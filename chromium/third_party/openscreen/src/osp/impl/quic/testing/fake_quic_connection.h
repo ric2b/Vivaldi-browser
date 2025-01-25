@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "osp/impl/quic/quic_connection.h"
@@ -21,7 +22,7 @@ class FakeQuicStream final : public QuicStream {
   FakeQuicStream(Delegate& delegate, uint64_t id);
   ~FakeQuicStream() override;
 
-  void ReceiveData(const ByteView& bytes);
+  void ReceiveData(ByteView bytes);
   void CloseReadEnd();
 
   std::vector<uint8_t> TakeReceivedData();
@@ -36,7 +37,7 @@ class FakeQuicStream final : public QuicStream {
   Delegate& delegate() { return delegate_; }
 
   uint64_t GetStreamId() override;
-  void Write(const ByteView& bytes) override;
+  void Write(ByteView bytes) override;
   void CloseWriteEnd() override;
 
  private:
@@ -49,27 +50,26 @@ class FakeQuicStream final : public QuicStream {
 
 class FakeQuicConnection final : public QuicConnection {
  public:
-  FakeQuicConnection(FakeQuicConnectionFactoryBridge& parent_factory,
-                     std::string connection_id,
+  FakeQuicConnection(std::string_view instance_name,
+                     FakeQuicConnectionFactoryBridge& parent_factory,
                      Delegate& delegate);
   ~FakeQuicConnection() override;
 
   Delegate& delegate() { return delegate_; }
-  const std::string& id() const { return connection_id_; }
   std::map<uint64_t, std::unique_ptr<FakeQuicStream>>& streams() {
     return streams_;
   }
 
+  void OnCryptoHandshakeComplete();
   FakeQuicStream* MakeIncomingStream();
 
   // QuicConnection overrides.
   void OnPacketReceived(const UdpPacket& packet) override;
-  QuicStream* MakeOutgoingStream(QuicStream::Delegate* delegate) override;
+  QuicStream* MakeOutgoingStream(QuicStream::Delegate& delegate) override;
   void Close() override;
 
  private:
   FakeQuicConnectionFactoryBridge& parent_factory_;
-  const std::string connection_id_;
   uint64_t next_stream_id_ = 1;
   std::map<uint64_t, std::unique_ptr<FakeQuicStream>> streams_;
 };

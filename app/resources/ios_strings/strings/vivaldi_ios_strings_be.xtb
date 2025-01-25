@@ -2,11 +2,14 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="be">
 <translation id="1063263220330818888">Прыватны пошук</translation>
+<translation id="1137850887415122856">Для блакавання вашых прыватных ўкладак наладзьце Touch ID, Face ID або код доступу.</translation>
 <translation id="1310184829257917508">Прапаноўваць адкрываць спасылкі з іншых праграм прыватна</translation>
 <translation id="1512201558627495343">Новая прыватная ўкладка</translation>
 <translation id="207677936531967364">Новая старонка прыватнай укладкі</translation>
+<translation id="2899836479226240291">Спасылкі будуць аўтаматычна адкрывацца ў Vivaldi, калі вы зробіце яго прадвызначаным браўзерам.</translation>
 <translation id="3365529507898144230">Захаваць у фотаздымках</translation>
 <translation id="3473652525653758699">Новае прыватнае акно</translation>
+<translation id="3501504415290398157">Для разблакавання прыватных укладак выкарыстоўваць<ph name="BIOMETRIC_AUTHENITCATION_TYPE" />.</translation>
 <translation id="3692650606013198282">Адкрыць у прыватным рэжыме</translation>
 <translation id="3709782636417497984">Адкрыць у новай прыватнай укладцы</translation>
 <translation id="3981599532037327317">Адкрыць ${url} у прыватнай укладцы</translation>
@@ -15,6 +18,7 @@
 <translation id="4755216899422789286">Адкрываць URL-адрасы ў Vivaldi</translation>
 <translation id="6233792867654386826">Адкрываць у Vivaldi URL-адрасы, якія ўводзяцца.</translation>
 <translation id="6827597288286078054">Прыватны пошук</translation>
+<translation id="7307970171564921489">Разблакаванне прыватных ўкладак з дапамогай <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Адкрыць у прыватным рэжыме?</translation>
 <translation id="7549299604720382000">Новая прыватная ўкладка</translation>
 <translation id="8326104954595890674">Новая прыватная ўкладка</translation>

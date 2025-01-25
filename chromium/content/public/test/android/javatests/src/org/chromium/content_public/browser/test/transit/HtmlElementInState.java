@@ -4,10 +4,11 @@
 
 package org.chromium.content_public.browser.test.transit;
 
-import androidx.annotation.Nullable;
+import android.graphics.Rect;
 
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.transit.Condition;
+import org.chromium.base.test.transit.ConditionWithResult;
 import org.chromium.base.test.transit.ElementInState;
 import org.chromium.base.test.transit.TravelException;
 import org.chromium.content_public.browser.WebContents;
@@ -15,41 +16,30 @@ import org.chromium.content_public.browser.test.transit.HtmlConditions.Displayed
 import org.chromium.content_public.browser.test.transit.HtmlConditions.NotDisplayedCondition;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 
-import java.util.Set;
 import java.util.concurrent.TimeoutException;
 
 /**
  * A Public Transit ElementInState representing an HTML DOM element to be searched for in the given
  * WebContentsElementInState.
  */
-public class HtmlElementInState implements ElementInState {
+public class HtmlElementInState extends ElementInState<Rect> {
     protected final HtmlElement mHtmlElement;
     protected final Supplier<WebContents> mWebContentsSupplier;
 
     public HtmlElementInState(HtmlElement htmlElement, Supplier<WebContents> webContentsSupplier) {
+        super(htmlElement.getId());
         mHtmlElement = htmlElement;
         mWebContentsSupplier = webContentsSupplier;
     }
 
     @Override
-    public String getId() {
-        return mHtmlElement.getId();
-    }
-
-    @Nullable
-    @Override
-    public Condition getEnterCondition() {
+    public ConditionWithResult<Rect> createEnterCondition() {
         return new DisplayedCondition(mWebContentsSupplier, mHtmlElement.getHtmlId());
     }
 
-    @Nullable
     @Override
-    public Condition getExitCondition(Set<String> destinationElementIds) {
-        if (destinationElementIds.contains(getId())) {
-            return null;
-        } else {
-            return new NotDisplayedCondition(mWebContentsSupplier, mHtmlElement.getHtmlId());
-        }
+    public Condition createExitCondition() {
+        return new NotDisplayedCondition(mWebContentsSupplier, mHtmlElement.getHtmlId());
     }
 
     /** Click the HTML element to trigger a Transition. */

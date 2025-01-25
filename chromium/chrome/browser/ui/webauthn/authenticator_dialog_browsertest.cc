@@ -43,6 +43,7 @@
 namespace {
 
 constexpr char kPhoneName[] = "Elisa's Pixel 6 Pro";
+using BleStatus = device::FidoRequestHandlerBase::BleStatus;
 
 }  // namespace
 
@@ -101,11 +102,19 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
         device::FidoRequestType::kGetAssertion;
 
     // The dialog should immediately close as soon as it is displayed.
-    if (name == "mechanisms") {
+    if (name == "mechanisms" || name == "mechanisms_disabled") {
       // A phone is configured so that the "Manage devices" button is shown.
       controller_->set_cable_transport_info(
           /*extension_is_v2=*/std::nullopt, std::move(phones),
           /*contact_phone_callback=*/base::DoNothing(), "fido://qrcode");
+      controller_->SetCurrentStepForTesting(
+          AuthenticatorRequestDialogModel::Step::kMechanismSelection);
+    } else if (name == "mechanisms_create" ||
+               name == "mechanisms_create_disabled") {
+      transport_availability.make_credential_attachment =
+          device::AuthenticatorAttachment::kAny;
+      transport_availability.request_type =
+          device::FidoRequestType::kMakeCredential;
       controller_->SetCurrentStepForTesting(
           AuthenticatorRequestDialogModel::Step::kMechanismSelection);
     } else if (name == "activate_usb") {
@@ -263,7 +272,7 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
       controller_->SelectAccount(
           std::move(responses),
           base::BindOnce([](device::AuthenticatorGetAssertionResponse) {}));
-    } else if (name == "account_select") {
+    } else if (name == "account_select" || name == "account_select_disabled") {
       // These strings attempt to exercise the encoding of direction and
       // language from https://github.com/w3c/webauthn/pull/1530.
 
@@ -359,6 +368,10 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
 
     controller_->StartFlow(std::move(transport_availability),
                            /*is_conditional_mediation=*/false);
+    if (name.ends_with("_disabled")) {
+      model_->ui_disabled_ = true;
+      model_->OnSheetModelChanged();
+    }
   }
 
  private:
@@ -382,6 +395,19 @@ IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest,
 }
 
 IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_mechanisms) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_mechanisms_create) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_mechanisms_disabled) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest,
+                       InvokeUi_mechanisms_create_disabled) {
   ShowAndVerifyUi();
 }
 
@@ -545,6 +571,11 @@ IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_account_select) {
 }
 
 IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest,
+                       InvokeUi_account_select_disabled) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest,
                        InvokeUi_request_attestation_permission) {
   ShowAndVerifyUi();
 }
@@ -582,8 +613,10 @@ IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_phone_confirmation) {
 class GPMPasskeysAuthenticatorDialogTest : public AuthenticatorDialogTest {
  public:
   GPMPasskeysAuthenticatorDialogTest() {
-    scoped_feature_list_.InitWithFeatures({syncer::kSyncWebauthnCredentials},
-                                          /*disabled_features=*/{});
+    scoped_feature_list_.InitWithFeatures(
+        {syncer::kSyncWebauthnCredentials,
+         device::kWebAuthnEnclaveAuthenticator},
+        /*disabled_features=*/{});
   }
 
   // AuthenticatorDialogTest:
@@ -601,13 +634,13 @@ class GPMPasskeysAuthenticatorDialogTest : public AuthenticatorDialogTest {
     model_->account_name = "example@gmail.com";
     controller_ =
         std::make_unique<AuthenticatorRequestDialogController>(model_.get());
+    controller_->SetAccountPreselectedCallback(base::DoNothing());
 
     device::FidoRequestHandlerBase::TransportAvailabilityInfo&
         transport_availability =
             controller_->transport_availability_for_testing();
     transport_availability.request_type =
         device::FidoRequestType::kGetAssertion;
-    transport_availability.ble_access_denied = false;
     transport_availability.available_transports = {
         AuthenticatorTransport::kUsbHumanInterfaceDevice,
         AuthenticatorTransport::kInternal,
@@ -615,6 +648,10 @@ class GPMPasskeysAuthenticatorDialogTest : public AuthenticatorDialogTest {
         AuthenticatorTransport::kAndroidAccessory,
     };
 
+    device::DiscoverableCredentialMetadata gpm_cred(
+        device::AuthenticatorType::kEnclave, "example.com", {1},
+        device::PublicKeyCredentialUserEntity({1}, "elisa.g.beckett@gmail.com",
+                                              "Elisa Beckett"));
     device::DiscoverableCredentialMetadata local_cred1(
         device::AuthenticatorType::kTouchID, "example.com", {1},
         device::PublicKeyCredentialUserEntity({1}, "elisa.g.beckett@gmail.com",
@@ -652,7 +689,7 @@ class GPMPasskeysAuthenticatorDialogTest : public AuthenticatorDialogTest {
           std::move(phone_cred1),
           std::move(phone_cred2),
       };
-    } else if (name == "local_only") {
+    } else if (name == "local_only" || name == "local_only_disabled") {
       transport_availability.recognized_credentials = {
           std::move(local_cred1),
           std::move(local_cred2),
@@ -669,9 +706,10 @@ class GPMPasskeysAuthenticatorDialogTest : public AuthenticatorDialogTest {
           std::move(phone_cred1),
           std::move(phone_cred2),
       };
-    } else if (name == "one_local_cred") {
+    } else if (name == "priority_mech" || name == "priority_mech_disabled") {
+      transport_availability.has_empty_allow_list = true;
       transport_availability.recognized_credentials = {
-          std::move(local_cred1),
+          std::move(gpm_cred),
       };
     } else if (name == "one_phone_cred") {
       transport_availability.recognized_credentials = {
@@ -682,7 +720,7 @@ class GPMPasskeysAuthenticatorDialogTest : public AuthenticatorDialogTest {
           /*extension_is_v2=*/std::nullopt,
           /*paired_phones=*/{},
           /*contact_phone_callback=*/base::DoNothing(), "fido://qrcode");
-      transport_availability.is_ble_powered = true;
+      transport_availability.ble_status = BleStatus::kOn;
       transport_availability.available_transports = {
           AuthenticatorTransport::kHybrid,
           AuthenticatorTransport::kUsbHumanInterfaceDevice,
@@ -692,7 +730,7 @@ class GPMPasskeysAuthenticatorDialogTest : public AuthenticatorDialogTest {
           /*extension_is_v2=*/std::nullopt,
           /*paired_phones=*/{},
           /*contact_phone_callback=*/base::DoNothing(), "fido://qrcode");
-      transport_availability.is_ble_powered = true;
+      transport_availability.ble_status = BleStatus::kOn;
       transport_availability.available_transports = {
           AuthenticatorTransport::kHybrid,
       };
@@ -703,7 +741,7 @@ class GPMPasskeysAuthenticatorDialogTest : public AuthenticatorDialogTest {
           /*contact_phone_callback=*/base::DoNothing(), "fido://qrcode");
       transport_availability.request_type =
           device::FidoRequestType::kMakeCredential;
-      transport_availability.is_ble_powered = true;
+      transport_availability.ble_status = BleStatus::kOn;
       transport_availability.available_transports = {
           AuthenticatorTransport::kHybrid,
           AuthenticatorTransport::kUsbHumanInterfaceDevice,
@@ -715,7 +753,7 @@ class GPMPasskeysAuthenticatorDialogTest : public AuthenticatorDialogTest {
           /*contact_phone_callback=*/base::DoNothing(), "fido://qrcode");
       transport_availability.request_type =
           device::FidoRequestType::kMakeCredential;
-      transport_availability.is_ble_powered = true;
+      transport_availability.ble_status = BleStatus::kOn;
       transport_availability.available_transports = {
           AuthenticatorTransport::kHybrid,
       };
@@ -735,24 +773,24 @@ class GPMPasskeysAuthenticatorDialogTest : public AuthenticatorDialogTest {
           device::AuthenticatorAttachment::kAny;
       controller_->SetCurrentStepForTesting(
           AuthenticatorRequestDialogModel::Step::kGPMTouchID);
-    } else if (name == "gpm_onboarding") {
+    } else if (name == "gpm_change_pin" || name == "gpm_change_pin_disabled") {
       controller_->SetCurrentStepForTesting(
-          AuthenticatorRequestDialogModel::Step::kGPMOnboarding);
+          AuthenticatorRequestDialogModel::Step::kGPMChangePin);
     } else if (name == "gpm_create_pin") {
       controller_->SetCurrentStepForTesting(
           AuthenticatorRequestDialogModel::Step::kGPMCreatePin);
     } else if (name == "gpm_enter_pin") {
       controller_->SetCurrentStepForTesting(
           AuthenticatorRequestDialogModel::Step::kGPMEnterPin);
+    } else if (name == "gpm_change_arbitrary_pin") {
+      controller_->SetCurrentStepForTesting(
+          AuthenticatorRequestDialogModel::Step::kGPMChangeArbitraryPin);
     } else if (name == "gpm_create_arbitrary_pin") {
       controller_->SetCurrentStepForTesting(
           AuthenticatorRequestDialogModel::Step::kGPMCreateArbitraryPin);
     } else if (name == "gpm_enter_arbitrary_pin") {
       controller_->SetCurrentStepForTesting(
           AuthenticatorRequestDialogModel::Step::kGPMEnterArbitraryPin);
-    } else if (name == "gpm_passkey_saved") {
-      controller_->SetCurrentStepForTesting(
-          AuthenticatorRequestDialogModel::Step::kGPMPasskeySaved);
     } else if (name == "gpm_error") {
       controller_->SetCurrentStepForTesting(
           AuthenticatorRequestDialogModel::Step::kGPMError);
@@ -762,11 +800,18 @@ class GPMPasskeysAuthenticatorDialogTest : public AuthenticatorDialogTest {
     } else if (name == "gpm_confirm_incognito_create") {
       controller_->SetCurrentStepForTesting(
           AuthenticatorRequestDialogModel::Step::kGPMConfirmOffTheRecordCreate);
+    } else if (name == "gpm_locked_pin") {
+      controller_->SetCurrentStepForTesting(
+          AuthenticatorRequestDialogModel::Step::kGPMLockedPin);
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
     controller_->StartFlow(std::move(transport_availability),
                            /*is_conditional_mediation=*/false);
+    if (name.ends_with("_disabled")) {
+      model_->ui_disabled_ = true;
+      model_->OnSheetModelChanged();
+    }
   }
 
  private:
@@ -791,6 +836,11 @@ IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
 }
 
 IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
+                       InvokeUi_local_only_disabled) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
                        InvokeUi_local_no_other_devices) {
   ShowAndVerifyUi();
 }
@@ -801,7 +851,12 @@ IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
 }
 
 IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
-                       InvokeUi_one_local_cred) {
+                       InvokeUi_priority_mech) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
+                       InvokeUi_priority_mech_disabled) {
   ShowAndVerifyUi();
 }
 
@@ -846,7 +901,12 @@ IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
 }
 
 IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
-                       InvokeUi_gpm_onboarding) {
+                       InvokeUi_gpm_change_pin) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
+                       InvokeUi_gpm_change_pin_disabled) {
   ShowAndVerifyUi();
 }
 
@@ -861,17 +921,17 @@ IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
 }
 
 IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
+                       InvokeUi_gpm_change_arbitrary_pin) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
                        InvokeUi_gpm_create_arbitrary_pin) {
   ShowAndVerifyUi();
 }
 
 IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
                        InvokeUi_gpm_enter_arbitrary_pin) {
-  ShowAndVerifyUi();
-}
-
-IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
-                       InvokeUi_gpm_passkey_saved) {
   ShowAndVerifyUi();
 }
 
@@ -886,6 +946,11 @@ IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
 
 IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
                        InvokeUi_gpm_confirm_incognito_create) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(GPMPasskeysAuthenticatorDialogTest,
+                       InvokeUi_gpm_locked_pin) {
   ShowAndVerifyUi();
 }
 

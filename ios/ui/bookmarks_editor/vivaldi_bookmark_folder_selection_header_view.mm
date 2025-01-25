@@ -6,7 +6,6 @@
 
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
-#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_features.h"
 #import "ios/ui/custom_views/vivaldi_search_bar_view.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
@@ -99,10 +98,7 @@ UIEdgeInsets speedDialSelectionLabelPadding = UIEdgeInsetsMake(0, 4, 0, 8);
   // Speed dial selection view description label
   UILabel* speedDialSelectionLabel = [[UILabel alloc] init];
   _speedDialSelectionLabel = speedDialSelectionLabel;
-  NSString* titleString =
-      [VivaldiBookmarksEditorFeatures shouldShowNewBookmarkEditor] ?
-          GetNSString(IDS_IOS_BOOKMARK_SHOW_ONLY_GROUPS) :
-          GetNSString(IDS_IOS_BOOKMARK_SHOW_ONLY_SD_FOLDERS);
+  NSString* titleString = GetNSString(IDS_IOS_BOOKMARK_SHOW_ONLY_GROUPS);
   speedDialSelectionLabel.text = titleString;
   speedDialSelectionLabel.accessibilityLabel = titleString;
   speedDialSelectionLabel.textColor = UIColor.labelColor;

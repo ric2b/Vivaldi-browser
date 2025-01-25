@@ -1,5 +1,7 @@
 **
 
+!common/
+common/target/
 !nearby/.cargo
 !nearby/connections/
 !nearby/crypto/
@@ -12,3 +14,4 @@ nearby/presence/cmake-build
 !nearby/deny.toml
 !nearby/rustfmt.toml
 !third_party
+third_party/boringssl/build

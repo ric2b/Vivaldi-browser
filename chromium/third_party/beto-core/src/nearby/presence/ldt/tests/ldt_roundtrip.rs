@@ -20,7 +20,7 @@ use crypto_provider_default::CryptoProviderImpl;
 use ldt::*;
 use ldt_tbc::TweakableBlockCipher;
 use rand::rngs::StdRng;
-use rand::{self, distributions, Rng as _, SeedableRng as _};
+use rand::{distributions, Rng as _, SeedableRng as _};
 use rand_ext::{random_bytes, random_vec};
 use xts_aes::{XtsAes128, XtsAes256};
 
@@ -57,9 +57,7 @@ fn roundtrip_normal_padder() {
 fn roundtrip_xor_padder() {
     let mut rng = <CryptoProviderImpl as CryptoProvider>::CryptoRng::new();
     let mut rc_rng = rand::rngs::StdRng::from_entropy();
-    // 2 bytes smaller because we're using a 2 byte salt
-    let plaintext_len_range =
-        distributions::Uniform::new_inclusive(BLOCK_SIZE, BLOCK_SIZE * 2 - 1 - 2);
+    let plaintext_len_range = distributions::Uniform::new_inclusive(BLOCK_SIZE, BLOCK_SIZE * 2 - 1);
 
     for _ in 0..100_000 {
         let padder: XorPadder<BLOCK_SIZE> =

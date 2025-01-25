@@ -783,8 +783,6 @@ BOOL _credentialExtensionWasUsed = NO;
 }
 
 + (void)recordStartupTabCount:(int)tabCount {
-  // TODO(crbug.com/41492684): Evaluate and remove old histogram.
-  base::UmaHistogramCounts100("Tabs.CountAtStartup", tabCount);
   base::UmaHistogramCounts1M("Tabs.CountAtStartup2", tabCount);
 }
 
@@ -798,8 +796,6 @@ BOOL _credentialExtensionWasUsed = NO;
 }
 
 + (void)recordResumeTabCount:(int)tabCount {
-  // TODO(crbug.com/41492684): Evaluate and remove old histogram.
-  base::UmaHistogramCounts100("Tabs.CountAtResume", tabCount);
   base::UmaHistogramCounts1M("Tabs.CountAtResume2", tabCount);
 }
 

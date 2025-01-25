@@ -4,8 +4,6 @@
 
 source_set("model") {
   sources = [
-    "device_info_sync_service_factory.h",
-    "device_info_sync_service_factory.mm",
     "enterprise_utils.cc",
     "enterprise_utils.h",
     "ios_chrome_sync_client.h",
@@ -16,15 +14,15 @@ source_set("model") {
     "send_tab_to_self_sync_service_factory.mm",
     "session_sync_service_factory.h",
     "session_sync_service_factory.mm",
-    "sync_invalidations_service_factory.h",
-    "sync_invalidations_service_factory.mm",
     "sync_observer_bridge.h",
     "sync_observer_bridge.mm",
     "sync_service_factory.h",
     "sync_service_factory.mm",
   ]
   deps = [
+    ":device_info_sync_service_factory",
     ":model_type_store_service_factory",
+    ":sync_invalidations_service_factory",
     "//base",
     "//components/autofill/core/browser",
     "//components/browser_sync",
@@ -34,14 +32,15 @@ source_set("model") {
     "//components/invalidation/impl",
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
-    "//components/metrics/demographics",
     "//components/network_time",
     "//components/password_manager/core/browser",
     "//components/password_manager/core/browser/sharing",
+    "//components/plus_addresses/settings",
     "//components/plus_addresses/webdata",
     "//components/pref_registry",
     "//components/prefs",
     "//components/reading_list/core",
+    "//components/saved_tab_groups:core",
     "//components/search_engines",
     "//components/send_tab_to_self",
     "//components/sessions",
@@ -73,15 +72,18 @@ source_set("model") {
     "//ios/chrome/browser/metrics/model:google_groups_updater",
     "//ios/chrome/browser/passwords/model:sharing_factory",
     "//ios/chrome/browser/passwords/model:store_factory",
+    "//ios/chrome/browser/plus_addresses/model",
     "//ios/chrome/browser/power_bookmarks/model",
     "//ios/chrome/browser/reading_list/model",
+    "//ios/chrome/browser/saved_tab_groups/model",
     "//ios/chrome/browser/search_engines/model",
-    "//ios/chrome/browser/sessions",
+    "//ios/chrome/browser/sessions/model",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/model/url:constants",
+    "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/signin/model",
     "//ios/chrome/browser/supervised_user/model:sync_settings_factory",
     "//ios/chrome/browser/sync/model/glue",
@@ -100,9 +102,49 @@ source_set("model") {
   allow_circular_includes_from = [
     "//ios/chrome/browser/history/model",
     "//ios/chrome/browser/passwords/model:store_factory",
-    "//ios/chrome/browser/reading_list/model",
     "//ios/chrome/browser/signin/model",
     "//ios/chrome/browser/sync/model/glue",
+  ]
+}
+
+source_set("device_info_sync_service_factory") {
+  sources = [
+    "device_info_sync_service_factory.h",
+    "device_info_sync_service_factory.mm",
+  ]
+  deps = [
+    ":model_type_store_service_factory",
+    ":sync_invalidations_service_factory",
+    "//base",
+    "//components/keyed_service/core",
+    "//components/keyed_service/ios",
+    "//components/send_tab_to_self",
+    "//components/signin/public/base",
+    "//components/sync/invalidations",
+    "//components/sync/model",
+    "//components/sync_device_info",
+    "//ios/chrome/browser/push_notification/model:push_notification_service_header",
+    "//ios/chrome/browser/shared/model/application_context",
+    "//ios/chrome/browser/shared/model/browser_state",
+    "//ios/chrome/browser/signin/model",
+    "//ios/chrome/common",
+  ]
+}
+
+source_set("sync_invalidations_service_factory") {
+  sources = [
+    "sync_invalidations_service_factory.h",
+    "sync_invalidations_service_factory.mm",
+  ]
+  deps = [
+    "//base",
+    "//components/gcm_driver",
+    "//components/gcm_driver/instance_id",
+    "//components/keyed_service/ios",
+    "//components/sync/invalidations",
+    "//ios/chrome/browser/gcm/model",
+    "//ios/chrome/browser/gcm/model/instance_id",
+    "//ios/chrome/browser/shared/model/browser_state",
   ]
 }
 

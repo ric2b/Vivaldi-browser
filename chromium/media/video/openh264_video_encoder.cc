@@ -86,9 +86,9 @@ void SetUpOpenH264Params(VideoCodecProfile profile,
         num_temporal_layers = 3;
         break;
       default:
-        NOTREACHED() << "Unsupported SVC: "
-                     << GetScalabilityModeName(
-                            options.scalability_mode.value());
+        NOTREACHED_IN_MIGRATION()
+            << "Unsupported SVC: "
+            << GetScalabilityModeName(options.scalability_mode.value());
     }
   }
 
@@ -315,29 +315,34 @@ EncoderStatus OpenH264VideoEncoder::DrainOutputs(const SFrameBSInfo& frame_info,
   DCHECK_EQ(written_size, total_chunk_size);
 
   if (!h264_converter_) {
-    result.size = total_chunk_size;
-
     output_cb_.Run(std::move(result), std::optional<CodecDescription>());
     return EncoderStatus::Codes::kOk;
   }
 
   size_t converted_output_size = 0;
   bool config_changed = false;
-  auto status = h264_converter_->ConvertChunk(
-      conversion_buffer_, result.data, &config_changed, &converted_output_size);
+  MP4Status status = OkStatus();
+  do {
+    status =
+        h264_converter_->ConvertChunk(conversion_buffer_, result.data,
+                                      &config_changed, &converted_output_size);
+    if (status.code() == MP4Status::Codes::kBufferTooSmall) {
+      result.data = base::HeapArray<uint8_t>::Uninit(converted_output_size);
+      continue;
+    } else if (!status.is_ok()) {
+      return EncoderStatus(EncoderStatus::Codes::kBitstreamConversionError)
+          .AddCause(std::move(status));
+    }
+  } while (!status.is_ok());
 
-  if (!status.is_ok())
-    return EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode)
-        .AddCause(std::move(status));
-
-  result.size = converted_output_size;
+  result.data = std::move(result.data).take_first(converted_output_size);
 
   std::optional<CodecDescription> desc;
   if (config_changed) {
     const auto& config = h264_converter_->GetCurrentConfig();
     desc = CodecDescription();
     if (!config.Serialize(desc.value())) {
-      return EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
+      return EncoderStatus(EncoderStatus::Codes::kBitstreamConversionError,
                            "Failed to serialize AVC decoder config");
     }
   }
@@ -358,7 +363,7 @@ void OpenH264VideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
 
   if (!frame) {
     std::move(done_cb).Run(
-        EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
+        EncoderStatus(EncoderStatus::Codes::kInvalidInputFrame,
                       "No frame provided for encoding."));
     return;
   }
@@ -368,21 +373,22 @@ void OpenH264VideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
                                 frame->format() == PIXEL_FORMAT_XRGB ||
                                 frame->format() == PIXEL_FORMAT_ABGR ||
                                 frame->format() == PIXEL_FORMAT_ARGB;
-  if ((!frame->IsMappable() && !frame->HasGpuMemoryBuffer()) ||
+  if ((!frame->IsMappable() && !frame->HasMappableGpuBuffer()) ||
       !supported_format) {
     std::move(done_cb).Run(
-        EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
+        EncoderStatus(EncoderStatus::Codes::kUnsupportedFrameFormat,
                       "Unexpected frame format.")
             .WithData("IsMappable", frame->IsMappable())
+            .WithData("storage type", frame->storage_type())
             .WithData("format", frame->format()));
     return;
   }
 
-  if (frame->format() == PIXEL_FORMAT_NV12 && frame->HasGpuMemoryBuffer()) {
+  if (frame->format() == PIXEL_FORMAT_NV12 && frame->HasMappableGpuBuffer()) {
     frame = ConvertToMemoryMappedFrame(frame);
     if (!frame) {
       std::move(done_cb).Run(
-          EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
+          EncoderStatus(EncoderStatus::Codes::kSystemAPICallError,
                         "Convert GMB frame to MemoryMappedFrame failed."));
       return;
     }
@@ -396,15 +402,13 @@ void OpenH264VideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
         options_.frame_size, frame->timestamp());
     if (!i420_frame) {
       std::move(done_cb).Run(
-          EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
+          EncoderStatus(EncoderStatus::Codes::kOutOfMemoryError,
                         "Can't allocate an I420 frame."));
       return;
     }
     auto status = frame_converter_.ConvertAndScale(*frame, *i420_frame);
     if (!status.is_ok()) {
-      std::move(done_cb).Run(
-          EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode)
-              .AddCause(std::move(status)));
+      std::move(done_cb).Run(status);
       return;
     }
     frame = std::move(i420_frame);

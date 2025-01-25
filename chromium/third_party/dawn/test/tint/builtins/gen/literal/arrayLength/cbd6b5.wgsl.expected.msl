@@ -22,34 +22,18 @@ struct SB_RW {
   tint_array<half, 1> arg_0;
 };
 
-void arrayLength_cbd6b5(const constant TintArrayLengths* const tint_symbol_1, device uint* const tint_symbol_2) {
-  uint res = (((*(tint_symbol_1)).array_lengths[0u][0u] - 0u) / 2u);
-  *(tint_symbol_2) = res;
+uint arrayLength_cbd6b5(const constant TintArrayLengths* const tint_symbol) {
+  uint res = (((*(tint_symbol)).array_lengths[0u][0u] - 0u) / 2u);
+  return res;
 }
 
-struct tint_symbol {
-  float4 value [[position]];
-};
-
-float4 vertex_main_inner(const constant TintArrayLengths* const tint_symbol_3, device uint* const tint_symbol_4) {
-  arrayLength_cbd6b5(tint_symbol_3, tint_symbol_4);
-  return float4(0.0f);
-}
-
-vertex tint_symbol vertex_main(const constant TintArrayLengths* tint_symbol_5 [[buffer(30)]], device uint* tint_symbol_6 [[buffer(1)]]) {
-  float4 const inner_result = vertex_main_inner(tint_symbol_5, tint_symbol_6);
-  tint_symbol wrapper_result = {};
-  wrapper_result.value = inner_result;
-  return wrapper_result;
-}
-
-fragment void fragment_main(const constant TintArrayLengths* tint_symbol_7 [[buffer(30)]], device uint* tint_symbol_8 [[buffer(1)]]) {
-  arrayLength_cbd6b5(tint_symbol_7, tint_symbol_8);
+fragment void fragment_main(device uint* tint_symbol_1 [[buffer(0)]], const constant TintArrayLengths* tint_symbol_2 [[buffer(30)]]) {
+  *(tint_symbol_1) = arrayLength_cbd6b5(tint_symbol_2);
   return;
 }
 
-kernel void compute_main(const constant TintArrayLengths* tint_symbol_9 [[buffer(30)]], device uint* tint_symbol_10 [[buffer(1)]]) {
-  arrayLength_cbd6b5(tint_symbol_9, tint_symbol_10);
+kernel void compute_main(device uint* tint_symbol_3 [[buffer(0)]], const constant TintArrayLengths* tint_symbol_4 [[buffer(30)]]) {
+  *(tint_symbol_3) = arrayLength_cbd6b5(tint_symbol_4);
   return;
 }
 

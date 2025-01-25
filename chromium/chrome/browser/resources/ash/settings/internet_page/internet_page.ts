@@ -189,9 +189,9 @@ export class SettingsInternetPageElement extends
        * enforced by policy and users are prohibited by policy from manually
        * disconnecting from it.
        */
-      isAddingBuiltInVpnProhibited_: {
+      isBuiltInVpnManagementBlocked_: {
         type: Boolean,
-        computed: 'computeIsAddingBuiltInVpnProhibited_(vpnIsProhibited_,' +
+        computed: 'computeIsBuiltInVpnManagementBlocked_(vpnIsProhibited_,' +
             'prefs.vpn_config_allowed.*' +
             'prefs.arc.vpn.*,' +
             'prefs.arc.vpn.always_on.*)',
@@ -227,14 +227,6 @@ export class SettingsInternetPageElement extends
         value() {
           return loadTimeData.valueExists('isApnRevampEnabled') &&
               loadTimeData.getBoolean('isApnRevampEnabled');
-        },
-      },
-
-      isCellularCarrierLockEnabled_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.valueExists('isCellularCarrierLockEnabled') &&
-              loadTimeData.getBoolean('isCellularCarrierLockEnabled');
         },
       },
 
@@ -339,22 +331,13 @@ export class SettingsInternetPageElement extends
         value: '',
       },
 
-      /**
-       * Return true if hotspot feature flag is enabled.
-       */
-      isHotspotFeatureEnabled_: {
+      isApnRevampAndAllowApnModificationPolicyEnabled_: {
         type: Boolean,
         value() {
-          return loadTimeData.valueExists('isHotspotEnabled') &&
-              loadTimeData.getBoolean('isHotspotEnabled');
-        },
-      },
-
-      isApnRevampAndPoliciesEnabled_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.valueExists('isApnRevampAndPoliciesEnabled') &&
-              loadTimeData.getBoolean('isApnRevampAndPoliciesEnabled');
+          return loadTimeData.valueExists(
+                     'isApnRevampAndAllowApnModificationPolicyEnabled') &&
+              loadTimeData.getBoolean(
+                  'isApnRevampAndAllowApnModificationPolicyEnabled');
         },
       },
 
@@ -397,13 +380,11 @@ export class SettingsInternetPageElement extends
   private eSimNetworkState_: NetworkStateProperties;
   private globalPolicy_: GlobalPolicy|undefined;
   private hasActiveCellularNetwork_: boolean;
-  private isCellularCarrierLockEnabled_: boolean;
   private isConnectedToNonCellularNetwork_: boolean;
   private isNumCustomApnsLimitReached_: boolean;
   private isInstantHotspotRebrandEnabled_: boolean;
-  private isHotspotFeatureEnabled_: boolean;
-  private isApnRevampAndPoliciesEnabled_: boolean;
-  private isAddingBuiltInVpnProhibited_: boolean;
+  private isApnRevampAndAllowApnModificationPolicyEnabled_: boolean;
+  private isBuiltInVpnManagementBlocked_: boolean;
   private knownNetworksType_: NetworkType;
   private networkConfig_: CrosNetworkConfigInterface;
   private passpointSubscription_: PasspointSubscription|undefined;
@@ -795,9 +776,6 @@ export class SettingsInternetPageElement extends
   }
 
   private showProviderLocked_(): boolean {
-    if (!this.isCellularCarrierLockEnabled_) {
-      return false;
-    }
     if (this.subpageType_ !== NetworkType.kCellular) {
       return false;
     }
@@ -890,7 +868,7 @@ export class SettingsInternetPageElement extends
   }
 
   private onAddVpnClick_(): void {
-    if (!this.isAddingBuiltInVpnProhibited_) {
+    if (!this.isBuiltInVpnManagementBlocked_) {
       this.showConfig_(true /* configAndConnect */, NetworkType.kVPN);
     }
   }
@@ -963,7 +941,7 @@ export class SettingsInternetPageElement extends
     return this.allowAddWiFiConnection_(globalPolicy, managedNetworkAvailable);
   }
 
-  private computeIsAddingBuiltInVpnProhibited_(): boolean {
+  private computeIsBuiltInVpnManagementBlocked_(): boolean {
     if (this.vpnIsProhibited_) {
       return true;
     }
@@ -1086,7 +1064,7 @@ export class SettingsInternetPageElement extends
 
   private shouldDisallowApnModification_(globalPolicy: GlobalPolicy|
                                          undefined): boolean {
-    if (!this.isApnRevampAndPoliciesEnabled_) {
+    if (!this.isApnRevampAndAllowApnModificationPolicyEnabled_) {
       return false;
     }
     if (!globalPolicy) {

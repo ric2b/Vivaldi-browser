@@ -4,11 +4,12 @@
 
 #include "content/browser/devtools/protocol/overlay_handler.h"
 
-#include "content/browser/renderer_host/render_widget_host_input_event_router.h"
-#include "content/browser/web_contents/web_contents_impl.h"
-
 #include <stdint.h>
+
 #include <utility>
+
+#include "components/input/render_widget_host_input_event_router.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -62,6 +63,7 @@ void OverlayHandler::UpdateCaptureInputEvents() {
   // debug overlay works at least for pages without iframes.
   if (vivaldi::IsVivaldiRunning())
     return;
+
   if (!host_)
     return;
   auto* web_contents = WebContentsImpl::FromRenderFrameHostImpl(host_);

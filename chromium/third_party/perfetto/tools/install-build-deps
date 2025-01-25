@@ -185,8 +185,13 @@ BUILD_DEPS_HOST = [
     # Keep in sync with Chromium's //third_party/protobuf.
     Dependency(
         'buildtools/protobuf',
+        # If you revert the below version back to an earlier version of
+        # protobuf, make sure to revert the changes to
+        # //gn/standalone/protoc.py as well.
+        #
+        # This comment can be removed with protobuf is next upreved.
         'https://chromium.googlesource.com/external/github.com/protocolbuffers/protobuf.git',
-        'fe271ab76f2ad2b2b28c10443865d2af21e27e0e',  # refs/tags/v3.20.3
+        'f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c',  # refs/tags/v21.12
         'all',
         'all'),
 
@@ -195,15 +200,15 @@ BUILD_DEPS_HOST = [
     Dependency(
         'buildtools/libcxx',
         'https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libcxx.git',
-        'f8571eaba606bde2eb8cd34b30104ca33e7c207e', 'all', 'all'),
+        '852bc6746f45add53fec19f3a29280e69e358d44', 'all', 'all'),
     Dependency(
         'buildtools/libcxxabi',
         'https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libcxxabi.git',
-        '8dd405113a4f3694e910b79785dd7fb7535a888a', 'all', 'all'),
+        'a37a3aa431f132b02a58656f13984d51098330a2', 'all', 'all'),
     Dependency(
         'buildtools/libunwind',
         'https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libunwind.git',
-        'aabcd8753678f1536e15eb6385a948470debdae4', 'all', 'all'),
+        '419b03c0b8f20d6da9ddcb0d661a94a97cdd7dad', 'all', 'all'),
 
     # Keep in sync with chromium DEPS.
     Dependency(
@@ -259,8 +264,8 @@ BUILD_DEPS_HOST = [
     # If updating the version, also update bazel/deps.bzl.
     Dependency(
         'buildtools/llvm-project.tgz',
-        'https://storage.googleapis.com/perfetto/llvm-project-3b4c59c156919902c785ce3cbae0eee2ee53064d.tgz',
-        'f4a52e7f36edd7cacc844d5ae0e5f60b6f57c5afc40683e99f295886c9ce8ff4',
+        'https://storage.googleapis.com/perfetto/llvm-project-617a15a9eac96088ae5e9134248d8236e34b91b1.tgz',
+        '7e2541446a27f2a09a84520da7bc93cd71749ba0f17318f2d5291fbf45b97956',
         'all', 'all'),
 
     # These dependencies are for libunwindstack, which is used by src/profiling.
@@ -366,18 +371,18 @@ TYPEFACES_SHA256 = '1065172aaf0e9c22bc4f206ed9fdf5f1b4355d233fb21f9f26a89cd66c94
 UI_DEPS = [
     Dependency(
         'buildtools/mac/nodejs.tgz',
-        'https://storage.googleapis.com/chromium-nodejs/16.13.0/31859fc1fa0994a95f44f09c367d6ff63607cfde',
-        'd9cf1f36b16e08ce52cfbdef427c6596eed2bd2f3608a79112d25b4ec8f75753',
+        'https://storage.googleapis.com/chromium-nodejs/20.11.0/5b5681e12a21cda986410f69e03e6220a21dd4d2',
+        'cecb99fbb369a9090dddc27e228b66335cd72555b44fa8839ef78e56c51682c5',
         'darwin', 'arm64'),
     Dependency(
         'buildtools/mac/nodejs.tgz',
-        'https://storage.googleapis.com/chromium-nodejs/16.13.0/16dfd094763b71988933a31735f9dea966f9abd6',
-        '065ced7e93f0e26276cb74d9688706674323865c4a8fc89e4adfa6868d4ebb4d',
+        'https://storage.googleapis.com/chromium-nodejs/20.11.0/e3c0fd53caae857309815f3f8de7c2dce49d7bca',
+        '20affacca2480c368b75a1d91ec1a2720604b325207ef0cf39cfef3c235dad19',
         'darwin', 'x64'),
     Dependency(
         'buildtools/linux64/nodejs.tgz',
-        'https://storage.googleapis.com/chromium-nodejs/16.13.0/ab9544e24e752d3d17f335fb7b2055062e582d11',
-        '3b5ca150a55f3aadfa18f3a10a4495aaf9653614ba3e460647170fef5287ec4f',
+        'https://storage.googleapis.com/chromium-nodejs/20.11.0/f9a337cfa0e2b92d3e5c671c26b454bd8e99769e',
+        '0ba9cc91698c1f833a1fdc1fe0cb392d825ad484c71b0d84388ac80bfd3d6079',
         'linux', 'x64'),
     Dependency(
         'buildtools/mac/emsdk.tgz',
@@ -425,7 +430,7 @@ GRPC_DEPS = [
     Dependency(
         'buildtools/grpc/src',
         'https://chromium.googlesource.com/external/github.com/grpc/grpc.git',
-        '6943c1841f57cac4666b165aea4f618fe73b3ff1', 'all', 'all', True),
+        '4795c5e69b25e8c767b498bea784da0ef8c96fd5', 'all', 'all', True),
 ]
 
 # Sysroots required to cross-compile Linux targets (linux-arm{,64}).

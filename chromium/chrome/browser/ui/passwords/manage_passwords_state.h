@@ -40,7 +40,7 @@ class ManagePasswordsState {
     client_ = client;
   }
 
-  password_manager::PasswordManagerClient* client() { return client_; }
+  password_manager::PasswordManagerClient* client() const { return client_; }
 
   // The methods below discard the current state/data of the object and move it
   // to the specified state.
@@ -84,19 +84,22 @@ class ManagePasswordsState {
   // Move to MANAGE_STATE or INACTIVE_STATE for PSL matched passwords.
   // |password_forms| contains best matches from the password store for the
   // form which was autofilled, |origin| is an origin of the form which was
-  // autofilled. In addition, |federated_matches|, if not null, contains stored
-  // federated credentials to show to the user as well.
+  // autofilled. In addition, |federated_matches|, contains stored federated
+  // credentials, if any, to show to the user as well.
   void OnPasswordAutofilled(
       base::span<const password_manager::PasswordForm> password_forms,
       url::Origin origin,
-      const std::vector<raw_ptr<const password_manager::PasswordForm,
-                                VectorExperimental>>* federated_matches);
+      base::span<const password_manager::PasswordForm> federated_matches);
 
   // Move to INACTIVE_STATE.
   void OnInactive();
 
   // Move to KEYCHAIN_ERROR_STATE.
   void OnKeychainError();
+
+  // Move to PASSKEY_SAVED_CONFIRMATION_STATE. Stores `username` of the saved
+  // passkey and whether GPM pin was created in the same flow.
+  void OnPasskeySaved(const std::u16string& username, bool gpm_pin_created);
 
   // Move to MOVE_CREDENTIAL_AFTER_LOG_IN_STATE. Triggers a bubble to move the
   // just submitted form to the user's account store.
@@ -152,6 +155,13 @@ class ManagePasswordsState {
     auth_for_account_storage_opt_in_failed_ = failed;
   }
 
+  std::u16string recently_saved_passkey_username() const {
+    return recently_saved_passkey_username_;
+  }
+  bool gpm_pin_created_during_recent_passkey_creation() const {
+    return gpm_pin_created_during_recent_passkey_creation_;
+  }
+
   // Current local forms. ManagePasswordsState is responsible for the forms.
   const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
   GetCurrentForms() const {
@@ -197,6 +207,12 @@ class ManagePasswordsState {
   // Whether the last attempt to authenticate to opt-in using password account
   // storage failed.
   bool auth_for_account_storage_opt_in_failed_ = false;
+
+  // Username of a recently saved passkey.
+  std::u16string recently_saved_passkey_username_;
+
+  // Whether GPM pin was created in the same flow as recent passkey creation.
+  bool gpm_pin_created_during_recent_passkey_creation_ = false;
 };
 
 #endif  // CHROME_BROWSER_UI_PASSWORDS_MANAGE_PASSWORDS_STATE_H_

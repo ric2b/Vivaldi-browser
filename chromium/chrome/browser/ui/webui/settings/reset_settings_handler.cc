@@ -36,6 +36,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/ash/settings/pref_names.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -60,7 +61,7 @@ ResetRequestOriginFromString(const std::string& request_origin) {
         RESET_REQUEST_ORIGIN_TRIGGERED_RESET;
   }
   if (!request_origin.empty())
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
 
   return reset_report::ChromeResetReport::RESET_REQUEST_ORIGIN_UNKNOWN;
 }
@@ -72,8 +73,7 @@ ResetRequestOriginFromString(const std::string& request_origin) {
 const char ResetSettingsHandler::kCctResetSettingsHash[] = "cct";
 
 // static
-void ResetSettingsHandler::RegisterLocalStatePrefs(
-    PrefRegistrySimple* registry) {
+void ResetSettingsHandler::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(ash::settings::prefs::kSanitizeCompleted,
                                 false);
 }
@@ -405,7 +405,7 @@ void ResetSettingsHandler::SanitizeSettings() {
 
 void ResetSettingsHandler::OnSanitizeDone() {
   setting_snapshot_.reset();
-  PrefService* prefs = g_browser_process->local_state();
+  PrefService* prefs = ProfileManager::GetPrimaryUserProfile()->GetPrefs();
   prefs->SetBoolean(ash::settings::prefs::kSanitizeCompleted, true);
   prefs->CommitPendingWrite();
   chrome::AttemptRestart();

@@ -17,6 +17,8 @@
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/queue.h"
+#include "base/debug/alias.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
@@ -97,7 +99,7 @@ UpdateService::Result ToResult(update_client::Error error) {
     case update_client::Error::BAD_CRX_DATA_CALLBACK:
       return UpdateService::Result::kInvalidArgument;
     case update_client::Error::MAX_VALUE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return UpdateService::Result::kInvalidArgument;
   }
 }
@@ -108,6 +110,7 @@ void GetComponents(
     scoped_refptr<PersistedData> persisted_data,
     const AppClientInstallData& app_client_install_data,
     const AppInstallDataIndex& app_install_data_index,
+    const std::string& install_source,
     UpdateService::Priority priority,
     bool update_blocked,
     UpdateService::PolicySameVersionUpdate policy_same_version_update,
@@ -150,6 +153,7 @@ void GetComponents(
           auto it = app_install_data_index.find(id);
           return it != app_install_data_index.end() ? it->second : "";
         }(),
+        install_source,
         policy_service->GetTargetChannel(id).policy_or(std::string()),
         policy_service->GetTargetVersionPrefix(id).policy_or(std::string()),
         policy_service->IsRollbackToTargetVersionAllowed(id).policy_or(false),
@@ -176,44 +180,6 @@ void GetComponents(
 
 #if BUILDFLAG(IS_WIN)
 namespace {
-
-std::wstring GetTextForInstallerError(int error_code) {
-#define POLICY_ERROR_SWITCH_ENTRY(error_code)                                 \
-  case error_code:                                                            \
-    return GetLocalizedStringF(IDS_APP_INSTALL_DISABLED_BY_GROUP_POLICY_BASE, \
-                               L#error_code)
-
-  switch (error_code) {
-    POLICY_ERROR_SWITCH_ENTRY(GOOPDATE_E_APP_INSTALL_DISABLED_BY_POLICY);
-    POLICY_ERROR_SWITCH_ENTRY(GOOPDATE_E_APP_UPDATE_DISABLED_BY_POLICY);
-    POLICY_ERROR_SWITCH_ENTRY(GOOPDATE_E_APP_UPDATE_DISABLED_BY_POLICY_MANUAL);
-
-    case GOOPDATEINSTALL_E_FILENAME_INVALID:
-      return GetLocalizedString(IDS_INVALID_INSTALLER_FILENAME_BASE);
-
-    case GOOPDATEINSTALL_E_INSTALLER_FAILED_START:
-      return GetLocalizedString(IDS_INSTALLER_FAILED_TO_START_BASE);
-
-    case GOOPDATEINSTALL_E_INSTALLER_TIMED_OUT:
-      return GetLocalizedString(IDS_INSTALLER_TIMED_OUT_BASE);
-
-    case GOOPDATEINSTALL_E_INSTALL_ALREADY_RUNNING:
-      return GetLocalizedStringF(
-          IDS_GENERIC_INSTALL_ERROR_BASE,
-          GetTextForSystemError(ERROR_INSTALL_ALREADY_RUNNING));
-
-    case ERROR_SUCCESS_REBOOT_INITIATED:
-    case ERROR_SUCCESS_REBOOT_REQUIRED:
-    case ERROR_SUCCESS_RESTART_REQUIRED:
-      return GetLocalizedStringF(IDS_INSTALL_REBOOT_BASE,
-                                 GetTextForSystemError(error_code));
-
-    default:
-      return GetLocalizedStringF(IDS_GENERIC_INSTALL_ERROR_BASE,
-                                 GetTextForSystemError(error_code));
-  }
-#undef POLICY_ERROR_SWITCH_ENTRY
-}
 
 std::wstring GetTextForUpdateClientInstallError(int error_code) {
 #define INSTALL_SWITCH_ENTRY(error_code) \
@@ -315,8 +281,11 @@ std::wstring GetTextForServiceError(int error) {
   switch (error) {
     SERVICE_SWITCH_ENTRY(update_client::ServiceError::SERVICE_WAIT_FAILED);
     SERVICE_SWITCH_ENTRY(update_client::ServiceError::UPDATE_DISABLED);
-    SERVICE_SWITCH_ENTRY(update_client::ServiceError::CANCELLED);
     SERVICE_SWITCH_ENTRY(update_client::ServiceError::CHECK_FOR_UPDATE_ONLY);
+
+    case static_cast<int>(update_client::ServiceError::CANCELLED):
+      return GetLocalizedString(IDS_SERVICE_ERROR_CANCELLED_BASE);
+
     default:
       return GetLocalizedStringF(IDS_GENERIC_SERVICE_ERROR_BASE,
                                  GetTextForSystemError(error));
@@ -387,22 +356,57 @@ std::wstring GetTextForUpdateCheckError(int error) {
 #undef UPDATE_CHECK_SWITCH_ENTRY
 }
 
+std::wstring GetTextForInstallerError(int error_code) {
+#define POLICY_ERROR_SWITCH_ENTRY(error_code)                                 \
+  case error_code:                                                            \
+    return GetLocalizedStringF(IDS_APP_INSTALL_DISABLED_BY_GROUP_POLICY_BASE, \
+                               L#error_code)
+
+  switch (error_code) {
+    POLICY_ERROR_SWITCH_ENTRY(GOOPDATE_E_APP_INSTALL_DISABLED_BY_POLICY);
+    POLICY_ERROR_SWITCH_ENTRY(GOOPDATE_E_APP_UPDATE_DISABLED_BY_POLICY);
+    POLICY_ERROR_SWITCH_ENTRY(GOOPDATE_E_APP_UPDATE_DISABLED_BY_POLICY_MANUAL);
+
+    case GOOPDATEINSTALL_E_FILENAME_INVALID:
+      return GetLocalizedString(IDS_INVALID_INSTALLER_FILENAME_BASE);
+
+    case GOOPDATEINSTALL_E_INSTALLER_FAILED_START:
+      return GetLocalizedString(IDS_INSTALLER_FAILED_TO_START_BASE);
+
+    case GOOPDATEINSTALL_E_INSTALLER_TIMED_OUT:
+      return GetLocalizedString(IDS_INSTALLER_TIMED_OUT_BASE);
+
+    case GOOPDATEINSTALL_E_INSTALL_ALREADY_RUNNING:
+      return GetLocalizedStringF(
+          IDS_GENERIC_INSTALLER_ERROR_BASE,
+          GetTextForSystemError(ERROR_INSTALL_ALREADY_RUNNING));
+
+    case ERROR_SUCCESS_REBOOT_INITIATED:
+    case ERROR_SUCCESS_REBOOT_REQUIRED:
+    case ERROR_SUCCESS_RESTART_REQUIRED:
+      return GetLocalizedStringF(IDS_INSTALL_REBOOT_BASE,
+                                 GetTextForSystemError(error_code));
+
+    default:
+      return GetLocalizedStringF(IDS_GENERIC_INSTALLER_ERROR_BASE,
+                                 GetTextForSystemError(error_code));
+  }
+#undef POLICY_ERROR_SWITCH_ENTRY
+}
+
 }  // namespace
 
 std::string GetInstallerText(UpdateService::ErrorCategory error_category,
                              int error_code,
-                             int extra_code,
-                             bool is_installer_error) {
+                             int extra_code) {
   if (!error_code) {
     return {};
   }
   return base::WideToUTF8(base::StrCat(
-      {[&]() -> std::wstring {
+      {[&] {
          switch (error_category) {
            case UpdateService::ErrorCategory::kInstall:
-             return is_installer_error
-                        ? GetTextForInstallerError(error_code)
-                        : GetTextForUpdateClientInstallError(error_code);
+             return GetTextForUpdateClientInstallError(error_code);
            case UpdateService::ErrorCategory::kDownload:
              return GetTextForDownloadError(error_code);
            case UpdateService::ErrorCategory::kUnpack:
@@ -411,14 +415,16 @@ std::string GetInstallerText(UpdateService::ErrorCategory error_category,
              return GetTextForServiceError(error_code);
            case UpdateService::ErrorCategory::kUpdateCheck:
              return GetTextForUpdateCheckError(error_code);
+           case UpdateService::ErrorCategory::kInstaller:
+             return GetTextForInstallerError(error_code);
            default:
              LOG(ERROR) << "Unknown error category: " << error_category;
-             return {};
+             return std::wstring();
          }
        }(),
-       [&]() -> std::wstring {
+       [&] {
          if (!extra_code) {
-           return {};
+           return std::wstring();
          }
          return base::StrCat(
              {L"\n", GetLocalizedStringF(IDS_EXTRA_CODE_BASE,
@@ -487,7 +493,7 @@ UpdateService::UpdateState::State ToUpdateState(
     case update_client::ComponentState::kPingOnly:
     case update_client::ComponentState::kRun:
     case update_client::ComponentState::kLastStatus:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return UpdateService::UpdateState::State::kUnknown;
   }
 }
@@ -507,6 +513,8 @@ UpdateService::ErrorCategory ToErrorCategory(
       return UpdateService::ErrorCategory::kService;
     case update_client::ErrorCategory::kUpdateCheck:
       return UpdateService::ErrorCategory::kUpdateCheck;
+    case update_client::ErrorCategory::kInstaller:
+      return UpdateService::ErrorCategory::kInstaller;
   }
 }
 
@@ -544,9 +552,8 @@ MakeUpdateClientCrxStateChangeCallback(
 #if BUILDFLAG(IS_WIN)
           if (update_state.installer_text.empty())
             update_state.installer_text = internal::GetInstallerText(
-                UpdateService::ErrorCategory::kInstall, update_state.error_code,
-                update_state.extra_code1,
-                /*is_installer_error=*/true);
+                UpdateService::ErrorCategory::kInstaller,
+                update_state.error_code, update_state.extra_code1);
 #endif  // BUILDFLAG(IS_WIN)
         }
 
@@ -580,6 +587,12 @@ MakeUpdateClientCrxStateChangeCallback(
           config->GetPrefService()->CommitPendingWrite();
         }
 
+        // TODO(crbug.com/345250525): remove dump instrumentation when fixed.
+        base::debug::Alias(&update_state);
+        if (update_state.app_id.empty() ||
+            update_state.state == UpdateService::UpdateState::State::kUnknown) {
+          base::debug::DumpWithoutCrashing();
+        }
         callback.Run(update_state);
       },
       config, persisted_data, new_install, callback);
@@ -927,7 +940,7 @@ void UpdateServiceImplImpl::Install(const RegistrationRequest& registration,
               {std::make_pair(registration.app_id, client_install_data)}),
           AppInstallDataIndex(
               {std::make_pair(registration.app_id, install_data_index)}),
-          priority,
+          kInstallSourceTaggedMetainstaller, priority,
           /*update_blocked=*/false, PolicySameVersionUpdate::kAllowed),
       MakeUpdateClientCrxStateChangeCallback(config_,
                                              config_->GetUpdaterPersistedData(),
@@ -1072,7 +1085,7 @@ void UpdateServiceImplImpl::RunInstaller(const std::string& app_id,
               persisted_data->SetProductVersion(app_id, installer_version);
               config->GetPrefService()->CommitPendingWrite();
             } else {
-              state.error_category = UpdateService::ErrorCategory::kInstall;
+              state.error_category = UpdateService::ErrorCategory::kInstaller;
             }
 
             // Handle the offline installer cases similar to the online cases,
@@ -1084,8 +1097,7 @@ void UpdateServiceImplImpl::RunInstaller(const std::string& app_id,
 #if BUILDFLAG(IS_WIN)
             if (state.installer_text.empty())
               state.installer_text = internal::GetInstallerText(
-                  state.error_category, state.error_code, state.extra_code1,
-                  /*is_installer_error=*/true);
+                  state.error_category, state.error_code, state.extra_code1);
 #endif  // BUILDFLAG(IS_WIN)
             state.installer_cmd_line = result.installer_cmd_line;
             state_update.Run(state);
@@ -1101,6 +1113,7 @@ void UpdateServiceImplImpl::RunInstaller(const std::string& app_id,
               install_data.app_id = app_id;
               install_data.brand = brand;
               install_data.requires_network_encryption = false;
+              install_data.install_source = kInstallSourceOffline;
               install_data.version = installer_version;
               update_client->SendPing(
                   install_data,
@@ -1162,7 +1175,7 @@ void UpdateServiceImplImpl::HandleUpdateDisabledByPolicy(
   UpdateState update_state;
   update_state.app_id = app_id;
   update_state.state = UpdateService::UpdateState::State::kUpdateError;
-  update_state.error_category = UpdateService::ErrorCategory::kInstall;
+  update_state.error_category = UpdateService::ErrorCategory::kInstaller;
   update_state.error_code =
       is_install ? GOOPDATE_E_APP_INSTALL_DISABLED_BY_POLICY
       : policy != kPolicyAutomaticUpdatesOnly
@@ -1172,8 +1185,7 @@ void UpdateServiceImplImpl::HandleUpdateDisabledByPolicy(
 #if BUILDFLAG(IS_WIN)
   update_state.installer_text = internal::GetInstallerText(
       update_state.error_category, update_state.error_code,
-      update_state.extra_code1,
-      /*is_installer_error=*/true);
+      update_state.extra_code1);
 #endif  // BUILDFLAG(IS_WIN)
 
   base::BindPostTask(main_task_runner_, state_update).Run(update_state);
@@ -1197,6 +1209,9 @@ void UpdateServiceImplImpl::OnShouldBlockCheckForUpdateForMeteredNetwork(
                          config_->GetCrxVerifierFormat(),
                          config_->GetUpdaterPersistedData(),
                          AppClientInstallData(), AppInstallDataIndex(),
+                         priority == UpdateService::Priority::kForeground
+                             ? kInstallSourceOnDemand
+                             : "",
                          priority, update_blocked, policy_same_version_update),
           MakeUpdateClientCrxStateChangeCallback(
               config_, config_->GetUpdaterPersistedData(),
@@ -1223,6 +1238,9 @@ void UpdateServiceImplImpl::OnShouldBlockUpdateForMeteredNetwork(
                          config_->GetCrxVerifierFormat(),
                          config_->GetUpdaterPersistedData(),
                          app_client_install_data, app_install_data_index,
+                         priority == UpdateService::Priority::kForeground
+                             ? kInstallSourceOnDemand
+                             : "",
                          priority, update_blocked, policy_same_version_update),
           MakeUpdateClientCrxStateChangeCallback(
               config_, config_->GetUpdaterPersistedData(),
@@ -1257,12 +1275,13 @@ void UpdateServiceImplImpl::OnShouldBlockForceInstallForMeteredNetwork(
         base::BindOnce(
             base::IgnoreResult(&update_client::UpdateClient::Install),
             update_client_, id,
-            base::BindOnce(
-                &internal::GetComponents, config_->GetPolicyService(),
-                config_->GetCrxVerifierFormat(),
-                config_->GetUpdaterPersistedData(), app_client_install_data,
-                app_install_data_index, Priority::kBackground, update_blocked,
-                policy_same_version_update),
+            base::BindOnce(&internal::GetComponents,
+                           config_->GetPolicyService(),
+                           config_->GetCrxVerifierFormat(),
+                           config_->GetUpdaterPersistedData(),
+                           app_client_install_data, app_install_data_index,
+                           kInstallSourcePolicy, Priority::kBackground,
+                           update_blocked, policy_same_version_update),
             MakeUpdateClientCrxStateChangeCallback(
                 config_, config_->GetUpdaterPersistedData(),
                 /*new_install=*/false, state_update),

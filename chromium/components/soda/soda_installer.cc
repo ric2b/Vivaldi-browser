@@ -5,6 +5,7 @@
 #include "components/soda/soda_installer.h"
 
 #include <optional>
+#include <string>
 
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
@@ -130,6 +131,11 @@ void SodaInstaller::SetUninstallTimer(PrefService* profile_prefs,
   global_prefs->SetTime(
       prefs::kSodaScheduledDeletionTime,
       base::Time::Now() + base::Days(kSodaCleanUpDelayInDays));
+}
+
+std::string SodaInstaller::GetLanguageDlcNameForLocale(
+    const std::string& locale) const {
+  return std::string();
 }
 
 bool SodaInstaller::IsSodaInstalled(LanguageCode language_code) const {
@@ -294,7 +300,8 @@ bool SodaInstaller::IsAnyFeatureUsingSodaEnabled(PrefService* prefs) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   return prefs->GetBoolean(prefs::kLiveCaptionEnabled) ||
          prefs->GetBoolean(ash::prefs::kAccessibilityDictationEnabled) ||
-         prefs->GetBoolean(ash::prefs::kProjectorCreationFlowEnabled);
+         prefs->GetBoolean(ash::prefs::kProjectorCreationFlowEnabled) ||
+         base::FeatureList::IsEnabled(ash::features::kConch);
 #else  // !BUILDFLAG(IS_CHROMEOS_ASH)
   return prefs->GetBoolean(prefs::kLiveCaptionEnabled);
 #endif

@@ -45,7 +45,6 @@ class HTMLHRElement;
 class HTMLOptGroupElement;
 class HTMLOptionElement;
 class HTMLOptionsCollection;
-class LayoutUnit;
 class PopupMenu;
 class SelectType;
 class V8UnionHTMLElementOrLong;
@@ -206,8 +205,9 @@ class CORE_EXPORT HTMLSelectElement final
 
   bool IsRichlyEditableForAccessibility() const override { return false; }
 
-  bool IsValidInvokeAction(HTMLElement& invoker, InvokeAction action) override;
-  bool HandleInvokeInternal(HTMLElement& invoker, InvokeAction action) override;
+  bool IsValidCommand(HTMLElement& invoker, CommandEventType command) override;
+  bool HandleCommandInternal(HTMLElement& invoker,
+                             CommandEventType command) override;
 
   // SlottedButton returns the first child <button> in the light dom tree. If
   // this select is in a state where the <button> can't be rendered, such as a
@@ -222,14 +222,6 @@ class CORE_EXPORT HTMLSelectElement final
   // the fallback <datalist> in the UA shadowroot will be returned.
   // This <datalist> is the one which will get rendered as a popover.
   HTMLDataListElement* DisplayedDatalist() const;
-
-  // FirstChildDatalist returns the first child <datalist> of this <select>,
-  // which will get slotted into the UA shadowroot. It is kept up to date with a
-  // mutation observer, which calls RecalcFirstChildDatalist. This doesn't just
-  // look at the slot's assigned nodes because we can't run slot assignment in
-  // some cases when we need to find the datalist.
-  HTMLDataListElement* FirstChildDatalist() const;
-  void RecalcFirstChildDatalist();
 
   // This method returns true if the computed style is appearance:base-select and
   // the SelectType supports alternate rendering based on appearance:base-select.
@@ -341,7 +333,6 @@ class CORE_EXPORT HTMLSelectElement final
   Member<HTMLSlotElement> option_slot_;
   Member<HTMLOptionElement> last_on_change_option_;
   Member<HTMLOptionElement> suggested_option_;
-  Member<HTMLDataListElement> first_child_datalist_;
   HeapHashSet<Member<HTMLSelectedOptionElement>> descendant_selectedoptions_;
   bool uses_menu_list_ = true;
   bool is_multiple_;

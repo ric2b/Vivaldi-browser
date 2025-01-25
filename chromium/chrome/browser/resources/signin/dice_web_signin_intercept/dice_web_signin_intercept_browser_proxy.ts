@@ -10,8 +10,9 @@ import {sendWithPromise} from 'chrome://resources/js/cr.js';
 
 /** Account information sent from C++. */
 export interface AccountInfo {
-  isManaged: boolean;
   pictureUrl: string;
+  // Empty if no badge should be set (for non-managed users).
+  avatarBadge: string;
 }
 
 export interface InterceptionParameters {
@@ -31,6 +32,8 @@ export interface InterceptionParameters {
 }
 
 export interface ChromeSigninInterceptionParameters {
+  title: string;
+  subtitle: string;
   fullName: string;
   givenName: string;
   email: string;

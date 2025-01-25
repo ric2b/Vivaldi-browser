@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/messaging/blink_transferable_message_mojom_traits.h"
 
 #include "base/memory/scoped_refptr.h"
@@ -221,7 +226,7 @@ TEST(BlinkTransferableMessageStructTraitsTest,
 class BlinkTransferableMessageStructTraitsWithFakeGpuTest : public Test {
  public:
   void SetUp() override {
-    auto sii = base::MakeRefCounted<viz::TestSharedImageInterface>();
+    auto sii = base::MakeRefCounted<gpu::TestSharedImageInterface>();
     sii_ = sii.get();
     context_provider_ = viz::TestContextProvider::Create(std::move(sii));
     InitializeSharedGpuContextGLES2(context_provider_.get());
@@ -241,7 +246,7 @@ class BlinkTransferableMessageStructTraitsWithFakeGpuTest : public Test {
   }
 
   ImageBitmap* CreateAcceleratedStaticImageBitmap() {
-    auto mailbox = gpu::Mailbox::GenerateForSharedImage();
+    auto mailbox = gpu::Mailbox::Generate();
 
     return MakeGarbageCollected<ImageBitmap>(
         AcceleratedStaticBitmapImage::CreateFromCanvasMailbox(
@@ -262,7 +267,7 @@ class BlinkTransferableMessageStructTraitsWithFakeGpuTest : public Test {
   }
 
  protected:
-  viz::TestSharedImageInterface* sii_;
+  gpu::TestSharedImageInterface* sii_;
   scoped_refptr<viz::TestContextProvider> context_provider_;
 
   bool image_destroyed_ = false;

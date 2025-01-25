@@ -186,7 +186,9 @@ void RealtimeAudioDestinationHandler::Render(
     AudioBus* destination_bus,
     uint32_t number_of_frames,
     const AudioIOPosition& output_position,
-    const AudioCallbackMetric& metric) {
+    const AudioCallbackMetric& metric,
+    base::TimeDelta playout_delay,
+    const media::AudioGlitchInfo& glitch_info) {
   TRACE_EVENT0("webaudio", "RealtimeAudioDestinationHandler::Render");
 
   // Denormals can seriously hurt performance of audio processing. This will
@@ -213,7 +215,8 @@ void RealtimeAudioDestinationHandler::Render(
     return;
   }
 
-  context->HandlePreRenderTasks(&output_position, &metric);
+  context->HandlePreRenderTasks(number_of_frames, &output_position, &metric,
+                                playout_delay, glitch_info);
 
   // Only pull on the audio graph if we have not stopped the destination.  It
   // takes time for the destination to stop, but we want to stop pulling before
@@ -256,17 +259,20 @@ void RealtimeAudioDestinationHandler::Render(
 }
 
 void RealtimeAudioDestinationHandler::OnRenderError() {
-  if (base::FeatureList::IsEnabled(features::kWebAudioHandleOnRenderError)) {
-    if (task_runner_->BelongsToCurrentThread()) {
-      RealtimeAudioDestinationHandler::NotifyAudioContext();
-    } else {
-      PostCrossThreadTask(
-          *task_runner_, FROM_HERE,
-          CrossThreadBindOnce(
-              &RealtimeAudioDestinationHandler::NotifyAudioContext,
-              AsWeakPtr()));
-    }
+  DCHECK(IsMainThread());
+
+  if (!RuntimeEnabledFeatures::AudioContextOnErrorEnabled()) {
+    return;
   }
+
+  // When this method gets executed by the task runner, it is possible that
+  // the corresponding GC-managed objects are not valid anymore. Check the
+  // initialization state and stop if the disposition already happened.
+  if (!IsInitialized()) {
+    return;
+  }
+
+  Context()->OnRenderError();
 }
 
 // A flag for using FakeAudioWorker when an AudioContext with "playback"
@@ -301,7 +307,8 @@ void RealtimeAudioDestinationHandler::SetDetectSilenceIfNecessary(
     PostCrossThreadTask(
         *task_runner_, FROM_HERE,
         CrossThreadBindOnce(&RealtimeAudioDestinationHandler::SetDetectSilence,
-                            AsWeakPtr(), needs_silence_detection));
+                            weak_ptr_factory_.GetWeakPtr(),
+                            needs_silence_detection));
     is_detecting_silence_ = needs_silence_detection;
   }
 }
@@ -310,19 +317,6 @@ void RealtimeAudioDestinationHandler::SetDetectSilence(bool detect_silence) {
   DCHECK(IsMainThread());
 
   platform_destination_->SetDetectSilence(detect_silence);
-}
-
-void RealtimeAudioDestinationHandler::NotifyAudioContext() {
-  DCHECK(IsMainThread());
-
-  // When this method gets executed by the task runner, it is possible that
-  // the corresponding GC-managed objects are not valid anymore. Check the
-  // initialization state and stop if the disposition already happened.
-  if (!IsInitialized()) {
-    return;
-  }
-
-  Context()->OnRenderError();
 }
 
 uint32_t RealtimeAudioDestinationHandler::GetCallbackBufferSize() const {
@@ -462,7 +456,7 @@ void RealtimeAudioDestinationHandler::SetSinkDescriptor(
   // sink in order to query the device status. If the status is OK, then replace
   // the `platform_destination_` with the pending_platform_destination.
   media::OutputDeviceStatus status =
-      pending_platform_destination->CreateSinkAndGetDeviceStatus();
+      pending_platform_destination->MaybeCreateSinkAndGetStatus();
   if (status == media::OutputDeviceStatus::OUTPUT_DEVICE_STATUS_OK) {
     StopPlatformDestination();
     platform_destination_ = pending_platform_destination;
@@ -471,6 +465,11 @@ void RealtimeAudioDestinationHandler::SetSinkDescriptor(
   }
 
   std::move(callback).Run(status);
+}
+
+void RealtimeAudioDestinationHandler::
+    invoke_onrendererror_from_platform_for_testing() {
+  platform_destination_->OnRenderError();
 }
 
 }  // namespace blink

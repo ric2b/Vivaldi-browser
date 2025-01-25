@@ -21,8 +21,8 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "components/enterprise/data_controls/features.h"
-#include "components/enterprise/data_controls/test_utils.h"
+#include "components/enterprise/data_controls/core/features.h"
+#include "components/enterprise/data_controls/core/test_utils.h"
 #include "components/policy/core/common/cloud/dm_token.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "components/policy/core/common/policy_types.h"
@@ -148,7 +148,7 @@ class DataProtectionNavigationObserverTest
     content::RenderViewHostTestHarness::SetUp();
 
     scoped_features_.InitAndEnableFeature(
-        data_controls::kEnableDesktopDataControls);
+        data_controls::kEnableScreenshotProtection);
 
     profile_manager_ = std::make_unique<TestingProfileManager>(
         TestingBrowserProcess::GetGlobal());
@@ -783,9 +783,10 @@ TEST_P(DataProtectionWatermarkStringTest,
        TestGetWatermarkStringFromThreatInfo) {
   safe_browsing::RTLookupResponse::ThreatInfo threat_info = GetTestThreatInfo(
       GetParam().custom_message, GetParam().timestamp_seconds);
-  EXPECT_EQ(enterprise_data_protection::GetWatermarkString(
-                GetParam().identifier, threat_info),
-            GetParam().expected);
+  EXPECT_EQ(
+      enterprise_data_protection::GetWatermarkString(
+          GetParam().identifier, threat_info.matched_url_navigation_rule()),
+      GetParam().expected);
 }
 
 }  // namespace enterprise_data_protection

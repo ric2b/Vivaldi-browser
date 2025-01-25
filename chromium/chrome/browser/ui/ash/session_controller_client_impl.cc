@@ -44,6 +44,7 @@
 #include "chromeos/ash/components/assistant/buildflags.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/ash/components/login/session/session_termination_manager.h"
+#include "chromeos/ash/components/standalone_browser/migrator_util.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
@@ -288,7 +289,8 @@ void SessionControllerClientImpl::ShowMultiProfileLogin() {
   const auto* primary_user = UserManager::Get()->GetPrimaryUser();
   DCHECK(primary_user);
   DCHECK(!crosapi::browser_util::IsLacrosEnabledForMigration(
-      primary_user, crosapi::browser_util::PolicyInitState::kAfterInit));
+      primary_user,
+      ash::standalone_browser::migrator_util::PolicyInitState::kAfterInit));
 
   // Don't show the dialog if any logged-in user in the multi-profile session
   // dismissed it.
@@ -346,15 +348,17 @@ base::FilePath SessionControllerClientImpl::GetProfilePath(
   return user_profile->GetPath();
 }
 
-bool SessionControllerClientImpl::IsEligibleForSeaPen(
+std::tuple<bool, bool> SessionControllerClientImpl::IsEligibleForSeaPen(
     const AccountId& account_id) {
   Profile* const user_profile =
       multi_user_util::GetProfileFromAccountId(account_id);
   if (!user_profile) {
-    return false;
+    return {false, false};
   }
 
-  return ash::personalization_app::IsEligibleForSeaPen(user_profile);
+  return {ash::personalization_app::IsEligibleForSeaPen(user_profile),
+          ash::personalization_app::IsManagedSeaPenVcBackgroundEnabled(
+              user_profile)};
 }
 
 std::optional<int> SessionControllerClientImpl::GetExistingUsersCount() const {
@@ -373,9 +377,9 @@ bool SessionControllerClientImpl::IsMultiProfileAvailable() {
   }
   // Multiprofile mode is not allowed if Lacros is enabled.
   const auto* primary_user = UserManager::Get()->GetPrimaryUser();
-  if (primary_user &&
-      crosapi::browser_util::IsLacrosEnabledForMigration(
-          primary_user, crosapi::browser_util::PolicyInitState::kAfterInit)) {
+  if (primary_user && crosapi::browser_util::IsLacrosEnabledForMigration(
+                          primary_user, ash::standalone_browser::migrator_util::
+                                            PolicyInitState::kAfterInit)) {
     return false;
   }
   size_t users_logged_in = UserManager::Get()->GetLoggedInUsers().size();
@@ -462,7 +466,8 @@ SessionControllerClientImpl::GetAddUserSessionPolicy() {
   const auto* primary_user = user_manager->GetPrimaryUser();
   if (primary_user) {
     if (crosapi::browser_util::IsLacrosEnabledForMigration(
-            primary_user, crosapi::browser_util::PolicyInitState::kAfterInit)) {
+            primary_user, ash::standalone_browser::migrator_util::
+                              PolicyInitState::kAfterInit)) {
       return ash::AddUserSessionPolicy::ERROR_LACROS_ENABLED;
     }
   }
@@ -527,7 +532,8 @@ void SessionControllerClientImpl::DoCycleActiveUser(
       it = logged_in_users.end();
     account_id = (*(--it))->GetAccountId();
   } else {
-    NOTREACHED() << "Invalid direction=" << static_cast<int>(direction);
+    NOTREACHED_IN_MIGRATION()
+        << "Invalid direction=" << static_cast<int>(direction);
     return;
   }
 

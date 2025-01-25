@@ -48,16 +48,21 @@ struct SupportedLimits;
 
 class AdapterBase : public RefCounted, public WeakRefSupport<AdapterBase> {
   public:
-    AdapterBase(Ref<PhysicalDeviceBase> physicalDevice,
+    AdapterBase(InstanceBase* instance,
+                Ref<PhysicalDeviceBase> physicalDevice,
                 FeatureLevel featureLevel,
                 const TogglesState& requiredAdapterToggles,
                 wgpu::PowerPreference powerPreference);
     ~AdapterBase() override;
 
+    // Gets the instance without adding a ref.
+    InstanceBase* GetInstance() const;
+
     // WebGPU API
     InstanceBase* APIGetInstance() const;
-    bool APIGetLimits(SupportedLimits* limits) const;
-    void APIGetProperties(AdapterProperties* properties) const;
+    wgpu::Status APIGetLimits(SupportedLimits* limits) const;
+    wgpu::Status APIGetInfo(AdapterInfo* info) const;
+    wgpu::Status APIGetProperties(AdapterProperties* properties) const;
     bool APIHasFeature(wgpu::FeatureName feature) const;
     size_t APIEnumerateFeatures(wgpu::FeatureName* features) const;
     void APIRequestDevice(const DeviceDescriptor* descriptor,
@@ -65,8 +70,11 @@ class AdapterBase : public RefCounted, public WeakRefSupport<AdapterBase> {
                           void* userdata);
     Future APIRequestDeviceF(const DeviceDescriptor* descriptor,
                              const RequestDeviceCallbackInfo& callbackInfo);
+    Future APIRequestDevice2(const DeviceDescriptor* descriptor,
+                             const WGPURequestDeviceCallbackInfo2& callbackInfo);
     DeviceBase* APICreateDevice(const DeviceDescriptor* descriptor = nullptr);
-    bool APIGetFormatCapabilities(wgpu::TextureFormat format, FormatCapabilities* capabilities);
+    wgpu::Status APIGetFormatCapabilities(wgpu::TextureFormat format,
+                                          FormatCapabilities* capabilities);
 
     void SetUseTieredLimits(bool useTieredLimits);
 
@@ -85,11 +93,14 @@ class AdapterBase : public RefCounted, public WeakRefSupport<AdapterBase> {
     const std::string& GetName() const;
 
   private:
+    wgpu::Status GetPropertiesInternal(AdapterProperties* properties) const;
+
     std::pair<Ref<DeviceBase::DeviceLostEvent>, ResultOrError<Ref<DeviceBase>>> CreateDevice(
         const DeviceDescriptor* rawDescriptor);
     ResultOrError<Ref<DeviceBase>> CreateDeviceInternal(const DeviceDescriptor* rawDescriptor,
                                                         Ref<DeviceBase::DeviceLostEvent> lostEvent);
 
+    Ref<InstanceBase> mInstance;
     Ref<PhysicalDeviceBase> mPhysicalDevice;
     FeatureLevel mFeatureLevel;
     bool mUseTieredLimits = false;

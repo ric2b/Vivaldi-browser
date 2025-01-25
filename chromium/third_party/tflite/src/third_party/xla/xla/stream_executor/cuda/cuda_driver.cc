@@ -47,6 +47,7 @@ limitations under the License.
 #include "xla/stream_executor/gpu/gpu_driver.h"
 #include "xla/stream_executor/gpu/gpu_types.h"
 #include "xla/stream_executor/platform.h"
+#include "xla/stream_executor/stream_executor.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/logging.h"
 #include "tsl/platform/macros.h"
@@ -115,17 +116,6 @@ tsl::thread::ThreadPool* GetDriverExecutor() {
 }
 
 }  // namespace
-
-std::string MemorySpaceString(MemorySpace memory_space) {
-  switch (memory_space) {
-    case MemorySpace::kHost:
-      return "host";
-    case MemorySpace::kDevice:
-      return "device";
-    default:
-      LOG(FATAL) << "impossible memory space";
-  }
-}
 
 namespace {
 
@@ -305,6 +295,17 @@ int GetFlagsFromEnv() {
 }
 
 }  // namespace
+
+absl::StatusOr<CUresult> QueryEvent(GpuContext* context, CUevent event) {
+  ScopedActivateContext activated{context};
+  CUresult res = cuEventQuery(event);
+  if (res != CUDA_SUCCESS && res != CUDA_ERROR_NOT_READY) {
+    return absl::InternalError(
+        absl::StrFormat("failed to query event: %s", ToString(res)));
+  }
+
+  return res;
+}
 
 /* static */ absl::Status GpuDriver::Init() {
   // Cached return value from calling InternalInit(), as cuInit need only be
@@ -1474,23 +1475,18 @@ struct BitPatternToValue {
   return absl::OkStatus();
 }
 
-/* static */ bool GpuDriver::GetModuleSymbol(GpuContext* context,
-                                             CUmodule module,
-                                             const char* symbol_name,
-                                             CUdeviceptr* dptr, size_t* bytes) {
+/* static */ absl::Status GpuDriver::GetModuleSymbol(GpuContext* context,
+                                                     CUmodule module,
+                                                     const char* symbol_name,
+                                                     CUdeviceptr* dptr,
+                                                     size_t* bytes) {
   ScopedActivateContext activated{context};
   CHECK(module != nullptr && symbol_name != nullptr &&
         (dptr != nullptr || bytes != nullptr));
-  CUresult res = cuModuleGetGlobal(dptr, bytes, module, symbol_name);
-  if (res != CUDA_SUCCESS) {
-    // symbol may not be found in the current module, but it may reside in
-    // another module.
-    VLOG(2) << "failed to get symbol \"" << symbol_name
-            << "\" from module: " << ToString(res);
-    return false;
-  }
-
-  return true;
+  RETURN_IF_CUDA_RES_ERROR(
+      cuModuleGetGlobal(dptr, bytes, module, symbol_name),
+      absl::StrCat("Failed to get symbol '", symbol_name, "'"));
+  return absl::OkStatus();
 }
 
 /* static */ void GpuDriver::UnloadModule(GpuContext* context,
@@ -1840,18 +1836,6 @@ GpuDriver::CreateMemoryHandle(GpuContext* context, uint64_t bytes) {
   return absl::OkStatus();
 }
 
-/* static */ absl::StatusOr<CUresult> GpuDriver::QueryEvent(GpuContext* context,
-                                                            CUevent event) {
-  ScopedActivateContext activated{context};
-  CUresult res = cuEventQuery(event);
-  if (res != CUDA_SUCCESS && res != CUDA_ERROR_NOT_READY) {
-    return absl::InternalError(
-        absl::StrFormat("failed to query event: %s", ToString(res)));
-  }
-
-  return res;
-}
-
 /* static */ bool GpuDriver::GetEventElapsedTime(GpuContext* context,
                                                  float* elapsed_milliseconds,
                                                  CUevent start, CUevent stop) {
@@ -2188,7 +2172,7 @@ GpuDriver::CreateMemoryHandle(GpuContext* context, uint64_t bytes) {
   }
 
   return absl::InternalError(absl::StrCat(
-      "failed to query device pointer for memory space: ", ToString(result)));
+      "failed to query pointer for memory space: ", ToString(result)));
 }
 
 /* static */ absl::Status GpuDriver::GetPointerAddressRange(CUdeviceptr dptr,
@@ -2260,7 +2244,7 @@ GpuDriver::CreateMemoryHandle(GpuContext* context, uint64_t bytes) {
 }
 
 // Helper function that turns the integer output of cuDeviceGetAttribute to type
-// T and wraps it in a StatusOr.
+// T and wraps it in a absl::StatusOr.
 template <typename T>
 static absl::StatusOr<T> GetSimpleAttribute(CUdevice device,
                                             CUdevice_attribute attribute) {

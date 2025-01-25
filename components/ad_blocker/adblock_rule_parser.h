@@ -49,11 +49,15 @@ class RuleParser {
                     std::vector<std::string>* included_domains,
                     std::vector<std::string>* excluded_domains);
   Result ParseRequestFilterRule(std::string_view rule_string,
-                                RequestFilterRule* rule);
+                                RequestFilterRule& rule);
   Result ParseRequestFilterRuleOptions(std::string_view options,
-                                       RequestFilterRule* rule);
+                                       RequestFilterRule& rule);
   std::optional<Result> ParseHostsFileOrNakedHost(std::string_view rule_string);
   bool MaybeAddPureHostRule(std::string_view maybe_hostname);
+
+  bool SetModifier(RequestFilterRule& rule,
+                   RequestFilterRule::ModifierType type,
+                   std::optional<std::string_view> value);
 
   const raw_ptr<ParseResult> parse_result_;
   RuleSourceSettings source_settings_;

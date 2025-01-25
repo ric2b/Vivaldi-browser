@@ -23,6 +23,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
+#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
@@ -253,21 +254,11 @@ NoStatePrefetchManager::StartPrefetchingFromLinkRelPrerender(
     attempt = preloading_data->AddPreloadingAttempt(
         content::preloading_predictor::kLinkRel,
         content::PreloadingType::kNoStatePrefetch, same_url_matcher,
+        /*planned_max_preloading_type=*/std::nullopt,
         triggered_primary_page_source_id);
   }
   return StartPrefetchingWithPreconnectFallback(
       origin, url, referrer, initiator_origin, gfx::Rect(size),
-      session_storage_namespace, attempt ? attempt->GetWeakPtr() : nullptr);
-}
-
-std::unique_ptr<NoStatePrefetchHandle>
-NoStatePrefetchManager::StartPrefetchingFromOmnibox(
-    const GURL& url,
-    SessionStorageNamespace* session_storage_namespace,
-    const gfx::Size& size,
-    PreloadingAttempt* attempt) {
-  return StartPrefetchingWithPreconnectFallback(
-      ORIGIN_OMNIBOX, url, content::Referrer(), std::nullopt, gfx::Rect(size),
       session_storage_namespace, attempt ? attempt->GetWeakPtr() : nullptr);
 }
 
@@ -308,7 +299,7 @@ void NoStatePrefetchManager::MoveEntryToPendingDelete(
   DCHECK(entry);
 
   auto it = FindIteratorForNoStatePrefetchContents(entry);
-  DCHECK(it != active_prefetches_.end());
+  CHECK(it != active_prefetches_.end(), base::NotFatalUntil::M130);
   to_delete_prefetches_.push_back(std::move(*it));
   active_prefetches_.erase(it);
   // Destroy the old WebContents relatively promptly to reduce resource usage.
@@ -958,7 +949,7 @@ void NoStatePrefetchManager::ScheduleDeleteOldWebContents(
       return;
     }
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void NoStatePrefetchManager::AddToHistory(NoStatePrefetchContents* contents) {

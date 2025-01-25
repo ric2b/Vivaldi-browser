@@ -406,6 +406,15 @@ class _InfoFileContext:
 
 def _OnStaleMd5(changes, options, javac_cmd, javac_args, java_files, kt_files):
   logging.info('Starting _OnStaleMd5')
+
+  # Use the build server for errorprone runs.
+  if (options.enable_errorprone and not options.skip_build_server
+      and server_utils.MaybeRunCommand(name=options.target_name,
+                                       argv=sys.argv,
+                                       stamp_file=options.jar_path,
+                                       force=options.use_build_server)):
+    return
+
   if options.enable_kythe_annotations:
     # Kythe requires those env variables to be set and compile_java.py does the
     # same
@@ -443,10 +452,12 @@ def _OnStaleMd5(changes, options, javac_cmd, javac_args, java_files, kt_files):
   jar_info_path = None
   if not options.enable_errorprone:
     # Delete any stale files in the generated directory. The purpose of
-    # options.generated_dir is for codesearch.
+    # options.generated_dir is for codesearch and Android Studio.
     shutil.rmtree(options.generated_dir, True)
     intermediates_out_dir = options.generated_dir
 
+    # Write .info file only for the main javac invocation (no need to do it
+    # when running Error Prone.
     jar_info_path = options.jar_path + '.info'
 
   # Compiles with Error Prone take twice as long to run as pure javac. Thus GN
@@ -505,7 +516,7 @@ def _RunCompiler(changes,
   java_srcjars = options.java_srcjars
   save_info_file = jar_info_path is not None
 
-  # Use jar_path's directory to ensure paths are relative (needed for goma).
+  # Use jar_path's directory to ensure paths are relative (needed for rbe).
   temp_dir = jar_path + '.staging'
   build_utils.DeleteDirectory(temp_dir)
   os.makedirs(temp_dir)
@@ -607,6 +618,15 @@ def _RunCompiler(changes,
     CreateJarFile(jar_path, classes_dir, service_provider_configuration,
                   options.additional_jar_files, options.kotlin_jar_path)
 
+    # Remove input srcjars that confuse Android Studio:
+    # https://crbug.com/353326240
+    for root, _, files in os.walk(intermediates_out_dir):
+      for subpath in files:
+        p = os.path.join(root, subpath)
+        # JNI Zero placeholders
+        if '_jni_java/' in p and not p.endswith('Jni.java'):
+          os.unlink(p)
+
     if save_info_file:
       info_file_context.Commit(jar_info_path)
 
@@ -663,8 +683,6 @@ def _ParseOptions(argv):
       type='int',
       help='Whether code being compiled should be built with stricter '
       'warnings for chromium code.')
-  parser.add_option(
-      '--gomacc-path', help='When set, prefix javac command with gomacc')
   parser.add_option(
       '--errorprone-path', help='Use the Errorprone compiler at this path.')
   parser.add_option(
@@ -734,18 +752,7 @@ def main(argv):
   argv = build_utils.ExpandFileArgs(argv)
   options, java_files, kt_files = _ParseOptions(argv)
 
-  # Only use the build server for errorprone runs.
-  if (options.enable_errorprone and not options.skip_build_server
-      and server_utils.MaybeRunCommand(name=options.target_name,
-                                       argv=sys.argv,
-                                       stamp_file=options.jar_path,
-                                       force=options.use_build_server)):
-    return
-
-  javac_cmd = []
-  if options.gomacc_path:
-    javac_cmd.append(options.gomacc_path)
-  javac_cmd.append(build_utils.JAVAC_PATH)
+  javac_cmd = [build_utils.JAVAC_PATH]
 
   javac_args = [
       '-g',

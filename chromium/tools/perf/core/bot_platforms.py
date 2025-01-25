@@ -1,6 +1,9 @@
 # Copyright 2018 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
+
+# pylint: disable=too-many-lines
+
 import os
 import six.moves.urllib.parse  # pylint: disable=import-error
 
@@ -39,7 +42,8 @@ class PerfPlatform(object):
                is_calibration=False,
                run_reference_build=False,
                pinpoint_only=False,
-               executables=None):
+               executables=None,
+               crossbench=None):
     benchmark_configs = benchmark_configs.Frozenset()
     self._name = name
     self._description = description
@@ -51,6 +55,7 @@ class PerfPlatform(object):
     self.run_reference_build = run_reference_build
     self.pinpoint_only = pinpoint_only
     self.executables = executables or frozenset()
+    self.crossbench = crossbench or frozenset()
     assert num_shards
     self._num_shards = num_shards
     # pylint: disable=redefined-outer-name
@@ -131,19 +136,23 @@ class PerfPlatform(object):
 
 
 class BenchmarkConfig(object):
-  def __init__(self, benchmark, abridged):
+
+  def __init__(self, benchmark, abridged, pageset_repeat_override):
     """A configuration for a benchmark that helps decide how to shard it.
 
     Args:
       benchmark: the benchmark.Benchmark object.
       abridged: True if the benchmark should be abridged so fewer stories
         are run, and False if the whole benchmark should be run.
+      pageset_repeat_override: number of times to repeat the entire story set.
+        can be None, which defaults to the benchmark default pageset_repeat.
     """
     self.benchmark = benchmark
     self.abridged = abridged
     self._stories = None
     self._exhaustive_stories = None
     self.is_telemetry = True
+    self.pageset_repeat_override = pageset_repeat_override
 
   @property
   def name(self):
@@ -151,6 +160,8 @@ class BenchmarkConfig(object):
 
   @property
   def repeat(self):
+    if self.pageset_repeat_override is not None:
+      return self.pageset_repeat_override
     return self.benchmark.options.get('pageset_repeat', 1)
 
   @property
@@ -193,6 +204,22 @@ class ExecutableConfig(object):
     self.repeat = 1
 
 
+class CrossbenchConfig:
+
+  def __init__(self,
+               name,
+               crossbench_name,
+               estimated_runtime=60,
+               stories=None,
+               arguments=None):
+    self.name = name
+    self.crossbench_name = crossbench_name
+    self.estimated_runtime = estimated_runtime
+    self.stories = stories or ['default']
+    self.arguments = arguments or []
+    self.repeat = 1
+
+
 class PerfSuite(object):
   def __init__(self, configs):
     self._configs = dict()
@@ -227,15 +254,18 @@ class PerfSuite(object):
           name, abridged=True)
     return self
 
+  def Repeat(self, config_names, pageset_repeat):
+    for name in config_names:
+      self._configs[name] = _GetBenchmarkConfig(
+          name,
+          abridged=self._configs[name].abridged,
+          pageset_repeat=pageset_repeat)
+    return self
 
-# Global |benchmarks| is convenient way to keep BenchmarkConfig objects
-# unique, which allows us to use set subtraction below.
-benchmarks = {b.Name(): {True: BenchmarkConfig(b, abridged=True),
-                         False: BenchmarkConfig(b, abridged=False)}
-              for b in ALL_SCHEDULEABLE_BENCHMARKS}
 
-def _GetBenchmarkConfig(benchmark_name, abridged=False):
-  return benchmarks[benchmark_name][abridged]
+def _GetBenchmarkConfig(benchmark_name, abridged=False, pageset_repeat=None):
+  benchmark = _ALL_BENCHMARKS_BY_NAMES[benchmark_name]
+  return BenchmarkConfig(benchmark, abridged, pageset_repeat)
 
 OFFICIAL_BENCHMARK_CONFIGS = PerfSuite(
     [_GetBenchmarkConfig(b.Name()) for b in OFFICIAL_BENCHMARKS])
@@ -243,11 +273,11 @@ OFFICIAL_BENCHMARK_CONFIGS = OFFICIAL_BENCHMARK_CONFIGS.Remove([
     'blink_perf.sanitizer-api',
     'blink_perf.svg',
     'blink_perf.paint',
-    'jetstream2-nominorms',
-    'octane-nominorms',
-    'speedometer2-nominorms',
+    'jetstream2-minorms',
+    'octane-minorms',
+    'speedometer2-minorms',
     'speedometer2-predictable',
-    'speedometer3-nominorms',
+    'speedometer3-minorms',
     'speedometer3-predictable',
 ])
 # TODO(crbug.com/40628256): Remove OFFICIAL_BENCHMARK_NAMES once sharding
@@ -255,9 +285,9 @@ OFFICIAL_BENCHMARK_CONFIGS = OFFICIAL_BENCHMARK_CONFIGS.Remove([
 OFFICIAL_BENCHMARK_NAMES = frozenset(
     b.name for b in OFFICIAL_BENCHMARK_CONFIGS.Frozenset())
 
-# TODO(crbug.com/40110184): Stop using these 'OFFICIAL_EXCEPT' suites and instead
-# define each benchmarking config separately as is already done for many of the
-# suites below.
+# TODO(crbug.com/40110184): Stop using these 'OFFICIAL_EXCEPT' suites and
+# instead define each benchmarking config separately as is already done for
+# many of the suites below.
 _OFFICIAL_EXCEPT_DISPLAY_LOCKING = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove(
     ['blink_perf.display_locking'])
 _OFFICIAL_EXCEPT_JETSTREAM2 = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove(
@@ -339,6 +369,41 @@ def _views_perftests(estimated_runtime=7):
                           flags=['--xvfb'],
                           estimated_runtime=estimated_runtime)
 
+
+def _crossbench_speedometer3_0(estimated_runtime=60):
+  return CrossbenchConfig('speedometer3.crossbench',
+                          'speedometer_3.0',
+                          estimated_runtime=estimated_runtime)
+
+
+def _crossbench_motionmark1_3(estimated_runtime=360):
+  return CrossbenchConfig('motionmark1.3.crossbench',
+                          'motionmark_1.3',
+                          estimated_runtime=estimated_runtime)
+
+
+def _crossbench_jetstream2_1(estimated_runtime=180):
+  return CrossbenchConfig('jetstream2.crossbench',
+                          'jetstream_2.2',
+                          estimated_runtime=estimated_runtime)
+
+
+_CROSSBENCH_JETSTREAM_SPEEDOMETER = frozenset([
+    _crossbench_jetstream2_1(),
+    _crossbench_speedometer3_0(),
+])
+
+_CROSSBENCH_MOTIONMARK_SPEEDOMETER = frozenset([
+    _crossbench_motionmark1_3(),
+    _crossbench_speedometer3_0(),
+])
+
+_CROSSBENCH_BENCHMARKS_ALL = frozenset([
+    _crossbench_speedometer3_0(),
+    _crossbench_motionmark1_3(),
+    _crossbench_jetstream2_1(),
+])
+
 _CHROME_HEALTH_BENCHMARK_CONFIGS_DESKTOP = PerfSuite([
     _GetBenchmarkConfig('system_health.common_desktop')
 ])
@@ -403,20 +468,19 @@ _LINUX_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
     'blink_perf.svg',
     'blink_perf.paint',
 ])
-_LINUX_BENCHMARK_CONFIGS_WITH_NOMINORMS_PREDICTABLE = PerfSuite(
+_LINUX_BENCHMARK_CONFIGS_WITH_MINORMS_PREDICTABLE = PerfSuite(
     _LINUX_BENCHMARK_CONFIGS).Add([
-        'jetstream2-nominorms',
-        'octane-nominorms',
-        'speedometer2-nominorms',
+        'jetstream2-minorms',
+        'octane-minorms',
+        'speedometer2-minorms',
         'speedometer2-predictable',
-        'speedometer3-nominorms',
+        'speedometer3-minorms',
         'speedometer3-predictable',
     ])
 _LINUX_EXECUTABLE_CONFIGS = frozenset([
     # TODO(crbug.com/40562709): Add views_perftests.
     _base_perftests(200),
     _load_library_perf_tests(),
-    _performance_browser_tests(165),
     _tracing_perftests(5),
 ])
 _MAC_HIGH_END_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
@@ -426,7 +490,6 @@ _MAC_HIGH_END_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
 _MAC_HIGH_END_EXECUTABLE_CONFIGS = frozenset([
     _base_perftests(300),
     # _dawn_perf_tests(330),    # b/332611618
-    _performance_browser_tests(190),
     _views_perftests(),
 ])
 _MAC_LOW_END_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
@@ -435,22 +498,30 @@ _MAC_LOW_END_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
 ])
 _MAC_LOW_END_EXECUTABLE_CONFIGS = frozenset([
     _load_library_perf_tests(),
-    _performance_browser_tests(210),
 ])
 _MAC_M1_MINI_2020_BENCHMARK_CONFIGS = PerfSuite(
     OFFICIAL_BENCHMARK_CONFIGS).Remove([
         'blink_perf.display_locking',
         'v8.runtime_stats.top_25',
     ]).Add([
-        'jetstream2-nominorms',
-        'speedometer2-nominorms',
-        'speedometer3-nominorms',
-    ])
+        'jetstream2-minorms',
+        'speedometer2-minorms',
+        'speedometer3-minorms',
+    ]).Repeat([
+        'speedometer2',
+        'speedometer3',
+        'rendering.desktop.notracing',
+    ], 2)
 _MAC_M1_MINI_2020_PGO_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('jetstream2'),
     _GetBenchmarkConfig('speedometer2'),
     _GetBenchmarkConfig('speedometer3'),
     _GetBenchmarkConfig('rendering.desktop.notracing'),
+])
+_MAC_M1_MINI_2020_NO_BRP_BENCHMARK_CONFIGS = PerfSuite([
+    _GetBenchmarkConfig('speedometer2', pageset_repeat=2),
+    _GetBenchmarkConfig('speedometer3', pageset_repeat=2),
+    _GetBenchmarkConfig('rendering.desktop.notracing', pageset_repeat=2),
 ])
 _MAC_M1_PRO_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('jetstream2'),
@@ -461,16 +532,15 @@ _MAC_M1_PRO_BENCHMARK_CONFIGS = PerfSuite([
 _MAC_M1_MINI_2020_EXECUTABLE_CONFIGS = frozenset([
     _base_perftests(300),
     _dawn_perf_tests(330),
-    _performance_browser_tests(190),
     _views_perftests(),
 ])
 _MAC_M2_PRO_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
     'blink_perf.display_locking',
     'v8.runtime_stats.top_25',
 ]).Add([
-    'jetstream2-nominorms',
-    'speedometer2-nominorms',
-    'speedometer3-nominorms',
+    'jetstream2-minorms',
+    'speedometer2-minorms',
+    'speedometer3-minorms',
 ])
 
 _WIN_10_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
@@ -557,9 +627,9 @@ _ANDROID_PIXEL6_PGO_BENCHMARK_CONFIGS = PerfSuite([
 ])
 _ANDROID_PIXEL6_PRO_BENCHMARK_CONFIGS = PerfSuite(
     _OFFICIAL_EXCEPT_DISPLAY_LOCKING).Add([
-        _GetBenchmarkConfig('jetstream2-nominorms'),
-        _GetBenchmarkConfig('speedometer2-nominorms'),
-        _GetBenchmarkConfig('speedometer3-nominorms'),
+        _GetBenchmarkConfig('jetstream2-minorms'),
+        _GetBenchmarkConfig('speedometer2-minorms'),
+        _GetBenchmarkConfig('speedometer3-minorms'),
     ])
 _ANDROID_PIXEL6_EXECUTABLE_CONFIGS = frozenset([
     _components_perftests(60),
@@ -567,8 +637,25 @@ _ANDROID_PIXEL6_EXECUTABLE_CONFIGS = frozenset([
 _ANDROID_PIXEL6_PRO_EXECUTABLE_CONFIGS = frozenset([
     _components_perftests(60),
 ])
-_ANDROID_PIXEL2_AAB_FYI_BENCHMARK_CONFIGS = PerfSuite(
-    [_GetBenchmarkConfig('startup.mobile')])
+# Pixel fold
+_ANDROID_PIXEL_FOLD_BENCHMARK_CONFIGS = PerfSuite(
+    _OFFICIAL_EXCEPT_DISPLAY_LOCKING).Add([
+        _GetBenchmarkConfig('jetstream2-minorms'),
+        _GetBenchmarkConfig('speedometer2-minorms'),
+        _GetBenchmarkConfig('speedometer3-minorms'),
+    ])
+_ANDROID_PIXEL_FOLD_EXECUTABLE_CONFIGS = frozenset([
+    _components_perftests(60),
+])
+# Pixel Tangor
+_ANDROID_PIXEL_TANGOR_BENCHMARK_CONFIGS = PerfSuite(
+    _OFFICIAL_EXCEPT_DISPLAY_LOCKING).Add([
+        _GetBenchmarkConfig('jetstream2-minorms'),
+        _GetBenchmarkConfig('speedometer2-minorms'),
+        _GetBenchmarkConfig('speedometer3-minorms')
+    ])
+_ANDROID_PIXEL_TANGOR_EXECUTABLE_CONFIGS = frozenset(
+    [_components_perftests(60)])
 _ANDROID_PIXEL2_FYI_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('v8.browsing_mobile'),
     _GetBenchmarkConfig('system_health.memory_mobile'),
@@ -595,7 +682,8 @@ _FUCHSIA_PERF_SHERLOCK_BENCHMARK_CONFIGS = \
     _FUCHSIA_PERF_NELSON_BENCHMARK_CONFIGS
 _LINUX_PERF_FYI_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('speedometer2'),
-    _GetBenchmarkConfig('speedometer2-nominorms')
+    _GetBenchmarkConfig('speedometer2-minorms'),
+    _GetBenchmarkConfig('speedometer3'),
 ])
 _LINUX_PERF_CALIBRATION_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('speedometer2'),
@@ -612,10 +700,11 @@ _ANDROID_PIXEL2_PERF_CALIBRATION_BENCHMARK_CONFIGS = PerfSuite([
 # Linux
 LINUX = PerfPlatform('linux-perf',
                      'Ubuntu-18.04, 8 core, NVIDIA Quadro P400',
-                     _LINUX_BENCHMARK_CONFIGS_WITH_NOMINORMS_PREDICTABLE,
+                     _LINUX_BENCHMARK_CONFIGS_WITH_MINORMS_PREDICTABLE,
                      26,
                      'linux',
-                     executables=_LINUX_EXECUTABLE_CONFIGS)
+                     executables=_LINUX_EXECUTABLE_CONFIGS,
+                     crossbench=_CROSSBENCH_BENCHMARKS_ALL)
 LINUX_PGO = PerfPlatform('linux-perf-pgo',
                          'Ubuntu-18.04, 8 core, NVIDIA Quadro P400',
                          _LINUX_BENCHMARK_CONFIGS,
@@ -624,12 +713,16 @@ LINUX_PGO = PerfPlatform('linux-perf-pgo',
                          executables=_LINUX_EXECUTABLE_CONFIGS,
                          pinpoint_only=True)
 LINUX_REL = PerfPlatform(
-    'linux-perf-rel',
-    'Ubuntu-18.04, 8 core, NVIDIA Quadro P400',
-    _CHROME_HEALTH_BENCHMARK_CONFIGS_DESKTOP,
-    2,
-    'linux',
-    executables=_LINUX_EXECUTABLE_CONFIGS)
+    'linux-perf-rel', 'Ubuntu-18.04, 8 core, NVIDIA Quadro P400',
+    _CHROME_HEALTH_BENCHMARK_CONFIGS_DESKTOP, 2,
+    'linux', executables=_LINUX_EXECUTABLE_CONFIGS)
+LINUX_R350 = PerfPlatform('linux-r350-perf',
+                          'Ubuntu-22.04, 16 core',
+                          _LINUX_BENCHMARK_CONFIGS_WITH_MINORMS_PREDICTABLE,
+                          30,
+                          'linux',
+                          executables=_LINUX_EXECUTABLE_CONFIGS,
+                          crossbench=_CROSSBENCH_BENCHMARKS_ALL)
 
 # Mac
 MAC_HIGH_END_LAPTOP = PerfPlatform(
@@ -638,7 +731,8 @@ MAC_HIGH_END_LAPTOP = PerfPlatform(
     _MAC_HIGH_END_BENCHMARK_CONFIGS,
     23,
     'mac',
-    executables=_MAC_HIGH_END_EXECUTABLE_CONFIGS)
+    executables=_MAC_HIGH_END_EXECUTABLE_CONFIGS,
+    crossbench=_CROSSBENCH_BENCHMARKS_ALL)
 MAC_HIGH_END_LAPTOP_PGO = PerfPlatform(
     'mac-laptop_high_end-perf-pgo',
     'MacBook Pro, Core i7 2.8 GHz, 16GB RAM, 256GB SSD, Radeon 55',
@@ -653,7 +747,8 @@ MAC_LOW_END_LAPTOP = PerfPlatform(
     _MAC_LOW_END_BENCHMARK_CONFIGS,
     23,
     'mac',
-    executables=_MAC_LOW_END_EXECUTABLE_CONFIGS)
+    executables=_MAC_LOW_END_EXECUTABLE_CONFIGS,
+    crossbench=_CROSSBENCH_MOTIONMARK_SPEEDOMETER)
 MAC_LOW_END_LAPTOP_PGO = PerfPlatform(
     'mac-laptop_low_end-perf-pgo',
     'MacBook Air, Core i5 1.8 GHz, 8GB RAM, 128GB SSD, HD Graphics',
@@ -668,28 +763,35 @@ MAC_M1_MINI_2020 = PerfPlatform(
     _MAC_M1_MINI_2020_BENCHMARK_CONFIGS,
     26,
     'mac',
-    executables=_MAC_M1_MINI_2020_EXECUTABLE_CONFIGS)
-MAC_M1_MINI_2020_PGO = PerfPlatform(
-    'mac-m1_mini_2020-perf-pgo',
-    'Mac M1 Mini 2020',
-    _MAC_M1_MINI_2020_PGO_BENCHMARK_CONFIGS,
-    4,
-    'mac')
-MAC_M1_PRO = PerfPlatform(
-    'mac-m1-pro-perf',
-    'Mac M1 PRO 2020',
-    _MAC_M1_PRO_BENCHMARK_CONFIGS,
-    1,
-    'mac')
-MAC_M2_PRO = PerfPlatform('mac-m2-pro-perf', 'Mac M2 PRO Baremetal ARM',
-                          _MAC_M2_PRO_BENCHMARK_CONFIGS, 20, 'mac')
-MAC_14_M1_PRO = PerfPlatform(
-    'mac-14-m1-pro-perf',
-    'Mac M1 PRO 2020 running MacOS 14',
-    _MAC_M1_PRO_BENCHMARK_CONFIGS,
-    1,
-    'mac',
-    pinpoint_only=True)
+    executables=_MAC_M1_MINI_2020_EXECUTABLE_CONFIGS,
+    crossbench=_CROSSBENCH_BENCHMARKS_ALL)
+MAC_M1_MINI_2020_PGO = PerfPlatform('mac-m1_mini_2020-perf-pgo',
+                                    'Mac M1 Mini 2020',
+                                    _MAC_M1_MINI_2020_PGO_BENCHMARK_CONFIGS,
+                                    4,
+                                    'mac',
+                                    crossbench=_CROSSBENCH_BENCHMARKS_ALL)
+MAC_M1_MINI_2020_NO_BRP = PerfPlatform(
+    'mac-m1_mini_2020-no-brp-perf', 'Mac M1 Mini 2020 with BRP disabled',
+    _MAC_M1_MINI_2020_NO_BRP_BENCHMARK_CONFIGS, 20, 'mac')
+MAC_M1_PRO = PerfPlatform('mac-m1-pro-perf',
+                          'Mac M1 PRO 2020',
+                          _MAC_M1_PRO_BENCHMARK_CONFIGS,
+                          1,
+                          'mac',
+                          crossbench=_CROSSBENCH_BENCHMARKS_ALL)
+MAC_M2_PRO = PerfPlatform('mac-m2-pro-perf',
+                          'Mac M2 PRO Baremetal ARM',
+                          _MAC_M2_PRO_BENCHMARK_CONFIGS,
+                          20,
+                          'mac',
+                          crossbench=_CROSSBENCH_BENCHMARKS_ALL)
+MAC_14_M1_PRO = PerfPlatform('mac-14-m1-pro-perf',
+                             'Mac M1 PRO 2020 running MacOS 14',
+                             _MAC_M1_PRO_BENCHMARK_CONFIGS,
+                             1,
+                             'mac',
+                             pinpoint_only=True)
 
 # Win
 WIN_10_LOW_END = PerfPlatform(
@@ -698,8 +800,9 @@ WIN_10_LOW_END = PerfPlatform(
     'SSD, 4GB RAM.',
     _WIN_10_LOW_END_BENCHMARK_CONFIGS,
     # TODO(b/278947510): Increase the count when m.2 disks stop failing.
-    48,
-    'win')
+    24,  # (b/354044494) reduce for os/gpu update.
+    'win',
+    crossbench=_CROSSBENCH_BENCHMARKS_ALL)
 WIN_10_LOW_END_PGO = PerfPlatform(
     'win-10_laptop_low_end-perf-pgo',
     'Low end windows 10 HP laptops. HD Graphics 5500, x86-64-i3-5005U, '
@@ -714,21 +817,25 @@ WIN_10 = PerfPlatform(
     'Windows Intel HD 630 towers, Core i7-7700 3.6 GHz, 16GB RAM,'
     ' Intel Kaby Lake HD Graphics 630',
     _WIN_10_BENCHMARK_CONFIGS,
-    20,
+    18,
     'win',
-    executables=_WIN_10_EXECUTABLE_CONFIGS)
+    executables=_WIN_10_EXECUTABLE_CONFIGS,
+    crossbench=_CROSSBENCH_BENCHMARKS_ALL)
 WIN_10_PGO = PerfPlatform(
     'win-10-perf-pgo',
     'Windows Intel HD 630 towers, Core i7-7700 3.6 GHz, 16GB RAM,'
     ' Intel Kaby Lake HD Graphics 630',
     _WIN_10_BENCHMARK_CONFIGS,
-    26,
+    18,
     'win',
     executables=_WIN_10_EXECUTABLE_CONFIGS,
     pinpoint_only=True)
 WIN_10_AMD_LAPTOP = PerfPlatform('win-10_amd_laptop-perf',
                                  'Windows 10 Laptop with AMD chipset.',
-                                 _WIN_10_AMD_LAPTOP_BENCHMARK_CONFIGS, 3, 'win')
+                                 _WIN_10_AMD_LAPTOP_BENCHMARK_CONFIGS,
+                                 3,
+                                 'win',
+                                 crossbench=_CROSSBENCH_JETSTREAM_SPEEDOMETER)
 WIN_10_AMD_LAPTOP_PGO = PerfPlatform('win-10_amd_laptop-perf-pgo',
                                      'Windows 10 Laptop with AMD chipset.',
                                      _WIN_10_AMD_LAPTOP_BENCHMARK_CONFIGS,
@@ -740,7 +847,8 @@ WIN_11 = PerfPlatform('win-11-perf',
                       _WIN_11_BENCHMARK_CONFIGS,
                       20,
                       'win',
-                      executables=_WIN_11_EXECUTABLE_CONFIGS)
+                      executables=_WIN_11_EXECUTABLE_CONFIGS,
+                      crossbench=_CROSSBENCH_BENCHMARKS_ALL)
 WIN_11_PGO = PerfPlatform('win-11-perf-pgo',
                           'Windows Dell PowerEdge R350',
                           _WIN_11_BENCHMARK_CONFIGS,
@@ -818,6 +926,14 @@ ANDROID_PIXEL6_PRO_PGO = PerfPlatform(
     'android',
     executables=_ANDROID_PIXEL6_PRO_EXECUTABLE_CONFIGS,
     pinpoint_only=True)
+ANDROID_PIXEL_FOLD = PerfPlatform('android-pixel-fold-perf', 'Android U',
+    _ANDROID_PIXEL_FOLD_BENCHMARK_CONFIGS,
+    2,  # testing on the first two connected devices
+    'android',
+    executables=_ANDROID_PIXEL_FOLD_EXECUTABLE_CONFIGS)
+ANDROID_PIXEL_TANGOR = PerfPlatform('android-pixel-tangor-perf', 'Android U',
+    _ANDROID_PIXEL_TANGOR_BENCHMARK_CONFIGS, 8, 'android',
+    executables=_ANDROID_PIXEL_TANGOR_EXECUTABLE_CONFIGS)
 ANDROID_GO_WEMBLEY = PerfPlatform('android-go-wembley-perf', 'Android U',
                                   _ANDROID_GO_BENCHMARK_CONFIGS, 15, 'android')
 ANDROID_GO_WEMBLEY_WEBVIEW = PerfPlatform(
@@ -857,13 +973,13 @@ LACROS_X86_PERF = PerfPlatform('lacros-x86-perf', '', _LACROS_BENCHMARK_CONFIGS,
 FUCHSIA_PERF_NELSON = PerfPlatform('fuchsia-perf-nsn',
                                    '',
                                    _FUCHSIA_PERF_NELSON_BENCHMARK_CONFIGS,
-                                   2,
+                                   3,
                                    'fuchsia',
                                    is_fyi=True)
 FUCHSIA_PERF_SHERLOCK = PerfPlatform('fuchsia-perf-shk',
                                      '',
                                      _FUCHSIA_PERF_SHERLOCK_BENCHMARK_CONFIGS,
-                                     2,
+                                     3,
                                      'fuchsia',
                                      is_fyi=True)
 
@@ -872,13 +988,6 @@ WIN_10_LOW_END_HP_CANDIDATE = PerfPlatform(
     'win-10_laptop_low_end-perf_HP-Candidate', 'HP 15-BS121NR Laptop Candidate',
     _WIN_10_LOW_END_HP_CANDIDATE_BENCHMARK_CONFIGS,
     1, 'win', is_fyi=True)
-ANDROID_PIXEL2_PERF_AAB_FYI = PerfPlatform(
-    'android-pixel2-perf-aab-fyi',
-    'Android OPM1.171019.021',
-    _ANDROID_PIXEL2_AAB_FYI_BENCHMARK_CONFIGS,
-    1,
-    'android',
-    is_fyi=True)
 ANDROID_PIXEL2_PERF_FYI = PerfPlatform('android-pixel2-perf-fyi',
                                        'Android OPM1.171019.021',
                                        _ANDROID_PIXEL2_FYI_BENCHMARK_CONFIGS,
@@ -894,8 +1003,9 @@ CHROMEOS_KEVIN_PERF_FYI = PerfPlatform('chromeos-kevin-perf-fyi',
 LINUX_PERF_FYI = PerfPlatform('linux-perf-fyi',
                               '',
                               _LINUX_PERF_FYI_BENCHMARK_CONFIGS,
-                              1,
+                              4,
                               'linux',
+                              crossbench=_CROSSBENCH_BENCHMARKS_ALL,
                               is_fyi=True)
 
 # Calibration bots

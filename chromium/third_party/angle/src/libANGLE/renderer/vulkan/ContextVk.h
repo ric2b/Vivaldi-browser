@@ -381,7 +381,11 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
                                   gl::TextureBarrierVector *textureBarriers) override;
 
     // Sets effective Context Priority. Changed by ShareGroupVk.
-    void setPriority(egl::ContextPriority newPriority) { mContextPriority = newPriority; }
+    void setPriority(egl::ContextPriority newPriority)
+    {
+        mContextPriority  = newPriority;
+        mDeviceQueueIndex = mRenderer->getDeviceQueueIndex(mContextPriority);
+    }
 
     VkDevice getDevice() const;
     // Effective Context Priority
@@ -502,8 +506,6 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
         return angle::Result::Continue;
     }
 
-    RenderPassCache &getRenderPassCache() { return mRenderPassCache; }
-
     bool emulateSeamfulCubeMapSampling() const { return mEmulateSeamfulCubeMapSampling; }
 
     const gl::Debug &getDebug() const { return mState.getDebug(); }
@@ -544,6 +546,18 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
         mRenderPassCommands->colorImagesDraw(level, layerStart, layerCount, image, resolveImage,
                                              imageSiblingSerial, packedAttachmentIndex);
     }
+    void onColorResolve(gl::LevelIndex level,
+                        uint32_t layerStart,
+                        uint32_t layerCount,
+                        vk::ImageHelper *image,
+                        VkImageView view,
+                        UniqueSerial imageSiblingSerial,
+                        size_t colorIndexGL)
+    {
+        ASSERT(mRenderPassCommands->started());
+        mRenderPassCommands->addColorResolveAttachment(colorIndexGL, image, view, level, layerStart,
+                                                       layerCount, imageSiblingSerial);
+    }
     void onDepthStencilDraw(gl::LevelIndex level,
                             uint32_t layerStart,
                             uint32_t layerCount,
@@ -554,6 +568,18 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
         ASSERT(mRenderPassCommands->started());
         mRenderPassCommands->depthStencilImagesDraw(level, layerStart, layerCount, image,
                                                     resolveImage, imageSiblingSerial);
+    }
+    void onDepthStencilResolve(gl::LevelIndex level,
+                               uint32_t layerStart,
+                               uint32_t layerCount,
+                               VkImageAspectFlags aspects,
+                               vk::ImageHelper *image,
+                               VkImageView view,
+                               UniqueSerial imageSiblingSerial)
+    {
+        ASSERT(mRenderPassCommands->started());
+        mRenderPassCommands->addDepthStencilResolveAttachment(
+            image, view, aspects, level, layerStart, layerCount, imageSiblingSerial);
     }
 
     void onFragmentShadingRateRead(vk::ImageHelper *image)
@@ -595,21 +621,6 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
             mOutsideRenderPassCommands->trackImageWithEvent(this, image);
         }
     }
-    void trackImagesWithOutsideRenderPassEvent(vk::ImageHelper *srcImage, vk::ImageHelper *dstImage)
-    {
-        if (mRenderer->getFeatures().useVkEventForImageBarrier.enabled)
-        {
-            mOutsideRenderPassCommands->trackImagesWithEvent(this, srcImage, dstImage);
-        }
-    }
-    void trackImagesWithOutsideRenderPassEvent(const vk::ImageHelperPtr *images, size_t count)
-    {
-        if (mRenderer->getFeatures().useVkEventForImageBarrier.enabled)
-        {
-            mOutsideRenderPassCommands->trackImagesWithEvent(this, images, count);
-        }
-    }
-
     angle::Result submitStagedTextureUpdates()
     {
         // Staged updates are recorded in outside RP cammand buffer, submit them.
@@ -651,14 +662,13 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
         return mRenderPassCommands->started() &&
                mRenderPassCommands->getQueueSerial() == queueSerial;
     }
-    bool hasStartedRenderPassWithSwapchainFramebuffer(const vk::Framebuffer &framebuffer) const
+    bool hasStartedRenderPassWithDefaultFramebuffer() const
     {
         // WindowSurfaceVk caches its own framebuffers and guarantees that render passes are not
         // kept open between frames (including when a swapchain is recreated and framebuffer handles
-        // change).  It is therefore safe to verify an open render pass by the framebuffer handle
-        return mRenderPassCommands->started() &&
-               mRenderPassCommands->getFramebuffer().getFramebuffer().getHandle() ==
-                   framebuffer.getHandle();
+        // change).  It is therefore safe to verify an open render pass just by checking if it
+        // originated from the default framebuffer.
+        return mRenderPassCommands->started() && mRenderPassCommands->isDefault();
     }
 
     bool isRenderPassStartedAndUsesBuffer(const vk::BufferHelper &buffer) const
@@ -744,7 +754,7 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
     angle::Result initializeMultisampleTextureToBlack(const gl::Context *context,
                                                       gl::Texture *glTexture) override;
 
-    // TODO(http://anglebug.com/5624): rework updateActiveTextures(), createPipelineLayout(),
+    // TODO(http://anglebug.com/42264159): rework updateActiveTextures(), createPipelineLayout(),
     // handleDirtyGraphicsPipeline(), and ProgramPipelineVk::link().
     void resetCurrentGraphicsPipeline()
     {
@@ -785,8 +795,6 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
     angle::Result switchToFramebufferFetchMode(bool hasFramebufferFetch);
     bool isInFramebufferFetchMode() const { return mIsInFramebufferFetchMode; }
 
-    void updateFoveatedRendering();
-
     const angle::PerfMonitorCounterGroups &getPerfMonitorCounters() override;
 
     void resetPerFramePerfCounters();
@@ -814,8 +822,6 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
                    ? vk::PipelineProtectedAccess::Protected
                    : vk::PipelineProtectedAccess::Unprotected;
     }
-
-    vk::ComputePipelineFlags getComputePipelineFlags() const;
 
     const angle::ImageLoadContext &getImageLoadContext() const { return mImageLoadContext; }
 
@@ -1294,7 +1300,8 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
     angle::Result handleDirtyComputeUniforms(DirtyBits::Iterator *dirtyBitsIterator);
 
     // Common parts of the common dirty bit handlers.
-    angle::Result handleDirtyUniformsImpl(vk::CommandBufferHelperCommon *commandBufferHelper);
+    angle::Result handleDirtyUniformsImpl(DirtyBits::Iterator *dirtyBitsIterator,
+                                          vk::CommandBufferHelperCommon *commandBufferHelper);
     angle::Result handleDirtyMemoryBarrierImpl(DirtyBits::Iterator *dirtyBitsIterator,
                                                DirtyBits dirtyBitMask);
     template <typename CommandBufferT>
@@ -1590,6 +1597,8 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
     vk::GarbageObjects mCurrentGarbage;
 
     RenderPassCache mRenderPassCache;
+    // Used with dynamic rendering as it doesn't use render passes.
+    vk::RenderPass mNullRenderPass;
 
     vk::OutsideRenderPassCommandBufferHelper *mOutsideRenderPassCommands;
     vk::RenderPassCommandBufferHelper *mRenderPassCommands;

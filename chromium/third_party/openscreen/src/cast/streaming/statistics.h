@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,7 @@
 
 namespace openscreen::cast {
 
+// This file must be updated whenever sender_stats.proto is updated.
 enum class StatisticType {
   // Frame enqueuing rate.
   kEnqueueFps = 0,

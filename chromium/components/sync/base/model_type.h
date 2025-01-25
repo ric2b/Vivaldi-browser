@@ -163,10 +163,15 @@ enum ModelType {
   PLUS_ADDRESS,
 
   // Product comparison groups.
-  COMPARE,
+  PRODUCT_COMPARISON,
 
   // Browser cookies, ChromeOS only.
   COOKIES,
+
+  // Settings for PLUS_ADDRESS forwarded from the user's account. Since the
+  // settings originate from the user's account, this is not reusing any of the
+  // standard syncable prefs.
+  PLUS_ADDRESS_SETTING,
 
   // Notes items
   NOTES,
@@ -266,8 +271,9 @@ enum class ModelTypeForHistograms {
   kSharedTabGroupData = 63,
   kCollaborationGroup = 64,
   kPlusAddresses = 65,
-  kCompare = 66,
+  kProductComparison = 66,
   kCookies = 67,
+  kPlusAddressSettings = 68,
 
   // Vivaldi
   kNotes = 300,
@@ -300,11 +306,13 @@ constexpr ModelTypeSet UserTypes() {
 
 // User types which are not user-controlled.
 constexpr ModelTypeSet AlwaysPreferredUserTypes() {
-  // TODO(b/322147254): `PLUS_ADDRESS` isn't bound to a `UserSelectableType` and
-  // always considered enabled. Revise once a product decision about the opt-out
-  // has been made.
-  return {DEVICE_INFO,     USER_CONSENTS,    PLUS_ADDRESS,
-          SECURITY_EVENTS, SEND_TAB_TO_SELF, SUPERVISED_USER_SETTINGS,
+  return {DEVICE_INFO,
+          USER_CONSENTS,
+          PLUS_ADDRESS,
+          PLUS_ADDRESS_SETTING,
+          SECURITY_EVENTS,
+          SEND_TAB_TO_SELF,
+          SUPERVISED_USER_SETTINGS,
           SHARING_MESSAGE};
 }
 
@@ -400,8 +408,8 @@ constexpr ModelTypeSet SharedTypes() {
 // unsynced data. The warning offers the user to either save the data locally or
 // abort sign-out, depending on the platform.
 constexpr ModelTypeSet TypesRequiringUnsyncedDataCheckOnSignout() {
-  return {syncer::BOOKMARKS, syncer::READING_LIST, syncer::PASSWORDS,
-          syncer::CONTACT_INFO};
+  return {syncer::BOOKMARKS, syncer::CONTACT_INFO, syncer::PASSWORDS,
+          syncer::READING_LIST, syncer::SAVED_TAB_GROUP};
 }
 
 // User types that can be encrypted, which is a subset of UserTypes() and a

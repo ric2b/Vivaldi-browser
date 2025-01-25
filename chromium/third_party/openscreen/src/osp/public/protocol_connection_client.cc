@@ -6,7 +6,15 @@
 
 #include <utility>
 
+#include "util/osp_logging.h"
+
 namespace openscreen::osp {
+
+ProtocolConnectionClient::ConnectionRequestCallback::
+    ConnectionRequestCallback() = default;
+
+ProtocolConnectionClient::ConnectionRequestCallback::
+    ~ConnectionRequestCallback() = default;
 
 ProtocolConnectionClient::ConnectRequest::ConnectRequest() = default;
 
@@ -21,11 +29,6 @@ ProtocolConnectionClient::ConnectRequest::ConnectRequest(
   other.request_id_ = 0;
 }
 
-ProtocolConnectionClient::ConnectRequest::~ConnectRequest() {
-  if (request_id_)
-    parent_->CancelConnectRequest(request_id_);
-}
-
 ProtocolConnectionClient::ConnectRequest&
 ProtocolConnectionClient::ConnectRequest::operator=(
     ConnectRequest&& other) noexcept {
@@ -35,29 +38,13 @@ ProtocolConnectionClient::ConnectRequest::operator=(
   return *this;
 }
 
-ProtocolConnectionClient::ProtocolConnectionClient(
-    MessageDemuxer& demuxer,
-    ProtocolConnectionServiceObserver& observer)
-    : demuxer_(demuxer),
-      endpoint_request_ids_(EndpointRequestIds::Role::kClient),
-      observer_(observer) {}
+ProtocolConnectionClient::ConnectRequest::~ConnectRequest() {
+  if (request_id_)
+    parent_->CancelConnectRequest(request_id_);
+}
+
+ProtocolConnectionClient::ProtocolConnectionClient() = default;
 
 ProtocolConnectionClient::~ProtocolConnectionClient() = default;
-
-std::ostream& operator<<(std::ostream& os,
-                         ProtocolConnectionClient::State state) {
-  switch (state) {
-    case ProtocolConnectionClient::State::kStopped:
-      return os << "STOPPED";
-    case ProtocolConnectionClient::State::kStarting:
-      return os << "STARTING";
-    case ProtocolConnectionClient::State::kRunning:
-      return os << "RUNNING";
-    case ProtocolConnectionClient::State::kStopping:
-      return os << "STOPPING";
-    default:
-      return os << "UNKNOWN";
-  }
-}
 
 }  // namespace openscreen::osp

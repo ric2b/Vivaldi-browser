@@ -27,7 +27,9 @@ class CGdiDisplayDriver final : public CGdiDeviceDriver {
  private:
   // CGdiDisplayDriver:
   int GetDeviceCaps(int caps_id) const override;
-  bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap, int left, int top) override;
+  bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap,
+                 int left,
+                 int top) const override;
   bool SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                  uint32_t color,
                  const FX_RECT& src_rect,
@@ -43,13 +45,12 @@ class CGdiDisplayDriver final : public CGdiDeviceDriver {
                      const FX_RECT* pClipRect,
                      const FXDIB_ResampleOptions& options,
                      BlendMode blend_type) override;
-  bool StartDIBits(RetainPtr<const CFX_DIBBase> bitmap,
-                   float alpha,
-                   uint32_t color,
-                   const CFX_Matrix& matrix,
-                   const FXDIB_ResampleOptions& options,
-                   std::unique_ptr<CFX_ImageRenderer>* handle,
-                   BlendMode blend_type) override;
+  StartResult StartDIBits(RetainPtr<const CFX_DIBBase> bitmap,
+                          float alpha,
+                          uint32_t color,
+                          const CFX_Matrix& matrix,
+                          const FXDIB_ResampleOptions& options,
+                          BlendMode blend_type) override;
 
   bool UseFoxitStretchEngine(RetainPtr<const CFX_DIBBase> bitmap,
                              uint32_t color,

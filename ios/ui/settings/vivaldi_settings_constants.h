@@ -15,6 +15,8 @@ extern NSString* vDefaultBrowserSetting;
 // Image name for search engine setting
 extern NSString* vSearchEngineSetting;
 
+// Image name for address bar setting
+extern NSString* vAddressBarSetting;
 // Image name for passwords setting
 extern NSString* vPasswordSetting;
 // Image name for payment methods setting

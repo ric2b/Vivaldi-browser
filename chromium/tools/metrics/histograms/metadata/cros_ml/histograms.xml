@@ -62,7 +62,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="MachineLearningService.CpuUsageMilliPercent"
-    units="1/1000ths of %" expires_after="2024-11-03">
+    units="1/1000ths of %" expires_after="2025-01-05">
   <owner>alanlxl@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <summary>
@@ -157,9 +157,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="MachineLearningService.MlCore.DlcBeginInstallDlcServiceError"
-    enum="MachineLearningServiceDlcErrorCode" expires_after="2024-11-03">
+    enum="MachineLearningServiceDlcErrorCode" expires_after="2025-01-05">
   <owner>amoylan@chromium.org</owner>
-  <owner>dgrebenyuk@chromium.org</owner>
+  <owner>chenjih@google.com</owner>
   <owner>nbowe@chromium.org</owner>
   <summary>
     The detailed error code received from DLC Service while trying to request to
@@ -169,9 +169,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="MachineLearningService.MlCore.DlcBeginInstallResult"
     enum="MachineLearningServiceDlcBeginInstallResult"
-    expires_after="2024-11-03">
+    expires_after="2025-01-05">
   <owner>amoylan@chromium.org</owner>
-  <owner>dgrebenyuk@chromium.org</owner>
+  <owner>chenjih@google.com</owner>
   <owner>nbowe@chromium.org</owner>
   <summary>
     Result of an attempt to request DLC Service to begin installation of the ML
@@ -183,7 +183,7 @@ chromium-metrics-reviews@google.com.
 <histogram name="MachineLearningService.MlCore.DlcFinalInstallDlcServiceError"
     enum="MachineLearningServiceDlcErrorCode" expires_after="2024-11-03">
   <owner>amoylan@chromium.org</owner>
-  <owner>dgrebenyuk@chromium.org</owner>
+  <owner>chenjih@google.com</owner>
   <owner>nbowe@chromium.org</owner>
   <summary>
     The detailed error code received from DLC Service after a DLC State Change
@@ -197,7 +197,7 @@ chromium-metrics-reviews@google.com.
     enum="MachineLearningServiceDlcFinalInstallResult"
     expires_after="2024-11-03">
   <owner>amoylan@chromium.org</owner>
-  <owner>dgrebenyuk@chromium.org</owner>
+  <owner>chenjih@google.com</owner>
   <owner>nbowe@chromium.org</owner>
   <summary>
     Final result of an attempt to install the ML Core DLC. See the related
@@ -207,9 +207,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="MachineLearningService.MlCore.DlcInstallAttemptCount"
-    units="attempts" expires_after="2024-11-03">
+    units="attempts" expires_after="2025-01-05">
   <owner>amoylan@chromium.org</owner>
-  <owner>dgrebenyuk@chromium.org</owner>
+  <owner>chenjih@google.com</owner>
   <owner>nbowe@chromium.org</owner>
   <summary>
     Indicates at least n attempts were made to install the ML Core DLC. Note
@@ -220,7 +220,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="MachineLearningService.MojoConnectionEvent"
-    enum="MachineLearningServiceMojoConnectionEvent" expires_after="2024-11-03">
+    enum="MachineLearningServiceMojoConnectionEvent" expires_after="2025-01-05">
   <owner>alanlxl@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <summary>
@@ -250,7 +250,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="MachineLearningService.ProcessError"
-    enum="MachineLearningServiceProcessError" expires_after="2024-11-03">
+    enum="MachineLearningServiceProcessError" expires_after="2025-01-05">
   <owner>amoylan@chromium.org</owner>
   <owner>alanlxl@chromium.org</owner>
   <summary>
@@ -277,7 +277,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="MachineLearningService.TextSuggester.Suggest.Event"
-    enum="BooleanError" expires_after="2024-11-03">
+    enum="BooleanError" expires_after="2025-01-05">
   <owner>curtismcmullan@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <summary>
@@ -310,7 +310,7 @@ chromium-metrics-reviews@google.com.
 <histogram
     name="MachineLearningService.WebPlatformHandwritingModel.LoadModelResult.Event"
     enum="MachineLearningServiceLoadHandwritingModelResultEvent"
-    expires_after="2024-11-03">
+    expires_after="2025-01-05">
   <owner>amoylan@chromium.org</owner>
   <owner>alanlxl@chromium.org</owner>
   <owner>charleszhao@chromium.org</owner>
@@ -371,7 +371,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="MachineLearningService.WorkerProcessCleanUpTime"
-    units="microseconds" expires_after="2024-11-03">
+    units="microseconds" expires_after="2025-01-05">
   <owner>alanlxl@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <summary>
@@ -406,7 +406,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="MachineLearningService.{ModelName}.ExecuteResult.Event"
-    enum="MachineLearningServiceExecuteResultEvent" expires_after="2024-06-30">
+    enum="MachineLearningServiceExecuteResultEvent" expires_after="2024-12-30">
   <owner>amoylan@chromium.org</owner>
   <owner>alanlxl@chromium.org</owner>
   <summary>
@@ -441,7 +441,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="MachineLearningService.{RequestName}.CpuTimeMicrosec"
-    units="microseconds" expires_after="2024-11-03">
+    units="microseconds" expires_after="2025-01-05">
   <owner>amoylan@chromium.org</owner>
   <owner>alanlxl@chromium.org</owner>
   <summary>
@@ -453,7 +453,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="MachineLearningService.{RequestName}.TotalMemoryDeltaKb"
-    units="KB" expires_after="2024-11-03">
+    units="KB" expires_after="2025-01-05">
   <owner>amoylan@chromium.org</owner>
   <owner>alanlxl@chromium.org</owner>
   <summary>Memory usage increase caused by {RequestName} request.</summary>

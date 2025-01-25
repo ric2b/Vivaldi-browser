@@ -10,6 +10,8 @@ NSString* const kNTPCollectionViewIdentifier = @"NTPCollectionViewIdentifier";
 
 NSString* const kNTPIncognitoViewIdentifier = @"kNTPIncognitoViewIdentifier";
 
+NSString* const kNTPFeedHeaderIdentifier = @"kNTPFeedHeaderIdentifier";
+
 NSString* const kNTPFeedHeaderManagementButtonIdentifier =
     @"kNTPFeedHeaderManagementButtonIdentifier";
 
@@ -21,4 +23,11 @@ NSString* const kNTPFeedHeaderSegmentedControlIdentifier =
 
 NSString* const kNTPFeedHeaderIdentityDisc = @"kNTPFeedHeaderIdentityDisc";
 
+NSString* const kNTPCustomizationMenuButtonIdentifier =
+    @"NTPCustomizationMenuButtonIdentifier";
+
 const CGFloat kHomeModuleContainerCornerRadius = 24.0f;
+
+const CGFloat kHomeModuleMinimumPadding = 4;
+
+const CGFloat kSpaceBetweenModules = 14;

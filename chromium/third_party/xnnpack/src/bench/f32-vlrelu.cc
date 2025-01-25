@@ -10,17 +10,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <xnnpack.h>
-#include <xnnpack/aligned-allocator.h>
-#include <xnnpack/common.h>
-#include <xnnpack/microfnptr.h>
-#include <xnnpack/microparams-init.h>
-#include <xnnpack/microparams.h>
-#include <xnnpack/vunary.h>
-
+#include <benchmark/benchmark.h>
 #include "bench/f32-vunary-benchmark.h"
 #include "bench/utils.h"
-#include <benchmark/benchmark.h>
+#include "xnnpack/common.h"
+#include "xnnpack/microfnptr.h"
+#include "xnnpack/microparams-init.h"
+#include "xnnpack/microparams.h"
+#include "xnnpack/vunary.h"
 
 void f32_vlrelu(benchmark::State& state, xnn_f32_vlrelu_ukernel_fn ukernel,
               xnn_init_f32_lrelu_params_fn init_params = nullptr,
@@ -50,6 +47,33 @@ void f32_vlrelu(benchmark::State& state, xnn_f32_vlrelu_ukernel_fn ukernel,
     ->Apply(benchmark::utils::UnaryElementwiseParameters<float, float>)
     ->UseRealTime();
 #endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
+
+#if XNN_ENABLE_RISCV_VECTOR && XNN_ARCH_RISCV
+  BENCHMARK_CAPTURE(f32_vlrelu, rvv_u1v,
+                    xnn_f32_vlrelu_ukernel__rvv_u1v,
+                    xnn_init_f32_lrelu_scalar_params,
+                    benchmark::utils::CheckRVV)
+    ->Apply(benchmark::utils::UnaryElementwiseParameters<float, float>)
+    ->UseRealTime();
+  BENCHMARK_CAPTURE(f32_vlrelu, rvv_u2v,
+                    xnn_f32_vlrelu_ukernel__rvv_u2v,
+                    xnn_init_f32_lrelu_scalar_params,
+                    benchmark::utils::CheckRVV)
+    ->Apply(benchmark::utils::UnaryElementwiseParameters<float, float>)
+    ->UseRealTime();
+  BENCHMARK_CAPTURE(f32_vlrelu, rvv_u4v,
+                    xnn_f32_vlrelu_ukernel__rvv_u4v,
+                    xnn_init_f32_lrelu_scalar_params,
+                    benchmark::utils::CheckRVV)
+    ->Apply(benchmark::utils::UnaryElementwiseParameters<float, float>)
+    ->UseRealTime();
+  BENCHMARK_CAPTURE(f32_vlrelu, rvv_u8v,
+                    xnn_f32_vlrelu_ukernel__rvv_u8v,
+                    xnn_init_f32_lrelu_scalar_params,
+                    benchmark::utils::CheckRVV)
+    ->Apply(benchmark::utils::UnaryElementwiseParameters<float, float>)
+    ->UseRealTime();
+#endif  // XNN_ENABLE_RISCV_VECTOR && XNN_ARCH_RISCV
 
 #if XNN_ARCH_X86 || XNN_ARCH_X86_64
   BENCHMARK_CAPTURE(f32_vlrelu, sse_u4,

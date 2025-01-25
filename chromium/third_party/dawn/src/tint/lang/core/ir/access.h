@@ -44,6 +44,12 @@ class Access final : public Castable<Access, OperandInstruction<3, 1>> {
     /// The base offset in Operands() for the access indices
     static constexpr size_t kIndicesOperandOffset = 1;
 
+    /// The fixed number of results returned by this instruction
+    static constexpr size_t kNumResults = 1;
+
+    /// The minimum number of operands used by this instruction
+    static constexpr size_t kMinNumOperands = 1;
+
     /// Constructor (no results, no operands)
     Access();
 
@@ -58,10 +64,10 @@ class Access final : public Castable<Access, OperandInstruction<3, 1>> {
     Access* Clone(CloneContext& ctx) override;
 
     /// @returns the object used for the access
-    Value* Object() { return operands_[kObjectOperandOffset]; }
+    Value* Object() { return Operand(kObjectOperandOffset); }
 
     /// @returns the object used for the access
-    const Value* Object() const { return operands_[kObjectOperandOffset]; }
+    const Value* Object() const { return Operand(kObjectOperandOffset); }
 
     /// Adds the given index to the end of the access chain
     /// @param idx the index to add

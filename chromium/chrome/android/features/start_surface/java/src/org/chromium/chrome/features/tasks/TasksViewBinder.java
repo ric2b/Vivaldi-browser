@@ -23,11 +23,9 @@ import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.IS_TAB_C
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.IS_VOICE_RECOGNITION_BUTTON_VISIBLE;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.LENS_BUTTON_CLICK_LISTENER;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.MAGIC_STACK_VISIBLE;
-import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.MV_TILES_CONTAINER_TOP_MARGIN;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.MV_TILES_VISIBLE;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.QUERY_TILES_VISIBLE;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.RESET_TASK_SURFACE_HEADER_SCROLL_POSITION;
-import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.TASKS_SURFACE_BODY_TOP_MARGIN;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.TOP_TOOLBAR_PLACEHOLDER_HEIGHT;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.VOICE_SEARCH_BUTTON_CLICK_LISTENER;
 
@@ -99,10 +97,6 @@ public class TasksViewBinder {
             view.getSearchBoxCoordinator()
                     .addVoiceSearchButtonClickListener(
                             model.get(VOICE_SEARCH_BUTTON_CLICK_LISTENER));
-        } else if (propertyKey == TASKS_SURFACE_BODY_TOP_MARGIN) {
-            view.setTasksSurfaceBodyTopMargin(model.get(TASKS_SURFACE_BODY_TOP_MARGIN));
-        } else if (propertyKey == MV_TILES_CONTAINER_TOP_MARGIN) {
-            view.setMVTilesContainerTopMargin(model.get(MV_TILES_CONTAINER_TOP_MARGIN));
         } else if (propertyKey == RESET_TASK_SURFACE_HEADER_SCROLL_POSITION) {
             view.resetScrollPosition();
         } else if (propertyKey == TOP_TOOLBAR_PLACEHOLDER_HEIGHT) {

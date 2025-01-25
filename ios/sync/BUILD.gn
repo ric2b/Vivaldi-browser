@@ -102,7 +102,7 @@ source_set("sync") {
     "//ios/chrome/browser/policy/model",
     "//ios/chrome/browser/reading_list/model",
     "//ios/chrome/browser/search_engines/model",
-    "//ios/chrome/browser/sessions",
+    "//ios/chrome/browser/sessions/model",
     "//ios/chrome/browser/sync/model/glue",
     "//ios/chrome/browser/tabs/model",
     "//ios/chrome/browser/webdata_services/model",

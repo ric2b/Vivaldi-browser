@@ -12,12 +12,12 @@
 #include <cstdint>
 
 #include "partition_alloc/build_config.h"
+#include "partition_alloc/buildflags.h"
 #include "partition_alloc/partition_alloc_base/compiler_specific.h"
 #include "partition_alloc/partition_alloc_base/component_export.h"
-#include "partition_alloc/partition_alloc_buildflags.h"
 #include "partition_alloc/partition_alloc_config.h"
 
-#if PA_BUILDFLAG(HAS_MEMORY_TAGGING) && BUILDFLAG(IS_ANDROID)
+#if PA_BUILDFLAG(HAS_MEMORY_TAGGING) && PA_BUILDFLAG(IS_ANDROID)
 #include <csignal>
 #endif
 
@@ -50,7 +50,7 @@ constexpr uint64_t kPtrTagMask = 0;
 #endif  // PA_BUILDFLAG(HAS_MEMORY_TAGGING)
 constexpr uint64_t kPtrUntagMask = ~kPtrTagMask;
 
-#if BUILDFLAG(IS_ANDROID)
+#if PA_BUILDFLAG(IS_ANDROID)
 // Changes the memory tagging mode for all threads in the current process.
 // Returns true on success. Most likely reason for failure is because heap
 // tagging may not be re-enabled after being disabled.
@@ -138,7 +138,7 @@ PA_ALWAYS_INLINE uintptr_t UntagPtr(T* ptr) {
   return internal::UntagAddr(reinterpret_cast<uintptr_t>(ptr));
 }
 
-#if PA_BUILDFLAG(HAS_MEMORY_TAGGING) && BUILDFLAG(IS_ANDROID)
+#if PA_BUILDFLAG(HAS_MEMORY_TAGGING) && PA_BUILDFLAG(IS_ANDROID)
 class PA_COMPONENT_EXPORT(PARTITION_ALLOC) PermissiveMte {
  public:
   static void SetEnabled(bool enabled);
@@ -148,6 +148,20 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) PermissiveMte {
   static bool enabled_;
 };
 #endif  // PA_BUILDFLAG(HAS_MEMORY_TAGGING)
+
+// Stops MTE tag checking for the current thread while this is alive. This does
+// not affect the return value for GetMemoryTaggingModeForCurrentThread().
+class PA_COMPONENT_EXPORT(PARTITION_ALLOC) SuspendTagCheckingScope final {
+ public:
+  SuspendTagCheckingScope() noexcept;
+  ~SuspendTagCheckingScope();
+
+ private:
+#if PA_BUILDFLAG(HAS_MEMORY_TAGGING)
+  // Stores the previous value of the Tag Check Override (TCO) register.
+  uint64_t previous_tco_;
+#endif
+};
 
 }  // namespace partition_alloc
 

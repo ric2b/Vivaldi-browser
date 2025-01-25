@@ -13,7 +13,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
-#include "base/strings/string_piece.h"
 #include "components/password_manager/core/browser/password_store/password_store_consumer.h"
 #include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/password_manager/core/browser/ui/affiliated_group.h"
@@ -120,7 +119,7 @@ class SavedPasswordsPresenter : public PasswordStoreInterface::Observer,
 
   // Initializes the presenter and makes it issue the first request for all
   // saved passwords.
-  void Init();
+  void Init(base::OnceClosure completion_callback = base::DoNothing());
 
   // Returns whether there are ongoing fetch requests to credential stores.
   bool IsWaitingForPasswordStore() const;
@@ -150,6 +149,9 @@ class SavedPasswordsPresenter : public PasswordStoreInterface::Observer,
   void AddCredentials(const std::vector<CredentialUIEntry>& credentials,
                       password_manager::PasswordForm::Type type,
                       AddCredentialsCallback completion);
+
+  // Deletes all saved credentials: passwords, passkeys, blocked entries.
+  void DeleteAllData(base::OnceCallback<void(bool)> success_callback);
 
   // Updates all matching password forms in |password_forms|.
   // |completion| will be run after the forms are updated.
@@ -272,6 +274,8 @@ class SavedPasswordsPresenter : public PasswordStoreInterface::Observer,
   DuplicatePasswordsMap sort_key_to_password_forms_;
 
   base::ObserverList<Observer, /*check_empty=*/true> observers_;
+
+  base::OnceClosure init_completion_callback_;
 
   base::ScopedObservation<PasswordStoreInterface,
                           PasswordStoreInterface::Observer>

@@ -16,11 +16,10 @@ import m from 'mithril';
 import * as vega from 'vega';
 import * as vegaLite from 'vega-lite';
 
-import {Disposable} from '../base/disposable';
 import {getErrorMessage} from '../base/errors';
 import {isString, shallowEquals} from '../base/object_utils';
 import {SimpleResizeObserver} from '../base/resize_observer';
-import {EngineProxy} from '../trace_processor/engine';
+import {Engine} from '../trace_processor/engine';
 import {QueryError} from '../trace_processor/query_result';
 import {scheduleFullRedraw} from '../widgets/raf';
 import {Spinner} from '../widgets/spinner';
@@ -45,7 +44,7 @@ export interface VegaViewData {
 interface VegaViewAttrs {
   spec: string;
   data: VegaViewData;
-  engine?: EngineProxy;
+  engine?: Engine;
 }
 
 // VegaWrapper is in exactly one of these states:
@@ -62,10 +61,10 @@ enum Status {
 }
 
 class EngineLoader implements vega.Loader {
-  private engine?: EngineProxy;
+  private engine?: Engine;
   private loader: vega.Loader;
 
-  constructor(engine: EngineProxy | undefined) {
+  constructor(engine: Engine | undefined) {
     this.engine = engine;
     this.loader = vega.loader();
   }
@@ -75,31 +74,32 @@ class EngineLoader implements vega.Loader {
     if (this.engine === undefined) {
       return '';
     }
-    const result = this.engine.execute(uri);
     try {
-      await result.waitAllRows();
+      const result = await this.engine.query(uri);
+      const columns = result.columns();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows: any[] = [];
+      for (const it = result.iter({}); it.valid(); it.next()) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const row: any = {};
+        for (const name of columns) {
+          let value = it.get(name);
+          if (typeof value === 'bigint') {
+            value = Number(value);
+          }
+          row[name] = value;
+        }
+        rows.push(row);
+      }
+      return JSON.stringify(rows);
     } catch (e) {
       if (e instanceof QueryError) {
-        console.error(result.error());
+        console.error(e);
         return '';
+      } else {
+        throw e;
       }
     }
-    const columns = result.columns();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rows: any[] = [];
-    for (const it = result.iter({}); it.valid(); it.next()) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const row: any = {};
-      for (const name of columns) {
-        let value = it.get(name);
-        if (typeof value === 'bigint') {
-          value = Number(value);
-        }
-        row[name] = value;
-      }
-      rows.push(row);
-    }
-    return JSON.stringify(rows);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -125,7 +125,7 @@ class VegaWrapper {
   private pending?: Promise<vega.View>;
   private _status: Status;
   private _error?: string;
-  private _engine?: EngineProxy;
+  private _engine?: Engine;
 
   constructor(dom: Element) {
     this.dom = dom;
@@ -155,7 +155,7 @@ class VegaWrapper {
     this.updateView();
   }
 
-  set engine(engine: EngineProxy | undefined) {
+  set engine(engine: Engine | undefined) {
     this._engine = engine;
   }
 
@@ -246,7 +246,7 @@ class VegaWrapper {
     scheduleFullRedraw();
   }
 
-  dispose() {
+  [Symbol.dispose]() {
     this._data = undefined;
     this._spec = undefined;
     this.updateView();
@@ -278,11 +278,11 @@ export class VegaView implements m.ClassComponent<VegaViewAttrs> {
 
   onremove() {
     if (this.resize) {
-      this.resize.dispose();
+      this.resize[Symbol.dispose]();
       this.resize = undefined;
     }
     if (this.wrapper) {
-      this.wrapper.dispose();
+      this.wrapper[Symbol.dispose]();
       this.wrapper = undefined;
     }
   }

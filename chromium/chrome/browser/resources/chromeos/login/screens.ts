@@ -24,6 +24,7 @@ import './screens/common/error_message.js';
 import './screens/common/family_link_notice.js';
 import './screens/common/gaia_info.js';
 import './screens/common/gaia_signin.js';
+import './screens/common/gemini_intro.js';
 import './screens/common/gesture_navigation.js';
 import './screens/common/guest_tos.js';
 import './screens/common/hw_data_collection.js';
@@ -36,6 +37,7 @@ import './screens/common/online_authentication_screen.js';
 import './screens/common/oobe_reset.js';
 import './screens/common/os_install.js';
 import './screens/common/os_trial.js';
+import './screens/common/perks_discovery.js';
 import './screens/common/personalized_recommend_apps.js';
 import './screens/common/parental_handoff.js';
 import './screens/common/quick_start.js';
@@ -48,7 +50,6 @@ import './screens/common/sync_consent.js';
 import './screens/common/theme_selection.js';
 import './screens/common/touchpad_scroll.js';
 import './screens/common/tpm_error.js';
-import './screens/common/tuna.js';
 import './screens/common/user_allowlist_check_screen.js';
 import './screens/common/wrong_hwid.js';
 // COMMON SCREENS USED TO SET UP AUTHENTICATION
@@ -64,7 +65,6 @@ import './screens/osauth/password_selection.js';
 import './screens/osauth/pin_setup.js';
 // AUTHENTICATION SCREENS USED DURING THE LOGIN FLOW
 import './screens/osauth/cryptohome_recovery.js';
-import './screens/osauth/gaia_password_changed.js';
 // SCREENS USED DURING THE LOGIN FLOW
 import './screens/login/arc_vm_data_migration.js';
 import './screens/login/encryption_migration.js';
@@ -148,6 +148,11 @@ export const commonScreensList: OobeTypes.ScreensList = [
     condition: 'isOobeGaiaInfoScreenEnabled',
   },
   {tag: 'gaia-signin-element', id: 'gaia-signin'},
+  {
+    tag: 'gemini-intro-element',
+    id: 'gemini-intro',
+    condition: 'isOobeGeminiIntroEnabled',
+  },
   {tag: 'gesture-navigation-element', id: 'gesture-navigation'},
   {tag: 'guest-tos-element', id: 'guest-tos'},
   {tag: 'hw-data-collection-element', id: 'hw-data-collection'},
@@ -169,6 +174,11 @@ export const commonScreensList: OobeTypes.ScreensList = [
   },
   {tag: 'oobe-reset-element', id: 'reset'},
   {tag: 'osauth-error-element', id: 'osauth-error'},
+  {
+    tag: 'perks-discovery-element',
+    id: 'perks-discovery',
+    condition: 'isPerksDiscoveryEnabled',
+  },
   {
     tag: 'personalized-apps-element',
     id: 'personalized-apps',
@@ -206,11 +216,6 @@ export const commonScreensList: OobeTypes.ScreensList = [
   },
   {tag: 'tpm-error-message-element', id: 'tpm-error-message'},
   {
-    tag: 'tuna-element',
-    id: 'tuna',
-    condition: 'isOobeTunaEnabled',
-  },
-  {
     tag: 'install-attributes-error-message-element',
     id: 'install-attributes-error-message',
   },
@@ -232,7 +237,6 @@ export const loginScreensList: OobeTypes.ScreensList = [
   },
   {tag: 'cryptohome-recovery-element', id: 'cryptohome-recovery'},
   {tag: 'encryption-migration-element', id: 'encryption-migration'},
-  {tag: 'gaia-password-changed-element', id: 'gaia-password-changed'},
   {
     tag: 'lacros-data-backward-migration-element',
     id: 'lacros-data-backward-migration',

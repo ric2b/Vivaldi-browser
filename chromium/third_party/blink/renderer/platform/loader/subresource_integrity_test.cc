@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/loader/subresource_integrity.h"
 
 #include <algorithm>
@@ -199,11 +204,12 @@ class SubresourceIntegrityTest : public testing::Test {
     IntegrityMetadataSet metadata_set;
     SubresourceIntegrity::ParseIntegrityAttribute(String(integrity), Features(),
                                                   metadata_set);
-
+    SegmentedBuffer buffer;
+    buffer.Append(base::make_span(kBasicScript, strlen(kBasicScript)));
     SubresourceIntegrity::ReportInfo report_info;
     EXPECT_EQ(expectation == kIntegritySuccess,
               SubresourceIntegrity::CheckSubresourceIntegrity(
-                  metadata_set, kBasicScript, strlen(kBasicScript), test.url,
+                  metadata_set, &buffer, test.url,
                   *CreateTestResource(test.url, test.request_mode,
                                       test.response_type),
                   report_info));

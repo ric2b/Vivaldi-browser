@@ -9,7 +9,7 @@
 #include "src/heap/evacuation-allocator-inl.h"
 #include "src/heap/incremental-marking-inl.h"
 #include "src/heap/marking-state-inl.h"
-#include "src/heap/mutable-page.h"
+#include "src/heap/mutable-page-metadata.h"
 #include "src/heap/new-spaces.h"
 #include "src/heap/objects-visiting-inl.h"
 #include "src/heap/pretenuring-handler-inl.h"
@@ -326,7 +326,7 @@ SlotCallbackResult Scavenger::EvacuateShortcutCandidate(
 
   if (shortcut_strings_ &&
       object->unchecked_second() == ReadOnlyRoots(heap()).empty_string()) {
-    Tagged<HeapObject> first = HeapObject::cast(object->unchecked_first());
+    Tagged<HeapObject> first = Cast<HeapObject>(object->unchecked_first());
 
     UpdateHeapObjectReferenceSlot(slot, first);
 
@@ -386,29 +386,21 @@ SlotCallbackResult Scavenger::EvacuateObject(THeapObjectSlot slot,
     case kVisitThinString:
       // At the moment we don't allow weak pointers to thin strings.
       DCHECK(!(*slot).IsWeak());
-      return EvacuateThinString(map, slot, ThinString::unchecked_cast(source),
+      return EvacuateThinString(map, slot, UncheckedCast<ThinString>(source),
                                 size);
     case kVisitShortcutCandidate:
       DCHECK(!(*slot).IsWeak());
       // At the moment we don't allow weak pointers to cons strings.
-      return EvacuateShortcutCandidate(
-          map, slot, ConsString::unchecked_cast(source), size);
+      return EvacuateShortcutCandidate(map, slot,
+                                       UncheckedCast<ConsString>(source), size);
     case kVisitSeqOneByteString:
     case kVisitSeqTwoByteString:
       DCHECK(String::IsInPlaceInternalizable(map->instance_type()));
       static_assert(Map::ObjectFieldsFrom(kVisitSeqOneByteString) ==
                     Map::ObjectFieldsFrom(kVisitSeqTwoByteString));
       return EvacuateInPlaceInternalizableString(
-          map, slot, String::unchecked_cast(source), size,
+          map, slot, UncheckedCast<String>(source), size,
           Map::ObjectFieldsFrom(kVisitSeqOneByteString));
-    case kVisitDataObject:  // External strings have kVisitDataObject.
-      if (String::IsInPlaceInternalizableExcludingExternal(
-              map->instance_type())) {
-        return EvacuateInPlaceInternalizableString(
-            map, slot, String::unchecked_cast(source), size,
-            ObjectFields::kDataOnly);
-      }
-      [[fallthrough]];
     default:
       return EvacuateObjectDefault(map, slot, source, size,
                                    Map::ObjectFieldsFrom(visitor_id));
@@ -490,6 +482,10 @@ class ScavengeVisitor final : public NewSpaceVisitor<ScavengeVisitor> {
   V8_INLINE int VisitJSApiObject(Tagged<Map> map, Tagged<JSObject> object);
   V8_INLINE void VisitExternalPointer(Tagged<HeapObject> host,
                                       ExternalPointerSlot slot);
+
+  V8_INLINE static constexpr bool CanEncounterFillerOrFreeSpace() {
+    return false;
+  }
 
  private:
   template <typename TSlot>

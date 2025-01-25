@@ -29,6 +29,7 @@ source_set("password_store_interface") {
 
 source_set("password_store_impl") {
   sources = [
+    "encrypt_decrypt_intrface.h",
     "get_logins_with_affiliations_request_handler.cc",
     "get_logins_with_affiliations_request_handler.h",
     "insecure_credentials_table.cc",
@@ -59,9 +60,12 @@ source_set("password_store_impl") {
     "//components/affiliations/core/browser:affiliations",
     "//components/affiliations/core/browser:sql_builder",
     "//components/autofill/core/common",
+    "//components/os_crypt/async/browser",
+    "//components/os_crypt/async/common",
     "//components/os_crypt/sync:os_crypt",
     "//components/password_manager/core/browser:metrics_util",
     "//components/password_manager/core/browser:password_manager_buildflags",
+    "//components/password_manager/core/browser:password_switches",
     "//components/password_manager/core/browser/affiliation:affiliation_match_helper",
     "//components/password_manager/core/browser/features:password_features",
     "//components/password_manager/core/browser/sync",
@@ -86,6 +90,10 @@ source_set("password_store_impl") {
       "password_model_type_controller_delegate_android.h",
       "split_stores_and_local_upm.cc",
       "split_stores_and_local_upm.h",
+    ]
+    deps += [
+      "//components/sync/base",
+      "//components/sync/service",
     ]
   }
 
@@ -166,6 +174,7 @@ source_set("unit_tests") {
     "//components/affiliations/core/browser:affiliations",
     "//components/affiliations/core/browser:test_support",
     "//components/autofill/core/common",
+    "//components/os_crypt/async/browser:test_support",
     "//components/os_crypt/sync:os_crypt",
     "//components/os_crypt/sync:test_support",
     "//components/password_manager/core/browser:password_manager_buildflags",

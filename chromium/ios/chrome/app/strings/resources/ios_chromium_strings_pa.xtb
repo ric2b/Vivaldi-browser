@@ -13,6 +13,7 @@
 <translation id="1361748954329991663">Chromium ਦਾ ਇਹ ਵਰਜਨ ਪੁਰਾਣਾ ਹੈ। ਜੇ <ph name="BEGIN_LINK" />ਐਪ ਸਟੋਰ<ph name="END_LINK" /> ਵਿੱਚ ਕੋਈ ਅੱਪਡੇਟ ਉਪਲਬਧ ਨਹੀਂ ਹੈ, ਤਾਂ ਇਹ ਸੰਭਵ ਹੈ ਕਿ ਤੁਹਾਡਾ ਡੀਵਾਈਸ ਹੁਣ Chromium ਦੇ ਨਵੇਂ ਵਰਜਨਾਂ ਦਾ ਸਮਰਥਨ ਨਹੀਂ ਕਰਦਾ ਹੈ।</translation>
 <translation id="1423007117030725713">ਇੱਕ ਨਵੀਂ Chromium ਟੈਬ ਵਿੱਚ ਕੋਈ ਖੋਜ ਸ਼ੁਰੂ ਕਰੋ।</translation>
 <translation id="1431818719585918472">Chromium ਨੂੰ ਤੁਹਾਡੀਆਂ ਇਨਕੋਗਨਿਟੋ ਟੈਬਾਂ ਲਾਕ ਕਰਨ ਦਿਓ।</translation>
+<translation id="146407871188825689">iPad 'ਤੇ ਪੂਰਵ-ਨਿਰਧਾਰਿਤ ਤੌਰ 'ਤੇ Chromium ਦੀ ਵਰਤੋਂ ਕਰੋ</translation>
 <translation id="1472013873724362412">ਤੁਹਾਡਾ ਖਾਤਾ Chromium 'ਤੇ ਕੰਮ ਨਹੀਂ ਕਰਦਾ। ਕਿਰਪਾ ਕਰਕੇ ਆਪਣੇ ਡੋਮੇਨ ਪ੍ਰਸ਼ਾਸਕ ਨੂੰ ਸੰਪਰਕ ਕਰੋ ਜਾਂ ਸਾਈਨ-ਇਨ ਲਈ ਇੱਕ ਨਿਯਮਿਤ Google ਖਾਤੇ ਦੀ ਵਰਤੋਂ ਕਰੋ।</translation>
 <translation id="1503199973012840174">ਤੁਹਾਡੇ Chromium ਦਾ ਵਰਜਨ ਪੁਰਾਣਾ ਹੈ। ਸੁਰੱਖਿਅਤ ਰਹਿਣ ਲਈ ਇਸਨੂੰ ਅੱਪਡੇਟ ਕਰੋ।</translation>
 <translation id="1507010443238049608">Chromium ਦੀਆਂ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਅਤੇ ਕਾਰਗੁਜ਼ਾਰੀ ਨੂੰ ਬਿਹਤਰ ਬਣਾਉਣ ਵਿੱਚ ਮਦਦ ਕਰੋ</translation>
@@ -75,6 +76,7 @@
 <translation id="2942241131342758843">ਲਿੰਕਾਂ ਨੂੰ ਖੋਲ੍ਹਣ, ਵਿਜੇਟਾਂ ਤੋਂ ਖੋਜ ਕਰਨ ਅਤੇ ਹੋਰ ਐਪਾਂ ਵਿੱਚ ਆਟੋਫਿਲ ਪਾਸਵਰਡਾਂ ਲਈ ਪੂਰਵ-ਨਿਰਧਾਰਿਤ ਤੌਰ 'ਤੇ Chromium ਦੀ ਵਰਤੋਂ ਕਰੋ</translation>
 <translation id="2977470724722393594">Chromium ਅੱਪ ਟੂ ਡੇਟ ਹੈ</translation>
 <translation id="3044857325852340337">Chromium ਡਾਟਾ ਮਿਟਾਇਆ ਗਿਆ</translation>
+<translation id="3049211156275642309">Chromium ਦਾ ਸੈੱਟਅੱਪ ਪੂਰਾ ਕਰੋ</translation>
 <translation id="3078941082359356771">{COUNT,plural, =1{Chromium ਨਵੇਂ ਟੈਬ ਪੰਨੇ 'ਤੇ ਇਸ ਪੈਕੇਜ ਨੂੰ ਟਰੈਕ ਕਰਨ ਵਿੱਚ ਤੁਹਾਡੀ ਮਦਦ ਕਰ ਸਕਦਾ ਹੈ।}one{Chromium ਨਵੇਂ ਟੈਬ ਪੰਨੇ 'ਤੇ ਇਸ ਪੈਕੇਜ ਨੂੰ ਟਰੈਕ ਕਰਨ ਵਿੱਚ ਤੁਹਾਡੀ ਮਦਦ ਕਰ ਸਕਦਾ ਹੈ।}other{Chromium ਨਵੇਂ ਟੈਬ ਪੰਨੇ 'ਤੇ ਇਨ੍ਹਾਂ ਪੈਕੇਜਾਂ ਨੂੰ ਟਰੈਕ ਕਰਨ ਵਿੱਚ ਤੁਹਾਡੀ ਮਦਦ ਕਰ ਸਕਦਾ ਹੈ।}}</translation>
 <translation id="3102849287235003384">ਸਾਰੀਆਂ ਵੈੱਬਸਾਈਟਾਂ 'ਤੇ ਆਪਣੇ Google ਖਾਤੇ ਤੋਂ ਸਾਈਨ-ਆਊਟ ਕਰਨ ਲਈ, <ph name="BEGIN_LINK" />Chromium ਤੋਂ ਸਾਈਨ-ਆਊਟ ਕਰੋ<ph name="END_LINK" />।</translation>
 <translation id="3219277919172823720">Chromium ਵਿੱਚ ਅਵਾਜ਼ ਨਾਲ ਖੋਜੋ</translation>
@@ -121,6 +123,7 @@
 
 ਇਸ ਸੈਟਿੰਗ ਨੂੰ ਬਦਲਣ ਲਈ, <ph name="BEGIN_LINK" />ਆਪਣੇ ਖਾਤੇ ਵਿੱਚ Chromium ਡਾਟੇ ਨੂੰ ਮਿਟਾਓ<ph name="END_LINK" />।</translation>
 <translation id="4576283463017113841">ਇਸ ਨਾਲ Chromium ਵਿੱਚ ਭੁਗਤਾਨ ਵਿਧੀ ਸੈਟਿੰਗ ਪੰਨਾ ਖੁੱਲ੍ਹਦਾ ਹੈ।</translation>
+<translation id="458786853569524949">ਤੁਸੀਂ ਹੁਣ ਈਮੇਲਾਂ, ਦਸਤਾਵੇਜ਼ਾਂ ਅਤੇ ਹੋਰ ਐਪਾਂ ਵਿਚਲੇ ਲਿੰਕਾਂ 'ਤੇ ਟੈਪ ਕਰ ਕੇ, ਕਿਸੇ ਵੀ ਸਮੇਂ Chromium ਦੀ ਵਰਤੋਂ ਕਰ ਸਕਦੇ ਹੋ।</translation>
 <translation id="459080529287102949">Chromium ਵਿੱਚ ਦ੍ਰਿਸ਼ਾਂ ਨੂੰ ਖੋਜੋ</translation>
 <translation id="4633738821577273991">ਇਸ Chromium ਪ੍ਰੋਫਾਈਲ ਲਈ ਵੀ ਵਿਸਤ੍ਰਿਤ ਸੁਰੱਖਿਅਤ ਬ੍ਰਾਊਜ਼ਿੰਗ ਵਿਸ਼ੇਸ਼ਤਾ ਨੂੰ ਪ੍ਰਾਪਤ ਕਰੋ</translation>
 <translation id="4638625642619341392">Chromium ਨੂੰ ਇੱਥੋਂ ਡਾਊਨਲੋਡ ਕਰੋ।</translation>
@@ -128,7 +131,6 @@
 <translation id="4675485352217495362">Chromium ਤੋਂ ਬ੍ਰਾਊਜ਼ਿੰਗ ਡਾਟਾ ਮਿਟਾਓ</translation>
 <translation id="4681781466797808448">Chromium ਸਕੈਨਰ ਚਾਲੂ ਕਰੋ</translation>
 <translation id="4736424910885271643">ਤੁਹਾਡੇ ਖਾਤੇ ਦਾ ਪ੍ਰਬੰਧਨ <ph name="HOSTED_DOMAIN" /> ਵੱਲੋਂ ਕੀਤਾ ਜਾਂਦਾ ਹੈ, ਇਸ ਲਈ ਇਸ ਡੀਵਾਈਸ ਤੋਂ ਤੁਹਾਡਾ Chromium ਡਾਟਾ ਕਲੀਅਰ ਕਰ ਦਿੱਤਾ ਜਾਵੇਗਾ</translation>
-<translation id="4773487571745795781">ਤੁਸੀਂ Chromium ਵਿੱਚ ਸਾਈਨ-ਇਨ ਕਰਨ ਦੀ ਸੁਵਿਧਾ ਨੂੰ ਬੰਦ ਕਰ ਦਿੱਤਾ ਹੈ।</translation>
 <translation id="4790638144988730920">ਆਪਣੇ Google ਖਾਤੇ ਵਿੱਚ Chromium ਡਾਟਾ ਵਰਤਣਾ ਜਾਰੀ ਰੱਖੋ।</translation>
 <translation id="4828317641996116749">Chromium ਸਾਰੇ ਪਾਸਵਰਡਾਂ ਦੀ ਜਾਂਚ ਨਹੀਂ ਕਰ ਸਕਿਆ। ਬਾਅਦ ਵਿੱਚ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</translation>
 <translation id="4962295957157529683">ਤੁਸੀਂ ਆਪਣੀ ਦੂਜੀ ਖੁੱਲ੍ਹੀ Chromium ਵਿੰਡੋ ਵਿੱਚ ਜੋ ਕੰਮ ਕਰ ਰਹੇ ਸੀ, ਉਸਨੂੰ ਪੂਰਾ ਕਰੋ।</translation>
@@ -156,6 +158,7 @@
 <translation id="5522297504975449419">ਕੁਝ Chromium ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਹੁਣ ਉਪਲਬਧ ਨਹੀਂ ਹੋਣਗੀਆਂ।</translation>
 <translation id="5534584691915394889">ਇਸਦੀ ਵਰਤੋਂ Chromium ਅਤੇ Google Lens ਤੋਂ ਤੁਹਾਡੇ Apple Calendar ਵਿੱਚ ਇਵੈਂਟ ਬਣਾਉਣ ਲਈ ਕੀਤੀ ਜਾਵੇਗੀ।</translation>
 <translation id="5571094606370987472">Chromium ਹਾਲੀਆ ਟੈਬਾਂ ਖੋਲ੍ਹਦਾ ਹੈ।</translation>
+<translation id="5603085937604338780">chromium</translation>
 <translation id="5623083843656850677">Chromium ਤੋਂ ਬਾਹਰ ਨਿਕਲਣ ਜਾਂ ਕਿਸੇ ਵੱਖਰੀ ਐਪ 'ਤੇ ਸਵਿੱਚ ਕਰਨ ਦੌਰਾਨ ਆਪਣੀਆਂ ਇਨਕੋਗਨਿਟੋ ਟੈਬਾਂ ਨੂੰ ਲਾਕ ਕਰੋ।</translation>
 <translation id="5671188105328420281">Chromium ਸੰਬੰਧੀ ਨੁਕਤੇ</translation>
 <translation id="5688047395118852662">ਇਹ ਕਾਰਡ ਤੁਹਾਨੂੰ Chromium ਦਾ ਵੱਧ ਤੋਂ ਵੱਧ ਲਾਹਾ ਲੈਣ ਦੇ ਤਰੀਕੇ ਬਾਰੇ ਸੁਝਾਅ ਦਿਖਾਉਂਦਾ ਹੈ।</translation>
@@ -201,7 +204,6 @@
 <translation id="6433172051771630690">Chromium ਦਾ ਵੱਧ ਤੋਂ ਵੱਧ ਲਾਹਾ ਲੈਣ ਸੰਬੰਧੀ ਨੁਕਤੇ।</translation>
 <translation id="6502321914804101924">Chromium ਸਾਈਨ-ਆਊਟ ਕੀਤਾ ਗਿਆ ਹੈ</translation>
 <translation id="6563921047760808519"><ph name="BEGIN_LINK" />Chromium ਤੁਹਾਡੇ ਡਾਟੇ ਨੂੰ ਨਿੱਜੀ ਕਿਵੇਂ ਰੱਖਦਾ ਹੈ<ph name="END_LINK" /> ਇਸ ਬਾਰੇ ਹੋਰ ਜਾਣੋ</translation>
-<translation id="6625409903340039086">Chromium ਹੁਣ ਤੁਹਾਡੇ ਪ੍ਰਬੰਧਿਤ ਕੀਤੇ ਖਾਤੇ ਲਈ ਵਰਤੋਂਕਾਰ ਨੀਤੀਆਂ ਦਾ ਸਮਰਥਨ ਕਰਦਾ ਹੈ</translation>
 <translation id="6728350288669261079">Chromium ਵਿੱਚ ਸੈਟਿੰਗਾਂ ਨੂੰ ਖੋਲ੍ਹਦਾ ਹੈ।</translation>
 <translation id="6752854822223394465">ਤੁਹਾਡੀ ਸੰਸਥਾ Chromium ਦਾ ਸੈੱਟਅੱਪ ਕਰ ਰਹੀ ਹੈ...</translation>
 <translation id="6794054469102824109">Chromium Dino ਗੇਮ ਨੂੰ ਖੋਲ੍ਹਦਾ ਹੈ।</translation>
@@ -232,7 +234,7 @@
 <translation id="7395825497086981028">ਤੁਹਾਡੇ ਪਾਸਵਰਡ ਨੂੰ <ph name="EMAIL" /> ਲਈ ਪਾਸਵਰਡ ਪ੍ਰਬੰਧਕ ਵਿੱਚ ਰੱਖਿਅਤ ਕੀਤਾ ਜਾਵੇਗਾ।</translation>
 <translation id="7400689562045506105">Chromium ਨੂੰ ਹਰ ਥਾਂ ਵਰਤੋ</translation>
 <translation id="7523464085759699266">"Chromium ਨੂੰ ਬੰਦ ਕਰਨ 'ਤੇ ਇਨਕੋਗਨਿਟੋ ਟੈਬਾਂ ਨੂੰ ਲਾਕ ਕਰੋ" ਨੂੰ ਚਾਲੂ ਕਰੋ।</translation>
-<translation id="7601597633134889942">ਕਿਸੇ ਸਾਈਟ 'ਤੇ ਜਾਓ ਅਤੇ Chromium ਮੀਨੂ ਵਿੱਚ 'ਅਨੁਸਰਣ ਕਰੋ' 'ਤੇ ਕਲਿੱਕ ਕਰੋ</translation>
+<translation id="7531461704633548377">Chromium ਤੋਂ</translation>
 <translation id="7674213385180944843">ਸੈਟਿੰਗਾਂ &gt; ਪਰਦੇਦਾਰੀ &gt; ਕੈਮਰਾ &gt; Chromium ਖੋਲ੍ਹੋ ਅਤੇ ਕੈਮਰਾ ਚਾਲੂ ਕਰੋ।</translation>
 <translation id="7710137812207066069">Chromium ਵਿੱਚ ਨਵੀਂ ਟੈਬ ਖੋਲ੍ਹਦਾ ਹੈ।</translation>
 <translation id="7747820849741499258">Chromium ਵਿੱਚ ਖੋਜੋ</translation>
@@ -248,7 +250,6 @@
 <translation id="7971753607796745700">Chromium ਦੀ ਪੜ੍ਹਨ-ਸੂਚੀ ਵਿੱਚ ਆਈਟਮ ਸ਼ਾਮਲ ਕਰੋ</translation>
 <translation id="7980860476903281594">Chromium ਤੁਹਾਡੇ ਵੱਲੋਂ ਆਗਿਆ ਦਿੱਤੀਆਂ ਸਾਈਟਾਂ ਨਾਲ ਤੁਹਾਡਾ ਟਿਕਾਣਾ ਸਾਂਝਾ ਕਰਦਾ ਹੈ।</translation>
 <translation id="7994322153108931467">ਲਾਹੇਵੰਦ Chromium ਨੁਕਤੇ ਪ੍ਰਾਪਤ ਕਰਨ ਲਈ, ਆਪਣੀਆਂ iOS ਸੈਟਿੰਗਾਂ ਵਿੱਚ ਸੂਚਨਾਵਾਂ ਚਾਲੂ ਕਰੋ।</translation>
-<translation id="7995166854192397899">ਸੁਝਾਅ ਤੁਹਾਡੇ ਹੋਰ ਡੀਵਾਈਸਾਂ 'ਤੇ ਤੁਹਾਡੀ ਬ੍ਰਾਊਜ਼ਿੰਗ ਸਰਗਰਮੀ 'ਤੇ ਆਧਾਰਿਤ ਹਨ। ਸੁਝਾਅ ਪ੍ਰਾਪਤ ਕਰਨ ਲਈ, ਆਪਣੇ ਸਾਰੇ ਡੀਵਾਈਸਾਂ 'ਤੇ Chromium ਵਿੱਚ ਸਾਈਨ-ਇਨ ਕਰੋ।</translation>
 <translation id="800195749539500647">Chromium ਦਾ ਵੱਧ ਤੋਂ ਵੱਧ ਲਾਹਾ ਲਓ</translation>
 <translation id="8013573822802650211">ਜਿਸ ਡੀਵਾਈਸ 'ਤੇ ਵੀ ਤੁਸੀਂ Chromium ਵਰਤਦੇ ਹੋ, ਉੱਥੇ ਆਪਣੀਆਂ ਟੈਬਾਂ ਦੇਖਣ ਲਈ ਸਾਈਨ-ਇਨ ਕਰੋ</translation>
 <translation id="8071041515667087705">Chromium ਸੈਟਿੰਗਾਂ 'ਤੇ ਜਾਓ।</translation>
@@ -264,6 +265,7 @@
 <translation id="8386869251364507178">Chromium ਕਾਰਵਾਈਆਂ</translation>
 <translation id="8409374867500149834">ਤੁਹਾਡੇ ਕੋਲ ਨੁਕਸਾਨਦੇਹ ਵੈੱਬਸਾਈਟਾਂ ਦੇ ਵਿਰੁੱਧ Chromium ਦੀ ਸਭ ਤੋਂ ਮਜ਼ਬੂਤ ਸੁਰੱਖਿਆ ਹੈ</translation>
 <translation id="8458950033462118672">ਤੁਸੀਂ Chromium ਨੂੰ ਆਪਣੀ ਪੂਰਵ-ਨਿਰਧਾਰਿਤ ਬ੍ਰਾਊਜ਼ਰ ਐਪ ਬਣਾ ਕੇ ਸਵੈਚਲਿਤ ਤੌਰ 'ਤੇ ਇਸ ਵਿੱਚ ਲਿੰਕ ਖੋਲ੍ਹ ਸਕਦੇ ਹੋ।</translation>
+<translation id="8543509361021925846">{THRESHOLD,plural, =1{ਅਜਿਹਾ ਉਦੋਂ ਹੁੰਦਾ ਹੈ, ਜਦੋਂ {THRESHOLD} ਮਿੰਟ ਲਈ Chromium ਦੀ ਵਰਤੋਂ ਨਹੀਂ ਕੀਤੀ ਜਾਂਦੀ। ਸਾਈਨ-ਇਨ ਰਹਿਣ ਦੌਰਾਨ, ਸਿਰਫ਼ ਇਸ ਡੀਵਾਈਸ 'ਤੇ ਰੱਖਿਅਤ ਕੀਤਾ ਗਿਆ ਡਾਟਾ ਮਿਟਾ ਦਿੱਤਾ ਜਾਵੇਗਾ। ਇਸ ਵਿੱਚ ਇਤਿਹਾਸ ਅਤੇ ਪਾਸਵਰਡ ਸ਼ਾਮਲ ਹੋ ਸਕਦੇ ਹਨ।}one{ਅਜਿਹਾ ਉਦੋਂ ਹੁੰਦਾ ਹੈ, ਜਦੋਂ {THRESHOLD} ਮਿੰਟ ਲਈ Chromium ਦੀ ਵਰਤੋਂ ਨਹੀਂ ਕੀਤੀ ਜਾਂਦੀ। ਸਾਈਨ-ਇਨ ਰਹਿਣ ਦੌਰਾਨ, ਸਿਰਫ਼ ਇਸ ਡੀਵਾਈਸ 'ਤੇ ਰੱਖਿਅਤ ਕੀਤਾ ਗਿਆ ਡਾਟਾ ਮਿਟਾ ਦਿੱਤਾ ਜਾਵੇਗਾ। ਇਸ ਵਿੱਚ ਇਤਿਹਾਸ ਅਤੇ ਪਾਸਵਰਡ ਸ਼ਾਮਲ ਹੋ ਸਕਦੇ ਹਨ।}other{ਅਜਿਹਾ ਉਦੋਂ ਹੁੰਦਾ ਹੈ, ਜਦੋਂ {THRESHOLD} ਮਿੰਟਾਂ ਲਈ Chromium ਦੀ ਵਰਤੋਂ ਨਹੀਂ ਕੀਤੀ ਜਾਂਦੀ। ਸਾਈਨ-ਇਨ ਰਹਿਣ ਦੌਰਾਨ, ਸਿਰਫ਼ ਇਸ ਡੀਵਾਈਸ 'ਤੇ ਰੱਖਿਅਤ ਕੀਤਾ ਗਿਆ ਡਾਟਾ ਮਿਟਾ ਦਿੱਤਾ ਜਾਵੇਗਾ। ਇਸ ਵਿੱਚ ਇਤਿਹਾਸ ਅਤੇ ਪਾਸਵਰਡ ਸ਼ਾਮਲ ਹੋ ਸਕਦੇ ਹਨ।}}</translation>
 <translation id="858114650497379505">ਤੁਸੀਂ ਤੁਹਾਡੇ ਵੱਲੋਂ ਆਪਣੇ iPhone 'ਤੇ ਹੋਰ ਐਪਾਂ ਵਿੱਚ ਪਾਸਵਰਡ ਪ੍ਰਬੰਧਕ 'ਤੇ ਰੱਖਿਅਤ ਕੀਤੇ ਪਾਸਵਰਡਾਂ ਦੀ ਵਰਤੋਂ ਕਰ ਸਕਦੇ ਹੋ।</translation>
 <translation id="8586442755830160949">ਕਾਪੀਰਾਈਟ <ph name="YEAR" /> The Chromium Authors. ਸਾਰੇ ਹੱਕ ਰਾਖਵੇਂ ਹਨ।</translation>
 <translation id="865600487977764604">ਤੁਹਾਡੇ ਸਾਈਨ-ਇਨ ਹੋਣ 'ਤੇ, ਤੁਹਾਨੂੰ Chromium ਵਿੱਚ ਸੁਰੱਖਿਅਤ ਰੱਖਿਆ ਜਾਂਦਾ ਹੈ ਅਤੇ ਸ਼ਾਇਦ ਹੋਰ Google ਐਪਾਂ ਵਿੱਚ ਤੁਹਾਡੀ ਸੁਰੱਖਿਆ ਨੂੰ ਬਿਹਤਰ ਬਣਾਉਣ ਲਈ ਵਰਤਿਆ ਜਾ ਸਕਦਾ ਹੈ।</translation>
@@ -274,6 +276,7 @@
 <translation id="8754966941001340678">Chromium ਵਿਸਤ੍ਰਿਤ ਸੁਰੱਖਿਆ ਦੀ ਸਿਫ਼ਾਰਸ਼ ਕਰਦਾ ਹੈ</translation>
 <translation id="8759037115129007407">ਫ਼ਿਲਹਾਲ ਤੁਹਾਡਾ ਪਰਿਵਾਰਕ ਮੈਂਬਰ ਪਾਸਵਰਡ ਪ੍ਰਾਪਤ ਨਹੀਂ ਕਰ ਸਕਦਾ। ਉਨ੍ਹਾਂ ਨੂੰ Chromium ਅੱਪਡੇਟ ਕਰ ਕੇ ਉਨ੍ਹਾਂ ਦੇ ਪਾਸਵਰਡ ਸਿੰਕ ਕਰਨ ਲਈ ਕਹੋ। <ph name="BEGIN_LINK" />ਹੋਰ ਜਾਣੋ<ph name="END_LINK" /></translation>
 <translation id="8776843108004031667">Chromium ਤੋਂ ਇਸ ਖਾਤੇ ਅਤੇ ਕਿਸੇ ਵੀ ਅਣਰੱਖਿਅਤ ਡਾਟੇ ਨੂੰ ਹਟਾ ਦਿੱਤਾ ਜਾਵੇਗਾ।</translation>
+<translation id="8826789549860004832">ਆਪਣੇ ਬ੍ਰਾਊਜ਼ਰ ਦਾ ਸੈੱਟਅੱਪ ਕਰਨਾ ਜਾਰੀ ਰੱਖ ਕੇ Chromium ਦਾ ਵੱਧ ਤੋਂ ਵੱਧ ਲਾਹਾ ਲਓ।</translation>
 <translation id="88376265765385899">Chromium ਬੁੱਕਮਾਰਕਾਂ ਨੂੰ ਖੋਲ੍ਹਦਾ ਹੈ।</translation>
 <translation id="8860548555286245440">Chromium ਵਿੱਚ URL ਨੂੰ ਇਨਕੋਗਨਿਟੋ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
 <translation id="8866191443434488382">Chromium ਤੁਹਾਡੇ ਵੱਲੋਂ ਦੇਖੀਆਂ ਗਈਆਂ ਸਾਈਟਾਂ ਦੇ ਟਰੈਕਿੰਗ ਨੰਬਰਾਂ ਦਾ ਪਤਾ ਲਗਾਵੇਗਾ ਅਤੇ ਨਵੇਂ ਟੈਬ ਪੰਨੇ 'ਤੇ ਤੁਹਾਨੂੰ ਪੈਕੇਜ ਸੰਬੰਧੀ ਅੱਪਡੇਟਾਂ ਦਿਖਾਵੇਗਾ। ਇਹ ਵਿਸ਼ੇਸ਼ਤਾ ਮੁਹੱਈਆ ਕਰਨ ਅਤੇ ਹਰ ਕਿਸੇ ਲਈ ਖਰੀਦਦਾਰੀ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਨੂੰ ਬਿਹਤਰ ਬਣਾਉਣ ਲਈ ਪੈਕੇਜ ਟਰੈਕਿੰਗ ਨੰਬਰ ਅਤੇ ਵੈੱਬਸਾਈਟ ਦਾ ਨਾਮ Chromium ਨੂੰ ਭੇਜਿਆ ਜਾਵੇਗਾ। ਤੁਸੀਂ ਇਸਨੂੰ ਕਿਸੇ ਵੇਲੇ ਵੀ <ph name="BEGIN_LINK" />ਪੈਕੇਜ ਟਰੈਕਿੰਗ ਸੈਟਿੰਗਾਂ<ph name="END_LINK" /> ਵਿੱਚ ਅੱਪਡੇਟ ਕਰ ਸਕਦੇ ਹੋ।</translation>
@@ -287,6 +290,7 @@
 ਤੁਹਾਡਾ ਡਾਟਾ ਤੁਹਾਡੇ ਪਾਸਫਰੇਜ਼ ਨਾਲ <ph name="TIME" /> ਨੂੰ ਇਨਕ੍ਰਿਪਟ ਕੀਤਾ ਗਿਆ ਸੀ। ਆਪਣੇ Google ਖਾਤੇ ਵਿੱਚ Chromium ਡਾਟੇ ਨੂੰ ਵਰਤਣ ਅਤੇ ਰੱਖਿਅਤ ਕਰਨ ਲਈ ਇਸਨੂੰ ਦਾਖਲ ਕਰੋ।</translation>
 <translation id="9022552996538154597">Chromium ਵਿੱਚ ਸਾਈਨ-ਇਨ ਕਰੋ</translation>
 <translation id="9050790730841755540">ਹੋਰ ਐਪਾਂ ਵਿਚਲੇ ਲਿੰਕਾਂ 'ਤੇ ਟੈਪ ਕਰ ਕੇ ਕਿਸੇ ਵੇਲੇ ਵੀ Chromium ਦੀ ਵਰਤੋਂ ਕਰੋ।</translation>
+<translation id="9057082013386654559">iPad ਲਈ ਪੂਰਵ-ਨਿਰਧਾਰਿਤ ਤੌਰ 'ਤੇ Chromium ਦੀ ਵਰਤੋਂ ਕਰੋ</translation>
 <translation id="9059693977935746710">ਤੁਹਾਨੂੰ ਇਸ ਪਾਸਵਰਡ ਨੂੰ ਯਾਦ ਰੱਖਣ ਦੀ ਲੋੜ ਨਹੀਂ ਹੋਵੇਗੀ। ਇਸਨੂੰ <ph name="EMAIL" /> ਦੇ ਪਾਸਵਰਡ ਪ੍ਰਬੰਧਕ ਵਿੱਚ ਰੱਖਿਅਤ ਕੀਤਾ ਜਾਵੇਗਾ</translation>
 <translation id="9089354809943900324">Chromium ਪੁਰਾਣਾ ਹੈ</translation>
 <translation id="9110075932708282655">Chromium ਨੂੰ ਪੂਰਵ-ਨਿਰਧਾਰਿਤ ਤੌਰ 'ਤੇ ਵਰਤੋ</translation>

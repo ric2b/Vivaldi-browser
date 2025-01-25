@@ -258,3 +258,33 @@ D. Local Modifications
     patches/revert_realpath.patch
   - https://bugs.chromium.org/p/chromium/issues/detail?id=1473422
   - https://unicode-org.atlassian.net/browse/ICU-22541
+
+11. Patch source/common/locid.cpp to resolve crashes in DecimalFormatting.
+    patches/locid.patch
+  - https://issues.chromium.org/issues/333453962
+
+12. Patch source/common/messagepattern.ccp/.h to resolve stack overflow.
+    patches/limit_message_pattern.patch
+  - https://issues.chromium.org/343280855
+  - https://unicode-org.atlassian.net/browse/ICU-22798
+
+13. Patch source/common/ubidiwrt.cpp to resolve a bidi buffer overflow.
+    patches/bidi_buffer_overflow.patch
+  - https://issues.chromium.org/u/1/issues/345352978
+  - https://unicode-org.atlassian.net/browse/ICU-22768
+
+14. Patch source/tools/pkgdata/pkgdata.cpp to remove a format-overflow warning.
+    patches/remove_format_overflow_warning.patch
+  - https://unicode-org.atlassian.net/browse/ICU-21589
+  - https://issues.chromium.org/u/1/issues/345352978
+
+15. Patch source/i18n/japancal.cpp to fix an extended year int32 overflow.
+    patches/ja_extended_year_overflow.patch
+  - https://issues.chromium.org/u/1/issues/345352978
+  - https://unicode-org.atlassian.net/browse/ICU-22730
+
+16. Patch an icu:calendar integer overflow by propagating error.
+    patch/propagate_error_avoid_overflow.patch
+  - https://bugs.chromium.org/p/oss-fuzz/issues/detail?id=68895
+  - https://issues.chromium.org/u/1/issues/345352978
+  - https://unicode-org.atlassian.net/browse/ICU-22730

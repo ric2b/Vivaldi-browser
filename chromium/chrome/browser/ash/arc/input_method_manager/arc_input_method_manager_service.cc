@@ -21,7 +21,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/ranges/algorithm.h"
-#include "base/strings/string_piece.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/arc/input_method_manager/arc_input_method_manager_bridge_impl.h"
 #include "chrome/browser/profiles/profile.h"
@@ -82,7 +81,7 @@ void SwitchImeToCallback(const std::string& ime_id,
       }
     }
   }
-  NOTREACHED() << "There is no enabled non-ARC IME.";
+  NOTREACHED_IN_MIGRATION() << "There is no enabled non-ARC IME.";
 }
 
 void SetKeyboardDisabled(bool disabled) {
@@ -248,7 +247,7 @@ class ArcInputMethodManagerService::InputMethodEngineObserver
       const ui::KeyEvent& event,
       ash::TextInputMethod::KeyEventDoneCallback key_data) override {
     if (event.key_code() == ui::VKEY_BROWSER_BACK &&
-        event.type() == ui::ET_KEY_PRESSED &&
+        event.type() == ui::EventType::kKeyPressed &&
         owner_->IsVirtualKeyboardShown()) {
       // Back button on the shelf is pressed. We should consume only "keydown"
       // events here to make sure that Android side receives "keyup" events

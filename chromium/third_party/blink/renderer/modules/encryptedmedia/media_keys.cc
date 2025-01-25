@@ -57,44 +57,6 @@
 #define MEDIA_KEYS_LOG_LEVEL 3
 
 namespace blink {
-namespace {
-
-// TODO(crbug/1347553): Remove duplicate function and merge it with the one
-// used in platform/media.
-media::HdcpVersion ConvertEncryptedMediaHdcpVersion(
-    const WebString& hdcp_version_string) {
-  if (!hdcp_version_string.ContainsOnlyASCII())
-    return media::HdcpVersion::kHdcpVersionNone;
-
-  std::string hdcp_version_ascii = hdcp_version_string.Ascii();
-
-  // The strings are specified in the explainer doc:
-  // https://github.com/WICG/hdcp-detection/blob/master/explainer.md
-  if (hdcp_version_ascii.empty())
-    return media::HdcpVersion::kHdcpVersionNone;
-  else if (hdcp_version_ascii == "1.0")
-    return media::HdcpVersion::kHdcpVersion1_0;
-  else if (hdcp_version_ascii == "1.1")
-    return media::HdcpVersion::kHdcpVersion1_1;
-  else if (hdcp_version_ascii == "1.2")
-    return media::HdcpVersion::kHdcpVersion1_2;
-  else if (hdcp_version_ascii == "1.3")
-    return media::HdcpVersion::kHdcpVersion1_3;
-  else if (hdcp_version_ascii == "1.4")
-    return media::HdcpVersion::kHdcpVersion1_4;
-  else if (hdcp_version_ascii == "2.0")
-    return media::HdcpVersion::kHdcpVersion2_0;
-  else if (hdcp_version_ascii == "2.1")
-    return media::HdcpVersion::kHdcpVersion2_1;
-  else if (hdcp_version_ascii == "2.2")
-    return media::HdcpVersion::kHdcpVersion2_2;
-  else if (hdcp_version_ascii == "2.3")
-    return media::HdcpVersion::kHdcpVersion2_3;
-
-  return media::HdcpVersion::kHdcpVersionNone;
-}
-
-}  // namespace
 
 // A class holding a pending action.
 class MediaKeys::PendingAction final
@@ -244,8 +206,13 @@ class GetStatusForPolicyResultPromise
             GetMediaKeysConfig().key_system.Ascii()));
         builder.SetUseHardwareSecureCodecs(
             static_cast<int>(GetMediaKeysConfig().use_hardware_secure_codecs));
+        std::optional<media::HdcpVersion> hdcp_version;
+        if (min_hdcp_version_.ContainsOnlyASCII()) {
+          hdcp_version =
+              media::MaybeHdcpVersionFromString(min_hdcp_version_.Ascii());
+        }
         builder.SetMinHdcpVersion(static_cast<int>(
-            ConvertEncryptedMediaHdcpVersion(min_hdcp_version_)));
+            hdcp_version.value_or(media::HdcpVersion::kHdcpVersionNone)));
         LocalFrame* frame = document->GetFrame();
         if (frame) {
           builder.SetIsAdFrame(static_cast<int>(frame->IsAdFrame()));
@@ -308,7 +275,7 @@ MediaKeySession* MediaKeys::createSession(ScriptState* script_state,
     return nullptr;
   }
 
-  // From http://w3c.github.io/encrypted-media/#createSession
+  // From https://w3c.github.io/encrypted-media/#dom-mediakeys-createsession
 
   // When this method is invoked, the user agent must run the following steps:
   // 1. If this object's persistent state allowed value is false and
@@ -343,10 +310,12 @@ ScriptPromise<IDLBoolean> MediaKeys::setServerCertificate(
   if (!GetExecutionContext()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
                                       "The context provided is invalid.");
-    return ScriptPromise<IDLBoolean>();
+    return EmptyPromise();
   }
 
-  // From https://w3c.github.io/encrypted-media/#setServerCertificate
+  // From
+  // https://w3c.github.io/encrypted-media/#dom-mediakeys-setservercertificate
+
   // The setServerCertificate(serverCertificate) method provides a server
   // certificate to be used to encrypt messages to the license server.
   // It must run the following steps:
@@ -360,7 +329,7 @@ ScriptPromise<IDLBoolean> MediaKeys::setServerCertificate(
   //    with a new a newly created TypeError.
   if (!server_certificate.ByteLength()) {
     exception_state.ThrowTypeError("The serverCertificate parameter is empty.");
-    return ScriptPromise<IDLBoolean>();
+    return EmptyPromise();
   }
 
   // 3. Let certificate be a copy of the contents of the serverCertificate
@@ -369,8 +338,8 @@ ScriptPromise<IDLBoolean> MediaKeys::setServerCertificate(
       server_certificate.Data(), server_certificate.ByteLength());
 
   // 4. Let promise be a new promise.
-  auto* resolver =
-      MakeGarbageCollected<ScriptPromiseResolver<IDLBoolean>>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLBoolean>>(
+      script_state, exception_state.GetContext());
   auto promise = resolver->Promise();
   SetCertificateResultPromise* result =
       MakeGarbageCollected<SetCertificateResultPromise>(resolver, config_,
@@ -422,7 +391,7 @@ ScriptPromise<V8MediaKeyStatus> MediaKeys::getStatusForPolicy(
   if (!GetExecutionContext()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
                                       "The context provided is invalid.");
-    return ScriptPromise<V8MediaKeyStatus>();
+    return EmptyPromise();
   }
 
   // TODO(xhwang): Pass MediaKeysPolicy classes all the way to Chromium when
@@ -432,7 +401,7 @@ ScriptPromise<V8MediaKeyStatus> MediaKeys::getStatusForPolicy(
   // Let promise be a new promise.
   auto* resolver =
       MakeGarbageCollected<ScriptPromiseResolver<V8MediaKeyStatus>>(
-          script_state);
+          script_state, exception_state.GetContext());
   GetStatusForPolicyResultPromise* result =
       MakeGarbageCollected<GetStatusForPolicyResultPromise>(
           resolver, config_, min_hdcp_version, this);
@@ -520,7 +489,7 @@ void MediaKeys::TimerFired(TimerBase*) {
         break;
 
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 }

@@ -17,7 +17,7 @@ class MockCastMessageHandler final : public CastMessageHandler {
               OnMessage,
               (VirtualConnectionRouter * router,
                CastSocket* socket,
-               ::cast::channel::CastMessage message),
+               proto::CastMessage message),
               (override));
 };
 

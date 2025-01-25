@@ -108,7 +108,7 @@ constexpr media::VideoCodec MediaVideoCodecFromCodecId(
     default:
       return media::VideoCodec::kUnknown;
   }
-  NOTREACHED() << "Unsupported video codec";
+  NOTREACHED_IN_MIGRATION() << "Unsupported video codec";
   return media::VideoCodec::kUnknown;
 }
 
@@ -132,7 +132,7 @@ media::VideoCodecProfile MediaVideoCodecProfileFromCodecId(
     default:
       break;
   }
-  NOTREACHED() << "Unsupported video codec";
+  NOTREACHED_IN_MIGRATION() << "Unsupported video codec";
   return media::VideoCodecProfile::VIDEO_CODEC_PROFILE_UNKNOWN;
 }
 
@@ -183,7 +183,13 @@ class MockVideoTrackRecorderCallbackInterface
 
   MOCK_METHOD(void, OnVideoEncodingError, (), (override));
   MOCK_METHOD(void, OnSourceReadyStateChanged, (), (override));
-  void Trace(Visitor*) const override {}
+  void Trace(Visitor* v) const override { v->Trace(weak_factory_); }
+  WeakCell<VideoTrackRecorder::CallbackInterface>* GetWeakCell() {
+    return weak_factory_.GetWeakCell();
+  }
+
+ private:
+  WeakCellFactory<VideoTrackRecorder::CallbackInterface> weak_factory_{this};
 };
 
 class VideoTrackRecorderTestBase {
@@ -270,7 +276,8 @@ class VideoTrackRecorderTest : public VideoTrackRecorderTestBase {
           KeyFrameRequestProcessor::Configuration()) {
     video_track_recorder_ = std::make_unique<VideoTrackRecorderImpl>(
         scheduler::GetSingleThreadTaskRunnerForTesting(), codec_profile,
-        WebMediaStreamTrack(component_.Get()), mock_callback_interface_,
+        WebMediaStreamTrack(component_.Get()),
+        mock_callback_interface_->GetWeakCell(),
         /*bits_per_second=*/1000000, keyframe_config);
   }
 
@@ -1179,7 +1186,8 @@ class VideoTrackRecorderPassthroughTest
   void InitializeRecorder() {
     video_track_recorder_ = std::make_unique<VideoTrackRecorderPassthrough>(
         scheduler::GetSingleThreadTaskRunnerForTesting(),
-        WebMediaStreamTrack(component_.Get()), mock_callback_interface_,
+        WebMediaStreamTrack(component_.Get()),
+        mock_callback_interface_->GetWeakCell(),
         KeyFrameRequestProcessor::Configuration());
   }
 

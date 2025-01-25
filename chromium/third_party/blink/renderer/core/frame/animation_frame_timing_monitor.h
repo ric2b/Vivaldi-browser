@@ -56,14 +56,14 @@ class CORE_EXPORT AnimationFrameTimingMonitor final
 
   void Shutdown();
 
-  void BeginMainFrame(base::TimeTicks frame_time);
+  void BeginMainFrame(LocalDOMWindow& local_root_window);
   void WillPerformStyleAndLayoutCalculation();
   void DidBeginMainFrame(LocalDOMWindow& local_root_window);
   void OnTaskCompleted(base::TimeTicks start_time,
                        base::TimeTicks end_time,
                        LocalFrame* frame);
 
-  // TaskTimeObsrver
+  // TaskTimeObserver
   void WillProcessTask(base::TimeTicks start_time) override;
 
   void DidProcessTask(base::TimeTicks start_time,
@@ -101,7 +101,7 @@ class CORE_EXPORT AnimationFrameTimingMonitor final
   void WillRunJavaScriptDialog();
   void DidRunJavaScriptDialog();
   void DidFinishSyncXHR(base::TimeDelta);
-
+  void WillHandleInput(LocalFrame*);
 
  private:
   Member<AnimationFrameTimingInfo> current_frame_timing_info_;
@@ -131,6 +131,7 @@ class CORE_EXPORT AnimationFrameTimingMonitor final
                                            LocalDOMWindow& window);
   void RecordLongAnimationFrameTrace(const AnimationFrameTimingInfo& info,
                                      LocalDOMWindow& window);
+  void RequestPresentationTimeForTracing(LocalFrame& frame);
   void ReportPresentationTimeToTrace(
       uint64_t trace_id,
       const viz::FrameTimingDetails& presentation_details);
@@ -161,6 +162,8 @@ class CORE_EXPORT AnimationFrameTimingMonitor final
   base::TimeDelta longest_task_duration_;
   bool did_pause_ = false;
   bool did_see_ui_events_ = false;
+  WeakMember<LocalFrame> frame_handling_input_;
+  bool multiple_focused_frames_in_same_task_ = false;
 
   unsigned entry_point_depth_ = 0;
 

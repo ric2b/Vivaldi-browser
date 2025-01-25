@@ -9,24 +9,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-TEST(Spanset, Fits) {
-  std::vector<char> dst(4, 'B');
-  fxcrt::spanset(pdfium::make_span(dst).first(2), 'A');
-  EXPECT_EQ(dst[0], 'A');
-  EXPECT_EQ(dst[1], 'A');
-  EXPECT_EQ(dst[2], 'B');
-  EXPECT_EQ(dst[3], 'B');
-}
-
-TEST(Spanset, Empty) {
-  std::vector<char> dst(4, 'B');
-  fxcrt::spanset(pdfium::make_span(dst).subspan(4), 'A');
-  EXPECT_EQ(dst[0], 'B');
-  EXPECT_EQ(dst[1], 'B');
-  EXPECT_EQ(dst[2], 'B');
-  EXPECT_EQ(dst[3], 'B');
-}
-
 TEST(Spancpy, FitsEntirely) {
   std::vector<char> src(4, 'A');
   std::vector<char> dst(4, 'B');
@@ -204,11 +186,6 @@ TEST(ReinterpretSpan, LegalConversions) {
   ASSERT_EQ(converted.size(), 2u);
   EXPECT_EQ(converted[0], 0x61616161u);
   EXPECT_EQ(converted[1], 0x62626262u);
-}
-
-TEST(ReinterpretSpan, BadLength) {
-  uint8_t ab[2] = {0x61, 0x62};
-  EXPECT_DEATH(fxcrt::reinterpret_span<uint32_t>(pdfium::make_span(ab)), "");
 }
 
 TEST(ReinterpretSpan, BadAlignment) {

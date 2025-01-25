@@ -48,11 +48,12 @@ enum class MachineRepresentation : uint8_t {
   // point into the sandbox.
   kSandboxedPointer,
   // FP and SIMD representations must be last, and in order of increasing size.
+  kFloat16,
   kFloat32,
   kFloat64,
   kSimd128,
   kSimd256,
-  kFirstFPRepresentation = kFloat32,
+  kFirstFPRepresentation = kFloat16,
   kLastRepresentation = kSimd256
 };
 
@@ -66,6 +67,7 @@ bool IsSubtype(MachineRepresentation rep1, MachineRepresentation rep2);
 ASSERT_CONSECUTIVE(Word8, Word16)
 ASSERT_CONSECUTIVE(Word16, Word32)
 ASSERT_CONSECUTIVE(Word32, Word64)
+ASSERT_CONSECUTIVE(Float16, Float32)
 ASSERT_CONSECUTIVE(Float32, Float64)
 ASSERT_CONSECUTIVE(Float64, Simd128)
 ASSERT_CONSECUTIVE(Simd128, Simd256)
@@ -91,6 +93,7 @@ enum class MachineSemantic : uint8_t {
   kSignedBigInt64,
   kUnsignedBigInt64,
   kNumber,
+  kHoleyFloat64,
   kAny
 };
 
@@ -204,6 +207,10 @@ class MachineType {
     return MachineType(MachineRepresentation::kWord64,
                        MachineSemantic::kUnsignedBigInt64);
   }
+  constexpr static MachineType Float16() {
+    return MachineType(MachineRepresentation::kFloat16,
+                       MachineSemantic::kNumber);
+  }
   constexpr static MachineType Float32() {
     return MachineType(MachineRepresentation::kFloat32,
                        MachineSemantic::kNumber);
@@ -211,6 +218,10 @@ class MachineType {
   constexpr static MachineType Float64() {
     return MachineType(MachineRepresentation::kFloat64,
                        MachineSemantic::kNumber);
+  }
+  constexpr static MachineType HoleyFloat64() {
+    return MachineType(MachineRepresentation::kFloat64,
+                       MachineSemantic::kHoleyFloat64);
   }
   constexpr static MachineType Simd128() {
     return MachineType(MachineRepresentation::kSimd128, MachineSemantic::kNone);
@@ -277,6 +288,8 @@ class MachineType {
         return isSigned ? MachineType::Int32() : MachineType::Uint32();
       case MachineRepresentation::kWord64:
         return isSigned ? MachineType::Int64() : MachineType::Uint64();
+      case MachineRepresentation::kFloat16:
+        return MachineType::Float16();
       case MachineRepresentation::kFloat32:
         return MachineType::Float32();
       case MachineRepresentation::kFloat64:
@@ -402,9 +415,12 @@ constexpr inline bool CanBeIndirectPointer(MachineRepresentation rep) {
   return rep == MachineRepresentation::kIndirectPointer;
 }
 
+// Note: this is used in particular to decide which spill slots need
+// to be visited by the GC.
 constexpr inline bool CanBeTaggedOrCompressedPointer(
     MachineRepresentation rep) {
-  return CanBeTaggedPointer(rep) || CanBeCompressedPointer(rep);
+  return CanBeTaggedPointer(rep) || CanBeCompressedPointer(rep) ||
+         rep == MachineRepresentation::kProtectedPointer;
 }
 
 constexpr inline bool CanBeTaggedOrCompressedOrIndirectPointer(
@@ -425,6 +441,7 @@ V8_EXPORT_PRIVATE inline constexpr int ElementSizeLog2Of(
     case MachineRepresentation::kWord8:
       return 0;
     case MachineRepresentation::kWord16:
+    case MachineRepresentation::kFloat16:
       return 1;
     case MachineRepresentation::kWord32:
     case MachineRepresentation::kFloat32:

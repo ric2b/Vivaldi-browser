@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "device/gamepad/nintendo_controller.h"
 
 #include <algorithm>
@@ -614,7 +619,7 @@ void UpdateButtonForLeftSide(const Gamepad& src_pad,
       case BUTTON_INDEX_LEFT_THUMBSTICK:
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
   }
@@ -670,7 +675,7 @@ void UpdateButtonForRightSide(const Gamepad& src_pad,
       case BUTTON_INDEX_RIGHT_TRIGGER:
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
   }
@@ -703,7 +708,7 @@ void UpdateAxisForLeftSide(const Gamepad& src_pad,
         remapped_index = AXIS_INDEX_LEFT_STICK_X;
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
   }
@@ -736,7 +741,7 @@ void UpdateAxisForRightSide(const Gamepad& src_pad,
         remapped_index = AXIS_INDEX_LEFT_STICK_X;
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
   }
@@ -834,7 +839,7 @@ GamepadBusType BusTypeFromDeviceInfo(const mojom::HidDeviceInfo* device_info) {
     default:
       break;
   }
-  DUMP_WILL_BE_NOTREACHED_NORETURN();
+  DUMP_WILL_BE_NOTREACHED();
   return GAMEPAD_BUS_UNKNOWN;
 }
 }  // namespace
@@ -985,7 +990,7 @@ GamepadHand NintendoController::GetGamepadHand() const {
     default:
       break;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return GamepadHand::kNone;
 }
 
@@ -1006,7 +1011,7 @@ bool NintendoController::IsUsable() const {
     default:
       break;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -1104,7 +1109,7 @@ void NintendoController::UpdateGamepadState(Gamepad& pad) const {
         UpdateRightGamepadState(pad, false);
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
     pad.connected = pad_.connected;
@@ -1227,7 +1232,7 @@ void NintendoController::StartInitSequence() {
       MakeInitSequenceRequests(kPendingSetPlayerLights);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -1468,7 +1473,7 @@ void NintendoController::ContinueInitSequence(
       break;
     case kInitialized:
     case kUninitialized:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     default:
       break;
@@ -1527,7 +1532,7 @@ void NintendoController::MakeInitSequenceRequests(InitializationState state) {
     case kInitialized:
     case kUninitialized:
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }

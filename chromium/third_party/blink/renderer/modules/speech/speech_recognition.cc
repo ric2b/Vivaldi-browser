@@ -23,21 +23,35 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/speech/speech_recognition.h"
 
 #include <algorithm>
 
+#include "base/feature_list.h"
 #include "build/build_config.h"
+#include "media/base/audio_parameters.h"
+#include "media/base/media_switches.h"
+#include "media/mojo/mojom/speech_recognition.mojom-blink.h"
+#include "media/mojo/mojom/speech_recognition_audio_forwarder.mojom-blink.h"
+#include "media/mojo/mojom/speech_recognition_error.mojom-blink.h"
+#include "media/mojo/mojom/speech_recognition_result.mojom-blink.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "third_party/blink/public/mojom/speech/speech_recognition_error.mojom-blink.h"
-#include "third_party/blink/public/mojom/speech/speech_recognition_result.mojom-blink.h"
+#include "third_party/blink/public/platform/modules/mediastream/web_media_stream_audio_sink.h"
+#include "third_party/blink/public/platform/modules/mediastream/web_media_stream_track.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_track.h"
 #include "third_party/blink/renderer/modules/speech/speech_recognition_controller.h"
 #include "third_party/blink/renderer/modules/speech/speech_recognition_error_event.h"
 #include "third_party/blink/renderer/modules/speech/speech_recognition_event.h"
+#include "third_party/blink/renderer/modules/speech/speech_recognition_media_stream_audio_sink.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
@@ -57,6 +71,12 @@ void SpeechRecognition::start(ExceptionState& exception_state) {
     return;
   }
   StartInternal(&exception_state);
+}
+
+void SpeechRecognition::start(MediaStreamTrack* media_stream_track,
+                              ExceptionState& exception_state) {
+  stream_track_ = media_stream_track;
+  start(exception_state);
 }
 
 void SpeechRecognition::stopFunction() {
@@ -96,7 +116,7 @@ void SpeechRecognition::abort() {
 }
 
 void SpeechRecognition::ResultRetrieved(
-    WTF::Vector<mojom::blink::SpeechRecognitionResultPtr> results) {
+    WTF::Vector<media::mojom::blink::WebSpeechRecognitionResultPtr> results) {
   auto* it = std::stable_partition(
       results.begin(), results.end(),
       [](const auto& result) { return !result->is_provisional; });
@@ -139,8 +159,9 @@ void SpeechRecognition::ResultRetrieved(
 }
 
 void SpeechRecognition::ErrorOccurred(
-    mojom::blink::SpeechRecognitionErrorPtr error) {
-  if (error->code == mojom::blink::SpeechRecognitionErrorCode::kNoMatch) {
+    media::mojom::blink::SpeechRecognitionErrorPtr error) {
+  if (error->code ==
+      media::mojom::blink::SpeechRecognitionErrorCode::kNoMatch) {
     DispatchEvent(*SpeechRecognitionEvent::CreateNoMatch(nullptr));
   } else {
     // TODO(primiano): message?
@@ -202,9 +223,9 @@ void SpeechRecognition::PageVisibilityChanged() {
 }
 
 void SpeechRecognition::OnConnectionError() {
-  ErrorOccurred(mojom::blink::SpeechRecognitionError::New(
-      mojom::blink::SpeechRecognitionErrorCode::kNetwork,
-      mojom::blink::SpeechAudioErrorDetails::kNone));
+  ErrorOccurred(media::mojom::blink::SpeechRecognitionError::New(
+      media::mojom::blink::SpeechRecognitionErrorCode::kNetwork,
+      media::mojom::blink::SpeechAudioErrorDetails::kNone));
   Ended();
 }
 
@@ -228,7 +249,7 @@ void SpeechRecognition::StartInternal(ExceptionState* exception_state) {
   }
   final_results_.clear();
 
-  mojo::PendingRemote<mojom::blink::SpeechRecognitionSessionClient>
+  mojo::PendingRemote<media::mojom::blink::SpeechRecognitionSessionClient>
       session_client;
   // See https://bit.ly/2S0zRAS for task types.
   receiver_.Bind(
@@ -237,11 +258,42 @@ void SpeechRecognition::StartInternal(ExceptionState* exception_state) {
   receiver_.set_disconnect_handler(WTF::BindOnce(
       &SpeechRecognition::OnConnectionError, WrapWeakPersistent(this)));
 
-  controller_->Start(
-      session_.BindNewPipeAndPassReceiver(
-          GetExecutionContext()->GetTaskRunner(TaskType::kMiscPlatformAPI)),
-      std::move(session_client), *grammars_, lang_, continuous_,
-      interim_results_, max_alternatives_);
+  if (base::FeatureList::IsEnabled(
+          blink::features::kMediaStreamTrackWebSpeech) &&
+      stream_track_) {
+    mojo::PendingRemote<media::mojom::blink::SpeechRecognitionAudioForwarder>
+        audio_forwarder_remote;
+    mojo::PendingReceiver<media::mojom::blink::SpeechRecognitionAudioForwarder>
+        audio_forwarder_receiver =
+            audio_forwarder_remote.InitWithNewPipeAndPassReceiver();
+
+    media::AudioParameters audio_parameters;
+    std::unique_ptr<WebMediaStreamTrack> web_media_stream_track =
+        std::make_unique<WebMediaStreamTrack>(stream_track_->Component());
+
+    audio_parameters = WebMediaStreamAudioSink::GetFormatFromAudioTrack(
+        *web_media_stream_track.get());
+
+    sink_ = MakeGarbageCollected<SpeechRecognitionMediaStreamAudioSink>(
+        GetExecutionContext(), std::move(audio_forwarder_remote),
+        audio_parameters);
+    WebMediaStreamAudioSink::AddToAudioTrack(
+        sink_, WebMediaStreamTrack(stream_track_->Component()));
+    controller_->Start(
+        session_.BindNewPipeAndPassReceiver(
+            GetExecutionContext()->GetTaskRunner(TaskType::kMiscPlatformAPI)),
+        std::move(session_client), *grammars_, lang_, continuous_,
+        interim_results_, max_alternatives_, local_service_,
+        allow_cloud_fallback_, std::move(audio_forwarder_receiver),
+        audio_parameters);
+  } else {
+    controller_->Start(
+        session_.BindNewPipeAndPassReceiver(
+            GetExecutionContext()->GetTaskRunner(TaskType::kMiscPlatformAPI)),
+        std::move(session_client), *grammars_, lang_, continuous_,
+        interim_results_, max_alternatives_, local_service_,
+        allow_cloud_fallback_);
+  }
   started_ = true;
 }
 
@@ -253,19 +305,16 @@ SpeechRecognition::SpeechRecognition(LocalDOMWindow* window)
       grammars_(SpeechGrammarList::Create()),  // FIXME: The spec is not clear
                                                // on the default value for the
                                                // grammars attribute.
-      continuous_(false),
-      interim_results_(false),
-      max_alternatives_(1),
       controller_(SpeechRecognitionController::From(*window)),
-      started_(false),
-      stopping_(false),
       receiver_(this, window),
       session_(window) {}
 
 SpeechRecognition::~SpeechRecognition() = default;
 
 void SpeechRecognition::Trace(Visitor* visitor) const {
+  visitor->Trace(stream_track_);
   visitor->Trace(grammars_);
+  visitor->Trace(sink_);
   visitor->Trace(controller_);
   visitor->Trace(final_results_);
   visitor->Trace(receiver_);

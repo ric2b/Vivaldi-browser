@@ -26,7 +26,6 @@ build_webui("build") {
     icons_html_files = [
       "icons.html",
       "icons_lit.html",
-      "mwb_shared_icons.html",
     ]
 
     non_web_component_files += [
@@ -36,7 +35,8 @@ build_webui("build") {
       "cr_radio_button/cr_radio_button_mixin.ts",
       "cr_radio_button/cr_radio_button_mixin_lit.ts",
       "cr_ripple/cr_ripple_mixin.ts",
-      "cr_scrollable_mixin.ts",
+      "cr_scroll_observer_mixin.ts",
+      "cr_scroll_observer_mixin_lit.ts",
       "cr_search_field/cr_search_field_mixin.ts",
       "cr_search_field/cr_search_field_mixin_lit.ts",
       "find_shortcut_mixin.ts",
@@ -83,6 +83,7 @@ build_webui("build") {
       "cr_input/cr_input.html.ts",
       "cr_input/cr_input.ts",
       "cr_lazy_render/cr_lazy_render.ts",
+      "cr_lazy_render/cr_lazy_render_lit.ts",
       "cr_link_row/cr_link_row.ts",
       "cr_link_row/cr_link_row.html.ts",
       "cr_loading_gradient/cr_loading_gradient.ts",
@@ -139,6 +140,7 @@ build_webui("build") {
 
     css_files = [
       "action_link.css",
+      "action_link_lit.css",
       "cr_actionable_row_style.css",
       "cr_actionable_row_style_lit.css",
       "cr_hidden_style.css",
@@ -146,7 +148,9 @@ build_webui("build") {
       "cr_icons.css",
       "cr_icons_lit.css",
       "cr_nav_menu_item_style.css",
+      "cr_nav_menu_item_style_lit.css",
       "cr_page_host_style.css",
+      "cr_page_host_style_lit.css",
       "cr_radio_button/cr_radio_button.css",
       "cr_radio_button/cr_card_radio_button.css",
       "cr_radio_button/cr_radio_button_style.css",
@@ -160,6 +164,7 @@ build_webui("build") {
       "mwb_element_shared_style.css",
       "mwb_element_shared_style_lit.css",
       "mwb_shared_style.css",
+      "mwb_shared_style_lit.css",
       "mwb_shared_vars.css",
       "search_highlight_style.css",
       "cr_action_menu/cr_action_menu.css",
@@ -205,6 +210,7 @@ build_webui("build") {
 
   html_to_wrapper_template = "detect"
 
+  ts_tsconfig_base = "//tools/typescript/tsconfig_base_lit.json"
   ts_out_dir = "$root_gen_dir/ui/webui/resources/tsc/cr_elements"
   ts_composite = true
   ts_deps = [ "../js:build_ts" ]

@@ -16,6 +16,7 @@ constexpr char kCosmeticRules[] = "cosmetic";
 constexpr char kScriptletRules[] = "scriptlet";
 constexpr char kBlockRules[] = "block";
 constexpr char kAllowRules[] = "allow";
+constexpr char kBlockImportantRules[] = "block-important";
 constexpr char kGeneric[] = "generic";
 constexpr char kSpecific[] = "specific";
 constexpr char kGenericAllowRules[] = "generic-allow";

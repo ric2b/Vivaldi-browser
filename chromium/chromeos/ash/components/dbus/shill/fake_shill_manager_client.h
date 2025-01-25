@@ -80,6 +80,11 @@ class COMPONENT_EXPORT(SHILL_CLIENT) FakeShillManagerClient
   void SetTetheringEnabled(bool enabled,
                            StringCallback callback,
                            ErrorCallback error_callback) override;
+  void EnableTethering(const shill::WiFiInterfacePriority& priority,
+                       StringCallback callback,
+                       ErrorCallback error_callback) override;
+  void DisableTethering(StringCallback callback,
+                        ErrorCallback error_callback) override;
   void CheckTetheringReadiness(StringCallback callback,
                                ErrorCallback error_callback) override;
   void SetLOHSEnabled(bool enabled,
@@ -127,6 +132,7 @@ class COMPONENT_EXPORT(SHILL_CLIENT) FakeShillManagerClient
   void ClearProperties() override;
   void SetManagerProperty(const std::string& key,
                           const base::Value& value) override;
+  base::Value::Dict GetStubProperties() override;
   void AddManagerService(const std::string& service_path,
                          bool notify_observers) override;
   void RemoveManagerService(const std::string& service_path) override;

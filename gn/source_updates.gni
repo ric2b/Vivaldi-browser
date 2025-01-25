@@ -98,6 +98,8 @@ if (vivaldi_build_tests) {
   update_template_instance("//chrome/test/data/webui/settings:build") {
     files -= [
       "privacy_page_test.ts",
+      "privacy_guide_ad_topics_fragment_test.ts",
+      "privacy_guide_completion_fragment_test.ts",
       "privacy_guide_fragments_test.ts",
       "privacy_guide_integration_test.ts",
       "privacy_guide_page_test.ts",

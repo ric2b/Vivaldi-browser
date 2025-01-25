@@ -41,6 +41,8 @@
 tint_add_target(tint_utils_text lib
   utils/text/base64.cc
   utils/text/base64.h
+  utils/text/color_mode.cc
+  utils/text/color_mode.h
   utils/text/string.cc
   utils/text/string.h
   utils/text/string_stream.cc

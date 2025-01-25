@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/layout/inline/inline_text_auto_space.h"
 
 #include <unicode/uchar.h>
@@ -183,8 +188,8 @@ void InlineTextAutoSpace::Apply(InlineItemsData& data,
       last_type = kOther;
       continue;
     }
-    if (UNLIKELY(!style->IsHorizontalWritingMode()) &&
-        UNLIKELY(style->GetTextOrientation() == ETextOrientation::kUpright)) {
+    if (UNLIKELY(style->GetFontDescription().Orientation() ==
+                 FontOrientation::kVerticalUpright)) {
       applier.SetSpacing(offsets, &item, *style);
       // Upright non-ideographic characters are `kOther`.
       // https://drafts.csswg.org/css-text-4/#non-ideographic-letters

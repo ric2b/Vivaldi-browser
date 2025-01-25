@@ -114,6 +114,7 @@ UIImage* DefaultFaviconImage() {
 // Constraint for the tab view background when omnibox is as the bottom.
 @property(nonatomic, strong) NSLayoutConstraint*
     tabViewBackgroundBottomConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *closeButtonWidthConstraint;
 // End Vivaldi
 
 @end
@@ -394,6 +395,19 @@ UIImage* DefaultFaviconImage() {
   AddSameCenterXConstraint(self, _faviconView, _activityIndicator);
   AddSameCenterYConstraint(self, _faviconView, _activityIndicator);
   AddSameCenterYConstraint(self, _faviconView, _titleLabel);
+
+  if (IsVivaldiRunning()) {
+    // Define and add the width constraint for the close button
+    self.closeButtonWidthConstraint =
+        [NSLayoutConstraint constraintWithItem:_closeButton
+                                     attribute:NSLayoutAttributeWidth
+                                     relatedBy:NSLayoutRelationEqual
+                                        toItem:nil
+                                     attribute:NSLayoutAttributeNotAnAttribute
+                                    multiplier:1.0
+                                      constant:kCloseButtonSize];
+    [_closeButton addConstraint:self.closeButtonWidthConstraint];
+  } // End Vivaldi
 }
 
 // Updates this tab's style based on the value of `selected` and the current
@@ -542,9 +556,10 @@ UIImage* DefaultFaviconImage() {
 #pragma mark - VIVALDI
 - (id)initWithEmptyView:(BOOL)emptyView
              isSelected:(BOOL)isSelected
-   bottomOmniboxEnabled:(BOOL)bottomOmniboxEnabled
-             themeColor:(UIColor*)themeColor
-              tintColor:(UIColor*)tintColor {
+       bottomOmniboxEnabled:(BOOL)bottomOmniboxEnabled
+  showXButtonBackgroundTabs:(BOOL)showXButton
+                 themeColor:(UIColor*)themeColor
+                  tintColor:(UIColor*)tintColor {
   if ((self = [super initWithFrame:CGRectZero])) {
     [self setOpaque:NO];
     [self createCommonViews];
@@ -565,7 +580,8 @@ UIImage* DefaultFaviconImage() {
       [self updateStyleForSelected:isSelected];
       [self updateTabViewStyleWithThemeColor:themeColor
                                    tintColor:tintColor
-                                  isSelected:isSelected];
+                                  isSelected:isSelected
+                   showXButtonBackgroundTabs:showXButton];
     }
 
     [self addTarget:self
@@ -631,7 +647,8 @@ UIImage* DefaultFaviconImage() {
 
 - (void)updateTabViewStyleWithThemeColor:(UIColor*)themeColor
                                tintColor:(UIColor*)tintColor
-                              isSelected:(BOOL)isSelected {
+                              isSelected:(BOOL)isSelected
+               showXButtonBackgroundTabs:(BOOL)showXButton {
   tabViewBackground.backgroundColor =
       [self tabViewBackgroundColor:isSelected
                         themeColor:themeColor
@@ -648,6 +665,21 @@ UIImage* DefaultFaviconImage() {
   _closeButton.tintColor = defaultTintColor;
   _faviconView.tintColor = defaultTintColor;
   _titleLabel.textColor = defaultTintColor;
+
+  // Update close button visibility based on settings.
+  [self updateTabViewWithXButtonVisibleBackgroundTabs:showXButton
+                                           isSelected:isSelected];
+}
+
+- (void)updateTabViewWithXButtonVisibleBackgroundTabs:(BOOL)visible
+                                           isSelected:(BOOL)isSelected {
+  if (isSelected) {
+    _closeButton.hidden = NO;
+    self.closeButtonWidthConstraint.constant = kCloseButtonSize;
+  } else {
+    _closeButton.hidden = !visible;
+    self.closeButtonWidthConstraint.constant = visible ? kCloseButtonSize : 0;
+  }
 }
 
 // Returns background color for tab view based on selected state, current color

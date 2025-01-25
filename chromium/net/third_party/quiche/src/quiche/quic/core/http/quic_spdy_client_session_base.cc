@@ -4,13 +4,16 @@
 
 #include "quiche/quic/core/http/quic_spdy_client_session_base.h"
 
+#include <limits>
+#include <memory>
 #include <string>
+#include <utility>
 
 #include "quiche/quic/core/quic_utils.h"
 #include "quiche/quic/platform/api/quic_flags.h"
 #include "quiche/quic/platform/api/quic_logging.h"
 
-using spdy::Http2HeaderBlock;
+using quiche::HttpHeaderBlock;
 
 namespace quic {
 

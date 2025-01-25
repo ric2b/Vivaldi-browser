@@ -1744,6 +1744,8 @@ IN_PROC_BROWSER_TEST_P(
       "\r\n"
       "\r\n");
   original_response2.Done();
+  EXPECT_TRUE(first_reload.WaitForRequestRedirected());
+  first_reload.ResumeNavigation();
   second_redirect_response.WaitForRequest();
   second_redirect_response.Send(
       "HTTP/1.1 200 OK\r\n"
@@ -3564,6 +3566,47 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
       ExecJs(root, JsReplace("history.pushState({}, '', $1);", file_url)));
   ASSERT_TRUE(web_contents->GetPrimaryMainFrame()->IsRenderFrameLive());
   EXPECT_EQ(4, web_contents->GetController().GetEntryCount());
+
+  // Illegal schemes would not normally be allowed to commit by CanCommitURL,
+  // but they are granted an exception if allow_universal_access_from_file_urls
+  // is in use.
+  GURL illegal_url("google:com");
+  EXPECT_TRUE(ExecJs(
+      root, JsReplace("history.replaceState({}, '', $1);", illegal_url)));
+  ASSERT_TRUE(web_contents->GetPrimaryMainFrame()->IsRenderFrameLive());
+  EXPECT_EQ(4, web_contents->GetController().GetEntryCount());
+
+  // Illegal schemes should also work for document.open on same-origin frames,
+  // where the initiator's URL is inherited (in the renderer process).
+  std::string create_frame_and_open_script =
+      "var new_iframe = document.createElement('iframe');"
+      "document.documentElement.appendChild(new_iframe);"
+      "new_iframe.contentDocument.open();";
+  EXPECT_TRUE(ExecJs(shell(), create_frame_and_open_script));
+  EXPECT_EQ(
+      illegal_url,
+      root->child_at(0)->current_frame_host()->last_document_url_in_renderer());
+  // Ensure the renderer process has not crashed.
+  ASSERT_TRUE(ExecJs(shell(), "true"));
+  ASSERT_TRUE(root->child_at(0)->current_frame_host()->IsRenderFrameLive());
+
+  // Now disable universal access, while still allowing file URLs to access each
+  // other. This generally turns off the exemption from commit-time security
+  // checks, while still allowing document.open to work in file:// origins.
+  prefs.allow_universal_access_from_file_urls = false;
+  prefs.allow_file_access_from_file_urls = true;
+  web_contents->SetWebPreferences(prefs);
+
+  // Calling document.open on another iframe should remember that the process
+  // already had an exemption for file:// origins and continue to work.
+  // See https://crbug.com/326250356#comment26.
+  EXPECT_TRUE(ExecJs(shell(), create_frame_and_open_script));
+  EXPECT_EQ(
+      illegal_url,
+      root->child_at(1)->current_frame_host()->last_document_url_in_renderer());
+  // Ensure the renderer process has not crashed.
+  ASSERT_TRUE(ExecJs(shell(), "true"));
+  ASSERT_TRUE(root->child_at(1)->current_frame_host()->IsRenderFrameLive());
 }
 
 // Ensure that navigating back from a sad tab to an existing process works
@@ -3634,9 +3677,10 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, LastCommittedOrigin) {
 
   // Start a navigation to a b.com URL, and don't wait for commit.
   GURL url_b(embedded_test_server()->GetURL("b.com", "/title2.html"));
-  TestFrameNavigationObserver commit_observer(root);
+  TestNavigationManager navigation_manager(web_contents, url_b);
   RenderFrameDeletedObserver deleted_observer(rfh_a);
   shell()->LoadURL(url_b);
+  navigation_manager.WaitForSpeculativeRenderFrameHostCreation();
 
   // The speculative RFH shouln't have a last committed origin (the default
   // value is a unique origin). The current RFH shouldn't change its last
@@ -3647,7 +3691,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, LastCommittedOrigin) {
 
   // Verify that the last committed origin is set for the b.com RHF once it
   // commits.
-  commit_observer.WaitForCommit();
+  ASSERT_TRUE(navigation_manager.WaitForNavigationFinished());
   EXPECT_EQ(url::Origin::Create(url_b), rfh_b->GetLastCommittedOrigin());
   EXPECT_EQ(rfh_b, web_contents->GetPrimaryMainFrame());
 
@@ -3938,7 +3982,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
 
   TestNavigationManager cross_site_navigation(shell()->web_contents(), site2);
   shell()->LoadURL(site2);
-  EXPECT_TRUE(cross_site_navigation.WaitForRequestStart());
+  cross_site_navigation.WaitForSpeculativeRenderFrameHostCreation();
 
   RenderFrameHostImpl* speculative_rfh =
       static_cast<WebContentsImpl*>(shell()->web_contents())
@@ -3951,7 +3995,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
       GURL("javascript:(0)"), Referrer(), ui::PAGE_TRANSITION_TYPED,
       std::string());
 
-  cross_site_navigation.ResumeNavigation();
+  ASSERT_TRUE(cross_site_navigation.WaitForNavigationFinished());
   // No crash means everything worked!
 }
 
@@ -5479,7 +5523,7 @@ class RenderFrameHostManagerUnloadBrowserTest
     if (event_name == "visibilitychange")
       return blink::mojom::SuddenTerminationDisablerType::
           kVisibilityChangeHandler;
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return blink::mojom::SuddenTerminationDisablerType::kUnloadHandler;
   }
 
@@ -5496,7 +5540,7 @@ class RenderFrameHostManagerUnloadBrowserTest
     if (event_name == "visibilitychange") {
       return {"window", "document"};
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return {};
   }
 
@@ -5981,6 +6025,7 @@ IN_PROC_BROWSER_TEST_P(
   content::TestNavigationManager navigation_manager(web_contents, url);
 
   shell()->LoadURL(url);
+  navigation_manager.WaitForSpeculativeRenderFrameHostCreation();
   RenderProcessHost* speculative_rph = web_contents->GetPrimaryFrameTree()
                                            .root()
                                            ->render_manager()
@@ -6051,6 +6096,7 @@ IN_PROC_BROWSER_TEST_P(
   content::TestNavigationManager navigation_manager(web_contents, url);
 
   shell()->LoadURL(url);
+  navigation_manager.WaitForSpeculativeRenderFrameHostCreation();
   RenderProcessHost* speculative_rph = web_contents->GetPrimaryFrameTree()
                                            .root()
                                            ->render_manager()

@@ -86,7 +86,6 @@
 <translation id="2439110203301358333">Et annet program på datamaskinen la til en utvidelse som kan endre hvordan Vivaldi virker.</translation>
 <translation id="2443487764245141020">Nettsteder trenger kanskje også å gjenkjenne enheten din ved bruk av en identifikator</translation>
 <translation id="2445081178310039857">Rotkatalogen til utvidelsen er påkrevd.</translation>
-<translation id="2470702053775288986">Utvidelser som ikke støttes ble deaktivert</translation>
 <translation id="2485422356828889247">Avinstaller</translation>
 <translation id="2498539833203011245">Minimer</translation>
 <translation id="2509495747794740764">Skaleringsverdien må være et tall mellom 10 og 200.</translation>
@@ -206,7 +205,6 @@
 <translation id="431076611119798497">&amp;Detaljer</translation>
 <translation id="4345587454538109430">Konfigurer...</translation>
 <translation id="4348766275249686434">Samle feil</translation>
-<translation id="4363771538994847871">Ingen Cast-mål funnet. Trenger du hjelp?</translation>
 <translation id="4384652540891215547">Aktiver utvidelsen</translation>
 <translation id="4394049700291259645">Deaktiver</translation>
 <translation id="4409697491990005945">Marger</translation>
@@ -390,7 +388,6 @@
 <translation id="7771452384635174008">Oppsett</translation>
 <translation id="7782102568078991263">Ingen flere forslag fra Google</translation>
 <translation id="7786889348652477777">&amp;Last inn appen på nytt</translation>
-<translation id="7791543448312431591">Legg til</translation>
 <translation id="7800518121066352902">Roter mot klokken</translation>
 <translation id="7814458197256864873">&amp;Kopier</translation>
 <translation id="7818135753970109980">Nytt tema lagt til (<ph name="EXTENSION_NAME" />)</translation>

@@ -54,7 +54,7 @@ void FakeResourcedClient::ReportBrowserProcesses(
   } else if (component == ResourcedClient::Component::kLacros) {
     lacros_browser_processes_ = processes;
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -88,21 +88,6 @@ void FakeResourcedClient::AddObserver(Observer* observer) {
 
 void FakeResourcedClient::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
-}
-
-void FakeResourcedClient::AddArcVmObserver(ArcVmObserver* observer) {
-  arcvm_observers_.AddObserver(observer);
-}
-
-void FakeResourcedClient::RemoveArcVmObserver(ArcVmObserver* observer) {
-  arcvm_observers_.RemoveObserver(observer);
-}
-
-void FakeResourcedClient::FakeArcVmMemoryPressure(PressureLevelArcVm level,
-                                                  uint64_t reclaim_target_kb) {
-  for (auto& observer : arcvm_observers_) {
-    observer.OnMemoryPressure(level, reclaim_target_kb);
-  }
 }
 
 bool FakeResourcedClient::TriggerServiceAvailable(bool available) {

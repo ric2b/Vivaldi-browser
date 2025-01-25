@@ -11,10 +11,9 @@
 #include <memory>
 #include <utility>
 
+#include "core/fxcodec/data_and_bytes_consumed.h"
 #include "core/fxcodec/flate/flatemodule.h"
 #include "core/fxcrt/check.h"
-#include "core/fxcrt/compiler_specific.h"
-#include "core/fxcrt/fx_memory_wrappers.h"
 #include "fxjs/gc/container_trace.h"
 #include "fxjs/xfa/cjx_object.h"
 #include "xfa/fxfa/parser/cxfa_acrobat.h"
@@ -1070,16 +1069,13 @@ CXFA_XMLLocale* GetLocaleFromBuffer(cppgc::Heap* heap,
   if (src_span.empty())
     return nullptr;
 
-  std::unique_ptr<uint8_t, FxFreeDeleter> output;
-  uint32_t dwSize;
-  FlateModule::FlateOrLZWDecode(false, src_span, true, 0, 0, 0, 0, 0, &output,
-                                &dwSize);
-  if (!output)
+  DataAndBytesConsumed result =
+      FlateModule::FlateOrLZWDecode(false, src_span, true, 0, 0, 0, 0, 0);
+  if (result.data.empty()) {
     return nullptr;
+  }
 
-  // TODO(crbug.com/pdfuim/2155): investigate safety issues.
-  return CXFA_XMLLocale::Create(
-      heap, UNSAFE_BUFFERS(pdfium::make_span(output.get(), dwSize)));
+  return CXFA_XMLLocale::Create(heap, result.data);
 }
 
 CXFA_LocaleMgr::LangID GetLanguageID(WideString wsLanguage) {

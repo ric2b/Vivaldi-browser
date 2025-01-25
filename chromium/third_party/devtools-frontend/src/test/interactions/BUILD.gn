@@ -7,7 +7,6 @@ import("../../third_party/typescript/typescript.gni")
 
 group("interactions") {
   deps = [
-    ":config",
     ":test_inputs",
     ":tests",
   ]
@@ -19,6 +18,7 @@ node_ts_library("tests") {
     "data_grid_controller",
     "helpers",
     "panels/explain",
+    "panels/freestyler",
     "panels/performance/timeline",
     "panels/recorder/injected",
     "text_editor",
@@ -27,13 +27,6 @@ node_ts_library("tests") {
   ]
 
   sources = [ "mocharc.ts" ]
-}
-
-copy_to_gen("config") {
-  sources = [
-    ".mocharc.js",
-    "test-runner-config.json",
-  ]
 }
 
 generated_file("test_inputs") {

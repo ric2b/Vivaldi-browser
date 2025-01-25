@@ -13,7 +13,6 @@
 
 #include "core/fxcrt/raw_span.h"
 #include "core/fxcrt/span.h"
-#include "core/fxcrt/unowned_ptr.h"
 
 #if defined(USE_SYSTEM_LIBOPENJPEG2)
 #include <openjpeg.h>
@@ -31,10 +30,10 @@ class CJPX_Decoder {
   // 1 is the smallest required size.
   static constexpr uint8_t kMaxResolutionsToSkip = 32;
 
-  enum ColorSpaceOption {
-    kNoColorSpace,
-    kNormalColorSpace,
-    kIndexedColorSpace
+  enum class ColorSpaceOption {
+    kNone,
+    kNormal,
+    kIndexed,
   };
 
   struct JpxImageInfo {
@@ -47,7 +46,8 @@ class CJPX_Decoder {
   static std::unique_ptr<CJPX_Decoder> Create(
       pdfium::span<const uint8_t> src_span,
       CJPX_Decoder::ColorSpaceOption option,
-      uint8_t resolution_levels_to_skip);
+      uint8_t resolution_levels_to_skip,
+      bool strict_mode);
 
   static void Sycc420ToRgbForTesting(opj_image_t* img);
 
@@ -73,18 +73,33 @@ class CJPX_Decoder {
               uint32_t component_count);
 
  private:
+  struct CodecDeleter {
+    inline void operator()(opj_codec_t* ptr) const { opj_destroy_codec(ptr); }
+  };
+
+  struct ImageDeleter {
+    inline void operator()(opj_image_t* ptr) const { opj_image_destroy(ptr); }
+  };
+
+  struct StreamDeleter {
+    inline void operator()(opj_stream_t* ptr) const { opj_stream_destroy(ptr); }
+  };
+
   // Use Create() to instantiate.
   explicit CJPX_Decoder(ColorSpaceOption option);
 
+  // TODO(crbug.com/42270564): Remove `strict_mode` once all the bugs have been
+  // worked out in OpenJPEG.
   bool Init(pdfium::span<const uint8_t> src_data,
-            uint8_t resolution_levels_to_skip);
+            uint8_t resolution_levels_to_skip,
+            bool strict_mode);
 
   const ColorSpaceOption m_ColorSpaceOption;
   pdfium::raw_span<const uint8_t> m_SrcData;
-  UnownedPtr<opj_image_t> m_Image;
-  UnownedPtr<opj_codec_t> m_Codec;
   std::unique_ptr<DecodeData> m_DecodeData;
-  UnownedPtr<opj_stream_t> m_Stream;
+  std::unique_ptr<opj_codec_t, CodecDeleter> m_Codec;
+  std::unique_ptr<opj_stream_t, StreamDeleter> m_Stream;
+  std::unique_ptr<opj_image_t, ImageDeleter> m_Image;
   opj_dparameters_t m_Parameters = {};
 };
 

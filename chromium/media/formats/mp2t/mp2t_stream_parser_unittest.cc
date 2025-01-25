@@ -4,6 +4,8 @@
 
 #include "media/formats/mp2t/mp2t_stream_parser.h"
 
+#include <openssl/aes.h>
+#include <openssl/evp.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -11,9 +13,7 @@
 #include <memory>
 #include <string>
 
-#include <openssl/aes.h>
-#include <openssl/evp.h>
-
+#include "base/containers/heap_array.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
@@ -79,7 +79,6 @@ std::string DecryptSampleAES(const std::string& key,
                              bool has_pattern) {
   DCHECK(input);
   EXPECT_EQ(input_size % 16, 0);
-  crypto::EnsureOpenSSLInit();
   std::string result;
   const EVP_CIPHER* cipher = EVP_aes_128_cbc();
   ScopedCipherCTX ctx;
@@ -88,11 +87,10 @@ std::string DecryptSampleAES(const std::string& key,
                               reinterpret_cast<const uint8_t*>(iv.data()), 0),
             1);
   EVP_CIPHER_CTX_set_padding(ctx.get(), 0);
-  const size_t output_size = input_size;
-  std::unique_ptr<char[]> output(new char[output_size]);
+  auto output = base::HeapArray<char>::Uninit(input_size);
   uint8_t* in_ptr = const_cast<uint8_t*>(input);
-  uint8_t* out_ptr = reinterpret_cast<uint8_t*>(output.get());
-  size_t bytes_remaining = output_size;
+  uint8_t* out_ptr = reinterpret_cast<uint8_t*>(output.data());
+  size_t bytes_remaining = output.size();
 
   while (bytes_remaining) {
     int unused;
@@ -115,7 +113,7 @@ std::string DecryptSampleAES(const std::string& key,
     }
   }
 
-  result.assign(output.get(), output_size);
+  result.assign(output.begin(), output.end());
   return result;
 }
 
@@ -221,16 +219,15 @@ class Mp2tStreamParserTest : public testing::Test {
 
   // Note this is similar to a StreamParserTestBase method, so may benefit from
   // utility method or inheritance if they don't diverge.
-  bool AppendAllDataThenParseInPieces(const uint8_t* data,
-                                      size_t length,
+  bool AppendAllDataThenParseInPieces(base::span<const uint8_t> data,
                                       size_t piece_size) {
-    if (!parser_->AppendToParseBuffer(data, length)) {
+    if (!parser_->AppendToParseBuffer(data)) {
       return false;
     }
 
     // Also verify that the expected number of pieces is needed to fully parse
     // `data`.
-    size_t expected_remaining_data = length;
+    size_t expected_remaining_data = data.size();
     bool has_more_data = true;
 
     // A zero-length append still needs a single iteration of parse.
@@ -396,15 +393,16 @@ class Mp2tStreamParserTest : public testing::Test {
     CHECK_GE(append_bytes, 0);
     scoped_refptr<DecoderBuffer> buffer = ReadTestDataFile(filename);
 
-    const uint8_t* start = buffer->data();
-    const uint8_t* end = start + buffer->size();
+    size_t start = 0;
+    size_t end = buffer->size();
     do {
       size_t chunk_size = std::min(static_cast<size_t>(append_bytes),
                                    static_cast<size_t>(end - start));
       // Attempt to incrementally parse each appended chunk to test out the
       // parser's internal management of input queue and pending data bytes.
       EXPECT_TRUE(AppendAllDataThenParseInPieces(
-          start, chunk_size, (chunk_size > 7) ? (chunk_size - 7) : chunk_size));
+          buffer->AsSpan().subspan(start, chunk_size),
+          (chunk_size > 7) ? (chunk_size - 7) : chunk_size));
       start += chunk_size;
     } while (start < end);
 

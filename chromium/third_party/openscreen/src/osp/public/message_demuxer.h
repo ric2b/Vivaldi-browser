@@ -27,12 +27,12 @@ class MessageDemuxer {
    public:
     virtual ~MessageCallback() = default;
 
-    // |buffer| contains data for a message of type |message_type|.  However,
+    // `buffer` contains data for a message of type `message_type`.  However,
     // the data may be incomplete, in which case the callback should return an
     // error code of Error::Code::kCborIncompleteMessage.  This way,
     // the MessageDemuxer knows to neither consume the data nor discard it as
     // bad.
-    virtual ErrorOr<size_t> OnStreamMessage(uint64_t endpoint_id,
+    virtual ErrorOr<size_t> OnStreamMessage(uint64_t instance_id,
                                             uint64_t connection_id,
                                             msgs::Type message_type,
                                             const uint8_t* buffer,
@@ -45,7 +45,7 @@ class MessageDemuxer {
     MessageWatch();
     MessageWatch(MessageDemuxer* parent,
                  bool is_default,
-                 uint64_t endpoint_id,
+                 uint64_t instance_id,
                  msgs::Type message_type);
     MessageWatch(MessageWatch&&) noexcept;
     ~MessageWatch();
@@ -56,7 +56,7 @@ class MessageDemuxer {
    private:
     MessageDemuxer* parent_ = nullptr;
     bool is_default_ = false;
-    uint64_t endpoint_id_ = 0;
+    uint64_t instance_id_ = 0u;
     msgs::Type message_type_ = msgs::Type::kUnknown;
   };
 
@@ -65,25 +65,26 @@ class MessageDemuxer {
   MessageDemuxer(ClockNowFunctionPtr now_function, size_t buffer_limit);
   ~MessageDemuxer();
 
-  // Starts watching for messages of type |message_type| from the endpoint
-  // identified by |endpoint_id|.  When such a message arrives, or if some are
-  // already buffered, |callback| will be called with the message data.
-  MessageWatch WatchMessageType(uint64_t endpoint_id,
+  // Starts watching for messages of type `message_type` from the instance
+  // identified by `instance_id`.  When such a message arrives, or if some
+  // are already buffered, `callback` will be called with the message data.
+  MessageWatch WatchMessageType(uint64_t instance_id,
                                 msgs::Type message_type,
                                 MessageCallback* callback);
 
-  // Starts watching for messages of type |message_type| from any endpoint when
-  // there is not callback set for its specific endpoint ID.
+  // Starts watching for messages of type `message_type` from any instance when
+  // there is not callback set for its specific instance ID.
   MessageWatch SetDefaultMessageTypeWatch(msgs::Type message_type,
                                           MessageCallback* callback);
 
-  // Gives data from |endpoint_id| to the demuxer for processing.
-  // TODO(btolsch): It'd be nice if errors could propagate out of here to close
-  // the stream.
-  void OnStreamData(uint64_t endpoint_id,
+  // Gives data from `instance_id` to the demuxer for processing.
+  void OnStreamData(uint64_t instance_id,
                     uint64_t connection_id,
                     const uint8_t* data,
                     size_t data_size);
+
+  // Clears the buffered data when the stream is closed.
+  void OnStreamClose(uint64_t instance_id, uint64_t connection_id);
 
  private:
   struct HandleStreamBufferResult {
@@ -91,18 +92,18 @@ class MessageDemuxer {
     size_t consumed;
   };
 
-  void StopWatchingMessageType(uint64_t endpoint_id, msgs::Type message_type);
+  void StopWatchingMessageType(uint64_t instance_id, msgs::Type message_type);
   void StopDefaultMessageTypeWatch(msgs::Type message_type);
 
   HandleStreamBufferResult HandleStreamBufferLoop(
-      uint64_t endpoint_id,
+      uint64_t instance_id,
       uint64_t connection_id,
       std::map<uint64_t, std::map<msgs::Type, MessageCallback*>>::iterator
-          endpoint_entry,
+          instance_entry,
       std::vector<uint8_t>* buffer);
 
   HandleStreamBufferResult HandleStreamBuffer(
-      uint64_t endpoint_id,
+      uint64_t instance_id,
       uint64_t connection_id,
       std::map<msgs::Type, MessageCallback*>* message_callbacks,
       std::vector<uint8_t>* buffer);
@@ -112,7 +113,7 @@ class MessageDemuxer {
   std::map<uint64_t, std::map<msgs::Type, MessageCallback*>> message_callbacks_;
   std::map<msgs::Type, MessageCallback*> default_callbacks_;
 
-  // Map<endpoint_id, Map<connection_id, data_buffer>>
+  // Map<instance_id, Map<connection_id, data_buffer>>
   std::map<uint64_t, std::map<uint64_t, std::vector<uint8_t>>> buffers_;
 };
 

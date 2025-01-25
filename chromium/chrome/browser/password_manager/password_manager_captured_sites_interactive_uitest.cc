@@ -6,7 +6,7 @@
 #include <utility>
 
 #include "base/files/file_enumerator.h"
-#include "base/memory/raw_ptr_exclusion.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autofill/automated_tests/cache_replayer.h"
@@ -133,8 +133,10 @@ class CapturedSitesPasswordManagerBrowserTest
 
   bool WaitForSaveFallback() override {
     BubbleObserver bubble_observer(WebContents());
-    if (bubble_observer.WaitForFallbackForSaving(kWaitForSaveFallbackInterval))
+    if (bubble_observer.WaitForFallbackForSaving(
+            kWaitForSaveFallbackInterval)) {
       return true;
+    }
     ADD_FAILURE() << "Chrome did not show the save fallback icon!";
     return false;
   }
@@ -206,7 +208,7 @@ class CapturedSitesPasswordManagerBrowserTest
   }
 
   void SetUpOnMainThread() override {
-    PasswordManagerBrowserTestBase::GetNewTab(browser(), &web_contents_);
+    web_contents_ = PasswordManagerBrowserTestBase::GetNewTab(browser());
     recipe_replayer_ =
         std::make_unique<captured_sites_test_utils::TestRecipeReplayer>(
             browser(), this);
@@ -242,6 +244,7 @@ class CapturedSitesPasswordManagerBrowserTest
   }
 
   void TearDownOnMainThread() override {
+    web_contents_ = nullptr;
     recipe_replayer_.reset();
     // Need to delete the URL loader and its underlying interceptor on the main
     // thread. Will result in a fatal crash otherwise. The pointer  has its
@@ -256,7 +259,6 @@ class CapturedSitesPasswordManagerBrowserTest
   }
 
   content::WebContents* WebContents() {
-    // return web_contents_;
     return web_contents_;
   }
 
@@ -267,9 +269,7 @@ class CapturedSitesPasswordManagerBrowserTest
   std::unique_ptr<captured_sites_test_utils::ProfileDataController>
       profile_controller_;
   base::test::ScopedFeatureList feature_list_;
-  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
-  // #addr-of
-  RAW_PTR_EXCLUSION content::WebContents* web_contents_ = nullptr;
+  raw_ptr<content::WebContents> web_contents_ = nullptr;
   std::unique_ptr<ServerUrlLoader> server_url_loader_;
 
   base::CallbackListSubscription create_services_subscription_;
@@ -285,8 +285,9 @@ IN_PROC_BROWSER_TEST_P(CapturedSitesPasswordManagerBrowserTest, Recipe) {
   bool test_completed = recipe_replayer()->ReplayTest(
       GetParam().capture_file_path, GetParam().recipe_file_path,
       captured_sites_test_utils::GetCommandFilePath());
-  if (!test_completed)
+  if (!test_completed) {
     ADD_FAILURE() << "Full execution was unable to complete.";
+  }
 }
 
 // This test is called with a dynamic list and may be empty during the Autofill

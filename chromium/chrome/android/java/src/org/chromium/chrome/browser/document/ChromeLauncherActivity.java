@@ -12,6 +12,9 @@ import com.google.android.material.color.DynamicColors;
 import org.chromium.base.TraceEvent;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Dispatches incoming intents to the appropriate activity based on the current configuration and
  * Intent fired.
@@ -25,8 +28,9 @@ public class ChromeLauncherActivity extends Activity {
 
         // TODO(crbug.com/40775606): Figure out a scalable way to apply overlays to
         // activities like this.
+        if (!BuildConfig.IS_VIVALDI) { // Vivaldi VAB-9114
         applyThemeOverlays();
-
+        }
         @LaunchIntentDispatcher.Action
         int dispatchAction = LaunchIntentDispatcher.dispatch(this, getIntent());
         switch (dispatchAction) {

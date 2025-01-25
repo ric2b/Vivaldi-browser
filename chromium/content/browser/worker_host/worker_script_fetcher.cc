@@ -15,8 +15,8 @@
 #include "content/browser/loader/browser_initiated_resource_request.h"
 #include "content/browser/loader/file_url_loader_factory.h"
 #include "content/browser/loader/url_loader_factory_utils.h"
-#include "content/browser/navigation_subresource_loader_params.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
+#include "content/browser/renderer_host/policy_container_host.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
@@ -40,6 +40,7 @@
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/isolation_info.h"
 #include "net/http/http_request_headers.h"
+#include "net/storage_access_api/status.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/constants.h"
@@ -122,23 +123,10 @@ void DidCreateScriptLoader(
     std::optional<GlobalRenderFrameHostId> ancestor_render_frame_host_id,
     const GURL& initial_request_url,
     blink::mojom::WorkerMainScriptLoadParamsPtr main_script_load_params,
-    SubresourceLoaderParams subresource_loader_params,
     const network::URLLoaderCompletionStatus* completion_status) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK_NE(main_script_load_params.is_null(), completion_status == nullptr);
-  DCHECK(!(main_script_load_params.is_null() &&
-           subresource_loader_params.controller_service_worker_info));
   TRACE_EVENT("loading", "DidCreateScriptLoader");
-
-  // Prepare the controller service worker info to pass to the renderer.
-  blink::mojom::ControllerServiceWorkerInfoPtr controller;
-  base::WeakPtr<ServiceWorkerObjectHost> controller_service_worker_object_host;
-  if (subresource_loader_params.controller_service_worker_info) {
-    controller =
-        std::move(subresource_loader_params.controller_service_worker_info);
-    controller_service_worker_object_host =
-        subresource_loader_params.controller_service_worker_object_host;
-  }
 
   // Figure out the final response URL.
   GURL final_response_url;
@@ -178,10 +166,13 @@ void DidCreateScriptLoader(
 
   // The load succeeded iff `main_script_load_params` is not nullptr.
   if (main_script_load_params) {
+    // TODO(crbug.com/41478971): Pass the PolicyContainerPolicies. It can
+    // be built from the
+    // `main_script_load_params.response_head->parsed_headers`.
     std::move(callback).Run(std::make_optional<WorkerScriptFetcherResult>(
         std::move(subresource_loader_factories),
-        std::move(main_script_load_params), std::move(controller),
-        std::move(controller_service_worker_object_host), final_response_url));
+        std::move(main_script_load_params), PolicyContainerPolicies(),
+        final_response_url));
   } else {
     std::move(callback).Run(std::nullopt);
   }
@@ -211,15 +202,11 @@ WorkerScriptFetcherResult::WorkerScriptFetcherResult(
     std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
         subresource_loader_factories,
     blink::mojom::WorkerMainScriptLoadParamsPtr main_script_load_params,
-    blink::mojom::ControllerServiceWorkerInfoPtr controller,
-    base::WeakPtr<ServiceWorkerObjectHost>
-        controller_service_worker_object_host,
+    PolicyContainerPolicies policy_container_policies,
     const GURL& final_response_url)
     : subresource_loader_factories(std::move(subresource_loader_factories)),
       main_script_load_params(std::move(main_script_load_params)),
-      controller(std::move(controller)),
-      controller_service_worker_object_host(
-          std::move(controller_service_worker_object_host)),
+      policy_container_policies(std::move(policy_container_policies)),
       final_response_url(final_response_url) {
   CHECK(this->main_script_load_params);
   CHECK(this->main_script_load_params->response_head);
@@ -253,11 +240,10 @@ void WorkerScriptFetcher::CreateAndStart(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_override,
     StoragePartitionImpl* storage_partition,
     const std::string& storage_domain,
-    ukm::SourceId worker_source_id,
     DevToolsAgentHostImpl* devtools_agent_host,
     const base::UnguessableToken& devtools_worker_token,
     bool require_cross_site_request_for_cookies,
-    bool has_storage_access,
+    net::StorageAccessApiStatus storage_access_api_status,
     CompletionCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(client_security_state);
@@ -321,7 +307,7 @@ void WorkerScriptFetcher::CreateAndStart(
   resource_request->trusted_params = network::ResourceRequest::TrustedParams();
   resource_request->trusted_params->isolation_info =
       ancestor_render_frame_host->GetStorageKey().ToPartialNetIsolationInfo();
-  resource_request->has_storage_access = has_storage_access;
+  resource_request->storage_access_api_status = storage_access_api_status;
 
   // For a classic worker script request:
   // https://html.spec.whatwg.org/C/#fetch-a-classic-worker-script
@@ -344,7 +330,7 @@ void WorkerScriptFetcher::CreateAndStart(
           static_cast<int>(blink::mojom::ResourceType::kSharedWorker);
       break;
     default:
-      NOTREACHED() << static_cast<int>(request_destination);
+      NOTREACHED_IN_MIGRATION() << static_cast<int>(request_destination);
       break;
   }
 
@@ -374,9 +360,9 @@ void WorkerScriptFetcher::CreateAndStart(
       std::move(subresource_loader_factories),
       std::move(service_worker_context), service_worker_handle,
       std::move(blob_url_loader_factory),
-      std::move(url_loader_factory_override), worker_source_id,
-      devtools_agent_host, devtools_worker_token,
-      require_cross_site_request_for_cookies, std::move(callback));
+      std::move(url_loader_factory_override), devtools_agent_host,
+      devtools_worker_token, require_cross_site_request_for_cookies,
+      std::move(callback));
 }
 
 void WorkerScriptFetcher::CreateScriptLoader(
@@ -396,7 +382,6 @@ void WorkerScriptFetcher::CreateScriptLoader(
     ServiceWorkerMainResourceHandle* service_worker_handle,
     scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_override,
-    ukm::SourceId worker_source_id,
     DevToolsAgentHostImpl* devtools_agent_host,
     const base::UnguessableToken& devtools_worker_token,
     bool require_cross_site_request_for_cookies,
@@ -518,7 +503,7 @@ void WorkerScriptFetcher::CreateScriptLoader(
       std::make_unique<WorkerScriptLoaderFactory>(
           worker_process_id, worker_token, trusted_isolation_info,
           service_worker_handle, browser_context_getter,
-          std::move(url_loader_factory), worker_source_id),
+          std::move(url_loader_factory)),
       std::move(resource_request),
       base::BindOnce(DidCreateScriptLoader, std::move(callback),
                      std::move(subresource_loader_factories),
@@ -685,14 +670,11 @@ void WorkerScriptFetcher::OnReceiveResponse(
   main_script_load_params_->redirect_response_heads =
       std::move(redirect_response_heads_);
 
-  subresource_loader_params_ =
-      script_loader_factory_->GetScriptLoader()->TakeSubresourceLoaderParams();
-
   // Currently `parsed_headers` is null when FileURLLoader is used.
   if (main_script_load_params_->response_head->parsed_headers) {
     std::move(callback_).Run(std::move(main_script_load_params_),
-                             std::move(subresource_loader_params_),
                              nullptr /* completion_status */);
+    script_loader_factory_->GetScriptLoader()->OnFetcherCallbackCalled();
     delete this;
     return;
   }
@@ -717,29 +699,28 @@ void WorkerScriptFetcher::OnReceiveRedirect(
 void WorkerScriptFetcher::OnUploadProgress(int64_t current_position,
                                            int64_t total_size,
                                            OnUploadProgressCallback callback) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void WorkerScriptFetcher::OnTransferSizeUpdated(int32_t transfer_size_diff) {
   network::RecordOnTransferSizeUpdatedUMA(
       network::OnTransferSizeUpdatedFrom::kWorkerScriptFetcher);
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void WorkerScriptFetcher::OnComplete(
     const network::URLLoaderCompletionStatus& status) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  if (status.error_code == net::OK) {
-    // It's possible to reach here when the `response_head_` doesn't have a
-    // `parsed_headers` and ask NetworkService to parse headers in
-    // OnReceiveResponse(). DidParseHeaders() will be called eventually
-    // and `this` will be deleted in it.
-    return;
-  }
+  // Successful completion must be passed to `url_loader_client_endpoints` and
+  // shouldn't reach here, because in successful fetch `url_loader_->Unbind()`
+  // should be called in `WorkerScriptFetcher::OnReceiveResponse` and thus
+  // subsequent URLLoaderClient mojo calls shouldn't reach to
+  // `WorkerScriptFetcher`.
+  CHECK_NE(status.error_code, net::OK);
 
-  std::move(callback_).Run(/*main_script_load_params=*/nullptr,
-                           /*subresource_loader_params=*/{}, &status);
+  std::move(callback_).Run(/*main_script_load_params=*/nullptr, &status);
+  script_loader_factory_->GetScriptLoader()->OnFetcherCallbackCalled();
   delete this;
 }
 
@@ -752,8 +733,8 @@ void WorkerScriptFetcher::DidParseHeaders(
       std::move(parsed_headers);
 
   std::move(callback_).Run(std::move(main_script_load_params_),
-                           std::move(subresource_loader_params_),
                            nullptr /* completion_status */);
+  script_loader_factory_->GetScriptLoader()->OnFetcherCallbackCalled();
   delete this;
 }
 

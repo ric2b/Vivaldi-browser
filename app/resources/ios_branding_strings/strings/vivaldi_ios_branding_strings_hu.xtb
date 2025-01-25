@@ -1,4 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hu">
+<translation id="1411542563378906926">Vivaldi Technologies AS.</translation>
+<translation id="1786453623676543866">Keresés indítása új Vivaldi lapon.</translation>
+<translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Minden jog fenntartva.</translation>
+<translation id="261127087791356050">Megnyitás Vivaldiban</translation>
+<translation id="2899836479226240291">Automatikusan megnyithatod a hivatkozásokat Vivaldiban, ha alapértelmezett böngészővé teszed.</translation>
+<translation id="3171582312249481866">Vivaldi beállítások megnyitása</translation>
+<translation id="3372807273343182542">Hivatkozás privát megnyitása Vivaldiban</translation>
+<translation id="3379322781901918214">1. Vivaldi beállítások megnyitása</translation>
+<translation id="5444185556951208294">A Vivaldi fogja zárolja a privát lapokat.</translation>
+<translation id="7064418729866177180">Privát lapok zárolása a Vivaldi bezárásakor</translation>
+<translation id="7175743738896712454">A megadott hivatkozás megnyitása a Vivaldi privát módjában.</translation>
+<translation id="8763006697839582351">Privát megnyitás Vivaldiban</translation>
+<translation id="9060728682512999830">Keresés Vivaldiban</translation>
 </translationbundle>

@@ -18,7 +18,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.test.util.Batch;
 import org.chromium.net.CronetTestRule.CronetImplementation;
 import org.chromium.net.CronetTestRule.IgnoreFor;
 
@@ -27,7 +26,7 @@ import java.util.Date;
 
 /** Tests functionality of BidirectionalStream's QUIC implementation. */
 @RunWith(AndroidJUnit4.class)
-@Batch(Batch.UNIT_TESTS)
+// TODO(b/344966604): Fix and batch afterwards.
 @IgnoreFor(
         implementations = {CronetImplementation.FALLBACK, CronetImplementation.AOSP_PLATFORM},
         reason =
@@ -98,6 +97,7 @@ public class BidirectionalStreamQuicTest {
     @Test
     @SmallTest
     public void testSimplePost() throws Exception {
+        CronetImplementation implementationUnderTest = mTestRule.implementationUnderTest();
         String path = "/simple.txt";
         String quicURL = QuicTestServer.getServerURL() + path;
         TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
@@ -124,9 +124,11 @@ public class BidirectionalStreamQuicTest {
         requestFinishedListener.blockUntilDone();
         Date endTime = new Date();
         RequestFinishedInfo finishedInfo = requestFinishedListener.getRequestInfo();
-        MetricsTestUtil.checkRequestFinishedInfo(finishedInfo, quicURL, startTime, endTime);
+        MetricsTestUtil.checkRequestFinishedInfo(
+                implementationUnderTest, finishedInfo, quicURL, startTime, endTime);
         assertThat(finishedInfo.getFinishedReason()).isEqualTo(RequestFinishedInfo.SUCCEEDED);
-        MetricsTestUtil.checkHasConnectTiming(finishedInfo.getMetrics(), startTime, endTime, true);
+        MetricsTestUtil.checkHasConnectTiming(
+                implementationUnderTest, finishedInfo.getMetrics(), startTime, endTime, true);
         assertThat(finishedInfo.getAnnotations()).containsExactly("request annotation", this);
         assertThat(callback.getResponseInfoWithChecks()).hasHttpStatusCodeThat().isEqualTo(200);
         assertThat(callback.mResponseAsString)

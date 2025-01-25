@@ -8,13 +8,13 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/uuid.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/mediastream/media_devices.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
@@ -23,6 +23,7 @@
 #include "third_party/blink/public/mojom/media/capture_handle_config.mojom-blink.h"
 #include "third_party/blink/public/mojom/mediastream/media_devices.mojom-blink.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
@@ -142,13 +143,13 @@ void PromiseResolverCallbacks<MediaStream>::OnSuccessImpl<MediaStream>(
   if (on_success_follow_up_) {
     // Only getDisplayMedia() calls set |on_success_follow_up_|.
     // Successful invocations of getDisplayMedia() always have exactly
-    // one video track.
+    // one video track, except for the case when the permission
+    // `DISPLAY_MEDIA_SYSTEM_AUDIO` is set, which will lead to 0 video track.
     //
     // Extension API calls that are followed by a getUserMedia() call with
     // chromeMediaSourceId are treated liked getDisplayMedia() calls.
     MediaStreamTrackVector video_tracks = stream->getVideoTracks();
-    DCHECK_EQ(video_tracks.size(), 1u);
-    if (capture_controller) {
+    if (capture_controller && video_tracks.size() > 0) {
       capture_controller->SetVideoTrack(video_tracks[0], stream->id().Utf8());
     }
   }
@@ -202,7 +203,7 @@ void RecordUma(SubCaptureTarget::Type type,
     base::UmaHistogramEnumeration(
         "Media.ElementCapture.ProduceTarget.Function.Result", result);
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -222,7 +223,7 @@ void RecordUma(SubCaptureTarget::Type type, ProduceTargetPromiseResult result) {
     base::UmaHistogramEnumeration(
         "Media.ElementCapture.ProduceTarget.Promise.Result", result);
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -771,12 +772,12 @@ ScriptPromise<CropTarget> MediaDevices::ProduceCropTarget(
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
                                     "Unsupported.");
-  return ScriptPromise<CropTarget>();
+  return EmptyPromise();
 #else
   if (!MayProduceSubCaptureTarget(script_state, element, exception_state,
                                   SubCaptureTarget::Type::kCropTarget)) {
     // Exception thrown by helper.
-    return ScriptPromise<CropTarget>();
+    return EmptyPromise();
   }
 
   if (const RegionCaptureCropId* id = element->GetRegionCaptureCropId()) {
@@ -835,12 +836,12 @@ ScriptPromise<RestrictionTarget> MediaDevices::ProduceRestrictionTarget(
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
                                     "Unsupported.");
-  return ScriptPromise<RestrictionTarget>();
+  return EmptyPromise();
 #else
   if (!MayProduceSubCaptureTarget(script_state, element, exception_state,
                                   SubCaptureTarget::Type::kRestrictionTarget)) {
     // Exception thrown by helper.
-    return ScriptPromise<RestrictionTarget>();
+    return EmptyPromise();
   }
 
   if (const RestrictionTargetId* id = element->GetRestrictionTargetId()) {
@@ -1294,7 +1295,7 @@ void MediaDevices::ResolveCropTargetPromise(Element* element,
   CHECK(element);  // Persistent.
 
   const auto it = crop_target_resolvers_.find(element);
-  DCHECK_NE(it, crop_target_resolvers_.end());
+  CHECK_NE(it, crop_target_resolvers_.end(), base::NotFatalUntil::M130);
   ScriptPromiseResolver<CropTarget>* const resolver = it->value;
   crop_target_resolvers_.erase(it);
 
@@ -1318,7 +1319,7 @@ void MediaDevices::ResolveRestrictionTargetPromise(Element* element,
   CHECK(element);  // Persistent.
 
   const auto it = restriction_target_resolvers_.find(element);
-  DCHECK_NE(it, restriction_target_resolvers_.end());
+  CHECK_NE(it, restriction_target_resolvers_.end(), base::NotFatalUntil::M130);
   ScriptPromiseResolver<RestrictionTarget>* const resolver = it->value;
   restriction_target_resolvers_.erase(it);
 

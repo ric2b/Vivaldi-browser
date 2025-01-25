@@ -1,0 +1,40 @@
+workspace = { members = ["sys/dav1d-sys", "sys/libyuv-sys", "sys/libgav1-sys", "sys/ndk-sys"] }
+
+[package]
+name = "crabby-avif"
+version = "0.1.0"
+edition = "2021" # Rust version
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+libc = {version = "0.2.152", optional = true}
+ndk-sys = {version = "0.1.0", path="sys/ndk-sys", optional = true}
+dav1d-sys = {version = "0.1.0", path="sys/dav1d-sys", optional = true}
+libgav1-sys = {version = "0.1.0", path="sys/libgav1-sys", optional = true}
+libyuv-sys = {version = "0.1.0", path="sys/libyuv-sys", optional = true}
+
+[dev-dependencies]
+test-case = "3.3.1"
+seq-macro = "0.3.5"
+tempfile = "3.8.1"
+exitcode = "1.1.2"
+rand = "0.8.5"
+image = "0.25.1"
+
+[build-dependencies]
+bindgen = "0.69.1"
+cbindgen = "0.26.0"
+
+[features]
+default = ["dav1d", "libyuv"]
+capi = []
+dav1d = ["dep:libc", "dep:dav1d-sys"]
+libgav1 = ["dep:libgav1-sys"]
+libyuv = ["dep:libyuv-sys"]
+android_mediacodec = ["dep:ndk-sys"]
+
+[package.metadata.capi.header]
+name = "avif"
+subdirectory = "avif"

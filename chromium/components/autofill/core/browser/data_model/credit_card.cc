@@ -37,12 +37,12 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/autofill_regexes.h"
+#include "components/autofill/core/common/credit_card_network_identifiers.h"
+#include "components/autofill/core/common/credit_card_number_validation.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
-
-using base::ASCIIToUTF16;
 
 namespace autofill {
 
@@ -97,7 +97,7 @@ std::u16string NetworkForFill(const std::string& network) {
 std::u16string GetLastFourDigits(const std::u16string& number) {
   static const size_t kNumLastDigits = 4;
 
-  std::u16string stripped = CreditCard::StripSeparators(number);
+  std::u16string stripped = StripCardNumberSeparators(number);
   if (stripped.size() <= kNumLastDigits)
     return stripped;
 
@@ -244,13 +244,6 @@ CreditCard& CreditCard::operator=(CreditCard&& credit_card) = default;
 CreditCard::~CreditCard() = default;
 
 // static
-const std::u16string CreditCard::StripSeparators(const std::u16string& number) {
-  std::u16string stripped;
-  base::RemoveChars(number, u"- ", &stripped);
-  return stripped;
-}
-
-// static
 std::u16string CreditCard::NetworkForDisplay(const std::string& network) {
   if (kGenericCard == network)
     return l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_GENERIC);
@@ -305,9 +298,11 @@ int CreditCard::IconResourceId(Suggestion::Icon icon) {
     case Suggestion::Icon::kDelete:
     case Suggestion::Icon::kDevice:
     case Suggestion::Icon::kEdit:
+    case Suggestion::Icon::kEmail:
     case Suggestion::Icon::kEmpty:
     case Suggestion::Icon::kGlobe:
     case Suggestion::Icon::kGoogle:
+    case Suggestion::Icon::kGoogleMonochrome:
     case Suggestion::Icon::kGooglePasswordManager:
     case Suggestion::Icon::kGooglePay:
     case Suggestion::Icon::kGooglePayDark:
@@ -332,185 +327,6 @@ int CreditCard::IconResourceId(Suggestion::Icon icon) {
 // static
 int CreditCard::IconResourceId(std::string_view icon_str) {
   return IconResourceId(ConvertCardNetworkIntoIcon(icon_str));
-}
-
-// static
-const char* CreditCard::GetCardNetwork(const std::u16string& number) {
-  // Credit card number specifications taken from:
-  // https://en.wikipedia.org/wiki/Payment_card_number,
-  // http://www.regular-expressions.info/creditcard.html,
-  // https://developer.ean.com/general-info/valid-card-types,
-  // http://www.bincodes.com/, and
-  // http://www.fraudpractice.com/FL-binCC.html.
-  // (Last updated: March 2021; change Troy bin range)
-  //
-  // Card Type              Prefix(es)                                  Length
-  // --------------------------------------------------------------------------
-  // Visa                   4                                          13,16,19
-  // American Express       34,37                                      15
-  // Diners Club            300-305,309,36,38-39                       14
-  // Discover Card          6011,644-649,65                            16
-  // Elo                    See Elo regex pattern below                16
-  // JCB                    3528-3589                                  16
-  // Mastercard             2221-2720, 51-55                           16
-  // MIR                    2200-2204                                  16
-  // Troy                   22050-22052, 9792                          16
-  // UnionPay               62                                         16-19
-
-  // Determine the network for the given |number| by going from the longest
-  // (most specific) prefix to the shortest (most general) prefix.
-  std::u16string stripped_number = CreditCard::StripSeparators(number);
-
-  // Original Elo parsing included only 6 BIN prefixes. This regex pattern,
-  // sourced from the official Elo documentation, attempts to cover missing gaps
-  // via a more comprehensive solution.
-  static constexpr char16_t kEloRegexPattern[] =
-      // clang-format off
-    u"^("
-      u"50("
-        u"67("
-          u"0[78]|"
-          u"1[5789]|"
-          u"2[012456789]|"
-          u"3[01234569]|"
-          u"4[0-7]|"
-          u"53|"
-          u"7[4-8]"
-        u")|"
-        u"9("
-          u"0(0[0-9]|1[34]|2[013457]|3[0359]|4[0123568]|5[01456789]|6[012356789]|7[013]|8[123789]|9[1379])|"
-          u"1(0[34568]|4[6-9]|5[1245678]|8[36789])|"
-          u"2(2[02]|57|6[0-9]|7[1245689]|8[023456789]|9[1-6])|"
-          u"3(0[78]|5[78])|"
-          u"4(0[7-9]|1[012456789]|2[02]|5[7-9]|6[0-5]|8[45])|"
-          u"55[01]|"
-          u"636|"
-          u"7(2[3-8]|32|6[5-9])"
-        u")"
-      u")|"
-      u"4("
-        u"0117[89]|3(1274|8935)|5(1416|7(393|63[12]))"
-      u")|"
-      u"6("
-        u"27780|"
-        u"36368|"
-        u"5("
-          u"0("
-            u"0(3[1258]|4[026]|69|7[0178])|"
-            u"4(0[67]|1[0-3]|2[2345689]|3[0568]|8[5-9]|9[0-9])|"
-            u"5(0[01346789]|1[01246789]|2[0-9]|3[0178]|5[2-9]|6[012356789]|7[01789]|8[0134679]|9[0-8])|"
-            u"72[0-7]|"
-            u"9(0[1-9]|1[0-9]|2[0128]|3[89]|4[6-9]|5[01578]|6[2-9]|7[01])"
-          u")|"
-          u"16("
-            u"5[236789]|"
-            u"6[025678]|"
-            u"7[013456789]|"
-            u"88"
-          u")|"
-          u"50("
-            u"0[01356789]|"
-            u"1[2568]|"
-            u"26|"
-            u"3[6-8]|"
-            u"5[1267]"
-          u")"
-        u")"
-      u")"
-    u")$";
-  // clang-format on
-
-  // Check for prefixes of length 6.
-  if (stripped_number.size() >= 6) {
-    int first_six_digits = 0;
-    if (!base::StringToInt(stripped_number.substr(0, 6), &first_six_digits))
-      return kGenericCard;
-
-    if (MatchesRegex<kEloRegexPattern>(
-            base::NumberToString16(first_six_digits))) {
-      return kEloCard;
-    }
-  }
-
-  // Check for prefixes of length 5.
-  if (stripped_number.size() >= 5) {
-    int first_five_digits = 0;
-    if (!base::StringToInt(stripped_number.substr(0, 5), &first_five_digits))
-      return kGenericCard;
-
-    if (first_five_digits == 22050 || first_five_digits == 22051 ||
-        first_five_digits == 22052) {
-      return kTroyCard;
-    }
-  }
-
-  // Check for prefixes of length 4.
-  if (stripped_number.size() >= 4) {
-    int first_four_digits = 0;
-    if (!base::StringToInt(stripped_number.substr(0, 4), &first_four_digits))
-      return kGenericCard;
-
-    if (first_four_digits >= 2200 && first_four_digits <= 2204)
-      return kMirCard;
-
-    if (first_four_digits == 9792)
-      return kTroyCard;
-
-    if (first_four_digits >= 2221 && first_four_digits <= 2720)
-      return kMasterCard;
-
-    if (first_four_digits >= 3528 && first_four_digits <= 3589)
-      return kJCBCard;
-
-    if (first_four_digits == 6011)
-      return kDiscoverCard;
-  }
-
-  // Check for prefixes of length 3.
-  if (stripped_number.size() >= 3) {
-    int first_three_digits = 0;
-    if (!base::StringToInt(stripped_number.substr(0, 3), &first_three_digits))
-      return kGenericCard;
-
-    if ((first_three_digits >= 300 && first_three_digits <= 305) ||
-        first_three_digits == 309)
-      return kDinersCard;
-
-    if (first_three_digits >= 644 && first_three_digits <= 649)
-      return kDiscoverCard;
-  }
-
-  // Check for prefixes of length 2.
-  if (stripped_number.size() >= 2) {
-    int first_two_digits = 0;
-    if (!base::StringToInt(stripped_number.substr(0, 2), &first_two_digits))
-      return kGenericCard;
-
-    if (first_two_digits == 34 || first_two_digits == 37)
-      return kAmericanExpressCard;
-
-    if (first_two_digits == 36 || first_two_digits == 38 ||
-        first_two_digits == 39)
-      return kDinersCard;
-
-    if (first_two_digits >= 51 && first_two_digits <= 55)
-      return kMasterCard;
-
-    if (first_two_digits == 62)
-      return kUnionPay;
-
-    if (first_two_digits == 65)
-      return kDiscoverCard;
-  }
-
-  // Check for prefixes of length 1.
-  if (stripped_number.empty())
-    return kGenericCard;
-
-  if (stripped_number[0] == '4')
-    return kVisaCard;
-
-  return kGenericCard;
 }
 
 // static
@@ -671,7 +487,9 @@ std::u16string CreditCard::GetRawInfo(FieldType type) const {
 void CreditCard::SetRawInfoWithVerificationStatus(FieldType type,
                                                   const std::u16string& value,
                                                   VerificationStatus status) {
-  DCHECK_EQ(FieldTypeGroup::kCreditCard, GroupTypeOfFieldType(type));
+  DCHECK(FieldTypeGroupSet(
+             {FieldTypeGroup::kCreditCard, FieldTypeGroup::kStandaloneCvcField})
+             .contains(GroupTypeOfFieldType(type)));
   switch (type) {
     case CREDIT_CARD_NAME_FULL:
       name_on_card_ = value;
@@ -730,7 +548,8 @@ void CreditCard::SetRawInfoWithVerificationStatus(FieldType type,
       break;
 
     default:
-      NOTREACHED() << "Attempting to set unknown info-type " << type;
+      NOTREACHED_IN_MIGRATION()
+          << "Attempting to set unknown info-type " << type;
       break;
   }
 }
@@ -740,14 +559,13 @@ void CreditCard::GetMatchingTypes(const std::u16string& text,
                                   FieldTypeSet* matching_types) const {
   FormGroup::GetMatchingTypes(text, app_locale, matching_types);
 
-  std::u16string card_number =
-      GetInfo(AutofillType(CREDIT_CARD_NUMBER), app_locale);
+  std::u16string card_number = GetInfo(CREDIT_CARD_NUMBER, app_locale);
   if (!card_number.empty()) {
     // We only have the last four digits for masked cards, so match against
     // that if |this| is a masked card.
     bool numbers_match = record_type_ == RecordType::kMaskedServerCard
                              ? GetLastFourDigits(text) == LastFourDigits()
-                             : StripSeparators(text) == card_number;
+                             : StripCardNumberSeparators(text) == card_number;
     if (numbers_match)
       matching_types->insert(CREDIT_CARD_NUMBER);
   }
@@ -796,8 +614,8 @@ void CreditCard::SetNickname(const std::u16string& nickname) {
 
 bool CreditCard::UpdateFromImportedCard(const CreditCard& imported_card,
                                         const std::string& app_locale) {
-  if (this->GetInfo(AutofillType(CREDIT_CARD_NUMBER), app_locale) !=
-      imported_card.GetInfo(AutofillType(CREDIT_CARD_NUMBER), app_locale)) {
+  if (this->GetInfo(CREDIT_CARD_NUMBER, app_locale) !=
+      imported_card.GetInfo(CREDIT_CARD_NUMBER, app_locale)) {
     return false;
   }
 
@@ -987,7 +805,8 @@ bool CreditCard::HasSameNumberAs(const CreditCard& other) const {
     return LastFourDigits() == other.LastFourDigits();
   }
 
-  return StripSeparators(number_) == StripSeparators(other.number_);
+  return StripCardNumberSeparators(number_) ==
+         StripCardNumberSeparators(other.number_);
 }
 
 bool CreditCard::HasSameExpirationDateAs(const CreditCard& other) const {
@@ -1111,7 +930,7 @@ std::u16string CreditCard::LastFourDigits() const {
 }
 
 std::u16string CreditCard::FullDigitsForDisplay() const {
-  std::u16string stripped = CreditCard::StripSeparators(number_);
+  std::u16string stripped = StripCardNumberSeparators(number_);
   if (stripped.size() == 16) {
     return AddWhiteSpaceSeparatorForNumber(stripped,
                                            k16DigitNumberSegmentations);
@@ -1199,14 +1018,14 @@ std::u16string CreditCard::CardIdentifierStringAndDescriptiveExpiration(
   return l10n_util::GetStringFUTF16(
       IDS_AUTOFILL_CREDIT_CARD_TWO_LINE_LABEL_FROM_NAME,
       CardNameAndLastFourDigits(customized_nickname),
-      GetInfo(AutofillType(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR), app_locale));
+      GetInfo(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR, app_locale));
 }
 
 std::u16string CreditCard::DescriptiveExpiration(
     const std::string& app_locale) const {
   return l10n_util::GetStringFUTF16(
       IDS_AUTOFILL_CREDIT_CARD_TWO_LINE_LABEL_FROM_CARD_NUMBER,
-      GetInfo(AutofillType(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR), app_locale));
+      GetInfo(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR, app_locale));
 }
 
 std::u16string CreditCard::AbbreviatedExpirationDateForDisplay(
@@ -1285,7 +1104,7 @@ std::u16string CreditCard::GetInfoImpl(const AutofillType& type,
     if (record_type() == RecordType::kMaskedServerCard) {
       return NetworkAndLastFourDigits();
     }
-    return StripSeparators(number_);
+    return StripCardNumberSeparators(number_);
   }
   return GetRawInfo(storable_type);
 }
@@ -1300,8 +1119,8 @@ bool CreditCard::SetInfoWithVerificationStatusImpl(
     return SetExpirationMonthFromString(value, app_locale);
 
   if (storable_type == CREDIT_CARD_NUMBER) {
-    SetRawInfoWithVerificationStatus(storable_type, StripSeparators(value),
-                                     status);
+    SetRawInfoWithVerificationStatus(storable_type,
+                                     StripCardNumberSeparators(value), status);
   } else {
     SetRawInfoWithVerificationStatus(storable_type, value, status);
   }
@@ -1333,7 +1152,7 @@ void CreditCard::SetNumber(const std::u16string& number) {
   // Set the type based on the card number, but only for full numbers, not
   // when we have masked cards from the server (last 4 digits).
   if (record_type_ != RecordType::kMaskedServerCard) {
-    network_ = GetCardNetwork(StripSeparators(number_));
+    network_ = GetCardNetwork(StripCardNumberSeparators(number_));
   }
 }
 
@@ -1344,7 +1163,7 @@ void CreditCard::RecordAndLogUse() {
   set_use_count(use_count() + 1);
 }
 
-bool CreditCard::IsExpired(const base::Time& current_time) const {
+bool CreditCard::IsExpired(base::Time current_time) const {
   return !IsValidCreditCardExpirationDate(expiration_year_, expiration_month_,
                                           current_time);
 }

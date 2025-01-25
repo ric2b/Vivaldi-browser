@@ -22,6 +22,11 @@
 #include <sanitizer/common_interface_defs.h>
 #endif
 
+// Vivaldi: Flatpak support.
+#if !BUILDFLAG(IS_ANDROID)
+#include "sandbox/linux/services/flatpak_sandbox.h"
+#endif  // !BUILDFLAG(IS_ANDROID)
+
 namespace base {
 template <typename T>
 struct DefaultSingletonTraits;
@@ -90,6 +95,9 @@ class SANDBOX_POLICY_EXPORT SandboxLinux {
 
     // User namespace sandbox active.
     kUserNS = 1 << 6,
+
+    // Flatpak sandbox active.
+    kFlatpak = 1 << 30,
 
     // A flag that denotes an invalid sandbox status.
     kInvalid = 1 << 31,
@@ -297,6 +305,14 @@ class SANDBOX_POLICY_EXPORT SandboxLinux {
   std::unique_ptr<__sanitizer_sandbox_arguments> sanitizer_args_;
 #endif
   raw_ptr<syscall_broker::BrokerProcess> broker_process_;  // Leaked as global.
+
+  // Vivaldi: Flatpak support:
+#if !BUILDFLAG(IS_ANDROID)
+  // Accurate if pre_initialized_, used to save the state of the Flatpak
+  // sandbox, as once we're in the BPF sandbox any attempts to check the Flatpak
+  // state will cause EPERM errors.
+  vivaldi::sandbox::FlatpakSandbox::SandboxLevel flatpak_sandbox_level_;
+#endif  // !BUILDFLAG(IS_ANDROID)
 };
 
 }  // namespace policy

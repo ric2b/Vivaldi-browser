@@ -132,7 +132,7 @@ base::LazyInstance<std::map<const Profile*, bool>>::DestructorAtExit
 bool g_disallow_for_testing = false;
 
 // Let IsArcBlockedDueToIncompatibleFileSystem() return the specified value
-// during test runs. Doesn't affect ARC kiosk and public session.
+// during test runs. Doesn't affect public session.
 bool g_arc_blocked_due_to_incompatible_filesystem_for_testing = false;
 
 // TODO(kinaba): Temporary workaround for crbug.com/729034.
@@ -244,10 +244,7 @@ ArcStatus GetArcStatusForProfile(const Profile* profile,
     return ArcStatus::kDisallowedForTesting;
   }
 
-  // ARC Kiosk can be enabled even if ARC is not yet supported on the device.
-  // In that case IsArcKioskMode() should return true as profile is already
-  // created.
-  if (!IsArcAvailable() && !(IsArcKioskMode() && IsArcKioskAvailable())) {
+  if (!IsArcAvailable()) {
     VLOG_IF(1, should_report_reason) << "ARC is not available.";
     return ArcStatus::kNotAvailable;
   }
@@ -282,27 +279,21 @@ ArcStatus GetArcStatusForProfile(const Profile* profile,
     return ArcStatus::kDisallowedByDevicePolicyRestriction;
   }
 
-  if (base::FeatureList::IsEnabled(kUnaffiliatedDeviceArcRestriction)) {
-    if (!user->IsAffiliated() &&
-        !profile->GetPrefs()->GetBoolean(
-            prefs::kUnaffiliatedDeviceArcAllowed) &&
-        policy_util::IsAccountManaged(profile)) {
-      VLOG_IF(1, should_report_reason)
-          << "ARC disallowed for unaffiliated users";
-      return arc::ArcStatus::kDisallowedByUserPolicyRestriction;
-    }
+  if (!user->IsAffiliated() &&
+      !profile->GetPrefs()->GetBoolean(prefs::kUnaffiliatedDeviceArcAllowed) &&
+      policy_util::IsAccountManaged(profile)) {
+    VLOG_IF(1, should_report_reason) << "ARC disallowed for unaffiliated users";
+    return arc::ArcStatus::kDisallowedByUserPolicyRestriction;
   }
 
   // Please add any condition that disallows ARC above this check.
-  if (base::FeatureList::IsEnabled(kUnaffiliatedDeviceArcRestriction)) {
-    const bool is_arc_allowed_on_unaffiliated_devices =
-        profile->GetPrefs()->GetBoolean(prefs::kUnaffiliatedDeviceArcAllowed);
-    if (user->IsAffiliated() && !is_arc_allowed_on_unaffiliated_devices) {
-      return ArcStatus::kAllowedOnAffiliatedDevice;
-    }
-    if (!user->IsAffiliated() && is_arc_allowed_on_unaffiliated_devices) {
-      return ArcStatus::kAllowedOnUnaffiliatedDevice;
-    }
+  const bool is_arc_allowed_on_unaffiliated_devices =
+      profile->GetPrefs()->GetBoolean(prefs::kUnaffiliatedDeviceArcAllowed);
+  if (user->IsAffiliated() && !is_arc_allowed_on_unaffiliated_devices) {
+    return ArcStatus::kAllowedOnAffiliatedDevice;
+  }
+  if (!user->IsAffiliated() && is_arc_allowed_on_unaffiliated_devices) {
+    return ArcStatus::kAllowedOnUnaffiliatedDevice;
   }
 
   return ArcStatus::kAllowed;
@@ -419,10 +410,11 @@ bool IsArcAllowedForProfile(const Profile* profile) {
 
   // This is next check. We should be persistent and report the same result.
   if (result != it->second) {
-    NOTREACHED() << "ARC allowed was changed for the current user session "
-                 << "and profile " << profile->GetPath().MaybeAsASCII()
-                 << ". This may lead to unexpected behavior. ARC allowed is"
-                 << " forced to " << it->second;
+    NOTREACHED_IN_MIGRATION()
+        << "ARC allowed was changed for the current user session "
+        << "and profile " << profile->GetPath().MaybeAsASCII()
+        << ". This may lead to unexpected behavior. ARC allowed is"
+        << " forced to " << it->second;
   }
   return it->second;
 }
@@ -444,12 +436,10 @@ bool IsArcBlockedDueToIncompatibleFileSystem(const Profile* profile) {
   const user_manager::User* user =
       ash::ProfileHelper::Get()->GetUserByProfile(profile);
 
-  // Return true for public accounts as they only have ext4 and
-  // for ARC kiosk as migration to ext4 should always be triggered.
-  // Without this check it fails to start after browser crash as
-  // compatibility info is stored in RAM.
-  if (user && (user->GetType() == user_manager::UserType::kPublicAccount ||
-               user->GetType() == user_manager::UserType::kArcKioskApp)) {
+  // Do not block ARC for public accounts as they only have ext4.
+  // Without this check it fails to start after browser crash as compatibility
+  // info is stored in RAM.
+  if (user && user->GetType() == user_manager::UserType::kPublicAccount) {
     return false;
   }
 
@@ -704,7 +694,7 @@ void UpdateArcFileSystemCompatibilityPrefIfNeeded(
   // old devices without ARC. We can always safely remove the following 4 lines
   // without changing any functionality when, say, the code clarity becomes
   // more important in the future.
-  if (!IsArcAvailable() && !IsArcKioskAvailable()) {
+  if (!IsArcAvailable()) {
     std::move(callback).Run();
     return;
   }

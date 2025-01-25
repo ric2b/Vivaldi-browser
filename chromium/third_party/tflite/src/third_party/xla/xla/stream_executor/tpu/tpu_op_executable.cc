@@ -22,11 +22,11 @@ limitations under the License.
 
 #include "absl/algorithm/container.h"
 #include "absl/log/log.h"
+#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/service/service_executable_run_options.h"
-#include "xla/status.h"
 #include "xla/stream_executor/device_memory.h"
 #include "xla/stream_executor/tpu/c_api_conversions.h"  // IWYU pragma: keep
 #include "xla/stream_executor/tpu/c_api_decl.h"
@@ -39,7 +39,6 @@ limitations under the License.
 #include "xla/stream_executor/tpu/tpu_platform_interface.h"
 #include "xla/xla_data.pb.h"
 #include "tsl/platform/casts.h"
-#include "tsl/platform/errors.h"
 
 namespace tensorflow {
 
@@ -79,7 +78,7 @@ absl::Status TpuOpExecutable::LoadProgramAndEnqueueToStream(
   stream_executor::tpu::SerializedProto dev_assign_serialized;
   if (dev_assign != nullptr) {
     xla::DeviceAssignmentProto dev_assign_proto;
-    TF_RETURN_IF_ERROR(dev_assign->Serialize(&dev_assign_proto));
+    dev_assign->Serialize(&dev_assign_proto);
     dev_assign_serialized =
         stream_executor::tpu::SerializeProto(dev_assign_proto);
     c_dev_assign.bytes = dev_assign_serialized.bytes;
@@ -88,8 +87,7 @@ absl::Status TpuOpExecutable::LoadProgramAndEnqueueToStream(
 
   auto platform = down_cast<tpu::TpuPlatform*>(
       tpu::TpuPlatformInterface::GetRegisteredPlatform());
-  auto stream = platform->LookupStream(
-      run_options.run_options().stream()->implementation());
+  auto stream = platform->LookupStream(run_options.run_options().stream());
   StatusHelper status;
 
   TpuExecutable_LoadProgramAndEnqueueToStream_Params params;

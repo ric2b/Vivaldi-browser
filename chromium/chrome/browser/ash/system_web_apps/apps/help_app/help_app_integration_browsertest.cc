@@ -8,7 +8,6 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
-#include "ash/utility/forest_util.h"
 #include "ash/webui/help_app_ui/buildflags.h"
 #include "ash/webui/help_app_ui/help_app_manager.h"
 #include "ash/webui/help_app_ui/help_app_manager_factory.h"
@@ -48,10 +47,11 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/views/web_apps/web_app_install_dialog_coordinator.h"
 #include "chrome/browser/ui/webui/ash/system_web_dialog_delegate.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -84,6 +84,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/widget/any_widget_observer.h"
+#include "ui/views/widget/widget.h"
 #include "url/url_constants.h"
 
 namespace ash {
@@ -100,7 +101,6 @@ class HelpAppIntegrationTest : public SystemWebAppIntegrationTest {
     scoped_feature_list_.InitWithFeatures(
         {chromeos::features::kUploadOfficeToCloud,
          features::kReleaseNotesNotificationAllChannels,
-         chromeos::features::kAppInstallServiceUri,
          features::kHelpAppLauncherSearch},
         {features::kHelpAppOpensInsteadOfReleaseNotesNotification});
     https_server()->AddDefaultHandlers(GetChromeTestDataDir());
@@ -387,6 +387,11 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest, HelpAppV2ReleaseNotesMetrics) {
 // Test that clicking the release notes notification opens Help App.
 IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
                        HelpAppV2LaunchReleaseNotesFromNotification) {
+  // TODO(http://b/349164737): Re-enable this test with forest feature enabled.
+  if (ash::features::IsForestFeatureEnabled()) {
+    GTEST_SKIP() << "Skipping test body for Forest Feature.";
+  }
+
   WaitForTestSystemAppInstall();
   base::UserActionTester user_action_tester;
   auto display_service =
@@ -434,7 +439,6 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
 // Test that the background page can trigger the release notes notification.
 IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
                        HelpAppV2ReleaseNotesNotificationFromBackground) {
-  ash::switches::SetIgnoreForestSecretKeyForTest(true);
   WaitForTestSystemAppInstall();
   content::WebContents* web_contents = LaunchApp(SystemWebAppType::HELP);
   auto display_service =
@@ -460,7 +464,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
   EXPECT_EQ(true,
             content::EvalJs(
                 SandboxedWebUiAppTestBase::GetAppFrame(web_contents), kScript));
-  if (IsForestFeatureEnabled()) {
+  if (features::IsForestFeatureEnabled()) {
     EXPECT_EQ(profile()->GetPrefs()->GetInteger(
                   prefs::kReleaseNotesSuggestionChipTimesLeftToShow),
               0);
@@ -481,7 +485,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
   // Assert that the notification really is there.
   auto notifications = display_service->GetDisplayedNotificationsForType(
       NotificationHandler::Type::TRANSIENT);
-  if (IsForestFeatureEnabled()) {
+  if (features::IsForestFeatureEnabled()) {
     ASSERT_EQ(0u, notifications.size());
   } else {
     ASSERT_EQ(1u, notifications.size());
@@ -495,7 +499,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
                                  "show_release_notes_notification",
                                  std::nullopt, std::nullopt);
 #if BUILDFLAG(ENABLE_CROS_HELP_APP)
-  if (!IsForestFeatureEnabled()) {
+  if (!features::IsForestFeatureEnabled()) {
     EXPECT_NO_FATAL_FAILURE(navigation_observer.Wait());
     EXPECT_EQ(expected_url, GetActiveWebContents()->GetVisibleURL());
   }
@@ -503,13 +507,11 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
   // We just have the original browser. No new app opens.
   EXPECT_EQ(1u, chrome::GetTotalBrowserCount());
 #endif
-  ash::switches::SetIgnoreForestSecretKeyForTest(false);
 }
 
 IN_PROC_BROWSER_TEST_P(
     HelpAppIntegrationTestWithHelpAppOpensInsteadOfReleaseNotesNotification,
     OpensHelpApp) {
-  ash::switches::SetIgnoreForestSecretKeyForTest(true);
   WaitForTestSystemAppInstall();
   base::HistogramTester histogram_tester;
   GURL expected_trusted_frame_url = GURL(kExploreUpdatesPageUrl);
@@ -533,7 +535,7 @@ IN_PROC_BROWSER_TEST_P(
                 prefs::kReleaseNotesSuggestionChipTimesLeftToShow),
             0);
 #if BUILDFLAG(ENABLE_CROS_HELP_APP)
-  if (!IsForestFeatureEnabled()) {
+  if (!features::IsForestFeatureEnabled()) {
     EXPECT_NO_FATAL_FAILURE(navigation_observer.Wait());
     EXPECT_EQ(expected_trusted_frame_url,
               GetActiveWebContents()->GetVisibleURL());
@@ -548,7 +550,6 @@ IN_PROC_BROWSER_TEST_P(
       "Discover.Overall.AppLaunched",
       apps::LaunchSource::kFromReleaseNotesNotification, 0);
 #endif
-  ash::switches::SetIgnoreForestSecretKeyForTest(false);
 }
 
 IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTestWithBirchFeatureEnabled,
@@ -650,6 +651,39 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
   EXPECT_EQ(true,
             content::EvalJs(
                 SandboxedWebUiAppTestBase::GetAppFrame(web_contents), kScript));
+}
+
+// Test that the Help App can open the on device app controls part section in OS
+// Settings.
+IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
+                       HelpAppV2ShowOnDeviceAppControls) {
+  WaitForTestSystemAppInstall();
+  content::WebContents* web_contents = LaunchApp(SystemWebAppType::HELP);
+
+  // There should be two browser windows, one regular and one for the newly
+  // opened help app.
+  EXPECT_EQ(2u, chrome::GetTotalBrowserCount());
+
+  const GURL expected_url("chrome://os-settings/apps");
+  content::TestNavigationObserver navigation_observer(expected_url);
+  navigation_observer.StartWatchingNewWebContents();
+
+  // Script that tells the Help App to show on device app controls.
+  constexpr char kScript[] = R"(
+    (async () => {
+      await window.customLaunchData.delegate.showOnDeviceAppControls();
+    })();
+  )";
+  // Trigger the script, then wait for settings to open. Use ExecJs
+  // instead of EvalJsInAppFrame because the script needs to run in the same
+  // world as the page's code.
+  EXPECT_TRUE(content::ExecJs(
+      SandboxedWebUiAppTestBase::GetAppFrame(web_contents), kScript));
+  navigation_observer.Wait();
+
+  // Settings should be active in a new window.
+  EXPECT_EQ(3u, chrome::GetTotalBrowserCount());
+  EXPECT_EQ(expected_url, GetActiveWebContents()->GetVisibleURL());
 }
 
 // Test that the Help App opens the OS Settings family link page.
@@ -762,8 +796,12 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
   content::TestNavigationObserver navigation_observer(test_url);
   navigation_observer.StartWatchingNewWebContents();
 
+  std::string dialog_name =
+      base::FeatureList::IsEnabled(::features::kWebAppUniversalInstall)
+          ? "WebAppSimpleInstallDialog"
+          : "PWAConfirmationBubbleView";
   views::NamedWidgetShownWaiter waiter(views::test::AnyWidgetTestPasskey(),
-                                       "PWAConfirmationBubbleView");
+                                       dialog_name);
 
   // Script that tells the Help App to call the
   // OpenUrlInBrowserAndTriggerInstallDialog Mojo function.
@@ -791,13 +829,9 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
   // The active tab should be the `test_url` we opened.
   EXPECT_EQ(test_url, GetActiveWebContents()->GetVisibleURL());
 
-  // Wait for the PWA install dialog to show up. Internally, this is called the
-  // PWAConfirmationBubbleView (Not to be confused with the omnibox icon).
-  waiter.WaitIfNeededAndGet();
-
-  EXPECT_TRUE(
-      web_app::WebAppInstallDialogCoordinator::GetOrCreateForBrowser(browser())
-          ->IsShowing());
+  // Wait for the PWA install dialog to show up.
+  views::Widget* widget = waiter.WaitIfNeededAndGet();
+  ASSERT_NE(widget, nullptr);
 }
 
 // Test that the Help App's `openUrlInBrowserAndTriggerInstallDialog` crashes

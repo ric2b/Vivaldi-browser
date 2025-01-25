@@ -25,19 +25,11 @@
 
 namespace blink {
 
+namespace {
 bool IsManifestEmpty(const mojom::blink::ManifestPtr& manifest) {
   return manifest == mojom::blink::Manifest::New();
 }
-
-bool IsDefaultManifest(const mojom::blink::ManifestPtr& manifest,
-                       const KURL& document_url) {
-  mojom::blink::ManifestPtr expected_manifest = mojom::blink::Manifest::New();
-  expected_manifest->start_url = document_url;
-  expected_manifest->id = document_url;
-  expected_manifest->id.RemoveFragmentIdentifier();
-  expected_manifest->scope = KURL(document_url.BaseAsString());
-  return manifest == expected_manifest;
-}
+}  // namespace
 
 class ManifestParserTest : public testing::Test {
  public:
@@ -66,16 +58,35 @@ class ManifestParserTest : public testing::Test {
   }
 
   mojom::blink::ManifestPtr& ParseManifest(const String& data) {
-    return ParseManifestWithURLs(data, default_manifest_url,
-                                 default_document_url);
+    return ParseManifestWithURLs(data, DefaultManifestUrl(),
+                                 DefaultDocumentUrl());
   }
 
   const Vector<String>& errors() const { return errors_; }
 
   unsigned int GetErrorCount() const { return errors_.size(); }
 
-  const KURL& DefaultDocumentUrl() const { return default_document_url; }
-  const KURL& DefaultManifestUrl() const { return default_manifest_url; }
+  static KURL DefaultDocumentUrl() { return KURL("http://foo.com/index.html"); }
+  static KURL DefaultManifestUrl() {
+    return KURL("http://foo.com/manifest.json");
+  }
+
+  bool HasDefaultValuesWithUrls(
+      const mojom::blink::ManifestPtr& manifest,
+      const KURL& document_url = DefaultDocumentUrl(),
+      const KURL& manifest_url = DefaultManifestUrl()) {
+    mojom::blink::ManifestPtr expected_manifest = mojom::blink::Manifest::New();
+    // A true "default" manifest would have an empty manifest URL. However in
+    // these tests we don't want to check for that, rather this method is used
+    // to check that a manifest has all its fields set to "default" values, but
+    // also have the expected manifest url.
+    expected_manifest->manifest_url = manifest_url;
+    expected_manifest->start_url = document_url;
+    expected_manifest->id = document_url;
+    expected_manifest->id.RemoveFragmentIdentifier();
+    expected_manifest->scope = KURL(document_url.BaseAsString());
+    return manifest == expected_manifest;
+  }
 
   void VerifySafeUrlPatternSizes(const SafeUrlPattern& pattern,
                                  size_t protocol_size,
@@ -100,9 +111,6 @@ class ManifestParserTest : public testing::Test {
   test::TaskEnvironment task_environment_;
   mojom::blink::ManifestPtr manifest_;
   Vector<String> errors_;
-
-  const KURL default_document_url = KURL("http://foo.com/index.html");
-  const KURL default_manifest_url = KURL("http://foo.com/manifest.json");
 };
 
 TEST_F(ManifestParserTest, CrashTest) {
@@ -143,7 +151,7 @@ TEST_F(ManifestParserTest, EmptyStringNull) {
 
   // A parsing error is equivalent to an empty manifest.
   EXPECT_TRUE(IsManifestEmpty(manifest));
-  EXPECT_FALSE(IsDefaultManifest(manifest, DefaultDocumentUrl()));
+  EXPECT_FALSE(HasDefaultValuesWithUrls(manifest));
 }
 
 TEST_F(ManifestParserTest, ValidNoContentParses) {
@@ -154,7 +162,7 @@ TEST_F(ManifestParserTest, ValidNoContentParses) {
 
   // Check that the fields are null or set to their default values.
   EXPECT_FALSE(IsManifestEmpty(manifest));
-  EXPECT_TRUE(IsDefaultManifest(manifest, DefaultDocumentUrl()));
+  EXPECT_TRUE(HasDefaultValuesWithUrls(manifest, DefaultDocumentUrl(), KURL()));
   EXPECT_TRUE(manifest->name.IsNull());
   EXPECT_TRUE(manifest->short_name.IsNull());
   EXPECT_EQ(manifest->start_url, DefaultDocumentUrl());
@@ -180,7 +188,7 @@ TEST_F(ManifestParserTest, UnrecognizedFieldsIgnored) {
 
   // Check that subsequent fields parsed.
   EXPECT_FALSE(IsManifestEmpty(manifest));
-  EXPECT_FALSE(IsDefaultManifest(manifest, DefaultDocumentUrl()));
+  EXPECT_FALSE(HasDefaultValuesWithUrls(manifest));
   EXPECT_EQ(manifest->name, "bar");
   EXPECT_EQ(DefaultDocumentUrl().BaseAsString(), manifest->scope.GetString());
 }
@@ -192,7 +200,7 @@ TEST_F(ManifestParserTest, MultipleErrorsReporting) {
       "start_url": null, "icons": {}, "theme_color": 42,
       "background_color": 42, "shortcuts": {} })");
   EXPECT_FALSE(IsManifestEmpty(manifest));
-  EXPECT_TRUE(IsDefaultManifest(manifest, DefaultDocumentUrl()));
+  EXPECT_TRUE(HasDefaultValuesWithUrls(manifest));
 
   EXPECT_THAT(errors(),
               testing::UnorderedElementsAre(
@@ -214,7 +222,7 @@ TEST_F(ManifestParserTest, NameParseRules) {
     auto& manifest = ParseManifest(R"({ "name": "foo" })");
     EXPECT_EQ(manifest->name, "foo");
     EXPECT_FALSE(IsManifestEmpty(manifest));
-    EXPECT_FALSE(IsDefaultManifest(manifest, DefaultDocumentUrl()));
+    EXPECT_FALSE(HasDefaultValuesWithUrls(manifest));
     EXPECT_EQ(0u, GetErrorCount());
   }
 
@@ -441,7 +449,7 @@ TEST_F(ManifestParserTest, StartURLParseRules) {
     ASSERT_FALSE(IsManifestEmpty(manifest));
     EXPECT_THAT(errors(), testing::IsEmpty());
     EXPECT_TRUE(manifest->has_valid_specified_start_url);
-    EXPECT_FALSE(IsDefaultManifest(manifest, DefaultDocumentUrl()));
+    EXPECT_FALSE(HasDefaultValuesWithUrls(manifest));
   }
 
   // Whitespaces.
@@ -461,7 +469,7 @@ TEST_F(ManifestParserTest, StartURLParseRules) {
                 testing::ElementsAre(
                     "property 'start_url' ignored, type string expected."));
     EXPECT_FALSE(manifest->has_valid_specified_start_url);
-    EXPECT_TRUE(IsDefaultManifest(manifest, DefaultDocumentUrl()));
+    EXPECT_TRUE(HasDefaultValuesWithUrls(manifest));
   }
 
   // Don't parse if property isn't a string.
@@ -671,9 +679,28 @@ TEST_F(ManifestParserTest, ScopeParseRules) {
     EXPECT_EQ(0u, GetErrorCount());
   }
 
+  // Scope removes query args.
+  {
+    auto& manifest = ParseManifest(
+        R"({ "start_url": "app/index.html",
+             "scope": "/?test=abc" })");
+    ASSERT_EQ(manifest->scope.GetString(), "http://foo.com/");
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Scope removes fragments.
+  {
+    auto& manifest = ParseManifest(
+        R"({ "start_url": "app/index.html",
+             "scope": "/#abc" })");
+    ASSERT_EQ(manifest->scope.GetString(), "http://foo.com/");
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
   // Scope defaults to start_url with the filename, query, and fragment removed.
   {
-    auto& manifest = ParseManifest(R"({ "start_url": "land/landing.html" })");
+    auto& manifest =
+        ParseManifest(R"({ "start_url": "land/landing.html?query=test#abc" })");
     ASSERT_EQ(manifest->scope, KURL(DefaultDocumentUrl(), "land/"));
     EXPECT_EQ(0u, GetErrorCount());
   }
@@ -6027,120 +6054,100 @@ TEST_F(ManifestParserTest, PermissionsPolicyInvalidAllowlistEntry) {
 
 TEST_F(ManifestParserTest, LaunchHandlerParseRules) {
   using ClientMode = mojom::blink::ManifestLaunchHandler::ClientMode;
-
+  // Smoke test.
   {
-    ScopedWebAppLaunchHandlerForTest feature(false);
-
-    // Feature not enabled, should not be parsed.
     auto& manifest = ParseManifest(R"({
       "launch_handler": {
-        "client_mode": "navigate-existing"
+        "client_mode": "focus-existing"
       }
     })");
-    EXPECT_FALSE(manifest->launch_handler);
+    EXPECT_EQ(manifest->launch_handler->client_mode,
+              ClientMode::kFocusExisting);
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+  {
+    auto& manifest = ParseManifest(R"({
+      "launch_handler": {
+        "client_mode": "navigate-new"
+      }
+    })");
+    EXPECT_EQ(manifest->launch_handler->client_mode, ClientMode::kNavigateNew);
     EXPECT_EQ(0u, GetErrorCount());
   }
 
+  // Empty object is fine.
   {
-    ScopedWebAppLaunchHandlerForTest feature(true);
-    // Smoke test.
-    {
-      auto& manifest = ParseManifest(R"({
-        "launch_handler": {
-          "client_mode": "focus-existing"
-        }
-      })");
-      EXPECT_EQ(manifest->launch_handler->client_mode,
-                ClientMode::kFocusExisting);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-    {
-      auto& manifest = ParseManifest(R"({
-        "launch_handler": {
-          "client_mode": "navigate-new"
-        }
-      })");
-      EXPECT_EQ(manifest->launch_handler->client_mode,
-                ClientMode::kNavigateNew);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
+    auto& manifest = ParseManifest(R"({
+      "launch_handler": {}
+    })");
+    EXPECT_EQ(manifest->launch_handler->client_mode, ClientMode::kAuto);
+    EXPECT_EQ(0u, GetErrorCount());
+  }
 
-    // Empty object is fine.
-    {
-      auto& manifest = ParseManifest(R"({
-        "launch_handler": {}
-      })");
-      EXPECT_EQ(manifest->launch_handler->client_mode, ClientMode::kAuto);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
+  // Empty array is fine.
+  {
+    auto& manifest = ParseManifest(R"({
+      "launch_handler": {
+        "client_mode": []
+      }
+    })");
+    EXPECT_EQ(manifest->launch_handler->client_mode, ClientMode::kAuto);
+    EXPECT_EQ(0u, GetErrorCount());
+  }
 
-    // Empty array is fine.
-    {
-      auto& manifest = ParseManifest(R"({
-        "launch_handler": {
-          "client_mode": []
-        }
-      })");
-      EXPECT_EQ(manifest->launch_handler->client_mode, ClientMode::kAuto);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
+  // Unknown single string.
+  {
+    auto& manifest = ParseManifest(R"({
+      "launch_handler": {
+        "client_mode": "space"
+      }
+    })");
+    EXPECT_EQ(manifest->launch_handler->client_mode, ClientMode::kAuto);
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("client_mode value 'space' ignored, unknown value.", errors()[0]);
+  }
 
-    // Unknown single string.
-    {
-      auto& manifest = ParseManifest(R"({
-        "launch_handler": {
-          "client_mode": "space"
-        }
-      })");
-      EXPECT_EQ(manifest->launch_handler->client_mode, ClientMode::kAuto);
-      EXPECT_EQ(1u, GetErrorCount());
-      EXPECT_EQ("client_mode value 'space' ignored, unknown value.",
-                errors()[0]);
-    }
+  // First known value in array is used.
+  {
+    auto& manifest = ParseManifest(R"({
+      "launch_handler": {
+        "client_mode": ["navigate-existing", "navigate-new"]
+      }
+    })");
+    EXPECT_EQ(manifest->launch_handler->client_mode,
+              ClientMode::kNavigateExisting);
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+  {
+    auto& manifest = ParseManifest(R"({
+      "launch_handler": {
+        "client_mode": [null, "space", "focus-existing", "auto"]
+      }
+    })");
+    EXPECT_EQ(manifest->launch_handler->client_mode,
+              ClientMode::kFocusExisting);
+    EXPECT_EQ(2u, GetErrorCount());
+    EXPECT_EQ("client_mode value 'null' ignored, string expected.",
+              errors()[0]);
+    EXPECT_EQ("client_mode value 'space' ignored, unknown value.", errors()[1]);
+  }
 
-    // First known value in array is used.
-    {
-      auto& manifest = ParseManifest(R"({
-        "launch_handler": {
-          "client_mode": ["navigate-existing", "navigate-new"]
-        }
-      })");
-      EXPECT_EQ(manifest->launch_handler->client_mode,
-                ClientMode::kNavigateExisting);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-    {
-      auto& manifest = ParseManifest(R"({
-        "launch_handler": {
-          "client_mode": [null, "space", "focus-existing", "auto"]
-        }
-      })");
-      EXPECT_EQ(manifest->launch_handler->client_mode,
-                ClientMode::kFocusExisting);
-      EXPECT_EQ(2u, GetErrorCount());
-      EXPECT_EQ("client_mode value 'null' ignored, string expected.",
-                errors()[0]);
-      EXPECT_EQ("client_mode value 'space' ignored, unknown value.",
-                errors()[1]);
-    }
-
-    // Don't parse if the property isn't an object.
-    {
-      auto& manifest = ParseManifest(R"({ "launch_handler": null })");
-      EXPECT_FALSE(manifest->launch_handler);
-      EXPECT_EQ(1u, GetErrorCount());
-      EXPECT_EQ("launch_handler value ignored, object expected.", errors()[0]);
-    }
-    {
-      auto& manifest = ParseManifest(R"({
-        "launch_handler": [{
-          "client_mode": "navigate-new"
-        }]
-      })");
-      EXPECT_FALSE(manifest->launch_handler);
-      EXPECT_EQ(1u, GetErrorCount());
-      EXPECT_EQ("launch_handler value ignored, object expected.", errors()[0]);
-    }
+  // Don't parse if the property isn't an object.
+  {
+    auto& manifest = ParseManifest(R"({ "launch_handler": null })");
+    EXPECT_FALSE(manifest->launch_handler);
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("launch_handler value ignored, object expected.", errors()[0]);
+  }
+  {
+    auto& manifest = ParseManifest(R"({
+      "launch_handler": [{
+        "client_mode": "navigate-new"
+      }]
+    })");
+    EXPECT_FALSE(manifest->launch_handler);
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("launch_handler value ignored, object expected.", errors()[0]);
   }
 }
 
@@ -6288,323 +6295,6 @@ TEST_F(ManifestParserTest, TranslationsStringsParseRules) {
               errors()[1]);
     EXPECT_EQ("property 'description' of 'translations' is an empty string.",
               errors()[2]);
-  }
-}
-
-TEST_F(ManifestParserTest, UserPreferencesParseRules) {
-  {
-    ScopedWebAppDarkModeForTest feature(false);
-
-    // Feature not enabled, should not be parsed.
-    {
-      auto& manifest = ParseManifest(
-          R"({ "user_preferences":
-          {"color_scheme_dark": {"theme_color": "#FF0000"}} })");
-      EXPECT_TRUE(manifest->user_preferences.is_null());
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-    {
-      auto& manifest = ParseManifest(
-          R"({ "user_preferences":
-          {"color_scheme": {"dark": {"theme_color": "#FF0000"}}} })");
-      EXPECT_TRUE(manifest->user_preferences.is_null());
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-  }
-  {
-    ScopedWebAppDarkModeForTest feature(true);
-
-    // Manifest does not contain a 'user_preferences' field.
-    {
-      auto& manifest = ParseManifest(R"({ })");
-      EXPECT_TRUE(manifest->user_preferences.is_null());
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-
-    // user_preferences object is empty.
-    {
-      auto& manifest = ParseManifest(R"({ "user_preferences": {} })");
-      EXPECT_FALSE(manifest->user_preferences.is_null());
-      EXPECT_TRUE(manifest->user_preferences->color_scheme_dark.is_null());
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-
-    // Empty preference is ignored.
-    {
-      auto& manifest =
-          ParseManifest(R"({ "user_preferences": {"color_scheme_dark": {}} })");
-      EXPECT_FALSE(manifest->user_preferences.is_null());
-      EXPECT_TRUE(manifest->user_preferences->color_scheme_dark.is_null());
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-    {
-      auto& manifest = ParseManifest(
-          R"({ "user_preferences": {"color_scheme": {"dark": {}}} })");
-      EXPECT_FALSE(manifest->user_preferences.is_null());
-      EXPECT_TRUE(manifest->user_preferences->color_scheme_dark.is_null());
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-
-    // Valid theme_color and background_color should be parsed
-    {
-      auto& manifest = ParseManifest(
-          R"({ "user_preferences": {"color_scheme_dark":
-          {"theme_color": "#FF0000", "background_color": "#FFF"}} })");
-      EXPECT_FALSE(manifest->user_preferences.is_null());
-      EXPECT_FALSE(manifest->user_preferences->color_scheme_dark.is_null());
-      EXPECT_EQ(manifest->user_preferences->color_scheme_dark->theme_color,
-                0xFFFF0000u);
-      EXPECT_EQ(manifest->user_preferences->color_scheme_dark->background_color,
-                0xFFFFFFFFu);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-    {
-      auto& manifest = ParseManifest(
-          R"({ "user_preferences": {"color_scheme": {"dark":
-          {"theme_color": "#FF0000", "background_color": "#FFF"}}} })");
-      EXPECT_FALSE(manifest->user_preferences.is_null());
-      EXPECT_FALSE(manifest->user_preferences->color_scheme_dark.is_null());
-      EXPECT_EQ(manifest->user_preferences->color_scheme_dark->theme_color,
-                0xFFFF0000u);
-      EXPECT_EQ(manifest->user_preferences->color_scheme_dark->background_color,
-                0xFFFFFFFFu);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-
-    // Don't parse if the property isn't an object.
-    {
-      auto& manifest = ParseManifest(R"({ "user_preferences": [] })");
-      EXPECT_TRUE(manifest->user_preferences.is_null());
-      EXPECT_EQ(1u, GetErrorCount());
-      EXPECT_EQ("property 'user_preferences' ignored, object expected.",
-                errors()[0]);
-    }
-
-    // Ignore preference if it isn't an object.
-    {
-      auto& manifest =
-          ParseManifest(R"({ "user_preferences": {"color_scheme_dark": []} })");
-      EXPECT_FALSE(manifest->user_preferences.is_null());
-      EXPECT_TRUE(manifest->user_preferences->color_scheme_dark.is_null());
-      EXPECT_EQ(1u, GetErrorCount());
-      EXPECT_EQ("preference 'color_scheme_dark' ignored, object expected.",
-                errors()[0]);
-    }
-    {
-      auto& manifest = ParseManifest(
-          R"({ "user_preferences": {"color_scheme": {"dark": []}} })");
-      EXPECT_FALSE(manifest->user_preferences.is_null());
-      EXPECT_TRUE(manifest->user_preferences->color_scheme_dark.is_null());
-      EXPECT_EQ(1u, GetErrorCount());
-      EXPECT_EQ("preference 'dark' ignored, object expected.", errors()[0]);
-    }
-
-    // Ignore color_scheme if it isn't an object.
-    {
-      auto& manifest =
-          ParseManifest(R"({ "user_preferences": {"color_scheme": []} })");
-      EXPECT_TRUE(manifest->user_preferences.is_null());
-      EXPECT_EQ(1u, GetErrorCount());
-      EXPECT_EQ("property 'color_scheme' ignored, object expected.",
-                errors()[0]);
-    }
-
-    // Preferences overriding a single value should be parsed.
-    {
-      auto& manifest = ParseManifest(
-          R"({ "user_preferences":
-          {"color_scheme_dark": {"theme_color": "#FF0000"}} })");
-      EXPECT_FALSE(manifest->user_preferences.is_null());
-      EXPECT_FALSE(manifest->user_preferences->color_scheme_dark.is_null());
-      EXPECT_EQ(manifest->user_preferences->color_scheme_dark->theme_color,
-                0xFFFF0000u);
-      EXPECT_FALSE(
-          manifest->user_preferences->color_scheme_dark->has_background_color);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-    {
-      auto& manifest = ParseManifest(
-          R"({ "user_preferences":
-          {"color_scheme": {"dark": {"theme_color": "#FF0000"}}} })");
-      EXPECT_FALSE(manifest->user_preferences.is_null());
-      EXPECT_FALSE(manifest->user_preferences->color_scheme_dark.is_null());
-      EXPECT_EQ(manifest->user_preferences->color_scheme_dark->theme_color,
-                0xFFFF0000u);
-      EXPECT_FALSE(
-          manifest->user_preferences->color_scheme_dark->has_background_color);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-
-    // Unknown preference string should be ignored.
-    {
-      auto& manifest = ParseManifest(
-          R"({ "user_preferences": {"something": {"theme_color": "#FF0000"}} })");
-      EXPECT_FALSE(manifest->user_preferences.is_null());
-      EXPECT_TRUE(manifest->user_preferences->color_scheme_dark.is_null());
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-
-    // Manifests with both old and new formats should prefer the new format.
-    {
-      auto& manifest = ParseManifest(
-          R"({ "user_preferences":
-          {"color_scheme_dark": {"theme_color": "#FFFFFF"},
-          "color_scheme": {"dark": {"theme_color": "#FF0000"}}}})");
-      EXPECT_FALSE(manifest->user_preferences.is_null());
-      EXPECT_FALSE(manifest->user_preferences->color_scheme_dark.is_null());
-      EXPECT_EQ(manifest->user_preferences->color_scheme_dark->theme_color,
-                0xFFFF0000u);
-      EXPECT_FALSE(
-          manifest->user_preferences->color_scheme_dark->has_background_color);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-  }
-}
-
-TEST_F(ManifestParserTest, DarkColorOverrideParseRules) {
-  {
-    ScopedWebAppDarkModeForTest feature(false);
-
-    // Feature not enabled, should not be parsed.
-    {
-      auto& manifest = ParseManifest(R"({
-          "theme_colors":
-            [{"color": "#000000", "media": "(prefers-color-scheme: dark) "}],
-          "background_colors":
-            [{"color": "#000000", "media": "(prefers-color-scheme: dark) "}]
-          })");
-      EXPECT_FALSE(manifest->has_dark_theme_color);
-      EXPECT_FALSE(manifest->has_dark_background_color);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-  }
-  {
-    ScopedWebAppDarkModeForTest feature(true);
-
-    // Manifest does not contain any overrides fields.
-    {
-      auto& manifest = ParseManifest(R"({ })");
-      EXPECT_FALSE(manifest->has_dark_theme_color);
-      EXPECT_FALSE(manifest->has_dark_background_color);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-
-    // Overrides objects are empty.
-    {
-      auto& manifest =
-          ParseManifest(R"({ "theme_colors": [], "background_colors": [] })");
-      EXPECT_FALSE(manifest->has_dark_theme_color);
-      EXPECT_FALSE(manifest->has_dark_background_color);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-
-    // Don't parse if the overrides aren't arrays.
-    {
-      auto& manifest =
-          ParseManifest(R"({ "theme_colors": {}, "background_colors": 5 })");
-      EXPECT_FALSE(manifest->has_dark_theme_color);
-      EXPECT_FALSE(manifest->has_dark_background_color);
-      EXPECT_EQ(2u, GetErrorCount());
-      EXPECT_EQ("property 'theme_colors' ignored, type array expected.",
-                errors()[0]);
-      EXPECT_EQ("property 'background_colors' ignored, type array expected.",
-                errors()[1]);
-    }
-
-    // Override arrays don't contain objects.
-    {
-      auto& manifest = ParseManifest(R"({
-            "theme_colors": [true],
-            "background_colors":
-            [5, {"color": "#0000FF", "media": "(prefers-color-scheme: dark) "}]
-            })");
-      EXPECT_FALSE(manifest->has_dark_theme_color);
-      EXPECT_TRUE(manifest->has_dark_background_color);
-      EXPECT_EQ(manifest->dark_background_color, 0xFF0000FFu);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-
-    // Valid overrides should be parsed
-    {
-      auto& manifest = ParseManifest(R"({
-          "theme_colors":
-            [{"color": "#000000", "media": "(prefers-color-scheme: dark) "}],
-          "background_colors":
-            [{"color": "#FFFFFF", "media": "(prefers-color-scheme: dark) "}]
-          })");
-      EXPECT_TRUE(manifest->has_dark_theme_color);
-      EXPECT_TRUE(manifest->has_dark_background_color);
-      EXPECT_EQ(manifest->dark_theme_color, 0xFF000000u);
-      EXPECT_EQ(manifest->dark_background_color, 0xFFFFFFFFu);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-
-    // Color from first matching media condition used.
-    {
-      auto& manifest = ParseManifest(R"({
-          "theme_colors":
-            [{"color": "#000000", "media":
-            "(prefers-color-scheme: dark) and (prefers-contrast: more) "},
-            {"color": "#0000FF", "media": "(prefers-color-scheme: dark) "},
-            {"color": "#00FF00", "media": "(prefers-color-scheme: dark) "}]
-          })");
-      EXPECT_TRUE(manifest->has_dark_theme_color);
-      EXPECT_FALSE(manifest->has_dark_background_color);
-      EXPECT_EQ(manifest->dark_theme_color, 0xFF0000FFu);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-
-    // Invalid list items skipped.
-    {
-      auto& manifest = ParseManifest(R"({
-          "theme_colors":
-            [{"color": "#000000"},
-            {"media": "(prefers-color-scheme: dark) "},
-            {"color": "#0000FF", "media": "(prefers-color-scheme: dark) "}]
-          })");
-      EXPECT_TRUE(manifest->has_dark_theme_color);
-      EXPECT_FALSE(manifest->has_dark_background_color);
-      EXPECT_EQ(manifest->dark_theme_color, 0xFF0000FFu);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-
-    // Media query without "(prefers-color-scheme: dark)" not used as dark
-    // color.
-    {
-      auto& manifest = ParseManifest(R"({
-          "theme_colors":
-            [{"color": "#000000", "media": "(width >= 0) "}]
-          })");
-      EXPECT_FALSE(manifest->has_dark_theme_color);
-      EXPECT_FALSE(manifest->has_dark_background_color);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-
-    // Case-insensitive media query is parsed.
-    {
-      auto& manifest = ParseManifest(R"({
-          "theme_colors":
-            [{"color": "#000000", "media": "(Prefers-color-scheme: DARK) "}]
-          })");
-      EXPECT_TRUE(manifest->has_dark_theme_color);
-      EXPECT_FALSE(manifest->has_dark_background_color);
-      EXPECT_EQ(manifest->dark_theme_color, 0xFF000000u);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
-
-    // Media query containing more than "(prefer-color-scheme: dark)" skipped.
-    {
-      auto& manifest = ParseManifest(R"({
-          "theme_colors":
-            [{"color": "#000000",
-              "media": "(width >= 0) and (prefers-color-scheme: dark) "},
-            {"color": "#0000FF", "media": "(prefers-color-scheme: dark) "}]
-          })");
-      EXPECT_TRUE(manifest->has_dark_theme_color);
-      EXPECT_FALSE(manifest->has_dark_background_color);
-      EXPECT_EQ(manifest->dark_theme_color, 0xFF0000FFu);
-      EXPECT_EQ(0u, GetErrorCount());
-    }
   }
 }
 

@@ -33,7 +33,6 @@ namespace dawn::wire {
 // of limit structs on Adapter/Device initialization.
 bool IsFeatureSupported(WGPUFeatureName feature) {
     switch (feature) {
-        case WGPUFeatureName_Undefined:
         case WGPUFeatureName_Force32:
         case WGPUFeatureName_DawnNative:
         case WGPUFeatureName_ImplicitDeviceSynchronization:
@@ -109,6 +108,8 @@ bool IsFeatureSupported(WGPUFeatureName feature) {
         case WGPUFeatureName_YCbCrVulkanSamplers:
         case WGPUFeatureName_ShaderModuleCompilationOptions:
         case WGPUFeatureName_DawnLoadResolveTexture:
+        case WGPUFeatureName_Subgroups:
+        case WGPUFeatureName_SubgroupsF16:
             return true;
     }
 

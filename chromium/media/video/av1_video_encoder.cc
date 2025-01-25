@@ -54,7 +54,7 @@ std::optional<VideoPixelFormat> GetConversionFormat(VideoCodecProfile profile,
       break;
     case AV1PROFILE_PROFILE_PRO:
     default:
-      NOTREACHED();  // Checked during Initialize().
+      NOTREACHED_IN_MIGRATION();  // Checked during Initialize().
   }
 
   return std::nullopt;
@@ -130,7 +130,7 @@ EncoderStatus SetUpAomConfig(VideoCodecProfile profile,
 
     case AV1PROFILE_PROFILE_PRO:
       // We don't build libaom with high bit depth support.
-      return EncoderStatus(EncoderStatus::Codes::kEncoderUnsupportedConfig,
+      return EncoderStatus(EncoderStatus::Codes::kEncoderUnsupportedProfile,
                            "Professional profile is unsupported.");
 
     default:
@@ -358,6 +358,7 @@ void Av1VideoEncoder::Initialize(VideoCodecProfile profile,
   }
 
   // Keep in mind that AV1E_SET_TILE_[COLUMNS|ROWS] uses log2 units.
+  CHECK_NE(config_.g_threads, 0u);
   int log2_threads = std::log2(config_.g_threads);
   int tile_columns_log2 = 0;
   int tile_rows_log2 = 0;
@@ -423,16 +424,16 @@ void Av1VideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
 
   if (!frame) {
     std::move(done_cb).Run(
-        EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
+        EncoderStatus(EncoderStatus::Codes::kInvalidInputFrame,
                       "No frame provided for encoding."));
     return;
   }
 
-  if (frame->HasGpuMemoryBuffer()) {
+  if (frame->HasMappableGpuBuffer()) {
     frame = ConvertToMemoryMappedFrame(frame);
     if (!frame) {
       std::move(done_cb).Run(
-          EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
+          EncoderStatus(EncoderStatus::Codes::kSystemAPICallError,
                         "Convert GMB frame to MemoryMappedFrame failed."));
       return;
     }
@@ -440,10 +441,9 @@ void Av1VideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
 
   if (!frame->IsMappable()) {
     std::move(done_cb).Run(
-        EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
-                      "Unexpected frame format.")
-            .WithData("IsMappable", frame->IsMappable())
-            .WithData("HasGpuMemoryBuffer", frame->HasGpuMemoryBuffer())
+        EncoderStatus(EncoderStatus::Codes::kInvalidInputFrame,
+                      "Frame is not mappable")
+            .WithData("storage type", frame->storage_type())
             .WithData("format", frame->format()));
     return;
   }
@@ -459,7 +459,7 @@ void Av1VideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
         options_.frame_size, frame->timestamp());
     if (!temp_frame) {
       std::move(done_cb).Run(
-          EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
+          EncoderStatus(EncoderStatus::Codes::kOutOfMemoryError,
                         "Can't allocate a temporary frame for conversion"));
       return;
     }
@@ -467,9 +467,7 @@ void Av1VideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
     // If `frame->format()` is unsupported ConvertAndScale() will fail.
     auto convert_status = frame_converter_.ConvertAndScale(*frame, *temp_frame);
     if (!convert_status.is_ok()) {
-      std::move(done_cb).Run(
-          EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode)
-              .AddCause(std::move(convert_status)));
+      std::move(done_cb).Run(std::move(convert_status));
       return;
     }
 
@@ -509,7 +507,7 @@ void Av1VideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
 
     case AV1PROFILE_PROFILE_PRO:
     default:
-      NOTREACHED();  // Checked during Initialize().
+      NOTREACHED_IN_MIGRATION();  // Checked during Initialize().
   }
 
   bool key_frame = encode_options.key_frame;
@@ -558,7 +556,7 @@ void Av1VideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
     if (output.key_frame) {
       temporal_svc_frame_index_ = 0;
     }
-    if (output.size != 0) {
+    if (!output.data.empty()) {
       temporal_svc_frame_index_++;
     }
   }
@@ -654,10 +652,9 @@ VideoEncoderOutput Av1VideoEncoder::GetEncoderOutput(
     if (pkt->kind == AOM_CODEC_CX_FRAME_PKT) {
       // The encoder is operating synchronously. There should be exactly one
       // encoded packet, or the frame is dropped.
-      CHECK_EQ(output.size, 0u);
-      output.size = pkt->data.frame.sz;
-      output.data = base::HeapArray<uint8_t>::Uninit(output.size);
-      memcpy(output.data.data(), pkt->data.frame.buf, output.size);
+      output.data = base::HeapArray<uint8_t>::CopiedFrom(
+          {reinterpret_cast<uint8_t*>(pkt->data.frame.buf),
+           pkt->data.frame.sz});
       output.key_frame = (pkt->data.frame.flags & AOM_FRAME_IS_KEY) != 0;
       output.temporal_id = output.key_frame ? 0 : temporal_id;
       output.color_space = color_space;

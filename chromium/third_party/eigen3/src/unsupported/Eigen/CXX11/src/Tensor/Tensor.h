@@ -239,18 +239,16 @@ class Tensor : public TensorBase<Tensor<Scalar_, NumIndices_, Options_, IndexTyp
 
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Tensor(const Self& other) : Base(other), m_storage(other.m_storage) {}
 
-  template<typename... IndexTypes>
-    EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Tensor(Index firstDimension, IndexTypes... otherDimensions)
-        : m_storage(firstDimension, otherDimensions...)
-    {
-      // The number of dimensions used to construct a tensor must be equal to the rank of the tensor.
-      EIGEN_STATIC_ASSERT(sizeof...(otherDimensions) + 1 == NumIndices, YOU_MADE_A_PROGRAMMING_MISTAKE)
-    }
+  template <typename... IndexTypes>
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Tensor(Index firstDimension, IndexTypes... otherDimensions)
+      : m_storage(firstDimension, otherDimensions...) {
+    // The number of dimensions used to construct a tensor must be equal to the rank of the tensor.
+    EIGEN_STATIC_ASSERT(sizeof...(otherDimensions) + 1 == NumIndices, YOU_MADE_A_PROGRAMMING_MISTAKE)
+  }
 
-    /** Normal Dimension */
-    EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE explicit Tensor(const array<Index, NumIndices>& dimensions)
-        : m_storage(internal::array_prod(dimensions), dimensions)
-    {
+  /** Normal Dimension */
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE explicit Tensor(const array<Index, NumIndices>& dimensions)
+      : m_storage(internal::array_prod(dimensions), dimensions) {
     EIGEN_INITIALIZE_COEFFS_IF_THAT_OPTION_IS_ENABLED
   }
 

@@ -179,17 +179,20 @@ component("fido") {
         "enclave/transact.h",
         "enclave/types.cc",
         "enclave/types.h",
+        "enclave/verify/amd.cc",
+        "enclave/verify/amd.h",
+        "enclave/verify/attestation_report.cc",
+        "enclave/verify/attestation_report.h",
         "enclave/verify/claim.cc",
         "enclave/verify/claim.h",
         "enclave/verify/endorsement.cc",
         "enclave/verify/endorsement.h",
-        "enclave/verify/hash.cc",
-        "enclave/verify/hash.h",
         "enclave/verify/rekor.cc",
         "enclave/verify/rekor.h",
         "enclave/verify/utils.cc",
         "enclave/verify/utils.h",
-        "enclave/verify/verify.h",
+        "enclave/verify/verifier.cc",
+        "enclave/verify/verifier.h",
         "fido_authenticator.cc",
         "fido_authenticator.h",
         "fido_device.cc",
@@ -233,8 +236,6 @@ component("fido") {
         "pin_internal.cc",
         "pin_internal.h",
         "platform_credential_store.h",
-        "platform_user_verification_policy.cc",
-        "platform_user_verification_policy.h",
         "reset_request_handler.cc",
         "reset_request_handler.h",
         "set_pin_request_handler.cc",
@@ -257,6 +258,7 @@ component("fido") {
 
       deps += [
         "//components/sync/protocol:protocol",
+        "//device/fido/enclave/verify/proto:proto",
         "//services/device/public/cpp/hid",
         "//services/device/public/cpp/usb",
         "//services/device/public/mojom",
@@ -313,6 +315,8 @@ component("fido") {
         "win/logging.h",
         "win/type_conversions.cc",
         "win/type_conversions.h",
+        "win/util.cc",
+        "win/util.h",
         "win/webauthn_api.cc",
         "win/webauthn_api.h",
       ]
@@ -469,7 +473,7 @@ if (use_blink) {
 
   source_set("test_support") {
     testonly = true
-    sources = [ "test_callback_receiver.h" ]
+    sources = []
     deps = [
       "//base",
       "//components/apdu",
@@ -523,6 +527,8 @@ if (is_mac) {
   static_library("icloud_keychain_test_support") {
     testonly = true
     sources = [
+      "mac/fake_icloud_keychain.h",
+      "mac/fake_icloud_keychain.mm",
       "mac/fake_icloud_keychain_sys.h",
       "mac/fake_icloud_keychain_sys.mm",
       "mac/scoped_icloud_keychain_test_environment.h",

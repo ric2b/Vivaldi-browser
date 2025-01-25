@@ -2,10 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/screen_orientation/screen_orientation.h"
 
 #include <memory>
 
+#include "base/memory/raw_ptr_exclusion.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -35,7 +41,8 @@ STATIC_ASSERT_ENUM(
 namespace blink {
 
 struct ScreenOrientationInfo {
-  const AtomicString& name;
+  // RAW_PTR_EXCLUSION: #global-scope
+  RAW_PTR_EXCLUSION const AtomicString& name;
   device::mojom::blink::ScreenOrientationLockType orientation;
 };
 
@@ -81,7 +88,7 @@ const AtomicString& ScreenOrientation::OrientationTypeToString(
       return orientation_map[i].name;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return g_null_atom;
 }
 
@@ -94,7 +101,7 @@ static device::mojom::blink::ScreenOrientationLockType StringToOrientationLock(
       return orientation_map[i].orientation;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return device::mojom::blink::ScreenOrientationLockType::DEFAULT;
 }
 
@@ -146,7 +153,7 @@ ScriptPromise<IDLUndefined> ScreenOrientation::lock(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "The object is no longer associated to a window.");
-    return ScriptPromise<IDLUndefined>();
+    return EmptyPromise();
   }
 
   if (GetExecutionContext()->IsSandboxed(
@@ -158,7 +165,7 @@ ScriptPromise<IDLUndefined> ScreenOrientation::lock(
             ? "The window is in a fenced frame tree."
             : "The window is sandboxed and lacks the 'allow-orientation-lock' "
               "flag.");
-    return ScriptPromise<IDLUndefined>();
+    return EmptyPromise();
   }
 
   auto* resolver =

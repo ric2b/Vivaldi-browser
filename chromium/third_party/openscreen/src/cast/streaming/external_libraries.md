@@ -22,6 +22,8 @@ Or on the command line as:
 $ gn gen --args="is_debug=true have_ffmpeg=true have_libsdl2=true have_libopus=true have_libvpx=true" out/Default
 ```
 
+## Linux
+
 On some versions of Debian, the following apt-get command will install all of
 the necessary external libraries for Open Screen:
 
@@ -49,6 +51,37 @@ Finally, note that generally the headers for packages must also be installed.
 In Debian Linux flavors, this usually means that the `*-dev` version of each
 package must also be installed. In the example above, this looks like having
 both `libavcodec` and `libavcodec-dev`.
+
+## MacOS (Homebrew)
+
+You can use [Homebrew](https://brew.sh/) to install the libraries needed to compile the
+standalone sender and receiver applications.
+
+```sh
+brew install ffmpeg SDL2
+```
+
+To compile and link against these libraries, set the path arguments as follows
+in your `gn.args`.  Adjust for your current version of MacOS and the versions of
+the brew formulae you installed.
+
+
+```python
+mac_deployment_target=14
+mac_min_system_version=14
+have_ffmpeg=true
+ffmpeg_lib_dirs=["/opt/homebrew/lib"]
+ffmpeg_include_dirs=["/opt/homebrew/Cellar/ffmpeg/7.0.1/include"]
+have_libsdl2=true
+libsdl2_lib_dirs=["/opt/homebrew/lib"]
+libsdl2_include_dirs=["/opt/homebrew/Cellar/sdl2/2.30.5/include"]
+have_libopus=true
+libopus_lib_dirs=["/opt/homebrew/lib"]
+libopus_include_dirs=["/opt/homebrew/Cellar/opus/1.5.2/include"]
+have_libvpx=true
+libvpx_lib_dirs=["/opt/homebrew/lib"]
+libvpx_include_dirs=["/opt/homebrew/Cellar/libvpx/1.13.1/include"]
+```
 
 ## libaom
 

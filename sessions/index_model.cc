@@ -131,13 +131,13 @@ bool Index_Model::Move(const Index_Node* node, const Index_Node* parent,
                        size_t index) {
   if (!node->parent() || !IsValidIndex(parent, index)) {
     NOTREACHED();
-    return false;
+    //return false;
   }
   DCHECK(!parent->HasAncestor(node));
   if (parent->HasAncestor(node)) {
     // Can't make an ancestor of the node be a child of the node.
     NOTREACHED();
-    return false;
+    //return false;
   }
 
   // We can only move an item into a container if it originally came from it.
@@ -146,7 +146,7 @@ bool Index_Model::Move(const Index_Node* node, const Index_Node* parent,
     if (node->container_guid() != parent->guid() &&
         !parent->is_trash_folder()) {
       NOTREACHED();
-      return false;
+      //return false;
     }
   }
 

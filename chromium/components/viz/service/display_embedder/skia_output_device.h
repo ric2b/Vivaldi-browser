@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/containers/queue.h"
-#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/time/time.h"
@@ -28,10 +27,6 @@
 class GrDirectContext;
 class SkSurface;
 
-namespace base {
-class SequencedTaskRunner;
-}  // namespace base
-
 namespace gfx {
 class Rect;
 class Size;
@@ -47,10 +42,6 @@ namespace skgpu::graphite {
 class Context;
 class Recording;
 }  // namespace skgpu::graphite
-
-namespace ui {
-class LatencyTracker;
-}  // namespace ui
 
 namespace viz {
 
@@ -128,11 +119,19 @@ class VIZ_SERVICE_EXPORT SkiaOutputDevice {
   virtual std::unique_ptr<SkiaOutputDevice::ScopedPaint> BeginScopedPaint();
 
   // Changes the size of draw surface and invalidates it's contents.
-  virtual bool Reshape(const SkImageInfo& image_info,
-                       const gfx::ColorSpace& color_space,
-                       int sample_count,
-                       float device_scale_factor,
-                       gfx::OverlayTransform transform) = 0;
+  struct ReshapeParams {
+    SkImageInfo image_info;
+    // This is redundant with `image_info.colorSpace()`.
+    gfx::ColorSpace color_space;
+    int sample_count = 1;
+    float device_scale_factor = 1.f;
+    gfx::OverlayTransform transform = gfx::OVERLAY_TRANSFORM_NONE;
+
+    gfx::Size GfxSize() const {
+      return gfx::SkISizeToSize(image_info.dimensions());
+    }
+  };
+  virtual bool Reshape(const ReshapeParams& params) = 0;
 
   // For devices that supports viewporter.
   virtual void SetViewportSize(const gfx::Size& viewport_size);
@@ -276,9 +275,6 @@ class VIZ_SERVICE_EXPORT SkiaOutputDevice {
   std::unique_ptr<gpu::MemoryTypeTracker> memory_type_tracker_;
 
  private:
-  std::unique_ptr<ui::LatencyTracker> latency_tracker_;
-  // task runner for latency tracker.
-  scoped_refptr<base::SequencedTaskRunner> latency_tracker_runner_;
   // A mapping from skipped swap ID to its corresponding OutputSurfaceFrame.
   base::flat_map<uint64_t, OutputSurfaceFrame> skipped_swap_info_;
 };

@@ -15,7 +15,7 @@
 import {fetchWithTimeout} from '../base/http_utils';
 import {assertExists} from '../base/logging';
 import {StatusResult} from '../protos';
-import {Engine, LoadingTracker} from '../trace_processor/engine';
+import {EngineBase, LoadingTracker} from '../trace_processor/engine';
 
 const RPC_CONNECT_TIMEOUT_MS = 2000;
 
@@ -25,7 +25,7 @@ export interface HttpRpcState {
   failure?: string;
 }
 
-export class HttpRpcEngine extends Engine {
+export class HttpRpcEngine extends EngineBase {
   readonly id: string;
   errorHandler: (err: string) => void = () => {};
   private requestQueue = new Array<Uint8Array>();
@@ -46,10 +46,11 @@ export class HttpRpcEngine extends Engine {
       this.websocket = new WebSocket(wsUrl);
       this.websocket.onopen = () => this.onWebsocketConnected();
       this.websocket.onmessage = (e) => this.onWebsocketMessage(e);
-      this.websocket.onclose = (e) =>
-        this.errorHandler(`Websocket closed (${e.code}: ${e.reason})`);
+      this.websocket.onclose = (e) => this.onWebsocketClosed(e);
       this.websocket.onerror = (e) =>
-        this.errorHandler(`WebSocket error: ${e}`);
+        this.errorHandler(
+          `WebSocket error (state=${(e.target as WebSocket)?.readyState})`,
+        );
     }
 
     if (this.connected) {
@@ -66,6 +67,19 @@ export class HttpRpcEngine extends Engine {
       assertExists(this.websocket).send(queuedMsg);
     }
     this.connected = true;
+  }
+
+  private onWebsocketClosed(e: CloseEvent) {
+    if (e.code === 1006 && this.connected) {
+      // On macbooks the act of closing the lid / suspending often causes socket
+      // disconnections. Try to gracefully re-connect.
+      console.log('Websocket closed, reconnecting');
+      this.websocket = undefined;
+      this.connected = false;
+      this.rpcSendRequestBytes(new Uint8Array()); // Triggers a reconnection.
+    } else {
+      this.errorHandler(`Websocket closed (${e.code}: ${e.reason})`);
+    }
   }
 
   private onWebsocketMessage(e: MessageEvent) {

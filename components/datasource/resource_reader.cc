@@ -74,8 +74,8 @@ const base::FilePath& ResourceReader::GetResourceDirectory() {
 
 /* static */
 std::optional<base::Value> ResourceReader::ReadJSON(
-    base::StringPiece resource_directory,
-    base::StringPiece resource_name) {
+    std::string_view resource_directory,
+    std::string_view resource_name) {
   DCHECK(resource_directory.empty() || resource_directory.front() != '/');
   DCHECK(resource_directory.empty() || resource_directory.back() != '/');
   DCHECK(!resource_name.empty());
@@ -96,7 +96,7 @@ std::optional<base::Value> ResourceReader::ReadJSON(
 }
 
 /* static */
-gfx::Image ResourceReader::ReadPngImage(base::StringPiece resource_url) {
+gfx::Image ResourceReader::ReadPngImage(std::string_view resource_url) {
   std::string resource_path;
   if (!vivaldi_data_url_utils::IsResourceURL(resource_url, &resource_path)) {
     LOG(ERROR) << "resource_url does not start with "

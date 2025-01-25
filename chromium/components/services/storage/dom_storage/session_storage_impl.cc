@@ -82,7 +82,7 @@ void RecordSessionStorageCachePurgedHistogram(
           purged_size_kib);
       break;
     case SessionStorageCachePurgeReason::kNotNeeded:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -254,7 +254,7 @@ void SessionStorageImpl::CloneNamespace(
       // namespace.
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   namespaces_.emplace(
       std::piecewise_construct, std::forward_as_tuple(clone_to_namespace_id),
@@ -295,21 +295,15 @@ void SessionStorageImpl::DeleteNamespace(const std::string& namespace_id,
   }
 }
 
-void SessionStorageImpl::Flush(FlushCallback callback) {
+void SessionStorageImpl::Flush() {
   if (connection_state_ != CONNECTION_FINISHED) {
     RunWhenConnected(base::BindOnce(&SessionStorageImpl::Flush,
-                                    weak_ptr_factory_.GetWeakPtr(),
-                                    std::move(callback)));
+                                    weak_ptr_factory_.GetWeakPtr()));
     return;
   }
 
-  base::RepeatingClosure commit_callback = base::BarrierClosure(
-      base::saturated_cast<int>(data_maps_.size()), std::move(callback));
-
   for (const auto& it : data_maps_)
-    it.second->storage_area()->ScheduleImmediateCommit(
-        mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-            base::OnceClosure(commit_callback)));
+    it.second->storage_area()->ScheduleImmediateCommit();
 }
 
 void SessionStorageImpl::GetUsage(GetUsageCallback callback) {
@@ -727,13 +721,13 @@ void SessionStorageImpl::RunWhenConnected(base::OnceClosure callback) {
       on_database_opened_callbacks_.push_back(std::move(callback));
       return;
     case CONNECTION_SHUTDOWN:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
     case CONNECTION_FINISHED:
       std::move(callback).Run();
       return;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void SessionStorageImpl::InitiateConnection(bool in_memory_only) {

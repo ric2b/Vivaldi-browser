@@ -387,7 +387,7 @@ GtkStateFlags StateToStateFlags(ui::NativeTheme::State state) {
       return static_cast<GtkStateFlags>(GTK_STATE_FLAG_PRELIGHT |
                                         GTK_STATE_FLAG_ACTIVE);
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return GTK_STATE_FLAG_NORMAL;
   }
 }
@@ -442,7 +442,7 @@ GtkCssContext AppendCssNodeToStyleContext(GtkCssContext context,
           part_type = CSS_PSEUDOCLASS;
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
       }
     } else {
       switch (part_type) {
@@ -467,7 +467,7 @@ GtkCssContext AppendCssNodeToStyleContext(GtkCssContext context,
           break;
         }
         case CSS_NONE:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
       }
     }
   }
@@ -684,8 +684,9 @@ GdkModifierType GetGdkKeyEventState(const ui::KeyEvent& key_event) {
 
 GdkEvent* GdkEventFromKeyEvent(const ui::KeyEvent& key_event) {
   DCHECK(!GtkCheckVersion(4));
-  GdkEventType event_type =
-      key_event.type() == ui::ET_KEY_PRESSED ? GdkKeyPress() : GdkKeyRelease();
+  GdkEventType event_type = key_event.type() == ui::EventType::kKeyPressed
+                                ? GdkKeyPress()
+                                : GdkKeyRelease();
   auto event_time = key_event.time_stamp() - base::TimeTicks();
   int hw_code = GetKeyEventProperty(key_event, ui::kPropertyKeyboardHwKeyCode);
   int group = GetKeyEventProperty(key_event, ui::kPropertyKeyboardGroup);

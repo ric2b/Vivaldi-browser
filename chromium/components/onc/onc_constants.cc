@@ -256,6 +256,7 @@ const char kIncludedRoutes[] = "IncludedRoutes";
 const char kExcludedRoutes[] = "ExcludedRoutes";
 const char kType[] = "Type";
 const char kWebProxyAutoDiscoveryUrl[] = "WebProxyAutoDiscoveryUrl";
+const char kMTU[] = "MTU";
 }  // namespace ipconfig
 
 namespace wifi {
@@ -578,6 +579,9 @@ const char kPSIMAdminAssignedAPNs[] = "PSIMAdminAssignedAPNs";
 const char kRecommendedValuesAreEphemeral[] = "RecommendedValuesAreEphemeral";
 const char kUserCreatedNetworkConfigurationsAreEphemeral[] =
     "UserCreatedNetworkConfigurationsAreEphemeral";
+const char kDisconnectWiFiOnEthernet[] = "DisconnectWiFiOnEthernet";
+const char kDisconnectWiFiOnEthernetWhenConnected[] = "WhenConnected";
+const char kDisconnectWiFiOnEthernetWhenOnline[] = "WhenOnline";
 }  // global_network_config
 
 namespace device_state {

@@ -286,7 +286,7 @@ int GetGestureScrollIndex(EventMetrics::EventType type) {
       return 4;
     default:
       // We are only interested in 5 categories of EventType for scroll input
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return kMaxGestureScrollHistogramIndex;
 }
@@ -313,7 +313,7 @@ const char* GetVSyncRatioTypeName(
         kGenerationVsVsyncRatioBeforeVSync:
       return "GenerationVsVsyncRatio.BeforeVSync";
     case CompositorFrameReporter::VSyncRatioType::kVSyncRatioTypeCount:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
   }
 }
@@ -334,6 +334,42 @@ void ReportVSyncRatioMetric(const std::string& base_histogram_name,
           histogram_name, 1, 100, 101,
           base::HistogramBase::kUmaTargetedHistogramFlag));
 }
+
+#if BUILDFLAG(IS_ANDROID)
+constexpr const char kTopControlsMovedName[] = ".TopControlsMoved";
+constexpr const char kTopControlsDidNotMoveName[] = ".TopControlsDidNotMove";
+void ReportTopControlsMetric(
+    const std::string& name,
+    bool top_controls_moved,
+    base::TimeDelta latency,
+    EventMetrics::EventType type,
+    const std::optional<EventMetrics::HistogramBucketing>& bucketing) {
+  if (!bucketing) {
+    return;
+  }
+  if (top_controls_moved) {
+    std::string versioned_name = name + kTopControlsMovedName;
+    STATIC_HISTOGRAM_POINTER_GROUP(
+        versioned_name, GetGestureScrollIndex(type),
+        kMaxGestureScrollHistogramIndex,
+        AddTimeMicrosecondsGranularity(latency),
+        base::Histogram::FactoryMicrosecondsTimeGet(
+            versioned_name, bucketing->min, bucketing->max, bucketing->count,
+            base::HistogramBase::kUmaTargetedHistogramFlag));
+  } else if (base::ShouldLogHistogramForCpuReductionExperiment()) {
+    // We want to sub-sample the reports with top controls not moving. As they
+    // dominate in volume.
+    std::string versioned_name = name + kTopControlsDidNotMoveName;
+    STATIC_HISTOGRAM_POINTER_GROUP(
+        versioned_name, GetGestureScrollIndex(type),
+        kMaxGestureScrollHistogramIndex,
+        AddTimeMicrosecondsGranularity(latency),
+        base::Histogram::FactoryMicrosecondsTimeGet(
+            versioned_name, bucketing->min, bucketing->max, bucketing->count,
+            base::HistogramBase::kUmaTargetedHistogramFlag));
+  }
+}
+#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace
 
@@ -638,7 +674,7 @@ const char* CompositorFrameReporter::GetStageName(
         case BlinkBreakdown::kBeginMainSentToStarted:
           return "SendBeginMainFrameToCommit.BeginMainSentToStarted";
         case BlinkBreakdown::kBreakdownCount:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           return "";
       }
     case StageType::kCommit:
@@ -682,13 +718,13 @@ const char* CompositorFrameReporter::GetStageName(
           return "SubmitCompositorFrameToPresentationCompositorFrame."
                  "LatchToSwapEnd";
         case VizBreakdown::kBreakdownCount:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           return "";
       }
     case StageType::kTotalLatency:
       return "TotalLatency";
     case StageType::kStageTypeCount:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
   }
 }
@@ -716,7 +752,7 @@ const char* CompositorFrameReporter::GetVizBreakdownName(
     case VizBreakdown::kLatchToSwapEnd:
       return "LatchToSwapEnd";
     case VizBreakdown::kBreakdownCount:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
   }
 }
@@ -1061,7 +1097,7 @@ void CompositorFrameReporter::ReportCompositorLatencyMetrics() const {
           break;
         case FrameSequenceTrackerType::kCustom:
         case FrameSequenceTrackerType::kMaxType:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
     }
@@ -1337,6 +1373,12 @@ void CompositorFrameReporter::ReportEventLatencyMetrics() const {
                                      std::ceil(generation_to_vsync_ratio));
             }
           }
+
+#if BUILDFLAG(IS_ANDROID)
+          ReportTopControlsMetric(histogram_base_name, top_controls_moved_,
+                                  total_latency, event_metrics->type(),
+                                  event_metrics->GetHistogramBucketing());
+#endif  // BUILDFLAG(IS_ANDROID)
         }
 
         const base::TimeTicks arrived_in_renderer_timestamp =
@@ -1435,7 +1477,12 @@ void CompositorFrameReporter::ReportCompositorLatencyTraceEvents(
         reporter->set_frame_source(args_.frame_id.source_id);
         reporter->set_frame_sequence(args_.frame_id.sequence_number);
         reporter->set_layer_tree_host_id(layer_tree_host_id_);
-        reporter->set_has_missing_content(info.has_missing_content);
+        reporter->set_has_missing_content(info.checkerboarded_needs_raster ||
+                                          info.checkerboarded_needs_record);
+        reporter->set_checkerboarded_needs_raster(
+            info.checkerboarded_needs_raster);
+        reporter->set_checkerboarded_needs_record(
+            info.checkerboarded_needs_record);
         if (info.IsDroppedAffectingSmoothness()) {
           DCHECK(state == ChromeFrameReporter::STATE_DROPPED ||
                  state == ChromeFrameReporter::STATE_PRESENTED_PARTIAL);
@@ -1611,7 +1658,7 @@ void CompositorFrameReporter::ReportScrollJankMetrics() const {
         fling_input_count += scroll_update->coalesced_event_count();
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -1627,6 +1674,8 @@ void CompositorFrameReporter::ReportScrollJankMetrics() const {
     }
     if (global_trackers_.scroll_jank_ukm_reporter) {
       global_trackers_.scroll_jank_ukm_reporter->EmitScrollJankUkm();
+      global_trackers_.scroll_jank_ukm_reporter->SetEarliestScrollEvent(
+          *(earliest_event->AsScrollUpdate()));
     }
   }
 
@@ -1650,7 +1699,8 @@ void CompositorFrameReporter::ReportScrollJankMetrics() const {
                                        args_.interval);
   }
   if (global_trackers_.scroll_jank_ukm_reporter) {
-    global_trackers_.scroll_jank_ukm_reporter->EmitPredictorJankUkm();
+    global_trackers_.scroll_jank_ukm_reporter
+        ->UpdateLatestFrameAndEmitPredictorJank(end_timestamp);
   }
 }
 
@@ -2070,7 +2120,8 @@ FrameInfo CompositorFrameReporter::GenerateFrameInfo() const {
   info.final_state = final_state;
   info.smooth_thread = smooth_thread;
   info.scroll_thread = scrolling_thread;
-  info.has_missing_content = has_missing_content_;
+  info.checkerboarded_needs_raster = checkerboarded_needs_raster_;
+  info.checkerboarded_needs_record = checkerboarded_needs_record_;
   info.sequence_number = args_.frame_id.sequence_number;
 
   if (frame_skip_reason_.has_value() &&

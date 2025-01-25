@@ -23,6 +23,7 @@
 #include "config_components.h"
 
 #include "libavutil/avassert.h"
+#include "libavutil/avstring.h"
 #include "libavutil/hwcontext_mediacodec.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/mem.h"
@@ -74,6 +75,7 @@ typedef struct MediaCodecEncContext {
     int bitrate_mode;
     int level;
     int pts_as_dts;
+    int extract_extradata;
 } MediaCodecEncContext;
 
 enum {
@@ -112,6 +114,23 @@ static void mediacodec_output_format(AVCodecContext *avctx)
     ff_AMediaFormat_delete(out_format);
 }
 
+static int extract_extradata_support(AVCodecContext *avctx)
+{
+    const AVBitStreamFilter *bsf = av_bsf_get_by_name("extract_extradata");
+
+    if (!bsf) {
+        av_log(avctx, AV_LOG_WARNING, "extract_extradata bsf not found\n");
+        return 0;
+    }
+
+    for (int i = 0; bsf->codec_ids[i] != AV_CODEC_ID_NONE; i++) {
+        if (bsf->codec_ids[i] == avctx->codec_id)
+            return 1;
+    }
+
+    return 0;
+}
+
 static int mediacodec_init_bsf(AVCodecContext *avctx)
 {
     MediaCodecEncContext *s = avctx->priv_data;
@@ -120,20 +139,32 @@ static int mediacodec_init_bsf(AVCodecContext *avctx)
     int crop_right = s->width - avctx->width;
     int crop_bottom = s->height - avctx->height;
 
-    if (!crop_right && !crop_bottom)
+    /* Nothing can be done for this format now */
+    if (avctx->pix_fmt == AV_PIX_FMT_MEDIACODEC)
         return 0;
 
-    if (avctx->codec_id == AV_CODEC_ID_H264)
-        ret = snprintf(str, sizeof(str), "h264_metadata=crop_right=%d:crop_bottom=%d",
-                 crop_right, crop_bottom);
-    else if (avctx->codec_id == AV_CODEC_ID_HEVC)
-        ret = snprintf(str, sizeof(str), "hevc_metadata=crop_right=%d:crop_bottom=%d",
-                 crop_right, crop_bottom);
-    else
+    s->extract_extradata = (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER) &&
+                           extract_extradata_support(avctx);
+    if (!crop_right && !crop_bottom && !s->extract_extradata)
         return 0;
 
-    if (ret >= sizeof(str))
-        return AVERROR_BUFFER_TOO_SMALL;
+    ret = 0;
+    if (crop_right || crop_bottom) {
+        if (avctx->codec_id == AV_CODEC_ID_H264)
+            ret = snprintf(str, sizeof(str), "h264_metadata=crop_right=%d:crop_bottom=%d",
+                           crop_right, crop_bottom);
+        else if (avctx->codec_id == AV_CODEC_ID_HEVC)
+            ret = snprintf(str, sizeof(str), "hevc_metadata=crop_right=%d:crop_bottom=%d",
+                           crop_right, crop_bottom);
+        if (ret >= sizeof(str))
+            return AVERROR_BUFFER_TOO_SMALL;
+    }
+
+    if (s->extract_extradata) {
+        ret = av_strlcatf(str, sizeof(str), "%sextract_extradata", ret ? "," : "");
+        if (ret >= sizeof(str))
+            return AVERROR_BUFFER_TOO_SMALL;
+    }
 
     ret = av_bsf_list_parse_str(str, &s->bsf);
     if (ret < 0)
@@ -147,6 +178,8 @@ static int mediacodec_init_bsf(AVCodecContext *avctx)
 
     return ret;
 }
+
+static int mediacodec_generate_extradata(AVCodecContext *avctx);
 
 static av_cold int mediacodec_init(AVCodecContext *avctx)
 {
@@ -337,14 +370,14 @@ static av_cold int mediacodec_init(AVCodecContext *avctx)
         goto bailout;
 
     mediacodec_output_format(avctx);
-    if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER)
-        av_log(avctx, AV_LOG_WARNING,
-                "Mediacodec encoder doesn't support AV_CODEC_FLAG_GLOBAL_HEADER. "
-                "Use extract_extradata bsf when necessary.\n");
 
     s->frame = av_frame_alloc();
-    if (!s->frame)
+    if (!s->frame) {
         ret = AVERROR(ENOMEM);
+        goto bailout;
+    }
+
+    ret = mediacodec_generate_extradata(avctx);
 
 bailout:
     if (format)
@@ -352,9 +385,7 @@ bailout:
     return ret;
 }
 
-static int mediacodec_receive(AVCodecContext *avctx,
-                               AVPacket *pkt,
-                               int *got_packet)
+static int mediacodec_receive(AVCodecContext *avctx, AVPacket *pkt)
 {
     MediaCodecEncContext *s = avctx->priv_data;
     FFAMediaCodec *codec = s->codec;
@@ -400,7 +431,7 @@ static int mediacodec_receive(AVCodecContext *avctx,
         memcpy(s->extradata, out_buf + out_info.offset, out_info.size);
         ff_AMediaCodec_releaseOutputBuffer(codec, index, false);
         // try immediately
-        return mediacodec_receive(avctx, pkt, got_packet);
+        return mediacodec_receive(avctx, pkt);
     }
 
     ret = ff_get_encode_buffer(avctx, pkt, out_info.size + s->extradata_size, 0);
@@ -419,7 +450,6 @@ static int mediacodec_receive(AVCodecContext *avctx,
     if (out_info.flags & ff_AMediaCodec_getBufferFlagKeyFrame(codec))
         pkt->flags |= AV_PKT_FLAG_KEY;
     ret = 0;
-    *got_packet = 1;
 
     av_log(avctx, AV_LOG_TRACE, "receive packet pts %" PRId64 " dts %" PRId64
            " flags %d extradata %d\n",
@@ -510,7 +540,6 @@ static int mediacodec_encode(AVCodecContext *avctx, AVPacket *pkt)
 {
     MediaCodecEncContext *s = avctx->priv_data;
     int ret;
-    int got_packet = 0;
 
     // Return on three case:
     // 1. Serious error
@@ -525,7 +554,7 @@ static int mediacodec_encode(AVCodecContext *avctx, AVPacket *pkt)
                 return ret;
         }
 
-        ret = mediacodec_receive(avctx, pkt, &got_packet);
+        ret = mediacodec_receive(avctx, pkt);
         if (s->bsf) {
             if (!ret || ret == AVERROR_EOF)
                 ret = av_bsf_send_packet(s->bsf, pkt);
@@ -534,7 +563,7 @@ static int mediacodec_encode(AVCodecContext *avctx, AVPacket *pkt)
                 return 0;
         }
 
-        if (ret != AVERROR(EAGAIN))
+        if (ret < 0 && ret != AVERROR(EAGAIN))
             return ret;
 
         if (!s->frame->buf[0]) {
@@ -551,6 +580,110 @@ static int mediacodec_encode(AVCodecContext *avctx, AVPacket *pkt)
     }
 
     return 0;
+}
+
+static int mediacodec_send_dummy_frame(AVCodecContext *avctx)
+{
+    MediaCodecEncContext *s = avctx->priv_data;
+    int ret;
+
+    s->frame->width = avctx->width;
+    s->frame->height = avctx->height;
+    s->frame->format = avctx->pix_fmt;
+    s->frame->pts = 0;
+
+    ret = av_frame_get_buffer(s->frame, 0);
+    if (ret < 0)
+        return ret;
+
+    do {
+        ret = mediacodec_send(avctx, s->frame);
+    } while (ret == AVERROR(EAGAIN));
+    av_frame_unref(s->frame);
+
+    if (ret < 0)
+        return ret;
+
+    ret = mediacodec_send(avctx, NULL);
+    if (ret < 0) {
+        av_log(avctx, AV_LOG_ERROR, "Flush failed: %s\n", av_err2str(ret));
+        return ret;
+    }
+
+    return 0;
+}
+
+static int mediacodec_receive_dummy_pkt(AVCodecContext *avctx, AVPacket *pkt)
+{
+    MediaCodecEncContext *s = avctx->priv_data;
+    int ret;
+
+    do {
+        ret = mediacodec_receive(avctx, pkt);
+    } while (ret == AVERROR(EAGAIN));
+
+    if (ret < 0)
+        return ret;
+
+    do {
+        ret = av_bsf_send_packet(s->bsf, pkt);
+        if (ret < 0)
+            return ret;
+        ret = av_bsf_receive_packet(s->bsf, pkt);
+    } while (ret == AVERROR(EAGAIN));
+
+    return ret;
+}
+
+static int mediacodec_generate_extradata(AVCodecContext *avctx)
+{
+    MediaCodecEncContext *s = avctx->priv_data;
+    AVPacket *pkt = NULL;
+    int ret;
+    size_t side_size;
+    uint8_t *side;
+
+    if (!(avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER))
+        return 0;
+
+    if (!s->extract_extradata) {
+        av_log(avctx, AV_LOG_WARNING,
+               "Mediacodec encoder doesn't support AV_CODEC_FLAG_GLOBAL_HEADER. "
+               "Use extract_extradata bsf when necessary.\n");
+        return 0;
+    }
+
+    pkt = av_packet_alloc();
+    if (!pkt)
+        return AVERROR(ENOMEM);
+
+    ret = mediacodec_send_dummy_frame(avctx);
+    if (ret < 0)
+        goto bailout;
+    ret = mediacodec_receive_dummy_pkt(avctx, pkt);
+    if (ret < 0)
+        goto bailout;
+
+    side = av_packet_get_side_data(pkt, AV_PKT_DATA_NEW_EXTRADATA, &side_size);
+    if (side && side_size > 0) {
+        avctx->extradata = av_mallocz(side_size + AV_INPUT_BUFFER_PADDING_SIZE);
+        if (!avctx->extradata) {
+            ret = AVERROR(ENOMEM);
+            goto bailout;
+        }
+
+        memcpy(avctx->extradata, side, side_size);
+        avctx->extradata_size = side_size;
+    }
+
+bailout:
+    if (s->eof_sent) {
+        s->eof_sent = 0;
+        ff_AMediaCodec_flush(s->codec);
+    }
+    av_bsf_flush(s->bsf);
+    av_packet_free(&pkt);
+    return ret;
 }
 
 static av_cold int mediacodec_close(AVCodecContext *avctx)
@@ -571,6 +704,15 @@ static av_cold int mediacodec_close(AVCodecContext *avctx)
     av_frame_free(&s->frame);
 
     return 0;
+}
+
+static av_cold void mediacodec_flush(AVCodecContext *avctx)
+{
+    MediaCodecEncContext *s = avctx->priv_data;
+    if (s->bsf)
+        av_bsf_flush(s->bsf);
+    av_frame_unref(s->frame);
+    ff_AMediaCodec_flush(s->codec);
 }
 
 static const AVCodecHWConfigInternal *const mediacodec_hw_configs[] = {
@@ -623,13 +765,15 @@ const FFCodec ff_ ## short_name ## _mediacodec_encoder = {              \
     CODEC_LONG_NAME(long_name " Android MediaCodec encoder"),           \
     .p.type           = AVMEDIA_TYPE_VIDEO,                             \
     .p.id             = codec_id,                                       \
-    .p.capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY           \
-                        | AV_CODEC_CAP_HARDWARE,                        \
+    .p.capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |         \
+                        AV_CODEC_CAP_HARDWARE |                         \
+                        AV_CODEC_CAP_ENCODER_FLUSH,                     \
     .priv_data_size   = sizeof(MediaCodecEncContext),                   \
     .p.pix_fmts       = avc_pix_fmts,                                   \
     .init             = mediacodec_init,                                \
     FF_CODEC_RECEIVE_PACKET_CB(mediacodec_encode),                      \
     .close            = mediacodec_close,                               \
+    .flush            = mediacodec_flush,                               \
     .p.priv_class     = &short_name ## _mediacodec_class,               \
     .caps_internal    = FF_CODEC_CAP_INIT_CLEANUP,                      \
     .p.wrapper_name = "mediacodec",                                     \

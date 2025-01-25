@@ -11,7 +11,9 @@
 
 #include <atomic>
 #include <iterator>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <type_traits>
 
 #include "v8config.h"  // NOLINT(build/include_directory)
@@ -87,7 +89,10 @@ struct SmiTagging<4> {
     // Truncate and shift down (requires >> to be sign extending).
     return static_cast<int32_t>(static_cast<uint32_t>(value)) >> shift_bits;
   }
-  V8_INLINE static constexpr bool IsValidSmi(intptr_t value) {
+
+  template <class T, typename std::enable_if_t<std::is_integral_v<T> &&
+                                               std::is_signed_v<T>>* = nullptr>
+  V8_INLINE static constexpr bool IsValidSmi(T value) {
     // Is value in range [kSmiMinValue, kSmiMaxValue].
     // Use unsigned operations in order to avoid undefined behaviour in case of
     // signed integer overflow.
@@ -96,7 +101,15 @@ struct SmiTagging<4> {
            (static_cast<uintptr_t>(kSmiMaxValue) -
             static_cast<uintptr_t>(kSmiMinValue));
   }
-#ifndef V8_HOST_ARCH_64_BIT
+
+  template <class T,
+            typename std::enable_if_t<std::is_integral_v<T> &&
+                                      std::is_unsigned_v<T>>* = nullptr>
+  V8_INLINE static constexpr bool IsValidSmi(T value) {
+    static_assert(kSmiMaxValue <= std::numeric_limits<uintptr_t>::max());
+    return value <= static_cast<uintptr_t>(kSmiMaxValue);
+  }
+
   // Same as the `intptr_t` version but works with int64_t on 32-bit builds
   // without slowing down anything else.
   V8_INLINE static constexpr bool IsValidSmi(int64_t value) {
@@ -105,7 +118,11 @@ struct SmiTagging<4> {
            (static_cast<uint64_t>(kSmiMaxValue) -
             static_cast<uint64_t>(kSmiMinValue));
   }
-#endif
+
+  V8_INLINE static constexpr bool IsValidSmi(uint64_t value) {
+    static_assert(kSmiMaxValue <= std::numeric_limits<uint64_t>::max());
+    return value <= static_cast<uint64_t>(kSmiMaxValue);
+  }
 };
 
 // Smi constants for systems where tagged pointer is a 64-bit value.
@@ -122,9 +139,20 @@ struct SmiTagging<8> {
     // Shift down and throw away top 32 bits.
     return static_cast<int>(static_cast<intptr_t>(value) >> shift_bits);
   }
-  V8_INLINE static constexpr bool IsValidSmi(intptr_t value) {
+
+  template <class T, typename std::enable_if_t<std::is_integral_v<T> &&
+                                               std::is_signed_v<T>>* = nullptr>
+  V8_INLINE static constexpr bool IsValidSmi(T value) {
     // To be representable as a long smi, the value must be a 32-bit integer.
     return (value == static_cast<int32_t>(value));
+  }
+
+  template <class T,
+            typename std::enable_if_t<std::is_integral_v<T> &&
+                                      std::is_unsigned_v<T>>* = nullptr>
+  V8_INLINE static constexpr bool IsValidSmi(T value) {
+    return (static_cast<uintptr_t>(value) ==
+            static_cast<uintptr_t>(static_cast<int32_t>(value)));
   }
 };
 
@@ -331,6 +359,33 @@ using CppHeapPointer_t = Address;
 constexpr CppHeapPointer_t kNullCppHeapPointer = 0;
 constexpr CppHeapPointerHandle kNullCppHeapPointerHandle = 0;
 
+constexpr uint64_t kCppHeapPointerMarkBit = 1ULL;
+constexpr uint64_t kCppHeapPointerTagShift = 1;
+constexpr uint64_t kCppHeapPointerPayloadShift = 16;
+
+#ifdef V8_COMPRESS_POINTERS
+// CppHeapPointers use a dedicated pointer table. These constants control the
+// size and layout of the table. See the corresponding constants for the
+// external pointer table for further details.
+constexpr size_t kCppHeapPointerTableReservationSize =
+    kExternalPointerTableReservationSize;
+constexpr uint32_t kCppHeapPointerIndexShift = kExternalPointerIndexShift;
+
+constexpr int kCppHeapPointerTableEntrySize = 8;
+constexpr int kCppHeapPointerTableEntrySizeLog2 = 3;
+constexpr size_t kMaxCppHeapPointers =
+    kCppHeapPointerTableReservationSize / kCppHeapPointerTableEntrySize;
+static_assert((1 << (32 - kCppHeapPointerIndexShift)) == kMaxCppHeapPointers,
+              "kCppHeapPointerTableReservationSize and "
+              "kCppHeapPointerIndexShift don't match");
+
+#else  // !V8_COMPRESS_POINTERS
+
+// Needed for the V8.SandboxedCppHeapPointersCount histogram.
+constexpr size_t kMaxCppHeapPointers = 0;
+
+#endif  // V8_COMPRESS_POINTERS
+
 // See `ExternalPointerHandle` for the main documentation. The difference to
 // `ExternalPointerHandle` is that the handle always refers to a
 // (external pointer, size) tuple. The handles are used in combination with a
@@ -437,7 +492,7 @@ static_assert((1 << (32 - kExternalBufferHandleShift)) ==
 // extension (MTE) which would use bits [56, 60).
 //
 // External pointer tables are also available even when the sandbox is off but
-// pointer compression is on. In that case, the mechanism can be used to easy
+// pointer compression is on. In that case, the mechanism can be used to ease
 // alignment requirements as it turns unaligned 64-bit raw pointers into
 // aligned 32-bit indices. To "opt-in" to the external pointer table mechanism
 // for this purpose, instead of using the ExternalPointer accessors one needs to
@@ -452,7 +507,7 @@ constexpr uint64_t kExternalPointerTagShift = 48;
 // These are sorted so that tags can be grouped together and it can efficiently
 // be checked if a tag belongs to a given group. See for example the
 // IsSharedExternalPointerType routine.
-constexpr uint64_t kAllExternalPointerTypeTags[] = {
+constexpr uint64_t kAllTagsForAndBasedTypeChecking[] = {
     0b00001111, 0b00010111, 0b00011011, 0b00011101, 0b00011110, 0b00100111,
     0b00101011, 0b00101101, 0b00101110, 0b00110011, 0b00110101, 0b00110110,
     0b00111001, 0b00111010, 0b00111100, 0b01000111, 0b01001011, 0b01001101,
@@ -466,8 +521,8 @@ constexpr uint64_t kAllExternalPointerTypeTags[] = {
     0b11001100, 0b11010001, 0b11010010, 0b11010100, 0b11011000, 0b11100001,
     0b11100010, 0b11100100, 0b11101000, 0b11110000};
 
-#define TAG(i)                                                    \
-  ((kAllExternalPointerTypeTags[i] << kExternalPointerTagShift) | \
+#define TAG(i)                                                        \
+  ((kAllTagsForAndBasedTypeChecking[i] << kExternalPointerTagShift) | \
    kExternalPointerMarkBit)
 
 // clang-format off
@@ -486,50 +541,73 @@ constexpr uint64_t kAllExternalPointerTypeTags[] = {
   V(kExternalStringResourceTag,                 TAG(1)) \
   V(kExternalStringResourceDataTag,             TAG(2)) \
   V(kLastSharedTag,                             TAG(2))
+  // Leave some space in the tag range here for future shared tags.
 
 // External pointers using these tags are kept in a per-Isolate external
 // pointer table and can only be accessed when this Isolate is active.
 #define PER_ISOLATE_EXTERNAL_POINTER_TAGS(V)             \
-  V(kNativeContextMicrotaskQueueTag,            TAG(10)) \
-  V(kEmbedderDataSlotPayloadTag,                TAG(11)) \
+  V(kNativeContextMicrotaskQueueTag,            TAG(5)) \
+  V(kEmbedderDataSlotPayloadTag,                TAG(6)) \
 /* This tag essentially stands for a `void*` pointer in the V8 API, and */ \
 /* it is the Embedder's responsibility to ensure type safety (against */   \
 /* substitution) and lifetime validity of these objects. */                \
-  V(kExternalObjectValueTag,                    TAG(12)) \
-  V(kFunctionTemplateInfoCallbackTag,           TAG(13)) \
-  V(kAccessorInfoGetterTag,                     TAG(14)) \
-  V(kAccessorInfoSetterTag,                     TAG(15)) \
-  V(kWasmInternalFunctionCallTargetTag,         TAG(16)) \
-  V(kWasmTypeInfoNativeTypeTag,                 TAG(17)) \
-  V(kWasmExportedFunctionDataSignatureTag,      TAG(18)) \
-  V(kWasmContinuationJmpbufTag,                 TAG(19)) \
-  V(kWasmIndirectFunctionTargetTag,             TAG(20)) \
+  V(kExternalObjectValueTag,                    TAG(7)) \
+  V(kFunctionTemplateInfoCallbackTag,           TAG(8)) \
+  V(kAccessorInfoGetterTag,                     TAG(9)) \
+  V(kAccessorInfoSetterTag,                     TAG(10)) \
+  V(kWasmInternalFunctionCallTargetTag,         TAG(11)) \
+  V(kWasmTypeInfoNativeTypeTag,                 TAG(12)) \
+  V(kWasmExportedFunctionDataSignatureTag,      TAG(13)) \
+  V(kWasmContinuationJmpbufTag,                 TAG(14)) \
+  V(kWasmStackMemoryTag,                        TAG(15)) \
+  V(kWasmIndirectFunctionTargetTag,             TAG(16)) \
   /* Foreigns */ \
-  V(kGenericForeignTag,                         TAG(30)) \
+  V(kGenericForeignTag,                         TAG(20)) \
+  V(kApiNamedPropertyQueryCallbackTag,          TAG(21)) \
+  V(kApiNamedPropertyGetterCallbackTag,         TAG(22)) \
+  V(kApiNamedPropertySetterCallbackTag,         TAG(23)) \
+  V(kApiNamedPropertyDescriptorCallbackTag,     TAG(24)) \
+  V(kApiNamedPropertyDefinerCallbackTag,        TAG(25)) \
+  V(kApiNamedPropertyDeleterCallbackTag,        TAG(26)) \
+  V(kApiIndexedPropertyQueryCallbackTag,        TAG(27)) \
+  V(kApiIndexedPropertyGetterCallbackTag,       TAG(28)) \
+  V(kApiIndexedPropertySetterCallbackTag,       TAG(29)) \
+  V(kApiIndexedPropertyDescriptorCallbackTag,   TAG(30)) \
+  V(kApiIndexedPropertyDefinerCallbackTag,      TAG(31)) \
+  V(kApiIndexedPropertyDeleterCallbackTag,      TAG(32)) \
+  V(kApiIndexedPropertyEnumeratorCallbackTag,   TAG(33)) \
+  V(kApiAccessCheckCallbackTag,                 TAG(34)) \
+  V(kApiAbortScriptExecutionCallbackTag,        TAG(35)) \
+  V(kSyntheticModuleTag,                        TAG(36)) \
+  V(kMicrotaskCallbackTag,                      TAG(37)) \
+  V(kMicrotaskCallbackDataTag,                  TAG(38)) \
+  V(kCFunctionTag,                              TAG(39)) \
+  V(kCFunctionInfoTag,                          TAG(40)) \
+  V(kMessageListenerTag,                        TAG(41)) \
+  V(kWaiterQueueForeignTag,                     TAG(42)) \
   /* Managed */ \
-  V(kFirstManagedResourceTag,                   TAG(40)) \
-  V(kGenericManagedTag,                         TAG(40)) \
-  V(kWasmWasmStreamingTag,                      TAG(41)) \
-  V(kWasmFuncDataTag,                           TAG(42)) \
-  V(kWasmManagedDataTag,                        TAG(43)) \
-  V(kWasmNativeModuleTag,                       TAG(44)) \
-  V(kWasmStackMemoryTag,                        TAG(45)) \
-  V(kIcuBreakIteratorTag,                       TAG(46)) \
-  V(kIcuUnicodeStringTag,                       TAG(47)) \
-  V(kIcuListFormatterTag,                       TAG(48)) \
-  V(kIcuLocaleTag,                              TAG(49)) \
-  V(kIcuSimpleDateFormatTag,                    TAG(50)) \
-  V(kIcuDateIntervalFormatTag,                  TAG(51)) \
-  V(kIcuRelativeDateTimeFormatterTag,           TAG(52)) \
-  V(kIcuLocalizedNumberFormatterTag,            TAG(53)) \
-  V(kIcuPluralRulesTag,                         TAG(54)) \
-  V(kIcuCollatorTag,                            TAG(55)) \
-  V(kDisplayNamesInternalTag,                   TAG(56)) \
+  V(kFirstManagedResourceTag,                   TAG(50)) \
+  V(kGenericManagedTag,                         TAG(50)) \
+  V(kWasmWasmStreamingTag,                      TAG(51)) \
+  V(kWasmFuncDataTag,                           TAG(52)) \
+  V(kWasmManagedDataTag,                        TAG(53)) \
+  V(kWasmNativeModuleTag,                       TAG(54)) \
+  V(kIcuBreakIteratorTag,                       TAG(55)) \
+  V(kIcuUnicodeStringTag,                       TAG(56)) \
+  V(kIcuListFormatterTag,                       TAG(57)) \
+  V(kIcuLocaleTag,                              TAG(58)) \
+  V(kIcuSimpleDateFormatTag,                    TAG(59)) \
+  V(kIcuDateIntervalFormatTag,                  TAG(60)) \
+  V(kIcuRelativeDateTimeFormatterTag,           TAG(61)) \
+  V(kIcuLocalizedNumberFormatterTag,            TAG(62)) \
+  V(kIcuPluralRulesTag,                         TAG(63)) \
+  V(kIcuCollatorTag,                            TAG(64)) \
+  V(kDisplayNamesInternalTag,                   TAG(65)) \
   /* External resources whose lifetime is tied to */     \
   /* their entry in the external pointer table but */    \
   /* which are not referenced via a Managed */           \
-  V(kArrayBufferExtensionTag,                   TAG(57)) \
-  V(kLastManagedResourceTag,                    TAG(57)) \
+  V(kArrayBufferExtensionTag,                   TAG(66)) \
+  V(kLastManagedResourceTag,                    TAG(66)) \
 
 // All external pointer tags.
 #define ALL_EXTERNAL_POINTER_TAGS(V) \
@@ -727,6 +805,29 @@ constexpr bool kAllCodeObjectsLiveInTrustedSpace =
     kRuntimeGeneratedCodeObjectsLiveInTrustedSpace &&
     kBuiltinCodeObjectsLiveInTrustedSpace;
 
+//
+// JavaScript Dispatch Table
+//
+// A JSDispatchHandle represents a 32-bit index into a JSDispatchTable.
+using JSDispatchHandle = uint32_t;
+
+constexpr JSDispatchHandle kNullJSDispatchHandle = 0;
+
+// The size of the virtual memory reservation for the JSDispatchTable.
+// As with the other tables, a maximum table size in combination with shifted
+// indices allows omitting bounds checks.
+constexpr size_t kJSDispatchTableReservationSize = 128 * MB;
+constexpr uint32_t kJSDispatchHandleShift = 9;
+
+// The maximum number of entries in a JSDispatchTable.
+constexpr int kJSDispatchTableEntrySize = 16;
+constexpr int kJSDispatchTableEntrySizeLog2 = 4;
+constexpr size_t kMaxJSDispatchEntries =
+    kJSDispatchTableReservationSize / kJSDispatchTableEntrySize;
+static_assert((1 << (32 - kJSDispatchHandleShift)) == kMaxJSDispatchEntries,
+              "kJSDispatchTableReservationSize and kJSDispatchEntryHandleShift "
+              "don't match");
+
 // {obj} must be the raw tagged pointer representation of a HeapObject
 // that's guaranteed to never be in ReadOnlySpace.
 V8_EXPORT internal::Isolate* IsolateFromNeverReadOnlySpaceObject(Address obj);
@@ -864,6 +965,10 @@ class Internals {
   static const int kIsolateRootsOffset =
       kContinuationPreservedEmbedderDataOffset + kApiSystemPointerSize;
 
+  // Assert scopes
+  static const int kDisallowGarbageCollectionAlign = alignof(uint32_t);
+  static const int kDisallowGarbageCollectionSize = sizeof(uint32_t);
+
 #if V8_STATIC_ROOTS_BOOL
 
 // These constants are copied from static-roots.h and guarded by static asserts.
@@ -922,8 +1027,8 @@ class Internals {
 
   // Constants used by PropertyCallbackInfo to check if we should throw when an
   // error occurs.
-  static const int kThrowOnError = 0;
-  static const int kDontThrow = 1;
+  static const int kDontThrow = 0;
+  static const int kThrowOnError = 1;
   static const int kInferShouldThrowMode = 2;
 
   // Soft limit for AdjustAmountofExternalAllocatedMemory. Trigger an
@@ -956,19 +1061,35 @@ class Internals {
     return PlatformSmiTagging::SmiToInt(value);
   }
 
+  V8_INLINE static constexpr Address AddressToSmi(Address value) {
+    return (value << (kSmiTagSize + PlatformSmiTagging::kSmiShiftSize)) |
+           kSmiTag;
+  }
+
   V8_INLINE static constexpr Address IntToSmi(int value) {
-    return internal::IntToSmi(value);
+    return AddressToSmi(static_cast<Address>(value));
   }
 
-  V8_INLINE static constexpr bool IsValidSmi(intptr_t value) {
+  template <typename T,
+            typename std::enable_if_t<std::is_integral_v<T>>* = nullptr>
+  V8_INLINE static constexpr Address IntegralToSmi(T value) {
+    return AddressToSmi(static_cast<Address>(value));
+  }
+
+  template <typename T,
+            typename std::enable_if_t<std::is_integral_v<T>>* = nullptr>
+  V8_INLINE static constexpr bool IsValidSmi(T value) {
     return PlatformSmiTagging::IsValidSmi(value);
   }
 
-#ifndef V8_HOST_ARCH_64_BIT
-  V8_INLINE static constexpr bool IsValidSmi(int64_t value) {
-    return PlatformSmiTagging::IsValidSmi(value);
+  template <typename T,
+            typename std::enable_if_t<std::is_integral_v<T>>* = nullptr>
+  static constexpr std::optional<Address> TryIntegralToSmi(T value) {
+    if (V8_LIKELY(PlatformSmiTagging::IsValidSmi(value))) {
+      return {AddressToSmi(static_cast<Address>(value))};
+    }
+    return {};
   }
-#endif
 
 #if V8_STATIC_ROOTS_BOOL
   V8_INLINE static bool is_identical(Address obj, Tagged_t constant) {
@@ -1510,6 +1631,13 @@ class HandleHelper final {
 };
 
 V8_EXPORT void VerifyHandleIsNonEmpty(bool is_empty);
+
+// These functions are here just to match friend declarations in
+// XxxCallbackInfo classes allowing these functions to access the internals
+// of the info objects. These functions are supposed to be called by debugger
+// macros.
+void PrintFunctionCallbackInfo(void* function_callback_info);
+void PrintPropertyCallbackInfo(void* property_callback_info);
 
 }  // namespace internal
 }  // namespace v8

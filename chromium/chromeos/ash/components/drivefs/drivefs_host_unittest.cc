@@ -64,7 +64,7 @@ class MockDriveFs : public mojom::DriveFsInterceptorForTesting,
   MockDriveFs() = default;
 
   DriveFs* GetForwardingInterface() override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
 
@@ -187,6 +187,8 @@ class TestingDriveFsHostDelegate : public DriveFsHost::Delegate,
 
   void PersistNotification(
       mojom::DriveFsNotificationPtr notification) override {}
+
+  void PersistSyncErrors(mojom::MirrorSyncErrorListPtr error_list) override {}
 
   const raw_ptr<signin::IdentityManager> identity_manager_;
   const AccountId account_id_;
@@ -606,9 +608,11 @@ TEST_F(DriveFsHostTest, DisplayConfirmDialogImpl_IgnoreIfNoHandler) {
 
 TEST_F(DriveFsHostTest, DisplayConfirmDialogImpl_IgnoreUnknownReasonTypes) {
   ASSERT_NO_FATAL_FAILURE(DoMount());
-  host_->set_dialog_handler(base::BindRepeating(
-      [](const mojom::DialogReason&,
-         base::OnceCallback<void(mojom::DialogResult)>) { NOTREACHED(); }));
+  host_->set_dialog_handler(
+      base::BindRepeating([](const mojom::DialogReason&,
+                             base::OnceCallback<void(mojom::DialogResult)>) {
+        NOTREACHED_IN_MIGRATION();
+      }));
   bool called = false;
   delegate_->DisplayConfirmDialog(
       mojom::DialogReason::New(

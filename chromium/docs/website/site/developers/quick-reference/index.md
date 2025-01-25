@@ -115,8 +115,9 @@ This page provides a quick reference for common development related commands.
 
 ### Review and commit
 
-> Please see the [contributing code](/developers/contributing-code) page for
-> full details.
+> Please see the
+> [contributing code](https://chromium.googlesource.com/chromium/src/+/main/docs/contributing.md)
+> page for full details.
 
 > **To upload a changelist for review:** gcl upload &lt;changename&gt;
 

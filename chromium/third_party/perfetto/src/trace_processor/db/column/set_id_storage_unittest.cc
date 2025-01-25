@@ -394,27 +394,34 @@ TEST(SetIdStorage, StableSort) {
   auto chain = storage.MakeChain();
   auto make_tokens = []() {
     return std::vector{
-        column::DataLayerChain::SortToken{3, 3},
-        column::DataLayerChain::SortToken{2, 2},
-        column::DataLayerChain::SortToken{1, 1},
-        column::DataLayerChain::SortToken{0, 0},
-        column::DataLayerChain::SortToken{4, 4},
+        Token{3, 3}, Token{2, 2}, Token{1, 1}, Token{0, 0}, Token{4, 4},
     };
   };
   {
     auto tokens = make_tokens();
     chain->StableSort(tokens.data(), tokens.data() + tokens.size(),
-                      column::DataLayerChain::SortDirection::kAscending);
+                      SortDirection::kAscending);
     ASSERT_THAT(utils::ExtractPayloadForTesting(tokens),
                 ElementsAre(2, 1, 0, 3, 4));
   }
   {
     auto tokens = make_tokens();
     chain->StableSort(tokens.data(), tokens.data() + tokens.size(),
-                      column::DataLayerChain::SortDirection::kDescending);
+                      SortDirection::kDescending);
     ASSERT_THAT(utils::ExtractPayloadForTesting(tokens),
                 ElementsAre(3, 4, 2, 1, 0));
   }
+}
+
+TEST(SetIdStorage, Distinct) {
+  std::vector<uint32_t> storage_data{0, 0, 0, 3, 3, 3, 6, 6, 6, 9, 9, 9};
+  SetIdStorage storage(&storage_data);
+  auto chain = storage.MakeChain();
+
+  auto indices = Indices::CreateWithIndexPayloadForTesting(
+      {10, 9, 0, 1, 4}, Indices::State::kNonmonotonic);
+  chain->Distinct(indices);
+  ASSERT_THAT(utils::ExtractPayloadForTesting(indices), ElementsAre(0, 2, 4));
 }
 
 }  // namespace

@@ -5,6 +5,7 @@
 #include "quiche/quic/core/qpack/qpack_instruction_encoder.h"
 
 #include <limits>
+#include <string>
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
@@ -167,7 +168,7 @@ void QpackInstructionEncoder::DoWriteString(absl::string_view name,
   absl::string_view string_to_write =
       (field_->type == QpackInstructionFieldType::kName) ? name : value;
   if (use_huffman_) {
-    http2::HuffmanEncodeFast(string_to_write, string_length_, output);
+    http2::HuffmanEncode(string_to_write, string_length_, output);
   } else {
     absl::StrAppend(output, string_to_write);
   }

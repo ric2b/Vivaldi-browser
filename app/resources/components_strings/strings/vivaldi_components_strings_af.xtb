@@ -16,7 +16,6 @@
 <translation id="1728677426644403582">U bekyk die bron van ’n webblad</translation>
 <translation id="1734878702283171397">Probeer tans die stelseladmin kontak.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Probeer die Windows netwerkdiagnose<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">Hierdie werf bevat skadelike programmatuur</translation>
 <translation id="1974060860693918893">Gevorderd</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Gaan tans die instaanbediener en brandmuur na<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Uitgereik aan: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -42,7 +41,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Verbindingsdiagnose loop tans<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Die verbinding is herstel.</translation>
 <translation id="2826760142808435982">Die verbinding is geënkripteer en bekragtig met <ph name="CIPHER" /> en gebruik <ph name="KX" /> as die sleuteluitruilmeganisme.</translation>
-<translation id="2856444702002559011">Aanvallers probeer dalk om u inligting (bv. wagwoorde, boodskappe of kredietkaarte) vanaf <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> te steel. <ph name="BEGIN_LEARN_MORE_LINK" />Meer inligting<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">’n Netwerkverandering is bespeur.</translation>
 <translation id="2948083400971632585">U kan enige instaanbedieners wat vir ’n verbinding opgestel is, vanuit die instellingsblad deaktiveer.</translation>
 <translation id="2991571918955627853">U kan nie nou <ph name="SITE" /> besoek nie omdat die webwerf HSTS gebruik. Netwerkfoute en -aanvalle is gewoonlik tydelik, dus sal hierdie blad waarskynlik later werk.</translation>
@@ -92,7 +90,6 @@
 <translation id="4265872034478892965">Deur u administrateur toegelaat</translation>
 <translation id="4305666528087210886">Kon nie toegang tot u lêer kry nie</translation>
 <translation id="4312866146174492540">Versper (verstek)</translation>
-<translation id="4356973930735388585">Aanvallers op hierdie werf kan moontlik probeer om gevaarlike programme op u rekenaar te installeer om sodoende u inligting (bv. foto’s, wagwoorde, boodskappe en kredietkaarte) te wis of te skrap.</translation>
 <translation id="4408413947728134509">Koekies <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> het nie u aantekensertifikaat aanvaar nie, of een is dalk nie verskaf nie.</translation>
 <translation id="4506599922270137252">Kontak tans die stelseladmin</translation>
@@ -144,7 +141,6 @@
 <translation id="6305205051461490394"><ph name="URL" /> is onbereikbaar.</translation>
 <translation id="6321917430147971392">Gaan u DNS-instellings na</translation>
 <translation id="6328639280570009161">Probeer netwerkvoorspelling deaktiveer</translation>
-<translation id="6328786501058569169">Hierdie werf is bedrieglik</translation>
 <translation id="6348220984832452017">Aktiewe variasies</translation>
 <translation id="6358450015545214790">Wat beteken hierdie?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> het geweier om te verbind.</translation>
@@ -158,7 +154,6 @@
 <translation id="6897140037006041989">Gebruikeragent</translation>
 <translation id="6957624206566198865">Open blad in ’n nuwe privaat oortjie</translation>
 <translation id="7053983685419859001">Versper</translation>
-<translation id="7079718277001814089">Hierdie werf bevat skadelike programmatuur</translation>
 <translation id="7096937462164235847">Hierdie webwerf se identiteit is nie geverifieer nie.</translation>
 <translation id="7108819624672055576">Deur ’n uitbreiding toegelaat</translation>
 <translation id="7111012039238467737">(Geldig)</translation>
@@ -175,7 +170,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kan tans nie hierdie versoek verwerk nie.</translation>
 <translation id="7662298039739062396">Instelling word deur uitbreiding beheer</translation>
 <translation id="7663736086183791259">Sertifikaat <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Aanvallers op hierdie werf kan u dalk programme probeer laat installeer wat u blaai-ervaring skaad (bv. deur u tuisblad te verander of ekstra advertensies te vertoon op werwe wat u besoek).</translation>
 <translation id="7714464543167945231">Sertifikaat</translation>
 <translation id="7716147886133743102">Deur u administrateur versper</translation>
 <translation id="7716424297397655342">Hierdie werf kan nie vanuit die kasgeheue gelaai word nie</translation>
@@ -185,7 +179,6 @@
 <translation id="7878562273885520351">U wagwoord is dalk gekompromitteer</translation>
 <translation id="7951415247503192394">(32-bis)</translation>
 <translation id="7953236668995583915">Herlaai hierdie blad om u bygewerkte instellings op hierdie webwerf toe te pas</translation>
-<translation id="8025119109950072390">Aanvallers op hierdie werf kan u dalk iets gevaarliks probeer laat doen soos om programmatuur te installeer of u persoonlike inligting (bv. wagwoorde, telefoonnommers of kredietkaarte) bloot te stel.</translation>
 <translation id="8037357227543935929">Vra (verstek)</translation>
 <translation id="8041940743680923270">Gebruik globale verstek (Vra)</translation>
 <translation id="808894953321890993">Verander wagwoord</translation>

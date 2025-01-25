@@ -9,10 +9,9 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/companion/core/features.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
-#include "chrome/browser/ui/side_panel/companion/companion_utils.h"
+#include "chrome/browser/ui/views/side_panel/companion/companion_utils.h"
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model_factory.h"
 #include "chrome/browser/ui/toolbar/toolbar_pref_names.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
@@ -65,7 +64,7 @@ class PinnedToolbarActionsModelTestObserver
   }
 
   void OnActionsChanged() override {
-    last_changed_ids_ = model_->pinned_action_ids();
+    last_changed_ids_ = model_->PinnedActionIds();
   }
 
   // Signals that the given action with `id` has been moved in the model.
@@ -91,10 +90,7 @@ class PinnedToolbarActionsModelBrowserTest : public InProcessBrowserTest {
  public:
   PinnedToolbarActionsModelBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
-        {features::kSidePanelPinning,
-         companion::features::internal::kSidePanelCompanion,
-         features::kChromeRefresh2023},
-        {});
+        {companion::features::internal::kSidePanelCompanion}, {});
   }
 
   PinnedToolbarActionsModelBrowserTest(

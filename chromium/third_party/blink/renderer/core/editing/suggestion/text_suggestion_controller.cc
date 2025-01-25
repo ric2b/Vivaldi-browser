@@ -5,7 +5,7 @@
 #include "third_party/blink/renderer/core/editing/suggestion/text_suggestion_controller.h"
 
 #include "base/ranges/algorithm.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
 #include "third_party/blink/renderer/core/clipboard/data_transfer_access_policy.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
@@ -439,6 +439,11 @@ void TextSuggestionController::ShowSpellCheckMenu(
     suggestion_ptrs.push_back(std::move(info_ptr));
   }
 
+  // |FrameSelection::AbsoluteCaretBounds()| requires clean layout.
+  // TODO(editing-dev): The use of UpdateStyleAndLayout
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  GetFrame().GetDocument()->UpdateStyleAndLayout(
+      DocumentUpdateReason::kSpellCheck);
   const gfx::Rect& absolute_bounds =
       GetFrame().Selection().AbsoluteCaretBounds();
   const gfx::Rect& viewport_bounds =
@@ -649,8 +654,10 @@ void TextSuggestionController::ReplaceRangeWithText(const EphemeralRange& range,
 
   if (is_canceled)
     return;
-  GetFrame().GetEditor().ReplaceSelectionWithText(
-      replacement, false, false, InputEvent::InputType::kInsertReplacementText);
+
+  GetFrame().GetEditor().InsertTextWithoutSendingTextEvent(
+      replacement, false, nullptr,
+      InputEvent::InputType::kInsertReplacementText);
 }
 
 }  // namespace blink

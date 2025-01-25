@@ -18,6 +18,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "extensions/browser/api/declarative/rules_registry_service.h"
+#include "extensions/browser/api/declarative_net_request/action_tracker.h"
 #include "extensions/browser/api/declarative_net_request/constants.h"
 #include "extensions/browser/api/declarative_net_request/request_action.h"
 #include "extensions/browser/api/declarative_net_request/rules_monitor_service.h"
@@ -31,11 +32,13 @@
 #include "extensions/browser/api/web_request/web_request_event_details.h"
 #include "extensions/browser/api/web_request/web_request_event_router_factory.h"
 #include "extensions/browser/api/web_request/web_request_info.h"
+#include "extensions/browser/api/web_request/web_request_permissions.h"
 #include "extensions/browser/api/web_request/web_request_time_tracker.h"
 #include "extensions/browser/api_activity_monitor.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extensions_browser_client.h"
+#include "extensions/browser/guest_view/guest_view_events.h"
 #include "extensions/browser/process_map.h"
 #include "extensions/common/api/web_request/web_request_activity_log_constants.h"
 #include "extensions/common/error_utils.h"
@@ -132,7 +135,8 @@ events::HistogramValue GetEventHistogramValue(const std::string& event_name) {
 
   // There is no histogram value for this event name. It should be added to
   // either the mapping here, or in guest_view_events.
-  NOTREACHED() << "Event " << event_name << " must have a histogram value";
+  NOTREACHED_IN_MIGRATION()
+      << "Event " << event_name << " must have a histogram value";
   return events::UNKNOWN;
 }
 
@@ -159,7 +163,7 @@ const char* GetRequestStageAsString(WebRequestEventRouter::EventTypes type) {
     case WebRequestEventRouter::kOnCompleted:
       return keys::kOnCompleted;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return "Not reached";
 }
 
@@ -373,6 +377,13 @@ void OnDNRActionMatched(content::BrowserContext* browser_context,
 
   action_tracker.OnRuleMatched(action, request);
   action.tracked = true;
+
+  // If `action` is tracked and it may match an entry in
+  // `request.max_priority_allow_action`, the entry doesn't need to have its
+  // `tracked` updated.
+  // `request.ShouldRecordMatchedAllowRuleInOnHeadersReceived` will only record
+  // an allow rule matched in OnHeadersReceived with a greater priority than one
+  // matched in OnBeforeRequest.
 }
 
 using CallbacksForPageLoad = std::list<base::OnceClosure>;
@@ -577,7 +588,7 @@ helpers::EventResponseDelta CalculateDelta(
           response->extension_id, response->extension_install_time,
           response->cancel, response->auth_credentials);
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return helpers::EventResponseDelta("", base::Time());
   }
 }
@@ -893,7 +904,7 @@ int WebRequestEventRouter::OnBeforeRequest(
     }
   }
 
-  // Whether to initialized |blocked_requests_|.
+  // Whether to initialized `blocked_requests_`.
   bool initialize_blocked_requests = false;
 
   initialize_blocked_requests |= ProcessDeclarativeRules(
@@ -917,17 +928,12 @@ int WebRequestEventRouter::OnBeforeRequest(
         browser_context, request, listeners, std::move(event_details));
   }
 
-  // Handle Declarative Net Request API rules. In case the request is blocked or
-  // redirected, we un-block the request and ignore any subsequent responses
-  // from webRequestBlocking listeners. Note: We don't remove the request from
-  // the |EventListener::blocked_requests| set of any blocking listeners it was
-  // dispatched to, since the listener's response will be ignored in
-  // |DecrementBlockCount| anyway.
-
-  // Only checking the rules in the OnBeforeRequest stage works, since the rules
-  // currently only depend on the request url, initiator and resource type,
-  // which should stay the same during the diffierent network request stages. A
-  // redirect should cause another OnBeforeRequest call.
+  // Handle Declarative Net Request API rules matched in this request phase.
+  // In case the request is blocked or redirected, we un-block the request and
+  // ignore any subsequent responses from webRequestBlocking listeners. Note: We
+  // don't remove the request from the `EventListener::blocked_requests` set of
+  // any blocking listeners it was dispatched to, since the listener's response
+  // will be ignored in `DecrementBlockCount` anyway.
   declarative_net_request::RulesetManager* ruleset_manager =
       declarative_net_request::RulesMonitorService::Get(browser_context)
           ->ruleset_manager();
@@ -953,9 +959,12 @@ int WebRequestEventRouter::OnBeforeRequest(
       scoped_timer = base::ScopedClosureRunner(
           base::BindOnce(record_completion_time,
                          &GetExtensionWebRequestTimeTracker(), request->id));
-    }
 
-    for (const auto& action : actions) {
+      // Only the first action in `actions` need to be checked, as all action
+      // types except MODIFY_HEADERS expect only one action, and for
+      // MODIFY_HEADERS, a check is performed to make sure all `actions` are
+      // MODIFY_HEADERS.
+      const DNRRequestAction& action = actions[0];
       switch (action.type) {
         case DNRRequestAction::Type::BLOCK:
           ClearPendingCallbacks(browser_context, *request);
@@ -1159,9 +1168,14 @@ int WebRequestEventRouter::OnHeadersReceived(
             *request, original_response_headers, is_incognito_context);
 
     // TODO(crbug.com/40727004): This shares a lot of logic with the equivalent
-    // loop in OnBeforeRequest. Refactor into a common method once all action
+    // block in OnBeforeRequest. Refactor into a common method once all action
     // types are supported.
-    for (const auto& action : actions) {
+    if (!actions.empty()) {
+      // Similar to OnBeforeRequest, only the first action needs to be examined.
+      // In the case of MODIFY_HEADERS, any operations needed to re-compute
+      // `request->dnr_actions` only needs to be executed once.
+      const DNRRequestAction& action = actions[0];
+
       switch (action.type) {
         case DNRRequestAction::Type::BLOCK:
           ClearPendingCallbacks(browser_context, *request);
@@ -1221,6 +1235,8 @@ int WebRequestEventRouter::OnHeadersReceived(
           // to `request->dnr_actions` since said action(s) can be taken on the
           // request now. Modify header actions need to be saved since they will
           // take effect later.
+          // Note: Since `actions` will be moved here either way, `action` is
+          // unsafe to use after this point!
 
           // If no modify header actions were matched in previous request
           // stages, then `request->dnr_actions` can simply be overwritten by
@@ -2402,7 +2418,7 @@ int WebRequestEventRouter::ExecuteDeltas(
         blocked_request.response_deltas, blocked_request.auth_credentials,
         &ignored_actions);
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   SendMessages(browser_context, blocked_request);

@@ -8,7 +8,6 @@
 
 #include "base/containers/span.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/uuid.h"
 #include "build/build_config.h"
 #include "chrome/browser/password_manager/password_sender_service_factory.h"
@@ -16,12 +15,10 @@
 #include "chrome/browser/sync/test/integration/password_sharing_invitation_helper.h"
 #include "chrome/browser/sync/test/integration/sync_service_impl_harness.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
-#include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/features/password_manager_features_util.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/sharing/password_sender_service.h"
 #include "components/password_manager/core/browser/sharing/recipient_info.h"
-#include "components/sync/base/features.h"
 #include "components/sync/engine/nigori/cross_user_sharing_public_private_key_pair.h"
 #include "components/sync/protocol/nigori_specifics.pb.h"
 #include "components/sync/protocol/password_sharing_invitation_specifics.pb.h"
@@ -92,11 +89,6 @@ class SingleClientOutgoingPasswordSharingInvitationTest : public SyncTest {
  public:
   SingleClientOutgoingPasswordSharingInvitationTest()
       : SyncTest(SINGLE_CLIENT) {
-    override_features_.InitWithFeatures(
-        /*enabled_features=*/
-        {password_manager::features::kPasswordManagerEnableSenderService,
-         syncer::kSharingOfferKeyPairBootstrap},
-        /*disabled_features=*/{});
   }
 
   PasswordSenderService* GetPasswordSenderService() {
@@ -122,9 +114,6 @@ class SingleClientOutgoingPasswordSharingInvitationTest : public SyncTest {
     DCHECK(nigori_specifics.has_cross_user_sharing_public_key());
     return nigori_specifics.cross_user_sharing_public_key();
   }
-
- private:
-  base::test::ScopedFeatureList override_features_;
 };
 
 IN_PROC_BROWSER_TEST_F(SingleClientOutgoingPasswordSharingInvitationTest,

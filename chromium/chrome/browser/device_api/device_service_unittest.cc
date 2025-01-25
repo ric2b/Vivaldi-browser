@@ -3,10 +3,12 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/memory/raw_ptr.h"
 #include "base/notimplemented.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/device_api/device_attribute_api.h"
@@ -16,13 +18,16 @@
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/account_id/account_id.h"
+#include "components/permissions/features.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/profile_metrics/browser_profile_type.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/web_contents_tester.h"
+#include "net/base/features.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/ui/web_applications/test/isolated_web_app_test_utils.h"
 #include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_policy_constants.h"
 #include "chrome/common/url_constants.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -80,20 +85,20 @@ class FakeDeviceAttributeApi : public DeviceAttributeApi {
   FakeDeviceAttributeApi() = default;
   ~FakeDeviceAttributeApi() override = default;
 
-  // This method forwards calls to RealDeviceAttributesApi to the test the
+  // This method forwards calls to DeviceAttributesApiImpl to the test the
   // actual error reported by the service.
   void ReportNotAllowedError(
       base::OnceCallback<void(blink::mojom::DeviceAttributeResultPtr)> callback)
       override {
-    NOTIMPLEMENTED();
+    device_attributes_api_.ReportNotAllowedError(std::move(callback));
   }
 
-  // This method forwards calls to RealDeviceAttributesApi to the test the
+  // This method forwards calls to DeviceAttributesApiImpl to the test the
   // actual error reported by the service.
   void ReportNotAffiliatedError(
       base::OnceCallback<void(blink::mojom::DeviceAttributeResultPtr)> callback)
       override {
-    NOTIMPLEMENTED();
+    device_attributes_api_.ReportNotAffiliatedError(std::move(callback));
   }
 
   void GetDirectoryId(blink::mojom::DeviceAPIService::GetDirectoryIdCallback
@@ -122,6 +127,9 @@ class FakeDeviceAttributeApi : public DeviceAttributeApi {
       override {
     std::move(callback).Run(Result::NewAttribute(kAnnotatedLocation));
   }
+
+ private:
+  DeviceAttributeApiImpl device_attributes_api_;
 };
 
 }  // namespace
@@ -165,8 +173,20 @@ class DeviceAPIServiceTest : public ChromeRenderViewHostTestHarness {
   void TryCreatingService(
       const GURL& url,
       std::unique_ptr<DeviceAttributeApi> device_attribute_api) {
+#if BUILDFLAG(IS_CHROMEOS)
+    // Isolated Web Apps require Cross Origin Isolation headers to be included
+    // in the response.
+    if (url.SchemeIs(chrome::kIsolatedAppScheme)) {
+      web_app::SimulateIsolatedWebAppNavigation(web_contents(), url);
+    } else {
+      content::NavigationSimulator::NavigateAndCommitFromBrowser(web_contents(),
+                                                                 url);
+    }
+#else
     content::NavigationSimulator::NavigateAndCommitFromBrowser(web_contents(),
                                                                url);
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
     DeviceServiceImpl::CreateForTest(main_rfh(),
                                      remote_.BindNewPipeAndPassReceiver(),
                                      std::move(device_attribute_api));
@@ -319,7 +339,51 @@ TEST_F(DeviceAPIServiceIwaTest, ReportErrorForDefaultUser) {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 
-class DeviceAPIServiceRegularUserTest : public DeviceAPIServiceTest {
+class DeviceAPIServiceParamTest
+    : public DeviceAPIServiceTest,
+      public testing::WithParamInterface<std::pair<std::string, bool>> {
+ public:
+  void SetAllowedOriginFromParam() {
+    profile()->GetPrefs()->SetList(
+        prefs::kDeviceAttributesAllowedForOrigins,
+        base::Value::List().Append(GetParamOrigin()));
+  }
+
+  void SetAllowedOrigin(const std::string& origin) {
+    profile()->GetPrefs()->SetList(prefs::kDeviceAttributesAllowedForOrigins,
+                                   base::Value::List().Append(origin));
+  }
+
+  void EnableFeatureAndAllowlistOrigin(const base::Feature& param,
+                                       const std::string& origin) {
+    base::FieldTrialParams feature_params;
+    feature_params[permissions::feature_params::
+                       kWebKioskBrowserPermissionsAllowlist.name] = origin;
+    feature_list_.InitAndEnableFeatureWithParameters(param, feature_params);
+  }
+
+  void EnableFeature(const base::Feature& param) {
+    feature_list_.InitAndEnableFeature(param);
+  }
+
+  void DisableFeature(const base::Feature& feature) {
+    feature_list_.InitAndDisableFeature(feature);
+  }
+
+  void SetKioskBrowserPermissionsAllowedForOrigins(const std::string& origin) {
+    profile()->GetPrefs()->SetList(
+        prefs::kKioskBrowserPermissionsAllowedForOrigins,
+        base::Value::List().Append(std::move(origin)));
+  }
+
+  const std::string& GetParamOrigin() { return GetParam().first; }
+  bool ExpectApiAvailable() { return GetParam().second; }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class DeviceAPIServiceRegularUserTest : public DeviceAPIServiceParamTest {
  public:
   DeviceAPIServiceRegularUserTest() = default;
 
@@ -344,7 +408,7 @@ class DeviceAPIServiceRegularUserTest : public DeviceAPIServiceTest {
 TEST_F(DeviceAPIServiceRegularUserTest, ReportErrorForUnaffiliatedUser) {
   LoginRegularUser(false);
   TryCreatingService(GURL(kTrustedUrl),
-                     std::make_unique<DeviceAttributeApiImpl>());
+                     std::make_unique<FakeDeviceAttributeApi>());
   VerifyErrorMessageResultForAllDeviceAttributesAPIs(
       kNotAffiliatedErrorMessage);
   ASSERT_TRUE(remote()->is_connected());
@@ -353,7 +417,7 @@ TEST_F(DeviceAPIServiceRegularUserTest, ReportErrorForUnaffiliatedUser) {
 TEST_F(DeviceAPIServiceRegularUserTest, ReportErrorForDisallowedOrigin) {
   LoginRegularUser(true);
   TryCreatingService(GURL(kTrustedUrl),
-                     std::make_unique<DeviceAttributeApiImpl>());
+                     std::make_unique<FakeDeviceAttributeApi>());
   RemoveAllowedOrigin();
 
   VerifyErrorMessageResultForAllDeviceAttributesAPIs(
@@ -361,7 +425,38 @@ TEST_F(DeviceAPIServiceRegularUserTest, ReportErrorForDisallowedOrigin) {
   ASSERT_TRUE(remote()->is_connected());
 }
 
-class DeviceAPIServiceWithKioskUserTest : public DeviceAPIServiceTest {
+TEST_P(DeviceAPIServiceRegularUserTest, TestPolicyOriginPatterns) {
+  SetAllowedOriginFromParam();
+  LoginRegularUser(true);
+  TryCreatingService(GURL(kTrustedUrl),
+                     std::make_unique<FakeDeviceAttributeApi>());
+
+  if (ExpectApiAvailable()) {
+    VerifyCanAccessForAllDeviceAttributesAPIs();
+  } else {
+    VerifyErrorMessageResultForAllDeviceAttributesAPIs(
+        kNotAllowedOriginErrorMessage);
+  }
+  ASSERT_TRUE(remote()->is_connected());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    DeviceAPIServiceRegularUserTest,
+    testing::ValuesIn(
+        {std::pair<std::string, bool>("*", false),
+         std::pair<std::string, bool>(".example.com", false),
+         std::pair<std::string, bool>("example.", false),
+         std::pair<std::string, bool>("file://example*", false),
+         std::pair<std::string, bool>("invalid-example.com", false),
+         std::pair<std::string, bool>(kTrustedUrl, true),
+         std::pair<std::string, bool>("https://example.com", true),
+         std::pair<std::string, bool>("https://example.com/sample", true),
+         std::pair<std::string, bool>("example.com", true),
+         std::pair<std::string, bool>("*://example.com:*/", true),
+         std::pair<std::string, bool>("[*.]example.com", true)}));
+
+class DeviceAPIServiceWithKioskUserTest : public DeviceAPIServiceParamTest {
  public:
   DeviceAPIServiceWithKioskUserTest()
       : fake_user_manager_(new ash::FakeChromeUserManager()),
@@ -413,20 +508,6 @@ TEST_F(DeviceAPIServiceWithKioskUserTest, ConnectsForKioskOrigin) {
   ASSERT_TRUE(remote()->is_connected());
 }
 
-// The service should be enabled if the current origin is same as the origin of
-// Kiosk app.
-TEST_F(DeviceAPIServiceWithKioskUserTest,
-       KioskOriginCanAccessDeviceAttributes) {
-  LoginKioskUser();
-  TryCreatingService(GURL(kKioskAppUrl),
-                     std::make_unique<FakeDeviceAttributeApi>());
-
-  remote()->FlushForTesting();
-
-  ASSERT_TRUE(remote()->is_connected());
-  VerifyCanAccessForAllDeviceAttributesAPIs();
-}
-
 // The service should be disabled if the current origin is different from the
 // origin of Kiosk app.
 TEST_F(DeviceAPIServiceWithKioskUserTest, DoesNotConnectForInvalidOrigin) {
@@ -459,4 +540,122 @@ TEST_F(DeviceAPIServiceWithKioskUserTest,
   ASSERT_FALSE(remote()->is_connected());
 }
 
+class DeviceAPIServiceWithKioskUserTestForOrigins
+    : public DeviceAPIServiceWithKioskUserTest {};
+
+TEST_F(DeviceAPIServiceWithKioskUserTestForOrigins,
+       TestTrustedKioskOriginsWhenEnabledByFeature) {
+  EnableFeatureAndAllowlistOrigin(
+      permissions::features::kAllowMultipleOriginsForWebKioskPermissions,
+      kTrustedUrl);
+  SetAllowedOrigin(kTrustedUrl);
+
+  LoginKioskUser();
+  TryCreatingService(GURL(kTrustedUrl),
+                     std::make_unique<FakeDeviceAttributeApi>());
+  remote()->FlushForTesting();
+
+  // Check whether the service connects for a different allowed origin.
+  ASSERT_TRUE(remote()->is_connected());
+  VerifyCanAccessForAllDeviceAttributesAPIs();
+}
+
+TEST_F(DeviceAPIServiceWithKioskUserTestForOrigins,
+       TestUntrustedKioskOriginsWhenEnabledByFeature) {
+  EnableFeatureAndAllowlistOrigin(
+      permissions::features::kAllowMultipleOriginsForWebKioskPermissions,
+      kTrustedUrl);
+  SetAllowedOrigin(kUntrustedUrl);
+
+  LoginKioskUser();
+  TryCreatingService(GURL(kUntrustedUrl),
+                     std::make_unique<FakeDeviceAttributeApi>());
+  remote()->FlushForTesting();
+
+  // Check whether the service connects for a different allowed origin.
+  ASSERT_FALSE(remote()->is_connected());
+}
+
+TEST_F(DeviceAPIServiceWithKioskUserTestForOrigins,
+       TestTrustedKioskOriginWhenMultipleOriginPrefIsSet) {
+  EnableFeature(
+      permissions::features::kAllowMultipleOriginsForWebKioskPermissions);
+  SetKioskBrowserPermissionsAllowedForOrigins(kTrustedUrl);
+  SetAllowedOrigin(kTrustedUrl);
+
+  LoginKioskUser();
+  TryCreatingService(GURL(kTrustedUrl),
+                     std::make_unique<FakeDeviceAttributeApi>());
+  remote()->FlushForTesting();
+
+  // Check whether the service connects for a different allowed origin.
+  ASSERT_TRUE(remote()->is_connected());
+  VerifyCanAccessForAllDeviceAttributesAPIs();
+}
+
+TEST_F(DeviceAPIServiceWithKioskUserTestForOrigins,
+       TestKioskInstallOriginWhenMultipleOriginPrefIsNotSet) {
+  EnableFeature(
+      permissions::features::kAllowMultipleOriginsForWebKioskPermissions);
+  SetAllowedOrigin(kKioskAppInstallUrl);
+
+  LoginKioskUser();
+  TryCreatingService(GURL(kKioskAppInstallUrl),
+                     std::make_unique<FakeDeviceAttributeApi>());
+  remote()->FlushForTesting();
+
+  // Check whether the service connects for install origin.
+  ASSERT_TRUE(remote()->is_connected());
+  VerifyCanAccessForAllDeviceAttributesAPIs();
+}
+
+TEST_F(DeviceAPIServiceWithKioskUserTestForOrigins,
+       TestMultipleOriginPolicyWhenFeatureIsDisabled) {
+  DisableFeature(
+      permissions::features::kAllowMultipleOriginsForWebKioskPermissions);
+  SetKioskBrowserPermissionsAllowedForOrigins(kTrustedUrl);
+  SetAllowedOrigin(kTrustedUrl);
+
+  LoginKioskUser();
+  TryCreatingService(GURL(kTrustedUrl),
+                     std::make_unique<FakeDeviceAttributeApi>());
+  remote()->FlushForTesting();
+
+  // Check that the service is not able to connect when the feature is disabled.
+  ASSERT_FALSE(remote()->is_connected());
+}
+
+TEST_P(DeviceAPIServiceWithKioskUserTestForOrigins, TestPolicyOriginPatterns) {
+  SetAllowedOriginFromParam();
+  LoginKioskUser();
+  TryCreatingService(GURL(kKioskAppUrl),
+                     std::make_unique<FakeDeviceAttributeApi>());
+
+  remote()->FlushForTesting();
+
+  ASSERT_TRUE(remote()->is_connected());
+
+  if (ExpectApiAvailable()) {
+    VerifyCanAccessForAllDeviceAttributesAPIs();
+  } else {
+    VerifyErrorMessageResultForAllDeviceAttributesAPIs(
+        kNotAllowedOriginErrorMessage);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    DeviceAPIServiceWithKioskUserTestForOrigins,
+    testing::ValuesIn({std::pair<std::string, bool>("*", false),
+                       std::pair<std::string, bool>("*.kiosk.com", false),
+                       std::pair<std::string, bool>("*kiosk.com", false),
+                       std::pair<std::string, bool>("kiosk.", false),
+                       std::pair<std::string, bool>(kInvalidKioskAppUrl, false),
+                       std::pair<std::string, bool>(kKioskAppUrl, true),
+                       std::pair<std::string, bool>("https://kiosk.com", true),
+                       std::pair<std::string, bool>("https://kiosk.com/sample",
+                                                    true),
+                       std::pair<std::string, bool>("kiosk.com", true),
+                       std::pair<std::string, bool>("*://kiosk.com:*/", true),
+                       std::pair<std::string, bool>("[*.]kiosk.com", true)}));
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)

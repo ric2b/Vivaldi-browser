@@ -19,6 +19,11 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/svg/svg_angle.h"
 
 #include "third_party/blink/renderer/core/svg/animation/smil_animation_effect_parameters.h"
@@ -108,7 +113,7 @@ float SVGAngle::Value() const {
       return value_in_specified_units_;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0;
 }
 
@@ -270,7 +275,7 @@ void SVGAngle::ConvertToSpecifiedUnits(SVGAngleType unit_type) {
           break;
         case kSvgAngletypeTurn:
         case kSvgAngletypeUnknown:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
       break;
@@ -289,7 +294,7 @@ void SVGAngle::ConvertToSpecifiedUnits(SVGAngleType unit_type) {
           break;
         case kSvgAngletypeRad:
         case kSvgAngletypeUnknown:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
       break;
@@ -307,7 +312,7 @@ void SVGAngle::ConvertToSpecifiedUnits(SVGAngleType unit_type) {
           break;
         case kSvgAngletypeGrad:
         case kSvgAngletypeUnknown:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
       break;
@@ -329,12 +334,12 @@ void SVGAngle::ConvertToSpecifiedUnits(SVGAngleType unit_type) {
         case kSvgAngletypeDeg:
           break;
         case kSvgAngletypeUnknown:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
       break;
     case kSvgAngletypeUnknown:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 

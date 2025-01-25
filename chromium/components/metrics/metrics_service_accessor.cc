@@ -24,15 +24,15 @@ namespace {
 
 bool g_force_official_enabled_test = false;
 
-bool IsMetricsReportingEnabledForOfficialBuild(PrefService* pref_service) {
-  return pref_service->GetBoolean(prefs::kMetricsReportingEnabled);
+bool IsMetricsReportingEnabledForOfficialBuild(PrefService* local_state) {
+  return local_state->GetBoolean(prefs::kMetricsReportingEnabled);
 }
 
 }  // namespace
 
 // static
 bool MetricsServiceAccessor::IsMetricsReportingEnabled(
-    PrefService* pref_service) {
+    PrefService* local_state) {
 
   if (vivaldi::IsVivaldiRunning())
     return false; // End Vivaldi
@@ -43,11 +43,11 @@ bool MetricsServiceAccessor::IsMetricsReportingEnabled(
     return true;
   }
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  return IsMetricsReportingEnabledForOfficialBuild(pref_service);
+  return IsMetricsReportingEnabledForOfficialBuild(local_state);
 #else
   // In non-official builds, disable metrics reporting completely.
   return g_force_official_enabled_test
-             ? IsMetricsReportingEnabledForOfficialBuild(pref_service)
+             ? IsMetricsReportingEnabledForOfficialBuild(local_state)
              : false;
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }

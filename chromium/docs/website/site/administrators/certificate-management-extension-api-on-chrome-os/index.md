@@ -3,12 +3,12 @@ breadcrumbs:
 - - /administrators
   - Documentation for Administrators
 page_name: certificate-management-extension-api-on-chrome-os
-title: 'Developer Guide: Certificate Management Extension API on Chrome OS'
+title: 'Developer Guide: Certificate Management Extension API on ChromeOS'
 ---
 
 This document is for extension developers and describes how to use the extension
 API
-[enterprise.platformKeys](https://developer.chrome.com/extensions/enterprise_platformKeys)
+[enterprise.platformKeys](https://developer.chrome.com/extensions/enterprise.platformKeys)
 for client certificate enrollment.
 
 ## Motivation
@@ -21,8 +21,8 @@ known as SSL) and the protocols that are built on top like EAP-TLS for network
 authentication and HTTPS for web resources.
 
 This article describes how to manage and make use of client certificates on
-Chrome OS using the
-[enterprise.platformKeys](https://developer.chrome.com/extensions/enterprise_platformKeys)
+ChromeOS using the
+[enterprise.platformKeys](https://developer.chrome.com/extensions/enterprise.platformKeys)
 extension API: in particular, how to provision a new client certificate and how
 to use a client certificate for network or web authentication.
 
@@ -32,9 +32,9 @@ Many certificate enrollment protocols exist, like
 [SCEP](http://tools.ietf.org/html/draft-nourse-scep-23),
 [EST](https://tools.ietf.org/html/rfc7030) or
 [CMC](https://tools.ietf.org/html/rfc5272), that define the communication
-between the client (in this case, the Chrome OS device) and the Certificate
+between the client (in this case, the ChromeOS device) and the Certificate
 Authority (CA), which can be accompanied by a Registration Authority. The
-[enterprise.platformKeys](https://developer.chrome.com/extensions/enterprise_platformKeys)
+[enterprise.platformKeys](https://developer.chrome.com/extensions/enterprise.platformKeys)
 API is designed in a way that extensions have the freedom to implement any
 enrollment protocol based on what is supported by the target Certificate
 Authority.
@@ -63,10 +63,10 @@ resources like a network or a web page.
 
 ## The enterprise.platformKeys API
 
-This extension API of Chrome OS allows extensions to generate a key pair, sign a
+This extension API of ChromeOS allows extensions to generate a key pair, sign a
 certification request, and to manage the installed client certificates (import,
 get and remove certificates). Using this API, an extension can drive the process
-of installing a new client certificate to a Chrome OS device.
+of installing a new client certificate to a ChromeOS device.
 
 In order to use the API, an extension must be pre-installed by user policy. Only
 extensions installed by policy can use the API.
@@ -77,7 +77,7 @@ extensions installed by policy can use the API.
     start the enrollment process, see for example
     [chrome.browserAction](https://developer.chrome.com/extensions/browserAction).
     * The first time the user tries to connect to a network that requires a client
-    certificate for authentication, Chrome OS can automatically open the
+    certificate for authentication, ChromeOS can automatically open the
     extension if the following required step has been taken by the
     administrator:
     The network must be configured by policy to use client certificates for
@@ -85,7 +85,7 @@ extensions installed by policy can use the API.
     URL must be set to a page of the extension, see [Manage
     Networks](https://support.google.com/chrome/a/answer/2634553).
     Every time the user attempts to connect to this network and there is no
-    matching certificate in the user’s certificate store, Chrome OS will open
+    matching certificate in the user’s certificate store, ChromeOS will open
     the configured Client Enrollment URL in a new browser tab.
     * The extension can use an [event
     page](https://developer.chrome.com/extensions/event_pages) (succeeding
@@ -102,7 +102,7 @@ request.
 
     * be part of the extension itself, which prevents reuse of the extension with
     other configurations,
-    * be part of the Client Enrollment URL that is opened by Chrome OS (see
+    * be part of the Client Enrollment URL that is opened by ChromeOS (see
     previous step),
     * be pushed through [policy for
     extensions](https://developer.chrome.com/extensions/manifest/storage), which
@@ -114,13 +114,13 @@ the extension can present any UI and ask the user to provide the credentials or
 use any other APIs, for example, OAuth.
 
 4. The extension has to obtain the user
-[Token](https://developer.chrome.com/extensions/enterprise_platformKeys#type-Token)
+[Token](https://developer.chrome.com/extensions/enterprise.platformKeys#type-Token)
 (with the id `"user"`) using
-[enterprise.platformKeys.getTokens](https://developer.chrome.com/extensions/enterprise_platformKeys#method-getTokens)
+[enterprise.platformKeys.getTokens](https://developer.chrome.com/extensions/enterprise.platformKeys#method-getTokens)
 and generate a key pair using the
 [subtleCrypto.generateKey](http://www.w3.org/TR/WebCryptoAPI/#subtlecrypto-interface)
 method of the
-[Token](https://developer.chrome.com/extensions/enterprise_platformKeys#type-Token).
+[Token](https://developer.chrome.com/extensions/enterprise.platformKeys#type-Token).
 The private key will be generated by the TPM and is guaranteed to never leave
 the device or even the TPM.
 
@@ -146,7 +146,7 @@ the device or even the TPM.
       modulusLength: 2048,
 
      // Equivalent to 65537
-      publicExponent: new Uint8Array([0x01, 0x00, 0x01]), 
+      publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
      hash: {
        name: "SHA-1"
      }
@@ -160,7 +160,7 @@ the device or even the TPM.
 5. Extract the public key from the key handle using the
 [subtleCrypto.exportKey](http://www.w3.org/TR/WebCryptoAPI/#subtlecrypto-interface)
 method of the
-[Token](https://developer.chrome.com/extensions/enterprise_platformKeys#type-Token):
+[Token](https://developer.chrome.com/extensions/enterprise.platformKeys#type-Token):
 
     ```none
     userToken.subtleCrypto.exportKey("spki", keyPair.publicKey)
@@ -182,10 +182,10 @@ open source library [forge](https://github.com/digitalbazaar/forge) may be used.
 7. Sign the content of the certification request (using the
 [subtleCrypto.sign](http://www.w3.org/TR/WebCryptoAPI/#subtlecrypto-interface)
 method of the
-[Token](https://developer.chrome.com/extensions/enterprise_platformKeys#type-Token))
+[Token](https://developer.chrome.com/extensions/enterprise.platformKeys#type-Token))
 and create the final request from the content and the signature. Any subsequent
 attempt to use the same key for signing will fail for security reasons: This API
-guarantees that only Chrome OS itself can use the private key and the
+guarantees that only ChromeOS itself can use the private key and the
 certificate for authentication.
 
     ```none
@@ -219,7 +219,7 @@ certificate for authentication.
     ```
 
 9. Install the client certificate using
-[enterprise.platformKeys.importCertificate](https://developer.chrome.com/extensions/enterprise_platformKeys#method-importCertificate)
+[enterprise.platformKeys.importCertificate](https://developer.chrome.com/extensions/enterprise.platformKeys#method-importCertificate)
 
     ```none
     chrome.enterprise.platformKeys.importCertificate(userToken.id, certificate);
@@ -234,14 +234,14 @@ available
     * The selection can also be automated if the network is configured by policy.
     For network types that support client certificates, like EAP-TLS, the
     administrator can configure a Certificate Pattern that defines which client
-    certificates are valid for authenticating to this network. Chrome OS will
+    certificates are valid for authenticating to this network. ChromeOS will
     automatically select the most recent matching client certificate and use it
     for authentication on every connection attempt.
 
     For web pages requiring client certificate authentication:
     * When accessing a web page that requires the client to present a certificate,
-    Chrome OS will show the user a list of available client certificates. After
-    selecting one, Chrome OS will use it to authenticate.
+    ChromeOS will show the user a list of available client certificates. After
+    selecting one, ChromeOS will use it to authenticate.
     * The selection can also be automated for specific URLs using the policy
     [Automatically select client certificates for these
     sites](https://support.google.com/chrome/a/answer/2657289?#AutoSelectCertificateForUrls):
@@ -250,9 +250,9 @@ available
     the user.
 
 Note that the
-[enterprise.platformKeys](https://developer.chrome.com/extensions/enterprise_platformKeys)
+[enterprise.platformKeys](https://developer.chrome.com/extensions/enterprise.platformKeys)
 API guarantees, that client certificates imported using the API can only be used
-by Chrome OS itself for authentication. The extension is not able to drive any
+by ChromeOS itself for authentication. The extension is not able to drive any
 authentication with such a certificate and in particular the API guarantees that
 the certificate can’t be extracted to authenticate any other user or device.
 
@@ -260,7 +260,7 @@ the certificate can’t be extracted to authenticate any other user or device.
 
 To determine whether any valid client certificate is already installed and to
 check the expiration of the installed certificates, an extension can use the
-[platformKeys.getCertificates](https://developer.chrome.com/extensions/enterprise_platformKeys#method-getCertificates)
+[platformKeys.getCertificates](https://developer.chrome.com/extensions/enterprise.platformKeys#method-getCertificates)
 function and if necessary trigger the process to obtain a new client
 certificate.
 
@@ -275,7 +275,7 @@ chrome.enterprise.platformKeys.getCertificates(userToken.id, function(certificat
 
 An installed certificate can be removed from the user’s certificate store using
 the function
-[enterprise.platformKeys.removeCertificate](https://developer.chrome.com/extensions/enterprise_platformKeys#method-removeCertificate).
+[enterprise.platformKeys.removeCertificate](https://developer.chrome.com/extensions/enterprise.platformKeys#method-removeCertificate).
 As client certificates can be selected automatically (see last step in the
 enrollment process above), unnecessary certificates should be removed to prevent
 conflicts.

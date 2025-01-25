@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/style/inset_area.h"
 
 #include "base/check_op.h"
@@ -87,7 +92,8 @@ InsetAreaRegion ToPhysicalRegion(
   switch (region) {
     case InsetAreaRegion::kNone:
     case InsetAreaRegion::kAll:
-      NOTREACHED() << "Should be handled directly in InsetArea::ToPhysical";
+      NOTREACHED_IN_MIGRATION()
+          << "Should be handled directly in InsetArea::ToPhysical";
       [[fallthrough]];
     case InsetAreaRegion::kCenter:
     case InsetAreaRegion::kTop:
@@ -228,7 +234,7 @@ std::optional<AnchorQuery> InsetArea::UsedTop() const {
     case InsetAreaRegion::kBottom:
       return AnchorBottom();
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       [[fallthrough]];
     case InsetAreaRegion::kNone:
       return std::nullopt;
@@ -244,7 +250,7 @@ std::optional<AnchorQuery> InsetArea::UsedBottom() const {
     case InsetAreaRegion::kBottom:
       return std::nullopt;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       [[fallthrough]];
     case InsetAreaRegion::kNone:
       return std::nullopt;
@@ -260,7 +266,7 @@ std::optional<AnchorQuery> InsetArea::UsedLeft() const {
     case InsetAreaRegion::kRight:
       return AnchorRight();
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       [[fallthrough]];
     case InsetAreaRegion::kNone:
       return std::nullopt;
@@ -276,7 +282,7 @@ std::optional<AnchorQuery> InsetArea::UsedRight() const {
     case InsetAreaRegion::kRight:
       return std::nullopt;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       [[fallthrough]];
     case InsetAreaRegion::kNone:
       return std::nullopt;

@@ -115,6 +115,84 @@ Validates that constant evaluation and override evaluation of ${builtin}() never
     );
   });
 
+g.test('partial_values')
+  .desc('Validates e2 <= bias + 1 when e1 is a runtime value')
+  .params(u =>
+    u
+      .combine('stage', ['constant', 'override', 'runtime'] as const)
+      .combine('typeA', keysOf(kValidArgumentTypesA))
+      .filter(t => {
+        const ty = kValidArgumentTypesA[t.typeA];
+        const scalar = scalarTypeOf(ty);
+        return scalar !== Type.abstractInt && scalar !== Type.abstractFloat;
+      })
+      .expand('typeB', u => keysOf(supportedSecondArgTypes(u.typeA)))
+      .filter(t => {
+        const ty = kValidArgumentTypesB[t.typeB];
+        const scalar = scalarTypeOf(ty);
+        return scalar !== Type.abstractInt && scalar !== Type.abstractFloat;
+      })
+      .beginSubcases()
+      .expandWithParams(p => {
+        const ty = kValidArgumentTypesA[p.typeA];
+        const scalar = scalarTypeOf(ty);
+        const cases = [];
+        const bias = biasForType(scalar);
+        cases.push({ value: bias });
+        cases.push({ value: bias + 1 });
+        cases.push({ value: bias + 2 });
+        return cases;
+      })
+  )
+  .beforeAllSubcases(t => {
+    const ty = kValidArgumentTypesA[t.params.typeA];
+    if (ty.requiresF16()) {
+      t.selectDeviceOrSkipTestCase('shader-f16');
+    }
+  })
+  .fn(t => {
+    const tyA = kValidArgumentTypesA[t.params.typeA];
+    const tyB = kValidArgumentTypesB[t.params.typeB];
+    const scalarB = scalarTypeOf(tyB);
+    const enable = `${tyA.requiresF16() ? 'enable f16;' : ''}`;
+    let bArg = '';
+    switch (t.params.stage) {
+      case 'constant':
+        bArg = `${tyB.create(t.params.value).wgsl()}`;
+        break;
+      case 'override':
+        bArg = `${tyB.toString()}(o_b)`;
+        break;
+      case 'runtime':
+        bArg = 'v_b';
+        break;
+    }
+    const wgsl = `
+${enable}
+override o_b : ${scalarB.toString()};
+fn foo() {
+  var v_b : ${tyB.toString()};
+  var v : ${tyA.toString()};
+  let tmp = ldexp(v, ${bArg});
+}`;
+
+    const bias = biasForType(scalarTypeOf(tyA));
+    const error = t.params.value > bias + 1;
+    const shader_error = error && t.params.stage === 'constant';
+    const pipeline_error = error && t.params.stage === 'override';
+    t.expectCompileResult(!shader_error, wgsl);
+    if (!shader_error) {
+      const constants: Record<string, number> = {};
+      constants['o_b'] = t.params.value;
+      t.expectPipelineResult({
+        expectedResult: !pipeline_error,
+        code: wgsl,
+        constants,
+        reference: ['o_b'],
+      });
+    }
+  });
+
 const kArgCases = {
   good: '(vec3(0), vec3(1))',
   bad_no_parens: '',

@@ -12,7 +12,6 @@
 #include "base/feature_list.h"
 #include "content/browser/preloading/prefetch/prefetch_container.h"
 #include "net/http/http_no_vary_search_data.h"
-#include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/no_vary_search.mojom.h"
 #include "url/gurl.h"
 
@@ -98,11 +97,6 @@ void IterateCandidates(
         IterateCandidateResult::kFinish) {
       return;
     }
-  }
-
-  // Fall back to No-Vary-Search equivalence if enabled.
-  if (!base::FeatureList::IsEnabled(network::features::kPrefetchNoVarySearch)) {
-    return;
   }
 
   GURL::Replacements replacements;
@@ -239,6 +233,8 @@ std::optional<net::HttpNoVarySearchData> ProcessHead(
     const GURL& url,
     RenderFrameHost* rfh);
 
+// TODO(crbug.com/331591646): This is used in both prerender and prefetch,
+// consider moving in a common location.
 // Parse No-Vary-Search from mojom structure received from network service.
 net::HttpNoVarySearchData ParseHttpNoVarySearchDataFromMojom(
     const network::mojom::NoVarySearchPtr& no_vary_search_ptr);

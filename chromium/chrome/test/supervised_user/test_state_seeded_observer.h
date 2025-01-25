@@ -23,47 +23,40 @@
 #include "components/supervised_user/core/browser/supervised_user_service.h"
 #include "components/supervised_user/core/browser/supervised_user_service_observer.h"
 #include "components/supervised_user/core/browser/supervised_user_url_filter.h"
-#include "ui/base/interaction/state_observer.h"
+#include "ui/base/interaction/polling_state_observer.h"
 
 namespace supervised_user {
 
 SupervisedUserService* GetSupervisedUserService(const FamilyMember& member);
 
+// State of a Family Link toggle.
+enum class FamilyLinkToggleState : bool {
+  kEnabled = true,
+  kDisabled = false,
+};
+
+// Toggles provided in the FL Advanced Settings parental controls.
+enum class FamilyLinkToggleType : int {
+  kPermissionsToggle = 0,
+  kExtensionsToggle = 1,
+  kCookiesToggle = 2
+};
+
+// Configured Family Link toggle.
+struct FamilyLinkToggleConfiguration {
+  const FamilyLinkToggleType type;
+  const FamilyLinkToggleState state;
+};
+
 // Creates requests and conditions associated with given state.
 class BrowserState {
  public:
-  // High-level classification on how the supervised user service in the browser
-  // is configured after sending RPC request, in relation to that request.
-  enum class SeedingStatus {
-    kCompleted,
-    kPending,
-  };
-
-  // Waits until the supervised user service reports intended state, as denoted
-  // by `condition`.
-  class Observer : public ui::test::ObservationStateObserver<
-                       SeedingStatus,
-                       SupervisedUserService,
-                       SupervisedUserServiceObserver> {
-   public:
-    // Creates unsubscribed observer.
-    Observer(SupervisedUserService* service,
-             base::RepeatingCallback<bool(void)> condition);
-    ~Observer() override;
-
-    SeedingStatus GetStateObserverInitialState() const override;
-
-    // SupervisedUserServiceObserver
-    void OnURLFilterChanged() override;
-
-   private:
-    base::RepeatingCallback<bool(void)> condition_;
-  };
+  using Observer = ui::test::PollingStateObserver<bool>;
 
   // Represents intended state of the supervised user service to achieve.
   // It both knows what request to send to get to that state (::GetRequest()),
   // and how to check whether the service is in that state
-  // (::GetBrowserCheck()).
+  // (::Check()).
   class Intent {
    public:
     virtual ~Intent() = 0;
@@ -79,8 +72,7 @@ class BrowserState {
 
     // Function that is checking `browser_user`'s browser whether it is in the
     // intended state.
-    virtual base::RepeatingCallback<bool(void)> GetBrowserCheck(
-        const FamilyMember& browser_user) const = 0;
+    virtual bool Check(const FamilyMember& browser_user) const = 0;
   };
 
   // Resets the state to defaults.
@@ -92,8 +84,7 @@ class BrowserState {
     std::string GetRequest() const override;
     const FetcherConfig& GetConfig() const override;
     std::string ToString() const override;
-    base::RepeatingCallback<bool(void)> GetBrowserCheck(
-        const FamilyMember& browser_user) const override;
+    bool Check(const FamilyMember& browser_user) const override;
   };
 
   // Defines safe sites configuration.
@@ -111,12 +102,27 @@ class BrowserState {
     std::string GetRequest() const override;
     const FetcherConfig& GetConfig() const override;
     std::string ToString() const override;
-    base::RepeatingCallback<bool(void)> GetBrowserCheck(
-        const FamilyMember& browser_user) const override;
+    bool Check(const FamilyMember& browser_user) const override;
 
    private:
     std::optional<GURL> allowed_url_;
     std::optional<GURL> blocked_url_;
+  };
+
+  // Defines configuration for a list of given boolean toggles.
+  class ToggleIntent : public Intent {
+   public:
+    explicit ToggleIntent(std::list<FamilyLinkToggleConfiguration> toggle_list);
+    ~ToggleIntent() override;
+
+    // Intent implementation:
+    std::string GetRequest() const override;
+    const FetcherConfig& GetConfig() const override;
+    std::string ToString() const override;
+    bool Check(const FamilyMember& browser_user) const override;
+
+   private:
+    std::list<FamilyLinkToggleConfiguration> toggle_list_;
   };
 
   // Use those static constructors to request state as indicated by name.
@@ -131,14 +137,19 @@ class BrowserState {
   // After issuing, FilteringLevel is set to SAFE_SITES and gurl is added to
   // block list of filtered urls.
   static BrowserState BlockSite(const GURL& gurl);
+  // Sets the Advanced Setting toggles (Permissions, Extensions, Cookies) to
+  // their default values.
+  static BrowserState SetAdvancedSettingsDefault();
+  // After issuing, Permissions, Extensions and Cookies toggles are set to the
+  // given values, if such a value is provided on the input list.
+  static BrowserState AdvancedSettingsToggles(
+      std::list<FamilyLinkToggleConfiguration> toggle_list);
 
   ~BrowserState();
 
-  // Returns a closure which tests whether the browser is in the intended state.
-  // The state is checked for `member`'s browser, which typically should be the
-  // child.
-  base::RepeatingCallback<bool(void)> GetIntendedStateCheck(
-      const FamilyMember& browser_user) const;
+  // Tests whether the browser is in the intended state. The state is checked
+  // for `member`'s browser, which typically should be the child.
+  bool Check(const FamilyMember& browser_user) const;
 
   // Seeds the `target_state_` by issuing a RPC.
   void Seed(const FamilyMember& supervising_user,

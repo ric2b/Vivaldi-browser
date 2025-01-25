@@ -10,10 +10,12 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "base/containers/flat_set.h"
+#include "base/containers/span.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ptr_exclusion.h"
 #include "base/time/time.h"
@@ -162,8 +164,7 @@ class CC_EXPORT LayerTreeImpl {
   void UpdateImageDecodingHints(
       base::flat_map<PaintImage::Id, PaintImage::DecodingMode>
           decoding_mode_map);
-  int GetMSAASampleCountForRaster(
-      const scoped_refptr<DisplayItemList>& display_list);
+  int GetMSAASampleCountForRaster(const DisplayItemList& display_list) const;
   TargetColorParams GetTargetColorParams(
       gfx::ContentColorUsage content_color_usage) const;
   bool IsReadyToActivate() const;
@@ -232,6 +233,7 @@ class CC_EXPORT LayerTreeImpl {
     using pointer = LayerImpl**;
     using reference = LayerImpl*&;
 
+    constexpr IteratorAdapter() = default;
     explicit IteratorAdapter(Iterator it) : it_(it) {}
     bool operator==(IteratorAdapter o) const { return it_ == o.it_; }
     bool operator!=(IteratorAdapter o) const { return !(*this == o); }
@@ -423,6 +425,14 @@ class CC_EXPORT LayerTreeImpl {
   void SetScreenshotDestinationToken(base::UnguessableToken destination_token);
   base::UnguessableToken TakeScreenshotDestinationToken();
 
+  void set_primary_main_frame_item_sequence_number(
+      int64_t item_sequence_number) {
+    primary_main_frame_item_sequence_number_ = item_sequence_number;
+  }
+  uint64_t primary_main_frame_item_sequence_number() {
+    return primary_main_frame_item_sequence_number_;
+  }
+
   void SetDeviceViewportRect(const gfx::Rect& device_viewport_rect);
 
   // TODO(fsamuel): The reason this is not a trivial accessor is because it
@@ -450,7 +460,7 @@ class CC_EXPORT LayerTreeImpl {
   // top-level frames we store this value in page_scale_factor_, but for
   // cross-process subframes it's stored in external_page_scale_factor_, so
   // that it only affects raster scale. These cases are mutually exclusive,
-  // except for a page hosted in a <portal>, so only one of the values should
+  // except for a page hosted in a GuestView, so only one of the values should
   // ever vary from 1.f.
   float page_scale_factor_for_scroll() const {
     DCHECK(external_page_scale_factor_ == 1.f ||
@@ -546,8 +556,7 @@ class CC_EXPORT LayerTreeImpl {
 
   void AddLayerShouldPushProperties(LayerImpl* layer);
   void ClearLayersThatShouldPushProperties();
-  const base::flat_set<raw_ptr<LayerImpl, CtnExperimental>>&
-  LayersThatShouldPushProperties() const {
+  const base::flat_set<LayerImpl*>& LayersThatShouldPushProperties() const {
     return layers_that_should_push_properties_;
   }
 
@@ -746,6 +755,9 @@ class CC_EXPORT LayerTreeImpl {
   void InvalidateRegionForImages(
       const PaintImageIdFlatSet& images_to_invalidate);
 
+  void InvalidateRasterInducingScrolls(
+      const base::flat_set<ElementId>& scrolls_to_invalidate);
+
   void UpdateViewportContainerSizes();
 
   LayerTreeLifecycle& lifecycle() { return lifecycle_; }
@@ -766,10 +778,6 @@ class CC_EXPORT LayerTreeImpl {
 
   ActivelyScrollingType GetActivelyScrollingType() const {
     return host_impl_->GetActivelyScrollingType();
-  }
-
-  bool CurrentScrollCheckerboardsDueToNoRecording() {
-    return host_impl_->CurrentScrollCheckerboardsDueToNoRecording();
   }
 
   // These functions are used for plumbing DelegatedInkMetadata from blink
@@ -812,6 +820,20 @@ class CC_EXPORT LayerTreeImpl {
   // Returns true if there is a pending ViewTransition save request to cache
   // output of the current frame.
   bool HasViewTransitionSaveRequest() const;
+
+  // Returns the set of layers that have been added or changed in some
+  // meaningful way since the last call to TakeUpdatedLayers() or
+  // ResetAllChangeTracking().
+  std::unordered_set<LayerImpl*> TakeUpdatedLayers();
+
+  // Returns a list of layer IDs for layers that have been unregistered from
+  // this tree since the last call to TakeUnregisteredLayers() or
+  // ResetAllChangeTracking().
+  std::vector<int> TakeUnregisteredLayers();
+
+  // Removes a set of layers from the tree. Returns the number of layers
+  // removed. Note that this method will never remove the root layer.
+  size_t RemoveLayers(base::span<int> layer_ids);
 
  protected:
   float ClampPageScaleFactorToLimits(float page_scale_factor) const;
@@ -905,7 +927,8 @@ class CC_EXPORT LayerTreeImpl {
   LayerImplMap layer_id_map_;
 
   // Set of layers that need to push properties.
-  base::flat_set<raw_ptr<LayerImpl, CtnExperimental>>
+  // RAW_PTR_EXCLUSION: Performance reasons (based on analysis of MotionMark).
+  RAW_PTR_EXCLUSION base::flat_set<LayerImpl*>
       layers_that_should_push_properties_;
 
   std::unordered_map<ElementId, float, ElementIdHash>
@@ -989,8 +1012,15 @@ class CC_EXPORT LayerTreeImpl {
   // Surface.
   base::TimeDelta visual_update_duration_;
 
+  std::unordered_set<LayerImpl*> updated_layers_;
+  std::vector<int> unregistered_layers_;
+
   // See `CommitState::screenshot_destination_token`.
   base::UnguessableToken screenshot_destination_;
+
+  // See `CommitState::primary_main_frame_item_sequence_number`.
+  int64_t primary_main_frame_item_sequence_number_ =
+      RenderFrameMetadata::kInvalidItemSequenceNumber;
 };
 
 }  // namespace cc

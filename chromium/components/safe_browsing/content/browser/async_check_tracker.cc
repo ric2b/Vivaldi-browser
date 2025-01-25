@@ -83,6 +83,9 @@ AsyncCheckTracker::AsyncCheckTracker(content::WebContents* web_contents,
 
 AsyncCheckTracker::~AsyncCheckTracker() {
   DeletePendingCheckers(/*excluded_navigation_id=*/std::nullopt);
+  for (auto& observer : observers_) {
+    observer.OnAsyncSafeBrowsingCheckTrackerDestructed();
+  }
 }
 
 void AsyncCheckTracker::TransferUrlChecker(
@@ -133,6 +136,11 @@ void AsyncCheckTracker::PendingCheckerCompleted(
     // proceed is true, because PendingCheckerCompleted may be called multiple
     // times during server redirects.
     MaybeDeleteChecker(navigation_id);
+  }
+  if (result.all_checks_completed) {
+    for (auto& observer : observers_) {
+      observer.OnAsyncSafeBrowsingCheckCompleted();
+    }
   }
 }
 
@@ -208,9 +216,6 @@ void AsyncCheckTracker::MaybeDisplayBlockingPage(
   auto* primary_main_frame = web_contents()->GetPrimaryMainFrame();
   resource.render_process_id = primary_main_frame->GetGlobalId().child_id;
   resource.render_frame_token = primary_main_frame->GetFrameToken().value();
-  // Reports were already sent when BaseUIManager attempted to trigger post
-  // commit error page, so don't send it again.
-  resource.should_send_reports = false;
   // The callback has already been run when BaseUIManager attempts to
   // trigger post commit error page, so there is no need to run again.
   resource.callback = base::DoNothing();
@@ -260,6 +265,14 @@ void AsyncCheckTracker::DeleteExpiredNavigationTimestamps() {
                   return base::TimeTicks::Now() - id_timestamp_pair.second >
                          kNavigationTimestampExpiration;
                 });
+}
+
+void AsyncCheckTracker::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void AsyncCheckTracker::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 size_t AsyncCheckTracker::PendingCheckersSizeForTesting() {

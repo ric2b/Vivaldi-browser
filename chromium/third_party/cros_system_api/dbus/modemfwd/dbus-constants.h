@@ -14,6 +14,17 @@ const char kModemfwdServiceName[] = "org.chromium.Modemfwd";
 // Methods.
 const char kSetDebugMode[] = "SetDebugMode";
 
+// Properties.
+const char kInProgressTasksProperty[] = "InProgressTasks";
+// keys used in InProgressTasks
+const char kTaskName[] = "name";
+const char kTaskType[] = "type";
+const char kTaskTypeHeartbeat[] = "heartbeat";
+const char kTaskTypeFlash[] = "flash";
+const char kTaskStartedAt[] = "started-at";
+const char kFlashTaskForceFlash[] = "force-flash";
+const char kFlashTaskCarrierOverride[] = "carrier-override";
+
 // error result codes.
 const char kErrorResultFailure[] = "org.chromium.Modemfwd.Error.Failure";
 const char kErrorResultInitFailure[] =

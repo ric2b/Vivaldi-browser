@@ -13,6 +13,32 @@
 
 namespace history_embeddings {
 
+inline constexpr char kModelInfoMetricName[] =
+    "History.Embeddings.Embedder.ModelInfoStatus";
+
+enum class EmbeddingsModelInfoStatus {
+  kUnknown = 0,
+
+  // Model info is valid.
+  kValid = 1,
+
+  // Model info is empty.
+  kEmpty = 2,
+
+  // Model info does not contain model metadata.
+  kNoMetadata = 3,
+
+  // Model info has invalid metadata.
+  kInvalidMetadata = 4,
+
+  // Model info has invalid additional files.
+  kInvalidAdditionalFiles = 5,
+
+  // This must be kept in sync with EmbeddingsModelInfoStatus in
+  // history/enums.xml
+  kMaxValue = kInvalidAdditionalFiles,
+};
+
 class PassageEmbeddingsServiceController {
  public:
   PassageEmbeddingsServiceController();
@@ -34,9 +60,14 @@ class PassageEmbeddingsServiceController {
   // an empty vector.
   using GetEmbeddingsCallback = ComputePassagesEmbeddingsCallback;
   void GetEmbeddings(std::vector<std::string> passages,
+                     passage_embeddings::mojom::PassagePriority priority,
                      GetEmbeddingsCallback callback);
 
-  // Returns the embeddings model version;
+  // Returns true if this service controller is ready for embeddings generation.
+  bool EmbedderReady();
+
+  // Returns the metadata about the embeddings model. This is only valid when
+  // EmbedderReady() returns true.
   EmbedderMetadata GetEmbedderMetadata();
 
  protected:

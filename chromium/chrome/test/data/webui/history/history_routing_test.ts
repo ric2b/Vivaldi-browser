@@ -54,42 +54,42 @@ import {navigateTo} from './test_util.js';
       return flushTasks();
     });
 
-    test('changing route changes active view', function() {
+    test('changing route changes active view', async () => {
       assertEquals('history', app.$.content.selected);
       assertEquals(app.$.history, app.$['tabs-content'].selectedItem);
 
       navigateTo('/syncedTabs', app);
-      return eventToPromise('iron-select', sidebar.$.menu).then(function() {
-        assertEquals('chrome://history/syncedTabs', window.location.href);
+      await eventToPromise('iron-select', sidebar.$.menu);
 
-        assertEquals('syncedTabs', app.$.content.selected);
-        assertEquals(
-            app.shadowRoot!.querySelector('#synced-devices'),
-            app.$.content.selectedItem);
-      });
+      assertEquals('chrome://history/syncedTabs', window.location.href);
+      await microtasksFinished();
+      assertEquals('syncedTabs', app.$.content.selected);
+      assertEquals(
+          app.shadowRoot!.querySelector('#synced-devices'),
+          app.$.content.selectedItem);
     });
 
 
-    test('routing to /grouped may change active view', function() {
+    test('routing to /grouped may change active view', async () => {
       assertEquals('history', app.$.content.selected);
       assertEquals(
           app.shadowRoot!.querySelector('#history'),
           app.$['tabs-content'].selectedItem);
 
       navigateTo('/grouped', app);
-      return flushTasks().then(function() {
-        assertEquals('chrome://history/grouped', window.location.href);
+      await flushTasks();
 
-        assertEquals('history', app.$.content.selected);
-        assertEquals(
-            !!app.shadowRoot!.querySelector('#history-clusters'),
-            isHistoryClustersEnabled);
-        assertEquals(
-            isHistoryClustersEnabled ?
-                app.shadowRoot!.querySelector('#history-clusters') :
-                app.shadowRoot!.querySelector('#history'),
-            app.$['tabs-content'].selectedItem);
-      });
+      assertEquals('chrome://history/grouped', window.location.href);
+      await microtasksFinished();
+      assertEquals('history', app.$.content.selected);
+      assertEquals(
+          !!app.shadowRoot!.querySelector('#history-clusters'),
+          isHistoryClustersEnabled);
+      assertEquals(
+          isHistoryClustersEnabled ?
+              app.shadowRoot!.querySelector('#history-clusters') :
+              app.shadowRoot!.querySelector('#history'),
+          app.$['tabs-content'].selectedItem);
     });
 
     test('routing to /grouped may update sidebar menu item', function() {
@@ -203,6 +203,20 @@ import {navigateTo} from './test_util.js';
                 window.location.href);
           }
         });
+
+    test(
+        'routing to chrome://history/syncedTabs works correctly',
+        async function() {
+          navigateTo('/syncedTabs', app);
+          if (isHistoryClustersEnabled) {
+            // cr-tabs can change their selected value, but these should be
+            // ignored since /syncedTabs is not a tabbed page.
+            const historyTabs = app.shadowRoot!.querySelector('cr-tabs')!;
+            historyTabs.selected = -1;
+            await microtasksFinished();
+          }
+          assertEquals(`chrome://history/syncedTabs`, window.location.href);
+        });
   });
 });
 
@@ -287,6 +301,7 @@ suite(`routing-test-with-history-embeddings-enabled`, () => {
     BrowserProxyImpl.setInstance(new TestBrowserProxy());
     MetricsProxyImpl.setInstance(new TestMetricsProxy());
     const handler = TestMock.fromClass(HistoryEmbeddingsPageHandlerRemote);
+    handler.setResultFor('search', new Promise(() => {}));
     HistoryEmbeddingsBrowserProxyImpl.setInstance(
         new HistoryEmbeddingsBrowserProxyImpl(handler));
 

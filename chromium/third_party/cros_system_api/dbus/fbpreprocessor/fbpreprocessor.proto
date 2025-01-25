@@ -34,13 +34,34 @@ message WiFiDump {
   Compression compression = 4;
 }
 
+message BluetoothDump {
+  string dmpfile = 1;
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    RAW = 1;
+    PSEUDONYMIZED = 2;
+  }
+  State state = 2;
+  enum Compression {
+    COMPRESSION_UNSPECIFIED = 0;
+    UNCOMPRESSED = 1;
+    GZIP = 2;
+    ZSTD = 3;
+  }
+  Compression compression = 3;
+}
+
 message DebugDump {
   enum Type {
     TYPE_UNSPECIFIED = 0;
     WIFI = 1;
+    BLUETOOTH = 2;
   }
   Type type = 1;
-  WiFiDump wifi_dump = 2;
+  oneof DumpInfo {
+    WiFiDump wifi_dump = 2;
+    BluetoothDump bluetooth_dump = 3;
+  }
 }
 
 message DebugDumps {

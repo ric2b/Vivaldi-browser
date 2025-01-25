@@ -108,9 +108,9 @@ To view the VM in a window, you can launch `vncviewer`:
 (shell) vncviewer localhost:5900 &
 ```
 
-To install `vncviewer`:
+To install `vncviewer`, which is a virtual package provided by `tigervnc-viewer`:
 ```bash
-(shell) sudo apt-get install vncviewer
+(shell) sudo apt-get install tigervnc-viewer
 ```
 
 See the [ChromiumOS developer guide](/chromium-os/developer-library/guides/development/developer-guide/#vm) for additional
@@ -185,7 +185,7 @@ is_debug = false
 
 # For Googlers:
 is_chrome_branded = true
-use_goma = true
+use_remoteexec = true
 ```
 
 Then use gn to generate your ninja file and build:

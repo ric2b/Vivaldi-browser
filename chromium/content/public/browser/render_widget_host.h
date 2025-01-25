@@ -15,9 +15,9 @@
 #include "base/i18n/rtl.h"
 #include "base/scoped_observation_traits.h"
 #include "build/build_config.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "content/common/content_export.h"
 #include "content/public/common/drop_data.h"
-#include "content/public/common/input/native_web_keyboard_event.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_sender.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
@@ -176,9 +176,9 @@ class CONTENT_EXPORT RenderWidgetHost {
   virtual void ForwardWheelEvent(
       const blink::WebMouseWheelEvent& wheel_event) = 0;
   virtual void ForwardKeyboardEvent(
-      const NativeWebKeyboardEvent& key_event) = 0;
+      const input::NativeWebKeyboardEvent& key_event) = 0;
   virtual void ForwardKeyboardEventWithLatencyInfo(
-      const NativeWebKeyboardEvent& key_event,
+      const input::NativeWebKeyboardEvent& key_event,
       const ui::LatencyInfo& latency_info) = 0;
   virtual void ForwardGestureEvent(
       const blink::WebGestureEvent& gesture_event) = 0;
@@ -205,7 +205,7 @@ class CONTENT_EXPORT RenderWidgetHost {
 
   // Add/remove a callback that can handle key presses without requiring focus.
   using KeyPressEventCallback =
-      base::RepeatingCallback<bool(const NativeWebKeyboardEvent&)>;
+      base::RepeatingCallback<bool(const input::NativeWebKeyboardEvent&)>;
   virtual void AddKeyPressEventCallback(
       const KeyPressEventCallback& callback) = 0;
   virtual void RemoveKeyPressEventCallback(

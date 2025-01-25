@@ -8,6 +8,9 @@
 #include "components/global_media_controls/public/media_item_ui.h"
 #include "components/global_media_controls/public/views/media_action_button.h"
 #include "components/global_media_controls/public/views/media_item_ui_device_selector.h"
+#include "components/global_media_controls/public/views/media_item_ui_footer.h"
+#include "components/global_media_controls/public/views/media_live_status_view.h"
+#include "components/global_media_controls/public/views/media_progress_view.h"
 #include "components/media_message_center/media_notification_view.h"
 #include "components/media_message_center/notification_theme.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -29,7 +32,31 @@ class Label;
 namespace global_media_controls {
 
 class MediaItemUIObserver;
-class MediaProgressView;
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(MediaItemUIUpdatedViewAction)
+enum class MediaItemUIUpdatedViewAction {
+  kPlay = 0,
+  kPause = 1,
+  kPreviousTrack = 2,
+  kNextTrack = 3,
+  kReplay10Seconds = 4,
+  kForward10Seconds = 5,
+  kProgressViewSeekBackward = 6,
+  kProgressViewSeekForward = 7,
+  kShowDeviceListForCasting = 8,
+  kHideDeviceListForCasting = 9,
+  kCloseDeviceListForCasting = 10,
+  kEnterPictureInPicture = 11,
+  kExitPictureInPicture = 12,
+  kMaxValue = kExitPictureInPicture,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/media/enums.xml:MediaItemUIUpdatedViewAction)
+
+const char kMediaItemUIUpdatedViewActionHistogram[] =
+    "Media.GlobalMediaControls.MediaItemUIUpdatedViewAction";
 
 // MediaItemUIUpdatedView holds the media information and playback controls for
 // a media session or cast session. This will be displayed within
@@ -46,15 +73,19 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIUpdatedView
       const std::string& id,
       base::WeakPtr<media_message_center::MediaNotificationItem> item,
       media_message_center::MediaColorTheme media_color_theme,
-      std::unique_ptr<MediaItemUIDeviceSelector> device_selector_view);
+      std::unique_ptr<MediaItemUIDeviceSelector> device_selector_view,
+      std::unique_ptr<MediaItemUIFooter> footer_view);
   MediaItemUIUpdatedView(const MediaItemUIUpdatedView&) = delete;
   MediaItemUIUpdatedView& operator=(const MediaItemUIUpdatedView&) = delete;
   ~MediaItemUIUpdatedView() override;
 
   // views::View:
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override;
   void AddedToWidget() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
+  bool OnMousePressed(const ui::MouseEvent& event) override;
 
   // MediaItemUI:
   void AddObserver(MediaItemUIObserver* observer) override;
@@ -76,23 +107,34 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIUpdatedView
   void UpdateWithMediaArtwork(const gfx::ImageSkia& image) override;
   void UpdateWithChapterArtwork(int index,
                                 const gfx::ImageSkia& image) override {}
-  void UpdateWithFavicon(const gfx::ImageSkia& icon) override {}
+  void UpdateWithFavicon(const gfx::ImageSkia& icon) override;
   void UpdateWithVectorIcon(const gfx::VectorIcon* vector_icon) override {}
   void UpdateWithMuteStatus(bool mute) override {}
   void UpdateWithVolume(float volume) override {}
   void UpdateDeviceSelectorVisibility(bool visible) override;
   void UpdateDeviceSelectorAvailability(bool has_devices) override;
 
+  // MediaItemUIUpdatedView:
+  void UpdateDeviceSelectorView(
+      std::unique_ptr<MediaItemUIDeviceSelector> device_selector_view);
+  void UpdateFooterView(std::unique_ptr<MediaItemUIFooter> footer_view);
+
   // Helper functions for testing:
   views::ImageView* GetArtworkViewForTesting();
+  views::ImageView* GetFaviconViewForTesting();
+  views::ImageView* GetCastingIndicatorViewForTesting();
   views::Label* GetSourceLabelForTesting();
   views::Label* GetTitleLabelForTesting();
   views::Label* GetArtistLabelForTesting();
+  views::Label* GetCurrentTimestampLabelForTesting();
+  views::Label* GetDurationTimestampLabelForTesting();
   MediaActionButton* GetMediaActionButtonForTesting(
       media_session::mojom::MediaSessionAction action);
   MediaProgressView* GetProgressViewForTesting();
+  MediaLiveStatusView* GetLiveStatusViewForTesting();
   MediaActionButton* GetStartCastingButtonForTesting();
   MediaItemUIDeviceSelector* GetDeviceSelectorForTesting();
+  MediaItemUIFooter* GetFooterForTesting();
 
  private:
   MediaActionButton* CreateMediaActionButton(views::View* parent,
@@ -107,13 +149,27 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIUpdatedView
   // actions are enabled.
   void UpdateMediaActionButtonsVisibility();
 
-  // Callback for the user dragging the progress view. A playing media should be
-  // temporarily paused when the user is dragging the progress line.
-  void OnProgressDragging(bool pause);
+  // Update the visibility of timestamp labels. They are visible only when the
+  // user is dragging the progress view.
+  void UpdateTimestampLabelsVisibility();
+
+  // Callback for when the user starts or ends dragging the progress view.
+  void OnProgressDragStateChange(DragState drag_state);
+
+  // Callback for when the user starts or ends dragging the progress view, and
+  // the media is playing before dragging starts. The media should be
+  // temporarily paused when the dragging starts, and resumed when the dragging
+  // ends.
+  void OnPlaybackStateChangeForProgressDrag(
+      PlaybackStateChangeForDragging change);
 
   // Callback for when the media progress view wants to update the progress
   // position.
   void SeekTo(double seek_progress);
+
+  // Callback for when the media progress view wants to inform the current
+  // progress position.
+  void OnProgressViewUpdateProgress(base::TimeDelta current_timestamp);
 
   // Callback for when the start casting button is toggled by user.
   void StartCastingButtonPressed();
@@ -124,20 +180,36 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIUpdatedView
   // Whether the media is currently in picture-in-picture.
   bool in_picture_in_picture_ = false;
 
+  // Whether the media is broadcast via livestream.
+  bool is_live_ = false;
+
+  // Whether the user is currently dragging the progress view.
+  DragState drag_state_ = DragState::kDragEnded;
+
   // Set of enabled media session actions that are used to decide media action
   // button visibilities.
   base::flat_set<media_session::mojom::MediaSessionAction> media_actions_;
 
   media_session::MediaPosition position_;
 
+  // Records the media position when user starts dragging the progress view. Use
+  // Max() as its default value to indicate that no dragging has started and the
+  // previous dragging has ended if there was one.
+  base::TimeDelta position_on_drag_started_ = base::TimeDelta::Max();
+
   base::ObserverList<MediaItemUIObserver> observers_;
 
   raw_ptr<views::ImageView> artwork_view_ = nullptr;
+  raw_ptr<views::ImageView> favicon_view_ = nullptr;
+  raw_ptr<views::ImageView> casting_indicator_view_ = nullptr;
   raw_ptr<views::Label> source_label_ = nullptr;
   raw_ptr<views::Label> title_label_ = nullptr;
   raw_ptr<views::Label> artist_label_ = nullptr;
+  raw_ptr<views::Label> current_timestamp_label_ = nullptr;
+  raw_ptr<views::Label> duration_timestamp_label_ = nullptr;
 
   raw_ptr<MediaProgressView> progress_view_ = nullptr;
+  raw_ptr<MediaLiveStatusView> live_status_view_ = nullptr;
   std::vector<MediaActionButton*> media_action_buttons_;
   raw_ptr<MediaActionButton> start_casting_button_ = nullptr;
   raw_ptr<MediaActionButton> picture_in_picture_button_ = nullptr;
@@ -148,6 +220,7 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIUpdatedView
   base::WeakPtr<media_message_center::MediaNotificationItem> item_;
   media_message_center::MediaColorTheme media_color_theme_;
   raw_ptr<MediaItemUIDeviceSelector> device_selector_view_ = nullptr;
+  raw_ptr<MediaItemUIFooter> footer_view_ = nullptr;
 };
 
 }  // namespace global_media_controls

@@ -52,6 +52,7 @@
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/profiles/profile_menu_coordinator.h"
+#include "chrome/browser/ui/views/profiles/profile_menu_view_base.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_test_helper.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_view.h"
@@ -80,6 +81,8 @@
 #include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
+#include "components/supervised_user/core/common/features.h"
+#include "components/supervised_user/test_support/supervised_user_signin_test_utils.h"
 #include "components/sync/service/sync_service.h"
 #include "components/sync/service/sync_user_settings.h"
 #include "components/sync/test/fake_server_network_resources.h"
@@ -219,11 +222,11 @@ class ProfileMenuViewTestBase {
     // Simulate a mouse click. Note: Buttons are either fired when pressed or
     // when released, so the corresponding methods need to be called.
     clickable_view->OnMousePressed(
-        ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+        ui::MouseEvent(ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
                        ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
-    clickable_view->OnMouseReleased(
-        ui::MouseEvent(ui::ET_MOUSE_RELEASED, gfx::Point(), gfx::Point(),
-                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
+    clickable_view->OnMouseReleased(ui::MouseEvent(
+        ui::EventType::kMouseReleased, gfx::Point(), gfx::Point(),
+        ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
   }
 
  private:
@@ -709,7 +712,8 @@ class ProfileMenuViewSigninErrorButtonTest : public ProfileMenuViewTestBase,
                  signin_metrics::AccessPoint access_point,
                  signin_metrics::PromoAction promo_action,
                  const CoreAccountId& account_id,
-                 TurnSyncOnHelper::SigninAbortedMode signin_aborted_mode),
+                 TurnSyncOnHelper::SigninAbortedMode signin_aborted_mode,
+                 bool is_sync_promo),
                 ());
   };
 
@@ -747,7 +751,8 @@ class ProfileMenuViewSigninErrorButtonTest : public ProfileMenuViewTestBase,
     static_cast<ProfileMenuView*>(profile_menu_view())
         ->OnSigninButtonClicked(
             account_info(),
-            ProfileMenuViewBase::ActionableItem::kSigninAccountButton);
+            ProfileMenuViewBase::ActionableItem::kSigninAccountButton,
+            signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN);
     histogram_tester.ExpectUniqueSample(
         "Profile.Menu.ClickedActionableItem",
         ProfileMenuViewBase::ActionableItem::kSigninAccountButton,
@@ -783,7 +788,8 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewSigninErrorButtonTest, OpenReauthDialog) {
           signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN,
           signin_metrics::PromoAction::PROMO_ACTION_WITH_DEFAULT,
           account_info().account_id,
-          TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT))
+          TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT,
+          /*sync_promo=*/false))
       .WillOnce([&loop]() { loop.Quit(); });
 
   // Complete reauth.
@@ -844,7 +850,8 @@ class ProfileMenuViewSigninPendingTest : public ProfileMenuViewTestBase,
     static_cast<ProfileMenuView*>(profile_menu_view())
         ->OnSigninButtonClicked(
             account_info(),
-            ProfileMenuViewBase::ActionableItem::kSigninReauthButton);
+            ProfileMenuViewBase::ActionableItem::kSigninReauthButton,
+            signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN);
     histogram_tester.ExpectUniqueSample(
         "Profile.Menu.ClickedActionableItem",
         ProfileMenuViewBase::ActionableItem::kSigninReauthButton,
@@ -1223,9 +1230,17 @@ constexpr ProfileMenuViewBase::ActionableItem
         // there are no other buttons at the end.
         ProfileMenuViewBase::ActionableItem::kPasswordsButton};
 
+// TODO(crbug.com/341975308): re-enable test.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_ProfileMenuClickTest_SyncEnabled_UnoEnabled \
+  DISABLED_ProfileMenuClickTest_SyncEnabled_UnoEnabled
+#else
+#define MAYBE_ProfileMenuClickTest_SyncEnabled_UnoEnabled \
+  ProfileMenuClickTest_SyncEnabled_UnoEnabled
+#endif
 PROFILE_MENU_CLICK_WITH_FEATURE_TEST(
     kActionableItems_SyncEnabled_UnoEnabled,
-    ProfileMenuClickTest_SyncEnabled_UnoEnabled,
+    MAYBE_ProfileMenuClickTest_SyncEnabled_UnoEnabled,
     /*enabled_features=*/{switches::kExplicitBrowserSigninUIOnDesktop},
     /*disabled_features=*/{}) {
   EnableSync();
@@ -1505,6 +1520,7 @@ constexpr ProfileMenuViewBase::ActionableItem
         ProfileMenuViewBase::ActionableItem::kAddressesButton,
         ProfileMenuViewBase::ActionableItem::kSigninAccountButton,
         ProfileMenuViewBase::ActionableItem::kEditProfileButton,
+        ProfileMenuViewBase::ActionableItem::kSyncSettingsButton,
         ProfileMenuViewBase::ActionableItem::kManageGoogleAccountButton,
         ProfileMenuViewBase::ActionableItem::kExitProfileButton,
 #if !BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -1545,6 +1561,7 @@ constexpr ProfileMenuViewBase::ActionableItem
         ProfileMenuViewBase::ActionableItem::kAddressesButton,
         ProfileMenuViewBase::ActionableItem::kSigninReauthButton,
         ProfileMenuViewBase::ActionableItem::kEditProfileButton,
+        ProfileMenuViewBase::ActionableItem::kSyncSettingsButton,
         ProfileMenuViewBase::ActionableItem::kManageGoogleAccountButton,
         ProfileMenuViewBase::ActionableItem::kExitProfileButton,
 #if !BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -1592,6 +1609,82 @@ PROFILE_MENU_CLICK_WITH_FEATURE_TEST(
 
   RunTest();
 }
+
+// The kHideGuestModeForSupervisedUsers does not exist on Lacros, as Guest mode
+// hiding for supervised users is inherited from OS-level signals.
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
+constexpr ProfileMenuViewBase::ActionableItem
+    kActionableItems_GuestProfileButtonAvailable_SignedInNotSupervised[] = {
+        ProfileMenuViewBase::ActionableItem::kEditProfileButton,
+        ProfileMenuViewBase::ActionableItem::kPasswordsButton,
+        ProfileMenuViewBase::ActionableItem::kCreditCardsButton,
+        ProfileMenuViewBase::ActionableItem::kAddressesButton,
+        ProfileMenuViewBase::ActionableItem::kSigninAccountButton,
+        ProfileMenuViewBase::ActionableItem::kManageGoogleAccountButton,
+        ProfileMenuViewBase::ActionableItem::kSignoutButton,
+        ProfileMenuViewBase::ActionableItem::kManageProfilesButton,
+        ProfileMenuViewBase::ActionableItem::kGuestProfileButton,
+        ProfileMenuViewBase::ActionableItem::kAddNewProfileButton,
+        // The first button is added again to finish the cycle and test that
+        // there are no other buttons at the end.
+        ProfileMenuViewBase::ActionableItem::kEditProfileButton};
+
+PROFILE_MENU_CLICK_WITH_FEATURE_TEST(
+    kActionableItems_GuestProfileButtonAvailable_SignedInNotSupervised,
+    ProfileMenuClickTest_GuestProfileButtonAvailable_SignedInNotSupervised,
+    /*enabled_features=*/{supervised_user::kHideGuestModeForSupervisedUsers},
+    /*disabled_features=*/{switches::kExplicitBrowserSigninUIOnDesktop}) {
+  AccountInfo account_info = signin::MakePrimaryAccountAvailable(
+      identity_manager(), "adult@gmail.com", signin::ConsentLevel::kSignin);
+  supervised_user::UpdateSupervisionStatusForAccount(
+      account_info, identity_manager(),
+      /*is_subject_to_parental_controls=*/false);
+  UnconsentedPrimaryAccountChecker(identity_manager()).Wait();
+
+  // Check setup.
+  ASSERT_EQ(account_info.account_id, identity_manager()->GetPrimaryAccountId(
+                                         signin::ConsentLevel::kSignin));
+  ASSERT_TRUE(profiles::IsGuestModeEnabled(*GetProfile()));
+
+  RunTest();
+}
+
+constexpr ProfileMenuViewBase::ActionableItem
+    kActionableItems_GuestProfileButtonNotAvailable_SignedInSupervised[] = {
+        ProfileMenuViewBase::ActionableItem::kEditProfileButton,
+        ProfileMenuViewBase::ActionableItem::kPasswordsButton,
+        ProfileMenuViewBase::ActionableItem::kCreditCardsButton,
+        ProfileMenuViewBase::ActionableItem::kAddressesButton,
+        ProfileMenuViewBase::ActionableItem::kSigninAccountButton,
+        ProfileMenuViewBase::ActionableItem::kManageGoogleAccountButton,
+        ProfileMenuViewBase::ActionableItem::kSignoutButton,
+        ProfileMenuViewBase::ActionableItem::kManageProfilesButton,
+        // The kGuestProfileButton entry is not present.
+        ProfileMenuViewBase::ActionableItem::kAddNewProfileButton,
+        // The first button is added again to finish the cycle and test that
+        // there are no other buttons at the end.
+        ProfileMenuViewBase::ActionableItem::kEditProfileButton};
+
+PROFILE_MENU_CLICK_WITH_FEATURE_TEST(
+    kActionableItems_GuestProfileButtonNotAvailable_SignedInSupervised,
+    ProfileMenuClickTest_GuestProfileButtonNotAvailable_SignedInSupervised,
+    /*enabled_features=*/{supervised_user::kHideGuestModeForSupervisedUsers},
+    /*disabled_features=*/{switches::kExplicitBrowserSigninUIOnDesktop}) {
+  AccountInfo account_info = signin::MakePrimaryAccountAvailable(
+      identity_manager(), "child@gmail.com", signin::ConsentLevel::kSignin);
+  supervised_user::UpdateSupervisionStatusForAccount(
+      account_info, identity_manager(),
+      /*is_subject_to_parental_controls=*/true);
+  UnconsentedPrimaryAccountChecker(identity_manager()).Wait();
+
+  // Check setup.
+  ASSERT_EQ(account_info.account_id, identity_manager()->GetPrimaryAccountId(
+                                         signin::ConsentLevel::kSignin));
+  ASSERT_FALSE(profiles::IsGuestModeEnabled(*GetProfile()));
+
+  RunTest();
+}
+#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 // List of actionable items in the correct order as they appear in the menu.

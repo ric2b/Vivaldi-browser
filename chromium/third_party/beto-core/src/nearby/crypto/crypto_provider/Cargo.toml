@@ -22,7 +22,6 @@ default = ["alloc"]
 std = []
 alloc = []
 test_vectors = []
-test_boringssl = ["crypto_provider_default/boringssl"]
 raw_private_key_permit = []
 
 [[bench]]

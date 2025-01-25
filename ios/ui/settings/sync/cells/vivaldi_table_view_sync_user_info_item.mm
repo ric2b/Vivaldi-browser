@@ -14,6 +14,8 @@ const CGFloat kHorizontalStackViewSpacing = 20.0;
 const CGFloat kVerticalStackViewSpacing = 4.0;
 const CGFloat kAvatarImageSize = 54.0;
 
+const CGFloat kBadgeImageSize = 20.0;
+
 const UIFontTextStyle nameTextStyle = UIFontTextStyleHeadline;
 const UIFontTextStyle sessionTextStyle = UIFontTextStyleFootnote;
 
@@ -37,6 +39,7 @@ const UIFontTextStyle sessionTextStyle = UIFontTextStyleFootnote;
   header.userNameLabel.text = self.userName;
   header.sessionNameLabel.text = self.sessionName;
   [header setUserAvatar:self.userAvatar];
+  [header setBadgeImage:self.supporterBadge];
 }
 
 @end
@@ -44,7 +47,8 @@ const UIFontTextStyle sessionTextStyle = UIFontTextStyleFootnote;
 #pragma mark - VivaldiTableViewSyncUserInfoView
 
 @interface VivaldiTableViewSyncUserInfoView ()
-@property(nonatomic, strong) UIImageView* imageView;
+@property(nonatomic, strong) UIImageView* profileImageView;
+@property(nonatomic, strong) UIImageView* badgeImageView;
 @end
 
 @implementation VivaldiTableViewSyncUserInfoView
@@ -71,13 +75,17 @@ const UIFontTextStyle sessionTextStyle = UIFontTextStyleFootnote;
     verticalStackView.alignment = UIStackViewAlignmentLeading;
     verticalStackView.spacing = kVerticalStackViewSpacing;
 
-    _imageView = [UIImageView new];
-    _imageView.contentMode = UIViewContentModeScaleAspectFill;
-    _imageView.layer.cornerRadius = kAvatarImageSize/2;
-    _imageView.layer.masksToBounds = YES;
+    _profileImageView = [UIImageView new];
+    _profileImageView.contentMode = UIViewContentModeScaleAspectFill;
+    _profileImageView.layer.cornerRadius = kAvatarImageSize/2;
+    _profileImageView.layer.masksToBounds = YES;
+
+    // Set up constraints for the badgeImageView
+    _badgeImageView = [UIImageView new];
+    _badgeImageView.contentMode = UIViewContentModeScaleAspectFit;
 
     UIStackView* stackView = [[UIStackView alloc]
-        initWithArrangedSubviews:@[_imageView, verticalStackView]];
+        initWithArrangedSubviews:@[_profileImageView, verticalStackView]];
     stackView.axis = UILayoutConstraintAxisHorizontal;
     stackView.alignment = UIStackViewAlignmentCenter;
     stackView.spacing = kHorizontalStackViewSpacing;
@@ -87,6 +95,18 @@ const UIFontTextStyle sessionTextStyle = UIFontTextStyleFootnote;
               kStackMargin,kStackMargin,
               kStackMargin,kStackMargin)];
   }
+  // Add badgeImageView as a sibling of imageView
+  [self.contentView addSubview:_badgeImageView];
+  // Set up constraints for the badgeImageView relative to imageView
+  _badgeImageView.translatesAutoresizingMaskIntoConstraints = NO;
+  [NSLayoutConstraint activateConstraints:@[
+    [_badgeImageView.widthAnchor constraintEqualToConstant:kBadgeImageSize],
+    [_badgeImageView.heightAnchor constraintEqualToConstant:kBadgeImageSize],
+    [_badgeImageView.bottomAnchor constraintEqualToAnchor:
+      _profileImageView.bottomAnchor],
+    [_badgeImageView.rightAnchor constraintEqualToAnchor:
+      _profileImageView.rightAnchor]
+  ]];
   return self;
 }
 
@@ -95,15 +115,22 @@ const UIFontTextStyle sessionTextStyle = UIFontTextStyleFootnote;
 
   self.userNameLabel.hidden = NO;
   self.sessionNameLabel.hidden = NO;
-  self.imageView.hidden = NO;
+  self.profileImageView.hidden = NO;
+  self.badgeImageView.hidden = NO;
   [self setUserAvatar:nil];
+  [self setBadgeImage:nil];
+}
+
+- (void)setBadgeImage:(UIImage*)badgeImage {
+  _badgeImageView.image = badgeImage;
 }
 
 - (void)setUserAvatar:(UIImage*)image {
   CGSize size = CGSizeMake(kAvatarImageSize, kAvatarImageSize);
-  self.imageView.layer.cornerRadius = kAvatarImageSize/2;
-  self.imageView.layer.masksToBounds = YES;
-  self.imageView.image = ResizeImage(image, size, ProjectionMode::kAspectFill);
+  self.profileImageView.layer.cornerRadius = kAvatarImageSize/2;
+  self.profileImageView.layer.masksToBounds = YES;
+  self.profileImageView.image =
+    ResizeImage(image, size, ProjectionMode::kAspectFill);
 }
 
 @end

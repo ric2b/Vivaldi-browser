@@ -14,12 +14,15 @@ class Rect;
 namespace chromeos::editor_menu {
 
 enum class CardType {
-  // Currently `kDefault` can be either Quick Answers or Mahi Menu.
+  // Currently `kDefault` can be either Quick Answers or Mahi Condensed Menu
+  // Card.
   kDefault = 0,
 
   kEditorMenu = 1,
 
   kMahiDefaultMenu = 2,
+
+  kMagicBoostOptInCard = 3,
 };
 
 // Spacing between the editor menu and the anchor view (context menu).
@@ -27,6 +30,8 @@ inline constexpr int kEditorMenuMarginDip = 8;
 
 // Minimum width of the editor menu.
 inline constexpr int kEditorMenuMinWidthDip = 320;
+inline constexpr int kMahiMenuTopBottomMinWidthDip = 240;
+inline constexpr int kBigEditorMenuMinWidthDip = 480;
 
 // Helper to compute editor menu bounds that for the provided anchor view
 // bounds. This tries to position the editor menu somewhere above/below/around
@@ -77,7 +82,8 @@ inline constexpr int kEditorMenuMinWidthDip = 320;
 // +------------------------------------------------------------------------+
 //
 gfx::Rect GetEditorMenuBounds(const gfx::Rect& anchor_view_bounds,
-                              const views::View* target);
+                              const views::View* target,
+                              const CardType card_type = CardType::kDefault);
 
 }  // namespace chromeos::editor_menu
 

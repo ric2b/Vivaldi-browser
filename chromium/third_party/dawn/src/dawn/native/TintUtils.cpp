@@ -119,9 +119,6 @@ tint::ast::transform::VertexFormat ToTintVertexFormat(wgpu::VertexFormat format)
             return tint::ast::transform::VertexFormat::kSint32x4;
         case wgpu::VertexFormat::Unorm10_10_10_2:
             return tint::ast::transform::VertexFormat::kUnorm10_10_10_2;
-
-        case wgpu::VertexFormat::Undefined:
-            break;
     }
     DAWN_UNREACHABLE();
 }
@@ -155,21 +152,6 @@ ScopedTintICEHandler::ScopedTintICEHandler(DeviceBase* device) {
 
 ScopedTintICEHandler::~ScopedTintICEHandler() {
     tlDevice = nullptr;
-}
-
-tint::ExternalTextureOptions BuildExternalTextureTransformBindings(
-    const PipelineLayoutBase* layout) {
-    tint::ExternalTextureOptions options;
-    for (BindGroupIndex i : IterateBitSet(layout->GetBindGroupLayoutsMask())) {
-        const BindGroupLayoutInternalBase* bgl = layout->GetBindGroupLayout(i);
-        for (const auto& [_, expansion] : bgl->GetExternalTextureBindingExpansionMap()) {
-            options.bindings_map[{static_cast<uint32_t>(i),
-                                  static_cast<uint32_t>(expansion.plane0)}] = {
-                {static_cast<uint32_t>(i), static_cast<uint32_t>(expansion.plane1)},
-                {static_cast<uint32_t>(i), static_cast<uint32_t>(expansion.params)}};
-        }
-    }
-    return options;
 }
 
 tint::ast::transform::VertexPulling::Config BuildVertexPullingTransformConfig(

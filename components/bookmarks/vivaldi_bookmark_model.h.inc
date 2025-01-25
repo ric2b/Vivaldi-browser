@@ -4,4 +4,4 @@
   // determines the algorithm used by QueryParser internally to parse `query`.
   [[nodiscard]] std::vector<TitledUrlMatch> GetNicknameMatching(
       const std::u16string& query,
-      size_t max_count_hint) const override;
+      size_t max_count_hint) const;

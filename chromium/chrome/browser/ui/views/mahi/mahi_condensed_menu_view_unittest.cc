@@ -12,6 +12,7 @@
 #include "chrome/browser/chromeos/mahi/test/fake_mahi_web_contents_manager.h"
 #include "chrome/browser/chromeos/mahi/test/scoped_mahi_web_contents_manager_for_testing.h"
 #include "chrome/browser/ui/views/mahi/mahi_menu_constants.h"
+#include "chromeos/components/mahi/public/cpp/mahi_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/screen.h"
@@ -39,8 +40,9 @@ class MockMahiWebContentsManager : public ::mahi::FakeMahiWebContentsManager {
   MOCK_METHOD(void,
               OnContextMenuClicked,
               (int64_t display_id,
-               ::mahi::ButtonType button_type,
-               const std::u16string& question),
+               ::chromeos::mahi::ButtonType button_type,
+               const std::u16string& question,
+               const gfx::Rect& mahi_menu_bounds),
               (override));
 };
 
@@ -50,7 +52,8 @@ TEST_F(MahiCondensedMenuViewTest, NotifiesWebContentsManagerOnClick) {
   MockMahiWebContentsManager mock_mahi_web_contents_manager;
   ::mahi::ScopedMahiWebContentsManagerForTesting
       scoped_mahi_web_contents_manager(&mock_mahi_web_contents_manager);
-  std::unique_ptr<views::Widget> menu_widget = CreateTestWidget();
+  std::unique_ptr<views::Widget> menu_widget =
+      CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
   auto* condensed_menu_view =
       menu_widget->SetContentsView(std::make_unique<MahiCondensedMenuView>());
   menu_widget->Show();
@@ -66,7 +69,8 @@ TEST_F(MahiCondensedMenuViewTest, NotifiesWebContentsManagerOnClick) {
           Eq(display::Screen::GetScreen()
                  ->GetDisplayNearestWindow(menu_widget->GetNativeWindow())
                  .id()),
-          Eq(::mahi::ButtonType::kSummary), /*question=*/Eq(u"")))
+          Eq(::chromeos::mahi::ButtonType::kSummary), /*question=*/Eq(u""),
+          /*mahi_menu_bounds=*/Eq(condensed_menu_view->GetBoundsInScreen())))
       .Times(1);
 
   ui::test::EventGenerator event_generator(GetContext(),

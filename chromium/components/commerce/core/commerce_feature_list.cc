@@ -46,7 +46,7 @@ const CountryLocaleMap& GetAllowedCountryToLocaleMap() {
     map[&ntp_features::kNtpChromeCartModule] = {{"us", {"en-us"}}};
     map[&kParcelTrackingRegionLaunched] = {{"us", {"en-us"}}};
     map[&kPriceInsightsRegionLaunched] = {{"us", {"en-us"}}};
-    map[&kProductSpecificationsRegionLaunched] = {{"us", {"en-us"}}};
+    map[&kProductSpecifications] = {{"us", {"en-us"}}};
     map[&kShoppingListRegionLaunched] = {{"us", {"en-us"}}};
     map[&kShoppingPageTypesRegionLaunched] = {{"us", {"en-us"}}};
     map[&kShoppingPDPMetricsRegionLaunched] = {{"us", {"en-us"}}};
@@ -191,6 +191,11 @@ const base::FeatureParam<bool> kPriceInsightsShowFeedback{
 const char kPriceInsightsUseCacheParam[] = "price-insights-use-cache";
 const base::FeatureParam<bool> kPriceInsightsUseCache{
     &commerce::kPriceInsights, kPriceInsightsUseCacheParam, true};
+const char kProductSpecsMigrateToMultiSpecificsParam[] =
+    "migrate-legacy-to-multi-specifics";
+const base::FeatureParam<bool> kProductSpecsMigrateToMultiSpecifics{
+    &commerce::kProductSpecificationsMultiSpecifics,
+    kProductSpecsMigrateToMultiSpecificsParam, false};
 
 // Tonal colors for the expanded state of the price tracking chip on desktop.
 BASE_FEATURE(kPriceTrackingIconColors,
@@ -200,13 +205,17 @@ BASE_FEATURE(kPriceTrackingIconColors,
 BASE_FEATURE(kProductSpecifications,
              "ProductSpecifications",
              base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kProductSpecificationsRegionLaunched,
-             "ProductSpecificationsRegionLaunched",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kProductSpecificationsSync,
-             "ProductSpecificationsSync",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+// Kill switch for unsupported fields becoming supported in the event of a
+// browser upgrade.
+BASE_FEATURE(kProductSpecificationsClearMetadataOnNewlySupportedFields,
+             "ProductSpecificationsClearMetadataOnNewlySupportedFields",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Stores Product Specifications across multiple specifics instead of one.
+BASE_FEATURE(kProductSpecificationsMultiSpecifics,
+             "ProductSpecificationsMultiSpecifics",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kShoppingIconColorVariant,
              "ShoppingIconColorVariant",
@@ -243,6 +252,10 @@ const base::FeatureParam<int> kNonMerchantWideBehavior{
     &commerce::kDiscountDialogAutoPopupBehaviorSetting,
     kNonMerchantWideBehaviorParam, 2};
 
+BASE_FEATURE(kDiscountsUiRefactor,
+             "DiscountsUiRefactor",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 const base::FeatureParam<bool> kDeleteAllMerchantsOnClearBrowsingHistory{
     &kCommerceMerchantViewer, "delete_all_merchants_on_clear_history", false};
 
@@ -257,6 +270,10 @@ BASE_FEATURE(kShoppingListRegionLaunched,
              "ShoppingListRegionLaunched",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
+
+BASE_FEATURE(kPriceTrackingSubscriptionServiceLocaleKey,
+             "PriceTrackingSubscriptionServiceLocaleKey",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kShoppingPDPMetrics,
              "ShoppingPDPMetrics",
@@ -273,6 +290,10 @@ BASE_FEATURE(kTrackByDefaultOnMobile,
 #if BUILDFLAG(IS_IOS)
 BASE_FEATURE(kPriceInsightsIos,
              "PriceInsightsIos",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPriceInsightsHighPriceIos,
+             "PriceInsightsHighPrice",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
@@ -436,6 +457,18 @@ const base::FeatureParam<base::TimeDelta>
         &commerce::kCodeBasedRBD, kCodeBasedRuleDiscountCouponDeletionTimeParam,
         base::Seconds(6)};
 
+const char kProductSpecificationsSetValidForClusteringTimeParam[] =
+    "set-valid-for-clustering-time";
+const base::FeatureParam<base::TimeDelta>
+    kProductSpecificationsSetValidForClusteringTime{
+        &commerce::kProductSpecifications,
+        kProductSpecificationsSetValidForClusteringTimeParam, base::Days(14)};
+const char kProductSpecificationsUseServerClusteringParam[] =
+    "use-server-clustering";
+const base::FeatureParam<bool> kProductSpecificationsUseServerClustering{
+    &commerce::kProductSpecifications,
+    kProductSpecificationsUseServerClusteringParam, false};
+
 const char kRevertIconOnFailureParam[] =
     "shopping-list-revert-page-action-icon-on-failure";
 const base::FeatureParam<bool> kRevertIconOnFailure{
@@ -477,11 +510,8 @@ bool isContextualConsentEnabled() {
 }
 
 bool IsShoppingListAllowedForEnterprise(PrefService* prefs) {
-  const base::Value* pref =
-      prefs->GetUserPrefValue(kShoppingListEnabledPrefName);
-
-  // Default to true if there is no value set.
-  return !pref || pref->GetBool();
+  return prefs->GetBoolean(kShoppingListEnabledPrefName) ||
+         !prefs->IsManagedPreference(kShoppingListEnabledPrefName);
 }
 
 bool IsEnabledForCountryAndLocale(const base::Feature& feature,

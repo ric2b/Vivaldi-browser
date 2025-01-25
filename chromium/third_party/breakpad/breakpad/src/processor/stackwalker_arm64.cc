@@ -289,8 +289,6 @@ void StackwalkerARM64::CorrectRegLRByFramePointer(
   uint64_t last_fp = 0;
   if (last_frame_callee_fp &&
       !memory_->GetMemoryAtAddress(last_frame_callee_fp, &last_fp)) {
-    BPLOG(ERROR) << "Unable to read last_fp from last_last_fp: 0x" << std::hex
-                 << last_frame_callee_fp;
     return;
   }
   // Give up if STACK CFI doesn't agree with frame pointer.

@@ -70,15 +70,18 @@ def branch_configs():
     """
     return [{
         "name": "standard branch",
-        "platforms": [p for p in PLATFORMS if p != platform.CROS_LTS],
-        "sheriff_rotation": "chrome_browser_release",
+        "initialize": {},
     }, {
         "name": "desktop extended stable branch",
-        "platforms": [platform.MAC, platform.WINDOWS],
-        "sheriff_rotation": "chrome_browser_release",
+        "platform_set": {
+            "platforms": [platform.MAC, platform.WINDOWS],
+            "gardener_rotation": "chrome_browser_release",
+        },
     }] + [{
         "name": p,
-        "platforms": [p],
+        "platform_set": {
+            "platforms": [p],
+        },
     } for p in PLATFORMS]
 
 presubmit_builder(
@@ -150,6 +153,7 @@ presubmit_builder(
     executable = "recipe:chromium/gn_args_verifier",
     contact_team_email = "chrome-browser-infra-team@google.com",
     properties = {
+        "gclient_config": "chromium",
         "builder_config_directory": "infra/config/generated/builders",
         "mb_config_paths": ["src/tools/mb/mb_config.pyl"],
     },

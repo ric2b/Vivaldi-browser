@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as Common from '../core/common/common.js';
 import type * as Platform from '../core/platform/platform.js';
 import * as SDK from '../core/sdk/sdk.js';
 import * as Protocol from '../generated/protocol.js';
@@ -16,6 +17,7 @@ export const MAIN_FRAME_ID = 'main' as Protocol.Page.FrameId;
 export const DOMAIN = 'example.com';
 export const SECURITY_ORIGIN = `https://${DOMAIN}`;
 export const FRAME_URL = `${SECURITY_ORIGIN}/` as Platform.DevToolsPath.UrlString;
+let childFrameId = 0;
 
 const FRAME = {
   url: FRAME_URL,
@@ -79,6 +81,30 @@ export function getMainFrame(
   const mainFrame = resourceTreeModel.mainFrame as unknown as SDK.ResourceTreeModel.ResourceTreeFrame;
   mainFrame.navigate(getEffectivePayload(MAIN_FRAME_ID, FRAME, framePayload));
   return mainFrame;
+}
+
+export async function addChildFrame(target: SDK.Target.Target, framePayload?: Partial<Protocol.Page.Frame>):
+    Promise<SDK.ResourceTreeModel.ResourceTreeFrame> {
+  const resourceTreeModel = await getInitializedResourceTreeModel(target);
+  getMainFrame(target);
+  const childFrame =
+      resourceTreeModel.frameAttached(`CHILD_FRAME_${++childFrameId}` as Protocol.Page.FrameId, MAIN_FRAME_ID);
+  assert.exists(childFrame);
+  if (framePayload) {
+    navigate(childFrame, {...FRAME, ...framePayload});
+  }
+  return childFrame;
+}
+
+export function createResource(
+    frame: SDK.ResourceTreeModel.ResourceTreeFrame, networkScriptUrl: Platform.DevToolsPath.UrlString, mimeType: string,
+    content: string) {
+  const resource = new SDK.Resource.Resource(
+      frame.resourceTreeModel(), null, networkScriptUrl, networkScriptUrl, MAIN_FRAME_ID, null,
+      Common.ResourceType.ResourceType.fromMimeType(mimeType), mimeType, null, content.length);
+
+  frame.addResource(resource);
+  return resource;
 }
 
 export function navigate(

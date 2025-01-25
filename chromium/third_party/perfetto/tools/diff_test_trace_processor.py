@@ -41,6 +41,7 @@ def main():
   parser.add_argument('--metrics-descriptor', nargs='+', type=str)
   parser.add_argument('--chrome-track-event-descriptor', type=str, default=None)
   parser.add_argument('--test-extensions', type=str, default=None)
+  parser.add_argument('--winscope-extensions', type=str, default=None)
   parser.add_argument('--perf-file', type=str)
   parser.add_argument(
       '--override-sql-module', type=str, action='append', default=[])
@@ -72,6 +73,10 @@ def main():
   if args.test_extensions is None:
     args.test_extensions = os.path.join(out_path, 'gen', 'protos', 'perfetto',
                                         'trace', 'test_extensions.descriptor')
+  if args.winscope_extensions is None:
+    args.winscope_extensions = os.path.join(out_path, 'gen', 'protos',
+                                            'perfetto', 'trace', 'android',
+                                            'winscope.descriptor')
 
   test_runner = DiffTestsRunner(args.name_filter, args.trace_processor,
                                 args.trace_descriptor, args.no_colors,
@@ -80,7 +85,8 @@ def main():
 
   results = test_runner.run_all_tests(args.metrics_descriptor,
                                       args.chrome_track_event_descriptor,
-                                      args.test_extensions, args.keep_input,
+                                      args.test_extensions,
+                                      args.winscope_extensions, args.keep_input,
                                       args.rebase)
   sys.stderr.write(results.str(args.no_colors, len(test_runner.tests)))
 

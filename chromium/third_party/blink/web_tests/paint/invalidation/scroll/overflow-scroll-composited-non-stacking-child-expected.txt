@@ -7,7 +7,7 @@
       "backgroundColor": "#FFFFFF"
     },
     {
-      "name": "LayoutNGBlockFlow (positioned) DIV class='back'",
+      "name": "LayoutBlockFlow (positioned) DIV class='back'",
       "position": [75, 65],
       "bounds": [180, 100],
       "contentsOpaque": true,
@@ -15,15 +15,19 @@
       "transform": 2
     },
     {
-      "name": "LayoutNGBlockFlow HTML",
+      "name": "LayoutBlockFlow HTML",
       "position": [8, 60],
-      "bounds": [784, 200],
-      "invalidations": [
-        [300, 5, 15, 175]
-      ]
+      "bounds": [784, 200]
     },
     {
-      "name": "LayoutNGBlockFlow (positioned) DIV class='icon'",
+      "name": "VerticalScrollbar",
+      "position": [290, 5],
+      "bounds": [15, 175],
+      "contentsOpaque": true,
+      "transform": 1
+    },
+    {
+      "name": "LayoutBlockFlow (positioned) DIV class='icon'",
       "bounds": [40, 40],
       "contentsOpaque": true,
       "backgroundColor": "#FFDDBB",

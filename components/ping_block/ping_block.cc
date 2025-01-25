@@ -3,9 +3,11 @@
 #include "components/ping_block/ping_block.h"
 
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
+
+#include "components/user_agent/vivaldi_user_agent.h"
+#include "prefs/vivaldi_gen_prefs.h"
 
 namespace vivaldi {
 
@@ -25,19 +27,17 @@ bool PingBlockerFilter::OnBeforeRequest(
     content::BrowserContext* browser_context,
     const vivaldi::FilteredRequestInfo* request,
     BeforeRequestCallback callback) {
-  bool accept = true;
+  bool cancel = false;
   if (request->request.resource_type ==
       static_cast<int>(blink::mojom::ResourceType::kPing)) {
     Profile* profile = Profile::FromBrowserContext(browser_context);
     PrefService* prefs = profile->GetPrefs();
-    if (!prefs->GetBoolean(prefs::kEnableHyperlinkAuditing))
-      accept = false;
-  }
-  if (accept) {
-    return false;
+    if (prefs->GetBoolean(vivaldiprefs::kPrivacyBlockPingsEnabled) &&
+        !vivaldi_user_agent::IsUrlAllowed(request->request.url))
+      cancel = true;
   }
 
-  std::move(callback).Run(true, false, GURL());
+  std::move(callback).Run(cancel, false, GURL());
   return true;
 }
 
@@ -46,7 +46,8 @@ bool PingBlockerFilter::OnBeforeSendHeaders(
     const vivaldi::FilteredRequestInfo* request,
     const net::HttpRequestHeaders* headers,
     BeforeSendHeadersCallback callback) {
-  return false;
+  std::move(callback).Run(false, RequestHeaderChanges());
+  return true;
 }
 
 void PingBlockerFilter::OnSendHeaders(
@@ -59,7 +60,8 @@ bool PingBlockerFilter::OnHeadersReceived(
     const vivaldi::FilteredRequestInfo* request,
     const net::HttpResponseHeaders* headers,
     HeadersReceivedCallback callback) {
-  return false;
+  std::move(callback).Run(false, false, GURL(), ResponseHeaderChanges());
+  return true;
 }
 
 void PingBlockerFilter::OnBeforeRedirect(

@@ -602,67 +602,6 @@
         }
       },
       {
-        "id": "ProxyPlatformSupport",
-        "type": "object",
-        "properties": {
-          "support": {
-            "type": "boolean"
-          }
-        }
-      },
-      {
-        "id": "ProxyInfo",
-        "type": "object",
-        "properties": {
-          "hasOther": {
-            "type": "boolean"
-          }
-        }
-      },
-      {
-        "id": "ProxyHost",
-        "type": "object",
-        "properties": {
-          "host": {
-            "type": "string"
-          },
-          "port": {
-            "type": "number"
-          }
-        }
-      },
-      {
-        "id": "ProxyConnectInfo",
-        "type": "object",
-        "properties": {
-          "message": {
-            "type": "string",
-            "description": "Information when success is false."
-          },
-          "pid": {
-            "type": "number"
-          },
-          "success": {
-            "type": "boolean"
-          }
-        }
-      },
-      {
-        "id": "ProxyOptions",
-        "type": "object",
-        "properties": {
-          "local": {
-            "$ref": "ProxyHost"
-          },
-          "remote": {
-            "$ref": "ProxyHost"
-          },
-          "token": {
-            "type": "string"
-          }
-        }
-      },
-      {
         "id": "ReadImageData",
         "type": "object",
         "description": "An object that defines the data read from the image file.",
@@ -2001,71 +1940,6 @@
         }
       },
       {
-        "name": "supportsProxy",
-        "type": "function",
-        "description": "Returns true or false depending on invisv proxy can be used or not. This is a platform test, not a test of other condtitions.",
-        "parameters": [],
-        "returns": {
-          "$ref": "ProxyPlatformSupport"
-        }
-      },
-      {
-        "name": "getOtherProxies",
-        "type": "function",
-        "description": "Get information of other proxies running.",
-        "parameters": [
-          {
-            "name": "options",
-            "$ref": "ProxyHost",
-            "description": "Ignore this proxy. Can be used to filter out our own."
-          }
-        ],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-            {
-              "name": "info",
-              "$ref": "ProxyInfo"
-            }
-          ]
-        }
-      },
-      {
-        "name": "connectProxy",
-        "type": "function",
-        "description": "Connects to invisv proxy.",
-        "parameters": [
-          {
-            "name": "options",
-            "$ref": "ProxyOptions"
-          }
-        ],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-            {
-              "name": "info",
-              "$ref": "ProxyConnectInfo"
-            }
-          ]
-        }
-      },
-      {
-        "name": "disconnectProxy",
-        "type": "function",
-        "description": "Disconnects from invisv proxy.",
-        "parameters": [],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-            {
-              "name": "result",
-              "type": "boolean"
-            }
-          ]
-        }
-      },
-      {
         "name": "browserWindowReady",
         "type": "function",
         "description": "Signals that JS has fully set up browser window and its event listeners.",
@@ -2151,6 +2025,79 @@
               "optional": true
             }
           ]
+        }
+      },
+      {
+        "name": "emulateUserInput",
+        "type": "function",
+        "description": "Notifies render there has been user driven input. To be used when normal input is not detected in render because of blocking event loop handling (eg when menus are open).",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "number"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      {
+        "name": "isVivaldiPinnedToLaunchBar",
+        "type": "function",
+        "description": "Check is Vivaldi pinned to the launch bar. If pinning is not available, throws an Error.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      {
+        "name": "pinVivaldiToLaunchBar",
+        "type": "function",
+        "description": "Pin Vivaldi icon to the launch bar.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      {
+        "name": "downloadsDrag",
+        "type": "function",
+        "description": "Start a native drag for the downloads items.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          },
+          {
+            "name": "downloadIds",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Array of IDs of the download items to initiate the drag."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
         }
       }
     ],

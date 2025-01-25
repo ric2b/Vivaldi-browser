@@ -5,6 +5,7 @@
 #include "chrome/browser/sharing/sharing_device_registration.h"
 
 #include <stdint.h>
+
 #include <map>
 #include <memory>
 #include <string>
@@ -14,7 +15,6 @@
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
-#include "chrome/browser/sharing/features.h"
 #include "chrome/browser/sharing/sharing_constants.h"
 #include "chrome/browser/sharing/sharing_device_registration_result.h"
 #include "chrome/browser/sharing/sharing_sync_preference.h"
@@ -23,6 +23,7 @@
 #include "components/gcm_driver/instance_id/instance_id_driver.h"
 #include "components/prefs/pref_registry.h"
 #include "components/prefs/pref_service_factory.h"
+#include "components/sharing_message/features.h"
 #include "components/sync/test/test_sync_service.h"
 #include "components/sync_device_info/device_info.h"
 #include "components/sync_device_info/fake_device_info_sync_service.h"
@@ -283,7 +284,7 @@ TEST_F(SharingDeviceRegistrationTest, RegisterDeviceTest_Success) {
   syncer::DeviceInfo::SharingInfo expected_sharing_info(
       {kVapidFCMToken, kDevicep256dh, kDeviceAuthSecret},
       {kSenderIdFCMToken, kSenderIdP256dh, kSenderIdAuthSecret},
-      enabled_features);
+      /*chime_representative_target_id=*/std::string(), enabled_features);
 
   EXPECT_EQ(SharingDeviceRegistrationResult::kSuccess, result_);
   EXPECT_EQ(expected_sharing_info, local_sharing_info_);
@@ -297,7 +298,7 @@ TEST_F(SharingDeviceRegistrationTest, RegisterDeviceTest_Success) {
   syncer::DeviceInfo::SharingInfo expected_synced_sharing_info_2(
       {kVapidFCMToken2, kDevicep256dh2, kDeviceAuthSecret2},
       {kSenderIdFCMToken, kSenderIdP256dh, kSenderIdAuthSecret},
-      enabled_features);
+      /*chime_representative_target_id=*/std::string(), enabled_features);
 
   EXPECT_EQ(SharingDeviceRegistrationResult::kSuccess, result_);
   EXPECT_EQ(expected_synced_sharing_info_2, local_sharing_info_);
@@ -319,7 +320,8 @@ TEST_F(SharingDeviceRegistrationTest, RegisterDeviceTest_Vapid_Only) {
       GetExpectedEnabledFeatures(/*supports_vapid=*/true);
   syncer::DeviceInfo::SharingInfo expected_sharing_info(
       {kVapidFCMToken, kDevicep256dh, kDeviceAuthSecret},
-      syncer::DeviceInfo::SharingTargetInfo(), enabled_features);
+      syncer::DeviceInfo::SharingTargetInfo(),
+      /*chime_representative_target_id=*/std::string(), enabled_features);
 
   EXPECT_EQ(SharingDeviceRegistrationResult::kSuccess, result_);
   EXPECT_EQ(expected_sharing_info, local_sharing_info_);
@@ -343,7 +345,7 @@ TEST_F(SharingDeviceRegistrationTest, RegisterDeviceTest_SenderIDOnly) {
   syncer::DeviceInfo::SharingInfo expected_sharing_info(
       syncer::DeviceInfo::SharingTargetInfo(),
       {kSenderIdFCMToken, kSenderIdP256dh, kSenderIdAuthSecret},
-      enabled_features);
+      /*chime_representative_target_id=*/std::string(), enabled_features);
 
   EXPECT_EQ(SharingDeviceRegistrationResult::kSuccess, result_);
   EXPECT_EQ(expected_sharing_info, local_sharing_info_);
@@ -422,7 +424,7 @@ TEST_F(SharingDeviceRegistrationTest, UnregisterDeviceTest_Success) {
   syncer::DeviceInfo::SharingInfo expected_sharing_info(
       {kVapidFCMToken2, kDevicep256dh, kDeviceAuthSecret},
       {kSenderIdFCMToken, kSenderIdP256dh, kSenderIdAuthSecret},
-      enabled_features);
+      /*chime_representative_target_id=*/std::string(), enabled_features);
 
   EXPECT_EQ(SharingDeviceRegistrationResult::kSuccess, result_);
   EXPECT_EQ(expected_sharing_info, local_sharing_info_);

@@ -5,6 +5,7 @@
 #include "components/translate/content/renderer/translate_agent.h"
 
 #include <stddef.h>
+
 #include <string>
 #include <utility>
 
@@ -14,6 +15,7 @@
 #include "base/functional/bind.h"
 #include "base/json/string_escape.h"
 #include "base/location.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/histogram_macros_local.h"
 #include "base/no_destructor.h"
@@ -21,6 +23,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/trace_event/trace_event.h"
 #include "components/translate/content/renderer/isolated_world_util.h"
 #include "components/translate/core/common/translate_constants.h"
 #include "components/translate/core/common/translate_metrics.h"
@@ -32,7 +35,7 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_language_detection_details.h"
@@ -170,6 +173,7 @@ void TranslateAgent::PrepareForUrl(const GURL& url) {
 
 void TranslateAgent::PageCaptured(
     scoped_refptr<const base::RefCountedString16> contents) {
+  TRACE_EVENT("browser", "TranslateAgent::PageCaptured");
   // Get the document language as set by WebKit from the http-equiv
   // meta tag for "content-language".  This may or may not also
   // have a value derived from the actual Content-Language HTTP
@@ -501,7 +505,7 @@ void TranslateAgent::TranslateFrame(const std::string& translate_script,
 
 void TranslateAgent::RevertTranslation() {
   if (!IsTranslateLibAvailable()) {
-    DUMP_WILL_BE_NOTREACHED_NORETURN();
+    DUMP_WILL_BE_NOTREACHED();
     return;
   }
 
@@ -526,6 +530,10 @@ void TranslateAgent::CheckTranslateStatus() {
     // language the Translate Element detected.
     if (source_lang_ == kAutoDetectionLanguage) {
       actual_source_lang = GetPageSourceLanguage();
+#if BUILDFLAG(IS_ANDROID)
+      // NOTE(jarle@vivaldi.com): Source language is detected on the server.
+      if (!vivaldi::IsVivaldiRunning()) {
+#endif
       if (actual_source_lang.empty()) {
         NotifyBrowserTranslationFailed(TranslateErrors::UNKNOWN_LANGUAGE);
         return;
@@ -533,12 +541,15 @@ void TranslateAgent::CheckTranslateStatus() {
         NotifyBrowserTranslationFailed(TranslateErrors::IDENTICAL_LANGUAGES);
         return;
       }
+#if BUILDFLAG(IS_ANDROID)
+      } // Vivaldi
+#endif
     } else {
       actual_source_lang = source_lang_;
     }
 
     if (!translate_callback_pending_) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
     }
 
@@ -615,7 +626,7 @@ void TranslateAgent::NotifyBrowserTranslationFailed(TranslateErrors error) {
 const mojo::Remote<mojom::ContentTranslateDriver>&
 TranslateAgent::GetTranslateHandler() {
   if (!translate_handler_) {
-    render_frame()->GetBrowserInterfaceBroker()->GetInterface(
+    render_frame()->GetBrowserInterfaceBroker().GetInterface(
         translate_handler_.BindNewPipeAndPassReceiver());
     return translate_handler_;
   }
@@ -627,7 +638,7 @@ TranslateAgent::GetTranslateHandler() {
     return translate_handler_;
 
   translate_handler_.reset();
-  render_frame()->GetBrowserInterfaceBroker()->GetInterface(
+  render_frame()->GetBrowserInterfaceBroker().GetInterface(
       translate_handler_.BindNewPipeAndPassReceiver());
   return translate_handler_;
 }
@@ -657,6 +668,9 @@ std::string TranslateAgent::BuildTranslationScript(
 }
 
 void TranslateAgent::UpdateLanguageDetectionModel(base::File model_file) {
+  TRACE_EVENT("browser", "TranslateAgent::UpdateLanguageDetectionModel");
+  base::ScopedUmaHistogramTimer timer(
+      "LanguageDetection.TFLiteModel.UpdateLanaguageDetectionModelTime");
   translate::LanguageDetectionModel& language_detection_model =
       GetLanguageDetectionModel();
   language_detection_model.UpdateWithFile(std::move(model_file));

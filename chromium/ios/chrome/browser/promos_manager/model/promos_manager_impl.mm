@@ -32,17 +32,6 @@ using promos_manager::Promo;
 
 namespace {
 
-// Killswitch to control the hard-coded DockingPromo and
-// DockingPromoRemindMeLater sort injections in `SortPromos()`.
-BASE_FEATURE(kPromosManagerDockingPromoSortKillswitch,
-             "PromosManagerDockingPromoSortKillswitch",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Killswitch to control new DockingPromo histograms.
-BASE_FEATURE(kPromosManagerDockingPromoHistogramsKillswitch,
-             "PromosManagerDockingPromoHistogramsKillswitch",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Conditionally appends `promo` to the list pref `pref_path`. If `promo`
 // already exists in the list pref `pref_path`, does nothing. If `promo` doesn't
 // exist in the list pref `pref_path`, appends `promo` to the list.
@@ -210,29 +199,27 @@ std::optional<promos_manager::Promo> PromosManagerImpl::NextPromoForDisplay() {
     return std::nullopt;
   }
 
-  for (promos_manager::Promo promo : sorted_promos) {
-    if (CanShowPromo(promo)) {
-      // TODO(crbug.com/330387623): Cleanup Docking Promo histograms.
-      if (base::FeatureList::IsEnabled(
-              kPromosManagerDockingPromoHistogramsKillswitch)) {
-        if (active_promos_with_context.contains(Promo::DockingPromo) &&
-            promo != Promo::DockingPromo) {
-          base::UmaHistogramEnumeration("IOS.DockingPromo.LostToCompetingPromo",
-                                        promo);
-        }
-        if (active_promos_with_context.contains(
-                Promo::DockingPromoRemindMeLater) &&
-            promo != Promo::DockingPromoRemindMeLater) {
-          base::UmaHistogramEnumeration(
-              "IOS.DockingPromoRemindMeLater.LostToCompetingPromo", promo);
-        }
-      }
-
-      return promo;
-    }
+  // Get eligible promo count before ```GetFirstEligiblePromo``` otherwise the
+  // count might not be accurate.
+  int valid_promo_count = GetEligiblePromoCount(sorted_promos);
+  if (valid_promo_count == 0) {
+    return std::nullopt;
   }
 
-  return std::nullopt;
+  std::optional<promos_manager::Promo> first_promo_opt =
+      GetFirstEligiblePromo(sorted_promos);
+  if (!first_promo_opt) {
+    return std::nullopt;
+  }
+
+  // If there is a promo eligible for display then record number of valid promos
+  // in the queue. This is to understand how often eligible promos don't get
+  // picked because of other promos.
+  base::UmaHistogramExactLinear("IOS.PromosManager.EligiblePromosInQueueCount",
+                                valid_promo_count,
+                                static_cast<int>(Promo::kMaxValue) + 1);
+
+  return first_promo_opt;
 }
 
 std::set<promos_manager::Promo> PromosManagerImpl::ActivePromos(
@@ -278,12 +265,16 @@ void PromosManagerImpl::InitializePendingPromos() {
   }
 }
 
-bool PromosManagerImpl::CanShowPromo(promos_manager::Promo promo) const {
-  return CanShowPromoUsingFeatureEngagementTracker(promo);
+bool PromosManagerImpl::CanShowPromoWithoutTrigger(
+    promos_manager::Promo promo) const {
+  const base::Feature* feature = FeatureForPromo(promo);
+  if (!feature) {
+    return false;
+  }
+  return tracker_->WouldTriggerHelpUI(*feature);
 }
 
-bool PromosManagerImpl::CanShowPromoUsingFeatureEngagementTracker(
-    promos_manager::Promo promo) const {
+bool PromosManagerImpl::CanShowPromo(promos_manager::Promo promo) const {
   const base::Feature* feature = FeatureForPromo(promo);
   if (!feature) {
     return false;
@@ -344,24 +335,6 @@ std::vector<promos_manager::Promo> PromosManagerImpl::SortPromos(
     if (rhs.first == Promo::PostDefaultAbandonment) {
       return false;
     }
-    // TODO(crbug.com/330387623): Cleanup hard-coded Docking Promo sort logic.
-    if (base::FeatureList::IsEnabled(
-            kPromosManagerDockingPromoSortKillswitch)) {
-      // Docking Promo comes next.
-      if (lhs.first == Promo::DockingPromo) {
-        return true;
-      }
-      if (rhs.first == Promo::DockingPromo) {
-        return false;
-      }
-      // Docking Promo (Remind Me Later) comes next.
-      if (lhs.first == Promo::DockingPromoRemindMeLater) {
-        return true;
-      }
-      if (rhs.first == Promo::DockingPromoRemindMeLater) {
-        return false;
-      }
-    }
     // prefer the promo with pending state to the other without.
     if (lhs.second.was_pending && !rhs.second.was_pending) {
       return true;
@@ -404,4 +377,25 @@ std::vector<promos_manager::Promo> PromosManagerImpl::SortPromos(
   }
 
   return sorted_promos;
+}
+
+std::optional<promos_manager::Promo> PromosManagerImpl::GetFirstEligiblePromo(
+    const std::vector<promos_manager::Promo>& promo_queue) {
+  for (promos_manager::Promo promo : promo_queue) {
+    if (CanShowPromo(promo)) {
+      return promo;
+    }
+  }
+  return std::nullopt;
+}
+
+int PromosManagerImpl::GetEligiblePromoCount(
+    const std::vector<promos_manager::Promo>& promo_queue) {
+  int count = 0;
+  for (promos_manager::Promo promo : promo_queue) {
+    if (CanShowPromoWithoutTrigger(promo)) {
+      count++;
+    }
+  }
+  return count;
 }

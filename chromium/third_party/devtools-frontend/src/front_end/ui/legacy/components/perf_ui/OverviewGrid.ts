@@ -33,6 +33,7 @@ import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
 import * as TraceEngine from '../../../../models/trace/trace.js';
 import * as IconButton from '../../../components/icon_button/icon_button.js';
+import * as VisualLogging from '../../../visual_logging/visual_logging.js';
 import * as UI from '../../legacy.js';
 import * as ThemeSupport from '../../theme_support/theme_support.js';
 
@@ -133,7 +134,7 @@ export class OverviewGrid {
 
 export const MinSelectableSize = 14;
 export const WindowScrollSpeedFactor = .3;
-export const ResizerOffset = 3.5;  // half pixel because offset values are not rounded but ceiled
+export const ResizerOffset = 5;
 export const OffsetFromWindowEnds = 10;
 
 export class Window extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
@@ -160,7 +161,7 @@ export class Window extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
   private resizerParentOffsetLeft?: number;
   #breadcrumbsEnabled: boolean = false;
   #mouseOverGridOverview: boolean = false;
-  constructor(parentElement: Element, dividersLabelBarElement?: Element, calculator?: Calculator) {
+  constructor(parentElement: HTMLElement, dividersLabelBarElement?: Element, calculator?: Calculator) {
     super();
     this.parentElement = parentElement;
     this.parentElement.classList.add('parent-element');
@@ -195,6 +196,7 @@ export class Window extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
     UI.ARIAUtils.markAsSlider(this.leftResizeElement);
     const leftKeyDown = (event: Event): void => this.handleKeyboardResizing(event, false);
     this.leftResizeElement.addEventListener('keydown', leftKeyDown);
+    this.leftResizeElement.addEventListener('click', this.onResizerClicked);
 
     UI.ARIAUtils.setLabel(this.rightResizeElement, i18nString(UIStrings.rightResizer));
     UI.ARIAUtils.markAsSlider(this.rightResizeElement);
@@ -202,13 +204,15 @@ export class Window extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
     const rightKeyDown = (event: Event): void => this.handleKeyboardResizing(event, true);
     this.rightResizeElement.addEventListener('keydown', rightKeyDown);
     this.rightResizeElement.addEventListener('focus', this.onRightResizeElementFocused.bind(this));
-    this.leftCurtainElement = (parentElement.createChild('div', 'window-curtain-left') as HTMLElement);
-    this.rightCurtainElement = (parentElement.createChild('div', 'window-curtain-right') as HTMLElement);
+    this.rightResizeElement.addEventListener('click', this.onResizerClicked);
 
-    this.breadcrumbButtonContainerElement =
-        (parentElement.createChild('div', 'create-breadcrumb-button-container') as HTMLElement);
-    this.createBreadcrumbButton =
-        (this.breadcrumbButtonContainerElement.createChild('div', 'create-breadcrumb-button') as HTMLElement);
+    this.leftCurtainElement = parentElement.createChild('div', 'window-curtain-left');
+    this.rightCurtainElement = parentElement.createChild('div', 'window-curtain-right');
+
+    this.breadcrumbButtonContainerElement = parentElement.createChild('div', 'create-breadcrumb-button-container');
+    this.createBreadcrumbButton = this.breadcrumbButtonContainerElement.createChild('div', 'create-breadcrumb-button');
+    this.createBreadcrumbButton.setAttribute(
+        'jslog', `${VisualLogging.action('timeline.create-breadcrumb').track({click: true})}`);
     this.reset();
   }
 
@@ -257,6 +261,12 @@ export class Window extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
       this.breadcrumbButtonContainerElement.classList.toggle('is-breadcrumb-button-visible', false);
       this.#mouseOverGridOverview = false;
     });
+  }
+
+  private onResizerClicked(event: Event): void {
+    if (event.target) {
+      (event.target as HTMLElement).focus();
+    }
   }
 
   private onRightResizeElementFocused(): void {

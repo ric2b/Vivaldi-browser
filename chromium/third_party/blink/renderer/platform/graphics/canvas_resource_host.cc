@@ -231,7 +231,7 @@ bool CanvasResourceHost::PrepareTransferableResource(
 
   CanvasResource::ReleaseCallback release_callback;
   if (!frame->PrepareTransferableResource(out_resource, &release_callback,
-                                          kUnverifiedSyncToken) ||
+                                          /*needs_verified_synctoken=*/false) ||
       *out_resource == cc_layer_->current_transferable_resource()) {
     // If the resource did not change, the release will be handled correctly
     // when the callback from the previous frame is dispatched. But run the
@@ -269,8 +269,6 @@ void CanvasResourceHost::SetOpacityMode(OpacityMode opacity_mode) {
 void CanvasResourceHost::FlushRecording(FlushReason reason) {
   if (resource_provider_) {
     resource_provider_->FlushCanvas(reason);
-    // Flushing consumed locked images.
-    resource_provider_->ReleaseLockedImages();
   }
 }
 

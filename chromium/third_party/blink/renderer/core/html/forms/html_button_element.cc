@@ -39,8 +39,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_list_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
-#include "third_party/blink/renderer/core/layout/forms/layout_button.h"
-#include "third_party/blink/renderer/core/layout/layout_ng_block_flow.h"
+#include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
@@ -64,17 +63,12 @@ LayoutObject* HTMLButtonElement::CreateLayoutObject(
       display == EDisplay::kInlineLayoutCustom ||
       display == EDisplay::kLayoutCustom)
     return HTMLFormControlElement::CreateLayoutObject(style);
-  if (RuntimeEnabledFeatures::LayoutBlockButtonEnabled()) {
-    return MakeGarbageCollected<LayoutNGBlockFlow>(this);
-  }
-  return MakeGarbageCollected<LayoutButton>(this);
+  return MakeGarbageCollected<LayoutBlockFlow>(this);
 }
 
 void HTMLButtonElement::AdjustStyle(ComputedStyleBuilder& builder) {
-  if (RuntimeEnabledFeatures::LayoutBaselineFixEnabled()) {
-    builder.SetShouldIgnoreOverflowPropertyForInlineBlockBaseline();
-    builder.SetInlineBlockBaselineEdge(EInlineBlockBaselineEdge::kContentBox);
-  }
+  builder.SetShouldIgnoreOverflowPropertyForInlineBlockBaseline();
+  builder.SetInlineBlockBaselineEdge(EInlineBlockBaselineEdge::kContentBox);
   HTMLFormControlElement::AdjustStyle(builder);
 }
 
@@ -139,6 +133,14 @@ void HTMLButtonElement::ParseAttribute(
                EqualIgnoringASCIICase(params.new_value, "popover")) {
       type_ = kPopover;
     } else {
+      if (!params.new_value.IsNull()) {
+        if (params.new_value.empty()) {
+          UseCounter::Count(GetDocument(),
+                            WebFeature::kButtonTypeAttrEmptyString);
+        } else if (!EqualIgnoringASCIICase(params.new_value, "submit")) {
+          UseCounter::Count(GetDocument(), WebFeature::kButtonTypeAttrInvalid);
+        }
+      }
       type_ = kSubmit;
     }
     UpdateWillValidateCache();

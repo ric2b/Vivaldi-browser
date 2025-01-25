@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "chromeos/ash/components/nearby/presence/conversions/nearby_presence_conversions.h"
 #include "chromeos/ash/components/nearby/presence/credentials/nearby_presence_credential_manager_impl.h"
+#include "chromeos/ash/components/nearby/presence/metrics/nearby_presence_metrics.h"
 #include "chromeos/ash/components/nearby/presence/nearby_presence_connections_manager.h"
 #include "chromeos/ash/components/nearby/presence/nearby_presence_service_enum_coversions.h"
 #include "chromeos/ash/components/nearby/presence/prefs/nearby_presence_prefs.h"
@@ -74,15 +75,15 @@ NearbyPresenceServiceImpl::~NearbyPresenceServiceImpl() {
 void NearbyPresenceServiceImpl::StartScan(
     ScanFilter scan_filter,
     ScanDelegate* scan_delegate,
-    base::OnceCallback<void(std::unique_ptr<ScanSession>,
-                            NearbyPresenceService::StatusCode)>
+    base::OnceCallback<void(std::unique_ptr<ScanSession>, enums::StatusCode)>
         on_start_scan_callback) {
   if (!SetProcessReference()) {
     LOG(ERROR) << "Failed to create process reference.";
     std::move(on_start_scan_callback)
         .Run(/*scan_session=*/nullptr,
-             /*status=*/NearbyPresenceService::StatusCode::
-                 kFailedToStartProcess);
+             /*status=*/enums::StatusCode::kFailedToStartProcess);
+
+    metrics::RecordScanRequestResult(enums::StatusCode::kFailedToStartProcess);
     return;
   }
 
@@ -98,6 +99,8 @@ void NearbyPresenceServiceImpl::StartScan(
   std::vector<mojom::PresenceScanFilterPtr> filters;
   auto filter = PresenceFilter::New(mojom::PresenceDeviceType::kChromeos);
   filters.push_back(std::move(filter));
+
+  start_scan_start_time_ = base::TimeTicks::Now();
 
   process_reference_->GetNearbyPresence()->StartScan(
       mojom::ScanRequest::New(/*account_name=*/std::string(), identity_types,
@@ -160,6 +163,8 @@ void NearbyPresenceServiceImpl::Shutdown() {
 
 void NearbyPresenceServiceImpl::OnDeviceFound(mojom::PresenceDevicePtr device) {
   auto build_device = BuildPresenceDevice(std::move(device));
+  metrics::RecordDeviceFoundLatency(base::TimeTicks::Now() -
+                                    start_scan_start_time_);
   for (ScanDelegate* delegate : scan_delegate_set_) {
     delegate->OnPresenceDeviceFound(build_device);
   }
@@ -217,8 +222,7 @@ bool NearbyPresenceServiceImpl::SetProcessReference() {
 
 void NearbyPresenceServiceImpl::OnScanStarted(
     ScanDelegate* scan_delegate,
-    base::OnceCallback<void(std::unique_ptr<ScanSession>,
-                            NearbyPresenceService::StatusCode)>
+    base::OnceCallback<void(std::unique_ptr<ScanSession>, enums::StatusCode)>
         on_start_scan_callback,
     mojo::PendingRemote<mojom::ScanSession> pending_remote,
     mojo_base::mojom::AbslStatusCode status) {
@@ -231,7 +235,9 @@ void NearbyPresenceServiceImpl::OnScanStarted(
     scan_delegate_set_.insert(scan_delegate);
   }
   std::move(on_start_scan_callback)
-      .Run(std::move(scan_session), ConvertToPresenceStatus(status));
+      .Run(std::move(scan_session), enums::ConvertToPresenceStatus(status));
+
+  metrics::RecordScanRequestResult(enums::ConvertToPresenceStatus(status));
 }
 
 void NearbyPresenceServiceImpl::OnScanSessionDisconnect(
@@ -248,10 +254,10 @@ void NearbyPresenceServiceImpl::OnScanSessionDisconnect(
 }
 
 void NearbyPresenceServiceImpl::OnNearbyProcessStopped(
-    ash::nearby::NearbyProcessManager::NearbyProcessShutdownReason) {
-  // TODO(b/277819923): Add metric to record shutdown reason for Nearby
-  // Presence process.
+    ash::nearby::NearbyProcessManager::NearbyProcessShutdownReason
+        shutdown_reason) {
   LOG(WARNING) << __func__ << ": Nearby process stopped.";
+  metrics::RecordNearbyProcessShutdownReason(shutdown_reason);
   Shutdown();
 }
 

@@ -6,7 +6,6 @@
 
 #include "ash/capture_mode/capture_mode_types.h"
 #include "ash/capture_mode/fake_video_source_provider.h"
-#include "ash/public/cpp/capture_mode/recording_overlay_view.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "base/files/file_util.h"
@@ -15,18 +14,6 @@
 #include "chromeos/ash/services/recording/recording_service_test_api.h"
 
 namespace ash {
-
-namespace {
-
-class TestRecordingOverlayView : public RecordingOverlayView {
- public:
-  TestRecordingOverlayView() = default;
-  TestRecordingOverlayView(const TestRecordingOverlayView&) = delete;
-  TestRecordingOverlayView& operator=(const TestRecordingOverlayView&) = delete;
-  ~TestRecordingOverlayView() override = default;
-};
-
-}  // namespace
 
 TestCaptureModeDelegate::TestCaptureModeDelegate()
     : video_source_provider_(std::make_unique<FakeVideoSourceProvider>()) {
@@ -91,9 +78,6 @@ base::FilePath TestCaptureModeDelegate::GetUserDefaultDownloadsFolder() const {
 
   return fake_downloads_dir_.GetPath();
 }
-
-void TestCaptureModeDelegate::ShowScreenCaptureItemInFolder(
-    const base::FilePath& file_path) {}
 
 void TestCaptureModeDelegate::OpenScreenCaptureItem(
     const base::FilePath& file_path) {}
@@ -183,11 +167,6 @@ TestCaptureModeDelegate::GetPolicyCapturePath() const {
   return policy_capture_path_;
 }
 
-std::unique_ptr<RecordingOverlayView>
-TestCaptureModeDelegate::CreateRecordingOverlayView() const {
-  return std::make_unique<TestRecordingOverlayView>();
-}
-
 void TestCaptureModeDelegate::ConnectToVideoSourceProvider(
     mojo::PendingReceiver<video_capture::mojom::VideoSourceProvider> receiver) {
   video_source_provider_->Bind(std::move(receiver));
@@ -218,5 +197,16 @@ void TestCaptureModeDelegate::UpdateVideoConferenceManager(
 
 void TestCaptureModeDelegate::NotifyDeviceUsedWhileDisabled(
     crosapi::mojom::VideoConferenceMediaDevice device) {}
+
+void TestCaptureModeDelegate::FinalizeSavedFile(
+    base::OnceCallback<void(bool, const base::FilePath&)> callback,
+    const base::FilePath& path) {
+  std::move(callback).Run(/*success=*/true, path);
+}
+
+base::FilePath TestCaptureModeDelegate::RedirectFilePath(
+    const base::FilePath& path) {
+  return path;
+}
 
 }  // namespace ash

@@ -29,8 +29,8 @@ use crypto_provider::{
         Aes, Aes128Key, Aes256Key, AesBlock, AesCipher, AesDecryptCipher, AesEncryptCipher,
     },
     ed25519::{
-        self, Ed25519Provider, InvalidPublicKeyBytes, KeyPair, RawPrivateKey, RawPrivateKeyPermit,
-        RawPublicKey, RawSignature, Signature, SignatureError,
+        self, Ed25519Provider, InvalidPublicKeyBytes, KeyPairImpl, RawPrivateKey,
+        RawPrivateKeyPermit, RawPublicKey, RawSignature, SignatureError, SignatureImpl,
     },
     elliptic_curve::{EcdhProvider, EphemeralSecret, PublicKey},
     hkdf::{Hkdf, InvalidLength},
@@ -477,7 +477,7 @@ impl Ed25519Provider for Ed25519Stubs {
     type Signature = SignatureStubs;
 }
 
-impl ed25519::PublicKey for PublicKeyStubs {
+impl ed25519::PublicKeyImpl for PublicKeyStubs {
     type Signature = SignatureStubs;
 
     fn from_bytes(bytes: &RawPublicKey) -> Result<Self, InvalidPublicKeyBytes>
@@ -502,7 +502,7 @@ impl ed25519::PublicKey for PublicKeyStubs {
 
 pub struct SignatureStubs;
 
-impl Signature for SignatureStubs {
+impl SignatureImpl for SignatureStubs {
     fn from_bytes(_bytes: &RawSignature) -> Self {
         unimplemented!()
     }
@@ -514,7 +514,7 @@ impl Signature for SignatureStubs {
 
 pub struct KeyPairStubs;
 
-impl KeyPair for KeyPairStubs {
+impl KeyPairImpl for KeyPairStubs {
     type PublicKey = PublicKeyStubs;
     type Signature = SignatureStubs;
 
@@ -537,7 +537,7 @@ impl KeyPair for KeyPairStubs {
         unimplemented!()
     }
 
-    fn public(&self) -> Self::PublicKey {
+    fn public_key(&self) -> Self::PublicKey {
         unimplemented!()
     }
 }

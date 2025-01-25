@@ -486,7 +486,7 @@ locale.  The strings in this file are specific to iOS.
         New Private Tab
       </message>
       <message name="IDS_IOS_NEW_SPEED_DIAL" desc="The string title describing the new speed dial adding option on the start page.">
-        New Speed Dial
+        Speed Dial
       </message>
       <message name="IDS_IOS_NEW_SPEED_DIAL_SMALL" desc="The string title describing the new speed dial adding option on the start page on 'Small' layout">
         New
@@ -498,7 +498,7 @@ locale.  The strings in this file are specific to iOS.
         Update thumbnail
       </message>
       <message name="IDS_IOS_NEW_FOLDER" desc="The string title describing the context menu option for adding a new folder.">
-        New Folder
+        Folder
       </message>
       <message name="IDS_IOS_MOVE_ITEM" desc='The string describing moving the dial. [CHAR-LIMIT=30]'>
         Move out of folder
@@ -533,8 +533,8 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_START_PAGE_CUSTOMIZE_TITLE" desc="The title for the start page customize action on context menu action">
         Customize Start Page
       </message>
-      <message name="IDS_IOS_START_PAGE_ADD_GROUP_TITLE" desc="The title for the start page add group action on context menu action">
-        Add Group
+      <message name="IDS_IOS_START_PAGE_NEW_GROUP_TITLE" desc="The title for the start page new group action on context menu action">
+        New Group
       </message>
       <message name="IDS_IOS_START_PAGE_SORTING_TITLE" desc="The title for the start page sorting action on context menu action">
         Sorting
@@ -558,9 +558,6 @@ locale.  The strings in this file are specific to iOS.
       <!-- BOOKMARK EDITOR -->
       <message name="IDS_IOS_USE_AS_GROUP" desc="Description for the bookmark folder editor 'Use as Group' option">
         Use as Group
-      </message>
-      <message name="IDS_IOS_USE_AS_SPEED_DIAL_FOLDER" desc="Description for the bookmark folder editor 'Use as Speed Dial Folder' option">
-        Use as Speed Dial Folder
       </message>
       <message name="IDS_IOS_DELETE_FOLDER" desc='Title of the "Delete Folder" form dialog. [CHAR_LIMIT=30]'>
         Delete folder
@@ -592,14 +589,14 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_BOOKMARK_SHOW_ONLY_GROUPS" desc="Description for the bookmark folder selection 'Show only Groups' option">
         Show only Groups
       </message>
-      <message name="IDS_IOS_BOOKMARK_SHOW_ONLY_SD_FOLDERS" desc="Description for the bookmark folder selection 'Show only Speed Dial folders' option">
-        Show only Speed Dial folders
-      </message>
       <message name="IDS_IOS_BOOKMARK_FOLDER_SELECTION_SEARCHBAR_PLACEHOLDER" desc="Placeholder text for the search bar used to search folder on folder selection page">
         Search Folder
       </message>
       <message name="IDS_IOS_BOOKMARKED_IN" desc="Title of the snacback message for new bookmark">
         Bookmarked in
+      </message>
+      <message name="IDS_IOS_NEW_ITEM_WITH_TYPE" desc='Title of the New item with a provided type in editor'>
+        New <ph name="ITEM_TYPE">$1</ph>
       </message>
       <message name="IDS_IOS_ADD_ITEM_WITH_TYPE" desc='Title of the Add item with a provided type in editor'>
         Add <ph name="ITEM_TYPE">$1</ph>
@@ -1390,6 +1387,18 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_TABS_TAB_STYLE_SHOW_TAB_BAR_TITLE" desc="Title for tabs show tab bar settings">
         Show Tab Bar
       </message>
+      <message name="IDS_IOS_TABS_TAB_STYLE_SHOW_X_BUTTON_BACKGROUND_TABS_TITLE" desc="Title for show X button for background tabs settings option">
+        Show X Button for Background Tabs
+      </message>
+      <message name="IDS_IOS_TABS_TAB_BEHAVIOUR_TITLE" desc="Title for tabs tab behaviour settings">
+        Tab Behaviour
+      </message>
+      <message name="IDS_IOS_TABS_OPEN_NTP_ON_CLOSING_LAST_TAB_TITLE" desc="Title for open new tab page on last tab close settings">
+        Open New Tab on Closing Last Tab
+      </message>
+      <message name="IDS_IOS_TABS_FOCUS_OMNIBOX_NTP_TITLE" desc="Title for focus address bar on new tab settings">
+        Focus Address Bar on New Tab
+      </message>
       <message name="IDS_IOS_TABS_INACTIVE_TABS_HEADER_TITLE" desc="Title for inactive tabs settings header on tabs settings">
         Inactive Tabs
       </message>
@@ -1397,6 +1406,32 @@ locale.  The strings in this file are specific to iOS.
         Inactive After Days
       </message>
       <!-- END TABS SETTINGS -->
+      <!-- ADDRESSBAR SETTINGS -->
+      <message name="IDS_IOS_PREFS_VIVALDI_ADDRESSBAR" desc="Title for the addressbar settings">
+        Address Bar
+      </message>
+      <message name="IDS_IOS_ADDRESSBAR_SHOW_FULL_ADDRESS_TITLE" desc="Title for the show full address in address bar option for addressbar settings">
+        Show Full Address
+      </message>
+      <message name="IDS_IOS_ADDRESSBAR_SHOW_FULL_ADDRESS_DESCRIPTION" desc="Description for the show full address in address bar option for addressbar settings">
+        Show Full Address in the Address Bar instead of Domain only.
+      </message>
+      <message name="IDS_IOS_ADDRESSBAR_BOOKMARKS_MATCHING_TITLE" desc="Title for the bookmarks matching option for addressbar settings">
+        Bookmarks Matching
+      </message>
+      <message name="IDS_IOS_ADDRESSBAR_BOOKMARKS_MATCHING_DESCRIPTION" desc="Description for the bookmarks matching option for addressbar settings">
+        Prioritize bookmarks in autocomplete suggestions
+      </message>
+      <message name="IDS_IOS_ADDRESSBAR_NICKNAME_MATCHING_TITLE" desc="Title for the nickname matching option for addressbar settings">
+        Nickname Matching
+      </message>
+      <message name="IDS_IOS_ADDRESSBAR_NICKNAME_MATCHING_DESCRIPTION" desc="Description for the nickname matching option for addressbar settings">
+        Prioritize bookmark nicknames in autocomplete suggestions
+      </message>
+      <message name="IDS_IOS_ADDRESSBAR_ENABLE_DIRECT_MATCH_TITLE" desc="Title for the enable direct match option for addressbar settings">
+        Enable Direct Match
+      </message>
+      <!-- END ADDRESSBAR SETTINGS -->
       <!-- TOOLBAR -->
       <message name="IDS_IOS_TOOLBAR_VIVALDI_AD_AND_TRACKER_BLOCKER" desc="Title for the ad and tracker blocker button on the toolbar menu for iPhone landscape">
         Ad and Tracker blocker
@@ -1605,6 +1640,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_PRIVATE_TAB_TITLE" desc="(Vivaldi) Title of the private tab button on the search engine settings UI.">
          Private Tab
       </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_ENABLE_NICKNAME_TITLE" desc="(Vivaldi) Title of the enable search engine nickname toggle on the search engine settings UI.">
+        Enable Search Engine Nicknames
+      </message>
       <message name="IDS_VIVALDI_SEARCH_ENGINE_RESTORE_DEFAULT_BUTTON_TITLE" desc="(Vivaldi) Title of the restore defaults toolbar button on the search engine list UI.">
          Restore Defaults
       </message>
@@ -1691,6 +1729,12 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_CONTENT_CONTEXT_OPENIMAGENEWBACKGROUNDTAB" desc="The iOS menu item for opening selected image in background tab.">
         Open Image in Background Tab
+      </message>
+      <message name="IDS_IOS_RENAME_TITLE" desc="Title for rename button in different places of the UI">
+        Rename
+      </message>
+      <message name="IDS_IOS_REMOVE_TITLE" desc="Title for remove button in different places of the UI">
+        Remove
       </message>
     </messages>
   </release>

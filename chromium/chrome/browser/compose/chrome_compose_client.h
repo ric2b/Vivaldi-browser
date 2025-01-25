@@ -12,10 +12,8 @@
 #include "base/containers/flat_map.h"
 #include "base/gtest_prod_util.h"
 #include "base/token.h"
-#include "chrome/browser/compose/compose_enabling.h"
 #include "chrome/browser/compose/compose_session.h"
 #include "chrome/browser/compose/proactive_nudge_tracker.h"
-#include "chrome/browser/compose/proto/compose_optimization_guide.pb.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/common/compose/compose.mojom.h"
 #include "components/autofill/content/browser/scoped_autofill_managers_observation.h"
@@ -42,6 +40,8 @@ class Page;
 class WebContents;
 }  // namespace content
 
+class ComposeEnabling;
+
 // An implementation of `ComposeClient` for Desktop and Android.
 class ChromeComposeClient
     : public compose::ComposeClient,
@@ -54,7 +54,6 @@ class ChromeComposeClient
       public InnerTextProvider {
  public:
   using EntryPoint = autofill::AutofillComposeDelegate::UiEntryPoint;
-
   class FieldChangeObserver : public autofill::AutofillManager::Observer {
    public:
     explicit FieldChangeObserver(content::WebContents* web_contents);
@@ -159,14 +158,6 @@ class ChromeComposeClient
           handler,
       mojo::PendingRemote<compose::mojom::ComposeUntrustedDialog> dialog);
 
-  void SetModelQualityLogsUploaderForTest(
-      optimization_guide::ModelQualityLogsUploader* model_quality_uploader);
-  void SetModelExecutorForTest(
-      optimization_guide::OptimizationGuideModelExecutor* model_executor);
-  void SetSkipShowDialogForTest(bool should_skip);
-  void SetSessionIdForTest(base::Token session_id);
-  void SetInnerTextProviderForTest(InnerTextProvider* inner_text);
-
   // content::WebContentsObserver implementation.
   // Called when the primary page location changes. This includes reloads.
   // TODO: Look into using DocumentUserData or keying sessions on render ID
@@ -192,32 +183,34 @@ class ChromeComposeClient
   void ShowProactiveNudge(autofill::FormGlobalId form,
                           autofill::FieldGlobalId field) override;
 
-  void SetOptimizationGuideForTest(
-      optimization_guide::OptimizationGuideDecider* opt_guide);
-
-  // This API gets optimization guidance for a web site.  We use this
-  // to guide our decision to enable the feature and trigger the nudge.
-  compose::ComposeHintDecision GetOptimizationGuidanceForUrl(const GURL& url);
-
   ComposeEnabling& GetComposeEnabling();
 
+  // Returns true when the dialog is showing and false otherwise.
+  bool IsDialogShowing();
+
+  // Returns true when the delay timmer to show the popup is running.
+  bool IsPopupTimerRunning();
+
+  // Helper methods for setting up testing state.
   int GetSessionCountForTest();
+  void SetOptimizationGuideForTest(
+      optimization_guide::OptimizationGuideDecider* opt_guide);
+  void SetModelExecutorForTest(
+      optimization_guide::OptimizationGuideModelExecutor* model_executor);
+  void SetSkipShowDialogForTest(bool should_skip);
+  void SetSessionIdForTest(base::Token session_id);
+  void SetInnerTextProviderForTest(InnerTextProvider* inner_text);
 
   // If there is an active session calls the OpenFeedbackPage method on it.
   // Used only for testing.
   void OpenFeedbackPageForTest(std::string feedback_id);
 
-  // Returns true when the dialog is showing and false otherwise.
-  bool IsDialogShowing();
-
  protected:
   explicit ChromeComposeClient(content::WebContents* web_contents);
-  optimization_guide::ModelQualityLogsUploader* GetModelQualityLogsUploader();
   optimization_guide::OptimizationGuideModelExecutor* GetModelExecutor();
   optimization_guide::OptimizationGuideDecider* GetOptimizationGuide();
   base::Token GetSessionId();
   InnerTextProvider* GetInnerTextProvider();
-  std::unique_ptr<TranslateLanguageProvider> translate_language_provider_;
   std::unique_ptr<ComposeEnabling> compose_enabling_;
 
  private:
@@ -232,21 +225,29 @@ class ChromeComposeClient
   raw_ptr<Profile> profile_;
   raw_ptr<PrefService> pref_service_;
 
+  // Prepares to open the dialog with an existing session for the active field.
+  // Must be called when there is an existing session for the active field (i.e.
+  // |GetSessionForACtiveComposeField| returns a valid session.
+  // Also records resumption metrics for the existing session.
+  void PrepareToResumeExistingSession(ComposeCallback callback,
+                                      bool has_selection,
+                                      bool popup_clicked);
   // Creates a session for `trigger_field` and initializes it as necessary.
   // `callback` is a callback to the renderer to insert the compose response
   // into the compose field.
-  void CreateOrUpdateSession(EntryPoint ui_entry_point,
-                             const autofill::FormFieldData& trigger_field,
-                             ComposeCallback callback);
+  void CreateNewSession(ComposeCallback callback,
+                        const autofill::FormFieldData& trigger_field,
+                        std::string_view selected_text,
+                        bool popup_clicked);
 
   // Set the exit reason for a session that does not progress past the FRE.
   void SetFirstRunSessionCloseReason(
-      compose::ComposeFirstRunSessionCloseReason close_reason);
+      compose::ComposeFreOrMsbbSessionCloseReason close_reason);
 
   // Set the exit reason for a session that does not progress past the
   // MSBB UI.
   void SetMSBBSessionCloseReason(
-      compose::ComposeMSBBSessionCloseReason close_reason);
+      compose::ComposeFreOrMsbbSessionCloseReason close_reason);
 
   // Set the exit reason for a session.
   void SetSessionCloseReason(compose::ComposeSessionCloseReason close_reason);
@@ -266,15 +267,15 @@ class ChromeComposeClient
   // Returns nullptr if no such session exists.
   ComposeSession* GetSessionForActiveComposeField();
 
+  // Checks if the page assessed language is supported by Compose.
+  bool IsPageLanguageSupported();
+
   compose::ComposeManagerImpl manager_{this};
 
   std::unique_ptr<compose::ComposeDialogController> compose_dialog_controller_;
   // A handle to optimization guide for information about URLs that have
   // recently been navigated to.
   raw_ptr<optimization_guide::OptimizationGuideDecider> opt_guide_;
-
-  std::optional<optimization_guide::ModelQualityLogsUploader*>
-      model_quality_uploader_for_test_;
 
   std::optional<optimization_guide::OptimizationGuideModelExecutor*>
       model_executor_for_test_;
@@ -283,8 +284,12 @@ class ChromeComposeClient
 
   // The unique renderer and form IDs of the last field the user selected
   // compose on.
-  std::optional<std::pair<autofill::FieldGlobalId, autofill::FormGlobalId>>
-      active_compose_ids_;
+  std::optional<FieldIdentifier> active_compose_ids_;
+
+  // The last trigger source used when calling |ShouldTriggerPopup|. This is
+  // reset after the dialog is shown.
+  autofill::AutofillSuggestionTriggerSource last_popup_trigger_source_ =
+      autofill::AutofillSuggestionTriggerSource::kUnspecified;
 
   std::optional<InnerTextProvider*> inner_text_provider_for_test_;
 
@@ -331,6 +336,8 @@ class ChromeComposeClient
 
   BooleanPrefMember proactive_nudge_enabled_;
 
+  // Time since page load, or time since page has changed if it's not loaded
+  // yet.
   base::TimeTicks page_change_time_;
 
   base::WeakPtrFactory<ChromeComposeClient> weak_ptr_factory_{this};

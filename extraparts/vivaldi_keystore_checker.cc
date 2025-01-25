@@ -7,6 +7,7 @@
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 #include "chrome/browser/ui/views/message_box_dialog.h"
 #include "ui/vivaldi_message_box_dialog.h"
+#include "ui/vivaldi_ui_utils.h"
 #endif
 
 #include "components/os_crypt/sync/os_crypt.h"
@@ -22,17 +23,12 @@ namespace {
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_WIN)
 constexpr char kCanaryValue[] = "VivaldiKeystoreEncryptionCanary";
 
-bool AskShouldAllowUpgradeToEncrypted() {
-  auto result = MessageBoxDialog::Show(
-      nullptr, l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_UPGRADE_TITLE),
-      l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_UPGRADE),
-      chrome::MESSAGE_BOX_TYPE_QUESTION,
-      l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_CONTINUE_UPGRADE),
-      l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_CANCEL), u"");
-  return result == chrome::MESSAGE_BOX_RESULT_YES;
-}
-
 bool AskShouldAllowInsecureAccess() {
+  if (!ui_tools::IsUIAvailable()) {
+    LOG(WARNING) << "KeystoreChecker: AskShouldAllowInsecureAccess: UI Is not available yet. Returning NO to insecure access";
+    return false;
+  }
+
   VivaldiMessageBoxDialog::Config config{
       l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_FAILED_TITLE),
       l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_UNCRYPTED),
@@ -125,7 +121,7 @@ bool HasLockedKeystore(Profile* profile) {
   // profile.
   if (preferences->GetInitializationStatus() ==
       PrefService::INITIALIZATION_STATUS_WAITING) {
-    LOG(INFO) << "KeyStoreChecker: New profile. Storing canary value.";
+    LOG(INFO) << "KeyStoreChecker: Profile still initializing, can't check.";
     return false;
   }
 
@@ -153,13 +149,12 @@ bool HasLockedKeystore(Profile* profile) {
     // back to unencrypted.
     LOG(ERROR) << "KeystoreChecker: Profile " << profile->GetBaseName()
                << ": Unencryted keystore was previously used but encryption is "
-                  "used now. Asking user if that's what they wanted.";
+                  "used now. Upgrading status to secured keystore.";
 
-    if (!AskShouldAllowUpgradeToEncrypted()) {
-      LOG(ERROR) << "KeystoreChecker: Keystore should stay unencrypted, user "
-                    "requested profile switch!";
-      return true;
-    }
+    // Re-store canary, the encryption key was added and we need have the canary
+    // to test for key changes
+    StoreCanary(preferences);
+
     // We test if we dropped out of encryption or the key changed.
   } else if ((was_encrypted && !is_encrypted) ||
              (canary_status == CanaryStatus::kInvalid)) {

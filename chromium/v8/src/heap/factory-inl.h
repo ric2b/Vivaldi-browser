@@ -48,9 +48,9 @@ Handle<Name> Factory::InternalizeName(Handle<T> name) {
   // T should be a subtype of Name, which is enforced by the second template
   // argument.
   if (IsUniqueName(*name)) return name;
-  return indirect_handle(isolate()->string_table()->LookupString(
-                             isolate(), DirectHandle<String>::cast(name)),
-                         isolate());
+  return indirect_handle(
+      isolate()->string_table()->LookupString(isolate(), Cast<String>(name)),
+      isolate());
 }
 
 #ifdef V8_ENABLE_DIRECT_HANDLE
@@ -67,8 +67,7 @@ DirectHandle<Name> Factory::InternalizeName(DirectHandle<T> name) {
   // T should be a subtype of Name, which is enforced by the second template
   // argument.
   if (IsUniqueName(*name)) return name;
-  return isolate()->string_table()->LookupString(
-      isolate(), DirectHandle<String>::cast(name));
+  return isolate()->string_table()->LookupString(isolate(), Cast<String>(name));
 }
 #endif
 
@@ -122,7 +121,7 @@ Handle<Foreign> Factory::NewForeign(Address addr,
   // Statically ensure that it is safe to allocate foreigns in paged spaces.
   static_assert(Foreign::kSize <= kMaxRegularHeapObjectSize);
   Tagged<Map> map = *foreign_map();
-  Tagged<Foreign> foreign = Tagged<Foreign>::cast(
+  Tagged<Foreign> foreign = Cast<Foreign>(
       AllocateRawWithImmortalMap(map->instance_size(), allocation_type, map));
   DisallowGarbageCollection no_gc;
   foreign->init_foreign_address<tag>(isolate(), addr);
@@ -162,7 +161,7 @@ void Factory::NumberToStringCacheSet(DirectHandle<Object> number, int hash,
       !v8_flags.optimize_for_size) {
     int full_size = isolate()->heap()->MaxNumberToStringCacheSize();
     if (number_string_cache()->length() != full_size) {
-      Handle<FixedArray> new_cache =
+      DirectHandle<FixedArray> new_cache =
           NewFixedArray(full_size, AllocationType::kOld);
       isolate()->heap()->set_number_string_cache(*new_cache);
       return;
@@ -179,9 +178,10 @@ Handle<Object> Factory::NumberToStringCacheGet(Tagged<Object> number,
   DisallowGarbageCollection no_gc;
   Tagged<FixedArray> cache = *number_string_cache();
   Tagged<Object> key = cache->get(hash * 2);
-  if (key == number || (IsHeapNumber(key) && IsHeapNumber(number) &&
-                        Object::Number(key) == Object::Number(number))) {
-    return Handle<String>(String::cast(cache->get(hash * 2 + 1)), isolate());
+  if (key == number ||
+      (IsHeapNumber(key) && IsHeapNumber(number) &&
+       Cast<HeapNumber>(key)->value() == Cast<HeapNumber>(number)->value())) {
+    return Handle<String>(Cast<String>(cache->get(hash * 2 + 1)), isolate());
   }
   return undefined_value();
 }

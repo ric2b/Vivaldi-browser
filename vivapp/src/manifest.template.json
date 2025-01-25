@@ -44,6 +44,7 @@
     "alwaysOnTopWindows",
     "app.window.fullscreen.overrideEsc",
     "audioCapture",
+    "autofillPrivate",
     "autoUpdate",
     "bookmarkContextMenu",
     "bookmarkManagerPrivate",

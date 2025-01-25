@@ -77,11 +77,14 @@ class If final : public Castable<If, ControlInstruction> {
     /// @copydoc ControlInstruction::ForeachBlock
     void ForeachBlock(const std::function<void(ir::Block*)>& cb) override;
 
-    /// @returns the if condition
-    Value* Condition() { return operands_[kConditionOperandOffset]; }
+    /// @copydoc ControlInstruction::ForeachBlock
+    void ForeachBlock(const std::function<void(const ir::Block*)>& cb) const override;
 
     /// @returns the if condition
-    const Value* Condition() const { return operands_[kConditionOperandOffset]; }
+    Value* Condition() { return Operand(kConditionOperandOffset); }
+
+    /// @returns the if condition
+    const Value* Condition() const { return Operand(kConditionOperandOffset); }
 
     /// @returns the true block
     ir::Block* True() { return true_; }

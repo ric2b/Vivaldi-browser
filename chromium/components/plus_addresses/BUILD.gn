@@ -40,23 +40,24 @@ source_set("plus_addresses") {
     "affiliations/plus_address_affiliation_source_adapter.cc",
     "affiliations/plus_address_affiliation_source_adapter.h",
     "plus_address_allocator.h",
+    "plus_address_cache.cc",
+    "plus_address_cache.h",
     "plus_address_http_client.h",
     "plus_address_http_client_impl.cc",
     "plus_address_http_client_impl.h",
     "plus_address_jit_allocator.cc",
     "plus_address_jit_allocator.h",
-    "plus_address_metrics.cc",
-    "plus_address_metrics.h",
-    "plus_address_prefs.cc",
-    "plus_address_prefs.h",
     "plus_address_service.cc",
     "plus_address_service.h",
   ]
   deps = [
     ":parsing",
     "//components/affiliations/core/browser:affiliations",
+    "//components/feature_engagement/public",
+    "//components/plus_addresses/metrics",
+    "//components/plus_addresses/metrics:submission_logger",
+    "//components/plus_addresses/settings",
     "//components/plus_addresses/webdata",
-    "//components/prefs",
     "//components/signin/public/identity_manager",
     "//components/strings:components_strings_grit",
     "//net",
@@ -113,9 +114,13 @@ source_set("unit_tests") {
     "//components/affiliations/core/browser:affiliations",
     "//components/affiliations/core/browser:test_support",
     "//components/autofill/core/browser:test_support",
+    "//components/feature_engagement/public",
+    "//components/plus_addresses/metrics",
+    "//components/plus_addresses/settings:test_support",
     "//components/plus_addresses/webdata",
     "//components/prefs:test_support",
     "//components/signin/public/identity_manager:test_support",
+    "//components/strings:components_strings_grit",
     "//services/data_decoder/public/cpp:test_support",
     "//services/network:test_support",
   ]
@@ -131,13 +136,17 @@ static_library("test_support") {
     "plus_address_http_client_impl_test_api.h",
     "plus_address_test_utils.cc",
     "plus_address_test_utils.h",
-    "plus_address_types.h",
   ]
   deps = [
     "//base",
     "//base/test:test_support",
+    "//components/affiliations/core/browser:test_support",
     "//components/autofill/core/browser",
+    "//net:test_support",
     "//testing/gmock",
   ]
-  public_deps = [ ":plus_addresses" ]
+  public_deps = [
+    ":plus_addresses",
+    ":types",
+  ]
 }

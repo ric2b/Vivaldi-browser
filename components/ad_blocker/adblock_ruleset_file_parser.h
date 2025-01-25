@@ -18,10 +18,10 @@ class RulesetFileParser {
   RulesetFileParser(const RulesetFileParser&) = delete;
   RulesetFileParser& operator=(const RulesetFileParser&) = delete;
 
-  void Parse(base::StringPiece file_contents);
+  void Parse(std::string_view file_contents);
 
  private:
-  void ParseLine(base::StringPiece line);
+  void ParseLine(std::string_view line);
 
   const raw_ptr<ParseResult> parse_result_;
   RuleParser parser_;

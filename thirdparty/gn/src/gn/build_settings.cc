@@ -85,6 +85,13 @@ void BuildSettings::ItemDefined(std::unique_ptr<Item> item) const {
     item_defined_callback_(std::move(item));
 }
 
+const BuildSettings::PrintCallback BuildSettings::swap_print_callback(
+    const BuildSettings::PrintCallback callback) {
+  auto temp = std::move(print_callback_);
+  print_callback_ = callback;
+  return temp;
+}
+
 bool BuildSettings::RegisterPathMap(const std::string &prefix,
                        const std::string &map_to_path)
 {

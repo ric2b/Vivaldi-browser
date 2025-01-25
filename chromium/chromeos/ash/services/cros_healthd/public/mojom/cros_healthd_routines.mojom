@@ -28,9 +28,9 @@ interface CrosHealthdRoutinesService {
   // for the routine, e.g. available hardware, correct arguments, etc.
   //
   // All exceptions that occur (either during initialization or while executing
-  // the routine) will close the connection to the provided RoutineControl
-  // with a specific reason (see cros_healthd.mojom.Exception) and a string
-  // message containing human readable information about the exception.
+  // the routine) will close the connection to the provided RoutineControl with
+  // a specific reason (see cros_healthd.mojom.Exception) and a string message
+  // containing human readable information about the exception.
   // For that reason it is necessary to always setup a disconnect handler on the
   // RoutineControl remote to be informed about potential exceptions.
   //
@@ -73,7 +73,7 @@ interface CrosHealthdRoutinesService {
 
 // Argument types for the possible routines the routine control API can create.
 //
-// NextMinVersion: 1, NextIndex: 19
+// NextMinVersion: 5, NextIndex: 23
 [Stable, Extensible]
 union RoutineArgument {
   // Default field is required by extensible unions for backward compatibility.
@@ -116,10 +116,22 @@ union RoutineArgument {
   UrandomRoutineArgument urandom@17;
   // Arguments to create a network bandwidth routine.
   NetworkBandwidthRoutineArgument network_bandwidth@18;
+  // Arguments to create a sensitive sensor routine.
+  [MinVersion=1]
+  SensitiveSensorRoutineArgument sensitive_sensor@19;
+  // Arguments to create a camera frame analysis routine.
+  [MinVersion=2]
+  CameraFrameAnalysisRoutineArgument camera_frame_analysis@20;
+  // Arguments to create a battery discharge routine.
+  [MinVersion=3]
+  BatteryDischargeRoutineArgument battery_discharge@21;
+  // Arguments to create a keyboard backlight routine.
+  [MinVersion=4]
+  KeyboardBacklightRoutineArgument keyboard_backlight@22;
 };
 
-// This routine checks whether there is any memory problem by
-// reading/writing different patterns.
+// This routine checks whether there is any memory problem by reading/writing
+// different patterns.
 //
 // NextMinVersion: 1, NextIndex: 1
 [Stable]
@@ -197,9 +209,9 @@ struct CpuCacheRoutineArgument {
 // NextMinVersion: 1, NextIndex: 1
 [Stable]
 struct PrimeSearchRoutineArgument {
-  // |exec_duration| determines how long the prime search test will run. If
-  // the provided value is null, default to running for 1 minute. If the value
-  // is less than 1 second, run for 1 second.
+  // |exec_duration| determines how long the prime search test will run. If the
+  // provided value is null, default to running for 1 minute. If the value is
+  // less than 1 second, run for 1 second.
   mojo_base.mojom.TimeDelta? exec_duration@0;
 };
 
@@ -214,8 +226,10 @@ struct VolumeButtonRoutineArgument {
   enum ButtonType {
     // The default value is for backward compatibility, should not be used.
     [Default] kUnmappedEnumField = 0,
-    kVolumeUp = 1,  // Test for the volume up button.
-    kVolumeDown = 2,  // Test for the volume down button.
+    // Test for the volume up button.
+    kVolumeUp = 1,
+    // Test for the volume down button.
+    kVolumeDown = 2,
   };
   // The type of volume button to test.
   ButtonType type@0;
@@ -251,15 +265,22 @@ struct LedLitUpRoutineArgument {
   LedColor color@1;
 };
 
+// This routine checks whether the keyboard backlight can be lit up at any
+// brightness level.
+//
+// NextMinVersion: 1, NextIndex: 0
+[Stable]
+struct KeyboardBacklightRoutineArgument {};
+
 // This routine checks whether there is any CPU problem by repeatedly
 // calculating floating point values.
 //
 // NextMinVersion: 1, NextIndex: 1
 [Stable]
 struct FloatingPointRoutineArgument {
-  // `exec_duration` determines how long the prime search test will run. If
-  // the provided value is null, default to running for 1 minute. If the value
-  // is less than 1 second, run for 1 second.
+  // `exec_duration` determines how long the prime search test will run. If the
+  // provided value is null, default to running for 1 minute. If the value is
+  // less than 1 second, run for 1 second.
   mojo_base.mojom.TimeDelta? exec_duration@0;
 };
 
@@ -324,9 +345,9 @@ struct CameraAvailabilityRoutineArgument {
 // NextMinVersion: 1, NextIndex: 1
 [Stable]
 struct UrandomRoutineArgument {
-  // `exec_duration` determines how long the prime search test will run. If
-  // the provided value is null, default to running for 1 minute. If the value
-  // is less than 1 second, run for 1 second.
+  // `exec_duration` determines how long the prime search test will run. If the
+  // provided value is null, default to running for 1 minute. If the value is
+  // less than 1 second, run for 1 second.
   mojo_base.mojom.TimeDelta? exec_duration@0;
 };
 
@@ -335,6 +356,36 @@ struct UrandomRoutineArgument {
 // NextMinVersion: 1, NextIndex: 0
 [Stable]
 struct NetworkBandwidthRoutineArgument {};
+
+// This routine checks that the device's sensors are working correctly by
+// monitoring the sensor sample data without user interaction. This routine only
+// support sensitive sensors including accelerometers, gyro sensors,
+// magnetometers and gravity sensors.
+//
+// NextMinVersion: 1, NextIndex: 0
+[Stable]
+struct SensitiveSensorRoutineArgument {};
+
+// This routine checks the frames captured by camera. The frontend should ensure
+// the camera is opened during the execution of the routine.
+//
+// NextMinVersion: 1, NextIndex: 0
+[Stable]
+struct CameraFrameAnalysisRoutineArgument {};
+
+// This routine checks that the battery discharge rate does not exceed a certain
+// percent within a given timeframe. Clients should unplug the AC adapter and
+// report done via `UnplugAcAdapterReply`.
+//
+// NextMinVersion: 1, NextIndex: 2
+[Stable]
+struct BatteryDischargeRoutineArgument {
+  // The length of time this routine is expected to run.
+  mojo_base.mojom.TimeDelta exec_duration@0;
+  // The maximum change in battery percent allowed for the routine to pass,
+  // values should range in [0, 100].
+  uint8 maximum_discharge_percent_allowed@1;
+};
 
 // Interface exposed to clients for controlling a routine.
 //
@@ -512,7 +563,7 @@ union RoutineInteraction {
 // reply type in `RoutineInquiryReply`. Clients should call the `ReplyInquiry`
 // method of `RoutineControl` with the corresponding reply type.
 //
-// NextMinVersion: 1, NextIndex: 2
+// NextMinVersion: 3, NextIndex: 4
 [Stable, Extensible]
 union RoutineInquiry {
   // Default field is required by extensible unions for backward compatibility.
@@ -521,11 +572,17 @@ union RoutineInquiry {
   bool unrecognizedInquiry@0;
   // Details of the inquiry to check the LED lit up state.
   CheckLedLitUpStateInquiry check_led_lit_up_state@1;
+  // Details of the inquiry to unplug AC adapter.
+  [MinVersion=1]
+  UnplugAcAdapterInquiry unplug_ac_adapter_inquiry@2;
+  // Details of the inquiry to check the keyboard backlight LED state.
+  [MinVersion=2]
+  CheckKeyboardBacklightStateInquiry check_keyboard_backlight_state@3;
 };
 
 // Details to reply to a routine inquiry.
 //
-// NextMinVersion: 1, NextIndex: 2
+// NextMinVersion: 3, NextIndex: 4
 [Stable, Extensible]
 union RoutineInquiryReply {
   // Default field is required by extensible unions for backward compatibility.
@@ -534,6 +591,13 @@ union RoutineInquiryReply {
   bool unrecognizedReply@0;
   // Details to resume a routine requesting to check the LED lit up state.
   CheckLedLitUpStateReply check_led_lit_up_state@1;
+  // Details to resume a routine requesting to unplug the AC adapter.
+  [MinVersion=1]
+  UnplugAcAdapterReply unplug_ac_adapter@2;
+  // Details to resume a routine requesting to check the keyboard backlight LED
+  // state.
+  [MinVersion=2]
+  CheckKeyboardBacklightStateReply check_keyboard_backlight_state@3;
 };
 
 // Details regarding the inquiry to check the LED lit up state. Clients should
@@ -563,6 +627,48 @@ struct CheckLedLitUpStateReply {
   State state@0;
 };
 
+// Details regarding the inquiry to unplug the AC adapter. Clients should unplug
+// the AC adapter and reply using `UnplugAcAdapterReply`.
+//
+// NextMinVersion: 1, NextIndex: 0
+[Stable]
+struct UnplugAcAdapterInquiry {};
+
+// Details to reply to a routine requesting to unplug the AC adapter.
+//
+// NextMinVersion: 1, NextIndex: 0
+[Stable]
+struct UnplugAcAdapterReply {};
+
+// Details regarding the inquiry to check the keyboard backlight lit up state.
+// Clients should inspect the keyboard backlight and report its state using
+// `CheckKeyboardBacklightStateReply`.
+//
+// NextMinVersion: 1, NextIndex: 0
+[Stable]
+struct CheckKeyboardBacklightStateInquiry {};
+
+// Details to reply to a routine requesting to check if all the LEDs on the
+// keyboard backlight lit up.
+//
+// NextMinVersion: 1, NextIndex: 1
+[Stable]
+struct CheckKeyboardBacklightStateReply {
+  // State of the keyboard backlight LED.
+  //
+  // NextMinVersion: 1, NextIndex: 3
+  [Stable, Extensible]
+  enum State {
+    // The default value is for backward compatibility, should not be used.
+    [Default] kUnmappedEnumField = 0,
+    // All keyboard backlight LEDs are lit up.
+    kOk = 1,
+    // Any of the keyboard backlight LED is not lit up.
+    kAnyNotLitUp = 2,
+  };
+  State state@0;
+};
+
 // Information about a finished routine.
 //
 // NextMinVersion: 1, NextIndex: 2
@@ -576,7 +682,7 @@ struct RoutineStateFinished {
 
 // Details about a finished routine.
 //
-// NextMinVersion: 2, NextIndex: 11
+// NextMinVersion: 5, NextIndex: 14
 [Stable, Extensible]
 union RoutineDetail {
   // Default field is required by extensible unions for backward compatibility.
@@ -604,6 +710,15 @@ union RoutineDetail {
   // Details of a completed network bandwidth routine.
   [MinVersion=1]
   NetworkBandwidthRoutineDetail network_bandwidth@10;
+  // Details of a completed sensitive sensor routine.
+  [MinVersion=2]
+  SensitiveSensorRoutineDetail sensitive_sensor@11;
+  // Details of a completed camera frame analysis routine.
+  [MinVersion=3]
+  CameraFrameAnalysisRoutineDetail camera_frame_analysis@12;
+  // Details of a completed battery discharge routine.
+  [MinVersion=4]
+  BatteryDischargeRoutineDetail battery_discharge@13;
 };
 
 // Details regarding memory routine.
@@ -805,6 +920,7 @@ struct BluetoothPairingPeripheralInfo {
     kTimeout = 5,
   };
   PairError pair_error@0;
+
   // The error which is reported when the routine fails to establish a baseband
   // connection when creating bond.
   //
@@ -821,10 +937,12 @@ struct BluetoothPairingPeripheralInfo {
     kNotConnected = 3,
   };
   ConnectError connect_error@1;
+
   // The list of available services of peripheral.
   array<mojo_base.mojom.Uuid> uuids@2;
   // The Bluetooth class of device (CoD) of peripheral.
   uint32? bluetooth_class@3;
+
   // The address type of peripheral.
   //
   // NextMinVersion: 1, NextIndex: 4
@@ -860,17 +978,18 @@ struct BluetoothPairingRoutineDetail {
 
 // All possible results for subtests of camera routines.
 //
-// NextMinVersion: 1, NextIndex: 3
+// NextMinVersion: 1, NextIndex: 4
 [Stable, Extensible]
 enum CameraSubtestResult {
+  // The default value is for backward compatibility, should not be used.
+  [Default] kUnmappedEnumField = 0,
   // The subtest was not run, possibly because the subtest was not enabled in
-  // the routine parameter. This value could also be used (as the default value)
-  // when there are Mojo version skews.
-  [Default] kNotRun = 0,
+  // the routine parameter or the subtest was not available on the device.
+  kNotRun = 1,
   // The subtest was passed.
-  kPassed = 1,
+  kPassed = 2,
   // The subtest was failed.
-  kFailed = 2,
+  kFailed = 3,
 };
 
 // Details regarding camera availability routine.
@@ -884,6 +1003,16 @@ struct CameraAvailabilityRoutineDetail {
   // subtest is informational, which means its result does not affect the passed
   // or failed state of the main routine.
   CameraSubtestResult camera_diagnostic_service_available_check@1;
+};
+
+// Details regarding battery discharge routine.
+//
+// NextMinVersion: 1, NextIndex: 1
+[Stable]
+struct BatteryDischargeRoutineDetail {
+  // The number of battery percent dropped in the routine's timeframe, range in
+  // [0, 100].
+  double discharge_percent@0;
 };
 
 // Enumeration of the possible DiskRead routine's command type.
@@ -965,4 +1094,105 @@ struct NetworkBandwidthRoutineDetail {
   double download_speed_kbps@0;
   // Average upload speed in kbit/s.
   double upload_speed_kbps@1;
+};
+
+// The info of single sensor tested in sensitive sensor routine.
+//
+// NextMinVersion: 1, NextIndex: 3
+[Stable]
+struct SensitiveSensorInfo {
+  // Sensor ID from Iioservice.
+  int32 id@0;
+
+  // The sensor types supported by the sensitive sensor routine.
+  //
+  // NextMinVersion: 1, NextIndex: 5
+  [Stable, Extensible]
+  enum Type {
+    // For mojo backward compatibility, should not be used.
+    [Default] kUnmappedEnumField = 0,
+    // Accelerometer.
+    kAccel = 1,
+    // Angular velocity sensor, also known as gyro sensor.
+    kGyro = 2,
+    // Magnetometer.
+    kMagn = 3,
+    // Gravity sensor.
+    kGravity = 4,
+  };
+  array<Type> types@1;
+
+  // The sensor channels checked by the sensitive sensor routine. Returns empty
+  // array if the channels are not collected successfully.
+  array<string> channels@2;
+};
+
+// The result of a sensor type in certain location (base or lid) tested in
+// sensitive sensor routine. For example: the result of base gyro sensors or lid
+// accelerometers.
+//
+// NextMinVersion: 1, NextIndex: 3
+[Stable]
+struct SensitiveSensorReport {
+  // The info of sensors passed routine.
+  array<SensitiveSensorInfo> passed_sensors@0;
+  // The info of sensors failed routine.
+  array<SensitiveSensorInfo> failed_sensors@1;
+  // The status of the sensors presence.
+  HardwarePresenceStatus sensor_presence_status@2;
+};
+
+// Details regarding sensitive sensor routine.
+//
+// NextMinVersion: 1, NextIndex: 8
+[Stable]
+struct SensitiveSensorRoutineDetail {
+  // Report of base accelerometer.
+  SensitiveSensorReport base_accelerometer@0;
+  // Report of lid accelerometer.
+  SensitiveSensorReport lid_accelerometer@1;
+  // Report of base gyroscope.
+  SensitiveSensorReport base_gyroscope@2;
+  // Report of lid gyroscope.
+  SensitiveSensorReport lid_gyroscope@3;
+  // Report of base magnetometer.
+  SensitiveSensorReport base_magnetometer@4;
+  // Report of lid magnetometer.
+  SensitiveSensorReport lid_magnetometer@5;
+  // Report of base gravity sensor.
+  SensitiveSensorReport base_gravity_sensor@6;
+  // Report of lid gravity sensor.
+  SensitiveSensorReport lid_gravity_sensor@7;
+};
+
+// Details regarding camera frame analysis routine.
+//
+// NextMinVersion: 1, NextIndex: 3
+[Stable]
+struct CameraFrameAnalysisRoutineDetail {
+  // The issue caught by the routine. See the fields for each subtest for their
+  // details.
+  //
+  // NextMinVersion: 1, NextIndex: 5
+  [Stable, Extensible]
+  enum Issue {
+    // For mojo backward compatibility, should not be used.
+    [Default] kUnmappedEnumField = 0,
+    // No issue.
+    kNone = 1,
+    // The camera service is not available.
+    kCameraServiceNotAvailable = 2,
+    // The len is blocked by the privacy shutter.
+    kBlockedByPrivacyShutter = 3,
+    // The frames are blurred. Lens might be dirty.
+    kLensAreDirty = 4,
+  };
+  Issue issue@0;
+  // The result is `kFailed` if the len is blocked by the privacy shutter. To
+  // mitigate the issue, users are suggested to open the privacy shutter to
+  // unveil the len.
+  CameraSubtestResult privacy_shutter_open_test@1;
+  // The result is `kFailed` if the frames are blurred. To mitigate the issue,
+  // users are suggested to clean the lens.
+  CameraSubtestResult lens_not_dirty_test@2;
 };

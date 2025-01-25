@@ -40,8 +40,7 @@ public class TabGroupTitleUtils {
      *
      * @param tabRootId The tab root ID whose related tab group title will be deleted.
      */
-    // Package Private.
-    public static void deleteTabGroupTitle(int tabRootId) {
+    static void deleteTabGroupTitle(int tabRootId) {
         assert tabRootId != Tab.INVALID_TAB_ID;
         getSharedPreferences().edit().remove(String.valueOf(tabRootId)).apply();
     }
@@ -54,7 +53,7 @@ public class TabGroupTitleUtils {
      * @param tabRootId The tab root ID whose related tab group title will be fetched.
      * @return The stored title of the target tab group, default value is null.
      */
-    public static @Nullable String getTabGroupTitle(int tabRootId) {
+    static @Nullable String getTabGroupTitle(int tabRootId) {
         assert tabRootId != Tab.INVALID_TAB_ID;
         // TODO(crbug.com/40895368): Consider checking if this looks like the default plural string
         // and

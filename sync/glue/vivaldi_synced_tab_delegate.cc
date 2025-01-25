@@ -5,7 +5,7 @@
 namespace sync_sessions {
 
 std::string SyncedTabDelegate::GetVivExtData() const {
-  return std::string();
+  return std::string("{}");
 }
 
 }  // namespace sync_sessions

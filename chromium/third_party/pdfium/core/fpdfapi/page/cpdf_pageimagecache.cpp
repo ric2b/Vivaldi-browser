@@ -51,14 +51,14 @@ class CachedImage final : public CFX_DIBBase {
  public:
   explicit CachedImage(RetainPtr<CFX_DIBBase> image)
       : image_(std::move(image)) {
-    m_Format = image_->GetFormat();
-    m_Width = image_->GetWidth();
-    m_Height = image_->GetHeight();
-    m_Pitch = image_->GetPitch();
+    SetFormat(image_->GetFormat());
+    SetWidth(image_->GetWidth());
+    SetHeight(image_->GetHeight());
+    SetPitch(image_->GetPitch());
 
     if (image_->HasPalette()) {
       pdfium::span<const uint32_t> palette = image_->GetPaletteSpan();
-      m_palette = DataVector<uint32_t>(palette.begin(), palette.end());
+      palette_ = DataVector<uint32_t>(palette.begin(), palette.end());
     }
   }
 

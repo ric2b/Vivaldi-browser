@@ -531,6 +531,7 @@ QueueTraits FrameSchedulerImpl::CreateQueueTraitsForTaskType(TaskType type) {
     case TaskType::kWakeLock:
     case TaskType::kStorage:
     case TaskType::kClipboard:
+    case TaskType::kMachineLearning:
       // TODO(altimin): Move appropriate tasks to throttleable task queue.
       return DeferrableTaskQueueTraits();
     case TaskType::kFileReading:
@@ -631,14 +632,14 @@ QueueTraits FrameSchedulerImpl::CreateQueueTraitsForTaskType(TaskType type) {
     // WebSchedulingTaskQueue with CreateWebSchedulingTaskQueue().
     case TaskType::kWebSchedulingPostedTask:
       // Not a valid frame-level TaskType.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return QueueTraits();
   }
   // This method is called for all values between 0 and kCount. TaskType,
   // however, has numbering gaps, so even though all enumerated TaskTypes are
   // handled in the switch and return a value, we fall through for some values
   // of |type|.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return QueueTraits();
 }
 

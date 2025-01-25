@@ -338,7 +338,7 @@ class RasterCommandsCompletedQuery : public QueryManager::Query {
   }
 
   void QueryCounter(base::subtle::Atomic32 submit_count) override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   void Pause() override { MarkAsPaused(); }
@@ -583,7 +583,7 @@ class RasterDecoderImpl final : public RasterDecoder,
  private:
   gles2::ContextState* state() const {
     if (use_passthrough_) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return nullptr;
     }
     return shared_context_state_->context_state();
@@ -823,7 +823,7 @@ class RasterDecoderImpl final : public RasterDecoder,
   static const CommandInfo command_info[kNumCommands - kFirstRasterCommand];
 
   const int raster_decoder_id_;
-  const bool disable_legacy_mailbox_;
+  const bool display_context_on_another_thread_;
 
   // Number of commands remaining to be processed in DoCommands().
   int commands_to_process_ = 0;
@@ -855,7 +855,7 @@ class RasterDecoderImpl final : public RasterDecoder,
   bool lose_context_when_out_of_memory_ = false;
 
   std::unique_ptr<gles2::GPUTracer> gpu_tracer_;
-  const unsigned char* gpu_decoder_category_;
+  raw_ptr<const unsigned char> gpu_decoder_category_;
   static constexpr int gpu_trace_level_ = 2;
   bool gpu_trace_commands_ = false;
   bool gpu_debug_commands_ = false;
@@ -980,7 +980,7 @@ RasterDecoderImpl::RasterDecoderImpl(
     bool is_privileged)
     : RasterDecoder(client, command_buffer_service, outputter),
       raster_decoder_id_(g_raster_decoder_id.GetNext() + 1),
-      disable_legacy_mailbox_(
+      display_context_on_another_thread_(
           shared_image_manager &&
           shared_image_manager->display_context_on_another_thread()),
       use_passthrough_(gles2::PassthroughCommandDecoderSupported() &&
@@ -1068,7 +1068,7 @@ void RasterDecoderImpl::Destroy(bool have_context) {
   if (!initialized())
     return;
 
-  DCHECK(!have_context || shared_context_state_->context()->IsCurrent(nullptr));
+  DCHECK(!have_context || shared_context_state_->IsCurrent(nullptr));
 
   // Client can call BeginRasterChromium and then channel can be closed and
   // decoder destroyed. Finish raster first.
@@ -1162,7 +1162,7 @@ Capabilities RasterDecoderImpl::GetCapabilities() {
   // images.
   caps.disable_one_component_textures =
       workarounds().avoid_one_component_egl_images ||
-      (disable_legacy_mailbox_ && features::IsUsingVulkan());
+      (display_context_on_another_thread_ && features::IsUsingVulkan());
   caps.angle_rgbx_internal_format =
       feature_info()->feature_flags().angle_rgbx_internal_format;
   caps.chromium_gpu_fence = feature_info()->feature_flags().chromium_gpu_fence;
@@ -1195,7 +1195,6 @@ Capabilities RasterDecoderImpl::GetCapabilities() {
     caps.texture_half_float_linear =
         feature_info()->feature_flags().enable_texture_half_float_linear;
   }
-  caps.disable_legacy_mailbox = disable_legacy_mailbox_;
 
   if (graphite_context()) {
     bool supports_multiplanar_rendering = false;
@@ -1208,11 +1207,9 @@ Capabilities RasterDecoderImpl::GetCapabilities() {
       supports_multiplanar_rendering = true;
     }
 #endif
-    caps.supports_yuv_to_rgb_conversion = true;
     caps.supports_rgb_to_yuv_conversion = supports_multiplanar_rendering;
     caps.supports_yuv_readback = supports_multiplanar_rendering;
   } else {
-    caps.supports_yuv_to_rgb_conversion = true;
     caps.supports_rgb_to_yuv_conversion = true;
     caps.supports_yuv_readback = true;
   }
@@ -1240,7 +1237,7 @@ Capabilities RasterDecoderImpl::GetCapabilities() {
   }
 #endif  // BUILDFLAG(SKIA_USE_DAWN)
   else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -1252,7 +1249,7 @@ GLCapabilities RasterDecoderImpl::GetGLCapabilities() {
 }
 
 const gles2::ContextState* RasterDecoderImpl::GetContextState() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 
@@ -1606,7 +1603,7 @@ bool RasterDecoderImpl::ClearLevel(gles2::Texture* texture,
                                    int yoffset,
                                    int width,
                                    int height) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return true;
 }
 
@@ -1616,7 +1613,7 @@ bool RasterDecoderImpl::ClearCompressedTextureLevel(gles2::Texture* texture,
                                                     unsigned format,
                                                     int width,
                                                     int height) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -1627,7 +1624,7 @@ bool RasterDecoderImpl::ClearCompressedTextureLevel3D(gles2::Texture* texture,
                                                       int width,
                                                       int height,
                                                       int depth) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 

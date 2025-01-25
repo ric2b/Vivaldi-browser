@@ -110,6 +110,8 @@ MATCHER_P(ModelEqualsSpecifics, expected_specifics, "") {
             arg_info.sender_id_target_info.p256dh ||
         expected_fields.sender_id_auth_secret_v2() !=
             arg_info.sender_id_target_info.auth_secret ||
+        expected_fields.chime_representative_target_id() !=
+            arg_info.chime_representative_target_id ||
         static_cast<size_t>(expected_fields.enabled_features_size()) !=
             arg_info.enabled_features.size()) {
       return false;
@@ -143,6 +145,9 @@ MATCHER_P(ModelEqualsSpecifics, expected_specifics, "") {
          expected_specifics.feature_fields()
                  .send_tab_to_self_receiving_enabled() ==
              arg.send_tab_to_self_receiving_enabled() &&
+         expected_specifics.feature_fields()
+                 .send_tab_to_self_receiving_type() ==
+             arg.send_tab_to_self_receiving_type() &&
          expected_specifics.invalidation_fields().instance_id_token() ==
              arg.fcm_registration_token();
 }
@@ -244,6 +249,10 @@ std::string SharingSenderIdFcmTokenForSuffix(int suffix) {
   return base::StringPrintf("sharing sender-id fcm token %d", suffix);
 }
 
+std::string SharingChimeRepresentativeTargetIdForSuffix(int suffix) {
+  return base::StringPrintf("chime representative target id %d", suffix);
+}
+
 std::string SharingSenderIdP256dhForSuffix(int suffix) {
   return base::StringPrintf("sharing sender-id p256dh %d", suffix);
 }
@@ -289,6 +298,9 @@ DeviceInfoSpecifics CreateSpecifics(
   specifics.set_last_updated_timestamp(TimeToProtoTime(last_updated));
   specifics.mutable_feature_fields()->set_send_tab_to_self_receiving_enabled(
       true);
+  specifics.mutable_feature_fields()->set_send_tab_to_self_receiving_type(
+      sync_pb::
+          SyncEnums_SendTabReceivingType_SEND_TAB_RECEIVING_TYPE_CHROME_OR_UNSPECIFIED);
   specifics.mutable_sharing_fields()->set_vapid_fcm_token(
       SharingVapidFcmTokenForSuffix(suffix));
   specifics.mutable_sharing_fields()->set_vapid_p256dh(
@@ -297,6 +309,8 @@ DeviceInfoSpecifics CreateSpecifics(
       SharingVapidAuthSecretForSuffix(suffix));
   specifics.mutable_sharing_fields()->set_sender_id_fcm_token_v2(
       SharingSenderIdFcmTokenForSuffix(suffix));
+  specifics.mutable_sharing_fields()->set_chime_representative_target_id(
+      SharingChimeRepresentativeTargetIdForSuffix(suffix));
   specifics.mutable_sharing_fields()->set_sender_id_p256dh_v2(
       SharingSenderIdP256dhForSuffix(suffix));
   specifics.mutable_sharing_fields()->set_sender_id_auth_secret_v2(
@@ -391,7 +405,11 @@ class TestLocalDeviceInfoProvider : public MutableLocalDeviceInfoProvider {
         kLocalDeviceFormFactor, SigninScopedDeviceIdForSuffix(kLocalSuffix),
         manufacturer_name, model_name, full_hardware_class, base::Time(),
         DeviceInfoUtil::GetPulseInterval(),
-        /*send_tab_to_self_receiving_enabled=*/true,
+        /*send_tab_to_self_receiving_enabled=*/
+        true,
+        /*send_tab_to_self_receiving_type=*/
+        sync_pb::
+            SyncEnums_SendTabReceivingType_SEND_TAB_RECEIVING_TYPE_CHROME_OR_UNSPECIFIED,
         DeviceInfo::SharingInfo(
             {SharingVapidFcmTokenForSuffix(kLocalSuffix),
              SharingVapidP256dhForSuffix(kLocalSuffix),
@@ -399,9 +417,11 @@ class TestLocalDeviceInfoProvider : public MutableLocalDeviceInfoProvider {
             {SharingSenderIdFcmTokenForSuffix(kLocalSuffix),
              SharingSenderIdP256dhForSuffix(kLocalSuffix),
              SharingSenderIdAuthSecretForSuffix(kLocalSuffix)},
+            SharingChimeRepresentativeTargetIdForSuffix(kLocalSuffix),
             sharing_enabled_features),
         /*paask_info=*/std::nullopt, last_fcm_registration_token,
-        last_interested_data_types);
+        last_interested_data_types,
+        /*floating_workspace_last_signin_timestamp=*/std::nullopt);
   }
 
   void Clear() override { local_device_info_.reset(); }
@@ -409,6 +429,11 @@ class TestLocalDeviceInfoProvider : public MutableLocalDeviceInfoProvider {
   void UpdateClientName(const std::string& client_name) override {
     ASSERT_TRUE(local_device_info_);
     local_device_info_->set_client_name(client_name);
+  }
+
+  void UpdateRecentSignInTime(base::Time time) override {
+    ASSERT_TRUE(local_device_info_);
+    local_device_info_->set_floating_workspace_last_signin_timestamp(time);
   }
 
   version_info::Channel GetChannel() const override {
@@ -659,33 +684,14 @@ class DeviceInfoSyncBridgeTest : public testing::Test,
   }
 
   std::map<std::string, sync_pb::EntitySpecifics> GetAllData() {
-    base::RunLoop loop;
-    std::unique_ptr<DataBatch> batch;
-    bridge_->GetAllDataForDebugging(base::BindOnce(
-        [](base::RunLoop* loop, std::unique_ptr<DataBatch>* out_batch,
-           std::unique_ptr<DataBatch> batch) {
-          *out_batch = std::move(batch);
-          loop->Quit();
-        },
-        &loop, &batch));
-    loop.Run();
+    std::unique_ptr<DataBatch> batch = bridge_->GetAllDataForDebugging();
     EXPECT_NE(nullptr, batch);
     return DataBatchToSpecificsMap(std::move(batch));
   }
 
-  std::map<std::string, sync_pb::EntitySpecifics> GetData(
+  std::map<std::string, sync_pb::EntitySpecifics> GetDataForCommit(
       const std::vector<std::string>& storage_keys) {
-    base::RunLoop loop;
-    std::unique_ptr<DataBatch> batch;
-    bridge_->GetData(storage_keys, base::BindOnce(
-                                       [](base::RunLoop* loop,
-                                          std::unique_ptr<DataBatch>* out_batch,
-                                          std::unique_ptr<DataBatch> batch) {
-                                         *out_batch = std::move(batch);
-                                         loop->Quit();
-                                       },
-                                       &loop, &batch));
-    loop.Run();
+    std::unique_ptr<DataBatch> batch = bridge_->GetDataForCommit(storage_keys);
     EXPECT_NE(nullptr, batch);
     return DataBatchToSpecificsMap(std::move(batch));
   }
@@ -818,26 +824,28 @@ TEST_F(DeviceInfoSyncBridgeTest, GetData) {
       StateWithEncryption("ekn"));
   InitializeAndPump();
 
-  EXPECT_THAT(GetData({specifics1.cache_guid()}),
+  EXPECT_THAT(GetDataForCommit({specifics1.cache_guid()}),
               UnorderedElementsAre(
                   Pair(specifics1.cache_guid(), HasDeviceInfo(specifics1))));
 
-  EXPECT_THAT(GetData({specifics1.cache_guid(), specifics3.cache_guid()}),
-              UnorderedElementsAre(
-                  Pair(specifics1.cache_guid(), HasDeviceInfo(specifics1)),
-                  Pair(specifics3.cache_guid(), HasDeviceInfo(specifics3))));
+  EXPECT_THAT(
+      GetDataForCommit({specifics1.cache_guid(), specifics3.cache_guid()}),
+      UnorderedElementsAre(
+          Pair(specifics1.cache_guid(), HasDeviceInfo(specifics1)),
+          Pair(specifics3.cache_guid(), HasDeviceInfo(specifics3))));
 
-  EXPECT_THAT(GetData({specifics1.cache_guid(), specifics2.cache_guid(),
-                       specifics3.cache_guid()}),
-              UnorderedElementsAre(
-                  Pair(specifics1.cache_guid(), HasDeviceInfo(specifics1)),
-                  Pair(specifics2.cache_guid(), HasDeviceInfo(specifics2)),
-                  Pair(specifics3.cache_guid(), HasDeviceInfo(specifics3))));
+  EXPECT_THAT(
+      GetDataForCommit({specifics1.cache_guid(), specifics2.cache_guid(),
+                        specifics3.cache_guid()}),
+      UnorderedElementsAre(
+          Pair(specifics1.cache_guid(), HasDeviceInfo(specifics1)),
+          Pair(specifics2.cache_guid(), HasDeviceInfo(specifics2)),
+          Pair(specifics3.cache_guid(), HasDeviceInfo(specifics3))));
 }
 
 TEST_F(DeviceInfoSyncBridgeTest, GetDataMissing) {
   InitializeAndPump();
-  EXPECT_THAT(GetData({"does_not_exist"}), IsEmpty());
+  EXPECT_THAT(GetDataForCommit({"does_not_exist"}), IsEmpty());
 }
 
 TEST_F(DeviceInfoSyncBridgeTest, GetAllData) {

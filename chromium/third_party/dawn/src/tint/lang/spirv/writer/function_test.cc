@@ -102,7 +102,7 @@ TEST_F(SpirvWriterTest, Function_EntryPoint_Compute) {
                OpExecutionMode %main LocalSize 32 4 1
 
                ; Debug Information
-               OpName %main "main"  ; id %1
+               OpName %main "main"                  ; id %1
 
                ; Types, variables and constants
        %void = OpTypeVoid
@@ -128,7 +128,7 @@ TEST_F(SpirvWriterTest, Function_EntryPoint_Fragment) {
                OpExecutionMode %main OriginUpperLeft
 
                ; Debug Information
-               OpName %main "main"  ; id %1
+               OpName %main "main"                  ; id %1
 
                ; Types, variables and constants
        %void = OpTypeVoid
@@ -153,7 +153,7 @@ TEST_F(SpirvWriterTest, Function_EntryPoint_Vertex) {
                OpEntryPoint Vertex %main "main"
 
                ; Debug Information
-               OpName %main "main"  ; id %1
+               OpName %main "main"                  ; id %1
 
                ; Types, variables and constants
        %void = OpTypeVoid
@@ -195,9 +195,9 @@ TEST_F(SpirvWriterTest, Function_EntryPoint_Multiple) {
                OpExecutionMode %main3 OriginUpperLeft
 
                ; Debug Information
-               OpName %main1 "main1"  ; id %1
-               OpName %main2 "main2"  ; id %5
-               OpName %main3 "main3"  ; id %7
+               OpName %main1 "main1"                ; id %1
+               OpName %main2 "main2"                ; id %5
+               OpName %main3 "main3"                ; id %7
 
                ; Types, variables and constants
        %void = OpTypeVoid
@@ -331,9 +331,9 @@ TEST_F(SpirvWriterTest, Function_ShaderIO_VertexPointSize) {
 )");
     EXPECT_INST(R"(
 %_ptr_Output_v4float = OpTypePointer Output %v4float
-%main_position_Output = OpVariable %_ptr_Output_v4float Output
+%main_position_Output = OpVariable %_ptr_Output_v4float Output  ; BuiltIn Position
 %_ptr_Output_float = OpTypePointer Output %float
-%main___point_size_Output = OpVariable %_ptr_Output_float Output
+%main___point_size_Output = OpVariable %_ptr_Output_float Output    ; BuiltIn PointSize
 )");
     EXPECT_INST(R"(
        %main = OpFunction %void None %14
@@ -348,9 +348,9 @@ TEST_F(SpirvWriterTest, Function_ShaderIO_VertexPointSize) {
 
 TEST_F(SpirvWriterTest, Function_ShaderIO_F16_Input_WithCapability) {
     auto* input = b.FunctionParam("input", ty.vec4<f16>());
-    input->SetLocation(1, std::nullopt);
+    input->SetLocation(1);
     auto* func = b.Function("main", ty.vec4<f32>(), core::ir::Function::PipelineStage::kFragment);
-    func->SetReturnLocation(2, std::nullopt);
+    func->SetReturnLocation(2);
     func->SetParams({input});
     b.Append(func->Block(), [&] {  //
         b.Return(func, b.Convert(ty.vec4<f32>(), input));
@@ -376,9 +376,9 @@ TEST_F(SpirvWriterTest, Function_ShaderIO_F16_Input_WithCapability) {
 
 TEST_F(SpirvWriterTest, Function_ShaderIO_F16_Input_WithoutCapability) {
     auto* input = b.FunctionParam("input", ty.vec4<f16>());
-    input->SetLocation(1, std::nullopt);
+    input->SetLocation(1);
     auto* func = b.Function("main", ty.vec4<f32>(), core::ir::Function::PipelineStage::kFragment);
-    func->SetReturnLocation(2, std::nullopt);
+    func->SetReturnLocation(2);
     func->SetParams({input});
     b.Append(func->Block(), [&] {  //
         b.Return(func, b.Convert(ty.vec4<f32>(), input));
@@ -404,9 +404,9 @@ TEST_F(SpirvWriterTest, Function_ShaderIO_F16_Input_WithoutCapability) {
 
 TEST_F(SpirvWriterTest, Function_ShaderIO_F16_Output_WithCapability) {
     auto* input = b.FunctionParam("input", ty.vec4<f32>());
-    input->SetLocation(1, std::nullopt);
+    input->SetLocation(1);
     auto* func = b.Function("main", ty.vec4<f16>(), core::ir::Function::PipelineStage::kFragment);
-    func->SetReturnLocation(2, std::nullopt);
+    func->SetReturnLocation(2);
     func->SetParams({input});
     b.Append(func->Block(), [&] {  //
         b.Return(func, b.Convert(ty.vec4<f16>(), input));
@@ -432,9 +432,9 @@ TEST_F(SpirvWriterTest, Function_ShaderIO_F16_Output_WithCapability) {
 
 TEST_F(SpirvWriterTest, Function_ShaderIO_F16_Output_WithoutCapability) {
     auto* input = b.FunctionParam("input", ty.vec4<f32>());
-    input->SetLocation(1, std::nullopt);
+    input->SetLocation(1);
     auto* func = b.Function("main", ty.vec4<f16>(), core::ir::Function::PipelineStage::kFragment);
-    func->SetReturnLocation(2, std::nullopt);
+    func->SetReturnLocation(2);
     func->SetParams({input});
     b.Append(func->Block(), [&] {  //
         b.Return(func, b.Convert(ty.vec4<f16>(), input));
@@ -464,7 +464,7 @@ TEST_F(SpirvWriterTest, Function_ShaderIO_DualSourceBlend) {
                                                   {
                                                       mod.symbols.Register("a"),
                                                       ty.f32(),
-                                                      core::type::StructMemberAttributes{
+                                                      core::IOAttributes{
                                                           /* location */ 0u,
                                                           /* index */ 0u,
                                                           /* color */ std::nullopt,
@@ -476,7 +476,7 @@ TEST_F(SpirvWriterTest, Function_ShaderIO_DualSourceBlend) {
                                                   {
                                                       mod.symbols.Register("b"),
                                                       ty.f32(),
-                                                      core::type::StructMemberAttributes{
+                                                      core::IOAttributes{
                                                           /* location */ 0u,
                                                           /* index */ 1u,
                                                           /* color */ std::nullopt,
@@ -502,8 +502,8 @@ TEST_F(SpirvWriterTest, Function_ShaderIO_DualSourceBlend) {
                OpDecorate %main_loc0_idx1_Output Index 1
     )");
     EXPECT_INST(R"(
-%main_loc0_idx0_Output = OpVariable %_ptr_Output_float Output
-%main_loc0_idx1_Output = OpVariable %_ptr_Output_float Output
+%main_loc0_idx0_Output = OpVariable %_ptr_Output_float Output   ; Location 0, Index 0
+%main_loc0_idx1_Output = OpVariable %_ptr_Output_float Output   ; Location 0, Index 1
     )");
     EXPECT_INST(R"(
        %main = OpFunction %void None %14

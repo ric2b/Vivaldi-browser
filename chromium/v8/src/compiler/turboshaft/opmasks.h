@@ -104,8 +104,7 @@ struct MaskBuilder {
   }
 
   static constexpr uint64_t EncodeValue(typename Fields::type... args) {
-    constexpr uint64_t base_mask =
-        EncodeBaseValue(operation_to_opcode_map<Op>::value);
+    constexpr uint64_t base_mask = EncodeBaseValue(operation_to_opcode_v<Op>);
     return (base_mask | ... | EncodeFieldValue<Fields>(args));
   }
 
@@ -237,6 +236,9 @@ using kWord64ShiftRightLogical =
                    WordRepresentation::Word64()>;
 using kShiftLeft = ShiftKindMask::For<ShiftOp::Kind::kShiftLeft>;
 
+using PhiMask = MaskBuilder<PhiOp, FIELD(PhiOp, rep)>;
+using kTaggedPhi = PhiMask::For<RegisterRepresentation::Tagged()>;
+
 using ConstantMask = MaskBuilder<ConstantOp, FIELD(ConstantOp, kind)>;
 
 using kWord32Constant = ConstantMask::For<ConstantOp::Kind::kWord32>;
@@ -314,6 +316,8 @@ using TaggedBitcastKindMask =
     MaskBuilder<TaggedBitcastOp, FIELD(TaggedBitcastOp, kind)>;
 using kTaggedBitcastSmi =
     TaggedBitcastKindMask::For<TaggedBitcastOp::Kind::kSmi>;
+using kTaggedBitcastHeapObject =
+    TaggedBitcastKindMask::For<TaggedBitcastOp::Kind::kHeapObject>;
 
 #if V8_ENABLE_WEBASSEMBLY
 

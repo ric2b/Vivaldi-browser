@@ -13,6 +13,7 @@
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/sequence_bound.h"
+#include "base/types/pass_key.h"
 #include "chrome/browser/dips/dips_browser_signin_detector.h"
 #include "chrome/browser/dips/dips_redirect_info.h"
 #include "chrome/browser/dips/dips_storage.h"
@@ -102,7 +103,6 @@ class DIPSService : public KeyedService {
   }
 
   void OnTimerFiredForTesting() { OnTimerFired(); }
-  void WaitForInitCompleteForTesting() { wait_for_prepopulating_.Run(); }
   void WaitForFileDeletionCompleteForTesting() {
     wait_for_file_deletion_.Run();
   }
@@ -156,11 +156,7 @@ class DIPSService : public KeyedService {
       base::RepeatingCallback<void(const GURL&)> content_settings_callback);
 
   scoped_refptr<base::SequencedTaskRunner> CreateTaskRunner();
-  void InitializeStorageWithEngagedSites(bool prepopulated);
-  // Prepopulates the DIPS database with `sites` having interaction at `time`.
-  void InitializeStorage(base::Time time, std::vector<std::string> sites);
 
-  void OnStorageInitialized();
   void OnTimerFired();
   void DeleteDIPSEligibleState(DeletedSitesCallback callback,
                                std::vector<std::string> sites_to_clear);
@@ -180,7 +176,6 @@ class DIPSService : public KeyedService {
                      const GURL& third_party_url) const;
 
   base::RunLoop wait_for_file_deletion_;
-  base::RunLoop wait_for_prepopulating_;
   raw_ptr<content::BrowserContext> browser_context_;
   scoped_refptr<content_settings::CookieSettings> cookie_settings_;
   // The persisted timer controlling how often incidental state is cleared.

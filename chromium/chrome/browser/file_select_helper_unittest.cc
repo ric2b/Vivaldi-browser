@@ -184,7 +184,6 @@ TEST_F(FileSelectHelperTest, LastSelectedDirectory) {
       new FileSelectHelper(&profile);
 
   const int index = 0;
-  void* params = nullptr;
 
   const base::FilePath dir_path_1 = data_dir_.AppendASCII("dir1");
   const base::FilePath dir_path_2 = data_dir_.AppendASCII("dir2");
@@ -208,23 +207,20 @@ TEST_F(FileSelectHelperTest, LastSelectedDirectory) {
     file_select_helper->dialog_mode_ = mode;
 
     file_select_helper->AddRef();  // Normally called by RunFileChooser().
-    file_select_helper->FileSelected(ui::SelectedFileInfo(file_path_1), index,
-                                     params);
+    file_select_helper->FileSelected(ui::SelectedFileInfo(file_path_1), index);
     EXPECT_EQ(dir_path_1, profile.last_selected_directory());
 
     file_select_helper->AddRef();  // Normally called by RunFileChooser().
-    file_select_helper->FileSelected(ui::SelectedFileInfo(file_path_2), index,
-                                     params);
+    file_select_helper->FileSelected(ui::SelectedFileInfo(file_path_2), index);
     EXPECT_EQ(dir_path_1, profile.last_selected_directory());
 
     file_select_helper->AddRef();  // Normally called by RunFileChooser().
-    file_select_helper->FileSelected(ui::SelectedFileInfo(file_path_3), index,
-                                     params);
+    file_select_helper->FileSelected(ui::SelectedFileInfo(file_path_3), index);
     EXPECT_EQ(dir_path_2, profile.last_selected_directory());
 
     file_select_helper->AddRef();  // Normally called by RunFileChooser().
     file_select_helper->MultiFilesSelected(
-        ui::FilePathListToSelectedFileInfoList(files), params);
+        ui::FilePathListToSelectedFileInfoList(files));
     EXPECT_EQ(dir_path_1, profile.last_selected_directory());
   }
 
@@ -232,18 +228,16 @@ TEST_F(FileSelectHelperTest, LastSelectedDirectory) {
   file_select_helper->dialog_mode_ = FileChooserParams::Mode::kUploadFolder;
 
   file_select_helper->AddRef();  // Normally called by RunFileChooser().
-  file_select_helper->FileSelected(ui::SelectedFileInfo(dir_path_1), index,
-                                   params);
+  file_select_helper->FileSelected(ui::SelectedFileInfo(dir_path_1), index);
   EXPECT_EQ(dir_path_1, profile.last_selected_directory());
 
   file_select_helper->AddRef();  // Normally called by RunFileChooser().
-  file_select_helper->FileSelected(ui::SelectedFileInfo(dir_path_2), index,
-                                   params);
+  file_select_helper->FileSelected(ui::SelectedFileInfo(dir_path_2), index);
   EXPECT_EQ(dir_path_2, profile.last_selected_directory());
 
   file_select_helper->AddRef();  // Normally called by RunFileChooser().
   file_select_helper->MultiFilesSelected(
-      ui::FilePathListToSelectedFileInfoList(dirs), params);
+      ui::FilePathListToSelectedFileInfoList(dirs));
   EXPECT_EQ(dir_path_1, profile.last_selected_directory());
 }
 

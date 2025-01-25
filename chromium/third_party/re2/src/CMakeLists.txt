@@ -60,12 +60,15 @@ if(UNIX)
 endif()
 
 set(ABSL_DEPS
+    absl_absl_check
+    absl_absl_log
     absl_base
     absl_core_headers
     absl_fixed_array
     absl_flags
     absl_flat_hash_map
     absl_flat_hash_set
+    absl_hash
     absl_inlined_vector
     absl_optional
     absl_span
@@ -150,7 +153,9 @@ if(UNIX)
 endif()
 
 foreach(dep ${ABSL_DEPS})
-  string(REGEX REPLACE "^absl_" "absl::" dep ${dep})
+  # Work around https://gitlab.kitware.com/cmake/cmake/-/issues/16899. >:(
+  string(PREPEND dep "^")
+  string(REGEX REPLACE "\\^absl_" "absl::" dep ${dep})
   target_link_libraries(re2 PUBLIC ${dep})
 endforeach()
 

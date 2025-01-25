@@ -264,7 +264,6 @@
 <translation id="2783001728278437613">{COUNT,plural, =1{+1}one{+#}two{+#}other{+#}}</translation>
 <translation id="2792200646155001340">אפשר גם להחליק בעזרת אצבע אחת משמאל לימין כדי לעבור לפריט הקודם. ניתן לנסות זאת עכשיו.</translation>
 <translation id="280499067616661124">‏חיפוש של ChromeVox בדף</translation>
-<translation id="2811019999044652585">‏כדי לעבור אל חלקים אחרים במסך, כמו סרגלי כלים או מגש המערכת, יש להקיש על Control ועל מקש 'הבא'. ב-Chromebook, מקש 'הבא' נמצא בדיוק מעל המקש של הספרה 2.</translation>
 <translation id="2811204574343810641">שורה</translation>
 <translation id="2816868829355607410">אזור תרגול: פקודות קפיצה</translation>
 <translation id="2841013758207633010">שעה</translation>
@@ -520,6 +519,7 @@
 <translation id="4432457053224379116">אדום הודי</translation>
 <translation id="4432896207833262240">תוכן מסומן</translation>
 <translation id="4437615272777527928">כדי לחפש בתפריטים יש להקליד כאן. בעזרת החץ למעלה והחץ למטה ניתן לעבור בין התוצאות. בעזרת החץ שמאלה והחץ ימינה ניתן לשלוט בסמן הטקסט ולעבור בין התפריטים.</translation>
+<translation id="4453530046591759283">‏כדי לעבור אל חלקים אחרים במסך, כמו סרגלי כלים או מגש המערכת, צריך להקיש על Control + F1. מקש F1 הוא המקש הראשון מימין למקש Escape.</translation>
 <translation id="4457472090507035117">בחירת הקול המוגדר כרגע:</translation>
 <translation id="4476183483923481720">שורה חדשה</translation>
 <translation id="4479068155583208887">אדום קיר-לבנים</translation>
@@ -880,6 +880,7 @@
 <translation id="7091296112653361280">לבן נבאחו</translation>
 <translation id="7095834689119144465">עריכת טקסט מספרי בלבד</translation>
 <translation id="7096001299300236431">המדיה הקודמת</translation>
+<translation id="7096668131290451939">‏כדי לצאת ממצב למידה, צריך ללחוץ שוב על Escape</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">הד מילה</translation>
 <translation id="7137397390322864165">סלמון</translation>

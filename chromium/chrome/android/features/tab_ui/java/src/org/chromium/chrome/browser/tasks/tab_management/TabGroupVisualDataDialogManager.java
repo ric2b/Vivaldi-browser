@@ -18,7 +18,6 @@ import androidx.appcompat.widget.AppCompatEditText;
 import androidx.appcompat.widget.DialogTitle;
 
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupTitleUtils;
 import org.chromium.chrome.browser.tasks.tab_management.ColorPickerCoordinator.ColorPickerLayoutType;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.tab_groups.TabGroupColorId;
@@ -123,7 +122,7 @@ public class TabGroupVisualDataDialogManager {
                         /* isIncognito= */ false,
                         ColorPickerLayoutType.DYNAMIC,
                         null);
-        mDefaultColorId = filter.getTabGroupColor(rootId);
+        mDefaultColorId = filter.getTabGroupColorWithFallback(rootId);
         mColorPickerCoordinator.setSelectedColorItem(mDefaultColorId);
 
         LinearLayout linearLayout = mCustomView.findViewById(R.id.visual_data_dialog_layout);
@@ -143,6 +142,7 @@ public class TabGroupVisualDataDialogManager {
                             dialog.getWindow()
                                     .setSoftInputMode(
                                             WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+                            mModalDialogManager.removeObserver(this);
                         }
                     }
                 };
@@ -154,11 +154,6 @@ public class TabGroupVisualDataDialogManager {
     public void hideDialog() {
         // Reset the model to null after each usage.
         mModel = null;
-        destroy();
-    }
-
-    /** Destroy any members that need clean up. */
-    public void destroy() {
         if (mModalDialogManagerObserver != null) {
             mModalDialogManager.removeObserver(mModalDialogManagerObserver);
         }
@@ -203,7 +198,7 @@ public class TabGroupVisualDataDialogManager {
         if (mDialogType == DialogType.TAB_GROUP_CREATION) {
             mDefaultGroupTitle = defaultGroupTitle;
         } else if (mDialogType == DialogType.TAB_GROUP_EDIT) {
-            mDefaultGroupTitle = TabGroupTitleUtils.getTabGroupTitle(rootId);
+            mDefaultGroupTitle = filter.getTabGroupTitle(rootId);
 
             if (mDefaultGroupTitle == null) {
                 mDefaultGroupTitle = defaultGroupTitle;

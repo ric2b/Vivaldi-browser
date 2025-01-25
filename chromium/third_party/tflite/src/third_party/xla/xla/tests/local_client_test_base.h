@@ -21,6 +21,7 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "xla/client/client_library.h"
@@ -31,9 +32,9 @@ limitations under the License.
 #include "xla/service/platform_util.h"
 #include "xla/service/shaped_buffer.h"
 #include "xla/service/transfer_manager.h"
-#include "xla/statusor.h"
 #include "xla/stream_executor/device_memory_allocator.h"
 #include "xla/stream_executor/stream_executor.h"
+#include "xla/stream_executor/stream_executor_memory_allocator.h"
 #include "xla/tests/client_library_test_base.h"
 #include "xla/tests/manifest_checking_test.h"
 #include "xla/tests/verified_hlo_module.h"
@@ -45,14 +46,13 @@ class TestAllocator : public se::StreamExecutorMemoryAllocator {
  public:
   explicit TestAllocator(se::Platform* platform)
       : se::StreamExecutorMemoryAllocator(
-            platform, GetInterfaceVectorFromExecutors(
-                          PlatformUtil::GetStreamExecutors(platform).value())) {
-  }
+            platform, PlatformUtil::GetStreamExecutors(platform).value()) {}
 
   absl::StatusOr<se::OwningDeviceMemory> Allocate(
       int device_ordinal, uint64_t size, bool retry_on_failure,
       int64_t memory_space) override;
-  Status Deallocate(int device_ordinal, se::DeviceMemoryBase mem) override;
+  absl::Status Deallocate(int device_ordinal,
+                          se::DeviceMemoryBase mem) override;
 
   // Return the number of allocations that have been performed.
   int64_t allocation_count() const;
@@ -63,13 +63,6 @@ class TestAllocator : public se::StreamExecutorMemoryAllocator {
   int64_t deallocation_count(int device_ordinal) const;
 
  private:
-  // Helper function to turn a vector<StreamExecutor*> into a
-  // vector<StreamExecutorInterface*>.
-  std::vector<se::StreamExecutorInterface*> GetInterfaceVectorFromExecutors(
-      const std::vector<se::StreamExecutor*>& executors) {
-    return std::vector<se::StreamExecutorInterface*>(executors.begin(),
-                                                     executors.end());
-  }
   mutable absl::Mutex count_mutex_;
 
   // Global counts of allocations and deallocations.

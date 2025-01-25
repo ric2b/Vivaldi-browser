@@ -9,7 +9,7 @@
 : #     "C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional\VC\Auxiliary\Build\vcvars64.bat"
 
 : # When updating the dav1d version, make the same change to dav1d_android.sh.
-git clone -b 1.4.1 --depth 1 https://code.videolan.org/videolan/dav1d.git
+git clone -b 1.4.3 --depth 1 https://code.videolan.org/videolan/dav1d.git
 
 cd dav1d
 mkdir build
@@ -20,5 +20,5 @@ cd build
 : # Build with msan: -Db_sanitize=memory -Db_lundef=false -Denable_asm=false
 : # Build with ubsan: -Db_sanitize=undefined -Db_lundef=false
 meson setup --default-library=static --buildtype release -Denable_tools=false -Denable_tests=false ..
-ninja
 cd ../..
+ninja -C dav1d/build

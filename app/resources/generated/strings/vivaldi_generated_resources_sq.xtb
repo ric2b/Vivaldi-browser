@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Zbatoj</translation>
 <translation id="1603914832182249871">(Private)</translation>
 <translation id="1627276047960621195">Përshkruesit e skedarëve</translation>
+<translation id="1654713139320245449">Nuk gjendet destinacioni për transmetim. Doni ndihmë?</translation>
 <translation id="166278006618318542">Algoritmi i çelësit publik të subjektit</translation>
 <translation id="1682548588986054654">Dritare private të re</translation>
 <translation id="1708338024780164500">(Joaktiv)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Një program kompjuterik instaloi një shtesë që mund të ndryshojë funksionet e Vivaldit.</translation>
 <translation id="2443487764245141020">Uebsajtet mund të njohin aparatin që përdorni me anë të një identifikuesi</translation>
 <translation id="2445081178310039857">Duhet katalogu kryesor i shtesës.</translation>
-<translation id="2470702053775288986">Janë çaktivizuar shtesat jofunksionale</translation>
 <translation id="2485422356828889247">Çinstaloj</translation>
 <translation id="2498539833203011245">Minimizoj</translation>
 <translation id="2509495747794740764">Vlera duhet të jetë një numër midis 10 dhe 200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Detajet</translation>
 <translation id="4345587454538109430">Konfiguroj...</translation>
 <translation id="4348766275249686434">Nxjerr gabimet</translation>
-<translation id="4363771538994847871">Mungon destinacioni për transmetim. Doni ndihmë?</translation>
 <translation id="4384652540891215547">Aktivizoj shtesën</translation>
 <translation id="4394049700291259645">Çaktivizoj</translation>
 <translation id="4409697491990005945">Anësoret</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Faqosja</translation>
 <translation id="7782102568078991263">Nuk ka më sugjerime nga Google</translation>
 <translation id="7786889348652477777">&amp;Freskoj aplikacionin</translation>
-<translation id="7791543448312431591">Shtoj</translation>
 <translation id="7800518121066352902">Rrotulloj në k&amp;ahun kundërorar</translation>
 <translation id="7814458197256864873">&amp;Kopjoj</translation>
 <translation id="7818135753970109980">U shtua një motiv i ri (<ph name="EXTENSION_NAME" />)</translation>

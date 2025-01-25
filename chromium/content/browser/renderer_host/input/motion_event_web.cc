@@ -9,13 +9,14 @@
 #include "base/check_op.h"
 #include "base/notreached.h"
 #include "base/numerics/angle_conversions.h"
-#include "content/common/input/web_touch_event_traits.h"
+#include "components/input/web_touch_event_traits.h"
 #include "ui/events/blink/blink_event_util.h"
 
 using blink::WebInputEvent;
 using blink::WebPointerProperties;
 using blink::WebTouchEvent;
 using blink::WebTouchPoint;
+using input::WebTouchEventTraits;
 
 namespace content {
 namespace {
@@ -44,7 +45,7 @@ ui::MotionEvent::Action GetActionFrom(const WebTouchEvent& event) {
     default:
       break;
   };
-  NOTREACHED()
+  NOTREACHED_IN_MIGRATION()
       << "Unable to derive a valid MotionEvent::Action from the WebTouchEvent.";
   return ui::MotionEvent::Action::CANCEL;
 }
@@ -214,7 +215,7 @@ ui::MotionEvent::ToolType MotionEventWeb::GetToolType(
     case WebPointerProperties::PointerType::kTouch:
       return ToolType::FINGER;
   }
-  NOTREACHED() << "Unexpected pointerType";
+  NOTREACHED_IN_MIGRATION() << "Unexpected pointerType";
   return ToolType::UNKNOWN;
 }
 

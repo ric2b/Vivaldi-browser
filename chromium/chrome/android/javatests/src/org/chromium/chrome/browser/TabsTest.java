@@ -34,11 +34,13 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
@@ -71,12 +73,12 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.content_public.browser.test.util.UiUtils;
 import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.test.util.UiDisableIf;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.io.File;
@@ -160,7 +162,7 @@ public class TabsTest {
 
         sActivityTestRule.newIncognitoTabFromMenu();
 
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () ->
                         tab.getWebContents()
                                 .evaluateJavaScriptForTests(
@@ -187,7 +189,7 @@ public class TabsTest {
         sActivityTestRule.newIncognitoTabFromMenu();
         sActivityTestRule.loadUrl(getUrl(TEST_FILE_PATH));
         final Tab tab = sActivityTestRule.getActivity().getActivityTab();
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () ->
                         tab.getWebContents()
                                 .evaluateJavaScriptForTests(
@@ -221,13 +223,13 @@ public class TabsTest {
     public void testOpenAndCloseNewTabButton() {
         sActivityTestRule.loadUrl(getUrl(TEST_FILE_PATH));
         Tab tab0 =
-                TestThreadUtils.runOnUiThreadBlockingNoException(
+                ThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             return sActivityTestRule.getActivity().getCurrentTabModel().getTabAt(0);
                         });
         Assert.assertEquals("Data file for TabsTest", ChromeTabUtils.getTitleOnUiThread(tab0));
         final int originalTabCount =
-                TestThreadUtils.runOnUiThreadBlockingNoException(
+                ThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             return sActivityTestRule.getActivity().getCurrentTabModel().getCount();
                         });
@@ -238,13 +240,15 @@ public class TabsTest {
                 sActivityTestRule.getActivity().getLayoutManager(), LayoutType.TAB_SWITCHER);
 
         int newTabButtonId =
-                HubFieldTrial.isHubEnabled() ? R.id.toolbar_action_button : R.id.new_tab_view;
+                HubFieldTrial.usesFloatActionButton()
+                        ? R.id.host_action_button
+                        : R.id.toolbar_action_button;
         onViewWaiting(withId(newTabButtonId)).check(matches(isDisplayed())).perform(click());
         LayoutTestUtils.waitForLayout(
                 sActivityTestRule.getActivity().getLayoutManager(), LayoutType.BROWSING);
 
         int currentTabCount =
-                TestThreadUtils.runOnUiThreadBlockingNoException(
+                ThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             return sActivityTestRule.getActivity().getCurrentTabModel().getCount();
                         });
@@ -262,7 +266,7 @@ public class TabsTest {
         ChromeTabUtils.closeCurrentTab(
                 InstrumentationRegistry.getInstrumentation(), sActivityTestRule.getActivity());
         currentTabCount =
-                TestThreadUtils.runOnUiThreadBlockingNoException(
+                ThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             return sActivityTestRule.getActivity().getCurrentTabModel().getCount();
                         });
@@ -291,6 +295,7 @@ public class TabsTest {
     @LargeTest
     @Restriction(UiRestriction.RESTRICTION_TYPE_TABLET)
     @Feature({"Android-TabSwitcher"})
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // crbug.com/353910783
     public void testHideKeyboard() throws Exception {
         // Open a new tab(The 1st tab) and click node.
         sActivityTestRule.loadUrlInNewTab(getUrl(TEST_FILE_PATH), false);
@@ -480,6 +485,7 @@ public class TabsTest {
     @Test
     @MediumTest
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @DisabledTest(message = "https://crbug.com/1347598")
     public void testQuickSwitchBetweenTabAndSwitcherMode() {
         final String[] urls = {
             getUrl("/chrome/test/data/android/navigate/one.html"),
@@ -565,9 +571,9 @@ public class TabsTest {
 
         Assert.assertEquals("Too many tabs at startup", 1, model.getCount());
 
-        TestThreadUtils.runOnUiThreadBlocking((Runnable) () -> model.closeTab(tab, false, true));
+        ThreadUtils.runOnUiThreadBlocking((Runnable) () -> model.closeTab(tab, false, true));
 
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     Assert.assertTrue(
                             "Tab close is not undoable", model.isClosurePending(tab.getId()));
@@ -604,7 +610,7 @@ public class TabsTest {
         }
 
         boolean hasFocus() {
-            return TestThreadUtils.runOnUiThreadBlockingNoException(
+            return ThreadUtils.runOnUiThreadBlocking(
                     () -> {
                         return mView.hasFocus();
                     });
@@ -625,7 +631,7 @@ public class TabsTest {
         Assert.assertNotNull("Tab should have a view", oldTab.getView());
 
         final FocusListener focusListener = new FocusListener(oldTab.getView());
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     oldTab.getView().setOnFocusChangeListener(focusListener);
                 });
@@ -648,7 +654,7 @@ public class TabsTest {
                 "oldTab should have been unfocused.", 1, focusListener.getTimesUnfocused());
         Assert.assertFalse("oldTab should not have focus", focusListener.hasFocus());
 
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     model.closeTab(newTab, false, true);
                 });
@@ -679,7 +685,7 @@ public class TabsTest {
                         .isKeyboardShowing(sActivityTestRule.getActivity(), urlBar));
 
         // Check refocus doesn't happen again on the closure being finalized.
-        TestThreadUtils.runOnUiThreadBlocking(() -> model.commitAllTabClosures());
+        ThreadUtils.runOnUiThreadBlocking(() -> model.commitAllTabClosures());
 
         Assert.assertEquals(
                 "oldTab should not have been focused again after committing tab closures.",
@@ -723,7 +729,7 @@ public class TabsTest {
         Assert.assertNotNull("Tab should have a view", oldTab.getView());
 
         final FocusListener oldTabFocusListener = new FocusListener(oldTab.getView());
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     oldTab.getView().setOnFocusChangeListener(oldTabFocusListener);
                 });
@@ -742,7 +748,7 @@ public class TabsTest {
                         "about:blank",
                         false);
         final FocusListener newTabFocusListener = new FocusListener(newTab.getView());
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     newTab.getView().setOnFocusChangeListener(newTabFocusListener);
                 });
@@ -759,9 +765,9 @@ public class TabsTest {
                 "oldTab should have been unfocused.", 1, oldTabFocusListener.getTimesUnfocused());
         Assert.assertFalse("oldTab should not have focus.", oldTabFocusListener.hasFocus());
 
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    model.setIndex(model.indexOf(oldTab), TabSelectionType.FROM_USER, false);
+                    model.setIndex(model.indexOf(oldTab), TabSelectionType.FROM_USER);
                 });
 
         Assert.assertEquals(
@@ -788,7 +794,7 @@ public class TabsTest {
         final TabModelSelector selector = sActivityTestRule.getActivity().getTabModelSelector();
         mNotifyChangedCalled = false;
 
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     selector.addObserver(
                             new TabModelSelectorObserver() {
@@ -801,7 +807,7 @@ public class TabsTest {
 
         Assert.assertEquals("Too many tabs at startup", 1, model.getCount());
 
-        TestThreadUtils.runOnUiThreadBlocking((Runnable) () -> model.closeTab(tab, false, true));
+        ThreadUtils.runOnUiThreadBlocking((Runnable) () -> model.closeTab(tab, false, true));
 
         Assert.assertTrue("notifyChanged() was not called", mNotifyChangedCalled);
     }
@@ -816,7 +822,7 @@ public class TabsTest {
 
         final CallbackHelper webContentsDestroyed = new CallbackHelper();
 
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     @SuppressWarnings("unused") // Avoid GC of observer
                     WebContentsObserver observer =
@@ -835,13 +841,13 @@ public class TabsTest {
 
         ApplicationTestUtils.finishActivity(sActivityTestRule.getActivity());
 
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     Assert.assertNull("Tab still has a web contents", tab.getWebContents());
                     Assert.assertFalse("Tab was not destroyed", tab.isInitialized());
                 });
 
-        webContentsDestroyed.waitForFirst();
+        webContentsDestroyed.waitForOnly();
     }
 
     @Test
@@ -895,7 +901,7 @@ public class TabsTest {
 
     private JavascriptTabModalDialog getCurrentAlertDialog() {
         return (JavascriptTabModalDialog)
-                TestThreadUtils.runOnUiThreadBlockingNoException(
+                ThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             PropertyModel dialogModel =
                                     sActivityTestRule

@@ -17,6 +17,12 @@ message TrafficAnnotation {
   enum Id {
     // Traffic for an unspecified usage.
     UNSPECIFIED = 0;
+    // Traffic from Shill captive portal detection.
+    SHILL_PORTAL_DETECTOR = 1;
+    // Traffic from Shill capport client.
+    SHILL_CAPPORT_CLIENT = 2;
+    // Traffic from Shill carrier entitlement.
+    SHILL_CARRIER_ENTITLEMENT = 3;
   };
 
   Id host_id = 1;

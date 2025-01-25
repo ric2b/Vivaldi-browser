@@ -1,6 +1,10 @@
 [submodule "glslang/src"]
 	path = glslang/src
+
 	url = ../external/github.com/KhronosGroup/glslang.git
+[submodule "lunarg-vulkantools/src"]
+	path = lunarg-vulkantools/src
+	url = ../external/github.com/LunarG/VulkanTools.git
 [submodule "spirv-cross/src"]
 	path = spirv-cross/src
 	url = ../external/github.com/KhronosGroup/SPIRV-Cross.git

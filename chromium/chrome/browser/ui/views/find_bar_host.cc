@@ -44,7 +44,7 @@
 #include "ui/views/view_constants_aura.h"
 #endif
 
-using content::NativeWebKeyboardEvent;
+using input::NativeWebKeyboardEvent;
 
 namespace {
 
@@ -152,7 +152,9 @@ FindBarHost::FindBarHost(BrowserView* browser_view)
 
   // Initialize the host.
   host_ = std::make_unique<ThemeCopyingWidget>(browser_view_->GetWidget());
-  views::Widget::InitParams params(views::Widget::InitParams::TYPE_CONTROL);
+  views::Widget::InitParams params(
+      views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+      views::Widget::InitParams::TYPE_CONTROL);
   params.delegate = this;
   params.name = "FindBarHost";
   params.parent = browser_view_->GetWidgetForAnchoring()->GetNativeView();

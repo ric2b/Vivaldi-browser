@@ -10,6 +10,7 @@
 #import "components/embedder_support/ios/delegate/file_chooser/file_select_helper_ios.h"
 #import "content/public/browser/file_select_listener.h"
 #import "content/public/browser/navigation_entry.h"
+#import "content/public/browser/visibility.h"
 #import "content/public/browser/web_contents.h"
 #import "ios/web/content/content_browser_context.h"
 #import "ios/web/content/navigation/content_navigation_context.h"
@@ -27,11 +28,13 @@
 #import "ios/web/public/web_state_delegate.h"
 #import "ios/web/public/web_state_observer.h"
 #import "ios/web/text_fragments/text_fragments_manager_impl.h"
+#import "ios/web/web_view/content_type_util.h"
 #import "net/cert/x509_util.h"
 #import "net/cert/x509_util_apple.h"
 #import "services/network/public/mojom/referrer_policy.mojom-shared.h"
 #import "skia/ext/skia_utils_ios.h"
 #import "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
+#import "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
 #import "ui/display/display.h"
 #import "ui/display/screen.h"
 
@@ -67,7 +70,7 @@ FaviconURL::IconType IconTypeFromContentIconType(
     case blink::mojom::FaviconIconType::kInvalid:
       return FaviconURL::IconType::kInvalid;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return FaviconURL::IconType::kInvalid;
 }
 
@@ -101,7 +104,8 @@ ContentWebState::ContentWebState(const CreateParams& params,
   scoped_refptr<content::SiteInstance> site_instance;
   content::WebContents::CreateParams createParams(browser_context,
                                                   site_instance);
-  if (params.created_with_opener) {
+  created_with_opener_ = params.created_with_opener;
+  if (created_with_opener_) {
     ContentWebState* opener_web_state =
         static_cast<ContentWebState*>(params.opener_web_state);
     DCHECK(opener_web_state->child_web_contents_);
@@ -142,6 +146,9 @@ ContentWebState::ContentWebState(const CreateParams& params,
     UUID_ = [[[NSUUID UUID] UUIDString] copy];
   }
 
+  creation_time_ = base::Time::Now();
+  last_active_time_ = params.last_active_time.value_or(creation_time_);
+
   RegisterNotificationObservers();
 }
 
@@ -181,6 +188,7 @@ void ContentWebState::SerializeToProto(proto::WebStateStorage& storage) const {
   // CRWSessionStorage and then converting to protobuf message format.
   DCHECK(IsRealized());
   CRWSessionStorage* session_storage = BuildSessionStorage();
+  storage.set_has_opener(created_with_opener_);
   [session_storage serializeToProto:storage];
 }
 
@@ -191,7 +199,7 @@ void ContentWebState::SerializeMetadataToProto(
 }
 
 WebStateDelegate* ContentWebState::GetDelegate() {
-  return nullptr;
+  return delegate_;
 }
 
 std::unique_ptr<WebState> ContentWebState::Clone() const {
@@ -250,21 +258,33 @@ void ContentWebState::DidCoverWebContent() {}
 void ContentWebState::DidRevealWebContent() {}
 
 base::Time ContentWebState::GetLastActiveTime() const {
-  return base::Time::Now();
+  return last_active_time_;
 }
 
 base::Time ContentWebState::GetCreationTime() const {
-  return base::Time::Now();
+  return creation_time_;
 }
 
 void ContentWebState::WasShown() {
+  if (IsVisible()) {
+    return;
+  }
+
   ForceRealized();
+
+  // Update last active time when the ContentWebState transition to visible.
+  last_active_time_ = base::Time::Now();
+
   for (auto& observer : observers_) {
     observer.WasShown(this);
   }
 }
 
 void ContentWebState::WasHidden() {
+  if (!IsVisible()) {
+    return;
+  }
+
   ForceRealized();
   for (auto& observer : observers_) {
     observer.WasHidden(this);
@@ -281,7 +301,11 @@ base::WeakPtr<WebState> ContentWebState::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
-void ContentWebState::OpenURL(const OpenURLParams& params) {}
+void ContentWebState::OpenURL(const OpenURLParams& params) {
+  if (delegate_) {
+    delegate_->OpenURLFromWebState(this, params);
+  }
+}
 
 void ContentWebState::LoadSimulatedRequest(const GURL& url,
                                            NSString* response_html_string) {}
@@ -290,7 +314,10 @@ void ContentWebState::LoadSimulatedRequest(const GURL& url,
                                            NSData* response_data,
                                            NSString* mime_type) {}
 
-void ContentWebState::Stop() {}
+void ContentWebState::Stop() {
+  DCHECK(web_contents_);
+  web_contents_->Stop();
+}
 
 const NavigationManager* ContentWebState::GetNavigationManager() const {
   return navigation_manager_.get();
@@ -336,12 +363,11 @@ WebStateID ContentWebState::GetUniqueIdentifier() const {
 }
 
 const std::string& ContentWebState::GetContentsMimeType() const {
-  static std::string type = "text/html";
-  return type;
+  return web_contents_->GetContentsMimeType();
 }
 
 bool ContentWebState::ContentIsHTML() const {
-  return true;
+  return web::IsContentTypeHtml(GetContentsMimeType());
 }
 
 const std::u16string& ContentWebState::GetTitle() const {
@@ -363,11 +389,14 @@ double ContentWebState::GetLoadingProgress() const {
 }
 
 bool ContentWebState::IsVisible() const {
-  return true;
+  DCHECK(web_contents_);
+  return web_contents_->GetVisibility() == content::Visibility::VISIBLE ? true
+                                                                        : false;
 }
 
 bool ContentWebState::IsCrashed() const {
-  return false;
+  DCHECK(web_contents_);
+  return web_contents_->IsCrashed();
 }
 
 bool ContentWebState::IsEvicted() const {
@@ -375,11 +404,13 @@ bool ContentWebState::IsEvicted() const {
 }
 
 bool ContentWebState::IsBeingDestroyed() const {
-  return false;
+  DCHECK(web_contents_);
+  return web_contents_->IsBeingDestroyed();
 }
 
 bool ContentWebState::IsWebPageInFullscreenMode() const {
-  return false;
+  DCHECK(web_contents_);
+  return web_contents_->IsFullscreen();
 }
 
 const FaviconStatus& ContentWebState::GetFaviconStatus() const {
@@ -432,7 +463,11 @@ void ContentWebState::RemoveObserver(WebStateObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-void ContentWebState::CloseWebState() {}
+void ContentWebState::CloseWebState() {
+  if (delegate_) {
+    delegate_->CloseWebState(this);
+  }
+}
 
 bool ContentWebState::SetSessionStateData(NSData* data) {
   return false;
@@ -509,10 +544,12 @@ void ContentWebState::DidChangeVisibleSecurityState() {
 }
 
 bool ContentWebState::HasOpener() const {
-  return false;
+  return created_with_opener_;
 }
 
-void ContentWebState::SetHasOpener(bool has_opener) {}
+void ContentWebState::SetHasOpener(bool has_opener) {
+  created_with_opener_ = has_opener;
+}
 
 bool ContentWebState::CanTakeSnapshot() const {
   return false;
@@ -573,9 +610,43 @@ void ContentWebState::DidStopLoading() {
   }
 }
 
+void ContentWebState::DidFinishLoad(content::RenderFrameHost* render_frame_host,
+                                    const GURL& validated_url) {
+  if (!render_frame_host->IsInPrimaryMainFrame()) {
+    return;
+  }
+
+  for (auto& observer : observers_) {
+    observer.PageLoaded(this, web::PageLoadCompletionStatus::SUCCESS);
+  }
+}
+
+void ContentWebState::DidFailLoad(content::RenderFrameHost* render_frame_host,
+                                  const GURL& validated_url,
+                                  int error_code) {
+  if (!render_frame_host->IsInPrimaryMainFrame()) {
+    return;
+  }
+
+  for (auto& observer : observers_) {
+    observer.PageLoaded(this, web::PageLoadCompletionStatus::FAILURE);
+  }
+}
+
 void ContentWebState::LoadProgressChanged(double progress) {
   for (auto& observer : observers_) {
     observer.LoadProgressChanged(this, progress);
+  }
+}
+
+void ContentWebState::OnVisibilityChanged(content::Visibility visibility) {
+  // Occlusion is not supported on iOS.
+  DCHECK_NE(visibility, content::Visibility::OCCLUDED);
+
+  if (visibility == content::Visibility::VISIBLE) {
+    WasShown();
+  } else {
+    WasHidden();
   }
 }
 

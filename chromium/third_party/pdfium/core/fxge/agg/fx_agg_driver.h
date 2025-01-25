@@ -62,9 +62,11 @@ class CFX_AggDeviceDriver final : public RenderDeviceDriverIface {
   bool FillRectWithBlend(const FX_RECT& rect,
                          uint32_t fill_color,
                          BlendMode blend_type) override;
-  bool GetClipBox(FX_RECT* pRect) override;
-  bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap, int left, int top) override;
-  RetainPtr<CFX_DIBitmap> GetBackDrop() override;
+  FX_RECT GetClipBox() const override;
+  bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap,
+                 int left,
+                 int top) const override;
+  RetainPtr<const CFX_DIBitmap> GetBackDrop() const override;
   bool SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                  uint32_t argb,
                  const FX_RECT& src_rect,
@@ -80,14 +82,13 @@ class CFX_AggDeviceDriver final : public RenderDeviceDriverIface {
                      const FX_RECT* pClipRect,
                      const FXDIB_ResampleOptions& options,
                      BlendMode blend_type) override;
-  bool StartDIBits(RetainPtr<const CFX_DIBBase> bitmap,
-                   float alpha,
-                   uint32_t argb,
-                   const CFX_Matrix& matrix,
-                   const FXDIB_ResampleOptions& options,
-                   std::unique_ptr<CFX_ImageRenderer>* handle,
-                   BlendMode blend_type) override;
-  bool ContinueDIBits(CFX_ImageRenderer* handle,
+  StartResult StartDIBits(RetainPtr<const CFX_DIBBase> bitmap,
+                          float alpha,
+                          uint32_t argb,
+                          const CFX_Matrix& matrix,
+                          const FXDIB_ResampleOptions& options,
+                          BlendMode blend_type) override;
+  bool ContinueDIBits(CFX_AggImageRenderer* handle,
                       PauseIndicatorIface* pPause) override;
   bool DrawDeviceText(pdfium::span<const TextCharPos> pCharPos,
                       CFX_Font* pFont,

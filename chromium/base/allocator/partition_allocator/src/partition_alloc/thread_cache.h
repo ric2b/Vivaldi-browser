@@ -12,15 +12,15 @@
 #include <optional>
 
 #include "partition_alloc/build_config.h"
+#include "partition_alloc/buildflags.h"
 #include "partition_alloc/lightweight_quarantine.h"
 #include "partition_alloc/partition_alloc-inl.h"
 #include "partition_alloc/partition_alloc_base/compiler_specific.h"
 #include "partition_alloc/partition_alloc_base/component_export.h"
-#include "partition_alloc/partition_alloc_base/debug/debugging_buildflags.h"
 #include "partition_alloc/partition_alloc_base/thread_annotations.h"
 #include "partition_alloc/partition_alloc_base/time/time.h"
-#include "partition_alloc/partition_alloc_buildflags.h"
 #include "partition_alloc/partition_alloc_config.h"
+#include "partition_alloc/partition_alloc_constants.h"
 #include "partition_alloc/partition_alloc_forward.h"
 #include "partition_alloc/partition_bucket_lookup.h"
 #include "partition_alloc/partition_freelist_entry.h"
@@ -28,7 +28,7 @@
 #include "partition_alloc/partition_stats.h"
 #include "partition_alloc/partition_tls.h"
 
-#if defined(ARCH_CPU_X86_64) && PA_BUILDFLAG(HAS_64_BIT_POINTERS)
+#if PA_BUILDFLAG(PA_ARCH_CPU_X86_64) && PA_BUILDFLAG(HAS_64_BIT_POINTERS)
 #include <algorithm>
 #endif
 
@@ -78,17 +78,6 @@ extern PA_COMPONENT_EXPORT(
 #endif
 
 }  // namespace internal
-
-struct ThreadCacheLimits {
-  // When trying to conserve memory, set the thread cache limit to this.
-  static constexpr size_t kDefaultSizeThreshold = 512;
-  // 32kiB is chosen here as from local experiments, "zone" allocation in
-  // V8 is performance-sensitive, and zones can (and do) grow up to 32kiB for
-  // each individual allocation.
-  static constexpr size_t kLargeSizeThreshold = 1 << 15;
-  static_assert(kLargeSizeThreshold <= std::numeric_limits<uint16_t>::max(),
-                "");
-};
 
 constexpr internal::base::TimeDelta kMinPurgeInterval =
     internal::base::Seconds(1);
@@ -186,8 +175,8 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ThreadCacheRegistry {
   internal::base::TimeDelta periodic_purge_next_interval_;
   bool is_purging_configured_ = false;
 
-  uint16_t largest_active_bucket_index_ = internal::BucketIndexLookup::GetIndex(
-      ThreadCacheLimits::kDefaultSizeThreshold);
+  uint16_t largest_active_bucket_index_ =
+      internal::BucketIndexLookup::GetIndex(kThreadCacheDefaultSizeThreshold);
 };
 
 constexpr ThreadCacheRegistry::ThreadCacheRegistry() = default;
@@ -200,7 +189,7 @@ constexpr ThreadCacheRegistry::ThreadCacheRegistry() = default;
   } while (0)
 #endif  // PA_CONFIG(THREAD_CACHE_ENABLE_STATISTICS)
 
-#if PA_BUILDFLAG(PA_DCHECK_IS_ON)
+#if PA_BUILDFLAG(DCHECKS_ARE_ON)
 
 namespace internal {
 
@@ -224,13 +213,13 @@ class ReentrancyGuard {
     x                               \
   }
 
-#else  // PA_BUILDFLAG(PA_DCHECK_IS_ON)
+#else  // PA_BUILDFLAG(DCHECKS_ARE_ON)
 
 #define PA_REENTRANCY_GUARD(x) \
   do {                         \
   } while (0)
 
-#endif  // PA_BUILDFLAG(PA_DCHECK_IS_ON)
+#endif  // PA_BUILDFLAG(DCHECKS_ARE_ON)
 
 // Per-thread cache. *Not* threadsafe, must only be accessed from a single
 // thread.
@@ -308,12 +297,11 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ThreadCache {
   // The slot comes from the bucket at index |bucket_index| from the partition
   // this cache is for.
   //
-  // Returns true if the slot was put in the cache, and false otherwise. This
-  // can happen either because the cache is full or the allocation was too
-  // large.
-  PA_ALWAYS_INLINE bool MaybePutInCache(uintptr_t slot_start,
-                                        size_t bucket_index,
-                                        size_t* slot_size);
+  // Returns the slot size if the insertion succeeds, `nullopt` otherwise.
+  // Insertion can fail either because the cache is full or the
+  // allocation was too large.
+  PA_ALWAYS_INLINE std::optional<size_t> MaybePutInCache(uintptr_t slot_start,
+                                                         size_t bucket_index);
 
   // Tries to allocate a memory slot from the cache.
   // Returns 0 on failure.
@@ -375,12 +363,10 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ThreadCache {
   static constexpr uint8_t kSmallBucketBaseCount = 64;
 
   static constexpr size_t kDefaultSizeThreshold =
-      ThreadCacheLimits::kDefaultSizeThreshold;
-  static constexpr size_t kLargeSizeThreshold =
-      ThreadCacheLimits::kLargeSizeThreshold;
+      kThreadCacheDefaultSizeThreshold;
+  static constexpr size_t kLargeSizeThreshold = kThreadCacheLargeSizeThreshold;
   static constexpr uint16_t kBucketCount =
-      internal::BucketIndexLookup::GetIndex(ThreadCache::kLargeSizeThreshold) +
-      1;
+      internal::BucketIndexLookup::GetIndex(kThreadCacheLargeSizeThreshold) + 1;
   static_assert(
       kBucketCount < internal::kNumBuckets,
       "Cannot have more cached buckets than what the allocator supports");
@@ -469,7 +455,7 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ThreadCache {
   PartitionRoot* const root_;
 
   const internal::base::PlatformThreadId thread_id_;
-#if PA_BUILDFLAG(PA_DCHECK_IS_ON)
+#if PA_BUILDFLAG(DCHECKS_ARE_ON)
   bool is_in_thread_cache_ = false;
 #endif
 
@@ -486,15 +472,15 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ThreadCache {
   friend class tools::ThreadCacheInspector;
 };
 
-PA_ALWAYS_INLINE bool ThreadCache::MaybePutInCache(uintptr_t slot_start,
-                                                   size_t bucket_index,
-                                                   size_t* slot_size) {
+PA_ALWAYS_INLINE std::optional<size_t> ThreadCache::MaybePutInCache(
+    uintptr_t slot_start,
+    size_t bucket_index) {
   PA_REENTRANCY_GUARD(is_in_thread_cache_);
   PA_INCREMENT_COUNTER(stats_.cache_fill_count);
 
   if (PA_UNLIKELY(bucket_index > largest_active_bucket_index_)) {
     PA_INCREMENT_COUNTER(stats_.cache_fill_misses);
-    return false;
+    return std::nullopt;
   }
 
   auto& bucket = buckets_[bucket_index];
@@ -519,8 +505,7 @@ PA_ALWAYS_INLINE bool ThreadCache::MaybePutInCache(uintptr_t slot_start,
     PurgeInternal();
   }
 
-  *slot_size = bucket.slot_size;
-  return true;
+  return bucket.slot_size;
 }
 
 PA_ALWAYS_INLINE uintptr_t ThreadCache::GetFromCache(size_t bucket_index,
@@ -558,7 +543,7 @@ PA_ALWAYS_INLINE uintptr_t ThreadCache::GetFromCache(size_t bucket_index,
   PA_DCHECK(bucket.count != 0);
   internal::PartitionFreelistEntry* entry = bucket.freelist_head;
   // TODO(lizeb): Consider removing once crbug.com/1382658 is fixed.
-#if BUILDFLAG(IS_CHROMEOS) && defined(ARCH_CPU_X86_64) && \
+#if PA_BUILDFLAG(IS_CHROMEOS) && PA_BUILDFLAG(PA_ARCH_CPU_X86_64) && \
     PA_BUILDFLAG(HAS_64_BIT_POINTERS)
   // x86_64 architecture now supports 57 bits of address space, as of Ice Lake
   // for Intel. However Chrome OS systems do not ship with kernel support for
@@ -567,7 +552,7 @@ PA_ALWAYS_INLINE uintptr_t ThreadCache::GetFromCache(size_t bucket_index,
   // by the kernel).
   constexpr uintptr_t kCanonicalPointerMask = (1ULL << 48) - 1;
   PA_CHECK(!(reinterpret_cast<uintptr_t>(entry) & ~kCanonicalPointerMask));
-#endif  // BUILDFLAG(IS_CHROMEOS) && defined(ARCH_CPU_X86_64) &&
+#endif  // PA_BUILDFLAG(IS_CHROMEOS) && PA_BUILDFLAG(PA_ARCH_CPU_X86_64) &&
         // PA_BUILDFLAG(HAS_64_BIT_POINTERS)
 
   // Passes the bucket size to |GetNext()|, so that in case of freelist
@@ -598,8 +583,8 @@ PA_ALWAYS_INLINE uintptr_t ThreadCache::GetFromCache(size_t bucket_index,
 
 PA_ALWAYS_INLINE void ThreadCache::PutInBucket(Bucket& bucket,
                                                uintptr_t slot_start) {
-#if PA_CONFIG(HAS_FREELIST_SHADOW_ENTRY) && defined(ARCH_CPU_X86_64) && \
-    PA_BUILDFLAG(HAS_64_BIT_POINTERS)
+#if PA_CONFIG(HAS_FREELIST_SHADOW_ENTRY) && \
+    PA_BUILDFLAG(PA_ARCH_CPU_X86_64) && PA_BUILDFLAG(HAS_64_BIT_POINTERS)
   // We see freelist corruption crashes happening in the wild.  These are likely
   // due to out-of-bounds accesses in the previous slot, or to a Use-After-Free
   // somewhere in the code.
@@ -629,11 +614,12 @@ PA_ALWAYS_INLINE void ThreadCache::PutInBucket(Bucket& bucket,
   static const uint32_t poison_16_bytes[4] = {0xbadbad00, 0xbadbad00,
                                               0xbadbad00, 0xbadbad00};
 
-#if !(BUILDFLAG(IS_WIN) && defined(COMPONENT_BUILD))
-  void* slot_start_tagged = std::assume_aligned<internal::kAlignment>(
-      internal::SlotStartAddr2Ptr(slot_start));
+#if !(PA_BUILDFLAG(IS_WIN) && defined(COMPONENT_BUILD)) && \
+    PA_HAS_BUILTIN(__builtin_assume_aligned)
+  void* slot_start_tagged = __builtin_assume_aligned(
+      internal::SlotStartAddr2Ptr(slot_start), internal::kAlignment);
 #else
-  // TODO(crbug.com/40262684): std::assume_aligned introuces an additional
+  // TODO(crbug.com/40262684): std::assume_aligned introduce an additional
   // dependency: _libcpp_verbose_abort(const char*, ...).  It will cause
   // "undefined symbol" error when linking allocator_shim.dll.
   void* slot_start_tagged = internal::SlotStartAddr2Ptr(slot_start);
@@ -645,8 +631,8 @@ PA_ALWAYS_INLINE void ThreadCache::PutInBucket(Bucket& bucket,
     memcpy(address_aligned, poison_16_bytes, sizeof(poison_16_bytes));
     address_aligned += 4;
   }
-#endif  // PA_CONFIG(HAS_FREELIST_SHADOW_ENTRY) && defined(ARCH_CPU_X86_64) &&
-        // PA_BUILDFLAG(HAS_64_BIT_POINTERS)
+#endif  // PA_CONFIG(HAS_FREELIST_SHADOW_ENTRY) &&
+        // PA_BUILDFLAG(PA_ARCH_CPU_X86_64) && PA_BUILDFLAG(HAS_64_BIT_POINTERS)
 
   auto* entry =
       get_freelist_dispatcher_from_root()->EmplaceAndInitForThreadCache(

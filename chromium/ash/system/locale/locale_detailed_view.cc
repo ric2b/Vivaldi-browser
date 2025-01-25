@@ -27,6 +27,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -88,7 +89,8 @@ class LocaleItemView : public views::Button {
           kMenuIconSize));
       tri_view->AddView(TriView::Container::END, checked_image);
     }
-    SetAccessibleName(display_name_view->GetText());
+    GetViewAccessibility().SetName(display_name_view->GetText());
+    GetViewAccessibility().SetRole(ax::mojom::Role::kCheckBox);
   }
   LocaleItemView(const LocaleItemView&) = delete;
   LocaleItemView& operator=(const LocaleItemView&) = delete;
@@ -106,7 +108,6 @@ class LocaleItemView : public views::Button {
 
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     views::Button::GetAccessibleNodeData(node_data);
-    node_data->role = ax::mojom::Role::kCheckBox;
     node_data->SetCheckedState(checked_ ? ax::mojom::CheckedState::kTrue
                                         : ax::mojom::CheckedState::kFalse);
   }

@@ -14,6 +14,8 @@ public class DefaultPaneOrderController implements PaneOrderController {
                 PaneId.TAB_SWITCHER,
                 PaneId.INCOGNITO_TAB_SWITCHER,
                 PaneId.TAB_GROUPS,
-                PaneId.BOOKMARKS);
+                PaneId.BOOKMARKS,
+                PaneId.SYNC_TABS, // Vivaldi
+                PaneId.TRASH_TABS); // Vivaldi
     }
 }

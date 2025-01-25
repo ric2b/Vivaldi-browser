@@ -24,6 +24,7 @@ limitations under the License.
 #include <mutex>  // NOLINT
 #include <optional>
 #include <string>
+#include <string_view>
 #include <system_error>  // NOLINT
 #include <utility>
 #include <variant>
@@ -79,10 +80,10 @@ limitations under the License.
 #include "xla/service/gpu/metrics.h"
 #include "xla/service/llvm_ir/llvm_command_line_options.h"
 #include "xla/service/llvm_ir/llvm_type_conversion_util.h"
-#include "xla/status.h"
 #include "xla/stream_executor/device_description.h"
 #include "xla/tsl/util/env_var.h"
 #include "xla/util.h"
+#include "xla/xla.pb.h"
 #include "tsl/platform/cuda_libdevice_path.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
@@ -382,8 +383,8 @@ std::unique_ptr<llvm::TargetMachine> NVPTXGetTargetMachine(
 }
 
 using TargetModuleLinker =
-    std::function<Status(llvm::Module*, se::GpuComputeCapability,
-                         const DebugOptions&, const std::string&)>;
+    std::function<absl::Status(llvm::Module*, se::GpuComputeCapability,
+                               const DebugOptions&, const std::string&)>;
 
 void DumpModule(const std::string output_filename, const llvm::Module* module) {
   std::error_code ec;

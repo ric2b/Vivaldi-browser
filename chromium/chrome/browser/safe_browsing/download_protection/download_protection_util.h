@@ -10,8 +10,10 @@
 #include "base/callback_list.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/download/public/common/download_item.h"
+#include "components/safe_browsing/content/browser/safe_browsing_navigation_observer_manager.h"
 #include "components/safe_browsing/core/browser/download_check_result.h"
 #include "components/safe_browsing/core/common/proto/csd.pb.h"
+#include "content/public/browser/file_system_access_write_item.h"
 #include "net/cert/x509_certificate.h"
 
 namespace safe_browsing {
@@ -153,6 +155,21 @@ GURL GetFileSystemAccessDownloadUrl(const GURL& frame_url);
 google::protobuf::RepeatedPtrField<ClientDownloadRequest::ArchivedBinary>
 SelectArchiveEntries(const google::protobuf::RepeatedPtrField<
                      ClientDownloadRequest::ArchivedBinary>& src_binaries);
+
+// Identify referrer chain info of a download. This function also
+// records UMA stats of download attribution result. The referrer chain
+// will include at most `user_gesture_limit` user gestures.
+std::unique_ptr<ReferrerChainData> IdentifyReferrerChain(
+    const download::DownloadItem& item,
+    int user_gesture_limit);
+
+// Identify referrer chain info of a File System Access write. This
+// function also records UMA stats of download attribution result. The
+// referrer chain will include at most `user_gesture_limit` user
+// gestures.
+std::unique_ptr<ReferrerChainData> IdentifyReferrerChain(
+    const content::FileSystemAccessWriteItem& item,
+    int user_gesture_limit);
 
 }  // namespace safe_browsing
 

@@ -60,7 +60,7 @@ import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.night_mode.NightModeStateProvider;
 import org.chromium.chrome.browser.page_info.ChromePageInfo;
 import org.chromium.chrome.browser.page_info.ChromePageInfoHighlight;
-import org.chromium.chrome.browser.searchwidget.SearchActivityUtils;
+import org.chromium.chrome.browser.searchwidget.SearchActivityClientImpl;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TrustedCdn;
 import org.chromium.chrome.browser.ui.google_bottom_bar.GoogleBottomBarCoordinator;
@@ -181,7 +181,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         // attached to a ChromeActivity, as the main tab might have been initialized prior to
         // inflation.
         if (mTabProvider.getTab() != null) {
-            ViewGroup bottomContainer = (ViewGroup) findViewById(R.id.bottom_container);
+            ViewGroup bottomContainer = findViewById(R.id.bottom_container);
             InfoBarContainer.get(mTabProvider.getTab()).setParentView(bottomContainer);
         }
 
@@ -196,7 +196,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         if (googleBottomBarCoordinator != null) {
             View googleBottomBarView = googleBottomBarCoordinator.createGoogleBottomBarView();
             CustomTabBottomBarDelegate delegate = getComponent().resolveBottomBarDelegate();
-            delegate.setBottomBarHeight(GoogleBottomBarCoordinator.getBottomBarHeightInPx(this));
+            delegate.setBottomBarHeight(googleBottomBarCoordinator.getBottomBarHeightInPx());
             delegate.setKeepContentView(true);
             delegate.setBottomBarContentView(googleBottomBarView);
             delegate.setCustomButtonsUpdater(googleBottomBarCoordinator::updateBottomBarButton);
@@ -239,9 +239,9 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     }
 
     @Override
-    protected void handleFinishAndClose() {
+    protected void handleFinishAndClose(boolean warmupOnFinish) {
         if (mOpenTimeRecorder != null) mOpenTimeRecorder.updateCloseCause();
-        super.handleFinishAndClose();
+        super.handleFinishAndClose(warmupOnFinish);
     }
 
     @Override
@@ -255,12 +255,6 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         WebContents webContents = tab == null ? null : tab.getWebContents();
         mConnection.resetPostMessageHandlerForSession(
                 mIntentDataProvider.getSession(), webContents);
-    }
-
-    @Override
-    public void createContextualSearchTab(String searchUrl) {
-        if (getActivityTab() == null) return;
-        getActivityTab().loadUrl(new LoadUrlParams(searchUrl));
     }
 
     @Override
@@ -317,11 +311,6 @@ public class CustomTabActivity extends BaseCustomTabActivity {
                             mRootUiCoordinator.getEphemeralTabCoordinatorSupplier(),
                             getTabCreator(getCurrentTabModel().isIncognito()))
                     .show(tab, ChromePageInfoHighlight.noHighlight());
-            return true;
-        } else if (id == R.id.page_insights_id) {
-            var pageInsights = mBaseCustomTabRootUiCoordinator.getPageInsightsCoordinator();
-            assert pageInsights != null;
-            pageInsights.launch();
             return true;
         } else if (id == R.id.open_history_menu_id) {
             // The menu is visible only when the app-specific history is enabled. Assert that.
@@ -388,9 +377,12 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     @Override
     protected BrowserServicesIntentDataProvider buildIntentDataProvider(
             Intent intent, @CustomTabsIntent.ColorScheme int colorScheme) {
-        if (IncognitoCustomTabIntentDataProvider.isValidIncognitoIntent(intent)
+        boolean isValidIncognitoIntent =
+                IncognitoCustomTabIntentDataProvider.isValidIncognitoIntent(intent);
+        if (isValidIncognitoIntent
                 || IncognitoCustomTabIntentDataProvider.isValidEphemeralTabIntent(intent)) {
-            return new IncognitoCustomTabIntentDataProvider(intent, this, colorScheme);
+            return new IncognitoCustomTabIntentDataProvider(
+                    intent, this, colorScheme, isValidIncognitoIntent);
         }
         return new CustomTabIntentDataProvider(intent, this, colorScheme);
     }
@@ -463,9 +455,9 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         if (resultCode != Activity.RESULT_OK) return;
 
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.SEARCH_IN_CCT)
-                && SearchActivityUtils.isOmniboxResult(requestCode, data)) {
+                && SearchActivityClientImpl.isOmniboxResult(requestCode, data)) {
             LoadUrlParams params =
-                    SearchActivityUtils.getOmniboxResult(requestCode, resultCode, data);
+                    SearchActivityClientImpl.getOmniboxResult(requestCode, resultCode, data);
 
             RecordHistogram.recordBooleanHistogram(
                     "CustomTabs.Omnibox.FocusResultedInNavigation", params != null);

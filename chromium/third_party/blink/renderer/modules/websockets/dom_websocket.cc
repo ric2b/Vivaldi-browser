@@ -455,7 +455,7 @@ String DOMWebSocket::binaryType() const {
     case kBinaryTypeArrayBuffer:
       return "arraybuffer";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return String();
 }
 
@@ -468,7 +468,7 @@ void DOMWebSocket::setBinaryType(const String& binary_type) {
     binary_type_ = kBinaryTypeArrayBuffer;
     return;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 const AtomicString& DOMWebSocket::InterfaceName() const {
@@ -552,7 +552,7 @@ void DOMWebSocket::DidReceiveBinaryMessage(
     case kBinaryTypeBlob: {
       auto blob_data = std::make_unique<BlobData>();
       for (const auto& span : data) {
-        blob_data->AppendBytes(span.data(), span.size());
+        blob_data->AppendBytes(base::as_bytes(span));
       }
       auto* blob = MakeGarbageCollected<Blob>(
           BlobDataHandle::Create(std::move(blob_data), size));

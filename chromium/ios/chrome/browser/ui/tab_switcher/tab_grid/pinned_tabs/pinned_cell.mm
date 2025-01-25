@@ -605,7 +605,7 @@ UIColor* GetInterfaceStyleDarkColor(UIColor* dynamicColor) {
 
 - (void)setTopCellView:(UIView*)topCellView {
   // The top cell view is `topBar` and can't be changed.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 - (UIView*)topCellView {
@@ -622,7 +622,7 @@ UIColor* GetInterfaceStyleDarkColor(UIColor* dynamicColor) {
 
 - (void)setMainCellView:(UIView*)mainCellView {
   // The main cell view is the snapshot view and can't be changed.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 - (UIView*)mainCellView {

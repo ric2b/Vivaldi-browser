@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import unittest
+from typing import Dict, List
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -51,7 +52,7 @@ class PresubmitDiffTest(unittest.TestCase):
     def tearDown(self):
         gclient_utils.rmtree(self.root)
 
-    def _test_create_diffs(self, files: list[str], expected: dict[str, str]):
+    def _test_create_diffs(self, files: List[str], expected: Dict[str, str]):
         actual = presubmit_diff.create_diffs("host", "repo", "ref", self.root,
                                              files)
         self.assertEqual(actual.keys(), expected.keys())

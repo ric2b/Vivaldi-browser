@@ -25,6 +25,10 @@ import("//tools/grit/grit_rule.gni")
 assert(enable_supervised_users)
 assert(!is_fuchsia, "Fuchsia shouldn't use anything in //chrome")
 
+declare_args() {
+  enable_android_site_isolation = is_desktop_android
+}
+
 fuzzer_test("ini_parser_fuzzer") {
   sources = [ "ini_parser_fuzzer.cc" ]
   deps = [
@@ -52,6 +56,7 @@ buildflag_header("buildflags") {
     "CHROME_ENABLE_LOGGING_BY_DEFAULT=$chrome_enable_logging_by_default",
     "CHROME_CERTIFICATE_POLICIES_SUPPORTED=$chrome_certificate_policies_supported",
     "CHROME_ROOT_STORE_CERT_MANAGEMENT_UI=$chrome_root_store_cert_management_ui",
+    "ENABLE_ANDROID_SITE_ISOLATION=$enable_android_site_isolation",
     "ENABLE_BACKGROUND_MODE=$enable_background_mode",
     "ENABLE_BACKGROUND_CONTENTS=$enable_background_contents",
     "ENABLE_CHROME_NOTIFICATIONS=$enable_chrome_notifications",
@@ -94,10 +99,7 @@ source_set("channel_info") {
     public_deps += [ "//components/version_info/android:channel_getter" ]
   } else if (is_chromeos_ash) {
     sources += [ "channel_info_chromeos.cc" ]
-    deps += [
-      "//chromeos/crosapi/cpp",
-      "//chromeos/crosapi/cpp:crosapi_constants",
-    ]
+    deps += [ "//chromeos/ash/components/channel" ]
   } else if (is_chromeos_lacros) {
     sources += [ "channel_info_lacros.cc" ]
   } else if (is_posix) {
@@ -332,6 +334,8 @@ static_library("common_lib") {
       "extensions/sync_helper.h",
       "extensions/webstore_install_result.cc",
       "extensions/webstore_install_result.h",
+      "extensions/webstore_override.cc",
+      "extensions/webstore_override.h",
       "initialize_extensions_client.cc",
       "initialize_extensions_client.h",
     ]

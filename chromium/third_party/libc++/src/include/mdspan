@@ -20,6 +20,10 @@ namespace std {
   template<class IndexType, size_t Rank>
     using dextents = see below;
 
+  // [mdspan.extents.dims], alias template dims
+  template<size_t Rank, class IndexType = size_t>
+    using dims = see below; // since C++26
+
   // [mdspan.layout], layout mapping
   struct layout_left;
   struct layout_right;
@@ -370,7 +374,11 @@ namespace std {
   template<class ElementType, class... Integrals>
     requires((is_convertible_v<Integrals, size_t> && ...) && sizeof...(Integrals) > 0)
     explicit mdspan(ElementType*, Integrals...)
-      -> mdspan<ElementType, dextents<size_t, sizeof...(Integrals)>>;
+      -> mdspan<ElementType, dextents<size_t, sizeof...(Integrals)>>;            // until C++26
+  template<class ElementType, class... Integrals>
+    requires((is_convertible_v<Integrals, size_t> && ...) && sizeof...(Integrals) > 0)
+    explicit mdspan(ElementType*, Integrals...)
+      -> mdspan<ElementType, extents<size_t, maybe-static-ext<Integrals>...>>;  // since C++26
 
   template<class ElementType, class OtherIndexType, size_t N>
     mdspan(ElementType*, span<OtherIndexType, N>)

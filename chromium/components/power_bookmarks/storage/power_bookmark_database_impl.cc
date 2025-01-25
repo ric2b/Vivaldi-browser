@@ -39,7 +39,7 @@ std::unique_ptr<Power> CreatePowerFromSpecifics(
     case sync_pb::PowerBookmarkSpecifics::POWER_TYPE_NOTE:
       return std::make_unique<Power>(specifics);
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return nullptr;
 }
@@ -608,17 +608,13 @@ PowerBookmarkDatabaseImpl::GetPowersForGUIDs(
   for (auto& guid : guids) {
     DCHECK(base::Uuid::ParseCaseInsensitive(guid).is_valid());
   }
-  static constexpr char kGetPowersForGUIDsSql[] =
-      // clang-format off
-      "SELECT blobs.id, blobs.specifics, saves.url "
-          "FROM blobs JOIN saves ON blobs.id=saves.id "
-          "WHERE saves.id IN ('";
-  // clang-format on
-  std::string sql_string = (std::string(kGetPowersForGUIDsSql) +
-                            base::JoinString(guids, "','") + "')");
-  db_.IsSQLValid(sql_string.c_str());
-  sql::Statement statement(
-      db_.GetCachedStatement(SQL_FROM_HERE, sql_string.c_str()));
+  const std::string query =
+      base::StrCat({"SELECT blobs.id, blobs.specifics, saves.url "
+                    "FROM blobs JOIN saves ON blobs.id=saves.id "
+                    "WHERE saves.id IN ('",
+                    base::JoinString(guids, "','"), "')"});
+  db_.IsSQLValid(query);
+  sql::Statement statement(db_.GetUniqueStatement(query));
   std::vector<std::unique_ptr<Power>> powers;
   while (statement.Step()) {
     DCHECK_EQ(3, statement.ColumnCount());

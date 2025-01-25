@@ -10,31 +10,31 @@ namespace v8 {
 namespace internal {
 namespace {
 
-base::Optional<base::TimeDelta> GetTimeoutDelta(Handle<Object> timeout_obj) {
-  double ms = Object::Number(*timeout_obj);
+std::optional<base::TimeDelta> GetTimeoutDelta(
+    DirectHandle<Object> timeout_obj) {
+  double ms = Object::NumberValue(*timeout_obj);
   if (!std::isnan(ms)) {
     if (ms < 0) ms = 0;
     if (ms <= static_cast<double>(std::numeric_limits<int64_t>::max())) {
       return base::TimeDelta::FromMilliseconds(static_cast<int64_t>(ms));
     }
   }
-  return base::nullopt;
+  return std::nullopt;
 }
 
 Handle<JSPromise> UnlockAsyncLockedMutexFromPromiseHandler(Isolate* isolate) {
-  Handle<Context> context = Handle<Context>(isolate->context(), isolate);
-  Handle<Object> mutex = Handle<Object>(
+  DirectHandle<Context> context(isolate->context(), isolate);
+  DirectHandle<Object> mutex(
       context->get(JSAtomicsMutex::kMutexAsyncContextSlot), isolate);
-  Handle<Object> unlock_promise = Handle<Object>(
+  Handle<Object> unlock_promise(
       context->get(JSAtomicsMutex::kUnlockedPromiseAsyncContextSlot), isolate);
-  Handle<Object> waiter_wrapper_obj = Handle<Object>(
+  DirectHandle<Object> waiter_wrapper_obj(
       context->get(JSAtomicsMutex::kAsyncLockedWaiterAsyncContextSlot),
       isolate);
 
-  Handle<JSAtomicsMutex> js_mutex = Handle<JSAtomicsMutex>::cast(mutex);
-  Handle<JSPromise> js_unlock_promise = Handle<JSPromise>::cast(unlock_promise);
-  Handle<Foreign> async_locked_waiter_wrapper =
-      Handle<Foreign>::cast(waiter_wrapper_obj);
+  auto js_mutex = Cast<JSAtomicsMutex>(mutex);
+  auto js_unlock_promise = Cast<JSPromise>(unlock_promise);
+  auto async_locked_waiter_wrapper = Cast<Foreign>(waiter_wrapper_obj);
   js_mutex->UnlockAsyncLockedMutex(isolate, async_locked_waiter_wrapper);
   return js_unlock_promise;
 }
@@ -59,7 +59,7 @@ BUILTIN(AtomicsMutexLock) {
                               isolate->factory()->NewStringFromAsciiChecked(
                                   method_name)));
   }
-  Handle<JSAtomicsMutex> js_mutex = Handle<JSAtomicsMutex>::cast(js_mutex_obj);
+  Handle<JSAtomicsMutex> js_mutex = Cast<JSAtomicsMutex>(js_mutex_obj);
   Handle<Object> run_under_lock = args.atOrUndefined(isolate, 2);
   if (!IsCallable(*run_under_lock)) {
     THROW_NEW_ERROR_RETURN_FAILURE(
@@ -101,7 +101,7 @@ BUILTIN(AtomicsMutexTryLock) {
                               isolate->factory()->NewStringFromAsciiChecked(
                                   method_name)));
   }
-  Handle<JSAtomicsMutex> js_mutex = Handle<JSAtomicsMutex>::cast(js_mutex_obj);
+  Handle<JSAtomicsMutex> js_mutex = Cast<JSAtomicsMutex>(js_mutex_obj);
   Handle<Object> run_under_lock = args.atOrUndefined(isolate, 2);
   if (!IsCallable(*run_under_lock)) {
     THROW_NEW_ERROR_RETURN_FAILURE(
@@ -123,7 +123,7 @@ BUILTIN(AtomicsMutexTryLock) {
       success = false;
     }
   }
-  Handle<JSObject> result =
+  DirectHandle<JSObject> result =
       JSAtomicsMutex::CreateResultObject(isolate, callback_result, success);
   return *result;
 }
@@ -140,7 +140,7 @@ BUILTIN(AtomicsMutexLockWithTimeout) {
                               isolate->factory()->NewStringFromAsciiChecked(
                                   method_name)));
   }
-  Handle<JSAtomicsMutex> js_mutex = Handle<JSAtomicsMutex>::cast(js_mutex_obj);
+  Handle<JSAtomicsMutex> js_mutex = Cast<JSAtomicsMutex>(js_mutex_obj);
   Handle<Object> run_under_lock = args.atOrUndefined(isolate, 2);
   if (!IsCallable(*run_under_lock)) {
     THROW_NEW_ERROR_RETURN_FAILURE(
@@ -148,7 +148,7 @@ BUILTIN(AtomicsMutexLockWithTimeout) {
   }
 
   Handle<Object> timeout_obj = args.atOrUndefined(isolate, 3);
-  base::Optional<base::TimeDelta> timeout;
+  std::optional<base::TimeDelta> timeout;
   if (!IsNumber(*timeout_obj)) {
     THROW_NEW_ERROR_RETURN_FAILURE(
         isolate, NewTypeError(MessageTemplate::kIsNotNumber, timeout_obj,
@@ -182,7 +182,7 @@ BUILTIN(AtomicsMutexLockWithTimeout) {
       success = false;
     }
   }
-  Handle<JSObject> result =
+  DirectHandle<JSObject> result =
       JSAtomicsMutex::CreateResultObject(isolate, callback_result, success);
   return *result;
 }
@@ -199,7 +199,7 @@ BUILTIN(AtomicsMutexLockAsync) {
                               isolate->factory()->NewStringFromAsciiChecked(
                                   method_name)));
   }
-  Handle<JSAtomicsMutex> js_mutex = Handle<JSAtomicsMutex>::cast(js_mutex_obj);
+  Handle<JSAtomicsMutex> js_mutex = Cast<JSAtomicsMutex>(js_mutex_obj);
   Handle<Object> run_under_lock = args.atOrUndefined(isolate, 2);
   if (!IsCallable(*run_under_lock)) {
     THROW_NEW_ERROR_RETURN_FAILURE(
@@ -207,7 +207,7 @@ BUILTIN(AtomicsMutexLockAsync) {
   }
 
   Handle<Object> timeout_obj = args.atOrUndefined(isolate, 3);
-  base::Optional<base::TimeDelta> timeout = base::nullopt;
+  std::optional<base::TimeDelta> timeout = std::nullopt;
   if (!IsUndefined(*timeout_obj, isolate)) {
     if (!IsNumber(*timeout_obj)) {
       THROW_NEW_ERROR_RETURN_FAILURE(
@@ -276,7 +276,7 @@ BUILTIN(AtomicsConditionWait) {
                                   method_name)));
   }
 
-  base::Optional<base::TimeDelta> timeout = base::nullopt;
+  std::optional<base::TimeDelta> timeout = std::nullopt;
   if (!IsUndefined(*timeout_obj, isolate)) {
     if (!IsNumber(*timeout_obj)) {
       THROW_NEW_ERROR_RETURN_FAILURE(
@@ -293,9 +293,8 @@ BUILTIN(AtomicsConditionWait) {
                                   method_name)));
   }
 
-  Handle<JSAtomicsCondition> js_condition =
-      Handle<JSAtomicsCondition>::cast(js_condition_obj);
-  Handle<JSAtomicsMutex> js_mutex = Handle<JSAtomicsMutex>::cast(js_mutex_obj);
+  auto js_condition = Cast<JSAtomicsCondition>(js_condition_obj);
+  auto js_mutex = Cast<JSAtomicsMutex>(js_mutex_obj);
 
   if (!js_mutex->IsCurrentThreadOwner()) {
     THROW_NEW_ERROR_RETURN_FAILURE(
@@ -327,7 +326,7 @@ BUILTIN(AtomicsConditionNotify) {
   } else {
     ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, count_obj,
                                        Object::ToInteger(isolate, count_obj));
-    double count_double = Object::Number(*count_obj);
+    double count_double = Object::NumberValue(*count_obj);
     if (count_double < 0) {
       count_double = 0;
     } else if (count_double > JSAtomicsCondition::kAllWaiters) {
@@ -336,8 +335,7 @@ BUILTIN(AtomicsConditionNotify) {
     count = static_cast<uint32_t>(count_double);
   }
 
-  Handle<JSAtomicsCondition> js_condition =
-      Handle<JSAtomicsCondition>::cast(js_condition_obj);
+  auto js_condition = Cast<JSAtomicsCondition>(js_condition_obj);
   return *isolate->factory()->NewNumberFromUint(
       JSAtomicsCondition::Notify(isolate, js_condition, count));
 }
@@ -358,7 +356,7 @@ BUILTIN(AtomicsConditionWaitAsync) {
   }
 
   Handle<Object> timeout_obj = args.atOrUndefined(isolate, 3);
-  base::Optional<base::TimeDelta> timeout = base::nullopt;
+  std::optional<base::TimeDelta> timeout = std::nullopt;
   if (!IsUndefined(*timeout_obj, isolate)) {
     if (!IsNumber(*timeout_obj)) {
       THROW_NEW_ERROR_RETURN_FAILURE(
@@ -369,8 +367,8 @@ BUILTIN(AtomicsConditionWaitAsync) {
   }
 
   Handle<JSAtomicsCondition> js_condition =
-      Handle<JSAtomicsCondition>::cast(js_condition_obj);
-  Handle<JSAtomicsMutex> js_mutex = Handle<JSAtomicsMutex>::cast(js_mutex_obj);
+      Cast<JSAtomicsCondition>(js_condition_obj);
+  auto js_mutex = Cast<JSAtomicsMutex>(js_mutex_obj);
 
   if (!js_mutex->IsCurrentThreadOwner()) {
     THROW_NEW_ERROR_RETURN_FAILURE(
@@ -378,7 +376,7 @@ BUILTIN(AtomicsConditionWaitAsync) {
         NewTypeError(MessageTemplate::kAtomicsMutexNotOwnedByCurrentThread));
   }
 
-  Handle<JSPromise> result_promise;
+  Handle<JSReceiver> result_promise;
   ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
       isolate, result_promise,
       JSAtomicsCondition::WaitAsync(isolate, js_condition, js_mutex, timeout));
@@ -389,11 +387,11 @@ BUILTIN(AtomicsConditionAcquireLock) {
   DCHECK(v8_flags.harmony_struct);
   HandleScope scope(isolate);
 
-  Handle<Context> context = Handle<Context>(isolate->context(), isolate);
+  DirectHandle<Context> context(isolate->context(), isolate);
   Handle<Object> js_mutex_obj = Handle<Object>(
       context->get(JSAtomicsCondition::kMutexAsyncContextSlot), isolate);
-  Handle<JSAtomicsMutex> js_mutex = Handle<JSAtomicsMutex>::cast(js_mutex_obj);
-  Handle<JSPromise> lock_promise =
+  Handle<JSAtomicsMutex> js_mutex = Cast<JSAtomicsMutex>(js_mutex_obj);
+  DirectHandle<JSPromise> lock_promise =
       JSAtomicsMutex::LockAsyncWrapperForWait(isolate, js_mutex);
   return *lock_promise;
 }

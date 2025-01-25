@@ -38,10 +38,16 @@ export class ProductSelectorElement extends PolymerElement {
         type: Object,
         value: null,
       },
+
+      excludedUrls: {
+        type: Array,
+        value: () => [],
+      },
     };
   }
 
   selectedItem: UrlListEntry|null;
+  excludedUrls: string[];
 
   private showMenu_() {
     this.$.productSelectionMenu.showAt(this.$.currentProductContainer);
@@ -62,6 +68,10 @@ export class ProductSelectorElement extends PolymerElement {
 
   private getUrl_(item: UrlListEntry) {
     return getAbbreviatedUrl(item.url);
+  }
+
+  private getSelectedUrl_() {
+    return this.selectedItem?.url ?? '';
   }
 }
 

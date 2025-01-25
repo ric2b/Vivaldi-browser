@@ -20,11 +20,11 @@
 #include "core/fxge/render_defines.h"
 #include "core/fxge/renderdevicedriver_iface.h"
 
+class CFX_AggImageRenderer;
 class CFX_DIBBase;
 class CFX_DIBitmap;
 class CFX_Font;
 class CFX_GraphStateData;
-class CFX_ImageRenderer;
 class PauseIndicatorIface;
 class TextCharPos;
 struct CFX_Color;
@@ -93,8 +93,8 @@ class CFX_RenderDevice {
     return FillRectWithBlend(rect, color, BlendMode::kNormal);
   }
 
-  RetainPtr<CFX_DIBitmap> GetBackDrop();
-  bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap, int left, int top);
+  RetainPtr<const CFX_DIBitmap> GetBackDrop() const;
+  bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap, int left, int top) const;
   bool SetDIBits(RetainPtr<const CFX_DIBBase> bitmap, int left, int top);
   bool SetDIBitsWithBlend(RetainPtr<const CFX_DIBBase> bitmap,
                           int left,
@@ -129,20 +129,21 @@ class CFX_RenderDevice {
                                int dest_height,
                                uint32_t argb,
                                const FXDIB_ResampleOptions& options);
-  bool StartDIBits(RetainPtr<const CFX_DIBBase> bitmap,
-                   float alpha,
-                   uint32_t argb,
-                   const CFX_Matrix& matrix,
-                   const FXDIB_ResampleOptions& options,
-                   std::unique_ptr<CFX_ImageRenderer>* handle);
-  bool StartDIBitsWithBlend(RetainPtr<const CFX_DIBBase> bitmap,
-                            float alpha,
-                            uint32_t argb,
-                            const CFX_Matrix& matrix,
-                            const FXDIB_ResampleOptions& options,
-                            std::unique_ptr<CFX_ImageRenderer>* handle,
-                            BlendMode blend_mode);
-  bool ContinueDIBits(CFX_ImageRenderer* handle, PauseIndicatorIface* pPause);
+  RenderDeviceDriverIface::StartResult StartDIBits(
+      RetainPtr<const CFX_DIBBase> bitmap,
+      float alpha,
+      uint32_t argb,
+      const CFX_Matrix& matrix,
+      const FXDIB_ResampleOptions& options);
+  RenderDeviceDriverIface::StartResult StartDIBitsWithBlend(
+      RetainPtr<const CFX_DIBBase> bitmap,
+      float alpha,
+      uint32_t argb,
+      const CFX_Matrix& matrix,
+      const FXDIB_ResampleOptions& options,
+      BlendMode blend_mode);
+  bool ContinueDIBits(CFX_AggImageRenderer* handle,
+                      PauseIndicatorIface* pPause);
 
   bool DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
                       CFX_Font* pFont,

@@ -15,6 +15,7 @@
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
+#include "components/password_manager/core/browser/password_manual_fallback_metrics_recorder.h"
 #include "components/password_manager/core/browser/password_ui_utils.h"
 #include "url/gurl.h"
 
@@ -36,16 +37,20 @@ PasswordManualFallbackFlow::PasswordManualFallbackFlow(
     PasswordManagerDriver* password_manager_driver,
     autofill::AutofillClient* autofill_client,
     PasswordManagerClient* password_client,
+    PasswordManualFallbackMetricsRecorder* manual_fallback_metrics_recorder,
     const PasswordFormCache* password_form_cache,
     std::unique_ptr<SavedPasswordsPresenter> passwords_presenter)
     : suggestion_generator_(password_manager_driver, password_client),
       password_manager_driver_(password_manager_driver),
       autofill_client_(autofill_client),
       password_client_(password_client),
+      manual_fallback_metrics_recorder_(manual_fallback_metrics_recorder),
       password_form_cache_(password_form_cache),
       passwords_presenter_(std::move(passwords_presenter)) {
   passwords_presenter_observation_.Observe(passwords_presenter_.get());
   passwords_presenter_->Init();
+
+  manual_fallback_metrics_recorder_->DataFetchingStarted();
 
   const GURL origin_as_gurl = password_manager_driver_->GetLastCommittedURL();
   password_manager::PasswordFormDigest form_digest(
@@ -85,7 +90,7 @@ void PasswordManualFallbackFlow::OnFetchCompleted() {
     flow_state_ = FlowState::kFlowInitialized;
     // The flow state transition to `FlowState::kFlowInitialized` can happen
     // only once.
-    metrics_recorder_.RecordDataFetchingLatency();
+    manual_fallback_metrics_recorder_->RecordDataFetchingLatency();
     if (on_all_password_data_ready_) {
       std::move(on_all_password_data_ready_).Run();
     }
@@ -100,7 +105,7 @@ void PasswordManualFallbackFlow::OnSavedPasswordsChanged(
     flow_state_ = FlowState::kFlowInitialized;
     // The flow state transition to `FlowState::kFlowInitialized` can happen
     // only once.
-    metrics_recorder_.RecordDataFetchingLatency();
+    manual_fallback_metrics_recorder_->RecordDataFetchingLatency();
     if (on_all_password_data_ready_) {
       std::move(on_all_password_data_ready_).Run();
     }
@@ -129,7 +134,11 @@ PasswordManualFallbackFlow::GetDriver() {
   return password_manager_driver_.get();
 }
 
-void PasswordManualFallbackFlow::OnSuggestionsShown() {}
+void PasswordManualFallbackFlow::OnSuggestionsShown() {
+  manual_fallback_metrics_recorder_->OnDidShowSuggestions(
+      password_form_cache_->HasPasswordForm(password_manager_driver_,
+                                            field_id_));
+}
 
 void PasswordManualFallbackFlow::OnSuggestionsHidden() {}
 
@@ -142,7 +151,7 @@ void PasswordManualFallbackFlow::DidSelectSuggestion(
   switch (suggestion.type) {
     case autofill::SuggestionType::kPasswordEntry:
       password_manager_driver_->PreviewSuggestion(
-          GetUsernameFromLabel(suggestion.additional_label),
+          GetUsernameFromLabel(suggestion.labels[0][0].value),
           suggestion.GetPayload<Suggestion::PasswordSuggestionDetails>()
               .password);
       break;
@@ -168,18 +177,21 @@ void PasswordManualFallbackFlow::DidAcceptSuggestion(
   if (!suggestion.is_acceptable) {
     return;
   }
+  manual_fallback_metrics_recorder_->OnDidFillSuggestion(
+      password_form_cache_->HasPasswordForm(password_manager_driver_,
+                                            field_id_));
+
   switch (suggestion.type) {
     case autofill::SuggestionType::kPasswordEntry:
       MaybeAuthenticateBeforeFilling(base::BindOnce(
           &PasswordManagerDriver::FillSuggestion,
           base::Unretained(password_manager_driver_),
-          GetUsernameFromLabel(suggestion.additional_label),
+          GetUsernameFromLabel(suggestion.labels[0][0].value),
           suggestion.GetPayload<Suggestion::PasswordSuggestionDetails>()
               .password));
       break;
     case autofill::SuggestionType::kPasswordFieldByFieldFilling:
-      password_manager_driver_->FillField(field_id_,
-                                          suggestion.main_text.value);
+      password_manager_driver_->FillField(suggestion.main_text.value);
       break;
     case autofill::SuggestionType::kFillPassword: {
       Suggestion::PasswordSuggestionDetails payload =
@@ -188,7 +200,7 @@ void PasswordManualFallbackFlow::DidAcceptSuggestion(
           &PasswordManualFallbackFlow::MaybeAuthenticateBeforeFilling,
           weak_ptr_factory_.GetWeakPtr(),
           base::BindOnce(&PasswordManagerDriver::FillField,
-                         base::Unretained(password_manager_driver_), field_id_,
+                         base::Unretained(password_manager_driver_),
                          payload.password));
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
@@ -278,7 +290,7 @@ void PasswordManualFallbackFlow::MaybeAuthenticateBeforeFilling(
       password_client_->GetDeviceAuthenticator();
   // Note: this is currently only implemented on Android, Mac and Windows.
   // For other platforms, the `authenticator` will be null.
-  if (!password_client_->CanUseBiometricAuthForFilling(authenticator.get())) {
+  if (!password_client_->IsReauthBeforeFillingRequired(authenticator.get())) {
     std::move(fill_fields).Run();
   } else {
     authenticator_ = std::move(authenticator);

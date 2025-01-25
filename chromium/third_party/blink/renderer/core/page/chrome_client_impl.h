@@ -266,6 +266,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   void HandleKeyboardEventOnTextField(HTMLInputElement&,
                                       KeyboardEvent&) override;
   void DidChangeValueInTextField(HTMLFormControlElement&) override;
+  void DidClearValueInTextField(HTMLFormControlElement&) override;
   void DidUserChangeContentEditableContent(Element&) override;
   void DidEndEditingOnTextField(HTMLInputElement&) override;
   void OpenTextDataListChooser(HTMLInputElement&) override;
@@ -309,7 +310,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
 
   void DocumentDetached(Document&) override;
 
-  double UserZoomFactor() const override;
+  double UserZoomFactor(LocalFrame* frame) const override;
 
   void FormElementReset(HTMLFormElement& element) override;
 

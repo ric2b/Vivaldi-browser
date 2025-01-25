@@ -56,6 +56,8 @@ class QUICHE_EXPORT NgHttp2Adapter : public Http2Adapter {
   void SubmitMetadata(Http2StreamId stream_id, size_t max_frame_size,
                       std::unique_ptr<MetadataSource> source) override;
 
+  void SubmitMetadata(Http2StreamId stream_id, size_t num_frames) override;
+
   int Send() override;
 
   int GetSendWindowSize() const override;
@@ -105,8 +107,19 @@ class QUICHE_EXPORT NgHttp2Adapter : public Http2Adapter {
     return 0;
   }
 
+  // Delegates a DATA frame read callback to either the visitor or a registered
+  // DataFrameSource.
+  ssize_t DelegateReadCallback(int32_t stream_id, size_t max_length,
+                               uint32_t* data_flags);
+
+  // Delegates a DATA frame send callback to either the visitor or a registered
+  // DataFrameSource.
+  int DelegateSendCallback(int32_t stream_id, const uint8_t* framehd,
+                           size_t length);
+
  private:
   class NotifyingMetadataSource;
+  class NotifyingVisitorMetadataSource;
 
   NgHttp2Adapter(Http2VisitorInterface& visitor, Perspective perspective,
                  const nghttp2_option* options);

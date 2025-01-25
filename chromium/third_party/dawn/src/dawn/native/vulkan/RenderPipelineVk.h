@@ -61,8 +61,12 @@ class RenderPipeline final : public RenderPipelineBase {
     };
     VkPipelineVertexInputStateCreateInfo ComputeVertexInputDesc(
         PipelineVertexInputStateCreateInfoTemporaryAllocations* temporaryAllocations);
+    VkPipelineDepthStencilStateCreateInfo ComputeDepthStencilDesc();
 
     VkPipeline mHandle = VK_NULL_HANDLE;
+
+    // Whether the pipeline has any input attachment being used in the frag shader.
+    bool mHasInputAttachment = false;
 };
 
 }  // namespace dawn::native::vulkan

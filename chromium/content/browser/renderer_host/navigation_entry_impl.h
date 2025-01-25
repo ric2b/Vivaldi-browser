@@ -19,6 +19,7 @@
 #include "build/build_config.h"
 #include "content/browser/renderer_host/back_forward_cache_metrics.h"
 #include "content/browser/renderer_host/frame_navigation_entry.h"
+#include "content/browser/renderer_host/navigation_transitions/navigation_transition_data.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/favicon_status.h"
@@ -136,7 +137,7 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   const Referrer& GetReferrer() override;
   void SetVirtualURL(const GURL& url) override;
   const GURL& GetVirtualURL() override;
-  void SetTitle(const std::u16string& title) override;
+  void SetTitle(std::u16string title) override;
   const std::u16string& GetTitle() override;
   void SetAppTitle(const std::u16string& app_title) override;
   const std::u16string& GetAppTitle() override;
@@ -509,6 +510,13 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
     return initial_navigation_entry_state_;
   }
 
+  NavigationTransitionData& navigation_transition_data() {
+    return navigation_transition_data_;
+  }
+  const NavigationTransitionData& navigation_transition_data() const {
+    return navigation_transition_data_;
+  }
+
  private:
   std::unique_ptr<NavigationEntryImpl> CloneAndReplaceInternal(
       scoped_refptr<FrameNavigationEntry> frame_entry,
@@ -647,6 +655,10 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   // See comment for the enum for explanation.
   InitialNavigationEntryState initial_navigation_entry_state_ =
       InitialNavigationEntryState::kNonInitial;
+
+  // Information about a navigation transition. See the comments on the class
+  // for details.
+  NavigationTransitionData navigation_transition_data_;
 };
 
 }  // namespace content

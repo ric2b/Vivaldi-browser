@@ -37,9 +37,7 @@ struct maybe_coherent_pad_helper {
 template <typename DerivativeType, typename OtherDerivativeType>
 struct maybe_coherent_pad_helper<
     DerivativeType, OtherDerivativeType,
-    std::enable_if_t<DerivativeType::SizeAtCompileTime >= OtherDerivativeType::SizeAtCompileTime &&
-                     DerivativeType::SizeAtCompileTime != Dynamic &&
-                     OtherDerivativeType::SizeAtCompileTime != Dynamic>> {
+    std::enable_if_t<enum_ge_not_dynamic(DerivativeType::SizeAtCompileTime, OtherDerivativeType::SizeAtCompileTime)>> {
   using type = const DerivativeType&;
   static const DerivativeType& pad(const DerivativeType& x, const OtherDerivativeType& /*y*/) { return x; }
 };

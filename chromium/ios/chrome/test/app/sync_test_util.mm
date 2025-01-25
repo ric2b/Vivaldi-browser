@@ -309,7 +309,7 @@ bool IsAutofillProfilePresent(std::string guid, std::string full_name) {
       chrome_test_util::GetOriginalBrowserState();
   autofill::PersonalDataManager* personal_data_manager =
       autofill::PersonalDataManagerFactory::GetForBrowserState(browser_state);
-  autofill::AutofillProfile* autofill_profile =
+  const autofill::AutofillProfile* autofill_profile =
       personal_data_manager->address_data_manager().GetProfileByGUID(guid);
 
   if (autofill_profile) {
@@ -409,6 +409,9 @@ void AddDeviceInfoToFakeSyncServer(const std::string& device_name,
   device_info.set_last_updated_timestamp(mtime);
   device_info.mutable_feature_fields()->set_send_tab_to_self_receiving_enabled(
       true);
+  device_info.mutable_feature_fields()->set_send_tab_to_self_receiving_type(
+      sync_pb::
+          SyncEnums_SendTabReceivingType_SEND_TAB_RECEIVING_TYPE_CHROME_OR_UNSPECIFIED);
 
   gSyncFakeServer->InjectEntity(
       syncer::PersistentUniqueClientEntity::CreateFromSpecificsForTesting(

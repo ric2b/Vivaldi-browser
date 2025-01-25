@@ -53,8 +53,8 @@ String BuildJustificationText(const String& text_content,
                                               item_result.item->Length()));
         }
         // Add the ruby-base results only if the ruby-base is wider than its
-        // ruby-text. Shorter ruby-bases don't participate in the justification
-        // for the whole line.
+        // ruby-text. Shorter ruby-bases produces OBJECT REPLACEMENT CHARACTER,
+        // and it is treated as a single Latin character.
         if (item_result.inline_size ==
             item_result.ruby_column->base_line.Width()) {
           const LineInfo& base_line = item_result.ruby_column->base_line;
@@ -65,6 +65,8 @@ String BuildJustificationText(const String& text_content,
                 base_line.EndOffsetForJustify(),
                 base_line.MayHaveTextCombineOrRubyItem()));
           }
+        } else {
+          line_text_builder.Append(kObjectReplacementCharacter);
         }
         continue;
       }
@@ -100,11 +102,14 @@ String BuildJustificationText(const String& text_content,
   return line_text_builder.ReleaseString();
 }
 
-void JustifyResults(const String& text_content,
-                    const String& line_text,
-                    unsigned line_text_start_offset,
-                    ShapeResultSpacing<String>& spacing,
-                    InlineItemResults& results) {
+// This function returns spacing amount on the right of the last glyph.
+// It's zero if the last item is an atomic-inline.
+float JustifyResults(const String& text_content,
+                     const String& line_text,
+                     unsigned line_text_start_offset,
+                     ShapeResultSpacing<String>& spacing,
+                     InlineItemResults& results) {
+  float last_glyph_spacing = 0;
   for (wtf_size_t i = 0; i < results.size(); ++i) {
     InlineItemResult& item_result = results[i];
     if (item_result.has_only_pre_wrap_trailing_spaces) {
@@ -127,15 +132,16 @@ void JustifyResults(const String& text_content,
       ShapeResult* shape_result = item_result.shape_result->CreateShapeResult();
       DCHECK_GE(item_result.StartOffset(), line_text_start_offset);
       DCHECK_EQ(shape_result->NumCharacters(), item_result.Length());
-      shape_result->ApplySpacing(spacing, item_result.StartOffset() -
-                                              line_text_start_offset -
-                                              shape_result->StartIndex());
+      last_glyph_spacing = shape_result->ApplySpacing(
+          spacing, item_result.StartOffset() - line_text_start_offset -
+                       shape_result->StartIndex());
       item_result.inline_size = shape_result->SnappedWidth();
       if (UNLIKELY(item_result.is_hyphenated)) {
         item_result.inline_size += item_result.hyphen.InlineSize();
       }
       item_result.shape_result = ShapeResultView::Create(shape_result);
     } else if (item_result.item->Type() == InlineItem::kAtomicInline) {
+      last_glyph_spacing = 0;
       float spacing_before = 0.0f;
       DCHECK_LE(line_text_start_offset, item_result.StartOffset());
       const unsigned line_text_offset =
@@ -157,12 +163,30 @@ void JustifyResults(const String& text_content,
     } else if (item_result.IsRubyColumn()) {
       LineInfo& base_line = item_result.ruby_column->base_line;
       if (item_result.inline_size == base_line.Width()) {
-        JustifyResults(text_content, line_text, line_text_start_offset, spacing,
-                       *base_line.MutableResults());
+        last_glyph_spacing =
+            JustifyResults(text_content, line_text, line_text_start_offset,
+                           spacing, *base_line.MutableResults());
         base_line.SetWidth(base_line.AvailableWidth(),
                            base_line.ComputeWidth());
         item_result.inline_size =
             std::max(item_result.inline_size, base_line.Width());
+        item_result.ruby_column->last_base_glyph_spacing =
+            LayoutUnit(last_glyph_spacing);
+      } else {
+        last_glyph_spacing = 0;
+        [[maybe_unused]] float spacing_before = 0;
+        unsigned offset = item_result.StartOffset() - line_text_start_offset;
+        if (!item_result.ruby_column->is_continuation) {
+          // Skip k*IsolateCharacter.
+          offset += item_result.item->Length();
+        }
+        [[maybe_unused]] const float spacing_after =
+            spacing.ComputeSpacing(offset, spacing_before);
+        // ShapeResultSpacing doesn't ask for adding space to OBJECT
+        // REPLACEMENT CHARACTER, and asks for adding space to the next item
+        // instead.
+        DCHECK_EQ(spacing_before, 0.0f);
+        DCHECK_EQ(spacing_after, 0.0f);
       }
       if (i + 1 < results.size()) {
         // Adjust line_text_start_offset because line_text is intermittent due
@@ -173,23 +197,25 @@ void JustifyResults(const String& text_content,
           line_text_start_offset +=
               next_start_offset - base_line.EndTextOffset();
         } else {
-          // BuildJustificationText() didn't produce any text for this ruby
-          // column.
-          line_text_start_offset += next_start_offset - base_line.StartOffset();
+          // BuildJustificationText() produced only OBJECT REPLACEMENT
+          // CHARACTER.
+          line_text_start_offset +=
+              next_start_offset - base_line.StartOffset() - 1;
         }
       }
     }
   }
+  return last_glyph_spacing;
 }
 
 class ExpandableItemsFinder {
   STACK_ALLOCATED();
 
  public:
-  void Find(LogicalLineItems::iterator begin, LogicalLineItems::iterator end) {
-    for (auto iter = begin; iter != end; ++iter) {
-      LogicalLineItem& item = *iter;
-      if (item.shape_result || item.layout_result) {
+  void Find(base::span<LogicalLineItem> items) {
+    for (auto& item : items) {
+      if ((item.shape_result && item.shape_result->NumGlyphs() > 0) ||
+          item.layout_result) {
         last_item_ = &item;
         if (!first_item_) {
           first_item_ = &item;
@@ -330,13 +356,12 @@ std::optional<LayoutUnit> ComputeRubyBaseInset(LayoutUnit space,
 
 bool ApplyLeftAndRightExpansion(LayoutUnit left_expansion,
                                 LayoutUnit right_expansion,
-                                LogicalLineItems::iterator begin,
-                                LogicalLineItems::iterator end) {
+                                base::span<LogicalLineItem> items) {
   if (!left_expansion && !right_expansion) {
     return true;
   }
   ExpandableItemsFinder finder;
-  finder.Find(begin, end);
+  finder.Find(items);
   LogicalLineItem* first_expandable = finder.FirstExpandable();
   LogicalLineItem* last_expandable = finder.LastExpandable();
   if (first_expandable && last_expandable) {

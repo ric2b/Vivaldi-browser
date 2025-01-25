@@ -30,7 +30,6 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/metrics/histogram_controller.h"
-#include "components/tracing/common/trace_startup_config.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/child_process_host_impl.h"
@@ -52,6 +51,7 @@
 #include "mojo/public/cpp/bindings/scoped_message_error_crash_key.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "services/tracing/public/cpp/trace_startup.h"
+#include "services/tracing/public/cpp/trace_startup_config.h"
 
 #if BUILDFLAG(IS_APPLE)
 #include "content/browser/child_process_task_port_provider_mac.h"
@@ -115,7 +115,7 @@ memory_instrumentation::mojom::ProcessType GetCoordinatorClientProcessType(
     case PROCESS_TYPE_PPAPI_BROKER:
       return memory_instrumentation::mojom::ProcessType::PLUGIN;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return memory_instrumentation::mojom::ProcessType::OTHER;
   }
 }
@@ -226,12 +226,6 @@ void BrowserChildProcessHostImpl::TerminateAll() {
   for (auto it = copy.begin(); it != copy.end(); ++it) {
     delete (*it)->delegate();  // ~*HostDelegate deletes *HostImpl.
   }
-}
-
-// static
-void BrowserChildProcessHostImpl::CopyTraceStartupFlags(
-    base::CommandLine* cmd_line) {
-  tracing::PropagateTracingFlagsToChildProcessCmdLine(cmd_line);
 }
 
 void BrowserChildProcessHostImpl::Launch(
@@ -351,6 +345,9 @@ void BrowserChildProcessHostImpl::LaunchWithoutExtraCommandLineSwitches(
     child_process_host_->SetProfilingFile(OpenProfilingFile());
 #endif
 
+  auto tracing_config_memory_region =
+      tracing::CreateTracingConfigSharedMemory();
+
   child_process_launcher_ = std::make_unique<ChildProcessLauncher>(
       std::move(delegate), std::move(cmd_line), data_.id, this,
       std::move(*child_process_host_->GetMojoInvitation()),
@@ -358,7 +355,7 @@ void BrowserChildProcessHostImpl::LaunchWithoutExtraCommandLineSwitches(
                           weak_factory_.GetWeakPtr(),
                           base::SingleThreadTaskRunner::GetCurrentDefault()),
       std::move(file_data), metrics_shared_region_.Duplicate(),
-      terminate_on_shutdown);
+      std::move(tracing_config_memory_region), terminate_on_shutdown);
   ShareMetricsAllocatorToProcess();
 
   if (!has_legacy_ipc_channel_)
@@ -529,7 +526,7 @@ void BrowserChildProcessHostImpl::OnChildDisconnected() {
       }
       case base::TERMINATION_STATUS_LAUNCH_FAILED: {
         // This is handled in OnProcessLaunchFailed.
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
       }
       case base::TERMINATION_STATUS_NORMAL_TERMINATION: {
@@ -547,7 +544,7 @@ void BrowserChildProcessHostImpl::OnChildDisconnected() {
       }
 #endif  // BUILDFLAG(IS_WIN)
       case base::TERMINATION_STATUS_MAX_ENUM: {
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
       }
     }

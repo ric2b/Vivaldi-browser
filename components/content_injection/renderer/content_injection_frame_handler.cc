@@ -4,17 +4,18 @@
 
 #include <algorithm>
 
+#include "app/vivaldi_apptools.h"
 #include "base/strings/string_util.h"
 #include "components/content_injection/renderer/content_injection_manager.h"
 #include "content/public/renderer/render_frame.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_script_source.h"
 
 namespace content_injection {
 namespace {
-std::string ReplacePlaceholders(base::StringPiece format_string,
+std::string ReplacePlaceholders(std::string_view format_string,
                                 std::vector<std::string> replacements) {
   DCHECK_LT(replacements.size(), 10U);
 
@@ -64,8 +65,11 @@ FrameHandler::FrameHandler(content::RenderFrame* render_frame,
     : content::RenderFrameObserver(render_frame),
       content::RenderFrameObserverTracker<FrameHandler>(render_frame) {
   DCHECK(render_frame);
-  render_frame->GetBrowserInterfaceBroker()->GetInterface(
-      injection_helper_.BindNewPipeAndPassReceiver());
+
+  if (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) {
+    render_frame->GetBrowserInterfaceBroker().GetInterface(
+        injection_helper_.BindNewPipeAndPassReceiver());
+  }
   registry->AddInterface(base::BindRepeating(
       &FrameHandler::BindFrameHandlerReceiver, base::Unretained(this)));
 }

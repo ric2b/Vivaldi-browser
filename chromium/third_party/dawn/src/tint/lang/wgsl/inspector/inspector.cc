@@ -42,6 +42,7 @@
 #include "src/tint/lang/core/type/f16.h"
 #include "src/tint/lang/core/type/f32.h"
 #include "src/tint/lang/core/type/i32.h"
+#include "src/tint/lang/core/type/input_attachment.h"
 #include "src/tint/lang/core/type/matrix.h"
 #include "src/tint/lang/core/type/multisampled_texture.h"
 #include "src/tint/lang/core/type/sampled_texture.h"
@@ -49,11 +50,13 @@
 #include "src/tint/lang/core/type/u32.h"
 #include "src/tint/lang/core/type/vector.h"
 #include "src/tint/lang/core/type/void.h"
+#include "src/tint/lang/wgsl/ast/blend_src_attribute.h"
 #include "src/tint/lang/wgsl/ast/bool_literal_expression.h"
 #include "src/tint/lang/wgsl/ast/call_expression.h"
 #include "src/tint/lang/wgsl/ast/float_literal_expression.h"
 #include "src/tint/lang/wgsl/ast/id_attribute.h"
 #include "src/tint/lang/wgsl/ast/identifier.h"
+#include "src/tint/lang/wgsl/ast/input_attachment_index_attribute.h"
 #include "src/tint/lang/wgsl/ast/int_literal_expression.h"
 #include "src/tint/lang/wgsl/ast/interpolate_attribute.h"
 #include "src/tint/lang/wgsl/ast/location_attribute.h"
@@ -174,10 +177,10 @@ EntryPoint Inspector::GetEntryPoint(const tint::ast::Function* func) {
     entry_point.push_constant_size = ComputePushConstantSize(func);
 
     for (auto* param : sem->Parameters()) {
-        AddEntryPointInOutVariables(param->Declaration()->name->symbol.Name(),
-                                    param->Declaration()->name->symbol.Name(), param->Type(),
-                                    param->Declaration()->attributes, param->Attributes().location,
-                                    param->Attributes().color, entry_point.input_variables);
+        AddEntryPointInOutVariables(
+            param->Declaration()->name->symbol.Name(), param->Declaration()->name->symbol.Name(),
+            param->Type(), param->Declaration()->attributes, param->Attributes().location,
+            param->Attributes().color, /* @blend_src */ std::nullopt, entry_point.input_variables);
 
         entry_point.input_position_used |= ContainsBuiltin(
             core::BuiltinValue::kPosition, param->Type(), param->Declaration()->attributes);
@@ -198,7 +201,7 @@ EntryPoint Inspector::GetEntryPoint(const tint::ast::Function* func) {
     if (!sem->ReturnType()->Is<core::type::Void>()) {
         AddEntryPointInOutVariables("<retval>", "", sem->ReturnType(), func->return_type_attributes,
                                     sem->ReturnLocation(), /* @color */ std::nullopt,
-                                    entry_point.output_variables);
+                                    /* @blend_src */ std::nullopt, entry_point.output_variables);
 
         entry_point.output_sample_mask_used = ContainsBuiltin(
             core::BuiltinValue::kSampleMask, sem->ReturnType(), func->return_type_attributes);
@@ -338,6 +341,7 @@ std::vector<ResourceBinding> Inspector::GetResourceBindings(const std::string& e
              &Inspector::GetDepthTextureResourceBindings,
              &Inspector::GetDepthMultisampledTextureResourceBindings,
              &Inspector::GetExternalTextureResourceBindings,
+             &Inspector::GetInputAttachmentResourceBindings,
          }) {
         AppendResourceBindings(&result, (this->*fn)(entry_point));
     }
@@ -503,6 +507,45 @@ std::vector<ResourceBinding> Inspector::GetExternalTextureResourceBindings(
                                       ResourceBinding::ResourceType::kExternalTexture);
 }
 
+std::vector<ResourceBinding> Inspector::GetInputAttachmentResourceBindings(
+    const std::string& entry_point) {
+    auto* func = FindEntryPointByName(entry_point);
+    if (!func) {
+        return {};
+    }
+
+    std::vector<ResourceBinding> result;
+    auto* func_sem = program_.Sem().Get(func);
+    for (auto& ref : func_sem->TransitivelyReferencedVariablesOfType(
+             &tint::TypeInfo::Of<core::type::InputAttachment>())) {
+        auto* var = ref.first;
+        auto binding_info = ref.second;
+
+        ResourceBinding entry;
+        entry.resource_type = ResourceBinding::ResourceType::kInputAttachment;
+        entry.bind_group = binding_info.group;
+        entry.binding = binding_info.binding;
+
+        auto* sem_var = var->As<sem::GlobalVariable>();
+        TINT_ASSERT(sem_var);
+        TINT_ASSERT(sem_var->Attributes().input_attachment_index);
+        entry.input_attachmnt_index = sem_var->Attributes().input_attachment_index.value();
+
+        auto* input_attachment_type = var->Type()->UnwrapRef()->As<core::type::InputAttachment>();
+        auto* base_type = input_attachment_type->type();
+        entry.sampled_kind = BaseTypeToSampledKind(base_type);
+
+        entry.variable_name = var->Declaration()->name->symbol.Name();
+
+        entry.dim =
+            TypeTextureDimensionToResourceBindingTextureDimension(input_attachment_type->dim());
+
+        result.push_back(entry);
+    }
+
+    return result;
+}
+
 VectorRef<SamplerTexturePair> Inspector::GetSamplerTextureUses(const std::string& entry_point) {
     auto* func = FindEntryPointByName(entry_point);
     if (!func) {
@@ -586,6 +629,7 @@ void Inspector::AddEntryPointInOutVariables(std::string name,
                                             VectorRef<const ast::Attribute*> attributes,
                                             std::optional<uint32_t> location,
                                             std::optional<uint32_t> color,
+                                            std::optional<uint32_t> blend_src,
                                             std::vector<StageVariable>& variables) const {
     // Skip builtins.
     if (ast::HasAttribute<ast::BuiltinAttribute>(attributes)) {
@@ -600,7 +644,7 @@ void Inspector::AddEntryPointInOutVariables(std::string name,
             AddEntryPointInOutVariables(name + "." + member->Name().Name(), member->Name().Name(),
                                         member->Type(), member->Declaration()->attributes,
                                         member->Attributes().location, member->Attributes().color,
-                                        variables);
+                                        member->Attributes().blend_src, variables);
         }
         return;
     }
@@ -613,11 +657,12 @@ void Inspector::AddEntryPointInOutVariables(std::string name,
     std::tie(stage_variable.component_type, stage_variable.composition_type) =
         CalculateComponentAndComposition(type);
 
+    stage_variable.attributes.blend_src = blend_src;
     stage_variable.attributes.location = location;
     stage_variable.attributes.color = color;
 
     std::tie(stage_variable.interpolation_type, stage_variable.interpolation_sampling) =
-        CalculateInterpolationData(type, attributes);
+        CalculateInterpolationData(attributes);
 
     variables.push_back(stage_variable);
 }
@@ -642,7 +687,7 @@ bool Inspector::ContainsBuiltin(core::BuiltinValue builtin,
     if (!builtin_declaration) {
         return false;
     }
-    return program_.Sem().Get(builtin_declaration)->Value() == builtin;
+    return builtin_declaration->builtin == builtin;
 }
 
 std::vector<ResourceBinding> Inspector::GetStorageBufferResourceBindingsImpl(
@@ -843,33 +888,22 @@ void Inspector::GenerateSamplerTargets() {
 }
 
 std::tuple<InterpolationType, InterpolationSampling> Inspector::CalculateInterpolationData(
-    const core::type::Type* type,
     VectorRef<const ast::Attribute*> attributes) const {
     auto* interpolation_attribute = ast::GetAttribute<ast::InterpolateAttribute>(attributes);
-    if (type->is_integer_scalar_or_vector()) {
-        return {InterpolationType::kFlat, InterpolationSampling::kNone};
-    }
 
     if (!interpolation_attribute) {
         return {InterpolationType::kPerspective, InterpolationSampling::kCenter};
     }
 
-    auto& sem = program_.Sem();
+    auto ast_interpolation_type = interpolation_attribute->interpolation.type;
+    auto ast_sampling_type = interpolation_attribute->interpolation.sampling;
 
-    auto ast_interpolation_type =
-        sem.Get<sem::BuiltinEnumExpression<core::InterpolationType>>(interpolation_attribute->type)
-            ->Value();
-
-    auto ast_sampling_type = core::InterpolationSampling::kUndefined;
-    if (interpolation_attribute->sampling) {
-        ast_sampling_type = sem.Get<sem::BuiltinEnumExpression<core::InterpolationSampling>>(
-                                   interpolation_attribute->sampling)
-                                ->Value();
-    }
-
-    if (ast_interpolation_type != core::InterpolationType::kFlat &&
-        ast_sampling_type == core::InterpolationSampling::kUndefined) {
-        ast_sampling_type = core::InterpolationSampling::kCenter;
+    if (ast_sampling_type == core::InterpolationSampling::kUndefined) {
+        if (ast_interpolation_type == core::InterpolationType::kFlat) {
+            ast_sampling_type = core::InterpolationSampling::kFirst;
+        } else {
+            ast_sampling_type = core::InterpolationSampling::kCenter;
+        }
     }
 
     auto interpolation_type = InterpolationType::kUnknown;
@@ -900,6 +934,12 @@ std::tuple<InterpolationType, InterpolationSampling> Inspector::CalculateInterpo
             break;
         case core::InterpolationSampling::kSample:
             sampling_type = InterpolationSampling::kSample;
+            break;
+        case core::InterpolationSampling::kFirst:
+            sampling_type = InterpolationSampling::kFirst;
+            break;
+        case core::InterpolationSampling::kEither:
+            sampling_type = InterpolationSampling::kEither;
             break;
     }
 

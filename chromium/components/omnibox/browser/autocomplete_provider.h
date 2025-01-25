@@ -65,6 +65,7 @@ typedef std::vector<metrics::OmniboxEventProto_ProviderInfo> ProvidersInfo;
 // UNKNOWN input type:
 // --------------------------------------------------------------------|-----
 // Keyword (non-substituting or in keyword UI mode, exact match)       | 1500
+// Bookmark nickname // Vivaldi                                        | 1450
 // HistoryURL (good exact or inline autocomplete matches, some inexact)| 1410++
 // HistoryURL (intranet url never visited match, some inexact matches) | 1400++
 // Search Primary Provider (past query in history within 2 days)       | 1399**

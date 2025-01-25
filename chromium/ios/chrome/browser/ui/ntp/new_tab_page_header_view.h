@@ -26,6 +26,9 @@
 // The Identity Disc showing the current user's avatar on NTP.
 @property(nonatomic, strong) UIView* identityDiscView;
 
+// The entrypoint for the Home customization menu.
+@property(nonatomic, strong) UIView* customizationMenuView;
+
 // Voice search button.
 @property(nonatomic, strong, readonly) UIButton* voiceSearchButton;
 
@@ -83,6 +86,12 @@
 
 // Highlights the fake omnibox.
 - (void)setFakeboxHighlighted:(BOOL)highlighted;
+
+// Hides the buttons within the fakebox.
+- (void)hideFakeboxButtons;
+
+// Shows the buttons within the fakebox.
+- (void)showFakeboxButtons;
 
 @end
 

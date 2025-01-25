@@ -13,10 +13,11 @@
 // limitations under the License.
 
 use crate::d2d_connection_context_v1::{Aes256Key as RawAes256Key, AesCbcIv};
+use crypto_provider::aead::AeadError;
 use crypto_provider::aes::cbc::DecryptionError;
 
-/// Encrypt message of length N
-pub(crate) fn encrypt<
+/// Encrypt message of length N with AES-CBC-256
+pub(crate) fn encrypt_cbc<
     R: rand::Rng + rand::CryptoRng,
     A: crypto_provider::aes::cbc::AesCbcPkcs7Padded,
 >(
@@ -29,10 +30,40 @@ pub(crate) fn encrypt<
     (ciphertext, iv)
 }
 
-pub(crate) fn decrypt<A: crypto_provider::aes::cbc::AesCbcPkcs7Padded>(
+/// Decrypt message of length N with AES-CBC-256
+pub(crate) fn decrypt_cbc<A: crypto_provider::aes::cbc::AesCbcPkcs7Padded>(
     key: &RawAes256Key,
     ciphertext: &[u8],
     iv: &AesCbcIv,
 ) -> Result<Vec<u8>, DecryptionError> {
     A::decrypt(&key[..].try_into().unwrap(), iv, ciphertext)
+}
+
+// TODO: Implement caching of these ciphers per connection so we don't recreate on each computation.
+pub(crate) fn encrypt_gcm_siv<
+    A: crypto_provider::aead::AesGcmSiv
+        + crypto_provider::aead::AeadInit<crypto_provider::aes::Aes256Key>,
+>(
+    key: &RawAes256Key,
+    plaintext: &[u8],
+    aad: &[u8],
+    nonce: &A::Nonce,
+) -> Result<Vec<u8>, AeadError> {
+    let converted_key = key.as_slice().try_into().unwrap();
+    let encrypter = A::new(&converted_key);
+    encrypter.encrypt(plaintext, aad, nonce)
+}
+
+pub(crate) fn decrypt_gcm_siv<
+    A: crypto_provider::aead::AesGcmSiv
+        + crypto_provider::aead::AeadInit<crypto_provider::aes::Aes256Key>,
+>(
+    key: &RawAes256Key,
+    ciphertext: &[u8],
+    aad: &[u8],
+    nonce: &A::Nonce,
+) -> Result<Vec<u8>, AeadError> {
+    let converted_key = key.as_slice().try_into().unwrap();
+    let decrypter = A::new(&converted_key);
+    decrypter.decrypt(ciphertext, aad, nonce)
 }

@@ -21,8 +21,8 @@ namespace extensions {
 
 namespace {
 
-std::string SplitByDotAndReverse(base::StringPiece host) {
-  std::vector<base::StringPiece> parts = base::SplitStringPiece(
+std::string SplitByDotAndReverse(std::string_view host) {
+  std::vector<std::string_view> parts = base::SplitStringPiece(
       host, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   std::reverse(parts.begin(), parts.end());
   return base::JoinString(parts, ".");
@@ -65,7 +65,7 @@ std::string CreateSortKey(
            kSortKeyPartsSeparator + base::UTF16ToUTF8(credential.password);
 
     key += kSortKeyPartsSeparator;
-    if (!credential.federation_origin.opaque())
+    if (!credential.federation_origin.IsValid())
       key += credential.federation_origin.host();
     else
       key += kSortKeyNoFederationSymbol;

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crypto_provider::CryptoProvider;
+use np_adv::extended::salt::MultiSalt;
 use np_adv::{extended::data_elements::*, extended::serialize::*, shared_data::*};
 use sink::Sink;
 use std::fmt::{Display, Formatter};
@@ -62,22 +63,18 @@ impl From<AddSectionError> for BoxedAddSectionError {
     }
 }
 
-fn wrap_owning_section_builder<C: CryptoProvider, S: Into<BoxedSectionBuilder<AdvBuilder, C>>>(
+fn wrap_owning_section_builder<S: Into<BoxedSectionBuilder<AdvBuilder>>>(
     maybe_section_builder: Result<S, (AdvBuilder, AddSectionError)>,
-) -> Result<BoxedSectionBuilder<AdvBuilder, C>, (BoxedAdvBuilder, BoxedAddSectionError)> {
+) -> Result<BoxedSectionBuilder<AdvBuilder>, (BoxedAdvBuilder, BoxedAddSectionError)> {
     match maybe_section_builder {
         Ok(section_builder) => Ok(section_builder.into()),
         Err((adv_builder, err)) => Err((adv_builder.into(), err.into())),
     }
 }
 
-fn wrap_mut_ref_section_builder<
-    'a,
-    C: CryptoProvider,
-    S: Into<BoxedSectionBuilder<&'a mut AdvBuilder, C>>,
->(
+fn wrap_mut_ref_section_builder<'a, S: Into<BoxedSectionBuilder<&'a mut AdvBuilder>>>(
     maybe_section_builder: Result<S, AddSectionError>,
-) -> Result<BoxedSectionBuilder<&'a mut AdvBuilder, C>, BoxedAddSectionError> {
+) -> Result<BoxedSectionBuilder<&'a mut AdvBuilder>, BoxedAddSectionError> {
     let section_builder = maybe_section_builder?;
     Ok(section_builder.into())
 }
@@ -98,42 +95,42 @@ impl BoxedAdvBuilder {
     /// builder, if the operation was successful. Otherwise,
     /// this advertisement builder will be returned back to the
     /// caller unaltered as part of the `Err` arm.
-    pub fn into_section_builder<C: CryptoProvider>(
+    pub fn into_section_builder(
         self,
-        identity: BoxedIdentity<C>,
-    ) -> Result<BoxedSectionBuilder<AdvBuilder, C>, (Self, BoxedAddSectionError)> {
+        identity: BoxedEncoder,
+    ) -> Result<BoxedSectionBuilder<AdvBuilder>, (Self, BoxedAddSectionError)> {
         match identity {
-            BoxedIdentity::PublicIdentity => wrap_owning_section_builder(
-                self.adv_builder.into_section_builder(PublicSectionEncoder::default()),
+            BoxedEncoder::Unencrypted => wrap_owning_section_builder(
+                self.adv_builder.into_section_builder(UnencryptedSectionEncoder),
             ),
-            BoxedIdentity::MicEncrypted(ident) => {
+            BoxedEncoder::MicEncrypted(ident) => {
                 wrap_owning_section_builder(self.adv_builder.into_section_builder(ident))
             }
-            BoxedIdentity::SignedEncrypted(ident) => {
+            BoxedEncoder::SignedEncrypted(ident) => {
                 wrap_owning_section_builder(self.adv_builder.into_section_builder(ident))
             }
         }
     }
 
-    /// Create a section builder using the given identity.
+    /// Create a section builder using the given encoder.
     ///
     /// Returns `Err` if the underlying advertisement builder
     /// yields an error when attempting to add a new section
     /// (typically because there's no more available adv space),
     /// or if the requested identity requires salt, and the
     /// advertisement builder is salt-less.
-    pub fn section_builder<C: CryptoProvider>(
+    pub fn section_builder(
         &mut self,
-        identity: BoxedIdentity<C>,
-    ) -> Result<BoxedSectionBuilder<&mut AdvBuilder, C>, BoxedAddSectionError> {
-        match identity {
-            BoxedIdentity::PublicIdentity => wrap_mut_ref_section_builder(
-                self.adv_builder.section_builder(PublicSectionEncoder::default()),
+        encoder: BoxedEncoder,
+    ) -> Result<BoxedSectionBuilder<&mut AdvBuilder>, BoxedAddSectionError> {
+        match encoder {
+            BoxedEncoder::Unencrypted => wrap_mut_ref_section_builder(
+                self.adv_builder.section_builder(UnencryptedSectionEncoder),
             ),
-            BoxedIdentity::MicEncrypted(ident) => {
+            BoxedEncoder::MicEncrypted(ident) => {
                 wrap_mut_ref_section_builder(self.adv_builder.section_builder(ident))
             }
-            BoxedIdentity::SignedEncrypted(ident) => {
+            BoxedEncoder::SignedEncrypted(ident) => {
                 wrap_mut_ref_section_builder(self.adv_builder.section_builder(ident))
             }
         }
@@ -145,29 +142,29 @@ impl BoxedAdvBuilder {
     }
 }
 
-/// A wrapped v1 identity whose type is given at run-time.
-pub enum BoxedIdentity<C: CryptoProvider> {
-    /// Public identity.
-    PublicIdentity,
-    /// An encrypted identity leveraging MIC for verification.
-    MicEncrypted(MicEncryptedSectionEncoder<C>),
-    /// An encrypted identity leveraging signatures for verification.
-    SignedEncrypted(SignedEncryptedSectionEncoder<C>),
+/// A wrapped v1 encoder whose type is given at run-time.
+pub enum BoxedEncoder {
+    /// Unencrypted encoder.
+    Unencrypted,
+    /// An encrypted encoder leveraging MIC for verification.
+    MicEncrypted(MicEncryptedSectionEncoder<MultiSalt>),
+    /// An encrypted encoder leveraging signatures for verification.
+    SignedEncrypted(SignedEncryptedSectionEncoder),
 }
 
 /// A `SectionBuilder` whose corresponding Identity
 /// and salted-ness is given at run-time instead of
 /// at compile-time.
-pub enum BoxedSectionBuilder<R: AsMut<AdvBuilder>, C: CryptoProvider> {
+pub enum BoxedSectionBuilder<R: AsMut<AdvBuilder>> {
     /// A builder for a public section.
-    Public(Box<SectionBuilder<R, PublicSectionEncoder>>),
+    Public(Box<SectionBuilder<R, UnencryptedSectionEncoder>>),
     /// A builder for a MIC-verified section.
-    MicEncrypted(Box<SectionBuilder<R, MicEncryptedSectionEncoder<C>>>),
+    MicEncrypted(Box<SectionBuilder<R, MicEncryptedSectionEncoder<MultiSalt>>>),
     /// A builder for a signature-verified section.
-    SignedEncrypted(Box<SectionBuilder<R, SignedEncryptedSectionEncoder<C>>>),
+    SignedEncrypted(Box<SectionBuilder<R, SignedEncryptedSectionEncoder>>),
 }
 
-impl<C: CryptoProvider> BoxedSectionBuilder<AdvBuilder, C> {
+impl BoxedSectionBuilder<AdvBuilder> {
     /// Gets the 0-based index of the section currently under construction
     /// in the context of the containing advertisement.
     pub fn section_index(&self) -> usize {
@@ -179,28 +176,28 @@ impl<C: CryptoProvider> BoxedSectionBuilder<AdvBuilder, C> {
     }
     /// Add this builder to the advertisement that created it,
     /// returning the containing advertisement builder.
-    pub fn add_to_advertisement(self) -> BoxedAdvBuilder {
+    pub fn add_to_advertisement<C: CryptoProvider>(self) -> BoxedAdvBuilder {
         let adv_builder = match self {
-            BoxedSectionBuilder::Public(x) => x.add_to_advertisement(),
-            BoxedSectionBuilder::MicEncrypted(x) => x.add_to_advertisement(),
-            BoxedSectionBuilder::SignedEncrypted(x) => x.add_to_advertisement(),
+            BoxedSectionBuilder::Public(x) => x.add_to_advertisement::<C>(),
+            BoxedSectionBuilder::MicEncrypted(x) => x.add_to_advertisement::<C>(),
+            BoxedSectionBuilder::SignedEncrypted(x) => x.add_to_advertisement::<C>(),
         };
         BoxedAdvBuilder::from(adv_builder)
     }
 }
 
-impl<'a, C: CryptoProvider> BoxedSectionBuilder<&'a mut AdvBuilder, C> {
+impl<'a> BoxedSectionBuilder<&'a mut AdvBuilder> {
     /// Add this builder to the advertisement that created it.
-    pub fn add_to_advertisement(self) {
+    pub fn add_to_advertisement<C: CryptoProvider>(self) {
         match self {
-            BoxedSectionBuilder::Public(x) => x.add_to_advertisement(),
-            BoxedSectionBuilder::MicEncrypted(x) => x.add_to_advertisement(),
-            BoxedSectionBuilder::SignedEncrypted(x) => x.add_to_advertisement(),
+            BoxedSectionBuilder::Public(x) => x.add_to_advertisement::<C>(),
+            BoxedSectionBuilder::MicEncrypted(x) => x.add_to_advertisement::<C>(),
+            BoxedSectionBuilder::SignedEncrypted(x) => x.add_to_advertisement::<C>(),
         }
     }
 }
 
-impl<R: AsMut<AdvBuilder>, C: CryptoProvider> BoxedSectionBuilder<R, C> {
+impl<R: AsMut<AdvBuilder>> BoxedSectionBuilder<R> {
     /// Returns true if this wraps a section builder which
     /// leverages some encrypted identity.
     pub fn is_encrypted(&self) -> bool {
@@ -211,15 +208,16 @@ impl<R: AsMut<AdvBuilder>, C: CryptoProvider> BoxedSectionBuilder<R, C> {
         }
     }
     /// Gets the derived salt of the next DE to be added to the section,
-    /// if this section-builder corresponds to an encrypted section.
+    /// if this section-builder corresponds to an encrypted section that can
+    /// provide per-DE salts.
     /// Otherwise, returns nothing.
     ///
     /// Suitable for scenarios (like FFI) where a closure would be inappropriate
     /// for DE construction, and interaction with the client is preferred.
-    pub fn next_de_salt(&self) -> Option<DeSalt<C>> {
+    pub fn next_de_salt(&self) -> Option<DeSalt> {
         match self {
             BoxedSectionBuilder::Public(_) => None,
-            BoxedSectionBuilder::MicEncrypted(x) => Some(x.next_de_salt()),
+            BoxedSectionBuilder::MicEncrypted(x) => x.next_de_salt(),
             BoxedSectionBuilder::SignedEncrypted(x) => Some(x.next_de_salt()),
         }
     }
@@ -230,19 +228,16 @@ impl<R: AsMut<AdvBuilder>, C: CryptoProvider> BoxedSectionBuilder<R, C> {
     /// if any salt has been specified for the surrounding advertisement.
     pub fn add_de_res<E>(
         &mut self,
-        build_de: impl FnOnce(Option<DeSalt<C>>) -> Result<BoxedWriteDataElement, E>,
+        build_de: impl FnOnce(Option<DeSalt>) -> Result<BoxedWriteDataElement, E>,
     ) -> Result<(), AddDataElementError<E>> {
         match self {
             BoxedSectionBuilder::Public(x) => {
                 let build_de_modified = |()| build_de(None);
                 x.add_de_res(build_de_modified)
             }
-            BoxedSectionBuilder::MicEncrypted(x) => {
-                let build_de_modified = |de_salt: DeSalt<C>| build_de(Some(de_salt));
-                x.add_de_res(build_de_modified)
-            }
+            BoxedSectionBuilder::MicEncrypted(x) => x.add_de_res(build_de),
             BoxedSectionBuilder::SignedEncrypted(x) => {
-                let build_de_modified = |de_salt: DeSalt<C>| build_de(Some(de_salt));
+                let build_de_modified = |de_salt: DeSalt| build_de(Some(de_salt));
                 x.add_de_res(build_de_modified)
             }
         }
@@ -250,32 +245,32 @@ impl<R: AsMut<AdvBuilder>, C: CryptoProvider> BoxedSectionBuilder<R, C> {
     /// Like add_de_res, but for infalliable closures
     pub fn add_de(
         &mut self,
-        build_de: impl FnOnce(Option<DeSalt<C>>) -> BoxedWriteDataElement,
+        build_de: impl FnOnce(Option<DeSalt>) -> BoxedWriteDataElement,
     ) -> Result<(), AddDataElementError<()>> {
         self.add_de_res(|derived_salt| Ok::<_, ()>(build_de(derived_salt)))
     }
 }
 
-impl<R: AsMut<AdvBuilder>, C: CryptoProvider> From<SectionBuilder<R, PublicSectionEncoder>>
-    for BoxedSectionBuilder<R, C>
+impl<R: AsMut<AdvBuilder>> From<SectionBuilder<R, UnencryptedSectionEncoder>>
+    for BoxedSectionBuilder<R>
 {
-    fn from(section_builder: SectionBuilder<R, PublicSectionEncoder>) -> Self {
+    fn from(section_builder: SectionBuilder<R, UnencryptedSectionEncoder>) -> Self {
         BoxedSectionBuilder::Public(Box::new(section_builder))
     }
 }
 
-impl<R: AsMut<AdvBuilder>, C: CryptoProvider> From<SectionBuilder<R, MicEncryptedSectionEncoder<C>>>
-    for BoxedSectionBuilder<R, C>
+impl<R: AsMut<AdvBuilder>> From<SectionBuilder<R, MicEncryptedSectionEncoder<MultiSalt>>>
+    for BoxedSectionBuilder<R>
 {
-    fn from(section_builder: SectionBuilder<R, MicEncryptedSectionEncoder<C>>) -> Self {
+    fn from(section_builder: SectionBuilder<R, MicEncryptedSectionEncoder<MultiSalt>>) -> Self {
         BoxedSectionBuilder::MicEncrypted(Box::new(section_builder))
     }
 }
 
-impl<R: AsMut<AdvBuilder>, C: CryptoProvider>
-    From<SectionBuilder<R, SignedEncryptedSectionEncoder<C>>> for BoxedSectionBuilder<R, C>
+impl<R: AsMut<AdvBuilder>> From<SectionBuilder<R, SignedEncryptedSectionEncoder>>
+    for BoxedSectionBuilder<R>
 {
-    fn from(section_builder: SectionBuilder<R, SignedEncryptedSectionEncoder<C>>) -> Self {
+    fn from(section_builder: SectionBuilder<R, SignedEncryptedSectionEncoder>) -> Self {
         BoxedSectionBuilder::SignedEncrypted(Box::new(section_builder))
     }
 }

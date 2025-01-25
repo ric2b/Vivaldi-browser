@@ -6,36 +6,35 @@
 #define ASH_SYSTEM_FOCUS_MODE_SOUNDS_SOUND_SECTION_VIEW_H_
 
 #include "ash/ash_export.h"
+#include "ash/system/focus_mode/focus_mode_util.h"
 #include "ash/system/focus_mode/sounds/focus_mode_sounds_controller.h"
 #include "ui/base/metadata/metadata_header_macros.h"
-#include "ui/views/layout/flex_layout_view.h"
+#include "ui/views/view.h"
 
 namespace views {
 class BoxLayoutView;
+class FlexLayoutView;
 }  // namespace views
 
 namespace ash {
 
-namespace {
-class PlaylistView;
-}  // namespace
-
 class PillButton;
+class PlaylistView;
 
 // These are views that represent a list of playlists and we toggle between
 // `Focus Sounds` or `YouTube Music` sound sections using the slider button in
 // the focus panel. When a non-premium user toggles to show the `YouTube Music`
 // sound section, we will create and show the alternate view instead.
-class ASH_EXPORT SoundSectionView : public views::FlexLayoutView {
-  METADATA_HEADER(SoundSectionView, views::FlexLayoutView)
+class ASH_EXPORT SoundSectionView : public views::View {
+  METADATA_HEADER(SoundSectionView, views::View)
 
  public:
-  SoundSectionView();
+  explicit SoundSectionView(focus_mode_util::SoundType type);
   SoundSectionView(const SoundSectionView&) = delete;
   SoundSectionView& operator=(const SoundSectionView&) = delete;
   ~SoundSectionView() override;
 
-  // Update the contents in `playlist_view_list_`, e.g. the image view, title,
+  // Updates the contents in `playlist_view_list_`, e.g. the image view, title,
   // id of a playlist.
   void UpdateContents(
       const std::vector<std::unique_ptr<FocusModeSoundsController::Playlist>>&
@@ -46,18 +45,28 @@ class ASH_EXPORT SoundSectionView : public views::FlexLayoutView {
   void ShowAlternateView(bool show_alternate_view);
   void SetAlternateView(std::unique_ptr<views::BoxLayoutView> alternate_view);
 
- protected:
-  void CreatePlaylistViewsContainer();
+  // Updates the state of `PlaylistView` for the newly `selected_playlist` and
+  // reset the state of `PlaylistView` for unselected playlists.
+  void UpdateStateForSelectedPlaylist(
+      const focus_mode_util::SelectedPlaylist& selected_playlist);
 
+  // Updates the state of `PlaylistView` for the existing selected playlist.
+  void UpdateSelectedPlaylistForNewState(focus_mode_util::SoundState new_state);
+
+ private:
+  void CreatePlaylistViewsContainer(focus_mode_util::SoundType type);
+
+  const focus_mode_util::SoundType type_;
   std::vector<PlaylistView*> playlist_view_list_;
-  raw_ptr<views::BoxLayoutView> playlist_views_container_ = nullptr;
+  raw_ptr<views::FlexLayoutView> playlist_views_container_ = nullptr;
 
   // For a non-premium users, the "YouTube Music" `playlist_views_container_`
   // will not be populated. For this case, we will set an alternate view (e.g. a
   // non-premium view defined in `FocusModeSoundsView`) and show it instead.
   raw_ptr<views::BoxLayoutView> alternate_view_ = nullptr;
-
   raw_ptr<PillButton> learn_more_button_ = nullptr;
+
+  base::WeakPtrFactory<SoundSectionView> weak_factory_{this};
 };
 
 }  // namespace ash

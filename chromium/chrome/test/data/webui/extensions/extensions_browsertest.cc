@@ -60,8 +60,14 @@ IN_PROC_BROWSER_TEST_F(CrExtensionsTest, HostPermissionsToggleList) {
   RunTest("extensions/host_permissions_toggle_list_test.js", "mocha.run()");
 }
 
-IN_PROC_BROWSER_TEST_F(CrExtensionsTest, ExtensionsMV2DeprecationPanel) {
-  RunTest("extensions/mv2_deprecation_panel_test.js", "mocha.run()");
+IN_PROC_BROWSER_TEST_F(CrExtensionsTest,
+                       ExtensionsMV2DeprecationPanelWarningStage) {
+  RunTest("extensions/mv2_deprecation_panel_warning_test.js", "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(CrExtensionsTest,
+                       ExtensionsMV2DeprecationPanelDisabledStage) {
+  RunTest("extensions/mv2_deprecation_panel_disabled_test.js", "mocha.run()");
 }
 
 IN_PROC_BROWSER_TEST_F(CrExtensionsTest, SafetyCheckReviewPanel) {
@@ -291,14 +297,23 @@ IN_PROC_BROWSER_TEST_F(CrExtensionsDetailViewTest, SafetyCheckWarning) {
   RunTestCase("SafetyCheckWarning");
 }
 
-IN_PROC_BROWSER_TEST_F(CrExtensionsDetailViewTest,
-                       Mv2DeprecationMessageWarning_Disabled) {
-  RunTestCase("Mv2DeprecationMessageWarning_Disabled");
+IN_PROC_BROWSER_TEST_F(CrExtensionsDetailViewTest, Mv2DeprecationMessage_None) {
+  RunTestCase("Mv2DeprecationMessage_None");
 }
 
 IN_PROC_BROWSER_TEST_F(CrExtensionsDetailViewTest,
-                       MvDeprecationMessageWarning_Enabled) {
-  RunTestCase("Mv2DeprecationMessageWarning_Enabled");
+                       Mv2DeprecationMessage_Warning) {
+  RunTestCase("Mv2DeprecationMessage_Warning");
+}
+
+IN_PROC_BROWSER_TEST_F(CrExtensionsDetailViewTest,
+                       Mv2DeprecationMessage_DisableWithReEnable_Visbility) {
+  RunTestCase("Mv2DeprecationMessage_DisableWithReEnable_Visbility");
+}
+
+IN_PROC_BROWSER_TEST_F(CrExtensionsDetailViewTest,
+                       Mv2DeprecationMessage_DisableWithReEnable) {
+  RunTestCase("Mv2DeprecationMessage_DisableWithReEnable_Content");
 }
 
 IN_PROC_BROWSER_TEST_F(CrExtensionsDetailViewTest, PinnedToToolbar) {
@@ -353,13 +368,18 @@ IN_PROC_BROWSER_TEST_F(CrExtensionsItemListTest,
 }
 
 IN_PROC_BROWSER_TEST_F(CrExtensionsItemListTest,
-                       ManifestV2DeprecationPanel_Disabled) {
-  RunTestCase("ManifestV2DeprecationPanel_Disabled");
+                       ManifestV2DeprecationPanel_None) {
+  RunTestCase("ManifestV2DeprecationPanel_None");
 }
 
 IN_PROC_BROWSER_TEST_F(CrExtensionsItemListTest,
-                       ManifestV2DeprecationPanel_Enabled) {
-  RunTestCase("ManifestV2DeprecationPanel_Enabled");
+                       ManifestV2DeprecationPanel_Warning) {
+  RunTestCase("ManifestV2DeprecationPanel_Warning");
+}
+
+IN_PROC_BROWSER_TEST_F(CrExtensionsItemListTest,
+                       ManifestV2DeprecationPanel_DisableWithReEnable) {
+  RunTestCase("ManifestV2DeprecationPanel_DisableWithReEnable");
 }
 
 IN_PROC_BROWSER_TEST_F(CrExtensionsItemListTest,

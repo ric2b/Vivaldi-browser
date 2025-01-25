@@ -12,8 +12,6 @@
 #import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/download/public/background_service/background_download_service.h"
-#import "components/feature_engagement/public/event_constants.h"
-#import "components/feature_engagement/public/tracker.h"
 #import "components/search_engines/prepopulated_engines.h"
 #import "components/search_engines/template_url.h"
 #import "components/search_engines/template_url_prepopulate_data.h"
@@ -33,7 +31,6 @@
 #import "ios/chrome/browser/content_notification/model/content_notification_util.h"
 #import "ios/chrome/browser/crash_report/model/crash_keys_helper.h"
 #import "ios/chrome/browser/download/model/background_service/background_download_service_factory.h"
-#import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_delegate.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_util.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
@@ -250,8 +247,11 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
   web::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(^{
         if ([self isContentNotificationAvailable]) {
-          Browser* browser = self.mainController.browserProviderInterface
-                                 .mainBrowserProvider.browser;
+          // TODO(crbug.com/341906612) Remove use of
+          // browserProviderInterfaceDoNotUse.
+          Browser* browser =
+              self.mainController.browserProviderInterfaceDoNotUse
+                  .mainBrowserProvider.browser;
           [self.pushNotificationDelegate
               applicationDidRegisterWithAPNS:deviceToken
                                 browserState:browser->GetBrowserState()];
@@ -286,8 +286,8 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
   }
   // TODO(crbug.com/325613461) Remove this Browser dependency, ideally by
   // refactoring into a dedicated agent.
-  Browser* browser =
-      _mainController.browserProviderInterface.mainBrowserProvider.browser;
+  Browser* browser = _mainController.browserProviderInterfaceDoNotUse
+                         .mainBrowserProvider.browser;
   if (!browser) {
     // TODO(crbug.com/40240359): We should store the completionHandler and wait
     // for mainBrowserProvider creation.
@@ -448,48 +448,19 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
 - (void)firstSceneDidEnterForeground {
   if ([self appStartupFromExternalIntent]) {
     base::RecordAction(base::UserMetricsAction("IOSOpenByViewIntent"));
-    [self applicationStartupFromExternalIntent];
   } else {
     base::RecordAction(base::UserMetricsAction("IOSOpenByMainIntent"));
     base::UmaHistogramEnumeration(kAppLaunchSource, AppLaunchSource::APP_ICON);
   }
 }
 
-// Invoked when the app is started by an external intent.
-- (void)applicationStartupFromExternalIntent {
-  [self notifyFETAppStartupFromExternalIntent];
-}
-
-// Notifies the Feature Engagement Tracker (FET) that the app has launched from
-// an external intent (i.e. through the share sheet), which is an eligibility
-// criterion for the default browser blue dot promo.
-// TODO(crbug.com/325614090): Change this to iterate and inform the feature
-// trackers for all of the browser states.
-- (void)notifyFETAppStartupFromExternalIntent {
-  Browser* browser =
-      _mainController.browserProviderInterface.mainBrowserProvider.browser;
-
-  // OTR browsers are ignored because they can sometimes cause a nullptr tracker
-  // to be returned from the tracker factory.
-  if (!browser || browser->GetBrowserState()->IsOffTheRecord()) {
-    return;
-  }
-
-  feature_engagement::Tracker* tracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(
-          browser->GetBrowserState());
-
-  tracker->NotifyEvent(feature_engagement::events::kBlueDotPromoCriterionMet);
-}
-
 // `YES` if Content notification is enabled or registered. Called before
 // register device With APNS.
 - (BOOL)isContentNotificationAvailable {
-  if (!IsContentNotificationExperimentEnalbed()) {
-    return false;
-  }
-  Browser* browser =
-      _mainController.browserProviderInterface.mainBrowserProvider.browser;
+  // TODO(crbug.com/341903881) Do not use
+  // mainController.browserProviderInterfaceDoNotUse.
+  Browser* browser = _mainController.browserProviderInterfaceDoNotUse
+                         .mainBrowserProvider.browser;
 
   if (!browser) {
     base::UmaHistogramBoolean(
@@ -498,21 +469,9 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
   }
 
   ChromeBrowserState* browserState = browser->GetBrowserState();
-  signin::IdentityManager* identityManager =
-      IdentityManagerFactory::GetForBrowserState(browserState);
-  bool isUserSignedIn = identityManager && identityManager->HasPrimaryAccount(
-                                               signin::ConsentLevel::kSignin);
-  const TemplateURL* defaultSearchURLTemplate =
-      ios::TemplateURLServiceFactory::GetForBrowserState(browserState)
-          ->GetDefaultSearchProvider();
-  bool isDefaultSearchEngine =
-      defaultSearchURLTemplate && defaultSearchURLTemplate->prepopulate_id() ==
-                                      TemplateURLPrepopulateData::google.id;
-  PrefService* prefService = browserState->GetPrefs();
-  return IsContentNotificationEnabled(isUserSignedIn, isDefaultSearchEngine,
-                                      prefService) ||
-         IsContentNotificationRegistered(isUserSignedIn, isDefaultSearchEngine,
-                                         prefService);
+
+  return IsContentNotificationEnabled(browserState) ||
+         IsContentNotificationRegistered(browserState);
 }
 
 @end

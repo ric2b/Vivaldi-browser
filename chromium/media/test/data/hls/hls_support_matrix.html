@@ -1,0 +1,198 @@
+<html>
+<head>
+  <style>
+    #player {
+      width:320px;
+      height:180px;
+      position:fixed;
+      top:0;
+      left:0;
+      overflow: hidden;
+    }
+    #support_list {
+      width:320px;
+      position:fixed;
+      top:180px;
+      left:0;
+      font-size:10px;
+      overflow:hidden;
+      white-space:nowrap;
+    }
+    ul {margin:0; padding:0;}
+    .green { background-color: green; }
+    .red { background-color: red; }
+  </style>
+</head>
+<body>
+  <div id="player"></div>
+  <ul id="support_list"></ul>
+  <template id="entry">
+    <li class="entry"></li>
+  </template>
+</body>
+<script>
+  const ok_event = "canplaythrough";
+
+  const content_definitions = [
+    {
+      type: "audio",
+      name: "vod_aac_0AAC",
+      location: "vod_aac_0AAC/chunklist.m3u8"
+    },
+    {
+      type: "video",
+      name: "vod_fmp4_0AAC",
+      location: "vod_fmp4_0AAC/playlist.m3u8"
+    },
+    {
+      type: "video",
+      name: "vod_fmp4_0AC3",
+      location: "vod_fmp4_0AC3/playlist.m3u8"
+    },
+    {
+      type: "video",
+      name: "vod_fmp4_0FLAC",
+      location: "vod_fmp4_0FLAC/playlist.m3u8"
+    },
+    {
+      type: "video",
+      name: "vod_fmp4_0H264",
+      location: "vod_fmp4_0H264/playlist.m3u8"
+    },
+    {
+      type: "video",
+      name: "vod_fmp4_0H265",
+      location: "vod_fmp4_0H265/playlist.m3u8"
+    },
+    {
+      type: "video",
+      name: "vod_fmp4_0VP9",
+      location: "vod_fmp4_0VP9/playlist.m3u8"
+    },
+    {
+      type: "video",
+      name: "vod_mpegts_0AAC",
+      location: "vod_mpegts_0AAC/playlist.m3u8"
+    },
+    {
+      type: "video",
+      name: "vod_mpegts_0AC3",
+      location: "vod_mpegts_0AC3/playlist.m3u8"
+    },
+    {
+      type: "video",
+      name: "vod_mpegts_0FLAC",
+      location: "vod_mpegts_0FLAC/playlist.m3u8"
+    },
+    {
+      type: "video",
+      name: "vod_mpegts_0H264",
+      location: "vod_mpegts_0H264/playlist.m3u8"
+    },
+    {
+      type: "video",
+      name: "vod_mpegts_0H265",
+      location: "vod_mpegts_0H265/playlist.m3u8"
+    },
+    {
+      type: "audio",
+      name: "vod_aac_0AAC",
+      location: "vod_aac_0AAC/playlist.m3u8"
+    },
+    {
+      type: "video",
+      name: "vod_aes128_mpegts_AAC_H264",
+      location: "https://bitmovin-a.akamaihd.net/content/art-of-motion_drm/m3u8s/11331.m3u8",
+    },
+    {
+      type: "video",
+      name: "vod_aes128_fmp4_AAC_H264",
+      location: "https://storage.googleapis.com/shaka-demo-assets/sintel-fmp4-aes/master.m3u8",
+    },
+    {
+      type: "video",
+      name: "vod_aes128rot_fmp4_AAC_H264",
+      location: "https://storage.googleapis.com/shaka-demo-assets/sintel-ts-aes-key-rotation/master.m3u8",
+    },
+    {
+      type: "video",
+      name: "vod_wv_fmp4_MP4A_H264",
+      location: "https://storage.googleapis.com/shaka-demo-assets/angel-one-widevine-hls/hls.m3u8",
+    },
+    {
+      type: "video",
+      name: "vod_ck_fmp4_MP4A_H264",
+      location: "https://storage.googleapis.com/shaka-demo-assets/angel-one-sample-aes-ctr-multiple-key/manifest.m3u8",
+    },
+  ];
+
+  function attach_listener(element, event, fn) {
+    if (element.listeners === undefined) {
+      element.listeners = {};
+    }
+    element.listeners[event] = fn;
+    element.addEventListener(event, fn);
+  }
+
+  function detach_listener(element, event) {
+    if (element.listeners === undefined) return;
+    if (!(event in element.listeners)) return;
+    element.removeEventListener(event, element.listeners[event]);
+  }
+
+  function create_video_element(name, src, element, done) {
+    const video = document.createElement(element);
+    attach_listener(video, "error", add_entry.bind(null, video, name, "red", done));
+    var on_seek = add_entry.bind(null, video, name, "green", done);
+    if (navigator.userAgent.match(/Android/i)) {
+      on_seek = attach_listener.bind(null, video, "durationchange", on_seek);
+    }
+    attach_listener(video, "seeked", on_seek);
+    video.src = src;
+    video.currentTime = 0.1;
+    return video;
+  }
+
+  function add_entry(video, name, color, done, error) {
+    detach_listener(video, "error");
+    detach_listener(video, "seeked");
+    detach_listener(video, "durationchange");
+    const template = document.getElementById("entry");
+    const clone = template.cloneNode(true);
+    const entry = clone.content.querySelector("li");
+    entry.textContent = name;
+    entry.classList.add(color);
+    document.getElementById("support_list").appendChild(entry);
+    setTimeout(done, 10);
+  }
+
+  function load_video(name, src, element, done) {
+    const container = document.getElementById("player");
+    container.innerHTML = '';
+    container.appendChild(create_video_element(name, src, element, done));
+  }
+
+  function load_sequential_video(content, done) {
+    if (content.length === 0) return done();
+    const spec = content.pop();
+    load_video(spec.name, spec.location, spec.type,
+               load_sequential_video.bind(null, content, done))
+  }
+
+  function load_videos() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const video_param = urlParams.get('video');
+    let videos = content_definitions;
+    if (video_param != null) {
+      videos = videos.filter((v) => {
+        return v.name == video_param;
+      });
+    }
+    load_sequential_video(videos, () => {
+      console.log('DONE!');
+    });
+  }
+
+  load_videos();
+</script>
+</html>

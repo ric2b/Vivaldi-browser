@@ -222,7 +222,7 @@ PersistedWindowShowState ShowStateToPersistedShowState(
     case ui::SHOW_STATE_END:
       break;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return PERSISTED_SHOW_STATE_NORMAL;
 }
 
@@ -241,7 +241,7 @@ ui::WindowShowState PersistedShowStateToShowState(int state) {
     case PERSISTED_SHOW_STATE_DOCKED_DEPRECATED:
       return ui::SHOW_STATE_NORMAL;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ui::SHOW_STATE_NORMAL;
 }
 
@@ -383,8 +383,10 @@ void AddTabsToWindows(IdToSessionTab* tabs,
   for (auto& tab_pair : *tabs) {
     std::unique_ptr<SessionTab> tab = std::move(tab_pair.second);
     // Do not restore the panels.
+#if !BUILDFLAG(IS_IOS)
     if (::vivaldi::ParseVivPanelId(tab->viv_ext_data))
       continue;
+#endif
     if (!tab->window_id.id() || tab->navigations.empty())
       continue;
 
@@ -715,8 +717,12 @@ void CreateTabsAndWindows(
           if (!iter.ReadString(&saved_guid)) {
             return;
           }
-
           group->saved_guid = saved_guid;
+        } else {
+          // Explicitly update the |saved_guid| to nullopt if the group
+          // isn't saved. This is to ensure the right value is set when there
+          // are multiple entries in the append log file.
+          group->saved_guid = std::nullopt;
         }
 
         break;

@@ -19,7 +19,8 @@ static jlong JNI_PageActionsService_Init(
   return reinterpret_cast<intptr_t>(page_actions_service);
 }
 
-PageActionsServiceAndroid::PageActionsServiceAndroid(JNIEnv* env, jobject obj)
+PageActionsServiceAndroid::PageActionsServiceAndroid(JNIEnv* env,
+  const base::android::JavaRef<jobject>& obj)
     : weak_java_ref_(env, obj) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   DCHECK(profile);

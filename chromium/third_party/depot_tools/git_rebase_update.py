@@ -16,6 +16,7 @@ import os
 from fnmatch import fnmatch
 from pprint import pformat
 
+import gclient_utils
 import git_common as git
 
 STARTING_BRANCH_KEY = 'depot-tools.rebase-update.starting-branch'
@@ -231,7 +232,23 @@ def rebase_branch(branch, parent, start_hash):
     return True
 
 
+def with_downstream_branches(base_branches, branch_tree):
+    """Returns a set of base_branches and all downstream branches."""
+    downstream_branches = set()
+    for branch, parent in git.topo_iter(branch_tree):
+        if parent in base_branches or parent in downstream_branches:
+            downstream_branches.add(branch)
+
+    return downstream_branches.union(base_branches)
+
+
 def main(args=None):
+    if gclient_utils.IsEnvCog():
+        print(
+            'rebase-update command is not supported. Please navigate to source '
+            'control view in the activity bar to rebase your changes.',
+            file=sys.stderr)
+        return 1
     parser = argparse.ArgumentParser()
     parser.add_argument('--verbose', '-v', action='store_true')
     parser.add_argument('--keep-going',
@@ -246,6 +263,10 @@ def main(args=None):
     parser.add_argument('--current',
                         action='store_true',
                         help='Only rebase the current branch.')
+    parser.add_argument('--tree',
+                        action='store_true',
+                        help='Rebase all branches downstream from the '
+                        'selected branch(es).')
     parser.add_argument('branches',
                         nargs='*',
                         help='Branches to be rebased. All branches are assumed '
@@ -290,6 +311,10 @@ def main(args=None):
         branches_to_rebase.add(git.current_branch())
 
     skipped, branch_tree = git.get_branch_tree(use_limit=not opts.current)
+    if opts.tree:
+        branches_to_rebase = with_downstream_branches(branches_to_rebase,
+                                                      branch_tree)
+
     if branches_to_rebase:
         skipped = set(skipped).intersection(branches_to_rebase)
     for branch in skipped:

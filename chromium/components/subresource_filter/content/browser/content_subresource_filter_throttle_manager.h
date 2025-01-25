@@ -82,9 +82,7 @@ enum class SubresourceFilterAction {
 // subresource filter (e.g. each computes main frame activation separately).
 // Fenced frames are an exception. A fenced frame does create a separate Page
 // but is considered a "subresource filter child" of its embedder;
-// behaviorally, the subresource filter treats it like a regular iframe.
-// Portals also have their own Page but their behavior hasn't been considered
-// in detail yet; they are currently considered a root. See
+// behaviorally, the subresource filter treats it like a regular iframe. See
 // IsInSubresourceFilterRoot in
 // content_subresource_filter_web_contents_helper.cc. The term "main frame" is
 // avoided in subresource filter code to avoid ambiguity; instead, the main
@@ -148,7 +146,7 @@ class ContentSubresourceFilterThrottleManager
   // that is: main-frame, cross-document navigations that are not making an
   // existing page primary. In other cases, FromNavigationHandle will look up
   // the throttle manager from the page it is navigating in. This cannot (will
-  // DCHECK) be used for prerendering or BFCache activating navigations because
+  // CHECK) be used for prerendering or BFCache activating navigations because
   // which page to get a throttle manager from is ambiguous: the navigation
   // occurs in the primary frame tree but the non-primary page is the resulting
   // page.

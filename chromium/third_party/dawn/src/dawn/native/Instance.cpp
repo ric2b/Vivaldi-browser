@@ -65,10 +65,6 @@
 #include "dawn/native/X11Functions.h"
 #endif  // defined(DAWN_USE_X11)
 
-#if DAWN_PLATFORM_IS(ANDROID)
-#include "dawn/native/AHBFunctions.h"
-#endif  // DAWN_PLATFORM_IS(ANDROID)
-
 namespace dawn::native {
 
 // Forward definitions of each backend's "Connect" function that creates new BackendConnection.
@@ -113,19 +109,22 @@ wgpu::WGSLFeatureName ToWGPUFeature(tint::wgsl::LanguageFeature f) {
         return wgpu::WGSLFeatureName::WgpuName;
         DAWN_FOREACH_WGSL_FEATURE(CASE)
 #undef CASE
+        case tint::wgsl::LanguageFeature::kUndefined:
+            DAWN_UNREACHABLE();
     }
+    DAWN_UNREACHABLE();
 }
 
 }  // anonymous namespace
 
-wgpu::Bool APIGetInstanceFeatures(InstanceFeatures* features) {
+wgpu::Status APIGetInstanceFeatures(InstanceFeatures* features) {
     if (features->nextInChain != nullptr) {
-        return false;
+        return wgpu::Status::Error;
     }
 
     features->timedWaitAnyEnable = true;
     features->timedWaitAnyMaxCount = kTimedWaitAnyMaxCountDefault;
-    return true;
+    return wgpu::Status::Success;
 }
 
 InstanceBase* APICreateInstance(const InstanceDescriptor* descriptor) {
@@ -138,6 +137,11 @@ InstanceBase* APICreateInstance(const InstanceDescriptor* descriptor) {
 }
 
 // InstanceBase
+
+struct InstanceBase::DeprecationWarnings {
+    absl::flat_hash_set<std::string> emitted;
+    uint64_t count = 0;
+};
 
 // static
 ResultOrError<Ref<InstanceBase>> InstanceBase::Create(const InstanceDescriptor* descriptor) {
@@ -163,7 +167,8 @@ ResultOrError<Ref<InstanceBase>> InstanceBase::Create(const InstanceDescriptor* 
     return instance;
 }
 
-InstanceBase::InstanceBase(const TogglesState& instanceToggles) : mToggles(instanceToggles) {}
+InstanceBase::InstanceBase(const TogglesState& instanceToggles)
+    : mToggles(instanceToggles), mDeprecationWarnings(std::make_unique<DeprecationWarnings>()) {}
 
 InstanceBase::~InstanceBase() = default;
 
@@ -194,22 +199,8 @@ void InstanceBase::DisconnectDawnPlatform() {
 }
 
 void InstanceBase::WillDropLastExternalRef() {
-    // InstanceBase uses RefCountedWithExternalCount to break refcycles.
-
     // Stop tracking events. See comment on ShutDown.
     mEventManager.ShutDown();
-
-    // InstanceBase holds backends which hold Refs to PhysicalDeviceBases discovered, which hold
-    // Refs back to the InstanceBase.
-    // In order to break this cycle and prevent leaks, when the application drops the last external
-    // ref and WillDropLastExternalRef is called, the instance clears out any member refs to
-    // physical devices that hold back-refs to the instance - thus breaking any reference cycles.
-    for (auto& backend : mBackends) {
-        if (backend != nullptr) {
-            backend->ClearPhysicalDevices();
-        }
-    }
-
     mLoggingCallback = nullptr;
     mLoggingCallbackUserdata = nullptr;
 }
@@ -282,7 +273,7 @@ void InstanceBase::APIRequestAdapter(const RequestAdapterOptions* options,
 Future InstanceBase::APIRequestAdapterF(const RequestAdapterOptions* options,
                                         const RequestAdapterCallbackInfo& callbackInfo) {
     return APIRequestAdapter2(
-        options, {nullptr, ToAPI(callbackInfo.mode),
+        options, {ToAPI(callbackInfo.nextInChain), ToAPI(callbackInfo.mode),
                   [](WGPURequestAdapterStatus status, WGPUAdapter adapter, char const* message,
                      void* callback, void* userdata) {
                       auto cb = reinterpret_cast<WGPURequestAdapterCallback>(callback);
@@ -342,17 +333,17 @@ Future InstanceBase::APIRequestAdapter2(const RequestAdapterOptions* options,
 Ref<AdapterBase> InstanceBase::CreateAdapter(Ref<PhysicalDeviceBase> physicalDevice,
                                              FeatureLevel featureLevel,
                                              const DawnTogglesDescriptor* requiredAdapterToggles,
-                                             wgpu::PowerPreference powerPreference) const {
+                                             wgpu::PowerPreference powerPreference) {
     // Set up toggles state for default adapter from given toggles descriptor and inherit from
     // instance toggles.
     TogglesState adapterToggles =
         TogglesState::CreateFromTogglesDescriptor(requiredAdapterToggles, ToggleStage::Adapter);
     adapterToggles.InheritFrom(mToggles);
     // Set up forced and default adapter toggles for selected physical device.
-    physicalDevice->SetupBackendAdapterToggles(&adapterToggles);
+    physicalDevice->SetupBackendAdapterToggles(GetPlatform(), &adapterToggles);
 
-    return AcquireRef(
-        new AdapterBase(std::move(physicalDevice), featureLevel, adapterToggles, powerPreference));
+    return AcquireRef(new AdapterBase(this, std::move(physicalDevice), featureLevel, adapterToggles,
+                                      powerPreference));
 }
 
 const TogglesState& InstanceBase::GetTogglesState() const {
@@ -387,17 +378,15 @@ std::vector<Ref<AdapterBase>> InstanceBase::EnumerateAdapters(
         adapters.push_back(
             CreateAdapter(physicalDevice, featureLevel, togglesDesc, unpacked->powerPreference));
     }
-    return SortAdapters(std::move(adapters), options);
-}
 
-size_t InstanceBase::GetPhysicalDeviceCountForTesting() const {
-    size_t count = 0;
-    for (auto& backend : mBackends) {
-        if (backend != nullptr) {
-            count += backend->GetPhysicalDeviceCountForTesting();
-        }
+    if (options->backendType == wgpu::BackendType::D3D11 ||
+        options->backendType == wgpu::BackendType::D3D12) {
+        // If a D3D backend was requested, the order of the adapters returned by DXGI should be
+        // preserved instead of sorting by whether they are integrated vs. discrete. DXGI
+        // returns the correct order based on system settings and configuration.
+        return adapters;
     }
-    return count;
+    return SortAdapters(std::move(adapters), options);
 }
 
 BackendConnection* InstanceBase::GetBackendConnection(wgpu::BackendType backendType) {
@@ -516,10 +505,6 @@ BackendValidationLevel InstanceBase::GetBackendValidationLevel() const {
     return mBackendValidationLevel;
 }
 
-void InstanceBase::EnableBeginCaptureOnStartup(bool beginCaptureOnStartup) {
-    mBeginCaptureOnStartup = beginCaptureOnStartup;
-}
-
 bool InstanceBase::IsBeginCaptureOnStartupEnabled() const {
     return mBeginCaptureOnStartup;
 }
@@ -538,6 +523,17 @@ void InstanceBase::SetPlatformForTesting(dawn::platform::Platform* platform) {
 
 dawn::platform::Platform* InstanceBase::GetPlatform() {
     return mPlatform;
+}
+
+uint64_t InstanceBase::GetDeprecationWarningCountForTesting() {
+    return mDeprecationWarnings->count;
+}
+
+void InstanceBase::EmitDeprecationWarning(const std::string& message) {
+    mDeprecationWarnings->count++;
+    if (mDeprecationWarnings->emitted.insert(message).second) {
+        dawn::WarningLog() << message;
+    }
 }
 
 uint64_t InstanceBase::GetDeviceCountForTesting() const {
@@ -614,17 +610,6 @@ const X11Functions* InstanceBase::GetOrLoadX11Functions() {
 #endif  // defined(DAWN_USE_X11)
 }
 
-const AHBFunctions* InstanceBase::GetOrLoadAHBFunctions() {
-#if DAWN_PLATFORM_IS(ANDROID)
-    if (mAHBFunctions == nullptr) {
-        mAHBFunctions = std::make_unique<AHBFunctions>();
-    }
-    return mAHBFunctions.get();
-#else
-    DAWN_UNREACHABLE();
-#endif  // DAWN_PLATFORM_IS(ANDROID)
-}
-
 Surface* InstanceBase::APICreateSurface(const SurfaceDescriptor* descriptor) {
     UnpackedPtr<SurfaceDescriptor> unpacked;
     if (ConsumedError(ValidateSurfaceDescriptor(this, descriptor), &unpacked)) {
@@ -677,7 +662,7 @@ void InstanceBase::GatherWGSLFeatures(const DawnWGSLBlocklist* wgslBlocklist) {
                 break;
         }
 
-        if (enable) {
+        if (enable && wgslFeature != tint::wgsl::LanguageFeature::kUndefined) {
             mWGSLFeatures.emplace(ToWGPUFeature(wgslFeature));
             mTintLanguageFeatures.emplace(wgslFeature);
         }
@@ -688,15 +673,12 @@ void InstanceBase::GatherWGSLFeatures(const DawnWGSLBlocklist* wgslBlocklist) {
         for (size_t i = 0; i < wgslBlocklist->blocklistedFeatureCount; i++) {
             const char* name = wgslBlocklist->blocklistedFeatures[i];
             tint::wgsl::LanguageFeature tintFeature = tint::wgsl::ParseLanguageFeature(name);
-            wgpu::WGSLFeatureName feature = ToWGPUFeature(tintFeature);
-
-            // Ignore unknown features in the blocklist.
-            if (feature == wgpu::WGSLFeatureName::Undefined) {
+            if (tintFeature == tint::wgsl::LanguageFeature::kUndefined) {
+                // Ignore unknown features in the blocklist.
                 continue;
             }
-
             mTintLanguageFeatures.erase(tintFeature);
-            mWGSLFeatures.erase(feature);
+            mWGSLFeatures.erase(ToWGPUFeature(tintFeature));
         }
     }
 }

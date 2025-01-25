@@ -17,12 +17,14 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/toast/toast_manager_impl.h"
+#include "ash/wm/desks/desks_util.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_session.h"
 #include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/snap_group/snap_group.h"
+#include "ash/wm/snap_group/snap_group_constants.h"
 #include "ash/wm/snap_group/snap_group_controller.h"
 #include "ash/wm/splitview/layout_divider_controller.h"
 #include "ash/wm/splitview/split_view_constants.h"
@@ -35,6 +37,7 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_metrics.h"
 #include "base/containers/adapters.h"
+#include "base/numerics/ranges.h"
 #include "base/time/time.h"
 #include "chromeos/ui/frame/caption_buttons/snap_controller.h"
 #include "components/app_restore/window_properties.h"
@@ -48,7 +51,6 @@
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/transient_window_manager.h"
 #include "ui/wm/core/window_util.h"
@@ -158,16 +160,6 @@ void ApplyAnimationSettings(
   }
 }
 
-// Returns BubbleDialogDelegateView if |transient_window| is a bubble dialog.
-views::BubbleDialogDelegate* AsBubbleDialogDelegate(
-    aura::Window* transient_window) {
-  views::Widget* widget =
-      views::Widget::GetWidgetForNativeWindow(transient_window);
-  if (!widget || !widget->widget_delegate())
-    return nullptr;
-  return widget->widget_delegate()->AsBubbleDialogDelegate();
-}
-
 // Returns the corresponding snap action source metric string component with
 // given `snap_action_source`.
 const char* GetSnapActionSourceMetricComponent(
@@ -209,6 +201,8 @@ const char* GetSnapActionSourceMetricComponent(
       return "Test";
     case WindowSnapActionSource::kLacrosSnapButtonOrWindowLayoutMenu:
       return "SnapByLacrosSnapButtonOrWindowLayoutMenu";
+    case WindowSnapActionSource::kSnapBySwapWindowsInSnapGroup:
+      return "SnapBySwapWindowsInSnapGroup";
   }
 }
 
@@ -221,6 +215,8 @@ void AppendUIModeToHistogram(std::string& histogram_name) {
 // Returns true if there is no window in partial overview (excluding the given
 // `window`).
 bool IsPartialOverviewEmptyForActiveDesk(aura::Window* window) {
+  // Use `BuildMruWindowList()` to include all window types, e.g. always-on-top
+  // windows and floated windows.
   for (auto win :
        Shell::Get()->mru_window_tracker()->BuildMruWindowList(kActiveDesk)) {
     if (win != window && wm::GetTransientRoot(win) != window &&
@@ -258,7 +254,7 @@ void WindowTransformAnimationObserver::OnImplicitAnimationsCompleted() {
        wm::TransientWindowManager::GetOrCreate(window_)->transient_children()) {
     // For now we only care about bubble dialog type transient children.
     views::BubbleDialogDelegate* bubble_delegate_view =
-        AsBubbleDialogDelegate(transient_window);
+        window_util::AsBubbleDialogDelegate(transient_window);
     if (bubble_delegate_view) {
       if (!bubble_delegate_view->GetAnchorRect().IsEmpty() ||
           bubble_delegate_view->GetAnchorView()) {
@@ -300,7 +296,8 @@ void DoSplitviewOpacityAnimation(ui::Layer* layer,
       target_opacity = 1.f;
       break;
     default:
-      NOTREACHED() << "Not a valid split view opacity animation type.";
+      NOTREACHED_IN_MIGRATION()
+          << "Not a valid split view opacity animation type.";
       return;
   }
 
@@ -333,7 +330,7 @@ void DoSplitviewTransformAnimation(
     case SPLITVIEW_ANIMATION_SET_WINDOW_TRANSFORM:
       break;
     default:
-      NOTREACHED() << "Not a valid split view transform type.";
+      NOTREACHED_IN_MIGRATION() << "Not a valid split view transform type.";
       return;
   }
 
@@ -367,7 +364,7 @@ void DoSplitviewClipRectAnimation(
     case SPLITVIEW_ANIMATION_PREVIEW_AREA_SLIDE_OUT:
       break;
     default:
-      NOTREACHED() << "Not a valid split view clip rect type.";
+      NOTREACHED_IN_MIGRATION() << "Not a valid split view clip rect type.";
       return;
   }
 
@@ -387,14 +384,34 @@ int GetWindowLength(aura::Window* window, bool horizontal) {
   return horizontal ? bounds.width() : bounds.height();
 }
 
-bool IsPhysicallyLeftOrTop(aura::Window* window) {
-  chromeos::WindowStateType state_type =
-      WindowState::Get(window)->GetStateType();
-  CHECK(chromeos::IsSnappedWindowStateType(state_type));
-  if (IsLayoutPrimary(window)) {
-    return state_type == chromeos::WindowStateType::kPrimarySnapped;
+WindowStateType GetWindowStateTypeFromSnapPosition(SnapPosition snap_position) {
+  switch (snap_position) {
+    case SnapPosition::kPrimary:
+      return WindowStateType::kPrimarySnapped;
+    case SnapPosition::kSecondary:
+      return WindowStateType::kSecondarySnapped;
+    default:
+      NOTREACHED_NORETURN();
   }
-  return state_type == chromeos::WindowStateType::kSecondarySnapped;
+}
+
+SnapPosition ToSnapPosition(chromeos::WindowStateType type) {
+  switch (type) {
+    case WindowStateType::kPrimarySnapped:
+      return SnapPosition::kPrimary;
+    case WindowStateType::kSecondarySnapped:
+      return SnapPosition::kSecondary;
+    default:
+      NOTREACHED_NORETURN();
+  }
+}
+
+SplitViewOverviewSession* GetSplitViewOverviewSession(aura::Window* window) {
+  return RootWindowController::ForWindow(window)->split_view_overview_session();
+}
+
+bool IsSnapped(aura::Window* window) {
+  return window && WindowState::Get(window)->IsSnapped();
 }
 
 void SetWindowTransformDuringResizing(aura::Window* window,
@@ -658,6 +675,16 @@ bool IsPhysicallyLeftOrTop(SnapPosition position,
                                                : SnapPosition::kSecondary);
 }
 
+bool IsPhysicallyLeftOrTop(aura::Window* window) {
+  chromeos::WindowStateType state_type =
+      WindowState::Get(window)->GetStateType();
+  CHECK(chromeos::IsSnappedWindowStateType(state_type));
+  if (IsLayoutPrimary(window)) {
+    return state_type == chromeos::WindowStateType::kPrimarySnapped;
+  }
+  return state_type == chromeos::WindowStateType::kSecondarySnapped;
+}
+
 int GetDividerPositionUpperLimit(aura::Window* root_window) {
   const gfx::Rect work_area_bounds =
       screen_util::GetDisplayWorkAreaBoundsInScreenForActiveDeskContainer(
@@ -689,8 +716,12 @@ int CalculateDividerPosition(aura::Window* root_window,
   // 1-DIP gap between snapped windows precludes multiresizing. See b/262011280.
   const float snap_length = (divider_upper_limit - divider_delta) * snap_ratio;
 
+  const bool is_layout_primary = IsLayoutPrimary(root_window);
+  const bool snap_to_left_or_top =
+      (is_layout_primary && snap_position == SnapPosition::kPrimary) ||
+      (!is_layout_primary && snap_position == SnapPosition::kSecondary);
   return std::clamp(
-      static_cast<int>(snap_position == SnapPosition::kPrimary
+      static_cast<int>(snap_to_left_or_top
                            ? snap_length
                            : divider_upper_limit - snap_length - divider_delta),
       0, divider_upper_limit);
@@ -807,14 +838,38 @@ gfx::Rect CalculateSnappedWindowBoundsInScreen(
   return snapped_window_bounds_in_screen;
 }
 
-chromeos::WindowStateType GetOppositeSnapType(aura::Window* window) {
-  CHECK(window);
-  WindowState* window_state = WindowState::Get(window);
-  CHECK(window_state->IsSnapped());
-  return window_state->GetStateType() ==
-                 chromeos::WindowStateType::kPrimarySnapped
-             ? chromeos::WindowStateType::kSecondarySnapped
-             : chromeos::WindowStateType::kPrimarySnapped;
+SnapViewType ToSnapViewType(chromeos::WindowStateType state_type) {
+  switch (state_type) {
+    case chromeos::WindowStateType::kPrimarySnapped:
+      return SnapViewType::kPrimary;
+    case chromeos::WindowStateType::kSecondarySnapped:
+      return SnapViewType::kSecondary;
+    default:
+      NOTREACHED_NORETURN();
+  }
+}
+
+chromeos::WindowStateType ToWindowStateType(SnapViewType snap_type) {
+  switch (snap_type) {
+    case SnapViewType::kPrimary:
+      return chromeos::WindowStateType::kPrimarySnapped;
+    case SnapViewType::kSecondary:
+      return chromeos::WindowStateType::kSecondarySnapped;
+  }
+}
+
+SnapViewType GetOppositeSnapType(SnapViewType snap_type) {
+  switch (snap_type) {
+    case SnapViewType::kPrimary:
+      return SnapViewType::kSecondary;
+    case SnapViewType::kSecondary:
+      return SnapViewType::kPrimary;
+  }
+}
+
+SnapViewType GetOppositeSnapType(aura::Window* window) {
+  return GetOppositeSnapType(
+      ToSnapViewType(WindowState::Get(window)->GetStateType()));
 }
 
 bool CanSnapActionSourceStartFasterSplitView(
@@ -823,8 +878,9 @@ bool CanSnapActionSourceStartFasterSplitView(
     case WindowSnapActionSource::kDragWindowToEdgeToSnap:
     case WindowSnapActionSource::kSnapByWindowLayoutMenu:
     case WindowSnapActionSource::kLongPressCaptionButtonToSnap:
+    case WindowSnapActionSource::kDragOrSelectOverviewWindowToSnap:
     case WindowSnapActionSource::kTest:
-    case ash::WindowSnapActionSource::kLacrosSnapButtonOrWindowLayoutMenu:
+    case WindowSnapActionSource::kLacrosSnapButtonOrWindowLayoutMenu:
       // We only start partial overview for the above snap sources.
       return true;
     default:
@@ -837,22 +893,42 @@ bool ShouldExcludeForOcclusionCheck(const aura::Window* window,
   // `window` should be excluded for occlusion check under the following
   // conditions:
   // 1. When `window` is not on the same root window as `target_root`;
-  // 2. When it is not visible or minimized;
-  // 3. When it is a float or pip window.
+  // 2. When `window` does not belong to the active desk container, for example
+  // always-on-top window, float or pip window;
+  // 3. When it is not visible or minimized;
   if (window->GetRootWindow() != target_root || !window->IsVisible()) {
     return true;
   }
-  const auto* window_state = WindowState::Get(window);
-  return window_state->IsMinimized() || window_state->IsFloated() ||
-         window_state->IsPip();
+
+  if (!desks_util::IsActiveDeskContainer(window->parent())) {
+    return true;
+  }
+
+  return WindowState::Get(window)->IsMinimized();
 }
 
-aura::Window* GetOppositeVisibleSnappedWindow(aura::Window* window) {
-  // `BuildAppWindowList()` will exclude transient windows like the window
-  // layout menu and other bubble widgets.
-  const auto windows =
-      Shell::Get()->mru_window_tracker()->BuildAppWindowList(kActiveDesk);
-  const auto opposite_snap_type = GetOppositeSnapType(window);
+aura::Window::Windows GetActiveDeskAppWindowsInZOrder(aura::Window* root) {
+  aura::Window::Windows windows;
+  const auto children =
+      desks_util::GetActiveDeskContainerForRoot(root)->children();
+  // Iterate through the desk container's children in reversed order.
+  for (const auto& child : base::Reversed(children)) {
+    if (CanIncludeWindowInAppMruList(child)) {
+      windows.push_back(child.get());
+    }
+  }
+  return windows;
+}
+
+aura::Window* GetTopmostVisibleWindowOfSnapType(aura::Window* window_to_ignore,
+                                                aura::Window* target_root,
+                                                SnapViewType snap_type) {
+  // `GetActiveDeskAppWindowsInZOrder()` will exclude transient windows like the
+  // window layout menu and other bubble widgets.
+  aura::Window::Windows windows = GetActiveDeskAppWindowsInZOrder(target_root);
+  const chromeos::WindowStateType target_state_type =
+      ToWindowStateType(snap_type);
+  auto* overview_session = GetOverviewSession();
 
   // Track the union bounds of the windows that are more recently used than the
   // currently iterated window, i.e. `top_window` below to check the occlusion
@@ -860,17 +936,17 @@ aura::Window* GetOppositeVisibleSnappedWindow(aura::Window* window) {
   gfx::Rect union_bounds;
   for (aura::Window* top_window : windows) {
     // The `top_window` should be excluded for occlusion check when it is the
-    // `window` itself or if `ShouldExcludeForOcclusionCheck()` is true.
+    // `window_to_ignore` itself or if `ShouldExcludeForOcclusionCheck()` is
+    // true.
     const bool should_be_excluded_for_occlusion_check =
-        top_window == window ||
-        ShouldExcludeForOcclusionCheck(top_window, window->GetRootWindow());
+        top_window == window_to_ignore ||
+        ShouldExcludeForOcclusionCheck(top_window, target_root);
 
     if (should_be_excluded_for_occlusion_check) {
       continue;
     }
 
-    if (IsInOverviewSession() &&
-        GetOverviewSession()->IsWindowInOverview(top_window)) {
+    if (overview_session && overview_session->IsWindowInOverview(top_window)) {
       // Skip any windows that are in overview, since they are visually not
       // snapped to the user.
       continue;
@@ -878,7 +954,7 @@ aura::Window* GetOppositeVisibleSnappedWindow(aura::Window* window) {
 
     const auto* top_window_state = WindowState::Get(top_window);
     const gfx::Rect top_window_bounds = top_window->GetBoundsInScreen();
-    if (top_window_state->GetStateType() == opposite_snap_type) {
+    if (top_window_state->GetStateType() == target_state_type) {
       // Ensure that `top_window` is fully visible by checking:
       // 1. There is no window stacked above `top_window` with bounds
       // confined or confining `top_window`. Note that if `union_bounds` is
@@ -898,27 +974,65 @@ aura::Window* GetOppositeVisibleSnappedWindow(aura::Window* window) {
   return nullptr;
 }
 
-bool ShouldConsiderWindowForFasterSplitView(
+aura::Window* GetOppositeVisibleSnappedWindow(aura::Window* window) {
+  return GetTopmostVisibleWindowOfSnapType(window, window->GetRootWindow(),
+                                           GetOppositeSnapType(window));
+}
+
+float GetSnapRatioGap(aura::Window* to_be_snapped,
+                      aura::Window* opposite_snapped) {
+  return std::abs(1.f - window_util::GetSnapRatioForWindow(to_be_snapped) -
+                  window_util::GetSnapRatioForWindow(opposite_snapped));
+}
+
+bool IsSnapRatioGapWithinThreshold(aura::Window* to_be_snapped,
+                                   aura::Window* opposite_snapped) {
+  const float snap_ratio_gap = GetSnapRatioGap(to_be_snapped, opposite_snapped);
+  // Use a more relaxed tolerance to allow approximate gaps.
+  const float diff = snap_ratio_gap - kSnapToReplaceRatioDiffThreshold;
+  return diff <= /*tolerance=*/0.01f;
+}
+
+float GetAutoSnapRatio(aura::Window* to_be_snapped_window,
+                       aura::Window* target_root,
+                       SnapViewType snap_type) {
+  if (IsSnapGroupEnabledInClamshellMode()) {
+    // `GetTopmostVisibleWindowOfSnapType()` will include windows in snap
+    // groups.
+    if (aura::Window* opposite_window =
+            GetTopmostVisibleWindowOfSnapType(to_be_snapped_window, target_root,
+                                              GetOppositeSnapType(snap_type))) {
+      // If the gap between `opposite_window` and `to_be_snapped_window`,
+      // which will always be the default snap ratio for drag to snap, exceeds
+      // the threshold, we won't allow auto grouping, so we also don't update
+      // the phantom snap ratio.
+      if (!IsSnapRatioGapWithinThreshold(to_be_snapped_window,
+                                         opposite_window)) {
+        return chromeos::kDefaultSnapRatio;
+      }
+      return 1.f - window_util::GetSnapRatioForWindow(opposite_window);
+    }
+  }
+  return chromeos::kDefaultSnapRatio;
+}
+
+bool ShouldConsiderWindowForSplitViewSetupView(
     aura::Window* window,
     WindowSnapActionSource snap_action_source) {
-  if (!window_util::IsFasterSplitScreenOrSnapGroupEnabledInClamshell()) {
-    return false;
-  }
-
   if (!OverviewController::Get()->CanEnterOverview() ||
       IsPartialOverviewEmptyForActiveDesk(window)) {
     return false;
   }
 
-    if (PrefService* pref =
-            Shell::Get()->session_controller()->GetActivePrefService();
-        pref && !pref->GetBoolean(prefs::kSnapWindowSuggestions)) {
-      return false;
-    }
+  if (PrefService* pref =
+          Shell::Get()->session_controller()->GetActivePrefService();
+      pref && !pref->GetBoolean(prefs::kSnapWindowSuggestions)) {
+    return false;
+  }
 
-    if (!CanSnapActionSourceStartFasterSplitView(snap_action_source)) {
-      return false;
-    }
+  if (!CanSnapActionSourceStartFasterSplitView(snap_action_source)) {
+    return false;
+  }
 
   return !IsInOverviewSession();
 }
@@ -926,40 +1040,23 @@ bool ShouldConsiderWindowForFasterSplitView(
 bool CanStartSplitViewOverviewSessionInClamshell(
     aura::Window* window,
     WindowSnapActionSource snap_action_source) {
-  // If kFasterSplitScreenSetup is disabled, only allow split view overview if
-  // the window is being dragged to snap while in overview. Note this is
-  // different from `IsFasterSplitScreenOrSnapGroupEnabledInClamshell()` which
-  // checks if kFasterSplitScreenSetup *or* kSnapGroup is enabled.
-  const bool is_overview_drag_to_snap =
-      snap_action_source ==
-      WindowSnapActionSource::kDragOrSelectOverviewWindowToSnap;
-  if (!Shell::Get()->IsInTabletMode() &&
-      !features::IsFasterSplitScreenSetupEnabled()) {
-    // TODO(b/344958499): Temporary fix. Investigate why `OnWindowSnapped()` is
-    // called multiple times.
-    return is_overview_drag_to_snap && !GetOppositeVisibleSnappedWindow(window);
-  }
-
   if (IsInOverviewSession() && WindowState::Get(window)->IsSnapped()) {
     return !RootWindowController::ForWindow(window)
                 ->split_view_overview_session();
   }
 
   // Skip starting `SplitViewOverviewSession` if a fully visible window snapped
-  // on the opposite side. Exception: If dragging in Overview, skip checking
-  // opposite-side snapped windows, as they're not visually snapped for the
-  // user in Overview.
-  if (!is_overview_drag_to_snap && GetOppositeVisibleSnappedWindow(window)) {
+  // on the opposite side. `GetOppositeVisibleSnappedWindow()` will exclude
+  // windows that are *in* overview.
+  if (GetOppositeVisibleSnappedWindow(window)) {
     return false;
   }
 
-  return ShouldConsiderWindowForFasterSplitView(window, snap_action_source);
+  return ShouldConsiderWindowForSplitViewSetupView(window, snap_action_source);
 }
 
 bool IsSnapGroupEnabledInClamshellMode() {
-  // `SnapGroupController` is only created if `kSnapGroup` is enabled in
-  // `Shell::Init()`.
-  return features::IsSnapGroupEnabled() && SnapGroupController::Get() &&
+  return features::IsSnapGroupEnabled() &&
          !display::Screen::GetScreen()->InTabletMode();
 }
 

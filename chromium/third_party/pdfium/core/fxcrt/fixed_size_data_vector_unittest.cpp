@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "core/fxcrt/span.h"
-#include "core/fxcrt/span_util.h"
+#include "core/fxcrt/stl_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -27,7 +27,18 @@ TEST(FixedSizeDataVector, UninitData) {
   ASSERT_EQ(4u, vec.span().size());
 
   constexpr int kData[] = {1, 2, 3, 4};
-  fxcrt::spancpy(vec.span(), pdfium::make_span(kData));
+  fxcrt::Copy(kData, vec.span());
+  EXPECT_THAT(vec.span(), testing::ElementsAre(1, 2, 3, 4));
+}
+
+TEST(FixedSizeDataVector, TryUninitData) {
+  auto vec = FixedSizeDataVector<int>::TryUninit(4);
+  EXPECT_FALSE(vec.empty());
+  ASSERT_EQ(4u, vec.size());
+  ASSERT_EQ(4u, vec.span().size());
+
+  constexpr int kData[] = {1, 2, 3, 4};
+  fxcrt::Copy(kData, vec.span());
   EXPECT_THAT(vec.span(), testing::ElementsAre(1, 2, 3, 4));
 }
 
@@ -39,7 +50,7 @@ TEST(FixedSizeDataVector, ZeroedData) {
   EXPECT_THAT(vec.span(), testing::ElementsAre(0, 0, 0, 0));
 
   constexpr int kData[] = {1, 2, 3, 4};
-  fxcrt::spancpy(vec.span(), pdfium::make_span(kData));
+  fxcrt::Copy(kData, vec.span());
   EXPECT_THAT(vec.span(), testing::ElementsAre(1, 2, 3, 4));
 }
 
@@ -51,14 +62,19 @@ TEST(FixedSizeDataVector, TryZeroedData) {
   EXPECT_THAT(vec.span(), testing::ElementsAre(0, 0, 0, 0));
 
   constexpr int kData[] = {1, 2, 3, 4};
-  fxcrt::spancpy(vec.span(), pdfium::make_span(kData));
+  fxcrt::Copy(kData, vec.span());
   EXPECT_THAT(vec.span(), testing::ElementsAre(1, 2, 3, 4));
 }
 
-TEST(FixedSizeDataVector, TryAllocFailure) {
+TEST(FixedSizeDataVector, TryAllocFailures) {
   constexpr size_t kCloseToMaxByteAlloc =
       std::numeric_limits<size_t>::max() - 100;
   auto vec = FixedSizeDataVector<int>::TryZeroed(kCloseToMaxByteAlloc);
+  EXPECT_TRUE(vec.empty());
+  EXPECT_EQ(0u, vec.size());
+  EXPECT_EQ(0u, vec.span().size());
+
+  vec = FixedSizeDataVector<int>::TryUninit(kCloseToMaxByteAlloc);
   EXPECT_TRUE(vec.empty());
   EXPECT_EQ(0u, vec.size());
   EXPECT_EQ(0u, vec.span().size());
@@ -68,7 +84,7 @@ TEST(FixedSizeDataVector, MoveConstruct) {
   constexpr int kData[] = {1, 2, 3, 4};
   auto vec = FixedSizeDataVector<int>::Uninit(4);
   ASSERT_EQ(4u, vec.span().size());
-  fxcrt::spancpy(vec.span(), pdfium::make_span(kData));
+  fxcrt::Copy(kData, vec.span());
   const int* const original_data_ptr = vec.span().data();
 
   FixedSizeDataVector<int> vec2(std::move(vec));
@@ -99,12 +115,23 @@ TEST(FixedSizeDataVector, MoveAssign) {
   auto vec2 = FixedSizeDataVector<int>::Zeroed(4);
   constexpr int kData[] = {1, 2, 3, 4};
   ASSERT_EQ(4u, vec2.span().size());
-  fxcrt::spancpy(vec2.span(), pdfium::make_span(kData));
+  fxcrt::Copy(kData, vec2.span());
 
   vec = std::move(vec2);
   EXPECT_TRUE(vec2.empty());
   EXPECT_EQ(4u, vec.span().size());
   EXPECT_THAT(vec.span(), testing::ElementsAre(1, 2, 3, 4));
+}
+
+TEST(FixedSizeDataVector, TruncatedFrom) {
+  constexpr int kData[] = {1, 2, 3, 4};
+  auto vec1 = FixedSizeDataVector<int>::Uninit(4);
+  fxcrt::Copy(kData, vec1.span());
+
+  auto vec2 = FixedSizeDataVector<int>::TruncatedFrom(std::move(vec1), 3);
+  EXPECT_EQ(0u, vec1.span().size());
+  EXPECT_EQ(nullptr, vec1.span().data());
+  EXPECT_THAT(vec2.span(), testing::ElementsAre(1, 2, 3));
 }
 
 TEST(FixedSizeDataVector, Subspan) {

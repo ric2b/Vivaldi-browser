@@ -19,13 +19,8 @@ use std::{env, fs, path::Path};
 
 use crate::CargoOptions;
 
-pub fn boringssl_check_everything(root: &Path, cargo_options: &CargoOptions) -> anyhow::Result<()> {
-    check_boringssl(root, cargo_options)?;
-    Ok(())
-}
-
 pub fn build_boringssl(root: &Path) -> anyhow::Result<()> {
-    let bindgen_version_req = VersionReq::parse(">=0.61.0")?;
+    let bindgen_version_req = VersionReq::parse(">=0.69.4")?;
     let bindgen_version = get_bindgen_version()?;
 
     if !bindgen_version_req.matches(&bindgen_version) {
@@ -77,11 +72,42 @@ pub fn check_boringssl(root: &Path, cargo_options: &CargoOptions) -> anyhow::Res
     run_cmd_shell(&bssl_dir, format!("cargo check {locked_arg}"))?;
     run_cmd_shell(&bssl_dir, "cargo fmt --check")?;
     run_cmd_shell(&bssl_dir, "cargo clippy --all-targets")?;
-    run_cmd_shell(&bssl_dir, format!("cargo test {locked_arg} -- --color=always"))?;
+    run_cmd_shell(&bssl_dir, cargo_options.test("check_boringssl", ""))?;
     run_cmd_shell(&bssl_dir, "cargo doc --no-deps")?;
+    run_cmd_shell(
+        root,
+        cargo_options.test(
+            "check_boringssl_ukey2",
+            "-p ukey2_connections -p ukey2_rs --no-default-features --features test_boringssl",
+        ),
+    )?;
+    Ok(())
+}
 
-    run_cmd_shell(root, "cargo test -p ukey2_connections -p ukey2_rs --no-default-features --features test_boringssl")?;
+/// Checks out latest boringssl commit and runs our crypto provider tests against it
+pub fn check_boringssl_at_head(root: &Path, cargo_options: &CargoOptions) -> anyhow::Result<()> {
+    // TODO: find a better way, a kokoro implemented auto-roller?
+    build_boringssl_at_latest(root)?;
 
+    let bssl_dir = root.join("crypto/crypto_provider_boringssl");
+    run_cmd_shell(&bssl_dir, "cargo check")?;
+    run_cmd_shell(&bssl_dir, cargo_options.test("check_boringssl_latest", ""))?;
+    Ok(())
+}
+
+fn build_boringssl_at_latest(root: &Path) -> anyhow::Result<()> {
+    // Now check boringssl against HEAD. Kokoro does not allow us to directly update the git submodule
+    // so we must use manual hackery instead :/
+    run_cmd_shell(root.parent().unwrap(), "rm -Rf third_party/boringssl")?;
+    run_cmd_shell(
+        &root.parent().unwrap().join("third_party"),
+        "git clone https://boringssl.googlesource.com/boringssl",
+    )?;
+    run_cmd_shell(
+        &root.parent().unwrap().join("third_party/boringssl"),
+        "git checkout origin/master",
+    )?;
+    build_boringssl(root)?;
     Ok(())
 }
 

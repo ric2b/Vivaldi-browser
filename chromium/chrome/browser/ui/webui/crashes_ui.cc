@@ -95,6 +95,7 @@ class CrashesDOMHandler : public WebUIMessageHandler {
 
   // WebUIMessageHandler implementation.
   void RegisterMessages() override;
+  void OnJavascriptDisallowed() override;
 
  private:
   void OnUploadListAvailable();
@@ -146,6 +147,10 @@ void CrashesDOMHandler::RegisterMessages() {
       crash_reporter::kCrashesUIRequestSingleCrashUpload,
       base::BindRepeating(&CrashesDOMHandler::HandleRequestSingleCrashUpload,
                           base::Unretained(this)));
+}
+
+void CrashesDOMHandler::OnJavascriptDisallowed() {
+  upload_list_->CancelLoadCallback();
 }
 
 void CrashesDOMHandler::HandleRequestCrashes(const base::Value::List& args) {

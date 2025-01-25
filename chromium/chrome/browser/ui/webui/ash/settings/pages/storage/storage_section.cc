@@ -42,7 +42,7 @@ const std::vector<SearchConcept>& GetDefaultSearchConcepts() {
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kStorage},
        {IDS_OS_SETTINGS_TAG_STORAGE_ALT1, IDS_OS_SETTINGS_TAG_STORAGE_ALT2,
-        SearchConcept::kAltTagEnd}},
+        IDS_OS_SETTINGS_TAG_STORAGE_ALT3, SearchConcept::kAltTagEnd}},
   });
   return *tags;
 }
@@ -96,6 +96,7 @@ void StorageSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"storageItemMyFiles", IDS_SETTINGS_STORAGE_ITEM_MY_FILES},
       {"storageItemOtherUsers", IDS_SETTINGS_STORAGE_ITEM_OTHER_USERS},
       {"storageItemSystem", IDS_SETTINGS_STORAGE_ITEM_SYSTEM},
+      {"storageItemEncryption", IDS_SETTINGS_STORAGE_ITEM_ENCRYPTION_LABEL},
       {"storageOverviewAriaLabel", IDS_SETTINGS_STORAGE_OVERVIEW_ARIA_LABEL},
       {"storageSizeComputing", IDS_SETTINGS_STORAGE_SIZE_CALCULATING},
       {"storageSizeUnknown", IDS_SETTINGS_STORAGE_SIZE_UNKNOWN},

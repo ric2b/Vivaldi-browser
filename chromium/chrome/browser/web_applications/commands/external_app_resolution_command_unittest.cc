@@ -5,6 +5,7 @@
 #include "chrome/browser/web_applications/commands/external_app_resolution_command.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <tuple>
 
@@ -36,6 +37,7 @@
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
+#include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_contents/web_app_data_retriever.h"
 #include "chrome/browser/web_applications/web_contents/web_contents_manager.h"
 #include "components/services/app_service/public/cpp/icon_info.h"
@@ -43,11 +45,13 @@
 #include "components/webapps/browser/installable/installable_logging.h"
 #include "components/webapps/browser/web_contents/web_app_url_loader.h"
 #include "components/webapps/common/web_app_id.h"
+#include "components/webapps/common/web_page_metadata.mojom.h"
 #include "net/http/http_status_code.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/size.h"
 
+using base::BucketsAre;
 using testing::_;
 using testing::Return;
 
@@ -124,13 +128,6 @@ class ExternalAppResolutionCommandTest : public WebAppTest {
 
   void SetUp() override {
     WebAppTest::SetUp();
-    auto shortcut_manager = std::make_unique<TestShortcutManager>(profile());
-    shortcut_manager_ = shortcut_manager.get();
-    FakeWebAppProvider::Get(profile())
-        ->GetOsIntegrationManager()
-        .AsTestOsIntegrationManager()
-        ->SetShortcutManager(std::move(shortcut_manager));
-
     auto ui_manager = std::make_unique<MockWebAppUiManager>();
     ui_manager_ = ui_manager.get();
     web_app::FakeWebAppProvider::Get(profile())->SetWebAppUiManager(
@@ -140,7 +137,6 @@ class ExternalAppResolutionCommandTest : public WebAppTest {
   }
 
   void TearDown() override {
-    shortcut_manager_ = nullptr;
     ui_manager_ = nullptr;
     WebAppTest::TearDown();
   }
@@ -245,8 +241,6 @@ class ExternalAppResolutionCommandTest : public WebAppTest {
         .AsTestOsIntegrationManager();
   }
 
-  TestShortcutManager* shortcut_manager() { return shortcut_manager_; }
-
   FakeWebContentsManager& fake_web_contents_manager() {
     return static_cast<FakeWebContentsManager&>(
         fake_provider().web_contents_manager());
@@ -262,7 +256,6 @@ class ExternalAppResolutionCommandTest : public WebAppTest {
 
  private:
   base::flat_map<webapps::AppId, BitmapData> app_to_icons_data_;
-  raw_ptr<TestShortcutManager> shortcut_manager_ = nullptr;
   raw_ptr<MockWebAppUiManager> ui_manager_ = nullptr;
 };
 
@@ -762,8 +755,11 @@ TEST_F(ExternalAppResolutionCommandTest, InstallWithWebAppInfoSucceeds) {
             webapps::WebappInstallSource::EXTERNAL_DEFAULT);
 
   // Ensure that the WebApp.Install.Result histogram is only measured once.
-  tester.ExpectBucketCount("WebApp.Install.Result", /*sample=*/true,
-                           /*expected_count=*/1);
+  EXPECT_THAT(tester.GetAllSamples("WebApp.Install.Result"),
+              BucketsAre(base::Bucket(true, 1)));
+  EXPECT_THAT(tester.GetAllSamples("WebApp.Install.Source.Success"),
+              BucketsAre(base::Bucket(
+                  webapps::WebappInstallSource::EXTERNAL_DEFAULT, 1)));
 }
 
 TEST_F(ExternalAppResolutionCommandTest, InstallWithWebAppInfoFails) {
@@ -792,8 +788,11 @@ TEST_F(ExternalAppResolutionCommandTest, InstallWithWebAppInfoFails) {
   EXPECT_FALSE(result.app_id.has_value());
 
   EXPECT_FALSE(id.has_value());
-  tester.ExpectBucketCount("WebApp.Install.Result", /*sample=*/false,
-                           /*expected_count=*/1);
+  EXPECT_THAT(tester.GetAllSamples("WebApp.Install.Result"),
+              BucketsAre(base::Bucket(false, 1)));
+  EXPECT_THAT(tester.GetAllSamples("WebApp.Install.Source.Failure"),
+              BucketsAre(base::Bucket(
+                  webapps::WebappInstallSource::EXTERNAL_DEFAULT, 1)));
 }
 
 TEST_F(ExternalAppResolutionCommandTest, SucessInstallForcedContainerWindow) {
@@ -834,100 +833,6 @@ TEST_F(ExternalAppResolutionCommandTest, GetWebAppInstallInfoFailed) {
             webapps::InstallResultCode::kGetWebAppInstallInfoFailed);
   ASSERT_FALSE(result.app_id.has_value());
   EXPECT_FALSE(registrar().IsLocallyInstalled(kWebAppId));
-}
-
-TEST_F(ExternalAppResolutionCommandTest,
-       InstallWebAppWithParams_DisplayModeFromWebAppInstallInfo) {
-  {
-    GURL url("https://example1.com/");
-    auto data_retriever = std::make_unique<FakeDataRetriever>();
-    data_retriever->BuildDefaultDataToRetrieve(url, url);
-
-    auto web_app_info = std::make_unique<WebAppInstallInfo>();
-    web_app_info->user_display_mode = mojom::UserDisplayMode::kBrowser;
-    data_retriever->SetRendererWebAppInstallInfo(std::move(web_app_info));
-    SetPageState({url, std::nullopt, ExternalInstallSource::kInternalDefault});
-
-    ExternalInstallOptions install_options(
-        url, /*user_display_mode=*/std::nullopt,
-        ExternalInstallSource::kExternalDefault);
-    auto result = InstallAndWait(install_options, std::move(data_retriever));
-
-    ASSERT_TRUE(result.app_id.has_value());
-    EXPECT_EQ(mojom::UserDisplayMode::kBrowser, provider()
-                                                    ->registrar_unsafe()
-                                                    .GetAppById(*result.app_id)
-                                                    ->user_display_mode());
-  }
-  {
-    GURL url("https://example2.com/");
-    auto data_retriever = std::make_unique<FakeDataRetriever>();
-    data_retriever->BuildDefaultDataToRetrieve(url, url);
-
-    auto web_app_info = std::make_unique<WebAppInstallInfo>();
-    web_app_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
-    data_retriever->SetRendererWebAppInstallInfo(std::move(web_app_info));
-    SetPageState({url, std::nullopt, ExternalInstallSource::kInternalDefault});
-
-    ExternalInstallOptions install_options(
-        url, /*user_display_mode=*/std::nullopt,
-        ExternalInstallSource::kExternalDefault);
-    auto result = InstallAndWait(install_options, std::move(data_retriever));
-
-    ASSERT_TRUE(result.app_id.has_value());
-    EXPECT_EQ(mojom::UserDisplayMode::kStandalone,
-              provider()
-                  ->registrar_unsafe()
-                  .GetAppById(*result.app_id)
-                  ->user_display_mode());
-  }
-}
-
-TEST_F(ExternalAppResolutionCommandTest,
-       InstallWebAppWithParams_DisplayModeOverrideByExternalInstallOptions) {
-  {
-    GURL url("https://example3.com/");
-    auto data_retriever = std::make_unique<FakeDataRetriever>();
-    data_retriever->BuildDefaultDataToRetrieve(url, url);
-
-    auto web_app_info = std::make_unique<WebAppInstallInfo>();
-    web_app_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
-    data_retriever->SetRendererWebAppInstallInfo(std::move(web_app_info));
-    SetPageState({url, std::nullopt, ExternalInstallSource::kInternalDefault});
-
-    ExternalInstallOptions install_options(
-        url, mojom::UserDisplayMode::kBrowser,
-        ExternalInstallSource::kExternalDefault);
-    auto result = InstallAndWait(install_options, std::move(data_retriever));
-
-    ASSERT_TRUE(result.app_id.has_value());
-    EXPECT_EQ(mojom::UserDisplayMode::kBrowser, provider()
-                                                    ->registrar_unsafe()
-                                                    .GetAppById(*result.app_id)
-                                                    ->user_display_mode());
-  }
-  {
-    GURL url("https://example4.com/");
-    auto data_retriever = std::make_unique<FakeDataRetriever>();
-    data_retriever->BuildDefaultDataToRetrieve(url, url);
-    SetPageState({url, std::nullopt, ExternalInstallSource::kInternalDefault});
-
-    auto web_app_info = std::make_unique<WebAppInstallInfo>();
-    web_app_info->user_display_mode = mojom::UserDisplayMode::kBrowser;
-    data_retriever->SetRendererWebAppInstallInfo(std::move(web_app_info));
-
-    ExternalInstallOptions install_options(
-        url, mojom::UserDisplayMode::kStandalone,
-        ExternalInstallSource::kExternalDefault);
-    auto result = InstallAndWait(install_options, std::move(data_retriever));
-
-    ASSERT_TRUE(result.app_id.has_value());
-    EXPECT_EQ(mojom::UserDisplayMode::kStandalone,
-              provider()
-                  ->registrar_unsafe()
-                  .GetAppById(*result.app_id)
-                  ->user_display_mode());
-  }
 }
 
 TEST_F(ExternalAppResolutionCommandTest, UpgradeLock) {
@@ -1011,10 +916,8 @@ TEST_F(ExternalAppResolutionCommandTest,
   {
     auto data_retriever = std::make_unique<FakeDataRetriever>();
     data_retriever->BuildDefaultDataToRetrieve(kWebAppUrl, kWebAppScope);
-
-    auto web_app_info = std::make_unique<WebAppInstallInfo>();
-    web_app_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
-    data_retriever->SetRendererWebAppInstallInfo(std::move(web_app_info));
+    data_retriever->SetWebPageMetadata(kWebAppUrl, u"Page Title",
+                                       /*opt_metadata=*/std::nullopt);
     SetPageState(
         {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault});
 
@@ -1049,7 +952,8 @@ TEST_F(ExternalAppResolutionCommandTest,
     new_data_retriever->SetIcons(std::move(icons_map));
     new_data_retriever->SetManifest(
         std::move(manifest), webapps::InstallableStatusCode::NO_ERROR_DETECTED);
-    new_data_retriever->SetEmptyRendererWebAppInstallInfo();
+    new_data_retriever->SetWebPageMetadata(kWebAppUrl, u"Page Title",
+                                           /*opt_metadata=*/std::nullopt);
     SetPageState(
         {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault});
 
@@ -1088,10 +992,6 @@ TEST_F(ExternalAppResolutionCommandTest, IconDownloadSuccessOverwriteOldIcons) {
       http_results[IconUrlWithSize::CreateForUnspecifiedSize(
           url_and_bitmap.first)] = net::HttpStatusCode::HTTP_OK;
     }
-
-    auto web_app_info = std::make_unique<WebAppInstallInfo>();
-    web_app_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
-
     auto data_retriever = std::make_unique<FakeDataRetriever>();
     data_retriever->BuildDefaultDataToRetrieve(kWebAppUrl, kWebAppScope);
     data_retriever->SetIconsDownloadedResult(IconsDownloadedResult::kCompleted);
@@ -1099,7 +999,8 @@ TEST_F(ExternalAppResolutionCommandTest, IconDownloadSuccessOverwriteOldIcons) {
     data_retriever->SetIcons(std::move(icons_map));
     data_retriever->SetManifest(
         std::move(manifest), webapps::InstallableStatusCode::NO_ERROR_DETECTED);
-    data_retriever->SetRendererWebAppInstallInfo(std::move(web_app_info));
+    data_retriever->SetWebPageMetadata(kWebAppUrl, u"Page Title",
+                                       /*opt_metadata=*/std::nullopt);
     SetPageState(
         {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault});
 
@@ -1143,7 +1044,8 @@ TEST_F(ExternalAppResolutionCommandTest, IconDownloadSuccessOverwriteOldIcons) {
     new_data_retriever->SetManifest(
         std::move(new_manifest),
         webapps::InstallableStatusCode::NO_ERROR_DETECTED);
-    new_data_retriever->SetEmptyRendererWebAppInstallInfo();
+    new_data_retriever->SetWebPageMetadata(kWebAppUrl, u"Page Title",
+                                           /*opt_metadata=*/std::nullopt);
     SetPageState(
         {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault});
 
@@ -1185,9 +1087,6 @@ TEST_F(ExternalAppResolutionCommandTest,
           url_and_bitmap.first)] = net::HttpStatusCode::HTTP_OK;
     }
 
-    auto web_app_info = std::make_unique<WebAppInstallInfo>();
-    web_app_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
-
     auto data_retriever = std::make_unique<FakeDataRetriever>();
     data_retriever->BuildDefaultDataToRetrieve(kWebAppUrl, kWebAppScope);
     data_retriever->SetIconsDownloadedResult(IconsDownloadedResult::kCompleted);
@@ -1195,7 +1094,8 @@ TEST_F(ExternalAppResolutionCommandTest,
     data_retriever->SetIcons(std::move(icons_map));
     data_retriever->SetManifest(
         std::move(manifest), webapps::InstallableStatusCode::NO_ERROR_DETECTED);
-    data_retriever->SetRendererWebAppInstallInfo(std::move(web_app_info));
+    data_retriever->SetWebPageMetadata(kWebAppUrl, u"Page Title",
+                                       /*opt_metadata=*/std::nullopt);
     SetPageState(
         {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault});
 
@@ -1240,7 +1140,8 @@ TEST_F(ExternalAppResolutionCommandTest,
     new_data_retriever->SetManifest(
         std::move(new_manifest),
         webapps::InstallableStatusCode::NO_ERROR_DETECTED);
-    new_data_retriever->SetEmptyRendererWebAppInstallInfo();
+    new_data_retriever->SetWebPageMetadata(kWebAppUrl, u"Page Title",
+                                           /*opt_metadata=*/std::nullopt);
     SetPageState(
         {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault});
 
@@ -1281,13 +1182,15 @@ TEST_F(ExternalAppResolutionCommandTest, SuccessWithUninstallAndReplace) {
       test::InstallDummyWebApp(profile(), "old_app", old_app_url);
   auto shortcut_info = std::make_unique<ShortcutInfo>();
   shortcut_info->url = old_app_url;
-  shortcut_manager()->SetShortcutInfoForApp(old_app, std::move(shortcut_info));
+  os_integration_manager()->SetShortcutInfoForApp(old_app,
+                                                  std::move(shortcut_info));
 
   ShortcutLocations shortcut_locations;
   shortcut_locations.on_desktop = false;
   shortcut_locations.in_quick_launch_bar = true;
   shortcut_locations.in_startup = true;
-  shortcut_manager()->SetAppExistingShortcuts(old_app_url, shortcut_locations);
+  os_integration_manager()->SetAppExistingShortcuts(old_app_url,
+                                                    shortcut_locations);
 
   ExternalInstallOptions install_options(
       kWebAppUrl, mojom::UserDisplayMode::kStandalone,

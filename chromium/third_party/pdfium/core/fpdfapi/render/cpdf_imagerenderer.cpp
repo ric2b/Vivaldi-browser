@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fpdfapi/render/cpdf_imagerenderer.h"
 
 #include <math.h>
@@ -38,6 +33,8 @@
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/maybe_owned.h"
+#include "core/fxcrt/zip.h"
+#include "core/fxge/agg/cfx_agg_imagerenderer.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_path.h"
@@ -254,27 +251,24 @@ RetainPtr<const CFX_DIBitmap> CPDF_ImageRenderer::CalculateDrawImage(
       mask_renderer.Continue(nullptr);
     }
     if (m_pLoader->MatteColor() != 0xffffffff) {
-      int matte_r = FXARGB_R(m_pLoader->MatteColor());
-      int matte_g = FXARGB_G(m_pLoader->MatteColor());
-      int matte_b = FXARGB_B(m_pLoader->MatteColor());
+      const int matte_r = FXARGB_R(m_pLoader->MatteColor());
+      const int matte_g = FXARGB_G(m_pLoader->MatteColor());
+      const int matte_b = FXARGB_B(m_pLoader->MatteColor());
+      RetainPtr<CFX_DIBitmap> dest_bitmap = bitmap_device.GetBitmap();
       for (int row = 0; row < rect.Height(); row++) {
-        uint8_t* dest_scan =
-            bitmap_device.GetBitmap()->GetWritableScanline(row).data();
-        const uint8_t* mask_scan =
-            mask_device.GetBitmap()->GetScanline(row).data();
-        for (int col = 0; col < rect.Width(); col++) {
-          int alpha = *mask_scan++;
-          if (!alpha) {
-            dest_scan += 4;
+        auto mask_scan = mask_bitmap->GetScanline(row).first(rect.Width());
+        auto dest_scan =
+            dest_bitmap->GetWritableScanlineAs<FX_BGRA_STRUCT<uint8_t>>(row);
+        for (auto [mask_ref, dest_ref] : fxcrt::Zip(mask_scan, dest_scan)) {
+          if (mask_ref == 0) {
             continue;
           }
-          int orig = (*dest_scan - matte_b) * 255 / alpha + matte_b;
-          *dest_scan++ = std::clamp(orig, 0, 255);
-          orig = (*dest_scan - matte_g) * 255 / alpha + matte_g;
-          *dest_scan++ = std::clamp(orig, 0, 255);
-          orig = (*dest_scan - matte_r) * 255 / alpha + matte_r;
-          *dest_scan++ = std::clamp(orig, 0, 255);
-          dest_scan++;
+          int orig_b = (dest_ref.blue - matte_b) * 255 / mask_ref + matte_b;
+          int orig_g = (dest_ref.green - matte_g) * 255 / mask_ref + matte_g;
+          int orig_r = (dest_ref.red - matte_r) * 255 / mask_ref + matte_r;
+          dest_ref.blue = std::clamp(orig_b, 0, 255);
+          dest_ref.green = std::clamp(orig_g, 0, 255);
+          dest_ref.red = std::clamp(orig_r, 0, 255);
         }
       }
     }
@@ -300,8 +294,7 @@ bool CPDF_ImageRenderer::DrawPatternImage() {
 
   CFX_Matrix new_matrix = GetDrawMatrix(rect);
   CFX_DefaultRenderDevice bitmap_device;
-  if (!bitmap_device.Create(rect.Width(), rect.Height(), FXDIB_Format::kArgb,
-                            nullptr)) {
+  if (!bitmap_device.Create(rect.Width(), rect.Height(), FXDIB_Format::kArgb)) {
     return true;
   }
 
@@ -347,8 +340,8 @@ bool CPDF_ImageRenderer::DrawMaskedImage() {
 
   CFX_Matrix new_matrix = GetDrawMatrix(rect);
   CFX_DefaultRenderDevice bitmap_device;
-  if (!bitmap_device.Create(rect.Width(), rect.Height(), FXDIB_Format::kRgb32,
-                            nullptr)) {
+  if (!bitmap_device.Create(rect.Width(), rect.Height(),
+                            FXDIB_Format::kRgb32)) {
     return true;
   }
   bitmap_device.Clear(0xffffffff);
@@ -397,9 +390,12 @@ bool CPDF_ImageRenderer::StartDIBBase() {
       m_ResampleOptions.bInterpolateBilinear = true;
     }
   }
-  if (m_pRenderStatus->GetRenderDevice()->StartDIBitsWithBlend(
+  RenderDeviceDriverIface::StartResult result =
+      m_pRenderStatus->GetRenderDevice()->StartDIBitsWithBlend(
           m_pDIBBase, m_Alpha, m_FillArgb, m_ImageMatrix, m_ResampleOptions,
-          &m_DeviceHandle, m_BlendType)) {
+          m_BlendType);
+  if (result.success) {
+    m_DeviceHandle = std::move(result.agg_image_renderer);
     if (m_DeviceHandle) {
       m_Mode = Mode::kBlend;
       return true;

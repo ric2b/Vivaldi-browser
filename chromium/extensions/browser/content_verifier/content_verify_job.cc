@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "extensions/browser/content_verifier/content_verify_job.h"
 
 #include <algorithm>
@@ -19,6 +24,7 @@
 #include "extensions/browser/content_hash_reader.h"
 #include "extensions/browser/content_verifier/content_hash.h"
 #include "extensions/browser/content_verifier/content_verifier.h"
+#include "extensions/common/constants.h"
 
 namespace extensions {
 
@@ -105,15 +111,15 @@ void ContentVerifyJob::DidGetContentHashOnIO(
       base::BindOnce(&ContentVerifyJob::OnHashesReady, this));
 }
 
-void ContentVerifyJob::Read(const char* data,
-                            int count,
-                            MojoResult read_result) {
+void ContentVerifyJob::BytesRead(const char* data,
+                                 int count,
+                                 MojoResult read_result) {
   base::AutoLock auto_lock(lock_);
   DCHECK(!done_reading_);
-  ReadImpl(data, count, read_result);
+  BytesReadImpl(data, count, read_result);
 }
 
-void ContentVerifyJob::Done() {
+void ContentVerifyJob::DoneReading() {
   base::AutoLock auto_lock(lock_);
   ScopedElapsedTimer timer(&time_spent_);
   if (failed_)
@@ -133,9 +139,9 @@ void ContentVerifyJob::Done() {
   }
 }
 
-void ContentVerifyJob::ReadImpl(const char* data,
-                                int count,
-                                MojoResult read_result) {
+void ContentVerifyJob::BytesReadImpl(const char* data,
+                                     int count,
+                                     MojoResult read_result) {
   ScopedElapsedTimer timer(&time_spent_);
   if (failed_)
     return;
@@ -252,7 +258,7 @@ void ContentVerifyJob::OnHashesReady(
   if (!queue_.empty()) {
     std::string tmp;
     queue_.swap(tmp);
-    ReadImpl(std::data(tmp), tmp.size(), MOJO_RESULT_OK);
+    BytesReadImpl(std::data(tmp), tmp.size(), MOJO_RESULT_OK);
     if (failed_)
       return;
   }
@@ -295,14 +301,24 @@ void ContentVerifyJob::DispatchFailureCallback(FailureReason reason) {
 }
 
 void ContentVerifyJob::ReportJobFinished(FailureReason reason) {
-  if (manifest_version_ == 2) {
-    base::UmaHistogramEnumeration(
-        "Extensions.ContentVerification.VerifyJobResultMV2", reason,
-        FAILURE_REASON_MAX);
-  } else if (manifest_version_ == 3) {
-    base::UmaHistogramEnumeration(
-        "Extensions.ContentVerification.VerifyJobResultMV3", reason,
-        FAILURE_REASON_MAX);
+  auto record_job_finished = [this, &reason](const char* mv2_histogram,
+                                             const char* mv3_histogram) {
+    if (manifest_version_ == 2) {
+      base::UmaHistogramEnumeration(mv2_histogram, reason, FAILURE_REASON_MAX);
+    } else if (manifest_version_ == 3) {
+      base::UmaHistogramEnumeration(mv3_histogram, reason, FAILURE_REASON_MAX);
+    }
+  };
+
+  record_job_finished("Extensions.ContentVerification.VerifyJobResultMV2",
+                      "Extensions.ContentVerification.VerifyJobResultMV3");
+
+  // TODO(crbug.com/325613709): Remove docs offline specific logging after a few
+  // milestones.
+  if (extension_id_ == extension_misc::kDocsOfflineExtensionId) {
+    record_job_finished(
+        "Extensions.ContentVerification.VerifyJobResultMV2.GoogleDocsOffline",
+        "Extensions.ContentVerification.VerifyJobResultMV3.GoogleDocsOffline");
   }
 
   scoped_refptr<TestObserver> test_observer = GetTestObserver();

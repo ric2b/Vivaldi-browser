@@ -8,15 +8,35 @@
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/shared_memory_mapping.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
+#include "base/trace_event/trace_event.h"
 #include "components/visitedlink/browser/visitedlink_delegate.h"
 #include "components/visitedlink/browser/visitedlink_event_listener.h"
 #include "components/visitedlink/core/visited_link.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/schemeful_site.h"
+#include "third_party/abseil-cpp/absl/container/inlined_vector.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+namespace {
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused. NOTE: Please also keep in line with
+// components/visitedlink/browser/visitedlink_writer.cc:AddFingerprint.
+//
+// LINT.IfChange(AddFingerprint)
+enum class AddFingerprint {
+  kNewVisit = 0,
+  kAlreadyVisited = 1,
+  kTableError = 2,
+  kMaxValue = kTableError,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/history/enums.xml:AddFingerprint)
+
+}  // namespace
 
 namespace visitedlink {
 
@@ -157,19 +177,27 @@ void PartitionedVisitedLinkWriter::TableBuilder::OnCompleteMainThread() {
 PartitionedVisitedLinkWriter::PartitionedVisitedLinkWriter(
     content::BrowserContext* browser_context,
     VisitedLinkDelegate* delegate)
-    : browser_context_(browser_context), delegate_(delegate) {}
+    : browser_context_(browser_context),
+      delegate_(delegate),
+      listener_(
+          std::make_unique<VisitedLinkEventListener>(browser_context, this)) {}
 
 PartitionedVisitedLinkWriter::PartitionedVisitedLinkWriter(
+    std::unique_ptr<Listener> listener,
     VisitedLinkDelegate* delegate,
     bool suppress_build,
     int32_t default_table_size)
     : delegate_(delegate),
+      listener_(std::move(listener)),
       suppress_build_(suppress_build),
-      table_size_override_(default_table_size) {}
+      table_size_override_(default_table_size) {
+  DCHECK(listener_);
+}
 
 PartitionedVisitedLinkWriter::~PartitionedVisitedLinkWriter() = default;
 
 bool PartitionedVisitedLinkWriter::Init() {
+  TRACE_EVENT0("browser", "PartitionedVisitedLinkWriter::Init");
   // Create a temporary table in mapped_table_memory_ full of null hashes. While
   // we build the table from history on the DB thread, this temporary
   // table will be available to query on the UI thread.
@@ -183,8 +211,10 @@ bool PartitionedVisitedLinkWriter::Init() {
     return true;
   }
 
-  // TODO(crbug.com/332364003): Notify the listener instance of the new
-  // `mapped_table_memory_` region.
+  // Send the temporary table to the renderer processes via `listener_`
+  if (mapped_table_memory_.region.IsValid()) {
+    listener_->NewTable(&mapped_table_memory_.region);
+  }
 
 #ifndef NDEBUG
   DebugValidate();
@@ -216,6 +246,9 @@ bool PartitionedVisitedLinkWriter::CreateVisitedLinkTableHelper(
   // The hashtable is a shared header followed by the entries.
   uint32_t alloc_size =
       num_entries * sizeof(Fingerprint) + sizeof(PartitionedSharedHeader);
+  base::UmaHistogramCustomCounts(
+      "History.VisitedLinks.HashTableSizeOnTableCreate",
+      alloc_size / 1024 / 1024, 1, 10000, 100);
 
   // Create the shared memory object.
   *memory = base::ReadOnlySharedMemoryRegion::Create(alloc_size);
@@ -285,10 +318,9 @@ void PartitionedVisitedLinkWriter::ResizeTable(int32_t new_size) {
       }
     }
   }
-
-  // TODO(crbug.com/332364003): Notify the listener instance of the new
-  // `mapped_table_memory_` region. We will send an update notification to all
-  // child processes so they read the new table.
+  // Send an update notification to all child processes so they read the new
+  // table.
+  listener_->NewTable(&mapped_table_memory_.region);
 
 #ifndef NDEBUG
   DebugValidate();
@@ -310,7 +342,9 @@ VisitedLinkWriter::Hash PartitionedVisitedLinkWriter::AddFingerprint(
     Fingerprint fingerprint,
     bool send_notifications) {
   if (!hash_table_ || table_length_ == 0) {
-    NOTREACHED();  // Not initialized.
+    base::UmaHistogramEnumeration("History.VisitedLinks.TryToAddFingerprint",
+                                  AddFingerprint::kTableError);
+    NOTREACHED_IN_MIGRATION();  // Not initialized.
     return null_hash_;
   }
 
@@ -319,6 +353,8 @@ VisitedLinkWriter::Hash PartitionedVisitedLinkWriter::AddFingerprint(
   while (true) {
     Fingerprint cur_fingerprint = FingerprintAt(cur_hash);
     if (cur_fingerprint == fingerprint) {
+      base::UmaHistogramEnumeration("History.VisitedLinks.TryToAddFingerprint",
+                                    AddFingerprint::kAlreadyVisited);
       return null_hash_;  // This fingerprint is already in there, do nothing.
     }
 
@@ -326,8 +362,13 @@ VisitedLinkWriter::Hash PartitionedVisitedLinkWriter::AddFingerprint(
       // End of probe sequence found, insert here.
       hash_table_[cur_hash] = fingerprint;
       used_items_++;
-      // TODO(crbug.com/332364003): if `send_notifications` is true, we would
-      // alert the listener about the added fingerprint here.
+      // If allowed, notify listener that a new visited link was added.
+      if (send_notifications) {
+        base::UmaHistogramEnumeration(
+            "History.VisitedLinks.TryToAddFingerprint",
+            AddFingerprint::kNewVisit);
+        listener_->Add(fingerprint);
+      }
       return cur_hash;
     }
 
@@ -337,7 +378,9 @@ VisitedLinkWriter::Hash PartitionedVisitedLinkWriter::AddFingerprint(
       // This means that we've wrapped around and are about to go into an
       // infinite loop. Something was wrong with the hashtable resizing
       // logic, so stop here.
-      NOTREACHED();
+      base::UmaHistogramEnumeration("History.VisitedLinks.TryToAddFingerprint",
+                                    AddFingerprint::kTableError);
+      NOTREACHED_IN_MIGRATION();
       return null_hash_;
     }
   }
@@ -356,7 +399,7 @@ void PartitionedVisitedLinkWriter::DeleteFingerprintsFromCurrentTable(
 
 bool PartitionedVisitedLinkWriter::DeleteFingerprint(Fingerprint fingerprint) {
   if (!hash_table_ || table_length_ == 0) {
-    NOTREACHED();  // Not initialized.
+    NOTREACHED_IN_MIGRATION();  // Not initialized.
     return false;
   }
   if (!IsVisited(fingerprint)) {
@@ -434,6 +477,7 @@ void PartitionedVisitedLinkWriter::OnTableBuildComplete(
       // Also add anything that was added while we were asynchronously
       // generating the new table.
       for (const auto& link : added_during_build_) {
+        CHECK(link.IsValid());
         const std::optional<uint64_t> salt =
             GetOrAddOriginSalt(link.frame_origin);
         CHECK(salt.has_value());
@@ -445,6 +489,7 @@ void PartitionedVisitedLinkWriter::OnTableBuildComplete(
       // Now handle deletions. Do not shrink the table now, we'll shrink it when
       // adding or deleting a visited link the next time.
       for (const auto& link : deleted_during_build_) {
+        CHECK(link.IsValid());
         const std::optional<uint64_t> salt =
             GetOrAddOriginSalt(link.frame_origin);
         CHECK(salt.has_value());
@@ -452,10 +497,17 @@ void PartitionedVisitedLinkWriter::OnTableBuildComplete(
       }
       deleted_during_build_.clear();
 
-      // TODO(crbug.com/332364003): Notify the listener of the new hashtable
-      // and ask the VisitedLinkReaders to reset their links.
+      // Send an update notification to all child processes.
+      listener_->NewTable(&mapped_table_memory_.region);
+      // All tabs which was loaded when table was being rebuilt
+      // invalidate their links again.
+      listener_->Reset(false);
     }
   }
+
+  // Now that we have completed our build on the DB thread, we can recover the
+  // per-origin salts of navigations that took place during the build.
+  listener_->UpdateOriginSalts();
 
   // Notify the unit test that the build is complete (will be NULL in prod.)
   if (!build_complete_task_.is_null()) {
@@ -505,6 +557,9 @@ uint32_t PartitionedVisitedLinkWriter::NewTableSizeForCount(
 }
 
 void PartitionedVisitedLinkWriter::AddVisitedLink(const VisitedLink& link) {
+  TRACE_EVENT0("browser", "PartitionedVisitedLinkWriter::AddVisitedLink");
+  base::UmaHistogramCounts10M("History.VisitedLinks.HashTableUsageOnLinkAdded",
+                              used_items_);
   Hash index = TryToAddVisitedLink(link);
   if (!table_builder_ && index != null_hash_) {
     // Not building the table from the VisitedLinkDatabase, so we may need to
@@ -519,7 +574,7 @@ VisitedLinkWriter::Hash PartitionedVisitedLinkWriter::TryToAddVisitedLink(
   // TODO(boliu): Move this check to HistoryService when IsOffTheRecord is
   // removed from BrowserContext.
   if (browser_context_ && browser_context_->IsOffTheRecord()) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return null_hash_;
   }
 
@@ -569,8 +624,8 @@ void PartitionedVisitedLinkWriter::DeleteAllVisitedLinks() {
   // us, otherwise, schedule writing the new table to disk ourselves.
   ResizeTableIfNecessary();
 
-  // TODO(crbug.com/332364003): Notify the listener instance that we reset the
-  // hashtable.
+  // Notify reader instances that hashtable state has changed.
+  listener_->Reset(false);
 }
 
 void PartitionedVisitedLinkWriter::DeleteVisitedLinks(
@@ -579,8 +634,8 @@ void PartitionedVisitedLinkWriter::DeleteVisitedLinks(
     return;
   }
 
-  // TODO(crbug.com/332364003): Notify the listener instance that we reset the
-  // hashtable.
+  // Notify reader instances that hashtable state has changed.
+  listener_->Reset(false);
 
   if (table_builder_.get()) {
     // A build is in progress, save this deletion in the temporary

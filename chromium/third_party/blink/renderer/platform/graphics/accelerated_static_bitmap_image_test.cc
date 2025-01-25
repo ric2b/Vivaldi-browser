@@ -2,9 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
 
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/test/null_task_runner.h"
 #include "base/test/task_environment.h"
 #include "components/viz/common/resources/release_callback.h"
@@ -49,7 +55,7 @@ gpu::SyncToken GenTestSyncToken(GLbyte id) {
 }
 
 scoped_refptr<StaticBitmapImage> CreateBitmap() {
-  auto mailbox = gpu::Mailbox::GenerateForSharedImage();
+  auto mailbox = gpu::Mailbox::Generate();
 
   return AcceleratedStaticBitmapImage::CreateFromCanvasMailbox(
       mailbox, GenTestSyncToken(100), 0, SkImageInfo::MakeN32Premul(100, 100),
@@ -74,7 +80,8 @@ class AcceleratedStaticBitmapImageTest : public Test {
 
  protected:
   base::test::TaskEnvironment task_environment_;
-  MockGLES2InterfaceWithSyncTokenSupport* gl_;
+  // RAW_PTR_EXCLUSION: #addr-of
+  RAW_PTR_EXCLUSION MockGLES2InterfaceWithSyncTokenSupport* gl_;
   scoped_refptr<viz::TestContextProvider> context_provider_;
 };
 

@@ -24,16 +24,12 @@
 #include "shared_test_util.h"
 
 TEST_F(NpCppTest, V1SimpleTestCase) {
-  auto maybe_credential_slab = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(maybe_credential_slab.ok());
-  auto maybe_credential_book =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(
-          maybe_credential_slab.value());
-  ASSERT_TRUE(maybe_credential_book.ok());
+  nearby_protocol::CredentialSlab credential_slab;
+  nearby_protocol::CredentialBook credential_book(credential_slab);
 
   auto deserialize_result =
-      nearby_protocol::Deserializer::DeserializeAdvertisement(
-          V1AdvPlaintext, maybe_credential_book.value());
+      nearby_protocol::Deserializer::DeserializeAdvertisement(V1AdvPlaintext,
+                                                              credential_book);
   ASSERT_EQ(deserialize_result.GetKind(),
             nearby_protocol::DeserializeAdvertisementResultKind::V1);
 
@@ -66,8 +62,8 @@ TEST_F(NpCppTest, V1SimpleTestCase) {
 }
 
 TEST_F(NpCppTest, TestV1AdvMoveConstructor) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   auto result = nearby_protocol::Deserializer::DeserializeAdvertisement(
       V1AdvPlaintext, book);
   ASSERT_EQ(result.GetKind(),
@@ -102,8 +98,8 @@ TEST_F(NpCppTest, TestV1AdvMoveConstructor) {
 }
 
 TEST_F(NpCppTest, TestV1AdvMoveAssignment) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   auto result = nearby_protocol::Deserializer::DeserializeAdvertisement(
       V1AdvPlaintext, book);
   ASSERT_EQ(result.GetKind(),
@@ -161,44 +157,43 @@ bool TryDeserializeNewV1Adv(nearby_protocol::CredentialBook &book) {
 }
 
 TEST_F(NpCppTest, TestSectionOwnership) {
-  auto maybe_credential_slab = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(maybe_credential_slab.ok());
-  auto maybe_credential_book =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(
-          maybe_credential_slab.value());
-  ASSERT_TRUE(maybe_credential_book.ok());
-
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   {
-    auto section = GetSection(maybe_credential_book.value());
+    auto section = GetSection(book);
     ASSERT_EQ(section.GetIdentityKind(),
               nearby_protocol::DeserializedV1IdentityKind::Plaintext);
     ASSERT_EQ(section.NumberOfDataElements(), 1);
     ASSERT_TRUE(section.TryGetDataElement(0).ok());
 
-    auto section2 = GetSection(maybe_credential_book.value());
+    auto section2 = GetSection(book);
     ASSERT_EQ(section2.GetIdentityKind(),
               nearby_protocol::DeserializedV1IdentityKind::Plaintext);
     ASSERT_EQ(section2.NumberOfDataElements(), 1);
     ASSERT_TRUE(section2.TryGetDataElement(0).ok());
 
-    ASSERT_FALSE(TryDeserializeNewV1Adv(maybe_credential_book.value()));
+    auto allocations =
+        nearby_protocol::GlobalConfig::GetCurrentHandleAllocationCount();
+    ASSERT_EQ(allocations.legible_v1_sections, 2U);
   }
 
-  // now that the section has gone out of scope, deserializing a new adv should
-  // succeed
-  ASSERT_TRUE(TryDeserializeNewV1Adv(maybe_credential_book.value()));
+  // now that the section has gone out of scope the allocation should be
+  // released
+  auto allocations =
+      nearby_protocol::GlobalConfig::GetCurrentHandleAllocationCount();
+  ASSERT_EQ(allocations.legible_v1_sections, 0U);
 }
 
 /*
  * Multiple sections are not supported in plaintext advertisements
  * TODO Update the below test to use encrypted sections
 TEST(NpCppTest, V1MultipleSections) {
-  auto maybe_credential_book = nearby_protocol::CredentialBook::TryCreate();
-  ASSERT_TRUE(maybe_credential_book.ok());
+  auto credential_book = nearby_protocol::CredentialBook::Create();
+  ASSERT_TRUE(credential_book.ok());
 
   auto deserialize_result =
       nearby_protocol::Deserializer::DeserializeAdvertisement(
-          V1AdvMultipleSections, maybe_credential_book.value());
+          V1AdvMultipleSections, credential_book);
   ASSERT_EQ(deserialize_result.GetKind(),
             nearby_protocol::DeserializeAdvertisementResultKind::V1);
 

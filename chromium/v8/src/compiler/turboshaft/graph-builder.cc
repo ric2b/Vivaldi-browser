@@ -177,7 +177,7 @@ struct GraphBuilder {
       if (stack->opcode() == IrOpcode::kHeapConstant &&
           *HeapConstantOf(stack->op()) ==
               ReadOnlyRoots(isolate->heap()).optimized_out()) {
-        // Nothing to do in this case.
+        builder->AddUnusedRegister();
       } else {
         const Operation& accumulator_op = __ output_graph().Get(Map(stack));
         const RegisterRepresentation accumulator_rep =
@@ -721,11 +721,11 @@ OpIndex GraphBuilder::Process(
           return __ TruncateFloat64ToInt64OverflowToMin(Map(node->InputAt(0)));
       }
     case IrOpcode::kFloat64InsertLowWord32: {
-      OpIndex high;
-      OpIndex low = Map(node->InputAt(1));
+      V<Word32> high;
+      V<Word32> low = Map<Word32>(node->InputAt(1));
       if (node->InputAt(0)->opcode() == IrOpcode::kFloat64InsertHighWord32) {
         // We can turn this into a single operation.
-        high = Map(node->InputAt(0)->InputAt(1));
+        high = Map<Word32>(node->InputAt(0)->InputAt(1));
       } else {
         // We need to extract the high word to combine it.
         high = __ Float64ExtractHighWord32(Map(node->InputAt(0)));
@@ -733,14 +733,14 @@ OpIndex GraphBuilder::Process(
       return __ BitcastWord32PairToFloat64(high, low);
     }
     case IrOpcode::kFloat64InsertHighWord32: {
-      OpIndex high = Map(node->InputAt(1));
-      OpIndex low;
+      V<Word32> high = Map<Word32>(node->InputAt(1));
+      V<Word32> low;
       if (node->InputAt(0)->opcode() == IrOpcode::kFloat64InsertLowWord32) {
         // We can turn this into a single operation.
-        low = Map(node->InputAt(0)->InputAt(1));
+        low = Map<Word32>(node->InputAt(0)->InputAt(1));
       } else {
         // We need to extract the low word to combine it.
-        low = __ Float64ExtractLowWord32(Map(node->InputAt(0)));
+        low = __ Float64ExtractLowWord32(Map<Float64>(node->InputAt(0)));
       }
       return __ BitcastWord32PairToFloat64(high, low);
     }
@@ -1237,7 +1237,7 @@ OpIndex GraphBuilder::Process(
       __ Retain(Map(node->InputAt(0)));
       return OpIndex::Invalid();
     case IrOpcode::kStackPointerGreaterThan:
-      return __ StackPointerGreaterThan(Map(node->InputAt(0)),
+      return __ StackPointerGreaterThan(Map<WordPtr>(node->InputAt(0)),
                                         StackCheckKindOf(op));
     case IrOpcode::kLoadStackCheckOffset:
       return __ StackCheckOffset();
@@ -1285,8 +1285,8 @@ OpIndex GraphBuilder::Process(
       }
       CanThrow can_throw =
           op->HasProperty(Operator::kNoThrow) ? CanThrow::kNo : CanThrow::kYes;
-      const TSCallDescriptor* ts_descriptor =
-          TSCallDescriptor::Create(call_descriptor, can_throw, graph_zone);
+      const TSCallDescriptor* ts_descriptor = TSCallDescriptor::Create(
+          call_descriptor, can_throw, LazyDeoptOnThrow::kNo, graph_zone);
 
       OpIndex frame_state_idx = OpIndex::Invalid();
       if (call_descriptor->NeedsFrameState()) {
@@ -1336,8 +1336,8 @@ OpIndex GraphBuilder::Process(
 
       CanThrow can_throw =
           op->HasProperty(Operator::kNoThrow) ? CanThrow::kNo : CanThrow::kYes;
-      const TSCallDescriptor* ts_descriptor =
-          TSCallDescriptor::Create(call_descriptor, can_throw, graph_zone);
+      const TSCallDescriptor* ts_descriptor = TSCallDescriptor::Create(
+          call_descriptor, can_throw, LazyDeoptOnThrow::kNo, graph_zone);
 
       __ TailCall(callee, base::VectorOf(arguments), ts_descriptor);
       return OpIndex::Invalid();
@@ -1570,7 +1570,7 @@ OpIndex GraphBuilder::Process(
       CHECK(m.HasResolvedValue() && m.Ref(broker).IsString() &&
             m.Ref(broker).AsString().IsContentAccessible());
       StringRef type_string = m.Ref(broker).AsString();
-      Handle<String> pattern_string =
+      DirectHandle<String> pattern_string =
           *type_string.ObjectIfContentAccessible(broker);
       std::unique_ptr<char[]> pattern = pattern_string->ToCString();
 
@@ -1944,8 +1944,9 @@ OpIndex GraphBuilder::Process(
       const int c_arg_count = params.argument_count();
 
       base::SmallVector<OpIndex, 16> slow_call_arguments;
-      DCHECK_EQ(node->op()->ValueInputCount() - c_arg_count,
-                n.SlowCallArgumentCount());
+      DCHECK_EQ(node->op()->ValueInputCount(),
+                c_arg_count + FastApiCallNode::kCallbackData +
+                    n.SlowCallArgumentCount());
       OpIndex slow_call_callee = Map(n.SlowCallArgument(0));
       for (int i = 1; i < n.SlowCallArgumentCount(); ++i) {
         slow_call_arguments.push_back(Map(n.SlowCallArgument(i)));
@@ -1968,7 +1969,7 @@ OpIndex GraphBuilder::Process(
               slow_call_callee, dominating_frame_state,
               base::VectorOf(slow_call_arguments),
               TSCallDescriptor::Create(params.descriptor(), CanThrow::kYes,
-                                       __ graph_zone()));
+                                       LazyDeoptOnThrow::kNo, __ graph_zone()));
 
           if (is_final_control) {
             // The `__ Call()` before has already created exceptional
@@ -1986,13 +1987,9 @@ OpIndex GraphBuilder::Process(
       for (int i = 0; i < c_arg_count; ++i) {
         arguments.push_back(Map(NodeProperties::GetValueInput(node, i)));
       }
-      OpIndex data_argument =
-          Map(n.SlowCallArgument(FastApiCallNode::kSlowCallDataArgumentIndex));
+      V<Object> data_argument = Map(n.CallbackData());
 
-      // The last slow call argument is the frame state, the one before is the
-      // context.
-      V<Context> context =
-          Map(n.SlowCallArgument(n.SlowCallArgumentCount() - 2));
+      V<Context> context = Map(n.Context());
 
       const FastApiCallParameters* parameters = FastApiCallParameters::Create(
           c_functions, resolution_result, __ graph_zone());
@@ -2016,11 +2013,11 @@ OpIndex GraphBuilder::Process(
         // arg. None of the above usually holds true for Wasm functions with
         // primitive types only, so we avoid generating an extra branch here.
 
-        V<Object> slow_call_result = V<Object>::Cast(
-            __ Call(slow_call_callee, dominating_frame_state,
-                    base::VectorOf(slow_call_arguments),
-                    TSCallDescriptor::Create(params.descriptor(),
-                                             CanThrow::kYes, __ graph_zone())));
+        V<Object> slow_call_result = V<Object>::Cast(__ Call(
+            slow_call_callee, dominating_frame_state,
+            base::VectorOf(slow_call_arguments),
+            TSCallDescriptor::Create(params.descriptor(), CanThrow::kYes,
+                                     LazyDeoptOnThrow::kNo, __ graph_zone())));
         GOTO(done, slow_call_result);
       }
       BIND(done, result);
@@ -2350,8 +2347,7 @@ OpIndex GraphBuilder::Process(
       return __ LoadStackPointer();
 
     case IrOpcode::kSetStackPointer:
-      __ SetStackPointer(Map(node->InputAt(0)),
-                         OpParameter<wasm::FPRelativeScope>(node->op()));
+      __ SetStackPointer(Map(node->InputAt(0)));
       return OpIndex::Invalid();
 
 #endif  // V8_ENABLE_WEBASSEMBLY
@@ -2359,7 +2355,9 @@ OpIndex GraphBuilder::Process(
     case IrOpcode::kJSStackCheck: {
       DCHECK_EQ(OpParameter<StackCheckKind>(node->op()),
                 StackCheckKind::kJSFunctionEntry);
-      __ StackCheck(StackCheckOp::Kind::kJSFunctionHeader);
+      V<Context> context = Map(node->InputAt(0));
+      V<FrameState> frame_state = Map(node->InputAt(1));
+      __ JSFunctionEntryStackCheck(context, frame_state);
       return OpIndex::Invalid();
     }
 
@@ -2399,6 +2397,14 @@ OpIndex GraphBuilder::Process(
       return __ Word32PairBinop(left_low, left_high, right_low, right_high,
                                 kind);
     }
+
+#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
+    case IrOpcode::kGetContinuationPreservedEmbedderData:
+      return __ GetContinuationPreservedEmbedderData();
+    case IrOpcode::kSetContinuationPreservedEmbedderData:
+      __ SetContinuationPreservedEmbedderData(Map(node->InputAt(0)));
+      return OpIndex::Invalid();
+#endif  // V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
 
     default:
       std::cerr << "unsupported node type: " << *node->op() << "\n";

@@ -11,6 +11,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
+import org.chromium.content_public.browser.webid.DigitalIdentityInterstitialType;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -21,12 +22,16 @@ import org.chromium.url.Origin;
 
 /** Shows modal dialog asking user whether they want to share their identity with website. */
 public class DigitalIdentitySafetyInterstitialController {
-    private DigitalIdentitySafetyInterstitialController() {}
+    private PropertyModel mDialogModel;
+    private Origin mOrigin;
 
-    public static void show(
+    public DigitalIdentitySafetyInterstitialController(Origin origin) {
+        mOrigin = origin;
+    }
+
+    public void show(
             ModalDialogManager modalDialogManager,
-            boolean isHighRisk,
-            Origin origin,
+            @DigitalIdentityInterstitialType int interstitialType,
             Callback<Integer> callback) {
         ModalDialogProperties.Controller controller =
                 new ModalDialogProperties.Controller() {
@@ -50,16 +55,16 @@ public class DigitalIdentitySafetyInterstitialController {
                 };
 
         int bodyTextResourceId =
-                isHighRisk
+                interstitialType == DigitalIdentityInterstitialType.HIGH_RISK
                         ? R.string.digital_identity_interstitial_high_risk_dialog_text
                         : R.string.digital_identity_interstitial_low_risk_dialog_text;
-        int positiveButtonTextResourceId =
-                isHighRisk
-                        ? R.string.digital_identity_interstitial_high_risk_positive_button_text
-                        : R.string.digital_identity_interstitial_low_risk_positive_button_text;
+        int negativeButtonTextResourceId =
+                interstitialType == DigitalIdentityInterstitialType.HIGH_RISK
+                        ? R.string.digital_identity_interstitial_high_risk_negative_button_text
+                        : R.string.digital_identity_interstitial_low_risk_negative_button_text;
         @ModalDialogProperties.ButtonStyles
         int buttonStyles =
-                isHighRisk
+                interstitialType == DigitalIdentityInterstitialType.HIGH_RISK
                         ? ModalDialogProperties.ButtonStyles.PRIMARY_OUTLINE_NEGATIVE_FILLED
                         : ModalDialogProperties.ButtonStyles.PRIMARY_FILLED_NEGATIVE_OUTLINE;
 
@@ -67,7 +72,8 @@ public class DigitalIdentitySafetyInterstitialController {
         String bodyText =
                 context.getString(
                         bodyTextResourceId,
-                        UrlFormatter.formatOriginForSecurityDisplay(origin, SchemeDisplay.SHOW));
+                        UrlFormatter.formatOriginForSecurityDisplay(
+                                mOrigin, SchemeDisplay.OMIT_CRYPTOGRAPHIC));
 
         Resources resources = context.getResources();
         PropertyModel.Builder dialogModelBuilder =
@@ -81,16 +87,28 @@ public class DigitalIdentitySafetyInterstitialController {
                         .with(
                                 ModalDialogProperties.POSITIVE_BUTTON_TEXT,
                                 resources,
-                                positiveButtonTextResourceId)
+                                R.string.continue_button)
                         .with(
                                 ModalDialogProperties.NEGATIVE_BUTTON_TEXT,
                                 resources,
-                                R.string.digital_identity_interstitial_negative_button_text)
+                                negativeButtonTextResourceId)
                         .with(ModalDialogProperties.BUTTON_STYLES, buttonStyles)
                         .with(
                                 ModalDialogProperties.BUTTON_TAP_PROTECTION_PERIOD_MS,
                                 UiUtils.PROMPT_INPUT_PROTECTION_SHORT_DELAY_MS);
-        modalDialogManager.showDialog(
-                dialogModelBuilder.build(), ModalDialogManager.ModalDialogType.APP);
+
+        mDialogModel = dialogModelBuilder.build();
+        modalDialogManager.showDialog(mDialogModel, ModalDialogManager.ModalDialogType.APP);
+    }
+
+    public void abort() {
+        Context context = ContextUtils.getApplicationContext();
+        String abortedMessage =
+                context.getString(
+                        R.string.digital_identity_interstitial_request_aborted_dialog_text,
+                        UrlFormatter.formatOriginForSecurityDisplay(
+                                mOrigin, SchemeDisplay.OMIT_CRYPTOGRAPHIC));
+        mDialogModel.set(ModalDialogProperties.MESSAGE_PARAGRAPH_2, abortedMessage);
+        mDialogModel.set(ModalDialogProperties.POSITIVE_BUTTON_DISABLED, true);
     }
 }

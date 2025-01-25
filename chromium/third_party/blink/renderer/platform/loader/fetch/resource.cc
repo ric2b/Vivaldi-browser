@@ -22,6 +22,11 @@
     Boston, MA 02110-1301, USA.
 */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/loader/fetch/resource.h"
 
 #include <stdint.h>
@@ -29,6 +34,7 @@
 #include <algorithm>
 #include <cassert>
 #include <memory>
+#include <utility>
 
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/default_clock.h"
@@ -210,21 +216,8 @@ void Resource::CheckResourceIntegrity() {
     return;
   }
 
-  const char* data = nullptr;
-  size_t data_length = 0;
-
-  // Edge case: If a resource actually has zero bytes then it will not
-  // typically have a resource buffer, but we still need to check integrity
-  // because people might want to assert a zero-length resource.
-  CHECK(DecodedSize() == 0 || Data());
-  if (Data()) {
-    data = Data()->Data();
-    data_length = Data()->size();
-  }
-
-  if (SubresourceIntegrity::CheckSubresourceIntegrity(IntegrityMetadata(), data,
-                                                      data_length, Url(), *this,
-                                                      integrity_report_info_)) {
+  if (SubresourceIntegrity::CheckSubresourceIntegrity(
+          IntegrityMetadata(), Data(), Url(), *this, integrity_report_info_)) {
     integrity_disposition_ = ResourceIntegrityDisposition::kPassed;
   } else {
     integrity_disposition_ = ResourceIntegrityDisposition::kFailed;
@@ -250,15 +243,39 @@ void Resource::MarkClientFinished(ResourceClient* client) {
   }
 }
 
-void Resource::AppendData(base::span<const char> data) {
-  TRACE_EVENT1("blink", "Resource::appendData", "length", data.size());
+void Resource::AppendData(
+    absl::variant<SegmentedBuffer, base::span<const char>> data) {
   DCHECK(!IsCacheValidator());
   DCHECK(!ErrorOccurred());
+  if (absl::holds_alternative<SegmentedBuffer>(data)) {
+    AppendDataImpl(std::move(absl::get<SegmentedBuffer>(data)));
+  } else {
+    CHECK(absl::holds_alternative<base::span<const char>>(data));
+    AppendDataImpl(absl::get<base::span<const char>>(data));
+  }
+}
+
+void Resource::AppendDataImpl(SegmentedBuffer&& buffer) {
+  TRACE_EVENT1("blink", "Resource::appendData", "length", buffer.size());
+  SegmentedBuffer* data_ptr = &buffer;
   if (options_.data_buffering_policy == kBufferData) {
-    if (data_)
-      data_->Append(data);
-    else
-      data_ = SharedBuffer::Create(data);
+    CHECK(!data_);
+    data_ = SharedBuffer::Create(std::move(buffer));
+    data_ptr = data_.get();
+    SetEncodedSize(data_->size());
+  }
+  for (const auto& span : *data_ptr) {
+    NotifyDataReceived(span);
+  }
+}
+
+void Resource::AppendDataImpl(base::span<const char> data) {
+  TRACE_EVENT1("blink", "Resource::appendData", "length", data.size());
+  if (options_.data_buffering_policy == kBufferData) {
+    if (!data_) {
+      data_ = SharedBuffer::Create();
+    }
+    data_->Append(data);
     SetEncodedSize(data_->size());
   }
   NotifyDataReceived(data);
@@ -1090,6 +1107,15 @@ void Resource::DidChangePriority(ResourceLoadPriority load_priority,
     loader_->DidChangePriority(load_priority, intra_priority_value);
 }
 
+void Resource::UpdateResourceWidth(const AtomicString& resource_width) {
+  if (resource_width) {
+    resource_request_.SetHttpHeaderField(AtomicString("sec-ch-width"),
+                                         resource_width);
+  } else {
+    resource_request_.ClearHttpHeaderField(AtomicString("sec-ch-width"));
+  }
+}
+
 // TODO(toyoshim): Consider to generate automatically. https://crbug.com/675515.
 static const char* InitiatorTypeNameToString(
     const AtomicString& initiator_type_name) {
@@ -1188,7 +1214,7 @@ const char* Resource::ResourceTypeToString(
     case ResourceType::kDictionary:
       return "Dictionary";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return InitiatorTypeNameToString(fetch_initiator_name);
 }
 
@@ -1214,7 +1240,7 @@ bool Resource::IsLoadEventBlockingResourceType() const {
     case ResourceType::kDictionary:
       return false;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -1237,8 +1263,8 @@ void Resource::UpdateMemoryCacheLastAccessedTime() {
   memory_cache_last_accessed_ = base::TimeTicks::Now();
 }
 
-scoped_refptr<BackgroundResponseProcessor>
-Resource::MaybeCreateBackgroundResponseProcessor() {
+std::unique_ptr<BackgroundResponseProcessorFactory>
+Resource::MaybeCreateBackgroundResponseProcessorFactory() {
   return nullptr;
 }
 

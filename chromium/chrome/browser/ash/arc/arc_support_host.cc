@@ -28,6 +28,7 @@
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/webui/ash/diagnostics_dialog.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/consent_auditor/consent_auditor.h"
@@ -166,7 +167,7 @@ std::ostream& operator<<(std::ostream& os, ArcSupportHost::UIPage ui_page) {
 
   // Some compiler reports an error even if all values of an enum-class are
   // covered individually in a switch statement.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return os;
 }
 
@@ -196,7 +197,7 @@ std::ostream& operator<<(std::ostream& os, ArcSupportHost::Error error) {
 
   // Some compiler reports an error even if all values of an enum-class are
   // covered individually in a switch statement.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return os;
 }
 
@@ -303,7 +304,7 @@ void ArcSupportHost::ShowPage(UIPage ui_page) {
       message.Set(kPage, "arc-loading");
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
   }
   message_host_->SendMessage(message);
@@ -603,9 +604,10 @@ bool ArcSupportHost::Initialize() {
   if (ash::features::IsCrosPrivacyHubLocationEnabled()) {
     loadtime_data.Set(
         "learnMoreLocationServices",
-        l10n_util::GetStringUTF16(
+        l10n_util::GetStringFUTF16(
             is_child ? IDS_CROS_OPT_IN_LEARN_MORE_LOCATION_SERVICES_CHILD
-                     : IDS_CROS_OPT_IN_LEARN_MORE_LOCATION_SERVICES));
+                     : IDS_CROS_OPT_IN_LEARN_MORE_LOCATION_SERVICES,
+            chrome::kPrivacyHubGeolocationAccuracyLearnMoreURL));
   } else {
     loadtime_data.Set(
         "learnMoreLocationServices",
@@ -672,7 +674,7 @@ void ArcSupportHost::SetWindowBound(const display::Display& display) {
 void ArcSupportHost::OnMessage(const base::Value::Dict& message) {
   const std::string* event = message.FindString(kEvent);
   if (!event) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 
@@ -705,7 +707,7 @@ void ArcSupportHost::OnMessage(const base::Value::Dict& message) {
         !is_backup_restore_managed.has_value() ||
         !is_location_service_enabled.has_value() ||
         !is_location_service_managed.has_value()) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
     }
 
@@ -761,23 +763,27 @@ void ArcSupportHost::OnMessage(const base::Value::Dict& message) {
     // If the user - not policy - controls Location Services setting, record
     // whether consent was given.
     if (!is_location_service_managed.value()) {
-      // TODO(b/327350824): Stop sending ARC controls to consent auditor.
-      if (!ash::features::IsCrosPrivacyHubLocationEnabled()) {
-        UserConsentTypes::ArcGoogleLocationServiceConsent
-            location_service_consent;
-        location_service_consent.set_confirmation_grd_id(
-            IDS_ARC_OPT_IN_DIALOG_BUTTON_AGREE);
+      UserConsentTypes::ArcGoogleLocationServiceConsent
+          location_service_consent;
+      location_service_consent.set_confirmation_grd_id(
+          IDS_ARC_OPT_IN_DIALOG_BUTTON_AGREE);
+
+      if (ash::features::IsCrosPrivacyHubLocationEnabled()) {
+        location_service_consent.add_description_grd_ids(
+            is_child ? IDS_CROS_OPT_IN_LOCATION_SETTING_CHILD
+                     : IDS_CROS_OPT_IN_LOCATION_SETTING);
+      } else {
         location_service_consent.add_description_grd_ids(
             is_child ? IDS_ARC_OPT_IN_LOCATION_SETTING_CHILD
                      : IDS_ARC_OPT_IN_LOCATION_SETTING);
-        location_service_consent.set_status(is_location_service_enabled.value()
-                                                ? UserConsentTypes::GIVEN
-                                                : UserConsentTypes::NOT_GIVEN);
-
-        ConsentAuditorFactory::GetForProfile(profile_)
-            ->RecordArcGoogleLocationServiceConsent(account_id,
-                                                    location_service_consent);
       }
+
+      location_service_consent.set_status(is_location_service_enabled.value()
+                                              ? UserConsentTypes::GIVEN
+                                              : UserConsentTypes::NOT_GIVEN);
+      ConsentAuditorFactory::GetForProfile(profile_)
+          ->RecordArcGoogleLocationServiceConsent(account_id,
+                                                  location_service_consent);
     }
 
     if (accepted) {
@@ -823,6 +829,6 @@ void ArcSupportHost::OnMessage(const base::Value::Dict& message) {
     SetWindowBound(display::Screen::GetScreen()->GetDisplayForNewWindows());
   } else {
     LOG(ERROR) << "Unknown message: " << *event;
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }

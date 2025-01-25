@@ -136,8 +136,8 @@ WideString CalcMergedString(const CJS_EventContext* event,
 template <CJS_Result (*F)(CJS_Runtime*, pdfium::span<v8::Local<v8::Value>>)>
 void JSGlobalFunc(const char* func_name_string,
                   const v8::FunctionCallbackInfo<v8::Value>& info) {
-  CJS_Object* pObj =
-      CFXJS_Engine::GetObjectPrivate(info.GetIsolate(), info.Holder());
+  auto* pObj = static_cast<CJS_Object*>(
+      CFXJS_Engine::GetBinding(info.GetIsolate(), info.This()));
   if (!pObj)
     return;
 
@@ -265,8 +265,7 @@ bool CJS_PublicMethods::IsNumber(const WideString& str) {
   bool bDot = false;
   bool bKXJS = false;
 
-  // TODO(tsepez): fix UNSAFE usage.
-  UNSAFE_BUFFERS({
+  UNSAFE_TODO({
     wchar_t c;
     while ((c = *p) != L'\0') {
       if (IsDigitSeparatorOrDecimalMark(c)) {
@@ -331,8 +330,7 @@ v8::Local<v8::Array> CJS_PublicMethods::AF_MakeArrayFromList(
   int nIndex = 0;
   v8::Local<v8::Array> StrArray = pRuntime->NewArray();
 
-  // TODO(tsepez): fix UNSAFE usage.
-  UNSAFE_BUFFERS({
+  UNSAFE_TODO({
     while (*p) {
       const char* pTemp = strchr(p, ',');
       if (!pTemp) {

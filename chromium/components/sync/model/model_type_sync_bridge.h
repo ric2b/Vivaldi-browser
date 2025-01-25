@@ -32,6 +32,7 @@ class ModelError;
 // immediately begin locally tracking changes and can start syncing with the
 // server soon afterward. If an error occurs during startup, the processor's
 // ReportError() method should be called instead of ModelReadyToSync().
+// Lives on the model sequence.
 class ModelTypeSyncBridge {
  public:
   using DataCallback = base::OnceCallback<void(std::unique_ptr<DataBatch>)>;
@@ -102,24 +103,17 @@ class ModelTypeSyncBridge {
       std::unique_ptr<MetadataChangeList> metadata_change_list,
       EntityChangeList entity_changes) = 0;
 
-  // Asynchronously retrieve the corresponding sync data for `storage_keys`.
-  // `callback` should be invoked if the operation is successful, otherwise
-  // the processor's ReportError method should be called.
-  // Deprecated: implement/use GetDataForCommit().
-  virtual void GetData(StorageKeyList storage_keys, DataCallback callback);
+  // Retrieves the corresponding sync data for `storage_keys`. This must return
+  // a non-null result, except if a model error occurred, in which case the
+  // processor's ReportError() method must be called.
+  // Used only to commit the data.
+  virtual std::unique_ptr<DataBatch> GetDataForCommit(
+      StorageKeyList storage_keys) = 0;
 
-  // Asynchronously retrieve the corresponding sync data for `storage_keys`.
-  // `callback` should be invoked if the operation is successful, otherwise
-  // the processor's ReportError method should be called. Used only to commit
-  // the data.
-  virtual void GetDataForCommit(StorageKeyList storage_keys,
-                                DataCallback callback);
-
-  // Asynchronously retrieve all of the local sync data. `callback` should be
-  // invoked if the operation is successful, otherwise the processor's
-  // ReportError method should be called.
+  // Retrieves all of the local sync data. In case of errors, the processor's
+  // ReportError method should be called, and this should return nullptr.
   // Used for getting all data in Sync Node Browser of chrome://sync-internals.
-  virtual void GetAllDataForDebugging(DataCallback callback) = 0;
+  virtual std::unique_ptr<DataBatch> GetAllDataForDebugging() = 0;
 
   // Must not be called unless SupportsGetClientTag() returns true.
   //

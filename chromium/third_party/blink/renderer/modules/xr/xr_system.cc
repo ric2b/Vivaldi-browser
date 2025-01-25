@@ -14,8 +14,8 @@
 #include "build/build_config.h"
 #include "device/vr/public/mojom/vr_service.mojom-blink.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_depth_state_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_tracked_image_init.h"
@@ -82,10 +82,6 @@ const char kImmersiveArModeNotValid[] =
 const char kTrackedImageWidthInvalid[] =
     "trackedImages[%d].widthInMeters invalid, must be a positive number.";
 
-const char kDepthSensingConfigurationNotSupported[] =
-    "The provided preferences depth sensing usage and format are not "
-    "supported, unable to create the session.";
-
 constexpr device::mojom::XRSessionFeature kDefaultImmersiveVrFeatures[] = {
     device::mojom::XRSessionFeature::REF_SPACE_VIEWER,
     device::mojom::XRSessionFeature::REF_SPACE_LOCAL,
@@ -112,7 +108,7 @@ device::mojom::blink::XRSessionMode stringToSessionMode(
     return device::mojom::blink::XRSessionMode::kImmersiveAr;
   }
 
-  NOTREACHED();  // Only strings in the enum are allowed by IDL.
+  NOTREACHED_IN_MIGRATION();  // Only strings in the enum are allowed by IDL.
   return device::mojom::blink::XRSessionMode::kInline;
 }
 
@@ -126,7 +122,7 @@ const char* SessionModeToString(device::mojom::blink::XRSessionMode mode) {
       return "immersive-ar";
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return "";
 }
 
@@ -155,6 +151,8 @@ device::mojom::XRDepthDataFormat ParseDepthFormat(
       return device::mojom::XRDepthDataFormat::kLuminanceAlpha;
     case V8XRDepthDataFormat::Enum::kFloat32:
       return device::mojom::XRDepthDataFormat::kFloat32;
+    case V8XRDepthDataFormat::Enum::kUnsignedShort:
+      return device::mojom::XRDepthDataFormat::kUnsignedShort;
   }
 }
 
@@ -1223,8 +1221,8 @@ ScriptPromise<XRSession> XRSystem::requestSession(
     // Document to get UkmRecorder anyway).
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kNavigatorDetachedError);
-    return ScriptPromise<XRSession>();  // Will be rejected by generated
-                                        // bindings
+    return EmptyPromise();  // Will be rejected by generated
+                            // bindings
   }
 
   device::mojom::blink::XRSessionMode session_mode = stringToSessionMode(mode);
@@ -1243,7 +1241,7 @@ ScriptPromise<XRSession> XRSystem::requestSession(
         .SetMode(static_cast<int64_t>(session_mode))
         .SetStatus(static_cast<int64_t>(SessionRequestStatus::kOtherError))
         .Record(DomWindow()->UkmRecorder());
-    return ScriptPromise<XRSession>();
+    return EmptyPromise();
   }
 
   // Parse required feature strings
@@ -1351,19 +1349,6 @@ ScriptPromise<XRSession> XRSystem::requestSession(
         ParseDepthUsages(session_init->depthSensing()->usagePreference());
     Vector<device::mojom::XRDepthDataFormat> preferred_format =
         ParseDepthFormats(session_init->depthSensing()->dataFormatPreference());
-
-    // If the depth API is required and either preferred usages or preferred
-    // formats are empty, we already know that the session creation will fail
-    // (as we won't be able to pick a supported usage & format combination), so
-    // let's fail it already:
-    if (query->RequiredFeatures().Contains(
-            device::mojom::XRSessionFeature::DEPTH) &&
-        (preferred_usage.empty() || preferred_format.empty())) {
-      query->RejectWithDOMException(DOMExceptionCode::kNotSupportedError,
-                                    kDepthSensingConfigurationNotSupported,
-                                    &exception_state);
-      return promise;
-    }
 
     query->SetDepthSensingConfiguration(preferred_usage, preferred_format);
   }

@@ -26,7 +26,7 @@ const char kRussianList[] =
     "https://easylist-downloads.adblockplus.org/advblock.txt";
 
 struct PermanentSource {
-  base::StringPiece url;
+  std::string_view url;
   RuleSourceSettings settings;
 };
 
@@ -41,8 +41,8 @@ const PermanentSource kPermanentKnownAdBlockSources[] = {
     {kAdblockPlusAntiAdblock, {.allow_abp_snippets = true}}};
 
 struct PresetSourceInfo {
-  base::StringPiece url;
-  base::StringPiece id;
+  std::string_view url;
+  std::string_view id;
 };
 
 // NOTE: When removing preset sources:

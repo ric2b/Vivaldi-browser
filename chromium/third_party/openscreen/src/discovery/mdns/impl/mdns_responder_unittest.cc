@@ -305,10 +305,6 @@ TEST_F(MdnsResponderTest, MulticastMessageSentOverMulticast) {
 
 // Validate that records are added as expected based on the query type, and that
 // additional records are populated as specified in RFC 6762 and 6763.
-
-// TODO(issuetracker.google.com/203003316): Refactor shared code from these
-// tests into the test fixture, or consider a data driven test approach, to
-// remove lots of duplication
 TEST_F(MdnsResponderTest, AnyQueryResultsAllApplied) {
   EXPECT_CALL(probe_manager_, IsDomainClaimed(_)).WillOnce(Return(true));
   EXPECT_CALL(record_handler_, HasRecords(_, _, _))

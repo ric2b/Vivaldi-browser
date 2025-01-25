@@ -163,11 +163,11 @@ int CalendarDatabase::GetCurrentVersion() {
 }
 
 void CalendarDatabase::BeginTransaction() {
-  db_.BeginTransaction();
+  db_.BeginTransactionDeprecated();
 }
 
 void CalendarDatabase::CommitTransaction() {
-  db_.CommitTransaction();
+  db_.CommitTransactionDeprecated();
 }
 
 void CalendarDatabase::RollbackTransaction() {
@@ -177,7 +177,7 @@ void CalendarDatabase::RollbackTransaction() {
   // transaction. This will crash on a DCHECK. So transaction_nesting() is
   // checked first.
   if (db_.transaction_nesting())
-    db_.RollbackTransaction();
+    db_.RollbackTransactionDeprecated();
 }
 
 void CalendarDatabase::Vacuum() {

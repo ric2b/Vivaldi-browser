@@ -168,6 +168,9 @@
 [submodule "third_party/libavif/src"]
 	path = third_party/libavif/src
 	url = ../../external/github.com/AOMediaCodec/libavif.git
+[submodule "third_party/crabbyavif/src"]
+	path = third_party/crabbyavif/src
+	url = ../../external/github.com/webmproject/CrabbyAvif.git
 [submodule "third_party/libavifinfo/src"]
 	path = third_party/libavifinfo/src
 	url = ../../aomedia/libavifinfo.git
@@ -298,6 +301,33 @@
 [submodule "third_party/vulkan-deps"]
 	path = third_party/vulkan-deps
 	url = ../../vulkan-deps.git
+[submodule "third_party/glslang/src"]
+	path = third_party/glslang/src
+	url = ../../external/github.com/KhronosGroup/glslang.git
+[submodule "third_party/spirv-cross/src"]
+	path = third_party/spirv-cross/src
+	url = ../../external/github.com/KhronosGroup/SPIRV-Cross.git
+[submodule "third_party/spirv-headers/src"]
+	path = third_party/spirv-headers/src
+	url = ../../external/github.com/KhronosGroup/SPIRV-Headers.git
+[submodule "third_party/spirv-tools/src"]
+	path = third_party/spirv-tools/src
+	url = ../../external/github.com/KhronosGroup/SPIRV-Tools.git
+[submodule "third_party/vulkan-headers/src"]
+	path = third_party/vulkan-headers/src
+	url = ../../external/github.com/KhronosGroup/Vulkan-Headers.git
+[submodule "third_party/vulkan-loader/src"]
+	path = third_party/vulkan-loader/src
+	url = ../../external/github.com/KhronosGroup/Vulkan-Loader.git
+[submodule "third_party/vulkan-tools/src"]
+	path = third_party/vulkan-tools/src
+	url = ../../external/github.com/KhronosGroup/Vulkan-Tools.git
+[submodule "third_party/vulkan-utility-libraries/src"]
+	path = third_party/vulkan-utility-libraries/src
+	url = ../../external/github.com/KhronosGroup/Vulkan-Utility-Libraries.git
+[submodule "third_party/vulkan-validation-layers/src"]
+	path = third_party/vulkan-validation-layers/src
+	url = ../../external/github.com/KhronosGroup/Vulkan-ValidationLayers.git
 [submodule "third_party/vulkan_memory_allocator"]
 	path = third_party/vulkan_memory_allocator
 	url = ../../external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git

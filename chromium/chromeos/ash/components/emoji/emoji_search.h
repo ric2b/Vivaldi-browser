@@ -38,13 +38,47 @@ class EmojiSearch {
 
   [[nodiscard]] EmojiSearchResult SearchEmoji(std::string_view query);
 
+  bool SetEmojiLanguage(std::string_view language_code);
+
+  // Returns an empty string if the emoji has no name.
+  std::string GetEmojiName(std::string_view emoji) const;
+
   std::vector<std::string> AllResultsForTesting(const std::string& query);
 
  private:
-  std::map<std::string, std::vector<EmojiSearchEntry>, std::less<>> emojis_;
-  std::map<std::string, std::vector<EmojiSearchEntry>, std::less<>> emoticons_;
-  std::map<std::string, std::vector<EmojiSearchEntry>, std::less<>> symbols_;
+  using EntryMap =
+      std::map<std::string, std::vector<EmojiSearchEntry>, std::less<>>;
+
+  enum class LanguageCode {
+    kDa,  // Danish
+    kDe,  // German
+    kEn,  // English
+    kEs,  // Spanish
+    kFi,  // Finnish
+    kFr,  // French
+    kJa,  // Japanese
+    kNo,  // Norweigian
+    kSv,  // Swedish
+  };
+
+  struct LanguageResourceIds {
+    int emoji_start_resource_id;
+    int emoji_remaining_resource_id;
+    int symbols_resource_id;
+  };
+
+  EntryMap emojis_;
+  EntryMap emoticons_;
+  EntryMap symbols_;
+
+  // A mapping of emojis, emoticons, and symbols to their names in English.
+  std::map<std::string, std::string, std::less<>> names_;
+
+  std::optional<LanguageResourceIds> GetLanguageResourceIds(LanguageCode code);
+
+  std::optional<LanguageCode> GetLanguageCode(std::string_view code);
 };
+
 }  // namespace emoji
 
 #endif  // CHROMEOS_ASH_COMPONENTS_EMOJI_EMOJI_SEARCH_H_

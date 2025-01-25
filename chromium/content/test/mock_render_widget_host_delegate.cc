@@ -4,12 +4,13 @@
 
 #include "content/test/mock_render_widget_host_delegate.h"
 
+#include "base/notimplemented.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "components/viz/common/hit_test/hit_test_data_provider.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
-#include "content/public/common/input/native_web_keyboard_event.h"
 #include "ui/compositor/compositor.h"
 #include "ui/display/screen.h"
 
@@ -25,8 +26,8 @@ void MockRenderWidgetHostDelegate::ResizeDueToAutoResize(
 
 KeyboardEventProcessingResult
 MockRenderWidgetHostDelegate::PreHandleKeyboardEvent(
-    const NativeWebKeyboardEvent& event) {
-  last_event_ = std::make_unique<NativeWebKeyboardEvent>(event);
+    const input::NativeWebKeyboardEvent& event) {
+  last_event_ = std::make_unique<input::NativeWebKeyboardEvent>(event);
   return pre_handle_keyboard_event_result_;
 }
 
@@ -49,11 +50,12 @@ void MockRenderWidgetHostDelegate::PasteAndMatchStyle() {}
 void MockRenderWidgetHostDelegate::SelectAll() {}
 
 void MockRenderWidgetHostDelegate::CreateInputEventRouter() {
-  rwh_input_event_router_ = std::make_unique<RenderWidgetHostInputEventRouter>(
-      GetHostFrameSinkManager());
+  rwh_input_event_router_ =
+      std::make_unique<input::RenderWidgetHostInputEventRouter>(
+          GetHostFrameSinkManager(), this);
 }
 
-RenderWidgetHostInputEventRouter*
+input::RenderWidgetHostInputEventRouter*
 MockRenderWidgetHostDelegate::GetInputEventRouter() {
   return rwh_input_event_router_.get();
 }
@@ -98,6 +100,12 @@ MockRenderWidgetHostDelegate::GetDelegatedInkRenderer(
     delegated_ink_point_renderer_.reset_on_disconnect();
   }
   return delegated_ink_point_renderer_.get();
+}
+
+input::TouchEmulator* MockRenderWidgetHostDelegate::GetTouchEmulator(
+    bool create_if_necessary) {
+  NOTIMPLEMENTED();
+  return nullptr;
 }
 
 }  // namespace content

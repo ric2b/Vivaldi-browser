@@ -85,6 +85,9 @@
 <translation id="3943857333388298514">貼り付け</translation>
 <translation id="4005270918754737597">このバージョンは飛ばすわ</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldiでセキュアキーストアのロック解除できへんかったわ。キーストアないと、保存したログインやセキュアなCookieが失われて、同期、メール、カレンダーなどの一部の機能が動作せんようになるで。
+
+今すぐ終了して、キーストアのロック解除するか修復してから、もう一度試してみて。データなくなるけど、ほんまに続ける？</translation>
 <translation id="4074744496918018786">プライベートウィンドウで画像開く</translation>
 <translation id="410351446219883937">自動再生</translation>
 <translation id="4281844954008187215">利用規約</translation>
@@ -175,6 +178,7 @@
 <translation id="8669345741879513971">怪獣１０</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">ポータルドキュメント調べる</translation>
+<translation id="875142999698251063">今すぐやめる</translation>
 <translation id="8768970203213061953">風景１４</translation>
 <translation id="8773635261052182196">この通知を見ることはもうないわ。また出したいんやったら、Vivaldiの設定からやっといて。</translation>
 <translation id="8774017153185436870">サイトが自動で動画再生してくる可能性あるで</translation>

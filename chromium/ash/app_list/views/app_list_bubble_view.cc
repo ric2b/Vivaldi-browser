@@ -192,7 +192,7 @@ class ButtonFocusSkipper : public ui::EventHandler {
     bool skip_focus = false;
     // This class overrides OnEvent() to examine all events so that focus
     // behavior is restored by mouse events, gesture events, etc.
-    if (event->type() == ui::ET_KEY_PRESSED) {
+    if (event->type() == ui::EventType::kKeyPressed) {
       ui::KeyboardCode key = event->AsKeyEvent()->key_code();
       if (key == ui::VKEY_UP || key == ui::VKEY_DOWN) {
         skip_focus = true;
@@ -581,7 +581,7 @@ void AppListBubbleView::ShowPage(AppListBubblePage page) {
   assistant_page_->SetVisible(page == AppListBubblePage::kAssistant);
   switch (current_page_) {
     case AppListBubblePage::kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case AppListBubblePage::kApps:
       apps_page_->ResetScrollPosition();
@@ -640,8 +640,9 @@ void AppListBubbleView::ShowPage(AppListBubblePage page) {
       apps_collections_page_->SetVisible(false);
       // Explicitly set search box inactive so the next attempt to activate it
       // will succeed.
-      search_box_view_->SetSearchBoxActive(false,
-                                           /*event_type=*/ui::ET_UNKNOWN);
+      search_box_view_->SetSearchBoxActive(
+          false,
+          /*event_type=*/ui::EventType::kUnknown);
       assistant_page_->RequestFocus();
       break;
   }
@@ -712,7 +713,7 @@ bool AppListBubbleView::AcceleratorPressed(const ui::Accelerator& accelerator) {
       }
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 
@@ -767,7 +768,8 @@ void AppListBubbleView::AssistantButtonPressed() {
 
 void AppListBubbleView::CloseButtonPressed() {
   // Activate and focus the search box.
-  search_box_view_->SetSearchBoxActive(true, /*event_type=*/ui::ET_UNKNOWN);
+  search_box_view_->SetSearchBoxActive(true,
+                                       /*event_type=*/ui::EventType::kUnknown);
   search_box_view_->ClearSearch();
 }
 
@@ -780,12 +782,6 @@ void AppListBubbleView::OnSearchBoxKeyEvent(ui::KeyEvent* event) {
 bool AppListBubbleView::CanSelectSearchResults() {
   return current_page_ == AppListBubblePage::kSearch &&
          search_page_->search_view()->CanSelectSearchResults();
-}
-
-bool AppListBubbleView::HandleFocusMoveAboveSearchResults(
-    const ui::KeyEvent& key_event) {
-  return search_page_->search_view()->OverrideKeyNavigationAboveSearchResults(
-      key_event);
 }
 
 void AppListBubbleView::ShowFolderForItemView(AppListItemView* folder_item_view,
@@ -940,7 +936,8 @@ void AppListBubbleView::MaybeFocusAndActivateSearchBox() {
     return;
   }
 
-  search_box_view_->SetSearchBoxActive(true, /*event_type=*/ui::ET_UNKNOWN);
+  search_box_view_->SetSearchBoxActive(true,
+                                       /*event_type=*/ui::EventType::kUnknown);
   // Explicitly request focus in case the search box was active before.
   search_box_view_->search_box()->RequestFocus();
 }

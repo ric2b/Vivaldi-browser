@@ -41,6 +41,7 @@ swift_source_set("quick_settings_swift") {
     "//base",
     "//ui/base",
     "//ios/chrome/app/strings",
+    "//vivaldi/ios/ui/bookmarks_editor:vivaldi_bookmarks_editor",
     "//vivaldi/ios/ui/settings/start_page/layout_settings",
     "//vivaldi/ios/ui/settings/start_page/layout_settings:layout_settings_swift",
     "//vivaldi/ios/ui/settings/start_page/wallpaper_settings",

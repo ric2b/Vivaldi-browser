@@ -241,7 +241,7 @@ std::string VivaldiSyncUIHelper::GetBackupEncryptionToken() {
 }
 
 bool VivaldiSyncUIHelper::RestoreEncryptionToken(
-    const base::StringPiece& token) {
+    const std::string_view& token) {
   if (token.empty())
     return false;
 

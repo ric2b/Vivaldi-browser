@@ -50,6 +50,13 @@
 #include "base/win/windows_version.h"
 #endif
 
+
+// Vivaldi: Flatpak support.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#include "sandbox/linux/services/flatpak_sandbox.h"
+#endif
+
+
 namespace service_manager {
 
 // Thread-safe owner of state related to a service process. This facilitates
@@ -286,8 +293,23 @@ void ServiceProcessLauncher::ProcessState::StopInBackground() {
     return;
 
   int rv = -1;
-  LOG_IF(ERROR, !child_process_.WaitForExit(&rv))
+
+  // Vivaldi: Handle flatpak support specifically.
+  bool success = false;
+#if BUILDFLAG(IS_LINUX)
+  auto* flatpak_sandbox = vivaldi::sandbox::FlatpakSandbox::GetInstance();
+  if (flatpak_sandbox->IsPidSandboxed(child_process_.Pid())) {
+    success = flatpak_sandbox->Wait(child_process_.Pid(), &rv);
+  } else {
+#endif
+    success = child_process_.WaitForExit(&rv);
+#if BUILDFLAG(IS_LINUX)
+  }
+#endif
+
+  LOG_IF(ERROR, success)
       << "Failed to wait for child process";
+
   child_process_.Close();
 }
 

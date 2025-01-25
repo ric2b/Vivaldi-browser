@@ -42,12 +42,12 @@
 #include "components/autofill/core/browser/ui/suggestion_type.h"
 #include "components/autofill/core/common/aliases.h"
 #include "components/autofill/core/common/unique_ids.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/video_picture_in_picture_window_controller.h"
 #include "content/public/browser/weak_document_ptr.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/input/native_web_keyboard_event.h"
 #include "content/public/test/navigation_simulator.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -146,7 +146,7 @@ TEST_F(AutofillSuggestionControllerTest, ShowInformsDelegate) {
 TEST_F(AutofillSuggestionControllerTest, UpdateDataListValues) {
   ShowSuggestions(manager(), {SuggestionType::kAddressEntry});
   std::vector<SelectOption> options = {
-      {.value = u"data list value 1", .content = u"data list label 1"}};
+      {.value = u"data list value 1", .text = u"data list label 1"}};
   client().popup_controller(manager()).UpdateDataListValues(options);
 
   ASSERT_EQ(3, client().popup_controller(manager()).GetLineCount());
@@ -158,13 +158,13 @@ TEST_F(AutofillSuggestionControllerTest, UpdateDataListValues) {
       client().popup_controller(manager()).GetSuggestionAt(0).main_text.value);
   ASSERT_EQ(1u, result0.labels.size());
   ASSERT_EQ(1u, result0.labels[0].size());
-  EXPECT_EQ(options[0].content, result0.labels[0][0].value);
+  EXPECT_EQ(options[0].text, result0.labels[0][0].value);
   EXPECT_EQ(std::u16string(), result0.additional_label);
-  EXPECT_EQ(options[0].content, client()
-                                    .popup_controller(manager())
-                                    .GetSuggestionAt(0)
-                                    .labels[0][0]
-                                    .value);
+  EXPECT_EQ(options[0].text, client()
+                                 .popup_controller(manager())
+                                 .GetSuggestionAt(0)
+                                 .labels[0][0]
+                                 .value);
   EXPECT_EQ(SuggestionType::kDatalistEntry, result0.type);
 
   Suggestion result1 = client().popup_controller(manager()).GetSuggestionAt(1);
@@ -181,7 +181,7 @@ TEST_F(AutofillSuggestionControllerTest, UpdateDataListValues) {
 
   // Add two data list entries (which should replace the current one).
   options.push_back(
-      {.value = u"data list value 1", .content = u"data list label 1"});
+      {.value = u"data list value 1", .text = u"data list label 1"});
   client().popup_controller(manager()).UpdateDataListValues(options);
   ASSERT_EQ(4, client().popup_controller(manager()).GetLineCount());
 
@@ -198,11 +198,11 @@ TEST_F(AutofillSuggestionControllerTest, UpdateDataListValues) {
   ASSERT_EQ(
       1u,
       client().popup_controller(manager()).GetSuggestionAt(0).labels[0].size());
-  EXPECT_EQ(options[0].content, client()
-                                    .popup_controller(manager())
-                                    .GetSuggestionAt(0)
-                                    .labels[0][0]
-                                    .value);
+  EXPECT_EQ(options[0].text, client()
+                                 .popup_controller(manager())
+                                 .GetSuggestionAt(0)
+                                 .labels[0][0]
+                                 .value);
   EXPECT_EQ(
       std::u16string(),
       client().popup_controller(manager()).GetSuggestionAt(0).additional_label);
@@ -218,11 +218,11 @@ TEST_F(AutofillSuggestionControllerTest, UpdateDataListValues) {
   ASSERT_EQ(
       1u,
       client().popup_controller(manager()).GetSuggestionAt(1).labels[0].size());
-  EXPECT_EQ(options[1].content, client()
-                                    .popup_controller(manager())
-                                    .GetSuggestionAt(1)
-                                    .labels[0][0]
-                                    .value);
+  EXPECT_EQ(options[1].text, client()
+                                 .popup_controller(manager())
+                                 .GetSuggestionAt(1)
+                                 .labels[0][0]
+                                 .value);
   EXPECT_EQ(
       std::u16string(),
       client().popup_controller(manager()).GetSuggestionAt(1).additional_label);
@@ -244,7 +244,7 @@ TEST_F(AutofillSuggestionControllerTest, PopupsWithOnlyDataLists) {
 
   // Replace the datalist element with a new one.
   std::vector<SelectOption> options = {
-      {.value = u"data list value 1", .content = u"data list label 1"}};
+      {.value = u"data list value 1", .text = u"data list label 1"}};
   client().popup_controller(manager()).UpdateDataListValues(options);
 
   ASSERT_EQ(1, client().popup_controller(manager()).GetLineCount());
@@ -257,11 +257,11 @@ TEST_F(AutofillSuggestionControllerTest, PopupsWithOnlyDataLists) {
   ASSERT_EQ(
       1u,
       client().popup_controller(manager()).GetSuggestionAt(0).labels[0].size());
-  EXPECT_EQ(options[0].content, client()
-                                    .popup_controller(manager())
-                                    .GetSuggestionAt(0)
-                                    .labels[0][0]
-                                    .value);
+  EXPECT_EQ(options[0].text, client()
+                                 .popup_controller(manager())
+                                 .GetSuggestionAt(0)
+                                 .labels[0][0]
+                                 .value);
   EXPECT_EQ(
       std::u16string(),
       client().popup_controller(manager()).GetSuggestionAt(0).additional_label);
@@ -392,46 +392,6 @@ TEST_F(AutofillSuggestionControllerTest, SelectInvalidSuggestion) {
   // The following should not crash:
   client().popup_controller(manager()).AcceptSuggestion(
       /*index=*/1);  // Out of bounds!
-}
-
-TEST_F(AutofillSuggestionControllerTest, AcceptSuggestionRespectsTimeout) {
-  base::HistogramTester histogram_tester;
-  ShowSuggestions(manager(), {SuggestionType::kAddressEntry});
-
-  // Calls before the threshold are ignored.
-  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion).Times(0);
-  client().popup_controller(manager()).AcceptSuggestion(0);
-  task_environment()->FastForwardBy(base::Milliseconds(100));
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
-
-  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion);
-  task_environment()->FastForwardBy(base::Milliseconds(400));
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
-}
-
-TEST_F(AutofillSuggestionControllerTest,
-       AcceptSuggestionTimeoutIsUpdatedOnPopupMove) {
-  base::HistogramTester histogram_tester;
-  ShowSuggestions(manager(), {SuggestionType::kAddressEntry});
-
-  // Calls before the threshold are ignored.
-  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion).Times(0);
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
-  task_environment()->FastForwardBy(base::Milliseconds(100));
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
-
-  task_environment()->FastForwardBy(base::Milliseconds(400));
-  // Show the suggestions again (simulating, e.g., a click somewhere slightly
-  // different).
-  ShowSuggestions(manager(), {SuggestionType::kAddressEntry});
-
-  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion).Times(0);
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
-
-  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion);
-  // After waiting, suggestions are accepted again.
-  task_environment()->FastForwardBy(base::Milliseconds(500));
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
 }
 
 // Tests that when a picture-in-picture window is initialized, there is a call

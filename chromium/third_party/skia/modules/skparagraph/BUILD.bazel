@@ -1,12 +1,10 @@
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_library")
+load("//bazel:skia_rules.bzl", "skia_cc_library")
 
 package(
     default_applicable_licenses = ["//:license"],
 )
 
 licenses(["notice"])
-
-exports_files_legacy()
 
 skia_cc_library(
     name = "legacy_skparagraph",
@@ -44,7 +42,7 @@ skia_cc_library(
 )
 
 skia_cc_library(
-    name = "skparagraph_harfbuzz_unicode",
+    name = "skparagraph_harfbuzz_skunicode",
     srcs = ["//modules/skparagraph/src:srcs"],
     hdrs = ["//modules/skparagraph/include:hdrs"],
     defines = ["SK_DISABLE_LEGACY_PARAGRAPH_UNICODE"],
@@ -59,5 +57,14 @@ skia_cc_library(
         "//modules/skunicode:skunicode_core",
         "//src/base",
         "//src/core:core_priv",
+    ],
+)
+
+# TODO(kjlubick) Remove after G3 roll
+alias(
+    name = "skparagraph_harfbuzz_unicode",
+    actual = ":skparagraph_harfbuzz_skunicode",
+    visibility = [
+        "//:__subpackages__",
     ],
 )

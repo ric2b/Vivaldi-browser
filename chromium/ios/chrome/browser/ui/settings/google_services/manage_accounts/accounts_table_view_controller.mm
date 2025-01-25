@@ -27,7 +27,6 @@
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
-#import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/show_signin_command.h"
@@ -149,7 +148,7 @@ constexpr CGFloat kErrorSymbolSize = 22.;
 
 @implementation AccountsTableViewController {
   // Callback to dismiss MyGoogle (Account Detail).
-  DismissViewCallback _dismissAccountDetailsViewController;
+  DismissViewCallback _accountDetailsControllerDismissCallback;
 }
 
 - (instancetype)initWithBrowser:(Browser*)browser
@@ -191,13 +190,12 @@ constexpr CGFloat kErrorSymbolSize = 22.;
 }
 
 - (void)settingsWillBeDismissed {
-  if (!_dismissAccountDetailsViewController.is_null()) {
-    // TODO(crbug.com/40846158): Once 40846158 is fixed, the following DCHECK
-    // can be added: DCHECK(self.presentedViewController);
-    // DCHECK(!self.signoutCoordinator);
+  if (!_accountDetailsControllerDismissCallback.is_null()) {
+    DCHECK(self.presentedViewController);
+    DCHECK(!self.signoutCoordinator);
     DCHECK(!self.removeOrMyGoogleChooserAlertCoordinator);
     DCHECK(!self.removeAccountCoordinator);
-    std::move(_dismissAccountDetailsViewController).Run(/*animated=*/false);
+    std::move(_accountDetailsControllerDismissCallback).Run(/*animated=*/false);
   }
   [self dismissRemoveOrMyGoogleChooserAlert];
   [self.signoutCoordinator stop];
@@ -500,7 +498,7 @@ constexpr CGFloat kErrorSymbolSize = 22.;
     case ItemTypeSignInHeader:
     case ItemTypeSignOutSyncingFooter:
     case ItemTypeRestrictedAccountsFooter:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 
@@ -596,11 +594,18 @@ constexpr CGFloat kErrorSymbolSize = 22.;
   // `self.removeOrMyGoogleChooserAlertCoordinator` should not be stopped, since
   // the coordinator has been confirmed.
   self.removeOrMyGoogleChooserAlertCoordinator = nil;
-  _dismissAccountDetailsViewController =
+  __strong __typeof(self) weakSelf = self;
+  _accountDetailsControllerDismissCallback =
       GetApplicationContext()
           ->GetSystemIdentityManager()
-          ->PresentAccountDetailsController(identity, self,
-                                            /*animated=*/YES);
+          ->PresentAccountDetailsController(
+              identity, self,
+              /*animated=*/YES,
+              base::BindOnce(
+                  [](__typeof(self) strongSelf) {
+                    [strongSelf accountDetailsControllerWasDismissed];
+                  },
+                  weakSelf));
 }
 
 // Handles the account remove action from
@@ -723,7 +728,7 @@ constexpr CGFloat kErrorSymbolSize = 22.;
         weakSelf.navigationController)
         popViewControllerOrCloseSettingsAnimated:YES];
   };
-  if (!_dismissAccountDetailsViewController.is_null()) {
+  if (!_accountDetailsControllerDismissCallback.is_null()) {
     DCHECK(self.presentedViewController);
     DCHECK(!self.removeOrMyGoogleChooserAlertCoordinator);
     DCHECK(!self.removeAccountCoordinator);
@@ -732,7 +737,7 @@ constexpr CGFloat kErrorSymbolSize = 22.;
     // `dismissAccountDetailsViewControllerBlock` callback, to trigger
     // `popAccountsTableViewController()`.
     // Once we have a completion block, we can set `animated` to YES.
-    std::move(_dismissAccountDetailsViewController).Run(/*animated*/ false);
+    std::move(_accountDetailsControllerDismissCallback).Run(/*animated=*/false);
     popAccountsTableViewController();
   } else if (self.removeOrMyGoogleChooserAlertCoordinator ||
              self.removeAccountCoordinator || self.signoutCoordinator) {
@@ -868,6 +873,11 @@ constexpr CGFloat kErrorSymbolSize = 22.;
 - (void)dismissRemoveAccountCoordinator {
   [self.removeAccountCoordinator stop];
   self.removeAccountCoordinator = nil;
+}
+
+// Called with the account details controller has been dismissed.
+- (void)accountDetailsControllerWasDismissed {
+  _accountDetailsControllerDismissCallback.Reset();
 }
 
 #pragma mark - AccountsConsumer

@@ -37,6 +37,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "dawn/common/MutexProtected.h"
 #include "dawn/common/Ref.h"
+#include "dawn/common/RefCountedWithExternalCount.h"
 #include "dawn/common/ityp_array.h"
 #include "dawn/common/ityp_bitset.h"
 #include "dawn/native/Adapter.h"
@@ -45,7 +46,6 @@
 #include "dawn/native/EventManager.h"
 #include "dawn/native/Features.h"
 #include "dawn/native/Forward.h"
-#include "dawn/native/RefCountedWithExternalCount.h"
 #include "dawn/native/Toggles.h"
 #include "dawn/native/dawn_platform.h"
 #include "partition_alloc/pointers/raw_ptr.h"
@@ -57,7 +57,6 @@ class Platform;
 
 namespace dawn::native {
 
-class AHBFunctions;
 class CallbackTaskManager;
 class DeviceBase;
 class Surface;
@@ -67,12 +66,12 @@ using BackendsBitset = ityp::bitset<wgpu::BackendType, kEnumCount<wgpu::BackendT
 using BackendsArray = ityp::
     array<wgpu::BackendType, std::unique_ptr<BackendConnection>, kEnumCount<wgpu::BackendType>>;
 
-wgpu::Bool APIGetInstanceFeatures(InstanceFeatures* features);
+wgpu::Status APIGetInstanceFeatures(InstanceFeatures* features);
 InstanceBase* APICreateInstance(const InstanceDescriptor* descriptor);
 
 // This is called InstanceBase for consistency across the frontend, even if the backends don't
 // specialize this class.
-class InstanceBase final : public ErrorSink, public RefCountedWithExternalCount {
+class InstanceBase final : public ErrorSink, public RefCountedWithExternalCount<RefCounted> {
   public:
     static ResultOrError<Ref<InstanceBase>> Create(const InstanceDescriptor* descriptor = nullptr);
 
@@ -120,12 +119,15 @@ class InstanceBase final : public ErrorSink, public RefCountedWithExternalCount 
     void SetBackendValidationLevel(BackendValidationLevel level);
     BackendValidationLevel GetBackendValidationLevel() const;
 
-    void EnableBeginCaptureOnStartup(bool beginCaptureOnStartup);
     bool IsBeginCaptureOnStartupEnabled() const;
 
     // Testing only API that is NOT thread-safe.
     void SetPlatformForTesting(dawn::platform::Platform* platform);
     dawn::platform::Platform* GetPlatform();
+
+    // Testing only API that is NOT thread-safe.
+    uint64_t GetDeprecationWarningCountForTesting();
+    void EmitDeprecationWarning(const std::string& warning);
 
     uint64_t GetDeviceCountForTesting() const;
     void AddDevice(DeviceBase* device);
@@ -138,7 +140,6 @@ class InstanceBase final : public ErrorSink, public RefCountedWithExternalCount 
 
     // Get backend-independent libraries that need to be loaded dynamically.
     const X11Functions* GetOrLoadX11Functions();
-    const AHBFunctions* GetOrLoadAHBFunctions();
 
     // TODO(dawn:752) Standardize webgpu.h to decide if we should return bool.
     //   Currently this is a backdoor for Chromium's process event loop.
@@ -183,7 +184,7 @@ class InstanceBase final : public ErrorSink, public RefCountedWithExternalCount 
     Ref<AdapterBase> CreateAdapter(Ref<PhysicalDeviceBase> physicalDevice,
                                    FeatureLevel featureLevel,
                                    const DawnTogglesDescriptor* requiredAdapterToggles,
-                                   wgpu::PowerPreference powerPreference) const;
+                                   wgpu::PowerPreference powerPreference);
 
     void GatherWGSLFeatures(const DawnWGSLBlocklist* wgslBlocklist);
 
@@ -216,12 +217,12 @@ class InstanceBase final : public ErrorSink, public RefCountedWithExternalCount 
 #if defined(DAWN_USE_X11)
     std::unique_ptr<X11Functions> mX11Functions;
 #endif  // defined(DAWN_USE_X11)
-#if DAWN_PLATFORM_IS(ANDROID)
-    std::unique_ptr<AHBFunctions> mAHBFunctions;
-#endif  // DAWN_PLATFORM_IS(ANDROID)
 
     Ref<CallbackTaskManager> mCallbackTaskManager;
     EventManager mEventManager;
+
+    struct DeprecationWarnings;
+    std::unique_ptr<DeprecationWarnings> mDeprecationWarnings;
 
     MutexProtected<absl::flat_hash_set<DeviceBase*>> mDevicesList;
 };

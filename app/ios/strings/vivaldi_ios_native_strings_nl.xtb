@@ -8,6 +8,7 @@
 <translation id="1123707809902612118">Traceerders en advertenties blokkeren</translation>
 <translation id="1151972924205500581">Wachtwoord vereist</translation>
 <translation id="1166425484559430538">Jouw synchronisatiegegevens zijn versleuteld. Voer het coderingswachtwoord in om de gegevens te decoderen.</translation>
+<translation id="1173894706177603556">Naam wijzigen</translation>
 <translation id="1181037720776840403">Verwijderen</translation>
 <translation id="1182668946911971500">Notitiesbalk</translation>
 <translation id="1198271701881992799">Laten we beginnen</translation>
@@ -148,6 +149,7 @@ geblokkeerd</translation>
 <translation id="3842727926262967527">Selecteer waar je de tabbalk en het adresveld wilt hebben.</translation>
 <translation id="3845564230651302310">Toepassen nieuwe traceringsfilterinstellingen...</translation>
 <translation id="3858860766373142691">Naam</translation>
+<translation id="3861379244432690245">Directe overeenkomst inschakelen</translation>
 <translation id="3866249974567520381">Beschrijving</translation>
 <translation id="3872195896030547485">Voer een geldig e-mailadres in.</translation>
 <translation id="3897092660631435901">Menu</translation>
@@ -173,6 +175,7 @@ geblokkeerd</translation>
 <translation id="4209092469652827314">Groot</translation>
 <translation id="4219175188138757774">Tsjechisch en Slowaaks (<ph name="ORIGIN" />)</translation>
 <translation id="4222285809803895512">Datum aangemaakt</translation>
+<translation id="4274598629843497594">Schakel Snelkiezers weergeven in om deze groep zichtbaar te maken op de startpagina. Je hebt nog steeds toegang tot de groep via het paneel Bladwijzers.</translation>
 <translation id="4276839458685471670">Aanmaakdatum</translation>
 <translation id="4277085371281330061">Traceerders
 geblokkeerd</translation>
@@ -202,6 +205,7 @@ geblokkeerd</translation>
 <translation id="4619615317237390068">Tabs van andere apparaten</translation>
 <translation id="462860218383788109">Datum aangepast</translation>
 <translation id="4640946580087069269">Naar notitie kopiëren</translation>
+<translation id="4643117005422448078">Belangrijkste websites</translation>
 <translation id="4654578955713250802">Blokkering van reclame en traceerders</translation>
 <translation id="4655510151391078468">Deze code komt niet overeen met hetgeen we je hebben gestuurd.
         Je hebt <ph name="ATTEMPTS" /> resterende pogingen.</translation>
@@ -211,6 +215,7 @@ geblokkeerd</translation>
 <translation id="4727698999970341158">IJslands (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">Bijwerken</translation>
 <translation id="4739712911308055817">Niet opgehaald</translation>
+<translation id="4750394297954878236">Suggesties</translation>
 <translation id="4759399863961855552">Sortering</translation>
 <translation id="4780953868408193639">Traceerder
 geblokkeerd</translation>
@@ -226,20 +231,23 @@ geblokkeerd</translation>
 <translation id="4943266325467647391">Vivaldi's ingebouwde traceerder- en reclamefilter beschermt je tegen malware en advertenties.</translation>
 <translation id="495421405224926623">Ik heb de gebruiksvoorwaarden en het privacybeleid gelezen en ga hiermee akkoord</translation>
 <translation id="497942794017668482">Traceerders en reclame blokkeren</translation>
+<translation id="4993477362660748586">Synchronisatie</translation>
 <translation id="5037761343305489956">Naar notitie gekopieerd</translation>
 <translation id="504986598654589766">Webbrowsen op een privé-tabblad betekent dat zoekopdrachten, bezochte websites, cookies en tijdelijke bestanden niet door Vivaldi worden opgeslagen. Het brengt geen beveiligde of anderszins aangepaste verbinding tot stand.</translation>
 <translation id="505774819758747674">Voorbeeld voor de werkbalk met geselecteerde accentkleur</translation>
 <translation id="5094183365876568934">Sommige websites passen hun kleurenschema aan de gebruikersvoorkeuren aan. Kies het kleurenschema dat deze sites moeten gebruiken.</translation>
-<translation id="5094376253685335202">Synchronisatie activeren</translation>
+<translation id="5094376253685335202">Synchronisatie inschakelen</translation>
 <translation id="5116316489033177455">Bladwijzers en snelkiezers synchroniseren</translation>
 <translation id="5122095890854520072">Lets (<ph name="ORIGIN" />)</translation>
 <translation id="5153806174841856652">Aanmelding mislukt</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Code opnieuw verzenden<ph name="END_LINK" /></translation>
 <translation id="5191012692655103305">Tabs en geschiedenis ophalen…</translation>
+<translation id="5221269430020540672">Open afbeelding in achtergrondtab</translation>
 <translation id="5238642303473095117">Gegevens wissen</translation>
 <translation id="5245732982828228444">Hier vind je je notities</translation>
 <translation id="5249199221558969362">Voer een realistische levensduur in.</translation>
 <translation id="5271549068863921519">Wachtwoord opslaan</translation>
+<translation id="5273620430932404871">Overeenkomstige bladwijzerbijnamen inschakelen</translation>
 <translation id="5290452628447338707">Geen notities</translation>
 <translation id="5317780077021120954">Opslaan</translation>
 <translation id="5349678548463426691">Beschrijving</translation>
@@ -248,7 +256,6 @@ geblokkeerd</translation>
 <translation id="5378841821586202982">Prullenbak</translation>
 <translation id="5398772614898833570">Advertenties geblokkeerd</translation>
 <translation id="5421638721143596928">Je aanmeldgegevens kunnen niet ontsleuteld worden. Meld je nogmaals aan.</translation>
-<translation id="5422086212043657100">Als snelkiezermap gebruiken</translation>
 <translation id="5439835075346716808">Aanmelding is tijdelijk geblokkeerd van dit IP. Probeer het later nog eens.</translation>
 <translation id="5486261815000869482">Wachtwoord bevestigen</translation>
 <translation id="5494016731375030300">Onlangs gesloten tabs</translation>
@@ -260,6 +267,7 @@ geblokkeerd</translation>
 <translation id="5710478562694930157">Oplopend</translation>
 <translation id="574392208103952083">Gemiddeld</translation>
 <translation id="5787420647064736989">Apparaatnaam</translation>
+<translation id="5801825598531634872">Inactief na dagen</translation>
 <translation id="5822336771053074270">Notitie toevoegen</translation>
 <translation id="5823830882692559950">Vivaldi.net heeft je aanmeldgegevens afgewezen: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">Nieuwe map</translation>
@@ -277,6 +285,7 @@ geblokkeerd</translation>
 <translation id="6147094071357011481">Onlangs gesloten tabs zijn niet beschikbaar</translation>
 <translation id="6193995664633100765">Indisch (<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">Opties voor het uiterlijk van websites</translation>
+<translation id="6257488392933423163">Als HTML weergegeven</translation>
 <translation id="6365929278691047681">Duits (<ph name="ORIGIN" />)</translation>
 <translation id="6406506848690869874">Synchronisatie</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> geselecteerd</translation>
@@ -285,6 +294,7 @@ geblokkeerd</translation>
 <translation id="6517411226162529295">Back-up coderingssleutel</translation>
 <translation id="6527303717912515753">Delen</translation>
 <translation id="6535988230515403205">Pools (<ph name="ORIGIN" />)</translation>
+<translation id="6566198107563125484">Overeenkomstige bladwijzers inschakelen</translation>
 <translation id="659351303388691480">Browsegegevens wissen...</translation>
 <translation id="6602272356389933803">Uiterlijk &amp; thema</translation>
 <translation id="6614744450826097546">Advertentiedetails</translation>
@@ -303,7 +313,6 @@ geblokkeerd</translation>
 <translation id="681368974849482173">Item aangemaakt</translation>
 <translation id="6830986331692390764">Synchronisatiegegevens wissen. Een ogenblik.</translation>
 <translation id="6875510405870945573">Kies het gewenste blokkeringsniveau.</translation>
-<translation id="6885837502028760851">Alleen snelkiezermappen weergeven</translation>
 <translation id="6887143077297974801">Synchronisatie is niet gestart.</translation>
 <translation id="691132463664340655">Browserthema</translation>
 <translation id="6937750621455385628">Voor de aanmelding moet je een Vivaldi-account gebruiken.</translation>
@@ -316,6 +325,7 @@ geblokkeerd</translation>
 <translation id="7006864796794806241">Wachtwoord herstellen</translation>
 <translation id="7029809446516969842">Wachtwoorden</translation>
 <translation id="7041964446309059643">Handmatig</translation>
+<translation id="7083011465470143310"><ph name="BEGIN_LINK" />Wachtwoord<ph name="END_LINK" /> vergeten?</translation>
 <translation id="7110758301321962823">Gebruikersnaam herstellen</translation>
 <translation id="7158507293261405349">Nieuwe groep toevoegen</translation>
 <translation id="7192066917392691622">Aflopend</translation>
@@ -354,6 +364,7 @@ geblokkeerd</translation>
 <translation id="7732622593814325274">Bronnen voor traceringsfiltering beheren</translation>
 <translation id="7765158879357617694">Verplaatsen</translation>
 <translation id="7771452384635174008">Opmaak</translation>
+<translation id="7791161131809889864">Alleen in de achtergrond openen</translation>
 <translation id="7801204999757211519">Heb al een account? <ph name="BEGIN_LINK" />Log in ➔<ph name="END_LINK" /></translation>
 <translation id="7850070199083838600">Nieuwe groep aanmaken?</translation>
 <translation id="7914995060146784406">Notitie bewerken</translation>
@@ -365,6 +376,7 @@ geblokkeerd</translation>
 <translation id="8058018971942772071">Als groep gebruiken</translation>
 <translation id="8066170816074394954">Serverfout.</translation>
 <translation id="8076492880354921740">Tabs</translation>
+<translation id="8077675488769462025">Inactieve tabs</translation>
 <translation id="8112996065264879835">Deze code komt niet overeen met hetgeen we je hebben gestuurd.
         Je hebt de maximale limiet voor verkeerde pogingen bereikt. Vraag hieronder een nieuwe code aan met de optie Opnieuw verzenden.</translation>
 <translation id="8134672010161840864">Knijp om de afbeelding bij te snijden en te positioneren</translation>
@@ -383,9 +395,10 @@ geblokkeerd</translation>
 <translation id="8326104954595890674">Nieuwe privétab</translation>
 <translation id="8329813750766387010">Bijgewerkt: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Cookiewaarschuwingen verwijderen (<ph name="TYPE" />)</translation>
-<translation id="8359194106448244241">Om tabs van andere apparaten te zien, moet Synchronisatie worden geactiveerd.</translation>
+<translation id="8359194106448244241">Om tabs van andere apparaten te zien, moet Synchronisatie worden ingeschakeld.</translation>
 <translation id="8366175803122817174">Alle notitieadressen openen</translation>
 <translation id="8384409685584033392">Pagina-info</translation>
+<translation id="8395378633507873708">Adresbalk</translation>
 <translation id="839736845446313156">Aanmelden</translation>
 <translation id="8414685983518053656">Notities</translation>
 <translation id="8423076545503792640">Aanvraag is mislukt door een fout. Probeer het later nog eens.</translation>
@@ -402,6 +415,7 @@ geblokkeerd</translation>
 <translation id="8675578805254882416">Ophalen</translation>
 <translation id="8677007239430848917">Voeg je eerste notitie toe door op het onderstaande pluspictogram te tikken</translation>
 <translation id="8684294196284714094">Klaar om Vivaldi in te stellen als je standaardbrowser?</translation>
+<translation id="8733945742171960420">Zodra je begint met browsen, worden je belangrijkste websites hier weergegeven.</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> items verwijderd</translation>
 <translation id="8763006697839582351">In Vivaldi privé openen</translation>
 <translation id="8765173886020357878">Zoeksuggesties</translation>
@@ -412,6 +426,7 @@ geblokkeerd</translation>
 <translation id="8855707633300847215">Tabbalk weergeven</translation>
 <translation id="8892354889971902600">Tabs die je onlangs hebt gesloten, verschijnen hier.</translation>
 <translation id="89390081013973080">Helemaal klaar! Tijd om te beslissen welke gegevens tussen apparaten moeten worden gesynchroniseerd.</translation>
+<translation id="8964449607824577665">Zonder het huidige coderingswachtwoord kunnen we de gegevens niet decoderen. Om dit wachtwoord opnieuw in te voeren, moeten alle bestaande synchronisatiegegevens op Vivaldi-servers worden verwijderd.</translation>
 <translation id="8965371804397726192">Alle gegevens synchroniseren</translation>
 <translation id="9028089729841356743">Netwerkfout.</translation>
 <translation id="9043882097999887291">Advertenties

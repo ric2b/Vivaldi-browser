@@ -28,8 +28,13 @@
 #ifndef SRC_DAWN_NATIVE_BLITCOLORTOCOLORWITHDRAW_H_
 #define SRC_DAWN_NATIVE_BLITCOLORTOCOLORWITHDRAW_H_
 
+#include <bitset>
+
 #include "absl/container/flat_hash_map.h"
+#include "dawn/common/ityp_array.h"
+#include "dawn/common/ityp_bitset.h"
 #include "dawn/native/Error.h"
+#include "dawn/native/IntegerTypes.h"
 
 namespace dawn::native {
 
@@ -39,8 +44,14 @@ struct RenderPassDescriptor;
 class TextureViewBase;
 
 struct BlitColorToColorWithDrawPipelineKey {
-    wgpu::TextureFormat colorFormat;
-    wgpu::TextureFormat depthStencilFormat;
+    BlitColorToColorWithDrawPipelineKey() {
+        colorTargetFormats.fill(wgpu::TextureFormat::Undefined);
+    }
+
+    PerColorAttachment<wgpu::TextureFormat> colorTargetFormats;
+    ColorAttachmentMask attachmentsToExpandResolve;
+    ColorAttachmentMask resolveTargetsMask;
+    wgpu::TextureFormat depthStencilFormat = wgpu::TextureFormat::Undefined;
     uint32_t sampleCount = 1;
 
     struct HashFunc {
@@ -64,7 +75,7 @@ using BlitColorToColorWithDrawPipelinesCache =
 //
 // The function assumes that the render pass is already started. It won't break the render pass,
 // just performing a draw call to blit.
-// This is only valid if the device's IsResolveTextureBlitWithDrawSupported() is true.
+// This is only valid if the device's CanTextureLoadResolveTargetInTheSameRenderpass() is true.
 MaybeError ExpandResolveTextureWithDraw(DeviceBase* device,
                                         RenderPassEncoder* renderEncoder,
                                         const RenderPassDescriptor* renderPassDescriptor);

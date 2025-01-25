@@ -931,19 +931,15 @@ public class SelectionPopupControllerTest {
                 mRenderFrameHost);
         Mockito.verify(spyController, times(1)).createAndShowDropdownMenu();
         Mockito.verify(spyController, times(1)).destroyActionModeAndKeepSelection();
-        Mockito.verify(spyController, times(1)).destroyPastePopup();
         Mockito.verify(dropdownMenuDelegate, times(1)).dismiss();
         Mockito.verify(dropdownMenuDelegate, times(1))
                 .show(any(), any(), any(), any(), anyInt(), anyInt());
-        Mockito.verify(spyController, never()).createAndShowPastePopup();
         Mockito.verify(spyController, never()).showActionModeOrClearOnFailure();
     }
 
     @Test
     @Feature({"TextInput"})
     public void testShowPasteMenuWhenSourceIsLongPressWithNoSelection() {
-        // Needed so createAndShowPastePopup() won't return early.
-        when(mView.getParent()).thenReturn(Mockito.mock(ViewGroup.class));
         setDropdownMenuFeatureEnabled(true);
         SelectionPopupControllerImpl spyController = Mockito.spy(mController);
         SelectionDropdownMenuDelegate dropdownMenuDelegate =
@@ -966,10 +962,9 @@ public class SelectionPopupControllerTest {
                 /* shouldSuggest= */ true,
                 MenuSourceType.MENU_SOURCE_LONG_PRESS,
                 mRenderFrameHost);
-        Mockito.verify(spyController, times(1)).createAndShowPastePopup();
+        Mockito.verify(spyController, times(1)).showActionModeOrClearOnFailure();
         Mockito.verify(dropdownMenuDelegate, times(1)).dismiss();
         Mockito.verify(spyController, never()).createAndShowDropdownMenu();
-        Mockito.verify(spyController, never()).showActionModeOrClearOnFailure();
     }
 
     @Test
@@ -999,7 +994,6 @@ public class SelectionPopupControllerTest {
                 mRenderFrameHost);
         Mockito.verify(spyController, times(1)).showActionModeOrClearOnFailure();
         Mockito.verify(dropdownMenuDelegate, times(1)).dismiss();
-        Mockito.verify(spyController, never()).createAndShowPastePopup();
         Mockito.verify(spyController, never()).createAndShowDropdownMenu();
     }
 
@@ -1026,7 +1020,7 @@ public class SelectionPopupControllerTest {
                 MenuSourceType.MENU_SOURCE_MOUSE,
                 mRenderFrameHost);
 
-        SortedSet<SelectionMenuGroup> result = mController.getSelectionMenuItems();
+        SortedSet<SelectionMenuGroup> result = mController.getMenuItems();
         mController.showSelectionMenu(
                 0,
                 0,
@@ -1046,7 +1040,7 @@ public class SelectionPopupControllerTest {
                 mRenderFrameHost);
 
         Assert.assertNotNull(mController.getSelectionMenuCachedResultForTesting());
-        Assert.assertSame(result, mController.getSelectionMenuItems());
+        Assert.assertSame(result, mController.getMenuItems());
     }
 
     @Test
@@ -1071,7 +1065,7 @@ public class SelectionPopupControllerTest {
                 MenuSourceType.MENU_SOURCE_MOUSE,
                 mRenderFrameHost);
 
-        SortedSet<SelectionMenuGroup> result = mController.getSelectionMenuItems();
+        SortedSet<SelectionMenuGroup> result = mController.getMenuItems();
         mController.showSelectionMenu(
                 0,
                 0,
@@ -1092,10 +1086,9 @@ public class SelectionPopupControllerTest {
 
         // Check the menu is different and not similar to the one we have stored.
         Assert.assertNotNull(mController.getSelectionMenuCachedResultForTesting());
-        Assert.assertNotSame(result, mController.getSelectionMenuItems());
+        Assert.assertNotSame(result, mController.getMenuItems());
         Assert.assertNotSame(
-                mController.getSelectionMenuCachedResultForTesting(),
-                mController.getSelectionMenuItems());
+                mController.getSelectionMenuCachedResultForTesting(), mController.getMenuItems());
     }
 
     @Test

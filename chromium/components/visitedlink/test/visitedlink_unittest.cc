@@ -14,12 +14,12 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
-#include "base/memory/raw_ptr.h"
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "base/timer/mock_timer.h"
 #include "components/visitedlink/browser/partitioned_visitedlink_writer.h"
@@ -39,6 +39,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
 
 using content::BrowserThread;
@@ -160,10 +161,15 @@ bool TestVisitedLinkIterator::HasNextVisitedLink() const {
 
 }  // namespace
 
-class TrackingVisitedLinkEventListener : public VisitedLinkWriter::Listener {
+class TrackingVisitedLinkEventListener
+    : public PartitionedVisitedLinkWriter::Listener,
+      public VisitedLinkWriter::Listener {
  public:
   TrackingVisitedLinkEventListener()
-      : reset_count_(0), completely_reset_count_(0), add_count_(0) {}
+      : reset_count_(0),
+        completely_reset_count_(0),
+        add_count_(0),
+        salts_update_count_(0) {}
 
   void NewTable(base::ReadOnlySharedMemoryRegion* table_region) override {
     if (table_region->IsValid()) {
@@ -180,20 +186,24 @@ class TrackingVisitedLinkEventListener : public VisitedLinkWriter::Listener {
     else
       reset_count_++;
   }
+  void UpdateOriginSalts() override { salts_update_count_++; }
 
   void SetUp() {
     reset_count_ = 0;
     add_count_ = 0;
+    salts_update_count_ = 0;
   }
 
   int reset_count() const { return reset_count_; }
   int completely_reset_count() { return completely_reset_count_; }
   int add_count() const { return add_count_; }
+  int salts_update_count() const { return salts_update_count_; }
 
  private:
   int reset_count_;
   int completely_reset_count_;
   int add_count_;
+  int salts_update_count_;
 };
 
 class VisitedLinkTest : public testing::Test {
@@ -660,7 +670,8 @@ class PartitionedVisitedLinkTest : public testing::Test {
   bool InitVisited(bool suppress_build, int initial_size) {
     // Initialize the visited link system.
     partitioned_writer_ = std::make_unique<PartitionedVisitedLinkWriter>(
-        &delegate_, suppress_build, initial_size);
+        std::make_unique<TrackingVisitedLinkEventListener>(), &delegate_,
+        suppress_build, initial_size);
     bool result = partitioned_writer_->Init();
     if (!suppress_build && result) {
       // Wait for the build to complete on the DB thread. The task will
@@ -671,6 +682,8 @@ class PartitionedVisitedLinkTest : public testing::Test {
     }
     return result;
   }
+
+  void TearDown() override { g_readers.clear(); }
 
   std::unique_ptr<PartitionedVisitedLinkWriter> partitioned_writer_;
   TestVisitedLinkDelegate delegate_;
@@ -718,6 +731,101 @@ TEST_F(PartitionedVisitedLinkTest, BuildPartitionedTable) {
         cur, net::SchemefulSite(cur), url::Origin::Create(cur), salt.value());
     EXPECT_TRUE(found) << "Partitioned link " << i << "not found in writer.";
   }
+}
+
+TEST_F(PartitionedVisitedLinkTest, NotVisitedEmptyDB) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      blink::features::kPartitionVisitedLinkDatabase);
+
+  ASSERT_TRUE(InitVisited(true, 0));
+  ASSERT_EQ(partitioned_writer_->GetUsedCount(), 0);
+
+  // Create a reader and copy the hashtable.
+  VisitedLinkReader reader;
+  reader.UpdateVisitedLinks(
+      partitioned_writer_->GetMappedTableMemoryForTesting().region.Duplicate());
+  g_readers.push_back(&reader);
+
+  // Test a visited link that has not been added to the VisitedLinkDatabase.
+  const url::Origin origin = url::Origin::Create(TestURL(0));
+  const VisitedLink link_0 = {TestURL(0), net::SchemefulSite(TestURL(0)),
+                              origin};
+  const std::optional<uint64_t> salt =
+      partitioned_writer_->GetOrAddOriginSalt(origin);
+  ASSERT_TRUE(salt.has_value());
+  // Ensure that we do not find this link in the writer's or reader's
+  // hashtables.
+  EXPECT_FALSE(partitioned_writer_->IsVisited(link_0, salt.value()));
+  EXPECT_FALSE(reader.IsVisited(link_0, salt.value()));
+}
+
+TEST_F(PartitionedVisitedLinkTest, NotVisitedSomeFieldsMatch) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      blink::features::kPartitionVisitedLinkDatabase);
+
+  // Add a link to the mock VisitedLinkDatabase. This needs to be done before we
+  // initialize the visited link hashtable.
+  const GURL url_0 = GURL("http://example.com");
+  const net::SchemefulSite site_0 = net::SchemefulSite(url_0);
+  const url::Origin origin_0 = url::Origin::Create(url_0);
+  const VisitedLink link_0 = {url_0, site_0, origin_0};
+  delegate_.AddVisitedLinkForRebuild(link_0);
+
+  // Initialize the visited link hashtable. This will load from history.
+  ASSERT_TRUE(InitVisited(false, 0));
+  ASSERT_EQ(partitioned_writer_->GetUsedCount(), 1);
+
+  // Create a reader and copy the hashtable.
+  VisitedLinkReader reader;
+  reader.UpdateVisitedLinks(
+      partitioned_writer_->GetMappedTableMemoryForTesting().region.Duplicate());
+  g_readers.push_back(&reader);
+
+  // Test visited links that have not been added to the VisitedLinkDatabase.
+  const std::optional<uint64_t> salt_0 =
+      partitioned_writer_->GetOrAddOriginSalt(origin_0);
+  ASSERT_TRUE(salt_0.has_value());
+
+  // Prepare cross-site, cross-origin values.
+  const GURL url_1 = GURL("https://google.com");
+  const net::SchemefulSite site_1 = net::SchemefulSite(url_1);
+  const url::Origin origin_1 = url::Origin::Create(TestURL(1));
+  const std::optional<uint64_t> salt_1 =
+      partitioned_writer_->GetOrAddOriginSalt(origin_1);
+  ASSERT_TRUE(salt_1.has_value());
+
+  // Test visited links that have not been added to the VisitedLinkDatabase.
+  std::map<VisitedLink, std::optional<uint64_t>> links = {
+      // Create a link where no fields match the added partition key.
+      {{url_1, site_1, origin_1}, salt_1},
+      // Create a link where only link_url matches.
+      {{url_0, site_1, origin_1}, salt_1},
+      // Create a link where only top_level_site matches.
+      {{url_1, site_0, origin_1}, salt_1},
+      // Create a link where only the frame_origin matches.
+      {{url_1, site_1, origin_0}, salt_0},
+      // Create a link where link_url and top_level_site match.
+      {{url_0, site_0, origin_1}, salt_1},
+      // Create a link where link_url and frame_origin match.
+      {{url_0, site_1, origin_0}, salt_0},
+      // Create a link where top_level_site and frame_origin match.
+      {{url_1, site_0, origin_0}, salt_0},
+      // Create a link where the salt does not match frame_origin.
+      {{url_0, site_0, origin_0}, salt_1}};
+
+  for (const auto& [cur_link, cur_salt] : links) {
+    // Ensure that we do not find this link in the writer's or reader's
+    // hashtables.
+    EXPECT_FALSE(partitioned_writer_->IsVisited(cur_link, cur_salt.value()));
+    EXPECT_FALSE(reader.IsVisited(cur_link, cur_salt.value()));
+  }
+
+  // Ensure that we can find the original link in the writer's and reader's
+  // hashtables.
+  EXPECT_TRUE(partitioned_writer_->IsVisited(link_0, salt_0.value()));
+  EXPECT_TRUE(reader.IsVisited(link_0, salt_0.value()));
 }
 
 TEST_F(PartitionedVisitedLinkTest, AddAndDelete) {
@@ -779,12 +887,75 @@ TEST_F(PartitionedVisitedLinkTest, DeleteWithCollisions) {
   }
 }
 
+TEST_F(PartitionedVisitedLinkTest, DeleteAll) {
+  // Initialize the table with partitioning enabled.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      blink::features::kPartitionVisitedLinkDatabase);
+  ASSERT_TRUE(InitVisited(true, 0));
+
+  // Create a reader instance and populate its hashtable.
+  {
+    VisitedLinkReader reader;
+    reader.UpdateVisitedLinks(
+        partitioned_writer_->GetMappedTableMemoryForTesting()
+            .region.Duplicate());
+    g_readers.push_back(&reader);
+
+    // Add the test links.
+    for (int i = 0; i < kTestCount; i++) {
+      const VisitedLink link = {TestURL(i), net::SchemefulSite(TestURL(i)),
+                                url::Origin::Create(TestURL(i))};
+      partitioned_writer_->AddVisitedLink(link);
+      ASSERT_EQ(i + 1, partitioned_writer_->GetUsedCount());
+    }
+    partitioned_writer_->DebugValidate();
+
+    // Make sure the reader received the added links via IPC.
+    for (int i = 0; i < kTestCount; i++) {
+      const url::Origin origin = url::Origin::Create(TestURL(i));
+      const VisitedLink link = {TestURL(i), net::SchemefulSite(TestURL(i)),
+                                origin};
+      const std::optional<uint64_t> salt =
+          partitioned_writer_->GetOrAddOriginSalt(origin);
+      ASSERT_TRUE(salt.has_value());
+      EXPECT_TRUE(reader.IsVisited(link, salt.value()));
+    }
+
+    // Clear the table and make sure the reader clears its hashtable as well.
+    partitioned_writer_->DeleteAllVisitedLinks();
+    EXPECT_EQ(0, partitioned_writer_->GetUsedCount());
+    for (int i = 0; i < kTestCount; i++) {
+      const url::Origin origin = url::Origin::Create(TestURL(i));
+      const VisitedLink link = {TestURL(i), net::SchemefulSite(TestURL(i)),
+                                origin};
+      const std::optional<uint64_t> salt =
+          partitioned_writer_->GetOrAddOriginSalt(origin);
+      ASSERT_TRUE(salt.has_value());
+      // Ensure that neither the writer nor the reader contain this link now.
+      EXPECT_FALSE(partitioned_writer_->IsVisited(link, salt.value()));
+      EXPECT_FALSE(reader.IsVisited(link, salt.value()));
+    }
+  }
+}
+
 TEST_F(PartitionedVisitedLinkTest, Resizing) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      blink::features::kPartitionVisitedLinkDatabase);
+
   // Create a very small database.
   const int32_t initial_size = 17;
   ASSERT_TRUE(InitVisited(true, initial_size));
   ASSERT_EQ(partitioned_writer_->GetUsedCount(), 0);
 
+  // Create a reader to notify of the resizing.
+  VisitedLinkReader reader;
+  reader.UpdateVisitedLinks(
+      partitioned_writer_->GetMappedTableMemoryForTesting().region.Duplicate());
+  g_readers.push_back(&reader);
+
+  // Populate the very small database.
   for (int i = 0; i < kTestCount; i++) {
     VisitedLink link = {TestURL(i), net::SchemefulSite(TestURL(i)),
                         url::Origin::Create(TestURL(i))};
@@ -801,7 +972,15 @@ TEST_F(PartitionedVisitedLinkTest, Resizing) {
   ASSERT_EQ(used_count, kTestCount)
       << "table count doesn't match the # of things we added";
 
-  // TODO(crbug.com/332364003): Ensure that the reader also resizes its table.
+  // Verify that the reader got the resize message and has the same
+  // table information.
+  int32_t reader_table_size;
+  VisitedLinkCommon::Fingerprint* reader_table;
+  reader.GetUsageStatistics(&reader_table_size, &reader_table);
+  ASSERT_EQ(table_size, reader_table_size);
+  for (int32_t i = 0; i < table_size; i++) {
+    ASSERT_EQ(table[i], reader_table[i]);
+  }
 }
 
 TEST_F(PartitionedVisitedLinkTest, HashRangeWraparound) {
@@ -825,6 +1004,50 @@ TEST_F(PartitionedVisitedLinkTest, HashRangeWraparound) {
   EXPECT_EQ(hash1, 0);
 }
 
+TEST_F(PartitionedVisitedLinkTest, Listener) {
+  // Create an initialized but empty hashtable.
+  ASSERT_TRUE(InitVisited(false, 0));
+
+  // Obtain the Listener and cast it into our test-friendly subclass.
+  TrackingVisitedLinkEventListener* listener =
+      static_cast<TrackingVisitedLinkEventListener*>(
+          partitioned_writer_->GetListener());
+
+  // Verify that PartitionedVisitedLinkWriter::Listener::Reset(false) was called
+  // when the hashtable was created.
+  EXPECT_EQ(1, listener->reset_count());
+  // Verify that PartitionedVisitedLinkWriter::Listener::UpdateOriginSalts() was
+  // called when the hashtable finished building.
+  EXPECT_EQ(1, listener->salts_update_count());
+
+  // Add test links to the hashtable.
+  for (int i = 0; i < kTestCount; i++) {
+    VisitedLink link = {TestURL(i), net::SchemefulSite(TestURL(i)),
+                        url::Origin::Create(TestURL(i))};
+    partitioned_writer_->AddVisitedLink(link);
+    ASSERT_EQ(i + 1, partitioned_writer_->GetUsedCount());
+  }
+  // Verify that PartitionedVisitedLinkWriter::Listener::Add was called for each
+  // added link.
+  EXPECT_EQ(kTestCount, listener->add_count());
+
+  // Delete the first test link.
+  VisitedLink link_0 = {TestURL(0), net::SchemefulSite(TestURL(0)),
+                        url::Origin::Create(TestURL(0))};
+  std::vector<VisitedLink> links_to_delete = {link_0};
+  TestVisitedLinkIterator iterator(links_to_delete);
+  partitioned_writer_->DeleteVisitedLinks(&iterator);
+  // Verify that PartitionedVisitedLinkWriter::Listener::Reset(false) was called
+  // when the single link was deleted.
+  EXPECT_EQ(2, listener->reset_count());
+
+  // ... and all of the remaining ones.
+  partitioned_writer_->DeleteAllVisitedLinks();
+  // Verify that PartitionedVisitedLinkWriter::Listener::Reset(false) was called
+  // when all the links were deleted.
+  EXPECT_EQ(3, listener->reset_count());
+}
+
 class VisitCountingContext : public mojom::VisitedLinkNotificationSink {
  public:
   VisitCountingContext()
@@ -832,7 +1055,8 @@ class VisitCountingContext : public mojom::VisitedLinkNotificationSink {
         add_event_count_(0),
         reset_event_count_(0),
         completely_reset_event_count_(0),
-        new_table_count_(0) {}
+        new_table_count_(0),
+        salts_update_event_count_(0) {}
 
   VisitCountingContext(const VisitCountingContext&) = delete;
   VisitCountingContext& operator=(const VisitCountingContext&) = delete;
@@ -873,10 +1097,20 @@ class VisitCountingContext : public mojom::VisitedLinkNotificationSink {
   }
 
   void ResetVisitedLinks(bool invalidate_cached_hashes) override {
-    if (invalidate_cached_hashes)
+    if (invalidate_cached_hashes) {
       completely_reset_event_count_++;
-    else
+    } else {
       reset_event_count_++;
+    }
+    NotifyUpdate();
+  }
+
+  void UpdateOriginSalts(
+      const base::flat_map<url::Origin, uint64_t>& origin_salts) override {
+    salts_update_event_count_++;
+    for (const auto& [origin, salt] : origin_salts) {
+      salts_[origin] = salt;
+    }
     NotifyUpdate();
   }
 
@@ -887,6 +1121,8 @@ class VisitCountingContext : public mojom::VisitedLinkNotificationSink {
     return completely_reset_event_count_;
   }
   int new_table_count() const { return new_table_count_; }
+  int salts_update_event_count() const { return salts_update_event_count_; }
+  std::map<url::Origin, uint64_t> salts() const { return salts_; }
 
  private:
   int add_count_;
@@ -894,6 +1130,8 @@ class VisitCountingContext : public mojom::VisitedLinkNotificationSink {
   int reset_event_count_;
   int completely_reset_event_count_;
   int new_table_count_;
+  int salts_update_event_count_;
+  std::map<url::Origin, uint64_t> salts_;
 
   base::OnceClosure quit_closure_;
   mojo::ReceiverSet<mojom::VisitedLinkNotificationSink> receiver_;
@@ -941,14 +1179,15 @@ class VisitedLinkRenderProcessHostFactory
   // process has launched. This is after RenderWidgetHost has been created. We
   // will notify at the end of SetUp.
   void NotifyProcessLaunced() {
+    DCHECK(listener_);
     for (auto& rph : processes_) {
-      creation_observer_->OnRenderProcessHostCreated(rph.get());
+      listener_->OnRenderProcessHostCreated(rph.get());
     }
   }
 
-  void SetRenderProcessHostCreationObserver(
-      content::RenderProcessHostCreationObserver* observer) {
-    creation_observer_ = observer;
+  void SetVisitedLinkEventListener(VisitedLinkEventListener* listener) {
+    DCHECK(listener);
+    listener_ = listener;
   }
 
   VisitCountingContext* context() { return context_.get(); }
@@ -956,8 +1195,7 @@ class VisitedLinkRenderProcessHostFactory
   void DeleteRenderProcessHosts() { processes_.clear(); }
 
  private:
-  raw_ptr<content::RenderProcessHostCreationObserver, DanglingUntriaged>
-      creation_observer_ = nullptr;
+  raw_ptr<VisitedLinkEventListener, DanglingUntriaged> listener_ = nullptr;
 
   std::list<std::unique_ptr<VisitRelayingRenderProcessHost>> processes_;
   std::unique_ptr<VisitCountingContext> context_;
@@ -986,7 +1224,7 @@ class VisitedLinkEventsTest : public content::RenderViewHostTestHarness {
   std::unique_ptr<content::BrowserContext> CreateBrowserContext() override {
     auto context = std::make_unique<content::TestBrowserContext>();
     CreateVisitedLinkWriter(context.get());
-    vc_rph_factory_.SetRenderProcessHostCreationObserver(
+    vc_rph_factory_.SetVisitedLinkEventListener(
         static_cast<VisitedLinkEventListener*>(writer_->GetListener()));
     return context;
   }
@@ -1178,13 +1416,277 @@ TEST_F(VisitedLinkEventsTest, IgnoreRendererCreationFromDifferentContext) {
   EXPECT_EQ(old_size, new_size);
 }
 
+// This class allows us to test PartitionedVisitedLinkWriter's inter-process
+// communication via the VisitedLinkNotificationSink interface. We also test
+// whether the VisitedLinkEventListener is able to connect the
+// PartitionedVisitedLinkWriter's updates with each RenderProcessHost.
+class PartitionedVisitedLinkEventsTest
+    : public content::RenderViewHostTestHarness {
+ public:
+  void SetUp() override {
+    SetRenderProcessHostFactory(&vc_rph_factory_);
+    content::RenderViewHostTestHarness::SetUp();
+    vc_rph_factory_.NotifyProcessLaunced();
+  }
+
+  void TearDown() override {
+    partitioned_writer_.reset();
+    DeleteContents();
+    vc_rph_factory_.DeleteRenderProcessHosts();
+    RenderViewHostTestHarness::TearDown();
+  }
+
+  std::unique_ptr<content::BrowserContext> CreateBrowserContext() override {
+    auto context = std::make_unique<content::TestBrowserContext>();
+    CreatePartitionedVisitedLinkWriter(context.get());
+    vc_rph_factory_.SetVisitedLinkEventListener(
+        static_cast<VisitedLinkEventListener*>(
+            partitioned_writer_->GetListener()));
+    return context;
+  }
+
+  VisitCountingContext* context() { return vc_rph_factory_.context(); }
+
+  PartitionedVisitedLinkWriter* partitioned_writer() const {
+    return partitioned_writer_.get();
+  }
+
+ protected:
+  void CreatePartitionedVisitedLinkWriter(
+      content::BrowserContext* browser_context) {
+    timer_ = std::make_unique<base::MockOneShotTimer>();
+    partitioned_writer_ = std::make_unique<PartitionedVisitedLinkWriter>(
+        browser_context, &delegate_);
+    static_cast<VisitedLinkEventListener*>(partitioned_writer_->GetListener())
+        ->SetCoalesceTimerForTest(timer_.get());
+    partitioned_writer_->Init();
+  }
+
+  VisitedLinkRenderProcessHostFactory vc_rph_factory_;
+
+  TestVisitedLinkDelegate delegate_;
+  std::unique_ptr<base::MockOneShotTimer> timer_;
+  std::unique_ptr<PartitionedVisitedLinkWriter> partitioned_writer_;
+};
+
+TEST_F(PartitionedVisitedLinkEventsTest, Coalescence) {
+  // Waiting for notifications that the table build is complete.
+  content::RunAllTasksUntilIdle();
+
+  // A reset should be called after the hashtable is built from the
+  // VisitedLinkDatabase.
+  EXPECT_EQ(1, context()->reset_event_count());
+
+  // Add test links to the hashtable.
+  const int kFirstBatchCount = 3;
+  for (int i = 0; i < kFirstBatchCount; i++) {
+    VisitedLink link = {TestURL(i), net::SchemefulSite(TestURL(i)),
+                        url::Origin::Create(TestURL(i))};
+    partitioned_writer_->AddVisitedLink(link);
+    ASSERT_EQ(i + 1, partitioned_writer_->GetUsedCount());
+  }
+  // Ensure that adding a duplicate link doesn't increase the add count.
+  const int kDupeIndex = kFirstBatchCount - 1;
+  VisitedLink duplicate_link1 = {TestURL(kDupeIndex),
+                                 net::SchemefulSite(TestURL(kDupeIndex)),
+                                 url::Origin::Create(TestURL(kDupeIndex))};
+  partitioned_writer_->AddVisitedLink(duplicate_link1);
+  ASSERT_TRUE(timer_->IsRunning());
+  timer_->Fire();
+
+  context()->WaitForUpdate();
+
+  // We now should have 3 entries added in 1 event.
+  EXPECT_EQ(kFirstBatchCount, context()->add_count());
+  EXPECT_EQ(1, context()->add_event_count());
+
+  // Test whether the coalescing continues by adding a few more URLs.
+  const int kSecondBatchCount = 6;
+  for (int i = kFirstBatchCount; i < kSecondBatchCount; i++) {
+    VisitedLink link = {TestURL(i), net::SchemefulSite(TestURL(i)),
+                        url::Origin::Create(TestURL(i))};
+    partitioned_writer_->AddVisitedLink(link);
+    ASSERT_EQ(i + 1, partitioned_writer_->GetUsedCount());
+  }
+  ASSERT_TRUE(timer_->IsRunning());
+  timer_->Fire();
+  context()->WaitForUpdate();
+
+  // We should have 6 entries added in 2 events.
+  EXPECT_EQ(kSecondBatchCount, context()->add_count());
+  EXPECT_EQ(2, context()->add_event_count());
+
+  // Test again whether duplicate entries produce add events.
+  const int kDupeIndex2 = kSecondBatchCount - 1;
+  VisitedLink duplicate_link2 = {TestURL(kDupeIndex2),
+                                 net::SchemefulSite(TestURL(kDupeIndex2)),
+                                 url::Origin::Create(TestURL(kDupeIndex2))};
+  partitioned_writer_->AddVisitedLink(duplicate_link2);
+  EXPECT_FALSE(timer_->IsRunning());
+  context()->WaitForNoUpdate();
+
+  // We should have no change in results.
+  EXPECT_EQ(kSecondBatchCount, context()->add_count());
+  EXPECT_EQ(2, context()->add_event_count());
+
+  // Ensure that the coalescing does not resume after resetting.
+  VisitedLink final_link = {TestURL(kSecondBatchCount),
+                            net::SchemefulSite(TestURL(kSecondBatchCount)),
+                            url::Origin::Create(TestURL(kSecondBatchCount))};
+  partitioned_writer_->AddVisitedLink(final_link);
+  EXPECT_TRUE(timer_->IsRunning());
+  partitioned_writer()->DeleteAllVisitedLinks();
+  EXPECT_FALSE(timer_->IsRunning());
+  context()->WaitForNoUpdate();
+
+  // We should have no change in results except for one new reset event.
+  EXPECT_EQ(kSecondBatchCount, context()->add_count());
+  EXPECT_EQ(2, context()->add_event_count());
+  EXPECT_EQ(2, context()->reset_event_count());
+}
+
+TEST_F(PartitionedVisitedLinkEventsTest, Basics) {
+  RenderViewHostTester::For(rvh())->CreateTestRenderView();
+
+  // Waiting for notifications that the table build is complete.
+  content::RunAllTasksUntilIdle();
+
+  // A reset and a salt update should be called after building the hashtable
+  // from the VisitedLinkDatabase.
+  EXPECT_EQ(1, context()->reset_event_count());
+  EXPECT_EQ(1, context()->salts_update_event_count());
+  EXPECT_EQ(1u, context()->salts().size());
+
+  // Ensure that the salt sent to the VisitedLinkReader for a given origin is
+  // equivalent to what we have stored in PartitionedVisitedLinkWriter.
+  for (const auto& [origin, salt] : context()->salts()) {
+    const std::optional<uint64_t> expected_salt =
+        partitioned_writer_->GetOrAddOriginSalt(origin);
+    EXPECT_TRUE(expected_salt.has_value());
+    EXPECT_EQ(salt, expected_salt.value());
+  }
+
+  // Add test links to the hashtable.
+  const int kLinkCount = 3;
+  for (int i = 0; i < kLinkCount; i++) {
+    VisitedLink link = {TestURL(i), net::SchemefulSite(TestURL(i)),
+                        url::Origin::Create(TestURL(i))};
+    partitioned_writer_->AddVisitedLink(link);
+    ASSERT_EQ(i + 1, partitioned_writer_->GetUsedCount());
+  }
+  ASSERT_TRUE(timer_->IsRunning());
+  timer_->Fire();
+  context()->WaitForUpdate();
+
+  // We now should have 1 add event.
+  EXPECT_EQ(1, context()->add_event_count());
+  EXPECT_EQ(1, context()->reset_event_count());
+
+  partitioned_writer()->DeleteAllVisitedLinks();
+
+  EXPECT_FALSE(timer_->IsRunning());
+  context()->WaitForNoUpdate();
+
+  // We should have no change in add results, plus one new reset event.
+  EXPECT_EQ(1, context()->add_event_count());
+  EXPECT_EQ(2, context()->reset_event_count());
+}
+
+TEST_F(PartitionedVisitedLinkEventsTest, TabVisibility) {
+  RenderViewHostTester::For(rvh())->CreateTestRenderView();
+
+  // Waiting for notifications that the table build is complete.
+  content::RunAllTasksUntilIdle();
+
+  // A reset should be called after building the hashtable from the
+  // VisitedLinkDatabase.
+  EXPECT_EQ(1, context()->reset_event_count());
+
+  // Simulate tab becoming inactive.
+  RenderViewHostTester::For(rvh())->SimulateWasHidden();
+
+  // Add test links to the hashtable.
+  const int kFirstBatchCount = 3;
+  for (int i = 0; i < kFirstBatchCount; i++) {
+    VisitedLink link = {TestURL(i), net::SchemefulSite(TestURL(i)),
+                        url::Origin::Create(TestURL(i))};
+    partitioned_writer_->AddVisitedLink(link);
+    ASSERT_EQ(i + 1, partitioned_writer_->GetUsedCount());
+  }
+  ASSERT_TRUE(timer_->IsRunning());
+  timer_->Fire();
+  context()->WaitForNoUpdate();
+
+  // We shouldn't have any add events because the tab is not visible.
+  EXPECT_EQ(0, context()->add_event_count());
+  EXPECT_EQ(1, context()->reset_event_count());
+
+  // Simulate the tab becoming active.
+  RenderViewHostTester::For(rvh())->SimulateWasShown();
+  context()->WaitForUpdate();
+
+  // Now that the tab is active, we should receive the add event.
+  EXPECT_EQ(1, context()->add_event_count());
+  EXPECT_EQ(1, context()->reset_event_count());
+
+  // Deactivate the tab again.
+  RenderViewHostTester::For(rvh())->SimulateWasHidden();
+
+  // Add a bunch of links (over 50) to exhaust the link event buffer.
+  for (int i = kFirstBatchCount; i < 100; i++) {
+    VisitedLink link = {TestURL(i), net::SchemefulSite(TestURL(i)),
+                        url::Origin::Create(TestURL(i))};
+    partitioned_writer_->AddVisitedLink(link);
+    ASSERT_EQ(i + 1, partitioned_writer_->GetUsedCount());
+  }
+
+  ASSERT_TRUE(timer_->IsRunning());
+  timer_->Fire();
+  context()->WaitForNoUpdate();
+
+  // Again, no change in events until tab is active.
+  EXPECT_EQ(1, context()->add_event_count());
+  EXPECT_EQ(1, context()->reset_event_count());
+
+  // Activate the tab.
+  RenderViewHostTester::For(rvh())->SimulateWasShown();
+  EXPECT_FALSE(timer_->IsRunning());
+  context()->WaitForUpdate();
+
+  // We should have only one more reset event because the links were added in
+  // bulk (which triggers the code to just reset rather than send individually).
+  EXPECT_EQ(1, context()->add_event_count());
+  EXPECT_EQ(2, context()->reset_event_count());
+}
+
+// Tests that VisitedLink ignores renderer process creation notification for a
+// different context.
+TEST_F(PartitionedVisitedLinkEventsTest,
+       IgnoreRendererCreationFromDifferentContext) {
+  content::TestBrowserContext different_context;
+  VisitCountingContext counting_context;
+  // There are two render process hosts in play with this test. The primary
+  // one is where the observer callback (done below) will be received
+  // and don't need an observer for the other process host as it isn't
+  // needed in the test.
+  VisitRelayingRenderProcessHost different_process_host(&different_context,
+                                                        &counting_context);
+
+  size_t old_size = counting_context.binding().size();
+
+  static_cast<VisitedLinkEventListener*>(partitioned_writer()->GetListener())
+      ->OnRenderProcessHostCreated(&different_process_host);
+  size_t new_size = counting_context.binding().size();
+  EXPECT_EQ(old_size, new_size);
+}
+
 class VisitedLinkCompletelyResetEventTest : public VisitedLinkEventsTest {
  public:
   std::unique_ptr<content::BrowserContext> CreateBrowserContext() override {
     auto context = std::make_unique<content::TestBrowserContext>();
     CreateVisitedLinkFile(context.get());
     CreateVisitedLinkWriter(context.get());
-    vc_rph_factory_.SetRenderProcessHostCreationObserver(
+    vc_rph_factory_.SetVisitedLinkEventListener(
         static_cast<VisitedLinkEventListener*>(writer_->GetListener()));
     return context;
   }

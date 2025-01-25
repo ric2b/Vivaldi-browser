@@ -23,6 +23,7 @@ source_set("lib") {
     ":test_support",
     ":tests",
     "//content/browser",
+    "//content/test:test_support",
     "//services/device/public/cpp:test_support",
   ]
   sources = [
@@ -153,7 +154,7 @@ source_set("tests") {
     "geolocation/geolocation_impl_unittest.cc",
     "geolocation/geolocation_provider_impl_unittest.cc",
     "geolocation/geolocation_service_unittest.cc",
-    "geolocation/location_arbitrator_unittest.cc",
+    "geolocation/location_provider_manager_unittest.cc",
     "geolocation/network_location_provider_unittest.cc",
     "geolocation/position_cache_impl_unittest.cc",
     "geolocation/public_ip_address_geolocator_unittest.cc",
@@ -342,6 +343,7 @@ source_set("tests") {
     deps += [
       ":usb_test_gadget",
       "//device/base",
+      "//mojo/public/cpp/test_support:test_utils",
       "//net:test_support",
       "//services/device/public/cpp:test_support",
       "//services/device/public/cpp/usb",

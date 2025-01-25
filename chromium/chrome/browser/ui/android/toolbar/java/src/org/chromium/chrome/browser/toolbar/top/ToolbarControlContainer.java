@@ -520,7 +520,12 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
 
                 final @LayoutType int layoutType = getCurrentLayoutType();
                 if (layoutType != LayoutType.TOOLBAR_SWIPE) {
-                    if (mConstraintsObserver != null && mTabSupplier != null) {
+                    // Don't block capture here if BrowserControlsInViz is enabled. With bciv
+                    // enabled, there's no surface sync, so we need to capture before controls are
+                    // unlocked so that it's ready as soon as we need to scroll.
+                    if (!ChromeFeatureList.sBrowserControlsInViz.isEnabled()
+                            && mConstraintsObserver != null
+                            && mTabSupplier != null) {
                         Tab tab = mTabSupplier.get();
 
                         // TODO(crbug.com/40859837): Understand and fix this for native
@@ -606,17 +611,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
             mToolbar.getLocationBarContentRect(mLocationBarRect);
             mLocationBarRect.offset(mTempPosition[0], mTempPosition[1]);
 
-            int shadowHeight;
-            if (ToolbarFeatures.isDynamicTopChromeEnabled()) {
-                // When DynamicTopChrome is enabled, the tab strip height can be unpredictable
-                // during capture.
-                shadowHeight = mToolbarHairline.getHeight();
-            } else {
-                shadowHeight =
-                        mToolbarContainer.getHeight() - mToolbar.getHeight() - mTabStripHeightPx;
-                shadowHeight  = mToolbarHairline.getHeight(); // Vivaldi
-            }
-
+            int shadowHeight = mToolbarHairline.getHeight();
             return ResourceFactory.createToolbarContainerResource(
                     mToolbarRect, mLocationBarRect, shadowHeight);
         }

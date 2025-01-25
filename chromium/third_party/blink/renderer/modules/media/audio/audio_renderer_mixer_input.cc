@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/media/audio/audio_renderer_mixer_input.h"
 
 #include <cmath>
@@ -137,7 +142,8 @@ bool AudioRendererMixerInput::SetVolume(double volume) {
 }
 
 media::OutputDeviceInfo AudioRendererMixerInput::GetOutputDeviceInfo() {
-  NOTREACHED();  // The blocking API is intentionally not supported.
+  NOTREACHED_IN_MIGRATION();  // The blocking API is intentionally not
+                              // supported.
   return media::OutputDeviceInfo();
 }
 

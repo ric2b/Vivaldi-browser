@@ -78,9 +78,10 @@ export class FilteredListWidget extends Common.ObjectWrapper.eventMixin<EventTyp
     this.inputBoxElement.data = {ariaLabel: i18nString(UIStrings.quickOpenPrompt), prefix: '', suggestion: ''};
     this.inputBoxElement.addEventListener(
         TextPrompt.TextPrompt.PromptInputEvent.eventName, this.onInput.bind(this), false);
-    this.inputBoxElement.setAttribute(
-        'jslog',
-        `${VisualLogging.textField().track({change: true, keydown: 'ArrowUp|ArrowDown|PageUp|PageDown|Enter|Tab'})}`);
+    this.inputBoxElement.setAttribute('jslog', `${VisualLogging.textField().track({
+                                        change: true,
+                                        keydown: 'ArrowUp|ArrowDown|PageUp|PageDown|Enter|Tab|>|@|:|?|!',
+                                      })}`);
     hbox.appendChild(this.inputBoxElement);
 
     this.hintElement = hbox.createChild('span', 'filtered-list-widget-hint');
@@ -250,8 +251,11 @@ export class FilteredListWidget extends Common.ObjectWrapper.eventMixin<EventTyp
       return;
     }
     event.preventDefault();
-
-    const element = this.list.elementAtIndex(this.list.selectedIndex());
+    const index = this.list.selectedIndex();
+    if (index < 0) {
+      return;
+    }
+    const element = this.list.elementAtIndex(index);
     if (element) {
       void VisualLogging.logClick(element, event);
     }

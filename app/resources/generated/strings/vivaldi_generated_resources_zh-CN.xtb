@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">应用</translation>
 <translation id="1603914832182249871">（隐身模式）</translation>
 <translation id="1627276047960621195">文件描述符</translation>
+<translation id="1654713139320245449">找不到目标投放设备。需要帮助吗？</translation>
 <translation id="166278006618318542">证书持有者的公共密钥算法</translation>
 <translation id="1682548588986054654">新建隐身窗口</translation>
 <translation id="1708338024780164500">（闲置）</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">您计算机上的其他程序添加了一个扩展程序，该扩展程序可能会改变 Vivaldi 的工作方式。</translation>
 <translation id="2443487764245141020">网站可能还需要使用标识符来识别您的设备</translation>
 <translation id="2445081178310039857">必须指定扩展程序根目录。</translation>
-<translation id="2470702053775288986">已停用不支持的扩展程序</translation>
 <translation id="2485422356828889247">卸载</translation>
 <translation id="2498539833203011245">最小化</translation>
 <translation id="2509495747794740764">缩放比例必须是一个介于 10 到 200 之间的数字。</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">详细信息(&amp;D)</translation>
 <translation id="4345587454538109430">配置...</translation>
 <translation id="4348766275249686434">收集错误信息</translation>
-<translation id="4363771538994847871">找不到投射目标。需要帮助吗？</translation>
 <translation id="4384652540891215547">激活该扩展程序</translation>
 <translation id="4394049700291259645">禁用</translation>
 <translation id="4409697491990005945">边距</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">布局</translation>
 <translation id="7782102568078991263">Google 无法提供更多建议</translation>
 <translation id="7786889348652477777">重新加载应用(&amp;R)</translation>
-<translation id="7791543448312431591">添加</translation>
 <translation id="7800518121066352902">逆时针旋转(&amp;O)</translation>
 <translation id="7814458197256864873">复制(&amp;C)</translation>
 <translation id="7818135753970109980">已添加新主题背景（<ph name="EXTENSION_NAME" />）</translation>

@@ -5,7 +5,7 @@
 #ifndef PARTITION_ALLOC_SHIM_ALLOCATOR_SHIM_DEFAULT_DISPATCH_TO_PARTITION_ALLOC_H_
 #define PARTITION_ALLOC_SHIM_ALLOCATOR_SHIM_DEFAULT_DISPATCH_TO_PARTITION_ALLOC_H_
 
-#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/buildflags.h"
 
 #if PA_BUILDFLAG(USE_ALLOCATOR_SHIM)
 #include "partition_alloc/partition_alloc.h"
@@ -56,6 +56,12 @@ void* PartitionAlignedAlloc(const AllocatorDispatch* dispatch,
                             void* context);
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
+void* PartitionAlignedAllocUnchecked(const AllocatorDispatch* dispatch,
+                                     size_t size,
+                                     size_t alignment,
+                                     void* context);
+
+PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
 void* PartitionAlignedRealloc(const AllocatorDispatch* dispatch,
                               void* address,
                               size_t size,
@@ -63,10 +69,23 @@ void* PartitionAlignedRealloc(const AllocatorDispatch* dispatch,
                               void* context);
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
+void* PartitionAlignedReallocUnchecked(const AllocatorDispatch* dispatch,
+                                       void* address,
+                                       size_t size,
+                                       size_t alignment,
+                                       void* context);
+
+PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
 void* PartitionRealloc(const AllocatorDispatch*,
                        void* address,
                        size_t size,
                        void* context);
+
+PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
+void* PartitionReallocUnchecked(const AllocatorDispatch*,
+                                void* address,
+                                size_t size,
+                                void* context);
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
 void PartitionFree(const AllocatorDispatch*, void* object, void* context);
@@ -83,9 +102,17 @@ size_t PartitionGetSizeEstimate(const AllocatorDispatch*,
 // we're making it more resilient to ConfigurePartitions() interface changes, so
 // that we don't have to modify multiple callers. This is particularly important
 // when callers are in a different repo, like PDFium or Dawn.
-PA_ALWAYS_INLINE void ConfigurePartitionsForTesting() {
+PA_ALWAYS_INLINE void ConfigurePartitionsForTesting(
+    bool enable_memory_tagging_if_available = true) {
   auto enable_brp = allocator_shim::EnableBrp(true);
+
+#if PA_BUILDFLAG(HAS_MEMORY_TAGGING)
+  auto enable_memory_tagging =
+      allocator_shim::EnableMemoryTagging(enable_memory_tagging_if_available);
+#else
   auto enable_memory_tagging = allocator_shim::EnableMemoryTagging(false);
+#endif  // PA_BUILDFLAG(HAS_MEMORY_TAGGING)
+
   // Since the only user of this function is a test function, we use
   // synchronous reporting mode, if MTE is enabled.
   auto memory_tagging_reporting_mode =
@@ -97,12 +124,13 @@ PA_ALWAYS_INLINE void ConfigurePartitionsForTesting() {
   size_t scheduler_loop_quarantine_capacity_in_bytes = 0;
   auto zapping_by_free_flags = ZappingByFreeFlags(false);
   auto use_pool_offset_freelists = UsePoolOffsetFreelists(true);
+  auto use_small_single_slot_spans = UseSmallSingleSlotSpans(true);
 
-  ConfigurePartitions(enable_brp, enable_memory_tagging,
-                      memory_tagging_reporting_mode, distribution,
-                      scheduler_loop_quarantine,
-                      scheduler_loop_quarantine_capacity_in_bytes,
-                      zapping_by_free_flags, use_pool_offset_freelists);
+  ConfigurePartitions(
+      enable_brp, enable_memory_tagging, memory_tagging_reporting_mode,
+      distribution, scheduler_loop_quarantine,
+      scheduler_loop_quarantine_capacity_in_bytes, zapping_by_free_flags,
+      use_pool_offset_freelists, use_small_single_slot_spans);
 }
 #endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 

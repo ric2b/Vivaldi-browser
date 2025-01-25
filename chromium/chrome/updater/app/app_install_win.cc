@@ -21,6 +21,7 @@
 
 #include "base/check.h"
 #include "base/check_op.h"
+#include "base/debug/alias.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/json/json_string_value_serializer.h"
@@ -232,7 +233,7 @@ class AppInstallProgressIPC : public AppInstallProgress {
 
   void OnWaitingToDownload(const std::string& app_id,
                            const std::u16string& app_name) override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   void OnDownloading(const std::string& app_id,
@@ -249,7 +250,7 @@ class AppInstallProgressIPC : public AppInstallProgress {
   void OnWaitingRetryDownload(const std::string& app_id,
                               const std::u16string& app_name,
                               const base::Time& next_retry_time) override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   void OnWaitingToInstall(const std::string& app_id,
@@ -271,7 +272,7 @@ class AppInstallProgressIPC : public AppInstallProgress {
                                time_remaining, pos));
   }
 
-  void OnPause() override { NOTREACHED(); }
+  void OnPause() override { NOTREACHED_IN_MIGRATION(); }
 
   void OnComplete(const ObserverCompletionInfo& observer_info) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -675,7 +676,7 @@ void AppInstallControllerImpl::HandleOsNotSupported() {
   update_state.error_category = UpdateService::ErrorCategory::kInstall;
   observer_completion_info_ = HandleInstallResult(update_state);
   observer_completion_info_->completion_text =
-      base::WideToUTF16(GetLocalizedString(IDS_INSTALL_OS_NOT_SUPPORTED_BASE));
+      base::WideToUTF16(GetLocalizedString(IDS_UPDATER_OS_NOT_SUPPORTED_BASE));
   InstallComplete(UpdateService::Result::kInstallFailed);
 }
 
@@ -712,8 +713,16 @@ void AppInstallControllerImpl::InstallComplete(UpdateService::Result result) {
 void AppInstallControllerImpl::StateChange(
     const UpdateService::UpdateState& update_state) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  AppInstallProgressIPC* dbg_ipc = install_progress_observer_ipc_.get();
+  base::debug::Alias(&dbg_ipc);
   CHECK(install_progress_observer_ipc_);
 
+  // crbug.com/345250525 - understand why the check fails.
+  UpdateService::UpdateState::State state = update_state.state;
+  base::debug::Alias(&state);
+  DEBUG_ALIAS_FOR_CSTR(dbg_app_id1, app_id_.c_str(), 64);
+  DEBUG_ALIAS_FOR_CSTR(dbg_app_id2, update_state.app_id.c_str(), 64);
   CHECK_EQ(app_id_, update_state.app_id);
 
   switch (update_state.state) {
@@ -931,7 +940,7 @@ void AppInstallControllerImpl::DoCancel() {
       completion_text = GetLocalizedString(IDS_INSTALL_UPDATER_FAILED_BASE);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 

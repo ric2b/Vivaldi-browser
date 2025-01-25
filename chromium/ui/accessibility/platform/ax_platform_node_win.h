@@ -1570,6 +1570,12 @@ class COMPONENT_EXPORT(AX_PLATFORM) __declspec(
 
   AXPlatformNodeWin* GetUIATableAncestor() const;
 
+  bool IsSelectionItemSupported() const;
+
+  bool IsToggleSupported() const;
+
+  bool IsInvokeSupported() const;
+
   // Start and end offsets of an active composition
   gfx::Range active_composition_range_;
 

@@ -14,6 +14,12 @@ namespace overflow_menu {
 // very careful when updating this method to ensure all enums are accounted for.
 // LINT.IfChange(stringToDestination)
 Destination DestinationForStringName(std::string destination) {
+
+  // Vivaldi
+  if (destination == "overflow_menu::Destination::vShare") {
+    return overflow_menu::Destination::vShare;
+  } // End Vivaldi
+
   if (destination == "overflow_menu::Destination::Bookmarks") {
     return overflow_menu::Destination::Bookmarks;
   } else if (destination == "overflow_menu::Destination::History") {
@@ -37,7 +43,7 @@ Destination DestinationForStringName(std::string destination) {
   } else if (destination == "overflow_menu::Destination::SpotlightDebugger") {
     return overflow_menu::Destination::SpotlightDebugger;
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     // Randomly chosen destination which should never be returned due to
     // NOTREACHED() above.
     return overflow_menu::Destination::Settings;

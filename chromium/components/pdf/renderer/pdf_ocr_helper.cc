@@ -7,7 +7,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "content/public/renderer/render_frame.h"
 #include "pdf/pdf_accessibility_image_fetcher.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "ui/accessibility/accessibility_features.h"
 
 namespace pdf {
@@ -45,8 +45,10 @@ PdfOcrHelper::PdfOcrHelper(
       root_node_id_(root_node_id),
       on_ocr_data_received_callback_(std::move(callback)) {
   CHECK(features::IsPdfOcrEnabled());
-  render_frame.GetBrowserInterfaceBroker()->GetInterface(
+  render_frame.GetBrowserInterfaceBroker().GetInterface(
       screen_ai_annotator_.BindNewPipeAndPassReceiver());
+  screen_ai_annotator_->SetClientType(
+      screen_ai::mojom::OcrClientType::kPdfViewer);
 }
 
 PdfOcrHelper::~PdfOcrHelper() {

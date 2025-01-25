@@ -37,6 +37,12 @@ class AwSettings : public content::WebContentsObserver {
     PREFER_MEDIA_QUERY_OVER_FORCE_DARK = 2,
   };
 
+  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.android_webview.settings
+  enum SpeculativeLoadingAllowedFlags {
+    SPECULATIVE_LOADING_DISABLED = 0,
+    PRERENDER_ENABLED = 1,
+  };
+
   enum RequestedWithHeaderMode {
     NO_HEADER = 0,
     APP_PACKAGE_NAME = 1,
@@ -68,7 +74,9 @@ class AwSettings : public content::WebContentsObserver {
   // on feature flags and trial config
   static RequestedWithHeaderMode GetDefaultRequestedWithHeaderMode();
 
-  AwSettings(JNIEnv* env, jobject obj, content::WebContents* web_contents);
+  AwSettings(JNIEnv* env,
+             const jni_zero::JavaRef<jobject>& obj,
+             content::WebContents* web_contents);
   ~AwSettings() override;
 
   bool GetAllowFileAccessFromFileURLs();
@@ -77,6 +85,8 @@ class AwSettings : public content::WebContentsObserver {
   bool GetAllowThirdPartyCookies();
   MixedContentMode GetMixedContentMode();
   AttributionBehavior GetAttributionBehavior();
+  bool IsPrerender2Allowed();
+  bool IsBackForwardCacheEnabled();
 
   // Called from Java. Methods with "Locked" suffix require that the settings
   // access lock is held during their execution.
@@ -122,6 +132,15 @@ class AwSettings : public content::WebContentsObserver {
   void UpdateAttributionBehaviorLocked(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
+  void UpdateSpeculativeLoadingAllowedLocked(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void UpdateBackForwardCacheEnabledLocked(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void UpdateGeolocationEnabledLocked(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
   void PopulateWebPreferences(blink::web_pref::WebPreferences* web_prefs);
   bool GetAllowFileAccess();
@@ -148,6 +167,8 @@ class AwSettings : public content::WebContentsObserver {
       const base::android::JavaParamRef<jobjectArray>& rules);
   scoped_refptr<AwContentsOriginMatcher> xrw_allowlist_matcher();
 
+  bool geolocation_enabled() { return geolocation_enabled_; }
+
  private:
   AwRenderViewHostExt* GetAwRenderViewHostExt();
   void UpdateEverything();
@@ -168,10 +189,16 @@ class AwSettings : public content::WebContentsObserver {
   bool enterprise_authentication_app_link_policy_enabled_{true};
   MixedContentMode mixed_content_mode_;
   AttributionBehavior attribution_behavior_;
+  SpeculativeLoadingAllowedFlags speculative_loading_allowed_flags_{
+      SpeculativeLoadingAllowedFlags::SPECULATIVE_LOADING_DISABLED};
+  bool bfcache_enabled_in_java_settings_{false};
+  bool geolocation_enabled_{false};
 
   scoped_refptr<AwContentsOriginMatcher> xrw_allowlist_matcher_;
 
   JavaObjectWeakGlobalRef aw_settings_;
+
+  bool in_update_everything_locked_{false};
 };
 
 }  // namespace android_webview

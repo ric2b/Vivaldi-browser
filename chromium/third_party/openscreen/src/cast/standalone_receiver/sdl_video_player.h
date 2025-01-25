@@ -20,7 +20,7 @@ class SDLVideoPlayer final : public SDLPlayerBase {
   // player has halted and set |error_status()|.
   SDLVideoPlayer(ClockNowFunctionPtr now_function,
                  TaskRunner& task_runner,
-                 Receiver* receiver,
+                 Receiver& receiver,
                  VideoCodec codec_name,
                  SDL_Renderer& renderer,
                  std::function<void()> error_callback);

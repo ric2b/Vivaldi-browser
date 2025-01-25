@@ -474,14 +474,14 @@ double VisualViewport::OffsetLeft() const {
   DCHECK(IsActiveViewport());
   if (Document* document = LocalMainFrame().GetDocument())
     document->UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
-  return VisibleRect().x() / LocalMainFrame().PageZoomFactor();
+  return VisibleRect().x() / LocalMainFrame().LayoutZoomFactor();
 }
 
 double VisualViewport::OffsetTop() const {
   DCHECK(IsActiveViewport());
   if (Document* document = LocalMainFrame().GetDocument())
     document->UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
-  return VisibleRect().y() / LocalMainFrame().PageZoomFactor();
+  return VisibleRect().y() / LocalMainFrame().LayoutZoomFactor();
 }
 
 double VisualViewport::Width() const {
@@ -518,7 +518,7 @@ double VisualViewport::VisibleWidthCSSPx() const {
   if (!IsActiveViewport())
     return VisibleRect().width();
 
-  float zoom = LocalMainFrame().PageZoomFactor();
+  float zoom = LocalMainFrame().LayoutZoomFactor();
   float width_css_px = VisibleRect().width() / zoom;
   return width_css_px;
 }
@@ -527,7 +527,7 @@ double VisualViewport::VisibleHeightCSSPx() const {
   if (!IsActiveViewport())
     return VisibleRect().height();
 
-  float zoom = LocalMainFrame().PageZoomFactor();
+  float zoom = LocalMainFrame().LayoutZoomFactor();
   float height_css_px = VisibleRect().height() / zoom;
   return height_css_px;
 }
@@ -795,11 +795,15 @@ PhysicalRect VisualViewport::ScrollIntoView(
 
   if (new_scroll_offset != GetScrollOffset()) {
     if (params->is_for_scroll_sequence) {
-      DCHECK(params->type == mojom::blink::ScrollType::kProgrammatic ||
-             params->type == mojom::blink::ScrollType::kUser);
-      CHECK(GetSmoothScrollSequencer());
-      GetSmoothScrollSequencer()->QueueAnimation(this, new_scroll_offset,
-                                                 params->behavior);
+      if (RuntimeEnabledFeatures::MultiSmoothScrollIntoViewEnabled()) {
+        SetScrollOffset(new_scroll_offset, params->type, params->behavior);
+      } else {
+        DCHECK(params->type == mojom::blink::ScrollType::kProgrammatic ||
+               params->type == mojom::blink::ScrollType::kUser);
+        CHECK(GetSmoothScrollSequencer());
+        GetSmoothScrollSequencer()->QueueAnimation(this, new_scroll_offset,
+                                                   params->behavior);
+      }
     } else {
       SetScrollOffset(new_scroll_offset, params->type, params->behavior,
                       ScrollCallback());
@@ -1217,7 +1221,8 @@ void VisualViewport::ScrollbarColorChanged() {
 
 void VisualViewport::UpdateScrollbarColor(cc::SolidColorScrollbarLayer& layer) {
   auto& theme = ScrollbarThemeOverlayMobile::GetInstance();
-  layer.SetColor(theme.GetSolidColor(CSSScrollbarThumbColor()));
+  layer.SetColor(
+      CSSScrollbarThumbColor().value_or(theme.DefaultColor()).toSkColor4f());
 }
 
 }  // namespace blink

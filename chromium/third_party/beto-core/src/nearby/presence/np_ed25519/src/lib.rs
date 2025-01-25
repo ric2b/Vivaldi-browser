@@ -21,100 +21,33 @@
 #![no_std]
 
 use array_view::ArrayView;
-use crypto_provider::ed25519::{
-    Ed25519Provider, KeyPair as _, PrivateKey, PublicKey as _, RawPrivateKey, RawPrivateKeyPermit,
-    RawPublicKey, RawSignature, Signature as _, SignatureError,
-};
-use crypto_provider::CryptoProvider;
+use crypto_provider::ed25519::{Ed25519Provider, PrivateKey, PublicKey, Signature, SignatureError};
 use sink::{Sink, SinkWriter};
 use tinyvec::ArrayVec;
-
-/// Convenient type-alias for a crypto-provider's Ed25519 key-pair
-type CpKeyPair<C> = <<C as CryptoProvider>::Ed25519 as Ed25519Provider>::KeyPair;
-
-/// Type-alias for the Ed25519 public key type
-type CpPublicKey<C> = <<C as CryptoProvider>::Ed25519 as Ed25519Provider>::PublicKey;
-
-/// Type-alias for the Ed25519 signature type
-type CpSignature<C> = <<C as CryptoProvider>::Ed25519 as Ed25519Provider>::Signature;
 
 /// Maximum length of the combined (context len byte) + (context bytes) + (signing payload)
 /// byte-array which an ed25519 signature will be computed over. This is deliberately
 /// chosen to be large enough to incorporate an entire v1 adv as the signing payload.
 pub const MAX_SIGNATURE_BUFFER_LEN: usize = 512;
 
-/// Representation of an Ed25519 key-pair using the given
-/// [`CryptoProvider`] to back its implementation.
-/// Contains both the public and secret halves of an
-/// asymmetric key, and so it may be used to
-/// both sign and verify message signatures.
-pub struct KeyPair<C: CryptoProvider>(CpKeyPair<C>);
-
-impl<C: CryptoProvider> KeyPair<C> {
-    /// Returns the `KeyPair`'s private key bytes.
-    /// This method is only usable in situations where
-    /// the caller has permission to handle the raw bytes
-    /// of a private key.
-    pub fn raw_private_key(&self, permit: &RawPrivateKeyPermit) -> RawPrivateKey {
-        self.0.raw_private_key(permit)
-    }
-
-    /// Builds this key-pair from an array of its private key bytes in the format
-    /// yielded by `private_key`.
-    /// This method is only usable in situations where
-    /// the caller has permission to handle the raw bytes
-    /// of a private key.
-    pub fn from_raw_private_key(private_key: &RawPrivateKey, permit: &RawPrivateKeyPermit) -> Self {
-        Self(CpKeyPair::<C>::from_raw_private_key(private_key, permit))
-    }
-
-    /// Returns the private key of this key-pair.
-    pub fn private_key(&self) -> PrivateKey {
-        self.0.private_key()
-    }
-
-    /// Builds this key-pair from a private key.
-    pub fn from_private_key(private_key: &PrivateKey) -> Self {
-        Self(CpKeyPair::<C>::from_private_key(private_key))
-    }
-
-    /// Sign the given message with the given context and
-    /// return a digital signature. The message is represented
-    /// using a [`SinkWriter`] to allow the caller to construct
-    /// the payload to sign without requiring a fully-assembled
-    /// payload available as a slice.
-    ///
-    /// If the message writer writes too much data (greater than 256 bytes),
-    /// this will return `None` instead of a valid signature,
-    /// and so uses in `np_adv` will use `.expect` on the returned value
-    /// to indicate that this length constraint has been considered.
-    pub fn sign_with_context<W: SinkWriter<DataType = u8>>(
-        &self,
-        context: &SignatureContext,
-        msg_writer: W,
-    ) -> Option<Signature<C>> {
-        let mut buffer = context.create_signature_buffer();
-        buffer.try_extend_from_writer(msg_writer).map(|_| Signature(self.0.sign(buffer.as_ref())))
-    }
-
-    /// Gets the public key of this key-pair
-    pub fn public(&self) -> PublicKey<C> {
-        PublicKey { public_key: self.0.public() }
-    }
-
-    /// Generates an ed25519 keypair from a CSPRNG
-    /// generate is not available in `no-std`
-    #[cfg(feature = "std")]
-    pub fn generate() -> Self {
-        Self(CpKeyPair::<C>::generate())
-    }
+/// Sign the given message with the given context and
+/// return a digital signature. The message is represented
+/// using a [`SinkWriter`] to allow the caller to construct
+/// the payload to sign without requiring a fully-assembled
+/// payload available as a slice.
+///
+/// If the message writer writes too much data (greater than 256 bytes),
+/// this will return `None` instead of a valid signature,
+/// and so uses in `np_adv` will use `.expect` on the returned value
+/// to indicate that this length constraint has been considered.
+pub fn sign_with_context<E: Ed25519Provider, W: SinkWriter<DataType = u8>>(
+    private_key: &PrivateKey,
+    context: &SignatureContext,
+    msg_writer: W,
+) -> Option<Signature> {
+    let mut buffer = context.create_signature_buffer();
+    buffer.try_extend_from_writer(msg_writer).map(|_| private_key.sign::<E>(buffer.as_ref()))
 }
-
-/// Error raised when attempting to deserialize a key-pair
-/// from a byte-array, but the bytes do not represent a valid
-/// ed25519 key-pair
-#[derive(Debug)]
-pub struct InvalidKeyPairBytes;
 
 /// Errors yielded when attempting to verify an ed25519 signature.
 #[derive(Debug, PartialEq, Eq)]
@@ -131,104 +64,38 @@ impl From<SignatureError> for SignatureVerificationError {
     }
 }
 
-/// Representation of an Ed25519 public key used for
-/// signature verification.
-pub struct PublicKey<C: CryptoProvider> {
-    public_key: CpPublicKey<C>,
-}
-
-impl<C: CryptoProvider> PublicKey<C> {
-    /// Constructs a public key for NP adv signature verification
-    /// from a public key under the given crypto-provider
-    pub fn new(public_key: CpPublicKey<C>) -> Self {
-        Self { public_key }
-    }
-    /// Succeeds if the signature was a valid signature created via the corresponding
-    /// keypair to this public key using the given [`SignatureContext`] on the given
-    /// message payload. The message payload is represented
-    /// using a [`SinkWriter`] to allow the caller to construct
-    /// the payload to sign without requiring a fully-assembled
-    /// payload available as a slice.
-    ///
-    /// If the message writer writes too much data (greater than 256 bytes),
-    /// this will return `None` instead of a valid signature,
-    /// and so uses in `np_adv` will use `.expect` on the returned value
-    /// to indicate that this length constraint has been considered.
-    pub fn verify_signature_with_context<W: SinkWriter<DataType = u8>>(
-        &self,
-        context: &SignatureContext,
-        msg_writer: W,
-        signature: &Signature<C>,
-    ) -> Result<(), SignatureVerificationError> {
-        let mut buffer = context.create_signature_buffer();
-        let maybe_write_success = buffer.try_extend_from_writer(msg_writer);
-        match maybe_write_success {
-            Some(_) => {
-                self.public_key.verify_strict(buffer.as_ref(), &signature.0)?;
-                Ok(())
-            }
-            None => Err(SignatureVerificationError::PayloadTooBig),
+/// Succeeds if the signature was a valid signature created via the corresponding
+/// keypair to this public key using the given [`SignatureContext`] on the given
+/// message payload. The message payload is represented
+/// using a [`SinkWriter`] to allow the caller to construct
+/// the payload to sign without requiring a fully-assembled
+/// payload available as a slice.
+///
+/// If the message writer writes too much data (greater than 256 bytes),
+/// this will return `None` instead of a valid signature,
+/// and so uses in `np_adv` will use `.expect` on the returned value
+/// to indicate that this length constraint has been considered.
+pub fn verify_signature_with_context<E: Ed25519Provider, W: SinkWriter<DataType = u8>>(
+    public_key: &PublicKey,
+    context: &SignatureContext,
+    msg_writer: W,
+    signature: Signature,
+) -> Result<(), SignatureVerificationError> {
+    let mut buffer = context.create_signature_buffer();
+    let maybe_write_success = buffer.try_extend_from_writer(msg_writer);
+    match maybe_write_success {
+        Some(_) => {
+            public_key.verify_strict::<E>(buffer.as_ref(), signature)?;
+            Ok(())
         }
-    }
-
-    /// Builds an ed25519 public key from an array of bytes in
-    /// the format yielded by `to_bytes`.
-    pub fn from_bytes(bytes: &RawPublicKey) -> Result<Self, InvalidPublicKeyBytes> {
-        CpPublicKey::<C>::from_bytes(bytes)
-            .map(|public_key| Self { public_key })
-            .map_err(|_| InvalidPublicKeyBytes)
-    }
-
-    /// Yields the bytes of this ed25519 public key
-    pub fn to_bytes(&self) -> RawPublicKey {
-        self.public_key.to_bytes()
-    }
-}
-
-impl<C: CryptoProvider> Clone for PublicKey<C> {
-    fn clone(&self) -> Self {
-        #[allow(clippy::expect_used)]
-        Self::from_bytes(&self.to_bytes()).expect("This should always succeed since self will always contain valid public key bytes, which is verified on creation")
-    }
-}
-
-/// Error raised when attempting to deserialize a public key
-/// from a byte-array, but the bytes do not represent a valid
-/// ed25519 public key
-#[derive(Debug)]
-pub struct InvalidPublicKeyBytes;
-
-/// Representation of an Ed25519 message signature,
-/// which can be checked against a [`PublicKey`]
-/// for validity.
-pub struct Signature<C: CryptoProvider>(CpSignature<C>);
-
-impl<C: CryptoProvider> Signature<C> {
-    /// Returns a slice of the signature bytes
-    pub fn to_bytes(&self) -> RawSignature {
-        self.0.to_bytes()
-    }
-}
-
-/// Error raised when attempting to construct a [`Signature`]
-/// from a byte-array which is not of the proper length or format.
-#[derive(Debug)]
-pub struct InvalidSignatureBytes;
-
-impl<C: CryptoProvider> TryFrom<&[u8]> for Signature<C> {
-    type Error = InvalidSignatureBytes;
-    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        bytes
-            .try_into()
-            .map(|sig| Self(CpSignature::<C>::from_bytes(sig)))
-            .map_err(|_| InvalidSignatureBytes)
+        None => Err(SignatureVerificationError::PayloadTooBig),
     }
 }
 
 /// Minimum length (in bytes) for a [`SignatureContext`] (which cannot be empty).
 pub const MIN_SIGNATURE_CONTEXT_LEN: usize = 1;
 
-/// Maximum length (in bytes) for a [`SignatureContext`] (which uses a 8-bit length field).
+/// Maximum length (in bytes) for a [`SignatureContext`] (which uses an 8-bit length field).
 pub const MAX_SIGNATURE_CONTEXT_LEN: usize = 255;
 
 /// (Non-empty) context bytes to use in the construction of NP's

@@ -12,6 +12,7 @@
 
 #include "base/component_export.h"
 #include "base/functional/callback_forward.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
@@ -21,7 +22,11 @@
 #include "components/manta/manta_status.h"
 #include "components/manta/proto/manta.pb.h"
 #include "components/manta/proto/sparky.pb.h"
+#include "components/manta/provider_params.h"
+#include "components/manta/sparky/sparky_context.h"
 #include "components/manta/sparky/sparky_delegate.h"
+#include "components/manta/sparky/sparky_util.h"
+#include "components/manta/sparky/system_info_delegate.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "url/gurl.h"
@@ -40,61 +45,68 @@ class COMPONENT_EXPORT(MANTA) SparkyProvider : virtual public BaseProvider {
   SparkyProvider(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       signin::IdentityManager* identity_manager,
-      bool is_demo_mode,
-      const std::string& chrome_version,
-      std::unique_ptr<SparkyDelegate> sparky_delegate);
+      const ProviderParams& provider_params,
+      std::unique_ptr<SparkyDelegate> sparky_delegate,
+      std::unique_ptr<SystemInfoDelegate> system_info_delegate);
 
   SparkyProvider(const SparkyProvider&) = delete;
   SparkyProvider& operator=(const SparkyProvider&) = delete;
 
   ~SparkyProvider() override;
 
-  // TODO Update this with Sparky information
-  using SparkyQAPair = std::pair<std::string, std::string>;
-
   using SparkyShowAnswerCallback =
-      base::OnceCallback<void(const std::string&, MantaStatus)>;
+      base::OnceCallback<void(MantaStatus, DialogTurn*)>;
 
-  void QuestionAndAnswer(const std::string& content,
-                         const std::vector<SparkyQAPair> QAHistory,
-                         const std::string& question,
-                         proto::Task task,
+  using SparkyProtoResponseCallback =
+      base::OnceCallback<void(std::unique_ptr<manta::proto::SparkyResponse>,
+                              MantaStatus)>;
+
+  void QuestionAndAnswer(std::unique_ptr<SparkyContext> sparky_context,
                          SparkyShowAnswerCallback done_callback);
 
  protected:
   SparkyProvider(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       signin::IdentityManager* identity_manager,
-      std::unique_ptr<SparkyDelegate> sparky_delegate);
+      std::unique_ptr<SparkyDelegate> sparky_delegate,
+      std::unique_ptr<SystemInfoDelegate> system_info_delegate);
 
  private:
   friend class FakeSparkyProvider;
 
   // Called if more information is requested from the client. It will make an
   // additional call to QuestionAndAnswer.
-  void RequestAdditionalInformation(proto::ContextRequest,
-                                    const std::string& original_content,
-                                    const std::vector<SparkyQAPair> QAHistory,
-                                    const std::string& question,
-                                    SparkyShowAnswerCallback done_callback,
-                                    manta::MantaStatus status);
+  void RequestAdditionalInformation(
+      proto::ContextRequest,
+      std::unique_ptr<SparkyContext> sparky_context,
+      SparkyShowAnswerCallback done_callback,
+      manta::MantaStatus status);
 
-  void OnResponseReceived(SparkyShowAnswerCallback done_callback,
-                          const std::string& original_content,
-                          const std::vector<SparkyQAPair> QAHistory,
-                          const std::string& question,
-                          std::unique_ptr<proto::Response> output_data,
-                          manta::MantaStatus status);
+  void OnScreenshotObtained(
+      std::unique_ptr<SparkyContext> sparky_context,
+      SparkyShowAnswerCallback done_callback,
+      scoped_refptr<base::RefCountedMemory> jpeg_screenshot);
 
-  void UpdateSettings(proto::SettingsData);
+  void OnResponseReceived(
+      SparkyShowAnswerCallback done_callback,
+      std::unique_ptr<SparkyContext> sparky_context,
+      std::unique_ptr<proto::SparkyResponse> sparky_response,
+      manta::MantaStatus status);
 
-  // If the response back is the final response to show to the user.
-  void OnActionResponse(proto::FinalResponse,
+  // If the response back is a dialog response with a message to show to the
+  // user and potentially actions.
+  void OnDialogResponse(std::unique_ptr<SparkyContext> sparky_context,
+                        proto::Turn latest_reply,
                         SparkyShowAnswerCallback done_callback,
                         manta::MantaStatus status);
 
-  std::unique_ptr<SparkyDelegate> sparky_delegate_;
+  void OnDiagnosticsReceived(std::unique_ptr<SparkyContext> sparky_context,
+                             SparkyShowAnswerCallback done_callback,
+                             manta::MantaStatus status,
+                             std::unique_ptr<DiagnosticsData> diagnostics_data);
 
+  std::unique_ptr<SparkyDelegate> sparky_delegate_;
+  std::unique_ptr<SystemInfoDelegate> system_info_delegate_;
   base::WeakPtrFactory<SparkyProvider> weak_ptr_factory_{this};
 };
 

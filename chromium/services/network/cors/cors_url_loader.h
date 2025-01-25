@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/types/strong_alias.h"
@@ -30,6 +31,10 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
+namespace net {
+class SharedDictionary;
+}  // namespace net
+
 namespace network {
 namespace mojom {
 enum class SharedDictionaryError : int32_t;
@@ -37,7 +42,6 @@ enum class SharedDictionaryError : int32_t;
 
 class URLLoaderFactory;
 class NetworkContext;
-class SharedDictionary;
 class SharedDictionaryStorage;
 class SharedDictionaryDataPipeWriter;
 
@@ -321,10 +325,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoader
   raw_ptr<const mojom::ClientSecurityState> factory_client_security_state_ =
       nullptr;
 
-  // True when `network_loader_` is bound to a URLLoader that serves response
-  // from `memory_cache_`.
-  bool memory_cache_was_used_ = false;
-
   // Observer for this request and any preflight requests we send ahead of it.
   // Owned by the parent `CorsURLLoaderFactory`, never nullptr - though the
   // pointee remote itself may be unbound.
@@ -371,7 +371,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoader
   const raw_ptr<NetworkContext> context_;
 
   scoped_refptr<SharedDictionaryStorage> shared_dictionary_storage_;
-  std::unique_ptr<SharedDictionary> shared_dictionary_;
+  scoped_refptr<net::SharedDictionary> shared_dictionary_;
   raw_ptr<mojom::SharedDictionaryAccessObserver> shared_dictionary_observer_;
   std::unique_ptr<SharedDictionaryDataPipeWriter>
       shared_dictionary_data_pipe_writer_;

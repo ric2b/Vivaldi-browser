@@ -5,7 +5,7 @@
 #include "third_party/blink/renderer/modules/badging/navigator_badge.h"
 
 #include "build/build_config.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -108,7 +108,7 @@ ScriptPromise<IDLUndefined> NavigatorBadge::SetAppBadgeHelper(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotAllowedError,
         "The badge API is not allowed in this context");
-    return ScriptPromise<IDLUndefined>();
+    return EmptyPromise();
   }
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)
@@ -153,7 +153,7 @@ ScriptPromise<IDLUndefined> NavigatorBadge::ClearAppBadgeHelper(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotAllowedError,
         "The badge API is not allowed in this context");
-    return ScriptPromise<IDLUndefined>();
+    return EmptyPromise();
   }
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)

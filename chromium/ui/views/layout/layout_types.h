@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "base/check.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/views_export.h"
 
@@ -137,6 +138,9 @@ class VIEWS_EXPORT SizeBounds {
   // Enlarges (or shrinks, if negative) each upper bound that is present by the
   // specified amounts.
   void Enlarge(int width, int height);
+
+  // Shrink the SizeBounds by the given `insets`.
+  SizeBounds Inset(const gfx::Insets& inset) const;
 
   std::string ToString() const;
 

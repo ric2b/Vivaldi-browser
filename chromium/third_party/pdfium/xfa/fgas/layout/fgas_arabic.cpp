@@ -4,16 +4,13 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "xfa/fgas/layout/fgas_arabic.h"
 
+#include <array>
 #include <iterator>
 
 #include "core/fxcrt/fx_unicode.h"
+#include "core/fxcrt/stl_util.h"
 #include "xfa/fgas/layout/cfgas_char.h"
 
 namespace {
@@ -30,7 +27,7 @@ struct FX_ARAALEF {
   uint16_t wIsolated;
 };
 
-constexpr FX_ARBFORMTABLE kFormTable[] = {
+constexpr auto kFormTable = fxcrt::ToArray<const FX_ARBFORMTABLE>({
     {0xFE81, 0xFE82, 0xFE81, 0xFE82}, {0xFE83, 0xFE84, 0xFE83, 0xFE84},
     {0xFE85, 0xFE86, 0xFE85, 0xFE86}, {0xFE87, 0xFE88, 0xFE87, 0xFE88},
     {0xFE89, 0xFE8A, 0xFE8B, 0xFE8C}, {0xFE8D, 0xFE8E, 0xFE8D, 0xFE8E},
@@ -121,7 +118,7 @@ constexpr FX_ARBFORMTABLE kFormTable[] = {
     {0xFBE4, 0xFBE5, 0xFBE6, 0xFBE7}, {0x06D1, 0x06D1, 0x06D1, 0x06D1},
     {0xFBAE, 0xFBAF, 0xFBAE, 0xFBAF}, {0xFBB0, 0xFBB1, 0xFBB0, 0xFBB1},
     {0x06D4, 0x06D4, 0x06D4, 0x06D4}, {0x06D5, 0x06D5, 0x06D5, 0x06D5},
-};
+});
 constexpr uint16_t kFirstFormTableEntry = 0x0622;
 constexpr uint16_t kLastFormTableEntry =
     kFirstFormTableEntry + std::size(kFormTable) - 1;
@@ -133,7 +130,13 @@ constexpr FX_ARAALEF kAlefTable[] = {
     {0x0627, 0xFEFB},
 };
 
-constexpr uint16_t kShaddaTable[] = {0xFC5E, 0xFC5F, 0xFC60, 0xFC61, 0xFC62};
+constexpr auto kShaddaTable = fxcrt::ToArray<const uint16_t>({
+    0xFC5E,
+    0xFC5F,
+    0xFC60,
+    0xFC61,
+    0xFC62,
+});
 constexpr uint16_t kFirstShaddaTableEntry = 0x064c;
 constexpr uint16_t kLastShaddaTableEntry =
     kFirstShaddaTableEntry + std::size(kShaddaTable) - 1;

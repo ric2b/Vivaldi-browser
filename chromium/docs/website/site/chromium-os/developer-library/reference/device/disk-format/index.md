@@ -485,6 +485,6 @@ sudo dd if=/tmp/kernel.new of=/dev/<src_part>
 ```
 
 
-[Disk Layout Format]: https://sites.google.com/a/chromium.org/dev/chromium-os/developer-guide/disk-layout-format
+[Disk Layout Format]: /chromium-os/developer-guide/disk-layout-format
 [SQL Server Partition Alignment]: http://msdn.microsoft.com/en-us/library/dd758814%28v=sql.100%29.aspx
-[Partition Resizing]: https://sites.google.com/a/chromium.org/dev/chromium-os/chromiumos-design-docs/partition-resizing
+[Partition Resizing]: /chromium-os/chromiumos-design-docs/partition-resizing

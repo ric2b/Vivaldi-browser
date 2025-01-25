@@ -14,6 +14,7 @@
 #include "base/check.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "components/attribution_reporting/os_registration.h"
 #include "content/browser/attribution_reporting/attribution_data_host_manager.h"
 #include "content/browser/attribution_reporting/attribution_observer.h"
@@ -29,6 +30,10 @@ MockAttributionManager::~MockAttributionManager() = default;
 
 void MockAttributionManager::AddObserver(AttributionObserver* observer) {
   observers_.AddObserver(observer);
+  if (on_observer_registered_) {
+    std::move(on_observer_registered_).Run();
+  }
+  observer->OnDebugModeChanged(/*debug_mode=*/false);
 }
 
 void MockAttributionManager::RemoveObserver(AttributionObserver* observer) {
@@ -87,6 +92,18 @@ void MockAttributionManager::NotifyDebugReportSent(
   }
 }
 
+void MockAttributionManager::NotifyAggregatableDebugReportSent(
+    const AggregatableDebugReport& report,
+    base::ValueView report_body,
+    attribution_reporting::mojom::ProcessAggregatableDebugReportResult
+        process_result,
+    const SendAggregatableDebugReportResult& send_result) {
+  for (auto& observer : observers_) {
+    observer.OnAggregatableDebugReportSent(report, report_body, process_result,
+                                           send_result);
+  }
+}
+
 void MockAttributionManager::NotifyOsRegistration(
     const OsRegistration& registration,
     bool is_debug_key_allowed,
@@ -102,10 +119,26 @@ void MockAttributionManager::NotifyOsRegistration(
   }
 }
 
+void MockAttributionManager::NotifyDebugModeChanged(bool debug_mode) {
+  for (auto& observer : observers_) {
+    observer.OnDebugModeChanged(debug_mode);
+  }
+}
+
 void MockAttributionManager::SetDataHostManager(
     std::unique_ptr<AttributionDataHostManager> manager) {
   DCHECK(manager);
   data_host_manager_ = std::move(manager);
+}
+
+void MockAttributionManager::SetOnObserverRegistered(base::OnceClosure done) {
+  CHECK(!on_observer_registered_);
+
+  if (!observers_.empty()) {
+    std::move(done).Run();
+    return;
+  }
+  on_observer_registered_ = std::move(done);
 }
 
 }  // namespace content

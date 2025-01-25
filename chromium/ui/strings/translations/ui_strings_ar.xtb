@@ -49,6 +49,7 @@
 <translation id="2295140143284145483">الاستطلاع</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> تيرابايت/ثانية</translation>
 <translation id="2353636109065292463">التحقُّق من اتصال الإنترنت</translation>
+<translation id="2359808026110333948">متابعة</translation>
 <translation id="2388990488038464401">هل تريد الاتصال بهذا الرقم من هاتفك؟</translation>
 <translation id="2435457462613246316">عرض كلمة المرور</translation>
 <translation id="24452542372838207">توسيع الإشعار</translation>
@@ -123,12 +124,13 @@
 <translation id="528468243742722775">‏مفتاح End</translation>
 <translation id="5329858601952122676">&amp;حذف</translation>
 <translation id="5361107212971249203">النص</translation>
-<translation id="5463830097259460683">الرموز التعبيرية والرموز</translation>
+<translation id="5463830097259460683">رموز الإيموجي والرموز</translation>
 <translation id="5505748296268090374">إزالة <ph name="ITEM_TEXT" /></translation>
 <translation id="5528053674512161860">‏تعذّر تحميل الصفحة بسبب عدم تثبيت وحدة واجهة المستخدِم الخاصة بمطوّر البرامج (dev_ui).</translation>
 <translation id="5574202486608032840">نظام <ph name="IDS_SHORT_PRODUCT_OS_NAME" /></translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5613020302032141669">مفتاح سهم إلى اليسار</translation>
+<translation id="5633029987065897167">فارغة</translation>
 <translation id="5754277640426581776">{MINUTES,plural, =1{دقيقة واحدة}zero{# من الدقائق}two{دقيقتان (#)}few{# دقائق}many{# دقيقة}other{# من الدقائق}}</translation>
 <translation id="5763338081255973061">{DAYS,plural, =0{نشط اليوم}=1{نشط قبل يوم واحد}two{نشط قبل يومين (#)}few{نشط قبل # أيام}many{نشط قبل # يومًا}other{نشط قبل # يوم}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{يوم واحد و }zero{# من الأيام و }two{يومان (#) و }few{# أيام و }many{# يومًا و }other{# من الأيام و }}</translation>
@@ -180,7 +182,7 @@
 <translation id="7410957453383678442">{MINUTES,plural, =1{يتبقى دقيقة واحدة}zero{يتبقى # من الدقائق}two{يتبقى دقيقتان (#)}few{يتبقى # دقائق}many{يتبقى # دقيقة}other{يتبقى # من الدقائق}}</translation>
 <translation id="7437971918971306061">العمود <ph name="COLUMN_NAME" /> غير مرتَّب.</translation>
 <translation id="7460907917090416791"><ph name="QUANTITY" /> تيرابايت</translation>
-<translation id="7507604095951736240">الرموز التعبيرية</translation>
+<translation id="7507604095951736240">رموز الإيموجي</translation>
 <translation id="7620655452534002301">تمت الإزالة.</translation>
 <translation id="7658239707568436148">إلغاء</translation>
 <translation id="7781829728241885113">أمس</translation>

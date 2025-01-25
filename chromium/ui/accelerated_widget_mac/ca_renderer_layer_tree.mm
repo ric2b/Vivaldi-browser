@@ -38,10 +38,6 @@ BASE_FEATURE(kFullscreenLowPowerBackdropMac,
              "FullscreenLowPowerBackdropMac",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kCALayerTreeOptimization,
-             "CALayerTreeOptimization",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 #if BUILDFLAG(IS_MAC)
 // Show borders around RenderPassDrawQuad CALayers. which is the output of a
 // non-root render pass.
@@ -315,9 +311,7 @@ CARendererLayerTree::CARendererLayerTree(
     bool allow_solid_color_layers)
     : allow_av_sample_buffer_display_layer_(
           allow_av_sample_buffer_display_layer),
-      allow_solid_color_layers_(allow_solid_color_layers),
-      ca_layer_tree_optimization_(
-          base::FeatureList::IsEnabled(kCALayerTreeOptimization)) {}
+      allow_solid_color_layers_(allow_solid_color_layers) {}
 CARendererLayerTree::~CARendererLayerTree() = default;
 
 bool CARendererLayerTree::ScheduleCALayer(const CARendererLayerParams& params) {
@@ -336,32 +330,14 @@ void CARendererLayerTree::CommitScheduledCALayers(
   TRACE_EVENT0("gpu", "CARendererLayerTree::CommitScheduledCALayers");
   scale_factor_ = scale_factor;
 
-  if (ca_layer_tree_optimization_)
-    MatchLayersToOldTree(old_tree.get());
-  else
-    MatchLayersToOldTreeDefault(old_tree.get());
+  // The CALayerTree optimization reuses the matched CALayer from the previous.
+  MatchLayersToOldTree(old_tree.get());
 
   root_layer_.CommitToCA(superlayer, pixel_size);
   // If there are any extra CALayers in |old_tree| that were not stolen by this
   // tree, they will be removed from the CALayer tree in this deallocation.
   old_tree.reset();
   has_committed_ = true;
-}
-
-void CARendererLayerTree::MatchLayersToOldTreeDefault(
-    CARendererLayerTree* old_tree) {
-  if (!old_tree)
-    return;
-  DCHECK(old_tree->has_committed_);
-
-  // Match the root layer.
-  if (old_tree->scale_factor_ != scale_factor_)
-    return;
-
-  root_layer_.old_layer_ =
-      old_tree->root_layer_.weak_factory_for_new_layer_.GetWeakPtr();
-
-  root_layer_.CALayerFallBack();
 }
 
 void CARendererLayerTree::MatchLayersToOldTree(CARendererLayerTree* old_tree) {
@@ -420,8 +396,8 @@ void CARendererLayerTree::ContentLayer::UpdateMapAndMatchOldLayers(
   if (matched_content_layer->ca_layer_used_)
     return;
 
-  auto matched_transform_layer = matched_content_layer->parent_layer_;
-  auto matched_clip_layer = matched_transform_layer->parent_layer_;
+  auto* matched_transform_layer = matched_content_layer->parent_layer_;
+  auto* matched_clip_layer = matched_transform_layer->parent_layer_;
 
   // If the parent is different, the superlayer must have changed. It should be
   // removed from its superlayer and inserted back to the new superlayer in
@@ -451,12 +427,11 @@ void CARendererLayerTree::ContentLayer::UpdateMapAndMatchOldLayers(
     }
   }
 
-  if (matched_clip_layer.get() !=
-      parent_layer_->parent_layer_->old_layer_.get()) {
+  if (matched_clip_layer != parent_layer_->parent_layer_->old_layer_.get()) {
     [matched_transform_layer->ca_layer_ removeFromSuperlayer];
   }
 
-  if (matched_transform_layer.get() != parent_layer_->old_layer_.get()) {
+  if (matched_transform_layer != parent_layer_->old_layer_.get()) {
     [matched_content_layer->ca_layer_ removeFromSuperlayer];
   } else if (matched_content_layer->layer_order_ < last_old_layer_order) {
     // For the content layers with the same superlayer, if the order changes.
@@ -782,16 +757,20 @@ CARendererLayerTree::ContentLayer::ContentLayer(
                                 io_surface_color_space)) {
     type_ = CALayerType::kHDRCopier;
   } else if (io_surface) {
-    // Only allow 4:2:0 frames which fill the layer's contents or protected
+    // Only allow YUV frames which fill the layer's contents or protected
     // video to be promoted to AV layers.
     if (tree()->allow_av_sample_buffer_display_layer_) {
       if (contents_rect == gfx::RectF(0, 0, 1, 1)) {
         switch (IOSurfaceGetPixelFormat(io_surface.get())) {
           case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange:
+          case kCVPixelFormatType_422YpCbCr8BiPlanarVideoRange:
+          case kCVPixelFormatType_444YpCbCr8BiPlanarVideoRange:
             type_ = CALayerType::kVideo;
             video_type_can_downgrade_ = !io_surface_color_space.IsHDR();
             break;
           case kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange:
+          case kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange:
+          case kCVPixelFormatType_444YpCbCr10BiPlanarVideoRange:
             type_ = CALayerType::kVideo;
             video_type_can_downgrade_ = false;
             break;
@@ -1271,26 +1250,34 @@ void CARendererLayerTree::ContentLayer::CommitToCA(
       case CALayerType::kVideo:
         switch (pixel_format) {
           case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange:
-            // Yellow is NV12 AVSampleBufferDisplayLayer
+          case kCVPixelFormatType_422YpCbCr8BiPlanarVideoRange:
+          case kCVPixelFormatType_444YpCbCr8BiPlanarVideoRange:
+            // Yellow is NV12/NV16/NV24 AVSampleBufferDisplayLayer
             red = green = 1;
             break;
           case kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange:
-            // Cyan is P010 AVSampleBufferDisplayLayer
+          case kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange:
+          case kCVPixelFormatType_444YpCbCr10BiPlanarVideoRange:
+            // Cyan is P010/P210/P410 AVSampleBufferDisplayLayer
             green = blue = 1;
             break;
           default:
-            NOTREACHED();
+            NOTREACHED_IN_MIGRATION();
             break;
         }
         break;
       case CALayerType::kDefault:
         switch (pixel_format) {
           case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange:
-            // Green is NV12 AVSampleBufferDisplayLayer
+          case kCVPixelFormatType_422YpCbCr8BiPlanarVideoRange:
+          case kCVPixelFormatType_444YpCbCr8BiPlanarVideoRange:
+            // Green is NV12/NV16/NV24 AVSampleBufferDisplayLayer
             green = 1;
             break;
           case kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange:
-            // Red is P010 AVSampleBufferDisplayLayer
+          case kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange:
+          case kCVPixelFormatType_444YpCbCr10BiPlanarVideoRange:
+            // Red is P010/P210/P410 AVSampleBufferDisplayLayer
             red = 1;
             break;
           case 0:

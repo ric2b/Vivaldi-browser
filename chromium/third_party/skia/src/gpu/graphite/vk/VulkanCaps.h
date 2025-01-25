@@ -49,7 +49,7 @@ public:
 
     TextureInfo getDefaultStorageTextureInfo(SkColorType) const override;
 
-    ImmutableSamplerInfo getImmutableSamplerInfo(sk_sp<TextureProxy> proxy) const override;
+    ImmutableSamplerInfo getImmutableSamplerInfo(const TextureProxy* proxy) const override;
 
     UniqueKey makeGraphicsPipelineKey(const GraphicsPipelineDesc&,
                                       const RenderPassDesc&) const override;
@@ -93,6 +93,8 @@ public:
         return fMaxVertexAttributes;
     }
     uint64_t maxUniformBufferRange() const { return fMaxUniformBufferRange; }
+
+    uint64_t maxStorageBufferRange() const { return fMaxStorageBufferRange; }
 
     const VkPhysicalDeviceMemoryProperties2& physicalDeviceMemoryProperties2() const {
         return fPhysicalDeviceMemoryProperties2;
@@ -220,7 +222,7 @@ private:
     VkFormat getFormatFromDepthStencilFlags(const SkEnumBitMask<DepthStencilFlags>& flags) const;
 
     // Map depth/stencil VkFormats to DepthStencilFormatInfo.
-    static const size_t kNumDepthStencilVkFormats = 3;
+    static const size_t kNumDepthStencilVkFormats = 5;
     DepthStencilFormatInfo fDepthStencilFormatTable[kNumDepthStencilVkFormats];
 
     DepthStencilFormatInfo& getDepthStencilFormatInfo(VkFormat);
@@ -228,7 +230,15 @@ private:
 
     uint32_t fMaxVertexAttributes;
     uint64_t fMaxUniformBufferRange;
+    uint64_t fMaxStorageBufferRange;
     VkPhysicalDeviceMemoryProperties2 fPhysicalDeviceMemoryProperties2;
+
+    // ColorTypeInfo struct for use w/ external formats.
+    const ColorTypeInfo fExternalFormatColorTypeInfo = {SkColorType::kRGBA_8888_SkColorType,
+                                                        SkColorType::kRGBA_8888_SkColorType,
+                                                        /*flags=*/0,
+                                                        skgpu::Swizzle::RGBA(),
+                                                        skgpu::Swizzle::RGBA()};
 
     // Various bools to define whether certain Vulkan features are supported.
     bool fSupportsMemorylessAttachments = false;

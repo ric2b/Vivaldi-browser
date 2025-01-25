@@ -32,6 +32,7 @@ import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.StreamUtil;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.SequencedTaskRunner;
@@ -54,12 +55,12 @@ import org.chromium.chrome.browser.tabmodel.TabPersistenceFileInfo;
 import org.chromium.chrome.browser.tabmodel.TabPersistenceFileInfo.TabStateFileInfo;
 import org.chromium.chrome.browser.tabmodel.TabPersistencePolicy;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore;
+import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabModelSelectorMetadata;
 import org.chromium.chrome.browser.tabmodel.TestTabModelDirectory;
 import org.chromium.chrome.browser.tabpersistence.TabStateDirectory;
 import org.chromium.chrome.browser.tabpersistence.TabStateFileManager;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.url.GURL;
 
 import java.io.File;
@@ -68,7 +69,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Tests for the Custom Tab persistence logic. */
@@ -90,7 +90,7 @@ public class CustomTabTabPersistencePolicyTest {
         Mockito.when(mIncognitoProfile.isOffTheRecord()).thenReturn(true);
 
         // CustomTabsConnection needs a true context, not the mock context set below.
-        TestThreadUtils.runOnUiThreadBlocking(() -> CustomTabsConnection.getInstance());
+        ThreadUtils.runOnUiThreadBlocking(() -> CustomTabsConnection.getInstance());
 
         mAppContext =
                 new AdvancedMockContext(
@@ -112,7 +112,7 @@ public class CustomTabTabPersistencePolicyTest {
         mMockDirectory.tearDown();
 
         for (Activity activity : ApplicationStatus.getRunningActivities()) {
-            TestThreadUtils.runOnUiThreadBlocking(
+            ThreadUtils.runOnUiThreadBlocking(
                     () ->
                             ApplicationStatus.onStateChangeForTesting(
                                     activity, ActivityState.DESTROYED));
@@ -288,7 +288,7 @@ public class CustomTabTabPersistencePolicyTest {
                 Matchers.equalTo(false));
 
         // Reference the tab state file and ensure it is no longer marked for deletion.
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     CustomTabActivity cct1 = buildTestCustomTabActivity(1, new int[] {999}, null);
                     ApplicationStatus.onStateChangeForTesting(cct1, ActivityState.CREATED);
@@ -299,23 +299,18 @@ public class CustomTabTabPersistencePolicyTest {
 
         // Create a tab model and associated tabs. Ensure it is not marked for deletion as it is
         // new enough.
-        byte[] data =
-                TestThreadUtils.runOnUiThreadBlockingNoException(
-                        new Callable<byte[]>() {
-                            @Override
-                            public byte[] call() throws Exception {
-                                TabModelSelectorImpl selectorImpl =
-                                        buildTestTabModelSelector(new int[] {111, 222, 333}, null);
-                                return TabPersistentStore.serializeTabModelSelector(
-                                                selectorImpl, null, false)
-                                        .listData;
-                            }
+        TabModelSelectorMetadata data =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> {
+                            TabModelSelectorImpl selectorImpl =
+                                    buildTestTabModelSelector(new int[] {111, 222, 333}, null);
+                            return TabPersistentStore.saveTabModelSelectorMetadata(
+                                    selectorImpl, null);
                         });
         FileOutputStream fos = null;
         File metadataFile = new File(stateDirectory, TabPersistentStore.getMetadataFileName("3"));
         try {
-            fos = new FileOutputStream(metadataFile);
-            fos.write(data);
+            TabPersistentStore.saveListToFile(metadataFile, data);
         } finally {
             StreamUtil.closeQuietly(fos);
         }

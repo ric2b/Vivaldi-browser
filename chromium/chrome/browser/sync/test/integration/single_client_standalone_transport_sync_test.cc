@@ -107,8 +107,6 @@ IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportSyncTest,
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-// TODO(crbug.com/40145099): On Android it's currently not possible to "upgrade"
-// a kSignin account to kSync.
 #if !BUILDFLAG(IS_ANDROID)
 IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportSyncTest,
                        SwitchesBetweenTransportAndFeature) {
@@ -138,7 +136,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportSyncTest,
   EXPECT_TRUE(GetSyncService(0)->IsSyncFeatureActive());
   // Make sure that some model type which is not allowed in transport-only mode
   // got activated.
-  CHECK(!AllowedTypesInStandaloneTransportMode().Has(syncer::BOOKMARKS));
+  ASSERT_FALSE(AllowedTypesInStandaloneTransportMode().Has(syncer::BOOKMARKS));
   ASSERT_TRUE(GetSyncService(0)->GetUserSettings()->GetSelectedTypes().Has(
       syncer::UserSelectableType::kBookmarks));
   EXPECT_TRUE(GetSyncService(0)->GetActiveDataTypes().Has(syncer::BOOKMARKS));
@@ -191,7 +189,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportSyncTest,
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
-// TODO(crbug.com/40145099): Android currently doesn't support PRE_ tests.
+// TODO(crbug.com/40200835): Android currently doesn't support PRE_ tests.
 #if !BUILDFLAG(IS_ANDROID)
 // Regression test for crbug.com/955989 that verifies the cache GUID is not
 // reset upon restart of the browser, in standalone transport mode.
@@ -215,7 +213,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportSyncTest,
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
   syncer::SyncTransportDataPrefs transport_data_prefs(
-      GetProfile(0)->GetPrefs());
+      GetProfile(0)->GetPrefs(),
+      GetClient(0)->GetGaiaIdHashForPrimaryAccount());
   const std::string cache_guid = transport_data_prefs.GetCacheGuid();
   ASSERT_FALSE(cache_guid.empty());
 
@@ -246,7 +245,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportSyncTest,
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
   syncer::SyncTransportDataPrefs transport_data_prefs(
-      GetProfile(0)->GetPrefs());
+      GetProfile(0)->GetPrefs(),
+      GetClient(0)->GetGaiaIdHashForPrimaryAccount());
   ASSERT_FALSE(transport_data_prefs.GetCacheGuid().empty());
 
   std::string old_cache_guid;
@@ -331,7 +331,7 @@ IN_PROC_BROWSER_TEST_F(
       syncer::AUTOFILL_WALLET_CREDENTIAL));
 }
 
-// TODO(crbug.com/40145099): Android currently doesn't support PRE_ tests.
+// TODO(crbug.com/40200835): Android currently doesn't support PRE_ tests.
 #if !BUILDFLAG(IS_ANDROID)
 IN_PROC_BROWSER_TEST_F(
     SingleClientStandaloneTransportWithReplaceSyncWithSigninSyncTest,
@@ -494,7 +494,7 @@ class SingleClientStandaloneTransportReplaceSyncWithSigninMigrationSyncTest
         {switches::kExplicitBrowserSigninUIOnDesktop,
          syncer::kReadingListEnableSyncTransportModeUponSignIn,
          syncer::kSyncEnableContactInfoDataTypeInTransportMode,
-         syncer::kEnableBookmarkFoldersForAccountStorage,
+         syncer::kSyncEnableBookmarksInTransportMode,
          syncer::kEnablePreferencesAccountStorage},
         /*disabled_features=*/{});
 

@@ -17,13 +17,6 @@
 
 namespace openscreen::cast {
 
-// TODO(crbug.com/openscreen/90): Remove these after Chromium is migrated to
-// openscreen::cast
-using CrlBundle = ::cast::certificate::CrlBundle;
-using Crl = ::cast::certificate::Crl;
-using TbsCrl = ::cast::certificate::TbsCrl;
-using SerialNumberRange = ::cast::certificate::SerialNumberRange;
-
 class ParsedCertificate;
 class TrustStore;
 
@@ -31,7 +24,7 @@ class TrustStore;
 // the binary in a protobuf message.
 class CastCRL {
  public:
-  CastCRL(const TbsCrl& tbs_crl, const DateTime& overall_not_after);
+  CastCRL(const proto::TbsCrl& tbs_crl, const DateTime& overall_not_after);
   ~CastCRL();
 
   // Verifies the revocation status of a cast device certificate given a chain

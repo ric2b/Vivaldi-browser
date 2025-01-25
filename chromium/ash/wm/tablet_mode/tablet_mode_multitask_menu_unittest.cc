@@ -836,9 +836,9 @@ TEST_F(TabletModeMultitaskMenuTest, NoCrashDuringUpdateDrag) {
 }
 
 // Test that the window is created on the target window. This can crash if
-// ET_SCROLL_FLING_START is sent quickly enough after ET_GESTURE_SCROLL_UPDATE,
-// causing the controller to create the menu on the split view divider
-// (b/293954921).
+// EventType::kScrollFlingStart is sent quickly enough after
+// EventType::kGestureScrollUpdate, causing the controller to create the menu on
+// the split view divider (b/293954921).
 TEST_F(TabletModeMultitaskMenuTest, NoCrashWhenDraggingSplitViewDivider) {
   ui::ScopedAnimationDurationScaleMode test_duration_mode(
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
@@ -869,7 +869,7 @@ TEST_F(TabletModeMultitaskMenuTest, NoCrashWhenDraggingSplitViewDivider) {
   // Test that, even though the target window is the divider, we don't try to
   // create the menu on the split view divider.
   CHECK_EQ(GetMultitaskMenuController()->target_window_for_test(),
-           split_view_divider->divider_widget()->GetNativeWindow());
+           split_view_divider->GetDividerWindow());
   EXPECT_FALSE(GetMultitaskMenu());
 }
 

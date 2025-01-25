@@ -431,6 +431,10 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
       AppController* appController =
           static_cast<AppController*>([NSApp delegate]);
 
+      if (!appController) {
+        return;
+      }
+
       switch (item.id) {
         case IDC_CONTENT_CONTEXT_UNDO:
         case IDC_CONTENT_CONTEXT_REDO:
@@ -452,7 +456,9 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
           // TODO: Test properly for problems wrt ARC transition
           [menuItem setSubmenu:[[NSMenu alloc] initWithTitle:
               base::SysUTF8ToNSString(item.name)]];
-          [appController vivInitShareMenu:menuItem];
+          if ([appController respondsToSelector:@selector(vivInitShareMenu:)]) {
+            [appController vivInitShareMenu:menuItem];
+          }
           break;
         case IDC_VIV_MAC_SERVICES:
           [menuItem setTag:0];
@@ -471,7 +477,10 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
           [menuItem setTarget:appController];
           break;
       }
-      [appController setVivaldiMenuItemAction:menuItem];
+      if ([appController
+          respondsToSelector:@selector(setVivaldiMenuItemAction:)]) {
+        [appController setVivaldiMenuItemAction:menuItem];
+      }
 
       if (item.icon.has_value() && item.icon.value().length() > 0) {
         std::string png_data;
@@ -575,7 +584,10 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
                   static_cast<AppController*>([NSApp delegate]);
               [item3 setTarget:appController];
               [subMenu insertItem:item3 atIndex:0];
-              [appController setVivaldiMenuItemAction:item3];
+              if ([appController
+                respondsToSelector:@selector(setVivaldiMenuItemAction:)]) {
+                [appController setVivaldiMenuItemAction:item3];
+              }
             }
           }
 

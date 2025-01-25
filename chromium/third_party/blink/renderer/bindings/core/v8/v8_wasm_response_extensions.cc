@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/bindings/core/v8/v8_wasm_response_extensions.h"
 
 #include "base/debug/dump_without_crashing.h"
@@ -115,10 +120,9 @@ class WasmCodeCachingCallback {
     {
       TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
                    "v8.wasm.compileDigestForCreate");
-      if (!ComputeDigest(kHashAlgorithmSha256,
-                         reinterpret_cast<const char*>(wire_bytes.data()),
-                         wire_bytes.size(), wire_bytes_digest))
+      if (!ComputeDigest(kHashAlgorithmSha256, wire_bytes, wire_bytes_digest)) {
         return;
+      }
       if (wire_bytes_digest.size() != kWireBytesDigestSize)
         return;
     }
@@ -226,7 +230,7 @@ class FetchDataLoaderForWasmStreaming final : public FetchDataLoader,
       }
       switch (result) {
         case BytesConsumer::Result::kShouldWait:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           return;
         case BytesConsumer::Result::kOk:
           break;
@@ -436,7 +440,7 @@ class WasmDataLoaderClient final
   WasmDataLoaderClient& operator=(const WasmDataLoaderClient&) = delete;
 
   void DidFetchDataLoadedCustomFormat() override {}
-  void DidFetchDataLoadFailed() override { NOTREACHED(); }
+  void DidFetchDataLoadFailed() override { NOTREACHED_IN_MIGRATION(); }
   void Abort() override { loader_->AbortFromClient(); }
 
   void Trace(Visitor* visitor) const override {
@@ -552,7 +556,7 @@ void StreamFromResponseCallback(
   // The spec explicitly disallows any extras on the Content-Type header,
   // so we check against ContentType() rather than MimeType(), which
   // implicitly strips extras.
-  if (response->ContentType().LowerASCII() != "application/wasm") {
+  if (!EqualIgnoringASCIICase(response->ContentType(), "application/wasm")) {
     base::UmaHistogramEnumeration("V8.WasmStreamingInputType",
                                   WasmStreamingInputType::kWrongMimeType);
     exception_state.ThrowTypeError(

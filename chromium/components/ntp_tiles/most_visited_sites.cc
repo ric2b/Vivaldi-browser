@@ -34,6 +34,7 @@
 #include "components/supervised_user/core/common/buildflags.h"
 #include "components/webapps/common/constants.h"
 #include "extensions/buildflags/buildflags.h"
+#include "third_party/re2/src/re2/re2.h"
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "components/supervised_user/core/browser/supervised_user_preferences.h"
@@ -78,8 +79,9 @@ bool NeedPopularSites(const PrefService* prefs, int num_tiles) {
 
 bool HasHomeTile(const NTPTilesVector& tiles) {
   for (const auto& tile : tiles) {
-    if (tile.source == TileSource::HOMEPAGE)
+    if (tile.source == TileSource::HOMEPAGE) {
       return true;
+    }
   }
   return false;
 }
@@ -108,16 +110,39 @@ bool ShouldShowPopularSites() {
 // custom links.
 std::u16string GenerateShortTitle(const std::u16string& title) {
   // Empty title only happened in the unittests.
-  if (title.empty())
+  if (title.empty()) {
     return std::u16string();
-  std::vector<std::u16string> short_title_list = SplitString(
-      title, u"-:|;", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  // Make sure it doesn't crash when the title only contains spaces.
-  if (short_title_list.empty())
-    return std::u16string();
-  std::u16string short_title_front = short_title_list.front();
-  std::u16string short_title_back = short_title_list.back();
-  std::u16string short_title = short_title_front;
+  }
+
+  // Match "anything- anything" where "-" is one of the delimiters shown in the
+  // following examples of intended matches: "Front - Back", "Front | Back",
+  // "Front: Back", "Front; Back"
+  const std::string regex = "(.*?)[-|:;]+\\s(.*)";
+
+  std::string utf8_short_title_front;
+  std::string utf8_short_title_back;
+  std::string utf8_title = base::UTF16ToUTF8(title);
+
+  std::u16string short_title_front;
+  std::u16string short_title_back;
+  std::u16string short_title;
+
+  if (!re2::RE2::FullMatch(utf8_title, regex, &utf8_short_title_front,
+                           &utf8_short_title_back)) {
+    // If FullMatch() returns false, we don't have a split title, so return full
+    // title. Tests expect trimmed title.
+    return std::u16string(
+        base::TrimWhitespace(title, base::TrimPositions::TRIM_ALL));
+  }
+
+  if (!utf8_short_title_front.empty()) {
+    short_title_front = base::UTF8ToUTF16(utf8_short_title_front);
+    short_title = short_title_front;
+  }
+  if (!utf8_short_title_back.empty()) {
+    short_title_back = base::UTF8ToUTF16(utf8_short_title_back);
+  }
+
   if (short_title_front != short_title_back) {
     int words_in_front =
         SplitString(short_title_front, base::kWhitespaceASCIIAs16,
@@ -131,6 +156,8 @@ std::u16string GenerateShortTitle(const std::u16string& title) {
       short_title = short_title_back;
     }
   }
+  base::TrimWhitespace(short_title, base::TrimPositions::TRIM_ALL,
+                       &short_title);
   return short_title;
 }
 
@@ -194,7 +221,7 @@ bool MostVisitedSites::DoesSourceExist(TileSource source) const {
     case TileSource::CUSTOM_LINKS:
       return custom_links_ != nullptr;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -261,16 +288,20 @@ void MostVisitedSites::RefreshTiles() {
 }
 
 void MostVisitedSites::InitializeCustomLinks() {
-  if (!custom_links_ || !current_tiles_.has_value() || !IsCustomLinksEnabled())
+  if (!custom_links_ || !current_tiles_.has_value() ||
+      !IsCustomLinksEnabled()) {
     return;
+  }
 
-  if (custom_links_->Initialize(current_tiles_.value()))
+  if (custom_links_->Initialize(current_tiles_.value())) {
     custom_links_action_count_ = 0;
+  }
 }
 
 void MostVisitedSites::UninitializeCustomLinks() {
-  if (!custom_links_ || !IsCustomLinksEnabled())
+  if (!custom_links_ || !IsCustomLinksEnabled()) {
     return;
+  }
 
   custom_links_action_count_ = -1;
   custom_links_->Uninitialize();
@@ -278,8 +309,9 @@ void MostVisitedSites::UninitializeCustomLinks() {
 }
 
 bool MostVisitedSites::IsCustomLinksInitialized() {
-  if (!custom_links_ || !IsCustomLinksEnabled())
+  if (!custom_links_ || !IsCustomLinksEnabled()) {
     return false;
+  }
 
   return custom_links_->IsInitialized();
 }
@@ -308,8 +340,9 @@ bool MostVisitedSites::IsShortcutsVisible() const {
 
 bool MostVisitedSites::AddCustomLink(const GURL& url,
                                      const std::u16string& title) {
-  if (!custom_links_ || !IsCustomLinksEnabled())
+  if (!custom_links_ || !IsCustomLinksEnabled()) {
     return false;
+  }
 
   bool is_first_action = !custom_links_->IsInitialized();
   // Initialize custom links if they have not been initialized yet.
@@ -317,8 +350,9 @@ bool MostVisitedSites::AddCustomLink(const GURL& url,
 
   bool success = custom_links_->AddLink(url, title);
   if (success) {
-    if (custom_links_action_count_ != -1)
+    if (custom_links_action_count_ != -1) {
       custom_links_action_count_++;
+    }
     BuildCurrentTiles();
   } else if (is_first_action) {
     // We don't want to keep custom links initialized if the first action after
@@ -331,8 +365,9 @@ bool MostVisitedSites::AddCustomLink(const GURL& url,
 bool MostVisitedSites::UpdateCustomLink(const GURL& url,
                                         const GURL& new_url,
                                         const std::u16string& new_title) {
-  if (!custom_links_ || !IsCustomLinksEnabled())
+  if (!custom_links_ || !IsCustomLinksEnabled()) {
     return false;
+  }
 
   bool is_first_action = !custom_links_->IsInitialized();
   // Initialize custom links if they have not been initialized yet.
@@ -340,8 +375,9 @@ bool MostVisitedSites::UpdateCustomLink(const GURL& url,
 
   bool success = custom_links_->UpdateLink(url, new_url, new_title);
   if (success) {
-    if (custom_links_action_count_ != -1)
+    if (custom_links_action_count_ != -1) {
       custom_links_action_count_++;
+    }
     BuildCurrentTiles();
   } else if (is_first_action) {
     // We don't want to keep custom links initialized if the first action after
@@ -352,8 +388,9 @@ bool MostVisitedSites::UpdateCustomLink(const GURL& url,
 }
 
 bool MostVisitedSites::ReorderCustomLink(const GURL& url, size_t new_pos) {
-  if (!custom_links_ || !IsCustomLinksEnabled())
+  if (!custom_links_ || !IsCustomLinksEnabled()) {
     return false;
+  }
 
   bool is_first_action = !custom_links_->IsInitialized();
   // Initialize custom links if they have not been initialized yet.
@@ -361,8 +398,9 @@ bool MostVisitedSites::ReorderCustomLink(const GURL& url, size_t new_pos) {
 
   bool success = custom_links_->ReorderLink(url, new_pos);
   if (success) {
-    if (custom_links_action_count_ != -1)
+    if (custom_links_action_count_ != -1) {
       custom_links_action_count_++;
+    }
     BuildCurrentTiles();
   } else if (is_first_action) {
     // We don't want to keep custom links initialized if the first action after
@@ -373,8 +411,9 @@ bool MostVisitedSites::ReorderCustomLink(const GURL& url, size_t new_pos) {
 }
 
 bool MostVisitedSites::DeleteCustomLink(const GURL& url) {
-  if (!custom_links_ || !IsCustomLinksEnabled())
+  if (!custom_links_ || !IsCustomLinksEnabled()) {
     return false;
+  }
 
   bool is_first_action = !custom_links_->IsInitialized();
   // Initialize custom links if they have not been initialized yet.
@@ -382,8 +421,9 @@ bool MostVisitedSites::DeleteCustomLink(const GURL& url) {
 
   bool success = custom_links_->DeleteLink(url);
   if (success) {
-    if (custom_links_action_count_ != -1)
+    if (custom_links_action_count_ != -1) {
       custom_links_action_count_++;
+    }
     BuildCurrentTiles();
   } else if (is_first_action) {
     // We don't want to keep custom links initialized if the first action after
@@ -394,15 +434,17 @@ bool MostVisitedSites::DeleteCustomLink(const GURL& url) {
 }
 
 void MostVisitedSites::UndoCustomLinkAction() {
-  if (!custom_links_ || !IsCustomLinksEnabled())
+  if (!custom_links_ || !IsCustomLinksEnabled()) {
     return;
+  }
 
   // If this is undoing the first action after initialization, uninitialize
   // custom links.
-  if (custom_links_action_count_-- == 1)
+  if (custom_links_action_count_-- == 1) {
     UninitializeCustomLinks();
-  else if (custom_links_->UndoAction())
+  } else if (custom_links_->UndoAction()) {
     BuildCurrentTiles();
+  }
 }
 
 size_t MostVisitedSites::GetCustomLinkNum() {
@@ -418,16 +460,18 @@ void MostVisitedSites::AddOrRemoveBlockedUrl(const GURL& url, bool add_url) {
   }
 
   if (top_sites_) {
-    if (add_url)
+    if (add_url) {
       top_sites_->AddBlockedUrl(url);
-    else
+    } else {
       top_sites_->RemoveBlockedUrl(url);
+    }
   }
 }
 
 void MostVisitedSites::ClearBlockedUrls() {
-  if (top_sites_)
+  if (top_sites_) {
     top_sites_->ClearBlockedUrls();
+  }
 }
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -452,10 +496,12 @@ size_t MostVisitedSites::GetMaxNumSites() const {
 }
 
 void MostVisitedSites::InitiateTopSitesQuery() {
-  if (!top_sites_)
+  if (!top_sites_) {
     return;
-  if (top_sites_weak_ptr_factory_.HasWeakPtrs())
+  }
+  if (top_sites_weak_ptr_factory_.HasWeakPtrs()) {
     return;  // Ongoing query.
+  }
   top_sites_->GetMostVisitedURLs(
       base::BindOnce(&MostVisitedSites::OnMostVisitedURLsAvailable,
                      top_sites_weak_ptr_factory_.GetWeakPtr()));
@@ -473,8 +519,9 @@ void MostVisitedSites::OnMostVisitedURLsAvailable(
   size_t num_tiles = std::min(visited_list.size(), GetMaxNumSites());
   for (size_t i = 0; i < num_tiles; ++i) {
     const history::MostVisitedURL& visited = visited_list[i];
-    if (visited.url.is_empty())
+    if (visited.url.is_empty()) {
       break;  // This is the signal that there are no more real visited sites.
+    }
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
     if (supervised_user_service_ &&
         supervised_user_service_->IsBlockedURL(visited.url)) {
@@ -561,8 +608,9 @@ NTPTilesVector MostVisitedSites::CreatePopularSitesTiles(
     }
 
     // Skip blocked sites.
-    if (top_sites_ && top_sites_->IsBlocked(popular_site.url))
+    if (top_sites_ && top_sites_->IsBlocked(popular_site.url)) {
       continue;
+    }
 
     const std::string& host = popular_site.url.host();
     if (IsHostOrMobilePageKnown(hosts_to_skip, host)) {
@@ -589,8 +637,9 @@ NTPTilesVector MostVisitedSites::CreatePopularSitesTiles(
 void MostVisitedSites::OnHomepageTitleDetermined(
     NTPTilesVector tiles,
     const std::optional<std::u16string>& title) {
-  if (!title.has_value())
+  if (!title.has_value()) {
     return;  // If there is no title, the most recent tile was already sent out.
+  }
 
   MergeMostVisitedTiles(InsertHomeTile(std::move(tiles), title.value()));
 }
@@ -641,8 +690,9 @@ NTPTilesVector MostVisitedSites::InsertHomeTile(
 
 void MostVisitedSites::OnCustomLinksChanged() {
   DCHECK(custom_links_);
-  if (!IsCustomLinksEnabled())
+  if (!IsCustomLinksEnabled()) {
     return;
+  }
 
   if (custom_links_->IsInitialized()) {
     BuildCustomLinks(custom_links_->GetLinks());
@@ -747,11 +797,13 @@ void MostVisitedSites::SaveTilesAndNotify(
     prefs_->SetInteger(prefs::kNumPersonalTiles, num_personal_tiles);
   }
 
-  if (observers_.empty())
+  if (observers_.empty()) {
     return;
+  }
   sections[SectionType::PERSONALIZED] = *current_tiles_;
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnURLsAvailable(sections);
+  }
 }
 
 // static
@@ -769,8 +821,9 @@ bool MostVisitedSites::WasNtpAppMigratedToWebApp(PrefService* prefs, GURL url) {
   const base::Value::List& migrated_apps =
       prefs->GetList(webapps::kWebAppsMigratedPreinstalledApps);
   for (const auto& val : migrated_apps) {
-    if (val.is_string() && val.GetString() == url.host())
+    if (val.is_string() && val.GetString() == url.host()) {
       return true;
+    }
   }
   return false;
 }
@@ -811,8 +864,9 @@ void MostVisitedSites::OnPopularSitesDownloaded(bool success) {
 }
 
 void MostVisitedSites::OnIconMadeAvailable(const GURL& site_url) {
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnIconMadeAvailable(site_url);
+  }
 }
 
 void MostVisitedSites::TopSitesLoaded(TopSites* top_sites) {}

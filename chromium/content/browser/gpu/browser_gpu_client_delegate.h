@@ -20,7 +20,6 @@ class BrowserGpuClientDelegate : public viz::GpuClientDelegate {
 
   // GpuClientDelegate:
   viz::GpuHostImpl* EnsureGpuHost() override;
-  viz::HostGpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
 
   // FEATURE_FORCE_ACCESS_TO_GPU
   void SetForceAllowAccessToGpu(bool enable) override;

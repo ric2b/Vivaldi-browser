@@ -29,6 +29,7 @@
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
@@ -243,7 +244,7 @@ LoginAuthFactorsView::LoginAuthFactorsView(
           kArrowButtonSizeDp));
   arrow_button_->SetInstallFocusRingOnFocus(true);
   views::InstallCircleHighlightPathGenerator(arrow_button_);
-  arrow_button_->SetAccessibleName(
+  arrow_button_->GetViewAccessibility().SetName(
       l10n_util::GetStringUTF16(IDS_AUTH_FACTOR_LABEL_CLICK_TO_ENTER));
 
   arrow_nudge_animation_ =
@@ -412,7 +413,7 @@ void LoginAuthFactorsView::UpdateState() {
       }
       return;
     case PrioritizedAuthFactorViewState::kUnavailable:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
   }
 }
@@ -474,7 +475,7 @@ int LoginAuthFactorsView::GetReadyLabelId() const {
 
   if (ready_factor_count == 0u) {
     LOG(ERROR) << "GetReadyLabelId() called without any ready auth factors.";
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return GetDefaultLabelId();
   }
 
@@ -488,7 +489,7 @@ int LoginAuthFactorsView::GetReadyLabelId() const {
       return IDS_AUTH_FACTOR_LABEL_UNLOCK_METHOD_SELECTION;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return GetDefaultLabelId();
 }
 
@@ -539,9 +540,9 @@ void LoginAuthFactorsView::ArrowButtonPressed(const ui::Event& event) {
 
 void LoginAuthFactorsView::RelayArrowButtonPressed() {
   if (arrow_button_) {
-    ArrowButtonPressed(ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(),
-                                      gfx::Point(), base::TimeTicks::Now(), 0,
-                                      0));
+    ArrowButtonPressed(ui::MouseEvent(ui::EventType::kMousePressed,
+                                      gfx::Point(), gfx::Point(),
+                                      base::TimeTicks::Now(), 0, 0));
   }
 }
 

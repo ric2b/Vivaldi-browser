@@ -135,14 +135,6 @@ std::optional<int64_t> getPublicFeaturesNotInStablehlo(HloOpTy hloOp) {
     // Version 1: Initial version for TanOp.
     return 1;
   }
-  // StableHLO CustomCall doesn't support API_VERSION_TYPED_FFI yet.
-  // Proposal: https://github.com/openxla/stablehlo/issues/637.
-  if constexpr (std::is_same<HloOpTy, mhlo::CustomCallOp>::value) {
-    // Version 1: Initial version for TYPED_FFI
-    if (hloOp.getApiVersion() ==
-        mhlo::CustomCallApiVersion::API_VERSION_TYPED_FFI)
-      return 1;
-  }
   // StableHLO doesn't support TopK yet.
   // Proposal: https://github.com/openxla/stablehlo/pull/1593
   if constexpr (std::is_same<HloOpTy, mhlo::TopKOp>::value) {
@@ -278,6 +270,7 @@ Attribute convertAttr(Attribute hloAttr) {
   if (auto attr = mlir::dyn_cast<mhlo::GatherDimensionNumbersAttr>(hloAttr)) {
     return stablehlo::GatherDimensionNumbersAttr::get(
         attr.getContext(), attr.getOffsetDims(), attr.getCollapsedSliceDims(),
+        attr.getOperandBatchingDims(), attr.getStartIndicesBatchingDims(),
         attr.getStartIndexMap(), attr.getIndexVectorDim());
   }
   if (auto attr = mlir::dyn_cast<mhlo::OutputOperandAliasAttr>(hloAttr)) {
@@ -300,8 +293,9 @@ Attribute convertAttr(Attribute hloAttr) {
   if (auto attr = mlir::dyn_cast<mhlo::ScatterDimensionNumbersAttr>(hloAttr)) {
     return stablehlo::ScatterDimensionNumbersAttr::get(
         attr.getContext(), attr.getUpdateWindowDims(),
-        attr.getInsertedWindowDims(), attr.getScatterDimsToOperandDims(),
-        attr.getIndexVectorDim());
+        attr.getInsertedWindowDims(), attr.getInputBatchingDims(),
+        attr.getScatterIndicesBatchingDims(),
+        attr.getScatterDimsToOperandDims(), attr.getIndexVectorDim());
   }
   if (auto attr = mlir::dyn_cast<mhlo::TransposeAttr>(hloAttr)) {
     RETURN_CONVERTED_ENUM_ATTR(Transpose);
@@ -576,8 +570,11 @@ class HloToStablehloCustomCallOpConverter
   bool allowExperimentalFeatures;
 };
 
-template <typename HloOpTy>
-class HloToStablehloOpConverter : public OpConversionPattern<HloOpTy> {
+template <typename StablehloOpTy>
+class HloToStablehloOpConverter
+    : public OpConversionPattern<StablehloToHloOp<StablehloOpTy>> {
+  using HloOpTy = StablehloToHloOp<StablehloOpTy>;
+
  public:
   HloToStablehloOpConverter(TypeConverter& converter, MLIRContext* context,
                             bool allowExperimentalFeatures)
@@ -676,14 +673,27 @@ class HloToStablehloOpConverter : public OpConversionPattern<HloOpTy> {
   bool allowExperimentalFeatures;
 };
 
+// Deprecated ops.
+template <>
+class HloToStablehloOpConverter<stablehlo::UnaryEinsumOp>
+    : public OpConversionPattern<stablehlo::UnaryEinsumOp> {
+ public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult matchAndRewrite(stablehlo::UnaryEinsumOp stablehloOp,
+                                typename stablehlo::UnaryEinsumOp::Adaptor,
+                                ConversionPatternRewriter&) const final {
+    return stablehloOp.emitError(
+        "UnaryEinsumOp is deprecated and not supported in MHLO");
+  }
+};
+
 template <typename... StablehloOpTypes>
 void populateHloToStablehloPatterns(RewritePatternSet* patterns,
                                     TypeConverter* converter,
                                     MLIRContext* context,
                                     bool allowExperimentalFeatures) {
-  patterns
-      ->add<HloToStablehloOpConverter<StablehloToHloOp<StablehloOpTypes>>...>(
-          *converter, context, allowExperimentalFeatures);
+  patterns->add<HloToStablehloOpConverter<StablehloOpTypes>...>(
+      *converter, context, allowExperimentalFeatures);
 }
 
 template <typename... HloOpTypes>

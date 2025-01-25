@@ -77,10 +77,11 @@ class TabStripController {
   virtual void AddSelectionFromAnchorTo(int index) = 0;
 
   // Prepares to close a tab. If closing the tab might require (for example) a
-  // user prompt, triggers that prompt and returns false, indicating that the
-  // current close operation should not proceed. If this method returns true,
-  // closing can proceed.
-  virtual bool BeforeCloseTab(int index, CloseTabSource source) = 0;
+  // user prompt, triggers that prompt passing in the callback ownership to it.
+  // Otherwise it runs the callback.
+  virtual void OnCloseTab(int index,
+                          CloseTabSource source,
+                          base::OnceCallback<void()> callback) = 0;
 
   // Closes the tab at the specified index in the model.
   virtual void CloseTab(int index) = 0;
@@ -104,12 +105,15 @@ class TabStripController {
   virtual void MoveGroup(const tab_groups::TabGroupId& group,
                          int final_index) = 0;
 
-  // Switches the collapsed state of a tab group. Returns false if the state was
-  // not successfully switched.
+  // Toggles the collapsed state of `group`. Collapsed becomes expanded.
+  // Expanded becomes collapsed. `origin` should be used to denote the way in
+  // which the tab group was toggled (Ex: From a context menu, mouse press,
+  // touch/gesture control, etc). Tests will default to `kMenuAction` unless
+  // specified otherwise.
   virtual void ToggleTabGroupCollapsedState(
       const tab_groups::TabGroupId group,
       ToggleTabGroupCollapsedStateOrigin origin =
-          ToggleTabGroupCollapsedStateOrigin::kImplicitAction) = 0;
+          ToggleTabGroupCollapsedStateOrigin::kMenuAction) = 0;
 
   // Shows a context menu for the tab at the specified point in screen coords.
   virtual void ShowContextMenuForTab(Tab* tab,
@@ -199,6 +203,8 @@ class TabStripController {
   // Returns whether tab strokes can ever be drawn. If true, strokes will only
   // be drawn if necessary.
   virtual bool CanDrawStrokes() const = 0;
+
+  virtual bool IsFrameButtonsRightAligned() const = 0;
 
   // Returns the color of the browser frame for the given window activation
   // state.

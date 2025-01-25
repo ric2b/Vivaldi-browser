@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/time/time.h"
+#include "cc/input/browser_controls_offset_tags_info.h"
 #include "cc/slim/layer.h"
 #include "cc/slim/layer_tree.h"
 #include "cc/slim/surface_layer.h"
@@ -21,6 +22,7 @@
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/common/surfaces/surface_id.h"
+#include "components/viz/common/viz_utils.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
@@ -123,6 +125,28 @@ void DelegatedFrameHostAndroid::SetIsFrameSinkIdOwner(bool is_owner) {
   }
 }
 
+void DelegatedFrameHostAndroid::RegisterOffsetTags(
+    const cc::BrowserControlsOffsetTagsInfo& tags_info) {
+  const viz::OffsetTag top_controls_offset_tag =
+      tags_info.top_controls_offset_tag;
+  if (!top_controls_offset_tag.IsEmpty()) {
+    int top_controls_height = tags_info.top_controls_height;
+    viz::OffsetTagConstraints top_controls_constraints(0, 0,
+                                                       -top_controls_height, 0);
+    content_layer_->RegisterOffsetTag(top_controls_offset_tag,
+                                      top_controls_constraints);
+  }
+}
+
+void DelegatedFrameHostAndroid::UnregisterOffsetTags(
+    const cc::BrowserControlsOffsetTagsInfo& tags_info) {
+  const viz::OffsetTag top_controls_offset_tag =
+      tags_info.top_controls_offset_tag;
+  if (!top_controls_offset_tag.IsEmpty()) {
+    content_layer_->UnregisterOffsetTag(top_controls_offset_tag);
+  }
+}
+
 const viz::FrameSinkId& DelegatedFrameHostAndroid::GetFrameSinkId() const {
   return frame_sink_id_;
 }
@@ -160,25 +184,8 @@ void DelegatedFrameHostAndroid::CopyFromCompositingSurface(
   request->set_result_task_runner(
       base::SequencedTaskRunner::GetCurrentDefault());
 
-  if (!src_subrect.IsEmpty())
-    request->set_area(src_subrect);
-  if (!output_size.IsEmpty()) {
-    // The CopyOutputRequest API does not allow fixing the output size. Instead
-    // we have the set area and scale in such a way that it would result in the
-    // desired output size.
-    if (!request->has_area())
-      request->set_area(gfx::Rect(surface_size_in_pixels_));
-    request->set_result_selection(gfx::Rect(output_size));
-    const gfx::Rect& area = request->area();
-    // Viz would normally return an empty result for an empty area.
-    // However, this guard here is still necessary to protect against setting
-    // an illegal scaling ratio.
-    if (area.IsEmpty())
-      return;
-    request->SetScaleRatio(
-        gfx::Vector2d(area.width(), area.height()),
-        gfx::Vector2d(output_size.width(), output_size.height()));
-  }
+  viz::SetCopyOutoutRequestResultSize(request.get(), src_subrect, output_size,
+                                      surface_size_in_pixels_);
 
   host_frame_sink_manager_->RequestCopyOfOutput(surface_id, std::move(request),
                                                 capture_exact_surface_id);
@@ -278,7 +285,16 @@ void DelegatedFrameHostAndroid::ResetFallbackToFirstNavigationSurface() {
       !first_local_surface_id_after_navigation_.is_valid()) {
     // If we have a valid `pre_navigation_local_surface_id_`, we must not be in
     // BFCache.
-    CHECK(!bfcache_fallback_.is_valid());
+    {
+      // TODO(https://crbug.com/349073060): Remove the scope when the bug is
+      // fixed.
+      SCOPED_CRASH_KEY_STRING64("crbug/349073060", "bfc_fallback_crashed",
+                                bfcache_fallback_.ToString().c_str());
+      SCOPED_CRASH_KEY_STRING64(
+          "crbug/349073060", "pre_nav_lsid_crashed",
+          pre_navigation_local_surface_id_.ToString().c_str());
+      CHECK(!bfcache_fallback_.is_valid());
+    }
     EvictDelegatedFrame(frame_evictor_->CollectSurfaceIdsForEviction());
     content_layer_->SetBackgroundColor(SkColors::kTransparent);
   }
@@ -301,6 +317,7 @@ void DelegatedFrameHostAndroid::AttachToCompositor(
     WindowAndroidCompositor* compositor) {
   if (registered_parent_compositor_)
     DetachFromCompositor();
+  compositor->AddFrameSubmissionObserver(client_);
   compositor->AddChildFrameSink(frame_sink_id_);
   registered_parent_compositor_ = compositor;
   if (content_to_visible_time_request_) {
@@ -315,6 +332,7 @@ void DelegatedFrameHostAndroid::AttachToCompositor(
 void DelegatedFrameHostAndroid::DetachFromCompositor() {
   if (!registered_parent_compositor_)
     return;
+  registered_parent_compositor_->RemoveFrameSubmissionObserver(client_);
   registered_parent_compositor_->RemoveChildFrameSink(frame_sink_id_);
   registered_parent_compositor_ = nullptr;
   content_to_visible_time_request_ = nullptr;
@@ -468,7 +486,7 @@ void DelegatedFrameHostAndroid::CancelSuccessfulPresentationTimeRequest() {
 
 void DelegatedFrameHostAndroid::OnFirstSurfaceActivation(
     const viz::SurfaceInfo& surface_info) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void DelegatedFrameHostAndroid::OnFrameTokenChanged(
@@ -552,16 +570,6 @@ void DelegatedFrameHostAndroid::DidEnterBackForwardCache() {
     bfcache_fallback_ = pre_navigation_local_surface_id_;
     pre_navigation_local_surface_id_ = viz::LocalSurfaceId();
   }
-}
-
-void DelegatedFrameHostAndroid::SetTopControlsVisibleHeight(float height) {
-  if (top_controls_visible_height_ == height)
-    return;
-  if (!content_layer_ || !content_layer_->layer_tree()) {
-    return;
-  }
-  top_controls_visible_height_ = height;
-  content_layer_->layer_tree()->UpdateTopControlsVisibleHeight(height);
 }
 
 void DelegatedFrameHostAndroid::

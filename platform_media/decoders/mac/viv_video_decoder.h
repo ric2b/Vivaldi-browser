@@ -18,8 +18,8 @@
 #include "base/threading/thread.h"
 #include "media/base/media_log.h"
 #include "media/base/video_decoder.h"
-#include "media/video/h264_parser.h"
-#include "media/video/h264_poc.h"
+#include "media/parsers/h264_parser.h"
+#include "media/parsers/h264_poc.h"
 
 namespace media {
 

@@ -13,6 +13,8 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.lifetime.Destroyable;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.SyncFirstSetupCompleteSource;
+import org.chromium.chrome.browser.firstrun.FirstRunStatus;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.signin.services.SigninManager.DataWipeOption;
 import org.chromium.chrome.browser.signin.services.SigninManager.SignInCallback;
 import org.chromium.components.signin.AccountManagerFacade;
@@ -101,7 +103,11 @@ public class SigninChecker
                 mAccountManagerFacade.getCoreAccountInfos();
         assert coreAccountInfosPromise.isFulfilled();
         List<CoreAccountInfo> coreAccountInfos = coreAccountInfosPromise.getResult();
-        checkChildAccount(coreAccountInfos);
+        // In the FRE, supervised accounts are signed in by the SigninManager
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+                || !FirstRunStatus.isFirstRunTriggered()) {
+            checkChildAccount(coreAccountInfos);
+        }
     }
 
     /** This method is invoked every time the accounts on device are seeded. */
@@ -209,44 +215,51 @@ public class SigninChecker
     }
 
     private void onChildAccountStatusReady(boolean isChild, @Nullable CoreAccountInfo childInfo) {
-        if (isChild) {
-            assert childInfo != null;
-            mSigninManager.runAfterOperationInProgress(
-                    () -> {
-                        if (mSigninManager.isSigninAllowed()) {
-                            Log.d(TAG, "The child account sign-in starts.");
-
-                            final SignInCallback signInCallback =
-                                    new SignInCallback() {
-                                        @Override
-                                        public void onSignInComplete() {
-                                            ++mNumOfChildAccountChecksDone;
-                                        }
-
-                                        @Override
-                                        public void onSignInAborted() {}
-                                    };
-                            mSigninManager.wipeSyncUserData(
-                                    () -> {
-                                        RecordUserAction.record(
-                                                "Signin_Signin_WipeDataOnChildAccountSignin2");
-                                        mSigninManager.signin(
-                                                childInfo,
-                                                SigninAccessPoint.FORCED_SIGNIN,
-                                                signInCallback);
-                                    },
-                                    DataWipeOption.WIPE_SYNC_DATA);
-                            return;
-                        }
-                    });
-        }
         ++mNumOfChildAccountChecksDone;
+        if (!isChild) {
+            return;
+        }
+
+        assert childInfo != null;
+        mSigninManager.runAfterOperationInProgress(
+                () -> {
+                    if (!mSigninManager.isSigninAllowed()) {
+                        return;
+                    }
+                    Log.d(TAG, "The child account sign-in starts.");
+
+                    final SignInCallback signInCallback =
+                            new SignInCallback() {
+                                @Override
+                                public void onSignInComplete() {
+                                    ++mNumOfChildAccountChecksDone;
+                                }
+
+                                @Override
+                                public void onSignInAborted() {}
+                            };
+                    if (ChromeFeatureList.isEnabled(
+                            ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)) {
+                        mSigninManager.signin(
+                                childInfo, SigninAccessPoint.FORCED_SIGNIN, signInCallback);
+                    } else {
+                        mSigninManager.wipeSyncUserData(
+                                () -> {
+                                    RecordUserAction.record(
+                                            "Signin_Signin_WipeDataOnChildAccountSignin2");
+                                    mSigninManager.signin(
+                                            childInfo,
+                                            SigninAccessPoint.FORCED_SIGNIN,
+                                            signInCallback);
+                                },
+                                DataWipeOption.WIPE_SYNC_DATA);
+                    }
+                });
     }
 
     /**
-     * Called once when Chrome starts.
-     * Responsible for checking if configuration has changed since Chrome was last launched
-     * and updates state accordingly.
+     * Called once when Chrome starts. Responsible for checking if configuration has changed since
+     * Chrome was last launched and updates state accordingly.
      */
     public void onMainActivityStart() {
         if (SigninFeatureMap.isEnabled(SigninFeatures.SEED_ACCOUNTS_REVAMP)) {

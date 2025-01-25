@@ -5,7 +5,6 @@
 import '//resources/ash/common/cr_elements/cros_color_overrides.css.js';
 import '//resources/ash/common/cr_elements/cr_input/cr_input.js';
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
-import '//resources/polymer/v3_0/iron-media-query/iron-media-query.js';
 import '../../components/oobe_icons.html.js';
 import '../../components/buttons/oobe_next_button.js';
 import '../../components/common_styles/oobe_common_styles.css.js';
@@ -13,27 +12,20 @@ import '../../components/common_styles/oobe_dialog_host_styles.css.js';
 import '../../components/dialogs/oobe_adaptive_dialog.js';
 
 import {PolymerElementProperties} from '//resources/polymer/v3_0/polymer/interfaces.js';
-import {mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.js';
-import {OobeDialogHostBehavior, OobeDialogHostBehaviorInterface} from '../../components/behaviors/oobe_dialog_host_behavior.js';
 import {OobeUiState} from '../../components/display_manager_types.js';
-import {OobeI18nMixin, OobeI18nMixinInterface} from '../../components/mixins/oobe_i18n_mixin.js';
+import {LoginScreenMixin} from '../../components/mixins/login_screen_mixin.js';
+import {OobeDialogHostMixin} from '../../components/mixins/oobe_dialog_host_mixin.js';
+import {OobeI18nMixin} from '../../components/mixins/oobe_i18n_mixin.js';
 import {LocalDataLossWarningPageHandlerRemote} from '../../mojom-webui/screens_osauth.mojom-webui.js';
 import {OobeScreensFactoryBrowserProxy} from '../../oobe_screens_factory_proxy.js';
 
 import {getTemplate} from './local_data_loss_warning.html.js';
 
 
-const LocalDataLossWarningBase = mixinBehaviors(
-      [
-        OobeDialogHostBehavior,
-        LoginScreenBehavior,
-      ],
-      OobeI18nMixin(PolymerElement)) as {
-new (): PolymerElement & OobeI18nMixinInterface &
-LoginScreenBehaviorInterface & OobeDialogHostBehaviorInterface,
-};
+const LocalDataLossWarningBase =
+    OobeDialogHostMixin(LoginScreenMixin(OobeI18nMixin(PolymerElement)));
 
 /**
  * Data that is passed to the screen during onBeforeShow.
@@ -86,7 +78,7 @@ export class LocalDataLossWarning extends LocalDataLossWarningBase {
     this.disabled = false;
     this.handler = new LocalDataLossWarningPageHandlerRemote();
     OobeScreensFactoryBrowserProxy.getInstance()
-        .screenFactory.createLocalDataLossWarningPageHandler(
+        .screenFactory.establishLocalDataLossWarningScreenPipe(
             this.handler.$.bindNewPipeAndPassReceiver());
   }
 
@@ -105,6 +97,7 @@ export class LocalDataLossWarning extends LocalDataLossWarningBase {
    * Invoked just before being shown. Contains all the data for the screen.
    */
   override onBeforeShow(data: LocalDataLossWarningScreenData) : void {
+    super.onBeforeShow(data);
     this.isOwner = data['isOwner'];
     this.email = data['email'];
     this.canGoBack = data['canGoBack'];

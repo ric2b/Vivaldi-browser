@@ -34,5 +34,21 @@
 #                       Do not modify this file directly
 ################################################################################
 
+include(lang/hlsl/intrinsic/BUILD.cmake)
+include(lang/hlsl/ir/BUILD.cmake)
+include(lang/hlsl/type/BUILD.cmake)
 include(lang/hlsl/validate/BUILD.cmake)
 include(lang/hlsl/writer/BUILD.cmake)
+
+################################################################################
+# Target:    tint_lang_hlsl
+# Kind:      lib
+################################################################################
+tint_add_target(tint_lang_hlsl lib
+  lang/hlsl/builtin_fn.cc
+  lang/hlsl/builtin_fn.h
+)
+
+tint_target_add_dependencies(tint_lang_hlsl lib
+  tint_utils_traits
+)

@@ -6,16 +6,16 @@
 
 #include <linux/v4l2-controls.h>
 #include <linux/videodev2.h>
-
 #include <sys/ioctl.h>
 
 #include "base/bits.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "media/filters/ivf_parser.h"
-#include "media/filters/vp9_parser.h"
+#include "base/notreached.h"
 #include "media/gpu/macros.h"
+#include "media/parsers/ivf_parser.h"
+#include "media/parsers/vp9_parser.h"
 
 namespace media {
 
@@ -384,7 +384,7 @@ void Vp9Decoder::SetupFrameParams(
         v4l2_frame_params->alt_frame_ts = reference_id;
         break;
       default:
-        NOTREACHED() << "Invalid reference frame index";
+        NOTREACHED_IN_MIGRATION() << "Invalid reference frame index";
     }
   }
 

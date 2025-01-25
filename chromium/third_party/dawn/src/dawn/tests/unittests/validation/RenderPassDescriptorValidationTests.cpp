@@ -985,6 +985,39 @@ TEST_F(MultisampledRenderPassDescriptorValidationTest, MultisampledResolveTarget
     AssertBeginRenderPassError(&renderPass);
 }
 
+// Test the view dimension of resolve target.
+TEST_F(MultisampledRenderPassDescriptorValidationTest, ResolveTargetDimension) {
+    wgpu::Texture resolveTexture2D = CreateTexture(
+        device, wgpu::TextureDimension::e2D, kColorFormat, kSize, kSize, kArrayLayers, kLevelCount);
+
+    // It is allowed to use a 2d texture view as resolve target.
+    {
+        utils::ComboRenderPassDescriptor renderPass = CreateMultisampledRenderPass();
+        renderPass.cColorAttachments[0].resolveTarget = resolveTexture2D.CreateView();
+        AssertBeginRenderPassSuccess(&renderPass);
+    }
+
+    // It is allowed to use a 2d-array texture view as resolve target.
+    {
+        wgpu::TextureViewDescriptor viewDesc;
+        viewDesc.dimension = wgpu::TextureViewDimension::e2DArray;
+
+        utils::ComboRenderPassDescriptor renderPass = CreateMultisampledRenderPass();
+        renderPass.cColorAttachments[0].resolveTarget = resolveTexture2D.CreateView(&viewDesc);
+        AssertBeginRenderPassSuccess(&renderPass);
+    }
+
+    // It is not allowed to use a 3d texture view as resolve target.
+    {
+        wgpu::Texture resolveTexture3D =
+            CreateTexture(device, wgpu::TextureDimension::e3D, kColorFormat, kSize, kSize,
+                          kArrayLayers, kLevelCount);
+        utils::ComboRenderPassDescriptor renderPass = CreateMultisampledRenderPass();
+        renderPass.cColorAttachments[0].resolveTarget = resolveTexture3D.CreateView();
+        AssertBeginRenderPassError(&renderPass);
+    }
+}
+
 // It is not allowed to use a resolve target with array layer count > 1.
 TEST_F(MultisampledRenderPassDescriptorValidationTest, ResolveTargetArrayLayerMoreThanOne) {
     constexpr uint32_t kArrayLayers2 = 2;
@@ -1688,12 +1721,8 @@ class MSAARenderToSingleSampledRenderPassDescriptorValidationTest
         mRenderToSingleSampledDesc.implicitSampleCount = kSampleCount;
     }
 
-    WGPUDevice CreateTestDevice(dawn::native::Adapter dawnAdapter,
-                                wgpu::DeviceDescriptor descriptor) override {
-        wgpu::FeatureName requiredFeatures[1] = {wgpu::FeatureName::MSAARenderToSingleSampled};
-        descriptor.requiredFeatures = requiredFeatures;
-        descriptor.requiredFeatureCount = 1;
-        return dawnAdapter.CreateDevice(&descriptor);
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
+        return {wgpu::FeatureName::MSAARenderToSingleSampled};
     }
 
     utils::ComboRenderPassDescriptor CreateMultisampledRenderToSingleSampledRenderPass(
@@ -1828,14 +1857,8 @@ TEST_F(MSAARenderToSingleSampledRenderPassDescriptorValidationTest,
 
 class DawnLoadResolveTextureValidationTest : public MultisampledRenderPassDescriptorValidationTest {
   protected:
-    WGPUDevice CreateTestDevice(dawn::native::Adapter dawnAdapter,
-                                wgpu::DeviceDescriptor descriptor) override {
-        wgpu::FeatureName requiredFeatures[2] = {wgpu::FeatureName::DawnLoadResolveTexture,
-                                                 wgpu::FeatureName::TransientAttachments};
-        descriptor.requiredFeatures = requiredFeatures;
-        descriptor.requiredFeatureCount = 2;
-
-        return dawnAdapter.CreateDevice(&descriptor);
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
+        return {wgpu::FeatureName::DawnLoadResolveTexture, wgpu::FeatureName::TransientAttachments};
     }
 
     // Create a view for a resolve texture that can be used with LoadOp::ExpandResolveTexture.
@@ -1945,32 +1968,14 @@ TEST_F(DawnLoadResolveTextureValidationTest, UnresolvableColorFormatError) {
     renderPass.cColorAttachments[0].view = multisampledTexture.CreateView();
     renderPass.cColorAttachments[0].resolveTarget = resolveTexture.CreateView();
     renderPass.cColorAttachments[0].loadOp = wgpu::LoadOp::ExpandResolveTexture;
-    AssertBeginRenderPassError(&renderPass, testing::HasSubstr("does not support resolve"));
+    AssertBeginRenderPassError(&renderPass,
+                               testing::HasSubstr("does not support being used as resolve target"));
 }
 
-// LoadOp::ExpandResolveTexture can only be used in a render pass with single color attachment.
-// The LoadOp is NOT currently supported on depth/stencil attachment either.
-TEST_F(DawnLoadResolveTextureValidationTest, OnlyLoadingSingleColorAttachmentIsSupported) {
+// The LoadOp is NOT currently supported on depth/stencil attachment.
+TEST_F(DawnLoadResolveTextureValidationTest, OnlyLoadingColorAttachmentIsSupported) {
     auto multisampledColorTextureView = CreateMultisampledColorTextureView();
     auto resolveTarget = CreateCompatibleResolveTextureView();
-
-    // Error case: Use ExpandResolveTexture with multiple color attachments.
-    {
-        auto multisampledColorTextureView2 = CreateMultisampledColorTextureView();
-        auto resolveTarget2 = CreateCompatibleResolveTextureView();
-
-        auto renderPass = CreateMultisampledRenderPass();
-        renderPass.colorAttachmentCount = 2;
-        renderPass.cColorAttachments[0].view = multisampledColorTextureView;
-        renderPass.cColorAttachments[0].resolveTarget = resolveTarget;
-        renderPass.cColorAttachments[0].loadOp = wgpu::LoadOp::ExpandResolveTexture;
-
-        renderPass.cColorAttachments[1].view = multisampledColorTextureView2;
-        renderPass.cColorAttachments[1].resolveTarget = resolveTarget2;
-        renderPass.cColorAttachments[1].loadOp = wgpu::LoadOp::ExpandResolveTexture;
-
-        AssertBeginRenderPassError(&renderPass, testing::HasSubstr("colorAttachmentCount"));
-    }
 
     // Error case: Use ExpandResolveTexture on depth/stencil attachment.
     {

@@ -39,7 +39,6 @@ namespace switches {
 extern const char kAcceptLang[];
 extern const char kAllowCrossOriginAuthPrompt[];
 extern const char kAllowHttpScreenCapture[];
-extern const char kAllowProfilesOutsideUserDir[];
 extern const char kAllowRunningInsecureContent[];
 extern const char kAllowSilentPush[];
 extern const char kApp[];
@@ -56,6 +55,7 @@ extern const char kAutoOpenDevToolsForTabs[];
 extern const char kAutoSelectDesktopCaptureSource[];
 extern const char kAutoSelectTabCaptureSourceByTitle[];
 extern const char kAutoSelectWindowCaptureSourceByTitle[];
+extern const char kBypassAccountAlreadyUsedByAnotherProfileCheck[];
 extern const char kCheckForUpdateIntervalSec[];
 extern const char kCipherSuiteBlacklist[];
 extern const char kCrashOnHangThreads[];
@@ -76,6 +76,7 @@ extern const char kDisableComponentExtensionsWithBackgroundPages[];
 #if BUILDFLAG(ENABLE_COMPONENT_UPDATER)
 extern const char kDisableComponentUpdate[];
 #endif
+extern const char kDisableCrashpadForTesting[];
 extern const char kDisableDefaultApps[];
 extern const char kDisableDomainReliability[];
 extern const char kDisableExtensions[];
@@ -108,6 +109,9 @@ extern const char kExtensionContentVerificationEnforce[];
 extern const char kExtensionContentVerificationEnforceStrict[];
 extern const char kExtensionsInstallVerification[];
 extern const char kExtensionsNotWebstore[];
+extern const char kExtensionsToolbarZeroStateVariation[];
+extern const char kExtensionsToolbarZeroStateSingleWebStoreLink[];
+extern const char kExtensionsToolbarZeroStateExploreExtensionsByCategory[];
 extern const char kForceAppMode[];
 #if BUILDFLAG(IS_CHROMEOS)
 extern const char kForceDevToolsAvailable[];
@@ -177,6 +181,7 @@ extern const char kSSLVersionMax[];
 extern const char kSSLVersionMin[];
 extern const char kSSLVersionTLSv12[];
 extern const char kSSLVersionTLSv13[];
+extern const char kStackProfilerUseThreadPool[];
 extern const char kStartMaximized[];
 extern const char kStartStackProfiler[];
 extern const char kStartStackProfilerBrowserTest[];
@@ -216,7 +221,6 @@ extern const char kForceDisableSigninFRE[];
 extern const char kForceUpdateMenuType[];
 extern const char kMarketUrlForTesting[];
 extern const char kRequestDesktopSites[];
-extern const char kStartStackProfilerWithJavaNameHashing[];
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -243,6 +247,8 @@ extern const char kMetricsClientID[];
 extern const char kRelauncherProcess[];
 extern const char kRelauncherProcessDMGDevice[];
 extern const char kMakeChromeDefault[];
+extern const char kCodeSignCloneCleanupProcess[];
+extern const char kUniqueTempDirSuffix[];
 #endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_WIN)

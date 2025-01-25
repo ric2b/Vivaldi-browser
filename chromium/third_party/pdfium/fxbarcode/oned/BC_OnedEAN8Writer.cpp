@@ -20,21 +20,16 @@
  * limitations under the License.
  */
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "fxbarcode/oned/BC_OnedEAN8Writer.h"
 
 #include <math.h>
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <vector>
 
 #include "core/fxcrt/fx_extension.h"
-#include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
 #include "core/fxge/text_char_pos.h"
 #include "fxbarcode/BC_Writer.h"
@@ -46,9 +41,19 @@ namespace {
 
 const uint8_t kOnedEAN8StartPattern[3] = {1, 1, 1};
 const uint8_t kOnedEAN8MiddlePattern[5] = {1, 1, 1, 1, 1};
-const uint8_t kOnedEAN8LPattern[10][4] = {
-    {3, 2, 1, 1}, {2, 2, 2, 1}, {2, 1, 2, 2}, {1, 4, 1, 1}, {1, 1, 3, 2},
-    {1, 2, 3, 1}, {1, 1, 1, 4}, {1, 3, 1, 2}, {1, 2, 1, 3}, {3, 1, 1, 2}};
+
+using LPatternRow = std::array<uint8_t, 4>;
+constexpr std::array<const LPatternRow, 10> kOnedEAN8LPatternTable = {
+    {{3, 2, 1, 1},
+     {2, 2, 2, 1},
+     {2, 1, 2, 2},
+     {1, 4, 1, 1},
+     {1, 1, 3, 2},
+     {1, 2, 3, 1},
+     {1, 1, 1, 4},
+     {1, 3, 1, 2},
+     {1, 2, 1, 3},
+     {3, 1, 1, 2}}};
 
 }  // namespace
 
@@ -103,13 +108,15 @@ DataVector<uint8_t> CBC_OnedEAN8Writer::Encode(const ByteString& contents) {
 
   for (int i = 0; i <= 3; i++) {
     int32_t digit = FXSYS_DecimalCharToInt(contents[i]);
-    result_span = AppendPattern(result_span, kOnedEAN8LPattern[digit], false);
+    result_span =
+        AppendPattern(result_span, kOnedEAN8LPatternTable[digit], false);
   }
   result_span = AppendPattern(result_span, kOnedEAN8MiddlePattern, false);
 
   for (int i = 4; i <= 7; i++) {
     int32_t digit = FXSYS_DecimalCharToInt(contents[i]);
-    result_span = AppendPattern(result_span, kOnedEAN8LPattern[digit], true);
+    result_span =
+        AppendPattern(result_span, kOnedEAN8LPatternTable[digit], true);
   }
   AppendPattern(result_span, kOnedEAN8StartPattern, true);
   return result;
@@ -148,27 +155,27 @@ bool CBC_OnedEAN8Writer::ShowChars(WideStringView contents,
   device->FillRect(re, kBackgroundColor);
   int32_t strWidth = static_cast<int32_t>(kWidth * m_outputHScale);
 
-  CalcTextInfo(tempStr, charpos.data(), m_pFont, (float)strWidth, iFontSize,
-               blank);
+  pdfium::span<TextCharPos> charpos_span = pdfium::make_span(charpos);
+  CalcTextInfo(tempStr, charpos, m_pFont, (float)strWidth, iFontSize, blank);
   {
     CFX_Matrix affine_matrix1(1.0, 0.0, 0.0, -1.0,
                               kLeftPosition * m_outputHScale,
                               (float)(m_Height - iTextHeight + iFontSize));
     affine_matrix1.Concat(matrix);
-    device->DrawNormalText(pdfium::make_span(charpos).first(iLen), m_pFont,
+    device->DrawNormalText(charpos_span.first(iLen), m_pFont,
                            static_cast<float>(iFontSize), affine_matrix1,
                            m_fontColor, GetTextRenderOptions());
   }
   tempStr = str.Substr(4, 4);
   iLen = tempStr.GetLength();
-  CalcTextInfo(tempStr, &charpos[4], m_pFont, (float)strWidth, iFontSize,
-               blank);
+  CalcTextInfo(tempStr, charpos_span.subspan(4), m_pFont, (float)strWidth,
+               iFontSize, blank);
   {
     CFX_Matrix affine_matrix1(1.0, 0.0, 0.0, -1.0,
                               (kLeftPosition + 33) * m_outputHScale,
                               (float)(m_Height - iTextHeight + iFontSize));
     affine_matrix1.Concat(matrix);
-    device->DrawNormalText(pdfium::make_span(charpos).subspan(4, iLen), m_pFont,
+    device->DrawNormalText(charpos_span.subspan(4, iLen), m_pFont,
                            static_cast<float>(iFontSize), affine_matrix1,
                            m_fontColor, GetTextRenderOptions());
   }

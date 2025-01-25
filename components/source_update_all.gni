@@ -38,8 +38,18 @@ update_target("//components/history/core/browser:browser") {
 
 update_target("//components/omnibox/browser:browser") {
   sources += [
+    "//vivaldi/components/omnibox/bookmark_nickname_match_utils.h",
+    "//vivaldi/components/omnibox/bookmark_nickname_match_utils.cc",
     "//vivaldi/components/omnibox/bookmark_nickname_provider.h",
     "//vivaldi/components/omnibox/bookmark_nickname_provider.cc",
+    "//vivaldi/components/omnibox/relevance_multiplier_constants.h",
+  ]
+}
+
+update_target("//components/sync_sessions:sync_sessions") {
+  sources += [
+    "//vivaldi/components/sync_sessions/vivaldi_local_session_event_handler_impl.cc",
+    "//vivaldi/components/sync_sessions/vivaldi_synced_session.cc",
   ]
 }
 
@@ -62,6 +72,19 @@ if (is_mac || is_ios) {
     sources += [
       "//vivaldi/components/os_crypt/viv_keychain_password_mac.mm",
     ]
+  }
+}
+
+if (is_linux && use_dbus) {
+  update_target("//components/os_crypt/sync:os_crypt") {
+    sources += [
+      "//vivaldi/components/os_crypt/xdg_desktop_portal_dbus.cc",
+      "//vivaldi/components/os_crypt/xdg_desktop_portal_dbus.h",
+      "//vivaldi/components/os_crypt/key_storage_xdg_desktop_portal.cc",
+      "//vivaldi/components/os_crypt/key_storage_xdg_desktop_portal.h",
+    ]
+
+    defines += [ "USE_XDG_DESKTOP_PORTAL" ]
   }
 }
 

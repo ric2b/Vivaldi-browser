@@ -9,7 +9,7 @@
 #include <optional>
 
 #include "base/memory/raw_ref.h"
-#include "components/autofill/core/browser/autofill_client.h"
+#include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/payments/payments_network_interface.h"
 #include "components/autofill/core/browser/payments/payments_window_manager.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -89,14 +89,14 @@ class DesktopPaymentsWindowManager : public PaymentsWindowManager,
   // retrieve the virtual card. This method is run once risk data is loaded for
   // VCN 3DS.
   void OnDidLoadRiskDataForVcn3ds(
-      RedirectCompletionProof redirect_completion_proof,
+      RedirectCompletionResult redirect_completion_result,
       const std::string& risk_data);
 
   // Closes the progress dialog and runs the completion callback
   // `vcn_3ds_context_`. Run once a response is received from the second
   // UnmaskCardRequest, triggered after the authentication has completed.
   void OnVcn3dsAuthenticationResponseReceived(
-      AutofillClient::PaymentsRpcResult result,
+      payments::PaymentsAutofillClient::PaymentsRpcResult result,
       const PaymentsNetworkInterface::UnmaskResponseDetails& response_details);
 
   // Resets the state of `this` in relation to the ongoing UnmaskCardRequest.
@@ -120,6 +120,10 @@ class DesktopPaymentsWindowManager : public PaymentsWindowManager,
 
   // Only present if `flow_type_` is `kVcn3ds`.
   std::optional<Vcn3dsContext> vcn_3ds_context_;
+
+  // The timestamp for when the VCN 3DS pop-up was shown to the user. Used for
+  // logging purposes.
+  std::optional<base::TimeTicks> vcn_3ds_popup_shown_timestamp_;
 
   // The type of flow that is currently ongoing. Set when a flow is initiated.
   FlowType flow_type_ = FlowType::kNoFlow;

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/editing/state_machines/backward_grapheme_boundary_state_machine.h"
 
 #include <ostream>
@@ -163,9 +168,10 @@ BackwardGraphemeBoundaryStateMachine::FeedPrecedingCodeUnit(UChar code_unit) {
         boundary_offset_ -= 2;
       return Finish();
     case InternalState::kFinished:
-      NOTREACHED() << "Do not call feedPrecedingCodeUnit() once it finishes.";
+      NOTREACHED_IN_MIGRATION()
+          << "Do not call feedPrecedingCodeUnit() once it finishes.";
   }
-  NOTREACHED() << "Unhandled state: " << internal_state_;
+  NOTREACHED_IN_MIGRATION() << "Unhandled state: " << internal_state_;
   return Finish();
 }
 
@@ -191,15 +197,16 @@ BackwardGraphemeBoundaryStateMachine::TellEndOfPrecedingText() {
         boundary_offset_ -= 2;
       return Finish();
     case InternalState::kFinished:
-      NOTREACHED() << "Do not call tellEndOfPrecedingText() once it finishes.";
+      NOTREACHED_IN_MIGRATION()
+          << "Do not call tellEndOfPrecedingText() once it finishes.";
   }
-  NOTREACHED() << "Unhandled state: " << internal_state_;
+  NOTREACHED_IN_MIGRATION() << "Unhandled state: " << internal_state_;
   return Finish();
 }
 
 TextSegmentationMachineState
 BackwardGraphemeBoundaryStateMachine::FeedFollowingCodeUnit(UChar code_unit) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return TextSegmentationMachineState::kInvalid;
 }
 

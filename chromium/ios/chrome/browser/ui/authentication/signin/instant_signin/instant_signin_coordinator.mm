@@ -189,7 +189,7 @@
   // `_identityChooserCoordinator.delegate` was set to nil before calling this
   // method since `identityChooserCoordinatorDidTapOnAddAccount:` or
   // `identityChooserCoordinator:didSelectIdentity:` have been called before.
-  NOTREACHED() << base::SysNSStringToUTF8([self description]);
+  NOTREACHED_IN_MIGRATION() << base::SysNSStringToUTF8([self description]);
 }
 
 - (void)identityChooserCoordinatorDidTapOnAddAccount:
@@ -258,16 +258,13 @@
       _promoAction == signin_metrics::PromoAction::PROMO_ACTION_WITH_DEFAULT
           ? PostSignInActionSet({PostSignInAction::kShowSnackbar})
           : PostSignInActionSet({PostSignInAction::kNone});
-  if (base::FeatureList::IsEnabled(kEnableReviewAccountSettingsPromo)) {
-    if (self.accessPoint ==
-        signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER) {
-      postSigninActions.Put(
-          PostSignInAction::kEnableUserSelectableTypeBookmarks);
-    } else if (self.accessPoint ==
-               signin_metrics::AccessPoint::ACCESS_POINT_READING_LIST) {
-      postSigninActions.Put(
-          PostSignInAction::kEnableUserSelectableTypeReadingList);
-    }
+  if (self.accessPoint ==
+      signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER) {
+    postSigninActions.Put(PostSignInAction::kEnableUserSelectableTypeBookmarks);
+  } else if (self.accessPoint ==
+             signin_metrics::AccessPoint::ACCESS_POINT_READING_LIST) {
+    postSigninActions.Put(
+        PostSignInAction::kEnableUserSelectableTypeReadingList);
   }
   AuthenticationFlow* authenticationFlow =
       [[AuthenticationFlow alloc] initWithBrowser:self.browser

@@ -54,6 +54,7 @@
 #import "testing/gmock/include/gmock/gmock.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
+#import "third_party/abseil-cpp/absl/types/variant.h"
 #import "ui/base/resource/resource_bundle.h"
 #import "ui/gfx/image/image_unittest_util.h"
 #import "url/gurl.h"
@@ -79,14 +80,13 @@ MinimalFormFieldDataForFilling() {
   return {autofill::FormFieldData::FillData(std::move(field))};
 }
 
-// Returns a simple form suggestion that only consists of a `value` and an
-// `item_id`.
+// Returns a simple form suggestion that only consists of a `value` and a `type`
 FormSuggestion* SimpleFormSuggestion(std::u16string value,
-                                     autofill::SuggestionType item_id) {
+                                     autofill::SuggestionType type) {
   return [FormSuggestion suggestionWithValue:base::SysUTF16ToNSString(value)
                           displayDescription:@""
                                         icon:nil
-                                 popupItemId:item_id
+                                        type:type
                            backendIdentifier:@""
                               requiresReauth:NO];
 }
@@ -476,7 +476,7 @@ TEST_F(AutofillAgentTests, onSuggestionsReady_ShowAccountCards) {
   // "Show credit cards from account" should be the only suggestion.
   EXPECT_EQ(1U, completion_handler_suggestions.count);
   EXPECT_EQ(SuggestionType::kShowAccountCards,
-            completion_handler_suggestions[0].popupItemId);
+            completion_handler_suggestions[0].type);
 }
 
 // Tests that virtual cards are being served as suggestions with the
@@ -526,7 +526,7 @@ TEST_F(AutofillAgentTests, showAutofillPopup_ShowVirtualCards) {
                         minorValue:[suggestions[0].minorValue copy]
                 displayDescription:[suggestions[0].displayDescription copy]
                               icon:[suggestions[0].icon copy]
-                       popupItemId:suggestions[0].popupItemId
+                              type:suggestions[0].type
                  backendIdentifier:suggestions[0].backendIdentifier
                     requiresReauth:suggestions[0].requiresReauth
         acceptanceA11yAnnouncement:[suggestions[0]
@@ -536,7 +536,7 @@ TEST_F(AutofillAgentTests, showAutofillPopup_ShowVirtualCards) {
                         minorValue:[suggestions[1].minorValue copy]
                 displayDescription:[suggestions[1].displayDescription copy]
                               icon:[suggestions[1].icon copy]
-                       popupItemId:suggestions[1].popupItemId
+                              type:suggestions[1].type
                  backendIdentifier:suggestions[1].backendIdentifier
                     requiresReauth:suggestions[1].requiresReauth
         acceptanceA11yAnnouncement:[suggestions[1]
@@ -561,7 +561,7 @@ TEST_F(AutofillAgentTests, showAutofillPopup_ShowVirtualCards) {
   EXPECT_TRUE(
       gfx::test::PlatformImagesEqual(virtual_card_suggestion.icon, visa_icon));
   EXPECT_EQ(autofill::SuggestionType::kVirtualCreditCardEntry,
-            virtual_card_suggestion.popupItemId);
+            virtual_card_suggestion.type);
   EXPECT_NSEQ(@"", virtual_card_suggestion.backendIdentifier);
   EXPECT_EQ(false, virtual_card_suggestion.requiresReauth);
   EXPECT_NSEQ(nil, virtual_card_suggestion.acceptanceA11yAnnouncement);
@@ -574,7 +574,7 @@ TEST_F(AutofillAgentTests, showAutofillPopup_ShowVirtualCards) {
   EXPECT_TRUE(
       gfx::test::PlatformImagesEqual(credit_card_suggestion.icon, visa_icon));
   EXPECT_EQ(autofill::SuggestionType::kCreditCardEntry,
-            credit_card_suggestion.popupItemId);
+            credit_card_suggestion.type);
   EXPECT_NSEQ(@"", credit_card_suggestion.backendIdentifier);
   EXPECT_EQ(false, credit_card_suggestion.requiresReauth);
   EXPECT_NSEQ(nil, credit_card_suggestion.acceptanceA11yAnnouncement);
@@ -705,11 +705,11 @@ TEST_F(AutofillAgentTests, showAutofillPopup_PlusAddresses) {
   // `FormSuggestion` objects.
   EXPECT_EQ(2U, completion_handler_suggestions.count);
   EXPECT_EQ(SuggestionType::kCreateNewPlusAddress,
-            completion_handler_suggestions[0].popupItemId);
+            completion_handler_suggestions[0].type);
   EXPECT_NSEQ(base::SysUTF8ToNSString(createSuggestionText),
               completion_handler_suggestions[0].value);
   EXPECT_EQ(autofill::SuggestionType::kFillExistingPlusAddress,
-            completion_handler_suggestions[1].popupItemId);
+            completion_handler_suggestions[1].type);
   EXPECT_NSEQ(base::SysUTF8ToNSString(fillExistingSuggestionText),
               completion_handler_suggestions[1].value);
 }
@@ -742,7 +742,10 @@ TEST_F(AutofillAgentTests,
   std::vector<autofill::Suggestion> autofillSuggestions = {
       autofill::Suggestion("", "", suggestion_network_icon,
                            autofill::SuggestionType::kCreditCardEntry)};
-  ASSERT_TRUE(autofillSuggestions[0].custom_icon.IsEmpty());
+  ASSERT_TRUE(
+      absl::holds_alternative<gfx::Image>(autofillSuggestions[0].custom_icon));
+  ASSERT_TRUE(
+      absl::get<gfx::Image>(autofillSuggestions[0].custom_icon).IsEmpty());
 
   // When the custom icon is not present, the default icon should be used.
   [autofill_agent_ showAutofillPopup:autofillSuggestions
@@ -779,8 +782,9 @@ TEST_F(AutofillAgentTests, onSuggestionsReady_ClearForm) {
   autofillSuggestions.push_back(
       autofill::Suggestion("", "", autofill::Suggestion::Icon::kNoIcon,
                            autofill::SuggestionType::kAddressEntry));
-  autofillSuggestions.push_back(autofill::Suggestion(
-      "", "", autofill::Suggestion::Icon::kNoIcon, SuggestionType::kClearForm));
+  autofillSuggestions.push_back(
+      autofill::Suggestion("", "", autofill::Suggestion::Icon::kNoIcon,
+                           SuggestionType::kUndoOrClear));
   [autofill_agent_
        showAutofillPopup:autofillSuggestions
       suggestionDelegate:base::WeakPtr<autofill::AutofillSuggestionDelegate>()];
@@ -814,12 +818,12 @@ TEST_F(AutofillAgentTests, onSuggestionsReady_ClearForm) {
   // "Clear Form" should appear as the first suggestion. Otherwise, the order of
   // suggestions should not change.
   EXPECT_EQ(3U, completion_handler_suggestions.count);
-  EXPECT_EQ(SuggestionType::kClearForm,
-            completion_handler_suggestions[0].popupItemId);
+  EXPECT_EQ(SuggestionType::kUndoOrClear,
+            completion_handler_suggestions[0].type);
   EXPECT_EQ(autofill::SuggestionType::kAddressEntry,
-            completion_handler_suggestions[1].popupItemId);
+            completion_handler_suggestions[1].type);
   EXPECT_EQ(autofill::SuggestionType::kAddressEntry,
-            completion_handler_suggestions[2].popupItemId);
+            completion_handler_suggestions[2].type);
 }
 
 // Tests that when Autofill suggestions are made available to AutofillAgent
@@ -836,8 +840,9 @@ TEST_F(AutofillAgentTests, onSuggestionsReady_ClearFormWithGPay) {
   autofillSuggestions.push_back(
       autofill::Suggestion("", "", autofill::Suggestion::Icon::kNoIcon,
                            autofill::SuggestionType::kCreditCardEntry));
-  autofillSuggestions.push_back(autofill::Suggestion(
-      "", "", autofill::Suggestion::Icon::kNoIcon, SuggestionType::kClearForm));
+  autofillSuggestions.push_back(
+      autofill::Suggestion("", "", autofill::Suggestion::Icon::kNoIcon,
+                           SuggestionType::kUndoOrClear));
   [autofill_agent_
        showAutofillPopup:autofillSuggestions
       suggestionDelegate:base::WeakPtr<autofill::AutofillSuggestionDelegate>()];
@@ -869,12 +874,12 @@ TEST_F(AutofillAgentTests, onSuggestionsReady_ClearFormWithGPay) {
       }));
 
   EXPECT_EQ(3U, completion_handler_suggestions.count);
-  EXPECT_EQ(SuggestionType::kClearForm,
-            completion_handler_suggestions[0].popupItemId);
+  EXPECT_EQ(SuggestionType::kUndoOrClear,
+            completion_handler_suggestions[0].type);
   EXPECT_EQ(autofill::SuggestionType::kCreditCardEntry,
-            completion_handler_suggestions[1].popupItemId);
+            completion_handler_suggestions[1].type);
   EXPECT_EQ(autofill::SuggestionType::kCreditCardEntry,
-            completion_handler_suggestions[2].popupItemId);
+            completion_handler_suggestions[2].type);
 }
 
 // Test that every frames are processed whatever is the order of pageloading
@@ -1151,7 +1156,7 @@ TEST_F(AutofillAgentTests, DidSelectSuggestion_ClearFormEntry) {
   // Select suggestion to trigger field filling.
   __block BOOL completion_handler_called = NO;
   FormSuggestion* form_suggestion =
-      SimpleFormSuggestion(u"", autofill::SuggestionType::kClearForm);
+      SimpleFormSuggestion(u"", autofill::SuggestionType::kUndoOrClear);
   [autofill_agent_ didSelectSuggestion:form_suggestion
                                   form:@"single-username-form"
                         formRendererID:form_id

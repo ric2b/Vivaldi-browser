@@ -40,7 +40,6 @@ enum class TreeScopeType;
 }  // namespace mojom
 
 struct FramePolicy;
-class StorageKey;
 }  // namespace blink
 
 namespace content {
@@ -194,6 +193,13 @@ class CONTENT_EXPORT FrameTree {
     // changing the focused frame tree in the case of inner/outer FrameTrees.
     virtual void SetFocusedFrame(FrameTreeNode* node,
                                  SiteInstanceGroup* source) = 0;
+
+    // Returns this FrameTree's picture-in-picture FrameTree if it has one.
+    virtual FrameTree* GetOwnedPictureInPictureFrameTree() = 0;
+
+    // Returns this FrameTree's opener if this FrameTree represents a
+    // picture-in-picture window.
+    virtual FrameTree* GetPictureInPictureOpenerFrameTree() = 0;
   };
 
   // Type of FrameTree instance.
@@ -554,27 +560,6 @@ class CONTENT_EXPORT FrameTree {
   // each inner FrameTree is attached.
   void FocusOuterFrameTrees();
 
-  // This should only be called by NavigationRequest when it detects that an
-  // origin is participating in the deprecation trial.
-  //
-  // TODO(crbug.com/40887671): Remove this when deprecation trial is complete.
-  void RegisterOriginForUnpartitionedSessionStorageAccess(
-      const url::Origin& origin);
-
-  // This should only be called by NavigationRequest when it detects that an
-  // origin is not participating in the deprecation trial.
-  //
-  // TODO(crbug.com/40887671): Remove this when deprecation trial is complete.
-  void UnregisterOriginForUnpartitionedSessionStorageAccess(
-      const url::Origin& origin);
-
-  // This should be used for all session storage related bindings as it adjusts
-  // the storage key used depending on the deprecation trial.
-  //
-  // TODO(crbug.com/40887671): Remove this when deprecation trial is complete.
-  const blink::StorageKey GetSessionStorageKey(
-      const blink::StorageKey& storage_key);
-
   // Vivaldi
   double loaded_bytes() const { return loaded_bytes_; }
   int loaded_elements() const { return loaded_elements_; }
@@ -682,13 +667,6 @@ class CONTENT_EXPORT FrameTree {
   // `root()` method, even while `root_` is running its destructor.
   // For that reason, we want to destroy |root_| before any other fields.
   FrameTreeNode root_;
-
-  // Origins in this set have enabled a deprecation trial that prevents the
-  // partitioning of session storage when embedded as a third-party iframe.
-  // This list persists for the lifetime of the associated tab.
-  //
-  // TODO(crbug.com/40887671): Remove this when deprecation trial is complete.
-  std::set<url::Origin> unpartitioned_session_storage_origins_;
 
   // Used to track loaded bytes and elements.
   double loaded_bytes_;

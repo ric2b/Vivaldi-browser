@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "base/allocator/buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/buildflags.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/containers/flat_map.h"
@@ -338,22 +338,22 @@ const Metric kAllocatorDumpNamesForMetrics[] = {
     {"malloc/extreme_lud", "Malloc.ExtremeLUD.SizeInBytes", MetricSize::kSmall,
      "size_in_bytes", EmitTo::kSizeInUmaOnly, nullptr},
     {"malloc/extreme_lud", "Malloc.ExtremeLUD.CumulativeCount",
-     MetricSize::kTiny, "cumulative_count", EmitTo::kSizeInUmaOnly, nullptr},
+     MetricSize::kSmall, "cumulative_count", EmitTo::kSizeInUmaOnly, nullptr},
     {"malloc/extreme_lud", "Malloc.ExtremeLUD.CumulativeSizeInBytes",
-     MetricSize::kSmall, "cumulative_size_in_bytes", EmitTo::kSizeInUmaOnly,
+     MetricSize::kLarge, "cumulative_size_in_bytes", EmitTo::kSizeInUmaOnly,
      nullptr},
     {"malloc/extreme_lud", "Malloc.ExtremeLUD.QuarantineMissCount",
      MetricSize::kTiny, "quarantine_miss_count", EmitTo::kSizeInUmaOnly,
      nullptr},
     {"malloc/extreme_lud", "Malloc.ExtremeLUD.BytesPerMinute",
-     MetricSize::kTiny, "bytes_per_minute", EmitTo::kSizeInUmaOnly, nullptr},
+     MetricSize::kSmall, "bytes_per_minute", EmitTo::kSizeInUmaOnly, nullptr},
     {"malloc/extreme_lud", "Malloc.ExtremeLUD.CountPerMinute",
      MetricSize::kTiny, "count_per_minute", EmitTo::kSizeInUmaOnly, nullptr},
     {"malloc/extreme_lud", "Malloc.ExtremeLUD.MissCountPerMinute",
      MetricSize::kTiny, "miss_count_per_minute", EmitTo::kSizeInUmaOnly,
      nullptr},
     {"malloc/extreme_lud", "Malloc.ExtremeLUD.QuarantinedTime",
-     MetricSize::kTiny, "quarantined_time", EmitTo::kSizeInUmaOnly, nullptr},
+     MetricSize::kSmall, "quarantined_time", EmitTo::kSizeInUmaOnly, nullptr},
     {"malloc/partitions/allocator/scheduler_loop_quarantine",
      "Malloc.SchedulerLoopQuarantine.Count", MetricSize::kTiny, "count",
      EmitTo::kSizeInUmaOnly, nullptr},
@@ -949,7 +949,7 @@ void EmitProcessUmaAndUkm(const GlobalMemoryDump::ProcessDump& pmd,
       case EmitTo::kIgnored:
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -1623,11 +1623,10 @@ void ProcessMemoryMetricsEmitter::GetProcessToPageInfoMap(
     GetProcessToPageInfoMapCallback callback,
     performance_manager::Graph* graph) {
   std::vector<ProcessInfo> process_infos;
-  std::vector<const performance_manager::ProcessNode*> process_nodes =
-      graph->GetAllProcessNodes();
   // Assign page nodes unique IDs within this lookup only.
   base::flat_map<const performance_manager::PageNode*, uint64_t> page_id_map;
-  for (auto* process_node : process_nodes) {
+  for (const performance_manager::ProcessNode* process_node :
+       graph->GetAllProcessNodes()) {
     if (process_node->GetProcessId() == base::kNullProcessId)
       continue;
 
@@ -1649,14 +1648,18 @@ void ProcessMemoryMetricsEmitter::GetProcessToPageInfoMap(
       if (page_node->GetUkmSourceID() == ukm::kInvalidSourceId)
         continue;
 
-      if (page_id_map.find(page_node) == page_id_map.end())
-        page_id_map.insert(std::make_pair(page_node, page_id_map.size() + 1));
+      // Get or generate the tab id.
+      uint64_t& tab_id = page_id_map[page_node];
+      if (tab_id == 0u) {
+        // 0 is an invalid id, meaning `page_node` was just inserted in
+        // `page_id_map` and its tab id must be generated.
+        tab_id = page_id_map.size();
+      }
 
       PageInfo& page_info = process_info.page_infos.emplace_back();
       page_info.ukm_source_id = page_node->GetUkmSourceID();
 
-      DCHECK(page_id_map.find(page_node) != page_id_map.end());
-      page_info.tab_id = page_id_map[page_node];
+      page_info.tab_id = tab_id;
       page_info.hosts_main_frame = HostsMainFrame(process_node, page_node);
       page_info.is_visible = page_node->IsVisible();
       page_info.time_since_last_visibility_change =

@@ -19,7 +19,7 @@
 use crypto_provider::aes::BLOCK_SIZE;
 use crypto_provider::{aes, CryptoProvider, CryptoRng};
 use crypto_provider_rustcrypto::RustCrypto;
-use ldt::{LdtEncryptCipher, LdtKey, Swap, XorPadder};
+use ldt::{LdtCipher, LdtEncryptCipher, LdtKey, Swap, XorPadder};
 use rand::{Rng as _, SeedableRng as _};
 use rand_ext::*;
 use serde_json::json;

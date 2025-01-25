@@ -10,10 +10,9 @@
 #include <cstddef>
 #include <vector>
 
-#include <xnnpack.h>
-#include <xnnpack/normalization.h>
-
 #include <gtest/gtest.h>
+#include "xnnpack.h"
+#include "xnnpack/normalization.h"
 
 class SliceNormalizationTester {
  public:

@@ -1,4 +1,4 @@
-set(AVIF_LOCAL_SVT_GIT_TAG "v2.0.0")
+set(AVIF_LOCAL_SVT_GIT_TAG "v2.1.1")
 
 set(LIB_FILENAME "${AVIF_SOURCE_DIR}/ext/SVT-AV1/Bin/Release/${AVIF_LIBRARY_PREFIX}SvtAv1Enc${CMAKE_STATIC_LIBRARY_SUFFIX}")
 
@@ -30,7 +30,7 @@ else()
             enable_language(ASM)
         endif()
     endif()
-    if(NOT CMAKE_ASM_NASM_COMPILER)
+    if(NOT CMAKE_ASM_NASM_COMPILER AND CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64|AMD64|amd64)")
         include(CheckLanguage)
         check_language(ASM_NASM)
         if(CMAKE_ASM_NASM_COMPILER)

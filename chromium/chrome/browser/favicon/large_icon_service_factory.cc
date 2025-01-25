@@ -31,8 +31,7 @@ favicon::LargeIconService* GetLargeIconService(
 }
 
 #if BUILDFLAG(IS_ANDROID)
-// Seems like on Android `1 dip == 1 px`. The value of `kDipForServerRequests`
-// can be overridden by `features::kLargeFaviconFromGoogle`.
+// Seems like on Android `1 dip == 1 px`.
 const int kDipForServerRequests = 24;
 // Matches the size used on iOS, see `kDipForServerRequests` in
 // `//ios/c/b/favicon/model/ios_chrome_large_icon_service_factory.cc`.
@@ -71,6 +70,9 @@ LargeIconServiceFactory::LargeIconServiceFactory()
               // TODO(crbug.com/40257657): Check if this service is needed in
               // Guest mode.
               .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/41488885): Check if this service is needed for
+              // Ash Internals.
+              .WithAshInternals(ProfileSelection::kRedirectedToOriginal)
               .Build()) {
   DependsOn(FaviconServiceFactory::GetInstance());
   favicon::SetLargeIconServiceGetter(base::BindRepeating(&GetLargeIconService));
@@ -98,10 +100,6 @@ LargeIconServiceFactory::BuildServiceInstanceForBrowserContext(
 
 // static
 int LargeIconServiceFactory::desired_size_in_dip_for_server_requests() {
-  if (base::FeatureList::IsEnabled(features::kLargeFaviconFromGoogle)) {
-    return features::kLargeFaviconFromGoogleSizeInDip.Get();
-  }
-
 #if BUILDFLAG(IS_ANDROID)
   if (search_engines::IsChoiceScreenFlagEnabled(
           search_engines::ChoicePromo::kAny)) {

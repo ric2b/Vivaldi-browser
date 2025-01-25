@@ -8,7 +8,7 @@
 
 import {TextAnnotationList} from '//ios/web/annotations/resources/text_annotation_list.js';
 import {annotationUniqueId, createChromeAnnotation, originalNodeDecorationId, replacementNodeDecorationId, TextDecoration} from '//ios/web/annotations/resources/text_decoration.js';
-import {HTMLElementWithSymbolIndex, NodeWithSymbolIndex, TextWithSymbolIndex} from '//ios/web/annotations/resources/text_dom_utils.js';
+import {annotationCanBeCrossElement, HTMLElementWithSymbolIndex, NodeWithSymbolIndex, TextWithSymbolIndex} from '//ios/web/annotations/resources/text_dom_utils.js';
 import {TextChunk} from '//ios/web/annotations/resources/text_extractor.js';
 import {TextStyler} from '//ios/web/annotations/resources/text_styler.js';
 
@@ -58,6 +58,25 @@ class TextDecorator {
   // Unique id used in `decorations` map.
   uniqueId = 0;
 
+  // A mutation observer callback that observed the original nodes.
+  // If an original node is updated, the decoration should be restored.
+  private mutationCallback =
+      (mutationList: MutationRecord[]) => {
+        for (let mutation of mutationList) {
+          let target = mutation.target as TextWithSymbolIndex;
+          if (!target[originalNodeDecorationId]) {
+            continue;
+          }
+          let replacementId = target[originalNodeDecorationId];
+          const liveDecoration = this.decorations.get(replacementId);
+          liveDecoration?.restore();
+        }
+      }
+
+  // A mutation observer callback that observed the original nodes.
+  // If an original node is updated, the decoration should be restored.
+  private mutationObserver = new MutationObserver(this.mutationCallback);
+
   // Decorates a single `textNode` at given `index` in full chunk text.
   private decorateNode(
       run: TextAnnotationList, textNode: TextWithSymbolIndex,
@@ -82,6 +101,11 @@ class TextDecorator {
       const start = annotation.start;
       const end = annotation.end;
       if (index < end && index + length > start) {
+        if (end > index + length &&
+            !(annotationCanBeCrossElement(annotation.type))) {
+          run.skip();
+          continue;
+        }
         // Position and substring inside the textNode. A textNode can include
         // a part of, the whole of or many annotations.
         const left = Math.max(0, start - index);
@@ -123,6 +147,9 @@ class TextDecorator {
             textNode, decoration.replacements);
       } else {
         this.decorations.set(decoration.id, decoration);
+        // Observe the original text Node. If the value change, the annotation
+        // should be reverted.
+        this.mutationObserver.observe(textNode, {characterData: true});
         decoration.apply();
       }
     }
@@ -233,6 +260,7 @@ class TextDecorator {
     this.decorations.forEach((decoration) => {
       decoration.restore();
     });
+    this.mutationObserver.disconnect();
     this.decorations.clear();
   }
 

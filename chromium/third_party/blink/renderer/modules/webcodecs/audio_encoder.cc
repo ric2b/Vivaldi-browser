@@ -611,8 +611,8 @@ void AudioEncoder::CallOutputCallback(
 
   MarkCodecActive();
 
-  auto buffer = media::DecoderBuffer::FromArray(
-      std::move(encoded_buffer.encoded_data), encoded_buffer.encoded_data_size);
+  auto buffer =
+      media::DecoderBuffer::FromArray(std::move(encoded_buffer.encoded_data));
   buffer->set_timestamp(encoded_buffer.timestamp - base::TimeTicks());
   buffer->set_is_key_frame(true);
   buffer->set_duration(encoded_buffer.duration);
@@ -651,7 +651,7 @@ ScriptPromise<AudioEncoderSupport> AudioEncoder::isConfigSupported(
   auto* parsed_config = ParseConfigStatic(config, exception_state);
   if (!parsed_config) {
     DCHECK(exception_state.HadException());
-    return ScriptPromise<AudioEncoderSupport>();
+    return EmptyPromise();
   }
 
   String unused_js_error_message;

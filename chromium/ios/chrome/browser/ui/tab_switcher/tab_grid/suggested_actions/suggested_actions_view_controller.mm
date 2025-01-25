@@ -8,6 +8,7 @@
 
 #import "base/apple/foundation_util.h"
 #import "base/check_op.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_image_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
@@ -138,24 +139,26 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addItem:searchWebItem
       toSectionWithIdentifier:kSectionIdentifierSuggestedActions];
 
-  TableViewImageItem* searchRecentTabsItem = [[TableViewImageItem alloc]
-      initWithType:ItemTypeSuggestedActionSearchRecentTabs];
-  searchRecentTabsItem.title = l10n_util::GetNSString(
-      IDS_IOS_TABS_SEARCH_SUGGESTED_ACTION_SEARCH_RECENT_TABS);
+  if (!IsTabGroupSyncEnabled()) {
+    TableViewImageItem* searchRecentTabsItem = [[TableViewImageItem alloc]
+        initWithType:ItemTypeSuggestedActionSearchRecentTabs];
+    searchRecentTabsItem.title = l10n_util::GetNSString(
+        IDS_IOS_TABS_SEARCH_SUGGESTED_ACTION_SEARCH_RECENT_TABS);
 
-  if (IsVivaldiRunning()) {
+    if (IsVivaldiRunning()) {
+      searchRecentTabsItem.image =
+          [[UIImage imageNamed:vOverflowClearHistory]
+              imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    } else {
     searchRecentTabsItem.image =
-        [[UIImage imageNamed:vOverflowClearHistory]
+        [[UIImage imageNamed:@"suggested_action_recent_tabs"]
             imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-  } else {
-  searchRecentTabsItem.image =
-      [[UIImage imageNamed:@"suggested_action_recent_tabs"]
-          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-  } // End Vivaldi
+    } // End Vivaldi
 
-  searchRecentTabsItem.textColor = actionsTextColor;
-  [model addItem:searchRecentTabsItem
-      toSectionWithIdentifier:kSectionIdentifierSuggestedActions];
+    searchRecentTabsItem.textColor = actionsTextColor;
+    [model addItem:searchRecentTabsItem
+        toSectionWithIdentifier:kSectionIdentifierSuggestedActions];
+  }
 
   TableViewTabsSearchSuggestedHistoryItem* searchHistoryItem =
       [[TableViewTabsSearchSuggestedHistoryItem alloc]

@@ -134,10 +134,6 @@ static int vble_decode_frame(AVCodecContext *avctx, AVFrame *pic,
     if ((ret = ff_thread_get_buffer(avctx, pic, 0)) < 0)
         return ret;
 
-    /* Set flags */
-    pic->flags |= AV_FRAME_FLAG_KEY;
-    pic->pict_type = AV_PICTURE_TYPE_I;
-
     /* Version should always be 1 */
     version = AV_RL32(src);
 
@@ -190,6 +186,9 @@ static av_cold int vble_decode_init(AVCodecContext *avctx)
 
     ctx->size = av_image_get_buffer_size(avctx->pix_fmt,
                                          avctx->width, avctx->height, 1);
+
+    if (ctx->size < 0)
+        return ctx->size;
 
     ctx->val = av_malloc_array(ctx->size, sizeof(*ctx->val));
 

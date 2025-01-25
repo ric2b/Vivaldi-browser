@@ -66,10 +66,8 @@
     _shortcutsConfig.shortcutItems = [self shortcutItems];
     _shortcutsConfig.consumerSource = self;
     _shortcutsConfig.commandHandler = self;
-    if (IsIOSMagicStackCollectionViewEnabled()) {
-      _consumers = [ShortcutsConsumerList
-          observersWithProtocol:@protocol(ShortcutsConsumer)];
-    }
+    _consumers = [ShortcutsConsumerList
+        observersWithProtocol:@protocol(ShortcutsConsumer)];
   }
   return self;
 }
@@ -103,7 +101,6 @@
 #pragma mark - ShortcutsConsumerSource
 
 - (void)addConsumer:(id<ShortcutsConsumer>)consumer {
-  DCHECK(IsIOSMagicStackCollectionViewEnabled());
   [_consumers addObserver:consumer];
 }
 
@@ -147,7 +144,7 @@
       [self.dispatcher showWhatsNew];
       break;
     case NTPCollectionShortcutTypeCount:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   return;
@@ -161,11 +158,7 @@
   _readingListModelIsLoaded = model->loaded();
   if (_readingListItem) {
     _shortcutsConfig.shortcutItems = [self shortcutItems];
-    if (IsIOSMagicStackCollectionViewEnabled()) {
-      [_consumers shortcutsItemConfigDidChange:_readingListItem];
-    } else {
-      [self.consumer setShortcutTilesConfig:_shortcutsConfig];
-    }
+    [_consumers shortcutsItemConfigDidChange:_readingListItem];
   }
 }
 

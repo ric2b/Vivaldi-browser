@@ -152,6 +152,27 @@ export class Importer {
       }
     }
 
+    // Restore Service Worker related response.
+    request.fetchedViaServiceWorker = Boolean(entry.response.custom.get('fetchedViaServiceWorker'));
+    const serviceWorkerResponseSource = entry.response.customAsString('serviceWorkerResponseSource');
+    if (serviceWorkerResponseSource) {
+      // Should consist with the `Protocol.Network.ServiceWorkerResponseSource` enum class.
+      const sources = new Set<Protocol.Network.ServiceWorkerResponseSource>([
+        Protocol.Network.ServiceWorkerResponseSource.CacheStorage,
+        Protocol.Network.ServiceWorkerResponseSource.FallbackCode,
+        Protocol.Network.ServiceWorkerResponseSource.HttpCache,
+        Protocol.Network.ServiceWorkerResponseSource.Network,
+      ]);
+      if (sources.has(serviceWorkerResponseSource as Protocol.Network.ServiceWorkerResponseSource)) {
+        request.setServiceWorkerResponseSource(
+            serviceWorkerResponseSource as Protocol.Network.ServiceWorkerResponseSource);
+      }
+    }
+    const responseCacheStorageCacheName = entry.response.customAsString('responseCacheStorageCacheName');
+    if (responseCacheStorageCacheName) {
+      request.setResponseCacheStorageCacheName(responseCacheStorageCacheName);
+    }
+
     request.finished = true;
   }
 
@@ -198,6 +219,14 @@ export class Importer {
     const proxy = timings.customAsNumber('blocked_proxy') || -1;
     const queueing = timings.customAsNumber('blocked_queueing') || -1;
 
+    // `blocked_queueing` should be excluded from `lastEntry`
+    // (`timings.blocked`) here because it should be taken into account
+    // by `timing.requestTime`, and other subsequent timings are
+    // calculated based on the accumulated `lastEntry`.
+    if (lastEntry > 0 && queueing > 0) {
+      lastEntry -= queueing;
+    }
+
     // SSL is part of connect for both HAR and Chrome's format so subtract it here.
     const ssl = timings.ssl && (timings.ssl >= 0) ? timings.ssl : 0;
     if (timings.connect && (timings.connect > 0)) {
@@ -218,10 +247,11 @@ export class Importer {
       sslStart: timings.ssl && (timings.ssl >= 0) ? lastEntry : -1,
       sslEnd: accumulateTime(timings.ssl),
 
-      workerStart: -1,
-      workerReady: -1,
-      workerFetchStart: -1,
-      workerRespondWithSettled: -1,
+      workerStart: timings.customAsNumber('workerStart') || -1,
+      workerReady: timings.customAsNumber('workerReady') || -1,
+      workerFetchStart: timings.customAsNumber('workerFetchStart') || -1,
+      workerRespondWithSettled: timings.customAsNumber('workerRespondWithSettled') || -1,
+
       sendStart: timings.send >= 0 ? lastEntry : -1,
       sendEnd: accumulateTime(timings.send),
       pushStart: 0,

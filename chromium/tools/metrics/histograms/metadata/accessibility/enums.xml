@@ -1306,21 +1306,15 @@ Unknown properties are collapsed to zero. -->
              null."/>
 </enum>
 
+<enum name="MainNodeAnnotationResult">
+  <int value="0" label="Main node successfully identified"/>
+  <int value="1" label="Invalid node returned"/>
+  <int value="2" label="Main node was already set"/>
+</enum>
+
 <enum name="PdfOcrRequestStatus">
   <int value="0" label="OCR requested"/>
   <int value="1" label="OCR performed"/>
-</enum>
-
-<enum name="PdfOcrUserSelection">
-  <int value="0"
-      label="(Obsolete) Turned on once from the context menu. Removed in
-             2023/09."/>
-  <int value="1" label="Turned on always from the context menu"/>
-  <int value="2" label="Turned off from the context menu"/>
-  <int value="3" label="Turned on always from the more actions"/>
-  <int value="4" label="Turned off from the more actions"/>
-  <int value="5" label="Turned on always from the settings"/>
-  <int value="6" label="Turned off from the settings"/>
 </enum>
 
 <enum name="ReadAnythingColor">
@@ -1346,6 +1340,11 @@ Unknown properties are collapsed to zero. -->
   <int value="6" label="STIX Two Text"/>
 </enum>
 
+<enum name="ReadAnythingHighlightState">
+  <int value="0" label="Reading highlight shown"/>
+  <int value="1" label="Reading highlight hidden"/>
+</enum>
+
 <enum name="ReadAnythingLetterSpacing">
   <int value="0" label="Tight (Deprecated)"/>
   <int value="1" label="Standard"/>
@@ -1358,6 +1357,23 @@ Unknown properties are collapsed to zero. -->
   <int value="1" label="Standard"/>
   <int value="2" label="Loose"/>
   <int value="3" label="Very Loose"/>
+</enum>
+
+<enum name="ReadAnythingNewPage">
+  <int value="0" label="New page distilled"/>
+  <int value="1" label="Speech played on new page"/>
+</enum>
+
+<enum name="ReadAnythingReadAloudSettingsChange">
+  <int value="0" label="Voice speed change"/>
+  <int value="1" label="Voice name change"/>
+  <int value="2" label="Highlight change"/>
+</enum>
+
+<enum name="ReadAnythingReadAloudVoice">
+  <int value="0" label="Natural voice"/>
+  <int value="1" label="eSpeak voice"/>
+  <int value="2" label="ChromeOS voice"/>
 </enum>
 
 <enum name="ReadAnythingScrollEvent">

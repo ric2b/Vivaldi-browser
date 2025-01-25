@@ -9,11 +9,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/task_environment.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
+#include "components/autofill/core/common/autocomplete_parsing_util.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/html_field_types.h"
+#include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/mojom/test_autofill_types.mojom.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/autofill/core/common/password_generation_util.h"
@@ -22,6 +24,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/test_support/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace autofill {
@@ -226,7 +229,7 @@ void ExpectFormFieldData(const FormFieldData& expected,
 void ExpectFormData(const FormData& expected,
                     base::OnceClosure closure,
                     const FormData& passed) {
-  EXPECT_TRUE(passed.host_frame.is_empty());
+  EXPECT_TRUE(passed.host_frame().is_empty());
   EXPECT_TRUE(
       FormData::DeepEqual(test::WithoutUnserializedData(expected), passed));
   std::move(closure).Run();
@@ -410,13 +413,15 @@ TEST_F(AutofillTypeTraitsTestImpl, PassDataListFormFieldData) {
 
 TEST_F(AutofillTypeTraitsTestImpl, PassFormData) {
   FormData input = test::CreateTestAddressFormData();
-  input.username_predictions = {autofill::FieldRendererId(1),
-                                autofill::FieldRendererId(13),
-                                autofill::FieldRendererId(2)};
-  input.button_titles.push_back(std::make_pair(
-      u"Sign-up", mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE));
+  input.set_username_predictions({autofill::FieldRendererId(1),
+                                  autofill::FieldRendererId(13),
+                                  autofill::FieldRendererId(2)});
+  std::vector<ButtonTitleInfo> button_titles = input.button_titles();
+  button_titles.emplace_back(
+      u"Sign-up", mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE);
+  input.set_button_titles(std::move(button_titles));
 
-  EXPECT_FALSE(input.host_frame.is_empty());
+  EXPECT_FALSE(input.host_frame().is_empty());
   base::RunLoop loop;
   mojo::Remote<mojom::TypeTraitsTest> remote(GetTypeTraitsTestRemote());
   remote->PassFormData(
@@ -504,6 +509,19 @@ TEST_F(AutofillTypeTraitsTestImpl, PassPasswordSuggestionRequest) {
       input, base::BindOnce(&ExpectPasswordSuggestionRequest, input,
                             loop.QuitClosure()));
   loop.Run();
+}
+
+TEST(AutofillTypesMojomTraitsTest, AutocompleteParsingResult) {
+  // Simulate a parsed "name webauthn" attribute.
+  autofill::AutocompleteParsingResult original;
+  original.mode = HtmlFieldMode::kNone;
+  original.field_type = HtmlFieldType::kName;
+  original.webauthn = true;
+
+  autofill::AutocompleteParsingResult copy;
+  EXPECT_TRUE(mojo::test::SerializeAndDeserialize<
+              autofill::mojom::AutocompleteParsingResult>(original, copy));
+  EXPECT_EQ(original, copy);
 }
 
 }  // namespace autofill

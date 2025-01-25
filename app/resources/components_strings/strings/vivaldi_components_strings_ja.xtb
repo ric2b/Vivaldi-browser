@@ -16,7 +16,6 @@
 <translation id="1728677426644403582">ウェブページのソースを表示しています</translation>
 <translation id="1734878702283171397">システム管理者にお問い合わせください。</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windowsのネットワーク診断を試す<ph name="END_LINK" />。</translation>
-<translation id="1834321415901700177">このサイトには有害なプログラムが含まれています</translation>
 <translation id="1974060860693918893">詳細</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシーとファイアウォールを確認する<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">発行先: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -42,7 +41,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />接続診断ツールを実行する<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">接続がリセットされました。</translation>
 <translation id="2826760142808435982">接続は <ph name="CIPHER" /> を使用して暗号化および認証されており、<ph name="KX" /> が鍵交換メカニズムとして使用されています。</translation>
-<translation id="2856444702002559011"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> では、悪意のあるユーザーによって、パスワード、メッセージ、クレジットカードなどの情報が盗まれる可能性があります。<ph name="BEGIN_LEARN_MORE_LINK" />詳しい情報<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">ネットワークの変更が検出されました。</translation>
 <translation id="2948083400971632585">接続用に構成したプロキシーは、設定ページから無効にすることができます。</translation>
 <translation id="2991571918955627853"><ph name="SITE" /> では HSTS が使用されているため、現在アクセスできません。通常、ネットワークエラーやネットワークへの攻撃は一時的なものです。しばらくするとページにアクセスできるようになります。</translation>
@@ -92,7 +90,6 @@
 <translation id="4265872034478892965">管理者によって許可</translation>
 <translation id="4305666528087210886">ファイルにアクセスできませんでした</translation>
 <translation id="4312866146174492540">ブロック（デフォルト）</translation>
-<translation id="4356973930735388585">このサイトを利用すると、悪意のあるユーザーによって危険なプログラム（写真、パスワード、メッセージ、クレジット カード番号などの情報を盗み取るか削除するプログラム）がお使いのパソコンにインストールされる可能性があります。</translation>
 <translation id="4408413947728134509">Cookie <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> でログイン証明書が承認されなかったか、ログイン証明書が提示されていない可能性があります。</translation>
 <translation id="4506599922270137252">システム管理者に問い合わせる</translation>
@@ -144,7 +141,6 @@
 <translation id="6305205051461490394"><ph name="URL" /> にアクセスできません。</translation>
 <translation id="6321917430147971392">DNS 設定を確認してください</translation>
 <translation id="6328639280570009161">ネットワーク予測を無効にしてみてください</translation>
-<translation id="6328786501058569169">これは詐欺サイトです</translation>
 <translation id="6348220984832452017">バリエーションを有効にする</translation>
 <translation id="6358450015545214790">ヘルプ</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> で接続が拒否されました。</translation>
@@ -158,7 +154,6 @@
 <translation id="6897140037006041989">ユーザーエージェント</translation>
 <translation id="6957624206566198865">ページを新しいプライベートタブで開く</translation>
 <translation id="7053983685419859001">ブロック</translation>
-<translation id="7079718277001814089">このサイトには悪意あるソフトウェアが含まれています</translation>
 <translation id="7096937462164235847">このウェブサイトの識別情報は確認されていません。</translation>
 <translation id="7108819624672055576">拡張機能によって許可</translation>
 <translation id="7111012039238467737">（有効）</translation>
@@ -175,7 +170,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> では現在このリクエストを処理できません。</translation>
 <translation id="7662298039739062396">拡張機能によって指定される設定</translation>
 <translation id="7663736086183791259">証明書 <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">このサイトを利用すると、悪意のあるユーザーによって閲覧時のエクスペリエンスを損なうプログラム（ホームページを改ざんする、アクセス先のサイトに追加の広告を表示するなどのプログラム）をインストールするよう誘導される可能性があります。</translation>
 <translation id="7714464543167945231">証明書</translation>
 <translation id="7716147886133743102">管理者によってブロック</translation>
 <translation id="7716424297397655342">このサイトをキャッシュから読み込むことができません</translation>
@@ -185,7 +179,6 @@
 <translation id="7878562273885520351">パスワードが不正利用される可能性があります</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="7953236668995583915">更新した設定をこのサイトに適用するには、このページを再読み込みしてください</translation>
-<translation id="8025119109950072390">このサイトを利用すると、悪意のあるユーザーによってソフトウェアのインストールや個人情報（例: パスワード、電話番号、クレジット カード番号）の入力などの危険な操作を行うよう誘導される可能性があります。</translation>
 <translation id="8037357227543935929">確認（デフォルト）</translation>
 <translation id="8041940743680923270">グローバルのデフォルト値（[確認]）を使用</translation>
 <translation id="808894953321890993">パスワードの変更</translation>

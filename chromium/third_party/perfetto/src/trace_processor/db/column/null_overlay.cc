@@ -19,7 +19,9 @@
 #include <algorithm>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -36,6 +38,37 @@
 
 namespace perfetto::trace_processor::column {
 namespace {
+
+namespace {
+using Indices = DataLayerChain::Indices;
+
+std::optional<Token> UpdateIndicesForInner(Indices& indices,
+                                           const BitVector& non_null) {
+  // Find first NULL.
+  auto first_null_it = std::find_if(
+      indices.tokens.begin(), indices.tokens.end(),
+      [&non_null](const Token& t) { return !non_null.IsSet(t.index); });
+
+  // Save first NULL.
+  std::optional<Token> null_tok;
+  if (first_null_it != indices.tokens.end()) {
+    null_tok = *first_null_it;
+  }
+
+  // Erase all NULLs.
+  indices.tokens.erase(std::remove_if(first_null_it, indices.tokens.end(),
+                                      [&non_null](const Token& idx) {
+                                        return !non_null.IsSet(idx.index);
+                                      }),
+                       indices.tokens.end());
+
+  // Update index of each token so they all point to inner.
+  for (auto& token : indices.tokens) {
+    token.index = non_null.CountSetBits(token.index);
+  }
+  return null_tok;
+}
+}  // namespace
 
 BitVector ReconcileStorageResult(FilterOp op,
                                  const BitVector& non_null,
@@ -104,9 +137,9 @@ SingleSearchResult NullOverlay::ChainImpl::SingleSearch(FilterOp op,
   PERFETTO_FATAL("For GCC");
 }
 
-NullOverlay::ChainImpl::ChainImpl(std::unique_ptr<DataLayerChain> innner,
+NullOverlay::ChainImpl::ChainImpl(std::unique_ptr<DataLayerChain> inner,
                                   const BitVector* non_null)
-    : inner_(std::move(innner)), non_null_(non_null) {
+    : inner_(std::move(inner)), non_null_(non_null) {
   PERFETTO_DCHECK(non_null_->CountSetBits() <= inner_->size());
 }
 
@@ -115,6 +148,9 @@ SearchValidationResult NullOverlay::ChainImpl::ValidateSearchConstraints(
     SqlValue sql_val) const {
   if (op == FilterOp::kIsNull || op == FilterOp::kIsNotNull) {
     return SearchValidationResult::kOk;
+  }
+  if (sql_val.is_null()) {
+    return SearchValidationResult::kNoData;
   }
   return inner_->ValidateSearchConstraints(op, sql_val);
 }
@@ -173,7 +209,7 @@ void NullOverlay::ChainImpl::IndexSearchValidated(FilterOp op,
     // non-null indices.
     auto non_null_it = std::stable_partition(
         indices.tokens.begin(), indices.tokens.end(),
-        [this](const Indices::Token& t) { return !non_null_->IsSet(t.index); });
+        [this](const Token& t) { return !non_null_->IsSet(t.index); });
 
     // IndexSearch |inner_| with a vector containing a copy of the (translated)
     // non-null indices.
@@ -193,17 +229,15 @@ void NullOverlay::ChainImpl::IndexSearchValidated(FilterOp op,
     // Merge the two sorted index ranges together using the payload as the
     // comparator. This is a required post-condition of IndexSearch.
     std::inplace_merge(indices.tokens.begin(), new_non_null_it,
-                       indices.tokens.end(),
-                       Indices::Token::PayloadComparator());
+                       indices.tokens.end(), Token::PayloadComparator());
     return;
   }
 
   auto keep_only_non_null = [this, &indices]() {
     indices.tokens.erase(
-        std::remove_if(indices.tokens.begin(), indices.tokens.end(),
-                       [this](const Indices::Token& idx) {
-                         return !non_null_->IsSet(idx.index);
-                       }),
+        std::remove_if(
+            indices.tokens.begin(), indices.tokens.end(),
+            [this](const Token& idx) { return !non_null_->IsSet(idx.index); }),
         indices.tokens.end());
     return;
   };
@@ -226,69 +260,86 @@ void NullOverlay::ChainImpl::IndexSearchValidated(FilterOp op,
   inner_->IndexSearchValidated(op, sql_val, indices);
 }
 
-Range NullOverlay::ChainImpl::OrderedIndexSearchValidated(
-    FilterOp op,
-    SqlValue sql_val,
-    const OrderedIndices& indices) const {
-  // For NOT EQUAL the translation or results from EQUAL needs to be done by the
-  // caller.
-  PERFETTO_CHECK(op != FilterOp::kNe);
-
-  PERFETTO_TP_TRACE(metatrace::Category::DB,
-                    "NullOverlay::ChainImpl::OrderedIndexSearch");
-
-  // We assume all NULLs are ordered to be in the front. We are looking for the
-  // first index that points to non NULL value.
-  const uint32_t* first_non_null =
-      std::partition_point(indices.data, indices.data + indices.size,
-                           [this](uint32_t i) { return !non_null_->IsSet(i); });
-  auto non_null_offset =
-      static_cast<uint32_t>(std::distance(indices.data, first_non_null));
-  auto non_null_size = static_cast<uint32_t>(
-      std::distance(first_non_null, indices.data + indices.size));
-
-  if (op == FilterOp::kIsNull) {
-    return {0, non_null_offset};
-  }
-
-  if (op == FilterOp::kIsNotNull) {
-    switch (inner_->ValidateSearchConstraints(op, sql_val)) {
-      case SearchValidationResult::kNoData:
-        return {};
-      case SearchValidationResult::kAllData:
-        return {non_null_offset, indices.size};
-      case SearchValidationResult::kOk:
-        break;
-    }
-  }
-
-  std::vector<uint32_t> storage_iv;
-  storage_iv.reserve(non_null_size);
-  for (const uint32_t* it = first_non_null;
-       it != first_non_null + non_null_size; it++) {
-    storage_iv.push_back(non_null_->CountSetBits(*it));
-  }
-
-  Range inner_range = inner_->OrderedIndexSearchValidated(
-      op, sql_val,
-      OrderedIndices{storage_iv.data(), non_null_size, indices.state});
-  return {inner_range.start + non_null_offset,
-          inner_range.end + non_null_offset};
-}
-
-void NullOverlay::ChainImpl::StableSort(SortToken* start,
-                                        SortToken* end,
+void NullOverlay::ChainImpl::StableSort(Token* start,
+                                        Token* end,
                                         SortDirection direction) const {
-  SortToken* middle = std::stable_partition(
-      start, end,
-      [this](const SortToken& idx) { return !non_null_->IsSet(idx.index); });
-  for (SortToken* it = middle; it != end; ++it) {
+  PERFETTO_TP_TRACE(metatrace::Category::DB,
+                    "NullOverlay::ChainImpl::StableSort");
+  Token* middle = std::stable_partition(start, end, [this](const Token& idx) {
+    return !non_null_->IsSet(idx.index);
+  });
+  for (Token* it = middle; it != end; ++it) {
     it->index = non_null_->CountSetBits(it->index);
   }
   inner_->StableSort(middle, end, direction);
   if (direction == SortDirection::kDescending) {
     std::rotate(start, middle, end);
   }
+}
+
+void NullOverlay::ChainImpl::Distinct(Indices& indices) const {
+  PERFETTO_TP_TRACE(metatrace::Category::DB,
+                    "NullOverlay::ChainImpl::Distinct");
+  auto null_tok = UpdateIndicesForInner(indices, *non_null_);
+
+  inner_->Distinct(indices);
+
+  // Add the only null as it is distinct value.
+  if (null_tok.has_value()) {
+    indices.tokens.push_back(*null_tok);
+  }
+}
+
+std::optional<Token> NullOverlay::ChainImpl::MaxElement(
+    Indices& indices) const {
+  PERFETTO_TP_TRACE(metatrace::Category::DB,
+                    "NullOverlay::ChainImpl::MaxElement");
+  auto null_tok = UpdateIndicesForInner(indices, *non_null_);
+
+  std::optional<Token> max_tok = inner_->MaxElement(indices);
+
+  return max_tok ? max_tok : null_tok;
+}
+
+std::optional<Token> NullOverlay::ChainImpl::MinElement(
+    Indices& indices) const {
+  PERFETTO_TP_TRACE(metatrace::Category::DB,
+                    "NullOverlay::ChainImpl::MinDistinct");
+  // The smallest value would be a NULL, so we should just return NULL here.
+  auto first_null_it = std::find_if(
+      indices.tokens.begin(), indices.tokens.end(),
+      [this](const Token& t) { return !non_null_->IsSet(t.index); });
+
+  if (first_null_it != indices.tokens.end()) {
+    return *first_null_it;
+  }
+
+  // If we didn't find a null in indices we need to update index of each token
+  // so they all point to inner and look for the smallest value in the storage.
+  for (auto& token : indices.tokens) {
+    token.index = non_null_->CountSetBits(token.index);
+  }
+
+  return inner_->MinElement(indices);
+}
+
+std::unique_ptr<DataLayer> NullOverlay::ChainImpl::Flatten(
+    std::vector<uint32_t>& indices) const {
+  for (auto& i : indices) {
+    if (non_null_->IsSet(i)) {
+      i = non_null_->CountSetBits(i);
+    } else {
+      i = std::numeric_limits<uint32_t>::max();
+    }
+  }
+  return inner_->Flatten(indices);
+}
+
+SqlValue NullOverlay::ChainImpl::Get_AvoidUsingBecauseSlow(
+    uint32_t index) const {
+  return non_null_->IsSet(index)
+             ? inner_->Get_AvoidUsingBecauseSlow(non_null_->CountSetBits(index))
+             : SqlValue();
 }
 
 void NullOverlay::ChainImpl::Serialize(StorageProto* storage) const {

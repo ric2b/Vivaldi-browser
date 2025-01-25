@@ -255,15 +255,15 @@ class TastTests(TestRunnerTest):
 class GTestTest(TestRunnerTest):
 
   @parameterized.expand([
-      [True, True, True, False],
-      [True, False, False, False],
-      [False, True, True, True],
-      [False, False, False, True],
-      [False, True, True, False],
-      [False, False, False, False],
+      [True, True, True, False, True],
+      [True, False, False, False, False],
+      [False, True, True, True, True],
+      [False, False, False, True, False],
+      [False, True, True, False, True],
+      [False, False, False, False, False],
   ])
   def test_gtest(self, use_vm, stop_ui, use_test_sudo_helper,
-                 fetch_cros_hostname):
+                 fetch_cros_hostname, use_deployed_dbus_configs):
     """Tests running a gtest."""
     fd_mock = mock.mock_open()
 
@@ -281,13 +281,16 @@ class GTestTest(TestRunnerTest):
       args.append('--stop-ui')
     if use_test_sudo_helper:
       args.append('--run-test-sudo-helper')
+    if use_deployed_dbus_configs:
+      args.append('--use-deployed-dbus-configs')
 
     with mock.patch.object(sys, 'argv', args),\
          mock.patch.object(test_runner.subprocess, 'Popen') as mock_popen,\
          mock.patch.object(os, 'fdopen', fd_mock),\
          mock.patch.object(os, 'remove') as mock_remove,\
          mock.patch.object(tempfile, 'mkstemp',
-            return_value=(3, 'out_eve/Release/device_script.sh')),\
+            side_effect=[(3, 'out_eve/Release/device_script.sh'),\
+                         (4, 'out_eve/Release/runtime_files.txt')]),\
          mock.patch.object(os, 'fchmod'):
       mock_popen.return_value.returncode = 0
 
@@ -296,8 +299,8 @@ class GTestTest(TestRunnerTest):
       expected_cmd = [
           'vpython3', test_runner.CROS_RUN_TEST_PATH, '--board', 'eve',
           '--cache-dir', test_runner.DEFAULT_CROS_CACHE, '--remote-cmd',
-          '--cwd', 'out_eve/Release', '--files',
-          'out_eve/Release/device_script.sh'
+          '--cwd', 'out_eve/Release', '--files-from',
+          'out_eve/Release/runtime_files.txt'
       ]
       if not stop_ui:
         expected_cmd.append('--as-chronos')
@@ -324,6 +327,12 @@ class GTestTest(TestRunnerTest):
           """)
         core_cmd += ' --test-sudo-helper-socket-path=${TEST_SUDO_HELPER_PATH}'
 
+      if use_deployed_dbus_configs:
+        expected_device_script += dedent("""\
+            mount --bind ./dbus /opt/google/chrome/dbus
+            kill -s HUP $(pgrep dbus)
+          """)
+
       if stop_ui:
         dbus_cmd = 'dbus-send --system --type=method_call'\
           ' --dest=org.chromium.PowerManager'\
@@ -349,14 +358,31 @@ class GTestTest(TestRunnerTest):
             kill $TEST_SUDO_HELPER_PID
             unlink ${TEST_SUDO_HELPER_PATH}
           """)
+
+      if use_deployed_dbus_configs:
+        expected_device_script += dedent("""\
+            umount /opt/google/chrome/dbus
+            kill -s HUP $(pgrep dbus)
+          """)
+
       expected_device_script += dedent("""\
           exit $TEST_RETURN_CODE
         """)
-      self.assertEqual(1, fd_mock().write.call_count)
+
+      self.assertEqual(2, fd_mock().write.call_count)
+      write_calls = fd_mock().write.call_args_list
+
       # Split the strings to make failure messages easier to read.
+      # Verify the first write of device script.
       self.assertListEqual(
           expected_device_script.split('\n'),
-          fd_mock().write.call_args[0][0].split('\n'))
+          str(write_calls[0][0][0]).split('\n'))
+
+      # Verify the 2nd write of runtime files.
+      expected_runtime_files = ['out_eve/Release/device_script.sh']
+      self.assertListEqual(expected_runtime_files,
+                           str(write_calls[1][0][0]).strip().split('\n'))
+
       mock_remove.assert_called_once_with('out_eve/Release/device_script.sh')
 
   def test_gtest_with_vpython(self):

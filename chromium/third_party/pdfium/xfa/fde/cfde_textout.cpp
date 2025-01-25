@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "xfa/fde/cfde_textout.h"
 
 #include <algorithm>
@@ -17,6 +12,7 @@
 #include "build/build_config.h"
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/check_op.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_system.h"
@@ -97,9 +93,8 @@ bool CFDE_TextOut::DrawString(CFX_RenderDevice* device,
 #else
         font = pFxFont;
 #endif
-
-        device->DrawNormalText(pdfium::make_span(pCurCP, count), font,
-                               -fFontSize, matrix, color, kOptions);
+        device->DrawNormalText(UNSAFE_TODO(pdfium::make_span(pCurCP, count)),
+                               font, -fFontSize, matrix, color, kOptions);
       }
       pCurFont = pSTFont;
       pCurCP = &pos;
@@ -108,8 +103,6 @@ bool CFDE_TextOut::DrawString(CFX_RenderDevice* device,
       ++count;
     }
   }
-
-  bool bRet = true;
   if (pCurFont && count) {
     pFxFont = pCurFont->GetDevFont();
     CFX_Font* font;
@@ -120,12 +113,10 @@ bool CFDE_TextOut::DrawString(CFX_RenderDevice* device,
 #else
     font = pFxFont;
 #endif
-
-    bRet = device->DrawNormalText(pdfium::make_span(pCurCP, count), font,
-                                  -fFontSize, matrix, color, kOptions);
+    return device->DrawNormalText(UNSAFE_TODO(pdfium::make_span(pCurCP, count)),
+                                  font, -fFontSize, matrix, color, kOptions);
   }
-
-  return bRet;
+  return true;
 }
 
 CFDE_TextOut::Piece::Piece() = default;

@@ -99,7 +99,8 @@ const UIStrings = {
   /**
    * @description Description text for not restored reason HaveInnerContents.
    */
-  haveInnerContents: 'Pages that use portals are not currently eligible for back/forward cache.',
+  haveInnerContents:
+      'Pages that have certain kinds of embedded content (e.g. PDFs) are not currently eligible for back/forward cache.',
   /**
    * @description Description text for not restored reason TimeoutPuttingInCache.
    */
@@ -332,10 +333,6 @@ const UIStrings = {
    */
   pictureInPicture: 'Pages that use Picture-in-Picture are not currently eligible for back/forward cache.',
   /**
-   * @description Description text for not restored reason Portal.
-   */
-  portal: 'Pages that use portals are not currently eligible for back/forward cache.',
-  /**
    * @description Description text for not restored reason SpeechRecognizer.
    */
   speechRecognizer: 'Pages that use SpeechRecognizer are not currently eligible for back/forward cache.',
@@ -540,41 +537,7 @@ const UIStrings = {
    * @description Description text for not restored reason WebSocketSticky.
    */
   webSocketSticky: 'Back/forward cache is disabled because WebSocket has been used.',
-  // TODO(leimy): Added in https://chromium-review.googlesource.com/c/chromium/src/+/4625807. Fill the below correctly.
-  /**
-   * @description Undefined.
-   */
-  HTTPAuthRequired: 'Undefined',
-  // TODO(kprokopenko, leimy): Please provide meaningful description.
-  /**
-   * @description Undefined.
-   */
-  CookieFlushed: 'Undefined',
-  // TODO(kprokopenko, leimy): Please provide meaningful description.
-  /**
-   * @description Undefined.
-   */
-  SmartCard: 'Undefined',
-  // TODO(kprokopenko, leimy): Please provide meaningful description.
-  /**
-   * @description Undefined.
-   */
-  LiveMediaStreamTrack: 'Undefined',
-  // TODO(kprokopenko, leimy): Please provide meaningful description.
-  /**
-   * @description Undefined.
-   */
-  UnloadHandler: 'Undefined',
-  // TODO(yuzus): Please provide meaningful description.
-  /**
-   * @description Undefined.
-   */
-  ParserAborted: 'Undefined',
-  // TODO(mkurumi): Please provide meaningful description.
-  /**
-   * @description Undefined.
-   */
-  BroadcastChannelOnMessage: 'Undefined',
+
 };
 
 const str_ = i18n.i18n.registerUIStrings('panels/application/components/BackForwardCacheStrings.ts', UIStrings);
@@ -669,7 +632,6 @@ export const NotRestoredReasonDescription = {
   'Printing': {name: i18nLazyString(UIStrings.printing)},
   'WebDatabase': {name: i18nLazyString(UIStrings.webDatabase)},
   'PictureInPicture': {name: i18nLazyString(UIStrings.pictureInPicture)},
-  'Portal': {name: i18nLazyString(UIStrings.portal)},
   'SpeechRecognizer': {name: i18nLazyString(UIStrings.speechRecognizer)},
   'IdleManager': {name: i18nLazyString(UIStrings.idleManager)},
   'PaymentManager': {name: i18nLazyString(UIStrings.paymentManager)},
@@ -721,12 +683,17 @@ export const NotRestoredReasonDescription = {
   'WebRTCSticky': {name: i18nLazyString(UIStrings.webRTCSticky)},
   'WebTransportSticky': {name: i18nLazyString(UIStrings.webTransportSticky)},
   'WebSocketSticky': {name: i18nLazyString(UIStrings.webSocketSticky)},
-  'HTTPAuthRequired': {name: i18nLazyString(UIStrings.HTTPAuthRequired)},
-  'CookieFlushed': {name: i18nLazyString(UIStrings.CookieFlushed)},
-  'SmartCard': {name: i18nLazyString(UIStrings.SmartCard)},
-  'LiveMediaStreamTrack': {name: i18nLazyString(UIStrings.LiveMediaStreamTrack)},
-  'UnloadHandler': {name: i18nLazyString(UIStrings.UnloadHandler)},
-  'ParserAborted': {name: i18nLazyString(UIStrings.ParserAborted)},
-  'BroadcastChannelOnMessage': {name: i18nLazyString(UIStrings.BroadcastChannelOnMessage)},
-  'RequestedByWebViewClient': {name: i18nLazyString(UIStrings.BroadcastChannelOnMessage)},
+  'HTTPAuthRequired': {name: i18n.i18n.lockedLazyString('HTTPAuthRequired')},
+  'CookieFlushed': {name: i18n.i18n.lockedLazyString('CookieFlushed')},
+  'SmartCard': {name: i18n.i18n.lockedLazyString('SmartCard')},
+  'LiveMediaStreamTrack': {name: i18n.i18n.lockedLazyString('LiveMediaStreamTrack')},
+  'UnloadHandler': {name: i18n.i18n.lockedLazyString('UnloadHandler')},
+  'ParserAborted': {name: i18n.i18n.lockedLazyString('ParserAborted')},
+  'BroadcastChannelOnMessage': {name: i18n.i18n.lockedLazyString('BroadcastChannelOnMessage')},
+  'RequestedByWebViewClient': {name: i18n.i18n.lockedLazyString('RequestedByWebViewClient')},
+  'WebViewSettingsChanged': {name: i18n.i18n.lockedLazyString('WebViewSettingsChanged')},
+  'WebViewJavaScriptObjectChanged': {name: i18n.i18n.lockedLazyString('WebViewJavaScriptObjectChanged')},
+  'WebViewMessageListenerInjected': {name: i18n.i18n.lockedLazyString('WebViewMessageListenerInjected')},
+  'WebViewSafeBrowsingAllowlistChanged': {name: i18n.i18n.lockedLazyString('WebViewSafeBrowsingAllowlistChanged')},
+  'WebViewDocumentStartJavascriptChanged': {name: i18n.i18n.lockedLazyString('WebViewDocumentStartJavascriptChanged')},
 };

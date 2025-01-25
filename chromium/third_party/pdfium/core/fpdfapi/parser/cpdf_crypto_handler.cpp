@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fpdfapi/parser/cpdf_crypto_handler.h"
 
 #include <time.h>
@@ -31,6 +26,7 @@
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/check_op.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
+#include "core/fxcrt/stl_util.h"
 
 namespace {
 
@@ -51,15 +47,12 @@ bool CPDF_CryptoHandler::IsSignatureDictionary(
   return type_obj && type_obj->GetString() == pdfium::form_fields::kSig;
 }
 
-// TODO(tsepez): should be UNSAFE_BUFFER_USAGE due to `dest_size`.
-void CPDF_CryptoHandler::EncryptContent(uint32_t objnum,
-                                        uint32_t gennum,
-                                        pdfium::span<const uint8_t> source,
-                                        uint8_t* dest_buf,
-                                        size_t& dest_size) const {
+DataVector<uint8_t> CPDF_CryptoHandler::EncryptContent(
+    uint32_t objnum,
+    uint32_t gennum,
+    pdfium::span<const uint8_t> source) const {
   if (m_Cipher == Cipher::kNone) {
-    FXSYS_memcpy(dest_buf, source.data(), source.size());
-    return;
+    return DataVector<uint8_t>(source.begin(), source.end());
   }
   uint8_t realkey[16];
   size_t realkeylen = sizeof(realkey);
@@ -67,7 +60,8 @@ void CPDF_CryptoHandler::EncryptContent(uint32_t objnum,
     uint8_t key1[32];
     PopulateKey(objnum, gennum, key1);
     if (m_Cipher == Cipher::kAES) {
-      FXSYS_memcpy(key1 + m_KeyLen + 5, "sAlT", 4);
+      fxcrt::Copy(ByteStringView("sAlT").unsigned_span(),
+                  pdfium::make_span(key1).subspan(m_KeyLen + 5));
     }
     size_t len = m_Cipher == Cipher::kAES ? m_KeyLen + 9 : m_KeyLen + 5;
     CRYPT_MD5Generate(pdfium::make_span(key1).first(len), realkey);
@@ -76,32 +70,36 @@ void CPDF_CryptoHandler::EncryptContent(uint32_t objnum,
   if (m_Cipher == Cipher::kAES) {
     CRYPT_AESSetKey(m_pAESContext.get(),
                     m_KeyLen == 32 ? m_EncryptKey.data() : realkey, m_KeyLen);
-    uint8_t iv[16];
-    for (int i = 0; i < 16; i++) {
-      iv[i] = (uint8_t)rand();
+
+    constexpr size_t kIVSize = 16;
+    constexpr size_t kPaddingSize = 16;
+    const size_t source_padding_size = source.size() % kPaddingSize;
+    const size_t source_data_size = source.size() - source_padding_size;
+
+    DataVector<uint8_t> dest(kIVSize + source_data_size + kPaddingSize);
+    auto dest_span = pdfium::make_span(dest);
+    auto dest_iv_span = dest_span.first(kIVSize);
+    auto dest_data_span = dest_span.subspan(kIVSize, source_data_size);
+    auto dest_padding_span = dest_span.subspan(kIVSize + source_data_size);
+
+    for (auto& v : dest_iv_span) {
+      v = static_cast<uint8_t>(rand());
     }
-    CRYPT_AESSetIV(m_pAESContext.get(), iv);
-    FXSYS_memcpy(dest_buf, iv, 16);
-    int nblocks = source.size() / 16;
-    CRYPT_AESEncrypt(m_pAESContext.get(), dest_buf + 16, source.data(),
-                     nblocks * 16);
-    uint8_t padding[16];
-    FXSYS_memcpy(padding, source.data() + nblocks * 16, source.size() % 16);
-    FXSYS_memset(padding + source.size() % 16, 16 - source.size() % 16,
-                 16 - source.size() % 16);
-    CRYPT_AESEncrypt(m_pAESContext.get(), dest_buf + nblocks * 16 + 16, padding,
-                     16);
-    dest_size = 32 + nblocks * 16;
-  } else {
-    DCHECK_EQ(dest_size, source.size());
-    if (dest_buf != source.data()) {
-      FXSYS_memcpy(dest_buf, source.data(), source.size());
-    }
-    // SAFETY: caller ensures that dest_buf points to at least dest_size bytes.
-    CRYPT_ArcFourCryptBlock(
-        UNSAFE_BUFFERS(pdfium::make_span(dest_buf, dest_size)),
-        pdfium::make_span(realkey).first(realkeylen));
+    CRYPT_AESSetIV(m_pAESContext.get(), dest_iv_span.data());
+
+    CRYPT_AESEncrypt(m_pAESContext.get(), dest_data_span,
+                     source.first(source_data_size));
+
+    std::array<uint8_t, kPaddingSize> padding;
+    fxcrt::Copy(source.subspan(source_data_size, source_padding_size), padding);
+    fxcrt::Fill(pdfium::make_span(padding).subspan(source_padding_size),
+                16 - source_padding_size);
+    CRYPT_AESEncrypt(m_pAESContext.get(), dest_padding_span, padding);
+    return dest;
   }
+  DataVector<uint8_t> dest(source.begin(), source.end());
+  CRYPT_ArcFourCryptBlock(dest, pdfium::make_span(realkey).first(realkeylen));
+  return dest;
 }
 
 struct AESCryptContext {
@@ -125,8 +123,9 @@ void* CPDF_CryptoHandler::DecryptStart(uint32_t objnum, uint32_t gennum) {
   uint8_t key1[48];
   PopulateKey(objnum, gennum, key1);
 
-  if (m_Cipher == Cipher::kAES)
-    FXSYS_memcpy(key1 + m_KeyLen + 5, "sAlT", 4);
+  if (m_Cipher == Cipher::kAES) {
+    UNSAFE_TODO(FXSYS_memcpy(key1 + m_KeyLen + 5, "sAlT", 4));
+  }
 
   uint8_t realkey[16];
   size_t len = m_Cipher == Cipher::kAES ? m_KeyLen + 9 : m_KeyLen + 5;
@@ -171,8 +170,8 @@ bool CPDF_CryptoHandler::DecryptStream(void* context,
     if (copy_size > src_left) {
       copy_size = src_left;
     }
-    FXSYS_memcpy(pContext->m_Block + pContext->m_BlockOffset,
-                 source.data() + src_off, copy_size);
+    UNSAFE_TODO(FXSYS_memcpy(pContext->m_Block + pContext->m_BlockOffset,
+                             source.data() + src_off, copy_size));
     src_off += copy_size;
     src_left -= copy_size;
     pContext->m_BlockOffset += copy_size;
@@ -227,7 +226,7 @@ ByteString CPDF_CryptoHandler::Decrypt(uint32_t objnum,
   void* context = DecryptStart(objnum, gennum);
   DecryptStream(context, str.unsigned_span(), dest_buf);
   DecryptFinish(context, dest_buf);
-  return ByteString(dest_buf.GetSpan());
+  return ByteString(ByteStringView(dest_buf.GetSpan()));
 }
 
 size_t CPDF_CryptoHandler::DecryptGetSize(size_t src_size) {
@@ -319,25 +318,20 @@ bool CPDF_CryptoHandler::DecryptObjectTree(RetainPtr<CPDF_Object> object) {
   return true;
 }
 
-size_t CPDF_CryptoHandler::EncryptGetSize(
-    pdfium::span<const uint8_t> source) const {
-  return m_Cipher == Cipher::kAES ? source.size() + 32 : source.size();
-}
-
 CPDF_CryptoHandler::CPDF_CryptoHandler(Cipher cipher,
-                                       const uint8_t* key,
-                                       size_t keylen)
-    : m_KeyLen(std::min<size_t>(keylen, 32)), m_Cipher(cipher) {
-  DCHECK(cipher != Cipher::kAES || keylen == 16 || keylen == 24 ||
-         keylen == 32);
-  DCHECK(cipher != Cipher::kAES2 || keylen == 32);
-  DCHECK(cipher != Cipher::kRC4 || (keylen >= 5 && keylen <= 16));
+                                       pdfium::span<const uint8_t> key)
+    : m_KeyLen(std::min<size_t>(key.size(), 32)), m_Cipher(cipher) {
+  DCHECK(cipher != Cipher::kAES || key.size() == 16 || key.size() == 24 ||
+         key.size() == 32);
+  DCHECK(cipher != Cipher::kAES2 || key.size() == 32);
+  DCHECK(cipher != Cipher::kRC4 || (key.size() >= 5 && key.size() <= 16));
 
-  if (m_Cipher != Cipher::kNone)
-    FXSYS_memcpy(m_EncryptKey.data(), key, m_KeyLen);
-
-  if (m_Cipher == Cipher::kAES)
+  if (m_Cipher != Cipher::kNone) {
+    fxcrt::Copy(key.first(m_KeyLen), m_EncryptKey);
+  }
+  if (m_Cipher == Cipher::kAES) {
     m_pAESContext.reset(FX_Alloc(CRYPT_aes_context, 1));
+  }
 }
 
 CPDF_CryptoHandler::~CPDF_CryptoHandler() = default;
@@ -345,10 +339,12 @@ CPDF_CryptoHandler::~CPDF_CryptoHandler() = default;
 void CPDF_CryptoHandler::PopulateKey(uint32_t objnum,
                                      uint32_t gennum,
                                      uint8_t* key) const {
-  FXSYS_memcpy(key, m_EncryptKey.data(), m_KeyLen);
-  key[m_KeyLen + 0] = (uint8_t)objnum;
-  key[m_KeyLen + 1] = (uint8_t)(objnum >> 8);
-  key[m_KeyLen + 2] = (uint8_t)(objnum >> 16);
-  key[m_KeyLen + 3] = (uint8_t)gennum;
-  key[m_KeyLen + 4] = (uint8_t)(gennum >> 8);
+  UNSAFE_TODO({
+    FXSYS_memcpy(key, m_EncryptKey.data(), m_KeyLen);
+    key[m_KeyLen + 0] = (uint8_t)objnum;
+    key[m_KeyLen + 1] = (uint8_t)(objnum >> 8);
+    key[m_KeyLen + 2] = (uint8_t)(objnum >> 16);
+    key[m_KeyLen + 3] = (uint8_t)gennum;
+    key[m_KeyLen + 4] = (uint8_t)(gennum >> 8);
+  });
 }

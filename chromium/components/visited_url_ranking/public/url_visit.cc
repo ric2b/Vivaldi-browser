@@ -4,7 +4,9 @@
 
 #include "components/visited_url_ranking/public/url_visit.h"
 
+#include <optional>
 #include <set>
+#include <string>
 #include <utility>
 #include <variant>
 
@@ -25,7 +27,7 @@ URLVisit::URLVisit(const URLVisit&) = default;
 
 URLVisit::~URLVisit() = default;
 
-URLVisitAggregate::URLVisitAggregate() = default;
+URLVisitAggregate::URLVisitAggregate(std::string key_arg) : url_key(key_arg) {}
 
 URLVisitAggregate::~URLVisitAggregate() = default;
 
@@ -49,6 +51,36 @@ std::set<const GURL*> URLVisitAggregate::GetAssociatedURLs() const {
   return urls;
 }
 
+base::Time URLVisitAggregate::GetLastVisitTime() const {
+  std::optional<base::Time> last_visit_time;
+  for (const auto& fetcher_entry : fetcher_data_map) {
+    // Prefer timestamp from local tabs, if not an active tab then use timestamp
+    // from the history.
+    switch (fetcher_entry.first) {
+      case Fetcher::kTabModel:
+        last_visit_time =
+            std::get<URLVisitAggregate::TabData>(fetcher_entry.second)
+                .last_active_tab.visit.last_modified;
+        break;
+      case Fetcher::kSession:
+        if (!last_visit_time) {
+          last_visit_time =
+              std::get<URLVisitAggregate::TabData>(fetcher_entry.second)
+                  .last_active_tab.visit.last_modified;
+        }
+        break;
+      case Fetcher::kHistory:
+        if (!last_visit_time) {
+          last_visit_time =
+              std::get<URLVisitAggregate::HistoryData>(fetcher_entry.second)
+                  .last_visited.visit_row.visit_time;
+        }
+        break;
+    }
+  }
+  return *last_visit_time;
+}
+
 URLVisitAggregate::Tab::Tab(const int32_t id_arg,
                             URLVisit visit_arg,
                             std::optional<std::string> session_tag_arg,
@@ -62,8 +94,8 @@ URLVisitAggregate::Tab::Tab(const URLVisitAggregate::Tab&) = default;
 
 URLVisitAggregate::Tab::~Tab() = default;
 
-URLVisitAggregate::TabData::TabData(Tab tab)
-    : last_active_tab(std::move(tab)) {}
+URLVisitAggregate::TabData::TabData(Tab last_active_tab_arg)
+    : last_active_tab(std::move(last_active_tab_arg)) {}
 
 URLVisitAggregate::TabData::TabData(const URLVisitAggregate::TabData&) =
     default;
@@ -73,10 +105,22 @@ URLVisitAggregate::TabData::~TabData() = default;
 URLVisitAggregate::HistoryData::HistoryData(
     history::AnnotatedVisit annotated_visit)
     : last_visited(std::move(annotated_visit)) {
-  visit_count = 1;
-  total_foreground_duration =
-      last_visited.context_annotations.total_foreground_duration;
+  if (last_visited.context_annotations.total_foreground_duration
+          .InMilliseconds() > 0) {
+    total_foreground_duration =
+        last_visited.context_annotations.total_foreground_duration;
+  }
+
+  if (last_visited.visit_row.app_id.has_value()) {
+    last_app_id = last_visited.visit_row.app_id;
+  }
 }
+
+URLVisitAggregate::HistoryData::HistoryData(
+    URLVisitAggregate::HistoryData&& other) = default;
+
+URLVisitAggregate::HistoryData& URLVisitAggregate::HistoryData::operator=(
+    URLVisitAggregate::HistoryData&& other) = default;
 
 URLVisitAggregate::HistoryData::~HistoryData() = default;
 

@@ -18,6 +18,10 @@ import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.ui.util.ValueUtils;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+import org.chromium.components.browser_ui.styles.ChromeColors;
+
 /** Util class to handle various color operations shared between hub classes. */
 public final class HubColors {
     private static final int[][] SELECTED_AND_NORMAL_STATES =
@@ -39,6 +43,8 @@ public final class HubColors {
             case HubColorScheme.DEFAULT:
                 return SemanticColorUtils.getDefaultBgColor(context);
             case HubColorScheme.INCOGNITO:
+                if (BuildConfig.IS_VIVALDI)
+                    return ChromeColors.getDefaultThemeColor(context, true);
                 return ContextCompat.getColor(context, R.color.default_bg_color_dark);
             default:
                 assert false;
@@ -75,17 +81,14 @@ public final class HubColors {
         }
     }
 
-    /** Returns the color of secondary contains that reacts to being disabled. */
+    /** Returns the color of secondary containers that reacts to being disabled. */
     public static ColorStateList getSecondaryContainerColorStateList(
             Context context, @HubColorScheme int colorScheme) {
-        Resources resources = context.getResources();
         @ColorInt int color = getSecondaryContainerColor(context, colorScheme);
-        float alpha = ValueUtils.getFloat(resources, R.dimen.filled_button_bg_disabled_alpha);
-        int[] colors = new int[] {ColorUtils.setAlphaComponentWithFloat(color, alpha), color};
-        return new ColorStateList(DISABLED_AND_NORMAL_STATES, colors);
+        return asDisabledAndNormalStates(context, color);
     }
 
-    /** Returns the color of secondary contains like the floating action button. */
+    /** Returns the color of secondary containers like the floating action button. */
     public static @ColorInt int getSecondaryContainerColor(
             Context context, @HubColorScheme int colorScheme) {
         switch (colorScheme) {
@@ -99,13 +102,80 @@ public final class HubColors {
         }
     }
 
+    /**
+     * Returns the color for the icon in the floating action button with secondary container color.
+     */
+    public static @ColorInt int getOnSecondaryContainerColor(
+            Context context, @HubColorScheme int colorScheme) {
+        switch (colorScheme) {
+            case HubColorScheme.DEFAULT:
+                return SemanticColorUtils.getColorOnSecondaryContainer(context);
+            case HubColorScheme.INCOGNITO:
+                return ContextCompat.getColor(context, R.color.baseline_secondary_90);
+            default:
+                assert false;
+                return Color.TRANSPARENT;
+        }
+    }
+
+    /** Returns the color of primary containers that reacts to being disabled. */
+    public static ColorStateList getPrimaryContainerColorStateList(
+            Context context, @HubColorScheme int colorScheme) {
+        @ColorInt int color = getPrimaryContainerColor(context, colorScheme);
+        return asDisabledAndNormalStates(context, color);
+    }
+
+    /** Returns the color of primary containers like the floating action button. */
+    public static @ColorInt int getPrimaryContainerColor(
+            Context context, @HubColorScheme int colorScheme) {
+        switch (colorScheme) {
+            case HubColorScheme.DEFAULT:
+                return SemanticColorUtils.getColorPrimaryContainer(context);
+            case HubColorScheme.INCOGNITO:
+                return ContextCompat.getColor(context, R.color.baseline_secondary_30);
+            default:
+                assert false;
+                return Color.TRANSPARENT;
+        }
+    }
+
+    /**
+     * Returns the color for the icon in the floating action button with primary container color.
+     */
+    public static @ColorInt int getOnPrimaryContainerColor(
+            Context context, @HubColorScheme int colorScheme) {
+        switch (colorScheme) {
+            case HubColorScheme.DEFAULT:
+                return SemanticColorUtils.getDefaultIconColorOnAccent1Container(context);
+            case HubColorScheme.INCOGNITO:
+                return ContextCompat.getColor(context, R.color.baseline_secondary_90);
+            default:
+                assert false;
+                return Color.TRANSPARENT;
+        }
+    }
+
+    /** Returns the color most text should use for the given color scheme. */
+    public static @StyleRes int getTextAppearanceMediumOnPrimaryContainer(
+            @HubColorScheme int colorScheme) {
+        switch (colorScheme) {
+            case HubColorScheme.DEFAULT:
+                return R.style.TextAppearance_FloatingActionButton_OnPrimaryContainer;
+            case HubColorScheme.INCOGNITO:
+                return R.style.TextAppearance_FloatingActionButton_Incognito;
+            default:
+                assert false;
+                return Resources.ID_NULL;
+        }
+    }
+
     /** Returns the color most text should use for the given color scheme. */
     public static @StyleRes int getTextAppearanceMedium(@HubColorScheme int colorScheme) {
         switch (colorScheme) {
             case HubColorScheme.DEFAULT:
-                return R.style.TextAppearance_TextMedium_Primary;
+                return R.style.TextAppearance_FloatingActionButton;
             case HubColorScheme.INCOGNITO:
-                return R.style.TextAppearance_TextMedium_Primary_Baseline_Light;
+                return R.style.TextAppearance_FloatingActionButton_Incognito;
             default:
                 assert false;
                 return Resources.ID_NULL;
@@ -117,5 +187,25 @@ public final class HubColors {
             @ColorInt int selectedColor, @ColorInt int normalColor) {
         int[] colors = new int[] {selectedColor, normalColor};
         return new ColorStateList(SELECTED_AND_NORMAL_STATES, colors);
+    }
+
+    /** Returns the color of the hairline for a color scheme. */
+    public static @ColorInt int getHairlineColor(Context context, @HubColorScheme int colorScheme) {
+        switch (colorScheme) {
+            case HubColorScheme.DEFAULT:
+                return SemanticColorUtils.getDividerLineBgColor(context);
+            case HubColorScheme.INCOGNITO:
+                return ContextCompat.getColor(context, R.color.divider_line_bg_color_light);
+            default:
+                assert false;
+                return Color.TRANSPARENT;
+        }
+    }
+
+    private static ColorStateList asDisabledAndNormalStates(Context context, @ColorInt int color) {
+        Resources resources = context.getResources();
+        float alpha = ValueUtils.getFloat(resources, R.dimen.filled_button_bg_disabled_alpha);
+        int[] colors = new int[] {ColorUtils.setAlphaComponentWithFloat(color, alpha), color};
+        return new ColorStateList(DISABLED_AND_NORMAL_STATES, colors);
     }
 }

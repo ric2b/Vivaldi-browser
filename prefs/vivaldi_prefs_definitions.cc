@@ -81,7 +81,7 @@ constexpr int kLowestIdForPrefsDefinitions = 1500000;
 const auto& SyncablePreferences() {
   // Non-iOS specific list of syncable preferences.
   static const auto kVivaldiSyncablePrefsAllowlist = base::MakeFixedFlatMap<
-      base::StringPiece, sync_preferences::SyncablePrefMetadata>({
+      std::string_view, sync_preferences::SyncablePrefMetadata>({
       {prefs::kSyncedDefaultPrivateSearchProviderGUID,
        {syncable_prefs_ids::kSyncedDefaultPrivateSearchProviderGUID,
         syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
@@ -177,7 +177,7 @@ void PatchPrefsJson(base::Value::Dict& prefs, base::Value& overrides) {
     LOG(ERROR) << prefs_overrides::kFileName << ": " << message;
     has_errors = true;
   };
-  auto append_default = [](base::StringPiece path) {
+  auto append_default = [](std::string_view path) {
     return std::string(path) + ".default";
   };
 
@@ -191,7 +191,7 @@ void PatchPrefsJson(base::Value::Dict& prefs, base::Value& overrides) {
 
   PrefOverrideValues values;
   for (auto name_value : overrides.GetDict()) {
-    base::StringPiece name = name_value.first;
+    std::string_view name = name_value.first;
     base::Value& value = name_value.second;
     std::string* values_string = nullptr;
     if (name == kComment) {
@@ -367,7 +367,7 @@ VivaldiPrefsDefinitions::SyncedPrefProperties::operator=(
     SyncedPrefProperties&&) = default;
 
 std::optional<int> VivaldiPrefsDefinitions::EnumPrefValues::FindValue(
-    base::StringPiece name) const {
+    std::string_view name) const {
   for (const auto& i : name_value_pairs) {
     if (i.first == name)
       return i.second;
@@ -420,7 +420,7 @@ VivaldiPrefsDefinitions::~VivaldiPrefsDefinitions() = default;
 
 void VivaldiPrefsDefinitions::AddChromiumProperties(
     base::Value::Dict& prefs,
-    base::StringPiece current_path,
+    std::string_view current_path,
     bool local_pref) {
   base::Value::Dict* chromium_prefs = prefs.FindDict(current_path);
   if (!chromium_prefs) {
@@ -687,13 +687,13 @@ void VivaldiPrefsDefinitions::RegisterProfilePrefs(
 
 std::optional<sync_preferences::SyncablePrefMetadata>
 VivaldiPrefsDefinitions::GetSyncablePrefMetadata(
-    const std::string& pref_name) const {
+    const std::string_view pref_name) const {
   const auto it = SyncablePreferences().find(pref_name);
   if (it != SyncablePreferences().end()) {
     return it->second;
   }
 
-  const auto& item = pref_properties_.find(pref_name);
+  const auto& item = pref_properties_.find(std::string(pref_name));
   if (item == pref_properties_.end() || !item->second.definition ||
       !item->second.definition->sync_properties) {
     return std::nullopt;

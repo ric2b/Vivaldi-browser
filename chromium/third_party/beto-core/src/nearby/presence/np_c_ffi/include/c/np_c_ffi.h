@@ -35,6 +35,19 @@
 #include <stdlib.h>
 
 /**
+ * The possible boolean action types which can be present in an Actions data element
+ */
+enum np_ffi_ActionType {
+  NP_FFI_ACTION_TYPE_CROSS_DEV_SDK = 1,
+  NP_FFI_ACTION_TYPE_CALL_TRANSFER = 4,
+  NP_FFI_ACTION_TYPE_ACTIVE_UNLOCK = 8,
+  NP_FFI_ACTION_TYPE_NEARBY_SHARE = 9,
+  NP_FFI_ACTION_TYPE_INSTANT_TETHERING = 10,
+  NP_FFI_ACTION_TYPE_PHONE_HUB = 11,
+};
+typedef uint8_t np_ffi_ActionType;
+
+/**
  * Result type for trying to add a V0 credential to a credential-slab.
  */
 enum np_ffi_AddV0CredentialToSlabResult {
@@ -161,37 +174,6 @@ enum np_ffi_AdvertisementBuilderKind {
 typedef uint8_t np_ffi_AdvertisementBuilderKind;
 
 /**
- * The possible boolean action types which can be present in an Actions data element
- */
-enum np_ffi_BooleanActionType {
-  NP_FFI_BOOLEAN_ACTION_TYPE_ACTIVE_UNLOCK = 8,
-  NP_FFI_BOOLEAN_ACTION_TYPE_NEARBY_SHARE = 9,
-  NP_FFI_BOOLEAN_ACTION_TYPE_INSTANT_TETHERING = 10,
-  NP_FFI_BOOLEAN_ACTION_TYPE_PHONE_HUB = 11,
-  NP_FFI_BOOLEAN_ACTION_TYPE_PRESENCE_MANAGER = 12,
-  NP_FFI_BOOLEAN_ACTION_TYPE_FINDER = 13,
-  NP_FFI_BOOLEAN_ACTION_TYPE_FAST_PAIR_SASS = 14,
-};
-typedef uint8_t np_ffi_BooleanActionType;
-
-/**
- * Discriminant for `BuildContextSyncSeqNumResult`.
- */
-enum np_ffi_BuildContextSyncSeqNumResultKind {
-  /**
-   * The sequence number was outside the allowed
-   * 0-15 single-nibble range.
-   */
-  NP_FFI_BUILD_CONTEXT_SYNC_SEQ_NUM_RESULT_KIND_OUT_OF_RANGE = 0,
-  /**
-   * The sequence number was in range,
-   * and so a `ContextSyncSeqNum` was constructed.
-   */
-  NP_FFI_BUILD_CONTEXT_SYNC_SEQ_NUM_RESULT_KIND_SUCCESS = 1,
-};
-typedef uint8_t np_ffi_BuildContextSyncSeqNumResultKind;
-
-/**
  * Discriminant for `BuildTxPowerResult`.
  */
 enum np_ffi_BuildTxPowerResultKind {
@@ -219,71 +201,12 @@ enum np_ffi_CreateCredentialBookResultKind {
    */
   NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_KIND_SUCCESS = 0,
   /**
-   * There was no space left to create a new credential book
-   */
-  NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_KIND_NO_SPACE_LEFT = 1,
-  /**
    * The slab that we tried to create a credential-book from
    * actually was an invalid handle.
    */
-  NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_KIND_INVALID_SLAB_HANDLE = 2,
+  NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_KIND_INVALID_SLAB_HANDLE = 1,
 };
 typedef uint8_t np_ffi_CreateCredentialBookResultKind;
-
-/**
- * Discriminant for `CreateCredentialSlabResult`
- */
-enum np_ffi_CreateCredentialSlabResultKind {
-  /**
-   * There was no space left to create a new credential slab
-   */
-  NP_FFI_CREATE_CREDENTIAL_SLAB_RESULT_KIND_NO_SPACE_LEFT = 0,
-  /**
-   * We created a new credential slab behind the given handle.
-   * The associated payload may be obtained via
-   * `CreateCredentialSlabResult#into_success()`.
-   */
-  NP_FFI_CREATE_CREDENTIAL_SLAB_RESULT_KIND_SUCCESS = 1,
-};
-typedef uint8_t np_ffi_CreateCredentialSlabResultKind;
-
-/**
- * Discriminant for `CreateV0AdvertisementBuilderResult`
- */
-enum np_ffi_CreateV0AdvertisementBuilderResultKind {
-  /**
-   * The attempt to create a new advertisement builder
-   * failed since there are no more available
-   * slots for V0 advertisement builders in their handle-map.
-   */
-  NP_FFI_CREATE_V0_ADVERTISEMENT_BUILDER_RESULT_KIND_NO_SPACE_LEFT = 0,
-  /**
-   * The attempt succeeded. The wrapped advertisement builder
-   * may be obtained via
-   * `CreateV0AdvertisementBuilderResult#into_success`.
-   */
-  NP_FFI_CREATE_V0_ADVERTISEMENT_BUILDER_RESULT_KIND_SUCCESS = 1,
-};
-typedef uint8_t np_ffi_CreateV0AdvertisementBuilderResultKind;
-
-/**
- * Discriminant for `CreateV1AdvertisementBuilderResult`
- */
-enum np_ffi_CreateV1AdvertisementBuilderResultKind {
-  /**
-   * The attempt to create a new advertisement builder
-   * failed since there are no more available
-   * slots for V1 advertisement builders in their handle-map.
-   */
-  NP_FFI_CREATE_V1_ADVERTISEMENT_BUILDER_RESULT_KIND_NO_SPACE_LEFT = 0,
-  /**
-   * The attempt succeeded. The wrapped advertisement builder
-   * may be obtained via
-   * `CreateV1AdvertisementBuilderResult#into_success`.
-   */
-  NP_FFI_CREATE_V1_ADVERTISEMENT_BUILDER_RESULT_KIND_SUCCESS = 1,
-};
-typedef uint8_t np_ffi_CreateV1AdvertisementBuilderResultKind;
 
 /**
  * Discriminant for `CreateV1SectionBuilderResult`
@@ -325,11 +248,11 @@ typedef enum {
   /**
    * The requested handle to deallocate was not present in the map
    */
-  NP_FFI_DEALLOCATE_RESULT_NOT_PRESENT = 0,
+  NP_FFI_DEALLOCATE_RESULT_NOT_PRESENT = 1,
   /**
    * The object behind the handle was successfully deallocated
    */
-  NP_FFI_DEALLOCATE_RESULT_SUCCESS = 1,
+  NP_FFI_DEALLOCATE_RESULT_SUCCESS = 2,
 } np_ffi_DeallocateResult;
 
 /**
@@ -382,14 +305,14 @@ enum np_ffi_DeserializedV0AdvertisementKind {
    * The associated payload may be obtained via
    * `DeserializedV0Advertisement#into_legible`.
    */
-  NP_FFI_DESERIALIZED_V0_ADVERTISEMENT_KIND_LEGIBLE = 0,
+  NP_FFI_DESERIALIZED_V0_ADVERTISEMENT_KIND_LEGIBLE = 1,
   /**
    * The deserialized V0 advertisement is illegible,
    * likely meaning that the receiver does not hold
    * the proper credentials to be able to read
    * the received advertisement.
    */
-  NP_FFI_DESERIALIZED_V0_ADVERTISEMENT_KIND_NO_MATCHING_CREDENTIALS = 1,
+  NP_FFI_DESERIALIZED_V0_ADVERTISEMENT_KIND_NO_MATCHING_CREDENTIALS = 2,
 };
 typedef uint8_t np_ffi_DeserializedV0AdvertisementKind;
 
@@ -401,11 +324,11 @@ enum np_ffi_DeserializedV0IdentityKind {
   /**
    * The deserialized identity was a plaintext identity.
    */
-  NP_FFI_DESERIALIZED_V0_IDENTITY_KIND_PLAINTEXT = 0,
+  NP_FFI_DESERIALIZED_V0_IDENTITY_KIND_PLAINTEXT = 1,
   /**
    * The deserialized identity was some decrypted identity.
    */
-  NP_FFI_DESERIALIZED_V0_IDENTITY_KIND_DECRYPTED = 1,
+  NP_FFI_DESERIALIZED_V0_IDENTITY_KIND_DECRYPTED = 2,
 };
 typedef uint8_t np_ffi_DeserializedV0IdentityKind;
 
@@ -424,28 +347,6 @@ enum np_ffi_DeserializedV1IdentityKind {
   NP_FFI_DESERIALIZED_V1_IDENTITY_KIND_DECRYPTED = 1,
 };
 typedef uint8_t np_ffi_DeserializedV1IdentityKind;
-
-/**
- * The DE type for an encrypted identity
- */
-enum np_ffi_EncryptedIdentityType {
-  /**
-   * Identity for broadcasts to nearby devices with the same
-   * logged-in-account (for some account).
-   */
-  NP_FFI_ENCRYPTED_IDENTITY_TYPE_PRIVATE = 1,
-  /**
-   * Identity for broadcasts to nearby devices which this
-   * device has declared to trust.
-   */
-  NP_FFI_ENCRYPTED_IDENTITY_TYPE_TRUSTED = 2,
-  /**
-   * Identity for broadcasts to devices which have been provisioned
-   * offline with this device.
-   */
-  NP_FFI_ENCRYPTED_IDENTITY_TYPE_PROVISIONED = 4,
-};
-typedef uint8_t np_ffi_EncryptedIdentityType;
 
 enum np_ffi_GetMetadataBufferPartsResultKind {
   NP_FFI_GET_METADATA_BUFFER_PARTS_RESULT_KIND_SUCCESS = 0,
@@ -620,6 +521,12 @@ enum np_ffi_PanicReason {
    * in an entirely unexpected way.
    */
   NP_FFI_PANIC_REASON_INVALID_STACK_DATA_STRUCTURE = 2,
+  /**
+   * The maximum amount of allocations per type is `u32::MAX`, this panic handler is invoked
+   * with this reason when this is exceeded. Clients should never need more than 4 Billions
+   * handles and would certainly run into other issues before reaching that point
+   */
+  NP_FFI_PANIC_REASON_EXCEEDED_MAX_HANDLE_ALLOCATIONS = 3,
 };
 typedef uint8_t np_ffi_PanicReason;
 
@@ -632,16 +539,21 @@ enum np_ffi_SerializeV0AdvertisementResultKind {
    */
   NP_FFI_SERIALIZE_V0_ADVERTISEMENT_RESULT_KIND_SUCCESS = 0,
   /**
+   * The advertisement builder handle was invalid.
+   */
+  NP_FFI_SERIALIZE_V0_ADVERTISEMENT_RESULT_KIND_INVALID_ADVERTISEMENT_BUILDER_HANDLE = 1,
+  /**
    * Serializing the advertisement to bytes failed
    * because the data in the advertisement wasn't
    * of an appropriate size for LDT encryption
    * to succeed.
    */
-  NP_FFI_SERIALIZE_V0_ADVERTISEMENT_RESULT_KIND_LDT_ERROR = 1,
+  NP_FFI_SERIALIZE_V0_ADVERTISEMENT_RESULT_KIND_LDT_ERROR = 2,
   /**
-   * The advertisement builder handle was invalid.
+   * Serializing an unencrypted adv failed because the adv data didn't meet the length
+   * requirements.
    */
-  NP_FFI_SERIALIZE_V0_ADVERTISEMENT_RESULT_KIND_INVALID_ADVERTISEMENT_BUILDER_HANDLE = 2,
+  NP_FFI_SERIALIZE_V0_ADVERTISEMENT_RESULT_KIND_UNENCRYPTED_ERROR = 3,
 };
 typedef uint8_t np_ffi_SerializeV0AdvertisementResultKind;
 
@@ -693,13 +605,13 @@ enum np_ffi_V0DataElementKind {
    * The associated payload may be obtained via
    * `V0DataElement#into_tx_power`.
    */
-  NP_FFI_V0_DATA_ELEMENT_KIND_TX_POWER = 0,
+  NP_FFI_V0_DATA_ELEMENT_KIND_TX_POWER = 1,
   /**
    * The Actions data-element.
    * The associated payload may be obtained via
    * `V0DataElement#into_actions`.
    */
-  NP_FFI_V0_DATA_ELEMENT_KIND_ACTIONS = 1,
+  NP_FFI_V0_DATA_ELEMENT_KIND_ACTIONS = 2,
 };
 typedef uint8_t np_ffi_V0DataElementKind;
 
@@ -721,6 +633,19 @@ enum np_ffi_V1VerificationMode {
 typedef uint8_t np_ffi_V1VerificationMode;
 
 /**
+ * Holds the count of handles currently allocated for each handle type
+ */
+typedef struct {
+  uint32_t cred_book;
+  uint32_t cred_slab;
+  uint32_t decrypted_metadata;
+  uint32_t v0_payload;
+  uint32_t legible_v1_sections;
+  uint32_t v0_advertisement_builder;
+  uint32_t v1_advertisement_builder;
+} np_ffi_CurrentHandleAllocations;
+
+/**
  * A `#[repr(C)]` handle to a value of type `CredentialBookInternals`
  */
 typedef struct {
@@ -732,7 +657,6 @@ typedef struct {
  */
 enum np_ffi_CreateCredentialBookResult_Tag {
   NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_SUCCESS = 0,
-  NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_NO_SPACE_LEFT = 1,
   NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_INVALID_SLAB_HANDLE = 2,
 };
 typedef uint8_t np_ffi_CreateCredentialBookResult_Tag;
@@ -753,29 +677,12 @@ typedef struct {
 } np_ffi_CredentialSlab;
 
 /**
- * Result type for `create_credential_slab`
- */
-typedef enum {
-  NP_FFI_CREATE_CREDENTIAL_SLAB_RESULT_NO_SPACE_LEFT,
-  NP_FFI_CREATE_CREDENTIAL_SLAB_RESULT_SUCCESS,
-} np_ffi_CreateCredentialSlabResult_Tag;
-
-typedef struct {
-  np_ffi_CreateCredentialSlabResult_Tag tag;
-  union {
-    struct {
-      np_ffi_CredentialSlab success;
-    };
-  };
-} np_ffi_CreateCredentialSlabResult;
-
-/**
  * Cryptographic information about a particular V0 discovery credential
  * necessary to match and decrypt encrypted V0 advertisements.
  */
 typedef struct {
   uint8_t key_seed[32];
-  uint8_t legacy_metadata_key_hmac[32];
+  uint8_t identity_token_hmac[32];
 } np_ffi_V0DiscoveryCredential;
 
 /**
@@ -803,8 +710,9 @@ typedef struct {
  */
 typedef struct {
   uint8_t key_seed[32];
-  uint8_t expected_unsigned_metadata_key_hmac[32];
-  uint8_t expected_signed_metadata_key_hmac[32];
+  uint8_t expected_mic_short_salt_identity_token_hmac[32];
+  uint8_t expected_mic_extended_salt_identity_token_hmac[32];
+  uint8_t expected_signature_identity_token_hmac[32];
   uint8_t pub_key[32];
 } np_ffi_V1DiscoveryCredential;
 
@@ -908,8 +816,17 @@ typedef struct {
  * Representation of a deserialized V1 advertisement
  */
 typedef struct {
+  /**
+   * The number of legible sections
+   */
   uint8_t num_legible_sections;
+  /**
+   * The number of sections that were unable to be decrypted
+   */
   uint8_t num_undecryptable_sections;
+  /**
+   * A handle to the set of legible (plain or decrypted) sections
+   */
   np_ffi_LegibleV1Sections legible_sections;
 } np_ffi_DeserializedV1Advertisement;
 
@@ -977,7 +894,7 @@ typedef struct {
 } np_ffi_TxPower;
 
 /**
- * The bitfield data of a VOActions data element
+ * The bitfield data of a V0Actions data element
  */
 typedef struct {
   uint32_t bitfield;
@@ -1052,18 +969,14 @@ typedef struct {
  */
 typedef struct {
   /**
-   * The identity type (private/provisioned/trusted)
-   */
-  np_ffi_EncryptedIdentityType identity_type;
-  /**
    * The ID of the credential which
    * matched the deserialized adv
    */
   uint32_t cred_id;
   /**
-   * The 14-byte legacy metadata key
+   * The 14-byte legacy identity token
    */
-  uint8_t metadata_key[14];
+  uint8_t identity_token[14];
   /**
    * The 2-byte advertisement salt
    */
@@ -1202,10 +1115,6 @@ typedef struct {
  */
 typedef struct {
   /**
-   * The identity type (private/provisioned/trusted)
-   */
-  np_ffi_EncryptedIdentityType identity_type;
-  /**
    * The verification mode (MIC/Signature) which
    * was used to verify the decrypted adv contents.
    */
@@ -1218,7 +1127,7 @@ typedef struct {
   /**
    * The 16-byte metadata key.
    */
-  uint8_t metadata_key[16];
+  uint8_t identity_token[16];
 } np_ffi_DeserializedV1IdentityDetails;
 
 /**
@@ -1270,14 +1179,6 @@ typedef struct {
  */
 typedef struct {
   uint64_t handle_id;
-} np_ffi_V0AdvertisementBuilderHandle;
-
-/**
- * A handle to a builder for V0 advertisements.
- */
-typedef struct {
-  np_ffi_AdvertisementBuilderKind kind;
-  np_ffi_V0AdvertisementBuilderHandle handle;
 } np_ffi_V0AdvertisementBuilder;
 
 /**
@@ -1297,8 +1198,9 @@ typedef struct {
  */
 typedef enum {
   NP_FFI_SERIALIZE_V0_ADVERTISEMENT_RESULT_SUCCESS,
-  NP_FFI_SERIALIZE_V0_ADVERTISEMENT_RESULT_LDT_ERROR,
   NP_FFI_SERIALIZE_V0_ADVERTISEMENT_RESULT_INVALID_ADVERTISEMENT_BUILDER_HANDLE,
+  NP_FFI_SERIALIZE_V0_ADVERTISEMENT_RESULT_LDT_ERROR,
+  NP_FFI_SERIALIZE_V0_ADVERTISEMENT_RESULT_UNENCRYPTED_ERROR,
 } np_ffi_SerializeV0AdvertisementResult_Tag;
 
 typedef struct {
@@ -1311,29 +1213,12 @@ typedef struct {
 } np_ffi_SerializeV0AdvertisementResult;
 
 /**
- * The result of attempting to create a new V0 advertisement builder.
- */
-typedef enum {
-  NP_FFI_CREATE_V0_ADVERTISEMENT_BUILDER_RESULT_NO_SPACE_LEFT,
-  NP_FFI_CREATE_V0_ADVERTISEMENT_BUILDER_RESULT_SUCCESS,
-} np_ffi_CreateV0AdvertisementBuilderResult_Tag;
-
-typedef struct {
-  np_ffi_CreateV0AdvertisementBuilderResult_Tag tag;
-  union {
-    struct {
-      np_ffi_V0AdvertisementBuilder success;
-    };
-  };
-} np_ffi_CreateV0AdvertisementBuilderResult;
-
-/**
  * Cryptographic information about a particular V0 broadcast credential
  * necessary to LDT-encrypt V0 advertisements.
  */
 typedef struct {
   uint8_t key_seed[32];
-  uint8_t metadata_key[14];
+  uint8_t identity_token[14];
 } np_ffi_V0BroadcastCredential;
 
 /**
@@ -1359,7 +1244,8 @@ typedef struct {
 } np_ffi_V1AdvertisementBuilder;
 
 /**
- * A handle to a builder for V1 sections.
+ * A handle to a builder for V1 sections. This is not a unique handle; it is the same handle as
+ * the advertisement builder the section builder was originated from.
  */
 typedef struct {
   np_ffi_V1AdvertisementBuilder adv_builder;
@@ -1392,7 +1278,7 @@ typedef struct {
  */
 typedef struct {
   uint8_t key_seed[32];
-  uint8_t metadata_key[16];
+  uint8_t identity_token[16];
   uint8_t private_key[32];
 } np_ffi_V1BroadcastCredential;
 
@@ -1425,23 +1311,6 @@ typedef struct {
     };
   };
 } np_ffi_SerializeV1AdvertisementResult;
-
-/**
- * The result of attempting to create a new V1 advertisement builder.
- */
-typedef enum {
-  NP_FFI_CREATE_V1_ADVERTISEMENT_BUILDER_RESULT_NO_SPACE_LEFT,
-  NP_FFI_CREATE_V1_ADVERTISEMENT_BUILDER_RESULT_SUCCESS,
-} np_ffi_CreateV1AdvertisementBuilderResult_Tag;
-
-typedef struct {
-  np_ffi_CreateV1AdvertisementBuilderResult_Tag tag;
-  union {
-    struct {
-      np_ffi_V1AdvertisementBuilder success;
-    };
-  };
-} np_ffi_CreateV1AdvertisementBuilderResult;
 
 /**
  * The result of attempting to get the derived V1 DE
@@ -1522,31 +1391,6 @@ typedef struct {
 } np_ffi_SetV0ActionResult;
 
 /**
- * Representation of a context-sync sequence number.
- */
-typedef struct {
-  uint8_t value;
-} np_ffi_ContextSyncSeqNum;
-
-/**
- * Result type for attempting to construct a
- * ContextSyncSeqNum from an unsigned byte.
- */
-typedef enum {
-  NP_FFI_BUILD_CONTEXT_SYNC_SEQ_NUM_RESULT_OUT_OF_RANGE,
-  NP_FFI_BUILD_CONTEXT_SYNC_SEQ_NUM_RESULT_SUCCESS,
-} np_ffi_BuildContextSyncSeqNumResult_Tag;
-
-typedef struct {
-  np_ffi_BuildContextSyncSeqNumResult_Tag tag;
-  union {
-    struct {
-      np_ffi_ContextSyncSeqNum success;
-    };
-  };
-} np_ffi_BuildContextSyncSeqNumResult;
-
-/**
  * Overrides the global panic handler to be used when NP C FFI calls panic.
  * This method will only have an effect on the global panic-handler
  * the first time it's called, and this method will return `true`
@@ -1569,6 +1413,12 @@ typedef struct {
 bool np_ffi_global_config_panic_handler(void (*handler)(np_ffi_PanicReason));
 
 /**
+ * Checks the current count of all outstanding handle allocations, useful for debugging,
+ * logging, and testing
+ */
+np_ffi_CurrentHandleAllocations np_ffi_global_config_get_current_allocation_count(void);
+
+/**
  * Sets an override to the number of shards to employ in the NP FFI's
  * internal handle-maps, which places an upper bound on the number
  * of writing threads which may make progress at any one time
@@ -1585,106 +1435,6 @@ bool np_ffi_global_config_panic_handler(void (*handler)(np_ffi_PanicReason));
  * API call.
  */
 void np_ffi_global_config_set_num_shards(uint8_t num_shards);
-
-/**
- * Sets the maximum number of active handles to credential slabs
- * which may be active at any one time.
- * Default value: Max value.
- * Max value: `u32::MAX - 1`.
- *
- * Useful for bounding the maximum memory used by the client application
- * on credential slabs in constrained-memory environments.
- *
- * Setting this value will have no effect if the handle-maps for the
- * API have already begun being used by the client code, and any
- * values set will take effect upon the first usage of any API
- * call utilizing credential slabs.
- */
-void np_ffi_global_config_set_max_num_credential_slabs(uint32_t max_num_credential_slabs);
-
-/**
- * Sets the maximum number of active handles to credential books
- * which may be active at any one time.
- * Default value: Max value.
- * Max value: `u32::MAX - 1`.
- *
- * Useful for bounding the maximum memory used by the client application
- * on credential books in constrained-memory environments.
- *
- * Setting this value will have no effect if the handle-maps for the
- * API have already begun being used by the client code, and any
- * values set will take effect upon the first usage of any API
- * call utilizing credential books.
- */
-void np_ffi_global_config_set_max_num_credential_books(uint32_t max_num_credential_books);
-
-/**
- * Sets the maximum number of active handles to deserialized v0
- * advertisements which may be active at any one time.
- *
- * Useful for bounding the maximum memory used by the client application
- * on v0 advertisements in constrained-memory environments.
- *
- * Default value: Max value.
- * Max value: `u32::MAX - 1`.
- *
- * Setting this value will have no effect if the handle-maps for the
- * API have already begun being used by the client code, and any
- * values set will take effect upon the first usage of any API
- * call which references or returns a deserialized V0 advertisement.
- */
-void np_ffi_global_config_set_max_num_deserialized_v0_advertisements(uint32_t max_num_deserialized_v0_advertisements);
-
-/**
- * Sets the maximum number of active handles to deserialized v1
- * advertisements which may be active at any one time.
- *
- * Useful for bounding the maximum memory used by the client application
- * on v1 advertisements in constrained-memory environments.
- *
- * Default value: Max value.
- * Max value: `u32::MAX - 1`.
- *
- * Setting this value will have no effect if the handle-maps for the
- * API have already begun being used by the client code, and any
- * values set will take effect upon the first usage of any API
- * call which references or returns a deserialized V1 advertisement.
- */
-void np_ffi_global_config_set_max_num_deserialized_v1_advertisements(uint32_t max_num_deserialized_v1_advertisements);
-
-/**
- * Sets the maximum number of active handles to v0 advertisement
- * builders which may be active at any one time.
- *
- * Useful for bounding the maximum memory used by the client application
- * on v0 advertisements in constrained-memory environments.
- *
- * Default value: Max value.
- * Max value: `u32::MAX - 1`.
- *
- * Setting this value will have no effect if the handle-maps for the
- * API have already begun being used by the client code, and any
- * values set will take effect upon the first usage of any API
- * call which references or returns a V0 advertisement builder.
- */
-void np_ffi_global_config_set_max_num_v0_advertisement_builders(uint32_t max_num_v0_advertisement_builders);
-
-/**
- * Sets the maximum number of active handles to v1 advertisement
- * builders which may be active at any one time.
- *
- * Useful for bounding the maximum memory used by the client application
- * on v1 advertisements in constrained-memory environments.
- *
- * Default value: Max value.
- * Max value: `u32::MAX - 1`.
- *
- * Setting this value will have no effect if the handle-maps for the
- * API have already begun being used by the client code, and any
- * values set will take effect upon the first usage of any API
- * call which references or returns a V1 advertisement builder.
- */
-void np_ffi_global_config_set_max_num_v1_advertisement_builders(uint32_t max_num_v1_advertisement_builders);
 
 /**
  * Allocates a new credential-book from the given slab, returning a handle
@@ -1716,18 +1466,7 @@ np_ffi_DeallocateResult np_ffi_deallocate_credential_book(np_ffi_CredentialBook 
 /**
  * Allocates a new credential-slab, returning a handle to the created object
  */
-np_ffi_CreateCredentialSlabResult np_ffi_create_credential_slab(void);
-
-/**
- * Gets the tag of a `CreateCredentialSlabResult` tagged enum.
- */
-np_ffi_CreateCredentialSlabResultKind np_ffi_CreateCredentialSlabResult_kind(np_ffi_CreateCredentialSlabResult result);
-
-/**
- * Casts a `CreateCredentialSlabResult` to the `SUCCESS` variant, panicking in the
- * case where the passed value is of a different enum variant.
- */
-np_ffi_CredentialSlab np_ffi_CreateCredentialSlabResult_into_SUCCESS(np_ffi_CreateCredentialSlabResult result);
+np_ffi_CredentialSlab np_ffi_create_credential_slab(void);
 
 /**
  * Adds the given V0 discovery credential with some associated
@@ -2033,27 +1772,15 @@ np_ffi_SerializeV0AdvertisementResult np_ffi_V0AdvertisementBuilder_into_adverti
 np_ffi_DeallocateResult np_ffi_deallocate_v0_advertisement_builder(np_ffi_V0AdvertisementBuilder adv_builder);
 
 /**
- * Gets the tag of a `CreateV0AdvertisementBuilderResult` tagged-union.
- */
-np_ffi_CreateV0AdvertisementBuilderResultKind np_ffi_CreateV0AdvertisementBuilderResult_kind(np_ffi_CreateV0AdvertisementBuilderResult result);
-
-/**
- * Casts a `CreateV0AdvertisementBuilderResult` to the `Success` variant,
- * panicking in the case where the passed value is of a different enum variant.
- */
-np_ffi_V0AdvertisementBuilder np_ffi_CreateV0AdvertisementBuilderResult_into_SUCCESS(np_ffi_CreateV0AdvertisementBuilderResult result);
-
-/**
  * Creates a new V0 advertisement builder for a public advertisement.
  */
-np_ffi_CreateV0AdvertisementBuilderResult np_ffi_create_v0_public_advertisement_builder(void);
+np_ffi_V0AdvertisementBuilder np_ffi_create_v0_public_advertisement_builder(void);
 
 /**
  * Creates a new V0 advertisement builder for an encrypted advertisement.
  */
-np_ffi_CreateV0AdvertisementBuilderResult np_ffi_create_v0_encrypted_advertisement_builder(np_ffi_V0BroadcastCredential broadcast_cred,
-                                                                                           np_ffi_EncryptedIdentityType identity_type,
-                                                                                           np_ffi_FixedSizeArray_2 salt);
+np_ffi_V0AdvertisementBuilder np_ffi_create_v0_encrypted_advertisement_builder(np_ffi_V0BroadcastCredential broadcast_cred,
+                                                                               np_ffi_FixedSizeArray_2 salt);
 
 /**
  * Gets the tag of a `SerializeV0AdvertisementResult` tagged-union.
@@ -2097,7 +1824,6 @@ np_ffi_CreateV1SectionBuilderResult np_ffi_V1AdvertisementBuilder_public_section
  */
 np_ffi_CreateV1SectionBuilderResult np_ffi_V1AdvertisementBuilder_encrypted_section_builder(np_ffi_V1AdvertisementBuilder adv_builder,
                                                                                             np_ffi_V1BroadcastCredential broadcast_cred,
-                                                                                            np_ffi_EncryptedIdentityType identity_type,
                                                                                             np_ffi_V1VerificationMode verification_mode);
 
 /**
@@ -2109,21 +1835,10 @@ np_ffi_CreateV1SectionBuilderResult np_ffi_V1AdvertisementBuilder_encrypted_sect
 np_ffi_SerializeV1AdvertisementResult np_ffi_V1AdvertisementBuilder_into_advertisement(np_ffi_V1AdvertisementBuilder adv_builder);
 
 /**
- * Gets the tag of a `CreateV1AdvertisementBuilderResult` tagged-union.
- */
-np_ffi_CreateV1AdvertisementBuilderResultKind np_ffi_CreateV1AdvertisementBuilderResult_kind(np_ffi_CreateV1AdvertisementBuilderResult result);
-
-/**
- * Casts a `CreateV1AdvertisementBuilderResult` to the `Success` variant,
- * panicking in the case where the passed value is of a different enum variant.
- */
-np_ffi_V1AdvertisementBuilder np_ffi_CreateV1AdvertisementBuilderResult_into_SUCCESS(np_ffi_CreateV1AdvertisementBuilderResult result);
-
-/**
  * Creates a new V1 advertisement builder for the given advertisement
  * kind (public/encrypted).
  */
-np_ffi_CreateV1AdvertisementBuilderResult np_ffi_create_v1_advertisement_builder(np_ffi_AdvertisementBuilderKind kind);
+np_ffi_V1AdvertisementBuilder np_ffi_create_v1_advertisement_builder(np_ffi_AdvertisementBuilderKind kind);
 
 /**
  * Gets the tag of a `SerializeV1AdvertisementResult` tagged-union.
@@ -2256,12 +1971,7 @@ np_ffi_V0Actions np_ffi_build_new_zeroed_V0Actions(np_ffi_AdvertisementBuilderKi
 /**
  * Return whether a boolean action type is set in this data element
  */
-bool np_ffi_V0Actions_has_action(np_ffi_V0Actions actions, np_ffi_BooleanActionType action_type);
-
-/**
- * Gets the 4 bit context sync sequence number as a u8 from this data element
- */
-np_ffi_ContextSyncSeqNum np_ffi_V0Actions_get_context_sync_sequence_number(np_ffi_V0Actions actions);
+bool np_ffi_V0Actions_has_action(np_ffi_V0Actions actions, np_ffi_ActionType action_type);
 
 /**
  * Attempts to set the given action bit to the given boolean value.
@@ -2272,42 +1982,14 @@ np_ffi_ContextSyncSeqNum np_ffi_V0Actions_get_context_sync_sequence_number(np_ff
  * unaltered.
  */
 np_ffi_SetV0ActionResult np_ffi_V0Actions_set_action(np_ffi_V0Actions actions,
-                                                     np_ffi_BooleanActionType action_type,
+                                                     np_ffi_ActionType action_type,
                                                      bool value);
-
-/**
- * Sets the context sequence number for the given Actions DE.
- */
-np_ffi_V0Actions np_ffi_V0Actions_set_context_sync_sequence_number(np_ffi_V0Actions actions,
-                                                                   np_ffi_ContextSyncSeqNum value);
 
 /**
  * Returns the representation of the passed `V0Actions` as an unsigned
  * integer, where the bit-positions correspond to individual actions.
  */
 uint32_t np_ffi_V0Actions_as_u32(np_ffi_V0Actions actions);
-
-/**
- * Gets the tag of a `BuildContextSyncSeqNumResult` tagged-union.
- */
-np_ffi_BuildContextSyncSeqNumResultKind np_ffi_BuildContextSyncSeqNumResult_kind(np_ffi_BuildContextSyncSeqNumResult result);
-
-/**
- * Casts a `BuildContextSyncSeqNumResult` to the `Success` variant, panicking in the
- * case where the passed value is of a different enum variant.
- */
-np_ffi_ContextSyncSeqNum np_ffi_BuildContextSyncSeqNumResult_into_SUCCESS(np_ffi_BuildContextSyncSeqNumResult result);
-
-/**
- * Attempts to build a new context sync sequence number
- * from the given unsigned byte.
- */
-np_ffi_BuildContextSyncSeqNumResult np_ffi_ContextSyncSeqNum_build_from_unsigned_byte(uint8_t value);
-
-/**
- * Gets the value of the given context-sync sequence number as an unsigned byte.
- */
-uint8_t np_ffi_ContextSyncSeqNum_as_unsigned_byte(np_ffi_ContextSyncSeqNum seq_num);
 
 /**
  * Converts a `V1DataElement` to a `GenericV1DataElement` which

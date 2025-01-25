@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_PAYMENTS_PAYMENTS_AUTOFILL_CLIENT_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_PAYMENTS_PAYMENTS_AUTOFILL_CLIENT_H_
 
+#include <optional>
 #include <string>
 
 #include "base/functional/callback_forward.h"
@@ -16,20 +17,28 @@
 namespace autofill {
 
 struct AutofillErrorDialogContext;
-class AutofillSaveCardBottomSheetBridge;
+class AutofillOfferData;
 enum class AutofillProgressDialogType;
+class AutofillSaveCardBottomSheetBridge;
+struct CardUnmaskChallengeOption;
 class CardUnmaskDelegate;
 struct CardUnmaskPromptOptions;
 class CreditCard;
 class CreditCardCvcAuthenticator;
 class CreditCardOtpAuthenticator;
-class Iban;
 class CreditCardRiskBasedAuthenticator;
+class Iban;
+class IbanAccessManager;
+class IbanManager;
+class MerchantPromoCodeManager;
 class MigratableCreditCard;
+struct OfferNotificationOptions;
 class OtpUnmaskDelegate;
-struct CardUnmaskChallengeOption;
 enum class OtpUnmaskResult;
+struct VirtualCardEnrollmentFields;
 class VirtualCardEnrollmentManager;
+struct VirtualCardManualFallbackBubbleOptions;
+enum class WebauthnDialogCallbackType;
 
 namespace payments {
 
@@ -44,6 +53,42 @@ class PaymentsAutofillClient : public RiskDataLoader {
  public:
   ~PaymentsAutofillClient() override;
 
+  // The type of the credit card the Payments RPC fetches.
+  enum class PaymentsRpcCardType {
+    // Unknown type.
+    kUnknown = 0,
+    // Server card.
+    kServerCard = 1,
+    // Virtual card.
+    kVirtualCard = 2,
+  };
+
+  enum class PaymentsRpcResult {
+    // Empty result. Used for initializing variables and should generally
+    // not be returned nor passed as arguments unless explicitly allowed by
+    // the API.
+    kNone,
+
+    // Request succeeded.
+    kSuccess,
+
+    // Request failed; try again.
+    kTryAgainFailure,
+
+    // Request failed; don't try again.
+    kPermanentFailure,
+
+    // Unable to connect to Payments servers. Prompt user to check internet
+    // connection.
+    kNetworkError,
+
+    // Request failed in retrieving virtual card information; try again.
+    kVcnRetrievalTryAgainFailure,
+
+    // Request failed in retrieving virtual card information; don't try again.
+    kVcnRetrievalPermanentFailure,
+  };
+
   enum class SaveIbanOfferUserDecision {
     // The user accepted IBAN save.
     kAccepted,
@@ -53,6 +98,23 @@ class PaymentsAutofillClient : public RiskDataLoader {
 
     // The user ignored the IBAN save prompt.
     kIgnored,
+  };
+
+  enum class UnmaskCardReason {
+    // The card is being unmasked for PaymentRequest.
+    kPaymentRequest,
+
+    // The card is being unmasked for Autofill.
+    kAutofill,
+  };
+
+  // Authentication methods for card unmasking.
+  enum class UnmaskAuthMethod {
+    kUnknown = 0,
+    // Require user to unmask via CVC.
+    kCvc = 1,
+    // Suggest use of FIDO authenticator for card unmasking.
+    kFido = 2,
   };
 
   // Callback to run if user presses the Save button in the migration dialog.
@@ -74,6 +136,32 @@ class PaymentsAutofillClient : public RiskDataLoader {
   using SaveIbanPromptCallback =
       base::OnceCallback<void(SaveIbanOfferUserDecision user_decision,
                               std::u16string_view nickname)>;
+
+  // Callback to run after credit card upload confirmation prompt is closed.
+  using OnConfirmationClosedCallback = base::OnceClosure;
+
+  // Callback to run if the OK button or the cancel button in a
+  // Webauthn dialog is clicked.
+  using WebauthnDialogCallback =
+      base::RepeatingCallback<void(WebauthnDialogCallbackType)>;
+
+  // Callback to run when the credit card has been scanned.
+  using CreditCardScanCallback = base::OnceCallback<void(const CreditCard&)>;
+
+  // Callback to run after local credit card save or local CVC save is offered.
+  // Sends whether the prompt was accepted, declined, or ignored in
+  // `user_decision`.
+  using LocalSaveCardPromptCallback = base::OnceCallback<void(
+      AutofillClient::SaveCardOfferUserDecision user_decision)>;
+
+  // Callback to run after upload credit card save or upload CVC save for
+  // existing server card is offered. Sends whether the prompt was accepted,
+  // declined, or ignored in `user_decision`, and additional
+  // `user_provided_card_details` if applicable.
+  using UploadSaveCardPromptCallback = base::OnceCallback<void(
+      AutofillClient::SaveCardOfferUserDecision user_decision,
+      const AutofillClient::UserProvidedCardDetails&
+          user_provided_card_details)>;
 
 #if BUILDFLAG(IS_ANDROID)
   // Gets the AutofillSaveCardBottomSheetBridge or creates one if it doesn't
@@ -108,24 +196,119 @@ class PaymentsAutofillClient : public RiskDataLoader {
       const std::vector<MigratableCreditCard>& migratable_credit_cards,
       MigrationDeleteCardCallback delete_local_card_callback);
 
+  // TODO(crbug.com/40639086): Find a way to merge these two functions.
+  // Shouldn't use WebauthnDialogState as that state is a purely UI state
+  // (should not be accessible for managers?), and some of the states
+  // `KInactive` may be confusing here. Do we want to add another Enum?
+
+  // Will show a dialog offering the option to use device's platform
+  // authenticator in the future instead of CVC to verify the card being
+  // unmasked. Runs `offer_dialog_callback` if the OK button or the cancel
+  // button in the dialog is clicked.
+  virtual void ShowWebauthnOfferDialog(
+      WebauthnDialogCallback offer_dialog_callback);
+
+  // Will show a dialog indicating the card verification is in progress. It is
+  // shown after verification starts only if the WebAuthn is enabled.
+  virtual void ShowWebauthnVerifyPendingDialog(
+      WebauthnDialogCallback verify_pending_dialog_callback);
+
+  // Will update the WebAuthn dialog content when there is an error fetching the
+  // challenge.
+  virtual void UpdateWebauthnOfferDialogWithError();
+
+  // Will close the current visible WebAuthn dialog. Returns true if dialog was
+  // visible and has been closed.
+  virtual bool CloseWebauthnDialog();
+
+  // Hides the virtual card enroll bubble and icon if it is visible.
+  virtual void HideVirtualCardEnrollBubbleAndIconIfVisible();
+#endif  // BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+  // Display the cardholder name fix flow prompt and run the `callback` if
+  // the card should be uploaded to payments with updated name from the user.
+  virtual void ConfirmAccountNameFixFlow(
+      base::OnceCallback<void(const std::u16string&)> callback);
+
+  // Display the expiration date fix flow prompt with the `card` details
+  // and run the `callback` if the card should be uploaded to payments with
+  // updated expiration date from the user.
+  virtual void ConfirmExpirationDateFixFlow(
+      const CreditCard& card,
+      base::OnceCallback<void(const std::u16string&, const std::u16string&)>
+          callback);
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+
+  // Returns true if both the platform and the device support scanning credit
+  // cards. Should be called before ScanCreditCard().
+  virtual bool HasCreditCardScanFeature() const;
+
+  // Shows the user interface for scanning a credit card. Invokes the `callback`
+  // when a credit card is scanned successfully. Should be called only if
+  // HasCreditCardScanFeature() returns true.
+  virtual void ScanCreditCard(CreditCardScanCallback callback);
+
+  // Runs `callback` once the user makes a decision with respect to the
+  // offer-to-save prompt. This includes both the save local card prompt and the
+  // save CVC for a local card prompt. On desktop, shows the offer-to-save
+  // bubble if `options.show_prompt` is true; otherwise only shows the omnibox
+  // icon. On mobile, shows the offer-to-save infobar if `options.show_prompt`
+  // is true; otherwise does not offer to save at all.
+  virtual void ConfirmSaveCreditCardLocally(
+      const CreditCard& card,
+      AutofillClient::SaveCreditCardOptions options,
+      LocalSaveCardPromptCallback callback);
+
+  // Runs `callback` once the user makes a decision with respect to the
+  // offer-to-save prompt. This includes both the save server card prompt and
+  // the save CVC for a server card prompt. Displays the contents of
+  // `legal_message_lines` to the user. Displays a cardholder name textfield in
+  // the bubble if `options.should_request_name_from_user` is true. Displays a
+  // pair of expiration date dropdowns in the bubble if
+  // `should_request_expiration_date_from_user` is true. On desktop, shows the
+  // offer-to-save bubble if `options.show_prompt` is true;
+  // otherwise only shows the omnibox icon. On mobile, shows the offer-to-save
+  // infobar if `options.show_prompt` is true; otherwise does
+  // not offer to save at all.
+  // TODO (crbug.com/1462821): Make `legal_message_lines` optional, as CVC
+  // upload has no legal message.
+  virtual void ConfirmSaveCreditCardToCloud(
+      const CreditCard& card,
+      const LegalMessageLines& legal_message_lines,
+      AutofillClient::SaveCreditCardOptions options,
+      UploadSaveCardPromptCallback callback);
+
+  // Shows upload result to users. Called after credit card upload is finished.
+  // `card_saved` indicates if the card is successfully saved.
+  // `on_confirmation_closed_callback` should run after confirmation prompt is
+  // closed.
+  // TODO(crbug.com/40614280): This function is overridden in iOS codebase and
+  // in the desktop codebase. If iOS is not using it to do anything, please keep
+  // this function for desktop.
+  virtual void CreditCardUploadCompleted(
+      bool card_saved,
+      std::optional<OnConfirmationClosedCallback>
+          on_confirmation_closed_callback);
+
+  // Hides save card offer or confirmation prompt.
+  virtual void HideSaveCardPrompt();
+
+  // Shows a dialog for the user to enroll in a virtual card.
+  virtual void ShowVirtualCardEnrollDialog(
+      const VirtualCardEnrollmentFields& virtual_card_enrollment_fields,
+      base::OnceClosure accept_virtual_card_callback,
+      base::OnceClosure decline_virtual_card_callback);
+
   // Called after virtual card enrollment is finished. Shows enrollment
   // result to users. `is_vcn_enrolled` indicates if the card was successfully
   // enrolled as a virtual card.
   virtual void VirtualCardEnrollCompleted(bool is_vcn_enrolled);
-#endif  // BUILDFLAG(IS_ANDROID)
 
-  // Called after credit card upload is finished. Will show upload result to
-  // users. `card_saved` indicates if the card is successfully saved.
-  // TODO(crbug.com/40614280): This function is overridden in iOS codebase and
-  // in the desktop codebase. If iOS is not using it to do anything, please keep
-  // this function for desktop.
-  virtual void CreditCardUploadCompleted(bool card_saved);
-
-  // Returns true if save card offer or confirmation prompt is visible.
-  virtual bool IsSaveCardPromptVisible() const;
-
-  // Hides save card offer or confirmation prompt.
-  virtual void HideSaveCardPromptPrompt();
+  // Called when the virtual card has been fetched successfully. Uses the
+  // necessary information in `options` to show the manual fallback bubble.
+  virtual void OnVirtualCardDataAvailable(
+      const VirtualCardManualFallbackBubbleOptions& options);
 
   // Runs `callback` once the user makes a decision with respect to the
   // offer-to-save prompt. On desktop, shows the offer-to-save bubble if
@@ -196,8 +379,7 @@ class PaymentsAutofillClient : public RiskDataLoader {
       const CreditCard& card,
       const CardUnmaskPromptOptions& card_unmask_prompt_options,
       base::WeakPtr<CardUnmaskDelegate> delegate);
-  virtual void OnUnmaskVerificationResult(
-      AutofillClient::PaymentsRpcResult result);
+  virtual void OnUnmaskVerificationResult(PaymentsRpcResult result);
 
   // Returns a pointer to a VirtualCardEnrollmentManager that is owned by
   // PaymentsAutofillClient. VirtualCardEnrollmentManager is used for virtual
@@ -215,6 +397,46 @@ class PaymentsAutofillClient : public RiskDataLoader {
   // Gets the RiskBasedAuthenticator owned by the client. This function will
   // return a nullptr on iOS WebView.
   virtual CreditCardRiskBasedAuthenticator* GetRiskBasedAuthenticator();
+
+  // Prompt the user to enable mandatory reauthentication for payment method
+  // autofill. When enabled, the user will be asked to authenticate using
+  // biometrics or device unlock before filling in payment method information.
+  virtual void ShowMandatoryReauthOptInPrompt(
+      base::OnceClosure accept_mandatory_reauth_callback,
+      base::OnceClosure cancel_mandatory_reauth_callback,
+      base::RepeatingClosure close_mandatory_reauth_callback);
+
+  // Gets the IbanManager instance associated with the client.
+  virtual IbanManager* GetIbanManager();
+
+  // Gets the IbanAccessManager instance associated with the client.
+  virtual IbanAccessManager* GetIbanAccessManager();
+
+  // Gets the MerchantPromoCodeManager instance associated with the
+  // client (can be null for unsupported platforms).
+  virtual MerchantPromoCodeManager* GetMerchantPromoCodeManager();
+
+  // Should only be called when we are sure re-showing the bubble will display a
+  // confirmation bubble. If the most recent bubble was an opt-in bubble and it
+  // was accepted, this will display the re-auth opt-in confirmation bubble.
+  virtual void ShowMandatoryReauthOptInConfirmation();
+
+  // TODO(crbug.com/40134864): Rename all the "domain" in this flow to origin.
+  //                          The server is passing down full origin of the
+  //                          urls. "Domain" is no longer accurate.
+  // Notifies the client to update the offer notification when the `offer` is
+  // available. `options` carries extra configuration options for the offer
+  // notification.
+  virtual void UpdateOfferNotification(const AutofillOfferData& offer,
+                                       const OfferNotificationOptions& options);
+
+  // Dismiss any visible offer notification on the current tab.
+  virtual void DismissOfferNotification();
+
+  // Navigates to `url` in a new tab. `url` links to the promo code offer
+  // details page for the offers in a promo code suggestions popup. Every offer
+  // in a promo code suggestions popup links to the same offer details page.
+  virtual void OpenPromoCodeOfferDetailsURL(const GURL& url);
 };
 
 }  // namespace payments

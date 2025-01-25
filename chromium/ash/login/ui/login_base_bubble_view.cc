@@ -67,20 +67,20 @@ class LoginBubbleHandler : public ui::EventHandler {
 
   // ui::EventHandler:
   void OnMouseEvent(ui::MouseEvent* event) override {
-    if (event->type() == ui::ET_MOUSE_PRESSED) {
+    if (event->type() == ui::EventType::kMousePressed) {
       ProcessPressedEvent(event->AsLocatedEvent());
     }
   }
 
   void OnGestureEvent(ui::GestureEvent* event) override {
-    if (event->type() == ui::ET_GESTURE_TAP ||
-        event->type() == ui::ET_GESTURE_TAP_DOWN) {
+    if (event->type() == ui::EventType::kGestureTap ||
+        event->type() == ui::EventType::kGestureTapDown) {
       ProcessPressedEvent(event->AsLocatedEvent());
     }
   }
 
   void OnKeyEvent(ui::KeyEvent* event) override {
-    if (event->type() != ui::ET_KEY_PRESSED ||
+    if (event->type() != ui::EventType::kKeyPressed ||
         event->key_code() == ui::VKEY_PROCESSKEY) {
       return;
     }
@@ -291,7 +291,7 @@ void LoginBaseBubbleView::OnLayerAnimationEnded(
 void LoginBaseBubbleView::OnLayerAnimationAborted(
     ui::LayerAnimationSequence* sequence) {
   // The animation for this view should never be aborted.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 gfx::Size LoginBaseBubbleView::CalculatePreferredSize(
@@ -339,7 +339,7 @@ views::View* LoginBaseBubbleView::GetAnchorView() const {
     // pointers. This should not cause a crash, but is still indicative of UI
     // bugs.
     base::debug::DumpWithoutCrashing();
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
   return anchor_view_.get();
 }

@@ -139,7 +139,7 @@ bool IsPhysicalKeyboardAutocorrectEnabled(PrefService* prefs,
 
 bool IsPredictiveWritingEnabled(PrefService* pref_service,
                                 const std::string& engine_id) {
-  return (IsPredictiveWritingPrefEnabled(pref_service, engine_id) &&
+  return (IsPredictiveWritingPrefEnabled(*pref_service, engine_id) &&
           IsUsEnglishEngine(engine_id));
 }
 
@@ -480,8 +480,8 @@ mojom::PhysicalKeyEventPtr CreatePhysicalKeyEventFromKeyEvent(
   }
 
   return mojom::PhysicalKeyEvent::New(
-      event.type() == ui::ET_KEY_PRESSED ? mojom::KeyEventType::kKeyDown
-                                         : mojom::KeyEventType::kKeyUp,
+      event.type() == ui::EventType::kKeyPressed ? mojom::KeyEventType::kKeyDown
+                                                 : mojom::KeyEventType::kKeyUp,
       std::move(key), DomCodeToMojom(event.code()),
       ModifierStateFromEvent(event));
 }
@@ -873,6 +873,11 @@ void NativeInputMethodEngineObserver::OnFocus(
     const std::string& engine_id,
     int context_id,
     const TextInputMethod::InputContext& context) {
+  if (IsJapaneseEngine(engine_id)) {
+    UMA_HISTOGRAM_BOOLEAN(
+        "InputMethod.PhysicalKeyboard.Japanese.OnFocusMigratedToSystemPk",
+        !ShouldInitializeJpPrefsFromLegacyConfig(*prefs_));
+  }
   text_client_ =
       TextClient{.context_id = context_id, .state = TextClientState::kPending};
   if (chromeos::features::IsOrcaEnabled() && editor_event_sink_) {
@@ -1023,7 +1028,7 @@ void NativeInputMethodEngineObserver::OnKeyEvent(
       ShouldRouteToNativeMojoEngine(engine_id)) {
     if (IsInputMethodBound() && IsInputMethodConnected()) {
       // CharacterComposer only takes KEY_PRESSED events.
-      const bool filtered = event.type() == ui::ET_KEY_PRESSED &&
+      const bool filtered = event.type() == ui::EventType::kKeyPressed &&
                             character_composer_.FilterKeyPress(event);
 
       // Don't send dead keys to the system IME. Dead keys should be handled
@@ -1187,7 +1192,7 @@ void NativeInputMethodEngineObserver::OnAssistiveWindowButtonClicked(
       break;
     case ui::ime::ButtonId::kSuggestion:
       if (assistive_suggester_->IsAssistiveFeatureEnabled()) {
-        assistive_suggester_->AcceptSuggestion(button.index);
+        assistive_suggester_->AcceptSuggestion(button.suggestion_index);
       }
       if (grammar_manager_->IsOnDeviceGrammarEnabled()) {
         grammar_manager_->AcceptSuggestion();

@@ -204,10 +204,6 @@ class SyncService : public KeyedService {
     // Same as above, but for the case where data loss may affect all
     // encryptable datatypes.
     kTrustedVaultRecoverabilityDegradedForEverything,
-    // Same as DISABLE_REASON_UNRECOVERABLE_ERROR.
-    // TODO(crbug.com/40890809): Consider removing this value and use disable
-    // reasons instead.
-    kGenericUnrecoverableError,
   };
 
   enum class ModelTypeDownloadStatus {
@@ -264,8 +260,7 @@ class SyncService : public KeyedService {
 
   // Returns the set of reasons that are keeping Sync disabled, as a bitmask of
   // DisableReason enum entries.
-  // Note: This refers to Sync-the-feature. Sync-the-transport may be running
-  // even in the presence of disable reasons.
+  // Note: These refer to both Sync-the-feature and Sync-the-transport.
   virtual DisableReasonSet GetDisableReasons() const = 0;
   // Helper that returns whether GetDisableReasons() contains the given |reason|
   // (possibly among others).
@@ -566,12 +561,6 @@ class SyncService : public KeyedService {
   // called for real data types only.
   virtual ModelTypeDownloadStatus GetDownloadStatusFor(
       ModelType type) const = 0;
-
-  // TODO(crbug.com/40260698): remove once investigation of timeouts complete.
-  // Records the reason if the `type` is waiting for updates to be downloaded.
-  virtual void RecordReasonIfWaitingForUpdates(
-      ModelType type,
-      const std::string& histogram_name) const = 0;
 };
 
 }  // namespace syncer

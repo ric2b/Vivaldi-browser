@@ -25,7 +25,6 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/thread_annotations.h"
-#include "components/aggregation_service/features.h"
 #include "content/browser/interest_group/ad_auction_service_impl.h"
 #include "content/browser/interest_group/ad_auction_service_mojolpm_fuzzer.pb.h"
 #include "content/browser/interest_group/ad_auction_service_mojolpm_fuzzer_stringifiers.h"
@@ -293,11 +292,7 @@ AdAuctionServiceTestcase::AdAuctionServiceTestcase(
       {blink::features::kInterestGroupStorage,
        blink::features::kAdInterestGroupAPI, blink::features::kFledge,
        blink::features::kFledgeClearOriginJoinedAdInterestGroups,
-       blink::features::kFledgeNegativeTargeting,
-       blink::features::kPrivateAggregationApiMultipleCloudProviders,
-       aggregation_service::kAggregationServiceMultipleCloudProviders,
-       features::kEnableUpdatingUserBiddingSignals,
-       features::kEnableUpdatingExecutionModeToFrozenContext},
+       blink::features::kFledgeNegativeTargeting},
       /*disabled_features=*/{});
   fenced_frame_feature_list_.InitAndEnableFeatureWithParameters(
       blink::features::kFencedFrames, {{"implementation_type", "mparch"}});

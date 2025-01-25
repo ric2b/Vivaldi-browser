@@ -59,6 +59,13 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH) CampaignsManager {
   // TODO(b/308684443): Rename this to `GetCampaignBySlotAndRegisterTrial`.
   const Campaign* GetCampaignBySlot(Slot slot) const;
 
+  // Get latest opened URL.
+  const GURL& GetActiveUrl() const;
+
+  // Set the current active URL. Used in `CampaignsMatcher` for matching
+  // URL targeting
+  void SetActiveUrl(const GURL& url);
+
   // Get latest opened app id.
   const std::string& GetOpenedAppId() const;
 
@@ -66,36 +73,42 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH) CampaignsManager {
   // opened app targeting.
   void SetOpenedApp(const std::string& app_id);
 
-  // Set the current trigger type. Used in `CampaignsMatcher` for matching
-  // trigger targeting.
-  void SetTrigger(TriggeringType trigger_type);
+  // Get latest trigger.
+  const Trigger& GetTrigger() const;
 
-  // Set the current active URL. Used in `CampaignsMatcher` for matching
-  // URL targeting
-  void SetActiveUrl(const GURL& url);
+  // Set the current trigger type and event. Used in `CampaignsMatcher` for
+  // matching trigger targeting.
+  void SetTrigger(const Trigger&& trigger_type);
 
   // Set whether the current user is device owner.
   void SetIsUserOwner(bool is_user_owner);
 
   // Select action performer based on the given `action`. Action includes the
   // action type and action params for performing action.
-  void PerformAction(int campaign_id, const Action* action);
+  void PerformAction(int campaign_id,
+                     std::optional<int> group_id,
+                     const Action* action);
 
   // Select action performer based on the action type and perform action with
   // action params.
   void PerformAction(int campaign_id,
+                     std::optional<int> group_id,
                      const ActionType action_type,
                      const base::Value::Dict* params);
 
   // Clear event stored in the Feature Engagement framework.
   void ClearEvent(CampaignEvent event, const std::string& id);
+  void ClearEvent(const std::string& event);
 
-  // Notify event to the Feature Engagement framework. Event will be stored and
+  // Record event to the Feature Engagement framework. Event will be stored and
   // could be used for targeting.
-  void NotifyEventForTargeting(growth::CampaignEvent event,
+  // TODO: b/342283711 - Refactor this into two functions with
+  // `RecordSurfaceUiEvent` and `RecordEventAppOpened`.
+  void RecordEventForTargeting(growth::CampaignEvent event,
                                const std::string& id);
 
   void SetOobeCompleteTimeForTesting(base::Time time);
+  void SetTrackerInitializedForTesting();
   const Campaigns* GetCampaignsBySlotForTesting(Slot slot) const;
 
  private:
@@ -115,6 +128,11 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH) CampaignsManager {
                              const std::optional<const base::FilePath>& path,
                              base::Time oobe_time);
 
+  // Triggered when the feature_engagement tracker is initialized.
+  void OnTrackerInitialized(base::OnceClosure load_callback,
+                            const std::optional<const base::FilePath>& path,
+                            bool init_success);
+
   // Notify observers that campaigns are loaded and CampaignsManager is ready
   // to query.
   void NotifyCampaignsLoaded();
@@ -123,7 +141,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH) CampaignsManager {
   // incomplete, i.e. missing id.
   void RegisterTrialForCampaign(const Campaign* campaign) const;
 
-  void NotifyEvent(const std::string& event);
+  void RecordEvent(const std::string& event);
 
   raw_ptr<CampaignsManagerClient> client_ = nullptr;
 
@@ -143,6 +161,8 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH) CampaignsManager {
   base::TimeTicks campaigns_download_start_time_;
 
   base::Time oobe_complete_time_for_test_;
+
+  bool tracker_initialized_for_test_ = false;
 
   base::ObserverList<Observer> observers_;
 

@@ -1,0 +1,67 @@
+name: 'Setup on macOS'
+description: 'Installs dependencies specific to macOS'
+inputs:
+  codec-aom:
+    description: 'Can take the values: OFF, LOCAL, SYSTEM'
+    default: 'OFF'
+  codec-dav1d:
+    description: 'Can take the values: OFF, LOCAL, SYSTEM'
+    default: 'OFF'
+  codec-rav1e:
+    description: 'Can take the values: OFF, LOCAL, SYSTEM'
+    default: 'OFF'
+  gtest:
+    description: 'Can take the values: OFF, LOCAL, SYSTEM'
+    default: 'OFF'
+  extra-cache-key:
+    description: 'Extra cache key to use in the cache name. Useful when several caches are used in one workflow.'
+    default: ''
+outputs:
+  ext-cache-hit:
+    value: ${{ steps.cache.outputs.ext-cache-hit }}
+runs:
+  using: "composite"
+  steps:
+    # github actions overwrites brew's python. Force it to reassert itself, by running in a separate step.
+    # Borrowed from https://github.com/mesonbuild/meson/blob/aab2533ab4f7f4c16991620b400d71782f89be1c/.github/workflows/macos.yml#L87-L92
+    # until https://github.com/actions/setup-python/issues/577 is fixed.
+    - name: unbreak python in github actions
+      run: |
+        find /usr/local/bin -lname '*/Library/Frameworks/Python.framework/2to3*' \
+          -o -lname '*/Library/Frameworks/Python.framework/idle3*' \
+          -o -lname '*/Library/Frameworks/Python.framework/pydoc3*' \
+          -o -lname '*/Library/Frameworks/Python.framework/python3*' -delete
+        sudo rm -rf /Library/Frameworks/Python.framework/
+        brew install --force python3 && brew unlink python3 && brew unlink python3 && brew link --overwrite python3
+      shell: bash
+    - name: Install non-library dependencies
+      run: brew install imagemagick
+      shell: bash
+    - name: Install AOM library
+      if: ${{ inputs.codec-aom == 'SYSTEM' }}
+      run: brew install aom
+      shell: bash
+    - name: Install dav1d library
+      if: ${{ inputs.codec-dav1d == 'SYSTEM' }}
+      run: brew install dav1d
+      shell: bash
+    - name: Set up meson
+      if: ${{ inputs.codec-dav1d == 'LOCAL' }}
+      run: brew install meson
+      shell: bash
+    - name: Set up gtest
+      if: ${{ inputs.gtest == 'SYSTEM' }}
+      run: brew install googletest
+      shell: bash
+
+    - uses: ./.github/actions/setup-common
+      with:
+        codec-aom: ${{ inputs.codec-aom }}
+        codec-dav1d: ${{ inputs.codec-dav1d }}
+        codec-rav1e: ${{ inputs.codec-rav1e }}
+    - uses: ./.github/actions/cache
+      id: cache
+      with:
+        extra-key: ${{ inputs.extra-cache-key }}
+        use-meson: ${{ inputs.codec-dav1d == 'LOCAL' }}
+        use-rust: ${{ inputs.codec-rav1e == 'LOCAL' }}

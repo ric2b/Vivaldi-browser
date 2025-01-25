@@ -32,10 +32,10 @@
 
 #include "base/allocator/partition_alloc_features.h"
 #include "base/allocator/partition_alloc_support.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/buildflags.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/oom.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/page_allocator.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_constants.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/partition_root.h"
 #include "base/debug/alias.h"
@@ -55,17 +55,13 @@ const char* const Partitions::kAllocatedObjectPoolName =
 
 BASE_FEATURE(kBlinkUseLargeEmptySlotSpanRingForBufferRoot,
              "BlinkUseLargeEmptySlotSpanRingForBufferRoot",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-#if PA_BUILDFLAG(USE_STARSCAN)
-// Runs PCScan on WTF partitions.
-BASE_FEATURE(kPCScanBlinkPartitions,
-             "PartitionAllocPCScanBlinkPartitions",
+#if BUILDFLAG(IS_MAC)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 bool Partitions::initialized_ = false;
-bool Partitions::scan_is_enabled_ = false;
 
 // These statics are inlined, so cannot be LazyInstances. We create the values,
 // and then set the pointers correctly in Initialize().
@@ -122,6 +118,11 @@ partition_alloc::PartitionOptions PartitionOptionsFromFeatures() {
   opts.backup_ref_ptr = brp_setting;
   opts.memory_tagging = {.enabled = memory_tagging};
   opts.use_pool_offset_freelists = use_pool_offset_freelists;
+  opts.use_small_single_slot_spans =
+      base::FeatureList::IsEnabled(
+          base::features::kPartitionAllocUseSmallSingleSlotSpans)
+          ? partition_alloc::PartitionOptions::kEnabled
+          : partition_alloc::PartitionOptions::kDisabled;
   return opts;
 }
 
@@ -160,15 +161,6 @@ bool Partitions::InitializeOnce() {
     options.backup_ref_ptr = actual_brp_setting;
   }
 
-  scan_is_enabled_ =
-      (options.backup_ref_ptr == PartitionOptions::kDisabled) &&
-#if PA_BUILDFLAG(USE_STARSCAN)
-      (base::FeatureList::IsEnabled(base::features::kPartitionAllocPCScan) ||
-       base::FeatureList::IsEnabled(kPCScanBlinkPartitions));
-#else
-      false;
-#endif  // PA_BUILDFLAG(USE_STARSCAN)
-
   // FastMalloc doesn't provide isolation, only a (hopefully fast) malloc().
   // When PartitionAlloc is already the malloc() implementation, there is
   // nothing to do.
@@ -176,31 +168,12 @@ bool Partitions::InitializeOnce() {
   // Note that we could keep the two heaps separate, but each PartitionAlloc's
   // root has a cost, both in used memory and in virtual address space. Don't
   // pay it when we don't have to.
-  //
-  // In addition, enable the FastMalloc partition if
-  // --enable-features=PartitionAllocPCScanBlinkPartitions is specified.
-  if (scan_is_enabled_ || !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)) {
 #if !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
-    options.thread_cache = PartitionOptions::kEnabled;
+  options.thread_cache = PartitionOptions::kEnabled;
+  static base::NoDestructor<partition_alloc::PartitionAllocator>
+      fast_malloc_allocator(options);
+  fast_malloc_root_ = fast_malloc_allocator->root();
 #endif
-    static base::NoDestructor<partition_alloc::PartitionAllocator>
-        fast_malloc_allocator(options);
-    fast_malloc_root_ = fast_malloc_allocator->root();
-  }
-
-#if PA_BUILDFLAG(USE_STARSCAN)
-  if (scan_is_enabled_) {
-    if (!partition_alloc::internal::PCScan::IsInitialized()) {
-      partition_alloc::internal::PCScan::Initialize(
-          {partition_alloc::internal::PCScan::InitConfig::
-               WantedWriteProtectionMode::kDisabled,
-           partition_alloc::internal::PCScan::InitConfig::SafepointMode::
-               kDisabled});
-    }
-    partition_alloc::internal::PCScan::RegisterScannableRoot(fast_malloc_root_);
-    // Ignore other partitions for now.
-  }
-#endif  // PA_BUILDFLAG(USE_STARSCAN)
 
   initialized_ = true;
   return initialized_;
@@ -233,15 +206,6 @@ void Partitions::InitializeArrayBufferPartition() {
       }());
 
   array_buffer_root_ = array_buffer_allocator->root();
-
-#if PA_BUILDFLAG(USE_STARSCAN)
-  // PCScan relies on the fact that quarantinable allocations go to PA's
-  // regular pool. This is not the case if configurable pool is available.
-  if (scan_is_enabled_ && !array_buffer_root_->uses_configurable_pool()) {
-    partition_alloc::internal::PCScan::RegisterNonScannableRoot(
-        array_buffer_root_);
-  }
-#endif  // PA_BUILDFLAG(USE_STARSCAN)
 }
 
 // static

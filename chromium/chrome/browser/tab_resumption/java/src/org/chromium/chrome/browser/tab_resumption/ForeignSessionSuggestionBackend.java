@@ -52,10 +52,10 @@ public class ForeignSessionSuggestionBackend implements SuggestionBackend {
 
     /** Implements {@link SuggestionBackend} */
     @Override
-    public void readCached(Callback<List<SuggestionEntry>> callback) {
+    public void read(Callback<List<SuggestionEntry>> callback) {
         List<SuggestionEntry> suggestions = new ArrayList<SuggestionEntry>();
 
-        long currentTimeMs = getCurrentTimeMs();
+        long currentTimeMs = TabResumptionModuleUtils.getCurrentTimeMs();
         List<ForeignSession> foreignSessions = mForeignSessionHelper.getForeignSessions();
         for (ForeignSession session : foreignSessions) {
             for (ForeignSessionWindow window : session.windows) {
@@ -63,23 +63,13 @@ public class ForeignSessionSuggestionBackend implements SuggestionBackend {
                     if (isForeignSessionTabUsable(tab)
                             && currentTimeMs - tab.lastActiveTime <= STALENESS_THRESHOLD_MS) {
                         suggestions.add(
-                                new SuggestionEntry(
-                                        session.name,
-                                        tab.url,
-                                        tab.title,
-                                        tab.lastActiveTime,
-                                        tab.id));
+                                SuggestionEntry.createFromForeignSessionTab(session.name, tab));
                     }
                 }
             }
         }
         Collections.sort(suggestions);
         callback.onResult(suggestions);
-    }
-
-    /** Returns the current time in ms since the epoch. */
-    long getCurrentTimeMs() {
-        return System.currentTimeMillis();
     }
 
     private boolean isForeignSessionTabUsable(ForeignSessionTab tab) {

@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/check.h"
@@ -19,10 +20,9 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
-#include "base/strings/string_piece.h"
+#include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "components/viz/common/constants.h"
 #include "components/viz/common/surfaces/frame_sink_bundle_id.h"
@@ -91,8 +91,6 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
     base::ProcessId host_process_id = base::kNullProcessId;
     raw_ptr<HintSessionFactory> hint_session_factory = nullptr;
     size_t max_uncommitted_frames = 0;
-    raw_ptr<SharedImageInterfaceProvider> shared_image_interface_provider =
-        nullptr;
   };
   explicit FrameSinkManagerImpl(const InitParams& params);
 
@@ -110,7 +108,13 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
   void BindAndSetClient(
       mojo::PendingReceiver<mojom::FrameSinkManager> receiver,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      mojo::PendingRemote<mojom::FrameSinkManagerClient> client);
+      mojo::PendingRemote<mojom::FrameSinkManagerClient> client,
+      SharedImageInterfaceProvider* shared_image_interface_provider);
+
+  void SetSharedImageInterfaceProviderForTest(
+      SharedImageInterfaceProvider* provider) {
+    shared_image_interface_provider_ = provider;
+  }
 
   // Sets up a direction connection to |client| without using Mojo.
   void SetLocalClient(
@@ -151,10 +155,12 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
   void RequestCopyOfOutput(const SurfaceId& surface_id,
                            std::unique_ptr<CopyOutputRequest> request,
                            bool capture_exact_surface_id) override;
+#if BUILDFLAG(IS_ANDROID)
   void CacheBackBuffer(uint32_t cache_id,
                        const FrameSinkId& root_frame_sink_id) override;
   void EvictBackBuffer(uint32_t cache_id,
                        EvictBackBufferCallback callback) override;
+#endif
   void UpdateDebugRendererSettings(
       const DebugRendererSettings& debug_settings) override;
   void Throttle(const std::vector<FrameSinkId>& ids,
@@ -169,6 +175,9 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
       const blink::ViewTransitionToken& transition_token) override;
   void HasUnclaimedViewTransitionResourcesForTest(
       HasUnclaimedViewTransitionResourcesForTestCallback callback) override;
+  void SetSameDocNavigationScreenshotSizeForTesting(
+      const gfx::Size& result_size,
+      SetSameDocNavigationScreenshotSizeForTestingCallback callback) override;
 
   void DestroyFrameSinkBundle(const FrameSinkBundleId& id);
 
@@ -181,7 +190,7 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
       const std::vector<AggregatedHitTestRegion>& hit_test_data) override;
 
   // SurfaceManagerDelegate implementation:
-  base::StringPiece GetFrameSinkDebugLabel(
+  std::string_view GetFrameSinkDebugLabel(
       const FrameSinkId& frame_sink_id) const override;
   void AggregatedFrameSinksChanged() override;
 
@@ -304,10 +313,15 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
   // Note that if context is lost, this shared image interface will become
   // invalid. Next call to this function will create a new interface.
   // It is up to the client to detect changes in the shared image interface.
+  // This call is only valid after BindAndSetClient().
   gpu::SharedImageInterface* GetSharedImageInterface();
 
   ReservedResourceIdTracker* reserved_resource_id_tracker() {
     return &reserved_resource_id_tracker_;
+  }
+
+  const gfx::Size& copy_output_request_result_size_for_testing() const {
+    return copy_output_request_result_size_for_testing_;
   }
 
  private:
@@ -465,9 +479,11 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
   // often BeginFrames are sent for all current and future frame sinks.
   std::optional<base::TimeDelta> global_throttle_interval_ = std::nullopt;
 
+#if BUILDFLAG(IS_ANDROID)
   base::flat_map<uint32_t, base::ScopedClosureRunner> cached_back_buffers_;
+#endif
 
-  THREAD_CHECKER(thread_checker_);
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // |video_detector_| is instantiated lazily in order to avoid overhead on
   // platforms that don't need video detection.
@@ -500,6 +516,8 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
       nullptr;
 
   ReservedResourceIdTracker reserved_resource_id_tracker_;
+
+  gfx::Size copy_output_request_result_size_for_testing_;
 
   base::WeakPtrFactory<FrameSinkManagerImpl> weak_factory_{this};
 };

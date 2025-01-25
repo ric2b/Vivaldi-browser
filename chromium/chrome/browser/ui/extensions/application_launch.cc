@@ -341,7 +341,7 @@ WebContents* OpenEnabledApplicationHelper(Profile* profile,
 
   switch (params.container) {
     case apps::LaunchContainer::kLaunchContainerNone: {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     }
     // Panels are deprecated. Launch a normal window instead.
@@ -354,7 +354,7 @@ WebContents* OpenEnabledApplicationHelper(Profile* profile,
       break;
     }
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 

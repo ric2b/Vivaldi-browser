@@ -14,9 +14,13 @@
 #include "base/strings/strcat.h"
 #include "base/task/task_traits.h"
 #include "base/test/bind.h"
+#include "base/version_info/channel.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/test/supervised_user/family_member.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/supervised_user/core/browser/fetcher_config.h"
@@ -26,6 +30,8 @@
 #include "components/supervised_user/core/browser/supervised_user_service.h"
 #include "components/supervised_user/core/browser/supervised_user_service_observer.h"
 #include "components/supervised_user/core/browser/supervised_user_url_filter.h"
+#include "components/supervised_user/core/common/pref_names.h"
+#include "components/supervised_user/core/common/supervised_user_constants.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "url/gurl.h"
 
@@ -47,6 +53,20 @@ std::ostream& operator<<(std::ostream& os, const FilteringBehavior& fb) {
 }
 
 namespace {
+
+std::string GetToggleAbbrev(FamilyLinkToggleType toggle) {
+  switch (toggle) {
+    case FamilyLinkToggleType::kPermissionsToggle:
+      return "PERMISSIONS";
+    case FamilyLinkToggleType::kExtensionsToggle:
+      return "EXTENSIONS";
+    case FamilyLinkToggleType::kCookiesToggle:
+      return "COOKIES";
+    default:
+      NOTREACHED_NORETURN();
+  }
+}
+
 net::NetworkTrafficAnnotationTag TestStateSeedTag() {
   return net::DefineNetworkTrafficAnnotation(
       "supervised_user_test_state_seeding",
@@ -129,7 +149,7 @@ void WaitForRequestToComplete(const FamilyMember& supervising_user,
   StatusFetcher fetcher(
       *supervising_user.identity_manager(),
       supervising_user.url_loader_factory(), serialized_request, config,
-      {browser_user.GetAccountId().ToString()},
+      {browser_user.GetAccountId().ToString()}, version_info::Channel::UNKNOWN,
       base::BindLambdaForTesting([&](const ProtoFetcherStatus& status) {
         CHECK(status.IsOk()) << "WaitForRequestToComplete failed";
         run_loop.Quit();
@@ -209,6 +229,48 @@ bool UrlFiltersAreEmpty(const FamilyMember& family_member) {
       ->IsManualHostsEmpty();
 }
 
+bool ToggleHasExpectedValue(const FamilyMember& browser_user,
+                            FamilyLinkToggleConfiguration toggle) {
+  content_settings::ProviderType provider_type;
+  const HostContentSettingsMap& map =
+      *HostContentSettingsMapFactory::GetForProfile(
+          browser_user.browser()->profile());
+  PrefService& prefs = *browser_user.browser()->profile()->GetPrefs();
+
+  if (toggle.type == FamilyLinkToggleType::kCookiesToggle) {
+    bool can_block_cookies = static_cast<bool>(toggle.state);
+    map.GetDefaultContentSetting(ContentSettingsType::COOKIES, &provider_type);
+    // The supervised user can block the cookies if the corresponding content
+    // provider is not supervised.
+    return can_block_cookies ==
+           (provider_type !=
+            content_settings::ProviderType::kSupervisedProvider);
+  }
+  if (toggle.type == FamilyLinkToggleType::kPermissionsToggle) {
+    bool permission_pref_has_expected_value =
+        prefs.GetBoolean(
+            prefs::kSupervisedUserExtensionsMayRequestPermissions) ==
+        static_cast<bool>(toggle.state);
+
+    // Note: The Family Link permissions toggle is mapped to the above
+    // preference, but with the transition to the updated extension flow the
+    // preference will become deprecated. The switch will still apply to other
+    // features such as blocking geolocation.
+    bool is_geolocation_blocked = !static_cast<bool>(toggle.state);
+    // The supervised user has the geolocation blocked if the corresponding
+    // content setting is blocked.
+    bool is_geolocation_configured =
+        is_geolocation_blocked ==
+        (map.GetDefaultContentSetting(ContentSettingsType::GEOLOCATION,
+                                      &provider_type) ==
+         ContentSetting::CONTENT_SETTING_BLOCK);
+
+    return permission_pref_has_expected_value && is_geolocation_configured;
+  }
+  CHECK(toggle.type == FamilyLinkToggleType::kExtensionsToggle);
+  return prefs.GetBoolean(prefs::kSkipParentApprovalToInstallExtensions) ==
+         static_cast<bool>(toggle.state);
+}
 }  // namespace
 
 BrowserState::~BrowserState() = default;
@@ -228,6 +290,24 @@ BrowserState BrowserState::BlockSite(const GURL& gurl) {
   return BrowserState(new DefineManualSiteListIntent(
       DefineManualSiteListIntent::BlockUrl(gurl)));
 }
+BrowserState BrowserState::AdvancedSettingsToggles(
+    std::list<FamilyLinkToggleConfiguration> toggle_list) {
+  return BrowserState(new ToggleIntent(std::move(toggle_list)));
+}
+
+BrowserState BrowserState::SetAdvancedSettingsDefault() {
+  FamilyLinkToggleConfiguration extensions_toggle(
+      {.type = FamilyLinkToggleType::kExtensionsToggle,
+       .state = FamilyLinkToggleState::kDisabled});
+  FamilyLinkToggleConfiguration permissions_toggle(
+      {.type = FamilyLinkToggleType::kPermissionsToggle,
+       .state = FamilyLinkToggleState::kEnabled});
+  FamilyLinkToggleConfiguration cookies_toggle(
+      {.type = FamilyLinkToggleType::kCookiesToggle,
+       .state = FamilyLinkToggleState::kDisabled});
+  return AdvancedSettingsToggles(
+      {extensions_toggle, permissions_toggle, cookies_toggle});
+}
 
 void BrowserState::Seed(const FamilyMember& supervising_user,
                         const FamilyMember& browser_user) const {
@@ -235,9 +315,8 @@ void BrowserState::Seed(const FamilyMember& supervising_user,
                            intent_->GetRequest());
 }
 
-base::RepeatingCallback<bool(void)> BrowserState::GetIntendedStateCheck(
-    const FamilyMember& browser_user) const {
-  return intent_->GetBrowserCheck(browser_user);
+bool BrowserState::Check(const FamilyMember& browser_user) const {
+  return intent_->Check(browser_user);
 }
 
 std::string BrowserState::ToString() const {
@@ -256,9 +335,10 @@ const FetcherConfig& BrowserState::ResetIntent::GetConfig() const {
 std::string BrowserState::ResetIntent::ToString() const {
   return "Reset";
 }
-base::RepeatingCallback<bool(void)> BrowserState::ResetIntent::GetBrowserCheck(
-    const FamilyMember& browser_user) const {
-  return base::BindRepeating(&UrlFiltersAreEmpty, std::ref(browser_user));
+bool BrowserState::ResetIntent::Check(const FamilyMember& browser_user) const {
+  bool result = UrlFiltersAreEmpty(browser_user);
+  LOG(WARNING) << "BrowserState::ResetIntent = " << (result ? "true" : "false");
+  return result;
 }
 
 BrowserState::DefineManualSiteListIntent::DefineManualSiteListIntent() =
@@ -285,8 +365,8 @@ std::string BrowserState::DefineManualSiteListIntent::GetRequest() const {
       kidsmanagement::SAFE_SITES);
   return request.SerializeAsString();
 }
-const FetcherConfig& BrowserState::DefineManualSiteListIntent::GetConfig()
-    const {
+const supervised_user::FetcherConfig&
+BrowserState::DefineManualSiteListIntent::GetConfig() const {
   return kDefineChromeTestStateConfig;
 }
 std::string BrowserState::DefineManualSiteListIntent::ToString() const {
@@ -303,34 +383,72 @@ std::string BrowserState::DefineManualSiteListIntent::ToString() const {
   bits.push_back("]");
   return base::StrCat(bits);
 }
-base::RepeatingCallback<bool(void)>
-BrowserState::DefineManualSiteListIntent::GetBrowserCheck(
+bool BrowserState::DefineManualSiteListIntent::Check(
     const FamilyMember& browser_user) const {
-  return base::BindRepeating(&UrlFiltersAreConfigured, std::ref(browser_user),
-                             std::ref(allowed_url_), std::ref(blocked_url_));
+  bool result =
+      UrlFiltersAreConfigured(browser_user, allowed_url_, blocked_url_);
+  LOG(WARNING) << "BrowserState::DefineManualSiteListIntent = "
+               << (result ? "true" : "false");
+  return result;
 }
 
-BrowserState::Observer::Observer(SupervisedUserService* service,
-                                 base::RepeatingCallback<bool(void)> condition)
-    : ui::test::ObservationStateObserver<SeedingStatus,
-                                         SupervisedUserService,
-                                         SupervisedUserServiceObserver>(
-          service),
-      condition_(condition) {}
-BrowserState::Observer::~Observer() = default;
+BrowserState::ToggleIntent::ToggleIntent(
+    std::list<FamilyLinkToggleConfiguration> toggle_list)
+    : toggle_list_(std::move(toggle_list)) {}
 
-BrowserState::SeedingStatus
-BrowserState::Observer::GetStateObserverInitialState() const {
-  return SeedingStatus::kPending;
-}
+BrowserState::ToggleIntent::~ToggleIntent() = default;
 
-void BrowserState::Observer::OnURLFilterChanged() {
-  if (!condition_.Run()) {
-    // Not yet in the intended state.
-    return;
+std::string BrowserState::ToggleIntent::GetRequest() const {
+  kidsmanagement::DefineChromeTestStateRequest request;
+  for (const auto& toggle : toggle_list_) {
+    if (toggle.type == FamilyLinkToggleType::kExtensionsToggle) {
+      request.mutable_url_filtering_settings()->set_can_add_extensions(
+          static_cast<bool>(toggle.state));
+    }
+    if (toggle.type == FamilyLinkToggleType::kPermissionsToggle) {
+      request.mutable_url_filtering_settings()
+          ->set_websites_can_request_permissions(
+              static_cast<bool>(toggle.state));
+    }
+    if (toggle.type == FamilyLinkToggleType::kCookiesToggle) {
+      request.mutable_url_filtering_settings()->set_can_block_cookies(
+          static_cast<bool>(toggle.state));
+    }
   }
+  return request.SerializeAsString();
+}
 
-  OnStateObserverStateChanged(SeedingStatus::kCompleted);
+const FetcherConfig& BrowserState::ToggleIntent::GetConfig() const {
+  return kDefineChromeTestStateConfig;
+}
+
+std::string BrowserState::ToggleIntent::ToString() const {
+  std::vector<std::string> bits;
+  bits.push_back("Define[");
+  for (const auto& toggle : toggle_list_) {
+    bits.push_back(GetToggleAbbrev(toggle.type) + " = ");
+    bits.push_back((static_cast<bool>(toggle.state) ? "true" : "false") +
+                   std::string(" "));
+  }
+  bits.push_back("]");
+  return base::StrCat(bits);
+}
+
+bool BrowserState::ToggleIntent::Check(const FamilyMember& browser_user) const {
+  bool result = true;
+  for (const auto& toggle : toggle_list_) {
+    bool toggle_has_expected_value =
+        ToggleHasExpectedValue(browser_user, toggle);
+    // Note: we do not exit the loop early on a false condition as we want
+    // to print all the false conditions for debugging purposes.
+    if (!toggle_has_expected_value) {
+      LOG(WARNING) << "BrowserState::ToggleIntent[" +
+                          GetToggleAbbrev(toggle.type) + "] = "
+                   << (toggle_has_expected_value ? "true" : "false");
+    }
+    result = result && toggle_has_expected_value;
+  }
+  return result;
 }
 
 }  // namespace supervised_user

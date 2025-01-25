@@ -22,8 +22,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/ui/user_notes/user_notes_controller.h"
 #include "chrome/browser/ui/web_applications/web_app_tabbed_utils.h"
+#include "chrome/browser/user_education/user_education_service.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -157,7 +157,9 @@ void TabMenuModel::Build(TabStripModel* tab_strip, int index) {
     if (tab_organization_service) {
       AddItemWithStringId(TabStripModel::CommandOrganizeTabs,
                           IDS_TAB_CXMENU_ORGANIZE_TABS);
-      SetIsNewFeatureAt(GetItemCount() - 1, true);
+      SetIsNewFeatureAt(GetItemCount() - 1,
+                        UserEducationService::MaybeShowNewBadge(
+                            tab_strip->profile(), features::kTabOrganization));
     }
   }
 
@@ -185,11 +187,6 @@ void TabMenuModel::Build(TabStripModel* tab_strip, int index) {
                           IDS_TAB_CXMENU_SOUND_MUTE_SITE, num_tabs)
                     : l10n_util::GetPluralStringFUTF16(
                           IDS_TAB_CXMENU_SOUND_UNMUTE_SITE, num_tabs));
-  if (UserNotesController::IsUserNotesSupported(tab_strip->profile())) {
-    AddItemWithStringId(TabStripModel::CommandAddNote,
-                        IDS_CONTENT_CONTEXT_ADD_A_NOTE);
-    SetElementIdentifierAt(GetItemCount() - 1, kAddANoteTabMenuItem);
-  }
   if (send_tab_to_self::ShouldDisplayEntryPoint(
           tab_strip->GetWebContentsAt(index))) {
     AddSeparator(ui::NORMAL_SEPARATOR);

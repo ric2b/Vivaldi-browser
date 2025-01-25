@@ -27,11 +27,14 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/profiles/profile_picker.h"
 #include "chrome/browser/ui/profiles/profile_ui_test_utils.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog_browsertest.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/search_engines/template_url_service.h"
@@ -53,6 +56,10 @@
 #include "chrome/browser/ui/chromeos/window_pin_util.h"
 #include "ui/aura/window.h"
 #endif
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+#include "chrome/common/chrome_features.h"
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 
 namespace chrome {
 
@@ -79,9 +86,7 @@ class BrowserCommandControllerBrowserTest : public InProcessBrowserTest {
 class BrowserCommandControllerBrowserTestRefreshOnly
     : public BrowserCommandControllerBrowserTest {
  public:
-  BrowserCommandControllerBrowserTestRefreshOnly() {
-    scoped_feature_list_.InitWithFeatures({features::kChromeRefresh2023}, {});
-  }
+  BrowserCommandControllerBrowserTestRefreshOnly() = default;
   BrowserCommandControllerBrowserTestRefreshOnly(
       const BrowserCommandControllerBrowserTestRefreshOnly&) = delete;
   BrowserCommandControllerBrowserTestRefreshOnly& operator=(
@@ -113,6 +118,20 @@ class BrowserCommandControllerBrowserTestRefreshOnly
     net::NetworkChangeNotifier::CreateMockIfNeeded();
     browser()->command_controller()->TabStateChanged();
   }
+};
+// Test case for actions behind Toolbar Pinning.
+class BrowserCommandControllerBrowserTestToolbarPinningOnly
+    : public BrowserCommandControllerBrowserTestRefreshOnly {
+ public:
+  BrowserCommandControllerBrowserTestToolbarPinningOnly() {
+    scoped_feature_list_.InitWithFeatures({features::kToolbarPinning}, {});
+  }
+  BrowserCommandControllerBrowserTestToolbarPinningOnly(
+      const BrowserCommandControllerBrowserTestToolbarPinningOnly&) = delete;
+  BrowserCommandControllerBrowserTestToolbarPinningOnly& operator=(
+      const BrowserCommandControllerBrowserTestToolbarPinningOnly&) = delete;
+
+  ~BrowserCommandControllerBrowserTestToolbarPinningOnly() override = default;
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -362,6 +381,38 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestRefreshOnly,
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestRefreshOnly,
+                       ExecuteShowCustomizeChrome) {
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  if (!features::IsToolbarPinningEnabled()) {
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("chrome://new-tab-page/")));
+  }
+  content::WaitForLoadStop(web_contents);
+  EXPECT_TRUE(
+      chrome::ExecuteCommand(browser(), IDC_SHOW_CUSTOMIZE_CHROME_SIDE_PANEL));
+  const std::optional<SidePanelEntryId> current_entry =
+      browser()->GetFeatures().side_panel_ui()->GetCurrentEntryId();
+  EXPECT_TRUE(current_entry.has_value());
+  EXPECT_EQ(SidePanelEntryId::kCustomizeChrome, current_entry.value());
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestRefreshOnly,
+                       ExecuteShowCustomizeChromeToolbar) {
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  if (!features::IsToolbarPinningEnabled()) {
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("chrome://new-tab-page/")));
+  }
+  content::WaitForLoadStop(web_contents);
+  EXPECT_TRUE(
+      chrome::ExecuteCommand(browser(), IDC_SHOW_CUSTOMIZE_CHROME_TOOLBAR));
+  const std::optional<SidePanelEntryId> current_entry =
+      browser()->GetFeatures().side_panel_ui()->GetCurrentEntryId();
+  EXPECT_TRUE(current_entry.has_value());
+  EXPECT_EQ(SidePanelEntryId::kCustomizeChrome, current_entry.value());
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestRefreshOnly,
                        ExecuteProfileMenuOpenGuestProfile) {
   EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_OPEN_GUEST_PROFILE));
   Browser* guest_browser = ui_test_utils::WaitForBrowserToOpen();
@@ -434,5 +485,60 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestRefreshOnly,
   LoadAndWaitForLanguage("/french_page.html");
   EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_SHOW_TRANSLATE));
 }
+
+IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestToolbarPinningOnly,
+                       ShowTranslateStatusChromePage) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url = GURL("chrome://new-tab-page/");
+  translate::TranslateManager::SetIgnoreMissingKeyForTesting(true);
+  net::NetworkChangeNotifier::CreateMockIfNeeded();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+
+  browser()->command_controller()->TabStateChanged();
+
+  EXPECT_FALSE(actions::ActionManager::GetForTesting()
+                   .FindAction(kActionShowTranslate)
+                   ->GetEnabled());
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestToolbarPinningOnly,
+                       ShowTranslateStatusEnglishPage) {
+  LoadAndWaitForLanguage("/english_page.html");
+  EXPECT_TRUE(actions::ActionManager::GetForTesting()
+                  .FindAction(kActionShowTranslate)
+                  ->GetEnabled());
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestToolbarPinningOnly,
+                       ShowTranslateStatusFrenchPage) {
+  LoadAndWaitForLanguage("/french_page.html");
+  EXPECT_TRUE(actions::ActionManager::GetForTesting()
+                  .FindAction(kActionShowTranslate)
+                  ->GetEnabled());
+}
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+class CreateShortcutBrowserCommandControllerNavTest
+    : public BrowserCommandControllerBrowserTest {
+ public:
+  CreateShortcutBrowserCommandControllerNavTest() = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_{
+      features::kShortcutsNotApps};
+};
+
+IN_PROC_BROWSER_TEST_F(CreateShortcutBrowserCommandControllerNavTest,
+                       ErrorUrlDisabled) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  // This returns a 404 server error, and cannot be unit-tested, since a valid
+  // request is not obtained for the navigation entry being committed in
+  // unit-tests.
+  GURL error_url(embedded_test_server()->GetURL("example.com", "/abcdef/"));
+  EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), error_url));
+  EXPECT_FALSE(chrome::IsCommandEnabled(browser(), IDC_CREATE_SHORTCUT));
+}
+
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 
 }  // namespace chrome

@@ -23,6 +23,7 @@ ldt_tbc.workspace = true
 crypto_provider_default = { workspace = true, features = ["rustcrypto", "std"] }
 rand_ext.workspace = true
 test_helper.workspace = true
+test_vector_hkdf.workspace = true
 
 rand.workspace = true
 base64.workspace = true

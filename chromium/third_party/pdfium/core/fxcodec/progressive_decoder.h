@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #ifndef CORE_FXCODEC_PROGRESSIVE_DECODER_H_
 #define CORE_FXCODEC_PROGRESSIVE_DECODER_H_
 
@@ -113,8 +108,7 @@ class ProgressiveDecoder final :
   uint32_t GifCurrentPosition() const override;
   bool GifInputRecordPositionBuf(uint32_t rcd_pos,
                                  const FX_RECT& img_rc,
-                                 int32_t pal_num,
-                                 CFX_GifPalette* pal_ptr,
+                                 pdfium::span<CFX_GifPalette> pal_span,
                                  int32_t trans_index,
                                  bool interlace) override;
   void GifReadScanline(int32_t row_num, pdfium::span<uint8_t> row_buf) override;
@@ -138,8 +132,9 @@ class ProgressiveDecoder final :
 
     void CalculateWeights(int dest_len, int src_len);
     PixelWeight* GetPixelWeight(int pixel) {
-      return reinterpret_cast<PixelWeight*>(m_pWeightTables.data() +
-                                            pixel * m_ItemSize);
+      return reinterpret_cast<PixelWeight*>(pdfium::make_span(m_pWeightTables)
+                                                .subspan(pixel * m_ItemSize)
+                                                .data());
     }
 
    private:
@@ -154,8 +149,9 @@ class ProgressiveDecoder final :
 
     void CalculateWeights(int dest_len, int src_len);
     PixelWeight* GetPixelWeight(int pixel) {
-      return reinterpret_cast<PixelWeight*>(m_pWeightTables.data() +
-                                            pixel * m_ItemSize);
+      return reinterpret_cast<PixelWeight*>(pdfium::make_span(m_pWeightTables)
+                                                .subspan(pixel * m_ItemSize)
+                                                .data());
     }
 
    private:
@@ -260,7 +256,6 @@ class ProgressiveDecoder final :
   int m_sizeX = 0;
   int m_sizeY = 0;
   int m_TransMethod = -1;
-  int m_SrcPaletteNumber = 0;
   int m_SrcRow = 0;
   FXCodec_Format m_SrcFormat = FXCodec_Invalid;
   int m_SrcPassNumber = 0;
@@ -268,8 +263,7 @@ class ProgressiveDecoder final :
   size_t m_FrameCur = 0;
 #ifdef PDF_ENABLE_XFA_GIF
   int m_GifBgIndex = 0;
-  UNOWNED_PTR_EXCLUSION CFX_GifPalette* m_pGifPalette = nullptr;
-  int32_t m_GifPltNumber = 0;
+  pdfium::span<CFX_GifPalette> m_GifPalette;
   int m_GifTransIndex = -1;
   FX_RECT m_GifFrameRect;
 #endif  // PDF_ENABLE_XFA_GIF

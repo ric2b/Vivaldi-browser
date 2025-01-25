@@ -7,6 +7,10 @@
 
 namespace ash {
 
+// This file contains catalogs with entries for every notifier in CrOS,
+// including notifications, toasts, and nudges. By having your notifier here
+// you'll automatically get metrics for it ---> go/notifier-framework-metrics.
+
 // A living catalog that registers notifications.
 // Current values should not be renumbered or removed. Please keep in sync with
 // "NotificationCatalogName" in tools/metrics/histograms/enums.xml.
@@ -195,16 +199,17 @@ enum class NotificationCatalogName {
   kGrowthFramework = 180,
   kAudioSelection = 181,
   kExtendedUpdatesAvailable = 182,
-  kMaxValue = kExtendedUpdatesAvailable
+  kOnDeviceAppControls = 183,
+  kMaxValue = kOnDeviceAppControls
 };
 
 // A living catalog that registers system nudges.
 // Current values should not be renumbered or removed. Please keep in sync with
 // "NudgeCatalogName" in tools/metrics/histograms/metadata/ash/enums.xml.
 // To deprecate comment out the entry.
-// Please call `SystemNudgeController::MaybeRecordNudgeAction()` (old nudges) or
-// `AnchoredNudgeManager::Get()->MaybeRecordNudgeAction()` when the nudge's
-// suggested action is performed by the user, if applicable.
+// Use `AnchoredNudgeManager::Get()->MaybeRecordNudgeAction()` with the proper
+// catalog name when the nudge's suggested action is performed by the user, if
+// applicable, to record a `TimeToAction` metric.
 enum class NudgeCatalogName {
   kTestCatalogName = 0,
   kDictation = 1,
@@ -235,12 +240,14 @@ enum class NudgeCatalogName {
   // [Deprecated] kWebsiteTelemetryReportingNudge = 26,
   kStandaloneWindowMigrationUx = 27,
   kFocusModeEndingMomentNudge = 28,
-  kPineEducationNudge = 29,
+  kInformedRestoreEducationNudge = 29,
   kGrowthCampaignNudge = 30,
   kSearchTopRowKeyPressed = 31,
   kSixPackRemappingPressed = 32,
   kCapsLockShortcutPressed = 33,
-  kMaxValue = kCapsLockShortcutPressed
+  kMahi = 34,
+  kBirchPrivacy = 35,
+  kMaxValue = kBirchPrivacy
 };
 
 // A living catalog that registers toasts.
@@ -299,8 +306,8 @@ enum class ToastCatalogName {
   kVideoConferenceTraySpeakOnMuteOptInConfirmation = 48,
   kAppNotClosable = 49,
   kGameDashboardEnterTablet = 50,
-  kPineOnboarding = 51,
-  kMaxValue = kPineOnboarding
+  kInformedRestoreOnboarding = 51,
+  kMaxValue = kInformedRestoreOnboarding
 };
 
 }  // namespace ash

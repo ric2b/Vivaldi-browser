@@ -15,21 +15,25 @@
 
 use crypto_provider_default::CryptoProviderImpl;
 use ldt_np_adv::*;
-use np_adv::legacy::data_elements::TxPowerDataElement;
+use np_adv::credential::matched::{
+    EmptyMatchedCredential, HasIdentityMatch, MetadataMatchedCredential,
+};
+use np_adv::legacy::serialize::{AdvBuilder, LdtEncoder};
 use np_adv::{
     credential::{
         book::CredentialBookBuilder,
-        v0::{V0DiscoveryCredential, V0},
-        EmptyMatchedCredential, MatchableCredential, MetadataMatchedCredential,
-        SimpleBroadcastCryptoMaterial,
+        v0::{V0BroadcastCredential, V0DiscoveryCredential, V0},
+        MatchableCredential,
     },
-    de_type::*,
-    legacy::{deserialize::*, ShortMetadataKey},
+    legacy::{
+        data_elements::tx_power::TxPowerDataElement, deserialize::*, V0AdvertisementContents,
+    },
     shared_data::*,
     *,
 };
 use serde::{Deserialize, Serialize};
 
+#[rustfmt::skip]
 #[test]
 fn v0_deser_plaintext() {
     let cred_book = CredentialBookBuilder::<EmptyMatchedCredential>::build_cached_slice_book::<
@@ -41,21 +45,19 @@ fn v0_deser_plaintext() {
     let adv = deserialize_advertisement::<_, CryptoProviderImpl>(
         arena,
         &[
-            0x00, // adv header
-            0x03, // public identity
+            0x00, // version header
             0x15, 0x03, // Length 1 Tx Power DE with value 3
         ],
         &cred_book,
     )
-    .expect("Should be a valid advertisement")
-    .into_v0()
-    .expect("Should be V0");
+        .expect("Should be a valid advertisement")
+        .into_v0()
+        .expect("Should be V0");
 
     match adv {
         V0AdvertisementContents::Plaintext(p) => {
-            assert_eq!(PlaintextIdentityMode::Public, p.identity());
             assert_eq!(
-                vec![PlainDataElement::TxPower(TxPowerDataElement::from(
+                vec![DeserializedDataElement::TxPower(TxPowerDataElement::from(
                     TxPower::try_from(3).unwrap()
                 ))],
                 p.data_elements().collect::<Result<Vec<_>, _>>().unwrap()
@@ -84,42 +86,45 @@ impl IdentityMetadata {
     }
 }
 
+#[rustfmt::skip]
 #[test]
 fn v0_deser_ciphertext() {
     // These are kept fixed in this example for reproducibility.
     // In practice, these should instead be derived from a cryptographically-secure
     // random number generator.
     let key_seed = [0x11_u8; 32];
-    let metadata_key: [u8; NP_LEGACY_METADATA_KEY_LEN] = [0x33; NP_LEGACY_METADATA_KEY_LEN];
-    let metadata_key = ShortMetadataKey(metadata_key);
+    let identity_token = V0IdentityToken::from([0x33; V0_IDENTITY_TOKEN_LEN]);
 
-    let broadcast_cm = SimpleBroadcastCryptoMaterial::<V0>::new(key_seed, metadata_key);
+    let broadcast_cred = V0BroadcastCredential::new(key_seed, identity_token);
 
     let hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
-    let metadata_key_hmac: [u8; 32] =
-        hkdf.legacy_metadata_key_hmac_key().calculate_hmac(&metadata_key.0);
+    let identity_token_hmac: [u8; 32] =
+        hkdf.v0_identity_token_hmac_key().calculate_hmac::<CryptoProviderImpl>(&identity_token.bytes());
 
     // Serialize and encrypt some identity metadata (sender-side)
     let sender_metadata =
         IdentityMetadata { name: "Alice".to_string(), email: "alice@gmail.com".to_string() };
     let sender_metadata_bytes = sender_metadata.to_bytes();
-    let encrypted_sender_metadata = MetadataMatchedCredential::<Vec<u8>>::encrypt_from_plaintext::<
-        _,
-        _,
-        CryptoProviderImpl,
-    >(&broadcast_cm, &sender_metadata_bytes);
+    let encrypted_sender_metadata = MetadataMatchedCredential::<Vec<u8>>::
+    encrypt_from_plaintext::<V0, CryptoProviderImpl>(&hkdf,
+      identity_token,
+      &sender_metadata_bytes);
 
     // output of building a packet using AdvBuilder
     let adv = &[
-        0x00, // adv header
-        0x21, // private DE w/ a 2 byte payload
+        0x04, // version header
         0x22, 0x22, // salt
         // ciphertext for metadata key & txpower DE
-        0x85, 0xBF, 0xA8, 0x83, 0x58, 0x7C, 0x50, 0xCF, 0x98, 0x38, 0xA7, 0x8A, 0xC0, 0x1C, 0x96,
-        0xF9,
+        0xD8, 0x22, 0x12, 0xEF, 0x16, 0xDB, 0xF8, 0x72, 0xF2, 0xA3, 0xA7,
+        0xC0, 0xFA, 0x52, 0x48, 0xEC
     ];
 
-    let discovery_credential = V0DiscoveryCredential::new(key_seed, metadata_key_hmac);
+    // make sure output hasn't changed
+    let mut builder = AdvBuilder::new(LdtEncoder::<CryptoProviderImpl>::new([0x22; 2].into(), &broadcast_cred));
+    builder.add_data_element(TxPowerDataElement::from(TxPower::try_from(3).unwrap())).unwrap();
+    assert_eq!(adv, builder.into_advertisement().unwrap().as_slice());
+
+    let discovery_credential = V0DiscoveryCredential::new(key_seed, identity_token_hmac);
 
     let credentials: [MatchableCredential<V0, MetadataMatchedCredential<_>>; 1] =
         [MatchableCredential { discovery_credential, match_data: encrypted_sender_metadata }];
@@ -134,12 +139,12 @@ fn v0_deser_ciphertext() {
         adv,
         &cred_book,
     )
-    .expect("Should be a valid advertisement")
-    .into_v0()
-    .expect("Should be V0")
+        .expect("Should be a valid advertisement")
+        .into_v0()
+        .expect("Should be V0")
     {
         V0AdvertisementContents::Decrypted(c) => c,
-        _ => panic!("this examples is ciphertext"),
+        _ => panic!("this example is ciphertext"),
     };
 
     let decrypted_metadata_bytes = matched
@@ -152,12 +157,10 @@ fn v0_deser_ciphertext() {
 
     let decrypted = matched.contents();
 
-    assert_eq!(EncryptedIdentityDataElementType::Private, decrypted.identity_type());
-
-    assert_eq!(metadata_key, decrypted.metadata_key());
+    assert_eq!(identity_token, decrypted.identity_token());
 
     assert_eq!(
-        vec![PlainDataElement::TxPower(TxPowerDataElement::from(TxPower::try_from(3).unwrap())),],
+        vec![DeserializedDataElement::TxPower(TxPowerDataElement::from(TxPower::try_from(3).unwrap())),],
         decrypted.data_elements().collect::<Result<Vec<_>, _>>().unwrap(),
     );
 }

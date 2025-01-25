@@ -7,7 +7,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "lacros-amd64-generic-rel",
-              "project": "chromium-m126"
+              "project": "chromium-m128"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-chromiumos-archive",
@@ -31,7 +31,7 @@
                   "checkout_lacros_sdk",
                   "chromeos"
                 ],
-                "config": "chromium_no_telemetry_dependencies"
+                "config": "chromium"
               },
               "skylab_upload_location": {
                 "gs_bucket": "chromium-ci-skylab"
@@ -42,7 +42,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "lacros-amd64-generic-rel-tast",
-              "project": "chromium-m126"
+              "project": "chromium-m128"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-chromiumos-archive",
@@ -66,12 +66,12 @@
                   "checkout_lacros_sdk",
                   "chromeos"
                 ],
-                "config": "chromium_no_telemetry_dependencies"
+                "config": "chromium"
               },
               "parent": {
                 "bucket": "ci",
                 "builder": "lacros-amd64-generic-rel",
-                "project": "chromium-m126"
+                "project": "chromium-m128"
               },
               "skylab_upload_location": {
                 "gs_bucket": "chromium-ci-skylab"
@@ -84,7 +84,7 @@
         {
           "bucket": "ci",
           "builder": "lacros-amd64-generic-rel-tast",
-          "project": "chromium-m126"
+          "project": "chromium-m128"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -92,7 +92,8 @@
           "builder": "lacros-amd64-generic-rel-gtest-and-tast",
           "group": "tryserver.chromium.chromiumos"
         }
-      ]
+      ],
+      "retry_failed_shards": true
     }
   },
   "$recipe_engine/resultdb/test_presentation": {
@@ -103,6 +104,9 @@
     ]
   },
   "builder_group": "chromium.chromiumos",
+  "gardener_rotations": [
+    "chrome_browser_release"
+  ],
   "recipe": "chromium",
   "sheriff_rotations": [
     "chrome_browser_release"

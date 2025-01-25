@@ -20,7 +20,7 @@ class SDLAudioPlayer final : public SDLPlayerBase {
   // player has halted and set |error_status()|.
   SDLAudioPlayer(ClockNowFunctionPtr now_function,
                  TaskRunner& task_runner,
-                 Receiver* receiver,
+                 Receiver& receiver,
                  AudioCodec codec,
                  std::function<void()> error_callback);
 

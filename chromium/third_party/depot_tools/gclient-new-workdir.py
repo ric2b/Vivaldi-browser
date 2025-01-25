@@ -14,6 +14,7 @@ import subprocess
 import sys
 import textwrap
 
+import gclient_utils
 import git_common
 
 
@@ -22,6 +23,9 @@ def parse_options():
         print(
             'ERROR: This script cannot run on Windows because it uses symlinks.'
         )
+        sys.exit(1)
+    if gclient_utils.IsEnvCog():
+        print('ERROR: This script cannot run in non-git environment.')
         sys.exit(1)
 
     parser = argparse.ArgumentParser(description='''\

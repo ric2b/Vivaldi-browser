@@ -19,6 +19,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <iterator>
+#include <memory>
+#include <optional>
 #include <utility>
 
 #include "perfetto/base/logging.h"
@@ -41,6 +43,7 @@ FakeStorageChain::FakeStorageChain(uint32_t size,
 SingleSearchResult FakeStorageChain::SingleSearch(FilterOp,
                                                   SqlValue,
                                                   uint32_t i) const {
+  PERFETTO_CHECK(i < size_);
   switch (strategy_) {
     case kAll:
       return SingleSearchResult::kMatch;
@@ -94,7 +97,7 @@ void FakeStorageChain::IndexSearchValidated(FilterOp,
     case kRange:
       indices.tokens.erase(
           std::remove_if(indices.tokens.begin(), indices.tokens.end(),
-                         [this](const Indices::Token& token) {
+                         [this](const Token& token) {
                            return !range_.Contains(token.index);
                          }),
           indices.tokens.end());
@@ -102,7 +105,7 @@ void FakeStorageChain::IndexSearchValidated(FilterOp,
     case kBitVector:
       indices.tokens.erase(
           std::remove_if(indices.tokens.begin(), indices.tokens.end(),
-                         [this](const Indices::Token& token) {
+                         [this](const Token& token) {
                            return !bit_vector_.IsSet(token.index);
                          }),
           indices.tokens.end());
@@ -111,44 +114,29 @@ void FakeStorageChain::IndexSearchValidated(FilterOp,
   PERFETTO_FATAL("For GCC");
 }
 
-Range FakeStorageChain::OrderedIndexSearchValidated(
-    FilterOp,
-    SqlValue,
-    const OrderedIndices& indices) const {
-  if (strategy_ == kAll) {
-    return {0, indices.size};
-  }
-
-  if (strategy_ == kNone) {
-    return {};
-  }
-
-  if (strategy_ == kRange) {
-    // We are looking at intersection of |range_| and |indices_|.
-    const uint32_t* first_in_range = std::partition_point(
-        indices.data, indices.data + indices.size,
-        [this](uint32_t i) { return !range_.Contains(i); });
-    const uint32_t* first_outside_range =
-        std::partition_point(first_in_range, indices.data + indices.size,
-                             [this](uint32_t i) { return range_.Contains(i); });
-    return {static_cast<uint32_t>(std::distance(indices.data, first_in_range)),
-            static_cast<uint32_t>(
-                std::distance(indices.data, first_outside_range))};
-  }
-
-  PERFETTO_DCHECK(strategy_ == kBitVector);
-  // We are looking at intersection of |range_| and |bit_vector_|.
-  const uint32_t* first_set = std::partition_point(
-      indices.data, indices.data + indices.size,
-      [this](uint32_t i) { return !bit_vector_.IsSet(i); });
-  const uint32_t* first_non_set =
-      std::partition_point(first_set, indices.data + indices.size,
-                           [this](uint32_t i) { return bit_vector_.IsSet(i); });
-  return {static_cast<uint32_t>(std::distance(indices.data, first_set)),
-          static_cast<uint32_t>(std::distance(indices.data, first_non_set))};
+void FakeStorageChain::Distinct(Indices&) const {
+  // Fake storage shouldn't implement Distinct as it's not a binary (this index
+  // passes or not) operation on a column.
+  PERFETTO_FATAL("Not implemented");
 }
 
-void FakeStorageChain::StableSort(SortToken*, SortToken*, SortDirection) const {
+std::optional<Token> FakeStorageChain::MaxElement(Indices&) const {
+  PERFETTO_FATAL("Not implemented");
+}
+std::optional<Token> FakeStorageChain::MinElement(Indices&) const {
+  PERFETTO_FATAL("Not implemented");
+}
+
+void FakeStorageChain::StableSort(Token*, Token*, SortDirection) const {
+  PERFETTO_FATAL("Not implemented");
+}
+
+std::unique_ptr<DataLayer> FakeStorageChain::Flatten(
+    std::vector<uint32_t>&) const {
+  return std::unique_ptr<DataLayer>();
+}
+
+SqlValue FakeStorageChain::Get_AvoidUsingBecauseSlow(uint32_t) const {
   PERFETTO_FATAL("Not implemented");
 }
 

@@ -370,6 +370,14 @@ void VideoConferenceTrayController::OnSpeakOnMuteNudgeOptInAction(bool opt_in) {
   ToastManager::Get()->Show(std::move(toast_data));
 }
 
+void VideoConferenceTrayController::OnDlcDownloadStateFetched(
+    bool add_warning,
+    const std::u16string& feature_tile_title) {
+  for (auto& observer : observer_list_) {
+    observer.OnDlcDownloadStateChanged(add_warning, feature_tile_title);
+  }
+}
+
 void VideoConferenceTrayController::CloseAllVcNudges() {
   for (size_t i = 0; i < std::size(kNudgeIds); ++i) {
     AnchoredNudgeManager::Get()->Cancel(kNudgeIds[i]);
@@ -391,6 +399,30 @@ bool VideoConferenceTrayController::GetHasCameraPermissions() const {
 
 bool VideoConferenceTrayController::GetHasMicrophonePermissions() const {
   return state_.has_microphone_permission;
+}
+
+void VideoConferenceTrayController::UpdateSidetoneSupportedState() {
+  CrasAudioHandler::Get()->UpdateSidetoneSupportedState();
+}
+
+bool VideoConferenceTrayController::IsSidetoneSupported() const {
+  return CrasAudioHandler::Get()->IsSidetoneSupported();
+}
+
+bool VideoConferenceTrayController::GetSidetoneEnabled() const {
+  return CrasAudioHandler::Get()->GetSidetoneEnabled();
+}
+
+void VideoConferenceTrayController::SetSidetoneEnabled(bool enabled) {
+  CrasAudioHandler::Get()->SetSidetoneEnabled(enabled);
+}
+
+void VideoConferenceTrayController::SetEwmaPowerReportEnabled(bool enabled) {
+  CrasAudioHandler::Get()->SetEwmaPowerReportEnabled(enabled);
+}
+
+double VideoConferenceTrayController::GetEwmaPower() {
+  return CrasAudioHandler::Get()->GetEwmaPower();
 }
 
 bool VideoConferenceTrayController::IsCapturingScreen() const {
@@ -902,7 +934,7 @@ void VideoConferenceTrayController::DisplayUsedWhileDisabledNudge(
       anchor_view = active_vc_tray->audio_icon();
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
   }
 
@@ -929,7 +961,7 @@ VideoConferenceTrayController::GetUsedWhileDisabledNudgeType(
           kMicrophone;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       type = VideoConferenceTrayController::UsedWhileDisabledNudgeType::kCamera;
   }
 

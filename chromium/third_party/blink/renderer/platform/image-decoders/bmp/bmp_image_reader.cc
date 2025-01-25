@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/image-decoders/bmp/bmp_image_reader.h"
 
 #include "third_party/blink/renderer/platform/image-decoders/jpeg/jpeg_image_decoder.h"
@@ -514,7 +519,7 @@ bool BMPImageReader::IsInfoHeaderValid() const {
     default:
       // Some type we don't understand.  This should have been caught in
       // ReadInfoHeader().
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 

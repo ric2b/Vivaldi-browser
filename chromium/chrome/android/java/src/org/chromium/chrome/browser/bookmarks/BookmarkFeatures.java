@@ -22,8 +22,4 @@ public class BookmarkFeatures {
         }
         return false;
     }
-
-    public static boolean isNewStartPageEnabled() {
-        return ChromeFeatureList.sAndroidNewStartPage.isEnabled();
-    }
 }

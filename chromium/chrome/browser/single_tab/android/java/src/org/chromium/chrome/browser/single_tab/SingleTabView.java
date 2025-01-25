@@ -11,6 +11,7 @@ import android.graphics.Matrix;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
+import android.view.View;
 import android.widget.ImageView;
 import android.widget.ImageView.ScaleType;
 import android.widget.LinearLayout;
@@ -18,11 +19,12 @@ import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 
+import org.chromium.chrome.browser.magic_stack.HomeModulesMetricsUtils;
 import org.chromium.chrome.browser.tab_ui.TabThumbnailView;
-import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 
 /** View of the tab on the single tab tab switcher. */
 class SingleTabView extends LinearLayout {
+    @Nullable private TextView mSeeMoreLinkView;
     private ImageView mFavicon;
     private TextView mTitle;
     @Nullable private TabThumbnailView mTabThumbnail;
@@ -37,20 +39,20 @@ class SingleTabView extends LinearLayout {
     protected void onFinishInflate() {
         super.onFinishInflate();
 
+        mSeeMoreLinkView = findViewById(R.id.tab_switcher_see_more_link);
         mFavicon = findViewById(R.id.tab_favicon_view);
         mTitle = findViewById(R.id.tab_title_view);
         mTabThumbnail = findViewById(R.id.tab_thumbnail);
         mUrl = findViewById(R.id.tab_url_view);
 
         if (mTabThumbnail != null) {
-            if (StartSurfaceConfiguration.useMagicStack()) {
+            if (HomeModulesMetricsUtils.useMagicStack()) {
                 Resources resources = getResources();
                 MarginLayoutParams marginLayoutParams =
                         (MarginLayoutParams) mTabThumbnail.getLayoutParams();
                 int size =
                         resources.getDimensionPixelSize(
-                                org.chromium.chrome.browser.tab_ui.R.dimen
-                                        .single_tab_module_tab_thumbnail_size_big);
+                                R.dimen.single_tab_module_tab_thumbnail_size_big);
                 marginLayoutParams.width = size;
                 marginLayoutParams.height = size;
 
@@ -88,7 +90,22 @@ class SingleTabView extends LinearLayout {
     }
 
     /**
+     * Set the listener for "See more" link, which gets shown if `listener` is non-null.
+     *
+     * @param listener The given listener.
+     */
+    public void setOnSeeMoreLinkClickListener(@Nullable Runnable listener) {
+        if (mSeeMoreLinkView != null) {
+            mSeeMoreLinkView.setVisibility((listener != null) ? View.VISIBLE : View.GONE);
+            if (listener != null) {
+                mSeeMoreLinkView.setOnClickListener(v -> listener.run());
+            }
+        }
+    }
+
+    /**
      * Set the favicon.
+     *
      * @param favicon The given favicon {@link Drawable}.
      */
     public void setFavicon(Drawable favicon) {

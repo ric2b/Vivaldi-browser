@@ -28,7 +28,6 @@
 #include "third_party/blink/renderer/platform/bindings/v8_throw_exception.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/subresource_integrity.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -155,7 +154,7 @@ KURL ModulatorImplBase::ResolveModuleSpecifier(const String& specifier,
 
   switch (parsed_specifier.GetType()) {
     case ParsedSpecifier::Type::kInvalid:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return KURL();
 
     case ParsedSpecifier::Type::kBare:

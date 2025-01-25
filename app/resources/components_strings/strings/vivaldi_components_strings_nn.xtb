@@ -15,7 +15,6 @@
 <translation id="1728677426644403582">Du ser på kjeldekoden til ei nettside</translation>
 <translation id="1734878702283171397">Prøv å kontakta systemadministratoren.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Prøv å køyra Windows-nettverksdiagnostikk<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">Denne nettstaden inneheld skadelege program</translation>
 <translation id="1974060860693918893">Avansert</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />sjå over mellomtenaren og brannmuren<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Utferda til: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -40,7 +39,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />køyr tilkoplingsdiagnostikk<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Sambandet vart nullstilt.</translation>
 <translation id="2826760142808435982">Sambandet er kryptert og autentisert ved å bruka <ph name="CIPHER" /> og nyttar <ph name="KX" /> som nøkkelutvekslingsmekanisme.</translation>
-<translation id="2856444702002559011">Åtakarar vil kanskje prøva å stela opplysningane dine frå <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (t.d. passord, meldingar eller kredittkort). <ph name="BEGIN_LEARN_MORE_LINK" />Lær meir<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Oppdaga ei nettverksendring.</translation>
 <translation id="2948083400971632585">Du kan slå av mellomtenarar som er i bruk på eit samband frå innstillingssida.</translation>
 <translation id="2991571918955627853">Du kan ikkje besøkja <ph name="SITE" /> nett no fordi nettstaden bruker HSTS. Nettverksfeil og -åtak er ofte mellombelse, so denne sida vil sannsynlegvis fungera seinare.</translation>
@@ -88,7 +86,6 @@
 <translation id="4265872034478892965">Tillate av administratoren din</translation>
 <translation id="4305666528087210886">Fikk ikkje tilgang til fila</translation>
 <translation id="4312866146174492540">Blokker (standard)</translation>
-<translation id="4356973930735388585">Åtakarar på denne nettstaden vil kanskje prøva å installera farlege program på maskina di som stel eller slettar opplysningane dine (t.d. bilde, passord, meldingar og kredittkort).</translation>
 <translation id="4408413947728134509">Informasjonskapslar <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> godtok ikkje påloggingssertifikatet ditt eller det vart ikkje oppgjeve.</translation>
 <translation id="4506599922270137252">kontakt systemadministratoren</translation>
@@ -140,7 +137,6 @@
 <translation id="6305205051461490394">Klarer ikkje å nå <ph name="URL" />.</translation>
 <translation id="6321917430147971392">Sjå over DNS-innstillingane</translation>
 <translation id="6328639280570009161">Prøv å slå av nettverksforslag</translation>
-<translation id="6328786501058569169">Denne nettstaden er sviksam</translation>
 <translation id="6348220984832452017">Aktive variantar</translation>
 <translation id="6358450015545214790">Kva betyr desse?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> nekta å kopla seg til.</translation>
@@ -152,7 +148,6 @@
 <translation id="6757797048963528358">Eininga di er i kvilemodus.</translation>
 <translation id="6897140037006041989">Brukaragent</translation>
 <translation id="7053983685419859001">Blokker</translation>
-<translation id="7079718277001814089">Denne nettstaden inneheld skadeprogram</translation>
 <translation id="7096937462164235847">Identiteten til denne nettstaden er ikkje stadfesta.</translation>
 <translation id="7108819624672055576">Tillate av ei utviding</translation>
 <translation id="7111012039238467737">(Gyldig)</translation>
@@ -169,7 +164,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" />klarer ikkje å behandla denne førespurnaden no.</translation>
 <translation id="7662298039739062396">Innstillinga er kontrollert av ei utviding</translation>
 <translation id="7663736086183791259">Sertifikat <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Åtakarar på denne nettstaden vil kanskje prøva å lura deg til å installera program som vil skada internettopplevinga di (t.d. ved å endra heimesida di eller visa ekstra annonsar på sidene du besøkjer).</translation>
 <translation id="7714464543167945231">Sertifikat</translation>
 <translation id="7716147886133743102">Blokkert av administratoren din</translation>
 <translation id="7716424297397655342">Denne nettstaden kan ikkje lastast frå mellomlageret</translation>
@@ -178,7 +172,6 @@
 <translation id="7834399512844817676"><ph name="SITE" /> bruker vanlegvis kryptering for å verna opplysningane dine. Då Vivaldi denne gongen prøvde å kopla til <ph name="SITE" />, sende nettstaden attende uvanleg og feil påloggingsinformasjon. Dette kan skje om ein åtakar prøver å stå fram som <ph name="SITE" /> eller ein påloggingsskjerm for trådlaust nettverk har brote seg inn på sambandet. Opplysningane dine er framleis trygge fordi Vivaldi stoppa sambandet før data vart utveksla.</translation>
 <translation id="7878562273885520351">Passordet ditt er kanskje blitt avslørt</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
-<translation id="8025119109950072390">Åtakarar på denne nettstaden vil kanskje prøva å lura deg til å gjera noko farleg som å installera program eller avsløra opplysningane dine (t.d. passord, telefonnummer eller kredittkort).</translation>
 <translation id="8037357227543935929">Spør (standard)</translation>
 <translation id="8041940743680923270">Bruk systemstandarden (spør)</translation>
 <translation id="808894953321890993">Endra passordet</translation>

@@ -16,7 +16,6 @@
 <translation id="1728677426644403582">Siz səhifənin koduna baxırsınız</translation>
 <translation id="1734878702283171397">Sistem inzibatçısına müraciət edin.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windows çəbəkəsinin diaqnostikasını başladın<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">Sayt zərərli proqramlardan ibarətdir</translation>
 <translation id="1974060860693918893">Daha ətraflı</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proksi və təhlükəsizlik divarının yoxlanılması<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Verildi: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -42,7 +41,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Bağlantı diaqnostika edilir<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Bağlantı sıflrlandı.</translation>
 <translation id="2826760142808435982">Bağlantı <ph name="CIPHER" /> istifadə edərək şifrələnib və doğrulanıb və açar mübadiləsi mexanizmi kimi <ph name="KX" /> istifadə edir.</translation>
-<translation id="2856444702002559011">Haker hücumu edənlər sizin məlumatlarınızı <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (məsələn, şifrələrinizi, ismarıclarınızı, məktublarınızı, bank kartı məlumatlarını) saytından ələ keçirə bilərlər. <ph name="BEGIN_LEARN_MORE_LINK" />Daha ətraflı...<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Şəbəkə dəyişikliyi aşkar edildi.</translation>
 <translation id="2948083400971632585">Ayarlar səhifəsindən hər hansı proksi serveri söndürə bilərsiniz.</translation>
 <translation id="2991571918955627853">İndi siz <ph name="SITE" /> saytına daxil ola bilməzsiniz, çünki sayt HSTS mexanizmindən istifadə edir. Şəbəkə xətası və sayta kənar hücumlar səbəbi ilə yaranan problem adətən müvəqqəti xarakter daşıyır. Yəqin ki, sayt bir müddət sonra işini bərpa edəcək.</translation>
@@ -92,7 +90,6 @@
 <translation id="4265872034478892965">İnzibatçınız tərəfindən icazə verildi</translation>
 <translation id="4305666528087210886">Faylınıza giriş mümkün olmadı</translation>
 <translation id="4312866146174492540">Əngəlləmək (susmaya görə)</translation>
-<translation id="4356973930735388585">Haker hücümu edənlər bu saytı kompyuterinizə Sizin məlumatlarınızı məs., şəkillər, şifrələr,ismarıc və bank rekvizitləri) oğurlayacaq zərərli proqram təminatıları quraşdırmaq üçün istifadə edə bilərlər.</translation>
 <translation id="4408413947728134509"><ph name="NUM_COOKIES" /> kukiləri</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" />sizin sertifikatınızı qəbul etmədi və ya sertifikat təqdim edilməyib.</translation>
 <translation id="4506599922270137252">Sistem inzibatçınızla əlaqə saxlayın</translation>
@@ -144,7 +141,6 @@
 <translation id="6305205051461490394"><ph name="URL" /> əlçatan deyil.</translation>
 <translation id="6321917430147971392">DNS ayarlarını yoxlayın</translation>
 <translation id="6328639280570009161">Şəbəkə fəaliyyəti proqnozunu söndürün</translation>
-<translation id="6328786501058569169">Bu sayt saxtadır</translation>
 <translation id="6348220984832452017">Aktiv variantlar</translation>
 <translation id="6358450015545214790">Bu nə deməkdir?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> bağlantıya imkan vermir.</translation>
@@ -158,7 +154,6 @@
 <translation id="6897140037006041989">User Agent</translation>
 <translation id="6957624206566198865">Səhifəni yeni gizli vərəqdə açın</translation>
 <translation id="7053983685419859001">Əngəlləmək</translation>
-<translation id="7079718277001814089">Saytda zərərli proqram təminatı var</translation>
 <translation id="7096937462164235847">Bu veb saytın etibarlılığı doğrulanmayıb.</translation>
 <translation id="7108819624672055576">Qoşma tərəfindən icazə verildi</translation>
 <translation id="7111012039238467737">(doğru)</translation>
@@ -175,7 +170,6 @@
 <translation id="759889825892636187">Hal-hazırda <ph name="HOST_NAME" /> bu sorğunu icra edə bilmir.</translation>
 <translation id="7662298039739062396">Bu ayar qoşma tərəfindən idarə olunur</translation>
 <translation id="7663736086183791259"><ph name="CERTIFICATE_VALIDITY" /> sertifikatı</translation>
-<translation id="7669271284792375604">Bu saytdakı təcavüzkarlar Sizə zərər verə biləcək proqramlar quraşdırmağa cəhd edə bilərlər (məsələn, ana səhifənizi dəyişdirərək və ya daxil olduğunuz saytlarda əlavə reklam göstərməklə).</translation>
 <translation id="7714464543167945231">Sertifikat</translation>
 <translation id="7716147886133743102">İnzibatçı tərəfindən əngəllənib</translation>
 <translation id="7716424297397655342">Sayt keşdən yüklənə bilmədi</translation>
@@ -185,7 +179,6 @@
 <translation id="7878562273885520351">Şifrəniz üçüncü tərəfin əlinə keçə bilər</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="7953236668995583915">Bu saytda yenilənmiş ayarların tətbiqi üçün bu səhifəni yenidən yükləyin</translation>
-<translation id="8025119109950072390">Bu sayta səyahət zərərli proqram təminatının quraşdırılmasına və şəxsi məlumatlarınızın (məs., şifrələr, telefon nömrələri və bank kartı məlumatları) oğurlanmasına səbəb ola bilər.</translation>
 <translation id="8037357227543935929">Soruşmaq (standart)</translation>
 <translation id="8041940743680923270">Ümumi istifadə etmək (soruşulsun)</translation>
 <translation id="808894953321890993">Şifrəni dəyişin</translation>

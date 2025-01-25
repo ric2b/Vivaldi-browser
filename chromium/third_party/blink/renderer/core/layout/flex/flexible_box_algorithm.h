@@ -28,6 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_FLEX_FLEXIBLE_BOX_ALGORITHM_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_FLEX_FLEXIBLE_BOX_ALGORITHM_H_
 
@@ -38,8 +43,8 @@
 #include "third_party/blink/renderer/core/layout/layout_result.h"
 #include "third_party/blink/renderer/core/layout/min_max_sizes.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
-#include "third_party/blink/renderer/platform/geometry/layout_point.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
+#include "third_party/blink/renderer/platform/geometry/physical_direction.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -55,13 +60,6 @@ struct NGFlexLine;
 enum FlexSign {
   kPositiveFlexibility,
   kNegativeFlexibility,
-};
-
-enum class TransformedWritingMode {
-  kTopToBottomWritingMode,
-  kRightToLeftWritingMode,
-  kLeftToRightWritingMode,
-  kBottomToTopWritingMode
 };
 
 typedef HeapVector<FlexItem, 8> FlexItemVector;
@@ -119,10 +117,16 @@ class FlexItem {
 
   bool MainAxisIsInlineAxis() const;
 
+  // Returns the main-start margin value.
   LayoutUnit FlowAwareMarginStart() const;
+  // Returns the main-end margin value.
   LayoutUnit FlowAwareMarginEnd() const;
+  // Returns the cross-start margin value ignoring flex-wrap.
   LayoutUnit FlowAwareMarginBefore() const;
+  // Returns the cross-end margin value ignoring flex-wrap.
   LayoutUnit FlowAwareMarginAfter() const;
+  // Returns the margin value on the block-end in the container writing-mode.
+  // This isn't aware of `flex-direction` and `flex-wrap`.
   LayoutUnit MarginBlockEnd() const;
 
   LayoutUnit MainAxisMarginExtent() const;
@@ -360,8 +364,12 @@ class CORE_EXPORT FlexibleBoxAlgorithm {
   bool IsMultiline() const { return style_->FlexWrap() != EFlexWrap::kNowrap; }
   static bool IsHorizontalFlow(const ComputedStyle&);
   static bool IsColumnFlow(const ComputedStyle&);
+  // Returns true if the main axis faces right or bottom.
   bool IsLeftToRightFlow() const;
-  TransformedWritingMode GetTransformedWritingMode() const;
+  // Returns the physical direction of the cross axis.
+  // This function is aware of `writing-mode`, `flex-direction`, and
+  // no `flex-wrap`.
+  PhysicalDirection GetPhysicalDirection() const;
 
   bool ShouldApplyMinSizeAutoForChild(const LayoutBox& child) const;
 
@@ -387,8 +395,6 @@ class CORE_EXPORT FlexibleBoxAlgorithm {
   void FlipForWrapReverse(LayoutUnit cross_axis_start_edge,
                           LayoutUnit cross_axis_content_size,
                           HeapVector<NGFlexLine>* flex_line_outputs = nullptr);
-
-  static TransformedWritingMode GetTransformedWritingMode(const ComputedStyle&);
 
   static const StyleContentAlignmentData& ContentAlignmentNormalBehavior();
   static StyleContentAlignmentData ResolvedJustifyContent(const ComputedStyle&);

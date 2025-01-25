@@ -10,12 +10,15 @@
 #include <type_traits>
 
 #include "src/base/utils/random-number-generator.h"
+#include "src/common/globals.h"
 #include "src/compiler/backend/instruction-selector.h"
+#include "src/compiler/globals.h"
 #include "src/compiler/turboshaft/assembler.h"
 #include "src/compiler/turboshaft/index.h"
 #include "src/compiler/turboshaft/instruction-selection-normalization-reducer.h"
 #include "src/compiler/turboshaft/load-store-simplification-reducer.h"
 #include "src/compiler/turboshaft/operations.h"
+#include "src/compiler/turboshaft/phase.h"
 #include "src/compiler/turboshaft/representations.h"
 #include "test/unittests/test-utils.h"
 
@@ -115,12 +118,13 @@ class TurboshaftInstructionSelectorTest : public TestWithNativeContextAndZone {
   TurboshaftInstructionSelectorTest();
   ~TurboshaftInstructionSelectorTest() override;
 
+  ZoneStats zone_stats_{this->zone()->allocator()};
+
   void SetUp() override {
     pipeline_data_ = std::make_unique<PipelineData>(
-        TurboshaftPipelineKind::kJS, info_, schedule_, graph_zone_,
-        this->zone(), broker_, isolate_, source_positions_, node_origins_,
-        sequence_, frame_, assembler_options_, &max_unoptimized_frame_height_,
-        &max_pushed_argument_count_, instruction_zone_);
+        &zone_stats_, TurboshaftPipelineKind::kJS, isolate_, nullptr,
+        AssemblerOptions::Default(isolate_));
+    pipeline_data_->InitializeGraphComponent(nullptr);
   }
   void TearDown() override { pipeline_data_.reset(); }
 
@@ -193,8 +197,8 @@ class TurboshaftInstructionSelectorTest : public TestWithNativeContextAndZone {
                  InstructionSelector::SourcePositionMode source_position_mode =
                      InstructionSelector::kAllSourcePositions);
 
-    const FrameStateFunctionInfo* GetFrameStateFunctionInfo(int parameter_count,
-                                                            int local_count);
+    const FrameStateFunctionInfo* GetFrameStateFunctionInfo(
+        uint16_t parameter_count, int local_count);
 
     // Create a simple call descriptor for testing.
     static CallDescriptor* MakeSimpleCallDescriptor(Zone* zone,
@@ -246,7 +250,8 @@ class TurboshaftInstructionSelectorTest : public TestWithNativeContextAndZone {
     static const TSCallDescriptor* MakeSimpleTSCallDescriptor(
         Zone* zone, MachineSignature* msig) {
       return TSCallDescriptor::Create(MakeSimpleCallDescriptor(zone, msig),
-                                      CanThrow::kYes, zone);
+                                      CanThrow::kYes, LazyDeoptOnThrow::kNo,
+                                      zone);
     }
 
     CallDescriptor* call_descriptor() { return call_descriptor_; }
@@ -316,17 +321,20 @@ class TurboshaftInstructionSelectorTest : public TestWithNativeContextAndZone {
     V<Word32> Uint64GreaterThan(V<Word64> a, V<Word64> b) {
       return Uint64LessThan(b, a);
     }
-    using Assembler::Parameter;
     OpIndex Parameter(int index) {
-      return Parameter(index, RegisterRepresentation::FromMachineType(
-                                  call_descriptor()->GetParameterType(index)));
+      return Assembler::Parameter(
+          index, RegisterRepresentation::FromMachineType(
+                     call_descriptor()->GetParameterType(index)));
+    }
+    OpIndex Parameter(int index, RegisterRepresentation rep) {
+      return Assembler::Parameter(index, rep);
     }
     template <typename T>
     V<T> Parameter(int index) {
       RegisterRepresentation rep = RegisterRepresentation::FromMachineType(
           call_descriptor()->GetParameterType(index));
       DCHECK_EQ(rep, v_traits<T>::rep);
-      return Parameter(index, rep);
+      return Assembler::Parameter(index, rep);
     }
     using Assembler::Phi;
     template <typename... Args,
@@ -548,21 +556,7 @@ class TurboshaftInstructionSelectorTest : public TestWithNativeContextAndZone {
 
   Graph& graph() { return pipeline_data_->graph(); }
 
-  // We use some dummy data to initialize the PipelineData::Scope.
-  // TODO(nicohartmann@): Clean this up once PipelineData is reorganized.
-  OptimizedCompilationInfo* info_ = nullptr;
-  Schedule* schedule_ = nullptr;
-  Zone* graph_zone_ = this->zone();
-  JSHeapBroker* broker_ = nullptr;
   Isolate* isolate_ = this->isolate();
-  SourcePositionTable* source_positions_ = nullptr;
-  NodeOriginTable* node_origins_ = nullptr;
-  InstructionSequence* sequence_ = nullptr;
-  Frame* frame_ = nullptr;
-  AssemblerOptions assembler_options_;
-  size_t max_unoptimized_frame_height_ = 0;
-  size_t max_pushed_argument_count_ = 0;
-  Zone* instruction_zone_ = this->zone();
 
   std::unique_ptr<turboshaft::PipelineData> pipeline_data_;
 };

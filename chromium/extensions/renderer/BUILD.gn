@@ -218,8 +218,6 @@ source_set("renderer") {
     "storage_area.h",
     "test_features_native_handler.cc",
     "test_features_native_handler.h",
-    "test_native_handler.cc",
-    "test_native_handler.h",
     "trace_util.h",
     "user_gestures_native_handler.cc",
     "user_gestures_native_handler.h",
@@ -236,8 +234,6 @@ source_set("renderer") {
     "v8_helpers.h",
     "v8_schema_registry.cc",
     "v8_schema_registry.h",
-    "wake_event_page.cc",
-    "wake_event_page.h",
     "web_ui_injection_host.cc",
     "web_ui_injection_host.h",
     "worker_script_context_set.cc",
@@ -275,9 +271,9 @@ source_set("renderer") {
     "//storage/common",
     "//third_party/blink/public:blink",
     "//third_party/blink/public/common",
-    "//third_party/blink/public/strings:accessibility_strings",
     "//third_party/cld_3/src/src:cld_3",
     "//third_party/zlib/google:compression_utils",
+    "//ui/strings:auto_image_annotation_strings_grit",
   ]
 
   if (enable_pdf) {

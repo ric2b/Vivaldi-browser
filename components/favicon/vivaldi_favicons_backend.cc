@@ -14,9 +14,9 @@ namespace favicon {
 namespace {
 
 struct VivaldiPreloadedFavicon {
-  base::StringPiece page_url;
-  base::StringPiece favicon_url;
-  base::StringPiece favicon_png_base64;
+  std::string_view page_url;
+  std::string_view favicon_url;
+  std::string_view favicon_png_base64;
 };
 
 #include "components/favicon/vivaldi_preloaded_favicons.inc"

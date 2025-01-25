@@ -1,5 +1,5 @@
-set(AVIF_LOCAL_AOM_GIT_TAG v3.9.0)
-set(AVIF_LOCAL_AVM_GIT_TAG research-v6.0.0)
+set(AVIF_LOCAL_AOM_GIT_TAG v3.9.1)
+set(AVIF_LOCAL_AVM_GIT_TAG research-v7.0.1)
 
 if(AVIF_CODEC_AVM)
     # Building the avm repository generates files such as "libaom.a" because it is a fork of aom,
@@ -91,9 +91,6 @@ else()
     set(ENABLE_TESTDATA 0 CACHE INTERNAL "")
     set(ENABLE_TESTS 0 CACHE INTERNAL "")
     set(ENABLE_TOOLS 0 CACHE INTERNAL "")
-    if(NOT CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL CMAKE_SYSTEM_PROCESSOR)
-        set(CONFIG_RUNTIME_CPU_DETECT 0 CACHE INTERNAL "")
-    endif()
     if(CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
         set(AOM_TARGET_CPU "arm64")
     endif()

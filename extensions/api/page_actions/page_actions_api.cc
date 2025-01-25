@@ -24,7 +24,6 @@ FromVivaldiPageActionsScriptOverride(
       return page_actions::Service::kDisabledOverride;
     default:
       NOTREACHED();
-      return std::nullopt;
   }
 }
 }  // namespace

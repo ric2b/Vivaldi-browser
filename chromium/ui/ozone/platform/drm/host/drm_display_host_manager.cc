@@ -25,6 +25,7 @@
 #include "ui/events/ozone/device/device_manager.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/common/drm_wrapper.h"
+#include "ui/ozone/platform/drm/common/hardware_display_controller_info.h"
 #include "ui/ozone/platform/drm/host/drm_display_host.h"
 #include "ui/ozone/platform/drm/host/drm_native_display_delegate.h"
 #include "ui/ozone/platform/drm/host/gpu_thread_adapter.h"
@@ -278,6 +279,7 @@ DrmDisplayHostManager::DrmDisplayHostManager(
   proxy_->AddGpuThreadObserver(this);
 
   auto display_infos = GetAvailableDisplayControllerInfos(*primary_drm_device_);
+  ConsolidateTiledDisplayInfo(display_infos);
   has_dummy_display_ = !display_infos.empty();
   MapEdidIdToDisplaySnapshot edid_id_collision_map;
   for (auto& display_info : display_infos) {

@@ -28,7 +28,9 @@
 TEST_F(NpCppTest, ByteBufferMaxLength) {
   // Each hex byte takes up 2 characters so length 510 string = 255 bytes of hex
   auto str_bytes = generate_hex_string(510);
-  auto bytes = absl::HexStringToBytes(str_bytes);
+
+  std::string bytes;
+  ASSERT_TRUE(absl::HexStringToBytes(str_bytes, &bytes));
   auto buffer = nearby_protocol::ByteBuffer<
       nearby_protocol::MAX_ADV_PAYLOAD_SIZE>::TryFromString(bytes);
   ASSERT_TRUE(buffer.ok());
@@ -81,14 +83,16 @@ TEST_F(NpCppTest, ByteBufferTryFromSpanArrayInvalid) {
 TEST_F(NpCppTest, ByteBufferInvalidLength) {
   // 256 bytes should fail
   auto str_bytes = generate_hex_string(512);
-  auto bytes = absl::HexStringToBytes(str_bytes);
+  std::string bytes;
+  ASSERT_TRUE(absl::HexStringToBytes(str_bytes, &bytes));
   auto buffer = nearby_protocol::ByteBuffer<
       nearby_protocol::MAX_ADV_PAYLOAD_SIZE>::TryFromString(bytes);
   ASSERT_FALSE(buffer.ok());
 }
 
 TEST_F(NpCppTest, ByteBufferRoundTrip) {
-  auto bytes = absl::HexStringToBytes("2003031503");
+  std::string bytes;
+  ASSERT_TRUE(absl::HexStringToBytes("2003031503", &bytes));
   auto buffer = nearby_protocol::ByteBuffer<
       nearby_protocol::MAX_ADV_PAYLOAD_SIZE>::TryFromString(bytes);
   auto string = buffer.value().ToString();
@@ -96,19 +100,22 @@ TEST_F(NpCppTest, ByteBufferRoundTrip) {
 }
 
 TEST_F(NpCppTest, ByteBufferPayloadWrongSize) {
-  auto bytes = absl::HexStringToBytes("1111111111111111111111");
+  std::string bytes;
+  ASSERT_TRUE(absl::HexStringToBytes("1111111111111111111111", &bytes));
   auto buffer = nearby_protocol::ByteBuffer<10>::TryFromString(bytes);
   ASSERT_FALSE(buffer.ok());
 }
 
 TEST_F(NpCppTest, ByteBufferEmptyString) {
-  auto bytes = absl::HexStringToBytes("");
+  std::string bytes;
+  ASSERT_TRUE(absl::HexStringToBytes("", &bytes));
   auto buffer = nearby_protocol::ByteBuffer<10>::TryFromString(bytes);
   ASSERT_TRUE(buffer.ok());
 }
 
 TEST_F(NpCppTest, ByteBufferToVector) {
-  auto bytes = absl::HexStringToBytes("1234567890");
+  std::string bytes;
+  ASSERT_TRUE(absl::HexStringToBytes("1234567890", &bytes));
   auto buffer = nearby_protocol::ByteBuffer<100>::TryFromString(bytes);
   auto vec = buffer.value().ToVector();
   const std::vector<uint8_t> expected{0x12, 0x34, 0x56, 0x78, 0x90};
@@ -116,17 +123,21 @@ TEST_F(NpCppTest, ByteBufferToVector) {
 }
 
 TEST_F(NpCppTest, ByteBufferEndToEndPayloadAsString) {
-  const std::string bytes = absl::HexStringToBytes("2003031503");
+  std::string bytes;
+  ASSERT_TRUE(
+      absl::HexStringToBytes("20"     // NP Version Header V1
+                             "00"     // Format = unencrypted
+                             "02"     // section length = 2
+                             "1503",  // tx power value 3
+                             &bytes));
   auto buffer = nearby_protocol::ByteBuffer<
       nearby_protocol::MAX_ADV_PAYLOAD_SIZE>::TryFromString(bytes);
   ASSERT_TRUE(buffer.ok());
 
   const nearby_protocol::RawAdvertisementPayload adv(buffer.value());
 
-  auto credential_slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto credential_book =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(credential_slab)
-          .value();
+  nearby_protocol::CredentialSlab credential_slab;
+  nearby_protocol::CredentialBook credential_book(credential_slab);
   auto str = nearby_protocol::Deserializer::DeserializeAdvertisement(
                  adv, credential_book)
                  .IntoV1()
@@ -136,6 +147,9 @@ TEST_F(NpCppTest, ByteBufferEndToEndPayloadAsString) {
                  .value()
                  .GetPayload()
                  .ToString();
-  ASSERT_EQ(str, absl::HexStringToBytes("03"));
+
+  std::string expected;
+  ASSERT_TRUE(absl::HexStringToBytes("03", &expected));
+  ASSERT_EQ(str, expected);
 }
 // NOLINTEND(readability-magic-numbers)

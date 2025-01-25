@@ -5,16 +5,11 @@
 #ifndef CONTENT_BROWSER_NAVIGATION_SUBRESOURCE_LOADER_PARAMS_H_
 #define CONTENT_BROWSER_NAVIGATION_SUBRESOURCE_LOADER_PARAMS_H_
 
-#include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "third_party/blink/public/mojom/navigation/prefetched_signed_exchange_info.mojom.h"
-#include "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom.h"
 
 namespace content {
-
-class ServiceWorkerClient;
-class ServiceWorkerObjectHost;
 
 // For NetworkService glues:
 // Navigation parameters that are necessary to set-up a subresource loader
@@ -27,22 +22,6 @@ struct CONTENT_EXPORT SubresourceLoaderParams {
 
   SubresourceLoaderParams(SubresourceLoaderParams&& other);
   SubresourceLoaderParams& operator=(SubresourceLoaderParams&& other);
-
-  // For ServiceWorkers.
-  // The controller service worker, non-null if the frame is to be
-  // controlled by the service worker.
-  //
-  // |controller_service_worker_info->object_info| is "incomplete". It must be
-  // updated before being sent over Mojo and then registered with
-  // |controller_service_worker_object_host|. See
-  // ServiceWorkerObjectHost::CreateIncompleteObjectInfo() for details.
-  blink::mojom::ControllerServiceWorkerInfoPtr controller_service_worker_info;
-  base::WeakPtr<ServiceWorkerObjectHost> controller_service_worker_object_host;
-
-  // For `NavigationURLLoaderImpl` only, to detect the controller lost and
-  // cancel ServiceWorker subresource interception. See the comment in
-  // `NavigationURLLoaderImpl::NotifyResponseStarted()` for details.
-  base::WeakPtr<ServiceWorkerClient> service_worker_client;
 
   // When signed exchanges were prefetched in the previous page and were stored
   // to the PrefetchedSignedExchangeCache, and the main resource for the

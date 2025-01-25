@@ -24,6 +24,7 @@
 #include "perfetto/trace_processor/basic_types.h"
 #include "src/trace_processor/importers/common/args_tracker.h"
 #include "src/trace_processor/importers/common/async_track_set_tracker.h"
+#include "src/trace_processor/importers/common/cpu_tracker.h"
 #include "src/trace_processor/importers/common/metadata_tracker.h"
 #include "src/trace_processor/importers/common/parser_types.h"
 #include "src/trace_processor/importers/common/process_tracker.h"
@@ -45,10 +46,12 @@
 
 #include "protos/perfetto/common/gpu_counter_descriptor.pbzero.h"
 #include "protos/perfetto/trace/ftrace/android_fs.pbzero.h"
+#include "protos/perfetto/trace/ftrace/bcl_exynos.pbzero.h"
 #include "protos/perfetto/trace/ftrace/binder.pbzero.h"
 #include "protos/perfetto/trace/ftrace/cma.pbzero.h"
 #include "protos/perfetto/trace/ftrace/cpuhp.pbzero.h"
 #include "protos/perfetto/trace/ftrace/cros_ec.pbzero.h"
+#include "protos/perfetto/trace/ftrace/dcvsh.pbzero.h"
 #include "protos/perfetto/trace/ftrace/dmabuf_heap.pbzero.h"
 #include "protos/perfetto/trace/ftrace/dpu.pbzero.h"
 #include "protos/perfetto/trace/ftrace/fastrpc.pbzero.h"
@@ -57,10 +60,13 @@
 #include "protos/perfetto/trace/ftrace/ftrace_stats.pbzero.h"
 #include "protos/perfetto/trace/ftrace/g2d.pbzero.h"
 #include "protos/perfetto/trace/ftrace/generic.pbzero.h"
+#include "protos/perfetto/trace/ftrace/google_icc_trace.pbzero.h"
+#include "protos/perfetto/trace/ftrace/google_irm_trace.pbzero.h"
 #include "protos/perfetto/trace/ftrace/gpu_mem.pbzero.h"
 #include "protos/perfetto/trace/ftrace/i2c.pbzero.h"
 #include "protos/perfetto/trace/ftrace/ion.pbzero.h"
 #include "protos/perfetto/trace/ftrace/irq.pbzero.h"
+#include "protos/perfetto/trace/ftrace/kgsl.pbzero.h"
 #include "protos/perfetto/trace/ftrace/kmem.pbzero.h"
 #include "protos/perfetto/trace/ftrace/lwis.pbzero.h"
 #include "protos/perfetto/trace/ftrace/mali.pbzero.h"
@@ -83,7 +89,6 @@
 #include "protos/perfetto/trace/ftrace/systrace.pbzero.h"
 #include "protos/perfetto/trace/ftrace/task.pbzero.h"
 #include "protos/perfetto/trace/ftrace/tcp.pbzero.h"
-#include "protos/perfetto/trace/ftrace/thermal.pbzero.h"
 #include "protos/perfetto/trace/ftrace/trusty.pbzero.h"
 #include "protos/perfetto/trace/ftrace/ufs.pbzero.h"
 #include "protos/perfetto/trace/ftrace/vmscan.pbzero.h"
@@ -231,6 +236,75 @@ enum RpmStatus {
   RPM_SUSPENDED,
   RPM_SUSPENDING,
 };
+
+// Obtain the string corresponding to the event code (`event` field) in the
+// `device_pm_callback_start` tracepoint.
+std::string GetDpmCallbackEventString(int64_t event) {
+  // This mapping order is obtained directly from the Linux kernel code.
+  switch (event) {
+    case 0x2:
+      return "suspend";
+    case 0x10:
+      return "resume";
+    case 0x1:
+      return "freeze";
+    case 0x8:
+      return "quiesce";
+    case 0x4:
+      return "hibernate";
+    case 0x20:
+      return "thaw";
+    case 0x40:
+      return "restore";
+    case 0x80:
+      return "recover";
+    default:
+      return "(unknown PM event)";
+  }
+}
+
+bool StrStartsWith(const std::string& str, const std::string& prefix) {
+  return str.size() >= prefix.size() &&
+         str.compare(0, prefix.size(), prefix) == 0;
+}
+
+// Constructs the display string for device PM callback slices.
+//
+// Format: "<driver name> <device name> <event type>[:<callback phase>]"
+//
+// Note: The optional `<callback phase>` is extracted from the `pm_ops` field
+// of the `device_pm_callback_start` tracepoint.
+std::string ConstructDpmCallbackSliceName(const std::string& driver_name,
+                                          const std::string& device_name,
+                                          const std::string& pm_ops,
+                                          const std::string& event_type) {
+  std::string slice_name_base =
+      driver_name + " " + device_name + " " + event_type;
+
+  // The Linux kernel has a limitation where the `pm_ops` field in the
+  // tracepoint is left empty if the phase is either prepare/complete.
+  if (pm_ops == "") {
+    if (event_type == "suspend")
+      return slice_name_base + ":prepare";
+    else if (event_type == "resume")
+      return slice_name_base + ":complete";
+  }
+
+  // Extract callback phase (if present) for slice display name.
+  //
+  // The `pm_ops` string may contain both callback phase and callback type, but
+  // only phase is needed. A prefix match is used due to potential absence of
+  // either/both phase or type in `pm_ops`.
+  const std::vector<std::string> valid_phases = {"early", "late", "noirq"};
+  for (const std::string& valid_phase : valid_phases) {
+    if (StrStartsWith(pm_ops, valid_phase)) {
+      return slice_name_base + ":" + valid_phase;
+    }
+  }
+
+  return slice_name_base;
+}
+
 }  // namespace
 
 FtraceParser::FtraceParser(TraceProcessorContext* context)
@@ -242,10 +316,13 @@ FtraceParser::FtraceParser(TraceProcessorContext* context)
       mali_gpu_event_tracker_(context),
       pkvm_hyp_cpu_tracker_(context),
       gpu_work_period_tracker_(context),
+      thermal_tracker_(context),
       sched_wakeup_name_id_(context->storage->InternString("sched_wakeup")),
       sched_waking_name_id_(context->storage->InternString("sched_waking")),
       cpu_id_(context->storage->InternString("cpu")),
       cpu_freq_name_id_(context->storage->InternString("cpufreq")),
+      cpu_freq_throttle_name_id_(
+          context->storage->InternString("cpufreq_throttle")),
       gpu_freq_name_id_(context->storage->InternString("gpufreq")),
       cpu_idle_name_id_(context->storage->InternString("cpuidle")),
       suspend_resume_name_id_(
@@ -262,9 +339,19 @@ FtraceParser::FtraceParser(TraceProcessorContext* context)
       dma_heap_change_id_(
           context->storage->InternString("mem.dma_heap_change")),
       dma_buffer_id_(context->storage->InternString("mem.dma_buffer")),
+      inode_arg_id_(context->storage->InternString("inode")),
       ion_total_unknown_id_(context->storage->InternString("mem.ion.unknown")),
       ion_change_unknown_id_(
           context->storage->InternString("mem.ion_change.unknown")),
+      bcl_irq_id_(context_->storage->InternString("bcl_irq_id")),
+      bcl_irq_throttle_(context_->storage->InternString("bcl_irq_throttle")),
+      bcl_irq_cpu0_(context_->storage->InternString("bcl_irq_cpu0")),
+      bcl_irq_cpu1_(context_->storage->InternString("bcl_irq_cpu1")),
+      bcl_irq_cpu2_(context_->storage->InternString("bcl_irq_cpu2")),
+      bcl_irq_tpu_(context_->storage->InternString("bcl_irq_tpu")),
+      bcl_irq_gpu_(context_->storage->InternString("bcl_irq_gpu")),
+      bcl_irq_voltage_(context_->storage->InternString("bcl_irq_voltage")),
+      bcl_irq_capacity_(context_->storage->InternString("bcl_irq_capacity")),
       signal_generate_id_(context->storage->InternString("signal_generate")),
       signal_deliver_id_(context->storage->InternString("signal_deliver")),
       oom_score_adj_id_(context->storage->InternString("oom_score_adj")),
@@ -339,6 +426,8 @@ FtraceParser::FtraceParser(TraceProcessorContext* context)
       android_fs_category_id_(context_->storage->InternString("android_fs")),
       android_fs_data_read_id_(
           context_->storage->InternString("android_fs_data_read")),
+      google_icc_event_id_(context->storage->InternString("google_icc_event")),
+      google_irm_event_id_(context->storage->InternString("google_irm_event")),
       runtime_status_invalid_id_(
           context->storage->InternString("Invalid State")),
       runtime_status_active_id_(context->storage->InternString("Active")),
@@ -688,8 +777,16 @@ base::Status FtraceParser::ParseFtraceEvent(uint32_t cpu,
         ParseCpuFreq(ts, fld_bytes);
         break;
       }
+      case FtraceEvent::kDcvshFreqFieldNumber: {
+        ParseCpuFreqThrottle(ts, fld_bytes);
+        break;
+      }
       case FtraceEvent::kGpuFrequencyFieldNumber: {
         ParseGpuFreq(ts, fld_bytes);
+        break;
+      }
+      case FtraceEvent::kKgslGpuFrequencyFieldNumber: {
+        ParseKgslGpuFreq(ts, fld_bytes);
         break;
       }
       case FtraceEvent::kCpuIdleFieldNumber: {
@@ -870,11 +967,19 @@ base::Status FtraceParser::ParseFtraceEvent(uint32_t cpu,
         break;
       }
       case FtraceEvent::kThermalTemperatureFieldNumber: {
-        ParseThermalTemperature(ts, fld_bytes);
+        thermal_tracker_.ParseThermalTemperature(ts, fld_bytes);
+        break;
+      }
+      case FtraceEvent::kThermalExynosAcpmBulkFieldNumber: {
+        thermal_tracker_.ParseThermalExynosAcpmBulk(fld_bytes);
+        break;
+      }
+      case FtraceEvent::kThermalExynosAcpmHighOverheadFieldNumber: {
+        thermal_tracker_.ParseThermalExynosAcpmHighOverhead(ts, fld_bytes);
         break;
       }
       case FtraceEvent::kCdevUpdateFieldNumber: {
-        ParseCdevUpdate(ts, fld_bytes);
+        thermal_tracker_.ParseCdevUpdate(ts, fld_bytes);
         break;
       }
       case FtraceEvent::kSchedBlockedReasonFieldNumber: {
@@ -1124,6 +1229,32 @@ base::Status FtraceParser::ParseFtraceEvent(uint32_t cpu,
                                                      fld_bytes);
         break;
       }
+      case FtraceEvent::kMaliMaliPMMCUHCTLCORESDOWNSCALENOTIFYPENDFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUHCTLCORESNOTIFYPENDFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUHCTLCOREINACTIVEPENDFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUHCTLMCUONRECHECKFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUHCTLSHADERSCOREOFFPENDFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUHCTLSHADERSPENDOFFFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUHCTLSHADERSPENDONFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUHCTLSHADERSREADYOFFFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUINSLEEPFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUOFFFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUONFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUONCOREATTRUPDATEPENDFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUONGLBREINITPENDFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUONHALTFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUONHWCNTDISABLEFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUONHWCNTENABLEFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUONPENDHALTFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUONPENDSLEEPFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUONSLEEPINITIATEFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUPENDOFFFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUPENDONRELOADFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCUPOWERDOWNFieldNumber:
+      case FtraceEvent::kMaliMaliPMMCURESETWAITFieldNumber: {
+        mali_gpu_event_tracker_.ParseMaliGpuMcuStateEvent(ts, fld.id());
+        break;
+      }
       case FtraceEvent::kTracingMarkWriteFieldNumber: {
         ParseMdssTracingMarkWrite(ts, pid, fld_bytes);
         break;
@@ -1146,6 +1277,26 @@ base::Status FtraceParser::ParseFtraceEvent(uint32_t cpu,
       }
       case FtraceEvent::kPanelWriteGenericFieldNumber: {
         ParsePanelWriteGeneric(ts, pid, fld_bytes);
+        break;
+      }
+      case FtraceEvent::kGoogleIccEventFieldNumber: {
+        ParseGoogleIccEvent(ts, fld_bytes);
+        break;
+      }
+      case FtraceEvent::kGoogleIrmEventFieldNumber: {
+        ParseGoogleIrmEvent(ts, fld_bytes);
+        break;
+      }
+      case FtraceEvent::kDevicePmCallbackStartFieldNumber: {
+        ParseDevicePmCallbackStart(ts, fld_bytes);
+        break;
+      }
+      case FtraceEvent::kDevicePmCallbackEndFieldNumber: {
+        ParseDevicePmCallbackEnd(ts, fld_bytes);
+        break;
+      }
+      case FtraceEvent::kBclIrqTriggerFieldNumber: {
+        ParseBclIrq(ts, fld_bytes);
         break;
       }
       default:
@@ -1264,10 +1415,10 @@ void FtraceParser::ParseGenericFtrace(int64_t ts,
   protos::pbzero::GenericFtraceEvent::Decoder evt(blob.data, blob.size);
   StringId event_id = context_->storage->InternString(evt.event_name());
   UniqueTid utid = context_->process_tracker->GetOrCreateThread(tid);
-  RawId id =
-      context_->storage->mutable_ftrace_event_table()
-          ->Insert({ts, event_id, cpu, utid, {}, {}, context_->machine_id()})
-          .id;
+  auto ucpu = context_->cpu_tracker->GetOrCreateCpu(cpu);
+  RawId id = context_->storage->mutable_ftrace_event_table()
+                 ->Insert({ts, event_id, utid, {}, {}, ucpu})
+                 .id;
   auto inserter = context_->args_tracker->AddArgsTo(id);
 
   for (auto it = evt.field(); it; ++it) {
@@ -1306,15 +1457,12 @@ void FtraceParser::ParseTypedFtraceToRaw(
   FtraceMessageDescriptor* m = GetMessageDescriptorForId(ftrace_id);
   const auto& message_strings = ftrace_message_strings_[ftrace_id];
   UniqueTid utid = context_->process_tracker->GetOrCreateThread(tid);
-  RawId id = context_->storage->mutable_ftrace_event_table()
-                 ->Insert({timestamp,
-                           message_strings.message_name_id,
-                           cpu,
-                           utid,
-                           {},
-                           {},
-                           context_->machine_id()})
-                 .id;
+  auto ucpu = context_->cpu_tracker->GetOrCreateCpu(cpu);
+  RawId id =
+      context_->storage->mutable_ftrace_event_table()
+          ->Insert(
+              {timestamp, message_strings.message_name_id, utid, {}, {}, ucpu})
+          .id;
   auto inserter = context_->args_tracker->AddArgsTo(id);
 
   for (auto fld = decoder.ReadField(); fld.valid(); fld = decoder.ReadField()) {
@@ -1438,16 +1586,36 @@ void FtraceParser::ParseSchedProcessFree(int64_t timestamp, ConstBytes blob) {
 void FtraceParser::ParseCpuFreq(int64_t timestamp, ConstBytes blob) {
   protos::pbzero::CpuFrequencyFtraceEvent::Decoder freq(blob.data, blob.size);
   uint32_t cpu = freq.cpu_id();
-  uint32_t new_freq = freq.state();
+  uint32_t new_freq_khz = freq.state();
   TrackId track =
       context_->track_tracker->InternCpuCounterTrack(cpu_freq_name_id_, cpu);
-  context_->event_tracker->PushCounter(timestamp, new_freq, track);
+  context_->event_tracker->PushCounter(timestamp, new_freq_khz, track);
+}
+
+void FtraceParser::ParseCpuFreqThrottle(int64_t timestamp, ConstBytes blob) {
+  protos::pbzero::DcvshFreqFtraceEvent::Decoder freq(blob.data, blob.size);
+  uint32_t cpu = static_cast<uint32_t>(freq.cpu());
+  double new_freq_khz = static_cast<double>(freq.freq());
+  TrackId track = context_->track_tracker->InternCpuCounterTrack(
+      cpu_freq_throttle_name_id_, cpu);
+  context_->event_tracker->PushCounter(timestamp, new_freq_khz, track);
 }
 
 void FtraceParser::ParseGpuFreq(int64_t timestamp, ConstBytes blob) {
   protos::pbzero::GpuFrequencyFtraceEvent::Decoder freq(blob.data, blob.size);
   uint32_t gpu = freq.gpu_id();
   uint32_t new_freq = freq.state();
+  TrackId track =
+      context_->track_tracker->InternGpuCounterTrack(gpu_freq_name_id_, gpu);
+  context_->event_tracker->PushCounter(timestamp, new_freq, track);
+}
+
+void FtraceParser::ParseKgslGpuFreq(int64_t timestamp, ConstBytes blob) {
+  protos::pbzero::KgslGpuFrequencyFtraceEvent::Decoder freq(blob.data,
+                                                            blob.size);
+  uint32_t gpu = freq.gpu_id();
+  // Source data is frequency / 1000, so we correct that here:
+  double new_freq = static_cast<double>(freq.gpu_freq()) * 1000.0;
   TrackId track =
       context_->track_tracker->InternGpuCounterTrack(gpu_freq_name_id_, gpu);
   context_->event_tracker->PushCounter(timestamp, new_freq, track);
@@ -1610,6 +1778,24 @@ void FtraceParser::ParseLwisTracingMarkWrite(int64_t timestamp,
       evt.func_name(), tgid, evt.value());
 }
 
+void FtraceParser::ParseGoogleIccEvent(int64_t timestamp, ConstBytes blob) {
+  protos::pbzero::GoogleIccEventFtraceEvent::Decoder evt(blob.data, blob.size);
+  TrackId track_id = context_->track_tracker->GetOrCreateInterconnectTrack();
+  StringId slice_name_id =
+      context_->storage->InternString(base::StringView(evt.event()));
+  context_->slice_tracker->Scoped(timestamp, track_id, google_icc_event_id_,
+                                  slice_name_id, 0);
+}
+
+void FtraceParser::ParseGoogleIrmEvent(int64_t timestamp, ConstBytes blob) {
+  protos::pbzero::GoogleIrmEventFtraceEvent::Decoder evt(blob.data, blob.size);
+  TrackId track_id = context_->track_tracker->GetOrCreateInterconnectTrack();
+  StringId slice_name_id =
+      context_->storage->InternString(base::StringView(evt.event()));
+  context_->slice_tracker->Scoped(timestamp, track_id, google_irm_event_id_,
+                                  slice_name_id, 0);
+}
+
 /** Parses ion heap events present in Pixel kernels. */
 void FtraceParser::ParseIonHeapGrowOrShrink(int64_t timestamp,
                                             uint32_t pid,
@@ -1703,6 +1889,59 @@ void FtraceParser::ParseIonStat(int64_t timestamp,
   }
 }
 
+void FtraceParser::ParseBclIrq(int64_t ts, protozero::ConstBytes data) {
+  protos::pbzero::BclIrqTriggerFtraceEvent::Decoder bcl(data.data, data.size);
+  int throttle = bcl.throttle();
+  // id
+  TrackId track = context_->track_tracker->InternGlobalCounterTrack(
+      TrackTracker::Group::kBatteryMitigation, bcl_irq_id_);
+  context_->event_tracker->PushCounter(ts,
+                                       throttle ? bcl.id() : -1,
+                                       track);
+  // throttle
+  track = context_->track_tracker->InternGlobalCounterTrack(
+      TrackTracker::Group::kBatteryMitigation, bcl_irq_throttle_);
+  context_->event_tracker->PushCounter(ts, throttle, track);
+  // cpu0_limit
+  track = context_->track_tracker->InternGlobalCounterTrack(
+      TrackTracker::Group::kBatteryMitigation, bcl_irq_cpu0_);
+  context_->event_tracker->PushCounter(ts,
+                                       throttle ? bcl.cpu0_limit() : 0,
+                                       track);
+  // cpu1_limit
+  track = context_->track_tracker->InternGlobalCounterTrack(
+      TrackTracker::Group::kBatteryMitigation, bcl_irq_cpu1_);
+  context_->event_tracker->PushCounter(ts,
+                                       throttle ? bcl.cpu1_limit() : 0,
+                                       track);
+  // cpu2_limit
+  track = context_->track_tracker->InternGlobalCounterTrack(
+      TrackTracker::Group::kBatteryMitigation, bcl_irq_cpu2_);
+  context_->event_tracker->PushCounter(ts,
+                                       throttle ? bcl.cpu2_limit() : 0,
+                                       track);
+  // tpu_limit
+  track = context_->track_tracker->InternGlobalCounterTrack(
+      TrackTracker::Group::kBatteryMitigation, bcl_irq_tpu_);
+  context_->event_tracker->PushCounter(ts,
+                                       throttle ? bcl.tpu_limit(): 0,
+                                       track);
+  // gpu_limit
+  track = context_->track_tracker->InternGlobalCounterTrack(
+      TrackTracker::Group::kBatteryMitigation, bcl_irq_gpu_);
+  context_->event_tracker->PushCounter(ts,
+                                       throttle ? bcl.gpu_limit() : 0,
+                                       track);
+  // voltage
+  track = context_->track_tracker->InternGlobalCounterTrack(
+      TrackTracker::Group::kBatteryMitigation, bcl_irq_voltage_);
+  context_->event_tracker->PushCounter(ts, bcl.voltage(), track);
+  // capacity
+  track = context_->track_tracker->InternGlobalCounterTrack(
+      TrackTracker::Group::kBatteryMitigation, bcl_irq_capacity_);
+  context_->event_tracker->PushCounter(ts, bcl.capacity(), track);
+}
+
 void FtraceParser::ParseDmaHeapStat(int64_t timestamp,
                                     uint32_t pid,
                                     protozero::ConstBytes data) {
@@ -1719,8 +1958,13 @@ void FtraceParser::ParseDmaHeapStat(int64_t timestamp,
   UniqueTid utid = context_->process_tracker->GetOrCreateThread(pid);
   track = context_->track_tracker->InternThreadCounterTrack(dma_heap_change_id_,
                                                             utid);
-  context_->event_tracker->PushCounter(
+
+  auto opt_counter_id = context_->event_tracker->PushCounter(
       timestamp, static_cast<double>(dma_heap.len()), track);
+  if (opt_counter_id) {
+    context_->args_tracker->AddArgsTo(*opt_counter_id)
+        .AddArg(inode_arg_id_, Variadic::UnsignedInteger(dma_heap.inode()));
+  }
 
   // Global track for individual buffer tracking
   auto async_track =
@@ -2349,32 +2593,6 @@ void FtraceParser::ParseGpuMemTotal(int64_t timestamp,
   }
   context_->event_tracker->PushCounter(
       timestamp, static_cast<double>(gpu_mem_total.size()), track);
-}
-
-void FtraceParser::ParseThermalTemperature(int64_t timestamp,
-                                           protozero::ConstBytes blob) {
-  protos::pbzero::ThermalTemperatureFtraceEvent::Decoder event(blob.data,
-                                                               blob.size);
-  base::StringView thermal_zone = event.thermal_zone();
-  base::StackString<255> counter_name(
-      "%.*s Temperature", int(thermal_zone.size()), thermal_zone.data());
-  StringId name = context_->storage->InternString(counter_name.string_view());
-  TrackId track = context_->track_tracker->InternGlobalCounterTrack(
-      TrackTracker::Group::kThermals, name);
-  context_->event_tracker->PushCounter(timestamp, event.temp(), track);
-}
-
-void FtraceParser::ParseCdevUpdate(int64_t timestamp,
-                                   protozero::ConstBytes blob) {
-  protos::pbzero::CdevUpdateFtraceEvent::Decoder event(blob.data, blob.size);
-  base::StringView type = event.type();
-  base::StackString<255> counter_name("%.*s Cooling Device", int(type.size()),
-                                      type.data());
-  StringId name = context_->storage->InternString(counter_name.string_view());
-  TrackId track = context_->track_tracker->InternGlobalCounterTrack(
-      TrackTracker::Group::kThermals, name);
-  context_->event_tracker->PushCounter(
-      timestamp, static_cast<double>(event.target()), track);
 }
 
 void FtraceParser::ParseSchedBlockedReason(
@@ -3114,6 +3332,14 @@ void FtraceParser::ParseSuspendResume(int64_t timestamp,
   // processor_id and device could enter suspend/resume from different
   // processor.
   auto val = (action_name == "timekeeping_freeze") ? 0 : evt.val();
+  std::string cookie_key = std::to_string(val);
+  int64_t cookie = 0;
+  if (suspend_resume_cookie_map_.Find(cookie_key) == nullptr) {
+    cookie = static_cast<int64_t>(suspend_resume_cookie_map_.size());
+    suspend_resume_cookie_map_[cookie_key] = cookie;
+  } else {
+    cookie = suspend_resume_cookie_map_[cookie_key];
+  }
 
   base::StackString<64> str("%s(%" PRIu32 ")", action_name.c_str(), val);
   std::string current_action = str.ToStdString();
@@ -3121,8 +3347,8 @@ void FtraceParser::ParseSuspendResume(int64_t timestamp,
   StringId slice_name_id = context_->storage->InternString(str.string_view());
 
   if (!evt.start()) {
-    TrackId end_id = context_->async_track_set_tracker->End(
-        async_track, static_cast<int64_t>(val));
+    TrackId end_id =
+        context_->async_track_set_tracker->End(async_track, cookie);
     context_->slice_tracker->End(timestamp, end_id);
     ongoing_suspend_resume_actions[current_action] = false;
     return;
@@ -3130,8 +3356,8 @@ void FtraceParser::ParseSuspendResume(int64_t timestamp,
 
   // Complete the previous action before starting a new one.
   if (ongoing_suspend_resume_actions[current_action]) {
-    TrackId end_id = context_->async_track_set_tracker->End(
-        async_track, static_cast<int64_t>(val));
+    TrackId end_id =
+        context_->async_track_set_tracker->End(async_track, cookie);
     auto args_inserter = [this](ArgsTracker::BoundInserter* inserter) {
       inserter->AddArg(replica_slice_id_, Variadic::Boolean(true));
     };
@@ -3139,8 +3365,8 @@ void FtraceParser::ParseSuspendResume(int64_t timestamp,
                                  kNullStringId, args_inserter);
   }
 
-  TrackId start_id = context_->async_track_set_tracker->Begin(
-      async_track, static_cast<int64_t>(val));
+  TrackId start_id =
+      context_->async_track_set_tracker->Begin(async_track, cookie);
   context_->slice_tracker->Begin(timestamp, start_id, suspend_resume_name_id_,
                                  slice_name_id);
   ongoing_suspend_resume_actions[current_action] = true;
@@ -3355,6 +3581,55 @@ void FtraceParser::ParseRpmStatus(int64_t ts, protozero::ConstBytes blob) {
   context_->slice_tracker->Begin(ts, track_id, /*category=*/kNullStringId,
                                  /*raw_name=*/GetRpmStatusStringId(rpm_status));
   devices_with_active_rpm_slice_.insert(device_name);
+}
+
+// Parses `device_pm_callback_start` events and begins corresponding slices in
+// the suspend / resume latency UI track.
+void FtraceParser::ParseDevicePmCallbackStart(int64_t ts,
+                                              protozero::ConstBytes blob) {
+  protos::pbzero::DevicePmCallbackStartFtraceEvent::Decoder dpm_event(
+      blob.data, blob.size);
+
+  // Device here refers to anything managed by a Linux kernel driver.
+  std::string device_name = dpm_event.device().ToStdString();
+  int64_t cookie;
+
+  if (suspend_resume_cookie_map_.Find(device_name) == nullptr) {
+    cookie = static_cast<int64_t>(suspend_resume_cookie_map_.size());
+    suspend_resume_cookie_map_[device_name] = cookie;
+  } else {
+    cookie = suspend_resume_cookie_map_[device_name];
+  }
+
+  std::string slice_name = ConstructDpmCallbackSliceName(
+      dpm_event.driver().ToStdString(), device_name,
+      dpm_event.pm_ops().ToStdString(),
+      GetDpmCallbackEventString(dpm_event.event()));
+  StringId slice_name_id = context_->storage->InternString(slice_name.c_str());
+
+  auto async_track = context_->async_track_set_tracker->InternGlobalTrackSet(
+      suspend_resume_name_id_);
+  TrackId track_id =
+      context_->async_track_set_tracker->Begin(async_track, cookie);
+  context_->slice_tracker->Begin(ts, track_id, suspend_resume_name_id_,
+                                 slice_name_id);
+}
+
+// Parses `device_pm_callback_end` events and ends corresponding slices in the
+// suspend / resume latency UI track.
+void FtraceParser::ParseDevicePmCallbackEnd(int64_t ts,
+                                            protozero::ConstBytes blob) {
+  protos::pbzero::DevicePmCallbackEndFtraceEvent::Decoder dpm_event(blob.data,
+                                                                    blob.size);
+
+  // Device here refers to anything managed by a Linux kernel driver.
+  std::string device_name = dpm_event.device().ToStdString();
+
+  auto async_track = context_->async_track_set_tracker->InternGlobalTrackSet(
+      suspend_resume_name_id_);
+  TrackId track_id = context_->async_track_set_tracker->End(
+      async_track, suspend_resume_cookie_map_[device_name]);
+  context_->slice_tracker->End(ts, track_id);
 }
 
 void FtraceParser::ParsePanelWriteGeneric(int64_t timestamp,

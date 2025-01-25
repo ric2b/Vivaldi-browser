@@ -39,6 +39,12 @@ id<GREYMatcher> ButtonWithAccessibilityLabelId(int message_id) {
   return [ChromeMatchersAppInterface buttonWithAccessibilityLabelID:message_id];
 }
 
+id<GREYMatcher> ButtonWithAccessibilityLabelIdAndNumberForPlural(int message_id,
+                                                                 int number) {
+  return [ChromeMatchersAppInterface buttonWithAccessibilityLabelID:message_id
+                                                    numberForPlural:number];
+}
+
 id<GREYMatcher> ButtonWithForegroundColor(NSString* colorName) {
   return [ChromeMatchersAppInterface buttonWithForegroundColor:colorName];
 }
@@ -200,10 +206,6 @@ id<GREYMatcher> OmniboxContainingText(const std::string& text) {
 
 id<GREYMatcher> OmniboxContainingAutocompleteText(NSString* text) {
   return [ChromeMatchersAppInterface omniboxContainingAutocompleteText:text];
-}
-
-id<GREYMatcher> OmniboxAutocompleteLabel() {
-  return [ChromeMatchersAppInterface omniboxAutocompleteLabel];
 }
 
 id<GREYMatcher> LocationViewContainingText(const std::string& text) {
@@ -425,10 +427,6 @@ id<GREYMatcher> InactiveTabsSettingsButton() {
   return [ChromeMatchersAppInterface inactiveTabsSettingsButton];
 }
 
-id<GREYMatcher> TabPickupSettingsButton() {
-  return [ChromeMatchersAppInterface tabPickupSettingsButton];
-}
-
 id<GREYMatcher> TabsSettingsButton() {
   return [ChromeMatchersAppInterface tabsSettingsButton];
 }
@@ -639,6 +637,10 @@ id<GREYMatcher> OpenInButton() {
   return [ChromeMatchersAppInterface openInButton];
 }
 
+id<GREYMatcher> OpenPDFButton() {
+  return [ChromeMatchersAppInterface openPDFButton];
+}
+
 id<GREYMatcher> TabGridCellAtIndex(unsigned int index) {
   return [ChromeMatchersAppInterface tabGridCellAtIndex:index];
 }
@@ -725,6 +727,11 @@ id<GREYMatcher> IncognitoTabGrid() {
 
 id<GREYMatcher> TabGridCloseButtonForCellAtIndex(unsigned int index) {
   return [ChromeMatchersAppInterface tabGridCloseButtonForCellAtIndex:index];
+}
+
+id<GREYMatcher> TabGridCloseButtonForGroupCellAtIndex(unsigned int index) {
+  return
+      [ChromeMatchersAppInterface tabGridCloseButtonForGroupCellAtIndex:index];
 }
 
 id<GREYMatcher> SettingsPasswordMatcher() {

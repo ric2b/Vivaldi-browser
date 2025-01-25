@@ -13,14 +13,19 @@ class MockViewDelegate implements Timeline.TimelinePanel.TimelineModeViewDelegat
   }
   selectEntryAtTime(_events: TraceEngine.Types.TraceEvents.TraceEventData[]|null, _time: number): void {
   }
-  highlightEvent(_event: TraceEngine.Legacy.CompatibleTraceEvent|null): void {
+  highlightEvent(_event: TraceEngine.Types.TraceEvents.TraceEventData|null): void {
   }
+  element = document.createElement('div');
 }
 
-function getRowDataForDetailsElement(details: HTMLElement) {
-  return Array.from(details.querySelectorAll<HTMLDivElement>('.timeline-details-view-row')).map(row => {
-    const title = row.querySelector<HTMLDivElement>('.timeline-details-view-row-title')?.innerText;
-    const value = row.querySelector<HTMLDivElement>('.timeline-details-view-row-value')?.innerText;
+function getRowDataForNetworkDetailsElement(details: ShadowRoot) {
+  return Array.from(details.querySelectorAll<HTMLDivElement>('.network-request-details-row')).map(row => {
+    const title = row.querySelector<HTMLDivElement>('.title')?.innerText;
+    // The innerText in here will contain a `\n` and a few space for each child <div> tag, so just remove these empty
+    // characters for easier test.
+    const regExpForLineBreakAndFollowingSpaces = /\n[\s]+/g;
+    const value =
+        row.querySelector<HTMLDivElement>('.value')?.innerText.replaceAll(regExpForLineBreakAndFollowingSpaces, '');
     return {title, value};
   });
 }
@@ -28,10 +33,10 @@ function getRowDataForDetailsElement(details: HTMLElement) {
 describeWithEnvironment('TimelineDetailsView', function() {
   const mockViewDelegate = new MockViewDelegate();
   it('displays the details of a network request event correctly', async function() {
-    const traceParsedData = await TraceLoader.traceEngine(this, 'lcp-web-font.json.gz');
+    const {traceData} = await TraceLoader.traceEngine(this, 'lcp-web-font.json.gz');
     const detailsView = new Timeline.TimelineDetailsView.TimelineDetailsView(mockViewDelegate);
 
-    const networkRequests = traceParsedData.NetworkRequests.byTime;
+    const networkRequests = traceData.NetworkRequests.byTime;
     const cssRequest = networkRequests.find(request => {
       return request.args.data.url === 'https://chromedevtools.github.io/performance-stories/lcp-web-font/app.css';
     });
@@ -40,24 +45,34 @@ describeWithEnvironment('TimelineDetailsView', function() {
     }
     const selection = Timeline.TimelineSelection.TimelineSelection.fromTraceEvent(cssRequest);
 
-    await detailsView.setModel(traceParsedData, null);
+    await detailsView.setModel(traceData, null);
     await detailsView.setSelection(selection);
 
     const detailsContentElement = detailsView.getDetailsContentElementForTest();
     assert.strictEqual(detailsContentElement.childNodes.length, 1);
-    const rowData = getRowDataForDetailsElement(detailsContentElement);
+    const detailsElementShadowRoot = (detailsContentElement.childNodes[0] as HTMLElement).shadowRoot;
+    if (!detailsElementShadowRoot) {
+      throw new Error('Could not find expected element to test.');
+    }
+    const rowData = getRowDataForNetworkDetailsElement(detailsElementShadowRoot);
 
+    const durationInnerText = '12.58 ms' +
+        'Queuing and connecting0' +
+        'Request sent and waiting0' +
+        'Content downloading8.29 ms' +
+        'Waiting on main thread4.29 ms';
     assert.deepEqual(
         rowData,
         [
           {title: 'URL', value: 'chromedevtools.github.io/performance-stories/lcp-web-font/app.css'},
-          {title: 'Duration', value: '12.582ms (8.291ms load from cache + 4.291ms resource loading)'},
           {title: 'Request Method', value: 'GET'},
           {title: 'Initial Priority', value: 'Highest'},
           {title: 'Priority', value: 'Highest'},
           {title: 'Mime Type', value: 'text/css'},
           {title: 'Encoded Data', value: ' (from cache)'},
           {title: 'Decoded Body', value: '96 B'},
+          {title: 'From cache', value: 'Yes'},
+          {title: 'Duration', value: durationInnerText},
         ],
     );
   });

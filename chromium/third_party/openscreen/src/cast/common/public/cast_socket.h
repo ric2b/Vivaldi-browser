@@ -12,13 +12,10 @@
 #include "platform/api/tls_connection.h"
 #include "util/weak_ptr.h"
 
-namespace cast::channel {
-
-class CastMessage;
-
-}  // namespace cast::channel
-
 namespace openscreen::cast {
+namespace proto {
+class CastMessage;
+}
 
 // Represents a simple message-oriented socket for communicating with the Cast
 // V2 protocol.  It isn't thread-safe, so it should only be used on the same
@@ -31,8 +28,7 @@ class CastSocket : public TlsConnection::Client {
     // Called when a terminal error on |socket| has occurred.
     virtual void OnError(CastSocket* socket, const Error& error) = 0;
 
-    virtual void OnMessage(CastSocket* socket,
-                           ::cast::channel::CastMessage message) = 0;
+    virtual void OnMessage(CastSocket* socket, proto::CastMessage message) = 0;
 
    protected:
     virtual ~Client();
@@ -50,7 +46,7 @@ class CastSocket : public TlsConnection::Client {
   // semantically correct according to the Cast protocol.  Callers should use
   // the functions in {sender,receiver}/channel/message_util.h to construct a
   // valid CastMessage to pass into Send().
-  [[nodiscard]] Error Send(const ::cast::channel::CastMessage& message);
+  [[nodiscard]] Error Send(const proto::CastMessage& message);
 
   void SetClient(Client* client);
 

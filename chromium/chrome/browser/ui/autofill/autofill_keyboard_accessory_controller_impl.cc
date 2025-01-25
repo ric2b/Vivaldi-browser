@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/check_op.h"
-#include "base/containers/contains.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
@@ -24,7 +23,9 @@
 #include "chrome/browser/ui/autofill/autofill_keyboard_accessory_view.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 #include "chrome/browser/ui/autofill/autofill_suggestion_controller_utils.h"
+#include "chrome/browser/ui/autofill/next_idle_barrier.h"
 #include "components/autofill/core/browser/address_data_manager.h"
+#include "components/autofill/core/browser/filling_product.h"
 #include "components/autofill/core/browser/metrics/granular_filling_metrics.h"
 #include "components/autofill/core/browser/payments_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
@@ -55,22 +56,30 @@ constexpr size_t kMaxBulletCount = 8;
 // `Suggestion::labels`. For other suggestions, constructs the label from
 // `Suggestion::labels`.
 Suggestion::Text CreateLabel(const Suggestion& suggestion) {
-  std::u16string password =
-      suggestion.additional_label.substr(0, kMaxBulletCount);
-  // The label contains the signon_realm or is empty. The additional_label can
-  // never be empty since it must contain a password.
-  if (suggestion.labels.empty() || suggestion.labels[0].empty() ||
-      suggestion.labels[0][0].value.empty()) {
-    return Suggestion::Text(password);
+  if (suggestion.labels.empty()) {
+    return Suggestion::Text();
   }
-
   // TODO(crbug.com/40221039): Re-consider whether using CHECK is an appropriate
   // way to explicitly regulate what information should be populated for the
   // interface.
   CHECK_EQ(suggestion.labels.size(), 1U);
   CHECK_EQ(suggestion.labels[0].size(), 1U);
-  return Suggestion::Text(
-      base::StrCat({suggestion.labels[0][0].value, kLabelSeparator, password}));
+  if (GetFillingProductFromSuggestionType(suggestion.type) ==
+      FillingProduct::kPassword) {
+    // The `Suggestion::labels` can never be empty since it must contain a
+    // password.
+    const std::u16string password =
+        suggestion.labels[0][0].value.substr(0, kMaxBulletCount);
+
+    // The `Suggestion::additional_label` contains the signon_realm or is empty.
+    if (suggestion.additional_label.empty()) {
+      return Suggestion::Text(password);
+    }
+    return Suggestion::Text(
+        base::StrCat({suggestion.additional_label, kLabelSeparator, password}));
+  }
+
+  return Suggestion::Text(suggestion.labels[0][0].value);
 }
 
 }  // namespace
@@ -237,37 +246,13 @@ void AutofillKeyboardAccessoryControllerImpl::OnSuggestionsChanged() {
 void AutofillKeyboardAccessoryControllerImpl::AcceptSuggestion(int index) {
   // Ignore clicks immediately after the popup was shown. This is to prevent
   // users accidentally accepting suggestions (crbug.com/1279268).
-  if (time_view_shown_.value().is_null() && !disable_threshold_for_testing_) {
-    return;
-  }
-  const base::TimeDelta time_elapsed =
-      base::TimeTicks::Now() - time_view_shown_.value();
-  // If `kAutofillPopupImprovedTimingChecksV2` is enabled, then
-  // `time_view_shown_` will remain null for at least
-  // `kIgnoreEarlyClicksOnSuggestionsDuration`. Therefore we do not have to
-  // check any times here.
-  // TODO(crbug.com/40279821): Once `kAutofillPopupImprovedTimingChecksV2` is
-  // launched, clean up most of the timing checks. That is:
-  // - Remove paint checks inside views.
-  // - Remove `event_time` parameters.
-  // - Rename `NextIdleTimeTicks` to `IdleDelayBarrier` or something similar
-  //   that indicates that just contains a boolean signaling whether a certain
-  //   delay has (safely) passed.
-  if (time_elapsed < kIgnoreEarlyClicksOnSuggestionsDuration &&
-      !disable_threshold_for_testing_ &&
-      !base::FeatureList::IsEnabled(
-          features::kAutofillPopupImprovedTimingChecksV2)) {
-    base::UmaHistogramCustomTimes(
-        "Autofill.Popup.AcceptanceDelayThresholdNotMet", time_elapsed,
-        base::Milliseconds(0), kIgnoreEarlyClicksOnSuggestionsDuration,
-        /*buckets=*/50);
+  if (!barrier_for_accepting_.value() && !disable_threshold_for_testing_) {
     return;
   }
 
   if (base::checked_cast<size_t>(index) >= suggestions_.size()) {
     return;
   }
-
   if (IsPointerLocked(web_contents_.get())) {
     Hide(SuggestionHidingReason::kMouseLocked);
     return;
@@ -276,6 +261,10 @@ void AutofillKeyboardAccessoryControllerImpl::AcceptSuggestion(int index) {
   // Use a copy instead of a reference here. Under certain circumstances,
   // `DidAcceptSuggestion()` invalidate the reference.
   Suggestion suggestion = suggestions_[index];
+  if (!suggestion.is_acceptable) {
+    return;
+  }
+
   if (base::WeakPtr<ManualFillingController> manual_filling_controller =
           ManualFillingController::GetOrCreate(web_contents_.get())) {
     // Accepting a suggestion should hide all suggestions. To prevent them from
@@ -286,8 +275,8 @@ void AutofillKeyboardAccessoryControllerImpl::AcceptSuggestion(int index) {
     manual_filling_controller->Hide();
   }
 
-  NotifyIphAboutAcceptedSuggestion(web_contents_->GetBrowserContext(),
-                                   suggestion);
+  NotifyUserEducationAboutAcceptedSuggestion(web_contents_->GetBrowserContext(),
+                                             suggestion);
   if (suggestion.acceptance_a11y_announcement && view_) {
     view_->AxAnnounce(*suggestion.acceptance_a11y_announcement);
   }
@@ -364,6 +353,7 @@ void AutofillKeyboardAccessoryControllerImpl::OnDeletionDialogClosed(
       }
       break;
     case FillingProduct::kCreditCard:
+    case FillingProduct::kStandaloneCvc:
       // TODO(crbug.com/41482065): Add metrics for credit cards.
       break;
     case FillingProduct::kNone:
@@ -416,8 +406,7 @@ void AutofillKeyboardAccessoryControllerImpl::Show(
     AutofillSuggestionTriggerSource trigger_source,
     AutoselectFirstSuggestion autoselect_first_suggestion) {
   suggestions_filling_product_ =
-      !suggestions.empty() && (!IsFooterSuggestionType(suggestions[0].type) ||
-         (suggestions[0].type == SuggestionType::kScanCreditCard))
+      !suggestions.empty() && IsStandaloneSuggestionType(suggestions[0].type)
           ? GetFillingProductFromSuggestionType(suggestions[0].type)
           : FillingProduct::kNone;
   if (auto* rwhv = web_contents_->GetRenderWidgetHostView();
@@ -481,7 +470,7 @@ void AutofillKeyboardAccessoryControllerImpl::Show(
     }
   }
 
-  time_view_shown_ = NextIdleTimeTicks::CaptureNextIdleTimeTicksWithDelay(
+  barrier_for_accepting_ = NextIdleBarrier::CreateNextIdleBarrierWithDelay(
       kIgnoreEarlyClicksOnSuggestionsDuration);
   delegate_->OnSuggestionsShown();
 }
@@ -513,12 +502,8 @@ void AutofillKeyboardAccessoryControllerImpl::PinView() {
 }
 
 bool AutofillKeyboardAccessoryControllerImpl::HasSuggestions() const {
-  if (suggestions_.empty()) {
-    return false;
-  }
-  SuggestionType type = suggestions_[0].type;
-  return base::Contains(kItemsTriggeringFieldFilling, type) ||
-         type == SuggestionType::kScanCreditCard;
+  return !suggestions_.empty() &&
+         IsStandaloneSuggestionType(suggestions_[0].type);
 }
 
 // AutofillKeyboardAccessoryController implementation:
@@ -597,8 +582,8 @@ bool AutofillKeyboardAccessoryControllerImpl::GetRemovalConfirmationText(
 
 void AutofillKeyboardAccessoryControllerImpl::
     OrderSuggestionsAndCreateLabels() {
-  // If there is a "clear form" entry, move it to the front.
-  if (auto it = base::ranges::find(suggestions_, SuggestionType::kClearForm,
+  // If there is an Undo suggestion, move it to the front.
+  if (auto it = base::ranges::find(suggestions_, SuggestionType::kUndoOrClear,
                                    &Suggestion::type);
       it != suggestions_.end()) {
     std::rotate(suggestions_.begin(), it, it + 1);
@@ -614,7 +599,7 @@ void AutofillKeyboardAccessoryControllerImpl::
 void AutofillKeyboardAccessoryControllerImpl::SetViewForTesting(
     std::unique_ptr<AutofillKeyboardAccessoryView> view) {
   view_ = std::move(view);
-  time_view_shown_ = NextIdleTimeTicks::CaptureNextIdleTimeTicksWithDelay(
+  barrier_for_accepting_ = NextIdleBarrier::CreateNextIdleBarrierWithDelay(
       kIgnoreEarlyClicksOnSuggestionsDuration);
 }
 

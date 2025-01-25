@@ -9,6 +9,7 @@
 #include "base/android/build_info.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
@@ -23,6 +24,7 @@
 #include "components/password_manager/core/browser/password_manager_buildflags.h"
 #include "components/password_manager/core/browser/password_manager_constants.h"
 #include "components/password_manager/core/browser/password_store/split_stores_and_local_upm.h"
+#include "components/password_manager/core/browser/password_sync_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/pref_names.h"
 #include "components/version_info/android/channel_getter.h"
@@ -146,6 +148,8 @@ bool ShouldDelayMigrationUntillMigrationWarningIsAcknowledged(
           password_manager::prefs::kEmptyProfileStoreLoginDatabase)) {
     return false;
   }
+  // TODO - b/342376844 : Don't delay migration because of warning
+  // acknowledgment if the access loss warning UI is active.
 
   // There is no warning shown on automotive.
   if (base::android::BuildInfo::GetInstance()->is_automotive()) {
@@ -266,9 +270,10 @@ void MaybeActivateSplitStoresAndLocalUpm(
       // Move the "profile" login DB to the "account" path, the latter is the
       // synced one after activation. We could rely on a redownload instead, but
       // a) this is a safety net, and b)it spares traffic.
+      base::FilePath profile_db_path = login_db_directory.Append(
+          password_manager::kLoginDataForProfileFileName);
       if (!base::ReplaceFile(
-              login_db_directory.Append(
-                  password_manager::kLoginDataForProfileFileName),
+              profile_db_path,
               login_db_directory.Append(
                   password_manager::kLoginDataForAccountFileName),
               /*error=*/nullptr)) {
@@ -293,6 +298,46 @@ void MaybeActivateSplitStoresAndLocalUpm(
     pref_service->SetInteger(kPasswordsUseUPMLocalAndSeparateStores,
                              static_cast<int>(state_to_set_on_success));
   }
+}
+
+// Called on startup from `MaybeDeactivateSplitStoresAndLocalUpm` to delete the
+// login data files for users migrated to UPM. Must only be called if the value
+// of the state pref `PasswordsUseUPMLocalAndSeparateStores` is `On` and there
+// is no need for deactivation of local UPM.
+void MaybeDeleteLoginDataFiles(PrefService* prefs,
+                               const base::FilePath& login_db_directory) {
+  CHECK(password_manager::UsesSplitStoresAndUPMForLocal(prefs));
+
+  base::FilePath profile_db_path =
+      login_db_directory.Append(password_manager::kLoginDataForProfileFileName);
+  base::FilePath account_db_path =
+      login_db_directory.Append(password_manager::kLoginDataForAccountFileName);
+  base::FilePath profile_db_journal_path = login_db_directory.Append(
+      password_manager::kLoginDataJournalForProfileFileName);
+  base::FilePath account_db_journal_path = login_db_directory.Append(
+      password_manager::kLoginDataJournalForAccountFileName);
+
+  // Delete the login data files for the user migrated to UPM.
+  // In the unlikely case that the deletion operation fails, it will be
+  // retried upon next startup as part of
+  // `MaybeDeactivateSplitStoresAndLocalUpm`.
+  if (PathExists(profile_db_path)) {
+    bool success = base::DeleteFile(profile_db_path);
+    base::UmaHistogramBoolean("PasswordManager.ProfileLoginData.RemovalStatus",
+                              success);
+    if (success) {
+      prefs->SetBoolean(
+          password_manager::prefs::kEmptyProfileStoreLoginDatabase, true);
+    }
+  }
+  base::DeleteFile(profile_db_journal_path);
+
+  if (PathExists(account_db_path)) {
+    bool success = base::DeleteFile(account_db_path);
+    base::UmaHistogramBoolean("PasswordManager.AccountLoginData.RemovalStatus",
+                              success);
+  }
+  base::DeleteFile(account_db_journal_path);
 }
 
 // Must only be called if the state pref is kOn or kOffAndMigrationPending, to
@@ -365,6 +410,12 @@ void MaybeDeactivateSplitStoresAndLocalUpm(
     base::FeatureList::IsEnabled(
         password_manager::features::
             kUnifiedPasswordManagerLocalPasswordsAndroidWithMigration);
+    if (base::FeatureList::IsEnabled(
+            password_manager::features::
+                kClearLoginDatabaseForAllMigratedUPMUsers)) {
+      MaybeDeleteLoginDataFiles(pref_service, login_db_directory);
+    }
+
     return;
   }
 
@@ -387,6 +438,7 @@ void MaybeDeactivateSplitStoresAndLocalUpm(
       login_db_directory.Append(password_manager::kLoginDataForAccountFileName);
   if (GetSplitStoresAndLocalUpmPrefValue(pref_service) == kOn &&
       IsPasswordSyncEnabled(pref_service) &&
+      base::PathExists(account_db_path) &&
       !base::ReplaceFile(account_db_path, profile_db_path, /*error=*/nullptr)) {
     return;
   }
@@ -431,9 +483,10 @@ bool AreMinUpmRequirementsMet() {
   return gms_version >= password_manager::features::kAccountUpmMinGmsVersion;
 }
 
-bool ShouldUseUpmWiring(bool is_pwd_sync_enabled, PrefService* pref_service) {
-  // TODO(crbug.com/40226137): Re-evaluate if the SyncService can be passed here
-  // instead of the `is_pwd_sync_enabled` boolean.
+bool ShouldUseUpmWiring(const syncer::SyncService* sync_service,
+                        const PrefService* pref_service) {
+  bool is_pwd_sync_enabled =
+      password_manager::sync_util::HasChosenToSyncPasswords(sync_service);
   if (is_pwd_sync_enabled &&
       password_manager_upm_eviction::IsCurrentUserEvicted(pref_service)) {
     return false;

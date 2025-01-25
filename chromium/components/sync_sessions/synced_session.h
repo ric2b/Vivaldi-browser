@@ -110,7 +110,12 @@ struct SyncedSession {
 
   syncer::DeviceInfo::FormFactor GetDeviceFormFactor() const;
 
+  void SetExtData(const std::string &data);
+  std::optional<std::string> GetExtData() const;
+
  private:
+  std::optional<std::string> viv_ext_data;
+
   // Unique tag for each session.
   std::string session_tag_;
 

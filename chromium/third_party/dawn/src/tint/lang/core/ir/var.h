@@ -33,30 +33,20 @@
 #include "src/tint/api/common/binding_point.h"
 #include "src/tint/lang/core/builtin_value.h"
 #include "src/tint/lang/core/interpolation.h"
+#include "src/tint/lang/core/io_attributes.h"
 #include "src/tint/lang/core/ir/operand_instruction.h"
 #include "src/tint/utils/rtti/castable.h"
 
 namespace tint::core::ir {
-
-/// Attributes that can be applied to a variable that will be used for shader IO.
-struct IOAttributes {
-    /// The value of a `@location` attribute.
-    std::optional<uint32_t> location;
-    /// The value of a `@blend_src` attribute.
-    std::optional<uint32_t> blend_src;
-    /// The value of a `@builtin` attribute.
-    std::optional<core::BuiltinValue> builtin;
-    /// The values of a `@interpolate` attribute.
-    std::optional<core::Interpolation> interpolation;
-    /// True if the variable is annotated with `@invariant`.
-    bool invariant = false;
-};
 
 /// A var instruction in the IR.
 class Var final : public Castable<Var, OperandInstruction<1, 1>> {
   public:
     /// The offset in Operands() for the initializer
     static constexpr size_t kInitializerOperandOffset = 0;
+
+    /// The fixed number of results returned by this instruction
+    static constexpr size_t kNumResults = 1;
 
     /// Constructor (no results, no operands)
     Var();
@@ -73,9 +63,9 @@ class Var final : public Castable<Var, OperandInstruction<1, 1>> {
     /// @param initializer the initializer
     void SetInitializer(Value* initializer);
     /// @returns the initializer
-    Value* Initializer() { return operands_[kInitializerOperandOffset]; }
+    Value* Initializer() { return Operand(kInitializerOperandOffset); }
     /// @returns the initializer
-    const Value* Initializer() const { return operands_[kInitializerOperandOffset]; }
+    const Value* Initializer() const { return Operand(kInitializerOperandOffset); }
 
     /// Sets the binding point
     /// @param group the group
@@ -83,6 +73,12 @@ class Var final : public Castable<Var, OperandInstruction<1, 1>> {
     void SetBindingPoint(uint32_t group, uint32_t binding) { binding_point_ = {group, binding}; }
     /// @returns the binding points if `Attributes` contains `kBindingPoint`
     std::optional<struct BindingPoint> BindingPoint() const { return binding_point_; }
+
+    /// Sets the input attachment index
+    /// @param index the index
+    void SetInputAttachmentIndex(uint32_t index) { input_attachment_index_ = index; }
+    /// @returns the input attachment index if any
+    std::optional<uint32_t> InputAttachmentIndex() const { return input_attachment_index_; }
 
     /// Sets the IO attributes
     /// @param attrs the attributes
@@ -98,6 +94,7 @@ class Var final : public Castable<Var, OperandInstruction<1, 1>> {
 
   private:
     std::optional<struct BindingPoint> binding_point_;
+    std::optional<uint32_t> input_attachment_index_;
     IOAttributes attributes_;
 };
 

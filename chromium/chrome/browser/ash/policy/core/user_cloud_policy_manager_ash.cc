@@ -27,10 +27,10 @@
 #include "chrome/browser/ash/login/users/affiliation.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/core/policy_oauth2_token_fetcher.h"
-#include "chrome/browser/ash/policy/local_user_files/local_files_cleanup.h"
 #include "chrome/browser/ash/policy/login/wildcard_login_checker.h"
 #include "chrome/browser/ash/policy/remote_commands/user_commands_factory_ash.h"
 #include "chrome/browser/ash/policy/reporting/arc_app_install_event_log_uploader.h"
+#include "chrome/browser/ash/policy/skyvault/local_files_cleanup.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/enterprise/reporting/report_scheduler_desktop.h"
@@ -44,7 +44,7 @@
 #include "components/enterprise/browser/reporting/real_time_report_controller.h"
 #include "components/enterprise/browser/reporting/report_generator.h"
 #include "components/enterprise/browser/reporting/report_scheduler.h"
-#include "components/invalidation/impl/profile_invalidation_provider.h"
+#include "components/invalidation/profile_invalidation_provider.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "components/policy/core/common/cloud/affiliation.h"
 #include "components/policy/core/common/cloud/cloud_external_data_manager.h"
@@ -126,6 +126,12 @@ class UserCloudPolicyManagerAshNotifierFactory
 
   ~UserCloudPolicyManagerAshNotifierFactory() override = default;
 };
+
+// Returns true only if SkyVault TT is enabled, but GA is not.
+bool IsSkyVaultTTEnabled() {
+  return base::FeatureList::IsEnabled(features::kSkyVault) &&
+         !base::FeatureList::IsEnabled(features::kSkyVaultV2);
+}
 
 }  // namespace
 
@@ -252,8 +258,12 @@ void UserCloudPolicyManagerAsh::ConnectManagementService(
 
   app_install_event_log_uploader_ =
       std::make_unique<ArcAppInstallEventLogUploader>(client(), profile_);
-  local_files_cleanup_ =
-      std::make_unique<local_user_files::LocalFilesCleanup>();
+
+  if (IsSkyVaultTTEnabled()) {
+    // Local files should be deleted if required by policy.
+    local_files_cleanup_ =
+        std::make_unique<local_user_files::LocalFilesCleanup>();
+  }
 }
 
 void UserCloudPolicyManagerAsh::OnAccessTokenAvailable(

@@ -14,18 +14,67 @@
 
 from python.generators.trace_processor_table.public import Column as C
 from python.generators.trace_processor_table.public import CppInt64
+from python.generators.trace_processor_table.public import ColumnFlag
 from python.generators.trace_processor_table.public import Table
 from python.generators.trace_processor_table.public import CppTableId
 from python.generators.trace_processor_table.public import TableDoc
 from python.generators.trace_processor_table.public import CppUint32
 from python.generators.trace_processor_table.public import CppString
 
+INPUTMETHOD_CLIENTS_TABLE = Table(
+    python_module=__file__,
+    class_name='InputMethodClientsTable',
+    sql_name='__intrinsic_inputmethod_clients',
+    columns=[
+        C('ts', CppInt64(), ColumnFlag.SORTED),
+        C('arg_set_id', CppUint32()),
+    ],
+    tabledoc=TableDoc(
+        doc='InputMethod clients',
+        group='Winscope',
+        columns={
+            'ts': 'The timestamp the dump was triggered',
+            'arg_set_id': 'Extra args parsed from the proto message',
+        }))
+
+INPUTMETHOD_MANAGER_SERVICE_TABLE = Table(
+    python_module=__file__,
+    class_name='InputMethodManagerServiceTable',
+    sql_name='__intrinsic_inputmethod_manager_service',
+    columns=[
+        C('ts', CppInt64(), ColumnFlag.SORTED),
+        C('arg_set_id', CppUint32()),
+    ],
+    tabledoc=TableDoc(
+        doc='InputMethod manager service',
+        group='Winscope',
+        columns={
+            'ts': 'The timestamp the dump was triggered',
+            'arg_set_id': 'Extra args parsed from the proto message',
+        }))
+
+INPUTMETHOD_SERVICE_TABLE = Table(
+    python_module=__file__,
+    class_name='InputMethodServiceTable',
+    sql_name='__intrinsic_inputmethod_service',
+    columns=[
+        C('ts', CppInt64(), ColumnFlag.SORTED),
+        C('arg_set_id', CppUint32()),
+    ],
+    tabledoc=TableDoc(
+        doc='InputMethod service',
+        group='Winscope',
+        columns={
+            'ts': 'The timestamp the dump was triggered',
+            'arg_set_id': 'Extra args parsed from the proto message',
+        }))
+
 SURFACE_FLINGER_LAYERS_SNAPSHOT_TABLE = Table(
     python_module=__file__,
     class_name='SurfaceFlingerLayersSnapshotTable',
     sql_name='surfaceflinger_layers_snapshot',
     columns=[
-        C('ts', CppInt64()),
+        C('ts', CppInt64(), ColumnFlag.SORTED),
         C('arg_set_id', CppUint32()),
     ],
     tabledoc=TableDoc(
@@ -57,7 +106,7 @@ SURFACE_FLINGER_TRANSACTIONS_TABLE = Table(
     class_name='SurfaceFlingerTransactionsTable',
     sql_name='surfaceflinger_transactions',
     columns=[
-        C('ts', CppInt64()),
+        C('ts', CppInt64(), ColumnFlag.SORTED),
         C('arg_set_id', CppUint32()),
     ],
     tabledoc=TableDoc(
@@ -69,13 +118,29 @@ SURFACE_FLINGER_TRANSACTIONS_TABLE = Table(
             'arg_set_id': 'Extra args parsed from the proto message',
         }))
 
+VIEWCAPTURE_TABLE = Table(
+    python_module=__file__,
+    class_name='ViewCaptureTable',
+    sql_name='__intrinsic_viewcapture',
+    columns=[
+        C('ts', CppInt64(), ColumnFlag.SORTED),
+        C('arg_set_id', CppUint32()),
+    ],
+    tabledoc=TableDoc(
+        doc='ViewCapture',
+        group='Winscope',
+        columns={
+            'ts': 'The timestamp the views were captured',
+            'arg_set_id': 'Extra args parsed from the proto message',
+        }))
+
 WINDOW_MANAGER_SHELL_TRANSITIONS_TABLE = Table(
     python_module=__file__,
     class_name='WindowManagerShellTransitionsTable',
     sql_name='window_manager_shell_transitions',
     columns=[
         C('ts', CppInt64()),
-        C('transition_id', CppInt64()),
+        C('transition_id', CppInt64(), ColumnFlag.SORTED),
         C('arg_set_id', CppUint32()),
     ],
     tabledoc=TableDoc(
@@ -103,12 +168,28 @@ WINDOW_MANAGER_SHELL_TRANSITION_HANDLERS_TABLE = Table(
             'handler_name': 'The name of the handler',
         }))
 
+WINDOW_MANAGER_TABLE = Table(
+    python_module=__file__,
+    class_name='WindowManagerTable',
+    sql_name='__intrinsic_windowmanager',
+    columns=[
+        C('ts', CppInt64(), ColumnFlag.SORTED),
+        C('arg_set_id', CppUint32()),
+    ],
+    tabledoc=TableDoc(
+        doc='WindowManager',
+        group='Winscope',
+        columns={
+            'ts': 'The timestamp the state snapshot was captured',
+            'arg_set_id': 'Extra args parsed from the proto message',
+        }))
+
 PROTOLOG_TABLE = Table(
     python_module=__file__,
     class_name='ProtoLogTable',
     sql_name='protolog',
     columns=[
-        C('ts', CppInt64()),
+        C('ts', CppInt64(), ColumnFlag.SORTED),
         C('level', CppString()),
         C('tag', CppString()),
         C('message', CppString()),
@@ -128,9 +209,14 @@ PROTOLOG_TABLE = Table(
 # Keep this list sorted.
 ALL_TABLES = [
     PROTOLOG_TABLE,
+    INPUTMETHOD_CLIENTS_TABLE,
+    INPUTMETHOD_MANAGER_SERVICE_TABLE,
+    INPUTMETHOD_SERVICE_TABLE,
     SURFACE_FLINGER_LAYERS_SNAPSHOT_TABLE,
     SURFACE_FLINGER_LAYER_TABLE,
     SURFACE_FLINGER_TRANSACTIONS_TABLE,
+    VIEWCAPTURE_TABLE,
     WINDOW_MANAGER_SHELL_TRANSITIONS_TABLE,
     WINDOW_MANAGER_SHELL_TRANSITION_HANDLERS_TABLE,
+    WINDOW_MANAGER_TABLE,
 ]

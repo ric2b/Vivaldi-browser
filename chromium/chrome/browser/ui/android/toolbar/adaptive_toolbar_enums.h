@@ -35,7 +35,12 @@ enum class AdaptiveToolbarButtonVariant {
   kAddToBookmarks = 9,
   // ReadAloud action.
   kReadAloud = 10,
-  kTrackerShield = 11, // Vivaldi
+  // Value for testing.
+  kTestButton = 11,
+  // Price Insights action.
+  kPriceInsights = 12,
+
+  kTrackerShield, // Vivaldi
   kMaxValue = kTrackerShield,
 };
 

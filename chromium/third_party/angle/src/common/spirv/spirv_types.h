@@ -72,7 +72,7 @@ using LiteralString     = const char *;
 // Note: In ANGLE's use cases, all literals fit in 32 bits.
 using LiteralContextDependentNumber = LiteralInteger;
 // TODO(syoussefi): To be made stronger when generating SPIR-V from the translator.
-// http://anglebug.com/4889
+// http://anglebug.com/40096715
 using LiteralExtInstInteger = LiteralInteger;
 
 struct PairLiteralIntegerIdRef
@@ -124,6 +124,11 @@ enum HeaderIndex
     kHeaderIndexSchema       = 4,
     kHeaderIndexInstructions = 5,
 };
+
+// SPIR-V version
+constexpr uint32_t kVersion_1_0 = 0x00010000;
+constexpr uint32_t kVersion_1_3 = 0x00010300;
+constexpr uint32_t kVersion_1_4 = 0x00010400;
 
 // Returns whether SPIR-V is valid.  Useful for ASSERTs.  Automatically generates a warning if
 // SPIR-V is not valid.

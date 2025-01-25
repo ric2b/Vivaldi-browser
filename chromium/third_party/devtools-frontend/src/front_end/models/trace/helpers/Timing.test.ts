@@ -9,9 +9,6 @@ import * as TraceModel from '../trace.js';
 function milliToMicro(value: number) {
   return TraceModel.Types.Timing.MicroSeconds(value * 1000);
 }
-function secToMicro(value: TraceModel.Types.Timing.Seconds): TraceModel.Types.Timing.MicroSeconds {
-  return milliToMicro(value * 1000);
-}
 
 describeWithEnvironment('Timing helpers', () => {
   describe('Timing conversions', () => {
@@ -81,56 +78,10 @@ describeWithEnvironment('Timing helpers', () => {
     });
   });
 
-  describe('detectBestTimeUnit', () => {
-    it('detects microseconds', () => {
-      const time = TraceModel.Types.Timing.MicroSeconds(890);
-      assert.strictEqual(
-          TraceModel.Helpers.Timing.detectBestTimeUnit(time), TraceModel.Types.Timing.TimeUnit.MICROSECONDS);
-    });
-
-    it('detects milliseconds', () => {
-      const time = milliToMicro(8.9122);
-      assert.strictEqual(
-          TraceModel.Helpers.Timing.detectBestTimeUnit(time), TraceModel.Types.Timing.TimeUnit.MILLISECONDS);
-    });
-
-    it('detects seconds', () => {
-      const time = secToMicro(TraceModel.Types.Timing.Seconds(8.9134));
-      assert.strictEqual(TraceModel.Helpers.Timing.detectBestTimeUnit(time), TraceModel.Types.Timing.TimeUnit.SECONDS);
-    });
-
-    it('detects minutes', () => {
-      const time = secToMicro(TraceModel.Types.Timing.Seconds(203));  // 3 mins, 23 sec in seconds.
-      assert.strictEqual(TraceModel.Helpers.Timing.detectBestTimeUnit(time), TraceModel.Types.Timing.TimeUnit.MINUTES);
-    });
-  });
-
-  describe('formatTime', () => {
-    it('formats microseconds', () => {
-      const time = TraceModel.Types.Timing.MicroSeconds(890);
-      assert.strictEqual(TraceModel.Helpers.Timing.formatMicrosecondsTime(time), '890μs');
-    });
-
-    it('formats milliseconds', () => {
-      const time = milliToMicro(8.9122);
-      assert.strictEqual(TraceModel.Helpers.Timing.formatMicrosecondsTime(time), '8.912ms');
-    });
-
-    it('formats seconds', () => {
-      const time = secToMicro(TraceModel.Types.Timing.Seconds(8.9134));
-      assert.strictEqual(TraceModel.Helpers.Timing.formatMicrosecondsTime(time), '8.913s');
-    });
-
-    it('formats minutes', () => {
-      const time = secToMicro(TraceModel.Types.Timing.Seconds(203));  // 3 mins, 23 sec in seconds.
-      assert.strictEqual(TraceModel.Helpers.Timing.formatMicrosecondsTime(time), '3m 23s');
-    });
-  });
-
   describe('timeStampForEventAdjustedByClosestNavigation', () => {
     it('can use the navigation ID to adjust the time correctly', async function() {
-      const traceParsedData = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
-      const lcpEvent = traceParsedData.PageLoadMetrics.allMarkerEvents.find(event => {
+      const {traceData} = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
+      const lcpEvent = traceData.PageLoadMetrics.allMarkerEvents.find(event => {
         // Just one LCP Event so we do not need to worry about ordering and finding the right one.
         return event.name === 'largestContentfulPaint::Candidate';
       });
@@ -141,13 +92,13 @@ describeWithEnvironment('Timing helpers', () => {
       assert.exists(lcpEvent.args.data?.navigationId);
       const adjustedTime = TraceModel.Helpers.Timing.timeStampForEventAdjustedByClosestNavigation(
           lcpEvent,
-          traceParsedData.Meta.traceBounds,
-          traceParsedData.Meta.navigationsByNavigationId,
-          traceParsedData.Meta.navigationsByFrameId,
+          traceData.Meta.traceBounds,
+          traceData.Meta.navigationsByNavigationId,
+          traceData.Meta.navigationsByFrameId,
       );
 
       const unadjustedTime = TraceModel.Helpers.Timing.microSecondsToMilliseconds(
-          TraceModel.Types.Timing.MicroSeconds(lcpEvent.ts - traceParsedData.Meta.traceBounds.min),
+          TraceModel.Types.Timing.MicroSeconds(lcpEvent.ts - traceData.Meta.traceBounds.min),
       );
       assert.strictEqual(unadjustedTime.toFixed(2), String(130.31));
 
@@ -157,9 +108,9 @@ describeWithEnvironment('Timing helpers', () => {
     });
 
     it('can use the frame ID to adjust the time correctly', async function() {
-      const traceParsedData = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
-      const dclEvent = traceParsedData.PageLoadMetrics.allMarkerEvents.find(event => {
-        return event.name === 'MarkDOMContent' && event.args.data?.frame === traceParsedData.Meta.mainFrameId;
+      const {traceData} = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
+      const dclEvent = traceData.PageLoadMetrics.allMarkerEvents.find(event => {
+        return event.name === 'MarkDOMContent' && event.args.data?.frame === traceData.Meta.mainFrameId;
       });
       if (!dclEvent) {
         throw new Error('Could not find DCL event');
@@ -168,19 +119,143 @@ describeWithEnvironment('Timing helpers', () => {
       assert.isUndefined(dclEvent.args.data?.navigationId);
 
       const unadjustedTime = TraceModel.Helpers.Timing.microSecondsToMilliseconds(
-          TraceModel.Types.Timing.MicroSeconds(dclEvent.ts - traceParsedData.Meta.traceBounds.min),
+          TraceModel.Types.Timing.MicroSeconds(dclEvent.ts - traceData.Meta.traceBounds.min),
       );
       assert.strictEqual(unadjustedTime.toFixed(2), String(190.79));
       const adjustedTime = TraceModel.Helpers.Timing.timeStampForEventAdjustedByClosestNavigation(
           dclEvent,
-          traceParsedData.Meta.traceBounds,
-          traceParsedData.Meta.navigationsByNavigationId,
-          traceParsedData.Meta.navigationsByFrameId,
+          traceData.Meta.traceBounds,
+          traceData.Meta.navigationsByNavigationId,
+          traceData.Meta.navigationsByFrameId,
       );
 
       // To make the assertion easier to read.
       const timeAsMS = TraceModel.Helpers.Timing.microSecondsToMilliseconds(adjustedTime);
       assert.strictEqual(timeAsMS.toFixed(2), String(178.92));
+    });
+  });
+
+  describe('BoundsIncludeTimeRange', () => {
+    const {boundsIncludeTimeRange, traceWindowFromMicroSeconds} = TraceModel.Helpers.Timing;
+
+    it('is false for an event that is outside the LHS of the visible bounds', () => {
+      const bounds = traceWindowFromMicroSeconds(
+          milliToMicro(50),
+          milliToMicro(100),
+      );
+
+      const timeRange = traceWindowFromMicroSeconds(
+          milliToMicro(10),
+          milliToMicro(20),
+      );
+
+      assert.isFalse(boundsIncludeTimeRange({
+        bounds,
+        timeRange,
+      }));
+    });
+
+    it('is false for an event that is outside the RHS of the visible bounds', () => {
+      const bounds = traceWindowFromMicroSeconds(
+          milliToMicro(50),
+          milliToMicro(100),
+      );
+
+      const timeRange = traceWindowFromMicroSeconds(
+          milliToMicro(101),
+          milliToMicro(200),
+      );
+
+      assert.isFalse(boundsIncludeTimeRange({
+        bounds,
+        timeRange,
+      }));
+    });
+
+    it('is true for an event that overlaps the LHS of the bounds', () => {
+      const bounds = traceWindowFromMicroSeconds(
+          milliToMicro(50),
+          milliToMicro(100),
+      );
+
+      const timeRange = traceWindowFromMicroSeconds(
+          milliToMicro(0),
+          milliToMicro(52),
+      );
+
+      assert.isTrue(boundsIncludeTimeRange({
+        bounds,
+        timeRange,
+      }));
+    });
+
+    it('is true for an event that overlaps the RHS of the bounds', () => {
+      const bounds = traceWindowFromMicroSeconds(
+          milliToMicro(50),
+          milliToMicro(100),
+      );
+
+      const timeRange = traceWindowFromMicroSeconds(
+          milliToMicro(99),
+          milliToMicro(101),
+      );
+
+      assert.isTrue(boundsIncludeTimeRange({
+        bounds,
+        timeRange,
+      }));
+    });
+
+    it('is true for an event that is entirely within the bounds', () => {
+      const bounds = traceWindowFromMicroSeconds(
+          milliToMicro(50),
+          milliToMicro(100),
+      );
+
+      const timeRange = traceWindowFromMicroSeconds(
+          milliToMicro(51),
+          milliToMicro(75),
+      );
+
+      assert.isTrue(boundsIncludeTimeRange({
+        bounds,
+        timeRange,
+      }));
+    });
+
+    it('is true for an event that is larger than the bounds', () => {
+      const bounds = traceWindowFromMicroSeconds(
+          milliToMicro(50),
+          milliToMicro(100),
+      );
+
+      const timeRange = traceWindowFromMicroSeconds(
+          milliToMicro(0),
+          milliToMicro(200),
+      );
+
+      assert.isTrue(boundsIncludeTimeRange({
+        bounds,
+        timeRange,
+      }));
+    });
+  });
+
+  describe('timestampIsInBounds', () => {
+    const {timestampIsInBounds} = TraceModel.Helpers.Timing;
+    const {MicroSeconds} = TraceModel.Types.Timing;
+    it('is true if the value is in the bounds and false otherwise', async () => {
+      const bounds: TraceModel.Types.Timing.TraceWindowMicroSeconds = {
+        min: MicroSeconds(1),
+        max: MicroSeconds(10),
+        range: MicroSeconds(9),
+      };
+
+      assert.isTrue(timestampIsInBounds(bounds, MicroSeconds(1)));
+      assert.isTrue(timestampIsInBounds(bounds, MicroSeconds(5)));
+      assert.isTrue(timestampIsInBounds(bounds, MicroSeconds(10)));
+      assert.isFalse(timestampIsInBounds(bounds, MicroSeconds(0)));
+      assert.isFalse(timestampIsInBounds(bounds, MicroSeconds(11)));
     });
   });
 });

@@ -33,7 +33,7 @@ bool EventTemplateTable::CreateEventTemplateTable() {
       "last_modified INTEGER"
       ")");
 
-  return GetDB().Execute(sql.c_str());
+  return GetDB().Execute(sql);
 }
 
 EventTemplateID EventTemplateTable::CreateEventTemplate(

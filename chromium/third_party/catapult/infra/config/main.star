@@ -141,11 +141,11 @@ def try_builder(
 
     dims = {
         "pool": "luci.flex.try",
-        "os": "Ubuntu-18" if os == "Ubuntu" else os,
+        "os": "Ubuntu-22.04" if os == "Ubuntu" else os,
     }
     if dimensions:
         dims.update(dimensions)
-    if os == "Ubuntu":
+    if os.startswith("Ubuntu"):
         dims["cpu"] = "x86-64"
 
     executable = luci.recipe(

@@ -20,10 +20,10 @@
 #include "base/i18n/char_iterator.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/not_fatal_until.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -195,7 +195,7 @@ DecoratedText::RangedAttribute CreateRangedAttribute(
       base::ranges::find_if(font_spans, [font_index](const FontSpan& span) {
         return IndexInRange(span.second, font_index);
       });
-  DCHECK(font_spans.end() != iter);
+  CHECK(font_spans.end() != iter);
   const Font& font = iter->first;
 
   int font_style = Font::NORMAL;
@@ -7173,7 +7173,7 @@ TEST_F(RenderTextTest, HarfBuzz_UnicodeFallback) {
   render_text->SetText(u"\ud55c");
   const internal::TextRunList* run_list = GetHarfBuzzRunList();
   ASSERT_EQ(1U, run_list->size());
-  EXPECT_EQ(0U, run_list->runs()[0]->CountMissingGlyphs());
+  EXPECT_EQ(0U, run_list->MissingGlyphCount());
 }
 #endif  // !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS) &&
         // !BUILDFLAG(IS_ANDROID)
@@ -7192,7 +7192,7 @@ TEST_F(RenderTextTest, HarfBuzz_FallbackFontsSupportGlyphs) {
 
     const internal::TextRunList* run_list = GetHarfBuzzRunList();
     ASSERT_EQ(1U, run_list->size());
-    int missing_glyphs = run_list->runs()[0]->CountMissingGlyphs();
+    const int missing_glyphs = run_list->MissingGlyphCount();
     if (missing_glyphs != 0) {
       ADD_FAILURE() << "Text '" << text << "' is missing " << missing_glyphs
                     << " glyphs.";
@@ -7213,11 +7213,7 @@ TEST_F(RenderTextTest, HarfBuzz_MultiRunsSupportGlyphs) {
     RenderTextHarfBuzz* render_text = GetRenderText();
     render_text->SetText(text);
 
-    int missing_glyphs = 0;
-    const internal::TextRunList* run_list = GetHarfBuzzRunList();
-    for (const auto& run : run_list->runs())
-      missing_glyphs += run->CountMissingGlyphs();
-
+    const int missing_glyphs = GetHarfBuzzRunList()->MissingGlyphCount();
     if (missing_glyphs != 0) {
       ADD_FAILURE() << "Text '" << text << "' is missing " << missing_glyphs
                     << " glyphs.";
@@ -7245,12 +7241,7 @@ TEST_P(RenderTextTestWithFallbackFontCase, FallbackFont) {
   RenderTextHarfBuzz* render_text = GetRenderText();
   render_text->SetText(param.text);
 
-  int missing_glyphs = 0;
-  const internal::TextRunList* run_list = GetHarfBuzzRunList();
-  for (const auto& run : run_list->runs())
-    missing_glyphs += run->CountMissingGlyphs();
-
-  EXPECT_EQ(missing_glyphs, 0);
+  EXPECT_EQ(GetHarfBuzzRunList()->MissingGlyphCount(), 0U);
 }
 
 const FallbackFontCase kUnicodeDecomposeCases[] = {
@@ -7519,7 +7510,7 @@ TEST_F(RenderTextTest, ZeroWidthCharacters) {
     const internal::TextRunList* run_list = GetHarfBuzzRunList();
     EXPECT_EQ(0, run_list->width());
     ASSERT_EQ(run_list->runs().size(), 1U);
-    EXPECT_EQ(run_list->runs()[0]->CountMissingGlyphs(), 0U);
+    EXPECT_EQ(run_list->MissingGlyphCount(), 0U);
   }
 }
 
@@ -7725,8 +7716,7 @@ TEST_F(RenderTextTest, SubpixelRenderingSuppressed) {
 #if !BUILDFLAG(IS_MAC)
   EXPECT_EQ(GetRendererFont().getEdging(), SkFont::Edging::kSubpixelAntiAlias);
 #else
-  if (features::IsChromeRefresh2023() &&
-      !base::FeatureList::IsEnabled(features::kCr2023MacFontSmoothing)) {
+  if (!base::FeatureList::IsEnabled(features::kCr2023MacFontSmoothing)) {
     EXPECT_EQ(GetRendererFont().getEdging(), SkFont::Edging::kAntiAlias);
   } else {
     EXPECT_EQ(GetRendererFont().getEdging(),

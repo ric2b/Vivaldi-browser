@@ -6,11 +6,11 @@
 #define COMPONENTS_REPORTING_ENCRYPTION_ENCRYPTION_MODULE_INTERFACE_H_
 
 #include <atomic>
+#include <string_view>
 
 #include "base/feature_list.h"
 #include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
-#include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "components/reporting/proto/synced/record.pb.h"
 #include "components/reporting/util/status.h"
@@ -22,6 +22,10 @@ namespace reporting {
 // By default encryption is enabled and supported by server.
 // Disabled only for testing/stress purposes.
 BASE_DECLARE_FEATURE(kEncryptedReportingFeature);
+
+inline constexpr base::FilePath::CharType kEncryptionKeyFilePrefix[] =
+    FILE_PATH_LITERAL("EncryptionKey.");
+inline constexpr int32_t kEncryptionKeyMaxFileSize = 256;
 
 class EncryptionModuleInterface
     : public base::RefCountedThreadSafe<EncryptionModuleInterface> {

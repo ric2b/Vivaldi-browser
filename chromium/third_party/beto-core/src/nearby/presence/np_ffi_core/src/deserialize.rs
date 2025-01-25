@@ -19,9 +19,7 @@ use crate::deserialize::v0::*;
 use crate::deserialize::v1::*;
 use crate::utils::FfiEnum;
 use crypto_provider_default::CryptoProviderImpl;
-use handle_map::{
-    declare_handle_map, HandleLike, HandleMapDimensions, HandleMapFullError, HandleNotPresentError,
-};
+use handle_map::{declare_handle_map, HandleLike, HandleMapFullError, HandleNotPresentError};
 use np_adv::deserialization_arena;
 
 pub mod v0;
@@ -73,7 +71,8 @@ impl DeserializeAdvertisementResult {
     declare_enum_cast! {into_v0, V0, DeserializedV0Advertisement}
     declare_enum_cast! {into_v1, V1, DeserializedV1Advertisement}
 
-    /// Deallocates any internal data referenced by a `DeserializeAdvertisementResult`
+    /// Deallocates any internal data referenced by a `DeserializeAdvertisementResult`. This takes
+    /// ownership of any internal handles.
     pub fn deallocate(self) -> DeallocateResult {
         match self {
             DeserializeAdvertisementResult::Error => DeallocateResult::Success,
@@ -133,8 +132,9 @@ fn deserialize_advertisement_from_slice_internal(
     }
 }
 
-/// Attempts to deserialize an advertisement with the given payload.
-/// Suitable for langs which have a suitably expressive slice-type.
+/// Attempts to deserialize an advertisement with the given payload. Suitable for langs which have
+/// a suitably expressive slice-type. This uses the given `credential_book` handle but does not
+/// take ownership of it. The caller is given ownership of any handles in the returned structure.
 pub fn deserialize_advertisement_from_slice(
     adv_payload: &[u8],
     credential_book: CredentialBook,
@@ -147,8 +147,10 @@ pub fn deserialize_advertisement_from_slice(
     }
 }
 
-/// Attempts to deserialize an advertisement with the given payload.
-/// Suitable for langs which don't have an expressive-enough slice type.
+/// Attempts to deserialize an advertisement with the given payload.  Suitable for langs which
+/// don't have an expressive-enough slice type. This uses the given `credential_book` handle but
+/// does not take ownership of it. The caller is given ownership of any handles in the returned
+/// structure.
 pub fn deserialize_advertisement(
     adv_payload: &RawAdvertisementPayload,
     credential_book: CredentialBook,
@@ -215,14 +217,10 @@ pub struct DecryptedMetadata {
 
 declare_handle_map!(
     decrypted_metadata,
-    super::get_decrypted_metadata_handle_map_dimensions(),
+    crate::common::default_handle_map_dimensions(),
     super::DecryptedMetadata,
     super::DecryptedMetadataInternals
 );
-
-fn get_decrypted_metadata_handle_map_dimensions() -> HandleMapDimensions {
-    HandleMapDimensions { num_shards: global_num_shards(), max_active_handles: DEFAULT_MAX_HANDLES }
-}
 
 /// The pointer and length of the decrypted metadata byte buffer
 #[repr(C)]
@@ -271,7 +269,8 @@ fn allocate_decrypted_metadata_handle(metadata: Vec<u8>) -> DecryptMetadataResul
 }
 
 impl DecryptedMetadata {
-    /// Gets the raw parts, pointer + length representation of the metadata byte buffer
+    /// Gets the raw parts, pointer + length representation of the metadata byte buffer. This uses
+    /// the handle but does not take ownership of it.
     pub fn get_metadata_buffer_parts(&self) -> GetMetadataBufferPartsResult {
         match self.get() {
             Ok(metadata_internals) => {
@@ -285,8 +284,14 @@ impl DecryptedMetadata {
         }
     }
 
-    /// Frees the underlying decrypted metadata buffer
-    pub fn deallocate_metadata(&self) -> DeallocateResult {
+    /// Unwraps the buffer of decrypted bytes. This is for Rust usage. This takes ownership of the
+    /// handle and deallocates it.
+    pub fn take_buffer(self) -> Result<Box<[u8]>, HandleNotPresentError> {
+        self.deallocate().map(|internals| internals.decrypted_bytes)
+    }
+
+    /// Frees the underlying decrypted metadata buffer. This takes ownership of the handle.
+    pub fn deallocate_metadata(self) -> DeallocateResult {
         self.deallocate().map(|_| ()).into()
     }
 }

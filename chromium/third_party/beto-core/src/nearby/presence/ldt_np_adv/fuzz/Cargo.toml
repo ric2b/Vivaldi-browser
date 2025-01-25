@@ -1,40 +1,30 @@
 [package]
 name = "ldt-np-adv-fuzz"
-version = "0.0.0"
-authors = ["Automatically generated"]
-publish = false
-edition = "2018"
+version.workspace = true
+publish.workspace = true
+edition.workspace = true
 
 [package.metadata]
 cargo-fuzz = true
 
 [dependencies]
-libfuzzer-sys = "0.4"
-arbitrary = { version = "1.1.7", features = ["derive"] }
-crypto_provider_rustcrypto = { path = "../../../crypto/crypto_provider_rustcrypto", features = ["alloc"] }
+arbitrary = { workspace = true, features = ["derive"] }
+crypto_provider_rustcrypto = { workspace = true, features = ["alloc"] }
+derive_fuzztest.workspace = true
+ldt.workspace = true
+ldt_np_adv.workspace = true
+np_hkdf.workspace = true
+xts_aes.workspace = true
 
-[dependencies.ldt_np_adv]
-path = ".."
-
-[dependencies.np_hkdf]
-path = "../../np_hkdf"
-[dependencies.xts_aes]
-path = "../../xts_aes"
-[dependencies.ldt]
-path = "../../ldt"
-
-# Prevent this from interfering with workspaces
-[workspace]
-members = ["."]
+[target.'cfg(fuzzing)'.dependencies]
+libfuzzer-sys.workspace = true
 
 [[bin]]
-name = "ldt-np-roundtrip"
-path = "fuzz_targets/ldt_np_roundtrip.rs"
-test = false
+name = "ldt_np_roundtrip"
+path = "src/bin/ldt_np_roundtrip.rs"
 doc = false
 
 [[bin]]
-name = "ldt-np-decrypt"
-path = "fuzz_targets/ldt_np_decrypt.rs"
-test = false
+name = "ldt_np_decrypt"
+path = "src/bin/ldt_np_decrypt.rs"
 doc = false

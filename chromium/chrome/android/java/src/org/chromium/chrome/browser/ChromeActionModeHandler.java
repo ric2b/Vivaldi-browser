@@ -49,6 +49,7 @@ import java.util.Set;
 // Vivaldi
 import android.content.Intent;
 
+import org.chromium.build.BuildConfig;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.vivaldi.browser.notes.NoteAppendActivity;
 import org.vivaldi.browser.notes.NoteSelectionPopupController;
@@ -69,6 +70,7 @@ public class ChromeActionModeHandler {
      * @param activityTabProvider {@link ActivityTabProvider} instance.
      * @param actionBarObserver observer called when the contextual action bar's visibility has
      *     changed.
+     * @param showWebSearch Whether 'Web Search' option will be shown.
      * @param searchCallback Callback to run when search action is selected in the action mode.
      * @param shareDelegateSupplier The {@link Supplier} of the {@link ShareDelegate} that will be
      *     notified when a share action is performed.
@@ -76,6 +78,7 @@ public class ChromeActionModeHandler {
     public ChromeActionModeHandler(
             ActivityTabProvider activityTabProvider,
             Callback<String> searchCallback,
+            boolean showWebSearch,
             Supplier<ShareDelegate> shareDelegateSupplier,
             Supplier<ReadAloudController> readAloudControllerSupplier) {
         mInitWebContentsObserver =
@@ -87,6 +90,7 @@ public class ChromeActionModeHandler {
                                     mActiveTab,
                                     webContents,
                                     searchCallback,
+                                    showWebSearch,
                                     shareDelegateSupplier,
                                     readAloudControllerSupplier));
                     spc.setDropdownMenuDelegate(new ChromeSelectionDropdownMenuDelegate());
@@ -124,6 +128,7 @@ public class ChromeActionModeHandler {
         private final Tab mTab;
         private final ActionModeCallbackHelper mHelper;
         private final Callback<String> mSearchCallback;
+        private final boolean mShowWebSearch;
         private final Supplier<ShareDelegate> mShareDelegateSupplier;
         private final Supplier<ReadAloudController> mReadAloudControllerSupplier;
 
@@ -137,10 +142,12 @@ public class ChromeActionModeHandler {
                 Tab tab,
                 WebContents webContents,
                 Callback<String> searchCallback,
+                boolean showWebSearch,
                 Supplier<ShareDelegate> shareDelegateSupplier,
                 Supplier<ReadAloudController> readAloudControllerSupplier) {
             mTab = tab;
             mHelper = getActionModeCallbackHelper(webContents);
+            mShowWebSearch = showWebSearch;
             mSearchCallback = searchCallback;
             mShareDelegateSupplier = shareDelegateSupplier;
             mReadAloudControllerSupplier = readAloudControllerSupplier;
@@ -161,7 +168,7 @@ public class ChromeActionModeHandler {
                             | ActionModeCallbackHelper.MENU_ITEM_SHARE;
             // Disable options that expose additional Chrome functionality prior to the FRE being
             // completed (i.e. creation of a new tab).
-            if (FirstRunStatus.getFirstRunFlowComplete()) {
+            if (FirstRunStatus.getFirstRunFlowComplete() && mShowWebSearch) {
                 allowedActionModes |= ActionModeCallbackHelper.MENU_ITEM_WEB_SEARCH;
             }
             mHelper.setAllowedMenuItems(allowedActionModes);
@@ -181,9 +188,21 @@ public class ChromeActionModeHandler {
                 if (item.getGroupId() != R.id.select_action_menu_text_processing_items
                         || item.getIntent() == null
                         || item.getIntent().getComponent() == null) {
+                    if (BuildConfig.IS_VIVALDI && // Vivaldi VAB-9670
+                            item.getItemId() == R.id.select_action_menu_translate) {
+                        item.setTitle(R.string.translate_vivaldi_context_menu);
+                        Intent webappIntent = (TabUtils.getActivity(mTab)).getIntent();
+                        if (webappIntent != null && webappIntent.getData() != null &&
+                                webappIntent.getData().toString().contains("webapp")) {
+                                    item.setVisible(false); // Removes option in PWAs
+                            }
+                        }
                     continue;
                 }
                 String packageName = item.getIntent().getComponent().getPackageName();
+                if (BuildConfig.IS_VIVALDI && packageName.equals("com.google.android.apps.translate")) { // Vivaldi
+                    item.setTitle(R.string.translate_google_context_menu);
+                } // End Vivaldi
                 // Exclude actions from browsers and system launchers. https://crbug.com/850195
                 if (browsers.contains(packageName) || launchers.contains(packageName)) {
                     item.setVisible(false);

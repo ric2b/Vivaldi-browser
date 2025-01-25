@@ -49,6 +49,7 @@
 #include "extensions/common/mojom/context_type.mojom.h"
 
 #include "app/vivaldi_apptools.h"
+#include "components/panel/panel_id.h"
 
 namespace extensions {
 
@@ -147,9 +148,10 @@ api::sessions::Session CreateSessionModelHelper(
   } else if (window) {
     session_struct.window = std::move(*window);
   } else if (group) {
-    NOTREACHED();  // TODO(crbug.com/40757179): Implement group support.
+    // TODO(crbug.com/40757179): Implement group support.
+    NOTIMPLEMENTED();
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
   return session_struct;
 }
@@ -176,6 +178,12 @@ api::windows::Window SessionsGetRecentlyClosedFunction::CreateWindowModel(
 
   std::vector<api::tabs::Tab> tabs;
   for (const auto& tab : window.tabs) {
+
+    if (vivaldi::ParseVivPanelId(tab->viv_ext_data)) {
+      // Exclude panels from the session.
+      continue;
+    }
+
     tabs.push_back(
         CreateTabModel(*tab, tab->tabstrip_index == window.selected_tab_index));
   }
@@ -332,7 +340,7 @@ SessionsGetDevicesFunction::CreateWindowModel(
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     case sessions::SessionWindow::TYPE_CUSTOM_TAB:
 #endif
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   api::windows::WindowState state = api::windows::WindowState::kNone;
@@ -395,6 +403,24 @@ api::sessions::Device SessionsGetDevicesFunction::CreateDeviceModel(
   api::sessions::Device device_struct;
   device_struct.info = session->GetSessionName();
   device_struct.device_name = session->GetSessionName();
+
+  if ((::vivaldi::IsVivaldiApp(extension()->id()))) {
+    device_struct.viv_ext_data = session->GetExtData();
+    switch(session->GetDeviceFormFactor()) {
+      case syncer::DeviceInfo::FormFactor::kPhone:
+        device_struct.device_type = "phone";
+        break;
+      case syncer::DeviceInfo::FormFactor::kDesktop:
+        device_struct.device_type = "desktop";
+        break;
+      case syncer::DeviceInfo::FormFactor::kTablet:
+        device_struct.device_type = "tablet";
+        break;
+     case syncer::DeviceInfo::FormFactor::kUnknown:
+        device_struct.device_type = "unknown";
+        break;
+    }
+  }
 
   for (auto it = session->windows.begin();
        it != session->windows.end() &&

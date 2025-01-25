@@ -45,8 +45,9 @@ static constexpr std::array<wgpu::CompositeAlphaMode, 5> kAllAlphaModes = {
     wgpu::CompositeAlphaMode::Premultiplied, wgpu::CompositeAlphaMode::Unpremultiplied,
     wgpu::CompositeAlphaMode::Inherit,
 };
-static constexpr std::array<wgpu::PresentMode, 3> kAllPresentModes = {
+static constexpr std::array<wgpu::PresentMode, 4> kAllPresentModes = {
     wgpu::PresentMode::Fifo,
+    wgpu::PresentMode::FifoRelaxed,
     wgpu::PresentMode::Immediate,
     wgpu::PresentMode::Mailbox,
 };
@@ -101,10 +102,8 @@ class SurfaceConfigurationValidationTests : public DawnTest {
         wgpu::SurfaceCapabilities capabilities;
         surface.GetCapabilities(adapter, &capabilities);
 
-        wgpu::TextureFormat preferredFormat = surface.GetPreferredFormat(adapter);
-
         wgpu::SurfaceConfiguration config = baseConfig;
-        config.format = preferredFormat;
+        config.format = capabilities.formats[0];
         config.alphaMode = capabilities.alphaModes[0];
         config.presentMode = capabilities.presentModes[0];
         return config;
@@ -121,6 +120,10 @@ class SurfaceConfigurationValidationTests : public DawnTest {
 
     bool SupportsAlphaMode(const wgpu::SurfaceCapabilities& capabilities,
                            wgpu::CompositeAlphaMode mode) {
+        if (mode == wgpu::CompositeAlphaMode::Auto) {
+            return true;
+        }
+
         for (size_t i = 0; i < capabilities.alphaModeCount; ++i) {
             if (capabilities.alphaModes[i] == mode) {
                 return true;
@@ -164,6 +167,24 @@ TEST_P(SurfaceConfigurationValidationTests, AtLeastOneSupportedConfiguration) {
     ASSERT_GT(capabilities.presentModeCount, 0u);
 }
 
+// AlphaMode::Auto should never be reported but always supported.
+TEST_P(SurfaceConfigurationValidationTests, AlphaModeAuto) {
+    wgpu::Surface surface = CreateTestSurface();
+
+    wgpu::SurfaceCapabilities capabilities;
+    surface.GetCapabilities(adapter, &capabilities);
+
+    // Auto is never reported.
+    for (size_t i = 0; i < capabilities.alphaModeCount; ++i) {
+        ASSERT_NE(capabilities.alphaModes[i], wgpu::CompositeAlphaMode::Auto);
+    }
+
+    // But always supported.
+    wgpu::SurfaceConfiguration config = GetPreferredConfiguration(surface);
+    config.alphaMode = wgpu::CompositeAlphaMode::Auto;
+    surface.Configure(&config);
+}
+
 // Using any combination of the reported capability is ok for configuring the surface.
 TEST_P(SurfaceConfigurationValidationTests, AnyCombinationOfCapabilities) {
     // TODO(dawn:2320): Fails with "internal drawable creation failed" on the Windows NVIDIA CQ
@@ -200,21 +221,6 @@ TEST_P(SurfaceConfigurationValidationTests, AnyCombinationOfCapabilities) {
             }
         }
     }
-}
-
-// Preferred format is always valid.
-TEST_P(SurfaceConfigurationValidationTests, PreferredFormatIsValid) {
-    wgpu::Surface surface = CreateTestSurface();
-
-    wgpu::SurfaceCapabilities capabilities;
-    surface.GetCapabilities(adapter, &capabilities);
-
-    wgpu::TextureFormat preferredFormat = surface.GetPreferredFormat(adapter);
-    bool found = false;
-    for (size_t i = 0; i < capabilities.formatCount; ++i) {
-        found = found || capabilities.formats[i] == preferredFormat;
-    }
-    ASSERT_TRUE(found);
 }
 
 // Invalid view format fails
@@ -290,6 +296,47 @@ TEST_P(SurfaceConfigurationValidationTests, UnconfigureNonConfiguredSurfaceFails
     // TODO(dawn:2320): This cannot throw a device error since the surface is
     // not aware of the device at this stage.
     /*ASSERT_DEVICE_ERROR(*/ CreateTestSurface().Unconfigure() /*)*/;
+}
+
+// Test that including unsupported usage flag will result in error.
+TEST_P(SurfaceConfigurationValidationTests, ErrorIncludeUnsupportedUsage) {
+    DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("skip_validation"));
+
+    wgpu::Surface surface = CreateTestSurface();
+    wgpu::SurfaceCapabilities caps;
+    surface.GetCapabilities(adapter, &caps);
+
+    // Assuming StorageAttachment is not supported.
+    DAWN_TEST_UNSUPPORTED_IF(caps.usages & wgpu::TextureUsage::StorageAttachment);
+
+    wgpu::SurfaceConfiguration config = GetPreferredConfiguration(surface);
+    config.usage = wgpu::TextureUsage::StorageAttachment;
+    ASSERT_DEVICE_ERROR_MSG(surface.Configure(&config), testing::HasSubstr("Usages requested"));
+}
+
+// Test that validation of format capabilities still happens.
+TEST_P(SurfaceConfigurationValidationTests, StorageRequiresCapableFormat) {
+    DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("skip_validation"));
+
+    wgpu::Surface surface = CreateTestSurface();
+    wgpu::SurfaceCapabilities caps;
+    surface.GetCapabilities(adapter, &caps);
+
+    // Assuming StorageAttachment is not supported.
+    DAWN_TEST_UNSUPPORTED_IF(!(caps.usages & wgpu::TextureUsage::StorageBinding));
+
+    for (uint32_t i = 0; i < caps.formatCount; i++) {
+        wgpu::SurfaceConfiguration config = GetPreferredConfiguration(surface);
+        config.usage = wgpu::TextureUsage::StorageBinding;
+        config.format = caps.formats[i];
+
+        if (utils::TextureFormatSupportsStorageTexture(config.format, device, false)) {
+            surface.Configure(&config);
+        } else {
+            ASSERT_DEVICE_ERROR_MSG(surface.Configure(&config),
+                                    testing::HasSubstr("TextureUsage::StorageBinding"));
+        }
+    }
 }
 
 DAWN_INSTANTIATE_TEST(SurfaceConfigurationValidationTests,

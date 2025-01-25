@@ -15,17 +15,19 @@
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/commerce/product_specifications/product_specifications_service_factory.h"
 #include "chrome/browser/consent_auditor/consent_auditor_factory.h"
 #include "chrome/browser/data_sharing/data_sharing_service_factory.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
-#include "chrome/browser/metrics/variations/google_groups_updater_service_factory.h"
+#include "chrome/browser/metrics/variations/google_groups_manager_factory.h"
 #include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/password_receiver_service_factory.h"
 #include "chrome/browser/password_manager/password_sender_service_factory.h"
 #include "chrome/browser/password_manager/profile_password_store_factory.h"
+#include "chrome/browser/plus_addresses/plus_address_setting_service_factory.h"
 #include "chrome/browser/power_bookmarks/power_bookmark_service_factory.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -34,7 +36,6 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/security_events/security_event_recorder.h"
 #include "chrome/browser/security_events/security_event_recorder_factory.h"
-#include "chrome/browser/sharing/sharing_message_bridge.h"
 #include "chrome/browser/sharing/sharing_message_bridge_factory.h"
 #include "chrome/browser/sharing/sharing_message_model_type_controller.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -55,27 +56,29 @@
 #include "chrome/browser/themes/theme_syncable_service.h"
 #include "chrome/browser/trusted_vault/trusted_vault_service_factory.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/browser/webdata_services/web_data_service_factory.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
+#include "components/browser_sync/common_controller_builder.h"
 #include "components/browser_sync/sync_api_component_factory_impl.h"
 #include "components/consent_auditor/consent_auditor.h"
 #include "components/data_sharing/public/features.h"
 #include "components/desks_storage/core/desk_sync_service.h"
 #include "components/history/core/browser/history_service.h"
-#include "components/metrics/demographics/user_demographics.h"
 #include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/password_manager/core/browser/sharing/password_receiver_service.h"
 #include "components/password_manager/core/browser/sharing/password_sender_service.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/plus_addresses/settings/plus_address_setting_service.h"
 #include "components/plus_addresses/webdata/plus_address_webdata_service.h"
 #include "components/prefs/pref_service.h"
+#include "components/saved_tab_groups/features.h"
 #include "components/saved_tab_groups/tab_group_sync_service.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/send_tab_to_self/send_tab_to_self_sync_service.h"
+#include "components/sharing_message/sharing_message_bridge.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
 #include "components/supervised_user/core/browser/supervised_user_settings_service.h"
 #include "components/sync/base/features.h"
@@ -91,11 +94,11 @@
 #include "components/sync/service/syncable_service_based_model_type_controller.h"
 #include "components/sync/service/trusted_vault_synthetic_field_trial.h"
 #include "components/sync_bookmarks/bookmark_sync_service.h"
+#include "components/sync_device_info/device_info_sync_service.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_sessions/session_sync_service.h"
 #include "components/sync_user_events/user_event_service.h"
 #include "components/trusted_vault/trusted_vault_service.h"
-#include "components/variations/service/google_groups_updater_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/buildflags/buildflags.h"
 
@@ -139,6 +142,8 @@
 #include "chrome/browser/ash/app_list/arc/arc_package_syncable_service.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
+#include "chrome/browser/ash/floating_sso/floating_sso_service.h"
+#include "chrome/browser/ash/floating_sso/floating_sso_service_factory.h"
 #include "chrome/browser/ash/printing/oauth2/authorization_zones_manager.h"
 #include "chrome/browser/ash/printing/oauth2/authorization_zones_manager_factory.h"
 #include "chrome/browser/ash/printing/printers_sync_bridge.h"
@@ -151,8 +156,10 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/android/webapk/webapk_sync_service.h"
+#include "components/browser_sync/sync_client_utils.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
+#include "app/vivaldi_apptools.h"
 #include "sync/note_sync_service_factory.h"
 
 using content::BrowserThread;
@@ -226,27 +233,55 @@ bool ShouldSyncAppsTypesInTransportMode() {
 }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
+syncer::ModelTypeControllerDelegate* GetSavedTabGroupControllerDelegate(
+    Profile* profile) {
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
+    BUILDFLAG(IS_WIN)
+  auto* keyed_service =
+      tab_groups::SavedTabGroupServiceFactory::GetForProfile(profile);
+  CHECK(keyed_service);
+  return keyed_service->GetSavedTabGroupControllerDelegate().get();
+#elif BUILDFLAG(IS_ANDROID)
+  return tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile)
+      ->GetSavedTabGroupControllerDelegate()
+      .get();
+#else
+  NOTREACHED_NORETURN();
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
+        // BUILDFLAG(IS_WIN)
+}
+
+syncer::ModelTypeControllerDelegate* GetSharedTabGroupControllerDelegate(
+    Profile* profile) {
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
+    BUILDFLAG(IS_WIN)
+  tab_groups::SavedTabGroupKeyedService* keyed_service =
+      tab_groups::SavedTabGroupServiceFactory::GetForProfile(profile);
+  CHECK(keyed_service);
+  return keyed_service->GetSharedTabGroupControllerDelegate().get();
+#elif BUILDFLAG(IS_ANDROID)
+  return tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile)
+      ->GetSharedTabGroupControllerDelegate()
+      .get();
+#else
+  NOTREACHED_NORETURN();
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
+        // BUILDFLAG(IS_WIN)
+}
+
 }  // namespace
 
 ChromeSyncClient::ChromeSyncClient(Profile* profile)
     : profile_(profile), extensions_activity_monitor_(profile) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  scoped_refptr<autofill::AutofillWebDataService> profile_web_data_service =
-      WebDataServiceFactory::GetAutofillWebDataForProfile(
-          profile_, ServiceAccessType::IMPLICIT_ACCESS);
-  scoped_refptr<autofill::AutofillWebDataService> account_web_data_service =
-      WebDataServiceFactory::GetAutofillWebDataForAccount(
-          profile_, ServiceAccessType::IMPLICIT_ACCESS);
-  scoped_refptr<base::SequencedTaskRunner> web_data_service_thread =
-      profile_web_data_service ? profile_web_data_service->GetDBTaskRunner()
-                               : nullptr;
+  component_factory_ = std::make_unique<SyncApiComponentFactoryImpl>(
+      this,
+      DeviceInfoSyncServiceFactory::GetForProfile(profile_)
+          ->GetDeviceInfoTracker(),
+      GetModelTypeStoreService()->GetSyncDataPath());
 
-  // This class assumes that the database thread is the same across the profile
-  // and account storage. This DCHECK makes that assumption explicit.
-  DCHECK(!account_web_data_service ||
-         web_data_service_thread ==
-             account_web_data_service->GetDBTaskRunner());
+#if BUILDFLAG(IS_ANDROID)
   scoped_refptr<password_manager::PasswordStoreInterface>
       profile_password_store = ProfilePasswordStoreFactory::GetForProfile(
           profile_, ServiceAccessType::IMPLICIT_ACCESS);
@@ -254,26 +289,20 @@ ChromeSyncClient::ChromeSyncClient(Profile* profile)
       account_password_store = AccountPasswordStoreFactory::GetForProfile(
           profile_, ServiceAccessType::IMPLICIT_ACCESS);
 
-  supervised_user::SupervisedUserSettingsService*
-      supervised_user_settings_service =
-          SupervisedUserSettingsServiceFactory::GetForKey(
-              profile_->GetProfileKey());
+  local_data_query_helper_ =
+      std::make_unique<browser_sync::LocalDataQueryHelper>(
+          profile_password_store.get(), account_password_store.get(),
+          BookmarkModelFactory::GetForBrowserContext(profile_),
+          ReadingListModelFactory::GetAsDualReadingListForBrowserContext(
+              profile_));
 
-  component_factory_ = std::make_unique<SyncApiComponentFactoryImpl>(
-      this, chrome::GetChannel(), content::GetUIThreadTaskRunner({}),
-      web_data_service_thread, profile_web_data_service,
-      account_web_data_service, profile_password_store, account_password_store,
-      LocalOrSyncableBookmarkSyncServiceFactory::GetForProfile(profile_),
-      AccountBookmarkSyncServiceFactory::GetForProfile(profile_),
-      PowerBookmarkServiceFactory::GetForBrowserContext(profile_),
-      supervised_user_settings_service,
-      WebDataServiceFactory::GetPlusAddressWebDataForProfile(
-          profile_, ServiceAccessType::IMPLICIT_ACCESS),
-      commerce::ProductSpecificationsServiceFactory::GetForBrowserContext(
-          profile_),
-      data_sharing::DataSharingServiceFactory::GetForProfile(profile_),
-
-      vivaldi::NoteSyncServiceFactory::GetForProfile(profile_));
+  local_data_migration_helper_ =
+      std::make_unique<browser_sync::LocalDataMigrationHelper>(
+          profile_password_store.get(), account_password_store.get(),
+          BookmarkModelFactory::GetForBrowserContext(profile_),
+          ReadingListModelFactory::GetAsDualReadingListForBrowserContext(
+              profile_));
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 ChromeSyncClient::~ChromeSyncClient() = default;
@@ -317,66 +346,108 @@ base::FilePath ChromeSyncClient::GetLocalSyncBackendFolder() {
   return local_sync_backend_folder;
 }
 
-syncer::ModelTypeStoreService* ChromeSyncClient::GetModelTypeStoreService() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return ModelTypeStoreServiceFactory::GetForProfile(profile_);
+#if BUILDFLAG(IS_ANDROID)
+void ChromeSyncClient::GetLocalDataDescriptions(
+    syncer::ModelTypeSet types,
+    base::OnceCallback<void(
+        std::map<syncer::ModelType, syncer::LocalDataDescription>)> callback) {
+  types.RemoveAll(
+      local_data_migration_helper_->GetTypesWithOngoingMigrations());
+  local_data_query_helper_->Run(types, std::move(callback));
 }
 
-syncer::DeviceInfoSyncService* ChromeSyncClient::GetDeviceInfoSyncService() {
-  return DeviceInfoSyncServiceFactory::GetForProfile(profile_);
+void ChromeSyncClient::TriggerLocalDataMigration(syncer::ModelTypeSet types) {
+  local_data_migration_helper_->Run(types);
 }
-
-favicon::FaviconService* ChromeSyncClient::GetFaviconService() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return FaviconServiceFactory::GetForProfile(
-      profile_, ServiceAccessType::IMPLICIT_ACCESS);
-}
-
-history::HistoryService* ChromeSyncClient::GetHistoryService() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return HistoryServiceFactory::GetForProfile(
-      profile_, ServiceAccessType::EXPLICIT_ACCESS);
-}
-
-ReadingListModel* ChromeSyncClient::GetReadingListModel() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return ReadingListModelFactory::GetForBrowserContext(profile_);
-}
-
-send_tab_to_self::SendTabToSelfSyncService*
-ChromeSyncClient::GetSendTabToSelfSyncService() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return SendTabToSelfSyncServiceFactory::GetForProfile(profile_);
-}
-
-sync_preferences::PrefServiceSyncable*
-ChromeSyncClient::GetPrefServiceSyncable() {
-  return PrefServiceSyncableFromProfile(profile_);
-}
-
-sync_sessions::SessionSyncService* ChromeSyncClient::GetSessionSyncService() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return SessionSyncServiceFactory::GetForProfile(profile_);
-}
-
-password_manager::PasswordReceiverService*
-ChromeSyncClient::GetPasswordReceiverService() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return PasswordReceiverServiceFactory::GetForProfile(profile_);
-}
-
-password_manager::PasswordSenderService*
-ChromeSyncClient::GetPasswordSenderService() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return PasswordSenderServiceFactory::GetForProfile(profile_);
-}
+#endif  // BUILDFLAG(IS_ANDROID)
 
 syncer::ModelTypeController::TypeVector
 ChromeSyncClient::CreateModelTypeControllers(
     syncer::SyncService* sync_service) {
-  syncer::ModelTypeController::TypeVector controllers =
-      component_factory_->CreateCommonModelTypeControllers(
-          GetDisabledCommonDataTypes(), sync_service);
+  scoped_refptr<autofill::AutofillWebDataService> profile_web_data_service =
+      WebDataServiceFactory::GetAutofillWebDataForProfile(
+          profile_, ServiceAccessType::IMPLICIT_ACCESS);
+  scoped_refptr<autofill::AutofillWebDataService> account_web_data_service =
+      WebDataServiceFactory::GetAutofillWebDataForAccount(
+          profile_, ServiceAccessType::IMPLICIT_ACCESS);
+  scoped_refptr<base::SequencedTaskRunner> web_data_service_thread =
+      profile_web_data_service ? profile_web_data_service->GetDBTaskRunner()
+                               : nullptr;
+  // This class assumes that the database thread is the same across the profile
+  // and account storage. This DCHECK makes that assumption explicit.
+  DCHECK(!account_web_data_service ||
+         web_data_service_thread ==
+             account_web_data_service->GetDBTaskRunner());
+
+  browser_sync::CommonControllerBuilder builder;
+  builder.SetAutofillWebDataService(
+      content::GetUIThreadTaskRunner({}), web_data_service_thread,
+      profile_web_data_service, account_web_data_service);
+  builder.SetBookmarkModel(
+      BookmarkModelFactory::GetForBrowserContext(profile_));
+  builder.SetBookmarkSyncService(
+      LocalOrSyncableBookmarkSyncServiceFactory::GetForProfile(profile_),
+      AccountBookmarkSyncServiceFactory::GetForProfile(profile_));
+  builder.SetConsentAuditor(ConsentAuditorFactory::GetForProfile(profile_));
+  builder.SetDataSharingService(
+      data_sharing::DataSharingServiceFactory::GetForProfile(profile_));
+  builder.SetDeviceInfoSyncService(
+      DeviceInfoSyncServiceFactory::GetForProfile(profile_));
+  builder.SetDualReadingListModel(
+      ReadingListModelFactory::GetAsDualReadingListForBrowserContext(profile_));
+  builder.SetFaviconService(FaviconServiceFactory::GetForProfile(
+      profile_, ServiceAccessType::IMPLICIT_ACCESS));
+  builder.SetGoogleGroupsManager(
+      GoogleGroupsManagerFactory::GetForBrowserContext(profile_));
+  builder.SetHistoryService(HistoryServiceFactory::GetForProfile(
+      profile_, ServiceAccessType::EXPLICIT_ACCESS));
+  builder.SetIdentityManager(GetIdentityManager());
+  builder.SetModelTypeStoreService(
+      ModelTypeStoreServiceFactory::GetForProfile(profile_));
+#if !BUILDFLAG(IS_ANDROID)
+  builder.SetPasskeyModel(
+      base::FeatureList::IsEnabled(syncer::kSyncWebauthnCredentials)
+          ? PasskeyModelFactory::GetForProfile(profile_)
+          : nullptr);
+#endif  // !BUILDFLAG(IS_ANDROID)
+  builder.SetPasswordReceiverService(
+      PasswordReceiverServiceFactory::GetForProfile(profile_));
+  builder.SetPasswordSenderService(
+      PasswordSenderServiceFactory::GetForProfile(profile_));
+  builder.SetPasswordStore(ProfilePasswordStoreFactory::GetForProfile(
+                               profile_, ServiceAccessType::IMPLICIT_ACCESS),
+                           AccountPasswordStoreFactory::GetForProfile(
+                               profile_, ServiceAccessType::IMPLICIT_ACCESS));
+  builder.SetPlusAddressServices(
+      PlusAddressSettingServiceFactory::GetForBrowserContext(profile_),
+      WebDataServiceFactory::GetPlusAddressWebDataForProfile(
+          profile_, ServiceAccessType::IMPLICIT_ACCESS));
+  builder.SetPowerBookmarkService(
+      PowerBookmarkServiceFactory::GetForBrowserContext(profile_));
+  builder.SetPrefService(profile_->GetPrefs());
+  builder.SetPrefServiceSyncable(PrefServiceSyncableFromProfile(profile_));
+  builder.SetProductSpecificationsService(
+      commerce::ProductSpecificationsServiceFactory::GetForBrowserContext(
+          profile_));
+  builder.SetSendTabToSelfSyncService(
+      SendTabToSelfSyncServiceFactory::GetForProfile(profile_));
+  builder.SetSessionSyncService(
+      SessionSyncServiceFactory::GetForProfile(profile_));
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  builder.SetSupervisedUserSettingsService(
+      SupervisedUserSettingsServiceFactory::GetForKey(
+          profile_->GetProfileKey()));
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  builder.SetUserEventService(
+      browser_sync::UserEventServiceFactory::GetForProfile(profile_));
+
+  // Vivaldi
+  builder.SetNoteSyncService(
+      vivaldi::NoteSyncServiceFactory::GetForProfile(profile_));
+  // End Vivaldi
+
+  syncer::ModelTypeController::TypeVector controllers = builder.Build(
+      GetDisabledCommonDataTypes(), sync_service, chrome::GetChannel());
 
   const base::RepeatingClosure dump_stack = GetDumpStackClosure();
 
@@ -403,7 +474,9 @@ ChromeSyncClient::CreateModelTypeControllers(
     // since behavior for SHARING_MESSAGE does not differ. They both do not
     // store data on persistent storage.
     syncer::ModelTypeControllerDelegate* sharing_message_delegate =
-        GetControllerDelegateForModelType(syncer::SHARING_MESSAGE).get();
+        SharingMessageBridgeFactory::GetForBrowserContext(profile_)
+            ->GetControllerDelegate()
+            .get();
     controllers.push_back(std::make_unique<SharingMessageModelTypeController>(
         /*delegate_for_full_sync_mode=*/
         std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
@@ -445,7 +518,9 @@ ChromeSyncClient::CreateModelTypeControllers(
 #if BUILDFLAG(IS_ANDROID)
     if (base::FeatureList::IsEnabled(syncer::kWebApkBackupAndRestoreBackend)) {
       syncer::ModelTypeControllerDelegate* delegate =
-          GetControllerDelegateForModelType(syncer::WEB_APKS).get();
+          webapk::WebApkSyncService::GetForProfile(profile_)
+              ->GetModelTypeControllerDelegate()
+              .get();
       controllers.push_back(std::make_unique<syncer::ModelTypeController>(
           syncer::WEB_APKS,
           /*delegate_for_full_sync_mode=*/
@@ -482,31 +557,40 @@ ChromeSyncClient::CreateModelTypeControllers(
     BUILDFLAG(IS_WIN)
     enable_tab_group_sync = true;
 #elif BUILDFLAG(IS_ANDROID)
-    enable_tab_group_sync = tab_groups::IsTabGroupSyncEnabled(GetPrefService());
+    enable_tab_group_sync =
+        tab_groups::IsTabGroupSyncEnabled(GetPrefService()) &&
+        !base::FeatureList::IsEnabled(
+            tab_groups::kTabGroupSyncDisableNetworkLayer);
     tab_groups::TabGroupTrial::OnTabgroupSyncEnabled(enable_tab_group_sync);
 #endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
         // BUILDFLAG(IS_WIN)
 
     if (enable_tab_group_sync) {
+      syncer::ModelTypeControllerDelegate* delegate =
+          GetSavedTabGroupControllerDelegate(profile_);
+
       controllers.push_back(std::make_unique<syncer::ModelTypeController>(
           syncer::SAVED_TAB_GROUP,
+          /*delegate_for_full_sync_mode=*/
           std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
-              GetControllerDelegateForModelType(syncer::SAVED_TAB_GROUP).get()),
-          /*delegate_for_transport_mode=*/nullptr));
+              delegate),
+          /*delegate_for_transport_mode=*/
+          std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
+              delegate)));
     }
 
     if (base::FeatureList::IsEnabled(
             data_sharing::features::kDataSharingFeature)) {
+      syncer::ModelTypeControllerDelegate* delegate =
+          GetSharedTabGroupControllerDelegate(profile_);
       controllers.push_back(std::make_unique<syncer::ModelTypeController>(
           syncer::SHARED_TAB_GROUP_DATA,
           /*delegate_for_full_sync_mode=*/
           std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
-              GetControllerDelegateForModelType(syncer::SHARED_TAB_GROUP_DATA)
-                  .get()),
+              delegate),
           /*delegate_for_transport_mode=*/
           std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
-              GetControllerDelegateForModelType(syncer::SHARED_TAB_GROUP_DATA)
-                  .get())));
+              delegate)));
     }
 
 // Chrome prefers OS provided spell checkers where they exist. So only sync the
@@ -561,7 +645,11 @@ ChromeSyncClient::CreateModelTypeControllers(
               kTransportModeWithSingleModel));
 
   syncer::ModelTypeControllerDelegate* printers_delegate =
-      GetControllerDelegateForModelType(syncer::PRINTERS).get();
+      ash::SyncedPrintersManagerFactory::GetForBrowserContext(profile_)
+          ->GetSyncBridge()
+          ->change_processor()
+          ->GetControllerDelegate()
+          .get();
   controllers.push_back(std::make_unique<syncer::ModelTypeController>(
       syncer::PRINTERS,
       std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
@@ -570,15 +658,21 @@ ChromeSyncClient::CreateModelTypeControllers(
 
   if (WifiConfigurationSyncServiceFactory::ShouldRunInProfile(profile_)) {
     syncer::ModelTypeControllerDelegate* wifi_configurations_delegate =
-        GetControllerDelegateForModelType(syncer::WIFI_CONFIGURATIONS).get();
+        WifiConfigurationSyncServiceFactory::GetForProfile(profile_,
+                                                           /*create=*/true)
+            ->GetControllerDelegate()
+            .get();
     controllers.push_back(std::make_unique<syncer::ModelTypeController>(
         syncer::WIFI_CONFIGURATIONS,
         std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
             wifi_configurations_delegate),
         /*delegate_for_transport_mode=*/nullptr));
   }
+
   syncer::ModelTypeControllerDelegate* workspace_desk_delegate =
-      GetControllerDelegateForModelType(syncer::WORKSPACE_DESK).get();
+      DeskSyncServiceFactory::GetForProfile(profile_)
+          ->GetControllerDelegate()
+          .get();
   controllers.push_back(std::make_unique<syncer::ModelTypeController>(
       syncer::WORKSPACE_DESK,
       std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
@@ -588,13 +682,29 @@ ChromeSyncClient::CreateModelTypeControllers(
   if (ash::features::IsOAuthIppEnabled()) {
     syncer::ModelTypeControllerDelegate*
         printers_authorization_servers_delegate =
-            GetControllerDelegateForModelType(
-                syncer::PRINTERS_AUTHORIZATION_SERVERS)
-                .get();
+            ash::printing::oauth2::AuthorizationZonesManagerFactory::
+                GetForBrowserContext(profile_)
+                    ->GetModelTypeSyncBridge()
+                    ->change_processor()
+                    ->GetControllerDelegate()
+                    .get();
     controllers.push_back(std::make_unique<syncer::ModelTypeController>(
         syncer::PRINTERS_AUTHORIZATION_SERVERS,
         std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
             printers_authorization_servers_delegate),
+        /*delegate_for_transport_mode=*/nullptr));
+  }
+
+  if (ash::features::IsFloatingSsoAllowed()) {
+    syncer::ModelTypeControllerDelegate* cookies_delegate =
+        ash::floating_sso::FloatingSsoServiceFactory::GetForProfile(profile_)
+            ->GetControllerDelegate()
+            .get();
+    controllers.push_back(std::make_unique<syncer::ModelTypeController>(
+        syncer::COOKIES,
+        /*delegate_for_full_sync_mode=*/
+        std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
+            cookies_delegate),
         /*delegate_for_transport_mode=*/nullptr));
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -615,6 +725,10 @@ ChromeSyncClient::GetSyncInvalidationsService() {
 scoped_refptr<syncer::ExtensionsActivity>
 ChromeSyncClient::GetExtensionsActivity() {
   return extensions_activity_monitor_.GetExtensionsActivity();
+}
+
+syncer::ModelTypeStoreService* ChromeSyncClient::GetModelTypeStoreService() {
+  return ModelTypeStoreServiceFactory::GetForProfile(profile_);
 }
 
 base::WeakPtr<syncer::SyncableService>
@@ -658,113 +772,8 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
           ->AsWeakPtr();
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return nullptr;
-  }
-}
-
-base::WeakPtr<syncer::ModelTypeControllerDelegate>
-ChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
-  switch (type) {
-    case syncer::SAVED_TAB_GROUP: {
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
-    BUILDFLAG(IS_WIN)
-      auto* keyed_service =
-          tab_groups::SavedTabGroupServiceFactory::GetForProfile(profile_);
-      CHECK(keyed_service);
-      return keyed_service->GetSavedTabGroupControllerDelegate();
-#elif BUILDFLAG(IS_ANDROID)
-      DCHECK(tab_groups::IsTabGroupSyncEnabled(GetPrefService()));
-      return tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile_)
-          ->GetSavedTabGroupControllerDelegate();
-#else
-      NOTREACHED();
-      return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
-#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
-        // BUILDFLAG(IS_WIN)
-    }
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    case syncer::PRINTERS:
-      return ash::SyncedPrintersManagerFactory::GetForBrowserContext(profile_)
-          ->GetSyncBridge()
-          ->change_processor()
-          ->GetControllerDelegate();
-    case syncer::PRINTERS_AUTHORIZATION_SERVERS:
-      return ash::printing::oauth2::AuthorizationZonesManagerFactory::
-          GetForBrowserContext(profile_)
-              ->GetModelTypeSyncBridge()
-              ->change_processor()
-              ->GetControllerDelegate();
-    case syncer::WIFI_CONFIGURATIONS:
-      return WifiConfigurationSyncServiceFactory::GetForProfile(profile_,
-                                                                /*create=*/true)
-          ->GetControllerDelegate();
-    case syncer::WORKSPACE_DESK:
-      return DeskSyncServiceFactory::GetForProfile(profile_)
-          ->GetControllerDelegate();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-    case syncer::SHARING_MESSAGE:
-      return SharingMessageBridgeFactory::GetForBrowserContext(profile_)
-          ->GetControllerDelegate();
-    case syncer::USER_CONSENTS:
-      return ConsentAuditorFactory::GetForProfile(profile_)
-          ->GetControllerDelegate();
-    case syncer::USER_EVENTS:
-      return browser_sync::UserEventServiceFactory::GetForProfile(profile_)
-          ->GetControllerDelegate();
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-    case syncer::WEB_APPS: {
-      auto* provider = web_app::WebAppProvider::GetForWebApps(profile_);
-
-      // CreateWebAppsModelTypeController(), and therefore this code, should
-      // never be called when GetForWebApps() returns nullptr.
-      DCHECK(provider);
-      DCHECK(web_app::AreWebAppsEnabled(profile_));
-
-      return provider->sync_bridge_unsafe()
-          .change_processor()
-          ->GetControllerDelegate();
-    }
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-#if BUILDFLAG(IS_ANDROID)
-    case syncer::WEB_APKS: {
-      webapk::WebApkSyncService* service =
-          webapk::WebApkSyncService::GetForProfile(profile_);
-      CHECK(service);
-      return service->GetModelTypeControllerDelegate();
-    }
-#endif  //  BUILDFLAG(IS_ANDROID)
-#if !BUILDFLAG(IS_ANDROID)
-    case syncer::WEBAUTHN_CREDENTIAL: {
-      DCHECK(base::FeatureList::IsEnabled(syncer::kSyncWebauthnCredentials));
-      return PasskeyModelFactory::GetForProfile(profile_)
-          ->GetModelTypeControllerDelegate();
-    }
-#endif  //  !BUILDFLAG(IS_ANDROID)
-    case syncer::SHARED_TAB_GROUP_DATA:
-      CHECK(base::FeatureList::IsEnabled(
-          data_sharing::features::kDataSharingFeature));
-      return tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile_)
-          ->GetSharedTabGroupControllerDelegate();
-    // We don't exercise this function for certain datatypes, because their
-    // controllers get the delegate elsewhere.
-    case syncer::AUTOFILL:
-    case syncer::AUTOFILL_PROFILE:
-    case syncer::AUTOFILL_WALLET_DATA:
-    case syncer::AUTOFILL_WALLET_METADATA:
-    case syncer::BOOKMARKS:
-    case syncer::DEVICE_INFO:
-    case syncer::READING_LIST:
-    case syncer::SECURITY_EVENTS:
-    case syncer::SEND_TAB_TO_SELF:
-    case syncer::SESSIONS:
-      NOTREACHED();
-      return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
-
-    default:
-      NOTREACHED();
-      return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
   }
 }
 
@@ -782,16 +791,6 @@ bool ChromeSyncClient::IsCustomPassphraseAllowed() {
     return supervised_user_settings_service->IsCustomPassphraseAllowed();
   }
   return true;
-}
-
-void ChromeSyncClient::OnLocalSyncTransportDataCleared() {
-  metrics::ClearDemographicsPrefs(profile_->GetPrefs());
-
-  GoogleGroupsUpdaterService* google_groups_updater =
-      GoogleGroupsUpdaterServiceFactory::GetForBrowserContext(profile_);
-  if (google_groups_updater != nullptr) {
-    google_groups_updater->ClearSigninScopedState();
-  }
 }
 
 bool ChromeSyncClient::IsPasswordSyncAllowed() {
@@ -882,8 +881,16 @@ ChromeSyncClient::CreateAppSettingsModelTypeController(
 
 std::unique_ptr<syncer::ModelTypeController>
 ChromeSyncClient::CreateWebAppsModelTypeController() {
-  syncer::ModelTypeControllerDelegate* delegate =
-      GetControllerDelegateForModelType(syncer::WEB_APPS).get();
+  auto* provider = web_app::WebAppProvider::GetForWebApps(profile_);
+
+  // This function should never be called when GetForWebApps() returns nullptr.
+  DCHECK(provider);
+  DCHECK(web_app::AreWebAppsEnabled(profile_));
+
+  syncer::ModelTypeControllerDelegate* delegate = provider->sync_bridge_unsafe()
+                                                      .change_processor()
+                                                      ->GetControllerDelegate()
+                                                      .get();
 
   std::unique_ptr<syncer::ModelTypeControllerDelegate>
       delegate_for_transport_mode = nullptr;

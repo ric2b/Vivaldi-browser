@@ -8,6 +8,8 @@
 #include "base/base64url.h"
 #include "build/branding_buildflags.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/new_tab_page/new_tab_page_util.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_service.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -23,6 +25,7 @@
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "third_party/omnibox_proto/answer_data.pb.h"
+#include "third_party/omnibox_proto/answer_type.pb.h"
 #include "third_party/omnibox_proto/rich_answer_template.pb.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -196,7 +199,7 @@ std::u16string GetAdditionalA11yMessage(
       return l10n_util::GetStringUTF16(
           IDS_ACC_REMOVE_SUGGESTION_FOCUSED_PREFIX);
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   return std::u16string();
@@ -242,7 +245,7 @@ bool MatchHasSideTypeAndRenderType(
 
 std::vector<searchbox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
     const AutocompleteResult& result,
-    bookmarks::CoreBookmarkModel* bookmark_model,
+    bookmarks::BookmarkModel* bookmark_model,
     const omnibox::GroupConfigMap& suggestion_groups_map) {
   std::vector<searchbox::mojom::AutocompleteMatchPtr> matches;
   int line = 0;
@@ -331,8 +334,7 @@ std::vector<searchbox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
               ntp_features::kRealboxCr23ExpandedStateIcons) ||
           base::FeatureList::IsEnabled(ntp_features::kRealboxCr23All)) {
         mojom_match->is_weather_answer_suggestion =
-            match.answer_template->answer_type() ==
-            omnibox::RichAnswerTemplate::WEATHER;
+            match.answer_type == omnibox::ANSWER_TYPE_WEATHER;
       }
     } else if (match.answer.has_value()) {
       const auto& additional_text =
@@ -347,7 +349,7 @@ std::vector<searchbox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
               ntp_features::kRealboxCr23ExpandedStateIcons) ||
           base::FeatureList::IsEnabled(ntp_features::kRealboxCr23All)) {
         mojom_match->is_weather_answer_suggestion =
-            match.answer->type() == SuggestionAnswer::ANSWER_TYPE_WEATHER;
+            match.answer->type() == omnibox::ANSWER_TYPE_WEATHER;
       }
     }
     mojom_match->is_rich_suggestion =
@@ -439,7 +441,7 @@ CreateSuggestionGroupsMap(
 searchbox::mojom::AutocompleteResultPtr CreateAutocompleteResult(
     const std::u16string& input,
     const AutocompleteResult& result,
-    bookmarks::CoreBookmarkModel* bookmark_model,
+    bookmarks::BookmarkModel* bookmark_model,
     PrefService* prefs) {
   return searchbox::mojom::AutocompleteResult::New(
       input,
@@ -472,6 +474,9 @@ void SearchboxHandler::SetupWebUIDataSource(content::WebUIDataSource* source,
       {"realboxSeparator", IDS_AUTOCOMPLETE_MATCH_DESCRIPTION_SEPARATOR},
       {"removeSuggestion", IDS_OMNIBOX_REMOVE_SUGGESTION},
       {"searchBoxHint", IDS_GOOGLE_SEARCH_BOX_EMPTY_HINT_MD},
+      {"searchBoxHintMultimodal", IDS_GOOGLE_SEARCH_BOX_EMPTY_HINT_MULTIMODAL},
+      {"searchboxThumbnailLabel",
+       IDS_GOOGLE_SEARCH_BOX_MULTIMODAL_IMAGE_THUMBNAIL},
       {"showSuggestions", IDS_TOOLTIP_HEADER_SHOW_SUGGESTIONS_BUTTON},
       {"voiceSearchButtonLabel", IDS_TOOLTIP_MIC_SEARCH}};
   source->AddLocalizedStrings(kStrings);
@@ -486,12 +491,12 @@ void SearchboxHandler::SetupWebUIDataSource(content::WebUIDataSource* source,
       "realboxMatchSearchboxTheme",
       base::FeatureList::IsEnabled(ntp_features::kRealboxMatchSearchboxTheme));
 
+  bool redesigned_modules_enabled = ntp_features::IsNtpModulesRedesignedEnabled(
+      g_browser_process->GetApplicationLocale(),
+      GetVariationsServiceCountryCode(g_browser_process->variations_service()));
   source->AddString("realboxWidthBehavior",
-                    base::GetFieldTrialParamValueByFeature(
-                        ntp_features::kRealboxWidthBehavior,
-                        ntp_features::kNtpRealboxWidthBehaviorParam));
-  source->AddBoolean("realboxIsTall", base::FeatureList::IsEnabled(
-                                          ntp_features::kRealboxIsTall));
+                    redesigned_modules_enabled ? "wide" : "");
+  source->AddBoolean("realboxIsTall", redesigned_modules_enabled);
   if ((base::FeatureList::IsEnabled(
            ntp_features::kRealboxCr23ExpandedStateIcons) ||
        base::FeatureList::IsEnabled(ntp_features::kRealboxCr23All))) {
@@ -688,10 +693,11 @@ std::string SearchboxHandler::ActionVectorIconToResourceName(
       icon.name == omnibox::kStarActiveChromeRefreshIcon.name) {
     return kStarActiveIconResourceName;
   }
-  NOTREACHED() << "Every vector icon returned by OmniboxAction::GetVectorIcon "
-                  "must have an equivalent SVG resource for the NTP Realbox. "
-                  "icon.name: '"
-               << icon.name << "'";
+  NOTREACHED_IN_MIGRATION()
+      << "Every vector icon returned by OmniboxAction::GetVectorIcon "
+         "must have an equivalent SVG resource for the NTP Realbox. "
+         "icon.name: '"
+      << icon.name << "'";
   return "";
 }
 

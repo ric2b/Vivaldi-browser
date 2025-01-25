@@ -5,33 +5,44 @@
 #ifndef IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_COORDINATOR_H_
 #define IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_COORDINATOR_H_
 
+#import <memory>
+
 #import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 
-class WebLocationBar;
+class OmniboxClient;
 @class BubblePresenter;
 @protocol EditViewAnimatee;
 @class OmniboxPopupCoordinator;
-@class OmniboxTextFieldIOS;
 @protocol LocationBarOffsetProvider;
 @protocol OmniboxPopupPresenterDelegate;
 @protocol TextFieldViewContaining;
 @protocol ToolbarOmniboxConsumer;
+@protocol OmniboxFocusDelegate;
 
 // The coordinator for the omnibox.
 @interface OmniboxCoordinator : ChromeCoordinator
+
+- (instancetype)initWithBaseViewController:(UIViewController*)viewController
+                                   browser:(Browser*)browser
+                             omniboxClient:
+                                 (std::unique_ptr<OmniboxClient>)client
+    NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)initWithBaseViewController:(UIViewController*)viewController
+                                   browser:(Browser*)browser NS_UNAVAILABLE;
 
 // Returns a popup coordinator created by this coordinator.
 // Created and started at `start` and stopped & destroyed at `stop`.
 @property(nonatomic, strong, readonly)
     OmniboxPopupCoordinator* popupCoordinator;
-// The edit controller interfacing the `textField` and the omnibox components
-// code. Needs to be set before the coordinator is started.
-@property(nonatomic, assign) WebLocationBar* locationBar;
 // Returns the animatee for the omnibox focus orchestrator.
 @property(nonatomic, strong, readonly) id<EditViewAnimatee> animatee;
 
 /// Positioner for the popup. Has to be configured before calling `start`.
 @property(nonatomic, weak) id<OmniboxPopupPresenterDelegate> presenterDelegate;
+
+/// Delegate for responding to focusing events.
+@property(nonatomic, weak) id<OmniboxFocusDelegate> focusDelegate;
 
 // Bubble presenter for displaying IPH bubbles relating to the omnibox.
 @property(nonatomic, strong) BubblePresenter* bubblePresenter;

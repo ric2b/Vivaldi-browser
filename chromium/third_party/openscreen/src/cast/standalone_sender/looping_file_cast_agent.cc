@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "build/build_config.h"
 #include "cast/common/channel/message_util.h"
 #include "cast/common/public/cast_streaming_app_ids.h"
 #include "cast/standalone_sender/looping_file_sender.h"
@@ -34,14 +35,14 @@ LoopingFileCastAgent::LoopingFileCastAgent(
     ShutdownCallback shutdown_callback)
     : task_runner_(task_runner),
       shutdown_callback_(std::move(shutdown_callback)),
-      connection_handler_(&router_, this),
-      socket_factory_(this,
+      connection_handler_(router_, *this),
+      socket_factory_(*this,
                       task_runner_,
                       std::move(cast_trust_store),
                       CastCRLTrustStore::Create()),
       connection_factory_(
           TlsConnectionFactory::CreateFactory(socket_factory_, task_runner_)),
-      message_port_(&router_) {
+      message_port_(router_) {
   router_.AddHandlerForLocalId(kPlatformSenderId, this);
   socket_factory_.set_factory(connection_factory_.get());
 }
@@ -60,9 +61,9 @@ void LoopingFileCastAgent::Connect(ConnectionSettings settings) {
                           : DeviceMediaPolicy::kAudioOnly;
 
   task_runner_.PostTask([this, policy] {
-#if defined(__APPLE__)
+#if BUILDFLAG(IS_APPLE)
     wake_lock_ = ScopedWakeLock::Create(task_runner_);
-#endif  // defined(__APPLE__)
+#endif  // BUILDFLAG(IS_APPLE)
     socket_factory_.Connect(connection_settings_->receiver_endpoint, policy,
                             &router_);
   });
@@ -113,7 +114,7 @@ bool LoopingFileCastAgent::IsConnectionAllowed(
 
 void LoopingFileCastAgent::OnMessage(VirtualConnectionRouter* router,
                                      CastSocket* socket,
-                                     ::cast::channel::CastMessage message) {
+                                     proto::CastMessage message) {
   if (message_port_.GetSocketId() == ToCastSocketId(socket) &&
       !message_port_.source_id().empty() &&
       message_port_.source_id() == message.destination_id()) {
@@ -129,7 +130,7 @@ void LoopingFileCastAgent::OnMessage(VirtualConnectionRouter* router,
 
   if (message.namespace_() == kReceiverNamespace &&
       message_port_.GetSocketId() == ToCastSocketId(socket)) {
-    if (message.payload_type() != ::cast::channel::CastMessage::STRING) {
+    if (message.payload_type() != proto::CastMessage::STRING) {
       OSP_DLOG_WARN << ": received an unsupported BINARY type message.";
     }
 
@@ -283,7 +284,7 @@ void LoopingFileCastAgent::CreateAndStartSession() {
 
   SenderSession::Configuration config{
       connection_settings_->receiver_endpoint.address,
-      this,
+      *this,
       environment_.get(),
       &message_port_,
       remote_connection_->local_id,
@@ -371,7 +372,7 @@ void LoopingFileCastAgent::OnPlaybackRateChange(double rate) {
 void LoopingFileCastAgent::StartFileSender() {
   OSP_CHECK(current_negotiation_);
   file_sender_ = std::make_unique<LoopingFileSender>(
-      environment_.get(), connection_settings_.value(), current_session_.get(),
+      *environment_, connection_settings_.value(), current_session_.get(),
       std::move(*current_negotiation_), [this]() { shutdown_callback_(); });
   current_negotiation_.reset();
   is_ready_for_remoting_ = false;

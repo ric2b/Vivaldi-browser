@@ -665,3 +665,34 @@
 -TouchpadPinchBrowserTest.WheelListenerAllowingPinch
 -TouchpadPinchBrowserTest.WheelListenerPreventingDoubleTap
 -TouchpadPinchBrowserTest.WheelListenerPreventingPinch
+
+# TODO(crbug.com/341991542): The below tests related to the accessibility
+# have been failing since https://crrev.com/c/5513503.
+-All/DumpAccessibilityTreeTest.SelectExpandManyOptionsCrash/blink
+-CrossPlatformAccessibilityBrowserTest.SelectListWithOptgroupActiveDescendant
+-CrossPlatformAccessibilityBrowserTest.SelectSizeChangeWithOpenedPopupDoesNotCrash
+-CrossPlatformAccessibilityBrowserTest.SelectWithOptgroupActiveDescendant
+
+# TODO(crbug.com/342866174): The test has been failing since
+# https://crrev.com/c/5545059.
+-FoldableAPIsOriginTrialBrowserTest.ValidOriginTrialToken
+
+# TODO(crbug.com/343248827): The test has been failing since
+# https://crrev.com/c/5467603. The CL removed
+# AllowBFCacheWhenClosedMediaStreamTrack feature.
+-BackForwardCacheBrowserTest.CacheIfMediaStreamTrackUsingGetDisplayMediaEnded
+
+# TODO(crbug.com/343101485): The test has been failing since
+# https://crrev.com/c/5468575.
+-NavigationBrowserTest.CommitBadNavigationInPendingCommitRFHCleanup
+
+# TODO(crbug.com/347803432): Timeout happens in these tests.
+-All/NavigationBrowserTestPaintHoldingSubframe.CrashSubframe/0
+-All/NavigationBrowserTestPaintHoldingSubframe.CrashSubframe/1
+
+# TODO(crbug.com/352516293): Timeout happens after `SupportPartitionedBlobUrl`
+# was enabled by default.
+-SecurityExploitBrowserTest.CreateMojoBlobURLInDifferentOrigin
+-SecurityExploitBrowserTest.InvalidBeginNavigationOpaqueInitiator
+-SecurityExploitBrowserTest.PostMessageOpaqueSourceOrigin
+-SecurityExploitViaDisabledWebSecurityTest.ValidateInitiatorBaseUrlNotEmpty

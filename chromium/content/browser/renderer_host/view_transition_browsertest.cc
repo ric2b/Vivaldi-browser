@@ -83,6 +83,7 @@ IN_PROC_BROWSER_TEST_F(ViewTransitionBrowserTest,
   GURL test_url(
       embedded_test_server()->GetURL("/view_transitions/basic-vt-opt-in.html"));
   ASSERT_TRUE(NavigateToURL(shell()->web_contents(), test_url));
+  WaitForCopyableViewInWebContents(shell()->web_contents());
 
   TestNavigationManager navigation_manager(shell()->web_contents(), test_url);
   ASSERT_TRUE(
@@ -125,6 +126,7 @@ IN_PROC_BROWSER_TEST_F(ViewTransitionBrowserTest,
   GURL test_url(
       embedded_test_server()->GetURL("/view_transitions/basic-vt-opt-in.html"));
   ASSERT_TRUE(NavigateToURL(shell()->web_contents(), test_url));
+  WaitForCopyableViewInWebContents(shell()->web_contents());
 
   TestNavigationManager navigation_manager(shell()->web_contents(), test_url);
   ASSERT_TRUE(
@@ -158,6 +160,7 @@ IN_PROC_BROWSER_TEST_F(ViewTransitionBrowserTest,
   GURL test_url(
       embedded_test_server()->GetURL("/view_transitions/basic-vt-opt-in.html"));
   ASSERT_TRUE(NavigateToURL(shell()->web_contents(), test_url));
+  WaitForCopyableViewInWebContents(shell()->web_contents());
 
   TestNavigationManager navigation_manager(shell()->web_contents(), test_url);
   ASSERT_TRUE(

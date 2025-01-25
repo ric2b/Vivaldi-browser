@@ -30,8 +30,8 @@ import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.Context
 import org.chromium.chrome.browser.compositor.layouts.Layout.Orientation;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
-import org.chromium.chrome.browser.gesturenav.HistoryNavigationCoordinator;
 import org.chromium.chrome.browser.layouts.CompositorModelChangeProcessor;
 import org.chromium.chrome.browser.layouts.EventFilter;
 import org.chromium.chrome.browser.layouts.EventFilter.EventType;
@@ -61,9 +61,9 @@ import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
-import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.chrome.browser.toolbar.bottom.ScrollingBottomViewSceneLayer;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarOverlayCoordinator;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeBottomChinSceneLayer;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.SwipeHandler;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -340,37 +340,22 @@ public class LayoutManagerImpl
 
         // Overlays are ordered back (closest to the web content) to front.
         Class[] overlayOrder;
-        if (ToolbarFeatures.isDynamicTopChromeEnabled()) {
-            // When DynamicTopChrome is enabled, place the tab strip behind the toolbar scene layer
-            // as during transition, the toolbar will move up and cover the tab strip.
-            overlayOrder =
-                    new Class[] {
-                        HistoryNavigationCoordinator.getSceneOverlayClass(),
-                        // StripLayoutHelperManager should be updated before
-                        // ScrollingBottomViewSceneLayer Since ScrollingBottomViewSceneLayer change
-                        // the container size, it causes relocation tab strip scene layer.
-                        StripLayoutHelperManager.class,
-                        TopToolbarOverlayCoordinator.class,
-                        ScrollingBottomViewSceneLayer.class,
-                        StatusIndicatorCoordinator.getSceneOverlayClass(),
-                        ContextualSearchPanel.class,
-                        ReadAloudMiniPlayerSceneLayer.class
-                    };
-        } else {
-            overlayOrder =
-                    new Class[] {
-                        HistoryNavigationCoordinator.getSceneOverlayClass(),
-                        TopToolbarOverlayCoordinator.class,
-                        // StripLayoutHelperManager should be updated before
-                        // ScrollingBottomViewSceneLayer Since ScrollingBottomViewSceneLayer change
-                        // the container size, it causes relocation tab strip scene layer.
-                        StripLayoutHelperManager.class,
-                        ScrollingBottomViewSceneLayer.class,
-                        StatusIndicatorCoordinator.getSceneOverlayClass(),
-                        ContextualSearchPanel.class,
-                        ReadAloudMiniPlayerSceneLayer.class
-                    };
-        }
+
+        overlayOrder =
+                new Class[] {
+                    // Place the tab strip behind the toolbar scene layer as during tab strip
+                    // transition, the toolbar will move up and cover the tab strip.
+                    StripLayoutHelperManager.class,
+                    TopToolbarOverlayCoordinator.class,
+                    // StripLayoutHelperManager should be updated before
+                    // ScrollingBottomViewSceneLayer Since ScrollingBottomViewSceneLayer change
+                    // the container size, it causes relocation tab strip scene layer.
+                    ScrollingBottomViewSceneLayer.class,
+                    StatusIndicatorCoordinator.getSceneOverlayClass(),
+                    ContextualSearchPanel.class,
+                    ReadAloudMiniPlayerSceneLayer.class,
+                    EdgeToEdgeBottomChinSceneLayer.class
+                };
 
         // Note(david@vivaldi.com): When toolbar is at the bottom we need to change the rendering
         // order and render the |StripLayoutHelperManager| first, otherwise we are running into a
@@ -378,7 +363,6 @@ public class LayoutManagerImpl
         if (!VivaldiUtils.isTopToolbarOn()) {
             overlayOrder = new Class[] {
                     StripLayoutHelperManager.class,
-                    HistoryNavigationCoordinator.getSceneOverlayClass(),
                     TopToolbarOverlayCoordinator.class,
                     ScrollingBottomViewSceneLayer.class,
                     StatusIndicatorCoordinator.getSceneOverlayClass(),
@@ -693,7 +677,14 @@ public class LayoutManagerImpl
 
                     @Override
                     public void onBackgroundColorChanged(Tab tab, int color) {
-                        initLayoutTabFromHost(tab.getId());
+                        // The NavBarColorMatchesTabBackground increases the frequency of these
+                        // notifications, so Chrome should use a more targeted method to limit
+                        // performance impact.
+                        if (ChromeFeatureList.sNavBarColorMatchesTabBackground.isEnabled()) {
+                            updateLayoutTabBackgroundColor(tab.getId());
+                        } else {
+                            initLayoutTabFromHost(tab.getId());
+                        }
                     }
 
                     @Override
@@ -1019,6 +1010,20 @@ public class LayoutManagerImpl
         mHost.requestRender();
     }
 
+    private void updateLayoutTabBackgroundColor(final int tabId) {
+        if (getTabModelSelector() == null || getActiveLayout() == null) return;
+
+        TabModelSelector selector = getTabModelSelector();
+        Tab tab = selector.getTabById(tabId);
+        if (tab == null) return;
+
+        LayoutTab layoutTab = mTabCache.get(tabId);
+        if (layoutTab == null) return;
+
+        layoutTab.set(
+                LayoutTab.BACKGROUND_COLOR, mTopUiThemeColorProvider.get().getBackgroundColor(tab));
+    }
+
     // Whether the tab is ready to display or it should be faded in as it loads.
     private static boolean shouldStall(Tab tab) {
         return (tab.isFrozen() || tab.needsReload()) && !tab.isNativePage();
@@ -1186,17 +1191,14 @@ public class LayoutManagerImpl
     /**
      * Should be called by control logic to show a new {@link Layout}.
      *
-     * TODO(dtrainor, clholgat): Clean up the show logic to guarantee startHiding/doneHiding get
+     * <p>TODO(dtrainor, clholgat): Clean up the show logic to guarantee startHiding/doneHiding get
      * called.
      *
-     * @param layout  The new {@link Layout} to show.
+     * @param layout The new {@link Layout} to show.
      * @param animate Whether or not {@code layout} should animate as it shows.
      */
     protected void startShowing(Layout layout, boolean animate) {
         assert layout != null : "Can't show a null layout.";
-
-        // This can happen in some cases where the start surface may not have been created yet.
-        if (layout == null) return;
 
         // Set the new layout
         setNextLayout(null, true);

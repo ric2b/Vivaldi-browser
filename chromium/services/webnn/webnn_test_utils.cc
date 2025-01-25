@@ -14,11 +14,11 @@ GraphInfoBuilder::GraphInfoBuilder() {
 GraphInfoBuilder::~GraphInfoBuilder() = default;
 
 uint64_t GraphInfoBuilder::BuildOperand(const std::vector<uint32_t>& dimensions,
-                                        mojom::Operand::DataType type,
+                                        OperandDataType type,
                                         mojom::Operand::Kind kind) {
   mojom::OperandPtr operand = mojom::Operand::New();
-  operand->data_type = type;
-  operand->dimensions = dimensions;
+
+  operand->descriptor = *OperandDescriptor::Create(type, dimensions);
   operand->kind = kind;
 
   CHECK(graph_info_->id_to_operand_map.find(operand_id_) ==
@@ -29,13 +29,13 @@ uint64_t GraphInfoBuilder::BuildOperand(const std::vector<uint32_t>& dimensions,
 
 uint64_t GraphInfoBuilder::BuildIntermediateOperand(
     const std::vector<uint32_t>& dimensions,
-    mojom::Operand::DataType type) {
+    OperandDataType type) {
   return BuildOperand(dimensions, type, mojom::Operand::Kind::kOutput);
 }
 
 uint64_t GraphInfoBuilder::BuildInput(const std::string& name,
                                       const std::vector<uint32_t>& dimensions,
-                                      mojom::Operand::DataType type) {
+                                      OperandDataType type) {
   uint64_t operand_id =
       BuildOperand(dimensions, type, mojom::Operand::Kind::kInput);
   graph_info_->id_to_operand_map[operand_id]->name = name;
@@ -45,7 +45,7 @@ uint64_t GraphInfoBuilder::BuildInput(const std::string& name,
 
 uint64_t GraphInfoBuilder::BuildConstant(
     const std::vector<uint32_t>& dimensions,
-    mojom::Operand::DataType type,
+    OperandDataType type,
     base::span<const uint8_t> values) {
   uint64_t operand_id =
       BuildOperand(dimensions, type, mojom::Operand::Kind::kConstant);
@@ -61,7 +61,7 @@ void GraphInfoBuilder::AddOutput(const std::string& name, uint64_t operand_id) {
 
 uint64_t GraphInfoBuilder::BuildOutput(const std::string& name,
                                        const std::vector<uint32_t>& dimensions,
-                                       mojom::Operand::DataType type) {
+                                       OperandDataType type) {
   uint64_t operand_id = BuildOperand(dimensions, type);
   AddOutput(name, operand_id);
   return operand_id;
@@ -71,15 +71,13 @@ void GraphInfoBuilder::BuildArgMinMax(mojom::ArgMinMax::Kind kind,
                                       uint64_t input_operand_id,
                                       uint64_t output_operand_id,
                                       std::vector<uint32_t> axes,
-                                      bool keep_dimensions,
-                                      bool select_last_index) {
+                                      bool keep_dimensions) {
   mojom::ArgMinMaxPtr arg_min_max = mojom::ArgMinMax::New();
   arg_min_max->kind = kind;
   arg_min_max->input_operand_id = input_operand_id;
   arg_min_max->output_operand_id = output_operand_id;
   arg_min_max->axes = axes;
   arg_min_max->keep_dimensions = keep_dimensions;
-  arg_min_max->select_last_index = select_last_index;
   graph_info_->operations.push_back(
       mojom::Operation::NewArgMinMax(std::move(arg_min_max)));
 }
@@ -329,10 +327,10 @@ void GraphInfoBuilder::BuildSigmoid(uint64_t input_operand_id,
 }
 
 void GraphInfoBuilder::BuildSoftmax(uint64_t input_operand_id,
-                                    uint64_t output_operand_id) {
-  mojom::SoftmaxPtr softmax = mojom::Softmax::New();
-  softmax->input_operand_id = input_operand_id;
-  softmax->output_operand_id = output_operand_id;
+                                    uint64_t output_operand_id,
+                                    uint32_t axis) {
+  mojom::SoftmaxPtr softmax =
+      mojom::Softmax::New(input_operand_id, output_operand_id, axis);
   graph_info_->operations.push_back(
       mojom::Operation::NewSoftmax(std::move(softmax)));
 }

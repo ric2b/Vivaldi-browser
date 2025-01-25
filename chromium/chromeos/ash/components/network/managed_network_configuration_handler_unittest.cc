@@ -2032,6 +2032,82 @@ TEST_F(ManagedNetworkConfigurationHandlerTest,
   EXPECT_TRUE(managed_handler()->GetBlockedHexSSIDs().empty());
 }
 
+TEST_F(ManagedNetworkConfigurationHandlerTest, DisconnectWiFiOnEthernet) {
+  policy_util::SetEphemeralNetworkPoliciesEnabled();
+
+  const char* const onc_policy_connected = R"(
+      {
+        "GlobalNetworkConfiguration": {
+          "DisconnectWiFiOnEthernet": "WhenConnected"
+        },
+        "Type": "UnencryptedConfiguration"
+      })";
+  EXPECT_TRUE(SetPolicy(::onc::ONC_SOURCE_DEVICE_POLICY, std::string(),
+                        base::test::ParseJsonDict(onc_policy_connected)));
+  FastForwardProfileRefreshDelay();
+  base::RunLoop().RunUntilIdle();
+  auto properties =
+      ShillManagerClient::Get()->GetTestInterface()->GetStubProperties();
+  EXPECT_NE(properties.FindString(shill::kDisconnectWiFiOnEthernetProperty),
+            nullptr);
+  EXPECT_EQ(*properties.FindString(shill::kDisconnectWiFiOnEthernetProperty),
+            std::string(shill::kDisconnectWiFiOnEthernetConnected));
+
+  // Unknown policy value should reset property value to Off.
+  const char* const onc_policy_invalid = R"(
+      {
+        "GlobalNetworkConfiguration": {
+          "DisconnectWiFiOnEthernet": "Unknown"
+        },
+        "Type": "UnencryptedConfiguration"
+      })";
+  EXPECT_TRUE(SetPolicy(::onc::ONC_SOURCE_DEVICE_POLICY, std::string(),
+                        base::test::ParseJsonDict(onc_policy_invalid)));
+  FastForwardProfileRefreshDelay();
+  base::RunLoop().RunUntilIdle();
+  properties =
+      ShillManagerClient::Get()->GetTestInterface()->GetStubProperties();
+  EXPECT_NE(properties.FindString(shill::kDisconnectWiFiOnEthernetProperty),
+            nullptr);
+  EXPECT_EQ(*properties.FindString(shill::kDisconnectWiFiOnEthernetProperty),
+            std::string(shill::kDisconnectWiFiOnEthernetOff));
+
+  const char* const onc_policy_online = R"(
+      {
+        "GlobalNetworkConfiguration": {
+          "DisconnectWiFiOnEthernet": "WhenOnline"
+        },
+        "Type": "UnencryptedConfiguration"
+      })";
+  EXPECT_TRUE(SetPolicy(::onc::ONC_SOURCE_DEVICE_POLICY, std::string(),
+                        base::test::ParseJsonDict(onc_policy_online)));
+  FastForwardProfileRefreshDelay();
+  base::RunLoop().RunUntilIdle();
+  properties =
+      ShillManagerClient::Get()->GetTestInterface()->GetStubProperties();
+  EXPECT_NE(properties.FindString(shill::kDisconnectWiFiOnEthernetProperty),
+            nullptr);
+  EXPECT_EQ(*properties.FindString(shill::kDisconnectWiFiOnEthernetProperty),
+            std::string(shill::kDisconnectWiFiOnEthernetOnline));
+
+  // Field not existing in policy should leave property value unchanged.
+  const char* const onc_policy_off = R"(
+      {
+        "GlobalNetworkConfiguration": {},
+        "Type": "UnencryptedConfiguration"
+      })";
+  EXPECT_TRUE(SetPolicy(::onc::ONC_SOURCE_DEVICE_POLICY, std::string(),
+                        base::test::ParseJsonDict(onc_policy_off)));
+  FastForwardProfileRefreshDelay();
+  base::RunLoop().RunUntilIdle();
+  properties =
+      ShillManagerClient::Get()->GetTestInterface()->GetStubProperties();
+  EXPECT_NE(properties.FindString(shill::kDisconnectWiFiOnEthernetProperty),
+            nullptr);
+  EXPECT_EQ(*properties.FindString(shill::kDisconnectWiFiOnEthernetProperty),
+            std::string(shill::kDisconnectWiFiOnEthernetOnline));
+}
+
 TEST_F(ManagedNetworkConfigurationHandlerTest,
        RecommendedValuesAreEphemeralAccessor) {
   policy_util::SetEphemeralNetworkPoliciesEnabled();
@@ -2080,7 +2156,7 @@ TEST_F(ManagedNetworkConfigurationHandlerTest, AllowApnModification) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(/*enabled_features=*/
                                        {features::kApnRevamp,
-                                        chromeos::features::kApnPolicies},
+                                        features::kAllowApnModificationPolicy},
                                        /*disabled_features=*/{});
 
   // TODO(b/333100319): When feature is fully enabled, test

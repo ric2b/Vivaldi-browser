@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.customtabs.content;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -12,6 +13,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
@@ -21,7 +23,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import static org.chromium.chrome.browser.content.WebContentsFactory.DEFAULT_NETWORK_HANDLE;
+
 import android.content.Intent;
+import android.net.Network;
 import android.os.Bundle;
 
 import org.junit.Before;
@@ -52,13 +57,14 @@ public class CustomTabActivityTabControllerUnitTest {
     public final CustomTabActivityContentTestEnvironment env =
             new CustomTabActivityContentTestEnvironment();
 
-    @Rule public Features.JUnitProcessor processor = new Features.JUnitProcessor();
-
     private CustomTabActivityTabController mTabController;
 
     @Mock private Profile mProfile;
     @Mock private Profile mIncognitoProfile;
     @Mock private PrivacyPreferencesManagerImpl mPrivacyPreferencesManager;
+    @Mock private Network mNetwork;
+
+    private static final long TEST_NETWORK_HANDLE = 1000;
 
     @Before
     public void setUp() {
@@ -66,6 +72,7 @@ public class CustomTabActivityTabControllerUnitTest {
         when(env.profileProvider.getOriginalProfile()).thenReturn(mProfile);
         when(env.profileProvider.getOffTheRecordProfile(eq(true))).thenReturn(mIncognitoProfile);
         when(mIncognitoProfile.isOffTheRecord()).thenReturn(true);
+        when(env.intentDataProvider.getNetworkHandle()).thenReturn(DEFAULT_NETWORK_HANDLE);
 
         mTabController = env.createTabController();
         PrivacyPreferencesManagerImpl.setInstanceForTesting(mPrivacyPreferencesManager);
@@ -154,9 +161,22 @@ public class CustomTabActivityTabControllerUnitTest {
     @Test
     public void usesWebContentsCreatedWithWarmRenderer_ByDefault() {
         WebContents webContents = mock(WebContents.class);
-        when(env.webContentsFactory.createWebContentsWithWarmRenderer(any(), anyBoolean()))
+        when(env.webContentsFactory.createWebContentsWithWarmRenderer(
+                        any(), anyBoolean(), anyLong()))
                 .thenReturn(webContents);
         env.reachNativeInit(mTabController);
+        assertEquals(webContents, env.webContentsCaptor.getValue());
+    }
+
+    @Test
+    public void usesWebContentsCreatedWithWarmRenderer_basedOnParticularNetworkHandle() {
+        WebContents webContents = mock(WebContents.class);
+        when(env.intentDataProvider.getNetworkHandle()).thenReturn(TEST_NETWORK_HANDLE);
+        when(env.webContentsFactory.createWebContentsWithWarmRenderer(
+                        any(), anyBoolean(), eq(TEST_NETWORK_HANDLE)))
+                .thenReturn(webContents);
+        env.reachNativeInit(mTabController);
+        verify(env.warmupManager, never()).takeSpareWebContents(env.isOffTheRecord, false);
         assertEquals(webContents, env.webContentsCaptor.getValue());
     }
 
@@ -180,6 +200,7 @@ public class CustomTabActivityTabControllerUnitTest {
         WebContents spareWebcontents = env.prepareSpareWebcontents();
         env.reachNativeInit(mTabController);
         assertEquals(transferredWebcontents, env.webContentsCaptor.getValue());
+        assertNotEquals(spareWebcontents, env.webContentsCaptor.getValue());
     }
 
     // This is important so that the tab doesn't get hidden, see ChromeActivity#onStopWithNative
@@ -202,11 +223,11 @@ public class CustomTabActivityTabControllerUnitTest {
                         })
                 .when(env.connection)
                 .setClientDataHeaderForNewTab(any(), any());
-        env.isIncognito = true;
+        env.isOffTheRecord = true;
         mTabController.onPreInflationStartup();
         mTabController.finishNativeInitialization();
         Tab tab = env.prepareTab();
-        assertTrue(tab.isIncognito());
+        assertTrue(tab.isOffTheRecord());
     }
 
     @Test

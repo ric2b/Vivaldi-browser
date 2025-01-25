@@ -169,7 +169,6 @@ class PLATFORM_EXPORT CanvasResourceProvider
   void OnContextDestroyed() override;
 
   MemoryManagedPaintCanvas& Canvas(bool needs_will_draw = false);
-  void ReleaseLockedImages();
   // FlushCanvas and preserve recording only if IsPrinting or
   // FlushReason indicates printing in progress.
   std::optional<cc::PaintRecord> FlushCanvas(FlushReason);
@@ -221,18 +220,17 @@ class PLATFORM_EXPORT CanvasResourceProvider
                            int x,
                            int y);
 
-  virtual gpu::Mailbox GetBackingMailboxForOverwrite(
-      MailboxSyncMode sync_mode) {
-    NOTREACHED();
+  virtual gpu::Mailbox GetBackingMailboxForOverwrite() {
+    NOTREACHED_IN_MIGRATION();
     return gpu::Mailbox();
   }
   virtual GLenum GetBackingTextureTarget() const { return GL_TEXTURE_2D; }
   virtual void* GetPixelBufferAddressForOverwrite() {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
   virtual uint32_t GetSharedImageUsageFlags() const {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return 0;
   }
 
@@ -401,6 +399,12 @@ class PLATFORM_EXPORT CanvasResourceProvider
   void RegisterUnusedResource(scoped_refptr<CanvasResource>&& resource);
   void MaybePostUnusedResourcesReclaimTask();
   void ClearOldUnusedResources();
+
+  // Disables lines drawing as paths if necessary. Drawing lines as paths is
+  // only needed for ganesh.
+  void DisableLineDrawingAsPathsIfNecessary();
+
+  void ReleaseLockedImages();
 
   base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper_;
   base::WeakPtr<CanvasResourceDispatcher> resource_dispatcher_;

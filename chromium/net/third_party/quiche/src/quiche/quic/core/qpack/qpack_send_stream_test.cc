@@ -4,6 +4,10 @@
 
 #include "quiche/quic/core/qpack/qpack_send_stream.h"
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "quiche/quic/core/crypto/null_encrypter.h"
@@ -129,7 +133,6 @@ TEST_P(QpackSendStreamTest, ReceiveDataOnSendStream) {
 }
 
 TEST_P(QpackSendStreamTest, GetSendWindowSizeFromSession) {
-  SetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data5, true);
   EXPECT_NE(session_.GetFlowControlSendWindowSize(qpack_send_stream_->id()),
             std::numeric_limits<QuicByteCount>::max());
 }

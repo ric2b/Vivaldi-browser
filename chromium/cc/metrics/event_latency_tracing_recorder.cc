@@ -64,6 +64,20 @@ constexpr perfetto::protos::pbzero::EventLatency::EventType ToProtoEnum(
   }
 }
 
+const char* GetVizBreakdownToPresentationName(
+    CompositorFrameReporter::VizBreakdown breakdown) {
+  switch (breakdown) {
+    case CompositorFrameReporter::VizBreakdown::kSwapStartToSwapEnd:
+      return "SwapStartToPresentation";
+    case CompositorFrameReporter::VizBreakdown::kLatchToSwapEnd:
+      return "LatchToPresentation";
+    default:
+      base::UmaHistogramEnumeration(
+          "Compositing.VizBreakdownToPresentationUnexpected", breakdown);
+      return "Unknown";
+  }
+}
+
 }  // namespace
 
 // static
@@ -80,7 +94,7 @@ const char* EventLatencyTracingRecorder::GetDispatchBreakdownName(
         case EventMetrics::DispatchStage::kArrivedInRendererCompositor:
           return "GenerationToRendererCompositor";
         default:
-          NOTREACHED() << static_cast<int>(end_stage);
+          NOTREACHED_IN_MIGRATION() << static_cast<int>(end_stage);
           return "";
       }
     case EventMetrics::DispatchStage::kScrollsBlockingTouchDispatchedToRenderer:
@@ -92,7 +106,7 @@ const char* EventLatencyTracingRecorder::GetDispatchBreakdownName(
           // a more detailed breakdown of this stage.
           return "TouchRendererHandlingToBrowserMain";
         default:
-          NOTREACHED() << static_cast<int>(end_stage);
+          NOTREACHED_IN_MIGRATION() << static_cast<int>(end_stage);
           return "";
       }
     case EventMetrics::DispatchStage::kArrivedInBrowserMain:
@@ -106,7 +120,7 @@ const char* EventLatencyTracingRecorder::GetDispatchBreakdownName(
         case EventMetrics::DispatchStage::kRendererMainStarted:
           return "RendererCompositorToMain";
         default:
-          NOTREACHED() << static_cast<int>(end_stage);
+          NOTREACHED_IN_MIGRATION() << static_cast<int>(end_stage);
           return "";
       }
     case EventMetrics::DispatchStage::kRendererCompositorStarted:
@@ -120,7 +134,7 @@ const char* EventLatencyTracingRecorder::GetDispatchBreakdownName(
       DCHECK_EQ(end_stage, EventMetrics::DispatchStage::kRendererMainFinished);
       return "RendererMainProcessing";
     case EventMetrics::DispatchStage::kRendererMainFinished:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
   }
 }
@@ -152,8 +166,9 @@ const char* EventLatencyTracingRecorder::GetDispatchToCompositorBreakdownName(
         default:
           // TODO(crbug.com/40866824): Logs are added to debug NOTREACHED()
           // begin hit in crbug/1366253. Remove after investigation is finished.
-          NOTREACHED() << "Invalid CC stage after compositor thread: "
-                       << static_cast<int>(compositor_stage);
+          NOTREACHED_IN_MIGRATION()
+              << "Invalid CC stage after compositor thread: "
+              << static_cast<int>(compositor_stage);
           return "";
       }
     case EventMetrics::DispatchStage::kRendererMainFinished:
@@ -178,12 +193,12 @@ const char* EventLatencyTracingRecorder::GetDispatchToCompositorBreakdownName(
         default:
           // TODO(crbug.com/40866824): Logs are added to debug NOTREACHED()
           // begin hit in crbug/1366253. Remove after investigation is finished.
-          NOTREACHED() << "Invalid CC stage after main thread: "
-                       << static_cast<int>(compositor_stage);
+          NOTREACHED_IN_MIGRATION() << "Invalid CC stage after main thread: "
+                                    << static_cast<int>(compositor_stage);
           return "";
       }
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
   }
 }
@@ -203,7 +218,7 @@ const char* EventLatencyTracingRecorder::GetDispatchToTerminationBreakdownName(
     case EventMetrics::DispatchStage::kRendererMainFinished:
       return "RendererMainFinishedToTermination";
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
   }
 }
@@ -358,10 +373,40 @@ void EventLatencyTracingRecorder::RecordEventLatencyTraceEventInternal(
                it.Advance()) {
             base::TimeTicks start_time = it.GetStartTime();
             base::TimeTicks end_time = it.GetEndTime();
-            if (start_time >= end_time)
+
+            // Only record events with positive duration that start before
+            // termination.
+            // For example, in WebView, swap start time is the same as
+            // presentation time, and it wouldn't make sense to have a
+            // zero-duration `SwapStartToPresentation` event. As a result, the
+            // last stage for WebView is `StartDrawToSwapStart`.
+            //
+            // http://b/337195538 tracks a feature request for receiving
+            // presentation time in WebView, which should make it consistent
+            // with Chrome.
+            if (start_time >= end_time || start_time >= termination_time) {
               continue;
-            const char* breakdown_name =
-                CompositorFrameReporter::GetVizBreakdownName(it.GetBreakdown());
+            }
+
+            CompositorFrameReporter::VizBreakdown breakdown = it.GetBreakdown();
+            const char* breakdown_name = nullptr;
+
+            if (end_time > termination_time) {
+              end_time = termination_time;
+              // A breakdown ending in swap-end can end after termination time
+              // (because swap-end is actually the time the post swap end
+              // callback is run, which can happen after presentation). In this
+              // case we truncate the breakdown to presentation.
+              DCHECK(
+                  breakdown == CompositorFrameReporter::VizBreakdown::
+                                   kSwapStartToSwapEnd ||
+                  breakdown ==
+                      CompositorFrameReporter::VizBreakdown::kLatchToSwapEnd);
+              breakdown_name = GetVizBreakdownToPresentationName(breakdown);
+            } else {
+              breakdown_name =
+                  CompositorFrameReporter::GetVizBreakdownName(breakdown);
+            }
             TRACE_EVENT_BEGIN(kTracingCategory,
                               perfetto::StaticString{breakdown_name},
                               trace_track, start_time);

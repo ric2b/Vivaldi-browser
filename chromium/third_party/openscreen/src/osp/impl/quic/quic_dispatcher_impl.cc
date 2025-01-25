@@ -11,6 +11,7 @@
 #include "osp/impl/quic/open_screen_server_session.h"
 #include "osp/impl/quic/quic_connection_impl.h"
 #include "osp/impl/quic/quic_packet_writer_impl.h"
+#include "osp/impl/quic/quic_server.h"
 #include "osp/impl/quic/quic_utils.h"
 #include "quiche/quic/core/crypto/quic_compressed_certs_cache.h"
 #include "quiche/quic/core/crypto/quic_crypto_server_config.h"
@@ -55,9 +56,11 @@ std::unique_ptr<quic::QuicSession> QuicDispatcherImpl::CreateQuicSession(
       quic::ParsedQuicVersionVector{version}, connection_id_generator);
 
   auto connection_impl = std::make_unique<QuicConnectionImpl>(
-      parent_factory_,
-      *parent_factory_.server_delegate()->NextConnectionDelegate(
-          ToIPEndpoint(peer_address)),
+      // NOTE: There is no corresponding instance name for IPEndpoint on the
+      // client side. So IPEndpoint is converted into a string and used as
+      // instance name.
+      ToIPEndpoint(peer_address).ToString(),
+      parent_factory_.server_delegate()->GetConnectionDelegate(),
       *helper()->GetClock());
   connection_impl->set_dispacher(this);
 
@@ -85,8 +88,12 @@ quic::QuicDispatcher::QuicPacketFate
 QuicDispatcherImpl::ValidityChecksOnFullChlo(
     const quic::ReceivedPacketInfo& /*packet_info*/,
     const quic::ParsedClientHello& parsed_chlo) const {
-  std::string sni = parent_factory_.GetFingerprint() + "._openscreen.udp";
-  sni.erase(std::remove(sni.begin(), sni.end(), ':'), sni.end());
+  QuicServer* server =
+      static_cast<QuicServer*>(parent_factory_.server_delegate());
+  // NOTE: Use instance name + domain temporarily to prevent blocking the
+  // project. There is an ongoing discussion about this, see blow link：
+  // https://github.com/w3c/openscreenprotocol/issues/275
+  std::string sni = server->instance_name() + ".local";
   if (sni != parsed_chlo.sni) {
     return kFateDrop;
   }

@@ -13,7 +13,6 @@ import android.view.View;
 import androidx.annotation.CallSuper;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
-import androidx.annotation.VisibleForTesting;
 import androidx.fragment.app.Fragment;
 import androidx.viewpager2.widget.ViewPager2;
 
@@ -339,10 +338,16 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         // Notify feature engagement that FRE occurred.
         TrackerFactory.getTrackerForProfile(profile)
                 .notifyEvent(EventConstants.RESTORE_TABS_ON_FIRST_RUN_SHOW_PROMO);
+        RecordHistogram.recordTimesHistogram(
+                "MobileFre.NativeInitialized", SystemClock.elapsedRealtime() - getStartTime());
     }
 
     private void onNativeDependenciesFullyInitialized() {
         mNativeInitializationPromise.fulfill(null);
+        if (ChromeFeatureList.isEnabled(
+                ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)) {
+            mPager.setOffscreenPageLimit(ViewPager2.OFFSCREEN_PAGE_LIMIT_DEFAULT);
+        }
 
         onInternalStateChanged();
     }
@@ -688,11 +693,6 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         return !getResources()
                 .getConfiguration()
                 .isLayoutSizeAtLeast(Configuration.SCREENLAYOUT_SIZE_LARGE);
-    }
-
-    @VisibleForTesting
-    boolean hasPages() {
-        return mPagerAdapter != null && mPagerAdapter.getItemCount() > 0;
     }
 
     public FirstRunFragment getCurrentFragmentForTesting() {

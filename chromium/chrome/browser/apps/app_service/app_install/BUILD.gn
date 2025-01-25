@@ -46,6 +46,8 @@ source_set("implementation") {
     sources += [
       "app_install_almanac_endpoint.cc",
       "app_install_almanac_endpoint.h",
+      "app_install_discovery_metrics.cc",
+      "app_install_discovery_metrics.h",
       "app_install_service_ash.cc",
       "app_install_service_ash.h",
       "arc_app_installer.cc",
@@ -67,6 +69,7 @@ source_set("implementation") {
       "//chrome/browser/profiles:profile",
       "//chrome/browser/ui/webui/ash/app_install:mojo_bindings",
       "//chrome/browser/web_applications",
+      "//chromeos/components/mgs",
       "//chromeos/constants:constants",
       "//components/webapps/browser",
       "//components/webapps/common",
@@ -86,7 +89,7 @@ source_set("implementation") {
   visibility = [
     ":*",
     "//chrome/browser",
-    "//chrome/browser/ash/system_web_apps/apps:browser_tests",
+    "//chrome/browser/ash/system_web_apps/apps/help_app:browser_tests",
   ]
 }
 
@@ -131,6 +134,7 @@ source_set("unit_tests") {
   if (is_chromeos_ash) {
     sources += [
       "app_install_almanac_endpoint_unittest.cc",
+      "app_install_service_ash_unittest.cc",
       "arc_app_installer_unittest.cc",
     ]
 
@@ -139,7 +143,10 @@ source_set("unit_tests") {
       "//ash/components/arc:arc_test_support",
       "//chrome/browser/apps/almanac_api_client/proto",
       "//chrome/browser/apps/app_service",
+      "//chrome/browser/apps/app_service",
       "//chrome/browser/ash:test_support",
+      "//chrome/browser/ash/app_list/arc",
+      "//components/arc:arc_test_support",
       "//services/network:test_support",
     ]
   }
@@ -170,6 +177,7 @@ source_set("browser_tests") {
     "//chrome/browser/apps/app_service:app_registry_cache_waiter",
     "//chrome/browser/apps/app_service:constants",
     "//chrome/browser/apps/browser_instance",
+    "//chrome/browser/apps/link_capturing:test_support",
     "//chrome/browser/chromeos/crosapi:test_support",
     "//chrome/browser/web_applications:web_applications_test_support",
     "//chrome/test:test_support",

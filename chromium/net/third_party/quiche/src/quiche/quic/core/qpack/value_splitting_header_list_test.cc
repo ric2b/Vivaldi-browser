@@ -4,6 +4,8 @@
 
 #include "quiche/quic/core/qpack/value_splitting_header_list.h"
 
+#include <vector>
+
 #include "absl/base/macros.h"
 #include "absl/strings/string_view.h"
 #include "quiche/quic/platform/api/quic_test.h"
@@ -16,7 +18,7 @@ using ::testing::ElementsAre;
 using ::testing::Pair;
 
 TEST(ValueSplittingHeaderListTest, Comparison) {
-  spdy::Http2HeaderBlock block;
+  quiche::HttpHeaderBlock block;
   block["foo"] = absl::string_view("bar\0baz", 7);
   block["baz"] = "qux";
   block["cookie"] = "foo; bar";
@@ -75,7 +77,7 @@ TEST(ValueSplittingHeaderListTest, Comparison) {
 }
 
 TEST(ValueSplittingHeaderListTest, Empty) {
-  spdy::Http2HeaderBlock block;
+  quiche::HttpHeaderBlock block;
 
   ValueSplittingHeaderList headers(&block);
   EXPECT_THAT(headers, ElementsAre());
@@ -114,7 +116,7 @@ TEST(ValueSplittingHeaderListTest, Split) {
   };
 
   for (size_t i = 0; i < ABSL_ARRAYSIZE(kTestData); ++i) {
-    spdy::Http2HeaderBlock block;
+    quiche::HttpHeaderBlock block;
     block[kTestData[i].name] = kTestData[i].value;
 
     ValueSplittingHeaderList headers(&block);
@@ -130,7 +132,7 @@ TEST(ValueSplittingHeaderListTest, Split) {
 }
 
 TEST(ValueSplittingHeaderListTest, MultipleFields) {
-  spdy::Http2HeaderBlock block;
+  quiche::HttpHeaderBlock block;
   block["foo"] = absl::string_view("bar\0baz\0", 8);
   block["cookie"] = "foo; bar";
   block["bar"] = absl::string_view("qux\0foo", 7);
@@ -143,7 +145,7 @@ TEST(ValueSplittingHeaderListTest, MultipleFields) {
 }
 
 TEST(ValueSplittingHeaderListTest, CookieStartsWithSpace) {
-  spdy::Http2HeaderBlock block;
+  quiche::HttpHeaderBlock block;
   block["foo"] = "bar";
   block["cookie"] = " foo";
   block["bar"] = "baz";

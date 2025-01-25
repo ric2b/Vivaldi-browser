@@ -12,7 +12,7 @@ class Profile;
 class VivaldiAccountManagerAndroid
     : public vivaldi::VivaldiAccountManager::Observer {
  public:
-  VivaldiAccountManagerAndroid(JNIEnv* env, jobject obj);
+  VivaldiAccountManagerAndroid(JNIEnv* env, const base::android::JavaRef<jobject>& obj);
   ~VivaldiAccountManagerAndroid() override;
   VivaldiAccountManagerAndroid(const VivaldiAccountManagerAndroid&) = delete;
   VivaldiAccountManagerAndroid& operator=(const VivaldiAccountManagerAndroid&) =
@@ -47,7 +47,6 @@ class VivaldiAccountManagerAndroid
   void OnVivaldiAccountUpdated() override;
   void OnTokenFetchSucceeded() override;
   void OnTokenFetchFailed() override;
-  void OnAccountInfoFetchFailed() override;
   void OnVivaldiAccountShutdown() override;
 
  private:

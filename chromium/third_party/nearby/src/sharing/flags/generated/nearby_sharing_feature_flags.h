@@ -29,18 +29,15 @@ namespace config_package_nearby {
 constexpr absl::string_view kConfigPackage = "nearby";
 
 namespace nearby_sharing_feature {
+// Time to delay the endpoint loss in milliseconds.
+constexpr auto kDelayEndpointLossMs =
+    flags::Flag<int64_t>(kConfigPackage, "45632386", 500);
 // When true, delete the file payload which received unexpectedly.
 constexpr auto kDeleteUnexpectedReceivedFile =
     flags::Flag<bool>(kConfigPackage, "45627826", false);
-// Enable/disable background scanning
-constexpr auto kEnableBackgroundScanning =
-    flags::Flag<bool>(kConfigPackage, "45418904", true);
 // Enable/disable the use of BLE as a connection medium.
 constexpr auto kEnableBleForTransfer =
     flags::Flag<bool>(kConfigPackage, "45427466", false);
-// Disable/Enable BLE v2 in Nearby Sharing SDK.
-constexpr auto kEnableBleV2 =
-    flags::Flag<bool>(kConfigPackage, "45401516", false);
 // Enable/disable certificates dump
 constexpr auto kEnableCertificatesDump =
     flags::Flag<bool>(kConfigPackage, "45409184", false);
@@ -78,9 +75,6 @@ constexpr auto kEnableNearbySharing =
 // Replace std::async with platform thread
 constexpr auto kEnablePlatformThreadToNearbyClient =
     flags::Flag<bool>(kConfigPackage, "45411213", true);
-// Enable/disable QR Code UI
-constexpr auto kEnableQrCodeUi =
-    flags::Flag<bool>(kConfigPackage, "45417647", false);
 // Enable/disable retry/resume transfer for partial files.
 constexpr auto kEnableRetryResumeTransfer =
     flags::Flag<bool>(kConfigPackage, "45411589", false);
@@ -93,9 +87,6 @@ constexpr auto kEnableSelfShareUi =
 // Enable/disable sending desktop events
 constexpr auto kEnableSendingDesktopEvents =
     flags::Flag<bool>(kConfigPackage, "45459748", false);
-// Disable/Enable tips carousel UI in Nearby Share app.
-constexpr auto kEnableTipsCarouselUi =
-    flags::Flag<bool>(kConfigPackage, "45411567", false);
 // Enable/disable optimization for transfer cancellation.
 constexpr auto kEnableTransferCancellationOptimization =
     flags::Flag<bool>(kConfigPackage, "45429881", false);
@@ -114,34 +105,35 @@ constexpr auto kSenderSkipsConfirmation =
 // Rasta metrics
 constexpr auto kShareZwiebackBtwPhenotypeAndClearcut =
     flags::Flag<bool>(kConfigPackage, "45419546", false);
-// Show Admin mode warning message in the app
-constexpr auto kShowAdminModeWarning =
-    flags::Flag<bool>(kConfigPackage, "45410558", false);
-// Show/hide auto app start setting.
-constexpr auto kShowAutoAppStartSetting =
-    flags::Flag<bool>(kConfigPackage, "45411601", false);
 // Enable/disable auto-update on settings page
 constexpr auto kShowAutoUpdateSetting =
     flags::Flag<bool>(kConfigPackage, "45409033", false);
 // Suppress Fast Initiation HUN by switching from kNotify to kSilent
 constexpr auto kSuppressFastInitHun =
     flags::Flag<bool>(kConfigPackage, "45409586", true);
-// Update track
-constexpr auto kUpdateTrack =
-    flags::Flag<absl::string_view>(kConfigPackage, "45409861", "");
 // When true, we only upgrade the bandwidth after accepting a connection.
 constexpr auto kUpgradeBandwidthAfterAccept =
     flags::Flag<bool>(kConfigPackage, "45627824", false);
 // When true, use gRpc client to access backend.
 constexpr auto kUseGrpcClient =
     flags::Flag<bool>(kConfigPackage, "45630055", false);
+// Enable/disable QR Code UI
+constexpr auto kEnableQrCodeUi =
+    flags::Flag<bool>(kConfigPackage, "45417647", false);
+// Show Admin mode warning message in the app
+constexpr auto kShowAdminModeWarning =
+    flags::Flag<bool>(kConfigPackage, "45410558", false);
+// Show/hide auto app start setting.
+constexpr auto kShowAutoAppStartSetting =
+    flags::Flag<bool>(kConfigPackage, "45411601", true);
+// Update track
+constexpr auto kUpdateTrack =
+    flags::Flag<absl::string_view>(kConfigPackage, "45409861", "");
 
 inline absl::btree_map<int, const flags::Flag<bool>&> GetBoolFlags() {
   return {
       {45627826, kDeleteUnexpectedReceivedFile},
-      {45418904, kEnableBackgroundScanning},
       {45427466, kEnableBleForTransfer},
-      {45401516, kEnableBleV2},
       {45409184, kEnableCertificatesDump},
       {45412090, kEnableComponentsRefactor},
       {45415713, kEnableDumpingFeatureFlags},
@@ -154,27 +146,27 @@ inline absl::btree_map<int, const flags::Flag<bool>&> GetBoolFlags() {
       {45418906, kEnableMediumWifiLan},
       {45418903, kEnableNearbySharing},
       {45411213, kEnablePlatformThreadToNearbyClient},
-      {45417647, kEnableQrCodeUi},
       {45411589, kEnableRetryResumeTransfer},
       {45418907, kEnableSelfShare},
       {45418908, kEnableSelfShareUi},
       {45459748, kEnableSendingDesktopEvents},
-      {45411567, kEnableTipsCarouselUi},
       {45429881, kEnableTransferCancellationOptimization},
       {45411620, kEnableWebrtcMedium},
       {45411353, kSenderSkipsConfirmation},
       {45419546, kShareZwiebackBtwPhenotypeAndClearcut},
-      {45410558, kShowAdminModeWarning},
-      {45411601, kShowAutoAppStartSetting},
       {45409033, kShowAutoUpdateSetting},
       {45409586, kSuppressFastInitHun},
       {45627824, kUpgradeBandwidthAfterAccept},
       {45630055, kUseGrpcClient},
+      {45417647, kEnableQrCodeUi},
+      {45410558, kShowAdminModeWarning},
+      {45411601, kShowAutoAppStartSetting},
   };
 }
 
 inline absl::btree_map<int, const flags::Flag<int64_t>&> GetInt64Flags() {
   return {
+      {45632386, kDelayEndpointLossMs},
       {45401358, kLoggingLevel},
   };
 }

@@ -84,34 +84,34 @@ int QuicProxyDatagramClientSocket::ConnectViaStream(
 }
 
 int QuicProxyDatagramClientSocket::Connect(const IPEndPoint& address) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ERR_NOT_IMPLEMENTED;
 }
 
 int QuicProxyDatagramClientSocket::ConnectAsync(
     const IPEndPoint& address,
     CompletionOnceCallback callback) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ERR_NOT_IMPLEMENTED;
 }
 
 int QuicProxyDatagramClientSocket::ConnectUsingDefaultNetworkAsync(
     const IPEndPoint& address,
     CompletionOnceCallback callback) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ERR_NOT_IMPLEMENTED;
 }
 
 int QuicProxyDatagramClientSocket::ConnectUsingNetwork(
     handles::NetworkHandle network,
     const IPEndPoint& address) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ERR_NOT_IMPLEMENTED;
 }
 
 int QuicProxyDatagramClientSocket::ConnectUsingDefaultNetwork(
     const IPEndPoint& address) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ERR_NOT_IMPLEMENTED;
 }
 
@@ -119,7 +119,7 @@ int QuicProxyDatagramClientSocket::ConnectUsingNetworkAsync(
     handles::NetworkHandle network,
     const IPEndPoint& address,
     CompletionOnceCallback callback) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ERR_NOT_IMPLEMENTED;
 }
 
@@ -202,7 +202,7 @@ void QuicProxyDatagramClientSocket::OnUnknownCapsule(
     quic::QuicStreamId stream_id,
     const quiche::UnknownCapsule& capsule) {}
 
-// TODO(crbug.com/41497362) Implement method.
+// Proxied connections are not on any specific network.
 handles::NetworkHandle QuicProxyDatagramClientSocket::GetBoundNetwork() const {
   return handles::kInvalidNetworkHandle;
 }
@@ -212,7 +212,7 @@ void QuicProxyDatagramClientSocket::ApplySocketTag(const SocketTag& tag) {}
 
 int QuicProxyDatagramClientSocket::SetMulticastInterface(
     uint32_t interface_index) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ERR_NOT_IMPLEMENTED;
 }
 
@@ -230,16 +230,16 @@ int QuicProxyDatagramClientSocket::GetLocalAddress(IPEndPoint* address) const {
 }
 
 void QuicProxyDatagramClientSocket::UseNonBlockingIO() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 int QuicProxyDatagramClientSocket::SetDoNotFragment() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ERR_NOT_IMPLEMENTED;
 }
 
 int QuicProxyDatagramClientSocket::SetRecvTos() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ERR_NOT_IMPLEMENTED;
 }
 
@@ -249,7 +249,7 @@ int QuicProxyDatagramClientSocket::SetTos(net::DiffServCodePoint dscp,
 }
 
 void QuicProxyDatagramClientSocket::SetMsgConfirm(bool confirm) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 const NetLogWithSource& QuicProxyDatagramClientSocket::NetLog() const {
@@ -362,7 +362,7 @@ int QuicProxyDatagramClientSocket::DoLoop(int last_io_result) {
             NetLogEventType::HTTP_TRANSACTION_TUNNEL_READ_HEADERS, rv);
         break;
       default:
-        NOTREACHED() << "bad state";
+        NOTREACHED_IN_MIGRATION() << "bad state";
         rv = ERR_UNEXPECTED;
         break;
     }
@@ -412,7 +412,7 @@ int QuicProxyDatagramClientSocket::DoSendRequest() {
                        NetLogEventType::HTTP_TRANSACTION_SEND_TUNNEL_HEADERS,
                        request_line, &request_.extra_headers);
 
-  spdy::Http2HeaderBlock headers;
+  quiche::HttpHeaderBlock headers;
   CreateSpdyHeadersFromHttpRequestForExtendedConnect(
       request_, /*priority=*/std::nullopt, "connect-udp",
       request_.extra_headers, &headers);
@@ -485,7 +485,7 @@ int QuicProxyDatagramClientSocket::DoReadReplyComplete(int result) {
 }
 
 void QuicProxyDatagramClientSocket::OnReadResponseHeadersComplete(int result) {
-  // Convert the now-populated spdy::Http2HeaderBlock to HttpResponseInfo
+  // Convert the now-populated quiche::HttpHeaderBlock to HttpResponseInfo
   if (result > 0) {
     result = ProcessResponseHeaders(response_header_block_);
   }
@@ -496,7 +496,7 @@ void QuicProxyDatagramClientSocket::OnReadResponseHeadersComplete(int result) {
 }
 
 int QuicProxyDatagramClientSocket::ProcessResponseHeaders(
-    const spdy::Http2HeaderBlock& headers) {
+    const quiche::HttpHeaderBlock& headers) {
   if (SpdyHeadersToHttpResponse(headers, &response_) != OK) {
     DLOG(WARNING) << "Invalid headers";
     return ERR_QUIC_PROTOCOL_ERROR;

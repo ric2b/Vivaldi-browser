@@ -448,6 +448,13 @@ void PaintOpWriter::Write(const SkSamplingOptions& sampling) {
   }
 }
 
+void PaintOpWriter::Write(
+    const SkGradientShader::Interpolation& interpolation) {
+  WriteEnum(interpolation.fInPremul);
+  WriteEnum(interpolation.fColorSpace);
+  WriteEnum(interpolation.fHueMethod);
+}
+
 void PaintOpWriter::Write(const SkColorSpace* color_space) {
   if (!color_space) {
     WriteSize(static_cast<size_t>(0));
@@ -615,7 +622,7 @@ void PaintOpWriter::Write(const PaintShader* shader,
   WriteSimple(shader->end_point_);
   WriteSimple(shader->start_degrees_);
   WriteSimple(shader->end_degrees_);
-  WriteSimple(shader->gradient_interpolation_);
+  Write(shader->gradient_interpolation_);
 
   if (enable_security_constraints_) {
     DrawImage draw_image(shader->image_, false, MakeSrcRect(shader->image_),
@@ -748,7 +755,7 @@ void PaintOpWriter::Write(const PaintFilter* filter, const SkM44& current_ctm) {
   AssertFieldAlignment();
   switch (filter->type()) {
     case PaintFilter::Type::kNullFilter:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case PaintFilter::Type::kColorFilter:
       Write(static_cast<const ColorFilterPaintFilter&>(*filter), current_ctm);

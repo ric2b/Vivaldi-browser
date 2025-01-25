@@ -83,7 +83,7 @@ void MakoBubbleCoordinator::LoadEditorUI(
   }
 
   contents_wrapper_ = std::make_unique<WebUIContentsWrapperT<MakoUntrustedUI>>(
-      url, profile, IDS_ACCNAME_ORCA, /*webui_resizes_host=*/true,
+      url, profile, IDS_ACCNAME_ORCA,
       /*esc_closes_ui=*/false);
   views::BubbleDialogDelegateView::CreateBubble(
       std::make_unique<MakoRewriteView>(contents_wrapper_.get(),

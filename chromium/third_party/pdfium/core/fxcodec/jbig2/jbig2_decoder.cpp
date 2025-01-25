@@ -4,17 +4,13 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fxcodec/jbig2/jbig2_decoder.h"
 
 #include "core/fxcodec/jbig2/JBig2_Context.h"
 #include "core/fxcodec/jbig2/JBig2_DocumentContext.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_2d_size.h"
-#include "core/fxcrt/span_util.h"
+#include "core/fxcrt/stl_util.h"
 
 namespace fxcodec {
 
@@ -31,8 +27,9 @@ FXCODEC_STATUS Decode(Jbig2Context* pJbig2Context, bool decode_success) {
 
   int dword_size = pJbig2Context->m_height * pJbig2Context->m_dest_pitch / 4;
   uint32_t* dword_buf = reinterpret_cast<uint32_t*>(pJbig2Context->m_dest_buf);
-  for (int i = 0; i < dword_size; i++)
-    dword_buf[i] = ~dword_buf[i];
+  for (int i = 0; i < dword_size; i++) {
+    UNSAFE_TODO(dword_buf[i] = ~dword_buf[i]);
+  }
   return FXCODEC_STATUS::kDecodeFinished;
 }
 
@@ -63,7 +60,7 @@ FXCODEC_STATUS Jbig2Decoder::StartDecode(
   pJbig2Context->m_nGlobalKey = global_key;
   pJbig2Context->m_dest_buf = dest_buf.data();
   pJbig2Context->m_dest_pitch = dest_pitch;
-  fxcrt::spanset(dest_buf.first(Fx2DSizeOrDie(height, dest_pitch)), 0);
+  fxcrt::Fill(dest_buf.first(Fx2DSizeOrDie(height, dest_pitch)), 0);
   pJbig2Context->m_pContext =
       CJBig2_Context::Create(global_span, global_key, src_span, src_key,
                              pJBig2DocumentContext->GetSymbolDictCache());

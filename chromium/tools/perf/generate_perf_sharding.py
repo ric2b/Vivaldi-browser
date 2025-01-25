@@ -123,6 +123,7 @@ def _DumpJson(data, output_path):
             newline='') if sys.version_info.major == 3 else open(
                 output_path, 'wb') as output_file:
     json.dump(data, output_file, indent=4, separators=(',', ': '))
+    output_file.write('\n')
 
 
 def _LoadTimingData(args):
@@ -147,8 +148,8 @@ def GenerateShardMap(builder, num_of_shards, debug=False):
   if builder:
     with open(builder.timing_file_path) as f:
       timing_data = json.load(f)
-  benchmarks_to_shard = (
-      list(builder.benchmark_configs) + list(builder.executables))
+  benchmarks_to_shard = (list(builder.benchmark_configs) +
+                         list(builder.executables) + list(builder.crossbench))
   repeat_config = cross_device_test_config.TARGET_DEVICES.get(builder.name, {})
   sharding_map = sharding_map_generator.generate_sharding_map(
       benchmarks_to_shard,

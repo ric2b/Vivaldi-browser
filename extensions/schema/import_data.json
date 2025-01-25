@@ -47,6 +47,11 @@
             "type": "string",
             "description": "The profile path, if it is different than parent profile.",
             "optional": true
+          },
+          "index": {
+            "type": "integer",
+            "description": "The user profile index, if it is different than parent profile.",
+            "optional": true
           }
         }
       },
@@ -114,6 +119,10 @@
           "requiresInteractiveImport": {
             "type": "boolean",
             "description": "Does the profile require interactive (file/directory picker dialog) selection by the user."
+          },
+          "requiresAccessPermission": {
+            "type": "boolean",
+            "description": "Does the profile require explicit access permission to the profile folder/file."
           },
           "suggestedProfilePath": {
             "type": "string",

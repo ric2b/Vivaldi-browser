@@ -207,11 +207,12 @@
         await this._dp.CSS.getMatchedStylesForNode({'nodeId': nodeId});
     this._testRunner.log('Dumping CSS position-try rules: ');
     for (const cssPositionTryRule of result.cssPositionTryRules) {
-      this._testRunner.log(
-          '@position-try ' + cssPositionTryRule.name.text + ' {');
+      const status = Boolean(cssPositionTryRule.active) ? 'active' : 'inactive';
+      this._testRunner.log(`@position-try ${cssPositionTryRule.name.text} (${status}) {`);
       this.dumpStyle(cssPositionTryRule.style, 0);
       this._testRunner.log('}');
     }
+    this._testRunner.log('index of active position-try-fallback: ' + result.activePositionFallbackIndex);
   }
 
   async loadAndDumpCSSAnimationsForNode(nodeId) {

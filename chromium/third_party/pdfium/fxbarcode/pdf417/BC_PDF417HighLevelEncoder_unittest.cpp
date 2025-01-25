@@ -2,14 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "fxbarcode/pdf417/BC_PDF417HighLevelEncoder.h"
-
-#include <vector>
 
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -44,14 +37,16 @@ TEST(PDF417HighLevelEncoderTest, EncodeHighLevel) {
       {L"0000000000000", L"\x0386\x000f\x00d9\x017b\x000b\x0064", 6},
   };
 
-  for (size_t i = 0; i < std::size(kEncodeHighLevelCases); ++i) {
-    const EncodeHighLevelCase& testcase = kEncodeHighLevelCases[i];
+  size_t i = 0;
+  for (const EncodeHighLevelCase& testcase : kEncodeHighLevelCases) {
     WideStringView input(testcase.input);
-    WideString expected(testcase.expected, testcase.expected_length);
+    auto expected =
+        UNSAFE_TODO(WideString(testcase.expected, testcase.expected_length));
     std::optional<WideString> result =
         CBC_PDF417HighLevelEncoder::EncodeHighLevel(input);
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(expected, result.value()) << " for case number " << i;
+    ++i;
   }
 }
 
@@ -88,20 +83,16 @@ TEST(PDF417HighLevelEncoderTest, EncodeBinary) {
        L"\u039c\u00c9\u031f\u012a\u00d2\u02d0", 6},
   };
 
-  for (size_t i = 0; i < std::size(kEncodeBinaryCases); ++i) {
-    const EncodeBinaryCase& testcase = kEncodeBinaryCases[i];
-    std::vector<uint8_t> input_array;
-    size_t input_length = strlen(testcase.input);
-    input_array.resize(input_length);
-    for (size_t j = 0; j < input_length; ++j) {
-      input_array[j] = testcase.input[j];
-    }
-    WideString expected(testcase.expected, testcase.expected_length);
+  size_t i = 0;
+  for (const EncodeBinaryCase& testcase : kEncodeBinaryCases) {
     WideString result;
-    CBC_PDF417HighLevelEncoder::EncodeBinary(input_array, testcase.offset,
-                                             testcase.count, testcase.startmode,
-                                             &result);
+    CBC_PDF417HighLevelEncoder::EncodeBinary(
+        ByteStringView(testcase.input).unsigned_span(), testcase.offset,
+        testcase.count, testcase.startmode, &result);
+    auto expected =
+        UNSAFE_TODO(WideString(testcase.expected, testcase.expected_length));
     EXPECT_EQ(expected, result) << " for case number " << i;
+    ++i;
   }
 }
 
@@ -155,14 +146,16 @@ TEST(PDF417HighLevelEncoderTest, EncodeNumeric) {
        18},
   };
 
-  for (size_t i = 0; i < std::size(kEncodeNumericCases); ++i) {
-    const EncodeNumericCase& testcase = kEncodeNumericCases[i];
+  size_t i = 0;
+  for (const EncodeNumericCase& testcase : kEncodeNumericCases) {
     WideString input(testcase.input);
-    WideString expected(testcase.expected, testcase.expected_length);
+    auto expected =
+        UNSAFE_TODO(WideString(testcase.expected, testcase.expected_length));
     WideString result;
     CBC_PDF417HighLevelEncoder::EncodeNumeric(input, testcase.offset,
                                               testcase.count, &result);
     EXPECT_EQ(expected, result) << " for case number " << i;
+    ++i;
   }
 }
 
@@ -199,15 +192,15 @@ TEST(PDF417HighLevelEncoderTest, ConsecutiveDigitCount) {
       // Test substring starting in digits field following non-digit field.
       {L"123FOO45678", 6, 5},
   };
-
-  for (size_t i = 0; i < std::size(kConsecutiveDigitCases); ++i) {
-    const ConsecutiveDigitCase& testcase = kConsecutiveDigitCases[i];
+  size_t i = 0;
+  for (const ConsecutiveDigitCase& testcase : kConsecutiveDigitCases) {
     WideString input(testcase.input);
     int actual_count =
         CBC_PDF417HighLevelEncoder::DetermineConsecutiveDigitCount(
             input, testcase.offset);
     EXPECT_EQ(testcase.expected_count, actual_count)
         << " for case number " << i;
+    ++i;
   }
 }
 
@@ -260,14 +253,15 @@ TEST(PDF417HighLevelEncoderTest, ConsecutiveTextCount) {
       {L"XXX121XXX12345678901234", 0, 9},
   };
 
-  for (size_t i = 0; i < std::size(kConsecutiveTextCases); ++i) {
-    const ConsecutiveTextCase& testcase = kConsecutiveTextCases[i];
+  size_t i = 0;
+  for (const ConsecutiveTextCase& testcase : kConsecutiveTextCases) {
     WideString input(testcase.input);
     int actual_count =
         CBC_PDF417HighLevelEncoder::DetermineConsecutiveTextCount(
             input, testcase.offset);
     EXPECT_EQ(testcase.expected_count, actual_count)
         << " for case number " << i;
+    ++i;
   }
 }
 

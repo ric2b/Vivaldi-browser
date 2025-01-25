@@ -17,7 +17,8 @@
 #include "base/run_loop.h"
 #include "chrome/browser/ash/app_mode/fake_cws.h"
 #include "chrome/browser/ash/app_mode/kiosk_controller.h"
-#include "chrome/browser/ash/login/app_mode/kiosk_launch_controller.h"
+#include "chrome/browser/ash/app_mode/kiosk_profile_load_failed_observer.h"
+#include "chrome/browser/ash/app_mode/kiosk_test_helper.h"
 #include "chrome/browser/ash/login/app_mode/test/kiosk_apps_mixin.h"
 #include "chrome/browser/ash/login/session/user_session_manager_test_api.h"
 #include "chrome/browser/ash/login/test/embedded_test_server_setup_mixin.h"
@@ -26,7 +27,6 @@
 #include "chrome/browser/ash/login/test/session_manager_state_waiter.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
-#include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/policy/core/device_local_account_policy_service.h"
 #include "chrome/browser/ash/policy/core/device_policy_cros_browser_test.h"
 #include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
@@ -50,6 +50,7 @@
 #include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_store.h"
+#include "components/policy/core/common/device_local_account_type.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/reporting/proto/synced/record.pb.h"
@@ -134,8 +135,7 @@ class PublicSessionUserCreationWaiter
   std::unique_ptr<base::RunLoop> local_state_changed_run_loop_;
 };
 
-class KioskProfileLoadFailedWaiter
-    : public KioskLaunchController::KioskProfileLoadFailedObserver {
+class KioskProfileLoadFailedWaiter : public KioskProfileLoadFailedObserver {
  public:
   KioskProfileLoadFailedWaiter() = default;
 
@@ -151,13 +151,11 @@ class KioskProfileLoadFailedWaiter
       // failure already took place.
       return;
     }
-    KioskController::Get()
-        .GetLaunchController()
-        ->AddKioskProfileLoadFailedObserver(this);
+    KioskController::Get().AddProfileLoadFailedObserver(this);
     run_loop_.Run();
   }
 
-  // KioskLaunchController::KioskProfileLoadFailedObserver:
+  // KioskProfileLoadFailedObserver:
   void OnKioskProfileLoadFailed() override { run_loop_.Quit(); }
 
  private:
@@ -384,7 +382,7 @@ class LoginLogoutReporterPublicSessionBrowserTest
   const AccountId public_session_account_id_ =
       AccountId::FromUserEmail(policy::GenerateDeviceLocalAccountUserId(
           kPublicSessionUserEmail,
-          policy::DeviceLocalAccount::TYPE_PUBLIC_SESSION));
+          policy::DeviceLocalAccountType::kPublicSession));
 
   LoginManagerMixin login_manager_{&mixin_host_, {}};
 };
@@ -448,13 +446,13 @@ class LoginLogoutReporterKioskBrowserTest
     extensions::browsertest_util::CreateAndInitializeLocalCache();
   }
 
-  std::string GetTestAppId() const { return KioskAppsMixin::kKioskAppId; }
+  std::string GetTestAppId() const { return KioskAppsMixin::kTestChromeAppId; }
 
  private:
   FakeCWS fake_cws_;
   policy::DevicePolicyCrosTestHelper policy_helper_;
   base::AutoReset<bool> skip_splash_wait_override_ =
-      KioskLaunchController::SkipSplashScreenWaitForTesting();
+      KioskTestHelper::SkipSplashScreenWait();
   EmbeddedTestServerSetupMixin embedded_test_server_{&mixin_host_,
                                                      embedded_test_server()};
 

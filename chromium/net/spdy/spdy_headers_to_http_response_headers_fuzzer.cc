@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 // Fuzzer for SpdyHeaderstoHttpResponseHeadersUsingBuilder. Compares the output
 // for the same input to SpdyHeadersToHttpResponseHeadersUsingRawString and
 // verifies they match.
@@ -20,7 +25,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "net/spdy/spdy_http_utils.h"
-#include "net/third_party/quiche/src/quiche/spdy/core/http2_header_block.h"
+#include "net/third_party/quiche/src/quiche/common/http/http_header_block.h"
 
 namespace net {
 
@@ -42,7 +47,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     }
     return first_line;
   };
-  spdy::Http2HeaderBlock input;
+  quiche::HttpHeaderBlock input;
 
   const std::string_view status = get_string();
   if (!HttpUtil::IsValidHeaderValue(status)) {

@@ -4,13 +4,9 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fpdfdoc/cpdf_formcontrol.h"
 
+#include <array>
 #include <iterator>
 #include <utility>
 
@@ -28,7 +24,7 @@
 
 namespace {
 
-constexpr char kHighlightModes[] = {'N', 'I', 'O', 'P', 'T'};
+constexpr std::array<char, 5> kHighlightModes = {{'N', 'I', 'O', 'P', 'T'}};
 
 // Order of |kHighlightModes| must match order of HighlightingMode enum.
 static_assert(kHighlightModes[CPDF_FormControl::kNone] == 'N',
@@ -136,8 +132,9 @@ CPDF_FormControl::HighlightingMode CPDF_FormControl::GetHighlightingMode()
   ByteString csH = m_pWidgetDict->GetByteStringFor("H", "I");
   for (size_t i = 0; i < std::size(kHighlightModes); ++i) {
     // TODO(tsepez): disambiguate string ctors.
-    if (csH == ByteStringView(kHighlightModes[i]))
-      return static_cast<HighlightingMode>(i);
+      if (csH == ByteStringView(kHighlightModes[i])) {
+        return static_cast<HighlightingMode>(i);
+      }
   }
   return kInvert;
 }

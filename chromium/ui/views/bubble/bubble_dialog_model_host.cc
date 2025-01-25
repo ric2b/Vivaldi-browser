@@ -147,7 +147,7 @@ class CheckboxControl : public Checkbox {
 
     // TODO(accessibility): There is no `SetAccessibilityProperties` which takes
     // a labelling view to set the accessible name.
-    SetAccessibleName(label.get());
+    GetViewAccessibility().SetName(*label.get());
 
     AddChildView(std::move(label));
   }
@@ -156,11 +156,6 @@ class CheckboxControl : public Checkbox {
       const SizeBounds& available_size) const override {
     // Skip LabelButton to use LayoutManager.
     return View::CalculatePreferredSize(available_size);
-  }
-
-  int GetHeightForWidth(int width) const override {
-    // Skip LabelButton to use LayoutManager.
-    return View::GetHeightForWidth(width);
   }
 
   void OnThemeChanged() override {
@@ -436,9 +431,10 @@ class BubbleDialogModelHostContentsView final : public DialogModelSectionHost {
     // TODO(pbos): Handle updating existing field.
 
     auto combobox = std::make_unique<Combobox>(model_field->combobox_model());
-    combobox->SetAccessibleName(model_field->accessible_name().empty()
-                                    ? model_field->label()
-                                    : model_field->accessible_name());
+    combobox->GetViewAccessibility().SetName(
+        model_field->accessible_name().empty()
+            ? model_field->label()
+            : model_field->accessible_name());
     combobox->SetCallback(base::BindRepeating(
         [](ui::DialogModelCombobox* model_field,
            base::PassKey<DialogModelFieldHost> pass_key,
@@ -494,9 +490,10 @@ class BubbleDialogModelHostContentsView final : public DialogModelSectionHost {
     // TODO(pbos): Support updates to the existing model.
 
     auto textfield = std::make_unique<Textfield>();
-    textfield->SetAccessibleName(model_field->accessible_name().empty()
-                                     ? model_field->label()
-                                     : model_field->accessible_name());
+    textfield->GetViewAccessibility().SetName(
+        model_field->accessible_name().empty()
+            ? model_field->label()
+            : model_field->accessible_name());
     textfield->SetText(model_field->text());
 
     // If this textfield is initially focused the text should be initially
@@ -1069,7 +1066,15 @@ void BubbleDialogModelHost::UpdateSpacingAndMargins() {
   LayoutProvider* const layout_provider = LayoutProvider::Get();
   gfx::Insets dialog_side_insets =
       layout_provider->GetInsetsMetric(InsetsMetric::INSETS_DIALOG);
-  dialog_side_insets.set_top(0);
+  if (GetWindowTitle().empty()) {
+    // If there is no title, increase the margin at the top to match the title
+    // margin, so that the text is not too close to the top edge.
+    dialog_side_insets.set_top(
+        layout_provider->GetInsetsMetric(InsetsMetric::INSETS_DIALOG_TITLE)
+            .top());
+  } else {
+    dialog_side_insets.set_top(0);
+  }
   dialog_side_insets.set_bottom(0);
 
   ui::DialogModelField* first_field = nullptr;
@@ -1122,7 +1127,7 @@ void BubbleDialogModelHost::UpdateSpacingAndMargins() {
       GetDialogTopMargins(layout_provider, first_field) - extra_margin;
   const int bottom_margin =
       GetDialogBottomMargins(layout_provider, last_field,
-                             GetDialogButtons() != ui::DIALOG_BUTTON_NONE) -
+                             buttons() != ui::DIALOG_BUTTON_NONE) -
       extra_margin;
   set_margins(gfx::Insets::TLBR(top_margin >= 0 ? top_margin : 0, 0,
                                 bottom_margin >= 0 ? bottom_margin : 0, 0));

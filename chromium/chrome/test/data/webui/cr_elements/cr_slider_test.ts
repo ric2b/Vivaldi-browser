@@ -7,10 +7,10 @@ import 'chrome://resources/cr_elements/cr_slider/cr_slider.js';
 
 import {getTrustedHTML} from 'chrome://resources/js/static_types.js';
 import type {CrSliderElement} from 'chrome://resources/cr_elements/cr_slider/cr_slider.js';
-import {pressAndReleaseKeyOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
+import {pressAndReleaseKeyOn} from 'chrome://webui-test/keyboard_mock_interactions.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertFalse, assertTrue, assertNotReached} from 'chrome://webui-test/chai_assert.js';
-import {eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
+import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test/test_util.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 // clang-format on
 
@@ -76,8 +76,7 @@ suite('cr-slider', function() {
   }
 
   function pointerEvent(eventType: string, ratio: number) {
-    const rect = crSlider.shadowRoot!.querySelector(
-                                         '#container')!.getBoundingClientRect();
+    const rect = crSlider.$.container.getBoundingClientRect();
     crSlider.dispatchEvent(new PointerEvent(eventType, {
       buttons: 1,
       pointerId: 1,
@@ -404,7 +403,7 @@ suite('cr-slider', function() {
 
   test('smooth position transition only on pointerdown', async () => {
     function assertNoTransition() {
-      const expected = 'all 0s ease 0s';
+      const expected = 'all';
       assertEquals(
           expected,
           getComputedStyle(crSlider.shadowRoot!.querySelector('#knobAndLabel')!)
@@ -545,16 +544,12 @@ suite('cr-slider', function() {
         assertEquals(50, crSlider.value);
       });
 
-  test('container hidden until value set', async () => {
+  test('InitialDefaultValue', () => {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     crSlider = document.createElement('cr-slider');
     document.body.appendChild(crSlider);
 
-    assertTrue(
-        crSlider.shadowRoot!.querySelector<HTMLElement>('#container')!.hidden);
-    crSlider.value = 0;
-    await microtasksFinished();
-    assertFalse(
-        crSlider.shadowRoot!.querySelector<HTMLElement>('#container')!.hidden);
+    assertEquals(0, crSlider.value);
+    assertTrue(isVisible(crSlider.$.container));
   });
 });

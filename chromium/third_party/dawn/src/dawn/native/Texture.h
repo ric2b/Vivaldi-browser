@@ -48,6 +48,7 @@ namespace dawn::native {
 
 enum class AllowMultiPlanarTextureFormat {
     No,
+    SingleLayerOnly,
     Yes,
 };
 
@@ -113,7 +114,8 @@ class TextureBase : public SharedResource {
     wgpu::TextureUsage GetInternalUsage() const;
 
     // SharedResource implementation
-    void SetHasAccess(bool hasAccess) override;
+    ExecutionSerial OnEndAccess() override;
+    void OnBeginAccess() override;
     bool HasAccess() const override;
     bool IsDestroyed() const override;
     bool IsInitialized() const override;
@@ -176,6 +178,8 @@ class TextureBase : public SharedResource {
     void AddInternalUsage(wgpu::TextureUsage usage);
     void SetSharedResourceMemoryContentsForTesting(Ref<SharedResourceMemoryContents> contents);
 
+    ExecutionSerial mLastSharedTextureMemoryUsageSerial{kBeginningOfGPUTime};
+
   private:
     struct TextureState {
         TextureState();
@@ -193,8 +197,9 @@ class TextureBase : public SharedResource {
     uint64_t ComputeEstimatedByteSize() const;
 
     wgpu::TextureDimension mDimension;
-    wgpu::TextureViewDimension
-        mCompatibilityTextureBindingViewDimension;  // only used for compatibility mode
+    // Only used for compatibility mode
+    wgpu::TextureViewDimension mCompatibilityTextureBindingViewDimension =
+        wgpu::TextureViewDimension::Undefined;
     const raw_ref<const Format> mFormat;
     FormatSet mViewFormats;
     Extent3D mBaseSize;

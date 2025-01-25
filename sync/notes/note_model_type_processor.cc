@@ -620,6 +620,11 @@ void NoteModelTypeProcessor::StartTrackingMetadata() {
   notes_model_->AddObserver(notes_model_observer_.get());
 }
 
+void NoteModelTypeProcessor::HasUnsyncedData(
+    base::OnceCallback<void(bool)> callback) {
+  std::move(callback).Run(note_tracker_ && note_tracker_->HasLocalChanges());
+}
+
 void NoteModelTypeProcessor::GetAllNodesForDebugging(
     AllNodesCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);

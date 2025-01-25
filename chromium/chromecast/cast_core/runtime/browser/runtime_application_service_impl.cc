@@ -12,6 +12,7 @@
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
+#include "chromecast/base/version.h"
 #include "chromecast/browser/cast_web_service.h"
 #include "chromecast/browser/cast_web_view.h"
 #include "chromecast/cast_core/grpc/grpc_status_or.h"
@@ -372,7 +373,7 @@ void RuntimeApplicationServiceImpl::SetTouchInput(
     case cast::common::TouchInput::UNDEFINED:
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -388,7 +389,7 @@ void RuntimeApplicationServiceImpl::SetVisibility(
     case cast::common::Visibility::UNDEFINED:
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -407,7 +408,7 @@ void RuntimeApplicationServiceImpl::SetMediaBlocking(
     case cast::common::MediaState::UNDEFINED:
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -687,6 +688,9 @@ bool RuntimeApplicationServiceImpl::IsAudioOnly() const {
 
 bool RuntimeApplicationServiceImpl::IsEnabledForDev() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (CAST_IS_DEBUG_BUILD()) {
+    return true;
+  }
   const auto* entry =
       FindEntry(feature::kCastCoreRendererFeatures, config_.extra_features());
   if (!entry) {

@@ -39,7 +39,7 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
           }
         }
         user_data: {
-          type: NONE
+          type: HW_OS_INFO
         }
         data: "Device technical specifications (e.g. model)."
         destination: GOOGLE_OWNED_SERVICE
@@ -95,7 +95,8 @@ std::optional<AppInstallData> ParseAppInstallResponseProto(
         .width_in_pixels = instance.icon().width_in_pixels(),
         .mime_type = instance.icon().mime_type(),
         .is_masking_allowed = instance.icon().is_masking_allowed()};
-    if (icon.url.is_valid() && icon.width_in_pixels > 0) {
+    // SVG icons have 0 width.
+    if (icon.url.is_valid() && icon.width_in_pixels >= 0) {
       result.icon = std::move(icon);
     }
   }

@@ -50,10 +50,12 @@ class CompatibilityModeInstance;
 class CrashCollectorHost;
 class CrashCollectorInstance;
 class DigitalGoodsInstance;
-class DiskQuotaHost;
-class DiskQuotaInstance;
+class DiskSpaceHost;
+class DiskSpaceInstance;
 class EnterpriseReportingHost;
 class EnterpriseReportingInstance;
+class ErrorNotificationHost;
+class ErrorNotificationInstance;
 class FileSystemHost;
 class FileSystemInstance;
 class IioSensorHost;
@@ -68,8 +70,6 @@ class KeyboardShortcutHost;
 class KeyboardShortcutInstance;
 class KeymasterHost;
 class KeymasterInstance;
-class KioskHost;
-class KioskInstance;
 class MediaSessionInstance;
 class MemoryInstance;
 class MetricsHost;
@@ -220,14 +220,19 @@ class ArcBridgeService {
   ConnectionHolder<mojom::DigitalGoodsInstance>* digital_goods() {
     return &digital_goods_;
   }
-  ConnectionHolder<mojom::DiskQuotaInstance, mojom::DiskQuotaHost>*
-  disk_quota() {
-    return &disk_quota_;
+  ConnectionHolder<mojom::DiskSpaceInstance, mojom::DiskSpaceHost>*
+  disk_space() {
+    return &disk_space_;
   }
   ConnectionHolder<mojom::EnterpriseReportingInstance,
                    mojom::EnterpriseReportingHost>*
   enterprise_reporting() {
     return &enterprise_reporting_;
+  }
+  ConnectionHolder<mojom::ErrorNotificationInstance,
+                   mojom::ErrorNotificationHost>*
+  error_notification() {
+    return &error_notification_;
   }
   ConnectionHolder<mojom::FileSystemInstance, mojom::FileSystemHost>*
   file_system() {
@@ -260,9 +265,6 @@ class ArcBridgeService {
                    mojom::keymint::KeyMintHost>*
   keymint() {
     return &keymint_;
-  }
-  ConnectionHolder<mojom::KioskInstance, mojom::KioskHost>* kiosk() {
-    return &kiosk_;
   }
   ConnectionHolder<mojom::MediaSessionInstance>* media_session() {
     return &media_session_;
@@ -375,10 +377,13 @@ class ArcBridgeService {
   ConnectionHolder<mojom::CrashCollectorInstance, mojom::CrashCollectorHost>
       crash_collector_;
   ConnectionHolder<mojom::DigitalGoodsInstance> digital_goods_;
-  ConnectionHolder<mojom::DiskQuotaInstance, mojom::DiskQuotaHost> disk_quota_;
+  ConnectionHolder<mojom::DiskSpaceInstance, mojom::DiskSpaceHost> disk_space_;
   ConnectionHolder<mojom::EnterpriseReportingInstance,
                    mojom::EnterpriseReportingHost>
       enterprise_reporting_;
+  ConnectionHolder<mojom::ErrorNotificationInstance,
+                   mojom::ErrorNotificationHost>
+      error_notification_;
   ConnectionHolder<mojom::FileSystemInstance, mojom::FileSystemHost>
       file_system_;
   ConnectionHolder<mojom::IioSensorInstance, mojom::IioSensorHost> iio_sensor_;
@@ -393,7 +398,6 @@ class ArcBridgeService {
   ConnectionHolder<mojom::KeymasterInstance, mojom::KeymasterHost> keymaster_;
   ConnectionHolder<mojom::keymint::KeyMintInstance, mojom::keymint::KeyMintHost>
       keymint_;
-  ConnectionHolder<mojom::KioskInstance, mojom::KioskHost> kiosk_;
   ConnectionHolder<mojom::MediaSessionInstance> media_session_;
   ConnectionHolder<mojom::MemoryInstance> memory_;
   ConnectionHolder<mojom::MetricsInstance, mojom::MetricsHost> metrics_;

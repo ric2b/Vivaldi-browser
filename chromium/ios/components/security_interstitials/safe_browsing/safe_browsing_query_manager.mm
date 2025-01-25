@@ -190,7 +190,13 @@ void SafeBrowsingQueryManager::UrlCheckFinished(
   // when an observer is notified.
   auto weak_this = weak_factory_.GetWeakPtr();
   for (auto& observer : observers_) {
-    observer.SafeBrowsingQueryFinished(this, query, result, performed_check);
+    if (base::FeatureList::IsEnabled(
+            safe_browsing::kSafeBrowsingAsyncRealTimeCheck)) {
+      observer.SafeBrowsingSyncQueryFinished(this, query, result,
+                                             performed_check);
+    } else {
+      observer.SafeBrowsingQueryFinished(this, query, result, performed_check);
+    }
     if (!weak_this)
       return;
   }
@@ -256,29 +262,6 @@ void SafeBrowsingQueryManager::UrlCheckerClient::CheckUrl(
 }
 
 void SafeBrowsingQueryManager::UrlCheckerClient::OnCheckUrlResult(
-    safe_browsing::SafeBrowsingUrlCheckerImpl* url_checker,
-    safe_browsing::SafeBrowsingUrlCheckerImpl::NativeUrlCheckNotifier*
-        slow_check_notifier,
-    bool proceed,
-    bool showed_interstitial,
-    bool has_post_commit_interstitial_skipped,
-    safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck performed_check) {
-  DCHECK_CURRENTLY_ON(
-      base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)
-          ? web::WebThread::UI
-          : web::WebThread::IO);
-  DCHECK(url_checker);
-  if (slow_check_notifier) {
-    *slow_check_notifier = base::BindOnce(&UrlCheckerClient::OnCheckComplete,
-                                          AsWeakPtr(), url_checker);
-    return;
-  }
-
-  OnCheckComplete(url_checker, proceed, showed_interstitial,
-                  has_post_commit_interstitial_skipped, performed_check);
-}
-
-void SafeBrowsingQueryManager::UrlCheckerClient::OnCheckComplete(
     safe_browsing::SafeBrowsingUrlCheckerImpl* url_checker,
     bool proceed,
     bool showed_interstitial,

@@ -6,13 +6,19 @@
 
 #include <functional>
 #include <memory>
+#include <tuple>
 #include <type_traits>
 
 #include "base/check.h"
+#include "base/containers/contains.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
+#include "base/logging.h"
+#include "base/no_destructor.h"
 #include "base/rand_util.h"
+#include "base/strings/string_util.h"
 #include "chrome/browser/about_flags.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/compose/proto/compose_optimization_guide.pb.h"
 #include "chrome/browser/flag_descriptions.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
@@ -26,6 +32,8 @@
 #include "components/flags_ui/feature_entry.h"
 #include "components/flags_ui/flags_storage.h"
 #include "components/prefs/pref_service.h"
+#include "components/variations/service/variations_service.h"
+#include "components/variations/service/variations_service_utils.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/render_frame_host.h"
 #if BUILDFLAG(IS_CHROMEOS)
@@ -39,13 +47,40 @@ bool AutocompleteAllowed(std::string_view autocomplete_attribute) {
   return autocomplete_attribute != std::string("off");
 }
 
+std::unique_ptr<std::string>& GetCountryCodeOverride() {
+  static base::NoDestructor<std::unique_ptr<std::string>> country_code_override(
+      nullptr);
+  return *country_code_override;
+}
+
+std::string GetCountryCode() {
+  if (GetCountryCodeOverride()) {
+    return *GetCountryCodeOverride();
+  }
+  std::string country_code =
+      base::ToLowerASCII(variations::GetCurrentCountryCode(
+          g_browser_process->variations_service()));
+  DLOG_IF(WARNING, country_code.empty()) << "Couldn't get country info.";
+  return country_code;
+}
+
+std::tuple<std::string, bool> IsComposeEnabledForCountry(
+    compose::Config config) {
+  std::string country_code = GetCountryCode();
+  if (config.enabled_countries.size() == 1 &&
+      config.enabled_countries[0] == "*") {
+    return {country_code, true};
+  }
+  return {country_code, base::Contains(config.enabled_countries, country_code)};
+}
+
 }  // namespace
 
+// Static members' initializers.
 int ComposeEnabling::enabled_for_testing_{0};
 int ComposeEnabling::skip_user_check_for_testing_{0};
 
 ComposeEnabling::ComposeEnabling(
-    TranslateLanguageProvider* translate_language_provider,
     Profile* profile,
     signin::IdentityManager* identity_manager,
     OptimizationGuideKeyedService* opt_guide)
@@ -53,13 +88,11 @@ ComposeEnabling::ComposeEnabling(
       opt_guide_(opt_guide),
       identity_manager_(identity_manager) {
   DCHECK(profile_);
-  translate_language_provider_ = translate_language_provider;
 }
 
 ComposeEnabling::~ComposeEnabling() {
   opt_guide_ = nullptr;
   identity_manager_ = nullptr;
-  translate_language_provider_ = nullptr;
   profile_ = nullptr;
 }
 
@@ -85,6 +118,15 @@ ComposeEnabling::ScopedSkipUserCheckForTesting() {
         DCHECK(skip_user_check_for_testing >= 0);
       },
       std::ref(skip_user_check_for_testing_)));
+}
+
+// Static.
+ComposeEnabling::ScopedOverride ComposeEnabling::OverrideCountryForTesting(
+    std::string country_code) {
+  CHECK(!GetCountryCodeOverride());
+  GetCountryCodeOverride() = std::make_unique<std::string>(country_code);
+  return std::make_unique<base::ScopedClosureRunner>(
+      base::BindOnce([]() { GetCountryCodeOverride().reset(); }));
 }
 
 compose::ComposeHintDecision ComposeEnabling::GetOptimizationGuidanceForUrl(
@@ -163,6 +205,20 @@ base::expected<void, compose::ComposeShowStatus> ComposeEnabling::CheckEnabling(
         compose::ComposeShowStatus::kComposeFeatureFlagDisabled);
   }
 
+  // Check if we're running in an enabled country. Note that an empty country
+  // code will cause Compose to be disabled.
+  std::string country_code;
+  bool is_enabled_for_country;
+  std::tie(country_code, is_enabled_for_country) =
+      IsComposeEnabledForCountry(compose::GetComposeConfig());
+  if (!is_enabled_for_country) {
+    DVLOG(2) << "not running in an enabled country: \"" << country_code << "\"";
+    return base::unexpected(
+        country_code.empty()
+            ? compose::ComposeShowStatus::kUndefinedCountry
+            : compose::ComposeShowStatus::kComposeNotEnabledInCountry);
+  }
+
   // Check signin status.
   CoreAccountInfo core_account_info =
       identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
@@ -215,6 +271,13 @@ ComposeEnabling::ShouldTriggerNoStatePopup(
     return base::unexpected(page_checks.error());
   }
 
+  // The no state popup should not show for unsupported languages even if the
+  // language bypass feature is enabled.
+  if (!IsPageLanguageSupported(translate_manager)) {
+    DVLOG(2) << "language not supported";
+    return base::unexpected(compose::ComposeShowStatus::kUnsupportedLanguage);
+  }
+
   if (!is_msbb_enabled) {
     return base::unexpected(
         compose::ComposeShowStatus::kProactiveNudgeDisabledByMSBB);
@@ -228,14 +291,14 @@ ComposeEnabling::ShouldTriggerNoStatePopup(
       if (!compose::GetComposeConfig()
                .proactive_nudge_bypass_optimization_guide) {
         return base::unexpected(
-            compose::ComposeShowStatus::kPractiveNudgeDisabledByServerConfig);
+            compose::ComposeShowStatus::kProactiveNudgeDisabledByServerConfig);
       }
       break;
     case compose::ComposeHintDecision::COMPOSE_HINT_DECISION_UNSPECIFIED:
       if (!base::FeatureList::IsEnabled(
               compose::features::kEnableNudgeForUnspecifiedHint)) {
         return base::unexpected(
-            compose::ComposeShowStatus::kPractiveNudgeUnknownServerConfig);
+            compose::ComposeShowStatus::kProactiveNudgeUnknownServerConfig);
       }
       break;
     case compose::ComposeHintDecision::COMPOSE_HINT_DECISION_ENABLED:
@@ -327,15 +390,24 @@ bool ComposeEnabling::ShouldTriggerContextMenu(
   auto show_status = PageLevelChecks(
       translate_manager, url, rfh->GetMainFrame()->GetLastCommittedOrigin(),
       params.frame_origin, rfh->IsNestedWithinFencedFrame());
-  if (show_status.has_value()) {
-    compose::LogComposeContextMenuShowStatus(
-        compose::ComposeShowStatus::kShouldShow);
-    return true;
+  if (!show_status.has_value()) {
+    compose::LogComposeContextMenuShowStatus(show_status.error());
+    DVLOG(2) << "page level checks failed";
+    return false;
   }
 
-  compose::LogComposeContextMenuShowStatus(show_status.error());
-  DVLOG(2) << "page level checks failed";
-  return false;
+  if (!base::FeatureList::IsEnabled(
+          compose::features::kEnableComposeLanguageBypassForContextMenu) &&
+      !IsPageLanguageSupported(translate_manager)) {
+    DVLOG(2) << "language not supported";
+    compose::LogComposeContextMenuShowStatus(
+        compose::ComposeShowStatus::kUnsupportedLanguage);
+    return false;
+  }
+
+  compose::LogComposeContextMenuShowStatus(
+      compose::ComposeShowStatus::kShouldShow);
+  return true;
 }
 
 base::expected<void, compose::ComposeShowStatus>
@@ -372,12 +444,21 @@ ComposeEnabling::PageLevelChecks(translate::TranslateManager* translate_manager,
         compose::ComposeShowStatus::kFormFieldInCrossOriginFrame);
   }
 
-  if (!base::FeatureList::IsEnabled(
-          compose::features::kEnableComposeLanguageBypass) &&
-      !translate_language_provider_->IsLanguageSupported(translate_manager)) {
-    DVLOG(2) << "language not supported";
-    return base::unexpected(compose::ComposeShowStatus::kUnsupportedLanguage);
-  }
-
   return base::ok();
+}
+
+bool ComposeEnabling::IsPageLanguageSupported(
+    translate::TranslateManager* translate_manager) {
+  std::string page_language =
+      translate_manager
+          ? translate_manager->GetLanguageState()->source_language()
+          : "";
+
+  // TODO(b/307814938): Make this finch configurable.
+  // Only English is supported for MVP, we will add more languages over time.
+  // We accept the empty string which might be returned if the translate system
+  // has not yet deterimed the language, and "und" which means translate
+  // couldn't find an answer.
+  return (page_language == "en" || page_language == "und" ||
+          page_language.empty());
 }

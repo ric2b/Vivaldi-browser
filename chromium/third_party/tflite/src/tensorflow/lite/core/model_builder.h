@@ -33,13 +33,9 @@ limitations under the License.
 
 #include "tensorflow/lite/allocation.h"
 #include "tensorflow/lite/core/api/error_reporter.h"
-#include "tensorflow/lite/core/api/op_resolver.h"
 #include "tensorflow/lite/core/api/verifier.h"
-#include "tensorflow/lite/core/c/common.h"
-#include "tensorflow/lite/mutable_op_resolver.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/stderr_reporter.h"
-#include "tensorflow/lite/string_type.h"
 
 namespace tflite {
 
@@ -93,6 +89,28 @@ class FlatBufferModel {
   /// Returns a nullptr in case of failure.
   static std::unique_ptr<FlatBufferModel> VerifyAndBuildFromFile(
       const char* filename, TfLiteVerifier* extra_verifier = nullptr,
+      ErrorReporter* error_reporter = DefaultErrorReporter());
+
+  /// Builds a model based on a file descriptor.
+  /// Caller retains ownership of `error_reporter` and must ensure its lifetime
+  /// is longer than the FlatBufferModel instance. Caller retains ownership of
+  /// `fd` and must ensure it is closed after BuildFromFile returns.
+  /// Returns a nullptr in case of failure.
+  static std::unique_ptr<FlatBufferModel> BuildFromFileDescriptor(
+      int fd,
+      ErrorReporter* error_reporter = DefaultErrorReporter());
+
+  /// Verifies whether the content of the file descriptor is legit, then builds
+  /// a model based on the file.
+  /// The extra_verifier argument is an additional optional verifier for the
+  /// file contents. By default, we always check with tflite::VerifyModelBuffer.
+  /// If extra_verifier is supplied, the file contents is also checked against
+  /// the extra_verifier after the check against tflite::VerifyModelBuilder.
+  /// Caller retains ownership of `error_reporter` and must ensure its lifetime
+  /// is longer than the FlatBufferModel instance.
+  /// Returns a nullptr in case of failure.
+  static std::unique_ptr<FlatBufferModel> VerifyAndBuildFromFileDescriptor(
+      int fd, TfLiteVerifier* extra_verifier = nullptr,
       ErrorReporter* error_reporter = DefaultErrorReporter());
 
   /// Builds a model based on a pre-loaded flatbuffer.

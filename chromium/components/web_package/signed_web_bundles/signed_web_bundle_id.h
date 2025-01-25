@@ -7,10 +7,10 @@
 
 #include <array>
 #include <iosfwd>
+#include <string_view>
 
 #include "base/containers/span.h"
 #include "base/functional/callback.h"
-#include "base/strings/string_piece.h"
 #include "base/types/expected.h"
 #include "components/web_package/signed_web_bundles/ecdsa_p256_public_key.h"
 #include "components/web_package/signed_web_bundles/ed25519_public_key.h"
@@ -78,12 +78,12 @@ class SignedWebBundleId {
   // `SignedWebBundleId` if it works. If it doesn't, then the return value
   // contains an error message detailing the issue.
   static base::expected<SignedWebBundleId, std::string> Create(
-      base::StringPiece base32_encoded_id);
+      std::string_view base32_encoded_id);
 
-  static SignedWebBundleId CreateForEd25519PublicKey(
+  static SignedWebBundleId CreateForPublicKey(
       const Ed25519PublicKey& public_key);
 
-  static SignedWebBundleId CreateForEcdsaP256PublicKey(
+  static SignedWebBundleId CreateForPublicKey(
       const EcdsaP256PublicKey& public_key);
 
   static SignedWebBundleId CreateForProxyMode(
@@ -108,7 +108,7 @@ class SignedWebBundleId {
                                   const SignedWebBundleId& id);
 
  private:
-  SignedWebBundleId(Type type, base::StringPiece encoded_id);
+  SignedWebBundleId(Type type, std::string_view encoded_id);
 
   Type type_;
   std::string encoded_id_;

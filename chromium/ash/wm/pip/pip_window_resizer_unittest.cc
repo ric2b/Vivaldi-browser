@@ -92,8 +92,8 @@ class PipWindowResizerTest : public AshTestBase,
         Shell::GetContainer(root_window, kShellWindowId_PipContainer);
 
     std::unique_ptr<views::Widget> widget(new views::Widget);
-    views::Widget::InitParams params;
-    params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+    views::Widget::InitParams params(
+        views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
     params.bounds = screen_bounds;
     params.z_order = ui::ZOrderLevel::kFloatingWindow;
     params.context = root_window;
@@ -143,7 +143,7 @@ class PipWindowResizerTest : public AshTestBase,
     aura::Window* target_window = resizer->GetTarget();
     base::TimeTicks timestamp = base::TimeTicks::Now();
     ui::GestureEventDetails details = ui::GestureEventDetails(
-        ui::ET_SCROLL_FLING_START, velocity_x, velocity_y);
+        ui::EventType::kScrollFlingStart, velocity_x, velocity_y);
     ui::GestureEvent event = ui::GestureEvent(
         target_window->bounds().origin().x(),
         target_window->bounds().origin().y(), ui::EF_NONE, timestamp, details);
@@ -605,7 +605,7 @@ TEST_P(PipWindowResizerTest, PipWindowFlungAvoidsFloatingKeyboard) {
                                         base::DoNothing());
   const display::Display display = WindowState::Get(window())->GetDisplay();
   keyboard_controller->ShowKeyboardInDisplay(display);
-  ASSERT_TRUE(keyboard::WaitUntilShown());
+  ASSERT_TRUE(keyboard::test::WaitUntilShown());
 
   aura::Window* keyboard_window = keyboard_controller->GetKeyboardWindow();
   keyboard_window->SetBounds(gfx::Rect(8, 150, 100, 100));
@@ -677,7 +677,7 @@ TEST_P(PipWindowResizerTest, PipPinchResizeTriggersResizeUmaMetrics) {
 
   // Send pinch event. This also creates a `WindowResizer`.
   base::TimeTicks timestamp = base::TimeTicks::Now();
-  ui::GestureEventDetails details(ui::ET_GESTURE_PINCH_BEGIN);
+  ui::GestureEventDetails details(ui::EventType::kGesturePinchBegin);
   ui::GestureEvent event(window()->bounds().origin().x(),
                          window()->bounds().origin().y(), ui::EF_NONE,
                          timestamp, details);

@@ -86,14 +86,6 @@ const User* FakeUserManager::AddKioskAppUser(const AccountId& account_id) {
   return user;
 }
 
-const User* FakeUserManager::AddArcKioskAppUser(const AccountId& account_id) {
-  User* user = User::CreateArcKioskAppUser(account_id);
-  user->set_username_hash(GetFakeUsernameHash(account_id));
-  user_storage_.emplace_back(user);
-  users_.push_back(user);
-  return user;
-}
-
 const User* FakeUserManager::AddUserWithAffiliation(const AccountId& account_id,
                                                     bool is_affiliated) {
   User* user = User::CreateRegularUser(account_id, UserType::kRegular);
@@ -313,11 +305,6 @@ bool FakeUserManager::IsLoggedInAsKioskApp() const {
   return active_user ? active_user->GetType() == UserType::kKioskApp : false;
 }
 
-bool FakeUserManager::IsLoggedInAsArcKioskApp() const {
-  const User* active_user = GetActiveUser();
-  return active_user ? active_user->GetType() == UserType::kArcKioskApp : false;
-}
-
 bool FakeUserManager::IsLoggedInAsWebKioskApp() const {
   const User* active_user = GetActiveUser();
   return active_user ? active_user->GetType() == UserType::kWebKioskApp : false;
@@ -350,32 +337,13 @@ bool FakeUserManager::IsUserAllowed(const User& user) const {
   return true;
 }
 
-void FakeUserManager::SetEphemeralModeConfig(
-    EphemeralModeConfig ephemeral_mode_config) {
-  UserManagerBase::SetEphemeralModeConfig(std::move(ephemeral_mode_config));
-}
-
-bool FakeUserManager::IsEphemeralAccountIdByPolicy(
-    const AccountId& account_id) const {
-  return GetEphemeralModeConfig().IsAccountIdIncluded(account_id);
-}
-
 bool FakeUserManager::IsDeviceLocalAccountMarkedForRemoval(
     const AccountId& account_id) const {
   return false;
 }
 
-void FakeUserManager::AsyncRemoveCryptohome(const AccountId& account_id) const {
-  NOTIMPLEMENTED();
-}
-
 bool FakeUserManager::IsDeprecatedSupervisedAccountId(
     const AccountId& account_id) const {
-  return false;
-}
-
-bool FakeUserManager::IsValidDefaultUserImageId(int image_index) const {
-  NOTIMPLEMENTED();
   return false;
 }
 

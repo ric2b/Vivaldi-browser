@@ -195,16 +195,15 @@ std::string OverflowErrorMessage(NumberT lhs, const char* op, NumberT rhs) {
 template <typename VALUE_TY>
 std::string OverflowErrorMessage(VALUE_TY value, std::string_view target_ty) {
     StringStream ss;
-    ss << "value " << value << " cannot be represented as "
-       << "'" << target_ty << "'";
+    ss << "value " << value << " cannot be represented as " << "'" << target_ty << "'";
     return ss.str();
 }
 
 template <typename NumberT>
 std::string OverflowExpErrorMessage(std::string_view base, NumberT exp) {
     StringStream ss;
-    ss << base << "^" << exp << " cannot be represented as "
-       << "'" << FriendlyName<NumberT>() << "'";
+    ss << base << "^" << exp << " cannot be represented as " << "'" << FriendlyName<NumberT>()
+       << "'";
     return ss.str();
 }
 
@@ -359,7 +358,7 @@ const Value* ConvertInternal(const Value* root_value,
         if (auto* build = std::get_if<ActionBuildSplat>(&next)) {
             TINT_ASSERT(value_stack.Length() >= 1);
             auto* el = value_stack.Pop();
-            value_stack.Push(ctx.mgr.Splat(build->type, el, build->count));
+            value_stack.Push(ctx.mgr.Splat(build->type, el));
             continue;
         }
 
@@ -1093,7 +1092,7 @@ tint::Result<NumberT, Eval::Error> Eval::Sqrt(const Source& source, NumberT v) {
 }
 
 auto Eval::SqrtFunc(const Source& source, const core::type::Type* elem_ty) {
-    return [=](auto v) -> Eval::Result {
+    return [this, source, elem_ty](auto v) -> Eval::Result {
         if (auto r = Sqrt(source, v); r == Success) {
             return CreateScalar(source, elem_ty, r.Get());
         }
@@ -1117,7 +1116,7 @@ tint::Result<NumberT, Eval::Error> Eval::Clamp(const Source& source,
 }
 
 auto Eval::ClampFunc(const Source& source, const core::type::Type* elem_ty) {
-    return [=](auto e, auto low, auto high) -> Eval::Result {
+    return [this, source, elem_ty](auto e, auto low, auto high) -> Eval::Result {
         if (auto r = Clamp(source, e, low, high); r == Success) {
             return CreateScalar(source, elem_ty, r.Get());
         }
@@ -1126,7 +1125,7 @@ auto Eval::ClampFunc(const Source& source, const core::type::Type* elem_ty) {
 }
 
 auto Eval::AddFunc(const Source& source, const core::type::Type* elem_ty) {
-    return [=](auto a1, auto a2) -> Eval::Result {
+    return [this, source, elem_ty](auto a1, auto a2) -> Eval::Result {
         if (auto r = Add(source, a1, a2); r == Success) {
             return CreateScalar(source, elem_ty, r.Get());
         }
@@ -1135,7 +1134,7 @@ auto Eval::AddFunc(const Source& source, const core::type::Type* elem_ty) {
 }
 
 auto Eval::SubFunc(const Source& source, const core::type::Type* elem_ty) {
-    return [=](auto a1, auto a2) -> Eval::Result {
+    return [this, source, elem_ty](auto a1, auto a2) -> Eval::Result {
         if (auto r = Sub(source, a1, a2); r == Success) {
             return CreateScalar(source, elem_ty, r.Get());
         }
@@ -1144,7 +1143,7 @@ auto Eval::SubFunc(const Source& source, const core::type::Type* elem_ty) {
 }
 
 auto Eval::MulFunc(const Source& source, const core::type::Type* elem_ty) {
-    return [=](auto a1, auto a2) -> Eval::Result {
+    return [this, source, elem_ty](auto a1, auto a2) -> Eval::Result {
         if (auto r = Mul(source, a1, a2); r == Success) {
             return CreateScalar(source, elem_ty, r.Get());
         }
@@ -1153,7 +1152,7 @@ auto Eval::MulFunc(const Source& source, const core::type::Type* elem_ty) {
 }
 
 auto Eval::DivFunc(const Source& source, const core::type::Type* elem_ty) {
-    return [=](auto a1, auto a2) -> Eval::Result {
+    return [this, source, elem_ty](auto a1, auto a2) -> Eval::Result {
         if (auto r = Div(source, a1, a2); r == Success) {
             return CreateScalar(source, elem_ty, r.Get());
         }
@@ -1162,7 +1161,7 @@ auto Eval::DivFunc(const Source& source, const core::type::Type* elem_ty) {
 }
 
 auto Eval::ModFunc(const Source& source, const core::type::Type* elem_ty) {
-    return [=](auto a1, auto a2) -> Eval::Result {
+    return [this, source, elem_ty](auto a1, auto a2) -> Eval::Result {
         if (auto r = Mod(source, a1, a2); r == Success) {
             return CreateScalar(source, elem_ty, r.Get());
         }
@@ -1171,7 +1170,7 @@ auto Eval::ModFunc(const Source& source, const core::type::Type* elem_ty) {
 }
 
 auto Eval::Dot2Func(const Source& source, const core::type::Type* elem_ty) {
-    return [=](auto a1, auto a2, auto b1, auto b2) -> Eval::Result {
+    return [this, source, elem_ty](auto a1, auto a2, auto b1, auto b2) -> Eval::Result {
         if (auto r = Dot2(source, a1, a2, b1, b2); r == Success) {
             return CreateScalar(source, elem_ty, r.Get());
         }
@@ -1180,7 +1179,8 @@ auto Eval::Dot2Func(const Source& source, const core::type::Type* elem_ty) {
 }
 
 auto Eval::Dot3Func(const Source& source, const core::type::Type* elem_ty) {
-    return [=](auto a1, auto a2, auto a3, auto b1, auto b2, auto b3) -> Eval::Result {
+    return [this, source, elem_ty](auto a1, auto a2, auto a3, auto b1, auto b2,
+                                   auto b3) -> Eval::Result {
         if (auto r = Dot3(source, a1, a2, a3, b1, b2, b3); r == Success) {
             return CreateScalar(source, elem_ty, r.Get());
         }
@@ -1189,8 +1189,8 @@ auto Eval::Dot3Func(const Source& source, const core::type::Type* elem_ty) {
 }
 
 auto Eval::Dot4Func(const Source& source, const core::type::Type* elem_ty) {
-    return [=](auto a1, auto a2, auto a3, auto a4, auto b1, auto b2, auto b3,
-               auto b4) -> Eval::Result {
+    return [this, source, elem_ty](auto a1, auto a2, auto a3, auto a4, auto b1, auto b2, auto b3,
+                                   auto b4) -> Eval::Result {
         if (auto r = Dot4(source, a1, a2, a3, a4, b1, b2, b3, b4); r == Success) {
             return CreateScalar(source, elem_ty, r.Get());
         }
@@ -1262,7 +1262,7 @@ Eval::Result Eval::Sub(const Source& source,
 }
 
 auto Eval::Det2Func(const Source& source, const core::type::Type* elem_ty) {
-    return [=](auto a, auto b, auto c, auto d) -> Eval::Result {
+    return [this, source, elem_ty](auto a, auto b, auto c, auto d) -> Eval::Result {
         if (auto r = Det2(source, a, b, c, d); r == Success) {
             return CreateScalar(source, elem_ty, r.Get());
         }
@@ -1271,8 +1271,8 @@ auto Eval::Det2Func(const Source& source, const core::type::Type* elem_ty) {
 }
 
 auto Eval::Det3Func(const Source& source, const core::type::Type* elem_ty) {
-    return [=](auto a, auto b, auto c, auto d, auto e, auto f, auto g, auto h,
-               auto i) -> Eval::Result {
+    return [this, source, elem_ty](auto a, auto b, auto c, auto d, auto e, auto f, auto g, auto h,
+                                   auto i) -> Eval::Result {
         if (auto r = Det3(source, a, b, c, d, e, f, g, h, i); r == Success) {
             return CreateScalar(source, elem_ty, r.Get());
         }
@@ -1281,8 +1281,9 @@ auto Eval::Det3Func(const Source& source, const core::type::Type* elem_ty) {
 }
 
 auto Eval::Det4Func(const Source& source, const core::type::Type* elem_ty) {
-    return [=](auto a, auto b, auto c, auto d, auto e, auto f, auto g, auto h, auto i, auto j,
-               auto k, auto l, auto m, auto n, auto o, auto p) -> Eval::Result {
+    return [this, source, elem_ty](auto a, auto b, auto c, auto d, auto e, auto f, auto g, auto h,
+                                   auto i, auto j, auto k, auto l, auto m, auto n, auto o,
+                                   auto p) -> Eval::Result {
         if (auto r = Det4(source, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p); r == Success) {
             return CreateScalar(source, elem_ty, r.Get());
         }
@@ -1331,7 +1332,7 @@ Eval::Result Eval::VecSplat(const core::type::Type* ty,
                             VectorRef<const Value*> args,
                             const Source&) {
     if (auto* arg = args[0]) {
-        return mgr.Splat(ty, arg, static_cast<const core::type::Vector*>(ty)->Width());
+        return mgr.Splat(ty, arg);
     }
     return nullptr;
 }
@@ -1395,7 +1396,7 @@ Eval::Result Eval::Index(const Value* obj_val,
                          const core::type::Type* obj_ty,
                          const Value* idx_val,
                          const Source& idx_source) {
-    auto el = obj_ty->UnwrapRef()->Elements();
+    auto el = obj_ty->UnwrapPtrOrRef()->Elements();
 
     AInt idx = idx_val->ValueAs<AInt>();
     if (idx < 0 || (el.count > 0 && idx >= el.count)) {
@@ -2013,18 +2014,14 @@ Eval::Result Eval::ShiftLeft(const core::type::Type* ty,
                     e2u = 0;
                 }
             } else {
-                if (static_cast<size_t>(e2) >= bit_width) {
+                if (static_cast<size_t>(e2) >= bit_width && use_runtime_semantics_) {
                     // At shader/pipeline-creation time, it is an error to shift by the bit width of
-                    // the lhs or greater.
-                    // NOTE: At runtime, we shift by e2 % (bit width of e1).
+                    // the lhs or greater, which should have already been caught by the validator.
+                    // At runtime, we shift by e2 % (bit width of e1).
                     AddError(source)
                         << "shift left value must be less than the bit width of the lhs, which is "
                         << bit_width;
-                    if (use_runtime_semantics_) {
-                        e2u = e2u % bit_width;
-                    } else {
-                        return error;
-                    }
+                    e2u = e2u % bit_width;
                 }
 
                 if constexpr (std::is_signed_v<T>) {
@@ -2097,22 +2094,22 @@ Eval::Result Eval::ShiftRight(const core::type::Type* ty,
             T result = 0;
             if constexpr (IsAbstract<NumberT>) {
                 if (static_cast<size_t>(e2) >= bit_width) {
-                    result = T{0};
+                    // For an abstract shift right, if e1 is negative, each inserted bit is 1,
+                    // resulting in the value -1 for all 1s. For a non-negative e1, each inserted
+                    // bit is 0, resulting in 0.
+                    result = e1 < 0 ? T{-1} : T{0};
                 } else {
                     result = signed_shift_right();
                 }
             } else {
-                if (static_cast<size_t>(e2) >= bit_width) {
+                if (static_cast<size_t>(e2) >= bit_width && use_runtime_semantics_) {
                     // At shader/pipeline-creation time, it is an error to shift by the bit width of
-                    // the lhs or greater. NOTE: At runtime, we shift by e2 % (bit width of e1).
+                    // the lhs or greater, which should have already been caught by the validator.
+                    // At runtime, we shift by e2 % (bit width of e1).
                     AddError(source)
                         << "shift right value must be less than the bit width of the lhs, which is "
                         << bit_width;
-                    if (use_runtime_semantics_) {
-                        e2u = e2u % bit_width;
-                    } else {
-                        return error;
-                    }
+                    e2u = e2u % bit_width;
                 }
 
                 if constexpr (std::is_signed_v<T>) {

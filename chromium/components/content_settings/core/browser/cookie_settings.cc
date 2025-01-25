@@ -29,6 +29,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
+#include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/privacy_sandbox/tracking_protection_prefs.h"
 #include "components/privacy_sandbox/tracking_protection_settings.h"
 #include "components/tpcd/metadata/browser/manager.h"
@@ -114,7 +115,7 @@ bool CookieSettings::IsAllowedByTpcdMetadataGrant(const GURL& url,
                                                   const GURL& first_party_url,
                                                   SettingInfo* out_info) const {
   if (!ShouldConsider3pcdMetadataGrantsSettings(
-          net::CookieSettingOverrides())) {
+          first_party_url, net::CookieSettingOverrides())) {
     return false;
   }
   if (!tpcd_metadata_manager_) {
@@ -192,15 +193,24 @@ void CookieSettings::SetCookieSettingForUserBypass(
 }
 
 bool CookieSettings::IsStoragePartitioningBypassEnabled(
-    const GURL& first_party_url) {
+    const GURL& first_party_url) const {
   SettingInfo info;
   ContentSetting setting = host_content_settings_map_->GetContentSetting(
       GURL(), first_party_url, ContentSettingsType::COOKIES, &info);
-
-  bool is_default = info.primary_pattern.MatchesAllHosts() &&
-                    info.secondary_pattern.MatchesAllHosts();
-
-  return is_default ? false : IsAllowed(setting);
+  // Check for explicit 3PC exception.
+  if (IsAllowed(setting) && (!info.primary_pattern.MatchesAllHosts() ||
+                             !info.secondary_pattern.MatchesAllHosts())) {
+    return true;
+  }
+  // Check for explicit Tracking Protection exception.
+  if (base::FeatureList::IsEnabled(
+          privacy_sandbox::kTrackingProtectionContentSettingFor3pcb) &&
+      tracking_protection_settings_ &&
+      tracking_protection_settings_->GetTrackingProtectionSetting(
+          first_party_url) == CONTENT_SETTING_ALLOW) {
+    return true;
+  }
+  return false;
 }
 
 void CookieSettings::ResetCookieSetting(const GURL& primary_url) {
@@ -215,7 +225,8 @@ bool CookieSettings::IsThirdPartyAccessAllowed(
     content_settings::SettingInfo* info) const {
   // Use GURL() as an opaque primary url to check if any site
   // could access cookies in a 3p context on |first_party_url|.
-  return IsAllowed(GetCookieSetting(GURL(), first_party_url,
+  return IsAllowed(GetCookieSetting(GURL(), net::SiteForCookies(),
+                                    first_party_url,
                                     net::CookieSettingOverrides(), info));
 }
 
@@ -354,12 +365,10 @@ bool CookieSettings::IsThirdPartyCookiesAllowedScheme(
 
 CookieSettings::~CookieSettings() = default;
 
+bool CookieSettings::ShouldBlockThirdPartyCookiesInternal() const {
 #if BUILDFLAG(IS_IOS)
-bool CookieSettings::ShouldBlockThirdPartyCookiesInternal() {
   return false;
-}
 #else
-bool CookieSettings::ShouldBlockThirdPartyCookiesInternal() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(pref_change_registrar_);
 
@@ -385,11 +394,10 @@ bool CookieSettings::ShouldBlockThirdPartyCookiesInternal() {
     case CookieControlsMode::kOff:
       return false;
   }
-  return false;
-}
 #endif
+}
 
-bool CookieSettings::MitigationsEnabledFor3pcdInternal() {
+bool CookieSettings::MitigationsEnabledFor3pcdInternal() const {
   if (tracking_protection_settings_ &&
       tracking_protection_settings_->IsTrackingProtection3pcdEnabled()) {
     // Mitigations should be on iff we are not blocking or allowing all 3PC.
@@ -409,7 +417,10 @@ void CookieSettings::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsTypeSet content_type_set) {
-  if (content_type_set.Contains(ContentSettingsType::COOKIES)) {
+  if (content_type_set.Contains(ContentSettingsType::COOKIES) ||
+      (base::FeatureList::IsEnabled(
+           privacy_sandbox::kTrackingProtectionContentSettingFor3pcb) &&
+       content_type_set.Contains(ContentSettingsType::TRACKING_PROTECTION))) {
     for (auto& observer : observers_) {
       observer.OnCookieSettingChanged();
     }

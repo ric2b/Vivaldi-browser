@@ -80,9 +80,7 @@ class Visit {
         base::Time visit_time,
         GURL url,
         std::u16string title,
-        ui::PageTransition transition,
-        int visit_count,
-        int source);
+        ui::PageTransition transition);
   ~Visit();
 
   Visit(const Visit& other);
@@ -95,8 +93,6 @@ class Visit {
   GURL url;
   std::u16string title;
   ui::PageTransition transition;
-  int visit_count;
-  int source;
 };
 
 }  //  namespace history

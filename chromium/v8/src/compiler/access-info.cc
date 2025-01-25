@@ -68,7 +68,6 @@ bool HasFieldRepresentationDependenciesOnMap(
 
 }  // namespace
 
-
 std::ostream& operator<<(std::ostream& os, AccessMode access_mode) {
   switch (access_mode) {
     case AccessMode::kLoad:
@@ -406,7 +405,7 @@ PropertyAccessInfo AccessInfoFactory::ComputeDataFieldAccessInfo(
     InternalIndex descriptor, AccessMode access_mode) const {
   DCHECK(descriptor.is_found());
   // TODO(jgruber,v8:7790): Use DescriptorArrayRef instead.
-  Handle<DescriptorArray> descriptors =
+  DirectHandle<DescriptorArray> descriptors =
       map.instance_descriptors(broker()).object();
   PropertyDetails const details = descriptors->GetDetails(descriptor);
   int index = descriptors->GetFieldIndex(descriptor);
@@ -453,19 +452,18 @@ PropertyAccessInfo AccessInfoFactory::ComputeDataFieldAccessInfo(
             map, field_owner_map, descriptor, details_representation));
   } else if (details_representation.IsHeapObject()) {
     if (IsNone(*descriptors_field_type)) {
+      // Cleared field-types are pre-monomorphic states. The field type was
+      // garbge collected and we need to record an updated type.
+      static_assert(FieldType::kFieldTypesCanBeClearedOnGC);
       switch (access_mode) {
         case AccessMode::kStore:
         case AccessMode::kStoreInLiteral:
         case AccessMode::kDefine:
-          // Store is not safe if the field type was cleared.
           return Invalid();
         case AccessMode::kLoad:
         case AccessMode::kHas:
           break;
       }
-
-      // The field type was cleared by the GC, so we don't know anything
-      // about the contents now.
     }
     unrecorded_dependencies.push_back(
         dependencies()->FieldRepresentationDependencyOffTheRecord(
@@ -518,13 +516,13 @@ PropertyAccessInfo AccessorAccessInfoHelper(
     AccessorsObjectGetter get_accessors) {
   if (holder_map.instance_type() == JS_MODULE_NAMESPACE_TYPE) {
     DCHECK(holder_map.object()->is_prototype_map());
-    Handle<PrototypeInfo> proto_info = broker->CanonicalPersistentHandle(
-        PrototypeInfo::cast(holder_map.object()->prototype_info()));
-    Handle<JSModuleNamespace> module_namespace =
+    DirectHandle<PrototypeInfo> proto_info = broker->CanonicalPersistentHandle(
+        Cast<PrototypeInfo>(holder_map.object()->prototype_info()));
+    DirectHandle<JSModuleNamespace> module_namespace =
         broker->CanonicalPersistentHandle(
-            JSModuleNamespace::cast(proto_info->module_namespace()));
+            Cast<JSModuleNamespace>(proto_info->module_namespace()));
     Handle<Cell> cell = broker->CanonicalPersistentHandle(
-        Cell::cast(module_namespace->module()->exports()->Lookup(
+        Cast<Cell>(module_namespace->module()->exports()->Lookup(
             isolate, name.object(),
             Smi::ToInt(Object::GetHash(*name.object())))));
     if (IsAnyStore(access_mode)) {
@@ -558,7 +556,7 @@ PropertyAccessInfo AccessorAccessInfoHelper(
   if (!IsAccessorPair(*maybe_accessors)) {
     return PropertyAccessInfo::Invalid(zone);
   }
-  Handle<AccessorPair> accessors = Handle<AccessorPair>::cast(maybe_accessors);
+  DirectHandle<AccessorPair> accessors = Cast<AccessorPair>(maybe_accessors);
   Handle<Object> accessor = broker->CanonicalPersistentHandle(
       access_mode == AccessMode::kLoad ? accessors->getter(kAcquireLoad)
                                        : accessors->setter(kAcquireLoad));
@@ -690,7 +688,7 @@ bool AccessInfoFactory::TryLoadPropertyDetails(
       return false;
     }
 
-    Handle<JSObject> holder = maybe_holder->object();
+    DirectHandle<JSObject> holder = maybe_holder->object();
     if (V8_ENABLE_SWISS_NAME_DICTIONARY_BOOL) {
       Tagged<SwissNameDictionary> dict = holder->property_dictionary_swiss();
       *index_out = dict->FindEntry(isolate(), name.object());
@@ -786,10 +784,10 @@ PropertyAccessInfo AccessInfoFactory::ComputePropertyAccessInfo(
 
       if (IsDefiningStore(access_mode)) {
         if (details.attributes() != PropertyAttributes::NONE) {
-          // We should store the property with WEC attributes, but that's not the
-          // attributes of the property that we found. We just bail out and let
-          // the runtime figure out what to do (which probably requires changing
-          // the object's map).
+          // We should store the property with WEC attributes, but that's not
+          // the attributes of the property that we found. We just bail out and
+          // let the runtime figure out what to do (which probably requires
+          // changing the object's map).
           return Invalid();
         }
       }
@@ -1108,7 +1106,7 @@ PropertyAccessInfo AccessInfoFactory::LookupTransition(
   MapRef transition_map = maybe_transition_map.value();
 
   InternalIndex const number = transition_map.object()->LastAdded();
-  Handle<DescriptorArray> descriptors =
+  DirectHandle<DescriptorArray> descriptors =
       transition_map.instance_descriptors(broker()).object();
   PropertyDetails const details = descriptors->GetDetails(number);
 
@@ -1151,7 +1149,9 @@ PropertyAccessInfo AccessInfoFactory::LookupTransition(
     if (!descriptors_field_type_ref.has_value()) return Invalid();
 
     if (IsNone(*descriptors_field_type)) {
-      // Store is not safe if the field type was cleared.
+      // Cleared field-types are pre-monomorphic states. The field type was
+      // garbge collected and we need to record an updated type.
+      static_assert(FieldType::kFieldTypesCanBeClearedOnGC);
       return Invalid();
     }
     unrecorded_dependencies.push_back(

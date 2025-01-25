@@ -30,7 +30,6 @@ extern const char kVivaldiProfileImagePath[];
 extern const char kVivaldiTranslateLanguageList[];
 extern const char kVivaldiTranslateLanguageListLastUpdate[];
 extern const char kVivaldiAccountServerUrlIdentity[];
-extern const char kVivaldiAccountServerUrlOpenId[];
 extern const char kVivaldiSyncServerUrl[];
 extern const char kVivaldiSyncNotificationsServerUrl[];
 
@@ -56,6 +55,12 @@ extern const char kVivaldiBookmarkFoldersViewMode[];
 extern const char kVivaldiBookmarksSortingMode[];
 extern const char kVivaldiBookmarksSortingOrder[];
 
+// Search Engine
+extern const char kVivaldiEnableSearchEngineNickname[];
+
+// Address bar
+extern const char kVivaldiShowFullAddressEnabled[];
+
 // Tabs
 // Desktop style tabs enabled status
 extern const char kVivaldiDesktopTabsEnabled[];
@@ -63,6 +68,12 @@ extern const char kVivaldiDesktopTabsEnabled[];
 extern const char kVivaldiReverseSearchResultsEnabled[];
 // Tab stack use status
 extern const char kVivaldiTabStackEnabled[];
+// Show X button in background tabs
+extern const char kVivaldiShowXButtonBackgroundTabsEnabled[];
+// Open new tab when last open tab is closed
+extern const char kVivaldiOpenNTPOnClosingLastTabEnabled[];
+// Focus omnibox on new tab page
+extern const char kVivaldiFocusOmniboxOnNTPEnabled[];
 
 // Apearance
 // Selected browser theme i.e. Light, Dark, System

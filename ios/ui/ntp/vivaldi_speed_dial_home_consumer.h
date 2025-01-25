@@ -3,7 +3,7 @@
 #ifndef IOS_UI_NTP_VIVALDI_SPEED_DIAL_HOME_CONSUMER_H_
 #define IOS_UI_NTP_VIVALDI_SPEED_DIAL_HOME_CONSUMER_H_
 
-#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
+#import "components/bookmarks/browser/bookmark_node.h"
 
 using bookmarks::BookmarkNode;
 

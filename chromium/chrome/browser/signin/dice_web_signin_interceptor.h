@@ -157,6 +157,10 @@ class DiceWebSigninInterceptor : public KeyedService,
         std::move(value);
   }
 
+  static base::TimeDelta GetTimeSinceLastChromeSigninDeclineForTesting(
+      const SigninPrefs& signin_prefs,
+      const std::string& gaia_id);
+
   // KeyedService:
   void Shutdown() override;
 
@@ -234,11 +238,6 @@ class DiceWebSigninInterceptor : public KeyedService,
   void ShowSigninInterceptionBubble(
       const WebSigninInterceptor::Delegate::BubbleParameters& bubble_parameters,
       base::OnceCallback<void(SigninInterceptionResult)> callback);
-
-  // Attempts showing the In-Product-Help for remembering the explicit browser
-  // sign-in preference.
-  void MaybeShowExplicitBrowserSigninPreferenceRememberedIPH(
-      const AccountInfo& account_info);
 
   // Ensure that we are observing changes in extended account info. Idempotent.
   void EnsureObservingExtendedAccountInfo();

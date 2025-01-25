@@ -11,7 +11,7 @@ import {eventToPromise, isVisible} from 'chrome://webui-test/test_util.js';
 
 import {clearBody} from '../../utils.js';
 
-suite('<settings-dropdown-v2>', () => {
+suite(SettingsDropdownV2Element.is, () => {
   let dropdownElement: SettingsDropdownV2Element;
   let internalSelectElement: HTMLSelectElement;
 
@@ -184,15 +184,11 @@ suite('<settings-dropdown-v2>', () => {
     });
 
     test('Pref value updates the selected option', async () => {
-      assertOptionSelected(1);
-
-      dropdownElement.set('pref.value', 2);
-      await flushTasks();
-      assertOptionSelected(2);
-
-      dropdownElement.set('pref.value', 3);
-      await flushTasks();
-      assertOptionSelected(3);
+      for (const testOption of testOptions) {
+        dropdownElement.set('pref.value', testOption.value);
+        await flushTasks();
+        assertOptionSelected(testOption.value);
+      }
     });
 
     test(
@@ -239,15 +235,6 @@ suite('<settings-dropdown-v2>', () => {
       assertTrue(isVisible(policyIndicator));
     });
 
-    test('Selecting an option updates local pref value', () => {
-      for (const testOption of testOptions) {
-        const value = testOption.value;
-        simulateSelectAction(value);
-        assertOptionSelected(value);
-        assertEquals(value, dropdownElement.pref!.value);
-      }
-    });
-
     test('Selecting an option dispatches pref change event', async () => {
       for (const testOption of testOptions) {
         const prefChangeEventPromise =
@@ -262,6 +249,23 @@ suite('<settings-dropdown-v2>', () => {
       }
     });
 
+    test(
+        'Selecting an option does not update the pref value directly',
+        async () => {
+          const initialPrefValue = dropdownElement.pref!.value;
+
+          const prefChangeEventPromise =
+              eventToPromise('user-action-setting-pref-change', window);
+          const value = testOptions[0]!.value;
+          simulateSelectAction(value);
+          assertOptionSelected(value);
+          await prefChangeEventPromise;
+
+          // Local pref object should be treated as immutable data and should
+          // not be updated directly.
+          assertEquals(initialPrefValue, dropdownElement.pref!.value);
+        });
+
     test('Selecting an option dispatches change event', async () => {
       for (const testOption of testOptions) {
         const value = testOption.value;
@@ -270,23 +274,19 @@ suite('<settings-dropdown-v2>', () => {
         assertOptionSelected(value);
         const event = await changeEventPromise;
         assertEquals(value, event.detail);
+        // Event should not pass the shadow DOM boundary.
+        assertFalse(event.composed);
       }
     });
   });
 
   suite('without pref', () => {
-    test('Selected option updates according to value property', async () => {
-      dropdownElement.value = 1;
-      await flushTasks();
-      assertOptionSelected(1);
-
-      dropdownElement.value = 2;
-      await flushTasks();
-      assertOptionSelected(2);
-
-      dropdownElement.value = 3;
-      await flushTasks();
-      assertOptionSelected(3);
+    test('Changing value updates the selected option', async () => {
+      for (const testOption of testOptions) {
+        dropdownElement.value = testOption.value;
+        await flushTasks();
+        assertOptionSelected(testOption.value);
+      }
     });
 
     test('No option is selected if no matching option for value', async () => {
@@ -318,6 +318,8 @@ suite('<settings-dropdown-v2>', () => {
         assertOptionSelected(value);
         const event = await changeEventPromise;
         assertEquals(value, event.detail);
+        // Event should not pass the shadow DOM boundary.
+        assertFalse(event.composed);
       }
     });
   });
@@ -329,6 +331,34 @@ suite('<settings-dropdown-v2>', () => {
       dropdownElement.focus();
       assertEquals(
           internalSelectElement, dropdownElement.shadowRoot!.activeElement);
+    });
+  });
+
+  suite('for a11y', () => {
+    test('ariaLabel property should apply to internal select', () => {
+      const ariaLabel = 'A11y label';
+      dropdownElement.ariaLabel = ariaLabel;
+      assertEquals(ariaLabel, internalSelectElement.getAttribute('aria-label'));
+    });
+
+    test('ariaLabel property does not reflect to attribute', () => {
+      const ariaLabel = 'A11y label';
+      dropdownElement.ariaLabel = ariaLabel;
+      assertFalse(dropdownElement.hasAttribute('aria-label'));
+    });
+
+    test('ariaDescription property should apply to internal select', () => {
+      const ariaDescription = 'A11y description';
+      dropdownElement.ariaDescription = ariaDescription;
+      assertEquals(
+          ariaDescription,
+          internalSelectElement.getAttribute('aria-description'));
+    });
+
+    test('ariaDescription property does not reflect to attribute', () => {
+      const ariaDescription = 'A11y description';
+      dropdownElement.ariaDescription = ariaDescription;
+      assertFalse(dropdownElement.hasAttribute('aria-description'));
     });
   });
 });

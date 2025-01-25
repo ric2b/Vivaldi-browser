@@ -239,37 +239,21 @@ class SessionSyncBridgeTest : public ::testing::Test {
   }
 
   std::map<std::string, std::unique_ptr<EntityData>> GetAllData() {
-    base::RunLoop loop;
-    std::unique_ptr<DataBatch> batch;
-    bridge_->GetAllDataForDebugging(base::BindLambdaForTesting(
-        [&loop, &batch](std::unique_ptr<DataBatch> input_batch) {
-          batch = std::move(input_batch);
-          loop.Quit();
-        }));
-    loop.Run();
+    std::unique_ptr<DataBatch> batch = bridge_->GetAllDataForDebugging();
     EXPECT_NE(nullptr, batch);
     return BatchToEntityDataMap(std::move(batch));
   }
 
-  std::map<std::string, std::unique_ptr<EntityData>> GetData(
+  std::map<std::string, std::unique_ptr<EntityData>> GetDataForCommit(
       const std::vector<std::string>& storage_keys) {
-    base::RunLoop loop;
-    std::unique_ptr<DataBatch> batch;
-    bridge_->GetData(
-        storage_keys,
-        base::BindLambdaForTesting(
-            [&loop, &batch](std::unique_ptr<DataBatch> input_batch) {
-              batch = std::move(input_batch);
-              loop.Quit();
-            }));
-    loop.Run();
+    std::unique_ptr<DataBatch> batch = bridge_->GetDataForCommit(storage_keys);
     EXPECT_NE(nullptr, batch);
     return BatchToEntityDataMap(std::move(batch));
   }
 
-  std::unique_ptr<EntityData> GetData(const std::string& storage_key) {
+  std::unique_ptr<EntityData> GetDataForCommit(const std::string& storage_key) {
     std::map<std::string, std::unique_ptr<EntityData>> entity_data_map =
-        GetData(std::vector<std::string>{storage_key});
+        GetDataForCommit(std::vector<std::string>{storage_key});
     EXPECT_LE(entity_data_map.size(), 1U);
     if (entity_data_map.empty()) {
       return nullptr;
@@ -395,7 +379,7 @@ TEST_F(SessionSyncBridgeTest, ShouldCreateHeaderByDefault) {
 
 // Tests that local windows and tabs that exist at the time the bridge is
 // started (e.g. after a Chrome restart) are properly exposed via the bridge's
-// GetData() and GetAllData() methods, as well as notified via Put().
+// GetDataForCommit() and GetAllData() methods, as well as notified via Put().
 TEST_F(SessionSyncBridgeTest, ShouldExposeInitialLocalTabsToProcessor) {
   const int kWindowId = 1000001;
   const int kTabId1 = 1000002;
@@ -434,7 +418,7 @@ TEST_F(SessionSyncBridgeTest, ShouldExposeInitialLocalTabsToProcessor) {
 
   StartSyncing();
 
-  EXPECT_THAT(GetData(header_storage_key),
+  EXPECT_THAT(GetDataForCommit(header_storage_key),
               EntityDataHasSpecifics(MatchesHeader(kLocalCacheGuid, {kWindowId},
                                                    {kTabId1, kTabId2})));
   EXPECT_THAT(
@@ -454,7 +438,7 @@ TEST_F(SessionSyncBridgeTest, ShouldExposeInitialLocalTabsToProcessor) {
 
 // Tests that the creation of a new tab while sync is enabled is propagated to:
 // 1) The processor, via Put().
-// 2) The in-memory representation exposed via GetData().
+// 2) The in-memory representation exposed via GetDataForCommit().
 // 3) The persisted store, exposed via GetAllData().
 TEST_F(SessionSyncBridgeTest, ShouldReportLocalTabCreation) {
   const int kWindowId = 1000001;
@@ -517,10 +501,10 @@ TEST_F(SessionSyncBridgeTest, ShouldReportLocalTabCreation) {
           Pair(tab_storage_key, EntityDataHasSpecifics(MatchesTab(
                                     kLocalCacheGuid, kWindowId, kTabId2,
                                     /*tab_node_id=*/_, {"http://bar.com/"})))));
-  EXPECT_THAT(GetData(header_storage_key),
+  EXPECT_THAT(GetDataForCommit(header_storage_key),
               EntityDataHasSpecifics(MatchesHeader(kLocalCacheGuid, {kWindowId},
                                                    {kTabId1, kTabId2})));
-  EXPECT_THAT(GetData(tab_storage_key),
+  EXPECT_THAT(GetDataForCommit(tab_storage_key),
               EntityDataHasSpecifics(
                   MatchesTab(kLocalCacheGuid, kWindowId, kTabId2,
                              /*tab_node_id=*/_, {"http://bar.com/"})));
@@ -549,15 +533,15 @@ TEST_F(SessionSyncBridgeTest, ShouldNotUpdatePlaceholderTabsDuringRestore) {
   InitializeBridge();
   StartSyncing();
 
-  ASSERT_THAT(GetData(header_storage_key),
+  ASSERT_THAT(GetDataForCommit(header_storage_key),
               EntityDataHasSpecifics(MatchesHeader(
                   kLocalCacheGuid, {kWindowId1}, {kTabId1, kTabId2})));
   ASSERT_THAT(
-      GetData(tab_storage_key1),
+      GetDataForCommit(tab_storage_key1),
       EntityDataHasSpecifics(MatchesTab(kLocalCacheGuid, kWindowId1, kTabId1,
                                         kTabNodeId1, {"http://foo.com/"})));
   ASSERT_THAT(
-      GetData(tab_storage_key2),
+      GetDataForCommit(tab_storage_key2),
       EntityDataHasSpecifics(MatchesTab(kLocalCacheGuid, kWindowId1, kTabId2,
                                         kTabNodeId2, {"http://bar.com/"})));
 
@@ -589,15 +573,15 @@ TEST_F(SessionSyncBridgeTest, ShouldNotUpdatePlaceholderTabsDuringRestore) {
   // Although we haven't notified the processor about the window-ID change, if
   // it hypothetically asked for these entities, the returned entities are
   // up-to-date.
-  EXPECT_THAT(GetData(header_storage_key),
+  EXPECT_THAT(GetDataForCommit(header_storage_key),
               EntityDataHasSpecifics(MatchesHeader(
                   kLocalCacheGuid, {kWindowId2}, {kTabId1, kTabId2})));
   EXPECT_THAT(
-      GetData(tab_storage_key1),
+      GetDataForCommit(tab_storage_key1),
       EntityDataHasSpecifics(MatchesTab(kLocalCacheGuid, kWindowId2, kTabId1,
                                         kTabNodeId1, {"http://foo.com/"})));
   EXPECT_THAT(
-      GetData(tab_storage_key2),
+      GetDataForCommit(tab_storage_key2),
       EntityDataHasSpecifics(MatchesTab(kLocalCacheGuid, kWindowId2, kTabId2,
                                         kTabNodeId2, {"http://bar.com/"})));
 
@@ -1020,7 +1004,7 @@ TEST_F(SessionSyncBridgeTest, ShouldRestoreLocalSessionWithFreedTab) {
   InitializeBridge();
   StartSyncing();
 
-  ASSERT_THAT(GetData(header_storage_key),
+  ASSERT_THAT(GetDataForCommit(header_storage_key),
               EntityDataHasSpecifics(MatchesHeader(
                   kLocalCacheGuid, {kWindowId1}, {kTabId1, kTabId2})));
 
@@ -1029,7 +1013,7 @@ TEST_F(SessionSyncBridgeTest, ShouldRestoreLocalSessionWithFreedTab) {
   CloseTab(kTabId2);
   tab1->Navigate("http://foo2.com/");
 
-  ASSERT_THAT(GetData(header_storage_key),
+  ASSERT_THAT(GetDataForCommit(header_storage_key),
               EntityDataHasSpecifics(
                   MatchesHeader(kLocalCacheGuid, {kWindowId1}, {kTabId1})));
 
@@ -1078,7 +1062,7 @@ TEST_F(SessionSyncBridgeTest, ShouldDisableSyncAndReenable) {
 
   const std::string header_storage_key =
       SessionStore::GetHeaderStorageKey(kLocalCacheGuid);
-  ASSERT_THAT(GetData(header_storage_key),
+  ASSERT_THAT(GetDataForCommit(header_storage_key),
               EntityDataHasSpecifics(
                   MatchesHeader(kLocalCacheGuid, {kWindowId}, {kTabId})));
   ASSERT_THAT(GetAllData(), Not(IsEmpty()));
@@ -1087,7 +1071,7 @@ TEST_F(SessionSyncBridgeTest, ShouldDisableSyncAndReenable) {
   real_processor()->OnSyncStopping(syncer::CLEAR_METADATA);
 
   StartSyncing();
-  ASSERT_THAT(GetData(header_storage_key),
+  ASSERT_THAT(GetDataForCommit(header_storage_key),
               EntityDataHasSpecifics(
                   MatchesHeader(kLocalCacheGuid, {kWindowId}, {kTabId})));
 }
@@ -1161,7 +1145,7 @@ TEST_F(SessionSyncBridgeTest, ShouldNotExposeForeignHeaderWithoutTabs) {
       Put(_, EntityDataHasSpecifics(MatchesHeader(kLocalCacheGuid, _, _)), _));
 
   StartSyncing({foreign_header});
-  ASSERT_THAT(GetData(foreign_header_storage_key), NotNull());
+  ASSERT_THAT(GetDataForCommit(foreign_header_storage_key), NotNull());
 
   std::vector<raw_ptr<const SyncedSession, VectorExperimental>>
       foreign_sessions;
@@ -1172,7 +1156,7 @@ TEST_F(SessionSyncBridgeTest, ShouldNotExposeForeignHeaderWithoutTabs) {
   ShutdownBridge();
   InitializeBridge();
   StartSyncing();
-  ASSERT_THAT(GetData(foreign_header_storage_key), NotNull());
+  ASSERT_THAT(GetDataForCommit(foreign_header_storage_key), NotNull());
 
   EXPECT_FALSE(bridge()->GetOpenTabsUIDelegate()->GetAllForeignSessions(
       &foreign_sessions));
@@ -1726,8 +1710,8 @@ TEST_F(SessionSyncBridgeTest, ShouldDeleteForeignSessionFromUI) {
 
   // Test fixture expects the two foreign entities in the model as well as the
   // underlying store.
-  ASSERT_THAT(GetData(foreign_header_storage_key), NotNull());
-  ASSERT_THAT(GetData(foreign_tab_storage_key), NotNull());
+  ASSERT_THAT(GetDataForCommit(foreign_header_storage_key), NotNull());
+  ASSERT_THAT(GetDataForCommit(foreign_tab_storage_key), NotNull());
 
   const sessions::SessionTab* foreign_session_tab = nullptr;
   ASSERT_TRUE(bridge()->GetOpenTabsUIDelegate()->GetForeignTab(
@@ -1759,8 +1743,8 @@ TEST_F(SessionSyncBridgeTest, ShouldDeleteForeignSessionFromUI) {
       &foreign_sessions));
 
   // Verify store.
-  EXPECT_THAT(GetData(foreign_header_storage_key), IsNull());
-  EXPECT_THAT(GetData(foreign_tab_storage_key), IsNull());
+  EXPECT_THAT(GetDataForCommit(foreign_header_storage_key), IsNull());
+  EXPECT_THAT(GetDataForCommit(foreign_tab_storage_key), IsNull());
 }
 
 // Verifies that attempts to delete the local session from the UI are ignored,
@@ -1777,8 +1761,9 @@ TEST_F(SessionSyncBridgeTest, ShouldIgnoreLocalSessionDeletionFromUI) {
   const SyncedSession* session = nullptr;
   EXPECT_TRUE(bridge()->GetOpenTabsUIDelegate()->GetLocalSession(&session));
   EXPECT_THAT(session, NotNull());
-  EXPECT_THAT(GetData(SessionStore::GetHeaderStorageKey(kLocalCacheGuid)),
-              NotNull());
+  EXPECT_THAT(
+      GetDataForCommit(SessionStore::GetHeaderStorageKey(kLocalCacheGuid)),
+      NotNull());
 }
 
 // Verifies that receiving an empty update list does not broadcast a foreign
@@ -1850,7 +1835,7 @@ TEST_F(SessionSyncBridgeTest, ShouldReturnBrowserTypeInGetData) {
   InitializeBridge();
   StartSyncing();
 
-  std::unique_ptr<EntityData> tab_data = GetData(
+  std::unique_ptr<EntityData> tab_data = GetDataForCommit(
       SessionStore::GetTabStorageKey(kLocalCacheGuid, /*tab_node_id=*/0));
   ASSERT_THAT(tab_data, NotNull());
 

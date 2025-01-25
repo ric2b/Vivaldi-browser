@@ -16,11 +16,11 @@
 #include "core/fxcrt/span.h"
 #include "core/fxge/dib/fx_dib.h"
 
+class CFX_AggImageRenderer;
 class CFX_DIBBase;
 class CFX_DIBitmap;
 class CFX_Font;
 class CFX_GraphStateData;
-class CFX_ImageRenderer;
 class CFX_Matrix;
 class CFX_Path;
 class CPDF_ShadingPattern;
@@ -37,6 +37,15 @@ enum class DeviceType : bool {
 
 class RenderDeviceDriverIface {
  public:
+  struct StartResult {
+    StartResult(bool success,
+                std::unique_ptr<CFX_AggImageRenderer> agg_image_renderer);
+    ~StartResult();
+
+    const bool success;
+    std::unique_ptr<CFX_AggImageRenderer> agg_image_renderer;
+  };
+
   virtual ~RenderDeviceDriverIface();
 
   virtual DeviceType GetDeviceType() const = 0;
@@ -67,9 +76,11 @@ class RenderDeviceDriverIface {
                                 uint32_t color,
                                 BlendMode blend_type);
 
-  virtual bool GetClipBox(FX_RECT* pRect) = 0;
-  virtual bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap, int left, int top);
-  virtual RetainPtr<CFX_DIBitmap> GetBackDrop();
+  virtual FX_RECT GetClipBox() const = 0;
+  virtual bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap,
+                         int left,
+                         int top) const;
+  virtual RetainPtr<const CFX_DIBitmap> GetBackDrop() const;
   virtual bool SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                          uint32_t color,
                          const FX_RECT& src_rect,
@@ -85,14 +96,13 @@ class RenderDeviceDriverIface {
                              const FX_RECT* pClipRect,
                              const FXDIB_ResampleOptions& options,
                              BlendMode blend_type) = 0;
-  virtual bool StartDIBits(RetainPtr<const CFX_DIBBase> bitmap,
-                           float alpha,
-                           uint32_t color,
-                           const CFX_Matrix& matrix,
-                           const FXDIB_ResampleOptions& options,
-                           std::unique_ptr<CFX_ImageRenderer>* handle,
-                           BlendMode blend_type) = 0;
-  virtual bool ContinueDIBits(CFX_ImageRenderer* handle,
+  virtual StartResult StartDIBits(RetainPtr<const CFX_DIBBase> bitmap,
+                                  float alpha,
+                                  uint32_t color,
+                                  const CFX_Matrix& matrix,
+                                  const FXDIB_ResampleOptions& options,
+                                  BlendMode blend_type) = 0;
+  virtual bool ContinueDIBits(CFX_AggImageRenderer* handle,
                               PauseIndicatorIface* pPause);
   virtual bool DrawDeviceText(pdfium::span<const TextCharPos> pCharPos,
                               CFX_Font* pFont,

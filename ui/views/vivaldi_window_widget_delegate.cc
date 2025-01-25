@@ -360,7 +360,7 @@ void VivaldiWindowWidgetDelegate::HandleKeyboardCode(ui::KeyboardCode code) {
   extensions::WebViewGuest* current_webviewguest =
       vivaldi::ui_tools::GetActiveWebGuestFromBrowser(browser);
   if (current_webviewguest) {
-    content::NativeWebKeyboardEvent synth_event(
+    input::NativeWebKeyboardEvent synth_event(
         blink::WebInputEvent::Type::kRawKeyDown,
         blink::WebInputEvent::kNoModifiers, ui::EventTimeForNow());
     synth_event.windows_key_code = code;

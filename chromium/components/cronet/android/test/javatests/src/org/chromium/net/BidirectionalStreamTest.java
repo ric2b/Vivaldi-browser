@@ -26,7 +26,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.Log;
-import org.chromium.base.test.util.Batch;
+import org.chromium.base.test.util.DoNotBatch;
+import org.chromium.base.test.util.RequiresRestart;
 import org.chromium.net.CronetTestRule.CronetImplementation;
 import org.chromium.net.CronetTestRule.IgnoreFor;
 import org.chromium.net.CronetTestRule.RequiresMinAndroidApi;
@@ -52,7 +53,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** Test functionality of BidirectionalStream interface. */
-@Batch(Batch.UNIT_TESTS)
+@DoNotBatch(reason = "crbug/1459563")
 @RunWith(AndroidJUnit4.class)
 @IgnoreFor(
         implementations = {CronetImplementation.FALLBACK},
@@ -327,10 +328,8 @@ public class BidirectionalStreamTest {
 
     @Test
     @SmallTest
-    @IgnoreFor(
-            implementations = {CronetImplementation.AOSP_PLATFORM},
-            reason = "RequedFinishedListener is not available in AOSP")
     public void testPostWithFinishedListener() throws Exception {
+        CronetImplementation implementationUnderTest = mTestRule.implementationUnderTest();
         String url = Http2TestServer.getEchoStreamUrl();
         TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
         callback.addWriteData("Test String".getBytes());
@@ -355,9 +354,11 @@ public class BidirectionalStreamTest {
         requestFinishedListener.blockUntilDone();
         Date endTime = new Date();
         RequestFinishedInfo finishedInfo = requestFinishedListener.getRequestInfo();
-        MetricsTestUtil.checkRequestFinishedInfo(finishedInfo, url, startTime, endTime);
+        MetricsTestUtil.checkRequestFinishedInfo(
+                implementationUnderTest, finishedInfo, url, startTime, endTime);
         assertThat(finishedInfo.getFinishedReason()).isEqualTo(RequestFinishedInfo.SUCCEEDED);
-        MetricsTestUtil.checkHasConnectTiming(finishedInfo.getMetrics(), startTime, endTime, true);
+        MetricsTestUtil.checkHasConnectTiming(
+                implementationUnderTest, finishedInfo.getMetrics(), startTime, endTime, true);
         assertThat(finishedInfo.getAnnotations()).containsExactly("request annotation", this);
         assertThat(callback.getResponseInfoWithChecks()).hasHttpStatusCodeThat().isEqualTo(200);
         assertThat(callback.mResponseAsString).isEqualTo("Test String1234567890woot!");
@@ -1316,11 +1317,6 @@ public class BidirectionalStreamTest {
     /** Checks that the buffer is updated correctly, when starting at an offset. */
     @Test
     @SmallTest
-    @IgnoreFor(
-            implementations = {CronetImplementation.AOSP_PLATFORM},
-            reason =
-                    "crbug.com/1494845: Relies on finished listener synchronization which isn't"
-                            + " available in AOSP")
     public void testSimpleGetBufferUpdates() throws Exception {
         TestRequestFinishedListener requestFinishedListener = new TestRequestFinishedListener();
         mCronetEngine.addRequestFinishedListener(requestFinishedListener);
@@ -1494,22 +1490,29 @@ public class BidirectionalStreamTest {
         if (failureStep != ResponseStep.ON_STREAM_READY) {
             assertThat(callback.getResponseInfo()).isNotNull();
         }
-        // Check metrics information.
-        if (failureStep == ResponseStep.ON_RESPONSE_STARTED
-                || failureStep == ResponseStep.ON_READ_COMPLETED
-                || failureStep == ResponseStep.ON_TRAILERS) {
-            // For steps after response headers are received, there will be
-            // connect timing metrics.
-            MetricsTestUtil.checkTimingMetrics(metrics, startTime, endTime);
-            MetricsTestUtil.checkHasConnectTiming(metrics, startTime, endTime, true);
-            assertThat(metrics.getSentByteCount()).isGreaterThan(0L);
-            assertThat(metrics.getReceivedByteCount()).isGreaterThan(0L);
-        } else if (failureStep == ResponseStep.ON_STREAM_READY) {
-            assertThat(metrics.getRequestStart()).isNotNull();
-            MetricsTestUtil.assertAfter(metrics.getRequestStart(), startTime);
-            assertThat(metrics.getRequestEnd()).isNotNull();
-            MetricsTestUtil.assertAfter(endTime, metrics.getRequestEnd());
-            MetricsTestUtil.assertAfter(metrics.getRequestEnd(), metrics.getRequestStart());
+        CronetImplementation implementationUnderTest = mTestRule.implementationUnderTest();
+        // RequestFinishedInfoListener HttpEngineWrapper implementation has placeholder ie null
+        // metrics. Don't bother checking timing metrics for AOSP whether it passes or not.
+        if (implementationUnderTest != CronetImplementation.AOSP_PLATFORM) {
+            // Check metrics information.
+            if (failureStep == ResponseStep.ON_RESPONSE_STARTED
+                    || failureStep == ResponseStep.ON_READ_COMPLETED
+                    || failureStep == ResponseStep.ON_TRAILERS) {
+                // For steps after response headers are received, there will be
+                // connect timing metrics.
+                MetricsTestUtil.checkTimingMetrics(
+                        implementationUnderTest, metrics, startTime, endTime);
+                MetricsTestUtil.checkHasConnectTiming(
+                        implementationUnderTest, metrics, startTime, endTime, true);
+                assertThat(metrics.getSentByteCount()).isGreaterThan(0L);
+                assertThat(metrics.getReceivedByteCount()).isGreaterThan(0L);
+            } else if (failureStep == ResponseStep.ON_STREAM_READY) {
+                assertThat(metrics.getRequestStart()).isNotNull();
+                MetricsTestUtil.assertAfter(metrics.getRequestStart(), startTime);
+                assertThat(metrics.getRequestEnd()).isNotNull();
+                MetricsTestUtil.assertAfter(endTime, metrics.getRequestEnd());
+                MetricsTestUtil.assertAfter(metrics.getRequestEnd(), metrics.getRequestStart());
+            }
         }
         assertThat(callback.mError != null).isEqualTo(expectError);
         assertThat(callback.mOnErrorCalled).isEqualTo(expectError);
@@ -1547,6 +1550,29 @@ public class BidirectionalStreamTest {
         throwOrCancel(
                 FailureType.CANCEL_ASYNC_WITHOUT_PAUSE, ResponseStep.ON_READ_COMPLETED, false);
         throwOrCancel(FailureType.THROW_SYNC, ResponseStep.ON_READ_COMPLETED, true);
+    }
+
+    @Test
+    @SmallTest
+    public void testCancelBeforeResponse() {
+        // Use a hanging endpoint to prevent race between getting a response and cancel().
+        // Cronet only records the responseInfo once onResponseHeadersReceived is called.
+        TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
+        BidirectionalStream.Builder builder =
+                mTestRule
+                        .getTestFramework()
+                        .getEngine()
+                        .newBidirectionalStreamBuilder(
+                                Http2TestServer.getHangingRequestUrl(),
+                                callback,
+                                callback.getExecutor());
+        BidirectionalStream stream = builder.build();
+        stream.start();
+        stream.cancel();
+        callback.blockForDone();
+
+        assertThat(callback.mResponseStep).isEqualTo(ResponseStep.ON_CANCELED);
+        assertThat(callback.getResponseInfo()).isNull();
     }
 
     @Test
@@ -1652,6 +1678,7 @@ public class BidirectionalStreamTest {
     @IgnoreFor(
             implementations = {CronetImplementation.AOSP_PLATFORM},
             reason = "ActiveRequestCount is not available in AOSP")
+    @RequiresRestart("crbug.com/344665939")
     public void testCronetEngineShutdownAfterStreamFailure() throws Exception {
         // Test that CronetEngine can be shut down after stream reports a failure.
         TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();

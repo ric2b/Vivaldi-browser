@@ -232,7 +232,7 @@ gfx::PointF FromUICoordinates(content::WebContents* web_contents,
   if (!zoom_controller)
     return p;
   double zoom_factor =
-      blink::PageZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
+      blink::ZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
   return gfx::PointF(p.x() * zoom_factor, p.y() * zoom_factor);
 }
 
@@ -244,7 +244,7 @@ void FromUICoordinates(content::WebContents* web_contents, gfx::RectF* rect) {
   if (!zoom_controller)
     return;
   double zoom_factor =
-      blink::PageZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
+      blink::ZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
   rect->Scale(zoom_factor);
 }
 
@@ -257,7 +257,7 @@ gfx::PointF ToUICoordinates(content::WebContents* web_contents,
   if (!zoom_controller)
     return p;
   double zoom_factor =
-      blink::PageZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
+      blink::ZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
   return gfx::PointF(p.x() / zoom_factor, p.y() / zoom_factor);
 }
 
@@ -343,8 +343,7 @@ std::u16string KeyCodeToName(ui::KeyboardCode key_code) {
 
 #endif  // OS_MACOS
 
-std::string ShortcutTextFromEvent(
-    const content::NativeWebKeyboardEvent& event) {
+std::string ShortcutTextFromEvent(const input::NativeWebKeyboardEvent& event) {
   return ::vivaldi::ShortcutText(
       event.windows_key_code,
       ui::WebEventModifiersToEventFlags(event.GetModifiers()), event.dom_code);
@@ -413,8 +412,8 @@ std::string ShortcutText(int windows_key_code, int modifiers, int dom_code) {
     // in some languages, i.e. AcceleratorToString returns a blank.
     // Cmd+Alt shortcuts seem to be the only case where this fallback
     // is required.
-    if (modifiers & content::NativeWebKeyboardEvent::kAltKey &&
-        modifiers & content::NativeWebKeyboardEvent::kMetaKey) {
+    if (modifiers & input::NativeWebKeyboardEvent::kAltKey &&
+        modifiers & input::NativeWebKeyboardEvent::kMetaKey) {
       shortcutText +=
           ui::DomCodeToUsLayoutCharacter(static_cast<ui::DomCode>(dom_code), 0);
     } else {

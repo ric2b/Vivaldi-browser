@@ -14,6 +14,7 @@
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "ios/chrome/browser/content_notification/model/content_notification_util.h"
+#import "ios/chrome/browser/credential_provider_promo/ui_bundled/credential_provider_promo_metrics.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/ntp/model/set_up_list.h"
 #import "ios/chrome/browser/ntp/model/set_up_list_delegate.h"
@@ -29,14 +30,12 @@
 #import "ios/chrome/browser/sync/model/enterprise_utils.h"
 #import "ios/chrome/browser/sync/model/sync_observer_bridge.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_consumer.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_recorder.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_config.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_consumer_source.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_item_view_data.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/utils.h"
-#import "ios/chrome/browser/ui/credential_provider_promo/credential_provider_promo_metrics.h"
 
 using credential_provider_promo::IOSCredentialProviderPromoAction;
 
@@ -120,7 +119,8 @@ bool DefaultBrowserPromoCompleted() {
                         syncService:(syncer::SyncService*)syncService
                     identityManager:(signin::IdentityManager*)identityManager
               authenticationService:(AuthenticationService*)authService
-                         sceneState:(SceneState*)sceneState {
+                         sceneState:(SceneState*)sceneState
+              isDefaultSearchEngine:(BOOL)isDefaultSearchEngine {
   self = [super init];
   if (self) {
     _prefService = prefService;
@@ -169,10 +169,10 @@ bool DefaultBrowserPromoCompleted() {
     [_sceneState addObserver:self];
 
     BOOL isContentNotificationEnabled =
-        IsContentNotificationExperimentEnalbed() &&
+        IsContentNotificationExperimentEnabled() &&
         IsContentNotificationSetUpListEnabled(
             identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin),
-            self.isDefaultSearchEngine, prefService);
+            isDefaultSearchEngine, prefService);
 
     _setUpList = [SetUpList buildFromPrefs:prefService
                                 localState:_localState
@@ -244,21 +244,8 @@ bool DefaultBrowserPromoCompleted() {
   return YES;
 }
 
-- (void)showSetUpList {
-  DCHECK(!IsIOSMagicStackCollectionViewEnabled());
-  [self.consumer showSetUpListModuleWithConfigs:[self setUpListConfigs]];
-  [self.contentSuggestionsMetricsRecorder recordSetUpListShown];
-  for (SetUpListConfig* config in [self setUpListConfigs]) {
-    for (SetUpListItemViewData* item in config.setUpListItems) {
-      [self.contentSuggestionsMetricsRecorder
-          recordSetUpListItemShown:item.type];
-    }
-  }
-}
-
 - (NSArray<SetUpListConfig*>*)setUpListConfigs {
   if (!_setUpListConfigs) {
-    NSArray<SetUpListItemViewData*>* items = [self setUpListItems];
     if ([self allItemsComplete]) {
       SetUpListConfig* config = [[SetUpListConfig alloc] init];
       config.setUpListConsumerSource = self;
@@ -266,9 +253,8 @@ bool DefaultBrowserPromoCompleted() {
       config.setUpListItems = @[ [self allSetItem] ];
       _setUpListConfigs = @[ config ];
     } else {
-      BOOL shouldShowCompactedSetUpListModule =
-          set_up_list_utils::ShouldShowCompactedSetUpListModule();
-      if (shouldShowCompactedSetUpListModule) {
+      NSArray<SetUpListItemViewData*>* items = [self setUpListItems];
+      if (set_up_list_utils::ShouldShowCompactedSetUpListModule()) {
         SetUpListConfig* config = [[SetUpListConfig alloc] init];
         config.shouldShowCompactModule = YES;
         config.shouldShowSeeMore = YES;
@@ -300,6 +286,15 @@ bool DefaultBrowserPromoCompleted() {
         _setUpListConfigs = configs;
       }
     }
+
+    // Record "ItemDisplayed" histogram for each item.
+    for (SetUpListConfig* config in _setUpListConfigs) {
+      for (SetUpListItemViewData* item in config.setUpListItems) {
+        [self.contentSuggestionsMetricsRecorder
+            recordSetUpListItemShown:item.type];
+      }
+    }
+    [self.contentSuggestionsMetricsRecorder recordSetUpListShown];
   }
   return _setUpListConfigs;
 }
@@ -308,27 +303,18 @@ bool DefaultBrowserPromoCompleted() {
 
 - (void)setUpListItemDidComplete:(SetUpListItem*)item
                allItemsCompleted:(BOOL)completed {
-  __weak __typeof(self) weakSelf = self;
   // Can resend signal to mediator from Set Up List after SetUpListItemView
   // completes animation
   ProceduralBlock completion = ^{
     if (completed) {
-      if (IsIOSMagicStackCollectionViewEnabled()) {
-        SetUpListConfig* config = [[SetUpListConfig alloc] init];
-        config.setUpListItems = @[ [self allSetItem] ];
-        [self.audience replaceSetUpListWithAllSet:config];
-      } else {
-        [weakSelf.consumer showSetUpListDoneWithAnimations:^{
-        }];
-      }
-    } else {
-      [weakSelf.consumer scrollToNextMagicStackModuleForCompletedModule:
-                             SetUpListModuleTypeForSetUpListType(item.type)];
+      SetUpListConfig* config = [[SetUpListConfig alloc] init];
+      config.setUpListItems = @[ [self allSetItem] ];
+      [self.audience replaceSetUpListWithAllSet:config];
     }
   };
-    [_consumers setUpListItemDidComplete:item
-                       allItemsCompleted:completed
-                              completion:completion];
+  [_consumers setUpListItemDidComplete:item
+                     allItemsCompleted:completed
+                            completion:completion];
 }
 
 #pragma mark - IdentityManagerObserverBridgeDelegate
@@ -468,14 +454,7 @@ bool DefaultBrowserPromoCompleted() {
 
 // Hides the Set Up List with an animation.
 - (void)hideSetUpList {
-  if (IsIOSMagicStackCollectionViewEnabled()) {
-    [self.audience removeSetUpList];
-    return;
-  }
-  __weak __typeof(self) weakSelf = self;
-  [self.consumer hideSetUpListWithAnimations:^{
-    [weakSelf.delegate contentSuggestionsWasUpdated];
-  }];
+  [self.audience removeSetUpList];
 }
 
 // Checks if the CPE is enabled and marks the SetUpList Autofill item complete

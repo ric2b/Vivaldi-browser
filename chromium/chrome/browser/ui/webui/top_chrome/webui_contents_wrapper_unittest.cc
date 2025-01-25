@@ -10,12 +10,12 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/views/chrome_views_test_base.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/content_client.h"
-#include "content/public/common/input/native_web_keyboard_event.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
@@ -175,7 +175,7 @@ TEST_F(WebUIContentsWrapperTest, EscapeKeyClosesHost) {
   MockHost host;
   contents_wrapper()->SetHost(host.GetWeakPtr());
 
-  content::NativeWebKeyboardEvent event(
+  input::NativeWebKeyboardEvent event(
       blink::WebInputEvent::Type::kRawKeyDown,
       blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
@@ -226,6 +226,23 @@ TEST_F(WebUIContentsWrapperTest, NotifiesHostWhenDraggableRegionsUpdated) {
   // notified of the most recently set draggable region.
   contents_wrapper()->SetHost(host.GetWeakPtr());
   EXPECT_EQ(2, host.draggable_regions_changed_called());
+}
+
+// Tests that when auto-resize is enabled (this is configured in
+// TestWebUIContentsWrapper), the host is resize when SetHost() is called if the
+// frame size is available.
+TEST_F(WebUIContentsWrapperTest, HostIsResizedOnSetHost) {
+  MockHost host;
+  contents_wrapper()->SetHost(host.GetWeakPtr());
+  // The render frame size is unset so the host is not resized.
+  EXPECT_EQ(0, host.resize_due_to_auto_resize_called());
+  contents_wrapper()->SetHost(nullptr);
+
+  // The frame size is updated and therefore the host should be resized.
+  content::WebContentsTester::For(contents_wrapper()->web_contents())
+      ->SetMainFrameSize(gfx::Size(100, 100));
+  contents_wrapper()->SetHost(host.GetWeakPtr());
+  EXPECT_EQ(1, host.resize_due_to_auto_resize_called());
 }
 
 }  // namespace test

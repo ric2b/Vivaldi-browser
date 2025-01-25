@@ -28,7 +28,7 @@ if (!is_win) {
       "impl/receiver_list_unittest.cc",
       "impl/service_listener_impl_unittest.cc",
       "impl/service_publisher_impl_unittest.cc",
-      "public/endpoint_request_ids_unittest.cc",
+      "public/instance_request_ids_unittest.cc",
       "public/message_demuxer_unittest.cc",
       "public/service_info_unittest.cc",
     ]

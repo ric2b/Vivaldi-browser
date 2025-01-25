@@ -177,12 +177,12 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
   static std::vector<base::FilePath::StringType> GetAllowedImageExtensions();
 
   static std::optional<ImageFormat> FindFormatForMimeType(
-      base::StringPiece mime_type);
+      std::string_view mime_type);
 
   // Find the format for the given file_extension. The extension may
   // start with a dot.
   static std::optional<ImageFormat> FindFormatForExtension(
-      base::StringPiece file_extension);
+      std::string_view file_extension);
 
   static std::optional<ImageFormat> FindFormatForPath(
       const base::FilePath& path);
@@ -200,7 +200,7 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
 
   void ScheduleThumbnalSanitizer();
 
-  static bool ParseDataUrl(base::StringPiece url,
+  static bool ParseDataUrl(std::string_view url,
                            VivaldiImageStore::UrlKind& url_kind,
                            std::string& id);
 
@@ -341,10 +341,10 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
   void SaveMappingsOnFileThread();
 
   base::FilePath GetFileMappingFilePath();
-  base::FilePath GetImagePath(base::StringPiece thumbnail_id);
-  base::FilePath GetDirectMatchImagePath(base::StringPiece thumbnail_id);
+  base::FilePath GetImagePath(std::string_view thumbnail_id);
+  base::FilePath GetDirectMatchImagePath(std::string_view thumbnail_id);
 
-  void AddNewbornUrlOnFileThread(base::StringPiece data_url);
+  void AddNewbornUrlOnFileThread(std::string_view data_url);
   void ForgetNewbornUrlOnFileThread(std::string data_url);
 
   // Helper to get bookmark model. It must be called from UI thread.

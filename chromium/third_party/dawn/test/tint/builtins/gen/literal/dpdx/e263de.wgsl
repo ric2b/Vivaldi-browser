@@ -35,14 +35,15 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 
-// fn dpdx(f32) -> f32
-fn dpdx_e263de() {
-  var res: f32 = dpdx(1.f);
-  prevent_dce = res;
-}
-@group(2) @binding(0) var<storage, read_write> prevent_dce : f32;
+@group(0) @binding(0) var<storage, read_write> prevent_dce : f32;
 
+
+// fn dpdx(f32) -> f32
+fn dpdx_e263de() -> f32{
+  var res: f32 = dpdx(1.f);
+  return res;
+}
 @fragment
 fn fragment_main() {
-  dpdx_e263de();
+  prevent_dce = dpdx_e263de();
 }

@@ -80,7 +80,7 @@ class RealboxOmniboxClient final : public OmniboxClient {
   bool IsPasteAndGoEnabled() const override;
   SessionID GetSessionID() const override;
   PrefService* GetPrefs() override;
-  bookmarks::CoreBookmarkModel* GetBookmarkModel() override;
+  bookmarks::BookmarkModel* GetBookmarkModel() override;
   AutocompleteControllerEmitter* GetAutocompleteControllerEmitter() override;
   TemplateURLService* GetTemplateURLService() override;
   const AutocompleteSchemeClassifier& GetSchemeClassifier() const override;
@@ -163,6 +163,9 @@ bool RealboxOmniboxClient::IsPasteAndGoEnabled() const {
 }
 
 SessionID RealboxOmniboxClient::GetSessionID() const {
+  if (lens_searchbox_client_) {
+    return lens_searchbox_client_->GetTabId();
+  }
   return sessions::SessionTabHelper::IdForTab(web_contents_);
 }
 
@@ -170,7 +173,7 @@ PrefService* RealboxOmniboxClient::GetPrefs() {
   return profile_->GetPrefs();
 }
 
-bookmarks::CoreBookmarkModel* RealboxOmniboxClient::GetBookmarkModel() {
+bookmarks::BookmarkModel* RealboxOmniboxClient::GetBookmarkModel() {
   return BookmarkModelFactory::GetForBrowserContext(profile_);
 }
 
@@ -528,7 +531,7 @@ searchbox::mojom::SelectionLineState ConvertLineState(
       return searchbox::mojom::SelectionLineState::
           kFocusedButtonRemoveSuggestion;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   return searchbox::mojom::SelectionLineState::kNormal;

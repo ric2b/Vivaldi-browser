@@ -12,7 +12,7 @@
 #include "src/compiler/backend/gap-resolver.h"
 #include "src/compiler/node-matchers.h"
 #include "src/compiler/osr.h"
-#include "src/heap/mutable-page.h"
+#include "src/heap/mutable-page-metadata.h"
 
 #if V8_ENABLE_WEBASSEMBLY
 #include "src/wasm/wasm-objects.h"
@@ -2036,8 +2036,8 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       DCHECK_EQ(LeaveRC, i.OutputRCBit());
       break;
     case kPPC_DoubleFromWord32Pair:
-      __ clrldi(i.TempRegister(0), i.InputRegister(1), Operand(32));
-      __ ShiftLeftU64(kScratchReg, i.InputRegister(0), Operand(32));
+      __ clrldi(kScratchReg, i.InputRegister(1), Operand(32));
+      __ ShiftLeftU64(i.TempRegister(0), i.InputRegister(0), Operand(32));
       __ OrU64(i.TempRegister(0), i.TempRegister(0), kScratchReg);
       __ MovInt64ToDouble(i.OutputDoubleRegister(), i.TempRegister(0));
       break;
@@ -3455,8 +3455,7 @@ void CodeGenerator::AssembleReturn(InstructionOperand* additional_pop_count) {
       __ mov(argc_reg, Operand(parameter_slots));
       __ bind(&skip);
     }
-    __ DropArguments(argc_reg, MacroAssembler::kCountIsInteger,
-                     MacroAssembler::kCountIncludesReceiver);
+    __ DropArguments(argc_reg);
   } else if (additional_pop_count->IsImmediate()) {
     int additional_count = g.ToConstant(additional_pop_count).ToInt32();
     __ Drop(parameter_slots + additional_count);
@@ -3615,22 +3614,10 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
       Register dst = destination->IsRegister() ? g.ToRegister(destination) : ip;
       switch (src.type()) {
         case Constant::kInt32:
-#if V8_ENABLE_WEBASSEMBLY && !V8_TARGET_ARCH_PPC64
-          if (RelocInfo::IsWasmReference(src.rmode())) {
-            __ mov(dst, Operand(src.ToInt32(), src.rmode()));
-            break;
-          }
-#endif  // V8_ENABLE_WEBASSEMBLY && !V8_TARGET_ARCH_PPC64
-          __ mov(dst, Operand(src.ToInt32()));
+          __ mov(dst, Operand(src.ToInt32(), src.rmode()));
           break;
         case Constant::kInt64:
-#if V8_ENABLE_WEBASSEMBLY && V8_TARGET_ARCH_PPC64
-          if (RelocInfo::IsWasmReference(src.rmode())) {
-            __ mov(dst, Operand(src.ToInt64(), src.rmode()));
-            break;
-          }
-#endif  // V8_ENABLE_WEBASSEMBLY && V8_TARGET_ARCH_PPC64
-          __ mov(dst, Operand(src.ToInt64()));
+          __ mov(dst, Operand(src.ToInt64(), src.rmode()));
           break;
         case Constant::kFloat32:
           __ mov(dst, Operand::EmbeddedNumber(src.ToFloat32()));

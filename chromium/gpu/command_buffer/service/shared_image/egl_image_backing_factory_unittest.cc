@@ -216,6 +216,7 @@ class EGLImageBackingFactoryThreadSafeTest
   }
 
   void CheckDawnPixels(wgpu::Texture texture,
+                       const wgpu::Instance& instance,
                        const wgpu::Device& device,
                        const gfx::Size& size,
                        const std::vector<uint8_t>& expected_color) const {
@@ -239,22 +240,15 @@ class EGLImageBackingFactoryThreadSafeTest
     wgpu::Queue queue = device.GetQueue();
     queue.Submit(1, &commands);
 
-    WGPUBufferMapAsyncStatus map_status = WGPUBufferMapAsyncStatus_Unknown;
-    auto map_callback = [](WGPUBufferMapAsyncStatus status, void* userdata) {
-      WGPUBufferMapAsyncStatus* status_out =
-          reinterpret_cast<WGPUBufferMapAsyncStatus*>(userdata);
-      *status_out = status;
-    };
-    buffer.MapAsync(wgpu::MapMode::Read, 0, buffer_desc.size, map_callback,
-                    &map_status);
-    // Tick device until async map operation completes.
-    EXPECT_TRUE(base::test::RunUntil([&]() {
-      if (map_status != WGPUBufferMapAsyncStatus_Unknown) {
-        return true;
-      }
-      device.Tick();
-      return false;
-    }));
+    wgpu::FutureWaitInfo wait_info{
+        buffer.MapAsync(wgpu::MapMode::Read, 0, buffer_desc.size,
+                        wgpu::CallbackMode::WaitAnyOnly,
+                        [&](wgpu::MapAsyncStatus status, const char*) {
+                          ASSERT_EQ(status, wgpu::MapAsyncStatus::Success);
+                        })};
+    wgpu::WaitStatus status =
+        instance.WaitAny(1, &wait_info, std::numeric_limits<uint64_t>::max());
+    DCHECK(status == wgpu::WaitStatus::Success);
 
     const uint8_t* dst_pixels =
         reinterpret_cast<const uint8_t*>(buffer.GetConstMappedRange());
@@ -408,7 +402,7 @@ TEST_P(EGLImageBackingFactoryThreadSafeTest, OneWriterOneReader) {
 #if BUILDFLAG(USE_DAWN) && BUILDFLAG(DAWN_ENABLE_BACKEND_OPENGLES) && \
     !BUILDFLAG(IS_ANDROID)
 // Test to check interaction between Dawn and skia GL representations.
-TEST_F(EGLImageBackingFactoryThreadSafeTest, Dawn_SkiaGL) {
+TEST_P(EGLImageBackingFactoryThreadSafeTest, Dawn_SkiaGL) {
   // Find a Dawn GLES adapter
   dawn::native::Instance instance;
   wgpu::RequestAdapterOptions adapter_options;
@@ -430,12 +424,12 @@ TEST_F(EGLImageBackingFactoryThreadSafeTest, Dawn_SkiaGL) {
   dawnProcSetProcs(&procs);
 
   // Create a backing using mailbox.
-  const auto mailbox = Mailbox::GenerateForSharedImage();
+  const auto mailbox = Mailbox::Generate();
   const auto format = viz::SinglePlaneFormat::kRGBA_8888;
   const gfx::Size size(1, 1);
   const auto color_space = gfx::ColorSpace::CreateSRGB();
   const gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
-  const uint32_t usage =
+  const gpu::SharedImageUsageSet usage =
       SHARED_IMAGE_USAGE_WEBGPU_WRITE | SHARED_IMAGE_USAGE_DISPLAY_READ;
 
   // Note that this backing is always thread safe by default even if it is not
@@ -500,9 +494,15 @@ TEST_P(EGLImageBackingFactoryThreadSafeTest, Dawn_SampledTexture) {
   DawnProcTable procs = dawn::native::GetProcs();
   dawnProcSetProcs(&procs);
 
-  // Create a Dawm OpenGLES device.
-  dawn::native::Instance instance;
+  WGPUInstanceDescriptor instance_desc = {
+      .features =
+          {
+              .timedWaitAnyEnable = true,
+          },
+  };
+  dawn::native::Instance instance(&instance_desc);
 
+  // Create a Dawn OpenGLES device.
   wgpu::RequestAdapterOptions adapter_options;
   adapter_options.backendType = wgpu::BackendType::OpenGLES;
   adapter_options.compatibilityMode = true;
@@ -521,11 +521,11 @@ TEST_P(EGLImageBackingFactoryThreadSafeTest, Dawn_SampledTexture) {
     wgpu::Device device = adapter.CreateDevice(&device_descriptor);
 
     // Create a backing using mailbox.
-    const auto mailbox = Mailbox::GenerateForSharedImage();
+    const auto mailbox = Mailbox::Generate();
     const auto format = viz::SinglePlaneFormat::kRGBA_8888;
     const gfx::Size size(1, 1);
     const auto color_space = gfx::ColorSpace::CreateSRGB();
-    const uint32_t usage =
+    const gpu::SharedImageUsageSet usage =
         SHARED_IMAGE_USAGE_WEBGPU_READ | SHARED_IMAGE_USAGE_WEBGPU_WRITE;
 
     std::vector<uint8_t> pixel_data = {0x80, 0x40, 0x20, 0x10};
@@ -640,7 +640,7 @@ return textureSample(tex, smp, tex_coord);
     wgpu::Queue queue = device.GetQueue();
     queue.Submit(1, &commands);
 
-    CheckDawnPixels(attachment, device, size, pixel_data);
+    CheckDawnPixels(attachment, instance.Get(), device, size, pixel_data);
   }
 
   // Shut down Dawn
@@ -664,7 +664,7 @@ CreateAndValidateSharedImageRepresentations::
   DCHECK(context_state);
   EXPECT_TRUE(
       context_state->MakeCurrent(context_state->surface(), true /* needs_gl*/));
-  mailbox_ = Mailbox::GenerateForSharedImage();
+  mailbox_ = Mailbox::Generate();
   auto color_space = gfx::ColorSpace::CreateSRGB();
   GrSurfaceOrigin surface_origin = kTopLeft_GrSurfaceOrigin;
   SkAlphaType alpha_type = kPremul_SkAlphaType;
@@ -674,8 +674,8 @@ CreateAndValidateSharedImageRepresentations::
   // compositor and SHARED_IMAGE_USAGE_RASTER_WRITE for modeling skia write via
   // raster. Tests that use this class also write to the created SharedImage via
   // GL.
-  uint32_t usage = SHARED_IMAGE_USAGE_GLES2_WRITE |
-                   SHARED_IMAGE_USAGE_RASTER_WRITE;
+  gpu::SharedImageUsageSet usage =
+      SHARED_IMAGE_USAGE_GLES2_WRITE | SHARED_IMAGE_USAGE_RASTER_WRITE;
   if (!is_thread_safe)
     usage |= SHARED_IMAGE_USAGE_DISPLAY_READ;
   if (upload_initial_data) {

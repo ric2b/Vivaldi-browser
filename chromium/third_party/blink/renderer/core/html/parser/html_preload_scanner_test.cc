@@ -28,7 +28,6 @@
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_response.h"
 #include "third_party/blink/renderer/platform/loader/fetch/client_hints_preferences.h"
 #include "third_party/blink/renderer/platform/network/http_names.h"
-#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/url_loader_mock_factory.h"
 #include "third_party/blink/renderer/platform/testing/url_test_helpers.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
@@ -1237,6 +1236,13 @@ TEST_F(HTMLPreloadScannerTest, testAttributionSrc) {
 
   static constexpr char kSecureBaseURL[] = "https://example.test";
   static constexpr char kInsecureBaseURL[] = "http://example.test";
+
+  url_test_helpers::RegisterMockedURLLoad(
+      url_test_helpers::ToKURL("https://example.test/script"), "");
+  url_test_helpers::RegisterMockedURLLoad(
+      url_test_helpers::ToKURL("http://example.test/script"), "");
+
+  GetDocument().GetSettings()->SetScriptEnabled(true);
 
   AttributionSrcTestCase test_cases[] = {
       // Insecure context

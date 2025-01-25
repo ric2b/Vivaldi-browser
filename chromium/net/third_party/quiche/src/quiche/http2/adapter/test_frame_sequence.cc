@@ -2,10 +2,13 @@
 
 #include <memory>
 #include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "quiche/http2/adapter/http2_util.h"
 #include "quiche/http2/adapter/oghttp2_util.h"
-#include "quiche/spdy/core/hpack/hpack_encoder.h"
+#include "quiche/http2/hpack/hpack_encoder.h"
 #include "quiche/spdy/core/spdy_framer.h"
 
 namespace http2 {
@@ -104,7 +107,7 @@ TestFrameSequence& TestFrameSequence::Headers(
 }
 
 TestFrameSequence& TestFrameSequence::Headers(Http2StreamId stream_id,
-                                              spdy::Http2HeaderBlock block,
+                                              quiche::HttpHeaderBlock block,
                                               bool fin, bool add_continuation) {
   if (add_continuation) {
     // The normal intermediate representations don't allow you to represent a

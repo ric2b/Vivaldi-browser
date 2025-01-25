@@ -83,13 +83,11 @@ def location_filters_without_defaults(tryjob_builder_proto):
 # creating a regular builder cache with a 4 minute wait_for_warm_cache.
 # `wait_for_warm_cache = None` ensures that swarming will not look for a bot
 # with a builder cache.
-SOURCELESS_BUILDER_CACHES = [
-    swarming.cache(
-        name = SOURCELESS_BUILDER_CACHE_NAME,
-        path = "builder",
-        wait_for_warm_cache = None,
-    ),
-]
+SOURCELESS_BUILDER_CACHE = swarming.cache(
+    name = SOURCELESS_BUILDER_CACHE_NAME,
+    path = "builder",
+    wait_for_warm_cache = None,
+)
 
 defaults = args.defaults(
     extends = builders.defaults,
@@ -393,9 +391,6 @@ def _orchestrator_builder(
         * cores: The orchestrator_cores module-level default.
         * executable: "recipe:chromium/orchestrator"
         * os: os.LINUX_DEFAULT
-        * reclient_instance: The orchestrator_reclient_instance module-level
-          default. (The reclient property is forwarded on to the compilator at
-          run-time).
         * service_account: "chromium-orchestrator@chops-service-accounts.iam.gserviceaccount.com"
         * ssd: None
     """
@@ -408,12 +403,12 @@ def _orchestrator_builder(
     if use_orchestrator_pool:
         kwargs.setdefault("pool", "luci.chromium.try.orchestrator")
         kwargs.setdefault("builderless", None)
-
-        # Orchestrator builders that don't use a src checkout don't need a
-        # builder cache.
-        kwargs.setdefault("caches", SOURCELESS_BUILDER_CACHES)
     else:
         kwargs.setdefault("builderless", not settings.is_main)
+
+    # Orchestrator builders that don't use a src checkout don't need a
+    # builder cache.
+    kwargs.setdefault("caches", [SOURCELESS_BUILDER_CACHE])
 
     kwargs.setdefault("cores", defaults.orchestrator_cores.get())
     kwargs.setdefault("executable", "recipe:chromium/orchestrator")
@@ -468,7 +463,7 @@ def _compilator_builder(*, name, **kwargs):
     kwargs.setdefault("executable", "recipe:chromium/compilator")
     kwargs.setdefault("ssd", True)
 
-    kwargs["reclient_instance"] = None
+    kwargs["siso_project"] = None
     kwargs["siso_enabled"] = False
     kwargs["test_presentation"] = resultdb.test_presentation()
 

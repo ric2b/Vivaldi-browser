@@ -4,11 +4,6 @@
 
 
 ------------------------------------------------------------------
-
-Affects:
-    configure
-
-------------------------------------------------------------------
 commit 3a43b481b78e54009e293c6c6172fc6c68990d8c
 Author: Will Harris <wfh@chromium.org>
 Date:   Wed Jan 21 20:33:15 2015 -0800
@@ -826,7 +821,7 @@ Date:   Tue Apr 2 14:26:12 2024 -0700
     Reviewed-by: Frank Liberato <liberato@chromium.org>
 
 Affects:
-    libavcodec/aacdec_template.c
+    libavcodec/aac/aacdec.c
 
 ------------------------------------------------------------------
 commit bdcb0b447f433de3b69f0252732791b9f7e26f37
@@ -850,26 +845,9 @@ Affects:
     libavformat/wavdec.c
 
 ------------------------------------------------------------------
-commit fecf1c679ad49ca33f9fb8f951f2a1f30481e5f3
-Merge: 901248a373 65c1c83ca4
+commit 092f84b6141055bfab609b6b2666b724eee2e130
 Author: Frank Liberato <liberato@chromium.org>
-Date:   Fri Apr 12 18:06:19 2024 +0000
-
-    Merge remote-tracking branch 'upstream/master' into sushi-2024-04-12-17-46-24
-
-     Conflicts:
-            configure
-            libavcodec/fraps.c
-            libavcodec/jpeglsenc.c
-            libavutil/x86/x86inc.asm
-
-Affects:
-    configure
-
-------------------------------------------------------------------
-commit dd45b7c227a4d4ba5e48be0434034e84853a0b41
-Author: Frank Liberato <liberato@chromium.org>
-Date:   Mon Apr 22 22:11:09 2024 +0000
+Date:   Mon Apr 22 22:21:36 2024 +0000
 
     Turn off PIC for x86.
 
@@ -883,6 +861,9 @@ Date:   Mon Apr 22 22:11:09 2024 +0000
     back into upstream so this patch can go away.
 
     Bug: b/334192344
+    Change-Id: I32f898602d453db177e137290c2873a979741268
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5474312
+    Reviewed-by: Thomas Guilbert <tguilbert@chromium.org>
 
 Affects:
     libavutil/x86/x86inc.asm

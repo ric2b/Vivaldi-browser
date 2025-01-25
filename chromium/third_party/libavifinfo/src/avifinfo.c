@@ -318,10 +318,17 @@ static AvifInfoInternalStatus AvifInfoInternalParseBox(
     // Read the 32 least-significant bits.
     box->size = AvifInfoInternalReadBigEndian(data + 4, sizeof(uint32_t));
   } else if (box->size == 0) {
+    // ISO/IEC 14496-12 4.2.2:
+    //   if size is 0, then this box shall be in a top-level box
+    //   (i.e. not contained in another box)
+    AVIFINFO_CHECK(nesting_level == 0, kInvalid);
     box->size = num_remaining_bytes;
   }
   AVIFINFO_CHECK(box->size >= box_header_size, kInvalid);
   AVIFINFO_CHECK(box->size <= num_remaining_bytes, kInvalid);
+
+  // 16 bytes of usertype should be read here if the box type is 'uuid'.
+  // 'uuid' boxes are skipped so usertype is part of the skipped body.
 
   const int has_fullbox_header =
       !memcmp(box->type, "meta", 4) || !memcmp(box->type, "pitm", 4) ||
@@ -483,7 +490,11 @@ static AvifInfoInternalStatus ParseIpco(int nesting_level,
         if (strcmp(aux_type, kGainmapStr) == 0) {
           // Note: It is unlikely but it is possible that this gain map
           // does not belong to the primary item or a tile. Ignore this issue.
-          features->gainmap_property_index = box_index;
+          if (box_index <= AVIFINFO_MAX_VALUE) {
+            features->gainmap_property_index = (uint8_t)box_index;
+          } else {
+            features->data_was_skipped = 1;
+          }
         } else if (box.content_size >= kAlphaStrLength &&
                    memcmp(aux_type, kAlphaStr, kGainmapStrLength) == 0) {
           // The beginning of the aux type matches the alpha aux type string.
@@ -511,7 +522,7 @@ static AvifInfoInternalStatus ParseIpco(int nesting_level,
   AVIFINFO_RETURN(kNotFound);
 }
 
-// Parses a 'stream' of an "iprp" box into 'features'. The "ipco" box contain
+// Parses a 'stream' of an "iprp" box into 'features'. The "ipco" box contains
 // the properties which are linked to items by the "ipma" box.
 static AvifInfoInternalStatus ParseIprp(int nesting_level,
                                         AvifInfoInternalStream* stream,
@@ -692,38 +703,37 @@ static AvifInfoInternalStatus ParseIinf(int nesting_level,
 
     if (!memcmp(box.type, "infe", 4)) {
       // See ISO/IEC 14496-12:2015(E) 8.11.6.2
-      uint32_t num_read_bytes = 0;
-
       const uint32_t num_bytes_per_id = (box.version == 2) ? 2 : 4;
       const uint8_t* data;
       // item_ID (16 or 32) + item_protection_index (16) + item_type (32).
-      AVIFINFO_CHECK((num_bytes_per_id + 6) <= num_remaining_bytes, kInvalid);
+      AVIFINFO_CHECK(num_bytes_per_id + 2 + 4 <= box.content_size, kInvalid);
       AVIFINFO_CHECK_FOUND(
           AvifInfoInternalRead(stream, num_bytes_per_id, &data));
-      num_read_bytes += num_bytes_per_id;
       const uint32_t item_id =
           AvifInfoInternalReadBigEndian(data, num_bytes_per_id);
 
-      // Skip item_protection_index
+      // Skip item_protection_index.
       AVIFINFO_CHECK_FOUND(AvifInfoInternalSkip(stream, 2));
-      num_read_bytes += 2;
 
       const uint8_t* item_type;
       AVIFINFO_CHECK_FOUND(AvifInfoInternalRead(stream, 4, &item_type));
-      num_read_bytes += 4;
       if (!memcmp(item_type, "tmap", 4)) {
         // Tone Mapped Image: indicates the presence of a gain map.
-        features->tone_mapped_item_id = item_id;
+        if (item_id <= AVIFINFO_MAX_VALUE) {
+          features->tone_mapped_item_id = (uint8_t)item_id;
+        } else {
+          features->data_was_skipped = 1;
+        }
       }
 
-      AVIFINFO_CHECK_FOUND(
-          AvifInfoInternalSkip(stream, box.content_size - num_read_bytes));
+      AVIFINFO_CHECK_FOUND(AvifInfoInternalSkip(
+          stream, box.content_size - (num_bytes_per_id + 2 + 4)));
     } else {
       AVIFINFO_CHECK_FOUND(AvifInfoInternalSkip(stream, box.content_size));
     }
 
     num_remaining_bytes -= box.size;
-    if (num_remaining_bytes <= 0) break;
+    if (num_remaining_bytes == 0) break;  // Ignore entry_count bigger than box.
   }
   AVIFINFO_RETURN(kNotFound);
 }
@@ -822,7 +832,6 @@ static AvifInfoInternalStatus ParseFile(AvifInfoInternalStream* stream,
       AVIFINFO_CHECK_FOUND(AvifInfoInternalSkip(stream, box.content_size));
     }
   }
-  AVIFINFO_RETURN(kInvalid);  // No "meta" no good.
 }
 
 //------------------------------------------------------------------------------

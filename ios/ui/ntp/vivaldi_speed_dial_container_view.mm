@@ -52,7 +52,8 @@ const CGFloat commonPadding = 20;
                                             UICollectionViewDelegate,
                                             UICollectionViewDragDelegate,
                                             UICollectionViewDropDelegate,
-                                     VivaldiSpeedDialAddGroupViewDelegate>
+                                     VivaldiSpeedDialAddGroupViewDelegate,
+                                            UIGestureRecognizerDelegate>
 // Action factory for speed dials
 @property (nonatomic,strong) BrowserActionFactory* actionFactory;
 // FaviconLoader is a keyed service that uses LargeIconService to retrieve
@@ -93,6 +94,7 @@ const CGFloat commonPadding = 20;
 - (instancetype)init {
   if (self = [super initWithFrame:CGRectZero]) {
     [self setUpUI];
+    [self setUpTapGesture];
     [self startObservingSDItemPropertyChange];
   }
   return self;
@@ -704,7 +706,29 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
   return config;
 }
 
+#pragma mark - UIGestureRecognizerDelegate and gesture handling
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer*)gestureRecognizer {
+  // Only handle tapping empty space (i.e. not a cell)
+  CGPoint point = [gestureRecognizer locationInView:self.collectionView];
+  NSIndexPath *indexPath = [self.collectionView indexPathForItemAtPoint:point];
+  return indexPath == nil;
+}
+
 #pragma mark - Private
+
+- (void)setUpTapGesture {
+  UITapGestureRecognizer *tapGestureCV =
+      [[UITapGestureRecognizer alloc]
+          initWithTarget:self
+              action:@selector(handleTapGesture:)];
+  tapGestureCV.delegate = self;
+  [self.collectionView addGestureRecognizer:tapGestureCV];
+}
+
+- (void)handleTapGesture:(UITapGestureRecognizer*)gesture {
+  if (self.delegate)
+    [self.delegate didTapOnCollectionViewEmptyArea];
+}
 
 - (void)startObservingSDItemPropertyChange {
   [[NSNotificationCenter defaultCenter] removeObserver:self];

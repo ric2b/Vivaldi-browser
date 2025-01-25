@@ -32,6 +32,8 @@ namespace gpu {
 // Error summaries taken from:
 std::string ToString(hipError_t result);
 
+absl::StatusOr<hipError_t> QueryEvent(GpuContext* context, hipEvent_t event);
+
 // GpuContext wraps the device_ordinal and hipCtx_t handle.
 class GpuContext {
  public:
@@ -140,7 +142,6 @@ class CreatedContexts {
 
 namespace rocm {
 
-using MemorySpace = gpu::MemorySpace;
 using ScopedActivateContext = gpu::ScopedActivateContext;
 
 // TODO: this function shall be added to the GpuDriver API as well

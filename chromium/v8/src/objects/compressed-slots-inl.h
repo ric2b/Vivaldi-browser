@@ -8,6 +8,7 @@
 #ifdef V8_COMPRESS_POINTERS
 
 #include "src/common/ptr-compr-inl.h"
+#include "src/objects/casting.h"
 #include "src/objects/compressed-slots.h"
 #include "src/objects/maybe-object-inl.h"
 
@@ -64,7 +65,7 @@ Tagged<Map> CompressedObjectSlot::load_map() const {
   // Simply forward to Relaxed_Load because map packing is not supported with
   // pointer compression.
   DCHECK(!V8_MAP_PACKING_BOOL);
-  return Map::unchecked_cast(Relaxed_Load());
+  return UncheckedCast<Map>(Relaxed_Load());
 }
 
 Tagged<Object> CompressedObjectSlot::Acquire_Load() const {
@@ -175,14 +176,14 @@ void CompressedMaybeObjectSlot::Release_CompareAndSwap(
 
 Tagged<HeapObjectReference> CompressedHeapObjectSlot::operator*() const {
   Tagged_t value = *location();
-  return Tagged<HeapObjectReference>::cast(Tagged<MaybeObject>(
+  return Cast<HeapObjectReference>(Tagged<MaybeObject>(
       TCompressionScheme::DecompressTagged(address(), value)));
 }
 
 Tagged<HeapObjectReference> CompressedHeapObjectSlot::load(
     PtrComprCageBase cage_base) const {
   Tagged_t value = *location();
-  return Tagged<HeapObjectReference>::cast(Tagged<MaybeObject>(
+  return Cast<HeapObjectReference>(Tagged<MaybeObject>(
       TCompressionScheme::DecompressTagged(cage_base, value)));
 }
 
@@ -193,7 +194,7 @@ void CompressedHeapObjectSlot::store(Tagged<HeapObjectReference> value) const {
 Tagged<HeapObject> CompressedHeapObjectSlot::ToHeapObject() const {
   Tagged_t value = *location();
   DCHECK(HAS_STRONG_HEAP_OBJECT_TAG(value));
-  return HeapObject::cast(
+  return Cast<HeapObject>(
       Tagged<Object>(TCompressionScheme::DecompressTagged(address(), value)));
 }
 

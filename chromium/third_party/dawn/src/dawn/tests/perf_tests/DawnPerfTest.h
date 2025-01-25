@@ -139,9 +139,9 @@ class DawnPerfTestWithParams : public DawnTestWithParams<Params>, public DawnPer
     void SetUp() override {
         DawnTestWithParams<Params>::SetUp();
 
-        wgpu::AdapterProperties properties;
-        this->GetAdapter().GetProperties(&properties);
-        DAWN_TEST_UNSUPPORTED_IF(properties.adapterType == wgpu::AdapterType::CPU);
+        wgpu::AdapterInfo info;
+        this->GetAdapter().GetInfo(&info);
+        DAWN_TEST_UNSUPPORTED_IF(info.adapterType == wgpu::AdapterType::CPU);
 
         if (mSupportsTimestampQuery) {
             InitializeGPUTimer();
@@ -185,12 +185,9 @@ class DawnPerfTestWithParams : public DawnTestWithParams<Params>, public DawnPer
 
     void ComputeGPUElapsedTime() {
         bool done = false;
-        mReadbackBuffer.MapAsync(
-            wgpu::MapMode::Read, 0, sizeof(uint64_t) * kTimestampQueryCount,
-            [](WGPUBufferMapAsyncStatus status, void* userdata) {
-                *static_cast<bool*>(userdata) = true;
-            },
-            &done);
+        mReadbackBuffer.MapAsync(wgpu::MapMode::Read, 0, sizeof(uint64_t) * kTimestampQueryCount,
+                                 wgpu::CallbackMode::AllowProcessEvents,
+                                 [&done](wgpu::MapAsyncStatus, const char*) { done = true; });
         while (!done) {
             DawnTestWithParams<Params>::WaitABit();
         }

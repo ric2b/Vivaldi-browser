@@ -225,7 +225,7 @@ namespace interpreter {
   V(BitwiseNot, ImplicitRegisterUse::kReadWriteAccumulator, OperandType::kIdx) \
   V(ToBooleanLogicalNot, ImplicitRegisterUse::kReadWriteAccumulator)           \
   V(LogicalNot, ImplicitRegisterUse::kReadWriteAccumulator)                    \
-  V(TypeOf, ImplicitRegisterUse::kReadWriteAccumulator)                        \
+  V(TypeOf, ImplicitRegisterUse::kReadWriteAccumulator, OperandType::kIdx)     \
   V(DeletePropertyStrict, ImplicitRegisterUse::kReadWriteAccumulator,          \
     OperandType::kReg)                                                         \
   V(DeletePropertySloppy, ImplicitRegisterUse::kReadWriteAccumulator,          \
@@ -948,9 +948,6 @@ class V8_EXPORT_PRIVATE Bytecodes final : public AllStatic {
 
   // Returns a debug break bytecode to replace |bytecode|.
   static Bytecode GetDebugBreak(Bytecode bytecode);
-
-  // Returns the equivalent jump bytecode without the accumulator coercion.
-  static Bytecode GetJumpWithoutToBoolean(Bytecode bytecode);
 
   // Returns true if there is a call in the most-frequently executed path
   // through the bytecode's handler.

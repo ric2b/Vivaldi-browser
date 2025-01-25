@@ -32,7 +32,7 @@ struct AutocompleteMatch;
 struct OmniboxLog;
 
 namespace bookmarks {
-class CoreBookmarkModel;
+class BookmarkModel;
 }
 
 namespace gfx {
@@ -101,7 +101,7 @@ class OmniboxClient {
       omnibox::mojom::NavigationPredictor navigation_predictor) {}
 
   virtual PrefService* GetPrefs() = 0;
-  virtual bookmarks::CoreBookmarkModel* GetBookmarkModel();
+  virtual bookmarks::BookmarkModel* GetBookmarkModel();
   virtual AutocompleteControllerEmitter* GetAutocompleteControllerEmitter() = 0;
   virtual TemplateURLService* GetTemplateURLService();
   virtual const AutocompleteSchemeClassifier& GetSchemeClassifier() const = 0;
@@ -233,11 +233,14 @@ class OmniboxClient {
   // Discards the state for all pending and transient navigations.
   virtual void DiscardNonCommittedNavigations() {}
 
-  // Presents prompt to update Chrome.
-  virtual void OpenUpdateChromeDialog() {}
-
   // Focuses the `WebContents`, i.e. the web page of the current tab.
   virtual void FocusWebContents() {}
+
+  // Called when the user presses the thumbs down button on a suggestion.
+  // Displays the Feedback form for submitting detailed feedback on why they
+  // disliked the suggestion.
+  virtual void ShowFeedbackPage(const std::u16string& input_text,
+                                const GURL& destination_url) {}
 
   virtual void OnAutocompleteAccept(
       const GURL& destination_url,
@@ -258,6 +261,11 @@ class OmniboxClient {
 
   // Called when the omnibox popup is shown or hidden.
   virtual void OnPopupVisibilityChanged() {}
+
+  // Even though IPH suggestions aren't selectable like normal matches, they can
+  // have a 'learn more' or next-steps link. `OpenIphLink()` allows opening
+  // these in a new tab.
+  virtual void OpenIphLink(GURL gurl) {}
 
   virtual base::WeakPtr<OmniboxClient> AsWeakPtr() = 0;
 };

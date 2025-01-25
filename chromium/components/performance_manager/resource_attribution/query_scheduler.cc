@@ -14,6 +14,7 @@
 #include "base/containers/enum_set.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
@@ -22,7 +23,9 @@
 #include "base/types/optional_util.h"
 #include "base/types/pass_key.h"
 #include "base/types/variant_util.h"
+#include "components/performance_manager/public/graph/graph.h"
 #include "components/performance_manager/public/graph/node_data_describer_registry.h"
+#include "components/performance_manager/public/performance_manager.h"
 #include "components/performance_manager/public/resource_attribution/resource_types.h"
 #include "components/performance_manager/resource_attribution/context_collection.h"
 #include "components/performance_manager/resource_attribution/performance_manager_aliases.h"
@@ -88,14 +91,22 @@ SchedulerTaskRunner* SchedulerTaskRunner::GetInstance() {
 void SchedulerTaskRunner::OnSchedulerPassedToGraph(Graph* graph) {
   base::AutoLock lock(task_runner_lock_);
   CHECK(!task_runner_);
-  task_runner_ = base::SequencedTaskRunner::GetCurrentDefault();
+  // Use the PM task runner if QueryScheduler is installed on the PM. (In tests
+  // it might not be.) This is used instead of GetCurrentDefault() because the
+  // PM task runner might be a wrapper for the default.
+  if (PerformanceManager::GetTaskRunner()->RunsTasksInCurrentSequence()) {
+    task_runner_ = PerformanceManager::GetTaskRunner();
+  } else {
+    task_runner_ = base::SequencedTaskRunner::GetCurrentDefault();
+  }
+  CHECK(task_runner_);
   CHECK(!graph_);
   graph_ = graph;
 }
 
 void SchedulerTaskRunner::OnSchedulerTakenFromGraph(Graph* graph) {
   base::AutoLock lock(task_runner_lock_);
-  CHECK_EQ(task_runner_, base::SequencedTaskRunner::GetCurrentDefault());
+  CHECK(task_runner_->RunsTasksInCurrentSequence());
   task_runner_.reset();
   CHECK_EQ(graph_.get(), graph);
   graph_ = nullptr;
@@ -230,9 +241,6 @@ void QueryScheduler::RequestResults(
 
 void QueryScheduler::OnPassedToGraph(Graph* graph) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK_EQ(graph_, nullptr);
-  graph_ = graph;
-  graph_->RegisterObject(this);
   memory_provider_.emplace(graph);
   graph->GetNodeDataDescriberRegistry()->RegisterDescriber(
       base::OptionalToPtr(memory_provider_), "ResourceAttr.Memory");
@@ -243,9 +251,6 @@ void QueryScheduler::OnPassedToGraph(Graph* graph) {
 
 void QueryScheduler::OnTakenFromGraph(Graph* graph) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK_EQ(graph_, graph);
-  graph_->UnregisterObject(this);
-  graph_ = nullptr;
   SchedulerTaskRunner::GetInstance()->OnSchedulerTakenFromGraph(graph);
   graph->GetNodeDataDescriberRegistry()->UnregisterDescriber(&cpu_monitor_);
   if (cpu_query_count_ > 0) {
@@ -285,19 +290,17 @@ void QueryScheduler::RecordMemoryMetrics() {
 
 void QueryScheduler::AddCPUQuery() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK_NE(graph_, nullptr);
   cpu_query_count_ += 1;
   // Check for overflow.
   CHECK_GT(cpu_query_count_, 0U);
   if (cpu_query_count_ == 1) {
     CHECK(!cpu_monitor_.IsMonitoring());
-    cpu_monitor_.StartMonitoring(graph_);
+    cpu_monitor_.StartMonitoring(GetOwningGraph());
   }
 }
 
 void QueryScheduler::RemoveCPUQuery() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK_NE(graph_, nullptr);
   CHECK_GE(cpu_query_count_, 1U);
   cpu_query_count_ -= 1;
   if (cpu_query_count_ == 0) {
@@ -308,7 +311,6 @@ void QueryScheduler::RemoveCPUQuery() {
 
 void QueryScheduler::AddMemoryQuery() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK_NE(graph_, nullptr);
   memory_query_count_ += 1;
   // Check for overflow.
   CHECK_GT(memory_query_count_, 0U);
@@ -316,7 +318,6 @@ void QueryScheduler::AddMemoryQuery() {
 
 void QueryScheduler::RemoveMemoryQuery() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK_NE(graph_, nullptr);
   CHECK_GE(memory_query_count_, 1U);
   memory_query_count_ -= 1;
 }

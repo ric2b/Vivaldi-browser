@@ -97,7 +97,6 @@
 <translation id="2586657967955657006">Буфер обміну</translation>
 <translation id="2597457036804169544">Не використовувати темну тему для сайтів</translation>
 <translation id="2606760465469169465">Автоматичне підтвердження</translation>
-<translation id="2613007545732217283"><ph name="HOST_NAME" /> <ph name="SEPARATOR" /> <ph name="RECENCY" /></translation>
 <translation id="2621115761605608342">Увімкнути JavaScript на певному сайті.</translation>
 <translation id="2653659639078652383">Надіслати</translation>
 <translation id="2677748264148917807">Вийти</translation>
@@ -114,6 +113,7 @@
 <translation id="2891975107962658722">Заборонити сайту зберігати дані на вашому пристрої</translation>
 <translation id="2903493209154104877">Адреси</translation>
 <translation id="2910701580606108292">Запитувати, перш ніж дозволяти сайтам відтворювати захищений вміст</translation>
+<translation id="2918484639460781603">Перейти в налаштування</translation>
 <translation id="2932883381142163287">Повідомити про порушення</translation>
 <translation id="2939338015096024043">Якщо цей параметр увімкнено, сайти можуть запитувати дозвіл відстежувати положення камери, щоб отримувати інформацію про ваше оточення. Якщо його вимкнено, сайти не можуть відстежувати положення камери й дізнаватися про ваше оточення.</translation>
 <translation id="2968755619301702150">Перегляд сертифікатів</translation>
@@ -172,7 +172,9 @@
 <translation id="385051799172605136">Назад</translation>
 <translation id="3859306556332390985">Далі</translation>
 <translation id="3895926599014793903">Примусово ввімкнути масштабування</translation>
+<translation id="3905475044299942653">Не отримувати велику кількість сповіщень</translation>
 <translation id="3908288065506437185">Заборонити сторонні файли cookie в режимі анонімного перегляду</translation>
+<translation id="3913461097001554748"><ph name="DOMAIN_URL" /> <ph name="SEPARATOR1" /> <ph name="DEVICE_NAME" /></translation>
 <translation id="3918378745482005425">Деякі функції можуть не працювати. При цьому пов’язані сайти все одно можуть використовувати сторонні файли cookie.</translation>
 <translation id="3933121352599513978">Згорнути небажані запити (рекомендовано)</translation>
 <translation id="3955193568934677022">Дозволити сайтам відтворювати захищений вміст (рекомендується)</translation>
@@ -190,7 +192,6 @@
 <translation id="4169549551965910670">Підключено до пристрою USB</translation>
 <translation id="4194328954146351878">Запитувати, перш ніж дозволяти сайтам переглядати й змінювати інформацію на пристроях NFC (рекомендовано)</translation>
 <translation id="4200726100658658164">Відкрити налаштування доступу до моїх геоданих</translation>
-<translation id="4206661981211220935"><ph name="RECENCY" /> <ph name="SEPARATOR" /> З пристрою <ph name="FROM_DEVICE" /></translation>
 <translation id="4226663524361240545">Коли надходитимуть сповіщення, пристрій може вібрувати</translation>
 <translation id="4259722352634471385">Веб-сторінку <ph name="URL" /> заблоковано</translation>
 <translation id="4278390842282768270">Дозволено</translation>
@@ -198,7 +199,6 @@
 <translation id="42981349822642051">Розгорнути</translation>
 <translation id="4336219115486912529">{COUNT,plural, =1{Строк дії закінчується завтра}one{Строк дії закінчується через # день}few{Строк дії закінчується через # дні}many{Строк дії закінчується через # днів}other{Строк дії закінчується через # дня}}</translation>
 <translation id="4336566011000459927">Сьогодні Chrome знов обмежить використання файлів cookie</translation>
-<translation id="4336836404251800362"><ph name="RECENCY" /> <ph name="SEPARATOR" /> Остання вкладка</translation>
 <translation id="4338831206024587507">Усі сайти домену <ph name="DOMAIN" /></translation>
 <translation id="4402755511846832236">Блокувати сайтам інформацію про те, чи ви активно використовуєте цей пристрій</translation>
 <translation id="4412992751769744546">Дозволити сторонні файли cookie</translation>
@@ -220,6 +220,7 @@
 <translation id="4751476147751820511">Датчики руху та світла</translation>
 <translation id="4755971844837804407">Якщо цей параметр увімкнено, сайти можуть показувати вам будь-які оголошення. Якщо його вимкнено, сайти не можуть показувати нав’язливі чи оманливі оголошення.</translation>
 <translation id="4779083564647765204">Збільшити</translation>
+<translation id="4807122856660838973">Увімкнути Безпечний перегляд</translation>
 <translation id="4811450222531576619">Докладніше про джерело й тему</translation>
 <translation id="4836046166855586901">Запитувати, коли сайт хоче дізнатися, чи ви активно використовуєте цей пристрій</translation>
 <translation id="483914009762354899">Включити всі сайти в цьому домені</translation>
@@ -233,6 +234,7 @@
 <translation id="4994033804516042629">Немає контактів</translation>
 <translation id="4996978546172906250">Надіслати</translation>
 <translation id="5001526427543320409">Сторонні файли cookie</translation>
+<translation id="5007392906805964215">Переглянути</translation>
 <translation id="5039804452771397117">Дозволити</translation>
 <translation id="5048398596102334565">Надати сайтам доступ до датчиків руху (рекомендовано)</translation>
 <translation id="5050380848339752099">Цей сайт збирається надіслати інформацію зовнішньому додатку, поки ви в режимі анонімного перегляду.</translation>
@@ -283,6 +285,7 @@
 <translation id="5706552988683188916">Буде видалено файли cookie й інші дані сайту <ph name="WEBSITE" /></translation>
 <translation id="5723967018671998714">Сторонні файли cookie блокуються в режимі анонімного перегляду</translation>
 <translation id="5740126560802162366">Сайти можуть зберігати дані на вашому пристрої</translation>
+<translation id="5749085587985334212">Сховати опцію "Перевірка безпеки"</translation>
 <translation id="5771720122942595109">Заблоковано: "<ph name="PERMISSION_1" />"</translation>
 <translation id="5804241973901381774">Дозволи</translation>
 <translation id="5844448279347999754">Якщо цей параметр увімкнено, сайти можуть запитувати дозвіл переглядати тексти й зображення, збережені в буфері обміну. Якщо його вимкнено, сайти не можуть переглядати тексти або зображення в буфері обміну.</translation>
@@ -304,7 +307,6 @@
 <translation id="6015775454662021376">Керуйте доступом цього сайту до вашого пристрою</translation>
 <translation id="6040143037577758943">Закрити</translation>
 <translation id="6042308850641462728">Більше</translation>
-<translation id="6060464773477604108"><ph name="HOST_NAME" /> <ph name="SEPARATOR1" /> <ph name="RECENCY" /> <ph name="SEPARATOR2" /> Остання вкладка</translation>
 <translation id="6064125863973209585">Завершені завантаження</translation>
 <translation id="6071501408666570960">Ви вийдете з облікового запису на цьому сайті</translation>
 <translation id="6120483543004435978">Якщо цей параметр увімкнено, сайти можуть запитувати, коли ви активно використовуєте пристрій. Якщо його вимкнено, сайти не можуть дізнаватися, коли ви активно використовуєте пристрій.</translation>
@@ -360,11 +362,11 @@
 <translation id="6790428901817661496">Відтворити</translation>
 <translation id="6818926723028410516">Виберіть елементи</translation>
 <translation id="6864395892908308021">Цей пристрій не підтримує NFC</translation>
-<translation id="6867014948848323204">З пристрою <ph name="FROM_DEVICE" /></translation>
 <translation id="6912998170423641340">Не дозволяти сайтам переглядати тексти й зображення в буфері обміну</translation>
 <translation id="6945221475159498467">Вибрати</translation>
 <translation id="6950072572526089586">Сайт, який ви відвідуєте, може зберігати інформацію про ваші дії, щоб вам було зручніше взаємодіяти з ним, наприклад не виходити з облікового запису чи запам’ятовувати товари в кошику для покупок. Часто сайти тимчасово зберігають таку інформацію на вашому пристрої.</translation>
 <translation id="6965382102122355670">OK</translation>
+<translation id="6980861169612950611">Видалити дані сайту <ph name="SITE_NAME" />?</translation>
 <translation id="6981982820502123353">Доступність</translation>
 <translation id="6992289844737586249">Запитувати, перш ніж дозволити сайтам використовувати мікрофон (рекомендується)</translation>
 <translation id="7000754031042624318">Вимкнено в налаштуваннях Android</translation>
@@ -392,6 +394,7 @@
 <translation id="7366415735885268578">Додати сайт</translation>
 <translation id="7368695150573390554">Усі офлайн-дані буде видалено</translation>
 <translation id="7383715096023715447">Налаштування для домену <ph name="DOMAIN" /></translation>
+<translation id="7399802613464275309">Перевірка безпеки</translation>
 <translation id="7406113532070524618">Це налаштування не передбачає вашу ідентифікацію і дозвіл для сайтів на доступ до історії веб-перегляду, хоча сайти можуть надсилати невелику кількість інформації для цілей підтвердження</translation>
 <translation id="7423098979219808738">Спершу запитувати</translation>
 <translation id="7423538860840206698">Заборонено переглядати буфер обміну</translation>
@@ -426,7 +429,6 @@
 <translation id="7986741934819883144">Виберіть контакт</translation>
 <translation id="7990211076305263060">Якщо цей параметр увімкнено, сайти можуть просити доступ до мікрофона. Якщо його вимкнено, сайти не можуть використовувати мікрофон.</translation>
 <translation id="8007176423574883786">Вимкнено для цього пристрою</translation>
-<translation id="8009579582995973057"><ph name="HOST_NAME" /> <ph name="SEPARATOR1" /> <ph name="RECENCY" /> <ph name="SEPARATOR2" /> З пристрою "<ph name="FROM_DEVICE" />"</translation>
 <translation id="802154636333426148">Не вдалося завантажити</translation>
 <translation id="8042586301629853791">Порядок сортування:</translation>
 <translation id="8067883171444229417">Дивитися відео</translation>
@@ -461,6 +463,7 @@
 <translation id="8441146129660941386">Назад</translation>
 <translation id="8444433999583714703">Щоб надати додатку <ph name="APP_NAME" /> доступ до геоданих, також увімкніть їх у <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Скасувати доступ до пристрою</translation>
+<translation id="8473055640493819707">Додаток <ph name="APP_NAME" /> застарілий. Перевстановіть його.</translation>
 <translation id="8487700953926739672">Доступ у режимі офлайн</translation>
 <translation id="848952951823693243">Завжди запитувати мобільний сайт</translation>
 <translation id="8499083585497694743">Увімкнути мікрофон</translation>
@@ -477,6 +480,7 @@
 <translation id="8681886425883659911">Реклама блокується на сайтах, які показують нав’язливі або оманливі оголошення</translation>
 <translation id="868929229000858085">Пошук у контактах</translation>
 <translation id="8712637175834984815">OK</translation>
+<translation id="8715862698998036666">Щоб вийти з повноекранного режиму, проведіть пальцем по екрану зверху вниз і від лівого чи правого краю.</translation>
 <translation id="8719283222052720129">Увімкніть дозвіл для додатка <ph name="APP_NAME" /> у <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="8721719390026067591">Якщо цей параметр увімкнено, сайти можуть просити дозвіл шукати пристрої з Bluetooth. Якщо його вимкнено, сайти не можуть шукати пристрої з Bluetooth.</translation>
 <translation id="8725066075913043281">Повторити спробу</translation>

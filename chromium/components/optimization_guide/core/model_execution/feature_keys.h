@@ -7,6 +7,7 @@
 
 #include <array>
 #include <optional>
+#include <ostream>
 
 #include "base/notreached.h"
 #include "components/optimization_guide/proto/model_execution.pb.h"
@@ -23,6 +24,20 @@ enum class ModelBasedCapabilityKey {
   kTest = proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_TEST,
   kTextSafety =
       proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_TEXT_SAFETY,
+  kPromptApi = proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_PROMPT_API,
+  kHistorySearch =
+      proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_HISTORY_SEARCH,
+};
+
+inline constexpr std::array<ModelBasedCapabilityKey, 7>
+    kAllModelBasedCapabilityKeys = {
+        ModelBasedCapabilityKey::kCompose,
+        ModelBasedCapabilityKey::kTabOrganization,
+        ModelBasedCapabilityKey::kWallpaperSearch,
+        ModelBasedCapabilityKey::kTest,
+        ModelBasedCapabilityKey::kTextSafety,
+        ModelBasedCapabilityKey::kPromptApi,
+        ModelBasedCapabilityKey::kHistorySearch,
 };
 
 // A "real" feature implemented by a model-based capability.
@@ -33,13 +48,15 @@ enum class UserVisibleFeatureKey {
       static_cast<int>(ModelBasedCapabilityKey::kTabOrganization),
   kWallpaperSearch =
       static_cast<int>(ModelBasedCapabilityKey::kWallpaperSearch),
+  kHistorySearch = static_cast<int>(ModelBasedCapabilityKey::kHistorySearch),
 };
 
-inline constexpr std::array<UserVisibleFeatureKey, 3>
+inline constexpr std::array<UserVisibleFeatureKey, 4>
     kAllUserVisibleFeatureKeys = {
         UserVisibleFeatureKey::kCompose,
         UserVisibleFeatureKey::kTabOrganization,
         UserVisibleFeatureKey::kWallpaperSearch,
+        UserVisibleFeatureKey::kHistorySearch,
 };
 
 inline ModelBasedCapabilityKey ToModelBasedCapabilityKey(
@@ -51,6 +68,30 @@ inline ModelBasedCapabilityKey ToModelBasedCapabilityKey(
       return ModelBasedCapabilityKey::kTabOrganization;
     case UserVisibleFeatureKey::kWallpaperSearch:
       return ModelBasedCapabilityKey::kWallpaperSearch;
+    case UserVisibleFeatureKey::kHistorySearch:
+      return ModelBasedCapabilityKey::kHistorySearch;
+  }
+}
+
+inline ModelBasedCapabilityKey ToModelBasedCapabilityKey(
+    proto::ModelExecutionFeature feature) {
+  switch (feature) {
+    case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_COMPOSE:
+      return ModelBasedCapabilityKey::kCompose;
+    case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_TAB_ORGANIZATION:
+      return ModelBasedCapabilityKey::kTabOrganization;
+    case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_WALLPAPER_SEARCH:
+      return ModelBasedCapabilityKey::kWallpaperSearch;
+    case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_TEST:
+      return ModelBasedCapabilityKey::kTest;
+    case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_TEXT_SAFETY:
+      return ModelBasedCapabilityKey::kTextSafety;
+    case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_PROMPT_API:
+      return ModelBasedCapabilityKey::kPromptApi;
+    case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_HISTORY_SEARCH:
+      return ModelBasedCapabilityKey::kHistorySearch;
+    case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_UNSPECIFIED:
+      NOTREACHED_NORETURN() << "Invalid feature";
   }
 }
 
@@ -69,6 +110,11 @@ inline proto::ModelExecutionFeature ToModelExecutionFeatureProto(
       return proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_TEST;
     case ModelBasedCapabilityKey::kTextSafety:
       return proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_TEXT_SAFETY;
+    case ModelBasedCapabilityKey::kPromptApi:
+      return proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_PROMPT_API;
+    case ModelBasedCapabilityKey::kHistorySearch:
+      return proto::ModelExecutionFeature::
+          MODEL_EXECUTION_FEATURE_HISTORY_SEARCH;
   }
 }
 

@@ -100,10 +100,10 @@ void Import(base::WeakPtr<Profile> profile,
 // Call |callback| on each url embedded into preferences containing user themes.
 void EnumerateUserThemeUrls(
     PrefService* prefs,
-    base::RepeatingCallback<void(base::StringPiece url)> callback);
+    base::RepeatingCallback<void(std::string_view url)> callback);
 
 bool StoreImageUrl(PrefService* prefs,
-                   base::StringPiece theme_id,
+                   std::string_view theme_id,
                    std::string url);
 
 // Returns version or empty string for the given theme id.

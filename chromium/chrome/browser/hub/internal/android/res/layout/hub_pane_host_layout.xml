@@ -7,6 +7,7 @@ found in the LICENSE file.
 <org.chromium.chrome.browser.hub.HubPaneHostView xmlns:android="http://schemas.android.com/apk/res/android"
   xmlns:app="http://schemas.android.com/apk/res-auto"
   android:id="@+id/hub_pane_host"
+  android:clipToPadding="false"
   android:layout_width="match_parent"
   android:layout_height="match_parent">
 
@@ -14,6 +15,16 @@ found in the LICENSE file.
     android:id="@+id/pane_frame"
     android:layout_width="match_parent"
     android:layout_height="match_parent" />
+
+  <ImageView
+    android:id="@+id/pane_top_hairline"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:src="@drawable/toolbar_hairline"
+    android:scaleType="fitXY"
+    android:gravity="top"
+    android:importantForAccessibility="no"
+    android:visibility="gone"/>
 
   <org.chromium.ui.widget.ButtonCompat
     android:id="@+id/host_action_button"

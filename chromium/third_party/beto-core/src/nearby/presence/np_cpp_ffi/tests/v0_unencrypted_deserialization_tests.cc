@@ -24,8 +24,8 @@
 #include "shared_test_util.h"
 
 TEST_F(NpCppTest, InvalidCast) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   auto deserialize_result =
       nearby_protocol::Deserializer::DeserializeAdvertisement(V0AdvPlaintext,
                                                               book);
@@ -34,18 +34,17 @@ TEST_F(NpCppTest, InvalidCast) {
 
   // Now try to cast the result into the wrong type and verify the process
   // aborts
-  ASSERT_DEATH(
-      { [[maybe_unused]] auto failure = deserialize_result.IntoV1(); }, "");
+  ASSERT_DEATH({ [[maybe_unused]] auto failure = deserialize_result.IntoV1(); },
+               "");
 }
 
 TEST_F(NpCppTest, V0DeserializeSingleDataElementTxPower) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto maybe_credential_book =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(slab);
-  ASSERT_TRUE(maybe_credential_book.ok());
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook credential_book(slab);
+
   auto deserialize_result =
-      nearby_protocol::Deserializer::DeserializeAdvertisement(
-          V0AdvPlaintext, maybe_credential_book.value());
+      nearby_protocol::Deserializer::DeserializeAdvertisement(V0AdvPlaintext,
+                                                              credential_book);
 
   ASSERT_EQ(deserialize_result.GetKind(),
             nearby_protocol::DeserializeAdvertisementResultKind::V0);
@@ -71,20 +70,15 @@ TEST_F(NpCppTest, V0DeserializeSingleDataElementTxPower) {
 }
 
 TEST_F(NpCppTest, V0LengthOneActionsDataElement) {
-  const std::array<uint8_t, 4> V0AdvPlaintextLengthOneActions{0x00, 0x03, 0x16,
-                                                              0x00};
+  const std::array<uint8_t, 3> V0AdvPlaintextLengthOneActions{0x00, 0x16, 0x00};
   const nearby_protocol::RawAdvertisementPayload adv(
       (nearby_protocol::ByteBuffer<255>(V0AdvPlaintextLengthOneActions)));
 
-  auto maybe_credential_slab = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(maybe_credential_slab.ok());
-  auto maybe_credential_book =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(
-          maybe_credential_slab.value());
-  ASSERT_TRUE(maybe_credential_book.ok());
+  nearby_protocol::CredentialSlab credential_slab;
+  nearby_protocol::CredentialBook credential_book(credential_slab);
   auto deserialize_result =
-      nearby_protocol::Deserializer::DeserializeAdvertisement(
-          adv, maybe_credential_book.value());
+      nearby_protocol::Deserializer::DeserializeAdvertisement(adv,
+                                                              credential_book);
 
   ASSERT_EQ(deserialize_result.GetKind(),
             nearby_protocol::DeserializeAdvertisementResultKind::V0);
@@ -110,20 +104,16 @@ TEST_F(NpCppTest, V0LengthOneActionsDataElement) {
 }
 
 TEST_F(NpCppTest, V0LengthTwoActionsDataElement) {
-  const std::array<uint8_t, 5> V0AdvPlaintextLengthTwoActions{0x00, 0x03, 0x26,
-                                                              0xD0, 0x46};
+  const std::array<uint8_t, 4> V0AdvPlaintextLengthTwoActions{0x00, 0x26, 0x40,
+                                                              0x40};
   const nearby_protocol::RawAdvertisementPayload adv(
       (nearby_protocol::ByteBuffer<255>(V0AdvPlaintextLengthTwoActions)));
 
-  auto maybe_credential_slab = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(maybe_credential_slab.ok());
-  auto maybe_credential_book =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(
-          maybe_credential_slab.value());
-  ASSERT_TRUE(maybe_credential_book.ok());
+  nearby_protocol::CredentialSlab credential_slab;
+  nearby_protocol::CredentialBook credential_book(credential_slab);
   auto deserialize_result =
-      nearby_protocol::Deserializer::DeserializeAdvertisement(
-          adv, maybe_credential_book.value());
+      nearby_protocol::Deserializer::DeserializeAdvertisement(adv,
+                                                              credential_book);
 
   ASSERT_EQ(deserialize_result.GetKind(),
             nearby_protocol::DeserializeAdvertisementResultKind::V0);
@@ -145,35 +135,24 @@ TEST_F(NpCppTest, V0LengthTwoActionsDataElement) {
 
   ASSERT_EQ(de.GetKind(), nearby_protocol::V0DataElementKind::Actions);
   auto actions = de.AsActions();
-  ASSERT_EQ(actions.GetAsU32(), 0xD0460000);
+  ASSERT_EQ(actions.GetAsU32(), 0x40400000U);
 
-  ASSERT_TRUE(
-      actions.HasAction(nearby_protocol::BooleanActionType::NearbyShare));
-  ASSERT_TRUE(actions.HasAction(nearby_protocol::BooleanActionType::Finder));
-  ASSERT_TRUE(
-      actions.HasAction(nearby_protocol::BooleanActionType::FastPairSass));
+  ASSERT_TRUE(actions.HasAction(nearby_protocol::ActionType::CrossDevSdk));
+  ASSERT_TRUE(actions.HasAction(nearby_protocol::ActionType::NearbyShare));
 
+  ASSERT_FALSE(actions.HasAction(nearby_protocol::ActionType::ActiveUnlock));
   ASSERT_FALSE(
-      actions.HasAction(nearby_protocol::BooleanActionType::ActiveUnlock));
-  ASSERT_FALSE(
-      actions.HasAction(nearby_protocol::BooleanActionType::InstantTethering));
-  ASSERT_FALSE(actions.HasAction(nearby_protocol::BooleanActionType::PhoneHub));
-  ASSERT_FALSE(
-      actions.HasAction(nearby_protocol::BooleanActionType::PresenceManager));
-
-  ASSERT_EQ(actions.GetContextSyncSequenceNumber().GetAsU8(), 0xD);
+      actions.HasAction(nearby_protocol::ActionType::InstantTethering));
+  ASSERT_FALSE(actions.HasAction(nearby_protocol::ActionType::PhoneHub));
 }
 
 TEST_F(NpCppTest, V0MultipleDataElements) {
-  auto maybe_credential_slab = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(maybe_credential_slab.ok());
-  auto maybe_credential_book =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(
-          maybe_credential_slab.value());
-  ASSERT_TRUE(maybe_credential_book.ok());
+  nearby_protocol::CredentialSlab credential_slab;
+  nearby_protocol::CredentialBook credential_book(credential_slab);
+
   auto deserialize_result =
       nearby_protocol::Deserializer::DeserializeAdvertisement(
-          V0AdvPlaintextMultiDe, maybe_credential_book.value());
+          V0AdvPlaintextMultiDe, credential_book);
 
   ASSERT_EQ(deserialize_result.GetKind(),
             nearby_protocol::DeserializeAdvertisementResultKind::V0);
@@ -203,28 +182,24 @@ TEST_F(NpCppTest, V0MultipleDataElements) {
 
   ASSERT_EQ(second_de.GetKind(), nearby_protocol::V0DataElementKind::Actions);
   auto actions = second_de.AsActions();
-  ASSERT_EQ(actions.GetAsU32(), (uint32_t)0x00460000);
-  ASSERT_EQ(actions.GetContextSyncSequenceNumber().GetAsU8(), (uint8_t)0);
+  ASSERT_EQ(actions.GetAsU32(), (uint32_t)0x40400000);
 }
 
 TEST_F(NpCppTest, V0EmptyPayload) {
-  auto maybe_credential_slab = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(maybe_credential_slab.ok());
-  auto maybe_credential_book =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(
-          maybe_credential_slab.value());
-  ASSERT_TRUE(maybe_credential_book.ok());
+  nearby_protocol::CredentialSlab credential_slab;
+  nearby_protocol::CredentialBook credential_book(credential_slab);
+
   auto deserialize_result =
-      nearby_protocol::Deserializer::DeserializeAdvertisement(
-          V0AdvEmpty, maybe_credential_book.value());
+      nearby_protocol::Deserializer::DeserializeAdvertisement(V0AdvEmpty,
+                                                              credential_book);
 
   ASSERT_EQ(deserialize_result.GetKind(),
             nearby_protocol::DeserializeAdvertisementResultKind::Error);
 }
 
 TEST_F(NpCppTest, TestV0AdvMoveConstructor) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   auto result = nearby_protocol::Deserializer::DeserializeAdvertisement(
       V0AdvPlaintext, book);
   ASSERT_EQ(result.GetKind(),
@@ -251,8 +226,8 @@ TEST_F(NpCppTest, TestV0AdvMoveConstructor) {
 }
 
 TEST_F(NpCppTest, TestV0AdvMoveAssignment) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   auto result = nearby_protocol::Deserializer::DeserializeAdvertisement(
       V0AdvPlaintext, book);
   ASSERT_EQ(result.GetKind(),
@@ -288,56 +263,37 @@ nearby_protocol::DeserializeAdvertisementResult CreateAdv(
     nearby_protocol::CredentialBook &book) {
   auto adv = nearby_protocol::Deserializer::DeserializeAdvertisement(
       V0AdvPlaintext, book);
+  assert(adv.GetKind() ==
+         np_ffi::internal::DeserializeAdvertisementResultKind::V0);
   return adv;
 }
 
 TEST_F(NpCppTest, V0AdvDestructor) {
-  auto maybe_credential_slab = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(maybe_credential_slab.ok());
-  auto book_result = nearby_protocol::CredentialBook::TryCreateFromSlab(
-      maybe_credential_slab.value());
-  ASSERT_TRUE(book_result.ok());
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   {
-    auto deserialize_result = CreateAdv(book_result.value());
-    auto deserialize_result2 = CreateAdv(book_result.value());
-    // Deserialize 2 advertisements, which will take up 2 slots in the handle
-    // map
-    ASSERT_EQ(deserialize_result.GetKind(),
-              np_ffi::internal::DeserializeAdvertisementResultKind::V0);
-    ASSERT_EQ(deserialize_result2.GetKind(),
-              np_ffi::internal::DeserializeAdvertisementResultKind::V0);
-
-    // Going over max amount should result in error
-    auto deserialize_result3 =
-        nearby_protocol::Deserializer::DeserializeAdvertisement(
-            V0AdvPlaintext, book_result.value());
-    ASSERT_EQ(deserialize_result3.GetKind(),
-              np_ffi::internal::DeserializeAdvertisementResultKind::Error);
+    auto deserialize_result = CreateAdv(book);
+    auto deserialize_result2 = CreateAdv(book);
+    auto allocations =
+        nearby_protocol::GlobalConfig::GetCurrentHandleAllocationCount();
+    ASSERT_EQ(allocations.v0_payload, 2U);
 
     // Calling IntoV0() should move the underlying resources into the v0
     // object when both go out of scope only one should be freed
     auto v0_adv = deserialize_result.IntoV0();
   }
-
-  // Now that the first v0 adv is out of scope, it should be de-allocated which
-  // will create room for one more to be created.
-  auto deserialize_result =
-      nearby_protocol::Deserializer::DeserializeAdvertisement(
-          V0AdvPlaintext, book_result.value());
-  ASSERT_EQ(deserialize_result.GetKind(),
-            np_ffi::internal::DeserializeAdvertisementResultKind::V0);
+  auto allocations =
+      nearby_protocol::GlobalConfig::GetCurrentHandleAllocationCount();
+  ASSERT_EQ(allocations.v0_payload, 0U);
 }
 
 TEST_F(NpCppTest, V0AdvUseAfterMove) {
-  auto maybe_credential_slab = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(maybe_credential_slab.ok());
-  auto maybe_credential_book =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(
-          maybe_credential_slab.value());
-  ASSERT_TRUE(maybe_credential_book.ok());
+  nearby_protocol::CredentialSlab credential_slab;
+  nearby_protocol::CredentialBook credential_book(credential_slab);
+
   auto deserialize_result =
-      nearby_protocol::Deserializer::DeserializeAdvertisement(
-          V0AdvPlaintext, maybe_credential_book.value());
+      nearby_protocol::Deserializer::DeserializeAdvertisement(V0AdvPlaintext,
+                                                              credential_book);
 
   ASSERT_EQ(deserialize_result.GetKind(),
             nearby_protocol::DeserializeAdvertisementResultKind::V0);
@@ -353,8 +309,8 @@ TEST_F(NpCppTest, V0AdvUseAfterMove) {
 }
 
 TEST_F(NpCppTest, TestLegibleAdvMoveConstructor) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   auto result = nearby_protocol::Deserializer::DeserializeAdvertisement(
       V0AdvPlaintext, book);
   ASSERT_EQ(result.GetKind(),
@@ -391,8 +347,8 @@ TEST_F(NpCppTest, TestLegibleAdvMoveConstructor) {
 }
 
 TEST_F(NpCppTest, TestLegibleAdvMoveAssignment) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   auto result = nearby_protocol::Deserializer::DeserializeAdvertisement(
       V0AdvPlaintext, book);
   ASSERT_EQ(result.GetKind(),
@@ -436,19 +392,20 @@ nearby_protocol::LegibleDeserializedV0Advertisement CreateLegibleAdv(
   auto adv = nearby_protocol::Deserializer::DeserializeAdvertisement(
       V0AdvPlaintext, book);
   auto v0_adv = adv.IntoV0();
-  return v0_adv.IntoLegible();
+  auto legible = v0_adv.IntoLegible();
+  assert(legible.GetIdentityKind() ==
+         nearby_protocol::DeserializedV0IdentityKind::Plaintext);
+  assert(legible.GetNumberOfDataElements() == 1U);
+  return legible;
 }
 
 TEST_F(NpCppTest, V0LegibleAdvUseAfterMove) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   auto legible_adv = CreateLegibleAdv(book);
 
   // Should be able to use the valid legible adv even though its original parent
   // is now out of scope.
-  ASSERT_EQ(legible_adv.GetIdentityKind(),
-            nearby_protocol::DeserializedV0IdentityKind::Plaintext);
-  ASSERT_EQ(legible_adv.GetNumberOfDataElements(), 1);
   [[maybe_unused]] auto payload = legible_adv.IntoPayload();
 
   // now that the legible adv has moved into the payload it should no longer be
@@ -462,32 +419,19 @@ TEST_F(NpCppTest, V0LegibleAdvUseAfterMove) {
 }
 
 TEST_F(NpCppTest, LegibleAdvDestructor) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   {
     auto legible_adv = CreateLegibleAdv(book);
     auto legible_adv2 = CreateLegibleAdv(book);
-
-    // check that legible advs are valid.
-    ASSERT_EQ(legible_adv.GetIdentityKind(),
-              nearby_protocol::DeserializedV0IdentityKind::Plaintext);
-    ASSERT_EQ(legible_adv.GetNumberOfDataElements(), 1);
-    ASSERT_EQ(legible_adv2.GetIdentityKind(),
-              nearby_protocol::DeserializedV0IdentityKind::Plaintext);
-    ASSERT_EQ(legible_adv2.GetNumberOfDataElements(), 1);
-
-    // allocation slots should be full
-    ASSERT_EQ(nearby_protocol::Deserializer::DeserializeAdvertisement(
-                  V0AdvPlaintext, book)
-                  .GetKind(),
-              nearby_protocol::DeserializeAdvertisementResultKind::Error);
+    auto allocations =
+        nearby_protocol::GlobalConfig::GetCurrentHandleAllocationCount();
+    ASSERT_EQ(allocations.v0_payload, 2U);
   }
-
-  // Verify the handle was de-allocated when legible adv went out of scope
-  auto result = nearby_protocol::Deserializer::DeserializeAdvertisement(
-      V0AdvPlaintext, book);
-  ASSERT_EQ(result.GetKind(),
-            nearby_protocol::DeserializeAdvertisementResultKind::V0);
+  // Verify the handles were de-allocated when legible advs went out of scope
+  auto allocations =
+      nearby_protocol::GlobalConfig::GetCurrentHandleAllocationCount();
+  ASSERT_EQ(allocations.v0_payload, 0U);
 }
 
 nearby_protocol::V0Payload CreatePayload(
@@ -496,35 +440,9 @@ nearby_protocol::V0Payload CreatePayload(
   return legible_adv.IntoPayload();
 }
 
-TEST_F(NpCppTest, V0PayloadDestructor) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
-  {
-    auto payload = CreatePayload(book);
-    auto payload2 = CreatePayload(book);
-
-    // check that payload adv is valid even though its parent is out of scope
-    ASSERT_TRUE(payload.TryGetDataElement(0).ok());
-    ASSERT_TRUE(payload2.TryGetDataElement(0).ok());
-
-    // allocation slots should be full
-    ASSERT_EQ(nearby_protocol::Deserializer::DeserializeAdvertisement(
-                  V0AdvPlaintext, book)
-                  .GetKind(),
-              nearby_protocol::DeserializeAdvertisementResultKind::Error);
-  }
-
-  // Now that the payload is out of scope its destructor should have been called
-  // freeing the parent handle
-  auto result = nearby_protocol::Deserializer::DeserializeAdvertisement(
-      V0AdvPlaintext, book);
-  ASSERT_EQ(result.GetKind(),
-            nearby_protocol::DeserializeAdvertisementResultKind::V0);
-}
-
 TEST_F(NpCppTest, TestV0PayloadMoveConstructor) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   auto result = nearby_protocol::Deserializer::DeserializeAdvertisement(
       V0AdvPlaintext, book);
   ASSERT_EQ(result.GetKind(),
@@ -552,8 +470,8 @@ TEST_F(NpCppTest, TestV0PayloadMoveConstructor) {
 }
 
 TEST_F(NpCppTest, TestV0PayloadMoveAssignment) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   auto result = nearby_protocol::Deserializer::DeserializeAdvertisement(
       V0AdvPlaintext, book);
   ASSERT_EQ(result.GetKind(),
@@ -585,16 +503,34 @@ TEST_F(NpCppTest, TestV0PayloadMoveAssignment) {
                "");
 }
 
+TEST_F(NpCppTest, V0PayloadDestructor) {
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
+  {
+    auto payload = CreatePayload(book);
+    auto payload2 = CreatePayload(book);
+
+    // check that payload adv is valid even though its parent is out of scope
+    ASSERT_TRUE(payload.TryGetDataElement(0).ok());
+    ASSERT_TRUE(payload2.TryGetDataElement(0).ok());
+    auto allocations =
+        nearby_protocol::GlobalConfig::GetCurrentHandleAllocationCount();
+    ASSERT_EQ(allocations.v0_payload, 2U);
+  }
+
+  // Verify the handle was de-allocated when legible advs went out of scope
+  auto allocations =
+      nearby_protocol::GlobalConfig::GetCurrentHandleAllocationCount();
+  ASSERT_EQ(allocations.v0_payload, 0U);
+}
+
 TEST_F(NpCppTest, InvalidDataElementCast) {
-  auto maybe_credential_slab = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(maybe_credential_slab.ok());
-  auto maybe_credential_book =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(
-          maybe_credential_slab.value());
-  ASSERT_TRUE(maybe_credential_book.ok());
+  nearby_protocol::CredentialSlab credential_slab;
+  nearby_protocol::CredentialBook credential_book(credential_slab);
+
   auto deserialize_result =
-      nearby_protocol::Deserializer::DeserializeAdvertisement(
-          V0AdvPlaintext, maybe_credential_book.value());
+      nearby_protocol::Deserializer::DeserializeAdvertisement(V0AdvPlaintext,
+                                                              credential_book);
 
   ASSERT_EQ(deserialize_result.GetKind(),
             nearby_protocol::DeserializeAdvertisementResultKind::V0);
@@ -618,15 +554,12 @@ TEST_F(NpCppTest, InvalidDataElementCast) {
 }
 
 TEST_F(NpCppTest, InvalidDataElementIndex) {
-  auto maybe_credential_slab = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(maybe_credential_slab.ok());
-  auto maybe_credential_book =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(
-          maybe_credential_slab.value());
-  ASSERT_TRUE(maybe_credential_book.ok());
+  nearby_protocol::CredentialSlab credential_slab;
+  nearby_protocol::CredentialBook credential_book(credential_slab);
+
   auto deserialize_result =
-      nearby_protocol::Deserializer::DeserializeAdvertisement(
-          V0AdvPlaintext, maybe_credential_book.value());
+      nearby_protocol::Deserializer::DeserializeAdvertisement(V0AdvPlaintext,
+                                                              credential_book);
 
   ASSERT_EQ(deserialize_result.GetKind(),
             nearby_protocol::DeserializeAdvertisementResultKind::V0);

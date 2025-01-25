@@ -51,26 +51,25 @@ class CONTENT_EXPORT FileSystemAccessWatcherManager
     // Describes a change to some location in a file system.
     struct CONTENT_EXPORT Change {
       Change(storage::FileSystemURL url,
-             blink::mojom::FileSystemAccessChangeTypePtr type,
-             FileSystemAccessChangeSource::FilePathType file_path_type);
+             FileSystemAccessChangeSource::ChangeInfo change_info);
       ~Change();
 
       // Copyable and movable.
       Change(const Change&);
       Change(Change&&) noexcept;
+      Change& operator=(const Change&);
+      Change& operator=(Change&&) noexcept;
 
       storage::FileSystemURL url;
-      blink::mojom::FileSystemAccessChangeTypePtr type;
-      FileSystemAccessChangeSource::FilePathType file_path_type;
+      FileSystemAccessChangeSource::ChangeInfo change_info;
 
       bool operator==(const Change& other) const {
-        return url == other.url && type == other.type &&
-               file_path_type == other.file_path_type;
+        return url == other.url && change_info == other.change_info;
       }
     };
 
-    using OnChangesCallback =
-        base::RepeatingCallback<void(const std::list<Change>& changes)>;
+    using OnChangesCallback = base::RepeatingCallback<void(
+        const std::optional<std::list<Change>>& changes_or_error)>;
     Observation(FileSystemAccessWatcherManager* watcher_manager,
                 FileSystemAccessWatchScope scope,
                 base::PassKey<FileSystemAccessWatcherManager> pass_key);
@@ -83,7 +82,7 @@ class CONTENT_EXPORT FileSystemAccessWatcherManager
     const FileSystemAccessWatchScope& scope() const { return scope_; }
 
     void NotifyOfChanges(
-        const std::list<Change>& changes,
+        const std::optional<std::list<Change>>& changes_or_error,
         base::PassKey<FileSystemAccessWatcherManager> pass_key);
 
    private:
@@ -201,7 +200,7 @@ class CONTENT_EXPORT FileSystemAccessWatcherManager
                  base::UniquePtrComparator>
       observer_hosts_;
 
-  // TODO(crbug.com/40283894): Make more efficient mappings to observers
+  // TODO(crbug.com/321980367): Make more efficient mappings to observers
   // and sources. For now, most actions requires iterating through lists.
 
   // Observations to which this instance will notify of changes within their

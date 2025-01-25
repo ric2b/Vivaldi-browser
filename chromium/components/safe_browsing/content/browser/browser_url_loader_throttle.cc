@@ -268,15 +268,13 @@ void BrowserURLLoaderThrottle::WillStartRequest(
       base::BindOnce(
           &BrowserURLLoaderThrottle::OnSkipCheckCompleteOnOriginalUrl,
           weak_factory_.GetWeakPtr(), request->headers, request->load_flags,
-          request->destination, request->has_user_gesture, request->url,
-          request->method),
+          request->has_user_gesture, request->url, request->method),
       request->url, request->originated_from_service_worker);
 }
 
 void BrowserURLLoaderThrottle::OnSkipCheckCompleteOnOriginalUrl(
     const net::HttpRequestHeaders& headers,
     int load_flags,
-    network::mojom::RequestDestination request_destination,
     bool has_user_gesture,
     const GURL& url,
     const std::string& method,
@@ -287,8 +285,8 @@ void BrowserURLLoaderThrottle::OnSkipCheckCompleteOnOriginalUrl(
     return;
   }
 
-  UrlCheckerOnSB::StartParams params(headers, load_flags, request_destination,
-                                     has_user_gesture, url, method);
+  UrlCheckerOnSB::StartParams params(headers, load_flags, has_user_gesture, url,
+                                     method);
   sync_sb_checker_->Start(params);
   if (async_sb_checker_) {
     async_sb_checker_->Start(params);
@@ -467,8 +465,6 @@ void BrowserURLLoaderThrottle::OnCompleteSyncCheck(
       deferred_ = false;
       TRACE_EVENT_NESTABLE_ASYNC_END0("safe_browsing", "Deferred",
                                       TRACE_ID_LOCAL(this));
-      base::UmaHistogramTimes("SafeBrowsing.BrowserThrottle.TotalDelay",
-                              total_delay_);
       delegate_->Resume();
       MaybeTransferAsyncChecker();
     }
@@ -522,7 +518,7 @@ std::string BrowserURLLoaderThrottle::GetUrlCheckTypeForLogging(
     case SafeBrowsingUrlCheckerImpl::PerformedCheck::kHashRealTimeCheck:
       return ".HashPrefixRealTimeCheck";
     case SafeBrowsingUrlCheckerImpl::PerformedCheck::kUnknown:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return ".HashPrefixDatabaseCheck";
   }
 }

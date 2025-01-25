@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.gesturenav;
 
+import static org.chromium.ui.base.LocalizationUtils.setRtlForTesting;
+
+import android.os.Build;
 import android.os.SystemClock;
 import android.view.MotionEvent;
 
@@ -21,13 +24,18 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.FeatureList;
+import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.chrome.browser.bookmarks.BookmarkPage;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.init.AsyncInitializationActivity;
@@ -35,18 +43,23 @@ import org.chromium.chrome.browser.layouts.LayoutManager;
 import org.chromium.chrome.browser.layouts.LayoutTestUtils;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.layouts.animation.CompositorAnimationHandler;
+import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
+import org.chromium.chrome.browser.ui.native_page.BasicSmoothTransitionDelegate;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.content_public.browser.back_forward_transition.AnimationStage;
+import org.chromium.content_public.browser.test.util.UiUtils;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.net.test.EmbeddedTestServer;
+import org.chromium.ui.base.BackGestureEventSwipeEdge;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.ui.base.UiAndroidFeatures;
 import org.chromium.ui.test.util.UiDisableIf;
 import org.chromium.ui.test.util.UiRestriction;
 
@@ -56,6 +69,10 @@ import java.util.concurrent.TimeoutException;
 /** Tests {@link NavigationHandler} navigating back/forward using overscroll history navigation. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@DisableIf.Build(
+        sdk_is_greater_than = Build.VERSION_CODES.Q,
+        message = "crbug.com/1276402 crbug.com/345352689")
+@Batch(Batch.PER_CLASS)
 public class NavigationHandlerTest {
     private static final String RENDERED_PAGE = "/chrome/test/data/android/navigate/simple.html";
     private static final boolean LEFT_EDGE = true;
@@ -82,10 +99,11 @@ public class NavigationHandlerTest {
     @After
     public void tearDown() {
         CompositorAnimationHandler.setTestingMode(false);
+        setRtlForTesting(false);
     }
 
     private Tab currentTab() {
-        return TestThreadUtils.runOnUiThreadBlockingNoException(
+        return ThreadUtils.runOnUiThreadBlocking(
                 () -> mActivityTestRule.getActivity().getActivityTabProvider().get());
     }
 
@@ -107,7 +125,108 @@ public class NavigationHandlerTest {
                                 Matchers.is(toUrl)));
         Assert.assertEquals(
                 "Didn't navigate back", toUrl, ChromeTabUtils.getUrlStringOnUiThread(currentTab()));
-        Assert.assertEquals("Detected a wrong direction.", mNavigationHandler.fromLeftSide(), edge);
+        Assert.assertEquals(
+                "Detected a wrong direction.",
+                mNavigationHandler.getInitiatingEdge() == BackGestureEventSwipeEdge.LEFT,
+                edge);
+    }
+
+    /**
+     * Enter or exit the tab switcher with animations and wait for the scene to change.
+     *
+     * @param inSwitcher Whether to enter or exit the tab switcher.
+     */
+    private void setTabSwitcherModeAndWait(boolean inSwitcher) {
+        LayoutManager layoutManager = mActivityTestRule.getActivity().getLayoutManager();
+        @LayoutType int layout = inSwitcher ? LayoutType.TAB_SWITCHER : LayoutType.BROWSING;
+        LayoutTestUtils.startShowingAndWaitForLayout(layoutManager, layout, false);
+    }
+
+    @Test
+    @SmallTest
+    @EnableFeatures({ChromeFeatureList.BACK_FORWARD_TRANSITIONS})
+    public void testSwipeBackToNTPWithTransition() {
+        final Tab tab = mActivityTestRule.getActivity().getActivityTab();
+        mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
+        mTestServer =
+                EmbeddedTestServer.createAndStartServer(
+                        InstrumentationRegistry.getInstrumentation().getContext());
+        mActivityTestRule.loadUrl(mTestServer.getURL(RENDERED_PAGE));
+
+        mNavUtils.swipeFromEdgeAndHold(true);
+        Assert.assertEquals(
+                "Back forward transition not invoked yet",
+                AnimationStage.OTHER,
+                tab.getWebContents().getCurrentBackForwardTransitionStage());
+
+        ThreadUtils.runOnUiThreadBlocking(() -> mNavigationHandler.release(true));
+        CriteriaHelper.pollInstrumentationThread(
+                () ->
+                        AnimationStage.INVOKE_ANIMATION
+                                == tab.getWebContents().getCurrentBackForwardTransitionStage(),
+                "invoking animation should be started");
+        CriteriaHelper.pollInstrumentationThread(
+                () ->
+                        AnimationStage.NONE
+                                == tab.getWebContents().getCurrentBackForwardTransitionStage(),
+                "should wait for animation to be finished");
+        CriteriaHelper.pollInstrumentationThread(
+                () ->
+                        ((NewTabPage) tab.getNativePage()).getSmoothTransitionDelegateForTesting()
+                                != null,
+                "Smooth transition should be enabled");
+        CriteriaHelper.pollInstrumentationThread(
+                () ->
+                        !((BasicSmoothTransitionDelegate)
+                                        ((NewTabPage) tab.getNativePage())
+                                                .getSmoothTransitionDelegateForTesting())
+                                .getAnimatorForTesting()
+                                .isRunning(),
+                "Smooth transition should be finished");
+    }
+
+    @Test
+    @SmallTest
+    @EnableFeatures({ChromeFeatureList.BACK_FORWARD_TRANSITIONS})
+    public void testSwipeBackToNativeBookmarksPageWithTransition() throws InterruptedException {
+        final Tab tab = mActivityTestRule.getActivity().getActivityTab();
+        mActivityTestRule.loadUrl("chrome-native://bookmarks/folder/0");
+        UiUtils.settleDownUI(InstrumentationRegistry.getInstrumentation());
+        mTestServer =
+                EmbeddedTestServer.createAndStartServer(
+                        InstrumentationRegistry.getInstrumentation().getContext());
+        mActivityTestRule.loadUrl(mTestServer.getURL(RENDERED_PAGE));
+
+        mNavUtils.swipeFromEdgeAndHold(true);
+        Assert.assertEquals(
+                "Back forward transition not invoked yet",
+                AnimationStage.OTHER,
+                tab.getWebContents().getCurrentBackForwardTransitionStage());
+
+        ThreadUtils.runOnUiThreadBlocking(() -> mNavigationHandler.release(true));
+        CriteriaHelper.pollInstrumentationThread(
+                () ->
+                        AnimationStage.INVOKE_ANIMATION
+                                == tab.getWebContents().getCurrentBackForwardTransitionStage(),
+                "invoking animation should be started");
+        CriteriaHelper.pollInstrumentationThread(
+                () ->
+                        AnimationStage.NONE
+                                == tab.getWebContents().getCurrentBackForwardTransitionStage(),
+                "should wait for animation to be finished");
+        CriteriaHelper.pollInstrumentationThread(
+                () ->
+                        ((BookmarkPage) tab.getNativePage()).getSmoothTransitionDelegateForTesting()
+                                != null,
+                "Smooth transition should be enabled");
+        CriteriaHelper.pollInstrumentationThread(
+                () ->
+                        !((BasicSmoothTransitionDelegate)
+                                        ((BookmarkPage) tab.getNativePage())
+                                                .getSmoothTransitionDelegateForTesting())
+                                .getAnimatorForTesting()
+                                .isRunning(),
+                "Smooth transition should be finished");
     }
 
     @Test
@@ -123,7 +242,8 @@ public class NavigationHandlerTest {
                 UrlConstants.NTP_URL,
                 ChromeTabUtils.getUrlStringOnUiThread(currentTab()));
         Assert.assertTrue(
-                "The gesture should start from the left side.", mNavigationHandler.fromLeftSide());
+                "The gesture should start from the left side.",
+                mNavigationHandler.getInitiatingEdge() == BackGestureEventSwipeEdge.LEFT);
     }
 
     @Test
@@ -156,11 +276,11 @@ public class NavigationHandlerTest {
                 EmbeddedTestServer.createAndStartServer(
                         InstrumentationRegistry.getInstrumentation().getContext());
         mActivityTestRule.loadUrl(mTestServer.getURL(RENDERED_PAGE));
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     // Right swipe on a rendered page to initiate overscroll glow.
                     mNavigationHandler.onDown();
-                    mNavigationHandler.triggerUi(true, 0, 0);
+                    mNavigationHandler.triggerUi(BackGestureEventSwipeEdge.RIGHT, 0, 0);
 
                     // Test that a release without preceding pull requests works
                     // without crashes.
@@ -205,9 +325,9 @@ public class NavigationHandlerTest {
                         .build();
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
         mActivityTestRule.loadUrl(UrlConstants.RECENT_TABS_URL);
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 mActivityTestRule.getActivity().getOnBackPressedDispatcher()::onBackPressed);
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 mActivityTestRule.getActivity().getOnBackPressedDispatcher()::onBackPressed);
         histogramWatcher.assertExpected("Should not record when back is not triggered by swipe");
     }
@@ -245,10 +365,10 @@ public class NavigationHandlerTest {
     private void testLeftEdgeSwipeClosesTabLaunchedFromLinkInternal() {
         Tab oldTab = currentTab();
         TabCreator tabCreator =
-                TestThreadUtils.runOnUiThreadBlockingNoException(
+                ThreadUtils.runOnUiThreadBlocking(
                         () -> mActivityTestRule.getActivity().getTabCreator(false));
         Tab newTab =
-                TestThreadUtils.runOnUiThreadBlockingNoException(
+                ThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             return tabCreator.createNewTab(
                                     new LoadUrlParams(
@@ -278,14 +398,14 @@ public class NavigationHandlerTest {
                 EmbeddedTestServer.createAndStartServer(
                         InstrumentationRegistry.getInstrumentation().getContext());
         mActivityTestRule.loadUrl(mTestServer.getURL(RENDERED_PAGE));
-        TestThreadUtils.runOnUiThreadBlocking(mNavigationHandler::destroy);
+        ThreadUtils.runOnUiThreadBlocking(mNavigationHandler::destroy);
 
         // |triggerUi| can be invoked by SwipeRefreshHandler on the rendered
         // page. Make sure this won't crash after the handler(and also
         // handler action delegate) is destroyed.
-        Assert.assertFalse(
-                TestThreadUtils.runOnUiThreadBlockingNoException(
-                        () -> mNavigationHandler.triggerUi(LEFT_EDGE, 0, 0)));
+        Assert.assertTrue(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mNavigationHandler.triggerUi(BackGestureEventSwipeEdge.LEFT, 0, 0)));
 
         // Just check we're still on the same URL.
         Assert.assertEquals(
@@ -300,13 +420,13 @@ public class NavigationHandlerTest {
                 EmbeddedTestServer.createAndStartServer(
                         InstrumentationRegistry.getInstrumentation().getContext());
         mActivityTestRule.loadUrl(mTestServer.getURL(RENDERED_PAGE));
-        TestThreadUtils.runOnUiThreadBlocking(currentTab()::destroy);
+        ThreadUtils.runOnUiThreadBlocking(currentTab()::destroy);
 
         // |triggerUi| can be invoked by SwipeRefreshHandler on the rendered
         // page. Make sure this won't crash after the current tab is destroyed.
         Assert.assertFalse(
-                TestThreadUtils.runOnUiThreadBlockingNoException(
-                        () -> mNavigationHandler.triggerUi(/* forward= */ false, 0, 0)));
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mNavigationHandler.triggerUi(BackGestureEventSwipeEdge.LEFT, 0, 0)));
     }
 
     @Test
@@ -316,7 +436,7 @@ public class NavigationHandlerTest {
                 EmbeddedTestServer.createAndStartServer(
                         InstrumentationRegistry.getInstrumentation().getContext());
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
-        TestThreadUtils.runOnUiThreadBlocking(mActivityTestRule.getActivity()::finish);
+        ThreadUtils.runOnUiThreadBlocking(mActivityTestRule.getActivity()::finish);
 
         // CompositorViewHolder dispatches motion events and invoke the handler's
         // |handleTouchEvent| on native pages. Make sure this won't crash the app after
@@ -330,7 +450,7 @@ public class NavigationHandlerTest {
                         /* x= */ 10,
                         /* y= */ 100,
                         0);
-        TestThreadUtils.runOnUiThreadBlockingNoException(
+        ThreadUtils.runOnUiThreadBlocking(
                 () ->
                         mActivityTestRule
                                 .getActivity()
@@ -367,17 +487,36 @@ public class NavigationHandlerTest {
         setTabSwitcherModeAndWait(true);
         Assert.assertFalse(
                 "Navigation UI should be reset.",
-                TestThreadUtils.runOnUiThreadBlockingNoException(mNavigationHandler::isActive));
+                ThreadUtils.runOnUiThreadBlocking(mNavigationHandler::isActive));
     }
 
-    /**
-     * Enter or exit the tab switcher with animations and wait for the scene to change.
-     *
-     * @param inSwitcher Whether to enter or exit the tab switcher.
-     */
-    private void setTabSwitcherModeAndWait(boolean inSwitcher) {
-        LayoutManager layoutManager = mActivityTestRule.getActivity().getLayoutManager();
-        @LayoutType int layout = inSwitcher ? LayoutType.TAB_SWITCHER : LayoutType.BROWSING;
-        LayoutTestUtils.startShowingAndWaitForLayout(layoutManager, layout, false);
+    @Test
+    @SmallTest
+    @EnableFeatures({UiAndroidFeatures.MIRROR_BACK_FORWARD_GESTURES_IN_RTL})
+    public void testRtlUiMirrorsDirectionsWithFlagEnabled() {
+        mTestServer =
+                EmbeddedTestServer.createAndStartServer(
+                        InstrumentationRegistry.getInstrumentation().getContext());
+        mActivityTestRule.loadUrl(mTestServer.getURL(RENDERED_PAGE));
+        mActivityTestRule.loadUrl(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
+
+        setRtlForTesting(true);
+        assertNavigateOnSwipeFrom(RIGHT_EDGE, mTestServer.getURL(RENDERED_PAGE));
+        assertNavigateOnSwipeFrom(LEFT_EDGE, ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
+    }
+
+    @Test
+    @SmallTest
+    @DisableFeatures({UiAndroidFeatures.MIRROR_BACK_FORWARD_GESTURES_IN_RTL})
+    public void testRtlUiMirrorsDirectionsWithFlagDisabled() {
+        mTestServer =
+                EmbeddedTestServer.createAndStartServer(
+                        InstrumentationRegistry.getInstrumentation().getContext());
+        mActivityTestRule.loadUrl(mTestServer.getURL(RENDERED_PAGE));
+        mActivityTestRule.loadUrl(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
+
+        setRtlForTesting(true);
+        assertNavigateOnSwipeFrom(LEFT_EDGE, mTestServer.getURL(RENDERED_PAGE));
+        assertNavigateOnSwipeFrom(RIGHT_EDGE, ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
     }
 }

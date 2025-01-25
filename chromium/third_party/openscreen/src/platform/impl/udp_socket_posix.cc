@@ -21,6 +21,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "build/build_config.h"
 #include "platform/api/task_runner.h"
 #include "platform/base/error.h"
 #include "platform/impl/udp_socket_reader_posix.h"
@@ -30,9 +31,7 @@ namespace openscreen {
 namespace {
 
 // 64 KB is the maximum possible UDP datagram size.
-#if !defined(__linux__)
 constexpr int kMaxUdpBufferSize = 64 << 10;
-#endif
 
 constexpr bool IsPowerOf2(uint32_t x) {
   return (x > 0) && ((x & (x - 1)) == 0);
@@ -135,7 +134,7 @@ IPEndpoint UdpSocketPosix::GetLocalEndpoint() const {
     // socket isn't bound yet. In this case, leave the original value in-place.
     switch (local_endpoint_.address.version()) {
       case UdpSocket::Version::kV4: {
-        struct sockaddr_in address;
+        struct sockaddr_in address {};
         socklen_t address_len = sizeof(address);
         if (getsockname(handle_.fd,
                         reinterpret_cast<struct sockaddr*>(&address),
@@ -150,7 +149,7 @@ IPEndpoint UdpSocketPosix::GetLocalEndpoint() const {
       }
 
       case UdpSocket::Version::kV6: {
-        struct sockaddr_in6 address;
+        struct sockaddr_in6 address {};
         socklen_t address_len = sizeof(address);
         if (getsockname(handle_.fd,
                         reinterpret_cast<struct sockaddr*>(&address),
@@ -178,11 +177,21 @@ void UdpSocketPosix::Bind() {
   // This is effectively a boolean passed to setsockopt() to allow a future
   // bind() on the same socket to succeed, even if the address is already in
   // use. This is pretty much universally the desired behavior.
-  const int reuse_addr = 1;
+  constexpr int reuse_addr = 1;
   if (setsockopt(handle_.fd, SOL_SOCKET, SO_REUSEADDR, &reuse_addr,
                  sizeof(reuse_addr)) == -1) {
     OnError(Error::Code::kSocketOptionSettingFailure);
   }
+
+#if BUILDFLAG(IS_APPLE)
+  // On Mac, SO_REUSEADDR is not enough to allow a bind() on a reusable
+  // multicast socket.  We need to also set the option SO_REUSEPORT.
+  constexpr int reuse_port = 1;
+  if (setsockopt(handle_.fd, SOL_SOCKET, SO_REUSEPORT, &reuse_port,
+                 sizeof(reuse_port)) == -1) {
+    OnError(Error::Code::kSocketOptionSettingFailure);
+  }
+#endif  // BUILDFLAG(IS_APPLE)
 
   bool is_bound = false;
   switch (local_endpoint_.address.version()) {
@@ -227,7 +236,7 @@ void UdpSocketPosix::SetMulticastOutboundInterface(
 
   switch (local_endpoint_.address.version()) {
     case UdpSocket::Version::kV4: {
-      struct ip_mreqn multicast_properties;
+      struct ip_mreqn multicast_properties {};
       // Appropriate address is set based on |imr_ifindex| when set.
       multicast_properties.imr_address.s_addr = INADDR_ANY;
       multicast_properties.imr_multiaddr.s_addr = INADDR_ANY;
@@ -271,7 +280,7 @@ void UdpSocketPosix::JoinMulticastGroup(const IPAddress& address,
         OnError(Error::Code::kSocketOptionSettingFailure);
         return;
       }
-      struct ip_mreqn multicast_properties;
+      struct ip_mreqn multicast_properties {};
       // Appropriate address is set based on |imr_ifindex| when set.
       multicast_properties.imr_address.s_addr = INADDR_ANY;
       multicast_properties.imr_ifindex =
@@ -376,29 +385,33 @@ bool IsPacketInfo<in6_pktinfo>(cmsghdr* cmh) {
 
 template <class SockAddrType, class PktInfoType>
 ErrorOr<UdpPacket> ReceiveMessageInternal(int fd) {
-  int upper_bound_bytes;
-#if defined(__linux__)
-  // This should return the exact size of the next message.
+  // Try to determine the size of the incoming packet.  If we cannot,
+  // it's not a fatal error, we will just allocate kMaxUdpBufferSize
+  // and shrink-to-fit below.
+  int upper_bound_bytes = -1;
+#if BUILDFLAG(IS_LINUX)
+  // Returns the exact size of the datagram, or -1 on error.
   upper_bound_bytes = recv(fd, nullptr, 0, MSG_PEEK | MSG_TRUNC);
-  if (upper_bound_bytes == -1) {
-    return ChooseError(errno, Error::Code::kSocketReadFailure);
+#elif BUILDFLAG(IS_APPLE)
+  // Can't use recv(MSG_TRUNC) (not supported).  Can't use ioctl(FIONREAD)
+  // (returns size in socket queue instead next message size).  Use
+  // getsocktopt(...NREAD...) to get the datagram size if possible.
+  // Ref: https://www.unix.com/man-page/mojave/2/getsockopt/
+  socklen_t optlen = sizeof(upper_bound_bytes);
+  if (getsockopt(fd, SOL_SOCKET, SO_NREAD, &upper_bound_bytes, &optlen) ==
+      -1) {
+    upper_bound_bytes = -1;
   }
-#elif defined(__APPLE__)
-  // Can't use MSG_TRUNC in recv(). Use the FIONREAD ioctl() to get an
-  // upper-bound.
-  if (ioctl(fd, FIONREAD, &upper_bound_bytes) == -1 || upper_bound_bytes < 0) {
-    return ChooseError(errno, Error::Code::kSocketReadFailure);
+#endif  // BUILDFLAG(IS_LINUX)
+  if (upper_bound_bytes > 0) {
+    upper_bound_bytes = std::min(upper_bound_bytes, kMaxUdpBufferSize);
+  } else {
+    upper_bound_bytes = kMaxUdpBufferSize;
   }
-  upper_bound_bytes = std::min(upper_bound_bytes, kMaxUdpBufferSize);
-#else  // Other POSIX platforms (neither MSG_TRUNC nor FIONREAD available).
-  upper_bound_bytes = kMaxUdpBufferSize;
-  OSP_LOG_ERROR << __func__
-                << ": POSIX upper bound bytes=" << upper_bound_bytes;
-#endif
 
   UdpPacket packet(upper_bound_bytes);
-  msghdr msg = {};
-  SockAddrType sa;
+  struct msghdr msg {};
+  SockAddrType sa{};
   msg.msg_name = &sa;
   msg.msg_namelen = sizeof(sa);
   iovec iov = {packet.data(), packet.size()};
@@ -407,11 +420,12 @@ ErrorOr<UdpPacket> ReceiveMessageInternal(int fd) {
 
   // Although we don't do anything with the control buffer, on Linux
   // it is required for the message to be properly read.
-#if defined(__linux__)
+#if BUILDFLAG(IS_LINUX)
   alignas(alignof(cmsghdr)) uint8_t control_buffer[2048];
   msg.msg_control = control_buffer;
   msg.msg_controllen = sizeof(control_buffer);
-#endif
+#endif  // BUILDFLAG(IS_LINUX)
+
   const ssize_t bytes_received = recvmsg(fd, &msg, 0);
   if (bytes_received == -1) {
     OSP_DVLOG << "Failed to read from socket.";
@@ -494,9 +508,7 @@ void UdpSocketPosix::ReceiveMessage() {
   });
 }
 
-void UdpSocketPosix::SendMessage(const void* data,
-                                 size_t length,
-                                 const IPEndpoint& dest) {
+void UdpSocketPosix::SendMessage(ByteView data, const IPEndpoint& dest) {
   if (is_closed()) {
     if (client_) {
       client_->OnSendError(this, Error::Code::kSocketClosedFailure);
@@ -504,8 +516,9 @@ void UdpSocketPosix::SendMessage(const void* data,
     return;
   }
 
-  struct iovec iov = {const_cast<void*>(data), length};
-  struct msghdr msg;
+  struct iovec iov = {
+      reinterpret_cast<void*>(const_cast<uint8_t*>(data.data())), data.size()};
+  struct msghdr msg {};
   msg.msg_iov = &iov;
   msg.msg_iovlen = 1;
   msg.msg_control = nullptr;
@@ -546,7 +559,7 @@ void UdpSocketPosix::SendMessage(const void* data,
   }
 
   // Sanity-check: UDP datagram sendmsg() is all or nothing.
-  OSP_CHECK_EQ(static_cast<size_t>(num_bytes_sent), length);
+  OSP_CHECK_EQ(static_cast<size_t>(num_bytes_sent), data.size());
 }
 
 void UdpSocketPosix::SetDscp(UdpSocket::DscpMode state) {

@@ -446,6 +446,14 @@ export interface MetricsBrowserProxy {
       interaction: SafetyCheckUnusedSitePermissionsModuleInteractions): void;
 
   /**
+   * Helper function that calls recordHistogram for the
+   * Settings.SafetyHub.AbusiveNotificationPermissionRevocation.Interactions
+   * histogram
+   */
+  recordSafetyHubAbusiveNotificationPermissionRevocationInteractionsHistogram(
+      interaction: SafetyCheckUnusedSitePermissionsModuleInteractions): void;
+
+  /**
    * Helper function that calls recordHistogram for
    * Settings.SafetyHub.UnusedSitePermissionsModule.ListCount histogram
    */
@@ -516,6 +524,17 @@ export interface MetricsBrowserProxy {
    * Hub surface.
    */
   recordSafetyHubInteraction(surface: SafetyHubSurfaces): void;
+
+  // <if expr="_google_chrome and is_win">
+  /**
+   * Notifies Chrome that the `feature_notifications.enabled` Local State pref
+   * was changed via the System settings page.
+   *
+   * @param enabled True if the toggle was changed to on (enabled), false if it
+   * was changed to off (disabled).
+   */
+  recordFeatureNotificationsChange(enabled: boolean): void;
+  // </if>
 }
 
 export class MetricsBrowserProxyImpl implements MetricsBrowserProxy {
@@ -646,6 +665,15 @@ export class MetricsBrowserProxyImpl implements MetricsBrowserProxy {
     ]);
   }
 
+  recordSafetyHubAbusiveNotificationPermissionRevocationInteractionsHistogram(
+      interaction: SafetyCheckUnusedSitePermissionsModuleInteractions) {
+    chrome.send('metricsHandler:recordInHistogram', [
+      'Settings.SafetyHub.AbusiveNotificationPermissionRevocation.Interactions',
+      interaction,
+      SafetyCheckUnusedSitePermissionsModuleInteractions.MAX_VALUE,
+    ]);
+  }
+
   recordSafetyHubUnusedSitePermissionsModuleListCountHistogram(suggestions:
                                                                    number) {
     chrome.send('metricsHandler:recordInHistogram', [
@@ -738,6 +766,13 @@ export class MetricsBrowserProxyImpl implements MetricsBrowserProxy {
       SafetyHubSurfaces.MAX_VALUE,
     ]);
   }
+
+  // <if expr="_google_chrome and is_win">
+  recordFeatureNotificationsChange(enabled: boolean): void {
+    chrome.metricsPrivate.recordBoolean(
+        'Windows.FeatureNotificationsSettingChange', enabled);
+  }
+  // </if>
 
   static getInstance(): MetricsBrowserProxy {
     return instance || (instance = new MetricsBrowserProxyImpl());

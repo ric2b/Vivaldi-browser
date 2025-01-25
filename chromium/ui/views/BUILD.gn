@@ -8,7 +8,7 @@ import("//build/config/features.gni")
 import("//build/config/ozone.gni")
 import("//build/config/ui.gni")
 import("//build/nocompile.gni")
-import("//components/metrics/generate_histograms_variants_allowlist.gni")
+import("//components/metrics/generate_allowlist_from_histograms_file.gni")
 import("//components/vector_icons/vector_icons.gni")
 import("//skia/features.gni")
 import("//testing/test.gni")
@@ -58,9 +58,10 @@ aggregate_vector_icons("views_vector_icons") {
   ]
 }
 
-generate_histograms_variants_allowlist("bubble_histograms_variant") {
+generate_allowlist_from_histograms_file("bubble_histograms_variant") {
   namespace = "views_metrics"
   input_xml_file = "//tools/metrics/histograms/metadata/views/histograms.xml"
+  tag = "variant"
   output_file = "bubble_histograms_variant.h"
   allow_list_name = "BubbleName"
 }
@@ -84,7 +85,6 @@ component("views") {
     "accessibility/ax_virtual_view.h",
     "accessibility/view_accessibility.h",
     "accessibility/view_accessibility_utils.h",
-    "accessibility/views_ax_tree_manager.h",
     "accessibility/widget_ax_tree_id_map.h",
     "accessible_pane_view.h",
     "actions/action_view_controller.h",
@@ -822,10 +822,7 @@ component("views") {
       "windows_stationarity_monitor_aura.cc",
     ]
     if (!is_chromeos_ash) {
-      sources += [
-        "accessibility/views_ax_tree_manager.cc",
-        "accessibility/widget_ax_tree_id_map.cc",
-      ]
+      sources += [ "accessibility/widget_ax_tree_id_map.cc" ]
     }
     if (is_chromeos_lacros) {
       public += [ "corewm/tooltip_lacros.h" ]
@@ -1303,6 +1300,7 @@ test("views_unittests") {
     "interaction/interaction_sequence_views_unittest.cc",
     "interaction/interaction_test_util_views_unittest.cc",
     "interaction/interactive_views_test_unittest.cc",
+    "interaction/widget_focus_observer_unittest.cc",
     "layout/animating_layout_manager_unittest.cc",
     "layout/box_layout_unittest.cc",
     "layout/box_layout_view_unittest.cc",
@@ -1438,10 +1436,6 @@ test("views_unittests") {
       "accessibility/ax_virtual_view_unittest.cc",
       "accessibility/view_ax_platform_node_delegate_unittest.cc",
     ]
-
-    if (use_aura) {
-      sources += [ "accessibility/views_ax_tree_manager_unittest.cc" ]
-    }
   }
 
   if (skia_support_skottie) {

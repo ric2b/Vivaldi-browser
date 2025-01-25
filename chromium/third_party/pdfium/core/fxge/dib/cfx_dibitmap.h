@@ -17,6 +17,7 @@
 #include "core/fxcrt/maybe_owned.h"
 #include "core/fxcrt/retain_ptr.h"
 #include "core/fxcrt/span.h"
+#include "core/fxcrt/span_util.h"
 #include "core/fxge/dib/cfx_dibbase.h"
 #include "core/fxge/dib/fx_dib.h"
 
@@ -55,8 +56,14 @@ class CFX_DIBitmap final : public CFX_DIBBase {
 
   pdfium::span<uint8_t> GetWritableScanline(int line) {
     pdfium::span<const uint8_t> src = GetScanline(line);
+    // SAFETY: const_cast<>() doesn't change size.
     return UNSAFE_BUFFERS(
         pdfium::make_span(const_cast<uint8_t*>(src.data()), src.size()));
+  }
+
+  template <typename T>
+  pdfium::span<T> GetWritableScanlineAs(int line) {
+    return fxcrt::reinterpret_span<T>(GetWritableScanline(line));
   }
 
   void TakeOver(RetainPtr<CFX_DIBitmap>&& pSrcBitmap);
@@ -71,7 +78,7 @@ class CFX_DIBitmap final : public CFX_DIBBase {
   void SetRedFromAlpha();
 
   // Requires `this` to be of format `FXDIB_Format::kArgb`.
-  bool SetUniformOpaqueAlpha();
+  void SetUniformOpaqueAlpha();
 
   // TODO(crbug.com/pdfium/2007): Migrate callers to `CFX_RenderDevice`.
   bool MultiplyAlpha(float alpha);
@@ -141,12 +148,10 @@ class CFX_DIBitmap final : public CFX_DIBBase {
   void UnPreMultiply();
 
   // Forces pre-multiplied alpha without conversion.
-  // TODO(crbug.com/pdfium/2011): Remove the need for this.
+  // TODO(crbug.com/42271020): Remove the need for this.
   void ForcePreMultiply();
-#endif
 
- protected:
-#if defined(PDF_USE_SKIA)
+  // CFX_DIBBase:
   bool IsPremultiplied() const override;
 #endif  // defined(PDF_USE_SKIA)
 

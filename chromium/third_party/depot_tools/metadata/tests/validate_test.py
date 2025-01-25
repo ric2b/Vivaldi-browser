@@ -16,6 +16,7 @@ sys.path.insert(0, _ROOT_DIR)
 
 import gclient_utils
 import metadata.validate
+import metadata.validation_result
 
 # Common paths for tests.
 _SOURCE_FILE_DIR = os.path.join(_THIS_DIR, "data")
@@ -139,6 +140,46 @@ class CheckFileTest(unittest.TestCase):
         # self.assertEqual(len(warnings), 2)
         self.assertEqual(len(errors), 0)
         self.assertEqual(len(warnings), 9)
+
+
+class ValidationResultTest(unittest.TestCase):
+    """Tests ValidationResult handles strings correctly."""
+
+    def test_ordering(self):
+        ve = metadata.validation_result.ValidationError(
+            "abc",
+            ["message1", "message2"],
+        )
+
+        vw = metadata.validation_result.ValidationError(
+            "def",
+            ["message3", "message4"],
+        )
+
+        # Check errors preceeds warnings.
+        self.assertLess(ve, vw)
+        self.assertGreater(vw, ve)
+        self.assertEqual([ve, vw], list(sorted([vw, ve])))
+
+    def test_message_generation(self):
+        ve = metadata.validation_result.ValidationError(
+            "abc",
+            ["message1", "message2"],
+        )
+        self.assertEqual(
+            ("Third party metadata issue: abc message1 message2 Check "
+             "//third_party/README.chromium.template for details."),
+            ve.get_message())
+        self.assertEqual("abc message1 message2",
+                         ve.get_message(prescript='', postscript=''))
+
+    def test_getters(self):
+        ve = metadata.validation_result.ValidationError(
+            "abc",
+            ["message1", "message2"],
+        )
+        self.assertEqual("abc", ve.get_reason())
+        self.assertEqual(["message1", "message2"], ve.get_additional())
 
 
 if __name__ == "__main__":

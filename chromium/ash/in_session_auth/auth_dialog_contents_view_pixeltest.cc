@@ -44,9 +44,7 @@ class AuthDialogContentsViewPixelTest
  public:
   AuthDialogContentsViewPixelTest() {
     scoped_features_.InitWithFeatureStates(
-        {{chromeos::features::kJelly, GetParam()},
-         {::features::kChromeRefresh2023, true},
-         {::features::kChromeRefreshSecondary2023, true}});
+        {{chromeos::features::kJelly, GetParam()}});
   }
 
   AuthDialogContentsViewPixelTest(const AuthDialogContentsViewPixelTest&) =
@@ -143,8 +141,9 @@ AuthDialogContentsViewPixelTest::CreateDialogWidget(
   // Ui response to mouse events (e.g hoover).
   aura::client::GetCursorClient(root_window)->DisableMouseEvents();
 
-  views::Widget::InitParams params(views::Widget::InitParams::TYPE_POPUP);
-  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  views::Widget::InitParams params(
+      views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
+      views::Widget::InitParams::TYPE_POPUP);
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.delegate = new views::WidgetDelegate();
   params.show_state = ui::SHOW_STATE_NORMAL;

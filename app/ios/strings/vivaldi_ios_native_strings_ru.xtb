@@ -8,6 +8,7 @@
 <translation id="1123707809902612118">От слежки и рекламы</translation>
 <translation id="1151972924205500581">Требуется пароль</translation>
 <translation id="1166425484559430538">Ваши данные зашифрованы. Укажите Мастер-пароль для их расшифровки.</translation>
+<translation id="1173894706177603556">Переименовать</translation>
 <translation id="1181037720776840403">Удалить</translation>
 <translation id="1182668946911971500">Панель заметок</translation>
 <translation id="1198271701881992799">Давайте начнём</translation>
@@ -106,7 +107,7 @@
 <translation id="2961573414320947355">Хотите открывать все ссылки в Vivaldi? Назначьте его основным.</translation>
 <translation id="3006429105107822794">Вам не нужно запоминать пароль. Он будет сохранён в менеджере паролей Vivaldi.</translation>
 <translation id="3018244467214569202">Греческий (<ph name="ORIGIN" />)</translation>
-<translation id="3029426144711327484">Показать ячейки</translation>
+<translation id="3029426144711327484">На Экспресс-панель</translation>
 <translation id="3039671569659952257">Удалить папку</translation>
 <translation id="3073196329485613487">Войти в учётную запись</translation>
 <translation id="307859903981308731">Продолжая вы принимаете</translation>
@@ -148,6 +149,7 @@
 <translation id="3842727926262967527">Выберите расположение панели вкладок и адресной строки.</translation>
 <translation id="3845564230651302310">Применение настроек блокировщика...</translation>
 <translation id="3858860766373142691">Имя</translation>
+<translation id="3861379244432690245">Включить Direct Match</translation>
 <translation id="3866249974567520381">Описание</translation>
 <translation id="3872195896030547485">Введите адрес электронной почты.</translation>
 <translation id="3897092660631435901">Меню</translation>
@@ -173,6 +175,7 @@
 <translation id="4209092469652827314">Большой</translation>
 <translation id="4219175188138757774">Чешский и словацкий (<ph name="ORIGIN" />)</translation>
 <translation id="4222285809803895512">По дате создания</translation>
+<translation id="4274598629843497594">Включите 'На Экспресс-панель', чтобы эта группа была видна на стартовой странице. Вы по-прежнему сможете получить доступ к группе через панель закладок.</translation>
 <translation id="4276839458685471670">По дате создания</translation>
 <translation id="4277085371281330061">Слежек
 блокировано</translation>
@@ -202,6 +205,7 @@
 <translation id="4619615317237390068">Вкладки с других устройств</translation>
 <translation id="462860218383788109">По дате изменения</translation>
 <translation id="4640946580087069269">В заметки</translation>
+<translation id="4643117005422448078">Популярные</translation>
 <translation id="4654578955713250802">Блокировка слежки и рекламы</translation>
 <translation id="4655510151391078468">Код не совпадает с отправленным вам.
         Вы можете <ph name="ATTEMPTS" /> попробовать ещё раз.</translation>
@@ -211,6 +215,7 @@
 <translation id="4727698999970341158">Исландский (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">Обновить</translation>
 <translation id="4739712911308055817">Не загружен</translation>
+<translation id="4750394297954878236">Подсказки</translation>
 <translation id="4759399863961855552">Порядок сортировки</translation>
 <translation id="4780953868408193639">Слежка
 блокирована</translation>
@@ -226,6 +231,7 @@
 <translation id="4943266325467647391">Встроенный в Vivaldi блокировщик защищает вас от слежки и рекламы.</translation>
 <translation id="495421405224926623">Я прочитал и согласен с Условиями использования и Политикой приватности</translation>
 <translation id="497942794017668482">Блокировано слежки и рекламы</translation>
+<translation id="4993477362660748586">Синхронизация</translation>
 <translation id="5037761343305489956">Скопировано в заметки</translation>
 <translation id="504986598654589766">Приватный просмотр позволяет не сохранять в браузере историю просмотра и поиска, временные файлы. Никакого скрытия или шифрования данных не производится.</translation>
 <translation id="505774819758747674">Предпросмотр панели с выбранным цветом</translation>
@@ -236,10 +242,12 @@
 <translation id="5153806174841856652">Ошибка входа</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Повторить отправку кода<ph name="END_LINK" /></translation>
 <translation id="5191012692655103305">Получение данных...</translation>
+<translation id="5221269430020540672">Открыть картинку в фоновой вкладке</translation>
 <translation id="5238642303473095117">Удалить данные</translation>
 <translation id="5245732982828228444">Ваши заметки будут здесь</translation>
 <translation id="5249199221558969362">Введите правдоподобный возраст.</translation>
 <translation id="5271549068863921519">Сохранить пароль</translation>
+<translation id="5273620430932404871">Включить совпадение с именем закладки</translation>
 <translation id="5290452628447338707">Заметок нет</translation>
 <translation id="5317780077021120954">Сохранить</translation>
 <translation id="5349678548463426691">По описанию</translation>
@@ -248,7 +256,6 @@
 <translation id="5378841821586202982">Корзина</translation>
 <translation id="5398772614898833570">Реклам блокировано</translation>
 <translation id="5421638721143596928">Ошибка распознавания данных. Повторите вход.</translation>
-<translation id="5422086212043657100">Использовать как папку Экспресс-панели</translation>
 <translation id="5439835075346716808">Регистрация с данного IP временно заблокирована. Попробуйте позже.</translation>
 <translation id="5486261815000869482">Подтвердите пароль</translation>
 <translation id="5494016731375030300">Недавно закрытые вкладки</translation>
@@ -260,6 +267,7 @@
 <translation id="5710478562694930157">По возрастанию</translation>
 <translation id="574392208103952083">Средний</translation>
 <translation id="5787420647064736989">Имя устройства</translation>
+<translation id="5801825598531634872">Неактивные дней</translation>
 <translation id="5822336771053074270">Добавить заметку</translation>
 <translation id="5823830882692559950">Vivaldi.net не принял ваши данные: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">Новая папка</translation>
@@ -277,6 +285,7 @@
 <translation id="6147094071357011481">Недавно закрытые вкладки недоступны</translation>
 <translation id="6193995664633100765">Индийский (<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">Опции отображения сайта</translation>
+<translation id="6257488392933423163">В виде HTML</translation>
 <translation id="6365929278691047681">Немецкий (<ph name="ORIGIN" />)</translation>
 <translation id="6406506848690869874">Синхронизация</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> выбрано</translation>
@@ -285,6 +294,7 @@
 <translation id="6517411226162529295">Запасной ключ шифрования</translation>
 <translation id="6527303717912515753">Поделиться</translation>
 <translation id="6535988230515403205">Польский (<ph name="ORIGIN" />)</translation>
+<translation id="6566198107563125484">Включить совпадение с закладками</translation>
 <translation id="659351303388691480">Удалить данные просмотра...</translation>
 <translation id="6602272356389933803">Внешний вид и темы</translation>
 <translation id="6614744450826097546">Подробности</translation>
@@ -303,7 +313,6 @@
 <translation id="681368974849482173">Заметка создана</translation>
 <translation id="6830986331692390764">Подождите, идёт очистка данных синхронизации.</translation>
 <translation id="6875510405870945573">Выберите предпочтительный уровень блокировки.</translation>
-<translation id="6885837502028760851">Показать только папки Экспресс-панели</translation>
 <translation id="6887143077297974801">Ошибка запуска.</translation>
 <translation id="691132463664340655">Тема браузера</translation>
 <translation id="6937750621455385628">Вы должны использовать учётную запись Vivaldi для входа.</translation>
@@ -316,6 +325,7 @@
 <translation id="7006864796794806241">Восстановление пароля</translation>
 <translation id="7029809446516969842">Пароли</translation>
 <translation id="7041964446309059643">Вручную</translation>
+<translation id="7083011465470143310">Забыли <ph name="BEGIN_LINK" />пароль<ph name="END_LINK" />?</translation>
 <translation id="7110758301321962823">Восстановление имени пользователя</translation>
 <translation id="7158507293261405349">Добавить новую группу</translation>
 <translation id="7192066917392691622">По убыванию</translation>
@@ -354,6 +364,7 @@
 <translation id="7732622593814325274">Блокировка слежки</translation>
 <translation id="7765158879357617694">Перенести</translation>
 <translation id="7771452384635174008">Оформление</translation>
+<translation id="7791161131809889864">Открыть все в фоне</translation>
 <translation id="7801204999757211519">Уже есть учётная запись? <ph name="BEGIN_LINK" />Войдите ➔<ph name="END_LINK" /></translation>
 <translation id="7850070199083838600">Создать новую группу?</translation>
 <translation id="7914995060146784406">Правка заметки</translation>
@@ -365,6 +376,7 @@
 <translation id="8058018971942772071">Использовать как группу</translation>
 <translation id="8066170816074394954">Ошибка сервера.</translation>
 <translation id="8076492880354921740">Вкладки</translation>
+<translation id="8077675488769462025">Неактивны вкладки</translation>
 <translation id="8112996065264879835">Код не совпадает с отправленным вам.
         Число возможных попыток истекло. Запросите новый код используя опцию повторной отправки кода ниже.</translation>
 <translation id="8134672010161840864">Обрезать или изменить положение</translation>
@@ -379,13 +391,14 @@
 <translation id="8275038454117074363">Импорт</translation>
 <translation id="8284356787013856231">Нет прав на открытие файла</translation>
 <translation id="8289933454364510719">Вверху или внизу</translation>
-<translation id="8304044605002588416">Кнопка настроек Экспресс-панели</translation>
+<translation id="8304044605002588416">Настроить кнопку Экспресс-панели</translation>
 <translation id="8326104954595890674">Новая приватная вкладка</translation>
 <translation id="8329813750766387010">Обновлён: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Удалить предупреждения cookie (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">Для просмотра вкладок с других устройств нужно включить синхронизацию.</translation>
 <translation id="8366175803122817174">Открыть все адреса заметки</translation>
 <translation id="8384409685584033392">О странице</translation>
+<translation id="8395378633507873708">Панель адреса</translation>
 <translation id="839736845446313156">Регистрация</translation>
 <translation id="8414685983518053656">Заметки</translation>
 <translation id="8423076545503792640">Ошибка выполнения запроса. Повторите позже.</translation>
@@ -402,6 +415,7 @@
 <translation id="8675578805254882416">Получение</translation>
 <translation id="8677007239430848917">Добавьте первую заметку кнопкой с плюсом ниже</translation>
 <translation id="8684294196284714094">Готовы назначить Vivaldi основным браузером?</translation>
+<translation id="8733945742171960420">Ваши часто посещаемые сайты будут отображаться здесь.</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> заметок удалено</translation>
 <translation id="8763006697839582351">Открыть в Vivaldi приватно</translation>
 <translation id="8765173886020357878">Поисковые подсказки</translation>
@@ -412,6 +426,7 @@
 <translation id="8855707633300847215">Показывать панель вкладок</translation>
 <translation id="8892354889971902600">Здесь будут недавно закрытые вкладки.</translation>
 <translation id="89390081013973080">Готово! Пора выбрать данные для синхронизации.</translation>
+<translation id="8964449607824577665">Без вашего текущего пароля шифрования мы не сможем расшифровать данные. Для сброса этого пароля необходимо очистить данные синхронизации на сервере Vivaldi.</translation>
 <translation id="8965371804397726192">Начать синхронизацию</translation>
 <translation id="9028089729841356743">Ошибка сети.</translation>
 <translation id="9043882097999887291">Реклам

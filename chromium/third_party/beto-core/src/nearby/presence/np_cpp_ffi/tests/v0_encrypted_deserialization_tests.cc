@@ -27,28 +27,19 @@
 
 // NOLINTBEGIN(readability-magic-numbers)
 TEST_F(NpCppTest, V0PrivateIdentityDeserializationSimpleCase) {
-  auto slab_result = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(slab_result.ok());
-
+  nearby_protocol::CredentialSlab slab;
   const std::span<uint8_t> metadata_span(V0AdvEncryptedMetadata);
   const nearby_protocol::MatchedCredentialData match_data(123, metadata_span);
-
   std::array<uint8_t, 32> key_seed = {};
   std::fill_n(key_seed.begin(), 32, 0x11);
-
   const nearby_protocol::V0MatchableCredential v0_cred(
-      key_seed, V0AdvLegacyMetadataKeyHmac, match_data);
-
-  auto add_result = slab_result->AddV0Credential(v0_cred);
-  ASSERT_EQ(add_result, absl::OkStatus());
-
-  auto book_result =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(*slab_result);
-  ASSERT_TRUE(book_result.ok());
+      key_seed, V0AdvLegacyIdentityTokenHmac, match_data);
+  slab.AddV0Credential(v0_cred);
+  nearby_protocol::CredentialBook book(slab);
 
   auto deserialize_result =
       nearby_protocol::Deserializer::DeserializeAdvertisement(
-          V0AdvEncryptedPayload, *book_result);
+          V0AdvEncryptedPayload, book);
   ASSERT_EQ(deserialize_result.GetKind(),
             nearby_protocol::DeserializeAdvertisementResultKind::V0);
 
@@ -66,16 +57,14 @@ TEST_F(NpCppTest, V0PrivateIdentityDeserializationSimpleCase) {
   auto de = payload.TryGetDataElement(0);
   ASSERT_TRUE(de.ok());
 
-  auto metadata = payload.DecryptMetadata();
+  auto metadata = payload.TryDecryptMetadata();
   ASSERT_TRUE(metadata.ok());
   ASSERT_EQ(ExpectedV0DecryptedMetadata,
             std::string(metadata->begin(), metadata->end()));
 
-  auto identity_details = payload.GetIdentityDetails();
+  auto identity_details = payload.TryGetIdentityDetails();
   ASSERT_TRUE(identity_details.ok());
-  ASSERT_EQ(identity_details->cred_id, 123);
-  ASSERT_EQ(identity_details->identity_type,
-            nearby_protocol::EncryptedIdentityType::Private);
+  ASSERT_EQ(identity_details->cred_id, 123u);
 
   auto de_type = de->GetKind();
   ASSERT_EQ(de_type, nearby_protocol::V0DataElementKind::TxPower);
@@ -85,8 +74,8 @@ TEST_F(NpCppTest, V0PrivateIdentityDeserializationSimpleCase) {
 }
 
 nearby_protocol::CredentialBook CreateEmptyCredBook() {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   return book;
 }
 
@@ -108,30 +97,22 @@ TEST_F(NpCppTest, V0PrivateIdentityEmptyBook) {
 }
 
 TEST_F(NpCppTest, V0PrivateIdentityNoMatchingCreds) {
-  auto slab_result = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(slab_result.ok());
-
+  nearby_protocol::CredentialSlab slab;
   uint8_t metadata[] = {0};
   const std::span<uint8_t> metadata_span(metadata);
   const nearby_protocol::MatchedCredentialData match_data(123, metadata_span);
-
   // A randomly picked key seed, does NOT match what was used for the canned adv
   std::array<uint8_t, 32> key_seed = {};
   std::fill_n(key_seed.begin(), 31, 0x11);
-
   const nearby_protocol::V0MatchableCredential v0_cred(
-      key_seed, V0AdvLegacyMetadataKeyHmac, match_data);
+      key_seed, V0AdvLegacyIdentityTokenHmac, match_data);
+  slab.AddV0Credential(v0_cred);
 
-  auto add_result = slab_result->AddV0Credential(v0_cred);
-  ASSERT_EQ(add_result, absl::OkStatus());
-
-  auto book_result =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(*slab_result);
-  ASSERT_TRUE(book_result.ok());
+  nearby_protocol::CredentialBook book(slab);
 
   auto deserialize_result =
       nearby_protocol::Deserializer::DeserializeAdvertisement(
-          V0AdvEncryptedPayload, *book_result);
+          V0AdvEncryptedPayload, book);
   ASSERT_EQ(deserialize_result.GetKind(),
             nearby_protocol::DeserializeAdvertisementResultKind::V0);
 
@@ -146,31 +127,31 @@ TEST_F(NpCppTest, V0PrivateIdentityNoMatchingCreds) {
 
 // Make sure the correct credential is matched out of multiple provided
 TEST_F(NpCppTest, V0PrivateIdentityMultipleCredentials) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
+  nearby_protocol::CredentialSlab slab;
   const std::span<uint8_t> metadata_span(V0AdvEncryptedMetadata);
   std::array<uint8_t, 32> key_seed = {};
   // Non matching credential
   const nearby_protocol::MatchedCredentialData match_data(123, metadata_span);
   std::fill_n(key_seed.begin(), 32, 0x12);
   const nearby_protocol::V0MatchableCredential v0_cred(
-      key_seed, V0AdvLegacyMetadataKeyHmac, match_data);
-  ASSERT_TRUE(slab.AddV0Credential(v0_cred).ok());
+      key_seed, V0AdvLegacyIdentityTokenHmac, match_data);
+  slab.AddV0Credential(v0_cred);
 
   // Matching credential
   const nearby_protocol::MatchedCredentialData match_data2(456, metadata_span);
   std::fill_n(key_seed.begin(), 32, 0x11);
   const nearby_protocol::V0MatchableCredential v0_cred2(
-      key_seed, V0AdvLegacyMetadataKeyHmac, match_data2);
-  ASSERT_TRUE(slab.AddV0Credential(v0_cred2).ok());
+      key_seed, V0AdvLegacyIdentityTokenHmac, match_data2);
+  slab.AddV0Credential(v0_cred2);
 
   // Non matching credential
   const nearby_protocol::MatchedCredentialData match_data3(789, metadata_span);
   std::fill_n(key_seed.begin(), 32, 0x13);
   const nearby_protocol::V0MatchableCredential v0_cred3(
-      key_seed, V0AdvLegacyMetadataKeyHmac, match_data3);
-  ASSERT_TRUE(slab.AddV0Credential(v0_cred3).ok());
+      key_seed, V0AdvLegacyIdentityTokenHmac, match_data3);
+  slab.AddV0Credential(v0_cred3);
 
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+  nearby_protocol::CredentialBook book(slab);
   auto legible_adv = nearby_protocol::Deserializer::DeserializeAdvertisement(
                          V0AdvEncryptedPayload, book)
                          .IntoV0()
@@ -183,10 +164,8 @@ TEST_F(NpCppTest, V0PrivateIdentityMultipleCredentials) {
   ASSERT_TRUE(payload.TryGetDataElement(0).ok());
 
   // Make sure the correct credential matches
-  auto identity_details = payload.GetIdentityDetails();
+  auto identity_details = payload.TryGetIdentityDetails();
   ASSERT_TRUE(identity_details.ok());
-  ASSERT_EQ(identity_details->cred_id, 456);
-  ASSERT_EQ(identity_details->identity_type,
-            nearby_protocol::EncryptedIdentityType::Private);
+  ASSERT_EQ(identity_details->cred_id, 456u);
 }
 // NOLINTEND(readability-magic-numbers)

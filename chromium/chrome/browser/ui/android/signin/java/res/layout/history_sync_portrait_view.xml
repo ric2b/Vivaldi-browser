@@ -8,7 +8,6 @@ found in the LICENSE file.
 <org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:background="@macro/default_bg_color"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:padding="24dp"
@@ -64,20 +63,22 @@ found in the LICENSE file.
                 </RelativeLayout>
 
             <org.chromium.ui.widget.TextViewWithLeading
-                android:id="@+id/sync_consent_title"
+                android:id="@+id/history_sync_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
                 android:gravity="center"
+                android:text="@string/history_sync_title"
                 android:textAppearance="@style/TextAppearance.Headline.Primary"
                 app:leading="@dimen/headline_size_leading" />
 
             <org.chromium.ui.widget.TextViewWithLeading
-                android:id="@+id/sync_consent_subtitle"
+                android:id="@+id/history_sync_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
                 android:gravity="center"
+                android:text="@string/history_sync_subtitle"
                 android:textAppearance="@style/TextAppearance.TextMedium.Secondary"
                 app:leading="@dimen/text_size_medium_leading" />
 
@@ -92,7 +93,7 @@ found in the LICENSE file.
     </ScrollView>
 
     <!-- Depending on the size of the screen, either the dual_control_button_bar or the
-    primary_button/secondary_button pair will be made visible from the Java side. -->
+    small_screen_button_layout will be made visible from the Java side. -->
     <org.chromium.components.browser_ui.widget.DualControlLayout
         android:id="@+id/dual_control_button_bar"
         android:layout_width="match_parent"
@@ -100,24 +101,21 @@ found in the LICENSE file.
         android:layout_marginBottom="22dp"
         android:visibility="gone" />
 
-    <org.chromium.ui.widget.ButtonCompat
-        android:id="@+id/button_primary"
-        style="@style/FilledButton.Flat"
+    <LinearLayout
+        android:id="@+id/small_screen_button_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:visibility="gone"/>
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone">
 
-    <org.chromium.ui.widget.ButtonCompat
-        android:id="@+id/button_secondary"
-        style="@style/TextButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:visibility="gone"/>
+    </LinearLayout>
 
     <org.chromium.ui.widget.TextViewWithLeading
-        android:id="@+id/sync_consent_details_description"
+        android:id="@+id/history_sync_footer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
         android:gravity="center"
         android:textAppearance="@style/TextAppearance.TextSmall.Secondary"
         app:leading="@dimen/text_size_small_leading" />

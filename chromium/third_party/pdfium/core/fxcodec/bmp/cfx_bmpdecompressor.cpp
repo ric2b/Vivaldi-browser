@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fxcodec/bmp/cfx_bmpdecompressor.h"
 
 #include <stdint.h>
@@ -20,18 +15,17 @@
 #include "core/fxcodec/bmp/cfx_bmpcontext.h"
 #include "core/fxcodec/cfx_codec_memory.h"
 #include "core/fxcrt/byteorder.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/numerics/safe_math.h"
 #include "core/fxcrt/span_util.h"
+#include "core/fxcrt/stl_util.h"
 #include "core/fxge/calculate_pitch.h"
 
 namespace fxcodec {
 
 namespace {
-
-#define BMP_PAL_ENCODE(a, r, g, b) \
-  (((uint32_t)(a) << 24) | ((r) << 16) | ((g) << 8) | (b))
 
 constexpr size_t kBmpCoreHeaderSize = 12;
 constexpr size_t kBmpInfoHeaderSize = 40;
@@ -261,8 +255,9 @@ BmpDecoder::Status CFX_BmpDecompressor::ReadBmpBitfields() {
     return BmpDecoder::Status::kFail;
 
   uint32_t masks[3];
-  if (!ReadAllOrNone(pdfium::as_writable_bytes(pdfium::make_span(masks))))
+  if (!ReadAllOrNone(pdfium::as_writable_byte_span(masks))) {
     return BmpDecoder::Status::kContinue;
+  }
 
   mask_red_ = fxcrt::FromLE32(masks[0]);
   mask_green_ = fxcrt::FromLE32(masks[1]);
@@ -282,35 +277,39 @@ BmpDecoder::Status CFX_BmpDecompressor::ReadBmpPalette() {
     mask_green_ = 0x03E0;
     mask_blue_ = 0x001F;
   }
-  pal_num_ = 0;
+  uint32_t palette_entries = 0;
   if (bit_counts_ < 16) {
-    pal_num_ = 1 << bit_counts_;
-    if (color_used_ != 0)
-      pal_num_ = color_used_;
-    size_t src_pal_size = pal_num_ * PaletteChannelCount();
-    DataVector<uint8_t> src_pal(src_pal_size);
-    uint8_t* src_pal_data = src_pal.data();
+    palette_entries = 1 << bit_counts_;
+    if (color_used_ != 0) {
+      palette_entries = color_used_;
+    }
+    size_t pal_bytes = palette_entries * PaletteChannelCount();
+    DataVector<uint8_t> src_pal(pal_bytes);
     if (!ReadAllOrNone(src_pal))
       return BmpDecoder::Status::kContinue;
 
-    palette_.resize(pal_num_);
-    int32_t src_pal_index = 0;
+    palette_.resize(palette_entries);
     if (pal_type_ == PalType::kOld) {
-      while (src_pal_index < pal_num_) {
-        palette_[src_pal_index++] = BMP_PAL_ENCODE(
-            0x00, src_pal_data[2], src_pal_data[1], src_pal_data[0]);
-        src_pal_data += 3;
+      auto src_pal_data =
+          fxcrt::reinterpret_span<FX_BGR_STRUCT<uint8_t>, uint8_t>(src_pal);
+      for (auto& dest : palette_) {
+        const auto& entry = src_pal_data.front();
+        dest = ArgbEncode(0x00, entry.red, entry.green, entry.blue);
+        src_pal_data = src_pal_data.subspan(1);
       }
     } else {
-      while (src_pal_index < pal_num_) {
-        palette_[src_pal_index++] = BMP_PAL_ENCODE(
-            src_pal_data[3], src_pal_data[2], src_pal_data[1], src_pal_data[0]);
-        src_pal_data += 4;
+      auto src_pal_data =
+          fxcrt::reinterpret_span<FX_BGRA_STRUCT<uint8_t>, uint8_t>(src_pal);
+      for (auto& dest : palette_) {
+        const auto& entry = src_pal_data.front();
+        dest = ArgbEncode(entry.alpha, entry.red, entry.green, entry.blue);
+        src_pal_data = src_pal_data.subspan(1);
       }
     }
   }
-  header_offset_ = std::max(
-      header_offset_, 14 + img_ifh_size_ + pal_num_ * PaletteChannelCount());
+  header_offset_ =
+      std::max(header_offset_,
+               14 + img_ifh_size_ + palette_entries * PaletteChannelCount());
   SaveDecodingStatus(DecodeStatus::kDataPre);
   return BmpDecoder::Status::kSuccess;
 }
@@ -359,7 +358,7 @@ BmpDecoder::Status CFX_BmpDecompressor::DecodeImage() {
 }
 
 bool CFX_BmpDecompressor::ValidateColorIndex(uint8_t val) const {
-  return val < pal_num_;
+  return val < palette_.size();
 }
 
 BmpDecoder::Status CFX_BmpDecompressor::DecodeRGB() {
@@ -436,8 +435,8 @@ BmpDecoder::Status CFX_BmpDecompressor::DecodeRGB() {
       case 24:
       case 32:
         // TODO(crbug.com/pdfium/1901): Apply bitfields.
-        fxcrt::spancpy(pdfium::make_span(out_row_buffer_),
-                       pdfium::make_span(dest_buf).first(src_row_bytes_));
+        fxcrt::Copy(pdfium::make_span(dest_buf).first(src_row_bytes_),
+                    out_row_buffer_);
         idx += src_row_bytes_;
         break;
     }
@@ -470,7 +469,7 @@ BmpDecoder::Status CFX_BmpDecompressor::DecodeRLE8() {
 
             ReadNextScanline();
             col_num_ = 0;
-            fxcrt::spanset(pdfium::make_span(out_row_buffer_), 0);
+            fxcrt::Fill(out_row_buffer_, 0);
             SaveDecodingStatus(DecodeStatus::kData);
             continue;
           }
@@ -491,7 +490,7 @@ BmpDecoder::Status CFX_BmpDecompressor::DecodeRLE8() {
               return BmpDecoder::Status::kFail;
 
             while (row_num_ < bmp_row_num__next) {
-              fxcrt::spanset(pdfium::make_span(out_row_buffer_), 0);
+              fxcrt::Fill(out_row_buffer_, 0);
               ReadNextScanline();
             }
             break;
@@ -508,8 +507,8 @@ BmpDecoder::Status CFX_BmpDecompressor::DecodeRLE8() {
             if (!ReadAllOrNone(second_part))
               return BmpDecoder::Status::kContinue;
 
-            fxcrt::spancpy(pdfium::make_span(out_row_buffer_).subspan(col_num_),
-                           pdfium::make_span(second_part).first(first_part));
+            fxcrt::Copy(pdfium::make_span(second_part).first(first_part),
+                        pdfium::make_span(out_row_buffer_).subspan(col_num_));
 
             for (size_t i = col_num_; i < col_num_ + first_part; ++i) {
               if (!ValidateColorIndex(out_row_buffer_[i]))
@@ -531,7 +530,7 @@ BmpDecoder::Status CFX_BmpDecompressor::DecodeRLE8() {
           return BmpDecoder::Status::kContinue;
         }
 
-        fxcrt::spanset(
+        fxcrt::Fill(
             pdfium::make_span(out_row_buffer_).subspan(col_num_, first_part),
             second_part);
 
@@ -566,7 +565,7 @@ BmpDecoder::Status CFX_BmpDecompressor::DecodeRLE4() {
 
             ReadNextScanline();
             col_num_ = 0;
-            fxcrt::spanset(pdfium::make_span(out_row_buffer_), 0);
+            fxcrt::Fill(out_row_buffer_, 0);
             SaveDecodingStatus(DecodeStatus::kData);
             continue;
           }
@@ -587,7 +586,7 @@ BmpDecoder::Status CFX_BmpDecompressor::DecodeRLE4() {
               return BmpDecoder::Status::kFail;
 
             while (row_num_ < bmp_row_num__next) {
-              fxcrt::spanset(pdfium::make_span(out_row_buffer_), 0);
+              fxcrt::Fill(out_row_buffer_, 0);
               ReadNextScanline();
             }
             break;
@@ -611,11 +610,12 @@ BmpDecoder::Status CFX_BmpDecompressor::DecodeRLE4() {
               return BmpDecoder::Status::kContinue;
 
             for (uint8_t i = 0; i < first_part; i++) {
-              uint8_t color = (i & 0x01) ? (*second_part_data++ & 0x0F)
-                                         : (*second_part_data & 0xF0) >> 4;
-              if (!ValidateColorIndex(color))
+              uint8_t color = (i & 0x01)
+                                  ? UNSAFE_TODO((*second_part_data++ & 0x0F))
+                                  : (*second_part_data & 0xF0) >> 4;
+              if (!ValidateColorIndex(color)) {
                 return BmpDecoder::Status::kFail;
-
+              }
               out_row_buffer_[col_num_++] = color;
             }
           }

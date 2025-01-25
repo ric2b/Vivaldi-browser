@@ -15,7 +15,6 @@
 #include "third_party/blink/renderer/core/layout/hit_test_request.h"
 #include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
-#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 namespace blink {
 
@@ -91,6 +90,31 @@ TEST_F(HitTestingTest, OcclusionHitTest) {
   UpdateAllLifecyclePhasesForTest();
   result = target->GetLayoutObject()->HitTestForOcclusion();
   EXPECT_EQ(result.InnerNode(), occluder);
+}
+
+TEST_F(HitTestingTest, OcclusionHitTestSVGTextWithFilterCrash) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+    div {
+      width: 100px;
+      height: 100px;
+    }
+    text {
+      filter: blur(10px);
+    }
+    </style>
+
+    <div id="target"></div>
+    <svg overflow="visible" display="block">
+      <text id="occluder" y="40" font-size="50px">M</text>
+    </svg>
+  )HTML");
+
+  Element* target = GetElementById("target");
+  Element* occluder = GetElementById("occluder");
+  HitTestResult result = target->GetLayoutObject()->HitTestForOcclusion();
+  // The intersection will be flagged on the text node.
+  EXPECT_EQ(result.InnerNode(), occluder->firstChild());
 }
 
 TEST_F(HitTestingTest, HitTestWithCallback) {

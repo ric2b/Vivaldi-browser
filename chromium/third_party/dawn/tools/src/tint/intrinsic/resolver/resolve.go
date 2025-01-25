@@ -116,8 +116,14 @@ func Resolve(a *ast.AST) (*sem.Sem, error) {
 		}
 	}
 
+	var usages = ast.EnumDecl{}
+	for _, e := range a.Enums {
+		if e.Name == "usages" {
+			usages = e
+		}
+	}
 	// Calculate the unique parameter names
-	r.s.UniqueParameterNames = r.calculateUniqueParameterNames()
+	r.s.UniqueParameterNames = r.calculateUniqueParameterNames(usages)
 
 	return r.s, nil
 }
@@ -395,6 +401,15 @@ func (r *resolver) intrinsic(
 			return fmt.Errorf("%v too many values for @const attribute", constEvalFn.Source)
 		}
 	}
+	if memberFunction := a.Attributes.Take("member_function"); memberFunction != nil {
+		overload.MemberFunction = true
+		if len(memberFunction.Values) != 0 {
+			return fmt.Errorf("%v unexpected value for member_function attribute", memberFunction.Source)
+		}
+		if len(a.Parameters) < 1 {
+			return fmt.Errorf("%v @member_function can only be used on a function with at least one parameter", memberFunction.Source)
+		}
+	}
 	if deprecated := a.Attributes.Take("deprecated"); deprecated != nil {
 		overload.IsDeprecated = true
 		if len(deprecated.Values) != 0 {
@@ -603,9 +618,15 @@ func (r *resolver) lookupNamed(s *scope, a ast.TemplatedName) (sem.Named, error)
 
 // calculateUniqueParameterNames() iterates over all the parameters of all
 // builtin overloads, calculating the list of unique parameter names
-func (r *resolver) calculateUniqueParameterNames() []string {
+func (r *resolver) calculateUniqueParameterNames(usages ast.EnumDecl) []string {
 	set := map[string]struct{}{"": {}}
 	names := []string{}
+
+	for _, e := range usages.Entries {
+		set[e.Name] = struct{}{}
+		names = append(names, e.Name)
+	}
+
 	for _, intrinsics := range [][]*sem.Intrinsic{
 		r.s.Builtins,
 		r.s.UnaryOperators,

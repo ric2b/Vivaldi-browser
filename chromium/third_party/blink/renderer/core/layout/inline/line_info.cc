@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/layout/inline/line_info.h"
 
 #include "base/containers/adapters.h"
@@ -17,6 +22,23 @@ namespace {
 inline bool IsHangingSpace(UChar c) {
   return c == kSpaceCharacter || Character::IsOtherSpaceSeparator(c);
 }
+
+wtf_size_t GlyphCount(const InlineItemResult& item_result) {
+  if (item_result.shape_result) {
+    return item_result.shape_result->NumGlyphs();
+  } else if (item_result.layout_result) {
+    return 1;
+  } else if (item_result.IsRubyColumn()) {
+    wtf_size_t count = 0;
+    for (const auto& nested_result :
+         item_result.ruby_column->base_line.Results()) {
+      count += GlyphCount(nested_result);
+    }
+    return count;
+  }
+  return 0;
+}
+
 }  // namespace
 
 void LineInfo::Trace(Visitor* visitor) const {
@@ -156,6 +178,25 @@ bool LineInfo::ComputeNeedsAccurateEndPosition() const {
   return false;
 }
 
+unsigned LineInfo::InflowStartOffset() const {
+  for (const auto& item_result : Results()) {
+    const InlineItem& item = *item_result.item;
+    if ((item.Type() == InlineItem::kText ||
+         item.Type() == InlineItem::kControl ||
+         item.Type() == InlineItem::kAtomicInline) &&
+        item.Length() > 0) {
+      return item_result.StartOffset();
+    } else if (item_result.IsRubyColumn()) {
+      const LineInfo& base_line = item_result.ruby_column->base_line;
+      unsigned start_offset = base_line.InflowStartOffset();
+      if (start_offset != base_line.EndTextOffset()) {
+        return start_offset;
+      }
+    }
+  }
+  return EndTextOffset();
+}
+
 InlineItemTextIndex LineInfo::End() const {
   if (GetBreakToken()) {
     return GetBreakToken()->Start();
@@ -180,9 +221,13 @@ unsigned LineInfo::InflowEndOffsetInternal(bool skip_forced_break) const {
   for (const auto& item_result : base::Reversed(Results())) {
     DCHECK(item_result.item);
     const InlineItem& item = *item_result.item;
-    if (skip_forced_break && item.Type() == InlineItem::kControl &&
-        ItemsData().text_content[item.StartOffset()] == kNewlineCharacter) {
-      continue;
+    if (skip_forced_break) {
+      if (item.Type() == InlineItem::kControl &&
+          ItemsData().text_content[item.StartOffset()] == kNewlineCharacter) {
+        continue;
+      } else if (item.Type() == InlineItem::kText && item.Length() == 0) {
+        continue;
+      }
     }
     if (item.Type() == InlineItem::kText ||
         item.Type() == InlineItem::kControl ||
@@ -198,6 +243,17 @@ unsigned LineInfo::InflowEndOffsetInternal(bool skip_forced_break) const {
     }
   }
   return StartOffset();
+}
+
+bool LineInfo::GlyphCountIsGreaterThan(wtf_size_t limit) const {
+  wtf_size_t count = 0;
+  for (const auto& item_result : Results()) {
+    count += GlyphCount(item_result);
+    if (count > limit) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool LineInfo::ShouldHangTrailingSpaces() const {
@@ -226,7 +282,7 @@ bool LineInfo::ShouldHangTrailingSpaces() const {
     case ETextAlign::kWebkitRight:
       return IsRtl(BaseDirection());
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 bool LineInfo::IsHyphenated() const {

@@ -175,7 +175,7 @@ Reduction JSNativeContextSpecialization::ReduceJSToString(Node* node) {
   // regressions and the stronger optimization should be re-implemented.
   NumberMatcher number_matcher(input);
   if (number_matcher.HasResolvedValue()) {
-    Handle<Object> num_obj =
+    DirectHandle<Object> num_obj =
         broker()
             ->local_isolate_or_isolate()
             ->factory()
@@ -200,7 +200,7 @@ Handle<String> JSNativeContextSpecialization::CreateStringConstant(Node* node) {
   DCHECK(IrOpcode::IsConstantOpcode(node->opcode()));
   NumberMatcher number_matcher(node);
   if (number_matcher.HasResolvedValue()) {
-    Handle<Object> num_obj =
+    DirectHandle<Object> num_obj =
         broker()
             ->local_isolate_or_isolate()
             ->factory()
@@ -2799,7 +2799,10 @@ Node* JSNativeContextSpecialization::InlineApiCall(
     FunctionTemplateInfoRef function_template_info) {
   compiler::OptionalObjectRef maybe_callback_data =
       function_template_info.callback_data(broker());
+  // Check if the function has an associated C++ code to execute.
   if (!maybe_callback_data.has_value()) {
+    // TODO(ishell): consider generating "return undefined" for empty function
+    // instead of failing.
     TRACE_BROKER_MISSING(broker(), "call code for function template info "
                                        << function_template_info);
     return nullptr;
@@ -2820,7 +2823,8 @@ Node* JSNativeContextSpecialization::InlineApiCall(
           1 /* implicit receiver */,
       CallDescriptor::kNeedsFrameState);
 
-  Node* data = jsgraph()->ConstantNoHole(maybe_callback_data.value(), broker());
+  Node* func_templ =
+      jsgraph()->HeapConstantNoHole(function_template_info.object());
   ApiFunction function(function_template_info.callback(broker()));
   Node* function_reference =
       graph()->NewNode(common()->ExternalConstant(ExternalReference::Create(
@@ -2829,8 +2833,9 @@ Node* JSNativeContextSpecialization::InlineApiCall(
 
   // Add CallApiCallbackStub's register argument as well.
   Node* context = jsgraph()->ConstantNoHole(native_context(), broker());
-  Node* inputs[11] = {code, function_reference, jsgraph()->ConstantNoHole(argc),
-                      data, api_holder,         receiver};
+  Node* inputs[11] = {
+      code,       function_reference, jsgraph()->ConstantNoHole(argc),
+      func_templ, api_holder,         receiver};
   int index = 6 + argc;
   inputs[index++] = context;
   inputs[index++] = frame_state;
@@ -3085,6 +3090,7 @@ JSNativeContextSpecialization::BuildPropertyStore(
       case MachineRepresentation::kWord16:
       case MachineRepresentation::kWord32:
       case MachineRepresentation::kWord64:
+      case MachineRepresentation::kFloat16:
       case MachineRepresentation::kFloat32:
       case MachineRepresentation::kSimd128:
       case MachineRepresentation::kSimd256:
@@ -3194,8 +3200,6 @@ JSNativeContextSpecialization::BuildElementAccess(
   // TODO(bmeurer): We currently specialize based on elements kind. We should
   // also be able to properly support strings and other JSObjects here.
   ElementsKind elements_kind = access_info.elements_kind();
-  DCHECK_IMPLIES(IsRabGsabTypedArrayElementsKind(elements_kind),
-                 v8_flags.turbo_rab_gsab);
   ZoneVector<MapRef> const& receiver_maps =
       access_info.lookup_start_object_maps();
 
@@ -3581,8 +3585,6 @@ JSNativeContextSpecialization::
         KeyedAccessMode const& keyed_mode) {
   DCHECK(IsTypedArrayElementsKind(elements_kind) ||
          IsRabGsabTypedArrayElementsKind(elements_kind));
-  DCHECK_IMPLIES(IsRabGsabTypedArrayElementsKind(elements_kind),
-                 v8_flags.turbo_rab_gsab);
   // AccessMode::kDefine is not handled here. Optimization should be skipped by
   // caller.
   DCHECK(keyed_mode.access_mode() != AccessMode::kDefine);

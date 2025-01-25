@@ -320,49 +320,6 @@ VkStencilOp VulkanStencilOp(wgpu::StencilOperation op) {
     DAWN_UNREACHABLE();
 }
 
-VkPipelineDepthStencilStateCreateInfo ComputeDepthStencilDesc(const DepthStencilState* descriptor) {
-    VkPipelineDepthStencilStateCreateInfo depthStencilState;
-    depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencilState.pNext = nullptr;
-    depthStencilState.flags = 0;
-
-    // Depth writes only occur if depth is enabled
-    depthStencilState.depthTestEnable =
-        (descriptor->depthCompare == wgpu::CompareFunction::Always &&
-         !descriptor->depthWriteEnabled)
-            ? VK_FALSE
-            : VK_TRUE;
-    depthStencilState.depthWriteEnable = descriptor->depthWriteEnabled ? VK_TRUE : VK_FALSE;
-    depthStencilState.depthCompareOp = ToVulkanCompareOp(descriptor->depthCompare);
-    depthStencilState.depthBoundsTestEnable = false;
-    depthStencilState.minDepthBounds = 0.0f;
-    depthStencilState.maxDepthBounds = 1.0f;
-
-    depthStencilState.stencilTestEnable = StencilTestEnabled(descriptor) ? VK_TRUE : VK_FALSE;
-
-    depthStencilState.front.failOp = VulkanStencilOp(descriptor->stencilFront.failOp);
-    depthStencilState.front.passOp = VulkanStencilOp(descriptor->stencilFront.passOp);
-    depthStencilState.front.depthFailOp = VulkanStencilOp(descriptor->stencilFront.depthFailOp);
-    depthStencilState.front.compareOp = ToVulkanCompareOp(descriptor->stencilFront.compare);
-
-    depthStencilState.back.failOp = VulkanStencilOp(descriptor->stencilBack.failOp);
-    depthStencilState.back.passOp = VulkanStencilOp(descriptor->stencilBack.passOp);
-    depthStencilState.back.depthFailOp = VulkanStencilOp(descriptor->stencilBack.depthFailOp);
-    depthStencilState.back.compareOp = ToVulkanCompareOp(descriptor->stencilBack.compare);
-
-    // Dawn doesn't have separate front and back stencil masks.
-    depthStencilState.front.compareMask = descriptor->stencilReadMask;
-    depthStencilState.back.compareMask = descriptor->stencilReadMask;
-    depthStencilState.front.writeMask = descriptor->stencilWriteMask;
-    depthStencilState.back.writeMask = descriptor->stencilWriteMask;
-
-    // The stencil reference is always dynamic
-    depthStencilState.front.reference = 0;
-    depthStencilState.back.reference = 0;
-
-    return depthStencilState;
-}
-
 }  // anonymous namespace
 
 // static
@@ -392,6 +349,7 @@ MaybeError RenderPipeline::InitializeImpl() {
                                             ->GetHandleAndSpirv(stage, programmableStage, layout,
                                                                 clampFragDepth, emitPointSize,
                                                                 /* fullSubgroups */ {}));
+        mHasInputAttachment = mHasInputAttachment || moduleAndSpirv.hasInputAttachment;
         // Record cache key for each shader since it will become inaccessible later on.
         StreamIn(&mCacheKey, stream::Iterable(moduleAndSpirv.spirv, moduleAndSpirv.wordCount));
 
@@ -486,8 +444,7 @@ MaybeError RenderPipeline::InitializeImpl() {
     multisample.alphaToCoverageEnable = IsAlphaToCoverageEnabled();
     multisample.alphaToOneEnable = VK_FALSE;
 
-    VkPipelineDepthStencilStateCreateInfo depthStencilState =
-        ComputeDepthStencilDesc(GetDepthStencilState());
+    VkPipelineDepthStencilStateCreateInfo depthStencilState = ComputeDepthStencilDesc();
 
     VkPipelineColorBlendStateCreateInfo colorBlend;
     // colorBlend may hold pointers to elements in colorBlendAttachments, so it must have a
@@ -544,17 +501,31 @@ MaybeError RenderPipeline::InitializeImpl() {
     dynamic.dynamicStateCount = sizeof(dynamicStates) / sizeof(dynamicStates[0]);
     dynamic.pDynamicStates = dynamicStates;
 
-    // Get a VkRenderPass that matches the attachment formats for this pipeline, load/store ops
-    // don't matter so set them all to LoadOp::Load / StoreOp::Store. Whether the render pass
-    // has resolve target and whether depth/stencil attachment is read-only also don't matter,
-    // so set them both to false.
-    VkRenderPass renderPass = VK_NULL_HANDLE;
+    // Get a VkRenderPass that matches the attachment formats for this pipeline.
+    // VkRenderPass compatibility rules let us provide placeholder data for a bunch of arguments.
+    // Load and store ops are all equivalent, though we still specify ExpandResolveTexture as that
+    // controls the use of input attachments. Single subpass VkRenderPasses are compatible
+    // irrespective of resolve attachments being used, but for ExpandResolveTexture that uses two
+    // subpasses we need to specify which attachments will be resolved.
+    RenderPassCache::RenderPassInfo renderPassInfo;
     {
         RenderPassCacheQuery query;
+        ColorAttachmentMask resolveMask =
+            GetAttachmentState()->GetExpandResolveInfo().resolveTargetsMask;
+        ColorAttachmentMask expandResolveMask =
+            GetAttachmentState()->GetExpandResolveInfo().attachmentsToExpandResolve;
 
         for (auto i : IterateBitSet(GetColorAttachmentsMask())) {
-            query.SetColor(i, GetColorAttachmentFormat(i), wgpu::LoadOp::Load, wgpu::StoreOp::Store,
-                           false);
+            wgpu::LoadOp colorLoadOp = wgpu::LoadOp::Load;
+            bool hasResolveTarget = resolveMask.test(i);
+
+            if (expandResolveMask.test(i)) {
+                // ExpandResolveTexture will use 2 subpasses in a render pass so we have to create
+                // an appropriate query.
+                colorLoadOp = wgpu::LoadOp::ExpandResolveTexture;
+            }
+            query.SetColor(i, GetColorAttachmentFormat(i), colorLoadOp, wgpu::StoreOp::Store,
+                           hasResolveTarget);
         }
 
         if (HasDepthStencilAttachment()) {
@@ -565,7 +536,7 @@ MaybeError RenderPipeline::InitializeImpl() {
         query.SetSampleCount(GetSampleCount());
 
         StreamIn(&mCacheKey, query);
-        DAWN_TRY_ASSIGN(renderPass, device->GetRenderPassCache()->GetRenderPass(query));
+        DAWN_TRY_ASSIGN(renderPassInfo, device->GetRenderPassCache()->GetRenderPass(query));
     }
 
     // The create info chains in a bunch of things created on the stack here or inside state
@@ -587,10 +558,17 @@ MaybeError RenderPipeline::InitializeImpl() {
         (GetStageMask() & wgpu::ShaderStage::Fragment) ? &colorBlend : nullptr;
     createInfo.pDynamicState = &dynamic;
     createInfo.layout = ToBackend(GetLayout())->GetHandle();
-    createInfo.renderPass = renderPass;
-    createInfo.subpass = 0;
+    createInfo.renderPass = renderPassInfo.renderPass;
     createInfo.basePipelineHandle = VkPipeline{};
     createInfo.basePipelineIndex = -1;
+
+    // - If the pipeline uses input attachments in shader, currently this is only used by
+    //   ExpandResolveTexture subpass, hence we need to set the subpass to 0.
+    // - Otherwise, the pipeline will operate on the main subpass.
+    // - TODO(42240662): Add explicit way to specify subpass instead of implicitly deducing based on
+    // mHasInputAttachment.
+    //   That also means mHasInputAttachment would be removed in future.
+    createInfo.subpass = mHasInputAttachment ? 0 : renderPassInfo.mainSubpass;
 
     // Record cache key information now since createInfo is not stored.
     StreamIn(&mCacheKey, createInfo, layout->GetCacheKey());
@@ -665,6 +643,51 @@ VkPipelineVertexInputStateCreateInfo RenderPipeline::ComputeVertexInputDesc(
     createInfo.vertexAttributeDescriptionCount = attributeCount;
     createInfo.pVertexAttributeDescriptions = tempAllocations->attributes.data();
     return createInfo;
+}
+
+VkPipelineDepthStencilStateCreateInfo RenderPipeline::ComputeDepthStencilDesc() {
+    const DepthStencilState* descriptor = GetDepthStencilState();
+
+    VkPipelineDepthStencilStateCreateInfo depthStencilState;
+    depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencilState.pNext = nullptr;
+    depthStencilState.flags = 0;
+
+    // Depth writes only occur if depth is enabled
+    depthStencilState.depthTestEnable =
+        (descriptor->depthCompare == wgpu::CompareFunction::Always &&
+         !descriptor->depthWriteEnabled)
+            ? VK_FALSE
+            : VK_TRUE;
+    depthStencilState.depthWriteEnable = descriptor->depthWriteEnabled ? VK_TRUE : VK_FALSE;
+    depthStencilState.depthCompareOp = ToVulkanCompareOp(descriptor->depthCompare);
+    depthStencilState.depthBoundsTestEnable = false;
+    depthStencilState.minDepthBounds = 0.0f;
+    depthStencilState.maxDepthBounds = 1.0f;
+
+    depthStencilState.stencilTestEnable = UsesStencil() ? VK_TRUE : VK_FALSE;
+
+    depthStencilState.front.failOp = VulkanStencilOp(descriptor->stencilFront.failOp);
+    depthStencilState.front.passOp = VulkanStencilOp(descriptor->stencilFront.passOp);
+    depthStencilState.front.depthFailOp = VulkanStencilOp(descriptor->stencilFront.depthFailOp);
+    depthStencilState.front.compareOp = ToVulkanCompareOp(descriptor->stencilFront.compare);
+
+    depthStencilState.back.failOp = VulkanStencilOp(descriptor->stencilBack.failOp);
+    depthStencilState.back.passOp = VulkanStencilOp(descriptor->stencilBack.passOp);
+    depthStencilState.back.depthFailOp = VulkanStencilOp(descriptor->stencilBack.depthFailOp);
+    depthStencilState.back.compareOp = ToVulkanCompareOp(descriptor->stencilBack.compare);
+
+    // Dawn doesn't have separate front and back stencil masks.
+    depthStencilState.front.compareMask = descriptor->stencilReadMask;
+    depthStencilState.back.compareMask = descriptor->stencilReadMask;
+    depthStencilState.front.writeMask = descriptor->stencilWriteMask;
+    depthStencilState.back.writeMask = descriptor->stencilWriteMask;
+
+    // The stencil reference is always dynamic
+    depthStencilState.front.reference = 0;
+    depthStencilState.back.reference = 0;
+
+    return depthStencilState;
 }
 
 RenderPipeline::~RenderPipeline() = default;

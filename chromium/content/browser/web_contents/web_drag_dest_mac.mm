@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/341324165): Fix and remove.
+#pragma allow_unsafe_buffers
+#endif
+
 #import "content/browser/web_contents/web_drag_dest_mac.h"
 
 #include <AppKit/AppKit.h>
@@ -13,9 +18,9 @@
 #include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/sys_string_conversions.h"
+#include "components/input/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
-#include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view_drag_security_info.h"
@@ -433,15 +438,6 @@ void DropCompletionCallback(WebDragDest* drag_dest,
   _dragSecurityInfo.OnDragEnded();
 }
 
-- (content::WebContentsViewDragSecurityInfo)dragSecurityInfo {
-  return _dragSecurityInfo;
-}
-
-- (void)setDragSecurityInfo:
-    (content::WebContentsViewDragSecurityInfo)dragSecurityInfo {
-  _dragSecurityInfo = dragSecurityInfo;
-}
-
 @end
 
 namespace content {
@@ -492,8 +488,9 @@ DropData PopulateDropDataFromPasteboard(NSPasteboard* pboard) {
   drop_data.filenames = ui::clipboard_util::FilesFromPasteboard(pboard);
 
   // Get custom MIME data.
-  if ([types containsObject:ui::kUTTypeChromiumWebCustomData]) {
-    NSData* customData = [pboard dataForType:ui::kUTTypeChromiumWebCustomData];
+  if ([types containsObject:ui::kUTTypeChromiumDataTransferCustomData]) {
+    NSData* customData =
+        [pboard dataForType:ui::kUTTypeChromiumDataTransferCustomData];
     if (std::optional<std::unordered_map<std::u16string, std::u16string>>
             maybe_custom_data = ui::ReadCustomDataIntoMap(
                 base::span(reinterpret_cast<const uint8_t*>([customData bytes]),

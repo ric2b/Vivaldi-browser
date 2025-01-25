@@ -76,6 +76,10 @@ class COMPONENT_EXPORT(DBUS_POWER) FakePowerManagerClient
   double keyboard_brightness_percent() const {
     return keyboard_brightness_percent_.value();
   }
+  power_manager::SetBacklightBrightnessRequest_Cause
+  requested_keyboard_brightness_cause() const {
+    return requested_keyboard_brightness_cause_;
+  }
   double keyboard_ambient_light_sensor_enabled() const {
     return keyboard_ambient_light_sensor_enabled_;
   }
@@ -215,6 +219,11 @@ class COMPONENT_EXPORT(DBUS_POWER) FakePowerManagerClient
   void SendAmbientLightSensorEnabledChanged(
       const power_manager::AmbientLightSensorChange& proto);
 
+  // Notifies observers about changes to the Keyboard Ambient Light Sensor
+  // status.
+  void SendKeyboardAmbientLightSensorEnabledChanged(
+      const power_manager::AmbientLightSensorChange& proto);
+
   // Notifies observers about the screen idle state changing.
   void SendScreenIdleStateChanged(const power_manager::ScreenIdleState& proto);
 
@@ -319,6 +328,12 @@ class COMPONENT_EXPORT(DBUS_POWER) FakePowerManagerClient
   // Initially set to an arbitrary value.
   power_manager::SetBacklightBrightnessRequest_Cause
       requested_screen_brightness_cause_ =
+          power_manager::SetBacklightBrightnessRequest_Cause_MODEL;
+
+  // Last keyboard brightness request cause via HandleSetKeyboardBrightness().
+  // Initially set to an arbitrary value.
+  power_manager::SetBacklightBrightnessRequest_Cause
+      requested_keyboard_brightness_cause_ =
           power_manager::SetBacklightBrightnessRequest_Cause_MODEL;
 
   // Last value set by SetAmbientLightSensorEnabled. Defaults to true to match

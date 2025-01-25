@@ -922,6 +922,17 @@ deps = {
                 'generation': 1542380408102456,
             }]
           },
+          'src/gcs_dep_ignored': {
+            'bucket': '789bucket',
+            'dep_type': 'gcs',
+            'objects': [{
+                'object_name': 'foobar',
+                'sha256sum': 'abcd124',
+                'size_bytes': 10000,
+                'generation': 1542380408102457,
+                'condition': 'False',
+            }]
+          },
         }"""),
                 'origin':
                 'git/repo_22@1\n'

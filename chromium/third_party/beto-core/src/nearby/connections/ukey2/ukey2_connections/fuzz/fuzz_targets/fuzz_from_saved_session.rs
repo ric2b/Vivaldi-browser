@@ -1,4 +1,4 @@
-#![no_main]
+#![cfg_attr(fuzzing, no_main)]
 // Copyright 2023 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,17 +13,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use libfuzzer_sys::fuzz_target;
-use ukey2_connections::{D2DConnectionContextV1, DeserializeError};
 use crypto_provider_rustcrypto::RustCrypto;
+use derive_fuzztest::fuzztest;
+use ukey2_connections::{D2DConnectionContextV1, DeserializeError};
 
 const PROTOCOL_VERSION: u8 = 1;
 
-fuzz_target!(|input: [u8; 73]| {
+#[fuzztest]
+fn test(input: [u8; 73]) {
     let result = D2DConnectionContextV1::from_saved_session::<RustCrypto>(&input);
     if input[0] != PROTOCOL_VERSION {
         assert_eq!(result.unwrap_err(), DeserializeError::BadProtocolVersion);
     } else {
         assert!(result.is_ok());
     }
-});
+}

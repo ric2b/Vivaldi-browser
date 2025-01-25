@@ -31,6 +31,8 @@ def MHLO_ScatterDimensionNumbers : AttrDef<MHLO_Dialect, "ScatterDimensionNumber
   let parameters = (ins
       MHLO_Dims:$updateWindowDims,
       MHLO_Dims:$insertedWindowDims,
+      MHLO_Dims:$inputBatchingDims,
+      MHLO_Dims:$scatterIndicesBatchingDims,
       MHLO_Dims:$scatterDimsToOperandDims,
       "int64_t":$indexVectorDim
   );
@@ -43,6 +45,8 @@ def MHLO_GatherDimensionNumbers : AttrDef<MHLO_Dialect, "GatherDimensionNumbers"
   let parameters = (ins
       MHLO_Dims:$offsetDims,
       MHLO_Dims:$collapsedSliceDims,
+      MHLO_Dims:$operandBatchingDims,
+      MHLO_Dims:$startIndicesBatchingDims,
       MHLO_Dims:$startIndexMap,
       "int64_t":$indexVectorDim
   );
@@ -289,25 +293,6 @@ def MHLO_BoolElementsAttr :
   let returnType = [{ ::mlir::DenseElementsAttr }];
 
   let convertFromStorage = "$_self";
-}
-
-def MHLO_ConvolutionAttributes {
-  dag attributes = (ins
-    // Default value: one for each of the spatial dimension.
-    OptionalAttr<I64ElementsAttr>:$window_strides,
-    // Default value: two zeros for each of the spatial dimension.
-    OptionalAttr<I64ElementsAttr>:$padding,
-    // Default value: one for each of the spatial dimension.
-    OptionalAttr<I64ElementsAttr>:$lhs_dilation,
-    // Default value: one for each of the spatial dimension.
-    OptionalAttr<I64ElementsAttr>:$rhs_dilation,
-    // Default value: false for each of the spatial dimension.
-    OptionalAttr<MHLO_BoolElementsAttr>:$window_reversal,
-    MHLO_ConvDimensionNumbers:$dimension_numbers,
-    I64Attr:$feature_group_count,
-    I64Attr:$batch_group_count,
-    MHLO_PrecisionConfigAttr:$precision_config
-  );
 }
 
 #endif // MLIR_HLO_DIALECT_MHLO_IR_HLO_OPS_ATTRS

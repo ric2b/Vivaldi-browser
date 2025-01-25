@@ -7,6 +7,7 @@ import("//build/config/android/config.gni")
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//third_party/cpuinfo/cpuinfo.gni")
+import("//third_party/flatbuffers/flatbuffer.gni")
 import("//third_party/mediapipe/features.gni")
 import("//third_party/protobuf/proto_library.gni")
 import("//third_party/tflite/features.gni")
@@ -16,6 +17,7 @@ proto_library("tflite_proto") {
   proto_in_dir = "src"
   sources = [
     "src/tensorflow/lite/acceleration/configuration/configuration.proto",
+    "src/tensorflow/lite/profiling/proto/profiling_info.proto",
     "src/third_party/xla/third_party/tsl/tsl/protobuf/coordination_config.proto",
   ]
   cc_generator_options = "lite=true:"
@@ -32,6 +34,7 @@ proto_library("tflite_op_resolver_proto") {
 
 config("tflite_config") {
   include_dirs = [
+    "$root_gen_dir/third_party/tflite/src",
     "shims",
     "src",
     "src/third_party/xla",
@@ -57,11 +60,6 @@ config("tflite_flags") {
     # TODO(crbug.com/1147556): Try to clean/remove no-sign-compare if possible.
     "-Wno-sign-compare",
 
-    # TODO(thakis): Remove once
-    # https://github.com/tensorflow/tensorflow/pull/50528 is rolled in.
-    "-Wno-unreachable-code-break",
-    "-Wno-unreachable-code-return",
-
     "-Wno-unused-but-set-variable",
 
     # This flag is needed to enable the strip error strings flag since a handful
@@ -80,7 +78,13 @@ config("tflite_flags") {
   ]
 
   if (build_tflite_with_xnnpack) {
-    defines += [ "TFLITE_BUILD_WITH_XNNPACK_DELEGATE" ]
+    defines += [
+      "TFLITE_BUILD_WITH_XNNPACK_DELEGATE",
+      "XNNPACK_DELEGATE_ENABLE_QS8",
+      "XNNPACK_DELEGATE_ENABLE_QU8",
+      "XNNPACK_DELEGATE_USE_LATEST_OPS",
+      "TFLITE_KERNEL_USE_XNNPACK",
+    ]
   } else {
     defines += [ "TFLITE_WITHOUT_XNNPACK" ]
   }
@@ -164,6 +168,7 @@ tflite_static_library("tflite_builtin_op_resolver") {
     "src/tensorflow/lite/kernels/sign.cc",
     "src/tensorflow/lite/kernels/sign_custom.cc",
     "src/tensorflow/lite/kernels/stablehlo_add.cc",
+    "src/tensorflow/lite/kernels/stablehlo_composite.cc",
     "src/tensorflow/lite/kernels/stablehlo_elementwise.cc",
     "src/tensorflow/lite/kernels/stablehlo_min_max.cc",
     "src/tensorflow/lite/kernels/stablehlo_multiply.cc",
@@ -192,13 +197,18 @@ tflite_static_library("tflite_builtin_op_resolver") {
 
   public_configs = [ ":tflite_config" ]
 
-  visibility = [ "//third_party/mediapipe/*" ]
+  visibility = [
+    ":tflite_benchmark",
+    "//services/webnn/*",
+    "//third_party/mediapipe/*",
+  ]
 
   conditional_deps = [ ":tflite" ]
 }
 
 source_set("tflite_public_headers") {
   public = [
+    "src/tensorflow/compiler/mlir/lite/schema/schema_utils.h",
     "src/tensorflow/lite/allocation.h",
     "src/tensorflow/lite/arena_planner.h",
     "src/tensorflow/lite/array.h",
@@ -221,7 +231,6 @@ source_set("tflite_public_headers") {
     "src/tensorflow/lite/op_resolver.h",
     "src/tensorflow/lite/optional_debug_tools.h",
     "src/tensorflow/lite/schema/schema_generated.h",
-    "src/tensorflow/lite/schema/schema_utils.h",
     "src/tensorflow/lite/signature_runner.h",
     "src/tensorflow/lite/stderr_reporter.h",
     "src/tensorflow/lite/string_type.h",
@@ -271,6 +280,9 @@ source_set("tflite_kernel_internals") {
     "src/tensorflow/lite/kernels/internal/kernel_utils.h",
     "src/tensorflow/lite/kernels/internal/max.h",
     "src/tensorflow/lite/kernels/internal/min.h",
+    "src/tensorflow/lite/kernels/internal/optimized/4bit/fully_connected_reference.cc",
+    "src/tensorflow/lite/kernels/internal/optimized/4bit/fully_connected_reference.h",
+    "src/tensorflow/lite/kernels/internal/optimized/4bit/fully_connected_reference_impl.h",
     "src/tensorflow/lite/kernels/internal/optimized/batch_matmul.h",
     "src/tensorflow/lite/kernels/internal/optimized/cpu_check.cc",
     "src/tensorflow/lite/kernels/internal/optimized/cpu_check.h",
@@ -388,6 +400,7 @@ source_set("tflite_kernel_internals") {
   configs += [
     ":tflite_config",
     ":tflite_flags",
+    "//third_party/eigen3:eigen_includes",
   ]
 
   public_configs = [ "//third_party/eigen3:eigen_public_includes" ]
@@ -442,9 +455,6 @@ tflite_static_library("tflite_kernels") {
     "src/tensorflow/lite/kernels/gather_nd.cc",
     "src/tensorflow/lite/kernels/hashtable_lookup.cc",
     "src/tensorflow/lite/kernels/if.cc",
-    "src/tensorflow/lite/kernels/internal/optimized/4bit/fully_connected_reference.cc",
-    "src/tensorflow/lite/kernels/internal/optimized/4bit/fully_connected_reference.h",
-    "src/tensorflow/lite/kernels/internal/optimized/4bit/fully_connected_reference_impl.h",
     "src/tensorflow/lite/kernels/kernel_util.cc",
     "src/tensorflow/lite/kernels/kernel_util.h",
     "src/tensorflow/lite/kernels/l2norm.cc",
@@ -543,6 +553,10 @@ tflite_static_library("tflite_kernels") {
     include_dirs = [ "//third_party/cpuinfo/src" ]
   }
 
+  if (build_tflite_with_xnnpack) {
+    conditional_deps += [ "//third_party/xnnpack:xnnpack" ]
+  }
+
   configs_to_add = [
     ":tflite_config",
     ":tflite_flags",
@@ -589,10 +603,19 @@ source_set("tflite_logging_standalone") {
   visibility = [ ":*" ]
 }
 
+flatbuffer("weight_cache_schema_generated") {
+  sources = [ "src/tensorflow/lite/delegates/xnnpack/weight_cache_schema.fbs" ]
+  args = [ "--gen-object-api" ]
+}
+
 # TODO(crbug.com/1147996): Update to a component build. Will require updating the
 # tflite version.
 tflite_static_library("tflite") {
   sources = [
+    "src/tensorflow/compiler/mlir/lite/experimental/remat/metadata_util.cc",
+    "src/tensorflow/compiler/mlir/lite/experimental/remat/metadata_util.h",
+    "src/tensorflow/compiler/mlir/lite/schema/schema_utils.cc",
+    "src/tensorflow/compiler/mlir/lite/utils/string_utils.cc",
     "src/tensorflow/lite/acceleration/configuration/flatbuffer_to_proto.cc",
     "src/tensorflow/lite/acceleration/configuration/flatbuffer_to_proto.h",
     "src/tensorflow/lite/acceleration/configuration/proto_to_flatbuffer.cc",
@@ -640,8 +663,6 @@ tflite_static_library("tflite") {
     "src/tensorflow/lite/delegates/utils.h",
     "src/tensorflow/lite/experimental/acceleration/mini_benchmark/mini_benchmark.cc",
     "src/tensorflow/lite/experimental/acceleration/mini_benchmark/mini_benchmark.h",
-    "src/tensorflow/lite/experimental/remat/metadata_util.cc",
-    "src/tensorflow/lite/experimental/remat/metadata_util.h",
     "src/tensorflow/lite/experimental/resource/initialization_status.cc",
     "src/tensorflow/lite/experimental/resource/initialization_status.h",
     "src/tensorflow/lite/experimental/resource/lookup_interfaces.h",
@@ -681,7 +702,6 @@ tflite_static_library("tflite") {
     "src/tensorflow/lite/profiling/telemetry/telemetry.h",
     "src/tensorflow/lite/profiling/time.cc",
     "src/tensorflow/lite/profiling/time.h",
-    "src/tensorflow/lite/schema/schema_utils.cc",
     "src/tensorflow/lite/signature_runner.h",
     "src/tensorflow/lite/simple_memory_arena.cc",
     "src/tensorflow/lite/simple_memory_arena.h",
@@ -721,6 +741,8 @@ tflite_static_library("tflite") {
     sources += [
       "src/tensorflow/lite/delegates/xnnpack/quantization_util.cc",
       "src/tensorflow/lite/delegates/xnnpack/quantization_util.h",
+      "src/tensorflow/lite/delegates/xnnpack/weight_cache.cc",
+      "src/tensorflow/lite/delegates/xnnpack/weight_cache.h",
       "src/tensorflow/lite/delegates/xnnpack/xnnpack_delegate.cc",
       "src/tensorflow/lite/delegates/xnnpack/xnnpack_delegate.h",
     ]
@@ -759,7 +781,10 @@ tflite_static_library("tflite") {
   ]
 
   if (build_tflite_with_xnnpack) {
-    deps += [ "//third_party/cpuinfo" ]
+    deps += [
+      ":weight_cache_schema_generated",
+      "//third_party/cpuinfo",
+    ]
     conditional_deps += [ "//third_party/xnnpack:xnnpack" ]
   }
 
@@ -798,4 +823,50 @@ tflite_static_library("tflite") {
   # target (which is assumed to be for third-party code that is OK to have
   # these switches).
   public_deps_for_standalone = [ "//third_party/neon_2_sse" ]
+}
+
+executable("tflite_benchmark") {
+  sources = [
+    "src/tensorflow/lite/tools/benchmark/benchmark_main.cc",
+    "src/tensorflow/lite/tools/benchmark/benchmark_model.cc",
+    "src/tensorflow/lite/tools/benchmark/benchmark_model.h",
+    "src/tensorflow/lite/tools/benchmark/benchmark_tflite_model.cc",
+    "src/tensorflow/lite/tools/benchmark/benchmark_tflite_model.h",
+    "src/tensorflow/lite/tools/benchmark/benchmark_utils.cc",
+    "src/tensorflow/lite/tools/benchmark/benchmark_utils.h",
+    "src/tensorflow/lite/tools/benchmark/profiling_listener.cc",
+    "src/tensorflow/lite/tools/benchmark/profiling_listener.h",
+    "src/tensorflow/lite/tools/command_line_flags.cc",
+    "src/tensorflow/lite/tools/command_line_flags.h",
+    "src/tensorflow/lite/tools/delegates/delegate_provider.cc",
+    "src/tensorflow/lite/tools/delegates/delegate_provider.h",
+    "src/tensorflow/lite/tools/model_loader.cc",
+    "src/tensorflow/lite/tools/model_loader.h",
+    "src/tensorflow/lite/tools/tool_params.cc",
+    "src/tensorflow/lite/tools/tool_params.h",
+    "src/tensorflow/lite/tools/utils.cc",
+    "src/tensorflow/lite/tools/utils.h",
+  ]
+  deps = [
+    ":tflite_builtin_op_resolver_standalone",
+    ":tflite_standalone",
+    "//third_party/abseil-cpp:absl",
+    "//third_party/ruy",
+  ]
+
+  public_configs = [ ":tflite_config" ]
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [
+    "//build/config/compiler:no_chromium_code",
+    "//third_party/eigen3:eigen_includes",
+    ":tflite_flags",
+  ]
+
+  if (is_clang) {
+    cflags_cc = [
+      "-Wno-ignored-qualifiers",
+      "-Wno-defaulted-function-deleted",
+    ]
+  }
 }

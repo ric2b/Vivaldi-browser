@@ -30,7 +30,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_WIN)
-#include "chrome/browser/os_crypt/app_bound_encryption_provider_win.h"
 #include "chrome/browser/os_crypt/app_bound_encryption_win.h"
 #include "chrome/browser/os_crypt/test_support.h"
 #include "chrome/install_static/test/scoped_install_details.h"
@@ -42,21 +41,15 @@ enum TestConfiguration {
   // Network Service is using Sync os_crypt API.
   kOSCryptSync,
   // Network Service is using Async API, i.e. cookie_encryption_provider is
-  // being supplied to the profile network context params. The DPAPI key
-  // provider is not being used in this test configuration.
+  // being supplied to the profile network context params. No key providers are
+  // used in this test configuration.
   kOSCryptAsync,
 #if BUILDFLAG(IS_WIN)
-  // The DPAPI key provider is being used to provide the key used for OSCrypt
-  // Async operation. This also means that OSCrypt Async is enabled by the test.
-  kOSCryptAsyncWithDPAPIProvider,
   // The App Bound key provider is being registered with Chrome, but not being
-  // used for encryption of new data, but will decrypt any existing data. This
-  // also registers the DPAPI provider as this replicates how it would be used
-  // in production.
+  // used for encryption of new data, but will decrypt any existing data.
   kOSCryptAsyncWithAppBoundProvider,
   // The App Bound key provider is being registered with Chrome, and is being
-  // used for encryption of new data. This also registers the DPAPI provider as
-  // this replicates how it would be used in production.
+  // used for encryption of new data.
   kOSCryptAsyncWithAppBoundProviderWithEncryption,
   // This is the same as `kOSCryptAsyncWithAppBoundProviderWithEncryption` but
   // without the service being correctly installed/running. This allows testing
@@ -79,8 +72,8 @@ enum TestConfiguration {
 
 enum MetricsExpectation {
   kNotChecked,
+  kOSCryptAsyncMetrics,
 #if BUILDFLAG(IS_WIN)
-  kDPAPIMetrics,
   kAppBoundEncryptMetrics,
   kAppBoundDecryptMetrics,
 #endif  // BUILDFLAG(IS_WIN)
@@ -96,6 +89,27 @@ struct TestCase {
   MetricsExpectation metrics_expectation_after = kNotChecked;
 };
 
+#if BUILDFLAG(IS_WIN)
+bool IsElevationRequired(TestConfiguration configuration) {
+  switch (configuration) {
+    case kOSCryptSync:
+      [[fallthrough]];
+    case kOSCryptAsync:
+      [[fallthrough]];
+    case kOSCryptAsyncWithAppBoundProviderWithEncryptionNoService:
+      return false;
+    case kOSCryptAsyncWithAppBoundProvider:
+      [[fallthrough]];
+    case kOSCryptAsyncWithAppBoundProviderWithEncryption:
+      [[fallthrough]];
+    case kOSCryptAsyncWithAppBoundProviderWithEncryptionUnsupportedUserData:
+      [[fallthrough]];
+    case kOSCryptAsyncWithAppBoundProviderDisabledByPolicy:
+      return true;
+  }
+}
+#endif  // BUILDFLAG(IS_WIN)
+
 }  // namespace
 
 class CookieEncryptionProviderBrowserTest
@@ -109,6 +123,14 @@ class CookieEncryptionProviderBrowserTest
 #endif  // BUILDFLAG(IS_WIN)
 
   void SetUp() override {
+#if BUILDFLAG(IS_WIN)
+    if ((IsElevationRequired(GetParam().before) ||
+         IsElevationRequired(GetParam().after)) &&
+        base::GetCurrentProcessIntegrityLevel() != base::HIGH_INTEGRITY) {
+      GTEST_SKIP() << "Elevation is required for this test.";
+    }
+#endif  // BUILDFLAG(IS_WIN)
+
     auto configuration =
         content::IsPreTest() ? GetParam().before : GetParam().after;
 
@@ -124,85 +146,60 @@ class CookieEncryptionProviderBrowserTest
         enabled_features.push_back(
             features::kUseOsCryptAsyncForCookieEncryption);
 #if BUILDFLAG(IS_WIN)
-        disabled_features.push_back(features::kEnableDPAPIEncryptionProvider);
         disabled_features.push_back(
             features::kRegisterAppBoundEncryptionProvider);
 #endif  // BUILDFLAG(IS_WIN)
         break;
 #if BUILDFLAG(IS_WIN)
-      case kOSCryptAsyncWithDPAPIProvider:
-        enabled_features.push_back(
-            features::kUseOsCryptAsyncForCookieEncryption);
-        enabled_features.push_back(features::kEnableDPAPIEncryptionProvider);
-        disabled_features.push_back(
-            features::kRegisterAppBoundEncryptionProvider);
-        break;
       case kOSCryptAsyncWithAppBoundProvider:
-        if (base::GetCurrentProcessIntegrityLevel() != base::HIGH_INTEGRITY) {
-          GTEST_SKIP() << "Elevation is required for this test.";
-        }
         maybe_uninstall_service_ = os_crypt::InstallService();
         EXPECT_TRUE(maybe_uninstall_service_.has_value());
         enabled_features.push_back(
             features::kUseOsCryptAsyncForCookieEncryption);
-        enabled_features.push_back(features::kEnableDPAPIEncryptionProvider);
         enabled_features.push_back(
             features::kRegisterAppBoundEncryptionProvider);
-        os_crypt_async::AppBoundEncryptionProviderWin::
-            SetEnableEncryptionForTesting(false);
+        disabled_features.push_back(
+            features::kUseAppBoundEncryptionProviderForEncryption);
         break;
       case kOSCryptAsyncWithAppBoundProviderWithEncryption:
-        if (base::GetCurrentProcessIntegrityLevel() != base::HIGH_INTEGRITY) {
-          GTEST_SKIP() << "Elevation is required for this test.";
-        }
         maybe_uninstall_service_ = os_crypt::InstallService();
         EXPECT_TRUE(maybe_uninstall_service_.has_value());
         enabled_features.push_back(
             features::kUseOsCryptAsyncForCookieEncryption);
-        enabled_features.push_back(features::kEnableDPAPIEncryptionProvider);
         enabled_features.push_back(
             features::kRegisterAppBoundEncryptionProvider);
-        os_crypt_async::AppBoundEncryptionProviderWin::
-            SetEnableEncryptionForTesting(true);
+        enabled_features.push_back(
+            features::kUseAppBoundEncryptionProviderForEncryption);
         break;
       case kOSCryptAsyncWithAppBoundProviderWithEncryptionNoService:
         enabled_features.push_back(
             features::kUseOsCryptAsyncForCookieEncryption);
-        enabled_features.push_back(features::kEnableDPAPIEncryptionProvider);
         enabled_features.push_back(
             features::kRegisterAppBoundEncryptionProvider);
-        os_crypt_async::AppBoundEncryptionProviderWin::
-            SetEnableEncryptionForTesting(true);
+        enabled_features.push_back(
+            features::kUseAppBoundEncryptionProviderForEncryption);
         break;
       case kOSCryptAsyncWithAppBoundProviderWithEncryptionUnsupportedUserData:
-        if (base::GetCurrentProcessIntegrityLevel() != base::HIGH_INTEGRITY) {
-          GTEST_SKIP() << "Elevation is required for this test.";
-        }
         maybe_uninstall_service_ = os_crypt::InstallService();
         EXPECT_TRUE(maybe_uninstall_service_.has_value());
         enabled_features.push_back(
             features::kUseOsCryptAsyncForCookieEncryption);
-        enabled_features.push_back(features::kEnableDPAPIEncryptionProvider);
         enabled_features.push_back(
             features::kRegisterAppBoundEncryptionProvider);
-        os_crypt_async::AppBoundEncryptionProviderWin::
-            SetEnableEncryptionForTesting(true);
+        enabled_features.push_back(
+            features::kUseAppBoundEncryptionProviderForEncryption);
         os_crypt::SetNonStandardUserDataDirSupportedForTesting(
             /*supported=*/false);
         break;
       case kOSCryptAsyncWithAppBoundProviderDisabledByPolicy:
-        if (base::GetCurrentProcessIntegrityLevel() != base::HIGH_INTEGRITY) {
-          GTEST_SKIP() << "Elevation is required for this test.";
-        }
         maybe_uninstall_service_ = os_crypt::InstallService();
         EXPECT_TRUE(maybe_uninstall_service_.has_value());
         enabled_features.push_back(
             features::kUseOsCryptAsyncForCookieEncryption);
-        enabled_features.push_back(features::kEnableDPAPIEncryptionProvider);
         enabled_features.push_back(
             features::kRegisterAppBoundEncryptionProvider);
-        os_crypt_async::AppBoundEncryptionProviderWin::
-            SetEnableEncryptionForTesting(false);
+        disabled_features.push_back(
+            features::kUseAppBoundEncryptionProviderForEncryption);
 
         policy_provider_.SetDefaultReturns(
             /*is_initialization_complete_return=*/true,
@@ -224,17 +221,25 @@ class CookieEncryptionProviderBrowserTest
   }
 
   void TearDown() override {
+    if (IsSkipped()) {
+      return;
+    }
+
     auto metrics_expectation = content::IsPreTest()
                                    ? GetParam().metrics_expectation_before
                                    : GetParam().metrics_expectation_after;
     switch (metrics_expectation) {
       case kNotChecked:
         break;
+      case kOSCryptAsyncMetrics:
+        histogram_tester_.ExpectTotalCount("OSCrypt.AsyncInitialization.Time",
+                                           1);
 #if BUILDFLAG(IS_WIN)
-      case kDPAPIMetrics:
         histogram_tester_.ExpectBucketCount("OSCrypt.DPAPIProvider.Status",
                                             /*success*/ 0, 1);
+#endif  // BUILDFLAG(IS_WIN)
         break;
+#if BUILDFLAG(IS_WIN)
       case kAppBoundEncryptMetrics:
         // In the pre-test the generation of a new key happens, followed by an
         // Encrypt.
@@ -316,45 +321,29 @@ INSTANTIATE_TEST_SUITE_P(
     CookieEncryptionProviderBrowserTest,
     testing::ValuesIn<TestCase>({
         {.name = "sync", .before = kOSCryptSync, .after = kOSCryptSync},
-        {.name = "async", .before = kOSCryptAsync, .after = kOSCryptAsync},
+        {.name = "async",
+         .before = kOSCryptAsync,
+         .after = kOSCryptAsync,
+         .metrics_expectation_before = kOSCryptAsyncMetrics,
+         .metrics_expectation_after = kOSCryptAsyncMetrics},
         {.name = "migration_sync_to_async",
          .before = kOSCryptSync,
-         .after = kOSCryptAsync},
+         .after = kOSCryptAsync,
+         .metrics_expectation_after = kOSCryptAsyncMetrics},
         {.name = "rollback_async_to_sync",
          .before = kOSCryptAsync,
-         .after = kOSCryptSync},
-#if BUILDFLAG(IS_WIN)
-        {.name = "asyncwithdpapi",
-         .before = kOSCryptAsyncWithDPAPIProvider,
-         .after = kOSCryptAsyncWithDPAPIProvider,
-         .metrics_expectation_before = kDPAPIMetrics,
-         .metrics_expectation_after = kDPAPIMetrics},
-        {.name = "migration_sync_to_async_with_dpapi",
-         .before = kOSCryptSync,
-         .after = kOSCryptAsyncWithDPAPIProvider,
-         .metrics_expectation_after = kDPAPIMetrics},
-        {.name = "migration_async_to_async_with_dpapi",
-         .before = kOSCryptAsync,
-         .after = kOSCryptAsyncWithDPAPIProvider,
-         .metrics_expectation_after = kDPAPIMetrics},
-        {.name = "rollback_async_with_dpapi_to_async",
-         .before = kOSCryptAsyncWithDPAPIProvider,
-         .after = kOSCryptAsync,
-         .metrics_expectation_before = kDPAPIMetrics,
-         .metrics_expectation_after = kNoMetrics},
-        {.name = "rollback_async_with_dpapi_to_sync",
-         .before = kOSCryptAsyncWithDPAPIProvider,
          .after = kOSCryptSync,
-         .metrics_expectation_before = kDPAPIMetrics},
-        {.name = "migration_dpapi_to_appbound_no_encryption",
-         .before = kOSCryptAsyncWithDPAPIProvider,
+         .metrics_expectation_before = kOSCryptAsyncMetrics},
+#if BUILDFLAG(IS_WIN)
+        {.name = "migration_async_to_appbound_no_encryption",
+         .before = kOSCryptAsync,
          .after = kOSCryptAsyncWithAppBoundProvider,
-         .metrics_expectation_before = kDPAPIMetrics,
+         .metrics_expectation_before = kOSCryptAsyncMetrics,
          .metrics_expectation_after = kAppBoundEncryptMetrics},
-        {.name = "migration_dpapi_to_appbound_with_encryption",
-         .before = kOSCryptAsyncWithDPAPIProvider,
+        {.name = "migration_async_to_appbound_with_encryption",
+         .before = kOSCryptAsync,
          .after = kOSCryptAsyncWithAppBoundProviderWithEncryption,
-         .metrics_expectation_before = kDPAPIMetrics,
+         .metrics_expectation_before = kOSCryptAsyncMetrics,
          .metrics_expectation_after = kAppBoundEncryptMetrics},
         {.name = "rollback_turn_off_encryption_of_new_data",
          .before = kOSCryptAsyncWithAppBoundProviderWithEncryption,
@@ -368,7 +357,7 @@ INSTANTIATE_TEST_SUITE_P(
          .metrics_expectation_after = kAppBoundDecryptMetrics},
         {.name = "rollback_unregister_app_bound_provider",
          .before = kOSCryptAsyncWithAppBoundProvider,
-         .after = kOSCryptAsyncWithDPAPIProvider,
+         .after = kOSCryptAsync,
          .metrics_expectation_before = kAppBoundEncryptMetrics},
         // It is unsupported to move back from enabling app-bound encryption
         // provider with encryption, to a state where the provider is no longer
@@ -378,14 +367,14 @@ INSTANTIATE_TEST_SUITE_P(
                  "encrypting_data",
          .expect_pass = false,
          .before = kOSCryptAsyncWithAppBoundProviderWithEncryption,
-         .after = kOSCryptAsyncWithDPAPIProvider},
+         .after = kOSCryptAsync},
         // This test will result in App-Bound not being able to provide a key,
         // so it will not be registered, and the cookies will instead be
         // encrypted with the second provider which is DPAPI, and then these can
         // successfully be decrypted.
         {.name = "app_bound_encryption_no_service_on_encrypt",
          .before = kOSCryptAsyncWithAppBoundProviderWithEncryptionNoService,
-         .after = kOSCryptAsyncWithDPAPIProvider},
+         .after = kOSCryptAsync},
         // This test will result in App-Bound being able to provide a key and
         // it's used for encryption, but in the second part of the test, since
         // the service does not exist it will not be able to decrypt it.
@@ -411,14 +400,14 @@ INSTANTIATE_TEST_SUITE_P(
         {.name = "app_bound_encryption_not_supported_on_encrypt",
          .before =
              kOSCryptAsyncWithAppBoundProviderWithEncryptionUnsupportedUserData,
-         .after = kOSCryptAsyncWithDPAPIProvider},
+         .after = kOSCryptAsync},
         // This test verifies that if App-Bound encryption is disabled by
         // policy, then the provider does not generate a key. This means any
         // data encrypted in the first stage of the test should decrypt using
         // just the DPAPI provider.
         {.name = "app_bound_encryption_disabled_by_policy",
          .before = kOSCryptAsyncWithAppBoundProviderDisabledByPolicy,
-         .after = kOSCryptAsyncWithDPAPIProvider,
+         .after = kOSCryptAsync,
          .metrics_expectation_before = kNoMetrics},
         // This test verifies that if App-Bound encryption is first enabled by
         // policy (the default), then subsequently disabled by policy, then the

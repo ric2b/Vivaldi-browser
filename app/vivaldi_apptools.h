@@ -28,9 +28,9 @@ BASE_EXPORT base::CallbackListSubscription SystemColorsUpdatedCallback(
     base::RepeatingCallback<void()> system_colors_callback);
 
 
-bool BASE_EXPORT IsVivaldiApp(base::StringPiece extension_id);
+bool BASE_EXPORT IsVivaldiApp(std::string_view extension_id);
 
-bool BASE_EXPORT IsVivaldiExtraLocale(base::StringPiece locale);
+bool BASE_EXPORT IsVivaldiExtraLocale(std::string_view locale);
 
 bool BASE_EXPORT IsVivaldiRunning();
 bool BASE_EXPORT IsVivaldiRunning(const base::CommandLine& cmd_line);

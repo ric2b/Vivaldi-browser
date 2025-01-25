@@ -140,7 +140,8 @@ void CpuFeatures::ProbeImpl(bool cross_compile) {
 
   if (cpu.has_cetss()) SetSupported(CETSS);
   // The static variable is used for codegen of certain CETSS instructions.
-  CpuFeatures::supports_cetss_ = IsSupported(CETSS);
+  CpuFeatures::supports_cetss_ =
+      IsSupported(CETSS) && base::OS::IsHardwareEnforcedShadowStacksEnabled();
 #endif  // V8_HOST_ARCH_IA32 || V8_HOST_ARCH_X64
 }
 
@@ -3913,7 +3914,7 @@ template <typename Reg1, typename Reg2, typename Op>
 void Assembler::vinstr(uint8_t op, Reg1 dst, Reg2 src1, Op src2, SIMDPrefix pp,
                        LeadingOpcode m, VexW w, CpuFeature feature) {
   DCHECK(IsEnabled(feature));
-  DCHECK(feature == AVX || feature == AVX2);
+  DCHECK(feature == AVX || feature == AVX2 || feature == AVX_VNNI);
   DCHECK(
       (std::is_same_v<Reg1, YMMRegister> || std::is_same_v<Reg2, YMMRegister>));
   EnsureSpace ensure_space(this);

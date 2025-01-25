@@ -59,6 +59,14 @@ using vivaldi::VivaldiSyncUIHelper;
 using base::SysUTF8ToNSString;
 using base::SysNSStringToUTF8;
 
+// Donation Support Tiers
+typedef enum {
+  BadgeTierNone = 0,
+  BadgeTierSupporter,
+  BadgeTierPatron,
+  BadgeTierAdvocate
+} BadgeTier;
+
 struct PendingRegistration {
 std::string username;
 int age;
@@ -211,7 +219,7 @@ PendingRegistration pendingRegistration;
       break;
     }
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -412,7 +420,7 @@ PendingRegistration pendingRegistration;
       }
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -714,6 +722,14 @@ PendingRegistration pendingRegistration;
       _vivaldiAccountManager->account_info();
   self.userInfoItem = [[VivaldiTableViewSyncUserInfoItem alloc]
       initWithType:ItemTypeSyncUserInfo];
+
+  // Checking & Setting Donation Badges
+  NSString *donationTierString = SysUTF8ToNSString(account_info.donation_tier);
+  if (donationTierString != nil && ![donationTierString isEqualToString:@""]) {
+    NSUInteger badgeTier = [donationTierString integerValue];
+    [self setBadgeWithTier: (BadgeTier)badgeTier];
+  }
+
   // Add a default avatar image
   self.userInfoItem.userAvatar =
       [UIImage systemImageNamed:@"person.circle.fill"];
@@ -1198,6 +1214,31 @@ PendingRegistration pendingRegistration;
 
 - (NSString*)localDeviceClientName {
   return base::SysUTF8ToNSString(syncer::GetPersonalizableDeviceNameBlocking());
+}
+
+#pragma mark Private - Donation Tier Methods
+
+- (void)setBadgeWithTier:(BadgeTier)tier {
+  UIImage *badgeImage = nil;
+  switch (tier) {
+    case BadgeTierNone:
+      badgeImage = nil;
+      break;
+    case BadgeTierSupporter:
+      badgeImage = [UIImage imageNamed: kVivaldiSupporterBadge];
+      break;
+    case BadgeTierPatron:
+      badgeImage = [UIImage imageNamed: kVivaldiPatronBadge];
+      break;
+    case BadgeTierAdvocate:
+      badgeImage = [UIImage imageNamed: kVivaldiAdvocateBadge];
+      break;
+    default:
+      badgeImage = nil;
+      break;
+  }
+  // Set donation support Badge to header model
+  self.userInfoItem.supporterBadge = badgeImage;
 }
 
 @end

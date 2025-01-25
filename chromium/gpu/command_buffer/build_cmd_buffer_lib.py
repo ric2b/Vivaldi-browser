@@ -424,7 +424,6 @@ _STATE_INFO = {
         'type': 'GLenum',
         'enum': 'GL_GENERATE_MIPMAP_HINT',
         'default': 'GL_DONT_CARE',
-        'gl_version_flag': '!is_desktop_core_profile'
       },
       {
         'name': 'hint_fragment_shader_derivative',
@@ -1057,7 +1056,6 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
     if func.IsES31():
       return
     self.WriteHandlerExtensionCheck(func, f)
-    self.WriteHandlerDeferReadWrite(func, f);
     self.WriteServiceHandlerArgGetCode(func, f)
     func.WriteHandlerValidation(f)
     func.WriteQueueTraceEvent(f)
@@ -1072,7 +1070,6 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
     if func.IsES31():
       return
     self.WriteHandlerExtensionCheck(func, f)
-    self.WriteHandlerDeferReadWrite(func, f);
     self.WriteImmediateServiceHandlerArgGetCode(func, f)
     func.WriteHandlerValidation(f)
     func.WriteQueueTraceEvent(f)
@@ -1087,7 +1084,6 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
     if func.IsES31():
       return
     self.WriteHandlerExtensionCheck(func, f)
-    self.WriteHandlerDeferReadWrite(func, f);
     self.WriteBucketServiceHandlerArgGetCode(func, f)
     func.WriteHandlerValidation(f)
     func.WriteQueueTraceEvent(f)
@@ -1160,21 +1156,6 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
       f.write("  if (!features().%s) {\n" % func.GetInfo('extension_flag'))
       f.write("    return error::kUnknownCommand;")
       f.write("  }\n\n")
-
-  def WriteHandlerDeferReadWrite(self, func, f):
-    """Writes the code to handle deferring reads or writes."""
-    defer_draws = func.GetInfo('defer_draws')
-    defer_reads = func.GetInfo('defer_reads')
-    if defer_draws or defer_reads:
-      f.write("  error::Error error;\n")
-    if defer_draws:
-      f.write("  error = WillAccessBoundFramebufferForDraw();\n")
-      f.write("  if (error != error::kNoError)\n")
-      f.write("    return error;\n")
-    if defer_reads:
-      f.write("  error = WillAccessBoundFramebufferForRead();\n")
-      f.write("  if (error != error::kNoError)\n")
-      f.write("    return error;\n")
 
   def WriteValidUnitTest(self, func, f, test, *extras):
     """Writes a valid unit test for the service implementation."""
@@ -1781,7 +1762,7 @@ class StateSetNamedParameter(TypeHandler):
       f.write("      }\n")
       f.write("      break;\n")
     f.write("    default:\n")
-    f.write("      NOTREACHED();\n")
+    f.write("      NOTREACHED_IN_MIGRATION();\n")
     f.write("  }\n")
 
   def WriteImmediateCmdInit(self, func, f):
@@ -6465,7 +6446,7 @@ class GLGenerator():
 
       f.write("""\
               default:
-                NOTREACHED();
+                NOTREACHED_IN_MIGRATION();
                 return;
             }
             if (enable)
@@ -6715,7 +6696,7 @@ void ContextState::InitState(const ContextState *prev_state) const {
         f.write("    case GL_%s:\n" % capability['name'].upper())
         f.write("      return enable_flags.%s;\n" % capability['name'])
       f.write("""    default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 }
@@ -6811,7 +6792,7 @@ bool GLES2DecoderImpl::SetCapabilityState(GLenum cap, bool enabled) {
               return false;
               """ % capability)
         f.write("""    default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 }

@@ -18,6 +18,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/safe_ref.h"
+#include "base/not_fatal_until.h"
 #include "base/ranges/algorithm.h"
 #include "base/trace_event/optional_trace_event.h"
 #include "base/trace_event/typed_macros.h"
@@ -43,7 +44,6 @@
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
 #include "third_party/blink/public/common/loader/loader_constants.h"
-#include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 
 namespace content {
@@ -319,7 +319,7 @@ std::vector<FrameTreeNode*> FrameTree::CollectNodesForIsLoading() {
   FrameTree::NodeIterator node_iter = node_range.begin();
   std::vector<FrameTreeNode*> nodes;
 
-  DCHECK(node_iter != node_range.end());
+  CHECK(node_iter != node_range.end(), base::NotFatalUntil::M130);
   FrameTree* root_loading_tree = root_.frame_tree().LoadingTree();
   while (node_iter != node_range.end()) {
     // Skip over frame trees and children which belong to inner web contents
@@ -484,7 +484,7 @@ FrameTreeNode* FrameTree::AddFrame(
 void FrameTree::RemoveFrame(FrameTreeNode* child) {
   RenderFrameHostImpl* parent = child->parent();
   if (!parent) {
-    NOTREACHED() << "Unexpected RemoveFrame call for main frame.";
+    NOTREACHED_IN_MIGRATION() << "Unexpected RemoveFrame call for main frame.";
     return;
   }
 
@@ -986,7 +986,8 @@ void FrameTree::Shutdown() {
 
   // Do not update state as the FrameTree::Delegate (possibly a WebContents) is
   // being destroyed.
-  root_.ResetNavigationRequestButKeepState();
+  root_.ResetNavigationRequestButKeepState(
+      NavigationDiscardReason::kWillRemoveFrame);
   if (root_manager->speculative_frame_host()) {
     root_manager->DiscardSpeculativeRenderFrameHostForShutdown();
   }
@@ -1030,30 +1031,6 @@ void FrameTree::FocusOuterFrameTrees() {
     }
     frame_tree_to_focus = &outer_node->frame_tree();
   }
-}
-
-void FrameTree::RegisterOriginForUnpartitionedSessionStorageAccess(
-    const url::Origin& origin) {
-  if (origin.opaque()) {
-    return;
-  }
-  unpartitioned_session_storage_origins_.insert(origin);
-}
-
-void FrameTree::UnregisterOriginForUnpartitionedSessionStorageAccess(
-    const url::Origin& origin) {
-  unpartitioned_session_storage_origins_.erase(origin);
-}
-
-const blink::StorageKey FrameTree::GetSessionStorageKey(
-    const blink::StorageKey& storage_key) {
-  if (unpartitioned_session_storage_origins_.find(storage_key.origin()) !=
-      unpartitioned_session_storage_origins_.end()) {
-    // If the storage key matches a participating origin we need to return the
-    // first-party version for use in binding session storage.
-    return blink::StorageKey::CreateFirstParty(storage_key.origin());
-  }
-  return storage_key;
 }
 
 }  // namespace content

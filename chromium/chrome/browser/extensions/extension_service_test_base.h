@@ -18,6 +18,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
+#include "chrome/test/base/testing_profile.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_service.h"
 #include "content/public/test/browser_task_environment.h"
@@ -82,8 +83,16 @@ class ExtensionServiceTestBase : public testing::Test {
     bool enable_bookmark_model = false;
     bool enable_install_limiter = false;
 
+    TestingProfile::TestingFactories testing_factories;
+
     ExtensionServiceInitParams();
-    ExtensionServiceInitParams(const ExtensionServiceInitParams& other);
+    ExtensionServiceInitParams(ExtensionServiceInitParams&& other);
+    ExtensionServiceInitParams& operator=(ExtensionServiceInitParams&& other) =
+        delete;
+    ExtensionServiceInitParams(const ExtensionServiceInitParams& other) =
+        delete;
+    ExtensionServiceInitParams& operator=(
+        const ExtensionServiceInitParams& other) = delete;
     ~ExtensionServiceInitParams();
 
     // Sets the prefs_content to the content in the given file.
@@ -119,8 +128,7 @@ class ExtensionServiceTestBase : public testing::Test {
   void TearDown() override;
 
   // Initialize an ExtensionService according to the given |params|.
-  virtual void InitializeExtensionService(
-      const ExtensionServiceInitParams& params);
+  virtual void InitializeExtensionService(ExtensionServiceInitParams params);
 
   // Initialize an empty ExtensionService using a production, on-disk pref file.
   // See documentation for |prefs_content|.
@@ -221,7 +229,10 @@ class ExtensionServiceTestBase : public testing::Test {
   ScopedTestingLocalState testing_local_state_;
 
  private:
-  void CreateExtensionService(const ExtensionServiceInitParams& params);
+  void CreateExtensionService(bool is_first_run,
+                              bool autoupdate_enabled,
+                              bool extensions_enabled,
+                              bool enable_install_limiter);
 
   // The directory into which extensions are installed.
   base::FilePath extensions_install_dir_;

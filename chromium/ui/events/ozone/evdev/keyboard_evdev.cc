@@ -81,7 +81,16 @@ void KeyboardEvdev::OnKeyChange(unsigned int key,
     return;  // Key already released.
 
   key_state_.set(key, down);
-  any_keys_are_pressed_callback_.Run(key_state_.any());
+  // HID codes that are unknown to Linux can sometimes map to BTN_MISC. This can
+  // cause BTN_MISC to appear permanently held down for some set of peripherals.
+  // BTN_MISC is equal to BTN_0 which is seen on some graphics tablets, but for
+  // the current usages of this check, graphics tablets holding a button down is
+  // irrelevant. See b/331482962 for more info.
+  {
+    auto key_state_without_btn_misc_ = key_state_;
+    key_state_without_btn_misc_.reset(BTN_MISC);
+    any_keys_are_pressed_callback_.Run(key_state_without_btn_misc_.any());
+  }
   auto_repeat_handler_.UpdateKeyRepeat(
       key, scan_code, down, suppress_auto_repeat, device_id, timestamp);
   DispatchKey(key, scan_code, down, is_repeat, timestamp, device_id, flags);
@@ -202,8 +211,9 @@ void KeyboardEvdev::DispatchKey(unsigned int key,
     }
   }
 
-  KeyEvent event(down ? ET_KEY_PRESSED : ET_KEY_RELEASED, key_code, dom_code,
-                 flags | modifiers_->GetModifierFlags(), dom_key, timestamp);
+  KeyEvent event(down ? EventType::kKeyPressed : EventType::kKeyReleased,
+                 key_code, dom_code, flags | modifiers_->GetModifierFlags(),
+                 dom_key, timestamp);
   event.set_scan_code(scan_code);
   event.set_source_device_id(device_id);
   callback_.Run(&event);

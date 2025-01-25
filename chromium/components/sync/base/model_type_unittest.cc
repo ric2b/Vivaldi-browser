@@ -152,7 +152,7 @@ TEST(ModelTypeTest, ModelTypeSetFromSpecificsFieldNumberList) {
 
 TEST(ModelTypeTest, TypesRequiringUnsyncedDataCheckOnSignout) {
   static_assert(
-      52 + 1 /* notes */ == GetNumModelTypes(),
+      53 + 1 /* notes */ == GetNumModelTypes(),
       "Add new types to `TypesRequiringUnsyncedDataCheckOnSignout()` if there "
       "should be a warning when the user signs out and the types have unsynced "
       "data. The warning offers the user to either save the data locally or "

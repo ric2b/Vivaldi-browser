@@ -55,6 +55,7 @@
 #include "src/tint/lang/wgsl/ast/if_statement.h"
 #include "src/tint/lang/wgsl/ast/increment_decrement_statement.h"
 #include "src/tint/lang/wgsl/ast/index_accessor_expression.h"
+#include "src/tint/lang/wgsl/ast/input_attachment_index_attribute.h"
 #include "src/tint/lang/wgsl/ast/int_literal_expression.h"
 #include "src/tint/lang/wgsl/ast/internal_attribute.h"
 #include "src/tint/lang/wgsl/ast/interpolate_attribute.h"
@@ -500,14 +501,14 @@ void ASTPrinter::EmitAttributes(StringStream& out, VectorRef<const ast::Attribut
                 EmitExpression(out, color->expr);
                 out << ")";
             },
-            [&](const ast::BlendSrcAttribute* index) {
+            [&](const ast::BlendSrcAttribute* blend_src) {
                 out << "blend_src(";
-                EmitExpression(out, index->expr);
+                EmitExpression(out, blend_src->expr);
                 out << ")";
             },
             [&](const ast::BuiltinAttribute* builtin) {
                 out << "builtin(";
-                EmitExpression(out, builtin->builtin);
+                out << core::ToString(builtin->builtin);
                 out << ")";
             },
             [&](const ast::DiagnosticAttribute* diagnostic) {
@@ -515,10 +516,11 @@ void ASTPrinter::EmitAttributes(StringStream& out, VectorRef<const ast::Attribut
             },
             [&](const ast::InterpolateAttribute* interpolate) {
                 out << "interpolate(";
-                EmitExpression(out, interpolate->type);
-                if (interpolate->sampling) {
+                out << core::ToString(interpolate->interpolation.type);
+                if (interpolate->interpolation.sampling !=
+                    core::InterpolationSampling::kUndefined) {
                     out << ", ";
-                    EmitExpression(out, interpolate->sampling);
+                    out << core::ToString(interpolate->interpolation.sampling);
                 }
                 out << ")";
             },
@@ -547,6 +549,11 @@ void ASTPrinter::EmitAttributes(StringStream& out, VectorRef<const ast::Attribut
             [&](const ast::StrideAttribute* stride) { out << "stride(" << stride->stride << ")"; },
             [&](const ast::InternalAttribute* internal) {
                 out << "internal(" << internal->InternalName() << ")";
+            },
+            [&](const ast::InputAttachmentIndexAttribute* index) {
+                out << "input_attachment_index(";
+                EmitExpression(out, index->expr);
+                out << ")";
             },  //
             TINT_ICE_ON_NO_MATCH);
     }

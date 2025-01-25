@@ -26,6 +26,7 @@ class OpenScreenSessionBase : public quic::QuicSession {
     virtual void OnCryptoHandshakeComplete() = 0;
     virtual void OnIncomingStream(QuicStream* stream) = 0;
     virtual QuicConnection::Delegate& GetConnectionDelegate() = 0;
+    virtual uint64_t GetInstanceID() = 0;
   };
 
   OpenScreenSessionBase(
@@ -48,7 +49,7 @@ class OpenScreenSessionBase : public quic::QuicSession {
   std::vector<absl::string_view>::const_iterator SelectAlpn(
       const std::vector<absl::string_view>& alpns) const override;
 
-  QuicStream* CreateOutgoingStream(QuicStream::Delegate* delegate);
+  QuicStream* CreateOutgoingStream(QuicStream::Delegate& delegate);
 
  protected:
   virtual std::unique_ptr<quic::QuicCryptoStream> CreateCryptoStream() = 0;

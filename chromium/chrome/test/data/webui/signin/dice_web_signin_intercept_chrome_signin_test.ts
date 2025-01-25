@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://signin-dice-web-intercept/chrome_signin/chrome_signin_app.js';
+import 'chrome://signin-dice-web-intercept.top-chrome/chrome_signin/chrome_signin_app.js';
 
 import type {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
-import type {ChromeSigninAppElement} from 'chrome://signin-dice-web-intercept/chrome_signin/chrome_signin_app.js';
-import type {ChromeSigninInterceptionParameters} from 'chrome://signin-dice-web-intercept/dice_web_signin_intercept_browser_proxy.js';
-import {DiceWebSigninInterceptBrowserProxyImpl} from 'chrome://signin-dice-web-intercept/dice_web_signin_intercept_browser_proxy.js';
+import type {ChromeSigninAppElement} from 'chrome://signin-dice-web-intercept.top-chrome/chrome_signin/chrome_signin_app.js';
+import type {ChromeSigninInterceptionParameters} from 'chrome://signin-dice-web-intercept.top-chrome/dice_web_signin_intercept_browser_proxy.js';
+import {DiceWebSigninInterceptBrowserProxyImpl} from 'chrome://signin-dice-web-intercept.top-chrome/dice_web_signin_intercept_browser_proxy.js';
 import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {isChildVisible} from 'chrome://webui-test/test_util.js';
@@ -18,6 +18,8 @@ import {TestDiceWebSigninInterceptBrowserProxy} from './test_dice_web_signin_int
 const AVATAR_URL: string = 'chrome://theme/IDR_PROFILE_AVATAR_1';
 
 const PARAMETERS: ChromeSigninInterceptionParameters = {
+  title: 'title',
+  subtitle: 'subtitle',
   fullName: 'full_name',
   givenName: 'given_name',
   email: 'email@example.com',
@@ -53,9 +55,9 @@ suite('DiceWebSigninInterceptChromeSigninTest', function() {
 
   test('AppContentValues', function() {
     const titleElement = app.shadowRoot!.querySelector('#title')!;
-    assertEquals(app.i18n('chromeSigninTitle'), titleElement.textContent);
+    assertEquals(PARAMETERS.title, titleElement.textContent);
     const subtitleElement = app.shadowRoot!.querySelector('#subtitle')!;
-    assertEquals(app.i18n('chromeSigninSubtitle'), subtitleElement.textContent);
+    assertEquals(PARAMETERS.subtitle, subtitleElement.textContent);
     const nameElement = app.shadowRoot!.querySelector('#name')!;
     assertEquals(PARAMETERS.fullName, nameElement.textContent);
     const emailElement = app.shadowRoot!.querySelector('#email')!;

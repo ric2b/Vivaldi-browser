@@ -8,6 +8,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.os.Build;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
@@ -32,6 +33,8 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.history.HistoryManagerToolbar.InfoHeaderPref;
+import org.chromium.chrome.browser.incognito.IncognitoUtils;
+import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
@@ -258,10 +261,36 @@ public class HistoryManager
                                         : R.menu.history_manager_menu,
                                 launchedForApp);
         mToolbar.setManager(this);
-        mToolbar.setPrefService(UserPrefs.get(profile));
+        mToolbar.setMenuDelegate(
+                new HistoryManagerToolbar.HistoryManagerMenuDelegate() {
+                    @Override
+                    public boolean supportsDeletingHistory() {
+                        return mPrefService.getBoolean(Pref.ALLOW_DELETING_BROWSER_HISTORY);
+                    }
+
+                    @Override
+                    public boolean supportsIncognito() {
+                        return IncognitoUtils.isIncognitoModeEnabled(profile);
+                    }
+                });
         mToolbar.initializeSearchView(this, R.string.history_manager_search, R.id.search_menu_id);
         mToolbar.setInfoMenuItem(R.id.info_menu_id);
         mToolbar.updateInfoMenuItem(shouldShowInfoButton(), shouldShowInfoHeaderIfAvailable());
+
+        // Make the toolbar focusable, so that focus transitions can move out from descendents of
+        // the toolbar to the neighboring delete button, and automatically to other items on the
+        // HistoryPage such as the list of HistoryItem(s).
+        mToolbar.setFocusable(true);
+        mToolbar.setNextFocusForwardId(R.id.clear_browsing_data_button);
+        mToolbar.setOnKeyListener(
+                (View view, int keyCode, KeyEvent event) -> {
+                    if ((keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+                            && event.getAction() == KeyEvent.ACTION_UP) {
+                        mToolbar.getMenu().performIdentifierAction(R.id.search_menu_id, 0);
+                        return true;
+                    }
+                    return false;
+                });
 
         // 4. Width constrain the SelectableListLayout.
         mSelectableListLayout.configureWideDisplayStyle();
@@ -271,12 +300,11 @@ public class HistoryManager
         initializeEmptyView();
 
         } else { // Vivaldi
-            mEmptyView = mSelectableListLayout.initializeEmptyStateView(
-                    R.drawable.history_empty_state,
-                    R.string.history_manager_empty_state,
-                    R.string.history_manager_empty_state_view_or_clear_page_visited
-            );
-            mEmptyView.setGravity(Gravity.CENTER_HORIZONTAL|Gravity.TOP);
+        mEmptyView = mSelectableListLayout.initializeEmptyStateView(R.drawable.history_empty_state,
+                R.string.history_manager_empty_state,
+                mActivity.getResources().getString(
+                        R.string.history_manager_empty_state_view_or_clear_page_visited));
+        mEmptyView.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.TOP);
         } // End Vivaldi
 
         // 6. Load items.
@@ -674,7 +702,9 @@ public class HistoryManager
     // Vivaldi
     public void openSearchUI() {
         mToolbar.showSearchView(true);
-        mSelectableListLayout.onStartSearch(R.string.bookmark_no_result);
+        mSelectableListLayout.onStartSearch(
+                mActivity.getResources().getString(R.string.history_manager_no_results),
+                R.string.history_manager_empty_state_view_or_open_more_history);
         mIsSearching = true;
     }
     public void clearSelection() {

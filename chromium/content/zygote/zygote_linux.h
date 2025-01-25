@@ -153,6 +153,9 @@ class Zygote {
   // Sandbox IPC channel for renderers to invoke services from the browser. See
   // https://chromium.googlesource.com/chromium/src/+/main/docs/linux/sandbox_ipc.md
   base::GlobalDescriptors::Descriptor ipc_backchannel_;
+
+  // Vivaldi: Returns true if the Flatpak sandbox is active. Implemented in vivaldi repository.
+  bool UsingFlatpakSandbox() const;
 };
 
 }  // namespace content

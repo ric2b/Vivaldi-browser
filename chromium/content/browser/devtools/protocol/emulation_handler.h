@@ -12,6 +12,7 @@
 #include "content/browser/devtools/protocol/devtools_domain_handler.h"
 #include "content/browser/devtools/protocol/emulation.h"
 #include "content/browser/devtools/protocol/protocol.h"
+#include "services/device/public/mojom/pressure_update.mojom-shared.h"
 #include "services/device/public/mojom/sensor.mojom-shared.h"
 #include "services/device/public/mojom/sensor_provider.mojom-shared.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
@@ -31,6 +32,7 @@ class DevToolsAgentHostImpl;
 class RenderFrameHostImpl;
 class RenderWidgetHostImpl;
 class ScopedVirtualSensorForDevTools;
+class ScopedVirtualPressureSourceForDevTools;
 class WebContentsImpl;
 
 namespace protocol {
@@ -57,11 +59,10 @@ class EmulationHandler : public DevToolsDomainHandler,
   void GetOverriddenSensorInformation(
       const Emulation::SensorType& type,
       std::unique_ptr<GetOverriddenSensorInformationCallback>) override;
-  void SetSensorOverrideEnabled(
+  Response SetSensorOverrideEnabled(
       bool enabled,
       const Emulation::SensorType& type,
-      Maybe<Emulation::SensorMetadata> metadata,
-      std::unique_ptr<SetSensorOverrideEnabledCallback>) override;
+      Maybe<Emulation::SensorMetadata> metadata) override;
   void SetSensorOverrideReadings(
       const Emulation::SensorType& type,
       std::unique_ptr<Emulation::SensorReading> reading,
@@ -146,6 +147,15 @@ class EmulationHandler : public DevToolsDomainHandler,
       std::unique_ptr<protocol::Emulation::DevicePosture> posture) override;
   Response ClearDevicePostureOverride() override;
 
+  Response SetPressureSourceOverrideEnabled(
+      bool enabled,
+      const Emulation::PressureSource& source,
+      Maybe<Emulation::PressureMetadata> metadata) override;
+  void SetPressureStateOverride(
+      const Emulation::PressureSource& source,
+      const Emulation::PressureState& state,
+      std::unique_ptr<SetPressureStateOverrideCallback>) override;
+
   bool touch_emulation_enabled_;
   std::string touch_emulation_configuration_;
   bool device_emulation_enabled_;
@@ -171,6 +181,10 @@ class EmulationHandler : public DevToolsDomainHandler,
   base::flat_map<device::mojom::SensorType,
                  std::unique_ptr<ScopedVirtualSensorForDevTools>>
       sensor_overrides_;
+
+  base::flat_map<device::mojom::PressureSource,
+                 std::unique_ptr<ScopedVirtualPressureSourceForDevTools>>
+      pressure_overrides_;
 
   // True when SetDevicePostureOverride() has been called.
   bool device_posture_emulation_enabled_ = false;

@@ -12,7 +12,6 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/escape.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
@@ -74,9 +73,9 @@ void CreateAndAddSystemInfoUIDataSource(Profile* profile) {
 
 #if BUILDFLAG(IS_CHROMEOS)
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  auto other_system_page_url = base::UTF8ToUTF16(chrome::kChromeUISystemURL);
+  std::u16string other_system_page_url(chrome::kChromeUISystemURL16);
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  auto other_system_page_url = base::UTF8ToUTF16(chrome::kOsUISystemURL);
+  std::u16string other_system_page_url(chrome::kOsUISystemURL);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   auto os_link_container = l10n_util::GetStringFUTF16(

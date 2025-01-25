@@ -7,11 +7,10 @@
 
 #include <cstddef>
 
+#include "partition_alloc/buildflags.h"
 #include "partition_alloc/partition_alloc_base/bits.h"
 #include "partition_alloc/partition_alloc_base/compiler_specific.h"
 #include "partition_alloc/partition_alloc_base/component_export.h"
-#include "partition_alloc/partition_alloc_base/no_destructor.h"
-#include "partition_alloc/partition_alloc_buildflags.h"
 #include "partition_alloc/partition_alloc_constants.h"
 
 namespace partition_alloc::internal {
@@ -102,10 +101,8 @@ struct PartitionFreelistDispatcher {
                                         PartitionFreelistEntry* next) const = 0;
   PA_ALWAYS_INLINE virtual uintptr_t ClearForAllocation(
       PartitionFreelistEntry* entry) const = 0;
-  PA_ALWAYS_INLINE virtual constexpr bool IsEncodedNextPtrZero(
+  PA_ALWAYS_INLINE virtual bool IsEncodedNextPtrZero(
       PartitionFreelistEntry* entry) const = 0;
-
-  virtual ~PartitionFreelistDispatcher() = default;
 #else
   static const PartitionFreelistDispatcher* Create(
       PartitionFreelistEncoding encoding) {
@@ -180,7 +177,7 @@ struct PartitionFreelistDispatcher {
     return entry->ClearForAllocation();
   }
 
-  PA_ALWAYS_INLINE constexpr bool IsEncodedNextPtrZero(
+  PA_ALWAYS_INLINE bool IsEncodedNextPtrZero(
       PartitionFreelistEntry* entry) const {
     return entry->IsEncodedNextPtrZero();
   }
@@ -191,7 +188,7 @@ struct PartitionFreelistDispatcher {
 
 #if PA_BUILDFLAG(USE_FREELIST_DISPATCHER)
 template <PartitionFreelistEncoding encoding>
-struct PartitionFreelistDispatcherImpl : PartitionFreelistDispatcher {
+struct PartitionFreelistDispatcherImpl final : PartitionFreelistDispatcher {
   using Entry =
       std::conditional_t<encoding ==
                              PartitionFreelistEncoding::kEncodedFreeList,
@@ -289,30 +286,38 @@ struct PartitionFreelistDispatcherImpl : PartitionFreelistDispatcher {
     return GetEntryImpl(entry)->ClearForAllocation();
   }
 
-  PA_ALWAYS_INLINE constexpr bool IsEncodedNextPtrZero(
+  PA_ALWAYS_INLINE bool IsEncodedNextPtrZero(
       PartitionFreelistEntry* entry) const override {
     return GetEntryImpl(entry)->IsEncodedNextPtrZero();
   }
 };
 
+// Both dispatchers are constexpr
+// 1. to avoid "declaration requires an exit-time destructor" error
+//    e.g. on android-cronet-mainline-clang-arm64-dbg.
+// 2. to not create re-entrancy issues with Windows CRT
+//    (crbug.com/336007395).
+inline static constexpr PartitionFreelistDispatcherImpl<
+    PartitionFreelistEncoding::kEncodedFreeList>
+    kEncodedImplDispatcher{};
+inline static constexpr PartitionFreelistDispatcherImpl<
+    PartitionFreelistEncoding::kPoolOffsetFreeList>
+    kPoolOffsetImplDispatcher{};
+
 PA_ALWAYS_INLINE const PartitionFreelistDispatcher*
 PartitionFreelistDispatcher::Create(PartitionFreelistEncoding encoding) {
   switch (encoding) {
     case PartitionFreelistEncoding::kEncodedFreeList: {
-      static base::NoDestructor<PartitionFreelistDispatcherImpl<
-          PartitionFreelistEncoding::kEncodedFreeList>>
-          encoded_impl;
-      return encoded_impl.get();
+      return &kEncodedImplDispatcher;
     }
     case PartitionFreelistEncoding::kPoolOffsetFreeList: {
-      static base::NoDestructor<PartitionFreelistDispatcherImpl<
-          PartitionFreelistEncoding::kPoolOffsetFreeList>>
-          pool_offset_impl;
-      return pool_offset_impl.get();
+      return &kPoolOffsetImplDispatcher;
     }
   }
 }
+
 #endif  // PA_BUILDFLAG(USE_FREELIST_DISPATCHER)
+
 }  // namespace partition_alloc::internal
 
 #endif  // PARTITION_ALLOC_PARTITION_FREELIST_ENTRY_H_

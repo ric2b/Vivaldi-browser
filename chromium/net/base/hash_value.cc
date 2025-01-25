@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/base/hash_value.h"
 
 #include <stdlib.h>
@@ -119,7 +124,7 @@ bool operator<(const HashValue& lhs, const HashValue& rhs) {
       return lhs.fingerprint.sha256 < rhs.fingerprint.sha256;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 

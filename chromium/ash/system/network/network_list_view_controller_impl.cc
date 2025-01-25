@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 
+#include "ash/ash_element_identifiers.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/bluetooth_config_service.h"
 #include "ash/resources/vector_icons/vector_icons.h"
@@ -37,6 +38,8 @@
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/image_view.h"
+#include "ui/views/view.h"
+#include "ui/views/view_class_properties.h"
 
 namespace ash {
 
@@ -67,7 +70,7 @@ constexpr auto kWifiGroupLabelPadding = gfx::Insets::TLBR(8, 22, 8, 4);
 // Helper function to remove `*view` from its view hierarchy, delete the view,
 // and reset the value of `*view` to be `nullptr`.
 template <class T>
-void RemoveAndResetViewIfExists(T** view) {
+void RemoveAndResetViewIfExists(raw_ptr<T>* view) {
   DCHECK(view);
 
   if (!*view) {
@@ -77,8 +80,7 @@ void RemoveAndResetViewIfExists(T** view) {
   views::View* parent = (*view)->parent();
 
   if (parent) {
-    parent->RemoveChildViewT(*view);
-    *view = nullptr;
+    parent->RemoveChildViewT(view->ExtractAsDangling());
   }
 }
 
@@ -285,6 +287,8 @@ void NetworkListViewControllerImpl::OnGetNetworkStateList(
     if (ShouldAddESimEntry()) {
       mobile_item_index = CreateConfigureNetworkEntry(
           &add_esim_entry_, GetMobileSectionNetworkType(), mobile_item_index);
+      add_esim_entry_->SetProperty(views::kElementIdentifierKey,
+                                   kNetworkAddEsimElementId);
     } else {
       RemoveAndResetViewIfExists(&add_esim_entry_);
     }
@@ -685,7 +689,7 @@ size_t NetworkListViewControllerImpl::CreateWifiGroupHeader(
 }
 
 size_t NetworkListViewControllerImpl::CreateConfigureNetworkEntry(
-    HoverHighlightView** configure_network_entry_ptr,
+    raw_ptr<HoverHighlightView>* configure_network_entry_ptr,
     NetworkType type,
     size_t index) {
   if (*configure_network_entry_ptr) {
@@ -895,7 +899,7 @@ void NetworkListViewControllerImpl::UpdateMobileToggleAndSetStatusMessage() {
 
 void NetworkListViewControllerImpl::CreateInfoLabelIfMissingAndUpdate(
     int message_id,
-    TrayInfoLabel** info_label_ptr) {
+    raw_ptr<TrayInfoLabel>* info_label_ptr) {
   DCHECK(message_id);
   DCHECK(info_label_ptr);
 
@@ -928,7 +932,7 @@ void NetworkListViewControllerImpl::CreateInfoLabelIfMissingAndUpdate(
                           ->GetNetworkList(NetworkType::kTether)
                           ->AddChildView(std::move(info));
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -1028,9 +1032,10 @@ void NetworkListViewControllerImpl::ShowConnectionWarning(
 }
 
 void NetworkListViewControllerImpl::HideConnectionWarning() {
-  // If `connection_warning_icon_` existed, it must be cleared first because
-  // `connection_warning_` owns it.
+  // If `connection_warning_icon_` or `connection_warning_label_` existed, they
+  // must be cleared first because `connection_warning_` owns them.
   RemoveAndResetViewIfExists(&connection_warning_icon_);
+  RemoveAndResetViewIfExists(&connection_warning_label_);
   RemoveAndResetViewIfExists(&connection_warning_);
 }
 

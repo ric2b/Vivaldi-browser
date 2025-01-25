@@ -2,38 +2,36 @@
 
 We run the following before a release:
 
-### Windows x86
+### Windows x86 host
 
 ```
 run_tests.bat
 ```
 
-### Linux x86
+### Linux x86 host
 
-#### Clang, GCC, ARM cross compile
-
-```
-./run_tests.sh
-```
+Clang, GCC; Arm, PPC cross-compile: `./run_tests.sh`
 
 Manual test of WASM and WASM_EMU256 targets.
 
-#### JPEG XL clang (debug, asan, msan)
+Check libjxl build actions at https://github.com/libjxl/libjxl/pull/2269.
 
-```
-for VER in 9 10 11 12 13; do
-  rm -rf build_debug$VER && CC=clang-$VER CXX=clang++-$VER BUILD_DIR=build_debug$VER SKIP_TEST=1 ./ci.sh debug && ./ci.sh test -R PassesTest && rm -rf build_debug$VER
-  rm -rf build_asan$VER  && CC=clang-$VER CXX=clang++-$VER BUILD_DIR=build_asan$VER  ./ci.sh asan  && rm -rf build_asan$VER
-  rm -rf build_msan$VER  && CC=clang-$VER CXX=clang++-$VER BUILD_DIR=build_msan$VER  ./ci.sh msan  && rm -rf build_msan$VER
-done
-```
+### Version updates
 
-#### JPEG XL tests
+Prepend to debian/changelog and update mentions of the current version in:
 
-```
-git -C third_party/highway pull -r origin master
-git diff
-vi deps.sh
-git commit -a -m"Highway test"
-git push git@github.com:$USER/libjxl.git HEAD:main --force
-```
+*   base.h
+*   CMakeLists.txt
+*   MODULE.bazel
+*   g3doc/faq.md
+
+### Signing the release
+
+*   Download release source code archive
+*   `gpg --armor --detach-sign highway-X.Y.Z.tar.gz`
+*   Edit release and attach the resulting `highway-X.Y.Z.tar.gz.asc`
+
+*   `git archive --prefix=highway-X.Y.Z/ -o highway-X.Y.Z.tar.gz vX.Y.Z` and
+    also attach the result
+
+(See https://wiki.debian.org/Creating%20signed%20GitHub%20releases)

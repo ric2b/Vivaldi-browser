@@ -31,11 +31,11 @@ describeWithEnvironment('TraceModel', function() {
 
   it('supports being given a set of handlers to run and will run just those and the Meta handler', async function() {
     const model = new TraceModel.TraceModel.Model({
-      Animation: TraceModel.Handlers.ModelHandlers.Animations,
-    });
+      Animations: TraceModel.Handlers.ModelHandlers.Animations,
+    } as TraceModel.Handlers.Types.Handlers);
     const file1 = await TraceLoader.rawEvents(this, 'animation.json.gz');
     await model.parse(file1);
-    assert.deepEqual(Object.keys(model.traceParsedData(0) || {}), ['Meta', 'Animation']);
+    assert.deepEqual(Object.keys(model.traceParsedData(0) || {}), ['Meta', 'Animations']);
   });
 
   it('supports parsing multiple traces', async function() {
@@ -44,8 +44,10 @@ describeWithEnvironment('TraceModel', function() {
     const file2 = await TraceLoader.rawEvents(this, 'slow-interaction-keydown.json.gz');
 
     await model.parse(file1);
+    assert.strictEqual(model.lastTraceIndex(), 0);
     model.resetProcessor();
     await model.parse(file2);
+    assert.strictEqual(model.lastTraceIndex(), 1);
     model.resetProcessor();
 
     assert.strictEqual(model.size(), 2);
@@ -102,13 +104,13 @@ describeWithEnvironment('TraceModel', function() {
     assert.deepEqual(model.getRecordingsAvailable(), expectedResults);
   });
 
-  it('supports overriding annotations in metadata', async function() {
+  it('supports overriding modifications in metadata', async function() {
     const model = TraceModel.TraceModel.Model.createWithAllHandlers();
     const file1 = await TraceLoader.rawEvents(this, 'basic.json.gz');
     await model.parse(file1);
 
-    // Make sure there are no annotations before any are added
-    assert.isUndefined(model.metadata(0)?.annotations);
+    // Make sure there are no modifications before any are added
+    assert.isUndefined(model.metadata(0)?.modifications);
 
     const initialBreadcrumb = {
       window: {
@@ -119,19 +121,28 @@ describeWithEnvironment('TraceModel', function() {
       child: null,
     };
 
-    const entriesFilterAnnotations = {
-      hiddenEntriesIndexes: [1, 2, 3],
-      modifiedEntriesIndexes: [4],
-    };
+    const entriesModifications = {
+      hiddenEntries: ['r-1', 'r-2', 'r-3'],
+      expandableEntries: ['r-4'],
+    } as TraceModel.Types.File.Modifications['entriesModifications'];
 
     const annotations = {
-      entriesFilterAnnotations,
+      entryLabels: [
+        {
+          entry: 'r-4',
+          label: 'entry label',
+        },
+      ],
+    } as TraceModel.Types.File.Modifications['annotations'];
+
+    const modifications = {
+      entriesModifications,
       initialBreadcrumb,
+      annotations,
     };
 
-    model.overrideAnnotations(0, annotations);
-    // Make sure metadata contains overwritten annotations
-    assert.strictEqual(model.metadata(0)?.annotations, annotations);
+    model.overrideModifications(0, modifications);
+    // Make sure metadata contains overwritten modifications
+    assert.strictEqual(model.metadata(0)?.modifications, modifications);
   });
-
 });

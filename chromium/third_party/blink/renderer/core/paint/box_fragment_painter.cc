@@ -268,7 +268,7 @@ Vector<PhysicalRect> BuildBackplate(InlineCursor* descendants,
       }
       continue;
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   if (!backplates.current_backplate.IsEmpty())
@@ -729,7 +729,7 @@ void BoxFragmentPainter::PaintLineBoxes(const PaintInfo& paint_info,
   // a fragment with inline children, without a paint fragment. See:
   // http://crbug.com/1022545
   if (!items_ || layout_object->NeedsLayout()) {
-    NOTREACHED();
+    DUMP_WILL_BE_NOTREACHED();
     return;
   }
 
@@ -1078,29 +1078,26 @@ void BoxFragmentPainter::PaintBoxDecorationBackground(
     visual_rect = VisualRect(paint_offset);
   }
 
-  if (!suppress_box_decoration_background) {
+  if (!suppress_box_decoration_background &&
+      !(paint_info.IsPaintingBackgroundInContentsSpace() &&
+        paint_info.ShouldSkipBackground())) {
     PaintBoxDecorationBackgroundWithRect(
         contents_paint_state ? contents_paint_state->GetPaintInfo()
                              : paint_info,
         visual_rect, paint_rect, *background_client);
+
+    Element* element = DynamicTo<Element>(layout_object.GetNode());
+    if (element && element->GetRegionCaptureCropId()) {
+      paint_info.context.GetPaintController().RecordRegionCaptureData(
+          *background_client, *(element->GetRegionCaptureCropId()),
+          ToPixelSnappedRect(paint_rect));
+    }
   }
 
   if (ShouldRecordHitTestData(paint_info)) {
     ObjectPainter(layout_object)
         .RecordHitTestData(paint_info, ToPixelSnappedRect(paint_rect),
                            *background_client);
-  }
-
-  Element* element = DynamicTo<Element>(layout_object.GetNode());
-  if (element && element->GetRegionCaptureCropId() &&
-      // TODO(wangxianzhu): This is to avoid the side-effect of
-      // HitTestOpaqueness on region capture data. Verify if the side-effect
-      // really matters.
-      !(paint_info.IsPaintingBackgroundInContentsSpace() &&
-        paint_info.ShouldSkipBackground())) {
-    paint_info.context.GetPaintController().RecordRegionCaptureData(
-        *background_client, *(element->GetRegionCaptureCropId()),
-        ToPixelSnappedRect(paint_rect));
   }
 
   // Record the scroll hit test after the non-scrolling background so
@@ -1572,7 +1569,7 @@ void BoxFragmentPainter::PaintInlineItems(const PaintInfo& paint_info,
     if (UNLIKELY(item->IsLayoutObjectDestroyedOrMoved())) {
       // TODO(crbug.com/1099613): This should not happen, as long as it is
       // really layout-clean.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       cursor->MoveToNextSkippingChildren();
       continue;
     }
@@ -1596,7 +1593,7 @@ void BoxFragmentPainter::PaintInlineItems(const PaintInfo& paint_info,
                            &line_box_cursor);
           cursor->MoveToNextSkippingChildren();
         } else {
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           cursor->MoveToNext();
         }
         break;
@@ -1700,7 +1697,7 @@ void BoxFragmentPainter::PaintLineBoxChildItems(
       }
     }
 
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -1976,11 +1973,11 @@ bool BoxFragmentPainter::NodeAtPoint(HitTestResult& result,
 bool BoxFragmentPainter::NodeAtPoint(const HitTestContext& hit_test,
                                      const PhysicalOffset& physical_offset) {
   const PhysicalBoxFragment& fragment = GetPhysicalFragment();
-  // TODO(mstensho): Make sure that we never create an BoxFragmentPainter for
-  // a fragment that doesn't intersect, and turn this into a DCHECK.
-  if (!fragment.MayIntersect(*hit_test.result, hit_test.location,
-                             physical_offset))
-    return false;
+  // Creating a BoxFragmentPainter is a significant cost, especially in broad
+  // trees. Should check before getting here, whether the fragment might
+  // intersect or not.
+  DCHECK(fragment.MayIntersect(*hit_test.result, hit_test.location,
+                               physical_offset));
 
   if (!fragment.IsFirstForNode() && !CanPaintMultipleFragments(fragment))
     return false;
@@ -2133,9 +2130,6 @@ bool BoxFragmentPainter::HitTestAllPhases(
     HitTestResult& result,
     const HitTestLocation& hit_test_location,
     const PhysicalOffset& accumulated_offset) {
-  // TODO(mstensho): Make sure that we never create a BoxFragmentPainter for
-  // a fragment that doesn't intersect, and DCHECK for that here.
-
   // Logic taken from LayoutObject::HitTestAllPhases().
   if (NodeAtPoint(result, hit_test_location, accumulated_offset,
                   HitTestPhase::kForeground)) {
@@ -2483,7 +2477,7 @@ bool BoxFragmentPainter::HitTestItemsChildren(
     if (UNLIKELY(item->IsLayoutObjectDestroyedOrMoved())) {
       // TODO(crbug.com/1099613): This should not happen, as long as it is
       // really layout-clean.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       cursor.MoveToPreviousSibling();
       continue;
     }
@@ -2516,7 +2510,7 @@ bool BoxFragmentPainter::HitTestItemsChildren(
       if (HitTestChildBoxItem(hit_test, container, *item, cursor))
         return true;
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
 
     cursor.MoveToPreviousSibling();

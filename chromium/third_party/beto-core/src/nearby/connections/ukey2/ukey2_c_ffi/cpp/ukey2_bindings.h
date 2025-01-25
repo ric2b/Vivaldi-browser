@@ -64,13 +64,20 @@ void rust_dealloc_ffi_byte_array(RustFFIByteArray array);
 // Common handshake methods
 bool is_handshake_complete(Ukey2HandshakeContextHandle handle);
 RustFFIByteArray get_next_handshake_message(Ukey2HandshakeContextHandle handle);
-CMessageParseResult parse_handshake_message(Ukey2HandshakeContextHandle handle, CFFIByteArray message);
-Ukey2ConnectionContextHandle to_connection_context(Ukey2HandshakeContextHandle handle);
-RustFFIByteArray get_verification_string(Ukey2HandshakeContextHandle handle, size_t output_length);
+CMessageParseResult parse_handshake_message(Ukey2HandshakeContextHandle handle,
+                                            CFFIByteArray message);
+Ukey2ConnectionContextHandle to_connection_context(
+    Ukey2HandshakeContextHandle handle);
+RustFFIByteArray get_verification_string(Ukey2HandshakeContextHandle handle,
+                                         size_t output_length);
 
 // D2DConnectionContextV1 methods
-RustFFIByteArray encode_message_to_peer(Ukey2ConnectionContextHandle handle, CFFIByteArray message, CFFIByteArray associated_data);
-RustFFIByteArray decode_message_from_peer(Ukey2ConnectionContextHandle handle, CFFIByteArray message, CFFIByteArray associated_data);
+RustFFIByteArray encode_message_to_peer(Ukey2ConnectionContextHandle handle,
+                                        CFFIByteArray message,
+                                        CFFIByteArray associated_data);
+RustFFIByteArray decode_message_from_peer(Ukey2ConnectionContextHandle handle,
+                                          CFFIByteArray message,
+                                          CFFIByteArray associated_data);
 RustFFIByteArray get_session_unique(Ukey2ConnectionContextHandle handle);
 int get_sequence_number_for_encoding(Ukey2ConnectionContextHandle handle);
 int get_sequence_number_for_decoding(Ukey2ConnectionContextHandle handle);

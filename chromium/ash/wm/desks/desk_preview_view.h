@@ -10,8 +10,10 @@
 
 #include "ash/ash_export.h"
 #include "ash/style/system_shadow.h"
+#include "ash/wm/desks/window_occlusion_calculator.h"
 #include "ash/wm/overview/overview_focusable_view.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "ui/aura/window_occlusion_tracker.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/controls/button/button.h"
@@ -31,49 +33,44 @@ class WallpaperBaseView;
 //                +---------------------------+
 //                |             <-------------+------  This view's layer.
 //                +---------------------------+
-//              /    |          |               \  ----->>>>> Higher in Z-order.
-//             /     |          |                \
-//     +-----+    +-----+    +-----+               +-----+
-//     |     |    |     |    |     |               |     |
-//     +-----+    +-----+    +-----+               +-----+
-//        ^          ^          ^    \                ^
-//        |          |          |     \ +-----+       |
-//        |          |          |       |     |       |
-//        |          |          |       +-----+       |
-//        |          |          |          ^          |
-//        |          |          |          |   `highlight_overlay_`'s layer:
-//        |          |          |          |   A solid color layer that is
-//        |          |          |          |   visible when `mini_view_`'s
-//        |          |          |          |   `DeskActionContextMenu` is open.
-//        |          |          |          |
-//        |          |          |          |
-//        |          |          |    The root layer of the desk's mirrored
-//        |          |          |    contents layer tree. This tree is owned by
-//        |          |          |    `desk_mirrored_contents_layer_tree_owner_`.
-//        |          |          |
-//        |          |          |
-//        |          |     `desk_mirrored_contents_view_`'s layer: Will be the
-//        |          |      parent layer of the desk's contents mirrored layer
-//        |          |      tree.
-//        |          |
-//        |          |
-//        |     `wallpaper_preview_`'s layer: On which the wallpaper is painted
-//        |      without the dimming and blur that overview mode adds.
-//        |
-//        |
-//     `shadow_layer_`: A layer that paints a shadow behind this view.
+//                       |               \  ----->>>>> Higher in Z-order.
+//                       |                \
+//                    +-----+               +-----+
+//                    |     |               |     |
+//                    +-----+               +-----+
+//                       ^    \                ^
+//                       |     \ +-----+       |
+//                       |       |     |       |
+//                       |       +-----+       |
+//                       |          ^          |
+//                       |          |   `highlight_overlay_`'s layer:
+//                       |          |   A solid color layer that is
+//                       |          |   visible when `mini_view_`'s
+//                       |          |   `DeskActionContextMenu` is open.
+//                       |          |
+//                       |          |
+//                       |    The root layer of the desk's mirrored
+//                       |    contents layer tree. This tree is owned by
+//                       |    `desk_mirrored_contents_layer_tree_owner_`.
+//                       |
+//                       |
+//             `desk_mirrored_contents_view_`'s layer: Will be the
+//              parent layer of the desk's contents mirrored layer tree.
 //
-// Note that `desk_mirrored_contents_view_`, `wallpaper_preview_`, and
-// `highlight_overlay_` paint to layers with rounded corners. In order to use
-// the fast rounded corners implementation we must make them sibling layers,
-// rather than one being a descendant of the other. Otherwise, this will trigger
-// a render surface.
+// Note that `desk_mirrored_contents_view_` and `highlight_overlay_` paint to
+// layers with rounded corners. In order to use the fast rounded corners
+// implementation we must make them sibling layers, rather than one being a
+// descendant of the other. Otherwise, this will trigger a render surface.
 class ASH_EXPORT DeskPreviewView : public views::Button,
-                                   public OverviewFocusableView {
+                                   public OverviewFocusableView,
+                                   public WindowOcclusionCalculator::Observer {
   METADATA_HEADER(DeskPreviewView, views::Button)
 
  public:
-  DeskPreviewView(PressedCallback callback, DeskMiniView* mini_view);
+  DeskPreviewView(
+      PressedCallback callback,
+      DeskMiniView* mini_view,
+      base::WeakPtr<WindowOcclusionCalculator> window_occlusion_calculator);
 
   DeskPreviewView(const DeskPreviewView&) = delete;
   DeskPreviewView& operator=(const DeskPreviewView&) = delete;
@@ -115,7 +112,7 @@ class ASH_EXPORT DeskPreviewView : public views::Button,
   // Updates accessible name for this desk preview.
   void UpdateAccessibleName();
 
-  // views::View:
+  // views::Button:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void Layout(PassKey) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
@@ -126,6 +123,8 @@ class ASH_EXPORT DeskPreviewView : public views::Button,
   void OnFocus() override;
   void OnBlur() override;
   void AboutToRequestFocusFromTabTraversal(bool reverse) override;
+  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
+  bool CanHandleAccelerators() const override;
 
   // OverviewFocusableView:
   views::View* GetView() override;
@@ -137,10 +136,14 @@ class ASH_EXPORT DeskPreviewView : public views::Button,
   void OnFocusableViewFocused() override;
   void OnFocusableViewBlurred() override;
 
+  // WindowOcclusionCalculator::Observer:
+  void OnWindowOcclusionChanged(aura::Window* window) override;
+
  private:
   friend class DesksTestApi;
 
   const raw_ptr<DeskMiniView, LeakedDanglingUntriaged> mini_view_;
+  const base::WeakPtr<WindowOcclusionCalculator> window_occlusion_calculator_;
 
   // A view that paints the wallpaper in the mini_view. It avoids the dimming
   // and blur overview mode adds to the original wallpaper. Owned by the views
@@ -176,6 +179,9 @@ class ASH_EXPORT DeskPreviewView : public views::Button,
   std::unique_ptr<SystemShadow> shadow_;
 
   std::optional<ui::ColorId> focus_color_id_;
+
+  base::WeakPtrFactory<DeskPreviewView> recreate_mirror_layers_weak_factory_{
+      this};
 };
 
 }  // namespace ash

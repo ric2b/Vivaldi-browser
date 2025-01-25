@@ -12,9 +12,10 @@
 #include "util/crypto/certificate_utils.h"
 #include "util/osp_logging.h"
 
-using ::cast::channel::CastMessage;
 
 namespace openscreen::cast {
+
+using proto::CastMessage;
 
 SenderSocketFactory::Client::~Client() = default;
 

@@ -47,10 +47,6 @@ constexpr base::TimeDelta kUmaMinTime = base::Milliseconds(1);
 constexpr base::TimeDelta kUmaMaxTime = base::Seconds(60);
 constexpr int kUmaNumBuckets = 50;
 constexpr int kUmaPriAbiMigMaxFailedAttempts = 10;
-constexpr int kUmaFixupDirectoriesCountMin = 0;
-constexpr int kUmaFixupDirectoriesCountMax = 5000000;
-constexpr int kUmaFixupAppsCountMin = 0;
-constexpr int kUmaFixupAppsCountMax = 10000;
 
 constexpr base::TimeDelta kRequestProcessListPeriod = base::Minutes(5);
 constexpr char kArcProcessNamePrefix[] = "org.chromium.arc.";
@@ -87,7 +83,7 @@ std::string BootTypeToString(mojom::BootType boot_type) {
     case mojom::BootType::REGULAR_BOOT:
       return ".RegularBoot";
   }
-  DUMP_WILL_BE_NOTREACHED_NORETURN();
+  DUMP_WILL_BE_NOTREACHED();
   return "";
 }
 
@@ -98,7 +94,7 @@ const char* DnsQueryToString(mojom::ArcDnsQuery query) {
     case mojom::ArcDnsQuery::ANDROID_API_HOST_NAME:
       return "AndroidApi";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return "";
 }
 
@@ -127,7 +123,7 @@ const char* WaylandTimingEventToString(mojom::WaylandTimingEvent event) {
     case mojom::WaylandTimingEvent::kZcrVsyncTimingUpdate:
       return ".ZcrVsyncTimingUpdate";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return "";
 }
 struct LoadAverageHistogram {
@@ -687,31 +683,6 @@ void ArcMetricsService::ReportLowLatencyStylusLibPredictionTarget(
   // Deprecated: This will be removed once all callers are removed.
 }
 
-void ArcMetricsService::ReportEntireFixupMetrics(base::TimeDelta duration,
-                                                 uint32_t number_of_directories,
-                                                 uint32_t number_of_failures) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  base::UmaHistogramLongTimes("Arc.Fixup.Entire.Duration", duration);
-  base::UmaHistogramCustomCounts("Arc.Fixup.Entire.Directories",
-                                 number_of_directories,
-                                 kUmaFixupDirectoriesCountMin,
-                                 kUmaFixupDirectoriesCountMax, kUmaNumBuckets);
-  base::UmaHistogramCustomCounts("Arc.Fixup.Entire.Failures",
-                                 number_of_failures, kUmaFixupAppsCountMin,
-                                 kUmaFixupAppsCountMax, kUmaNumBuckets);
-}
-
-void ArcMetricsService::ReportPerAppFixupMetrics(
-    base::TimeDelta duration,
-    uint32_t number_of_directories) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  base::UmaHistogramLongTimes("Arc.Fixup.PerApp.Duration", duration);
-  base::UmaHistogramCustomCounts("Arc.Fixup.PerApp.Directories",
-                                 number_of_directories,
-                                 kUmaFixupDirectoriesCountMin,
-                                 kUmaFixupDirectoriesCountMax, kUmaNumBuckets);
-}
-
 void ArcMetricsService::ReportMainAccountHashMigrationMetrics(
     mojom::MainAccountHashMigrationStatus status) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -825,6 +796,11 @@ void ArcMetricsService::ReportAppErrorDialogType(
     mojom::AppErrorDialogType type) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   base::UmaHistogramEnumeration("Arc.WM.AppErrorDialog.Type", type);
+}
+
+void ArcMetricsService::ReportApkCacheHit(bool hit) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  base::UmaHistogramBoolean("Arc.AppInstall.CacheHit", hit);
 }
 
 void ArcMetricsService::OnWindowActivated(

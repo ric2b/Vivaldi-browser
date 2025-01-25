@@ -126,8 +126,7 @@ class EnrollmentLauncherImpl : public EnrollmentLauncher {
   void UpdateDeviceAttributes(const std::string& asset_id,
                               const std::string& location) override;
   void Setup(const policy::EnrollmentConfig& enrollment_config,
-             const std::string& enrolling_user_domain,
-             policy::LicenseType license_type) override;
+             const std::string& enrolling_user_domain) override;
   bool InProgress() const override;
 
  private:
@@ -206,11 +205,9 @@ EnrollmentLauncherImpl::~EnrollmentLauncherImpl() {
 
 void EnrollmentLauncherImpl::Setup(
     const policy::EnrollmentConfig& enrollment_config,
-    const std::string& enrolling_user_domain,
-    policy::LicenseType license_type) {
+    const std::string& enrolling_user_domain) {
   enrollment_config_ = enrollment_config;
   enrolling_user_domain_ = enrolling_user_domain;
-  license_type_ = license_type;
 }
 
 void EnrollmentLauncherImpl::EnrollUsingAuthCode(const std::string& auth_code) {
@@ -323,7 +320,7 @@ void EnrollmentLauncherImpl::DoEnroll(policy::DMAuth auth_data) {
       connector->GetStateKeysBroker(), attestation_flow_.get(),
       std::move(client),
       policy::BrowserPolicyConnectorAsh::CreateBackgroundTaskRunner(),
-      enrollment_config_, license_type_, auth_data_.Clone(),
+      enrollment_config_, auth_data_.Clone(),
       InstallAttributes::Get()->GetDeviceId(),
       policy::EnrollmentRequisitionManager::GetDeviceRequisition(),
       policy::EnrollmentRequisitionManager::GetSubOrganization(),
@@ -484,7 +481,7 @@ void EnrollmentLauncherImpl::ReportAuthStatus(
       LOG(WARNING) << "Network error " << error.state();
       break;
     case GoogleServiceAuthError::NUM_STATES:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -499,7 +496,7 @@ void EnrollmentLauncherImpl::ReportEnrollmentStatus(
     case policy::EnrollmentStatus::Code::kPolicyFetchFailed:
       switch (status.client_status()) {
         case policy::DM_STATUS_SUCCESS:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
         case policy::DM_STATUS_REQUEST_INVALID:
           UMA(policy::kMetricEnrollmentRegisterPolicyPayloadInvalid);
@@ -554,10 +551,10 @@ void EnrollmentLauncherImpl::ReportEnrollmentStatus(
           UMA(policy::kMetricEnrollmentRegisterCannotSignRequest);
           break;
         case policy::DM_STATUS_SERVICE_DEVICE_NEEDS_RESET:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
         case policy::DM_STATUS_SERVICE_ARC_DISABLED:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
         case policy::DM_STATUS_SERVICE_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE:
           UMA(policy::
@@ -595,7 +592,7 @@ void EnrollmentLauncherImpl::ReportEnrollmentStatus(
       switch (status.lock_status()) {
         case InstallAttributes::LOCK_SUCCESS:
         case InstallAttributes::LOCK_NOT_READY:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
         case InstallAttributes::LOCK_TIMEOUT:
           UMA(policy::kMetricEnrollmentLockboxTimeoutError);
@@ -641,7 +638,7 @@ void EnrollmentLauncherImpl::ReportEnrollmentStatus(
       UMA(policy::kMetricEnrollmentRegistrationCertificateFetchFailed);
       switch (status.attestation_status()) {
         case attestation::ATTESTATION_SUCCESS:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
         case attestation::ATTESTATION_UNSPECIFIED_FAILURE:
           UMA(policy::
@@ -688,16 +685,15 @@ EnrollmentLauncher::~EnrollmentLauncher() = default;
 std::unique_ptr<EnrollmentLauncher> EnrollmentLauncher::Create(
     EnrollmentStatusConsumer* status_consumer,
     const policy::EnrollmentConfig& enrollment_config,
-    const std::string& enrolling_user_domain,
-    policy::LicenseType license_type) {
+    const std::string& enrolling_user_domain) {
   if (!g_testing_factory->is_null()) {
     CHECK_IS_TEST();
     return g_testing_factory->Run(status_consumer, enrollment_config,
-                                  enrolling_user_domain, license_type);
+                                  enrolling_user_domain);
   }
 
   auto result = std::make_unique<EnrollmentLauncherImpl>(status_consumer);
-  result->Setup(enrollment_config, enrolling_user_domain, license_type);
+  result->Setup(enrollment_config, enrolling_user_domain);
   return result;
 }
 

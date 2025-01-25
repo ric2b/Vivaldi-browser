@@ -20,12 +20,12 @@ limitations under the License.
 
 #define EIGEN_USE_THREADS
 
+#include "unsupported/Eigen/CXX11/Tensor"  // from @eigen_archive
 #include "dnnl.hpp"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/tsl/util/onednn_threadpool.h"
 #include "xla/xla_data.pb.h"
 #include "tsl/platform/cpu_info.h"
-#include "unsupported/Eigen/CXX11/Tensor"
 
 namespace xla {
 namespace cpu {
@@ -41,10 +41,10 @@ inline bool IsSupportedType(xla::PrimitiveType dtype) {
              TestCPUFeature(CPUFeature::AVX_NE_CONVERT) ||
              TestCPUFeature(CPUFeature::AMX_BF16);
     case F16:
-      return TestCPUFeature(CPUFeature::AVX512BW) &&
-             (TestCPUFeature(CPUFeature::AVX512_FP16) ||
-              TestCPUFeature(CPUFeature::AMX_FP16) ||
-              TestCPUFeature(CPUFeature::AVX_NE_CONVERT));
+      return (TestCPUFeature(CPUFeature::AVX512BW) &&
+              (TestCPUFeature(CPUFeature::AVX512_FP16) ||
+               TestCPUFeature(CPUFeature::AMX_FP16))) ||
+             TestCPUFeature(CPUFeature::AVX_NE_CONVERT);
     default:
       return false;
   }

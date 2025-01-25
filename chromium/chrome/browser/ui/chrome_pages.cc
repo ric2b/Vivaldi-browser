@@ -43,6 +43,7 @@
 #include "chrome/browser/ui/user_education/show_promo_in_page.h"
 #include "chrome/browser/ui/webui/bookmarks/bookmarks_ui.h"
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
+#include "chrome/browser/user_education/tutorial_identifiers.h"
 #include "chrome/browser/user_education/user_education_service.h"
 #include "chrome/browser/user_education/user_education_service_factory.h"
 #include "chrome/common/chrome_features.h"
@@ -155,7 +156,7 @@ void ShowHelpImpl(Browser* browser, Profile* profile, HelpSource source) {
       app_launch_source = apps::LaunchSource::kFromOtherApp;
       break;
     default:
-      NOTREACHED() << "Unhandled help source" << source;
+      NOTREACHED_IN_MIGRATION() << "Unhandled help source" << source;
   }
 
   ash::SystemAppLaunchParams params;
@@ -193,7 +194,7 @@ void ShowHelpImpl(Browser* browser, Profile* profile, HelpSource source) {
       url = GURL(kChooserUsbOverviewURL);
       break;
     default:
-      NOTREACHED() << "Unhandled help source " << source;
+      NOTREACHED_IN_MIGRATION() << "Unhandled help source " << source;
   }
 #endif  // BUILDFLAG_IS_CHROMEOS_LACROS)
   if (browser) {
@@ -381,9 +382,11 @@ void ShowChromeTips(Browser* browser) {
   ShowSingletonTab(browser, GURL(kChromeTipsURL));
 }
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 void ShowChromeWhatsNew(Browser* browser) {
   ShowSingletonTab(browser, GURL(kChromeUIWhatsNewURL));
 }
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 void LaunchReleaseNotes(Profile* profile, apps::LaunchSource source) {
@@ -630,13 +633,13 @@ void ShowAllSitesSettingsFilteredByFpsOwner(
   ShowSingletonTabIgnorePathOverwriteNTP(browser, url);
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 void ShowEnterpriseManagementPageInTabbedBrowser(Browser* browser) {
   // Management shows in a tab because it has a "back" arrow that takes the
   // user to the Chrome browser about page, which is part of browser settings.
   ShowSingletonTabIgnorePathOverwriteNTP(browser, GURL(kChromeUIManagementURL));
 }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void ShowAppManagementPage(Profile* profile,
                            const std::string& app_id,
                            ash::settings::AppManagementEntryPoint entry_point) {

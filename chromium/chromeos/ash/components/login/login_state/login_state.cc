@@ -44,13 +44,12 @@ LoginState::LoggedInUserType GetLoggedInUserTypeFromUser(
       return LoginState::LOGGED_IN_USER_KIOSK;
     case user_manager::UserType::kChild:
       return LoginState::LOGGED_IN_USER_CHILD;
-    case user_manager::UserType::kArcKioskApp:
-      return LoginState::LOGGED_IN_USER_KIOSK;
     case user_manager::UserType::kWebKioskApp:
       return LoginState::LOGGED_IN_USER_KIOSK;
       // Since there is no default, the compiler warns about unhandled types.
   }
-  NOTREACHED() << "Invalid type for active user: " << active_user.GetType();
+  NOTREACHED_IN_MIGRATION()
+      << "Invalid type for active user: " << active_user.GetType();
   return LoginState::LOGGED_IN_USER_REGULAR;
 }
 

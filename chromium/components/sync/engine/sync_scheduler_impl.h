@@ -32,15 +32,15 @@ namespace syncer {
 class BackoffDelayProvider;
 struct ModelNeutralState;
 
+// Lives on the sync sequence.
 class SyncSchedulerImpl : public SyncScheduler {
  public:
-  // |name| is a display string to identify the syncer thread.
+  // |name| is a display string to identify the sync sequence.
   SyncSchedulerImpl(const std::string& name,
                     std::unique_ptr<BackoffDelayProvider> delay_provider,
                     SyncCycleContext* context,
                     std::unique_ptr<Syncer> syncer,
-                    bool ignore_auth_credentials,
-                    bool sync_poll_immediately_on_every_startup);
+                    bool ignore_auth_credentials);
 
   SyncSchedulerImpl(const SyncSchedulerImpl&) = delete;
   SyncSchedulerImpl& operator=(const SyncSchedulerImpl&) = delete;
@@ -176,7 +176,7 @@ class SyncSchedulerImpl : public SyncScheduler {
   void NotifyBlockedTypesChanged();
 
   // Looks for pending work and, if it finds any, runs it. TrySyncCycleJob just
-  // posts a call to TrySyncCycleJobImpl on the current thread.
+  // posts a call to TrySyncCycleJobImpl on the current sequence.
   void TrySyncCycleJob(RespectGlobalBackoff respect_backoff);
   void TrySyncCycleJobImpl(RespectGlobalBackoff respect_backoff);
 
@@ -214,13 +214,6 @@ class SyncSchedulerImpl : public SyncScheduler {
 
   bool IsEarlierThanCurrentPendingJob(const base::TimeDelta& delay);
 
-  // Computes the last poll time the system should assume on start-up.
-  static base::Time ComputeLastPollOnStart(
-      base::Time last_poll,
-      base::TimeDelta poll_interval,
-      base::Time now,
-      bool sync_poll_immediately_on_every_startup);
-
   // Used for logging.
   const std::string name_;
 
@@ -233,14 +226,9 @@ class SyncSchedulerImpl : public SyncScheduler {
   // Timer for polling. Restarted on each successful poll, and when entering
   // normal sync mode or exiting an error state. Not active in configuration
   // mode.
-  // Depending on the state of kSyncSchedulerUseWallClockTimer, *either* the
-  // OneShotTimer *or* the WallClockTimer is used.
-  // TODO(crbug.com/40939309): Once kSyncSchedulerUseWallClockTimer is launched,
-  // remove poll_timer_ticks_.
-  base::OneShotTimer poll_timer_ticks_;
   // Note that this is a WallClockTimer (as opposed to a regular OneShotTimer)
   // so that it continues counting even if the device is suspended.
-  base::WallClockTimer poll_timer_wall_;
+  base::WallClockTimer poll_timer_;
 
   // The mode of operation.
   Mode mode_ = CONFIGURATION_MODE;
@@ -271,9 +259,6 @@ class SyncSchedulerImpl : public SyncScheduler {
 
   // The time when the last poll request finished. Used for computing the next
   // poll time.
-  // TODO(crbug.com/40939309): Once kSyncSchedulerUseWallClockTimer is launched,
-  // remove last_poll_reset_ticks_.
-  base::TimeTicks last_poll_reset_ticks_;
   base::Time last_poll_reset_time_;
 
   // One-shot timer for scheduling GU retry according to delay set by server.
@@ -281,8 +266,6 @@ class SyncSchedulerImpl : public SyncScheduler {
 
   // Dictates if the scheduler should wait for authentication to happen or not.
   const bool ignore_auth_credentials_;
-
-  const bool sync_poll_immediately_on_every_startup_;
 
   // Used to prevent changing nudge delays by the server in integration tests.
   bool force_short_nudge_delay_for_test_ = false;

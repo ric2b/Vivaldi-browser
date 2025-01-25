@@ -28,7 +28,7 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('core/sdk/CSSStyleSheetHeader.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-export class CSSStyleSheetHeader implements TextUtils.ContentProvider.SafeContentProvider, FrameAssociated {
+export class CSSStyleSheetHeader implements TextUtils.ContentProvider.ContentProvider, FrameAssociated {
   #cssModelInternal: CSSModel;
   id: Protocol.CSS.StyleSheetId;
   frameId: Protocol.Page.FrameId;
@@ -48,7 +48,7 @@ export class CSSStyleSheetHeader implements TextUtils.ContentProvider.SafeConten
   ownerNode: DeferredDOMNode|undefined;
   sourceMapURL: Platform.DevToolsPath.UrlString|undefined;
   readonly loadingFailed: boolean;
-  #originalContentProviderInternal: TextUtils.StaticContentProvider.SafeStaticContentProvider|null;
+  #originalContentProviderInternal: TextUtils.StaticContentProvider.StaticContentProvider|null;
 
   constructor(cssModel: CSSModel, payload: Protocol.CSS.CSSStyleSheetHeader) {
     this.#cssModelInternal = cssModel;
@@ -75,7 +75,7 @@ export class CSSStyleSheetHeader implements TextUtils.ContentProvider.SafeConten
     this.#originalContentProviderInternal = null;
   }
 
-  originalContentProvider(): TextUtils.ContentProvider.SafeContentProvider {
+  originalContentProvider(): TextUtils.ContentProvider.ContentProvider {
     if (!this.#originalContentProviderInternal) {
       const lazyContent = (async(): Promise<TextUtils.ContentData.ContentDataOrError> => {
         const originalText = await this.#cssModelInternal.originalStyleSheetText(this);
@@ -84,8 +84,8 @@ export class CSSStyleSheetHeader implements TextUtils.ContentProvider.SafeConten
         }
         return new TextUtils.ContentData.ContentData(originalText, /* isBase64=*/ false, 'text/css');
       });
-      this.#originalContentProviderInternal = new TextUtils.StaticContentProvider.SafeStaticContentProvider(
-          this.contentURL(), this.contentType(), lazyContent);
+      this.#originalContentProviderInternal =
+          new TextUtils.StaticContentProvider.StaticContentProvider(this.contentURL(), this.contentType(), lazyContent);
     }
     return this.#originalContentProviderInternal;
   }

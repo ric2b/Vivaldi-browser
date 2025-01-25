@@ -52,7 +52,7 @@ void CaptureCommitRequest(CommitRequestDataList* dst,
   *dst = std::move(src);
 }
 
-sync_pb::ModelTypeState CreateDummyModelTypeState() {
+sync_pb::ModelTypeState CreateModelTypeState() {
   sync_pb::ModelTypeState model_type_state;
   model_type_state.set_cache_guid(kCacheGuid);
   model_type_state.set_initial_sync_state(
@@ -60,9 +60,9 @@ sync_pb::ModelTypeState CreateDummyModelTypeState() {
   return model_type_state;
 }
 
-// Creates a dummy Nigori UpdateResponseData that has the keystore decryptor
+// Creates a fake Nigori UpdateResponseData that has the keystore decryptor
 // token key name set.
-syncer::UpdateResponseData CreateDummyNigoriUpdateResponseData(
+syncer::UpdateResponseData CreateFakeNigoriUpdateResponseData(
     const std::string keystore_decryptor_token_key_name,
     int response_version) {
   syncer::EntityData entity_data;
@@ -105,7 +105,8 @@ class MockNigoriSyncBridge : public NigoriSyncBridge {
               ApplyIncrementalSyncChanges,
               (std::optional<EntityData> data),
               (override));
-  MOCK_METHOD(std::unique_ptr<EntityData>, GetData, (), (override));
+  MOCK_METHOD(std::unique_ptr<EntityData>, GetDataForCommit, (), (override));
+  MOCK_METHOD(std::unique_ptr<EntityData>, GetDataForDebugging, (), (override));
   MOCK_METHOD(void, ApplyDisableSyncChanges, (), (override));
 };
 
@@ -236,6 +237,11 @@ TEST_F(NigoriModelTypeProcessorTest, ShouldIncrementSequenceNumberWhenPut) {
 
 TEST_F(NigoriModelTypeProcessorTest, ShouldGetEmptyLocalChanges) {
   SimulateModelReadyToSync(/*initial_sync_done=*/true);
+  {
+    base::MockOnceCallback<void(bool)> has_unsynced_data_cb;
+    EXPECT_CALL(has_unsynced_data_cb, Run(false));
+    processor()->HasUnsyncedData(has_unsynced_data_cb.Get());
+  }
   CommitRequestDataList commit_request;
   processor()->GetLocalChanges(
       /*max_entries=*/10,
@@ -246,11 +252,24 @@ TEST_F(NigoriModelTypeProcessorTest, ShouldGetEmptyLocalChanges) {
 TEST_F(NigoriModelTypeProcessorTest, ShouldGetLocalChangesWhenPut) {
   SimulateModelReadyToSync(/*initial_sync_done=*/true);
 
+  {
+    base::MockOnceCallback<void(bool)> has_unsynced_data_cb;
+    EXPECT_CALL(has_unsynced_data_cb, Run(false));
+    processor()->HasUnsyncedData(has_unsynced_data_cb.Get());
+  }
+
   auto entity_data = std::make_unique<syncer::EntityData>();
   entity_data->specifics.mutable_nigori();
   entity_data->name = kNigoriNonUniqueName;
 
   processor()->Put(std::move(entity_data));
+
+  {
+    base::MockOnceCallback<void(bool)> has_unsynced_data_cb;
+    EXPECT_CALL(has_unsynced_data_cb, Run(true));
+    processor()->HasUnsyncedData(has_unsynced_data_cb.Get());
+  }
+
   CommitRequestDataList commit_request;
   processor()->GetLocalChanges(
       /*max_entries=*/10,
@@ -263,11 +282,24 @@ TEST_F(NigoriModelTypeProcessorTest,
        ShouldSquashCommitRequestUponCommitCompleted) {
   SimulateModelReadyToSync(/*initial_sync_done=*/true);
 
+  {
+    base::MockOnceCallback<void(bool)> has_unsynced_data_cb;
+    EXPECT_CALL(has_unsynced_data_cb, Run(false));
+    processor()->HasUnsyncedData(has_unsynced_data_cb.Get());
+  }
+
   auto entity_data = std::make_unique<syncer::EntityData>();
   entity_data->specifics.mutable_nigori();
   entity_data->name = kNigoriNonUniqueName;
 
   processor()->Put(std::move(entity_data));
+
+  {
+    base::MockOnceCallback<void(bool)> has_unsynced_data_cb;
+    EXPECT_CALL(has_unsynced_data_cb, Run(true));
+    processor()->HasUnsyncedData(has_unsynced_data_cb.Get());
+  }
+
   CommitRequestDataList commit_request_list;
   processor()->GetLocalChanges(
       /*max_entries=*/10,
@@ -286,10 +318,15 @@ TEST_F(NigoriModelTypeProcessorTest,
   EXPECT_CALL(*mock_nigori_sync_bridge(),
               ApplyIncrementalSyncChanges(Eq(std::nullopt)));
   processor()->OnCommitCompleted(
-      CreateDummyModelTypeState(), std::move(commit_response_list),
+      CreateModelTypeState(), std::move(commit_response_list),
       /*error_response_list=*/FailedCommitResponseDataList());
 
   // There should be no more local changes.
+  {
+    base::MockOnceCallback<void(bool)> has_unsynced_data_cb;
+    EXPECT_CALL(has_unsynced_data_cb, Run(false));
+    processor()->HasUnsyncedData(has_unsynced_data_cb.Get());
+  }
   commit_response_list.clear();
   processor()->GetLocalChanges(
       /*max_entries=*/10,
@@ -317,13 +354,13 @@ TEST_F(NigoriModelTypeProcessorTest,
   EXPECT_CALL(*mock_nigori_sync_bridge(),
               ApplyIncrementalSyncChanges(Eq(std::nullopt)));
   processor()->OnCommitCompleted(
-      CreateDummyModelTypeState(),
+      CreateModelTypeState(),
       /*committed_response_list=*/CommitResponseDataList(),
       /*error_response_list=*/FailedCommitResponseDataList());
 
   // Data has been moved into the previous request, so the processor will ask
   // for the commit data once more.
-  ON_CALL(*mock_nigori_sync_bridge(), GetData()).WillByDefault([&]() {
+  ON_CALL(*mock_nigori_sync_bridge(), GetDataForCommit()).WillByDefault([&]() {
     auto entity_data = std::make_unique<syncer::EntityData>();
     entity_data->specifics.mutable_nigori();
     entity_data->name = kNigoriNonUniqueName;
@@ -377,7 +414,7 @@ TEST_F(NigoriModelTypeProcessorTest,
               ApplyIncrementalSyncChanges(Eq(std::nullopt)));
   // Receive the commit response of the first request.
   processor()->OnCommitCompleted(
-      CreateDummyModelTypeState(), std::move(commit_response_list),
+      CreateModelTypeState(), std::move(commit_response_list),
       /*error_response_list=*/FailedCommitResponseDataList());
 
   // There should still be a local change.
@@ -447,14 +484,14 @@ TEST_F(NigoriModelTypeProcessorTest, ShouldMergeFullSyncData) {
 
   const std::string kDecryptorTokenKeyName = "key_name";
   UpdateResponseDataList updates;
-  updates.push_back(CreateDummyNigoriUpdateResponseData(kDecryptorTokenKeyName,
-                                                        /*server_version=*/1));
+  updates.push_back(CreateFakeNigoriUpdateResponseData(kDecryptorTokenKeyName,
+                                                       /*server_version=*/1));
 
   EXPECT_CALL(*mock_nigori_sync_bridge(),
               MergeFullSyncData(OptionalEntityDataHasDecryptorTokenKeyName(
                   kDecryptorTokenKeyName)));
 
-  processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
+  processor()->OnUpdateReceived(CreateModelTypeState(), std::move(updates),
                                 /*gc_directive=*/std::nullopt);
 
   histogram_tester.ExpectTotalCount(
@@ -468,8 +505,8 @@ TEST_F(NigoriModelTypeProcessorTest, ShouldApplyIncrementalSyncChanges) {
 
   const std::string kDecryptorTokenKeyName = "key_name";
   UpdateResponseDataList updates;
-  updates.push_back(CreateDummyNigoriUpdateResponseData(kDecryptorTokenKeyName,
-                                                        /*server_version=*/2));
+  updates.push_back(CreateFakeNigoriUpdateResponseData(kDecryptorTokenKeyName,
+                                                       /*server_version=*/2));
   updates.back().entity.modification_time = base::Time::Now() - base::Hours(1);
 
   EXPECT_CALL(
@@ -477,7 +514,7 @@ TEST_F(NigoriModelTypeProcessorTest, ShouldApplyIncrementalSyncChanges) {
       ApplyIncrementalSyncChanges(
           OptionalEntityDataHasDecryptorTokenKeyName(kDecryptorTokenKeyName)));
 
-  processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
+  processor()->OnUpdateReceived(CreateModelTypeState(), std::move(updates),
                                 /*gc_directive=*/std::nullopt);
 
   histogram_tester.ExpectUniqueTimeSample(
@@ -494,7 +531,7 @@ TEST_F(NigoriModelTypeProcessorTest,
   EXPECT_CALL(*mock_nigori_sync_bridge(),
               ApplyIncrementalSyncChanges(Eq(std::nullopt)));
 
-  processor()->OnUpdateReceived(CreateDummyModelTypeState(),
+  processor()->OnUpdateReceived(CreateModelTypeState(),
                                 UpdateResponseDataList(),
                                 /*gc_directive=*/std::nullopt);
 }
@@ -507,7 +544,7 @@ TEST_F(NigoriModelTypeProcessorTest,
   SimulateModelReadyToSync(/*initial_sync_done=*/true, kServerVersion);
 
   UpdateResponseDataList updates;
-  updates.push_back(CreateDummyNigoriUpdateResponseData(
+  updates.push_back(CreateFakeNigoriUpdateResponseData(
       /*keystore_decryptor_token_key_name=*/"key_name", kServerVersion));
 
   // ApplyIncrementalSyncChanges() should still be called to trigger persistence
@@ -515,7 +552,7 @@ TEST_F(NigoriModelTypeProcessorTest,
   EXPECT_CALL(*mock_nigori_sync_bridge(),
               ApplyIncrementalSyncChanges(Eq(std::nullopt)));
 
-  processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
+  processor()->OnUpdateReceived(CreateModelTypeState(), std::move(updates),
                                 /*gc_directive=*/std::nullopt);
 
   histogram_tester.ExpectTotalCount(
@@ -574,14 +611,14 @@ TEST_F(NigoriModelTypeProcessorTest, ShouldResetDataOnCacheGuidMismatch) {
   // Check that sync can be started.
   const std::string kDecryptorTokenKeyName = "key_name";
   UpdateResponseDataList updates;
-  updates.push_back(CreateDummyNigoriUpdateResponseData(kDecryptorTokenKeyName,
-                                                        /*server_version=*/1));
+  updates.push_back(CreateFakeNigoriUpdateResponseData(kDecryptorTokenKeyName,
+                                                       /*server_version=*/1));
 
   EXPECT_CALL(*mock_nigori_sync_bridge(),
               MergeFullSyncData(OptionalEntityDataHasDecryptorTokenKeyName(
                   kDecryptorTokenKeyName)));
 
-  processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
+  processor()->OnUpdateReceived(CreateModelTypeState(), std::move(updates),
                                 /*gc_directive=*/std::nullopt);
 }
 
@@ -603,13 +640,13 @@ TEST_F(NigoriModelTypeProcessorTest,
       });
 
   UpdateResponseDataList updates;
-  updates.push_back(CreateDummyNigoriUpdateResponseData(
+  updates.push_back(CreateFakeNigoriUpdateResponseData(
       /*keystore_decryptor_token_key_name=*/"some key",
       /*server_version=*/1));
 
   ASSERT_TRUE(processor()->IsConnectedForTest());
   EXPECT_CALL(error_handler_callback, Run);
-  processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
+  processor()->OnUpdateReceived(CreateModelTypeState(), std::move(updates),
                                 /*gc_directive=*/std::nullopt);
   EXPECT_FALSE(processor()->IsConnectedForTest());
 }
@@ -632,13 +669,13 @@ TEST_F(NigoriModelTypeProcessorTest,
       });
 
   UpdateResponseDataList updates;
-  updates.push_back(CreateDummyNigoriUpdateResponseData(
+  updates.push_back(CreateFakeNigoriUpdateResponseData(
       /*keystore_decryptor_token_key_name=*/"some key",
       /*server_version=*/2));
 
   ASSERT_TRUE(processor()->IsConnectedForTest());
   EXPECT_CALL(error_handler_callback, Run);
-  processor()->OnUpdateReceived(CreateDummyModelTypeState(), std::move(updates),
+  processor()->OnUpdateReceived(CreateModelTypeState(), std::move(updates),
                                 /*gc_directive=*/std::nullopt);
   EXPECT_FALSE(processor()->IsConnectedForTest());
 }

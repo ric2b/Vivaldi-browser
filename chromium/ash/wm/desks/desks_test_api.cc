@@ -15,7 +15,7 @@
 #include "ash/wm/desks/desk_preview_view.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_restore_util.h"
-#include "ash/wm/desks/legacy_desk_bar_view.h"
+#include "ash/wm/desks/overview_desk_bar_view.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_test_util.h"
@@ -80,7 +80,7 @@ DeskActionContextMenu* DesksTestApi::GetContextMenuForDesk(
 
   // The context menu is not created until it is opened, so open it first.
   mini_view->OpenContextMenu(ui::MENU_SOURCE_MOUSE);
-  return mini_view->context_menu_.get();
+  return mini_view->context_menu();
 }
 
 // static

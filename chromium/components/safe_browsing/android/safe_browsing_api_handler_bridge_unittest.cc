@@ -10,7 +10,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
-#include "components/safe_browsing/android/native_j_unittests_jni_headers/SafeBrowsingApiHandlerBridgeNativeUnitTestHelper_jni.h"
+#include "base/test/test_future.h"
 #include "components/safe_browsing/android/safe_browsing_api_handler_util.h"
 #include "components/safe_browsing/core/browser/db/util.h"
 #include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
@@ -19,6 +19,9 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "components/safe_browsing/android/native_j_unittests_jni_headers/SafeBrowsingApiHandlerBridgeNativeUnitTestHelper_jni.h"
 
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ScopedJavaLocalRef;
@@ -134,6 +137,11 @@ class SafeBrowsingApiHandlerBridgeTest : public testing::Test {
         ToJavaIntArray(env_, int_threat_attributes,
                        returned_threat_attributes.size()),
         static_cast<int>(returned_response_status));
+  }
+
+  void SetVerifyAppsResult(VerifyAppsEnabledResult result) {
+    Java_SafeBrowsingApiHandlerBridgeNativeUnitTestHelper_setVerifyAppsResult(
+        env_, static_cast<int>(result));
   }
 
   void RunHashDatabaseUrlCheck(
@@ -700,8 +708,9 @@ TEST_F(SafeBrowsingApiHandlerBridgeTest,
 }
 
 TEST_F(SafeBrowsingApiHandlerBridgeTest,
-       HashRealTimeUrlCheck_NonRecoverableLookupResultAndFallback) {
+       HashRealTimeUrlCheck_NonRecoverableLookupResult) {
   GURL url1("https://example1.com");
+  // FAILURE_API_UNSUPPORTED is a non-recoverable error.
   AddSafeBrowsingResponse(
       url1, SafeBrowsingApiLookupResult::FAILURE_API_UNSUPPORTED,
       SafeBrowsingJavaThreatType::POTENTIALLY_HARMFUL_APPLICATION, {},
@@ -720,20 +729,14 @@ TEST_F(SafeBrowsingApiHandlerBridgeTest,
       /*expected_count=*/1);
 
   GURL url2("https://example2.com");
-  std::string metadata = "{\"matches\":[{\"threat_type\":\"3\"}]}";
-  AddSafetyNetBlocklistResponse(url2, metadata,
-                                GetAllSafetyNetThreatsOfInterest());
 
-  // The response should come from SafetyNet because FAILURE_API_UNSUPPORTED is
-  // a non-recoverable failure.
   RunHashRealTimeUrlCheck(url2,
                           /*threat_types=*/GetAllThreatTypes(),
-                          /*expected_threat_type=*/SB_THREAT_TYPE_URL_UNWANTED);
+                          /*expected_threat_type=*/SB_THREAT_TYPE_SAFE);
   histogram_tester_.ExpectBucketCount(
       "SafeBrowsing.GmsSafeBrowsingApi.IsAvailable", /*sample=*/false,
       /*expected_count=*/1);
-  // No additional histogram because the check doesn't go through SafeBrowsing
-  // API.
+  // No additional histogram because SafeBrowsing API is not available.
   histogram_tester_.ExpectTotalCount(
       "SafeBrowsing.GmsSafeBrowsingApi.JavaValidationResult",
       /*expected_count=*/1);
@@ -815,6 +818,22 @@ TEST_F(SafeBrowsingApiHandlerBridgeTest,
   RunHashRealTimeUrlCheck(hash_realtime_safe_url,
                           /*threat_types=*/GetAllThreatTypes(),
                           /*expected_threat_type=*/SB_THREAT_TYPE_SAFE);
+}
+
+TEST_F(SafeBrowsingApiHandlerBridgeTest, IsVerifyAppsEnabled) {
+  SetVerifyAppsResult(VerifyAppsEnabledResult::SUCCESS_ENABLED);
+  base::test::TestFuture<VerifyAppsEnabledResult> result_future;
+  SafeBrowsingApiHandlerBridge::GetInstance().StartIsVerifyAppsEnabled(
+      result_future.GetCallback());
+  EXPECT_EQ(result_future.Get(), VerifyAppsEnabledResult::SUCCESS_ENABLED);
+}
+
+TEST_F(SafeBrowsingApiHandlerBridgeTest, EnableVerifyApps) {
+  SetVerifyAppsResult(VerifyAppsEnabledResult::TIMEOUT);
+  base::test::TestFuture<VerifyAppsEnabledResult> result_future;
+  SafeBrowsingApiHandlerBridge::GetInstance().StartEnableVerifyApps(
+      result_future.GetCallback());
+  EXPECT_EQ(result_future.Get(), VerifyAppsEnabledResult::TIMEOUT);
 }
 
 class SafeBrowsingApiHandlerBridgeNewGmsApiDisabledTest

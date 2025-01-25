@@ -16,12 +16,12 @@ namespace switches {
 // Feature to refactor how and when accounts are seeded on Android.
 BASE_FEATURE(kSeedAccountsRevamp,
              "SeedAccountsRevamp",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Feature to apply enterprise policies on signin regardless of sync status.
 BASE_FEATURE(kEnterprisePolicyOnSignin,
              "EnterprisePolicyOnSignin",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Feature to bypass double-checking that signin callers have correctly gotten
 // the user to accept account management. This check is slow and not strictly
@@ -39,6 +39,10 @@ BASE_FEATURE(kHideSettingsSignInPromo,
 BASE_FEATURE(kUseConsentLevelSigninForLegacyAccountEmailPref,
              "UseConsentLevelSigninForLegacyAccountEmailPref",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kDontFallbackToDefaultImplementationInAccountManagerFacade,
+             "DontFallbackToDefaultImplementationInAccountManagerFacade",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -95,12 +99,6 @@ bool IsChromeRefreshTokenBindingEnabled(const PrefService* profile_prefs) {
 }
 #endif
 
-// Enables fetching account capabilities and populating AccountInfo with the
-// fetch result.
-BASE_FEATURE(kEnableFetchingAccountCapabilities,
-             "EnableFetchingAccountCapabilities",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // This feature disables all extended sync promos.
 BASE_FEATURE(kForceDisableExtendedSyncPromos,
              "ForceDisableExtendedSyncPromos",
@@ -134,23 +132,15 @@ bool IsExplicitBrowserSigninUIOnDesktopEnabled() {
   return base::FeatureList::IsEnabled(kExplicitBrowserSigninUIOnDesktop);
 }
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || \
-    BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+#if BUILDFLAG(IS_IOS)
+
 BASE_FEATURE(kMinorModeRestrictionsForHistorySyncOptIn,
              "MinorModeRestrictionsForHistorySyncOptIn",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Based on Signin.AccountCapabilities.UserVisibleLatency
 constexpr int kMinorModeRestrictionsFetchDeadlineDefaultValueMs =
-#if BUILDFLAG(IS_ANDROID)
-    // Based on Signin.AccountCapabilities.UserVisibleLatency
-    400;
-#elif BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-    // Based on Signin.SyncOptIn.PreSyncConfirmationLatency
-    900;
-#elif BUILDFLAG(IS_IOS)
-    // Based on Signin.AccountCapabilities.UserVisibleLatency
     1000;
-#endif
 
 const base::FeatureParam<int> kMinorModeRestrictionsFetchDeadlineMs{
     &kMinorModeRestrictionsForHistorySyncOptIn,
@@ -159,16 +149,9 @@ const base::FeatureParam<int> kMinorModeRestrictionsFetchDeadlineMs{
 #endif
 
 #if BUILDFLAG(IS_IOS)
-BASE_FEATURE(kUseSystemCapabilitiesForMinorModeRestrictions,
-             "UseSystemCapabilitiesForMinorModeRestrictions",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-constexpr int kFetchImmediatelyAvailableCapabilityDeadlineDefaultValueMs = 100;
-
-const base::FeatureParam<int> kFetchImmediatelyAvailableCapabilityDeadlineMs{
-    &kUseSystemCapabilitiesForMinorModeRestrictions,
-    /*name=*/"FetchImmediatelyAvailableCapabilityDeadlineMs",
-    kFetchImmediatelyAvailableCapabilityDeadlineDefaultValueMs};
+BASE_FEATURE(kEnableClearCut,
+             "EnableClearcut",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kRemoveSignedInAccountsDialog,
              "RemoveSignedInAccountsDialog",
@@ -178,7 +161,7 @@ BASE_FEATURE(kRemoveSignedInAccountsDialog,
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 BASE_FEATURE(kPreconnectAccountCapabilitiesPostSignin,
              "PreconnectAccountCapabilitiesPostSignin",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
@@ -188,6 +171,12 @@ BASE_FEATURE(kPreconnectAccountCapabilitiesPostSignin,
 BASE_FEATURE(kUpdateMetricsServicesStateInRestore,
              "UpdateMetricsServicesStateInRestore",
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
+#if BUILDFLAG(IS_IOS)
+BASE_FEATURE(kAlwaysLoadDeviceAccounts,
+             "kAlwaysLoadDeviceAccounts",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 }  // namespace switches
@@ -220,6 +209,10 @@ BASE_FEATURE(kVerifyRequestInitiatorForMirrorHeaders,
 
 BASE_FEATURE(kProfilesReordering,
              "ProfilesReordering",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kOutlineSilhouetteIcon,
+             "OutlineSilhouetteIcon",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)

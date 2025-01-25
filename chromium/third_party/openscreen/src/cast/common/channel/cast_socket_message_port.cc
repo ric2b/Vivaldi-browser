@@ -81,7 +81,7 @@ void CastSocketMessagePort::PostMessage(
 
 void CastSocketMessagePort::OnMessage(VirtualConnectionRouter* router,
                                       CastSocket* socket,
-                                      ::cast::channel::CastMessage message) {
+                                      proto::CastMessage message) {
   OSP_CHECK_EQ(router, &router_);
   OSP_CHECK(!socket || socket_.get() == socket);
 
@@ -96,7 +96,7 @@ void CastSocketMessagePort::OnMessage(VirtualConnectionRouter* router,
     return;
   }
 
-  if (message.payload_type() != ::cast::channel::CastMessage::STRING) {
+  if (message.payload_type() != proto::CastMessage::STRING) {
     OSP_DLOG_WARN << __func__ << ": received an unsupported binary message.";
     return;
   }

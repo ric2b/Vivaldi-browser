@@ -13,8 +13,9 @@
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
 // SETTERS
-- (void)setText:(NSString*)text
-       clipTail:(BOOL)clipTail;
+- (void)updateLocationText:(NSString*)text
+                    domain:(NSString*)domain
+                  showFull:(BOOL)showFull;
 - (void)setLocationImage:(UIImage*)locationImage;
 - (void)setTintColor:(UIColor*)tintColor;
 - (void)setSecurityLevelAccessibilityString:(NSString*)string;

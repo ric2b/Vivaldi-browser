@@ -10,6 +10,7 @@
 #include "ash/accelerators/accelerator_controller_impl.h"
 #include "ash/accessibility/a11y_feature_type.h"
 #include "ash/accessibility/accessibility_observer.h"
+#include "ash/accessibility/disable_trackpad_event_rewriter.h"
 #include "ash/accessibility/magnifier/docked_magnifier_controller.h"
 #include "ash/accessibility/sticky_keys/sticky_keys_controller.h"
 #include "ash/accessibility/test_accessibility_controller_client.h"
@@ -17,7 +18,9 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/display/cursor_window_controller.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/keyboard/ui/keyboard_util.h"
+#include "ash/public/cpp/event_rewriter_controller.h"
 #include "ash/public/cpp/test/test_system_tray_client.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller_impl.h"
@@ -146,7 +149,7 @@ TEST_F(AccessibilityControllerTest, ChangingCursorSizePrefChangesCursorSize) {
       Shell::Get()->window_tree_host_manager()->cursor_window_controller();
 
   // Test all possible sizes
-  for (int size = 25; size <= 64; ++size) {
+  for (int size = 25; size <= 128; ++size) {
     prefs->SetInteger(prefs::kAccessibilityLargeCursorDipSize, size);
     auto bounds = cursor_window_controller->GetBoundsForTest();
     EXPECT_EQ(bounds.height(), size);
@@ -175,10 +178,10 @@ TEST_F(AccessibilityControllerTest, PrefsAreRegistered) {
   EXPECT_TRUE(prefs->FindPreference(prefs::kAccessibilityMonoAudioEnabled));
   EXPECT_TRUE(prefs->FindPreference(prefs::kAccessibilityMouseKeysEnabled));
   EXPECT_TRUE(
-      prefs->FindPreference(prefs::kAccessibilityMouseKeysDisableInTextFields));
-  EXPECT_TRUE(
       prefs->FindPreference(prefs::kAccessibilityMouseKeysAcceleration));
   EXPECT_TRUE(prefs->FindPreference(prefs::kAccessibilityMouseKeysMaxSpeed));
+  EXPECT_TRUE(
+      prefs->FindPreference(prefs::kAccessibilityMouseKeysUsePrimaryKeys));
   EXPECT_TRUE(
       prefs->FindPreference(prefs::kAccessibilityMouseKeysDominantHand));
   EXPECT_TRUE(prefs->FindPreference(prefs::kAccessibilityAutoclickDelayMs));
@@ -276,6 +279,12 @@ TEST_F(AccessibilityControllerTest, PrefsAreRegistered) {
       prefs->FindPreference(prefs::kAccessibilityFaceGazeGesturesToMacros));
   EXPECT_TRUE(
       prefs->FindPreference(prefs::kAccessibilityFaceGazeGesturesToConfidence));
+  EXPECT_TRUE(
+      prefs->FindPreference(prefs::kAccessibilityFaceGazeCursorControlEnabled));
+  EXPECT_TRUE(
+      prefs->FindPreference(prefs::kAccessibilityFaceGazeActionsEnabled));
+  EXPECT_TRUE(prefs->FindPreference(
+      prefs::kAccessibilityFaceGazeAdjustSpeedSeparately));
   EXPECT_TRUE(prefs->FindPreference(prefs::kAccessibilityCaretBlinkInterval));
 }
 
@@ -1562,8 +1571,8 @@ TEST_F(AccessibilityControllerTest,
   message_center::NotificationList::Notifications notifications =
       MessageCenter::Get()->GetVisibleNotifications();
   ASSERT_EQ(1u, notifications.size());
-  EXPECT_EQ(std::u16string(), (*notifications.begin())->title());
-  EXPECT_EQ(kBrailleConnected, (*notifications.begin())->message());
+  EXPECT_EQ(kBrailleConnected, (*notifications.begin())->title());
+  EXPECT_EQ(std::u16string(), (*notifications.begin())->message());
 
   // Neither disconnecting a braille display, nor disabling spoken feedback
   // should show any notification.
@@ -1783,6 +1792,20 @@ TEST_F(AccessibilityControllerTest, LogsDurationAtShutdown) {
   // Shutdown causes a duration to be logged.
   controller->Shutdown();
   ExpectSessionDurationMetricCount("CrosLargeCursor", 1);
+}
+
+// Verifies that the DisableTrackpadEventRewriter isn't initialized, since the
+// feature flag is off in this test suite.
+TEST_F(AccessibilityControllerTest,
+       DisableTrackpadEventRewriterNotInitialized) {
+  // Initialize the EventRewriterController manually so that all EventRewriters
+  // get initialized.
+  EventRewriterController::Get()->Initialize(nullptr, nullptr);
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
+  // AccessibilityController shouldn't have a reference to the
+  // DisableTrackpadEventRewriter.
+  ASSERT_EQ(nullptr, controller->GetDisableTrackpadEventRewriterForTest());
 }
 
 namespace {
@@ -2022,6 +2045,164 @@ TEST_P(AccessibilityControllerSigninTest,
   BlockUserSession(BLOCKED_BY_USER_ADDING_SCREEN);
   EXPECT_TRUE(
       container->GetProperty(ui::kAXConsiderInvisibleAndIgnoreChildren));
+}
+
+class AccessibilityControllerSelectToSpeakKeyboardShortcutTest
+    : public AshTestBase {
+ protected:
+  AccessibilityControllerSelectToSpeakKeyboardShortcutTest() = default;
+  AccessibilityControllerSelectToSpeakKeyboardShortcutTest(
+      const AccessibilityControllerSelectToSpeakKeyboardShortcutTest&) = delete;
+  AccessibilityControllerSelectToSpeakKeyboardShortcutTest& operator=(
+      const AccessibilityControllerSelectToSpeakKeyboardShortcutTest&) = delete;
+  ~AccessibilityControllerSelectToSpeakKeyboardShortcutTest() override =
+      default;
+
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        ::features::kAccessibilitySelectToSpeakShortcut);
+    AshTestBase::SetUp();
+  }
+
+  void SetDialogAcceptedPref(bool accepted) {
+    PrefService* prefs =
+        Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+    prefs->SetBoolean(prefs::kSelectToSpeakAcceleratorDialogHasBeenAccepted,
+                      accepted);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(AccessibilityControllerSelectToSpeakKeyboardShortcutTest,
+       DialogNotAccepted) {
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
+  TestAccessibilityControllerClient client;
+  controller->SetClient(&client);
+
+  SetDialogAcceptedPref(false);
+  ASSERT_FALSE(controller->select_to_speak().enabled());
+  controller->EnableSelectToSpeakWithDialog();
+
+  // If the dialog hasn't been accepted yet, then pressing the Select to Speak
+  // shortcut should show a dialog.
+  ASSERT_NE(nullptr, controller->GetConfirmationDialogForTest());
+  ASSERT_FALSE(controller->select_to_speak().enabled());
+}
+
+TEST_F(AccessibilityControllerSelectToSpeakKeyboardShortcutTest,
+       DialogAccepted) {
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
+  TestAccessibilityControllerClient client;
+  controller->SetClient(&client);
+
+  SetDialogAcceptedPref(true);
+  ASSERT_FALSE(controller->select_to_speak().enabled());
+  controller->EnableSelectToSpeakWithDialog();
+
+  // If the dialog has been accepted, then pressing the key shortcut should
+  // enable Select to Speak (but it should still remain inactive).
+  ASSERT_TRUE(controller->select_to_speak().enabled());
+  ASSERT_EQ(nullptr, controller->GetConfirmationDialogForTest());
+}
+
+TEST_F(AccessibilityControllerSelectToSpeakKeyboardShortcutTest,
+       SelectToSpeakAlreadyEnabled) {
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
+  TestAccessibilityControllerClient client;
+  controller->SetClient(&client);
+
+  SetDialogAcceptedPref(true);
+  controller->select_to_speak().SetEnabled(true);
+  ASSERT_TRUE(controller->select_to_speak().enabled());
+  controller->EnableSelectToSpeakWithDialog();
+
+  // If Select to Speak is already on, then pressing the key shortcut should
+  // activate it. That logic is handled in a separate class, so for the purposes
+  // of this unit test, we can just assert that Select to Speak is enabled and
+  // that the dialog isn't showing.
+  ASSERT_TRUE(controller->select_to_speak().enabled());
+  ASSERT_EQ(nullptr, controller->GetConfirmationDialogForTest());
+}
+
+TEST_F(AccessibilityControllerSelectToSpeakKeyboardShortcutTest,
+       NoDialogIfDisabledByPolicy) {
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
+  TestAccessibilityControllerClient client;
+  controller->SetClient(&client);
+
+  SetDialogAcceptedPref(false);
+  ASSERT_FALSE(controller->select_to_speak().enabled());
+
+  // Ensure that Select to Speak is disabled by policy.
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  static_cast<TestingPrefServiceSimple*>(prefs)->SetManagedPref(
+      prefs::kAccessibilitySelectToSpeakEnabled,
+      std::make_unique<base::Value>(false));
+
+  controller->EnableSelectToSpeakWithDialog();
+
+  // No dialog should be shown if Select to speak is disabled by a policy.
+  ASSERT_EQ(nullptr, controller->GetConfirmationDialogForTest());
+  ASSERT_FALSE(controller->select_to_speak().enabled());
+}
+
+class AccessibilityControllerDisableTrackpadTest : public AshTestBase {
+ protected:
+  AccessibilityControllerDisableTrackpadTest() = default;
+  AccessibilityControllerDisableTrackpadTest(
+      const AccessibilityControllerDisableTrackpadTest&) = delete;
+  AccessibilityControllerDisableTrackpadTest& operator=(
+      const AccessibilityControllerDisableTrackpadTest&) = delete;
+  ~AccessibilityControllerDisableTrackpadTest() override = default;
+
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        ::features::kAccessibilityDisableTrackpad);
+    AshTestBase::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(AccessibilityControllerDisableTrackpadTest,
+       PrefChangesEventRewriterEnabledState) {
+  // Initialize the EventRewriterController manually so that all EventRewriters
+  // get initialized.
+  EventRewriterController::Get()->Initialize(nullptr, nullptr);
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
+
+  // Verify that the disable trackpad feature is off by default.
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  ASSERT_FALSE(prefs->GetBoolean(prefs::kAccessibilityDisableTrackpadEnabled));
+  ASSERT_FALSE(controller->disable_trackpad().enabled());
+
+  // AccessibilityController should have a reference to the
+  // DisableTrackpadEventRewriter and it should also be off by default.
+  auto* disable_trackpad_event_rewriter =
+      controller->GetDisableTrackpadEventRewriterForTest();
+  ASSERT_NE(nullptr, disable_trackpad_event_rewriter);
+  ASSERT_FALSE(disable_trackpad_event_rewriter->IsEnabled());
+
+  // Enabling the disable trackpad feature should enable the
+  // DisableTrackpadEventRewriter.
+  prefs->SetBoolean(prefs::kAccessibilityDisableTrackpadEnabled, true);
+  ASSERT_TRUE(controller->disable_trackpad().enabled());
+  ASSERT_TRUE(disable_trackpad_event_rewriter->IsEnabled());
+
+  // Disabling the feature should disable the event rewriter.
+  prefs->SetBoolean(prefs::kAccessibilityDisableTrackpadEnabled, false);
+  ASSERT_FALSE(controller->disable_trackpad().enabled());
+  ASSERT_FALSE(disable_trackpad_event_rewriter->IsEnabled());
 }
 
 }  // namespace ash

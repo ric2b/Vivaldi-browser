@@ -17,6 +17,7 @@
 #include "base/test/bind.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
@@ -82,10 +83,6 @@ class MAYBE_DomSerializerTests : public ContentBrowserTest,
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kSingleProcess);
-#if BUILDFLAG(IS_WIN)
-    // Don't want to try to create a GPU process.
-    command_line->AppendSwitch(switches::kDisableGpu);
-#endif
   }
 
   void SetUpOnMainThread() override {

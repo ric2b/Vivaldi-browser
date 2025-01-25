@@ -6,7 +6,7 @@
 load("//lib/args.star", "args")
 load("//lib/builder_config.star", "builder_config")
 load("//lib/builder_health_indicators.star", "health_spec")
-load("//lib/builders.star", "cpu", "os", "reclient", "sheriff_rotations")
+load("//lib/builders.star", "cpu", "gardener_rotations", "os", "siso")
 load("//lib/branches.star", "branches")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
@@ -23,16 +23,16 @@ ci.defaults.set(
     builder_group = "chromium",
     pool = ci.DEFAULT_POOL,
     os = os.LINUX_DEFAULT,
-    sheriff_rotations = sheriff_rotations.CHROMIUM,
+    gardener_rotations = gardener_rotations.CHROMIUM,
+    tree_closing = True,
     main_console_view = "main",
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
     health_spec = health_spec.DEFAULT,
-    reclient_instance = reclient.instance.DEFAULT_TRUSTED,
-    reclient_jobs = reclient.jobs.DEFAULT,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
     shadow_service_account = ci.DEFAULT_SHADOW_SERVICE_ACCOUNT,
     siso_enabled = True,
-    siso_remote_jobs = reclient.jobs.DEFAULT,
+    siso_project = siso.project.DEFAULT_TRUSTED,
+    siso_remote_jobs = siso.remote_jobs.DEFAULT,
 )
 
 consoles.console_view(
@@ -80,16 +80,16 @@ ci.builder(
         configs = [
             "android_builder_without_codecs",
             "release_builder",
-            "reclient",
+            "remoteexec",
             "minimal_symbols",
             "strip_debug_info",
+            "arm",
         ],
     ),
     targets = targets.bundle(
         additional_compile_targets = "all",
     ),
     cores = 32,
-    tree_closing = True,
     console_view_entry = consoles.console_view_entry(
         category = "android",
         short_name = "rel",
@@ -106,8 +106,7 @@ ci.builder(
             ],
         },
     },
-    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CI,
 )
 
 ci.builder(
@@ -138,7 +137,7 @@ ci.builder(
         configs = [
             "android_builder_without_codecs",
             "release_builder",
-            "reclient",
+            "remoteexec",
             "minimal_symbols",
             "strip_debug_info",
             "arm64",
@@ -148,7 +147,6 @@ ci.builder(
         additional_compile_targets = "all",
     ),
     cores = 32,
-    tree_closing = True,
     console_view_entry = consoles.console_view_entry(
         category = "android|arm",
         short_name = "arm64",
@@ -164,8 +162,7 @@ ci.builder(
             ],
         },
     },
-    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CI,
 )
 
 ci.builder(
@@ -193,9 +190,10 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "official_optimize",
-            "reclient",
+            "remoteexec",
             "android_builder_without_codecs",
             "full_symbols",
+            "arm",
         ],
     ),
     targets = targets.bundle(
@@ -211,8 +209,7 @@ ci.builder(
     # See https://crbug.com/1153349#c22, as we update symbol_level=2, build
     # needs longer time to complete.
     execution_timeout = 7 * time.hour,
-    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CI,
 )
 
 ci.builder(
@@ -239,8 +236,9 @@ ci.builder(
         configs = [
             "chromeos",
             "release_builder",
-            "reclient",
+            "remoteexec",
             "use_cups",
+            "x64",
         ],
     ),
     targets = targets.bundle(
@@ -292,8 +290,7 @@ ci.builder(
             ],
         },
     },
-    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CI,
 )
 
 ci.builder(
@@ -319,8 +316,9 @@ ci.builder(
         configs = [
             "lacros_on_linux",
             "release_builder",
-            "reclient",
+            "remoteexec",
             "also_build_ash_chrome",
+            "x64",
         ],
     ),
     targets = targets.bundle(
@@ -328,7 +326,7 @@ ci.builder(
     ),
     cores = 8,
     # TODO(crbug.com/40238185): Turn on when stable.
-    sheriff_rotations = args.ignore_default(None),
+    gardener_rotations = args.ignore_default(None),
     tree_closing = False,
     console_view_entry = consoles.console_view_entry(
         category = "lacros",
@@ -345,8 +343,7 @@ ci.builder(
             ],
         },
     },
-    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CI,
 )
 
 ci.builder(
@@ -377,11 +374,12 @@ ci.builder(
         configs = [
             "chromeos_device",
             "dcheck_off",
-            "reclient",
+            "remoteexec",
             "amd64-generic-crostoolchain",
             "ozone_headless",
             "lacros",
             "release",
+            "x64",
         ],
     ),
     # If tests get added to this builder, it will need to specify os_type chromeos
@@ -389,7 +387,6 @@ ci.builder(
         additional_compile_targets = "chrome",
     ),
     cores = 32,
-    tree_closing = True,
     console_view_entry = consoles.console_view_entry(
         category = "lacros",
         short_name = "rel",
@@ -406,8 +403,7 @@ ci.builder(
             ],
         },
     },
-    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CI,
 )
 
 ci.builder(
@@ -438,11 +434,12 @@ ci.builder(
         configs = [
             "chromeos_device",
             "dcheck_off",
-            "reclient",
+            "remoteexec",
             "arm-generic-crostoolchain",
             "ozone_headless",
             "lacros",
             "release",
+            "arm",
         ],
     ),
     # If tests get added to this builder, it will need to specify os_type chromeos
@@ -450,7 +447,6 @@ ci.builder(
         additional_compile_targets = "chrome",
     ),
     cores = 32,
-    tree_closing = True,
     console_view_entry = consoles.console_view_entry(
         category = "lacros",
         short_name = "arm",
@@ -467,8 +463,7 @@ ci.builder(
             ],
         },
     },
-    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CI,
 )
 
 ci.builder(
@@ -499,11 +494,12 @@ ci.builder(
         configs = [
             "chromeos_device",
             "dcheck_off",
-            "reclient",
+            "remoteexec",
             "arm64-generic-crostoolchain",
             "ozone_headless",
             "lacros",
             "release",
+            "arm64",
         ],
     ),
     # If tests get added to this builder, it will need to specify os_type chromeos
@@ -511,8 +507,8 @@ ci.builder(
         additional_compile_targets = "chrome",
     ),
     cores = 32,
-    sheriff_rotations = args.ignore_default(None),
-    # TODO(crbug.com/40238619): Enable tree_closing/sheriff when stable.
+    gardener_rotations = args.ignore_default(None),
+    # TODO(crbug.com/40238619): Enable tree_closing/gardening when stable.
     tree_closing = False,
     console_view_entry = consoles.console_view_entry(
         category = "lacros",
@@ -529,8 +525,7 @@ ci.builder(
             ],
         },
     },
-    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CI,
 )
 
 ci.builder(
@@ -555,15 +550,16 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "updater",
+            "linux",
+            "x64",
         ],
     ),
     targets = targets.bundle(
         additional_compile_targets = "all",
     ),
     cores = 32,
-    tree_closing = True,
     console_view_entry = consoles.console_view_entry(
         category = "linux",
         short_name = "rel",
@@ -603,14 +599,14 @@ ci.builder(
         ),
     ),
     gn_args = gn_args.config(
-        configs = ["official_optimize", "reclient"],
+        configs = ["official_optimize", "remoteexec", "linux", "x64"],
     ),
     targets = targets.bundle(
         additional_compile_targets = "all",
     ),
     builderless = False,
     cores = 32,
-    sheriff_rotations = args.ignore_default(None),
+    gardener_rotations = args.ignore_default(None),
     console_view_entry = consoles.console_view_entry(
         category = "linux",
         short_name = "off",
@@ -645,17 +641,18 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "mac_strip",
             "minimal_symbols",
+            "mac",
+            "x64",
         ],
     ),
     targets = targets.bundle(
         additional_compile_targets = "all",
     ),
-    cores = 12,
     os = os.MAC_DEFAULT,
-    tree_closing = True,
+    cpu = cpu.ARM64,
     console_view_entry = consoles.console_view_entry(
         category = "mac",
         short_name = "rel",
@@ -694,9 +691,10 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "mac_strip",
             "minimal_symbols",
+            "mac",
             "arm64",
         ],
     ),
@@ -707,7 +705,6 @@ ci.builder(
     cores = None,
     os = os.MAC_DEFAULT,
     cpu = cpu.ARM64,
-    tree_closing = True,
     console_view_entry = consoles.console_view_entry(
         category = "mac|arm",
         short_name = "rel",
@@ -748,7 +745,9 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "official_optimize",
-            "reclient",
+            "remoteexec",
+            "mac",
+            "arm64",
         ],
     ),
     targets = targets.bundle(
@@ -787,8 +786,10 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "minimal_symbols",
+            "win",
+            "x64",
         ],
     ),
     targets = targets.bundle(
@@ -798,7 +799,6 @@ ci.builder(
     builderless = False,
     cores = 32,
     os = os.WINDOWS_DEFAULT,
-    tree_closing = True,
     console_view_entry = consoles.console_view_entry(
         category = "win|rel",
         short_name = "64",
@@ -812,6 +812,63 @@ ci.builder(
                 "infra",
                 "archive_config",
                 "win-archive-rel.json",
+            ],
+        },
+    },
+)
+
+ci.builder(
+    name = "win-arm64-archive-rel",
+    description_html = "Chromium snapshot archive builder for win-arm64",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "clobber",
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.WIN,
+        ),
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "release_builder",
+            "remoteexec",
+            "minimal_symbols",
+            "win",
+            "arm64",
+        ],
+    ),
+    targets = targets.bundle(
+        targets = "public_build_scripts",
+        additional_compile_targets = "all",
+    ),
+    builderless = False,
+    cores = 32,
+    os = os.WINDOWS_DEFAULT,
+    # TODO(crbug.com/335863313): Enable when verified.
+    gardener_rotations = args.ignore_default(None),
+    # TODO(crbug.com/335863313): Enable when verified.
+    tree_closing = False,
+    console_view_entry = consoles.console_view_entry(
+        category = "win|rel",
+        short_name = "arm64",
+    ),
+    contact_team_email = "chrome-desktop-engprod@google.com",
+    properties = {
+        # The format of these properties is defined at archive/properties.proto
+        "$build/archive": {
+            "source_side_spec_path": [
+                "src",
+                "infra",
+                "archive_config",
+                "win-arm64-archive-rel.json",
             ],
         },
     },
@@ -839,8 +896,10 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "official_optimize",
-            "reclient",
+            "remoteexec",
             "minimal_symbols",
+            "win",
+            "x64",
         ],
     ),
     targets = targets.bundle(
@@ -849,6 +908,9 @@ ci.builder(
     builderless = False,
     cores = 32,
     os = os.WINDOWS_DEFAULT,
+    # TODO(crbug.com/346263463): Enable tree-closing when the builder no
+    # longer flakily fails compile.
+    tree_closing = False,
     console_view_entry = consoles.console_view_entry(
         category = "win|off",
         short_name = "64",
@@ -856,8 +918,7 @@ ci.builder(
     contact_team_email = "chrome-desktop-engprod@google.com",
     # TODO(crbug.com/40735404) builds with PGO change take long time.
     execution_timeout = 7 * time.hour,
-    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CI,
 )
 
 ci.builder(
@@ -880,9 +941,10 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "x86",
             "minimal_symbols",
+            "win",
         ],
     ),
     targets = targets.bundle(
@@ -892,7 +954,6 @@ ci.builder(
     builderless = False,
     cores = 32,
     os = os.WINDOWS_DEFAULT,
-    tree_closing = True,
     console_view_entry = consoles.console_view_entry(
         category = "win|rel",
         short_name = "32",
@@ -933,7 +994,8 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "official_optimize",
-            "reclient",
+            "remoteexec",
+            "win",
             "x86",
         ],
     ),
@@ -950,6 +1012,5 @@ ci.builder(
     contact_team_email = "chrome-desktop-engprod@google.com",
     # TODO(crbug.com/40735404) builds with PGO change take long time.
     execution_timeout = 7 * time.hour,
-    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CI,
 )

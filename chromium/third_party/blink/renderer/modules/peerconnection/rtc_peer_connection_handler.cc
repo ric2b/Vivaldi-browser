@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection_handler.h"
 
 #include <string.h>
@@ -572,7 +577,7 @@ class RTCPeerConnectionHandler::Observer
     DCHECK(native_peer_connection_);
     std::string sdp;
     if (!candidate->ToString(&sdp)) {
-      NOTREACHED() << "OnIceCandidate: Could not get SDP string.";
+      NOTREACHED_IN_MIGRATION() << "OnIceCandidate: Could not get SDP string.";
       return;
     }
     // The generated candidate may have been added to the pending or current
@@ -2096,7 +2101,7 @@ wtf_size_t RTCPeerConnectionHandler::GetTransceiverIndex(
     if (platform_transceiver.Id() == rtp_transceivers_[i]->Id())
       return i;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0u;
 }
 

@@ -5,13 +5,16 @@
 
 #pragma once
 
-#include <xnnpack.h>
-#include <xnnpack/aligned-allocator.h>
-#include <xnnpack/common.h>
-
 #include <memory>
 #include <utility>
 #include <vector>
+
+#include "xnnpack.h"
+#include "xnnpack/aligned-allocator.h"
+#include "xnnpack/common.h"
+
+// align a size up to XNN_EXTRA_BYTES
+#define XNN_PAD_EXTRA_BYTES(s, t) (((s) + XNN_EXTRA_BYTES / sizeof(t) - 1) & ~(XNN_EXTRA_BYTES / sizeof(t) - 1))
 
 namespace models {
 

@@ -3,12 +3,16 @@
 #ifndef COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_RULES_INDEX_H_
 #define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_RULES_INDEX_H_
 
+#include <array>
+#include <bit>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "base/containers/circular_deque.h"
+#include "base/containers/flat_map.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_manager.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "vivaldi/components/request_filter/adblock_filter/flat/adblock_rules_list_generated.h"
@@ -28,22 +32,34 @@ struct RulesIndex;
 
 class RulesIndex : public content::RenderProcessHostObserver {
  public:
-  using RulesBufferMap = std::map<uint32_t, const RuleBufferHolder&>;
   static constexpr size_t kNGramSize = 5;
 
-  struct ActivationsFound {
-    ActivationsFound();
-    ActivationsFound(const ActivationsFound& other);
-    ~ActivationsFound();
-    ActivationsFound& operator=(const ActivationsFound& other);
+  using RulesBufferMap = std::map<uint32_t, const RuleBufferHolder&>;
+  using ScriptletInjection = std::pair<std::string, std::vector<std::string>>;
 
-    bool operator==(const ActivationsFound& other) const;
+  struct ActivationResult {
+    enum { MATCH, PARENT, ALWAYS_PASS } type = MATCH;
+    const flat::RequestFilterRule* rule = nullptr;
 
-    uint8_t in_block_rules = 0;
-    uint8_t in_allow_rules = 0;
+    std::optional<flat::Decision> GetDecision() {
+      if (type == ALWAYS_PASS)
+        return flat::Decision_PASS;
+      if (rule)
+        return rule->decision();
+      return std::nullopt;
+    }
+  };
+  using ActivationResults =
+      base::flat_map<flat::ActivationType, ActivationResult>;
+
+  struct FoundModifiers {
+    std::map<std::string, const flat::RequestFilterRule*> value_with_decision;
+    const flat::RequestFilterRule* pass_all_rule = nullptr;
+    bool found_modify_rules = false;
   };
 
-  using ScriptletInjection = std::pair<std::string, std::vector<std::string>>;
+  using FoundModifiersByType =
+      std::array<FoundModifiers, flat::Modifier::Modifier_MAX + 1>;
 
   struct InjectionData {
     InjectionData();
@@ -67,15 +83,11 @@ class RulesIndex : public content::RenderProcessHostObserver {
   RulesIndex(const RulesIndex&) = delete;
   RulesIndex& operator=(const RulesIndex&) = delete;
 
-  ActivationsFound FindMatchingActivationsRules(
-      const GURL& url,
-      const url::Origin& document_origin,
-      bool is_third_party,
-      content::RenderFrameHost* frame);
-
-  ActivationsFound GetActivationsForFrame(
+  ActivationResults GetActivationsForFrame(
       base::RepeatingCallback<bool(url::Origin)> is_origin_wanted,
-      content::RenderFrameHost* frame);
+      const content::RenderFrameHost* frame,
+      std::optional<GURL> url = std::nullopt,
+      std::optional<url::Origin> document_origin = std::nullopt);
 
   const flat::RequestFilterRule* FindMatchingBeforeRequestRule(
       const GURL& url,
@@ -84,9 +96,17 @@ class RulesIndex : public content::RenderProcessHostObserver {
       bool is_third_party,
       bool disable_generic_rules);
 
-  std::vector<const flat::RequestFilterRule*> FindMatchingHeadersReceivedRules(
+  FoundModifiersByType FindMatchingRequestModifierRules(
       const GURL& url,
       const url::Origin& document_origin,
+      flat::ResourceType resource_type,
+      bool is_third_party,
+      bool disable_generic_rules);
+
+  FoundModifiersByType FindMatchingHeadersReceivedRules(
+      const GURL& url,
+      const url::Origin& document_origin,
+      flat::ResourceType resource_type,
       bool is_third_party,
       bool disable_generic_rules);
 
@@ -94,6 +114,8 @@ class RulesIndex : public content::RenderProcessHostObserver {
 
   InjectionData GetInjectionDataForOrigin(const url::Origin& origin,
                                           bool disable_generic_rules);
+
+  void InvalidateActivationCache();
 
   // Implementing content::RenderProcessHostObserver
   void RenderProcessHostDestroyed(content::RenderProcessHost* host) override;
@@ -103,7 +125,7 @@ class RulesIndex : public content::RenderProcessHostObserver {
     CachedActivation();
     CachedActivation(const url::Origin& document_origin,
                      const GURL& url,
-                     ActivationsFound activations);
+                     ActivationResults activations);
     CachedActivation(const CachedActivation& activation);
     ~CachedActivation();
 
@@ -112,12 +134,8 @@ class RulesIndex : public content::RenderProcessHostObserver {
 
     const url::Origin document_origin_;
     const GURL url_;
-    const ActivationsFound activations_;
+    const ActivationResults activations_;
   };
-
-  ActivationsFound GetActivationsForSingleFrame(
-      base::RepeatingCallback<bool(url::Origin)> is_origin_wanted,
-      content::RenderFrameHost* frame);
 
   RulesBufferMap rules_buffers_;
   std::string rules_index_buffer_;

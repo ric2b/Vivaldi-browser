@@ -155,7 +155,7 @@ RuleManagerImpl::ExceptionsList RuleManagerImpl::GetActiveExceptionList(
 void RuleManagerImpl::AddExceptionForDomain(RuleGroup group,
                                             ExceptionsList list,
                                             const std::string& domain) {
-  base::StringPiece canonicalized_domain(domain);
+  std::string_view canonicalized_domain(domain);
   if (canonicalized_domain.back() == '.')
     canonicalized_domain.remove_suffix(1);
 
@@ -170,16 +170,16 @@ void RuleManagerImpl::AddExceptionForDomain(RuleGroup group,
 void RuleManagerImpl::RemoveExceptionForDomain(RuleGroup group,
                                                ExceptionsList list,
                                                const std::string& domain) {
-  base::StringPiece canonicalized_domain(domain);
+  std::string_view canonicalized_domain(domain);
   if (canonicalized_domain.back() == '.')
     canonicalized_domain.remove_suffix(1);
 
   for (size_t position = 0;; ++position) {
-    const base::StringPiece subdomain = canonicalized_domain.substr(position);
+    const std::string_view subdomain = canonicalized_domain.substr(position);
     exceptions_[static_cast<size_t>(group)][list].erase(std::string(subdomain));
 
     position = canonicalized_domain.find('.', position);
-    if (position == base::StringPiece::npos)
+    if (position == std::string_view::npos)
       break;
   }
 
@@ -212,7 +212,7 @@ bool RuleManagerImpl::IsExemptOfFiltering(RuleGroup group,
   if (origin.opaque())
     return default_exempt;
 
-  base::StringPiece canonicalized_host(origin.host());
+  std::string_view canonicalized_host(origin.host());
   if (canonicalized_host.empty())
     return default_exempt;
 
@@ -221,7 +221,7 @@ bool RuleManagerImpl::IsExemptOfFiltering(RuleGroup group,
     canonicalized_host.remove_suffix(1);
 
   for (size_t position = 0;; ++position) {
-    const base::StringPiece subdomain = canonicalized_host.substr(position);
+    const std::string_view subdomain = canonicalized_host.substr(position);
 
     if (exceptions_[static_cast<size_t>(group)]
                    [active_exceptions_lists_[static_cast<size_t>(group)]]
@@ -229,7 +229,7 @@ bool RuleManagerImpl::IsExemptOfFiltering(RuleGroup group,
       return !default_exempt;
 
     position = canonicalized_host.find('.', position);
-    if (position == base::StringPiece::npos)
+    if (position == std::string_view::npos)
       break;
   }
 

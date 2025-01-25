@@ -36,6 +36,9 @@ TEST(AdBlockRuleParserTest, ParseMetadata) {
   EXPECT_EQ(RuleParser::kMetadata, rule_parser.Parse("! Expires: 2 days"));
   EXPECT_EQ(RuleParser::kMetadata, rule_parser.Parse("! Version: 13"));
   EXPECT_EQ(RuleParser::kComment, rule_parser.Parse("! Some other comment"));
+  EXPECT_EQ(RuleParser::kComment, rule_parser.Parse("#"));
+  EXPECT_EQ(RuleParser::kComment, rule_parser.Parse("# A hosts file comment"));
+  EXPECT_EQ(RuleParser::kComment, rule_parser.Parse("####Comment"));
 
   EXPECT_EQ(GURL("https://vivaldi.com"), parse_result.metadata.homepage);
   EXPECT_EQ(GURL("http://www.wtfpl.net/"), parse_result.metadata.license);
@@ -134,7 +137,10 @@ TEST(AdBlockRuleParserTest, HostsFile) {
 
   std::vector<RequestFilterRule> expected_rules;
 
-  EXPECT_EQ(RuleParser::kRequestFilterRule, rule_parser.Parse("127.0.0.1 localhost localhost.mydomain google.com microsoft.com"));
+  EXPECT_EQ(
+      RuleParser::kRequestFilterRule,
+      rule_parser.Parse(
+          "127.0.0.1 localhost localhost.mydomain google.com microsoft.com"));
   expected_rules.emplace_back();
   expected_rules.back().pattern = "google.com^";
   expected_rules.back().anchor_type = RequestFilterRule::kAnchorHost;
@@ -215,6 +221,7 @@ TEST(AdBlockRuleParserTest, RegexRule) {
   expected_rules.back().resource_types.set(RequestFilterRule::kScript);
   expected_rules.back().party.set();
   expected_rules.back().pattern_type = RequestFilterRule::kRegex;
+  expected_rules.back().ngram_search_string = "";
 
   ASSERT_EQ(expected_rules.size(), parse_result.request_filter_rules.size());
 
@@ -374,6 +381,8 @@ TEST(AdBlockRuleParserTest, ResourceTypes) {
 
   std::vector<RequestFilterRule> expected_rules;
 
+  EXPECT_EQ(RuleParser::kError, rule_parser.Parse("tracker.jpg$image=abc"));
+
   EXPECT_EQ(RuleParser::kRequestFilterRule,
             rule_parser.Parse("tracker.jpg$image"));
   expected_rules.emplace_back();
@@ -473,6 +482,8 @@ TEST(AdBlockRuleParserTest, Domains) {
 
   std::vector<RequestFilterRule> expected_rules;
 
+  EXPECT_EQ(RuleParser::kError, rule_parser.Parse("missing-domain$domain"));
+
   EXPECT_EQ(RuleParser::kRequestFilterRule,
             rule_parser.Parse("bad-resource$domain=some.domain"));
   expected_rules.emplace_back();
@@ -543,12 +554,22 @@ TEST(AdBlockRuleParserTest, Parties) {
 
   std::vector<RequestFilterRule> expected_rules;
 
+  EXPECT_EQ(RuleParser::kError,
+            rule_parser.Parse("bad-resource$third-party=invalid"));
+
   EXPECT_EQ(RuleParser::kRequestFilterRule,
             rule_parser.Parse("bad-resource$third-party"));
   expected_rules.emplace_back();
   expected_rules.back().resource_types.set();
   expected_rules.back().party.set(RequestFilterRule::kThirdParty);
   expected_rules.back().pattern = "bad-resource";
+
+  EXPECT_EQ(RuleParser::kRequestFilterRule,
+            rule_parser.Parse("worse-resource$3p"));
+  expected_rules.emplace_back();
+  expected_rules.back().resource_types.set();
+  expected_rules.back().party.set(RequestFilterRule::kThirdParty);
+  expected_rules.back().pattern = "worse-resource";
 
   EXPECT_EQ(RuleParser::kRequestFilterRule,
             rule_parser.Parse("bad-resource$third-party,third-party"));
@@ -559,6 +580,13 @@ TEST(AdBlockRuleParserTest, Parties) {
 
   EXPECT_EQ(RuleParser::kRequestFilterRule,
             rule_parser.Parse("bad-resource$~third-party"));
+  expected_rules.emplace_back();
+  expected_rules.back().resource_types.set();
+  expected_rules.back().party.set(RequestFilterRule::kFirstParty);
+  expected_rules.back().pattern = "bad-resource";
+
+  EXPECT_EQ(RuleParser::kRequestFilterRule,
+            rule_parser.Parse("bad-resource$first-party"));
   expected_rules.emplace_back();
   expected_rules.back().resource_types.set();
   expected_rules.back().party.set(RequestFilterRule::kFirstParty);
@@ -621,41 +649,52 @@ TEST(AdBlockRuleParserTest, CSP) {
             rule_parser.Parse("bad-resource$csp=script-src none"));
   expected_rules.emplace_back();
   expected_rules.back().party.set();
+  expected_rules.back().modify_block = false;
   expected_rules.back().pattern = "bad-resource";
-  expected_rules.back().is_csp_rule = true;
-  expected_rules.back().csp = "script-src none";
+  expected_rules.back().modifier = RequestFilterRule::kCsp;
+  expected_rules.back().modifier_value = "script-src none";
+
+  EXPECT_EQ(RuleParser::kRequestFilterRule,
+            rule_parser.Parse("bad-resource$image,csp=script-src none"));
+  expected_rules.emplace_back();
+  expected_rules.back().party.set();
+  expected_rules.back().resource_types.set(RequestFilterRule::kImage);
+  expected_rules.back().pattern = "bad-resource";
+  expected_rules.back().modifier = RequestFilterRule::kCsp;
+  expected_rules.back().modifier_value = "script-src none";
 
   EXPECT_EQ(RuleParser::kRequestFilterRule,
             rule_parser.Parse("bad-resource$csp=default-src self; img-src *"));
   expected_rules.emplace_back();
   expected_rules.back().party.set();
+  expected_rules.back().modify_block = false;
   expected_rules.back().pattern = "bad-resource";
-  expected_rules.back().is_csp_rule = true;
-  expected_rules.back().csp = "default-src self; img-src *";
+  expected_rules.back().modifier = RequestFilterRule::kCsp;
+  expected_rules.back().modifier_value = "default-src self; img-src *";
 
   EXPECT_EQ(
       RuleParser::kRequestFilterRule,
       rule_parser.Parse("@@good-resource$csp=default-src self; img-src *"));
   expected_rules.emplace_back();
   expected_rules.back().party.set();
+  expected_rules.back().modify_block = false;
   expected_rules.back().pattern = "good-resource";
-  expected_rules.back().is_csp_rule = true;
-  expected_rules.back().is_allow_rule = true;
-  expected_rules.back().csp = "default-src self; img-src *";
+  expected_rules.back().modifier = RequestFilterRule::kCsp;
+  expected_rules.back().decision = RequestFilterRule::kPass;
+  expected_rules.back().modifier_value = "default-src self; img-src *";
 
   EXPECT_EQ(RuleParser::kRequestFilterRule,
             rule_parser.Parse("@@good-resource$csp"));
   expected_rules.emplace_back();
+  expected_rules.back().modify_block = false;
   expected_rules.back().party.set();
   expected_rules.back().pattern = "good-resource";
-  expected_rules.back().is_csp_rule = true;
-  expected_rules.back().is_allow_rule = true;
+  expected_rules.back().modifier = RequestFilterRule::kCsp;
+  expected_rules.back().decision = RequestFilterRule::kPass;
 
   EXPECT_EQ(RuleParser::kError,
             rule_parser.Parse("bad-resource$csp=script-src none; report-uri "
                               "http://report.example.com; img-src none"));
-  EXPECT_EQ(RuleParser::kError,
-            rule_parser.Parse("bad-resource$csp=upgrade-insecure-requests"));
 
   ASSERT_EQ(expected_rules.size(), parse_result.request_filter_rules.size());
 
@@ -680,7 +719,8 @@ TEST(AdBlockRuleParserTest, Rewrite) {
   expected_rules.back().resource_types.set();
   expected_rules.back().party.set();
   expected_rules.back().pattern = "bad-script";
-  expected_rules.back().redirect = "blank-js";
+  expected_rules.back().modifier = RequestFilterRule::kRedirect;
+  expected_rules.back().modifier_value = "blank-js";
   expected_rules.back().included_domains.emplace_back("some.domain");
 
   EXPECT_EQ(RuleParser::kRequestFilterRule,
@@ -692,7 +732,8 @@ TEST(AdBlockRuleParserTest, Rewrite) {
   expected_rules.back().party.set();
   expected_rules.back().anchor_type.set(RequestFilterRule::kAnchorHost);
   expected_rules.back().pattern = "bad.host/bad-image";
-  expected_rules.back().redirect = "1x1-transparent-gif";
+  expected_rules.back().modifier = RequestFilterRule::kRedirect;
+  expected_rules.back().modifier_value = "1x1-transparent-gif";
   expected_rules.back().included_domains.emplace_back("some.domain");
 
   EXPECT_EQ(RuleParser::kRequestFilterRule,
@@ -704,7 +745,8 @@ TEST(AdBlockRuleParserTest, Rewrite) {
   expected_rules.back().party.set(RequestFilterRule::kFirstParty);
   expected_rules.back().anchor_type.set(RequestFilterRule::kAnchorHost);
   expected_rules.back().pattern = "tracking.host/bad-style";
-  expected_rules.back().redirect = "blank-css";
+  expected_rules.back().modifier = RequestFilterRule::kRedirect;
+  expected_rules.back().modifier_value = "blank-css";
 
   EXPECT_EQ(
       RuleParser::kError,
@@ -725,13 +767,27 @@ TEST(AdBlockRuleParserTest, Redirect) {
 
   std::vector<RequestFilterRule> expected_rules;
 
+  EXPECT_EQ(RuleParser::kError, rule_parser.Parse("redirect-nowhere$redirect"));
+
   EXPECT_EQ(RuleParser::kRequestFilterRule,
             rule_parser.Parse("*bad-script.js$redirect=noop.js,script"));
   expected_rules.emplace_back();
   expected_rules.back().resource_types.set(RequestFilterRule::kScript);
   expected_rules.back().party.set();
   expected_rules.back().pattern = "bad-script.js";
-  expected_rules.back().redirect = "noop.js";
+  expected_rules.back().modifier = RequestFilterRule::kRedirect;
+  expected_rules.back().modifier_value = "noop.js";
+
+  EXPECT_EQ(
+      RuleParser::kRequestFilterRule,
+      rule_parser.Parse("*other-bad-script.js$redirect-rule=noop.js,script"));
+  expected_rules.emplace_back();
+  expected_rules.back().resource_types.set(RequestFilterRule::kScript);
+  expected_rules.back().party.set();
+  expected_rules.back().modify_block = false;
+  expected_rules.back().pattern = "other-bad-script.js";
+  expected_rules.back().modifier = RequestFilterRule::kRedirect;
+  expected_rules.back().modifier_value = "noop.js";
 
   EXPECT_EQ(RuleParser::kRequestFilterRule,
             rule_parser.Parse(
@@ -741,7 +797,8 @@ TEST(AdBlockRuleParserTest, Redirect) {
   expected_rules.back().party.set();
   expected_rules.back().anchor_type.set(RequestFilterRule::kAnchorHost);
   expected_rules.back().pattern = "bad.host/bad-image";
-  expected_rules.back().redirect = "1x1-transparent.gif";
+  expected_rules.back().modifier = RequestFilterRule::kRedirect;
+  expected_rules.back().modifier_value = "1x1-transparent.gif";
 
   EXPECT_EQ(RuleParser::kRequestFilterRule,
             rule_parser.Parse("||tracking.host/"
@@ -751,7 +808,29 @@ TEST(AdBlockRuleParserTest, Redirect) {
   expected_rules.back().party.set(RequestFilterRule::kFirstParty);
   expected_rules.back().anchor_type.set(RequestFilterRule::kAnchorHost);
   expected_rules.back().pattern = "tracking.host/bad-file";
-  expected_rules.back().redirect = "empty";
+  expected_rules.back().modifier = RequestFilterRule::kRedirect;
+  expected_rules.back().modifier_value = "empty";
+
+  EXPECT_EQ(
+      RuleParser::kRequestFilterRule,
+      rule_parser.Parse("@@no-redirect$redirect=1x1-transparent.gif,image"));
+  expected_rules.emplace_back();
+  expected_rules.back().party.set();
+  expected_rules.back().resource_types.set(RequestFilterRule::kImage);
+  expected_rules.back().decision = RequestFilterRule::kPass;
+  expected_rules.back().pattern = "no-redirect";
+  expected_rules.back().modifier = RequestFilterRule::kRedirect;
+  expected_rules.back().modifier_value = "1x1-transparent.gif";
+
+  EXPECT_EQ(RuleParser::kRequestFilterRule,
+            rule_parser.Parse("@@redirect-exempt$redirect"));
+  expected_rules.emplace_back();
+  expected_rules.back().party.set();
+  expected_rules.back().resource_types.set();
+  expected_rules.back().modify_block = false;
+  expected_rules.back().decision = RequestFilterRule::kPass;
+  expected_rules.back().pattern = "redirect-exempt";
+  expected_rules.back().modifier = RequestFilterRule::kRedirect;
 
   EXPECT_EQ(
       RuleParser::kError,
@@ -773,18 +852,22 @@ TEST(AdBlockRuleParserTest, AllowRuleAndActivation) {
 
   std::vector<RequestFilterRule> expected_rules;
 
+  EXPECT_EQ(RuleParser::kError,
+            rule_parser.Parse("@@something$generichide=invalid"));
+
   EXPECT_EQ(RuleParser::kRequestFilterRule,
             rule_parser.Parse("@@safe-resource"));
   expected_rules.emplace_back();
-  expected_rules.back().is_allow_rule = true;
+  expected_rules.back().decision = RequestFilterRule::kPass;
   expected_rules.back().resource_types.set();
   expected_rules.back().party.set();
   expected_rules.back().pattern = "safe-resource";
 
   EXPECT_EQ(RuleParser::kRequestFilterRule,
-            rule_parser.Parse("|http://this.whole.page$document"));
+            rule_parser.Parse("|http://this.whole.page$doc"));
   expected_rules.emplace_back();
   expected_rules.back().party.set();
+  expected_rules.back().modify_block = false;
   expected_rules.back().activation_types.set(RequestFilterRule::kDocument);
   expected_rules.back().anchor_type.set(RequestFilterRule::kAnchorStart);
   expected_rules.back().pattern = "http://this.whole.page";
@@ -792,7 +875,8 @@ TEST(AdBlockRuleParserTest, AllowRuleAndActivation) {
   EXPECT_EQ(RuleParser::kRequestFilterRule,
             rule_parser.Parse("@@|http://this.other.page$document"));
   expected_rules.emplace_back();
-  expected_rules.back().is_allow_rule = true;
+  expected_rules.back().decision = RequestFilterRule::kPass;
+  expected_rules.back().modify_block = false;
   expected_rules.back().activation_types.set(RequestFilterRule::kDocument);
   expected_rules.back().anchor_type.set(RequestFilterRule::kAnchorStart);
   expected_rules.back().party.set();
@@ -801,18 +885,45 @@ TEST(AdBlockRuleParserTest, AllowRuleAndActivation) {
   EXPECT_EQ(RuleParser::kRequestFilterRule,
             rule_parser.Parse("@@good-resource$genericblock,generichide"));
   expected_rules.emplace_back();
-  expected_rules.back().is_allow_rule = true;
+  expected_rules.back().decision = RequestFilterRule::kPass;
+  expected_rules.back().modify_block = false;
   expected_rules.back().activation_types.set(RequestFilterRule::kGenericBlock);
   expected_rules.back().activation_types.set(RequestFilterRule::kGenericHide);
   expected_rules.back().party.set();
   expected_rules.back().pattern = "good-resource";
 
-  EXPECT_EQ(RuleParser::kError, rule_parser.Parse("not-good$genericblock"));
+  EXPECT_EQ(RuleParser::kRequestFilterRule,
+            rule_parser.Parse("@@another-good-resource$ghide"));
+  expected_rules.emplace_back();
+  expected_rules.back().decision = RequestFilterRule::kPass;
+  expected_rules.back().modify_block = false;
+  expected_rules.back().activation_types.set(RequestFilterRule::kGenericHide);
+  expected_rules.back().party.set();
+  expected_rules.back().pattern = "another-good-resource";
+
+  EXPECT_EQ(RuleParser::kRequestFilterRule,
+            rule_parser.Parse("not-good$genericblock"));
+  expected_rules.emplace_back();
+  expected_rules.back().decision = RequestFilterRule::kModify;
+  expected_rules.back().modify_block = false;
+  expected_rules.back().activation_types.set(RequestFilterRule::kGenericBlock);
+  expected_rules.back().party.set();
+  expected_rules.back().pattern = "not-good";
+
+  EXPECT_EQ(RuleParser::kRequestFilterRule,
+            rule_parser.Parse("really-not-good$genericblock,important"));
+  expected_rules.emplace_back();
+  expected_rules.back().decision = RequestFilterRule::kModifyImportant;
+  expected_rules.back().modify_block = false;
+  expected_rules.back().activation_types.set(RequestFilterRule::kGenericBlock);
+  expected_rules.back().party.set();
+  expected_rules.back().pattern = "really-not-good";
 
   EXPECT_EQ(RuleParser::kRequestFilterRule,
             rule_parser.Parse("distraction$popup"));
   expected_rules.emplace_back();
   expected_rules.back().party.set();
+  expected_rules.back().modify_block = false;
   expected_rules.back().activation_types.set(RequestFilterRule::kPopup);
   expected_rules.back().pattern = "distraction";
 
@@ -821,6 +932,7 @@ TEST(AdBlockRuleParserTest, AllowRuleAndActivation) {
       rule_parser.Parse("contradictory-activations$popup,~popup,document"));
   expected_rules.emplace_back();
   expected_rules.back().party.set();
+  expected_rules.back().modify_block = false;
   expected_rules.back().activation_types.set(RequestFilterRule::kDocument);
   expected_rules.back().pattern = "contradictory-activations";
 
@@ -842,6 +954,59 @@ TEST(AdBlockRuleParserTest, AllowRuleAndActivation) {
     EXPECT_EQ(rule, *actual_rules_it);
     actual_rules_it++;
   }
+}
+
+TEST(AdBlockRuleParserTest, AllOption) {
+  ParseResult parse_result;
+  RuleParser rule_parser(&parse_result, {});
+
+  std::vector<RequestFilterRule> expected_rules;
+
+  EXPECT_EQ(RuleParser::kError, rule_parser.Parse("block-everything$all=all"));
+  EXPECT_EQ(RuleParser::kError, rule_parser.Parse("pass-everything$~all"));
+
+  EXPECT_EQ(RuleParser::kRequestFilterRule,
+            rule_parser.Parse("block-everything$all"));
+  expected_rules.emplace_back();
+  expected_rules.back().resource_types.set();
+  expected_rules.back().activation_types.set(RequestFilterRule::kDocument);
+  expected_rules.back().activation_types.set(RequestFilterRule::kPopup);
+  expected_rules.back().party.set();
+  expected_rules.back().pattern = "block-everything";
+
+  EXPECT_EQ(RuleParser::kRequestFilterRule,
+            rule_parser.Parse("@@pass-everything$all"));
+  expected_rules.emplace_back();
+  expected_rules.back().decision = RequestFilterRule::kPass;
+  expected_rules.back().resource_types.set();
+  expected_rules.back().activation_types.set(RequestFilterRule::kPopup);
+  expected_rules.back().party.set();
+  expected_rules.back().pattern = "pass-everything";
+
+  auto actual_rules_it = parse_result.request_filter_rules.begin();
+  for (const auto& rule : expected_rules) {
+    EXPECT_EQ(rule, *actual_rules_it);
+    actual_rules_it++;
+  }
+}
+
+TEST(AdBlockRuleParserTest, ImportantOption) {
+  ParseResult parse_result;
+  RuleParser rule_parser(&parse_result, {});
+
+  std::vector<RequestFilterRule> expected_rules;
+
+  EXPECT_EQ(RuleParser::kError,
+            rule_parser.Parse("the-worst-site$important=yes"));
+  EXPECT_EQ(RuleParser::kError, rule_parser.Parse("not-important$~important"));
+
+  EXPECT_EQ(RuleParser::kRequestFilterRule,
+            rule_parser.Parse("the-worst-site$important"));
+  expected_rules.emplace_back();
+  expected_rules.back().decision = RequestFilterRule::kModifyImportant;
+  expected_rules.back().resource_types.set();
+  expected_rules.back().party.set();
+  expected_rules.back().pattern = "the-worst-site";
 }
 
 }  // namespace adblock_filter

@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/core/html/media/autoplay_policy.h"
 #include "third_party/blink/renderer/modules/webaudio/base_audio_context.h"
 #include "third_party/blink/renderer/modules/webaudio/setsinkid_resolver.h"
+#include "third_party/blink/renderer/platform/audio/audio_frame_stats_accumulator.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_deque.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/self_keep_alive.h"
@@ -30,6 +31,7 @@ namespace blink {
 
 class AudioContextOptions;
 class AudioTimestamp;
+class AudioPlayoutStats;
 class ExceptionState;
 class ExecutionContext;
 class HTMLMediaElement;
@@ -60,6 +62,7 @@ class MODULES_EXPORT AudioContext : public BaseAudioContext,
                WebAudioSinkDescriptor sink_descriptor);
   ~AudioContext() override;
 
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(error, kError)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(sinkchange, kSinkchange)
 
   void Trace(Visitor*) const override;
@@ -84,6 +87,7 @@ class MODULES_EXPORT AudioContext : public BaseAudioContext,
   AudioTimestamp* getOutputTimestamp(ScriptState*) const;
   double baseLatency() const;
   double outputLatency() const;
+  AudioPlayoutStats* playoutStats();
 
   MediaElementAudioSourceNode* createMediaElementSource(HTMLMediaElement*,
                                                         ExceptionState&);
@@ -97,10 +101,11 @@ class MODULES_EXPORT AudioContext : public BaseAudioContext,
   // the AudioContext if it is now allowed to start.
   void NotifySourceNodeStart() final;
 
-  void set_was_audible_for_testing(bool value) { was_audible_ = value; }
-
-  bool HandlePreRenderTasks(const AudioIOPosition* output_position,
-                            const AudioCallbackMetric* metric) final;
+  bool HandlePreRenderTasks(uint32_t frames_to_process,
+                            const AudioIOPosition* output_position,
+                            const AudioCallbackMetric* metric,
+                            base::TimeDelta playout_delay,
+                            const media::AudioGlitchInfo& glitch_info) final;
 
   // Called at the end of each render quantum.
   void HandlePostRenderTasks() final;
@@ -141,13 +146,69 @@ class MODULES_EXPORT AudioContext : public BaseAudioContext,
 
   void OnRenderError();
 
+  // Methods for unit tests
+  void set_was_audible_for_testing(bool value) { was_audible_ = value; }
+  void invoke_onrendererror_from_platform_for_testing();
+
  protected:
   void Uninitialize() final;
 
  private:
+  friend class AudioPlayoutStats;  // For TransferAudioFrameStatsTo().
   friend class AudioContextAutoplayTest;
   friend class AudioContextTest;
   FRIEND_TEST_ALL_PREFIXES(AudioContextTest, MediaDevicesService);
+  FRIEND_TEST_ALL_PREFIXES(AudioContextTest,
+                           OnRenderErrorFromPlatformDestination);
+
+  // Corresponds to
+  // https://wicg.github.io/web_audio_playout/#audioplayoutstats-interface.
+  class AudioFrameStats {
+   public:
+    AudioFrameStats() = default;
+    AudioFrameStats(const AudioFrameStats&) = delete;
+    AudioFrameStats& operator=(const AudioFrameStats&) = delete;
+    ~AudioFrameStats() = default;
+
+    // Updates the stats with information from a new buffer.
+    void Update(size_t playout_frames,
+                int sample_rate,
+                base::TimeDelta playout_latency,
+                const media::AudioGlitchInfo& glitch_info) {
+      accumulator_.Update(playout_frames, sample_rate, playout_latency,
+                          glitch_info);
+    }
+
+    // Absorbs stats from an object that contains stats from a more recent
+    // interval. This merges the latency statistics into this object, and resets
+    // them on the |from| object. |from|'s latency information interval should
+    // start where |this|'s latency information interval ends. The frame
+    // counters, frame durations, and current latency are simply copied from
+    // |from|.
+    void Absorb(AudioFrameStats& from) {
+      accumulator_.Absorb(from.accumulator_);
+    }
+
+    base::TimeDelta FallbackFramesDuration() {
+      return accumulator_.glitch_frames_duration();
+    }
+
+    size_t FallbackFramesEvents() { return accumulator_.glitch_event_count(); }
+
+    base::TimeDelta TotalFramesDuration() {
+      return accumulator_.glitch_frames_duration() +
+             accumulator_.observed_frames_duration();
+    }
+
+    base::TimeDelta AverageLatency() { return accumulator_.average_latency(); }
+
+    base::TimeDelta MinimumLatency() { return accumulator_.min_latency(); }
+
+    base::TimeDelta MaximumLatency() { return accumulator_.max_latency(); }
+
+   private:
+    AudioFrameStatsAccumulator accumulator_;
+  };
 
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
@@ -243,11 +304,24 @@ class MODULES_EXPORT AudioContext : public BaseAudioContext,
   // prerendering.
   void ResumeOnPrerenderActivation();
 
+  // Passes `audio_frame_stats_` to be absorbed by `receiver`.
+  void TransferAudioFrameStatsTo(AudioFrameStats& receiver);
+
+  void HandleRenderError();
+
   unsigned context_id_;
   Member<ScriptPromiseResolver<IDLUndefined>> close_resolver_;
 
   AudioIOPosition output_position_;
   AudioCallbackMetric callback_metric_;
+
+  // Accessed only on the thread pulling audio from the graph.
+  AudioFrameStats pending_audio_frame_stats_;
+
+  // Protected by the graph lock.
+  AudioFrameStats audio_frame_stats_;
+
+  Member<AudioPlayoutStats> audio_playout_stats_;
 
   // Whether a user gesture is required to start this AudioContext.
   bool user_gesture_required_ = false;
@@ -324,6 +398,10 @@ class MODULES_EXPORT AudioContext : public BaseAudioContext,
   // `wasRunning` flag for `setSinkId()` state transition. See the
   // implementation of `NotifySetSinkIdBegins()` for details.
   bool sink_transition_flag_was_running_ = false;
+
+  // To keep the record of any render errors reported from the infra during
+  // the life cycle of the context.
+  bool render_error_occurred_ = false;
 };
 
 }  // namespace blink

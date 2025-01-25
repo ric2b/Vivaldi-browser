@@ -4,7 +4,7 @@
 """Definitions of builders in chromium.build.fyi builder group."""
 
 load("//lib/builder_config.star", "builder_config")
-load("//lib/builders.star", "cpu", "os", "reclient")
+load("//lib/builders.star", "cpu", "os", "siso")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 
@@ -19,12 +19,12 @@ ci.defaults.set(
     contact_team_email = "chrome-build-team@google.com",
     execution_timeout = 10 * time.hour,
     priority = ci.DEFAULT_FYI_PRIORITY,
-    reclient_instance = reclient.instance.DEFAULT_TRUSTED,
-    reclient_jobs = reclient.jobs.DEFAULT,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
-    shadow_reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
     shadow_service_account = ci.DEFAULT_SHADOW_SERVICE_ACCOUNT,
+    shadow_siso_project = siso.project.DEFAULT_UNTRUSTED,
     siso_enabled = True,
+    siso_project = siso.project.DEFAULT_TRUSTED,
+    siso_remote_jobs = siso.remote_jobs.DEFAULT,
 )
 
 consoles.console_view(
@@ -69,9 +69,9 @@ ci.builder(
 )
 
 ci.thin_tester(
-    name = "Mac13 Tests Siso FYI",
+    name = "Mac Tests Siso FYI",
     description_html = """\
-This builder is intended to shadow <a href="https://ci.chromium.org/ui/p/chromium/builders/ci/Mac13%20Tests">Mac13 Tests</a>.<br/>\
+This builder is intended to shadow <a href="https://ci.chromium.org/ui/p/chromium/builders/ci/mac14-tests">mac14-tests</a>.<br/>\
 But, the tests are built by <a ref="https://ci.chromium.org/ui/p/chromium/builders/build/Mac%20Builder%20Siso%20FYI">Mac Builder Siso FYI</a>.\
 """,
     triggered_by = ["build/Mac Builder Siso FYI"],

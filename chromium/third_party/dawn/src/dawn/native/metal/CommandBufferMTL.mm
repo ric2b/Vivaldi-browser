@@ -27,7 +27,9 @@
 
 #include "dawn/native/metal/CommandBufferMTL.h"
 
+#include "absl/container/flat_hash_map.h"
 #include "dawn/common/MatchVariant.h"
+#include "dawn/common/Range.h"
 #include "dawn/native/BindGroupTracker.h"
 #include "dawn/native/CommandEncoder.h"
 #include "dawn/native/Commands.h"
@@ -558,8 +560,7 @@ class BindGroupTracker : public BindGroupTrackerBase<true, uint64_t> {
         // TODO(crbug.com/dawn/854): Maintain buffers and offsets arrays in BindGroup
         // so that we only have to do one setVertexBuffers and one setFragmentBuffers
         // call here.
-        for (BindingIndex bindingIndex{0}; bindingIndex < group->GetLayout()->GetBindingCount();
-             ++bindingIndex) {
+        for (BindingIndex bindingIndex : Range(group->GetLayout()->GetBindingCount())) {
             const BindingInfo& bindingInfo = group->GetLayout()->GetBindingInfo(bindingIndex);
 
             bool hasVertStage =
@@ -585,6 +586,26 @@ class BindGroupTracker : public BindGroupTrackerBase<true, uint64_t> {
                 computeIndex = pipelineLayout->GetBindingIndexInfo(
                     SingleShaderStage::Compute)[index][bindingIndex];
             }
+
+            auto HandleTextureBinding = [&]() {
+                auto textureView = ToBackend(group->GetBindingAsTextureView(bindingIndex));
+                id<MTLTexture> texture = textureView->GetMTLTexture();
+                if (hasVertStage &&
+                    mBoundTextures[SingleShaderStage::Vertex][vertIndex] != texture) {
+                    mBoundTextures[SingleShaderStage::Vertex][vertIndex] = texture;
+                    [render setVertexTexture:texture atIndex:vertIndex];
+                }
+                if (hasFragStage &&
+                    mBoundTextures[SingleShaderStage::Fragment][fragIndex] != texture) {
+                    mBoundTextures[SingleShaderStage::Fragment][fragIndex] = texture;
+                    [render setFragmentTexture:texture atIndex:fragIndex];
+                }
+                if (hasComputeStage &&
+                    mBoundTextures[SingleShaderStage::Compute][computeIndex] != texture) {
+                    mBoundTextures[SingleShaderStage::Compute][computeIndex] = texture;
+                    [compute setTexture:texture atIndex:computeIndex];
+                }
+            };
 
             MatchVariant(
                 bindingInfo.bindingLayout,
@@ -626,15 +647,20 @@ class BindGroupTracker : public BindGroupTrackerBase<true, uint64_t> {
                 },
                 [&](const SamplerBindingInfo&) {
                     auto sampler = ToBackend(group->GetBindingAsSampler(bindingIndex));
-                    if (hasVertStage) {
-                        [render setVertexSamplerState:sampler->GetMTLSamplerState()
-                                              atIndex:vertIndex];
+                    id<MTLSamplerState> samplerState = sampler->GetMTLSamplerState();
+                    if (hasVertStage &&
+                        mBoundSamplers[SingleShaderStage::Vertex][vertIndex] != samplerState) {
+                        mBoundSamplers[SingleShaderStage::Vertex][vertIndex] = samplerState;
+                        [render setVertexSamplerState:samplerState atIndex:vertIndex];
                     }
-                    if (hasFragStage) {
-                        [render setFragmentSamplerState:sampler->GetMTLSamplerState()
-                                                atIndex:fragIndex];
+                    if (hasFragStage &&
+                        mBoundSamplers[SingleShaderStage::Fragment][fragIndex] != samplerState) {
+                        mBoundSamplers[SingleShaderStage::Fragment][fragIndex] = samplerState;
+                        [render setFragmentSamplerState:samplerState atIndex:fragIndex];
                     }
-                    if (hasComputeStage) {
+                    if (hasComputeStage &&
+                        mBoundSamplers[SingleShaderStage::Compute][computeIndex] != samplerState) {
+                        mBoundSamplers[SingleShaderStage::Compute][computeIndex] = samplerState;
                         [compute setSamplerState:sampler->GetMTLSamplerState()
                                          atIndex:computeIndex];
                     }
@@ -645,30 +671,9 @@ class BindGroupTracker : public BindGroupTrackerBase<true, uint64_t> {
                     // Metal backend.
                     DAWN_UNREACHABLE();
                 },
-                [&](const TextureBindingInfo&) {
-                    auto textureView = ToBackend(group->GetBindingAsTextureView(bindingIndex));
-                    if (hasVertStage) {
-                        [render setVertexTexture:textureView->GetMTLTexture() atIndex:vertIndex];
-                    }
-                    if (hasFragStage) {
-                        [render setFragmentTexture:textureView->GetMTLTexture() atIndex:fragIndex];
-                    }
-                    if (hasComputeStage) {
-                        [compute setTexture:textureView->GetMTLTexture() atIndex:computeIndex];
-                    }
-                },
-                [&](const StorageTextureBindingInfo&) {
-                    auto textureView = ToBackend(group->GetBindingAsTextureView(bindingIndex));
-                    if (hasVertStage) {
-                        [render setVertexTexture:textureView->GetMTLTexture() atIndex:vertIndex];
-                    }
-                    if (hasFragStage) {
-                        [render setFragmentTexture:textureView->GetMTLTexture() atIndex:fragIndex];
-                    }
-                    if (hasComputeStage) {
-                        [compute setTexture:textureView->GetMTLTexture() atIndex:computeIndex];
-                    }
-                });
+                [&](const TextureBindingInfo&) { HandleTextureBinding(); },
+                [&](const StorageTextureBindingInfo&) { HandleTextureBinding(); },
+                [](const InputAttachmentBindingInfo&) { DAWN_UNREACHABLE(); });
         }
     }
 
@@ -683,6 +688,12 @@ class BindGroupTracker : public BindGroupTrackerBase<true, uint64_t> {
     }
 
     raw_ptr<StorageBufferLengthTracker> mLengthTracker;
+
+    // Keep track of current texture and sampler bindings to minimize state changes even when bind
+    // groups are dirtied. It's safe to keep raw pointers here since if an entry is set here, the
+    // texture/sampler is bound in Metal and the Metal runtime will keep them alive.
+    PerStage<absl::flat_hash_map<uint32_t, id<MTLTexture>>> mBoundTextures;
+    PerStage<absl::flat_hash_map<uint32_t, id<MTLSamplerState>>> mBoundSamplers;
 };
 
 // Keeps track of the dirty vertex buffer values so they can be lazily applied when we know

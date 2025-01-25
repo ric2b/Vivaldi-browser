@@ -9,6 +9,7 @@ Create new branch tracking origin HEAD by default.
 import argparse
 import sys
 
+import gclient_utils
 import git_common
 import subprocess2
 
@@ -52,6 +53,10 @@ def create_new_branch(branch_name,
 
 
 def main(args):
+    if gclient_utils.IsEnvCog():
+        print('new-branch command is not supported in non-git environment.',
+              file=sys.stderr)
+        return 1
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         description=__doc__,

@@ -248,12 +248,12 @@ using vivaldi::IsVivaldiRunning;
   if (IsVivaldiRunning()) {
     UIAction* action =
         [self actionWithTitle:l10n_util::GetNSString(
-                        IDS_IOS_OPEN_IN_PRIVATE_ACTION_TITLE)
+                        IDS_IOS_NEW_INCOGNITO_TAB)
                         image:[UIImage imageNamed:vMenuPrivateTab]
                          type:MenuActionType::OpenNewIncognitoTab
                         block:^{
-                          [handler openURLInNewTab:[OpenNewTabCommand
-                                                       commandWithIncognito:YES]];
+                          [handler openURLInNewTab:
+                              [OpenNewTabCommand commandWithIncognito:YES]];
                         }];
     if (IsIncognitoModeDisabled(self.browser->GetBrowserState()->GetPrefs())) {
       action.attributes = UIMenuElementAttributesDisabled;

@@ -27,6 +27,8 @@
 
 // GEN_BUILD:CONDITION(tint_build_wgsl_reader)
 
+#include <iostream>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 
@@ -34,50 +36,98 @@
 #include "src/tint/lang/hlsl/validate/validate.h"
 #include "src/tint/lang/hlsl/writer/writer.h"
 #include "src/tint/lang/wgsl/ast/module.h"
+#include "src/tint/lang/wgsl/ast/transform/renamer.h"
 #include "src/tint/utils/command/command.h"
+#include "src/tint/utils/text/string.h"
 
 namespace tint::hlsl::writer {
 namespace {
 
-void ASTFuzzer(const tint::Program& program,
-               const fuzz::wgsl::Options& fuzz_options,
-               Options options) {
+bool CanRun(const Program& program) {
     if (program.AST().HasOverrides()) {
+        return false;
+    }
+
+    // The PixelLocal transform assumes only a single entry point, so check for multiple entry
+    // points if chromium_experimental_pixel_local is enabled.
+    uint32_t num_entry_points = 0;
+    for (auto* fn : program.AST().Functions()) {
+        if (fn->PipelineStage() != ast::PipelineStage::kNone) {
+            num_entry_points++;
+        }
+    }
+    for (auto* enable : program.AST().Enables()) {
+        if (enable->HasExtension(tint::wgsl::Extension::kChromiumExperimentalPixelLocal)) {
+            if (num_entry_points > 1) {
+                return false;
+            }
+            break;
+        }
+    }
+
+    return true;
+}
+
+void ASTFuzzer(const tint::Program& program, const fuzz::wgsl::Context& context, Options options) {
+    if (!CanRun(program)) {
         return;
     }
 
-    auto res = tint::hlsl::writer::Generate(program, options);
-    if (res == Success) {
-        const char* dxc_path = validate::kDxcDLLName;
-        bool must_validate = false;
-        if (!fuzz_options.dxc.empty()) {
-            must_validate = true;
-            dxc_path = fuzz_options.dxc.c_str();
+    // Currently disabled, as DXC can error on HLSL emitted by Tint. For example: post optimization
+    // infinite loops will fail to compile, but these are beyond Tint's analysis capabilities.
+    constexpr bool must_validate = false;
+
+    const char* dxc_path = validate::kDxcDLLName;
+    Result<tint::hlsl::writer::Output> res;
+    if (!context.options.dxc.empty()) {
+        dxc_path = context.options.dxc.c_str();
+        ast::transform::DataMap inputs, outputs;
+        inputs.Add<ast::transform::Renamer::Config>(ast::transform::Renamer::Target::kHlslKeywords,
+                                                    /* preserve_unicode */ false);
+        if (auto renamer_res = tint::ast::transform::Renamer{}.Apply(program, inputs, outputs)) {
+            if (!renamer_res->IsValid()) {
+                TINT_ICE() << renamer_res->Diagnostics();
+            }
+            res = tint::hlsl::writer::Generate(*renamer_res, options);
         }
 
-        auto dxc = tint::Command::LookPath(dxc_path);
-        if (dxc.Found()) {
-            uint32_t hlsl_shader_model = 60;
-            bool require_16bit_types = false;
-            auto enable_list = program.AST().Enables();
-            for (auto* enable : enable_list) {
-                if (enable->HasExtension(tint::wgsl::Extension::kF16)) {
-                    hlsl_shader_model = 62;
-                    require_16bit_types = true;
-                    break;
-                }
+    } else {
+        res = tint::hlsl::writer::Generate(program, options);
+    }
+
+    if (res != Success) {
+        return;
+    }
+
+    auto dxc = tint::Command::LookPath(dxc_path);
+    if (dxc.Found()) {
+        uint32_t hlsl_shader_model = 60;
+        bool require_16bit_types = false;
+        auto enable_list = program.AST().Enables();
+        for (auto* enable : enable_list) {
+            if (enable->HasExtension(tint::wgsl::Extension::kF16)) {
+                hlsl_shader_model = 62;
+                require_16bit_types = true;
+                break;
             }
-
-            auto validate_res = validate::ValidateUsingDXC(dxc.Path(), res->hlsl, res->entry_points,
-                                                           require_16bit_types, hlsl_shader_model);
-
-            if (must_validate && validate_res.failed) {
-                TINT_ICE() << "DXC was expected to succeed, but failed: " << validate_res.output;
-            }
-
-        } else if (must_validate) {
-            TINT_ICE() << "DXC path was explicitly specified, but was not found: " << dxc_path;
         }
+
+        auto validate_res = validate::ValidateUsingDXC(dxc.Path(), res->hlsl, res->entry_points,
+                                                       require_16bit_types, hlsl_shader_model);
+
+        if (must_validate && validate_res.failed) {
+            size_t line_num = 1;
+            std::stringstream err;
+            err << "DXC was expected to succeed, but failed:\n\n";
+            for (auto line : Split(res->hlsl, "\n")) {
+                err << line_num++ << ": " << line << "\n";
+            }
+            err << "\n\n" << validate_res.output;
+            TINT_ICE() << err.str();
+        }
+
+    } else if (must_validate) {
+        TINT_ICE() << "cannot validate with DXC as it was not found at: " << dxc_path;
     }
 }
 

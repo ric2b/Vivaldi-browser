@@ -6,6 +6,7 @@
 
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "components/metrics/structured/test/test_event_storage.h"
@@ -15,24 +16,25 @@ namespace metrics::structured {
 
 TestStructuredMetricsProvider::TestStructuredMetricsProvider() {
   if (temp_dir_.CreateUniqueTempDir()) {
-    structured_metrics_recorder_ = std::make_unique<StructuredMetricsRecorder>(
-        std::make_unique<TestKeyDataProvider>(
-            temp_dir_.GetPath()
-                .Append(FILE_PATH_LITERAL("structured_metrics"))
-                .Append(FILE_PATH_LITERAL("device_keys"))),
-        std::make_unique<TestEventStorage>());
-    Recorder::GetInstance()->AddObserver(this);
+    structured_metrics_recorder_ =
+        base::MakeRefCounted<StructuredMetricsRecorder>(
+            std::make_unique<TestKeyDataProvider>(
+                temp_dir_.GetPath()
+                    .Append(FILE_PATH_LITERAL("structured_metrics"))
+                    .Append(FILE_PATH_LITERAL("device_keys"))),
+            std::make_unique<TestEventStorage>());
+    Recorder::GetInstance()->SetRecorder(this);
   }
 }
 
 TestStructuredMetricsProvider::TestStructuredMetricsProvider(
-    std::unique_ptr<StructuredMetricsRecorder> recorder)
+    scoped_refptr<StructuredMetricsRecorder> recorder)
     : structured_metrics_recorder_(std::move(recorder)) {
-  Recorder::GetInstance()->AddObserver(this);
+  Recorder::GetInstance()->SetRecorder(this);
 }
 
 TestStructuredMetricsProvider::~TestStructuredMetricsProvider() {
-  Recorder::GetInstance()->RemoveObserver(this);
+  Recorder::GetInstance()->UnsetRecorder(this);
 }
 
 const EventsProto& TestStructuredMetricsProvider::ReadEvents() const {

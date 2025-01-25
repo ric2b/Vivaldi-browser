@@ -17,7 +17,6 @@
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
-#import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/shared/public/commands/show_signin_command.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
@@ -44,7 +43,7 @@ enum InfobarSyncError : uint8_t {
   // DEPRECATED. No longer recorded.
   // SYNC_SERVICE_UNAVAILABLE = 2
   SYNC_NEEDS_PASSPHRASE = 3,
-  SYNC_UNRECOVERABLE_ERROR = 4,
+  // SYNC_UNRECOVERABLE_ERROR = 4, (deprecated)
   SYNC_SYNC_SETTINGS_NOT_CONFIRMED = 5,
   SYNC_NEEDS_TRUSTED_VAULT_KEY = 6,
   SYNC_TRUSTED_VAULT_RECOVERABILITY_DEGRADED = 7,
@@ -80,7 +79,6 @@ std::u16string GetIdentityErrorInfoBarTitle(
           IDS_IOS_IDENTITY_ERROR_INFOBAR_VERIFY_ITS_YOU_TITLE);
     case syncer::SyncService::UserActionableError::kNone:
     case syncer::SyncService::UserActionableError::kSignInNeedsUpdate:
-    case syncer::SyncService::UserActionableError::kGenericUnrecoverableError:
       NOTREACHED_NORETURN();
   }
 }
@@ -116,7 +114,6 @@ NSString* GetIdentityErrorInfoBarMessage(
           IDS_IOS_IDENTITY_ERROR_INFOBAR_MAKE_SURE_YOU_CAN_ALWAYS_USE_CHROME_DATA_MESSAGE);
     case syncer::SyncService::UserActionableError::kNone:
     case syncer::SyncService::UserActionableError::kSignInNeedsUpdate:
-    case syncer::SyncService::UserActionableError::kGenericUnrecoverableError:
       NOTREACHED_NORETURN();
   }
 }
@@ -139,7 +136,6 @@ NSString* GetIdentityErrorInfoBarButtonLabel(
           IDS_IOS_IDENTITY_ERROR_INFOBAR_VERIFY_BUTTON_LABEL);
     case syncer::SyncService::UserActionableError::kNone:
     case syncer::SyncService::UserActionableError::kSignInNeedsUpdate:
-    case syncer::SyncService::UserActionableError::kGenericUnrecoverableError:
       NOTREACHED_NORETURN();
   }
 }
@@ -174,8 +170,6 @@ NSString* GetSyncErrorDescriptionForSyncService(
       // syncer::AlwaysEncryptedUserTypes().
       return l10n_util::GetNSString(
           IDS_IOS_GOOGLE_SERVICES_SETTINGS_SYNC_FIX_RECOVERABILITY_DEGRADED_FOR_PASSWORDS);
-    case syncer::SyncService::UserActionableError::kGenericUnrecoverableError:
-      return l10n_util::GetNSString(IDS_IOS_SYNC_STATUS_UNRECOVERABLE_ERROR);
   }
 }
 
@@ -223,8 +217,6 @@ NSString* GetSyncErrorMessageForBrowserState(ChromeBrowserState* browserState) {
     case syncer::SyncService::UserActionableError::
         kTrustedVaultRecoverabilityDegradedForEverything:
       return GetSyncErrorDescriptionForSyncService(syncService);
-    case syncer::SyncService::UserActionableError::kGenericUnrecoverableError:
-      return l10n_util::GetNSString(IDS_IOS_SYNC_ERROR_UNRECOVERABLE);
   }
 }
 
@@ -257,8 +249,6 @@ NSString* GetSyncErrorButtonTitleForBrowserState(
     case syncer::SyncService::UserActionableError::
         kTrustedVaultRecoverabilityDegradedForEverything:
       return l10n_util::GetNSString(IDS_IOS_SYNC_VERIFY_ITS_YOU_BUTTON);
-    case syncer::SyncService::UserActionableError::kGenericUnrecoverableError:
-      return l10n_util::GetNSString(IDS_IOS_SYNC_SIGN_IN_AGAIN_BUTTON);
     case syncer::SyncService::UserActionableError::kNone:
       return nil;
   }
@@ -266,7 +256,6 @@ NSString* GetSyncErrorButtonTitleForBrowserState(
 
 bool ShouldShowSyncSettings(syncer::SyncService::UserActionableError error) {
   switch (error) {
-    case syncer::SyncService::UserActionableError::kGenericUnrecoverableError:
     case syncer::SyncService::UserActionableError::kNone:
       return true;
     case syncer::SyncService::UserActionableError::kSignInNeedsUpdate:
@@ -311,11 +300,7 @@ bool DisplaySyncErrors(ChromeBrowserState* browser_state,
 
     signin::IdentityManager* identityManager =
         IdentityManagerFactory::GetForBrowserState(browser_state);
-    // TODO(crbug.com/40066949): Simplify this (remove the whole
-    // `if (!UseIdentityErrorInfobar(syncService)) {...}`) after kSync users are
-    // migrated to kSignin in phase 3. See ConsentLevel::kSync documentation for
-    // details.
-    if (!identityManager->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
+    if (!identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
       return false;
     }
   }
@@ -343,9 +328,6 @@ bool DisplaySyncErrors(ChromeBrowserState* browser_state,
     case syncer::SyncService::UserActionableError::
         kTrustedVaultRecoverabilityDegradedForEverything:
       loggedErrorState = SYNC_TRUSTED_VAULT_RECOVERABILITY_DEGRADED;
-      break;
-    case syncer::SyncService::UserActionableError::kGenericUnrecoverableError:
-      loggedErrorState = SYNC_UNRECOVERABLE_ERROR;
       break;
   }
   UMA_HISTOGRAM_ENUMERATION("Sync.SyncErrorInfobarDisplayed", loggedErrorState);

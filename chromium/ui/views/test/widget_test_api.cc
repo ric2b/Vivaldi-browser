@@ -4,6 +4,7 @@
 
 #include "ui/views/test/widget_test_api.h"
 
+#include "base/notimplemented.h"
 #include "ui/views/widget/widget.h"
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS) || BUILDFLAG(IS_LINUX)
@@ -58,13 +59,22 @@ void AsyncWidgetRequestWaiter::Wait() {
       return !wayland_extension->HasInFlightRequestsForState() &&
              wayland_extension->GetVizSequenceIdForAppliedState() ==
                  wayland_extension->GetVizSequenceIdForLatchedState();
-    }));
+    })) << "Has in flight requests: "
+        << wayland_extension->HasInFlightRequestsForState()
+        << ", applied sequence ID: "
+        << wayland_extension->GetVizSequenceIdForAppliedState()
+        << ", latched sequence ID:"
+        << wayland_extension->GetVizSequenceIdForLatchedState();
 
     // Wait for all Wayland messages sent as a result of requests being latched
     // to be processed on the server side.
     wayland_extension->RoundTripQueue();
     wayland_extension->SetLatchImmediately(true);
+  } else {
+    NOTIMPLEMENTED_LOG_ONCE();
   }
+#else
+  NOTIMPLEMENTED_LOG_ONCE();
 #endif
   waited_ = true;
 }

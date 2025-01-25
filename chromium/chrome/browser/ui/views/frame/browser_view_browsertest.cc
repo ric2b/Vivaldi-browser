@@ -51,7 +51,8 @@
 #include "ui/views/widget/native_widget_aura.h"
 #endif  // USE_AURA
 
-#if BUILDFLAG(ENTERPRISE_WATERMARK)
+#if BUILDFLAG(ENTERPRISE_WATERMARK) || \
+    BUILDFLAG(ENTERPRISE_SCREENSHOT_PROTECTION)
 #include "base/callback_list.h"
 #include "base/functional/bind.h"
 #include "chrome/browser/enterprise/watermark/watermark_view.h"
@@ -61,6 +62,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/common/chrome_features.h"
+#include "components/enterprise/data_controls/core/features.h"
+#include "components/enterprise/data_controls/core/test_utils.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/safe_browsing/core/browser/realtime/fake_url_lookup_service.h"
@@ -110,15 +113,6 @@ class BrowserViewTest : public InProcessBrowserTest {
   raw_ptr<DevToolsWindow> devtools_;
 };
 
-class BrowserViewTestRefreshOnly : public BrowserViewTest {
- public:
-  BrowserViewTestRefreshOnly() {
-    scoped_feature_list_.InitWithFeatures({features::kChromeRefresh2023}, {});
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
 namespace {
 
 // Used to simulate scenario in a crash. When WebContentsDestroyed() is invoked
@@ -254,12 +248,11 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, DISABLED_DevToolsUpdatesBrowserWindow) {
 }
 
 // Verifies that the side panel's rounded corner is being correctly layed out.
-IN_PROC_BROWSER_TEST_F(BrowserViewTestRefreshOnly,
-                       SidePanelRoundedCornerLayout) {
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, SidePanelRoundedCornerLayout) {
   SidePanelCoordinator* coordinator =
       SidePanelUtil::GetSidePanelCoordinatorForBrowser((browser()));
   coordinator->SetNoDelaysForTesting(true);
-  coordinator->Show();
+  coordinator->Show(SidePanelEntry::Id::kBookmarks);
   EXPECT_EQ(side_panel()->bounds().x(),
             side_panel_rounded_corner()->bounds().right());
   EXPECT_EQ(side_panel()->bounds().y(),
@@ -419,6 +412,7 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, GetAccessibleTabModalDialogTree) {
   EXPECT_NE(ui::AXPlatformNodeTestHelper::FindChildByName(ax_node, "OK"),
             nullptr);
 }
+#endif  // !BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(ENTERPRISE_WATERMARK)
 
@@ -465,6 +459,11 @@ class BrowserViewDataProtectionTest : public InProcessBrowserTest {
       const BrowserViewDataProtectionTest&) = delete;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
+    scoped_feature_list_.InitWithFeatures(
+        {features::kEnableWatermarkView,
+         data_controls::kEnableScreenshotProtection},
+        {});
+
     // Set a DM token since the enterprise real-time URL service expects one.
     policy::SetDMTokenForTesting(policy::DMToken::CreateValidToken("dm_token"));
 
@@ -507,8 +506,7 @@ class BrowserViewDataProtectionTest : public InProcessBrowserTest {
 
  private:
   base::CallbackListSubscription create_services_subscription_;
-  base::test::ScopedFeatureList scoped_feature_list_{
-      features::kEnableWatermarkView};
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 }  // namespace
@@ -589,6 +587,28 @@ IN_PROC_BROWSER_TEST_F(BrowserViewDataProtectionTest,
                   ->has_text_for_testing());
 }
 
-#endif  // BUILDFLAG(ENTERPRISE_WATERMARK)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 
-#endif  // !BUILDFLAG(IS_MAC)
+IN_PROC_BROWSER_TEST_F(BrowserViewDataProtectionTest, DC_Screenshot) {
+  data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"(
+        {
+          "name":"block",
+          "rule_id":"1234",
+          "sources":{"urls":["noscreenshot.com"]},
+          "restrictions":[{"class": "SCREENSHOT", "level": "BLOCK"} ]
+        }
+      )"});
+
+  auto* widget = BrowserView::GetBrowserViewForBrowser(browser())->GetWidget();
+  ASSERT_TRUE(widget);
+
+  NavigateToAndWait(GURL("https://noscreenshot.com"));
+  EXPECT_FALSE(widget->AreScreenshotsAllowed());
+
+  NavigateToAndWait(GURL("https://screenshot.com"));
+  EXPECT_TRUE(widget->AreScreenshotsAllowed());
+}
+
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+
+#endif  // BUILDFLAG(ENTERPRISE_WATERMARK)

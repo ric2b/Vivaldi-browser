@@ -173,11 +173,29 @@ typename std::bitset<kKnownFormatCount>::reference FormatSet::operator[](const F
 
 // For the enum for formats are packed but this might change when we have a broader feature
 // mechanism for webgpu.h. Formats start at 1 because 0 is the undefined format.
+// Dawn internal formats start with a prefix. We strip the prefix and then pack
+// them after the last WebGPU format.
 FormatIndex ComputeFormatIndex(wgpu::TextureFormat format) {
-    // This takes advantage of overflows to make the index of TextureFormat::Undefined outside
-    // of the range of the FormatTable.
-    static_assert(static_cast<uint32_t>(wgpu::TextureFormat::Undefined) - 1 > kKnownFormatCount);
-    return static_cast<FormatIndex>(static_cast<uint32_t>(format) - 1);
+    uint32_t formatValue = static_cast<uint32_t>(format);
+    switch (formatValue & kEnumPrefixMask) {
+        case 0:
+            // This takes advantage of overflows to make the index of TextureFormat::Undefined
+            // outside of the range of the FormatTable.
+            static_assert(static_cast<uint32_t>(wgpu::TextureFormat::Undefined) - 1 >
+                          kKnownFormatCount);
+            return static_cast<FormatIndex>(formatValue - 1);
+        case kDawnEnumPrefix: {
+            uint32_t dawnIndex = formatValue & ~kEnumPrefixMask;
+            if (dawnIndex < kDawnFormatCount) {
+                return static_cast<FormatIndex>(dawnIndex + kWebGPUFormatCount);
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    // Invalid format. Return an index outside the format table.
+    return FormatIndex(~0);
 }
 
 FormatTable BuildFormatTable(const DeviceBase* device) {
@@ -266,6 +284,7 @@ FormatTable BuildFormatTable(const DeviceBase* device) {
                 switch (sampleTypes) {
                     case SampleTypeBit::Float:
                     case SampleTypeBit::UnfilterableFloat:
+                    case SampleTypeBit::External:
                         firstAspect->baseType = TextureComponentType::Float;
                         break;
                     case SampleTypeBit::Sint:
@@ -460,6 +479,9 @@ FormatTable BuildFormatTable(const DeviceBase* device) {
     AddColorFormat(wgpu::TextureFormat::RGBA8Snorm, Cap::StorageROrW, ByteSize(4), kAnyFloat, ComponentCount(4));
     AddColorFormat(wgpu::TextureFormat::RGBA8Uint, Cap::Renderable | Cap::StorageROrW | Cap::Multisample, ByteSize(4), SampleTypeBit::Uint, ComponentCount(4), RenderTargetPixelByteCost(4), RenderTargetComponentAlignment(1));
     AddColorFormat(wgpu::TextureFormat::RGBA8Sint, Cap::Renderable | Cap::StorageROrW | Cap::Multisample, ByteSize(4), SampleTypeBit::Sint, ComponentCount(4), RenderTargetPixelByteCost(4), RenderTargetComponentAlignment(1));
+
+    const UnsupportedReason externalUnsupportedReason = device->HasFeature(Feature::YCbCrVulkanSamplers) ?  Format::supported : RequiresFeature{wgpu::FeatureName::YCbCrVulkanSamplers};
+    AddConditionalColorFormat(wgpu::TextureFormat::External, externalUnsupportedReason, Cap::None, ByteSize(1), SampleTypeBit::External, ComponentCount(0));
 
     auto BGRA8UnormSupportsStorageUsage = device->HasFeature(Feature::BGRA8UnormStorage) ? Cap::StorageROrW : Cap::None;
     AddColorFormat(wgpu::TextureFormat::BGRA8Unorm, Cap::Renderable | BGRA8UnormSupportsStorageUsage | Cap::Multisample | Cap::Resolve, ByteSize(4), kAnyFloat, ComponentCount(4), RenderTargetPixelByteCost(8), RenderTargetComponentAlignment(1));

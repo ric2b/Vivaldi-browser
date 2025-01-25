@@ -14,7 +14,6 @@
 
 class Browser;
 @protocol BrowserCommands;
-@protocol BrowsingDataCommands;
 enum class DefaultBrowserSettingsPageSource;
 @protocol SettingsRootViewControlling;
 @protocol SnackbarCommands;
@@ -55,7 +54,8 @@ extern NSString* const kSettingsDoneButtonId;
 + (instancetype)
     mainSettingsControllerForBrowser:(Browser*)browser
                             delegate:(id<SettingsNavigationControllerDelegate>)
-                                         delegate;
+                                         delegate
+            hasDefaultBrowserBlueDot:(BOOL)hasDefaultBrowserBlueDot;
 
 // Creates a new AccountsTableViewController and the chrome around it.
 // `browser` is the browser where settings are being displayed and should not be
@@ -122,6 +122,7 @@ extern NSString* const kSettingsDoneButtonId;
                                        delegate
                              credential:
                                  (password_manager::CredentialUIEntry)credential
+                             inEditMode:(BOOL)editMode
                        showCancelButton:(BOOL)showCancelButton;
 
 // Creates and displays a new UIViewController for user to report an issue.
@@ -134,6 +135,19 @@ extern NSString* const kSettingsDoneButtonId;
                             delegate:(id<SettingsNavigationControllerDelegate>)
                                          delegate
                     userFeedbackData:(UserFeedbackData*)userFeedbackData;
+
+// Creates a new AutofillProfileEditTableViewController and the
+// chrome around it. `browser` is the browser where settings are being displayed
+// and should not be nil. `delegate` may be nil. `address` is the address for
+// which the details should be opened.
++ (instancetype)
+    addressDetailsControllerForBrowser:(Browser*)browser
+                              delegate:
+                                  (id<SettingsNavigationControllerDelegate>)
+                                      delegate
+                               address:(const autofill::AutofillProfile*)address
+                            inEditMode:(BOOL)editMode
+                 offerMigrateToAccount:(BOOL)offerMigrateToAccount;
 
 // Creates a new AutofillProfileTableViewController and the chrome around
 // it. `browser` is the browser where settings are being displayed and should
@@ -169,7 +183,8 @@ extern NSString* const kSettingsDoneButtonId;
                                           (id<SettingsNavigationControllerDelegate>)
                                               delegate
                                     creditCard:
-                                        (const autofill::CreditCard*)creditCard;
+                                        (const autofill::CreditCard*)creditCard
+                                    inEditMode:(BOOL)editMode;
 
 // Creates a new DefaultBrowserSettingsTableViewController and the chrome
 // around it. `browser` is the browser where settings are being displayed and
@@ -253,8 +268,13 @@ extern NSString* const kSettingsDoneButtonId;
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
+// Returns a new Cancel button for a UINavigationItem which will call
+// `closeSettings` when it is pressed. Should only be called by view controllers
+// owned by SettingsNavigationController.
+- (UIBarButtonItem*)cancelButton;
+
 // Returns a new Done button for a UINavigationItem which will call
-// closeSettings when it is pressed. Should only be called by view controllers
+// `closeSettings` when it is pressed. Should only be called by view controllers
 // owned by SettingsNavigationController.
 - (UIBarButtonItem*)doneButton;
 

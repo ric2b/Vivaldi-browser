@@ -189,7 +189,7 @@ const std::string ImportItemToString(importer::ImportItem item) {
   }
   // Missing datatype in the array?
   NOTREACHED();
-  return nullptr;
+  //return nullptr;
 }
 
 
@@ -511,6 +511,22 @@ void ImportDataGetProfilesFunction::Finished() {
   namespace Results = vivaldi::import_data::GetProfiles::Results;
 
   std::vector<vivaldi::import_data::ProfileItem> nodes;
+  const auto appendProfileToImporter =
+      [&nodes](const auto& importer_index,
+               const importer::SourceProfile& source_profile,
+               std::optional<int> profile_index = std::nullopt) {
+        vivaldi::import_data::UserProfileItem profile;
+        profile.profile_name = profile.profile_display_name =
+            base::UTF16ToUTF8(source_profile.profile);
+        profile.profile_path = toSystemUTF(source_profile.source_path.value());
+        profile.index = profile_index;
+
+        if (!profile.profile_name.empty() && !profile.profile_path->empty()) {
+          nodes.at(importer_index)
+              .user_profiles.emplace_back(std::move(profile));
+        }
+      };
+
   std::map<std::string, int> importersNamesLUT;
   for (size_t i = 0; i < api_importer_list_->count(); ++i) {
     const importer::SourceProfile& source_profile =
@@ -520,11 +536,7 @@ void ImportDataGetProfilesFunction::Finished() {
     const auto importerName = base::UTF16ToUTF8(source_profile.importer_name);
     if (auto it = importersNamesLUT.find(importerName);
         it != importersNamesLUT.end()) {
-      vivaldi::import_data::UserProfileItem profile;
-      profile.profile_name = profile.profile_display_name =
-          base::UTF16ToUTF8(source_profile.profile);
-      profile.profile_path = toSystemUTF(source_profile.source_path.value());
-      nodes.at(it->second).user_profiles.emplace_back(std::move(profile));
+      appendProfileToImporter(it->second, source_profile, i);
       continue;
     }
     nodes.emplace_back();
@@ -533,7 +545,7 @@ void ImportDataGetProfilesFunction::Finished() {
     uint16_t browser_services = source_profile.services_supported;
 
     profile->name = importerName;
-    profile->index = importersNamesLUT.size();
+    profile->index = i;
     importersNamesLUT.emplace(profile->name, profile->index);
 
     profile->history = ((browser_services & importer::HISTORY) != 0);
@@ -555,6 +567,11 @@ void ImportDataGetProfilesFunction::Finished() {
     if (profile->has_default_install) {
       profile->detected_profile_path = toSystemUTF(source_profile.source_path.value());
     } else {
+      // To be able to detect Safari, first we need to
+      // obtain a permission from the user.
+      profile->requires_access_permission =
+          profile->import_type == ImportTypes::kSafari;
+
       profile->requires_interactive_import = true;
       profile->suggested_profile_path =
           MapSuggestedProfilePath(profile->import_type);
@@ -575,9 +592,13 @@ void ImportDataGetProfilesFunction::Finished() {
           source_profile.user_profile_names.at(j).profileDisplayName);
       profItem->profile_name =
           source_profile.user_profile_names.at(j).profileName;
+      profItem->index = profile->index;
     }
 
     profile->user_profiles = std::move(profileItems);
+
+    // NOTE(konrad@vivaldi.com): VB-76639 To distinguish firefox profiles
+    appendProfileToImporter(profile->index, source_profile);
   }
 
   Respond(ArgumentList(Results::Create(nodes)));

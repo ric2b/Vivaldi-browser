@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {describeWithLocale} from '../../testing/EnvironmentHelpers.js';
+import type * as Platform from '../platform/platform.js';
+
 import * as i18n from './i18n.js';
 
-describe('preciseMillisToString', () => {
+describeWithLocale('preciseMillisToString', () => {
   it('formats without a given precision', () => {
     const inputNumber = 7.84;
     const outputString = i18n.TimeUtilities.preciseMillisToString(inputNumber);
@@ -19,7 +22,50 @@ describe('preciseMillisToString', () => {
   });
 });
 
-describe('millisToString', () => {
+describeWithLocale('formatMicroSecondsTime', () => {
+  const {formatMicroSecondsTime} = i18n.TimeUtilities;
+
+  it('formats small microsecond values', async () => {
+    const time = 8 as Platform.Timing.MicroSeconds;
+    assert.strictEqual(formatMicroSecondsTime(time), '8\xA0μs');
+  });
+
+  it('formats larger microsecond values as milliseconds', async () => {
+    const time = 892 as Platform.Timing.MicroSeconds;
+    assert.strictEqual(formatMicroSecondsTime(time), '0.89\xA0ms');
+  });
+
+  it('formats milliseconds', async () => {
+    const time = 8.9122 * 1_000 as Platform.Timing.MicroSeconds;
+    assert.strictEqual(formatMicroSecondsTime(time), '8.91\xA0ms');
+  });
+
+  it('formats seconds', async () => {
+    const time = 8.9122 * 1_000 * 1_000 as Platform.Timing.MicroSeconds;
+    assert.strictEqual(formatMicroSecondsTime(time), '8.91\xA0s');
+  });
+
+  it('formats minutes', async () => {
+    // 203 = 3 minutes, 23 seconds
+    const time = 203 * 1_000 * 1_000 as Platform.Timing.MicroSeconds;
+    assert.strictEqual(formatMicroSecondsTime(time), '3.4\xA0min');
+  });
+});
+
+describeWithLocale('formatMicroSecondsAsSeconds', () => {
+  const {formatMicroSecondsAsSeconds} = i18n.TimeUtilities;
+  it('formats smaller second values', async () => {
+    const time = 0.03 * 1_000 * 1_000 as Platform.Timing.MicroSeconds;
+    assert.strictEqual(formatMicroSecondsAsSeconds(time), '0.03\xA0s');
+  });
+
+  it('formats larger second values', async () => {
+    const time = 8.9122 * 1_000 * 1_000 as Platform.Timing.MicroSeconds;
+    assert.strictEqual(formatMicroSecondsAsSeconds(time), '8.91\xA0s');
+  });
+});
+
+describeWithLocale('millisToString', () => {
   it('formats when number is infinite', () => {
     const inputNumber = Infinity;
     const outputString = i18n.TimeUtilities.millisToString(inputNumber);
@@ -78,7 +124,7 @@ describe('millisToString', () => {
   });
 });
 
-describe('secondsToString', () => {
+describeWithLocale('secondsToString', () => {
   it('formats infinte numbers correctly', () => {
     const inputNumber = Infinity;
     const outputString = i18n.TimeUtilities.secondsToString(inputNumber);

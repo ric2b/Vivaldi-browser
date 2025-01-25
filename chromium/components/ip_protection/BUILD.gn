@@ -9,9 +9,17 @@ source_set("ip_protection") {
   sources = [
     "ip_protection_config_provider_helper.cc",
     "ip_protection_config_provider_helper.h",
+    "ip_protection_proxy_config_fetcher.cc",
+    "ip_protection_proxy_config_fetcher.h",
     "ip_protection_proxy_config_retriever.cc",
     "ip_protection_proxy_config_retriever.h",
   ]
+  if (is_android) {
+    sources += [
+      "blind_sign_message_android_impl.cc",
+      "blind_sign_message_android_impl.h",
+    ]
+  }
   deps = [
     ":get_proxy_config_proto",
     "//base",
@@ -23,24 +31,47 @@ source_set("ip_protection") {
     "//services/network/public/cpp:cpp",
     "//services/network/public/mojom:mojom",
   ]
+
+  public_deps = [ "//third_party/anonymous_tokens:anonymous_tokens_cc_proto" ]
+
+  if (is_android) {
+    deps += [
+      "//components/ip_protection/android_auth_client_lib/cpp:jni_headers",
+      "//components/ip_protection/android_auth_client_lib/cpp:native",
+    ]
+  }
 }
 
 source_set("unit_tests") {
   testonly = true
 
-  sources = [ "ip_protection_proxy_config_retriever_unittest.cc" ]
+  sources = [
+    "ip_protection_proxy_config_fetcher_unittest.cc",
+    "ip_protection_proxy_config_retriever_unittest.cc",
+  ]
+
+  if (is_android) {
+    sources += [ "blind_sign_message_android_impl_unittest.cc" ]
+  }
 
   deps = [
     ":get_proxy_config_proto",
     ":ip_protection",
     "//base",
     "//base/test:test_support",
-    "//net:net",
+    "//net/third_party/quiche:blind_sign_auth",
     "//net/traffic_annotation:test_support",
     "//services/network:test_support",
     "//services/network/public/cpp:cpp",
     "//testing/gtest",
   ]
+
+  if (is_android) {
+    deps += [
+      "//components/ip_protection/android_auth_client_lib/cpp:jni_headers",
+      "//components/ip_protection/android_auth_client_lib/cpp:native",
+    ]
+  }
 }
 
 proto_library("get_proxy_config_proto") {

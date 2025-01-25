@@ -17,7 +17,6 @@
 #include "base/debug/crash_logging.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/layers/deadline_policy.h"
@@ -240,22 +239,6 @@ void ShellSurface::AcknowledgeConfigure(uint32_t serial) {
 void ShellSurface::SetParent(ShellSurface* parent) {
   TRACE_EVENT1("exo", "ShellSurface::SetParent", "parent",
                parent ? base::UTF16ToASCII(parent->GetWindowTitle()) : "null");
-
-  // Some apps are trying to parent to its descendant, e.g. b/342265753. Add
-  // crash keys here to find out the causes.
-  const std::string* app_id = GetShellApplicationId(host_window());
-  SCOPED_CRASH_KEY_STRING256("342265753", "app id", app_id ? *app_id : "null");
-  SCOPED_CRASH_KEY_STRING256("342265753", "app title",
-                             base::UTF16ToUTF8(GetWindowTitle()));
-
-  const std::string* parent_id =
-      parent ? GetShellApplicationId(parent->host_window()) : nullptr;
-  SCOPED_CRASH_KEY_STRING256("342265753", "parent app id",
-                             parent_id ? *parent_id : "null");
-  SCOPED_CRASH_KEY_STRING256(
-      "342265753", "parent title",
-      parent ? base::UTF16ToUTF8(parent->GetWindowTitle()) : "null");
-
   SetParentWindow(parent ? parent->GetWidget()->GetNativeWindow() : nullptr);
 }
 
@@ -615,7 +598,8 @@ gfx::Point ShellSurface::GetSurfaceOrigin() const {
                         client_bounds.height() - visible_bounds.height()) -
              visible_bounds.OffsetFromOrigin();
     default:
-      NOTREACHED() << "Unsupported component:" << resize_component_;
+      NOTREACHED_IN_MIGRATION()
+          << "Unsupported component:" << resize_component_;
       return gfx::Point();
   }
 }
@@ -978,22 +962,37 @@ void ShellSurface::OnLayerRecreated(ui::Layer* old_layer) {
   } else {
     old_layer->SetName(old_layer->name() + "-old-no-surface");
   }
+  CHECK(old_layer->parent());
+  CHECK(host_window()->layer()->parent());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // ShellSurface, private:
 
 void ShellSurface::SetParentWindow(aura::Window* new_parent) {
-  if (new_parent && GetWidget() &&
-      new_parent == GetWidget()->GetNativeWindow()) {
-    // Some apps e.g. crbug/1210235 try to be their own parent. Ignore them to
-    // prevent chrome from locking up/crashing.
-    auto* app_id = GetShellApplicationId(host_window());
-    LOG(WARNING)
-        << "Client attempts to add itself as a transient parent: app_id="
-        << app_id;
-    return;
+  if (new_parent && widget_) {
+    const aura::Window* window = widget_->GetNativeWindow();
+    const aura::Window* ancestor = new_parent;
+    while (ancestor) {
+      if (ancestor == window) {
+        // Some apps try to be their own parent, e.g. crbug/1210235, or parent
+        // to its ancestors, e.g., b/342265753. Ignore them to prevent chrome
+        // from locking up/crashing.
+        auto* app_id = GetShellApplicationId(host_window());
+        LOG(WARNING) << "Client attempts to parent to itself or its transient "
+                        "ancestors: app_id="
+                     << app_id;
+        return;
+      }
+
+      auto* transient_window_manager =
+          wm::TransientWindowManager::GetIfExists(ancestor);
+      ancestor = transient_window_manager
+                     ? transient_window_manager->transient_parent()
+                     : nullptr;
+    }
   }
+
   if (parent()) {
     parent()->RemoveObserver(this);
     if (widget_) {

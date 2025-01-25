@@ -5,14 +5,13 @@
 #ifndef V8_SANDBOX_EXTERNAL_POINTER_TABLE_H_
 #define V8_SANDBOX_EXTERNAL_POINTER_TABLE_H_
 
-#include <vector>
-
 #include "include/v8config.h"
 #include "src/base/atomicops.h"
 #include "src/base/memory.h"
 #include "src/base/platform/mutex.h"
 #include "src/common/globals.h"
 #include "src/sandbox/compactible-external-entity-table.h"
+#include "src/sandbox/tagged-payload.h"
 #include "src/utils/allocation.h"
 
 #ifdef V8_COMPRESS_POINTERS
@@ -101,74 +100,22 @@ struct ExternalPointerTableEntry {
   // Mark this entry as alive during table garbage collection.
   inline void Mark();
 
+  static constexpr bool IsWriteProtected = false;
+
  private:
   friend class ExternalPointerTable;
 
-  // ExternalPointerTable entries consist of a single pointer-sized word
-  // containing a tag and marking bit together with the actual content (e.g. an
-  // external pointer).
-  struct Payload {
-    Payload(Address pointer, ExternalPointerTag tag)
-        : encoded_word_(Tag(pointer, tag)) {}
-
-    Address Untag(ExternalPointerTag tag) const { return encoded_word_ & ~tag; }
-
-    static Address Tag(Address pointer, ExternalPointerTag tag) {
-      return pointer | tag;
-    }
-
-    bool IsTaggedWith(ExternalPointerTag tag) const {
-      // We have to explicitly ignore the marking bit (which is part of the
-      // tag) since an unmarked entry with tag kXyzTag is still considered to
-      // be tagged with kXyzTag.
-      uint64_t expected = tag & ~kExternalPointerMarkBit;
-      uint64_t actual = encoded_word_ & kExternalPointerTagMaskWithoutMarkBit;
-      return expected == actual;
-    }
-
-    void SetMarkBit() { encoded_word_ |= kExternalPointerMarkBit; }
-
-    void ClearMarkBit() { encoded_word_ &= ~kExternalPointerMarkBit; }
-
-    bool HasMarkBitSet() const {
-      return (encoded_word_ & kExternalPointerMarkBit) != 0;
-    }
-
-    ExternalPointerTag ExtractTag() const {
-      return static_cast<ExternalPointerTag>(
-          (encoded_word_ & kExternalPointerTagMask) | kExternalPointerMarkBit);
-    }
-
-    bool ContainsFreelistLink() const {
-      return IsTaggedWith(kExternalPointerFreeEntryTag);
-    }
-
-    uint32_t ExtractFreelistLink() const {
-      return static_cast<uint32_t>(encoded_word_);
-    }
-
-    bool ContainsEvacuationEntry() const {
-      return IsTaggedWith(kExternalPointerEvacuationEntryTag);
-    }
-
-    Address ExtractEvacuationEntryHandleLocation() const {
-      return Untag(kExternalPointerEvacuationEntryTag);
-    }
-
-    bool ContainsExternalPointer() const {
-      return !ContainsFreelistLink() && !ContainsEvacuationEntry();
-    }
-
-    bool operator==(Payload other) const {
-      return encoded_word_ == other.encoded_word_;
-    }
-    bool operator!=(Payload other) const {
-      return encoded_word_ != other.encoded_word_;
-    }
-
-   private:
-    Address encoded_word_;
+  struct ExternalPointerTaggingScheme {
+    using TagType = ExternalPointerTag;
+    static constexpr uint64_t kMarkBit = kExternalPointerMarkBit;
+    static constexpr uint64_t kTagMask = kExternalPointerTagMask;
+    static constexpr TagType kFreeEntryTag = kExternalPointerFreeEntryTag;
+    static constexpr TagType kEvacuationEntryTag =
+        kExternalPointerEvacuationEntryTag;
+    static constexpr bool kSupportsEvacuation = true;
   };
+
+  using Payload = TaggedPayload<ExternalPointerTaggingScheme>;
 
   inline Payload GetRawPayload() {
     return payload_.load(std::memory_order_relaxed);
@@ -183,6 +130,9 @@ struct ExternalPointerTableEntry {
 #endif  // LEAK_SANITIZER
   }
 
+  // ExternalPointerTable entries consist of a single pointer-sized word
+  // containing a tag and marking bit together with the actual content (e.g. an
+  // external pointer).
   std::atomic<Payload> payload_;
 
 #if defined(LEAK_SANITIZER)
@@ -301,8 +251,7 @@ class V8_EXPORT_PRIVATE ExternalPointerTable
   ExternalPointerTable(const ExternalPointerTable&) = delete;
   ExternalPointerTable& operator=(const ExternalPointerTable&) = delete;
 
-  // The Spaces used by an ExternalPointerTable also contain the state related
-  // to compaction.
+  // The Spaces used by an ExternalPointerTable.
   struct Space : public Base::Space {
    public:
     // During table compaction, we may record the addresses of fields
@@ -439,6 +388,8 @@ class V8_EXPORT_PRIVATE ExternalPointerTable
   static inline uint32_t HandleToIndex(ExternalPointerHandle handle);
   static inline ExternalPointerHandle IndexToHandle(uint32_t index);
 
+  inline void TakeOwnershipOfManagedResourceIfNecessary(
+      Address value, ExternalPointerHandle handle, ExternalPointerTag tag);
   inline void FreeManagedResourceIfPresent(uint32_t entry_index);
 
   void ResolveEvacuationEntryDuringSweeping(

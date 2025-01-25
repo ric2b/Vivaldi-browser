@@ -4,7 +4,6 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
@@ -27,7 +26,7 @@
 // The background Image for Speed Dial
 @property(nonatomic, strong) UIImageView* backgroundImageView;
 // Bookmark Model that holds the bookmark data
-@property(assign,nonatomic) LegacyBookmarkModel* bookmarks;
+@property(assign,nonatomic) BookmarkModel* bookmarks;
 // FaviconLoader is a keyed service that uses LargeIconService to retrieve
 // favicon images.
 @property(assign,nonatomic) FaviconLoader* faviconLoader;
@@ -63,7 +62,7 @@
 #pragma mark - INITIALIZERS
 + (instancetype)initWithItem:(VivaldiSpeedDialItem*)item
                       parent:(VivaldiSpeedDialItem*)parent
-                   bookmarks:(LegacyBookmarkModel*)bookmarks
+                   bookmarks:(BookmarkModel*)bookmarks
                      browser:(Browser*)browser
                faviconLoader:(FaviconLoader*)faviconLoader
              backgroundImage:(UIImage*)backgroundImage {
@@ -81,7 +80,7 @@
   return controller;
 }
 
-- (instancetype)initWithBookmarks:(LegacyBookmarkModel*)bookmarks
+- (instancetype)initWithBookmarks:(BookmarkModel*)bookmarks
                           browser:(Browser*)browser {
   self = [super init];
   if (self) {
@@ -365,6 +364,11 @@
                     fromView:(UIView*)view {
   if (self.delegate)
     [self.delegate didSelectItemToShare:item parent:parent fromView:view];
+}
+
+- (void)didTapOnCollectionViewEmptyArea {
+  if (self.delegate)
+    [self.delegate didTapOnCollectionViewEmptyArea];
 }
 
 @end

@@ -8,9 +8,9 @@
 
 #include <assert.h>
 #include <stdarg.h>
-#include <string.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #ifdef _WIN32
   #include <windows.h>
 #else
@@ -32,7 +32,7 @@
   #endif
 #endif
 
-#include <xnnpack/log.h>
+#include "xnnpack/log.h"
 
 
 /* Messages up to this size are formatted entirely on-stack, and don't allocate heap memory */

@@ -30,6 +30,17 @@ class CC_EXPORT LayerTreeSettings {
   SchedulerSettings ToSchedulerSettings() const;
   TileManagerSettings ToTileManagerSettings() const;
 
+  // If true, this tree doesn't draw itself. Instead upon activation it pushes
+  // differential updates to a remote (GPU-side) display tree which is drawn
+  // using tile resources prepared by this tree.
+  bool UseLayerContextForDisplay() const;
+
+  // If true, this is a GPU-side display tree receiving updates from a remote
+  // client via the LayerContext API. Such trees do no raster work of their own
+  // and submit compositor frames directly within Viz using tiles rastered by
+  // the remote client.
+  bool is_display_tree = false;
+
   bool single_thread_proxy_scheduler = true;
   bool main_frame_before_activation_enabled = false;
   bool using_synchronous_renderer_compositor = false;
@@ -124,8 +135,8 @@ class CC_EXPORT LayerTreeSettings {
   // rendered in a different process from its ancestor frames.
   bool is_for_embedded_frame = false;
 
-  // Indicates when the LayerTree is for a portal element, GuestView, or top
-  // level frame. In all these cases we may have a page scale.
+  // Indicates when the LayerTree is for a GuestView or top level frame. In all
+  // these cases we may have a page scale.
   bool is_for_scalable_page = true;
 
   // Determines whether we disallow non-exact matches when finding resources
@@ -228,11 +239,6 @@ class CC_EXPORT LayerTreeSettings {
 
   // Whether to use variable refresh rates when generating begin frames.
   bool enable_variable_refresh_rate = false;
-};
-
-class CC_EXPORT LayerListSettings : public LayerTreeSettings {
- public:
-  LayerListSettings() { use_layer_lists = true; }
 };
 
 }  // namespace cc

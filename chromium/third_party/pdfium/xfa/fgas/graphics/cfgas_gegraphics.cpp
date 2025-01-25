@@ -4,22 +4,20 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "xfa/fgas/graphics/cfgas_gegraphics.h"
 
 #include <math.h>
 
+#include <array>
 #include <iterator>
 #include <memory>
 #include <utility>
 
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/span_util.h"
+#include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
 #include "core/fxge/cfx_renderdevice.h"
 #include "core/fxge/cfx_unicodeencoding.h"
@@ -37,7 +35,7 @@ struct FX_HATCHDATA {
   uint8_t maskBits[64];
 };
 
-const FX_HATCHDATA kHatchBitmapData[] = {
+constexpr auto kHatchBitmapData = fxcrt::ToArray<const FX_HATCHDATA>({
     {16,  // Horizontal
      16,
      {
@@ -98,7 +96,7 @@ const FX_HATCHDATA kHatchBitmapData[] = {
          0x18, 0x18, 0x00, 0x00, 0x18, 0x18, 0x00, 0x00, 0x24, 0x24, 0x00,
          0x00, 0x42, 0x42, 0x00, 0x00, 0x81, 0x81, 0x00, 0x00,
      }},
-};
+});
 
 const FX_HATCHDATA kHatchPlaceHolder = {
     0,
@@ -261,9 +259,9 @@ void CFGAS_GEGraphics::FillPathWithPattern(
 
   auto mask = pdfium::MakeRetain<CFX_DIBitmap>();
   CHECK(mask->Create(data.width, data.height, FXDIB_Format::k1bppMask));
-  fxcrt::spancpy(
-      mask->GetWritableBuffer(),
-      pdfium::make_span(data.maskBits).first(mask->GetPitch() * data.height));
+  fxcrt::Copy(
+      pdfium::make_span(data.maskBits).first(mask->GetPitch() * data.height),
+      mask->GetWritableBuffer());
   const CFX_FloatRect rectf =
       matrix.TransformRect(path.GetPath().GetBoundingBox());
   const FX_RECT rect = rectf.ToRoundedFxRect();
@@ -303,9 +301,7 @@ void CFGAS_GEGraphics::FillPathWithShading(
       float y_span = end_y - start_y;
       float axis_len_square = (x_span * x_span) + (y_span * y_span);
       for (int32_t row = 0; row < height; row++) {
-        uint32_t* dib_buf =
-            fxcrt::reinterpret_span<uint32_t>(bmp->GetWritableScanline(row))
-                .data();
+        uint32_t* dib_buf = bmp->GetWritableScanlineAs<uint32_t>(row).data();
         for (int32_t column = 0; column < width; column++) {
           float scale = 0.0f;
           if (axis_len_square) {
@@ -323,9 +319,8 @@ void CFGAS_GEGraphics::FillPathWithShading(
               scale = 1.0f;
             }
           }
-          int32_t index =
-              static_cast<int32_t>(scale * (CFGAS_GEShading::kSteps - 1));
-          dib_buf[column] = m_info.fillColor.GetShading()->GetArgb(index);
+          UNSAFE_TODO(dib_buf[column]) =
+              m_info.fillColor.GetShading()->GetArgb(scale);
         }
       }
       result = true;
@@ -338,9 +333,7 @@ void CFGAS_GEGraphics::FillPathWithShading(
                 ((start_y - end_y) * (start_y - end_y)) -
                 ((start_r - end_r) * (start_r - end_r));
       for (int32_t row = 0; row < height; row++) {
-        uint32_t* dib_buf =
-            fxcrt::reinterpret_span<uint32_t>(bmp->GetWritableScanline(row))
-                .data();
+        uint32_t* dib_buf = bmp->GetWritableScanlineAs<uint32_t>(row).data();
         for (int32_t column = 0; column < width; column++) {
           float x = (float)(column);
           float y = (float)(row);
@@ -386,8 +379,8 @@ void CFGAS_GEGraphics::FillPathWithShading(
               continue;
             s = 1.0f;
           }
-          int index = static_cast<int32_t>(s * (CFGAS_GEShading::kSteps - 1));
-          dib_buf[column] = m_info.fillColor.GetShading()->GetArgb(index);
+          UNSAFE_TODO(dib_buf[column]) =
+              m_info.fillColor.GetShading()->GetArgb(s);
         }
       }
       result = true;

@@ -105,6 +105,11 @@ class HttpStreamFactory::JobController
       const ProxyInfo& used_proxy_info,
       std::unique_ptr<WebSocketHandshakeStreamBase> stream) override;
 
+  // Invoked when a QUIC job finished a DNS resolution.
+  void OnQuicHostResolution(const url::SchemeHostPort& destination,
+                            base::TimeTicks dns_resolution_start_time,
+                            base::TimeTicks dns_resolution_end_time) override;
+
   // Invoked when |job| fails to create a stream.
   void OnStreamFailed(Job* job, int status) override;
 
@@ -175,7 +180,7 @@ class HttpStreamFactory::JobController
   };
 
   void OnIOComplete(int result);
-  void OnResolveProxyError(int error);
+
   void RunLoop(int result);
   int DoLoop(int result);
   int DoResolveProxy();
@@ -288,9 +293,9 @@ class HttpStreamFactory::JobController
            (dns_alpn_h3_job_ ? 1 : 0);
   }
 
-  raw_ptr<HttpStreamFactory> factory_;
-  raw_ptr<HttpNetworkSession> session_;
-  raw_ptr<JobFactory> job_factory_;
+  const raw_ptr<HttpStreamFactory> factory_;
+  const raw_ptr<HttpNetworkSession> session_;
+  const raw_ptr<JobFactory> job_factory_;
 
   // Request will be handed out to factory once created. This just keeps an
   // reference and is safe as |request_| will notify |this| JobController

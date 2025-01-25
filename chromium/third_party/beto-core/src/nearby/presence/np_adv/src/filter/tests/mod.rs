@@ -13,11 +13,13 @@
 // limitations under the License.
 
 use crate::credential::book::CredentialBookBuilder;
-use crate::credential::KeySeedMatchedCredential;
+use crate::credential::matched::KeySeedMatchedCredential;
+use crate::extended::V1_ENCODING_UNENCRYPTED;
 use crate::filter::IdentityFilterType::Any;
 use crate::filter::{
     FilterOptions, FilterResult, NoMatch, V0DataElementsFilter, V0Filter, V1Filter,
 };
+use crate::header::{VERSION_HEADER_V0_UNENCRYPTED, VERSION_HEADER_V1};
 use crypto_provider_default::CryptoProviderImpl;
 
 mod actions_filter_tests;
@@ -42,9 +44,9 @@ fn top_level_match_v0_adv() {
     let result = filter.match_advertisement::<_, CryptoProviderImpl>(
         &empty_cred_book,
         &[
-            0x0,  // adv header
-            0x03, // public DE
-            0x16, 0x00, // actions
+            VERSION_HEADER_V0_UNENCRYPTED,
+            0x16,
+            0x00, // actions
         ],
     );
 
@@ -69,9 +71,9 @@ fn top_level_match_v0_adv_either() {
     let result = filter.match_advertisement::<_, CryptoProviderImpl>(
         &empty_cred_book,
         &[
-            0x0,  // adv header
-            0x03, // public DE
-            0x16, 0x00, // actions
+            VERSION_HEADER_V0_UNENCRYPTED,
+            0x16,
+            0x00, // actions
         ],
     );
 
@@ -96,10 +98,11 @@ fn top_level_no_match_v0_adv() {
     let result = filter.match_advertisement::<_, CryptoProviderImpl>(
         &empty_cred_book,
         &[
-            0x20, // V1 Advertisement header
+            VERSION_HEADER_V1,
             0x03, // Section Header
-            0x03, // Public Identity DE header
-            0x15, 0x03, // Length 1 Tx Power DE with value 3
+            V1_ENCODING_UNENCRYPTED,
+            0x15,
+            0x03, // Length 1 Tx Power DE with value 3
         ],
     );
 

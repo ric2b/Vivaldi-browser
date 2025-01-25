@@ -25,12 +25,15 @@ void FakeDlcserviceClient::Install(
     ProgressCallback progress_callback) {
   VLOG(1) << "Requesting to install DLC(s).";
   const std::string& id = install_request.id();
+  std::string error = GetInstallError();
   InstallResult install_result{
-      .error = GetInstallError(),
+      .error = error,
       .dlc_id = id,
       .root_path = install_root_path_,
   };
-  dlcs_with_content_.add_dlc_infos()->set_id(id);
+  if (!skip_adding_dlc_info_on_error_ || error == dlcservice::kErrorNone) {
+    dlcs_with_content_.add_dlc_infos()->set_id(id);
+  }
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(std::move(callback), std::move(install_result)));
@@ -87,7 +90,7 @@ void FakeDlcserviceClient::GetExistingDlcs(GetExistingDlcsCallback callback) {
 }
 
 void FakeDlcserviceClient::DlcStateChangedForTest(dbus::Signal* signal) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void FakeDlcserviceClient::NotifyObserversForTest(

@@ -63,6 +63,7 @@
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_file_handler_manager.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
+#include "chrome/browser/web_applications/proto/web_app_proto_package.pb.h"
 #include "chrome/browser/web_applications/scope_extension_info.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_chromeos_data.h"
@@ -296,7 +297,7 @@ apps::InstallSource GetInstallSource(
     case webapps::WebappInstallSource::WEBAPK_RESTORE:
       return apps::InstallSource::kSync;
     case webapps::WebappInstallSource::COUNT:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return apps::InstallSource::kUnknown;
   }
 }
@@ -486,9 +487,6 @@ void WebAppPublisherHelper::BadgeManagerDelegate::OnAppBadgeUpdated(
   if (!publisher_helper_) {
     return;
   }
-  if (IsAppServiceShortcut(app_id, *publisher_helper_->provider_)) {
-    return;
-  }
   apps::AppPtr app =
       publisher_helper_->app_notifications_.CreateAppWithHasBadgeStatus(
           publisher_helper_->app_type(), app_id);
@@ -669,11 +667,19 @@ apps::IntentFilters WebAppPublisherHelper::CreateIntentFiltersForWebApp(
 apps::AppPtr WebAppPublisherHelper::CreateWebApp(const WebApp* web_app) {
   DCHECK(!IsShuttingDown());
 
-  apps::Readiness readiness =
-      web_app->is_locally_installed()
-          ? (web_app->is_uninstalling() ? apps::Readiness::kUninstalledByUser
-                                        : apps::Readiness::kReady)
-          : apps::Readiness::kDisabledByUser;
+  apps::Readiness readiness;
+
+  switch (web_app->install_state()) {
+    case proto::InstallState::INSTALLED_WITH_OS_INTEGRATION:
+    case proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION:
+      readiness =
+          (web_app->is_uninstalling() ? apps::Readiness::kUninstalledByUser
+                                      : apps::Readiness::kReady);
+      break;
+    case proto::InstallState::SUGGESTED_FROM_ANOTHER_DEVICE:
+      readiness = apps::Readiness::kDisabledByUser;
+  }
+
 #if BUILDFLAG(IS_CHROMEOS)
   DCHECK(web_app->chromeos_data().has_value());
   if (web_app->chromeos_data()->is_disabled) {
@@ -694,8 +700,7 @@ apps::AppPtr WebAppPublisherHelper::CreateWebApp(const WebApp* web_app) {
 
   // Web App's publisher_id the start url.
   app->publisher_id = web_app->start_url().spec();
-  app->installer_package_id =
-      apps::PackageId(apps::PackageType::kWeb, web_app->manifest_id().spec());
+  app->installer_package_id = GetPackageId(*web_app);
 
   app->icon_key = apps::IconKey(GetIconEffects(web_app));
 
@@ -774,13 +779,8 @@ apps::AppPtr WebAppPublisherHelper::CreateWebApp(const WebApp* web_app) {
   }
 #endif
 
-  // For the window mode setting in app service, with shortstand enabled, this
-  // field is no longer needed. However we want to keep populating the value
-  // with shortstand disabled so that we can use it to show a user education
-  // nudge when the display mode is changed by shortstand.
-  app->window_mode =
-      ConvertDisplayModeToWindowMode(registrar().GetAppEffectiveDisplayMode(
-          web_app->app_id(), /*ignore_shortstand = */ true));
+  app->window_mode = ConvertDisplayModeToWindowMode(
+      registrar().GetAppEffectiveDisplayMode(web_app->app_id()));
 
   const auto login_mode = registrar().GetAppRunOnOsLoginMode(web_app->app_id());
   app->run_on_os_login = apps::RunOnOsLogin(
@@ -1327,9 +1327,6 @@ bool WebAppPublisherHelper::IsShuttingDown() const {
 
 void WebAppPublisherHelper::OnWebAppFileHandlerApprovalStateChanged(
     const webapps::AppId& app_id) {
-  if (IsAppServiceShortcut(app_id, *provider_)) {
-    return;
-  }
   const WebApp* web_app = GetWebApp(app_id);
   if (web_app) {
     delegate_->PublishWebApp(CreateWebApp(web_app));
@@ -1337,9 +1334,6 @@ void WebAppPublisherHelper::OnWebAppFileHandlerApprovalStateChanged(
 }
 
 void WebAppPublisherHelper::OnWebAppInstalled(const webapps::AppId& app_id) {
-  if (IsAppServiceShortcut(app_id, *provider_)) {
-    return;
-  }
   const WebApp* web_app = GetWebApp(app_id);
   if (web_app) {
     delegate_->PublishWebApp(CreateWebApp(web_app));
@@ -1348,9 +1342,6 @@ void WebAppPublisherHelper::OnWebAppInstalled(const webapps::AppId& app_id) {
 
 void WebAppPublisherHelper::OnWebAppInstalledWithOsHooks(
     const webapps::AppId& app_id) {
-  if (IsAppServiceShortcut(app_id, *provider_)) {
-    return;
-  }
   const WebApp* web_app = GetWebApp(app_id);
   if (web_app) {
     delegate_->PublishWebApp(CreateWebApp(web_app));
@@ -1359,9 +1350,6 @@ void WebAppPublisherHelper::OnWebAppInstalledWithOsHooks(
 
 void WebAppPublisherHelper::OnWebAppManifestUpdated(
     const webapps::AppId& app_id) {
-  if (IsAppServiceShortcut(app_id, *provider_)) {
-    return;
-  }
   const WebApp* web_app = GetWebApp(app_id);
   if (web_app) {
     auto app = CreateWebApp(web_app);
@@ -1411,9 +1399,6 @@ void WebAppPublisherHelper::OnAppRegistrarDestroyed() {
 void WebAppPublisherHelper::OnWebAppLastLaunchTimeChanged(
     const std::string& app_id,
     const base::Time& last_launch_time) {
-  if (IsAppServiceShortcut(app_id, *provider_)) {
-    return;
-  }
   const WebApp* web_app = GetWebApp(app_id);
   if (!web_app) {
     return;
@@ -1425,22 +1410,14 @@ void WebAppPublisherHelper::OnWebAppLastLaunchTimeChanged(
 void WebAppPublisherHelper::OnWebAppUserDisplayModeChanged(
     const webapps::AppId& app_id,
     mojom::UserDisplayMode user_display_mode) {
-  if (IsAppServiceShortcut(app_id, *provider_)) {
-    return;
-  }
-
   // If the app that changed display mode is not registered in app service, it
   // is because this was considered as a shortcut and now considered as an app
   // due to display mode change, in this case we should publish the full app.
   if (apps::AppServiceProxyFactory::GetForProfile(profile_)
           ->AppRegistryCache()
           .IsAppInstalled(app_id)) {
-    // For the window mode setting in app service, with shortstand enabled, this
-    // field is no longer needed. However we want to keep populating the value
-    // with shortstand disabled so that we can use it to show a user education
-    // nudge when the display mode is changed by shortstand.
-    PublishWindowModeUpdate(app_id, registrar().GetAppEffectiveDisplayMode(
-                                        app_id, /*ignore_shortstand = */ true));
+    PublishWindowModeUpdate(app_id,
+                            registrar().GetAppEffectiveDisplayMode(app_id));
   } else {
     const WebApp* web_app = GetWebApp(app_id);
     if (web_app) {
@@ -1452,9 +1429,6 @@ void WebAppPublisherHelper::OnWebAppUserDisplayModeChanged(
 void WebAppPublisherHelper::OnWebAppRunOnOsLoginModeChanged(
     const webapps::AppId& app_id,
     RunOnOsLoginMode run_on_os_login_mode) {
-  if (IsAppServiceShortcut(app_id, *provider_)) {
-    return;
-  }
   PublishRunOnOsLoginModeUpdate(app_id, run_on_os_login_mode);
 }
 
@@ -1464,9 +1438,6 @@ void WebAppPublisherHelper::OnWebAppRunOnOsLoginModeChanged(
 void WebAppPublisherHelper::OnWebAppDisabledStateChanged(
     const webapps::AppId& app_id,
     bool is_disabled) {
-  if (IsAppServiceShortcut(app_id, *provider_)) {
-    return;
-  }
   const WebApp* web_app = GetWebApp(app_id);
   if (!web_app) {
     return;
@@ -1494,9 +1465,6 @@ void WebAppPublisherHelper::OnWebAppsDisabledModeChanged() {
     // called and this method will update visibility and readiness of the newly
     // enabled app.
     if (provider_->policy_manager().IsWebAppInDisabledList(id)) {
-      if (IsAppServiceShortcut(id, *provider_)) {
-        continue;
-      }
       const WebApp* web_app = GetWebApp(id);
       if (!web_app) {
         continue;
@@ -1531,9 +1499,6 @@ void WebAppPublisherHelper::OnNotificationClosed(
   app_notifications_.RemoveNotification(notification_id);
 
   for (const auto& app_id : app_ids) {
-    if (IsAppServiceShortcut(app_id, *provider_)) {
-      continue;
-    }
     auto app =
         app_notifications_.CreateAppWithHasBadgeStatus(app_type(), app_id);
     DCHECK(app->has_badge.has_value());
@@ -1555,9 +1520,6 @@ void WebAppPublisherHelper::OnIsCapturingVideoChanged(
   if (!app_id) {
     return;
   }
-  if (IsAppServiceShortcut(*app_id, *provider_)) {
-    return;
-  }
   auto result = media_requests_.UpdateCameraState(*app_id, web_contents,
                                                   is_capturing_video);
   delegate_->ModifyWebAppCapabilityAccess(*app_id, result.camera,
@@ -1569,9 +1531,6 @@ void WebAppPublisherHelper::OnIsCapturingAudioChanged(
     bool is_capturing_audio) {
   const webapps::AppId* app_id = WebAppTabHelper::GetAppId(web_contents);
   if (!app_id) {
-    return;
-  }
-  if (IsAppServiceShortcut(*app_id, *provider_)) {
     return;
   }
   auto result = media_requests_.UpdateMicrophoneState(*app_id, web_contents,
@@ -1593,9 +1552,6 @@ void WebAppPublisherHelper::OnContentSettingChanged(
   }
 
   for (const WebApp& web_app : registrar().GetApps()) {
-    if (IsAppServiceShortcut(web_app.app_id(), *provider_)) {
-      continue;
-    }
     if (primary_pattern.Matches(web_app.start_url())) {
       auto app = std::make_unique<apps::App>(app_type(), web_app.app_id());
       app->permissions = CreatePermissions(&web_app);
@@ -1608,9 +1564,6 @@ void WebAppPublisherHelper::OnWebAppSettingsPolicyChanged() {
   DCHECK(!IsShuttingDown());
 
   for (const WebApp& web_app : registrar().GetApps()) {
-    if (IsAppServiceShortcut(web_app.app_id(), *provider_)) {
-      continue;
-    }
     delegate_->PublishWebApp(CreateWebApp(&web_app));
   }
 }
@@ -1662,7 +1615,8 @@ void WebAppPublisherHelper::ObserveWebAppSubsystems() {
 
 IconEffects WebAppPublisherHelper::GetIconEffects(const WebApp* web_app) {
   IconEffects icon_effects = IconEffects::kRoundCorners;
-  if (!web_app->is_locally_installed()) {
+  if (web_app->install_state() ==
+      proto::InstallState::SUGGESTED_FROM_ANOTHER_DEVICE) {
     icon_effects |= IconEffects::kBlocked;
   }
 
@@ -1688,9 +1642,6 @@ IconEffects WebAppPublisherHelper::GetIconEffects(const WebApp* web_app) {
 
 const WebApp* WebAppPublisherHelper::GetWebApp(
     const webapps::AppId& app_id) const {
-  if (IsAppServiceShortcut(app_id, *provider_)) {
-    return nullptr;
-  }
   return registrar().GetAppById(app_id);
 }
 
@@ -1736,6 +1687,11 @@ void WebAppPublisherHelper::LaunchAppWithIntentImpl(
 std::vector<std::string> WebAppPublisherHelper::GetPolicyIds(
     const WebApp& web_app) const {
   const auto& app_id = web_app.app_id();
+
+  if (web_app.isolation_data() && registrar().IsInstalledByPolicy(app_id)) {
+    // This is an IWA - and thus, web_bundle_id == policy_id == URL hostname
+    return {web_app.start_url().host()};
+  }
 
   std::vector<std::string> policy_ids;
 
@@ -1787,6 +1743,21 @@ std::vector<std::string> WebAppPublisherHelper::GetPolicyIds(
   return policy_ids;
 }
 
+apps::PackageId WebAppPublisherHelper::GetPackageId(
+    const WebApp& web_app) const {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (web_app.client_data().system_web_app_data) {
+    const std::optional<std::string_view> policy_id =
+        apps_util::GetPolicyIdForSystemWebAppType(
+            web_app.client_data().system_web_app_data->system_app_type);
+    if (policy_id) {
+      return apps::PackageId(apps::PackageType::kSystem, *policy_id);
+    }
+  }
+#endif
+  return apps::PackageId(apps::PackageType::kWeb, web_app.manifest_id().spec());
+}
+
 #if BUILDFLAG(IS_CHROMEOS)
 void WebAppPublisherHelper::UpdateAppDisabledMode(apps::App& app) {
   if (provider_->policy_manager().IsDisabledAppsModeHidden()) {
@@ -1818,9 +1789,6 @@ void WebAppPublisherHelper::UpdateAppDisabledMode(apps::App& app) {
 bool WebAppPublisherHelper::MaybeAddNotification(
     const std::string& app_id,
     const std::string& notification_id) {
-  if (IsAppServiceShortcut(app_id, *provider_)) {
-    return false;
-  }
   const WebApp* web_app = GetWebApp(app_id);
   if (!web_app) {
     return false;
@@ -1903,7 +1871,7 @@ void WebAppPublisherHelper::LaunchAppWithFilesCheckingUserPermission(
     case ApiApprovalState::kDisallowed:
       // We shouldn't have gotten this far (i.e. "open with" should not have
       // been selectable) if file handling was already disallowed for the app.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       std::move(launch_callback)
           .Run(/*allowed=*/false, /*remember_user_choice=*/false);
       break;

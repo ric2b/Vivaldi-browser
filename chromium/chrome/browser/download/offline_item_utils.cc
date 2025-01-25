@@ -169,7 +169,7 @@ OfflineItem OfflineItemUtils::CreateOfflineItem(const std::string& name_space,
       }
     } break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   // TODO(crbug.com/40582846): Set pending_state correctly.
@@ -318,7 +318,9 @@ std::u16string OfflineItemUtils::GetFailStateMessage(FailState fail_state) {
       break;
 
     case FailState::NO_FAILURE:
-      DUMP_WILL_BE_NOTREACHED_NORETURN();
+      // We reach here if the received bytes is zero. Ideally, we should have a
+      // separate FailState outside of download interrupt reasons, and pass the
+      // bytes info to every function that invokes this.
       [[fallthrough]];
     case FailState::CANNOT_DOWNLOAD:
       [[fallthrough]];

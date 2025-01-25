@@ -272,6 +272,28 @@ void RecordRefreshTokenRevokedFromSource(
   UMA_HISTOGRAM_ENUMERATION("Signin.RefreshTokenRevoked.Source", source);
 }
 
+#if BUILDFLAG(IS_IOS)
+void RecordSignoutConfirmationFromDataLossAlert(
+    SignoutDataLossAlertReason reason,
+    bool signout_confirmed) {
+  const char* histogram;
+  switch (reason) {
+    case SignoutDataLossAlertReason::kSignoutWithUnsyncedData:
+      histogram = "Sync.SignoutWithUnsyncedData";
+      break;
+    case SignoutDataLossAlertReason::kSignoutWithClearDataForManagedUser:
+      histogram = "Signin.SignoutAndClearDataFromManagedAccount";
+      break;
+  }
+  base::UmaHistogramBoolean(histogram, signout_confirmed);
+}
+
+void RecordSignoutForceClearDataChoice(bool force_clear_data) {
+  base::UmaHistogramBoolean("Signin.UserRequestedWipeDataOnSignout",
+                            force_clear_data);
+}
+#endif  // BUILDFLAG(IS_IOS)
+
 // --------------------------------------------------------------
 // User actions
 // --------------------------------------------------------------
@@ -372,10 +394,11 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point) {
           base::UserMetricsAction("Signin_Signin_FromNTPFeedTopPromo"));
       break;
     case AccessPoint::ACCESS_POINT_KALEIDOSCOPE:
-      NOTREACHED() << "Access point " << static_cast<int>(access_point)
-                   << " is only used to trigger non-sync sign-in and this"
-                   << " action should only be triggered for sync-enabled"
-                   << " sign-ins.";
+      NOTREACHED_IN_MIGRATION()
+          << "Access point " << static_cast<int>(access_point)
+          << " is only used to trigger non-sync sign-in and this"
+          << " action should only be triggered for sync-enabled"
+          << " sign-ins.";
       break;
     case AccessPoint::ACCESS_POINT_SYNC_ERROR_CARD:
     case AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
@@ -391,8 +414,9 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point) {
     case AccessPoint::ACCESS_POINT_PROFILE_MENU_SIGNOUT_CONFIRMATION_PROMPT:
     case AccessPoint::ACCESS_POINT_SETTINGS_SIGNOUT_CONFIRMATION_PROMPT:
     case AccessPoint::ACCESS_POINT_WEBAUTHN_MODAL_DIALOG:
-      NOTREACHED() << "Access point " << static_cast<int>(access_point)
-                   << " is not supposed to log signin user actions.";
+      NOTREACHED_IN_MIGRATION()
+          << "Access point " << static_cast<int>(access_point)
+          << " is not supposed to log signin user actions.";
       break;
     case AccessPoint::ACCESS_POINT_SAFETY_CHECK:
       VLOG(1) << "Signin_Signin_From* user action is not recorded "
@@ -474,8 +498,16 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point) {
       base::RecordAction(base::UserMetricsAction(
           "Signin_Signin_FromOidcRedirectionInterception"));
       break;
+    case AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN_WITH_SYNC_PROMO:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_Signin_FromAvatarBubbleSigninWithSyncPromo"));
+      break;
+    case AccessPoint::ACCESS_POINT_ACCOUNT_MENU:
+      base::RecordAction(
+          base::UserMetricsAction("Signin_Signin_FromAccountMenu"));
+      break;
     case AccessPoint::ACCESS_POINT_MAX:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -637,10 +669,12 @@ void RecordSigninImpressionUserActionForAccessPoint(AccessPoint access_point) {
     case AccessPoint::ACCESS_POINT_NTP_IDENTITY_DISC:
     case AccessPoint::ACCESS_POINT_OIDC_REDIRECTION_INTERCEPTION:
     case AccessPoint::ACCESS_POINT_WEBAUTHN_MODAL_DIALOG:
+    case AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN_WITH_SYNC_PROMO:
+    case AccessPoint::ACCESS_POINT_ACCOUNT_MENU:
     case AccessPoint::ACCESS_POINT_MAX:
-      NOTREACHED() << "Signin_Impression_From* user actions"
-                   << " are not recorded for access point "
-                   << static_cast<int>(access_point);
+      NOTREACHED_IN_MIGRATION() << "Signin_Impression_From* user actions"
+                                << " are not recorded for access point "
+                                << static_cast<int>(access_point);
       break;
   }
 }

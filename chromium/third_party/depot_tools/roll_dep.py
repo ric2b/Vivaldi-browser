@@ -16,6 +16,8 @@ import subprocess2
 import sys
 import tempfile
 
+import gclient_utils
+
 NEED_SHELL = sys.platform.startswith('win')
 GCLIENT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             'gclient.py')
@@ -247,6 +249,10 @@ def finalize(commit_msg, current_dir, rolls):
 
 
 def main():
+    if gclient_utils.IsEnvCog():
+        print('"roll-dep" is not supported in non-git environment',
+              file=sys.stderr)
+        return 1
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--ignore-dirty-tree',
                         action='store_true',

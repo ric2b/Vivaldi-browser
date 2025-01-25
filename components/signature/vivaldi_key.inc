@@ -21,5 +21,14 @@ constexpr const char* kECDSAPublicKeyCreationTime = "1709752345";
 
 constexpr const char* kSignedResourceDirectMatch =
     "https://downloads.vivaldi.com/directmatch/{}/directmatch.json";
+
+
+// Search engines
 constexpr const char* kSignedResourceSearchEngines =
     "https://downloads.vivaldi.com/search/{}/search_engines.json";
+
+constexpr const char* kSignedResourceSearchEnginesSopranos =
+  "https://downloads.vivaldi.com/search/sopranos/{}/search_engines.json";
+
+constexpr const char* kSignedResourceSearchEnginesSnapshot =
+  "https://downloads.vivaldi.com/search/snapshot/{}/search_engines.json";

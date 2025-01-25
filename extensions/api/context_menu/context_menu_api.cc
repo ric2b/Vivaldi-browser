@@ -21,6 +21,19 @@ namespace extensions {
 
 namespace context_menu = vivaldi::context_menu;
 
+
+// How it works
+// * Menus from UI. The ContextMenuShowFunction() will create a
+// ContextMenuController instance which will build the menu model based on the
+// provided parameters from JS. The controller will then make a platform menu
+// using the model so that chrome code can set it up.
+// * Menus from a page. In chrome code we create a VivaldiRenderViewContextMenu
+// instance. It examines the provided parameters from chrome to make a state
+// object we pass to JS using  ContextMenuAPI::RequestMenu(). JS will then use
+// that information to set up menu content and pass it to C++ again (here). From
+// then on handling is for the most part tha same as with "Menus from UI" above
+// (some exceptions where we test for the VivaldiRenderViewContextMenu instance).
+
 // static
 void ContextMenuAPI::RequestMenu(
     content::BrowserContext* browser_context,
@@ -74,11 +87,10 @@ ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
               "and call preventDefault() to block the standard menu"));
   }
 
-  // The controller deletes itself
-  ::vivaldi::ContextMenuController* controller =
-      new ::vivaldi::ContextMenuController(window->web_contents(),
-                                           rv_context_menu, std::move(params));
-  controller->Show();
+  ::vivaldi::ContextMenuController::Create(window->web_contents(),
+                                           rv_context_menu,
+                                           std::move(params))->Show();
+
   return RespondNow(ArgumentList(context_menu::Show::Results::Create()));
 }
 

@@ -21,20 +21,14 @@
 
 namespace webnn::dml {
 
+constexpr DML_FEATURE_LEVEL kMinDMLFeatureLevelForGpu = DML_FEATURE_LEVEL_4_0;
+constexpr DML_FEATURE_LEVEL kMinDMLFeatureLevelForNpu = DML_FEATURE_LEVEL_6_4;
+
 uint64_t CalculateDMLBufferTensorSize(DML_TENSOR_DATA_TYPE data_type,
                                       const std::vector<uint32_t>& dimensions,
                                       const std::vector<uint32_t>& strides);
 
 std::vector<uint32_t> CalculateStrides(base::span<const uint32_t> dimensions);
-
-// The length of `permutation` must be the same as `array`. The values in
-// `permutation` must be within the range [0, N-1] where N is the length of
-// `array`. There must be no two or more same values in `permutation`.
-//
-// e.g., Given an array of [10, 11, 12, 13] and a permutation of [0, 2, 3, 1],
-// the permuted array would be [10, 12, 13, 11].
-std::vector<uint32_t> PermuteArray(base::span<const uint32_t> array,
-                                   base::span<const uint32_t> permutation);
 
 // Gets the ID3D12Device used to create the IDMLDevice.
 Microsoft::WRL::ComPtr<ID3D12Device> GetD3D12Device(IDMLDevice* dml_device);
@@ -65,8 +59,22 @@ void COMPONENT_EXPORT(WEBNN_SERVICE) ReadbackBufferWithBarrier(
     Microsoft::WRL::ComPtr<ID3D12Resource> default_buffer,
     size_t buffer_size);
 
+// TODO(crbug.com/40278771): move buffer helpers into command recorder.
+void COMPONENT_EXPORT(WEBNN_SERVICE)
+    UploadBufferWithBarrier(CommandRecorder* command_recorder,
+                            BufferImplDml* dst_buffer,
+                            Microsoft::WRL::ComPtr<ID3D12Resource> src_buffer,
+                            size_t buffer_size);
+
+void COMPONENT_EXPORT(WEBNN_SERVICE)
+    ReadbackBufferWithBarrier(CommandRecorder* command_recorder,
+                              Microsoft::WRL::ComPtr<ID3D12Resource> dst_buffer,
+                              BufferImplDml* src_buffer,
+                              size_t buffer_size);
+
 mojom::ErrorPtr CreateError(mojom::Error::Code error_code,
-                            const std::string& error_message);
+                            const std::string& error_message,
+                            std::string_view label = "");
 
 // Create a resource with `size` bytes in
 // D3D12_RESOURCE_STATE_UNORDERED_ACCESS state from the default heap of the

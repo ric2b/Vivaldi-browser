@@ -14,11 +14,7 @@
 #include "platform/base/span.h"
 #include "util/osp_logging.h"
 
-namespace openscreen {
-
-class Error;
-
-namespace osp {
+namespace openscreen::osp {
 
 template <typename T>
 using MessageEncodingFunction =
@@ -48,7 +44,7 @@ class ProtocolConnection {
     virtual void OnConnectionClosed(const ProtocolConnection& connection) = 0;
   };
 
-  ProtocolConnection(uint64_t endpoint_id, uint64_t connection_id);
+  ProtocolConnection(uint64_t instance_id, uint64_t protocol_connection_id);
   virtual ~ProtocolConnection() = default;
 
   // TODO(mfoltz): Define extension API exposed to embedders.  This would be
@@ -79,35 +75,18 @@ class ProtocolConnection {
 
   // TODO(btolsch): This should be derived from the handshake auth identifier
   // when that is finalized and implemented.
-  uint64_t endpoint_id() const { return endpoint_id_; }
+  uint64_t instance_id() const { return instance_id_; }
   uint64_t id() const { return id_; }
 
-  virtual void Write(const ByteView& bytes) = 0;
+  virtual void Write(ByteView bytes) = 0;
   virtual void CloseWriteEnd() = 0;
 
  protected:
-  uint64_t endpoint_id_;
-  uint64_t id_;
+  uint64_t instance_id_ = 0u;
+  uint64_t id_ = 0u;
   Observer* observer_ = nullptr;
 };
 
-class ProtocolConnectionServiceObserver {
- public:
-  // Called when the state becomes kRunning.
-  virtual void OnRunning() = 0;
-  // Called when the state becomes kStopped.
-  virtual void OnStopped() = 0;
-
-  // Called when metrics have been collected by the service.
-  virtual void OnMetrics(const NetworkMetrics& metrics) = 0;
-  // Called when an error has occurred.
-  virtual void OnError(const Error& error) = 0;
-
- protected:
-  virtual ~ProtocolConnectionServiceObserver() = default;
-};
-
-}  // namespace osp
-}  // namespace openscreen
+}  // namespace openscreen::osp
 
 #endif  // OSP_PUBLIC_PROTOCOL_CONNECTION_H_

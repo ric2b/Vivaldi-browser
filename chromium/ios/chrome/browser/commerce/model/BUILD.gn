@@ -28,7 +28,7 @@ source_set("model") {
   ]
 }
 
-static_library("shopping_service") {
+source_set("shopping_service") {
   sources = [
     "shopping_service_factory.h",
     "shopping_service_factory.mm",
@@ -50,6 +50,8 @@ static_library("shopping_service") {
     "//ios/chrome/browser/bookmarks/model",
     "//ios/chrome/browser/history/model",
     "//ios/chrome/browser/optimization_guide/model",
+    "//ios/chrome/browser/parcel_tracking:features",
+    "//ios/chrome/browser/parcel_tracking:opt_in_status",
     "//ios/chrome/browser/power_bookmarks/model",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/browser_state",
@@ -60,7 +62,7 @@ static_library("shopping_service") {
   ]
 }
 
-static_library("session_proto_db") {
+source_set("session_proto_db") {
   sources = [
     "session_proto_db_factory.h",
     "session_proto_db_factory.mm",

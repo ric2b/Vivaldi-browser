@@ -301,3 +301,42 @@ test({0:0,1:0}, idView);
     });
   }
 })();
+
+// A case not supported by the clone IC.
+(function () {
+  function F0() {}
+  const v6 = new F0();
+  o9 = {
+   ...v6,
+  };
+})();
+
+// A case where the clone IC adds a transition to an existing transition array.
+(function () {
+  function f1() {}
+  function F2(a4) {
+    function f5() {}
+    a4.toString = f5;
+  }
+  const v7 = new F2(WeakSet);
+  const v8 = new F2(f1);
+  new F2(v8);
+  const o10 = {
+      ...v7,
+  };
+})();
+
+// A case where we copy from a smaller into a bigger object.
+(function() {
+  function F0() {
+  }
+  function F3() {
+      const v9 = new F0();
+      const o10 = {
+          ...v9,
+      };
+  }
+  new F3();
+  new F3();
+  new F3();
+})();

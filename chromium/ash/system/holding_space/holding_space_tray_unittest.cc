@@ -71,6 +71,7 @@
 #include "ui/gfx/geometry/transform_util.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/skia_util.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/menu/menu_controller.h"
@@ -163,11 +164,11 @@ void LongPress(const views::View* view) {
   event_generator.MoveTouch(view->GetBoundsInScreen().CenterPoint());
   const gfx::Point& press_location = event_generator.current_screen_location();
   ui::GestureEvent long_press =
-      BuildGestureEvent(press_location, ui::ET_GESTURE_LONG_PRESS);
+      BuildGestureEvent(press_location, ui::EventType::kGestureLongPress);
   event_generator.Dispatch(&long_press);
 
   ui::GestureEvent gesture_end =
-      BuildGestureEvent(press_location, ui::ET_GESTURE_END);
+      BuildGestureEvent(press_location, ui::EventType::kGestureEnd);
   event_generator.Dispatch(&gesture_end);
 }
 
@@ -542,9 +543,14 @@ class HoldingSpaceTrayTest : public HoldingSpaceTrayTestBase {
     // The section header's accessibility data should indicate whether the
     // section is expanded or collapsed.
     ui::AXNodeData node_data;
-    header->GetAccessibleNodeData(&node_data);
-    EXPECT_TRUE(node_data.HasState(expanded ? ax::mojom::State::kExpanded
-                                            : ax::mojom::State::kCollapsed));
+    header->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+    if (expanded) {
+      EXPECT_TRUE(node_data.HasState(ax::mojom::State::kExpanded));
+      EXPECT_FALSE(node_data.HasState(ax::mojom::State::kCollapsed));
+    } else {
+      EXPECT_TRUE(node_data.HasState(ax::mojom::State::kCollapsed));
+      EXPECT_FALSE(node_data.HasState(ax::mojom::State::kExpanded));
+    }
 
     // The section header's chevron icon should indicate whether the section is
     // expanded or collapsed.
@@ -587,40 +593,6 @@ TEST_F(HoldingSpaceTrayTest, BubbleHasExpectedWidth) {
   ASSERT_TRUE(bubble);
   ViewDrawnWaiter().Wait(bubble);
   EXPECT_EQ(bubble->width(), 360);
-}
-
-TEST_F(HoldingSpaceTrayTest, ShowTrayButtonWhenForced) {
-  // Case: Force show in shelf prior to session start.
-  auto force_show_in_shelf =
-      std::make_unique<HoldingSpaceController::ScopedForceShowInShelf>();
-  EXPECT_FALSE(test_api()->IsShowingInShelf());
-
-  // Case: Force show in shelf after session start with empty model.
-  StartSession(/*pre_mark_time_of_first_add=*/false);
-  EXPECT_TRUE(test_api()->IsShowingInShelf());
-
-  // Case: Force show in shelf with blocked user session.
-  auto* session_ctrlr = ash_test_helper()->test_session_controller_client();
-  session_ctrlr->SetSessionState(session_manager::SessionState::LOCKED);
-  EXPECT_FALSE(test_api()->IsShowingInShelf());
-
-  // Case: Force show in shelf with unblocked user session.
-  session_ctrlr->UnlockScreen();
-  EXPECT_TRUE(test_api()->IsShowingInShelf());
-
-  // Case: Force show in shelf with detached model.
-  auto account_id = Shell::Get()->session_controller()->GetActiveAccountId();
-  auto* controller = HoldingSpaceController::Get();
-  controller->RegisterClientAndModelForUser(account_id, client(), nullptr);
-  EXPECT_FALSE(test_api()->IsShowingInShelf());
-
-  // Case: Force show in shelf with attached model.
-  controller->RegisterClientAndModelForUser(account_id, client(), model());
-  EXPECT_TRUE(test_api()->IsShowingInShelf());
-
-  // Case: Stop forcing show in shelf with empty model.
-  force_show_in_shelf.reset();
-  EXPECT_FALSE(test_api()->IsShowingInShelf());
 }
 
 TEST_F(HoldingSpaceTrayTest, ShowTrayButtonOnFirstUse) {
@@ -809,7 +781,8 @@ TEST_F(HoldingSpaceTrayTest, ShelfConfigChangeWithDelayedItemRemoval) {
   StartSession();
 
   // Create a test widget to force in-app shelf in tablet mode.
-  std::unique_ptr<views::Widget> widget = CreateTestWidget();
+  std::unique_ptr<views::Widget> widget =
+      CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
   ASSERT_TRUE(widget);
 
   // The tray button should be hidden if the user has previously pinned an item,
@@ -2131,27 +2104,6 @@ TEST_F(HoldingSpaceTrayTest, EnterAndExitAnimations) {
   UnregisterModelForUser(kSecondaryUserId);
 }
 
-TEST_F(HoldingSpaceTrayTest, FiresBubbleOpenCloseEvents) {
-  StartSession();
-  ASSERT_TRUE(test_api()->IsShowingInShelf());
-
-  MockHoldingSpaceControllerObserver observer;
-  base::ScopedObservation<HoldingSpaceController,
-                          HoldingSpaceControllerObserver>
-      observation(&observer);
-  observation.Observe(HoldingSpaceController::Get());
-
-  EXPECT_CALL(observer, OnHoldingSpaceTrayBubbleVisibilityChanged(
-                            GetTray(), /*visible*/ true));
-  test_api()->Show();
-  testing::Mock::VerifyAndClearExpectations(&observer);
-
-  EXPECT_CALL(observer, OnHoldingSpaceTrayBubbleVisibilityChanged(
-                            GetTray(), /*visible*/ false));
-  test_api()->Close();
-  testing::Mock::VerifyAndClearExpectations(&observer);
-}
-
 // Verifies that the holding space bubble supports scrolling of pinned files.
 TEST_F(HoldingSpaceTrayTest, SupportsScrollingOfPinnedFiles) {
   StartSession();
@@ -2302,7 +2254,8 @@ TEST_F(HoldingSpacePreviewsTrayTest, UpdateTrayIconSizeForInAppShelf) {
   TabletModeControllerTestApi().EnterTabletMode();
 
   // Create a test widget to force in-app shelf.
-  std::unique_ptr<views::Widget> widget = CreateTestWidget();
+  std::unique_ptr<views::Widget> widget =
+      CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
   ASSERT_TRUE(widget);
 
   EXPECT_TRUE(test_api()->IsShowingInShelf());
@@ -2333,7 +2286,8 @@ TEST_F(
   GetTray()->FirePreviewsUpdateTimerIfRunningForTesting();
 
   // Create a test widget and minimize it to transition to home screen.
-  std::unique_ptr<views::Widget> widget = CreateTestWidget();
+  std::unique_ptr<views::Widget> widget =
+      CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
   ASSERT_TRUE(widget);
   widget->Minimize();
 
@@ -2977,8 +2931,17 @@ TEST_P(HoldingSpaceTraySuggestionsSectionTest, SuggestionsSection) {
   EXPECT_TRUE(test_api()->GetSuggestionChips().empty());
 }
 
-// Tests the code flow when a suggestion item is removed through the context
-// menu.
+// Tests that suggestions are refreshed when showing holding space.
+TEST_P(HoldingSpaceTraySuggestionsSectionTest, SuggestionsRefresh) {
+  StartSession();
+
+  // Show holding space.
+  // Verify that `HoldingSpaceClient::RefreshSuggestions()` is called.
+  EXPECT_CALL(*client(), RefreshSuggestions);
+  test_api()->Show();
+}
+
+// Tests that suggestions can be removed via an item's context menu.
 TEST_P(HoldingSpaceTraySuggestionsSectionTest, SuggestionsRemoval) {
   StartSession();
 
@@ -2986,6 +2949,7 @@ TEST_P(HoldingSpaceTraySuggestionsSectionTest, SuggestionsRemoval) {
   const base::FilePath path("/tmp/fake_1");
   AddItem(GetType(), path);
 
+  // Show holding space.
   test_api()->Show();
   std::vector<views::View*> item_views = test_api()->GetHoldingSpaceItemViews();
   ASSERT_EQ(item_views.size(), 1u);
@@ -2996,10 +2960,10 @@ TEST_P(HoldingSpaceTraySuggestionsSectionTest, SuggestionsRemoval) {
   // Right click the item view to show the context menu.
   RightClick(item_views.front());
 
-  // Click at the menu item of item removal. Verify that
-  // `HoldingSpaceClient::RemoveFileSuggestions()` is called.
+  // Click the menu item corresponding to item removal. Verify that
+  // `HoldingSpaceClient::RemoveSuggestions()` is called.
   EXPECT_CALL(*client(),
-              RemoveFileSuggestions(std::vector<base::FilePath>({path})));
+              RemoveSuggestions(std::vector<base::FilePath>({path})));
   Click(GetMenuItemByCommandId(HoldingSpaceCommandId::kRemoveItem));
 }
 

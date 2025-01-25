@@ -114,8 +114,8 @@ RetainPtr<CPDF_Dictionary> CreateCidFontDict(CPDF_Document* doc,
   // TODO(npm): Maybe use FT_Get_CID_Registry_Ordering_Supplement to get the
   // CIDSystemInfo
   auto cid_system_info_dict = doc->NewIndirect<CPDF_Dictionary>();
-  cid_system_info_dict->SetNewFor<CPDF_String>("Registry", "Adobe", false);
-  cid_system_info_dict->SetNewFor<CPDF_String>("Ordering", "Identity", false);
+  cid_system_info_dict->SetNewFor<CPDF_String>("Registry", "Adobe");
+  cid_system_info_dict->SetNewFor<CPDF_String>("Ordering", "Identity");
   cid_system_info_dict->SetNewFor<CPDF_Number>("Supplement", 0);
   cid_font_dict->SetNewFor<CPDF_Reference>("CIDSystemInfo", doc,
                                            cid_system_info_dict->GetObjNum());
@@ -618,8 +618,7 @@ FPDFText_SetCharcodes(FPDF_PAGEOBJECT text_object,
   ByteString byte_text;
   if (charcodes) {
     for (size_t i = 0; i < count; ++i) {
-      // TODO(crbug.com/pdfium/2155): investigate safety issues.
-      pTextObj->GetFont()->AppendChar(&byte_text, UNSAFE_BUFFERS(charcodes[i]));
+      pTextObj->GetFont()->AppendChar(&byte_text, UNSAFE_TODO(charcodes[i]));
     }
   }
   pTextObj->SetText(byte_text);
@@ -851,14 +850,15 @@ FPDF_EXPORT FPDF_FONT FPDF_CALLCONV FPDFTextObj_GetFont(FPDF_PAGEOBJECT text) {
 }
 
 FPDF_EXPORT unsigned long FPDF_CALLCONV
-FPDFFont_GetFontName(FPDF_FONT font, char* buffer, unsigned long length) {
-  auto* pFont = CPDFFontFromFPDFFont(font);
-  if (!pFont)
+FPDFFont_GetFamilyName(FPDF_FONT font, char* buffer, unsigned long length) {
+  auto* cfont = CPDFFontFromFPDFFont(font);
+  if (!cfont) {
     return 0;
+  }
 
   // SAFETY: required from caller.
   auto result_span = UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, length));
-  ByteString name = pFont->GetFont()->GetFamilyName();
+  ByteString name = cfont->GetFont()->GetFamilyName();
   pdfium::span<const char> name_span = name.span_with_terminator();
   fxcrt::try_spancpy(result_span, name_span);
   return static_cast<unsigned long>(name_span.size());

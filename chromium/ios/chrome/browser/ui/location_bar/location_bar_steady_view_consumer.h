@@ -29,6 +29,17 @@
 // steady view UI.
 - (void)updateAfterNavigatingToNTP;
 
+// Vivaldi
+// Notifies the consumer to update the location text.
+// `text` provides full address.
+// `domain` provides only the domain part of address.
+// `showFull` indicates whether steady view should show full address or only
+// domain.
+- (void)updateLocationText:(NSString*)text
+                    domain:(NSString*)domain
+                  showFull:(BOOL)showFull;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_LOCATION_BAR_LOCATION_BAR_STEADY_VIEW_CONSUMER_H_

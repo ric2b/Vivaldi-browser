@@ -1,12 +1,12 @@
-RWByteAddressBuffer prevent_dce : register(u0, space2);
+RWByteAddressBuffer prevent_dce : register(u0);
 
-void subgroupBroadcast_4a4334() {
+uint2 subgroupBroadcast_4a4334() {
   uint2 res = WaveReadLaneAt((1u).xx, 1u);
-  prevent_dce.Store2(0u, asuint(res));
+  return res;
 }
 
 [numthreads(1, 1, 1)]
 void compute_main() {
-  subgroupBroadcast_4a4334();
+  prevent_dce.Store2(0u, asuint(subgroupBroadcast_4a4334()));
   return;
 }

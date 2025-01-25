@@ -42,7 +42,8 @@ class BuildConfigGenerator extends DefaultTask {
     private static final String DEPS_TOKEN_END = '# === ANDROID_DEPS Generated Code End ==='
     private static final Pattern DEPS_GEN_PATTERN = Pattern.compile(
             "${DEPS_TOKEN_START}(.*)${DEPS_TOKEN_END}", Pattern.DOTALL)
-    private static final String DOWNLOAD_DIRECTORY_NAME = 'libs'
+    private static final String DOWNLOAD_ROOT_DIRECTORY = 'cipd'
+    private static final String LIBS_DIRECTORY = 'libs'
     // The 3pp bot now adds an epoch to the version tag, this needs to be kept in sync with 3pp epoch at:
     /* groovylint-disable-next-line LineLength */
     // https://source.chromium.org/chromium/infra/infra/+/master:recipes/recipe_modules/support_3pp/resolved_spec.py?q=symbol:PACKAGE_EPOCH&ss=chromium
@@ -119,6 +120,7 @@ class BuildConfigGenerator extends DefaultTask {
      * add it in //third_party/androidx/build.gradle.template
      */
     static final Set<String> ALLOWED_ANDROIDX_NON_SNAPSHOT_DEPS_PREFIXES = [
+      'androidx_compose_material_material_icons_core_android',
       'androidx_constraintlayout',
       'androidx_documentfile',
       'androidx_legacy',
@@ -126,6 +128,7 @@ class BuildConfigGenerator extends DefaultTask {
       'androidx_media3_media3',
       'androidx_multidex_multidex',
       'androidx_print',
+      'androidx_privacysandbox_ads_ads_adservices',
       'androidx_test',
     ]
 
@@ -171,6 +174,10 @@ class BuildConfigGenerator extends DefaultTask {
     /** Whether to ignore DEPS file. */
     @Input
     boolean ignoreDEPS
+
+    /** Whether .info files and BUILD.gn are in a cipd/ subdirectory. */
+    @Input
+    boolean allFilesInCipd
 
     /** The URI of the file BuildConfigGenerator.groovy */
     @Input
@@ -239,7 +246,7 @@ class BuildConfigGenerator extends DefaultTask {
         String cipdVersion = "${THREEPP_EPOCH}@${dependency.version}.${dependency.cipdSuffix}"
         String cipdPath = "${cipdBucket}/${repoPath}"
         // CIPD does not allow uppercase in names.
-        cipdPath += "/${DOWNLOAD_DIRECTORY_NAME}/$dependency.directoryName"
+        cipdPath += "/${LIBS_DIRECTORY}/$dependency.directoryName"
 
         // NOTE: The fetch_all.py script relies on the format of this file! See fetch_all.py:GetCipdPackageInfo().
         // NOTE: Keep the copyright year 2018 until this generated code is updated, avoiding annual churn of all
@@ -313,7 +320,7 @@ class BuildConfigGenerator extends DefaultTask {
     }
 
     static String make3ppPb(String cipdBucket, String repoPath) {
-        String pkgPrefix = "${cipdBucket}/${repoPath}/${DOWNLOAD_DIRECTORY_NAME}"
+        String pkgPrefix = "${cipdBucket}/${repoPath}/${LIBS_DIRECTORY}"
 
         return COPYRIGHT_HEADER + '\n' + GEN_REMINDER + """
             create {
@@ -553,32 +560,32 @@ class BuildConfigGenerator extends DefaultTask {
           condition = 'google_play_services_package == "//third_party/android_deps"'
         }
 
-        String libPath = "${DOWNLOAD_DIRECTORY_NAME}/${dependency.directoryName}"
+        String libPath = "${LIBS_DIRECTORY}/${dependency.directoryName}"
         sb.append(GEN_REMINDER)
         if (condition != null) {
           sb.append("if ($condition) {\n")
         }
+        boolean isAndroidX = targetName.startsWith('androidx')
         if (dependency.extension == 'jar') {
-            String targetType = targetName.startsWith('androidx') ? 'androidx_java_prebuilt' : 'java_prebuilt'
+            String targetType = isAndroidX ? 'androidx_java_prebuilt' : 'java_prebuilt'
             sb.append("""\
                 ${targetType}("${targetName}") {
-                  jar_path = "${libPath}/${dependency.fileName}"
+                  jar_path = "${DOWNLOAD_ROOT_DIRECTORY}/${libPath}/${dependency.fileName}"
                   output_name = "${dependency.id}"
                 """.stripIndent(/* forceGroovyBehavior */ true))
             if (dependency.supportsAndroid) {
                 sb.append('  supports_android = true\n')
             }
         } else if (dependency.extension == 'aar') {
-            String targetType = (targetName.startsWith('androidx') ?
-                    'androidx_android_aar_prebuilt' : 'android_aar_prebuilt')
+            String targetType = isAndroidX ? 'androidx_android_aar_prebuilt' : 'android_aar_prebuilt'
+            String maybeSubdir = allFilesInCipd ? "${DOWNLOAD_ROOT_DIRECTORY}/" : ""
             sb.append("""\
                 ${targetType}("${targetName}") {
-                  aar_path = "${libPath}/${dependency.fileName}"
-                  info_path = "${libPath}/${BuildConfigGenerator.reducedDepencencyId(dependency.id)}.info"
+                  aar_path = "${DOWNLOAD_ROOT_DIRECTORY}/${libPath}/${dependency.fileName}"
+                  info_path = "${maybeSubdir}${libPath}/${BuildConfigGenerator.reducedDepencencyId(dependency.id)}.info"
             """.stripIndent(/* forceGroovyBehavior */ true))
         } else if (dependency.extension == 'group') {
-            String targetType = (targetName.startsWith('androidx') ?
-                    'androidx_java_group' : 'java_group')
+            String targetType = isAndroidX ? 'androidx_java_group' : 'java_group'
             sb.append("""\
                 ${targetType}("${targetName}") {
             """.stripIndent(/* forceGroovyBehavior */ true))
@@ -636,8 +643,8 @@ class BuildConfigGenerator extends DefaultTask {
     }
 
     boolean isInDifferentRepo(ChromiumDepGraph.DependencyDescription dependency) {
-        boolean isAndroidxRepository = (repositoryPath == 'third_party/androidx')
-        boolean isAndroidxDependency = (dependency.id.startsWith('androidx'))
+        boolean isAndroidxRepository = repositoryPath.startsWith('third_party/androidx')
+        boolean isAndroidxDependency = dependency.id.startsWith('androidx')
         if (isAndroidxRepository != isAndroidxDependency) {
             return true
         }
@@ -676,7 +683,7 @@ class BuildConfigGenerator extends DefaultTask {
     }
 
     private static String computeDepDir(ChromiumDepGraph.DependencyDescription dependency) {
-        return "${DOWNLOAD_DIRECTORY_NAME}/${dependency.directoryName}"
+        return "${LIBS_DIRECTORY}/${dependency.directoryName}"
     }
 
     private static void addSpecialTreatment(StringBuilder sb, String dependencyId, String dependencyExtension) {
@@ -964,18 +971,18 @@ class BuildConfigGenerator extends DefaultTask {
             if (excludeDependency(dependency) || computeJavaGroupForwardingTargets(dependency)) {
                 return
             }
-            String depPath = "${DOWNLOAD_DIRECTORY_NAME}/${dependency.directoryName}"
+            String depPath = "${LIBS_DIRECTORY}/${dependency.directoryName}"
             String cipdPath = "${cipdBucket}/${repoPath}/${depPath}"
             sb.append("""\
             |
-            |  'src/${repoPath}/${depPath}': {
+            |  'src/${repoPath}/${DOWNLOAD_ROOT_DIRECTORY}/${depPath}': {
             |      'packages': [
             |          {
             |              'package': '${cipdPath}',
             |              'version': 'version:${THREEPP_EPOCH}@${dependency.version}.${dependency.cipdSuffix}',
             |          },
             |      ],
-            |      'condition': 'checkout_android',
+            |      'condition': 'checkout_android and non_git_source',
             |      'dep_type': 'cipd',
             |  },
             |""".stripMargin())

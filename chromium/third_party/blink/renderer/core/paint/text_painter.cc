@@ -144,7 +144,7 @@ void UpdateGraphicsContext(GraphicsContext& context,
     DCHECK(shadow_mode == TextPainter::kBothShadowsAndTextProper ||
            shadow_mode == TextPainter::kShadowsOnly);
 
-    // If there are shadows, we definitely need an SkDrawLooper, but if there
+    // If there are shadows, we definitely need a cc::DrawLooper, but if there
     // are no shadows (nullptr), we still need one iff we’re in kShadowsOnly
     // mode, because we suppress text proper by omitting AddUnmodifiedContent
     // when building a looper (cf. CRC2DState::ShadowAndForegroundDrawLooper).
@@ -332,6 +332,11 @@ void TextPainter::Paint(const TextFragmentPaintInfo& fragment_paint_info,
                         ShadowMode shadow_mode) {
   // TODO(layout-dev): We shouldn't be creating text fragments without text.
   if (!fragment_paint_info.shape_result) {
+    return;
+  }
+  // Do not try to paint kShadowsOnly without a ShadowList, because we will
+  // create an empty DrawLooper that effectively paints kTextProperOnly.
+  if (shadow_mode == ShadowMode::kShadowsOnly && !text_style.shadow) {
     return;
   }
   DCHECK_LE(fragment_paint_info.from, fragment_paint_info.text.length());

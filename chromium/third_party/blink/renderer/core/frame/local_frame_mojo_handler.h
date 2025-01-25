@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_LOCAL_FRAME_MOJO_HANDLER_H_
 
 #include "build/build_config.h"
+#include "cc/input/browser_controls_offset_tags_info.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/device_posture/device_posture_provider.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/back_forward_cache_controller.mojom-blink.h"
@@ -123,10 +124,11 @@ class LocalFrameMojoHandler
   void BeforeUnload(bool is_reload, BeforeUnloadCallback callback) final;
   void MediaPlayerActionAt(const gfx::Point& window_point,
                            mojom::blink::MediaPlayerActionPtr action) final;
-  void RequestVideoFrameAt(const gfx::Point& window_point,
-                           const gfx::Size& max_size,
-                           int max_area,
-                           RequestVideoFrameAtCallback callback) final;
+  void RequestVideoFrameAtWithBoundsHint(
+      const gfx::Point& window_point,
+      const gfx::Size& max_size,
+      int max_area,
+      RequestVideoFrameAtWithBoundsHintCallback callback) final;
   void AdvanceFocusInFrame(
       mojom::blink::FocusType focus_type,
       const std::optional<RemoteFrameToken>& source_frame_token) final;
@@ -233,7 +235,6 @@ class LocalFrameMojoHandler
       bool is_validated,
       const WTF::String& normalized_server_timing,
       const ::network::URLLoaderCompletionStatus& completion_status) final;
-  void RequestFullscreenDocumentElement() final;
 
   // blink::mojom::LocalMainFrame overrides:
   void AnimateDoubleTapZoom(const gfx::Point& point,
@@ -253,9 +254,12 @@ class LocalFrameMojoHandler
       network::mojom::blink::CrossOriginOpenerPolicyReporterParamsPtr
           coop_reporter_params,
       bool is_in_same_virtual_coop_related_group) final;
-  void UpdateBrowserControlsState(cc::BrowserControlsState constraints,
-                                  cc::BrowserControlsState current,
-                                  bool animate) override;
+  void UpdateBrowserControlsState(
+      cc::BrowserControlsState constraints,
+      cc::BrowserControlsState current,
+      bool animate,
+      const std::optional<cc::BrowserControlsOffsetTagsInfo>& offset_tags_info)
+      override;
 
   void SetV8CompileHints(base::ReadOnlySharedMemoryRegion data) override;
 

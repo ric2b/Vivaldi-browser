@@ -8,8 +8,8 @@ import type {CrMenuSelector} from 'chrome://resources/cr_elements/cr_menu_select
 import {FocusOutlineManager} from 'chrome://resources/js/focus_outline_manager.js';
 import {getTrustedHTML} from 'chrome://resources/js/static_types.js';
 import {getDeepActiveElement} from 'chrome://resources/js/util.js';
-import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {keyDownOn} from 'chrome://webui-test/keyboard_mock_interactions.js';
 import {eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
 
@@ -137,14 +137,14 @@ suite('CrMenuSelectorFocusTest', () => {
     assertFalse(shiftTabEvent.defaultPrevented);
   });
 
-  test('SetsSelectedItemUsingHref', async () => {
+  test('SetsSelectedItemUsingHrefAttribute', async () => {
     const firstItem = getChild(0);
-    element.selected = firstItem.href;
+    element.selected = firstItem.getAttribute('href')!;
     await microtasksFinished();
     assertTrue(firstItem.hasAttribute('selected'));
     assertEquals('page', firstItem.getAttribute('aria-current'));
     const secondItem = getChild(1);
-    element.selected = secondItem.href;
+    element.selected = secondItem.getAttribute('href')!;
     await microtasksFinished();
     assertFalse(firstItem.hasAttribute('selected'));
     assertFalse(firstItem.hasAttribute('aria-current'));
@@ -166,6 +166,6 @@ suite('CrMenuSelectorFocusTest', () => {
     itemToSelect.dispatchEvent(new Event('click', {bubbles: true}));
     await Promise.all([onActivate, onSelect]);
     assertTrue(itemToSelect.hasAttribute('selected'));
-    assertEquals(itemToSelect.href, element.selected);
+    assertEquals(itemToSelect.getAttribute('href'), element.selected);
   });
 });

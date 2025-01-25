@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/fetch/bytes_consumer_tee.h"
 
 #include <string.h>
@@ -77,7 +82,7 @@ class TeeHelper final : public GarbageCollected<TeeHelper>,
           has_enqueued = true;
           break;
         case Result::kShouldWait:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           return;
         case Result::kDone:
           if (chunk) {
@@ -173,7 +178,7 @@ class TeeHelper final : public GarbageCollected<TeeHelper>,
           ClearClient();
           return Result::kError;
       }
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return Result::kError;
     }
 

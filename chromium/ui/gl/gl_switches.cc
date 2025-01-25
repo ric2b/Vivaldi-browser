@@ -212,7 +212,7 @@ BASE_FEATURE(kDirectCompositionSoftwareOverlays,
 // that DWM power optimization can be turned on.
 BASE_FEATURE(kDirectCompositionLetterboxVideoOptimization,
              "DirectCompositionLetterboxVideoOptimization",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Do not consider hardware YUV overlay count when promoting quads to DComp
 // visuals. If there are more videos than hardware overlay planes, there may be
@@ -349,18 +349,12 @@ BASE_FEATURE(kDXGISwapChainPresentInterval0,
              "DXGISwapChainPresentInterval0",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Kill switch using floating point based rounding adjustments in
-// SwapChainPresenter::Adjust* functions.
-BASE_FEATURE(kUseSwapChainPresenterFloatingPointAdjustments,
-             "UseSwapChainPresenterFloatingPointAdjustments",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 bool SupportsEGLDualGPURendering() {
-#if defined(USE_EGL) && (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   return base::FeatureList::IsEnabled(kEGLDualGPURendering);
 #else
   return false;
-#endif  // USE_EGL && (IS_WIN || IS_MAC)
+#endif  // IS_WIN || IS_MAC
 }
 
 }  // namespace features

@@ -18,8 +18,17 @@ cipd_pick_list = [
   "build/linux/debian_bullseye_amd64-sysroot",
   "build/linux/debian_bullseye_arm64-sysroot",
   "build/linux/debian_bullseye_armhf-sysroot",
+  "build/linux/debian_bullseye_i386-sysroot",
   "third_party/test_fonts",
   "third_party/subresource-filter-ruleset/data",
+  "third_party/node/node_modules",
+  "third_party/rust-toolchain",
+  "third_party/llvm-build/Release+Asserts",
+  "buildtools/win-format",
+  "buildtools/mac-format",
+  "buildtools/mac_arm64-format",
+  "buildtools/linux64-format",
+  "third_party/test_fonts/test_fonts",
   ]
 
 exclude_cipd = [

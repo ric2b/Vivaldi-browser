@@ -10,36 +10,43 @@ vars = {
   'chromium_git': 'https://chromium.googlesource.com',
 
   # Current revision of glslang, the Khronos SPIRV compiler.
-  'glslang_revision': 'b3e9bdbe1656b37611585e0a1523678f089bc31e',
+  'glslang_revision': 'dc9f6f61adaec755a09e1943cf7014c688443bcb',
+
+  # Current revision of Lunarg VulkanTools
+  'lunarg_vulkantools_revision': '9bd6f95db3076517205b01300c8d37043c5b2dd3',
 
   # Current revision of spirv-cross, the Khronos SPIRV cross compiler.
   'spirv_cross_revision': 'b8fcf307f1f347089e3c46eb4451d27f32ebc8d3',
 
   # Current revision fo the SPIRV-Headers Vulkan support library.
-  'spirv_headers_revision': '49a1fceb9b1d087f3c25ad5ec077bb0e46231297',
+  'spirv_headers_revision': 'db5a00f8cebe81146cafabf89019674a3c4bf03d',
 
   # Current revision of SPIRV-Tools for Vulkan.
-  'spirv_tools_revision': '199038f10cbe56bf7cbfeb5472eb0a25af2f09f5',
+  'spirv_tools_revision': 'a0817526b8e391732632e6a887134be256a20a18',
 
   # Current revision of Khronos Vulkan-Headers.
-  'vulkan_headers_revision': '5677bafb820e476441e9e1f745371b72133407d3',
+  'vulkan_headers_revision': 'fabe9e2672334fdb9a622d42a2e8f94578952082',
 
   # Current revision of Khronos Vulkan-Loader.
-  'vulkan_loader_revision': 'eb8c7b071a449be3d1331e0961c8fdd0a78efca9',
+  'vulkan_loader_revision': '5892ebe2d7505c2238a643288d9a5b2e68784a36',
 
   # Current revision of Khronos Vulkan-Tools.
-  'vulkan_tools_revision': 'df8e710224f563a04b7db2680f72d31619c4b259',
+  'vulkan_tools_revision': '2cee0d5b1d8c34e26fd6d9992d3d428ac4c5139d',
 
   # Current revision of Khronos Vulkan-Utility-Libraries.
-  'vulkan_utility_libraries_revision': '358a107a6ff284906dcccbabe5b0183c03fd85b6',
+  'vulkan_utility_libraries_revision': '67522b34edde86dbb97e164280291f387ade55fc',
 
   # Current revision of Khronos Vulkan-ValidationLayers.
-  'vulkan_validation_revision': '944660e342cfafb6c318d11731751d9a291434d4',
+  'vulkan_validation_revision': '919599474e6e6639527e7c3775ed1064665412d3',
 }
 
 deps = {
   'glslang/src': {
     'url': '{chromium_git}/external/github.com/KhronosGroup/glslang@{glslang_revision}',
+  },
+
+  'lunarg-vulkantools/src': {
+    'url': '{chromium_git}/external/github.com/LunarG/VulkanTools@{lunarg_vulkantools_revision}',
   },
 
   'spirv-cross/src': {

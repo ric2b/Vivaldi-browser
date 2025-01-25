@@ -20,7 +20,6 @@ import "protos/perfetto/common/trace_stats.proto";
 import "protos/perfetto/config/trace_config.proto";
 import "protos/perfetto/trace/extension_descriptor.proto";
 import "protos/perfetto/trace/android/android_game_intervention_list.proto";
-import "protos/perfetto/trace/android/android_input_event.proto";
 import "protos/perfetto/trace/android/android_log.proto";
 import "protos/perfetto/trace/android/android_system_property.proto";
 import "protos/perfetto/trace/android/camera_event.proto";
@@ -35,6 +34,7 @@ import "protos/perfetto/trace/android/protolog.proto";
 import "protos/perfetto/trace/android/shell_transition.proto";
 import "protos/perfetto/trace/android/surfaceflinger_layers.proto";
 import "protos/perfetto/trace/android/surfaceflinger_transactions.proto";
+import "protos/perfetto/trace/android/winscope_extensions.proto";
 import "protos/perfetto/trace/chrome/chrome_benchmark_metadata.proto";
 import "protos/perfetto/trace/chrome/chrome_metadata.proto";
 import "protos/perfetto/trace/chrome/chrome_trace_event.proto";
@@ -104,7 +104,7 @@ package perfetto.protos;
 // See the [Buffers and Dataflow](/docs/concepts/buffers.md) doc for details.
 //
 // Next reserved id: 14 (up to 15).
-// Next id: 112.
+// Next id: 113.
 message TracePacket {
   // The timestamp of the TracePacket.
   // By default this timestamps refers to the trace clock (CLOCK_BOOTTIME on
@@ -228,6 +228,7 @@ message TracePacket {
     ShellHandlerMappings shell_handler_mappings = 97;
     ProtoLogMessage protolog_message = 104;
     ProtoLogViewerConfig protolog_viewer_config = 105;
+    WinscopeExtensions winscope_extensions = 112;
 
     // Events from the Windows etw infrastructure.
     EtwTraceEventBundle etw_events = 95;
@@ -237,10 +238,6 @@ message TracePacket {
     V8WasmCode v8_wasm_code = 101;
     V8RegExpCode v8_reg_exp_code = 102;
     V8CodeMove v8_code_move = 103;
-
-    // InputFlinger traces
-    AndroidInputEvent android_input_event = 106;
-
     // Clock synchronization with remote machines.
     RemoteClockSync remote_clock_sync = 107;
 
@@ -256,12 +253,17 @@ message TracePacket {
     TestEvent for_testing = 900;
   }
 
+  // AndroidInputEvent android_input_event (moved to winscope_extensions)
+  reserved 106;
+
   // Trusted user id of the producer which generated this packet. Keep in sync
   // with TrustedPacket.trusted_uid.
   //
   // TODO(eseckler): Emit this field in a PacketSequenceDescriptor message
   // instead.
-  oneof optional_trusted_uid { int32 trusted_uid = 3; };
+  oneof optional_trusted_uid {
+    int32 trusted_uid = 3;
+  };
 
   // Service-assigned identifier of the packet sequence this packet belongs to.
   // Uniquely identifies a producer + writer pair within the tracing session. A

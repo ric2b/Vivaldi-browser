@@ -28,6 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 
 #include "base/debug/dump_without_crashing.h"
@@ -54,7 +59,6 @@
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/shadow_realm/shadow_realm_global_scope.h"
-#include "third_party/blink/renderer/core/typed_arrays/flexible_array_buffer_view.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worker_or_worklet_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worklet_global_scope.h"
@@ -738,7 +742,7 @@ v8::Local<v8::Context> ToV8ContextEvenIfDetached(LocalFrame* frame,
   // TODO(crbug.com/1046282): The following bailout is a temporary fix
   // introduced due to crbug.com/1037985 .  Remove this temporary fix once
   // the root cause is fixed.
-  if (frame->IsProvisional()) {
+  if (!frame->IsDetached() && frame->IsProvisional()) {
     base::debug::DumpWithoutCrashing();
     return v8::Local<v8::Context>();
   }

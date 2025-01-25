@@ -46,7 +46,7 @@ Program Parse(const Source::File* file, const Options& options) {
     }
     Parser parser(file);
     parser.Parse();
-    return resolver::Resolve(parser.builder(), options.allowed_features);
+    return resolver::Resolve(parser.builder(), options.allowed_features, options.mode);
 }
 
 Result<core::ir::Module> WgslToIR(const Source::File* file, const Options& options) {
@@ -75,6 +75,21 @@ tint::Result<core::ir::Module> ProgramToLoweredIR(const Program& program) {
     }
 
     return ir;
+}
+
+bool IsUnsupportedByIR(const ast::Enable* enable) {
+    for (auto ext : enable->extensions) {
+        switch (ext->name) {
+            case tint::wgsl::Extension::kChromiumExperimentalFramebufferFetch:
+            case tint::wgsl::Extension::kChromiumExperimentalPixelLocal:
+            case tint::wgsl::Extension::kChromiumExperimentalPushConstant:
+            case tint::wgsl::Extension::kChromiumInternalRelaxedUniformLayout:
+                return true;
+            default:
+                break;
+        }
+    }
+    return false;
 }
 
 }  // namespace tint::wgsl::reader

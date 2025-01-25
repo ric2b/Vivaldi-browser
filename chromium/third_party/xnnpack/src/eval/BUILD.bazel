@@ -7,12 +7,13 @@ load(
     "//:build_defs.bzl",
     "xnnpack_benchmark",
     "xnnpack_cc_library",
+    "xnnpack_test_deps_for_library",
     "xnnpack_unit_test",
 )
 
 ACCURACY_EVAL_DEPS = [
     "//:aligned_allocator",
-    "//:bench_microkernels",
+    "//:test_microkernels",
     "//:common",
     "//:isa_checks",
     "//:math",
@@ -226,14 +227,13 @@ xnnpack_cc_library(
     testonly = True,
     srcs = ["math-evaluation-tester.cc"],
     hdrs = ["math-evaluation-tester.h"],
-    deps = [
+    deps = xnnpack_test_deps_for_library() + [
         "@FP16",
         "//:aligned_allocator",
         "//:common",
         "//:math",
         "//:math_stubs",
         "@pthreadpool",
-        "@com_google_googletest//:gtest_main",
     ],
 )
 

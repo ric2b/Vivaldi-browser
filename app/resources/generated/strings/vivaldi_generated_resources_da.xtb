@@ -27,7 +27,7 @@
 <translation id="1451375123200651445">Webside, enkelt fil</translation>
 <translation id="1465176863081977902">K&amp;opiér webadressen til lyden</translation>
 <translation id="1476607407192946488">&amp;Sprogindstillinger</translation>
-<translation id="1546280085599573572">Denne udvidelse har ændret, hvilken side der vises, når du klikker på knappen Startside.</translation>
+<translation id="1546280085599573572">Denne udvidelse har ændret, hvilken side der vises, når du klikker på Hjem-knappen.</translation>
 <translation id="1552752544932680961">Administrer udvidelse</translation>
 <translation id="15662109988763471">Den valgte printer er ikke tilgængelig eller ikke installeret korrekt. Tjek din printer, eller vælg en anden printer.</translation>
 <translation id="1588438908519853928">Normal</translation>
@@ -86,7 +86,6 @@
 <translation id="2439110203301358333">Et andet program på din computer tilføjede en udvidelse, der kan ændre den måde, hvorpå Vivaldi fungerer.</translation>
 <translation id="2443487764245141020">Det kan også være nødvendigt for websites at identificere din enhed ved hjælp af et id</translation>
 <translation id="2445081178310039857">Udvidelsens rodmappe er påkrævet.</translation>
-<translation id="2470702053775288986">Understøttede udvidelser er blevet deaktiveret</translation>
 <translation id="2485422356828889247">Afinstaller</translation>
 <translation id="2498539833203011245">Minimer</translation>
 <translation id="2509495747794740764">Skaleringsværdien skal være et tal mellem 10 og 200.</translation>
@@ -161,7 +160,7 @@
 <translation id="3683524264665795342"><ph name="APP_NAME" /> anmoder om at dele din skærm</translation>
 <translation id="3708684582558000260">Tillad ikke, at lukkede websites kan færdiggøre afsendelsen eller modtagelsen af data</translation>
 <translation id="3711931198657368127">Ind&amp;sæt, og gå til <ph name="URL" /></translation>
-<translation id="3719826155360621982">Startside</translation>
+<translation id="3719826155360621982">Hjemmeside</translation>
 <translation id="3727187387656390258">Undersøg popup-vindue</translation>
 <translation id="3760460896538743390">Undersøg &amp;baggrundsside</translation>
 <translation id="3786224729726357296">Slet websitedata og tilladelser for <ph name="SITE" /></translation>
@@ -206,7 +205,6 @@
 <translation id="431076611119798497">&amp;Detaljer</translation>
 <translation id="4345587454538109430">Konfigurer...</translation>
 <translation id="4348766275249686434">Indsaml fejl</translation>
-<translation id="4363771538994847871">Der blev ikke fundet nogen Cast-destinationer. Har du brug for hjælp?</translation>
 <translation id="4384652540891215547">Aktivér udvidelsen</translation>
 <translation id="4394049700291259645">Deaktiver</translation>
 <translation id="4409697491990005945">Margener</translation>
@@ -246,7 +244,7 @@
 <translation id="5059526285558225588">Vælg, hvad du vil dele</translation>
 <translation id="5063480226653192405">Forbrug</translation>
 <translation id="5116628073786783676">Ge&amp;m lyd som...</translation>
-<translation id="5143374789336132547">Udvidelsen <ph name="EXTENSION_NAME" /> har ændret, hvilken side der vises, når du klikker på knappen Startside.</translation>
+<translation id="5143374789336132547">Udvidelsen <ph name="EXTENSION_NAME" /> har ændret, hvilken side der vises, når du klikker på Hjem-knappen.</translation>
 <translation id="5154108062446123722">Avancerede indstillinger for <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5154702632169343078">Emne</translation>
 <translation id="5171343362375269016">Ombyttet hukommelse</translation>
@@ -273,7 +271,7 @@
 <translation id="5485102783864353244">Tilføj app</translation>
 <translation id="5486561344817861625">Simuler genstart af browser</translation>
 <translation id="5509693895992845810">Gem &amp;som...</translation>
-<translation id="5521078259930077036">Var det den startside, du forventede?</translation>
+<translation id="5521078259930077036">Var det den hjemmeside, du forventede?</translation>
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Genindlæs</translation>
 <translation id="5575473780076478375">Inkognitoudvidelse: <ph name="EXTENSION_NAME" /></translation>
@@ -390,7 +388,6 @@
 <translation id="7771452384635174008">Layout</translation>
 <translation id="7782102568078991263">Ikke flere forslag fra Google</translation>
 <translation id="7786889348652477777">&amp;Genindlæs app</translation>
-<translation id="7791543448312431591">Tilføj</translation>
 <translation id="7800518121066352902">Roter m&amp;od uret</translation>
 <translation id="7814458197256864873">&amp;Kopier</translation>
 <translation id="7818135753970109980">Nyt tema er tilføjet (<ph name="EXTENSION_NAME" />)</translation>

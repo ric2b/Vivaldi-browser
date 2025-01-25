@@ -10,8 +10,10 @@
 #include <string_view>
 #include <utility>
 
+#include "android_webview/browser/aw_app_defined_websites.h"
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_browser_main_parts.h"
+#include "android_webview/browser/aw_browser_permission_request_delegate.h"
 #include "android_webview/browser/aw_contents_client_bridge.h"
 #include "android_webview/browser/aw_contents_io_thread_client.h"
 #include "android_webview/browser/aw_pdf_exporter.h"
@@ -35,8 +37,6 @@
 #include "android_webview/browser/permission/permission_request_handler.h"
 #include "android_webview/browser/permission/simple_permission_request.h"
 #include "android_webview/browser/state_serializer.h"
-#include "android_webview/browser_jni_headers/AwContents_jni.h"
-#include "android_webview/browser_jni_headers/StartupJavascriptInfo_jni.h"
 #include "android_webview/common/aw_features.h"
 #include "android_webview/common/aw_switches.h"
 #include "android_webview/common/devtools_instrumentation.h"
@@ -112,6 +112,11 @@
 #include "url/origin.h"
 #include "url/url_constants.h"
 
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "android_webview/browser_jni_headers/AwContents_jni.h"
+#include "android_webview/browser_jni_headers/AwSiteVisitLogger_jni.h"
+#include "android_webview/browser_jni_headers/StartupJavascriptInfo_jni.h"
+
 struct AwDrawSWFunctionTable;
 
 using base::android::AppendJavaStringArrayToStringVector;
@@ -131,6 +136,7 @@ using content::RenderFrameHost;
 using content::WebContents;
 using js_injection::JsCommunicationHost;
 using navigation_interception::InterceptNavigationDelegate;
+using NotRestoredReason = content::BackForwardCache::NotRestoredReason;
 
 namespace android_webview {
 
@@ -235,6 +241,8 @@ AwRenderProcessGoneDelegate* AwRenderProcessGoneDelegate::FromWebContents(
 
 AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
     : content::WebContentsObserver(web_contents.get()),
+      AwSafeBrowsingAllowlistSetObserver(
+          AwBrowserProcess::GetInstance()->GetSafeBrowsingAllowlistManager()),
       browser_view_renderer_(this,
                              content::GetUIThreadTaskRunner({}),
                              content::GetIOThreadTaskRunner({})),
@@ -346,8 +354,6 @@ AwContents::~AwContents() {
   // Corresponds to "WebView Instance" in AwContents's constructor.
   TRACE_EVENT_END("android_webview.timeline",
                   perfetto::Track::FromPointer(this));
-  // TODO(crbug.com/40657156): Remove this once fixed.
-  PERFETTO_INTERNAL_ADD_EMPTY_EVENT();
 }
 
 base::android::ScopedJavaLocalRef<jobject> AwContents::GetWebContents(
@@ -708,7 +714,7 @@ void AwContents::RequestGeolocationPermission(const GURL& origin,
   if (!obj)
     return;
 
-  if (Java_AwContents_useLegacyGeolocationPermissionAPI(env, obj)) {
+  if (UseLegacyGeolocationPermissionAPI()) {
     ShowGeolocationPrompt(origin, std::move(callback));
     return;
   }
@@ -723,12 +729,23 @@ void AwContents::CancelGeolocationPermissionRequests(const GURL& origin) {
   if (!obj)
     return;
 
-  if (Java_AwContents_useLegacyGeolocationPermissionAPI(env, obj)) {
+  if (UseLegacyGeolocationPermissionAPI()) {
     HideGeolocationPrompt(origin);
     return;
   }
   permission_request_handler_->CancelRequest(origin,
                                              AwPermissionRequest::Geolocation);
+}
+
+bool AwContents::UseLegacyGeolocationPermissionAPI() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
+  if (!obj) {
+    return false;
+  }
+
+  return Java_AwContents_useLegacyGeolocationPermissionAPI(env, obj);
 }
 
 void AwContents::RequestMIDISysexPermission(const GURL& origin,
@@ -1295,7 +1312,7 @@ jint AwContents::GetEffectivePriority(JNIEnv* env) {
     case content::ChildProcessImportance::IMPORTANT:
       return static_cast<jint>(RendererPriority::HIGH);
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0;
 }
 
@@ -1315,6 +1332,9 @@ jint AwContents::AddDocumentStartJavaScript(
   std::vector<std::string> native_allowed_origin_rule_strings;
   AppendJavaStringArrayToStringVector(env, allowed_origin_rules,
                                       &native_allowed_origin_rule_strings);
+  web_contents()->GetController().GetBackForwardCache().Flush(
+      NotRestoredReason::kWebViewDocumentStartJavascriptChanged);
+  web_contents()->CancelAllPrerendering();
   auto result = GetJsCommunicationHost()->AddDocumentStartJavaScript(
       base::android::ConvertJavaStringToUTF16(env, script),
       native_allowed_origin_rule_strings);
@@ -1328,6 +1348,7 @@ jint AwContents::AddDocumentStartJavaScript(
 }
 
 void AwContents::RemoveDocumentStartJavaScript(JNIEnv* env, jint script_id) {
+  web_contents()->CancelAllPrerendering();
   GetJsCommunicationHost()->RemoveDocumentStartJavaScript(script_id);
 }
 
@@ -1387,8 +1408,14 @@ AwContents::GetDocumentStartupJavascripts(JNIEnv* env) {
   return script_objects;
 }
 
-void AwContents::FlushBackForwardCache(JNIEnv* env) {
-  web_contents()->GetController().GetBackForwardCache().Flush();
+void AwContents::FlushBackForwardCache(JNIEnv* env, jint reason) {
+  web_contents()->GetController().GetBackForwardCache().Flush(
+      static_cast<NotRestoredReason>(reason));
+}
+
+void AwContents::CancelAllPrerendering(JNIEnv* env) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  web_contents()->CancelAllPrerendering();
 }
 
 void AwContents::ClearView(JNIEnv* env) {
@@ -1455,6 +1482,13 @@ void JNI_AwContents_SetShouldDownloadFavicons(JNIEnv* env) {
   g_should_download_favicons = true;
 }
 
+void LogSiteVisit(std::string etld_plus1, jlong site_hash) {
+  bool site_related = IsAppDefined(std::move(etld_plus1));
+
+  JNIEnv* env = AttachCurrentThread();
+  Java_AwSiteVisitLogger_logVisit(env, site_hash, site_related);
+}
+
 void AwContents::PrimaryPageChanged(content::Page& page) {
   std::string scheme = page.GetMainDocument().GetLastCommittedURL().scheme();
   const url::Origin& origin = page.GetMainDocument().GetLastCommittedOrigin();
@@ -1479,7 +1513,14 @@ void AwContents::PrimaryPageChanged(content::Page& page) {
       jlong j_etld_plus1_hash = static_cast<jlong>(etld_plus1_hash);
 
       Java_AwContents_logOriginVisit(env, j_ref, j_origin_hash);
-      Java_AwContents_logSiteVisit(env, j_ref, j_etld_plus1_hash);
+
+      // When recording the site visit, we want to reference this against
+      // g_app_defined_domains which may take a moment to retrieve since
+      // we are getting that from a system service so we need post this
+      // to the background thread to avoid blocking things here.
+      base::ThreadPool::PostTask(
+          FROM_HERE, base::BindOnce(&LogSiteVisit, std::move(etld_plus1),
+                                    j_etld_plus1_hash));
     }
   }
 
@@ -1617,6 +1658,11 @@ AwContents::RenderProcessGoneResult AwContents::OnRenderProcessGone(
 
   return result ? RenderProcessGoneResult::kHandled
                 : RenderProcessGoneResult::kUnhandled;
+}
+
+void AwContents::OnSafeBrowsingAllowListSet() {
+  web_contents()->GetController().GetBackForwardCache().Flush(
+      NotRestoredReason::kWebViewSafeBrowsingAllowlistChanged);
 }
 
 }  // namespace android_webview

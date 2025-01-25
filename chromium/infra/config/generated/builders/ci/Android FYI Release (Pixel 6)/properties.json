@@ -7,7 +7,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Android FYI Release (Pixel 6)",
-              "project": "chromium-m126"
+              "project": "chromium-m128"
             },
             "builder_spec": {
               "builder_group": "chromium.gpu.fyi",
@@ -31,7 +31,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "GPU FYI Android arm64 Builder",
-                "project": "chromium-m126"
+                "project": "chromium-m128"
               },
               "run_tests_serially": true
             }
@@ -40,7 +40,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "GPU FYI Android arm64 Builder",
-              "project": "chromium-m126"
+              "project": "chromium-m128"
             },
             "builder_spec": {
               "builder_group": "chromium.gpu.fyi",
@@ -69,7 +69,7 @@
         {
           "bucket": "ci",
           "builder": "Android FYI Release (Pixel 6)",
-          "project": "chromium-m126"
+          "project": "chromium-m128"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -88,6 +88,9 @@
     ]
   },
   "builder_group": "chromium.gpu.fyi",
+  "gardener_rotations": [
+    "chrome_browser_release"
+  ],
   "perf_dashboard_machine_group": "ChromiumGPUFYI",
   "recipe": "chromium",
   "sheriff_rotations": [

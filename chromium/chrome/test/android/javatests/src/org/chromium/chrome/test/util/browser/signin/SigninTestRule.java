@@ -8,15 +8,14 @@ import static org.hamcrest.Matchers.is;
 
 import androidx.annotation.Nullable;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
-import org.chromium.components.signin.AccountCapabilitiesConstants;
 import org.chromium.components.signin.SigninFeatureMap;
 import org.chromium.components.signin.SigninFeatures;
-import org.chromium.components.signin.base.AccountCapabilities;
 import org.chromium.components.signin.base.AccountInfo;
 import org.chromium.components.signin.base.CoreAccountId;
 import org.chromium.components.signin.base.CoreAccountInfo;
@@ -24,10 +23,6 @@ import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.test.util.AccountCapabilitiesBuilder;
 import org.chromium.components.signin.test.util.FakeAccountManagerFacade;
 import org.chromium.components.sync.SyncService;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
-
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * This test rule mocks AccountManagerFacade and manages sign-in/sign-out.
@@ -40,17 +35,6 @@ import java.util.Map;
  * AccountManagerFacade mock.
  */
 public class SigninTestRule extends AccountManagerTestRule {
-    public static final AccountCapabilities NON_DISPLAYABLE_EMAIL_ACCOUNT_CAPABILITIES =
-            new AccountCapabilities(
-                    new HashMap<>(
-                            Map.of(
-                                    AccountCapabilitiesConstants
-                                            .CAN_HAVE_EMAIL_ADDRESS_DISPLAYED_CAPABILITY_NAME,
-                                    false,
-                                    AccountCapabilitiesConstants
-                                            .IS_SUBJECT_TO_PARENTAL_CONTROLS_CAPABILITY_NAME,
-                                    true)));
-
     private boolean mIsSignedIn;
 
     /** Signs out if user is signed in. */
@@ -220,7 +204,7 @@ public class SigninTestRule extends AccountManagerTestRule {
 
         // The auto sign-in should leave the user in signed-in, non-syncing state - check this and
         // enable sync.
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     assert IdentityServicesProvider.get()
                                             .getIdentityManager(

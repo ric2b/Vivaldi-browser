@@ -139,6 +139,7 @@ class WebViewChromium
 
     // Used to record the UMA histogram WebView.WebViewApiCall. Since these values are persisted to
     // logs, they should never be renumbered or reused.
+    // LINT.IfChange(ApiCall)
     @IntDef({
         ApiCall.ADD_JAVASCRIPT_INTERFACE,
         ApiCall.AUTOFILL,
@@ -370,6 +371,11 @@ class WebViewChromium
         ApiCall.WEB_ICON_DATABASE_REMOVE_ALL_ICONS,
         ApiCall.WEB_ICON_DATABASE_REQUEST_ICON_FOR_PAGE_URL,
         ApiCall.WEB_ICON_DATABASE_RETAIN_ICON_FOR_PAGE_URL,
+        ApiCall.GEOLOCATION_PERMISSIONS_ALLOW,
+        ApiCall.GEOLOCATION_PERMISSIONS_CLEAR,
+        ApiCall.GEOLOCATION_PERMISSIONS_CLEAR_ALL,
+        ApiCall.GEOLOCATION_PERMISSIONS_GET_ALLOWED,
+        ApiCall.GEOLOCATION_PERMISSIONS_GET_ORIGINS
     })
     @interface ApiCall {
         int ADD_JAVASCRIPT_INTERFACE = 0;
@@ -602,8 +608,15 @@ class WebViewChromium
         int WEB_ICON_DATABASE_REMOVE_ALL_ICONS = 227;
         int WEB_ICON_DATABASE_REQUEST_ICON_FOR_PAGE_URL = 228;
         int WEB_ICON_DATABASE_RETAIN_ICON_FOR_PAGE_URL = 229;
-        int COUNT = 230;
+        int GEOLOCATION_PERMISSIONS_ALLOW = 230;
+        int GEOLOCATION_PERMISSIONS_CLEAR = 231;
+        int GEOLOCATION_PERMISSIONS_CLEAR_ALL = 232;
+        int GEOLOCATION_PERMISSIONS_GET_ALLOWED = 233;
+        int GEOLOCATION_PERMISSIONS_GET_ORIGINS = 234;
+        int COUNT = 235;
     }
+
+    // LINT.ThenChange(/tools/metrics/histograms/metadata/android/enums.xml:WebViewApiCall)
 
     public static void recordWebViewApiCall(@ApiCall int sample) {
         RecordHistogram.recordEnumeratedHistogram("Android.WebView.ApiCall", sample, ApiCall.COUNT);
@@ -1189,20 +1202,23 @@ class WebViewChromium
                     new Runnable() {
                         @Override
                         public void run() {
-                            try (TraceEvent event =
-                                    TraceEvent.scoped(
-                                            "WebView.APICall.Framework.LOAD_URL_ADDITIONAL_HEADERS")) {
-                                recordWebViewApiCall(ApiCall.LOAD_URL_ADDITIONAL_HEADERS);
-                                mAwContents.loadUrl(url, additionalHttpHeaders);
-                            }
+                            loadUrlNoPost(url, additionalHttpHeaders);
                         }
                     });
             return;
         }
+        loadUrlNoPost(url, additionalHttpHeaders);
+    }
+
+    private void loadUrlNoPost(final String url, final Map<String, String> additionalHttpHeaders) {
         try (TraceEvent event =
                 TraceEvent.scoped("WebView.APICall.Framework.LOAD_URL_ADDITIONAL_HEADERS")) {
             recordWebViewApiCall(ApiCall.LOAD_URL_ADDITIONAL_HEADERS);
+            long startTime = SystemClock.uptimeMillis();
             mAwContents.loadUrl(url, additionalHttpHeaders);
+            RecordHistogram.recordTimesHistogram(
+                    "Android.WebView.ApiCall.Duration.Framework.LOAD_URL_ADDITIONAL_HEADERS",
+                    SystemClock.uptimeMillis() - startTime);
         }
     }
 
@@ -1216,18 +1232,22 @@ class WebViewChromium
                     new Runnable() {
                         @Override
                         public void run() {
-                            try (TraceEvent event =
-                                    TraceEvent.scoped("WebView.APICall.Framework.LOAD_URL")) {
-                                recordWebViewApiCall(ApiCall.LOAD_URL);
-                                mAwContents.loadUrl(url);
-                            }
+                            loadUrlNoPost(url);
                         }
                     });
             return;
         }
+        loadUrlNoPost(url);
+    }
+
+    private void loadUrlNoPost(final String url) {
         try (TraceEvent event = TraceEvent.scoped("WebView.APICall.Framework.LOAD_URL")) {
             recordWebViewApiCall(ApiCall.LOAD_URL);
+            long startTime = SystemClock.uptimeMillis();
             mAwContents.loadUrl(url);
+            RecordHistogram.recordTimesHistogram(
+                    "Android.WebView.ApiCall.Duration.Framework.LOAD_URL",
+                    SystemClock.uptimeMillis() - startTime);
         }
     }
 
@@ -1296,21 +1316,29 @@ class WebViewChromium
                     new Runnable() {
                         @Override
                         public void run() {
-                            try (TraceEvent event =
-                                    TraceEvent.scoped(
-                                            "WebView.APICall.Framework.LOAD_DATA_WITH_BASE_URL")) {
-                                recordWebViewApiCall(ApiCall.LOAD_DATA_WITH_BASE_URL);
-                                mAwContents.loadDataWithBaseURL(
-                                        baseUrl, data, mimeType, encoding, historyUrl);
-                            }
+                            loadDataWithBaseURLNoPost(
+                                    baseUrl, data, mimeType, encoding, historyUrl);
                         }
                     });
             return;
         }
+        loadDataWithBaseURLNoPost(baseUrl, data, mimeType, encoding, historyUrl);
+    }
+
+    private void loadDataWithBaseURLNoPost(
+            final String baseUrl,
+            final String data,
+            final String mimeType,
+            final String encoding,
+            final String historyUrl) {
         try (TraceEvent event =
                 TraceEvent.scoped("WebView.APICall.Framework.LOAD_DATA_WITH_BASE_URL")) {
             recordWebViewApiCall(ApiCall.LOAD_DATA_WITH_BASE_URL);
+            long startTime = SystemClock.uptimeMillis();
             mAwContents.loadDataWithBaseURL(baseUrl, data, mimeType, encoding, historyUrl);
+            RecordHistogram.recordTimesHistogram(
+                    "Android.WebView.ApiCall.Duration.Framework.LOAD_DATA_WITH_BASE_URL",
+                    SystemClock.uptimeMillis() - startTime);
         }
     }
 
@@ -2182,8 +2210,12 @@ class WebViewChromium
     public void setWebViewClient(WebViewClient client) {
         try (TraceEvent event = TraceEvent.scoped("WebView.APICall.Framework.SET_WEBVIEW_CLIENT")) {
             recordWebViewApiCall(ApiCall.SET_WEBVIEW_CLIENT);
+            mAwContents.cancelAllPrerendering();
             mSharedWebViewChromium.setWebViewClient(client);
             mContentsClientAdapter.setWebViewClient(mSharedWebViewChromium.getWebViewClient());
+            if (client != null) {
+                ApiImplementationLogger.logWebViewClientImplementation(client);
+            }
         }
     }
 
@@ -2255,9 +2287,13 @@ class WebViewChromium
         try (TraceEvent event =
                 TraceEvent.scoped("WebView.APICall.Framework.SET_WEBCHROME_CLIENT")) {
             recordWebViewApiCall(ApiCall.SET_WEBCHROME_CLIENT);
+            mAwContents.cancelAllPrerendering();
             mWebSettings.getAwSettings().setFullscreenSupported(doesSupportFullscreen(client));
             mSharedWebViewChromium.setWebChromeClient(client);
             mContentsClientAdapter.setWebChromeClient(mSharedWebViewChromium.getWebChromeClient());
+            if (client != null) {
+                ApiImplementationLogger.logWebChromeClientImplementation(client);
+            }
         }
     }
 

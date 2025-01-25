@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Virkja</translation>
 <translation id="1603914832182249871">(hulin)</translation>
 <translation id="1627276047960621195">Skráalýsingar</translation>
+<translation id="1654713139320245449">Engir áfangastaðir fundust til að varpa á. Þarftu aðstoð?</translation>
 <translation id="166278006618318542">Reiknirit opinbers lykils viðfangs</translation>
 <translation id="1682548588986054654">Nýr einkagluggi</translation>
 <translation id="1708338024780164500">(óvirk)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Annað forrit á tölvunni þinni bætti við viðbót sem gæti breytt virkni Vivaldi.</translation>
 <translation id="2443487764245141020">Vefsvæði þurfa hugsanlega að staðfesta tækið þitt með auðkenni</translation>
 <translation id="2445081178310039857">Rótarmappa viðbótar er krafist.</translation>
-<translation id="2470702053775288986">Óstuddar viðbætur gerða óvirkar</translation>
 <translation id="2485422356828889247">Fjarlægja</translation>
 <translation id="2498539833203011245">Minnka</translation>
 <translation id="2509495747794740764">Skölun skal vera tala á bilinu 10 til 200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">Upplýsingar</translation>
 <translation id="4345587454538109430">Stillingar...</translation>
 <translation id="4348766275249686434">Safna villum</translation>
-<translation id="4363771538994847871">Engin vörpunarstaðsetning fundin. Þarftu hjálp?</translation>
 <translation id="4384652540891215547">Virkja viðbótina</translation>
 <translation id="4394049700291259645">Slökkva</translation>
 <translation id="4409697491990005945">Spássíða</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Afstaða</translation>
 <translation id="7782102568078991263">Ekki fleiri tillögur frá Google</translation>
 <translation id="7786889348652477777">&amp;Endurhlaða smáforriti</translation>
-<translation id="7791543448312431591">Bæta við</translation>
 <translation id="7800518121066352902">Snúa r&amp;angsælis</translation>
 <translation id="7814458197256864873">&amp;Afrita</translation>
 <translation id="7818135753970109980">Nýju þema bætt við (<ph name="EXTENSION_NAME" />)</translation>

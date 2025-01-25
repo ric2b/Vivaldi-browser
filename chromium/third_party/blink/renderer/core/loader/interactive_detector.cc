@@ -2,7 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/loader/interactive_detector.h"
+
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/profiler/sample_metadata.h"
@@ -60,7 +66,7 @@ InteractiveDetector* InteractiveDetector::From(Document& document) {
       Supplement<Document>::From<InteractiveDetector>(document);
   if (!detector) {
     detector = MakeGarbageCollected<InteractiveDetector>(
-        document, new NetworkActivityChecker(&document));
+        document, std::make_unique<NetworkActivityChecker>(&document));
     Supplement<Document>::ProvideTo(document, detector);
   }
   return detector;
@@ -72,11 +78,11 @@ const char* InteractiveDetector::SupplementName() {
 
 InteractiveDetector::InteractiveDetector(
     Document& document,
-    NetworkActivityChecker* network_activity_checker)
+    std::unique_ptr<NetworkActivityChecker> network_activity_checker)
     : Supplement<Document>(document),
       ExecutionContextLifecycleObserver(document.GetExecutionContext()),
       clock_(base::DefaultTickClock::GetInstance()),
-      network_activity_checker_(network_activity_checker),
+      network_activity_checker_(std::move(network_activity_checker)),
       time_to_interactive_timer_(
           document.GetTaskRunner(TaskType::kInternalDefault),
           this,

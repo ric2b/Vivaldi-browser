@@ -27,7 +27,7 @@ constexpr EnumNameTable<VideoCodec, 6> kFfmpegCodecDescriptors{
 
 SDLVideoPlayer::SDLVideoPlayer(ClockNowFunctionPtr now_function,
                                TaskRunner& task_runner,
-                               Receiver* receiver,
+                               Receiver& receiver,
                                VideoCodec codec,
                                SDL_Renderer& renderer,
                                std::function<void()> error_callback)

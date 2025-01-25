@@ -91,7 +91,7 @@ git daemon --base-path=/home/cros/mirror/ --export-all
 And then your users could pull from it like so:
 
 ```none
-repo init -u git://local-cros-mirror/chromiumos/manifest.git --repo-url=git://local-cros-mirror/external/repo.git
+repo init git://local-cros-mirror/chromiumos/manifest.git
 ```
 
 ## Alternative Client Usage (git insteadOf)

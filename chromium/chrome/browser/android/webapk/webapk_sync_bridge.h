@@ -65,9 +65,9 @@ class WebApkSyncBridge : public syncer::ModelTypeSyncBridge {
   std::optional<syncer::ModelError> ApplyIncrementalSyncChanges(
       std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
       syncer::EntityChangeList entity_changes) override;
-  void GetDataForCommit(StorageKeyList storage_keys,
-                        DataCallback callback) override;
-  void GetAllDataForDebugging(DataCallback callback) override;
+  std::unique_ptr<syncer::DataBatch> GetDataForCommit(
+      StorageKeyList storage_keys) override;
+  std::unique_ptr<syncer::DataBatch> GetAllDataForDebugging() override;
   std::string GetClientTag(const syncer::EntityData& entity_data) override;
   std::string GetStorageKey(const syncer::EntityData& entity_data) override;
   void ApplyDisableSyncChanges(std::unique_ptr<syncer::MetadataChangeList>
@@ -134,7 +134,8 @@ class WebApkSyncBridge : public syncer::ModelTypeSyncBridge {
       std::unique_ptr<RegistryUpdateData> update_data);
 
   void AddOrModifyAppInSync(std::unique_ptr<WebApkProto> app, bool is_install);
-  void DeleteAppsFromSync(const std::vector<webapps::AppId>& app_ids);
+  void DeleteAppsFromSync(const std::vector<webapps::AppId>& app_ids,
+                          bool database_opened);
 
   void RecordSyncedWebApkAdditionHistogram(bool is_install,
                                            bool already_exists_in_sync) const;
@@ -144,7 +145,7 @@ class WebApkSyncBridge : public syncer::ModelTypeSyncBridge {
   Registry registry_;
   std::unique_ptr<base::Clock> clock_;
   std::unique_ptr<AbstractWebApkSpecificsFetcher> webapk_specifics_fetcher_;
-  base::OnceCallback<void(bool)> init_done_callback_;
+  std::vector<base::OnceCallback<void(bool)>> init_done_callback_;
 
   base::WeakPtrFactory<WebApkSyncBridge> weak_ptr_factory_{this};
 };

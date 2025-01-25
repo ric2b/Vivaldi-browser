@@ -2,9 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "content/common/service_worker/race_network_request_read_buffer_manager.h"
 
 #include "base/check_op.h"
+#include "base/containers/span.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/memory/scoped_refptr.h"
@@ -49,8 +55,8 @@ RaceNetworkRequestReadBufferManager::ReadData() {
   bool is_query_data_size_mode = base::GetFieldTrialParamByFeatureAsBool(
       features::kServiceWorkerAutoPreload, "query_data_size", false);
   if (is_query_data_size_mode) {
-    result = consumer_handle_->ReadData(nullptr, &num_bytes,
-                                        MOJO_READ_DATA_FLAG_QUERY);
+    result = consumer_handle_->ReadData(MOJO_READ_DATA_FLAG_QUERY,
+                                        base::span<uint8_t>(), num_bytes);
     CHECK_EQ(result, MOJO_RESULT_OK);
     // Sometimes queried |num_bytes| is zero. So explicitly set >=1 byte size
     // here to avoid receiving |MOJO_RESULT_INVALID_ARGUMENT| from
@@ -67,8 +73,9 @@ RaceNetworkRequestReadBufferManager::ReadData() {
   }
   scoped_refptr<net::IOBuffer> buffer =
       base::MakeRefCounted<net::IOBufferWithSize>(num_bytes);
-  result = consumer_handle_->ReadData(buffer->data(), &num_bytes,
-                                      MOJO_READ_DATA_FLAG_NONE);
+  result = consumer_handle_->ReadData(MOJO_READ_DATA_FLAG_NONE,
+                                      base::as_writable_bytes(buffer->span()),
+                                      num_bytes);
 
   if (result == MOJO_RESULT_OK) {
     buffer_ = base::MakeRefCounted<net::DrainableIOBuffer>(std::move(buffer),

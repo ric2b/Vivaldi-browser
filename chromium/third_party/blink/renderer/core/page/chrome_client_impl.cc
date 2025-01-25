@@ -138,7 +138,7 @@ const char* UIElementTypeToString(ChromeClient::UIElementType ui_element_type) {
     case ChromeClient::UIElementType::kPopup:
       return "popup";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return "";
 }
 
@@ -153,9 +153,9 @@ const char* DismissalTypeToString(Document::PageDismissalType dismissal_type) {
     case Document::kUnloadDismissal:
       return "unload";
     case Document::kNoDismissal:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return "";
 }
 
@@ -775,7 +775,8 @@ ColorChooser* ChromeClientImpl::OpenColorChooser(
         frame, this, chooser_client);
   } else {
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-    NOTREACHED() << "Page popups should be enabled on all but Android or iOS";
+    NOTREACHED_IN_MIGRATION()
+        << "Page popups should be enabled on all but Android or iOS";
 #endif
     controller =
         MakeGarbageCollected<ColorChooserUIController>(frame, chooser_client);
@@ -1292,6 +1293,14 @@ void ChromeClientImpl::DidChangeValueInTextField(
   }
 }
 
+void ChromeClientImpl::DidClearValueInTextField(
+    HTMLFormControlElement& element) {
+  Document& doc = element.GetDocument();
+  if (auto* fill_client = AutofillClientFromFrame(doc.GetFrame())) {
+    fill_client->TextFieldCleared(WebFormControlElement(&element));
+  }
+}
+
 void ChromeClientImpl::DidUserChangeContentEditableContent(Element& element) {
   Document& doc = element.GetDocument();
   // Selecting the focused element as we are only interested in changes made by
@@ -1421,9 +1430,12 @@ void ChromeClientImpl::DocumentDetached(Document& document) {
   }
 }
 
-double ChromeClientImpl::UserZoomFactor() const {
+double ChromeClientImpl::UserZoomFactor(LocalFrame* frame) const {
   DCHECK(web_view_);
-  return PageZoomLevelToZoomFactor(web_view_->ZoomLevel());
+  return ZoomLevelToZoomFactor(
+      WebLocalFrameImpl::FromFrame(frame->LocalFrameRoot())
+          ->FrameWidgetImpl()
+          ->GetZoomLevel());
 }
 
 void ChromeClientImpl::SetDelegatedInkMetadata(

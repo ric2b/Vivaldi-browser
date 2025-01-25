@@ -270,15 +270,13 @@ void CreateTestTwoColoredTextureDrawQuad(
   SkPMColor pixel_color_one =
       premultiplied_alpha
           ? SkPreMultiplyColor(texel_color_one.toSkColor())
-          : SkPackARGB32NoCheck(
-                255 * texel_color_one.fA, 255 * texel_color_one.fR,
-                255 * texel_color_one.fG, 255 * texel_color_one.fB);
+          : SkPackARGB32(255 * texel_color_one.fA, 255 * texel_color_one.fR,
+                         255 * texel_color_one.fG, 255 * texel_color_one.fB);
   SkPMColor pixel_color_two =
       premultiplied_alpha
           ? SkPreMultiplyColor(texel_color_two.toSkColor())
-          : SkPackARGB32NoCheck(
-                255 * texel_color_two.fA, 255 * texel_color_two.fR,
-                255 * texel_color_two.fG, 255 * texel_color_two.fB);
+          : SkPackARGB32(255 * texel_color_two.fA, 255 * texel_color_two.fR,
+                         255 * texel_color_two.fG, 255 * texel_color_two.fB);
   // The default color is texel_color_one
   std::vector<uint32_t> pixels(rect.size().GetArea(), pixel_color_one);
   if (half_and_half) {
@@ -354,8 +352,8 @@ void CreateTestTextureDrawQuad(
   SkPMColor pixel_color =
       premultiplied_alpha
           ? SkPreMultiplyColor(texel_color.toSkColor())
-          : SkPackARGB32NoCheck(texel_color.fA * 255, texel_color.fR * 255,
-                                texel_color.fG * 255, texel_color.fB * 255);
+          : SkPackARGB32(texel_color.fA * 255, texel_color.fR * 255,
+                         texel_color.fG * 255, texel_color.fB * 255);
   size_t num_pixels = static_cast<size_t>(rect.width()) * rect.height();
   std::vector<uint32_t> pixels(num_pixels, pixel_color);
 
@@ -397,57 +395,6 @@ void CreateTestTextureDrawQuad(
                premultiplied_alpha, uv_top_left, uv_bottom_right,
                background_color, flipped, nearest_neighbor,
                /*secure_output=*/false, gfx::ProtectedVideoType::kClear);
-}
-
-
-void CreateTestMultiplanarVideoDrawQuad_FromVideoFrame(
-    scoped_refptr<media::VideoFrame> video_frame,
-    uint8_t alpha_value,
-    gfx::Transform transform,
-    gfx::MaskFilterInfo mask_filter_info,
-    int sorting_context_id,
-    CompositorRenderPass* render_pass,
-    media::VideoResourceUpdater* video_resource_updater,
-    const gfx::Rect& rect,
-    const gfx::Rect& visible_rect,
-    DisplayResourceProvider* resource_provider,
-    ClientResourceProvider* child_resource_provider,
-    RasterContextProvider* child_context_provider) {
-  DCHECK(video_frame->ColorSpace().IsValid());
-  bool contents_opaque = false;
-  float draw_opacity = 1.0f;
-  const bool with_alpha = (video_frame->format() == media::PIXEL_FORMAT_I420A);
-  if (with_alpha) {
-    memset(video_frame->writable_data(media::VideoFrame::Plane::kA),
-           alpha_value,
-           video_frame->stride(media::VideoFrame::Plane::kA) *
-               video_frame->rows(media::VideoFrame::Plane::kA));
-  }
-
-  // Obtain frame resources and perform AppendQuads which chooses the correct
-  // quad to append to.
-  video_resource_updater->ObtainFrameResources(video_frame);
-  video_resource_updater->AppendQuads(
-      render_pass, video_frame, transform, rect, visible_rect, mask_filter_info,
-      /*clip_rect=*/std::nullopt, contents_opaque, draw_opacity,
-      sorting_context_id);
-
-  // Get the appended quad and map resource ids for transfer.
-  auto* quad = render_pass->quad_list.back();
-  std::vector<ResourceId> resource_ids_to_transfer;
-  for (uint32_t i = 0; i < quad->resources.count; ++i) {
-    resource_ids_to_transfer.push_back(quad->resources.ids[i]);
-  }
-
-  std::unordered_map<ResourceId, ResourceId, ResourceIdHasher> resource_map =
-      cc::SendResourceAndGetChildToParentMap(
-          resource_ids_to_transfer, resource_provider, child_resource_provider,
-          child_context_provider);
-  // Set correct resource ids and count.
-  for (size_t i = 0; i < resource_map.size(); ++i) {
-    quad->resources.ids[i] = resource_map[resource_ids_to_transfer[i]];
-  }
-  quad->resources.count = resource_map.size();
 }
 
 void CreateTestY16TextureDrawQuad_FromVideoFrame(
@@ -564,7 +511,7 @@ scoped_refptr<media::VideoFrame> CreateHighbitVideoFrame(
       break;
 
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return nullptr;
   }
   scoped_refptr<media::VideoFrame> ret = media::VideoFrame::CreateFrame(
@@ -590,6 +537,56 @@ scoped_refptr<media::VideoFrame> CreateHighbitVideoFrame(
     }
   }
   return ret;
+}
+
+void CreateTestMultiplanarVideoDrawQuad_FromVideoFrame(
+    scoped_refptr<media::VideoFrame> video_frame,
+    uint8_t alpha_value,
+    gfx::Transform transform,
+    gfx::MaskFilterInfo mask_filter_info,
+    int sorting_context_id,
+    CompositorRenderPass* render_pass,
+    media::VideoResourceUpdater* video_resource_updater,
+    const gfx::Rect& rect,
+    const gfx::Rect& visible_rect,
+    DisplayResourceProvider* resource_provider,
+    ClientResourceProvider* child_resource_provider,
+    RasterContextProvider* child_context_provider) {
+  DCHECK(video_frame->ColorSpace().IsValid());
+  bool contents_opaque = false;
+  float draw_opacity = 1.0f;
+  const bool with_alpha = (video_frame->format() == media::PIXEL_FORMAT_I420A);
+  if (with_alpha) {
+    memset(video_frame->writable_data(media::VideoFrame::Plane::kA),
+           alpha_value,
+           video_frame->stride(media::VideoFrame::Plane::kA) *
+               video_frame->rows(media::VideoFrame::Plane::kA));
+  }
+
+  // Obtain frame resources and perform AppendQuads which chooses the correct
+  // quad to append to.
+  video_resource_updater->ObtainFrameResources(video_frame);
+  video_resource_updater->AppendQuads(
+      render_pass, video_frame, transform, rect, visible_rect, mask_filter_info,
+      /*clip_rect=*/std::nullopt, contents_opaque, draw_opacity,
+      sorting_context_id);
+
+  // Get the appended quad and map resource ids for transfer.
+  auto* quad = render_pass->quad_list.back();
+  std::vector<ResourceId> resource_ids_to_transfer;
+  for (uint32_t i = 0; i < quad->resources.count; ++i) {
+    resource_ids_to_transfer.push_back(quad->resources.ids[i]);
+  }
+
+  std::unordered_map<ResourceId, ResourceId, ResourceIdHasher> resource_map =
+      cc::SendResourceAndGetChildToParentMap(
+          resource_ids_to_transfer, resource_provider, child_resource_provider,
+          child_context_provider);
+  // Set correct resource ids and count.
+  for (size_t i = 0; i < resource_map.size(); ++i) {
+    quad->resources.ids[i] = resource_map[resource_ids_to_transfer[i]];
+  }
+  quad->resources.count = resource_map.size();
 }
 
 void CreateTestMultiplanarVideoDrawQuad_Striped(
@@ -768,12 +765,29 @@ void CreateTestMultiplanarVideoDrawQuad_Solid(
   memset(video_frame->writable_data(media::VideoFrame::Plane::kY), y,
          video_frame->stride(media::VideoFrame::Plane::kY) *
              video_frame->rows(media::VideoFrame::Plane::kY));
-  memset(video_frame->writable_data(media::VideoFrame::Plane::kU), u,
-         video_frame->stride(media::VideoFrame::Plane::kU) *
-             video_frame->rows(media::VideoFrame::Plane::kU));
-  memset(video_frame->writable_data(media::VideoFrame::Plane::kV), v,
-         video_frame->stride(media::VideoFrame::Plane::kV) *
-             video_frame->rows(media::VideoFrame::Plane::kV));
+  if (format == media::PIXEL_FORMAT_NV12) {
+    const int stride_uv = video_frame->stride(media::VideoFrame::Plane::kUV);
+    const int half_height = (coded_size.height() + 1) / 2;
+    uint8_t* uv_plane =
+        video_frame->writable_data(media::VideoFrame::Plane::kUV);
+    // Set U and V.
+    for (int row = 0; row < half_height; ++row) {
+      for (int col = 0; col < stride_uv; col++) {
+        *uv_plane = col % 2 == 0 ? u : v;
+        uv_plane++;
+      }
+    }
+  } else {
+    // Only NV12, YV12 and I420 formats are used for testing here.
+    CHECK(format == media::PIXEL_FORMAT_I420 ||
+          format == media::PIXEL_FORMAT_YV12);
+    memset(video_frame->writable_data(media::VideoFrame::Plane::kU), u,
+           video_frame->stride(media::VideoFrame::Plane::kU) *
+               video_frame->rows(media::VideoFrame::Plane::kU));
+    memset(video_frame->writable_data(media::VideoFrame::Plane::kV), v,
+           video_frame->stride(media::VideoFrame::Plane::kV) *
+               video_frame->rows(media::VideoFrame::Plane::kV));
+  }
 
   uint8_t alpha_value = is_transparent ? 0 : 128;
   CreateTestMultiplanarVideoDrawQuad_FromVideoFrame(
@@ -781,65 +795,6 @@ void CreateTestMultiplanarVideoDrawQuad_Solid(
       /*sorting_context_id=*/0, render_pass, video_resource_updater, rect,
       visible_rect, resource_provider, child_resource_provider,
       child_context_provider);
-}
-
-void CreateTestYUVVideoDrawQuad_NV12(
-    const SharedQuadState* shared_state,
-    const gfx::ColorSpace& color_space,
-    const gfx::RectF& tex_coord_rect,
-    uint8_t y,
-    uint8_t u,
-    uint8_t v,
-    AggregatedRenderPass* render_pass,
-    media::VideoResourceUpdater* video_resource_updater,
-    const gfx::Rect& rect,
-    const gfx::Rect& visible_rect,
-    DisplayResourceProvider* resource_provider,
-    ClientResourceProvider* child_resource_provider,
-    scoped_refptr<RasterContextProvider> child_context_provider) {
-  bool needs_blending = true;
-  const gfx::Size ya_tex_size = rect.size();
-  const gfx::Size uv_tex_size = media::VideoFrame::PlaneSizeInSamples(
-      media::PIXEL_FORMAT_NV12, media::VideoFrame::Plane::kUV, rect.size());
-  const gfx::Size uv_sample_size = media::VideoFrame::SampleSize(
-      media::PIXEL_FORMAT_NV12, media::VideoFrame::Plane::kUV);
-
-  std::vector<uint8_t> y_pixels(ya_tex_size.GetArea(), y);
-  ResourceId resource_y = CreateGpuResource(
-      child_context_provider, child_resource_provider, ya_tex_size,
-      video_resource_updater->YuvSharedImageFormat(8), color_space, y_pixels);
-
-  // U goes in the R component and V goes in the G component.
-  uint32_t rgba_pixel = (u) | (v << 8);
-  std::vector<uint32_t> uv_pixels(uv_tex_size.GetArea(), rgba_pixel);
-  ResourceId resource_u = CreateGpuResource(
-      child_context_provider, child_resource_provider, uv_tex_size,
-      SinglePlaneFormat::kRGBA_8888, color_space, MakePixelSpan(uv_pixels));
-  ResourceId resource_v = resource_u;
-  ResourceId resource_a = kInvalidResourceId;
-
-  // Transfer resources to the parent, and get the resource map.
-  std::unordered_map<ResourceId, ResourceId, ResourceIdHasher> resource_map =
-      cc::SendResourceAndGetChildToParentMap(
-          {resource_y, resource_u, resource_v}, resource_provider,
-          child_resource_provider, child_context_provider.get());
-
-  ResourceId mapped_resource_y = resource_map[resource_y];
-  ResourceId mapped_resource_u = resource_map[resource_u];
-  ResourceId mapped_resource_v = resource_map[resource_v];
-
-  const gfx::Rect video_frame_visible_rect = gfx::ToNearestRect(
-      gfx::RectF(tex_coord_rect.x() * ya_tex_size.width(),
-                 tex_coord_rect.y() * ya_tex_size.height(),
-                 tex_coord_rect.width() * ya_tex_size.width(),
-                 tex_coord_rect.height() * ya_tex_size.height()));
-
-  auto* yuv_quad = render_pass->CreateAndAppendDrawQuad<YUVVideoDrawQuad>();
-  yuv_quad->SetNew(shared_state, rect, visible_rect, needs_blending,
-                   ya_tex_size, video_frame_visible_rect, uv_sample_size,
-                   mapped_resource_y, mapped_resource_u, mapped_resource_v,
-                   resource_a, color_space, 8, gfx::ProtectedVideoType::kClear,
-                   std::nullopt);
 }
 
 // Create two quads of specified colors on half-pixel boundaries.
@@ -2103,12 +2058,12 @@ TEST_P(IntersectingQuadSoftwareTest, PictureQuads) {
   cc::PaintFlags green_flags;
   green_flags.setColor(SkColors::kGreen);
 
-  auto blue_recording = cc::FakeRecordingSource::Create(quad_rect_.size());
-  blue_recording->add_draw_rect_with_flags(outer_rect, black_flags);
-  blue_recording->add_draw_rect_with_flags(inner_rect, blue_flags);
-  blue_recording->Rerecord();
+  cc::FakeRecordingSource blue_recording(quad_rect_.size());
+  blue_recording.add_draw_rect_with_flags(outer_rect, black_flags);
+  blue_recording.add_draw_rect_with_flags(inner_rect, blue_flags);
+  blue_recording.Rerecord();
   scoped_refptr<cc::RasterSource> blue_raster_source =
-      blue_recording->CreateRasterSource();
+      blue_recording.CreateRasterSource();
 
   auto* blue_quad =
       this->render_pass_->template CreateAndAppendDrawQuad<PictureDrawQuad>();
@@ -2116,21 +2071,23 @@ TEST_P(IntersectingQuadSoftwareTest, PictureQuads) {
   blue_quad->SetNew(this->front_quad_state_, this->quad_rect_, this->quad_rect_,
                     needs_blending, gfx::RectF(this->quad_rect_),
                     this->quad_rect_.size(), false, this->quad_rect_, 1.f, {},
-                    blue_raster_source->GetDisplayItemList());
+                    blue_raster_source->GetDisplayItemList(),
+                    cc::ScrollOffsetMap());
 
-  auto green_recording = cc::FakeRecordingSource::Create(quad_rect_.size());
-  green_recording->add_draw_rect_with_flags(outer_rect, green_flags);
-  green_recording->add_draw_rect_with_flags(inner_rect, black_flags);
-  green_recording->Rerecord();
+  cc::FakeRecordingSource green_recording(quad_rect_.size());
+  green_recording.add_draw_rect_with_flags(outer_rect, green_flags);
+  green_recording.add_draw_rect_with_flags(inner_rect, black_flags);
+  green_recording.Rerecord();
   scoped_refptr<cc::RasterSource> green_raster_source =
-      green_recording->CreateRasterSource();
+      green_recording.CreateRasterSource();
 
   auto* green_quad =
       this->render_pass_->template CreateAndAppendDrawQuad<PictureDrawQuad>();
   green_quad->SetNew(this->back_quad_state_, this->quad_rect_, this->quad_rect_,
                      needs_blending, gfx::RectF(this->quad_rect_),
                      this->quad_rect_.size(), false, this->quad_rect_, 1.f, {},
-                     green_raster_source->GetDisplayItemList());
+                     green_raster_source->GetDisplayItemList(),
+                     cc::ScrollOffsetMap());
   this->AppendBackgroundAndRunTest(
       cc::FuzzyPixelComparator().SetErrorPixelsPercentageLimit(2.f),
       base::FilePath(FILE_PATH_LITERAL("intersecting_blue_green_squares.png")));
@@ -2459,7 +2416,7 @@ class VideoRendererPixelHiLoColorSpaceTest
       case gfx::ColorSpace::MatrixID::GBR:
         return "_gbr_limited";
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
     return "";
   }
@@ -2746,22 +2703,23 @@ TEST_P(VideoRendererPixelTest, SimpleYUVJRectWithTemperature) {
 TEST_P(VideoRendererPixelTest, SimpleNV12JRect) {
   gfx::Rect rect(this->device_viewport_size_);
 
-  AggregatedRenderPassId id{1};
+  CompositorRenderPassId id{1};
   auto pass = CreateTestRootRenderPass(id, rect);
 
-  SharedQuadState* shared_state = CreateTestSharedQuadState(
-      gfx::Transform(), rect, pass.get(), gfx::MaskFilterInfo());
-
   // YUV of (149,100,50) should be emerald green (39, 214, 99) in RGB.
-  CreateTestYUVVideoDrawQuad_NV12(
-      shared_state, gfx::ColorSpace::CreateJpeg(),
+  CreateTestMultiplanarVideoDrawQuad_Solid(
+      media::PIXEL_FORMAT_NV12, gfx::ColorSpace::CreateJpeg(), false,
       gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f), 149, 100, 50, pass.get(),
       this->video_resource_updater_.get(), rect, rect,
       this->resource_provider_.get(), this->child_resource_provider_.get(),
-      this->child_context_provider_);
+      this->child_context_provider_.get());
+
+  AggregatedRenderPassId new_id{1};
+  auto copy_pass = cc::CopyToAggregatedRenderPass(
+      pass.get(), new_id, gfx::ContentColorUsage::kSRGB);
 
   AggregatedRenderPassList pass_list;
-  pass_list.push_back(std::move(pass));
+  pass_list.push_back(std::move(copy_pass));
 
   EXPECT_TRUE(this->RunPixelTest(
       &pass_list, base::FilePath(FILE_PATH_LITERAL("emerald_green.png")),
@@ -4333,17 +4291,17 @@ TEST_F(SoftwareRendererPixelTest, PictureDrawQuadIdentityScale) {
   gfx::Rect blue_rect(gfx::Size(100, 100));
   gfx::Rect blue_clip_rect(gfx::Point(50, 50), gfx::Size(50, 50));
 
-  auto blue_recording = cc::FakeRecordingSource::Create(blue_rect.size());
+  cc::FakeRecordingSource blue_recording(blue_rect.size());
   cc::PaintFlags red_flags;
   red_flags.setColor(SkColors::kRed);
-  blue_recording->add_draw_rect_with_flags(blue_rect, red_flags);
+  blue_recording.add_draw_rect_with_flags(blue_rect, red_flags);
   cc::PaintFlags blue_flags;
   blue_flags.setColor(SkColors::kBlue);
-  blue_recording->add_draw_rect_with_flags(blue_clip_rect, blue_flags);
-  blue_recording->Rerecord();
+  blue_recording.add_draw_rect_with_flags(blue_clip_rect, blue_flags);
+  blue_recording.Rerecord();
 
   scoped_refptr<cc::RasterSource> blue_raster_source =
-      blue_recording->CreateRasterSource();
+      blue_recording.CreateRasterSource();
 
   gfx::Vector2d offset(viewport.bottom_right() - blue_rect.bottom_right());
   bool needs_blending = true;
@@ -4361,16 +4319,17 @@ TEST_F(SoftwareRendererPixelTest, PictureDrawQuadIdentityScale) {
                     viewport,  // Intentionally bigger than clip.
                     viewport, needs_blending, gfx::RectF(viewport),
                     viewport.size(), nearest_neighbor, viewport, 1.f, {},
-                    blue_raster_source->GetDisplayItemList());
+                    blue_raster_source->GetDisplayItemList(),
+                    cc::ScrollOffsetMap());
 
   // One viewport-filling green quad.
-  auto green_recording = cc::FakeRecordingSource::Create(viewport.size());
+  cc::FakeRecordingSource green_recording(viewport.size());
   cc::PaintFlags green_flags;
   green_flags.setColor(SkColors::kGreen);
-  green_recording->add_draw_rect_with_flags(viewport, green_flags);
-  green_recording->Rerecord();
+  green_recording.add_draw_rect_with_flags(viewport, green_flags);
+  green_recording.Rerecord();
   scoped_refptr<cc::RasterSource> green_raster_source =
-      green_recording->CreateRasterSource();
+      green_recording.CreateRasterSource();
 
   gfx::Transform green_quad_to_target_transform;
   SharedQuadState* green_shared_state = CreateTestSharedQuadState(
@@ -4380,7 +4339,8 @@ TEST_F(SoftwareRendererPixelTest, PictureDrawQuadIdentityScale) {
   green_quad->SetNew(green_shared_state, viewport, viewport, needs_blending,
                      gfx::RectF(0.f, 0.f, 1.f, 1.f), viewport.size(),
                      nearest_neighbor, viewport, 1.f, {},
-                     green_raster_source->GetDisplayItemList());
+                     green_raster_source->GetDisplayItemList(),
+                     cc::ScrollOffsetMap());
 
   AggregatedRenderPassList pass_list;
   pass_list.push_back(std::move(pass));
@@ -4402,13 +4362,13 @@ TEST_F(SoftwareRendererPixelTest, PictureDrawQuadOpacity) {
   auto pass = CreateTestRenderPass(id, viewport, transform_to_root);
 
   // One viewport-filling 0.5-opacity green quad.
-  auto green_recording = cc::FakeRecordingSource::Create(viewport.size());
+  cc::FakeRecordingSource green_recording(viewport.size());
   cc::PaintFlags green_flags;
   green_flags.setColor(SkColors::kGreen);
-  green_recording->add_draw_rect_with_flags(viewport, green_flags);
-  green_recording->Rerecord();
+  green_recording.add_draw_rect_with_flags(viewport, green_flags);
+  green_recording.Rerecord();
   scoped_refptr<cc::RasterSource> green_raster_source =
-      green_recording->CreateRasterSource();
+      green_recording.CreateRasterSource();
 
   gfx::Transform green_quad_to_target_transform;
   SharedQuadState* green_shared_state = CreateTestSharedQuadState(
@@ -4416,29 +4376,29 @@ TEST_F(SoftwareRendererPixelTest, PictureDrawQuadOpacity) {
   green_shared_state->opacity = 0.5f;
 
   auto* green_quad = pass->CreateAndAppendDrawQuad<PictureDrawQuad>();
-  green_quad->SetNew(green_shared_state, viewport, viewport, needs_blending,
-                     gfx::RectF(0, 0, 1, 1), viewport.size(), nearest_neighbor,
-                     viewport, 1.f, {},
-                     green_raster_source->GetDisplayItemList());
+  green_quad->SetNew(
+      green_shared_state, viewport, viewport, needs_blending,
+      gfx::RectF(0, 0, 1, 1), viewport.size(), nearest_neighbor, viewport, 1.f,
+      {}, green_raster_source->GetDisplayItemList(), cc::ScrollOffsetMap());
 
   // One viewport-filling white quad.
-  auto white_recording = cc::FakeRecordingSource::Create(viewport.size());
+  cc::FakeRecordingSource white_recording(viewport.size());
   cc::PaintFlags white_flags;
   white_flags.setColor(SkColors::kWhite);
-  white_recording->add_draw_rect_with_flags(viewport, white_flags);
-  white_recording->Rerecord();
+  white_recording.add_draw_rect_with_flags(viewport, white_flags);
+  white_recording.Rerecord();
   scoped_refptr<cc::RasterSource> white_raster_source =
-      white_recording->CreateRasterSource();
+      white_recording.CreateRasterSource();
 
   gfx::Transform white_quad_to_target_transform;
   SharedQuadState* white_shared_state = CreateTestSharedQuadState(
       white_quad_to_target_transform, viewport, pass.get(), gfx::MaskFilterInfo());
 
   auto* white_quad = pass->CreateAndAppendDrawQuad<PictureDrawQuad>();
-  white_quad->SetNew(white_shared_state, viewport, viewport, needs_blending,
-                     gfx::RectF(0, 0, 1, 1), viewport.size(), nearest_neighbor,
-                     viewport, 1.f, {},
-                     white_raster_source->GetDisplayItemList());
+  white_quad->SetNew(
+      white_shared_state, viewport, viewport, needs_blending,
+      gfx::RectF(0, 0, 1, 1), viewport.size(), nearest_neighbor, viewport, 1.f,
+      {}, white_raster_source->GetDisplayItemList(), cc::ScrollOffsetMap());
 
   AggregatedRenderPassList pass_list;
   pass_list.push_back(std::move(pass));
@@ -4458,13 +4418,13 @@ TEST_F(SoftwareRendererPixelTest, PictureDrawQuadOpacityWithAlpha) {
   auto pass = CreateTestRenderPass(id, viewport, transform_to_root);
 
   // One viewport-filling 0.5-opacity transparent quad.
-  auto transparent_recording = cc::FakeRecordingSource::Create(viewport.size());
+  cc::FakeRecordingSource transparent_recording(viewport.size());
   cc::PaintFlags transparent_flags;
   transparent_flags.setColor(SkColors::kTransparent);
-  transparent_recording->add_draw_rect_with_flags(viewport, transparent_flags);
-  transparent_recording->Rerecord();
+  transparent_recording.add_draw_rect_with_flags(viewport, transparent_flags);
+  transparent_recording.Rerecord();
   scoped_refptr<cc::RasterSource> transparent_raster_source =
-      transparent_recording->CreateRasterSource();
+      transparent_recording.CreateRasterSource();
 
   gfx::Transform transparent_quad_to_target_transform;
   SharedQuadState* transparent_shared_state = CreateTestSharedQuadState(
@@ -4475,26 +4435,27 @@ TEST_F(SoftwareRendererPixelTest, PictureDrawQuadOpacityWithAlpha) {
   transparent_quad->SetNew(transparent_shared_state, viewport, viewport,
                            needs_blending, gfx::RectF(0, 0, 1, 1),
                            viewport.size(), nearest_neighbor, viewport, 1.f, {},
-                           transparent_raster_source->GetDisplayItemList());
+                           transparent_raster_source->GetDisplayItemList(),
+                           cc::ScrollOffsetMap());
 
   // One viewport-filling white quad.
-  auto white_recording = cc::FakeRecordingSource::Create(viewport.size());
+  cc::FakeRecordingSource white_recording(viewport.size());
   cc::PaintFlags white_flags;
   white_flags.setColor(SkColors::kWhite);
-  white_recording->add_draw_rect_with_flags(viewport, white_flags);
-  white_recording->Rerecord();
+  white_recording.add_draw_rect_with_flags(viewport, white_flags);
+  white_recording.Rerecord();
   scoped_refptr<cc::RasterSource> white_raster_source =
-      white_recording->CreateRasterSource();
+      white_recording.CreateRasterSource();
 
   gfx::Transform white_quad_to_target_transform;
   SharedQuadState* white_shared_state = CreateTestSharedQuadState(
       white_quad_to_target_transform, viewport, pass.get(), gfx::MaskFilterInfo());
 
   auto* white_quad = pass->CreateAndAppendDrawQuad<PictureDrawQuad>();
-  white_quad->SetNew(white_shared_state, viewport, viewport, needs_blending,
-                     gfx::RectF(0, 0, 1, 1), viewport.size(), nearest_neighbor,
-                     viewport, 1.f, {},
-                     white_raster_source->GetDisplayItemList());
+  white_quad->SetNew(
+      white_shared_state, viewport, viewport, needs_blending,
+      gfx::RectF(0, 0, 1, 1), viewport.size(), nearest_neighbor, viewport, 1.f,
+      {}, white_raster_source->GetDisplayItemList(), cc::ScrollOffsetMap());
 
   AggregatedRenderPassList pass_list;
   pass_list.push_back(std::move(pass));
@@ -4511,55 +4472,6 @@ void draw_point_color(SkCanvas* canvas,
   SkPaint paint;
   paint.setColor(color, nullptr /* SkColorSpace* colorSpace */);
   canvas->drawPoint(x, y, paint);
-}
-
-// If we disable image filtering, then a 2x2 bitmap should appear as four
-// huge sharp squares.
-TEST_F(SoftwareRendererPixelTest, PictureDrawQuadDisableImageFiltering) {
-  gfx::Rect viewport(this->device_viewport_size_);
-  bool needs_blending = true;
-  bool nearest_neighbor = false;
-
-  AggregatedRenderPassId id{1};
-  gfx::Transform transform_to_root;
-  auto pass = CreateTestRenderPass(id, viewport, transform_to_root);
-
-  sk_sp<SkSurface> surface =
-      SkSurfaces::Raster(SkImageInfo::MakeN32Premul(2, 2));
-  ASSERT_NE(surface, nullptr);
-  SkCanvas* canvas = surface->getCanvas();
-  draw_point_color(canvas, 0, 0, SkColors::kGreen);
-  draw_point_color(canvas, 0, 1, SkColors::kBlue);
-  draw_point_color(canvas, 1, 0, SkColors::kBlue);
-  draw_point_color(canvas, 1, 1, SkColors::kGreen);
-
-  auto recording = cc::FakeRecordingSource::Create(viewport.size());
-  recording->add_draw_image_with_flags(
-      surface->makeImageSnapshot(), gfx::Point(),
-      SkSamplingOptions(SkFilterMode::kLinear), cc::PaintFlags());
-  recording->Rerecord();
-  scoped_refptr<cc::RasterSource> raster_source =
-      recording->CreateRasterSource();
-
-  gfx::Transform quad_to_target_transform;
-  SharedQuadState* shared_state =
-      CreateTestSharedQuadState(quad_to_target_transform, viewport, pass.get(),
-                                gfx::MaskFilterInfo());
-
-  auto* quad = pass->CreateAndAppendDrawQuad<PictureDrawQuad>();
-  quad->SetNew(shared_state, viewport, viewport, needs_blending,
-               gfx::RectF(0, 0, 2, 2), viewport.size(), nearest_neighbor,
-               viewport, 1.f, {}, raster_source->GetDisplayItemList());
-
-  AggregatedRenderPassList pass_list;
-  pass_list.push_back(std::move(pass));
-
-  this->disable_picture_quad_image_filtering_ = true;
-
-  EXPECT_TRUE(this->RunPixelTest(
-      &pass_list,
-      base::FilePath(FILE_PATH_LITERAL("four_blue_green_checkers.png")),
-      cc::AlphaDiscardingExactPixelComparator()));
 }
 
 // This disables filtering by setting |nearest_neighbor| on the
@@ -4582,13 +4494,13 @@ TEST_F(SoftwareRendererPixelTest, PictureDrawQuadNearestNeighbor) {
   draw_point_color(canvas, 1, 0, SkColors::kBlue);
   draw_point_color(canvas, 1, 1, SkColors::kGreen);
 
-  auto recording = cc::FakeRecordingSource::Create(viewport.size());
-  recording->add_draw_image_with_flags(
+  cc::FakeRecordingSource recording(viewport.size());
+  recording.add_draw_image_with_flags(
       surface->makeImageSnapshot(), gfx::Point(),
       SkSamplingOptions(SkFilterMode::kLinear), cc::PaintFlags());
-  recording->Rerecord();
+  recording.Rerecord();
   scoped_refptr<cc::RasterSource> raster_source =
-      recording->CreateRasterSource();
+      recording.CreateRasterSource();
 
   gfx::Transform quad_to_target_transform;
   SharedQuadState* shared_state =
@@ -4598,7 +4510,111 @@ TEST_F(SoftwareRendererPixelTest, PictureDrawQuadNearestNeighbor) {
   auto* quad = pass->CreateAndAppendDrawQuad<PictureDrawQuad>();
   quad->SetNew(shared_state, viewport, viewport, needs_blending,
                gfx::RectF(0, 0, 2, 2), viewport.size(), nearest_neighbor,
-               viewport, 1.f, {}, raster_source->GetDisplayItemList());
+               viewport, 1.f, {}, raster_source->GetDisplayItemList(),
+               cc::ScrollOffsetMap());
+
+  AggregatedRenderPassList pass_list;
+  pass_list.push_back(std::move(pass));
+
+  EXPECT_TRUE(this->RunPixelTest(
+      &pass_list,
+      base::FilePath(FILE_PATH_LITERAL("four_blue_green_checkers.png")),
+      cc::AlphaDiscardingExactPixelComparator()));
+}
+
+TEST_P(RendererPixelTest, PictureDrawQuadRasterInducingScroll) {
+  gfx::Rect viewport(this->device_viewport_size_);
+  bool needs_blending = true;
+  bool nearest_neighbor = false;
+
+  AggregatedRenderPassId id{1};
+  gfx::Transform transform_to_root;
+  auto pass = CreateTestRenderPass(id, viewport, transform_to_root);
+
+  cc::PaintFlags red_flags;
+  red_flags.setColor(SkColors::kRed);
+  cc::PaintFlags green_flags;
+  green_flags.setColor(SkColors::kGreen);
+  cc::PaintFlags blue_flags;
+  blue_flags.setColor(SkColors::kBlue);
+
+  gfx::PointF blue_offset1(123, 456);
+  auto scroll_list1 = base::MakeRefCounted<cc::DisplayItemList>();
+  scroll_list1->StartPaint();
+  scroll_list1->push<cc::DrawRectOp>(SkRect::MakeWH(1000, 1000), red_flags);
+  scroll_list1->push<cc::DrawRectOp>(
+      SkRect::MakeXYWH(blue_offset1.x(), blue_offset1.y(), 150, 100),
+      blue_flags);
+  scroll_list1->EndPaintOfUnpaired(gfx::Rect(1000, 1000));
+  scroll_list1->Finalize();
+
+  gfx::PointF blue_offset2(234, 789);
+  auto scroll_list2 = base::MakeRefCounted<cc::DisplayItemList>();
+  scroll_list2->StartPaint();
+  scroll_list2->push<cc::DrawRectOp>(SkRect::MakeWH(1000, 1000), red_flags);
+  scroll_list2->push<cc::DrawRectOp>(
+      SkRect::MakeXYWH(blue_offset2.x(), blue_offset2.y(), 100, 100),
+      blue_flags);
+  scroll_list2->EndPaintOfUnpaired(gfx::Rect(1000, 1000));
+  scroll_list2->Finalize();
+
+  cc::ElementId scroll_element_id1(123);
+  cc::ElementId scroll_element_id2(456);
+  auto display_list = base::MakeRefCounted<cc::DisplayItemList>();
+  display_list->StartPaint();
+  display_list->push<cc::DrawRectOp>(SkRect::MakeWH(200, 200), green_flags);
+  display_list->EndPaintOfUnpaired(gfx::Rect(200, 200));
+
+  // Draw scrolling contents op 1 under a clip.
+  display_list->StartPaint();
+  display_list->push<cc::SaveOp>();
+  display_list->push<cc::TranslateOp>(100.f, 0.f);
+  display_list->push<cc::ClipRectOp>(SkRect::MakeXYWH(0, 0, 100, 100),
+                                     SkClipOp::kIntersect, false);
+  display_list->EndPaintOfPairedBegin();
+  display_list->PushDrawScrollingContentsOp(
+      scroll_element_id1, std::move(scroll_list1), gfx::Rect(100, 0, 100, 100));
+  display_list->StartPaint();
+  display_list->push<cc::RestoreOp>();
+  display_list->EndPaintOfPairedEnd();
+
+  // Draw another scrolling contents op 2 under a translate and a clip.
+  display_list->StartPaint();
+  display_list->push<cc::SaveOp>();
+  display_list->push<cc::TranslateOp>(0.f, 100.f);
+  display_list->push<cc::ClipRectOp>(SkRect::MakeWH(100, 100),
+                                     SkClipOp::kIntersect, false);
+  display_list->EndPaintOfPairedBegin();
+  display_list->PushDrawScrollingContentsOp(
+      scroll_element_id2, std::move(scroll_list2), gfx::Rect(0, 100, 100, 100));
+  display_list->StartPaint();
+  display_list->push<cc::RestoreOp>();
+  display_list->EndPaintOfPairedEnd();
+  display_list->Finalize();
+
+  EXPECT_EQ(2u, display_list->raster_inducing_scrolls().size());
+
+  cc::FakeContentLayerClient client;
+  client.set_display_item_list(std::move(display_list));
+  cc::RecordingSource recording;
+  cc::Region invalidation;
+  recording.Update(gfx::Size(200, 200), 1, client, invalidation);
+  scoped_refptr<cc::RasterSource> raster_source =
+      recording.CreateRasterSource();
+
+  gfx::Transform quad_to_target_transform;
+  SharedQuadState* shared_state = CreateTestSharedQuadState(
+      quad_to_target_transform, viewport, pass.get(), gfx::MaskFilterInfo());
+
+  cc::ScrollOffsetMap raster_inducing_scroll_offsets = {
+      {scroll_element_id1, blue_offset1},
+      {scroll_element_id2, blue_offset2},
+  };
+  auto* quad = pass->CreateAndAppendDrawQuad<PictureDrawQuad>();
+  quad->SetNew(shared_state, viewport, viewport, needs_blending,
+               gfx::RectF(viewport), viewport.size(), nearest_neighbor,
+               viewport, 1.f, {}, raster_source->GetDisplayItemList(),
+               raster_inducing_scroll_offsets);
 
   AggregatedRenderPassList pass_list;
   pass_list.push_back(std::move(pass));
@@ -4797,36 +4813,36 @@ TEST_F(SoftwareRendererPixelTest, PictureDrawQuadNonIdentityScale) {
   gfx::Rect green_rect1(gfx::Point(80, 0), gfx::Size(20, 100));
   gfx::Rect green_rect2(gfx::Point(0, 80), gfx::Size(100, 20));
 
-  auto green_recording = cc::FakeRecordingSource::Create(viewport.size());
+  cc::FakeRecordingSource green_recording(viewport.size());
 
   cc::PaintFlags red_flags;
   red_flags.setColor(SkColors::kRed);
-  green_recording->add_draw_rect_with_flags(viewport, red_flags);
+  green_recording.add_draw_rect_with_flags(viewport, red_flags);
   cc::PaintFlags green_flags;
   green_flags.setColor(SkColors::kGreen);
-  green_recording->add_draw_rect_with_flags(green_rect1, green_flags);
-  green_recording->add_draw_rect_with_flags(green_rect2, green_flags);
-  green_recording->Rerecord();
+  green_recording.add_draw_rect_with_flags(green_rect1, green_flags);
+  green_recording.add_draw_rect_with_flags(green_rect2, green_flags);
+  green_recording.Rerecord();
   scoped_refptr<cc::RasterSource> green_raster_source =
-      green_recording->CreateRasterSource();
+      green_recording.CreateRasterSource();
 
   SharedQuadState* top_right_green_shared_quad_state =
       CreateTestSharedQuadState(green_quad_to_target_transform, viewport,
                                 pass.get(), gfx::MaskFilterInfo());
 
   auto* green_quad1 = pass->CreateAndAppendDrawQuad<PictureDrawQuad>();
-  green_quad1->SetNew(top_right_green_shared_quad_state, green_rect1,
-                      green_rect1, needs_blending,
-                      gfx::RectF(gfx::SizeF(green_rect1.size())),
-                      green_rect1.size(), nearest_neighbor, green_rect1, 1.f,
-                      {}, green_raster_source->GetDisplayItemList());
+  green_quad1->SetNew(
+      top_right_green_shared_quad_state, green_rect1, green_rect1,
+      needs_blending, gfx::RectF(gfx::SizeF(green_rect1.size())),
+      green_rect1.size(), nearest_neighbor, green_rect1, 1.f, {},
+      green_raster_source->GetDisplayItemList(), cc::ScrollOffsetMap());
 
   auto* green_quad2 = pass->CreateAndAppendDrawQuad<PictureDrawQuad>();
-  green_quad2->SetNew(top_right_green_shared_quad_state, green_rect2,
-                      green_rect2, needs_blending,
-                      gfx::RectF(gfx::SizeF(green_rect2.size())),
-                      green_rect2.size(), nearest_neighbor, green_rect2, 1.f,
-                      {}, green_raster_source->GetDisplayItemList());
+  green_quad2->SetNew(
+      top_right_green_shared_quad_state, green_rect2, green_rect2,
+      needs_blending, gfx::RectF(gfx::SizeF(green_rect2.size())),
+      green_rect2.size(), nearest_neighbor, green_rect2, 1.f, {},
+      green_raster_source->GetDisplayItemList(), cc::ScrollOffsetMap());
 
   // Add a green clipped checkerboard in the bottom right to help test
   // interleaving picture quad content and solid color content.
@@ -4858,21 +4874,21 @@ TEST_F(SoftwareRendererPixelTest, PictureDrawQuadNonIdentityScale) {
   blue_layer_rect1.Inset(inset);
   blue_layer_rect2.Inset(inset);
 
-  auto recording = cc::FakeRecordingSource::Create(layer_rect.size());
+  cc::FakeRecordingSource recording(layer_rect.size());
 
   cc::Region outside(layer_rect);
   outside.Subtract(gfx::ToEnclosingRect(union_layer_rect));
   for (gfx::Rect rect : outside) {
-    recording->add_draw_rect_with_flags(rect, red_flags);
+    recording.add_draw_rect_with_flags(rect, red_flags);
   }
 
   cc::PaintFlags blue_flags;
   blue_flags.setColor(SkColors::kBlue);
-  recording->add_draw_rectf_with_flags(blue_layer_rect1, blue_flags);
-  recording->add_draw_rectf_with_flags(blue_layer_rect2, blue_flags);
-  recording->Rerecord();
+  recording.add_draw_rectf_with_flags(blue_layer_rect1, blue_flags);
+  recording.add_draw_rectf_with_flags(blue_layer_rect2, blue_flags);
+  recording.Rerecord();
   scoped_refptr<cc::RasterSource> raster_source =
-      recording->CreateRasterSource();
+      recording.CreateRasterSource();
 
   gfx::Rect content_union_rect(
       gfx::ToEnclosingRect(gfx::ScaleRect(union_layer_rect, contents_scale)));
@@ -4890,7 +4906,7 @@ TEST_F(SoftwareRendererPixelTest, PictureDrawQuadNonIdentityScale) {
                     needs_blending, gfx::RectF(quad_content_rect),
                     content_union_rect.size(), nearest_neighbor,
                     content_union_rect, contents_scale, {},
-                    raster_source->GetDisplayItemList());
+                    raster_source->GetDisplayItemList(), cc::ScrollOffsetMap());
 
   // Fill left half of viewport with green.
   gfx::Transform half_green_quad_to_target_transform;

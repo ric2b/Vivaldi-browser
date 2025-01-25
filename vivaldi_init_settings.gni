@@ -8,14 +8,14 @@ import("//vivaldi/gn/config/hermetic.gni")
 import("//vivaldi/gn/config/reclient.gni")
 
 import("//build/toolchain/cc_wrapper.gni")
-import("//build/toolchain/goma.gni")
 import("//build/toolchain/rbe.gni")
 
 declare_overrides() {
   chrome_pgo_phase = 0
   if (is_official_build && (is_win || is_mac ||
               (is_linux && target_cpu == "x64") ||
-              (is_android && target_cpu == "arm64" && !is_vivaldi_automotive))) {
+              (is_android && target_cpu == "arm64") ||
+              (is_android && target_cpu == "x64"))) {
     chrome_pgo_phase = 2
   }
 
@@ -85,13 +85,14 @@ declare_overrides() {
       # library integration.
       treat_warnings_as_errors = false
     }
+    use_login_database_as_backend = true
   }
 
   if(!is_ios) {
     enable_hangout_services_extension = true
   }
 
-  enable_precompiled_headers = !is_official_build && cc_wrapper == "" && !use_goma && !use_remoteexec
+  enable_precompiled_headers = !is_official_build && cc_wrapper == "" && !use_remoteexec
   enable_nocompile_tests = false
   # We cannot use this functionality at present because the system assumes
   # "../../" is the Chromium src dir, but it is the vivaldi dir for us

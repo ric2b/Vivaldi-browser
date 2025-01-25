@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include "absl/container/flat_hash_map.h"
 #include "quiche/balsa/balsa_enums.h"
 #include "quiche/balsa/balsa_headers.h"
 #include "quiche/balsa/balsa_visitor_interface.h"
@@ -37,7 +36,7 @@ class QUICHE_EXPORT BalsaFrame : public FramerInterface {
   typedef BalsaHeaders::HeaderLines HeaderLines;
   typedef BalsaHeaders::HeaderTokenList HeaderTokenList;
 
-  enum class InvalidCharsLevel { kOff, kWarning, kError };
+  enum class InvalidCharsLevel { kOff, kError };
 
   static constexpr int32_t kValidTerm1 = '\n' << 16 | '\r' << 8 | '\n';
   static constexpr int32_t kValidTerm1Mask = 0xFF << 16 | 0xFF << 8 | 0xFF;
@@ -59,6 +58,7 @@ class QUICHE_EXPORT BalsaFrame : public FramerInterface {
         term_chars_(0),
         parse_state_(BalsaFrameEnums::READING_HEADER_AND_FIRSTLINE),
         last_error_(BalsaFrameEnums::BALSA_NO_ERROR),
+        is_valid_target_uri_(true),
         continue_headers_(nullptr),
         headers_(nullptr),
         start_of_trailer_line_(0),
@@ -125,10 +125,6 @@ class QUICHE_EXPORT BalsaFrame : public FramerInterface {
     invalid_chars_level_ = v;
   }
 
-  bool track_invalid_chars() {
-    return invalid_chars_level_ != InvalidCharsLevel::kOff;
-  }
-
   bool invalid_chars_error_enabled() {
     return invalid_chars_level_ == InvalidCharsLevel::kError;
   }
@@ -164,10 +160,6 @@ class QUICHE_EXPORT BalsaFrame : public FramerInterface {
 
   BalsaFrameEnums::ErrorCode ErrorCode() const { return last_error_; }
 
-  const absl::flat_hash_map<char, int>& get_invalid_chars() const {
-    return invalid_chars_;
-  }
-
   const BalsaHeaders* headers() const { return headers_; }
   BalsaHeaders* mutable_headers() { return headers_; }
 
@@ -200,13 +192,15 @@ class QUICHE_EXPORT BalsaFrame : public FramerInterface {
     parse_truncated_headers_even_when_headers_too_long_ = set;
   }
 
+  bool is_valid_target_uri() const { return is_valid_target_uri_; }
+
  protected:
   inline BalsaHeadersEnums::ContentLengthStatus ProcessContentLengthLine(
       size_t line_idx, size_t* length);
 
   inline void ProcessTransferEncodingLine(size_t line_idx);
 
-  void ProcessFirstLine(const char* begin, const char* end);
+  void ProcessFirstLine(char* begin, char* end);
 
   void CleanUpKeyValueWhitespace(const char* stream_begin,
                                  const char* line_begin, const char* current,
@@ -217,7 +211,6 @@ class QUICHE_EXPORT BalsaFrame : public FramerInterface {
                           BalsaHeaders* headers);
 
   // Returns true if there are invalid characters, false otherwise.
-  // Will also update counts per invalid character in invalid_chars_.
   bool CheckHeaderLinesForInvalidChars(const Lines& lines,
                                        const BalsaHeaders* headers);
 
@@ -290,7 +283,7 @@ class QUICHE_EXPORT BalsaFrame : public FramerInterface {
   uint32_t term_chars_;
   BalsaFrameEnums::ParseState parse_state_;
   BalsaFrameEnums::ErrorCode last_error_;
-  absl::flat_hash_map<char, int> invalid_chars_;
+  bool is_valid_target_uri_;  // False if the target URI was invalid.
 
   Lines lines_;
 

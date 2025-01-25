@@ -122,7 +122,8 @@ void RecordDismissalMetrics(
         infobar_response);
   } else {
     password_manager::metrics_util::LogSaveUIDismissalReason(
-        infobar_response, account_storage_user_state);
+        infobar_response, account_storage_user_state,
+        /*log_adoption_metric=*/false);
   }
 }
 
@@ -255,7 +256,7 @@ std::u16string IOSChromeSavePasswordInfoBarDelegate::GetButtonLabel(
                        IDS_IOS_PASSWORD_MANAGER_MODAL_BLOCK_BUTTON);
     }
     case BUTTON_NONE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return std::u16string();
   }
 }

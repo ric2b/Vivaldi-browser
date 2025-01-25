@@ -33,6 +33,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "dawn/common/HashUtils.h"
 #include "dawn/common/vulkan_platform.h"
@@ -51,6 +52,7 @@ struct TransformedShaderModuleCacheKey {
     std::string entryPoint;
     PipelineConstantEntries constants;
     std::optional<uint32_t> maxSubgroupSizeForFullSubgroups;
+    bool emitPointSize;
 
     bool operator==(const TransformedShaderModuleCacheKey& other) const;
 };
@@ -69,11 +71,13 @@ class ShaderModule final : public ShaderModuleBase {
         const uint32_t* spirv;
         size_t wordCount;
         std::string remappedEntryPoint;
+        bool hasInputAttachment;
     };
 
     static ResultOrError<Ref<ShaderModule>> Create(
         Device* device,
         const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
+        const std::vector<tint::wgsl::Extension>& internalExtensions,
         ShaderModuleParseResult* parseResult,
         OwnedCompilationMessages* compilationMessages);
 
@@ -86,7 +90,9 @@ class ShaderModule final : public ShaderModuleBase {
         std::optional<uint32_t> maxSubgroupSizeForFullSubgroups);
 
   private:
-    ShaderModule(Device* device, const UnpackedPtr<ShaderModuleDescriptor>& descriptor);
+    ShaderModule(Device* device,
+                 const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
+                 std::vector<tint::wgsl::Extension> internalExtensions);
     ~ShaderModule() override;
     MaybeError Initialize(ShaderModuleParseResult* parseResult,
                           OwnedCompilationMessages* compilationMessages);

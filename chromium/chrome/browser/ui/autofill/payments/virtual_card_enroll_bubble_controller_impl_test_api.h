@@ -9,6 +9,9 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/autofill/payments/virtual_card_enroll_bubble_controller_impl.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_manager.h"
+#if BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/ui/android/autofill/autofill_vcn_enroll_bottom_sheet_bridge.h"
+#endif
 
 namespace autofill {
 
@@ -26,20 +29,25 @@ class VirtualCardEnrollBubbleControllerImplTestApi {
         bubble_shown_closure_for_testing;
   }
 
-  void SetFields(const VirtualCardEnrollmentFields& fields) {
-    controller_->ui_model_.enrollment_fields = fields;
+  void SetUiModel(std::unique_ptr<VirtualCardEnrollUiModel> ui_model) {
+    controller_->ui_model_ = std::move(ui_model);
   }
 
 #if BUILDFLAG(IS_ANDROID)
+  void SetAutofillVCNEnrollBottomSheetBridge(
+      std::unique_ptr<AutofillVCNEnrollBottomSheetBridge> bridge) {
+    controller_->autofill_vcn_enroll_bottom_sheet_bridge_ = std::move(bridge);
+  }
+
   bool DidShowBottomSheet() {
     return !!controller_->autofill_vcn_enroll_bottom_sheet_bridge_;
   }
-#else
+#else   // !BUILDFLAG(IS_ANDROID)
   VirtualCardEnrollBubbleControllerImpl::EnrollmentStatus
   GetEnrollmentStatus() {
     return controller_->enrollment_status_;
   }
-#endif  // IS_ANDROID
+#endif  // BUILDFLAG(IS_ANDROID)
 
  private:
   raw_ref<VirtualCardEnrollBubbleControllerImpl> controller_;

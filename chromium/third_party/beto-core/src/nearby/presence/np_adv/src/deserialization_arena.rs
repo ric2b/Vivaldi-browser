@@ -15,7 +15,7 @@
 //! Types for creating arenas used in deserialization of np_adv. This implementation is purpose-made
 //! for deserializing in `np_adv` and is not intended for general use as an arena.
 
-use crate::extended::BLE_ADV_SVC_CONTENT_LEN;
+use crate::extended::BLE_5_ADV_SVC_MAX_CONTENT_LEN;
 
 /// Create a [`DeserializationArena`] suitable for use with deserializing an advertisement.
 #[macro_export]
@@ -64,13 +64,13 @@ impl<'a> DeserializationArenaAllocator<'a> {
 /// [`deserialization_arena!`][crate::deserialization_arena!] macro to create an instance.
 pub struct DeserializationArena<'a> {
     #[doc(hidden)] // Exposed for use by `deserialization_arena!` only.
-    pub buffer: &'a mut [u8; BLE_ADV_SVC_CONTENT_LEN],
+    pub buffer: &'a mut [u8; BLE_5_ADV_SVC_MAX_CONTENT_LEN],
 }
 
 impl<'a> DeserializationArena<'a> {
     #[doc(hidden)] // Exposed for use by `deserialization_arena!` only.
-    pub fn new_buffer() -> [u8; BLE_ADV_SVC_CONTENT_LEN] {
-        [0; BLE_ADV_SVC_CONTENT_LEN]
+    pub fn new_buffer() -> [u8; BLE_5_ADV_SVC_MAX_CONTENT_LEN] {
+        [0; BLE_5_ADV_SVC_MAX_CONTENT_LEN]
     }
 
     /// Convert this arena into an allocator that can start allocating.
@@ -87,11 +87,11 @@ pub(crate) struct ArenaOutOfSpace;
 
 #[cfg(test)]
 mod test {
-    use crate::{deserialization_arena::ArenaOutOfSpace, extended::BLE_ADV_SVC_CONTENT_LEN};
+    use crate::{deserialization_arena::ArenaOutOfSpace, extended::BLE_5_ADV_SVC_MAX_CONTENT_LEN};
 
     #[test]
     fn test_creation() {
-        assert_eq!(BLE_ADV_SVC_CONTENT_LEN, deserialization_arena!().buffer.len());
+        assert_eq!(BLE_5_ADV_SVC_MAX_CONTENT_LEN, deserialization_arena!().buffer.len());
     }
 
     #[test]
@@ -99,7 +99,7 @@ mod test {
         let arena = deserialization_arena!();
         let mut allocator = arena.into_allocator();
         assert_eq!(Ok(&mut [0_u8; 100][..]), allocator.allocate(100));
-        assert_eq!(BLE_ADV_SVC_CONTENT_LEN - 100, allocator.slice.len());
+        assert_eq!(BLE_5_ADV_SVC_MAX_CONTENT_LEN - 100, allocator.slice.len());
     }
 
     #[test]

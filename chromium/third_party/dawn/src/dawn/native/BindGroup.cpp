@@ -161,6 +161,11 @@ MaybeError ValidateSampledTextureBinding(DeviceBase* device,
     TextureBase* texture = view->GetTexture();
 
     SampleTypeBit supportedTypes = texture->GetFormat().GetAspectInfo(aspect).supportedSampleTypes;
+    if (supportedTypes == SampleTypeBit::External) {
+        supportedTypes =
+            static_cast<SharedTextureMemoryContents*>(texture->GetSharedResourceMemoryContents())
+                ->GetExternalFormatSupportedSampleTypes();
+    }
     DAWN_TRY(ValidateCanUseAs(texture, wgpu::TextureUsage::TextureBinding, mode));
 
     DAWN_INVALID_IF(texture->IsMultisampledTexture() != layout.multisampled,
@@ -404,6 +409,10 @@ MaybeError ValidateBindGroupDescriptor(DeviceBase* device,
                     "entries[%u] is provided when the layout contains a static sampler for that "
                     "binding.",
                     i);
+            },
+            [](const InputAttachmentBindingInfo&) -> MaybeError {
+                // Internal use only. No validation.
+                return {};
             }));
     }
 
@@ -595,6 +604,8 @@ TextureViewBase* BindGroupBase::GetBindingAsTextureView(BindingIndex bindingInde
     DAWN_ASSERT(std::holds_alternative<TextureBindingInfo>(
                     layout->GetBindingInfo(bindingIndex).bindingLayout) ||
                 std::holds_alternative<StorageTextureBindingInfo>(
+                    layout->GetBindingInfo(bindingIndex).bindingLayout) ||
+                std::holds_alternative<InputAttachmentBindingInfo>(
                     layout->GetBindingInfo(bindingIndex).bindingLayout));
     return static_cast<TextureViewBase*>(mBindingData.bindings[bindingIndex].Get());
 }

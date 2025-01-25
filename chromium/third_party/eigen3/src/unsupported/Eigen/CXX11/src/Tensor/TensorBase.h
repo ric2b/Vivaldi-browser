@@ -618,16 +618,15 @@ class TensorBase<Derived, ReadOnlyAccessors>
     (isnan)() const {
       return unaryExpr(internal::scalar_isnan_op<Scalar, true>()).template cast<bool>();
     }
-
     EIGEN_DEVICE_FUNC
-    EIGEN_STRONG_INLINE const TensorCwiseUnaryOp<internal::scalar_isinf_op<Scalar>, const Derived>
+    EIGEN_STRONG_INLINE const TensorConversionOp<bool, const TensorCwiseUnaryOp<internal::scalar_isinf_op<Scalar, true>, const Derived>>
     (isinf)() const {
-      return unaryExpr(internal::scalar_isinf_op<Scalar>());
+      return unaryExpr(internal::scalar_isinf_op<Scalar, true>()).template cast<bool>();
     }
     EIGEN_DEVICE_FUNC
-    EIGEN_STRONG_INLINE const TensorCwiseUnaryOp<internal::scalar_isfinite_op<Scalar>, const Derived>
+    EIGEN_STRONG_INLINE const TensorConversionOp<bool, const TensorCwiseUnaryOp<internal::scalar_isfinite_op<Scalar, true>, const Derived>>
     (isfinite)() const {
-      return unaryExpr(internal::scalar_isfinite_op<Scalar>());
+      return unaryExpr(internal::scalar_isfinite_op<Scalar, true>()).template cast<bool>();
     }
 
     // Coefficient-wise ternary operators.

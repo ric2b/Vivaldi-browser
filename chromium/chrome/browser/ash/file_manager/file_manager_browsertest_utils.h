@@ -48,8 +48,6 @@ struct TestCase {
 
   TestCase& Offline();
 
-  TestCase& FilesExperimental();
-
   TestCase& EnableConflictDialog();
 
   TestCase& DisableNativeSmb();
@@ -100,9 +98,9 @@ struct TestCase {
 
   TestCase& EnableOsFeedback();
 
-  TestCase& EnableGoogleOneOfferFilesBanner();
-
   TestCase& DisableGoogleOneOfferFilesBanner();
+
+  TestCase& DisableGoogleOneOfferFilesBannerWithG1Nudge();
 
   TestCase& FeatureIds(const std::vector<std::string>& ids);
 

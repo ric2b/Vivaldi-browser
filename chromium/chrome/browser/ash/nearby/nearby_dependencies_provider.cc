@@ -17,16 +17,19 @@
 #include "chrome/browser/nearby_sharing/common/nearby_share_features.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_switches.h"
 #include "chrome/browser/nearby_sharing/firewall_hole/nearby_connections_firewall_hole_factory.h"
+#include "chrome/browser/nearby_sharing/mdns/nearby_connections_mdns_manager.h"
 #include "chrome/browser/nearby_sharing/sharing_mojo_service.h"
 #include "chrome/browser/nearby_sharing/tachyon_ice_config_fetcher.h"
 #include "chrome/browser/nearby_sharing/tcp_socket/nearby_connections_tcp_socket_factory.h"
 #include "chrome/browser/nearby_sharing/webrtc_signaling_messenger.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/ash/services/nearby/public/mojom/firewall_hole.mojom.h"
+#include "chromeos/ash/services/nearby/public/mojom/mdns.mojom.h"
 #include "chromeos/ash/services/nearby/public/mojom/nearby_connections.mojom.h"
 #include "chromeos/ash/services/nearby/public/mojom/sharing.mojom.h"
 #include "chromeos/ash/services/nearby/public/mojom/tcp_socket_factory.mojom.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
+#include "components/cross_device/nearby/nearby_features.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
 #include "content/public/browser/network_service_instance.h"
@@ -182,6 +185,7 @@ NearbyDependenciesProvider::GetDependencies() {
 
   dependencies->webrtc_dependencies = GetWebRtcDependencies();
   dependencies->wifilan_dependencies = GetWifiLanDependencies();
+  dependencies->wifidirect_dependencies = GetWifiDirectDependencies();
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kNearbyShareVerboseLogging)) {
@@ -292,10 +296,39 @@ NearbyDependenciesProvider::GetWifiLanDependencies() {
                               base::Unretained(this))),
       std::move(tcp_socket_factory.receiver));
 
+  MojoPipe<::sharing::mojom::MdnsManager> mdns_manager;
+  if (::features::IsNearbyMdnsEnabled()) {
+    mojo::MakeSelfOwnedReceiver(
+        std::make_unique<::nearby::sharing::NearbyConnectionsMdnsManager>(),
+        std::move(mdns_manager.receiver));
+  }
+
   return ::sharing::mojom::WifiLanDependencies::New(
       std::move(cros_network_config.remote),
       std::move(firewall_hole_factory.remote),
-      std::move(tcp_socket_factory.remote));
+      std::move(tcp_socket_factory.remote),
+      (::features::IsNearbyMdnsEnabled() ? std::move(mdns_manager.remote)
+                                         : mojo::NullRemote()));
+}
+
+sharing::mojom::WifiDirectDependenciesPtr
+NearbyDependenciesProvider::GetWifiDirectDependencies() {
+  if (!ash::features::IsWifiDirectEnabled() ||
+      !base::FeatureList::IsEnabled(::features::kNearbySharingWifiDirect)) {
+    return nullptr;
+  }
+
+  MojoPipe<sharing::mojom::FirewallHoleFactory> firewall_hole_factory;
+  mojo::MakeSelfOwnedReceiver(
+      std::make_unique<NearbyConnectionsFirewallHoleFactory>(),
+      std::move(firewall_hole_factory.receiver));
+
+  wifi_direct_manager_ = std::make_unique<wifi_direct::WifiDirectManager>();
+  MojoPipe<wifi_direct::mojom::WifiDirectManager> manager;
+  wifi_direct_manager_->BindPendingReceiver(std::move(manager.receiver));
+
+  return sharing::mojom::WifiDirectDependencies::New(
+      std::move(manager.remote), std::move(firewall_hole_factory.remote));
 }
 
 network::mojom::NetworkContext*

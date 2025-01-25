@@ -8,6 +8,7 @@
 /third_party/abseil-cpp
 /third_party/android_toolchain
 /third_party/catapult
+/third_party/clang-format
 /third_party/cpu_features/src
 /third_party/depot_tools
 /third_party/fp16/src
@@ -26,7 +27,8 @@
 /third_party/llvm-build
 /third_party/markupsafe
 /third_party/nasm
-/third_party/ninja/ninja*
+/third_party/ninja
+/third_party/rust
 /third_party/rust-toolchain
 /third_party/skia
 /third_party/test_fonts

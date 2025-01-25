@@ -453,16 +453,16 @@ base::Value::Dict SerializeRuleGroup(RuleService* service, RuleGroup group) {
           service->GetKnownSourcesHandler()->GetDeletedPresets(group)));
   rule_group.Set(kIndexChecksum, service->GetRulesIndexChecksum(group));
 
-  if (service->GetBlockerUrlsReporter()) {
+  if (service->GetTabHandler()) {
     rule_group.Set(kBlockedDomainsCountersKey,
                    SerializeCounters(
-                       service->GetBlockerUrlsReporter()
+                       service->GetTabHandler()
                            ->GetBlockedDomains()[static_cast<size_t>(group)]));
 
     rule_group.Set(
         kBlockedForOriginCountersKey,
         SerializeCounters(
-            service->GetBlockerUrlsReporter()
+            service->GetTabHandler()
                 ->GetBlockedForOrigin()[static_cast<size_t>(group)]));
   }
 
@@ -525,10 +525,10 @@ std::optional<std::string> RuleServiceStorage::SerializeData() {
            SerializeRuleGroup(rule_service_, RuleGroup::kTrackingRules));
   root.Set(kAdBlockingRulesKey,
            SerializeRuleGroup(rule_service_, RuleGroup::kAdBlockingRules));
-  if (rule_service_->GetBlockerUrlsReporter()) {
-    root.Set(kBlockedReportingStartKey,
-             base::TimeToValue(
-                 rule_service_->GetBlockerUrlsReporter()->GetReportingStart()));
+  if (rule_service_->GetTabHandler()) {
+    root.Set(
+        kBlockedReportingStartKey,
+        base::TimeToValue(rule_service_->GetTabHandler()->GetReportingStart()));
   }
   root.Set(kVersionKey, kCurrentStorageVersion);
 

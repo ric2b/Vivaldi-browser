@@ -11,14 +11,14 @@ import '../../components/oobe_personalized_apps_list.js';
 
 import {assert} from '//resources/js/assert.js';
 import {PolymerElementProperties} from '//resources/polymer/v3_0/polymer/interfaces.js';
-import {mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.js';
-import {MultiStepBehavior, MultiStepBehaviorInterface} from '../../components/behaviors/multi_step_behavior.js';
-import {OobeDialogHostBehavior, OobeDialogHostBehaviorInterface} from '../../components/behaviors/oobe_dialog_host_behavior.js';
 import {OobeUiState} from '../../components/display_manager_types.js';
-import {OobeI18nMixin, OobeI18nMixinInterface} from '../../components/mixins/oobe_i18n_mixin.js';
-import {CategoriesAppsMap, OobePersonalizedAppsList} from '../../components/oobe_personalized_apps_list.js';
+import {LoginScreenMixin} from '../../components/mixins/login_screen_mixin.js';
+import {MultiStepMixin} from '../../components/mixins/multi_step_mixin.js';
+import {OobeDialogHostMixin} from '../../components/mixins/oobe_dialog_host_mixin.js';
+import {OobeI18nMixin} from '../../components/mixins/oobe_i18n_mixin.js';
+import {CategoryAppsItems, OobePersonalizedAppsList} from '../../components/oobe_personalized_apps_list.js';
 
 import {getTemplate} from './personalized_recommend_apps.html.js';
 
@@ -33,20 +33,12 @@ enum PersonalizedAppsStep {
 enum UserAction {
   SKIP = 'skip',
   NEXT = 'next',
+  BACK = 'back',
+  LOADED = 'loaded',
 }
 
-interface RecommendAppsScreenData {
-  data: CategoriesAppsMap;
-}
-
-export const PersonalizedRecommedAppsElementBase =
-    mixinBehaviors(
-        [LoginScreenBehavior, OobeDialogHostBehavior, MultiStepBehavior],
-        OobeI18nMixin(PolymerElement)) as {
-      new (): PolymerElement & OobeI18nMixinInterface &
-          LoginScreenBehaviorInterface & OobeDialogHostBehaviorInterface &
-          MultiStepBehaviorInterface,
-    };
+export const PersonalizedRecommedAppsElementBase = OobeDialogHostMixin(
+    LoginScreenMixin(MultiStepMixin(OobeI18nMixin(PolymerElement))));
 
 export class PersonalizedRecommedAppsElement extends
     PersonalizedRecommedAppsElementBase {
@@ -80,7 +72,8 @@ export class PersonalizedRecommedAppsElement extends
 
   override get EXTERNAL_API(): string[] {
     return [
-      'setCategoriesAppsMapData',
+      'setAppsAndUseCasesData',
+      'setOverviewStep',
     ];
   }
 
@@ -101,23 +94,39 @@ export class PersonalizedRecommedAppsElement extends
     return OobeUiState.ONBOARDING;
   }
 
-  setCategoriesAppsMapData(categoriesData: RecommendAppsScreenData): void {
-    assert('data' in categoriesData);
-    this.shadowRoot!
-        .querySelector<OobePersonalizedAppsList>('#categoriesAppsList')!.init(
-            categoriesData['data']);
+  override onBeforeShow(): void {
+    super.onBeforeShow();
+    this.setUIStep(PersonalizedAppsStep.LOADING);
   }
 
-  /**
-   * Handles event when contents in the webview is generated.
-   */
-  private onFullyLoaded(): void {
+  override onBeforeHide(): void {
+    super.onBeforeHide();
+    this.shadowRoot!
+        .querySelector<OobePersonalizedAppsList>(
+            '#categoriesAppsList')!.reset();
+  }
+
+  setAppsAndUseCasesData(categoriesData: CategoryAppsItems): void {
+    assert(categoriesData !== null);
+    this.shadowRoot!
+        .querySelector<OobePersonalizedAppsList>('#categoriesAppsList')!.init(
+            categoriesData);
+  }
+
+  setOverviewStep(): void {
     this.setUIStep(PersonalizedAppsStep.OVERVIEW);
     const categoriesAppsList =
         this.shadowRoot?.querySelector<HTMLElement>('#categoriesAppsList');
     if (categoriesAppsList instanceof HTMLElement) {
       categoriesAppsList.focus();
     }
+  }
+
+  /**
+   * Handles event when contents in the webview is generated.
+   */
+  private onFullyLoaded(): void {
+    this.userActed(UserAction.LOADED);
   }
 
   override ready(): void {
@@ -138,6 +147,10 @@ export class PersonalizedRecommedAppsElement extends
 
   private canProceed(): boolean {
     return this.numberOfSelectedApps > 0;
+  }
+
+  private onBackClicked(): void {
+    this.userActed(UserAction.BACK);
   }
 }
 

@@ -49,10 +49,11 @@ class ProcessHandle;
 class MockBidderWorklet : public auction_worklet::mojom::BidderWorklet,
                           auction_worklet::mojom::GenerateBidFinalizer {
  public:
-  MockBidderWorklet(mojo::PendingReceiver<auction_worklet::mojom::BidderWorklet>
-                        pending_receiver,
-                    const std::map<std::string, base::TimeDelta>&
-                        expected_per_buyer_timeouts);
+  MockBidderWorklet(
+      mojo::PendingReceiver<auction_worklet::mojom::BidderWorklet>
+          pending_receiver,
+      const std::map<std::string, base::TimeDelta>& expected_per_buyer_timeouts,
+      bool skip_generate_bid);
 
   MockBidderWorklet(const MockBidderWorklet&) = delete;
   const MockBidderWorklet& operator=(const MockBidderWorklet&) = delete;
@@ -113,8 +114,8 @@ class MockBidderWorklet : public auction_worklet::mojom::BidderWorklet,
       uint64_t trace_id,
       ReportWinCallback report_win_callback) override;
   void ConnectDevToolsAgent(
-      mojo::PendingAssociatedReceiver<blink::mojom::DevToolsAgent> agent)
-      override;
+      mojo::PendingAssociatedReceiver<blink::mojom::DevToolsAgent> agent,
+      uint32_t thread_index) override;
 
   // mojom::GenerateBidFinalizer implementation.
   void FinishGenerateBid(
@@ -203,6 +204,12 @@ class MockBidderWorklet : public auction_worklet::mojom::BidderWorklet,
   std::unique_ptr<base::RunLoop> generate_bid_run_loop_;
   std::unique_ptr<base::RunLoop> report_win_run_loop_;
   ReportWinCallback report_win_callback_;
+
+  // If true, bypass the `BeginGenerateBid()` function. This class does not
+  // support testing multiple calls to `BeginGenerateBid()`. This flag is useful
+  // for testing other auction functions while disabling that specific code
+  // path.
+  bool skip_generate_bid_ = false;
 
   bool generate_bid_called_ = false;
   bool send_pending_signals_requests_called_ = false;
@@ -304,8 +311,8 @@ class MockSellerWorklet : public auction_worklet::mojom::SellerWorklet {
       uint64_t trace_id,
       ReportResultCallback report_result_callback) override;
   void ConnectDevToolsAgent(
-      mojo::PendingAssociatedReceiver<blink::mojom::DevToolsAgent> agent)
-      override;
+      mojo::PendingAssociatedReceiver<blink::mojom::DevToolsAgent> agent,
+      uint32_t thread_index) override;
 
   // Closes the receiver pipe with the provided reason.
   void ResetReceiverWithReason(const std::string& reason);
@@ -390,8 +397,9 @@ class MockAuctionProcessManager
   void LoadBidderWorklet(
       mojo::PendingReceiver<auction_worklet::mojom::BidderWorklet>
           bidder_worklet_receiver,
-      mojo::PendingRemote<auction_worklet::mojom::AuctionSharedStorageHost>
-          shared_storage_host_remote,
+      std::vector<
+          mojo::PendingRemote<auction_worklet::mojom::AuctionSharedStorageHost>>
+          shared_storage_hosts,
       bool pause_for_debugger_on_start,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           pending_url_loader_factory,
@@ -408,8 +416,9 @@ class MockAuctionProcessManager
   void LoadSellerWorklet(
       mojo::PendingReceiver<auction_worklet::mojom::SellerWorklet>
           seller_worklet_receiver,
-      mojo::PendingRemote<auction_worklet::mojom::AuctionSharedStorageHost>
-          shared_storage_host_remote,
+      std::vector<
+          mojo::PendingRemote<auction_worklet::mojom::AuctionSharedStorageHost>>
+          shared_storage_hosts,
       bool should_pause_on_start,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           pending_url_loader_factory,
@@ -453,6 +462,16 @@ class MockAuctionProcessManager
   // Flushes the receiver set.
   void Flush();
 
+  void SetSkipGenerateBid() { skip_generate_bid_ = true; }
+
+  size_t load_bidder_worklet_count() const {
+    return load_bidder_worklet_count_;
+  }
+
+  size_t last_load_bidder_worklet_threads_count() const {
+    return last_load_bidder_worklet_threads_count_;
+  }
+
  private:
   void MaybeQuitWaitForWorkletsRunLoop();
 
@@ -475,6 +494,15 @@ class MockAuctionProcessManager
   // towards these totals.
   size_t waiting_for_num_bidders_ = 0;
   size_t waiting_for_num_sellers_ = 0;
+
+  // If true, configure the bidder worklets to bypass the `BeginGenerateBid()`
+  // function. The `MockBidderWorklet` does not support testing multiple calls
+  // to `BeginGenerateBid()`. This flag is useful for testing other auction
+  // functions while disabling that specific code path.
+  bool skip_generate_bid_ = false;
+
+  size_t load_bidder_worklet_count_ = 0;
+  size_t last_load_bidder_worklet_threads_count_ = 0;
 
   // Map from ReceiverSet IDs to display name when the process was launched.
   // Used to verify that worklets are created in the right process.

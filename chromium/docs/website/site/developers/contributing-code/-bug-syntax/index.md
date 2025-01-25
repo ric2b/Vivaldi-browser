@@ -15,7 +15,9 @@ message by whitespace or non-trailer lines will be ignored. This includes
 everything from the unique "Change-Id" which identifies a Gerrit change, to more
 useful metadata like bugs the change helps fix, trybots which should be run to
 test the change, and more. This page includes a listing of well-known footers,
-their meanings, and their formats:
+their meanings, and their formats.
+
+See also <https://chromium.googlesource.com/chromium/src/+/main/docs/infra/cq.md#options>
 
 **Bug:**
 

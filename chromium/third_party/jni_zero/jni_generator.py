@@ -150,6 +150,9 @@ def NameIsTestOnly(name):
 
 
 def _MangleMethodName(type_resolver, name, param_types):
+  # E.g. java.util.List.reversed() has overloads that return different types.
+  if not param_types:
+    return name
   mangled_types = []
   for java_type in param_types:
     if java_type.primitive_name:
@@ -168,6 +171,7 @@ def _AssignMethodIdFunctionNames(type_resolver, called_by_natives):
             called_by_native.name, len(called_by_native.params))
 
   method_counts = collections.Counter(key(x) for x in called_by_natives)
+  cbn_by_name = collections.defaultdict(list)
 
   for called_by_native in called_by_natives:
     if called_by_native.is_constructor:
@@ -179,8 +183,14 @@ def _AssignMethodIdFunctionNames(type_resolver, called_by_natives):
       method_id_function_name = _MangleMethodName(
           type_resolver, method_id_function_name,
           called_by_native.signature.param_types)
+      cbn_by_name[method_id_function_name].append(called_by_native)
 
     called_by_native.method_id_function_name = method_id_function_name
+
+  # E.g. java.util.List.reversed() has overloads that return different types.
+  for duplicates in cbn_by_name.values():
+    for i, cbn in enumerate(duplicates[1:], 1):
+      cbn.method_id_function_name += str(i)
 
 
 class JniObject:
@@ -277,6 +287,8 @@ class JniObject:
         return 'Java_' + common.escape_class_name(
             f'{self.java_class.full_name_with_slashes}Jni/native{common.capitalize(native.name)}'
         )
+      elif self.options.enable_jni_multiplexing:
+        return f'Java_{method_name}'
       else:
         return 'Java_%s_%s' % (common.escape_class_name(
             self.final_gen_jni_class.full_name_with_slashes), method_name)
@@ -286,33 +298,6 @@ class JniObject:
     return f'Java_{escaped_name}_native{native.cpp_name}'
 
 
-def _UsesConvertType(java_type):
-  # Array conversions do not need to be declared and primitive conversions
-  # are just static_cast.
-  return bool(java_type.converted_type() and not java_type.is_array()
-              and not java_type.is_primitive())
-
-
-def _CollectConvertTypeTypes(natives, called_by_natives):
-  java_to_cpp_types = []
-  cpp_to_java_types = []
-
-  for native in natives:
-    java_to_cpp_types.extend(param.java_type for param in native.params
-                             if _UsesConvertType(param.java_type))
-    if _UsesConvertType(native.return_type):
-      cpp_to_java_types.append(native.return_type)
-
-  for called_by_native in called_by_natives:
-    cpp_to_java_types.extend(param.java_type
-                             for param in called_by_native.params
-                             if _UsesConvertType(param.java_type))
-    if _UsesConvertType(called_by_native.return_type):
-      java_to_cpp_types.append(called_by_native.return_type)
-
-  return java_to_cpp_types, cpp_to_java_types
-
-
 def _CollectReferencedClasses(jni_obj):
   ret = set()
   # @CalledByNatives can appear on nested classes, so check each one.
@@ -320,14 +305,14 @@ def _CollectReferencedClasses(jni_obj):
     ret.add(called_by_native.java_class)
     for param in called_by_native.params:
       java_type = param.java_type
-      if java_type.is_object_array() and java_type.converted_type():
+      if java_type.is_object_array() and java_type.converted_type:
         ret.add(java_type.java_class)
 
 
   # Find any classes needed for @JniType conversions.
   for native in jni_obj.proxy_natives:
     return_type = native.return_type
-    if return_type.is_object_array() and return_type.converted_type():
+    if return_type.is_object_array() and return_type.converted_type:
       ret.add(return_type.java_class)
   return sorted(ret)
 
@@ -352,7 +337,6 @@ class InlHeaderFileGenerator:
     template = Template("""\
 ${PREAMBLE}\
 ${CLASS_ACCESSORS}\
-${CONVERSION_FUNCTION_DECLARATIONS}\
 ${OPEN_NAMESPACE}\
 ${CONSTANTS_ENUMS}\
 ${NATIVES}\
@@ -369,10 +353,6 @@ ${EPILOGUE}\
         self.options.extra_includes)
     class_accessors = header_common.class_accessors(java_classes,
                                                     self.jni_obj.module_name)
-    java_to_cpp_types, cpp_to_java_types = _CollectConvertTypeTypes(
-        self.natives, self.called_by_natives)
-    conversion_declarations = convert_type.conversion_declarations(
-        java_to_cpp_types, cpp_to_java_types)
     constants_enums = called_by_native_header.constants_enums(
         self.java_class, self.constant_fields)
 
@@ -384,7 +364,6 @@ ${EPILOGUE}\
         'PREAMBLE': preamble,
         'EPILOGUE': epilogue,
         'CLASS_ACCESSORS': class_accessors,
-        'CONVERSION_FUNCTION_DECLARATIONS': conversion_declarations,
         'CONSTANTS_ENUMS': constants_enums,
         'CALLED_BY_NATIVES': called_by_natives_code,
         'NATIVES': natives_code,

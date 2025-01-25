@@ -63,15 +63,26 @@ const char* const kWebViewCrashKeyAllowList[] = {
 
     // content/:
     "bad_message_reason",
+    "can_access_data_failure_reason",
+    "cpspi_can_commit_url_failure_reason",
     "discardable-memory-allocated",
     "discardable-memory-free",
     "mojo-message-error",
     "total-discardable-memory-allocated",
 
     // Navigation
+    "ever_had_loaddatawithbaseurl_exemption",
+    "ever_had_universal_access_exemption",
     "rfhi_can_commit_failure_reason",
     "is_same_document",
     "is_main_frame",
+    "is_opaque_origin",
+    "is_file_origin",
+    "is_data_url",
+    "is_srcdoc_url",
+    "is_loaddatawithbaseurl_navrequest",
+    "is_loaddatawithbaseurl_samedoc",
+    "is_process_locked",
     "is_on_initial_empty_doc",
     "is_renderer_initiated",
     "is_error_page",
@@ -159,6 +170,9 @@ const char* const kWebViewCrashKeyAllowList[] = {
     "variations",
     "num-experiments",
     "variations-seed-version",
+
+    // CRX components
+    "crx-components",
 
     // sandbox/linux
     "seccomp-sigsys",

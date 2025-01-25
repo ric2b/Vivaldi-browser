@@ -17,21 +17,21 @@ limitations under the License.
 
 #include <stdarg.h>
 
+#include <algorithm>
 #include <cstddef>
+#include <iterator>
 #include <limits>
-#include <memory>
 #include <numeric>
-#include <optional>
 #include <string>
 #include <tuple>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include "absl/algorithm/container.h"
 #include "absl/base/casts.h"
-#include "absl/container/flat_hash_map.h"
+#include "absl/base/log_severity.h"
 #include "absl/container/inlined_vector.h"
+#include "absl/log/check.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
@@ -41,7 +41,6 @@ limitations under the License.
 #include "tsl/platform/env.h"
 #include "tsl/platform/numbers.h"
 #include "tsl/platform/stacktrace.h"
-#include "tsl/platform/threadpool.h"
 
 namespace xla {
 
@@ -68,7 +67,7 @@ std::vector<int64_t> ToMixedRadix(const int64_t n,
   return digits;
 }
 
-Status WithLogBacktrace(const Status& status) {
+absl::Status WithLogBacktrace(const absl::Status& status) {
   CHECK(!status.ok());
   VLOG(1) << status.ToString();
   VLOG(2) << tsl::CurrentStackTrace();
@@ -113,14 +112,16 @@ void ScopedLoggingTimer::StopAndLog() {
 
 ScopedLoggingTimer::~ScopedLoggingTimer() { StopAndLog(); }
 
-Status AddStatus(Status prior, absl::string_view context) {
+absl::Status AddStatus(absl::Status prior, absl::string_view context) {
   CHECK(!prior.ok());
-  return Status{prior.code(), absl::StrCat(context, ": ", prior.message())};
+  return absl::Status{prior.code(),
+                      absl::StrCat(context, ": ", prior.message())};
 }
 
-Status AppendStatus(Status prior, absl::string_view context) {
+absl::Status AppendStatus(absl::Status prior, absl::string_view context) {
   CHECK(!prior.ok());
-  return Status{prior.code(), absl::StrCat(prior.message(), ": ", context)};
+  return absl::Status{prior.code(),
+                      absl::StrCat(prior.message(), ": ", context)};
 }
 
 std::string Reindent(absl::string_view original,
@@ -282,10 +283,11 @@ std::string HumanReadableNumTranscendentalOps(double trops,
   return HumanReadableNumOps(trops, nanoseconds, "TR");
 }
 
-void LogLines(int sev, absl::string_view text, const char* fname, int lineno) {
-  const int orig_sev = sev;
-  if (sev == tsl::FATAL) {
-    sev = tsl::ERROR;
+void LogLines(absl::LogSeverity sev, absl::string_view text, const char* fname,
+              int lineno) {
+  const absl::LogSeverity orig_sev = sev;
+  if (sev == absl::LogSeverity::kFatal) {
+    sev = absl::LogSeverity::kError;
   }
 
   // Protect calls with a mutex so we don't interleave calls to LogLines from
@@ -305,7 +307,7 @@ void LogLines(int sev, absl::string_view text, const char* fname, int lineno) {
     cur = eol + 1;
   }
 
-  if (orig_sev == tsl::FATAL) {
+  if (orig_sev == absl::LogSeverity::kFatal) {
     tsl::internal::LogString(fname, lineno, orig_sev,
                              "Aborting due to errors.");
   }
@@ -314,6 +316,15 @@ void LogLines(int sev, absl::string_view text, const char* fname, int lineno) {
 int64_t Product(absl::Span<const int64_t> xs) {
   return std::accumulate(xs.begin(), xs.end(), static_cast<int64_t>(1),
                          std::multiplies<int64_t>());
+}
+
+std::vector<int64_t> ElemwiseProduct(absl::Span<const int64_t> a,
+                                     absl::Span<const int64_t> b) {
+  CHECK_EQ(a.size(), b.size());
+  std::vector<int64_t> result;
+  std::transform(a.begin(), a.end(), b.begin(), std::back_inserter(result),
+                 std::multiplies<int64_t>());
+  return result;
 }
 
 absl::InlinedVector<std::pair<int64_t, int64_t>, 8> CommonFactors(

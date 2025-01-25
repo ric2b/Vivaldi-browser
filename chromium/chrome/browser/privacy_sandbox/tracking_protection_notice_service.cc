@@ -47,31 +47,14 @@ namespace {
 using NoticeType = ::privacy_sandbox::TrackingProtectionOnboarding::NoticeType;
 using NoticeAction =
     ::privacy_sandbox::TrackingProtectionOnboarding::NoticeAction;
+using SurfaceType =
+    ::privacy_sandbox::TrackingProtectionOnboarding::SurfaceType;
 
 void CreateHistogramNoticeServiceEvent(
-    TrackingProtectionOnboarding::NoticeType type,
-    TrackingProtectionNoticeService::TrackingProtectionMetricsNoticeEvent
+    TrackingProtectionNoticeService::TrackingProtectionNoticeServiceEvent
         event) {
-  switch (type) {
-    case TrackingProtectionOnboarding::NoticeType::kNone:
-      break;
-    case TrackingProtectionOnboarding::NoticeType::kOnboarding:
-      base::UmaHistogramEnumeration(
-          "PrivacySandbox.TrackingProtection.Onboarding.NoticeServiceEvent",
-          event);
-      break;
-    case TrackingProtectionOnboarding::NoticeType::kOffboarding:
-      base::UmaHistogramEnumeration(
-          "PrivacySandbox.TrackingProtection.Offboarding.NoticeServiceEvent",
-          event);
-      break;
-    case TrackingProtectionOnboarding::NoticeType::kSilentOnboarding:
-      base::UmaHistogramEnumeration(
-          "PrivacySandbox.TrackingProtection.SilentOnboarding."
-          "NoticeServiceEvent",
-          event);
-      break;
-  }
+  base::UmaHistogramEnumeration(
+      "PrivacySandbox.TrackingProtection.NoticeServiceEvent", event);
 }
 
 NoticeAction ToNoticeAction(
@@ -87,6 +70,7 @@ NoticeAction ToNoticeAction(
       return NoticeAction::kOther;
   }
 }
+
 }  // namespace
 
 TrackingProtectionNoticeService::TrackingProtectionNoticeService(
@@ -106,9 +90,7 @@ TrackingProtectionNoticeService::~TrackingProtectionNoticeService() = default;
 void TrackingProtectionNoticeService::Shutdown() {
   profile_ = nullptr;
   onboarding_service_ = nullptr;
-  onboarding_notice_.reset();
-  offboarding_notice_.reset();
-  silent_onboarding_notice_.reset();
+  tracking_protection_notice_.reset();
   onboarding_observation_.Reset();
 }
 
@@ -135,6 +117,64 @@ void TrackingProtectionNoticeService::ResetTabStripTracker() {
       false);
 }
 
+bool TrackingProtectionNoticeService::SilentNotice::WasPromoPreviouslyDismissed(
+    Browser* browser) {
+  return false;
+}
+
+bool TrackingProtectionNoticeService::SilentNotice::MaybeShowPromo(
+    Browser* browser) {
+  return browser->window()->CanShowFeaturePromo(notice_->GetIPHFeature());
+}
+
+bool TrackingProtectionNoticeService::SilentNotice::IsPromoShowing(
+    Browser* browser) {
+  return false;
+}
+
+bool TrackingProtectionNoticeService::SilentNotice::HidePromo(
+    Browser* browser) {
+  return false;
+}
+
+bool TrackingProtectionNoticeService::VisibleNotice::
+    WasPromoPreviouslyDismissed(Browser* browser) {
+  auto promo_result =
+      browser->window()->CanShowFeaturePromo(notice_->GetIPHFeature());
+  return promo_result.failure().has_value() &&
+         promo_result.failure().value() ==
+             user_education::FeaturePromoResult::kPermanentlyDismissed;
+}
+
+bool TrackingProtectionNoticeService::VisibleNotice::MaybeShowPromo(
+    Browser* browser) {
+  base::Time shown_when = base::Time::Now();
+  user_education::FeaturePromoParams params(notice_->GetIPHFeature());
+  params.close_callback = base::BindOnce(
+      &TrackingProtectionNoticeService::BaseIPHNotice::OnNoticeClosed,
+      base::Unretained(notice_), shown_when,
+      browser->window()->GetFeaturePromoController());
+  return browser->window()->MaybeShowFeaturePromo(std::move(params));
+}
+
+bool TrackingProtectionNoticeService::VisibleNotice::IsPromoShowing(
+    Browser* browser) {
+  return browser->window()->IsFeaturePromoActive(notice_->GetIPHFeature());
+}
+
+bool TrackingProtectionNoticeService::VisibleNotice::HidePromo(
+    Browser* browser) {
+  return browser->window()->CloseFeaturePromo(
+      notice_->GetIPHFeature(),
+      user_education::EndFeaturePromoReason::kAbortPromo);
+}
+
+TrackingProtectionNoticeService::NoticeBehavior::NoticeBehavior(
+    BaseIPHNotice* notice)
+    : notice_(notice) {}
+
+TrackingProtectionNoticeService::NoticeBehavior::~NoticeBehavior() = default;
+
 TrackingProtectionNoticeService::BaseIPHNotice::BaseIPHNotice(
     Profile* profile,
     TrackingProtectionOnboarding* onboarding_service,
@@ -145,11 +185,17 @@ TrackingProtectionNoticeService::BaseIPHNotice::BaseIPHNotice(
 
 TrackingProtectionNoticeService::BaseIPHNotice::~BaseIPHNotice() = default;
 
+const base::Feature&
+TrackingProtectionNoticeService::BaseIPHNotice::GetIPHFeature() {
+  // TODO(crbug.com/341975190) Add other features for when 3PCD Full Launch is
+  // supported.
+  return feature_engagement::kIPHTrackingProtectionOnboardingFeature;
+}
+
 void TrackingProtectionNoticeService::BaseIPHNotice::
     MaybeUpdateNoticeVisibility(content::WebContents* web_content) {
   CreateHistogramNoticeServiceEvent(
-      GetNoticeType(),
-      TrackingProtectionMetricsNoticeEvent::kUpdateNoticeVisibility);
+      TrackingProtectionNoticeServiceEvent::kUpdateNoticeVisibility);
   if (!web_content) {
     return;
   }
@@ -163,138 +209,96 @@ void TrackingProtectionNoticeService::BaseIPHNotice::
   // Exclude Popups, PWAs and other non normal browsers.
   if (browser->type() != Browser::TYPE_NORMAL) {
     CreateHistogramNoticeServiceEvent(
-        GetNoticeType(),
-        TrackingProtectionMetricsNoticeEvent::kBrowserTypeNonNormal);
-
+        TrackingProtectionNoticeServiceEvent::kBrowserTypeNonNormal);
     return;
   }
 
   // If the notice should no longer be shown, then hide it and add metrics.
-  if (onboarding_service_->GetRequiredNotice() != GetNoticeType()) {
-    if (IsPromoShowing(browser)) {
+  if (notice_behavior() &&
+      GetNoticeType() !=
+          onboarding_service_->GetRequiredNotice(SurfaceType::kDesktop)) {
+    if (notice_behavior()->IsPromoShowing(browser)) {
       CreateHistogramNoticeServiceEvent(
-          GetNoticeType(),
-          TrackingProtectionMetricsNoticeEvent::kNoticeShowingButShouldnt);
-      HidePromo(browser);
+          TrackingProtectionNoticeServiceEvent::kNoticeShowingButShouldnt);
+      notice_behavior()->HidePromo(browser);
     }
     return;
   }
-
   // If tab triggering the update isn't the active one, avoid triggering the
   // promo.
   // No additional checks on the window Active/Minimized, as the Promos can only
   // be shown on active windows.
   if (browser->tab_strip_model()->GetActiveWebContents() != web_content) {
     CreateHistogramNoticeServiceEvent(
-        GetNoticeType(),
-        TrackingProtectionMetricsNoticeEvent::kInactiveWebcontentUpdated);
-    return;
-  }
-
-  // Check if the promo has previously been dismissed by the user. If so, Notify
-  // the onboarding service that the promo was shown.
-  if (WasPromoPreviouslyDismissed(browser)) {
-    onboarding_service_->NoticeShown(GetNoticeType());
-    CreateHistogramNoticeServiceEvent(
-        GetNoticeType(),
-        TrackingProtectionMetricsNoticeEvent::kPromoPreviouslyDismissed);
+        TrackingProtectionNoticeServiceEvent::kInactiveWebcontentUpdated);
     return;
   }
 
   // We should hide the notice at this point if the browser isn't eligible.
+  // This would only be relevant if we've already had a chance to create a
+  // notice_behavior, since a notice_behavior had to have been present for us to
+  // be able to show a Promo.
   if (!IsLocationBarEligible(browser)) {
-    HidePromo(browser);
+    if (notice_behavior()) {
+      notice_behavior()->HidePromo(browser);
+    }
     return;
   }
 
   // At this point, the update is happening in an active tab, Secure location,
   // with a visible LocationIcon. We should attempt to show the notice if it's
   // not already shown.
-  if (IsPromoShowing(browser)) {
+  if (notice_behavior() && notice_behavior()->IsPromoShowing(browser)) {
     CreateHistogramNoticeServiceEvent(
-        GetNoticeType(),
-        TrackingProtectionMetricsNoticeEvent::kNoticeAlreadyShowing);
+        TrackingProtectionNoticeServiceEvent::kNoticeAlreadyShowing);
     return;
   }
 
-  if (MaybeShowPromo(browser)) {
-    onboarding_service_->NoticeShown(GetNoticeType());
+  // Safe to init the notice behavior at this point, since we know we're about
+  // to show the notice.
+  MaybeInitNoticeBehavior();
+
+  // Check if the promo has previously been dismissed by the user. If so, Notify
+  // the onboarding service that the promo was shown.
+  if (notice_behavior() &&
+      notice_behavior()->WasPromoPreviouslyDismissed(browser)) {
+    onboarding_service_->NoticeShown(SurfaceType::kDesktop, GetNoticeType());
     CreateHistogramNoticeServiceEvent(
-        GetNoticeType(),
-        TrackingProtectionMetricsNoticeEvent::kNoticeRequestedAndShown);
+        TrackingProtectionNoticeServiceEvent::kPromoPreviouslyDismissed);
+    return;
+  }
+
+  if (notice_behavior() && notice_behavior()->MaybeShowPromo(browser)) {
+    onboarding_service_->NoticeShown(SurfaceType::kDesktop, GetNoticeType());
+    CreateHistogramNoticeServiceEvent(
+        TrackingProtectionNoticeServiceEvent::kNoticeRequestedAndShown);
   } else {
     CreateHistogramNoticeServiceEvent(
-        GetNoticeType(),
-        TrackingProtectionMetricsNoticeEvent::kNoticeRequestedButNotShown);
+        TrackingProtectionNoticeServiceEvent::kNoticeRequestedButNotShown);
   }
 }
 
-bool TrackingProtectionNoticeService::BaseIPHNotice::
-    WasPromoPreviouslyDismissed(Browser* browser) {
-  auto promo_result = browser->window()->CanShowFeaturePromo(GetIPHFeature());
-  return promo_result.failure().has_value() &&
-         promo_result.failure().value() ==
-             user_education::FeaturePromoResult::kPermanentlyDismissed;
+void TrackingProtectionNoticeService::BaseIPHNotice::MaybeInitNoticeBehavior() {
+  if (notice_behavior()) {
+    return;
+  }
+  if (GetNoticeType() ==
+      TrackingProtectionOnboarding::NoticeType::kModeBSilentOnboarding) {
+    notice_behavior_ = std::make_unique<SilentNotice>(this);
+    return;
+  } else if (GetNoticeType() ==
+             TrackingProtectionOnboarding::NoticeType::kModeBOnboarding) {
+    notice_behavior_ = std::make_unique<VisibleNotice>(this);
+    return;
+  }
 }
 
-bool TrackingProtectionNoticeService::BaseIPHNotice::MaybeShowPromo(
-    Browser* browser) {
-  base::Time shown_when = base::Time::Now();
-  user_education::FeaturePromoParams params(GetIPHFeature());
-  params.close_callback = base::BindOnce(
-      &TrackingProtectionNoticeService::BaseIPHNotice::OnNoticeClosed,
-      base::Unretained(this), shown_when,
-      browser->window()->GetFeaturePromoController());
-  return browser->window()->MaybeShowFeaturePromo(std::move(params));
-}
-
-void TrackingProtectionNoticeService::BaseIPHNotice::HidePromo(
-    Browser* browser) {
-  browser->window()->CloseFeaturePromo(
-      GetIPHFeature(), user_education::EndFeaturePromoReason::kAbortPromo);
-}
-
-bool TrackingProtectionNoticeService::BaseIPHNotice::IsPromoShowing(
-    Browser* browser) {
-  return browser->window()->IsFeaturePromoActive(GetIPHFeature());
-}
-
-TrackingProtectionNoticeService::OnboardingNotice::OnboardingNotice(
-    Profile* profile,
-    TrackingProtectionOnboarding* onboarding_service,
-    TrackingProtectionNoticeService* notice_service)
-    : BaseIPHNotice(profile, onboarding_service, notice_service) {
-  CreateHistogramNoticeServiceEvent(
-      GetNoticeType(),
-      TrackingProtectionMetricsNoticeEvent::kNoticeObjectCreated);
-}
-
-NoticeType TrackingProtectionNoticeService::OnboardingNotice::GetNoticeType() {
-  return NoticeType::kOnboarding;
-}
-
-const base::Feature&
-TrackingProtectionNoticeService::OnboardingNotice::GetIPHFeature() {
-  return feature_engagement::kIPHTrackingProtectionOnboardingFeature;
-}
-
-TrackingProtectionNoticeService::OffboardingNotice::OffboardingNotice(
-    Profile* profile,
-    TrackingProtectionOnboarding* onboarding_service,
-    TrackingProtectionNoticeService* notice_service)
-    : BaseIPHNotice(profile, onboarding_service, notice_service) {
-  CreateHistogramNoticeServiceEvent(
-      GetNoticeType(),
-      TrackingProtectionMetricsNoticeEvent::kNoticeObjectCreated);
-}
-
-const base::Feature&
-TrackingProtectionNoticeService::OffboardingNotice::GetIPHFeature() {
-  return feature_engagement::kIPHTrackingProtectionOffboardingFeature;
-}
-
-NoticeType TrackingProtectionNoticeService::OffboardingNotice::GetNoticeType() {
-  return NoticeType::kOffboarding;
+NoticeType TrackingProtectionNoticeService::BaseIPHNotice::GetNoticeType() {
+  if (!notice_type_.has_value()) {
+    notice_type_ =
+        onboarding_service_->GetRequiredNotice(SurfaceType::kDesktop);
+  }
+  return *notice_type_;
 }
 
 void TrackingProtectionNoticeService::BaseIPHNotice::OnNoticeClosed(
@@ -310,93 +314,26 @@ void TrackingProtectionNoticeService::BaseIPHNotice::OnNoticeClosed(
   if (!has_been_dismissed) {
     return;
   }
-  onboarding_service_->NoticeActionTaken(GetNoticeType(),
+  onboarding_service_->NoticeActionTaken(SurfaceType::kDesktop, GetNoticeType(),
                                          ToNoticeAction(close_reason));
-}
-
-void TrackingProtectionNoticeService::OffboardingNotice::OnNoticeClosed(
-    base::Time showed_when,
-    user_education::FeaturePromoController* promo_controller) {
-  BaseIPHNotice::OnNoticeClosed(showed_when, promo_controller);
-  // At this point, the user is offboarded and we no longer
-  // need to show the notice, so we can stop observing the tab strip model
-  notice_service()->ResetTabStripTracker();
-}
-
-TrackingProtectionNoticeService::SilentOnboardingNotice::SilentOnboardingNotice(
-    Profile* profile,
-    TrackingProtectionOnboarding* onboarding_service,
-    TrackingProtectionNoticeService* notice_service)
-    : BaseIPHNotice(profile, onboarding_service, notice_service) {
-  CreateHistogramNoticeServiceEvent(
-      GetNoticeType(),
-      TrackingProtectionMetricsNoticeEvent::kNoticeObjectCreated);
-}
-
-NoticeType
-TrackingProtectionNoticeService::SilentOnboardingNotice::GetNoticeType() {
-  return NoticeType::kSilentOnboarding;
-}
-
-const base::Feature&
-TrackingProtectionNoticeService::SilentOnboardingNotice::GetIPHFeature() {
-  return feature_engagement::kIPHTrackingProtectionOnboardingFeature;
-}
-
-bool TrackingProtectionNoticeService::SilentOnboardingNotice::
-    WasPromoPreviouslyDismissed(Browser* browser) {
-  return false;
-}
-
-bool TrackingProtectionNoticeService::SilentOnboardingNotice::IsPromoShowing(
-    Browser* browser) {
-  return false;
-}
-
-bool TrackingProtectionNoticeService::SilentOnboardingNotice::MaybeShowPromo(
-    Browser* browser) {
-  // Check whether the onboarding promo can be shown but not actually showing
-  // the promo.
-  return browser->window()->CanShowFeaturePromo(GetIPHFeature());
-}
-
-void TrackingProtectionNoticeService::SilentOnboardingNotice::HidePromo(
-    Browser* browser) {}
-
-void TrackingProtectionNoticeService::SilentOnboardingNotice::OnNoticeClosed(
-    base::Time showed_when,
-    user_education::FeaturePromoController* promo_controller) {
-  NOTREACHED();
 }
 
 void TrackingProtectionNoticeService::OnShouldShowNoticeUpdated() {
   // We only start watching updates on TabStripTracker when we actually need
   // to show a notice. If we no longer need to show the notice, we stop watching
   // so we don't run logic unnecessarily.
-  switch (onboarding_service_->GetRequiredNotice()) {
-    case NoticeType::kNone:
-      ResetTabStripTracker();
-      return;
-    case NoticeType::kOnboarding:
-      onboarding_notice_ = std::make_unique<OnboardingNotice>(
-          profile_, onboarding_service_, this);
-      InitializeTabStripTracker();
-      return;
-    case TrackingProtectionOnboarding::NoticeType::kOffboarding:
-      offboarding_notice_ = std::make_unique<OffboardingNotice>(
-          profile_, onboarding_service_, this);
-      InitializeTabStripTracker();
-      return;
-    case TrackingProtectionOnboarding::NoticeType::kSilentOnboarding:
-      silent_onboarding_notice_ = std::make_unique<SilentOnboardingNotice>(
-          profile_, onboarding_service_, this);
-      InitializeTabStripTracker();
-      return;
+  if (!onboarding_service_->ShouldRunUILogic(SurfaceType::kDesktop)) {
+    ResetTabStripTracker();
+    return;
   }
+  tracking_protection_notice_ =
+      std::make_unique<BaseIPHNotice>(profile_, onboarding_service_, this);
+  InitializeTabStripTracker();
+  return;
 }
 
 bool TrackingProtectionNoticeService::IsNoticeNeeded() {
-  return onboarding_service_->GetRequiredNotice() != NoticeType::kNone;
+  return onboarding_service_->ShouldRunUILogic(SurfaceType::kDesktop);
 }
 
 bool TrackingProtectionNoticeService::ShouldTrackBrowser(Browser* browser) {
@@ -411,26 +348,15 @@ void TrackingProtectionNoticeService::OnTabStripModelChanged(
   if (!selection.active_tab_changed()) {
     return;
   }
-  if (offboarding_notice_) {
-    offboarding_notice_->MaybeUpdateNoticeVisibility(selection.new_contents);
-    CreateHistogramNoticeServiceEvent(
-        TrackingProtectionOnboarding::NoticeType::kOffboarding,
-        TrackingProtectionNoticeService::TrackingProtectionMetricsNoticeEvent::
-            kActiveTabChanged);
-  } else if (onboarding_notice_) {
-    onboarding_notice_->MaybeUpdateNoticeVisibility(selection.new_contents);
-    CreateHistogramNoticeServiceEvent(
-        TrackingProtectionOnboarding::NoticeType::kOnboarding,
-        TrackingProtectionNoticeService::TrackingProtectionMetricsNoticeEvent::
-            kActiveTabChanged);
-  } else if (silent_onboarding_notice_) {
-    silent_onboarding_notice_->MaybeUpdateNoticeVisibility(
-        selection.new_contents);
-    CreateHistogramNoticeServiceEvent(
-        TrackingProtectionOnboarding::NoticeType::kSilentOnboarding,
-        TrackingProtectionNoticeService::TrackingProtectionMetricsNoticeEvent::
-            kActiveTabChanged);
+  if (!tracking_protection_notice_) {
+    return;
   }
+  tracking_protection_notice_->MaybeUpdateNoticeVisibility(
+      selection.new_contents);
+  CreateHistogramNoticeServiceEvent(
+      TrackingProtectionNoticeService::TrackingProtectionNoticeServiceEvent::
+          kActiveTabChanged);
+  return;
 }
 
 TrackingProtectionNoticeService::TabHelper::TabHelper(
@@ -463,28 +389,14 @@ void TrackingProtectionNoticeService::TabHelper::DidFinishNavigation(
 
   auto* notice_service =
       TrackingProtectionNoticeFactory::GetForProfile(profile);
-  if (notice_service->offboarding_notice_) {
-    notice_service->offboarding_notice_->MaybeUpdateNoticeVisibility(
-        web_contents());
-    CreateHistogramNoticeServiceEvent(
-        TrackingProtectionOnboarding::NoticeType::kOffboarding,
-        TrackingProtectionNoticeService::TrackingProtectionMetricsNoticeEvent::
-            kNavigationFinished);
-  } else if (notice_service->onboarding_notice_) {
-    notice_service->onboarding_notice_->MaybeUpdateNoticeVisibility(
-        web_contents());
-    CreateHistogramNoticeServiceEvent(
-        TrackingProtectionOnboarding::NoticeType::kOnboarding,
-        TrackingProtectionNoticeService::TrackingProtectionMetricsNoticeEvent::
-            kNavigationFinished);
-  } else if (notice_service->silent_onboarding_notice_) {
-    notice_service->silent_onboarding_notice_->MaybeUpdateNoticeVisibility(
-        web_contents());
-    CreateHistogramNoticeServiceEvent(
-        TrackingProtectionOnboarding::NoticeType::kSilentOnboarding,
-        TrackingProtectionNoticeService::TrackingProtectionMetricsNoticeEvent::
-            kNavigationFinished);
+  if (!notice_service->tracking_protection_notice_) {
+    return;
   }
+  notice_service->tracking_protection_notice_->MaybeUpdateNoticeVisibility(
+      web_contents());
+  CreateHistogramNoticeServiceEvent(
+      TrackingProtectionNoticeService::TrackingProtectionNoticeServiceEvent::
+          kNavigationFinished);
 }
 
 bool TrackingProtectionNoticeService::BaseIPHNotice::IsLocationBarEligible(
@@ -493,8 +405,7 @@ bool TrackingProtectionNoticeService::BaseIPHNotice::IsLocationBarEligible(
                    security_state::SECURE;
   if (!is_secure) {
     CreateHistogramNoticeServiceEvent(
-        GetNoticeType(),
-        TrackingProtectionNoticeService::TrackingProtectionMetricsNoticeEvent::
+        TrackingProtectionNoticeService::TrackingProtectionNoticeServiceEvent::
             kLocationIconNonSecure);
   }
 
@@ -503,8 +414,7 @@ bool TrackingProtectionNoticeService::BaseIPHNotice::IsLocationBarEligible(
           kLocationIconElementId, browser->window()->GetElementContext());
   if (!is_element_visible) {
     CreateHistogramNoticeServiceEvent(
-        GetNoticeType(),
-        TrackingProtectionNoticeService::TrackingProtectionMetricsNoticeEvent::
+        TrackingProtectionNoticeService::TrackingProtectionNoticeServiceEvent::
             kLocationIconNonVisible);
   }
   return is_secure && is_element_visible;

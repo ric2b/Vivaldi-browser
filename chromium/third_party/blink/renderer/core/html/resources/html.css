@@ -642,10 +642,11 @@ input[type="hidden" i], input[type="image" i], input[type="file" i] {
 input[type="file" i] {
     align-items: baseline;
     color: inherit;
-    overflow: hidden !important;
     text-align: start !important;
     text-overflow: ellipsis;
     white-space: pre;
+    /* NOTE: This can be removed once InputClipRulesCss is removed */
+    overflow: hidden !important;
 }
 
 input[type="image" i] {
@@ -783,6 +784,13 @@ input:disabled, textarea:disabled {
 option:-internal-spatial-navigation-focus {
     outline: light-dark(black, white) dashed 1px;
     outline-offset: -1px;
+}
+
+@supports blink-feature(InputClipRulesCss) {
+  input:not([type="image" i], [type="range" i], [type="checkbox" i], [type="radio" i]) {
+    overflow: clip !important;
+    overflow-clip-margin: 0px !important;
+  }
 }
 
 /* https://html.spec.whatwg.org/multipage/rendering.html#hidden-elements */
@@ -1008,9 +1016,11 @@ optgroup {
 option {
     font-weight: normal;
     display: block;
-    padding: 0 2px 1px 2px;
+    padding-inline: 2px;
+    padding-block-start: 0;
+    padding-block-end: 1px;
     white-space: nowrap;
-    min-height: 1.2em;
+    min-block-size: 1.2em;
 }
 
 /* The following select style rules have to go after the other
@@ -1497,6 +1507,14 @@ dialog:popover-open {
   display:block;
 }
 
+@supports blink-feature(HTMLAnchorAttribute) {
+  /* Popovers using anchor positioning get their inset properties reset, to make
+  * it easier to position them. */
+  [popover][anchor] {
+    inset:auto;
+  }
+}
+
 /* This rule matches popovers (dialog or not) that are currently open as a
    popover. */
 [popover]:popover-open:not(dialog), dialog:popover-open:not([open]) {
@@ -1516,11 +1534,71 @@ dialog:popover-open {
 
 @media print {
   @page {
-    /* FIXME: Define the right default values for page properties. */
-    size: auto;
-
-    padding: 0px;
-    border-width: 0px;
+    /* https://drafts.csswg.org/css-page-3/#margin-text-alignment */
+    @top-left-corner {
+      text-align: right;
+      vertical-align: middle;
+    }
+    @top-left {
+      text-align: left;
+      vertical-align: middle;
+    }
+    @top-center {
+      text-align: center;
+      vertical-align: middle;
+    }
+    @top-right {
+      text-align: right;
+      vertical-align: middle;
+    }
+    @top-right-corner {
+      text-align: left;
+      vertical-align: middle;
+    }
+    @right-top {
+      text-align: center;
+      vertical-align: top;
+    }
+    @right-middle {
+      text-align: center;
+      vertical-align: middle;
+    }
+    @right-bottom {
+      text-align: center;
+      vertical-align: bottom;
+    }
+    @bottom-right-corner {
+      text-align: left;
+      vertical-align: middle;
+    }
+    @bottom-right {
+      text-align: right;
+      vertical-align: middle;
+    }
+    @bottom-center {
+      text-align: center;
+      vertical-align: middle;
+    }
+    @bottom-left {
+      text-align: left;
+      vertical-align: middle;
+    }
+    @bottom-left-corner {
+      text-align: right;
+      vertical-align: middle;
+    }
+    @left-bottom {
+      text-align: center;
+      vertical-align: bottom;
+    }
+    @left-middle {
+      text-align: center;
+      vertical-align: middle;
+    }
+    @left-top {
+      text-align: center;
+      vertical-align: top;
+    }
   }
 
   /* Allows table headers and footers to print at the top / bottom of each
@@ -1537,6 +1615,13 @@ html::spelling-error {
 
 html::grammar-error {
     text-decoration: -internal-grammar-error-color grammar-error;
+}
+
+@supports blink-feature(AutoSizeLazyLoadedImages) {
+  img:is([sizes="auto" i], [sizes^="auto," i]) {
+    contain: size !important;
+    contain-intrinsic-size: 300px 150px;
+  }
 }
 
 /* noscript is handled internally, as it depends on settings. */

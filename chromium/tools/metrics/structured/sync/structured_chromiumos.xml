@@ -614,9 +614,10 @@
         that is running.
       </summary>
     </metric>
-    <metric name="IsCrashLoop" type="int">
+    <metric name="CrashSendingMode" type="int">
       <summary>
-        Boolean: 1 if using crash-loop mode.
+        Value from CrashSendingMode, indicating if the crash was sent using
+        crash-loop mode.
       </summary>
     </metric>
   </event>
@@ -638,9 +639,10 @@
         that is running.
       </summary>
     </metric>
-    <metric name="IsCrashLoop" type="int">
+    <metric name="CrashSendingMode" type="int">
       <summary>
-        Boolean: 1 if using crash-loop mode.
+        Value from CrashSendingMode, indicating if the crash was sent using
+        crash-loop mode.
       </summary>
     </metric>
   </event>
@@ -677,10 +679,10 @@
       crash_sender has started processing a new crash file. Recorded once per
       crash send attempt. Not recorded in dry run mode.
     </summary>
-    <metric name="IsCrashLoop" type="int">
+    <metric name="CrashSendingMode" type="int">
       <summary>
-        Boolean: 1 if crash_sender was invoked by crash_reporter using
-        crash-loop mode.
+        Value from CrashSendingMode, indicating if crash sender was started
+        using crash-loop mode.
       </summary>
     </metric>
   </event>
@@ -697,10 +699,10 @@
         that produced the .meta file.
       </summary>
     </metric>
-    <metric name="IsCrashLoop" type="int">
+    <metric name="CrashSendingMode" type="int">
       <summary>
-        Boolean: 1 if crash_sender was invoked by crash_reporter using
-        crash-loop mode.
+        Value from CrashSendingMode, indicating if crash sender was started
+        using crash-loop mode.
       </summary>
     </metric>
   </event>
@@ -723,10 +725,10 @@
         removed the crash record.
       </summary>
     </metric>
-    <metric name="IsCrashLoop" type="int">
+    <metric name="CrashSendingMode" type="int">
       <summary>
-        Boolean: 1 if crash_sender was invoked by crash_reporter using
-        crash-loop mode.
+        Value from CrashSendingMode, indicating if crash sender was started
+        using crash-loop mode.
       </summary>
     </metric>
   </event>
@@ -749,10 +751,10 @@
         left for the next time.
       </summary>
     </metric>
-    <metric name="IsCrashLoop" type="int">
+    <metric name="CrashSendingMode" type="int">
       <summary>
-        Boolean: 1 if crash_sender was invoked by crash_reporter using
-        crash-loop mode.
+        Value from CrashSendingMode, indicating if crash sender was started
+        using crash-loop mode.
       </summary>
     </metric>
   </event>
@@ -768,10 +770,10 @@
         file could not be removed.
       </summary>
     </metric>
-    <metric name="IsCrashLoop" type="int">
+    <metric name="CrashSendingMode" type="int">
       <summary>
-        Boolean: 1 if crash_sender was invoked by crash_reporter using
-        crash-loop mode.
+        Value from CrashSendingMode, indicating if crash sender was started
+        using crash-loop mode.
       </summary>
     </metric>
     <metric name="SeemingCrashFile" type="int">
@@ -1675,6 +1677,175 @@
     <metric name="ProductId" type="int">
       <summary>
         The product id of the USB device.
+      </summary>
+    </metric>
+  </event>
+</project>
+
+<project name="UsbQuality">
+  <owner>jthies@google.com</owner>
+  <owner>chromeos-usb@google.com</owner>
+  <id>per-project</id>
+  <summary>
+    Project to measure USB device connectivity quality be recording USB data bus
+    and power delivery quality indicators when devices are added or removed.
+  </summary>
+
+  <event name="UsbBusConnect">
+  <summary>
+    USB quality metric recorded on device enumeration.
+  </summary>
+    <metric name="BootId" type="hmac-string">
+      <summary>
+        Random ID generated at boot time to detect reboots.
+      </summary>
+    </metric>
+    <metric name="ConnectionId" type="hmac-string">
+      <summary>
+        Unique device connection ID based on boot information, busnum and
+        devnum.
+      </summary>
+    </metric>
+    <metric name="VendorId" type="int">
+      <summary>
+        Vendor ID, obfuscated for unpopular devices.
+      </summary>
+    </metric>
+    <metric name="ProductId" type="int">
+      <summary>
+        Product ID, obfuscated for unpopular devices.
+      </summary>
+    </metric>
+    <metric name="LockScreen" type="int">
+      <summary>
+        Bool noting whether the lock screen is show. This impacts USBGuard
+        behavior.
+      </summary>
+    </metric>
+    <metric name="Speed" type="int">
+      <summary>
+        USB device speed, based on UMA metric with fallback speeds.
+      </summary>
+    </metric>
+    <metric name="DeviceClass" type="int">
+      <summary>
+        The device's USB class.
+      </summary>
+    </metric>
+    <metric name="InterfaceClass" type="int-array" max="20">
+      <summary>
+        USB class for each of the device's interfaces.
+      </summary>
+    </metric>
+    <metric name="InterfaceSubClass" type="int-array" max="20">
+      <summary>
+       USB subclass for each of the device's interfaces.
+      </summary>
+    </metric>
+    <metric name="InterfaceProtocol" type="int-array" max="20">
+      <summary>
+        Protocol for each of the device's interfaces.
+      </summary>
+    </metric>
+    <metric name="InterfaceDriver" type="int-array" max="20">
+      <summary>
+        Drivers bound to each of the device's interfaces.
+      </summary>
+    </metric>
+    <metric name="Endpoint" type="int-array" max="20">
+      <summary>
+        List of endpoints used by the devices interfaces.
+      </summary>
+    </metric>
+  </event>
+
+  <event name="UsbBusDisconnect">
+  <summary>
+    USB quality metric recorded on device disconnection.
+  </summary>
+    <metric name="BootId" type="hmac-string">
+      <summary>
+        Random ID generated at boot time to detect reboots.
+      </summary>
+    </metric>
+    <metric name="ConnectionId" type="hmac-string">
+      <summary>
+        Unique device connection ID based on boot information, busnum and
+        devnum.
+      </summary>
+    </metric>
+    <metric name="VendorId" type="int">
+      <summary>
+        Vendor ID, obfuscated for unpopular devices.
+      </summary>
+    </metric>
+    <metric name="ProductId" type="int">
+      <summary>
+        Product ID, obfuscated for unpopular devices.
+      </summary>
+    </metric>
+    <metric name="DeviceError" type="int-array" max="10">
+      <summary>
+        List of USB errors in dmesg attributable to the device at when it is
+        disconnected.
+      </summary>
+    </metric>
+  </event>
+
+  <event name="UsbPdConnect">
+  <summary>
+    USB quality metric recorded on shortly after USB PD device registration.
+  </summary>
+    <metric name="BootId" type="hmac-string">
+      <summary>
+        Random ID generated at boot time to detect reboots.
+      </summary>
+    </metric>
+    <metric name="Usb2ConnectionId" type="hmac-string">
+      <summary>
+        Unique device connection ID based on boot information, busnum and
+        devnum if the USB PD device includes an internal USB 2.0 device.
+      </summary>
+    </metric>
+    <metric name="Usb3ConnectionId" type="hmac-string">
+      <summary>
+        Unique device connection ID based on boot information, busnum and
+        devnum if the USB PD device includes an internal USB 3.2 device.
+      </summary>
+    </metric>
+    <metric name="VendorId" type="int">
+      <summary>
+        Vendor ID, obfuscated for unpopular devices.
+      </summary>
+    </metric>
+    <metric name="ProductId" type="int">
+      <summary>
+        Product ID, obfuscated for unpopular devices.
+      </summary>
+    </metric>
+    <metric name="PartnerType" type="int">
+      <summary>
+        Partner category derived from USB PD identity and mode support.
+      </summary>
+    </metric>
+    <metric name="CableType" type="int">
+      <summary>
+        Cable category derived from USB PD identity and mode support.
+      </summary>
+    </metric>
+    <metric name="MaxChargingRate" type="int">
+      <summary>
+        Wattage of highest available PDO.
+      </summary>
+    </metric>
+    <metric name="RealizedChargingRate" type="int">
+      <summary>
+        Wattage the port is sinking if applicable.
+      </summary>
+    </metric>
+    <metric name="ModeEntryResult" type="int">
+      <summary>
+        Enum specifying the attempted mode entered and a pass/fail result.
       </summary>
     </metric>
   </event>
@@ -2713,6 +2884,24 @@
     <metric name="TestMetricFive" type="int-array" max="10">
       <summary>
         A per-user keyed hash array value.
+      </summary>
+    </metric>
+  </event>
+</project>
+
+<project name="TestProject.With.Name.Not.Legal.CPP">
+  <owner>iby@google.com</owner>
+  <id>none</id>
+  <summary>
+    Project for unit testing, do not use.
+  </summary>
+  <event name="TestEvent.With.Name.Not.Legal.CPP">
+    <summary>
+      Event for unit testing, do not use.
+    </summary>
+    <metric name="TestMetric.With.Name.Not.Legal.CPP" type="raw-string">
+      <summary>
+        Metric for unit testing, do not use.
       </summary>
     </metric>
   </event>

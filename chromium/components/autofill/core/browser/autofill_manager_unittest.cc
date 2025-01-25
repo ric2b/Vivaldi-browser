@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/autofill/core/browser/autofill_manager.h"
+
 #include <iterator>
 #include <memory>
 #include <tuple>
@@ -11,7 +13,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
-#include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/autofill_manager_test_api.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/crowdsourcing/mock_autofill_crowdsourcing_manager.h"
@@ -22,6 +23,7 @@
 #include "components/autofill/core/browser/test_autofill_manager_waiter.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/form_data_test_api.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "components/optimization_guide/core/test_optimization_guide_model_provider.h"
 #include "components/translate/core/common/language_detection_details.h"
@@ -245,7 +247,7 @@ TEST_F(AutofillManagerTest, ObserverReceiveCalls) {
   std::vector<FormData> forms = CreateTestForms(2);
   FormData form = forms[0];
   FormData other_form = forms[1];
-  FormFieldData field = form.fields.front();
+  FormFieldData field = form.fields().front();
 
   // Shorthands for matchers to reduce visual noise.
   auto m = Ref(manager());
@@ -328,20 +330,20 @@ TEST_F(AutofillManagerTest, ObserverReceiveCalls) {
   EXPECT_CALL(observer, OnFieldTypesDetermined(m, g, heuristics));
   task_environment_.RunUntilIdle();
 
-  form.fields.push_back(form.fields.back());
-  form.fields.back().set_renderer_id(test::MakeFieldRendererId());
+  test_api(form).Append(form.fields().back());
+  test_api(form).field(-1).set_renderer_id(test::MakeFieldRendererId());
 
   // The form was just changed, which causes a reparse. The reparse is
   // asynchronous, so OnAfterTextFieldDidChange() is asynchronous, too.
   EXPECT_CALL(observer, OnBeforeTextFieldDidChange(m, f, ff));
-  manager().OnTextFieldDidChange(form, field, {});
+  manager().OnTextFieldDidChange(form, field.global_id(), {});
   EXPECT_CALL(observer, OnAfterTextFieldDidChange(m, f, ff, std::u16string()));
   EXPECT_CALL(observer, OnFieldTypesDetermined(m, f, heuristics));
   task_environment_.RunUntilIdle();
 
   EXPECT_CALL(observer, OnBeforeTextFieldDidScroll(m, f, ff));
   EXPECT_CALL(observer, OnAfterTextFieldDidScroll(m, f, ff));
-  manager().OnTextFieldDidScroll(form, field);
+  manager().OnTextFieldDidScroll(form, field.global_id());
 
   EXPECT_CALL(observer, OnBeforeDidFillAutofillFormData(m, f));
   EXPECT_CALL(observer, OnAfterDidFillAutofillFormData(m, f));
@@ -349,22 +351,22 @@ TEST_F(AutofillManagerTest, ObserverReceiveCalls) {
 
   EXPECT_CALL(observer, OnBeforeAskForValuesToFill(m, f, ff, Ref(form)));
   EXPECT_CALL(observer, OnAfterAskForValuesToFill(m, f, ff));
-  manager().OnAskForValuesToFill(form, field, gfx::Rect(),
+  manager().OnAskForValuesToFill(form, field.global_id(), gfx::Rect(),
                                  AutofillSuggestionTriggerSource::kUnspecified);
 
   EXPECT_CALL(observer, OnBeforeFocusOnFormField(m, f, ff, Ref(form)));
   EXPECT_CALL(observer, OnAfterFocusOnFormField(m, f, ff));
-  manager().OnFocusOnFormField(form, field);
+  manager().OnFocusOnFormField(form, field.global_id());
 
   EXPECT_CALL(observer, OnBeforeJavaScriptChangedAutofilledValue(m, f, ff));
   EXPECT_CALL(observer, OnAfterJavaScriptChangedAutofilledValue(m, f, ff));
-  manager().OnJavaScriptChangedAutofilledValue(form, field, {},
+  manager().OnJavaScriptChangedAutofilledValue(form, field.global_id(), {},
                                                /*formatting_only=*/false);
 
   // TODO(crbug.com/) Test in browser_autofill_manager_unittest.cc that
   // FillOrPreviewForm() triggers OnFillOrPreviewDataModelForm().
 
-  EXPECT_CALL(observer, OnFormSubmitted(m, f));
+  EXPECT_CALL(observer, OnFormSubmitted(m, Ref(form)));
   manager().OnFormSubmitted(form, true,
                             mojom::SubmissionSource::FORM_SUBMISSION);
 

@@ -31,9 +31,9 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
  public:
   ~VivaldiContextMenuMac() override;
   VivaldiContextMenuMac(content::WebContents* web_contents,
-                        ui::SimpleMenuModel* menu_model,
-                        const gfx::Rect& rect,
-                        vivaldi::VivaldiRenderViewContextMenu* context_menu);
+              ui::SimpleMenuModel* menu_model,
+              const gfx::Rect& rect,
+              vivaldi::VivaldiRenderViewContextMenu* render_view_context_menu);
   VivaldiContextMenuMac(const VivaldiContextMenuMac&) = delete;
   VivaldiContextMenuMac& operator=(const VivaldiContextMenuMac&) = delete;
 
@@ -41,8 +41,8 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
             base::WeakPtr<ContextMenuPostitionDelegate> delegate) override;
   bool Show() override;
   void SetIcon(const gfx::Image& icon, int id) override;
-  void SetParentView(gfx::NativeView parent_view) override;
   bool HasDarkTextColor() override;
+  bool IsViews() override { return false; }
   void UpdateItem(int command_id,
                   bool enabled,
                   bool hidden,

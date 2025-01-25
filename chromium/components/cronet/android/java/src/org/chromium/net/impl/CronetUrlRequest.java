@@ -18,6 +18,7 @@ import org.jni_zero.NativeMethods;
 
 import org.chromium.base.Log;
 import org.chromium.net.CallbackException;
+import org.chromium.net.ConnectionCloseSource;
 import org.chromium.net.CronetException;
 import org.chromium.net.ExperimentalUrlRequest;
 import org.chromium.net.Idempotency;
@@ -82,7 +83,7 @@ public final class CronetUrlRequest extends ExperimentalUrlRequest {
      * all URLs previously requested. New URLs are added before
      * mCallback.onRedirectReceived is called.
      */
-    private final List<String> mUrlChain = new ArrayList<String>();
+    private final List<String> mUrlChain = new ArrayList<>();
 
     private final VersionSafeCallbacks.UrlRequestCallback mCallback;
     private final String mInitialUrl;
@@ -464,12 +465,10 @@ public final class CronetUrlRequest extends ExperimentalUrlRequest {
             long receivedByteCount) {
         ArrayList<Map.Entry<String, String>> headersList = new ArrayList<>();
         for (int i = 0; i < headers.length; i += 2) {
-            headersList.add(
-                    new AbstractMap.SimpleImmutableEntry<String, String>(
-                            headers[i], headers[i + 1]));
+            headersList.add(new AbstractMap.SimpleImmutableEntry<>(headers[i], headers[i + 1]));
         }
         return new UrlResponseInfoImpl(
-                new ArrayList<String>(mUrlChain),
+                new ArrayList<>(mUrlChain),
                 httpStatusCode,
                 httpStatusText,
                 headersList,
@@ -731,10 +730,10 @@ public final class CronetUrlRequest extends ExperimentalUrlRequest {
     /**
      * Called when error has occurred, no callbacks will be called afterwards.
      *
-     * @param errorCode Error code represented by {@code UrlRequestError} that should be mapped
-     *                  to one of {@link NetworkException#ERROR_HOSTNAME_NOT_RESOLVED
-     *                  NetworkException.ERROR_*}.
+     * @param errorCode Error code represented by {@code UrlRequestError} that should be mapped to
+     *     one of {@link NetworkException#ERROR_HOSTNAME_NOT_RESOLVED NetworkException.ERROR_*}.
      * @param nativeError native net error code.
+     * @param source Represented by {@code ErrorSource} which is the initiator of the error.
      * @param errorString textual representation of the error code.
      * @param receivedByteCount number of bytes received.
      */
@@ -744,6 +743,7 @@ public final class CronetUrlRequest extends ExperimentalUrlRequest {
             int errorCode,
             int nativeError,
             int nativeQuicError,
+            @ConnectionCloseSource int source,
             String errorString,
             long receivedByteCount) {
         if (mResponseInfo != null) {
@@ -756,7 +756,8 @@ public final class CronetUrlRequest extends ExperimentalUrlRequest {
                             "Exception in CronetUrlRequest: " + errorString,
                             errorCode,
                             nativeError,
-                            nativeQuicError));
+                            nativeQuicError,
+                            source));
         } else {
             int javaError = mapUrlRequestErrorToApiErrorCode(errorCode);
             failWithException(
@@ -1065,38 +1066,8 @@ public final class CronetUrlRequest extends ExperimentalUrlRequest {
                             mFinishedReason,
                             mResponseInfo,
                             mException);
-            mRequestContext.reportRequestFinished(requestInfo, inflightCallbackCount);
-            if (mRequestFinishedListener != null) {
-                inflightCallbackCount.increment();
-                try {
-                    mRequestFinishedListener
-                            .getExecutor()
-                            .execute(
-                                    new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            try {
-                                                mRequestFinishedListener.onRequestFinished(
-                                                        requestInfo);
-                                            } catch (Exception e) {
-                                                Log.e(
-                                                        CronetUrlRequestContext.LOG_TAG,
-                                                        "Exception thrown from request"
-                                                                + " finishedlistener",
-                                                        e);
-                                            } finally {
-                                                inflightCallbackCount.decrement();
-                                            }
-                                        }
-                                    });
-                } catch (RejectedExecutionException failException) {
-                    Log.e(
-                            CronetUrlRequestContext.LOG_TAG,
-                            "Exception posting task to executor",
-                            failException);
-                    inflightCallbackCount.decrement();
-                }
-            }
+            mRequestContext.reportRequestFinished(
+                    requestInfo, inflightCallbackCount, mRequestFinishedListener);
         } finally {
             inflightCallbackCount.decrement();
         }

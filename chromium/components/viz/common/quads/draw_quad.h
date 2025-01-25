@@ -76,8 +76,8 @@ class VIZ_COMMON_EXPORT DrawQuad {
   // Stores state common to a large bundle of quads; kept separate for memory
   // efficiency. There is special treatment to reconstruct these pointers
   // during serialization.
-  // This field is not a raw_ptr<> because of missing |.get()| in not-rewritten
-  // platform specific code.
+  // RAW_PTR_EXCLUSION: Performance reasons (rendering.mobile,
+  // Graphics.Smoothness, see crbug.com/345298647)
   RAW_PTR_EXCLUSION const SharedQuadState* shared_quad_state;
 
   bool IsDebugQuad() const { return material == Material::kDebugBorder; }

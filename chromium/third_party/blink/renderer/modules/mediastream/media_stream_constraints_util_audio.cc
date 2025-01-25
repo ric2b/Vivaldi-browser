@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util_audio.h"
 
 #include <algorithm>
@@ -765,7 +770,7 @@ class ProcessingBasedContainer {
       bool is_device_capture,
       const media::AudioParameters& device_parameters,
       bool is_reconfiguration_allowed) {
-    int sample_rate_hz = media::kAudioProcessingSampleRateHz;
+    int sample_rate_hz = media::WebRtcAudioProcessingSampleRateHz();
     if (stream_type == mojom::blink::MediaStreamType::DEVICE_AUDIO_CAPTURE &&
         !ProcessedLocalAudioSource::OutputAudioAtProcessingSampleRate()) {
       // If audio processing runs in the audio service without any mitigations

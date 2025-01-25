@@ -6,6 +6,7 @@ import 'chrome://os-settings/lazy_load.js';
 
 import {SettingsCursorAndTouchpadPageElement} from 'chrome://os-settings/lazy_load.js';
 import {createRouterForTesting, CrSettingsPrefs, DevicePageBrowserProxyImpl, Router, routes, settingMojom, SettingsDropdownMenuElement, SettingsPrefsElement, SettingsToggleButtonElement} from 'chrome://os-settings/os_settings.js';
+import {CrToggleElement} from 'chrome://resources/ash/common/cr_elements/cr_toggle/cr_toggle.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -589,7 +590,7 @@ suite('<settings-cursor-and-touchpad-page>', () => {
   }
 
   test(
-      'face gaze feature does not show if the feature flag is disabled',
+      'face control feature does not show if the feature flag is disabled',
       async () => {
         loadTimeData.overrideValues({
           isAccessibilityFaceGazeEnabled: false,
@@ -597,45 +598,81 @@ suite('<settings-cursor-and-touchpad-page>', () => {
 
         await initPage();
         const faceGazeToggle =
-            page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
-                '#faceGazeToggle');
+            page.shadowRoot!.querySelector<CrToggleElement>('#faceGazeToggle');
         assertEquals(null, faceGazeToggle);
       });
 
   test(
-      'face tracking feature shows if the feature flag is enabled',
-      async () => {
+      'face control feature shows if the feature flag is enabled', async () => {
         loadTimeData.overrideValues({
           isAccessibilityFaceGazeEnabled: true,
         });
 
         await initPage();
         const faceGazeToggle =
-            page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
-                '#faceGazeToggle');
+            page.shadowRoot!.querySelector<CrToggleElement>('#faceGazeToggle');
         assert(faceGazeToggle);
         assertTrue(isVisible(faceGazeToggle));
 
-        const faceGazeCursorControlButton =
-            page.shadowRoot!.querySelector('#faceGazeCursorControlButton');
-        assert(faceGazeCursorControlButton);
-        assertFalse(isVisible(faceGazeCursorControlButton));
-
-        const faceGazeFacialExpressionsButton =
-            page.shadowRoot!.querySelector('#faceGazeFacialExpressionsButton');
-        assert(faceGazeFacialExpressionsButton);
-        assertFalse(isVisible(faceGazeFacialExpressionsButton));
-
         assertFalse(faceGazeToggle.checked);
+        assertFalse(faceGazeToggle.hasAttribute('checked'));
         assertFalse(page.prefs.settings.a11y.face_gaze.enabled.value);
-        faceGazeToggle.click();
 
+        // FaceGaze settings subpage button is missing until the feature is
+        // enabled.
+        let faceGazeSubpageButton = page.shadowRoot!.querySelector<HTMLElement>(
+            '#faceGazeSubpageButton');
+        assertEquals(null, faceGazeSubpageButton);
+
+        faceGazeToggle.click();
         await waitBeforeNextRender(page);
         flush();
+
         assertTrue(faceGazeToggle.checked);
+        assertTrue(faceGazeToggle.hasAttribute('checked'));
         assertTrue(page.prefs.settings.a11y.face_gaze.enabled.value);
-        assertTrue(isVisible(faceGazeCursorControlButton));
-        assertTrue(isVisible(faceGazeFacialExpressionsButton));
+
+        // Subpage button now present.
+        faceGazeSubpageButton = page.shadowRoot!.querySelector<HTMLElement>(
+            '#faceGazeSubpageButton');
+        assert(faceGazeSubpageButton);
+        assertTrue(isVisible(faceGazeSubpageButton));
+
+        // Clicking on it should update the route.
+        faceGazeSubpageButton.click();
+        assertEquals(
+            routes.MANAGE_FACEGAZE_SETTINGS, Router.getInstance().currentRoute);
+      });
+
+  test(
+      'can reach face control settings from description when enabled',
+      async () => {
+        loadTimeData.overrideValues({
+          isAccessibilityFaceGazeEnabled: true,
+        });
+        await initPage();
+
+        const row =
+            page.shadowRoot!.querySelector<HTMLElement>('#faceGazeDescription');
+        assert(row);
+        assertTrue(isVisible(row));
+
+        // Nothing happens if face control is not enabled.
+        row.click();
+        assertEquals(
+            routes.A11Y_CURSOR_AND_TOUCHPAD, Router.getInstance().currentRoute);
+
+        const faceGazeToggle =
+            page.shadowRoot!.querySelector<CrToggleElement>('#faceGazeToggle');
+        assert(faceGazeToggle);
+        faceGazeToggle.click();
+        await waitBeforeNextRender(page);
+        flush();
+
+        // Clicking on it now should update the route.
+        row.click();
+        assertEquals(
+            routes.MANAGE_FACEGAZE_SETTINGS, Router.getInstance().currentRoute);
       });
 
   test('Mouse keys feature disabled.', async () => {
@@ -653,46 +690,6 @@ suite('<settings-cursor-and-touchpad-page>', () => {
     assertNull(enableMouseKeysToggle);
   });
 
-  test('Moust keys: Disable in text fields', async () => {
-    await initPage();
-
-    if (!loadTimeData.getBoolean('isAccessibilityMouseKeysEnabled')) {
-      // Skip if the flag isn't enabled.
-      return;
-    }
-
-    // If the flag is enabled, check that the UI works.
-    assertFalse(page.prefs.settings.a11y.mouse_keys.enabled.value);
-
-    const enableMouseKeysToggle =
-        page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
-            '#enableMouseKeys');
-    assert(enableMouseKeysToggle);
-    assertTrue(isVisible(enableMouseKeysToggle));
-
-    enableMouseKeysToggle.click();
-    await waitBeforeNextRender(page);
-    flush();
-
-    assertTrue(page.prefs.settings.a11y.mouse_keys.enabled.value);
-
-    // kAccessibilityMouseKeysDisableInTextFields
-    assertTrue(
-        page.prefs.settings.a11y.mouse_keys.disable_in_text_fields.value);
-    const enableMouseKeysDisableInTextFieldsToggle =
-        page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
-            '#enableMouseKeysDisableInTextFields');
-    assert(enableMouseKeysDisableInTextFieldsToggle);
-    assertTrue(isVisible(enableMouseKeysDisableInTextFieldsToggle));
-
-    enableMouseKeysDisableInTextFieldsToggle.click();
-    await waitBeforeNextRender(page);
-    flush();
-
-    assertFalse(
-        page.prefs.settings.a11y.mouse_keys.disable_in_text_fields.value);
-  });
-
   test('Mouse keys: Dominant Hand', async () => {
     await initPage();
 
@@ -702,6 +699,9 @@ suite('<settings-cursor-and-touchpad-page>', () => {
     }
     // If the flag is enabled, check that the UI works.
     assertFalse(page.prefs.settings.a11y.mouse_keys.enabled.value);
+
+    // We should use primary keys by default.
+    assertTrue(page.prefs.settings.a11y.mouse_keys.use_primary_keys.value);
 
     const enableMouseKeysToggle =
         page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
@@ -716,25 +716,42 @@ suite('<settings-cursor-and-touchpad-page>', () => {
     assertTrue(page.prefs.settings.a11y.mouse_keys.enabled.value);
 
     // kAccessibilityMouseKeysDominantHand
-    // Ensure control exists.
-    const control =
+    // Ensure dominantHandControl exists.
+    const dominantHandControl =
         page.shadowRoot!.querySelector<HTMLElement>(`#mouseKeysDominantHand`);
-    assert(control);
+    assert(dominantHandControl);
+    assertTrue(isVisible(dominantHandControl));
 
     // Ensure pref is set to the default value.
     let pref = page.getPref('settings.a11y.mouse_keys.dominant_hand');
     assertEquals(pref.value, 0);
 
-    // Update control to alternate value.
-    await waitAfterNextRender(control);
-    const controlElement = control.shadowRoot!.querySelector('select');
-    assert(controlElement);
-    controlElement.value = String(1);
-    controlElement.dispatchEvent(new CustomEvent('change'));
+    // Update dominantHandControl to alternate value.
+    await waitAfterNextRender(dominantHandControl);
+    const dominantHandControlElement =
+        dominantHandControl.shadowRoot!.querySelector('select');
+    assert(dominantHandControlElement);
+    dominantHandControlElement.value = String(1);
+    dominantHandControlElement.dispatchEvent(new CustomEvent('change'));
 
     // Ensure pref is set to the alternate value.
     pref = page.getPref('settings.a11y.mouse_keys.dominant_hand');
     assertEquals(pref.value, 1);
-  });
 
+    // Switch to num pad.
+    const usePrimaryKeysToggle =
+        page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
+            '#mouseKeysUsePrimaryKeys');
+    assert(usePrimaryKeysToggle);
+    assertTrue(isVisible(usePrimaryKeysToggle));
+
+    usePrimaryKeysToggle.click();
+    await waitBeforeNextRender(page);
+    flush();
+
+    // kAccessibilityMouseKeysUsePrimaryKeys
+    assertFalse(page.prefs.settings.a11y.mouse_keys.use_primary_keys.value);
+
+    assertFalse(isVisible(dominantHandControl));
+  });
 });

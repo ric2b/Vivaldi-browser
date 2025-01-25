@@ -50,6 +50,7 @@
 #include "src/tint/lang/glsl/writer/ast_raise/pad_structs.h"
 #include "src/tint/lang/glsl/writer/ast_raise/texture_1d_to_2d.h"
 #include "src/tint/lang/glsl/writer/ast_raise/texture_builtins_from_uniform.h"
+#include "src/tint/lang/glsl/writer/common/option_helpers.h"
 #include "src/tint/lang/glsl/writer/common/options.h"
 #include "src/tint/lang/glsl/writer/common/printer_support.h"
 #include "src/tint/lang/wgsl/ast/call_statement.h"
@@ -170,10 +171,63 @@ SanitizedResult Sanitize(const Program& in,
         manager.Add<ast::transform::Robustness>();
     }
 
+    if (!options.disable_workgroup_init) {
+        // ZeroInitWorkgroupMemory must come before CanonicalizeEntryPointIO as
+        // ZeroInitWorkgroupMemory may inject new builtin parameters.
+        manager.Add<ast::transform::ZeroInitWorkgroupMemory>();
+    }
+
+    manager.Add<ast::transform::RemovePhonies>();
+
+    // TextureBuiltinsFromUniform must come before CombineSamplers to preserve texture binding point
+    // info, instead of combined sampler binding point. As a result, TextureBuiltinsFromUniform also
+    // comes before BindingRemapper so the binding point info it reflects is before remapping.
+    manager.Add<TextureBuiltinsFromUniform>();
+    data.Add<TextureBuiltinsFromUniform::Config>(
+        options.bindings.texture_builtins_from_uniform.ubo_binding,
+        options.bindings.texture_builtins_from_uniform.ubo_bindingpoint_ordering);
+
+    tint::transform::multiplanar::BindingsMap multiplanar_map{};
+    RemapperData remapper_data{};
+    PopulateBindingInfo(options, remapper_data, multiplanar_map);
+
+    data.Add<ast::transform::BindingRemapper::Remappings>(
+        remapper_data, std::unordered_map<BindingPoint, core::Access>{},
+        /* allow_collisions */ true);
+    manager.Add<ast::transform::BindingRemapper>();
+
     // Note: it is more efficient for MultiplanarExternalTexture to come after Robustness
+    // Must come before builtin polyfills
     data.Add<ast::transform::MultiplanarExternalTexture::NewBindingPoints>(
-        options.external_texture_options.bindings_map);
+        multiplanar_map, /* allow collisions */ true);
     manager.Add<ast::transform::MultiplanarExternalTexture>();
+
+    // Must be after multiplanar and must be before OffsetFirstindex
+    manager.Add<ast::transform::AddBlockAttribute>();
+
+    // This must come before ClampFragDepth as the AddBlockAttribute will change around the struct
+    // that gets created for the push constants and we end up with the `inner` structure sitting at
+    // the same offset we want to place the first_instance value.
+    manager.Add<ast::transform::OffsetFirstIndex>();
+    data.Add<ast::transform::OffsetFirstIndex::Config>(options.first_vertex_offset,
+                                                       options.first_instance_offset);
+
+    // ClampFragDepth must come before CanonicalizeEntryPointIO, or the assignments to FragDepth are
+    // lost
+    manager.Add<ast::transform::ClampFragDepth>();
+    std::optional<ast::transform::ClampFragDepth::RangeOffsets> range_offsets;
+    if (options.depth_range_offsets.has_value()) {
+        range_offsets = {options.depth_range_offsets->min, options.depth_range_offsets->max};
+    }
+    data.Add<ast::transform::ClampFragDepth::Config>(range_offsets);
+
+    // CanonicalizeEntryPointIO must come after Robustness
+    manager.Add<ast::transform::CanonicalizeEntryPointIO>();
+    data.Add<ast::transform::CanonicalizeEntryPointIO::Config>(
+        ast::transform::CanonicalizeEntryPointIO::ShaderStyle::kGlsl);
+
+    // DemoteToHelper must come after PromoteSideEffectsToDecl and ExpandCompoundAssignment.
+    manager.Add<ast::transform::DemoteToHelper>();
 
     {  // Builtin polyfills
         ast::transform::BuiltinPolyfill::Builtins polyfills;
@@ -201,48 +255,14 @@ SanitizedResult Sanitize(const Program& in,
 
     manager.Add<ast::transform::DirectVariableAccess>();
 
-    if (!options.disable_workgroup_init) {
-        // ZeroInitWorkgroupMemory must come before CanonicalizeEntryPointIO as
-        // ZeroInitWorkgroupMemory may inject new builtin parameters.
-        manager.Add<ast::transform::ZeroInitWorkgroupMemory>();
-    }
-
-    manager.Add<ast::transform::AddBlockAttribute>();
-
-    manager.Add<ast::transform::OffsetFirstIndex>();
-
-    // ClampFragDepth must come before CanonicalizeEntryPointIO, or the assignments to FragDepth are
-    // lost
-    manager.Add<ast::transform::ClampFragDepth>();
-
-    // CanonicalizeEntryPointIO must come after Robustness
-    manager.Add<ast::transform::CanonicalizeEntryPointIO>();
-
-    // PadStructs must come after CanonicalizeEntryPointIO
-    manager.Add<PadStructs>();
-
-    // DemoteToHelper must come after PromoteSideEffectsToDecl and ExpandCompoundAssignment.
-    manager.Add<ast::transform::DemoteToHelper>();
-
-    manager.Add<ast::transform::RemovePhonies>();
-
-    // TextureBuiltinsFromUniform must come before CombineSamplers to preserve texture binding point
-    // info, instead of combined sampler binding point. As a result, TextureBuiltinsFromUniform also
-    // comes before BindingRemapper so the binding point info it reflects is before remapping.
-    manager.Add<TextureBuiltinsFromUniform>();
-    data.Add<TextureBuiltinsFromUniform::Config>(
-        options.texture_builtins_from_uniform.ubo_binding,
-        options.texture_builtins_from_uniform.ubo_bindingpoint_ordering);
-
-    data.Add<CombineSamplers::BindingInfo>(options.binding_map, options.placeholder_binding_point);
+    // Must come after builtin polyfills (specifically texture_sample_base_clamp_to_edge_2d_f32)
+    data.Add<Bindings>(options.bindings);
     manager.Add<CombineSamplers>();
 
-    data.Add<ast::transform::BindingRemapper::Remappings>(
-        options.binding_remapper_options.binding_points,
-        std::unordered_map<BindingPoint, core::Access>{},
-        /* allow_collisions */ true);
-    manager.Add<ast::transform::BindingRemapper>();
+    // PadStructs must come after CanonicalizeEntryPointIO and CombineSamplers
+    manager.Add<PadStructs>();
 
+    // Promote initializers must come after binding polyfill
     manager.Add<ast::transform::PromoteInitializersToLet>();
     manager.Add<ast::transform::RemoveContinueInSwitch>();
     manager.Add<ast::transform::AddEmptyEntryPoint>();
@@ -253,13 +273,6 @@ SanitizedResult Sanitize(const Program& in,
     manager.Add<Texture1DTo2D>();
 
     manager.Add<ast::transform::SimplifyPointers>();
-
-    data.Add<ast::transform::CanonicalizeEntryPointIO::Config>(
-        ast::transform::CanonicalizeEntryPointIO::ShaderStyle::kGlsl);
-
-    data.Add<ast::transform::OffsetFirstIndex::Config>(std::nullopt, options.first_instance_offset);
-
-    data.Add<ast::transform::ClampFragDepth::Config>(options.depth_range_offsets);
 
     SanitizedResult result;
     ast::transform::DataMap outputs;
@@ -278,9 +291,9 @@ bool ASTPrinter::Generate() {
             Vector{
                 wgsl::Extension::kChromiumDisableUniformityAnalysis,
                 wgsl::Extension::kChromiumExperimentalPushConstant,
-                wgsl::Extension::kChromiumInternalDualSourceBlending,
                 wgsl::Extension::kChromiumInternalGraphite,
                 wgsl::Extension::kF16,
+                wgsl::Extension::kDualSourceBlending,
             })) {
         return false;
     }
@@ -379,7 +392,7 @@ void ASTPrinter::RecordExtension(const ast::Enable* enable) {
         requires_f16_extension_ = true;
     }
 
-    if (enable->HasExtension(wgsl::Extension::kChromiumInternalDualSourceBlending)) {
+    if (enable->HasExtension(wgsl::Extension::kDualSourceBlending)) {
         requires_dual_source_blending_extension_ = true;
     }
 }
@@ -1925,13 +1938,13 @@ void ASTPrinter::EmitGlobalVariable(const ast::Variable* global) {
         TINT_ICE_ON_NO_MATCH);
 }
 
-void ASTPrinter::EmitUniformVariable(const ast::Var* var, const sem::Variable* sem) {
+void ASTPrinter::EmitUniformVariable(const ast::Var* var, const sem::GlobalVariable* sem) {
     auto* type = sem->Type()->UnwrapRef();
     auto* str = type->As<core::type::Struct>();
     if (TINT_UNLIKELY(!str)) {
         TINT_ICE() << "storage variable must be of struct type";
     }
-    auto bp = *sem->As<sem::GlobalVariable>()->Attributes().binding_point;
+    auto bp = *sem->Attributes().binding_point;
     {
         auto out = Line();
         out << "layout(binding = " << bp.binding << ", std140";
@@ -1943,13 +1956,13 @@ void ASTPrinter::EmitUniformVariable(const ast::Var* var, const sem::Variable* s
     Line();
 }
 
-void ASTPrinter::EmitStorageVariable(const ast::Var* var, const sem::Variable* sem) {
+void ASTPrinter::EmitStorageVariable(const ast::Var* var, const sem::GlobalVariable* sem) {
     auto* type = sem->Type()->UnwrapRef();
     auto* str = type->As<core::type::Struct>();
     if (TINT_UNLIKELY(!str)) {
         TINT_ICE() << "storage variable must be of struct type";
     }
-    auto bp = *sem->As<sem::GlobalVariable>()->Attributes().binding_point;
+    auto bp = *sem->Attributes().binding_point;
     Line() << "layout(binding = " << bp.binding << ", std430) buffer "
            << UniqueIdentifier(StructName(str) + "_ssbo") << " {";
     EmitStructMembers(current_buffer_, str);
@@ -1958,7 +1971,7 @@ void ASTPrinter::EmitStorageVariable(const ast::Var* var, const sem::Variable* s
     Line();
 }
 
-void ASTPrinter::EmitHandleVariable(const ast::Var* var, const sem::Variable* sem) {
+void ASTPrinter::EmitHandleVariable(const ast::Var* var, const sem::GlobalVariable* sem) {
     auto out = Line();
 
     auto name = var->name->symbol.Name();
@@ -1969,7 +1982,8 @@ void ASTPrinter::EmitHandleVariable(const ast::Var* var, const sem::Variable* se
     }
 
     if (auto* storage = type->As<core::type::StorageTexture>()) {
-        out << "layout(";
+        auto bp = *sem->Attributes().binding_point;
+        out << "layout(binding = " << bp.binding << ", ";
         switch (storage->texel_format()) {
             case core::TexelFormat::kBgra8Unorm:
                 TINT_ICE() << "bgra8unorm should have been polyfilled to rgba8unorm";
@@ -2072,9 +2086,8 @@ void ASTPrinter::EmitIOVariable(const sem::GlobalVariable* var) {
     auto* decl = var->Declaration();
 
     if (auto* attr = ast::GetAttribute<ast::BuiltinAttribute>(decl->attributes)) {
-        auto builtin = builder_.Sem().Get(attr)->Value();
         // Use of gl_SampleID requires the GL_OES_sample_variables extension
-        if (RequiresOESSampleVariables(builtin)) {
+        if (RequiresOESSampleVariables(attr->builtin)) {
             requires_oes_sample_variables_ = true;
         }
         // Do not emit builtin (gl_) variables.
@@ -2112,11 +2125,7 @@ void ASTPrinter::EmitInterpolationQualifiers(StringStream& out,
                                              VectorRef<const ast::Attribute*> attributes) {
     for (auto* attr : attributes) {
         if (auto* interpolate = attr->As<ast::InterpolateAttribute>()) {
-            auto& sem = builder_.Sem();
-            auto i_type =
-                sem.Get<sem::BuiltinEnumExpression<core::InterpolationType>>(interpolate->type)
-                    ->Value();
-            switch (i_type) {
+            switch (interpolate->interpolation.type) {
                 case core::InterpolationType::kPerspective:
                 case core::InterpolationType::kLinear:
                 case core::InterpolationType::kUndefined:
@@ -2126,19 +2135,16 @@ void ASTPrinter::EmitInterpolationQualifiers(StringStream& out,
                     break;
             }
 
-            if (interpolate->sampling) {
-                auto i_smpl = sem.Get<sem::BuiltinEnumExpression<core::InterpolationSampling>>(
-                                     interpolate->sampling)
-                                  ->Value();
-                switch (i_smpl) {
-                    case core::InterpolationSampling::kCentroid:
-                        out << "centroid ";
-                        break;
-                    case core::InterpolationSampling::kSample:
-                    case core::InterpolationSampling::kCenter:
-                    case core::InterpolationSampling::kUndefined:
-                        break;
-                }
+            switch (interpolate->interpolation.sampling) {
+                case core::InterpolationSampling::kCentroid:
+                    out << "centroid ";
+                    break;
+                case core::InterpolationSampling::kSample:
+                case core::InterpolationSampling::kCenter:
+                case core::InterpolationSampling::kFirst:
+                case core::InterpolationSampling::kEither:
+                case core::InterpolationSampling::kUndefined:
+                    break;
             }
         }
     }
@@ -2153,8 +2159,8 @@ void ASTPrinter::EmitAttributes(StringStream& out, const sem::GlobalVariable* va
         out << "location = " << std::to_string(attrs.location.value());
         first = false;
     }
-    if (attrs.index.has_value()) {
-        out << ", index = " << std::to_string(attrs.index.value());
+    if (attrs.blend_src.has_value()) {
+        out << ", index = " << std::to_string(attrs.blend_src.value());
     }
     if (!first) {
         out << ") ";

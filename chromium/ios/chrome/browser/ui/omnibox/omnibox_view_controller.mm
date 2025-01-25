@@ -50,6 +50,8 @@ using base::UserMetricsAction;
   const TemplateURL* _defaultSearchEngine;
   // Boolen to track if search engine is overridden
   BOOL _isSearchEngineOverriden;
+  // Boolen to track if search engine nickname is enabled
+  BOOL _isSearchEngineNicknameEnabled;
   // End Vivaldi
 
 }
@@ -64,8 +66,6 @@ using base::UserMetricsAction;
 // Whether the default search engine supports Lens. This controls the
 // edit menu option to do a Lens search.
 @property(nonatomic, assign) BOOL lensImageEnabled;
-
-@property(nonatomic, assign) BOOL incognito;
 
 // YES if we are already forwarding an OnDidChange() message to the edit view.
 // Needed to prevent infinite recursion.
@@ -110,14 +110,6 @@ using base::UserMetricsAction;
 
 @dynamic view;
 
-- (instancetype)initWithIncognito:(BOOL)isIncognito {
-  self = [super init];
-  if (self) {
-    _incognito = isIncognito;
-  }
-  return self;
-}
-
 #pragma mark - UIViewController
 
 - (void)loadView {
@@ -130,7 +122,6 @@ using base::UserMetricsAction;
                                                 textColor:textColor
                                             textFieldTint:textFieldTintColor
                                                  iconTint:iconTintColor];
-  self.view.incognito = self.incognito;
   self.view.layoutGuideCenter = self.layoutGuideCenter;
   _clearButton = self.view.clearButton;
 
@@ -165,8 +156,6 @@ using base::UserMetricsAction;
              action:@selector(searchCopiedText:)]);
 #endif
 
-  self.textField.placeholderTextColor =
-      [UIColor colorNamed:kTextfieldPlaceholderColor];
   if (IsVivaldiRunning()) {
     self.textField.placeholder = [self defaultPlaceholder];
   } else {
@@ -302,7 +291,7 @@ using base::UserMetricsAction;
 
   // Note: (prio@vivaldi.com) - Intercepts the omnibox input to check and
   // trigger search engine shortcut if input is matched with a keyword.
-  if (IsVivaldiRunning()) {
+  if (IsVivaldiRunning() && _isSearchEngineNicknameEnabled) {
     [self interceptOmniboxInputForSearchEngineShortcut:textField
                                                inRange:range
                                      replacementString:newText];
@@ -381,17 +370,6 @@ using base::UserMetricsAction;
     return;
   }
   _textChangeDelegate->OnDidBeginEditing();
-}
-
-- (BOOL)textFieldShouldEndEditing:(UITextField*)textField {
-  if (!_textChangeDelegate) {
-    // This can happen when the view controller is still alive but the model is
-    // already deconstructed on shutdown.
-    return YES;
-  }
-  _textChangeDelegate->OnWillEndEditing();
-
-  return YES;
 }
 
 // Record the metrics as needed.
@@ -491,14 +469,13 @@ using base::UserMetricsAction;
   } else if ([self.textField canPerformKeyboardAction:keyboardAction]) {
     [self.textField performKeyboardAction:keyboardAction];
   } else {
-    NOTREACHED() << "Check canPerformKeyboardAction before!";
+    NOTREACHED_IN_MIGRATION() << "Check canPerformKeyboardAction before!";
   }
 }
 
 - (UIMenu*)textField:(UITextField*)textField
     editMenuForCharactersInRange:(NSRange)range
-                suggestedActions:(NSArray<UIMenuElement*>*)suggestedActions
-    API_AVAILABLE(ios(16)) {
+                suggestedActions:(NSArray<UIMenuElement*>*)suggestedActions {
   NSMutableArray* actions = [suggestedActions mutableCopy];
   if ([self canPerformAction:@selector(searchCopiedImage:) withSender:nil]) {
     UIAction* searchCopiedImage = [UIAction
@@ -792,16 +769,16 @@ using base::UserMetricsAction;
                                    replacementString:(NSString*)newText {
 
   // If search engine is overriden by shortcut keyword, return early.
-  if (_isSearchEngineOverriden)
+  if (_isSearchEngineOverriden || self.textField != textField)
     return;
 
-  if (NSMaxRange(range) > textField.text.length)
+  if (NSMaxRange(range) > self.textField.userText.length)
     return;
 
   // Combine the new string with the old text field content
   NSString *currentString =
-      [textField.text stringByReplacingCharactersInRange:range
-                                              withString:newText];
+      [self.textField.userText stringByReplacingCharactersInRange:range
+                                                       withString:newText];
 
   // Create a character set that includes both ASCII and full-width spaces
   NSMutableCharacterSet *spaceCharacterSet =
@@ -870,6 +847,10 @@ using base::UserMetricsAction;
 - (void)resetOverriddenSearchEngine {
   self.textField.placeholder = [self defaultPlaceholder];
   _isSearchEngineOverriden = NO;
+}
+
+- (void)setPreferenceForEnableSearchEngineNickname:(BOOL)enable {
+  _isSearchEngineNicknameEnabled = enable;
 }
 
 @end

@@ -17,7 +17,7 @@
 #include "components/supervised_user/core/common/supervised_user_constants.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "components/prefs/pref_service.h"
+#include "components/prefs/android/pref_service_android.h"
 
 // Must come after other includes, because FromJniType() uses PrefService.
 #include "components/supervised_user/android/supervised_user_preferences_jni_headers/SupervisedUserPreferences_jni.h"
@@ -152,6 +152,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
       prefs::kFirstTimeInterstitialBannerState,
       static_cast<int>(FirstTimeInterstitialBannerState::kUnknown));
   registry->RegisterBooleanPref(prefs::kChildAccountStatusKnown, false);
+  registry->RegisterStringPref(prefs::kFamilyLinkUserMemberRole, std::string());
 #if BUILDFLAG(ENABLE_EXTENSIONS) && \
     (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX))
   registry->RegisterIntegerPref(
@@ -191,13 +192,13 @@ bool IsSubjectToParentalControls(const PrefService& pref_service) {
 
 bool AreExtensionsPermissionsEnabled(const PrefService& pref_service) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
   return supervised_user::IsSubjectToParentalControls(pref_service);
 #else
   return supervised_user::IsSubjectToParentalControls(pref_service) &&
          base::FeatureList::IsEnabled(
              kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
-#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 #else
   return false;
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)

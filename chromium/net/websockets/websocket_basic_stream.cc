@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/websockets/websocket_basic_stream.h"
 
 #include <stddef.h>
@@ -14,6 +19,7 @@
 
 #include "base/check.h"
 #include "base/check_op.h"
+#include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/logging.h"
@@ -287,9 +293,10 @@ int WebSocketBasicStream::ReadEverything(
     DCHECK_GE(http_read_buffer_->offset(), 0);
     is_http_read_buffer_decoded_ = true;
     std::vector<std::unique_ptr<WebSocketFrameChunk>> frame_chunks;
-    if (!parser_.Decode(http_read_buffer_->StartOfBuffer(),
-                        http_read_buffer_->offset(), &frame_chunks))
+    auto data = base::as_chars(http_read_buffer_->span_before_offset());
+    if (!parser_.Decode(data.data(), data.size(), &frame_chunks)) {
       return WebSocketErrorToNetError(parser_.websocket_error());
+    }
     if (!frame_chunks.empty()) {
       int result = ConvertChunksToFrames(&frame_chunks, frames);
       if (result != ERR_IO_PENDING)

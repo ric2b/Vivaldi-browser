@@ -78,9 +78,9 @@ struct BidderWorkletNonSharedParams {
   array<blink.mojom.InterestGroupAd>? ads;
   array<blink.mojom.InterestGroupAd>? ad_components;
 
-  // ads_kanon[kanon_key] is true iff `kanon_key` is sufficiently k-anonymous to
+  // A key is present iff it is sufficiently k-anonymous to
   // be used as an ad or an ad component.
-  map<KAnonKey, bool> kanon_keys;
+  array<KAnonKey> kanon_keys;
 };
 
 // Browser signals passed to the BidderWorklet's generateBid() method that are
@@ -649,7 +649,11 @@ interface BidderWorklet {
           mojo_base.mojom.TimeDelta reporting_latency,
           array<string> errors);
 
-  // Establishes a debugger connection to the worklet.
+  // Establishes a debugger connection to the worklet thread.
+  //
+  // Arguments:
+  // `thread_index` The index of the thread in the thread pool.
   ConnectDevToolsAgent(
-      pending_associated_receiver<blink.mojom.DevToolsAgent> agent);
+      pending_associated_receiver<blink.mojom.DevToolsAgent> agent,
+      uint32 thread_index);
 };

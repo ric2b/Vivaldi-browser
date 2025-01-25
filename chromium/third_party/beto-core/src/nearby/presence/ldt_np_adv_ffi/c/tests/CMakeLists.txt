@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-file(COPY ${CMAKE_SOURCE_DIR}/ldt_np_adv/resources/test/np_adv_test_vectors.json
+file(COPY ${NEARBY_ROOT}/presence/ldt_np_adv/resources/test/np_adv_test_vectors.json
      DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 add_executable(

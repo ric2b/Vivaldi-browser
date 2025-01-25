@@ -114,6 +114,7 @@ import "third_party/dawn/src/dawn/fuzzers/lpmfuzz/dawn_custom_lpm.proto";
 {% macro lift_dawn_member_pass_by_value(record, name, member, count) %}
     {% if member.type.name.get() == "ObjectHandle" or
        member.type.category == "function pointer" or
+       member.type.category == "callback function" or
        member.type.name.get() == "void *" %}
        //* These types should not be serialized using protobuf structures.
        //* Handled by the serializer.
@@ -172,8 +173,7 @@ import "third_party/dawn/src/dawn/fuzzers/lpmfuzz/dawn_custom_lpm.proto";
     {% endfor %}
 {% endmacro %}
 
-
-{% for structure in by_category["structure"] %}
+{% for structure in by_category["callback info"] + by_category["structure"] %}
     message {{structure.name.CamelCase()}} {
         {{ lift_proto_members_helper(structure, structure.name, structure.members) }}
     }

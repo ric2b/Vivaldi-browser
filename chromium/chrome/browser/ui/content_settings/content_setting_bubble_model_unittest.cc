@@ -63,9 +63,12 @@
 #endif  // BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
 
 #if !BUILDFLAG(IS_ANDROID)
+#include "base/test/gmock_expected_support.h"
 #include "chrome/browser/ui/web_applications/test/isolated_web_app_test_utils.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
+#include "chrome/browser/web_applications/isolated_web_apps/test/isolated_web_app_builder.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
-#include "chrome/browser/web_applications/test/web_app_test_utils.h"
+#include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 using content::WebContentsTester;
@@ -92,8 +95,9 @@ class ContentSettingBubbleModelTest : public ChromeRenderViewHostTestHarness {
   }
 
   TestingProfile::TestingFactories GetTestingFactories() const override {
-    return {{HistoryServiceFactory::GetInstance(),
-             HistoryServiceFactory::GetDefaultFactory()}};
+    return {TestingProfile::TestingFactory{
+        HistoryServiceFactory::GetInstance(),
+        HistoryServiceFactory::GetDefaultFactory()}};
   }
 };
 
@@ -529,7 +533,27 @@ TEST_F(ContentSettingBubbleModelTest, AccumulateMediastreamMicAndCamera) {
   EXPECT_EQ(0, new_bubble_content.radio_group.default_item);
 }
 
-TEST_F(ContentSettingBubbleModelTest, Geolocation) {
+// Enable geolocation bubble tests to be run with OS-level permission
+// integration enabled or disabled on platforms where support is toggleable.
+class ContentSettingGeolocationBubbleModelTest
+    : public ContentSettingBubbleModelTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  void SetUp() override {
+    ContentSettingBubbleModelTest::SetUp();
+#if BUILDFLAG(IS_WIN)
+    if (GetParam()) {
+      scoped_feature_list_.InitWithFeatures(
+          {features::kWinSystemLocationPermission}, {});
+    }
+#endif  // BUILDFLAG(IS_WIN)
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_P(ContentSettingGeolocationBubbleModelTest, Geolocation) {
 #if BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
   auto fake_geolocation_system_permission_manager =
       std::make_unique<device::FakeGeolocationSystemPermissionManager>();
@@ -555,7 +579,8 @@ TEST_F(ContentSettingBubbleModelTest, Geolocation) {
 
 #if BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
   // System-level geolocation permission is blocked.
-  {
+  const bool is_os_level_geolocation_permission_support_enabled = GetParam();
+  if (is_os_level_geolocation_permission_support_enabled) {
     auto content_setting_bubble_model =
         std::make_unique<ContentSettingGeolocationBubbleModel>(nullptr,
                                                                web_contents());
@@ -566,7 +591,10 @@ TEST_F(ContentSettingBubbleModelTest, Geolocation) {
 #if BUILDFLAG(IS_MAC)
     EXPECT_EQ(bubble_content.title,
               l10n_util::GetStringUTF16(IDS_GEOLOCATION_TURNED_OFF_IN_MACOS));
-#else
+#elif BUILDFLAG(IS_WIN)
+    EXPECT_EQ(bubble_content.title,
+              l10n_util::GetStringUTF16(IDS_GEOLOCATION_TURNED_OFF_IN_WINDOWS));
+#elif BUILDFLAG(IS_CHROMEOS)
     EXPECT_EQ(bubble_content.title,
               l10n_util::GetStringUTF16(IDS_GEOLOCATION_TURNED_OFF_IN_OS));
 #endif
@@ -579,7 +607,7 @@ TEST_F(ContentSettingBubbleModelTest, Geolocation) {
 
   // System-level geolocation permission is blocked, but allowed while the
   // bubble is visible. The displayed message should not change.
-  {
+  if (is_os_level_geolocation_permission_support_enabled) {
     auto content_setting_bubble_model =
         std::make_unique<ContentSettingGeolocationBubbleModel>(nullptr,
                                                                web_contents());
@@ -593,7 +621,10 @@ TEST_F(ContentSettingBubbleModelTest, Geolocation) {
 #if BUILDFLAG(IS_MAC)
     EXPECT_EQ(bubble_content.title,
               l10n_util::GetStringUTF16(IDS_GEOLOCATION_TURNED_OFF_IN_MACOS));
-#else
+#elif BUILDFLAG(IS_WIN)
+    EXPECT_EQ(bubble_content.title,
+              l10n_util::GetStringUTF16(IDS_GEOLOCATION_TURNED_OFF_IN_WINDOWS));
+#elif BUILDFLAG(IS_CHROMEOS)
     EXPECT_EQ(bubble_content.title,
               l10n_util::GetStringUTF16(IDS_GEOLOCATION_TURNED_OFF_IN_OS));
 #endif  // BUILDFLAG(IS_MAC)
@@ -821,6 +852,15 @@ TEST_F(ContentSettingBubbleModelTest, Geolocation) {
   }
 }
 
+INSTANTIATE_TEST_SUITE_P(ContentSettingGeolocationBubbleModelTests,
+                         ContentSettingGeolocationBubbleModelTest,
+#if BUILDFLAG(IS_WIN)
+                         testing::Values(false, true)
+#else
+                         testing::Values(true)
+#endif
+);
+
 TEST_F(ContentSettingBubbleModelTest, FileURL) {
   std::string file_url("file:///tmp/test.html");
   NavigateAndCommit(GURL(file_url));
@@ -838,25 +878,33 @@ TEST_F(ContentSettingBubbleModelTest, FileURL) {
 #if !BUILDFLAG(IS_ANDROID)
 class ContentSettingBubbleModelIsolatedWebAppTest
     : public ContentSettingBubbleModelTest {
- protected:
-  void InstallIsolatedWebApp(const std::string& app_name, const GURL& url) {
+ public:
+  void SetUp() override {
+    ContentSettingBubbleModelTest::SetUp();
     web_app::test::AwaitStartWebAppProviderAndSubsystems(profile());
-    web_app::AddDummyIsolatedAppToRegistry(profile(), url, app_name);
   }
+
+ private:
+  data_decoder::test::InProcessDataDecoder in_process_data_decoder_;
 };
 
-#include "chrome/browser/web_applications/web_app_provider.h"
 TEST_F(ContentSettingBubbleModelIsolatedWebAppTest, IsolatedWebAppUrl) {
-  const GURL app_url(
-      "isolated-app://"
-      "berugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaic");
   const std::string app_name("Test IWA Name");
+  std::unique_ptr<web_app::ScopedBundledIsolatedWebApp> iwa =
+      web_app::IsolatedWebAppBuilder(
+          web_app::ManifestBuilder().SetName(app_name))
+          .BuildBundle();
+  iwa->TrustSigningKey();
+  iwa->FakeInstallPageState(profile());
+  ASSERT_OK_AND_ASSIGN(web_app::IsolatedWebAppUrlInfo url_info,
+                       iwa->Install(profile()));
+  web_app::SimulateIsolatedWebAppNavigation(web_contents(),
+                                            url_info.origin().GetURL());
 
-  InstallIsolatedWebApp(app_name, app_url);
-  NavigateAndCommit(app_url);
   PageSpecificContentSettings::GetForFrame(
       web_contents()->GetPrimaryMainFrame())
       ->OnContentBlocked(ContentSettingsType::IMAGES);
+
   std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
       ContentSettingBubbleModel::CreateContentSettingBubbleModel(
           nullptr, web_contents(), ContentSettingsType::IMAGES));

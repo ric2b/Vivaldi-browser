@@ -31,8 +31,6 @@
 namespace ash {
 namespace {
 
-static PowerStatus* g_power_status = nullptr;
-
 std::u16string GetBatteryTimeAccessibilityString(int hour, int min) {
   DCHECK(hour || min);
   if (hour && !min) {
@@ -79,7 +77,7 @@ int PowerSourceToMessageID(
     case power_manager::PowerSupplyProperties_PowerSource_Port_BACK_RIGHT:
       return IDS_ASH_POWER_SOURCE_PORT_BACK_RIGHT;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0;
 }
 
@@ -125,28 +123,30 @@ const int PowerStatus::kMaxBatteryTimeToDisplaySec = 24 * 60 * 60;
 
 const double PowerStatus::kCriticalBatteryChargePercentage = 5;
 
+PowerStatus* PowerStatus::g_power_status_ = nullptr;
+
 // static
 void PowerStatus::Initialize() {
-  CHECK(!g_power_status);
-  g_power_status = new PowerStatus();
+  CHECK(!g_power_status_);
+  g_power_status_ = new PowerStatus();
 }
 
 // static
 void PowerStatus::Shutdown() {
-  CHECK(g_power_status);
-  delete g_power_status;
-  g_power_status = nullptr;
+  CHECK(g_power_status_);
+  delete g_power_status_;
+  g_power_status_ = nullptr;
 }
 
 // static
 bool PowerStatus::IsInitialized() {
-  return g_power_status != nullptr;
+  return g_power_status_ != nullptr;
 }
 
 // static
 PowerStatus* PowerStatus::Get() {
-  CHECK(g_power_status) << "PowerStatus::Get() called before Initialize().";
-  return g_power_status;
+  CHECK(g_power_status_) << "PowerStatus::Get() called before Initialize().";
+  return g_power_status_;
 }
 
 void PowerStatus::AddObserver(Observer* observer) {
@@ -333,6 +333,11 @@ gfx::ImageSkia PowerStatus::GetBatteryImage(
 
 std::u16string PowerStatus::GetAccessibleNameString(
     bool full_description) const {
+  if (!proto_initialized_) {
+    return l10n_util::GetStringUTF16(
+        IDS_ASH_STATUS_TRAY_BATTERY_CALCULATING_CHARGE_LEVEL_ACCESSIBLE);
+  }
+
   if (IsBatteryFull()) {
     return l10n_util::GetStringUTF16(
         IDS_ASH_STATUS_TRAY_BATTERY_FULL_CHARGE_ACCESSIBLE);
@@ -395,7 +400,10 @@ std::pair<std::u16string, std::u16string> PowerStatus::GetStatusStrings()
     const {
   std::u16string percentage;
   std::u16string status;
-  if (IsBatteryFull()) {
+  if (!proto_initialized_) {
+    status = l10n_util::GetStringUTF16(
+        IDS_ASH_STATUS_TRAY_BATTERY_CALCULATING_CHARGE_LEVEL);
+  } else if (IsBatteryFull()) {
     status = l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_BATTERY_FULL);
   } else {
     percentage = base::FormatPercent(GetRoundedBatteryPercent());

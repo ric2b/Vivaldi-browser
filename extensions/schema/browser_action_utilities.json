@@ -116,6 +116,10 @@
         "type": "object",
         "description": "Extension action per tab id.",
         "properties": {
+          "tabId": {
+            "description": "tab id, or kDefaultTabId(-1) if the information should be used for all tabs.",
+            "type": "integer"
+          },
           "id": {
             "type": "string",
             "description": "The unique extension identifier."
@@ -444,11 +448,6 @@
           {
             "$ref": "ExtensionInfo",
             "name": "extension"
-          },
-          {
-            "type": "integer",
-            "name": "windowId",
-            "description": "id of the window that receives the update."
           }
         ]
       },

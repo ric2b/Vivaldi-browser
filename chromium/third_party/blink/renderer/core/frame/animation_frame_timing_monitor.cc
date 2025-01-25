@@ -6,7 +6,6 @@
 
 #include "base/time/time.h"
 #include "base/trace_event/base_tracing.h"
-#include "base/trace_event/trace_id_helper.h"
 #include "components/viz/common/frame_timing_details.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
@@ -49,10 +48,25 @@ AnimationFrameTimingMonitor::AnimationFrameTimingMonitor(Client& client,
 
 void AnimationFrameTimingMonitor::Shutdown() {
   enabled_ = false;
+  frame_handling_input_ = nullptr;
   Thread::Current()->RemoveTaskTimeObserver(this);
 }
 
-void AnimationFrameTimingMonitor::BeginMainFrame(base::TimeTicks frame_time) {
+void AnimationFrameTimingMonitor::WillHandleInput(LocalFrame* frame) {
+  CHECK(frame);
+  if (frame == frame_handling_input_) {
+    return;
+  }
+
+  if (frame_handling_input_) {
+    multiple_focused_frames_in_same_task_ = true;
+  }
+
+  frame_handling_input_ = frame;
+}
+
+void AnimationFrameTimingMonitor::BeginMainFrame(
+    LocalDOMWindow& local_root_window) {
   base::TimeTicks now = base::TimeTicks::Now();
   if (!current_frame_timing_info_) {
     current_frame_timing_info_ =
@@ -62,6 +76,8 @@ void AnimationFrameTimingMonitor::BeginMainFrame(base::TimeTicks frame_time) {
   current_frame_timing_info_->SetRenderStartTime(now);
   state_ = State::kRenderingFrame;
   ApplyTaskDuration(now - current_task_start_);
+
+  RequestPresentationTimeForTracing(*local_root_window.GetFrame());
 }
 
 void AnimationFrameTimingMonitor::WillPerformStyleAndLayoutCalculation() {
@@ -160,8 +176,19 @@ void AnimationFrameTimingMonitor::OnTaskCompleted(
 
   bool did_pause = false;
   bool did_see_ui_events = false;
+  bool multiple_focused_frames_in_same_task = false;
   std::swap(did_pause, did_pause_);
   std::swap(did_see_ui_events, did_see_ui_events_);
+  std::swap(multiple_focused_frames_in_same_task,
+            multiple_focused_frames_in_same_task_);
+
+  // Input tasks are not attributed to a frame, so we manually attribute it to
+  // the focused frame as received from WebFrameWidgetImpl.
+  LocalFrame* frame_handling_input = frame_handling_input_.Release();
+  if (!frame) {
+    frame = frame_handling_input;
+  }
+
   current_task_start_ = base::TimeTicks();
 
   base::TimeDelta task_duration = end_time - start_time;
@@ -194,6 +221,15 @@ void AnimationFrameTimingMonitor::OnTaskCompleted(
   }
 
   bool should_report = client_.ShouldReportLongAnimationFrameTiming();
+
+  // Changing the focused frame mid-task should also schedule rendering.
+  // Marking as DUMP_WILL_BE_CHECK because failing this assumption is not
+  // critical.
+  // TODO(crbug/352077677): Verify this assumption if no dumps are created and
+  // turn into a CHECK.
+  DUMP_WILL_BE_CHECK(!multiple_focused_frames_in_same_task_ ||
+                     client_.RequestedMainFramePending());
+
   if (client_.RequestedMainFramePending() && should_report) {
     current_frame_timing_info_ =
         MakeGarbageCollected<AnimationFrameTimingInfo>(start_time);
@@ -259,16 +295,55 @@ ToProtoEnum(ScriptTimingInfo::InvokerType type) {
   }
   return ProtoType::UNDEFINED;
 }
+
+perfetto::protos::pbzero::AnimationFrameScriptTimingInfo::ThirdPartyTechnology
+ToProtoEnum(ThirdPartyScriptDetector::Technology technology) {
+  // The technology detector is a bitset so that multiple technologies can be
+  // reported to UKM for all the scripts that ran in a long animation frame.
+  // But for tracing, we report the detected technology of each script. So we
+  // return the first technology found in the bitset, or none if none are found.
+  using ProtoType = perfetto::protos::pbzero::AnimationFrameScriptTimingInfo::
+      ThirdPartyTechnology;
+  uint64_t technology_bits = static_cast<uint64_t>(technology);
+  if (technology_bits &
+      static_cast<uint64_t>(ThirdPartyScriptDetector::Technology::kWordPress)) {
+    return ProtoType::WORD_PRESS;
+  } else if (technology_bits &
+             static_cast<uint64_t>(
+                 ThirdPartyScriptDetector::Technology::kGoogleAnalytics)) {
+    return ProtoType::GOOGLE_ANALYTICS;
+  } else if (technology_bits &
+             static_cast<uint64_t>(
+                 ThirdPartyScriptDetector::Technology::kGoogleFontApi)) {
+    return ProtoType::GOOGLE_FONT_API;
+  }
+  return ProtoType::NONE;
+}
+
 }  // namespace
+
+void AnimationFrameTimingMonitor::RequestPresentationTimeForTracing(
+    LocalFrame& frame) {
+  bool tracing_enabled;
+  TRACE_EVENT_CATEGORY_GROUP_ENABLED("devtools.timeline", &tracing_enabled);
+  if (tracing_enabled) {
+    frame.GetChromeClient().NotifyPresentationTime(
+        frame, CrossThreadBindOnce(
+                   &AnimationFrameTimingMonitor::ReportPresentationTimeToTrace,
+                   WrapCrossThreadWeakPersistent(this),
+                   current_frame_timing_info_->GetTraceId()));
+  }
+}
 
 void AnimationFrameTimingMonitor::ReportPresentationTimeToTrace(
     uint64_t trace_id,
     const viz::FrameTimingDetails& presentation_details) {
   auto track_id = perfetto::Track::ThreadScoped(this);
   auto flow_id = perfetto::Flow::ProcessScoped(trace_id);
-  TRACE_EVENT_INSTANT(
-      "devtools.timeline", "AnimationFrame::Presentation", track_id,
-      presentation_details.presentation_feedback.timestamp, flow_id);
+  TRACE_EVENT_INSTANT("devtools.timeline", "AnimationFrame::Presentation",
+                      track_id,
+                      presentation_details.presentation_feedback.timestamp,
+                      flow_id, "id", String::Format("%016" PRIx64, trace_id));
 }
 
 void AnimationFrameTimingMonitor::RecordLongAnimationFrameTrace(
@@ -280,7 +355,7 @@ void AnimationFrameTimingMonitor::RecordLongAnimationFrameTrace(
     return;
   }
 
-  uint64_t trace_id = base::trace_event::GetNextGlobalTraceId();
+  uint64_t trace_id = info.GetTraceId();
   auto track_id = perfetto::Track::ThreadScoped(this);
   auto flow_id = perfetto::Flow::ProcessScoped(trace_id);
   if (!info.FirstUIEventTime().is_null()) {
@@ -289,7 +364,8 @@ void AnimationFrameTimingMonitor::RecordLongAnimationFrameTrace(
   }
   TRACE_EVENT_BEGIN(
       "devtools.timeline", "AnimationFrame", track_id, info.FrameStartTime(),
-      flow_id, [&](perfetto::EventContext ctx) {
+      flow_id, "id", String::Format("%016" PRIx64, trace_id),
+      [&](perfetto::EventContext ctx) {
         auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
         auto* data = event->set_animation_frame_timing_info();
         data->set_blocking_duration_ms(
@@ -304,6 +380,9 @@ void AnimationFrameTimingMonitor::RecordLongAnimationFrameTrace(
       TRACE_EVENT_END("devtools.timeline", track_id,
                       script->ExecutionStartTime());
     }
+    ThirdPartyScriptDetector::Technology third_party_technology =
+        ThirdPartyScriptDetector::From(window).Detect(
+            script->GetSourceLocation().url);
     TRACE_EVENT_BEGIN(
         "devtools.timeline", "AnimationFrame::Script::Execute", track_id,
         script->ExecutionStartTime(), [&](perfetto::EventContext ctx) {
@@ -315,9 +394,13 @@ void AnimationFrameTimingMonitor::RecordLongAnimationFrameTrace(
           data->set_pause_duration_ms(script->PauseDuration().InMilliseconds());
           data->set_class_like_name(script->ClassLikeName().Utf8());
           data->set_property_like_name(script->PropertyLikeName().Utf8());
+          data->set_source_location_url(script->GetSourceLocation().url.Utf8());
+          data->set_source_location_function_name(
+              script->GetSourceLocation().function_name.Utf8());
           data->set_source_location_char_position(
               script->GetSourceLocation().char_position);
           data->set_invoker_type(ToProtoEnum(script->GetInvokerType()));
+          data->set_third_party_technology(ToProtoEnum(third_party_technology));
         });
     TRACE_EVENT_END("devtools.timeline", track_id, script->EndTime());
   }
@@ -333,12 +416,6 @@ void AnimationFrameTimingMonitor::RecordLongAnimationFrameTrace(
   }
 
   TRACE_EVENT_END("devtools.timeline", track_id, info.RenderEndTime());
-
-  window.GetFrame()->GetChromeClient().NotifyPresentationTime(
-      *window.GetFrame(),
-      CrossThreadBindOnce(
-          &AnimationFrameTimingMonitor::ReportPresentationTimeToTrace,
-          WrapCrossThreadWeakPersistent(this), trace_id));
 }
 
 void AnimationFrameTimingMonitor::RecordLongAnimationFrameUKMAndTrace(
@@ -432,6 +509,7 @@ void AnimationFrameTimingMonitor::RecordLongAnimationFrameUKMAndTrace(
 void AnimationFrameTimingMonitor::Trace(Visitor* visitor) const {
   visitor->Trace(current_frame_timing_info_);
   visitor->Trace(current_scripts_);
+  visitor->Trace(frame_handling_input_);
 }
 
 namespace {

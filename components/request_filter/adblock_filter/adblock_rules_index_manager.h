@@ -70,9 +70,13 @@ class RulesIndexManager : public RuleManager::Observer {
   RuleGroup group() const { return group_; }
 
  private:
+  // Implementing RuleManager::Observer
   void OnRuleSourceUpdated(RuleGroup group,
                            const ActiveRuleSource& rule_source) override;
   void OnRuleSourceDeleted(uint32_t source_id, RuleGroup group) override;
+  void OnExceptionListStateChanged(RuleGroup group) override;
+  void OnExceptionListChanged(RuleGroup group,
+                              RuleManager::ExceptionsList list) override;
 
   void ReadRules(const ActiveRuleSource& rule_source);
   void OnRulesRead(uint32_t source_id,

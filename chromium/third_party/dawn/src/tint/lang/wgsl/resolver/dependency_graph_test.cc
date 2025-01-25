@@ -1349,128 +1349,6 @@ INSTANTIATE_TEST_SUITE_P(Functions,
 }  // namespace resolve_to_address_space
 
 ////////////////////////////////////////////////////////////////////////////////
-// Resolve to core::BuiltinValue tests
-////////////////////////////////////////////////////////////////////////////////
-namespace resolve_to_builtin_value {
-
-using ResolverDependencyGraphResolveToBuiltinValue =
-    ResolverDependencyGraphTestWithParam<std::tuple<SymbolUseKind, std::string_view>>;
-
-TEST_P(ResolverDependencyGraphResolveToBuiltinValue, Resolve) {
-    const auto use = std::get<0>(GetParam());
-    const auto name = std::get<1>(GetParam());
-    const auto symbol = Symbols().New(name);
-
-    SymbolTestHelper helper(this);
-    auto* ident = helper.Add(use, symbol);
-    helper.Build();
-
-    auto graph = Build();
-    auto resolved = graph.resolved_identifiers.Get(ident);
-    ASSERT_TRUE(resolved);
-    EXPECT_EQ(resolved->BuiltinValue(), core::ParseBuiltinValue(name)) << resolved->String();
-}
-
-INSTANTIATE_TEST_SUITE_P(Types,
-                         ResolverDependencyGraphResolveToBuiltinValue,
-                         testing::Combine(testing::ValuesIn(kTypeUseKinds),
-                                          testing::ValuesIn(core::kBuiltinValueStrings)));
-
-INSTANTIATE_TEST_SUITE_P(Values,
-                         ResolverDependencyGraphResolveToBuiltinValue,
-                         testing::Combine(testing::ValuesIn(kValueUseKinds),
-                                          testing::ValuesIn(core::kBuiltinValueStrings)));
-
-INSTANTIATE_TEST_SUITE_P(Functions,
-                         ResolverDependencyGraphResolveToBuiltinValue,
-                         testing::Combine(testing::ValuesIn(kFuncUseKinds),
-                                          testing::ValuesIn(core::kBuiltinValueStrings)));
-
-}  // namespace resolve_to_builtin_value
-
-////////////////////////////////////////////////////////////////////////////////
-// Resolve to core::InterpolationSampling tests
-////////////////////////////////////////////////////////////////////////////////
-namespace resolve_to_interpolation_sampling {
-
-using ResolverDependencyGraphResolveToInterpolationSampling =
-    ResolverDependencyGraphTestWithParam<std::tuple<SymbolUseKind, std::string_view>>;
-
-TEST_P(ResolverDependencyGraphResolveToInterpolationSampling, Resolve) {
-    const auto use = std::get<0>(GetParam());
-    const auto name = std::get<1>(GetParam());
-    const auto symbol = Symbols().New(name);
-
-    SymbolTestHelper helper(this);
-    auto* ident = helper.Add(use, symbol);
-    helper.Build();
-
-    auto graph = Build();
-    auto resolved = graph.resolved_identifiers.Get(ident);
-    ASSERT_TRUE(resolved);
-    EXPECT_EQ(resolved->InterpolationSampling(), core::ParseInterpolationSampling(name))
-        << resolved->String();
-}
-
-INSTANTIATE_TEST_SUITE_P(Types,
-                         ResolverDependencyGraphResolveToInterpolationSampling,
-                         testing::Combine(testing::ValuesIn(kTypeUseKinds),
-                                          testing::ValuesIn(core::kInterpolationTypeStrings)));
-
-INSTANTIATE_TEST_SUITE_P(Values,
-                         ResolverDependencyGraphResolveToInterpolationSampling,
-                         testing::Combine(testing::ValuesIn(kValueUseKinds),
-                                          testing::ValuesIn(core::kInterpolationTypeStrings)));
-
-INSTANTIATE_TEST_SUITE_P(Functions,
-                         ResolverDependencyGraphResolveToInterpolationSampling,
-                         testing::Combine(testing::ValuesIn(kFuncUseKinds),
-                                          testing::ValuesIn(core::kInterpolationTypeStrings)));
-
-}  // namespace resolve_to_interpolation_sampling
-
-////////////////////////////////////////////////////////////////////////////////
-// Resolve to core::InterpolationType tests
-////////////////////////////////////////////////////////////////////////////////
-namespace resolve_to_interpolation_sampling {
-
-using ResolverDependencyGraphResolveToInterpolationType =
-    ResolverDependencyGraphTestWithParam<std::tuple<SymbolUseKind, std::string_view>>;
-
-TEST_P(ResolverDependencyGraphResolveToInterpolationType, Resolve) {
-    const auto use = std::get<0>(GetParam());
-    const auto name = std::get<1>(GetParam());
-    const auto symbol = Symbols().New(name);
-
-    SymbolTestHelper helper(this);
-    auto* ident = helper.Add(use, symbol);
-    helper.Build();
-
-    auto graph = Build();
-    auto resolved = graph.resolved_identifiers.Get(ident);
-    ASSERT_TRUE(resolved);
-    EXPECT_EQ(resolved->InterpolationType(), core::ParseInterpolationType(name))
-        << resolved->String();
-}
-
-INSTANTIATE_TEST_SUITE_P(Types,
-                         ResolverDependencyGraphResolveToInterpolationType,
-                         testing::Combine(testing::ValuesIn(kTypeUseKinds),
-                                          testing::ValuesIn(core::kInterpolationSamplingStrings)));
-
-INSTANTIATE_TEST_SUITE_P(Values,
-                         ResolverDependencyGraphResolveToInterpolationType,
-                         testing::Combine(testing::ValuesIn(kValueUseKinds),
-                                          testing::ValuesIn(core::kInterpolationSamplingStrings)));
-
-INSTANTIATE_TEST_SUITE_P(Functions,
-                         ResolverDependencyGraphResolveToInterpolationType,
-                         testing::Combine(testing::ValuesIn(kFuncUseKinds),
-                                          testing::ValuesIn(core::kInterpolationSamplingStrings)));
-
-}  // namespace resolve_to_interpolation_sampling
-
-////////////////////////////////////////////////////////////////////////////////
 // Resolve to core::TexelFormat tests
 ////////////////////////////////////////////////////////////////////////////////
 namespace resolve_to_texel_format {
@@ -1704,9 +1582,6 @@ TEST_F(ResolverDependencyGraphTraversalTest, SymbolsReached) {
                    Vector{
                        Location(V),  // Parameter attributes
                        Color(V),
-                       Builtin(V),
-                       Interpolate(V),
-                       Interpolate(V, V),
                    }),
          },
          T,  // Return type
@@ -1761,6 +1636,7 @@ TEST_F(ResolverDependencyGraphTraversalTest, SymbolsReached) {
     GlobalVar(Sym(), ty.sampler(core::type::SamplerKind::kSampler));
 
     GlobalVar(Sym(), ty.i32(), Vector{Binding(V), Group(V)});
+    GlobalVar(Sym(), ty.input_attachment(T), Vector{Binding(V), Group(V), InputAttachmentIndex(V)});
     GlobalVar(Sym(), ty.i32(), Vector{Location(V)});
     Override(Sym(), ty.i32(), Vector{Id(V)});
 

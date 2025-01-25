@@ -199,9 +199,9 @@ void ContextSerializer::SerializeObjectImpl(Handle<HeapObject> obj,
   InstanceType instance_type = obj->map()->instance_type();
   if (InstanceTypeChecker::IsFeedbackVector(instance_type)) {
     // Clear literal boilerplates and feedback.
-    Handle<FeedbackVector>::cast(obj)->ClearSlots(isolate());
+    Cast<FeedbackVector>(obj)->ClearSlots(isolate());
   } else if (InstanceTypeChecker::IsJSObject(instance_type)) {
-    Handle<JSObject> js_obj = Handle<JSObject>::cast(obj);
+    Handle<JSObject> js_obj = Cast<JSObject>(obj);
     int embedder_fields_count = js_obj->GetEmbedderFieldCount();
     if (embedder_fields_count > 0) {
       DCHECK(!js_obj->NeedsRehashing(cage_base()));
@@ -220,7 +220,7 @@ void ContextSerializer::SerializeObjectImpl(Handle<HeapObject> obj,
       DisallowGarbageCollection no_gc;
       // Unconditionally reset the JSFunction to its SFI's code, since we can't
       // serialize optimized code anyway.
-      Tagged<JSFunction> closure = JSFunction::cast(*obj);
+      Tagged<JSFunction> closure = Cast<JSFunction>(*obj);
       if (closure->shared()->HasBytecodeArray()) {
         closure->SetInterruptBudget(isolate());
       }
@@ -235,13 +235,12 @@ void ContextSerializer::SerializeObjectImpl(Handle<HeapObject> obj,
   } else if (InstanceTypeChecker::IsEmbedderDataArray(instance_type) &&
              !allow_active_isolate_for_testing()) {
     DCHECK_EQ(*obj, context_->embedder_data());
-    Handle<EmbedderDataArray> embedder_data =
-        Handle<EmbedderDataArray>::cast(obj);
+    Handle<EmbedderDataArray> embedder_data = Cast<EmbedderDataArray>(obj);
     int embedder_fields_count = embedder_data->length();
     if (embedder_data->length() > 0) {
       Handle<Context> context_handle(context_, isolate());
       v8::Local<v8::Context> api_obj =
-          v8::Utils::ToLocal(Handle<NativeContext>::cast(context_handle));
+          v8::Utils::ToLocal(Cast<NativeContext>(context_handle));
       v8::SerializeContextDataCallback user_callback =
           serialize_embedder_fields_.context_callback;
       SerializeObjectWithEmbedderFields(embedder_data, embedder_fields_count,
@@ -257,7 +256,7 @@ void ContextSerializer::SerializeObjectImpl(Handle<HeapObject> obj,
   ObjectSerializer serializer(this, obj, &sink_);
   serializer.Serialize(slot_type);
   if (IsJSApiWrapperObject(obj->map())) {
-    SerializeApiWrapperFields(Handle<JSObject>::cast(obj));
+    SerializeApiWrapperFields(Cast<JSObject>(obj));
   }
 }
 
@@ -286,7 +285,7 @@ void ContextSerializer::SerializeApiWrapperFields(Handle<JSObject> js_object) {
   DCHECK(IsJSApiWrapperObject(*js_object));
   auto* cpp_heap_pointer =
       JSApiWrapper(*js_object)
-          .GetCppHeapWrappable<kAnyExternalPointerTag>(isolate());
+          .GetCppHeapWrappable(isolate(), kAnyCppHeapPointer);
   const auto& callback_data = serialize_embedder_fields_.api_wrapper_callback;
   if (callback_data.callback == nullptr && cpp_heap_pointer == nullptr) {
     // No need to serialize anything as empty handles or handles pointing to
@@ -325,32 +324,35 @@ void ContextSerializer::SerializeObjectWithEmbedderFields(
 
   std::vector<EmbedderDataSlot::RawData> original_embedder_values;
   std::vector<StartupData> serialized_data;
+  std::vector<bool> should_clear_slot;
 
   // 1) Iterate embedder fields. Hold onto the original value of the fields.
   //    Ignore references to heap objects since these are to be handled by the
   //    serializer. For aligned pointers, call the serialize callback. Hold
   //    onto the result.
   for (int i = 0; i < embedder_fields_count; i++) {
-    EmbedderDataSlot embedder_data_slot(raw_obj, i);
-    original_embedder_values.emplace_back(
-        embedder_data_slot.load_raw(isolate(), no_gc));
-    Tagged<Object> object = embedder_data_slot.load_tagged();
+    EmbedderDataSlot slot(raw_obj, i);
+    original_embedder_values.emplace_back(slot.load_raw(isolate(), no_gc));
+    Tagged<Object> object = slot.load_tagged();
     if (IsHeapObject(object)) {
-      DCHECK(IsValidHeapObject(isolate()->heap(), HeapObject::cast(object)));
+      DCHECK(IsValidHeapObject(isolate()->heap(), Cast<HeapObject>(object)));
       serialized_data.push_back({nullptr, 0});
+      should_clear_slot.push_back(false);
     } else {
-      serialized_data.push_back(
-          wrapper(i, object == Smi::zero(), user_callback, api_obj));
+      StartupData data =
+          wrapper(i, object == Smi::zero(), user_callback, api_obj);
+      serialized_data.push_back(data);
+      bool clear_slot =
+          !DataIsEmpty(data) || slot.MustClearDuringSerialization(no_gc);
+      should_clear_slot.push_back(clear_slot);
     }
   }
 
-  // 2) Embedder fields for which the embedder callback produced non-zero
-  //    serialized data should be considered aligned pointers to objects owned
-  //    by the embedder. Clear these memory addresses to avoid non-determism
-  //    in the snapshot. This is done separately to step 1 to no not interleave
-  //    with embedder callbacks.
+  // 2) Prevent embedder fields that are not V8 objects from ending up in the
+  //    blob.  This is done separately to step 1 so as to not interleave with
+  //    embedder callbacks.
   for (int i = 0; i < embedder_fields_count; i++) {
-    if (!DataIsEmpty(serialized_data[i])) {
+    if (should_clear_slot[i]) {
       EmbedderDataSlot(raw_obj, i).store_raw(isolate(), kNullAddress, no_gc);
     }
   }
@@ -374,10 +376,11 @@ void ContextSerializer::SerializeObjectWithEmbedderFields(
   //    headed by the back reference. Restore the original embedder fields.
   for (int i = 0; i < embedder_fields_count; i++) {
     StartupData data = serialized_data[i];
-    if (DataIsEmpty(data)) continue;
+    if (!should_clear_slot[i]) continue;
     // Restore original values from cleared fields.
     EmbedderDataSlot(raw_obj, i)
         .store_raw(isolate(), original_embedder_values[i], no_gc);
+    if (DataIsEmpty(data)) continue;
     embedder_fields_sink_.Put(kNewObject, "embedder field holder");
     embedder_fields_sink_.PutUint30(reference->back_ref_index(),
                                     "BackRefIndex");

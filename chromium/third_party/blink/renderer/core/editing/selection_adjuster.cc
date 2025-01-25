@@ -35,7 +35,6 @@
 #include "third_party/blink/renderer/core/editing/visible_units.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -165,7 +164,7 @@ class GranularityAdjuster final {
         return StartOfSentencePosition(passed_start.GetPosition());
     }
 
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return passed_start.GetPosition();
   }
 
@@ -301,7 +300,7 @@ class GranularityAdjuster final {
         return EndOfSentence(CreateVisiblePosition(passed_end))
             .DeepEquivalent();
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return passed_end.GetPosition();
   }
 
@@ -788,15 +787,13 @@ class SelectionTypeAdjuster final {
     // `StartPosition().AnchorNode()` is editable. In this case, we shouldn't
     // forward/backward the start/end position of `range`.
     // See http://crbug.com/1371268 for more details.
-    if (RuntimeEnabledFeatures::AvoidCaretVisibleSelectionAdjusterEnabled()) {
-      if (IsEditablePosition(backward_end_position) &&
-          CanonicalPositionOf(forward_start_position).IsNull()) {
-        forward_start_position = range.StartPosition();
-      }
-      if (IsEditablePosition(forward_start_position) &&
-          CanonicalPositionOf(backward_end_position).IsNull()) {
-        backward_end_position = range.EndPosition();
-      }
+    if (IsEditablePosition(backward_end_position) &&
+        CanonicalPositionOf(forward_start_position).IsNull()) {
+      forward_start_position = range.StartPosition();
+    }
+    if (IsEditablePosition(forward_start_position) &&
+        CanonicalPositionOf(backward_end_position).IsNull()) {
+      backward_end_position = range.EndPosition();
     }
     const EphemeralRangeTemplate<Strategy> minimal_range(forward_start_position,
                                                          backward_end_position);

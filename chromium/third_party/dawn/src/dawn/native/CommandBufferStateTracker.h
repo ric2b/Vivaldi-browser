@@ -36,7 +36,7 @@
 #include "dawn/native/BindingInfo.h"
 #include "dawn/native/Error.h"
 #include "dawn/native/Forward.h"
-#include "partition_alloc/pointers/raw_ptr.h"
+#include "partition_alloc/pointers/raw_ptr_exclusion.h"
 
 namespace dawn::native {
 
@@ -95,9 +95,6 @@ class CommandBufferStateTracker {
 
     ValidationAspects mAspects;
 
-    PerBindGroup<raw_ptr<BindGroupBase>> mBindgroups = {};
-    PerBindGroup<std::vector<uint32_t>> mDynamicOffsets = {};
-
     VertexBufferMask mVertexBuffersUsed;
     PerVertexBuffer<uint64_t> mVertexBufferSizes = {};
 
@@ -106,9 +103,15 @@ class CommandBufferStateTracker {
     uint64_t mIndexBufferSize = 0;
     uint64_t mIndexBufferOffset = 0;
 
-    raw_ptr<PipelineLayoutBase> mLastPipelineLayout = nullptr;
-    raw_ptr<PipelineBase> mLastPipeline = nullptr;
-    raw_ptr<const RequiredBufferSizes> mMinBufferSizes = nullptr;
+    // RAW_PTR_EXCLUSION: These pointers are very hot in command recording code and point at
+    // various objects referenced by the object graph of the CommandBuffer so they cannot be
+    // freed from underneath this class.
+    RAW_PTR_EXCLUSION PerBindGroup<BindGroupBase*> mBindgroups = {};
+    PerBindGroup<std::vector<uint32_t>> mDynamicOffsets = {};
+
+    RAW_PTR_EXCLUSION PipelineLayoutBase* mLastPipelineLayout = nullptr;
+    RAW_PTR_EXCLUSION PipelineBase* mLastPipeline = nullptr;
+    RAW_PTR_EXCLUSION const RequiredBufferSizes* mMinBufferSizes = nullptr;
 };
 
 }  // namespace dawn::native

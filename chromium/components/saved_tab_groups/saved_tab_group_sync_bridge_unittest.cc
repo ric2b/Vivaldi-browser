@@ -5,23 +5,33 @@
 #include "components/saved_tab_groups/saved_tab_group_sync_bridge.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ref.h"
+#include "base/scoped_observation.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_file_util.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
+#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/testing_pref_service.h"
 #include "components/saved_tab_groups/features.h"
+#include "components/saved_tab_groups/pref_names.h"
 #include "components/saved_tab_groups/saved_tab_group.h"
 #include "components/saved_tab_groups/saved_tab_group_model.h"
 #include "components/saved_tab_groups/saved_tab_group_model_observer.h"
 #include "components/saved_tab_groups/saved_tab_group_tab.h"
+#include "components/saved_tab_groups/saved_tab_group_test_utils.h"
 #include "components/sync/engine/commit_queue.h"
+#include "components/sync/model/conflict_resolution.h"
 #include "components/sync/model/data_batch.h"
 #include "components/sync/model/entity_change.h"
 #include "components/sync/model/metadata_batch.h"
@@ -41,6 +51,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
+using syncer::ConflictResolution;
+using syncer::EntityData;
 using testing::_;
 
 namespace tab_groups {
@@ -48,6 +60,59 @@ namespace {
 
 // Discard orphaned tabs after 30 days if the associated group cannot be found.
 constexpr base::TimeDelta kDiscardOrphanedTabsThreshold = base::Days(30);
+
+// Forwards SavedTabGroupModel's observer notifications to the bridge.
+class ModelObserverForwarder : public SavedTabGroupModelObserver {
+ public:
+  ModelObserverForwarder(SavedTabGroupModel& model,
+                         SavedTabGroupSyncBridge& bridge)
+      : model_(model), bridge_(bridge) {
+    observation_.Observe(&model);
+  }
+
+  ~ModelObserverForwarder() override = default;
+
+  // SavedTabGroupModelObserver overrides.
+  void SavedTabGroupAddedLocally(const base::Uuid& guid) override {
+    bridge_->SavedTabGroupAddedLocally(guid);
+  }
+
+  void SavedTabGroupRemovedLocally(
+      const SavedTabGroup& removed_group) override {
+    bridge_->SavedTabGroupRemovedLocally(removed_group);
+  }
+
+  void SavedTabGroupUpdatedLocally(
+      const base::Uuid& group_guid,
+      const std::optional<base::Uuid>& tab_guid) override {
+    bridge_->SavedTabGroupUpdatedLocally(group_guid, tab_guid);
+  }
+
+  void SavedTabGroupTabsReorderedLocally(
+      const base::Uuid& group_guid) override {
+    bridge_->SavedTabGroupTabsReorderedLocally(group_guid);
+  }
+
+  void SavedTabGroupReorderedLocally() override {
+    bridge_->SavedTabGroupReorderedLocally();
+  }
+
+  void SavedTabGroupLocalIdChanged(const base::Uuid& group_guid) override {
+    bridge_->SavedTabGroupLocalIdChanged(group_guid);
+  }
+
+  void SavedTabGroupLastUserInteractionTimeUpdated(
+      const base::Uuid& group_guid) override {
+    bridge_->SavedTabGroupLastUserInteractionTimeUpdated(group_guid);
+  }
+
+ private:
+  raw_ref<SavedTabGroupModel> model_;
+  raw_ref<SavedTabGroupSyncBridge> bridge_;
+
+  base::ScopedObservation<SavedTabGroupModel, SavedTabGroupModelObserver>
+      observation_{this};
+};
 
 // Do not check update times for specifics as adding tabs to a group through the
 // bridge will change the update times for the group object.
@@ -71,6 +136,13 @@ bool AreGroupSpecificsEqual(const sync_pb::SavedTabGroupSpecifics& sp1,
   return true;
 }
 
+bool AreSavedTabGroupsEqual(const SavedTabGroup& group1,
+                            const SavedTabGroup& group2) {
+  return AreGroupSpecificsEqual(
+      SavedTabGroupSyncBridge::SavedTabGroupToSpecificsForTest(group1),
+      SavedTabGroupSyncBridge::SavedTabGroupToSpecificsForTest(group2));
+}
+
 bool AreTabSpecificsEqual(const sync_pb::SavedTabGroupSpecifics& sp1,
                           const sync_pb::SavedTabGroupSpecifics& sp2) {
   if (sp1.guid() != sp2.guid())
@@ -88,26 +160,31 @@ bool AreTabSpecificsEqual(const sync_pb::SavedTabGroupSpecifics& sp1,
   return true;
 }
 
-syncer::EntityData CreateEntityData(
-    std::unique_ptr<sync_pb::SavedTabGroupSpecifics> specific) {
+bool AreSavedTabGroupTabsEqual(const SavedTabGroupTab& tab1,
+                               const SavedTabGroupTab& tab2) {
+  return AreTabSpecificsEqual(
+      SavedTabGroupSyncBridge::SavedTabGroupTabToSpecificsForTest(tab1),
+      SavedTabGroupSyncBridge::SavedTabGroupTabToSpecificsForTest(tab2));
+}
+
+syncer::EntityData CreateEntityData(sync_pb::SavedTabGroupSpecifics specific) {
   syncer::EntityData entity_data;
-  entity_data.name = specific->guid();
-  entity_data.specifics.set_allocated_saved_tab_group(specific.release());
+  entity_data.name = specific.guid();
+  entity_data.specifics.mutable_saved_tab_group()->Swap(&specific);
   return entity_data;
 }
 
 std::unique_ptr<syncer::EntityChange> CreateEntityChange(
-    std::unique_ptr<sync_pb::SavedTabGroupSpecifics> specific,
+    sync_pb::SavedTabGroupSpecifics specific,
     syncer::EntityChange::ChangeType change_type) {
-  std::string guid = specific->guid();
+  std::string guid = specific.guid();
 
   switch (change_type) {
     case syncer::EntityChange::ACTION_ADD:
-      return syncer::EntityChange::CreateAdd(
-          guid, CreateEntityData(std::move(specific)));
+      return syncer::EntityChange::CreateAdd(guid, CreateEntityData(specific));
     case syncer::EntityChange::ACTION_UPDATE:
-      return syncer::EntityChange::CreateUpdate(
-          guid, CreateEntityData(std::move(specific)));
+      return syncer::EntityChange::CreateUpdate(guid,
+                                                CreateEntityData(specific));
     case syncer::EntityChange::ACTION_DELETE:
       return syncer::EntityChange::CreateDelete(guid);
   }
@@ -117,12 +194,14 @@ syncer::EntityChangeList CreateEntityChangeListFromGroup(
     const SavedTabGroup& group,
     syncer::EntityChange::ChangeType change_type) {
   syncer::EntityChangeList entity_change_list;
-  entity_change_list.push_back(
-      CreateEntityChange(group.ToSpecifics(), change_type));
+  entity_change_list.push_back(CreateEntityChange(
+      SavedTabGroupSyncBridge::SavedTabGroupToSpecificsForTest(group),
+      change_type));
 
   for (const SavedTabGroupTab& tab : group.saved_tabs()) {
-    entity_change_list.push_back(
-        CreateEntityChange(tab.ToSpecifics(), change_type));
+    entity_change_list.push_back(CreateEntityChange(
+        SavedTabGroupSyncBridge::SavedTabGroupTabToSpecificsForTest(tab),
+        change_type));
   }
 
   return entity_change_list;
@@ -134,26 +213,44 @@ syncer::EntityChangeList CreateEntityChangeListFromGroup(
 class SavedTabGroupSyncBridgeTest : public ::testing::Test {
  public:
   SavedTabGroupSyncBridgeTest()
-      : store_(syncer::ModelTypeStoreTestUtil::CreateInMemoryStoreForTest()) {
-    InitializeBridge();
-  }
+      : store_(syncer::ModelTypeStoreTestUtil::CreateInMemoryStoreForTest()) {}
   ~SavedTabGroupSyncBridgeTest() override = default;
 
-  void InitializeBridge() {
+  void SetUp() override {
+    pref_service_.registry()->RegisterBooleanPref(
+        prefs::kSavedTabGroupSpecificsToDataMigration, false);
     ON_CALL(processor_, IsTrackingMetadata())
         .WillByDefault(testing::Return(true));
     bridge_ = std::make_unique<SavedTabGroupSyncBridge>(
         &saved_tab_group_model_,
         syncer::ModelTypeStoreTestUtil::FactoryForForwardingStore(store_.get()),
-        processor_.CreateForwardingProcessor());
+        processor_.CreateForwardingProcessor(), &pref_service_,
+        base::DoNothing());
+    observer_forwarder_ = std::make_unique<ModelObserverForwarder>(
+        saved_tab_group_model_, *bridge_);
     task_environment_.RunUntilIdle();
+  }
+
+  void VerifyEntriesCount(size_t expected_count) {
+    std::unique_ptr<syncer::ModelTypeStore::RecordList> entries;
+    store_->ReadAllData(base::BindLambdaForTesting(
+        [&](const std::optional<syncer::ModelError>& error,
+            std::unique_ptr<syncer::ModelTypeStore::RecordList> data) {
+          entries = std::move(data);
+        }));
+    task_environment_.RunUntilIdle();
+
+    ASSERT_TRUE(entries);
+    EXPECT_EQ(expected_count, entries->size());
   }
 
   base::test::TaskEnvironment task_environment_;
   SavedTabGroupModel saved_tab_group_model_;
   testing::NiceMock<syncer::MockModelTypeChangeProcessor> processor_;
   std::unique_ptr<syncer::ModelTypeStore> store_;
+  TestingPrefServiceSimple pref_service_;
   std::unique_ptr<SavedTabGroupSyncBridge> bridge_;
+  std::unique_ptr<ModelObserverForwarder> observer_forwarder_;
 };
 
 // Verify that when we add data into the sync bridge the SavedTabGroupModel will
@@ -184,22 +281,126 @@ TEST_F(SavedTabGroupSyncBridgeTest, MergeFullSyncData) {
       saved_tab_group_model_.Get(group.saved_guid());
 
   EXPECT_EQ(group_from_model->saved_tabs().size(), 2u);
-  EXPECT_TRUE(AreGroupSpecificsEqual(*group.ToSpecifics(),
-                                     *group_from_model->ToSpecifics()));
+  EXPECT_TRUE(AreSavedTabGroupsEqual(group, *group_from_model));
 
   for (const SavedTabGroupTab& tab : group.saved_tabs()) {
     ASSERT_TRUE(group_from_model->ContainsTab(tab.saved_tab_guid()));
-    EXPECT_TRUE(AreTabSpecificsEqual(
-        *tab.ToSpecifics(),
-        *group_from_model->GetTab(tab.saved_tab_guid())->ToSpecifics()));
+    EXPECT_TRUE(AreSavedTabGroupTabsEqual(
+        tab, *group_from_model->GetTab(tab.saved_tab_guid())));
   }
+}
+
+TEST_F(SavedTabGroupSyncBridgeTest, ConflictResolutionForTabGroup) {
+  ASSERT_TRUE(saved_tab_group_model_.saved_tab_groups().empty());
+
+  SavedTabGroup group(u"Test Title`", tab_groups::TabGroupColorId::kCyan, {},
+                      1);
+  SavedTabGroupTab tab(GURL("https://website1.com"), u"Website Title1",
+                       group.saved_guid(), /*position=*/std::nullopt);
+  group.AddTabLocally(tab);
+  base::Uuid group_id = group.saved_guid();
+  saved_tab_group_model_.Add(std::move(group));
+  ASSERT_EQ(saved_tab_group_model_.saved_tab_groups().size(), 1u);
+  const SavedTabGroup* group_from_model = saved_tab_group_model_.Get(group_id);
+
+  sync_pb::SavedTabGroupSpecifics group_specific =
+      SavedTabGroupSyncBridge::SavedTabGroupToSpecificsForTest(
+          *group_from_model);
+  syncer::EntityData remote_data = CreateEntityData(group_specific);
+  ASSERT_FALSE(remote_data.is_deleted());
+
+  // Remote is old.
+  group_specific.set_update_time_windows_epoch_micros(
+      group_specific.update_time_windows_epoch_micros() - 10);
+  remote_data = CreateEntityData(group_specific);
+  EXPECT_THAT(bridge_->ResolveConflict("storagekey1", remote_data),
+              testing::Eq(syncer::ConflictResolution::kUseLocal));
+
+  // Remote is more recent.
+  group_specific.set_update_time_windows_epoch_micros(
+      group_specific.update_time_windows_epoch_micros() + 10);
+  remote_data = CreateEntityData(group_specific);
+  EXPECT_THAT(bridge_->ResolveConflict("storagekey1", remote_data),
+              testing::Eq(syncer::ConflictResolution::kUseRemote));
+
+  // Remote is deleted.
+  syncer::EntityData remote_data2;
+  remote_data2.name = group_specific.guid();
+  ASSERT_TRUE(remote_data2.is_deleted());
+  EXPECT_THAT(bridge_->ResolveConflict("storagekey1", remote_data2),
+              testing::Eq(syncer::ConflictResolution::kUseLocal));
+
+  // Local doesn't exist.
+  saved_tab_group_model_.Remove(group_id);
+  EXPECT_EQ(saved_tab_group_model_.saved_tab_groups().size(), 0u);
+  remote_data = CreateEntityData(group_specific);
+  EXPECT_THAT(bridge_->ResolveConflict("storagekey1", remote_data),
+              testing::Eq(syncer::ConflictResolution::kUseRemote));
+}
+
+TEST_F(SavedTabGroupSyncBridgeTest, ConflictResolutionForTab) {
+  ASSERT_TRUE(saved_tab_group_model_.saved_tab_groups().empty());
+
+  SavedTabGroup group(u"Test Title`", tab_groups::TabGroupColorId::kCyan, {},
+                      1);
+  SavedTabGroupTab tab(GURL("https://website1.com"), u"Website Title1",
+                       group.saved_guid(), /*position=*/std::nullopt);
+  group.AddTabLocally(tab);
+  base::Uuid group_id = group.saved_guid();
+  base::Uuid tab_id = tab.saved_tab_guid();
+  saved_tab_group_model_.Add(std::move(group));
+  EXPECT_EQ(saved_tab_group_model_.saved_tab_groups().size(), 1u);
+  const SavedTabGroup* group_from_model = saved_tab_group_model_.Get(group_id);
+
+  const SavedTabGroupTab* tab_from_model = group_from_model->GetTab(tab_id);
+  ASSERT_TRUE(tab_from_model);
+  sync_pb::SavedTabGroupSpecifics tab_specific =
+      SavedTabGroupSyncBridge::SavedTabGroupTabToSpecificsForTest(
+          *tab_from_model);
+
+  // Remote is old.
+  tab_specific.set_update_time_windows_epoch_micros(
+      tab_specific.update_time_windows_epoch_micros() - 10);
+  syncer::EntityData remote_data = CreateEntityData(tab_specific);
+  ASSERT_FALSE(remote_data.is_deleted());
+  EXPECT_THAT(bridge_->ResolveConflict("storagekey1", remote_data),
+              testing::Eq(syncer::ConflictResolution::kUseLocal));
+
+  // Remote is more recent.
+  tab_specific.set_update_time_windows_epoch_micros(
+      tab_specific.update_time_windows_epoch_micros() + 10);
+  remote_data = CreateEntityData(tab_specific);
+  EXPECT_THAT(bridge_->ResolveConflict("storagekey1", remote_data),
+              testing::Eq(syncer::ConflictResolution::kUseRemote));
+
+  // Remote is deleted.
+  syncer::EntityData remote_data2;
+  remote_data2.name = tab_specific.guid();
+  ASSERT_TRUE(remote_data2.is_deleted());
+  EXPECT_THAT(bridge_->ResolveConflict("storagekey1", remote_data2),
+              testing::Eq(syncer::ConflictResolution::kUseLocal));
+
+  // Local doesn't exist.
+  saved_tab_group_model_.Remove(group_id);
+  EXPECT_EQ(saved_tab_group_model_.saved_tab_groups().size(), 0u);
+  remote_data = CreateEntityData(tab_specific);
+  EXPECT_THAT(bridge_->ResolveConflict("storagekey1", remote_data),
+              testing::Eq(syncer::ConflictResolution::kUseRemote));
 }
 
 // Verify merging with preexisting data in the model merges the correct
 // elements.
 TEST_F(SavedTabGroupSyncBridgeTest, MergeFullSyncDataWithExistingData) {
+  // Force the cache guid to return the same value as the groups, reflecting
+  // that the processor cache guid is the "creator".
+  std::string cache_guid = "cache_guid";
+  ON_CALL(processor_, TrackedCacheGuid())
+      .WillByDefault(testing::Return(cache_guid));
+
   SavedTabGroup group(u"Test Title", tab_groups::TabGroupColorId::kBlue, {},
-                      /*position=*/std::nullopt);
+                      /*position=*/std::nullopt, /*saved_guid=*/std::nullopt,
+                      /*local_group_guid=*/std::nullopt,
+                      /*creator_cache_guid=*/cache_guid);
   SavedTabGroupTab tab_1(GURL("https://website.com"), u"Website Title",
                          group.saved_guid(), /*position=*/std::nullopt);
   SavedTabGroupTab tab_2(GURL("https://google.com"), u"Google",
@@ -220,21 +421,25 @@ TEST_F(SavedTabGroupSyncBridgeTest, MergeFullSyncDataWithExistingData) {
 
   // Create an updated version of `group` using the same creation time and 1
   // less tab.
-  SavedTabGroup updated_group(u"New Title", tab_groups::TabGroupColorId::kPink,
-                              {}, /*position=*/0, group_guid, std::nullopt,
-                              group_creation_time);
+  SavedTabGroup updated_group(
+      u"New Title", tab_groups::TabGroupColorId::kPink, {}, /*position=*/0,
+      /*saved_guid=*/group_guid,
+      /*local_group_guid=*/std::nullopt, cache_guid, cache_guid,
+      /*created_before_syncing_tab_groups=*/false, group_creation_time);
   SavedTabGroupTab updated_tab_1(GURL("https://support.google.com"), u"Support",
                                  group_guid, /*position=*/0, tab_1_guid,
-                                 std::nullopt, tab_1_creation_time);
+                                 std::nullopt, cache_guid, cache_guid,
+                                 tab_1_creation_time);
   updated_group.AddTabLocally(updated_tab_1);
 
   syncer::EntityChangeList entity_change_list = CreateEntityChangeListFromGroup(
       updated_group, syncer::EntityChange::ChangeType::ACTION_UPDATE);
 
   // Ensure the updated data is eligible to be merged.
-  EXPECT_TRUE(group_from_model->ShouldMergeGroup(*updated_group.ToSpecifics()));
-  EXPECT_TRUE(group_from_model->GetTab(tab_1_guid)
-                  ->ShouldMergeTab(*updated_tab_1.ToSpecifics()));
+  EXPECT_TRUE(group_from_model->RemoteGroupHasMoreRecentUpdates(
+      updated_group.update_time_windows_epoch_micros()));
+  EXPECT_TRUE(
+      group_from_model->GetTab(tab_1_guid)->ShouldMergeTab(updated_tab_1));
 
   bridge_->MergeFullSyncData(bridge_->CreateMetadataChangeList(),
                              std::move(entity_change_list));
@@ -246,52 +451,79 @@ TEST_F(SavedTabGroupSyncBridgeTest, MergeFullSyncDataWithExistingData) {
   EXPECT_TRUE(group_from_model->ContainsTab(tab_2_guid));
 
   // Ensure tab_2 was left untouched.
-  SavedTabGroupTab tab_2_replica(GURL("https://google.com"), u"Google",
-                                 group_guid, /*position=*/1, tab_2_guid,
-                                 std::nullopt, tab_2_creation_time);
-  EXPECT_TRUE(AreTabSpecificsEqual(
-      *tab_2_replica.ToSpecifics(),
-      *group_from_model->GetTab(tab_2_guid)->ToSpecifics()));
+  SavedTabGroupTab tab_2_replica(
+      GURL("https://google.com"), u"Google", group_guid, /*position=*/1,
+      tab_2_guid, std::nullopt, cache_guid, cache_guid, tab_2_creation_time);
+  EXPECT_TRUE(AreSavedTabGroupTabsEqual(tab_2_replica,
+                                        *group_from_model->GetTab(tab_2_guid)));
 
   // Ensure the updated group and tab have been merged into the original group
   // in the model.
-  EXPECT_TRUE(AreGroupSpecificsEqual(*group_from_model->ToSpecifics(),
-                                     *updated_group.ToSpecifics()));
-  EXPECT_TRUE(AreTabSpecificsEqual(
-      *updated_tab_1.ToSpecifics(),
-      *group_from_model->GetTab(tab_1_guid)->ToSpecifics()));
+  EXPECT_TRUE(AreSavedTabGroupsEqual(*group_from_model, updated_group));
+  EXPECT_TRUE(AreSavedTabGroupTabsEqual(updated_tab_1,
+                                        *group_from_model->GetTab(tab_1_guid)));
 }
 
-// Verify that on sign-out, all data is locally deleted.
-TEST_F(SavedTabGroupSyncBridgeTest, DisableSyncDeletesAllLocalData) {
-  std::map<std::string, std::string> params = {
-      {"close_all_tab_groups_on_sign_out", "true"},
-  };
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeatureWithParameters(kTabGroupSyncUno, params);
-
+// Verify that on sign-out, the groups created before sign-in are locally
+// deleted.
+TEST_F(SavedTabGroupSyncBridgeTest,
+       DisableSyncLocallyRemovesGroupsCreatedBeforeSignIn) {
   EXPECT_TRUE(saved_tab_group_model_.saved_tab_groups().empty());
 
-  SavedTabGroup group(u"Test Title", tab_groups::TabGroupColorId::kBlue, {}, 0);
-  SavedTabGroupTab tab_1(GURL("https://website.com"), u"Website Title",
-                         group.saved_guid(), /*position=*/std::nullopt);
-  group.AddTabLocally(tab_1);
-  bridge_->MergeFullSyncData(
-      bridge_->CreateMetadataChangeList(),
-      CreateEntityChangeListFromGroup(
-          group, syncer::EntityChange::ChangeType::ACTION_ADD));
-  EXPECT_TRUE(saved_tab_group_model_.Contains(group.saved_guid()));
-  EXPECT_EQ(saved_tab_group_model_.saved_tab_groups().size(), 1u);
+  // Create two groups: group1 before sign in and group2 after sign in.
+  SavedTabGroup group1(u"Test Title1", tab_groups::TabGroupColorId::kBlue, {},
+                       0, std::nullopt, std::nullopt, std::nullopt,
+                       std::nullopt,
+                       /*created_before_syncing_tab_groups=*/true);
+  SavedTabGroupTab tab_1(GURL("https://website1.com"), u"Website Title1",
+                         group1.saved_guid(), /*position=*/std::nullopt);
+  group1.AddTabLocally(tab_1);
+  group1.SetCreatorCacheGuid("cache_guid_local");
 
-  const SavedTabGroup* group_from_model =
-      saved_tab_group_model_.Get(group.saved_guid());
-  EXPECT_EQ(group_from_model->saved_tabs().size(), 1u);
+  SavedTabGroup group2(u"Test Title2", tab_groups::TabGroupColorId::kCyan, {},
+                       1, std::nullopt, std::nullopt, std::nullopt,
+                       std::nullopt,
+                       /*created_before_syncing_tab_groups=*/false);
+  SavedTabGroupTab tab_2(GURL("https://website2.com"), u"Website Title2",
+                         group2.saved_guid(), /*position=*/std::nullopt);
+  group2.AddTabLocally(tab_2);
+  group2.SetCreatorCacheGuid("cache_guid_local");
 
-  // Disable sync. Expect all groups to be deleted locally from the model, but
-  // not from sync.
+  base::Uuid group_id1 = group1.saved_guid();
+  base::Uuid group_id2 = group2.saved_guid();
+  saved_tab_group_model_.Add(std::move(group1));
+  saved_tab_group_model_.Add(std::move(group2));
+  VerifyEntriesCount(4u);
+
+  EXPECT_EQ(saved_tab_group_model_.saved_tab_groups().size(), 2u);
+
+  const SavedTabGroup* group1_from_model =
+      saved_tab_group_model_.Get(group_id1);
+  EXPECT_EQ(group1_from_model->saved_tabs().size(), 1u);
+
+  const SavedTabGroup* group2_from_model =
+      saved_tab_group_model_.Get(group_id2);
+  EXPECT_EQ(group2_from_model->saved_tabs().size(), 1u);
+
+  EXPECT_TRUE(group1_from_model->created_before_syncing_tab_groups());
+  EXPECT_FALSE(group2_from_model->created_before_syncing_tab_groups());
+  EXPECT_EQ("cache_guid_local", group1_from_model->creator_cache_guid());
+  EXPECT_EQ("cache_guid_local", group2_from_model->creator_cache_guid());
+
+  // Disable sync. Expect group 2 to be removed from model, and group 1 should
+  // still be in the model. None of them should be deleted from sync.
   EXPECT_CALL(processor_, Delete(_, _, _)).Times(0);
   bridge_->ApplyDisableSyncChanges(bridge_->CreateMetadataChangeList());
-  EXPECT_EQ(saved_tab_group_model_.saved_tab_groups().size(), 0u);
+  EXPECT_EQ(saved_tab_group_model_.saved_tab_groups().size(), 1u);
+  EXPECT_TRUE(saved_tab_group_model_.Contains(group_id1));
+  EXPECT_FALSE(saved_tab_group_model_.Contains(group_id2));
+
+  // DB should have only the two entries from group 1.
+  VerifyEntriesCount(2u);
+
+  group1_from_model = saved_tab_group_model_.Get(group_id1);
+  group2_from_model = saved_tab_group_model_.Get(group_id2);
+  EXPECT_EQ("cache_guid_local", group1_from_model->creator_cache_guid());
 }
 
 // Verify orphaned tabs (tabs missing their group) are added into the correct
@@ -304,9 +536,9 @@ TEST_F(SavedTabGroupSyncBridgeTest, OrphanedTabAddedIntoGroupWhenFound) {
                                 orphaned_guid, /*position=*/0);
 
   syncer::EntityChangeList orphaned_tab_change_list;
-  orphaned_tab_change_list.push_back(
-      CreateEntityChange(orphaned_tab.ToSpecifics(),
-                         syncer::EntityChange::ChangeType::ACTION_ADD));
+  orphaned_tab_change_list.push_back(CreateEntityChange(
+      SavedTabGroupSyncBridge::SavedTabGroupTabToSpecificsForTest(orphaned_tab),
+      syncer::EntityChange::ChangeType::ACTION_ADD));
   bridge_->MergeFullSyncData(bridge_->CreateMetadataChangeList(),
                              std::move(orphaned_tab_change_list));
 
@@ -318,9 +550,9 @@ TEST_F(SavedTabGroupSyncBridgeTest, OrphanedTabAddedIntoGroupWhenFound) {
                               tab_groups::TabGroupColorId::kOrange, {},
                               /*position=*/0, orphaned_guid);
   syncer::EntityChangeList missing_group_change_list;
-  missing_group_change_list.push_back(
-      CreateEntityChange(missing_group.ToSpecifics(),
-                         syncer::EntityChange::ChangeType::ACTION_ADD));
+  missing_group_change_list.push_back(CreateEntityChange(
+      SavedTabGroupSyncBridge::SavedTabGroupToSpecificsForTest(missing_group),
+      syncer::EntityChange::ChangeType::ACTION_ADD));
   bridge_->ApplyIncrementalSyncChanges(bridge_->CreateMetadataChangeList(),
                                        std::move(missing_group_change_list));
 
@@ -333,12 +565,11 @@ TEST_F(SavedTabGroupSyncBridgeTest, OrphanedTabAddedIntoGroupWhenFound) {
   EXPECT_EQ(orphaned_group_from_model->saved_tabs().size(), 1u);
   EXPECT_TRUE(
       orphaned_group_from_model->ContainsTab(orphaned_tab.saved_tab_guid()));
-  EXPECT_TRUE(AreGroupSpecificsEqual(
-      *missing_group.ToSpecifics(), *orphaned_group_from_model->ToSpecifics()));
-  EXPECT_TRUE(AreTabSpecificsEqual(
-      *orphaned_tab.ToSpecifics(),
-      *orphaned_group_from_model->GetTab(orphaned_tab.saved_tab_guid())
-           ->ToSpecifics()));
+  EXPECT_TRUE(
+      AreSavedTabGroupsEqual(missing_group, *orphaned_group_from_model));
+  EXPECT_TRUE(AreSavedTabGroupTabsEqual(
+      orphaned_tab,
+      *orphaned_group_from_model->GetTab(orphaned_tab.saved_tab_guid())));
 }
 
 // Verify orphaned tabs (tabs missing their group) that have not been updated
@@ -353,9 +584,9 @@ TEST_F(SavedTabGroupSyncBridgeTest, OprhanedTabDiscardedAfter30Days) {
                                                kDiscardOrphanedTabsThreshold);
 
   syncer::EntityChangeList orphaned_tab_change_list;
-  orphaned_tab_change_list.push_back(
-      CreateEntityChange(orphaned_tab.ToSpecifics(),
-                         syncer::EntityChange::ChangeType::ACTION_ADD));
+  orphaned_tab_change_list.push_back(CreateEntityChange(
+      SavedTabGroupSyncBridge::SavedTabGroupTabToSpecificsForTest(orphaned_tab),
+      syncer::EntityChange::ChangeType::ACTION_ADD));
   bridge_->MergeFullSyncData(bridge_->CreateMetadataChangeList(),
                              std::move(orphaned_tab_change_list));
 
@@ -367,9 +598,9 @@ TEST_F(SavedTabGroupSyncBridgeTest, OprhanedTabDiscardedAfter30Days) {
                               tab_groups::TabGroupColorId::kOrange, {},
                               /*position=*/0, orphaned_guid);
   syncer::EntityChangeList missing_group_change_list;
-  missing_group_change_list.push_back(
-      CreateEntityChange(missing_group.ToSpecifics(),
-                         syncer::EntityChange::ChangeType::ACTION_ADD));
+  missing_group_change_list.push_back(CreateEntityChange(
+      SavedTabGroupSyncBridge::SavedTabGroupToSpecificsForTest(missing_group),
+      syncer::EntityChange::ChangeType::ACTION_ADD));
   bridge_->ApplyIncrementalSyncChanges(bridge_->CreateMetadataChangeList(),
                                        std::move(missing_group_change_list));
 
@@ -394,9 +625,9 @@ TEST_F(SavedTabGroupSyncBridgeTest, OprhanedTabGroupFoundAfter30Days) {
                               tab_groups::TabGroupColorId::kOrange, {},
                               /*position=*/0, orphaned_guid);
   syncer::EntityChangeList missing_group_change_list;
-  missing_group_change_list.push_back(
-      CreateEntityChange(missing_group.ToSpecifics(),
-                         syncer::EntityChange::ChangeType::ACTION_ADD));
+  missing_group_change_list.push_back(CreateEntityChange(
+      SavedTabGroupSyncBridge::SavedTabGroupToSpecificsForTest(missing_group),
+      syncer::EntityChange::ChangeType::ACTION_ADD));
   bridge_->MergeFullSyncData(bridge_->CreateMetadataChangeList(),
                              std::move(missing_group_change_list));
 
@@ -408,9 +639,9 @@ TEST_F(SavedTabGroupSyncBridgeTest, OprhanedTabGroupFoundAfter30Days) {
   orphaned_tab.SetUpdateTimeWindowsEpochMicros(base::Time::Now() -
                                                kDiscardOrphanedTabsThreshold);
   syncer::EntityChangeList orphaned_tab_change_list;
-  orphaned_tab_change_list.push_back(
-      CreateEntityChange(orphaned_tab.ToSpecifics(),
-                         syncer::EntityChange::ChangeType::ACTION_ADD));
+  orphaned_tab_change_list.push_back(CreateEntityChange(
+      SavedTabGroupSyncBridge::SavedTabGroupTabToSpecificsForTest(orphaned_tab),
+      syncer::EntityChange::ChangeType::ACTION_ADD));
 
   bridge_->ApplyIncrementalSyncChanges(bridge_->CreateMetadataChangeList(),
                                        std::move(orphaned_tab_change_list));
@@ -423,12 +654,11 @@ TEST_F(SavedTabGroupSyncBridgeTest, OprhanedTabGroupFoundAfter30Days) {
   EXPECT_EQ(orphaned_group_from_model->saved_tabs().size(), 1u);
   EXPECT_TRUE(
       orphaned_group_from_model->ContainsTab(orphaned_tab.saved_tab_guid()));
-  EXPECT_TRUE(AreGroupSpecificsEqual(
-      *missing_group.ToSpecifics(), *orphaned_group_from_model->ToSpecifics()));
-  EXPECT_TRUE(AreTabSpecificsEqual(
-      *orphaned_tab.ToSpecifics(),
-      *orphaned_group_from_model->GetTab(orphaned_tab.saved_tab_guid())
-           ->ToSpecifics()));
+  EXPECT_TRUE(
+      AreSavedTabGroupsEqual(missing_group, *orphaned_group_from_model));
+  EXPECT_TRUE(AreSavedTabGroupTabsEqual(
+      orphaned_tab,
+      *orphaned_group_from_model->GetTab(orphaned_tab.saved_tab_guid())));
 }
 
 // Verify that when we add data into the sync bridge the SavedTabGroupModel
@@ -444,7 +674,9 @@ TEST_F(SavedTabGroupSyncBridgeTest, AddSyncData) {
                          group.saved_guid(), /*position=*/std::nullopt);
   SavedTabGroupTab tab_2(GURL("https://google.com"), u"Google",
                          group.saved_guid(), /*position=*/std::nullopt);
+  group.SetCreatorCacheGuid("remote_cache_guid");
   group.AddTabLocally(tab_1).AddTabLocally(tab_2);
+  group.SetCreatorCacheGuid("remote_cache_guid");
 
   bridge_->ApplyIncrementalSyncChanges(
       bridge_->CreateMetadataChangeList(),
@@ -456,14 +688,12 @@ TEST_F(SavedTabGroupSyncBridgeTest, AddSyncData) {
   const SavedTabGroup* group_from_model =
       saved_tab_group_model_.Get(group.saved_guid());
 
-  EXPECT_TRUE(AreGroupSpecificsEqual(*group.ToSpecifics(),
-                                     *group_from_model->ToSpecifics()));
+  EXPECT_TRUE(AreSavedTabGroupsEqual(group, *group_from_model));
 
   for (const SavedTabGroupTab& tab : group.saved_tabs()) {
     ASSERT_TRUE(group_from_model->ContainsTab(tab.saved_tab_guid()));
-    EXPECT_TRUE(AreTabSpecificsEqual(
-        *tab.ToSpecifics(),
-        *group_from_model->GetTab(tab.saved_tab_guid())->ToSpecifics()));
+    EXPECT_TRUE(AreSavedTabGroupTabsEqual(
+        tab, *group_from_model->GetTab(tab.saved_tab_guid())));
   }
 
   // Ensure a tab added to an existing group in the bridge is added into the
@@ -477,12 +707,13 @@ TEST_F(SavedTabGroupSyncBridgeTest, AddSyncData) {
                                 base::Uuid::GenerateRandomV4(), /*position=*/0);
 
   syncer::EntityChangeList entity_change_list;
-  entity_change_list.push_back(
-      CreateEntityChange(additional_tab.ToSpecifics(),
-                         syncer::EntityChange::ChangeType::ACTION_ADD));
-  entity_change_list.push_back(
-      (CreateEntityChange(orphaned_tab.ToSpecifics(),
-                          syncer::EntityChange::ChangeType::ACTION_ADD)));
+  entity_change_list.push_back(CreateEntityChange(
+      SavedTabGroupSyncBridge::SavedTabGroupTabToSpecificsForTest(
+          additional_tab),
+      syncer::EntityChange::ChangeType::ACTION_ADD));
+  entity_change_list.push_back((CreateEntityChange(
+      SavedTabGroupSyncBridge::SavedTabGroupTabToSpecificsForTest(orphaned_tab),
+      syncer::EntityChange::ChangeType::ACTION_ADD)));
 
   bridge_->ApplyIncrementalSyncChanges(bridge_->CreateMetadataChangeList(),
                                        std::move(entity_change_list));
@@ -491,9 +722,8 @@ TEST_F(SavedTabGroupSyncBridgeTest, AddSyncData) {
   EXPECT_EQ(group_from_model->saved_tabs().size(), 3u);
   for (const SavedTabGroupTab& tab : group.saved_tabs()) {
     ASSERT_TRUE(group_from_model->ContainsTab(tab.saved_tab_guid()));
-    EXPECT_TRUE(AreTabSpecificsEqual(
-        *tab.ToSpecifics(),
-        *group_from_model->GetTab(tab.saved_tab_guid())->ToSpecifics()));
+    EXPECT_TRUE(AreSavedTabGroupTabsEqual(
+        tab, *group_from_model->GetTab(tab.saved_tab_guid())));
   }
 }
 
@@ -530,14 +760,12 @@ TEST_F(SavedTabGroupSyncBridgeTest, UpdateSyncData) {
       CreateEntityChangeListFromGroup(
           group, syncer::EntityChange::ChangeType::ACTION_UPDATE));
 
-  EXPECT_TRUE(AreGroupSpecificsEqual(*group.ToSpecifics(),
-                                     *group_from_model->ToSpecifics()));
+  EXPECT_TRUE(AreSavedTabGroupsEqual(group, *group_from_model));
 
   for (const SavedTabGroupTab& tab : group.saved_tabs()) {
     ASSERT_TRUE(group_from_model->ContainsTab(tab.saved_tab_guid()));
-    EXPECT_TRUE(AreTabSpecificsEqual(
-        *tab.ToSpecifics(),
-        *group_from_model->GetTab(tab.saved_tab_guid())->ToSpecifics()));
+    EXPECT_TRUE(AreSavedTabGroupTabsEqual(
+        tab, *group_from_model->GetTab(tab.saved_tab_guid())));
   }
 }
 
@@ -570,23 +798,24 @@ TEST_F(SavedTabGroupSyncBridgeTest, DeleteSyncData) {
   base::Uuid tab_to_remove = group.saved_tabs()[0].saved_tab_guid();
 
   syncer::EntityChangeList delete_tab_change_list;
-  delete_tab_change_list.push_back(
-      CreateEntityChange(group.saved_tabs()[0].ToSpecifics(),
-                         syncer::EntityChange::ChangeType::ACTION_DELETE));
+  delete_tab_change_list.push_back(CreateEntityChange(
+      SavedTabGroupSyncBridge::SavedTabGroupTabToSpecificsForTest(
+          group.saved_tabs()[0]),
+      syncer::EntityChange::ChangeType::ACTION_DELETE));
   bridge_->ApplyIncrementalSyncChanges(bridge_->CreateMetadataChangeList(),
                                        std::move(delete_tab_change_list));
 
   EXPECT_EQ(group_from_model->saved_tabs().size(), 1u);
-  EXPECT_TRUE(
-      AreTabSpecificsEqual(*group.saved_tabs()[1].ToSpecifics(),
-                           *group_from_model->saved_tabs()[0].ToSpecifics()));
+  EXPECT_TRUE(AreSavedTabGroupTabsEqual(group.saved_tabs()[1],
+                                        group_from_model->saved_tabs()[0]));
   EXPECT_FALSE(group_from_model->ContainsTab(tab_to_remove));
 
   // Ensure deleting a group deletes all the tabs in the group as well.
   syncer::EntityChangeList delete_group_change_list;
 
   delete_group_change_list.push_back(CreateEntityChange(
-      group.ToSpecifics(), syncer::EntityChange::ChangeType::ACTION_DELETE));
+      SavedTabGroupSyncBridge::SavedTabGroupToSpecificsForTest(group),
+      syncer::EntityChange::ChangeType::ACTION_DELETE));
   bridge_->ApplyIncrementalSyncChanges(bridge_->CreateMetadataChangeList(),
                                        std::move(delete_group_change_list));
 
@@ -628,22 +857,25 @@ TEST_F(SavedTabGroupSyncBridgeTest, DeleteSyncDataProcessedLast) {
 
   // Remove both tabs in the group first, then add the new tab.
   syncer::EntityChangeList change_list;
-  change_list.push_back(
-      CreateEntityChange(group.saved_tabs()[0].ToSpecifics(),
-                         syncer::EntityChange::ChangeType::ACTION_DELETE));
-  change_list.push_back(
-      CreateEntityChange(group.saved_tabs()[1].ToSpecifics(),
-                         syncer::EntityChange::ChangeType::ACTION_DELETE));
   change_list.push_back(CreateEntityChange(
-      tab_3.ToSpecifics(), syncer::EntityChange::ChangeType::ACTION_ADD));
+      SavedTabGroupSyncBridge::SavedTabGroupTabToSpecificsForTest(
+          group.saved_tabs()[0]),
+      syncer::EntityChange::ChangeType::ACTION_DELETE));
+  change_list.push_back(CreateEntityChange(
+      SavedTabGroupSyncBridge::SavedTabGroupTabToSpecificsForTest(
+          group.saved_tabs()[1]),
+      syncer::EntityChange::ChangeType::ACTION_DELETE));
+  change_list.push_back(CreateEntityChange(
+      SavedTabGroupSyncBridge::SavedTabGroupTabToSpecificsForTest(tab_3),
+      syncer::EntityChange::ChangeType::ACTION_ADD));
   bridge_->ApplyIncrementalSyncChanges(bridge_->CreateMetadataChangeList(),
                                        std::move(change_list));
 
   // The group should still exist with only `tab_3`.
   ASSERT_TRUE(saved_tab_group_model_.Contains(group.saved_guid()));
   EXPECT_EQ(group_from_model->saved_tabs().size(), 1u);
-  EXPECT_TRUE(AreTabSpecificsEqual(
-      *tab_3.ToSpecifics(), *group_from_model->saved_tabs()[0].ToSpecifics()));
+  EXPECT_TRUE(
+      AreSavedTabGroupTabsEqual(tab_3, group_from_model->saved_tabs()[0]));
 
   EXPECT_FALSE(group_from_model->ContainsTab(removed_tab_1));
   EXPECT_FALSE(group_from_model->ContainsTab(removed_tab_2));
@@ -673,6 +905,29 @@ TEST_F(SavedTabGroupSyncBridgeTest, AddGroupLocally) {
   saved_tab_group_model_.Add(std::move(group));
 }
 
+// Verify that local ID change events aren't passed to the processor.
+TEST_F(SavedTabGroupSyncBridgeTest, LocalIdChanged) {
+  EXPECT_TRUE(saved_tab_group_model_.saved_tab_groups().empty());
+
+  SavedTabGroup group(u"Test Title", tab_groups::TabGroupColorId::kBlue, {},
+                      /*position=*/std::nullopt);
+  SavedTabGroupTab tab_1(GURL("https://website.com"), u"Website Title",
+                         group.saved_guid(), /*position=*/std::nullopt);
+  group.AddTabLocally(tab_1);
+  saved_tab_group_model_.Add(group);
+
+  // Local ID change events on tabs or groups shouldn't propagate to the
+  // processor.
+  EXPECT_CALL(processor_, Put(_, _, _)).Times(0);
+  // Open the group.
+  group.SetLocalGroupId(test::GenerateRandomTabGroupID());
+  tab_1.SetLocalTabID(test::GenerateRandomTabID());
+
+  // Close the group.
+  group.SetLocalGroupId(std::nullopt);
+  tab_1.SetLocalTabID(std::nullopt);
+}
+
 // Verify that locally removed groups removes the group from the processor
 // and leaves the tabs without an associated group.
 TEST_F(SavedTabGroupSyncBridgeTest, RemoveGroupLocally) {
@@ -700,16 +955,16 @@ TEST_F(SavedTabGroupSyncBridgeTest, RemoveGroupLocally) {
   saved_tab_group_model_.Remove(group_guid);
 
   // Verify that the orphaned tabs are still stored locally in the sync bridge.
-  const std::vector<sync_pb::SavedTabGroupSpecifics>& tabs_missing_groups =
+  const std::vector<proto::SavedTabGroupData>& tabs_missing_groups =
       bridge_->GetTabsMissingGroupsForTesting();
 
   auto it_1 = base::ranges::find_if(
-      tabs_missing_groups, [&](sync_pb::SavedTabGroupSpecifics specifics) {
-        return specifics.guid() == tab_1_guid.AsLowercaseString();
+      tabs_missing_groups, [&](proto::SavedTabGroupData data) {
+        return data.specifics().guid() == tab_1_guid.AsLowercaseString();
       });
   auto it_2 = base::ranges::find_if(
-      tabs_missing_groups, [&](sync_pb::SavedTabGroupSpecifics specifics) {
-        return specifics.guid() == tab_2_guid.AsLowercaseString();
+      tabs_missing_groups, [&](proto::SavedTabGroupData data) {
+        return data.specifics().guid() == tab_2_guid.AsLowercaseString();
       });
 
   EXPECT_TRUE(it_1 != tabs_missing_groups.end());
@@ -721,7 +976,9 @@ TEST_F(SavedTabGroupSyncBridgeTest, UpdateGroupLocally) {
   EXPECT_TRUE(saved_tab_group_model_.saved_tab_groups().empty());
 
   SavedTabGroup group(u"Test Title", tab_groups::TabGroupColorId::kBlue, {},
-                      /*position=*/std::nullopt);
+                      /*position=*/std::nullopt,
+                      /*saved_guid=*/base::Uuid::GenerateRandomV4(),
+                      /*local_group_id=*/test::GenerateRandomTabGroupID());
   SavedTabGroupTab tab_1(GURL("https://website.com"), u"Website Title",
                          group.saved_guid(), /*position=*/std::nullopt);
   SavedTabGroupTab tab_2(GURL("https://google.com"), u"Google",
@@ -739,7 +996,8 @@ TEST_F(SavedTabGroupSyncBridgeTest, UpdateGroupLocally) {
 
   tab_groups::TabGroupVisualData visual_data(
       u"New Title", tab_groups::TabGroupColorId::kYellow);
-  saved_tab_group_model_.UpdateVisualData(group_guid, &visual_data);
+  saved_tab_group_model_.UpdateVisualData(group.local_group_id().value(),
+                                          &visual_data);
 }
 
 // Verify duplicate tab added from sync is merged with the correct tab and not
@@ -915,6 +1173,317 @@ TEST_F(SavedTabGroupSyncBridgeTest, ReorderGroupLocally) {
   EXPECT_CALL(processor_, Put(group_2_guid.AsLowercaseString(), _, _));
 
   saved_tab_group_model_.ReorderGroupLocally(group_guid, 1);
+}
+
+// Verify that pulling the cache guid works.
+TEST_F(SavedTabGroupSyncBridgeTest, Group) {
+  const std::string expected_guid = "cache_guid";
+  ON_CALL(processor_, TrackedCacheGuid())
+      .WillByDefault(testing::Return(expected_guid));
+
+  ASSERT_TRUE(processor_.IsTrackingMetadata());
+  ASSERT_EQ(processor_.TrackedCacheGuid(), expected_guid);
+
+  std::optional<std::string> maybe_cache_guid = bridge_->GetLocalCacheGuid();
+  EXPECT_EQ(maybe_cache_guid, expected_guid);
+}
+
+class SavedTabGroupSyncBridgeMigrationTest
+    : public SavedTabGroupSyncBridgeTest {
+ public:
+  void SetUp() override {
+    pref_service_.registry()->RegisterBooleanPref(
+        prefs::kSavedTabGroupSpecificsToDataMigration, false);
+    ON_CALL(processor_, IsTrackingMetadata())
+        .WillByDefault(testing::Return(true));
+    ON_CALL(processor_, TrackedCacheGuid())
+        .WillByDefault(testing::Return("local_cache_guid"));
+  }
+
+  void CreateBridge(bool has_specifics_migrated) {
+    pref_service_.SetBoolean(prefs::kSavedTabGroupSpecificsToDataMigration,
+                             has_specifics_migrated);
+    bridge_ = std::make_unique<SavedTabGroupSyncBridge>(
+        &saved_tab_group_model_,
+        syncer::ModelTypeStoreTestUtil::FactoryForForwardingStore(store_.get()),
+        processor_.CreateForwardingProcessor(), &pref_service_,
+        base::BindOnce(&SavedTabGroupModel::LoadStoredEntries,
+                       base::Unretained(&saved_tab_group_model_)));
+    task_environment_.RunUntilIdle();
+  }
+};
+
+TEST_F(
+    SavedTabGroupSyncBridgeMigrationTest,
+    MigrateSpecificsToSavedTabGroupData_OldToNewFormat_Success_OneGroup_VerifyNewRecord) {
+  // Create a SavedTabGroup and serialize in the old format.
+  SavedTabGroup group(u"Test Group", tab_groups::TabGroupColorId::kBlue, {}, 0,
+                      base::Uuid::GenerateRandomV4());
+  sync_pb::SavedTabGroupSpecifics old_specifics =
+      SavedTabGroupSyncBridge::SavedTabGroupToSpecificsForTest(group);
+
+  std::unique_ptr<syncer::ModelTypeStore::WriteBatch> batch =
+      store_->CreateWriteBatch();
+  batch->WriteData(old_specifics.guid(), old_specifics.SerializeAsString());
+  store_->CommitWriteBatch(std::move(batch), base::DoNothing());
+
+  // Create the bridge. That should trigger migration.
+  CreateBridge(/*has_specifics_migrated=*/false);
+  task_environment_.RunUntilIdle();
+
+  // Read the migrated data from the store.
+  std::unique_ptr<syncer::ModelTypeStore::RecordList> entries;
+  store_->ReadAllData(base::BindLambdaForTesting(
+      [&](const std::optional<syncer::ModelError>& error,
+          std::unique_ptr<syncer::ModelTypeStore::RecordList> data) {
+        entries = std::move(data);
+      }));
+  task_environment_.RunUntilIdle();
+
+  // Verify the migrated data
+  ASSERT_TRUE(entries);
+  EXPECT_EQ(entries->size(), 1u);
+  const syncer::ModelTypeStore::Record& record = entries->at(0);
+  proto::SavedTabGroupData migrated_data;
+  ASSERT_TRUE(migrated_data.ParseFromString(record.value));
+
+  EXPECT_TRUE(AreGroupSpecificsEqual(migrated_data.specifics(), old_specifics));
+
+  // Verify that the migration pref is set to true.
+  EXPECT_TRUE(
+      pref_service_.GetBoolean(prefs::kSavedTabGroupSpecificsToDataMigration));
+}
+
+TEST_F(
+    SavedTabGroupSyncBridgeMigrationTest,
+    MigrateSpecificsToSavedTabGroupData_OldToNewFormat_Success_OneGroupWithOneTab) {
+  // Create a SavedTabGroup with one tab and serialize in the old format.
+  SavedTabGroup group(u"Test Group", tab_groups::TabGroupColorId::kBlue, {}, 0,
+                      base::Uuid::GenerateRandomV4());
+  SavedTabGroupTab tab_1(GURL("https://website.com"), u"Website Title",
+                         group.saved_guid(), 0);
+  group.AddTabLocally(tab_1);
+
+  sync_pb::SavedTabGroupSpecifics old_specifics =
+      SavedTabGroupSyncBridge::SavedTabGroupToSpecificsForTest(group);
+  sync_pb::SavedTabGroupSpecifics old_tab_specifics =
+      SavedTabGroupSyncBridge::SavedTabGroupTabToSpecificsForTest(tab_1);
+
+  std::unique_ptr<syncer::ModelTypeStore::WriteBatch> batch =
+      store_->CreateWriteBatch();
+  batch->WriteData(old_specifics.guid(), old_specifics.SerializeAsString());
+  batch->WriteData(old_tab_specifics.guid(),
+                   old_tab_specifics.SerializeAsString());
+  store_->CommitWriteBatch(std::move(batch), base::DoNothing());
+
+  // Create the bridge. That should trigger migration.
+  CreateBridge(/*has_specifics_migrated=*/false);
+  task_environment_.RunUntilIdle();
+
+  // Read the migrated data from the store.
+  std::unique_ptr<syncer::ModelTypeStore::RecordList> entries;
+  store_->ReadAllData(base::BindLambdaForTesting(
+      [&](const std::optional<syncer::ModelError>& error,
+          std::unique_ptr<syncer::ModelTypeStore::RecordList> data) {
+        entries = std::move(data);
+      }));
+  task_environment_.RunUntilIdle();
+
+  // Verify the migrated data
+  ASSERT_TRUE(entries);
+  EXPECT_EQ(entries->size(), 2u);
+  EXPECT_EQ(1u, saved_tab_group_model_.saved_tab_groups().size());
+
+  // Verify the migrated data in the model.
+  const SavedTabGroup* migrated_group =
+      saved_tab_group_model_.Get(group.saved_guid());
+  EXPECT_TRUE(migrated_group);  // The group should exist in the model
+
+  // Compare the migrated group with the original group (excluding
+  // local_group_id).
+  EXPECT_EQ(migrated_group->title(), group.title());
+  EXPECT_EQ(migrated_group->color(), group.color());
+  EXPECT_EQ(migrated_group->position(), group.position());
+
+  EXPECT_FALSE(migrated_group->local_group_id().has_value());
+
+  // Verify the migrated tabs.
+  const SavedTabGroupTab* migrated_tab =
+      migrated_group->GetTab(tab_1.saved_tab_guid());
+  EXPECT_TRUE(migrated_tab);
+  EXPECT_EQ(migrated_tab->url(), tab_1.url());
+  EXPECT_EQ(migrated_tab->title(), tab_1.title());
+
+  // Verify that the migration pref is set to true.
+  EXPECT_TRUE(
+      pref_service_.GetBoolean(prefs::kSavedTabGroupSpecificsToDataMigration));
+}
+
+TEST_F(SavedTabGroupSyncBridgeMigrationTest,
+       MigrateSpecificsToSavedTabGroupData_CorruptedData) {
+  // 1. Create invalid data.
+  std::string invalid_data = "this is not a valid protobuf";
+
+  // 2. Write the invalid data to the ModelTypeStore.
+  std::unique_ptr<syncer::ModelTypeStore::WriteBatch> batch =
+      store_->CreateWriteBatch();
+  batch->WriteData(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                   invalid_data);
+  store_->CommitWriteBatch(std::move(batch), base::DoNothing());
+
+  // 3. Create the bridge (triggering migration).
+  CreateBridge(/*has_specifics_migrated=*/false);
+  task_environment_.RunUntilIdle();
+
+  // 4. Verify that the migration didn't crash and the model is empty.
+  EXPECT_TRUE(saved_tab_group_model_.saved_tab_groups().empty());
+}
+
+TEST_F(SavedTabGroupSyncBridgeMigrationTest,
+       SavedTabGroupSyncBridgeMigrationTest_AlreadyMigrated) {
+  // Create a SavedTabGroup and serialize in the new format.
+  SavedTabGroup group(u"Test Group", tab_groups::TabGroupColorId::kBlue, {}, 0,
+                      base::Uuid::GenerateRandomV4());
+
+  proto::SavedTabGroupData group_data =
+      SavedTabGroupSyncBridge::SavedTabGroupToDataForTest(group);
+  std::unique_ptr<syncer::ModelTypeStore::WriteBatch> batch =
+      store_->CreateWriteBatch();
+  batch->WriteData(group_data.specifics().guid(),
+                   group_data.SerializeAsString());
+  store_->CommitWriteBatch(std::move(batch), base::DoNothing());
+
+  // Create the bridge with pref set to true. That should not trigger migration.
+  CreateBridge(/*has_specifics_migrated=*/true);
+  task_environment_.RunUntilIdle();
+
+  // Read the migrated data from the store.
+  std::unique_ptr<syncer::ModelTypeStore::RecordList> entries;
+  store_->ReadAllData(base::BindLambdaForTesting(
+      [&](const std::optional<syncer::ModelError>& error,
+          std::unique_ptr<syncer::ModelTypeStore::RecordList> data) {
+        entries = std::move(data);
+      }));
+  task_environment_.RunUntilIdle();
+
+  // Verify the migrated data. It should match the original.
+  ASSERT_TRUE(entries);
+  EXPECT_EQ(entries->size(), 1u);
+  const syncer::ModelTypeStore::Record& record = entries->at(0);
+  proto::SavedTabGroupData migrated_data;
+  EXPECT_EQ(group_data.SerializeAsString(), record.value);
+  ASSERT_TRUE(migrated_data.ParseFromString(record.value));
+  EXPECT_TRUE(AreGroupSpecificsEqual(migrated_data.specifics(),
+                                     group_data.specifics()));
+
+  EXPECT_TRUE(
+      pref_service_.GetBoolean(prefs::kSavedTabGroupSpecificsToDataMigration));
+}
+
+TEST_F(SavedTabGroupSyncBridgeMigrationTest,
+       SavedTabGroupSyncBridgeMigrationTest_NewFormatBeforeMigration) {
+  // Create a SavedTabGroup and serialize in the new format.
+  SavedTabGroup group(u"Test Group", tab_groups::TabGroupColorId::kBlue, {}, 0,
+                      base::Uuid::GenerateRandomV4());
+
+  proto::SavedTabGroupData group_data =
+      SavedTabGroupSyncBridge::SavedTabGroupToDataForTest(group);
+  std::unique_ptr<syncer::ModelTypeStore::WriteBatch> batch =
+      store_->CreateWriteBatch();
+  batch->WriteData(group_data.specifics().guid(),
+                   group_data.SerializeAsString());
+  store_->CommitWriteBatch(std::move(batch), base::DoNothing());
+
+  // Create the bridge with pref set to true. That should not trigger migration.
+  CreateBridge(/*has_migrated=*/false);
+  task_environment_.RunUntilIdle();
+
+  // Read the migrated data from the store.
+  std::unique_ptr<syncer::ModelTypeStore::RecordList> entries;
+  store_->ReadAllData(base::BindLambdaForTesting(
+      [&](const std::optional<syncer::ModelError>& error,
+          std::unique_ptr<syncer::ModelTypeStore::RecordList> data) {
+        entries = std::move(data);
+      }));
+  task_environment_.RunUntilIdle();
+
+  // Verify the migrated data. It should match the original.
+  ASSERT_TRUE(entries);
+  EXPECT_EQ(entries->size(), 1u);
+  const syncer::ModelTypeStore::Record& record = entries->at(0);
+  proto::SavedTabGroupData migrated_data;
+  EXPECT_EQ(group_data.SerializeAsString(), record.value);
+  ASSERT_TRUE(migrated_data.ParseFromString(record.value));
+  EXPECT_TRUE(AreGroupSpecificsEqual(migrated_data.specifics(),
+                                     group_data.specifics()));
+
+  EXPECT_TRUE(
+      pref_service_.GetBoolean(prefs::kSavedTabGroupSpecificsToDataMigration));
+}
+
+TEST_F(
+    SavedTabGroupSyncBridgeMigrationTest,
+    MigrateSpecificsToSavedTabGroupData_AlreadyNewFormatBeforeMigration_Success_OneGroupWithOneTab) {
+  // Create a SavedTabGroup with one tab and serialize in the old format.
+  SavedTabGroup group(u"Test Group", tab_groups::TabGroupColorId::kBlue, {}, 0,
+                      base::Uuid::GenerateRandomV4());
+  SavedTabGroupTab tab_1(GURL("https://website.com"), u"Website Title",
+                         group.saved_guid(), 0);
+  group.AddTabLocally(tab_1);
+
+  proto::SavedTabGroupData group_data =
+      SavedTabGroupSyncBridge::SavedTabGroupToDataForTest(group);
+  proto::SavedTabGroupData tab_data =
+      SavedTabGroupSyncBridge::SavedTabGroupTabToDataForTest(tab_1);
+
+  std::unique_ptr<syncer::ModelTypeStore::WriteBatch> batch =
+      store_->CreateWriteBatch();
+  batch->WriteData(group_data.specifics().guid(),
+                   group_data.SerializeAsString());
+  batch->WriteData(tab_data.specifics().guid(), tab_data.SerializeAsString());
+  store_->CommitWriteBatch(std::move(batch), base::DoNothing());
+
+  // Create the bridge. That should trigger migration.
+  CreateBridge(/*has_migrated=*/false);
+  task_environment_.RunUntilIdle();
+
+  // Read the migrated data from the store.
+  std::unique_ptr<syncer::ModelTypeStore::RecordList> entries;
+  store_->ReadAllData(base::BindLambdaForTesting(
+      [&](const std::optional<syncer::ModelError>& error,
+          std::unique_ptr<syncer::ModelTypeStore::RecordList> data) {
+        entries = std::move(data);
+      }));
+  task_environment_.RunUntilIdle();
+
+  // Verify the migrated data
+  ASSERT_TRUE(entries);
+  EXPECT_EQ(entries->size(), 2u);
+  EXPECT_EQ(1u, saved_tab_group_model_.saved_tab_groups().size());
+
+  // Verify the migrated data in the model.
+  const SavedTabGroup* migrated_group =
+      saved_tab_group_model_.Get(group.saved_guid());
+  EXPECT_TRUE(migrated_group);  // The group should exist in the model
+
+  // Compare the migrated group with the original group (excluding
+  // local_group_id).
+  EXPECT_EQ(migrated_group->title(), group.title());
+  EXPECT_EQ(migrated_group->color(), group.color());
+  EXPECT_EQ(migrated_group->position(), group.position());
+
+  EXPECT_FALSE(migrated_group->local_group_id().has_value());
+
+  // Verify the migrated tabs.
+  const SavedTabGroupTab* migrated_tab =
+      migrated_group->GetTab(tab_1.saved_tab_guid());
+  EXPECT_TRUE(migrated_tab);
+  EXPECT_EQ(migrated_tab->url(), tab_1.url());
+  EXPECT_EQ(migrated_tab->title(), tab_1.title());
+
+  // Verify that the migration pref is set to true.
+  EXPECT_TRUE(
+      pref_service_.GetBoolean(prefs::kSavedTabGroupSpecificsToDataMigration));
 }
 
 }  // namespace tab_groups

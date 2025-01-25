@@ -42,6 +42,7 @@
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/password_manager/android/account_storage_notice/account_storage_notice.h"
 #include "chrome/browser/password_manager/android/generated_password_saved_message_delegate.h"
 #include "chrome/browser/password_manager/android/password_manager_error_message_delegate.h"
 #include "chrome/browser/password_manager/android/password_migration_warning_startup_launcher.h"
@@ -78,7 +79,7 @@ struct PasswordGenerationUIData;
 namespace content {
 class RenderFrameHost;
 class WebContents;
-}
+}  // namespace content
 
 namespace device_reauth {
 class DeviceAuthenticator;
@@ -89,7 +90,7 @@ class FieldInfoManager;
 class WebAuthnCredentialsDelegate;
 class CredManController;
 class KeyboardReplacingSurfaceVisibilityController;
-}
+}  // namespace password_manager
 
 namespace webauthn {
 #if BUILDFLAG(IS_ANDROID)
@@ -145,13 +146,14 @@ class ChromePasswordManagerClient
       password_manager::ErrorMessageFlowType flow_type,
       password_manager::PasswordStoreBackendErrorType error_type) override;
 
-  bool ShowKeyboardReplacingSurface(
+  void ShowKeyboardReplacingSurface(
       password_manager::PasswordManagerDriver* driver,
       const password_manager::PasswordFillingParams& password_filling_params,
-      bool is_webauthn_form) override;
+      bool is_webauthn_form,
+      base::OnceCallback<void(bool)> shown_cb) override;
 #endif
 
-  bool CanUseBiometricAuthForFilling(
+  bool IsReauthBeforeFillingRequired(
       device_reauth::DeviceAuthenticator* authenticator) override;
   // Returns a pointer to the DeviceAuthenticator which is created on demand.
   // This is currently only implemented for Android, Mac and Windows. On all
@@ -187,8 +189,7 @@ class ChromePasswordManagerClient
   void PasswordWasAutofilled(
       base::span<const password_manager::PasswordForm> best_matches,
       const url::Origin& origin,
-      const std::vector<raw_ptr<const password_manager::PasswordForm,
-                                VectorExperimental>>* federated_matches,
+      base::span<const password_manager::PasswordForm> federated_matches,
       bool was_autofilled_on_pageload) override;
   void AutofillHttpAuth(
       const password_manager::PasswordForm& preferred_match,
@@ -234,9 +235,10 @@ class ChromePasswordManagerClient
   autofill::LogManager* GetLogManager() override;
   void AnnotateNavigationEntry(bool has_password_field) override;
   autofill::LanguageCode GetPageLanguage() const override;
-
   safe_browsing::PasswordProtectionService* GetPasswordProtectionService()
       const override;
+  void TriggerUserPerceptionOfPasswordManagerSurvey(
+      const std::string& filling_assistance) override;
 
 #if defined(ON_FOCUS_PING_ENABLED)
   void CheckSafeBrowsingReputation(const GURL& form_action,
@@ -248,7 +250,7 @@ class ChromePasswordManagerClient
   void MaybeReportEnterpriseLoginEvent(
       const GURL& url,
       bool is_federated,
-      const url::Origin& federated_origin,
+      const url::SchemeHostPort& federated_origin,
       const std::u16string& login_user_name) const override;
   void MaybeReportEnterprisePasswordBreachEvent(
       const std::vector<std::pair<GURL, std::u16string>>& identities)
@@ -365,6 +367,13 @@ class ChromePasswordManagerClient
 
 #if BUILDFLAG(IS_ANDROID)
   TouchToFillController* GetOrCreateTouchToFillController();
+
+  void MaybeShowAccountStorageNotice(base::OnceClosure callback);
+
+  void ShowKeyboardReplacingSurfaceOnAccountStorageNoticeDone(
+      base::WeakPtr<password_manager::ContentPasswordManagerDriver> weak_driver,
+      const password_manager::PasswordFillingParams& password_filling_params,
+      base::OnceCallback<void(bool)> shown_cb);
 #endif
 
   // content::WebContentsObserver overrides.
@@ -389,10 +398,6 @@ class ChromePasswordManagerClient
   // Checks if the current page specified in |url| fulfils the conditions for
   // the password manager to be active on it.
   bool IsPasswordManagementEnabledForCurrentPage(const GURL& url) const;
-
-  // Returns true if this profile has metrics reporting and active sync
-  // without custom sync passphrase.
-  static bool ShouldAnnotateNavigationEntries(Profile* profile);
 
   // Called back by the PasswordGenerationAgent when the generation flow is
   // completed. If |ui_data| is non-empty, will create a UI to display the
@@ -460,6 +465,8 @@ class ChromePasswordManagerClient
   SaveUpdatePasswordMessageDelegate save_update_password_message_delegate_;
   GeneratedPasswordSavedMessageDelegate
       generated_password_saved_message_delegate_;
+
+  std::unique_ptr<AccountStorageNotice> account_storage_notice_;
 #endif  // BUILDFLAG(IS_ANDROID)
 
   // As a mojo service, will be registered into service registry

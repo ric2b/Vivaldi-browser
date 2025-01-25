@@ -38,7 +38,8 @@ class TabWebContentsDelegateAndroid
     : public web_contents_delegate_android::WebContentsDelegateAndroid,
       public find_in_page::FindResultObserver {
  public:
-  TabWebContentsDelegateAndroid(JNIEnv* env, jobject obj);
+  TabWebContentsDelegateAndroid(JNIEnv* env,
+                                const jni_zero::JavaRef<jobject>& obj);
 
   TabWebContentsDelegateAndroid(const TabWebContentsDelegateAndroid&) = delete;
   TabWebContentsDelegateAndroid& operator=(
@@ -98,7 +99,7 @@ class TabWebContentsDelegateAndroid
   content::PictureInPictureResult EnterPictureInPicture(
       content::WebContents* web_contents) override;
   void ExitPictureInPicture() override;
-  bool IsBackForwardCacheSupported() override;
+  bool IsBackForwardCacheSupported(content::WebContents& web_contents) override;
   content::PreloadingEligibility IsPrerender2Supported(
       content::WebContents& web_contents) override;
   device::mojom::GeolocationContext* GetInstalledWebappGeolocationContext()

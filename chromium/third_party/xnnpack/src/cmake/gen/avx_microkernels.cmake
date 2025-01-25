@@ -163,6 +163,9 @@ SET(ALL_AVX_MICROKERNEL_SRCS
   src/f32-vbinary/gen/f32-vsubc-minmax-avx-u16.c
   src/f32-vclamp/gen/f32-vclamp-avx-u8.c
   src/f32-vclamp/gen/f32-vclamp-avx-u16.c
+  src/f32-vcopysign/gen/f32-vcopysign-avx.c
+  src/f32-vcopysign/gen/f32-vcopysignc-avx.c
+  src/f32-vcopysign/gen/f32-vrcopysignc-avx.c
   src/f32-velu/gen/f32-velu-avx-rr2-lut4-p4-perm-u8.c
   src/f32-velu/gen/f32-velu-avx-rr2-lut4-p4-perm-u16.c
   src/f32-velu/gen/f32-velu-avx-rr2-lut4-p4-perm-u24.c
@@ -181,6 +184,7 @@ SET(ALL_AVX_MICROKERNEL_SRCS
   src/f32-velu/gen/f32-velu-avx-rr2-p6-u32.c
   src/f32-velu/gen/f32-velu-avx-rr2-p6-u40.c
   src/f32-velu/gen/f32-velu-avx-rr2-p6-u48.c
+  src/f32-vgelu/gen/f32-vgelu-avx-rational-12-10-div.c
   src/f32-vhswish/gen/f32-vhswish-avx-u8.c
   src/f32-vhswish/gen/f32-vhswish-avx-u16.c
   src/f32-vlrelu/gen/f32-vlrelu-avx-u8.c
@@ -224,64 +228,11 @@ SET(ALL_AVX_MICROKERNEL_SRCS
   src/f32-vsqrt/gen/f32-vsqrt-avx-sqrt-u8.c
   src/f32-vsqrt/gen/f32-vsqrt-avx-sqrt-u16.c
   src/f32-vsqrt/gen/f32-vsqrt-avx-sqrt-u32.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-lut4-p4h2ts-perm-div-u8.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-lut4-p4h2ts-perm-div-u16.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-lut4-p4h2ts-perm-div-u24.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-lut4-p4h2ts-perm-div-u32.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-lut4-p4h2ts-perm-div-u40.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-lut4-p4h2ts-perm-div-u48.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-lut4-p4h2ts-perm-div-u56.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-lut4-p4h2ts-perm-div-u64.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-lut4-p4h2ts-perm-div-u72.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-lut4-p4h2ts-perm-div-u80.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-lut8-p4h3ts-div-u8.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-lut8-p4h3ts-div-u16.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-lut8-p4h3ts-div-u24.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-lut8-p4h3ts-div-u32.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-div-u8.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-div-u16.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-div-u24.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-div-u32.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-div-u40.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-div-u48.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-div-u56.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-div-u64.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-div-u72.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-div-u80.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr1-u8.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr1-u16.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr1-u24.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr1-u32.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr1-u40.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr1-u48.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr1-u56.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr1-u64.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr1-u72.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr1-u80.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr2-u8.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr2-u16.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr2-u24.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr2-u32.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr2-u40.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr2-u48.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr2-u56.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr2-u64.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr2-u72.c
-  src/f32-vtanh/gen/f32-vtanh-avx-expm1minus-rr1-p6h5ts-nr2-u80.c
-  src/f32-vtanh/gen/f32-vtanh-avx-rational-9-6-div-u8.c
-  src/f32-vtanh/gen/f32-vtanh-avx-rational-9-6-div-u16.c
-  src/f32-vtanh/gen/f32-vtanh-avx-rational-9-6-div-u24.c
-  src/f32-vtanh/gen/f32-vtanh-avx-rational-9-6-div-u32.c
-  src/f32-vtanh/gen/f32-vtanh-avx-rational-9-6-nr-u8.c
-  src/f32-vtanh/gen/f32-vtanh-avx-rational-9-6-nr-u16.c
-  src/f32-vtanh/gen/f32-vtanh-avx-rational-9-6-nr-u24.c
-  src/f32-vtanh/gen/f32-vtanh-avx-rational-9-6-nr-u32.c
-  src/f32-vunary/gen/f32-vabs-avx-u8.c
-  src/f32-vunary/gen/f32-vabs-avx-u16.c
-  src/f32-vunary/gen/f32-vneg-avx-u8.c
-  src/f32-vunary/gen/f32-vneg-avx-u16.c
-  src/f32-vunary/gen/f32-vsqr-avx-u8.c
-  src/f32-vunary/gen/f32-vsqr-avx-u16.c
+  src/f32-vtanh/gen/f32-vtanh-avx-rational-9-6-div.c
+  src/f32-vtanh/gen/f32-vtanh-avx-rational-9-6-nr.c
+  src/f32-vunary/gen/f32-vabs-avx.c
+  src/f32-vunary/gen/f32-vneg-avx.c
+  src/f32-vunary/gen/f32-vsqr-avx.c
   src/math/f32-exp-avx-rr2-p5.c
   src/math/f32-expm1minus-avx-rr2-lut4-p4-perm.c
   src/math/f32-expm1minus-avx-rr2-lut16-p3.c
@@ -301,6 +252,14 @@ SET(ALL_AVX_MICROKERNEL_SRCS
   src/math/gen/f32-tanh-avx-expm1minus-rr2-lut8-p4h3ps-nr2.c
   src/math/gen/f32-tanh-avx-expm1minus-rr2-lut8-p4h3ts-nr1.c
   src/math/gen/f32-tanh-avx-expm1minus-rr2-lut8-p4h3ts-nr2.c
+  src/qd8-f32-qb4w-gemm/gen/qd8-f32-qb4w-gemm-1x4c8-minmax-avx-ld64.c
+  src/qd8-f32-qb4w-gemm/gen/qd8-f32-qb4w-gemm-1x4c8-minmax-avx-ld128.c
+  src/qd8-f32-qb4w-gemm/gen/qd8-f32-qb4w-gemm-2x4c8-minmax-avx-ld64.c
+  src/qd8-f32-qb4w-gemm/gen/qd8-f32-qb4w-gemm-2x4c8-minmax-avx-ld128.c
+  src/qd8-f32-qb4w-gemm/gen/qd8-f32-qb4w-gemm-3x4c8-minmax-avx-ld64.c
+  src/qd8-f32-qb4w-gemm/gen/qd8-f32-qb4w-gemm-3x4c8-minmax-avx-ld128.c
+  src/qd8-f32-qb4w-gemm/gen/qd8-f32-qb4w-gemm-4x4c8-minmax-avx-ld64.c
+  src/qd8-f32-qb4w-gemm/gen/qd8-f32-qb4w-gemm-4x4c8-minmax-avx-ld128.c
   src/qd8-f32-qc4w-gemm/gen/qd8-f32-qc4w-gemm-1x4c8-minmax-avx-ld64.c
   src/qd8-f32-qc4w-gemm/gen/qd8-f32-qc4w-gemm-1x4c8-minmax-avx-ld128.c
   src/qd8-f32-qc4w-gemm/gen/qd8-f32-qc4w-gemm-2x4c8-minmax-avx-ld64.c

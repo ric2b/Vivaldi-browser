@@ -23,6 +23,9 @@ source_set("vivaldi_account") {
     "//url",
     "//vivaldi/prefs:prefs_files_generated",
   ]
+  configs += [
+    "//vivaldi/gn/config:release_kind"
+  ]
 
   if (is_android) {
     sources += [

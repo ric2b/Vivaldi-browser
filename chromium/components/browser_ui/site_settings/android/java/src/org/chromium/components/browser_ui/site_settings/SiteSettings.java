@@ -8,8 +8,11 @@ import static org.chromium.components.content_settings.PrefNames.COOKIE_CONTROLS
 
 import android.os.Bundle;
 
+import androidx.annotation.VisibleForTesting;
 import androidx.preference.Preference;
 
+import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.CustomDividerFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory.Type;
@@ -17,6 +20,10 @@ import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.CookieControlsMode;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.BrowserContextHandle;
+
+// Vivaldi
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+import org.chromium.components.content_settings.ContentSettingsType;
 
 /**
  * The main Site Settings screen, which shows all the site settings categories: All sites, Location,
@@ -27,7 +34,16 @@ import org.chromium.content_public.browser.BrowserContextHandle;
 public class SiteSettings extends BaseSiteSettingsFragment
         implements Preference.OnPreferenceClickListener, CustomDividerFragment {
     // The keys for each category shown on the Site Settings page
-    // are defined in the SiteSettingsCategory.
+    // are defined in the SiteSettingsCategory. The only exception is the permission autorevocation
+    // switch at the bottom of the page and its top divider.
+    @VisibleForTesting
+    public static final String PERMISSION_AUTOREVOCATION_PREF = "permission_autorevocation";
+
+    @VisibleForTesting
+    public static final String PERMISSION_AUTOREVOCATION_HISTOGRAM_NAME =
+            "Settings.SafetyHub.AutorevokeUnusedSitePermissions.Changed";
+
+    private static final String DIVIDER_PREF = "divider";
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -60,6 +76,12 @@ public class SiteSettings extends BaseSiteSettingsFragment
             if (!getSiteSettingsDelegate().isCategoryVisible(type)) {
                 getPreferenceScreen().removePreference(findPreference(type));
             }
+        }
+
+        // Remove the permission autorevocation preference if Safety Hub is not enabled.
+        if (!getSiteSettingsDelegate().isSafetyHubEnabled()) {
+            getPreferenceScreen().removePreference(findPreference(PERMISSION_AUTOREVOCATION_PREF));
+            getPreferenceScreen().removePreference(findPreference(DIVIDER_PREF));
         }
     }
 
@@ -136,6 +158,12 @@ public class SiteSettings extends BaseSiteSettingsFragment
             } else if (Type.REQUEST_DESKTOP_SITE == prefCategory) {
                 p.setSummary(ContentSettingsResources.getDesktopSiteListSummary(checked));
             } else if (Type.AUTO_DARK_WEB_CONTENT == prefCategory) {
+                // Vivaldi - VAB-7122: sync the site settings dark mode option with theme settings
+                checked = WebsitePreferenceBridge.isContentSettingEnabled(
+                                  browserContextHandle, ContentSettingsType.AUTO_DARK_WEB_CONTENT)
+                        && ChromeSharedPreferences.getInstance().readBoolean(
+                                "dark_mode_for_webpages", false);
+                // Vivaldi End
                 p.setSummary(ContentSettingsResources.getAutoDarkWebContentListSummary(checked));
             } else if (Type.ZOOM == prefCategory) {
                 // Don't want to set a summary for Zoom because we don't want any message to display
@@ -181,6 +209,21 @@ public class SiteSettings extends BaseSiteSettingsFragment
                                 getSiteSettingsDelegate()
                                         .isBlockAll3PCDEnabledInTrackingProtection()));
             }
+        }
+
+        // For the permission autorevocation switch.
+        ChromeSwitchPreference switch_pref =
+                (ChromeSwitchPreference) findPreference(PERMISSION_AUTOREVOCATION_PREF);
+        if (switch_pref != null) {
+            switch_pref.setChecked(getSiteSettingsDelegate().isPermissionAutorevocationEnabled());
+            switch_pref.setOnPreferenceChangeListener(
+                    (preference, newValue) -> {
+                        boolean boolValue = (boolean) newValue;
+                        getSiteSettingsDelegate().setPermissionAutorevocationEnabled(boolValue);
+                        RecordHistogram.recordBooleanHistogram(
+                                PERMISSION_AUTOREVOCATION_HISTOGRAM_NAME, boolValue);
+                        return true;
+                    });
         }
     }
 

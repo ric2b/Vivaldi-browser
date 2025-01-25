@@ -520,7 +520,9 @@ public class SearchEngineAdapter extends BaseAdapter
 
         // Vivaldi - Custom search engine changes
         TextView shortcut = view.findViewById(R.id.shortcut);
+        if (shortcut != null) { // Vivaldi VAB-9739
         shortcut.setText(templateUrl.getKeyword());
+        }
         try {
             URL itemUrl = new URL(templateUrl.getURL());
             url.setText(itemUrl.getHost());

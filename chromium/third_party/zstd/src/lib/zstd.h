@@ -57,7 +57,7 @@ extern "C" {
 #else
 #  if defined (__cplusplus) && (__cplusplus >= 201402) /* C++14 or greater */
 #    define ZSTD_DEPRECATED(message) [[deprecated(message)]]
-#  elif (defined(GNUC) && (GNUC > 4 || (GNUC == 4 && GNUC_MINOR >= 5))) || defined(__clang__)
+#  elif (defined(GNUC) && (GNUC > 4 || (GNUC == 4 && GNUC_MINOR >= 5))) || defined(__clang__) || defined(__IAR_SYSTEMS_ICC__)
 #    define ZSTD_DEPRECATED(message) __attribute__((deprecated(message)))
 #  elif defined(__GNUC__) && (__GNUC__ >= 3)
 #    define ZSTD_DEPRECATED(message) __attribute__((deprecated))
@@ -157,37 +157,40 @@ ZSTDLIB_API size_t ZSTD_compress( void* dst, size_t dstCapacity,
                                   int compressionLevel);
 
 /*! ZSTD_decompress() :
- *  `compressedSize` : must be the _exact_ size of some number of compressed and/or skippable frames.
- *  `dstCapacity` is an upper bound of originalSize to regenerate.
- *  If user cannot imply a maximum upper bound, it's better to use streaming mode to decompress data.
- *  @return : the number of bytes decompressed into `dst` (<= `dstCapacity`),
- *            or an errorCode if it fails (which can be tested using ZSTD_isError()). */
+ * `compressedSize` : must be the _exact_ size of some number of compressed and/or skippable frames.
+ *  Multiple compressed frames can be decompressed at once with this method.
+ *  The result will be the concatenation of all decompressed frames, back to back.
+ * `dstCapacity` is an upper bound of originalSize to regenerate.
+ *  First frame's decompressed size can be extracted using ZSTD_getFrameContentSize().
+ *  If maximum upper bound isn't known, prefer using streaming mode to decompress data.
+ * @return : the number of bytes decompressed into `dst` (<= `dstCapacity`),
+ *           or an errorCode if it fails (which can be tested using ZSTD_isError()). */
 ZSTDLIB_API size_t ZSTD_decompress( void* dst, size_t dstCapacity,
                               const void* src, size_t compressedSize);
 
 /*! ZSTD_getFrameContentSize() : requires v1.3.0+
- *  `src` should point to the start of a ZSTD encoded frame.
- *  `srcSize` must be at least as large as the frame header.
- *            hint : any size >= `ZSTD_frameHeaderSize_max` is large enough.
- *  @return : - decompressed size of `src` frame content, if known
- *            - ZSTD_CONTENTSIZE_UNKNOWN if the size cannot be determined
- *            - ZSTD_CONTENTSIZE_ERROR if an error occurred (e.g. invalid magic number, srcSize too small)
- *   note 1 : a 0 return value means the frame is valid but "empty".
- *   note 2 : decompressed size is an optional field, it may not be present, typically in streaming mode.
- *            When `return==ZSTD_CONTENTSIZE_UNKNOWN`, data to decompress could be any size.
- *            In which case, it's necessary to use streaming mode to decompress data.
- *            Optionally, application can rely on some implicit limit,
- *            as ZSTD_decompress() only needs an upper bound of decompressed size.
- *            (For example, data could be necessarily cut into blocks <= 16 KB).
- *   note 3 : decompressed size is always present when compression is completed using single-pass functions,
- *            such as ZSTD_compress(), ZSTD_compressCCtx() ZSTD_compress_usingDict() or ZSTD_compress_usingCDict().
- *   note 4 : decompressed size can be very large (64-bits value),
- *            potentially larger than what local system can handle as a single memory segment.
- *            In which case, it's necessary to use streaming mode to decompress data.
- *   note 5 : If source is untrusted, decompressed size could be wrong or intentionally modified.
- *            Always ensure return value fits within application's authorized limits.
- *            Each application can set its own limits.
- *   note 6 : This function replaces ZSTD_getDecompressedSize() */
+ * `src` should point to the start of a ZSTD encoded frame.
+ * `srcSize` must be at least as large as the frame header.
+ *           hint : any size >= `ZSTD_frameHeaderSize_max` is large enough.
+ * @return : - decompressed size of `src` frame content, if known
+ *           - ZSTD_CONTENTSIZE_UNKNOWN if the size cannot be determined
+ *           - ZSTD_CONTENTSIZE_ERROR if an error occurred (e.g. invalid magic number, srcSize too small)
+ *  note 1 : a 0 return value means the frame is valid but "empty".
+ *  note 2 : decompressed size is an optional field, it may not be present (typically in streaming mode).
+ *           When `return==ZSTD_CONTENTSIZE_UNKNOWN`, data to decompress could be any size.
+ *           In which case, it's necessary to use streaming mode to decompress data.
+ *           Optionally, application can rely on some implicit limit,
+ *           as ZSTD_decompress() only needs an upper bound of decompressed size.
+ *           (For example, data could be necessarily cut into blocks <= 16 KB).
+ *  note 3 : decompressed size is always present when compression is completed using single-pass functions,
+ *           such as ZSTD_compress(), ZSTD_compressCCtx() ZSTD_compress_usingDict() or ZSTD_compress_usingCDict().
+ *  note 4 : decompressed size can be very large (64-bits value),
+ *           potentially larger than what local system can handle as a single memory segment.
+ *           In which case, it's necessary to use streaming mode to decompress data.
+ *  note 5 : If source is untrusted, decompressed size could be wrong or intentionally modified.
+ *           Always ensure return value fits within application's authorized limits.
+ *           Each application can set its own limits.
+ *  note 6 : This function replaces ZSTD_getDecompressedSize() */
 #define ZSTD_CONTENTSIZE_UNKNOWN (0ULL - 1)
 #define ZSTD_CONTENTSIZE_ERROR   (0ULL - 2)
 ZSTDLIB_API unsigned long long ZSTD_getFrameContentSize(const void *src, size_t srcSize);
@@ -392,7 +395,7 @@ typedef enum {
                               * Special: value 0 means "use default strategy". */
 
     ZSTD_c_targetCBlockSize=130, /* v1.5.6+
-                                  * Attempts to fit compressed block size into approximatively targetCBlockSize.
+                                  * Attempts to fit compressed block size into approximately targetCBlockSize.
                                   * Bound by ZSTD_TARGETCBLOCKSIZE_MIN and ZSTD_TARGETCBLOCKSIZE_MAX.
                                   * Note that it's not a guarantee, just a convergence target (default:0).
                                   * No target when targetCBlockSize == 0.
@@ -855,7 +858,7 @@ ZSTDLIB_API size_t ZSTD_endStream(ZSTD_CStream* zcs, ZSTD_outBuffer* output);
 *
 *  A ZSTD_DStream object is required to track streaming operations.
 *  Use ZSTD_createDStream() and ZSTD_freeDStream() to create/release resources.
-*  ZSTD_DStream objects can be reused multiple times.
+*  ZSTD_DStream objects can be re-employed multiple times.
 *
 *  Use ZSTD_initDStream() to start a new decompression operation.
 * @return : recommended first input size
@@ -865,16 +868,21 @@ ZSTDLIB_API size_t ZSTD_endStream(ZSTD_CStream* zcs, ZSTD_outBuffer* output);
 *  The function will update both `pos` fields.
 *  If `input.pos < input.size`, some input has not been consumed.
 *  It's up to the caller to present again remaining data.
+*
 *  The function tries to flush all data decoded immediately, respecting output buffer size.
 *  If `output.pos < output.size`, decoder has flushed everything it could.
-*  But if `output.pos == output.size`, there might be some data left within internal buffers.,
+*
+*  However, when `output.pos == output.size`, it's more difficult to know.
+*  If @return > 0, the frame is not complete, meaning
+*  either there is still some data left to flush within internal buffers,
+*  or there is more input to read to complete the frame (or both).
 *  In which case, call ZSTD_decompressStream() again to flush whatever remains in the buffer.
 *  Note : with no additional input provided, amount of data flushed is necessarily <= ZSTD_BLOCKSIZE_MAX.
 * @return : 0 when a frame is completely decoded and fully flushed,
 *        or an error code, which can be tested using ZSTD_isError(),
 *        or any other value > 0, which means there is still some decoding or flushing to do to complete current frame :
 *                                the return value is a suggested next input size (just a hint for better latency)
-*                                that will never request more than the remaining frame size.
+*                                that will never request more than the remaining content of the compressed frame.
 * *******************************************************************************/
 
 typedef ZSTD_DCtx ZSTD_DStream;  /**< DCtx and DStream are now effectively same object (>= v1.3.0) */
@@ -901,9 +909,10 @@ ZSTDLIB_API size_t ZSTD_initDStream(ZSTD_DStream* zds);
  * Function will update both input and output `pos` fields exposing current state via these fields:
  * - `input.pos < input.size`, some input remaining and caller should provide remaining input
  *   on the next call.
- * - `output.pos < output.size`, decoder finished and flushed all remaining buffers.
- * - `output.pos == output.size`, potentially uncflushed data present in the internal buffers,
- *   call ZSTD_decompressStream() again to flush remaining data to output.
+ * - `output.pos < output.size`, decoder flushed internal output buffer.
+ * - `output.pos == output.size`, unflushed data potentially present in the internal buffers,
+ *   check ZSTD_decompressStream() @return value,
+ *   if > 0, invoke it again to flush remaining data to output.
  * Note : with no additional input, amount of data flushed <= ZSTD_BLOCKSIZE_MAX.
  *
  * @return : 0 when a frame is completely decoded and fully flushed,
@@ -1796,7 +1805,15 @@ static
 #ifdef __GNUC__
 __attribute__((__unused__))
 #endif
+
+#if defined(__clang__) && __clang_major__ >= 5
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant"
+#endif
 ZSTD_customMem const ZSTD_defaultCMem = { NULL, NULL, NULL };  /**< this constant defers to stdlib's functions */
+#if defined(__clang__) && __clang_major__ >= 5
+#pragma clang diagnostic pop
+#endif
 
 ZSTDLIB_STATIC_API ZSTD_CCtx*    ZSTD_createCCtx_advanced(ZSTD_customMem customMem);
 ZSTDLIB_STATIC_API ZSTD_CStream* ZSTD_createCStream_advanced(ZSTD_customMem customMem);

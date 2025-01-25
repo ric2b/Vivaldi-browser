@@ -11,11 +11,15 @@
 #include "components/saved_tab_groups/saved_tab_group.h"
 #include "components/saved_tab_groups/saved_tab_group_model.h"
 #include "components/saved_tab_groups/saved_tab_group_tab.h"
+#include "components/saved_tab_groups/types.h"
+#include "components/tab_groups/tab_group_visual_data.h"
 
 namespace tab_groups {
 namespace stats {
 constexpr base::TimeDelta kModifiedThreshold = base::Days(30);
 
+// Only used for desktop code that uses SavedTabGroupKeyedService. Soon to be
+// deprecated.
 void RecordSavedTabGroupMetrics(SavedTabGroupModel* model) {
   base::UmaHistogramCounts10000("TabGroups.SavedTabGroupCount", model->Count());
 
@@ -82,6 +86,49 @@ void RecordTabCountMismatchOnConnect(size_t tabs_in_saved_group,
         "TabGroups.SavedTabGroups.TabCountDifference.Negative",
         tabs_in_saved_group - tabs_in_group);
   }
+}
+
+void RecordMigrationResult(MigrationResult migration_result) {
+  base::UmaHistogramEnumeration(
+      "TabGroups.SavedTabGroupSyncBridge.MigrationResult", migration_result,
+      MigrationResult::kCount);
+}
+
+void RecordSpecificsParseFailureCount(int parse_failure_count,
+                                      int total_entries) {
+  int parse_failure_percentage = 0;
+  if (total_entries != 0) {
+    parse_failure_percentage = base::ClampRound(
+        100.f * (static_cast<float>(parse_failure_count) / total_entries));
+  }
+
+  base::UmaHistogramPercentage(
+      "TabGroups.SpecificsToDataMigration.ParseFailurePercentage",
+      parse_failure_percentage);
+}
+
+void RecordParsedSavedTabGroupDataCount(int parsed_entries_count,
+                                        int total_entries) {
+  int parse_failure_percentage = 0;
+  if (total_entries != 0) {
+    parse_failure_percentage = base::ClampRound(
+        100.f * (static_cast<float>(total_entries - parsed_entries_count) /
+                 total_entries));
+  }
+
+  base::UmaHistogramPercentage(
+      "TabGroups.ParseSavedTabGroupDataEntries.ParseFailurePercentage",
+      parse_failure_percentage);
+}
+
+void RecordTabGroupVisualsMetrics(
+    const tab_groups::TabGroupVisualData* visual_data) {
+  if (!visual_data) {
+    return;
+  }
+
+  base::UmaHistogramCounts100("TabGroups.Sync.TabGroupTitleLength",
+                              visual_data->title().length());
 }
 
 }  // namespace stats

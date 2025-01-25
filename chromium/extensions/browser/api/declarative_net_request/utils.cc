@@ -20,6 +20,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "components/url_pattern_index/url_pattern_index.h"
+#include "components/version_info/channel.h"
 #include "components/web_cache/browser/web_cache_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/api/declarative_net_request/composite_matcher.h"
@@ -33,6 +34,7 @@
 #include "extensions/common/api/declarative_net_request/dnr_manifest_data.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension_features.h"
+#include "extensions/common/features/feature_channel.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "third_party/flatbuffers/src/include/flatbuffers/flatbuffers.h"
@@ -48,7 +50,7 @@ namespace flat_rule = url_pattern_index::flat;
 // url_pattern_index.fbs. Whenever an extension with an indexed ruleset format
 // version different from the one currently used by Chrome is loaded, the
 // extension ruleset will be reindexed.
-constexpr int kIndexedRulesetFormatVersion = 32;
+constexpr int kIndexedRulesetFormatVersion = 33;
 
 // This static assert is meant to catch cases where
 // url_pattern_index::kUrlPatternIndexFormatVersion is incremented without
@@ -228,7 +230,7 @@ dnr_api::ResourceType GetDNRResourceType(WebRequestResourceType resource_type) {
     case WebRequestResourceType::WEBBUNDLE:
       return dnr_api::ResourceType::kWebbundle;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return dnr_api::ResourceType::kOther;
 }
 
@@ -267,10 +269,10 @@ WebRequestResourceType GetWebRequestResourceType(
     case dnr_api::ResourceType::kWebbundle:
       return WebRequestResourceType::WEBBUNDLE;
     case dnr_api::ResourceType::kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return WebRequestResourceType::OTHER;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return WebRequestResourceType::OTHER;
 }
 
@@ -339,7 +341,7 @@ flat::ActionType ConvertToFlatActionType(dnr_api::RuleActionType action_type) {
     case dnr_api::RuleActionType::kNone:
       break;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return flat::ActionType_block;
 }
 
@@ -716,7 +718,7 @@ std::string GetParseError(ParseResult error_reason, int rule_id) {
           kErrorResponseHeaderRuleCannotModifyRequestHeaders,
           base::NumberToString(rule_id));
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -753,7 +755,7 @@ flat_rule::ElementType GetElementType(WebRequestResourceType web_request_type) {
     case WebRequestResourceType::WEB_TRANSPORT:
       return flat_rule::ElementType_WEBTRANSPORT;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return flat_rule::ElementType_OTHER;
 }
 
@@ -792,7 +794,7 @@ flat_rule::ElementType GetElementType(dnr_api::ResourceType resource_type) {
     case dnr_api::ResourceType::kOther:
       return flat_rule::ElementType_OTHER;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return flat_rule::ElementType_NONE;
 }
 
@@ -836,7 +838,7 @@ flat_rule::RequestMethod GetRequestMethod(
     dnr_api::RequestMethod request_method) {
   switch (request_method) {
     case dnr_api::RequestMethod::kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return flat_rule::RequestMethod_NONE;
     case dnr_api::RequestMethod::kConnect:
       return flat_rule::RequestMethod_CONNECT;
@@ -857,7 +859,7 @@ flat_rule::RequestMethod GetRequestMethod(
     case dnr_api::RequestMethod::kPut:
       return flat_rule::RequestMethod_PUT;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return flat_rule::RequestMethod_NONE;
 }
 
@@ -888,6 +890,14 @@ bool IsRuleSafe(const flat::UrlRuleMetadata& url_rule_metadata) {
          action_type == flat::ActionType_allow ||
          action_type == flat::ActionType_allow_all_requests ||
          action_type == flat::ActionType_upgrade_scheme;
+}
+
+bool IsResponseHeaderMatchingEnabled() {
+  // Response header matching is enabled if the feature flag is enabled.
+  // Note: This function still remains in case additional checks may need to be
+  // added back such as channel restrictions.
+  return base::FeatureList::IsEnabled(
+      extensions_features::kDeclarativeNetRequestResponseHeaderMatching);
 }
 
 }  // namespace extensions::declarative_net_request

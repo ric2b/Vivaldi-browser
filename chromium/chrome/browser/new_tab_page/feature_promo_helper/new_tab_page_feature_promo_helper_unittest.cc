@@ -14,7 +14,6 @@
 #include "components/user_education/common/feature_promo_controller.h"
 #include "components/user_education/test/mock_feature_promo_controller.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "ui/base/ui_base_features.h"
 
 class NewTabPageFeaturePromoHelperTest : public BrowserWithTestWindowTest {
  protected:
@@ -37,13 +36,6 @@ class NewTabPageFeaturePromoHelperTest : public BrowserWithTestWindowTest {
                 tab_->GetBrowserContext()));
   }
 
-  void SetChromeRefresh2023() {
-    iph_feature_list_.Reset();
-    iph_feature_list_.InitAndEnableFeatures(
-        {feature_engagement::kIPHDesktopCustomizeChromeRefreshFeature,
-         features::kChromeRefresh2023});
-  }
-
   NewTabPageFeaturePromoHelper* helper() { return helper_.get(); }
 
   std::unique_ptr<BrowserWindow> CreateBrowserWindow() override {
@@ -61,11 +53,10 @@ class NewTabPageFeaturePromoHelperTest : public BrowserWithTestWindowTest {
   }
 
   TestingProfile::TestingFactories GetTestingFactories() override {
-    TestingProfile::TestingFactories factories = {
-        {feature_engagement::TrackerFactory::GetInstance(),
-         base::BindRepeating(
-             NewTabPageFeaturePromoHelperTest::MakeTestTracker)}};
-    return factories;
+    return {TestingProfile::TestingFactory{
+        feature_engagement::TrackerFactory::GetInstance(),
+        base::BindRepeating(
+            NewTabPageFeaturePromoHelperTest::MakeTestTracker)}};
   }
 
   content::WebContents* tab() { return tab_; }

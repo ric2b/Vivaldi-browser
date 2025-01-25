@@ -30,13 +30,16 @@ ContentIDs ContentIDsForType(TipsNotificationType type) {
     case TipsNotificationType::kSignin:
       return {IDS_IOS_NOTIFICATIONS_TIPS_SIGNIN_TITLE,
               IDS_IOS_NOTIFICATIONS_TIPS_SIGNIN_BODY};
+    case TipsNotificationType::kSetUpListContinuation:
+      return {IDS_IOS_NOTIFICATIONS_TIPS_SETUPLIST_CONTINUATION_TITLE,
+              IDS_IOS_NOTIFICATIONS_TIPS_SETUPLIST_CONTINUATION_BODY};
     case TipsNotificationType::kError:
       NOTREACHED_NORETURN();
   }
 }
 
 // A bitfield with all notification types enabled.
-const int kEnableAllNotifications = 7;
+const int kEnableAllNotifications = 23;
 
 }  // namespace
 
@@ -88,14 +91,15 @@ UNNotificationContent* ContentForTipsNotificationType(
   return content;
 }
 
+base::TimeDelta TipsNotificationTriggerDelta() {
+  return GetFieldTrialParamByFeatureAsTimeDelta(
+      kIOSTipsNotifications, kIOSTipsNotificationsTriggerTimeParam,
+      kTipsNotificationDefaultTriggerDelta);
+}
+
 UNNotificationTrigger* TipsNotificationTrigger() {
-  NSTimeInterval trigger_interval =
-      GetFieldTrialParamByFeatureAsTimeDelta(
-          kIOSTipsNotifications, kIOSTipsNotificationsTriggerTimeParam,
-          kTipsNotificationDefaultTriggerDelta)
-          .InSecondsF();
   return [UNTimeIntervalNotificationTrigger
-      triggerWithTimeInterval:trigger_interval
+      triggerWithTimeInterval:TipsNotificationTriggerDelta().InSecondsF()
                       repeats:NO];
 }
 

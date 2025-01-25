@@ -199,7 +199,7 @@ const char* ToString(bad_message::BadMessageReason bad_message_code) {
     case bad_message::BadMessageReason::EFD_INVALID_EXTENSION_ID_FOR_PROCESS:
       return "LocalFrameHost::Request: renderer never hosted such extension";
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "LocalFrameHost::Request encountered unrecognized validation "
              "error.";
   }
@@ -658,6 +658,9 @@ ExtensionFunctionDispatcher::CreateExtensionFunction(
   function->set_has_callback(params.has_callback);
   function->set_user_gesture(params.user_gesture);
   function->set_extension(extension);
+  if (params.js_callstack.has_value()) {
+    function->set_js_callstack(*params.js_callstack);
+  }
   function->set_response_callback(std::move(callback));
   function->set_source_context_type(context_type);
   function->set_source_process_id(requesting_process_id);

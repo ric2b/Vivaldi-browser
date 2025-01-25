@@ -5,6 +5,7 @@
 #include "quiche/quic/core/http/quic_headers_stream.h"
 
 #include <cstdint>
+#include <memory>
 #include <ostream>
 #include <string>
 #include <tuple>
@@ -13,6 +14,8 @@
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "quiche/http2/core/recording_headers_handler.h"
+#include "quiche/http2/test_tools/spdy_test_utils.h"
 #include "quiche/quic/core/crypto/null_encrypter.h"
 #include "quiche/quic/core/http/spdy_utils.h"
 #include "quiche/quic/core/quic_data_writer.h"
@@ -26,16 +29,14 @@
 #include "quiche/quic/test_tools/quic_spdy_session_peer.h"
 #include "quiche/quic/test_tools/quic_stream_peer.h"
 #include "quiche/quic/test_tools/quic_test_utils.h"
+#include "quiche/common/http/http_header_block.h"
 #include "quiche/common/quiche_endian.h"
 #include "quiche/spdy/core/http2_frame_decoder_adapter.h"
-#include "quiche/spdy/core/http2_header_block.h"
-#include "quiche/spdy/core/recording_headers_handler.h"
 #include "quiche/spdy/core/spdy_alt_svc_wire_format.h"
 #include "quiche/spdy/core/spdy_protocol.h"
-#include "quiche/spdy/test_tools/spdy_test_utils.h"
 
+using quiche::HttpHeaderBlock;
 using spdy::ERROR_CODE_PROTOCOL_ERROR;
-using spdy::Http2HeaderBlock;
 using spdy::RecordingHeadersHandler;
 using spdy::SETTINGS_ENABLE_PUSH;
 using spdy::SETTINGS_HEADER_TABLE_SIZE;
@@ -354,7 +355,7 @@ class QuicHeadersStreamTest : public QuicTestWithParam<TestParams> {
   StrictMock<MockQuicConnection>* connection_;
   StrictMock<MockQuicSpdySession> session_;
   QuicHeadersStream* headers_stream_;
-  Http2HeaderBlock headers_;
+  HttpHeaderBlock headers_;
   std::unique_ptr<RecordingHeadersHandler> headers_handler_;
   std::string body_;
   std::string saved_data_;

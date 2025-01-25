@@ -394,6 +394,23 @@ def CMDsetlabel(parser, args):
 
 
 @subcommand.usage('')
+def CMDrestore(parser, args):
+    """Restores a Gerrit change."""
+    parser.add_option('-c', '--change', type=str, help='change number')
+    parser.add_option('-m',
+                      '--message',
+                      default='',
+                      help='reason for restoring')
+
+    (opt, args) = parser.parse_args(args)
+    assert opt.change, "-c not defined"
+    result = gerrit_util.RestoreChange(
+        urllib.parse.urlparse(opt.host).netloc, opt.change, opt.message)
+    logging.info(result)
+    write_result(result, opt)
+
+
+@subcommand.usage('')
 def CMDabandon(parser, args):
     """Abandons a Gerrit change."""
     parser.add_option('-c', '--change', type=int, help='change number')

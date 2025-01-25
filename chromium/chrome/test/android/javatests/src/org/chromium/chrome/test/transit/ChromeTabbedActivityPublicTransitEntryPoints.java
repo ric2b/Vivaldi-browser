@@ -5,10 +5,14 @@
 package org.chromium.chrome.test.transit;
 
 import org.chromium.base.test.transit.BatchedPublicTransitRule;
+import org.chromium.base.test.transit.EntryPointSentinelStation;
 import org.chromium.base.test.transit.Station;
-import org.chromium.base.test.transit.Trip;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.transit.ntp.RegularNewTabPageStation;
+import org.chromium.chrome.test.transit.page.PageStation;
+import org.chromium.chrome.test.transit.page.WebPageStation;
+import org.chromium.components.embedder_support.util.UrlConstants;
 
 import java.util.concurrent.Callable;
 
@@ -28,13 +32,28 @@ public class ChromeTabbedActivityPublicTransitEntryPoints {
      * @return the active entry {@link PageStation}
      */
     public WebPageStation startOnBlankPageNonBatched() {
+        EntryPointSentinelStation sentinel = new EntryPointSentinelStation();
+        sentinel.setAsEntryPoint();
+
         WebPageStation entryPageStation =
-                WebPageStation.newWebPageStationBuilder()
-                        .withActivityTestRule(mActivityTestRule)
-                        .withEntryPoint()
-                        .build();
-        return Trip.travelSync(
-                null, entryPageStation, () -> mActivityTestRule.startMainActivityOnBlankPage());
+                WebPageStation.newWebPageStationBuilder().withEntryPoint().build();
+        return sentinel.travelToSync(
+                entryPageStation, mActivityTestRule::startMainActivityOnBlankPage);
+    }
+
+    /**
+     * Start the test in an NTP.
+     *
+     * @return the active entry {@link RegularNewTabPageStation}
+     */
+    public RegularNewTabPageStation startOnNtpNonBatched() {
+        EntryPointSentinelStation sentinel = new EntryPointSentinelStation();
+        sentinel.setAsEntryPoint();
+        RegularNewTabPageStation entryPageStation =
+                RegularNewTabPageStation.newBuilder().withEntryPoint().build();
+        return sentinel.travelToSync(
+                entryPageStation,
+                () -> mActivityTestRule.startMainActivityWithURL(UrlConstants.NTP_URL));
     }
 
     /**
@@ -44,6 +63,16 @@ public class ChromeTabbedActivityPublicTransitEntryPoints {
      */
     public PageStation startOnBlankPage(BatchedPublicTransitRule<PageStation> batchedRule) {
         return startBatched(batchedRule, this::startOnBlankPageNonBatched);
+    }
+
+    /**
+     * Start the batched test in the New Tab Page.
+     *
+     * @return the active entry {@link RegularNewTabPageStation}
+     */
+    public RegularNewTabPageStation startOnNtp(
+            BatchedPublicTransitRule<RegularNewTabPageStation> batchedRule) {
+        return startBatched(batchedRule, this::startOnNtpNonBatched);
     }
 
     private <T extends Station> T startBatched(
@@ -61,5 +90,20 @@ public class ChromeTabbedActivityPublicTransitEntryPoints {
             mActivityTestRule.setActivity(sActivity);
         }
         return station;
+    }
+
+    /**
+     * Hop onto Public Transit when the test has already started the ChromeTabbedActivity in a blank
+     * page.
+     *
+     * @return the active entry {@link WebPageStation}
+     */
+    public WebPageStation alreadyStartedOnBlankPageNonBatched() {
+        EntryPointSentinelStation sentinel = new EntryPointSentinelStation();
+        sentinel.setAsEntryPoint();
+
+        WebPageStation entryPageStation =
+                WebPageStation.newWebPageStationBuilder().withEntryPoint().build();
+        return sentinel.travelToSync(entryPageStation, /* trigger= */ null);
     }
 }

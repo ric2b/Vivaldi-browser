@@ -17,11 +17,17 @@
     Boston, MA 02110-1301, USA.
 */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_TEXT_SEGMENTED_STRING_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_TEXT_SEGMENTED_STRING_H_
 
 #include "base/check_op.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/deque.h"
@@ -156,14 +162,16 @@ class PLATFORM_EXPORT SegmentedSubstring {
   }
 
   union {
-    const LChar* string8_ptr;
-    const UChar* string16_ptr;
+    // RAW_PTR_EXCLUSION: #union
+    RAW_PTR_EXCLUSION const LChar* string8_ptr;
+    RAW_PTR_EXCLUSION const UChar* string16_ptr;
   } data_;
-  const LChar* data_start_;
+  raw_ptr<const LChar, AllowPtrArithmetic | DanglingUntriaged> data_start_;
   // |data_last_char_| points to the last character (or nullptr). This is to
   // avoid extra computation in |CanAdvance|, which is in the critical path of
   // HTMLTokenizer.
-  const LChar* data_last_char_;
+  // RAW_PTR_EXCLUSION: End of the buffer already protected by raw_ptr.
+  RAW_PTR_EXCLUSION const LChar* data_last_char_;
   bool do_not_exclude_line_numbers_ = true;
   bool is_8bit_ = true;
   String string_;

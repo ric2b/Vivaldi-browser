@@ -463,8 +463,8 @@ void HoldingSpaceItemChipView::OnSelectionUiChanged() {
 void HoldingSpaceItemChipView::OnMouseEvent(ui::MouseEvent* event) {
   HoldingSpaceItemView::OnMouseEvent(event);
   switch (event->type()) {
-    case ui::ET_MOUSE_ENTERED:
-    case ui::ET_MOUSE_EXITED:
+    case ui::EventType::kMouseEntered:
+    case ui::EventType::kMouseExited:
       UpdateSecondaryAction();
       break;
     default:
@@ -525,7 +525,7 @@ void HoldingSpaceItemChipView::OnSecondaryActionPressed() {
   if (!holding_space_util::ExecuteInProgressCommand(
           item(), command_id,
           holding_space_metrics::EventSource::kHoldingSpaceItem)) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 

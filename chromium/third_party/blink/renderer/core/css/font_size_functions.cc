@@ -28,6 +28,11 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/css/font_size_functions.h"
 
 #include "third_party/blink/renderer/core/css_value_keywords.h"
@@ -204,7 +209,7 @@ static float AspectValue(const SimpleFontData& font_data,
                          float computed_size) {
   DCHECK(computed_size);
   const FontMetrics& font_metrics = font_data.GetFontMetrics();
-  // FIXME: The behavior for missing metrics has yet to be defined.
+  // We return fallback values for missing font metrics.
   // https://github.com/w3c/csswg-drafts/issues/6384
   float aspect_value = 1.0;
   switch (metric) {
@@ -219,11 +224,18 @@ static float AspectValue(const SimpleFontData& font_data,
       }
       break;
     case FontSizeAdjust::Metric::kIcWidth:
-      if (const std::optional<float> size =
+      if (const std::optional<float>& size =
               font_data.IdeographicAdvanceWidth()) {
         aspect_value = *size / computed_size;
       }
       break;
+    case FontSizeAdjust::Metric::kIcHeight: {
+      if (const std::optional<float>& size =
+              font_data.IdeographicAdvanceHeight()) {
+        aspect_value = *size / computed_size;
+      }
+      break;
+    }
     case FontSizeAdjust::Metric::kExHeight:
     default:
       if (font_metrics.HasXHeight()) {
@@ -240,7 +252,12 @@ std::optional<float> FontSizeFunctions::FontAspectValue(
   if (!font_data || !computed_size) {
     return std::nullopt;
   }
-  return AspectValue(*font_data, metric, computed_size);
+
+  float aspect_value = AspectValue(*font_data, metric, computed_size);
+  if (!aspect_value) {
+    return std::nullopt;
+  }
+  return aspect_value;
 }
 
 std::optional<float> FontSizeFunctions::MetricsMultiplierAdjustedFontSize(

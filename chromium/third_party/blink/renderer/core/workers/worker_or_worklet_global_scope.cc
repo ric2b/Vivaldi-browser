@@ -50,7 +50,6 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_observer.h"
 #include "third_party/blink/renderer/platform/network/http_parsers.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -161,7 +160,7 @@ class OutsideSettingsCSPDelegate final
   void ReportBlockedScriptExecutionToInspector(
       const String& directive_text) override {
     // This shouldn't be called during top-level worker script fetch.
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   void DidAddContentSecurityPolicies(
@@ -249,8 +248,9 @@ WorkerOrWorkletGlobalScope::~WorkerOrWorkletGlobalScope() = default;
 
 // EventTarget
 const AtomicString& WorkerOrWorkletGlobalScope::InterfaceName() const {
-  NOTREACHED() << "Each global scope that uses events should define its own "
-                  "interface name.";
+  NOTREACHED_IN_MIGRATION()
+      << "Each global scope that uses events should define its own "
+         "interface name.";
   return g_null_atom;
 }
 

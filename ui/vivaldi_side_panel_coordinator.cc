@@ -1,9 +1,9 @@
 #include "ui/vivaldi_side_panel_coordinator.h"
 #include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/browser.h"
 #include "extensions/schema/browser_action_utilities.h"
 #include "extensions/tools/vivaldi_tools.h"
-#include "ui/vivaldi_browser_window.h"
 
 using namespace extensions;
 
@@ -21,8 +21,8 @@ SidePanelCoordinator::~SidePanelCoordinator() {
   }
 }
 
-SidePanelCoordinator::SidePanelCoordinator(VivaldiBrowserWindow* browser_window)
-    : browser_window_(browser_window) {
+SidePanelCoordinator::SidePanelCoordinator(Browser* browser)
+    : browser_(browser) {
   Profile* p = GetProfile();
   DCHECK(p);
   if (!p)
@@ -35,13 +35,13 @@ SidePanelCoordinator::SidePanelCoordinator(VivaldiBrowserWindow* browser_window)
 }
 
 Profile * SidePanelCoordinator::GetProfile() {
-  return browser_window_->GetProfile();
+  return browser_->profile();
 }
 
 void SidePanelCoordinator::Close() {}
 
 void SidePanelCoordinator::Show(
-    std::optional<SidePanelEntryId> entry_id,
+    SidePanelEntryId entry_id,
     std::optional<SidePanelOpenTrigger> open_trigger) {}
 
 void SidePanelCoordinator::Show(
@@ -56,8 +56,6 @@ void SidePanelCoordinator::Show(
         GetProfile());
   }
 }
-
-void SidePanelCoordinator::Toggle() {}
 
 void SidePanelCoordinator::Toggle(SidePanelEntryKey key,
                                   SidePanelOpenTrigger open_trigger) {}

@@ -6,10 +6,15 @@
 import argparse
 import sys
 
+import gclient_utils
 import git_common
 
 
 def main(args):
+    if gclient_utils.IsEnvCog():
+        print('squash-branch command is not supported in non-git environment.',
+              file=sys.stderr)
+        return 1
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '-m',

@@ -4,6 +4,8 @@
 
 #include "quiche/quic/test_tools/quic_spdy_session_peer.h"
 
+#include <utility>
+
 
 #include "quiche/quic/core/http/quic_spdy_session.h"
 #include "quiche/quic/core/qpack/qpack_receive_stream.h"
@@ -47,7 +49,7 @@ void QuicSpdySessionPeer::SetMaxInboundHeaderListSize(
 
 // static
 size_t QuicSpdySessionPeer::WriteHeadersOnHeadersStream(
-    QuicSpdySession* session, QuicStreamId id, spdy::Http2HeaderBlock headers,
+    QuicSpdySession* session, QuicStreamId id, quiche::HttpHeaderBlock headers,
     bool fin, const spdy::SpdyStreamPrecedence& precedence,
     quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
         ack_listener) {

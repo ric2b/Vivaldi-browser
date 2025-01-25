@@ -3,4 +3,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-git checkout "$(git rev-parse  --abbrev-ref "@{u}")"
+if git rev-parse 2> /dev/null; then
+  git checkout "$(git rev-parse  --abbrev-ref "@{u}")"
+else
+  echo "error: not in a git repository" >&2
+  exit 1
+fi

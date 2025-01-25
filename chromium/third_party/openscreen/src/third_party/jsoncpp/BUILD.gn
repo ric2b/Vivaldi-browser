@@ -11,12 +11,6 @@ if (build_with_chromium) {
 } else {
   config("jsoncpp_config") {
     include_dirs = [ "//third_party/jsoncpp/src/include" ]
-
-    cflags_cc = [ "-Wno-implicit-fallthrough" ]
-
-    if (is_clang) {
-      cflags_cc += [ "-Wno-exit-time-destructors" ]
-    }
   }
 
   source_set("jsoncpp") {
@@ -39,6 +33,8 @@ if (build_with_chromium) {
     public_configs = [ ":jsoncpp_config" ]
 
     defines = [ "JSON_USE_EXCEPTION=0" ]
+
+    cflags_cc = [ "-Wno-implicit-fallthrough" ]
 
     include_dirs = [ "src/src/lib_json" ]
   }

@@ -29,6 +29,7 @@
 #define SRC_DAWN_NATIVE_D3D11_COMMANDRECORDINGCONTEXT_D3D11_H_
 
 #include "absl/container/flat_hash_set.h"
+#include "absl/container/inlined_vector.h"
 #include "dawn/common/MutexProtected.h"
 #include "dawn/common/NonCopyable.h"
 #include "dawn/common/Ref.h"
@@ -40,6 +41,7 @@ namespace dawn::native::d3d11 {
 
 class CommandAllocatorManager;
 class Buffer;
+class GPUUsableBuffer;
 class Device;
 
 class CommandRecordingContext;
@@ -83,7 +85,7 @@ class CommandRecordingContext {
     void Destroy();
 
     static ResultOrError<Ref<BufferBase>> CreateInternalUniformBuffer(DeviceBase* device);
-    void SetInternalUniformBuffer(Ref<BufferBase> uniformBuffer);
+    MaybeError SetInternalUniformBuffer(Ref<BufferBase> uniformBuffer);
 
     void ReleaseKeyedMutexes();
 
@@ -106,13 +108,17 @@ class CommandRecordingContext {
     // The maximum number of builtin elements is 4 (vec4). It must be multiple of 4.
     static constexpr size_t kMaxNumBuiltinElements = 4;
     // The uniform buffer for built-in variables.
-    Ref<Buffer> mUniformBuffer;
+    Ref<GPUUsableBuffer> mUniformBuffer;
     std::array<uint32_t, kMaxNumBuiltinElements> mUniformBufferData;
     bool mUniformBufferDirty = true;
 
     absl::flat_hash_set<Ref<d3d::KeyedMutex>> mAcquiredKeyedMutexes;
 
     bool mNeedsFence = false;
+
+    // List of buffers to sync their CPU accessible storages.
+    // Use inlined vector to avoid heap allocation when the vector is empty.
+    absl::InlinedVector<GPUUsableBuffer*, 1> mBuffersToSyncWithCPU;
 
     Ref<Device> mDevice;
 };
@@ -164,6 +170,11 @@ class ScopedCommandRecordingContext : public CommandRecordingContext::Guard {
     MaybeError AcquireKeyedMutex(Ref<d3d::KeyedMutex> keyedMutex) const;
 
     void SetNeedsFence() const;
+
+    // Add a buffer to a pending list for syncing CPU storages. The list is typically processed at
+    // the end of a command buffer when it is about to be submitted.
+    void AddBufferForSyncingWithCPU(GPUUsableBuffer* buffer) const;
+    MaybeError FlushBuffersForSyncingWithCPU() const;
 };
 
 // For using ID3D11DeviceContext directly. It swaps and resets ID3DDeviceContextState of

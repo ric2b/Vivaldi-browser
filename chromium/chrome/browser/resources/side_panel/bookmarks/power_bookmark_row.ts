@@ -4,19 +4,22 @@
 
 import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
+import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.js';
 import 'chrome://resources/cr_elements/cr_input/cr_input.js';
-import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/cr_elements/cr_url_list_item/cr_url_list_item.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 
+import {CrLitElement} from '//resources/lit/v3_0/lit.rollup.js';
+import type {PropertyValues} from '//resources/lit/v3_0/lit.rollup.js';
 import type {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 import type {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import type {CrUrlListItemElement} from 'chrome://resources/cr_elements/cr_url_list_item/cr_url_list_item.js';
 import {CrUrlListItemSize} from 'chrome://resources/cr_elements/cr_url_list_item/cr_url_list_item.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {getTemplate} from './power_bookmark_row.html.js';
+import {getCss} from './power_bookmark_row.css.js';
+import {getHtml} from './power_bookmark_row.html.js';
+import type {PowerBookmarksService} from './power_bookmarks_service.js';
 
 export interface PowerBookmarkRowElement {
   $: {
@@ -24,112 +27,97 @@ export interface PowerBookmarkRowElement {
   };
 }
 
-export class PowerBookmarkRowElement extends PolymerElement {
+export class PowerBookmarkRowElement extends CrLitElement {
   static get is() {
     return 'power-bookmark-row';
   }
 
-  static get template() {
-    return getTemplate();
+  static override get styles() {
+    return getCss();
   }
 
-  static get properties() {
+  override render() {
+    return getHtml.bind(this)();
+  }
+
+  static override get properties() {
     return {
-      bookmark: Object,
-      checkboxChecked: {
-        type: Boolean,
-        value: false,
-      },
-      checkboxDisabled: {
-        type: Boolean,
-        value: false,
-      },
-      compact: {
-        type: Boolean,
-        value: false,
-      },
-      description: {
-        type: String,
-        value: '',
-      },
-      descriptionMeta: {
-        type: String,
-        value: '',
-      },
-      forceHover: {
-        type: Boolean,
-        value: false,
-      },
+      bookmark: {type: Object},
+      checkboxChecked: {type: Boolean},
+      checkboxDisabled: {type: Boolean},
+      compact: {type: Boolean},
+      description: {type: String},
+      descriptionMeta: {type: String},
+      bookmarksTreeViewEnabled: {type: Boolean},
+      forceHover: {type: Boolean},
       hasCheckbox: {
         type: Boolean,
-        reflectToAttribute: true,
-        value: false,
+        reflect: true,
       },
       hasInput: {
         type: Boolean,
-        reflectToAttribute: true,
-        value: false,
+        reflect: true,
       },
-      imageUrls: {
-        type: Array,
-        value: () => [],
-      },
-      isShoppingCollection: {
-        type: Boolean,
-        value: false,
-      },
-      rowAriaDescription: {
-        type: String,
-        value: '',
-      },
-      rowAriaLabel: {
-        type: String,
-        value: '',
-      },
-      trailingIcon: {
-        type: String,
-        value: '',
-      },
-      trailingIconAriaLabel: {
-        type: String,
-        value: '',
-      },
-      trailingIconTooltip: {
-        type: String,
-        value: '',
-      },
-      listItemSize_: {
-        type: String,
-        computed: 'computeListItemSize_(compact)',
-        observer: 'onListItemSizeChanged_',
-      },
+      imageUrls: {type: Array},
+      isShoppingCollection: {type: Boolean},
+      rowAriaDescription: {type: String},
+      rowAriaLabel: {type: String},
+      trailingIcon: {type: String},
+      trailingIconAriaLabel: {type: String},
+      trailingIconTooltip: {type: String},
+      listItemSize: {type: String},
+      bookmarksService: {type: Object},
     };
   }
 
   bookmark: chrome.bookmarks.BookmarkTreeNode;
-  checkboxChecked: boolean;
-  checkboxDisabled: boolean;
-  compact: boolean;
-  description: string;
-  descriptionMeta: string;
-  forceHover: boolean;
-  hasCheckbox: boolean;
-  hasInput: boolean;
-  isShoppingCollection: boolean;
-  rowAriaDescription: string;
-  rowAriaLabel: string;
-  trailingIcon: string;
-  trailingIconAriaLabel: string;
-  trailingIconTooltip: string;
-  imageUrls: string[];
+  checkboxChecked: boolean = false;
+  checkboxDisabled: boolean = false;
+  compact: boolean = false;
+  description: string = '';
+  descriptionMeta: string = '';
+  bookmarksTreeViewEnabled: boolean =
+      loadTimeData.getBoolean('bookmarksTreeViewEnabled');
+  forceHover: boolean = false;
+  hasCheckbox: boolean = false;
+  hasInput: boolean = false;
+  isShoppingCollection: boolean = false;
+  rowAriaDescription: string = '';
+  rowAriaLabel: string = '';
+  trailingIcon: string = '';
+  trailingIconAriaLabel: string = '';
+  trailingIconTooltip: string = '';
+  imageUrls: string[] = [];
 
-  private listItemSize_: CrUrlListItemSize;
+  listItemSize: CrUrlListItemSize = CrUrlListItemSize.COMPACT;
+  bookmarksService: PowerBookmarksService;
 
   override connectedCallback() {
     super.connectedCallback();
     this.onInputDisplayChange_();
     this.addEventListener('keydown', this.onKeydown_);
     this.addEventListener('focus', this.onFocus_);
+  }
+
+  override willUpdate(changedProperties: PropertyValues<this>) {
+    super.willUpdate(changedProperties);
+
+    if (changedProperties.has('compact')) {
+      this.listItemSize =
+          this.compact ? CrUrlListItemSize.COMPACT : CrUrlListItemSize.LARGE;
+    }
+  }
+
+  override updated(changedProperties: PropertyValues<this>) {
+    super.updated(changedProperties);
+
+    if (changedProperties.has('listItemSize')) {
+      this.onListItemSizeChanged_();
+    }
+    if (changedProperties.has('hasInput') ||
+        changedProperties.has('hasCheckbox')) {
+      this.onInputDisplayChange_();
+    }
   }
 
   override focus() {
@@ -165,10 +153,6 @@ export class PowerBookmarkRowElement extends PolymerElement {
     }
   }
 
-  private computeListItemSize_(): CrUrlListItemSize {
-    return this.compact ? CrUrlListItemSize.COMPACT : CrUrlListItemSize.LARGE;
-  }
-
   private async onListItemSizeChanged_() {
     await this.$.crUrlListItem.updateComplete;
     if (this.parentNode &&
@@ -177,11 +161,11 @@ export class PowerBookmarkRowElement extends PolymerElement {
     }
   }
 
-  private isBookmarksBar_(): boolean {
-    return this.bookmark.id === loadTimeData.getString('bookmarksBarId');
+  protected isBookmarksBar_(): boolean {
+    return this.bookmark?.id === loadTimeData.getString('bookmarksBarId');
   }
 
-  private showTrailingIcon_(): boolean {
+  protected showTrailingIcon_(): boolean {
     return !this.hasInput && !this.hasCheckbox;
   }
 
@@ -195,7 +179,7 @@ export class PowerBookmarkRowElement extends PolymerElement {
   /**
    * Dispatches a custom click event when the user clicks anywhere on the row.
    */
-  private onRowClicked_(event: MouseEvent) {
+  protected onRowClicked_(event: MouseEvent) {
     // Ignore clicks on the row when it has an input, to ensure the row doesn't
     // eat input clicks. Also ignore clicks if the row has no associated
     // bookmark, or if the event is a right-click.
@@ -226,7 +210,7 @@ export class PowerBookmarkRowElement extends PolymerElement {
    * Dispatches a custom click event when the user right-clicks anywhere on the
    * row.
    */
-  private onContextMenu_(event: MouseEvent) {
+  protected onContextMenu_(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
     this.dispatchEvent(new CustomEvent('context-menu', {
@@ -243,7 +227,7 @@ export class PowerBookmarkRowElement extends PolymerElement {
    * Dispatches a custom click event when the user clicks anywhere on the
    * trailing icon button.
    */
-  private onTrailingIconClicked_(event: MouseEvent) {
+  protected onTrailingIconClicked_(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
     this.dispatchEvent(new CustomEvent('trailing-icon-clicked', {
@@ -259,7 +243,7 @@ export class PowerBookmarkRowElement extends PolymerElement {
   /**
    * Dispatches a custom click event when the user clicks on the checkbox.
    */
-  private onCheckboxChange_(event: Event) {
+  protected onCheckboxChange_(event: Event) {
     event.preventDefault();
     event.stopPropagation();
     this.dispatchEvent(new CustomEvent('checkbox-change', {
@@ -276,7 +260,7 @@ export class PowerBookmarkRowElement extends PolymerElement {
    * Triggers an input change event on enter. Extends default input behavior
    * which only triggers a change event if the value of the input has changed.
    */
-  private onInputKeyDown_(event: KeyboardEvent) {
+  protected onInputKeyDown_(event: KeyboardEvent) {
     if (event.key === 'Enter') {
       event.stopPropagation();
       this.onInputChange_(event);
@@ -298,7 +282,7 @@ export class PowerBookmarkRowElement extends PolymerElement {
    * Triggers a custom input change event when the user hits enter or the input
    * loses focus.
    */
-  private onInputChange_(event: Event) {
+  protected onInputChange_(event: Event) {
     event.preventDefault();
     event.stopPropagation();
     const inputElement =
@@ -306,10 +290,80 @@ export class PowerBookmarkRowElement extends PolymerElement {
     this.dispatchEvent(this.createInputChangeEvent_(inputElement.value));
   }
 
-  private onInputBlur_(event: Event) {
+  protected onInputBlur_(event: Event) {
     event.preventDefault();
     event.stopPropagation();
     this.dispatchEvent(this.createInputChangeEvent_(null));
+  }
+
+  protected isPriceTracked_(bookmark: chrome.bookmarks.BookmarkTreeNode):
+      boolean {
+    return !!this.bookmarksService?.getPriceTrackedInfo(bookmark);
+  }
+
+  /**
+   * Whether the given price-tracked bookmark should display as if discounted.
+   */
+  protected showDiscountedPrice_(bookmark: chrome.bookmarks.BookmarkTreeNode):
+      boolean {
+    const bookmarkProductInfo =
+        this.bookmarksService?.getPriceTrackedInfo(bookmark);
+    if (bookmarkProductInfo) {
+      return bookmarkProductInfo.info.previousPrice.length > 0;
+    }
+    return false;
+  }
+
+  protected getCurrentPrice_(bookmark: chrome.bookmarks.BookmarkTreeNode):
+      string {
+    const bookmarkProductInfo =
+        this.bookmarksService?.getPriceTrackedInfo(bookmark);
+    if (bookmarkProductInfo) {
+      return bookmarkProductInfo.info.currentPrice;
+    } else {
+      return '';
+    }
+  }
+
+  protected getPreviousPrice_(bookmark: chrome.bookmarks.BookmarkTreeNode):
+      string {
+    const bookmarkProductInfo =
+        this.bookmarksService?.getPriceTrackedInfo(bookmark);
+    if (bookmarkProductInfo) {
+      return bookmarkProductInfo.info.previousPrice;
+    } else {
+      return '';
+    }
+  }
+
+  protected getBookmarkA11yDescription_(
+      bookmark: chrome.bookmarks.BookmarkTreeNode): string {
+    let description = '';
+    if (this.bookmarksService?.getPriceTrackedInfo(bookmark)) {
+      description += loadTimeData.getStringF(
+          'a11yDescriptionPriceTracking', this.getCurrentPrice_(bookmark));
+      const previousPrice = this.getPreviousPrice_(bookmark);
+      if (previousPrice) {
+        description += ' ' + loadTimeData.getStringF(
+            'a11yDescriptionPriceChange', previousPrice);
+      }
+    }
+    return description;
+  }
+
+  protected getBookmarkDescriptionMeta_(bookmark:
+                                            chrome.bookmarks.BookmarkTreeNode) {
+    // If there is a price available for the product and it isn't being
+    // tracked, return the current price which will be added to the description
+    // meta section.
+    const productInfo =
+        this.bookmarksService?.getAvailableProductInfo(bookmark);
+    if (productInfo && productInfo.info.currentPrice &&
+        !this.isPriceTracked_(bookmark)) {
+      return productInfo.info.currentPrice;
+    }
+
+    return '';
   }
 }
 

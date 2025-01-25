@@ -158,13 +158,13 @@ LinkCapturingNavigationThrottle::MaybeCreate(
     content::NavigationHandle* handle,
     std::unique_ptr<Delegate> delegate) {
   // Don't handle navigations in subframes or main frames that are in a nested
-  // frame tree (e.g. portals, fenced-frame). We specifically allow
+  // frame tree (e.g. fenced-frame). We specifically allow
   // prerendering navigations so that we can destroy the prerender. Opening an
   // app must only happen when the user intentionally navigates; however, for a
   // prerender, the prerender-activating navigation doesn't run throttles so we
   // must cancel it during initial loading to get a standard (non-prerendering)
   // navigation at link-click-time.
-  if (!handle->IsInPrimaryMainFrame() && !handle->IsInPrerenderedMainFrame()) {
+  if (!handle->IsInOutermostMainFrame()) {
     return nullptr;
   }
 
@@ -174,9 +174,7 @@ LinkCapturingNavigationThrottle::MaybeCreate(
     return nullptr;
   }
 
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents->GetBrowserContext());
-  if (!web_app::AreWebAppsUserInstallable(profile)) {
+  if (delegate->ShouldCancelThrottleCreation(handle)) {
     return nullptr;
   }
 

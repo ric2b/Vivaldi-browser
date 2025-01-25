@@ -70,7 +70,7 @@ std::string VivaldiTranslateAgent::GetPageSourceLanguage() {
 void VivaldiTranslateAgent::RevertTranslation() {
   if (!IsTranslateLibAvailable()) {
     NOTREACHED();
-    return;
+    //return;
   }
 
   CancelPendingTranslation();

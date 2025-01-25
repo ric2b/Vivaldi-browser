@@ -72,7 +72,7 @@ g.test('vector_prefix')
       basicExpressionBuilder(ops => `vec${t.params.width}()`),
       [],
       type,
-      { inputSource: 'const' },
+      { inputSource: 'const', constEvaluationMode: 'direct' },
       [{ input: [], expected: type.create(0) }]
     );
   });

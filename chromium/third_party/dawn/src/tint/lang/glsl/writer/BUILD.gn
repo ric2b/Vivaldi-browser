@@ -51,13 +51,13 @@ if (tint_build_glsl_writer) {
     ]
     deps = [
       "${tint_src_dir}/api/common",
-      "${tint_src_dir}/api/options",
       "${tint_src_dir}/lang/core",
       "${tint_src_dir}/lang/core/constant",
       "${tint_src_dir}/lang/core/type",
       "${tint_src_dir}/lang/glsl/writer/raise",
       "${tint_src_dir}/lang/wgsl",
       "${tint_src_dir}/lang/wgsl/ast",
+      "${tint_src_dir}/lang/wgsl/ast/transform",
       "${tint_src_dir}/lang/wgsl/features",
       "${tint_src_dir}/lang/wgsl/program",
       "${tint_src_dir}/lang/wgsl/sem",
@@ -93,13 +93,13 @@ if (tint_build_benchmarks) {
       deps = [
         "${tint_src_dir}:google_benchmark",
         "${tint_src_dir}/api/common",
-        "${tint_src_dir}/api/options",
         "${tint_src_dir}/cmd/bench:bench",
         "${tint_src_dir}/lang/core",
         "${tint_src_dir}/lang/core/constant",
         "${tint_src_dir}/lang/core/type",
         "${tint_src_dir}/lang/wgsl",
         "${tint_src_dir}/lang/wgsl/ast",
+        "${tint_src_dir}/lang/wgsl/ast/transform",
         "${tint_src_dir}/lang/wgsl/features",
         "${tint_src_dir}/lang/wgsl/program",
         "${tint_src_dir}/lang/wgsl/sem",
@@ -132,12 +132,12 @@ if (tint_build_glsl_writer) {
     sources = []
     deps = [
       "${tint_src_dir}/api/common",
-      "${tint_src_dir}/api/options",
       "${tint_src_dir}/lang/core",
       "${tint_src_dir}/lang/core/constant",
       "${tint_src_dir}/lang/core/type",
       "${tint_src_dir}/lang/wgsl",
       "${tint_src_dir}/lang/wgsl/ast",
+      "${tint_src_dir}/lang/wgsl/ast/transform",
       "${tint_src_dir}/lang/wgsl/features",
       "${tint_src_dir}/lang/wgsl/inspector",
       "${tint_src_dir}/lang/wgsl/program",

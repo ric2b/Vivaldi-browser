@@ -17,15 +17,15 @@
 #include "platform/base/tls_credentials.h"
 #include "util/crypto/digest_sign.h"
 
-using ::cast::channel::AuthChallenge;
-using ::cast::channel::AuthError;
-using ::cast::channel::AuthResponse;
-using ::cast::channel::CastMessage;
-using ::cast::channel::DeviceAuthMessage;
-using ::cast::channel::HashAlgorithm;
-using ::cast::channel::SignatureAlgorithm;
-
 namespace openscreen::cast {
+
+using proto::AuthChallenge;
+using proto::AuthError;
+using proto::AuthResponse;
+using proto::CastMessage;
+using proto::DeviceAuthMessage;
+using proto::HashAlgorithm;
+using proto::SignatureAlgorithm;
 
 namespace {
 
@@ -37,10 +37,9 @@ CastMessage GenerateErrorMessage(AuthError::ErrorType error_type) {
   message.SerializeToString(&payload);
 
   CastMessage response;
-  response.set_protocol_version(
-      ::cast::channel::CastMessage_ProtocolVersion_CASTV2_1_0);
+  response.set_protocol_version(proto::CastMessage_ProtocolVersion_CASTV2_1_0);
   response.set_namespace_(kAuthNamespace);
-  response.set_payload_type(::cast::channel::CastMessage_PayloadType_BINARY);
+  response.set_payload_type(proto::CastMessage_PayloadType_BINARY);
   response.set_payload_binary(std::move(payload));
   return response;
 }
@@ -62,8 +61,7 @@ void DeviceAuthNamespaceHandler::OnMessage(VirtualConnectionRouter* router,
   if (!socket) {
     return;  // Don't handle auth messages from local senders. That's nonsense.
   }
-  if (message.payload_type() !=
-      ::cast::channel::CastMessage_PayloadType_BINARY) {
+  if (message.payload_type() != proto::CastMessage_PayloadType_BINARY) {
     return;
   }
   const std::string& payload = message.payload_binary();
@@ -89,16 +87,13 @@ void DeviceAuthNamespaceHandler::OnMessage(VirtualConnectionRouter* router,
   HashAlgorithm hash_alg = challenge.hash_algorithm();
   // TODO(btolsch): Reconsider supporting SHA1 after further metrics
   // investigation.
-  if ((sig_alg != ::cast::channel::UNSPECIFIED &&
-       sig_alg != ::cast::channel::RSASSA_PKCS1v15) ||
-      (hash_alg != ::cast::channel::SHA1 &&
-       hash_alg != ::cast::channel::SHA256)) {
+  if ((sig_alg != proto::UNSPECIFIED && sig_alg != proto::RSASSA_PKCS1v15) ||
+      (hash_alg != proto::SHA1 && hash_alg != proto::SHA256)) {
     router->Send(virtual_conn, GenerateErrorMessage(
                                    AuthError::SIGNATURE_ALGORITHM_UNAVAILABLE));
     return;
   }
-  const EVP_MD* digest =
-      hash_alg == ::cast::channel::SHA256 ? EVP_sha256() : EVP_sha1();
+  const EVP_MD* digest = hash_alg == proto::SHA256 ? EVP_sha256() : EVP_sha1();
 
   const ByteView tls_cert_der = creds_provider_.GetCurrentTlsCertAsDer();
   const DeviceCredentials& device_creds =
@@ -116,7 +111,7 @@ void DeviceAuthNamespaceHandler::OnMessage(VirtualConnectionRouter* router,
        ++it) {
     auth_response->add_intermediate_certificate(*it);
   }
-  auth_response->set_signature_algorithm(::cast::channel::RSASSA_PKCS1v15);
+  auth_response->set_signature_algorithm(proto::RSASSA_PKCS1v15);
   auth_response->set_hash_algorithm(hash_alg);
   std::string sender_nonce;
   if (challenge.has_sender_nonce()) {
@@ -147,10 +142,9 @@ void DeviceAuthNamespaceHandler::OnMessage(VirtualConnectionRouter* router,
   std::string response_string;
   response_auth_message.SerializeToString(&response_string);
   CastMessage response;
-  response.set_protocol_version(
-      ::cast::channel::CastMessage_ProtocolVersion_CASTV2_1_0);
+  response.set_protocol_version(proto::CastMessage_ProtocolVersion_CASTV2_1_0);
   response.set_namespace_(kAuthNamespace);
-  response.set_payload_type(::cast::channel::CastMessage_PayloadType_BINARY);
+  response.set_payload_type(proto::CastMessage_PayloadType_BINARY);
   response.set_payload_binary(std::move(response_string));
   router->Send(virtual_conn, std::move(response));
 }

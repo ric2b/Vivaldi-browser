@@ -20,7 +20,6 @@ group("resources") {
     ":vivaldi_ntp_toolbar_more_dark_color",
     ":vivaldi_ntp_toolbar_more_light_color",
     ":vivaldi_ntp_search",
-    ":vivaldi_ntp_toolbar_sort",
     ":vivaldi_ntp_toolbar_more",
     ":vivaldi_ntp_add_new_speed_dial",
     ":vivaldi_ntp_add_new_speed_dial_folder",
@@ -97,14 +96,6 @@ imageset("vivaldi_ntp_search") {
     "vivaldi_ntp_search.imageset/Contents.json",
     "vivaldi_ntp_search.imageset/vivaldi_ntp_search.pdf",
     "vivaldi_ntp_search.imageset/vivaldi_ntp_search_dark.pdf",
-  ]
-}
-
-imageset("vivaldi_ntp_toolbar_sort") {
-  sources = [
-    "vivaldi_ntp_toolbar_sort.imageset/Contents.json",
-    "vivaldi_ntp_toolbar_sort.imageset/vivaldi_ntp_toolbar_sort.pdf",
-    "vivaldi_ntp_toolbar_sort.imageset/vivaldi_ntp_toolbar_sort_dark.pdf",
   ]
 }
 

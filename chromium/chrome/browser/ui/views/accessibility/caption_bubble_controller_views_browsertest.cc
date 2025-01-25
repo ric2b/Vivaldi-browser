@@ -55,7 +55,9 @@ namespace captions {
 class CaptionBubbleControllerViewsTest : public InProcessBrowserTest {
  public:
   CaptionBubbleControllerViewsTest() {
-    scoped_feature_list_.InitAndEnableFeature(media::kLiveTranslate);
+    scoped_feature_list_.InitWithFeatures(
+        {media::kLiveTranslate, media::kFeatureManagementLiveTranslateCrOS},
+        {});
   }
 
   ~CaptionBubbleControllerViewsTest() override = default;
@@ -190,11 +192,11 @@ class CaptionBubbleControllerViewsTest : public InProcessBrowserTest {
     if (!button) {
       return;
     }
-    button->OnMousePressed(
-        ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(0, 0), gfx::Point(0, 0),
-                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
+    button->OnMousePressed(ui::MouseEvent(
+        ui::EventType::kMousePressed, gfx::Point(0, 0), gfx::Point(0, 0),
+        ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
     button->OnMouseReleased(ui::MouseEvent(
-        ui::ET_MOUSE_RELEASED, gfx::Point(0, 0), gfx::Point(0, 0),
+        ui::EventType::kMouseReleased, gfx::Point(0, 0), gfx::Point(0, 0),
         ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
   }
 

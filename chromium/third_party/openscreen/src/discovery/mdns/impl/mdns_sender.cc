@@ -10,6 +10,7 @@
 
 #include "discovery/mdns/public/mdns_writer.h"
 #include "platform/api/udp_socket.h"
+#include "platform/base/span.h"
 
 namespace openscreen::discovery {
 
@@ -35,7 +36,7 @@ Error MdnsSender::SendMessage(const MdnsMessage& message,
     return Error::Code::kInsufficientBuffer;
   }
 
-  socket_.SendMessage(buffer.data(), writer.offset(), endpoint);
+  socket_.SendMessage(ByteView(buffer.data(), writer.offset()), endpoint);
   return Error::Code::kNone;
 }
 

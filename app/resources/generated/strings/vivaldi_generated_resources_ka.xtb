@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">გადატარება</translation>
 <translation id="1603914832182249871">(ინკოგნიტო)</translation>
 <translation id="1627276047960621195">ფაილის დესკრიპტორები</translation>
+<translation id="1654713139320245449">ტრანსლაციისთვის მოწყობილობები ვერ მოიძებნა. დახმარება გჭირდებათ?</translation>
 <translation id="166278006618318542">საჯარო გასაღების ალგორითმი</translation>
 <translation id="1682548588986054654">ახალი ინკოგნიტო ფანჯარა</translation>
 <translation id="1708338024780164500">(არააქტიური)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">სხვა პროგრამამ თქვენი კომპიუტერიდან დაამატა გაფართოება, რომელმაც, შეიძლება, შეცვალოს გზა, როგორ მუშაობს Vivaldi.</translation>
 <translation id="2443487764245141020">ვებსაიტებს ასევე შეიძლება დასჭირდეთ თქვენი მოწყობილობის ამოცნობა შესაბამისი იდენტიფიკატორის მეშვეობით</translation>
 <translation id="2445081178310039857">გაფართოების ძირითადი საქაღალდე აუცილებელია.</translation>
-<translation id="2470702053775288986">მხარდაუჭერელი გაფართოებები გათიშულია</translation>
 <translation id="2485422356828889247">წაშლა</translation>
 <translation id="2498539833203011245">ჩაკეცვა</translation>
 <translation id="2509495747794740764">მასშტაბის რაოდენობა რიცხვი უნდა იყოს, შუალედიდან 10-200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;დეტალები</translation>
 <translation id="4345587454538109430">კონფიგურაცია..</translation>
 <translation id="4348766275249686434">შეცდომების შეგროვება</translation>
-<translation id="4363771538994847871">გადაცემის სამიზნეები აღმოჩენილი არაა. გჭირდებათ დახმარება?</translation>
 <translation id="4384652540891215547">გაფართოების აქტივაცია</translation>
 <translation id="4394049700291259645">გამორთვა</translation>
 <translation id="4409697491990005945">გვერდის ველები</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">განლაგება</translation>
 <translation id="7782102568078991263">Google-სგან მეტი შეთავაზება არ გაქვთ</translation>
 <translation id="7786889348652477777">&amp;აპის თავიდან ჩატვირთვა</translation>
-<translation id="7791543448312431591">დამატება</translation>
 <translation id="7800518121066352902">&amp;საათის ისრის საწინააღმდეგოდ შებრუნება</translation>
 <translation id="7814458197256864873">&amp;კოპირება</translation>
 <translation id="7818135753970109980">ახალი თემა დამატებულია (<ph name="EXTENSION_NAME" />)</translation>

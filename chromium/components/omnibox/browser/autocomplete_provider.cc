@@ -84,7 +84,8 @@ const char* AutocompleteProvider::TypeToString(Type type) {
       return "BookmarkNickname";
 
     default:
-      NOTREACHED() << "Unhandled AutocompleteProvider::Type " << type;
+      DUMP_WILL_BE_NOTREACHED()
+          << "Unhandled AutocompleteProvider::Type " << type;
       return "Unknown";
   }
 }
@@ -173,7 +174,7 @@ AutocompleteProvider::AsOmniboxEventProviderType() const {
       //   message in crash reports. Should be reverted back to a NOTREACHED or
       //   NOTREACHED_NORETURN if their logs eventually begin being logged to
       //   crash reports.
-      DUMP_WILL_BE_NOTREACHED_NORETURN()
+      DUMP_WILL_BE_NOTREACHED()
           << "[NOTREACHED] Unhandled AutocompleteProvider::Type " << type_;
       return metrics::OmniboxEventProto::UNKNOWN_PROVIDER;
   }

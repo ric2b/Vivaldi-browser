@@ -38,7 +38,7 @@ namespace {
 // changing this value.
 // LINT.IfChange
 constexpr int kTailoredWarningVersion = 3;
-constexpr int kTailoredWarningVersionDownloadReportWithoutUserDecision = 4;
+constexpr int kTailoredWarningVersionDownloadReportWithoutUserDecision = 5;
 // LINT.ThenChange(/components/safe_browsing/core/common/proto/csd.proto)
 
 DownloadRequestMaker::TabUrls TabUrlsFromWebContents(
@@ -133,9 +133,10 @@ DownloadRequestMaker::CreateFromFileSystemAccess(
   if (item.frame_url.is_valid())
     resource.set_referrer(ShortURLForReporting(item.frame_url));
 
-  std::unique_ptr<ReferrerChainData> referrer_chain_data;
-  if (service)
-    service->IdentifyReferrerChain(item);
+  std::unique_ptr<ReferrerChainData> referrer_chain_data =
+      IdentifyReferrerChain(
+          item,
+          DownloadProtectionService::GetDownloadAttributionUserGestureLimit());
 
   return std::make_unique<DownloadRequestMaker>(
       binary_feature_extractor, item.browser_context,
@@ -232,7 +233,6 @@ void DownloadRequestMaker::OnFileFeatureExtractionDone(
   request_->mutable_archived_binary()->CopyFrom(results.archived_binaries);
   request_->mutable_signature()->CopyFrom(results.signature_info);
   request_->mutable_image_headers()->CopyFrom(results.image_headers);
-  request_->mutable_document_summary()->CopyFrom(results.document_summary);
   request_->mutable_archive_summary()->CopyFrom(results.archive_summary);
 
 #if BUILDFLAG(IS_MAC)

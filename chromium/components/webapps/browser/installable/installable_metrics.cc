@@ -230,7 +230,7 @@ bool InstallableMetrics::IsReportableInstallSource(WebappInstallSource source) {
     case WebappInstallSource::SYNC:
       return false;
     case WebappInstallSource::COUNT:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 }
@@ -265,7 +265,7 @@ InstallableMetrics::ConvertFromServiceWorkerCapability(
     case content::ServiceWorkerCapability::NO_SERVICE_WORKER:
       return ServiceWorkerOfflineCapability::kNoServiceWorker;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 // static
@@ -277,7 +277,7 @@ ServiceWorkerOfflineCapability InstallableMetrics::ConvertFromOfflineCapability(
     case content::OfflineCapability::kUnsupported:
       return ServiceWorkerOfflineCapability::kServiceWorkerNoOfflineSupport;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 // static
@@ -286,7 +286,13 @@ void InstallableMetrics::TrackUninstallEvent(WebappUninstallSource source) {
 }
 
 // static
-void InstallableMetrics::TrackInstallResult(bool result) {
+void InstallableMetrics::TrackInstallResult(bool result,
+                                            WebappInstallSource source) {
   base::UmaHistogramBoolean("WebApp.Install.Result", result);
+  if (IsReportableInstallSource(source)) {
+    base::UmaHistogramEnumeration(result ? "WebApp.Install.Source.Success"
+                                         : "WebApp.Install.Source.Failure",
+                                  source, WebappInstallSource::COUNT);
+  }
 }
 }  // namespace webapps

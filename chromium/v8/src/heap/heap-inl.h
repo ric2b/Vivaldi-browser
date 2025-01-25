@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <cmath>
+#include <optional>
 
 // Clients of this interface shouldn't depend on lots of heap internals.
 // Avoid including anything but `heap.h` from `src/heap` where possible.
@@ -26,7 +27,7 @@
 #include "src/heap/memory-allocator.h"
 #include "src/heap/memory-chunk-inl.h"
 #include "src/heap/memory-chunk-layout.h"
-#include "src/heap/mutable-page.h"
+#include "src/heap/mutable-page-metadata.h"
 #include "src/heap/new-spaces-inl.h"
 #include "src/heap/paged-spaces-inl.h"
 #include "src/heap/read-only-heap.h"
@@ -60,7 +61,7 @@ Tagged<T> ForwardingAddress(Tagged<T> heap_obj) {
   MapWord map_word = heap_obj->map_word(kRelaxedLoad);
 
   if (map_word.IsForwardingAddress()) {
-    return Tagged<T>::cast(map_word.ToForwardingAddress(heap_obj));
+    return Cast<T>(map_word.ToForwardingAddress(heap_obj));
   } else if (Heap::InFromPage(heap_obj)) {
     DCHECK(!v8_flags.minor_ms);
     return Tagged<T>();
@@ -110,16 +111,15 @@ int64_t Heap::update_external_memory(int64_t delta) {
 
 RootsTable& Heap::roots_table() { return isolate()->roots_table(); }
 
-#define ROOT_ACCESSOR(Type, name, CamelName)                     \
-  Tagged<Type> Heap::name() {                                    \
-    return Tagged<Type>::cast(                                   \
-        Tagged<Object>(roots_table()[RootIndex::k##CamelName])); \
+#define ROOT_ACCESSOR(Type, name, CamelName)                                   \
+  Tagged<Type> Heap::name() {                                                  \
+    return Cast<Type>(Tagged<Object>(roots_table()[RootIndex::k##CamelName])); \
   }
 MUTABLE_ROOT_LIST(ROOT_ACCESSOR)
 #undef ROOT_ACCESSOR
 
 Tagged<FixedArray> Heap::single_character_string_table() {
-  return Tagged<FixedArray>::cast(
+  return Cast<FixedArray>(
       Tagged<Object>(roots_table()[RootIndex::kSingleCharacterStringTable]));
 }
 
@@ -152,8 +152,7 @@ Tagged<FixedArray> Heap::single_character_string_table() {
       /* to HeapObject (these Smis will anyway be excluded by */               \
       /* RootsTable::IsImmortalImmovable but this isn't enough for the*/       \
       /* compiler, even with `if constexpr`)*/                                 \
-      DCHECK(                                                                  \
-          IsImmovable(Tagged<HeapObject>::cast(Tagged<Object>::cast(value)))); \
+      DCHECK(IsImmovable(Cast<HeapObject>(Cast<Object>(value))));              \
     }                                                                          \
     DCHECK_STATIC_ROOT(value, CamelName);                                      \
     roots_table()[RootIndex::k##CamelName] = value.ptr();                      \
@@ -183,7 +182,7 @@ void Heap::SetFunctionsMarkedForManualOptimization(Tagged<Object> hash_table) {
 
 PagedSpace* Heap::paged_space(int idx) const {
   DCHECK(idx == OLD_SPACE || idx == CODE_SPACE || idx == SHARED_SPACE ||
-         idx == TRUSTED_SPACE);
+         idx == TRUSTED_SPACE || idx == SHARED_TRUSTED_SPACE);
   return static_cast<PagedSpace*>(space_[idx].get());
 }
 
@@ -255,7 +254,7 @@ void Heap::RegisterExternalString(Tagged<String> string) {
 
 void Heap::FinalizeExternalString(Tagged<String> string) {
   DCHECK(IsExternalString(string));
-  Tagged<ExternalString> ext_string = Tagged<ExternalString>::cast(string);
+  Tagged<ExternalString> ext_string = Cast<ExternalString>(string);
 
   if (!v8_flags.enable_third_party_heap) {
     PageMetadata* page = PageMetadata::FromHeapObject(string);
@@ -281,7 +280,7 @@ Address Heap::NewSpaceLimit() {
 
 bool Heap::InYoungGeneration(Tagged<Object> object) {
   DCHECK(!HasWeakHeapObjectTag(object));
-  return IsHeapObject(object) && InYoungGeneration(HeapObject::cast(object));
+  return IsHeapObject(object) && InYoungGeneration(Cast<HeapObject>(object));
 }
 
 // static
@@ -295,7 +294,7 @@ bool Heap::InYoungGeneration(Tagged<HeapObject> heap_object) {
   if (V8_ENABLE_THIRD_PARTY_HEAP_BOOL) return false;
   if (v8_flags.sticky_mark_bits) {
     return !MemoryChunk::FromHeapObject(heap_object)
-                ->IsReadOnlyOrMajorMarkingOn() &&
+                ->IsOnlyOldOrMajorMarkingOn() &&
            !MarkBit::From(heap_object.address())
                 .template Get<AccessMode::ATOMIC>();
   }
@@ -316,7 +315,7 @@ bool Heap::InYoungGeneration(Tagged<HeapObject> heap_object) {
 // static
 bool Heap::InFromPage(Tagged<Object> object) {
   DCHECK(!HasWeakHeapObjectTag(object));
-  return IsHeapObject(object) && InFromPage(HeapObject::cast(object));
+  return IsHeapObject(object) && InFromPage(Cast<HeapObject>(object));
 }
 
 // static
@@ -333,7 +332,7 @@ bool Heap::InFromPage(Tagged<HeapObject> heap_object) {
 // static
 bool Heap::InToPage(Tagged<Object> object) {
   DCHECK(!HasWeakHeapObjectTag(object));
-  return IsHeapObject(object) && InToPage(HeapObject::cast(object));
+  return IsHeapObject(object) && InToPage(Cast<HeapObject>(object));
 }
 
 // static
@@ -442,11 +441,11 @@ bool Heap::IsPendingAllocation(Tagged<HeapObject> object) {
 }
 
 bool Heap::IsPendingAllocation(Tagged<Object> object) {
-  return IsHeapObject(object) && IsPendingAllocation(HeapObject::cast(object));
+  return IsHeapObject(object) && IsPendingAllocation(Cast<HeapObject>(object));
 }
 
 void Heap::ExternalStringTable::AddString(Tagged<String> string) {
-  base::Optional<base::MutexGuard> guard;
+  std::optional<base::MutexGuard> guard;
 
   // With --shared-string-table client isolates may insert into the main
   // isolate's table concurrently.
@@ -472,7 +471,7 @@ Tagged<Boolean> Heap::ToBoolean(bool condition) {
 
 int Heap::NextScriptId() {
   FullObjectSlot last_script_id_slot(&roots_table()[RootIndex::kLastScriptId]);
-  Tagged<Smi> last_id = Smi::cast(last_script_id_slot.Relaxed_Load());
+  Tagged<Smi> last_id = Cast<Smi>(last_script_id_slot.Relaxed_Load());
   Tagged<Smi> new_id, last_id_before_cas;
   do {
     if (last_id.value() == Smi::kMaxValue) {
@@ -488,7 +487,7 @@ int Heap::NextScriptId() {
     // doesn't.
     last_id_before_cas = last_id;
     last_id =
-        Smi::cast(last_script_id_slot.Relaxed_CompareAndSwap(last_id, new_id));
+        Cast<Smi>(last_script_id_slot.Relaxed_CompareAndSwap(last_id, new_id));
   } while (last_id != last_id_before_cas);
 
   return new_id.value();

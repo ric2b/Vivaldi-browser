@@ -15,13 +15,13 @@ struct ExternalTextureParams {
   GammaTransferParams gammaDecodeParams;
   GammaTransferParams gammaEncodeParams;
   float3x3 gamutConversionMatrix;
-  float3x2 coordTransformationMatrix;
-  float3x2 loadTransformationMatrix;
+  float3x2 sampleTransform;
+  float3x2 loadTransform;
   float2 samplePlane0RectMin;
   float2 samplePlane0RectMax;
   float2 samplePlane1RectMin;
   float2 samplePlane1RectMax;
-  uint2 displayVisibleRectMax;
+  uint2 visibleSize;
   float2 plane1CoordFactor;
 };
 
@@ -29,6 +29,7 @@ Texture2D<float4> ext_tex_plane_1 : register(t2, space1);
 cbuffer cbuffer_ext_tex_params : register(b3, space1) {
   uint4 ext_tex_params[17];
 };
+RWByteAddressBuffer prevent_dce : register(u0);
 Texture2D<float4> arg_0 : register(t0, space1);
 SamplerState arg_1 : register(s1, space1);
 
@@ -40,7 +41,7 @@ float3 gammaCorrection(float3 v, GammaTransferParams params) {
 }
 
 float4 textureSampleExternal(Texture2D<float4> plane0, Texture2D<float4> plane1, SamplerState smp, float2 coord, ExternalTextureParams params) {
-  float2 modifiedCoords = mul(float3(coord, 1.0f), params.coordTransformationMatrix);
+  float2 modifiedCoords = mul(float3(coord, 1.0f), params.sampleTransform);
   float2 plane0_clamped = clamp(modifiedCoords, params.samplePlane0RectMin, params.samplePlane0RectMax);
   float4 color = float4(0.0f, 0.0f, 0.0f, 0.0f);
   if ((params.numPlanes == 1u)) {
@@ -73,8 +74,8 @@ GammaTransferParams ext_tex_params_load_4(uint offset) {
   const uint scalar_offset_8 = ((offset + 20u)) / 4;
   const uint scalar_offset_9 = ((offset + 24u)) / 4;
   const uint scalar_offset_10 = ((offset + 28u)) / 4;
-  GammaTransferParams tint_symbol_1 = {asfloat(ext_tex_params[scalar_offset_3 / 4][scalar_offset_3 % 4]), asfloat(ext_tex_params[scalar_offset_4 / 4][scalar_offset_4 % 4]), asfloat(ext_tex_params[scalar_offset_5 / 4][scalar_offset_5 % 4]), asfloat(ext_tex_params[scalar_offset_6 / 4][scalar_offset_6 % 4]), asfloat(ext_tex_params[scalar_offset_7 / 4][scalar_offset_7 % 4]), asfloat(ext_tex_params[scalar_offset_8 / 4][scalar_offset_8 % 4]), asfloat(ext_tex_params[scalar_offset_9 / 4][scalar_offset_9 % 4]), ext_tex_params[scalar_offset_10 / 4][scalar_offset_10 % 4]};
-  return tint_symbol_1;
+  GammaTransferParams tint_symbol_2 = {asfloat(ext_tex_params[scalar_offset_3 / 4][scalar_offset_3 % 4]), asfloat(ext_tex_params[scalar_offset_4 / 4][scalar_offset_4 % 4]), asfloat(ext_tex_params[scalar_offset_5 / 4][scalar_offset_5 % 4]), asfloat(ext_tex_params[scalar_offset_6 / 4][scalar_offset_6 % 4]), asfloat(ext_tex_params[scalar_offset_7 / 4][scalar_offset_7 % 4]), asfloat(ext_tex_params[scalar_offset_8 / 4][scalar_offset_8 % 4]), asfloat(ext_tex_params[scalar_offset_9 / 4][scalar_offset_9 % 4]), ext_tex_params[scalar_offset_10 / 4][scalar_offset_10 % 4]};
+  return tint_symbol_2;
 }
 
 float3x3 ext_tex_params_load_6(uint offset) {
@@ -109,40 +110,46 @@ ExternalTextureParams ext_tex_params_load(uint offset) {
   uint4 ubo_load_7 = ext_tex_params[scalar_offset_23 / 4];
   const uint scalar_offset_24 = ((offset + 264u)) / 4;
   uint4 ubo_load_8 = ext_tex_params[scalar_offset_24 / 4];
-  ExternalTextureParams tint_symbol_2 = {ext_tex_params[scalar_offset_17 / 4][scalar_offset_17 % 4], ext_tex_params[scalar_offset_18 / 4][scalar_offset_18 % 4], ext_tex_params_load_2((offset + 16u)), ext_tex_params_load_4((offset + 64u)), ext_tex_params_load_4((offset + 96u)), ext_tex_params_load_6((offset + 128u)), ext_tex_params_load_8((offset + 176u)), ext_tex_params_load_8((offset + 200u)), asfloat(((scalar_offset_19 & 2) ? ubo_load_3.zw : ubo_load_3.xy)), asfloat(((scalar_offset_20 & 2) ? ubo_load_4.zw : ubo_load_4.xy)), asfloat(((scalar_offset_21 & 2) ? ubo_load_5.zw : ubo_load_5.xy)), asfloat(((scalar_offset_22 & 2) ? ubo_load_6.zw : ubo_load_6.xy)), ((scalar_offset_23 & 2) ? ubo_load_7.zw : ubo_load_7.xy), asfloat(((scalar_offset_24 & 2) ? ubo_load_8.zw : ubo_load_8.xy))};
-  return tint_symbol_2;
+  ExternalTextureParams tint_symbol_3 = {ext_tex_params[scalar_offset_17 / 4][scalar_offset_17 % 4], ext_tex_params[scalar_offset_18 / 4][scalar_offset_18 % 4], ext_tex_params_load_2((offset + 16u)), ext_tex_params_load_4((offset + 64u)), ext_tex_params_load_4((offset + 96u)), ext_tex_params_load_6((offset + 128u)), ext_tex_params_load_8((offset + 176u)), ext_tex_params_load_8((offset + 200u)), asfloat(((scalar_offset_19 & 2) ? ubo_load_3.zw : ubo_load_3.xy)), asfloat(((scalar_offset_20 & 2) ? ubo_load_4.zw : ubo_load_4.xy)), asfloat(((scalar_offset_21 & 2) ? ubo_load_5.zw : ubo_load_5.xy)), asfloat(((scalar_offset_22 & 2) ? ubo_load_6.zw : ubo_load_6.xy)), ((scalar_offset_23 & 2) ? ubo_load_7.zw : ubo_load_7.xy), asfloat(((scalar_offset_24 & 2) ? ubo_load_8.zw : ubo_load_8.xy))};
+  return tint_symbol_3;
 }
 
-RWByteAddressBuffer prevent_dce : register(u0, space2);
-
-void textureSampleBaseClampToEdge_7c04e6() {
+float4 textureSampleBaseClampToEdge_7c04e6() {
   float4 res = textureSampleExternal(arg_0, ext_tex_plane_1, arg_1, (1.0f).xx, ext_tex_params_load(0u));
-  prevent_dce.Store4(0u, asuint(res));
-}
-
-struct tint_symbol {
-  float4 value : SV_Position;
-};
-
-float4 vertex_main_inner() {
-  textureSampleBaseClampToEdge_7c04e6();
-  return (0.0f).xxxx;
-}
-
-tint_symbol vertex_main() {
-  float4 inner_result = vertex_main_inner();
-  tint_symbol wrapper_result = (tint_symbol)0;
-  wrapper_result.value = inner_result;
-  return wrapper_result;
+  return res;
 }
 
 void fragment_main() {
-  textureSampleBaseClampToEdge_7c04e6();
+  prevent_dce.Store4(0u, asuint(textureSampleBaseClampToEdge_7c04e6()));
   return;
 }
 
 [numthreads(1, 1, 1)]
 void compute_main() {
-  textureSampleBaseClampToEdge_7c04e6();
+  prevent_dce.Store4(0u, asuint(textureSampleBaseClampToEdge_7c04e6()));
   return;
+}
+
+struct VertexOutput {
+  float4 pos;
+  float4 prevent_dce;
+};
+struct tint_symbol_1 {
+  nointerpolation float4 prevent_dce : TEXCOORD0;
+  float4 pos : SV_Position;
+};
+
+VertexOutput vertex_main_inner() {
+  VertexOutput tint_symbol = (VertexOutput)0;
+  tint_symbol.pos = (0.0f).xxxx;
+  tint_symbol.prevent_dce = textureSampleBaseClampToEdge_7c04e6();
+  return tint_symbol;
+}
+
+tint_symbol_1 vertex_main() {
+  VertexOutput inner_result = vertex_main_inner();
+  tint_symbol_1 wrapper_result = (tint_symbol_1)0;
+  wrapper_result.pos = inner_result.pos;
+  wrapper_result.prevent_dce = inner_result.prevent_dce;
+  return wrapper_result;
 }

@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <array>
 #include <set>
 #include <utility>
 
@@ -26,7 +27,7 @@
 #include "core/fpdfapi/parser/object_tree_traversal_util.h"
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/containers/contains.h"
-#include "core/fxcrt/data_vector.h"
+#include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_random.h"
 #include "core/fxcrt/fx_safe_types.h"
@@ -50,15 +51,15 @@ class CFX_FileBufferArchive final : public IFX_ArchiveStream {
   bool Flush();
 
   FX_FILESIZE offset_ = 0;
-  DataVector<uint8_t> buffer_;
+  FixedSizeDataVector<uint8_t> buffer_;
   pdfium::raw_span<uint8_t> available_;
   RetainPtr<IFX_RetainableWriteStream> const backing_file_;
 };
 
 CFX_FileBufferArchive::CFX_FileBufferArchive(
     RetainPtr<IFX_RetainableWriteStream> file)
-    : buffer_(kArchiveBufferSize),
-      available_(buffer_),
+    : buffer_(FixedSizeDataVector<uint8_t>::Uninit(kArchiveBufferSize)),
+      available_(buffer_.span()),
       backing_file_(std::move(file)) {
   DCHECK(backing_file_);
 }
@@ -68,11 +69,9 @@ CFX_FileBufferArchive::~CFX_FileBufferArchive() {
 }
 
 bool CFX_FileBufferArchive::Flush() {
-  size_t nUsed = buffer_.size() - available_.size();
-  available_ = pdfium::make_span(buffer_);
-  if (!nUsed)
-    return true;
-  return backing_file_->WriteBlock(available_.first(nUsed));
+  size_t used = buffer_.size() - available_.size();
+  available_ = buffer_.span();
+  return used == 0 || backing_file_->WriteBlock(available_.first(used));
 }
 
 bool CFX_FileBufferArchive::WriteBlock(pdfium::span<const uint8_t> buffer) {
@@ -97,17 +96,15 @@ bool CFX_FileBufferArchive::WriteBlock(pdfium::span<const uint8_t> buffer) {
   return true;
 }
 
-ByteString GenerateFileID(uint32_t dwSeed1, uint32_t dwSeed2) {
-  uint32_t buffer[4];
+std::array<uint32_t, 4> GenerateFileID(uint32_t dwSeed1, uint32_t dwSeed2) {
   void* pContext1 = FX_Random_MT_Start(dwSeed1);
   void* pContext2 = FX_Random_MT_Start(dwSeed2);
-  buffer[0] = FX_Random_MT_Generate(pContext1);
-  buffer[1] = FX_Random_MT_Generate(pContext1);
-  buffer[2] = FX_Random_MT_Generate(pContext2);
-  buffer[3] = FX_Random_MT_Generate(pContext2);
+  std::array<uint32_t, 4> buffer = {
+      FX_Random_MT_Generate(pContext1), FX_Random_MT_Generate(pContext1),
+      FX_Random_MT_Generate(pContext2), FX_Random_MT_Generate(pContext2)};
   FX_Random_MT_Close(pContext1);
   FX_Random_MT_Close(pContext2);
-  return ByteString(ByteStringView(pdfium::as_byte_span(buffer)));
+  return buffer;
 }
 
 bool OutputIndex(IFX_ArchiveStream* archive, FX_FILESIZE offset) {
@@ -146,8 +143,9 @@ bool CPDF_Creator::WriteIndirectObj(uint32_t objnum, const CPDF_Object* pObj) {
 }
 
 bool CPDF_Creator::WriteOldIndirectObject(uint32_t objnum) {
-  if (m_pParser->IsObjectFreeOrNull(objnum))
+  if (m_pParser->IsObjectFree(objnum)) {
     return true;
+  }
 
   m_ObjectOffsets[objnum] = m_Archive->CurrentOffset();
 
@@ -260,8 +258,9 @@ CPDF_Creator::Stage CPDF_Creator::WriteDoc_Stage1() {
     }
     if (m_IsOriginal && m_pParser->GetLastXRefOffset() == 0) {
       for (uint32_t num = 0; num <= m_pParser->GetLastObjNum(); ++num) {
-        if (m_pParser->IsObjectFreeOrNull(num))
+        if (m_pParser->IsObjectFree(num)) {
           continue;
+        }
 
         m_ObjectOffsets[num] = m_pParser->GetObjectPositionOrZero(num);
       }
@@ -572,9 +571,10 @@ void CPDF_Creator::InitID() {
   if (pID1) {
     m_pIDArray->Append(pID1->Clone());
   } else {
-    ByteString bsBuffer =
+    std::array<uint32_t, 4> file_id =
         GenerateFileID((uint32_t)(uintptr_t)this, m_dwLastObjNum);
-    m_pIDArray->AppendNew<CPDF_String>(bsBuffer, true);
+    m_pIDArray->AppendNew<CPDF_String>(pdfium::as_byte_span(file_id),
+                                       CPDF_String::DataType::kIsHex);
   }
 
   if (pOldIDArray) {
@@ -583,9 +583,10 @@ void CPDF_Creator::InitID() {
       m_pIDArray->Append(pID2->Clone());
       return;
     }
-    ByteString bsBuffer =
+    std::array<uint32_t, 4> file_id =
         GenerateFileID((uint32_t)(uintptr_t)this, m_dwLastObjNum);
-    m_pIDArray->AppendNew<CPDF_String>(bsBuffer, true);
+    m_pIDArray->AppendNew<CPDF_String>(pdfium::as_byte_span(file_id),
+                                       CPDF_String::DataType::kIsHex);
     return;
   }
 

@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Verkställ</translation>
 <translation id="1603914832182249871">(Privat fönster)</translation>
 <translation id="1627276047960621195">Filbeskrielser</translation>
+<translation id="1654713139320245449">Inga Cast-destinationer hittades. Behöver du hjälp?</translation>
 <translation id="166278006618318542">Ämnes algoritm för offentlig nyckel</translation>
 <translation id="1682548588986054654">Nytt inkognitofönster</translation>
 <translation id="1708338024780164500">(Inaktiv)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Ett annat program i datorn har lagt till ett tillägg som kan ändra hur Vivaldi fungerar.</translation>
 <translation id="2443487764245141020">Webbplatser kanske även känner igen din enhet med hjälp av en identifierare</translation>
 <translation id="2445081178310039857">Tilläggets rotkatalog måste anges.</translation>
-<translation id="2470702053775288986">Tillägg som inte stöds har inaktiverats</translation>
 <translation id="2485422356828889247">Avinstallera</translation>
 <translation id="2498539833203011245">Minimera</translation>
 <translation id="2509495747794740764">Förstoringsgraden måste vara ett tal mellan 10 och 200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Detaljer</translation>
 <translation id="4345587454538109430">Konfigurera...</translation>
 <translation id="4348766275249686434">Samla fel</translation>
-<translation id="4363771538994847871">Inget Överföringsmål hittades. Behöver du hjälp?</translation>
 <translation id="4384652540891215547">Aktivera tillägget</translation>
 <translation id="4394049700291259645">Inaktivera</translation>
 <translation id="4409697491990005945">Marginaler</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Layout</translation>
 <translation id="7782102568078991263">Inga fler förslag från Google</translation>
 <translation id="7786889348652477777">&amp;Läs in appen igen</translation>
-<translation id="7791543448312431591">Lägg till</translation>
 <translation id="7800518121066352902">Rotera m&amp;oturs</translation>
 <translation id="7814458197256864873">&amp;Kopiera</translation>
 <translation id="7818135753970109980">Ett nytt tema har lagts till (<ph name="EXTENSION_NAME" />)</translation>

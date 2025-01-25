@@ -7,7 +7,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux ASan LSan Builder",
-              "project": "chromium-m126"
+              "project": "chromium-m128"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-memory-archive",
@@ -32,7 +32,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux ASan LSan Tests (1)",
-              "project": "chromium-m126"
+              "project": "chromium-m128"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-memory-archive",
@@ -54,7 +54,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Linux ASan LSan Builder",
-                "project": "chromium-m126"
+                "project": "chromium-m128"
               }
             }
           }
@@ -64,7 +64,7 @@
         {
           "bucket": "ci",
           "builder": "Linux ASan LSan Tests (1)",
-          "project": "chromium-m126"
+          "project": "chromium-m128"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -72,7 +72,8 @@
           "builder": "linux_chromium_asan_rel_ng",
           "group": "tryserver.chromium.linux"
         }
-      ]
+      ],
+      "retry_failed_shards": true
     }
   },
   "$recipe_engine/resultdb/test_presentation": {
@@ -83,6 +84,9 @@
     ]
   },
   "builder_group": "chromium.memory",
+  "gardener_rotations": [
+    "chrome_browser_release"
+  ],
   "recipe": "chromium",
   "sheriff_rotations": [
     "chrome_browser_release"

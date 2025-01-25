@@ -119,7 +119,7 @@ public interface BookmarkDelegate {
     void highlightBookmark(BookmarkId bookmarkId);
 
     /** Vivaldi **/
-    void setSortOrder(BookmarkManagerMediator.SortOrder sorting, boolean force);
+    void setSortOrder(BookmarkManagerMediator.SortOrder sortingMode);
     BookmarkManagerMediator.SortOrder getSortOrder();
-    void setSortOrder(boolean force);
+    BookmarkManagerMediator.SortAscOrDesc getSortAscendingDescending();
 }

@@ -16,7 +16,7 @@
 
 /// Power in dBm, calibrated as per
 /// [Eddystone](https://github.com/google/eddystone/tree/master/eddystone-uid#tx-power)
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct TxPower {
     /// Power in `[-100, 20]`
     power: i8,
@@ -42,7 +42,7 @@ impl TryFrom<i8> for TxPower {
 }
 
 /// Tx power was out of the valid range `[-100, 20]`.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct TxPowerOutOfRange;
 
 /// MDP's context sync number, used to inform other devices that they have stale context.
@@ -73,5 +73,33 @@ impl TryFrom<u8> for ContextSyncSeqNum {
 }
 
 /// Seq num must be in `[0-15]`.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ContextSyncSeqNumOutOfRange;
+
+#[allow(clippy::unwrap_used)]
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tx_power_out_of_range() {
+        assert_eq!(TxPowerOutOfRange, TxPower::try_from(-101).unwrap_err());
+        assert_eq!(TxPowerOutOfRange, TxPower::try_from(21).unwrap_err());
+    }
+
+    #[test]
+    fn tx_power_ok() {
+        assert_eq!(-100, TxPower::try_from(-100).unwrap().power);
+        assert_eq!(20, TxPower::try_from(20).unwrap().power);
+    }
+
+    #[test]
+    fn context_sync_seq_num_out_of_range() {
+        assert_eq!(ContextSyncSeqNumOutOfRange, ContextSyncSeqNum::try_from(0x10).unwrap_err());
+    }
+
+    #[test]
+    fn context_sync_seq_num_ok() {
+        assert_eq!(0x0F, ContextSyncSeqNum::try_from(0x0F).unwrap().num);
+    }
+}

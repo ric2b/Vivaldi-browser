@@ -11,6 +11,9 @@
 #include <string>
 
 #include "base/component_export.h"
+#include "base/functional/callback.h"
+#include "base/memory/ref_counted_memory.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/values.h"
 
 namespace manta {
@@ -28,20 +31,42 @@ enum class PrefType {
 
 // Stores the setting data for the current or wanted state of a Pref.
 struct COMPONENT_EXPORT(MANTA) SettingsData {
-  std::string pref_name;
-  PrefType pref_type;
-  std::optional<base::Value> value;
-
   SettingsData(const std::string& pref_name,
                const PrefType& pref_type,
                std::optional<base::Value> value);
 
   ~SettingsData();
 
-  SettingsData(const SettingsData&) = delete;
-  SettingsData& operator=(const SettingsData&) = delete;
+  SettingsData(const SettingsData&);
+  SettingsData& operator=(const SettingsData&);
 
-  void UpdateValue(std::optional<base::Value> new_value);
+  std::optional<base::Value> GetValue() const;
+
+  std::string pref_name;
+  PrefType pref_type;
+  bool val_set{false};
+  bool bool_val;
+  int int_val;
+  std::string string_val;
+  double double_val;
+};
+
+using ScreenshotDataCallback =
+    base::OnceCallback<void(scoped_refptr<base::RefCountedMemory>)>;
+
+struct COMPONENT_EXPORT(MANTA) AppsData {
+  AppsData(const std::string& name, const std::string& id);
+
+  ~AppsData();
+
+  AppsData(AppsData&& other);
+  AppsData& operator=(AppsData&& other);
+
+  void AddSearchableText(const std::string& new_searchable_text);
+
+  std::string name;
+  std::string id;
+  std::vector<std::string> searchable_text;
 };
 
 // Virtual class to handle the information requests and actions taken within
@@ -59,6 +84,9 @@ class COMPONENT_EXPORT(MANTA) SparkyDelegate {
   virtual SettingsDataList* GetSettingsList() = 0;
   virtual std::optional<base::Value> GetSettingValue(
       const std::string& setting_id) = 0;
+  virtual void GetScreenshot(ScreenshotDataCallback callback) = 0;
+  virtual std::vector<AppsData> GetAppsList() = 0;
+  virtual void LaunchApp(const std::string& app_id) = 0;
 };
 
 }  // namespace manta

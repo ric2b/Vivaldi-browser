@@ -4,7 +4,7 @@ update_template_instance("//ios/chrome/app/resources:launchscreen_xib") {
   source = "//vivaldi/ios/app/resources/LaunchScreen.xib"
 }
 
-update_target("//ios/chrome/browser/ui/browser_view:browser_view") {
+update_target("//ios/chrome/browser/browser_view/ui_bundled:ui_bundled") {
   sources += [
     "//vivaldi/ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.h",
     "//vivaldi/ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.mm",
@@ -198,5 +198,26 @@ update_template_instance("//ios/chrome/browser/ui/tab_switcher/tab_grid/grid/res
     "Assets.xcassets/tab_grid_incognito_tabs_empty.imageset/tab_grid_incognito_tabs_empty.pdf",
     "Assets.xcassets/tab_grid_regular_tabs_empty.imageset/Contents.json",
     "Assets.xcassets/tab_grid_regular_tabs_empty.imageset/tab_grid_regular_tabs_empty.pdf",
+  ]
+}
+
+update_target("//ios/chrome/browser/providers/lottie:chromium_lottie_animation") {
+  sources -= [ "chromium_lottie_animation.mm" ]
+  sources += [ "//vivaldi/ios/chrome/browser/providers/lottie/vivaldi_lottie_animation.mm" ]
+}
+
+update_target("//ios/chrome/browser/default_promo/ui_bundled/resources:animation_files") {
+  sources -= [
+    "default_browser_animation.json",
+    "default_browser_animation_darkmode.json",
+    "default_browser_animation_rtl.json",
+    "default_browser_animation_rtl_darkmode.json",
+  ]
+
+  sources += [
+    "//vivaldi/ios/chrome/browser/ui/default_promo/resources/default_browser_animation.json",
+    "//vivaldi/ios/chrome/browser/ui/default_promo/resources/default_browser_animation_darkmode.json",
+    "//vivaldi/ios/chrome/browser/ui/default_promo/resources/default_browser_animation_rtl.json",
+    "//vivaldi/ios/chrome/browser/ui/default_promo/resources/default_browser_animation_rtl_darkmode.json",
   ]
 }

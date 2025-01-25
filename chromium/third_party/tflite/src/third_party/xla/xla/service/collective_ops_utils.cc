@@ -21,6 +21,7 @@ limitations under the License.
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_join.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_instruction.h"
@@ -515,8 +516,12 @@ absl::StatusOr<std::vector<int64_t>> GetPariticipantCountsForReplicaGroups(
 
   switch (group_mode) {
     case CollectiveOpGroupMode::kCrossReplica: {
-      participant_counts.resize(participating_replica_groups.size(),
-                                num_partitions);
+      for (const auto& replica_group : participating_replica_groups) {
+        for (int partition_id = 0; partition_id < num_partitions;
+             ++partition_id) {
+          participant_counts.push_back(replica_group.replica_ids().size());
+        }
+      }
       return participant_counts;
     }
     case CollectiveOpGroupMode::kCrossPartition: {
@@ -610,19 +615,22 @@ bool IsCollective(const HloInstruction* instruction) {
   }
 }
 
-bool IsCollectiveWithChannelId(const HloInstruction* instruction) {
+HloInstruction* IsOrHasCollectiveWithChannelId(HloInstruction* instruction) {
   if (instruction->opcode() == HloOpcode::kFusion) {
-    for (const auto* inner_inst : instruction->fused_instructions()) {
-      if (IsCollectiveWithChannelId(inner_inst)) {
-        return true;
+    for (auto* inner_inst : instruction->fused_instructions()) {
+      if (IsOrHasCollectiveWithChannelId(inner_inst) != nullptr) {
+        return inner_inst;
       }
     }
-    return false;
+    return nullptr;
   }
   if (DynCast<HloChannelInstruction>(instruction) == nullptr) {
-    return false;
+    return nullptr;
   }
-  return IsCollective(instruction) && instruction->channel_id().has_value();
+  if (IsCollective(instruction) && instruction->channel_id().has_value()) {
+    return instruction;
+  }
+  return nullptr;
 }
 
 bool IsSyncCollective(const HloInstruction* instr) {
@@ -633,4 +641,71 @@ bool IsSyncCollective(const HloInstruction* instr) {
   return backend_config->collective_backend_config().is_sync();
 }
 
+using SourceTargetPair = std::pair<int64_t, int64_t>;
+using SourceTargetPairs = std::vector<SourceTargetPair>;
+
+bool IsForwardCycle(const SourceTargetPairs& pairs) {
+  int64_t num_pairs = pairs.size();
+  const SourceTargetPair& last_pair = pairs[num_pairs - 1];
+  if (last_pair.first != num_pairs - 1 || last_pair.second != 0) {
+    return false;
+  }
+  for (int64_t i = 0; i < num_pairs - 1; ++i) {
+    const SourceTargetPair& pair = pairs[i];
+    if (pair.first != i || pair.second != i + 1) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool IsBackwardCycle(const SourceTargetPairs& pairs) {
+  int64_t num_pairs = pairs.size();
+  const SourceTargetPair& first_pair = pairs[0];
+  if (first_pair.first != 0 || first_pair.second != num_pairs - 1) {
+    return false;
+  }
+  for (int64_t i = 1; i < num_pairs; ++i) {
+    const SourceTargetPair& pair = pairs[i];
+    if (pair.first != i || pair.second != i - 1) {
+      return false;
+    }
+  }
+  return true;
+}
+
+absl::StatusOr<bool> IsExclusivelyCrossModule(
+    absl::Span<const ReplicaGroup> replica_groups, bool use_global_ids,
+    bool has_channel_id, const DeviceAssignment& device_assignment) {
+  if (!has_channel_id) {
+    return false;
+  }
+  if (!use_global_ids) {
+    // Each id is a replica group is a replica id. If any group
+    // has more than one id then this is not exclusively cross module.
+    for (const ReplicaGroup& replica_group : replica_groups) {
+      if (replica_group.replica_ids_size() != 1) {
+        return false;
+      }
+    }
+    return true;
+  }
+  // Each id in a replica group is a global id. Check if all replica groups are
+  // exclusively cross module (all participants in a group have the same replica
+  // id).
+  for (const ReplicaGroup& replica_group : replica_groups) {
+    std::optional<int64_t> first_replica_id;
+    for (int64_t global_id : replica_group.replica_ids()) {
+      TF_ASSIGN_OR_RETURN(
+          DeviceAssignment::LogicalID logical_id,
+          device_assignment.LogicalIdForDevice(GlobalDeviceId(global_id)));
+      if (!first_replica_id.has_value()) {
+        first_replica_id = logical_id.replica_id;
+      } else if (logical_id.replica_id != first_replica_id) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
 }  // end namespace xla

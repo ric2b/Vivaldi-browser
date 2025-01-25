@@ -123,6 +123,16 @@ by a child template that "extends" this file.
                       android:authorities="{{ manifest_package }}.DeveloperModeContentProvider"
                       android:process=":webview_service"  {# Explicit process required for monochrome compatibility. #}
                       tools:ignore="ExportedContentProvider" />
+            <provider android:name="androidx.core.content.FileProvider"
+                      android:visibleToInstantApps="true"
+                      android:exported="false"
+                      android:authorities="{{ manifest_package }}.net_logs_provider"
+                      android:process=":webview_service"  {# Explicit process required for monochrome compatibility. #}
+                      android:grantUriPermissions="true"
+                      tools:ignore="ExportedContentProvider">
+                      <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                          android:resource="@xml/provider_paths" />
+            </provider>
             <!-- If you change this component make sure to update the corresponding copy in
                  test/shell/AndroidManifest.xml-->
             <provider android:name="org.chromium.android_webview.services.SafeModeVariationsSeedContentProvider"
@@ -177,6 +187,10 @@ by a child template that "extends" this file.
                           />
                 </service>
                 <service android:name="org.chromium.android_webview.services.SafeModeService"
+                         android:exported="true"
+                         android:process=":webview_service"  {# Explicit process required for monochrome compatibility. #}
+                         tools:ignore="ExportedService" />
+                <service android:name="org.chromium.android_webview.services.AwNetLogService"
                          android:exported="true"
                          android:process=":webview_service"  {# Explicit process required for monochrome compatibility. #}
                          tools:ignore="ExportedService" />

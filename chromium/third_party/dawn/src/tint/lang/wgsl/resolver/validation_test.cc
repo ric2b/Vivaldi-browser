@@ -61,6 +61,7 @@ using namespace tint::core::fluent_types;     // NOLINT
 using namespace tint::core::number_suffixes;  // NOLINT
 
 using ResolverValidationTest = ResolverTest;
+using ResolverValidationDeathTest = ResolverValidationTest;
 
 class FakeStmt final : public Castable<FakeStmt, ast::Statement> {
   public:
@@ -132,7 +133,58 @@ TEST_F(ResolverValidationTest, WorkgroupMemoryUsedInFragmentStage) {
 9:10 note: called by entry point 'f0')");
 }
 
-TEST_F(ResolverValidationTest, UnhandledStmt) {
+TEST_F(ResolverValidationTest, RWStorageBufferUsedInVertexStage) {
+    // @group(0) @binding(0) var<storage, read_write> v : vec4<f32>;
+    // @vertex
+    // fn main() -> @builtin(position) vec4f {
+    //   return v;
+    // }
+
+    GlobalVar(Source{{1, 2}}, "v", ty.vec4<f32>(), core::AddressSpace::kStorage,
+              core::Access::kReadWrite, Binding(0_a), Group(0_a));
+    Func("main", tint::Empty, ty.vec4<f32>(),
+         Vector{
+             Return(Expr(Source{{3, 4}}, "v")),
+         },
+         Vector{
+             Stage(ast::PipelineStage::kVertex),
+         },
+         Vector{
+             Builtin(core::BuiltinValue::kPosition),
+         });
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(
+        r()->error(),
+        R"(3:4 error: var with 'storage' address space and 'read_write' access mode cannot be used by vertex pipeline stage
+1:2 note: variable is declared here)");
+}
+
+TEST_F(ResolverValidationTest, RWStorageTextureUsedInVertexStage) {
+    auto type = ty.storage_texture(core::type::TextureDimension::k2d, core::TexelFormat::kR32Uint,
+                                   core::Access::kReadWrite);
+    GlobalVar(Source{{1, 2}}, "v", type, Binding(0_a), Group(0_a));
+    GlobalVar("res", ty.vec4<f32>(), core::AddressSpace::kPrivate);
+    Func("main", tint::Empty, ty.vec4<f32>(),
+         Vector{
+             Assign(Phony(), Expr(Source{{3, 4}}, "v")),
+             Return(Expr(Source{{3, 4}}, "res")),
+         },
+         Vector{
+             Stage(ast::PipelineStage::kVertex),
+         },
+         Vector{
+             Builtin(core::BuiltinValue::kPosition),
+         });
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(
+        r()->error(),
+        R"(3:4 error: storage texture with 'read_write' access mode cannot be used by vertex pipeline stage
+1:2 note: variable is declared here)");
+}
+
+TEST_F(ResolverValidationDeathTest, UnhandledStmt) {
     EXPECT_DEATH_IF_SUPPORTED(
         {
             ProgramBuilder b;
@@ -163,7 +215,7 @@ TEST_F(ResolverValidationTest, Stmt_ElseIf_NonBool) {
     EXPECT_EQ(r()->error(), R"(12:34 error: if statement condition must be bool, got f32)");
 }
 
-TEST_F(ResolverValidationTest, Expr_ErrUnknownExprType) {
+TEST_F(ResolverValidationDeathTest, Expr_ErrUnknownExprType) {
     EXPECT_DEATH_IF_SUPPORTED(
         {
             ProgramBuilder b;
@@ -585,6 +637,69 @@ TEST_F(ResolverValidationTest,
     EXPECT_FALSE(r()->Resolve()) << r()->error();
     EXPECT_EQ(r()->error(),
               R"(12:34 error: continue statement bypasses declaration of 'z'
+56:78 note: identifier 'z' declared here
+90:12 note: identifier 'z' referenced in continuing block here)");
+}
+
+TEST_F(ResolverValidationTest,
+       Stmt_Loop_ContinueInLoopBodyBeforeDecl_UsageInNestedContinuingInBody) {
+    // loop  {
+    //     continue;
+    //     var z : i32;
+    //     loop {
+    //         continue;
+    //         continuing {
+    //             z = 2i;
+    //             break if true;
+    //         }
+    //     }
+    //     continuing {
+    //         break if true;
+    //     }
+    // }
+
+    auto cont_loc = Source{{12, 34}};
+    auto decl_loc = Source{{56, 78}};
+    auto ref_loc = Source{{90, 12}};
+    auto* nested_loop =
+        Loop(Block(Continue()), Block(Assign(Expr(ref_loc, "z"), 2_i), BreakIf(true)));
+    auto* body = Block(Continue(cont_loc), Decl(Var(decl_loc, "z", ty.i32())), nested_loop);
+    auto* continuing = Block(BreakIf(true));
+    auto* loop_stmt = Loop(body, continuing);
+    WrapInFunction(loop_stmt);
+
+    ASSERT_TRUE(r()->Resolve()) << r()->error();
+}
+
+TEST_F(ResolverValidationTest,
+       Stmt_Loop_ContinueInLoopBodyBeforeDecl_UsageInNestedContinuingInContinuing) {
+    // loop  {
+    //     continue;
+    //     var z : i32;
+    //     continuing {
+    //         loop {
+    //             continuing {
+    //               z = 2i;
+    //               break if true;
+    //             }
+    //         }
+    //         break if true;
+    //     }
+    // }
+
+    auto cont_loc = Source{{12, 34}};
+    auto decl_loc = Source{{56, 78}};
+    auto ref_loc = Source{{90, 12}};
+    auto* body = Block(Continue(cont_loc), Decl(Var(decl_loc, "z", ty.i32())));
+    auto* nested_loop = Loop(Block(), Block(Assign(Expr(ref_loc, "z"), 2_i), BreakIf(true)));
+    auto* continuing = Block(nested_loop, BreakIf(true));
+    auto* loop_stmt = Loop(body, continuing);
+    WrapInFunction(loop_stmt);
+
+    EXPECT_FALSE(r()->Resolve()) << r()->error();
+    EXPECT_EQ(r()->error(),
+              R"(warning: code is unreachable
+12:34 error: continue statement bypasses declaration of 'z'
 56:78 note: identifier 'z' declared here
 90:12 note: identifier 'z' referenced in continuing block here)");
 }
@@ -1287,6 +1402,55 @@ TEST_F(ResolverTest, U32_Overflow) {
 
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(), R"(12:24 error: value 4294967296 cannot be represented as 'u32')");
+}
+
+TEST_F(ResolverValidationTest, ShiftLeft_I32_PartialEval_Valid) {
+    auto* lhs = GlobalVar("v", ty.i32(), core::AddressSpace::kPrivate);
+    auto* let = Let("res", Shl(lhs, Expr(31_u)));
+    WrapInFunction(Decl(let));
+
+    EXPECT_TRUE(r()->Resolve()) << r()->error();
+}
+
+TEST_F(ResolverValidationTest, ShiftLeft_I32_PartialEval_Invalid) {
+    auto* lhs = GlobalVar("v", ty.i32(), core::AddressSpace::kPrivate);
+    auto* let = Let("res", Shl(Source{{1, 2}}, lhs, Expr(32_u)));
+    WrapInFunction(Decl(let));
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(
+        r()->error(),
+        R"(1:2 error: shift left value must be less than the bit width of the lhs, which is 32)");
+}
+
+TEST_F(ResolverValidationTest, ShiftRight_U32_PartialEval_Invalid) {
+    auto* lhs = GlobalVar("v", ty.u32(), core::AddressSpace::kPrivate);
+    auto* let = Let("res", Shr(Source{{1, 2}}, lhs, Expr(64_u)));
+    WrapInFunction(Decl(let));
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(
+        r()->error(),
+        R"(1:2 error: shift right value must be less than the bit width of the lhs, which is 32)");
+}
+
+TEST_F(ResolverValidationTest, ShiftLeft_VecI32_PartialEval_Valid) {
+    auto* lhs = GlobalVar("v", ty.vec3(ty.i32()), core::AddressSpace::kPrivate);
+    auto* let = Let("res", Shl(lhs, Call<vec3<u32>>(0_u, 1_u, 2_u)));
+    WrapInFunction(Decl(let));
+
+    EXPECT_TRUE(r()->Resolve()) << r()->error();
+}
+
+TEST_F(ResolverValidationTest, ShiftLeft_VecI32_PartialEval_Invalid) {
+    auto* lhs = GlobalVar("v", ty.vec3(ty.i32()), core::AddressSpace::kPrivate);
+    auto* let = Let("res", Shl(Source{{1, 2}}, lhs, Call<vec3<u32>>(31_u, 32_u, 33_u)));
+    WrapInFunction(Decl(let));
+
+    EXPECT_FALSE(r()->Resolve());
+    EXPECT_EQ(
+        r()->error(),
+        R"(1:2 error: shift left value must be less than the bit width of the lhs, which is 32)");
 }
 
 }  // namespace

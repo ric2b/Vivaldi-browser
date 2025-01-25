@@ -88,6 +88,7 @@
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/loader/fetch/client_hints_preferences.h"
 #include "third_party/blink/renderer/platform/loader/fetch/loader_freeze_mode.h"
+#include "third_party/blink/renderer/platform/mojo/browser_interface_broker_proxy_impl.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_associated_remote.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_unique_receiver_set.h"
@@ -106,7 +107,6 @@ namespace gfx {
 class Point;
 class Range;
 class Size;
-class SizeF;
 }  // namespace gfx
 
 namespace network {
@@ -121,7 +121,6 @@ class AttributionSrcLoader;
 class AuditsIssue;
 class BackgroundColorPaintImageGenerator;
 class BoxShadowPaintImageGenerator;
-class BrowserInterfaceBrokerProxy;
 class ClipPathPaintImageGenerator;
 class Color;
 class ContentCaptureManager;
@@ -213,6 +212,7 @@ class CORE_EXPORT LocalFrame final
       const LocalFrameToken& frame_token,
       WindowAgentFactory* inheriting_agent_factory,
       InterfaceRegistry*,
+      mojo::PendingRemote<mojom::blink::BrowserInterfaceBroker>,
       const base::TickClock* clock = base::DefaultTickClock::GetInstance());
 
   // Initialize the LocalFrame, creating and initializing its LocalDOMWindow. It
@@ -403,13 +403,13 @@ class CORE_EXPORT LocalFrame final
 
   // Begin printing.
   // If too large (in the inline direction), the frame content will fit to the
-  // page size with the specified maximum shrink ratio.
+  // page size with the specified maximum shrink ratio, if this value is larger
+  // than 1. If this value is 1 or less, there will be no shrinking.
   void StartPrinting(const WebPrintParams&, float maximum_shrink_ratio = 0);
-  void StartPrinting(const gfx::SizeF& page_size = gfx::SizeF(),
-                     float maximum_shrink_ratio = 0);
+  void StartPrintingSubLocalFrame();
 
   void EndPrinting();
-  bool ShouldUsePrintingLayout() const;
+  bool ShouldUsePaginatedLayout() const;
 
   // Setup for a Paint Preview of the page which will paint the full page
   // contents.
@@ -426,12 +426,15 @@ class CORE_EXPORT LocalFrame final
   bool InViewSourceMode() const;
   void SetInViewSourceMode(bool = true);
 
-  void SetPageZoomFactor(float);
-  float PageZoomFactor() const { return page_zoom_factor_; }
+  // Layout zoom factor reflects hardware device pixel ratio, browser zoom, and
+  // for embedded frames the effect of the CSS "zoom" property applied to the
+  // embedding element (e.g. <iframe>).
+  void SetLayoutZoomFactor(float);
+  float LayoutZoomFactor() const { return layout_zoom_factor_; }
   void SetTextZoomFactor(float);
   float TextZoomFactor() const { return text_zoom_factor_; }
-  void SetPageAndTextZoomFactors(float page_zoom_factor,
-                                 float text_zoom_factor);
+  void SetLayoutAndTextZoomFactors(float layout_zoom_factor,
+                                   float text_zoom_factor);
 
   double DevicePixelRatio() const;
 
@@ -467,9 +470,6 @@ class CORE_EXPORT LocalFrame final
   void RemoveSpellingMarkersUnderWords(const Vector<String>& words);
 
   bool ShouldThrottleRendering() const;
-
-  // Called on the main frame of the portal is activated or adopted.
-  void PortalStateChanged();
 
   // Returns frame scheduler for this frame.
   // FrameScheduler is destroyed during frame detach and nullptr will be
@@ -591,7 +591,7 @@ class CORE_EXPORT LocalFrame final
   // |mime_type| and populated with the contents of |data|. Only intended for
   // use in internal-implementation LocalFrames that aren't in the frame tree.
   void ForceSynchronousDocumentInstall(const AtomicString& mime_type,
-                                       scoped_refptr<const SharedBuffer> data);
+                                       const SegmentedBuffer& data);
 
   // Called when certain event listeners are added for the first time/last time,
   // making it possible/not possible to terminate the frame suddenly.
@@ -631,8 +631,8 @@ class CORE_EXPORT LocalFrame final
   bool IsAdScriptInStack() const;
 
   // The evidence for or against a frame being an ad. `std::nullopt` if not yet
-  // set or if the frame is a subfiltering root frame (outermost main frame or
-  // portal) as only child frames can be tagged as ads.
+  // set or if the frame is a subfiltering root frame (outermost main frame) as
+  // only child frames can be tagged as ads.
   const std::optional<blink::FrameAdEvidence>& AdEvidence() const {
     return ad_evidence_;
   }
@@ -743,11 +743,11 @@ class CORE_EXPORT LocalFrame final
       const gfx::Point& viewport_position,
       const blink::mojom::blink::MediaPlayerActionType type,
       bool enable);
-  void RequestVideoFrameAt(
+  void RequestVideoFrameAtWithBoundsHint(
       const gfx::Point& viewport_position,
       const gfx::Size& max_size,
       int max_area,
-      base::OnceCallback<void(const gfx::ImageSkia&)> callback);
+      base::OnceCallback<void(const SkBitmap&, const gfx::Rect&)> callback);
 
   // Handle the request as a download. If the request is for a blob: URL,
   // a BlobURLToken should be provided as |blob_url_token| to ensure the
@@ -926,10 +926,6 @@ class CORE_EXPORT LocalFrame final
     return *v8_local_compile_hints_producer_;
   }
 
-  // Gets the content settings associated with the current navigation commit.
-  // Can only be called while the frame is not detached.
-  const mojom::RendererContentSettingsPtr& GetContentSettings();
-
   // Returns whether images are allowed to load for the current frame. This is a
   // convenience method that checks both renderer content settings and frame
   // settings.
@@ -1093,13 +1089,16 @@ class CORE_EXPORT LocalFrame final
   // Whether this frame is known to be completely occluded by other opaque
   // OS-level windows.
   unsigned hidden_ : 1;
+  // Whether DetachImpl() has run to completion on this LocalFrame.
+  unsigned did_run_detach_impl_ : 1 = false;
 
-  float page_zoom_factor_;
+  float layout_zoom_factor_;
   float text_zoom_factor_;
 
   Member<CoreProbeSink> probe_sink_;
   scoped_refptr<InspectorTaskRunner> inspector_task_runner_;
   Member<PerformanceMonitor> performance_monitor_;
+
   Member<AdTracker> ad_tracker_;
   Member<IdlenessDetector> idleness_detector_;
   Member<AttributionSrcLoader> attribution_src_loader_;
@@ -1174,11 +1173,11 @@ class CORE_EXPORT LocalFrame final
 
 #if !BUILDFLAG(IS_ANDROID)
   bool is_window_controls_overlay_visible_ = false;
-  // |page_zoom_factor_| is asynchronously set sometimes (most prominently seen
-  // on mac) in |LocalFrame| via |PropagatePageZoomToNewlyAttachedFrame| on
+  // |layout_zoom_factor_| is asynchronously set sometimes (most prominently
+  // seen on mac) in |LocalFrame| via |WebFrameWidgetImpl::SetZoomLevel| on
   // navigation. We need to store the window_controls_overlay_rect sent from the
   // browser in dips so we can convert the rect to blink space coordinates when
-  // |page_zoom_factor_| gets updated this way.
+  // |layout_zoom_factor_| gets updated this way.
   gfx::Rect window_controls_overlay_rect_in_dips_;
   gfx::Rect window_controls_overlay_rect_;
   WeakMember<WindowControlsOverlayChangedDelegate>
@@ -1231,6 +1230,8 @@ class CORE_EXPORT LocalFrame final
       feature_handle_for_scheduler_;
 
   WebPrintParams print_params_;
+
+  BrowserInterfaceBrokerProxyImpl browser_interface_broker_proxy_;
 
   // Holds WebLinkPreviewTriggerer instance if content renderer client wants to
   // inject it. Note that `link_preview_triggerer_` may be nullptr after

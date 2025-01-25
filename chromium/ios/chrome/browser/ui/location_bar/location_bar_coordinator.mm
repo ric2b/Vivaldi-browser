@@ -18,6 +18,10 @@
 #import "components/search_engines/util.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/autocomplete/model/autocomplete_scheme_classifier_impl.h"
+#import "ios/chrome/browser/badges/ui_bundled/badge_button_factory.h"
+#import "ios/chrome/browser/badges/ui_bundled/badge_delegate.h"
+#import "ios/chrome/browser/badges/ui_bundled/badge_mediator.h"
+#import "ios/chrome/browser/badges/ui_bundled/badge_view_controller.h"
 #import "ios/chrome/browser/browser_state_metrics/model/browser_state_metrics.h"
 #import "ios/chrome/browser/contextual_panel/entrypoint/coordinator/contextual_panel_entrypoint_coordinator.h"
 #import "ios/chrome/browser/contextual_panel/entrypoint/coordinator/contextual_panel_entrypoint_coordinator_delegate.h"
@@ -42,10 +46,6 @@
 #import "ios/chrome/browser/shared/public/commands/search_image_with_lens_command.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
-#import "ios/chrome/browser/ui/badges/badge_button_factory.h"
-#import "ios/chrome/browser/ui/badges/badge_delegate.h"
-#import "ios/chrome/browser/ui/badges/badge_mediator.h"
-#import "ios/chrome/browser/ui/badges/badge_view_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
@@ -57,6 +57,7 @@
 #import "ios/chrome/browser/ui/location_bar/location_bar_steady_view_mediator.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_url_loader.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_view_controller.h"
+#import "ios/chrome/browser/ui/omnibox/chrome_omnibox_client_ios.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_controller_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_coordinator.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_focus_delegate.h"
@@ -85,10 +86,6 @@
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-BASE_FEATURE(kEnableFocusOmniboxWorkaround,
-             "EnableFocusOmniboxWorkaround",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 namespace {
 const size_t kMaxURLDisplayChars = 32 * 1024;
@@ -179,9 +176,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
   BOOL isIncognito = self.browserState->IsOffTheRecord();
 
-  PrefService* originalPrefs = self.browser->GetBrowserState()
-                                   ->GetOriginalChromeBrowserState()
-                                   ->GetPrefs();
   self.viewController = [[LocationBarViewController alloc] init];
   self.viewController.incognito = isIncognito;
   self.viewController.delegate = self;
@@ -196,20 +190,25 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
       ios::provider::IsVoiceSearchEnabled();
   self.viewController.layoutGuideCenter =
       LayoutGuideCenterForBrowser(self.browser);
-  self.viewController.originalPrefService = originalPrefs;
 
-  _locationBar = std::make_unique<WebLocationBarImpl>(self, self.delegate);
+  _locationBar = std::make_unique<WebLocationBarImpl>(self);
   _locationBar->SetURLLoader(self);
   _locationBarModelDelegate.reset(new LocationBarModelDelegateIOS(
       self.browser->GetWebStateList(), self.browserState));
   _locationBarModel = std::make_unique<LocationBarModelImpl>(
       _locationBarModelDelegate.get(), kMaxURLDisplayChars);
 
-  self.omniboxCoordinator =
-      [[OmniboxCoordinator alloc] initWithBaseViewController:nil
-                                                     browser:self.browser];
+  self.omniboxCoordinator = [[OmniboxCoordinator alloc]
+      initWithBaseViewController:nil
+                         browser:self.browser
+                   omniboxClient:std::make_unique<ChromeOmniboxClientIOS>(
+                                     _locationBar.get(), self.browserState,
+                                     feature_engagement::TrackerFactory::
+                                         GetForBrowserState(
+                                             self.browserState))];
   self.omniboxCoordinator.bubblePresenter = self.bubblePresenter;
-  self.omniboxCoordinator.locationBar = _locationBar.get();
+  self.omniboxCoordinator.focusDelegate = self.delegate;
+
   self.omniboxCoordinator.presenterDelegate = self.popupPresenterDelegate;
   [self.omniboxCoordinator start];
 
@@ -364,12 +363,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   if (immediately) {
     [self loadURLForQuery:sanitizedQuery];
   } else {
-    // TODO(crbug.com/40275343): Clean up the kill switch and else branch.
-    if (base::FeatureList::IsEnabled(kEnableFocusOmniboxWorkaround)) {
-      [self focusOmnibox];
-    } else {
-      [self.omniboxCoordinator focusOmnibox];
-    }
+    [self focusOmnibox];
     [self.omniboxCoordinator
         insertTextToOmnibox:base::SysUTF16ToNSString(sanitizedQuery)];
   }
@@ -553,13 +547,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   [self.omniboxCoordinator updateOmniboxState];
   [self.viewController updateLocationText:text clipTail:clipTail];
   [self.viewController updateForNTP:NO];
-
-  // Vivaldi
-  [self.viewController setLoadingState:[self isPageLoading]];
-  [self.steadyViewConsumer updateLocationText:text
-                                     clipTail:clipTail];
-  // End Vivaldi
-
 }
 
 - (void)updateLocationIcon:(UIImage*)icon
@@ -598,6 +585,9 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   // Disable drag and drop when the omnibox is focused, as it interferes with
   // text interactions like moving the cursor (crbug.com/1502538).
   if ([self isOmniboxFirstResponder]) {
+    return nil;
+  }
+  if (!self.webState->GetVisibleURL().is_valid()) {
     return nil;
   }
   return [[URLInfo alloc]
@@ -741,6 +731,22 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 - (id<SharingPositioner>)vivaldiPositioner {
   return [self.viewController sharingSourceView];
 }
+
+#pragma mark - LocationBarSteadyViewConsumer (Vivaldi)
+- (void)updateLocationText:(NSString*)text
+                    domain:(NSString*)domain
+                  showFull:(BOOL)showFull {
+  [self.omniboxCoordinator updateOmniboxState];
+  [self.viewController updateLocationText:text
+                                   domain:domain
+                                 showFull:showFull];
+  [self.viewController updateForNTP:NO];
+  [self.viewController setLoadingState:[self isPageLoading]];
+  [self.steadyViewConsumer updateLocationText:text
+                                       domain:domain
+                                     showFull:showFull];
+}
+
 // End Vivaldi
 
 @end

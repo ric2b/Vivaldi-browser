@@ -12,6 +12,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
@@ -25,6 +26,7 @@
 #include "extensions/common/manifest_handlers/sandboxed_page_info.h"
 #include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "extensions/common/switches.h"
 #include "extensions/renderer/dispatcher.h"
 #include "extensions/renderer/isolated_world_manager.h"
 #include "extensions/renderer/renderer_context_data.h"
@@ -80,7 +82,7 @@ std::string GetContextTypeDescriptionString(mojom::ContextType context_type) {
     case mojom::ContextType::kUserScript:
       return "USER_SCRIPT_CONTEXT";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -277,8 +279,11 @@ Feature::Availability ScriptContext::GetAvailability(
   // Special case #1: The `test` API depends on this being run in a test, in
   // which case the kTestType switch is appended.
   if (base::StartsWith(api_name, "test", base::CompareCase::SENSITIVE)) {
-    bool allowed = base::CommandLine::ForCurrentProcess()->
-                       HasSwitch(::switches::kTestType);
+    bool allowed = base::CommandLine::ForCurrentProcess()->HasSwitch(
+                       ::switches::kTestType) ||
+                   (base::CommandLine::ForCurrentProcess()->HasSwitch(
+                        switches::kExtensionTestApiOnWebPages) &&
+                    context_type_ == mojom::ContextType::kWebPage);
     Feature::AvailabilityResult result =
         allowed ? Feature::IS_AVAILABLE : Feature::MISSING_COMMAND_LINE_SWITCH;
     return Feature::Availability(result,
@@ -500,7 +505,7 @@ std::string ScriptContext::GetStackTraceAsString() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   v8::Local<v8::StackTrace> stack_trace =
       v8::StackTrace::CurrentStackTrace(isolate(), 10);
-  if (stack_trace.IsEmpty() || stack_trace->GetFrameCount() <= 0) {
+  if (stack_trace.IsEmpty() || stack_trace->GetFrameCount() == 0) {
     return "    <no stack trace>";
   }
   std::string result;
@@ -518,6 +523,38 @@ std::string ScriptContext::GetStackTraceAsString() const {
   return result;
 }
 
+std::optional<StackTrace> ScriptContext::GetStackTrace(int frame_limit) {
+  v8::Local<v8::StackTrace> v8_stack_trace =
+      v8::StackTrace::CurrentStackTrace(isolate(), frame_limit);
+  const int frame_count = v8_stack_trace->GetFrameCount();
+  if (v8_stack_trace.IsEmpty() || frame_count == 0) {
+    return std::nullopt;
+  }
+  DCHECK_LE(frame_count, frame_limit);
+  StackTrace stack_trace;
+  stack_trace.reserve(frame_count);
+  for (int i = 0; i < frame_count; ++i) {
+    v8::Local<v8::StackFrame> v8_frame = v8_stack_trace->GetFrame(isolate(), i);
+    CHECK(!v8_frame.IsEmpty());
+    std::string function = ToStringOrDefault(
+        isolate(), v8_frame->GetFunctionName(), "<anonymous>");
+    std::string source =
+        ToStringOrDefault(isolate(), v8_frame->GetScriptName(), "<anonymous>");
+    GURL source_url(source);
+    if (source_url.SchemeIs(kExtensionScheme)) {
+      source = source_url.PathForRequest();
+    }
+    StackFrame frame;
+    frame.line_number = v8_frame->GetLineNumber();
+    frame.column_number = v8_frame->GetColumn();
+    frame.source = base::UTF8ToUTF16(source);
+    frame.function = base::UTF8ToUTF16(function);
+    stack_trace.push_back(std::move(frame));
+  }
+
+  return std::move(stack_trace);
+}
+
 v8::Local<v8::Value> ScriptContext::RunScript(
     v8::Local<v8::String> name,
     v8::Local<v8::String> code,
@@ -533,7 +570,7 @@ v8::Local<v8::Value> ScriptContext::RunScript(
       "extensions::%s", *v8::String::Utf8Value(isolate(), name));
 
   if (internal_name.size() >= v8::String::kMaxLength) {
-    DUMP_WILL_BE_NOTREACHED_NORETURN() << "internal_name is too long.";
+    DUMP_WILL_BE_NOTREACHED() << "internal_name is too long.";
     return v8::Undefined(isolate());
   }
 

@@ -871,8 +871,7 @@ void NativeWidgetAura::FlashFrame(bool flash) {
     window_->SetProperty(aura::client::kDrawAttentionKey, flash);
 }
 
-void NativeWidgetAura::RunShellDrag(View* view,
-                                    std::unique_ptr<ui::OSExchangeData> data,
+void NativeWidgetAura::RunShellDrag(std::unique_ptr<ui::OSExchangeData> data,
                                     const gfx::Point& location,
                                     int operation,
                                     ui::mojom::DragEventSource source) {
@@ -1009,6 +1008,21 @@ void NativeWidgetAura::OnSizeConstraintsChanged() {
 void NativeWidgetAura::OnNativeViewHierarchyWillChange() {}
 
 void NativeWidgetAura::OnNativeViewHierarchyChanged() {}
+
+bool NativeWidgetAura::SetAllowScreenshots(bool allow) {
+  // TODO(crbug.com/322519161): Revisit this to delegate the call to
+  // `WindowTreeHost`.
+  NOTIMPLEMENTED();
+  return false;
+}
+
+bool NativeWidgetAura::AreScreenshotsAllowed() {
+  // TODO(crbug.com/322519161): Revisit this to delegate the call to
+  // `WindowTreeHost`. For now, this function simply returns true as the
+  // screenshot blocking logic is handled in desktop_native_widget_aura.cc
+  NOTIMPLEMENTED();
+  return true;
+}
 
 std::string NativeWidgetAura::GetName() const {
   return window_ ? window_->GetName() : std::string();
@@ -1180,7 +1194,7 @@ void NativeWidgetAura::OnKeyEvent(ui::KeyEvent* event) {
 void NativeWidgetAura::OnMouseEvent(ui::MouseEvent* event) {
   DCHECK(window_);
   DCHECK(window_->IsVisible());
-  if (delegate_ && event->type() == ui::ET_MOUSEWHEEL) {
+  if (delegate_ && event->type() == ui::EventType::kMousewheel) {
     delegate_->OnMouseEvent(event);
     return;
   }
@@ -1434,8 +1448,7 @@ void NativeWidgetPrivate::ReparentNativeView(gfx::NativeView native_view,
 
   Widget* child_widget = Widget::GetWidgetForNativeView(native_view);
 
-  if (base::FeatureList::IsEnabled(features::kDesktopWidgetReparentAura) &&
-      child_widget) {
+  if (child_widget) {
     child_widget->native_widget_private()->ReparentNativeViewImpl(new_parent);
   } else {
     ReparentAuraWindow(native_view, new_parent);

@@ -58,7 +58,7 @@ WindowType ConvertToJSWindowType(VivaldiBrowserWindow::WindowType type) {
       return WindowType::kSettings;
   }
   NOTREACHED();
-  return WindowType::kNone;
+  //return WindowType::kNone;
 }
 
 using vivaldi::window_private::WindowState;
@@ -74,7 +74,7 @@ WindowState ConvertToJSWindowState(ui::WindowShowState state) {
       return WindowState::kNormal;
   }
   NOTREACHED();
-  return WindowState::kNormal;
+  //return WindowState::kNormal;
 }
 
 ui::WindowShowState ConvertToWindowShowState(
@@ -93,7 +93,7 @@ ui::WindowShowState ConvertToWindowShowState(
       return ui::SHOW_STATE_DEFAULT;
   }
   NOTREACHED();
-  return ui::SHOW_STATE_DEFAULT;
+  //return ui::SHOW_STATE_DEFAULT;
 }
 }  // namespace vivaldi
 
@@ -613,7 +613,7 @@ ExtensionFunction::ResponseAction
 WindowPrivateSetControlButtonsPaddingFunction::Run() {
   using vivaldi::window_private::SetControlButtonsPadding::Params;
 
-  absl::optional<Params> params = Params::Create(args());
+  std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   Browser* browser;

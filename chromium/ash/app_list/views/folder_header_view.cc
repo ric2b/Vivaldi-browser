@@ -29,6 +29,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/text_elider.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
@@ -385,7 +386,7 @@ class FolderHeaderView::FolderNameViewController
       // TODO(b/323054951): Clean this code once the SystemTextfield has
       // implemented clearing focus.
       const bool should_clear_focus =
-          key_event.type() == ui::ET_KEY_PRESSED &&
+          key_event.type() == ui::EventType::kKeyPressed &&
           (key_event.key_code() == ui::VKEY_RETURN ||
            key_event.key_code() == ui::VKEY_ESCAPE);
 
@@ -494,7 +495,7 @@ void FolderHeaderView::UpdateFolderNameAccessibleName() {
   std::u16string accessible_name = folder_name_view_->GetText().empty()
                                        ? folder_name_placeholder_text_
                                        : std::u16string();
-  folder_name_view_->SetAccessibleName(accessible_name);
+  folder_name_view_->GetViewAccessibility().SetName(accessible_name);
 }
 
 const std::u16string& FolderHeaderView::GetFolderNameForTest() {
@@ -620,7 +621,7 @@ void FolderHeaderView::UpdateFolderName(
 }
 
 bool FolderHeaderView::ShouldNameViewClearFocus(const ui::KeyEvent& key_event) {
-  return key_event.type() == ui::ET_KEY_PRESSED &&
+  return key_event.type() == ui::EventType::kKeyPressed &&
          (key_event.key_code() == ui::VKEY_RETURN ||
           key_event.key_code() == ui::VKEY_ESCAPE);
 }

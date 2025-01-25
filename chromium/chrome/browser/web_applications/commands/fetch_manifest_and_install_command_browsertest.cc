@@ -30,6 +30,7 @@
 #include "chrome/browser/web_applications/web_app_install_params.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
+#include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/common/chrome_features.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "content/public/browser/web_contents.h"
@@ -288,7 +289,8 @@ IN_PROC_BROWSER_TEST_F(FetchManifestAndInstallCommandTest,
   {
     ScopedRegistryUpdate update = provider().sync_bridge_unsafe().BeginUpdate();
     web_app->SetUserDisplayMode(mojom::UserDisplayMode::kStandalone);
-    web_app->SetIsLocallyInstalled(false);
+    web_app->SetInstallState(
+        proto::InstallState::SUGGESTED_FROM_ANOTHER_DEVICE);
     update->CreateApp(std::move(web_app));
   }
 

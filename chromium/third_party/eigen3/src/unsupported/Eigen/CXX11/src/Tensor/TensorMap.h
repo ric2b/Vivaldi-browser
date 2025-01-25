@@ -79,14 +79,14 @@ class TensorMap : public TensorBase<TensorMap<PlainObjectType, Options_, MakePoi
   template <typename... IndexTypes>
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE TensorMap(StoragePointerType dataPtr, Index firstDimension,
                                                   IndexTypes... otherDimensions)
-      : m_data(dataPtr),
-        m_dimensions(firstDimension, otherDimensions...){
-            // The number of dimensions used to construct a tensor must be equal to the rank of the tensor.
-            EIGEN_STATIC_ASSERT((sizeof...(otherDimensions) + 1 == NumIndices || NumIndices == Dynamic),
-                                YOU_MADE_A_PROGRAMMING_MISTAKE)}
+      : m_data(dataPtr), m_dimensions(firstDimension, otherDimensions...) {
+    // The number of dimensions used to construct a tensor must be equal to the rank of the tensor.
+    EIGEN_STATIC_ASSERT((sizeof...(otherDimensions) + 1 == NumIndices || NumIndices == Dynamic),
+                        YOU_MADE_A_PROGRAMMING_MISTAKE)
+  }
 
-        EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE TensorMap(StoragePointerType dataPtr,
-                                                        const array<Index, NumIndices>& dimensions)
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE TensorMap(StoragePointerType dataPtr,
+                                                  const array<Index, NumIndices>& dimensions)
       : m_data(dataPtr), m_dimensions(dimensions) {}
 
   template <typename Dimensions>

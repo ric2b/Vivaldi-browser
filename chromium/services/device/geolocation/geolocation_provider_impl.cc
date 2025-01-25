@@ -23,7 +23,7 @@
 #include "build/build_config.h"
 #include "components/device_event_log/device_event_log.h"
 #include "net/base/network_change_notifier.h"
-#include "services/device/geolocation/location_arbitrator.h"
+#include "services/device/geolocation/location_provider_manager.h"
 #include "services/device/geolocation/position_cache_impl.h"
 #include "services/device/public/cpp/device_features.h"
 #include "services/device/public/cpp/geolocation/geoposition.h"
@@ -82,7 +82,8 @@ void GeolocationProviderImpl::SetGeolocationConfiguration(
     JNIEnv* env = base::android::AttachCurrentThread();
     Java_LocationProviderFactory_useGmsCoreLocationProvider(env);
 #else
-    NOTREACHED() << "GMS core location provider is only available for Android";
+    NOTREACHED_IN_MIGRATION()
+        << "GMS core location provider is only available for Android";
 #endif
   }
 }
@@ -177,8 +178,9 @@ GeolocationProviderImpl::GeolocationProviderImpl()
       &GeolocationProviderImpl::OnInternalsObserverDisconnected,
       base::Unretained(this)));
 
-#if BUILDFLAG(IS_APPLE) || BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
-  if (g_geolocation_system_permission_manager) {
+#if BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
+  if (features::IsOsLevelGeolocationPermissionSupportEnabled() &&
+      g_geolocation_system_permission_manager) {
     observers_ = g_geolocation_system_permission_manager->GetObserverList();
     observers_->AddObserver(this);
     system_permission_status_ =
@@ -194,18 +196,18 @@ GeolocationProviderImpl::GeolocationProviderImpl()
 }
 
 GeolocationProviderImpl::~GeolocationProviderImpl() {
-#if BUILDFLAG(IS_APPLE) || BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
-  if (observers_) {
+#if BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
+  if (features::IsOsLevelGeolocationPermissionSupportEnabled() && observers_) {
     observers_->RemoveObserver(this);
   }
 #endif
   Stop();
-  DCHECK(!arbitrator_);
+  DCHECK(!location_provider_manager_);
 }
 
-void GeolocationProviderImpl::SetArbitratorForTesting(
-    std::unique_ptr<LocationProvider> arbitrator) {
-  arbitrator_ = std::move(arbitrator);
+void GeolocationProviderImpl::SetLocationProviderManagerForTesting(
+    std::unique_ptr<LocationProvider> location_provider_manager) {
+  location_provider_manager_ = std::move(location_provider_manager);
 }
 
 bool GeolocationProviderImpl::OnGeolocationThread() const {
@@ -234,13 +236,14 @@ void GeolocationProviderImpl::OnClientsChanged() {
       if (user_did_opt_into_location_services_)
         InformProvidersPermissionGranted();
     }
-#if BUILDFLAG(IS_APPLE) || BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
+#if BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
     // Handle system permission states:
     // - kAllowed: Start providers (allows re-entry for accuracy updates).
     // - kDenied: Use previously generated error result (no action here).
     // - kUndetermined: Wait for OnSystemPermissionUpdated() to handle changes
     // (no action here).
-    if (system_permission_status_ != LocationSystemPermissionStatus::kAllowed) {
+    if (features::IsOsLevelGeolocationPermissionSupportEnabled() &&
+        system_permission_status_ != LocationSystemPermissionStatus::kAllowed) {
       return;
     }
 #endif
@@ -301,19 +304,19 @@ void GeolocationProviderImpl::OnInternalsObserverDisconnected(
 
 void GeolocationProviderImpl::StopProviders() {
   DCHECK(OnGeolocationThread());
-  DCHECK(arbitrator_);
+  DCHECK(location_provider_manager_);
   GEOLOCATION_LOG(DEBUG) << "Stop provider.";
-  arbitrator_->StopProvider();
+  location_provider_manager_->StopProvider();
   OnInternalsUpdated();
 }
 
 void GeolocationProviderImpl::StartProviders(bool enable_high_accuracy,
                                              bool enable_diagnostics) {
   DCHECK(OnGeolocationThread());
-  DCHECK(arbitrator_);
+  DCHECK(location_provider_manager_);
   GEOLOCATION_LOG(DEBUG) << "Start provider: high_accuracy="
                          << enable_high_accuracy;
-  arbitrator_->StartProvider(enable_high_accuracy);
+  location_provider_manager_->StartProvider(enable_high_accuracy);
   if (enable_diagnostics) {
     // Enable diagnostics in the case where internals observers are added before
     // the provider is started.
@@ -333,8 +336,8 @@ void GeolocationProviderImpl::InformProvidersPermissionGranted() {
     return;
   }
   DCHECK(OnGeolocationThread());
-  DCHECK(arbitrator_);
-  arbitrator_->OnPermissionGranted();
+  DCHECK(location_provider_manager_);
+  location_provider_manager_->OnPermissionGranted();
 }
 
 void GeolocationProviderImpl::NotifyClients(
@@ -377,8 +380,9 @@ void GeolocationProviderImpl::NotifyNetworkLocationReceived(
 void GeolocationProviderImpl::Init() {
   DCHECK(OnGeolocationThread());
 
-  if (arbitrator_)
+  if (location_provider_manager_) {
     return;
+  }
 
   LocationProvider::LocationProviderUpdateCallback callback =
       base::BindRepeating(&GeolocationProviderImpl::OnLocationUpdate,
@@ -392,7 +396,7 @@ void GeolocationProviderImpl::Init() {
 
   DCHECK(!net::NetworkChangeNotifier::CreateIfNeeded())
       << "PositionCacheImpl needs a global NetworkChangeNotifier";
-  arbitrator_ = std::make_unique<LocationArbitrator>(
+  location_provider_manager_ = std::make_unique<LocationProviderManager>(
       g_custom_location_provider_callback.Get(),
       g_geolocation_system_permission_manager, std::move(url_loader_factory),
       g_api_key.Get(),
@@ -404,12 +408,12 @@ void GeolocationProviderImpl::Init() {
                           base::Unretained(this)),
       base::BindRepeating(&GeolocationProviderImpl::OnNetworkLocationReceived,
                           base::Unretained(this)));
-  arbitrator_->SetUpdateCallback(callback);
+  location_provider_manager_->SetUpdateCallback(callback);
 }
 
 void GeolocationProviderImpl::CleanUp() {
   DCHECK(OnGeolocationThread());
-  arbitrator_.reset();
+  location_provider_manager_.reset();
 }
 
 void GeolocationProviderImpl::AddInternalsObserver(
@@ -423,7 +427,7 @@ void GeolocationProviderImpl::AddInternalsObserver(
     return;
   }
   internals_observers_.Add(std::move(observer));
-  if (!arbitrator_) {
+  if (!location_provider_manager_) {
     std::move(callback).Run(nullptr);
     return;
   }
@@ -457,7 +461,7 @@ GeolocationProviderImpl::EnableAndGetDiagnosticsOnGeolocationThread() {
 
   mojom::GeolocationDiagnosticsPtr result =
       mojom::GeolocationDiagnostics::New();
-  arbitrator_->FillDiagnostics(*result);
+  location_provider_manager_->FillDiagnostics(*result);
   return result;
 }
 
@@ -467,7 +471,7 @@ void GeolocationProviderImpl::DisableDiagnosticsOnGeolocationThread() {
   diagnostics_enabled_ = false;
 }
 
-#if BUILDFLAG(IS_APPLE) || BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
+#if BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
 void GeolocationProviderImpl::OnSystemPermissionUpdated(
     LocationSystemPermissionStatus new_status) {
   CHECK(main_task_runner_->BelongsToCurrentThread());

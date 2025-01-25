@@ -26,6 +26,11 @@
  * DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/css/resolver/scoped_style_resolver.h"
 
 #include "third_party/blink/renderer/core/animation/document_timeline.h"
@@ -141,7 +146,7 @@ void ScopedStyleResolver::CollectFeaturesTo(
     StyleSheetContents* contents = sheet->Contents();
     if (contents->HasOneClient() ||
         visited_shared_style_sheet_contents.insert(contents).is_new_entry) {
-      features.Merge(contents->GetRuleSet().Features());
+      features.Merge(rule_set->Features());
     }
   }
 }

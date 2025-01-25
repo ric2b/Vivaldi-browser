@@ -97,7 +97,7 @@ def ci_builder(name, os, caches = None):
         short_name = name,
     )
 
-ci_builder("linux", "Ubuntu-18.04")
+ci_builder("linux", "Ubuntu-22.04")
 ci_builder("mac", "Mac-10.15", caches = [swarming.cache("macos_sdk")])
 ci_builder("win", "Windows-10", caches = [swarming.cache("windows_sdk")])
 
@@ -151,6 +151,6 @@ def try_builder(name, os, caches = None):
         cq_group = "gn",
     )
 
-try_builder("linux", "Ubuntu-18.04")
+try_builder("linux", "Ubuntu-22.04")
 try_builder("mac", "Mac-10.15", caches = [swarming.cache("macos_sdk")])
 try_builder("win", "Windows-10", caches = [swarming.cache("windows_sdk")])

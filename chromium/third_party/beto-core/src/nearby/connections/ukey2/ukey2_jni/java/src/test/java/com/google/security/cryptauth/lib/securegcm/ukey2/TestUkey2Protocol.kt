@@ -167,9 +167,71 @@ class TestUkey2Protocol {
   @Test
   fun throwsAlertExceptionWhenBadMessage() {
     val serverContext = D2DHandshakeContext(D2DHandshakeContext.Role.RESPONDER)
-    val exception = assertThrows<AlertException> {
-      serverContext.parseHandshakeMessage("Hello UKEY2".toByteArray())
-    }
+    val exception =
+        assertThrows<AlertException> {
+          serverContext.parseHandshakeMessage("Hello UKEY2".toByteArray())
+        }
     assert(exception.alertMessageToSend.isNotEmpty())
+  }
+
+  @Test
+  fun testGcm() {
+    val initiatorContext =
+        D2DHandshakeContext(
+            D2DHandshakeContext.Role.INITIATOR,
+            arrayOf(D2DHandshakeContext.NextProtocol.AES_256_GCM_SIV))
+    val serverContext =
+        D2DHandshakeContext(
+            D2DHandshakeContext.Role.RESPONDER,
+            arrayOf(D2DHandshakeContext.NextProtocol.AES_256_GCM_SIV))
+    assertDoesNotThrow {
+      serverContext.parseHandshakeMessage(initiatorContext.nextHandshakeMessage)
+      initiatorContext.parseHandshakeMessage(serverContext.nextHandshakeMessage)
+      serverContext.parseHandshakeMessage(initiatorContext.nextHandshakeMessage)
+    }
+    assert(serverContext.isHandshakeComplete)
+    assert(initiatorContext.isHandshakeComplete)
+  }
+
+  @Test
+  fun testGcmServer_cbcClient() {
+    val initiatorContext =
+        D2DHandshakeContext(
+            D2DHandshakeContext.Role.INITIATOR,
+            arrayOf(D2DHandshakeContext.NextProtocol.AES_256_CBC_HMAC_SHA256))
+    val serverContext =
+        D2DHandshakeContext(
+            D2DHandshakeContext.Role.RESPONDER,
+            arrayOf(
+                D2DHandshakeContext.NextProtocol.AES_256_CBC_HMAC_SHA256,
+                D2DHandshakeContext.NextProtocol.AES_256_GCM_SIV))
+    assertDoesNotThrow {
+      serverContext.parseHandshakeMessage(initiatorContext.nextHandshakeMessage)
+      initiatorContext.parseHandshakeMessage(serverContext.nextHandshakeMessage)
+      serverContext.parseHandshakeMessage(initiatorContext.nextHandshakeMessage)
+    }
+    assert(serverContext.isHandshakeComplete)
+    assert(initiatorContext.isHandshakeComplete)
+  }
+
+  @Test
+  fun testGcmClient_cbcServer() {
+    val initiatorContext =
+        D2DHandshakeContext(
+            D2DHandshakeContext.Role.INITIATOR,
+            arrayOf(
+                D2DHandshakeContext.NextProtocol.AES_256_CBC_HMAC_SHA256,
+                D2DHandshakeContext.NextProtocol.AES_256_GCM_SIV))
+    val serverContext =
+        D2DHandshakeContext(
+            D2DHandshakeContext.Role.RESPONDER,
+            arrayOf(D2DHandshakeContext.NextProtocol.AES_256_CBC_HMAC_SHA256))
+    assertDoesNotThrow {
+      serverContext.parseHandshakeMessage(initiatorContext.nextHandshakeMessage)
+      initiatorContext.parseHandshakeMessage(serverContext.nextHandshakeMessage)
+      serverContext.parseHandshakeMessage(initiatorContext.nextHandshakeMessage)
+    }
+    assert(serverContext.isHandshakeComplete)
+    assert(initiatorContext.isHandshakeComplete)
   }
 }

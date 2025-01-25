@@ -25,6 +25,7 @@ import org.chromium.components.browser_ui.settings.CustomDividerFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.ui.UiUtils;
 
+// Vivaldi
 import androidx.preference.PreferenceCategory;
 
 import org.chromium.chrome.browser.profiles.ProfileManager;
@@ -110,7 +111,7 @@ public class ThemeSettingsFragment extends ChromeBaseSettingsFragment
                             ProfileManager.getLastUsedRegularProfile()));
             darkWebPagesSwitch.setOnPreferenceChangeListener((preference, newValue) -> {
                 ChromeSharedPreferences.getInstance().writeBoolean(KEY_DARK_MODE_FOR_WEBPAGES,
-                        true);
+                        (boolean) newValue);
                 WebContentsDarkModeController.setGlobalUserSettings(
                         ProfileManager.getLastUsedRegularProfile(), (boolean) newValue);
                 return true;

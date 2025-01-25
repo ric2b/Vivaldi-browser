@@ -12,6 +12,7 @@
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
+#include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
@@ -91,12 +92,12 @@ SharedImageBackingType SharedMemoryImageBacking::GetType() const {
 }
 
 gfx::Rect SharedMemoryImageBacking::ClearedRect() const {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return gfx::Rect();
 }
 
 void SharedMemoryImageBacking::SetClearedRect(const gfx::Rect& cleared_rect) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 gfx::GpuMemoryBufferHandle
@@ -202,7 +203,7 @@ SharedMemoryImageBacking::SharedMemoryImageBacking(
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
-    uint32_t usage,
+    SharedImageUsageSet usage,
     std::string debug_label,
     SharedMemoryRegionWrapper wrapper,
     gfx::GpuMemoryBufferHandle handle,

@@ -21,10 +21,11 @@ source_set("top_toolbar") {
 swift_source_set("top_toolbar_swift") {
   bridge_header = "vivaldi_ntp_top_toolbar_view_swift_bridge.h"
   sources = [
-    "vivaldi_ntp_top_toolbar_view.swift",
-    "vivaldi_ntp_top_toolbar_child_view.swift",
     "vivaldi_ntp_top_toolbar_child_view_cell.swift",
+    "vivaldi_ntp_top_toolbar_child_view.swift",
+    "vivaldi_ntp_top_toolbar_item.swift",
     "vivaldi_ntp_top_toolbar_view_provider.swift",
+    "vivaldi_ntp_top_toolbar_view.swift",
   ]
 
   deps = [

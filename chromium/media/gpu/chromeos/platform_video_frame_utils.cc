@@ -367,18 +367,14 @@ scoped_refptr<VideoFrame> CreateVideoFrameFromGpuMemoryBufferHandle(
   scoped_refptr<VideoFrame> frame;
   if (is_intel_media_compressed_buffer) {
     CHECK(pixel_format == PIXEL_FORMAT_NV12 ||
-          pixel_format == PIXEL_FORMAT_P016LE);
+          pixel_format == PIXEL_FORMAT_P010LE);
     frame = WrapChromeOSCompressedGpuMemoryBufferAsVideoFrame(
         visible_rect, natural_size, std::move(gpu_memory_buffer), timestamp);
   } else {
-    // The empty shared image array is ok because this VideoFrame is not
+    // It is not necessary to pass a SharedImage because this VideoFrame is not
     // rendered.
-    scoped_refptr<gpu::ClientSharedImage>
-        empty_shared_images[VideoFrame::kMaxPlanes];
     frame = VideoFrame::WrapExternalGpuMemoryBuffer(
-        visible_rect, natural_size, std::move(gpu_memory_buffer),
-        empty_shared_images, gpu::SyncToken(), /*texture_target=*/0,
-        base::NullCallback(), timestamp);
+        visible_rect, natural_size, std::move(gpu_memory_buffer), timestamp);
   }
 
   if (!frame)
@@ -483,8 +479,8 @@ gfx::GpuMemoryBufferHandle CreateGpuMemoryBufferHandle(
       }
     } break;
     default:
-      NOTREACHED() << "Unsupported storage type: "
-                   << video_frame->storage_type();
+      NOTREACHED_IN_MIGRATION()
+          << "Unsupported storage type: " << video_frame->storage_type();
   }
   CHECK_EQ(handle.type, gfx::NATIVE_PIXMAP);
   if (video_frame->format() == PIXEL_FORMAT_MJPEG)
@@ -535,7 +531,7 @@ gfx::GenericSharedMemoryId GetSharedMemoryId(const VideoFrame& frame) {
   if (frame.HasDmaBufs()) {
     return gfx::GenericSharedMemoryId(frame.GetDmabufFd(0));
   }
-  NOTREACHED() << "The frame is not backed by shared memory";
+  NOTREACHED_IN_MIGRATION() << "The frame is not backed by shared memory";
   return gfx::GenericSharedMemoryId();  // Invalid
 }
 

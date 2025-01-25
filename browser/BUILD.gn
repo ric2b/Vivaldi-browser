@@ -28,7 +28,6 @@ static_library("browser") {
     "//chrome/app:command_ids",
     "//chrome/app:generated_resources",
     "//chrome/browser:resources",
-    "//chrome/browser:theme_properties",
     "//chrome/browser/devtools",
     "//chrome/common:buildflags",
     "//chrome/common:non_code_constants",
@@ -49,6 +48,7 @@ static_library("browser") {
   ]
   if (!is_android) {
     deps += [
+      "//chrome/browser/themes",
       "//components/guest_view/browser",
       "//ui/views",
     ]

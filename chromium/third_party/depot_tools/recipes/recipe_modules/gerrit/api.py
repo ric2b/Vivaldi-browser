@@ -277,6 +277,26 @@ class GerritApi(recipe_api.RecipeApi):
         step_test_data=step_test_data,
     ).json.output
 
+  def restore_change(self, host, change, message=None, name=None,
+                     step_test_data=None):
+    args = [
+        'restore',
+        '--host', host,
+        '--change', change,
+        '--json_file', self.m.json.output(),
+    ]
+    if message:
+      args.extend(('--message', message))
+    if not step_test_data:
+      step_test_data = lambda: self.test_api.get_one_change_response_data(
+          status='NEW', _number=str(change))
+
+    return self(
+        name or 'restore',
+        args,
+        step_test_data=step_test_data,
+    ).json.output
+
   def set_change_label(self,
                        host,
                        change,

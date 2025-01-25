@@ -24,7 +24,8 @@ update_target("//chrome/browser:browser") {
   deps += [
     "//vivaldi/components/datasource:resource_reader",
     "//vivaldi/components/ad_blocker",
-    "//vivaldi/components/request_filter/adblock_filter/mojom"
+    "//vivaldi/components/request_filter/adblock_filter/mojom",
+    "//vivaldi/components:user_agent",
   ]
 }
 
@@ -68,4 +69,16 @@ if (is_android) {
   update_target("//chrome:chrome_android_core") {
     deps += [ "//vivaldi/components/notes" ]
   }
+}
+
+update_template_instance("//third_party/blink/renderer/core:core") {
+  deps += [
+    "//vivaldi/components:user_agent",
+  ]
+}
+
+update_template_instance("//content/common:common") {
+  deps += [
+    "//vivaldi/components:user_agent",
+  ]
 }

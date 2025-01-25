@@ -132,11 +132,12 @@ class TestHelper : public ProgramBuilder {
     /// declared in WGSL.
     std::string FriendlyName(const core::type::Type* type) { return type->FriendlyName(); }
 
-  private:
+  protected:
     std::unique_ptr<Resolver> resolver_;
 };
 
 class ResolverTest : public TestHelper, public testing::Test {};
+using ResolverDeathTest = ResolverTest;
 
 template <typename T>
 class ResolverTestWithParam : public TestHelper, public testing::TestWithParam<T> {};

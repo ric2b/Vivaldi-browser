@@ -78,7 +78,6 @@ bool IsProfileEligibleForChoiceScreen(Profile& profile) {
   return eligibility_conditions ==
          search_engines::SearchEngineChoiceScreenConditions::kEligible;
 }
-
 }  // namespace
 
 SearchEngineChoiceDialogServiceFactory::SearchEngineChoiceDialogServiceFactory()
@@ -136,16 +135,13 @@ SearchEngineChoiceDialogServiceFactory::BuildServiceInstanceForBrowserContext(
     return nullptr;
   }
 
-  auto& profile = CHECK_DEREF(Profile::FromBrowserContext(context));
+  Profile& profile = CHECK_DEREF(Profile::FromBrowserContext(context));
   search_engines::SearchEngineChoiceService& search_engine_choice_service =
       CHECK_DEREF(
           search_engines::SearchEngineChoiceServiceFactory::GetForProfile(
               &profile));
 
   if (!IsProfileEligibleForChoiceScreen(profile)) {
-    DVLOG(1) << "Profile not eligible, removing tag for profile "
-             << profile.GetBaseName();
-    profile.GetPrefs()->ClearPref(prefs::kDefaultSearchProviderChoicePending);
     return nullptr;
   }
 

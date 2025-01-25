@@ -5,5 +5,5 @@
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {閉じたタブは、Vivaldi のメインメニューにある「最近のタブ」にあります。プライベートタブは表示されません。}
         other {閉じたタブは、Vivaldiのメインメニューにある「最近のタブ」にあります。 # つのプライベートタブは表示されません。}}</translation>
-<translation id="4871187110787939393">プライベートタブを全て閉じますか？</translation>
+<translation id="4871187110787939393">プライベートタブをすべて閉じますか？</translation>
 </translationbundle>

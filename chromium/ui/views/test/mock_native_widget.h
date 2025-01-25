@@ -127,8 +127,7 @@ class MockNativeWidget : public internal::NativeWidgetPrivate {
   MOCK_METHOD(void, FlashFrame, (bool flash), (override));
   MOCK_METHOD(void,
               RunShellDrag,
-              (View * view,
-               std::unique_ptr<ui::OSExchangeData> data,
+              (std::unique_ptr<ui::OSExchangeData> data,
                const gfx::Point& location,
                int operation,
                ui::mojom::DragEventSource source),
@@ -167,6 +166,8 @@ class MockNativeWidget : public internal::NativeWidgetPrivate {
   MOCK_METHOD(void, OnSizeConstraintsChanged, (), (override));
   MOCK_METHOD(void, OnNativeViewHierarchyWillChange, (), (override));
   MOCK_METHOD(void, OnNativeViewHierarchyChanged, (), (override));
+  MOCK_METHOD(bool, SetAllowScreenshots, (bool allow), (override));
+  MOCK_METHOD(bool, AreScreenshotsAllowed, (), (override));
   MOCK_METHOD(std::string, GetName, (), (const override));
 
   base::WeakPtr<NativeWidgetPrivate> GetWeakPtr() override;

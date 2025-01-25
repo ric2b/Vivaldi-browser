@@ -17,6 +17,11 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/page/touch_adjustment.h"
 
 #include "third_party/blink/renderer/core/dom/container_node.h"
@@ -523,7 +528,8 @@ bool FindNodeWithLowestDistanceMetric(Node*& adjusted_node,
   }
 
   // As for HitTestResult.innerNode, we skip over pseudo elements.
-  if (adjusted_node && adjusted_node->IsPseudoElement()) {
+  if (adjusted_node && adjusted_node->IsPseudoElement() &&
+      !adjusted_node->IsScrollMarkerPseudoElement()) {
     adjusted_node = adjusted_node->ParentOrShadowHostNode();
   }
 

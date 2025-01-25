@@ -14,17 +14,14 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/password_manager/password_manager_test_util.h"
-#include "chrome/browser/permissions/notifications_engagement_service_factory.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/global_error/global_error.h"
 #include "chrome/browser/ui/global_error/global_error_service.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
-#include "chrome/browser/ui/safety_hub/notification_permission_review_service_factory.h"
 #include "chrome/browser/ui/safety_hub/password_status_check_service.h"
 #include "chrome/browser/ui/safety_hub/password_status_check_service_factory.h"
 #include "chrome/browser/ui/safety_hub/safety_hub_test_util.h"
@@ -41,16 +38,10 @@
 #include "chrome/test/base/menu_model_test.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/content_settings/core/common/content_settings.h"
-#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/optimization_guide/core/model_execution/model_execution_features.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/password_manager/core/browser/password_store/test_password_store.h"
-#include "components/password_manager/core/common/password_manager_features.h"
-#include "components/performance_manager/public/features.h"
 #include "components/signin/public/base/consent_level.h"
-#include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -104,10 +95,6 @@ class FakeIconDelegate : public AppMenuIconController::Delegate {
   // AppMenuIconController::Delegate:
   void UpdateTypeAndSeverity(
       AppMenuIconController::TypeAndSeverity type_and_severity) override {}
-  SkColor GetDefaultColorForSeverity(
-      AppMenuIconController::Severity severity) const override {
-    return gfx::kPlaceholderColor;
-  }
 };
 
 }  // namespace
@@ -155,8 +142,7 @@ class ExtensionsMenuModelTest : public AppMenuModelTest {
 class TestAppMenuModelCR2023 : public AppMenuModelTest {
  public:
   TestAppMenuModelCR2023() {
-    feature_list_.InitWithFeatures(
-        {features::kTabOrganization, features::kChromeRefresh2023}, {});
+    feature_list_.InitWithFeatures({features::kTabOrganization}, {});
   }
 
   TestAppMenuModelCR2023(const TestAppMenuModelCR2023&) = delete;
@@ -369,18 +355,28 @@ TEST_F(AppMenuModelTest, PerformanceItem) {
   EXPECT_TRUE(toolModel.IsEnabledAt(performance_index));
 }
 
-TEST_F(TestAppMenuModelCR2023, PerformanceItemElevated) {
+TEST_F(TestAppMenuModelCR2023, CustomizeChromeItem) {
   feature_list_.Reset();
-  feature_list_.InitWithFeatures(
-      /*enabled_features=*/{features::kChromeRefresh2023,
-                            performance_manager::features::
-                                kPerformanceControlsSidePanel},
-      /*disabled_features=*/{});
+  feature_list_.InitAndEnableFeature(features::kToolbarPinning);
   AppMenuModel model(this, browser());
   model.Init();
-  ASSERT_TRUE(model.GetIndexOfCommandId(IDC_PERFORMANCE));
-  size_t performance_index = model.GetIndexOfCommandId(IDC_PERFORMANCE).value();
-  EXPECT_TRUE(model.IsEnabledAt(performance_index));
+  ToolsMenuModel tool_model(&model, browser());
+  ASSERT_TRUE(
+      tool_model.GetIndexOfCommandId(IDC_SHOW_CUSTOMIZE_CHROME_SIDE_PANEL));
+  size_t customize_chrome_index =
+      tool_model.GetIndexOfCommandId(IDC_SHOW_CUSTOMIZE_CHROME_SIDE_PANEL)
+          .value();
+  EXPECT_TRUE(tool_model.IsEnabledAt(customize_chrome_index));
+}
+
+TEST_F(TestAppMenuModelCR2023, CustomizeChromeLogMetrics) {
+  feature_list_.Reset();
+  feature_list_.InitAndEnableFeature(features::kToolbarPinning);
+
+  TestLogMetricsAppMenuModel model(this, browser());
+  model.Init();
+  model.ExecuteCommand(IDC_SHOW_CUSTOMIZE_CHROME_SIDE_PANEL, 0);
+  EXPECT_EQ(1, model.log_metrics_count_);
 }
 
 TEST_F(TestAppMenuModelCR2023, OrganizeTabsItem) {
@@ -555,6 +551,12 @@ class TestAppMenuModelSafetyHubTest : public AppMenuModelTest {
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
     password_store_ = CreateAndUseTestPasswordStore(profile());
+
+    // Let PasswordStatusCheckService run until it fetches the latest data.
+    PasswordStatusCheckService* password_service =
+        PasswordStatusCheckServiceFactory::GetForProfile(profile());
+    safety_hub_test_util::UpdatePasswordCheckServiceAsync(password_service);
+    EXPECT_EQ(password_service->compromised_credential_count(), 0UL);
   }
 
  protected:
@@ -569,33 +571,7 @@ TEST_F(TestAppMenuModelSafetyHubTest, SafetyHubMenuNotification) {
   model.Init();
   EXPECT_FALSE(model.GetIndexOfCommandId(IDC_OPEN_SAFETY_HUB).has_value());
 
-  // Let PasswordStatusCheckService to run till it fetches the latest data.
-  PasswordStatusCheckService* password_service =
-      PasswordStatusCheckServiceFactory::GetForProfile(profile());
-  safety_hub_test_util::UpdatePasswordCheckServiceAsync(password_service);
-  EXPECT_EQ(password_service->compromised_credential_count(), 0UL);
-
-  // Creating and showing a notification for a site that has never been
-  // interacted with, will be caught by the notification permission review
-  // service, and raised as a Safety Hub issue to be reviewed. In this case a
-  // menu entry should be there with the action to open the Safety Hub settings
-  // page.
-  auto* hcsm = HostContentSettingsMapFactory::GetForProfile(profile());
-  const GURL kUrl("https://example.com");
-  hcsm->SetContentSettingDefaultScope(
-      kUrl, GURL(), ContentSettingsType::NOTIFICATIONS, CONTENT_SETTING_ALLOW);
-  auto* notifications_engagement_service =
-      NotificationsEngagementServiceFactory::GetForProfile(profile());
-  // There should be at least an average of 1 recorded notification per day, for
-  // the past week to trigger a Safety Hub review.
-  notifications_engagement_service->RecordNotificationDisplayed(kUrl, 7);
-
-  // Update the notification permissions review service for it to capture the
-  // recently added notification permission.
-  auto* notification_permissions_service =
-      NotificationPermissionsReviewServiceFactory::GetForProfile(profile());
-  safety_hub_test_util::UpdateSafetyHubServiceAsync(
-      notification_permissions_service);
+  safety_hub_test_util::GenerateSafetyHubMenuNotification(profile());
 
   AppMenuModel new_model(this, browser());
   new_model.Init();

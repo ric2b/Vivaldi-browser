@@ -81,6 +81,7 @@ class WebTestBuilders(builders.Builders):
     def GetNonChromiumBuilders(self) -> Set[data_types.BuilderEntry]:
         if self._non_chromium_builders is None:
             str_builders = {
+                # These builders do not use the Chromium recipe.
                 'devtools_frontend_linux_blink_light_rel',
                 'devtools_frontend_linux_blink_light_rel_fastbuild',
                 'devtools_frontend_linux_blink_rel',
@@ -93,7 +94,12 @@ class WebTestBuilders(builders.Builders):
                 'V8 Blink Linux Debug',
                 'V8 Blink Linux Future',
                 'V8 Blink Mac',
-                'V8 Blink Win'
+                'V8 Blink Win',
+                # These do use the Chromium recipe, but are in the "build"
+                # bucket instead of the "ci" bucket, which breaks some
+                # assumptions we have.
+                'Mac13 Tests Siso FYI',
+                'Mac Tests Siso FYI',
             }
             self._non_chromium_builders = {
                 data_types.BuilderEntry(b, constants.BuilderTypes.CI, False)

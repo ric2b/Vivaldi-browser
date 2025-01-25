@@ -58,8 +58,16 @@ def _create_config(config_args, development):
                 return True
 
             @property
+            def main_executable_pinned_geometry(self):
+                # Pinned geometry is only needed to keep release builds
+                # consistent over time. Ignore executable geometry when code
+                # signing for development.
+                return None
+
+            @property
             def is_development_version(self):
                 return True
+
         config_class = DevelopmentCodeSignConfig
 
     config_class = vivaldi_config.getCodeSignConfigClass(development)

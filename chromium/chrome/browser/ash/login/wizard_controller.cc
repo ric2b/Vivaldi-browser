@@ -61,6 +61,7 @@
 #include "chrome/browser/ash/login/screens/arc_vm_data_migration_screen.h"
 #include "chrome/browser/ash/login/screens/assistant_optin_flow_screen.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
+#include "chrome/browser/ash/login/screens/categories_selection_screen.h"
 #include "chrome/browser/ash/login/screens/choobe_screen.h"
 #include "chrome/browser/ash/login/screens/consolidated_consent_screen.h"
 #include "chrome/browser/ash/login/screens/consumer_update_screen.h"
@@ -78,6 +79,7 @@
 #include "chrome/browser/ash/login/screens/fingerprint_setup_screen.h"
 #include "chrome/browser/ash/login/screens/gaia_info_screen.h"
 #include "chrome/browser/ash/login/screens/gaia_screen.h"
+#include "chrome/browser/ash/login/screens/gemini_intro_screen.h"
 #include "chrome/browser/ash/login/screens/gesture_navigation_screen.h"
 #include "chrome/browser/ash/login/screens/hardware_data_collection_screen.h"
 #include "chrome/browser/ash/login/screens/hid_detection_screen.h"
@@ -100,14 +102,13 @@
 #include "chrome/browser/ash/login/screens/osauth/cryptohome_recovery_setup_screen.h"
 #include "chrome/browser/ash/login/screens/osauth/enter_old_password_screen.h"
 #include "chrome/browser/ash/login/screens/osauth/factor_setup_success_screen.h"
-#include "chrome/browser/ash/login/screens/osauth/gaia_password_changed_screen.h"
-#include "chrome/browser/ash/login/screens/osauth/gaia_password_changed_screen_legacy.h"
 #include "chrome/browser/ash/login/screens/osauth/local_data_loss_warning_screen.h"
 #include "chrome/browser/ash/login/screens/osauth/local_password_setup_screen.h"
 #include "chrome/browser/ash/login/screens/osauth/osauth_error_screen.h"
 #include "chrome/browser/ash/login/screens/osauth/password_selection_screen.h"
 #include "chrome/browser/ash/login/screens/osauth/recovery_eligibility_screen.h"
 #include "chrome/browser/ash/login/screens/packaged_license_screen.h"
+#include "chrome/browser/ash/login/screens/personalized_recommend_apps_screen.h"
 #include "chrome/browser/ash/login/screens/pin_setup_screen.h"
 #include "chrome/browser/ash/login/screens/quick_start_screen.h"
 #include "chrome/browser/ash/login/screens/recommend_apps_screen.h"
@@ -120,13 +121,14 @@
 #include "chrome/browser/ash/login/screens/theme_selection_screen.h"
 #include "chrome/browser/ash/login/screens/touchpad_scroll_screen.h"
 #include "chrome/browser/ash/login/screens/tpm_error_screen.h"
-#include "chrome/browser/ash/login/screens/tuna_screen.h"
 #include "chrome/browser/ash/login/screens/update_required_screen.h"
 #include "chrome/browser/ash/login/screens/update_screen.h"
 #include "chrome/browser/ash/login/screens/user_allowlist_check_screen.h"
 #include "chrome/browser/ash/login/screens/user_creation_screen.h"
 #include "chrome/browser/ash/login/screens/welcome_screen.h"
 #include "chrome/browser/ash/login/screens/wrong_hwid_screen.h"
+// Add new screens before this block. Add screens and exit reasons to
+// OOBE histograms.
 // LINT.ThenChange(//tools/metrics/histograms/metadata/oobe/histograms.xml)
 #include "chrome/browser/ash/login/session/user_session_manager.h"
 #include "chrome/browser/ash/login/startup_utils.h"
@@ -137,6 +139,7 @@
 #include "chrome/browser/ash/net/rollback_network_config/rollback_network_config_service.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/core/device_cloud_policy_manager_ash.h"
+#include "chrome/browser/ash/policy/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
 #include "chrome/browser/ash/settings/stats_reporting_controller.h"
 #include "chrome/browser/ash/system/device_disabling_manager.h"
@@ -157,6 +160,7 @@
 #include "chrome/browser/ui/webui/ash/login/arc_vm_data_migration_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/assistant_optin_flow_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/auto_enrollment_check_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/categories_selection_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/choobe_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/consolidated_consent_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/consumer_update_screen_handler.h"
@@ -176,8 +180,8 @@
 #include "chrome/browser/ui/webui/ash/login/family_link_notice_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/fingerprint_setup_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/gaia_info_screen_handler.h"
-#include "chrome/browser/ui/webui/ash/login/gaia_password_changed_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/gemini_intro_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/gesture_navigation_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/guest_tos_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/hardware_data_collection_screen_handler.h"
@@ -206,6 +210,7 @@
 #include "chrome/browser/ui/webui/ash/login/packaged_license_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/parental_handoff_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/password_selection_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/personalized_recommend_apps_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/pin_setup_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/quick_start_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/recommend_apps_screen_handler.h"
@@ -220,7 +225,6 @@
 #include "chrome/browser/ui/webui/ash/login/theme_selection_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/touchpad_scroll_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/tpm_error_screen_handler.h"
-#include "chrome/browser/ui/webui/ash/login/tuna_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/update_required_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/update_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/user_allowlist_check_screen_handler.h"
@@ -302,7 +306,7 @@ const StaticOobeScreenId kResumablePostLoginScreens[] = {
     GestureNavigationScreenView::kScreenId,
     RecommendAppsScreenView::kScreenId,
     AiIntroScreenView::kScreenId,
-    TunaScreenView::kScreenId,
+    GeminiIntroScreenView::kScreenId,
     PinSetupScreenView::kScreenId,
     MarketingOptInScreenView::kScreenId,
     MultiDeviceSetupScreenView::kScreenId,
@@ -310,7 +314,9 @@ const StaticOobeScreenId kResumablePostLoginScreens[] = {
     ThemeSelectionScreenView::kScreenId,
     ChoobeScreenView::kScreenId,
     DisplaySizeScreenView::kScreenId,
-    TouchpadScrollScreenView::kScreenId};
+    TouchpadScrollScreenView::kScreenId,
+    CategoriesSelectionScreenView::kScreenId,
+};
 
 const StaticOobeScreenId kScreensWithHiddenStatusArea[] = {
     EnableAdbSideloadingScreenView::kScreenId,
@@ -372,7 +378,6 @@ bool IsGaiaPageDefaultsToSAML() {
 bool IsContextNeededForScreen(OobeScreenId screen_id) {
   return screen_id == SamlConfirmPasswordView::kScreenId ||
          screen_id == CryptohomeRecoveryScreenView::kScreenId ||
-         screen_id == GaiaPasswordChangedView::kScreenId ||
          screen_id == LocalDataLossWarningScreenView::kScreenId;
 }
 
@@ -718,10 +723,10 @@ WizardController::CreateScreens() {
                             weak_factory_.GetWeakPtr())));
   }
 
-  if (features::IsOobeTunaEnabled()) {
-    append(std::make_unique<TunaScreen>(
-        oobe_ui->GetView<TunaScreenHandler>()->AsWeakPtr(),
-        base::BindRepeating(&WizardController::OnTunaScreenExit,
+  if (features::IsOobeGeminiIntroEnabled()) {
+    append(std::make_unique<GeminiIntroScreen>(
+        oobe_ui->GetView<GeminiIntroScreenHandler>()->AsWeakPtr(),
+        base::BindRepeating(&WizardController::OnGeminiIntroScreenExit,
                             weak_factory_.GetWeakPtr())));
   }
 
@@ -832,11 +837,6 @@ WizardController::CreateScreens() {
 
   append(std::make_unique<InstallAttributesErrorScreen>(
       oobe_ui->GetView<InstallAttributesErrorScreenHandler>()->AsWeakPtr()));
-
-  append(std::make_unique<GaiaPasswordChangedScreen>(
-      base::BindRepeating(&WizardController::OnPasswordChangeScreenExit,
-                          weak_factory_.GetWeakPtr()),
-      oobe_ui->GetView<GaiaPasswordChangedScreenHandler>()->AsWeakPtr()));
 
   append(std::make_unique<FamilyLinkNoticeScreen>(
       oobe_ui->GetView<FamilyLinkNoticeScreenHandler>()->AsWeakPtr(),
@@ -957,6 +957,22 @@ WizardController::CreateScreens() {
                             weak_factory_.GetWeakPtr())));
   }
 
+  // We don't guard creation of those screens via feature flag to prevent cases
+  // when we didn't apply Finch config, but user restarted their device
+  // and our screen being marked as resumable is expected to be shown, but Finch
+  // decided that feature should be turned off.
+  // Instead, we will check for feature flag inside each screen's `MaybeSkip()`.
+  append(std::make_unique<CategoriesSelectionScreen>(
+      oobe_ui->GetView<CategoriesSelectionScreenHandler>()->AsWeakPtr(),
+      base::BindRepeating(&WizardController::OnCategoriesSelectionScreenExit,
+                          weak_factory_.GetWeakPtr())));
+
+  append(std::make_unique<PersonalizedRecommendAppsScreen>(
+      oobe_ui->GetView<PersonalizedRecommendAppsScreenHandler>()->AsWeakPtr(),
+      base::BindRepeating(
+          &WizardController::OnPersonalizedRecomendAppsScreenExit,
+          weak_factory_.GetWeakPtr())));
+
   append(std::make_unique<PasswordSelectionScreen>(
       oobe_ui->GetView<PasswordSelectionScreenHandler>()->AsWeakPtr(),
       base::BindRepeating(&WizardController::OnPasswordSelectionScreenExit,
@@ -1049,13 +1065,6 @@ void WizardController::ShowLoginScreen() {
   VLOG(1) << "Showing login screen.";
   UpdateStatusAreaVisibilityForScreen(GaiaView::kScreenId);
   GetLoginDisplayHost()->StartSignInScreen();
-}
-
-// TODO(b/315829727): remove now unused codepath.
-void WizardController::ShowGaiaPasswordChangedScreen(
-    std::unique_ptr<UserContext> user_context) {
-  wizard_context_->user_context = std::move(user_context);
-  SetCurrentScreen(GetScreen<GaiaPasswordChangedScreen>());
 }
 
 void WizardController::ShowGaiaInfoScreen() {
@@ -1203,8 +1212,8 @@ void WizardController::ShowAiIntroScreen() {
   SetCurrentScreen(GetScreen(AiIntroScreenView::kScreenId));
 }
 
-void WizardController::ShowTunaScreen() {
-  SetCurrentScreen(GetScreen(TunaScreenView::kScreenId));
+void WizardController::ShowGeminiIntroScreen() {
+  SetCurrentScreen(GetScreen(GeminiIntroScreenView::kScreenId));
 }
 
 void WizardController::ShowWrongHWIDScreen() {
@@ -1276,6 +1285,14 @@ void WizardController::ShowConsolidatedConsentScreen() {
 void WizardController::ShowChoobeScreen() {
   DCHECK(features::IsOobeChoobeEnabled());
   SetCurrentScreen(GetScreen(ChoobeScreenView::kScreenId));
+}
+
+void WizardController::ShowCategoriesSelectionScreen() {
+  SetCurrentScreen(GetScreen(CategoriesSelectionScreenView::kScreenId));
+}
+
+void WizardController::ShowPersonalizedRecomendAppsScreen() {
+  SetCurrentScreen(GetScreen(PersonalizedRecommendAppsScreenView::kScreenId));
 }
 
 void WizardController::ShowTouchpadScrollScreen() {
@@ -1569,48 +1586,6 @@ void WizardController::OnSamlConfirmPasswordScreenExit(
   }
 }
 
-void WizardController::OnPasswordChangeLegacyScreenExit(
-    GaiaPasswordChangedScreenLegacy::Result result) {
-  OnScreenExit(GaiaPasswordChangedView::kScreenId,
-               GaiaPasswordChangedScreenLegacy::GetResultString(result));
-  switch (result) {
-    case GaiaPasswordChangedScreenLegacy::Result::CANCEL:
-      LoginDisplayHost::default_host()->CancelPasswordChangedFlow();
-      break;
-    case GaiaPasswordChangedScreenLegacy::Result::RESYNC:
-      LoginDisplayHost::default_host()->ResyncUserData();
-      break;
-    case GaiaPasswordChangedScreenLegacy::Result::MIGRATE:
-      NOTREACHED();
-  }
-}
-
-void WizardController::OnPasswordChangeScreenExit(
-    GaiaPasswordChangedScreen::Result result) {
-  OnScreenExit(GaiaPasswordChangedView::kScreenId,
-               GaiaPasswordChangedScreen::GetResultString(result));
-  switch (result) {
-    case GaiaPasswordChangedScreen::Result::CANCEL:
-      LoginDisplayHost::default_host()->CancelPasswordChangedFlow();
-      break;
-    case GaiaPasswordChangedScreen::Result::CONTINUE_LOGIN:
-      ash::LoginDisplayHost::default_host()
-          ->GetExistingUserController()
-          ->LoginAuthenticated(std::move(wizard_context_->user_context));
-      break;
-    case GaiaPasswordChangedScreen::Result::RECREATE_USER: {
-      std::unique_ptr<UserContext> context =
-          std::move(wizard_context_->user_context);
-      ash::LoginDisplayHost::default_host()->CompleteLogin(*context);
-      break;
-    }
-    case GaiaPasswordChangedScreen::Result::CRYPTOHOME_ERROR:
-      // TODO(b/239420684): Send an error to the UI.
-      NOTREACHED();
-      LoginDisplayHost::default_host()->CancelPasswordChangedFlow();
-  }
-}
-
 void WizardController::OnEduCoexistenceLoginScreenExit(
     EduCoexistenceLoginScreen::Result result) {
   OnScreenExit(EduCoexistenceLoginScreen::kScreenId,
@@ -1776,7 +1751,8 @@ void WizardController::OnCryptohomeRecoveryScreenExit(
     case CryptohomeRecoveryScreen::Result::kAuthenticated: {
       switch (wizard_context_->knowledge_factor_setup.auth_setup_flow) {
         case WizardContext::AuthChangeFlow::kInitialSetup:
-          NOTREACHED() << "Recovery can not be used during initial setup.";
+          NOTREACHED_IN_MIGRATION()
+              << "Recovery can not be used during initial setup.";
           return;
         case WizardContext::AuthChangeFlow::kRecovery:
           ShowPasswordSelectionScreen();
@@ -1800,7 +1776,8 @@ void WizardController::OnCryptohomeRecoveryScreenExit(
     case CryptohomeRecoveryScreen::Result::kFallbackLocal: {
       switch (wizard_context_->knowledge_factor_setup.auth_setup_flow) {
         case WizardContext::AuthChangeFlow::kInitialSetup:
-          NOTREACHED() << "Recovery is not used during initial setup";
+          NOTREACHED_IN_MIGRATION()
+              << "Recovery is not used during initial setup";
           return;
         case WizardContext::AuthChangeFlow::kReauthentication:
           AttemptLocalAuthenticationWithContext(
@@ -1864,7 +1841,8 @@ void WizardController::OnEnterOldPasswordScreenExit(
     case EnterOldPasswordScreen::Result::kAuthenticated: {
       switch (wizard_context_->knowledge_factor_setup.auth_setup_flow) {
         case WizardContext::AuthChangeFlow::kInitialSetup:
-          NOTREACHED() << "Old password is not used during initial setup";
+          NOTREACHED_IN_MIGRATION()
+              << "Old password is not used during initial setup";
           break;
         case WizardContext::AuthChangeFlow::kRecovery:
         case WizardContext::AuthChangeFlow::kReauthentication:
@@ -1899,6 +1877,50 @@ void WizardController::OnTouchpadScreenExit(
                TouchpadScrollScreen::GetResultString(result));
 
   ShowDrivePinningScreen();
+}
+
+void WizardController::OnCategoriesSelectionScreenExit(
+    CategoriesSelectionScreen::Result result) {
+  OnScreenExit(CategoriesSelectionScreenView::kScreenId,
+               CategoriesSelectionScreen::GetResultString(result));
+  switch (result) {
+    case CategoriesSelectionScreen::Result::kError:
+    case CategoriesSelectionScreen::Result::kNotApplicable:
+    case CategoriesSelectionScreen::Result::kDataMalformed:
+    case CategoriesSelectionScreen::Result::kTimeout:
+      ShowRecommendAppsScreen();
+      break;
+    case CategoriesSelectionScreen::Result::kNext:
+    case CategoriesSelectionScreen::Result::kSkip:
+      ShowPersonalizedRecomendAppsScreen();
+      break;
+  }
+}
+
+void WizardController::OnPersonalizedRecomendAppsScreenExit(
+    PersonalizedRecommendAppsScreen::Result result) {
+  OnScreenExit(PersonalizedRecommendAppsScreenView::kScreenId,
+               PersonalizedRecommendAppsScreen::GetResultString(result));
+
+  switch (result) {
+    case PersonalizedRecommendAppsScreen::Result::kBack:
+      ShowCategoriesSelectionScreen();
+      break;
+    case PersonalizedRecommendAppsScreen::Result::kNext:
+    case PersonalizedRecommendAppsScreen::Result::kNotApplicable:
+    case PersonalizedRecommendAppsScreen::Result::kSkip:
+    case PersonalizedRecommendAppsScreen::Result::kDataMalformed:
+    case PersonalizedRecommendAppsScreen::Result::kError:
+    case PersonalizedRecommendAppsScreen::Result::kTimeout:
+      if (features::IsOobeAiIntroEnabled()) {
+        ShowAiIntroScreen();
+      } else if (features::IsOobeGeminiIntroEnabled()) {
+        ShowGeminiIntroScreen();
+      } else {
+        ShowAssistantOptInFlowScreen();
+      }
+      break;
+  }
 }
 
 void WizardController::OnDrivePinningScreenExit(
@@ -2052,7 +2074,7 @@ void WizardController::OnNetworkScreenExit(NetworkScreen::Result result) {
         ShowWelcomeScreen();
         break;
       case NetworkScreen::Result::QUICK_START:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
     return;
@@ -2071,7 +2093,7 @@ void WizardController::OnNetworkScreenExit(NetworkScreen::Result result) {
         ShowOsTrialScreen();
         break;
       case NetworkScreen::Result::QUICK_START:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
     return;
@@ -2439,8 +2461,9 @@ void WizardController::OnApplyOnlinePasswordScreenExit(
           ShowFactorSetupSuccessScreen();
           return;
         case WizardContext::AuthChangeFlow::kReauthentication:
-          NOTREACHED() << "Reauthentication should have been switched to "
-                          "Recovery if there was password update";
+          NOTREACHED_IN_MIGRATION()
+              << "Reauthentication should have been switched to "
+                 "Recovery if there was password update";
       }
     }
       return;
@@ -2458,7 +2481,8 @@ void WizardController::OnOSAuthErrorScreenExit(
     case OSAuthErrorScreen::Result::kFallbackLocal: {
       switch (wizard_context_->knowledge_factor_setup.auth_setup_flow) {
         case WizardContext::AuthChangeFlow::kInitialSetup:
-          NOTREACHED() << "Recovery is not used during initial setup";
+          NOTREACHED_IN_MIGRATION()
+              << "Recovery is not used during initial setup";
           return;
         case WizardContext::AuthChangeFlow::kReauthentication:
           AttemptLocalAuthenticationWithContext(
@@ -2571,7 +2595,11 @@ void WizardController::AttemptLocalAuthenticationWithContext(
 
 void WizardController::FinishAuthFactorsSetup() {
   // TODO(b/238606050): Ensure that AuthSession is terminated after this step.
-  ShowRecommendAppsScreen();
+  if (features::IsOobePersonalizedOnboardingEnabled()) {
+    ShowCategoriesSelectionScreen();
+  } else {
+    ShowRecommendAppsScreen();
+  }
 }
 
 // End of local authentication setup screen exit handlers.
@@ -2590,8 +2618,8 @@ void WizardController::OnRecommendAppsScreenExit(
     case RecommendAppsScreen::Result::kLoadError:
       if (features::IsOobeAiIntroEnabled()) {
         ShowAiIntroScreen();
-      } else if (features::IsOobeTunaEnabled()) {
-        ShowTunaScreen();
+      } else if (features::IsOobeGeminiIntroEnabled()) {
+        ShowGeminiIntroScreen();
       } else {
         ShowAssistantOptInFlowScreen();
       }
@@ -2621,8 +2649,8 @@ void WizardController::OnAppDownloadingScreenExit() {
 
   if (features::IsOobeAiIntroEnabled()) {
     ShowAiIntroScreen();
-  } else if (features::IsOobeTunaEnabled()) {
-    ShowTunaScreen();
+  } else if (features::IsOobeGeminiIntroEnabled()) {
+    ShowGeminiIntroScreen();
   } else {
     ShowAssistantOptInFlowScreen();
   }
@@ -2632,17 +2660,19 @@ void WizardController::OnAiIntroScreenExit(AiIntroScreen::Result result) {
   OnScreenExit(AiIntroScreenView::kScreenId,
                AiIntroScreen::GetResultString(result));
 
-  if (features::IsOobeTunaEnabled()) {
-    ShowTunaScreen();
+  if (features::IsOobeGeminiIntroEnabled()) {
+    ShowGeminiIntroScreen();
   } else {
     ShowAssistantOptInFlowScreen();
   }
 }
 
-void WizardController::OnTunaScreenExit(TunaScreen::Result result) {
-  OnScreenExit(TunaScreenView::kScreenId, TunaScreen::GetResultString(result));
+void WizardController::OnGeminiIntroScreenExit(
+    GeminiIntroScreen::Result result) {
+  OnScreenExit(GeminiIntroScreenView::kScreenId,
+               GeminiIntroScreen::GetResultString(result));
 
-  if (result == TunaScreen::Result::kBack) {
+  if (result == GeminiIntroScreen::Result::kBack) {
     CHECK(!AiIntroScreen::ShouldBeSkipped());
     ShowAiIntroScreen();
     return;
@@ -3077,8 +3107,8 @@ void WizardController::AdvanceToScreen(OobeScreenId screen_id) {
     ShowAppDownloadingScreen();
   } else if (screen_id == AiIntroScreenView::kScreenId) {
     ShowAiIntroScreen();
-  } else if (screen_id == TunaScreenView::kScreenId) {
-    ShowTunaScreen();
+  } else if (screen_id == GeminiIntroScreenView::kScreenId) {
+    ShowGeminiIntroScreen();
   } else if (screen_id == WrongHWIDScreenView::kScreenId) {
     ShowWrongHWIDScreen();
   } else if (screen_id == AutoEnrollmentCheckScreenView::kScreenId) {
@@ -3146,9 +3176,12 @@ void WizardController::AdvanceToScreen(OobeScreenId screen_id) {
     ShowFactorSetupSuccessScreen();
   } else if (screen_id == LocalPasswordSetupView::kScreenId) {
     ShowLocalPasswordSetupScreen();
+  } else if (screen_id == CategoriesSelectionScreenView::kScreenId) {
+    ShowCategoriesSelectionScreen();
+  } else if (screen_id == PersonalizedRecommendAppsScreenView::kScreenId) {
+    ShowPersonalizedRecomendAppsScreen();
   } else if (screen_id == TpmErrorView::kScreenId ||
              screen_id == InstallAttributesErrorView::kScreenId ||
-             screen_id == GaiaPasswordChangedView::kScreenId ||
              screen_id == FamilyLinkNoticeView::kScreenId ||
              screen_id == GaiaView::kScreenId ||
              screen_id == UserCreationView::kScreenId ||
@@ -3168,7 +3201,7 @@ void WizardController::AdvanceToScreen(OobeScreenId screen_id) {
              screen_id == QuickStartView::kScreenId) {
     SetCurrentScreen(GetScreen(screen_id));
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 

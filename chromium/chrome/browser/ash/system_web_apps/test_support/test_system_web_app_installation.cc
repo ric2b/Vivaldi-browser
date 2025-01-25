@@ -49,7 +49,7 @@ WebUIType GetWebUIType(const GURL& url) {
     return WebUIType::kChrome;
   if (url.SchemeIs(content::kChromeUIUntrustedScheme))
     return WebUIType::kChromeUntrusted;
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return WebUIType::kChrome;
 }
 
@@ -347,12 +347,13 @@ TestSystemWebAppInstallation::~TestSystemWebAppInstallation() = default;
 
 std::unique_ptr<web_app::WebAppInstallInfo>
 GenerateWebAppInstallInfoForTestApp() {
-  auto info = std::make_unique<web_app::WebAppInstallInfo>();
   // the pwa.html is arguably wrong, but the manifest version uses it
   // incorrectly as well, and it's a lot of work to fix it. App ids are
   // generated from this, and it's important to keep it stable across the
   // installation modes.
-  info->start_url = GURL("chrome://test-system-app/pwa.html");
+  auto start_url = GURL("chrome://test-system-app/pwa.html");
+  auto info =
+      web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(start_url);
   info->scope = GURL("chrome://test-system-app/");
   info->title = u"Test System App";
   info->theme_color = 0xFF00FF00;
@@ -364,9 +365,12 @@ GenerateWebAppInstallInfoForTestApp() {
 
 std::unique_ptr<web_app::WebAppInstallInfo>
 GenerateWebAppInstallInfoForTestAppUntrusted() {
-  auto info = GenerateWebAppInstallInfoForTestApp();
-  info->start_url = GURL("chrome-untrusted://test-system-app/pwa.html");
+  auto start_url = GURL("chrome-untrusted://test-system-app/pwa.html");
+  auto info =
+      web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(start_url);
   info->scope = GURL("chrome-untrusted://test-system-app/");
+  info->title = u"Test System App Untrusted";
+  info->theme_color = 0xFFFF0000;
   return info;
 }
 
@@ -380,7 +384,7 @@ SkBitmap CreateIcon(int size) {
 std::unique_ptr<web_app::WebAppInstallInfo>
 GenerateWebAppInstallInfoWithValidIcons() {
   auto info = GenerateWebAppInstallInfoForTestApp();
-  info->manifest_icons.emplace_back(info->start_url.Resolve("test.png"),
+  info->manifest_icons.emplace_back(info->start_url().Resolve("test.png"),
                                     web_app::icon_size::k256);
   info->icon_bitmaps.any[web_app::icon_size::k256] =
       CreateIcon(web_app::icon_size::k256);
@@ -554,13 +558,14 @@ TestSystemWebAppInstallation::SetUpAppThatCapturesNavigation() {
       std::make_unique<UnittestingSystemAppDelegate>(
           SystemWebAppType::SETTINGS, "Initiating App", kInitiatingAppUrl,
           base::BindLambdaForTesting([]() {
-            auto info = std::make_unique<web_app::WebAppInstallInfo>();
             // the pwa.html is arguably wrong, but the manifest
             // version uses it incorrectly as well, and it's a lot of
             // work to fix it. App ids are generated from this, and
             // it's important to keep it stable across the
             // installation modes.
-            info->start_url = GURL("chrome://initiating-app/pwa.html");
+            auto info =
+                web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(
+                    GURL("chrome://initiating-app/pwa.html"));
             info->scope = GURL("chrome://initiating-app/");
             info->title = u"Test System App";
             info->theme_color = 0xFF00FF00;

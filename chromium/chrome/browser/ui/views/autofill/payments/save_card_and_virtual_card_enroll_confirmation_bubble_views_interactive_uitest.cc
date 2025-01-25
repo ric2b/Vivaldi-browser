@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.h"
+#include <optional>
 
+#include "chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/virtual_card_enroll_bubble_controller_impl_test_api.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/autofill/payments/dialog_view_ids.h"
@@ -19,6 +20,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "content/public/test/browser_test.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/test/ax_event_counter.h"
 #include "ui/views/test/widget_test.h"
 
@@ -69,7 +71,9 @@ class SaveCardConfirmationBubbleViewsInteractiveUiTest
   }
 
   void ShowBubble(bool card_saved) {
-    GetController()->ShowConfirmationBubbleView(card_saved);
+    GetController()->ShowConfirmationBubbleView(
+        card_saved,
+        /*on_confirmation_closed_callback=*/std::nullopt);
   }
 
   void HideBubble(views::Widget::ClosedReason closed_reason) {
@@ -115,10 +119,11 @@ IN_PROC_BROWSER_TEST_F(SaveCardConfirmationBubbleViewsInteractiveUiTest,
                 IDS_AUTOFILL_SAVE_CARD_CONFIRMATION_SUCCESS_DESCRIPTION_TEXT));
   EXPECT_EQ(static_cast<views::Label*>(
                 BubbleView()->GetViewByID(DialogViewId::DESCRIPTION_LABEL))
-                ->GetAccessibleName(),
+                ->GetViewAccessibility()
+                .GetCachedName(),
             l10n_util::GetStringUTF16(
                 IDS_AUTOFILL_SAVE_CARD_CONFIRMATION_SUCCESS_DESCRIPTION_TEXT));
-  EXPECT_EQ(BubbleView()->GetDialogButtons(), ui::DIALOG_BUTTON_NONE);
+  EXPECT_EQ(BubbleView()->buttons(), ui::DIALOG_BUTTON_NONE);
   EXPECT_TRUE(IconView()->GetVisible());
 
   HideBubble(views::Widget::ClosedReason::kLostFocus);
@@ -153,16 +158,17 @@ IN_PROC_BROWSER_TEST_F(SaveCardConfirmationBubbleViewsInteractiveUiTest,
                 IDS_AUTOFILL_SAVE_CARD_CONFIRMATION_FAILURE_DESCRIPTION_TEXT));
   EXPECT_EQ(static_cast<views::Label*>(
                 BubbleView()->GetViewByID(DialogViewId::DESCRIPTION_LABEL))
-                ->GetAccessibleName(),
+                ->GetViewAccessibility()
+                .GetCachedName(),
             l10n_util::GetStringUTF16(
                 IDS_AUTOFILL_SAVE_CARD_CONFIRMATION_FAILURE_DESCRIPTION_TEXT));
-  EXPECT_EQ(BubbleView()->GetDialogButtons(), ui::DIALOG_BUTTON_OK);
+  EXPECT_EQ(BubbleView()->buttons(), ui::DIALOG_BUTTON_OK);
   EXPECT_EQ(
       BubbleView()->GetDialogButtonLabel(ui::DIALOG_BUTTON_OK),
       l10n_util::GetStringUTF16(
-          IDS_AUTOFILL_SAVE_CARD_AND_VIRTUAL_CARD_ENROLL_CONFIRMATION_FAILURE_OK_BUTTON_TEXT));
+          IDS_AUTOFILL_SAVE_CARD_AND_VIRTUAL_CARD_ENROLL_CONFIRMATION_BUTTON_TEXT));
   EXPECT_EQ(
-      BubbleView()->GetOkButton()->GetAccessibleName(),
+      BubbleView()->GetOkButton()->GetViewAccessibility().GetCachedName(),
       l10n_util::GetStringUTF16(
           IDS_AUTOFILL_SAVE_CARD_CONFIRMATION_FAILURE_OK_BUTTON_ACCESSIBLE_NAME));
   EXPECT_TRUE(IconView()->GetVisible());
@@ -262,10 +268,11 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_EQ(
       static_cast<views::Label*>(
           BubbleView()->GetViewByID(DialogViewId::DESCRIPTION_LABEL))
-          ->GetAccessibleName(),
+          ->GetViewAccessibility()
+          .GetCachedName(),
       l10n_util::GetStringUTF16(
           IDS_AUTOFILL_VIRTUAL_CARD_ENROLL_CONFIRMATION_SUCCESS_DESCRIPTION_TEXT));
-  EXPECT_EQ(BubbleView()->GetDialogButtons(), ui::DIALOG_BUTTON_NONE);
+  EXPECT_EQ(BubbleView()->buttons(), ui::DIALOG_BUTTON_NONE);
   EXPECT_TRUE(IconView()->GetVisible());
 
   GetController()->HideIconAndBubble();
@@ -279,7 +286,9 @@ IN_PROC_BROWSER_TEST_F(
   CreditCard card = test::GetCreditCard();
   VirtualCardEnrollmentFields enrollment_fields;
   enrollment_fields.credit_card = card;
-  test_api(*GetController()).SetFields(enrollment_fields);
+  test_api(*GetController())
+      .SetUiModel(
+          std::make_unique<VirtualCardEnrollUiModel>(enrollment_fields));
 
   views::test::AXEventCounter counter(views::AXEventManager::Get());
   EXPECT_EQ(0, counter.GetCount(ax::mojom::Event::kAlert));
@@ -310,17 +319,18 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_EQ(
       static_cast<views::Label*>(
           BubbleView()->GetViewByID(DialogViewId::DESCRIPTION_LABEL))
-          ->GetAccessibleName(),
+          ->GetViewAccessibility()
+          .GetCachedName(),
       l10n_util::GetStringFUTF16(
           IDS_AUTOFILL_VIRTUAL_CARD_ENROLL_CONFIRMATION_FAILURE_DESCRIPTION_TEXT,
           card.NetworkAndLastFourDigits()));
-  EXPECT_EQ(BubbleView()->GetDialogButtons(), ui::DIALOG_BUTTON_OK);
+  EXPECT_EQ(BubbleView()->buttons(), ui::DIALOG_BUTTON_OK);
   EXPECT_EQ(
       BubbleView()->GetDialogButtonLabel(ui::DIALOG_BUTTON_OK),
       l10n_util::GetStringUTF16(
-          IDS_AUTOFILL_SAVE_CARD_AND_VIRTUAL_CARD_ENROLL_CONFIRMATION_FAILURE_OK_BUTTON_TEXT));
+          IDS_AUTOFILL_SAVE_CARD_AND_VIRTUAL_CARD_ENROLL_CONFIRMATION_BUTTON_TEXT));
   EXPECT_EQ(
-      BubbleView()->GetOkButton()->GetAccessibleName(),
+      BubbleView()->GetOkButton()->GetViewAccessibility().GetCachedName(),
       l10n_util::GetStringUTF16(
           IDS_AUTOFILL_VIRTUAL_CARD_ENROLL_CONFIRMATION_FAILURE_OK_BUTTON_ACCESSIBLE_NAME));
   EXPECT_TRUE(IconView()->GetVisible());

@@ -340,7 +340,7 @@ void RecordPreferredDisplaySurfaceConstraintUma(
       RecordUma(GetDisplayMediaConstraintsDisplaySurface::kTab);
       return;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void RecordSuppressLocalAudioPlaybackConstraintUma(
@@ -378,7 +378,7 @@ MediaConstraints ParseOptions(
       }
       return constraints;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return MediaConstraints();
 }
 
@@ -467,29 +467,30 @@ UserMediaRequest* UserMediaRequest::Create(
       }
     }
 
-    if (video.IsNull()) {
-      exception_state.ThrowTypeError("video must be requested");
+    if (audio.IsNull() && video.IsNull()) {
+      exception_state.ThrowTypeError("either audio or video must be requested");
       return nullptr;
     }
 
     if ((!audio.IsNull() && !audio.Advanced().empty()) ||
-        !video.Advanced().empty()) {
+        (!video.IsNull() && !video.Advanced().empty())) {
       exception_state.ThrowTypeError("Advanced constraints are not supported");
       return nullptr;
     }
 
-    if ((!audio.IsNull() && audio.Basic().HasMin()) || video.Basic().HasMin()) {
+    if ((!audio.IsNull() && audio.Basic().HasMin()) ||
+        (!video.IsNull() && video.Basic().HasMin())) {
       exception_state.ThrowTypeError("min constraints are not supported");
       return nullptr;
     }
 
     if ((!audio.IsNull() && audio.Basic().HasExact()) ||
-        video.Basic().HasExact()) {
+        (!video.IsNull() && video.Basic().HasExact())) {
       exception_state.ThrowTypeError("exact constraints are not supported");
       return nullptr;
     }
 
-    if (video.Basic().display_surface.HasIdeal() &&
+    if (!video.IsNull() && video.Basic().display_surface.HasIdeal() &&
         video.Basic().display_surface.Ideal().size() > 0) {
       display_surface_constraint =
           video.Basic().display_surface.Ideal()[0].Utf8();
@@ -830,7 +831,7 @@ void UserMediaRequest::OnMediaStreamsInitialized(MediaStreamVector streams) {
         PeerConnectionTracker::From(*window).TrackGetDisplayMediaSuccess(
             this, stream);
       } else {
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
       }
     }
   }
@@ -856,7 +857,7 @@ void UserMediaRequest::FailConstraint(const String& constraint_name,
       PeerConnectionTracker::From(*window).TrackGetDisplayMediaFailure(
           this, "OverConstrainedError", message);
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
   // After this call, the execution context may be invalid.
@@ -910,7 +911,7 @@ void UserMediaRequest::Fail(Result error, const String& message) {
       result_enum = UserMediaRequestResult::kSecurityError;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   RecordIdentifiabilityMetric(surface_, GetExecutionContext(),
                               IdentifiabilityBenignStringToken(message));
@@ -924,7 +925,7 @@ void UserMediaRequest::Fail(Result error, const String& message) {
       PeerConnectionTracker::From(*window).TrackGetDisplayMediaFailure(
           this, DOMException::GetErrorName(exception_code), message);
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
 

@@ -9,6 +9,7 @@ alignSelf
 alignmentBaseline
 all
 anchorName
+anchorScope
 animation
 animationComposition
 animationDelay
@@ -107,6 +108,7 @@ borderTopStyle
 borderTopWidth
 borderWidth
 bottom
+boxDecorationBreak
 boxShadow
 boxSizing
 breakAfter
@@ -195,6 +197,7 @@ fontVariant
 fontVariantAlternates
 fontVariantCaps
 fontVariantEastAsian
+fontVariantEmoji
 fontVariantLigatures
 fontVariantNumeric
 fontVariantPosition
@@ -240,6 +243,7 @@ insetBlockStart
 insetInline
 insetInlineEnd
 insetInlineStart
+interpolateSize
 isolation
 item
 justifyContent
@@ -250,6 +254,7 @@ length
 letterSpacing
 lightingColor
 lineBreak
+lineClamp
 lineGapOverride
 lineHeight
 listStyle
@@ -357,19 +362,20 @@ popoverShowDelay
 position
 positionAnchor
 positionTry
-positionTryOptions
+positionTryFallbacks
 positionTryOrder
 positionVisibility
 prefix
 quotes
 r
 range
-readingOrderItems
+readingFlow
 removeProperty
 resize
 right
 rotate
 rowGap
+rubyAlign
 rubyPosition
 rx
 ry
@@ -386,6 +392,7 @@ scrollMarginInlineStart
 scrollMarginLeft
 scrollMarginRight
 scrollMarginTop
+scrollMarkerGroup
 scrollPadding
 scrollPaddingBlock
 scrollPaddingBlockEnd

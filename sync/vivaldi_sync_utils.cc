@@ -69,7 +69,6 @@ const char* ProtoEnumToString(
     ENUM_CASE(sync_pb::NotesSpecifics, ATTACHMENT);
   }
   NOTREACHED();
-  return "";
 }
 
 const char* ProtoEnumToString(
@@ -81,7 +80,6 @@ const char* ProtoEnumToString(
     ENUM_CASE(sync_pb::BookmarkSpecifics, TRASH_NODE);
   }
   NOTREACHED();
-  return "";
 }
 
 }  // namespace syncer

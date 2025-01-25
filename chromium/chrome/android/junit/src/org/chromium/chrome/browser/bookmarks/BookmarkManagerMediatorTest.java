@@ -47,7 +47,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
@@ -64,7 +63,6 @@ import org.chromium.base.task.TaskTraits;
 import org.chromium.base.task.test.ShadowPostTask;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
-import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
@@ -143,8 +141,9 @@ import java.util.function.Consumer;
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(shadows = {ShadowPostTask.class})
 @EnableFeatures({
-    SyncFeatureMap.ENABLE_BOOKMARK_FOLDERS_FOR_ACCOUNT_STORAGE,
-    ChromeFeatureList.ANDROID_IMPROVED_BOOKMARKS
+    SyncFeatureMap.SYNC_ENABLE_BOOKMARKS_IN_TRANSPORT_MODE,
+    ChromeFeatureList.ANDROID_IMPROVED_BOOKMARKS,
+    ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS
 })
 public class BookmarkManagerMediatorTest {
     private static final GURL EXAMPLE_URL = JUnitTestGURLs.EXAMPLE_URL;
@@ -157,7 +156,6 @@ public class BookmarkManagerMediatorTest {
             new ActivityScenarioRule<>(TestActivity.class);
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule().strictness(Strictness.LENIENT);
-    @Rule public TestRule mFeaturesProcessorRule = new Features.JUnitProcessor();
     @Rule public JniMocker mJniMocker = new JniMocker();
 
     @Mock private BookmarkModel mBookmarkModel;
@@ -558,34 +556,76 @@ public class BookmarkManagerMediatorTest {
 
     @Test
     public void testEmptyView_Bookmark() {
+        doReturn(Arrays.asList()).when(mBookmarkModel).getChildIds(mMobileFolderId);
+
         // Setup and open Bookmark folder.
         finishLoading();
         assertEquals(BookmarkUiMode.LOADING, mMediator.getCurrentUiMode());
-        mMediator.openFolder(mFolderId1);
+        mMediator.openFolder(mMobileFolderId);
 
-        // Verify empty view initialized.
-        verify(mSelectableListLayout)
-                .setEmptyStateImageRes(R.drawable.bookmark_empty_state_illustration);
-        verify(mSelectableListLayout)
-                .setEmptyStateViewText(
-                        R.string.bookmark_manager_empty_state,
-                        R.string.bookmark_manager_back_to_page_by_adding_bookmark);
+        assertBookmarkListEmpty();
+
+        ListItem emptyListItem = mModelList.get(1);
+        assertEquals(ViewType.EMPTY_STATE, emptyListItem.type);
+        assertEquals(
+                R.string.bookmark_manager_empty_state,
+                emptyListItem.model.get(BookmarkManagerEmptyStateProperties.EMPTY_STATE_TITLE_RES));
+        assertEquals(
+                R.string.bookmark_manager_back_to_page_by_adding_bookmark,
+                emptyListItem.model.get(
+                        BookmarkManagerEmptyStateProperties.EMPTY_STATE_DESCRIPTION_RES));
+        assertEquals(
+                R.drawable.bookmark_empty_state_illustration,
+                emptyListItem.model.get(BookmarkManagerEmptyStateProperties.EMPTY_STATE_IMAGE_RES));
     }
 
     @Test
     public void testEmptyView_ReadingList() {
-        // Setup and open Reading list folder.
+        doReturn(Arrays.asList()).when(mBookmarkModel).getChildIds(mReadingListFolderId);
+
+        // Setup and open Bookmark folder.
         finishLoading();
         assertEquals(BookmarkUiMode.LOADING, mMediator.getCurrentUiMode());
         mMediator.openFolder(mReadingListFolderId);
 
-        // Verify empty view initialized.
-        verify(mSelectableListLayout)
-                .setEmptyStateImageRes(R.drawable.reading_list_empty_state_illustration);
-        verify(mSelectableListLayout)
-                .setEmptyStateViewText(
-                        R.string.reading_list_manager_empty_state,
-                        R.string.reading_list_manager_save_page_to_read_later);
+        assertBookmarkListEmpty();
+
+        ListItem emptyListItem = mModelList.get(1);
+        assertEquals(ViewType.EMPTY_STATE, emptyListItem.type);
+        assertEquals(
+                R.string.reading_list_manager_empty_state,
+                emptyListItem.model.get(BookmarkManagerEmptyStateProperties.EMPTY_STATE_TITLE_RES));
+        assertEquals(
+                R.string.reading_list_manager_save_page_to_read_later,
+                emptyListItem.model.get(
+                        BookmarkManagerEmptyStateProperties.EMPTY_STATE_DESCRIPTION_RES));
+        assertEquals(
+                R.drawable.reading_list_empty_state_illustration,
+                emptyListItem.model.get(BookmarkManagerEmptyStateProperties.EMPTY_STATE_IMAGE_RES));
+    }
+
+    @Test
+    public void testEmptyView_Search() {
+        // Setup and open Bookmark folder.
+        finishLoading();
+        assertEquals(BookmarkUiMode.LOADING, mMediator.getCurrentUiMode());
+        mMediator.openFolder(mMobileFolderId);
+        mMediator.openSearchUi();
+
+        assertBookmarkListEmpty();
+
+        ListItem emptyListItem = mModelList.get(1);
+        assertEquals(ViewType.EMPTY_STATE, emptyListItem.type);
+        assertEquals(
+                R.string.bookmark_manager_empty_state,
+                emptyListItem.model.get(BookmarkManagerEmptyStateProperties.EMPTY_STATE_TITLE_RES));
+        assertEquals(
+                R.string.bookmark_manager_back_to_page_by_adding_bookmark,
+                emptyListItem.model.get(
+                        BookmarkManagerEmptyStateProperties.EMPTY_STATE_DESCRIPTION_RES));
+        assertEquals(
+                R.drawable.bookmark_empty_state_illustration,
+                emptyListItem.model.get(BookmarkManagerEmptyStateProperties.EMPTY_STATE_IMAGE_RES));
     }
 
     @Test
@@ -981,7 +1021,10 @@ public class BookmarkManagerMediatorTest {
     }
 
     @Test
-    @DisableFeatures(SyncFeatureMap.ENABLE_BOOKMARK_FOLDERS_FOR_ACCOUNT_STORAGE)
+    @DisableFeatures({
+        SyncFeatureMap.SYNC_ENABLE_BOOKMARKS_IN_TRANSPORT_MODE,
+        ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS
+    })
     public void testBuildImprovedBookmarkRow_Folder_Visual() {
         finishLoading();
         mMediator.openFolder(mFolderId1);
@@ -1188,7 +1231,7 @@ public class BookmarkManagerMediatorTest {
         assertTrue(model.get(BookmarkSearchBoxRowProperties.SHOPPING_CHIP_VISIBILITY));
         model.get(BookmarkSearchBoxRowProperties.SHOPPING_CHIP_TOGGLE_CALLBACK).onResult(true);
 
-        assertEquals(1, mModelList.size());
+        assertBookmarkListEmpty();
 
         // Simulate creation of a tracked product.
         BookmarkId trackedProductBookmarkId = new BookmarkId(9999L, 0);
@@ -1306,7 +1349,10 @@ public class BookmarkManagerMediatorTest {
     }
 
     @Test
-    @DisableFeatures(SyncFeatureMap.ENABLE_BOOKMARK_FOLDERS_FOR_ACCOUNT_STORAGE)
+    @DisableFeatures({
+        SyncFeatureMap.SYNC_ENABLE_BOOKMARKS_IN_TRANSPORT_MODE,
+        ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS
+    })
     public void testParentFolderUpdatedWhenChildDeleted() {
         finishLoading();
 
@@ -1802,7 +1848,7 @@ public class BookmarkManagerMediatorTest {
         mMediator.openFolder(mFolderId3);
         mMediator.changeSelectionMode(true);
 
-        assertEquals(1, mModelList.size());
+        assertEquals(2, mModelList.size());
         assertEquals(ViewType.SEARCH_BOX, mModelList.get(0).type);
     }
 
@@ -1839,7 +1885,7 @@ public class BookmarkManagerMediatorTest {
                         BookmarkSearchBoxRowProperties.CLEAR_SEARCH_TEXT_BUTTON_VISIBILITY));
         // It shouldn't search again.
         verify(mBookmarkModel, times(1)).searchBookmarks(anyString(), anyInt());
-        assertEquals(1, mModelList.size());
+        assertBookmarkListEmpty();
     }
 
     @Test
@@ -1873,7 +1919,7 @@ public class BookmarkManagerMediatorTest {
 
         mMediator.openFolder(mFolderId3);
 
-        assertEquals(1, mModelList.size());
+        assertBookmarkListEmpty();
         assertEquals(ViewType.SEARCH_BOX, mModelList.get(0).type);
 
         PropertyModel model = mModelList.get(0).model;
@@ -1942,7 +1988,7 @@ public class BookmarkManagerMediatorTest {
         searchBoxModel.get(BookmarkSearchBoxRowProperties.FOCUS_CHANGE_CALLBACK).onResult(true);
 
         assertEquals(BookmarkUiMode.SEARCHING, mMediator.getCurrentUiMode());
-        assertEquals(1, mModelList.size());
+        assertBookmarkListEmpty();
 
         verify(mBookmarkModel, never()).searchBookmarks(anyString(), anyInt());
 
@@ -1964,7 +2010,7 @@ public class BookmarkManagerMediatorTest {
         assertTrue(model.get(BookmarkSearchBoxRowProperties.SHOPPING_CHIP_VISIBILITY));
         model.get(BookmarkSearchBoxRowProperties.SHOPPING_CHIP_TOGGLE_CALLBACK).onResult(true);
 
-        assertEquals(1, mModelList.size());
+        assertBookmarkListEmpty();
     }
 
     @Test
@@ -1986,7 +2032,7 @@ public class BookmarkManagerMediatorTest {
 
         mMediator.openFolder(mFolderId3);
 
-        assertEquals(1, mModelList.size());
+        assertBookmarkListEmpty();
         assertEquals(ViewType.SEARCH_BOX, mModelList.get(0).type);
 
         PropertyModel model = mModelList.get(0).model;
@@ -2002,7 +2048,7 @@ public class BookmarkManagerMediatorTest {
                 .getAllPriceTrackedBookmarks(any());
 
         mMediator.updateShoppingFilterVisible();
-        assertEquals(1, mModelList.size());
+        assertBookmarkListEmpty();
         assertEquals(ViewType.SEARCH_BOX, mModelList.get(0).type);
 
         model = mModelList.get(0).model;
@@ -2016,7 +2062,7 @@ public class BookmarkManagerMediatorTest {
 
         mMediator.openFolder(mFolderId3);
 
-        assertEquals(1, mModelList.size());
+        assertBookmarkListEmpty();
         assertEquals(ViewType.SEARCH_BOX, mModelList.get(0).type);
 
         PropertyModel model = mModelList.get(0).model;
@@ -2080,7 +2126,7 @@ public class BookmarkManagerMediatorTest {
         searchBoxModel.get(BookmarkSearchBoxRowProperties.FOCUS_CHANGE_CALLBACK).onResult(true);
 
         assertEquals(BookmarkUiMode.SEARCHING, mMediator.getCurrentUiMode());
-        assertEquals(1, mModelList.size());
+        assertBookmarkListEmpty();
 
         verify(mBookmarkModel, never()).searchBookmarks(anyString(), anyInt());
         verify(mBookmarkModel).addObserver(mBookmarkModelObserverArgumentCaptor.capture());
@@ -2088,7 +2134,7 @@ public class BookmarkManagerMediatorTest {
 
         // Should still be in search mode, and should have refreshed and picked up new results.
         assertEquals(BookmarkUiMode.SEARCHING, mMediator.getCurrentUiMode());
-        assertEquals(1, mModelList.size());
+        assertBookmarkListEmpty();
     }
 
     @Test
@@ -2186,7 +2232,7 @@ public class BookmarkManagerMediatorTest {
         verify(mBookmarkModel).addObserver(mBookmarkModelObserverArgumentCaptor.capture());
         BookmarkModelObserver observer = mBookmarkModelObserverArgumentCaptor.getValue();
         observer.bookmarkModelChanged();
-        verifyCurrentBookmarkIds(new BookmarkId[] {null});
+        assertBookmarkListEmpty();
 
         // Neither of these can do anything, the models are gone. But more importantly, they should
         // not crash.
@@ -2218,5 +2264,11 @@ public class BookmarkManagerMediatorTest {
                     expected,
                     actual);
         }
+    }
+
+    private void assertBookmarkListEmpty() {
+        assertEquals(2, mModelList.size());
+        assertEquals(ViewType.SEARCH_BOX, mModelList.get(0).type);
+        assertEquals(ViewType.EMPTY_STATE, mModelList.get(1).type);
     }
 }

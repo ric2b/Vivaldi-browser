@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "sandbox/win/src/sandbox_policy_base.h"
 
 #include <stddef.h>
@@ -162,7 +167,7 @@ bool ConfigBase::IsOnCreatingThread() const {
 #if DCHECK_IS_ON()
   return GetCurrentThreadId() == creating_thread_id_;
 #else  // DCHECK_IS_ON()
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return true;
 #endif
 }
@@ -247,7 +252,7 @@ sandbox::LowLevelPolicy* ConfigBase::PolicyMaker() {
 ResultCode ConfigBase::AllowFileAccess(FileSemantics semantics,
                                        const wchar_t* pattern) {
   if (!FileSystemPolicy::GenerateRules(pattern, semantics, PolicyMaker())) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return SBOX_ERROR_BAD_PARAMS;
   }
   return SBOX_ALL_OK;
@@ -258,7 +263,7 @@ ResultCode ConfigBase::SetFakeGdiInit() {
       << "Enable MITIGATION_WIN32K_DISABLE before adding win32k policy "
          "rules.";
   if (!ProcessMitigationsWin32KLockdownPolicy::GenerateRules(PolicyMaker())) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return SBOX_ERROR_BAD_PARAMS;
   }
   return SBOX_ALL_OK;
@@ -274,7 +279,7 @@ ResultCode ConfigBase::AllowExtraDlls(const wchar_t* pattern) {
         << "Enable MITIGATION_FORCE_MS_SIGNED_BINS before adding signed "
            "policy rules.";
     if (!SignedPolicy::GenerateRules(pattern, PolicyMaker())) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return SBOX_ERROR_BAD_PARAMS;
     }
   }
@@ -352,8 +357,9 @@ void ConfigBase::SetLockdownDefaultDacl() {
   lockdown_default_dacl_ = true;
 }
 
-ResultCode ConfigBase::AddAppContainerProfile(const wchar_t* package_name,
-                                              bool create_profile) {
+ResultCode ConfigBase::AddAppContainerProfile(
+    const wchar_t* package_name,
+    ACProfileRegistration registration) {
   if (!features::IsAppContainerSandboxSupported())
     return SBOX_ERROR_UNSUPPORTED;
 
@@ -363,12 +369,17 @@ ResultCode ConfigBase::AddAppContainerProfile(const wchar_t* package_name,
     return SBOX_ERROR_BAD_PARAMS;
   }
 
-  if (create_profile) {
-    app_container_ = AppContainerBase::CreateProfile(
-        package_name, L"Chrome Sandbox", L"Profile for Chrome Sandbox");
-  } else {
-    app_container_ = AppContainerBase::Open(package_name);
+  switch (registration) {
+    case ACProfileRegistration::kDefault:
+      app_container_ = AppContainerBase::CreateProfile(
+          package_name, L"Chrome Sandbox", L"Profile for Chrome Sandbox");
+      break;
+    case ACProfileRegistration::kNoFirewall:
+      app_container_ = AppContainerBase::CreateProfileNoFirewall(
+          package_name, L"Chrome Sandbox");
+      break;
   }
+
   if (!app_container_)
     return SBOX_ERROR_CREATE_APPCONTAINER;
 
@@ -388,8 +399,8 @@ ResultCode ConfigBase::AddAppContainerProfile(const wchar_t* package_name,
   return SBOX_ALL_OK;
 }
 
-scoped_refptr<AppContainer> ConfigBase::GetAppContainer() {
-  return app_container_;
+AppContainer* ConfigBase::GetAppContainer() {
+  return app_container_.get();
 }
 
 ResultCode ConfigBase::SetTokenLevel(TokenLevel initial, TokenLevel lockdown) {
@@ -723,7 +734,7 @@ EvalResult PolicyBase::EvalPolicy(IpcTag service,
     }
     for (size_t i = 0; i < params->count; i++) {
       if (!params->parameters[i].IsValid()) {
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return SIGNAL_ALARM;
       }
     }

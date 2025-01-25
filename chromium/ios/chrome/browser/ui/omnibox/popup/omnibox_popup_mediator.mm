@@ -28,9 +28,11 @@
 #import "components/variations/variations_associated_data.h"
 #import "components/variations/variations_ids_provider.h"
 #import "ios/chrome/browser/default_browser/model/default_browser_interest_signals.h"
+#import "ios/chrome/browser/download/model/external_app_util.h"
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -53,8 +55,10 @@
 #import "ios/chrome/browser/ui/omnibox/popup/popup_debug_info_consumer.h"
 #import "ios/chrome/browser/ui/omnibox/popup/popup_swift.h"
 #import "ios/chrome/browser/ui/omnibox/popup/remote_suggestions_service_observer_bridge.h"
+#import "ios/chrome/browser/ui/omnibox/popup/row/actions/suggest_action.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_omnibox_consumer.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
+#import "net/base/apple/url_conversions.h"
 #import "third_party/omnibox_proto/groups.pb.h"
 #import "ui/base/l10n/l10n_util.h"
 
@@ -152,8 +156,21 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
     _cachedImages = [[NSCache alloc] init];
     // This is logged only when `IsBottomOmniboxAvailable`.
     _preferredOmniboxPosition = metrics::OmniboxEventProto::UNKNOWN_POSITION;
+
+    _bottomOmniboxEnabled = [[PrefBackedBoolean alloc]
+        initWithPrefService:GetApplicationContext()->GetLocalState()
+                   prefName:prefs::kBottomOmnibox];
+    [_bottomOmniboxEnabled setObserver:self];
+    // Initialize to the correct value.
+    [self booleanDidChange:_bottomOmniboxEnabled];
   }
   return self;
+}
+
+- (void)disconnect {
+  [_bottomOmniboxEnabled stop];
+  [_bottomOmniboxEnabled setObserver:nil];
+  _bottomOmniboxEnabled = nil;
 }
 
 - (void)updateMatches:(const AutocompleteResult&)result {
@@ -219,39 +236,6 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
   _debugInfoConsumer = debugInfoConsumer;
 }
 
-- (void)setOriginalPrefService:(PrefService*)originalPrefService {
-  _originalPrefService = originalPrefService;
-  if (IsBottomOmniboxAvailable() && _originalPrefService) {
-    _bottomOmniboxEnabled =
-        [[PrefBackedBoolean alloc] initWithPrefService:_originalPrefService
-                                              prefName:prefs::kBottomOmnibox];
-    [_bottomOmniboxEnabled setObserver:self];
-    // Initialize to the correct value.
-    [self booleanDidChange:_bottomOmniboxEnabled];
-
-    // Vivaldi
-    _reverseSearchResultsEnabled =
-        [[PrefBackedBoolean alloc]
-           initWithPrefService:originalPrefService
-              prefName:vivaldiprefs::kVivaldiReverseSearchResultsEnabled];
-    [_reverseSearchResultsEnabled setObserver:self];
-    [self booleanDidChange:_reverseSearchResultsEnabled];
-    // End Vivaldi
-
-  } else {
-    [_bottomOmniboxEnabled stop];
-    [_bottomOmniboxEnabled setObserver:nil];
-    _bottomOmniboxEnabled = nil;
-
-    // Vivaldi
-    [_reverseSearchResultsEnabled stop];
-    [_reverseSearchResultsEnabled setObserver:nil];
-    _reverseSearchResultsEnabled = nil;
-    // End Vivaldi
-
-  }
-}
-
 #pragma mark - AutocompleteResultDataSource
 
 - (void)requestResultsWithVisibleSuggestionCount:
@@ -288,6 +272,11 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
                didSelectSuggestion:(id<AutocompleteSuggestion>)suggestion
                              inRow:(NSUInteger)row {
   [self logPedalShownForCurrentResult];
+
+  // Log the suggest actions that were shown and not used.
+  if (suggestion.actionsInSuggest.count == 0) {
+    [self logActionsInSuggestShownForCurrentResult];
+  }
 
   if ([suggestion isKindOfClass:[PedalSuggestionWrapper class]]) {
     PedalSuggestionWrapper* pedalSuggestionWrapper =
@@ -328,9 +317,50 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
 
     _delegate->OnMatchSelected(match, row, WindowOpenDisposition::CURRENT_TAB);
   } else {
-    DUMP_WILL_BE_NOTREACHED_NORETURN()
+    DUMP_WILL_BE_NOTREACHED()
         << "Suggestion type " << NSStringFromClass(suggestion.class)
         << " not handled for selection.";
+  }
+}
+
+- (void)autocompleteResultConsumer:(id<AutocompleteResultConsumer>)sender
+         didSelectSuggestionAction:(SuggestAction*)action
+                        suggestion:(id<AutocompleteSuggestion>)suggestion
+                             inRow:(NSUInteger)row {
+  OmniboxActionInSuggest::RecordShownAndUsedMetrics(action.type,
+                                                    true /* used */);
+
+  switch (action.type) {
+    case omnibox::ActionInfo_ActionType_CALL: {
+      NSURL* URL = net::NSURLWithGURL(action.actionURI);
+      __weak __typeof__(self) weakSelf = self;
+      [[UIApplication sharedApplication] openURL:URL
+                                         options:@{}
+                               completionHandler:^(BOOL success) {
+                                 if (success) {
+                                   [weakSelf callActionTapped];
+                                 }
+                               }];
+      break;
+    }
+    case omnibox::ActionInfo_ActionType_DIRECTIONS: {
+      NSURL* URL = net::NSURLWithGURL(action.actionURI);
+
+      if (IsGoogleMapsAppInstalled() && !self.incognito) {
+        [[UIApplication sharedApplication] openURL:URL
+                                           options:@{}
+                                 completionHandler:nil];
+      } else {
+        [self openNewTabWithSuggestAction:action];
+      }
+      break;
+    }
+    case omnibox::ActionInfo_ActionType_REVIEWS: {
+      [self openNewTabWithSuggestAction:action];
+      break;
+    }
+    default:
+      break;
   }
 }
 
@@ -356,8 +386,9 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
       _delegate->OnMatchSelectedForAppending(match);
     }
   } else {
-    NOTREACHED() << "Suggestion type " << NSStringFromClass(suggestion.class)
-                 << " not handled for trailing button tap.";
+    NOTREACHED_IN_MIGRATION()
+        << "Suggestion type " << NSStringFromClass(suggestion.class)
+        << " not handled for trailing button tap.";
   }
 }
 
@@ -371,7 +402,7 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
         autocompleteMatchFormatter.autocompleteMatch;
     _delegate->OnMatchSelectedForDeletion(match);
   } else {
-    DUMP_WILL_BE_NOTREACHED_NORETURN()
+    DUMP_WILL_BE_NOTREACHED()
         << "Suggestion type " << NSStringFromClass(suggestion.class)
         << " not handled for deletion.";
   }
@@ -499,6 +530,21 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
   }
 }
 
+- (void)logActionsInSuggestShownForCurrentResult {
+  NSArray<id<AutocompleteSuggestion>>* allMatches =
+      [self extractMatches:self.autocompleteResult];
+
+  for (id<AutocompleteSuggestion> match in allMatches) {
+    if (match.actionsInSuggest.count == 0) {
+      continue;
+    }
+    for (SuggestAction* action in match.actionsInSuggest) {
+      OmniboxActionInSuggest::RecordShownAndUsedMetrics(action.type,
+                                                        false /* used */);
+    }
+  }
+}
+
 /// Wraps `match` with AutocompleteMatchFormatter.
 - (AutocompleteMatchFormatter*)wrapMatch:(const AutocompleteMatch&)match
                               fromResult:(const AutocompleteResult&)result {
@@ -517,6 +563,30 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
     formatter.suggestionSectionId =
         [NSNumber numberWithInt:static_cast<int>(sectionId)];
   }
+
+  NSMutableArray* actions = [[NSMutableArray alloc] init];
+
+  for (auto& action : match.actions) {
+    SuggestAction* suggestAction =
+        [SuggestAction actionWithOmniboxAction:action.get()];
+
+    if (!suggestAction) {
+      continue;
+    }
+
+    if (suggestAction.type != omnibox::ActionInfo_ActionType_CALL) {
+      [actions addObject:suggestAction];
+      continue;
+    }
+
+    BOOL hasDialApp = [[UIApplication sharedApplication]
+        canOpenURL:net::NSURLWithGURL(suggestAction.actionURI)];
+    if (hasDialApp) {
+      [actions addObject:suggestAction];
+    }
+  }
+
+  formatter.actionsInSuggest = actions;
 
   return formatter;
 }
@@ -667,6 +737,10 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
   DCHECK(begin <= self.autocompleteResult.size());
   DCHECK(end <= self.autocompleteResult.size());
   self.autocompleteController->GroupSuggestionsBySearchVsURL(begin, end);
+}
+
+- (void)callActionTapped {
+  _delegate->OnCallActionTap();
 }
 
 #pragma mark - CarouselItemMenuProvider
@@ -870,7 +944,32 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
   [self.applicationCommandsHandler openURLInNewTab:command];
 }
 
+/// Opens suggestAction in a new tab.
+- (void)openNewTabWithSuggestAction:(SuggestAction*)suggestAction {
+  DCHECK(self.applicationCommandsHandler);
+  OpenNewTabCommand* command =
+      [OpenNewTabCommand commandWithURLFromChrome:suggestAction.actionURI
+                                      inIncognito:NO];
+  [self.applicationCommandsHandler openURLInNewTab:command];
+}
+
 #pragma mark - Vivaldi
+- (void)setOriginalPrefService:(PrefService*)originalPrefService {
+  _originalPrefService = originalPrefService;
+  if (_originalPrefService) {
+    _reverseSearchResultsEnabled =
+        [[PrefBackedBoolean alloc]
+            initWithPrefService:originalPrefService
+                prefName:vivaldiprefs::kVivaldiReverseSearchResultsEnabled];
+    [_reverseSearchResultsEnabled setObserver:self];
+    [self booleanDidChange:_reverseSearchResultsEnabled];
+  } else {
+    [_reverseSearchResultsEnabled stop];
+    [_reverseSearchResultsEnabled setObserver:nil];
+    _reverseSearchResultsEnabled = nil;
+  }
+}
+
 - (BOOL)isBottomOmniboxEnabled {
   if (!_bottomOmniboxEnabled)
     return NO;
@@ -882,6 +981,6 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
   if (!_reverseSearchResultsEnabled || ![self isBottomOmniboxEnabled])
     return NO;
   return [_reverseSearchResultsEnabled value];
-}
+} // End Vivaldi
 
 @end

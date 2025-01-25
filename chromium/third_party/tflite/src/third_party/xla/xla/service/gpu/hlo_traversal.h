@@ -20,6 +20,7 @@ limitations under the License.
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/container/inlined_vector.h"
 #include "absl/strings/string_view.h"
@@ -188,10 +189,14 @@ std::optional<const HloInstruction*> HloFindIf(
     const std::function<bool(const HloInstruction* node)>& visit,
     bool visit_operands = true);
 
-// Visit the producers of all parameters that are needed by the fusion.
-void FindFusionArguments(
-    const HloFusionAdaptor& fusion,
-    const std::function<void(HloInstructionAdaptor producer)>& visit);
+// Visit the HLO nodes starting from `roots`.  If `visit_operands` is true, the
+// search is going towards the operands, otherwise towards the users. Returns
+// all nodes for which `visit` returns true. If no node matches, returns an
+// empty vector.
+std::vector<const HloInstruction*> HloFindAll(
+    absl::Span<const HloInstruction* const> roots,
+    const std::function<bool(const HloInstruction* node)>& visit,
+    bool visit_operands = true);
 
 // Find a use chain from `parent` to `root`. Empty if no chain exists.
 // `[parent]` if `parent` is `root`.

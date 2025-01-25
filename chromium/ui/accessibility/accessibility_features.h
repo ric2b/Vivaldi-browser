@@ -43,11 +43,6 @@
 
 namespace features {
 
-// Draw a visual highlight around the focused element on the page
-// briefly whenever focus changes.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityFocusHighlight);
-AX_BASE_EXPORT bool IsAccessibilityFocusHighlightEnabled();
-
 // Enable PDF OCR for Select-to-Speak. It will be disabled by default on
 // platforms other than ChromeOS as STS is available only on ChromeOS.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityPdfOcrForSelectToSpeak);
@@ -142,6 +137,10 @@ AX_BASE_EXPORT bool IsAccessibilityReducedAnimationsEnabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityFaceGaze);
 AX_BASE_EXPORT bool IsAccessibilityFaceGazeEnabled();
 
+// Adds reduced animations toggle to kiosk quick settings.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityReducedAnimationsInKiosk);
+AX_BASE_EXPORT bool IsAccessibilityReducedAnimationsInKioskEnabled();
+
 // Allow context checking with the accessibility Dictation
 // feature.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(
@@ -155,9 +154,9 @@ AX_BASE_EXPORT BASE_DECLARE_FEATURE(
 AX_BASE_EXPORT bool
 IsExperimentalAccessibilityGoogleTtsHighQualityVoicesEnabled();
 
-// Whether the extra-large cursor size feature is enabled.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityExtraLargeCursor);
-AX_BASE_EXPORT bool IsAccessibilityExtraLargeCursorEnabled();
+// Whether the screen magnifier can follow the ChromeVox focus.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityMagnifierFollowsChromeVox);
+AX_BASE_EXPORT bool IsAccessibilityMagnifierFollowsChromeVoxEnabled();
 
 // Whether the screen magnifier can follow the Select to Speak focus.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityMagnifierFollowsSts);
@@ -182,6 +181,15 @@ AX_BASE_EXPORT bool IsAccessibilitySelectToSpeakShortcutEnabled();
 // Controls whether the shake cursor to locate feature is available.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityShakeToLocate);
 AX_BASE_EXPORT bool IsAccessibilityShakeToLocateEnabled();
+
+// Controls whether the turn on magnifier at accelerator dialog feature is
+// available.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityMagnifyAcceleratorDialog);
+AX_BASE_EXPORT bool IsAccessibilityMagnifyAcceleratorDialogEnabled();
+
+// Controls whether the Select to Speak keyboard shortcut is enabled.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityDisableTrackpad);
+AX_BASE_EXPORT bool IsAccessibilityDisableTrackpadEnabled();
 
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -217,11 +225,6 @@ AX_BASE_EXPORT bool IsAccessibilityServiceEnabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kDataCollectionModeForScreen2x);
 AX_BASE_EXPORT bool IsDataCollectionModeForScreen2xEnabled();
 
-// Use local MI service to make inaccessibile surfaces (e.g.
-// canvases) accessible.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kLayoutExtraction);
-AX_BASE_EXPORT bool IsLayoutExtractionEnabled();
-
 // Identify and annotate the main node of the AXTree where one was not already
 // provided.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kMainNodeAnnotations);
@@ -233,27 +236,10 @@ AX_BASE_EXPORT bool IsMainNodeAnnotationsEnabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kPdfOcr);
 AX_BASE_EXPORT bool IsPdfOcrEnabled();
 
-// Include the Read Anything feature. (Note: This feature shows
-// users websites, such as articles, in a comfortable reading experience in a
-// side panel)
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kReadAnything);
-AX_BASE_EXPORT bool IsReadAnythingEnabled();
-
-// Delay showing the side panel until content has loaded. This is being
-// separated out behind a separate flag to better verify that latency issues
-// introduced by the switch to the WebUI toolbar aren't related to delaying
-// loading the side panel.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kReadAnythingDelaySidePanelLoad);
-AX_BASE_EXPORT bool IsReadAnythingDelaySidePanelLoadEnabled();
-
 // Make the Read Anything Side Panel local (don't persist when opening a new
 // tab)
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kReadAnythingLocalSidePanel);
 AX_BASE_EXPORT bool IsReadAnythingLocalSidePanelEnabled();
-
-// Show a reading mode icon in the omnibox.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kReadAnythingOmniboxIcon);
-AX_BASE_EXPORT bool IsReadAnythingOmniboxIconEnabled();
 
 // Show the Read Aloud feature in Read Anything.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kReadAnythingReadAloud);
@@ -275,10 +261,6 @@ AX_BASE_EXPORT bool IsReadAnythingReadAloudAutomaticWordHighlightingEnabled();
 // Enable phrase highlighting in Read Anything Read Aloud.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kReadAnythingReadAloudPhraseHighlighting);
 AX_BASE_EXPORT bool IsReadAnythingReadAloudPhraseHighlightingEnabled();
-
-// Use the WebUI toolbar in Read Anything.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kReadAnythingWebUIToolbar);
-AX_BASE_EXPORT bool IsReadAnythingWebUIToolbarEnabled();
 
 // Use screen2x integration for Read Anything to distill web pages
 // using an ML model.
@@ -313,10 +295,6 @@ AX_BASE_EXPORT bool IsScreenAIOCREnabled();
 // If enabled, ScreenAI library will be loaded from //third_party/screen-ai.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kScreenAITestMode);
 AX_BASE_EXPORT bool IsScreenAITestModeEnabled();
-
-// Use screen2x version 2.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kUseScreen2xV2);
-AX_BASE_EXPORT bool UseScreen2xV2();
 
 #endif  // !BUILDFLAG(IS_ANDROID)
 

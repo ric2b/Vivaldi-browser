@@ -19,6 +19,11 @@
  *
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_WTF_TEXT_CASE_FOLDING_HASH_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_WTF_TEXT_CASE_FOLDING_HASH_H_
 
@@ -55,6 +60,11 @@ class CaseFoldingHash {
     return GetHash(reinterpret_cast<const LChar*>(data), length);
   }
 
+  static inline unsigned GetHash(const char* data) {
+    return GetHash(reinterpret_cast<const LChar*>(data),
+                   static_cast<unsigned>(strlen(data)));
+  }
+
   static inline bool Equal(const StringImpl* a, const StringImpl* b) {
     DCHECK(a);
     DCHECK(b);
@@ -62,6 +72,12 @@ class CaseFoldingHash {
     // and another branch inside the compare function by skipping the null
     // checks.
     return DeprecatedEqualIgnoringCaseAndNullity(*a, *b);
+  }
+
+  static inline bool Equal(const char* a, const char* b) {
+    DCHECK(a);
+    DCHECK(b);
+    return DeprecatedEqualIgnoringCaseAndNullity(a, b);
   }
 
   static unsigned GetHash(const scoped_refptr<StringImpl>& key) {

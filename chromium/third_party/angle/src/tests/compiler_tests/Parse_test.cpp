@@ -237,6 +237,45 @@ void main() {
         "cannot convert from 'void' to 'highp 3-component vector of float'"));
 }
 
+// Tests that usage of BuildIn struct type name does not crash during parsing.
+TEST_F(ParseTest, BuildInStructTypeNameDeclarationNoCrash)
+{
+    mCompileOptions.validateAST = 1;
+    const char kShader[]        = R"(
+void main() {
+gl_DepthRangeParameters testVariable;
+})";
+    EXPECT_FALSE(compile(kShader));
+    EXPECT_TRUE(foundErrorInIntermediateTree());
+    EXPECT_TRUE(foundInIntermediateTree("reserved built-in name"));
+}
+
+TEST_F(ParseTest, BuildInStructTypeNameFunctionArgumentNoCrash)
+{
+    mCompileOptions.validateAST = 1;
+    const char kShader[]        = R"(
+void testFunction(gl_DepthRangeParameters testParam){}
+void main() {
+testFunction(gl_DepthRange);
+})";
+    EXPECT_FALSE(compile(kShader));
+    EXPECT_TRUE(foundErrorInIntermediateTree());
+    EXPECT_TRUE(foundInIntermediateTree("reserved built-in name"));
+}
+
+TEST_F(ParseTest, BuildInStructTypeNameFunctionReturnValueNoCrash)
+{
+    mCompileOptions.validateAST = 1;
+    const char kShader[]        = R"(
+gl_DepthRangeParameters testFunction(){return gl_DepthRange;}
+void main() {
+testFunction();
+})";
+    EXPECT_FALSE(compile(kShader));
+    EXPECT_TRUE(foundErrorInIntermediateTree());
+    EXPECT_TRUE(foundInIntermediateTree("reserved built-in name"));
+}
+
 // Tests that imod of const void variable does not crash during parsing.
 TEST_F(ParseTest, ConstStructVoidAndImodAndNoCrash)
 {
@@ -293,7 +332,7 @@ int E=int)";
     EXPECT_TRUE(foundInIntermediateTree("array has too many dimensions"));
 }
 
-TEST_F(ParseTest, DeeplyNestedWhileExpressionsNoCrash)
+TEST_F(ParseTest, DeeplyNestedWhileStatementsNoCrash)
 {
     mShaderSpec = SH_WEBGL2_SPEC;
     std::ostringstream shader;
@@ -310,7 +349,7 @@ void main() {
     EXPECT_TRUE(foundInIntermediateTree("statement is too deeply nested"));
 }
 
-TEST_F(ParseTest, DeeplyNestedForExpresionsNoCrash)
+TEST_F(ParseTest, DeeplyNestedForStatementsNoCrash)
 {
     mShaderSpec = SH_WEBGL2_SPEC;
     std::ostringstream shader;
@@ -327,7 +366,7 @@ void main() {
     EXPECT_TRUE(foundInIntermediateTree("statement is too deeply nested"));
 }
 
-TEST_F(ParseTest, DeeplyNestedDoWhileExpresionsNoCrash)
+TEST_F(ParseTest, DeeplyNestedDoWhileStatementsNoCrash)
 {
     mShaderSpec = SH_WEBGL2_SPEC;
     std::ostringstream shader;
@@ -346,4 +385,65 @@ void main() {
     EXPECT_FALSE(compile(shader.str()));
     EXPECT_TRUE(foundErrorInIntermediateTree());
     EXPECT_TRUE(foundInIntermediateTree("statement is too deeply nested"));
+}
+
+TEST_F(ParseTest, DeeplyNestedSwitchStatementsNoCrash)
+{
+    mShaderSpec = SH_WEBGL2_SPEC;
+    std::ostringstream shader;
+    shader << R"(#version 300 es
+void main() {
+)";
+    for (int i = 0; i < 1700; ++i)
+    {
+        shader << " switch(1) { default: int i=0;";
+    }
+    for (int i = 0; i < 1700; ++i)
+    {
+        shader << "}";
+    }
+    shader << "}";
+    EXPECT_FALSE(compile(shader.str()));
+    EXPECT_TRUE(foundErrorInIntermediateTree());
+    EXPECT_TRUE(foundInIntermediateTree("statement is too deeply nested"));
+}
+
+TEST_F(ParseTest, ManyChainedUnaryExpressionsNoCrash)
+{
+    mCompileOptions.limitExpressionComplexity = true;
+    mShaderSpec                               = SH_WEBGL2_SPEC;
+    std::ostringstream shader;
+    shader << R"(#version 300 es
+precision mediump float;
+void main() {
+  int iterations=0;)";
+    for (int i = 0; i < 6000; ++i)
+    {
+        shader << "~";
+    }
+    shader << R"(++iterations;
+}
+)";
+    EXPECT_FALSE(compile(shader.str()));
+    EXPECT_TRUE(foundErrorInIntermediateTree());
+    EXPECT_TRUE(foundInIntermediateTree("Expression too complex"));
+}
+
+TEST_F(ParseTest, ManyChainedAssignmentsNoCrash)
+{
+    mCompileOptions.limitExpressionComplexity = true;
+    mShaderSpec                               = SH_WEBGL2_SPEC;
+    std::ostringstream shader;
+    shader << R"(#version 300 es
+void main() {
+    int c = 0;
+)";
+    for (int i = 0; i < 3750; ++i)
+    {
+        shader << "c=\n";
+    }
+    shader << "c+1; }";
+    EXPECT_FALSE(compile(shader.str()));
+    EXPECT_TRUE(foundErrorInIntermediateTree());
+    EXPECT_TRUE(foundInIntermediateTree("Expression too complex"));
 }

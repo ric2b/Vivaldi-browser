@@ -26,6 +26,7 @@
 #include "components/segmentation_platform/embedder/default_model/search_user_model.h"
 #include "components/segmentation_platform/embedder/default_model/shopping_user_model.h"
 #include "components/segmentation_platform/embedder/default_model/tab_resumption_ranker.h"
+#include "components/segmentation_platform/embedder/default_model/url_visit_resumption_ranker.h"
 #include "components/segmentation_platform/internal/config_parser.h"
 #include "components/segmentation_platform/public/config.h"
 #include "components/segmentation_platform/public/constants.h"
@@ -38,7 +39,6 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/commerce/shopping_service_factory.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
-#include "chrome/browser/segmentation_platform/default_model/chrome_start_model_android_v2.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/shopping_service.h"
 #include "components/segmentation_platform/embedder/default_model/android_home_module_ranker.h"
@@ -102,16 +102,7 @@ std::unique_ptr<Config> GetConfigForAdaptiveToolbar() {
 
 #if BUILDFLAG(IS_ANDROID)
 bool IsEnabledContextualPageActions() {
-  if (!base::FeatureList::IsEnabled(features::kContextualPageActions))
-    return false;
-
-  bool is_price_tracking_enabled = base::FeatureList::IsEnabled(
-      features::kContextualPageActionPriceTracking);
-
-  bool is_reader_mode_enabled =
-      base::FeatureList::IsEnabled(features::kContextualPageActionReaderMode);
-
-  return is_price_tracking_enabled || is_reader_mode_enabled;
+  return base::FeatureList::IsEnabled(features::kContextualPageActions);
 }
 
 std::unique_ptr<Config> GetConfigForContextualPageActions(
@@ -150,6 +141,7 @@ std::unique_ptr<Config> GetConfigForDesktopNtpModule() {
 
 }  // namespace
 
+// Note: Do not remove feature flag for models that are served on the server.
 std::vector<std::unique_ptr<Config>> GetSegmentationPlatformConfig(
     content::BrowserContext* context) {
   std::vector<std::unique_ptr<Config>> configs;
@@ -162,7 +154,6 @@ std::vector<std::unique_ptr<Config>> GetSegmentationPlatformConfig(
     configs.emplace_back(GetConfigForContextualPageActions(context));
   }
 
-  configs.emplace_back(ChromeStartModelV2::GetConfig());
   configs.emplace_back(IntentionalUserModel::GetConfig());
   configs.emplace_back(PowerUserSegment::GetConfig());
   configs.emplace_back(FrequentFeatureUserModel::GetConfig());
@@ -170,7 +161,6 @@ std::vector<std::unique_ptr<Config>> GetSegmentationPlatformConfig(
   configs.emplace_back(TabletProductivityUserModel::GetConfig());
   configs.emplace_back(MostVisitedTilesUser::GetConfig());
   configs.emplace_back(AndroidHomeModuleRanker::GetConfig());
-  configs.emplace_back(GetConfigForWebAppInstallationPromo());
 #endif
   configs.emplace_back(LowUserEngagementModel::GetConfig());
   configs.emplace_back(SearchUserModel::GetConfig());
@@ -180,6 +170,7 @@ std::vector<std::unique_ptr<Config>> GetSegmentationPlatformConfig(
   configs.emplace_back(ResumeHeavyUserModel::GetConfig());
   configs.emplace_back(DeviceSwitcherModel::GetConfig());
   configs.emplace_back(TabResumptionRanker::GetConfig());
+  configs.emplace_back(URLVisitResumptionRanker::GetConfig());
   configs.emplace_back(PasswordManagerUserModel::GetConfig());
   configs.emplace_back(DatabaseApiClients::GetConfig());
 
@@ -194,6 +185,7 @@ std::vector<std::unique_ptr<Config>> GetSegmentationPlatformConfig(
           webapps::features::kWebAppsEnableMLModelForPromotion)) {
     configs.emplace_back(GetConfigForWebAppInstallationPromo());
   }
+
   if (base::FeatureList::IsEnabled(ntp_features::kNtpDriveModuleSegmentation)) {
     configs.emplace_back(GetConfigForDesktopNtpModule());
   }

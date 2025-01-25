@@ -33,7 +33,8 @@ class CampaignsMatcher {
   void SetOpenedApp(const std::string& app_id);
   void SetOobeCompleteTime(base::Time time);
 
-  void SetTrigger(TriggeringType trigger);
+  const Trigger& trigger() const { return trigger_; }
+  void SetTrigger(const Trigger&& trigger);
 
   const GURL& active_url() const { return active_url_; }
   void SetActiveUrl(const GURL& url);
@@ -52,29 +53,38 @@ class CampaignsMatcher {
   bool MatchRetailers(const base::Value::List* retailers) const;
   bool MaybeMatchDemoModeTargeting(const DemoModeTargeting& targeting) const;
   bool MatchMilestone(const DeviceTargeting& targeting) const;
+  bool MatchMilestoneVersion(const DeviceTargeting& targeting) const;
   bool MatchDeviceTargeting(const DeviceTargeting& targeting) const;
   bool MatchRegisteredTime(const std::unique_ptr<TimeWindowTargeting>&
                                registered_time_targeting) const;
   bool MatchExperimentTagTargeting(const base::Value::List* targeting) const;
   bool MatchOpenedApp(const std::vector<std::unique_ptr<AppTargeting>>&
                           apps_opened_targeting) const;
-  bool MatchTriggeringType(const std::vector<TriggeringType>& triggers) const;
+  bool MatchTriggerTargeting(
+      const std::vector<std::unique_ptr<TriggerTargeting>>& triggers) const;
   bool MatchActiveUrlRegexes(
       const std::vector<std::string>& active_url_regrexes) const;
   bool MatchSessionTargeting(const SessionTargeting& targeting) const;
   bool MatchRuntimeTargeting(const RuntimeTargeting& targeting,
-                             int campaign_id) const;
+                             int campaign_id,
+                             std::optional<int> group_id) const;
   bool MatchDeviceAge(
       const std::unique_ptr<NumberRangeTargeting>& device_age_in_hours) const;
   bool MatchEvents(std::unique_ptr<EventsTargeting> config,
-                   int campaign_id) const;
+                   int campaign_id,
+                   std::optional<int> group_id) const;
+  bool ReachCap(const std::string& cap_event_name,
+                int id,
+                std::optional<int> cap) const;
   bool MatchMinorUser(std::optional<bool> minor_user_targeting) const;
   bool MatchOwner(std::optional<bool> is_owner) const;
   bool Matched(const Targeting* targeting,
                int campaign_id,
+               std::optional<int> group_id,
                bool is_prematch) const;
   bool Matched(const Targetings* targetings,
                int campaign_id,
+               std::optional<int> group_id,
                bool is_prematch) const;
 
   // Owned by CampaignsManager.
@@ -86,7 +96,7 @@ class CampaignsMatcher {
   GURL active_url_;
   base::Time oobe_compelete_time_;
   bool is_user_owner_ = false;
-  std::optional<TriggeringType> trigger_;
+  Trigger trigger_{TriggerType::kUnSpecified};
 };
 
 }  // namespace growth

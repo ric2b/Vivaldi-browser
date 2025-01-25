@@ -2,10 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/341324165): Fix and remove.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "content/browser/preloading/prerenderer_impl.h"
 
 #include <vector>
 
+#include "base/feature_list.h"
+#include "content/browser/preloading/prefetch/no_vary_search_helper.h"
+#include "content/browser/preloading/prefetch/prefetch_document_manager.h"
 #include "content/browser/preloading/preloading.h"
 #include "content/browser/preloading/preloading_attempt_impl.h"
 #include "content/browser/preloading/preloading_data_impl.h"
@@ -20,6 +28,7 @@
 #include "content/browser/renderer_host/render_frame_host_delegate.h"
 #include "content/public/browser/preloading_trigger_type.h"
 #include "content/public/browser/web_contents.h"
+#include "third_party/blink/public/common/features.h"
 
 namespace content {
 
@@ -241,6 +250,10 @@ bool PrerendererImpl::MaybePrerender(
 
   GetContentClient()->browser()->LogWebFeatureForCurrentPage(
       &rfhi, blink::mojom::WebFeature::kSpeculationRulesPrerender);
+  auto* preloading_data = static_cast<PreloadingDataImpl*>(
+      PreloadingData::GetOrCreateForWebContents(web_contents));
+  preloading_data->SetHasSpeculationRulesPrerender();
+
   IncrementReceivedPrerendersCountForMetrics(
       PreloadingTriggerTypeFromSpeculationInjectionType(
           candidate->injection_type),
@@ -260,6 +273,14 @@ bool PrerendererImpl::MaybePrerender(
             url::Origin::Create(candidate->url).Serialize().c_str()));
   }
 
+  std::optional<net::HttpNoVarySearchData> no_vary_search_expected;
+  if (base::FeatureList::IsEnabled(blink::features::kPrerender2NoVarySearch) &&
+      candidate->no_vary_search_hint) {
+    no_vary_search_expected =
+        no_vary_search::ParseHttpNoVarySearchDataFromMojom(
+            candidate->no_vary_search_hint);
+  }
+
   PrerenderAttributes attributes(
       candidate->url,
       PreloadingTriggerTypeFromSpeculationInjectionType(
@@ -267,10 +288,11 @@ bool PrerendererImpl::MaybePrerender(
       /*embedder_histogram_suffix=*/"",
       candidate->target_browsing_context_name_hint,
       Referrer{*candidate->referrer}, candidate->eagerness,
-      rfhi.GetLastCommittedOrigin(), rfhi.GetProcess()->GetID(),
-      web_contents->GetWeakPtr(), rfhi.GetFrameToken(),
-      rfhi.GetFrameTreeNodeId(), rfhi.GetPageUkmSourceId(),
-      ui::PAGE_TRANSITION_LINK,
+      no_vary_search_expected, rfhi.GetLastCommittedOrigin(),
+      rfhi.GetProcess()->GetID(), web_contents->GetWeakPtr(),
+      rfhi.GetFrameToken(), rfhi.GetFrameTreeNodeId(),
+      rfhi.GetPageUkmSourceId(), ui::PAGE_TRANSITION_LINK,
+      /*should_warm_up_compositor=*/false,
       /*url_match_predicate=*/{},
       /*prerender_navigation_handle_callback=*/{},
       rfhi.GetDevToolsNavigationToken());
@@ -300,16 +322,27 @@ bool PrerendererImpl::MaybePrerender(
       }
       case blink::mojom::SpeculationTargetHint::kNoHint:
       case blink::mojom::SpeculationTargetHint::kSelf: {
+        if (base::FeatureList::IsEnabled(
+                features::kPrerender2FallbackPrefetchSpecRules)) {
+          auto* prefetch_document_manager =
+              content::PrefetchDocumentManager::GetOrCreateForCurrentDocument(
+                  web_contents->GetPrimaryMainFrame());
+          prefetch_document_manager->PrefetchAheadOfPrerender(
+              candidate.Clone(), enacting_predictor);
+        }
+
         // Create new PreloadingAttempt and pass all the values corresponding to
         // this prerendering attempt.
         auto* preloading_data =
             PreloadingDataImpl::GetOrCreateForWebContents(web_contents);
         PreloadingURLMatchCallback same_url_matcher =
             PreloadingData::GetSameURLMatcher(candidate->url);
+
         auto* preloading_attempt = static_cast<PreloadingAttemptImpl*>(
             preloading_data->AddPreloadingAttempt(
                 creating_predictor, enacting_predictor,
                 PreloadingType::kPrerender, std::move(same_url_matcher),
+                /*planned_max_preloading_type=*/PreloadingType::kPrerender,
                 web_contents->GetPrimaryMainFrame()->GetPageUkmSourceId()));
         preloading_attempt->SetSpeculationEagerness(candidate->eagerness);
         return registry_->CreateAndStartHost(attributes, preloading_attempt);
@@ -357,6 +390,7 @@ void PrerendererImpl::OnCancel(int host_frame_tree_node_id,
 
   switch (reason.final_status()) {
     // TODO(crbug.com/40275452): Support other final status cases.
+    case PrerenderFinalStatus::kTimeoutBackgrounded:
     case PrerenderFinalStatus::kMaxNumOfRunningNonEagerPrerendersExceeded:
     case PrerenderFinalStatus::kSpeculationRuleRemoved: {
       auto erasing_prerender_it = std::find_if(

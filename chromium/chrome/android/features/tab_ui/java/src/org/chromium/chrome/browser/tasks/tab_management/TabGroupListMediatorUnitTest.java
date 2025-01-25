@@ -5,7 +5,8 @@
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -16,14 +17,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.ASYNC_FAVICON_BOTTOM_LEFT;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.ASYNC_FAVICON_BOTTOM_RIGHT;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.ASYNC_FAVICON_TOP_LEFT;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.ASYNC_FAVICON_TOP_RIGHT;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.COLOR_INDEX;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.DELETE_RUNNABLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.OPEN_RUNNABLE;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.PLUS_COUNT;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.TITLE_DATA;
 
 import android.graphics.drawable.Drawable;
@@ -34,7 +30,6 @@ import androidx.test.filters.SmallTest;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
@@ -46,8 +41,6 @@ import org.robolectric.shadows.ShadowLooper;
 import org.chromium.base.Callback;
 import org.chromium.base.Token;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.Features;
-import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.PaneId;
@@ -59,6 +52,8 @@ import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.ConfirmationResult;
+import org.chromium.components.sync.ModelType;
+import org.chromium.components.sync.SyncService;
 import org.chromium.components.tab_group_sync.LocalTabGroupId;
 import org.chromium.components.tab_group_sync.SavedTabGroup;
 import org.chromium.components.tab_group_sync.SavedTabGroupTab;
@@ -69,9 +64,9 @@ import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.test.util.MockitoHelper;
 import org.chromium.url.GURL;
-import org.chromium.url.JUnitTestGURLs;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.function.BiConsumer;
 
 /** Tests for {@link TabGroupListMediator}. */
@@ -89,7 +84,6 @@ public class TabGroupListMediatorUnitTest {
     private static final int ROOT_ID2 = 2;
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
-    @Rule public TestRule mFeaturesProcessorRule = new Features.JUnitProcessor();
 
     @Mock private TabGroupModelFilter mTabGroupModelFilter;
     @Mock private TabModel mTabModel;
@@ -100,20 +94,23 @@ public class TabGroupListMediatorUnitTest {
     @Mock private TabSwitcherPaneBase mTabSwitcherPaneBase;
     @Mock private TabGroupUiActionHandler mTabGroupUiActionHandler;
     @Mock private ActionConfirmationManager mActionConfirmationManager;
-    @Mock private Callback<Drawable> mFaviconCallback1;
-    @Mock private Callback<Drawable> mFaviconCallback2;
-    @Mock private Callback<Drawable> mFaviconCallback3;
-    @Mock private Callback<Drawable> mFaviconCallback4;
-    @Mock private Tab mTab;
+    @Mock private SyncService mSyncService;
+    @Mock private Tab mTab1;
+    @Mock private Tab mTab2;
 
     @Captor private ArgumentCaptor<TabModelObserver> mTabModelObserver;
-    @Captor private ArgumentCaptor<TabGroupSyncService.Observer> mSyncObserverCaptor;
+    @Captor private ArgumentCaptor<TabGroupSyncService.Observer> mTabGroupSyncObserverCaptor;
     @Captor private ArgumentCaptor<Callback<Integer>> mConfirmationResultCallbackCaptor;
 
+    @Captor
+    private ArgumentCaptor<SyncService.SyncStateChangedListener> mSyncStateChangedListenerCaptor;
+
+    private PropertyModel mPropertyModel;
     private ModelList mModelList;
 
     @Before
     public void setUp() {
+        mPropertyModel = new PropertyModel(TabGroupListProperties.ALL_KEYS);
         mModelList = new ModelList();
         when(mPaneManager.getPaneForId(PaneId.TAB_SWITCHER)).thenReturn(mTabSwitcherPaneBase);
         when(mTabSwitcherPaneBase.requestOpenTabGroupDialog(anyInt())).thenReturn(true);
@@ -124,18 +121,28 @@ public class TabGroupListMediatorUnitTest {
     private TabGroupListMediator createMediator() {
         return new TabGroupListMediator(
                 mModelList,
+                mPropertyModel,
                 mTabGroupModelFilter,
                 mFaviconResolver,
                 mTabGroupSyncService,
                 mPaneManager,
                 mTabGroupUiActionHandler,
-                mActionConfirmationManager);
+                mActionConfirmationManager,
+                mSyncService);
     }
 
     @Test
     @SmallTest
     public void testNoTabGroups() {
         when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {});
+        createMediator();
+        assertEquals(0, mModelList.size());
+    }
+
+    @Test
+    @SmallTest
+    public void testNoTabGroupSyncService() {
+        mTabGroupSyncService = null;
         createMediator();
         assertEquals(0, mModelList.size());
     }
@@ -210,8 +217,10 @@ public class TabGroupListMediatorUnitTest {
         assertEquals(1, mModelList.size());
 
         when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {});
-        verify(mTabGroupSyncService).addObserver(mSyncObserverCaptor.capture());
-        mSyncObserverCaptor.getValue().onTabGroupRemoved(SYNC_GROUP_ID1, TriggerSource.LOCAL);
+        verify(mTabGroupSyncService).addObserver(mTabGroupSyncObserverCaptor.capture());
+        mTabGroupSyncObserverCaptor
+                .getValue()
+                .onTabGroupRemoved(SYNC_GROUP_ID1, TriggerSource.LOCAL);
         ShadowLooper.idleMainLooper();
 
         assertEquals(0, mModelList.size());
@@ -219,7 +228,7 @@ public class TabGroupListMediatorUnitTest {
 
     @Test
     @SmallTest
-    public void testTabModelObservervation() {
+    public void testTabModelObservation() {
         SavedTabGroup group = new SavedTabGroup();
         group.syncId = SYNC_GROUP_ID1;
         group.title = "Title";
@@ -232,183 +241,12 @@ public class TabGroupListMediatorUnitTest {
         assertEquals(1, mModelList.size());
 
         when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {});
-        when(mTabGroupModelFilter.isTabInTabGroup(mTab)).thenReturn(true);
+        when(mTabGroupModelFilter.isTabInTabGroup(mTab1)).thenReturn(true);
         verify(mTabGroupModelFilter).addObserver(mTabModelObserver.capture());
-        mTabModelObserver.getValue().tabClosureUndone(mTab);
+        mTabModelObserver.getValue().tabClosureUndone(mTab1);
         ShadowLooper.idleMainLooper();
 
         assertEquals(0, mModelList.size());
-    }
-
-    @Test
-    @SmallTest
-    @DisableFeatures(ChromeFeatureList.TAB_GROUP_PARITY_ANDROID)
-    public void testNoParity() {
-        SavedTabGroup group = new SavedTabGroup();
-        group.syncId = SYNC_GROUP_ID1;
-        group.title = "Title";
-        group.color = TabGroupColorId.BLUE;
-        group.savedTabs = Arrays.asList(new SavedTabGroupTab());
-        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {SYNC_GROUP_ID1});
-        when(mTabGroupSyncService.getGroup(SYNC_GROUP_ID1)).thenReturn(group);
-
-        createMediator();
-        assertEquals(1, mModelList.size());
-        // 0 is the default value.
-        assertEquals(0, mModelList.get(0).model.get(COLOR_INDEX));
-    }
-
-    @Test
-    @SmallTest
-    public void testFavicons_one() {
-        SavedTabGroupTab tab = new SavedTabGroupTab();
-        tab.url = JUnitTestGURLs.URL_1;
-        SavedTabGroup group = new SavedTabGroup();
-        group.syncId = SYNC_GROUP_ID1;
-        group.title = "Title";
-        group.color = TabGroupColorId.BLUE;
-        group.savedTabs = Arrays.asList(tab);
-        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {SYNC_GROUP_ID1});
-        when(mTabGroupSyncService.getGroup(SYNC_GROUP_ID1)).thenReturn(group);
-
-        createMediator();
-
-        assertEquals(1, mModelList.size());
-        PropertyModel propertyModel = mModelList.get(0).model;
-        propertyModel.get(ASYNC_FAVICON_TOP_LEFT).accept(mFaviconCallback1);
-        assertNull(propertyModel.get(ASYNC_FAVICON_TOP_RIGHT));
-        assertNull(propertyModel.get(ASYNC_FAVICON_BOTTOM_LEFT));
-        assertNull(propertyModel.get(ASYNC_FAVICON_BOTTOM_RIGHT));
-        assertNull(propertyModel.get(PLUS_COUNT));
-        verify(mFaviconResolver).accept(eq(JUnitTestGURLs.URL_1), eq(mFaviconCallback1));
-    }
-
-    @Test
-    @SmallTest
-    public void testFavicons_two() {
-        SavedTabGroupTab tab1 = new SavedTabGroupTab();
-        tab1.url = JUnitTestGURLs.URL_1;
-        SavedTabGroupTab tab2 = new SavedTabGroupTab();
-        tab2.url = JUnitTestGURLs.URL_2;
-        SavedTabGroup group = new SavedTabGroup();
-        group.syncId = SYNC_GROUP_ID1;
-        group.title = "Title";
-        group.color = TabGroupColorId.BLUE;
-        group.savedTabs = Arrays.asList(tab1, tab2);
-        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {SYNC_GROUP_ID1});
-        when(mTabGroupSyncService.getGroup(SYNC_GROUP_ID1)).thenReturn(group);
-
-        createMediator();
-
-        assertEquals(1, mModelList.size());
-        PropertyModel propertyModel = mModelList.get(0).model;
-        propertyModel.get(ASYNC_FAVICON_TOP_LEFT).accept(mFaviconCallback1);
-        propertyModel.get(ASYNC_FAVICON_TOP_RIGHT).accept(mFaviconCallback2);
-        assertNull(propertyModel.get(ASYNC_FAVICON_BOTTOM_LEFT));
-        assertNull(propertyModel.get(ASYNC_FAVICON_BOTTOM_RIGHT));
-        assertNull(propertyModel.get(PLUS_COUNT));
-        verify(mFaviconResolver).accept(eq(JUnitTestGURLs.URL_1), eq(mFaviconCallback1));
-        verify(mFaviconResolver).accept(eq(JUnitTestGURLs.URL_2), eq(mFaviconCallback2));
-    }
-
-    @Test
-    @SmallTest
-    public void testFavicons_three() {
-        SavedTabGroupTab tab1 = new SavedTabGroupTab();
-        tab1.url = JUnitTestGURLs.URL_1;
-        SavedTabGroupTab tab2 = new SavedTabGroupTab();
-        tab2.url = JUnitTestGURLs.URL_2;
-        SavedTabGroupTab tab3 = new SavedTabGroupTab();
-        tab3.url = JUnitTestGURLs.URL_3;
-        SavedTabGroup group = new SavedTabGroup();
-        group.syncId = SYNC_GROUP_ID1;
-        group.title = "Title";
-        group.color = TabGroupColorId.BLUE;
-        group.savedTabs = Arrays.asList(tab1, tab2, tab3);
-        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {SYNC_GROUP_ID1});
-        when(mTabGroupSyncService.getGroup(SYNC_GROUP_ID1)).thenReturn(group);
-
-        createMediator();
-
-        assertEquals(1, mModelList.size());
-        PropertyModel propertyModel = mModelList.get(0).model;
-        propertyModel.get(ASYNC_FAVICON_TOP_LEFT).accept(mFaviconCallback1);
-        propertyModel.get(ASYNC_FAVICON_TOP_RIGHT).accept(mFaviconCallback2);
-        propertyModel.get(ASYNC_FAVICON_BOTTOM_LEFT).accept(mFaviconCallback3);
-        assertNull(propertyModel.get(ASYNC_FAVICON_BOTTOM_RIGHT));
-        assertNull(propertyModel.get(PLUS_COUNT));
-        verify(mFaviconResolver).accept(eq(JUnitTestGURLs.URL_1), eq(mFaviconCallback1));
-        verify(mFaviconResolver).accept(eq(JUnitTestGURLs.URL_2), eq(mFaviconCallback2));
-        verify(mFaviconResolver).accept(eq(JUnitTestGURLs.URL_3), eq(mFaviconCallback3));
-    }
-
-    @Test
-    @SmallTest
-    public void testFavicons_four() {
-        SavedTabGroupTab tab1 = new SavedTabGroupTab();
-        tab1.url = JUnitTestGURLs.URL_1;
-        SavedTabGroupTab tab2 = new SavedTabGroupTab();
-        tab2.url = JUnitTestGURLs.URL_2;
-        SavedTabGroupTab tab3 = new SavedTabGroupTab();
-        tab3.url = JUnitTestGURLs.URL_3;
-        SavedTabGroupTab tab4 = new SavedTabGroupTab();
-        tab4.url = JUnitTestGURLs.BLUE_1;
-        SavedTabGroup group = new SavedTabGroup();
-        group.syncId = SYNC_GROUP_ID1;
-        group.title = "Title";
-        group.color = TabGroupColorId.BLUE;
-        group.savedTabs = Arrays.asList(tab1, tab2, tab3, tab4);
-        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {SYNC_GROUP_ID1});
-        when(mTabGroupSyncService.getGroup(SYNC_GROUP_ID1)).thenReturn(group);
-
-        createMediator();
-
-        assertEquals(1, mModelList.size());
-        PropertyModel propertyModel = mModelList.get(0).model;
-        propertyModel.get(ASYNC_FAVICON_TOP_LEFT).accept(mFaviconCallback1);
-        propertyModel.get(ASYNC_FAVICON_TOP_RIGHT).accept(mFaviconCallback2);
-        propertyModel.get(ASYNC_FAVICON_BOTTOM_LEFT).accept(mFaviconCallback3);
-        propertyModel.get(ASYNC_FAVICON_BOTTOM_RIGHT).accept(mFaviconCallback4);
-        assertNull(propertyModel.get(PLUS_COUNT));
-        verify(mFaviconResolver).accept(eq(JUnitTestGURLs.URL_1), eq(mFaviconCallback1));
-        verify(mFaviconResolver).accept(eq(JUnitTestGURLs.URL_2), eq(mFaviconCallback2));
-        verify(mFaviconResolver).accept(eq(JUnitTestGURLs.URL_3), eq(mFaviconCallback3));
-        verify(mFaviconResolver).accept(eq(JUnitTestGURLs.BLUE_1), eq(mFaviconCallback4));
-    }
-
-    @Test
-    @SmallTest
-    public void testFavicons_five() {
-        SavedTabGroupTab tab1 = new SavedTabGroupTab();
-        tab1.url = JUnitTestGURLs.URL_1;
-        SavedTabGroupTab tab2 = new SavedTabGroupTab();
-        tab2.url = JUnitTestGURLs.URL_2;
-        SavedTabGroupTab tab3 = new SavedTabGroupTab();
-        tab3.url = JUnitTestGURLs.URL_3;
-        SavedTabGroupTab tab4 = new SavedTabGroupTab();
-        tab4.url = JUnitTestGURLs.BLUE_1;
-        SavedTabGroupTab tab5 = new SavedTabGroupTab();
-        tab5.url = JUnitTestGURLs.BLUE_2;
-        SavedTabGroup group = new SavedTabGroup();
-        group.syncId = SYNC_GROUP_ID1;
-        group.title = "Title";
-        group.color = TabGroupColorId.BLUE;
-        group.savedTabs = Arrays.asList(tab1, tab2, tab3, tab4, tab5);
-        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {SYNC_GROUP_ID1});
-        when(mTabGroupSyncService.getGroup(SYNC_GROUP_ID1)).thenReturn(group);
-
-        createMediator();
-
-        assertEquals(1, mModelList.size());
-        PropertyModel propertyModel = mModelList.get(0).model;
-        propertyModel.get(ASYNC_FAVICON_TOP_LEFT).accept(mFaviconCallback1);
-        propertyModel.get(ASYNC_FAVICON_TOP_RIGHT).accept(mFaviconCallback2);
-        propertyModel.get(ASYNC_FAVICON_BOTTOM_LEFT).accept(mFaviconCallback3);
-        assertNull(propertyModel.get(ASYNC_FAVICON_BOTTOM_RIGHT));
-        assertEquals(2, propertyModel.get(PLUS_COUNT).intValue());
-        verify(mFaviconResolver).accept(eq(JUnitTestGURLs.URL_1), eq(mFaviconCallback1));
-        verify(mFaviconResolver).accept(eq(JUnitTestGURLs.URL_2), eq(mFaviconCallback2));
-        verify(mFaviconResolver).accept(eq(JUnitTestGURLs.URL_3), eq(mFaviconCallback3));
     }
 
     @Test
@@ -441,10 +279,10 @@ public class TabGroupListMediatorUnitTest {
         when(mTabGroupModelFilter.getRootIdFromStableId(LOCAL_GROUP_ID2))
                 .thenReturn(Tab.INVALID_TAB_ID);
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab);
-        when(mTab.getRootId()).thenReturn(ROOT_ID1);
-        when(mTab.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
-        when(mTab.isClosing()).thenReturn(false);
+        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mTab1.getRootId()).thenReturn(ROOT_ID1);
+        when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
+        when(mTab1.isClosing()).thenReturn(false);
 
         createMediator();
 
@@ -481,10 +319,10 @@ public class TabGroupListMediatorUnitTest {
         when(mTabGroupModelFilter.getRootIdFromStableId(LOCAL_GROUP_ID2))
                 .thenReturn(Tab.INVALID_TAB_ID);
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab);
-        when(mTab.getRootId()).thenReturn(ROOT_ID1);
-        when(mTab.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
-        when(mTab.isClosing()).thenReturn(false);
+        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mTab1.getRootId()).thenReturn(ROOT_ID1);
+        when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
+        when(mTab1.isClosing()).thenReturn(false);
 
         createMediator();
 
@@ -524,10 +362,10 @@ public class TabGroupListMediatorUnitTest {
         when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {SYNC_GROUP_ID1});
         when(mTabGroupSyncService.getGroup(SYNC_GROUP_ID1)).thenReturn(group1);
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab);
-        when(mTab.getRootId()).thenReturn(ROOT_ID1);
-        when(mTab.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
-        when(mTab.isClosing()).thenReturn(true);
+        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mTab1.getRootId()).thenReturn(ROOT_ID1);
+        when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
+        when(mTab1.isClosing()).thenReturn(true);
 
         createMediator();
 
@@ -566,10 +404,10 @@ public class TabGroupListMediatorUnitTest {
         when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {SYNC_GROUP_ID1});
         when(mTabGroupSyncService.getGroup(SYNC_GROUP_ID1)).thenReturn(group1);
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab);
-        when(mTab.getRootId()).thenReturn(ROOT_ID1);
-        when(mTab.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
-        when(mTab.isClosing()).thenReturn(true);
+        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mTab1.getRootId()).thenReturn(ROOT_ID1);
+        when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
+        when(mTab1.isClosing()).thenReturn(true);
 
         createMediator();
 
@@ -582,6 +420,52 @@ public class TabGroupListMediatorUnitTest {
         verify(mTabModel).cancelTabClosure(ROOT_ID1);
         verify(mPaneManager).focusPane(PaneId.TAB_SWITCHER);
         verify(mTabSwitcherPaneBase).requestOpenTabGroupDialog(ROOT_ID1);
+    }
+
+    @Test
+    @SmallTest
+    public void testOpenRunnable_ClosingAfterShowing() {
+        SavedTabGroupTab savedTab1 = new SavedTabGroupTab();
+        savedTab1.localId = ROOT_ID1;
+        SavedTabGroupTab savedTab2 = new SavedTabGroupTab();
+        savedTab2.localId = ROOT_ID2;
+
+        SavedTabGroup group1 = new SavedTabGroup();
+        group1.syncId = SYNC_GROUP_ID1;
+        group1.savedTabs = Arrays.asList(savedTab1, savedTab2);
+        group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
+
+        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {SYNC_GROUP_ID1});
+        when(mTabGroupSyncService.getGroup(SYNC_GROUP_ID1)).thenReturn(group1);
+        when(mComprehensiveModel.getCount()).thenReturn(2);
+        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mComprehensiveModel.getTabAt(1)).thenReturn(mTab2);
+        when(mTab1.getRootId()).thenReturn(ROOT_ID1);
+        when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
+        when(mTab2.getRootId()).thenReturn(ROOT_ID1);
+        when(mTab2.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
+        when(mTabGroupModelFilter.getRootIdFromStableId(LOCAL_GROUP_ID1)).thenReturn(ROOT_ID1);
+
+        createMediator();
+        assertEquals(1, mModelList.size());
+
+        PropertyModel model1 = mModelList.get(0).model;
+        model1.get(OPEN_RUNNABLE).run();
+        verify(mTabModel, never()).cancelTabClosure(ROOT_ID1);
+        verify(mPaneManager).focusPane(PaneId.TAB_SWITCHER);
+        verify(mTabSwitcherPaneBase).requestOpenTabGroupDialog(ROOT_ID1);
+
+        when(mTab1.isClosing()).thenReturn(true);
+        model1.get(OPEN_RUNNABLE).run();
+        verify(mTabModel, never()).cancelTabClosure(ROOT_ID1);
+        verify(mPaneManager, times(2)).focusPane(PaneId.TAB_SWITCHER);
+        verify(mTabSwitcherPaneBase, times(2)).requestOpenTabGroupDialog(ROOT_ID1);
+
+        when(mTab2.isClosing()).thenReturn(true);
+        model1.get(OPEN_RUNNABLE).run();
+        verify(mTabModel).cancelTabClosure(ROOT_ID1);
+        verify(mPaneManager, times(3)).focusPane(PaneId.TAB_SWITCHER);
+        verify(mTabSwitcherPaneBase, times(3)).requestOpenTabGroupDialog(ROOT_ID1);
     }
 
     @Test
@@ -605,12 +489,12 @@ public class TabGroupListMediatorUnitTest {
         when(mTabGroupModelFilter.getRootIdFromStableId(LOCAL_GROUP_ID2))
                 .thenReturn(Tab.INVALID_TAB_ID);
         when(mTabGroupModelFilter.getRelatedTabListForRootId(ROOT_ID1))
-                .thenReturn(Arrays.asList(mTab));
+                .thenReturn(Arrays.asList(mTab1));
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab);
-        when(mTab.getRootId()).thenReturn(ROOT_ID1);
-        when(mTab.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
-        when(mTab.isClosing()).thenReturn(false);
+        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mTab1.getRootId()).thenReturn(ROOT_ID1);
+        when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
+        when(mTab1.isClosing()).thenReturn(false);
 
         createMediator();
 
@@ -647,12 +531,12 @@ public class TabGroupListMediatorUnitTest {
         when(mTabGroupSyncService.getGroup(SYNC_GROUP_ID1)).thenReturn(group1);
         when(mTabGroupModelFilter.getRootIdFromStableId(LOCAL_GROUP_ID1)).thenReturn(ROOT_ID1);
         when(mTabGroupModelFilter.getRelatedTabListForRootId(ROOT_ID1))
-                .thenReturn(Arrays.asList(mTab));
+                .thenReturn(Arrays.asList(mTab1));
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab);
-        when(mTab.getRootId()).thenReturn(ROOT_ID1);
-        when(mTab.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
-        when(mTab.isClosing()).thenReturn(false);
+        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mTab1.getRootId()).thenReturn(ROOT_ID1);
+        when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
+        when(mTab1.isClosing()).thenReturn(false);
 
         createMediator();
 
@@ -680,12 +564,12 @@ public class TabGroupListMediatorUnitTest {
         when(mTabGroupSyncService.getGroup(SYNC_GROUP_ID1)).thenReturn(group1);
         when(mTabGroupModelFilter.getRootIdFromStableId(LOCAL_GROUP_ID1)).thenReturn(ROOT_ID1);
         when(mTabGroupModelFilter.getRelatedTabListForRootId(ROOT_ID1))
-                .thenReturn(Arrays.asList(mTab));
+                .thenReturn(Arrays.asList(mTab1));
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab);
-        when(mTab.getRootId()).thenReturn(ROOT_ID1);
-        when(mTab.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
-        when(mTab.isClosing()).thenReturn(true);
+        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mTab1.getRootId()).thenReturn(ROOT_ID1);
+        when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
+        when(mTab1.isClosing()).thenReturn(true);
 
         createMediator();
 
@@ -700,5 +584,58 @@ public class TabGroupListMediatorUnitTest {
                 .onResult(ConfirmationResult.CONFIRMATION_POSITIVE);
         verify(mTabModel).commitTabClosure(ROOT_ID1);
         verify(mTabGroupSyncService).removeGroup(SYNC_GROUP_ID1);
+    }
+
+    @Test
+    @SmallTest
+    public void testEmptyStateEnabled() {
+        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {});
+        createMediator();
+        assertTrue(mPropertyModel.get(TabGroupListProperties.EMPTY_STATE_VISIBLE));
+
+        SavedTabGroup group = new SavedTabGroup();
+        group.syncId = SYNC_GROUP_ID1;
+        group.title = "Title";
+        group.color = TabGroupColorId.BLUE;
+        group.savedTabs = Arrays.asList(new SavedTabGroupTab());
+        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {SYNC_GROUP_ID1});
+        when(mTabGroupSyncService.getGroup(SYNC_GROUP_ID1)).thenReturn(group);
+        verify(mTabGroupSyncService).addObserver(mTabGroupSyncObserverCaptor.capture());
+        mTabGroupSyncObserverCaptor
+                .getValue()
+                .onTabGroupRemoved(SYNC_GROUP_ID1, TriggerSource.LOCAL);
+        ShadowLooper.idleMainLooper();
+        assertFalse(mPropertyModel.get(TabGroupListProperties.EMPTY_STATE_VISIBLE));
+    }
+
+    @Test
+    @SmallTest
+    public void testSyncEnabled() {
+        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {});
+        createMediator();
+        assertFalse(mPropertyModel.get(TabGroupListProperties.SYNC_ENABLED));
+
+        when(mSyncService.getActiveDataTypes())
+                .thenReturn(Collections.singleton(ModelType.SAVED_TAB_GROUP));
+        verify(mSyncService).addSyncStateChangedListener(mSyncStateChangedListenerCaptor.capture());
+        mSyncStateChangedListenerCaptor.getValue().syncStateChanged();
+        assertTrue(mPropertyModel.get(TabGroupListProperties.SYNC_ENABLED));
+    }
+
+    @Test
+    @SmallTest
+    public void testDestroy() {
+        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {});
+        createMediator().destroy();
+
+        verify(mTabGroupModelFilter).removeObserver(any());
+        verify(mTabGroupSyncService).removeObserver(any());
+        verify(mSyncService).removeSyncStateChangedListener(any());
+
+        verify(mTabGroupSyncService).addObserver(mTabGroupSyncObserverCaptor.capture());
+        reset(mTabGroupSyncService);
+        mTabGroupSyncObserverCaptor.getValue().onTabGroupAdded(null, 0);
+        ShadowLooper.idleMainLooper();
+        verify(mTabGroupSyncService, never()).getAllGroupIds();
     }
 }

@@ -49,7 +49,7 @@
 
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       content::WebContents* source,
-      const content::NativeWebKeyboardEvent& event) override;
+      const input::NativeWebKeyboardEvent& event) override;
 
   // Note(andre@vivaldi.com):
   // This is used for pages opened from extensions. The delegate is not set

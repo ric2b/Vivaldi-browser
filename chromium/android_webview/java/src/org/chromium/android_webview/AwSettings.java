@@ -30,10 +30,12 @@ import org.chromium.android_webview.common.AwFeatures;
 import org.chromium.android_webview.common.AwSwitches;
 import org.chromium.android_webview.common.Lifetime;
 import org.chromium.android_webview.common.MediaIntegrityApiStatus;
+import org.chromium.android_webview.metrics.BackForwardCacheNotRestoredReason;
 import org.chromium.android_webview.safe_browsing.AwSafeBrowsingConfigHelper;
 import org.chromium.android_webview.settings.AttributionBehavior;
 import org.chromium.android_webview.settings.ForceDarkBehavior;
 import org.chromium.android_webview.settings.ForceDarkMode;
+import org.chromium.android_webview.settings.SpeculativeLoadingAllowedFlags;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -171,6 +173,18 @@ public class AwSettings {
     private boolean mEnableSupportedHardwareAcceleratedFeatures;
     private int mMixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW;
     private int mAttributionBehavior = AttributionBehavior.APP_SOURCE_AND_WEB_TRIGGER;
+
+    @SpeculativeLoadingAllowedFlags
+    private int mSpeculativeLoadingAllowedFlags =
+            SpeculativeLoadingAllowedFlags.SPECULATIVE_LOADING_DISABLED;
+
+    private boolean mHasCalledSetSpeculativeLoadingAllowedBefore;
+
+    // Enabling this setting or the kWebViewBackForwardCache feature will enable BFCache
+    // in WebView.
+    private boolean mBackForwardCacheEnabled;
+    private boolean mHasCalledSetBackForwardCacheEnabledBefore;
+
     private boolean mCSSHexAlphaColorEnabled;
     private boolean mScrollTopLeftInteropEnabled;
     private boolean mWillSuppressErrorPage;
@@ -294,15 +308,31 @@ public class AwSettings {
         }
 
         void updateWebkitPreferencesLocked() {
-            runOnUiThreadBlockingAndLocked(() -> updateWebkitPreferencesOnUiThreadLocked());
+            runOnUiThreadBlockingAndLocked(
+                    AwSettings.this::updateWebkitPreferencesOnUiThreadLocked);
         }
 
         void updateCookiePolicyLocked() {
-            runOnUiThreadBlockingAndLocked(() -> updateCookiePolicyOnUiThreadLocked());
+            runOnUiThreadBlockingAndLocked(AwSettings.this::updateCookiePolicyOnUiThreadLocked);
         }
 
         void updateAllowFileAccessLocked() {
-            runOnUiThreadBlockingAndLocked(() -> updateAllowFileAccessOnUiThreadLocked());
+            runOnUiThreadBlockingAndLocked(AwSettings.this::updateAllowFileAccessOnUiThreadLocked);
+        }
+
+        void updateSpeculativeLoadingAllowedLocked() {
+            runOnUiThreadBlockingAndLocked(
+                    AwSettings.this::updateSpeculativeLoadingAllowedOnUiThreadLocked);
+        }
+
+        void updateBackForwardCacheEnabled() {
+            runOnUiThreadBlockingAndLocked(
+                    AwSettings.this::updateBackForwardCacheEnabledOnUiThreadLocked);
+        }
+
+        void updateGeolocationEnabled() {
+            runOnUiThreadBlockingAndLocked(
+                    AwSettings.this::updateGeolocationEnabledOnUiThreadLocked);
         }
     }
 
@@ -371,14 +401,14 @@ public class AwSettings {
             mAllowFileUrlAccess =
                     ContextUtils.getApplicationContext().getApplicationInfo().targetSdkVersion
                             < Build.VERSION_CODES.R;
-            if (AwFeatureMap.isEnabled(
-                    AwFeatures.WEBVIEW_X_REQUESTED_WITH_HEADER_MANIFEST_ALLOW_LIST)) {
-                mRequestedWithHeaderAllowedOriginRules =
-                        ManifestMetadataUtil.getXRequestedWithAllowList();
-            } else {
-                mRequestedWithHeaderAllowedOriginRules = Collections.emptySet();
-            }
+            mRequestedWithHeaderAllowedOriginRules =
+                    ManifestMetadataUtil.getXRequestedWithAllowList();
             mIntegrityApiStatusConfig = new AwMediaIntegrityApiStatusConfig();
+            mSpeculativeLoadingAllowedFlags =
+                    SpeculativeLoadingAllowedFlags.SPECULATIVE_LOADING_DISABLED;
+            mHasCalledSetSpeculativeLoadingAllowedBefore = false;
+            mBackForwardCacheEnabled = false;
+            mHasCalledSetBackForwardCacheEnabledBefore = false;
         }
         // Defer initializing the native side until a native WebContents instance is set.
     }
@@ -422,21 +452,27 @@ public class AwSettings {
     private void flushBackForwardCacheOnUiThreadLocked() {
         synchronized (mAwSettingsLock) {
             WebContents contents = mWebContents;
-            mEventHandler.maybePostOnUiThread(() -> flushBackForwardCache(contents));
+            Boolean backForwardCacheEnabled = mBackForwardCacheEnabled;
+            mEventHandler.maybePostOnUiThread(
+                    () -> flushBackForwardCache(contents, backForwardCacheEnabled));
         }
     }
 
     private void flushBackForwardCache() {
         assert Thread.holdsLock(mAwSettingsLock);
-        flushBackForwardCache(mWebContents);
+        flushBackForwardCache(mWebContents, mBackForwardCacheEnabled);
     }
 
-    private void flushBackForwardCache(WebContents contents) {
+    private void flushBackForwardCache(WebContents contents, boolean backForwardCacheEnabled) {
         ThreadUtils.assertOnUiThread();
-        if (contents != null) {
+        backForwardCacheEnabled =
+                AwFeatureMap.isEnabled(AwFeatures.WEBVIEW_BACK_FORWARD_CACHE)
+                        || backForwardCacheEnabled;
+        if (contents != null && backForwardCacheEnabled) {
             AwContents awContents = AwContents.fromWebContents(contents);
             if (awContents != null) {
-                awContents.flushBackForwardCache();
+                awContents.flushBackForwardCache(
+                        BackForwardCacheNotRestoredReason.WEBVIEW_SETTINGS_CHANGED);
             }
         }
     }
@@ -451,6 +487,7 @@ public class AwSettings {
                 mEventHandler.bindUiThread();
                 mNativeAwSettings = AwSettingsJni.get().init(AwSettings.this, webContents);
                 updateEverythingLocked();
+                setRequestedWithHeaderOriginAllowListLocked(mRequestedWithHeaderAllowedOriginRules);
                 WebauthnModeProvider.getInstance()
                         .setWebauthnModeForWebContents(webContents, mWebauthnMode);
                 flushBackForwardCacheOnUiThreadLocked();
@@ -464,7 +501,6 @@ public class AwSettings {
         assert mNativeAwSettings != 0;
         AwSettingsJni.get().updateEverythingLocked(mNativeAwSettings, AwSettings.this);
         onGestureZoomSupportChanged(supportsDoubleTapZoomLocked(), supportsMultiTouchZoomLocked());
-        setRequestedWithHeaderOriginAllowListLocked(mRequestedWithHeaderAllowedOriginRules);
     }
 
     /** See {@link android.webkit.WebSettings#setBlockNetworkLoads}. */
@@ -694,11 +730,16 @@ public class AwSettings {
                 flushBackForwardCacheOnUiThreadLocked();
             }
             mGeolocationEnabled = flag;
+            mEventHandler.updateGeolocationEnabled();
         }
     }
 
-    /** @return Returns if geolocation is currently enabled. */
-    boolean getGeolocationEnabled() {
+    /**
+     * @return Returns if geolocation is currently enabled.
+     */
+    @CalledByNative
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
+    public boolean getGeolocationEnabled() {
         synchronized (mAwSettingsLock) {
             return mGeolocationEnabled;
         }
@@ -1754,6 +1795,50 @@ public class AwSettings {
         }
     }
 
+    public void setSpeculativeLoadingAllowed(@SpeculativeLoadingAllowedFlags int flags) {
+        synchronized (mAwSettingsLock) {
+            // Only trigger an update if the value changed, or this is the first time we call this
+            // function. The latter is important to make sure every embedder that calls this
+            // function explicitly will be assigned a synthetic field trial group.
+            if (mSpeculativeLoadingAllowedFlags != flags
+                    || !mHasCalledSetSpeculativeLoadingAllowedBefore) {
+                mSpeculativeLoadingAllowedFlags = flags;
+                mHasCalledSetSpeculativeLoadingAllowedBefore = true;
+                mEventHandler.updateSpeculativeLoadingAllowedLocked();
+            }
+        }
+    }
+
+    @CalledByNative
+    @SpeculativeLoadingAllowedFlags
+    public int getSpeculativeLoadingAllowed() {
+        synchronized (mAwSettingsLock) {
+            return mSpeculativeLoadingAllowedFlags;
+        }
+    }
+
+    public void setBackForwardCacheEnabled(boolean enabled) {
+        if (TRACE) Log.i(TAG, "setBackForwardCacheEnabled = " + enabled);
+        synchronized (mAwSettingsLock) {
+            // Only trigger an update if the value changed, or this is the first time we call this
+            // function. The latter is important to make sure every embedder that calls this
+            // function explicitly will be assigned a synthetic field trial group.
+            if (mBackForwardCacheEnabled != enabled
+                    || !mHasCalledSetBackForwardCacheEnabledBefore) {
+                mBackForwardCacheEnabled = enabled;
+                mHasCalledSetBackForwardCacheEnabledBefore = true;
+                mEventHandler.updateBackForwardCacheEnabled();
+            }
+        }
+    }
+
+    @CalledByNative
+    public boolean getBackForwardCacheEnabled() {
+        synchronized (mAwSettingsLock) {
+            return mBackForwardCacheEnabled;
+        }
+    }
+
     @ForceDarkMode
     public int getForceDarkMode() {
         synchronized (mAwSettingsLock) {
@@ -2046,6 +2131,32 @@ public class AwSettings {
         }
     }
 
+    private void updateSpeculativeLoadingAllowedOnUiThreadLocked() {
+        assert mEventHandler.mHandler != null;
+        ThreadUtils.assertOnUiThread();
+        if (mNativeAwSettings != 0) {
+            AwSettingsJni.get()
+                    .updateSpeculativeLoadingAllowedLocked(mNativeAwSettings, AwSettings.this);
+        }
+    }
+
+    private void updateBackForwardCacheEnabledOnUiThreadLocked() {
+        assert mEventHandler.mHandler != null;
+        ThreadUtils.assertOnUiThread();
+        if (mNativeAwSettings != 0) {
+            AwSettingsJni.get()
+                    .updateBackForwardCacheEnabledLocked(mNativeAwSettings, AwSettings.this);
+        }
+    }
+
+    private void updateGeolocationEnabledOnUiThreadLocked() {
+        assert mEventHandler.mHandler != null;
+        ThreadUtils.assertOnUiThread();
+        if (mNativeAwSettings != 0) {
+            AwSettingsJni.get().updateGeolocationEnabledLocked(mNativeAwSettings, AwSettings.this);
+        }
+    }
+
     public void setEnterpriseAuthenticationAppLinkPolicyEnabled(boolean enabled) {
         synchronized (mAwSettingsLock) {
             mEventHandler.runOnUiThreadBlockingAndLocked(
@@ -2153,6 +2264,10 @@ public class AwSettings {
 
         void updateAllowFileAccessLocked(long nativeAwSettings, AwSettings caller);
 
+        void updateSpeculativeLoadingAllowedLocked(long nativeAwSettings, AwSettings caller);
+
+        void updateBackForwardCacheEnabledLocked(long nativeAwSettings, AwSettings caller);
+
         boolean isForceDarkApplied(long nativeAwSettings, AwSettings caller);
 
         boolean prefersDarkFromTheme(long nativeAwSettings, AwSettings caller);
@@ -2164,5 +2279,7 @@ public class AwSettings {
                 long nativeAwSettings, AwSettings caller);
 
         String[] updateXRequestedWithAllowListOriginMatcher(long nativeAwSettings, String[] rules);
+
+        void updateGeolocationEnabledLocked(long nativeAwSettings, AwSettings caller);
     }
 }

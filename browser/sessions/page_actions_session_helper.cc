@@ -1,6 +1,7 @@
 
 #include "browser/sessions/page_actions_session_helper.h"
 
+#include "app/vivaldi_apptools.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "components/page_actions/page_actions_service_factory.h"
@@ -34,9 +35,10 @@ void SessionService::VivPageActionOverridesChanged(
 PageActionsSessionHelper::PageActionsSessionHelper(
     SessionService* session_service)
     : session_service_(session_service), profile_(session_service_->profile()) {
-  if (!profile_)
+  if (!profile_ ||
+      (!vivaldi::IsVivaldiRunning() && !vivaldi::ForcedVivaldiRunning())) {
     return;
-
+  }
   profile_->AddObserver(this);
   page_actions::ServiceFactory::GetForBrowserContext(profile_)->AddObserver(
       this);
@@ -66,10 +68,12 @@ void PageActionsSessionHelper::OnProfileWillBeDestroyed(Profile* profile) {
   DCHECK(profile == profile_);
   profile_->RemoveObserver(this);
 
-  auto* page_action_service =
-      page_actions::ServiceFactory::GetForBrowserContextIfExists(profile_);
-  if (page_action_service)
-    page_action_service->RemoveObserver(this);
-
+  // The page_actions is not started for disable-vivaldi.
+  if ((vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning())) {
+    auto* page_action_service =
+        page_actions::ServiceFactory::GetForBrowserContextIfExists(profile_);
+    if (page_action_service)
+      page_action_service->RemoveObserver(this);
+  }
   profile_ = nullptr;
 }

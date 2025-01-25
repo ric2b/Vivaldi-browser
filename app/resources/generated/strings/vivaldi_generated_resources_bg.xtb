@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Приложи</translation>
 <translation id="1603914832182249871">(частно)</translation>
 <translation id="1627276047960621195">Файлови описатели</translation>
+<translation id="1654713139320245449">Няма намерени назначения на прехвърляне. Трябва ви помощ?</translation>
 <translation id="166278006618318542">Алгоритъм на публичния ключа на лицето</translation>
 <translation id="1682548588986054654">Създай частен прозорец</translation>
 <translation id="1708338024780164500">(неразрешено)</translation>
@@ -54,7 +55,7 @@
 <translation id="1901303067676059328">&amp;Избери всичко</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> тни</translation>
 <translation id="1925021887439448749">Въведете собствен адрес</translation>
-<translation id="1932098463447129402">Не по-рано от</translation>
+<translation id="1932098463447129402">Не по&amp;#8209;рано от</translation>
 <translation id="1936931585862840749">Укажете брой отпечатвани копия с число (от 1 до <ph name="MAX_COPIES" />).</translation>
 <translation id="2019718679933488176">Отвори &amp;звука в нов раздел</translation>
 <translation id="2050339315714019657">портретно</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Друга програма в компютъра добави разширение, вероятно променящо начина на работа на Vivaldi.</translation>
 <translation id="2443487764245141020">Сайтовете може да се наложи да разпознават вашето устройство чрез идентификатор</translation>
 <translation id="2445081178310039857">Задължително въведете главна директория на разширението.</translation>
-<translation id="2470702053775288986">Забранени неподдържани разширения</translation>
 <translation id="2485422356828889247">Премахни</translation>
 <translation id="2498539833203011245">Намали</translation>
 <translation id="2509495747794740764">Мащабът е число между 10 и 200.</translation>
@@ -102,7 +102,7 @@
 <translation id="2678100101831051676">Прехвърлянето е невъзможно.</translation>
 <translation id="2719936478972253983">Блокирани в страницата са следните бисквитки</translation>
 <translation id="2721037002783622288">Потърси &amp;картината чрез <ph name="SEARCH_ENGINE" /></translation>
-<translation id="2738771556149464852">Не по-късно от</translation>
+<translation id="2738771556149464852">Не по&amp;#8209;късно от</translation>
 <translation id="2749881179542288782">Проверявай граматиката с правописа</translation>
 <translation id="2785873697295365461">Файлови описатели</translation>
 <translation id="2825758591930162672">Публичен ключ на лицето</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Подробности</translation>
 <translation id="4345587454538109430">Конфигурирай…</translation>
 <translation id="4348766275249686434">Събирай грешките</translation>
-<translation id="4363771538994847871">Няма намерени назначения за прехвърляне. Трябва ви помощ?</translation>
 <translation id="4384652540891215547">Задействай с натискане на</translation>
 <translation id="4394049700291259645">Забрани</translation>
 <translation id="4409697491990005945">Полета</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Оформление</translation>
 <translation id="7782102568078991263">Няма други предложения от Google</translation>
 <translation id="7786889348652477777">Пре&amp;зареди приложението</translation>
-<translation id="7791543448312431591">Добави</translation>
 <translation id="7800518121066352902">Завърти срещу ча&amp;совника</translation>
 <translation id="7814458197256864873">&amp;Копирай</translation>
 <translation id="7818135753970109980">Добавена нова тема (<ph name="EXTENSION_NAME" />)</translation>

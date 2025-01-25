@@ -8,8 +8,8 @@
 
 #include "base/check.h"
 #include "base/no_destructor.h"
-#include "base/uuid.h"
 #include "components/notes/note_node.h"
+#include "components/sync/base/hash_util.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
@@ -148,12 +148,11 @@ void NotesModelObserverImpl::NotesNodeMoved(const vivaldi::NoteNode* old_parent,
 
   const SyncedNoteTrackerEntity* entity =
       note_tracker_->GetEntityForNoteNode(node);
-  DCHECK(entity);
+  CHECK(entity);
 
-  const std::string& sync_id = entity->metadata().server_id();
   const base::Time modification_time = base::Time::Now();
   const syncer::UniquePosition unique_position =
-      ComputePosition(*new_parent, new_index, sync_id);
+      ComputePosition(*new_parent, new_index);
 
   sync_pb::EntitySpecifics specifics =
       CreateSpecificsFromNoteNode(node, note_model_, unique_position.ToProto());
@@ -180,7 +179,7 @@ void NotesModelObserverImpl::NotesNodeAdded(const vivaldi::NoteNode* parent,
   DCHECK(parent_entity);
 
   const syncer::UniquePosition unique_position =
-      ComputePosition(*parent, index, node->uuid().AsLowercaseString());
+      ComputePosition(*parent, index);
 
   sync_pb::EntitySpecifics specifics =
       CreateSpecificsFromNoteNode(node, note_model_, unique_position.ToProto());
@@ -407,11 +406,13 @@ void NotesModelObserverImpl::NotesNodeChildrenReordered(
 
 syncer::UniquePosition NotesModelObserverImpl::ComputePosition(
     const vivaldi::NoteNode& parent,
-    size_t index,
-    const std::string& sync_id) {
-  const std::string& suffix = syncer::GenerateSyncableNotesHash(
-      note_tracker_->model_type_state().cache_guid(), sync_id);
-  DCHECK(!parent.children().empty());
+    size_t index) const {
+  CHECK_LT(index, parent.children().size());
+
+  const vivaldi::NoteNode* node = parent.children()[index].get();
+  const std::string suffix = syncer::GenerateUniquePositionSuffix(
+      SyncedNoteTracker::GetClientTagHashFromUuid(node->uuid()));
+
   const SyncedNoteTrackerEntity* predecessor_entity = nullptr;
   const SyncedNoteTrackerEntity* successor_entity = nullptr;
 
@@ -503,15 +504,14 @@ syncer::UniquePosition NotesModelObserverImpl::UpdateUniquePositionForNode(
     const vivaldi::NoteNode* node,
     const syncer::UniquePosition& prev,
     const syncer::UniquePosition& next) {
-  DCHECK(note_tracker_);
-  DCHECK(node);
+  CHECK(note_tracker_);
+  CHECK(node);
 
   const SyncedNoteTrackerEntity* entity =
       note_tracker_->GetEntityForNoteNode(node);
-  DCHECK(entity);
-  const std::string suffix = syncer::GenerateSyncableNotesHash(
-      note_tracker_->model_type_state().cache_guid(),
-      entity->metadata().server_id());
+  CHECK(entity);
+  const std::string suffix =
+      syncer::GenerateUniquePositionSuffix(entity->GetClientTagHash());
   const base::Time modification_time = base::Time::Now();
 
   syncer::UniquePosition new_unique_position;

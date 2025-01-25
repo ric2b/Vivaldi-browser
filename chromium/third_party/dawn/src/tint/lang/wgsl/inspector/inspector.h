@@ -131,6 +131,13 @@ class Inspector {
     /// @returns vector of all of the bindings for external textures.
     std::vector<ResourceBinding> GetExternalTextureResourceBindings(const std::string& entry_point);
 
+    /// Gathers all the resource bindings of the input attachment type for the given
+    /// entry point.
+    /// @param entry_point name of the entry point to get information about.
+    /// texture type.
+    /// @returns vector of all of the bindings for input attachments.
+    std::vector<ResourceBinding> GetInputAttachmentResourceBindings(const std::string& entry_point);
+
     /// @param entry_point name of the entry point to get information about.
     /// @returns vector of all of the sampler/texture sampling pairs that are used
     /// by that entry point.
@@ -201,6 +208,7 @@ class Inspector {
     /// @param attributes the variable attributes
     /// @param location the location attribute value if provided
     /// @param color the color attribute value if provided
+    /// @param blend_src the blend_src attribute value if provided
     /// @param variables the list to add the variables to
     void AddEntryPointInOutVariables(std::string name,
                                      std::string variable_name,
@@ -208,6 +216,7 @@ class Inspector {
                                      VectorRef<const ast::Attribute*> attributes,
                                      std::optional<uint32_t> location,
                                      std::optional<uint32_t> color,
+                                     std::optional<uint32_t> blend_src,
                                      std::vector<StageVariable>& variables) const;
 
     /// Recursively determine if the type contains builtin.
@@ -253,11 +262,9 @@ class Inspector {
     /// Constructs |sampler_targets_| if it hasn't already been instantiated.
     void GenerateSamplerTargets();
 
-    /// @param type the type of the parameter or structure member
     /// @param attributes attributes associated with the parameter or structure member
     /// @returns the interpolation type and sampling modes for the value
     std::tuple<InterpolationType, InterpolationSampling> CalculateInterpolationData(
-        const core::type::Type* type,
         VectorRef<const ast::Attribute*> attributes) const;
 
     /// @param func the root function of the callgraph to consider for the computation.

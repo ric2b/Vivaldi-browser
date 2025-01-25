@@ -17,9 +17,11 @@ import {
   waitForMany,
 } from '../../shared/helper.js';
 
+import {veImpression} from './visual-logging-helpers.js';
+
 export const FILTER_TEXTBOX_SELECTOR = '[aria-label="Filter"]';
 export const RECORD_BUTTON_SELECTOR = '[aria-label="Record"]';
-export const RELOAD_AND_RECORD_BUTTON_SELECTOR = '[aria-label="Start profiling and reload page"]';
+export const RELOAD_AND_RECORD_BUTTON_SELECTOR = '[aria-label="Record and reload"]';
 export const STOP_BUTTON_SELECTOR = '[aria-label="Stop"]';
 export const SUMMARY_TAB_SELECTOR = '[aria-label="Summary"]';
 export const BOTTOM_UP_SELECTOR = '[aria-label="Bottom-Up"]';
@@ -205,4 +207,24 @@ export async function disableCSSSelectorStats() {
     }
     return true;
   }));
+}
+
+export function veImpressionForPerformancePanel() {
+  return veImpression('Panel', 'timeline', [
+    veImpression(
+        'Toolbar', undefined,
+        [
+          veImpression('Toggle', 'timeline.toggle-recording'),
+          veImpression('Action', 'timeline.record-reload'),
+          veImpression('Action', 'timeline.load-from-file'),
+          veImpression('Action', 'timeline.save-to-file'),
+          veImpression('Action', 'components.collect-garbage'),
+          veImpression('Toggle', 'timeline-show-screenshots'),
+          veImpression('Toggle', 'timeline-show-memory'),
+        ]),
+    // veImpression('Pane', 'timeline-settings-pane', {optional: true}),
+    veImpression('Link', 'learn-more'),
+    veImpression('Toggle', 'timeline.toggle-recording'),
+    veImpression('Action', 'timeline.record-reload'),
+  ]);
 }

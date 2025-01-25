@@ -6,7 +6,7 @@ import type {String16} from '//resources/mojo/mojo/public/mojom/base/string16.mo
 import type {Uuid} from '//resources/mojo/mojo/public/mojom/base/uuid.mojom-webui.js';
 import type {Url} from '//resources/mojo/url/mojom/url.mojom-webui.js';
 
-import type {BookmarkProductInfo, PriceInsightsInfo, ProductInfo, ProductSpecifications, ProductSpecificationsSet, UrlInfo} from './shopping_service.mojom-webui.js';
+import type {BookmarkProductInfo, PriceInsightsInfo, ProductInfo, ProductSpecifications, ProductSpecificationsSet, UrlInfo, UserFeedback} from './shopping_service.mojom-webui.js';
 import {PageCallbackRouter, ShoppingServiceHandlerFactory, ShoppingServiceHandlerRemote} from './shopping_service.mojom-webui.js';
 
 let instance: BrowserProxy|null = null;
@@ -22,16 +22,18 @@ export interface BrowserProxy {
   getPriceInsightsInfoForCurrentUrl():
       Promise<{priceInsightsInfo: PriceInsightsInfo}>;
   showInsightsSidePanelUi(): void;
-  getUrlInfosForOpenTabs(): Promise<{urlInfos: UrlInfo[]}>;
+  getUrlInfosForProductTabs(): Promise<{urlInfos: UrlInfo[]}>;
   getUrlInfosForRecentlyViewedTabs(): Promise<{urlInfos: UrlInfo[]}>;
   isShoppingListEligible(): Promise<{eligible: boolean}>;
   getShoppingCollectionBookmarkFolderId(): Promise<{collectionId: bigint}>;
   getPriceTrackingStatusForCurrentUrl(): Promise<{tracked: boolean}>;
   setPriceTrackingStatusForCurrentUrl(track: boolean): void;
   openUrlInNewTab(url: Url): void;
+  switchToOrOpenTab(url: Url): void;
   getParentBookmarkFolderNameForCurrentUrl(): Promise<{name: String16}>;
   showBookmarkEditorForCurrentUrl(): void;
-  showFeedback(): void;
+  showProductSpecificationsSetForUuid(uuid: Uuid): void;
+  showFeedbackForPriceInsights(): void;
   getCallbackRouter(): PageCallbackRouter;
   getProductInfoForUrl(url: Url): Promise<{productInfo: ProductInfo}>;
   getProductSpecificationsForUrls(urls: Url[]):
@@ -43,6 +45,11 @@ export interface BrowserProxy {
   addProductSpecificationsSet(name: string, urls: Url[]):
       Promise<{createdSet: ProductSpecificationsSet | null}>;
   deleteProductSpecificationsSet(uuid: Uuid): void;
+  setNameForProductSpecificationsSet(uuid: Uuid, name: string):
+      Promise<{updatedSet: ProductSpecificationsSet | null}>;
+  setUrlsForProductSpecificationsSet(uuid: Uuid, urls: Url[]):
+      Promise<{updatedSet: ProductSpecificationsSet | null}>;
+  setProductSpecificationsUserFeedback(feedback: UserFeedback): void;
 }
 
 export class BrowserProxyImpl implements BrowserProxy {
@@ -92,8 +99,8 @@ export class BrowserProxyImpl implements BrowserProxy {
     return this.handler.getProductSpecificationsForUrls(urls);
   }
 
-  getUrlInfosForOpenTabs() {
-    return this.handler.getUrlInfosForOpenTabs();
+  getUrlInfosForProductTabs() {
+    return this.handler.getUrlInfosForProductTabs();
   }
 
   getUrlInfosForRecentlyViewedTabs() {
@@ -124,6 +131,10 @@ export class BrowserProxyImpl implements BrowserProxy {
     this.handler.openUrlInNewTab(url);
   }
 
+  switchToOrOpenTab(url: Url) {
+    this.handler.switchToOrOpenTab(url);
+  }
+
   getParentBookmarkFolderNameForCurrentUrl() {
     return this.handler.getParentBookmarkFolderNameForCurrentUrl();
   }
@@ -132,8 +143,12 @@ export class BrowserProxyImpl implements BrowserProxy {
     this.handler.showBookmarkEditorForCurrentUrl();
   }
 
-  showFeedback() {
-    this.handler.showFeedback();
+  showProductSpecificationsSetForUuid(uuid: Uuid) {
+    this.handler.showProductSpecificationsSetForUuid(uuid);
+  }
+
+  showFeedbackForPriceInsights() {
+    this.handler.showFeedbackForPriceInsights();
   }
 
   getAllProductSpecificationsSets() {
@@ -150,6 +165,18 @@ export class BrowserProxyImpl implements BrowserProxy {
 
   deleteProductSpecificationsSet(uuid: Uuid) {
     this.handler.deleteProductSpecificationsSet(uuid);
+  }
+
+  setNameForProductSpecificationsSet(uuid: Uuid, name: string) {
+    return this.handler.setNameForProductSpecificationsSet(uuid, name);
+  }
+
+  setUrlsForProductSpecificationsSet(uuid: Uuid, urls: Url[]) {
+    return this.handler.setUrlsForProductSpecificationsSet(uuid, urls);
+  }
+
+  setProductSpecificationsUserFeedback(feedback: UserFeedback) {
+    this.handler.setProductSpecificationsUserFeedback(feedback);
   }
 
   getCallbackRouter() {

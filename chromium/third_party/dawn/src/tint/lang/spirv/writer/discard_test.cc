@@ -42,7 +42,7 @@ TEST_F(SpirvWriterTest, Discard) {
     front_facing->SetBuiltin(core::BuiltinValue::kFrontFacing);
     auto* ep = b.Function("ep", ty.f32(), core::ir::Function::PipelineStage::kFragment);
     ep->SetParams({front_facing});
-    ep->SetReturnLocation(0_u, {});
+    ep->SetReturnLocation(0_u);
 
     b.Append(ep->Block(), [&] {
         auto* ifelse = b.If(front_facing);
@@ -74,7 +74,7 @@ TEST_F(SpirvWriterTest, Discard) {
                OpBranch %26
          %26 = OpLabel
          %29 = OpLoad %bool %continue_execution
-         %30 = OpLogicalEqual %bool %29 %false
+         %30 = OpLogicalNot %bool %29
                OpSelectionMerge %31 None
                OpBranchConditional %30 %32 %31
          %32 = OpLabel
@@ -94,7 +94,7 @@ TEST_F(SpirvWriterTest, DiscardBeforeAtomic) {
     front_facing->SetBuiltin(core::BuiltinValue::kFrontFacing);
     auto* ep = b.Function("ep", ty.f32(), core::ir::Function::PipelineStage::kFragment);
     ep->SetParams({front_facing});
-    ep->SetReturnLocation(0_u, {});
+    ep->SetReturnLocation(0_u);
 
     b.Append(ep->Block(), [&] {
         auto* ifelse = b.If(front_facing);
@@ -130,7 +130,7 @@ TEST_F(SpirvWriterTest, DiscardBeforeAtomic) {
          %26 = OpLabel
          %32 = OpPhi %int %29 %27 %33 %28
          %34 = OpLoad %bool %continue_execution
-         %35 = OpLogicalEqual %bool %34 %false
+         %35 = OpLogicalNot %bool %34
                OpSelectionMerge %36 None
                OpBranchConditional %35 %37 %36
          %37 = OpLabel

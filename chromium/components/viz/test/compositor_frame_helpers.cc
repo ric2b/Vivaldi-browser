@@ -255,7 +255,7 @@ RenderPassBuilder& RenderPassBuilder::SetQuadDamageRect(
     auto* yuv_video_quad = static_cast<YUVVideoDrawQuad*>(quad);
     yuv_video_quad->damage_rect = damage_rect;
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   pass_->has_per_quad_damage = true;
@@ -279,6 +279,12 @@ RenderPassBuilder& RenderPassBuilder::SetMaskFilter(
 RenderPassBuilder& RenderPassBuilder::SetQuadLayerId(uint32_t layer_id) {
   auto* sqs = GetLastQuadSharedQuadState();
   sqs->layer_id = layer_id;
+  return *this;
+}
+
+RenderPassBuilder& RenderPassBuilder::SetQuadOffsetTag(const OffsetTag& tag) {
+  auto* sqs = GetLastQuadSharedQuadState();
+  sqs->offset_tag = tag;
   return *this;
 }
 
@@ -448,6 +454,12 @@ CompositorFrameBuilder& CompositorFrameBuilder::AddDelegatedInkMetadata(
     const gfx::DelegatedInkMetadata& metadata) {
   frame_->metadata.delegated_ink_metadata =
       std::make_unique<gfx::DelegatedInkMetadata>(metadata);
+  return *this;
+}
+
+CompositorFrameBuilder& CompositorFrameBuilder::AddOffsetTagDefinition(
+    const OffsetTagDefinition& definition) {
+  frame_->metadata.offset_tag_definitions.push_back(definition);
   return *this;
 }
 

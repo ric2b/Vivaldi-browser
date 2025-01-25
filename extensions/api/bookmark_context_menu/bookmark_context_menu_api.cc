@@ -88,7 +88,7 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
     case vivaldi::bookmark_context_menu::SortField::kDescription:
       sortField = ::vivaldi::BookmarkSorter::FIELD_NICKNAME;
       break;
-    case vivaldi::bookmark_context_menu::SortField::kDateadded:
+    case vivaldi::bookmark_context_menu::SortField::kDateAdded:
       sortField = ::vivaldi::BookmarkSorter::FIELD_DATEADDED;
       break;
   }

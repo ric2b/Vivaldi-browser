@@ -70,11 +70,7 @@ BlobURLStoreImpl::BlobURLStoreImpl(
     : storage_key_(storage_key),
       registry_(std::move(registry)),
       validity_check_behavior_(validity_check_behavior) {
-  if (validity_check_behavior_ ==
-      BlobURLValidityCheckBehavior::ALLOW_OPAQUE_ORIGIN_STORAGE_KEY_MISMATCH) {
-    DCHECK(base::FeatureList::IsEnabled(
-        net::features::kSupportPartitionedBlobUrl));
-  }
+
 }
 
 BlobURLStoreImpl::~BlobURLStoreImpl() {
@@ -112,16 +108,6 @@ void BlobURLStoreImpl::Revoke(const GURL& url) {
   if (registry_)
     registry_->RemoveUrlMapping(url, storage_key_);
   urls_.erase(url);
-}
-
-void BlobURLStoreImpl::Resolve(const GURL& url, ResolveCallback callback) {
-  if (!registry_) {
-    std::move(callback).Run(mojo::NullRemote(), std::nullopt);
-    return;
-  }
-  mojo::PendingRemote<blink::mojom::Blob> blob = registry_->GetBlobFromUrl(url);
-  std::move(callback).Run(std::move(blob),
-                          registry_->GetUnsafeAgentClusterID(url));
 }
 
 void BlobURLStoreImpl::ResolveAsURLLoaderFactory(

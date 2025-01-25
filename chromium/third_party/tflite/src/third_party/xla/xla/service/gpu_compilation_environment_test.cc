@@ -22,6 +22,7 @@ limitations under the License.
 #include <gtest/gtest.h>
 #include "xla/parse_flags_from_env.h"
 #include "xla/service/compilation_environments.h"
+#include "xla/xla.pb.h"
 #include "tsl/lib/core/status_test_util.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
@@ -71,13 +72,6 @@ TEST(CreateGpuCompEnvFromFlagStringsTest, InvalidFlagName) {
   ASSERT_EQ(flags.size(), 1);
 }
 
-TEST(CreateGpuCompEnvFromFlagStringsTest, InvalidFlagValue) {
-  std::vector<std::string> flags = {"--dummy_flag=foo"};
-
-  EXPECT_THAT(CreateGpuCompEnvFromFlagStrings(flags, /*strict=*/false),
-              StatusIs(tsl::error::INVALID_ARGUMENT));
-}
-
 TEST(CreateGpuCompEnvFromEnvVarTest, ValidFlags) {
   set_xla_flags_env_var("--dummy_flag=4");
 
@@ -85,13 +79,6 @@ TEST(CreateGpuCompEnvFromEnvVarTest, ValidFlags) {
                           CreateGpuCompEnvFromEnvVar());
 
   ASSERT_EQ(gpu_comp_env.dummy_flag(), 4);
-}
-
-TEST(CreateGpuCompEnvFromEnvVarTest, InvalidFlagValue) {
-  set_xla_flags_env_var("--dummy_flag=foo");
-
-  EXPECT_THAT(CreateGpuCompEnvFromEnvVar(),
-              StatusIs(tsl::error::INVALID_ARGUMENT));
 }
 
 TEST(InitializeMissingFieldsFromXLAFlagsTest, BothProtoAndEnvVarUnset) {

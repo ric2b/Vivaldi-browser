@@ -74,8 +74,8 @@ std::unique_ptr<views::Widget> CreateTransientWidget(
     const std::string& widget_name,
     bool accept_events) {
   views::Widget::InitParams params(
+      views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
-  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.parent = parent_window;
   params.name = widget_name;
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
@@ -117,7 +117,7 @@ class DisplayOverlayController::FocusCycler {
     // Only tab pressed is checked because the focus change is triggered by the
     // tab pressed event. No need to change widget focus again on tab key
     // released event.
-    if (event.type() == ui::ET_KEY_RELEASED ||
+    if (event.type() == ui::EventType::kKeyReleased ||
         !views::FocusManager::IsTabTraversalKeyEvent(event)) {
       return;
     }
@@ -543,7 +543,7 @@ void DisplayOverlayController::SetDisplayModeAlpha(DisplayMode mode) {
       SetEventTarget(overlay_widget, /*on_overlay=*/true);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 
@@ -1004,7 +1004,7 @@ void DisplayOverlayController::UpdateWidgetBoundsInRootWindow(
 
 void DisplayOverlayController::OnMouseEvent(ui::MouseEvent* event) {
   if ((display_mode_ == DisplayMode::kView && IsNudgeEmpty()) ||
-      event->type() != ui::ET_MOUSE_PRESSED) {
+      event->type() != ui::EventType::kMousePressed) {
     return;
   }
 
@@ -1013,7 +1013,7 @@ void DisplayOverlayController::OnMouseEvent(ui::MouseEvent* event) {
 
 void DisplayOverlayController::OnTouchEvent(ui::TouchEvent* event) {
   if ((display_mode_ == DisplayMode::kView && IsNudgeEmpty()) ||
-      event->type() != ui::ET_TOUCH_PRESSED) {
+      event->type() != ui::EventType::kTouchPressed) {
     return;
   }
   ProcessPressedEvent(*event);

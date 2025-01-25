@@ -6,7 +6,9 @@
 
 #include <memory>
 
+#include "ash/constants/ash_features.h"
 #include "base/memory/weak_ptr.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/webui/top_chrome/webui_contents_wrapper.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/views/chrome_views_test_base.h"
@@ -41,7 +43,16 @@ class TestWebUIContentsWrapper final : public WebUIContentsWrapper {
   base::WeakPtrFactory<TestWebUIContentsWrapper> weak_ptr_factory_{this};
 };
 
-using MakoRewriteViewTest = ChromeViewsTestBase;
+class MakoRewriteViewTest : public ChromeViewsTestBase {
+ public:
+  void SetUp() override {
+    feature_list_.InitAndEnableFeature(features::kOrcaResizingSupport);
+    ChromeViewsTestBase::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
 
 TEST_F(MakoRewriteViewTest, ResizesToWebViewSize) {
   TestingProfile profile;
@@ -52,9 +63,8 @@ TEST_F(MakoRewriteViewTest, ResizesToWebViewSize) {
   auto* mako_rewrite_view_ptr = mako_rewrite_view.get();
   views::BubbleDialogDelegateView::CreateBubble(std::move(mako_rewrite_view));
 
-  constexpr gfx::Size kWebViewSize(120, 200);
-  mako_rewrite_view_ptr->ResizeDueToAutoResize(/*source=*/nullptr,
-                                               kWebViewSize);
+  constexpr gfx::Size kWebViewSize(440, 343);
+  mako_rewrite_view_ptr->ShowUI();
 
   EXPECT_EQ(mako_rewrite_view_ptr->GetBoundsInScreen().size(), kWebViewSize);
 }
@@ -69,8 +79,7 @@ TEST_F(MakoRewriteViewTest, DefaultBoundsAtBottomLeftOfCaret) {
   auto* mako_rewrite_view_ptr = mako_rewrite_view.get();
   views::BubbleDialogDelegateView::CreateBubble(std::move(mako_rewrite_view));
 
-  mako_rewrite_view_ptr->ResizeDueToAutoResize(/*source=*/nullptr,
-                                               gfx::Size(100, 200));
+  mako_rewrite_view_ptr->ShowUI();
 
   // Should be left aligned and below the caret.
   EXPECT_EQ(mako_rewrite_view_ptr->GetBoundsInScreen().x(), kCaretBounds.x());
@@ -90,8 +99,8 @@ TEST_F(MakoRewriteViewTest, AtTopLeftOfCaretForCaretAtScreenBottom) {
   auto* mako_rewrite_view_ptr = mako_rewrite_view.get();
   views::BubbleDialogDelegateView::CreateBubble(std::move(mako_rewrite_view));
 
-  mako_rewrite_view_ptr->ResizeDueToAutoResize(/*source=*/nullptr,
-                                               gfx::Size(100, 200));
+  mako_rewrite_view_ptr->ShowUI();
+
   // Should be left aligned and above the caret.
   EXPECT_EQ(mako_rewrite_view_ptr->GetBoundsInScreen().x(), caret_bounds.x());
   EXPECT_LE(mako_rewrite_view_ptr->GetBoundsInScreen().bottom(),
@@ -108,8 +117,7 @@ TEST_F(MakoRewriteViewTest, OnScreenWithoutOverlapForSmallSelection) {
   auto* mako_rewrite_view_ptr = mako_rewrite_view.get();
   views::BubbleDialogDelegateView::CreateBubble(std::move(mako_rewrite_view));
 
-  mako_rewrite_view_ptr->ResizeDueToAutoResize(/*source=*/nullptr,
-                                               gfx::Size(100, 200));
+  mako_rewrite_view_ptr->ShowUI();
 
   EXPECT_TRUE(
       display::Screen::GetScreen()->GetPrimaryDisplay().work_area().Contains(
@@ -129,8 +137,7 @@ TEST_F(MakoRewriteViewTest, OnScreenForLargeSelection) {
   auto* mako_rewrite_view_ptr = mako_rewrite_view.get();
   views::BubbleDialogDelegateView::CreateBubble(std::move(mako_rewrite_view));
 
-  mako_rewrite_view_ptr->ResizeDueToAutoResize(/*source=*/nullptr,
-                                               gfx::Size(100, 200));
+  mako_rewrite_view_ptr->ShowUI();
 
   EXPECT_TRUE(
       display::Screen::GetScreen()->GetPrimaryDisplay().work_area().Contains(

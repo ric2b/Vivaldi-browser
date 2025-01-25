@@ -24,6 +24,7 @@ import shlex
 import subprocess
 import sys
 
+import gclient_utils
 import git_common
 
 from distutils import spawn
@@ -270,6 +271,12 @@ def run(options, spec, root):
             method (checkout type, repository url, etc.).
         root: The directory into which the repo expects to be checkout out.
     """
+    if gclient_utils.IsEnvCog():
+        print(
+            'Your current directory appears to be in a Cog workspace.'
+            '"fetch" command is not supported in this environment.',
+            file=sys.stderr)
+        return 1
     assert 'type' in spec
     checkout_type = spec['type']
     checkout_spec = spec['%s_spec' % checkout_type]

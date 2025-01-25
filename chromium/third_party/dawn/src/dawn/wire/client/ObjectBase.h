@@ -31,7 +31,8 @@
 #include "dawn/webgpu.h"
 #include "partition_alloc/pointers/raw_ptr.h"
 
-#include "dawn/common/LinkedList.h"
+#include "dawn/common/Ref.h"
+#include "dawn/common/RefCounted.h"
 #include "dawn/wire/ObjectHandle.h"
 #include "dawn/wire/ObjectType_autogen.h"
 #include "dawn/wire/client/EventManager.h"
@@ -49,30 +50,29 @@ struct ObjectBaseParams {
 //  - A pointer to the Client to get where to serialize commands
 //  - The external reference count, starting at 1.
 //  - An ID that is used to refer to this object when talking with the server side
-//  - A next/prev pointer. They are part of a linked list of objects of the same type.
-class ObjectBase : public LinkNode<ObjectBase> {
+class ObjectBase : public RefCounted {
   public:
     explicit ObjectBase(const ObjectBaseParams& params);
-    virtual ~ObjectBase();
 
     virtual void CancelCallbacksForDisconnect() {}
     virtual ObjectType GetObjectType() const = 0;
+
+    // Objects are assumed to be registered with the wire on creation but can be unregistered
+    // with Unregister(). After that is done, other ObjectBase getters are invalid to use.
+    bool IsRegistered() const;
+    void Unregister();
 
     const ObjectHandle& GetWireHandle() const;
     ObjectId GetWireId() const;
     ObjectGeneration GetWireGeneration() const;
     Client* GetClient() const;
 
-    void AddRef();
-    uint32_t Release();
-
   protected:
-    uint32_t GetRefcount() const { return mRefcount; }
+    void DeleteThis() override;
 
   private:
-    const raw_ptr<Client> mClient;
+    raw_ptr<Client> mClient;
     const ObjectHandle mHandle;
-    uint32_t mRefcount;
 };
 
 // Compositable functionality for objects on the client side that need to have access to the event
@@ -91,6 +91,16 @@ class ObjectWithEventsBase : public ObjectBase {
     // objects are also freed.
     ObjectHandle mEventManagerHandle;
 };
+
+template <class T>
+auto ReturnToAPI(Ref<T>&& object) {
+    if constexpr (T::HasExternalRefCount) {
+        // For an object which has external ref count, just need to increase the external ref count,
+        // and keep the total ref count unchanged.
+        object->IncrementExternalRefCount();
+    }
+    return ToAPI(object.Detach());
+}
 
 }  // namespace dawn::wire::client
 

@@ -12735,6 +12735,166 @@ void safe_VkAndroidHardwareBufferFormatResolvePropertiesANDROID::initialize(
 }
 #endif  // VK_USE_PLATFORM_ANDROID_KHR
 
+safe_VkPhysicalDeviceAntiLagFeaturesAMD::safe_VkPhysicalDeviceAntiLagFeaturesAMD(
+    const VkPhysicalDeviceAntiLagFeaturesAMD* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType), antiLag(in_struct->antiLag) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPhysicalDeviceAntiLagFeaturesAMD::safe_VkPhysicalDeviceAntiLagFeaturesAMD()
+    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ANTI_LAG_FEATURES_AMD), pNext(nullptr), antiLag() {}
+
+safe_VkPhysicalDeviceAntiLagFeaturesAMD::safe_VkPhysicalDeviceAntiLagFeaturesAMD(
+    const safe_VkPhysicalDeviceAntiLagFeaturesAMD& copy_src) {
+    sType = copy_src.sType;
+    antiLag = copy_src.antiLag;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceAntiLagFeaturesAMD& safe_VkPhysicalDeviceAntiLagFeaturesAMD::operator=(
+    const safe_VkPhysicalDeviceAntiLagFeaturesAMD& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    antiLag = copy_src.antiLag;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceAntiLagFeaturesAMD::~safe_VkPhysicalDeviceAntiLagFeaturesAMD() { FreePnextChain(pNext); }
+
+void safe_VkPhysicalDeviceAntiLagFeaturesAMD::initialize(const VkPhysicalDeviceAntiLagFeaturesAMD* in_struct,
+                                                         [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    antiLag = in_struct->antiLag;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceAntiLagFeaturesAMD::initialize(const safe_VkPhysicalDeviceAntiLagFeaturesAMD* copy_src,
+                                                         [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    antiLag = copy_src->antiLag;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkAntiLagPresentationInfoAMD::safe_VkAntiLagPresentationInfoAMD(const VkAntiLagPresentationInfoAMD* in_struct,
+                                                                     [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType), stage(in_struct->stage), frameIndex(in_struct->frameIndex) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkAntiLagPresentationInfoAMD::safe_VkAntiLagPresentationInfoAMD()
+    : sType(VK_STRUCTURE_TYPE_ANTI_LAG_PRESENTATION_INFO_AMD), pNext(nullptr), stage(), frameIndex() {}
+
+safe_VkAntiLagPresentationInfoAMD::safe_VkAntiLagPresentationInfoAMD(const safe_VkAntiLagPresentationInfoAMD& copy_src) {
+    sType = copy_src.sType;
+    stage = copy_src.stage;
+    frameIndex = copy_src.frameIndex;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkAntiLagPresentationInfoAMD& safe_VkAntiLagPresentationInfoAMD::operator=(const safe_VkAntiLagPresentationInfoAMD& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    stage = copy_src.stage;
+    frameIndex = copy_src.frameIndex;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkAntiLagPresentationInfoAMD::~safe_VkAntiLagPresentationInfoAMD() { FreePnextChain(pNext); }
+
+void safe_VkAntiLagPresentationInfoAMD::initialize(const VkAntiLagPresentationInfoAMD* in_struct,
+                                                   [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    stage = in_struct->stage;
+    frameIndex = in_struct->frameIndex;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkAntiLagPresentationInfoAMD::initialize(const safe_VkAntiLagPresentationInfoAMD* copy_src,
+                                                   [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    stage = copy_src->stage;
+    frameIndex = copy_src->frameIndex;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkAntiLagDataAMD::safe_VkAntiLagDataAMD(const VkAntiLagDataAMD* in_struct, [[maybe_unused]] PNextCopyState* copy_state,
+                                             bool copy_pnext)
+    : sType(in_struct->sType), mode(in_struct->mode), maxFPS(in_struct->maxFPS), pPresentationInfo(nullptr) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+    if (in_struct->pPresentationInfo) pPresentationInfo = new safe_VkAntiLagPresentationInfoAMD(in_struct->pPresentationInfo);
+}
+
+safe_VkAntiLagDataAMD::safe_VkAntiLagDataAMD()
+    : sType(VK_STRUCTURE_TYPE_ANTI_LAG_DATA_AMD), pNext(nullptr), mode(), maxFPS(), pPresentationInfo(nullptr) {}
+
+safe_VkAntiLagDataAMD::safe_VkAntiLagDataAMD(const safe_VkAntiLagDataAMD& copy_src) {
+    sType = copy_src.sType;
+    mode = copy_src.mode;
+    maxFPS = copy_src.maxFPS;
+    pPresentationInfo = nullptr;
+    pNext = SafePnextCopy(copy_src.pNext);
+    if (copy_src.pPresentationInfo) pPresentationInfo = new safe_VkAntiLagPresentationInfoAMD(*copy_src.pPresentationInfo);
+}
+
+safe_VkAntiLagDataAMD& safe_VkAntiLagDataAMD::operator=(const safe_VkAntiLagDataAMD& copy_src) {
+    if (&copy_src == this) return *this;
+
+    if (pPresentationInfo) delete pPresentationInfo;
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    mode = copy_src.mode;
+    maxFPS = copy_src.maxFPS;
+    pPresentationInfo = nullptr;
+    pNext = SafePnextCopy(copy_src.pNext);
+    if (copy_src.pPresentationInfo) pPresentationInfo = new safe_VkAntiLagPresentationInfoAMD(*copy_src.pPresentationInfo);
+
+    return *this;
+}
+
+safe_VkAntiLagDataAMD::~safe_VkAntiLagDataAMD() {
+    if (pPresentationInfo) delete pPresentationInfo;
+    FreePnextChain(pNext);
+}
+
+void safe_VkAntiLagDataAMD::initialize(const VkAntiLagDataAMD* in_struct, [[maybe_unused]] PNextCopyState* copy_state) {
+    if (pPresentationInfo) delete pPresentationInfo;
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    mode = in_struct->mode;
+    maxFPS = in_struct->maxFPS;
+    pPresentationInfo = nullptr;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    if (in_struct->pPresentationInfo) pPresentationInfo = new safe_VkAntiLagPresentationInfoAMD(in_struct->pPresentationInfo);
+}
+
+void safe_VkAntiLagDataAMD::initialize(const safe_VkAntiLagDataAMD* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    mode = copy_src->mode;
+    maxFPS = copy_src->maxFPS;
+    pPresentationInfo = nullptr;
+    pNext = SafePnextCopy(copy_src->pNext);
+    if (copy_src->pPresentationInfo) pPresentationInfo = new safe_VkAntiLagPresentationInfoAMD(*copy_src->pPresentationInfo);
+}
+
 safe_VkPhysicalDeviceTilePropertiesFeaturesQCOM::safe_VkPhysicalDeviceTilePropertiesFeaturesQCOM(
     const VkPhysicalDeviceTilePropertiesFeaturesQCOM* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
     : sType(in_struct->sType), tileProperties(in_struct->tileProperties) {
@@ -15115,6 +15275,158 @@ void safe_VkPhysicalDeviceRayTracingValidationFeaturesNV::initialize(
     const safe_VkPhysicalDeviceRayTracingValidationFeaturesNV* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
     sType = copy_src->sType;
     rayTracingValidation = copy_src->rayTracingValidation;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA::safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA(
+    const VkPhysicalDeviceImageAlignmentControlFeaturesMESA* in_struct, [[maybe_unused]] PNextCopyState* copy_state,
+    bool copy_pnext)
+    : sType(in_struct->sType), imageAlignmentControl(in_struct->imageAlignmentControl) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA::safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA()
+    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_FEATURES_MESA), pNext(nullptr), imageAlignmentControl() {}
+
+safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA::safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA(
+    const safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA& copy_src) {
+    sType = copy_src.sType;
+    imageAlignmentControl = copy_src.imageAlignmentControl;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA& safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA::operator=(
+    const safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    imageAlignmentControl = copy_src.imageAlignmentControl;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA::~safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA() {
+    FreePnextChain(pNext);
+}
+
+void safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA::initialize(
+    const VkPhysicalDeviceImageAlignmentControlFeaturesMESA* in_struct, [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    imageAlignmentControl = in_struct->imageAlignmentControl;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA::initialize(
+    const safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    imageAlignmentControl = copy_src->imageAlignmentControl;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA::safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA(
+    const VkPhysicalDeviceImageAlignmentControlPropertiesMESA* in_struct, [[maybe_unused]] PNextCopyState* copy_state,
+    bool copy_pnext)
+    : sType(in_struct->sType), supportedImageAlignmentMask(in_struct->supportedImageAlignmentMask) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA::safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA()
+    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_PROPERTIES_MESA),
+      pNext(nullptr),
+      supportedImageAlignmentMask() {}
+
+safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA::safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA(
+    const safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA& copy_src) {
+    sType = copy_src.sType;
+    supportedImageAlignmentMask = copy_src.supportedImageAlignmentMask;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA& safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA::operator=(
+    const safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    supportedImageAlignmentMask = copy_src.supportedImageAlignmentMask;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA::~safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA() {
+    FreePnextChain(pNext);
+}
+
+void safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA::initialize(
+    const VkPhysicalDeviceImageAlignmentControlPropertiesMESA* in_struct, [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    supportedImageAlignmentMask = in_struct->supportedImageAlignmentMask;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA::initialize(
+    const safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    supportedImageAlignmentMask = copy_src->supportedImageAlignmentMask;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkImageAlignmentControlCreateInfoMESA::safe_VkImageAlignmentControlCreateInfoMESA(
+    const VkImageAlignmentControlCreateInfoMESA* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType), maximumRequestedAlignment(in_struct->maximumRequestedAlignment) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkImageAlignmentControlCreateInfoMESA::safe_VkImageAlignmentControlCreateInfoMESA()
+    : sType(VK_STRUCTURE_TYPE_IMAGE_ALIGNMENT_CONTROL_CREATE_INFO_MESA), pNext(nullptr), maximumRequestedAlignment() {}
+
+safe_VkImageAlignmentControlCreateInfoMESA::safe_VkImageAlignmentControlCreateInfoMESA(
+    const safe_VkImageAlignmentControlCreateInfoMESA& copy_src) {
+    sType = copy_src.sType;
+    maximumRequestedAlignment = copy_src.maximumRequestedAlignment;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkImageAlignmentControlCreateInfoMESA& safe_VkImageAlignmentControlCreateInfoMESA::operator=(
+    const safe_VkImageAlignmentControlCreateInfoMESA& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    maximumRequestedAlignment = copy_src.maximumRequestedAlignment;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkImageAlignmentControlCreateInfoMESA::~safe_VkImageAlignmentControlCreateInfoMESA() { FreePnextChain(pNext); }
+
+void safe_VkImageAlignmentControlCreateInfoMESA::initialize(const VkImageAlignmentControlCreateInfoMESA* in_struct,
+                                                            [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    maximumRequestedAlignment = in_struct->maximumRequestedAlignment;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkImageAlignmentControlCreateInfoMESA::initialize(const safe_VkImageAlignmentControlCreateInfoMESA* copy_src,
+                                                            [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    maximumRequestedAlignment = copy_src->maximumRequestedAlignment;
     pNext = SafePnextCopy(copy_src->pNext);
 }
 

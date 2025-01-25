@@ -8,7 +8,6 @@
 #include "ash/public/cpp/in_session_auth_dialog_client.h"
 #include "ash/public/cpp/webauthn_dialog_controller.h"
 #include "base/functional/callback.h"
-#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -18,6 +17,7 @@
 #include "chromeos/ash/components/dbus/userdataauth/fake_cryptohome_misc_client.h"
 #include "chromeos/ash/components/dbus/userdataauth/fake_userdataauth_client.h"
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
+#include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
 #include "chromeos/ash/components/login/auth/public/cryptohome_key_constants.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -94,21 +94,27 @@ class InSessionAuthDialogClientTest : public testing::Test {
                                                std::move(callback));
   }
 
-  void ConfigureExistingUserWithPassword(const AccountId& user,
+  void ConfigureExistingUserWithPassword(const AccountId& account_id,
                                          const std::string& password) {
     Key key(Key::KEY_TYPE_PASSWORD_PLAIN, std::string(), password);
     key.Transform(Key::KEY_TYPE_SALTED_SHA256_TOP_HALF,
                   ash::SystemSaltGetter::ConvertRawSaltToHexString(
                       ash::FakeCryptohomeMiscClient::GetStubSystemSalt()));
 
-    cryptohome::Key cryptohome_key;
-    cryptohome_key.mutable_data()->set_label(ash::kCryptohomeGaiaKeyLabel);
-    cryptohome_key.set_secret(key.GetSecret());
+    user_data_auth::AuthFactor auth_factor;
+    user_data_auth::AuthInput auth_input;
 
+    auth_factor.set_label(ash::kCryptohomeGaiaKeyLabel);
+    auth_factor.set_type(user_data_auth::AUTH_FACTOR_TYPE_PASSWORD);
+
+    auth_input.mutable_password_input()->set_secret(key.GetSecret());
+
+    // Add the password key to the user.
     auto* test_api = ash::FakeUserDataAuthClient::TestApi::Get();
-    auto account_id = cryptohome::CreateAccountIdentifierFromAccountId(user);
-    test_api->AddExistingUser(account_id);
-    test_api->AddKey(account_id, cryptohome_key);
+    auto cryptohome_account_id =
+        cryptohome::CreateAccountIdentifierFromAccountId(account_id);
+    test_api->AddExistingUser(cryptohome_account_id);
+    test_api->AddAuthFactor(cryptohome_account_id, auth_factor, auth_input);
   }
 
   void StartAuthSessionForActiveUser() {
@@ -123,10 +129,10 @@ class InSessionAuthDialogClientTest : public testing::Test {
  protected:
   const content::BrowserTaskEnvironment task_environment_;
 
-  raw_ptr<ash::FakeChromeUserManager, DanglingUntriaged> fake_user_manager_{
-      new ash::FakeChromeUserManager()};
-  user_manager::ScopedUserManager scoped_user_manager_{
-      base::WrapUnique(fake_user_manager_.get())};
+  ash::ScopedStubInstallAttributes install_attributes{
+      ash::StubInstallAttributes::CreateConsumerOwned()};
+  user_manager::TypedScopedUserManager<ash::FakeChromeUserManager>
+      fake_user_manager_{std::make_unique<ash::FakeChromeUserManager>()};
   std::unique_ptr<FakeInSessionAuthDialogController> fake_controller_{
       std::make_unique<FakeInSessionAuthDialogController>()};
   std::unique_ptr<InSessionAuthDialogClient> client_;

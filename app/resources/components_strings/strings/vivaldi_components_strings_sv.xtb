@@ -16,7 +16,6 @@
 <translation id="1728677426644403582">Du visar källkoden till en webbsida</translation>
 <translation id="1734878702283171397">Försök att kontakta systemadministratören.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Testa att köra Windows nätverksdiagnostik<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">Den här webbplatsen innehåller skadliga program</translation>
 <translation id="1974060860693918893">Avancerat</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrollerar mellanservern (proxyn) och brandväggen<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Utfärdat till: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -42,7 +41,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Kör anslutningsdiagnostik<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Anslutningen har återställts.</translation>
 <translation id="2826760142808435982">Anslutningen är krypterad och verifieras med <ph name="CIPHER" /> och använder <ph name="KX" /> som nyckelutbytesmekanism.</translation>
-<translation id="2856444702002559011">En angripare kan försöka stjäla dina uppgifter från <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (t.ex. lösenord, meddelanden eller kreditkortsuppgifter). <ph name="BEGIN_LEARN_MORE_LINK" />Läs mer<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">En nätverksförändring upptäcktes.</translation>
 <translation id="2948083400971632585">Du kan inaktivera mellanservrar (proxy) konfigurerade för en anslutning från inställningssidan.</translation>
 <translation id="2991571918955627853">Du kan inte besöka <ph name="SITE" /> just nu eftersom webbplatsen använder HSTS. Nätverksfel och attacker är ofta tillfälliga, så sidan kommer förmodligen att fungera senare.</translation>
@@ -69,6 +67,7 @@
 <translation id="3566021033012934673">Anslutningen är inte privat</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Dölj detaljerad information</translation>
+<translation id="3614001939154393113">Angripare kanske försöker stjäla din information från <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (till exempel lösenord, meddelanden eller kreditkort). <ph name="BEGIN_LEARN_MORE_LINK" />Läs mer om denna varning<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3630155396527302611">Om den redan finns med på listan över program som har tillgång till nätverket 
         kan du prova att ta bort den från listan och sedan lägga till den igen.</translation>
 <translation id="3658742229777143148">Version</translation>
@@ -92,7 +91,6 @@
 <translation id="4265872034478892965">Beviljades av administratören</translation>
 <translation id="4305666528087210886">Din fil gick inte att komma åt</translation>
 <translation id="4312866146174492540">Blockera (standard)</translation>
-<translation id="4356973930735388585">Det kan hända att angripare på den här webbplatsen försöker installera skadliga program på datorn som stjäl eller raderar dina uppgifter (t.ex. foton, lösenord, meddelanden och kreditkort).</translation>
 <translation id="4408413947728134509">Kakor <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> godkände inte inloggningscertifikatet eller så har inget inloggningscertifikat angetts.</translation>
 <translation id="4506599922270137252">Kontakta systemadministratören</translation>
@@ -144,7 +142,6 @@
 <translation id="6305205051461490394"><ph name="URL" /> kan inte nås.</translation>
 <translation id="6321917430147971392">Kontrollera DNS-inställningarna</translation>
 <translation id="6328639280570009161">Prova att inaktivera nätverksförslag</translation>
-<translation id="6328786501058569169">Den här webbplatsen är bedräglig</translation>
 <translation id="6348220984832452017">Aktiva variationer</translation>
 <translation id="6358450015545214790">Vad innebär dessa?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> avvisade anslutningen.</translation>
@@ -158,7 +155,6 @@
 <translation id="6897140037006041989">Användaragent</translation>
 <translation id="6957624206566198865">Öppna sidan på en ny privat flik</translation>
 <translation id="7053983685419859001">Blockera</translation>
-<translation id="7079718277001814089">Webbplatsen innehåller skadlig programvara</translation>
 <translation id="7096937462164235847">Identiteten för denna webbplats är inte verifierad.</translation>
 <translation id="7108819624672055576">Beviljades av ett tillägg</translation>
 <translation id="7111012039238467737">(Giltigt)</translation>
@@ -166,6 +162,7 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> följer inte säkerhetsstandarderna.</translation>
 <translation id="7219179957768738017">För anslutningen används <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Visa aviseringar</translation>
+<translation id="7227747683324411744">Angripare på webbplatsen du försöker besöka kan lura dig att installera skadlig programvara som påverkar hur du surfar – till exempel genom att ändra din startsida eller visa dig extra annonser på webbplatser du besöker.</translation>
 <translation id="7353601530677266744">Kommandorad</translation>
 <translation id="7364115444476960850">Sidan du försökte komma åt blockerades av Vivaldis <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profilsökväg</translation>
@@ -173,9 +170,9 @@
 <translation id="7518003948725431193">Det fanns ingen webbsida på webbadressen: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Den här webbsidan kräver uppgifter som du har angett tidigare för att kunna visas korrekt. Du kan skicka uppgifterna igen, men om du gör det upprepas de åtgärder som har utförts av sidan tidigare.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kan för närvarande inte hantera förfrågan.</translation>
+<translation id="7605377493722372900">Angripare på webbplatsen du försöker besöka kan installera skadlig programvara som stjäl eller raderar saker som ditt lösenord, foton, meddelanden eller kreditkortsnummer.</translation>
 <translation id="7662298039739062396">Inställningen styrs av ett tillägg</translation>
 <translation id="7663736086183791259">Certifikat <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Angripare på den här webbplatsen kan försöka lura dig att installera program som skadar din webbupplevelse (till exempel genom att byta ut din startsida eller visa extra annonser på webbplatser som du besöker).</translation>
 <translation id="7714464543167945231">Certifikat</translation>
 <translation id="7716147886133743102">Blockerades av administratören</translation>
 <translation id="7716424297397655342">Det går inte att läsa in webbplatsen från cachelagringen</translation>
@@ -185,7 +182,6 @@
 <translation id="7878562273885520351">Lösenordet kan vara utsatt för risk</translation>
 <translation id="7951415247503192394">(32 bitar)</translation>
 <translation id="7953236668995583915">Läs in sidan igen så att de uppdaterade inställningarna tillämpas på webbplatsen</translation>
-<translation id="8025119109950072390">Angripare på den här webbplatsen kan lura dig att göra något farligt, till exempel installera programvara eller lämna ut personliga uppgifter (som lösenord, telefonnummer eller kreditkortsuppgifter).</translation>
 <translation id="8037357227543935929">Fråga (standard)</translation>
 <translation id="8041940743680923270">Använd global standardinställning (Fråga)</translation>
 <translation id="808894953321890993">Byt lösenord</translation>
@@ -200,6 +196,7 @@
 <translation id="8288807391153049143">Visa certifikat</translation>
 <translation id="8289355894181816810">Kontakta din nätverksadministratör om du är osäker på vad det här innebär.</translation>
 <translation id="8332188693563227489">Åtkomst nekades till <ph name="HOST_NAME" /></translation>
+<translation id="8422228580902424274">Angripare på webbplatsen du försöker besöka kan lura dig att installera programvara eller avslöja saker som ditt lösenord, telefon eller kreditkortsnummer.</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> tog för lång tid på sig att svara.</translation>
 <translation id="8503813439785031346">Användarnamn</translation>
 <translation id="8703575177326907206">Din anslutning till <ph name="DOMAIN" /> är inte krypterad.</translation>

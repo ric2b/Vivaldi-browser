@@ -55,6 +55,8 @@ VkPresentModeKHR ToVulkanPresentMode(wgpu::PresentMode mode) {
     switch (mode) {
         case wgpu::PresentMode::Fifo:
             return VK_PRESENT_MODE_FIFO_KHR;
+        case wgpu::PresentMode::FifoRelaxed:
+            return VK_PRESENT_MODE_FIFO_RELAXED_KHR;
         case wgpu::PresentMode::Immediate:
             return VK_PRESENT_MODE_IMMEDIATE_KHR;
         case wgpu::PresentMode::Mailbox:
@@ -66,6 +68,7 @@ VkPresentModeKHR ToVulkanPresentMode(wgpu::PresentMode mode) {
 uint32_t MinImageCountForPresentMode(VkPresentModeKHR mode) {
     switch (mode) {
         case VK_PRESENT_MODE_FIFO_KHR:
+        case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
         case VK_PRESENT_MODE_IMMEDIATE_KHR:
             return 2;
         case VK_PRESENT_MODE_MAILBOX_KHR:
@@ -77,41 +80,6 @@ uint32_t MinImageCountForPresentMode(VkPresentModeKHR mode) {
 }
 
 }  // anonymous namespace
-
-// static
-ResultOrError<wgpu::TextureUsage> SwapChain::GetSupportedSurfaceUsage(const Device* device,
-                                                                      const Surface* surface) {
-    PhysicalDevice* physicalDevice = ToBackend(device->GetPhysicalDevice());
-    const VulkanFunctions& fn = physicalDevice->GetVulkanInstance()->GetFunctions();
-    VkInstance instanceVk = physicalDevice->GetVulkanInstance()->GetVkInstance();
-    VkPhysicalDevice vkPhysicalDevice = physicalDevice->GetVkPhysicalDevice();
-
-    VkSurfaceKHR surfaceVk;
-    VkSurfaceCapabilitiesKHR surfaceCapsVk;
-    DAWN_TRY_ASSIGN(surfaceVk, CreateVulkanSurface(physicalDevice, surface));
-
-    DAWN_TRY(CheckVkSuccess(
-        fn.GetPhysicalDeviceSurfaceCapabilitiesKHR(vkPhysicalDevice, surfaceVk, &surfaceCapsVk),
-        "GetPhysicalDeviceSurfaceCapabilitiesKHR"));
-
-    wgpu::TextureUsage supportedUsages = wgpu::TextureUsage::None;
-    if (surfaceCapsVk.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
-        supportedUsages |= wgpu::TextureUsage::CopySrc;
-    }
-    if (surfaceCapsVk.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT) {
-        supportedUsages |= wgpu::TextureUsage::CopyDst;
-    }
-    if (surfaceCapsVk.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) {
-        supportedUsages |= wgpu::TextureUsage::RenderAttachment;
-    }
-    if (surfaceCapsVk.supportedUsageFlags & VK_IMAGE_USAGE_SAMPLED_BIT) {
-        supportedUsages |= wgpu::TextureUsage::TextureBinding;
-    }
-
-    fn.DestroySurfaceKHR(instanceVk, surfaceVk, nullptr);
-
-    return supportedUsages;
-}
 
 // static
 ResultOrError<Ref<SwapChain>> SwapChain::Create(Device* device,
@@ -182,7 +150,8 @@ MaybeError SwapChain::Initialize(SwapChainBase* previousSwapChain) {
     }
 
     if (mVkSurface == VK_NULL_HANDLE) {
-        DAWN_TRY_ASSIGN(mVkSurface, CreateVulkanSurface(physicalDevice, GetSurface()));
+        DAWN_TRY_ASSIGN(mVkSurface,
+                        CreateVulkanSurface(device->GetInstance(), physicalDevice, GetSurface()));
     }
 
     VulkanSurfaceInfo surfaceInfo;
@@ -261,9 +230,10 @@ ResultOrError<SwapChain::Config> SwapChain::ChooseConfig(
         };
 
         VkPresentModeKHR targetMode = ToVulkanPresentMode(GetPresentMode());
-        const std::array<VkPresentModeKHR, 3> kPresentModeFallbacks = {
+        const std::array<VkPresentModeKHR, 4> kPresentModeFallbacks = {
             VK_PRESENT_MODE_IMMEDIATE_KHR,
             VK_PRESENT_MODE_MAILBOX_KHR,
+            VK_PRESENT_MODE_FIFO_RELAXED_KHR,
             VK_PRESENT_MODE_FIFO_KHR,
         };
 
@@ -295,7 +265,7 @@ ResultOrError<SwapChain::Config> SwapChain::ChooseConfig(
 
     // Choose the target usage or do a blit.
     VkImageUsageFlags targetUsages =
-        VulkanImageUsage(GetUsage(), GetDevice()->GetValidInternalFormat(GetFormat()));
+        VulkanImageUsage(GetDevice(), GetUsage(), GetDevice()->GetValidInternalFormat(GetFormat()));
     VkImageUsageFlags supportedUsages = surfaceInfo.capabilities.supportedUsageFlags;
     if (!IsSubset(targetUsages, supportedUsages)) {
         config.needsBlit = true;
@@ -616,14 +586,15 @@ void SwapChain::DetachFromSurfaceImpl() {
     }
 }
 
-ResultOrError<VkSurfaceKHR> CreateVulkanSurface(const PhysicalDevice* physicalDevice,
+ResultOrError<VkSurfaceKHR> CreateVulkanSurface(InstanceBase* instance,
+                                                const PhysicalDevice* physicalDevice,
                                                 const Surface* surface) {
     // May not be used in the platform-specific switches below.
     [[maybe_unused]] const VulkanGlobalInfo& info =
         physicalDevice->GetVulkanInstance()->GetGlobalInfo();
     [[maybe_unused]] const VulkanFunctions& fn =
         physicalDevice->GetVulkanInstance()->GetFunctions();
-    [[maybe_unused]] VkInstance instance = physicalDevice->GetVulkanInstance()->GetVkInstance();
+    [[maybe_unused]] VkInstance vkInstance = physicalDevice->GetVulkanInstance()->GetVkInstance();
 
     switch (surface->GetType()) {
 #if defined(DAWN_ENABLE_BACKEND_METAL)
@@ -637,7 +608,7 @@ ResultOrError<VkSurfaceKHR> CreateVulkanSurface(const PhysicalDevice* physicalDe
 
                 VkSurfaceKHR vkSurface = VK_NULL_HANDLE;
                 DAWN_TRY(CheckVkSuccess(
-                    fn.CreateMetalSurfaceEXT(instance, &createInfo, nullptr, &*vkSurface),
+                    fn.CreateMetalSurfaceEXT(vkInstance, &createInfo, nullptr, &*vkSurface),
                     "CreateMetalSurface"));
                 return vkSurface;
             }
@@ -656,7 +627,7 @@ ResultOrError<VkSurfaceKHR> CreateVulkanSurface(const PhysicalDevice* physicalDe
 
                 VkSurfaceKHR vkSurface = VK_NULL_HANDLE;
                 DAWN_TRY(CheckVkSuccess(
-                    fn.CreateWin32SurfaceKHR(instance, &createInfo, nullptr, &*vkSurface),
+                    fn.CreateWin32SurfaceKHR(vkInstance, &createInfo, nullptr, &*vkSurface),
                     "CreateWin32Surface"));
                 return vkSurface;
             }
@@ -677,7 +648,7 @@ ResultOrError<VkSurfaceKHR> CreateVulkanSurface(const PhysicalDevice* physicalDe
 
                 VkSurfaceKHR vkSurface = VK_NULL_HANDLE;
                 DAWN_TRY(CheckVkSuccess(
-                    fn.CreateAndroidSurfaceKHR(instance, &createInfo, nullptr, &*vkSurface),
+                    fn.CreateAndroidSurfaceKHR(vkInstance, &createInfo, nullptr, &*vkSurface),
                     "CreateAndroidSurfaceKHR"));
                 return vkSurface;
             }
@@ -699,7 +670,7 @@ ResultOrError<VkSurfaceKHR> CreateVulkanSurface(const PhysicalDevice* physicalDe
 
                 VkSurfaceKHR vkSurface = VK_NULL_HANDLE;
                 DAWN_TRY(CheckVkSuccess(
-                    fn.CreateWaylandSurfaceKHR(instance, &createInfo, nullptr, &*vkSurface),
+                    fn.CreateWaylandSurfaceKHR(vkInstance, &createInfo, nullptr, &*vkSurface),
                     "CreateWaylandSurface"));
                 return vkSurface;
             }
@@ -719,7 +690,7 @@ ResultOrError<VkSurfaceKHR> CreateVulkanSurface(const PhysicalDevice* physicalDe
 
                 VkSurfaceKHR vkSurface = VK_NULL_HANDLE;
                 DAWN_TRY(CheckVkSuccess(
-                    fn.CreateXlibSurfaceKHR(instance, &createInfo, nullptr, &*vkSurface),
+                    fn.CreateXlibSurfaceKHR(vkInstance, &createInfo, nullptr, &*vkSurface),
                     "CreateXlibSurface"));
                 return vkSurface;
             }
@@ -727,7 +698,7 @@ ResultOrError<VkSurfaceKHR> CreateVulkanSurface(const PhysicalDevice* physicalDe
             // Fall back to using XCB surfaces if the Xlib extension isn't available.
             // See https://xcb.freedesktop.org/MixingCalls/ for more information about
             // interoperability between Xlib and XCB
-            const X11Functions* x11 = physicalDevice->GetInstance()->GetOrLoadX11Functions();
+            const X11Functions* x11 = instance->GetOrLoadX11Functions();
             DAWN_ASSERT(x11 != nullptr);
 
             if (info.HasExt(InstanceExt::XcbSurface) && x11->IsX11XcbLoaded()) {
@@ -742,7 +713,7 @@ ResultOrError<VkSurfaceKHR> CreateVulkanSurface(const PhysicalDevice* physicalDe
 
                 VkSurfaceKHR vkSurface = VK_NULL_HANDLE;
                 DAWN_TRY(CheckVkSuccess(
-                    fn.CreateXcbSurfaceKHR(instance, &createInfo, nullptr, &*vkSurface),
+                    fn.CreateXcbSurfaceKHR(vkInstance, &createInfo, nullptr, &*vkSurface),
                     "CreateXcbSurfaceKHR"));
                 return vkSurface;
             }

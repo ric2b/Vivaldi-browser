@@ -55,7 +55,7 @@ static avifBool avifJPEGCopyPixels(avifImage * avif, uint32_t sizeLimit, struct 
 
     avif->width = cinfo->image_width;
     avif->height = cinfo->image_height;
-    if ((uint32_t)avif->width > sizeLimit / (uint32_t)avif->height) {
+    if (avif->width > sizeLimit / avif->height) {
         return AVIF_FALSE;
     }
 
@@ -297,13 +297,13 @@ static uint32_t avifJPEGReadUint32LittleEndian(const uint8_t * src)
 // Reads a 2-byte unsigned integer in big-endian format from the raw bitstream src.
 static uint16_t avifJPEGReadUint16BigEndian(const uint8_t * src)
 {
-    return ((uint32_t)src[0] << 8) | ((uint32_t)src[1] << 0);
+    return (uint16_t)((src[0] << 8) | (src[1] << 0));
 }
 
 // Reads a 2-byte unsigned integer in little-endian format from the raw bitstream src.
 static uint16_t avifJPEGReadUint16LittleEndian(const uint8_t * src)
 {
-    return ((uint32_t)src[0] << 0) | ((uint32_t)src[1] << 8);
+    return (uint16_t)((src[0] << 0) | (src[1] << 8));
 }
 
 // Reads 'numBytes' at 'offset', stores them in 'bytes' and increases 'offset'.
@@ -601,7 +601,6 @@ static avifBool avifJPEGParseGainMapXMPProperties(const xmlNode * rootNode, avif
 
     avifGainMapMetadataDouble metadataDouble;
     // Set default values from Adobe's spec.
-    metadataDouble.backwardDirection = AVIF_FALSE;
     metadataDouble.baseHdrHeadroom = 0.0;
     metadataDouble.alternateHdrHeadroom = 1.0;
     for (int i = 0; i < 3; ++i) {
@@ -637,13 +636,11 @@ static avifBool avifJPEGParseGainMapXMPProperties(const xmlNode * rootNode, avif
     const char * baseRenditionIsHDR;
     if (avifJPEGFindGainMapProperty(descNode, "BaseRenditionIsHDR", /*maxValues=*/1, &baseRenditionIsHDR, &numValues)) {
         if (!strcmp(baseRenditionIsHDR, "True")) {
-            metadataDouble.backwardDirection = AVIF_TRUE;
             SwapDoubles(&metadataDouble.baseHdrHeadroom, &metadataDouble.alternateHdrHeadroom);
             for (int c = 0; c < 3; ++c) {
                 SwapDoubles(&metadataDouble.baseOffset[c], &metadataDouble.alternateOffset[c]);
             }
         } else if (!strcmp(baseRenditionIsHDR, "False")) {
-            metadataDouble.backwardDirection = AVIF_FALSE;
         } else {
             return AVIF_FALSE; // Unexpected value.
         }

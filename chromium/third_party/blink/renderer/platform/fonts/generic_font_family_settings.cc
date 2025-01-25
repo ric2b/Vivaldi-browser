@@ -49,7 +49,8 @@ GenericFontFamilySettings::GenericFontFamilySettings(
       sans_serif_font_family_map_(other.sans_serif_font_family_map_),
       cursive_font_family_map_(other.cursive_font_family_map_),
       fantasy_font_family_map_(other.fantasy_font_family_map_),
-      math_font_family_map_(other.math_font_family_map_) {}
+      math_font_family_map_(other.math_font_family_map_),
+      first_available_font_for_families_(other.first_available_font_for_families_) {}
 
 GenericFontFamilySettings& GenericFontFamilySettings::operator=(
     const GenericFontFamilySettings& other) {
@@ -60,6 +61,7 @@ GenericFontFamilySettings& GenericFontFamilySettings::operator=(
   cursive_font_family_map_ = other.cursive_font_family_map_;
   fantasy_font_family_map_ = other.fantasy_font_family_map_;
   math_font_family_map_ = other.math_font_family_map_;
+  first_available_font_for_families_ = other.first_available_font_for_families_;
   return *this;
 }
 
@@ -161,7 +163,16 @@ bool GenericFontFamilySettings::UpdateStandard(const AtomicString& family,
 }
 
 const AtomicString& GenericFontFamilySettings::Fixed(UScriptCode script) const {
-  return GenericFontFamilyForScript(fixed_font_family_map_, script);
+  const AtomicString& fixed_font =
+      GenericFontFamilyForScript(fixed_font_family_map_, script);
+#if BUILDFLAG(IS_MAC)
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(AtomicString, kOsaka, ("Osaka"));
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(AtomicString, kOsakaMono, ("Osaka-Mono"));
+  if (fixed_font == kOsaka) {
+    return kOsakaMono;
+  }
+#endif
+  return fixed_font;
 }
 
 bool GenericFontFamilySettings::UpdateFixed(const AtomicString& family,

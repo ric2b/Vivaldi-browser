@@ -68,7 +68,6 @@ class LoadingPageVoterTest : public GraphTestHarness {
   LoadingPageVoterTest& operator=(const LoadingPageVoterTest&) = delete;
 
   void SetUp() override {
-    GetGraphFeatures().EnableExecutionContextRegistry();
     Super::SetUp();
     auto wrapper = std::make_unique<GraphOwnedWrapper>();
     wrapper_ = wrapper.get();
@@ -102,11 +101,11 @@ TEST_F(LoadingPageVoterTest, VoteIfLoading) {
   EXPECT_EQ(observer().GetVoteCount(), 2u);
   EXPECT_TRUE(observer().HasVote(voter_id(),
                                  GetExecutionContext(frame_node.get()),
-                                 base::TaskPriority::USER_VISIBLE,
+                                 base::TaskPriority::USER_BLOCKING,
                                  LoadingPageVoter::kPageIsLoadingReason));
   EXPECT_TRUE(observer().HasVote(voter_id(),
                                  GetExecutionContext(child_frame_node.get()),
-                                 base::TaskPriority::USER_VISIBLE,
+                                 base::TaskPriority::USER_BLOCKING,
                                  LoadingPageVoter::kPageIsLoadingReason));
 
   // Still voting when the page is in the state kLoadedBusy.
@@ -115,11 +114,11 @@ TEST_F(LoadingPageVoterTest, VoteIfLoading) {
   EXPECT_EQ(observer().GetVoteCount(), 2u);
   EXPECT_TRUE(observer().HasVote(voter_id(),
                                  GetExecutionContext(frame_node.get()),
-                                 base::TaskPriority::USER_VISIBLE,
+                                 base::TaskPriority::USER_BLOCKING,
                                  LoadingPageVoter::kPageIsLoadingReason));
   EXPECT_TRUE(observer().HasVote(voter_id(),
                                  GetExecutionContext(child_frame_node.get()),
-                                 base::TaskPriority::USER_VISIBLE,
+                                 base::TaskPriority::USER_BLOCKING,
                                  LoadingPageVoter::kPageIsLoadingReason));
 
   // Add a frame while the page is loading.
@@ -129,15 +128,15 @@ TEST_F(LoadingPageVoterTest, VoteIfLoading) {
   EXPECT_EQ(observer().GetVoteCount(), 3u);
   EXPECT_TRUE(observer().HasVote(voter_id(),
                                  GetExecutionContext(frame_node.get()),
-                                 base::TaskPriority::USER_VISIBLE,
+                                 base::TaskPriority::USER_BLOCKING,
                                  LoadingPageVoter::kPageIsLoadingReason));
   EXPECT_TRUE(observer().HasVote(voter_id(),
                                  GetExecutionContext(child_frame_node.get()),
-                                 base::TaskPriority::USER_VISIBLE,
+                                 base::TaskPriority::USER_BLOCKING,
                                  LoadingPageVoter::kPageIsLoadingReason));
   EXPECT_TRUE(observer().HasVote(
       voter_id(), GetExecutionContext(other_child_frame_node.get()),
-      base::TaskPriority::USER_VISIBLE,
+      base::TaskPriority::USER_BLOCKING,
       LoadingPageVoter::kPageIsLoadingReason));
 
   // Remove a frame while the page is loading.
@@ -146,11 +145,11 @@ TEST_F(LoadingPageVoterTest, VoteIfLoading) {
   EXPECT_EQ(observer().GetVoteCount(), 2u);
   EXPECT_TRUE(observer().HasVote(voter_id(),
                                  GetExecutionContext(frame_node.get()),
-                                 base::TaskPriority::USER_VISIBLE,
+                                 base::TaskPriority::USER_BLOCKING,
                                  LoadingPageVoter::kPageIsLoadingReason));
   EXPECT_TRUE(observer().HasVote(voter_id(),
                                  GetExecutionContext(child_frame_node.get()),
-                                 base::TaskPriority::USER_VISIBLE,
+                                 base::TaskPriority::USER_BLOCKING,
                                  LoadingPageVoter::kPageIsLoadingReason));
 
   // Finish loading.

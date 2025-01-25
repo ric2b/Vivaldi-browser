@@ -6,6 +6,7 @@
 #import "base/check.h"
 #import "base/strings/sys_string_conversions.h"
 #import "chromium/base/containers/stack.h"
+#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/browser/bookmark_model_observer.h"
 #import "components/bookmarks/common/bookmark_pref_names.h"
 #import "components/bookmarks/managed/managed_bookmark_service.h"
@@ -14,23 +15,23 @@
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_bridge_observer.h"
-#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
-#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/model/managed_bookmark_service_factory.h"
 #import "ios/chrome/browser/features/vivaldi_features.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
-#import "ios/chrome/browser/ui/content_suggestions/magic_stack/most_visited_tiles_config.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/most_visited_tiles_config.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
+#import "ios/most_visited_sites/vivaldi_most_visited_sites_manager.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/ui/ntp/top_toolbar/top_toolbar_swift.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_prefs_helper.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_prefs.h"
-#import "ios/most_visited_sites/vivaldi_most_visited_sites_manager.h"
 #import "prefs/vivaldi_pref_names.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
@@ -41,7 +42,6 @@ using bookmarks::BookmarkNode;
 using bookmarks::ManagedBookmarkService;
 using vivaldi_bookmark_kit::GetSpeeddial;
 using vivaldi_bookmark_kit::IsSeparator;
-using vivaldi_bookmark_kit::SetNodeSpeeddial;
 using l10n_util::GetNSString;
 
 @interface VivaldiSpeedDialHomeMediator ()<BookmarkModelBridgeObserver,
@@ -86,7 +86,7 @@ using l10n_util::GetNSString;
 
 @implementation VivaldiSpeedDialHomeMediator {
   // The model holding bookmark data.
-  base::WeakPtr<LegacyBookmarkModel> _bookmarkModel;
+  base::WeakPtr<BookmarkModel> _bookmarkModel;
   // Bridge to register for bookmark changes in the bookmarkModel.
   std::unique_ptr<BookmarkModelBridge> _bookmarkModelBridge;
 }
@@ -98,7 +98,7 @@ using l10n_util::GetNSString;
 
 #pragma mark - INITIALIZERS
 - (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState
-                       bookmarkModel:(LegacyBookmarkModel*)bookmarkModel {
+                       bookmarkModel:(BookmarkModel*)bookmarkModel {
   if ((self = [super init])) {
     _browserState = browserState;
     _bookmarkModel = bookmarkModel->AsWeakPtr();
@@ -128,8 +128,9 @@ using l10n_util::GetNSString;
     [self booleanDidChange:_tabBarEnabled];
 
     _bottomOmniboxEnabled =
-        [[PrefBackedBoolean alloc] initWithPrefService:_prefs
-                                              prefName:prefs::kBottomOmnibox];
+        [[PrefBackedBoolean alloc]
+            initWithPrefService:GetApplicationContext()->GetLocalState()
+                 prefName:prefs::kBottomOmnibox];
     [_bottomOmniboxEnabled setObserver:self];
     [self booleanDidChange:_bottomOmniboxEnabled];
 
@@ -215,7 +216,10 @@ using l10n_util::GetNSString;
 }
 
 - (void)computeSpeedDialFolders {
-  [_mostVisitedSiteManager start];
+  if (IsTopSitesEnabled()) {
+    [_mostVisitedSiteManager start];
+  }
+
   if (_bookmarkModel && _bookmarkModel->loaded())
     [self fetchSpeedDialFolders];
 }
@@ -254,7 +258,7 @@ using l10n_util::GetNSString;
 
   NSMutableArray* sortedItems = [[NSMutableArray alloc] initWithArray:@[]];
 
-  if (IsNewStartPageIsEnabled() && [self showFrequentlyVisited]) {
+  if (IsTopSitesEnabled() && [self showFrequentlyVisited]) {
     NSMutableArray* frequentlyVisitedPages = [[NSMutableArray alloc] init];
     for (ContentSuggestionsMostVisitedItem* tile in
               _mostVisitedConfig.mostVisitedItems) {
@@ -357,27 +361,23 @@ using l10n_util::GetNSString;
   // Create a collection of array with speed dial folder item title.
   NSMutableArray *menuItems = [[NSMutableArray alloc] init];
 
-  if (IsNewStartPageIsEnabled()) {
+  if (IsTopSitesEnabled() && [self showFrequentlyVisited]) {
+    [menuItems addObject:
+        [self toolbarItemWithId:nil
+            title:GetNSString(IDS_IOS_START_PAGE_FREQUENTLY_VISITED_TITLE)]];
+  }
 
-    if ([self showFrequentlyVisited]) {
-      [menuItems
-          addObject:GetNSString(IDS_IOS_START_PAGE_FREQUENTLY_VISITED_TITLE)];
-    }
-
-    // Only proceed to add dynamic items if they are visible
-    if ([self showSpeedDials]) {
-      for (VivaldiSpeedDialItem *item in self.speedDialFolders) {
-        [menuItems addObject:item.title];
-      }
-    }
-    // Add an extra menu item with empty string at the end for 'Add Group' page.
-    // We do not need the title since the item will not have any title.
-    [menuItems addObject:@""];
-  } else {
+  // Only proceed to add dynamic items if they are visible
+  if ([self showSpeedDials]) {
     for (VivaldiSpeedDialItem *item in self.speedDialFolders) {
-      [menuItems addObject:item.title];
+      [menuItems addObject:[self toolbarItemWithId:item.idValue
+                                             title:item.title]];
     }
   }
+  // Add an extra menu item with empty string at the end for 'Add Group' page.
+  // We do not need the title since the item will not have any title.
+  [menuItems addObject:[self toolbarItemWithId:nil
+                                         title:@""]];
 
   // Refresh menu items
   [self.consumer refreshMenuItems:menuItems
@@ -435,6 +435,11 @@ using l10n_util::GetNSString;
   }
 
   return items;
+}
+
+- (VivaldiNTPTopToolbarItem*)toolbarItemWithId:(NSNumber*)idValue
+                                         title:(NSString*)title {
+  return [[VivaldiNTPTopToolbarItem alloc] initWithId:idValue title:title];
 }
 
 /// Sort and return children of a speed dial folder
@@ -513,7 +518,7 @@ using l10n_util::GetNSString;
 
 - (BOOL)showFrequentlyVisited {
   if (!_showFrequentlyVisited)
-    return YES;
+    return NO;
   return [_showFrequentlyVisited value];
 }
 
@@ -552,36 +557,31 @@ using l10n_util::GetNSString;
 
 #pragma mark - BOOKMARK MODEL OBSERVER
 
-- (void)bookmarkModelLoaded:(LegacyBookmarkModel*)model {
+- (void)bookmarkModelLoaded {
   [self.consumer bookmarkModelLoaded];
   [self startMediating];
 }
 
-- (void)bookmarkModel:(LegacyBookmarkModel*)model
-        didChangeNode:(const bookmarks::BookmarkNode*)bookmarkNode {
+- (void)didChangeNode:(const bookmarks::BookmarkNode*)bookmarkNode {
   [self.consumer refreshNode:bookmarkNode];
 }
 
-- (void)bookmarkModel:(LegacyBookmarkModel*)model
-    didChangeChildrenForNode:(const bookmarks::BookmarkNode*)bookmarkNode {
+- (void)didChangeChildrenForNode:(const bookmarks::BookmarkNode*)bookmarkNode {
   [self refreshContents];
 }
 
-- (void)bookmarkModel:(LegacyBookmarkModel*)model
-          didMoveNode:(const bookmarks::BookmarkNode*)bookmarkNode
-           fromParent:(const bookmarks::BookmarkNode*)oldParent
-             toParent:(const bookmarks::BookmarkNode*)newParent {
+- (void)didMoveNode:(const bookmarks::BookmarkNode*)bookmarkNode
+         fromParent:(const bookmarks::BookmarkNode*)oldParent
+           toParent:(const bookmarks::BookmarkNode*)newParent {
   [self refreshContents];
 }
 
-- (void)bookmarkModel:(LegacyBookmarkModel*)model
-        didDeleteNode:(const bookmarks::BookmarkNode*)node
+- (void)didDeleteNode:(const bookmarks::BookmarkNode*)node
            fromFolder:(const bookmarks::BookmarkNode*)folder {
   [self refreshContents];
 }
 
-- (void)bookmarkModel:(LegacyBookmarkModel*)model
-    didChangeFaviconForNode:(const bookmarks::BookmarkNode*)bookmarkNode {
+- (void)didChangeFaviconForNode:(const bookmarks::BookmarkNode*)bookmarkNode {
   // Only urls have favicons.
   if (!bookmarkNode->is_url())
     return;
@@ -593,7 +593,7 @@ using l10n_util::GetNSString;
   }
 }
 
-- (void)bookmarkModelRemovedAllNodes:(LegacyBookmarkModel*)model {
+- (void)bookmarkModelRemovedAllNodes {
   // No-op.
 }
 

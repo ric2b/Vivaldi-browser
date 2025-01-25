@@ -2,11 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/base/proxy_chain.h"
 
 #include <optional>
 #include <sstream>
 
+#include "base/pickle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/gtest_util.h"
 #include "net/base/proxy_server.h"
@@ -498,6 +504,39 @@ TEST(ProxyChainTest, Equal) {
   EXPECT_FALSE(proxy_chain3 < proxy_chain2);
   EXPECT_TRUE(proxy_chain3 == proxy_chain2);
   EXPECT_TRUE(proxy_chain3 == proxy_chain2);
+}
+
+TEST(ProxyChainTest, PickleDirect) {
+  ProxyChain proxy_chain = ProxyChain::Direct();
+  base::Pickle pickle;
+  proxy_chain.Persist(&pickle);
+  base::PickleIterator iter(pickle);
+  ProxyChain proxy_chain_from_pickle;
+  proxy_chain_from_pickle.InitFromPickle(&iter);
+  EXPECT_EQ(proxy_chain, proxy_chain_from_pickle);
+}
+
+TEST(ProxyChainTest, PickleOneProxy) {
+  ProxyChain proxy_chain =
+      ProxyChain(ProxyUriToProxyServer("foo:11", ProxyServer::SCHEME_HTTPS));
+  base::Pickle pickle;
+  proxy_chain.Persist(&pickle);
+  base::PickleIterator iter(pickle);
+  ProxyChain proxy_chain_from_pickle;
+  proxy_chain_from_pickle.InitFromPickle(&iter);
+  EXPECT_EQ(proxy_chain, proxy_chain_from_pickle);
+}
+
+TEST(ProxyChainTest, PickleTwoProxies) {
+  ProxyChain proxy_chain =
+      ProxyChain({ProxyUriToProxyServer("foo:11", ProxyServer::SCHEME_HTTPS),
+                  ProxyUriToProxyServer("foo:22", ProxyServer::SCHEME_HTTPS)});
+  base::Pickle pickle;
+  proxy_chain.Persist(&pickle);
+  base::PickleIterator iter(pickle);
+  ProxyChain proxy_chain_from_pickle;
+  proxy_chain_from_pickle.InitFromPickle(&iter);
+  EXPECT_EQ(proxy_chain, proxy_chain_from_pickle);
 }
 
 }  // namespace

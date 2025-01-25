@@ -120,7 +120,7 @@ _reclient = struct(
 )
 
 def get_properties(
-        is_release = False,
+        is_debug = True,
         is_gcc = False,
         is_asan = False,
         is_tsan = False,
@@ -135,7 +135,7 @@ def get_properties(
     """Property generator method, used to configure the build system.
 
     Args:
-      is_release: if True, the build mode is release instead of debug.
+      is_debug: if False, the build mode is release instead of debug.
       is_gcc: if True, the GCC compiler is used instead of clang.
       is_asan: if True, this is an address sanitizer build.
       is_msan: if True, this is a memory sanitizer build.
@@ -156,17 +156,15 @@ def get_properties(
     properties = {
         "clang_use_chrome_plugins": False,
         "target_cpu": target_cpu,
-        "$depot_tools/bot_update": {
-            "apply_patch_on_gclient": True,
-        },
         "$recipe_engine/swarming": {
             "server": "https://chromium-swarm.appspot.com",
         },
     }
-    if not is_release:
-        properties["is_debug"] = True
+    if not is_debug:
+        properties["is_debug"] = False
     if is_gcc:
         properties["is_clang"] = False
+        properties["use_custom_libcxx"] = False
     if is_asan:
         properties["is_asan"] = True
     if is_msan:
@@ -325,7 +323,7 @@ def try_and_ci_builders(name, properties, os = "Ubuntu-20.04", cpu = "x86-64"):
 
 try_builder(
     "openscreen_presubmit",
-    get_properties(is_presubmit = True, is_release = True),
+    get_properties(is_presubmit = True, is_debug = False),
 )
 try_and_ci_builders(
     "linux_arm64_cast_receiver",
@@ -339,11 +337,11 @@ try_and_ci_builders(
 )
 try_and_ci_builders(
     "linux_x64_msan_rel",
-    get_properties(is_release = True, is_msan = True),
+    get_properties(is_debug = False, is_msan = True),
 )
 try_and_ci_builders(
     "linux_x64_tsan_rel",
-    get_properties(is_release = True, is_tsan = True),
+    get_properties(is_debug = False, is_tsan = True),
 )
 try_and_ci_builders(
     "linux_arm64",

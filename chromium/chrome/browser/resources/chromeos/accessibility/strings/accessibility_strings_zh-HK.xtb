@@ -264,7 +264,6 @@
 <translation id="2783001728278437613">{COUNT,plural, =1{+#}other{+#}}</translation>
 <translation id="2792200646155001340">如要移至上一個項目，亦可以單指由右至左滑動。立即試試吧。</translation>
 <translation id="280499067616661124">ChromeVox 從網頁中尋找</translation>
-<translation id="2811019999044652585">如要跳到畫面上的其他部分 (例如工具列或系統列)，請按 Control + Forward 鍵。Chromebook 的 Forward 鍵位於數字 2 鍵的正上方。</translation>
 <translation id="2811204574343810641">列</translation>
 <translation id="2816868829355607410">練習區：跳轉指令</translation>
 <translation id="2841013758207633010">時間</translation>
@@ -520,6 +519,7 @@
 <translation id="4432457053224379116">印度紅色</translation>
 <translation id="4432896207833262240">已標示的內容</translation>
 <translation id="4437615272777527928">輸入要喺選單度搵嘅字詞。用向上/向下箭咀就可以切換搜尋結果，用向左/向右箭咀就可以調整文字插入符號，同埋喺選單之間移動。</translation>
+<translation id="4453530046591759283">如要跳至螢幕的其他部分 (例如工具列或系統列)，請按下 Control + F1 鍵。F1 是 Escape 鍵右側的第一個鍵。</translation>
 <translation id="4457472090507035117">選取目前的語音：</translation>
 <translation id="4476183483923481720">換行</translation>
 <translation id="4479068155583208887">磚紅色</translation>
@@ -880,6 +880,7 @@
 <translation id="7091296112653361280">那瓦霍白色</translation>
 <translation id="7095834689119144465">編輯文字時只限輸入數字</translation>
 <translation id="7096001299300236431">上一個媒體元素</translation>
+<translation id="7096668131290451939">再㩒一下 Escape 掣就可以退出學習模式</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">字詞語音回應</translation>
 <translation id="7137397390322864165">鮭紅色</translation>

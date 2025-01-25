@@ -54,7 +54,7 @@ class CC_EXPORT PictureLayerImpl
   bool is_backdrop_filter_mask() const { return is_backdrop_filter_mask_; }
 
   // LayerImpl overrides.
-  const char* LayerTypeAsString() const override;
+  mojom::LayerType GetLayerType() const override;
   std::unique_ptr<LayerImpl> CreateLayerImpl(
       LayerTreeImpl* tree_impl) const override;
   void PushPropertiesTo(LayerImpl* layer) override;
@@ -81,9 +81,10 @@ class CC_EXPORT PictureLayerImpl
   bool HasValidTilePriorities() const override;
   bool RequiresHighResToDraw() const override;
   const PaintWorkletRecordMap& GetPaintWorkletRecords() const override;
-  bool ScrollInteractionInProgress() const override;
-  bool CurrentScrollCheckerboardsDueToNoRecording() const override;
   void OnTilesAdded() override;
+  std::vector<const DrawImage*> GetDiscardableImagesInRect(
+      const gfx::Rect& rect) const override;
+  ScrollOffsetMap GetRasterInducingScrollOffsets() const override;
 
   // ImageAnimationController::AnimationDriver overrides.
   bool ShouldAnimate(PaintImage::Id paint_image_id) const override;
@@ -96,11 +97,9 @@ class CC_EXPORT PictureLayerImpl
     return gpu_raster_max_texture_size_;
   }
 
-  void UpdateRasterSource(
-      scoped_refptr<RasterSource> raster_source,
-      Region* new_invalidation,
-      const PictureLayerTilingSet* pending_set,
-      const PaintWorkletRecordMap* pending_paint_worklet_records);
+  void UpdateRasterSource(scoped_refptr<RasterSource> raster_source,
+                          Region* new_invalidation);
+  void RegenerateDiscardableImageMapIfNeeded();
   bool UpdateTiles();
 
   // Mask-related functions.
@@ -136,6 +135,9 @@ class CC_EXPORT PictureLayerImpl
 
   ImageInvalidationResult InvalidateRegionForImages(
       const PaintImageIdFlatSet& images_to_invalidate);
+
+  void InvalidateRasterInducingScrolls(
+      const base::flat_set<ElementId>& scrolls_to_invalidate);
 
   bool can_use_lcd_text() const {
     return lcd_text_disallowed_reason_ == LCDTextDisallowedReason::kNone;
@@ -207,6 +209,13 @@ class CC_EXPORT PictureLayerImpl
   // their contents scale.
   float CalculateDirectlyCompositedImageRasterScale() const;
 
+  void UpdateRasterSourceInternal(
+      scoped_refptr<RasterSource> raster_source,
+      Region* new_invalidation,
+      const PictureLayerTilingSet* pending_set,
+      const PaintWorkletRecordMap* pending_paint_worklet_records,
+      const DiscardableImageMap* pending_discardable_image_map);
+
   bool IsDirectlyCompositedImage() const;
   void UpdateDirectlyCompositedImageFromRasterSource();
 
@@ -245,6 +254,7 @@ class CC_EXPORT PictureLayerImpl
       CreatePictureLayerTilingSet();
   scoped_refptr<RasterSource> raster_source_;
   Region invalidation_;
+  scoped_refptr<const DiscardableImageMap> discardable_image_map_;
 
   // Ideal scales are calcuated from the transforms applied to the layer. They
   // represent the best known scale from the layer to the final output.
@@ -292,6 +302,8 @@ class CC_EXPORT PictureLayerImpl
   bool raster_source_size_changed_ : 1 = false;
 
   bool directly_composited_image_default_raster_scale_changed_ : 1 = false;
+
+  bool needs_regenerate_discardable_image_map_ : 1 = false;
 
   LCDTextDisallowedReason lcd_text_disallowed_reason_ =
       LCDTextDisallowedReason::kNoText;

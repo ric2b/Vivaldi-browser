@@ -1199,6 +1199,18 @@ class V8_EXPORT HeapProfiler {
   void SetGetDetachednessCallback(GetDetachednessCallback callback, void* data);
 
   /**
+   * Returns whether the heap profiler is currently taking a snapshot.
+   */
+  bool IsTakingSnapshot();
+
+  /**
+   * Allocates a copy of the provided string within the heap snapshot generator
+   * and returns a pointer to the copy. May only be called during heap snapshot
+   * generation.
+   */
+  const char* CopyNameForHeapSnapshot(const char* name);
+
+  /**
    * Default value of persistent handle class ID. Must not be used to
    * define a class. Can be used to reset a class of a persistent
    * handle.

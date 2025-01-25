@@ -186,11 +186,11 @@ class DummyAccountReconcilorWithDelegate : public AccountReconcilor {
         return std::make_unique<signin::DiceAccountReconcilorDelegate>(
             identity_manager, client);
 #else
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return nullptr;
 #endif
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
 };
@@ -687,7 +687,7 @@ class BaseAccountReconcilorTestTable : public AccountReconcilorTest {
       if (PickAccountIdForAccount(account.gaia_id, account.email) == account_id)
         return account;
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return Account();
   }
 
@@ -1610,7 +1610,7 @@ TEST_P(AccountReconcilorDiceTestWithUnoDesktop,
       prefs::kCookieClearOnExitMigrationNoticeComplete));
 
   // Changing cookie settings should trigger the migration.
-
+  test_signin_client()->set_are_signin_cookies_deleted_on_exit(false);
   reconcilor->OnContentSettingChanged(
       /*primary_pattern=*/ContentSettingsPattern(),
       /*secondary_pattern=*/ContentSettingsPattern(),
@@ -1651,7 +1651,7 @@ TEST_P(AccountReconcilorDiceTestWithUnoDesktop,
   ASSERT_FALSE(identity_test_env()->identity_manager()->HasPrimaryAccount(
       signin::ConsentLevel::kSignin));
 
-  // Implicit signin is auto-migrated.
+  // Signed out state is auto-migrated.
   GetMockReconcilor();
   EXPECT_EQ(is_uno_desktop_enabled(),
             pref_service()->GetBoolean(
@@ -1670,6 +1670,33 @@ TEST_P(AccountReconcilorDiceTestWithUnoDesktop, CookieSettingMigrationSync) {
   GetMockReconcilor();
   EXPECT_FALSE(pref_service()->GetBoolean(
       prefs::kCookieClearOnExitMigrationNoticeComplete));
+
+  // But is migrated on signout. Regression test for b/350888149.
+  identity_test_env()->ClearPrimaryAccount();
+  EXPECT_EQ(is_uno_desktop_enabled(),
+            pref_service()->GetBoolean(
+                prefs::kCookieClearOnExitMigrationNoticeComplete));
+}
+
+TEST_P(AccountReconcilorDiceTestWithUnoDesktop,
+       CookieSettingMigrationExplicitPref) {
+  ASSERT_FALSE(pref_service()->GetBoolean(
+      prefs::kCookieClearOnExitMigrationNoticeComplete));
+  AccountInfo account_info = identity_test_env()->MakePrimaryAccountAvailable(
+      kFakeEmail, signin::ConsentLevel::kSignin);
+  pref_service()->ClearPref(prefs::kExplicitBrowserSignin);
+  ASSERT_FALSE(pref_service()->GetBoolean(prefs::kExplicitBrowserSignin));
+
+  // Implicit signin is not auto-migrated.
+  GetMockReconcilor();
+  EXPECT_FALSE(pref_service()->GetBoolean(
+      prefs::kCookieClearOnExitMigrationNoticeComplete));
+
+  // Make the signin explicit, this triggers the migration.
+  pref_service()->SetBoolean(prefs::kExplicitBrowserSignin, true);
+  EXPECT_EQ(is_uno_desktop_enabled(),
+            pref_service()->GetBoolean(
+                prefs::kCookieClearOnExitMigrationNoticeComplete));
 }
 
 const std::vector<AccountReconcilorTestTableParam>
@@ -2698,7 +2725,7 @@ TEST_P(AccountReconcilorMethodParamTest,
       break;
     }
     case signin::AccountConsistencyMethod::kDisabled:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 
@@ -3165,6 +3192,48 @@ TEST_F(AccountReconcilorTest, UnlockAfterShutdown) {
   lock.reset();  // This should not crash.
   EXPECT_FALSE(reconcilor->is_reconcile_started_);
 }
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+TEST_F(AccountReconcilorTest, OnAccountsInCookieUpdatedLogoutInProgress) {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  signin::AccountConsistencyMethod account_consistency =
+      signin::AccountConsistencyMethod::kDice;
+  SetAccountConsistency(account_consistency);
+#else
+  signin::AccountConsistencyMethod account_consistency =
+      signin::AccountConsistencyMethod::kMirror;
+  SetAccountConsistency(account_consistency);
+#endif
+  signin::CookieParams cookie_params = {
+      kFakeEmail, signin::GetTestGaiaIdForEmail(kFakeEmail), true /* valid */,
+      false /* signed_out */, true /* verified */};
+
+  signin::SetListAccountsResponseOneAccountWithParams(
+      cookie_params, &test_url_loader_factory_);
+
+  EXPECT_CALL(*GetMockReconcilor(), PerformLogoutAllAccountsAction());
+
+  AccountReconcilor* reconcilor = GetMockReconcilor();
+  ASSERT_TRUE(reconcilor);
+
+  ASSERT_EQ(AccountReconcilorState::kScheduled, reconcilor->GetState());
+  reconcilor->StartReconcile(AccountReconcilor::Trigger::kCookieChange);
+  ASSERT_EQ(AccountReconcilorState::kRunning, reconcilor->GetState());
+
+  // Add extra cookie change notification. Reconcilor should ignore it.
+  reconcilor->OnAccountsInCookieUpdated(
+      identity_test_env()->identity_manager()->GetAccountsInCookieJar(),
+      GoogleServiceAuthError::AuthErrorNone());
+
+  base::RunLoop().RunUntilIdle();
+
+  SimulateLogOutFromCookieCompleted(reconcilor,
+                                    GoogleServiceAuthError::AuthErrorNone());
+
+  ASSERT_FALSE(reconcilor->is_reconcile_started_);
+  ASSERT_EQ(AccountReconcilorState::kOk, reconcilor->GetState());
+}
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 class AccountReconcilorThrottlerTest : public AccountReconcilorTest {
  public:

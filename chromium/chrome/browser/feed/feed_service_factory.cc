@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/check.h"
+#include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -29,6 +30,7 @@
 #include "components/feed/core/v2/public/feed_service.h"
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/variations/service/variations_service_utils.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
@@ -42,9 +44,6 @@
 
 namespace feed {
 const base::FilePath::CharType kFeedv2Folder[] = FILE_PATH_LITERAL("feedv2");
-#if BUILDFLAG(IS_ANDROID)
-const char kEeaCountryOnly[] = "eea_country_only";
-#endif
 
 namespace internal {
 const std::string_view GetFollowingFeedFollowCountGroupName(
@@ -88,6 +87,7 @@ class FeedServiceDelegateImpl : public FeedService::Delegate {
     return "en";
 #endif
   }
+  std::string GetCountry() override { return FeedServiceFactory::GetCountry(); }
   DisplayMetrics GetDisplayMetrics() override {
 #if BUILDFLAG(IS_ANDROID)
     return FeedServiceBridge::GetDisplayMetrics();
@@ -102,7 +102,7 @@ class FeedServiceDelegateImpl : public FeedService::Delegate {
   }
   TabGroupEnabledState GetTabGroupEnabledState() override {
 #if BUILDFLAG(IS_ANDROID)
-    return FeedServiceBridge::GetTabGroupEnabledState();
+    return TabGroupEnabledState::kBoth;
 #else
     return TabGroupEnabledState::kNone;
 #endif
@@ -120,13 +120,15 @@ class FeedServiceDelegateImpl : public FeedService::Delegate {
 #endif
   }
   void RegisterExperiments(const Experiments& experiments) override {
+    experiments_ = experiments;
+
     // Note that this does not affect the contents of the X-Client-Data
     // by design. We do not provide the variations IDs from the backend
     // and do not attach them to the X-Client-Data header.
     for (const auto& exp : experiments) {
-      for (const auto& group_name : exp.second) {
+      for (const auto& group : exp.second) {
         ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(exp.first,
-                                                                  group_name);
+                                                                  group.name);
       }
     }
   }
@@ -140,6 +142,10 @@ class FeedServiceDelegateImpl : public FeedService::Delegate {
     ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
         "FeedUserSettings", group);
   }
+  const Experiments& GetExperiments() const override { return experiments_; }
+
+ private:
+  Experiments experiments_;
 };
 
 // static
@@ -164,6 +170,12 @@ FeedServiceFactory* FeedServiceFactory::GetInstance() {
   return instance.get();
 }
 
+// static
+std::string FeedServiceFactory::GetCountry() {
+  return base::ToUpperASCII(variations::GetCurrentCountryCode(
+      g_browser_process->variations_service()));
+}
+
 FeedServiceFactory::FeedServiceFactory()
     : ProfileKeyedServiceFactory(
           "FeedService",
@@ -172,6 +184,9 @@ FeedServiceFactory::FeedServiceFactory()
               // TODO(crbug.com/40257657): Check if this service is needed in
               // Guest mode.
               .WithGuest(ProfileSelection::kOriginalOnly)
+              // TODO(crbug.com/41488885): Check if this service is needed for
+              // Ash Internals.
+              .WithAshInternals(ProfileSelection::kOriginalOnly)
               .Build()) {
   DependsOn(IdentityManagerFactory::GetInstance());
   DependsOn(HistoryServiceFactory::GetInstance());
@@ -211,17 +226,9 @@ FeedServiceFactory::BuildServiceInstanceForBrowserContext(
   TemplateURLService* template_url_service =
       TemplateURLServiceFactory::GetForProfile(profile);
 #if BUILDFLAG(IS_ANDROID)
-  chrome_info.start_surface =
-      base::FeatureList::IsEnabled(chrome::android::kStartSurfaceAndroid);
   chrome_info.is_new_tab_search_engine_url_android_enabled =
-      base::FeatureList::IsEnabled(
-          chrome::android::kNewTabSearchEngineUrlAndroid) &&
-      (!base::GetFieldTrialParamByFeatureAsBool(
-           chrome::android::kNewTabSearchEngineUrlAndroid, kEeaCountryOnly,
-           false) ||
-       template_url_service->IsEeaChoiceCountry());
+      template_url_service->IsEeaChoiceCountry();
 #else
-  chrome_info.start_surface = false;
   chrome_info.is_new_tab_search_engine_url_android_enabled = false;
 #endif
 

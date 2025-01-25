@@ -23,7 +23,7 @@
 
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
-use clap::{self, Parser as _};
+use clap::Parser as _;
 use crypto_provider::aes::BLOCK_SIZE;
 use crypto_provider::{CryptoProvider, CryptoRng};
 use crypto_provider_rustcrypto::RustCrypto;

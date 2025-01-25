@@ -35,6 +35,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_creation_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_descriptor.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_parameters.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_report_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_request_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_rp_entity.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_user_entity.h"
@@ -49,7 +50,6 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
 #include "third_party/boringssl/src/include/openssl/sha.h"
-
 namespace mojo {
 
 using blink::mojom::blink::AttestationConveyancePreference;
@@ -81,6 +81,7 @@ using blink::mojom::blink::PublicKeyCredentialDescriptor;
 using blink::mojom::blink::PublicKeyCredentialDescriptorPtr;
 using blink::mojom::blink::PublicKeyCredentialParameters;
 using blink::mojom::blink::PublicKeyCredentialParametersPtr;
+using blink::mojom::blink::PublicKeyCredentialReportOptionsPtr;
 using blink::mojom::blink::PublicKeyCredentialRequestOptionsPtr;
 using blink::mojom::blink::PublicKeyCredentialRpEntity;
 using blink::mojom::blink::PublicKeyCredentialRpEntityPtr;
@@ -138,14 +139,17 @@ CredentialInfoPtr TypeConverter<CredentialInfoPtr, blink::Credential*>::Convert(
     info->password = password_credential->password();
     info->name = password_credential->name();
     info->icon = password_credential->iconURL();
-    info->federation = blink::SecurityOrigin::CreateUniqueOpaque();
+    info->federation = url::SchemeHostPort();
   } else {
     DCHECK(credential->IsFederatedCredential());
     ::blink::FederatedCredential* federated_credential =
         static_cast<::blink::FederatedCredential*>(credential);
     info->type = CredentialType::FEDERATED;
     info->password = g_empty_string;
-    info->federation = federated_credential->GetProviderAsOrigin();
+    scoped_refptr<const blink::SecurityOrigin> origin =
+        federated_credential->GetProviderAsOrigin();
+    info->federation = url::SchemeHostPort(
+        origin->Protocol().Utf8(), origin->Host().Utf8(), origin->Port());
     info->name = federated_credential->name();
     info->icon = federated_credential->iconURL();
   }
@@ -158,15 +162,20 @@ TypeConverter<blink::Credential*, CredentialInfoPtr>::Convert(
     const CredentialInfoPtr& info) {
   switch (info->type) {
     case CredentialType::FEDERATED:
-      return blink::FederatedCredential::Create(info->id, info->federation,
-                                                info->name, info->icon);
+      return blink::FederatedCredential::Create(
+          info->id,
+          blink::SecurityOrigin::CreateFromValidTuple(
+              String::FromUTF8(info->federation.scheme()),
+              String::FromUTF8(info->federation.host()),
+              info->federation.port()),
+          info->name, info->icon);
     case CredentialType::PASSWORD:
       return blink::PasswordCredential::Create(info->id, info->password,
                                                info->name, info->icon);
     case CredentialType::EMPTY:
       return nullptr;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 
@@ -296,7 +305,7 @@ PublicKeyCredentialType TypeConverter<PublicKeyCredentialType, String>::Convert(
     const String& type) {
   if (type == "public-key")
     return PublicKeyCredentialType::PUBLIC_KEY;
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return PublicKeyCredentialType::PUBLIC_KEY;
 }
 
@@ -331,7 +340,7 @@ String TypeConverter<String, AuthenticatorTransport>::Convert(
     return "hybrid";
   if (transport == AuthenticatorTransport::INTERNAL)
     return "internal";
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return "usb";
 }
 
@@ -840,7 +849,7 @@ TypeConverter<IdentityProviderConfigPtr, blink::IdentityProviderConfig>::
   auto mojo_provider = IdentityProviderConfig::New();
 
   mojo_provider->config_url = blink::KURL(provider.configURL());
-  mojo_provider->client_id = provider.clientId();
+  mojo_provider->client_id = provider.getClientIdOr("");
   return mojo_provider;
 }
 
@@ -855,10 +864,14 @@ TypeConverter<IdentityProviderRequestOptionsPtr,
   if (blink::RuntimeEnabledFeatures::FedCmIdPRegistrationEnabled() &&
       options.configURL() == "any") {
     mojo_options->config->use_registered_config_urls = true;
+    // We only set the `type` if `configURL` is 'any'.
+    if (options.hasType()) {
+      mojo_options->config->type = options.type();
+    }
   } else {
     mojo_options->config->config_url = blink::KURL(options.configURL());
   }
-  mojo_options->config->client_id = options.clientId();
+  mojo_options->config->client_id = options.getClientIdOr("");
 
   mojo_options->nonce = options.getNonceOr("");
   mojo_options->login_hint = options.getLoginHintOr("");
@@ -1023,4 +1036,21 @@ Vector<Hint> TypeConverter<Vector<Hint>, Vector<String>>::Convert(
   return ret;
 }
 
+// static
+PublicKeyCredentialReportOptionsPtr
+TypeConverter<PublicKeyCredentialReportOptionsPtr,
+              blink::PublicKeyCredentialReportOptions>::
+    Convert(const blink::PublicKeyCredentialReportOptions& options) {
+  auto mojo_options =
+      blink::mojom::blink::PublicKeyCredentialReportOptions::New();
+
+  if (options.hasRpId()) {
+    mojo_options->relying_party_id = options.rpId();
+  }
+  if (options.hasUnknownCredentialId()) {
+    mojo_options->unknown_credential_id =
+        ConvertTo<Vector<uint8_t>>(options.unknownCredentialId());
+  }
+  return mojo_options;
+}
 }  // namespace mojo

@@ -12,24 +12,26 @@ component("cpp") {
   sources = [
     "mahi_manager.cc",
     "mahi_manager.h",
+    "mahi_media_app_content_manager.cc",
+    "mahi_media_app_content_manager.h",
+    "mahi_media_app_events_proxy.cc",
+    "mahi_media_app_events_proxy.h",
     "mahi_switches.cc",
     "mahi_switches.h",
-    "views/experiment_badge.cc",
-    "views/experiment_badge.h",
+    "mahi_util.cc",
+    "mahi_util.h",
   ]
 
   deps = [
     "//base",
     "//chromeos/constants",
     "//chromeos/crosapi/mojom",
-    "//chromeos/strings:strings_grit",
     "//components/account_id",
     "//components/user_manager",
     "//google_apis",
     "//ui/base",
     "//ui/color",
     "//ui/gfx",
-    "//ui/views",
   ]
   if (is_chromeos_ash) {
     deps += [ "//ash/constants" ]

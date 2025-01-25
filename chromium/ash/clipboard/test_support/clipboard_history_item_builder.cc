@@ -106,7 +106,7 @@ ClipboardHistoryItemBuilder& ClipboardHistoryItemBuilder::ClearFormat(
     case ui::ClipboardInternalFormat::kWeb:
       return ClearWebSmartPaste();
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return *this;
 }
 
@@ -218,7 +218,7 @@ ClipboardHistoryItemBuilder& ClipboardHistoryItemBuilder::SetFileSystemData(
       &custom_data);
 
   return SetCustomData(
-      ui::ClipboardFormatType::WebCustomDataType(),
+      ui::ClipboardFormatType::DataTransferCustomType(),
       std::string(custom_data.data_as_char(), custom_data.size()));
 }
 

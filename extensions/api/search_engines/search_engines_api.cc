@@ -6,9 +6,15 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "components/country_codes/country_codes.h"
+#include "components/prefs/pref_service.h"
+#include "components/search_engines/search_engines_manager.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/search_engines/vivaldi_pref_names.h"
 #include "extensions/schema/search_engines.h"
 #include "extensions/tools/vivaldi_tools.h"
+
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace extensions {
 
@@ -255,6 +261,45 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
     result.default_image = base::NumberToString(default_search->id());
   }
 
+  const auto checkSystemDefaultSearchEngine = [&]() {
+    const auto index_pref_path = vivaldiprefs::kSystemSearchEngineDefaultIndex;
+    const auto last_change_pref_path =
+        vivaldiprefs::kSystemSearchEngineDefaultLastChange;
+
+    auto search_engines_manager = SearchEnginesManager::GetInstance();
+    if (!service->loaded() || !search_engines_manager->IsInitialized()) {
+      return false;
+    }
+
+    auto* prefs = Profile::FromBrowserContext(browser_context())->GetPrefs();
+    const auto app_locale = prefs->GetString(prefs::kLanguageAtInstall);
+    // GetEnginesByCountryId expect only the first 2 chars of locale
+    std::string lang(app_locale.begin(),
+                     std::find(app_locale.begin(), app_locale.end(), '-'));
+
+    const auto version = search_engines_manager->GetCurrentDataVersion();
+    SearchEnginesManager::EnginesInfo engines_info;
+    const auto engines = search_engines_manager->GetEnginesByCountryId(
+        country_codes::GetCurrentCountryID(), lang, &engines_info);
+    const auto default_search_engine_id =
+        engines[engines_info.default_engine_index]->id;
+
+    const bool engine_has_changed =
+        prefs->GetInteger(index_pref_path) != default_search_engine_id &&
+        prefs->GetInteger(last_change_pref_path) < version;
+
+    prefs->SetInteger(index_pref_path, default_search_engine_id);
+    prefs->SetInteger(last_change_pref_path, version);
+
+    // If the new engine is the same as the curent default, notify about the
+    // change.
+    return engine_has_changed &&
+           service->GetDefaultSearchProvider(
+                      TemplateURLService::kDefaultSearchMain)
+                   ->prepopulate_id() == default_search_engine_id;
+  };
+  result.system_default_search_changed = checkSystemDefaultSearchEngine();
+
   return RespondNow(ArgumentList(
       vivaldi::search_engines::GetTemplateUrls::Results::Create(result)));
 }
@@ -481,7 +526,6 @@ ExtensionFunction::ResponseAction SearchEnginesSetDefaultFunction::Run() {
         return TemplateURLService::kDefaultSearchImage;
       default:
         NOTREACHED();
-        return std::nullopt;
     }
   }(params->default_type);
 

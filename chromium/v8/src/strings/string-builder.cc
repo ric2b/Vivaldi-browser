@@ -38,7 +38,7 @@ void StringBuilderConcatHelper(Tagged<String> special, sinkchar* sink,
       String::WriteToFlat(special, sink + position, pos, len);
       position += len;
     } else {
-      Tagged<String> string = String::cast(element);
+      Tagged<String> string = Cast<String>(element);
       int element_length = string->length();
       String::WriteToFlat(string, sink + position, 0, element_length);
       position += element_length;
@@ -88,7 +88,7 @@ int StringBuilderConcatLength(int special_length,
       if (pos > special_length || len > special_length - pos) return -1;
       increment = len;
     } else if (IsString(elt)) {
-      Tagged<String> element = String::cast(elt);
+      Tagged<String> element = Cast<String>(elt);
       int element_length = element->length();
       increment = element_length;
       if (*one_byte && !element->IsOneByteRepresentation()) {
@@ -211,26 +211,26 @@ MaybeDirectHandle<String> ReplacementStringBuilder::ToString() {
   if (is_one_byte_) {
     DirectHandle<SeqOneByteString> seq;
     ASSIGN_RETURN_ON_EXCEPTION(
-        isolate, seq, isolate->factory()->NewRawOneByteString(character_count_),
-        String);
+        isolate, seq,
+        isolate->factory()->NewRawOneByteString(character_count_));
 
     DisallowGarbageCollection no_gc;
     uint8_t* char_buffer = seq->GetChars(no_gc);
     StringBuilderConcatHelper(*subject_, char_buffer, *array_builder_.array(),
                               array_builder_.length());
-    joined_string = DirectHandle<String>::cast(seq);
+    joined_string = Cast<String>(seq);
   } else {
     // Two-byte.
     DirectHandle<SeqTwoByteString> seq;
     ASSIGN_RETURN_ON_EXCEPTION(
-        isolate, seq, isolate->factory()->NewRawTwoByteString(character_count_),
-        String);
+        isolate, seq,
+        isolate->factory()->NewRawTwoByteString(character_count_));
 
     DisallowGarbageCollection no_gc;
     base::uc16* char_buffer = seq->GetChars(no_gc);
     StringBuilderConcatHelper(*subject_, char_buffer, *array_builder_.array(),
                               array_builder_.length());
-    joined_string = DirectHandle<String>::cast(seq);
+    joined_string = Cast<String>(seq);
   }
   return joined_string;
 }
@@ -300,7 +300,7 @@ MaybeDirectHandle<String> IncrementalStringBuilder::Finish() {
   ShrinkCurrentPart();
   Accumulate(current_part());
   if (overflowed_) {
-    THROW_NEW_ERROR(isolate_, NewInvalidStringLengthError(), String);
+    THROW_NEW_ERROR(isolate_, NewInvalidStringLengthError());
   }
   if (isolate()->serializer_enabled()) {
     return factory()->InternalizeString(
@@ -327,17 +327,17 @@ void IncrementalStringBuilder::AppendStringByCopy(DirectHandle<String> string) {
   {
     DisallowGarbageCollection no_gc;
     if (encoding_ == String::ONE_BYTE_ENCODING) {
-      String::WriteToFlat(*string,
-                          DirectHandle<SeqOneByteString>::cast(current_part())
-                                  ->GetChars(no_gc) +
-                              current_index_,
-                          0, string->length());
+      String::WriteToFlat(
+          *string,
+          Cast<SeqOneByteString>(current_part())->GetChars(no_gc) +
+              current_index_,
+          0, string->length());
     } else {
-      String::WriteToFlat(*string,
-                          DirectHandle<SeqTwoByteString>::cast(current_part())
-                                  ->GetChars(no_gc) +
-                              current_index_,
-                          0, string->length());
+      String::WriteToFlat(
+          *string,
+          Cast<SeqTwoByteString>(current_part())->GetChars(no_gc) +
+              current_index_,
+          0, string->length());
     }
   }
   current_index_ += string->length();

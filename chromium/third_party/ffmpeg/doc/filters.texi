@@ -20989,8 +20989,8 @@ the next filter, the scale filter will convert the input to the
 requested format.
 
 @subsection Options
-The filter accepts the following options, or any of the options
-supported by the libswscale scaler.
+The filter accepts the following options, any of the options supported
+by the libswscale scaler, as well as any of the @ref{framesync} options.
 
 See @ref{scaler_options,,the ffmpeg-scaler manual,ffmpeg-scaler} for
 the complete list of scaler options.
@@ -21228,6 +21228,16 @@ The position (byte offset) of the frame in the input stream, or NaN if
 this information is unavailable and/or meaningless (for example in case of synthetic video).
 Only available with @code{eval=frame}.
 Deprecated, do not use.
+
+@item ref_w, rw
+@item ref_h, rh
+@item ref_a
+@item ref_dar, rdar
+@item ref_n
+@item ref_t
+@item ref_pos
+Eqvuialent to the above, but for a second reference input. If any of these
+variables are present, this filter accepts two inputs.
 @end table
 
 @subsection Examples
@@ -21328,6 +21338,20 @@ Make pixels square by combining scale and setsar,
 making sure the resulting resolution is even (required by some codecs):
 @example
 scale='trunc(ih*dar/2)*2:trunc(ih/2)*2',setsar=1/1
+@end example
+
+@item
+Scale a subtitle stream (sub) to match the main video (main) in size before
+overlaying. ("scale2ref")
+@example
+'[main]split[a][b]; [ref][a]scale=rw:rh[c]; [b][c]overlay'
+@end example
+
+@item
+Scale a logo to 1/10th the height of a video, while preserving its display
+aspect ratio.
+@example
+[logo-in][video-in]scale=w=oh*dar:h=rh/10[logo-out]
 @end example
 @end itemize
 
@@ -21562,79 +21586,6 @@ The position (byte offset) of the frame in the input stream, or NaN if
 this information is unavailable and/or meaningless (for example in case of synthetic video).
 Only available with @code{eval=frame}.
 Deprecated, do not use.
-@end table
-
-@section scale2ref
-
-Scale (resize) the input video, based on a reference video.
-
-See the scale filter for available options, scale2ref supports the same but
-uses the reference video instead of the main input as basis. scale2ref also
-supports the following additional constants for the @option{w} and
-@option{h} options:
-
-@table @var
-@item main_w
-@item main_h
-The main input video's width and height
-
-@item main_a
-The same as @var{main_w} / @var{main_h}
-
-@item main_sar
-The main input video's sample aspect ratio
-
-@item main_dar, mdar
-The main input video's display aspect ratio. Calculated from
-@code{(main_w / main_h) * main_sar}.
-
-@item main_hsub
-@item main_vsub
-The main input video's horizontal and vertical chroma subsample values.
-For example for the pixel format "yuv422p" @var{hsub} is 2 and @var{vsub}
-is 1.
-
-@item main_n
-The (sequential) number of the main input frame, starting from 0.
-Only available with @code{eval=frame}.
-
-@item main_t
-The presentation timestamp of the main input frame, expressed as a number of
-seconds. Only available with @code{eval=frame}.
-
-@item main_pos
-The position (byte offset) of the frame in the main input stream, or NaN if
-this information is unavailable and/or meaningless (for example in case of synthetic video).
-Only available with @code{eval=frame}.
-@end table
-
-@subsection Examples
-
-@itemize
-@item
-Scale a subtitle stream (b) to match the main video (a) in size before overlaying
-@example
-'scale2ref[b][a];[a][b]overlay'
-@end example
-
-@item
-Scale a logo to 1/10th the height of a video, while preserving its display aspect ratio.
-@example
-[logo-in][video-in]scale2ref=w=oh*mdar:h=ih/10[logo-out][video-out]
-@end example
-@end itemize
-
-@subsection Commands
-
-This filter supports the following commands:
-@table @option
-@item width, w
-@item height, h
-Set the output video dimension expression.
-The command accepts the same syntax of the corresponding option.
-
-If the specified expression is not valid, it is kept at its current
-value.
 @end table
 
 @section scale2ref_npp
@@ -22702,9 +22653,27 @@ whether a pixel should be blurred or not. The option value must be an
 integer in the range [-30,30]. A value of 0 will filter all the image,
 a value included in [0,30] will filter flat areas and a value included
 in [-30,0] will filter edges. Default value is @option{luma_threshold}.
+
+@item alpha_radius, ar
+Set the alpha radius. The option value must be a float number in
+the range [0.1,5.0] that specifies the variance of the gaussian filter
+used to blur the image (slower if larger). Default value is @option{luma_radius}.
+
+@item alpha_strength, as
+Set the alpha strength. The option value must be a float number
+in the range [-1.0,1.0] that configures the blurring. A value included
+in [0.0,1.0] will blur the image whereas a value included in
+[-1.0,0.0] will sharpen the image. Default value is @option{luma_strength}.
+
+@item alpha_threshold, at
+Set the alpha threshold used as a coefficient to determine
+whether a pixel should be blurred or not. The option value must be an
+integer in the range [-30,30]. A value of 0 will filter all the image,
+a value included in [0,30] will filter flat areas and a value included
+in [-30,0] will filter edges. Default value is @option{luma_threshold}.
 @end table
 
-If a chroma option is not explicitly set, the corresponding luma value
+If a chroma or alpha option is not explicitly set, the corresponding luma value
 is set.
 
 @section sobel
@@ -27832,8 +27801,7 @@ The inputs have same memory layout for color channels, the overlay has additiona
 
 @section tonemap_vaapi
 
-Perform HDR(High Dynamic Range) to SDR(Standard Dynamic Range) conversion with tone-mapping.
-It maps the dynamic range of HDR10 content to the SDR content.
+Perform HDR-to-SDR or HDR-to-HDR tone-mapping.
 It currently only accepts HDR10 as input.
 
 It accepts the following parameters:
@@ -27842,28 +27810,42 @@ It accepts the following parameters:
 @item format
 Specify the output pixel format.
 
-Currently supported formats are:
-@table @var
-@item p010
-@item nv12
-@end table
-
-Default is nv12.
+Default is nv12 for HDR-to-SDR tone-mapping and p010 for HDR-to-HDR
+tone-mapping.
 
 @item primaries, p
 Set the output color primaries.
 
-Default is same as input.
+Default is bt709 for HDR-to-SDR tone-mapping and same as input for HDR-to-HDR
+tone-mapping.
 
 @item transfer, t
 Set the output transfer characteristics.
 
-Default is bt709.
+Default is bt709 for HDR-to-SDR tone-mapping and same as input for HDR-to-HDR
+tone-mapping.
 
 @item matrix, m
 Set the output colorspace matrix.
 
-Default is same as input.
+Default is bt709 for HDR-to-SDR tone-mapping and same as input for HDR-to-HDR
+tone-mapping.
+
+@item display
+Set the output mastering display colour volume. It is given by a '|'-separated
+list of two values, two values are space separated. It set display primaries
+x & y in G, B, R order, then white point x & y, the nominal minimum & maximum
+display luminances.
+
+HDR-to-HDR tone-mapping will be performed when this option is set.
+
+@item light
+Set the output content light level information. It accepts 2 space-separated
+values, the first input is the maximum light level and the second input is
+the maximum average light level.
+
+It is ignored for HDR-to-SDR tone-mapping, and optional for HDR-to-HDR
+tone-mapping.
 
 @end table
 
@@ -27874,6 +27856,11 @@ Default is same as input.
 Convert HDR(HDR10) video to bt2020-transfer-characteristic p010 format
 @example
 tonemap_vaapi=format=p010:t=bt2020-10
+@end example
+@item
+Convert HDR video to HDR video
+@example
+tonemap_vaapi=display=7500\ 3000|34000\ 16000|13250\ 34500|15635\ 16450|500\ 10000000
 @end example
 @end itemize
 
@@ -27954,6 +27941,168 @@ first input stream. For the syntax of this option, check the
 @item fill
 See @ref{xstack}.
 @end table
+
+@section pad_vaapi
+
+Add paddings to the input image, and place the original input at the
+provided @var{x}, @var{y} coordinates.
+
+It accepts the following options:
+
+@table @option
+@item width, w
+@item height, h
+Specify an expression for the size of the output image with the
+paddings added. If the value for @var{width} or @var{height} is 0, the
+corresponding input size is used for the output.
+
+The @var{width} expression can reference the value set by the
+@var{height} expression, and vice versa.
+
+The default value of @var{width} and @var{height} is 0.
+
+@item x
+@item y
+Specify the offsets to place the input image at within the padded area,
+with respect to the top/left border of the output image.
+
+The @var{x} expression can reference the value set by the @var{y}
+expression, and vice versa.
+
+The default value of @var{x} and @var{y} is 0.
+
+If @var{x} or @var{y} evaluate to a negative number, they'll be changed
+so the input image is centered on the padded area.
+
+@item color
+Specify the color of the padded area. For the syntax of this option,
+check the @ref{color syntax,,"Color" section in the ffmpeg-utils
+manual,ffmpeg-utils}.
+
+@item aspect
+Pad to an aspect instead to a resolution.
+@end table
+
+The value for the @var{width}, @var{height}, @var{x}, and @var{y}
+options are expressions containing the following constants:
+
+@table @option
+@item in_w
+@item in_h
+The input video width and height.
+
+@item iw
+@item ih
+These are the same as @var{in_w} and @var{in_h}.
+
+@item out_w
+@item out_h
+The output width and height (the size of the padded area), as
+specified by the @var{width} and @var{height} expressions.
+
+@item ow
+@item oh
+These are the same as @var{out_w} and @var{out_h}.
+
+@item x
+@item y
+The x and y offsets as specified by the @var{x} and @var{y}
+expressions, or NAN if not yet specified.
+
+@item a
+same as @var{iw} / @var{ih}
+
+@item sar
+input sample aspect ratio
+
+@item dar
+input display aspect ratio, it is the same as (@var{iw} / @var{ih}) * @var{sar}
+@end table
+
+@section drawbox_vaapi
+
+Draw a colored box on the input image.
+
+It accepts the following parameters:
+
+@table @option
+@item x
+@item y
+The expressions which specify the top left corner coordinates of the box. It defaults to 0.
+
+@item width, w
+@item height, h
+The expressions which specify the width and height of the box; if 0 they are interpreted as
+the input width and height. It defaults to 0.
+
+@item color, c
+Specify the color of the box to write. For the general syntax of this option,
+check the @ref{color syntax,,"Color" section in the ffmpeg-utils manual,ffmpeg-utils}.
+
+@item thickness, t
+The expression which sets the thickness of the box edge.
+A value of @code{fill} will create a filled box. Default value is @code{3}.
+
+See below for the list of accepted constants.
+
+@item replace
+With value @code{1}, the pixels of the painted box will overwrite the video's color and alpha pixels.
+Default is @code{0}, which composites the box onto the input video.
+@end table
+
+The parameters for @var{x}, @var{y}, @var{w} and @var{h} and @var{t} are expressions containing the
+following constants:
+
+@table @option
+@item in_h, ih
+@item in_w, iw
+The input width and height.
+
+@item x
+@item y
+The x and y offset coordinates where the box is drawn.
+
+@item w
+@item h
+The width and height of the drawn box.
+
+@item t
+The thickness of the drawn box.
+
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Draw a black box around the edge of the input image:
+@example
+drawbox
+@end example
+
+@item
+Draw a box with color red and an opacity of 50%:
+@example
+drawbox=10:20:200:60:red@@0.5
+@end example
+
+The previous example can be specified as:
+@example
+drawbox=x=10:y=20:w=200:h=60:color=red@@0.5
+@end example
+
+@item
+Fill the box with pink color:
+@example
+drawbox=x=10:y=10:w=100:h=100:color=pink@@0.5:t=fill
+@end example
+
+@item
+Draw a 2-pixel red 2.40:1 mask:
+@example
+drawbox=x=-t:y=0.5*(ih-iw/2.4)-t:w=iw+t*2:h=iw/2.4+t*2:t=2:c=red
+@end example
+@end itemize
 
 @c man end VAAPI VIDEO FILTERS
 
@@ -30750,6 +30899,12 @@ missing.
 
 That basically means that an input frame is selected if its pts is within the
 interval set by the concat demuxer.
+
+@item iw @emph{(video only)}
+Represents the width of the input video frame.
+
+@item ih @emph{(video only)}
+Represents the height of the input video frame.
 
 @end table
 

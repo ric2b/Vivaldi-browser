@@ -6,7 +6,9 @@ int c() {
   a = (a + 2);
   return a;
 }
+
 void b() {
-  int b = c();
-  b = (b + c());
+  int b_1 = c();
+  int const v = c();
+  b_1 = (b_1 + v);
 }

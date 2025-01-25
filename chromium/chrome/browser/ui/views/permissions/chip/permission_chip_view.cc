@@ -77,13 +77,15 @@ void PermissionChipView::AnimateExpand(base::TimeDelta duration) {
 
 void PermissionChipView::AnimateToFit(base::TimeDelta duration) {
   animation_->SetSlideDuration(duration);
-  base_width_ = label()
-                    ->GetPreferredSize(views::SizeBounds(label()->width(), {}))
-                    .width();
 
   if (label()
           ->GetPreferredSize(views::SizeBounds(label()->width(), {}))
           .width() < width()) {
+    base_width_ =
+        label()
+            ->GetPreferredSize(views::SizeBounds(label()->width(), {}))
+            .width();
+
     // As we're collapsing, we need to make sure that the padding is not
     // animated away.
     base_width_ += GetPadding().width();
@@ -94,26 +96,33 @@ void PermissionChipView::AnimateToFit(base::TimeDelta duration) {
 }
 
 void PermissionChipView::ResetAnimation(double value) {
+  // `base_width_` is used regardless of the animation value. When animation is
+  // reset, e.g. on a tab switch, `base_width_` may hold obsolete values that
+  // should be reset as well.
+  if (value == 0.0) {
+    base_width_ = 0;
+  }
   animation_->Reset(value);
   OnAnimationValueMaybeChanged();
 }
 
-// TODO(crbug.com/40232718): Respect `available_size`.
 gfx::Size PermissionChipView::CalculatePreferredSize(
     const views::SizeBounds& available_size) const {
   const int icon_width = GetIconViewWidth();
+  const int extra_width = GetPadding().width() + icon_width;
+  views::SizeBound available_width =
+      std::max<views::SizeBound>(0, available_size.width() - extra_width);
   const int label_width =
-      label()
-          ->GetPreferredSize(views::SizeBounds(label()->width(), {}))
-          .width() +
-      GetPadding().width();
+      label()->GetPreferredSize(views::SizeBounds(available_width, {})).width();
+  const int collapsable_width = label_width + GetPadding().width();
 
   const int width =
-      base_width_ +
-      base::ClampRound(label_width * animation_->GetCurrentValue()) +
-      icon_width;
+      base_width_ + icon_width +
+      base::ClampRound(collapsable_width * animation_->GetCurrentValue());
 
-  return gfx::Size(width, GetHeightForWidth(width));
+  return gfx::Size(width, views::LabelButton::CalculatePreferredSize(
+                              views::SizeBounds(width, {}))
+                              .height());
 }
 
 void PermissionChipView::OnThemeChanged() {
@@ -291,8 +300,18 @@ void PermissionChipView::UpdateIconAndColors() {
   if (!GetWidget()) {
     return;
   }
-  SetEnabledTextColors(GetForegroundColor());
-  SetImageModel(views::Button::STATE_NORMAL, GetIconImageModel());
+
+  SkColor foreground_color = GetForegroundColor();
+  SetEnabledTextColors(foreground_color);
+  // On macOS the chip view could get disabled if a browser's window lost its
+  // focus. This can lead to low contrast between the chip's text and background
+  // color.
+  SetTextColor(views::Button::STATE_DISABLED, foreground_color);
+
+  ui::ImageModel image_model = GetIconImageModel();
+  SetImageModel(views::Button::STATE_NORMAL, image_model);
+  SetImageModel(views::Button::STATE_DISABLED, image_model);
+
   ConfigureInkDropForRefresh2023(this, kColorOmniboxChipInkDropHover,
                                  kColorOmniboxChipInkDropRipple);
 }

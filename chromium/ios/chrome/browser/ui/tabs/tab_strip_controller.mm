@@ -22,8 +22,6 @@
 #import "components/favicon/ios/web_favicon_driver.h"
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/tracker.h"
-#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
-#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/model/url_drag_drop_handler.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
@@ -707,6 +705,8 @@ const CGFloat kSymbolSize = 18;
     view = [[TabView alloc] initWithEmptyView:YES
                                    isSelected:YES
                          bottomOmniboxEnabled:[self isBottomOmniboxEnabled]
+                    showXButtonBackgroundTabs:
+                                        [self showXButtonForBackgroundTabs]
                                    themeColor:nil
                                     tintColor:nil];
   } // End Vivaldi
@@ -729,6 +729,8 @@ const CGFloat kSymbolSize = 18;
     view = [[TabView alloc] initWithEmptyView:NO
                                    isSelected:isSelected
                          bottomOmniboxEnabled:[self isBottomOmniboxEnabled]
+                    showXButtonBackgroundTabs:
+                                        [self showXButtonForBackgroundTabs]
                                    themeColor:
                                         [self themeColorForWebState:webState]
                                     tintColor:[self tabViewTintColor]];
@@ -891,7 +893,7 @@ const CGFloat kSymbolSize = 18;
                         object:nil];
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -2104,6 +2106,13 @@ const CGFloat kSymbolSize = 18;
   }
 }
 
+- (void)setShowXButtonForBackgroundTabs:(BOOL)showXButtonForBackgroundTabs {
+  if (_showXButtonForBackgroundTabs != showXButtonForBackgroundTabs) {
+    _showXButtonForBackgroundTabs = showXButtonForBackgroundTabs;
+    [self updateTabStripViewXButtonVisibility];
+  }
+}
+
 - (void)setDynamicAccentColorEnabled:(BOOL)dynamicAccentColorEnabled {
   if (_dynamicAccentColorEnabled != dynamicAccentColorEnabled) {
     _dynamicAccentColorEnabled = dynamicAccentColorEnabled;
@@ -2331,9 +2340,25 @@ const CGFloat kSymbolSize = 18;
     [tab updateTabViewStyleWithThemeColor:
                           [self themeColorForWebState:activeWebState]
                                 tintColor:[self tabViewTintColor]
-                               isSelected:tab == view];
+                               isSelected:tab == view
+                showXButtonBackgroundTabs:
+                                    [self showXButtonForBackgroundTabs]];
   }
   [self updateNewTabButtonTintColor];
+}
+
+// Loops through tabs for tab array and updates X button visibility based on
+// the settings.
+- (void)updateTabStripViewXButtonVisibility {
+  web::WebState* activeWebState = _webStateList->GetActiveWebState();
+  if (!activeWebState)
+    return;
+  TabView* view = [self tabViewForWebState:activeWebState];
+  for (TabView* tab in _tabArray) {
+    [tab updateTabViewWithXButtonVisibleBackgroundTabs:
+        _showXButtonForBackgroundTabs
+              isSelected:tab == view];
+  }
 }
 
 @end

@@ -228,6 +228,8 @@ void KioskBrowserSession::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kNewWindowsInKioskAllowed, false);
   registry->RegisterBooleanPref(prefs::kKioskTroubleshootingToolsEnabled,
                                 false);
+  registry->RegisterListPref(prefs::kKioskBrowserPermissionsAllowedForOrigins,
+                             PrefRegistrySimple::NO_REGISTRATION_FLAGS);
 }
 
 void KioskBrowserSession::InitForChromeAppKiosk(const std::string& app_id) {
@@ -309,7 +311,10 @@ void KioskBrowserSession::OnGuestAdded(
   }
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-  plugin_handler_->Observe(guest_web_contents);
+  // Plugin handler is initialized only for Chrome app Kiosks.
+  if (plugin_handler_) {
+    plugin_handler_->Observe(guest_web_contents);
+  }
 #endif
 }
 

@@ -302,18 +302,6 @@ fetchSecretWithPairingSupported:(BOOL)pairingSupported
                   }];
 }
 
-- (void)fetchThirdPartyTokenForUrl:(NSString*)tokenUrl
-                          clientId:(NSString*)clientId
-                            scopes:(NSString*)scopes
-                          callback:(const remoting::protocol::
-                                        ThirdPartyTokenFetchedCallback&)
-                                       tokenFetchedCallback {
-  // Not supported for iOS yet.
-  _sessionDetails.state = SessionFailed;
-  _sessionDetails.error = SessionErrorThirdPartyAuthNotSupported;
-  tokenFetchedCallback.Run("", "");
-}
-
 - (void)setCapabilities:(NSString*)capabilities {
   DCHECK(capabilities.length == 0) << "No capability has been implemented on "
                                    << "iOS yet";
@@ -321,8 +309,8 @@ fetchSecretWithPairingSupported:(BOOL)pairingSupported
 
 - (void)handleExtensionMessageOfType:(NSString*)type
                              message:(NSString*)message {
-  NOTREACHED() << "handleExtensionMessageOfType is unimplemented. " << type
-               << ":" << message;
+  NOTREACHED_IN_MIGRATION() << "handleExtensionMessageOfType is unimplemented. "
+                            << type << ":" << message;
 }
 
 - (void)setHostResolution:(CGSize)resolutionPixels scale:(int)scale {

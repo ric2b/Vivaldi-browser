@@ -344,7 +344,7 @@ class TextureViewSamplingTest : public TextureViewTestBase {
                             uint32_t textureViewBaseLayer,
                             uint32_t textureViewLayerCount,
                             bool isCubeMapArray) {
-        // TODO(crbug.com/dawn/1300): OpenGLES does not support cube map arrays.
+        // Cube map arrays are unsupported in Compatbility mode.
         DAWN_TEST_UNSUPPORTED_IF(isCubeMapArray && IsCompatibilityMode());
 
         ASSERT_TRUE((textureViewLayerCount == 6) ||
@@ -420,6 +420,7 @@ TEST_P(TextureViewSamplingTest, Texture2DViewOn2DArrayTexture) {
 
 // Test sampling from a 2D array texture view created on a 2D array texture.
 TEST_P(TextureViewSamplingTest, Texture2DArrayViewOn2DArrayTexture) {
+    DAWN_TEST_UNSUPPORTED_IF(IsCompatibilityMode());
     Texture2DArrayViewTest(6, 1, 2, 0);
 }
 
@@ -472,8 +473,8 @@ TEST_P(TextureViewSamplingTest, Texture2DArrayViewOnOneLevelOf2DArrayTexture) {
 // Test that an RGBA8 texture may be interpreted as RGBA8UnormSrgb and sampled from.
 // More extensive color value checks and format tests are left for the CTS.
 TEST_P(TextureViewSamplingTest, SRGBReinterpretation) {
-    // TODO(crbug.com/dawn/1360): OpenGLES doesn't support view format reinterpretation.
-    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
+    // View format reinterpretation is unsupported in Compatibility mode.
+    DAWN_TEST_UNSUPPORTED_IF(IsCompatibilityMode());
 
     wgpu::TextureViewDescriptor viewDesc = {};
     viewDesc.format = wgpu::TextureFormat::RGBA8UnormSrgb;
@@ -811,8 +812,8 @@ TEST_P(TextureViewRenderingTest, Texture2DArrayViewOnALayerOf2DArrayTextureAsCol
 // Test that an RGBA8 texture may be interpreted as RGBA8UnormSrgb and rendered to.
 // More extensive color value checks and format tests are left for the CTS.
 TEST_P(TextureViewRenderingTest, SRGBReinterpretationRenderAttachment) {
-    // TODO(crbug.com/dawn/1360): OpenGLES doesn't support view format reinterpretation.
-    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
+    // View format reinterpretation is unsupported in Compatibility mode.
+    DAWN_TEST_UNSUPPORTED_IF(IsCompatibilityMode());
 
     // Test will render into an SRGB view
     wgpu::TextureViewDescriptor viewDesc = {};
@@ -917,8 +918,8 @@ TEST_P(TextureViewRenderingTest, SRGBReinterpretationRenderAttachment) {
 // This test samples the RGBA8Unorm texture into an RGBA8Unorm multisample texture viewed as SRGB,
 // and resolves it into an RGBA8Unorm texture, viewed as SRGB.
 TEST_P(TextureViewRenderingTest, SRGBReinterpretionResolveAttachment) {
-    // TODO(crbug.com/dawn/1360): OpenGLES doesn't support view format reinterpretation.
-    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
+    // View format reinterpretation is unsupported in Compatibility mode.
+    DAWN_TEST_UNSUPPORTED_IF(IsCompatibilityMode());
 
     // Test will resolve into an SRGB view
     wgpu::TextureViewDescriptor viewDesc = {};

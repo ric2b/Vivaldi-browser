@@ -375,7 +375,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
   protected buildMessage(): HTMLElement {
     let messageElement;
     let messageText: Common.UIString.LocalizedString|string = this.message.messageText;
-    if (this.message.source === SDK.ConsoleModel.FrontendMessageSource.ConsoleAPI) {
+    if (this.message.source === Common.Console.FrontendMessageSource.ConsoleAPI) {
       switch (this.message.type) {
         case Protocol.Runtime.ConsoleAPICalledEventType.Trace:
           messageElement = this.format(this.message.parameters || ['console.trace']);
@@ -906,8 +906,9 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
         async(errorObj: SDK.RemoteObject.RemoteObject, includeCausedByPrefix: boolean): Promise<void> => {
       const error = SDK.RemoteObject.RemoteError.objectAsError(errorObj);
       const [details, cause] = await Promise.all([error.exceptionDetails(), error.cause()]);
-      const errorElement =
-          this.tryFormatAsError(error.errorStack, details) ?? this.linkifyStringAsFragment(error.errorStack);
+      const errorElementType = includeCausedByPrefix ? 'div' : 'span';
+      const errorElement = this.tryFormatAsError(error.errorStack, details, errorElementType) ??
+          this.linkifyStringAsFragment(error.errorStack);
       if (includeCausedByPrefix) {
         errorElement.prepend('Caused by: ');
       }
@@ -1276,7 +1277,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     if (this.message.isGroupStartMessage()) {
       this.elementInternal.classList.add('console-group-title');
     }
-    if (this.message.source === SDK.ConsoleModel.FrontendMessageSource.ConsoleAPI) {
+    if (this.message.source === Common.Console.FrontendMessageSource.ConsoleAPI) {
       this.elementInternal.classList.add('console-from-api');
     }
     if (this.inSimilarGroup) {
@@ -1294,20 +1295,24 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     switch (this.message.level) {
       case Protocol.Log.LogEntryLevel.Verbose:
         this.elementInternal.classList.add('console-verbose-level');
+        UI.ARIAUtils.setLabel(this.elementInternal, this.text);
         break;
       case Protocol.Log.LogEntryLevel.Info:
         this.elementInternal.classList.add('console-info-level');
         if (this.message.type === SDK.ConsoleModel.FrontendMessageType.System) {
           this.elementInternal.classList.add('console-system-type');
         }
+        UI.ARIAUtils.setLabel(this.elementInternal, this.text);
         break;
       case Protocol.Log.LogEntryLevel.Warning:
         this.elementInternal.classList.add('console-warning-level');
         this.elementInternal.role = 'log';
+        UI.ARIAUtils.setLabel(this.elementInternal, this.text);
         break;
       case Protocol.Log.LogEntryLevel.Error:
         this.elementInternal.classList.add('console-error-level');
         this.elementInternal.role = 'log';
+        UI.ARIAUtils.setLabel(this.elementInternal, this.text);
         break;
     }
     this.updateMessageIcon();
@@ -1328,9 +1333,12 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
   }
 
   shouldShowInsights(): boolean {
-    if (this.message.source === SDK.ConsoleModel.FrontendMessageSource.ConsoleAPI &&
+    if (this.message.source === Common.Console.FrontendMessageSource.ConsoleAPI &&
         this.message.stackTrace?.callFrames[0]?.url === '') {
       // Do not show insights for direct calls to Console APIs from within DevTools Console.
+      return false;
+    }
+    if (this.message.messageText === '' || this.message.source === Common.Console.FrontendMessageSource.SelfXss) {
       return false;
     }
     return this.message.level === Protocol.Log.LogEntryLevel.Error ||
@@ -1379,6 +1387,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     button.classList.add('hover-button');
     button.ariaLabel = this.getExplainLabel();
     button.tabIndex = 0;
+    button.setAttribute('jslog', `${VisualLogging.action(EXPLAIN_HOVER_ACTION_ID).track({click: true})}`);
     hoverButtonObserver.observe(button);
     return button;
   }
@@ -1641,7 +1650,9 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     return scriptLocationLink;
   }
 
-  private tryFormatAsError(string: string, exceptionDetails?: Protocol.Runtime.ExceptionDetails): HTMLElement|null {
+  private tryFormatAsError(
+      string: string, exceptionDetails?: Protocol.Runtime.ExceptionDetails,
+      formattedResultType: 'div'|'span' = 'span'): HTMLElement|null {
     const runtimeModel = this.message.runtimeModel();
     if (!runtimeModel) {
       return null;
@@ -1656,7 +1667,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     }
 
     const debuggerModel = runtimeModel.debuggerModel();
-    const formattedResult = document.createElement('div');
+    const formattedResult = document.createElement(formattedResultType);
 
     for (let i = 0; i < linkInfos.length; ++i) {
       const newline = i < linkInfos.length - 1 ? '\n' : '';

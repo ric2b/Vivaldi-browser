@@ -33,24 +33,9 @@ void PerformanceHandler::RegisterMessages() {
       base::BindRepeating(&PerformanceHandler::HandleGetDeviceHasBattery,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "openBatterySaverFeedbackDialog",
-      base::BindRepeating(
-          &PerformanceHandler::HandleOpenBatterySaverFeedbackDialog,
-          base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
-      "openMemorySaverFeedbackDialog",
-      base::BindRepeating(
-          &PerformanceHandler::HandleOpenMemorySaverFeedbackDialog,
-          base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
-      "openSpeedFeedbackDialog",
-      base::BindRepeating(&PerformanceHandler::HandleOpenSpeedFeedbackDialog,
+      "openPerformanceFeedbackDialog",
+      base::BindRepeating(&PerformanceHandler::HandleOpenFeedbackDialog,
                           base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
-      "onDiscardRingTreatmentEnabledChanged",
-      base::BindRepeating(
-          &PerformanceHandler::HandleSetDiscardRingTreatmentEnabled,
-          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "validateTabDiscardExceptionRule",
       base::BindRepeating(
@@ -130,44 +115,17 @@ void PerformanceHandler::HandleGetDeviceHasBattery(
                                        ->DeviceHasBattery()));
 }
 
-void PerformanceHandler::HandleOpenBatterySaverFeedbackDialog(
-    const base::Value::List& args) {
-  HandleOpenFeedbackDialog("performance_battery");
-}
-
-void PerformanceHandler::HandleOpenMemorySaverFeedbackDialog(
-    const base::Value::List& args) {
-  HandleOpenFeedbackDialog("performance_tabs");
-}
-
-void PerformanceHandler::HandleOpenSpeedFeedbackDialog(
-    const base::Value::List& args) {
-  HandleOpenFeedbackDialog("performance_speed");
-}
-
 void PerformanceHandler::HandleOpenFeedbackDialog(
-    const std::string category_tag) {
+    const base::Value::List& args) {
+  CHECK_EQ(1U, args.size());
+  const std::string category_tag = args[0].GetString();
+
   Browser* browser = chrome::FindBrowserWithTab(web_ui()->GetWebContents());
   DCHECK(browser);
   std::string unused;
   chrome::ShowFeedbackPage(browser,
                            feedback::kFeedbackSourceSettingsPerformancePage,
                            unused, unused, category_tag, unused);
-}
-
-void PerformanceHandler::HandleSetDiscardRingTreatmentEnabled(
-    const base::Value::List& args) {
-  for (Browser* browser : *BrowserList::GetInstance()) {
-    TabStripModel* tab_strip_model = browser->tab_strip_model();
-    TabStrip* tab_strip =
-        BrowserView::GetBrowserViewForBrowser(browser)->tabstrip();
-
-    for (int tab_index = 0; tab_index < tab_strip_model->count(); ++tab_index) {
-      TabRendererData tab_data =
-          TabRendererData::FromTabInModel(tab_strip_model, tab_index);
-      tab_strip->SetTabData(tab_index, tab_data);
-    }
-  }
 }
 
 void PerformanceHandler::HandleValidateTabDiscardExceptionRule(

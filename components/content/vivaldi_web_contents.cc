@@ -103,8 +103,25 @@ void WebContentsImpl::WebContentsTreeNode::VivaldiDetachExternallyOwned(
     outermost->SetAsFocusedWebContentsIfNecessary();
   }
 
+  // Make sure we can reattach with a new ProxyHost.
+  current_web_contents_->GetRenderManager()
+      ->current_frame_host()
+      ->browsing_context_state()
+      ->DeleteRenderFrameProxyHost(
+          OuterContentsFrameTreeNode()
+              ->current_frame_host()
+              ->GetSiteInstance()
+              ->group(),
+          BrowsingContextState::ProxyAccessMode::kAllowOuterDelegate);
+
   // Make sure this isn't freed here. It is owned by the TabStrip or DevTools.
-  current_web_contents_->DetachFromOuterWebContents().release();
+  std::unique_ptr<WebContents> inner_contents =
+      outer_web_contents_->node_.DetachInnerWebContents(current_web_contents_);
+  OuterContentsFrameTreeNode()->RemoveObserver(this);
+  outer_contents_frame_tree_node_id_ = FrameTreeNode::kFrameTreeNodeInvalidId;
+  outer_web_contents_ = nullptr;
+
+  inner_contents.release();
 
   // Disconnect the view hierarhy from the text_input.
   // NOTE(igor@vivaldi.com) This also clears the text input state for each

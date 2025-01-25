@@ -4,10 +4,10 @@
 
 #include "components/autofill/core/browser/test_browser_autofill_manager.h"
 
-#include "autofill_test_utils.h"
+#include "base/check_deref.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/autofill/core/browser/autofill_suggestion_generator.h"
+#include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/browser_autofill_manager_test_api.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
@@ -20,6 +20,7 @@
 #include "components/autofill/core/browser/test_personal_data_manager.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -51,11 +52,11 @@ void TestBrowserAutofillManager::OnFormsSeen(
 
 void TestBrowserAutofillManager::OnTextFieldDidChange(
     const FormData& form,
-    const FormFieldData& field,
+    const FieldGlobalId& field_id,
     const base::TimeTicks timestamp) {
   TestAutofillManagerWaiter waiter(*this,
                                    {AutofillManagerEvent::kTextFieldDidChange});
-  AutofillManager::OnTextFieldDidChange(form, field, timestamp);
+  AutofillManager::OnTextFieldDidChange(form, field_id, timestamp);
   ASSERT_TRUE(waiter.Wait());
 }
 
@@ -70,24 +71,24 @@ void TestBrowserAutofillManager::OnDidFillAutofillFormData(
 
 void TestBrowserAutofillManager::OnAskForValuesToFill(
     const FormData& form,
-    const FormFieldData& field,
+    const FieldGlobalId& field_id,
     const gfx::Rect& caret_bounds,
     AutofillSuggestionTriggerSource trigger_source) {
   TestAutofillManagerWaiter waiter(*this,
                                    {AutofillManagerEvent::kAskForValuesToFill});
-  AutofillManager::OnAskForValuesToFill(form, field, caret_bounds,
+  AutofillManager::OnAskForValuesToFill(form, field_id, caret_bounds,
                                         trigger_source);
   ASSERT_TRUE(waiter.Wait());
 }
 
 void TestBrowserAutofillManager::OnJavaScriptChangedAutofilledValue(
     const FormData& form,
-    const FormFieldData& field,
+    const FieldGlobalId& field_id,
     const std::u16string& old_value,
     bool formatting_only) {
   TestAutofillManagerWaiter waiter(
       *this, {AutofillManagerEvent::kJavaScriptChangedAutofilledValue});
-  AutofillManager::OnJavaScriptChangedAutofilledValue(form, field, old_value,
+  AutofillManager::OnJavaScriptChangedAutofilledValue(form, field_id, old_value,
                                                       formatting_only);
   ASSERT_TRUE(waiter.Wait());
 }
@@ -141,7 +142,7 @@ void TestBrowserAutofillManager::UploadVotesAndLogQuality(
                 possible_types.size());
       for (auto it : expected_submitted_field_types_[i]) {
         EXPECT_TRUE(possible_types.count(it))
-            << "Expected type: " << AutofillType(it).ToStringView();
+            << "Expected type: " << FieldTypeToStringView(it);
       }
     }
   }
@@ -224,13 +225,14 @@ const std::string TestBrowserAutofillManager::GetSubmittedFormSignature() {
 
 void TestBrowserAutofillManager::OnAskForValuesToFillTest(
     const FormData& form,
-    const FormFieldData& field,
+    const FieldGlobalId& field_id,
     AutofillSuggestionTriggerSource trigger_source) {
   TestAutofillManagerWaiter waiter(*this,
                                    {AutofillManagerEvent::kAskForValuesToFill});
-  gfx::PointF p = field.bounds().origin();
+  gfx::PointF p =
+      CHECK_DEREF(form.FindFieldByGlobalId(field_id)).bounds().origin();
   gfx::Rect caret_bounds(gfx::Point(p.x(), p.y()), gfx::Size(0, 10));
-  BrowserAutofillManager::OnAskForValuesToFill(form, field, caret_bounds,
+  BrowserAutofillManager::OnAskForValuesToFill(form, field_id, caret_bounds,
                                                trigger_source);
   ASSERT_TRUE(waiter.Wait());
 }
@@ -239,9 +241,14 @@ void TestBrowserAutofillManager::SetAutofillProfileEnabled(
     TestAutofillClient& client,
     bool autofill_profile_enabled) {
   autofill_profile_enabled_ = autofill_profile_enabled;
+  if (PrefService* prefs = client.GetPrefs()) {
+    prefs->SetBoolean(prefs::kAutofillProfileEnabled, autofill_profile_enabled);
+  }
   if (!autofill_profile_enabled_) {
     // Profile data is refreshed when this pref is changed.
-    client.GetPersonalDataManager()->ClearProfiles();
+    client.GetPersonalDataManager()
+        ->test_address_data_manager()
+        .ClearProfiles();
   }
 }
 

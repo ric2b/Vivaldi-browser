@@ -28,7 +28,7 @@
 namespace openscreen::cast {
 namespace {
 
-using ::cast::channel::CastMessage;
+using proto::CastMessage;
 using ::testing::_;
 using ::testing::Invoke;
 using ::testing::Mock;
@@ -181,8 +181,7 @@ class ApplicationAgentTest : public ::testing::Test {
     EXPECT_EQ(from, message.source_id());
     EXPECT_EQ(to, message.destination_id());
     EXPECT_EQ(the_namespace, message.namespace_());
-    EXPECT_EQ(::cast::channel::CastMessage_PayloadType_STRING,
-              message.payload_type());
+    EXPECT_EQ(proto::CastMessage_PayloadType_STRING, message.payload_type());
     EXPECT_FALSE(message.payload_utf8().empty());
     ErrorOr<Json::Value> parsed = json::Parse(message.payload_utf8());
     return parsed.value(Json::Value(Json::objectValue));

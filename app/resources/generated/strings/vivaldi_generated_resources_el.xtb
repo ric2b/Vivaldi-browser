@@ -86,7 +86,6 @@
 <translation id="2439110203301358333">Κάποιο άλλο πρόγραμμα στον υπολογιστή σας πρόσθεσε μια επέκταση, η οποία ενδέχεται να αλλάξει τον τρόπο λειτουργίας του Vivaldi.</translation>
 <translation id="2443487764245141020">Ενδέχεται επίσης να απαιτείται η αναγνώριση της συσκευής σας από ιστοτόπους μέσω αναγνωριστικού</translation>
 <translation id="2445081178310039857">Απαιτείται ο κατάλογος ρίζας επέκτασης.</translation>
-<translation id="2470702053775288986">Απενεργοποίηση μη υποστηριζόμενων επεκτάσεων</translation>
 <translation id="2485422356828889247">Απεγκατάσταση</translation>
 <translation id="2498539833203011245">Ελαχιστοποίηση</translation>
 <translation id="2509495747794740764">Η κλίμακα πρέπει να είναι αριθμός μεταξύ του 10 και του 200.</translation>
@@ -204,7 +203,6 @@
 <translation id="431076611119798497">&amp;Λεπτομέρειες</translation>
 <translation id="4345587454538109430">Διαμόρφωση...</translation>
 <translation id="4348766275249686434">Συλλέξτε τα λάθη</translation>
-<translation id="4363771538994847871">Δεν βρέθηκαν προορισμοί μετάδοσης. Χρειάζεστε βοήθεια;</translation>
 <translation id="4384652540891215547">Ενεργοποίηση επέκτασης</translation>
 <translation id="4394049700291259645">Απενεργοποίηση</translation>
 <translation id="4409697491990005945">Περιθώρια</translation>
@@ -388,7 +386,6 @@
 <translation id="7771452384635174008">Διάταξη</translation>
 <translation id="7782102568078991263">Δεν υπάρχουν άλλες προτάσεις από την Google</translation>
 <translation id="7786889348652477777">Ε&amp;πανάληψη φόρτωσης εφαρμογής</translation>
-<translation id="7791543448312431591">Προσθήκη</translation>
 <translation id="7800518121066352902">Περιστροφή προς τα &amp;Αριστερά</translation>
 <translation id="7814458197256864873">&amp;Αντιγραφή</translation>
 <translation id="7818135753970109980">Προστέθηκε νέο θέμα (<ph name="EXTENSION_NAME" />)</translation>

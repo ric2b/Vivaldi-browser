@@ -29,8 +29,8 @@ namespace gpu::raster {
 class GPU_GLES2_EXPORT GraphiteCacheController final
     : public base::RefCounted<GraphiteCacheController> {
  public:
-  // |recorder| and |context| are optional, GraphiteCacheController only purges
-  // resources in non-null |recorder| and |context|.
+  // |context| is optional e.g. Viz thread GraphiteCacheController won't cleanup
+  // the Graphite context which lives on GPU main thread.
   explicit GraphiteCacheController(skgpu::graphite::Recorder* recorder,
                                    skgpu::graphite::Context* context = nullptr);
 
@@ -45,11 +45,15 @@ class GPU_GLES2_EXPORT GraphiteCacheController final
     return weak_ptr_factory_.GetWeakPtr();
   }
 
+  // Cleans up all Skia-owned scratch resources.
+  void CleanUpScratchResources();
+
+  // Cleans up all resources.
+  void CleanUpAllResources();
+
  private:
   friend class base::RefCounted<GraphiteCacheController>;
   ~GraphiteCacheController();
-
-  void PerformCleanup();
 
   const raw_ptr<skgpu::graphite::Recorder> recorder_;
   const raw_ptr<skgpu::graphite::Context> context_;

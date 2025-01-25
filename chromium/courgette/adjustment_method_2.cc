@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "courgette/adjustment_method.h"
@@ -464,7 +469,7 @@ bool Shingle::InterningLess::operator()(
     if (info_a->is_model_ > info_b->is_model_)
       return false;
     if (info_a != info_b) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
   return false;
@@ -1000,7 +1005,7 @@ class AssignmentProblem {
       LOG_ASSERT(n == 1);
     } else if (pattern->program_histogram_.empty() &&
                pattern->model_histogram_.empty()) {
-      NOTREACHED();  // Should not come back to life.
+      NOTREACHED_IN_MIGRATION();  // Should not come back to life.
     } else if (pattern->program_histogram_.empty()) {
       // Useless pattern.
     } else {
@@ -1215,7 +1220,7 @@ class AssignmentProblem {
   Shingle::OwningSet shingle_instances_;
 
   // |instances_| maps from position in |trace_| to Shingle at that position.
-  std::vector<raw_ptr<Shingle, VectorExperimental>> instances_;
+  std::vector<raw_ptr<Shingle>> instances_;
 
   SingleUsePatternQueue single_use_pattern_queue_;
   ShinglePatternSet active_non_single_use_patterns_;

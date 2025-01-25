@@ -19,6 +19,7 @@ import org.jni_zero.NativeMethods;
 import org.chromium.base.Log;
 import org.chromium.net.BidirectionalStream;
 import org.chromium.net.CallbackException;
+import org.chromium.net.ConnectionCloseSource;
 import org.chromium.net.CronetException;
 import org.chromium.net.ExperimentalBidirectionalStream;
 import org.chromium.net.NetworkException;
@@ -111,7 +112,7 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
     private final String mInitialUrl;
     private final int mInitialPriority;
     private final String mInitialMethod;
-    private final String mRequestHeaders[];
+    private final String[] mRequestHeaders;
     private final boolean mDelayRequestHeadersUntilFirstFlush;
     private final Collection<Object> mRequestAnnotations;
     private final boolean mTrafficStatsTagSet;
@@ -703,6 +704,7 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
             int errorCode,
             int nativeError,
             int nativeQuicError,
+            @ConnectionCloseSource int source,
             String errorString,
             long receivedByteCount) {
         if (mResponseInfo != null) {
@@ -715,7 +717,8 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
                             "Exception in BidirectionalStream: " + errorString,
                             errorCode,
                             nativeError,
-                            nativeQuicError));
+                            nativeQuicError,
+                            source));
         } else {
             failWithException(
                     new BidirectionalStreamNetworkException(
@@ -800,7 +803,8 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
                             getFinishedReason(),
                             mResponseInfo,
                             mException);
-            mRequestContext.reportRequestFinished(requestFinishedInfo, mInflightDoneCallbackCount);
+            mRequestContext.reportRequestFinished(
+                    requestFinishedInfo, mInflightDoneCallbackCount, null);
         } finally {
             mInflightDoneCallbackCount.decrement();
         }
@@ -969,7 +973,7 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
     }
 
     private static String[] stringsFromHeaderList(List<Map.Entry<String, String>> headersList) {
-        String headersArray[] = new String[headersList.size() * 2];
+        String[] headersArray = new String[headersList.size() * 2];
         int i = 0;
         for (Map.Entry<String, String> requestHeader : headersList) {
             headersArray[i++] = requestHeader.getKey();

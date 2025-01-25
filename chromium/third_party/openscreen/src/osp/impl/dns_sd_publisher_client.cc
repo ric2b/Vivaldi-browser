@@ -29,11 +29,9 @@ discovery::DnsSdInstance ServiceConfigToDnsSdInstance(
       txt.SetValue(kFingerprint, config.fingerprint).ok();
   OSP_CHECK(did_set_everything);
 
-  // NOTE: Not totally clear how we should be using config.hostname, which in
-  // principle is already part of config.service_instance_name.
-  return discovery::DnsSdInstance(
-      config.service_instance_name, kOpenScreenServiceName, kDnsSdDomainId,
-      std::move(txt), config.connection_server_port);
+  return discovery::DnsSdInstance(config.instance_name, kOpenScreenServiceName,
+                                  kDnsSdDomainId, std::move(txt),
+                                  config.connection_server_port);
 }
 
 }  // namespace

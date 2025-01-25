@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/not_fatal_until.h"
 #include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "components/signin/internal/identity_manager/profile_oauth2_token_service.h"
@@ -29,7 +30,7 @@ FakeProfileOAuth2TokenServiceDelegate::CreateAccessTokenFetcher(
     OAuth2AccessTokenConsumer* consumer,
     const std::string& token_binding_challenge) {
   auto it = refresh_tokens_.find(account_id);
-  DCHECK(it != refresh_tokens_.end());
+  CHECK(it != refresh_tokens_.end(), base::NotFatalUntil::M130);
   return GaiaAccessTokenFetcher::
       CreateExchangeRefreshTokenForAccessTokenInstance(
           consumer, url_loader_factory, it->second);
@@ -112,8 +113,11 @@ void FakeProfileOAuth2TokenServiceDelegate::IssueRefreshTokenForUser(
                   GoogleServiceAuthError::InvalidGaiaCredentialsReason::
                       CREDENTIALS_REJECTED_BY_CLIENT)
             : GoogleServiceAuthError(GoogleServiceAuthError::NONE);
+
+    // The main difference with this call compared to the production call is
+    // that it is also called for newly added accounts.
     UpdateAuthError(account_id, error,
-                    /*fire_auth_error_changed=*/false);
+                    /*fire_auth_error_changed=*/true);
 
     FireRefreshTokenAvailable(account_id);
   }
@@ -128,7 +132,7 @@ void FakeProfileOAuth2TokenServiceDelegate::ExtractCredentialsInternal(
     ProfileOAuth2TokenService* to_service,
     const CoreAccountId& account_id) {
   auto it = refresh_tokens_.find(account_id);
-  DCHECK(it != refresh_tokens_.end());
+  CHECK(it != refresh_tokens_.end(), base::NotFatalUntil::M130);
   to_service->GetDelegate()->UpdateCredentials(account_id, it->second);
   RevokeCredentials(account_id);
 }
@@ -138,8 +142,8 @@ FakeProfileOAuth2TokenServiceDelegate::GetURLLoaderFactory() const {
   return shared_factory_;
 }
 
-bool FakeProfileOAuth2TokenServiceDelegate::FixRequestErrorIfPossible() {
-  return fix_request_if_possible_;
+bool FakeProfileOAuth2TokenServiceDelegate::FixAccountErrorIfPossible() {
+  return fix_account_if_possible_ ? fix_account_if_possible_.Run() : false;
 }
 
 #if BUILDFLAG(IS_ANDROID)

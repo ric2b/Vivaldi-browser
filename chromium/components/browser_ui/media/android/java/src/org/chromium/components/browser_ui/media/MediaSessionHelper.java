@@ -37,6 +37,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
+// Vivaldi
+import android.net.Uri;
+import org.chromium.base.IntentUtils;
+import org.chromium.base.Log;
+import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.common.VivaldiIntentHandler;
+
 /**
  * Glue code that relays events from the {@link org.chromium.content.browser.MediaSession} for a
  * WebContents to a delegate (ultimately, to {@link MediaNotificationController}).
@@ -188,8 +195,31 @@ public class MediaSessionHelper implements MediaImageCallback {
                     hideNotificationDelayed();
                     return;
                 }
-
                 Intent contentIntent = mDelegate.createBringTabToFrontIntent();
+                // Vivaldi
+                if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
+                    Intent intent = getActivity().getIntent();
+                    if (intent != null) {
+                        String referrer = IntentUtils.safeGetStringExtra(
+                                intent, VivaldiIntentHandler.CHROMIUM_EXTRA_ACTIVITY_REFERRER);
+                        Log.d("MediaSessionHelper", "referrer = " + referrer);
+                        if (referrer != null && !referrer.isEmpty()) {
+                            contentIntent.putExtra(
+                                    VivaldiIntentHandler.EXTRA_ACTIVITY_REFERRER,
+                                    referrer);
+                        } else {
+                            Uri extraReferrer = getActivity().getReferrer();
+                            if (extraReferrer != null)
+                                referrer = extraReferrer.toString();
+                            else
+                                referrer = "null";
+
+                            contentIntent.putExtra(
+                                    VivaldiIntentHandler.EXTRA_ACTIVITY_REFERRER,
+                                    referrer);
+                        }
+                    }
+                }
 
                 if (mFallbackTitle == null) mFallbackTitle = sanitizeMediaTitle(mOrigin);
 

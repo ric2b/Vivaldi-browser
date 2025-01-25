@@ -68,8 +68,8 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
   options.SetByDottedPath("QUIC.connection_options", "TIME,TBBR,REJ");
   options.SetByDottedPath(
       "QUIC.set_quic_flags",
-      "FLAGS_quic_reloadable_flag_quic_testonly_default_false=true,"
-      "FLAGS_quic_restart_flag_quic_testonly_default_true=false");
+      "FLAGS_quiche_reloadable_flag_quic_testonly_default_false=true,"
+      "FLAGS_quiche_restart_flag_quic_testonly_default_true=false");
   options.SetByDottedPath("AsyncDNS.enable", true);
   options.SetByDottedPath("NetworkErrorLogging.enable", true);
   options.SetByDottedPath("NetworkErrorLogging.preloaded_report_to_headers",
@@ -142,8 +142,8 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
   EXPECT_TRUE(base::JSONWriter::Write(options, &options_json));
 
   // Initialize QUIC flags set by the config.
-  FLAGS_quic_reloadable_flag_quic_testonly_default_false = false;
-  FLAGS_quic_restart_flag_quic_testonly_default_true = true;
+  FLAGS_quiche_reloadable_flag_quic_testonly_default_false = false;
+  FLAGS_quiche_restart_flag_quic_testonly_default_true = true;
 
   std::unique_ptr<URLRequestContextConfig> config =
       URLRequestContextConfig::CreateURLRequestContextConfig(
@@ -195,8 +195,8 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
   EXPECT_EQ(quic_connection_options, quic_params->connection_options);
 
   // Check QUIC flags.
-  EXPECT_TRUE(FLAGS_quic_reloadable_flag_quic_testonly_default_false);
-  EXPECT_FALSE(FLAGS_quic_restart_flag_quic_testonly_default_true);
+  EXPECT_TRUE(FLAGS_quiche_reloadable_flag_quic_testonly_default_false);
+  EXPECT_FALSE(FLAGS_quiche_restart_flag_quic_testonly_default_true);
 
   // Check max_server_configs_stored_in_properties.
   EXPECT_EQ(2u, quic_params->max_server_configs_stored_in_properties);
@@ -293,8 +293,8 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
       context->host_resolver()->CreateRequest(
           net::HostPortPair("abcde", 80), net::NetworkAnonymizationKey(),
           net::NetLogWithSource(), std::nullopt);
-  EXPECT_EQ(net::OK, resolve_request->Start(
-                         base::BindOnce([](int error) { NOTREACHED(); })));
+  EXPECT_EQ(net::OK, resolve_request->Start(base::BindOnce(
+                         [](int error) { NOTREACHED_IN_MIGRATION(); })));
 
   EXPECT_TRUE(config->network_thread_priority);
   EXPECT_EQ(42, config->network_thread_priority.value());

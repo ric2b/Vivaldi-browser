@@ -25,7 +25,7 @@ class TlsWriteBuffer {
   // Pushes the provided data into the buffer, returning true if successful.
   // Returns false if there was insufficient space left. Either all or none of
   // the data is pushed into the buffer.
-  bool Push(const void* data, size_t len);
+  bool Push(ByteView data);
 
   // Returns a subset of the readable region of data. At time of reading, more
   // data may be available for reading than what is represented in this Span.

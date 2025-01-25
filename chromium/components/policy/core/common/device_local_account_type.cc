@@ -20,7 +20,6 @@ constexpr auto kDomainPrefixMap =
     base::MakeFixedFlatMap<DeviceLocalAccountType, std::string_view>({
         {DeviceLocalAccountType::kPublicSession, "public-accounts"},
         {DeviceLocalAccountType::kKioskApp, "kiosk-apps"},
-        {DeviceLocalAccountType::kArcKioskApp, "arc-kiosk-apps"},
         {DeviceLocalAccountType::kSamlPublicSession, "saml-public-accounts"},
         {DeviceLocalAccountType::kWebKioskApp, "web-kiosk-apps"},
     });
@@ -33,7 +32,6 @@ bool IsValidDeviceLocalAccountType(int value) {
   switch (static_cast<DeviceLocalAccountType>(value)) {
     case DeviceLocalAccountType::kPublicSession:
     case DeviceLocalAccountType::kKioskApp:
-    case DeviceLocalAccountType::kArcKioskApp:
     case DeviceLocalAccountType::kSamlPublicSession:
     case DeviceLocalAccountType::kWebKioskApp:
       return true;
@@ -78,7 +76,7 @@ GetDeviceLocalAccountType(std::string_view user_id) {
   }
 
   // |user_id| is a device-local account but its type is not recognized.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return base::unexpected(GetDeviceLocalAccountTypeError::kUnknownDomain);
 }
 

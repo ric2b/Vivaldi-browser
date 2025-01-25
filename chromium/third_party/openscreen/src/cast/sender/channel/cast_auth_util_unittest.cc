@@ -27,15 +27,9 @@
 
 namespace openscreen::cast {
 
-// TODO(crbug.com/openscreen/90): Remove these after Chromium is migrated to
-// openscreen::cast
-using DeviceCertTestSuite = ::cast::certificate::DeviceCertTestSuite;
-using VerificationResult = ::cast::certificate::VerificationResult;
-using DeviceCertTest = ::cast::certificate::DeviceCertTest;
-
 namespace {
 
-using ::cast::channel::AuthResponse;
+using proto::AuthResponse;
 
 std::unique_ptr<ParsedCertificate> ParseX509Der(const std::string& der) {
   auto* data = reinterpret_cast<const uint8_t*>(der.data());
@@ -137,7 +131,7 @@ class CastAuthUtilTest : public ::testing::Test {
  protected:
   static AuthResponse CreateAuthResponse(
       std::vector<uint8_t>* signed_data,
-      ::cast::channel::HashAlgorithm digest_algorithm) {
+      proto::HashAlgorithm digest_algorithm) {
     std::vector<std::string> chain = ReadCertificatesFromPemFile(
         GetSpecificTestDataPath() + "certificates/chromecast_gen1.pem");
     OSP_CHECK(!chain.empty());
@@ -154,10 +148,10 @@ class CastAuthUtilTest : public ::testing::Test {
 
     response.set_hash_algorithm(digest_algorithm);
     switch (digest_algorithm) {
-      case ::cast::channel::SHA1:
+      case proto::SHA1:
         response.set_signature(ByteViewToString(signatures.sha1));
         break;
-      case ::cast::channel::SHA256:
+      case proto::SHA256:
         response.set_signature(ByteViewToString(signatures.sha256));
         break;
     }
@@ -183,8 +177,7 @@ class CastAuthUtilTest : public ::testing::Test {
 // being verified doesn't expire until 2032.
 TEST_F(CastAuthUtilTest, VerifySuccess) {
   std::vector<uint8_t> signed_data;
-  AuthResponse auth_response =
-      CreateAuthResponse(&signed_data, ::cast::channel::SHA256);
+  AuthResponse auth_response = CreateAuthResponse(&signed_data, proto::SHA256);
   DateTime now = {};
   ASSERT_TRUE(DateTimeFromSeconds(GetWallTimeSinceUnixEpoch().count(), &now));
   ErrorOr<CastDeviceCertPolicy> result = VerifyCredentialsForTest(
@@ -196,8 +189,7 @@ TEST_F(CastAuthUtilTest, VerifySuccess) {
 
 TEST_F(CastAuthUtilTest, VerifyBadCA) {
   std::vector<uint8_t> signed_data;
-  AuthResponse auth_response =
-      CreateAuthResponse(&signed_data, ::cast::channel::SHA256);
+  AuthResponse auth_response = CreateAuthResponse(&signed_data, proto::SHA256);
   MangleString(auth_response.mutable_intermediate_certificate(0));
   ErrorOr<CastDeviceCertPolicy> result =
       VerifyCredentials(auth_response, signed_data, cast_trust_store_.get(),
@@ -208,8 +200,7 @@ TEST_F(CastAuthUtilTest, VerifyBadCA) {
 
 TEST_F(CastAuthUtilTest, VerifyBadClientAuthCert) {
   std::vector<uint8_t> signed_data;
-  AuthResponse auth_response =
-      CreateAuthResponse(&signed_data, ::cast::channel::SHA256);
+  AuthResponse auth_response = CreateAuthResponse(&signed_data, proto::SHA256);
   MangleString(auth_response.mutable_client_auth_certificate());
   ErrorOr<CastDeviceCertPolicy> result =
       VerifyCredentials(auth_response, signed_data, cast_trust_store_.get(),
@@ -220,8 +211,7 @@ TEST_F(CastAuthUtilTest, VerifyBadClientAuthCert) {
 
 TEST_F(CastAuthUtilTest, VerifyBadSignature) {
   std::vector<uint8_t> signed_data;
-  AuthResponse auth_response =
-      CreateAuthResponse(&signed_data, ::cast::channel::SHA256);
+  AuthResponse auth_response = CreateAuthResponse(&signed_data, proto::SHA256);
   MangleString(auth_response.mutable_signature());
   ErrorOr<CastDeviceCertPolicy> result =
       VerifyCredentials(auth_response, signed_data, cast_trust_store_.get(),
@@ -232,8 +222,7 @@ TEST_F(CastAuthUtilTest, VerifyBadSignature) {
 
 TEST_F(CastAuthUtilTest, VerifyEmptySignature) {
   std::vector<uint8_t> signed_data;
-  AuthResponse auth_response =
-      CreateAuthResponse(&signed_data, ::cast::channel::SHA256);
+  AuthResponse auth_response = CreateAuthResponse(&signed_data, proto::SHA256);
   auth_response.mutable_signature()->clear();
   ErrorOr<CastDeviceCertPolicy> result =
       VerifyCredentials(auth_response, signed_data, cast_trust_store_.get(),
@@ -244,8 +233,7 @@ TEST_F(CastAuthUtilTest, VerifyEmptySignature) {
 
 TEST_F(CastAuthUtilTest, VerifyUnsupportedDigest) {
   std::vector<uint8_t> signed_data;
-  AuthResponse auth_response =
-      CreateAuthResponse(&signed_data, ::cast::channel::SHA1);
+  AuthResponse auth_response = CreateAuthResponse(&signed_data, proto::SHA1);
   DateTime now = {};
   ASSERT_TRUE(DateTimeFromSeconds(GetWallTimeSinceUnixEpoch().count(), &now));
   ErrorOr<CastDeviceCertPolicy> result = VerifyCredentialsForTest(
@@ -257,8 +245,7 @@ TEST_F(CastAuthUtilTest, VerifyUnsupportedDigest) {
 
 TEST_F(CastAuthUtilTest, VerifyBackwardsCompatibleDigest) {
   std::vector<uint8_t> signed_data;
-  AuthResponse auth_response =
-      CreateAuthResponse(&signed_data, ::cast::channel::SHA1);
+  AuthResponse auth_response = CreateAuthResponse(&signed_data, proto::SHA1);
   DateTime now = {};
   ASSERT_TRUE(DateTimeFromSeconds(GetWallTimeSinceUnixEpoch().count(), &now));
   ErrorOr<CastDeviceCertPolicy> result = VerifyCredentialsForTest(
@@ -269,8 +256,7 @@ TEST_F(CastAuthUtilTest, VerifyBackwardsCompatibleDigest) {
 
 TEST_F(CastAuthUtilTest, VerifyBadPeerCert) {
   std::vector<uint8_t> signed_data;
-  AuthResponse auth_response =
-      CreateAuthResponse(&signed_data, ::cast::channel::SHA256);
+  AuthResponse auth_response = CreateAuthResponse(&signed_data, proto::SHA256);
   MangleData(&signed_data);
   ErrorOr<CastDeviceCertPolicy> result =
       VerifyCredentials(auth_response, signed_data, cast_trust_store_.get(),
@@ -396,7 +382,7 @@ ErrorOr<CastDeviceCertPolicy> TestVerifyRevocation(
 }
 
 // Runs a single test case.
-bool RunTest(const DeviceCertTest& test_case) {
+bool RunTest(const proto::DeviceCertTest& test_case) {
   std::unique_ptr<TrustStore> crl_trust_store;
   std::unique_ptr<TrustStore> cast_trust_store;
   if (test_case.use_test_trust_anchors()) {
@@ -422,7 +408,7 @@ bool RunTest(const DeviceCertTest& test_case) {
   std::string crl_bundle = test_case.crl_bundle();
   ErrorOr<CastDeviceCertPolicy> result(CastDeviceCertPolicy::kUnrestricted);
   switch (test_case.expected_result()) {
-    case ::cast::certificate::PATH_VERIFICATION_FAILED:
+    case proto::PATH_VERIFICATION_FAILED:
       result = TestVerifyRevocation(
           certificate_chain, crl_bundle, verification_time, false,
           cast_trust_store.get(), crl_trust_store.get());
@@ -430,31 +416,31 @@ bool RunTest(const DeviceCertTest& test_case) {
                 Error::Code::kCastV2CertNotSignedByTrustedCa);
       return result.error().code() ==
              Error::Code::kCastV2CertNotSignedByTrustedCa;
-    case ::cast::certificate::CRL_VERIFICATION_FAILED:
+    case proto::CRL_VERIFICATION_FAILED:
     // Fall-through intended.
-    case ::cast::certificate::REVOCATION_CHECK_FAILED_WITHOUT_CRL:
+    case proto::REVOCATION_CHECK_FAILED_WITHOUT_CRL:
       result = TestVerifyRevocation(
           certificate_chain, crl_bundle, verification_time, true,
           cast_trust_store.get(), crl_trust_store.get());
       EXPECT_EQ(result.error().code(), Error::Code::kErrCrlInvalid);
       return result.error().code() == Error::Code::kErrCrlInvalid;
-    case ::cast::certificate::CRL_EXPIRED_AFTER_INITIAL_VERIFICATION:
+    case proto::CRL_EXPIRED_AFTER_INITIAL_VERIFICATION:
       // By-pass this test because CRL is always verified at the time the
       // certificate is verified.
       return true;
-    case ::cast::certificate::REVOCATION_CHECK_FAILED:
+    case proto::REVOCATION_CHECK_FAILED:
       result = TestVerifyRevocation(
           certificate_chain, crl_bundle, verification_time, true,
           cast_trust_store.get(), crl_trust_store.get());
       EXPECT_EQ(result.error().code(), Error::Code::kErrCertsRevoked);
       return result.error().code() == Error::Code::kErrCertsRevoked;
-    case ::cast::certificate::SUCCESS:
+    case proto::SUCCESS:
       result = TestVerifyRevocation(
           certificate_chain, crl_bundle, verification_time, false,
           cast_trust_store.get(), crl_trust_store.get());
       EXPECT_EQ(result.error().code(), Error::Code::kCastV2SignedBlobsMismatch);
       return result.error().code() == Error::Code::kCastV2SignedBlobsMismatch;
-    case ::cast::certificate::UNSPECIFIED:
+    case proto::UNKNOWN:
       return false;
   }
   return false;
@@ -466,7 +452,7 @@ bool RunTest(const DeviceCertTest& test_case) {
 // These tests are generated by a test generator in google3.
 void RunTestSuite(const std::string& test_suite_file_name) {
   std::string testsuite_raw = ReadEntireFileToString(test_suite_file_name);
-  DeviceCertTestSuite test_suite;
+  proto::DeviceCertTestSuite test_suite;
   EXPECT_TRUE(test_suite.ParseFromString(testsuite_raw));
   uint16_t successes = 0;
 

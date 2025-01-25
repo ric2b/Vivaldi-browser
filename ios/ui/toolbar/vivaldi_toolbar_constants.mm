@@ -38,6 +38,8 @@ NSString* vToolbarSearchButtonIcon = @"toolbar_search";
 NSString* vToolbarForwardButtonIcon = @"toolbar_forward";
 NSString* vToolbarBackButtonIcon = @"toolbar_back";
 NSString* vToolbarTabSwitcherButtonIcon = @"toolbar_switcher";
+NSString* vToolbarMoreButtonIcon = @"toolbar_more";
+NSString* vToolbarNTPButtonIcon = @"toolbar_new_tab_page";
 NSString* vToolbarTabSwitcherOveflowButtonIcon = @"toolbar_switcher_overflow";
 
 NSString* vToolbarButtonColor = @"toolbar_button_color";

@@ -16,6 +16,7 @@
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/ui/settings/appearance/vivaldi_appearance_settings_prefs_helper.h"
@@ -36,6 +37,8 @@ PrefObserverDelegate> {
   PrefBackedBoolean* _dynamicAccentColorEnabled;
   /// Pref tracking if bottom omnibox is enabled.
   PrefBackedBoolean* _bottomOmniboxEnabled;
+  /// Pref tracking if X button for background tabs is enabled.
+  PrefBackedBoolean* _showXButtonBackgroundTabsEnabled;
 }
 // End Vivaldi
 
@@ -98,16 +101,11 @@ PrefObserverDelegate> {
                    forProtocol:@protocol(TabStripCommands)];
 
   // Vivaldi
+  [self startObservingOmniboxPosition:GetApplicationContext()->GetLocalState()];
   PrefService* prefService = self.browser->GetBrowserState()->GetPrefs();
   if (prefService) {
     [VivaldiAppearanceSettingPrefs setPrefService:prefService];
-    _bottomOmniboxEnabled =
-        [[PrefBackedBoolean alloc] initWithPrefService:prefService
-                                              prefName:prefs::kBottomOmnibox];
-    [_bottomOmniboxEnabled setObserver:self];
-    // Initialize to the correct value.
-    [self booleanDidChange:_bottomOmniboxEnabled];
-
+    [self startObservingTabStyles:prefService];
     [self startObservingAccentColorChange:prefService];
   }
   // End Vivaldi
@@ -124,6 +122,11 @@ PrefObserverDelegate> {
       stopDispatchingForProtocol:@protocol(TabStripCommands)];
 
   // Vivaldi
+  if (_showXButtonBackgroundTabsEnabled) {
+    [_showXButtonBackgroundTabsEnabled stop];
+    [_showXButtonBackgroundTabsEnabled setObserver:nil];
+    _showXButtonBackgroundTabsEnabled = nil;
+  }
   if (_bottomOmniboxEnabled) {
     [_bottomOmniboxEnabled stop];
     [_bottomOmniboxEnabled setObserver:nil];
@@ -141,8 +144,24 @@ PrefObserverDelegate> {
 }
 
 #pragma mark VIVALDI
-
 // Private
+- (void)startObservingOmniboxPosition:(PrefService*)prefService {
+  _bottomOmniboxEnabled =
+      [[PrefBackedBoolean alloc] initWithPrefService:prefService
+                                            prefName:prefs::kBottomOmnibox];
+  [_bottomOmniboxEnabled setObserver:self];
+  [self booleanDidChange:_bottomOmniboxEnabled];
+}
+
+- (void)startObservingTabStyles:(PrefService*)prefService {
+  _showXButtonBackgroundTabsEnabled =
+      [[PrefBackedBoolean alloc]
+          initWithPrefService:prefService
+             prefName:vivaldiprefs::kVivaldiShowXButtonBackgroundTabsEnabled];
+  [_showXButtonBackgroundTabsEnabled setObserver:self];
+  [self booleanDidChange:_showXButtonBackgroundTabsEnabled];
+}
+
 - (void)startObservingAccentColorChange:(PrefService*)prefService {
   // Dynamic accent color toggle
   _dynamicAccentColorEnabled =
@@ -181,6 +200,9 @@ PrefObserverDelegate> {
   } else if (observableBoolean == _dynamicAccentColorEnabled) {
     self.tabStripController.dynamicAccentColorEnabled =
         [observableBoolean value];
+  } else if (observableBoolean == _showXButtonBackgroundTabsEnabled) {
+    self.tabStripController.showXButtonForBackgroundTabs =
+        [observableBoolean value];
   }
 }
 
@@ -189,6 +211,6 @@ PrefObserverDelegate> {
   if (preferenceName == vivaldiprefs::kVivaldiCustomAccentColor) {
     self.tabStripController.customAccentColor = [self customAccentColor];
   }
-}
+} // Vivaldi
 
 @end

@@ -19,6 +19,7 @@ syntax = "proto2";
 package perfetto.protos;
 
 import "protos/perfetto/trace/android/surfaceflinger_common.proto";
+import "protos/perfetto/trace/android/graphics/rect.proto";
 
 // Message used by Winscope to process legacy trace files.
 // Represents a file full of surface flinger trace entries.
@@ -232,6 +233,8 @@ message LayerProto {
   optional RectProto destination_frame = 57;
 
   optional uint32 original_id = 58;
+
+  optional TrustedOverlay trusted_overlay = 59;
 }
 
 message PositionProto {

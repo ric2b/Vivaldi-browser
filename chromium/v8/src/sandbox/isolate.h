@@ -6,8 +6,10 @@
 #define V8_SANDBOX_ISOLATE_H_
 
 #include "src/sandbox/code-pointer-table.h"
+#include "src/sandbox/cppheap-pointer-table.h"
 #include "src/sandbox/external-buffer-table.h"
 #include "src/sandbox/external-pointer-table.h"
+#include "src/sandbox/js-dispatch-table.h"
 #include "src/sandbox/trusted-pointer-table.h"
 
 namespace v8 {
@@ -36,6 +38,9 @@ class V8_EXPORT_PRIVATE IsolateForSandbox final {
   inline CodePointerTable::Space* GetCodePointerTableSpaceFor(
       Address owning_slot);
 
+  inline JSDispatchTable::Space* GetJSDispatchTableSpaceFor(
+      Address owning_slot);
+
   inline TrustedPointerTable& GetTrustedPointerTable();
   inline TrustedPointerTable::Space* GetTrustedPointerTableSpace();
 
@@ -58,8 +63,8 @@ class V8_EXPORT_PRIVATE IsolateForPointerCompression final {
   inline ExternalPointerTable::Space* GetExternalPointerTableSpaceFor(
       ExternalPointerTag tag, Address host);
 
-  inline ExternalPointerTable& GetCppHeapPointerTable();
-  inline ExternalPointerTable::Space* GetCppHeapPointerTableSpace();
+  inline CppHeapPointerTable& GetCppHeapPointerTable();
+  inline CppHeapPointerTable::Space* GetCppHeapPointerTableSpace();
 #endif  // V8_COMPRESS_POINTERS
 
  private:

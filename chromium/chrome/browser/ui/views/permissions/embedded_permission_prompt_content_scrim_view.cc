@@ -30,6 +30,7 @@ EmbeddedPermissionPromptContentScrimView::CreateScrimWidget(
     base::WeakPtr<Delegate> delegate,
     SkColor color) {
   views::Widget::InitParams params(
+      views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   auto permission_prompt_delegate = delegate->GetPermissionPromptDelegate();
   CHECK(permission_prompt_delegate);
@@ -56,8 +57,18 @@ EmbeddedPermissionPromptContentScrimView::CreateScrimWidget(
 
 bool EmbeddedPermissionPromptContentScrimView::OnMousePressed(
     const ui::MouseEvent& event) {
-  delegate_->DismissScrim();
+  if (delegate_) {
+    delegate_->DismissScrim();
+  }
   return true;
+}
+
+void EmbeddedPermissionPromptContentScrimView::OnGestureEvent(
+    ui::GestureEvent* event) {
+  if (delegate_ && (event->type() == ui::EventType::kGestureTap ||
+                    event->type() == ui::EventType::kGestureDoubleTap)) {
+    delegate_->DismissScrim();
+  }
 }
 
 void EmbeddedPermissionPromptContentScrimView::OnWidgetDestroyed(
@@ -69,6 +80,9 @@ void EmbeddedPermissionPromptContentScrimView::OnWidgetDestroyed(
 void EmbeddedPermissionPromptContentScrimView::OnWidgetBoundsChanged(
     views::Widget* widget,
     const gfx::Rect& new_bounds) {
+  if (!delegate_) {
+    return;
+  }
   if (auto permission_prompt_delegate =
           delegate_->GetPermissionPromptDelegate()) {
     GetWidget()->SetBounds(

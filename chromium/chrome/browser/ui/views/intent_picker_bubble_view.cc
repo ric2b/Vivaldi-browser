@@ -142,7 +142,10 @@ class IntentPickerAppGridButton : public views::Button {
     name_label->SetVerticalAlignment(gfx::VerticalAlignment::ALIGN_TOP);
 
     SetFocusBehavior(FocusBehavior::ALWAYS);
-    SetAccessibleName(name_label->GetText());
+    GetViewAccessibility().SetRole(ax::mojom::Role::kRadioButton);
+    // TODO(crbug.com/325137417): `SetName` should be called whenever the
+    // `name_label` text changes, not just in the constructor.
+    GetViewAccessibility().SetName(name_label->GetText());
     SetPreferredSize(gfx::Size(kGridItemPreferredSize, kGridItemPreferredSize));
 
     SetGroup(kGridItemGroupId);
@@ -162,7 +165,6 @@ class IntentPickerAppGridButton : public views::Button {
   void StateChanged(ButtonState old_state) override { UpdateBackground(); }
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     Button::GetAccessibleNodeData(node_data);
-    node_data->role = ax::mojom::Role::kRadioButton;
     node_data->SetCheckedState(selected_ ? ax::mojom::CheckedState::kTrue
                                          : ax::mojom::CheckedState::kFalse);
   }
@@ -417,8 +419,9 @@ class IntentPickerAppListView
 
   void OnKeyEvent(ui::KeyEvent* event) override {
     if (!IsKeyboardCodeArrow(event->key_code()) ||
-        event->type() != ui::ET_KEY_RELEASED)
+        event->type() != ui::EventType::kKeyReleased) {
       return;
+    }
 
     int delta = 0;
     switch (event->key_code()) {

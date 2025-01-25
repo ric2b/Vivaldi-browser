@@ -18,21 +18,33 @@ namespace content {
 
 ServiceWorkerMainResourceHandle::ServiceWorkerMainResourceHandle(
     scoped_refptr<ServiceWorkerContextWrapper> context_wrapper,
-    ServiceWorkerAccessedCallback on_service_worker_accessed)
-    : service_worker_accessed_callback_(std::move(on_service_worker_accessed)),
+    ServiceWorkerAccessedCallback on_service_worker_accessed,
+    base::WeakPtr<ServiceWorkerClient> parent_service_worker_client)
+    : parent_service_worker_client_(std::move(parent_service_worker_client)),
+      service_worker_accessed_callback_(std::move(on_service_worker_accessed)),
       context_wrapper_(std::move(context_wrapper)) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
 ServiceWorkerMainResourceHandle::~ServiceWorkerMainResourceHandle() = default;
 
-void ServiceWorkerMainResourceHandle::OnCreatedContainerHost(
-    blink::mojom::ServiceWorkerContainerInfoForClientPtr container_info) {
+void ServiceWorkerMainResourceHandle::set_service_worker_client(
+    ScopedServiceWorkerClient scoped_service_worker_client) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(container_info->host_remote.is_valid() &&
-         container_info->client_receiver.is_valid());
+  CHECK(!scoped_service_worker_client_);
 
-  container_info_ = std::move(container_info);
+  scoped_service_worker_client_ = std::make_unique<ScopedServiceWorkerClient>(
+      std::move(scoped_service_worker_client));
+
+  CHECK(service_worker_client());
+}
+
+base::WeakPtr<ServiceWorkerClient>
+ServiceWorkerMainResourceHandle::service_worker_client() {
+  if (!scoped_service_worker_client_) {
+    return nullptr;
+  }
+  return scoped_service_worker_client_->AsWeakPtr();
 }
 
 }  // namespace content

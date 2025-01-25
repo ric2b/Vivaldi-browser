@@ -240,6 +240,8 @@ class StyleBuilderConverter {
                                                       const CSSValue& value);
   static ScopedCSSNameList* ConvertAnchorName(StyleResolverState&,
                                               const CSSValue&);
+  static ScopedCSSNameList* ConvertAnchorScope(StyleResolverState&,
+                                               const CSSValue&);
   static StyleInitialLetter ConvertInitialLetter(StyleResolverState&,
                                                  const CSSValue&);
   static StyleOffsetRotation ConvertOffsetRotate(StyleResolverState&,
@@ -330,7 +332,7 @@ class StyleBuilderConverter {
       const CSSValue&,
       const CSSParserContext*);
 
-  static scoped_refptr<CSSVariableData> ConvertRegisteredPropertyVariableData(
+  static CSSVariableData* ConvertRegisteredPropertyVariableData(
       const CSSValue&,
       bool is_animation_tainted);
 
@@ -360,8 +362,8 @@ class StyleBuilderConverter {
       const StyleResolverState&,
       const CSSValue&);
 
-  static AtomicString ConvertViewTransitionName(StyleResolverState&,
-                                                const CSSValue&);
+  static ScopedCSSName* ConvertViewTransitionName(StyleResolverState&,
+                                                  const CSSValue&);
   static Vector<AtomicString> ConvertViewTransitionClass(StyleResolverState&,
                                                          const CSSValue&);
 
@@ -430,7 +432,7 @@ T StyleBuilderConverter::ConvertLineWidth(StyleResolverState& state,
         result = 5;
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
     result = state.CssToLengthConversionData().ZoomedComputedPixels(
@@ -475,7 +477,7 @@ Length StyleBuilderConverter::ConvertPositionLength(StyleResolverState& state,
       case CSSValueID::kCenter:
         return Length::Percent(50);
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 

@@ -15,6 +15,7 @@
 class GURL;
 
 namespace apps {
+class AppDiscoveryMetrics;
 class AppPlatformMetrics;
 }
 
@@ -44,6 +45,8 @@ BASE_FEATURE(kUkmAppLogging, "UkmAppLogging", base::FEATURE_DISABLED_BY_DEFAULT)
 
 class AppSourceUrlRecorder {
  private:
+  friend class apps::AppDiscoveryMetrics;
+
   friend class apps::AppPlatformMetrics;
 
   friend class AppSourceUrlRecorderTest;

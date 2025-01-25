@@ -434,7 +434,7 @@ CoreProbeSink* WorkerGlobalScope::GetProbeSink() {
   return nullptr;
 }
 
-const BrowserInterfaceBrokerProxy&
+const BrowserInterfaceBrokerProxyImpl&
 WorkerGlobalScope::GetBrowserInterfaceBroker() const {
   return browser_interface_broker_proxy_;
 }
@@ -497,9 +497,12 @@ void WorkerGlobalScope::RunWorkerScript() {
   DCHECK(!IsContextPaused());
   CHECK(GetExecutionContext()) << "crbug.com/1045818: attempted to evaluate "
                                   "script but no execution context";
-  CHECK(!GetExecutionContext()->IsContextDestroyed())
-      << "crbug.com/1045818: attempted to evaluate script but worker global "
-         "scope was already destroyed";
+  // If the context has already been destroyed, it should be a orphan worker.
+  // It should be fine to close the worker.
+  if (GetExecutionContext()->IsContextDestroyed()) {
+    close();
+    return;
+  }
 
   DCHECK(worker_script_);
   DCHECK_EQ(script_eval_state_, ScriptEvalState::kReadyToEvaluate);
@@ -548,7 +551,7 @@ void WorkerGlobalScope::RunWorkerScript() {
               is_success = false;
               break;
             case v8::Promise::kPending:
-              NOTREACHED();
+              NOTREACHED_IN_MIGRATION();
               is_success = false;
               break;
           }
@@ -640,6 +643,7 @@ WorkerGlobalScope::WorkerGlobalScope(
           creation_params->agent_group_scheduler_compositor_task_runner)),
       time_origin_(time_origin),
       font_selector_(MakeGarbageCollected<OffscreenFontSelector>(this)),
+      browser_interface_broker_proxy_(this),
       script_eval_state_(ScriptEvalState::kPauseAfterFetch),
       ukm_source_id_(creation_params->ukm_source_id),
       top_level_frame_security_origin_(
@@ -775,6 +779,7 @@ void WorkerGlobalScope::Trace(Visitor* visitor) const {
   visitor->Trace(font_selector_);
   visitor->Trace(trusted_types_);
   visitor->Trace(worker_script_);
+  visitor->Trace(browser_interface_broker_proxy_);
   WorkerOrWorkletGlobalScope::Trace(visitor);
   Supplementable<WorkerGlobalScope>::Trace(visitor);
 }

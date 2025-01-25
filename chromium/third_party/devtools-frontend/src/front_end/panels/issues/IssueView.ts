@@ -238,23 +238,23 @@ export class IssueView extends UI.TreeOutline.TreeElement {
 
     this.affectedResources = this.#createAffectedResources();
     this.#affectedResourceViews = [
-      new AffectedCookiesView(this, this.#issue),
-      new AffectedElementsView(this, this.#issue),
-      new AffectedRequestsView(this, this.#issue),
-      new AffectedMixedContentView(this, this.#issue),
-      new AffectedSourcesView(this, this.#issue),
-      new AffectedHeavyAdView(this, this.#issue),
-      new AffectedDirectivesView(this, this.#issue),
-      new AffectedBlockedByResponseView(this, this.#issue),
-      new AffectedSharedArrayBufferIssueDetailsView(this, this.#issue),
-      new AffectedElementsWithLowContrastView(this, this.#issue),
-      new CorsIssueDetailsView(this, this.#issue),
-      new GenericIssueDetailsView(this, this.#issue),
-      new AffectedDocumentsInQuirksModeView(this, this.#issue),
-      new AttributionReportingIssueDetailsView(this, this.#issue),
-      new AffectedRawCookieLinesView(this, this.#issue),
-      new AffectedTrackingSitesView(this, this.#issue),
-      new AffectedMetadataAllowedSitesView(this, this.#issue),
+      new AffectedCookiesView(this, this.#issue, 'affected-cookies'),
+      new AffectedElementsView(this, this.#issue, 'affected-elements'),
+      new AffectedRequestsView(this, this.#issue, 'affected-requests'),
+      new AffectedMixedContentView(this, this.#issue, 'mixed-content-details'),
+      new AffectedSourcesView(this, this.#issue, 'affected-sources'),
+      new AffectedHeavyAdView(this, this.#issue, 'heavy-ad-details'),
+      new AffectedDirectivesView(this, this.#issue, 'directives-details'),
+      new AffectedBlockedByResponseView(this, this.#issue, 'blocked-by-response-details'),
+      new AffectedSharedArrayBufferIssueDetailsView(this, this.#issue, 'sab-details'),
+      new AffectedElementsWithLowContrastView(this, this.#issue, 'low-contrast-details'),
+      new CorsIssueDetailsView(this, this.#issue, 'cors-details'),
+      new GenericIssueDetailsView(this, this.#issue, 'generic-details'),
+      new AffectedDocumentsInQuirksModeView(this, this.#issue, 'affected-documents'),
+      new AttributionReportingIssueDetailsView(this, this.#issue, 'attribution-reporting-details'),
+      new AffectedRawCookieLinesView(this, this.#issue, 'affected-raw-cookies'),
+      new AffectedTrackingSitesView(this, this.#issue, 'tracking-sites-details'),
+      new AffectedMetadataAllowedSitesView(this, this.#issue, 'metadata-allowed-sites-details'),
     ];
     this.#hiddenIssuesMenu = new Components.HideIssuesMenu.HideIssuesMenu();
     this.#aggregatedIssuesCount = null;
@@ -450,10 +450,6 @@ export class IssueView extends UI.TreeOutline.TreeElement {
       const link = UI.Fragment.html`<x-link class="link devtools-link" tabindex="0" href=${description.link}>${
                        i18nString(UIStrings.learnMoreS, {PH1: description.linkTitle})}</x-link>` as UI.XLink.XLink;
       link.setAttribute('jslog', `${VisualLogging.link('learn-more').track({click: true})}`);
-      const linkIcon = new IconButton.Icon.Icon();
-      linkIcon.data = {iconName: 'open-externally', color: 'var(--icon-link)', width: '16px', height: '16px'};
-      linkIcon.classList.add('link-icon');
-      link.prepend(linkIcon);
 
       const linkListItem = linkList.createChild('li');
       linkListItem.appendChild(link);

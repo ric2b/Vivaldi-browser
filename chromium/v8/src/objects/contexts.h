@@ -41,15 +41,6 @@ enum ContextLookupFlags {
 // must always be allocated via Heap::AllocateContext() or
 // Factory::NewContext.
 
-#define NATIVE_CONTEXT_INTRINSIC_FUNCTIONS(V)                     \
-  V(GENERATOR_NEXT_INTERNAL, JSFunction, generator_next_internal) \
-  V(ASYNC_MODULE_EVALUATE_INTERNAL, JSFunction,                   \
-    async_module_evaluate_internal)                               \
-  V(REFLECT_APPLY_INDEX, JSFunction, reflect_apply)               \
-  V(REFLECT_CONSTRUCT_INDEX, JSFunction, reflect_construct)       \
-  V(PROMISE_THEN_INDEX, JSFunction, promise_then)                 \
-  V(FUNCTION_PROTOTYPE_APPLY_INDEX, JSFunction, function_prototype_apply)
-
 #define NATIVE_CONTEXT_FIELDS(V)                                               \
   V(GLOBAL_PROXY_INDEX, JSGlobalProxy, global_proxy_object)                    \
   /* TODO(ishell): Actually we store exactly EmbedderDataArray here but */     \
@@ -58,7 +49,14 @@ enum ContextLookupFlags {
   V(EMBEDDER_DATA_INDEX, HeapObject, embedder_data)                            \
   V(CONTINUATION_PRESERVED_EMBEDDER_DATA_INDEX, HeapObject,                    \
     continuation_preserved_embedder_data)                                      \
-  NATIVE_CONTEXT_INTRINSIC_FUNCTIONS(V)                                        \
+  V(GENERATOR_NEXT_INTERNAL, JSFunction, generator_next_internal)              \
+  V(ASYNC_MODULE_EVALUATE_INTERNAL, JSFunction,                                \
+    async_module_evaluate_internal)                                            \
+  V(REFLECT_APPLY_INDEX, JSFunction, reflect_apply)                            \
+  V(REFLECT_CONSTRUCT_INDEX, JSFunction, reflect_construct)                    \
+  V(PROMISE_THEN_INDEX, JSFunction, promise_then)                              \
+  V(PROMISE_RESOLVE_INDEX, JSFunction, promise_resolve)                        \
+  V(FUNCTION_PROTOTYPE_APPLY_INDEX, JSFunction, function_prototype_apply)      \
   /* TypedArray constructors - these must stay in order! */                    \
   V(UINT8_ARRAY_FUN_INDEX, JSFunction, uint8_array_fun)                        \
   V(INT8_ARRAY_FUN_INDEX, JSFunction, int8_array_fun)                          \
@@ -114,7 +112,7 @@ enum ContextLookupFlags {
   V(DATA_PROPERTY_DESCRIPTOR_MAP_INDEX, Map, data_property_descriptor_map)     \
   V(DATA_VIEW_FUN_INDEX, JSFunction, data_view_fun)                            \
   V(DATE_FUNCTION_INDEX, JSFunction, date_function)                            \
-  V(DEBUG_CONTEXT_ID_INDEX, Object, debug_context_id)                          \
+  V(DEBUG_CONTEXT_ID_INDEX, (UnionOf<Smi, Undefined>), debug_context_id)       \
   V(EMPTY_FUNCTION_INDEX, JSFunction, empty_function)                          \
   V(ERROR_MESSAGE_FOR_CODE_GEN_FROM_STRINGS_INDEX, Object,                     \
     error_message_for_code_gen_from_strings)                                   \
@@ -199,6 +197,8 @@ enum ContextLookupFlags {
     js_array_holey_double_elements_map)                                        \
   V(JS_ARRAY_TEMPLATE_LITERAL_OBJECT_MAP, Map,                                 \
     js_array_template_literal_object_map)                                      \
+  V(JS_DISPOSABLE_STACK_FUNCTION_INDEX, JSFunction,                            \
+    js_disposable_stack_function)                                              \
   V(JS_DISPOSABLE_STACK_MAP_INDEX, Map, js_disposable_stack_map)               \
   V(JS_MAP_FUN_INDEX, JSFunction, js_map_fun)                                  \
   V(JS_MAP_MAP_INDEX, Map, js_map_map)                                         \
@@ -623,14 +623,11 @@ class Context : public TorqueGeneratedContext<Context, HeapObject> {
   Handle<Object> ErrorMessageForCodeGenerationFromStrings();
   Handle<Object> ErrorMessageForWasmCodeGeneration();
 
-  static int IntrinsicIndexForName(Handle<String> name);
-  static int IntrinsicIndexForName(const unsigned char* name, int length);
-
-#define NATIVE_CONTEXT_FIELD_ACCESSORS(index, type, name) \
-  inline void set_##name(Tagged<type> value);             \
-  inline bool is_##name(Tagged<type> value) const;        \
-  inline Tagged<type> name() const;                       \
-  inline Tagged<type> name(AcquireLoadTag) const;
+#define NATIVE_CONTEXT_FIELD_ACCESSORS(index, type, name)   \
+  inline void set_##name(Tagged<UNPAREN(type)> value);      \
+  inline bool is_##name(Tagged<UNPAREN(type)> value) const; \
+  inline Tagged<UNPAREN(type)> name() const;                \
+  inline Tagged<UNPAREN(type)> name(AcquireLoadTag) const;
   NATIVE_CONTEXT_FIELDS(NATIVE_CONTEXT_FIELD_ACCESSORS)
 #undef NATIVE_CONTEXT_FIELD_ACCESSORS
 
@@ -673,14 +670,13 @@ class Context : public TorqueGeneratedContext<Context, HeapObject> {
   inline Tagged<Map> GetInitialJSArrayMap(ElementsKind kind) const;
 
   static Tagged<ConstTrackingLetCell> GetOrCreateConstTrackingLetCell(
-      Handle<Context> context, size_t index, Isolate* isolate);
+      DirectHandle<Context> context, size_t index, Isolate* isolate);
 
   bool ConstTrackingLetSideDataIsConst(size_t index) const;
 
-  static void UpdateConstTrackingLetSideData(Handle<Context> script_context,
-                                             int index,
-                                             Handle<Object> new_value,
-                                             Isolate* isolate);
+  static void UpdateConstTrackingLetSideData(
+      DirectHandle<Context> script_context, int index,
+      DirectHandle<Object> new_value, Isolate* isolate);
 
   static const int kNotFound = -1;
 
@@ -710,7 +706,6 @@ class Context : public TorqueGeneratedContext<Context, HeapObject> {
 
 class NativeContext : public Context {
  public:
-  DECL_CAST(NativeContext)
   // TODO(neis): Move some stuff from Context here.
 
   // NativeContext fields are read concurrently from background threads; any
@@ -839,9 +834,8 @@ class ScriptContextTable
   V8_WARN_UNUSED_RESULT
   V8_EXPORT_PRIVATE static Handle<ScriptContextTable> Add(
       Isolate* isolate, Handle<ScriptContextTable> table,
-      Handle<Context> script_context, bool ignore_duplicates);
+      DirectHandle<Context> script_context, bool ignore_duplicates);
 
-  DECL_CAST(ScriptContextTable)
   DECL_PRINTER(ScriptContextTable)
   DECL_VERIFIER(ScriptContextTable)
 

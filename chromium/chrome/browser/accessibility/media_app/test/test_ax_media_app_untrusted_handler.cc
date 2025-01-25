@@ -19,8 +19,9 @@ namespace ash::test {
 
 TestAXMediaAppUntrustedHandler::TestAXMediaAppUntrustedHandler(
     content::BrowserContext& context,
+    gfx::NativeWindow native_window,
     mojo::PendingRemote<media_app_ui::mojom::OcrUntrustedPage> page)
-    : AXMediaAppUntrustedHandler(context, std::move(page)) {}
+    : AXMediaAppUntrustedHandler(context, native_window, std::move(page)) {}
 
 TestAXMediaAppUntrustedHandler::~TestAXMediaAppUntrustedHandler() = default;
 
@@ -35,7 +36,7 @@ std::string TestAXMediaAppUntrustedHandler::GetDocumentTreeToStringForTesting()
 void TestAXMediaAppUntrustedHandler::
     EnablePendingSerializedUpdatesForTesting() {
   pending_serialized_updates_for_testing_ =
-      std::make_unique<std::vector<const ui::AXTreeUpdate>>();
+      std::make_unique<std::vector<ui::AXTreeUpdate>>();
 }
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)

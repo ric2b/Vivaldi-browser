@@ -45,6 +45,7 @@
 #include "components/device_event_log/device_event_log.h"
 #include "components/performance_manager/public/features.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
@@ -162,7 +163,7 @@ base::TimeTicks TabManagerDelegate::Candidate::LastActivityTime() const {
   if (lifecycle_unit()) {
     return lifecycle_unit()->GetLastFocusedTime();
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return base::TimeTicks();
 }
 
@@ -463,7 +464,7 @@ void TabManagerDelegate::Observe(int type,
       break;
     }
     default:
-      NOTREACHED() << "Received unexpected notification";
+      NOTREACHED_IN_MIGRATION() << "Received unexpected notification";
       break;
   }
 }
@@ -712,6 +713,17 @@ int TabManagerDelegate::ProcessLifecycleUnitCandidate(
     // Failed to kill the tab, nothing was freed.
     return 0;
   }
+
+  // Logs a histogram entry to track the proportion of discarded tabs that were
+  // protected at the time of discard. If the candidate is not a background tab,
+  // then it must be protected.
+  UMA_HISTOGRAM_BOOLEAN("Discarding.DiscardingProtectedTab",
+                        candidate.process_type() != ProcessType::BACKGROUND);
+
+  // Logs a histogram entry to track the proportion of discarded tabs that were
+  // focused at the time of discard.
+  UMA_HISTOGRAM_BOOLEAN("Discarding.DiscardingFocusedTab",
+                        candidate.process_type() == ProcessType::FOCUSED_TAB);
 
   memory::MemoryKillsMonitor::LogLowMemoryKill("TAB",
                                                kill_estimated_memory_freed_kb);

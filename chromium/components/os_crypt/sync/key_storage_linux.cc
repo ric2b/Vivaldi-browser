@@ -25,6 +25,11 @@
 #include "components/os_crypt/sync/key_storage_kwallet.h"
 #endif
 
+// Vivaldi: Support for xdg-desktop-portal Secret backend.
+#if defined(USE_XDG_DESKTOP_PORTAL)
+#include "components/os_crypt/key_storage_xdg_desktop_portal.h"
+#endif
+
 #ifdef VIVALDI_BUILD
 #undef BUILDFLAG_INTERNAL_GOOGLE_CHROME_BRANDING
 #define BUILDFLAG_INTERNAL_GOOGLE_CHROME_BRANDING() (1)
@@ -62,6 +67,11 @@ enum class BackendUsage {
   kKwallet5Failed = 13,
   kKwallet6 = 14,
   kKwallet6Failed = 15,
+
+  // Vivaldi: Support for xdg-xdg-desktop-portal
+  kXDGDesktopPortal = 16,
+  kXDGDesktopPortalFailed = 17,
+
   kMaxValue = kKwallet6Failed,
 };
 
@@ -82,8 +92,13 @@ constexpr BackendUsage SelectedBackendToMetric(
       return used ? BackendUsage::kKwallet5 : BackendUsage::kKwallet5Failed;
     case os_crypt::SelectedLinuxBackend::KWALLET6:
       return used ? BackendUsage::kKwallet6 : BackendUsage::kKwallet6Failed;
+
+    // Vivaldi: Support for xdg-xdg-desktop-portal
+    case os_crypt::SelectedLinuxBackend::XDG_DESKTOP_PORTAL:
+      return used ? BackendUsage::kXDGDesktopPortal : BackendUsage::kXDGDesktopPortalFailed;
+
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return BackendUsage::kDeferFailed;
 }
 
@@ -102,8 +117,11 @@ const char* SelectedLinuxBackendToString(
       return "KWALLET5";
     case os_crypt::SelectedLinuxBackend::KWALLET6:
       return "KWALLET6";
+    // Vivaldi: Support for xdg-xdg-desktop-portal
+    case os_crypt::SelectedLinuxBackend::XDG_DESKTOP_PORTAL:
+      return "XDG_DESKTOP_PORTAL";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 
@@ -196,6 +214,18 @@ std::unique_ptr<KeyStorageLinux> KeyStorageLinux::CreateServiceInternal(
     LOG(WARNING) << "OSCrypt tried KWallet but couldn't initialise.";
   }
 #endif  // defined(USE_KWALLET)
+
+  // Vivaldi: Support for XDG-DESKTOP-PORTAL
+#if defined(USE_XDG_DESKTOP_PORTAL)
+  if (selected_backend == os_crypt::SelectedLinuxBackend::XDG_DESKTOP_PORTAL) {
+    key_storage = std::make_unique<KeyStoragePortal>();
+    if (key_storage->WaitForInitOnTaskRunner()) {
+      VLOG(1) << "OSCrypt using xdg-desktop-portal as backend.";
+      return key_storage;
+    }
+    LOG(WARNING) << "OSCrypt tried xdg-desktop-portal but couldn't initialise.";
+  }
+#endif
 
   return nullptr;
 }

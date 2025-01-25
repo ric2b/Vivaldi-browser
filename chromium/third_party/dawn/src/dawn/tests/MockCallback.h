@@ -113,6 +113,33 @@ class MockCallback<R (*)(Args...)> : public ::testing::MockFunction<R(Args...)> 
     std::set<std::unique_ptr<MockAndUserdata>> mUserdatas;
 };
 
+template <typename F>
+class MockCppCallback;
+
+// Helper wrapper class for C++ entry point callbacks.
+// Example Usage:
+//   MockCppCallback<void (*)(wgpu::PopErrorScopeStatus, wgpu::ErrorType, const char*)> mock;
+//
+//   device.PopErrorScope(wgpu::CallbackMode::AllowProcessEvents, mock.Callback());
+//   EXPECT_CALL(mock, Call(wgpu::PopErrorScopeStatus::Success, _, _));
+template <typename R, typename... Args>
+class MockCppCallback<R (*)(Args...)> : public ::testing::MockFunction<R(Args...)> {
+  private:
+    using TemplatedCallbackT = MockCppCallback<R (*)(Args...)>;
+
+  public:
+    auto Callback() {
+        return [this](Args... args) -> R { return this->Call(args...); };
+    }
+
+    // Returns the templated version of the callback with a static function. Useful when we cannot
+    // use a binding lambda. This must be used with TemplatedCallbackUserdata.
+    auto TemplatedCallback() {
+        return [](Args... args, TemplatedCallbackT* self) -> R { return self->Call(args...); };
+    }
+    TemplatedCallbackT* TemplatedCallbackUserdata() { return this; }
+};
+
 }  // namespace testing
 
 #endif  // SRC_DAWN_TESTS_MOCKCALLBACK_H_

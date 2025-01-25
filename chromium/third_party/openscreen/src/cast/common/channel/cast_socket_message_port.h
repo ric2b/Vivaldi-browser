@@ -41,7 +41,7 @@ class CastSocketMessagePort : public MessagePort, public CastMessageHandler {
   // CastMessageHandler overrides.
   void OnMessage(VirtualConnectionRouter* router,
                  CastSocket* socket,
-                 ::cast::channel::CastMessage message) override;
+                 proto::CastMessage message) override;
 
  private:
   VirtualConnectionRouter& router_;

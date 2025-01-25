@@ -4,9 +4,9 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 
+#include "third_party/blink/renderer/bindings/core/v8/v8_set_return_value_for_core.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
-#include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 
 namespace blink {
 
@@ -23,6 +23,8 @@ const WrapperTypeInfo callable_holder_info = {
     nullptr,
     "ScriptFunctionCallableHolder",
     nullptr,
+    kDOMWrappersTag,
+    kDOMWrappersTag,
     WrapperTypeInfo::kWrapperTypeNoPrototype,
     WrapperTypeInfo::kCustomWrappableId,
     WrapperTypeInfo::kNotInheritFromActiveScriptWrappable,
@@ -52,8 +54,7 @@ class CORE_EXPORT CallableHolder final : public ScriptWrappable {
                                                  "Blink_CallCallback");
     v8::Local<v8::Object> data = v8::Local<v8::Object>::Cast(args.Data());
     v8::Isolate* isolate = args.GetIsolate();
-    auto* holder =
-        static_cast<CallableHolder*>(ToScriptWrappable(isolate, data));
+    auto* holder = ToScriptWrappable<CallableHolder>(isolate, data);
     ScriptState* script_state = ScriptState::ForCurrentRealm(isolate);
     holder->callable_->CallRaw(script_state, args);
   }
@@ -80,7 +81,7 @@ const WrapperTypeInfo& CallableHolder::wrapper_type_info_ =
     callable_holder_info;
 
 ScriptValue ScriptFunction::Callable::Call(ScriptState*, ScriptValue) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ScriptValue();
 }
 
@@ -89,7 +90,7 @@ void ScriptFunction::Callable::CallRaw(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   ScriptValue result =
       Call(script_state, ScriptValue(script_state->GetIsolate(), args[0]));
-  V8SetReturnValue(args, result.V8Value());
+  bindings::V8SetReturnValue(args, result);
 }
 
 ScriptFunction::ScriptFunction(ScriptState* script_state, Callable* callable)

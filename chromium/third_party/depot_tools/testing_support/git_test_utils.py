@@ -289,6 +289,8 @@ class GitRepo(object):
         Args:
             schema - An instance of GitRepoSchema
         """
+        self.last_commit = None
+
         self.repo_path = os.path.realpath(
             tempfile.mkdtemp(dir=self.BASE_TEMP_DIR))
         self.commit_map = {}
@@ -521,7 +523,8 @@ class GitRepoReadOnlyTestBase(GitRepoSchemaTestBase):
         cls.repo = cls.r_schema.reify()
 
     def setUp(self):
-        self.repo.git('checkout', '-f', self.repo.last_commit)
+        if self.repo.last_commit is not None:
+            self.repo.git('checkout', '-f', self.repo.last_commit)
 
     @classmethod
     def tearDownClass(cls):

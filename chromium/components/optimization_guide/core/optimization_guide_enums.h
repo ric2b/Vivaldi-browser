@@ -272,12 +272,14 @@ enum class ModelQualityLogsUploadStatus {
   kMetricsReportingDisabled = 4,
   // Upload is disabled due to enterprise policy.
   kDisabledDueToEnterprisePolicy = 5,
+  // Upload is disabled because the feature is not enabled for the user.
+  kFeatureNotEnabledForUser = 6,
 
   // Insert new values before this line.
   // This enum must remain synchronized with the enum
   // |OptimizationGuideModelQualityLogsUploadStatus| in
   // tools/metrics/histograms/metadata/optimization/enums.xml.
-  kMaxValue = kDisabledDueToEnterprisePolicy,
+  kMaxValue = kFeatureNotEnabledForUser,
 };
 
 // Performance class of this device.
@@ -390,9 +392,36 @@ enum class OnDeviceModelAdaptationAvailability {
   // The received adaptation model was incompatible with the base model.
   kAdaptationModelIncompatible = 5,
 
+  // The execution config in the adaptation model was invalid.
+  kAdaptationModelExecutionConfigInvalid = 6,
+
+  // The model execution feature was not recently used.
+  kFeatureNotRecentlyUsed = 7,
+
   // This must be kept in sync with OnDeviceModelAdaptationAvailability in
   // optimization/enums.xml.
-  kMaxValue = kAdaptationModelIncompatible,
+  kMaxValue = kFeatureNotRecentlyUsed,
+};
+
+// The result of running validation prompts for the on-device model.
+//
+// Keep in sync with OnDeviceModelValidationResult in enums.xml.
+enum class OnDeviceModelValidationResult {
+  kUnknown = 0,
+  // The validation is currently running or was interrupted.
+  kPending = 1,
+  // The validation test succeeded.
+  kSuccess = 2,
+  // The validation test produced non-matching output.
+  kNonMatchingOutput = 3,
+  // The service crashed while running the validation test.
+  kServiceCrash = 4,
+  // The validation test was interrupted by another session.
+  kInterrupted = 5,
+
+  // This must be kept in sync with OnDeviceModelValidationResult in
+  // optimization/enums.xml.
+  kMaxValue = kInterrupted,
 };
 
 }  // namespace optimization_guide

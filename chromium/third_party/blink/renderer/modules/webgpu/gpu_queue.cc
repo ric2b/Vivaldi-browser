@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/webgpu/gpu_queue.h"
 
 #include "build/build_config.h"
@@ -389,9 +394,7 @@ void GPUQueue::submit(ScriptState* script_state,
 }
 
 void OnWorkDoneCallback(ScriptPromiseResolver<IDLUndefined>* resolver,
-                        WGPUQueueWorkDoneStatus cStatus) {
-  wgpu::QueueWorkDoneStatus status =
-      static_cast<wgpu::QueueWorkDoneStatus>(cStatus);
+                        wgpu::QueueWorkDoneStatus status) {
   switch (status) {
     case wgpu::QueueWorkDoneStatus::Success:
       resolver->Resolve();
@@ -429,7 +432,8 @@ ScriptPromise<IDLUndefined> GPUQueue::onSubmittedWorkDone(
   auto* callback = MakeWGPUOnceCallback(
       resolver->WrapCallbackInScriptScope(WTF::BindOnce(&OnWorkDoneCallback)));
 
-  GetHandle().OnSubmittedWorkDone(callback->UnboundCallback(),
+  GetHandle().OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
+                                  callback->UnboundCallback(),
                                   callback->AsUserdata());
   // WebGPU guarantees that promises are resolved in finite time so we
   // need to ensure commands are flushed.
@@ -736,15 +740,11 @@ void GPUQueue::CopyFromVideoElement(
     bool flipY) {
   CHECK(source.valid);
 
-  // Import GPUExternalTexture to sRGB color space always.
-  // Delegate future color space conversion for
-  // Dawn::CopyExternalTextureForBrowser.
-  gfx::ColorSpace external_texture_dst_color_space =
-      PredefinedColorSpaceToGfxColorSpace(dst_color_space);
+  // Create External Texture with dst color space. No color space conversion
+  // happens during copy step.
   ExternalTexture external_texture =
-      CreateExternalTexture(device_, source.media_video_frame->ColorSpace(),
-                            external_texture_dst_color_space,
-                            source.media_video_frame, source.video_renderer);
+      CreateExternalTexture(device_, dst_color_space, source.media_video_frame,
+                            source.video_renderer);
 
   wgpu::CopyTextureForBrowserOptions options = {
       // Extracting contents from HTMLVideoElement (e.g.
@@ -756,25 +756,6 @@ void GPUQueue::CopyFromVideoElement(
                           ? wgpu::AlphaMode::Premultiplied
                           : wgpu::AlphaMode::Unpremultiplied,
   };
-
-  // Set color space conversion params
-  gfx::ColorSpace gfx_dst_color_space =
-      PredefinedColorSpaceToGfxColorSpace(dst_color_space);
-
-  ColorSpaceConversionConstants color_space_conversion_constants;
-
-  if (external_texture_dst_color_space != gfx_dst_color_space) {
-    color_space_conversion_constants = GetColorSpaceConversionConstants(
-        external_texture_dst_color_space, gfx_dst_color_space);
-
-    options.needsColorSpaceConversion = true;
-    options.srcTransferFunctionParameters =
-        color_space_conversion_constants.src_transfer_constants.data();
-    options.dstTransferFunctionParameters =
-        color_space_conversion_constants.dst_transfer_constants.data();
-    options.conversionMatrix =
-        color_space_conversion_constants.gamut_conversion_matrix.data();
-  }
 
   options.flipY = flipY;
 

@@ -1684,33 +1684,34 @@ TEST_F(TileManagerTilePriorityQueueTest, NoRasterTasksforSolidColorTiles) {
   gfx::Size size(10, 10);
   const gfx::Size layer_bounds(1000, 1000);
 
-  auto recording_source = FakeRecordingSource::Create(layer_bounds);
+  FakeRecordingSource recording_source(layer_bounds);
 
   PaintFlags solid_flags;
   SkColor4f solid_color{0.1f, 0.2f, 0.3f, 1.0f};
   solid_flags.setColor(solid_color);
-  recording_source->add_draw_rect_with_flags(gfx::Rect(layer_bounds),
-                                             solid_flags);
+  recording_source.add_draw_rect_with_flags(gfx::Rect(layer_bounds),
+                                            solid_flags);
 
   // Create non solid tile as well, otherwise tilings wouldnt be created.
   SkColor4f non_solid_color{0.2f, 0.3f, 0.4f, 0.5f};
   PaintFlags non_solid_flags;
   non_solid_flags.setColor(non_solid_color);
 
-  recording_source->add_draw_rect_with_flags(gfx::Rect(0, 0, 10, 10),
-                                             non_solid_flags);
-  recording_source->Rerecord();
+  recording_source.add_draw_rect_with_flags(gfx::Rect(0, 0, 10, 10),
+                                            non_solid_flags);
+  recording_source.Rerecord();
 
   scoped_refptr<RasterSource> raster_source =
-      recording_source->CreateRasterSource();
+      recording_source.CreateRasterSource();
 
   FakePictureLayerTilingClient tiling_client;
   tiling_client.SetTileSize(size);
 
-  std::unique_ptr<PictureLayerImpl> layer_impl =
-      PictureLayerImpl::Create(host_impl()->active_tree(), 1);
-  layer_impl->set_contributes_to_drawn_render_surface(true);
-  PictureLayerTilingSet* tiling_set = layer_impl->picture_layer_tiling_set();
+  SetupTrees(raster_source, raster_source);
+  pending_layer_->set_contributes_to_drawn_render_surface(true);
+  PictureLayerTilingSet* tiling_set =
+      pending_layer_->picture_layer_tiling_set();
+  tiling_set->RemoveAllTilings();
 
   PictureLayerTiling* tiling =
       tiling_set->AddTiling(gfx::AxisTransform2d(), raster_source);
@@ -1810,6 +1811,15 @@ class TestSoftwareRasterBufferProvider : public FakeRasterBufferProviderImpl {
 
 class TileManagerTest : public TestLayerTreeHostBase {
  public:
+  LayerTreeSettings CreateSettings() override {
+    LayerTreeSettings settings = TestLayerTreeHostBase::CreateSettings();
+    CHECK(!settings.commit_to_active_tree);
+    // This is required in commit-to-pending-tree mode to call
+    // NotifyReadyToDraw().
+    settings.wait_for_all_pipeline_stages_before_draw = true;
+    return settings;
+  }
+
   // MockLayerTreeHostImpl allows us to intercept tile manager callbacks.
   class MockLayerTreeHostImpl : public FakeLayerTreeHostImpl {
    public:
@@ -1949,7 +1959,7 @@ TEST_F(TileManagerTest, ActivateAndDrawWhenOOM) {
 class TileManagerOcclusionTest : public TileManagerTest {
  public:
   LayerTreeSettings CreateSettings() override {
-    auto settings = TestLayerTreeHostBase::CreateSettings();
+    auto settings = TileManagerTest::CreateSettings();
     settings.create_low_res_tiling = true;
     settings.use_occlusion_for_tile_prioritization = true;
     return settings;
@@ -2048,11 +2058,6 @@ TEST_F(TileManagerOcclusionTest, OccludedTileEvictedForVisibleTile) {
 
 class PixelInspectTileManagerTest : public TileManagerTest {
  public:
-  ~PixelInspectTileManagerTest() override {
-    // Ensure that the host impl doesn't outlive |raster_buffer_provider_|.
-    TakeHostImpl();
-  }
-
   void SetUp() override {
     TileManagerTest::SetUp();
     // Use a RasterBufferProvider that will let us inspect pixels.
@@ -2067,6 +2072,7 @@ class PixelInspectTileManagerTest : public TileManagerTest {
 TEST_F(PixelInspectTileManagerTest, LowResHasNoImage) {
   gfx::Size size(10, 12);
   TileResolution resolutions[] = {HIGH_RESOLUTION, LOW_RESOLUTION};
+  host_impl()->CreatePendingTree();
 
   for (size_t i = 0; i < std::size(resolutions); ++i) {
     SCOPED_TRACE(resolutions[i]);
@@ -2078,21 +2084,22 @@ TEST_F(PixelInspectTileManagerTest, LowResHasNoImage) {
     surface->getCanvas()->clear(SK_ColorBLUE);
     sk_sp<SkImage> blue_image = surface->makeImageSnapshot();
 
-    auto recording_source = FakeRecordingSource::Create(size);
-    recording_source->SetBackgroundColor(SkColors::kTransparent);
-    recording_source->SetRequiresClear(true);
+    FakeRecordingSource recording_source(size);
+    recording_source.SetBackgroundColor(SkColors::kTransparent);
+    recording_source.SetRequiresClear(true);
     PaintFlags flags;
     flags.setColor(SK_ColorGREEN);
-    recording_source->add_draw_rect_with_flags(gfx::Rect(size), flags);
-    recording_source->add_draw_image(std::move(blue_image), gfx::Point());
-    recording_source->Rerecord();
-    scoped_refptr<RasterSource> raster = recording_source->CreateRasterSource();
-
-    FakePictureLayerTilingClient tiling_client;
-    tiling_client.SetTileSize(size);
+    recording_source.add_draw_rect_with_flags(gfx::Rect(size), flags);
+    recording_source.add_draw_image(std::move(blue_image), gfx::Point());
+    recording_source.Rerecord();
+    scoped_refptr<RasterSource> raster = recording_source.CreateRasterSource();
 
     std::unique_ptr<PictureLayerImpl> layer =
-        PictureLayerImpl::Create(host_impl()->active_tree(), 1);
+        PictureLayerImpl::Create(host_impl()->pending_tree(), 1);
+    layer->SetBounds(size);
+    Region invalidation;
+    layer->UpdateRasterSource(raster, &invalidation);
+    layer->RegenerateDiscardableImageMapIfNeeded();
     PictureLayerTilingSet* tiling_set = layer->picture_layer_tiling_set();
     layer->set_contributes_to_drawn_render_surface(true);
 
@@ -2173,31 +2180,30 @@ TEST_F(ActivationTasksDoNotBlockReadyToDrawTest,
   EXPECT_TRUE(host_impl()->use_gpu_rasterization());
 
   // Active tree has no non-solid tiles, so it will generate no tile tasks.
-  auto active_tree_recording_source = FakeRecordingSource::Create(layer_bounds);
+  FakeRecordingSource active_tree_recording_source(layer_bounds);
 
   PaintFlags solid_flags;
   SkColor solid_color = SkColorSetARGB(255, 12, 23, 34);
   solid_flags.setColor(solid_color);
-  active_tree_recording_source->add_draw_rect_with_flags(
-      gfx::Rect(layer_bounds), solid_flags);
+  active_tree_recording_source.add_draw_rect_with_flags(gfx::Rect(layer_bounds),
+                                                        solid_flags);
 
-  active_tree_recording_source->Rerecord();
+  active_tree_recording_source.Rerecord();
 
   // Pending tree has non-solid tiles, so it will generate tile tasks.
-  auto pending_tree_recording_source =
-      FakeRecordingSource::Create(layer_bounds);
+  FakeRecordingSource pending_tree_recording_source(layer_bounds);
   SkColor non_solid_color = SkColorSetARGB(128, 45, 56, 67);
   PaintFlags non_solid_flags;
   non_solid_flags.setColor(non_solid_color);
 
-  pending_tree_recording_source->add_draw_rect_with_flags(
+  pending_tree_recording_source.add_draw_rect_with_flags(
       gfx::Rect(5, 5, 10, 10), non_solid_flags);
-  pending_tree_recording_source->Rerecord();
+  pending_tree_recording_source.Rerecord();
 
   scoped_refptr<RasterSource> active_tree_raster_source =
-      active_tree_recording_source->CreateRasterSource();
+      active_tree_recording_source.CreateRasterSource();
   scoped_refptr<RasterSource> pending_tree_raster_source =
-      pending_tree_recording_source->CreateRasterSource();
+      pending_tree_recording_source.CreateRasterSource();
 
   SetupTrees(pending_tree_raster_source, active_tree_raster_source);
   host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
@@ -2276,7 +2282,7 @@ TEST_F(PartialRasterTileManagerTest, CancelledTasksHaveNoContentId) {
 
   // Free our host_impl_ before the tile_task_manager we passed it, as it
   // will use that class in clean up.
-  TakeHostImpl();
+  ClearLayersAndHost();
 }
 
 // FakeRasterBufferProviderImpl that verifies the resource content ID of raster
@@ -2403,8 +2409,8 @@ void RunPartialTileDecodeCheck(std::unique_ptr<LayerTreeHostImpl> host_impl,
 
   const gfx::Size layer_bounds(500, 500);
 
-  auto recording_source = FakeRecordingSource::Create(layer_bounds);
-  recording_source->set_fill_with_nonsolid_color(true);
+  FakeRecordingSource recording_source(layer_bounds);
+  recording_source.set_fill_with_nonsolid_color(true);
 
   int dimension = 250;
   PaintImage image1 =
@@ -2415,15 +2421,15 @@ void RunPartialTileDecodeCheck(std::unique_ptr<LayerTreeHostImpl> host_impl,
       CreateDiscardablePaintImage(gfx::Size(dimension, dimension));
   PaintImage image4 =
       CreateDiscardablePaintImage(gfx::Size(dimension, dimension));
-  recording_source->add_draw_image(image1, gfx::Point(0, 0));
-  recording_source->add_draw_image(image2, gfx::Point(300, 0));
-  recording_source->add_draw_image(image3, gfx::Point(0, 300));
-  recording_source->add_draw_image(image4, gfx::Point(300, 300));
+  recording_source.add_draw_image(image1, gfx::Point(0, 0));
+  recording_source.add_draw_image(image2, gfx::Point(300, 0));
+  recording_source.add_draw_image(image3, gfx::Point(0, 300));
+  recording_source.add_draw_image(image4, gfx::Point(300, 300));
 
-  recording_source->Rerecord();
+  recording_source.Rerecord();
 
   scoped_refptr<FakeRasterSource> pending_raster_source =
-      FakeRasterSource::CreateFromRecordingSource(recording_source.get());
+      FakeRasterSource::CreateFromRecordingSource(recording_source);
 
   host_impl->CreatePendingTree();
   LayerTreeImpl* pending_tree = host_impl->pending_tree();
@@ -2535,12 +2541,13 @@ TEST_F(InvalidResourceTileManagerTest, InvalidResource) {
   FakePictureLayerTilingClient tiling_client;
   tiling_client.SetTileSize(size);
 
-  std::unique_ptr<PictureLayerImpl> layer =
-      PictureLayerImpl::Create(host_impl()->active_tree(), 1);
-  layer->set_contributes_to_drawn_render_surface(true);
+  auto raster = FakeRasterSource::CreateFilled(size);
+  SetupTrees(raster, raster);
+  active_layer()->set_contributes_to_drawn_render_surface(true);
 
-  auto* tiling = layer->picture_layer_tiling_set()->AddTiling(
-      gfx::AxisTransform2d(), FakeRasterSource::CreateFilled(size));
+  active_layer()->picture_layer_tiling_set()->RemoveAllTilings();
+  auto* tiling = active_layer()->picture_layer_tiling_set()->AddTiling(
+      gfx::AxisTransform2d(), std::move(raster));
   tiling->set_resolution(HIGH_RESOLUTION);
   tiling->CreateAllTilesForTesting();
   tiling->SetTilePriorityRectsForTesting(gfx::Rect(size),   // Visible rect.
@@ -2562,8 +2569,7 @@ TEST_F(InvalidResourceTileManagerTest, InvalidResource) {
   EXPECT_EQ(TileDrawInfo::OOM_MODE, tile->draw_info().mode());
 
   // Ensure that the host impl doesn't outlive |raster_buffer_provider|.
-  layer = nullptr;
-  TakeHostImpl();
+  ClearLayersAndHost();
 }
 
 // FakeRasterBufferProviderImpl that allows us to mock ready to draw
@@ -2602,56 +2608,46 @@ class MockReadyToDrawRasterBufferProviderImpl
 
 class TileManagerReadyToDrawTest : public TileManagerTest {
  public:
-  ~TileManagerReadyToDrawTest() override {
-    // Ensure that the host impl doesn't outlive |raster_buffer_provider_|.
-    TakeHostImpl();
-  }
-
   void SetUp() override {
     TileManagerTest::SetUp();
     host_impl()->tile_manager()->SetRasterBufferProviderForTesting(
         &mock_raster_buffer_provider_);
 
-    const gfx::Size layer_bounds(1000, 1000);
-
-    solid_color_recording_source_ = FakeRecordingSource::Create(layer_bounds);
-
     PaintFlags solid_flags;
     SkColor solid_color = SkColorSetARGB(255, 12, 23, 34);
     solid_flags.setColor(solid_color);
-    solid_color_recording_source_->add_draw_rect_with_flags(
-        gfx::Rect(layer_bounds), solid_flags);
+    solid_color_recording_source_.add_draw_rect_with_flags(
+        gfx::Rect(kLayerBounds), solid_flags);
 
-    solid_color_recording_source_->Rerecord();
+    solid_color_recording_source_.Rerecord();
 
-    recording_source_ = FakeRecordingSource::Create(layer_bounds);
     SkColor non_solid_color = SkColorSetARGB(128, 45, 56, 67);
     PaintFlags non_solid_flags;
     non_solid_flags.setColor(non_solid_color);
 
     for (int i = 0; i < 100; ++i) {
       for (int j = 0; j < 100; ++j) {
-        recording_source_->add_draw_rect_with_flags(
+        recording_source_.add_draw_rect_with_flags(
             gfx::Rect(10 * i, 10 * j, 5, 5), non_solid_flags);
       }
     }
-    recording_source_->Rerecord();
+    recording_source_.Rerecord();
   }
 
   void SetupTreesWithActiveTreeTiles() {
     scoped_refptr<RasterSource> active_tree_raster_source =
-        recording_source_->CreateRasterSource();
+        recording_source_.CreateRasterSource();
     scoped_refptr<RasterSource> pending_tree_raster_source =
-        solid_color_recording_source_->CreateRasterSource();
+        solid_color_recording_source_.CreateRasterSource();
 
     SetupTrees(pending_tree_raster_source, active_tree_raster_source);
   }
 
   void SetupTreesWithPendingTreeTiles() {
     scoped_refptr<RasterSource> active_tree_raster_source =
-        solid_color_recording_source_->CreateRasterSource();
+        solid_color_recording_source_.CreateRasterSource();
     scoped_refptr<RasterSource> pending_tree_raster_source =
-        recording_source_->CreateRasterSource();
+        recording_source_.CreateRasterSource();
 
     SetupTrees(pending_tree_raster_source, active_tree_raster_source);
   }
@@ -2664,8 +2660,9 @@ class TileManagerReadyToDrawTest : public TileManagerTest {
  private:
   StrictMock<MockReadyToDrawRasterBufferProviderImpl>
       mock_raster_buffer_provider_;
-  std::unique_ptr<FakeRecordingSource> recording_source_;
-  std::unique_ptr<FakeRecordingSource> solid_color_recording_source_;
+  const gfx::Size kLayerBounds{1000, 1000};
+  FakeRecordingSource recording_source_{kLayerBounds};
+  FakeRecordingSource solid_color_recording_source_{kLayerBounds};
 };
 
 TEST_F(TileManagerReadyToDrawTest, SmoothActivationWaitsOnCallback) {
@@ -3206,7 +3203,6 @@ class CheckerImagingTileManagerTest : public TestLayerTreeHostBase {
 
   LayerTreeSettings CreateSettings() override {
     auto settings = TestLayerTreeHostBase::CreateSettings();
-    settings.commit_to_active_tree = false;
     settings.enable_checker_imaging = true;
     settings.min_image_bytes_to_checker = 512 * 1024;
     return settings;
@@ -3246,8 +3242,8 @@ TEST_F(CheckerImagingTileManagerTest,
        NoImageDecodeDependencyForCheckeredTiles) {
   const gfx::Size layer_bounds(512, 512);
 
-  auto recording_source = FakeRecordingSource::Create(layer_bounds);
-  recording_source->set_fill_with_nonsolid_color(true);
+  FakeRecordingSource recording_source(layer_bounds);
+  recording_source.set_fill_with_nonsolid_color(true);
 
   auto generator =
       sk_make_sp<testing::StrictMock<MockImageGenerator>>(gfx::Size(512, 512));
@@ -3256,11 +3252,11 @@ TEST_F(CheckerImagingTileManagerTest,
                          .set_paint_image_generator(generator)
                          .set_decoding_mode(PaintImage::DecodingMode::kAsync)
                          .TakePaintImage();
-  recording_source->add_draw_image(image, gfx::Point(0, 0));
+  recording_source.add_draw_image(image, gfx::Point(0, 0));
 
-  recording_source->Rerecord();
+  recording_source.Rerecord();
   scoped_refptr<RasterSource> raster_source =
-      recording_source->CreateRasterSource();
+      recording_source.CreateRasterSource();
 
   Region invalidation((gfx::Rect(layer_bounds)));
   SetupPendingTree(raster_source, layer_bounds, invalidation);
@@ -3299,16 +3295,16 @@ class EmptyCacheTileManagerTest : public TileManagerTest {
 TEST_F(EmptyCacheTileManagerTest, AtRasterOnScreenTileRasterTasks) {
   const gfx::Size layer_bounds(500, 500);
 
-  auto recording_source = FakeRecordingSource::Create(layer_bounds);
-  recording_source->set_fill_with_nonsolid_color(true);
+  FakeRecordingSource recording_source(layer_bounds);
+  recording_source.set_fill_with_nonsolid_color(true);
 
   int dimension = 500;
   PaintImage image = MakeCheckerablePaintImage(gfx::Size(dimension, dimension));
-  recording_source->add_draw_image(image, gfx::Point(0, 0));
+  recording_source.add_draw_image(image, gfx::Point(0, 0));
 
-  recording_source->Rerecord();
+  recording_source.Rerecord();
   scoped_refptr<RasterSource> raster_source =
-      recording_source->CreateRasterSource();
+      recording_source.CreateRasterSource();
 
   gfx::Size tile_size(500, 500);
   Region invalidation((gfx::Rect(layer_bounds)));
@@ -3334,16 +3330,16 @@ TEST_F(EmptyCacheTileManagerTest, AtRasterOnScreenTileRasterTasks) {
 TEST_F(EmptyCacheTileManagerTest, AtRasterPrepaintTileRasterTasksSkipped) {
   const gfx::Size layer_bounds(500, 500);
 
-  auto recording_source = FakeRecordingSource::Create(layer_bounds);
-  recording_source->set_fill_with_nonsolid_color(true);
+  FakeRecordingSource recording_source(layer_bounds);
+  recording_source.set_fill_with_nonsolid_color(true);
 
   int dimension = 500;
   PaintImage image = MakeCheckerablePaintImage(gfx::Size(dimension, dimension));
-  recording_source->add_draw_image(image, gfx::Point(0, 0));
+  recording_source.add_draw_image(image, gfx::Point(0, 0));
 
-  recording_source->Rerecord();
+  recording_source.Rerecord();
   scoped_refptr<RasterSource> raster_source =
-      recording_source->CreateRasterSource();
+      recording_source.CreateRasterSource();
 
   gfx::Size tile_size(500, 500);
   Region invalidation((gfx::Rect(layer_bounds)));
@@ -3369,8 +3365,8 @@ TEST_F(EmptyCacheTileManagerTest, AtRasterPrepaintTileRasterTasksSkipped) {
 TEST_F(CheckerImagingTileManagerTest, BuildsImageDecodeQueueAsExpected) {
   const gfx::Size layer_bounds(900, 900);
 
-  auto recording_source = FakeRecordingSource::Create(layer_bounds);
-  recording_source->set_fill_with_nonsolid_color(true);
+  FakeRecordingSource recording_source(layer_bounds);
+  recording_source.set_fill_with_nonsolid_color(true);
 
   int dimension = 450;
   PaintImage image1 =
@@ -3379,13 +3375,13 @@ TEST_F(CheckerImagingTileManagerTest, BuildsImageDecodeQueueAsExpected) {
       MakeCheckerablePaintImage(gfx::Size(dimension, dimension));
   PaintImage image3 =
       MakeCheckerablePaintImage(gfx::Size(dimension, dimension));
-  recording_source->add_draw_image(image1, gfx::Point(0, 0));
-  recording_source->add_draw_image(image2, gfx::Point(600, 0));
-  recording_source->add_draw_image(image3, gfx::Point(0, 600));
+  recording_source.add_draw_image(image1, gfx::Point(0, 0));
+  recording_source.add_draw_image(image2, gfx::Point(600, 0));
+  recording_source.add_draw_image(image3, gfx::Point(0, 600));
 
-  recording_source->Rerecord();
+  recording_source.Rerecord();
   scoped_refptr<RasterSource> raster_source =
-      recording_source->CreateRasterSource();
+      recording_source.CreateRasterSource();
 
   gfx::Size tile_size(500, 500);
   Region invalidation((gfx::Rect(layer_bounds)));
@@ -3532,13 +3528,13 @@ TEST_F(CheckerImagingTileManagerTest,
        TileManagerCleanupClearsCheckerImagedDecodes) {
   const gfx::Size layer_bounds(512, 512);
 
-  auto recording_source = FakeRecordingSource::Create(layer_bounds);
-  recording_source->set_fill_with_nonsolid_color(true);
+  FakeRecordingSource recording_source(layer_bounds);
+  recording_source.set_fill_with_nonsolid_color(true);
   PaintImage image = MakeCheckerablePaintImage(gfx::Size(512, 512));
-  recording_source->add_draw_image(image, gfx::Point(0, 0));
-  recording_source->Rerecord();
+  recording_source.add_draw_image(image, gfx::Point(0, 0));
+  recording_source.Rerecord();
   scoped_refptr<RasterSource> raster_source =
-      recording_source->CreateRasterSource();
+      recording_source.CreateRasterSource();
 
   SetupPendingTree(raster_source, gfx::Size(100, 100),
                    Region(gfx::Rect(0, 0, 500, 500)));
@@ -3570,13 +3566,13 @@ TEST_F(CheckerImagingTileManagerTest,
        TileManagerCorrectlyPrioritizesCheckerImagedDecodes) {
   gfx::Size layer_bounds(500, 500);
 
-  auto recording_source = FakeRecordingSource::Create(layer_bounds);
-  recording_source->set_fill_with_nonsolid_color(true);
+  FakeRecordingSource recording_source(layer_bounds);
+  recording_source.set_fill_with_nonsolid_color(true);
   PaintImage image = MakeCheckerablePaintImage(gfx::Size(512, 512));
-  recording_source->add_draw_image(image, gfx::Point(0, 0));
-  recording_source->Rerecord();
+  recording_source.add_draw_image(image, gfx::Point(0, 0));
+  recording_source.Rerecord();
   scoped_refptr<RasterSource> raster_source =
-      recording_source->CreateRasterSource();
+      recording_source.CreateRasterSource();
 
   // Required for activation tiles block checker-imaged decodes.
   SetupPendingTree(raster_source, gfx::Size(100, 100),
@@ -3651,20 +3647,20 @@ class CheckerImagingTileManagerMemoryTest
 TEST_F(CheckerImagingTileManagerMemoryTest, AddsAllNowTilesToImageDecodeQueue) {
   const gfx::Size layer_bounds(900, 1400);
 
-  auto recording_source = FakeRecordingSource::Create(layer_bounds);
-  recording_source->set_fill_with_nonsolid_color(true);
+  FakeRecordingSource recording_source(layer_bounds);
+  recording_source.set_fill_with_nonsolid_color(true);
 
   int dimension = 450;
   PaintImage image1 =
       MakeCheckerablePaintImage(gfx::Size(dimension, dimension));
   PaintImage image2 =
       MakeCheckerablePaintImage(gfx::Size(dimension, dimension));
-  recording_source->add_draw_image(image1, gfx::Point(0, 515));
-  recording_source->add_draw_image(image2, gfx::Point(515, 515));
+  recording_source.add_draw_image(image1, gfx::Point(0, 515));
+  recording_source.add_draw_image(image2, gfx::Point(515, 515));
 
-  recording_source->Rerecord();
+  recording_source.Rerecord();
   scoped_refptr<RasterSource> raster_source =
-      recording_source->CreateRasterSource();
+      recording_source.CreateRasterSource();
 
   gfx::Size tile_size(500, 500);
   Region invalidation((gfx::Rect(layer_bounds)));
@@ -3804,9 +3800,8 @@ TEST_F(SynchronousRasterTileManagerTest, AlwaysUseImageCache) {
   host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
   static_cast<SynchronousTaskGraphRunner*>(task_graph_runner())->RunUntilIdle();
 
-  pending_layer_ = old_pending_layer_ = active_layer_ = nullptr;
   // Destroy the LTHI since it accesses the RasterBufferProvider during cleanup.
-  TakeHostImpl();
+  ClearLayersAndHost();
 }
 
 class DecodedImageTrackerTileManagerTest : public TestLayerTreeHostBase {
@@ -3879,14 +3874,14 @@ TEST_F(DecodedImageTrackerTileManagerTest, DecodedImageTrackerDropsLocksOnUse) {
 
   // Add images to a fake recording source.
   const gfx::Size layer_bounds(1000, 500);
-  auto recording_source = FakeRecordingSource::Create(layer_bounds);
-  recording_source->set_fill_with_nonsolid_color(true);
-  recording_source->add_draw_image(image1, gfx::Point(0, 0));
-  recording_source->add_draw_image(image2, gfx::Point(700, 0));
-  recording_source->Rerecord();
+  FakeRecordingSource recording_source(layer_bounds);
+  recording_source.set_fill_with_nonsolid_color(true);
+  recording_source.add_draw_image(image1, gfx::Point(0, 0));
+  recording_source.add_draw_image(image2, gfx::Point(700, 0));
+  recording_source.Rerecord();
 
   scoped_refptr<FakeRasterSource> pending_raster_source =
-      FakeRasterSource::CreateFromRecordingSource(recording_source.get());
+      FakeRasterSource::CreateFromRecordingSource(recording_source);
 
   host_impl()->CreatePendingTree();
   LayerTreeImpl* pending_tree = host_impl()->pending_tree();
@@ -3953,12 +3948,12 @@ class HdrImageTileManagerTest : public CheckerImagingTileManagerTest {
 
     // Add images to a fake recording source.
     constexpr gfx::Size kLayerBounds(1000, 500);
-    auto recording_source = FakeRecordingSource::Create(kLayerBounds);
-    recording_source->set_fill_with_nonsolid_color(true);
-    recording_source->add_draw_image(hdr_image, gfx::Point(0, 0));
-    recording_source->Rerecord();
+    FakeRecordingSource recording_source(kLayerBounds);
+    recording_source.set_fill_with_nonsolid_color(true);
+    recording_source.add_draw_image(hdr_image, gfx::Point(0, 0));
+    recording_source.Rerecord();
 
-    auto raster_source = recording_source->CreateRasterSource();
+    auto raster_source = recording_source.CreateRasterSource();
 
     constexpr gfx::Size kTileSize(500, 500);
     Region invalidation((gfx::Rect(kLayerBounds)));
@@ -4038,10 +4033,7 @@ class TileManagerCheckRasterQueriesTest : public TileManagerTest {
   TileManagerCheckRasterQueriesTest()
       : pending_raster_queries_(
             viz::TestContextProvider::CreateWorker().get()) {}
-  ~TileManagerCheckRasterQueriesTest() override {
-    // Ensure that the host impl doesn't outlive |raster_buffer_provider_|.
-    TakeHostImpl();
-  }
+
   void SetUp() override {
     TileManagerTest::SetUp();
     host_impl()->tile_manager()->SetPendingRasterQueriesForTesting(
@@ -4074,8 +4066,6 @@ TEST_F(TileManagerCheckRasterQueriesTest,
 
 class TileManagerTileReclaimTest : public TileManagerTest {
  public:
-  ~TileManagerTileReclaimTest() override { TakeHostImpl(); }
-
   void SetUp() override {
     TileManagerTest::SetUp();
     task_runner_ = base::MakeRefCounted<base::TestMockTimeTaskRunner>();

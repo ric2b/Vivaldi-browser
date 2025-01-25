@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "content/browser/speech/speech_recognizer_impl.h"
 
 #include <stdint.h>
@@ -310,7 +315,7 @@ void SpeechRecognizerImpl::OnCaptureError(
 }
 
 void SpeechRecognizerImpl::OnSpeechRecognitionEngineResults(
-    const std::vector<blink::mojom::SpeechRecognitionResultPtr>& results) {
+    const std::vector<media::mojom::WebSpeechRecognitionResultPtr>& results) {
   FSMEventArgs event_args(EVENT_ENGINE_RESULT);
   event_args.engine_results = mojo::Clone(results);
   GetIOThreadTaskRunner({})->PostTask(
@@ -324,7 +329,7 @@ void SpeechRecognizerImpl::OnSpeechRecognitionEngineEndOfUtterance() {
 }
 
 void SpeechRecognizerImpl::OnSpeechRecognitionEngineError(
-    const blink::mojom::SpeechRecognitionError& error) {
+    const media::mojom::SpeechRecognitionError& error) {
   FSMEventArgs event_args(EVENT_ENGINE_ERROR);
   event_args.engine_error = error;
   GetIOThreadTaskRunner({})->PostTask(
@@ -679,9 +684,9 @@ SpeechRecognizerImpl::DetectUserSpeechOrTimeout(const FSMEventArgs&) {
     listener()->OnSoundStart(session_id());
     return STATE_RECOGNIZING;
   } else if (GetElapsedTimeMs() >= kNoSpeechTimeoutMs) {
-    return Abort(blink::mojom::SpeechRecognitionError(
-        blink::mojom::SpeechRecognitionErrorCode::kNoSpeech,
-        blink::mojom::SpeechAudioErrorDetails::kNone));
+    return Abort(media::mojom::SpeechRecognitionError(
+        media::mojom::SpeechRecognitionErrorCode::kNoSpeech,
+        media::mojom::SpeechAudioErrorDetails::kNone));
   }
   return STATE_WAITING_FOR_SPEECH;
 }
@@ -712,27 +717,27 @@ SpeechRecognizerImpl::FSMState
 SpeechRecognizerImpl::AbortSilently(const FSMEventArgs& event_args) {
   DCHECK_NE(event_args.event, EVENT_AUDIO_ERROR);
   DCHECK_NE(event_args.event, EVENT_ENGINE_ERROR);
-  return Abort(blink::mojom::SpeechRecognitionError(
-      blink::mojom::SpeechRecognitionErrorCode::kNone,
-      blink::mojom::SpeechAudioErrorDetails::kNone));
+  return Abort(media::mojom::SpeechRecognitionError(
+      media::mojom::SpeechRecognitionErrorCode::kNone,
+      media::mojom::SpeechAudioErrorDetails::kNone));
 }
 
 SpeechRecognizerImpl::FSMState
 SpeechRecognizerImpl::AbortWithError(const FSMEventArgs& event_args) {
   if (event_args.event == EVENT_AUDIO_ERROR) {
-    return Abort(blink::mojom::SpeechRecognitionError(
-        blink::mojom::SpeechRecognitionErrorCode::kAudioCapture,
-        blink::mojom::SpeechAudioErrorDetails::kNone));
+    return Abort(media::mojom::SpeechRecognitionError(
+        media::mojom::SpeechRecognitionErrorCode::kAudioCapture,
+        media::mojom::SpeechAudioErrorDetails::kNone));
   } else if (event_args.event == EVENT_ENGINE_ERROR) {
     return Abort(event_args.engine_error);
   }
-  return Abort(blink::mojom::SpeechRecognitionError(
-      blink::mojom::SpeechRecognitionErrorCode::kAborted,
-      blink::mojom::SpeechAudioErrorDetails::kNone));
+  return Abort(media::mojom::SpeechRecognitionError(
+      media::mojom::SpeechRecognitionErrorCode::kAborted,
+      media::mojom::SpeechAudioErrorDetails::kNone));
 }
 
 SpeechRecognizerImpl::FSMState SpeechRecognizerImpl::Abort(
-    const blink::mojom::SpeechRecognitionError& error) {
+    const media::mojom::SpeechRecognitionError& error) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   if (IsCapturingAudio())
@@ -757,8 +762,9 @@ SpeechRecognizerImpl::FSMState SpeechRecognizerImpl::Abort(
   if (state_ > STATE_STARTING && state_ < STATE_WAITING_FINAL_RESULT)
     listener()->OnAudioEnd(session_id());
 
-  if (error.code != blink::mojom::SpeechRecognitionErrorCode::kNone)
+  if (error.code != media::mojom::SpeechRecognitionErrorCode::kNone) {
     listener()->OnRecognitionError(session_id(), error);
+  }
 
   listener()->OnRecognitionEnd(session_id());
 
@@ -787,13 +793,13 @@ SpeechRecognizerImpl::FSMState SpeechRecognizerImpl::ProcessIntermediateResult(
 
 SpeechRecognizerImpl::FSMState
 SpeechRecognizerImpl::ProcessFinalResult(const FSMEventArgs& event_args) {
-  const std::vector<blink::mojom::SpeechRecognitionResultPtr>& results =
+  const std::vector<media::mojom::WebSpeechRecognitionResultPtr>& results =
       event_args.engine_results;
   auto i = results.begin();
   bool provisional_results_pending = false;
   bool results_are_empty = true;
   for (; i != results.end(); ++i) {
-    const blink::mojom::SpeechRecognitionResultPtr& result = *i;
+    const media::mojom::WebSpeechRecognitionResultPtr& result = *i;
     if (result->is_provisional) {
       DCHECK(provisional_results_);
       provisional_results_pending = true;
@@ -836,8 +842,8 @@ SpeechRecognizerImpl::DoNothing(const FSMEventArgs&) const {
 
 SpeechRecognizerImpl::FSMState
 SpeechRecognizerImpl::NotFeasible(const FSMEventArgs& event_args) {
-  NOTREACHED() << "Unfeasible event " << event_args.event
-               << " in state " << state_;
+  NOTREACHED_IN_MIGRATION()
+      << "Unfeasible event " << event_args.event << " in state " << state_;
   return state_;
 }
 
@@ -905,8 +911,8 @@ media::AudioCapturerSource* SpeechRecognizerImpl::GetAudioCapturerSource() {
 SpeechRecognizerImpl::FSMEventArgs::FSMEventArgs(FSMEvent event_value)
     : event(event_value),
       audio_data(nullptr),
-      engine_error(blink::mojom::SpeechRecognitionErrorCode::kNone,
-                   blink::mojom::SpeechAudioErrorDetails::kNone) {}
+      engine_error(media::mojom::SpeechRecognitionErrorCode::kNone,
+                   media::mojom::SpeechAudioErrorDetails::kNone) {}
 
 SpeechRecognizerImpl::FSMEventArgs::FSMEventArgs(const FSMEventArgs& other)
     : event(other.event),

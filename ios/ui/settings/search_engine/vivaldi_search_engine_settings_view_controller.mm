@@ -3,17 +3,11 @@
 #import "ios/ui/settings/search_engine/vivaldi_search_engine_settings_view_controller.h"
 
 #import "base/apple/foundation_util.h"
-#import "base/strings/sys_string_conversions.h"
-#import "components/search_engines/template_url_service_observer.h"
-#import "components/search_engines/template_url_service.h"
-#import "components/search_engines/util.h"
-#import "ios/chrome/browser/search_engines/model/search_engine_observer_bridge.h"
-#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_icon_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/ui/settings/search_engine_table_view_controller.h"
-#import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
@@ -25,6 +19,7 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 typedef NS_ENUM(NSInteger, ItemType) {
   SettingsItemTypeRegularSearchEngine = kItemTypeEnumZero,
   SettingsItemTypePrivateSearchEngine,
+  SettingsItemTypeSearchEngineNickname,
 };
 
 NSString* const kRegularTabsSearchEngineCellId =
@@ -34,15 +29,16 @@ NSString* const kPrivateTabsSearchEngineCellId =
 
 }  // namespace
 
-@interface VivaldiSearchEngineSettingsViewController() <SearchEngineObserving> {
+@interface VivaldiSearchEngineSettingsViewController() {
   ChromeBrowserState* _browserState;  // weak
-  TemplateURLService* _templateURLService;  // weak
-  // Bridge for TemplateURLServiceObserver.
-  std::unique_ptr<SearchEngineObserverBridge> _observer;
 
   TableViewDetailIconItem* _regularSearchEngineItem;
   TableViewDetailIconItem* _privateSearchEngineItem;
+  TableViewSwitchItem* _enableNicknameToggleItem;
 
+  NSString* _regularTabsSearchEngine;
+  NSString* _privateTabsSearchEngine;
+  BOOL _nicknameEnabled;
   // Whether Settings have been dismissed.
   BOOL _settingsAreDismissed;
 }
@@ -59,12 +55,6 @@ NSString* const kPrivateTabsSearchEngineCellId =
   self = [super initWithStyle:ChromeTableViewStyle()];
   if (self) {
     _browserState = browserState;
-    _templateURLService =
-        ios::TemplateURLServiceFactory::GetForBrowserState(browserState);
-    _observer =
-        std::make_unique<SearchEngineObserverBridge>(self, _templateURLService);
-    _templateURLService->Load();
-    [self setTitle:l10n_util::GetNSString(IDS_IOS_SEARCH_ENGINE_SETTING_TITLE)];
   }
   return self;
 }
@@ -91,6 +81,8 @@ NSString* const kPrivateTabsSearchEngineCellId =
   [model addItem:[self regularSearchEngineDetailItem]
       toSectionWithIdentifier:SectionIdentifierSearchEngineList];
   [model addItem:[self privateSearchEngineDetailItem]
+      toSectionWithIdentifier:SectionIdentifierSearchEngineList];
+  [model addItem:[self searchEngineNicknameToggleItem]
       toSectionWithIdentifier:SectionIdentifierSearchEngineList];
 }
 
@@ -121,19 +113,28 @@ NSString* const kPrivateTabsSearchEngineCellId =
   [self.navigationController pushViewController:controller animated:YES];
 }
 
-#pragma mark - SearchEngineObserving
+#pragma mark - UITableViewDataSource
 
-- (void)searchEngineChanged {
-  _regularSearchEngineItem.detailText =
-      [self defaultSearchEngineNameForType:
-                        TemplateURLService::kDefaultSearchMain];
+- (UITableViewCell*)tableView:(UITableView*)tableView
+        cellForRowAtIndexPath:(NSIndexPath*)indexPath {
+  UITableViewCell* cell = [super tableView:tableView
+                     cellForRowAtIndexPath:indexPath];
+  NSInteger itemType = [self.tableViewModel itemTypeForIndexPath:indexPath];
 
-  _privateSearchEngineItem.detailText =
-      [self defaultSearchEngineNameForType:
-                        TemplateURLService::kDefaultSearchPrivate];
-
-  [self reconfigureCellsForItems:@[ _regularSearchEngineItem,
-                                    _privateSearchEngineItem ]];
+  switch (itemType) {
+    case SettingsItemTypeSearchEngineNickname: {
+      TableViewSwitchCell* switchCell =
+          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
+      [switchCell.switchView
+          addTarget:self
+              action:@selector(searchEngineNicknameToggleChanged:)
+                  forControlEvents:UIControlEventValueChanged];
+      break;
+    }
+    default:
+      break;
+  }
+  return cell;
 }
 
 #pragma mark SettingsControllerProtocol
@@ -149,59 +150,83 @@ NSString* const kPrivateTabsSearchEngineCellId =
 - (void)settingsWillBeDismissed {
   DCHECK(!_settingsAreDismissed);
 
-  // Remove observer bridges.
-  _observer.reset();
-
   _browserState = nullptr;
-  _templateURLService = nullptr;
 
+  _nicknameEnabled = YES;
   _settingsAreDismissed = YES;
+}
+
+#pragma mark VivaldiSearchEngineSettingsConsumer
+
+- (void)setSearchEngineForRegularTabs:(NSString*)searchEngine {
+  _regularTabsSearchEngine = searchEngine;
+  if (!_regularSearchEngineItem)
+    return;
+  _regularSearchEngineItem.detailText = searchEngine;
+  [self reconfigureCellsForItems:@[ _regularSearchEngineItem]];
+}
+
+- (void)setSearchEngineForPrivateTabs:(NSString*)searchEngine {
+  _privateTabsSearchEngine = searchEngine;
+  if (!_privateSearchEngineItem)
+    return;
+  _privateSearchEngineItem.detailText = searchEngine;
+  [self reconfigureCellsForItems:@[ _privateSearchEngineItem ]];
+}
+
+- (void)setPreferenceForEnableSearchEngineNickname:(BOOL)enable {
+  _nicknameEnabled = enable;
+  if (!_enableNicknameToggleItem) {
+    return;
+  }
+  _enableNicknameToggleItem.on = _nicknameEnabled;
 }
 
 #pragma mark - Private Methods
 - (TableViewItem*)regularSearchEngineDetailItem {
-  NSString* regularDefaultSearchEngineName =
-      [self defaultSearchEngineNameForType:
-            TemplateURLService::kDefaultSearchMain];
-
-  _regularSearchEngineItem =
-      [self detailItemWithType:SettingsItemTypeRegularSearchEngine
-                             text:l10n_util::GetNSString(
-                        IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_STANDARD_TAB_TITLE)
-                       detailText:regularDefaultSearchEngineName
-                           symbol:nil
-          accessibilityIdentifier:kRegularTabsSearchEngineCellId];
-
+  if (!_regularSearchEngineItem) {
+    _regularSearchEngineItem =
+        [self detailItemWithType:SettingsItemTypeRegularSearchEngine
+                            text:l10n_util::GetNSString(
+                       IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_STANDARD_TAB_TITLE)
+                      detailText:_regularTabsSearchEngine
+                          symbol:nil
+         accessibilityIdentifier:kRegularTabsSearchEngineCellId];
+  }
   return _regularSearchEngineItem;
 }
 
 - (TableViewItem*)privateSearchEngineDetailItem {
-  NSString* privateDefaultSearchEngineName =
-      [self defaultSearchEngineNameForType:
-            TemplateURLService::kDefaultSearchPrivate];
-
-  _privateSearchEngineItem =
-      [self detailItemWithType:SettingsItemTypePrivateSearchEngine
-                             text:l10n_util::GetNSString(
+  if (!_privateSearchEngineItem) {
+    _privateSearchEngineItem =
+        [self detailItemWithType:SettingsItemTypePrivateSearchEngine
+                            text:l10n_util::GetNSString(
                         IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_PRIVATE_TAB_TITLE)
-                       detailText:privateDefaultSearchEngineName
-                           symbol:nil
-          accessibilityIdentifier:kPrivateTabsSearchEngineCellId];
+                      detailText:_privateTabsSearchEngine
+                          symbol:nil
+         accessibilityIdentifier:kPrivateTabsSearchEngineCellId];
 
+  }
   return _privateSearchEngineItem;
 }
 
-- (NSString*)defaultSearchEngineNameForType:
-    (TemplateURLService::DefaultSearchType)type {
-  DCHECK(!_templateURLService);
-
-  const TemplateURL* const default_provider =
-      _templateURLService->GetDefaultSearchProvider(type);
-
-  if (!default_provider) {
-    return @"";
+- (TableViewSwitchItem*)searchEngineNicknameToggleItem {
+  if (!_enableNicknameToggleItem) {
+    _enableNicknameToggleItem =
+        [[TableViewSwitchItem alloc]
+            initWithType:SettingsItemTypeSearchEngineNickname];
+    NSString* title =
+        l10n_util::GetNSString(
+             IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_ENABLE_NICKNAME_TITLE);
+    _enableNicknameToggleItem.text = title;
+    _enableNicknameToggleItem.on = _nicknameEnabled;
+    _enableNicknameToggleItem.accessibilityIdentifier = title;
   }
-  return base::SysUTF16ToNSString(default_provider->short_name());
+  return _enableNicknameToggleItem;
+}
+
+- (void)searchEngineNicknameToggleChanged:(UISwitch*)switchView {
+  [self.delegate searchEngineNicknameEnabled:switchView.isOn];
 }
 
 #pragma mark Item Constructors

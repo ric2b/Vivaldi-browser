@@ -225,7 +225,7 @@ std::u16string GetAccessibilityBaseLabel(const AutocompleteMatch& match,
       // Clipboard match with no textual clipboard content.
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 

@@ -49,8 +49,6 @@
 #include "third_party/blink/renderer/core/style/basic_shapes.h"
 #include "third_party/blink/renderer/core/style/computed_style_base_constants.h"
 #include "third_party/blink/renderer/platform/geometry/layout_point.h"
-#include "third_party/blink/renderer/platform/geometry/layout_rect.h"
-#include "third_party/blink/renderer/platform/geometry/layout_size.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/geometry/length_functions.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -94,7 +92,7 @@ void LayoutReplaced::StyleDidChange(StyleDifference diff,
 
   // Replaced elements can have border-radius clips without clipping overflow;
   // the overflow clipping case is already covered in LayoutBox::StyleDidChange
-  if (old_style && !old_style->BorderRadiusEqual(StyleRef())) {
+  if (old_style && diff.BorderRadiusChanged()) {
     SetNeedsPaintPropertyUpdate();
   }
 
@@ -176,22 +174,6 @@ void LayoutReplaced::RecalcVisualOverflow() {
   // LayoutBox::VisualOverflowRect.
   if (RespectsCSSOverflow())
     AddContentsVisualOverflow(ReplacedContentRect());
-}
-
-std::optional<gfx::SizeF>
-LayoutReplaced::ComputeObjectViewBoxSizeForIntrinsicSizing() const {
-  // TODO(crbug.com/335003884): Investigate if this first branch is
-  // actually doing anything and maybe clean that up too
-  if (!RuntimeEnabledFeatures::NoIntrinsicSizeOverrideEnabled()) {
-    if (IntrinsicWidthOverride() || IntrinsicHeightOverride()) {
-      return std::nullopt;
-    }
-  }
-
-  if (auto view_box = ComputeObjectViewBoxRect())
-    return static_cast<gfx::SizeF>(view_box->size);
-
-  return std::nullopt;
 }
 
 std::optional<PhysicalRect> LayoutReplaced::ComputeObjectViewBoxRect(
@@ -345,7 +327,7 @@ PhysicalRect LayoutReplaced::ComputeObjectFitAndPositionRect(
     case EObjectFit::kFill:
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   LayoutUnit x_offset =
@@ -382,8 +364,8 @@ void LayoutReplaced::ComputeIntrinsicSizingInfo(
   NOT_DESTROYED();
   DCHECK(!ShouldApplySizeContainment());
 
-  if (auto view_box_size = ComputeObjectViewBoxSizeForIntrinsicSizing()) {
-    intrinsic_sizing_info.size = *view_box_size;
+  if (auto view_box = ComputeObjectViewBoxRect()) {
+    intrinsic_sizing_info.size = gfx::SizeF(view_box->size);
   } else {
     intrinsic_sizing_info.size = gfx::SizeF(IntrinsicSize());
   }

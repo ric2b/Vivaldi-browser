@@ -82,10 +82,11 @@ SingleCopyReadOnlyArtifacts::~SingleCopyReadOnlyArtifacts() {
   // TearDown requires MemoryAllocator which itself is tied to an Isolate.
   shared_read_only_space_->pages_.resize(0);
 
-  for (ReadOnlyPageMetadata* chunk : pages_) {
-    void* chunk_address = reinterpret_cast<void*>(chunk->ChunkAddress());
-    size_t size = RoundUp(chunk->size(), page_allocator_->AllocatePageSize());
-    CHECK(page_allocator_->FreePages(chunk_address, size));
+  for (ReadOnlyPageMetadata* page : pages_) {
+    MemoryChunk* chunk = MemoryChunk::FromAddress(page->ChunkAddress());
+    size_t size = RoundUp(page->size(), page_allocator_->AllocatePageSize());
+    page->~ReadOnlyPageMetadata();
+    CHECK(page_allocator_->FreePages(chunk, size));
   }
 }
 
@@ -326,7 +327,8 @@ ReadOnlyPageMetadata::ReadOnlyPageMetadata(Heap* heap, BaseSpace* space,
 }
 
 MemoryChunk::MainThreadFlags ReadOnlyPageMetadata::InitialFlags() const {
-  return MemoryChunk::NEVER_EVACUATE | MemoryChunk::READ_ONLY_HEAP;
+  return MemoryChunk::NEVER_EVACUATE | MemoryChunk::READ_ONLY_HEAP |
+         MemoryChunk::CONTAINS_ONLY_OLD;
 }
 
 void ReadOnlyPageMetadata::MakeHeaderRelocatable() {
@@ -756,9 +758,15 @@ size_t ReadOnlySpace::AllocateNextPage() {
 }
 
 size_t ReadOnlySpace::AllocateNextPageAt(Address pos) {
+  CHECK(IsAligned(pos, kRegularPageSize));
   ReadOnlyPageMetadata* page =
       heap_->memory_allocator()->AllocateReadOnlyPage(this, pos);
-  // If this fails we probably allocated r/o space too late.
+  if (!page) {
+    heap_->FatalProcessOutOfMemory("ReadOnly allocation failure");
+  }
+  // If this fails we got a wrong page. This means something allocated a page in
+  // the shared cage before us, stealing our required page (i.e.,
+  // ReadOnlyHeap::SetUp was called too late).
   CHECK_EQ(pos, page->ChunkAddress());
   capacity_ += AreaSize();
   AccountCommitted(page->size());

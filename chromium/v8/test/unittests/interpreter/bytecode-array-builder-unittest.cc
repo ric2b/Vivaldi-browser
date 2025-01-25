@@ -271,7 +271,7 @@ TEST_F(BytecodeArrayBuilderTest, AllBytecodesGenerated) {
   // Emit unary operator invocations.
   builder.LogicalNot(ToBooleanMode::kConvertToBoolean)
       .LogicalNot(ToBooleanMode::kAlreadyBoolean)
-      .TypeOf();
+      .TypeOf(1);
 
   // Emit delete
   builder.Delete(reg, LanguageMode::kSloppy).Delete(reg, LanguageMode::kStrict);
@@ -484,10 +484,12 @@ TEST_F(BytecodeArrayBuilderTest, AllBytecodesGenerated) {
   scope_info->set_flags(flags);
   scope_info->set_context_local_count(0);
   scope_info->set_parameter_count(0);
+  scope_info->set_position_info_start(0);
+  scope_info->set_position_info_end(0);
   scope.SetScriptScopeInfo(scope_info);
 
   ast_factory.Internalize(isolate());
-  Handle<BytecodeArray> the_array = builder.ToBytecodeArray(isolate());
+  DirectHandle<BytecodeArray> the_array = builder.ToBytecodeArray(isolate());
   CHECK_EQ(the_array->frame_size(),
            builder.total_register_count() * kSystemPointerSize);
 
@@ -551,7 +553,8 @@ TEST_F(BytecodeArrayBuilderTest, FrameSizesLookGood) {
       }
       builder.Return();
 
-      Handle<BytecodeArray> the_array = builder.ToBytecodeArray(isolate());
+      DirectHandle<BytecodeArray> the_array =
+          builder.ToBytecodeArray(isolate());
       int total_registers = locals + temps;
       CHECK_EQ(the_array->frame_size(), total_registers * kSystemPointerSize);
     }
@@ -600,7 +603,7 @@ TEST_F(BytecodeArrayBuilderTest, Constants) {
       .Return();
 
   ast_factory.Internalize(isolate());
-  Handle<BytecodeArray> array = builder.ToBytecodeArray(isolate());
+  DirectHandle<BytecodeArray> array = builder.ToBytecodeArray(isolate());
   // Should only have one entry for each identical constant.
   EXPECT_EQ(4, array->constant_pool()->length());
 }

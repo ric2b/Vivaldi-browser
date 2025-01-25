@@ -61,7 +61,7 @@ scoped_refptr<Importer> CreateImporterByType(ImporterType type) {
     case TYPE_OPERA_GX:
       return new ChromiumImporter();
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return nullptr;
   }
 }

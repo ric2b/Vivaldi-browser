@@ -678,6 +678,44 @@ void Simulator::DoRuntimeCall(Instruction* instr) {
   const int64_t arg19 = stack_pointer[11];
   static_assert(kMaxCParameters == 20);
 
+#ifdef V8_USE_MEMORY_SANITIZER
+  // `UnsafeGenericFunctionCall()` dispatches calls to functions with
+  // varying signatures and relies on the fact that the mismatched prototype
+  // used by the caller and the prototype used by the callee (defined using
+  // the `RUNTIME_FUNCTION*()` macros happen to line up so that things more
+  // or less work out [1].
+  //
+  // Unfortunately, this confuses MSan's uninit tracking with eager checks
+  // enabled; it's unclear if these are all false positives or if there are
+  // legitimate reports. For now, unconditionally unpoison args to
+  // unblock finding and fixing more violations with MSan eager checks.
+  //
+  // TODO(crbug.com/v8/14712): Fix the MSan violations and migrate to
+  // something like crrev.com/c/5422076 instead.
+  //
+  // [1] Yes, this is undefined behaviour. 🙈🙉🙊
+  MSAN_MEMORY_IS_INITIALIZED(&arg0, sizeof(arg0));
+  MSAN_MEMORY_IS_INITIALIZED(&arg1, sizeof(arg1));
+  MSAN_MEMORY_IS_INITIALIZED(&arg2, sizeof(arg2));
+  MSAN_MEMORY_IS_INITIALIZED(&arg3, sizeof(arg3));
+  MSAN_MEMORY_IS_INITIALIZED(&arg4, sizeof(arg4));
+  MSAN_MEMORY_IS_INITIALIZED(&arg5, sizeof(arg5));
+  MSAN_MEMORY_IS_INITIALIZED(&arg6, sizeof(arg6));
+  MSAN_MEMORY_IS_INITIALIZED(&arg7, sizeof(arg7));
+  MSAN_MEMORY_IS_INITIALIZED(&arg8, sizeof(arg8));
+  MSAN_MEMORY_IS_INITIALIZED(&arg9, sizeof(arg9));
+  MSAN_MEMORY_IS_INITIALIZED(&arg10, sizeof(arg10));
+  MSAN_MEMORY_IS_INITIALIZED(&arg11, sizeof(arg11));
+  MSAN_MEMORY_IS_INITIALIZED(&arg12, sizeof(arg12));
+  MSAN_MEMORY_IS_INITIALIZED(&arg13, sizeof(arg13));
+  MSAN_MEMORY_IS_INITIALIZED(&arg14, sizeof(arg14));
+  MSAN_MEMORY_IS_INITIALIZED(&arg15, sizeof(arg15));
+  MSAN_MEMORY_IS_INITIALIZED(&arg16, sizeof(arg16));
+  MSAN_MEMORY_IS_INITIALIZED(&arg17, sizeof(arg17));
+  MSAN_MEMORY_IS_INITIALIZED(&arg18, sizeof(arg18));
+  MSAN_MEMORY_IS_INITIALIZED(&arg19, sizeof(arg19));
+#endif  // V8_USE_MEMORY_SANITIZER
+
   switch (redirection->type()) {
     default:
       TraceSim("Type: Unknown.\n");
@@ -1045,6 +1083,10 @@ int Simulator::CodeFromName(const char* name) {
   if ((strcmp("sp", name) == 0) || (strcmp("wsp", name) == 0)) {
     return kSPRegInternalCode;
   }
+  if (strcmp("x16", name) == 0) return CodeFromName("ip0");
+  if (strcmp("x17", name) == 0) return CodeFromName("ip1");
+  if (strcmp("x29", name) == 0) return CodeFromName("fp");
+  if (strcmp("x30", name) == 0) return CodeFromName("lr");
   return -1;
 }
 
@@ -4053,7 +4095,7 @@ bool Simulator::ExecDebugCommand(ArrayUniquePtr<char> line_ptr) {
         Tagged<Object> obj(*cur);
         Heap* current_heap = isolate_->heap();
         if (IsSmi(obj) ||
-            IsValidHeapObject(current_heap, HeapObject::cast(obj))) {
+            IsValidHeapObject(current_heap, Cast<HeapObject>(obj))) {
           PrintF(" (");
           if (IsSmi(obj)) {
             PrintF("smi %" PRId32, Smi::ToInt(obj));
@@ -5010,6 +5052,27 @@ void Simulator::VisitNEON3Different(Instruction* instr) {
       break;
     case NEON_RSUBHN2:
       rsubhn2(vf, rd, rn, rm);
+      break;
+    default:
+      UNIMPLEMENTED();
+  }
+}
+
+void Simulator::VisitNEON3Extension(Instruction* instr) {
+  NEONFormatDecoder nfd(instr);
+  SimVRegister& rd = vreg(instr->Rd());
+  SimVRegister& rm = vreg(instr->Rm());
+  SimVRegister& rn = vreg(instr->Rn());
+  VectorFormat vf = nfd.GetVectorFormat();
+
+  switch (instr->Mask(NEON3ExtensionMask)) {
+    case NEON_SDOT:
+      if (vf == kFormat4S || vf == kFormat2S) {
+        sdot(vf, rd, rn, rm);
+      } else {
+        VisitUnallocated(instr);
+      }
+
       break;
     default:
       UNIMPLEMENTED();

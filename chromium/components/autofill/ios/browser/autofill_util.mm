@@ -160,8 +160,8 @@ bool ExtractFormData(const base::Value::Dict& form,
   if (!name) {
     return false;
   }
-  form_data->name = base::UTF8ToUTF16(*name);
-  if (filtered && form_name != form_data->name) {
+  form_data->set_name(base::UTF8ToUTF16(*name));
+  if (filtered && form_name != form_data->name()) {
     return false;
   }
 
@@ -173,8 +173,8 @@ bool ExtractFormData(const base::Value::Dict& form,
   std::u16string origin = base::UTF8ToUTF16(*origin_ptr);
 
   // Use GURL object to verify origin of host frame URL.
-  form_data->url = GURL(origin);
-  if (form_data->url.DeprecatedGetOriginAsURL() != form_frame_origin) {
+  form_data->set_url(GURL(origin));
+  if (form_data->url().DeprecatedGetOriginAsURL() != form_frame_origin) {
     return false;
   }
 
@@ -189,22 +189,26 @@ bool ExtractFormData(const base::Value::Dict& form,
   // kAutofillAcrossIframesIos is enabled.
   std::optional<base::UnguessableToken> host_frame;
   if (const std::string* frame_id = form.FindString("frame_id")) {
-    form_data->frame_id = *frame_id;
-      host_frame = DeserializeJavaScriptFrameId(*frame_id);
-      if (!host_frame) {
-        return false;
-      }
-      form_data->host_frame = LocalFrameToken(*host_frame);
+    form_data->set_frame_id(*frame_id);
+    host_frame = DeserializeJavaScriptFrameId(*frame_id);
+    if (!host_frame) {
+      return false;
+    }
+    if (include_frame_metadata) {
+      form_data->set_host_frame(LocalFrameToken(*host_frame));
+    }
   }
 
   // main_frame_origin is used for logging UKM.
-  form_data->main_frame_origin = url::Origin::Create(main_frame_url);
+  form_data->set_main_frame_origin(url::Origin::Create(main_frame_url));
 
   const std::string* renderer_id = form.FindString("renderer_id");
   if (renderer_id && !renderer_id->empty()) {
-    StringToUint(*renderer_id, &form_data->renderer_id.value());
+    FormRendererId form_renderer_id;
+    StringToUint(*renderer_id, &form_renderer_id.value());
+    form_data->set_renderer_id(form_renderer_id);
   } else {
-    form_data->renderer_id = FormRendererId();
+    form_data->set_renderer_id(FormRendererId());
   }
 
   // Action is optional.
@@ -212,27 +216,29 @@ bool ExtractFormData(const base::Value::Dict& form,
   if (const std::string* action_ptr = form.FindString("action")) {
     action = base::UTF8ToUTF16(*action_ptr);
   }
-  form_data->action = GURL(action);
+  form_data->set_action(GURL(action));
 
   // Optional fields.
   if (const std::string* name_attribute = form.FindString("name_attribute")) {
-    form_data->name_attribute = base::UTF8ToUTF16(*name_attribute);
+    form_data->set_name_attribute(base::UTF8ToUTF16(*name_attribute));
   }
   if (const std::string* id_attribute = form.FindString("id_attribute")) {
-    form_data->id_attribute = base::UTF8ToUTF16(*id_attribute);
+    form_data->set_id_attribute(base::UTF8ToUTF16(*id_attribute));
   }
 
   if (include_frame_metadata) {
     // Child frame tokens, optional.
     if (const base::Value::List* child_frames_list =
             form.FindList("child_frames")) {
+      std::vector<autofill::FrameTokenWithPredecessor> child_frames;
       for (const auto& frame_dict : *child_frames_list) {
         autofill::FrameTokenWithPredecessor token;
         if (frame_dict.is_dict() &&
             ExtractRemoteFrameToken(frame_dict.GetDict(), &token)) {
-          form_data->child_frames.push_back(std::move(token));
+          child_frames.push_back(std::move(token));
         }
       }
+      form_data->set_child_frames(std::move(child_frames));
     }
   }
 
@@ -241,6 +247,8 @@ bool ExtractFormData(const base::Value::Dict& form,
   if (!fields_list) {
     return false;
   }
+  std::vector<FormFieldData> fields;
+  fields.reserve(fields_list->size());
   for (const auto& field_dict : *fields_list) {
     autofill::FormFieldData field_data;
     if (field_dict.is_dict() &&
@@ -248,22 +256,25 @@ bool ExtractFormData(const base::Value::Dict& form,
                              &field_data)) {
       // Some data is extracted at the form level, but also appears at the
       // field level. Reuse the extracted values.
-      field_data.set_host_form_id(form_data->renderer_id);
+      field_data.set_host_form_id(form_data->renderer_id());
       if (include_frame_metadata) {
-        field_data.set_host_frame(form_data->host_frame);
+        field_data.set_host_frame(form_data->host_frame());
         field_data.set_origin(frame_origin_object);
       }
-      form_data->fields.push_back(std::move(field_data));
+      fields.push_back(std::move(field_data));
     } else {
       return false;
     }
   }
+  form_data->set_fields(std::move(fields));
 
   if (include_frame_metadata) {
     FormSignature form_signature = CalculateFormSignature(*form_data);
-    for (FormFieldData& field : form_data->fields) {
+    std::vector<FormFieldData> form_fields = form_data->ExtractFields();
+    for (FormFieldData& field : form_fields) {
       field.set_host_form_signature(form_signature);
     }
+    form_data->set_fields(std::move(form_fields));
   }
   return true;
 }
@@ -355,23 +366,21 @@ bool ExtractFormFieldData(const base::Value::Dict& field,
 
   // Load option values where present.
   const base::Value::List* option_values = field.FindList("option_values");
-  const base::Value::List* option_contents = field.FindList("option_contents");
-  if (option_values && option_contents) {
-    if (option_values->size() != option_contents->size()) {
+  const base::Value::List* option_texts = field.FindList("option_texts");
+  if (option_values && option_texts) {
+    if (option_values->size() != option_texts->size()) {
       return false;
     }
     std::vector<SelectOption> options;
     auto value_it = option_values->begin();
-    auto content_it = option_contents->begin();
-    while (value_it != option_values->end() &&
-           content_it != option_contents->end()) {
-      if (value_it->is_string() && content_it->is_string()) {
-        options.push_back(
-            {.value = base::UTF8ToUTF16(value_it->GetString()),
-             .content = base::UTF8ToUTF16(content_it->GetString())});
+    auto text_it = option_texts->begin();
+    while (value_it != option_values->end() && text_it != option_texts->end()) {
+      if (value_it->is_string() && text_it->is_string()) {
+        options.push_back({.value = base::UTF8ToUTF16(value_it->GetString()),
+                           .text = base::UTF8ToUTF16(text_it->GetString())});
       }
       ++value_it;
-      ++content_it;
+      ++text_it;
     }
     field_data->set_options(std::move(options));
   }

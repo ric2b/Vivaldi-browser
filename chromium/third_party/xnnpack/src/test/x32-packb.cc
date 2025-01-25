@@ -8,12 +8,12 @@
 //   Generator: tools/generate-packb-test.py
 
 
+#include <cstddef>
+
 #include <gtest/gtest.h>
-
-#include <xnnpack/common.h>
-#include <xnnpack/isa-checks.h>
-
-#include <xnnpack/packb.h>
+#include "xnnpack/common.h"
+#include "xnnpack/isa-checks.h"
+#include "xnnpack/packb.h"
 #include "packb-microkernel-tester.h"
 
 

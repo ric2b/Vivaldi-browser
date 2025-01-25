@@ -8,9 +8,9 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/version.h"
-#include "base/vivaldi_user_agent.h"
 #include "components/embedder_support/user_agent_utils.h"
 #include "components/prefs/pref_service.h"
+#include "components/user_agent/vivaldi_user_agent.h"
 #include "components/version_info/version_info.h"
 #include "components/version_info/version_info_values.h"
 
@@ -144,7 +144,7 @@ void ConfigureClientHintsOverrides() {
     BrandOverride brand_override(
         BrandConfiguration({BrandSelection::kVivaldiBrand, false, {}, {}}));
 
-    for (auto domain : vivaldi_user_agent::GetVivaldiWhitelist()) {
+    for (auto domain : vivaldi_user_agent::GetVivaldiAllowlist()) {
       blink::UserAgentOverride::AddGetUaMetaDataOverride(
           std::string(domain), embedder_support::GetUserAgentMetadata());
     }

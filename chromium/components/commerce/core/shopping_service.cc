@@ -8,6 +8,7 @@
 
 #include "base/barrier_callback.h"
 #include "base/check_is_test.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
@@ -25,6 +26,8 @@
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/commerce_utils.h"
 #include "components/commerce/core/compare/cluster_manager.h"
+#include "components/commerce/core/compare/cluster_server_proxy.h"
+#include "components/commerce/core/compare/product_group.h"
 #include "components/commerce/core/compare/product_specifications_server_proxy.h"
 #include "components/commerce/core/discounts_storage.h"
 #include "components/commerce/core/feature_utils.h"
@@ -71,6 +74,87 @@ namespace commerce {
 namespace {
 // The maximum number of recently visited tab URLs to maintain.
 const size_t kRecentTabsMaxSize = 10;
+
+// An observer of the ProductSpecificationsService that adds and removes
+// references to URLs kept by each ProductSpecificationsSet.
+class ProductSpecificationsUrlObserver
+    : public ProductSpecificationsSet::Observer {
+ public:
+  explicit ProductSpecificationsUrlObserver(
+      CommerceInfoCache* cache,
+      ProductSpecificationsService* product_specifications_service)
+      : cache_(cache) {
+    scoped_observation_.Observe(product_specifications_service);
+
+    product_specifications_service->GetAllProductSpecifications(base::BindOnce(
+        [](base::WeakPtr<ProductSpecificationsUrlObserver> observer,
+           const std::vector<ProductSpecificationsSet> sets) {
+          if (!observer) {
+            return;
+          }
+          for (const auto& set : sets) {
+            observer->UpdateForAddition(set);
+          }
+        },
+        weak_ptr_factory_.GetWeakPtr()));
+  }
+
+  ProductSpecificationsUrlObserver(const ProductSpecificationsUrlObserver&) =
+      delete;
+  ProductSpecificationsUrlObserver operator=(
+      const ProductSpecificationsUrlObserver&) = delete;
+  ~ProductSpecificationsUrlObserver() override = default;
+
+  void OnProductSpecificationsSetAdded(
+      const ProductSpecificationsSet& product_specifications_set) override {
+    UpdateForAddition(product_specifications_set);
+  }
+
+  void OnProductSpecificationsSetUpdate(
+      const ProductSpecificationsSet& before,
+      const ProductSpecificationsSet& after) override {
+    // First remove any references to URLs that are no longer in the product
+    // spec set.
+    for (const auto& url : before.urls()) {
+      if (!base::Contains(after.urls(), url)) {
+        cache_->RemoveRef(url);
+      }
+    }
+
+    // Now add any URLs that weren't previously referenced.
+    for (const auto& url : after.urls()) {
+      if (!base::Contains(before.urls(), url)) {
+        cache_->AddRef(url);
+      }
+    }
+  }
+
+  void OnProductSpecificationsSetRemoved(
+      const ProductSpecificationsSet& set) override {
+    for (const auto& url : set.urls()) {
+      cache_->RemoveRef(url);
+    }
+  }
+
+ private:
+  void UpdateForAddition(const ProductSpecificationsSet& set) {
+    for (const auto& url : set.urls()) {
+      cache_->AddRef(url);
+    }
+  }
+
+  base::ScopedObservation<ProductSpecificationsService,
+                          ProductSpecificationsSet::Observer>
+      scoped_observation_{this};
+
+  // A pointer to the cache held by the shopping service. This observer will
+  // always be destroyed prior to the shopping service itself (and the cache).
+  raw_ptr<CommerceInfoCache> cache_;
+
+  base::WeakPtrFactory<ProductSpecificationsUrlObserver> weak_ptr_factory_{
+      this};
+};
+
 }  // namespace
 
 const char kImageAvailabilityHistogramName[] =
@@ -83,8 +167,7 @@ const uint64_t kProductInfoLocalExtractionDelayMs = 2000;
 ShoppingService::ShoppingService(
     const std::string& country_on_startup,
     const std::string& locale_on_startup,
-    bookmarks::BookmarkModel* local_or_syncable_bookmark_model,
-    bookmarks::BookmarkModel* account_bookmark_model,
+    bookmarks::BookmarkModel* bookmark_model,
     optimization_guide::OptimizationGuideDecider* opt_guide,
     PrefService* pref_service,
     signin::IdentityManager* identity_manager,
@@ -106,9 +189,7 @@ ShoppingService::ShoppingService(
       opt_guide_(opt_guide),
       pref_service_(pref_service),
       sync_service_(sync_service),
-      local_or_syncable_bookmark_model_(local_or_syncable_bookmark_model),
-      account_bookmark_model_(account_bookmark_model),
-      bookmark_model_used_for_sync_(nullptr),
+      bookmark_model_(bookmark_model),
       power_bookmark_service_(power_bookmark_service),
       product_specifications_service_(product_specifications_service),
       bookmark_consent_throttle_(
@@ -169,19 +250,10 @@ ShoppingService::ShoppingService(
     }
   }
 
-  if (local_or_syncable_bookmark_model_) {
-    if (base::FeatureList::IsEnabled(
-            syncer::kReplaceSyncPromosWithSignInPromos) &&
-        account_bookmark_model_) {
-      // Account bookmarks is supported, we should observe SyncService to update
-      // the model that is used for sync based on the opt-in state.
-      sync_service_observation_.Observe(sync_service_);
-    }
-    bookmark_model_used_for_sync_ = CalculateBookmarkModelUsedForSync();
-
+  if (bookmark_model_) {
     shopping_bookmark_observer_ =
         std::make_unique<ShoppingBookmarkModelObserver>(
-            GetBookmarkModelUsedForSync(), this, subscriptions_manager_.get());
+            bookmark_model, this, subscriptions_manager_.get());
 
     if (power_bookmark_service_ && IsProductInfoApiEnabled()) {
       shopping_power_bookmark_data_provider_ =
@@ -191,11 +263,10 @@ ShoppingService::ShoppingService(
   }
 
   bookmark_update_manager_ = std::make_unique<BookmarkUpdateManager>(
-      this, GetBookmarkModelUsedForSync(), pref_service_);
+      this, bookmark_model_, pref_service_);
 
   // In testing, the objects required for metrics may be null.
-  if (pref_service_ && GetBookmarkModelUsedForSync() &&
-      subscriptions_manager_) {
+  if (pref_service_ && bookmark_model_ && subscriptions_manager_) {
     scheduled_metrics_manager_ =
         std::make_unique<metrics::ScheduledMetricsManager>(pref_service_, this);
   }
@@ -207,8 +278,7 @@ ShoppingService::ShoppingService(
 
   if (subscriptions_manager_) {
     RemoveDanglingSubscriptions(
-        this, bookmark_model_used_for_sync_,
-        base::BindOnce([](size_t dangling_sub_count) {
+        this, bookmark_model_, base::BindOnce([](size_t dangling_sub_count) {
           base::UmaHistogramCounts100(
               "Commerce.PriceTracking.DanglingUserSubscriptionCountAtStartup",
               dangling_sub_count);
@@ -219,14 +289,22 @@ ShoppingService::ShoppingService(
       std::make_unique<ProductSpecificationsServerProxy>(
           account_checker_.get(), identity_manager, url_loader_factory);
 
-  if (account_checker_ && product_specifications_service_ &&
-      IsProductSpecificationsEnabled(account_checker_.get())) {
-    cluster_manager_ = std::make_unique<ClusterManager>(
-        product_specifications_service_,
-        base::BindRepeating(&ShoppingService::GetProductInfoForUrl,
-                            weak_ptr_factory_.GetWeakPtr()),
-        base::BindRepeating(&ShoppingService::GetUrlInfosForActiveWebWrappers,
-                            base::Unretained(this)));
+  if (account_checker_ && product_specifications_service_) {
+    prod_spec_url_ref_observer_ =
+        std::make_unique<ProductSpecificationsUrlObserver>(
+            &commerce_info_cache_, product_specifications_service_);
+
+    if (identity_manager &&
+        IsProductSpecificationsEnabled(account_checker_.get())) {
+      cluster_manager_ = std::make_unique<ClusterManager>(
+          product_specifications_service_,
+          std::make_unique<ClusterServerProxy>(identity_manager,
+                                               url_loader_factory),
+          base::BindRepeating(&ShoppingService::GetProductInfoForUrl,
+                              weak_ptr_factory_.GetWeakPtr()),
+          base::BindRepeating(&ShoppingService::GetUrlInfosForActiveWebWrappers,
+                              base::Unretained(this)));
+    }
   }
 }
 
@@ -607,12 +685,11 @@ void ShoppingService::GetUpdatedProductInfoForBookmarks(
   std::vector<GURL> urls;
   std::unordered_map<std::string, int64_t> url_to_id_map;
   for (uint64_t id : bookmark_ids) {
-    bookmarks::BookmarkModel* model = GetBookmarkModelUsedForSync();
     const bookmarks::BookmarkNode* bookmark =
-        bookmarks::GetBookmarkNodeByID(model, id);
+        bookmarks::GetBookmarkNodeByID(bookmark_model_, id);
 
     std::unique_ptr<power_bookmarks::PowerBookmarkMeta> meta =
-        power_bookmarks::GetNodePowerBookmarkMeta(model, bookmark);
+        power_bookmarks::GetNodePowerBookmarkMeta(bookmark_model_, bookmark);
 
     if (!meta || !meta->has_shopping_specifics()) {
       continue;
@@ -620,7 +697,7 @@ void ShoppingService::GetUpdatedProductInfoForBookmarks(
 
     CHECK(bookmark);
 
-    if (model->IsLocalOnlyNode(*bookmark)) {
+    if (bookmark_model_->IsLocalOnlyNode(*bookmark)) {
       continue;
     }
 
@@ -642,66 +719,16 @@ size_t ShoppingService::GetMaxProductBookmarkUpdatesPerBatch() {
       MaxUrlsForOptimizationGuideServiceHintsFetch();
 }
 
-bookmarks::BookmarkModel* ShoppingService::GetBookmarkModelUsedForSync() {
-  return bookmark_model_used_for_sync_;
-}
-
-void ShoppingService::UpdateBookmarkModelUsedForSync() {
-  bookmarks::BookmarkModel* model_to_use_for_sync =
-      CalculateBookmarkModelUsedForSync();
-  if (bookmark_model_used_for_sync_ == model_to_use_for_sync) {
-    return;
-  }
-
-  // These objects are safe to recreate.
-  bookmark_update_manager_.reset();
-  shopping_bookmark_observer_.reset();
-
-  bookmark_model_used_for_sync_ = model_to_use_for_sync;
-
-  if (local_or_syncable_bookmark_model_) {
-    shopping_bookmark_observer_ =
-        std::make_unique<ShoppingBookmarkModelObserver>(
-            GetBookmarkModelUsedForSync(), this, subscriptions_manager_.get());
-  }
-  bookmark_update_manager_ = std::make_unique<BookmarkUpdateManager>(
-      this, GetBookmarkModelUsedForSync(), pref_service_);
-
-  if (subscriptions_manager_) {
-    subscriptions_manager_->WipeStorageAndSyncSubscriptions();
-  }
-}
-
-bookmarks::BookmarkModel* ShoppingService::CalculateBookmarkModelUsedForSync() {
-  if (!base::FeatureList::IsEnabled(
-          syncer::kReplaceSyncPromosWithSignInPromos) ||
-      !account_bookmark_model_) {
-    // Feature flag isn't enabled or account storage isn't available - use
-    // local-or-syncable instead.
-    return local_or_syncable_bookmark_model_;
-  }
-  if (sync_service_->HasSyncConsent()) {
-    // The user is in the legacy sync state - use local-or-syncable storage.
-    return local_or_syncable_bookmark_model_;
-  }
-  // In all other cases, account bookmark model should be used. This avoids
-  // changing the bookmark model back-and-forth when the user signs in or out.
-  return account_bookmark_model_;
-}
-
-void ShoppingService::OnStateChanged(syncer::SyncService* sync) {
-  UpdateBookmarkModelUsedForSync();
-}
-
 void ShoppingService::GetAllPriceTrackedBookmarks(
     base::OnceCallback<void(std::vector<const bookmarks::BookmarkNode*>)>
         callback) {
-  commerce::GetAllPriceTrackedBookmarks(this, std::move(callback));
+  commerce::GetAllPriceTrackedBookmarks(this, bookmark_model_,
+                                        std::move(callback));
 }
 
 std::vector<const bookmarks::BookmarkNode*>
 ShoppingService::GetAllShoppingBookmarks() {
-  return commerce::GetAllShoppingBookmarks(GetBookmarkModelUsedForSync());
+  return commerce::GetAllShoppingBookmarks(bookmark_model_);
 }
 
 void ShoppingService::GetMerchantInfoForUrl(const GURL& url,
@@ -744,6 +771,14 @@ void ShoppingService::GetDiscountInfoForUrls(const std::vector<GURL>& urls,
   for (const GURL& url : urls) {
     GetDiscountInfoFromOptGuide(url, barrier_callback);
   }
+}
+
+bool ShoppingService::HasDiscountShownBefore(uint64_t discount_id) {
+  return shown_discount_ids_.contains(discount_id);
+}
+
+void ShoppingService::ShownDiscount(uint64_t discount_id) {
+  shown_discount_ids_.insert(discount_id);
 }
 
 void ShoppingService::GetProductSpecificationsForUrls(
@@ -876,6 +911,44 @@ const std::vector<UrlInfo> ShoppingService::GetUrlInfosForActiveWebWrappers() {
     urls.push_back(url);
   }
   return urls;
+}
+
+void ShoppingService::GetUrlInfosForWebWrappersWithProducts(
+    base::OnceCallback<void(const std::vector<UrlInfo>)> callback) {
+  const std::vector<UrlInfo> active_infos = GetUrlInfosForActiveWebWrappers();
+
+  std::unordered_map<std::string, std::u16string> url_to_title_map;
+  for (const auto& info : active_infos) {
+    url_to_title_map[info.url.spec()] = info.title;
+  }
+
+  auto barrier_callback =
+      base::BarrierCallback<const UrlProductIdentifierTuple&>(
+          active_infos.size(),
+          base::BindOnce(
+              [](base::OnceCallback<void(const std::vector<UrlInfo>)> callback,
+                 std::unordered_map<std::string, std::u16string>
+                     url_to_title_map,
+                 const std::vector<UrlProductIdentifierTuple>& id_info_list) {
+                std::vector<UrlInfo> product_url_infos;
+                for (const auto& info : id_info_list) {
+                  const GURL url = std::get<0>(info);
+                  // If there's no ID, it's not a product.
+                  if (!std::get<1>(info).has_value()) {
+                    continue;
+                  }
+                  product_url_infos.push_back(
+                      UrlInfo(std::get<0>(info),
+                              url_to_title_map[std::get<0>(info).spec()]));
+                }
+
+                std::move(callback).Run(std::move(product_url_infos));
+              },
+              std::move(callback), std::move(url_to_title_map)));
+
+  for (const auto& info : active_infos) {
+    GetProductIdentifierForUrl(info.url, barrier_callback);
+  }
 }
 
 const std::vector<UrlInfo>
@@ -1744,6 +1817,10 @@ ShoppingService::GetProductSpecificationsService() {
   return product_specifications_service_;
 }
 
+ClusterManager* ShoppingService::GetClusterManager() {
+  return cluster_manager_.get();
+}
+
 void ShoppingService::GetProductIdentifierForUrl(
     const GURL& url,
     UrlProductIdentifierTupleCallback callback) {
@@ -1772,23 +1849,8 @@ base::WeakPtr<ShoppingService> ShoppingService::AsWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
-std::optional<EntryPointInfo> ShoppingService::GetEntryPointInfoForSelection(
-    GURL old_url,
-    GURL new_url) {
-  if (!cluster_manager_) {
-    return std::nullopt;
-  }
-  return cluster_manager_->GetEntryPointInfoForSelection(old_url, new_url);
-}
-
 void ShoppingService::Shutdown() {
   DETACH_FROM_SEQUENCE(sequence_checker_);
-
-  // SyncService requires all observer to unregister themselves before its
-  // shutdown is called, which can be done either in OnSyncShutdown() or
-  // for a KeyedService in their Shutdown() method. Opt for this option as
-  // ShoppingService is a KeyedService.
-  sync_service_observation_.Reset();
 }
 
 ShoppingService::~ShoppingService() = default;

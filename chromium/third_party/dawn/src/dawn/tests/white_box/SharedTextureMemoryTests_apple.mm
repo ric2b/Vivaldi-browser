@@ -84,7 +84,8 @@ class Backend : public SharedTextureMemoryTestBackend {
     }
 
     // Create one basic shared texture memory. It should support most operations.
-    wgpu::SharedTextureMemory CreateSharedTextureMemory(const wgpu::Device& device) override {
+    wgpu::SharedTextureMemory CreateSharedTextureMemory(const wgpu::Device& device,
+                                                        int layerCount) override {
         auto dict = AcquireCFRef(CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
                                                            &kCFTypeDictionaryKeyCallBacks,
                                                            &kCFTypeDictionaryValueCallBacks));
@@ -103,13 +104,14 @@ class Backend : public SharedTextureMemoryTestBackend {
     }
 
     std::vector<std::vector<wgpu::SharedTextureMemory>> CreatePerDeviceSharedTextureMemories(
-        const std::vector<wgpu::Device>& devices) override {
+        const std::vector<wgpu::Device>& devices,
+        int layerCount) override {
         std::vector<std::vector<wgpu::SharedTextureMemory>> memories;
 
         struct IOSurfaceFormat {
             uint32_t format;
             uint32_t bytesPerElement;
-            wgpu::FeatureName requiredFeature = wgpu::FeatureName::Undefined;
+            wgpu::FeatureName requiredFeature = wgpu::FeatureName(0u);
         };
         const std::array<IOSurfaceFormat, 17> kFormats{
             {{kCVPixelFormatType_64RGBAHalf, 8},
@@ -161,7 +163,7 @@ class Backend : public SharedTextureMemoryTestBackend {
 
                 std::vector<wgpu::SharedTextureMemory> perDeviceMemories;
                 for (auto& device : devices) {
-                    if (f.requiredFeature != wgpu::FeatureName::Undefined &&
+                    if (f.requiredFeature != wgpu::FeatureName(0u) &&
                         !device.HasFeature(f.requiredFeature)) {
                         continue;
                     }
@@ -279,12 +281,14 @@ TEST_P(SharedTextureMemoryTests, SharedFenceExportInfoInvalidChainedStruct) {
 DAWN_INSTANTIATE_PREFIXED_TEST_P(Metal,
                                  SharedTextureMemoryNoFeatureTests,
                                  {MetalBackend()},
-                                 {Backend::GetInstance()});
+                                 {Backend::GetInstance()},
+                                 {1});
 
 DAWN_INSTANTIATE_PREFIXED_TEST_P(Metal,
                                  SharedTextureMemoryTests,
                                  {MetalBackend()},
-                                 {Backend::GetInstance()});
+                                 {Backend::GetInstance()},
+                                 {1});
 
 }  // anonymous namespace
 }  // namespace dawn

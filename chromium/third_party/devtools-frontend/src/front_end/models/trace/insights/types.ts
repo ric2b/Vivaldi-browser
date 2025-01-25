@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 import type * as Handlers from '../handlers/handlers.js';
+import type * as Lantern from '../lantern/lantern.js';
+import type * as Types from '../types/types.js';
 
 import type * as InsightsRunners from './InsightRunners.js';
 
@@ -12,9 +14,16 @@ import type * as InsightsRunners from './InsightRunners.js';
 export interface NavigationInsightContext {
   frameId: string;
   navigationId: string;
+  lantern?: LanternContext;
 }
 
-type InsightRunnersType = typeof InsightsRunners;
+export interface LanternContext {
+  graph: Lantern.Graph.Node<Types.TraceEvents.SyntheticNetworkRequest>;
+  simulator: Lantern.Simulation.Simulator<Types.TraceEvents.SyntheticNetworkRequest>;
+  metrics: Record<string, Lantern.Metrics.MetricResult>;
+}
+
+export type InsightRunnersType = typeof InsightsRunners;
 
 export enum InsightWarning {
   NO_FP = 'NO_FP',
@@ -26,31 +35,37 @@ export enum InsightWarning {
 
 export type InsightResult<R extends Record<string, unknown>> = R&{
   warnings?: InsightWarning[],
+  metricSavings?: {
+    /* eslint-disable @typescript-eslint/naming-convention */
+    FCP?: number,
+    LCP?: number,
+    TBT?: number,
+    CLS?: number,
+    INP?: number,
+    /* eslint-enable @typescript-eslint/naming-convention */
+  },
 };
+
+export type LCPInsightResult = InsightResult<{
+  lcpMs?: Types.Timing.MilliSeconds,
+  lcpTs?: Types.Timing.MilliSeconds,
+  phases?: InsightsRunners.LargestContentfulPaint.LCPPhases,
+  shouldRemoveLazyLoading?: boolean,
+  shouldIncreasePriorityHint?: boolean,
+  shouldPreloadImage?: boolean,
+}>;
 
 /**
  * Contains insights for a specific navigation.
  */
-export type NavigationInsightData<H extends {[key: string]: Handlers.Types.TraceEventHandler}> = {
-  [I in keyof EnabledInsightRunners<H>]: ReturnType<EnabledInsightRunners<H>[I]>|Error;
+export type NavigationInsightData = {
+  [I in keyof InsightRunnersType]: ReturnType<InsightRunnersType[I]['generateInsight']>|Error;
 };
 
 /**
  * Contains insights for the entire trace. Insights are grouped by `navigationId`.
  */
-export type TraceInsightData<H extends {[key: string]: Handlers.Types.TraceEventHandler}> =
-    Map<string, NavigationInsightData<H>>;
-
-/**
- * Maps each enabled insight name to its generate function. Insights that are disabled (i.e. missing one or more dependencies) will be unset.
- */
-export type EnabledInsightRunners<H extends {[key: string]: Handlers.Types.TraceEventHandler}> = {
-  [I in keyof InsightRunnersType]:
-      [Handlers.Types.EnabledHandlerDataWithMeta<H>] extends [Parameters<InsightRunnersType[I]['generateInsight']>[0]] ?
-      (traceParsedData: Handlers.Types.EnabledHandlerDataWithMeta<H>, context: NavigationInsightContext) =>
-          ReturnType<InsightRunnersType[I]['generateInsight']>:
-      never;
-};
+export type TraceInsightData = Map<string, NavigationInsightData>;
 
 /**
  * Represents the narrow set of dependencies defined by an insight's `deps()` function. `Meta` is always included regardless of `deps()`.

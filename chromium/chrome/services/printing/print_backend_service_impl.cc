@@ -16,6 +16,7 @@
 #include "base/containers/span.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
@@ -395,7 +396,7 @@ PrintBackendServiceImpl::PrintingContextDelegate::GetParentView() {
 #if BUILDFLAG(ENABLE_OOP_BASIC_PRINT_DIALOG)
   return parent_native_view_;
 #else
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 #endif
 }
@@ -411,7 +412,7 @@ void PrintBackendServiceImpl::PrintingContextDelegate::SetParentWindow(
   parent_native_view_ = reinterpret_cast<gfx::NativeView>(
       base::win::Uint32ToHandle(parent_window_id));
 #else
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #endif
 }
 #endif
@@ -953,7 +954,7 @@ void PrintBackendServiceImpl::RemoveDocumentHelper(
   int cookie = document_helper.document_cookie();
   auto item =
       base::ranges::find(documents_, cookie, &DocumentHelper::document_cookie);
-  DCHECK(item != documents_.end())
+  CHECK(item != documents_.end(), base::NotFatalUntil::M130)
       << "Document " << cookie << " to be deleted not found";
   documents_.erase(item);
 

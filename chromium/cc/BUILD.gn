@@ -4,6 +4,7 @@
 import("//build/config/sanitizers/sanitizers.gni")
 import("//gpu/vulkan/features.gni")
 import("//skia/features.gni")
+import("//third_party/jni_zero/jni_zero.gni")
 import("//ui/gl/features.gni")
 
 import("//cc/cc.gni")
@@ -38,6 +39,7 @@ cc_component("cc") {
     "input/browser_controls_offset_manager.cc",
     "input/browser_controls_offset_manager.h",
     "input/browser_controls_offset_manager_client.h",
+    "input/browser_controls_offset_tags_info.h",
     "input/browser_controls_state.h",
     "input/compositor_input_interfaces.h",
     "input/hit_test_opaqueness.cc",
@@ -209,8 +211,11 @@ cc_component("cc") {
     "metrics/scroll_jank_ukm_reporter.cc",
     "metrics/scroll_jank_ukm_reporter.h",
     "metrics/shared_metrics_buffer.h",
+    "metrics/submit_info.h",
     "metrics/total_frame_counter.cc",
     "metrics/total_frame_counter.h",
+    "metrics/ukm_manager.cc",
+    "metrics/ukm_manager.h",
     "metrics/ukm_smoothness_data.cc",
     "metrics/ukm_smoothness_data.h",
     "metrics/video_playback_roughness_reporter.cc",
@@ -368,7 +373,6 @@ cc_component("cc") {
     "trees/latency_info_swap_promise_monitor.cc",
     "trees/latency_info_swap_promise_monitor.h",
     "trees/layer_context.h",
-    "trees/layer_context_client.h",
     "trees/layer_tree_frame_sink.cc",
     "trees/layer_tree_frame_sink.h",
     "trees/layer_tree_frame_sink_client.h",
@@ -385,8 +389,6 @@ cc_component("cc") {
     "trees/layer_tree_mutator.h",
     "trees/layer_tree_settings.cc",
     "trees/layer_tree_settings.h",
-    "trees/local_layer_context.cc",
-    "trees/local_layer_context.h",
     "trees/managed_memory_policy.cc",
     "trees/managed_memory_policy.h",
     "trees/mobile_optimized_viewport_util.cc",
@@ -443,8 +445,6 @@ cc_component("cc") {
     "trees/transform_node.h",
     "trees/tree_synchronizer.cc",
     "trees/tree_synchronizer.h",
-    "trees/ukm_manager.cc",
-    "trees/ukm_manager.h",
     "trees/viewport_layers.cc",
     "trees/viewport_layers.h",
     "trees/viewport_property_ids.h",
@@ -454,6 +454,7 @@ cc_component("cc") {
 
   public_deps = [
     "//cc/base",
+    "//cc/mojom:layer_type",
     "//cc/paint",
     "//components/viz/common",
     "//skia",
@@ -485,6 +486,15 @@ cc_component("cc") {
     "//ui/gl",
     "//ui/latency",
   ]
+
+  if (is_android) {
+    sources += [
+      "input/android/offset_tag_android.cc",
+      "input/android/offset_tag_android.h",
+    ]
+
+    deps += [ ":cc_jni_headers" ]
+  }
 
   defines = [ "CC_IMPLEMENTATION=1" ]
 }
@@ -521,8 +531,6 @@ cc_test_static_library("test_support") {
     "test/fake_output_surface_client.h",
     "test/fake_paint_image_generator.cc",
     "test/fake_paint_image_generator.h",
-    "test/fake_painted_scrollbar_layer.cc",
-    "test/fake_painted_scrollbar_layer.h",
     "test/fake_picture_layer.cc",
     "test/fake_picture_layer.h",
     "test/fake_picture_layer_impl.cc",
@@ -543,6 +551,7 @@ cc_test_static_library("test_support") {
     "test/fake_scoped_ui_resource.h",
     "test/fake_scrollbar.cc",
     "test/fake_scrollbar.h",
+    "test/fake_scrollbar_layer.h",
     "test/fake_tile_manager.cc",
     "test/fake_tile_manager.h",
     "test/fake_tile_manager_client.cc",
@@ -571,7 +580,6 @@ cc_test_static_library("test_support") {
     "test/mock_latency_info_swap_promise_monitor.h",
     "test/mock_layer_tree_mutator.cc",
     "test/mock_layer_tree_mutator.h",
-    "test/mock_occlusion_tracker.h",
     "test/paint_image_matchers.h",
     "test/paint_op_helper.cc",
     "test/paint_op_helper.h",
@@ -774,6 +782,7 @@ cc_test("cc_unittests") {
     "metrics/scroll_jank_dropped_frame_tracker_unittest.cc",
     "metrics/scroll_jank_ukm_reporter_unittest.cc",
     "metrics/total_frame_counter_unittest.cc",
+    "metrics/ukm_manager_unittest.cc",
     "metrics/video_playback_roughness_reporter_unittest.cc",
     "mojo_embedder/async_layer_tree_frame_sink_unittest.cc",
     "paint/clear_for_opaque_raster_unittest.cc",
@@ -864,7 +873,6 @@ cc_test("cc_unittests") {
     "trees/swap_promise_manager_unittest.cc",
     "trees/throttle_decider_unittest.cc",
     "trees/tree_synchronizer_unittest.cc",
-    "trees/ukm_manager_unittest.cc",
     "view_transition/view_transition_request_unittest.cc",
 
     # Animation test files.
@@ -1043,10 +1051,31 @@ if (is_android) {
     sources = [ "//cc/input/browser_controls_state.h" ]
   }
 
+  generate_jni("cc_jni_headers") {
+    sources = [
+      "input/android/java/src/org/chromium/cc/input/BrowserControlsOffsetTagsInfo.java",
+      "input/android/java/src/org/chromium/cc/input/OffsetTag.java",
+    ]
+  }
+
   android_library("cc_java") {
     # Right now, this only includes the Java switches. But if we need more Java
     # files, they should be added here as necessary.
-    srcjar_deps = [ ":cc_android_java_enums_srcjar" ]
-    deps = [ "//third_party/androidx:androidx_annotation_annotation_java" ]
+    srcjar_deps = [
+      ":cc_android_java_enums_srcjar",
+      ":cc_jni_headers",
+    ]
+
+    sources = [
+      "input/android/java/src/org/chromium/cc/input/BrowserControlsOffsetTagsInfo.java",
+      "input/android/java/src/org/chromium/cc/input/OffsetTag.java",
+    ]
+
+    deps = [
+      "//base:base_java",
+      "//third_party/android_deps:com_google_errorprone_error_prone_annotations_java",
+      "//third_party/androidx:androidx_annotation_annotation_java",
+      "//third_party/jni_zero:jni_zero_java",
+    ]
   }
 }

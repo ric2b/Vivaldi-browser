@@ -216,7 +216,7 @@ void BluetoothDeviceFloss::SetConnectionLatency(
       max_connection_interval = kMaxConnectionIntervalHigh;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 
@@ -264,6 +264,14 @@ void BluetoothDeviceFloss::OnSetConnectionLatency(base::OnceClosure callback,
 void BluetoothDeviceFloss::Connect(
     device::BluetoothDevice::PairingDelegate* pairing_delegate,
     ConnectCallback callback) {
+  ConnectWithTransport(pairing_delegate, std::move(callback),
+                       FlossAdapterClient::BluetoothTransport::kAuto);
+}
+
+void BluetoothDeviceFloss::ConnectWithTransport(
+    device::BluetoothDevice::PairingDelegate* pairing_delegate,
+    ConnectCallback callback,
+    FlossAdapterClient::BluetoothTransport transport) {
   BLUETOOTH_LOG(EVENT) << "Connecting to " << address_;
 
   if ((connecting_state_ == ConnectingState::kACLConnecting) ||
@@ -296,14 +304,14 @@ void BluetoothDeviceFloss::Connect(
                              DBusResult<FlossDBusClient::BtifStatus>)>(
                              &BluetoothDeviceFloss::OnCreateBond),
                          weak_ptr_factory_.GetWeakPtr()),
-          AsFlossDeviceId(), FlossAdapterClient::BluetoothTransport::kAuto);
+          AsFlossDeviceId(), transport);
     } else {
       FlossDBusManager::Get()->GetAdapterClient()->CreateBond(
           base::BindOnce(
               static_cast<void (BluetoothDeviceFloss::*)(DBusResult<bool>)>(
                   &BluetoothDeviceFloss::OnCreateBond),
               weak_ptr_factory_.GetWeakPtr()),
-          AsFlossDeviceId(), FlossAdapterClient::BluetoothTransport::kAuto);
+          AsFlossDeviceId(), transport);
     }
   }
 }
@@ -345,10 +353,8 @@ void BluetoothDeviceFloss::ConnectionIncomplete() {
 void BluetoothDeviceFloss::ConnectClassic(
     device::BluetoothDevice::PairingDelegate* pairing_delegate,
     ConnectCallback callback) {
-  // TODO(b/215621933): Explicitly create a classic Bluetooth connection.
-  // Currently Floss doesn't have the BlueZ-equivalent of ConnectClassic() at
-  // the stack level, so just call the existing Connect().
-  Connect(pairing_delegate, std::move(callback));
+  ConnectWithTransport(pairing_delegate, std::move(callback),
+                       FlossAdapterClient::BluetoothTransport::kBrEdr);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
@@ -587,7 +593,7 @@ void BluetoothDeviceFloss::SetBondState(
       }
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -657,7 +663,9 @@ void BluetoothDeviceFloss::CreateGattConnectionImpl(
   // Generally, the first ever connection to a device should be direct and
   // subsequent connections to known devices should be invoked with is_direct =
   // false. Refer to |autoConnect| on BluetoothGatt.java.
-  bool is_direct = !IsBondedImpl();
+  bool is_direct =
+      gatt_connecting_state_ == GattConnectingState::kGattConnectionInit ||
+      !IsBondedImpl();
 
   UpdateGattConnectingState(GattConnectingState::kGattConnecting);
 

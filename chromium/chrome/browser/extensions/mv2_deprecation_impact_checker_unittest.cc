@@ -73,6 +73,9 @@ std::string DescribeTestVariant(const TestVariant& test_variant) {
     case MV2ExperimentStage::kWarning:
       description += "WarningExperiment";
       break;
+    case MV2ExperimentStage::kDisableWithReEnable:
+      description += "DisableExperiment";
+      break;
   }
 
   return description;
@@ -93,8 +96,7 @@ class MV2DeprecationImpactCheckerUnitTest
     // Note: This is (subtly) different from
     // `InitializeEmptyExtensionService()`, which doesn't initialize a
     // testing PrefService.
-    ExtensionServiceInitParams params;
-    InitializeExtensionService(params);
+    InitializeExtensionService(ExtensionServiceInitParams{});
 
     // Sets the current level of the MV2 admin policy.
     sync_preferences::TestingPrefServiceSyncable* pref_service =
@@ -235,7 +237,8 @@ INSTANTIATE_TEST_SUITE_P(
     MV2DeprecationImpactCheckerUnitTest,
     testing::Combine(
         testing::Values(MV2ExperimentStage::kNone,
-                        MV2ExperimentStage::kWarning),
+                        MV2ExperimentStage::kWarning,
+                        MV2ExperimentStage::kDisableWithReEnable),
         testing::Values(MV2PolicyLevel::kUnset,
                         MV2PolicyLevel::kAllowed,
                         MV2PolicyLevel::kDisallowed,

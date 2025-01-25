@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/feature_list.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
@@ -10,7 +10,6 @@
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/browser/ui/toolbar/bookmark_sub_menu_model.h"
 #include "chrome/browser/ui/toolbar/reading_list_sub_menu_model.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
@@ -31,8 +30,6 @@ constexpr char kUserEducationInternalsUrl[] =
 class HelpBubbleHandlerInteractiveUiTest : public InteractiveBrowserTest {
  public:
   HelpBubbleHandlerInteractiveUiTest() {
-    feature_list_.InitWithFeatures(
-        {features::kSidePanelPinning, features::kChromeRefresh2023}, {});
   }
   ~HelpBubbleHandlerInteractiveUiTest() override = default;
 
@@ -70,9 +67,6 @@ class HelpBubbleHandlerInteractiveUiTest : public InteractiveBrowserTest {
                  PressButton(kSidePanelCloseButtonElementId),
                  WaitForHide(kSidePanelElementId));
   }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(HelpBubbleHandlerInteractiveUiTest,
@@ -110,8 +104,18 @@ IN_PROC_BROWSER_TEST_F(HelpBubbleHandlerInteractiveUiTest,
       InAnyContext(WaitForHide(kAddCurrentTabToReadingListElementId)));
 }
 
+// This test is flaky on Mac; see: https://crbug.com/348242589
+// Suspect that something in the async way the combo box works is causing this
+// particular issue. Might be solved by programmatically switching panels.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_ElementBecomesHiddenOnSecondaryUISwap \
+  DISABLED_ElementBecomesHiddenOnSecondaryUISwap
+#else
+#define MAYBE_ElementBecomesHiddenOnSecondaryUISwap \
+  ElementBecomesHiddenOnSecondaryUISwap
+#endif
 IN_PROC_BROWSER_TEST_F(HelpBubbleHandlerInteractiveUiTest,
-                       ElementBecomesHiddenOnSecondaryUISwap) {
+                       MAYBE_ElementBecomesHiddenOnSecondaryUISwap) {
   RunTestSequence(
       OpenReadingListSidePanel(),
       InAnyContext(WaitForShow(kAddCurrentTabToReadingListElementId)),

@@ -181,6 +181,8 @@ class CORE_EXPORT CSSParserImpl {
 
   static bool RemoveImportantAnnotationIfPresent(CSSTokenizedValue&);
 
+  CSSParserMode GetMode() const;
+
  private:
   enum RuleListType {
     kTopLevelRuleList,
@@ -256,6 +258,8 @@ class CORE_EXPORT CSSParserImpl {
   StyleRuleFunction* ConsumeFunctionRule(CSSParserTokenStream& stream);
   std::optional<Vector<StyleRuleFunction::Parameter>> ConsumeFunctionParameters(
       CSSParserTokenRange& stream);
+  StyleRuleMixin* ConsumeMixinRule(CSSParserTokenStream& stream);
+  StyleRuleApplyMixin* ConsumeApplyMixinRule(CSSParserTokenStream& stream);
 
   StyleRuleKeyframe* ConsumeKeyframeStyleRule(CSSParserTokenRange prelude,
                                               const RangeOffset& prelude_offset,
@@ -291,7 +295,7 @@ class CORE_EXPORT CSSParserImpl {
   // Returns true if a declaration was parsed and added to parsed_properties_,
   // and false otherwise.
   bool ConsumeDeclaration(CSSParserTokenStream&, StyleRule::RuleType);
-  void ConsumeDeclarationValue(const CSSTokenizedValue&,
+  void ConsumeDeclarationValue(CSSParserTokenStream&,
                                CSSPropertyID,
                                bool is_in_declaration_list,
                                StyleRule::RuleType);

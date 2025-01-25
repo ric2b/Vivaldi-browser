@@ -39,9 +39,7 @@ class UdpSocketPosix : public UdpSocket {
   void SetMulticastOutboundInterface(NetworkInterfaceIndex ifindex) override;
   void JoinMulticastGroup(const IPAddress& address,
                           NetworkInterfaceIndex ifindex) override;
-  void SendMessage(const void* data,
-                   size_t length,
-                   const IPEndpoint& dest) override;
+  void SendMessage(ByteView data, const IPEndpoint& dest) override;
   void SetDscp(DscpMode state) override;
 
   const SocketHandle& GetHandle() const;

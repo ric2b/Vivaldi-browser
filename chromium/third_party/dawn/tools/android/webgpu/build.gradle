@@ -35,11 +35,13 @@ android {
     namespace 'net.android.webgpu'
     defaultConfig {
         minSdkVersion 26
-        compileSdk 31
+        compileSdk 34
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         externalNativeBuild {
             cmake {
                 arguments '-DANDROID_STL=c++_shared'
                 version '3.22.1'
+                targets 'webgpu_c_bundled'
             }
         }
     }
@@ -65,11 +67,27 @@ android {
     compileOptions {
         targetCompatibility JavaVersion.VERSION_17
     }
+    sourceSets {
+        main {
+            java.srcDirs += "$project.projectDir/../../../out/Debug/gen/java"
+        }
+    }
 }
 
 dependencies {
-    implementation 'androidx.core:core-ktx:1.12.0'
-    testImplementation 'junit:junit:4.12'
+    implementation 'androidx.core:core-ktx:1.13.1'
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.reflections:reflections:0.10.2'
+    testImplementation("org.jetbrains.kotlin:kotlin-reflect")
+    testImplementation("org.jetbrains.kotlin:kotlin-test")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.6.4")
+    testImplementation("org.mockito:mockito-core:5.12.0")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.3.1")
+
+    androidTestImplementation 'androidx.test.ext:junit-ktx:1.2.1'
+    androidTestImplementation 'androidx.test:runner:1.6.1'
+    androidTestImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.6.4'
 }
 
 project.afterEvaluate {
@@ -83,4 +101,19 @@ project.afterEvaluate {
             }
         }
     }
+}
+
+tasks.register('generateBindings', Exec) {
+    workingDir('../../..')
+    commandLine 'python3', 'generator/dawn_json_generator.py',
+    '--template-dir', 'generator/templates',
+    '--output-dir', "$project.projectDir/../../../out/Debug/gen",
+    '--dawn-json', 'src/dawn/dawn.json',
+    '--targets', 'kotlin',
+    '--kotlin-json', 'src/dawn/dawn_kotlin.json',
+    '--jinja2-path', 'third_party/jinja2'
+}
+
+preBuild {
+    dependsOn generateBindings
 }

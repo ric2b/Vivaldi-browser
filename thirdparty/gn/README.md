@@ -107,6 +107,10 @@ On Linux, Mac and z/OS, the default compiler is `clang++`, a recent version is
 expected to be found in `PATH`. This can be overridden by setting the `CC`, `CXX`,
 and `AR` environment variables.
 
+On MSYS and MinGW, the default compiler is `g++`, a recent version is
+expected to be found in `PATH`. This can be overridden by setting the `CC`, `CXX`,
+`LD` and `AR` environment variables.
+
 On z/OS, building GN requires [ZOSLIB](https://github.com/ibmruntimes/zoslib) to be
 installed, as described at that URL. When building with `build/gen.py`, use the option
 `--zoslib-dir` to specify the path to [ZOSLIB](https://github.com/ibmruntimes/zoslib):

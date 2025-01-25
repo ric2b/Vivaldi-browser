@@ -747,12 +747,10 @@ InternetSection::InternetSection(Profile* profile,
   cros_network_config_->AddObserver(
       network_config_receiver_.BindNewPipeAndPassRemote());
 
-  if (ash::features::IsHotspotEnabled()) {
-    // Receive updates when hotspot info changed.
-    GetHotspotConfigService(cros_hotspot_config_.BindNewPipeAndPassReceiver());
-    cros_hotspot_config_->AddObserver(
-        hotspot_config_receiver_.BindNewPipeAndPassRemote());
-  }
+  // Receive updates when hotspot info changed.
+  GetHotspotConfigService(cros_hotspot_config_.BindNewPipeAndPassReceiver());
+  cros_hotspot_config_->AddObserver(
+      hotspot_config_receiver_.BindNewPipeAndPassRemote());
 
   // Fetch initial list of devices and active networks.
   FetchDeviceList();
@@ -803,8 +801,15 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"internetConfigName", IDS_SETTINGS_INTERNET_CONFIG_NAME},
       {"internetDetailPageTitle", IDS_SETTINGS_INTERNET_DETAIL},
       {"internetDeviceBusy", IDS_SETTINGS_INTERNET_DEVICE_BUSY},
+      {"internetDeviceFlashing", IDS_SETTINGS_INTERNET_DEVICE_FLASHING},
       {"internetJoinType", IDS_SETTINGS_INTERNET_JOIN_TYPE},
       {"internetKnownNetworksPageTitle", IDS_SETTINGS_INTERNET_KNOWN_NETWORKS},
+      {"internetYourDeviceHotspots",
+       IDS_SETTINGS_INTERNET_YOUR_DEVICE_HOTSPOTS},
+      {"internetTetherNotificationControlTitle",
+       IDS_SETTINGS_INTERNET_TETHER_NOTIFICATION_CONTROL_TITLE},
+      {"internetTetherNotificationControlDescription",
+       IDS_SETTINGS_INTERNET_TETHER_NOTIFICATION_CONTROL_DESCRIPTION},
       {"internetNoNetworks", IDS_SETTINGS_INTERNET_NO_NETWORKS},
       {"internetNoTetherHosts", IDS_SETTINGS_INTERNET_NO_TETHER_HOSTS},
       {"internetPageTitle", features::IsInstantHotspotRebrandEnabled()
@@ -1147,10 +1152,11 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       "showMeteredToggle",
       base::FeatureList::IsEnabled(::features::kMeteredShowToggle));
   html_source->AddBoolean(
+      "trafficCountersForWifiTesting",
+      ash::features::IsTrafficCountersForWiFiTestingEnabled());
+  html_source->AddBoolean(
       "showHiddenToggle",
       base::FeatureList::IsEnabled(::features::kShowHiddenNetworkToggle));
-  html_source->AddBoolean("isHotspotEnabled",
-                          ash::features::IsHotspotEnabled());
   html_source->AddBoolean("isInstantHotspotRebrandEnabled",
                           ash::features::IsInstantHotspotRebrandEnabled());
   html_source->AddBoolean("isPasspointSettingsEnabled",
@@ -1434,10 +1440,8 @@ void InternetSection::OnHotspotInfoChanged() {
 }
 
 void InternetSection::FetchHotspotInfo() {
-  if (ash::features::IsHotspotEnabled()) {
-    cros_hotspot_config_->GetHotspotInfo(base::BindOnce(
-        &InternetSection::OnHotspotInfo, base::Unretained(this)));
-  }
+  cros_hotspot_config_->GetHotspotInfo(
+      base::BindOnce(&InternetSection::OnHotspotInfo, base::Unretained(this)));
 }
 
 void InternetSection::OnHotspotInfo(

@@ -25,7 +25,7 @@ class BrowserState;
 namespace adblock_filter {
 class RuleManager;
 class KnownRuleSourcesHandler;
-class BlockedUrlsReporter;
+class TabHandler;
 class CosmeticFilter;
 
 class RuleService : public KeyedService {
@@ -78,7 +78,7 @@ class RuleService : public KeyedService {
 
   virtual RuleManager* GetRuleManager() = 0;
   virtual KnownRuleSourcesHandler* GetKnownSourcesHandler() = 0;
-  virtual BlockedUrlsReporter* GetBlockerUrlsReporter() = 0;
+  virtual TabHandler* GetTabHandler() = 0;
 };
 
 }  // namespace adblock_filter

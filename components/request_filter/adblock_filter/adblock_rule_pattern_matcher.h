@@ -33,17 +33,17 @@ class RulePatternMatcher {
     UrlInfo(const UrlInfo&) = delete;
     UrlInfo& operator=(const UrlInfo&) = delete;
 
-    base::StringPiece spec() const { return spec_; }
-    base::StringPiece fold_case_spec() const { return fold_case_spec_; }
+    std::string_view spec() const { return spec_; }
+    std::string_view fold_case_spec() const { return fold_case_spec_; }
     url::Component host() const { return host_; }
 
    private:
     // The url spec.
-    const base::StringPiece spec_;
+    const std::string_view spec_;
     // String to hold the case-folded spec.
     const std::string fold_case_spec_owner_;
     // Reference to the case-folded spec.
-    base::StringPiece fold_case_spec_;
+    std::string_view fold_case_spec_;
 
     // The url host component.
     const url::Component host_;
@@ -66,7 +66,7 @@ class RulePatternMatcher {
 
  private:
   const raw_ref<const flat::RequestFilterRule> rule_;
-  base::StringPiece pattern_;
+  std::string_view pattern_;
 };
 
 }  // namespace adblock_filter

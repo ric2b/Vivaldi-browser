@@ -1,3 +1,4 @@
 file://CONTENT_OWNERS
 
+per-file .gitignore=*
 per-file pages.json=file://site/chromium-os/OWNERS

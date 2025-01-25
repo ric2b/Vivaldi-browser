@@ -28,7 +28,6 @@
 #include "src/tint/lang/core/ir/transform/robustness.h"
 
 #include <algorithm>
-#include <utility>
 
 #include "src/tint/lang/core/ir/builder.h"
 #include "src/tint/lang/core/ir/module.h"
@@ -99,8 +98,7 @@ struct State {
                     // Check if this is a texture builtin that needs to be clamped.
                     if (config.clamp_texture) {
                         if (call->Func() == core::BuiltinFn::kTextureDimensions ||
-                            call->Func() == core::BuiltinFn::kTextureLoad ||
-                            call->Func() == core::BuiltinFn::kTextureStore) {
+                            call->Func() == core::BuiltinFn::kTextureLoad) {
                             texture_calls.Push(call);
                         }
                     }
@@ -288,12 +286,9 @@ struct State {
 
         // Helper for clamping the coordinates.
         auto clamp_coords = [&](uint32_t idx) {
-            const type::Type* type = ty.u32();
-            auto* one = b.Constant(1_u);
-            if (auto* vec = args[idx]->Type()->As<type::Vector>()) {
-                type = ty.vec(type, vec->Width());
-                one = b.Splat(type, one, vec->Width());
-            }
+            auto* arg_ty = args[idx]->Type();
+            const type::Type* type = ty.match_width(ty.u32(), arg_ty);
+            auto* one = b.MatchWidth(1_u, arg_ty);
             auto* dims = clamped_level ? b.Call(type, core::BuiltinFn::kTextureDimensions, args[0],
                                                 clamped_level)
                                        : b.Call(type, core::BuiltinFn::kTextureDimensions, args[0]);

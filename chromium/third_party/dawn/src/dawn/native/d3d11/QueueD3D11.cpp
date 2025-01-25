@@ -144,7 +144,7 @@ MaybeError Queue::InitializePendingContext() {
     Ref<BufferBase> uniformBuffer;
     DAWN_TRY_ASSIGN(uniformBuffer,
                     CommandRecordingContext::CreateInternalUniformBuffer(GetDevice()));
-    mPendingCommands->SetInternalUniformBuffer(std::move(uniformBuffer));
+    DAWN_TRY(mPendingCommands->SetInternalUniformBuffer(std::move(uniformBuffer)));
 
     return {};
 }
@@ -219,15 +219,18 @@ MaybeError Queue::SubmitImpl(uint32_t commandCount, CommandBufferBase* const* co
 
 MaybeError Queue::CheckAndMapReadyBuffers(ExecutionSerial completedSerial) {
     auto commandContext = GetScopedPendingCommandContext(QueueBase::SubmitMode::Passive);
-    for (auto buffer : mPendingMapBuffers.IterateUpTo(completedSerial)) {
-        DAWN_TRY(buffer->FinalizeMap(&commandContext, completedSerial));
+    for (const auto& bufferEntry : mPendingMapBuffers.IterateUpTo(completedSerial)) {
+        DAWN_TRY(
+            bufferEntry.buffer->FinalizeMap(&commandContext, completedSerial, bufferEntry.mode));
     }
     mPendingMapBuffers.ClearUpTo(completedSerial);
     return {};
 }
 
-void Queue::TrackPendingMapBuffer(Ref<Buffer>&& buffer, ExecutionSerial readySerial) {
-    mPendingMapBuffers.Enqueue(buffer, readySerial);
+void Queue::TrackPendingMapBuffer(Ref<Buffer>&& buffer,
+                                  wgpu::MapMode mode,
+                                  ExecutionSerial readySerial) {
+    mPendingMapBuffers.Enqueue({buffer, mode}, readySerial);
 }
 
 MaybeError Queue::WriteBufferImpl(BufferBase* buffer,
@@ -291,6 +294,8 @@ MaybeError MonitoredQueue::Initialize() {
 MaybeError MonitoredQueue::NextSerial() {
     auto commandContext = GetScopedPendingCommandContext(SubmitMode::Passive);
 
+    DAWN_TRY(commandContext.FlushBuffersForSyncingWithCPU());
+
     IncrementLastSubmittedCommandSerial();
     TRACE_EVENT1(GetDevice()->GetPlatform(), General, "D3D11Device::SignalFence", "serial",
                  uint64_t(GetLastSubmittedCommandSerial()));
@@ -335,6 +340,8 @@ MaybeError UnmonitoredQueue::Initialize() {
 
 MaybeError UnmonitoredQueue::NextSerial() {
     auto commandContext = GetScopedPendingCommandContext(SubmitMode::Passive);
+
+    DAWN_TRY(commandContext.FlushBuffersForSyncingWithCPU());
 
     IncrementLastSubmittedCommandSerial();
     ExecutionSerial lastSubmittedSerial = GetLastSubmittedCommandSerial();

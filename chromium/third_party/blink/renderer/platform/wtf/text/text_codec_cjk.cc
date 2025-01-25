@@ -23,6 +23,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/wtf/text/text_codec_cjk.h"
 
 #include <utility>
@@ -1122,7 +1127,7 @@ std::unique_ptr<TextCodec> TextCodecCJK::Create(const TextEncoding& encoding,
   if (!strcmp(name, kCanonicalNameGb18030)) {
     return base::WrapUnique(new TextCodecCJK(Encoding::kGb18030));
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 
@@ -1223,7 +1228,7 @@ Vector<uint8_t> TextCodecCJK::EncodeCommon(StringView string,
     case Encoding::kGb18030:
       return EncodeGb18030(string, handling);
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return {};
 }
 

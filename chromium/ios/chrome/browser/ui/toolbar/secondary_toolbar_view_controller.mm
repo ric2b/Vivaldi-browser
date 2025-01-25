@@ -219,6 +219,16 @@ using vivaldi::IsVivaldiRunning;
   }
 }
 
+#pragma mark - SecondaryToolbarConsumer
+
+- (void)makeTranslucent {
+  [self.view makeTranslucent];
+}
+
+- (void)makeOpaque {
+  [self.view makeOpaque];
+}
+
 #pragma mark - Vivaldi
 - (UIStackView*)toolbarButtonStackView {
   return self.view.buttonStackView;

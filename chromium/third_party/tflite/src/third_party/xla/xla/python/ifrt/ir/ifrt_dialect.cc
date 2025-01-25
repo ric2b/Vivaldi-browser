@@ -20,7 +20,6 @@ limitations under the License.
 #include "absl/status/statusor.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
-#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Casting.h"
@@ -82,6 +81,10 @@ IfrtAsmDialectInterface::AliasResult IfrtAsmDialectInterface::getAlias(
       devices != nullptr && devices.getIds().size() > 4) {
     os << "devices";
     return AliasResult::FinalAlias;
+  } else if (auto mapping = llvm::dyn_cast<IfrtArrayMappingAttr>(attr);
+             mapping != nullptr && mapping.getMappings().size() > 2) {
+    os << "array_mapping";
+    return AliasResult::FinalAlias;
   }
   return AliasResult::NoAlias;
 }
@@ -128,7 +131,7 @@ mlir::LogicalResult IfrtDialect::verifyRegionArgAttribute(
 
 mlir::LogicalResult IfrtShardingParamAttr::verify(
     llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
-    ShardingParam sharding_param, mlir::StringAttr memory_kind) {
+    ShardingParam sharding_param) {
   return sharding_param.verify(emitError);
 }
 
@@ -153,12 +156,6 @@ IfrtShardingParamAttr::LocalShapeFromGlobalShape(
 // Returns the number of devices the sharding applies to.
 int IfrtShardingParamAttr::NumDevices() const {
   return getSharding().NumDevices();
-};
-
-xla::ifrt::MemoryKind IfrtShardingParamAttr::MemoryKind() const {
-  return getMemoryKind() == nullptr
-             ? xla::ifrt::MemoryKind()
-             : xla::ifrt::MemoryKind(getMemoryKind().str());
 };
 
 //===----------------------------------------------------------------------===//
@@ -192,10 +189,6 @@ IfrtUnspecifiedShardingAttr::LocalShapeFromGlobalShape(
 
 int IfrtUnspecifiedShardingAttr::NumDevices() const { return 0; }
 
-xla::ifrt::MemoryKind IfrtUnspecifiedShardingAttr::MemoryKind() const {
-  return xla::ifrt::MemoryKind();
-}
-
 //===----------------------------------------------------------------------===//
 // IfrtArrayType
 //===----------------------------------------------------------------------===//
@@ -208,9 +201,15 @@ llvm::ArrayRef<int> IfrtArrayType::getDevices() const {
 mlir::LogicalResult IfrtArrayType::verify(
     llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
     mlir::RankedTensorType shape, IfrtShardingAttrInterface sharding_attr,
-    IfrtDevicesAttr devices) {
+    IfrtDevicesAttr devices, mlir::StringAttr memory_kind) {
   return sharding_attr.CanApplyTo(emitError, shape, devices.getIds());
 }
+
+xla::ifrt::MemoryKind IfrtArrayType::MemoryKind() const {
+  return getMemoryKindAttr() == nullptr
+             ? xla::ifrt::MemoryKind()
+             : xla::ifrt::MemoryKind(getMemoryKindAttr().str());
+};
 
 //===----------------------------------------------------------------------===//
 // IfrtDevicesAttr
@@ -221,7 +220,7 @@ IfrtDevicesAttr::operator llvm::ArrayRef<int>() const { return getIds(); }
 mlir::LogicalResult IfrtDevicesAttr::verify(
     llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
     llvm::ArrayRef<int> ids) {
-  llvm::SmallSet<int, 4> device_set;
+  llvm::DenseSet<int> device_set;
   for (int id : ids) {
     if (id < 0) {
       return emitError() << "Device list has negative logical id " << id;
@@ -231,6 +230,45 @@ mlir::LogicalResult IfrtDevicesAttr::verify(
     }
   }
 
+  return mlir::success();
+}
+
+//===----------------------------------------------------------------------===//
+// IfrtIntervalAttr
+//===----------------------------------------------------------------------===//
+
+mlir::LogicalResult IfrtIntervalAttr::verify(
+    llvm::function_ref<mlir::InFlightDiagnostic()> emitError, int start,
+    int end, int step) {
+  if (start < 0 || end < 0) {
+    return emitError() << "start, end must be zero or positive";
+  }
+  if (step <= 0) {
+    return emitError() << "step must be positive";
+  }
+  if (start > end) {
+    return emitError() << "interval is empty";
+  }
+  return mlir::success();
+}
+
+int IfrtIntervalAttr::size() const {
+  return (getEnd() - getStart() + getStep() - 1) / getStep();
+}
+
+//===----------------------------------------------------------------------===//
+// IfrtMappingAttr
+//===----------------------------------------------------------------------===//
+
+mlir::LogicalResult IfrtMappingAttr::verify(
+    llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+    IfrtIntervalAttr from_shards, IfrtIntervalAttr to_shards) {
+  // Verify that from and to contains the same number of shards.
+  if (from_shards.size() != to_shards.size()) {
+    return emitError() << "from has " << from_shards.size() << " and to has "
+                       << to_shards.size()
+                       << ", but they must have the same number of shards.";
+  }
   return mlir::success();
 }
 

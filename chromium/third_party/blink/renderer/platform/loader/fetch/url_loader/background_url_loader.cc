@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -254,10 +255,12 @@ class BackgroundURLLoader::Context
                             intra_priority_value));
   }
 
-  void SetBackgroundResponseProcessor(scoped_refptr<BackgroundResponseProcessor>
-                                          background_response_processor) {
+  void SetBackgroundResponseProcessorFactory(
+      std::unique_ptr<BackgroundResponseProcessorFactory>
+          background_response_processor_factory) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
-    background_response_processor_ = std::move(background_response_processor);
+    background_response_processor_factory_ =
+        std::move(background_response_processor_factory);
   }
 
   void Start(std::unique_ptr<network::ResourceRequest> request,
@@ -281,7 +284,7 @@ class BackgroundURLLoader::Context
             no_mime_sniffing, cors_exempt_header_list_,
             std::move(resource_load_info_notifier_wrapper),
             should_use_code_cache_host,
-            std::move(background_response_processor_)));
+            std::move(background_response_processor_factory_)));
   }
 
  private:
@@ -291,7 +294,7 @@ class BackgroundURLLoader::Context
     explicit RequestClient(
         scoped_refptr<Context> context,
         scoped_refptr<base::SequencedTaskRunner> background_task_runner,
-        scoped_refptr<BackgroundResponseProcessor>
+        std::unique_ptr<BackgroundResponseProcessor>
             background_response_processor)
         : context_(std::move(context)),
           background_task_runner_(std::move(background_task_runner)),
@@ -299,11 +302,7 @@ class BackgroundURLLoader::Context
               std::move(background_response_processor)) {
       CHECK(background_task_runner_->RunsTasksInCurrentSequence());
     }
-    ~RequestClient() override {
-      if (background_response_processor_) {
-        background_response_processor_->Cancel();
-      }
-    }
+    ~RequestClient() override = default;
 
     // ResourceRequestClient overrides:
     void OnUploadProgress(uint64_t position, uint64_t size) override {
@@ -374,25 +373,23 @@ class BackgroundURLLoader::Context
       CHECK(background_task_runner_->RunsTasksInCurrentSequence());
       background_response_processor_.reset();
       waiting_for_background_response_processor_ = false;
-      if (absl::holds_alternative<Deque<Vector<char>>>(body)) {
-        size_t raw_data_size = 0u;
-        for (const auto& data : absl::get<Deque<Vector<char>>>(body)) {
-          raw_data_size =
-              base::CheckAdd(raw_data_size, data.size()).ValueOrDie();
-        }
+      if (absl::holds_alternative<SegmentedBuffer>(body)) {
         context_->DidReadDataByBackgroundResponseProcessorOnBackground(
-            raw_data_size);
+            absl::get<SegmentedBuffer>(body).size());
       }
       context_->PostTaskToMainThread(CrossThreadBindOnce(
           &Context::DidFinishBackgroundResponseProcessor, context_,
           std::move(head), std::move(body), std::move(cached_metadata),
           deferred_transfer_size_diff_, std::move(deferred_status_)));
     }
+    void PostTaskToMainThread(CrossThreadOnceClosure task) override {
+      context_->PostTaskToMainThread(std::move(task));
+    }
 
    private:
     scoped_refptr<Context> context_;
     const scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
-    scoped_refptr<BackgroundResponseProcessor> background_response_processor_;
+    std::unique_ptr<BackgroundResponseProcessor> background_response_processor_;
 
     int deferred_transfer_size_diff_ = 0;
     std::optional<network::URLLoaderCompletionStatus> deferred_status_;
@@ -409,8 +406,8 @@ class BackgroundURLLoader::Context
                          std::unique_ptr<ResourceLoadInfoNotifierWrapper>
                              resource_load_info_notifier_wrapper,
                          bool should_use_code_cache_host,
-                         scoped_refptr<BackgroundResponseProcessor>
-                             background_response_processor) {
+                         std::unique_ptr<BackgroundResponseProcessorFactory>
+                             background_response_processor_factory) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(background_sequence_checker_);
     if (canceled_) {
       // This happens when the request was canceled (eg: window.stop())
@@ -449,7 +446,9 @@ class BackgroundURLLoader::Context
         cors_exempt_header_list,
         base::MakeRefCounted<RequestClient>(
             this, background_task_runner_,
-            std::move(background_response_processor)),
+            background_response_processor_factory
+                ? std::move(*background_response_processor_factory).Create()
+                : nullptr),
         background_resource_fetch_context->GetLoaderFactory(),
         std::move(throttles), std::move(resource_load_info_notifier_wrapper),
         should_use_code_cache_host && background_code_cache_host_
@@ -488,15 +487,20 @@ class BackgroundURLLoader::Context
     }
   }
 
-  void PostTaskToMainThread(CrossThreadOnceFunction<void(int)> task) {
+  void PostTaskToMainThread(CrossThreadOnceClosure task) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(background_sequence_checker_);
     {
       base::AutoLock locker(tasks_lock_);
-      tasks_.push_back(CrossThreadBindOnce(std::move(task), request_id_));
+      tasks_.push_back(std::move(task));
     }
     PostCrossThreadTask(*unfreezable_task_runner_, FROM_HERE,
                         CrossThreadBindOnce(&Context::RunTasksOnMainThread,
                                             scoped_refptr(this)));
+  }
+
+  void PostTaskToMainThread(CrossThreadOnceFunction<void(int)> task) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(background_sequence_checker_);
+    PostTaskToMainThread(CrossThreadBindOnce(std::move(task), request_id_));
   }
 
   void RunTasksOnMainThread() {
@@ -553,7 +557,7 @@ class BackgroundURLLoader::Context
     }
   }
   void OnReceivedResponse(network::mojom::URLResponseHeadPtr head,
-                          mojo::ScopedDataPipeConsumerHandle body,
+                          BodyVariant body,
                           std::optional<mojo_base::BigBuffer> cached_metadata,
                           int request_id) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
@@ -571,35 +575,20 @@ class BackgroundURLLoader::Context
       int request_id) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
 
-    OnReceivedResponse(
-        std::move(head),
-        absl::holds_alternative<mojo::ScopedDataPipeConsumerHandle>(body)
-            ? std::move(absl::get<mojo::ScopedDataPipeConsumerHandle>(body))
-            : mojo::ScopedDataPipeConsumerHandle(),
-        std::move(cached_metadata), request_id);
-    if (absl::holds_alternative<Deque<Vector<char>>>(body)) {
-      Deque<Vector<char>> raw_data =
-          std::move(absl::get<Deque<Vector<char>>>(body));
-      while (!raw_data.empty()) {
-        Vector<char> data = raw_data.TakeFirst();
-        if (client_) {
-          client_->DidReceiveData(data.data(), data.size());
-        }
-      }
-    }
+    OnReceivedResponse(std::move(head), std::move(body),
+                       std::move(cached_metadata), request_id);
     if (client_ && deferred_transfer_size_diff > 0) {
-      OnTransferSizeUpdated(deferred_transfer_size_diff, request_id);
+      OnTransferSizeUpdated(deferred_transfer_size_diff);
     }
     if (client_ && deferred_status) {
-      OnCompletedRequest(*deferred_status, request_id);
+      OnCompletedRequest(*deferred_status);
     }
   }
-  void OnTransferSizeUpdated(int transfer_size_diff, int request_id) {
+  void OnTransferSizeUpdated(int transfer_size_diff) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
     client_->DidReceiveTransferSizeUpdate(transfer_size_diff);
   }
-  void OnCompletedRequest(const network::URLLoaderCompletionStatus& status,
-                          int request_id) {
+  void OnCompletedRequest(const network::URLLoaderCompletionStatus& status) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
     int64_t total_transfer_size = status.encoded_data_length;
     int64_t encoded_body_size = status.encoded_body_length;
@@ -715,8 +704,9 @@ class BackgroundURLLoader::Context
   LoaderFreezeMode freeze_mode_ GUARDED_BY_CONTEXT(
       main_thread_sequence_checker_) = LoaderFreezeMode::kNone;
 
-  scoped_refptr<BackgroundResponseProcessor> background_response_processor_
-      GUARDED_BY_CONTEXT(main_thread_sequence_checker_);
+  std::unique_ptr<BackgroundResponseProcessorFactory>
+      background_response_processor_factory_
+          GUARDED_BY_CONTEXT(main_thread_sequence_checker_);
 
   std::unique_ptr<ResourceRequestSender> resource_request_sender_
       GUARDED_BY_CONTEXT(background_sequence_checker_);
@@ -810,10 +800,11 @@ BackgroundURLLoader::GetTaskRunnerForBodyLoader() {
   return context_->unfreezable_task_runner();
 }
 
-void BackgroundURLLoader::SetBackgroundResponseProcessor(
-    scoped_refptr<BackgroundResponseProcessor> background_response_processor) {
-  context_->SetBackgroundResponseProcessor(
-      std::move(background_response_processor));
+void BackgroundURLLoader::SetBackgroundResponseProcessorFactory(
+    std::unique_ptr<BackgroundResponseProcessorFactory>
+        background_response_processor_factory) {
+  context_->SetBackgroundResponseProcessorFactory(
+      std::move(background_response_processor_factory));
 }
 
 }  // namespace blink

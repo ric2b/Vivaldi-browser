@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ash/chromebox_for_meetings/cfm_chrome_services.h"
 
+#include "base/command_line.h"
+#include "chrome/browser/ash/chromebox_for_meetings/artemis/data_aggregator_service.h"
 #include "chrome/browser/ash/chromebox_for_meetings/browser/cfm_browser_service.h"
 #include "chrome/browser/ash/chromebox_for_meetings/device_info/device_info_service.h"
 #include "chrome/browser/ash/chromebox_for_meetings/diagnostics/diagnostics_service.h"
@@ -27,6 +29,7 @@ void InitializeCfmServices() {
   DiagnosticsService::Initialize();
   XuCameraService::Initialize();
   ExternalDisplayBrightnessService::Initialize();
+  DataAggregatorService::Initialize();
 }
 
 void ShutdownCfmServices() {
@@ -35,6 +38,7 @@ void ShutdownCfmServices() {
     return;
   }
 
+  DataAggregatorService::Shutdown();
   ExternalDisplayBrightnessService::Shutdown();
   XuCameraService::Shutdown();
   DiagnosticsService::Shutdown();

@@ -13,25 +13,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "hwy/contrib/sort/vqsort.h"
+#include "hwy/contrib/sort/vqsort.h"  // VQSort
 
 #undef HWY_TARGET_INCLUDE
 #define HWY_TARGET_INCLUDE "hwy/contrib/sort/vqsort_i16a.cc"
 #include "hwy/foreach_target.h"  // IWYU pragma: keep
 
 // After foreach_target
-#include "hwy/contrib/sort/traits-inl.h"
 #include "hwy/contrib/sort/vqsort-inl.h"
 
 HWY_BEFORE_NAMESPACE();
 namespace hwy {
 namespace HWY_NAMESPACE {
 
-void SortI16Asc(int16_t* HWY_RESTRICT keys, size_t num,
-                int16_t* HWY_RESTRICT buf) {
-  SortTag<int16_t> d;
-  detail::SharedTraits<detail::TraitsLane<detail::OrderAscending<int16_t>>> st;
-  Sort(d, st, keys, num, buf);
+void SortI16Asc(int16_t* HWY_RESTRICT keys, const size_t num) {
+  return VQSortStatic(keys, num, SortAscending());
+}
+
+void PartialSortI16Asc(int16_t* HWY_RESTRICT keys, const size_t num,
+                       const size_t k) {
+  return VQPartialSortStatic(keys, num, k, SortAscending());
+}
+
+void SelectI16Asc(int16_t* HWY_RESTRICT keys, const size_t num,
+                  const size_t k) {
+  return VQSelectStatic(keys, num, k, SortAscending());
 }
 
 // NOLINTNEXTLINE(google-readability-namespace-comments)
@@ -43,11 +49,22 @@ HWY_AFTER_NAMESPACE();
 namespace hwy {
 namespace {
 HWY_EXPORT(SortI16Asc);
+HWY_EXPORT(PartialSortI16Asc);
+HWY_EXPORT(SelectI16Asc);
 }  // namespace
 
-void Sorter::operator()(int16_t* HWY_RESTRICT keys, size_t n,
-                        SortAscending) const {
-  HWY_DYNAMIC_DISPATCH(SortI16Asc)(keys, n, Get<int16_t>());
+void VQSort(int16_t* HWY_RESTRICT keys, const size_t n, SortAscending) {
+  HWY_DYNAMIC_DISPATCH(SortI16Asc)(keys, n);
+}
+
+void VQPartialSort(int16_t* HWY_RESTRICT keys, const size_t n, const size_t k,
+                   SortAscending) {
+  HWY_DYNAMIC_DISPATCH(PartialSortI16Asc)(keys, n, k);
+}
+
+void VQSelect(int16_t* HWY_RESTRICT keys, const size_t n, const size_t k,
+              SortAscending) {
+  HWY_DYNAMIC_DISPATCH(SelectI16Asc)(keys, n, k);
 }
 
 }  // namespace hwy

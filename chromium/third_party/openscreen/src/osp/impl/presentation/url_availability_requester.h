@@ -78,8 +78,7 @@ class UrlAvailabilityRequester {
         public MessageDemuxer::MessageCallback {
    public:
     ReceiverRequester(UrlAvailabilityRequester& listener,
-                      const std::string& instance_id,
-                      const IPEndpoint& endpoint);
+                      const std::string& instance_name);
     ~ReceiverRequester() override;
 
     void GetOrRequestAvailabilities(
@@ -103,7 +102,7 @@ class UrlAvailabilityRequester {
     void OnConnectionFailed(uint64_t request_id) override;
 
     // MessageDemuxer::MessageCallback overrides.
-    ErrorOr<size_t> OnStreamMessage(uint64_t endpoint_id,
+    ErrorOr<size_t> OnStreamMessage(uint64_t instance_id,
                                     uint64_t connection_id,
                                     msgs::Type message_type,
                                     const uint8_t* buffer,
@@ -128,28 +127,26 @@ class UrlAvailabilityRequester {
     UrlAvailabilityRequester& listener_;
 
     uint64_t next_watch_id_ = 1;
-
-    const std::string instance_id_;
-    uint64_t endpoint_id_{0};
+    const std::string instance_name_;
+    uint64_t instance_id_{0};
 
     ProtocolConnectionClient::ConnectRequest connect_request_;
     // TODO(btolsch): Observe connection and restart all the things on close.
     std::unique_ptr<ProtocolConnection> connection_;
 
     MessageDemuxer::MessageWatch response_watch_;
-    std::map<uint64_t, Request> request_by_id_;
     MessageDemuxer::MessageWatch event_watch_;
-    std::map<uint64_t, Watch> watch_by_id_;
 
+    std::map<uint64_t, Request> request_by_id_;
+    std::map<uint64_t, Watch> watch_by_id_;
     std::map<std::string, msgs::UrlAvailability> known_availability_by_url_;
   };
 
   const ClockNowFunctionPtr now_function_;
 
   std::map<std::string, std::vector<ReceiverObserver*>> observers_by_url_;
-
   std::map<std::string, std::unique_ptr<ReceiverRequester>>
-      receiver_by_instance_id_;
+      receiver_by_instance_name_;
 };
 
 }  // namespace openscreen::osp

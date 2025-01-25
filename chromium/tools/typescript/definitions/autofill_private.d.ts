@@ -199,7 +199,8 @@ declare global {
 
       export function getAccountInfo(): Promise<AccountInfo|undefined>;
       export function saveAddress(address: AddressEntry): void;
-      export function getCountryList(): Promise<CountryEntry[]>;
+      export function getCountryList(forAccountAddressProfile: boolean):
+          Promise<CountryEntry[]>;
       export function getAddressComponents(
           countryCode: string): Promise<AddressComponents>;
       export function getAddressList(): Promise<AddressEntry[]>;
@@ -214,7 +215,6 @@ declare global {
       export function migrateCreditCards(): void;
       export function logServerCardLinkClicked(): void;
       export function logServerIbanLinkClicked(): void;
-      export function setCreditCardFIDOAuthEnabledState(enabled: boolean): void;
       export function addVirtualCard(cardId: string): void;
       export function removeVirtualCard(cardId: string): void;
       export function authenticateUserAndFlipMandatoryAuthToggle(): void;

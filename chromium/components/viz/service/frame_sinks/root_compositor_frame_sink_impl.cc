@@ -123,6 +123,9 @@ RootCompositorFrameSinkImpl::Create(
   std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source;
   ExternalBeginFrameSourceMojo* external_begin_frame_source_mojo = nullptr;
   bool hw_support_for_multiple_refresh_rates = false;
+#if BUILDFLAG(IS_MAC)
+  bool created_external_begin_frame_source_mac = false;
+#endif
 #if !BUILDFLAG(IS_APPLE)
   bool wants_vsync_updates = false;
 #endif
@@ -172,6 +175,7 @@ RootCompositorFrameSinkImpl::Create(
             std::make_unique<ExternalBeginFrameSourceMac>(
                 restart_id, params->renderer_settings.display_id,
                 output_surface.get());
+        created_external_begin_frame_source_mac = true;
       } else {
         auto time_source = std::make_unique<DelayBasedTimeSource>(
             base::SingleThreadTaskRunner::GetCurrentDefault().get());
@@ -257,6 +261,14 @@ RootCompositorFrameSinkImpl::Create(
         base::BindRepeating(
             &RootCompositorFrameSinkImpl::SetDisplayVSyncParameters,
             base::Unretained(impl.get())));
+
+    if (created_external_begin_frame_source_mac) {
+      static_cast<ExternalBeginFrameSourceMac*>(
+          impl->external_begin_frame_source())
+          ->SetMultipleHWRefreshRatesCallback(base::BindRepeating(
+              &RootCompositorFrameSinkImpl::SetHwSupportForMultipleRefreshRates,
+              base::Unretained(impl.get())));
+    }
   } else if (impl->synthetic_begin_frame_source_) {
     impl->synthetic_begin_frame_source_->SetUpdateVSyncParametersCallback(
         base::BindRepeating(
@@ -372,7 +384,7 @@ void RootCompositorFrameSinkImpl::SetDisplayVSyncParameters(
   UpdateVSyncParameters();
 }
 
-std::vector<base::TimeDelta>
+base::flat_set<base::TimeDelta>
 RootCompositorFrameSinkImpl::GetSupportedFrameIntervals(
     base::TimeDelta interval) {
   if (external_begin_frame_source_) {
@@ -420,11 +432,10 @@ void RootCompositorFrameSinkImpl::UpdateRefreshRate(float refresh_rate) {
 
 void RootCompositorFrameSinkImpl::SetSupportedRefreshRates(
     const std::vector<float>& supported_refresh_rates) {
-  std::vector<base::TimeDelta> supported_frame_intervals(
-      supported_refresh_rates.size());
+  base::flat_set<base::TimeDelta> supported_frame_intervals;
   for (size_t i = 0; i < supported_refresh_rates.size(); ++i) {
-    supported_frame_intervals[i] =
-        base::Seconds(1 / supported_refresh_rates[i]);
+    supported_frame_intervals.insert(
+        base::Seconds(1 / supported_refresh_rates[i]));
   }
 
   display_->SetSupportedFrameIntervals(supported_frame_intervals);
@@ -582,7 +593,6 @@ RootCompositorFrameSinkImpl::RootCompositorFrameSinkImpl(
   frame_sink_manager->RegisterBeginFrameSource(begin_frame_source(),
                                                support_->frame_sink_id());
   display_->Initialize(this, support_->frame_sink_manager()->surface_manager(),
-                       Display::kEnableSharedImages,
                        hw_support_for_multiple_refresh_rates);
   support_->SetUpHitTest(display_.get());
 #if BUILDFLAG(IS_IOS)
@@ -621,8 +631,15 @@ void RootCompositorFrameSinkImpl::DisplayWillDrawAndSwap(
   support_->GetHitTestAggregator()->Aggregate(display_->CurrentSurfaceId());
 }
 
+#if BUILDFLAG(IS_ANDROID)
 base::ScopedClosureRunner RootCompositorFrameSinkImpl::GetCacheBackBufferCb() {
   return display_->GetCacheBackBufferCb();
+}
+#endif
+
+void RootCompositorFrameSinkImpl::SetHwSupportForMultipleRefreshRates(
+    bool support) {
+  display_->SetHwSupportForMultipleRefreshRates(support);
 }
 
 void RootCompositorFrameSinkImpl::DisplayDidReceiveCALayerParams(
@@ -646,7 +663,7 @@ void RootCompositorFrameSinkImpl::DisplayDidReceiveCALayerParams(
   if (display_client_)
     display_client_->OnDisplayReceivedCALayerParams(ca_layer_params);
 #else
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #endif
 }
 
@@ -663,7 +680,7 @@ void RootCompositorFrameSinkImpl::DisplayDidCompleteSwapWithSize(
   }
 #else  // !BUILDFLAG(IS_ANDROID) && !(BUILDFLAG(IS_LINUX) &&
        // BUILDFLAG(IS_OZONE_X11))
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #endif
 }
 
@@ -674,7 +691,7 @@ void RootCompositorFrameSinkImpl::DisplayAddChildWindowToBrowser(
     display_client_->AddChildWindowToBrowser(child_window);
   }
 #else
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #endif
 }
 

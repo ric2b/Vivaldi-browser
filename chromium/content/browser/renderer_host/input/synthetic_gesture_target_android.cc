@@ -9,7 +9,6 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
-#include "content/public/android/content_jni_headers/SyntheticGestureTarget_jni.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
@@ -17,6 +16,9 @@
 #include "ui/android/view_android.h"
 #include "ui/compositor/compositor.h"
 #include "ui/gfx/android/view_configuration.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "content/public/android/content_jni_headers/SyntheticGestureTarget_jni.h"
 
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
@@ -113,7 +115,7 @@ void SyntheticGestureTargetAndroid::DispatchWebTouchEventToPlatform(
       action = MOTION_EVENT_ACTION_END;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   const unsigned num_touches = web_touch.touches_length;
   int touch_index = -1;

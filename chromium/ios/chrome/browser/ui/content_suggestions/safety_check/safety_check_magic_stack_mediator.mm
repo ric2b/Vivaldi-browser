@@ -116,6 +116,16 @@
   safety_check_prefs::DisableSafetyCheckInMagicStack(_localState);
 }
 
+- (void)reset {
+  _safetyCheckState = [[SafetyCheckState alloc]
+      initWithUpdateChromeState:UpdateChromeSafetyCheckState::kDefault
+                  passwordState:PasswordSafetyCheckState::kDefault
+              safeBrowsingState:SafeBrowsingSafetyCheckState::kDefault
+                   runningState:RunningSafetyCheckState::kDefault];
+  _safetyCheckState.audience = self;
+  _safetyCheckState.safetyCheckConsumerSource = self;
+}
+
 #pragma mark - SafetyCheckConsumerSource
 
 - (void)addConsumer:(id<SafetyCheckMagicStackConsumer>)consumer {
@@ -169,11 +179,7 @@
   // running state changes; this avoids calling the consumer every time an
   // individual check state changes.
   _safetyCheckState.audience = self;
-  if (IsIOSMagicStackCollectionViewEnabled()) {
-    [_safetyCheckConsumer safetyCheckStateDidChange:_safetyCheckState];
-  } else {
-    [self.consumer showSafetyCheck:_safetyCheckState];
-  }
+  [_safetyCheckConsumer safetyCheckStateDidChange:_safetyCheckState];
 }
 
 - (void)safetyCheckManagerWillShutdown {

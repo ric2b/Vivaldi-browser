@@ -32,6 +32,7 @@
 
 #import "app/vivaldi_apptools.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
@@ -204,7 +205,7 @@
                                    browser:self.browser
                                   delegate:self];
     case kStepsCompleted:
-      NOTREACHED() << "Reaches kStepsCompleted unexpectedly.";
+      NOTREACHED_IN_MIGRATION() << "Reaches kStepsCompleted unexpectedly.";
       break;
   }
   return nil;
@@ -283,7 +284,7 @@
     observeOmniboxPositionChange:^(BOOL isBottomOmniboxEnabled) {
     [VivaldiTabSettingPrefs
         setBottomOmniboxEnabled:isBottomOmniboxEnabled
-            inPrefServices:self.browser->GetBrowserState()->GetPrefs()];
+            inPrefServices:GetApplicationContext()->GetLocalState()];
     [VivaldiTabSettingPrefs
         setReverseSearchSuggestionsEnabled:isBottomOmniboxEnabled
             inPrefServices:self.browser->GetBrowserState()->GetPrefs()];

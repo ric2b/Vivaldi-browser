@@ -52,26 +52,12 @@ const int kProfileImageSize = 128;
 
 // Derives screen mode of sync opt in screen from the
 // CanShowHistorySyncOptInsWithoutMinorModeRestrictions capability.
-bool UseMinorModeRestrictions() {
+constexpr bool UseMinorModeRestrictions() {
 #if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   // ChromeOS handles minor modes separately.
   return false;
 #else
-  return base::FeatureList::IsEnabled(
-      ::switches::kMinorModeRestrictionsForHistorySyncOptIn);
-#endif
-}
-
-// After this time delta, user must see a screen. If it was impossible to get
-// the CanShowHistorySyncOptInsWithoutMinorModeRestrictions capability before
-// the deadline, the screen should be configured in minor-safe way.
-base::TimeDelta GetMinorModeRestrictionsDeadline() {
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
-  // Not implemented for those platforms.
-  NOTREACHED_NORETURN();
-#else
-  return base::Milliseconds(
-      ::switches::kMinorModeRestrictionsFetchDeadlineMs.Get());
+  return true;
 #endif
 }
 
@@ -115,7 +101,7 @@ void RecordButtonClicked(SyncConfirmationScreenMode mode,
           signin_metrics::SyncButtonClicked::kSyncSettingsUnknownWeighted;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   base::UmaHistogramEnumeration("Signin.SyncButtons.Clicked", *button_clicked);
@@ -353,10 +339,14 @@ void SyncConfirmationHandler::OnScreenModeChanged(
 }
 
 void SyncConfirmationHandler::OnDeadline() {
-  if (!screen_mode_notified_) {
-    AllowJavascript();
-    OnScreenModeChanged(SyncConfirmationScreenMode::kDeadlined);
+  if (screen_mode_notified_ || !IsJavascriptAllowed()) {
+    // Do not override already configured screen mode, and ignore update attempt
+    // when the UI is no longer present. Note: this is called from a timer
+    // routine rather than directly from being handled from the UI app.
+    return;
   }
+
+  OnScreenModeChanged(SyncConfirmationScreenMode::kDeadlined);
 }
 
 void SyncConfirmationHandler::DispatchAccountInfoUpdate(
@@ -378,6 +368,7 @@ void SyncConfirmationHandler::DispatchAccountInfoUpdate(
     return;
   }
 
+  // Subsequent code will send updates to the UI.
   AllowJavascript();
 
   if (info.IsValid() && !avatar_notified_) {
@@ -465,7 +456,8 @@ void SyncConfirmationHandler::HandleInitializedWithSize(
 
   if (!screen_mode_notified_ && UseMinorModeRestrictions()) {
     // Deadline timer for the case when screen mode doesn't arrive in time.
-    screen_mode_deadline_.Start(FROM_HERE, GetMinorModeRestrictionsDeadline(),
+    screen_mode_deadline_.Start(FROM_HERE,
+                                signin::GetMinorModeRestrictionsDeadline(),
                                 this, &SyncConfirmationHandler::OnDeadline);
   }
 

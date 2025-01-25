@@ -4,6 +4,8 @@
 
 #include "ui/display/types/display_mode.h"
 
+#include <ostream>
+
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 
@@ -27,6 +29,12 @@ DisplayMode::~DisplayMode() {}
 std::unique_ptr<DisplayMode> DisplayMode::Clone() const {
   return base::WrapUnique(new DisplayMode(size_, is_interlaced_, refresh_rate_,
                                           htotal_, vtotal_, clock_));
+}
+
+std::unique_ptr<DisplayMode> DisplayMode::CopyWithSize(
+    const gfx::Size& size) const {
+  return std::make_unique<DisplayMode>(size, is_interlaced_, refresh_rate_,
+                                       htotal_, vtotal_, clock_);
 }
 
 bool DisplayMode::operator<(const DisplayMode& other) const {

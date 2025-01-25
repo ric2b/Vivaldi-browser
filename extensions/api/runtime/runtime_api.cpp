@@ -418,7 +418,7 @@ void RuntimePrivateGetUserProfilesFunction::ProcessImagesOnWorkerThread(
       continue;
     }
     std::string image_data;
-    base::StringPiece base64_input(
+    std::string_view base64_input(
         reinterpret_cast<const char*>(&buffer.data()[0]), buffer.size());
     image_data = base::Base64Encode(base64_input);
 

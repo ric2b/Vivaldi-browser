@@ -31,9 +31,13 @@
 #include "components/segmentation_platform/public/segmentation_platform_service.h"
 #include "components/segmentation_platform/public/service_proxy.h"
 #include "components/ukm/test_ukm_recorder.h"
+#include "components/visited_url_ranking/public/test_support.h"
+#include "components/visited_url_ranking/public/url_visit_schema.h"
+#include "components/visited_url_ranking/public/url_visit_util.h"
 #include "content/public/test/browser_task_environment.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace segmentation_platform {
 namespace {
@@ -110,7 +114,8 @@ class SegmentationPlatformServiceFactoryTest : public testing::Test {
          {features::kSegmentationPlatformTimeDelaySampling,
           {{"SamplingRate", "1"}}},
          {features::kSegmentationPlatformTabResumptionRanker, {}},
-         {features::kSegmentationPlatformAndroidHomeModuleRanker, {}}},
+         {features::kSegmentationPlatformAndroidHomeModuleRanker, {}},
+         {features::kSegmentationPlatformURLVisitResumptionRanker, {}}},
         {});
 
     // Creating profile and initialising segmentation service.
@@ -428,6 +433,23 @@ TEST_F(SegmentationPlatformServiceFactoryTest, TestDeviceSwitcherModel) {
       /*expected_labels=*/std::vector<std::string>(1, "NotSynced"));
 }
 
+TEST_F(SegmentationPlatformServiceFactoryTest, URLVisitResumptionRanker) {
+  InitService();
+
+  visited_url_ranking::URLVisitAggregate visit_aggregate =
+      visited_url_ranking::CreateSampleURLVisitAggregate(
+          GURL("https://google.com/search?q=sample"));
+  scoped_refptr<InputContext> input_context =
+      visited_url_ranking::AsInputContext(
+          visited_url_ranking::kURLVisitAggregateSchema, visit_aggregate);
+
+  PredictionOptions prediction_options;
+  prediction_options.on_demand_execution = true;
+  ExpectGetAnnotatedNumericResult(kURLVisitResumptionRankerKey,
+                                  prediction_options, input_context,
+                                  PredictionStatus::kSucceeded);
+}
+
 // Segmentation Ukm Engine is disabled on CrOS.
 #if !BUILDFLAG(IS_CHROMEOS)
 TEST_F(SegmentationPlatformServiceFactoryTest, TabResupmtionRanker) {
@@ -486,6 +508,9 @@ TEST_F(SegmentationPlatformServiceFactoryTest, TestContextualPageActionsShare) {
       segmentation_platform::processing::ProcessedValue::FromFloat(1));
   input_context->metadata_args.emplace(
       segmentation_platform::kContextualPageActionModelInputReaderMode,
+      segmentation_platform::processing::ProcessedValue::FromFloat(0));
+  input_context->metadata_args.emplace(
+      segmentation_platform::kContextualPageActionModelInputPriceInsights,
       segmentation_platform::processing::ProcessedValue::FromFloat(0));
 
   ExpectGetClassificationResult(
@@ -581,9 +606,12 @@ TEST_F(SegmentationPlatformServiceFactoryTest, TestAndroidHomeModuleRanker) {
   input_context->metadata_args.emplace(
       segmentation_platform::kTabResumptionForAndroidHomeFreshness,
       segmentation_platform::processing::ProcessedValue::FromFloat(-1));
+  input_context->metadata_args.emplace(
+      segmentation_platform::kSafetyHubFreshness,
+      segmentation_platform::processing::ProcessedValue::FromFloat(-1));
 
   std::vector<std::string> result = {kPriceChange, kSingleTab,
-                                     kTabResumptionForAndroidHome};
+                                     kTabResumptionForAndroidHome, kSafetyHub};
   ExpectGetClassificationResult(
       segmentation_platform::kAndroidHomeModuleRankerKey, prediction_options,
       input_context,

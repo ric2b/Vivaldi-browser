@@ -237,6 +237,10 @@ enum SubmissionReadinessState {
   // tap, i.e. TTF should submit both single username and single password
   // forms.
   kNoPasswordField = 8,
+
+  // One or more child frames are detected within the password form. They may
+  // contain a CAPTCHA or other input fields, so don't trigger submission.
+  kHasChildFrames = 9,
 };
 
 // autofill::FrameToken (components/autofill/core/common/unique_ids.h)
@@ -267,7 +271,7 @@ struct FieldRendererId {
 // autofill::SelectOption (components/autofill/core/common/form_field_data.h)
 struct SelectOption {
   mojo_base.mojom.String16 value;
-  mojo_base.mojom.String16 content;
+  mojo_base.mojom.String16 text;
 };
 
 // autofill::Section::Autocomplete
@@ -304,6 +308,7 @@ struct AutocompleteParsingResult {
   string section;
   HtmlFieldMode mode;
   HtmlFieldType field_type;
+  bool webauthn;
 };
 
 // autofill::FormFieldData (components/autofill/core/common/form_field_data.h)

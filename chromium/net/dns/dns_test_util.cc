@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/dns/dns_test_util.h"
 
 #include <cstdint>
@@ -647,7 +652,7 @@ class MockDnsTransactionFactory::MockDohProbeRunner : public DnsProbeRunner {
 
   base::TimeDelta GetDelayUntilNextProbeForTest(
       size_t doh_server_index) const override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return base::TimeDelta();
   }
 
@@ -828,7 +833,7 @@ DnsConfigOverrides MockDnsClient::GetConfigOverridesForTesting() const {
 
 void MockDnsClient::SetTransactionFactoryForTesting(
     std::unique_ptr<DnsTransactionFactory> factory) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void MockDnsClient::SetAddressSorterForTesting(

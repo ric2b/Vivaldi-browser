@@ -13,17 +13,20 @@
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
+#import "components/signin/public/identity_manager/identity_manager.h"
+#import "components/signin/public/identity_manager/tribool.h"
 #import "components/supervised_user/core/browser/supervised_user_preferences.h"
 #import "components/supervised_user/core/common/features.h"
 #import "components/supervised_user/core/common/pref_names.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
+#import "ios/chrome/browser/supervised_user/model/supervised_user_capabilities_observer_bridge.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_toolbars_mutator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_consumer.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_mediator_provider_wrangler.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_metrics.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_page_mutator.h"
 
-@interface TabGridMediator () <PrefObserverDelegate>
+@interface TabGridMediator () <PrefObserverDelegate,
+                               SupervisedUserCapabilitiesObserving>
 @end
 
 @implementation TabGridMediator {
@@ -37,26 +40,40 @@
   std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
   // Registrar for pref changes notifications.
   PrefChangeRegistrar _prefChangeRegistrar;
-  // Current page.
-  // TODO(crbug.com/41487637): Remove once the mediator and the view controller
-  // are fully sync.
-  TabGridPage _currentPage;
+  // Identity manager providing AccountInfo capabilities.
+  raw_ptr<signin::IdentityManager> _identityManager;
+  // Observer to track changes to supervision-related capabilities.
+  std::unique_ptr<supervised_user::SupervisedUserCapabilitiesObserverBridge>
+      _supervisedUserCapabilitiesObserver;
 }
 
-- (instancetype)initWithPrefService:(PrefService*)prefService
-           featureEngagementTracker:(feature_engagement::Tracker*)tracker {
+- (instancetype)initWithIdentityManager:
+                    (signin::IdentityManager*)identityManager
+                            prefService:(PrefService*)prefService
+               featureEngagementTracker:(feature_engagement::Tracker*)tracker {
   self = [super init];
   if (self) {
+    CHECK(identityManager);
     CHECK(prefService);
     CHECK(tracker);
-    _prefService = prefService;
     _engagementTracker = tracker;
-    _prefChangeRegistrar.Init(_prefService);
-    _prefObserverBridge.reset(new PrefObserverBridge(self));
 
-    // Register to observe any changes on supervised_user status.
-    _prefObserverBridge->ObserveChangesForPreference(prefs::kSupervisedUserId,
-                                                     &_prefChangeRegistrar);
+    if (base::FeatureList::IsEnabled(
+            supervised_user::
+                kReplaceSupervisionPrefsWithAccountCapabilitiesOnIOS)) {
+      _identityManager = identityManager;
+      _supervisedUserCapabilitiesObserver = std::make_unique<
+          supervised_user::SupervisedUserCapabilitiesObserverBridge>(
+          _identityManager, self);
+    } else {
+      _prefService = prefService;
+      _prefChangeRegistrar.Init(_prefService);
+      _prefObserverBridge.reset(new PrefObserverBridge(self));
+
+      // Register to observe any changes on supervised_user status.
+      _prefObserverBridge->ObserveChangesForPreference(prefs::kSupervisedUserId,
+                                                       &_prefChangeRegistrar);
+    }
   }
   return self;
 }
@@ -65,6 +82,8 @@
   _prefChangeRegistrar.RemoveAll();
   _prefObserverBridge.reset();
   _prefService = nil;
+  _supervisedUserCapabilitiesObserver.reset();
+  _identityManager = nil;
   _consumer = nil;
 }
 
@@ -80,8 +99,18 @@
 
 - (void)setConsumer:(id<TabGridConsumer>)consumer {
   _consumer = consumer;
-  [_consumer updateParentalControlStatus:
-      supervised_user::IsSubjectToParentalControls(*_prefService)];
+  BOOL isSubjectToParentalControls;
+  if (base::FeatureList::IsEnabled(
+          supervised_user::
+              kReplaceSupervisionPrefsWithAccountCapabilitiesOnIOS)) {
+    isSubjectToParentalControls =
+        supervised_user::IsPrimaryAccountSubjectToParentalControls(
+            _identityManager) == signin::Tribool::kTrue;
+  } else {
+    isSubjectToParentalControls =
+        supervised_user::IsSubjectToParentalControls(*_prefService);
+  }
+  [_consumer updateParentalControlStatus:isSubjectToParentalControls];
 }
 
 #pragma mark - PrefObserverDelegate
@@ -89,9 +118,28 @@
 // TODO(b/295307282): Migrate to IncognitoGridMediator once the incognito grid
 // coordinator and view controller is ready.
 - (void)onPreferenceChanged:(const std::string&)preferenceName {
-  if (preferenceName == prefs::kSupervisedUserId) {
+  if (!base::FeatureList::IsEnabled(
+          supervised_user::
+              kReplaceSupervisionPrefsWithAccountCapabilitiesOnIOS) &&
+      preferenceName == prefs::kSupervisedUserId) {
     [_consumer updateParentalControlStatus:
         supervised_user::IsSubjectToParentalControls(*_prefService)];
+    [_consumer updateTabGridForIncognitoModeDisabled:IsIncognitoModeDisabled(
+                                                         _prefService)];
+  }
+}
+
+#pragma mark - SupervisedUserCapabilitiesObserving
+
+- (void)onIsSubjectToParentalControlsCapabilityChanged:
+    (supervised_user::CapabilityUpdateState)capabilityUpdateState {
+  if (base::FeatureList::IsEnabled(
+          supervised_user::
+              kReplaceSupervisionPrefsWithAccountCapabilitiesOnIOS)) {
+    BOOL isSubjectToParentalControl =
+        (capabilityUpdateState ==
+         supervised_user::CapabilityUpdateState::kSetToTrue);
+    [_consumer updateParentalControlStatus:isSubjectToParentalControl];
     [_consumer updateTabGridForIncognitoModeDisabled:IsIncognitoModeDisabled(
                                                          _prefService)];
   }
@@ -112,22 +160,20 @@
       _currentPageMutator = self.remotePageMutator;
       break;
     case TabGridPage::TabGridPageTabGroups:
-      // TODO(crbug.com/329626033): Handle displaying Tab Groups.
-      NOTIMPLEMENTED();
+      _currentPageMutator = self.tabGroupsPageMutator;
+      break;
 
     // Vivaldi
-      break;
     case TabGridPageClosedTabs:
       _currentPageMutator = self.closedPageMutator;
+      break;
     // End Vivaldi
 
-      break;
   }
 }
 
 // Notifies mutators if it is the current selected one or not.
 - (void)notifyPageMutatorAboutPage:(TabGridPage)page {
-  _currentPage = page;
   [_currentPageMutator currentlySelectedGrid:NO];
   [self updateCurrentPageMutatorForPage:page];
   [_currentPageMutator currentlySelectedGrid:YES];
@@ -170,10 +216,8 @@
   [self.toolbarsMutator setButtonsEnabled:YES];
 }
 
-#pragma mark - TabGridMediatorProviderWrangler
-
-- (TabGridPage)currentPage {
-  return _currentPage;
+- (void)quitSearchMode {
+  [self setModeOnCurrentPage:TabGridModeNormal];
 }
 
 @end

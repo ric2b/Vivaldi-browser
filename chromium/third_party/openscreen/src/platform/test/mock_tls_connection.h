@@ -25,7 +25,7 @@ class MockTlsConnection : public TlsConnection {
   using TlsConnection::Client;
   void SetClient(Client* client) override { client_ = client; }
 
-  MOCK_METHOD(bool, Send, (const void* data, size_t len), (override));
+  MOCK_METHOD(bool, Send, (ByteView data), (override));
 
   IPEndpoint GetRemoteEndpoint() const override { return remote_address_; }
 

@@ -70,8 +70,7 @@ bool GetHttpNumericHeader(HINTERNET handle, DWORD whatToGet, DWORD& output) {
 
 FileDownloader::FileDownloader() = default;
 
-void FileDownloader::SetHeader(base::StringPiece name,
-                               base::StringPiece value) {
+void FileDownloader::SetHeader(std::string_view name, std::string_view value) {
   DCHECK(!inet_handle_) << "must not be called after Connect()";
   http_headers_.append(name.data(), name.length());
   http_headers_ += ": ";

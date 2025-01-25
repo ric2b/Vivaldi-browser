@@ -16,7 +16,7 @@
 
 use anyhow::anyhow;
 use crypto_provider_default::CryptoProviderImpl;
-use ldt::{DefaultPadder, LdtDecryptCipher, LdtEncryptCipher, LdtKey, Swap, XorPadder};
+use ldt::{DefaultPadder, LdtCipher, LdtDecryptCipher, LdtEncryptCipher, LdtKey, Swap, XorPadder};
 use std::{fs, io::Read as _};
 use test_helper::{extract_key_array, extract_key_vec};
 use xts_aes::XtsAes128;

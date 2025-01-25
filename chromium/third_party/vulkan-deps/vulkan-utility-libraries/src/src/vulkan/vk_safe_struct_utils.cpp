@@ -20,8 +20,6 @@
 #include <vector>
 #include <cstring>
 
-extern std::vector<std::pair<uint32_t, uint32_t>> custom_stype_info;
-
 namespace vku {
 char *SafeStringCopy(const char *in_string) {
     if (nullptr == in_string) return nullptr;
@@ -768,6 +766,21 @@ void *SafePnextCopy(const void *pNext, PNextCopyState* copy_state) {
                 break;
             case VK_STRUCTURE_TYPE_BIND_MEMORY_STATUS_KHR:
                 safe_pNext = new safe_VkBindMemoryStatusKHR(reinterpret_cast<const VkBindMemoryStatusKHR *>(pNext), copy_state, false);
+                break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR:
+                safe_pNext = new safe_VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR(reinterpret_cast<const VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR *>(pNext), copy_state, false);
+                break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_FEATURES_KHR:
+                safe_pNext = new safe_VkPhysicalDeviceMaintenance7FeaturesKHR(reinterpret_cast<const VkPhysicalDeviceMaintenance7FeaturesKHR *>(pNext), copy_state, false);
+                break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_PROPERTIES_KHR:
+                safe_pNext = new safe_VkPhysicalDeviceMaintenance7PropertiesKHR(reinterpret_cast<const VkPhysicalDeviceMaintenance7PropertiesKHR *>(pNext), copy_state, false);
+                break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_PROPERTIES_LIST_KHR:
+                safe_pNext = new safe_VkPhysicalDeviceLayeredApiPropertiesListKHR(reinterpret_cast<const VkPhysicalDeviceLayeredApiPropertiesListKHR *>(pNext), copy_state, false);
+                break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_VULKAN_PROPERTIES_KHR:
+                safe_pNext = new safe_VkPhysicalDeviceLayeredApiVulkanPropertiesKHR(reinterpret_cast<const VkPhysicalDeviceLayeredApiVulkanPropertiesKHR *>(pNext), copy_state, false);
                 break;
             case VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT:
                 safe_pNext = new safe_VkDebugReportCallbackCreateInfoEXT(reinterpret_cast<const VkDebugReportCallbackCreateInfoEXT *>(pNext), copy_state, false);
@@ -1666,6 +1679,9 @@ void *SafePnextCopy(const void *pNext, PNextCopyState* copy_state) {
                 safe_pNext = new safe_VkAndroidHardwareBufferFormatResolvePropertiesANDROID(reinterpret_cast<const VkAndroidHardwareBufferFormatResolvePropertiesANDROID *>(pNext), copy_state, false);
                 break;
 #endif  // VK_USE_PLATFORM_ANDROID_KHR
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ANTI_LAG_FEATURES_AMD:
+                safe_pNext = new safe_VkPhysicalDeviceAntiLagFeaturesAMD(reinterpret_cast<const VkPhysicalDeviceAntiLagFeaturesAMD *>(pNext), copy_state, false);
+                break;
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT:
                 safe_pNext = new safe_VkPhysicalDeviceShaderObjectFeaturesEXT(reinterpret_cast<const VkPhysicalDeviceShaderObjectFeaturesEXT *>(pNext), copy_state, false);
                 break;
@@ -1791,8 +1807,20 @@ void *SafePnextCopy(const void *pNext, PNextCopyState* copy_state) {
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT16_VECTOR_FEATURES_NV:
                 safe_pNext = new safe_VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV(reinterpret_cast<const VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV *>(pNext), copy_state, false);
                 break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_REPLICATED_COMPOSITES_FEATURES_EXT:
+                safe_pNext = new safe_VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT(reinterpret_cast<const VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT *>(pNext), copy_state, false);
+                break;
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV:
                 safe_pNext = new safe_VkPhysicalDeviceRayTracingValidationFeaturesNV(reinterpret_cast<const VkPhysicalDeviceRayTracingValidationFeaturesNV *>(pNext), copy_state, false);
+                break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_FEATURES_MESA:
+                safe_pNext = new safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA(reinterpret_cast<const VkPhysicalDeviceImageAlignmentControlFeaturesMESA *>(pNext), copy_state, false);
+                break;
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_PROPERTIES_MESA:
+                safe_pNext = new safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA(reinterpret_cast<const VkPhysicalDeviceImageAlignmentControlPropertiesMESA *>(pNext), copy_state, false);
+                break;
+            case VK_STRUCTURE_TYPE_IMAGE_ALIGNMENT_CONTROL_CREATE_INFO_MESA:
+                safe_pNext = new safe_VkImageAlignmentControlCreateInfoMESA(reinterpret_cast<const VkImageAlignmentControlCreateInfoMESA *>(pNext), copy_state, false);
                 break;
             case VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR:
                 safe_pNext = new safe_VkWriteDescriptorSetAccelerationStructureKHR(reinterpret_cast<const VkWriteDescriptorSetAccelerationStructureKHR *>(pNext), copy_state, false);
@@ -1821,7 +1849,7 @@ void *SafePnextCopy(const void *pNext, PNextCopyState* copy_state) {
 
             default: // Encountered an unknown sType -- skip (do not copy) this entry in the chain
                 // If sType is in custom list, construct blind copy
-                for (auto item : custom_stype_info) {
+                for (auto item : GetCustomStypeInfo()) {
                     if (item.first == static_cast<uint32_t>(header->sType)) {
                         safe_pNext = malloc(item.second);
                         memcpy(safe_pNext, header, item.second);
@@ -1846,1797 +1874,1825 @@ void *SafePnextCopy(const void *pNext, PNextCopyState* copy_state) {
 }
 
 void FreePnextChain(const void *pNext) {
-    if (!pNext) return;
+    // The pNext parameter is const for convenience, since it is called by code
+    // for many structures where the pNext field is const.
+    void *current = const_cast<void*>(pNext);
+    while (current) {
+        auto header = reinterpret_cast<VkBaseOutStructure *>(current);
+        void *next = header->pNext;
+        // prevent destructors from recursing behind our backs.
+        header->pNext = nullptr;
 
-    auto header = reinterpret_cast<const VkBaseOutStructure *>(pNext);
-
-    switch (header->sType) {
-        // Special-case Loader Instance Struct passed to/from layer in pNext chain
+        switch (header->sType) {
+            // Special-case Loader Instance Struct passed to/from layer in pNext chain
         case VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO:
-            FreePnextChain(header->pNext);
-            delete reinterpret_cast<const VkLayerInstanceCreateInfo *>(pNext);
+            delete reinterpret_cast<VkLayerInstanceCreateInfo *>(current);
             break;
         // Special-case Loader Device Struct passed to/from layer in pNext chain
         case VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO:
-            FreePnextChain(header->pNext);
-            delete reinterpret_cast<const VkLayerDeviceCreateInfo *>(pNext);
+            delete reinterpret_cast<VkLayerDeviceCreateInfo *>(current);
             break;
         case VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkShaderModuleCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkShaderModuleCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkPipelineLayoutCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkPipelineLayoutCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceSubgroupProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceSubgroupProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDevice16BitStorageFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevice16BitStorageFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS:
-            delete reinterpret_cast<const safe_VkMemoryDedicatedRequirements *>(header);
+            delete reinterpret_cast<safe_VkMemoryDedicatedRequirements *>(header);
             break;
         case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO:
-            delete reinterpret_cast<const safe_VkMemoryDedicatedAllocateInfo *>(header);
+            delete reinterpret_cast<safe_VkMemoryDedicatedAllocateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO:
-            delete reinterpret_cast<const safe_VkMemoryAllocateFlagsInfo *>(header);
+            delete reinterpret_cast<safe_VkMemoryAllocateFlagsInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEVICE_GROUP_RENDER_PASS_BEGIN_INFO:
-            delete reinterpret_cast<const safe_VkDeviceGroupRenderPassBeginInfo *>(header);
+            delete reinterpret_cast<safe_VkDeviceGroupRenderPassBeginInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO:
-            delete reinterpret_cast<const safe_VkDeviceGroupCommandBufferBeginInfo *>(header);
+            delete reinterpret_cast<safe_VkDeviceGroupCommandBufferBeginInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO:
-            delete reinterpret_cast<const safe_VkDeviceGroupSubmitInfo *>(header);
+            delete reinterpret_cast<safe_VkDeviceGroupSubmitInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEVICE_GROUP_BIND_SPARSE_INFO:
-            delete reinterpret_cast<const safe_VkDeviceGroupBindSparseInfo *>(header);
+            delete reinterpret_cast<safe_VkDeviceGroupBindSparseInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO:
-            delete reinterpret_cast<const safe_VkBindBufferMemoryDeviceGroupInfo *>(header);
+            delete reinterpret_cast<safe_VkBindBufferMemoryDeviceGroupInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO:
-            delete reinterpret_cast<const safe_VkBindImageMemoryDeviceGroupInfo *>(header);
+            delete reinterpret_cast<safe_VkBindImageMemoryDeviceGroupInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkDeviceGroupDeviceCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkDeviceGroupDeviceCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFeatures2 *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFeatures2 *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePointClippingProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePointClippingProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDER_PASS_INPUT_ATTACHMENT_ASPECT_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkRenderPassInputAttachmentAspectCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkRenderPassInputAttachmentAspectCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkImageViewUsageCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkImageViewUsageCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkPipelineTessellationDomainOriginStateCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkPipelineTessellationDomainOriginStateCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkRenderPassMultiviewCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkRenderPassMultiviewCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMultiviewFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMultiviewFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMultiviewProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMultiviewProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTERS_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceVariablePointersFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceVariablePointersFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceProtectedMemoryFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceProtectedMemoryFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceProtectedMemoryProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceProtectedMemoryProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO:
-            delete reinterpret_cast<const safe_VkProtectedSubmitInfo *>(header);
+            delete reinterpret_cast<safe_VkProtectedSubmitInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO:
-            delete reinterpret_cast<const safe_VkSamplerYcbcrConversionInfo *>(header);
+            delete reinterpret_cast<safe_VkSamplerYcbcrConversionInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO:
-            delete reinterpret_cast<const safe_VkBindImagePlaneMemoryInfo *>(header);
+            delete reinterpret_cast<safe_VkBindImagePlaneMemoryInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO:
-            delete reinterpret_cast<const safe_VkImagePlaneMemoryRequirementsInfo *>(header);
+            delete reinterpret_cast<safe_VkImagePlaneMemoryRequirementsInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceSamplerYcbcrConversionFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceSamplerYcbcrConversionFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES:
-            delete reinterpret_cast<const safe_VkSamplerYcbcrConversionImageFormatProperties *>(header);
+            delete reinterpret_cast<safe_VkSamplerYcbcrConversionImageFormatProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceExternalImageFormatInfo *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceExternalImageFormatInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES:
-            delete reinterpret_cast<const safe_VkExternalImageFormatProperties *>(header);
+            delete reinterpret_cast<safe_VkExternalImageFormatProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceIDProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceIDProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkExternalMemoryImageCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkExternalMemoryImageCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkExternalMemoryBufferCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkExternalMemoryBufferCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO:
-            delete reinterpret_cast<const safe_VkExportMemoryAllocateInfo *>(header);
+            delete reinterpret_cast<safe_VkExportMemoryAllocateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkExportFenceCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkExportFenceCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkExportSemaphoreCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkExportSemaphoreCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMaintenance3Properties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMaintenance3Properties *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderDrawParametersFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderDrawParametersFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceVulkan11Features *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceVulkan11Features *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceVulkan11Properties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceVulkan11Properties *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceVulkan12Features *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceVulkan12Features *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceVulkan12Properties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceVulkan12Properties *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkImageFormatListCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkImageFormatListCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDevice8BitStorageFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevice8BitStorageFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDriverProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDriverProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderAtomicInt64Features *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderAtomicInt64Features *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderFloat16Int8Features *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderFloat16Int8Features *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFloatControlsProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFloatControlsProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkDescriptorSetLayoutBindingFlagsCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkDescriptorSetLayoutBindingFlagsCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDescriptorIndexingFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDescriptorIndexingFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDescriptorIndexingProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDescriptorIndexingProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO:
-            delete reinterpret_cast<const safe_VkDescriptorSetVariableDescriptorCountAllocateInfo *>(header);
+            delete reinterpret_cast<safe_VkDescriptorSetVariableDescriptorCountAllocateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT:
-            delete reinterpret_cast<const safe_VkDescriptorSetVariableDescriptorCountLayoutSupport *>(header);
+            delete reinterpret_cast<safe_VkDescriptorSetVariableDescriptorCountLayoutSupport *>(header);
             break;
         case VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE:
-            delete reinterpret_cast<const safe_VkSubpassDescriptionDepthStencilResolve *>(header);
+            delete reinterpret_cast<safe_VkSubpassDescriptionDepthStencilResolve *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDepthStencilResolveProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDepthStencilResolveProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceScalarBlockLayoutFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceScalarBlockLayoutFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkImageStencilUsageCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkImageStencilUsageCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkSamplerReductionModeCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkSamplerReductionModeCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceSamplerFilterMinmaxProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceSamplerFilterMinmaxProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceVulkanMemoryModelFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceVulkanMemoryModelFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceImagelessFramebufferFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceImagelessFramebufferFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkFramebufferAttachmentsCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkFramebufferAttachmentsCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO:
-            delete reinterpret_cast<const safe_VkRenderPassAttachmentBeginInfo *>(header);
+            delete reinterpret_cast<safe_VkRenderPassAttachmentBeginInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceUniformBufferStandardLayoutFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceUniformBufferStandardLayoutFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_STENCIL_LAYOUT:
-            delete reinterpret_cast<const safe_VkAttachmentReferenceStencilLayout *>(header);
+            delete reinterpret_cast<safe_VkAttachmentReferenceStencilLayout *>(header);
             break;
         case VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT:
-            delete reinterpret_cast<const safe_VkAttachmentDescriptionStencilLayout *>(header);
+            delete reinterpret_cast<safe_VkAttachmentDescriptionStencilLayout *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceHostQueryResetFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceHostQueryResetFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceTimelineSemaphoreFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceTimelineSemaphoreFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceTimelineSemaphoreProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceTimelineSemaphoreProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkSemaphoreTypeCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkSemaphoreTypeCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO:
-            delete reinterpret_cast<const safe_VkTimelineSemaphoreSubmitInfo *>(header);
+            delete reinterpret_cast<safe_VkTimelineSemaphoreSubmitInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceBufferDeviceAddressFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceBufferDeviceAddressFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_BUFFER_OPAQUE_CAPTURE_ADDRESS_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkBufferOpaqueCaptureAddressCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkBufferOpaqueCaptureAddressCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO:
-            delete reinterpret_cast<const safe_VkMemoryOpaqueCaptureAddressAllocateInfo *>(header);
+            delete reinterpret_cast<safe_VkMemoryOpaqueCaptureAddressAllocateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceVulkan13Features *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceVulkan13Features *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceVulkan13Properties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceVulkan13Properties *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkPipelineCreationFeedbackCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkPipelineCreationFeedbackCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderTerminateInvocationFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderTerminateInvocationFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePrivateDataFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePrivateDataFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkDevicePrivateDataCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkDevicePrivateDataCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePipelineCreationCacheControlFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePipelineCreationCacheControlFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_MEMORY_BARRIER_2:
-            delete reinterpret_cast<const safe_VkMemoryBarrier2 *>(header);
+            delete reinterpret_cast<safe_VkMemoryBarrier2 *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceSynchronization2Features *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceSynchronization2Features *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceImageRobustnessFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceImageRobustnessFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceSubgroupSizeControlFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceSubgroupSizeControlFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceSubgroupSizeControlProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceSubgroupSizeControlProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkPipelineShaderStageRequiredSubgroupSizeCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkPipelineShaderStageRequiredSubgroupSizeCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceInlineUniformBlockFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceInlineUniformBlockFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceInlineUniformBlockProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceInlineUniformBlockProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK:
-            delete reinterpret_cast<const safe_VkWriteDescriptorSetInlineUniformBlock *>(header);
+            delete reinterpret_cast<safe_VkWriteDescriptorSetInlineUniformBlock *>(header);
             break;
         case VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkDescriptorPoolInlineUniformBlockCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkDescriptorPoolInlineUniformBlockCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXTURE_COMPRESSION_ASTC_HDR_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceTextureCompressionASTCHDRFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceTextureCompressionASTCHDRFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO:
-            delete reinterpret_cast<const safe_VkPipelineRenderingCreateInfo *>(header);
+            delete reinterpret_cast<safe_VkPipelineRenderingCreateInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDynamicRenderingFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDynamicRenderingFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO:
-            delete reinterpret_cast<const safe_VkCommandBufferInheritanceRenderingInfo *>(header);
+            delete reinterpret_cast<safe_VkCommandBufferInheritanceRenderingInfo *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderIntegerDotProductFeatures *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderIntegerDotProductFeatures *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderIntegerDotProductProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderIntegerDotProductProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceTexelBufferAlignmentProperties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceTexelBufferAlignmentProperties *>(header);
             break;
         case VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3:
-            delete reinterpret_cast<const safe_VkFormatProperties3 *>(header);
+            delete reinterpret_cast<safe_VkFormatProperties3 *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMaintenance4Features *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMaintenance4Features *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMaintenance4Properties *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMaintenance4Properties *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkImageSwapchainCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkImageSwapchainCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR:
-            delete reinterpret_cast<const safe_VkBindImageMemorySwapchainInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkBindImageMemorySwapchainInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_INFO_KHR:
-            delete reinterpret_cast<const safe_VkDeviceGroupPresentInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkDeviceGroupPresentInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEVICE_GROUP_SWAPCHAIN_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkDeviceGroupSwapchainCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkDeviceGroupSwapchainCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_DISPLAY_PRESENT_INFO_KHR:
-            delete reinterpret_cast<const safe_VkDisplayPresentInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkDisplayPresentInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_QUEUE_FAMILY_QUERY_RESULT_STATUS_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkQueueFamilyQueryResultStatusPropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkQueueFamilyQueryResultStatusPropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_QUEUE_FAMILY_VIDEO_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkQueueFamilyVideoPropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkQueueFamilyVideoPropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoProfileInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoProfileInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_PROFILE_LIST_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoProfileListInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoProfileListInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_CAPABILITIES_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeCapabilitiesKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeCapabilitiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_USAGE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeUsageInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeUsageInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_CAPABILITIES_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH264CapabilitiesKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH264CapabilitiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_QUALITY_LEVEL_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH264QualityLevelPropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH264QualityLevelPropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH264SessionCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH264SessionCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_ADD_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH264SessionParametersAddInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH264SessionParametersAddInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH264SessionParametersCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH264SessionParametersCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_GET_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH264SessionParametersGetInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH264SessionParametersGetInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_FEEDBACK_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH264SessionParametersFeedbackInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH264SessionParametersFeedbackInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_PICTURE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH264PictureInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH264PictureInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_DPB_SLOT_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH264DpbSlotInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH264DpbSlotInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_PROFILE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH264ProfileInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH264ProfileInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_RATE_CONTROL_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH264RateControlInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH264RateControlInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_RATE_CONTROL_LAYER_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH264RateControlLayerInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH264RateControlLayerInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_GOP_REMAINING_FRAME_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH264GopRemainingFrameInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH264GopRemainingFrameInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_CAPABILITIES_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH265CapabilitiesKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH265CapabilitiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH265SessionCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH265SessionCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_QUALITY_LEVEL_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH265QualityLevelPropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH265QualityLevelPropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_ADD_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH265SessionParametersAddInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH265SessionParametersAddInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH265SessionParametersCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH265SessionParametersCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_GET_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH265SessionParametersGetInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH265SessionParametersGetInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_FEEDBACK_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH265SessionParametersFeedbackInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH265SessionParametersFeedbackInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PICTURE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH265PictureInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH265PictureInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_DPB_SLOT_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH265DpbSlotInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH265DpbSlotInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PROFILE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH265ProfileInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH265ProfileInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_RATE_CONTROL_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH265RateControlInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH265RateControlInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_RATE_CONTROL_LAYER_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH265RateControlLayerInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH265RateControlLayerInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_GOP_REMAINING_FRAME_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeH265GopRemainingFrameInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeH265GopRemainingFrameInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_PROFILE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeH264ProfileInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeH264ProfileInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_CAPABILITIES_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeH264CapabilitiesKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeH264CapabilitiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_SESSION_PARAMETERS_ADD_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeH264SessionParametersAddInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeH264SessionParametersAddInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_SESSION_PARAMETERS_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeH264SessionParametersCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeH264SessionParametersCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_PICTURE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeH264PictureInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeH264PictureInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_DPB_SLOT_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeH264DpbSlotInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeH264DpbSlotInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR:
-            delete reinterpret_cast<const safe_VkRenderingFragmentShadingRateAttachmentInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkRenderingFragmentShadingRateAttachmentInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_DENSITY_MAP_ATTACHMENT_INFO_EXT:
-            delete reinterpret_cast<const safe_VkRenderingFragmentDensityMapAttachmentInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkRenderingFragmentDensityMapAttachmentInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_ATTACHMENT_SAMPLE_COUNT_INFO_AMD:
-            delete reinterpret_cast<const safe_VkAttachmentSampleCountInfoAMD *>(header);
+            delete reinterpret_cast<safe_VkAttachmentSampleCountInfoAMD *>(header);
             break;
         case VK_STRUCTURE_TYPE_MULTIVIEW_PER_VIEW_ATTRIBUTES_INFO_NVX:
-            delete reinterpret_cast<const safe_VkMultiviewPerViewAttributesInfoNVX *>(header);
+            delete reinterpret_cast<safe_VkMultiviewPerViewAttributesInfoNVX *>(header);
             break;
 #ifdef VK_USE_PLATFORM_WIN32_KHR
         case VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkImportMemoryWin32HandleInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkImportMemoryWin32HandleInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXPORT_MEMORY_WIN32_HANDLE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkExportMemoryWin32HandleInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkExportMemoryWin32HandleInfoKHR *>(header);
             break;
 #endif  // VK_USE_PLATFORM_WIN32_KHR
         case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR:
-            delete reinterpret_cast<const safe_VkImportMemoryFdInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkImportMemoryFdInfoKHR *>(header);
             break;
 #ifdef VK_USE_PLATFORM_WIN32_KHR
         case VK_STRUCTURE_TYPE_WIN32_KEYED_MUTEX_ACQUIRE_RELEASE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkWin32KeyedMutexAcquireReleaseInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkWin32KeyedMutexAcquireReleaseInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_WIN32_HANDLE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkExportSemaphoreWin32HandleInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkExportSemaphoreWin32HandleInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_D3D12_FENCE_SUBMIT_INFO_KHR:
-            delete reinterpret_cast<const safe_VkD3D12FenceSubmitInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkD3D12FenceSubmitInfoKHR *>(header);
             break;
 #endif  // VK_USE_PLATFORM_WIN32_KHR
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePushDescriptorPropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePushDescriptorPropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PRESENT_REGIONS_KHR:
-            delete reinterpret_cast<const safe_VkPresentRegionsKHR *>(header);
+            delete reinterpret_cast<safe_VkPresentRegionsKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_SHARED_PRESENT_SURFACE_CAPABILITIES_KHR:
-            delete reinterpret_cast<const safe_VkSharedPresentSurfaceCapabilitiesKHR *>(header);
+            delete reinterpret_cast<safe_VkSharedPresentSurfaceCapabilitiesKHR *>(header);
             break;
 #ifdef VK_USE_PLATFORM_WIN32_KHR
         case VK_STRUCTURE_TYPE_EXPORT_FENCE_WIN32_HANDLE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkExportFenceWin32HandleInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkExportFenceWin32HandleInfoKHR *>(header);
             break;
 #endif  // VK_USE_PLATFORM_WIN32_KHR
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePerformanceQueryFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePerformanceQueryFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePerformanceQueryPropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePerformanceQueryPropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_QUERY_POOL_PERFORMANCE_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkQueryPoolPerformanceCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkQueryPoolPerformanceCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PERFORMANCE_QUERY_SUBMIT_INFO_KHR:
-            delete reinterpret_cast<const safe_VkPerformanceQuerySubmitInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkPerformanceQuerySubmitInfoKHR *>(header);
             break;
 #ifdef VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePortabilitySubsetFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePortabilitySubsetFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePortabilitySubsetPropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePortabilitySubsetPropertiesKHR *>(header);
             break;
 #endif  // VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderClockFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderClockFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_PROFILE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeH265ProfileInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeH265ProfileInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_CAPABILITIES_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeH265CapabilitiesKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeH265CapabilitiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_SESSION_PARAMETERS_ADD_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeH265SessionParametersAddInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeH265SessionParametersAddInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_SESSION_PARAMETERS_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeH265SessionParametersCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeH265SessionParametersCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_PICTURE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeH265PictureInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeH265PictureInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_DPB_SLOT_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeH265DpbSlotInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeH265DpbSlotInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkDeviceQueueGlobalPriorityCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkDeviceQueueGlobalPriorityCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GLOBAL_PRIORITY_QUERY_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceGlobalPriorityQueryFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceGlobalPriorityQueryFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkQueueFamilyGlobalPriorityPropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkQueueFamilyGlobalPriorityPropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR:
-            delete reinterpret_cast<const safe_VkFragmentShadingRateAttachmentInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkFragmentShadingRateAttachmentInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkPipelineFragmentShadingRateStateCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkPipelineFragmentShadingRateStateCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFragmentShadingRateFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFragmentShadingRateFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFragmentShadingRatePropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFragmentShadingRatePropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_LOCAL_READ_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDynamicRenderingLocalReadFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDynamicRenderingLocalReadFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_LOCATION_INFO_KHR:
-            delete reinterpret_cast<const safe_VkRenderingAttachmentLocationInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkRenderingAttachmentLocationInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDERING_INPUT_ATTACHMENT_INDEX_INFO_KHR:
-            delete reinterpret_cast<const safe_VkRenderingInputAttachmentIndexInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkRenderingInputAttachmentIndexInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_QUAD_CONTROL_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderQuadControlFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderQuadControlFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_SURFACE_PROTECTED_CAPABILITIES_KHR:
-            delete reinterpret_cast<const safe_VkSurfaceProtectedCapabilitiesKHR *>(header);
+            delete reinterpret_cast<safe_VkSurfaceProtectedCapabilitiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePresentWaitFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePresentWaitFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkPipelineLibraryCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkPipelineLibraryCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PRESENT_ID_KHR:
-            delete reinterpret_cast<const safe_VkPresentIdKHR *>(header);
+            delete reinterpret_cast<safe_VkPresentIdKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePresentIdFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePresentIdFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_CAPABILITIES_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeCapabilitiesKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeCapabilitiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_QUERY_POOL_VIDEO_ENCODE_FEEDBACK_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkQueryPoolVideoEncodeFeedbackCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkQueryPoolVideoEncodeFeedbackCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_USAGE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeUsageInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeUsageInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_RATE_CONTROL_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeRateControlInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeRateControlInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_QUALITY_LEVEL_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoEncodeQualityLevelInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoEncodeQualityLevelInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_2_NV:
-            delete reinterpret_cast<const safe_VkQueueFamilyCheckpointProperties2NV *>(header);
+            delete reinterpret_cast<safe_VkQueueFamilyCheckpointProperties2NV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_ROTATE_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderSubgroupRotateFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderSubgroupRotateFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MAXIMAL_RECONVERGENCE_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMaintenance5FeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMaintenance5FeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMaintenance5PropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMaintenance5PropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkPipelineCreateFlags2CreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkPipelineCreateFlags2CreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkBufferUsageFlags2CreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkBufferUsageFlags2CreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCooperativeMatrixFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCooperativeMatrixFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCooperativeMatrixPropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCooperativeMatrixPropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_AV1_PROFILE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeAV1ProfileInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeAV1ProfileInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_AV1_CAPABILITIES_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeAV1CapabilitiesKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeAV1CapabilitiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_AV1_SESSION_PARAMETERS_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeAV1SessionParametersCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeAV1SessionParametersCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_AV1_PICTURE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeAV1PictureInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeAV1PictureInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_AV1_DPB_SLOT_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoDecodeAV1DpbSlotInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoDecodeAV1DpbSlotInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_1_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceVideoMaintenance1FeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceVideoMaintenance1FeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_VIDEO_INLINE_QUERY_INFO_KHR:
-            delete reinterpret_cast<const safe_VkVideoInlineQueryInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkVideoInlineQueryInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceVertexAttributeDivisorPropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceVertexAttributeDivisorPropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkPipelineVertexInputDivisorStateCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkPipelineVertexInputDivisorStateCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceVertexAttributeDivisorFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceVertexAttributeDivisorFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT_CONTROLS_2_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderFloatControls2FeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderFloatControls2FeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceIndexTypeUint8FeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceIndexTypeUint8FeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceLineRasterizationFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceLineRasterizationFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceLineRasterizationPropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceLineRasterizationPropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_KHR:
-            delete reinterpret_cast<const safe_VkPipelineRasterizationLineStateCreateInfoKHR *>(header);
+            delete reinterpret_cast<safe_VkPipelineRasterizationLineStateCreateInfoKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_EXPECT_ASSUME_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderExpectAssumeFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderExpectAssumeFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMaintenance6FeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMaintenance6FeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMaintenance6PropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMaintenance6PropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_BIND_MEMORY_STATUS_KHR:
-            delete reinterpret_cast<const safe_VkBindMemoryStatusKHR *>(header);
+            delete reinterpret_cast<safe_VkBindMemoryStatusKHR *>(header);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR:
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR *>(header);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_FEATURES_KHR:
+            delete reinterpret_cast<safe_VkPhysicalDeviceMaintenance7FeaturesKHR *>(header);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_PROPERTIES_KHR:
+            delete reinterpret_cast<safe_VkPhysicalDeviceMaintenance7PropertiesKHR *>(header);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_PROPERTIES_LIST_KHR:
+            delete reinterpret_cast<safe_VkPhysicalDeviceLayeredApiPropertiesListKHR *>(header);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_VULKAN_PROPERTIES_KHR:
+            delete reinterpret_cast<safe_VkPhysicalDeviceLayeredApiVulkanPropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkDebugReportCallbackCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkDebugReportCallbackCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD:
-            delete reinterpret_cast<const safe_VkPipelineRasterizationStateRasterizationOrderAMD *>(header);
+            delete reinterpret_cast<safe_VkPipelineRasterizationStateRasterizationOrderAMD *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_IMAGE_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkDedicatedAllocationImageCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkDedicatedAllocationImageCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_BUFFER_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkDedicatedAllocationBufferCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkDedicatedAllocationBufferCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_MEMORY_ALLOCATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkDedicatedAllocationMemoryAllocateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkDedicatedAllocationMemoryAllocateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceTransformFeedbackFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceTransformFeedbackFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceTransformFeedbackPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceTransformFeedbackPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkPipelineRasterizationStateStreamCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkPipelineRasterizationStateStreamCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD:
-            delete reinterpret_cast<const safe_VkTextureLODGatherFormatPropertiesAMD *>(header);
+            delete reinterpret_cast<safe_VkTextureLODGatherFormatPropertiesAMD *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CORNER_SAMPLED_IMAGE_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCornerSampledImageFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCornerSampledImageFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkExternalMemoryImageCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkExternalMemoryImageCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkExportMemoryAllocateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkExportMemoryAllocateInfoNV *>(header);
             break;
 #ifdef VK_USE_PLATFORM_WIN32_KHR
         case VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_NV:
-            delete reinterpret_cast<const safe_VkImportMemoryWin32HandleInfoNV *>(header);
+            delete reinterpret_cast<safe_VkImportMemoryWin32HandleInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXPORT_MEMORY_WIN32_HANDLE_INFO_NV:
-            delete reinterpret_cast<const safe_VkExportMemoryWin32HandleInfoNV *>(header);
+            delete reinterpret_cast<safe_VkExportMemoryWin32HandleInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_WIN32_KEYED_MUTEX_ACQUIRE_RELEASE_INFO_NV:
-            delete reinterpret_cast<const safe_VkWin32KeyedMutexAcquireReleaseInfoNV *>(header);
+            delete reinterpret_cast<safe_VkWin32KeyedMutexAcquireReleaseInfoNV *>(header);
             break;
 #endif  // VK_USE_PLATFORM_WIN32_KHR
         case VK_STRUCTURE_TYPE_VALIDATION_FLAGS_EXT:
-            delete reinterpret_cast<const safe_VkValidationFlagsEXT *>(header);
+            delete reinterpret_cast<safe_VkValidationFlagsEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMAGE_VIEW_ASTC_DECODE_MODE_EXT:
-            delete reinterpret_cast<const safe_VkImageViewASTCDecodeModeEXT *>(header);
+            delete reinterpret_cast<safe_VkImageViewASTCDecodeModeEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ASTC_DECODE_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceASTCDecodeFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceASTCDecodeFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePipelineRobustnessFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePipelineRobustnessFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePipelineRobustnessPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePipelineRobustnessPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkPipelineRobustnessCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkPipelineRobustnessCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceConditionalRenderingFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceConditionalRenderingFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_CONDITIONAL_RENDERING_INFO_EXT:
-            delete reinterpret_cast<const safe_VkCommandBufferInheritanceConditionalRenderingInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkCommandBufferInheritanceConditionalRenderingInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_W_SCALING_STATE_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkPipelineViewportWScalingStateCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkPipelineViewportWScalingStateCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_SWAPCHAIN_COUNTER_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkSwapchainCounterCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkSwapchainCounterCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE:
-            delete reinterpret_cast<const safe_VkPresentTimesInfoGOOGLE *>(header);
+            delete reinterpret_cast<safe_VkPresentTimesInfoGOOGLE *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_ATTRIBUTES_PROPERTIES_NVX:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_SWIZZLE_STATE_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkPipelineViewportSwizzleStateCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkPipelineViewportSwizzleStateCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DISCARD_RECTANGLE_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDiscardRectanglePropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDiscardRectanglePropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_DISCARD_RECTANGLE_STATE_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkPipelineDiscardRectangleStateCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkPipelineDiscardRectangleStateCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceConservativeRasterizationPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceConservativeRasterizationPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkPipelineRasterizationConservativeStateCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkPipelineRasterizationConservativeStateCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDepthClipEnableFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDepthClipEnableFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkPipelineRasterizationDepthClipStateCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkPipelineRasterizationDepthClipStateCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RELAXED_LINE_RASTERIZATION_FEATURES_IMG:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRelaxedLineRasterizationFeaturesIMG *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRelaxedLineRasterizationFeaturesIMG *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT:
-            delete reinterpret_cast<const safe_VkDebugUtilsObjectNameInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkDebugUtilsObjectNameInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkDebugUtilsMessengerCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkDebugUtilsMessengerCreateInfoEXT *>(header);
             break;
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
         case VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_USAGE_ANDROID:
-            delete reinterpret_cast<const safe_VkAndroidHardwareBufferUsageANDROID *>(header);
+            delete reinterpret_cast<safe_VkAndroidHardwareBufferUsageANDROID *>(header);
             break;
         case VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_ANDROID:
-            delete reinterpret_cast<const safe_VkAndroidHardwareBufferFormatPropertiesANDROID *>(header);
+            delete reinterpret_cast<safe_VkAndroidHardwareBufferFormatPropertiesANDROID *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMPORT_ANDROID_HARDWARE_BUFFER_INFO_ANDROID:
-            delete reinterpret_cast<const safe_VkImportAndroidHardwareBufferInfoANDROID *>(header);
+            delete reinterpret_cast<safe_VkImportAndroidHardwareBufferInfoANDROID *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXTERNAL_FORMAT_ANDROID:
-            delete reinterpret_cast<const safe_VkExternalFormatANDROID *>(header);
+            delete reinterpret_cast<safe_VkExternalFormatANDROID *>(header);
             break;
         case VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_2_ANDROID:
-            delete reinterpret_cast<const safe_VkAndroidHardwareBufferFormatProperties2ANDROID *>(header);
+            delete reinterpret_cast<safe_VkAndroidHardwareBufferFormatProperties2ANDROID *>(header);
             break;
 #endif  // VK_USE_PLATFORM_ANDROID_KHR
 #ifdef VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ENQUEUE_FEATURES_AMDX:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderEnqueueFeaturesAMDX *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderEnqueueFeaturesAMDX *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ENQUEUE_PROPERTIES_AMDX:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderEnqueuePropertiesAMDX *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderEnqueuePropertiesAMDX *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_NODE_CREATE_INFO_AMDX:
-            delete reinterpret_cast<const safe_VkPipelineShaderStageNodeCreateInfoAMDX *>(header);
+            delete reinterpret_cast<safe_VkPipelineShaderStageNodeCreateInfoAMDX *>(header);
             break;
 #endif  // VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT:
-            delete reinterpret_cast<const safe_VkSampleLocationsInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkSampleLocationsInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDER_PASS_SAMPLE_LOCATIONS_BEGIN_INFO_EXT:
-            delete reinterpret_cast<const safe_VkRenderPassSampleLocationsBeginInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkRenderPassSampleLocationsBeginInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkPipelineSampleLocationsStateCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkPipelineSampleLocationsStateCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceSampleLocationsPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceSampleLocationsPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkPipelineColorBlendAdvancedStateCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkPipelineColorBlendAdvancedStateCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_TO_COLOR_STATE_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkPipelineCoverageToColorStateCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkPipelineCoverageToColorStateCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_MODULATION_STATE_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkPipelineCoverageModulationStateCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkPipelineCoverageModulationStateCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderSMBuiltinsPropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderSMBuiltinsPropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderSMBuiltinsFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderSMBuiltinsFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT:
-            delete reinterpret_cast<const safe_VkDrmFormatModifierPropertiesListEXT *>(header);
+            delete reinterpret_cast<safe_VkDrmFormatModifierPropertiesListEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceImageDrmFormatModifierInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceImageDrmFormatModifierInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkImageDrmFormatModifierListCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkImageDrmFormatModifierListCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkImageDrmFormatModifierExplicitCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkImageDrmFormatModifierExplicitCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT:
-            delete reinterpret_cast<const safe_VkDrmFormatModifierPropertiesList2EXT *>(header);
+            delete reinterpret_cast<safe_VkDrmFormatModifierPropertiesList2EXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_SHADER_MODULE_VALIDATION_CACHE_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkShaderModuleValidationCacheCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkShaderModuleValidationCacheCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_SHADING_RATE_IMAGE_STATE_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkPipelineViewportShadingRateImageStateCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkPipelineViewportShadingRateImageStateCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShadingRateImageFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShadingRateImageFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShadingRateImagePropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShadingRateImagePropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_COARSE_SAMPLE_ORDER_STATE_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkPipelineViewportCoarseSampleOrderStateCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkPipelineViewportCoarseSampleOrderStateCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV:
-            delete reinterpret_cast<const safe_VkWriteDescriptorSetAccelerationStructureNV *>(header);
+            delete reinterpret_cast<safe_VkWriteDescriptorSetAccelerationStructureNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRayTracingPropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRayTracingPropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_REPRESENTATIVE_FRAGMENT_TEST_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_REPRESENTATIVE_FRAGMENT_TEST_STATE_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkPipelineRepresentativeFragmentTestStateCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkPipelineRepresentativeFragmentTestStateCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_IMAGE_FORMAT_INFO_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceImageViewImageFormatInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceImageViewImageFormatInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_FILTER_CUBIC_IMAGE_VIEW_IMAGE_FORMAT_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkFilterCubicImageViewImageFormatPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkFilterCubicImageViewImageFormatPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT:
-            delete reinterpret_cast<const safe_VkImportMemoryHostPointerInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkImportMemoryHostPointerInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceExternalMemoryHostPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceExternalMemoryHostPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_COMPILER_CONTROL_CREATE_INFO_AMD:
-            delete reinterpret_cast<const safe_VkPipelineCompilerControlCreateInfoAMD *>(header);
+            delete reinterpret_cast<safe_VkPipelineCompilerControlCreateInfoAMD *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderCorePropertiesAMD *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderCorePropertiesAMD *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD:
-            delete reinterpret_cast<const safe_VkDeviceMemoryOverallocationCreateInfoAMD *>(header);
+            delete reinterpret_cast<safe_VkDeviceMemoryOverallocationCreateInfoAMD *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT *>(header);
             break;
 #ifdef VK_USE_PLATFORM_GGP
         case VK_STRUCTURE_TYPE_PRESENT_FRAME_TOKEN_GGP:
-            delete reinterpret_cast<const safe_VkPresentFrameTokenGGP *>(header);
+            delete reinterpret_cast<safe_VkPresentFrameTokenGGP *>(header);
             break;
 #endif  // VK_USE_PLATFORM_GGP
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMeshShaderFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMeshShaderFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMeshShaderPropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMeshShaderPropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_FOOTPRINT_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderImageFootprintFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderImageFootprintFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_EXCLUSIVE_SCISSOR_STATE_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkPipelineViewportExclusiveScissorStateCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkPipelineViewportExclusiveScissorStateCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXCLUSIVE_SCISSOR_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceExclusiveScissorFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceExclusiveScissorFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkQueueFamilyCheckpointPropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkQueueFamilyCheckpointPropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_FUNCTIONS_2_FEATURES_INTEL:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL *>(header);
             break;
         case VK_STRUCTURE_TYPE_QUERY_POOL_PERFORMANCE_QUERY_CREATE_INFO_INTEL:
-            delete reinterpret_cast<const safe_VkQueryPoolPerformanceQueryCreateInfoINTEL *>(header);
+            delete reinterpret_cast<safe_VkQueryPoolPerformanceQueryCreateInfoINTEL *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePCIBusInfoPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePCIBusInfoPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_DISPLAY_NATIVE_HDR_SURFACE_CAPABILITIES_AMD:
-            delete reinterpret_cast<const safe_VkDisplayNativeHdrSurfaceCapabilitiesAMD *>(header);
+            delete reinterpret_cast<safe_VkDisplayNativeHdrSurfaceCapabilitiesAMD *>(header);
             break;
         case VK_STRUCTURE_TYPE_SWAPCHAIN_DISPLAY_NATIVE_HDR_CREATE_INFO_AMD:
-            delete reinterpret_cast<const safe_VkSwapchainDisplayNativeHdrCreateInfoAMD *>(header);
+            delete reinterpret_cast<safe_VkSwapchainDisplayNativeHdrCreateInfoAMD *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFragmentDensityMapFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFragmentDensityMapFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFragmentDensityMapPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFragmentDensityMapPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDER_PASS_FRAGMENT_DENSITY_MAP_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkRenderPassFragmentDensityMapCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkRenderPassFragmentDensityMapCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_2_AMD:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderCoreProperties2AMD *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderCoreProperties2AMD *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCoherentMemoryFeaturesAMD *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCoherentMemoryFeaturesAMD *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMemoryBudgetPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMemoryBudgetPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMemoryPriorityFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMemoryPriorityFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_MEMORY_PRIORITY_ALLOCATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkMemoryPriorityAllocateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkMemoryPriorityAllocateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEDICATED_ALLOCATION_IMAGE_ALIASING_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceBufferDeviceAddressFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceBufferDeviceAddressFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkBufferDeviceAddressCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkBufferDeviceAddressCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkValidationFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkValidationFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCooperativeMatrixFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCooperativeMatrixFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCooperativeMatrixPropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCooperativeMatrixPropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COVERAGE_REDUCTION_MODE_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCoverageReductionModeFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCoverageReductionModeFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_REDUCTION_STATE_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkPipelineCoverageReductionStateCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkPipelineCoverageReductionStateCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_IMAGE_ARRAYS_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceYcbcrImageArraysFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceYcbcrImageArraysFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceProvokingVertexFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceProvokingVertexFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceProvokingVertexPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceProvokingVertexPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *>(header);
             break;
 #ifdef VK_USE_PLATFORM_WIN32_KHR
         case VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkSurfaceFullScreenExclusiveInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkSurfaceFullScreenExclusiveInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_FULL_SCREEN_EXCLUSIVE_EXT:
-            delete reinterpret_cast<const safe_VkSurfaceCapabilitiesFullScreenExclusiveEXT *>(header);
+            delete reinterpret_cast<safe_VkSurfaceCapabilitiesFullScreenExclusiveEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_WIN32_INFO_EXT:
-            delete reinterpret_cast<const safe_VkSurfaceFullScreenExclusiveWin32InfoEXT *>(header);
+            delete reinterpret_cast<safe_VkSurfaceFullScreenExclusiveWin32InfoEXT *>(header);
             break;
 #endif  // VK_USE_PLATFORM_WIN32_KHR
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderAtomicFloatFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderAtomicFloatFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceExtendedDynamicStateFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceExtendedDynamicStateFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceHostImageCopyFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceHostImageCopyFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceHostImageCopyPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceHostImageCopyPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_SUBRESOURCE_HOST_MEMCPY_SIZE_EXT:
-            delete reinterpret_cast<const safe_VkSubresourceHostMemcpySizeEXT *>(header);
+            delete reinterpret_cast<safe_VkSubresourceHostMemcpySizeEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_HOST_IMAGE_COPY_DEVICE_PERFORMANCE_QUERY_EXT:
-            delete reinterpret_cast<const safe_VkHostImageCopyDevicePerformanceQueryEXT *>(header);
+            delete reinterpret_cast<safe_VkHostImageCopyDevicePerformanceQueryEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAP_MEMORY_PLACED_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMapMemoryPlacedFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMapMemoryPlacedFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAP_MEMORY_PLACED_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMapMemoryPlacedPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMapMemoryPlacedPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_MEMORY_MAP_PLACED_INFO_EXT:
-            delete reinterpret_cast<const safe_VkMemoryMapPlacedInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkMemoryMapPlacedInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_EXT:
-            delete reinterpret_cast<const safe_VkSurfacePresentModeEXT *>(header);
+            delete reinterpret_cast<safe_VkSurfacePresentModeEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_EXT:
-            delete reinterpret_cast<const safe_VkSurfacePresentScalingCapabilitiesEXT *>(header);
+            delete reinterpret_cast<safe_VkSurfacePresentScalingCapabilitiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_COMPATIBILITY_EXT:
-            delete reinterpret_cast<const safe_VkSurfacePresentModeCompatibilityEXT *>(header);
+            delete reinterpret_cast<safe_VkSurfacePresentModeCompatibilityEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkSwapchainPresentFenceInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkSwapchainPresentFenceInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODES_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkSwapchainPresentModesCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkSwapchainPresentModesCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkSwapchainPresentModeInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkSwapchainPresentModeInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_SCALING_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkSwapchainPresentScalingCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkSwapchainPresentScalingCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_SHADER_GROUPS_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkGraphicsPipelineShaderGroupsCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkGraphicsPipelineShaderGroupsCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INHERITED_VIEWPORT_SCISSOR_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceInheritedViewportScissorFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceInheritedViewportScissorFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_VIEWPORT_SCISSOR_INFO_NV:
-            delete reinterpret_cast<const safe_VkCommandBufferInheritanceViewportScissorInfoNV *>(header);
+            delete reinterpret_cast<safe_VkCommandBufferInheritanceViewportScissorInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDER_PASS_TRANSFORM_BEGIN_INFO_QCOM:
-            delete reinterpret_cast<const safe_VkRenderPassTransformBeginInfoQCOM *>(header);
+            delete reinterpret_cast<safe_VkRenderPassTransformBeginInfoQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDER_PASS_TRANSFORM_INFO_QCOM:
-            delete reinterpret_cast<const safe_VkCommandBufferInheritanceRenderPassTransformInfoQCOM *>(header);
+            delete reinterpret_cast<safe_VkCommandBufferInheritanceRenderPassTransformInfoQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_BIAS_CONTROL_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDepthBiasControlFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEPTH_BIAS_REPRESENTATION_INFO_EXT:
-            delete reinterpret_cast<const safe_VkDepthBiasRepresentationInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkDepthBiasRepresentationInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_MEMORY_REPORT_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDeviceMemoryReportFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDeviceMemoryReportFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEVICE_DEVICE_MEMORY_REPORT_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkDeviceDeviceMemoryReportCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkDeviceDeviceMemoryReportCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRobustness2FeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRobustness2FeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRobustness2PropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRobustness2PropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkSamplerCustomBorderColorCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkSamplerCustomBorderColorCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCustomBorderColorPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCustomBorderColorPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCustomBorderColorFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCustomBorderColorFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_BARRIER_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePresentBarrierFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePresentBarrierFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_PRESENT_BARRIER_NV:
-            delete reinterpret_cast<const safe_VkSurfaceCapabilitiesPresentBarrierNV *>(header);
+            delete reinterpret_cast<safe_VkSurfaceCapabilitiesPresentBarrierNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_BARRIER_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkSwapchainPresentBarrierCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkSwapchainPresentBarrierCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DIAGNOSTICS_CONFIG_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDiagnosticsConfigFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDiagnosticsConfigFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEVICE_DIAGNOSTICS_CONFIG_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkDeviceDiagnosticsConfigCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkDeviceDiagnosticsConfigCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCudaKernelLaunchFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCudaKernelLaunchFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCudaKernelLaunchPropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCudaKernelLaunchPropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_QUERY_LOW_LATENCY_SUPPORT_NV:
-            delete reinterpret_cast<const safe_VkQueryLowLatencySupportNV *>(header);
+            delete reinterpret_cast<safe_VkQueryLowLatencySupportNV *>(header);
             break;
 #ifdef VK_USE_PLATFORM_METAL_EXT
         case VK_STRUCTURE_TYPE_EXPORT_METAL_OBJECT_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkExportMetalObjectCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkExportMetalObjectCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXPORT_METAL_DEVICE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkExportMetalDeviceInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkExportMetalDeviceInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXPORT_METAL_COMMAND_QUEUE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkExportMetalCommandQueueInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkExportMetalCommandQueueInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXPORT_METAL_BUFFER_INFO_EXT:
-            delete reinterpret_cast<const safe_VkExportMetalBufferInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkExportMetalBufferInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMPORT_METAL_BUFFER_INFO_EXT:
-            delete reinterpret_cast<const safe_VkImportMetalBufferInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkImportMetalBufferInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXPORT_METAL_TEXTURE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkExportMetalTextureInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkExportMetalTextureInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMPORT_METAL_TEXTURE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkImportMetalTextureInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkImportMetalTextureInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXPORT_METAL_IO_SURFACE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkExportMetalIOSurfaceInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkExportMetalIOSurfaceInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMPORT_METAL_IO_SURFACE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkImportMetalIOSurfaceInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkImportMetalIOSurfaceInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXPORT_METAL_SHARED_EVENT_INFO_EXT:
-            delete reinterpret_cast<const safe_VkExportMetalSharedEventInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkExportMetalSharedEventInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMPORT_METAL_SHARED_EVENT_INFO_EXT:
-            delete reinterpret_cast<const safe_VkImportMetalSharedEventInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkImportMetalSharedEventInfoEXT *>(header);
             break;
 #endif  // VK_USE_PLATFORM_METAL_EXT
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDescriptorBufferPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_DENSITY_MAP_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDescriptorBufferFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_PUSH_DESCRIPTOR_BUFFER_HANDLE_EXT:
-            delete reinterpret_cast<const safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT *>(header);
+            delete reinterpret_cast<safe_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkOpaqueCaptureDescriptorDataCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkGraphicsPipelineLibraryCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkGraphicsPipelineLibraryCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_EARLY_AND_LATE_FRAGMENT_TESTS_FEATURES_AMD:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderEarlyAndLateFragmentTestsFeaturesAMD *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderEarlyAndLateFragmentTestsFeaturesAMD *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_ENUMS_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFragmentShadingRateEnumsFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFragmentShadingRateEnumsFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_ENUMS_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFragmentShadingRateEnumsPropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFragmentShadingRateEnumsPropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_ENUM_STATE_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkPipelineFragmentShadingRateEnumStateCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkPipelineFragmentShadingRateEnumStateCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_MOTION_TRIANGLES_DATA_NV:
-            delete reinterpret_cast<const safe_VkAccelerationStructureGeometryMotionTrianglesDataNV *>(header);
+            delete reinterpret_cast<safe_VkAccelerationStructureGeometryMotionTrianglesDataNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MOTION_INFO_NV:
-            delete reinterpret_cast<const safe_VkAccelerationStructureMotionInfoNV *>(header);
+            delete reinterpret_cast<safe_VkAccelerationStructureMotionInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MOTION_BLUR_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRayTracingMotionBlurFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRayTracingMotionBlurFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_2_PLANE_444_FORMATS_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceYcbcr2Plane444FormatsFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceYcbcr2Plane444FormatsFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_2_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFragmentDensityMap2FeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFragmentDensityMap2FeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_2_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFragmentDensityMap2PropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFragmentDensityMap2PropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_COPY_COMMAND_TRANSFORM_INFO_QCOM:
-            delete reinterpret_cast<const safe_VkCopyCommandTransformInfoQCOM *>(header);
+            delete reinterpret_cast<safe_VkCopyCommandTransformInfoQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceImageCompressionControlFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceImageCompressionControlFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT:
-            delete reinterpret_cast<const safe_VkImageCompressionControlEXT *>(header);
+            delete reinterpret_cast<safe_VkImageCompressionControlEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkImageCompressionPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkImageCompressionPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDevice4444FormatsFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevice4444FormatsFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFaultFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFaultFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RGBA10X6_FORMATS_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkMutableDescriptorTypeCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkMutableDescriptorTypeCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDrmPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDrmPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceAddressBindingReportFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceAddressBindingReportFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEVICE_ADDRESS_BINDING_CALLBACK_DATA_EXT:
-            delete reinterpret_cast<const safe_VkDeviceAddressBindingCallbackDataEXT *>(header);
+            delete reinterpret_cast<safe_VkDeviceAddressBindingCallbackDataEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDepthClipControlFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDepthClipControlFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkPipelineViewportDepthClipControlCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkPipelineViewportDepthClipControlCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVE_TOPOLOGY_LIST_RESTART_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT *>(header);
             break;
 #ifdef VK_USE_PLATFORM_FUCHSIA
         case VK_STRUCTURE_TYPE_IMPORT_MEMORY_ZIRCON_HANDLE_INFO_FUCHSIA:
-            delete reinterpret_cast<const safe_VkImportMemoryZirconHandleInfoFUCHSIA *>(header);
+            delete reinterpret_cast<safe_VkImportMemoryZirconHandleInfoFUCHSIA *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMPORT_MEMORY_BUFFER_COLLECTION_FUCHSIA:
-            delete reinterpret_cast<const safe_VkImportMemoryBufferCollectionFUCHSIA *>(header);
+            delete reinterpret_cast<safe_VkImportMemoryBufferCollectionFUCHSIA *>(header);
             break;
         case VK_STRUCTURE_TYPE_BUFFER_COLLECTION_IMAGE_CREATE_INFO_FUCHSIA:
-            delete reinterpret_cast<const safe_VkBufferCollectionImageCreateInfoFUCHSIA *>(header);
+            delete reinterpret_cast<safe_VkBufferCollectionImageCreateInfoFUCHSIA *>(header);
             break;
         case VK_STRUCTURE_TYPE_BUFFER_COLLECTION_BUFFER_CREATE_INFO_FUCHSIA:
-            delete reinterpret_cast<const safe_VkBufferCollectionBufferCreateInfoFUCHSIA *>(header);
+            delete reinterpret_cast<safe_VkBufferCollectionBufferCreateInfoFUCHSIA *>(header);
             break;
 #endif  // VK_USE_PLATFORM_FUCHSIA
         case VK_STRUCTURE_TYPE_SUBPASS_SHADING_PIPELINE_CREATE_INFO_HUAWEI:
-            delete reinterpret_cast<const safe_VkSubpassShadingPipelineCreateInfoHUAWEI *>(header);
+            delete reinterpret_cast<safe_VkSubpassShadingPipelineCreateInfoHUAWEI *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_SHADING_FEATURES_HUAWEI:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceSubpassShadingFeaturesHUAWEI *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceSubpassShadingFeaturesHUAWEI *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_SHADING_PROPERTIES_HUAWEI:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceSubpassShadingPropertiesHUAWEI *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceSubpassShadingPropertiesHUAWEI *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INVOCATION_MASK_FEATURES_HUAWEI:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceInvocationMaskFeaturesHUAWEI *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceInvocationMaskFeaturesHUAWEI *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_RDMA_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceExternalMemoryRDMAFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceExternalMemoryRDMAFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_PROPERTIES_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePipelinePropertiesFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePipelinePropertiesFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAME_BOUNDARY_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFrameBoundaryFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFrameBoundaryFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_FRAME_BOUNDARY_EXT:
-            delete reinterpret_cast<const safe_VkFrameBoundaryEXT *>(header);
+            delete reinterpret_cast<safe_VkFrameBoundaryEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMultisampledRenderToSingleSampledFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMultisampledRenderToSingleSampledFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_SUBPASS_RESOLVE_PERFORMANCE_QUERY_EXT:
-            delete reinterpret_cast<const safe_VkSubpassResolvePerformanceQueryEXT *>(header);
+            delete reinterpret_cast<safe_VkSubpassResolvePerformanceQueryEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_INFO_EXT:
-            delete reinterpret_cast<const safe_VkMultisampledRenderToSingleSampledInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkMultisampledRenderToSingleSampledInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceExtendedDynamicState2FeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceExtendedDynamicState2FeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceColorWriteEnableFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceColorWriteEnableFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_COLOR_WRITE_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkPipelineColorWriteCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkPipelineColorWriteCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVES_GENERATED_QUERY_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_MIN_LOD_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceImageViewMinLodFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceImageViewMinLodFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkImageViewMinLodCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkImageViewMinLodCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMultiDrawFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMultiDrawFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMultiDrawPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMultiDrawPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_2D_VIEW_OF_3D_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceImage2DViewOf3DFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceImage2DViewOf3DFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TILE_IMAGE_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderTileImageFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderTileImageFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TILE_IMAGE_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderTileImagePropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderTileImagePropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceOpacityMicromapFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceOpacityMicromapFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceOpacityMicromapPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceOpacityMicromapPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_TRIANGLES_OPACITY_MICROMAP_EXT:
-            delete reinterpret_cast<const safe_VkAccelerationStructureTrianglesOpacityMicromapEXT *>(header);
+            delete reinterpret_cast<safe_VkAccelerationStructureTrianglesOpacityMicromapEXT *>(header);
             break;
 #ifdef VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DISPLACEMENT_MICROMAP_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDisplacementMicromapFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDisplacementMicromapFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DISPLACEMENT_MICROMAP_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDisplacementMicromapPropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDisplacementMicromapPropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_TRIANGLES_DISPLACEMENT_MICROMAP_NV:
-            delete reinterpret_cast<const safe_VkAccelerationStructureTrianglesDisplacementMicromapNV *>(header);
+            delete reinterpret_cast<safe_VkAccelerationStructureTrianglesDisplacementMicromapNV *>(header);
             break;
 #endif  // VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_PROPERTIES_HUAWEI:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_VRS_FEATURES_HUAWEI:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceClusterCullingShaderVrsFeaturesHUAWEI *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceClusterCullingShaderVrsFeaturesHUAWEI *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BORDER_COLOR_SWIZZLE_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceBorderColorSwizzleFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceBorderColorSwizzleFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkSamplerBorderColorComponentMappingCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkSamplerBorderColorComponentMappingCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_ARM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderCorePropertiesARM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderCorePropertiesARM *>(header);
             break;
         case VK_STRUCTURE_TYPE_DEVICE_QUEUE_SHADER_CORE_CONTROL_CREATE_INFO_ARM:
-            delete reinterpret_cast<const safe_VkDeviceQueueShaderCoreControlCreateInfoARM *>(header);
+            delete reinterpret_cast<safe_VkDeviceQueueShaderCoreControlCreateInfoARM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCHEDULING_CONTROLS_FEATURES_ARM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceSchedulingControlsFeaturesARM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceSchedulingControlsFeaturesARM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCHEDULING_CONTROLS_PROPERTIES_ARM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceSchedulingControlsPropertiesARM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceSchedulingControlsPropertiesARM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_SLICED_VIEW_OF_3D_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceImageSlicedViewOf3DFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceImageSlicedViewOf3DFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMAGE_VIEW_SLICED_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkImageViewSlicedCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkImageViewSlicedCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_SET_HOST_MAPPING_FEATURES_VALVE:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_ZERO_ONE_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDepthClampZeroOneFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDepthClampZeroOneFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NON_SEAMLESS_CUBE_MAP_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_FEATURES_ARM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRenderPassStripedFeaturesARM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRenderPassStripedFeaturesARM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_PROPERTIES_ARM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRenderPassStripedPropertiesARM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRenderPassStripedPropertiesARM *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDER_PASS_STRIPE_BEGIN_INFO_ARM:
-            delete reinterpret_cast<const safe_VkRenderPassStripeBeginInfoARM *>(header);
+            delete reinterpret_cast<safe_VkRenderPassStripeBeginInfoARM *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDER_PASS_STRIPE_SUBMIT_INFO_ARM:
-            delete reinterpret_cast<const safe_VkRenderPassStripeSubmitInfoARM *>(header);
+            delete reinterpret_cast<safe_VkRenderPassStripeSubmitInfoARM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_FEATURES_QCOM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_PROPERTIES_QCOM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_SUBPASS_FRAGMENT_DENSITY_MAP_OFFSET_END_INFO_QCOM:
-            delete reinterpret_cast<const safe_VkSubpassFragmentDensityMapOffsetEndInfoQCOM *>(header);
+            delete reinterpret_cast<safe_VkSubpassFragmentDensityMapOffsetEndInfoQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCopyMemoryIndirectFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCopyMemoryIndirectFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCopyMemoryIndirectPropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMemoryDecompressionFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMemoryDecompressionFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMemoryDecompressionPropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMemoryDecompressionPropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_COMPUTE_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_INDIRECT_BUFFER_INFO_NV:
-            delete reinterpret_cast<const safe_VkComputePipelineIndirectBufferInfoNV *>(header);
+            delete reinterpret_cast<safe_VkComputePipelineIndirectBufferInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINEAR_COLOR_ATTACHMENT_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceLinearColorAttachmentFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceLinearColorAttachmentFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMAGE_VIEW_SAMPLE_WEIGHT_CREATE_INFO_QCOM:
-            delete reinterpret_cast<const safe_VkImageViewSampleWeightCreateInfoQCOM *>(header);
+            delete reinterpret_cast<safe_VkImageViewSampleWeightCreateInfoQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_FEATURES_QCOM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceImageProcessingFeaturesQCOM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceImageProcessingFeaturesQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_PROPERTIES_QCOM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceImageProcessingPropertiesQCOM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceImageProcessingPropertiesQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceNestedCommandBufferFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceNestedCommandBufferFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceNestedCommandBufferPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceNestedCommandBufferPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_ACQUIRE_UNMODIFIED_EXT:
-            delete reinterpret_cast<const safe_VkExternalMemoryAcquireUnmodifiedEXT *>(header);
+            delete reinterpret_cast<safe_VkExternalMemoryAcquireUnmodifiedEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceExtendedDynamicState3FeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_MERGE_FEEDBACK_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDER_PASS_CREATION_CONTROL_EXT:
-            delete reinterpret_cast<const safe_VkRenderPassCreationControlEXT *>(header);
+            delete reinterpret_cast<safe_VkRenderPassCreationControlEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDER_PASS_CREATION_FEEDBACK_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkRenderPassCreationFeedbackCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkRenderPassCreationFeedbackCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_RENDER_PASS_SUBPASS_FEEDBACK_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkRenderPassSubpassFeedbackCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkRenderPassSubpassFeedbackCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_DIRECT_DRIVER_LOADING_LIST_LUNARG:
-            delete reinterpret_cast<const safe_VkDirectDriverLoadingListLUNARG *>(header);
+            delete reinterpret_cast<safe_VkDirectDriverLoadingListLUNARG *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkPipelineShaderStageModuleIdentifierCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkPipelineShaderStageModuleIdentifierCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceOpticalFlowFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceOpticalFlowFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceOpticalFlowPropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceOpticalFlowPropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_OPTICAL_FLOW_IMAGE_FORMAT_INFO_NV:
-            delete reinterpret_cast<const safe_VkOpticalFlowImageFormatInfoNV *>(header);
+            delete reinterpret_cast<safe_VkOpticalFlowImageFormatInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_OPTICAL_FLOW_SESSION_CREATE_PRIVATE_DATA_INFO_NV:
-            delete reinterpret_cast<const safe_VkOpticalFlowSessionCreatePrivateDataInfoNV *>(header);
+            delete reinterpret_cast<safe_VkOpticalFlowSessionCreatePrivateDataInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_DITHERING_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceLegacyDitheringFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceLegacyDitheringFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_PROTECTED_ACCESS_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePipelineProtectedAccessFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePipelineProtectedAccessFeaturesEXT *>(header);
             break;
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_FORMAT_RESOLVE_FEATURES_ANDROID:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceExternalFormatResolveFeaturesANDROID *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceExternalFormatResolveFeaturesANDROID *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_FORMAT_RESOLVE_PROPERTIES_ANDROID:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceExternalFormatResolvePropertiesANDROID *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceExternalFormatResolvePropertiesANDROID *>(header);
             break;
         case VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_RESOLVE_PROPERTIES_ANDROID:
-            delete reinterpret_cast<const safe_VkAndroidHardwareBufferFormatResolvePropertiesANDROID *>(header);
+            delete reinterpret_cast<safe_VkAndroidHardwareBufferFormatResolvePropertiesANDROID *>(header);
             break;
 #endif  // VK_USE_PLATFORM_ANDROID_KHR
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ANTI_LAG_FEATURES_AMD:
+            delete reinterpret_cast<safe_VkPhysicalDeviceAntiLagFeaturesAMD *>(header);
+            break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderObjectFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderObjectFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderObjectPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderObjectPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_PROPERTIES_FEATURES_QCOM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceTilePropertiesFeaturesQCOM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceTilePropertiesFeaturesQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_AMIGO_PROFILING_FEATURES_SEC:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceAmigoProfilingFeaturesSEC *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceAmigoProfilingFeaturesSEC *>(header);
             break;
         case VK_STRUCTURE_TYPE_AMIGO_PROFILING_SUBMIT_INFO_SEC:
-            delete reinterpret_cast<const safe_VkAmigoProfilingSubmitInfoSEC *>(header);
+            delete reinterpret_cast<safe_VkAmigoProfilingSubmitInfoSEC *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_VIEWPORTS_FEATURES_QCOM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceExtendedSparseAddressSpaceFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceExtendedSparseAddressSpaceFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_PROPERTIES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceExtendedSparseAddressSpacePropertiesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceExtendedSparseAddressSpacePropertiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_VERTEX_ATTRIBUTES_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceLegacyVertexAttributesFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceLegacyVertexAttributesFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_VERTEX_ATTRIBUTES_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceLegacyVertexAttributesPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceLegacyVertexAttributesPropertiesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT:
-            delete reinterpret_cast<const safe_VkLayerSettingsCreateInfoEXT *>(header);
+            delete reinterpret_cast<safe_VkLayerSettingsCreateInfoEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_FEATURES_ARM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_PROPERTIES_ARM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderCoreBuiltinsPropertiesARM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderCoreBuiltinsPropertiesARM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_LATENCY_SUBMISSION_PRESENT_ID_NV:
-            delete reinterpret_cast<const safe_VkLatencySubmissionPresentIdNV *>(header);
+            delete reinterpret_cast<safe_VkLatencySubmissionPresentIdNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_SWAPCHAIN_LATENCY_CREATE_INFO_NV:
-            delete reinterpret_cast<const safe_VkSwapchainLatencyCreateInfoNV *>(header);
+            delete reinterpret_cast<safe_VkSwapchainLatencyCreateInfoNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_LATENCY_SURFACE_CAPABILITIES_NV:
-            delete reinterpret_cast<const safe_VkLatencySurfaceCapabilitiesNV *>(header);
+            delete reinterpret_cast<safe_VkLatencySurfaceCapabilitiesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_RENDER_AREAS_FEATURES_QCOM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMultiviewPerViewRenderAreasFeaturesQCOM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMultiviewPerViewRenderAreasFeaturesQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_MULTIVIEW_PER_VIEW_RENDER_AREAS_RENDER_PASS_BEGIN_INFO_QCOM:
-            delete reinterpret_cast<const safe_VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM *>(header);
+            delete reinterpret_cast<safe_VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PER_STAGE_DESCRIPTOR_SET_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDevicePerStageDescriptorSetFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDevicePerStageDescriptorSetFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_2_FEATURES_QCOM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceImageProcessing2FeaturesQCOM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceImageProcessing2FeaturesQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_2_PROPERTIES_QCOM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceImageProcessing2PropertiesQCOM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceImageProcessing2PropertiesQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_SAMPLER_BLOCK_MATCH_WINDOW_CREATE_INFO_QCOM:
-            delete reinterpret_cast<const safe_VkSamplerBlockMatchWindowCreateInfoQCOM *>(header);
+            delete reinterpret_cast<safe_VkSamplerBlockMatchWindowCreateInfoQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUBIC_WEIGHTS_FEATURES_QCOM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCubicWeightsFeaturesQCOM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCubicWeightsFeaturesQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_SAMPLER_CUBIC_WEIGHTS_CREATE_INFO_QCOM:
-            delete reinterpret_cast<const safe_VkSamplerCubicWeightsCreateInfoQCOM *>(header);
+            delete reinterpret_cast<safe_VkSamplerCubicWeightsCreateInfoQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_BLIT_IMAGE_CUBIC_WEIGHTS_INFO_QCOM:
-            delete reinterpret_cast<const safe_VkBlitImageCubicWeightsInfoQCOM *>(header);
+            delete reinterpret_cast<safe_VkBlitImageCubicWeightsInfoQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_DEGAMMA_FEATURES_QCOM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceYcbcrDegammaFeaturesQCOM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceYcbcrDegammaFeaturesQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_YCBCR_DEGAMMA_CREATE_INFO_QCOM:
-            delete reinterpret_cast<const safe_VkSamplerYcbcrConversionYcbcrDegammaCreateInfoQCOM *>(header);
+            delete reinterpret_cast<safe_VkSamplerYcbcrConversionYcbcrDegammaCreateInfoQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUBIC_CLAMP_FEATURES_QCOM:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceCubicClampFeaturesQCOM *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceCubicClampFeaturesQCOM *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_DYNAMIC_STATE_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceAttachmentFeedbackLoopDynamicStateFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceAttachmentFeedbackLoopDynamicStateFeaturesEXT *>(header);
             break;
 #ifdef VK_USE_PLATFORM_SCREEN_QNX
         case VK_STRUCTURE_TYPE_SCREEN_BUFFER_FORMAT_PROPERTIES_QNX:
-            delete reinterpret_cast<const safe_VkScreenBufferFormatPropertiesQNX *>(header);
+            delete reinterpret_cast<safe_VkScreenBufferFormatPropertiesQNX *>(header);
             break;
         case VK_STRUCTURE_TYPE_IMPORT_SCREEN_BUFFER_INFO_QNX:
-            delete reinterpret_cast<const safe_VkImportScreenBufferInfoQNX *>(header);
+            delete reinterpret_cast<safe_VkImportScreenBufferInfoQNX *>(header);
             break;
         case VK_STRUCTURE_TYPE_EXTERNAL_FORMAT_QNX:
-            delete reinterpret_cast<const safe_VkExternalFormatQNX *>(header);
+            delete reinterpret_cast<safe_VkExternalFormatQNX *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_SCREEN_BUFFER_FEATURES_QNX:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceExternalMemoryScreenBufferFeaturesQNX *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceExternalMemoryScreenBufferFeaturesQNX *>(header);
             break;
 #endif  // VK_USE_PLATFORM_SCREEN_QNX
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_DRIVER_PROPERTIES_MSFT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceLayeredDriverPropertiesMSFT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceLayeredDriverPropertiesMSFT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_POOL_OVERALLOCATION_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAW_ACCESS_CHAINS_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRawAccessChainsFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRawAccessChainsFeaturesNV *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT16_VECTOR_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV *>(header);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_REPLICATED_COMPOSITES_FEATURES_EXT:
+            delete reinterpret_cast<safe_VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRayTracingValidationFeaturesNV *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRayTracingValidationFeaturesNV *>(header);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_FEATURES_MESA:
+            delete reinterpret_cast<safe_VkPhysicalDeviceImageAlignmentControlFeaturesMESA *>(header);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_PROPERTIES_MESA:
+            delete reinterpret_cast<safe_VkPhysicalDeviceImageAlignmentControlPropertiesMESA *>(header);
+            break;
+        case VK_STRUCTURE_TYPE_IMAGE_ALIGNMENT_CONTROL_CREATE_INFO_MESA:
+            delete reinterpret_cast<safe_VkImageAlignmentControlCreateInfoMESA *>(header);
             break;
         case VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR:
-            delete reinterpret_cast<const safe_VkWriteDescriptorSetAccelerationStructureKHR *>(header);
+            delete reinterpret_cast<safe_VkWriteDescriptorSetAccelerationStructureKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceAccelerationStructureFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceAccelerationStructureFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceAccelerationStructurePropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceAccelerationStructurePropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRayTracingPipelineFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRayTracingPipelineFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRayTracingPipelinePropertiesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRayTracingPipelinePropertiesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceRayQueryFeaturesKHR *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceRayQueryFeaturesKHR *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMeshShaderFeaturesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMeshShaderFeaturesEXT *>(header);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT:
-            delete reinterpret_cast<const safe_VkPhysicalDeviceMeshShaderPropertiesEXT *>(header);
+            delete reinterpret_cast<safe_VkPhysicalDeviceMeshShaderPropertiesEXT *>(header);
             break;
 
         default: // Encountered an unknown sType
             // If sType is in custom list, free custom struct memory and clean up
-            for (auto item : custom_stype_info) {
+            for (auto item : GetCustomStypeInfo()   ) {
                 if (item.first == static_cast<uint32_t>(header->sType)) {
-                    if (header->pNext) {
-                        FreePnextChain(header->pNext);
-                    }
-                    free(const_cast<void *>(pNext));
-                    pNext = nullptr;
+                    free(current);
                     break;
                 }
             }
-            if (pNext) {
-                FreePnextChain(header->pNext);
-            }
             break;
+        }
+        current = next;
     }
 }  // clang-format on
 

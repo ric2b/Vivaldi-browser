@@ -526,27 +526,43 @@ TEST_F(WelcomeTourControllerTest, AbortsTourAndPropagatesEvents) {
 // Base class for tests of the `WelcomeTourController` which are concerned with
 // the behavior of WelcomeTourV2 experiment arms, parameterized by whether the
 // Welcome Tour V2 feature is enabled.
-class WelcomeTourControllerV2Test : public WelcomeTourControllerTest,
-                                    public ::testing::WithParamInterface<
-                                        /*is_welcome_tour_v2_enabled=*/bool> {
+class WelcomeTourControllerV2Test
+    : public WelcomeTourControllerTest,
+      public ::testing::WithParamInterface<std::tuple<
+          /*is_welcome_tour_v2_enabled=*/bool,
+          /*is_welcome_tour_counterfactually_enabled=*/bool>> {
  public:
   WelcomeTourControllerV2Test() {
-    scoped_feature_list_.InitWithFeatureState(features::kWelcomeTourV2,
-                                              IsWelcomeTourV2Enabled());
+    // Only one of those features can be enabled at a time.
+    scoped_feature_list_.InitWithFeatureStates(
+        {{features::kWelcomeTourV2,
+          IsWelcomeTourV2Enabled() && !IsWelcomeTourCounterfactuallyEnabled()},
+         {features::kWelcomeTourCounterfactualArm,
+          IsWelcomeTourCounterfactuallyEnabled()},
+         {features::kWelcomeTourHoldbackArm, false}});
   }
 
  protected:
   // Returns whether the WelcomeTourV2 feature is enabled given test
   // parameterization.
-  bool IsWelcomeTourV2Enabled() const { return GetParam(); }
+  bool IsWelcomeTourV2Enabled() const { return std::get<0>(GetParam()); }
+
+  // Returns whether the WelcomeTour feature is counterfactually enabled given
+  // test parameterization.
+  bool IsWelcomeTourCounterfactuallyEnabled() const {
+    return std::get<1>(GetParam());
+  }
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         WelcomeTourControllerV2Test,
-                         /*is_welcome_tour_v2_enabled=*/testing::Bool());
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    WelcomeTourControllerV2Test,
+    testing::Combine(
+        /*is_welcome_tour_v2_enabled=*/testing::Bool(),
+        /*is_welcome_tour_counterfactually_enabled=*/testing::Bool()));
 
 // Verifies that `GetTutorialDescription()` returns expected values.
 TEST_P(WelcomeTourControllerV2Test, GetTutorialDescription) {
@@ -555,7 +571,7 @@ TEST_P(WelcomeTourControllerV2Test, GetTutorialDescription) {
 
   const std::u16string product_name = ui::GetChromeOSDeviceName();
   const std::u16string total_steps =
-      IsWelcomeTourV2Enabled() ? kTotalStepsV2 : kTotalStepsV1;
+      features::IsWelcomeTourV2Enabled() ? kTotalStepsV2 : kTotalStepsV1;
   int current_step = 1;
 
   using ::testing::Matcher;
@@ -798,59 +814,60 @@ TEST_P(WelcomeTourControllerChromeVoxTest,
                   IsEmpty()));
 }
 
-// WelcomeTourControllerCounterfactualTest -------------------------------------
+// WelcomeTourControllerHoldbackTest -------------------------------------------
 
-// Base class for tests of the `WelcomeTourController` which are concerned with
-// the behavior of counterfactual experiment arms, parameterized by whether the
-// Welcome Tour feature is enabled counterfactually.
-class WelcomeTourControllerCounterfactualTest
+// Base class for tests of the `WelcomeTourController` which are concerned
+// with the behavior of holdback experiment arms, parameterized by whether the
+// Welcome Tour is held back.
+class WelcomeTourControllerHoldbackTest
     : public WelcomeTourControllerTest,
       public ::testing::WithParamInterface<
-          /*is_counterfactual=*/std::optional<bool>> {
+          /*is_holdback=*/std::optional<bool>> {
  public:
-  WelcomeTourControllerCounterfactualTest() {
-    if (const auto& is_counterfactual = IsCounterfactual()) {
-      scoped_feature_list_.InitAndEnableFeatureWithParameters(
-          features::kWelcomeTour,
-          {{"is-counterfactual", *is_counterfactual ? "true" : "false"}});
+  WelcomeTourControllerHoldbackTest() {
+    // Only one of those features can be enabled at a time.
+    if (const auto& is_holdback = IsHoldback()) {
+      scoped_feature_list_.InitWithFeatureStates(
+          {{features::kWelcomeTourHoldbackArm, is_holdback.value()},
+           {features::kWelcomeTourV2, false},
+           {features::kWelcomeTourCounterfactualArm, false}});
     }
   }
 
-  // Returns whether the Welcome Tour is enabled counterfactually as part of an
-  // experiment arm given test parameterization.
-  const std::optional<bool>& IsCounterfactual() const { return GetParam(); }
+  // Returns whether the Welcome Tour is enabled as the holdback experiment
+  // arm given test parameterization.
+  const std::optional<bool>& IsHoldback() const { return GetParam(); }
 
  private:
-  // Used to conditionally enable the Welcome Tour counterfactually as part of
-  // an experiment arm given test parameterization.
+  // Used to conditionally enable the Welcome Tour as the holdback experiment
+  // arm given test parameterization.
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 INSTANTIATE_TEST_SUITE_P(All,
-                         WelcomeTourControllerCounterfactualTest,
-                         /*is_counterfactual=*/
+                         WelcomeTourControllerHoldbackTest,
+                         /*is_holdback=*/
                          ::testing::Values(std::make_optional(true),
                                            std::make_optional(false),
                                            std::nullopt));
 
 // Tests -----------------------------------------------------------------------
 
-// Verifies that the Welcome Tour is prevented from running if enabled
-// counterfactually as part of an experiment arm and that an attempt is made to
-// launch the Explore app when that occurs.
-TEST_P(WelcomeTourControllerCounterfactualTest,
-       PreventsWelcomeTourForCounterfactualArms) {
+// Verifies that the Welcome Tour is prevented from running if enabled as the
+// holdback experiment arm and that an attempt is made to launch the Explore app
+// when that occurs.
+TEST_P(WelcomeTourControllerHoldbackTest, PreventsWelcomeTourForHoldbackArms) {
   const auto primary_account_id = AccountId::FromUserEmail("primary@test");
 
   // Set expectations for whether the Welcome Tour will run.
   EXPECT_CALL(
       *user_education_delegate(),
       RegisterTutorial(Eq(primary_account_id), Eq(TutorialId::kWelcomeTour), _))
-      .Times(IsCounterfactual().value_or(false) ? 0u : 1u);
+      .Times(IsHoldback().value_or(false) ? 0u : 1u);
   EXPECT_CALL(*user_education_delegate(),
               StartTutorial(Eq(primary_account_id),
                             Eq(TutorialId::kWelcomeTour), _, _, _))
-      .Times(IsCounterfactual().value_or(false) ? 0u : 1u);
+      .Times(IsHoldback().value_or(false) ? 0u : 1u);
 
   // Set expectations for whether the Explore app will launch.
   EXPECT_CALL(*user_education_delegate(),
@@ -858,7 +875,7 @@ TEST_P(WelcomeTourControllerCounterfactualTest,
                   Eq(primary_account_id), Eq(ash::SystemWebAppType::HELP),
                   Eq(apps::LaunchSource::kFromWelcomeTour),
                   Eq(display::Screen::GetScreen()->GetPrimaryDisplay().id())))
-      .Times(IsCounterfactual().value_or(false) ? 1u : 0u);
+      .Times(IsHoldback().value_or(false) ? 1u : 0u);
 
   // Login the primary user for the first time and verify expectations.
   SimulateNewUserFirstLogin(primary_account_id.GetUserEmail());
@@ -951,8 +968,7 @@ INSTANTIATE_TEST_SUITE_P(
                           std::nullopt),
         /*is_new_user_locally=*/::testing::Bool(),
         /*is_managed_user=*/::testing::Bool(),
-        ::testing::Values(user_manager::UserType::kArcKioskApp,
-                          user_manager::UserType::kChild,
+        ::testing::Values(user_manager::UserType::kChild,
                           user_manager::UserType::kGuest,
                           user_manager::UserType::kKioskApp,
                           user_manager::UserType::kPublicAccount,
@@ -1119,16 +1135,21 @@ TEST_F(WelcomeTourControllerRunTest, BlockInteractionsWithIrrelevantWindow) {
   widget->GetFocusManager()->SetFocusedView(contents_view);
 
   // `contents_view` should be interactive before the Welcome Tour.
-  EXPECT_CALL(*contents_view,
-              OnEvent(Property(&ui::Event::type, Eq(ui::ET_MOUSE_ENTERED))));
-  EXPECT_CALL(*contents_view,
-              OnEvent(Property(&ui::Event::type, Eq(ui::ET_MOUSE_PRESSED))));
-  EXPECT_CALL(*contents_view,
-              OnEvent(Property(&ui::Event::type, Eq(ui::ET_MOUSE_EXITED))));
-  EXPECT_CALL(*contents_view,
-              OnEvent(Property(&ui::Event::type, Eq(ui::ET_KEY_PRESSED))));
-  EXPECT_CALL(*contents_view,
-              OnEvent(Property(&ui::Event::type, Eq(ui::ET_KEY_RELEASED))));
+  EXPECT_CALL(
+      *contents_view,
+      OnEvent(Property(&ui::Event::type, Eq(ui::EventType::kMouseEntered))));
+  EXPECT_CALL(
+      *contents_view,
+      OnEvent(Property(&ui::Event::type, Eq(ui::EventType::kMousePressed))));
+  EXPECT_CALL(
+      *contents_view,
+      OnEvent(Property(&ui::Event::type, Eq(ui::EventType::kMouseExited))));
+  EXPECT_CALL(
+      *contents_view,
+      OnEvent(Property(&ui::Event::type, Eq(ui::EventType::kKeyPressed))));
+  EXPECT_CALL(
+      *contents_view,
+      OnEvent(Property(&ui::Event::type, Eq(ui::EventType::kKeyReleased))));
   LeftClickOn(contents_view);
   PressAndReleaseKey(ui::VKEY_A);
 
@@ -1142,16 +1163,21 @@ TEST_F(WelcomeTourControllerRunTest, BlockInteractionsWithIrrelevantWindow) {
 
   // Perform the same set of actions after the Welcome Tour. `contents_view`
   // should be interactive.
-  EXPECT_CALL(*contents_view,
-              OnEvent(Property(&ui::Event::type, Eq(ui::ET_MOUSE_ENTERED))));
-  EXPECT_CALL(*contents_view,
-              OnEvent(Property(&ui::Event::type, Eq(ui::ET_MOUSE_PRESSED))));
-  EXPECT_CALL(*contents_view,
-              OnEvent(Property(&ui::Event::type, Eq(ui::ET_MOUSE_EXITED))));
-  EXPECT_CALL(*contents_view,
-              OnEvent(Property(&ui::Event::type, Eq(ui::ET_KEY_PRESSED))));
-  EXPECT_CALL(*contents_view,
-              OnEvent(Property(&ui::Event::type, Eq(ui::ET_KEY_RELEASED))));
+  EXPECT_CALL(
+      *contents_view,
+      OnEvent(Property(&ui::Event::type, Eq(ui::EventType::kMouseEntered))));
+  EXPECT_CALL(
+      *contents_view,
+      OnEvent(Property(&ui::Event::type, Eq(ui::EventType::kMousePressed))));
+  EXPECT_CALL(
+      *contents_view,
+      OnEvent(Property(&ui::Event::type, Eq(ui::EventType::kMouseExited))));
+  EXPECT_CALL(
+      *contents_view,
+      OnEvent(Property(&ui::Event::type, Eq(ui::EventType::kKeyPressed))));
+  EXPECT_CALL(
+      *contents_view,
+      OnEvent(Property(&ui::Event::type, Eq(ui::EventType::kKeyReleased))));
   LeftClickOn(contents_view);
   PressAndReleaseKey(ui::VKEY_A);
 }
@@ -1408,8 +1434,8 @@ class WelcomeTourAcceleratorHandlerRunTest
               Property(&ui::KeyEvent::type,
                        Eq(accelerator.key_state() ==
                                   ui::Accelerator::KeyState::PRESSED
-                              ? ui::ET_KEY_PRESSED
-                              : ui::ET_KEY_RELEASED)),
+                              ? ui::EventType::kKeyPressed
+                              : ui::EventType::kKeyReleased)),
               Property(&ui::KeyEvent::key_code, Eq(accelerator.key_code())))))
           .Times(received ? 1u : 0u);
 
@@ -1420,8 +1446,8 @@ class WelcomeTourAcceleratorHandlerRunTest
               Property(&ui::KeyEvent::type,
                        Eq(accelerator.key_state() ==
                                   ui::Accelerator::KeyState::PRESSED
-                              ? ui::ET_KEY_RELEASED
-                              : ui::ET_KEY_PRESSED)),
+                              ? ui::EventType::kKeyReleased
+                              : ui::EventType::kKeyPressed)),
               Property(&ui::KeyEvent::key_code, Eq(accelerator.key_code())))));
 
       // Press and release `accelerator`.

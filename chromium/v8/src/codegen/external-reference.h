@@ -19,13 +19,13 @@ class Isolate;
 class PageMetadata;
 class SCTableReference;
 class StatsCounter;
+enum class IsolateFieldId : uint8_t;
 
 //------------------------------------------------------------------------------
 // External references
 
 #define EXTERNAL_REFERENCE_LIST_WITH_ISOLATE(V)                                \
   V(isolate_address, "isolate")                                                \
-  V(builtins_table, "builtins_table")                                          \
   V(handle_scope_implementer_address,                                          \
     "Isolate::handle_scope_implementer_address")                               \
   V(address_of_interpreter_entry_trampoline_instruction_start,                 \
@@ -46,7 +46,6 @@ class StatsCounter;
   V(heap_is_minor_marking_flag_address, "heap_is_minor_marking_flag_address")  \
   V(is_shared_space_isolate_flag_address,                                      \
     "is_shared_space_isolate_flag_address")                                    \
-  V(uses_shared_heap_flag_address, "uses_shared_heap_flag_address")            \
   V(new_space_allocation_top_address, "Heap::NewSpaceAllocationTopAddress()")  \
   V(new_space_allocation_limit_address,                                        \
     "Heap::NewSpaceAllocationLimitAddress()")                                  \
@@ -66,20 +65,9 @@ class StatsCounter;
     "Debug::hook_on_function_call_address()")                                  \
   V(runtime_function_table_address,                                            \
     "Runtime::runtime_function_table_address()")                               \
-  V(execution_mode_address, "IsolateData::execution_mode")                     \
   V(debug_suspended_generator_address,                                         \
     "Debug::step_suspended_generator_address()")                               \
   V(context_address, "Isolate::context_address()")                             \
-  V(fast_c_call_caller_fp_address,                                             \
-    "IsolateData::fast_c_call_caller_fp_address")                              \
-  V(fast_c_call_caller_pc_address,                                             \
-    "IsolateData::fast_c_call_caller_pc_address")                              \
-  V(fast_api_call_target_address, "IsolateData::fast_api_call_target_address") \
-  V(api_callback_thunk_argument_address,                                       \
-    "IsolateData::api_callback_thunk_argument_address")                        \
-  V(continuation_preserved_embedder_data,                                      \
-    "IsolateData::continuation_preserved_embedder_data")                       \
-  V(stack_is_iterable_address, "IsolateData::stack_is_iterable_address")       \
   V(address_of_regexp_stack_limit_address,                                     \
     "RegExpStack::limit_address_address()")                                    \
   V(address_of_regexp_stack_memory_top_address,                                \
@@ -111,6 +99,8 @@ class StatsCounter;
   V(address_of_double_neg_constant, "double_negate_constant")                  \
   V(address_of_enable_experimental_regexp_engine,                              \
     "address_of_enable_experimental_regexp_engine")                            \
+  V(address_of_fp16_abs_constant, "fp16_absolute_constant")                    \
+  V(address_of_fp16_neg_constant, "fp16_negate_constant")                      \
   V(address_of_float_abs_constant, "float_absolute_constant")                  \
   V(address_of_float_neg_constant, "float_negate_constant")                    \
   V(address_of_log10_offset_table, "log10_offset_table")                       \
@@ -255,8 +245,8 @@ class StatsCounter;
     "name_to_index_hashtable_lookup_forwarded_string")                         \
   V(name_to_index_hashtable_find_insertion_entry_forwarded_string,             \
     "name_to_index_hashtable_find_insertion_entry_forwarded_string")           \
-  IF_WASM(V, wasm_delete_deoptimizer, "Deoptimizer::DeleteForWasm()")          \
   IF_WASM(V, wasm_sync_stack_limit, "wasm_sync_stack_limit")                   \
+  IF_WASM(V, wasm_return_switch, "wasm_return_switch")                         \
   IF_WASM(V, wasm_switch_to_the_central_stack,                                 \
           "wasm::switch_to_the_central_stack")                                 \
   IF_WASM(V, wasm_switch_from_the_central_stack,                               \
@@ -284,6 +274,8 @@ class StatsCounter;
   IF_WASM(V, wasm_float64_to_int64_sat, "wasm::float64_to_int64_sat_wrapper")  \
   IF_WASM(V, wasm_float64_to_uint64_sat,                                       \
           "wasm::float64_to_uint64_sat_wrapper")                               \
+  IF_WASM(V, wasm_float16_to_float32, "wasm::float16_to_float32_wrapper")      \
+  IF_WASM(V, wasm_float32_to_float16, "wasm::float32_to_float16_wrapper")      \
   IF_WASM(V, wasm_int64_div, "wasm::int64_div")                                \
   IF_WASM(V, wasm_int64_mod, "wasm::int64_mod")                                \
   IF_WASM(V, wasm_int64_to_float32, "wasm::int64_to_float32_wrapper")          \
@@ -315,6 +307,7 @@ class StatsCounter;
   IF_WASM(V, wasm_array_fill, "wasm::array_fill")                              \
   IF_WASM(V, wasm_string_to_f64, "wasm_string_to_f64")                         \
   IF_WASM(V, wasm_atomic_notify, "wasm_atomic_notify")                         \
+  IF_WASM(V, wasm_signature_check_fail, "wasm_signature_check_fail")           \
   IF_WASM(V, wasm_WebAssemblyCompile, "wasm::WebAssemblyCompile")              \
   IF_WASM(V, wasm_WebAssemblyException, "wasm::WebAssemblyException")          \
   IF_WASM(V, wasm_WebAssemblyExceptionGetArg,                                  \
@@ -510,7 +503,7 @@ class ExternalReference {
   static V8_EXPORT_PRIVATE ExternalReference
   address_of_pending_message(LocalIsolate* local_isolate);
 
-  ExternalReference() : address_(kNullAddress) {}
+  ExternalReference() : raw_(kNullAddress) {}
   static ExternalReference Create(const SCTableReference& table_ref);
   static ExternalReference Create(StatsCounter* counter);
   static V8_EXPORT_PRIVATE ExternalReference Create(ApiFunction* ptr,
@@ -527,6 +520,7 @@ class ExternalReference {
   static ExternalReference Create(const Runtime::Function* f);
   static ExternalReference Create(IsolateAddressId id, Isolate* isolate);
   static ExternalReference Create(Runtime::FunctionId id);
+  static ExternalReference Create(IsolateFieldId id);
   static V8_EXPORT_PRIVATE ExternalReference
   Create(Address address, Type type = ExternalReference::BUILTIN_CALL);
 
@@ -545,6 +539,8 @@ class ExternalReference {
   EXTERNAL_REFERENCE_LIST_WITH_ISOLATE(DECL_EXTERNAL_REFERENCE)
 #undef DECL_EXTERNAL_REFERENCE
 
+  V8_EXPORT_PRIVATE static ExternalReference isolate_address();
+
   V8_EXPORT_PRIVATE V8_NOINLINE static ExternalReference
   runtime_function_table_address_for_unittests(Isolate* isolate);
 
@@ -555,7 +551,16 @@ class ExternalReference {
 
   static ExternalReference invoke_function_callback(CallApiCallbackMode mode);
 
-  Address address() const { return address_; }
+  bool IsIsolateFieldId() const;
+
+  Address raw() const { return raw_; }
+
+  // Returns the raw value of the ExternalReference as an address. Can only be
+  // used when the ExternalReference stores an absolute address and not an
+  // IsolateFieldId.
+  V8_EXPORT_PRIVATE Address address() const;
+
+  int32_t offset_from_root_register() const;
 
   // Creates a redirection trampoline for given C function and signature for
   // simulated builds.
@@ -569,12 +574,19 @@ class ExternalReference {
   static Address UnwrapRedirection(Address redirection_trampoline);
 
  private:
-  explicit ExternalReference(Address address) : address_(address) {}
+  explicit ExternalReference(Address address) : raw_(address) {
+    CHECK(!IsIsolateFieldId());
+  }
 
   explicit ExternalReference(void* address)
-      : address_(reinterpret_cast<Address>(address)) {}
+      : raw_(reinterpret_cast<Address>(address)) {
+    CHECK(!IsIsolateFieldId());
+  }
 
-  Address address_;
+  explicit ExternalReference(IsolateFieldId id)
+      : raw_(static_cast<Address>(id)) {}
+
+  Address raw_;
 };
 ASSERT_TRIVIALLY_COPYABLE(ExternalReference);
 

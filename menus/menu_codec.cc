@@ -358,7 +358,7 @@ base::Value MenuCodec::EncodeNode(Menu_Node* node) {
       break;
     default:
       NOTREACHED();
-      break;
+      //break;
   }
 
   if (is_folder) {

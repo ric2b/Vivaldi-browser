@@ -54,7 +54,7 @@ sync_pb::SyncEnums::GetUpdatesOrigin GetOriginFromReason(
     case CONFIGURE_REASON_PROGRAMMATIC:
       return sync_pb::SyncEnums::PROGRAMMATIC;
     case CONFIGURE_REASON_UNKNOWN:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return sync_pb::SyncEnums::UNKNOWN_ORIGIN;
 }
@@ -186,8 +186,7 @@ void SyncManagerImpl::Init(InitArgs* args) {
       args->birthday, args->bag_of_chips, args->poll_interval);
   scheduler_ = args->engine_components_factory->BuildScheduler(
       name_, cycle_context_.get(), args->cancelation_signal,
-      args->enable_local_sync_backend,
-      args->sync_poll_immediately_on_every_startup);
+      args->enable_local_sync_backend);
 
   scheduler_->Start(SyncScheduler::CONFIGURATION_MODE, base::Time());
 
@@ -300,6 +299,7 @@ void SyncManagerImpl::ShutdownOnSyncThread() {
   if (sync_encryption_handler_) {
     sync_encryption_handler_->RemoveObserver(&debug_info_event_listener_);
     sync_encryption_handler_->RemoveObserver(this);
+    sync_encryption_handler_->RemoveObserver(encryption_observer_proxy_.get());
   }
 
   RemoveObserver(&debug_info_event_listener_);

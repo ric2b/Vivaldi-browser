@@ -7,7 +7,6 @@
 
 #import <Foundation/Foundation.h>
 
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_mediator_provider_wrangler.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_mutator.h"
 
 @protocol GridToolbarsMutator;
@@ -18,16 +17,21 @@ namespace feature_engagement {
 class Tracker;
 }  // namespace feature_engagement
 
+namespace signin {
+class IdentityManager;
+}  // namespace signin
+
 class PrefService;
 
 // Mediates between model layer and tab grid UI layer.
-@interface TabGridMediator
-    : NSObject <TabGridMediatorProviderWrangler, TabGridMutator>
+@interface TabGridMediator : NSObject <TabGridMutator>
 
 // Mutator for regular Tabs.
 @property(nonatomic, weak) id<TabGridPageMutator> regularPageMutator;
 // Mutator for incognito Tabs.
 @property(nonatomic, weak) id<TabGridPageMutator> incognitoPageMutator;
+// Mutator for Tab Groups.
+@property(nonatomic, weak) id<TabGridPageMutator> tabGroupsPageMutator;
 // Mutator for remote Tabs.
 @property(nonatomic, weak) id<TabGridPageMutator> remotePageMutator;
 
@@ -42,8 +46,10 @@ class PrefService;
 // Consumer for state changes in tab grid.
 @property(nonatomic, weak) id<TabGridConsumer> consumer;
 
-- (instancetype)initWithPrefService:(PrefService*)prefService
-           featureEngagementTracker:(feature_engagement::Tracker*)tracker
+- (instancetype)initWithIdentityManager:
+                    (signin::IdentityManager*)identityManager
+                            prefService:(PrefService*)prefService
+               featureEngagementTracker:(feature_engagement::Tracker*)tracker
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;

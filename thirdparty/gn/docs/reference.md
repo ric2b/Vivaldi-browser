@@ -3936,6 +3936,20 @@
         would be
           "-Wl,-add_ast_path,obj/foo/Foo.swiftmodule"
 
+    rust_swiftmodule_switch [string, optional, link tools only]
+        Valid for: Linker tools except "alink"
+
+        Like swiftmodule_switch, but for targets built/linked with the Rust
+        compiler. The string will be prependend to the path to the
+        .swiftmodule files that are embedded in the linker output.
+
+        If you specified:
+          rust_swiftmodule_swift = "-Clink-arg=-Wl,-add_ast_path,"
+        then the "{{swiftmodules}}" expansion for
+          [ "obj/foo/Foo.swiftmodule" ]
+        would be
+          "-Clink-arg=-Wl,-add_ast_path,obj/foo/Foo.swiftmodule"
+
     outputs  [list of strings with substitutions]
         Valid for: Linker and compiler tools (required)
 

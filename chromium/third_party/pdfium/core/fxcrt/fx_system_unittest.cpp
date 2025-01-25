@@ -25,8 +25,7 @@ const char kSentinel = 0x7f;
 void Check32BitBase16Itoa(int32_t input, const char* expected_output) {
   const size_t kBufLen = 11;  // "-" + 8 digits + NUL + sentinel.
   char buf[kBufLen];
-  // TODO(tsepez): make safe.
-  UNSAFE_BUFFERS({
+  UNSAFE_TODO({
     buf[kBufLen - 1] = kSentinel;
     FXSYS_itoa(input, buf, 16);
     EXPECT_STREQ(expected_output, buf);
@@ -37,8 +36,7 @@ void Check32BitBase16Itoa(int32_t input, const char* expected_output) {
 void Check32BitBase10Itoa(int32_t input, const char* expected_output) {
   const size_t kBufLen = 13;  // "-" + 10 digits + NUL + sentinel.
   char buf[kBufLen];
-  // TODO(tsepez): make safe.
-  UNSAFE_BUFFERS({
+  UNSAFE_TODO({
     buf[kBufLen - 1] = kSentinel;
     FXSYS_itoa(input, buf, 10);
     EXPECT_STREQ(expected_output, buf);
@@ -49,8 +47,7 @@ void Check32BitBase10Itoa(int32_t input, const char* expected_output) {
 void Check32BitBase2Itoa(int32_t input, const char* expected_output) {
   const size_t kBufLen = 35;  // "-" + 32 digits + NUL + sentinel.
   char buf[kBufLen];
-  // TODO(tsepez): make safe.
-  UNSAFE_BUFFERS({
+  UNSAFE_TODO({
     buf[kBufLen - 1] = kSentinel;
     FXSYS_itoa(input, buf, 2);
     EXPECT_STREQ(expected_output, buf);
@@ -61,8 +58,7 @@ void Check32BitBase2Itoa(int32_t input, const char* expected_output) {
 void Check64BitBase16Itoa(int64_t input, const char* expected_output) {
   const size_t kBufLen = 19;  // "-" + 16 digits + NUL + sentinel.
   char buf[kBufLen];
-  // TODO(tsepez): make safe.
-  UNSAFE_BUFFERS({
+  UNSAFE_TODO({
     buf[kBufLen - 1] = kSentinel;
     FXSYS_i64toa(input, buf, 16);
     EXPECT_STREQ(expected_output, buf);
@@ -73,8 +69,7 @@ void Check64BitBase16Itoa(int64_t input, const char* expected_output) {
 void Check64BitBase10Itoa(int64_t input, const char* expected_output) {
   const size_t kBufLen = 22;  // "-" + 19 digits + NUL + sentinel.
   char buf[kBufLen];
-  // TODO(tsepez): make safe.
-  UNSAFE_BUFFERS({
+  UNSAFE_TODO({
     buf[kBufLen - 1] = kSentinel;
     FXSYS_i64toa(input, buf, 10);
     EXPECT_STREQ(expected_output, buf);
@@ -85,8 +80,7 @@ void Check64BitBase10Itoa(int64_t input, const char* expected_output) {
 void Check64BitBase2Itoa(int64_t input, const char* expected_output) {
   const size_t kBufLen = 67;  // "-" + 64 digits + NUL + sentinel.
   char buf[kBufLen];
-  // TODO(tsepez): make safe.
-  UNSAFE_BUFFERS({
+  UNSAFE_TODO({
     buf[kBufLen - 1] = kSentinel;
     FXSYS_i64toa(input, buf, 2);
     EXPECT_STREQ(expected_output, buf);
@@ -294,8 +288,8 @@ TEST(fxcrt, FXSYS_wcsftime) {
   good_time.tm_sec = 59;
 
   wchar_t buf[100] = {};
-  EXPECT_EQ(19u, FXSYS_wcsftime(buf, std::size(buf), L"%Y-%m-%dT%H:%M:%S",
-                                &good_time));
+  EXPECT_EQ(19u, UNSAFE_TODO(FXSYS_wcsftime(buf, std::size(buf),
+                                            L"%Y-%m-%dT%H:%M:%S", &good_time)));
   EXPECT_STREQ(L"1974-08-09T11:59:59", buf);
 
   // Ensure wcsftime handles a wide range of years without crashing.
@@ -309,8 +303,8 @@ TEST(fxcrt, FXSYS_wcsftime) {
   for (int year = -2500; year <= 8500; ++year) {
     year_time.tm_year = year;
     wchar_t year_buf[100] = {};
-    FXSYS_wcsftime(year_buf, std::size(year_buf), L"%Y-%m-%dT%H:%M:%S",
-                   &year_time);
+    UNSAFE_TODO(FXSYS_wcsftime(year_buf, std::size(year_buf),
+                               L"%Y-%m-%dT%H:%M:%S", &year_time));
   }
 
   // Ensure wcsftime handles bad years, etc. without crashing.
@@ -322,7 +316,8 @@ TEST(fxcrt, FXSYS_wcsftime) {
   bad_time.tm_min = -1;
   bad_time.tm_sec = -1;
 
-  FXSYS_wcsftime(buf, std::size(buf), L"%y-%m-%dT%H:%M:%S", &bad_time);
+  UNSAFE_TODO(
+      FXSYS_wcsftime(buf, std::size(buf), L"%y-%m-%dT%H:%M:%S", &bad_time));
 
   // Ensure wcsftime handles bad-ish day without crashing (Feb 30).
   struct tm feb_time = {};
@@ -333,7 +328,8 @@ TEST(fxcrt, FXSYS_wcsftime) {
   feb_time.tm_min = 00;
   feb_time.tm_sec = 00;
 
-  FXSYS_wcsftime(buf, std::size(buf), L"%y-%m-%dT%H:%M:%S", &feb_time);
+  UNSAFE_TODO(
+      FXSYS_wcsftime(buf, std::size(buf), L"%y-%m-%dT%H:%M:%S", &feb_time));
 }
 
 TEST(fxcrt, FXSYS_atoi) {

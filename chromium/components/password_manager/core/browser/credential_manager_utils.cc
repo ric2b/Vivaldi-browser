@@ -18,8 +18,9 @@ std::unique_ptr<PasswordForm> CreatePasswordFormFromCredentialInfo(
     const CredentialInfo& info,
     const url::Origin& origin) {
   std::unique_ptr<PasswordForm> form;
-  if (info.type == CredentialType::CREDENTIAL_TYPE_EMPTY)
+  if (info.type == CredentialType::CREDENTIAL_TYPE_EMPTY) {
     return form;
+  }
 
   form = std::make_unique<PasswordForm>();
   form->icon_url = info.icon;
@@ -39,9 +40,9 @@ std::unique_ptr<PasswordForm> CreatePasswordFormFromCredentialInfo(
 }
 
 CredentialInfo PasswordFormToCredentialInfo(const PasswordForm& form) {
-  return CredentialInfo(form.federation_origin.opaque()
-                            ? CredentialType::CREDENTIAL_TYPE_PASSWORD
-                            : CredentialType::CREDENTIAL_TYPE_FEDERATED,
+  return CredentialInfo(form.federation_origin.IsValid()
+                            ? CredentialType::CREDENTIAL_TYPE_FEDERATED
+                            : CredentialType::CREDENTIAL_TYPE_PASSWORD,
                         form.username_value, form.display_name, form.icon_url,
                         form.password_value, form.federation_origin);
 }

@@ -144,7 +144,7 @@ class MockPasswordManagerClient
               (override));
 
   MOCK_METHOD(bool,
-              CanUseBiometricAuthForFilling,
+              IsReauthBeforeFillingRequired,
               (device_reauth::DeviceAuthenticator*),
               (override));
 
@@ -1012,7 +1012,7 @@ TEST_F(PasswordAccessoryControllerTest, FillsPasswordIfNoAuthAvailable) {
 
   auto mock_authenticator = std::make_unique<MockDeviceAuthenticator>();
 
-  EXPECT_CALL(*password_client(), CanUseBiometricAuthForFilling)
+  EXPECT_CALL(*password_client(), IsReauthBeforeFillingRequired)
       .WillOnce(Return(false));
   EXPECT_CALL(*password_client(), GetDeviceAuthenticator)
       .WillOnce(Return(testing::ByMove(std::move(mock_authenticator))));
@@ -1044,7 +1044,7 @@ TEST_F(PasswordAccessoryControllerTest, FillsPasswordIfAuthSuccessful) {
 
   auto mock_authenticator = std::make_unique<MockDeviceAuthenticator>();
 
-  ON_CALL(*password_client(), CanUseBiometricAuthForFilling)
+  ON_CALL(*password_client(), IsReauthBeforeFillingRequired)
       .WillByDefault(Return(true));
   EXPECT_CALL(*mock_authenticator, AuthenticateWithMessage)
       .WillOnce(RunOnceCallback<1>(/*auth_succeeded=*/true));
@@ -1081,7 +1081,7 @@ TEST_F(PasswordAccessoryControllerTest, DoesntFillPasswordIfAuthFails) {
 
   auto mock_authenticator = std::make_unique<MockDeviceAuthenticator>();
 
-  ON_CALL(*password_client(), CanUseBiometricAuthForFilling)
+  ON_CALL(*password_client(), IsReauthBeforeFillingRequired)
       .WillByDefault(Return(true));
   EXPECT_CALL(*mock_authenticator, AuthenticateWithMessage)
       .WillOnce(RunOnceCallback<1>(/*auth_succeeded=*/false));
@@ -1120,7 +1120,7 @@ TEST_F(PasswordAccessoryControllerTest, CancelsOngoingAuthIfDestroyed) {
   auto mock_authenticator = std::make_unique<MockDeviceAuthenticator>();
   auto* mock_authenticator_ptr = mock_authenticator.get();
 
-  ON_CALL(*password_client(), CanUseBiometricAuthForFilling)
+  ON_CALL(*password_client(), IsReauthBeforeFillingRequired)
       .WillByDefault(Return(true));
   EXPECT_CALL(*mock_authenticator_ptr, AuthenticateWithMessage);
 
@@ -1280,7 +1280,8 @@ TEST_F(PasswordAccessoryControllerTest, ShowAndSelectPasskey) {
       PasskeyCredential::RpId("rpid.com"),
       PasskeyCredential::CredentialId({21, 22, 23, 24}),
       PasskeyCredential::UserId({81, 28, 83, 84}),
-      PasskeyCredential::Username("someone@example.com"));
+      PasskeyCredential::Username("someone@example.com"),
+      PasskeyCredential::DisplayName("someone"));
   const std::optional<std::vector<PasskeyCredential>> kTestPasskeys(
       {kTestPasskey});
   ON_CALL(*webauthn_credentials_delegate(), GetPasskeys)
@@ -1298,7 +1299,7 @@ TEST_F(PasswordAccessoryControllerTest, ShowAndSelectPasskey) {
       controller()->GetSheetData(),
       AccessorySheetData::Builder(AccessoryTabType::PASSWORDS,
                                   passwords_title_str(kExampleDomain))
-          .AddPasskeySection(kTestPasskey.username(),
+          .AddPasskeySection(kTestPasskey.display_name(),
                              kTestPasskey.credential_id())
           .AppendFooterCommand(manage_passwords_and_passkeys_str(),
                                autofill::AccessoryAction::MANAGE_PASSWORDS)

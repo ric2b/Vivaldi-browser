@@ -10,6 +10,8 @@
 #include "base/notreached.h"
 #include "net/android/network_change_notifier_android.h"
 #include "net/base/features.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
 #include "net/net_jni_headers/NetworkActiveNotifier_jni.h"
 #include "net/net_jni_headers/NetworkChangeNotifier_jni.h"
 
@@ -37,7 +39,8 @@ NetworkChangeNotifier::ConnectionType ConvertConnectionType(
     case NetworkChangeNotifier::CONNECTION_BLUETOOTH:
       break;
     default:
-      NOTREACHED() << "Unknown connection type received: " << connection_type;
+      NOTREACHED_IN_MIGRATION()
+          << "Unknown connection type received: " << connection_type;
       return NetworkChangeNotifier::CONNECTION_UNKNOWN;
   }
   return static_cast<NetworkChangeNotifier::ConnectionType>(connection_type);
@@ -53,7 +56,8 @@ NetworkChangeNotifier::ConnectionCost ConvertConnectionCost(
     case NetworkChangeNotifier::CONNECTION_COST_METERED:
       break;
     default:
-      NOTREACHED() << "Unknown connection cost received: " << connection_cost;
+      NOTREACHED_IN_MIGRATION()
+          << "Unknown connection cost received: " << connection_cost;
       return NetworkChangeNotifier::CONNECTION_COST_UNKNOWN;
   }
   return static_cast<NetworkChangeNotifier::ConnectionCost>(connection_cost);

@@ -5,41 +5,73 @@
 #include "chrome/browser/webauthn/gpm_enclave_controller.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <iterator>
 #include <memory>
+#include <optional>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
 
+#include "base/check.h"
+#include "base/check_op.h"
+#include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/i18n/time_formatting.h"
+#include "base/location.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
+#include "base/no_destructor.h"
+#include "base/notimplemented.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/clock.h"
-#include "base/time/default_clock.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
+#include "build/buildflag.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ui/passwords/passwords_client_ui_delegate.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
+#include "chrome/browser/webauthn/change_pin_controller_impl.h"
+#include "chrome/browser/webauthn/enclave_manager.h"
 #include "chrome/browser/webauthn/enclave_manager_factory.h"
+#include "chrome/browser/webauthn/gpm_user_verification_policy.h"
 #include "chrome/browser/webauthn/passkey_model_factory.h"
 #include "chrome/browser/webauthn/proto/enclave_local_state.pb.h"
 #include "chrome/browser/webauthn/webauthn_pref_names.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_access_token_fetcher.h"
 #include "components/trusted_vault/frontend_trusted_vault_connection.h"
 #include "components/trusted_vault/securebox.h"
 #include "components/trusted_vault/trusted_vault_connection.h"
 #include "components/trusted_vault/trusted_vault_server_constants.h"
+#include "components/webauthn/core/browser/passkey_model.h"
 #include "content/public/browser/render_frame_host.h"
+#include "device/fido/enclave/constants.h"
 #include "device/fido/enclave/metrics.h"
+#include "device/fido/enclave/types.h"
 #include "device/fido/features.h"
 #include "device/fido/fido_constants.h"
+#include "device/fido/fido_discovery_base.h"
 #include "device/fido/fido_discovery_factory.h"
 #include "device/fido/fido_types.h"
-#include "device/fido/platform_user_verification_policy.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/public/cpp/webauthn_dialog_controller.h"
+#endif
 
 #if BUILDFLAG(IS_MAC)
 #include "chrome/common/chrome_version.h"
@@ -47,6 +79,7 @@
 #endif  // BUILDFLAG(IS_MAC)
 
 using Step = AuthenticatorRequestDialogModel::Step;
+using ChangePinEvent = ChangePinControllerImpl::ChangePinEvent;
 
 // These diagrams aren't exhaustive, but hopefully can help identify the control
 // flow in this code, which is very callback-heavy. The "digraph" sections are
@@ -102,8 +135,8 @@ using Step = AuthenticatorRequestDialogModel::Step;
 // create(), empty security domain
 //
 // digraph {
-//   OnGPMSelected -> kGPMOnboarding -> OnGPMOnboardingAccepted ->
-//     kGPMCreatePin -> OnGPMPinEntered -> OnDeviceAdded
+//   OnGPMSelected -> kGPMCreatePasskey -> kGPMCreatePin -> OnGPMPinEntered ->
+//     OnDeviceAdded
 //   OnDeviceAdded -> StartTransaction
 //   OnDeviceAdded -> kGPMTouchID -> OnTouchIDComplete -> StartTransaction
 // }
@@ -115,13 +148,7 @@ using Step = AuthenticatorRequestDialogModel::Step;
 //   |
 //   v
 // +-------------------------+
-// |     kGPMOnboarding      |
-// +-------------------------+
-//   |
-//   |
-//   v
-// +-------------------------+
-// | OnGPMOnboardingAccepted |
+// |    kGPMCreatePasskey    |
 // +-------------------------+
 //   |
 //   |
@@ -214,16 +241,9 @@ struct GPMEnclaveController::DownloadedAccountState {
   std::vector<base::Time> lskf_expiries;
 };
 
-namespace {
-
-#if BUILDFLAG(IS_MAC)
-constexpr char kICloudKeychainRecoveryKeyAccessGroup[] =
-    MAC_TEAM_IDENTIFIER_STRING ".com.google.common.folsom";
-#endif  // BUILDFLAG(IS_MAC)
-
 // EnclaveUserVerificationMethod enumerates the possible ways that user
 // verification will be performed for an enclave transaction.
-enum class EnclaveUserVerificationMethod {
+enum class GPMEnclaveController::EnclaveUserVerificationMethod {
   // No user verification will be performed.
   kNone,
   // The user will enter a GPM PIN.
@@ -244,17 +264,38 @@ enum class EnclaveUserVerificationMethod {
   kUnsatisfiable,
 };
 
+using EnclaveUserVerificationMethod =
+    GPMEnclaveController::EnclaveUserVerificationMethod;
+
+namespace {
+
+#if BUILDFLAG(IS_MAC)
+constexpr char kICloudKeychainRecoveryKeyAccessGroup[] =
+#if defined(VIVALDI_BUILD)
+    MAC_TEAM_IDENTIFIER_STRING ".com.vivaldi.common";
+#else
+    MAC_TEAM_IDENTIFIER_STRING ".com.google.common.folsom";
+#endif  // defined(VIVALDI_BUILD)
+#endif  // BUILDFLAG(IS_MAC)
+
 // Pick an enclave user verification method for a specific request.
 EnclaveUserVerificationMethod PickEnclaveUserVerificationMethod(
     device::UserVerificationRequirement uv,
     bool have_added_device,
     bool has_pin,
-    EnclaveManager::UvKeyState uv_key_state) {
+    EnclaveManager::UvKeyState uv_key_state,
+    bool platform_has_biometrics) {
   if (have_added_device) {
     return EnclaveUserVerificationMethod::kImplicit;
   }
 
-  if (!device::fido::PlatformWillDoUserVerification(uv)) {
+  // If the platform has biometrics now, but didn't when we enrolled, we need to
+  // act as if they are missing because we've no UV key to use them with.
+  if (uv_key_state == EnclaveManager::UvKeyState::kNone) {
+    platform_has_biometrics = false;
+  }
+
+  if (!GpmWillDoUserVerification(uv, platform_has_biometrics)) {
     return EnclaveUserVerificationMethod::kNone;
   }
 
@@ -314,8 +355,10 @@ class AccountStateCache {
 
   void Put(base::Clock* clock,
            const GPMEnclaveController::DownloadedAccountState& state) {
-    cache_time_ = clock->Now();
-    value_ = state;
+    if (base::FeatureList::IsEnabled(device::kWebAuthnCacheSecurityDomain)) {
+      cache_time_ = clock->Now();
+      value_ = state;
+    }
   }
 
  private:
@@ -449,17 +492,36 @@ void GPMEnclaveController::OnEnclaveLoaded() {
     return;
   }
 
-  // TODO(enclave): even for kGetAssertion, when using a GPM PIN for UV we will
-  // want to probe the security domain service to learn when the PIN changes.
+  // For create() requests, we want to probe the security domain service to
+  // ensure that we never create a credential encrypted to an old security
+  // domain secret. For get() requests, we can generally skip the probe if
+  // already enrolled. However, if this request will require using the GPM PIN
+  // for UV then we want to probe to ensure that we catch any changes to the GPM
+  // PIN. While we cannot fully determine the UV method at this stage, because
+  // we don't know whether the platform has biometrics, we can know whether
+  // we'll use a GPM PIN for UV or not.
   if (request_type_ == device::FidoRequestType::kGetAssertion) {
     if (enclave_manager_->is_ready()) {
-      FIDO_LOG(EVENT) << "Enclave is ready";
-      SetAccountStateReady();
-      SetActive(true);
-      return;
+      switch (PickEnclaveUserVerificationMethod(
+          user_verification_requirement_, /*have_added_device=*/false,
+          enclave_manager_->has_wrapped_pin(),
+          enclave_manager_->uv_key_state(/*platform_has_biometrics=*/false),
+          /*platform_has_biometrics=*/false)) {
+        case EnclaveUserVerificationMethod::kPIN:
+          FIDO_LOG(EVENT)
+              << "Checking security domain service because a GPM PIN will be "
+                 "used for user verification in this request.";
+          break;
+        default:
+          FIDO_LOG(EVENT) << "Enclave is ready and this request will not use a "
+                             "GPM PIN for user verification";
+          SetAccountStateReady();
+          SetActive(true);
+          return;
+      }
     }
 
-    if (base::FeatureList::IsEnabled(device::kWebAuthnGpmPin)) {
+    if (device::kWebAuthnGpmPin.Get()) {
       // For get() requests, progress the UI now because, with GPM PIN support,
       // we can handle the account in any state and we'll block the UI if needed
       // when the user selects a GPM credential.
@@ -478,8 +540,7 @@ void GPMEnclaveController::OnUVCapabilityKnown(bool can_make_uv_keys) {
 
   can_make_uv_keys_ = can_make_uv_keys;
 
-  if (!can_make_uv_keys &&
-      !base::FeatureList::IsEnabled(device::kWebAuthnGpmPin)) {
+  if (!can_make_uv_keys && !device::kWebAuthnGpmPin.Get()) {
     // Without the ability to do user verification, we cannot enroll the current
     // device.
     account_state_ = AccountState::kNone;
@@ -510,14 +571,18 @@ void GPMEnclaveController::DownloadAccountState() {
 
   account_state_timeout_ = std::make_unique<base::OneShotTimer>();
   account_state_timeout_->Start(
-      FROM_HERE, base::Milliseconds(1000),
+      FROM_HERE, kDownloadAccountStateTimeout,
       base::BindOnce(&GPMEnclaveController::OnAccountStateTimeOut,
                      weak_ptr_factory_.GetWeakPtr()));
 
   auto* const identity_manager =
       IdentityManagerFactory::GetForProfile(GetProfile());
+  scoped_refptr<network::SharedURLLoaderFactory> testing_url_loader =
+      EnclaveManagerFactory::url_loader_override();
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory =
-      SystemNetworkContextManager::GetInstance()->GetSharedURLLoaderFactory();
+      testing_url_loader ? testing_url_loader
+                         : SystemNetworkContextManager::GetInstance()
+                               ->GetSharedURLLoaderFactory();
   std::unique_ptr<trusted_vault::TrustedVaultConnection> trusted_vault_conn =
       vault_connection_override_
           ? std::move(vault_connection_override_)
@@ -543,6 +608,7 @@ void GPMEnclaveController::OnAccountStateTimeOut() {
     SetAccountStateReady();
     SetActive(true);
   } else {
+    model_->OnLoadingEnclaveTimeout();
     account_state_ = AccountState::kNone;
     SetActive(false);
   }
@@ -590,7 +656,7 @@ void GPMEnclaveController::OnHaveAccountState(DownloadedAccountState result) {
                   << ", has PIN: " << result.gpm_pin_metadata.has_value()
                   << ", iCloud Keychain keys: " << result.icloud_keys.size();
 
-  if (!base::FeatureList::IsEnabled(device::kWebAuthnGpmPin) &&
+  if (!device::kWebAuthnGpmPin.Get() &&
       result.state == Result::State::kRecoverable &&
       !result.lskf_expiries.empty() &&
       base::ranges::all_of(result.lskf_expiries, ExpiryTooSoon)) {
@@ -627,7 +693,7 @@ void GPMEnclaveController::OnHaveAccountState(DownloadedAccountState result) {
   }
   security_domain_icloud_recovery_keys_ = std::move(result.icloud_keys);
 
-  if (base::FeatureList::IsEnabled(device::kWebAuthnGpmPin)) {
+  if (device::kWebAuthnGpmPin.Get()) {
     SetActive(account_state_ != AccountState::kNone);
   } else {
     SetActive(account_state_ == AccountState::kRecoverable);
@@ -753,64 +819,65 @@ void GPMEnclaveController::OnEnclaveAccountSetUpComplete() {
   SetAccountStateReady();
   SetFailedPINAttemptCount(0);
 
-  switch (account_state_) {
-    case AccountState::kReady:
-      model_->SetStep(Step::kGPMConnecting);
-      StartTransaction();
-      break;
+  uv_method_ = PickEnclaveUserVerificationMethod(
+      user_verification_requirement_, have_added_device_,
+      enclave_manager_->has_wrapped_pin(),
+      enclave_manager_->uv_key_state(*model_->platform_has_biometrics),
+      *model_->platform_has_biometrics);
+  // `have_added_device_` is set, which satisfies UV, so we must have picked
+  // "implicit" UV.
+  CHECK_EQ(*uv_method_, EnclaveUserVerificationMethod::kImplicit);
 
-    case AccountState::kReadyWithBiometrics:
-      model_->SetStep(Step::kGPMTouchID);
-      break;
-
-    default:
-      // kReadyWithPIN is not possible because `have_added_device_` is set
-      // and so user verification will be satisfied with the stored security
-      // domain secret in this case.
-      NOTREACHED_NORETURN();
-  }
+  model_->DisableUiOrShowLoadingDialog();
+  StartTransaction();
 }
 
 void GPMEnclaveController::SetAccountStateReady() {
-  switch (PickEnclaveUserVerificationMethod(
-      user_verification_requirement_, have_added_device_,
-      enclave_manager_->has_wrapped_pin(), enclave_manager_->uv_key_state())) {
-    case EnclaveUserVerificationMethod::kUVKeyWithSystemUI:
-    case EnclaveUserVerificationMethod::kDeferredUVKeyWithSystemUI:
-    case EnclaveUserVerificationMethod::kNone:
-    case EnclaveUserVerificationMethod::kImplicit:
-      account_state_ = AccountState::kReady;
-      break;
-
-    case EnclaveUserVerificationMethod::kPIN:
-      account_state_ = AccountState::kReadyWithPIN;
-      break;
-
-    case EnclaveUserVerificationMethod::kUVKeyWithChromeUI:
-      account_state_ = AccountState::kReadyWithBiometrics;
-      break;
-
-    case EnclaveUserVerificationMethod::kUnsatisfiable:
-      account_state_ = AccountState::kNone;
-      break;
-  }
-
+  account_state_ = AccountState::kReady;
   pin_is_arbitrary_ = enclave_manager_->has_wrapped_pin() &&
                       enclave_manager_->wrapped_pin_is_arbitrary();
 }
 
 void GPMEnclaveController::OnGPMSelected() {
+  if (model_->is_off_the_record && !off_the_record_confirmed_) {
+    model_->SetStep(Step::kGPMConfirmOffTheRecordCreate);
+    return;
+  }
+
   switch (account_state_) {
-    case AccountState::kReady:
-    case AccountState::kReadyWithPIN:
+    case AccountState::kEmpty:
       model_->SetStep(Step::kGPMCreatePasskey);
       break;
 
-    case AccountState::kReadyWithBiometrics:
-      model_->SetStep(Step::kGPMTouchID);
+    case AccountState::kReady:
+      uv_method_ = PickEnclaveUserVerificationMethod(
+          user_verification_requirement_, have_added_device_,
+          enclave_manager_->has_wrapped_pin(),
+          enclave_manager_->uv_key_state(*model_->platform_has_biometrics),
+          *model_->platform_has_biometrics);
+
+      switch (*uv_method_) {
+        case EnclaveUserVerificationMethod::kUVKeyWithSystemUI:
+        case EnclaveUserVerificationMethod::kDeferredUVKeyWithSystemUI:
+        case EnclaveUserVerificationMethod::kNone:
+        case EnclaveUserVerificationMethod::kImplicit:
+        case EnclaveUserVerificationMethod::kPIN:
+          model_->SetStep(Step::kGPMCreatePasskey);
+          break;
+
+        case EnclaveUserVerificationMethod::kUVKeyWithChromeUI:
+          model_->SetStep(Step::kGPMTouchID);
+          break;
+
+        case EnclaveUserVerificationMethod::kUnsatisfiable:
+          model_->SetStep(Step::kGPMError);
+          break;
+      }
       break;
 
     case AccountState::kRecoverable:
+    case AccountState::kIrrecoverable:
+      device::enclave::RecordEvent(device::enclave::Event::kOnboarding);
       model_->SetStep(Step::kTrustThisComputerCreation);
       break;
 
@@ -818,28 +885,14 @@ void GPMEnclaveController::OnGPMSelected() {
     case AccountState::kChecking:
       waiting_for_account_state_ = base::BindOnce(
           &GPMEnclaveController::OnGPMSelected, weak_ptr_factory_.GetWeakPtr());
-      if (model_->step() == Step::kNotStarted) {
-        // No UI is visible yet, display a loading dialog after a delay, so it
-        // doesn't flicker in case the account state is fetched quickly.
-        // TODO(rgod): Add delay.
-        model_->SetStep(Step::kGPMConnecting);
-      } else {
-        model_->ui_disabled_ = true;
-        model_->OnSheetModelChanged();
-      }
+      // TODO(rgod): If the model step is `kNotStarted`, no UI is visible yet.
+      // Display a loading dialog after a delay, so it doesn't flicker in case
+      // the account state is fetched quickly.
+      model_->DisableUiOrShowLoadingDialog();
       break;
 
     case AccountState::kNone:
       model_->SetStep(Step::kGPMError);
-      break;
-
-    case AccountState::kIrrecoverable:
-      // TODO(enclave): show the reset flow.
-      NOTIMPLEMENTED();
-      break;
-
-    case AccountState::kEmpty:
-      model_->SetStep(Step::kGPMOnboarding);
       break;
   }
 }
@@ -850,20 +903,42 @@ void GPMEnclaveController::OnGPMPasskeySelected(
 
   switch (account_state_) {
     case AccountState::kReady:
-      model_->SetStep(Step::kGPMConnecting);
-      StartTransaction();
-      break;
+      uv_method_ = PickEnclaveUserVerificationMethod(
+          user_verification_requirement_, have_added_device_,
+          enclave_manager_->has_wrapped_pin(),
+          enclave_manager_->uv_key_state(*model_->platform_has_biometrics),
+          *model_->platform_has_biometrics);
 
-    case AccountState::kReadyWithPIN:
-      PromptForPin();
-      break;
+      switch (*uv_method_) {
+        case EnclaveUserVerificationMethod::kUVKeyWithSystemUI:
+        case EnclaveUserVerificationMethod::kDeferredUVKeyWithSystemUI:
+        case EnclaveUserVerificationMethod::kNone:
+        case EnclaveUserVerificationMethod::kImplicit:
+          if (model_->step() != Step::kConditionalMediation) {
+            // The autofill UI shows its own loading indicator.
+            model_->DisableUiOrShowLoadingDialog();
+          }
+          StartTransaction();
+          break;
 
-    case AccountState::kReadyWithBiometrics:
-      model_->SetStep(Step::kGPMTouchID);
+        case EnclaveUserVerificationMethod::kPIN:
+          PromptForPin();
+          break;
+
+        case EnclaveUserVerificationMethod::kUVKeyWithChromeUI:
+          model_->SetStep(Step::kGPMTouchID);
+          break;
+
+        case EnclaveUserVerificationMethod::kUnsatisfiable:
+          model_->SetStep(Step::kGPMError);
+          break;
+      }
       break;
 
     case AccountState::kRecoverable:
+    case AccountState::kIrrecoverable:
       if (model_->priority_phone_name.has_value()) {
+        device::enclave::RecordEvent(device::enclave::Event::kOnboarding);
         model_->SetStep(Step::kTrustThisComputerAssertion);
       } else {
         model_->SetStep(Step::kRecoverSecurityDomain);
@@ -872,7 +947,11 @@ void GPMEnclaveController::OnGPMPasskeySelected(
 
     case AccountState::kLoading:
     case AccountState::kChecking:
-      model_->SetStep(Step::kGPMConnecting);
+      if (model_->step() != Step::kConditionalMediation &&
+          model_->step() != Step::kNotStarted) {
+        // The autofill UI shows its own loading indicator.
+        model_->DisableUiOrShowLoadingDialog();
+      }
       waiting_for_account_state_ =
           base::BindOnce(&GPMEnclaveController::OnGPMPasskeySelected,
                          weak_ptr_factory_.GetWeakPtr(), *selected_cred_id_);
@@ -882,13 +961,9 @@ void GPMEnclaveController::OnGPMPasskeySelected(
       if (model_->priority_phone_name.has_value()) {
         model_->ContactPriorityPhone();
       } else {
-        NOTREACHED_NORETURN();
+        // This can happen if a passkey is selected after the enclave times out.
+        model_->SetStep(Step::kGPMError);
       }
-      break;
-
-    case AccountState::kIrrecoverable:
-      // TODO(enclave): show the reset flow.
-      NOTIMPLEMENTED();
       break;
 
     case AccountState::kEmpty:
@@ -905,10 +980,12 @@ void GPMEnclaveController::OnGPMPasskeySelected(
 }
 
 void GPMEnclaveController::PromptForPin() {
-  // TODO(enclave): Check for failed PIN attempts having been exhausted, and
-  // trigger a PIN reset flow in that case.
-  model_->SetStep(pin_is_arbitrary_ ? Step::kGPMEnterArbitraryPin
-                                    : Step::kGPMEnterPin);
+  if (GetFailedPINAttemptCount() >= device::enclave::kMaxFailedPINAttempts) {
+    model_->SetStep(Step::kGPMLockedPin);
+  } else {
+    model_->SetStep(pin_is_arbitrary_ ? Step::kGPMEnterArbitraryPin
+                                      : Step::kGPMEnterPin);
+  }
 }
 
 void GPMEnclaveController::OnGpmPinChanged(bool success) {
@@ -916,89 +993,97 @@ void GPMEnclaveController::OnGpmPinChanged(bool success) {
 
   if (!success) {
     model_->SetStep(Step::kGPMError);
+    ChangePinControllerImpl::RecordHistogram(ChangePinEvent::kFailed);
     return;
   }
 
   SetFailedPINAttemptCount(0);
+  model_->gpm_pin_remaining_attempts_ = std::nullopt;
   // Changing GPM Pin required reauth, hence we can just proceed with the
   // get/create passkey transaction.
   StartTransaction();
+  ChangePinControllerImpl::RecordHistogram(
+      ChangePinEvent::kCompletedSuccessfully);
 }
 
 void GPMEnclaveController::OnTrustThisComputer() {
   CHECK(model_->step() == Step::kTrustThisComputerAssertion ||
         model_->step() == Step::kTrustThisComputerCreation);
+  device::enclave::RecordEvent(device::enclave::Event::kOnboardingAccepted);
   // Clicking through the bootstrapping dialog resets the count even if it
   // doesn't end up being successful.
   ResetDeclinedBootstrappingCount(model_.get());
-  if (model_->step() == Step::kTrustThisComputerCreation &&
-      model_->is_off_the_record) {
-    last_step_ = Step::kTrustThisComputerCreation;
-    model_->SetStep(Step::kGPMConfirmOffTheRecordCreate);
-    return;
-  }
   model_->SetStep(Step::kRecoverSecurityDomain);
 }
 
-void GPMEnclaveController::OnGPMOnboardingAccepted() {
-  DCHECK_EQ(model_->step(), Step::kGPMOnboarding);
-  model_->SetStep(Step::kGPMCreatePin);
-}
-
 void GPMEnclaveController::OnGPMPinOptionChanged(bool is_arbitrary) {
-  CHECK(model_->step() == Step::kGPMCreatePin ||
-        model_->step() == Step::kGPMCreateArbitraryPin);
-  model_->SetStep(is_arbitrary ? Step::kGPMCreateArbitraryPin
-                               : Step::kGPMCreatePin);
+  if (changing_gpm_pin_) {
+    CHECK(model_->step() == Step::kGPMChangePin ||
+          model_->step() == Step::kGPMChangeArbitraryPin);
+    model_->SetStep(is_arbitrary ? Step::kGPMChangeArbitraryPin
+                                 : Step::kGPMChangePin);
+  } else {
+    CHECK(model_->step() == Step::kGPMCreatePin ||
+          model_->step() == Step::kGPMCreateArbitraryPin);
+    model_->SetStep(is_arbitrary ? Step::kGPMCreateArbitraryPin
+                                 : Step::kGPMCreatePin);
+  }
 }
 
 void GPMEnclaveController::OnGPMCreatePasskey() {
   CHECK_EQ(model_->step(), Step::kGPMCreatePasskey);
+  CHECK(account_state_ == AccountState::kEmpty ||
+        account_state_ == AccountState::kReady);
+  if (account_state_ == AccountState::kEmpty) {
+    model_->SetStep(Step::kGPMCreatePin);
+  } else {
+    switch (*uv_method_) {
+      case EnclaveUserVerificationMethod::kUVKeyWithSystemUI:
+      case EnclaveUserVerificationMethod::kDeferredUVKeyWithSystemUI:
+      case EnclaveUserVerificationMethod::kNone:
+      case EnclaveUserVerificationMethod::kImplicit:
+        model_->DisableUiOrShowLoadingDialog();
+        StartTransaction();
+        break;
 
-  if (model_->is_off_the_record) {
-    last_step_ = Step::kGPMCreatePasskey;
-    model_->SetStep(Step::kGPMConfirmOffTheRecordCreate);
-    return;
+      case EnclaveUserVerificationMethod::kPIN:
+        PromptForPin();
+        break;
+
+      case EnclaveUserVerificationMethod::kUVKeyWithChromeUI:
+        model_->SetStep(Step::kGPMTouchID);
+        break;
+
+      case EnclaveUserVerificationMethod::kUnsatisfiable:
+        NOTREACHED_NORETURN();
+    }
   }
-  ContinueGPMCreatePasskey();
 }
 
 void GPMEnclaveController::OnGPMConfirmOffTheRecordCreate() {
   CHECK_EQ(model_->step(), Step::kGPMConfirmOffTheRecordCreate);
-  if (last_step_ == Step::kGPMCreatePasskey) {
-    ContinueGPMCreatePasskey();
-  } else {
-    CHECK_EQ(last_step_, Step::kTrustThisComputerCreation);
-    model_->SetStep(Step::kRecoverSecurityDomain);
-  }
-}
-
-void GPMEnclaveController::ContinueGPMCreatePasskey() {
-  CHECK(account_state_ == AccountState::kReady ||
-        account_state_ == AccountState::kReadyWithPIN ||
-        account_state_ == AccountState::kReadyWithBiometrics);
-  if (account_state_ == AccountState::kReady) {
-    model_->SetStep(Step::kGPMConnecting);
-    StartTransaction();
-  } else if (account_state_ == AccountState::kReadyWithPIN) {
-    PromptForPin();
-  } else if (account_state_ == AccountState::kReadyWithBiometrics) {
-    model_->SetStep(Step::kGPMTouchID);
-  } else {
-    NOTREACHED_NORETURN();
-  }
+  off_the_record_confirmed_ = true;
+  OnGPMSelected();
 }
 
 void GPMEnclaveController::OnGPMPinEntered(const std::u16string& pin) {
-  DCHECK(model_->step() == Step::kGPMCreateArbitraryPin ||
-         model_->step() == Step::kGPMCreatePin ||
-         model_->step() == Step::kGPMEnterArbitraryPin ||
-         model_->step() == Step::kGPMEnterPin);
+  CHECK(model_->step() == Step::kGPMChangeArbitraryPin ||
+        model_->step() == Step::kGPMChangePin ||
+        model_->step() == Step::kGPMCreateArbitraryPin ||
+        model_->step() == Step::kGPMCreatePin ||
+        model_->step() == Step::kGPMEnterArbitraryPin ||
+        model_->step() == Step::kGPMEnterPin);
   pin_ = base::UTF16ToUTF8(pin);
 
   // Disable the pin entry view while waiting for the response from enclave.
-  model_->ui_disabled_ = true;
-  model_->OnSheetModelChanged();
+  model_->DisableUiOrShowLoadingDialog();
+
+  if (model_->step() == Step::kGPMChangeArbitraryPin ||
+      model_->step() == Step::kGPMChangePin ||
+      model_->step() == Step::kGPMCreateArbitraryPin ||
+      model_->step() == Step::kGPMCreatePin) {
+    gpm_pin_creation_confirmed_ = true;
+  }
 
   if (account_state_ == AccountState::kRecoverable) {
     CHECK(enclave_manager_->has_pending_keys());
@@ -1012,14 +1097,15 @@ void GPMEnclaveController::OnGPMPinEntered(const std::u16string& pin) {
         *pin_, base::BindOnce(&GPMEnclaveController::OnDeviceAdded,
                               weak_ptr_factory_.GetWeakPtr()));
   } else if (changing_gpm_pin_) {
-    DCHECK(model_->step() == Step::kGPMCreatePin ||
-           model_->step() == Step::kGPMCreateArbitraryPin);
+    CHECK(model_->step() == Step::kGPMChangePin ||
+          model_->step() == Step::kGPMChangeArbitraryPin);
     enclave_manager_->ChangePIN(
-        base::UTF16ToUTF8(pin), std::move(rapt_),
+        base::UTF16ToUTF8(pin), std::move(*rapt_),
         base::BindOnce(&GPMEnclaveController::OnGpmPinChanged,
                        weak_ptr_factory_.GetWeakPtr()));
+    rapt_.reset();
+    ChangePinControllerImpl::RecordHistogram(ChangePinEvent::kNewPinEntered);
   } else {
-    model_->SetStep(Step::kGPMConnecting);
     StartTransaction();
   }
 }
@@ -1027,20 +1113,22 @@ void GPMEnclaveController::OnGPMPinEntered(const std::u16string& pin) {
 void GPMEnclaveController::OnTouchIDComplete(bool success) {
   // On error no LAContext will be provided and macOS will show the system UI
   // for user verification.
-  model_->SetStep(Step::kGPMConnecting);
+  model_->DisableUiOrShowLoadingDialog();
   StartTransaction();
 }
 
 void GPMEnclaveController::OnForgotGPMPinPressed() {
   changing_gpm_pin_ = true;
-  // TODO(enclave): Use biometrics instead of GAIA reauth (if available).
   model_->SetStep(Step::kGPMReauthForPinReset);
+  ChangePinControllerImpl::RecordHistogram(
+      ChangePinEvent::kFlowStartedFromPinDialog);
 }
 
 void GPMEnclaveController::OnReauthComplete(std::string rapt) {
   CHECK_EQ(model_->step(), Step::kGPMReauthForPinReset);
   rapt_ = std::move(rapt);
-  model_->SetStep(Step::kGPMCreatePin);
+  model_->SetStep(Step::kGPMChangePin);
+  ChangePinControllerImpl::RecordHistogram(ChangePinEvent::kReauthCompleted);
 }
 
 void GPMEnclaveController::StartTransaction() {
@@ -1084,7 +1172,7 @@ void GPMEnclaveController::StartEnclaveTransaction(
   // `enclave_request_callback_` which surfaces in
   // `EnclaveDiscovery::OnUIRequest`.
 
-  if (!token) {
+  if (!token || !enclave_manager_->is_ready()) {
     model_->SetStep(Step::kGPMError);
     return;
   }
@@ -1098,24 +1186,22 @@ void GPMEnclaveController::StartEnclaveTransaction(
   // is in memory.
   bool use_unwrapped_secret = false;
 
-  switch (PickEnclaveUserVerificationMethod(
-      user_verification_requirement_, have_added_device_,
-      enclave_manager_->has_wrapped_pin(), enclave_manager_->uv_key_state())) {
+  switch (*uv_method_) {
     case EnclaveUserVerificationMethod::kNone:
       request->signing_callback =
-          enclave_manager_->HardwareKeySigningCallback();
+          enclave_manager_->IdentityKeySigningCallback();
       break;
 
     case EnclaveUserVerificationMethod::kImplicit:
       request->signing_callback =
-          enclave_manager_->HardwareKeySigningCallback();
+          enclave_manager_->IdentityKeySigningCallback();
       use_unwrapped_secret = true;
       request->user_verified = true;
       break;
 
     case EnclaveUserVerificationMethod::kPIN:
       request->signing_callback =
-          enclave_manager_->HardwareKeySigningCallback();
+          enclave_manager_->IdentityKeySigningCallback();
       CHECK(claimed_pin);
       request->claimed_pin = std::move(claimed_pin);
       request->pin_result_callback =
@@ -1127,9 +1213,14 @@ void GPMEnclaveController::StartEnclaveTransaction(
     case EnclaveUserVerificationMethod::kUVKeyWithChromeUI:
     case EnclaveUserVerificationMethod::kUVKeyWithSystemUI: {
       EnclaveManager::UVKeyOptions uv_options;
+      uv_options.rp_id = rp_id_;
+      uv_options.render_frame_host_id = render_frame_host_id_;
 #if BUILDFLAG(IS_MAC)
       uv_options.lacontext = std::move(model_->lacontext);
 #endif  // BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      uv_options.dialog_controller = ash::WebAuthNDialogController::Get();
+#endif
       request->signing_callback =
           enclave_manager_->UserVerifyingKeySigningCallback(
               std::move(uv_options));
@@ -1141,7 +1232,7 @@ void GPMEnclaveController::StartEnclaveTransaction(
       // it as being user verified because this will trigger UV creation and
       // the system will verify the user for that operation.
       request->signing_callback =
-          enclave_manager_->HardwareKeySigningCallback();
+          enclave_manager_->IdentityKeySigningCallback();
       request->user_verified = true;
       request->uv_key_creation_callback =
           enclave_manager_->UserVerifyingKeyCreationCallback();
@@ -1222,12 +1313,26 @@ void GPMEnclaveController::OnPasskeyCreated(
   webauthn::PasskeyModel* passkey_model =
       PasskeyModelFactory::GetInstance()->GetForProfile(GetProfile());
   passkey_model->CreatePasskey(passkey);
-  // TODO(enclave): consider whether we're going to have this step in the
-  // future. If not, `authenticator_request_bubble.cc` can be dropped.
-  // model_->SetStep(Step::kGPMPasskeySaved);
+
+  if (device::kWebAuthnGpmPin.Get()) {
+    content::WebContents* web_contents = model_->GetWebContents();
+    if (!web_contents) {
+      return;
+    }
+
+    PasswordsClientUIDelegate* manage_passwords_ui_controller =
+        PasswordsClientUIDelegateFromWebContents(web_contents);
+    if (manage_passwords_ui_controller) {
+      bool gpm_pin_created_in_this_request =
+          gpm_pin_creation_confirmed_ && enclave_manager_->has_wrapped_pin();
+      manage_passwords_ui_controller->OnPasskeySaved(
+          base::UTF8ToUTF16(model_->user_entity.name.value_or("")),
+          gpm_pin_created_in_this_request);
+    }
+  }
 }
 
-bool GPMEnclaveController::GetFailedPINAttemptCount() {
+int GPMEnclaveController::GetFailedPINAttemptCount() {
   return GetProfile()->GetPrefs()->GetInteger(
       webauthn::pref_names::kEnclaveFailedPINAttemptsCount);
 }
@@ -1239,23 +1344,40 @@ void GPMEnclaveController::SetFailedPINAttemptCount(int count) {
 
 void GPMEnclaveController::HandlePINValidationResult(
     device::enclave::PINValidationResult result) {
-  using GpmPinError = AuthenticatorRequestDialogModel::GpmPinError;
-
   switch (result) {
     case device::enclave::PINValidationResult::kSuccess:
       SetFailedPINAttemptCount(0);
-      model_->gpm_pin_error = GpmPinError::kNone;
+      model_->gpm_pin_remaining_attempts_ = std::nullopt;
       break;
     case device::enclave::PINValidationResult::kIncorrect: {
       int count = GetFailedPINAttemptCount();
-      // TODO(enclave): If the new count is 5, go to the locked PIN UI.
       SetFailedPINAttemptCount(++count);
-      model_->gpm_pin_error = GpmPinError::kWrongPin;
-      PromptForPin();
+
+      if (count >= device::enclave::kMaxFailedPINAttempts) {
+        model_->SetStep(Step::kGPMLockedPin);
+      } else {
+        model_->gpm_pin_remaining_attempts_ =
+            device::enclave::kMaxFailedPINAttempts - count;
+        PromptForPin();
+      }
       break;
     }
     case device::enclave::PINValidationResult::kLocked:
-      // TODO(enclave): Handle locked PIN.
+      model_->SetStep(Step::kGPMLockedPin);
       break;
   }
+}
+
+void GPMEnclaveController::OnGpmPasskeysReset(bool success) {
+  CHECK(model_->step() == Step::kRecoverSecurityDomain);
+  if (!success ||
+      model_->request_type != device::FidoRequestType::kMakeCredential ||
+      !device::kWebAuthnGpmPin.Get()) {
+    model_->CancelAuthenticatorRequest();
+    return;
+  }
+  // TODO(crbug.com/342554229): There might be a race between other members of
+  // the domain. Maybe re-download the account state.
+  account_state_ = AccountState::kEmpty;
+  model_->SetStep(AuthenticatorRequestDialogModel::Step::kGPMCreatePin);
 }

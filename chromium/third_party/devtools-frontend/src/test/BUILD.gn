@@ -7,7 +7,6 @@ import("../third_party/typescript/typescript.gni")
 
 group("test") {
   deps = [
-    ":config",
     ":run",
     ":unittests",
     "e2e",
@@ -19,19 +18,11 @@ group("test") {
 
 group("unittests") {
   deps = [
-    ":config",
     "../front_end:test_inputs",
     "../front_end:unittests",
     "../inspector_overlay:unittests",
     "shared",
     "unit:karma",
-  ]
-}
-
-copy_to_gen("config") {
-  sources = [
-    "base-mocharc.js",
-    "karma.conf.js",
   ]
 }
 
@@ -41,6 +32,9 @@ node_ts_library("run") {
   deps = [ "shared" ]
 }
 
-source_root = rebase_path("//$devtools_location", "$target_gen_dir")
-write_file("$target_gen_dir/build.js",
-           "module.exports = {SOURCE_ROOT: '$source_root'};")
+source_root = rebase_path("//$devtools_location", target_gen_dir)
+checkout_root = rebase_path("//", target_gen_dir)
+build_root = rebase_path(root_build_dir, target_gen_dir)
+write_file(
+    "$target_gen_dir/build.js",
+    "module.exports = {SOURCE_ROOT: '$source_root', CHECKOUT_ROOT: '$checkout_root', BUILD_ROOT: '$build_root', BUILD_WITH_CHROMIUM: $build_with_chromium};")

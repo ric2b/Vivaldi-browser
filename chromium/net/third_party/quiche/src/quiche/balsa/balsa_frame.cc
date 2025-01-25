@@ -41,6 +41,9 @@ namespace quiche {
 
 namespace {
 
+using FirstLineValidationOption =
+    HttpValidationPolicy::FirstLineValidationOption;
+
 constexpr size_t kContinueStatusCode = 100;
 constexpr size_t kSwitchingProtocolsStatusCode = 101;
 
@@ -71,7 +74,6 @@ void BalsaFrame::Reset() {
   term_chars_ = 0;
   parse_state_ = BalsaFrameEnums::READING_HEADER_AND_FIRSTLINE;
   last_error_ = BalsaFrameEnums::BALSA_NO_ERROR;
-  invalid_chars_.clear();
   lines_.clear();
   if (continue_headers_ != nullptr) {
     continue_headers_->Clear();
@@ -85,6 +87,7 @@ void BalsaFrame::Reset() {
   if (trailers_ != nullptr) {
     trailers_->Clear();
   }
+  is_valid_target_uri_ = true;
 }
 
 namespace {
@@ -101,9 +104,8 @@ namespace {
 // whose indices fall in [*first_whitespace, *first_nonwhite), while the
 // non-whitespace span are the characters whose indices fall in
 // [*first_nonwhite, returnvalue - begin).
-inline const char* ParseOneIsland(const char* current, const char* begin,
-                                  const char* end, size_t* first_whitespace,
-                                  size_t* first_nonwhite) {
+inline char* ParseOneIsland(char* current, char* begin, char* end,
+                            size_t* first_whitespace, size_t* first_nonwhite) {
   *first_whitespace = current - begin;
   while (current < end && CHAR_LE(*current, ' ')) {
     ++current;
@@ -151,16 +153,32 @@ inline const char* ParseOneIsland(const char* current, const char* begin,
 //  ProcessFirstLine(begin, end, is_request, &headers, &error_code);
 //
 
-bool ParseHTTPFirstLine(const char* begin, const char* end, bool is_request,
+bool ParseHTTPFirstLine(char* begin, char* end, bool is_request,
                         BalsaHeaders* headers,
-                        BalsaFrameEnums::ErrorCode* error_code) {
+                        BalsaFrameEnums::ErrorCode* error_code,
+                        FirstLineValidationOption whitespace_option) {
   while (begin < end && (end[-1] == '\n' || end[-1] == '\r')) {
     --end;
   }
 
-  const char* current =
-      ParseOneIsland(begin, begin, end, &headers->whitespace_1_idx_,
-                     &headers->non_whitespace_1_idx_);
+  if (whitespace_option != FirstLineValidationOption::NONE) {
+    constexpr absl::string_view kBadWhitespace = "\r\t";
+    char* pos = std::find_first_of(begin, end, kBadWhitespace.begin(),
+                                   kBadWhitespace.end());
+    if (pos != end) {
+      if (whitespace_option == FirstLineValidationOption::REJECT) {
+        *error_code = static_cast<BalsaFrameEnums::ErrorCode>(
+            BalsaFrameEnums::INVALID_WS_IN_STATUS_LINE +
+            static_cast<int>(is_request));
+        return false;
+      }
+      QUICHE_DCHECK(whitespace_option == FirstLineValidationOption::SANITIZE);
+      std::replace_if(
+          pos, end, [](char c) { return c == '\r' || c == '\t'; }, ' ');
+    }
+  }
+  char* current = ParseOneIsland(begin, begin, end, &headers->whitespace_1_idx_,
+                                 &headers->non_whitespace_1_idx_);
   current = ParseOneIsland(current, begin, end, &headers->whitespace_2_idx_,
                            &headers->non_whitespace_2_idx_);
   current = ParseOneIsland(current, begin, end, &headers->whitespace_3_idx_,
@@ -228,6 +246,94 @@ bool ParseHTTPFirstLine(const char* begin, const char* end, bool is_request,
   return true;
 }
 
+namespace {
+bool IsValidTargetUri(absl::string_view method, absl::string_view target_uri) {
+  if (target_uri.empty()) {
+    QUICHE_CODE_COUNT(invalid_target_uri_empty);
+    return false;
+  }
+  // HTTP/1.1 allows for a path of "*" for OPTIONS requests, based on RFC
+  // 9112, https://www.rfc-editor.org/rfc/rfc9112.html#section-3.2.4:
+  //
+  // The asterisk-form of request-target is only used for a server-wide OPTIONS
+  // request
+  // ...
+  // asterisk-form  = "*"
+  if (target_uri == "*") {
+    if (method == "OPTIONS") {
+      return true;
+    }
+    QUICHE_CODE_COUNT(invalid_target_uri_asterisk_not_options);
+    return false;
+  }
+  if (method == "CONNECT") {
+    // The :authority must be authority-form for CONNECT method requests. From
+    // RFC 9112: https://www.rfc-editor.org/rfc/rfc9112.html#section-3.2.3:
+    //
+    // The "authority-form" of request-target is only used for CONNECT requests
+    // (Section 9.3.6 of [HTTP]). It consists of only the uri-host and port
+    // number of the tunnel destination, separated by a colon (":").
+    //
+    //    authority-form = uri-host ":" port
+    //
+    // When making a CONNECT request to establish a tunnel through one or more
+    // proxies, a client MUST send only the host and port of the tunnel
+    // destination as the request-target. The client obtains the host and port
+    // from the target URI's authority component, except that it sends the
+    // scheme's default port if the target URI elides the port. For example, a
+    // CONNECT request to "http://www.example.com" looks like the following:
+    //
+    //    CONNECT www.example.com:80 HTTP/1.1
+    //    Host: www.example.com
+    //
+    // Also from RFC 9110, the CONNECT request-target must have a valid port
+    // number, https://www.rfc-editor.org/rfc/rfc9110.html#section-9.3.6:
+    //
+    // A server MUST reject a CONNECT request that targets an empty or invalid
+    // port number, typically by responding with a 400 (Bad Request) status code
+    size_t index = target_uri.find_last_of(':');
+    if (index == absl::string_view::npos || index == 0) {
+      QUICHE_CODE_COUNT(invalid_target_uri_connect_missing_port);
+      return false;
+    }
+    // This is an IPv6 address and must have the closing "]" bracket just prior
+    // to the port delimiter.
+    if (target_uri[0] == '[' && target_uri[index - 1] != ']') {
+      QUICHE_CODE_COUNT(invalid_target_uri_connect_bad_v6_literal);
+      return false;
+    }
+    int port;
+    if (!absl::SimpleAtoi(target_uri.substr(index + 1), &port) || port < 0 ||
+        port > 65535) {
+      QUICHE_CODE_COUNT(invalid_target_uri_connect_bad_port);
+      return false;
+    }
+    return true;
+  }
+
+  // From RFC 9112: https://www.rfc-editor.org/rfc/rfc9112.html#name-origin-form
+  //
+  // When making a request directly to an origin server, other than a CONNECT
+  // or server-wide OPTIONS request (as detailed below), a client MUST send
+  // only the absolute path and query components of the target URI as the
+  // request-target. If the target URI's path component is empty, the client
+  // MUST send "/" as the path within the origin-form of request-target.
+  //
+  // https://www.rfc-editor.org/rfc/rfc9112.html#name-absolute-form
+  // When making a request to a proxy, other than a CONNECT or server-wide
+  // OPTIONS request (as detailed below), a client MUST send the target URI
+  // in "absolute-form" as the request-target.
+  //
+  // https://www.rfc-editor.org/rfc/rfc3986.html#section-4.2
+  // https://www.rfc-editor.org/rfc/rfc3986.html#section-4.3
+  if (target_uri[0] == '/' || absl::StrContains(target_uri, "://")) {
+    return true;
+  }
+  QUICHE_CODE_COUNT(invalid_target_uri_bad_path);
+  return false;
+}
+}  // namespace
+
 // begin - beginning of the firstline
 // end - end of the firstline
 //
@@ -238,9 +344,11 @@ bool ParseHTTPFirstLine(const char* begin, const char* end, bool is_request,
 //
 // Another precondition for this function is that [begin, end) includes
 // at most one newline, which must be at the end of the line.
-void BalsaFrame::ProcessFirstLine(const char* begin, const char* end) {
+void BalsaFrame::ProcessFirstLine(char* begin, char* end) {
   BalsaFrameEnums::ErrorCode previous_error = last_error_;
-  if (!ParseHTTPFirstLine(begin, end, is_request_, headers_, &last_error_)) {
+  if (!ParseHTTPFirstLine(
+          begin, end, is_request_, headers_, &last_error_,
+          http_validation_policy().sanitize_cr_tab_in_first_line)) {
     parse_state_ = BalsaFrameEnums::ERROR;
     HandleError(last_error_);
     return;
@@ -263,6 +371,14 @@ void BalsaFrame::ProcessFirstLine(const char* begin, const char* end) {
       headers_->whitespace_4_idx_ - headers_->non_whitespace_3_idx_);
 
   if (is_request_) {
+    is_valid_target_uri_ = IsValidTargetUri(part1, part2);
+    if (http_validation_policy().disallow_invalid_target_uris &&
+        !is_valid_target_uri_) {
+      parse_state_ = BalsaFrameEnums::ERROR;
+      last_error_ = BalsaFrameEnums::INVALID_TARGET_URI;
+      HandleError(last_error_);
+      return;
+    }
     visitor_->OnRequestFirstLineInput(line_input, part1, part2, part3);
     if (part3.empty()) {
       parse_state_ = BalsaFrameEnums::MESSAGE_FULLY_READ;
@@ -543,13 +659,11 @@ bool BalsaFrame::CheckHeaderLinesForInvalidChars(const Lines& lines,
   for (const char* c = stream_begin; c < stream_end; c++) {
     if (header_properties::IsInvalidHeaderChar(*c)) {
       found_invalid = true;
-      invalid_chars_[*c]++;
     }
     if (*c == '\r' &&
         http_validation_policy().disallow_lone_cr_in_request_headers &&
         c + 1 < stream_end && *(c + 1) != '\n') {
       found_invalid = true;
-      invalid_chars_[*c]++;
     }
   }
 
@@ -561,16 +675,12 @@ void BalsaFrame::ProcessHeaderLines(const Lines& lines, bool is_trailer,
   QUICHE_DCHECK(!lines.empty());
   QUICHE_DVLOG(1) << "******@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@**********\n";
 
-  if ((is_request() || http_validation_policy()
-                           .disallow_invalid_header_characters_in_response) &&
-      track_invalid_chars()) {
-    if (CheckHeaderLinesForInvalidChars(lines, headers)) {
-      if (invalid_chars_error_enabled()) {
-        HandleError(BalsaFrameEnums::INVALID_HEADER_CHARACTER);
-        return;
-      }
-
-      HandleWarning(BalsaFrameEnums::INVALID_HEADER_CHARACTER);
+  if (is_request() ||
+      http_validation_policy().disallow_invalid_header_characters_in_response) {
+    if (invalid_chars_error_enabled() &&
+        CheckHeaderLinesForInvalidChars(lines, headers)) {
+      HandleError(BalsaFrameEnums::INVALID_HEADER_CHARACTER);
+      return;
     }
   }
 
@@ -793,7 +903,7 @@ size_t BalsaFrame::ProcessHeaders(const char* message_start,
       if (lines_.size() == 1) {
         headers_->WriteFromFramer(checkpoint, 1 + message_current - checkpoint);
         checkpoint = message_current + 1;
-        const char* begin = headers_->OriginalHeaderStreamBegin();
+        char* begin = headers_->OriginalHeaderStreamBegin();
 
         QUICHE_DVLOG(1) << "First line "
                         << std::string(begin, lines_[0].second);
@@ -1111,6 +1221,7 @@ size_t BalsaFrame::ProcessInput(const char* input, size_t size) {
 
         --current;
         parse_state_ = BalsaFrameEnums::READING_CHUNK_EXTENSION;
+        last_char_was_slash_r_ = false;
         visitor_->OnChunkLength(chunk_length_remaining_);
         continue;
 
@@ -1129,11 +1240,22 @@ size_t BalsaFrame::ProcessInput(const char* input, size_t size) {
             return current - input;
           }
           const char c = *current;
-          if (http_validation_policy_.disallow_lone_cr_in_chunk_extension &&
-              c == '\r' && (current + 1 == end || *(current + 1) != '\n')) {
-            // We have a lone carriage return.
-            HandleError(BalsaFrameEnums::INVALID_CHUNK_EXTENSION);
-            return current - input;
+          if (http_validation_policy_.disallow_lone_cr_in_chunk_extension) {
+            // This is a CR character and the next one is not LF.
+            const bool cr_followed_by_non_lf =
+                c == '\r' && current + 1 < end && *(current + 1) != '\n';
+            // The last character processed by the last ProcessInput() call was
+            // CR, this is the first character of the current ProcessInput()
+            // call, and it is not LF.
+            const bool previous_cr_followed_by_non_lf =
+                last_char_was_slash_r_ && current == input && c != '\n';
+            if (cr_followed_by_non_lf || previous_cr_followed_by_non_lf) {
+              HandleError(BalsaFrameEnums::INVALID_CHUNK_EXTENSION);
+              return current - input;
+            }
+            if (current + 1 == end) {
+              last_char_was_slash_r_ = c == '\r';
+            }
           }
           if (c == '\r' || c == '\n') {
             extensions_length = (extensions_start == current)

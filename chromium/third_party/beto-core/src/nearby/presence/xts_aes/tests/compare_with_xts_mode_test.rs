@@ -15,16 +15,14 @@
 #![allow(clippy::unwrap_used)]
 
 use aes::{cipher, cipher::KeyInit as _};
-use alloc::vec::Vec;
 use crypto_provider::aes::*;
 use crypto_provider::CryptoProvider;
 use crypto_provider_default::CryptoProviderImpl;
 use ldt_tbc::TweakableBlockCipherDecrypter;
 use ldt_tbc::TweakableBlockCipherEncrypter;
-use rand::{self, distributions, Rng as _};
+use rand::{distributions, Rng as _};
 use rand_ext::seeded_rng;
 use xts_aes::{Tweak, XtsAes128Key, XtsAes256Key, XtsDecrypter, XtsEncrypter, XtsKey};
-extern crate alloc;
 
 #[test]
 fn identical_to_xtsmode_crate() {

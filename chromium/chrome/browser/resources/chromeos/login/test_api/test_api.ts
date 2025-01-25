@@ -353,12 +353,12 @@ class AiIntroScreenTester extends ScreenElementApi {
   }
 }
 
-class TunaScreenTester extends ScreenElementApi {
+class GeminiIntroScreenTester extends ScreenElementApi {
   constructor() {
-    super('tuna');
+    super('gemini-intro');
   }
   override shouldSkip(): boolean {
-    return loadTimeData.getBoolean('testapi_shouldSkipTuna');
+    return loadTimeData.getBoolean('testapi_shouldSkipGeminiIntro');
   }
 }
 
@@ -1225,19 +1225,17 @@ class ChoobeScreenTester extends ScreenElementApi {
   }
 
   override shouldSkip(): boolean {
-    return loadTimeData.getBoolean('testapi_shouldSkipChoobe');
-  }
-
-  // TODO(b/327270907) To avoid breaking existing calls to `shouldSkip()`,
-  // `updatedShouldSkip()` is temporarily introduced. The code in
-  // `updatedShouldSkip()` should later be moved to `shouldSkip()` once the
-  // users of the API are migrated to the new logic.
-  updatedShouldSkip(): boolean {
     assert(
         this.isShouldSkipReceived(),
         '`shouldSkip()` should only be called after `requestShouldSkip()`' +
             'is called, and `isShouldSkippedReceived()` starts returning true');
     return this.shouldBeSkipped;
+  }
+
+  // TODO(b/327270907): Remove `updatedShouldSkip()` after the users of the test
+  // API migrate to using `shouldSkip()`
+  updatedShouldSkip(): boolean {
+    return this.shouldSkip();
   }
 
   isReadyForTesting(): boolean {
@@ -1353,19 +1351,17 @@ class ChoobeTouchpadScrollScreenTester extends ScreenElementApi {
   }
 
   override shouldSkip(): boolean {
-    return loadTimeData.getBoolean('testapi_shouldSkipTouchpadScroll');
-  }
-
-  // TODO(b/327270907) To avoid breaking existing calls to `shouldSkip()`,
-  // `updatedShouldSkip()` is temporarily introduced. The code in
-  // `updatedShouldSkip()` should later be moved to `shouldSkip()` once the
-  // users of the API are migrated to the new logic.
-  updatedShouldSkip(): boolean {
     assert(
         this.isShouldSkipReceived(),
         '`shouldSkip()` should only be called after `requestShouldSkip()`' +
             'is called, and `isShouldSkippedReceived()` starts returning true');
     return this.shouldBeSkipped;
+  }
+
+  // TODO(b/327270907): Remove `updatedShouldSkip()` after the users of the test
+  // API migrate to using `shouldSkip()`
+  updatedShouldSkip(): boolean {
+    return this.shouldSkip();
   }
 
   isReadyForTesting(): boolean {
@@ -1400,6 +1396,47 @@ class HwDataCollectionScreenTester extends ScreenElementApi {
 
   isReadyForTesting(): boolean {
     return this.isVisible();
+  }
+}
+
+class DeviceUseCaseScreenTester extends ScreenElementApi {
+  private loadingStep: PolymerElementApi;
+  private overviewStep: PolymerElementApi;
+  private skipButton: PolymerElementApi;
+
+  constructor() {
+    super('categories-selection');
+    this.loadingStep = new PolymerElementApi(this, '#progressDialog');
+    this.overviewStep = new PolymerElementApi(this, '#categoriesDialog');
+    this.skipButton = new PolymerElementApi(this, '#skipButton');
+    this.nextButton = new PolymerElementApi(this, '#nextButton');
+  }
+
+  isReadyForTesting(): boolean {
+    // Return true only if we were able to fetch data from the server and
+    // rendered it on the screen.
+    return this.isVisible() && this.overviewStep.isVisible();
+  }
+}
+
+class PersonalizedRecommendAppsScreenTester extends ScreenElementApi {
+  private loadingStep: PolymerElementApi;
+  private overviewStep: PolymerElementApi;
+  private skipButton: PolymerElementApi;
+
+  constructor() {
+    super('personalized-apps');
+    this.loadingStep = new PolymerElementApi(this, '#progressDialog');
+    this.overviewStep =
+        new PolymerElementApi(this, '#personalizedRecommendDialog');
+    this.skipButton = new PolymerElementApi(this, '#skipButton');
+    this.nextButton = new PolymerElementApi(this, '#nextButton');
+  }
+
+  isReadyForTesting(): boolean {
+    // Return true only if we were able to fetch data from the server and
+    // rendered it on the screen.
+    return this.isVisible() && this.overviewStep.isVisible();
   }
 }
 
@@ -1440,7 +1477,7 @@ export class OobeApiProvider {
       PasswordSelectionScreen: new PasswordSelectionScreenTester(),
       FingerprintScreen: new FingerprintScreenTester(),
       AiIntroScreen: new AiIntroScreenTester(),
-      TunaScreen: new TunaScreenTester(),
+      GeminiIntroScreen: new GeminiIntroScreenTester(),
       AssistantScreen: new AssistantScreenTester(),
       MarketingOptInScreen: new MarketingOptInScreenTester(),
       ConfirmSamlPasswordScreen: new ConfirmSamlPasswordScreenTester(),
@@ -1464,6 +1501,9 @@ export class OobeApiProvider {
       ChoobeTouchpadScrollScreen: new ChoobeTouchpadScrollScreenTester(),
       ChoobeDisplaySizeScreen: new ChoobeDisplaySizeTester(),
       HWDataCollectionScreen: new HwDataCollectionScreenTester(),
+      DeviceUseCaseScreen: new DeviceUseCaseScreenTester(),
+      PersonalizedRecommendAppsScreen:
+          new PersonalizedRecommendAppsScreenTester(),
     };
 
     this.loginWithPin = function(username: string, pin: string): void {

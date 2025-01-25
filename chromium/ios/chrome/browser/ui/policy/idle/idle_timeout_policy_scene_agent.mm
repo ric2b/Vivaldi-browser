@@ -22,9 +22,8 @@
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
+#import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/signin/model/authentication_service.h"
-#import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/ui/policy/idle/constants.h"
 #import "ios/chrome/browser/ui/policy/idle/idle_timeout_confirmation_coordinator.h"
 #import "ios/chrome/browser/ui/policy/idle/idle_timeout_confirmation_coordinator_delegate.h"
@@ -200,11 +199,6 @@
   [self.sceneState.appState removeObserver:self];
 }
 
-- (AuthenticationService*)authService {
-  return AuthenticationServiceFactory::GetForBrowserState(
-      _mainBrowser->GetBrowserState());
-}
-
 - (PrefService*)prefService {
   return _mainBrowser->GetBrowserState()->GetPrefs();
 }
@@ -241,6 +235,7 @@
     // `transitionedToActivationLevel` to foreground.
     return;
   }
+
   // It is important to get the last actions from the service because the window
   // showing the snackbar might have been opened after timeout happened. This
   // can be the case in the following scenario: Foreground 1 window -> wait till
@@ -271,8 +266,7 @@
 }
 
 - (void)showSnackbar:(NSString*)messageText {
-  MDCSnackbarMessage* message =
-      [MDCSnackbarMessage messageWithText:messageText];
+  MDCSnackbarMessage* message = CreateSnackbarMessage(messageText);
   message.duration = kIdleTimeoutSnackbarDuration;
   message.accessibilityLabel = messageText;
   [_snackbarHandler showSnackbarMessage:message];

@@ -162,15 +162,7 @@ class AutotestPrivateApiTest : public ExtensionApiTest {
   ash::ScopedTestingCrosSettings scoped_testing_cros_settings_;
 };
 
-// TODO(crbug.com/41491890): Flaky on ASan/LSan, deflake and re-enable the test.
-#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
-#define MAYBE_AutotestPrivate DISABLED_AutotestPrivate
-#elif BUILDFLAG(IS_CHROMEOS)
-#define MAYBE_AutotestPrivate DISABLED_AutotestPrivate
-#else
-#define MAYBE_AutotestPrivate AutotestPrivate
-#endif
-IN_PROC_BROWSER_TEST_F(AutotestPrivateApiTest, MAYBE_AutotestPrivate) {
+IN_PROC_BROWSER_TEST_F(AutotestPrivateApiTest, AutotestPrivate) {
   ASSERT_TRUE(RunAutotestPrivateExtensionTest("default")) << message_;
 }
 
@@ -379,7 +371,7 @@ IN_PROC_BROWSER_TEST_F(AutotestPrivateApiOverviewTest, Drag) {
 
   ui::GestureEvent long_press(
       start_point.x(), start_point.y(), 0, ui::EventTimeForNow(),
-      ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
+      ui::GestureEventDetails(ui::EventType::kGestureLongPress));
   generator.Dispatch(&long_press);
 
   // 50 is arbitrary number of dip to move a bit to ensure the item is being
@@ -406,7 +398,7 @@ IN_PROC_BROWSER_TEST_F(AutotestPrivateApiOverviewTest, PrimarySnapped) {
 
   ui::GestureEvent long_press(
       start_point.x(), start_point.y(), 0, ui::EventTimeForNow(),
-      ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
+      ui::GestureEventDetails(ui::EventType::kGestureLongPress));
   generator.Dispatch(&long_press);
 
   generator.MoveTouch(end_point);

@@ -197,7 +197,7 @@ std::string ContextTypeToString(ContextType context_type) {
       return "service-worker";
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -209,7 +209,7 @@ std::string JsRequestTypeToString(JsRequestType request_type) {
       return "fetch";
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -241,7 +241,7 @@ GURL ConstructJsRequestURL(const GURL& base_url, JsRequestType request_type) {
     case JsRequestType::kFetch:
       return base_url.Resolve(kMalwarePage);
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return GURL();
 }
 
@@ -437,12 +437,10 @@ class TestSBClient : public base::RefCountedThreadSafe<TestSBClient>,
 class V4SafeBrowsingServiceTest : public InProcessBrowserTest {
  public:
   V4SafeBrowsingServiceTest() {
-    // TODO(crbug.com/40941453): Remove kSafeBrowsingAsyncRealTimeCheck from
-    // disabled features list.
     scoped_feature_list_.InitWithFeatures(
         /*enabled_features=*/{safe_browsing::
                                   kCreateWarningShownClientSafeBrowsingReports},
-        /*disabled_features=*/{safe_browsing::kSafeBrowsingAsyncRealTimeCheck});
+        /*disabled_features=*/{});
   }
 
   V4SafeBrowsingServiceTest(const V4SafeBrowsingServiceTest&) = delete;
@@ -889,7 +887,7 @@ class V4SafeBrowsingServiceJsRequestNoInterstitialTest
       public V4SafeBrowsingServiceTest {};
 
 IN_PROC_BROWSER_TEST_P(V4SafeBrowsingServiceJsRequestNoInterstitialTest,
-                       MalwareBlocked) {
+                       MalwareNotBlocked) {
   GURL base_url = embedded_test_server()->GetURL(kMalwareJsRequestPage);
   JsRequestTestParam param = GetParam();
   MarkUrlForMalwareUnexpired(
@@ -899,22 +897,10 @@ IN_PROC_BROWSER_TEST_P(V4SafeBrowsingServiceJsRequestNoInterstitialTest,
   auto new_title = JsRequestTestNavigateAndWaitForTitle(
       browser(), AddJsRequestParam(base_url, param));
 
-  // When |kSafeBrowsingSkipSubresources2| is disabled and request_type is
-  // |JsRequestType::kWebSocket|, show a warning.
-  if (!base::FeatureList::IsEnabled(kSafeBrowsingSkipSubresources2) &&
-      param.request_type == JsRequestType::kWebSocket) {
-    EXPECT_EQ("ERROR", new_title);
-    EXPECT_FALSE(ShowingInterstitialPage());
-
-    // got_hit_report() is only set when an interstitial is shown.
-    EXPECT_FALSE(got_hit_report());
-    EXPECT_FALSE(got_warning_shown_report());
-  } else {
-    EXPECT_EQ("NOT BLOCKED", new_title);
-    EXPECT_FALSE(ShowingInterstitialPage());
-    EXPECT_FALSE(got_hit_report());
-    EXPECT_FALSE(got_warning_shown_report());
-  }
+  EXPECT_EQ("NOT BLOCKED", new_title);
+  EXPECT_FALSE(ShowingInterstitialPage());
+  EXPECT_FALSE(got_hit_report());
+  EXPECT_FALSE(got_warning_shown_report());
 }
 
 INSTANTIATE_TEST_SUITE_P(

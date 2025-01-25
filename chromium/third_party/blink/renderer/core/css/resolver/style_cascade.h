@@ -7,6 +7,7 @@
 
 #include "third_party/blink/renderer/core/animation/interpolation.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/css/css_attr_type.h"
 #include "third_party/blink/renderer/core/css/css_property_name.h"
 #include "third_party/blink/renderer/core/css/css_property_value.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token.h"
@@ -298,7 +299,7 @@ class CORE_EXPORT StyleCascade {
     // template machinery) of TokenSequence and everything calling it.
     void StripCommentTokens();
 
-    scoped_refptr<CSSVariableData> BuildVariableData();
+    CSSVariableData* BuildVariableData();
 
    private:
     // In cases where we're not building a CSSValue, we don't really care about
@@ -380,9 +381,9 @@ class CORE_EXPORT StyleCascade {
                                       const CSSMathFunctionValue&,
                                       CascadePriority);
 
-  scoped_refptr<CSSVariableData> ResolveVariableData(CSSVariableData*,
-                                                     const CSSParserContext&,
-                                                     CascadeResolver&);
+  CSSVariableData* ResolveVariableData(CSSVariableData*,
+                                       const CSSParserContext&,
+                                       CascadeResolver&);
 
   // Certain parts of CSS function evaluation may need some local context
   // supplied by the caller. Given the current scoping strategy, the only
@@ -430,6 +431,16 @@ class CORE_EXPORT StyleCascade {
                       const CSSParserContext&,
                       const FunctionContext&,
                       TokenSequence&);
+  bool ResolveAttrInto(CSSParserTokenStream&,
+                       CascadeResolver&,
+                       CSSTokenizer*,
+                       const CSSParserContext&,
+                       TokenSequence&);
+
+  // Check if <declaration-value> type is equal to <attr-type>.
+  bool ValidateAttrFallback(TokenSequence& sequence,
+                            CSSAttrType attr_type,
+                            const CSSParserContext& context);
 
   // NOTE: The FunctionContext object must be the _caller's_ function context,
   // not the one the function itself sets up. This is because it is used to

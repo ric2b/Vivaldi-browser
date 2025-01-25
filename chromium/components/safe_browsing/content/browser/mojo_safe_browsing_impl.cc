@@ -103,7 +103,6 @@ void MojoSafeBrowsingImpl::CreateCheckerAndCheck(
     const std::string& method,
     const net::HttpRequestHeaders& headers,
     int32_t load_flags,
-    network::mojom::RequestDestination request_destination,
     bool has_user_gesture,
     bool originated_from_service_worker,
     CreateCheckerAndCheckCallback callback) {
@@ -118,7 +117,7 @@ void MojoSafeBrowsingImpl::CreateCheckerAndCheck(
           sb_frame_token, originated_from_service_worker)) {
     // Ensure that we don't destroy an uncalled CreateCheckerAndCheckCallback
     if (callback) {
-      std::move(callback).Run(mojo::NullReceiver(), true /* proceed */,
+      std::move(callback).Run(true /* proceed */,
                               false /* showed_interstitial */);
     }
 
@@ -134,8 +133,7 @@ void MojoSafeBrowsingImpl::CreateCheckerAndCheck(
   // hash-prefix real-time checks to support non-main frames, we will need to
   // provide the hash_realtime_service_on_ui here.
   auto checker_impl = std::make_unique<SafeBrowsingUrlCheckerImpl>(
-      headers, static_cast<int>(load_flags), request_destination,
-      has_user_gesture, delegate_,
+      headers, static_cast<int>(load_flags), has_user_gesture, delegate_,
       base::BindRepeating(&GetWebContentsFromToken, render_process_id_,
                           frame_token),
       /*weak_web_state=*/nullptr, render_process_id_, sb_frame_token,
@@ -152,11 +150,10 @@ void MojoSafeBrowsingImpl::CreateCheckerAndCheck(
       /*is_async_check=*/false, SessionID::InvalidValue());
   auto weak_impl = checker_impl->WeakPtr();
 
-  checker_impl->CheckUrl(
-      url, method,
-      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          std::move(callback), /*slow_check_notifier=*/mojo::NullReceiver(),
-          /*proceed=*/true, /*showed_interstitial=*/false));
+  checker_impl->CheckUrl(url, method,
+                         mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+                             std::move(callback),
+                             /*proceed=*/true, /*showed_interstitial=*/false));
   CHECK(weak_impl);  // This is to ensure calling CheckUrl doesn't delete itself
   mojo::MakeSelfOwnedReceiver(std::move(checker_impl), std::move(receiver));
 }

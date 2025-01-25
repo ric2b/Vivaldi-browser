@@ -16,7 +16,6 @@
 <translation id="1728677426644403582">Je bekijkt de bron van een webpagina</translation>
 <translation id="1734878702283171397">Probeer contact op te nemen met de systeembeheerder.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Probeer Windows Probleemoplosser voor netwerken uit te voeren<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">Deze website bevat schadelijke programma's</translation>
 <translation id="1974060860693918893">Geavanceerd</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Controleer de proxy en firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Verleend aan: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -42,7 +41,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Verbindingsdiagnose uitvoeren<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">De verbinding is opnieuw ingesteld.</translation>
 <translation id="2826760142808435982">De verbinding is gecodeerd en geverifieerd met <ph name="CIPHER" /> en gebruikt <ph name="KX" /> als mechanisme voor sleuteluitwisseling.</translation>
-<translation id="2856444702002559011">Cybercriminelen proberen mogelijk je gegevens van <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> te stelen (bijvoorbeeld wachtwoorden, berichten of creditcardgegevens). <ph name="BEGIN_LEARN_MORE_LINK" />Meer informatie<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Er is een netwerkwijziging gedetecteerd.</translation>
 <translation id="2948083400971632585">Je kunt alle proxy's die zijn geconfigureerd voor een verbinding op de instellingenpagina uitschakelen.</translation>
 <translation id="2991571918955627853">Je kunt <ph name="SITE" /> momenteel niet bezoeken, omdat de website HSTS gebruikt. Netwerkfouten en aanvallen zijn doorgaans tijdelijk, dus deze pagina werkt later waarschijnlijk correct.</translation>
@@ -69,6 +67,7 @@
 <translation id="3566021033012934673">Je verbinding is niet privé</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" />, <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Details verbergen</translation>
+<translation id="3614001939154393113">Aanvallers proberen misschien je gegevens van <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> te stelen (bijvoorbeeld wachtwoorden, berichten of creditcardgegevens). <ph name="BEGIN_LEARN_MORE_LINK" />Meer informatie over deze waarschuwing<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3630155396527302611">Als dit programma al wordt aangemerkt met toegang tot het netwerk,
           probeer het dan uit de lijst te verwijderen en opnieuw toe te voegen.</translation>
 <translation id="3658742229777143148">Revisie</translation>
@@ -92,7 +91,6 @@
 <translation id="4265872034478892965">Toegestaan door je beheerder</translation>
 <translation id="4305666528087210886">Het bestand kan niet worden geopend</translation>
 <translation id="4312866146174492540">Blokkeren (standaard)</translation>
-<translation id="4356973930735388585">Cybercriminelen op deze website proberen mogelijk gevaarlijke programma's op je computer te installeren waarmee je gegevens worden gestolen of verwijderd (bijvoorbeeld foto's, wachtwoorden, berichten en creditcards).</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> heeft je aanmeldingscertificaat niet geaccepteerd of er is geen aanmeldingscertificaat geleverd.</translation>
 <translation id="4506599922270137252">Neem contact op met de systeembeheerder</translation>
@@ -143,7 +141,6 @@
 <translation id="6305205051461490394"><ph name="URL" /> is niet bereikbaar.</translation>
 <translation id="6321917430147971392">Controleer je DNS-instellingen</translation>
 <translation id="6328639280570009161">Probeer netwerkvoorspelling uit te schakelen</translation>
-<translation id="6328786501058569169">Deze website is misleidend</translation>
 <translation id="6348220984832452017">Actieve variaties</translation>
 <translation id="6358450015545214790">Wat betekent dit?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> heeft de verbinding geweigerd.</translation>
@@ -157,7 +154,6 @@
 <translation id="6897140037006041989">Gebruikersagent</translation>
 <translation id="6957624206566198865">Pagina in nieuw privétabblad openen</translation>
 <translation id="7053983685419859001">Blokkeren</translation>
-<translation id="7079718277001814089">Deze website bevat malware</translation>
 <translation id="7096937462164235847">De identiteit van deze website is niet geverifieerd.</translation>
 <translation id="7108819624672055576">Toegestaan door een extensie</translation>
 <translation id="7111012039238467737">(Geldig)</translation>
@@ -165,6 +161,7 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> voldoet niet aan de beveiligingsnormen.</translation>
 <translation id="7219179957768738017">De verbinding maakt gebruik van <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Meldingen weergeven</translation>
+<translation id="7227747683324411744">Aanvallers op de site die je wilt bezoeken, kunnen je misleiden zodat je schadelijke software installeert die van invloed is op de manier waarop je browst, bijvoorbeeld door je startpagina te wijzigen of extra advertenties te tonen op sites die je bezoekt.</translation>
 <translation id="7353601530677266744">Opdrachtregel</translation>
 <translation id="7364115444476960850">De pagina die je wilde bezoeken is geblokkeerd door Vivaldi's <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profielpad</translation>
@@ -172,9 +169,9 @@
 <translation id="7518003948725431193">Er is geen webpagina gevonden voor het webadres: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Deze webpagina kan alleen correct worden weergegeven op basis van gegevens die je eerder hebt opgegeven. Je kunt deze gegevens opnieuw verzenden, maar hierdoor worden de acties herhaald die eerder op deze pagina zijn uitgevoerd.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kan dit verzoek momenteel niet verwerken.</translation>
+<translation id="7605377493722372900">Aanvallers op de site die je wilt bezoeken, kunnen schadelijke software installeren waarmee items zoals je wachtwoord, foto's, berichten of creditcardnummers kunnen worden gestolen of verwijderd.</translation>
 <translation id="7662298039739062396">Instelling beheerd door een extensie</translation>
 <translation id="7663736086183791259">Certificaat <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Cybercriminelen op deze website proberen je mogelijk over te halen om programma's te installeren die schadelijk zijn voor de browserfunctionaliteit (door bijvoorbeeld je startpagina te wijzigen of extra advertenties weer te geven op websites die je bezoekt).</translation>
 <translation id="7714464543167945231">Certificaat</translation>
 <translation id="7716147886133743102">Geblokkeerd door je beheerder</translation>
 <translation id="7716424297397655342">Deze website kan niet worden geladen vanuit het cachegeheugen</translation>
@@ -184,7 +181,6 @@
 <translation id="7878562273885520351">Je wachtwoord is mogelijk gehackt</translation>
 <translation id="7951415247503192394">(32-bits)</translation>
 <translation id="7953236668995583915">Deze pagina vernieuwen om je bijgewerkte instellingen op deze site toe te passen</translation>
-<translation id="8025119109950072390">Cybercriminelen op deze website proberen je mogelijk te misleiden om iets gevaarlijks te doen, zoals software installeren of je persoonlijke gegevens bekendmaken (bijvoorbeeld wachtwoorden, telefoonnummers of creditcards).</translation>
 <translation id="8037357227543935929">Vragen (standaard)</translation>
 <translation id="8041940743680923270">Algemene standaardinstelling gebruiken (Vragen)</translation>
 <translation id="808894953321890993">Wachtwoord wijzigen</translation>
@@ -199,6 +195,7 @@
 <translation id="8288807391153049143">Certificaat weergeven</translation>
 <translation id="8289355894181816810">Neem contact op met je netwerkbeheerder als je niet zeker weet wat dit betekent.</translation>
 <translation id="8332188693563227489">Toegang tot <ph name="HOST_NAME" /> is geweigerd</translation>
+<translation id="8422228580902424274">Aanvallers op de site die je wilt bezoeken, kunnen je misleiden zodat je software installeert of gegevens zoals je wachtwoord, telefoon of creditcardnummer openbaar maakt.</translation>
 <translation id="8498891568109133222">Het duurt te lang voordat <ph name="HOST_NAME" /> reageert.</translation>
 <translation id="8503813439785031346">Gebruikersnaam</translation>
 <translation id="8703575177326907206">Je verbinding met <ph name="DOMAIN" /> is niet versleuteld.</translation>

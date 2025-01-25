@@ -190,7 +190,7 @@ class TextureBuiltinTest : public SpirvWriterTestWithParam<TextureBuiltinTestCas
             for (const auto& arg : params.args) {
                 auto* value = MakeScalarValue(arg.type, arg_value++);
                 if (arg.width > 1) {
-                    value = b.Splat(ty.vec(value->Type(), arg.width), value, arg.width);
+                    value = b.Splat(ty.vec(value->Type(), arg.width), value);
                 }
                 args.Push(value);
                 mod.SetName(value, arg.name);
@@ -2006,39 +2006,6 @@ TEST_F(SpirvWriterTest, TextureLoad_WithRobustness) {
          %22 = OpBitcast %uint %level
          %23 = OpExtInst %uint %19 UMin %22 %21
      %result = OpImageFetch %v4float %texture %18 Lod %23
-)");
-}
-
-TEST_F(SpirvWriterTest, TextureStore_WithRobustness) {
-    auto format = core::TexelFormat::kRgba8Unorm;
-    auto* texture_ty = ty.Get<core::type::StorageTexture>(
-        core::type::TextureDimension::k2dArray, format, core::Access::kWrite,
-        core::type::StorageTexture::SubtypeFor(format, ty));
-
-    auto* texture = b.FunctionParam("texture", texture_ty);
-    auto* coords = b.FunctionParam("coords", ty.vec2<u32>());
-    auto* layer = b.FunctionParam("layer", ty.i32());
-    auto* value = b.FunctionParam("value", ty.vec4<f32>());
-    auto* func = b.Function("foo", ty.void_());
-    func->SetParams({texture, coords, layer, value});
-    b.Append(func->Block(), [&] {
-        b.Call(ty.void_(), core::BuiltinFn::kTextureStore, texture, coords, layer, value);
-        b.Return(func);
-    });
-
-    ASSERT_TRUE(Generate()) << Error() << output_;
-    EXPECT_INST(R"(
-         %15 = OpImageQuerySize %v3uint %texture
-         %17 = OpVectorShuffle %v2uint %15 %15 0 1
-         %18 = OpISub %v2uint %17 %19
-         %21 = OpExtInst %v2uint %22 UMin %coords %18
-         %23 = OpImageQuerySize %v3uint %texture
-         %24 = OpCompositeExtract %uint %23 2
-         %25 = OpISub %uint %24 %uint_1
-         %26 = OpBitcast %uint %layer
-         %27 = OpExtInst %uint %22 UMin %26 %25
-         %28 = OpCompositeConstruct %v3uint %21 %27
-               OpImageWrite %texture %28 %value None
 )");
 }
 

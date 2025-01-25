@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "printing/backend/print_backend_cups.h"
 
 #include <cups/cups.h>
@@ -23,15 +28,16 @@
 #include "build/build_config.h"
 #include "printing/backend/cups_helper.h"
 #include "printing/backend/print_backend_consts.h"
+#include "printing/backend/print_backend_utils.h"
 #include "printing/mojom/print.mojom.h"
 #include "url/gurl.h"
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
 #include "base/feature_list.h"
 #include "printing/backend/cups_connection.h"
 #include "printing/backend/print_backend_cups_ipp.h"
 #include "printing/printing_features.h"
-#endif  // BUILDFLAG(IS_MAC)
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
 
 namespace printing {
 
@@ -86,7 +92,7 @@ mojom::ResultCode PrintBackendCUPS::PrinterBasicInfoFromCUPS(
   printer_info->printer_name = printer.name;
   printer_info->is_default = printer.is_default;
 
-  const char* info =
+  const char* info_option =
       cupsGetOption(kCUPSOptPrinterInfo, printer.num_options, printer.options);
 
   const char* state =
@@ -104,39 +110,20 @@ mojom::ResultCode PrintBackendCUPS::PrinterBasicInfoFromCUPS(
     printer_info->options[printer.options[opt_index].name] =
         printer.options[opt_index].value;
   }
-
-#if BUILDFLAG(IS_MAC)
-  // On Mac, "printer-info" option specifies the printer name and
-  // "printer-make-and-model" specifies the printer description.
-  if (info)
-    printer_info->display_name = info;
-
-  // It is possible to create a printer with a blank display name, so just
-  // use the printer name in such a case.
-  if (printer_info->display_name.empty()) {
-    printer_info->display_name = printer.name;
-  }
-
-  if (drv_info)
-    printer_info->printer_description = drv_info;
-#else
-  // On Linux destination name specifies the printer name and "printer-info"
-  // specifies the printer description.
-  printer_info->display_name = printer.name;
-  if (info)
-    printer_info->printer_description = info;
-#endif
+  std::string_view info =
+      info_option ? std::string_view(info_option) : std::string_view();
+  printer_info->display_name = GetDisplayName(printer_info->printer_name, info);
+  printer_info->printer_description = GetPrinterDescription(
+      drv_info ? std::string_view(drv_info) : std::string_view(), info);
   return mojom::ResultCode::kSuccess;
 }
 
 // static
 std::string PrintBackendCUPS::PrinterDriverInfoFromCUPS(
     const cups_dest_t& printer) {
-  // std::string_view will correctly handle nullptrs from cupsGetOption(),
-  // whereas std::string will not. Thus do not directly assign to `result`.
-  std::string_view info(
-      cupsGetOption(kDriverNameTagName, printer.num_options, printer.options));
-  return std::string(info);
+  const char* info =
+      cupsGetOption(kDriverNameTagName, printer.num_options, printer.options);
+  return info ? info : std::string();
 }
 
 mojom::ResultCode PrintBackendCUPS::EnumeratePrinters(
@@ -296,11 +283,11 @@ bool PrintBackendCUPS::IsValidPrinter(const std::string& printer_name) {
 #if !BUILDFLAG(IS_CHROMEOS)
 scoped_refptr<PrintBackend> PrintBackend::CreateInstanceImpl(
     const std::string& locale) {
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
   if (base::FeatureList::IsEnabled(features::kCupsIppPrintingBackend)) {
     return base::MakeRefCounted<PrintBackendCupsIpp>(CupsConnection::Create());
   }
-#endif  // BUILDFLAG(IS_MAC)
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
   return base::MakeRefCounted<PrintBackendCUPS>(
       GURL(), HTTP_ENCRYPT_NEVER, /*cups_blocking=*/false, locale);
 }

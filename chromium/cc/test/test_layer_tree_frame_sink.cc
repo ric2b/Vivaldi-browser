@@ -88,6 +88,8 @@ bool TestLayerTreeFrameSink::BindToClient(LayerTreeFrameSinkClient* client) {
   shared_bitmap_manager_ = std::make_unique<viz::TestSharedBitmapManager>();
   frame_sink_manager_ = std::make_unique<viz::FrameSinkManagerImpl>(
       viz::FrameSinkManagerImpl::InitParams(shared_bitmap_manager_.get()));
+  frame_sink_manager_->SetSharedImageInterfaceProviderForTest(
+      &shared_image_interface_provider_);
 
   std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
       display_controller;

@@ -45,11 +45,11 @@ class AccountSelectionView {
 
   // Returns the brand icon minimum size. This includes the size of the
   // safe-zone defined in https://www.w3.org/TR/appmanifest/#icon-masks
-  static int GetBrandIconMinimumSize();
+  static int GetBrandIconMinimumSize(blink::mojom::RpMode rp_mode);
 
   // Returns the brand icon ideal size. This includes the size of the
   // safe-zone defined in https://www.w3.org/TR/appmanifest/#icon-masks
-  static int GetBrandIconIdealSize();
+  static int GetBrandIconIdealSize(blink::mojom::RpMode rp_mode);
 
   explicit AccountSelectionView(Delegate* delegate) : delegate_(delegate) {}
   AccountSelectionView(const AccountSelectionView&) = delete;
@@ -57,43 +57,48 @@ class AccountSelectionView {
   virtual ~AccountSelectionView() = default;
 
   // Instructs the view to show the provided accounts to the user.
-  // `top_frame_for_display` is the relying party's top frame URL and
-  // `iframe_for_display` is the relying party's iframe URL to display in
-  // the prompt. All IDP-specific information, including user accounts, is
-  // stored in `idps_for_display`. `sign_in_mode` represents whether this is an
-  // auto re-authn flow. If it is the auto re-authn flow, `idps_for_display`
-  // will only include the single returning account and its IDP.
-  // `new_account_idp` represents the account information of a newly logged in
-  // account that ought to be prioritized in the UI.
-  virtual void Show(
-      const std::string& top_frame_for_display,
-      const std::optional<std::string>& iframe_for_display,
+  // `rp_for_display` is the relying party's URL. All IDP-specific information,
+  // including user accounts, is stored in `idps_for_display`. `sign_in_mode`
+  // represents whether this is an auto re-authn flow. If it is the auto
+  // re-authn flow, `idps_for_display` will only include the single returning
+  // account and its IDP. `new_accounts_idp` represents the account information
+  // of a newly logged in account that ought to be prioritized in the UI.
+  // Returns true if it was possible to show UI. If this method could not show
+  // UI and called Dismiss, returns false.
+  virtual bool Show(
+      const std::string& rp_for_display,
       const std::vector<content::IdentityProviderData>& identity_provider_data,
       Account::SignInMode sign_in_mode,
       blink::mojom::RpMode rp_mode,
-      const std::optional<content::IdentityProviderData>& new_account_idp) = 0;
+      const std::optional<content::IdentityProviderData>& new_accounts_idp) = 0;
 
   // Shows a failure UI when the accounts fetch is failed such that it is
   // observable by users. This could happen when an IDP claims that the user is
   // signed in but not respond with any user account during browser fetches.
-  virtual void ShowFailureDialog(
-      const std::string& top_frame_for_display,
-      const std::optional<std::string>& iframe_for_display,
+  // Returns true if it was possible to show UI. If this method could not show
+  // UI and called Dismiss, returns false.
+  virtual bool ShowFailureDialog(
+      const std::string& rp_for_display,
       const std::string& idp_for_display,
       blink::mojom::RpContext rp_context,
       blink::mojom::RpMode rp_mode,
       const content::IdentityProviderMetadata& idp_metadata) = 0;
 
-  virtual void ShowErrorDialog(
-      const std::string& top_frame_for_display,
-      const std::optional<std::string>& iframe_for_display,
+  // Shows an error dialog to the user, possibly with a custom error message.
+  // Returns true if it was possible to show UI. If this method could not show
+  // UI and called Dismiss, returns false.
+  virtual bool ShowErrorDialog(
+      const std::string& rp_for_display,
       const std::string& idp_for_display,
       blink::mojom::RpContext rp_context,
       blink::mojom::RpMode rp_mode,
       const content::IdentityProviderMetadata& idp_metadata,
       const std::optional<TokenError>& error) = 0;
 
-  virtual void ShowLoadingDialog(const std::string& top_frame_for_display,
+  // Shows a loading dialog to the user. Used in the button mode, to acknowledge
+  // the user interaction. Returns true if it was possible to show UI. If this
+  // method could not show UI and called Dismiss, returns false.
+  virtual bool ShowLoadingDialog(const std::string& rp_for_display,
                                  const std::string& idp_for_display,
                                  blink::mojom::RpContext rp_context,
                                  blink::mojom::RpMode rp_mode) = 0;
@@ -102,8 +107,11 @@ class AccountSelectionView {
   virtual std::optional<std::string> GetSubtitle() const = 0;
 
   virtual void ShowUrl(LinkType type, const GURL& url) = 0;
-  virtual content::WebContents* ShowModalDialog(const GURL& url) = 0;
+  virtual content::WebContents* ShowModalDialog(
+      const GURL& url,
+      blink::mojom::RpMode rp_mode) = 0;
   virtual void CloseModalDialog() = 0;
+  virtual content::WebContents* GetRpWebContents() = 0;
 
  protected:
   raw_ptr<Delegate> delegate_ = nullptr;

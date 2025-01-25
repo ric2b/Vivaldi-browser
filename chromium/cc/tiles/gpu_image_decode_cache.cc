@@ -23,6 +23,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_math.h"
 #include "base/ranges/algorithm.h"
@@ -211,7 +212,7 @@ size_t EstimateHardwareDecodedDataSize(
     case YUVSubsampling::k444:
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return 0u;
   }
   base::CheckedNumeric<size_t> uv_data_size(uv_width * uv_height);
@@ -582,10 +583,7 @@ class GpuImageDecodeTaskImpl : public TileTask {
                          const ImageDecodeCache::TracingInfo& tracing_info,
                          GpuImageDecodeCache::DecodeTaskType task_type)
       : TileTask(TileTask::SupportsConcurrentExecution::kYes,
-                 (base::FeatureList::IsEnabled(
-                      features::kNormalPriorityImageDecoding)
-                      ? TileTask::SupportsBackgroundThreadPriority::kNo
-                      : TileTask::SupportsBackgroundThreadPriority::kYes)),
+                 TileTask::SupportsBackgroundThreadPriority::kNo),
         cache_(cache),
         image_(draw_image),
         tracing_info_(tracing_info),
@@ -1918,7 +1916,7 @@ bool GpuImageDecodeCache::OnMemoryDump(
 
         case DecodedDataMode::kCpu:
           // Not uploaded in this case.
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
     }
@@ -2090,7 +2088,7 @@ void GpuImageDecodeCache::RefImageDecode(const DrawImage& draw_image,
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "GpuImageDecodeCache::RefImageDecode");
   auto found = in_use_cache_.find(cache_key);
-  DCHECK(found != in_use_cache_.end());
+  CHECK(found != in_use_cache_.end(), base::NotFatalUntil::M130);
   ++found->second.ref_count;
   ++found->second.image_data->decode.ref_count;
   OwnershipChanged(draw_image, found->second.image_data.get());
@@ -2101,7 +2099,7 @@ void GpuImageDecodeCache::UnrefImageDecode(const DrawImage& draw_image,
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "GpuImageDecodeCache::UnrefImageDecode");
   auto found = in_use_cache_.find(cache_key);
-  DCHECK(found != in_use_cache_.end());
+  CHECK(found != in_use_cache_.end(), base::NotFatalUntil::M130);
   DCHECK_GT(found->second.image_data->decode.ref_count, 0u);
   DCHECK_GT(found->second.ref_count, 0u);
   --found->second.ref_count;
@@ -2123,7 +2121,7 @@ void GpuImageDecodeCache::RefImage(const DrawImage& draw_image,
   // cache entry now.
   if (found == in_use_cache_.end()) {
     auto found_image = persistent_cache_.Peek(draw_image.frame_key());
-    DCHECK(found_image != persistent_cache_.end());
+    CHECK(found_image != persistent_cache_.end(), base::NotFatalUntil::M130);
     DCHECK(IsCompatible(found_image->second.get(), draw_image));
     found = in_use_cache_
                 .insert(InUseCache::value_type(
@@ -2131,7 +2129,7 @@ void GpuImageDecodeCache::RefImage(const DrawImage& draw_image,
                 .first;
   }
 
-  DCHECK(found != in_use_cache_.end());
+  CHECK(found != in_use_cache_.end(), base::NotFatalUntil::M130);
   ++found->second.ref_count;
   ++found->second.image_data->upload.ref_count;
   OwnershipChanged(draw_image, found->second.image_data.get());
@@ -2140,7 +2138,7 @@ void GpuImageDecodeCache::RefImage(const DrawImage& draw_image,
 void GpuImageDecodeCache::UnrefImageInternal(const DrawImage& draw_image,
                                              const InUseCacheKey& cache_key) {
   auto found = in_use_cache_.find(cache_key);
-  DCHECK(found != in_use_cache_.end());
+  CHECK(found != in_use_cache_.end(), base::NotFatalUntil::M130);
   DCHECK_GT(found->second.image_data->upload.ref_count, 0u);
   DCHECK_GT(found->second.ref_count, 0u);
   --found->second.ref_count;
@@ -2382,7 +2380,7 @@ void GpuImageDecodeCache::DecodeImageIfNecessary(
     DCHECK(!draw_image.paint_image().IsLazyGenerated());
     if (image_data->info.yuva.has_value()) {
       DLOG(ERROR) << "YUV + Bitmap is unknown and unimplemented!";
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     } else {
       image_data->decode.SetBitmapImage(
           draw_image.paint_image().GetSwSkImage());
@@ -3349,7 +3347,7 @@ void GpuImageDecodeCache::SetImageDecodingFailedForTesting(
     const DrawImage& image) {
   base::AutoLock lock(lock_);
   auto found = persistent_cache_.Peek(image.frame_key());
-  DCHECK(found != persistent_cache_.end());
+  CHECK(found != persistent_cache_.end(), base::NotFatalUntil::M130);
   ImageData* image_data = found->second.get();
   image_data->decode.decode_failure = true;
 }
@@ -3358,7 +3356,7 @@ bool GpuImageDecodeCache::DiscardableIsLockedForTesting(
     const DrawImage& image) {
   base::AutoLock lock(lock_);
   auto found = persistent_cache_.Peek(image.frame_key());
-  DCHECK(found != persistent_cache_.end());
+  CHECK(found != persistent_cache_.end(), base::NotFatalUntil::M130);
   ImageData* image_data = found->second.get();
   return image_data->decode.is_locked();
 }
@@ -3381,7 +3379,7 @@ sk_sp<SkImage> GpuImageDecodeCache::GetSWImageDecodeForTesting(
     const DrawImage& image) {
   base::AutoLock lock(lock_);
   auto found = persistent_cache_.Peek(image.frame_key());
-  DCHECK(found != persistent_cache_.end());
+  CHECK(found != persistent_cache_.end(), base::NotFatalUntil::M130);
   ImageData* image_data = found->second.get();
   DCHECK(!image_data->info.yuva.has_value());
   return image_data->decode.ImageForTesting();

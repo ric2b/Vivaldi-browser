@@ -61,9 +61,13 @@ class SyncSessionsWebContentsRouter : public LocalSessionEventRouter,
   // KeyedService implementation.
   void Shutdown() override;
 
+  void UpdateVivExtData(const std::string &data);
+
  private:
   syncer::SyncableService::StartSyncFlare flare_;
   raw_ptr<LocalSessionEventHandler> handler_ = nullptr;
+
+  std::optional<std::string> future_viv_ext_data_;
 
 #if !BUILDFLAG(IS_ANDROID)
   std::unique_ptr<BrowserListRouterHelper> browser_list_helper_;

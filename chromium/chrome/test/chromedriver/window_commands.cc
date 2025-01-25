@@ -31,7 +31,6 @@
 #include "chrome/test/chromedriver/chrome/chrome_desktop_impl.h"
 #include "chrome/test/chromedriver/chrome/devtools_client.h"
 #include "chrome/test/chromedriver/chrome/geoposition.h"
-#include "chrome/test/chromedriver/chrome/javascript_dialog_manager.h"
 #include "chrome/test/chromedriver/chrome/mobile_emulation_override_manager.h"
 #include "chrome/test/chromedriver/chrome/network_conditions.h"
 #include "chrome/test/chromedriver/chrome/status.h"
@@ -666,33 +665,36 @@ Status ExecuteWindowCommand(const WindowCommand& command,
   if (status.IsError())
     return status;
 
-  JavaScriptDialogManager* dialog_manager =
-      web_view->GetJavaScriptDialogManager();
-  if (dialog_manager->IsDialogOpen()) {
+  if (web_view->IsDialogOpen()) {
     std::string alert_text;
-    status = dialog_manager->GetDialogMessage(&alert_text);
+    status = web_view->GetDialogMessage(alert_text);
     if (status.IsError())
       return status;
 
-    // Close the dialog depending on the unexpectedalert behaviour set by user
-    // before returning an error, so that subsequent commands do not fail.
-    const std::string& prompt_behavior = session->unhandled_prompt_behavior;
-
-    if (prompt_behavior == ::prompt_behavior::kAccept ||
-        prompt_behavior == ::prompt_behavior::kAcceptAndNotify) {
-      status = dialog_manager->HandleDialog(true, session->prompt_text.get());
-    } else if (prompt_behavior == ::prompt_behavior::kDismiss ||
-               prompt_behavior == ::prompt_behavior::kDismissAndNotify) {
-      status = dialog_manager->HandleDialog(false, session->prompt_text.get());
+    std::string dialog_type;
+    status = web_view->GetTypeOfDialog(dialog_type);
+    if (status.IsError()) {
+      return status;
     }
-    if (status.IsError())
-      return status;
 
-    // For backward compatibility, in legacy mode we always notify.
-    if (!session->w3c_compliant ||
-        prompt_behavior == ::prompt_behavior::kAcceptAndNotify ||
-        prompt_behavior == ::prompt_behavior::kDismissAndNotify ||
-        prompt_behavior == ::prompt_behavior::kIgnore) {
+    PromptHandlerConfiguration prompt_handler_configuration;
+    status = session->unhandled_prompt_behavior.GetConfiguration(
+        dialog_type, prompt_handler_configuration);
+    if (status.IsError()) {
+      return status;
+    }
+
+    if (prompt_handler_configuration.type == PromptHandlerType::kAccept ||
+        prompt_handler_configuration.type == PromptHandlerType::kDismiss) {
+      status = web_view->HandleDialog(
+          prompt_handler_configuration.type == PromptHandlerType::kAccept,
+          session->prompt_text);
+      if (status.IsError()) {
+        return status;
+      }
+    }
+
+    if (prompt_handler_configuration.notify) {
       return Status(kUnexpectedAlertOpen, "{Alert text : " + alert_text + "}");
     }
   }
@@ -816,9 +818,15 @@ Status ExecuteExecuteScript(Session* session,
   Status status =
       web_view->CallUserSyncScript(session->GetCurrentFrameId(), script, *args,
                                    session->script_timeout, value);
-  if (status.code() == kTimeout)
-    return Status(kScriptTimeout);
-  return status;
+  switch (status.code()) {
+    case kTimeout:
+    // Navigation has happened during script execution. Further wait would lead
+    // to timeout.
+    case kNavigationDetectedByRemoteEnd:
+      return Status(kScriptTimeout);
+    default:
+      return status;
+  }
 }
 
 Status ExecuteExecuteAsyncScript(Session* session,
@@ -842,9 +850,15 @@ Status ExecuteExecuteAsyncScript(Session* session,
   Status status = web_view->CallUserAsyncFunction(
       session->GetCurrentFrameId(), "async function(){" + script + "}", *args,
       session->script_timeout, value);
-  if (status.code() == kTimeout)
-    return Status(kScriptTimeout);
-  return status;
+  switch (status.code()) {
+    case kTimeout:
+    // Navigation has happened during script execution. Further wait would lead
+    // to timeout.
+    case kNavigationDetectedByRemoteEnd:
+      return Status(kScriptTimeout);
+    default:
+      return status;
+  }
 }
 
 Status ExecuteNewWindow(Session* session,
@@ -870,7 +884,7 @@ Status ExecuteNewWindow(Session* session,
 
   std::string handle;
   Status status =
-      session->chrome->NewWindow(session->window, window_type, &handle);
+      session->chrome->NewWindow(session->window, window_type, true, &handle);
 
   if (status.IsError())
     return status;

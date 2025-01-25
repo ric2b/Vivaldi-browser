@@ -1,5 +1,6 @@
 #include <metal_stdlib>
 using namespace metal;
+
 template<typename T, size_t N>
 struct tint_array {
   const constant T& operator[](size_t i) const constant { return elements[i]; }
@@ -16,7 +17,15 @@ struct Normals {
   float3 f;
 };
 
-vertex float4 tint_symbol() {
+struct tint_symbol_outputs {
+  float4 tint_symbol_1 [[position]];
+};
+
+float4 tint_symbol_inner() {
   int const zero = 0;
   return float4(tint_array<Normals, 1>{Normals{.f=float3(0.0f, 0.0f, 1.0f)}}[zero].f, 1.0f);
+}
+
+vertex tint_symbol_outputs tint_symbol() {
+  return tint_symbol_outputs{.tint_symbol_1=tint_symbol_inner()};
 }

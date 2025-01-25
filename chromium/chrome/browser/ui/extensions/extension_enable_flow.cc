@@ -108,7 +108,10 @@ void ExtensionEnableFlow::CheckPermissionAndMaybePromptUser() {
         base::BindOnce(&ExtensionEnableFlow::OnExtensionApprovalDone,
                        weak_ptr_factory_.GetWeakPtr());
     supervised_user_extensions_delegate->RequestToEnableExtensionOrShowError(
-        *extension, parent_contents_, std::move(extension_approval_callback));
+        *extension, parent_contents_,
+        SupervisedUserExtensionParentApprovalEntryPoint::
+            kOnTerminatedExtensionEnableFlowOperation,
+        std::move(extension_approval_callback));
     return;
   }
 
@@ -263,7 +266,7 @@ void ExtensionEnableFlow::InstallPromptDone(
       break;
     case ExtensionInstallPrompt::Result::ACCEPTED_WITH_WITHHELD_PERMISSIONS:
       // This dialog doesn't support the "withhold permissions" checkbox.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case ExtensionInstallPrompt::Result::USER_CANCELED:
     case ExtensionInstallPrompt::Result::ABORTED:

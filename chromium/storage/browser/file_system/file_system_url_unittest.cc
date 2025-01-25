@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "storage/browser/file_system/file_system_url.h"
 
 #include <stddef.h>
@@ -79,7 +84,7 @@ TEST(FileSystemURLTest, CreateSibling) {
   // Another CreateSibling precondition is that the sibling_name is non-empty.
   // We don't test for that here because a base::SafeBaseName is designed to be
   // non-empty by construction: the base::SafeBaseName::Create factory function
-  // returns absl::Optional<base::SafeBaseName> not base::SafeBaseName.
+  // returns std::optional<base::SafeBaseName> not base::SafeBaseName.
   //
   // See also TODO(crbug.com/40205226)
   const base::SafeBaseName sibling_name =

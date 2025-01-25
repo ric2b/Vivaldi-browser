@@ -8,6 +8,7 @@
 
 #include "src/deoptimizer/translated-state.h"
 #include "src/interpreter/bytecode-array-iterator.h"
+#include "src/objects/casting.h"
 #include "src/objects/code.h"
 #include "src/objects/deoptimization-data-inl.h"
 #include "src/objects/shared-function-info.h"
@@ -36,7 +37,8 @@ Handle<Object> DeoptimizationLiteral::Reify(Isolate* isolate) const {
     }
     case DeoptimizationLiteralKind::kWasmI31Ref:
     case DeoptimizationLiteralKind::kWasmInt32:
-    case DeoptimizationLiteralKind::kWasmFloat:
+    case DeoptimizationLiteralKind::kWasmFloat32:
+    case DeoptimizationLiteralKind::kWasmFloat64:
     case DeoptimizationLiteralKind::kInvalid: {
       UNREACHABLE();
     }
@@ -46,31 +48,31 @@ Handle<Object> DeoptimizationLiteral::Reify(Isolate* isolate) const {
 
 Handle<DeoptimizationData> DeoptimizationData::New(Isolate* isolate,
                                                    int deopt_entry_count) {
-  return Handle<DeoptimizationData>::cast(
+  return Cast<DeoptimizationData>(
       isolate->factory()->NewProtectedFixedArray(LengthFor(deopt_entry_count)));
 }
 
 Handle<DeoptimizationData> DeoptimizationData::New(LocalIsolate* isolate,
                                                    int deopt_entry_count) {
-  return Handle<DeoptimizationData>::cast(
+  return Cast<DeoptimizationData>(
       isolate->factory()->NewProtectedFixedArray(LengthFor(deopt_entry_count)));
 }
 
 Handle<DeoptimizationData> DeoptimizationData::Empty(Isolate* isolate) {
-  return Handle<DeoptimizationData>::cast(
+  return Cast<DeoptimizationData>(
       isolate->factory()->empty_protected_fixed_array());
 }
 
 Handle<DeoptimizationData> DeoptimizationData::Empty(LocalIsolate* isolate) {
-  return Handle<DeoptimizationData>::cast(
+  return Cast<DeoptimizationData>(
       isolate->factory()->empty_protected_fixed_array());
 }
 
 Tagged<SharedFunctionInfo> DeoptimizationData::GetInlinedFunction(int index) {
   if (index == -1) {
-    return SharedFunctionInfo::cast(SharedFunctionInfo());
+    return Cast<i::SharedFunctionInfo>(SharedFunctionInfo());
   } else {
-    return SharedFunctionInfo::cast(LiteralArray()->get(index));
+    return Cast<i::SharedFunctionInfo>(LiteralArray()->get(index));
   }
 }
 
@@ -146,7 +148,7 @@ void DeoptimizationData::PrintDeoptimizationData(std::ostream& os) const {
   os << "Inlined functions (count = " << inlined_function_count << ")\n";
   for (int id = 0; id < inlined_function_count; ++id) {
     Tagged<Object> info = LiteralArray()->get(id);
-    os << " " << Brief(SharedFunctionInfo::cast(info)) << "\n";
+    os << " " << Brief(Cast<i::SharedFunctionInfo>(info)) << "\n";
   }
   os << "\n";
   int deopt_count = DeoptCount();

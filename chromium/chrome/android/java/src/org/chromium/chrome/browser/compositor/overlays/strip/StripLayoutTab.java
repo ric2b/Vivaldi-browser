@@ -13,6 +13,8 @@ import android.util.FloatProperty;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.DrawableRes;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ContextUtils;
@@ -35,6 +37,7 @@ import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.util.ColorUtils;
 
 import java.util.List;
+import java.util.Optional;
 
 // Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
@@ -179,6 +182,7 @@ public class StripLayoutTab extends StripLayoutView {
     private TintedCompositorButton mCloseButton;
 
     private boolean mIsDying;
+    private boolean mIsClosed;
     private boolean mIsReordering;
     private boolean mIsDraggedOffStrip;
     private boolean mCanShowCloseButton = true;
@@ -191,6 +195,10 @@ public class StripLayoutTab extends StripLayoutView {
     private float mLeftInset;
     private float mRightInset;
     private String mAccessibilityDescription = "";
+
+    // For avoiding unnecessary accessibility description updates.
+    private Optional<String> mCachedA11yDescriptionTitle = Optional.empty();
+    private @StringRes int mCachedA11yTabstripIdentifierResId;
 
     // Ideal intermediate parameters
     private float mTabOffsetY;
@@ -324,27 +332,62 @@ public class StripLayoutTab extends StripLayoutView {
 
     @Override
     public void getVirtualViews(List<VirtualView> views) {
+        if (isCollapsed()) return;
         super.getVirtualViews(views);
         if (mShowingCloseButton) mCloseButton.getVirtualViews(views);
     }
 
     /**
      * Set strip tab and close button accessibility description.
-     * @param description   A description for accessibility events.
+     *
+     * @param description A description for accessibility events.
      * @param title The title of the tab.
      */
-    public void setAccessibilityDescription(String description, String title) {
+    public void setAccessibilityDescription(
+            String description,
+            @Nullable String title,
+            @StringRes int newA11yTabstripIdentifierResId) {
         mAccessibilityDescription = description;
         String closeButtonDescription =
                 ContextUtils.getApplicationContext()
                         .getString(R.string.accessibility_tabstrip_btn_close_tab, title);
         mCloseButton.setAccessibilityDescription(closeButtonDescription, closeButtonDescription);
+
+        // Cache the title + resource ID used to create this description so we can avoid unnecessary
+        // updates.
+        mCachedA11yDescriptionTitle = Optional.ofNullable(title);
+        mCachedA11yTabstripIdentifierResId = newA11yTabstripIdentifierResId;
     }
 
     /** {@link org.chromium.chrome.browser.layouts.components.VirtualView} Implementation */
     @Override
     public String getAccessibilityDescription() {
         return mAccessibilityDescription;
+    }
+
+    /**
+     * @param newTitle The title that would be used in the new accessibility description.
+     * @param resId The String resource ID the description would use.
+     * @return True if the accessibility description should be updated, false if the resulting
+     *     description would match the current description.
+     */
+    public boolean needsAccessibilityDescriptionUpdate(
+            @Nullable String newTitle, @StringRes int newA11yTabstripIdentifierResId) {
+        if (mCachedA11yTabstripIdentifierResId != newA11yTabstripIdentifierResId) {
+            // A different resource ID was used to create the description.
+            return true;
+        }
+        if (mCachedA11yDescriptionTitle.isPresent() && newTitle == null) {
+            // Going from non-null title to null title.
+            return true;
+        }
+        if (newTitle != null && !newTitle.equals(mCachedA11yDescriptionTitle.orElse(null))) {
+            // Going from non-null title to some other title (may even be null).
+            return true;
+        }
+        // The page title is the same as before and the resource ID we'd use to construct the
+        // a11y description is the same, so no need to update it.
+        return false;
     }
 
     @Override
@@ -582,8 +625,9 @@ public class StripLayoutTab extends StripLayoutView {
     }
 
     /**
-     * Mark this tab as in the process of dying.  This lets us track which tabs are dead after
+     * Mark this tab as in the process of dying. This lets us track which tabs are closed after
      * animations.
+     *
      * @param isDying Whether or not the tab is dying.
      */
     public void setIsDying(boolean isDying) {
@@ -595,6 +639,28 @@ public class StripLayoutTab extends StripLayoutView {
      */
     public boolean isDying() {
         return mIsDying;
+    }
+
+    /**
+     * Mark this tab as closed. We can't immediately remove the tab from the TabModel, since doing
+     * so may result in a concurrent modification exception. Track here to treat as removed.
+     *
+     * @param isClosed Whether or not the tab should be treated as closed.
+     */
+    public void setIsClosed(boolean isClosed) {
+        mIsClosed = isClosed;
+    }
+
+    /**
+     * Closed tabs should have been removed from the TabModel and mStripTabs. We can't do so
+     * immediately, however, since we may try to do so when we are committing all tab closures,
+     * resulting in a concurrent modification exception. We instead post the removal and mark such
+     * tabs as closed.
+     *
+     * @return Whether or not the tab should be treated as closed.
+     */
+    public boolean isClosed() {
+        return mIsClosed;
     }
 
     /**
@@ -617,16 +683,6 @@ public class StripLayoutTab extends StripLayoutView {
      */
     public void addLoadingSpinnerRotation(float rotation) {
         mLoadingSpinnerRotationDegrees = (mLoadingSpinnerRotationDegrees + rotation) % 1080;
-    }
-
-    /** Called when this tab has started loading. */
-    public void pageLoadingStarted() {
-        mLoadTracker.pageLoadingStarted();
-    }
-
-    /** Called when this tab has finished loading. */
-    public void pageLoadingFinished() {
-        mLoadTracker.pageLoadingFinished();
     }
 
     /** Called when this tab has started loading resources. */

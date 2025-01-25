@@ -262,7 +262,7 @@ void ContactBackend::UpdateContact(ContactID contact_id,
   } else {
     result->success = false;
     NOTREACHED() << "Could not find contact row in DB";
-    return;
+    //return;
   }
 }
 

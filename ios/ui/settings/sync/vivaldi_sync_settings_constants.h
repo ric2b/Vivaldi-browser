@@ -23,6 +23,11 @@ extern NSString* const kShowPasswordIcon;
 extern NSString* const kHidePasswordIcon;
 extern NSString* const kVivaldiIcon;
 
+// Vivaldi supporter icon
+extern NSString* const kVivaldiSupporterBadge;
+extern NSString* const kVivaldiPatronBadge;
+extern NSString* const kVivaldiAdvocateBadge;
+
 // Vivaldi.net account creation validation
 extern const int vUserMinimumValidAge;
 extern const int vUserMaximumValidAge;

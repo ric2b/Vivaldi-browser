@@ -12,14 +12,68 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {runQuery} from '../../common/queries';
+import {SimpleSliceTrackConfig} from '../../frontend/simple_slice_track';
 import {addDebugSliceTrack} from '../../public';
 import {Plugin, PluginContextTrace, PluginDescriptor} from '../../public';
+import {addAndPinSliceTrack, TrackType} from './trackUtils';
+
+/**
+ * Adds the Debug Slice Track for given Jank CUJ name
+ *
+ * @param {PluginContextTrace} ctx For properties and methods of trace viewer
+ * @param {string} trackName Display Name of the track
+ * @param {TrackType} type Track type for jank CUJ slice track
+ * @param {string | string[]} cujNames List of Jank CUJs to pin
+ * @param {string} uri Identifier for the track in case of 'static' type
+ */
+export function addJankCUJDebugTrack(
+  ctx: PluginContextTrace,
+  trackName: string,
+  type: TrackType,
+  cujNames?: string | string[],
+  uri?: string,
+) {
+  const jankCujTrackConfig: SimpleSliceTrackConfig =
+    generateJankCujTrackConfig(cujNames);
+  addAndPinSliceTrack(ctx, jankCujTrackConfig, trackName, type, uri);
+}
 
 const JANK_CUJ_QUERY_PRECONDITIONS = `
   SELECT RUN_METRIC('android/android_jank_cuj.sql');
-  SELECT RUN_METRIC('android/jank/internal/counters.sql');
+  INCLUDE PERFETTO MODULE android.critical_blocking_calls;
 `;
+
+/**
+ * Generate the Track config for a multiple Jank CUJ slices
+ *
+ * @param {string | string[]} cujNames List of Jank CUJs to pin, default empty
+ * @returns {SimpleSliceTrackConfig} Returns the track config for given CUJs
+ */
+function generateJankCujTrackConfig(
+  cujNames: string | string[] = [],
+): SimpleSliceTrackConfig {
+  // This method expects the caller to have run JANK_CUJ_QUERY_PRECONDITIONS
+  // Not running the precondition query here to save time in case already run
+  const jankCujQuery = JANK_CUJ_QUERY;
+  const jankCujColumns = JANK_COLUMNS;
+  const cujNamesList = typeof cujNames === 'string' ? [cujNames] : cujNames;
+  const filterCuj =
+    cujNamesList?.length > 0
+      ? ` AND cuj.name IN (${cujNamesList
+          .map((name) => `'J<${name}>'`)
+          .join(',')})`
+      : '';
+
+  const jankCujTrackConfig: SimpleSliceTrackConfig = {
+    data: {
+      sqlSource: `${jankCujQuery}${filterCuj}`,
+      columns: jankCujColumns,
+    },
+    columns: {ts: 'ts', dur: 'dur', name: 'name'},
+    argColumns: jankCujColumns,
+  };
+  return jankCujTrackConfig;
+}
 
 const JANK_CUJ_QUERY = `
     SELECT
@@ -64,15 +118,17 @@ const JANK_CUJ_QUERY = `
       sf_callback_missed_frames,
       hwui_callback_missed_frames,
       cuj_layer.layer_name,
-      cuj.ts,
-      cuj.dur,
+      /* Boundaries table doesn't contain ts and dur when a CUJ didn't complete successfully.
+        In that case we still want to show that it was canceled, so let's take the slice timestamps. */
+      CASE WHEN boundaries.ts IS NOT NULL THEN boundaries.ts ELSE cuj.ts END AS ts,
+      CASE WHEN boundaries.dur IS NOT NULL THEN boundaries.dur ELSE cuj.dur END AS dur,
       cuj.track_id,
       cuj.slice_id
     FROM slice AS cuj
-           JOIN process_track AS pt
-                ON cuj.track_id = pt.id
+           JOIN process_track AS pt ON cuj.track_id = pt.id
            LEFT JOIN android_jank_cuj jc
                      ON pt.upid = jc.upid AND cuj.name = jc.cuj_slice_name AND cuj.ts = jc.ts
+           LEFT JOIN android_jank_cuj_main_thread_cuj_boundary boundaries using (cuj_id)
            LEFT JOIN android_jank_cuj_layer_name cuj_layer USING (cuj_id)
            LEFT JOIN android_jank_cuj_counter_metrics USING (cuj_id)
     WHERE cuj.name GLOB 'J<*>'
@@ -125,23 +181,50 @@ const LATENCY_CUJ_QUERY = `
 `;
 
 const LATENCY_COLUMNS = ['name', 'dur_ms', 'ts', 'dur', 'track_id', 'slice_id'];
+
+const BLOCKING_CALLS_DURING_CUJS_QUERY = `
+    SELECT
+      s.id AS slice_id,
+      s.name,
+      max(s.ts, cuj.ts) AS ts,
+      min(s.ts + s.dur, cuj.ts_end) as ts_end,
+      min(s.ts + s.dur, cuj.ts_end) - max(s.ts, cuj.ts) AS dur,
+      cuj.cuj_id,
+      cuj.cuj_name,
+      s.process_name,
+      s.upid,
+      s.utid,
+      'slice' AS table_name
+    FROM _android_critical_blocking_calls s
+      JOIN  android_jank_cuj cuj
+      -- only when there is an overlap
+      ON s.ts + s.dur > cuj.ts AND s.ts < cuj.ts_end
+          -- and are from the same process
+          AND s.upid = cuj.upid
+`;
+
+const BLOCKING_CALLS_DURING_CUJS_COLUMNS = [
+  'slice_id',
+  'name',
+  'ts',
+  'cuj_ts',
+  'dur',
+  'cuj_id',
+  'cuj_name',
+  'process_name',
+  'upid',
+  'utid',
+  'table_name',
+];
+
 class AndroidCujs implements Plugin {
   async onTraceLoad(ctx: PluginContextTrace): Promise<void> {
     ctx.registerCommand({
       id: 'dev.perfetto.AndroidCujs#PinJankCUJs',
       name: 'Add track: Android jank CUJs',
       callback: () => {
-        runQuery(JANK_CUJ_QUERY_PRECONDITIONS, ctx.engine).then(() => {
-          addDebugSliceTrack(
-            ctx.engine,
-            {
-              sqlSource: JANK_CUJ_QUERY,
-              columns: JANK_COLUMNS,
-            },
-            'Jank CUJs',
-            {ts: 'ts', dur: 'dur', name: 'name'},
-            [],
-          );
+        ctx.engine.query(JANK_CUJ_QUERY_PRECONDITIONS).then(() => {
+          addJankCUJDebugTrack(ctx, 'Jank CUJs', 'debug');
         });
       },
     });
@@ -150,9 +233,9 @@ class AndroidCujs implements Plugin {
       id: 'dev.perfetto.AndroidCujs#ListJankCUJs',
       name: 'Run query: Android jank CUJs',
       callback: () => {
-        runQuery(JANK_CUJ_QUERY_PRECONDITIONS, ctx.engine).then(() =>
-          ctx.tabs.openQuery(JANK_CUJ_QUERY, 'Android Jank CUJs'),
-        );
+        ctx.engine
+          .query(JANK_CUJ_QUERY_PRECONDITIONS)
+          .then(() => ctx.tabs.openQuery(JANK_CUJ_QUERY, 'Android Jank CUJs'));
       },
     });
 
@@ -161,7 +244,7 @@ class AndroidCujs implements Plugin {
       name: 'Add track: Android latency CUJs',
       callback: () => {
         addDebugSliceTrack(
-          ctx.engine,
+          ctx,
           {
             sqlSource: LATENCY_CUJ_QUERY,
             columns: LATENCY_COLUMNS,
@@ -178,6 +261,25 @@ class AndroidCujs implements Plugin {
       name: 'Run query: Android Latency CUJs',
       callback: () =>
         ctx.tabs.openQuery(LATENCY_CUJ_QUERY, 'Android Latency CUJs'),
+    });
+
+    ctx.registerCommand({
+      id: 'dev.perfetto.AndroidCujs#PinBlockingCalls',
+      name: 'Add track: Android Blocking calls during CUJs',
+      callback: () => {
+        ctx.engine.query(JANK_CUJ_QUERY_PRECONDITIONS).then(() =>
+          addDebugSliceTrack(
+            ctx,
+            {
+              sqlSource: BLOCKING_CALLS_DURING_CUJS_QUERY,
+              columns: BLOCKING_CALLS_DURING_CUJS_COLUMNS,
+            },
+            'Blocking calls during CUJs',
+            {ts: 'ts', dur: 'dur', name: 'name'},
+            BLOCKING_CALLS_DURING_CUJS_COLUMNS,
+          ),
+        );
+      },
     });
   }
 }

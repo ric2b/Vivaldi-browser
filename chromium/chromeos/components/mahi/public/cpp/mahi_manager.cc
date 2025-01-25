@@ -30,32 +30,15 @@ MahiManager* g_instance = nullptr;
 
 }  // namespace
 
+// MahiOutline ----------------------------------------------------------------
+
+bool MahiOutline::operator==(const MahiOutline&) const = default;
+
+// MahiManager -----------------------------------------------------------------
+
 // static
 MahiManager* MahiManager::Get() {
   return g_instance;
-}
-
-// static
-bool MahiManager::IsSupportedWithCorrectFeatureKey() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (!chromeos::features::IsMahiEnabled()) {
-    return false;
-  }
-
-  // Allow Google accounts to bypass the secret key check.
-  if (user_manager::UserManager::IsInitialized() &&
-      gaia::IsGoogleInternalAccountEmail(user_manager::UserManager::Get()
-                                             ->GetActiveUser()
-                                             ->GetAccountId()
-                                             .GetUserEmail())) {
-    return true;
-  }
-
-  return ash::switches::IsMahiSecretKeyMatched();
-#else
-  return chromeos::BrowserParamsProxy::Get()
-      ->IsMahiSupportedWithCorrectFeatureKey();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 MahiManager::MahiManager() {
@@ -68,13 +51,18 @@ MahiManager::~MahiManager() {
   g_instance = nullptr;
 }
 
+std::optional<base::UnguessableToken> MahiManager::GetMediaAppPDFClientId()
+    const {
+  return std::nullopt;
+}
+
 // static
 ScopedMahiManagerSetter* ScopedMahiManagerSetter::instance_ = nullptr;
 
 ScopedMahiManagerSetter::ScopedMahiManagerSetter(MahiManager* manager) {
   // Only allow one scoped instance at a time.
   if (instance_) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
   instance_ = this;
@@ -86,7 +74,7 @@ ScopedMahiManagerSetter::ScopedMahiManagerSetter(MahiManager* manager) {
 
 ScopedMahiManagerSetter::~ScopedMahiManagerSetter() {
   if (instance_ != this) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 

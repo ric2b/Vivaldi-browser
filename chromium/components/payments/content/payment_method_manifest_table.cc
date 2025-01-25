@@ -5,6 +5,7 @@
 #include "components/payments/content/payment_method_manifest_table.h"
 
 #include <time.h>
+
 #include <string>
 
 #include "base/feature_list.h"
@@ -50,7 +51,7 @@ bool PaymentMethodManifestTable::CreateTablesIfNecessary() {
                     "expire_date INTEGER NOT NULL DEFAULT 0, "
                     "method_name VARCHAR, "
                     "web_app_id VARCHAR)")) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return false;
   }
 
@@ -63,7 +64,7 @@ bool PaymentMethodManifestTable::CreateTablesIfNecessary() {
           "relying_party_id VARCHAR NOT NULL, "
           "label VARCHAR NOT NULL, "
           "icon BLOB NOT NULL)")) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return false;
   }
 
@@ -72,7 +73,7 @@ bool PaymentMethodManifestTable::CreateTablesIfNecessary() {
     if (!db_->Execute(
             "ALTER TABLE secure_payment_confirmation_instrument ADD COLUMN "
             "date_created INTEGER NOT NULL DEFAULT 0")) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
     }
   }
@@ -82,7 +83,7 @@ bool PaymentMethodManifestTable::CreateTablesIfNecessary() {
     if (!db_->Execute(
             "ALTER TABLE secure_payment_confirmation_instrument ADD COLUMN "
             "user_id BLOB")) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
     }
   }
@@ -277,7 +278,7 @@ PaymentMethodManifestTable::GetSecurePaymentConfirmationCredentials(
   return credentials;
 }
 
-bool PaymentMethodManifestTable::ExecuteForTest(const char* sql) {
+bool PaymentMethodManifestTable::ExecuteForTest(const base::cstring_view sql) {
   return db_->Execute(sql);
 }
 
@@ -286,8 +287,8 @@ bool PaymentMethodManifestTable::RazeForTest() {
 }
 
 bool PaymentMethodManifestTable::DoesColumnExistForTest(
-    const char* table_name,
-    const char* column_name) {
+    const base::cstring_view table_name,
+    const base::cstring_view column_name) {
   return db_->DoesColumnExist(table_name, column_name);
 }
 

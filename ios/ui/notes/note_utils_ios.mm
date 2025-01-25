@@ -192,11 +192,6 @@ MDCSnackbarMessage* CreateOrUpdateNoteWithToast(
     ChromeBrowserState* browser_state) {
   std::u16string contentString = base::SysNSStringToUTF16(content);
 
-  // If the note has no changes supporting Undo, just bail out.
-  if (node && node->GetTitle() == contentString && node->GetURL() == url &&
-      node->parent() == folder) {
-    return nil;
-  }
   // Save the note information.
   if (!node) {
     // Normalize title first from content

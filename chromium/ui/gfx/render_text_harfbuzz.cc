@@ -262,7 +262,7 @@ size_t FindRunBreakingCharacter(const std::u16string& text,
       run_text, base::i18n::BreakIterator::BREAK_CHARACTER);
   if (!grapheme_iterator.Init() || !grapheme_iterator.Advance()) {
     // In case of error, isolate the first character in a separate run.
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return run_start + 1;
   }
 
@@ -1160,7 +1160,8 @@ SkScalar TextRunHarfBuzz::GetGlyphWidthForCharRange(
   // colors for a single glyph). In this case it might cause the browser crash,
   // see crbug.com/526234.
   if (glyph_range.start() >= glyph_range.end()) {
-    NOTREACHED() << "The glyph range is empty or invalid! Its char range: ["
+    NOTREACHED_IN_MIGRATION()
+        << "The glyph range is empty or invalid! Its char range: ["
         << char_range.start() << ", " << char_range.end()
         << "], and its glyph range: [" << glyph_range.start() << ", "
         << glyph_range.end() << "].";
@@ -1182,8 +1183,9 @@ void TextRunHarfBuzz::UpdateFontParamsAndShape(
     // Note that |new_shape.glyph_to_char| is indexed from the beginning of
     // |range|, while |shape.glyph_to_char| is indexed from the beginning of
     // its embedding text.
-    for (size_t i = 0; i < shape.glyph_to_char.size(); ++i)
-      shape.glyph_to_char[i] += range.start();
+    for (auto& glyph_to_char : shape.glyph_to_char) {
+      glyph_to_char += range.start();
+    }
   }
 }
 

@@ -44,8 +44,6 @@ cc_binary(
   deps = [
     "//src/tint/api",
     "//src/tint/api/common:test",
-    "//src/tint/api/options:test",
-    "//src/tint/cmd/common:test",
     "//src/tint/lang/core/constant:test",
     "//src/tint/lang/core/intrinsic:test",
     "//src/tint/lang/core/ir/transform/common:test",
@@ -53,8 +51,12 @@ cc_binary(
     "//src/tint/lang/core/ir:test",
     "//src/tint/lang/core/type:test",
     "//src/tint/lang/core:test",
+    "//src/tint/lang/hlsl/ir:test",
+    "//src/tint/lang/hlsl/type:test",
     "//src/tint/lang/hlsl/writer/common:test",
+    "//src/tint/lang/hlsl/writer/raise:test",
     "//src/tint/lang/msl/ir:test",
+    "//src/tint/lang/msl/type:test",
     "//src/tint/lang/spirv/ir:test",
     "//src/tint/lang/spirv/reader/lower:test",
     "//src/tint/lang/spirv/type:test",
@@ -102,6 +104,7 @@ cc_binary(
   }) + select({
     ":tint_build_hlsl_writer": [
       "//src/tint/lang/hlsl/writer/ast_printer:test",
+      "//src/tint/lang/hlsl/writer:test",
     ],
     "//conditions:default": [],
   }) + select({
@@ -118,8 +121,8 @@ cc_binary(
     ":tint_build_msl_writer": [
       "//src/tint/lang/msl/writer/ast_printer:test",
       "//src/tint/lang/msl/writer/common:test",
-      "//src/tint/lang/msl/writer/printer:test",
       "//src/tint/lang/msl/writer/raise:test",
+      "//src/tint/lang/msl/writer:test",
     ],
     "//conditions:default": [],
   }) + select({

@@ -12,12 +12,13 @@
 #include "base/time/time.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
-#include "chrome/browser/ui/side_panel/side_panel_enums.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/top_container_background.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_enums.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_resize_area.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_util.h"
 #include "chrome/common/pref_names.h"
@@ -161,10 +162,8 @@ class SidePanelBorder : public views::Border {
     // inset is outside the SidePanel itself, but not outside the BorderView. If
     // there is a header we want to increase the top inset to give room for the
     // header to paint on top of the border area.
-    int top_inset = views::Separator::kThickness + header_height_;
-    if (features::IsSidePanelPinningEnabled()) {
-      top_inset -= GetBorderThickness();
-    }
+    int top_inset =
+        views::Separator::kThickness + header_height_ - GetBorderThickness();
     return GetBorderInsets() + gfx::Insets::TLBR(top_inset, 0, 0, 0);
   }
   gfx::Size GetMinimumSize() const override {
@@ -273,8 +272,6 @@ SidePanel::SidePanel(BrowserView* browser_view,
                      HorizontalAlignment horizontal_alignment)
     : views::AnimationDelegateViews(this),
       browser_view_(browser_view),
-      visible_bounds_view_clipper_(
-          std::make_unique<VisibleBoundsViewClipper>(this)),
       horizontal_alignment_(horizontal_alignment) {
   if (lens::features::IsLensOverlayEnabled()) {
     visible_bounds_view_clipper_ =
@@ -367,10 +364,7 @@ void SidePanel::AddHeaderView(std::unique_ptr<views::View> view) {
   static_cast<BorderView*>(border_view_)->HeaderViewChanged(header_view_);
   // Update the border so that the insets include space for the header to be
   // placed on top of the border.
-  int top_inset = header_view_->height();
-  if (features::IsSidePanelPinningEnabled()) {
-    top_inset -= GetBorderThickness();
-  }
+  int top_inset = header_view_->height() - GetBorderThickness();
   SetBorder(views::CreateEmptyBorder(GetBorderInsets() +
                                      gfx::Insets::TLBR(top_inset, 0, 0, 0)));
 }
@@ -495,10 +489,13 @@ void SidePanel::OnResize(int resize_amount, bool done_resizing) {
 
 void SidePanel::RecordMetricsIfResized() {
   if (did_resize_) {
-    std::optional<SidePanelEntry::Id> id =
-        SidePanelUI::GetSidePanelUIForBrowser(browser_view_->browser())
-            ->GetCurrentEntryId();
-    CHECK(id.has_value());
+    std::optional<SidePanelEntry::Id> id = browser_view_->browser()
+                                               ->GetFeatures()
+                                               .side_panel_ui()
+                                               ->GetCurrentEntryId();
+    if (!id.has_value()) {
+      return;
+    }
     int side_panel_contents_width = width() - GetBorderInsets().width();
     int browser_window_width = browser_view_->width();
     SidePanelUtil::RecordSidePanelResizeMetrics(
@@ -550,10 +547,7 @@ void SidePanel::UpdateVisibility() {
       border_view_->layer()->SetFillsBoundsOpaquely(false);
       if (header_view_) {
         static_cast<BorderView*>(border_view_)->HeaderViewChanged(header_view_);
-        int top_inset = header_view_->height();
-        if (features::IsSidePanelPinningEnabled()) {
-          top_inset -= GetBorderThickness();
-        }
+        int top_inset = header_view_->height() - GetBorderThickness();
         SetBorder(views::CreateEmptyBorder(
             GetBorderInsets() + gfx::Insets::TLBR(top_inset, 0, 0, 0)));
       }
@@ -578,6 +572,9 @@ void SidePanel::UpdateVisibility() {
       animation_.Hide();
     }
   } else {
+    // Set the animation value so that it accurately reflects what state the
+    // side panel should be in for layout.
+    animation_.Reset(should_be_open ? 1 : 0);
     SetVisible(should_be_open);
   }
 }

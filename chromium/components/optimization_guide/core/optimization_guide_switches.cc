@@ -116,6 +116,18 @@ const char kModelQualityServiceURL[] = "model-quality-service-url";
 // Overrides the ModelQuality Service API Key for remote requests to be made.
 const char kModelQualityServiceAPIKey[] = "model-quality-service-api-key";
 
+// Enables model quality logs regardless of other client-side settings, as long
+// as the client is a dogfood client.
+const char kEnableModelQualityDogfoodLogging[] =
+    "enable-model-quality-dogfood-logging";
+
+const char kGetFreeDiskSpaceWithUserVisiblePriorityTask[] =
+    "optimization-guide-get-free-disk-space-with-user-visible-priority-task";
+
+// Allows sending an language code to the backend.
+const char kOptimizationGuideLanguageOverride[] =
+    "optimization-guide-language-override";
+
 std::string GetModelQualityServiceAPIKey() {
   // Command line override takes priority.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -268,6 +280,11 @@ std::optional<base::FilePath> GetOnDeviceValidationWriteToFile() {
     return std::nullopt;
   }
   return command_line->GetSwitchValuePath(kOnDeviceValidationWriteToFile);
+}
+
+bool ShouldGetFreeDiskSpaceWithUserVisiblePriorityTask() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  return command_line->HasSwitch(kGetFreeDiskSpaceWithUserVisiblePriorityTask);
 }
 
 }  // namespace switches

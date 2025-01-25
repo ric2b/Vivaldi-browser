@@ -26,7 +26,7 @@ class MockCastSocketClient final : public CastSocket::Client {
               (override));
   MOCK_METHOD(void,
               OnMessage,
-              (CastSocket * socket, ::cast::channel::CastMessage message),
+              (CastSocket * socket, proto::CastMessage message),
               (override));
 };
 
@@ -77,18 +77,13 @@ struct FakeCastSocketPair {
     peer_socket =
         std::make_unique<CastSocket>(std::move(moved_peer), &mock_peer_client);
 
-    ON_CALL(*connection, Send(_, _))
-        .WillByDefault(Invoke([this](const void* data, size_t len) {
-          peer_connection->OnRead(std::vector<uint8_t>(
-              reinterpret_cast<const uint8_t*>(data),
-              reinterpret_cast<const uint8_t*>(data) + len));
-          return true;
-        }));
-    ON_CALL(*peer_connection, Send(_, _))
-        .WillByDefault(Invoke([this](const void* data, size_t len) {
-          connection->OnRead(std::vector<uint8_t>(
-              reinterpret_cast<const uint8_t*>(data),
-              reinterpret_cast<const uint8_t*>(data) + len));
+    ON_CALL(*connection, Send(_)).WillByDefault(Invoke([this](ByteView data) {
+      peer_connection->OnRead(std::vector<uint8_t>(data.cbegin(), data.cend()));
+      return true;
+    }));
+    ON_CALL(*peer_connection, Send(_))
+        .WillByDefault(Invoke([this](ByteView data) {
+          connection->OnRead(std::vector<uint8_t>(data.cbegin(), data.cend()));
           return true;
         }));
   }

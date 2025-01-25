@@ -297,6 +297,8 @@ class CrostiniManager::CrostiniRestarter
 
   void LogRestarterResult(const RestartRequest& request, CrostiniResult result);
 
+  void OnConciergeAvailable(bool service_available);
+
   base::OneShotTimer stage_timeout_timer_;
   base::TimeTicks stage_start_;
 
@@ -688,6 +690,20 @@ void CrostiniManager::CrostiniRestarter::LoadComponentFinished(
   // Set the pref here, after we first successfully install something
   profile_->GetPrefs()->SetBoolean(crostini::prefs::kCrostiniEnabled, true);
 
+  // Ensure concierge is ready to serve requests
+  GetConciergeClient()->WaitForServiceToBeAvailable(
+      base::BindOnce(&CrostiniManager::CrostiniRestarter::OnConciergeAvailable,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void CrostiniManager::CrostiniRestarter::OnConciergeAvailable(
+    bool service_is_available) {
+  if (!service_is_available) {
+    LOG(ERROR) << "vm_concierge service is not available";
+    FinishRestart(CrostiniResult::CONCIERGE_START_FAILED);
+    return;
+  }
+
   // Allow concierge to choose an appropriate disk image size.
   int64_t disk_size_bytes = requests_[0].options.disk_size_bytes.value_or(0);
   // If we have an already existing disk, CreateDiskImage will just return its
@@ -953,7 +969,7 @@ void CrostiniManager::CrostiniRestarter::LogRestarterResult(
   // separate histograms in Crostini.SetupResult.
   switch (request.options.restart_source) {
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       [[fallthrough]];
     case RestartSource::kOther:
       if (is_initial_install_) {
@@ -1568,7 +1584,7 @@ void CrostiniManager::StopRunningVms(CrostiniResultCallback callback) {
                         },
                         std::move(callback)));
   for (const auto& name : names) {
-    LOG(WARNING) << "Stopping vm " << name;
+    VLOG(1) << "Stopping vm " << name;
     StopVm(name, barrier);
   }
 }
@@ -2747,7 +2763,7 @@ void CrostiniManager::OnInstallLinuxPackageProgress(
       status = InstallLinuxPackageProgressStatus::INSTALLING;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   guest_os::GuestId container_id(kCrostiniDefaultVmType, signal.vm_name(),
@@ -2783,7 +2799,7 @@ void CrostiniManager::OnUninstallPackageProgress(
       status = UninstallPackageProgressStatus::UNINSTALLING;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   guest_os::GuestId container_id(kCrostiniDefaultVmType, signal.vm_name(),
@@ -2825,7 +2841,7 @@ void CrostiniManager::OnUpgradeContainerProgress(
       status = UpgradeContainerProgressStatus::UPGRADING;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   std::vector<std::string> progress_messages;
@@ -2982,7 +2998,7 @@ void CrostiniManager::OnStartLxdContainer(
       break;
     }
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   if (response->has_os_release()) {
@@ -3026,7 +3042,7 @@ void CrostiniManager::OnStopLxdContainer(
       break;
 
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -3084,7 +3100,7 @@ void CrostiniManager::OnSetUpLxdContainerUser(
       std::move(callback).Run(/*success=*/false);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 

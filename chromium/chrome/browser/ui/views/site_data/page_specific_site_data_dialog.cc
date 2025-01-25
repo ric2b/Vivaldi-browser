@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/views/site_data/page_specific_site_data_dialog.h"
+
 #include <memory>
 #include <string>
 
@@ -13,6 +14,7 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/privacy_sandbox/tracking_protection_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -33,6 +35,8 @@
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/omnibox/browser/favicon_cache.h"
+#include "components/privacy_sandbox/privacy_sandbox_features.h"
+#include "components/privacy_sandbox/tracking_protection_settings.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/browsing_data_remover.h"
@@ -137,6 +141,8 @@ class PageSpecificSiteDataDialogModelDelegate : public ui::DialogModelDelegate {
         HistoryServiceFactory::GetForProfile(
             profile, ServiceAccessType::EXPLICIT_ACCESS));
     cookie_settings_ = CookieSettingsFactory::GetForProfile(profile);
+    tracking_protection_settings_ =
+        TrackingProtectionSettingsFactory::GetForProfile(profile);
     host_content_settings_map_ =
         HostContentSettingsMapFactory::GetForProfile(profile);
 
@@ -334,13 +340,20 @@ class PageSpecificSiteDataDialogModelDelegate : public ui::DialogModelDelegate {
         host_content_settings_map_->GetContentSetting(
             current_url, GURL(), ContentSettingsType::COOKIES);
 
+    // Check for either a COOKIES or TRACKING_PROTECTION site exception.
     content_settings::SettingInfo info;
-    const base::Value value = host_content_settings_map_->GetWebsiteSetting(
+    host_content_settings_map_->GetContentSetting(
         site_origin.GetURL(), current_url, ContentSettingsType::COOKIES, &info);
-
     bool has_site_level_exception =
         info.primary_pattern != ContentSettingsPattern::Wildcard() ||
         info.secondary_pattern != ContentSettingsPattern::Wildcard();
+
+    if (base::FeatureList::IsEnabled(
+            privacy_sandbox::kTrackingProtectionContentSettingFor3pcb)) {
+      has_site_level_exception |=
+          tracking_protection_settings_->GetTrackingProtectionSetting(
+              current_url) == CONTENT_SETTING_ALLOW;
+    }
 
     // Partitioned access is displayed when all of these conditions are met:
     return
@@ -389,6 +402,8 @@ class PageSpecificSiteDataDialogModelDelegate : public ui::DialogModelDelegate {
       blocked_browsing_data_model_for_testing_ = nullptr;
   std::unique_ptr<FaviconCache> favicon_cache_;
   scoped_refptr<content_settings::CookieSettings> cookie_settings_;
+  raw_ptr<privacy_sandbox::TrackingProtectionSettings>
+      tracking_protection_settings_;
   raw_ptr<HostContentSettingsMap> host_content_settings_map_;
 
   // Whether user has done any changes to the site data, deleted site data for a

@@ -28,14 +28,14 @@
 class PrefService;
 
 namespace autofill {
-struct FormData;
+class FormData;
 }
 
 namespace password_manager {
 
 struct InteractionsStats;
 
-// The pupose of this class is to record various types of metrics about the
+// The purpose of this class is to record various types of metrics about the
 // behavior of the PasswordFormManager and its interaction with the user and
 // the page. The recorder tracks events tied to the logical life of a password
 // form, from parsing to having been saved. These events happen on different
@@ -457,6 +457,10 @@ class PasswordFormMetricsRecorder
   // JavaScript. The result is stored in |js_only_input_|.
   void CalculateJsOnlyInput(const autofill::FormData& submitted_form);
 
+  // Calculates the share of input text field characters in the submitted form
+  // that are filled by Chrome. The result is stored in `automation_rate_`.
+  void CalculateAutomationRate(const autofill::FormData& submitted_form);
+
   // Caches how the form was parsed for filling. Needed to measure the
   // difference in form parsing on filling and saving.
   void CacheParsingResultInFillingMode(const PasswordForm& form);
@@ -464,6 +468,12 @@ class PasswordFormMetricsRecorder
   // Calculates whether the password form was parsed in the same way
   // during parsing and saving.
   void CalculateParsingDifferenceOnSavingAndFilling(const PasswordForm& form);
+
+  // Returns a string representation of the calculated `FillingAssistance` to be
+  // used as part of hats survey answers information.
+  // If the assistance holds a different variant type (i.e
+  // `SingleUsernameFillingAssistance`), returns an empty string.
+  std::string FillingAssinstanceToHatsInProductDataString();
 
   void set_possible_username_used(bool value) {
     possible_username_used_ = value;
@@ -479,6 +489,11 @@ class PasswordFormMetricsRecorder
       metrics_util::SubmittedFormFrame submitted_form_frame) {
     submitted_form_frame_ = submitted_form_frame;
   }
+#if BUILDFLAG(IS_ANDROID)
+  void set_form_submission_reached(bool value) {
+    form_submission_reached_ = value;
+  }
+#endif
 
  private:
   friend class base::RefCounted<PasswordFormMetricsRecorder>;
@@ -615,6 +630,17 @@ class PasswordFormMetricsRecorder
   autofill::FieldRendererId confirmation_password_rendered_id_;
 
   std::optional<ParsingDifference> parsing_diff_on_filling_and_saving_;
+
+  // Records the share of input text field characters in the submitted
+  // form that are filled by Chrome. This value includes all fields in the
+  // form (not only username and passwords).
+  std::optional<float> automation_rate_;
+
+#if BUILDFLAG(IS_ANDROID)
+  // Set to true when the form submission step is reached. Used to record
+  // form submission and avoid duplicate samples.
+  bool form_submission_reached_ = false;
+#endif
 };
 
 }  // namespace password_manager

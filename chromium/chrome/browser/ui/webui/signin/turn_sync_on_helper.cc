@@ -228,14 +228,21 @@ TurnSyncOnHelper::TurnSyncOnHelper(
     signin_metrics::AccessPoint signin_access_point,
     signin_metrics::PromoAction signin_promo_action,
     const CoreAccountId& account_id,
-    SigninAbortedMode signin_aborted_mode)
-    : TurnSyncOnHelper(profile,
-                       signin_access_point,
-                       signin_promo_action,
-                       account_id,
-                       signin_aborted_mode,
-                       std::make_unique<TurnSyncOnHelperDelegateImpl>(browser),
-                       base::OnceClosure()) {}
+    SigninAbortedMode signin_aborted_mode,
+    bool is_sync_promo)
+    : TurnSyncOnHelper(
+          profile,
+          signin_access_point,
+          signin_promo_action,
+          account_id,
+          signin_aborted_mode,
+          std::make_unique<TurnSyncOnHelperDelegateImpl>(browser,
+                                                         is_sync_promo),
+          base::OnceClosure()) {
+  // If this is a promo, the account should not be removed on abort.
+  CHECK(!is_sync_promo ||
+        signin_aborted_mode == SigninAbortedMode::KEEP_ACCOUNT);
+}
 
 TurnSyncOnHelper::~TurnSyncOnHelper() {
   DCHECK_EQ(this, GetCurrentTurnSyncOnHelper(profile_));
@@ -309,7 +316,7 @@ void TurnSyncOnHelper::OnMergeAccountConfirmation(signin::SigninChoice choice) {
       AbortAndDelete();
       break;
     case signin::SIGNIN_CHOICE_SIZE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       AbortAndDelete();
       break;
   }
@@ -341,7 +348,7 @@ void TurnSyncOnHelper::OnEnterpriseAccountConfirmation(
       CreateNewSignedInProfile();
       break;
     case signin::SIGNIN_CHOICE_SIZE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       AbortAndDelete();
       break;
   }
@@ -573,7 +580,7 @@ void TurnSyncOnHelper::OnSyncStartupStateChanged(
     SyncStartupTracker::ServiceStartupState state) {
   switch (state) {
     case SyncStartupTracker::ServiceStartupState::kPending:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case SyncStartupTracker::ServiceStartupState::kTimeout:
       DVLOG(1) << "Waiting for Sync Service to start timed out.";

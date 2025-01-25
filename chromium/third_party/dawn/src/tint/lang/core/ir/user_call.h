@@ -45,6 +45,12 @@ class UserCall final : public Castable<UserCall, Call> {
     /// The base offset in Operands() for the call arguments
     static constexpr size_t kArgsOperandOffset = 1;
 
+    /// The fixed number of results returned by this instruction
+    static constexpr size_t kNumResults = 1;
+
+    /// The minimum number of operands expected for this instruction
+    static constexpr size_t kMinOperands = 1;
+
     /// Constructor (no results, no operands)
     UserCall();
 
@@ -66,10 +72,12 @@ class UserCall final : public Castable<UserCall, Call> {
     void SetArgs(VectorRef<Value*> arguments);
 
     /// @returns the called function
-    Function* Target() { return operands_[kFunctionOperandOffset]->As<ir::Function>(); }
+    Function* Target() { return tint::As<ir::Function>(Operand(kFunctionOperandOffset)); }
 
     /// @returns the called function
-    const Function* Target() const { return operands_[kFunctionOperandOffset]->As<ir::Function>(); }
+    const Function* Target() const {
+        return tint::As<ir::Function>(Operand(kFunctionOperandOffset));
+    }
 
     /// Sets called function
     /// @param target the new target of the call

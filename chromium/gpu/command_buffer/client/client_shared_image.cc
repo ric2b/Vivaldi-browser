@@ -53,15 +53,13 @@ uint32_t ComputeTextureTargetForSharedImage(
 #if !BUILDFLAG(IS_OZONE)
   // External sampling with GMBs is supported in Chromium only for Ozone.
   // Android uses a bespoke path for external sampling where the AHB doesn't get
-  // put in a GMB and multiplanar formats aren't used, and Windows doesn't use
-  // external sampling at all. It is not possible to set
+  // put in a GMB and multiplanar formats aren't used, and other platforms
+  // don't use external sampling at all. It is not possible to set
   // PrefersExternalSampler() on a MP SIF outside of Ozone, but legacy MP
   // formats could theoretically be used on any platform. Such usage would be
   // incorrect outside of Ozone as legacy MP formats work only with external
-  // sampling. This DUMP_WILL_BE_CHECK() is added in advance of adding the
-  // invariant via a CHECK that legacy MP formats are *actually* used only on
-  // Ozone.
-  DUMP_WILL_BE_CHECK(!metadata.format.IsLegacyMultiplanar());
+  // sampling. This CHECK ensures that it does not occur.
+  CHECK(!metadata.format.IsLegacyMultiplanar());
 #endif
 
 #if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_OZONE)
@@ -70,15 +68,15 @@ uint32_t ComputeTextureTargetForSharedImage(
   // Check for IOSurfaces being used.
   // NOTE: WebGPU usage on Mac results in SharedImages being backed by
   // IOSurfaces.
-  uint32_t usages_requiring_native_buffer = SHARED_IMAGE_USAGE_SCANOUT |
-                                            SHARED_IMAGE_USAGE_WEBGPU_READ |
-                                            SHARED_IMAGE_USAGE_WEBGPU_WRITE;
+  gpu::SharedImageUsageSet usages_requiring_native_buffer =
+      SHARED_IMAGE_USAGE_SCANOUT | SHARED_IMAGE_USAGE_WEBGPU_READ |
+      SHARED_IMAGE_USAGE_WEBGPU_WRITE;
 
   bool uses_native_buffer = GMBIsNative(client_gmb_type) ||
                             (metadata.usage & usages_requiring_native_buffer);
 
   return uses_native_buffer
-             ? sii->GetCapabilities().macos_specific_texture_target
+             ? sii->GetCapabilities().texture_target_for_io_surfaces
              : GL_TEXTURE_2D;
 #else  // Ozone
   // Check for external sampling being used.
@@ -117,14 +115,6 @@ uint32_t ComputeTextureTargetForSharedImage(
 }
 
 }  // namespace
-
-BASE_FEATURE(kUseUniversalGetTextureTargetFunction,
-             "UseUniversalGetTextureTargetFunction",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kEnableAutomaticSharedImageManagement,
-             "EnableAutomaticSharedImageManagement",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 ClientSharedImage::ScopedMapping::ScopedMapping() = default;
 ClientSharedImage::ScopedMapping::~ScopedMapping() {
@@ -273,18 +263,12 @@ ClientSharedImage::ClientSharedImage(
 
 ClientSharedImage::~ClientSharedImage() {
   if (!HasHolder()) {
-    if (marked_for_destruction_) {
-      CHECK_IS_TEST();
-    }
     return;
   }
 
-  if (base::FeatureList::IsEnabled(kEnableAutomaticSharedImageManagement) ||
-      marked_for_destruction_) {
-    auto sii = sii_holder_->Get();
-    if (sii) {
-      sii->DestroySharedImage(destruction_sync_token_, mailbox_);
-    }
+  auto sii = sii_holder_->Get();
+  if (sii) {
+    sii->DestroySharedImage(destruction_sync_token_, mailbox_);
   }
 }
 
@@ -316,63 +300,6 @@ uint32_t ClientSharedImage::GetTextureTarget() {
   CHECK(texture_target_);
 #endif
   return texture_target_;
-}
-
-uint32_t ClientSharedImage::GetTextureTargetForOverlays() {
-  if (base::FeatureList::IsEnabled(kUseUniversalGetTextureTargetFunction)) {
-    return GetTextureTarget();
-  }
-
-#if BUILDFLAG(IS_MAC)
-  return GetPlatformSpecificTextureTarget();
-#else
-  return GL_TEXTURE_2D;
-#endif
-}
-
-uint32_t ClientSharedImage::GetTextureTarget(gfx::BufferFormat format) {
-  if (base::FeatureList::IsEnabled(kUseUniversalGetTextureTargetFunction)) {
-    return GetTextureTarget();
-  }
-
-  return NativeBufferNeedsPlatformSpecificTextureTarget(format)
-             ? GetPlatformSpecificTextureTarget()
-             : GL_TEXTURE_2D;
-}
-
-uint32_t ClientSharedImage::GetTextureTarget(gfx::BufferUsage usage,
-                                             gfx::BufferFormat format) {
-  if (base::FeatureList::IsEnabled(kUseUniversalGetTextureTargetFunction)) {
-    return GetTextureTarget();
-  }
-
-  CHECK(HasHolder());
-
-  auto capabilities = sii_holder_->Get()->GetCapabilities();
-  bool found = base::Contains(capabilities.texture_target_exception_list,
-                              gfx::BufferUsageAndFormat(usage, format));
-  return found ? gpu::GetPlatformSpecificTextureTarget() : GL_TEXTURE_2D;
-}
-
-uint32_t ClientSharedImage::GetTextureTarget(gfx::BufferUsage usage) {
-  if (base::FeatureList::IsEnabled(kUseUniversalGetTextureTargetFunction)) {
-    return GetTextureTarget();
-  }
-
-  uint32_t usages_forcing_native_buffer = SHARED_IMAGE_USAGE_SCANOUT;
-#if BUILDFLAG(IS_MAC)
-  // On Mac, WebGPU usage results in SharedImages being backed by IOSurfaces.
-  usages_forcing_native_buffer = usages_forcing_native_buffer |
-                                 SHARED_IMAGE_USAGE_WEBGPU_READ |
-                                 SHARED_IMAGE_USAGE_WEBGPU_WRITE;
-#endif
-
-  bool uses_native_buffer = this->usage() & usages_forcing_native_buffer;
-  return uses_native_buffer
-             ? GetTextureTarget(usage,
-                                viz::SinglePlaneSharedImageFormatToBufferFormat(
-                                    metadata_.format))
-             : GL_TEXTURE_2D;
 }
 
 scoped_refptr<ClientSharedImage> ClientSharedImage::MakeUnowned() {
@@ -407,15 +334,21 @@ void ClientSharedImage::OnMemoryDump(
 
 // static
 scoped_refptr<ClientSharedImage> ClientSharedImage::CreateForTesting() {
+  return CreateForTesting(GL_TEXTURE_2D);
+}
+
+// static
+scoped_refptr<ClientSharedImage> ClientSharedImage::CreateForTesting(
+    uint32_t texture_target) {
   SharedImageMetadata metadata;
   metadata.format = viz::SinglePlaneFormat::kRGBA_8888;
   metadata.color_space = gfx::ColorSpace::CreateSRGB();
   metadata.surface_origin = kTopLeft_GrSurfaceOrigin;
   metadata.alpha_type = kOpaque_SkAlphaType;
-  metadata.usage = 0;
+  metadata.usage = gpu::SharedImageUsageSet();
 
-  return ImportUnowned(ExportedSharedImage(
-      Mailbox::GenerateForSharedImage(), metadata, SyncToken(), GL_TEXTURE_2D));
+  return ImportUnowned(ExportedSharedImage(Mailbox::Generate(), metadata,
+                                           SyncToken(), texture_target));
 }
 
 ExportedSharedImage::ExportedSharedImage() = default;

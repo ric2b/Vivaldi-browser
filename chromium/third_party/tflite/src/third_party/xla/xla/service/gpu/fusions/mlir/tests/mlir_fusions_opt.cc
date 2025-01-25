@@ -21,9 +21,11 @@ limitations under the License.
 #include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"  // from @llvm-project
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"  // from @llvm-project
+#include "mlir/Dialect/LLVMIR/NVVMDialect.h"  // from @llvm-project
 #include "mlir/Dialect/Math/IR/Math.h"  // from @llvm-project
 #include "mlir/Dialect/SCF/IR/SCF.h"  // from @llvm-project
 #include "mlir/Dialect/Tensor/IR/Tensor.h"  // from @llvm-project
+#include "mlir/Dialect/Vector/IR/VectorOps.h"  // from @llvm-project
 #include "mlir/Support/LogicalResult.h"  // from @llvm-project
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"  // from @llvm-project
 #include "mlir/Transforms/Passes.h"  // from @llvm-project
@@ -39,7 +41,8 @@ int main(int argc, char **argv) {
                   mlir::math::MathDialect, mlir::scf::SCFDialect,
                   mlir::mhlo::MhloDialect, mlir::LLVM::LLVMDialect,
                   mlir::gpu::GPUDialect, mlir::mhlo::MhloDialect,
-                  xla::gpu::XlaGpuDialect>();
+                  mlir::vector::VectorDialect, xla::gpu::XlaGpuDialect,
+                  mlir::NVVM::NVVMDialect>();
   mlir::func::registerAllExtensions(registry);
   mlir::registerCanonicalizerPass();
   mlir::registerCSEPass();

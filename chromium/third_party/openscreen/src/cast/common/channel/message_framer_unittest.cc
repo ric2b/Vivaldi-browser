@@ -18,7 +18,7 @@
 namespace openscreen::cast {
 namespace message_serialization {
 
-using ::cast::channel::CastMessage;
+using proto::CastMessage;
 
 namespace {
 

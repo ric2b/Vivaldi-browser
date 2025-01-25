@@ -206,7 +206,7 @@ class AccessRegressionTest : public AccessCheckTest {
     i::Handle<i::JSReceiver> r =
         Utils::OpenHandle(*Local<Function>::Cast(getter));
     EXPECT_TRUE(IsJSFunction(*r));
-    return i::Handle<i::JSFunction>::cast(r);
+    return i::Cast<i::JSFunction>(r);
   }
 };
 
@@ -236,7 +236,7 @@ TEST_F(AccessRegressionTest,
       ->Set(context2, NewString("object_from_context1"), object)
       .Check();
 
-  i::Handle<i::JSFunction> getter = RetrieveFunctionFrom(
+  i::DirectHandle<i::JSFunction> getter = RetrieveFunctionFrom(
       context2,
       "Object.getOwnPropertyDescriptor(object_from_context1, 'property').get");
 
@@ -287,7 +287,7 @@ TEST_F(AccessRegressionTest,
   {
     Context::Scope context_scope(context1);
     i::Isolate* iso = reinterpret_cast<i::Isolate*>(isolate());
-    i::Handle<i::JSFunction> break_fn =
+    i::DirectHandle<i::JSFunction> break_fn =
         RetrieveFunctionFrom(context1, "object.breakfn");
 
     int id;
@@ -295,9 +295,9 @@ TEST_F(AccessRegressionTest,
                                            iso->factory()->empty_string(), &id);
   }
 
-  i::Handle<i::JSFunction> getter_c1 = RetrieveFunctionFrom(
+  i::DirectHandle<i::JSFunction> getter_c1 = RetrieveFunctionFrom(
       context1, "Object.getOwnPropertyDescriptor(object, 'property').get");
-  i::Handle<i::JSFunction> getter_c2 = RetrieveFunctionFrom(
+  i::DirectHandle<i::JSFunction> getter_c2 = RetrieveFunctionFrom(
       context2, "Object.getOwnPropertyDescriptor(object, 'property').get");
 
   ASSERT_EQ(getter_c1->native_context(), *Utils::OpenDirectHandle(*context1));
@@ -327,7 +327,6 @@ v8::Intercepted NamedSetter(Local<Name> property, Local<Value> value,
   if (value->IsInt32()) {
     g_cross_context_int = value->ToInt32(context).ToLocalChecked()->Value();
   }
-  info.GetReturnValue().Set(value);
   return v8::Intercepted::kYes;
 }
 
@@ -383,7 +382,6 @@ v8::Intercepted IndexedSetter(uint32_t index, Local<Value> value,
     if (value->IsInt32()) {
       g_cross_context_int = value->ToInt32(context).ToLocalChecked()->Value();
     }
-    info.GetReturnValue().Set(value);
     return v8::Intercepted::kYes;
   }
   return v8::Intercepted::kNo;

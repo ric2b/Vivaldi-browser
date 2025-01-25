@@ -21,7 +21,6 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.merchant_viewer.MerchantTrustSignalsCoordinator;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.R;
@@ -181,7 +180,7 @@ public class StatusMediator
         mPermissionDialogController.addObserver(this);
 
         updateColorTheme();
-        setStatusIconShown(/* show= */ !mLocationBarDataProvider.isIncognito());
+        setStatusIconShown(/* show= */ !mLocationBarDataProvider.isIncognitoBranded());
         updateLocationBarIcon(IconTransitionType.CROSSFADE);
 
         // Vivaldi
@@ -328,13 +327,15 @@ public class StatusMediator
         // This logic doesn't apply to tablets.
         if (mIsTablet) return;
 
-        boolean shouldShowLogo = !mLocationBarDataProvider.isIncognito();
+        boolean shouldShowLogo = !mLocationBarDataProvider.isIncognitoBranded();
+
         // Vivaldi
         if (BuildConfig.IS_VIVALDI) shouldShowLogo = true;
+
         setShowIconsWhenUrlFocused(shouldShowLogo);
         if (!shouldShowLogo) return;
 
-        if (mProfileSupplier.hasValue() && isNTPOrStartSurfaceVisible()) {
+        if (mProfileSupplier.hasValue() && isNtpVisible()) {
             setStatusIconShown(shouldShowLogo && (mUrlHasFocus || mUrlFocusPercent > 0));
         } else {
             setStatusIconShown(true);
@@ -370,8 +371,8 @@ public class StatusMediator
         if (BuildConfig.IS_VIVALDI)
             setStatusIconAlpha(1f);
         else
-        // Only fade the animation on the new tab page or start surface.
-        if (mProfileSupplier.hasValue() && isNTPOrStartSurfaceVisible()) {
+        // Only fade the animation on the new tab page.
+        if (mProfileSupplier.hasValue() && isNtpVisible()) {
             setStatusIconAlpha(percent);
         } else {
             setStatusIconAlpha(1f);
@@ -475,9 +476,8 @@ public class StatusMediator
         return mPageIsOffline || mPageIsPaintPreview;
     }
 
-    private boolean isNTPOrStartSurfaceVisible() {
-        return mLocationBarDataProvider.getNewTabPageDelegate().isCurrentlyVisible()
-                || mLocationBarDataProvider.isInOverviewAndShowingOmnibox();
+    private boolean isNtpVisible() {
+        return mLocationBarDataProvider.getNewTabPageDelegate().isCurrentlyVisible();
     }
 
     /**
@@ -564,7 +564,7 @@ public class StatusMediator
     boolean shouldDisplaySearchEngineIcon() {
         // Vivaldi
         if (!BuildConfig.IS_VIVALDI)
-        if (mLocationBarDataProvider.isIncognito()) {
+        if (mLocationBarDataProvider.isIncognitoBranded()) {
             return false;
         }
 
@@ -573,7 +573,7 @@ public class StatusMediator
         }
 
         return (mUrlHasFocus || mUrlFocusPercent > 0)
-                && isNTPOrStartSurfaceVisible()
+                && isNtpVisible()
                 && mProfileSupplier.hasValue();
     }
 
@@ -594,7 +594,7 @@ public class StatusMediator
 
     /** Return the resource id for the accessibility description or 0 if none apply. */
     private int getAccessibilityDescriptionRes() {
-        if (mUrlHasFocus && !mLocationBarDataProvider.isIncognito()) {
+        if (mUrlHasFocus && !mLocationBarDataProvider.isIncognitoBranded()) {
             return 0;
         }
         return (mSecurityIconRes != 0) ? mSecurityIconDescriptionRes : 0;
@@ -632,14 +632,11 @@ public class StatusMediator
     }
 
     public void onIncognitoStateChanged() {
-        boolean showIncognitoStatus =
-                !mIsTablet
-                        || ChromeFeatureList.sTabletToolbarIncognitoStatus.isEnabled()
-                        || ChromeFeatureList.sDynamicTopChrome.isEnabled();
-        boolean incognitoBadgeVisible =
-                mLocationBarDataProvider.isIncognito() && showIncognitoStatus;
+        boolean incognitoBadgeVisible = mLocationBarDataProvider.isIncognitoBranded();
+
         // Vivaldi - No incognito badge.
         incognitoBadgeVisible = incognitoBadgeVisible && !BuildConfig.IS_VIVALDI;
+
         mModel.set(StatusProperties.INCOGNITO_BADGE_VISIBLE, incognitoBadgeVisible);
         mModel.set(StatusProperties.STATUS_ICON_RESOURCE, null);
         setStatusIconAlpha(1f);
@@ -662,12 +659,12 @@ public class StatusMediator
         resetCustomIconsStatus();
         mLastPermission = permission;
 
-        boolean isIncognito = mLocationBarDataProvider.isIncognito();
+        boolean isIncognitoBranded = mLocationBarDataProvider.isIncognitoBranded();
         Drawable permissionDrawable =
                 ContentSettingsResources.getIconForOmnibox(
-                        mContext, mLastPermission, result, isIncognito);
+                        mContext, mLastPermission, result, isIncognitoBranded);
         PermissionIconResource permissionIconResource =
-                new PermissionIconResource(permissionDrawable, isIncognito);
+                new PermissionIconResource(permissionDrawable, isIncognitoBranded);
         permissionIconResource.setTransitionType(IconTransitionType.ROTATE);
         // We only want to notify the IPH controller after the icon transition is finished.
         // IPH is controlled by the FeatureEngagement system through finch with a field trial
@@ -713,17 +710,18 @@ public class StatusMediator
         }
         resetCustomIconsStatus();
 
-        boolean isIncognito = mLocationBarDataProvider.isIncognito();
+        boolean isIncognitoBranded = mLocationBarDataProvider.isIncognitoBranded();
         Drawable eyeCrossedIcon =
                 SettingsUtils.getTintedIcon(
                         mContext,
                         R.drawable.ic_eye_crossed,
-                        isIncognito
+                        isIncognitoBranded
                                 ? R.color.default_icon_color_blue_light
                                 : R.color.default_icon_color_accent1_tint_list);
 
         PermissionIconResource permissionIconResource =
-                new PermissionIconResource(eyeCrossedIcon, isIncognito, COOKIE_CONTROLS_ICON);
+                new PermissionIconResource(
+                        eyeCrossedIcon, isIncognitoBranded, COOKIE_CONTROLS_ICON);
         permissionIconResource.setTransitionType(IconTransitionType.ROTATE);
         permissionIconResource.setAnimationFinishedCallback(
                 () -> {
@@ -763,7 +761,7 @@ public class StatusMediator
             boolean canShowIph) {
         if ((window != mWindowAndroid)
                 || (!url.equals(mLocationBarDataProvider.getCurrentGurl().getSpec()))
-                || (mLocationBarDataProvider.isIncognito())) {
+                || (mLocationBarDataProvider.isOffTheRecord())) {
             return;
         }
         resetCustomIconsStatus();

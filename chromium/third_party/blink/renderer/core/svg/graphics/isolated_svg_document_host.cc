@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_chrome_client.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
+#include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/scheduler/public/agent_group_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/main_thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/main_thread_scheduler.h"
@@ -70,7 +71,7 @@ class IsolatedSVGDocumentHost::LocalFrameClient : public EmptyLocalFrameClient {
             [](const network::ResourceRequest& resource_request,
                mojo::PendingReceiver<network::mojom::URLLoader> receiver,
                mojo::PendingRemote<network::mojom::URLLoaderClient> client) {
-              NOTREACHED();
+              NOTREACHED_IN_MIGRATION();
             }));
   }
 
@@ -101,7 +102,8 @@ IsolatedSVGDocumentHost::IsolatedSVGDocumentHost(
   {
     TRACE_EVENT("blink",
                 "IsolatedSVGDocumentHost::IsolatedSVGDocumentHost::createPage");
-    page = Page::CreateNonOrdinary(chrome_client, agent_group_scheduler);
+    page = Page::CreateNonOrdinary(chrome_client, agent_group_scheduler,
+                                   /*color_provider_colors=*/nullptr);
 
     Settings& settings = page->GetSettings();
     settings.SetScriptEnabled(false);
@@ -117,7 +119,7 @@ IsolatedSVGDocumentHost::IsolatedSVGDocumentHost(
     frame = MakeGarbageCollected<LocalFrame>(
         frame_client_, *page, nullptr, nullptr, nullptr,
         FrameInsertType::kInsertInConstructor, LocalFrameToken(), nullptr,
-        nullptr);
+        nullptr, mojo::NullRemote());
     frame->SetView(MakeGarbageCollected<LocalFrameView>(*frame));
     frame->Init(/*opener=*/nullptr, DocumentToken(),
                 /*policy_container=*/nullptr, StorageKey(),
@@ -164,10 +166,9 @@ void IsolatedSVGDocumentHost::InstallDocument(
     settings.SetImageAnimationPolicy(
         mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyNoAnimation);
   }
-
+  CHECK(data);
   LocalFrame* frame = GetFrame();
-  frame->ForceSynchronousDocumentInstall(AtomicString("image/svg+xml"),
-                                         std::move(data));
+  frame->ForceSynchronousDocumentInstall(AtomicString("image/svg+xml"), *data);
 
   // Intrinsic sizing relies on computed style (e.g. font-size and
   // writing-mode).
@@ -346,6 +347,9 @@ void IsolatedSVGDocumentHostInitializer::MaybePrepareIsolatedSVGDocumentHost() {
 
 std::pair<SVGImageChromeClient*, IsolatedSVGDocumentHost*>
 IsolatedSVGDocumentHostInitializer::Create() {
+  SCOPED_BLINK_UMA_HISTOGRAM_TIMER_HIGHRES(
+      "Blink.SVGImage.IsolatedSVGDocumentHostCreationTime");
+
   // SVG will be shared via MemoryCache (which is renderer process
   // global cache) across multiple AgentSchedulingGroups. That's
   // why we can't use an existing AgentSchedulingGroup for now. If

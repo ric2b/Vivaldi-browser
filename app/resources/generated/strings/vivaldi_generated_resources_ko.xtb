@@ -86,7 +86,6 @@
 <translation id="2439110203301358333">컴퓨터의 다른 프로그램에서 Vivaldi 작동에 영향을 줄 수 있는 확장 프로그램을 추가했습니다.</translation>
 <translation id="2443487764245141020">사이트에서 식별자를 사용하여 기기를 인식해야 할 수도 있습니다</translation>
 <translation id="2445081178310039857">확장 프로그램 루트 디렉토리가 필요합니다.</translation>
-<translation id="2470702053775288986">지원되지 않는 확장 프로그램이 사용 중지됨</translation>
 <translation id="2485422356828889247">제거</translation>
 <translation id="2498539833203011245">최소화</translation>
 <translation id="2509495747794740764">배율 값은 10에서 200 사이의 숫자여야 합니다.</translation>
@@ -206,7 +205,6 @@
 <translation id="431076611119798497">정보(&amp;D)</translation>
 <translation id="4345587454538109430">설정...</translation>
 <translation id="4348766275249686434">오류 수집</translation>
-<translation id="4363771538994847871">전송 대상을 찾을 수 없습니다. 도움이 필요하세요?</translation>
 <translation id="4384652540891215547">확장 프로그램 활성화</translation>
 <translation id="4394049700291259645">사용 중지</translation>
 <translation id="4409697491990005945">여백</translation>
@@ -390,7 +388,6 @@
 <translation id="7771452384635174008">레이아웃</translation>
 <translation id="7782102568078991263">Google 추천 단어 없음</translation>
 <translation id="7786889348652477777">앱 새로고침(&amp;R)</translation>
-<translation id="7791543448312431591">추가</translation>
 <translation id="7800518121066352902">반시계 방향으로 회전(&amp;O)</translation>
 <translation id="7814458197256864873">복사 (&amp;C)</translation>
 <translation id="7818135753970109980">새 테마가 추가됨(<ph name="EXTENSION_NAME" />)</translation>

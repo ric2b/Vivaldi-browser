@@ -81,10 +81,8 @@ gpu_info::DriverVersion DecodeVulkanDriverVersion(uint32_t vendorID, uint32_t ve
 
 }  // anonymous namespace
 
-PhysicalDevice::PhysicalDevice(InstanceBase* instance,
-                               VulkanInstance* vulkanInstance,
-                               VkPhysicalDevice physicalDevice)
-    : PhysicalDeviceBase(instance, wgpu::BackendType::Vulkan),
+PhysicalDevice::PhysicalDevice(VulkanInstance* vulkanInstance, VkPhysicalDevice physicalDevice)
+    : PhysicalDeviceBase(wgpu::BackendType::Vulkan),
       mVkPhysicalDevice(physicalDevice),
       mVulkanInstance(vulkanInstance) {}
 
@@ -250,6 +248,7 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
         EnableFeature(Feature::R8UnormStorage);
     }
 
+    bool shaderF16Enabled = false;
     if (mDeviceInfo.HasExt(DeviceExt::ShaderFloat16Int8) &&
         mDeviceInfo.HasExt(DeviceExt::_16BitStorage) &&
         mDeviceInfo.shaderFloat16Int8Features.shaderFloat16 == VK_TRUE &&
@@ -258,6 +257,7 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
         // TODO(crbug.com/tint/2164): Investigate crashes in f16 CTS tests to enable on NVIDIA.
         if (!gpu_info::IsNvidia(GetVendorId())) {
             EnableFeature(Feature::ShaderF16);
+            shaderF16Enabled = true;
         }
     }
 
@@ -371,20 +371,58 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     EnableFeature(Feature::SurfaceCapabilities);
     EnableFeature(Feature::TransientAttachments);
     EnableFeature(Feature::AdapterPropertiesVk);
+    EnableFeature(Feature::DawnLoadResolveTexture);
 
+    // TODO(349125474): Remove deprecated ChromiumExperimentalSubgroups.
     // Enable ChromiumExperimentalSubgroups feature if:
     // 1. Vulkan API version is 1.1 or later, and
     // 2. subgroupSupportedStages includes compute stage bit, and
     // 3. subgroupSupportedOperations includes basic and ballot bits, and
     // 4. VK_EXT_subgroup_size_control extension is valid, and both subgroupSizeControl
     //    and computeFullSubgroups is TRUE in VkPhysicalDeviceSubgroupSizeControlFeaturesEXT.
+    // Notes that these requirement doesn't ensure all subgroups features are supported by the
+    // Vulkan backend. For example, currently ChromiumExperimentalSubgroups feature allows using
+    // subgroups functions with f16 types in WGSL, but doesn't ensure that backend supports it.
     if ((mDeviceInfo.properties.apiVersion >= VK_API_VERSION_1_1) &&
         (mDeviceInfo.subgroupProperties.supportedStages & VK_SHADER_STAGE_COMPUTE_BIT) &&
+        (mDeviceInfo.subgroupProperties.supportedOperations & VK_SUBGROUP_FEATURE_BASIC_BIT) &&
         (mDeviceInfo.subgroupProperties.supportedOperations & VK_SUBGROUP_FEATURE_BALLOT_BIT) &&
         (mDeviceInfo.HasExt(DeviceExt::SubgroupSizeControl)) &&
         (mDeviceInfo.subgroupSizeControlFeatures.subgroupSizeControl == VK_TRUE) &&
         (mDeviceInfo.subgroupSizeControlFeatures.computeFullSubgroups == VK_TRUE)) {
         EnableFeature(Feature::ChromiumExperimentalSubgroups);
+    }
+
+    // Enable Subgroups feature if:
+    // 1. Vulkan API version is 1.1 or later, and
+    // 2. subgroupSupportedStages includes compute and fragment stage bit, and
+    // 3. subgroupSupportedOperations includes vote, ballot, shuffle, shuffle relative, arithmetic,
+    //    and quad bits, and
+    // 4. VK_EXT_subgroup_size_control extension is valid, and both subgroupSizeControl
+    //    and computeFullSubgroups is TRUE in VkPhysicalDeviceSubgroupSizeControlFeaturesEXT.
+    if ((mDeviceInfo.properties.apiVersion >= VK_API_VERSION_1_1) &&
+        (mDeviceInfo.subgroupProperties.supportedStages & VK_SHADER_STAGE_COMPUTE_BIT) &&
+        (mDeviceInfo.subgroupProperties.supportedStages & VK_SHADER_STAGE_FRAGMENT_BIT) &&
+        (mDeviceInfo.subgroupProperties.supportedOperations & VK_SUBGROUP_FEATURE_BASIC_BIT) &&
+        (mDeviceInfo.subgroupProperties.supportedOperations & VK_SUBGROUP_FEATURE_BALLOT_BIT) &&
+        (mDeviceInfo.subgroupProperties.supportedOperations & VK_SUBGROUP_FEATURE_SHUFFLE_BIT) &&
+        (mDeviceInfo.subgroupProperties.supportedOperations &
+         VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT) &&
+        (mDeviceInfo.subgroupProperties.supportedOperations & VK_SUBGROUP_FEATURE_ARITHMETIC_BIT) &&
+        (mDeviceInfo.subgroupProperties.supportedOperations & VK_SUBGROUP_FEATURE_QUAD_BIT) &&
+        (mDeviceInfo.HasExt(DeviceExt::SubgroupSizeControl)) &&
+        (mDeviceInfo.subgroupSizeControlFeatures.subgroupSizeControl == VK_TRUE) &&
+        (mDeviceInfo.subgroupSizeControlFeatures.computeFullSubgroups == VK_TRUE)) {
+        EnableFeature(Feature::Subgroups);
+        // Enable SubgroupsF16 feature if:
+        // 1. Subgroups feature is enabled, and
+        // 2. ShaderF16 feature is enabled, and
+        // 3. shaderSubgroupExtendedTypes is TRUE in
+        //    VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR.
+        if (shaderF16Enabled &&
+            mDeviceInfo.shaderSubgroupExtendedTypes.shaderSubgroupExtendedTypes == VK_TRUE) {
+            EnableFeature(Feature::SubgroupsF16);
+        }
     }
     // Enable ChromiumExperimentalSubgroupUniformControlFlow if
     // VK_KHR_shader_subgroup_uniform_control_flow is supported.
@@ -412,7 +450,7 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
 
 #if DAWN_PLATFORM_IS(ANDROID)
     if (mDeviceInfo.HasExt(DeviceExt::ExternalMemoryAndroidHardwareBuffer)) {
-        if (GetInstance()->GetOrLoadAHBFunctions()->IsValid()) {
+        if (GetOrLoadAHBFunctions()->IsValid()) {
             EnableFeature(Feature::SharedTextureMemoryAHardwareBuffer);
         }
     }
@@ -625,20 +663,23 @@ bool PhysicalDevice::SupportsFeatureLevel(FeatureLevel) const {
     return true;
 }
 
-void PhysicalDevice::SetupBackendAdapterToggles(TogglesState* adpterToggles) const {}
+void PhysicalDevice::SetupBackendAdapterToggles(dawn::platform::Platform* platform,
+                                                TogglesState* adapterToggles) const {}
 
-void PhysicalDevice::SetupBackendDeviceToggles(TogglesState* deviceToggles) const {
+void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platform,
+                                               TogglesState* deviceToggles) const {
     // TODO(crbug.com/dawn/857): tighten this workaround when this issue is fixed in both
     // Vulkan SPEC and drivers.
     deviceToggles->Default(Toggle::UseTemporaryBufferInCompressedTextureToTextureCopy, true);
 
-#if DAWN_PLATFORM_IS(ANDROID)
-    // Default to the IR backend on Android.
-    deviceToggles->Default(Toggle::UseTintIR, true);
+    // TODO(crbug.com/345276504): Remove this and associated ShaderModuleVK code after M128 branch.
+#if DAWN_PLATFORM_IS(CHROMEOS)
+    // ChromeOS is controlled by the feature flag (which defaults to `true`) for one more release.
+    deviceToggles->Default(Toggle::UseTintIR,
+                           platform->IsFeatureEnabled(platform::Features::kWebGPUUseTintIR));
 #else
-    // All other platforms default to the value corresponding to the feature flag.
-    deviceToggles->Default(Toggle::UseTintIR, GetInstance()->GetPlatform()->IsFeatureEnabled(
-                                                  platform::Features::kWebGPUUseTintIR));
+    // All other Vulkan platforms are not controlled by the feature flag and use the IR by default.
+    deviceToggles->Default(Toggle::UseTintIR, true);
 #endif
 
     if (IsAndroidQualcomm()) {
@@ -660,6 +701,10 @@ void PhysicalDevice::SetupBackendDeviceToggles(TogglesState* deviceToggles) cons
         // forced to store the multisampled targets and do the resolves as separate passes injected
         // after the original one.
         deviceToggles->Default(Toggle::ResolveMultipleAttachmentInSeparatePasses, true);
+    }
+
+    if (IsAndroidSamsung() || IsAndroidQualcomm()) {
+        deviceToggles->Default(Toggle::IgnoreImportedAHardwareBufferVulkanImageSize, true);
     }
 
     if (IsIntelMesa() && gpu_info::IsIntelGen12LP(GetVendorId(), GetDeviceId())) {
@@ -805,6 +850,14 @@ bool PhysicalDevice::IsAndroidARM() const {
 #endif
 }
 
+bool PhysicalDevice::IsAndroidSamsung() const {
+#if DAWN_PLATFORM_IS(ANDROID)
+    return gpu_info::IsSamsung(GetVendorId());
+#else
+    return false;
+#endif
+}
+
 bool PhysicalDevice::IsIntelMesa() const {
     if (mDeviceInfo.HasExt(DeviceExt::DriverProperties)) {
         return mDeviceInfo.driverProperties.driverID == VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA_KHR;
@@ -867,58 +920,91 @@ uint32_t PhysicalDevice::GetDefaultComputeSubgroupSize() const {
 }
 
 ResultOrError<PhysicalDeviceSurfaceCapabilities> PhysicalDevice::GetSurfaceCapabilities(
+    InstanceBase* instance,
     const Surface* surface) const {
+    // Gather the Vulkan surface capabilities.
+    VulkanSurfaceInfo vkCaps;
+    {
+        const VulkanFunctions& fn = GetVulkanInstance()->GetFunctions();
+        VkInstance vkInstance = GetVulkanInstance()->GetVkInstance();
+
+        VkSurfaceKHR vkSurface;
+        DAWN_TRY_ASSIGN(vkSurface, CreateVulkanSurface(instance, this, surface));
+        DAWN_TRY_ASSIGN_WITH_CLEANUP(vkCaps, GatherSurfaceInfo(*this, vkSurface),
+                                     { fn.DestroySurfaceKHR(vkInstance, vkSurface, nullptr); });
+
+        fn.DestroySurfaceKHR(vkInstance, vkSurface, nullptr);
+    }
+
     PhysicalDeviceSurfaceCapabilities capabilities;
 
-    // Formats
+    // Convert the known swapchain usages.
+    capabilities.usages = wgpu::TextureUsage::None;
+    if (vkCaps.capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
+        capabilities.usages |= wgpu::TextureUsage::CopySrc;
+    }
+    if (vkCaps.capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT) {
+        capabilities.usages |= wgpu::TextureUsage::CopyDst;
+    }
+    if (vkCaps.capabilities.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) {
+        capabilities.usages |= wgpu::TextureUsage::RenderAttachment;
+    }
+    if (vkCaps.capabilities.supportedUsageFlags & VK_IMAGE_USAGE_SAMPLED_BIT) {
+        capabilities.usages |= wgpu::TextureUsage::TextureBinding;
+    }
+    if (vkCaps.capabilities.supportedUsageFlags & VK_IMAGE_USAGE_STORAGE_BIT) {
+        capabilities.usages |= wgpu::TextureUsage::StorageBinding;
+    }
 
-    // This is the only supported format in native mode (see crbug.com/dawn/160).
-#if DAWN_PLATFORM_IS(ANDROID)
-    capabilities.formats.push_back(wgpu::TextureFormat::RGBA8Unorm);
-#else
-    capabilities.formats.push_back(wgpu::TextureFormat::BGRA8Unorm);
-#endif  // !DAWN_PLATFORM_IS(ANDROID)
-
-    // Present Modes
-
-    // TODO(dawn:2320): Other present modes than Mailbox do not pass tests on Intel Graphics. Once
-    // 'surface' will actually contain a vkSurface we'll be able to test
-    // vkGetPhysicalDeviceSurfaceSupportKHR to avoid this #if.
-#if DAWN_PLATFORM_IS(LINUX)
-    capabilities.presentModes = {
-        wgpu::PresentMode::Mailbox,
+    // Convert known swapchain formats
+    auto ToWGPUSwapChainFormat = [](VkFormat format) -> wgpu::TextureFormat {
+        switch (format) {
+            case VK_FORMAT_R8G8B8A8_UNORM:
+                return wgpu::TextureFormat::RGBA8Unorm;
+            case VK_FORMAT_R8G8B8A8_SRGB:
+                return wgpu::TextureFormat::RGBA8UnormSrgb;
+            case VK_FORMAT_B8G8R8A8_UNORM:
+                return wgpu::TextureFormat::BGRA8Unorm;
+            case VK_FORMAT_B8G8R8A8_SRGB:
+                return wgpu::TextureFormat::BGRA8UnormSrgb;
+            case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+                return wgpu::TextureFormat::RGB10A2Unorm;
+            case VK_FORMAT_R16G16B16A16_SFLOAT:
+                return wgpu::TextureFormat::RGBA16Float;
+            default:
+                return wgpu::TextureFormat::Undefined;
+        }
     };
-#else
-    capabilities.presentModes = {
-        wgpu::PresentMode::Fifo,
-        wgpu::PresentMode::Immediate,
-        wgpu::PresentMode::Mailbox,
+    for (VkSurfaceFormatKHR surfaceFormat : vkCaps.formats) {
+        wgpu::TextureFormat format = ToWGPUSwapChainFormat(surfaceFormat.format);
+        if (format != wgpu::TextureFormat::Undefined) {
+            capabilities.formats.push_back(format);
+        }
+    }
+
+    // Convert known present modes
+    auto ToWGPUPresentMode = [](VkPresentModeKHR mode) -> std::optional<wgpu::PresentMode> {
+        switch (mode) {
+            case VK_PRESENT_MODE_FIFO_KHR:
+                return wgpu::PresentMode::Fifo;
+            case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+                return wgpu::PresentMode::FifoRelaxed;
+            case VK_PRESENT_MODE_MAILBOX_KHR:
+                return wgpu::PresentMode::Mailbox;
+            case VK_PRESENT_MODE_IMMEDIATE_KHR:
+                return wgpu::PresentMode::Immediate;
+            default:
+                return {};
+        }
     };
-#endif  // !DAWN_PLATFORM_IS(LINUX)
+    for (VkPresentModeKHR vkMode : vkCaps.presentModes) {
+        std::optional<wgpu::PresentMode> wgpuMode = ToWGPUPresentMode(vkMode);
+        if (wgpuMode) {
+            capabilities.presentModes.push_back(*wgpuMode);
+        }
+    }
 
-    // Alpha Modes
-
-#if !DAWN_PLATFORM_IS(ANDROID)
-    capabilities.alphaModes.push_back(wgpu::CompositeAlphaMode::Opaque);
-#else
-    VkSurfaceKHR vkSurface;
-    DAWN_TRY_ASSIGN(vkSurface, CreateVulkanSurface(this, surface));
-
-    VkPhysicalDevice vkPhysicalDevice = GetVkPhysicalDevice();
-    const VulkanFunctions& fn = GetVulkanInstance()->GetFunctions();
-    VkInstance vkInstance = GetVulkanInstance()->GetVkInstance();
-    const VulkanFunctions& vkFunctions = GetVulkanInstance()->GetFunctions();
-
-    // Get the surface capabilities
-    VkSurfaceCapabilitiesKHR vkCapabilities;
-    DAWN_TRY_WITH_CLEANUP(CheckVkSuccess(vkFunctions.GetPhysicalDeviceSurfaceCapabilitiesKHR(
-                                             vkPhysicalDevice, vkSurface, &vkCapabilities),
-                                         "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"),
-                          { fn.DestroySurfaceKHR(vkInstance, vkSurface, nullptr); });
-
-    fn.DestroySurfaceKHR(vkInstance, vkSurface, nullptr);
-
-    // TODO(dawn:286): investigate composite alpha for WebGPU native
+    // Compute supported alpha modes
     struct AlphaModePairs {
         VkCompositeAlphaFlagBitsKHR vkBit;
         wgpu::CompositeAlphaMode webgpuEnum;
@@ -931,14 +1017,23 @@ ResultOrError<PhysicalDeviceSurfaceCapabilities> PhysicalDevice::GetSurfaceCapab
     };
 
     for (auto mode : alphaModePairs) {
-        if (vkCapabilities.supportedCompositeAlpha & mode.vkBit) {
+        if (vkCaps.capabilities.supportedCompositeAlpha & mode.vkBit) {
             capabilities.alphaModes.push_back(mode.webgpuEnum);
         }
     }
-#endif  // #if !DAWN_PLATFORM_IS(ANDROID)
-    capabilities.alphaModes.push_back(wgpu::CompositeAlphaMode::Auto);
 
     return capabilities;
+}
+
+const AHBFunctions* PhysicalDevice::GetOrLoadAHBFunctions() {
+#if DAWN_PLATFORM_IS(ANDROID)
+    if (mAHBFunctions == nullptr) {
+        mAHBFunctions = std::make_unique<AHBFunctions>();
+    }
+    return mAHBFunctions.get();
+#else
+    DAWN_UNREACHABLE();
+#endif  // DAWN_PLATFORM_IS(ANDROID)
 }
 
 void PhysicalDevice::PopulateBackendProperties(UnpackedPtr<AdapterProperties>& properties) const {

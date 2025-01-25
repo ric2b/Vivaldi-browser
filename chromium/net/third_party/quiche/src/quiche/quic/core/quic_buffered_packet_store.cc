@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/strings/string_view.h"
 #include "quiche/quic/core/connection_id_generator.h"
@@ -102,11 +103,15 @@ QuicBufferedPacketStore::~QuicBufferedPacketStore() {
 }
 
 EnqueuePacketResult QuicBufferedPacketStore::EnqueuePacket(
-    QuicConnectionId connection_id, bool ietf_quic,
-    const QuicReceivedPacket& packet, QuicSocketAddress self_address,
-    QuicSocketAddress peer_address, const ParsedQuicVersion& version,
+    const ReceivedPacketInfo& packet_info,
     std::optional<ParsedClientHello> parsed_chlo,
     ConnectionIdGeneratorInterface* connection_id_generator) {
+  QuicConnectionId connection_id = packet_info.destination_connection_id;
+  const QuicReceivedPacket& packet = packet_info.packet;
+  const QuicSocketAddress& self_address = packet_info.self_address;
+  const QuicSocketAddress& peer_address = packet_info.peer_address;
+  const ParsedQuicVersion& version = packet_info.version;
+  const bool ietf_quic = packet_info.form != GOOGLE_QUIC_PACKET;
   const bool is_chlo = parsed_chlo.has_value();
   QUIC_BUG_IF(quic_bug_12410_1, !GetQuicFlag(quic_allow_chlo_buffering))
       << "Shouldn't buffer packets if disabled via flag.";
@@ -312,6 +317,7 @@ bool QuicBufferedPacketStore::IngestPacketForTlsChloExtraction(
     const QuicConnectionId& connection_id, const ParsedQuicVersion& version,
     const QuicReceivedPacket& packet,
     std::vector<uint16_t>* out_supported_groups,
+    std::vector<uint16_t>* out_cert_compression_algos,
     std::vector<std::string>* out_alpns, std::string* out_sni,
     bool* out_resumption_attempted, bool* out_early_data_attempted,
     std::optional<uint8_t>* tls_alert) {
@@ -332,6 +338,7 @@ bool QuicBufferedPacketStore::IngestPacketForTlsChloExtraction(
   }
   const TlsChloExtractor& tls_chlo_extractor = it->second.tls_chlo_extractor;
   *out_supported_groups = tls_chlo_extractor.supported_groups();
+  *out_cert_compression_algos = tls_chlo_extractor.cert_compression_algos();
   *out_alpns = tls_chlo_extractor.alpns();
   *out_sni = tls_chlo_extractor.server_name();
   *out_resumption_attempted = tls_chlo_extractor.resumption_attempted();

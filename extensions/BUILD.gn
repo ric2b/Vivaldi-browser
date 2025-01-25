@@ -29,14 +29,11 @@ static_library("extensions_client") {
     "permissions",
 
     "schema",
-    "//chrome/common",
+    #"//chrome/common",
     "//chrome/common/apps/platform_apps",
   ]
   deps = [
     ":resources",
-  ]
-  allow_circular_includes_from = [
-    "//chrome/common",
   ]
   sources = [
     "vivaldi_extensions_client.cpp",

@@ -46,8 +46,8 @@ import {type ComputedStyle, ComputedStyleModel, Events} from './ComputedStyleMod
 import computedStyleSidebarPaneStyles from './computedStyleSidebarPane.css.js';
 import {ImagePreviewPopover} from './ImagePreviewPopover.js';
 import {PlatformFontsWidget} from './PlatformFontsWidget.js';
+import {type ColorMatch, ColorMatcher} from './PropertyMatchers.js';
 import {categorizePropertyName, type Category, DefaultCategoryOrder} from './PropertyNameCategories.js';
-import {type ColorMatch, ColorMatcher} from './PropertyParser.js';
 import {type MatchRenderer, Renderer, type RenderingContext, StringRenderer, URLRenderer} from './PropertyRenderer.js';
 import {StylePropertiesSection} from './StylePropertiesSection.js';
 
@@ -166,17 +166,22 @@ const createTraceElement =
 
 class ColorRenderer implements MatchRenderer<ColorMatch> {
   render(match: ColorMatch, context: RenderingContext): Node[] {
+    const color = Common.Color.parse(match.text);
+    if (!color) {
+      return [document.createTextNode(match.text)];
+    }
+
     const swatch = new InlineEditor.ColorSwatch.ColorSwatch();
     swatch.setReadonly(true);
-    swatch.renderColor(match.text, true);
+    swatch.renderColor(color);
     const valueElement = document.createElement('span');
-    valueElement.textContent = swatch.getText();
+    valueElement.textContent = match.text;
     swatch.append(valueElement);
 
     swatch.addEventListener(
         InlineEditor.ColorSwatch.ColorChangedEvent.eventName, (event: InlineEditor.ColorSwatch.ColorChangedEvent) => {
-          const {data} = event;
-          valueElement.textContent = data.text;
+          const {data: {color}} = event;
+          valueElement.textContent = color.getAuthoredText() ?? color.asString();
         });
 
     context.addControl('color', swatch);

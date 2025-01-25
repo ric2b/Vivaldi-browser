@@ -96,6 +96,24 @@
       ],
     },
   },
+  '12l-landscape-x64-emulator': {
+    'args': [
+      '--avd-config=../../tools/android/avd/proto/android_32_google_apis_x64_foldable_landscape.textpb',
+    ],
+    'swarming': {
+      'optional_dimensions': {
+        '60': {
+          'caches': 'android_32_google_apis_x64_foldable_landscape',
+        },
+      },
+      'named_caches': [
+        {
+          'name': 'android_32_google_apis_x64_foldable_landscape',
+          'path': '.android_emulator/android_32_google_apis_x64_foldable_landscape',
+        },
+      ],
+    },
+  },
   '12l-x64-emulator': {
     'args': [
       '--avd-config=../../tools/android/avd/proto/android_32_google_apis_x64_foldable.textpb',
@@ -171,20 +189,20 @@
     },
   },
   '15-x64-emulator': {
-    'description': 'Run with android_v_google_apis_x64',
+    'description': 'Run with android_35_google_apis_x64',
     'args': [
-      '--avd-config=../../tools/android/avd/proto/android_v_google_apis_x64.textpb',
+      '--avd-config=../../tools/android/avd/proto/android_35_google_apis_x64.textpb',
     ],
     'swarming': {
       'optional_dimensions': {
         '60': {
-          'caches': 'android_v_google_apis_x64',
+          'caches': 'android_35_google_apis_x64',
         },
       },
       'named_caches': [
         {
-          'name': 'android_v_google_apis_x64',
-          'path': '.android_emulator/android_v_google_apis_x64',
+          'name': 'android_35_google_apis_x64',
+          'path': '.android_emulator/android_35_google_apis_x64',
         },
       ],
     },
@@ -301,7 +319,7 @@
   },
   'chromeos-betty-finch': {
     'args': [
-      '--board=betty-pi-arc',
+      '--board=betty',
       '--magic-vm-cache=magic_cros_vm_cache',
     ],
     'swarming': {
@@ -341,31 +359,6 @@
       },
     },
   },
-  'chromeos-reven': {
-    'args': [
-      '--magic-vm-cache=magic_cros_reven_vm_cache',
-    ],
-    'swarming': {
-      'dimensions': {
-        'cpu': 'x86-64',
-        'kvm': '1',
-        'gce': '1',
-        'os': 'Ubuntu-22.04',
-        'pool': 'chrome.tests',
-      },
-      'optional_dimensions': {
-        '60': {
-          'caches': 'cros_reven_vm',
-        },
-      },
-      'named_caches': [
-        {
-          'name': 'cros_reven_vm',
-          'path': 'magic_cros_reven_vm_cache',
-        },
-      ],
-    },
-  },
   'chromeos-tast-public-builder': {
     'args': ["tast.setup.FieldTrialConfig=enable", "maybemissingvars=ui\\.(gaiaPoolDefault|signinProfileTestExtensionManifestKey)|uidetection\\.(key|key_type|server)", "shard_method=hash"],
   },
@@ -388,6 +381,11 @@
   },
   'ci_only': {
     'ci_only': True,
+  },
+  'crosier-no-arc': {
+    'args': [
+      '--test-launcher-filter-file=../../testing/buildbot/filters/chromeos.reven.chromeos_integration_tests.filter',
+    ],
   },
   'dawn_end2end_gpu_test': {
     'args': [
@@ -437,6 +435,9 @@
       'idempotent': False,
     },
   },
+  'experiments': {
+    'experiment_percentage': 100,
+  },
   'finch-chromium-swarming-pool': {
     'swarming': {
       'dimensions': {
@@ -466,11 +467,6 @@
         },
       ],
     },
-  },
-  'fuchsia_logs': {
-    'args': [
-      '--logs-dir=${ISOLATED_OUTDIR}/logs',
-    ],
   },
   'gce': {
     'swarming': {
@@ -645,22 +641,22 @@
       ],
     },
   },
-  'ios_runtime_cache_17_4': {
-    'swarming': {
-      'named_caches': [
-        {
-          'name': 'runtime_ios_17_4',
-          'path': 'Runtime-ios-17.4',
-        },
-      ],
-    },
-  },
   'ios_runtime_cache_17_5': {
     'swarming': {
       'named_caches': [
         {
           'name': 'runtime_ios_17_5',
           'path': 'Runtime-ios-17.5',
+        },
+      ],
+    },
+  },
+  'ios_runtime_cache_18_0': {
+    'swarming': {
+      'named_caches': [
+        {
+          'name': 'runtime_ios_18_0',
+          'path': 'Runtime-ios-18.0',
         },
       ],
     },
@@ -706,6 +702,13 @@
     'swarming': {
       'dimensions': {
         'os': 'Ubuntu-22.04|Ubuntu-20.04',
+      },
+    },
+  },
+  'linux-noble': {
+    'swarming': {
+      'dimensions': {
+        'os': 'Ubuntu-24.04',
       },
     },
   },
@@ -847,22 +850,6 @@
       },
     },
   },
-  'mac_13_or_14_arm64': {
-    'swarming': {
-      'dimensions': {
-        'cpu': 'arm64',
-        'os': 'Mac-13|Mac-14',
-      },
-    },
-  },
-  'mac_13_or_14_x64': {
-    'swarming': {
-      'dimensions': {
-        'cpu': 'x86-64',
-        'os': 'Mac-13|Mac-14',
-      },
-    },
-  },
   'mac_13_x64': {
     'swarming': {
       'dimensions': {
@@ -876,6 +863,14 @@
       'dimensions': {
         'cpu': 'arm64',
         'os': 'Mac-14',
+      },
+    },
+  },
+  'mac_14_beta_arm64': {
+    'swarming': {
+      'dimensions': {
+        'cpu': 'arm64',
+        'os': 'Mac-14.5',
       },
     },
   },
@@ -893,7 +888,7 @@
         'cpu': 'arm64',
         'gpu': 'apple:m1',
         'mac_model': 'Macmini9,1',
-        'os': 'Mac-14.4.1',
+        'os': 'Mac-14.5',
         'pool': 'chromium.tests',
         'display_attached': '1',
       },
@@ -905,7 +900,7 @@
         'cpu': 'arm64',
         'gpu': 'apple:m1',
         'mac_model': 'Macmini9,1',
-        'os': 'Mac-14.4.1',
+        'os': 'Mac-14.5',
         'pool': 'chromium.tests',
         'display_attached': '1',
       },
@@ -917,7 +912,7 @@
         'cpu': 'arm64',
         'gpu': 'apple:m2',
         'mac_model': 'Mac14,7',
-        'os': 'Mac-14.3.1|Mac-14.4.1',
+        'os': 'Mac-14.4.1',
         'pool': 'chromium.tests.gpu',
         'display_attached': '1',
         'hidpi': '1',
@@ -930,7 +925,7 @@
         'cpu': 'arm64',
         'gpu': 'apple:m2',
         'mac_model': 'Mac14,7',
-        'os': 'Mac-13.3.1|Mac-14.3.1',
+        'os': 'Mac-14.4.1',
         'pool': 'chromium.tests.gpu',
         'display_attached': '1',
         'hidpi': '1',
@@ -941,7 +936,7 @@
     'swarming': {
       'dimensions': {
         'cpu': 'arm64',
-        'os': 'Mac-14',
+        'os': 'Mac-15',
       },
     },
   },
@@ -949,7 +944,7 @@
     'swarming': {
       'dimensions': {
         'cpu': 'x86-64',
-        'os': 'Mac-14',
+        'os': 'Mac-15',
       },
     },
   },
@@ -957,7 +952,7 @@
     'swarming': {
       'dimensions': {
         'cpu': 'arm64',
-        'os': 'Mac-13|Mac-14',
+        'os': 'Mac-14',
       },
     },
   },
@@ -965,7 +960,7 @@
     'swarming': {
       'dimensions': {
         'cpu': 'x86-64',
-        'os': 'Mac-13|Mac-14',
+        'os': 'Mac-14',
       },
     },
   },
@@ -974,7 +969,7 @@
       'dimensions': {
         'cpu': 'x86-64',
         'gpu': '8086:3e9b',
-        'os': 'Mac-14.4.1',
+        'os': 'Mac-14.5',
         'display_attached': '1',
       },
     },
@@ -984,7 +979,7 @@
       'dimensions': {
         'cpu': 'x86-64',
         'gpu': '8086:3e9b',
-        'os': 'Mac-14.4.1',
+        'os': 'Mac-14.5',
         'display_attached': '1',
       },
     },
@@ -1006,7 +1001,7 @@
         'cpu': 'x86-64',
         'gpu': '1002:67ef',
         'hidpi': '1',
-        'os': 'Mac-14.3.1|Mac-14.4.1',
+        'os': 'Mac-14.4.1',
         'pool': 'chromium.tests.gpu',
         'display_attached': '1',
       },
@@ -1018,7 +1013,7 @@
         'cpu': 'x86-64',
         'gpu': '1002:67ef',
         'hidpi': '1',
-        'os': 'Mac-13.5',
+        'os': 'Mac-14.4.1',
         'pool': 'chromium.tests.gpu',
         'display_attached': '1',
       },
@@ -1166,6 +1161,15 @@
       '${ISOLATED_OUTDIR}',
     ],
   },
+  'panther_on_14': {
+    'swarming': {
+      'dimensions': {
+        'device_type': 'panther',
+        'device_os': 'AP2A.240705.004',
+        'os': 'Android',
+      },
+    },
+  },
   'pie-x86-emulator': {
     'args': [
       '--avd-config=../../tools/android/avd/proto/android_28_google_apis_x86.textpb',
@@ -1232,9 +1236,21 @@
       '--buildbucket-id=${buildbucket_build_id}',
     ],
   },
+  'skylab-cft': {
+    'run_cft': True,
+  },
   'swarming_containment_auto': {
     'swarming': {
       'containment_type': 'AUTO',
+    },
+  },
+  'tangorpro': {
+    'swarming': {
+      'dimensions': {
+        'device_type': 'tangorpro',
+        'device_os': 'AP1A.240505.005',
+        'os': 'Android',
+      },
     },
   },
   'timeout_15m': {
@@ -1268,6 +1284,12 @@
       'dimensions': {
         'pool': 'chromium.win.uac',
       },
+    },
+  },
+  'upload_inv_extended_properties': {
+    'resultdb': {
+      'enable': True,
+      'inv_extended_properties_dir': '${ISOLATED_OUTDIR}/invocations',
     },
   },
   'vaapi_unittest_args': {
@@ -1329,7 +1351,7 @@
       'cipd_packages': [
         {
           'cipd_package': 'chromium/android_webview/tools/cts_archive',
-          'location': 'android_webview/tools/cts_archive',
+          'location': 'android_webview/tools/cts_archive/cipd',
           'revision': 'UYQZhJpB3MWpJIAcesI-M1bqRoTghiKCYr_SD9tPDewC',
         },
       ],
@@ -1435,6 +1457,13 @@
       },
     },
   },
+  'win11-any': {
+    'swarming': {
+      'dimensions': {
+        'os': 'Windows-11',
+      },
+    },
+  },
   'win11_qualcomm_adreno_690_stable': {
     'swarming': {
       'dimensions': {
@@ -1457,12 +1486,12 @@
   'xcode_15_beta': {
     'args': [
       '--xcode-build-version',
-      '15f31c',
+      '15f31d',
     ],
     'swarming': {
       'named_caches': [
         {
-          'name': 'xcode_ios_15f31c',
+          'name': 'xcode_ios_15f31d',
           'path': 'Xcode.app',
         },
       ],
@@ -1471,12 +1500,26 @@
   'xcode_15_main': {
     'args': [
       '--xcode-build-version',
-      '15c500b',
+      '15f31d',
     ],
     'swarming': {
       'named_caches': [
         {
-          'name': 'xcode_ios_15c500b',
+          'name': 'xcode_ios_15f31d',
+          'path': 'Xcode.app',
+        },
+      ],
+    },
+  },
+  'xcode_16_beta': {
+    'args': [
+      '--xcode-build-version',
+      '16a5202i',
+    ],
+    'swarming': {
+      'named_caches': [
+        {
+          'name': 'xcode_ios_16a5202i',
           'path': 'Xcode.app',
         },
       ],

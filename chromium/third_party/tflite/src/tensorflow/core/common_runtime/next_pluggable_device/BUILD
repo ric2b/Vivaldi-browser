@@ -87,9 +87,9 @@ cc_library(
         "//tensorflow/core:session_options",
         "//tensorflow/core/common_runtime/next_pluggable_device/c:plugin_c_api_hdrs",
         "@com_google_absl//absl/strings",
-        "@local_tsl//tsl/framework:device_id_utils",
         "@local_tsl//tsl/platform:errors",
         "@local_xla//xla/stream_executor/tpu:c_api_conversions",
+        "@local_xla//xla/tsl/framework:device_id_utils",
     ],
 )
 
@@ -130,6 +130,7 @@ cc_library(
         "//tensorflow/core/framework:attr_value_proto_cc",
         "//tensorflow/core/framework:bfloat16",
         "//tensorflow/core/platform:status",
+        "@com_google_absl//absl/status",
         "@local_xla//xla/pjrt:pjrt_client",
     ],
 )
@@ -148,6 +149,7 @@ cc_library(
         "//tensorflow/core:framework",
         "//tensorflow/core/platform:errors",
         "//tensorflow/core/platform:status",
+        "@com_google_absl//absl/status",
         "@local_tsl//tsl/platform:status",
     ],
 )
@@ -305,6 +307,7 @@ cc_library(
         "//tensorflow/c:kernels_hdrs",
         "//tensorflow/c:tf_status_helper",
         "//tensorflow/core/common_runtime/next_pluggable_device:flags",
+        "@com_google_absl//absl/flags:flag",
     ],
 )
 

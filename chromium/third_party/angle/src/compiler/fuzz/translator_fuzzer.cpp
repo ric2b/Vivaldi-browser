@@ -14,6 +14,7 @@
 
 #include "angle_gl.h"
 #include "anglebase/no_destructor.h"
+#include "common/hash_containers.h"
 #include "compiler/translator/Compiler.h"
 #include "compiler/translator/util.h"
 
@@ -227,7 +228,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 
     auto &translator = (*translators)[key];
 
-    const char *shaderStrings[] = {reinterpret_cast<const char *>(data)};
+    options.limitExpressionComplexity = true;
+    const char *shaderStrings[]       = {reinterpret_cast<const char *>(data)};
     translator->compile(shaderStrings, 1, options);
 
     return 0;

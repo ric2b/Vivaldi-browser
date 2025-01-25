@@ -14,15 +14,13 @@
 
 #include "sharing/wifi_credentials_attachment.h"
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <string>
 #include <utility>
 
 #include "absl/strings/string_view.h"
 #include "sharing/attachment.h"
 #include "sharing/common/nearby_share_enums.h"
-#include "sharing/share_target.h"
 
 namespace nearby {
 namespace sharing {
@@ -47,10 +45,6 @@ WifiCredentialsAttachment::WifiCredentialsAttachment(
       security_type_(security_type),
       password_(std::move(password)),
       is_hidden_(is_hidden) {}
-
-void WifiCredentialsAttachment::MoveToShareTarget(ShareTarget& share_target) {
-  share_target.wifi_credentials_attachments.push_back(std::move(*this));
-}
 
 absl::string_view WifiCredentialsAttachment::GetDescription() const {
   return ssid_;

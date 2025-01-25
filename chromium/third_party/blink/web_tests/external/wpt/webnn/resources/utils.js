@@ -12,6 +12,27 @@ const TypedArrayDict = {
   uint8: Uint8Array,
   int64: BigInt64Array,
 };
+const kIntTypes = ['uint8', 'int8', 'uint32', 'int32', 'uint64', 'int64'];
+const kFloatTypes = ['float16', 'float32'];
+
+const findCompatibleType =
+    (dataType, supportedTypes) => {
+      for (let supportedType of supportedTypes) {
+        if (kIntTypes.includes(dataType)) {
+          if (kIntTypes.indexOf(supportedType) > kIntTypes.indexOf(dataType)) {
+            return supportedType;
+          }
+        }
+
+        if (kFloatTypes.includes(dataType)) {
+          if (kFloatTypes.indexOf(supportedType) >
+              kFloatTypes.indexOf(dataType)) {
+            return supportedType;
+          }
+        }
+      }
+      return null;
+    }
 
 const kContextOptionsForVariant = {
   cpu: {
@@ -19,7 +40,10 @@ const kContextOptionsForVariant = {
   },
   gpu: {
     deviceType: 'gpu',
-  }
+  },
+  npu: {
+    deviceType: 'npu',
+  },
 };
 
 // The maximum index to validate for the output's expected value.
@@ -54,8 +78,31 @@ const getTypedArrayData = (type, size, data) => {
   return outData;
 };
 
+const bytesPerDataType = (dataType) => {
+  if (dataType === 'int8' || dataType === 'uint8') {
+    return 1;
+  } else if (dataType === 'float16') {
+    return 2;
+  } else if (
+      dataType === 'float32' || dataType === 'int32' || dataType === 'uint32') {
+    return 4;
+  } else if (dataType === 'int64' || dataType === 'uint64') {
+    return 8;
+  }
+};
+
 const sizeOfShape = (array) => {
   return array.reduce((accumulator, currentValue) => accumulator * currentValue, 1);
+};
+
+const sizeOfDescriptor = (descriptor) => {
+  return descriptor.dimensions.reduce(
+      (accumulator, currentValue) => accumulator * currentValue,
+      bytesPerDataType(descriptor.dataType));
+};
+
+const getDescriptorFromBuffer = (buffer) => {
+  return {dataType: buffer.dataType, dimensions: buffer.shape};
 };
 
 /**
@@ -274,9 +321,9 @@ const getReductionPrecisionTolerance = (resources, operationName) => {
   } else {
     sizes = inputShape;
   }
-  const reducedElementCount = sizes.reduce(
-                                  (accumulator, currentValue) => accumulator * currentValue
-  );
+  const reducedElementCount = sizes.length ?
+      sizes.reduce((accumulator, currentValue) => accumulator * currentValue) :
+      1;
   let tolerance;
   switch (operationName) {
     case 'reduceL1':
@@ -377,6 +424,7 @@ const PrecisionMetrics = {
   elu: {ULP: {float32: 18, float16: 18}},
   expand: {ULP: {float32: 0, float16: 0}},
   gather: {ULP: {float32: 0, float16: 0}},
+  gelu: {ULP: {float32: 18, float16: 18}},
   gemm: {ULP: {float32: getGemmPrecisionTolerance, float16: getGemmPrecisionTolerance}},
   instanceNormalization: {ULP: {float32: 840, float16: 8400}},
   hardSigmoid: {ULP: {float32: 2, float16: 2}},
@@ -545,15 +593,39 @@ const checkResults = (operationName, namedOutputOperands, outputs, resources) =>
     // the outputs of split() or gru() is a sequence
     for (let operandName in namedOutputOperands) {
       const suboutputResource = getNamedResource(expected, operandName);
-      assert_array_equals(namedOutputOperands[operandName].shape(), suboutputResource.shape ?? []);
       outputData = outputs[operandName];
+      // If data is scalar and shape is not, it means it's expecting to be
+      // filled by the scalar value. Also limit the array size so it doesn't
+      // timeout.
+      if (typeof (suboutputResource.data) === 'number' &&
+          suboutputResource.shape && sizeOfShape(suboutputResource.shape) > 1) {
+        const size = Math.min(
+            kMaximumIndexToValidate, sizeOfShape(suboutputResource.shape));
+        suboutputResource.data = [
+          new Array(size).fill(suboutputResource.data), suboutputResource.type
+        ];
+        outputData = outputData.subarray(0, kMaximumIndexToValidate);
+      }
+      assert_array_equals(
+          namedOutputOperands[operandName].shape(),
+          suboutputResource.shape ?? []);
       tolerance = getPrecisonTolerance(operationName, metricType, resources);
       doAssert(operationName, outputData, suboutputResource.data, tolerance, suboutputResource.type, metricType)
     }
   } else {
     assert_array_equals(namedOutputOperands[expected.name].shape(), expected.shape ?? []);
     outputData = outputs[expected.name];
+    // If data is scalar and shape is not, it means it's expecting to be filled
+    // by the scalar value. Also limit the array size so it doesn't timeout.
+    if (typeof (expected.data) === 'number' && expected.shape &&
+        sizeOfShape(expected.shape) > 1) {
+      const size =
+          Math.min(kMaximumIndexToValidate, sizeOfShape(expected.shape));
+      expected.data = new Array(size).fill(expected.data);
+      outputData = outputData.subarray(0, kMaximumIndexToValidate);
+    }
     expectedData = expected.data;
+
     operandType = expected.type;
     tolerance = getPrecisonTolerance(operationName, metricType, resources);
     doAssert(operationName, outputData, expectedData, tolerance, operandType, metricType)
@@ -564,47 +636,79 @@ const checkResults = (operationName, namedOutputOperands, outputs, resources) =>
  * Create a constant operand
  * @param {MLGraphBuilder} builder - A ML graph builder
  * @param {Object} resources - Resources used for constant operand
+ * @param {String} dataType - optional dataType if it's different from resources
  * @returns {MLOperand} A constant operand
  */
-const createConstantOperand = (builder, resources) => {
+const createConstantOperand = (builder, resources, dataType = null) => {
+  if (!dataType) {
+    dataType = resources.type;
+  }
+
   const bufferView = (typeof (resources.data) === 'number' &&
                       sizeOfShape(resources.shape) > 1) ?
-      new TypedArrayDict[resources.type](sizeOfShape(resources.shape))
+      new TypedArrayDict[dataType](sizeOfShape(resources.shape))
           .fill(resources.data) :
-      new TypedArrayDict[resources.type](resources.data);
-  return builder.constant({dataType: resources.type, type: resources.type, dimensions: resources.shape}, bufferView);
+      new TypedArrayDict[dataType](resources.data);
+  return builder.constant(
+      {dataType: dataType, type: dataType, dimensions: resources.shape},
+      bufferView);
 };
 
 /**
  * Create single input operands for a graph.
+ * @param {MLContext} context - A ML context
  * @param {MLGraphBuilder} builder - A ML graph builder
  * @param {Object} resources - Resources used for building a graph
  * @param {String} [inputOperandName] - An inputOperand name
  * @returns {MLOperand} An input operand
  */
-const createSingleInputOperand = (builder, resources, inputOperandName) => {
-  inputOperandName = inputOperandName ? inputOperandName : Object.keys(resources.inputs)[0];
-  const inputResources = resources.inputs[inputOperandName];
-  let operand;
-  if (resources.inputs[inputOperandName].hasOwnProperty('constant') && resources.inputs[inputOperandName]['constant']) {
-    operand = createConstantOperand(builder, resources.inputs[inputOperandName]);
-  } else {
-    operand = builder.input(inputOperandName, {dataType: inputResources.type, type: inputResources.type, dimensions: inputResources.shape});
-  }
-  return operand;
-};
+const createSingleInputOperand =
+    (context, builder, resources, inputOperandName) => {
+      inputOperandName ||= Object.keys(resources.inputs)[0];
+      const inputResources = resources.inputs[inputOperandName];
+      let operand;
+      let dataType = inputResources.type;
+      // If input data type is not supported on current platform, attempt to use
+      // a supported type to pass the data, then cast back to original type.
+      if (!context.opSupportLimits().input.dataTypes.includes(
+              inputResources.type)) {
+        const compatible_type = findCompatibleType(
+            inputResources.type, context.opSupportLimits().input.dataTypes);
+        if (compatible_type) {
+          inputResources.castedType = compatible_type;
+          dataType = compatible_type;
+        }
+      }
+      if (resources.inputs[inputOperandName].hasOwnProperty('constant') &&
+          resources.inputs[inputOperandName]['constant']) {
+        operand = createConstantOperand(
+            builder, resources.inputs[inputOperandName], dataType);
+      } else {
+        operand = builder.input(inputOperandName, {
+          dataType: dataType,
+          type: dataType,
+          dimensions: inputResources.shape
+        });
+      }
+      if (inputResources.castedType) {
+        operand = builder.cast(operand, inputResources.type);
+      }
+      return operand;
+    };
 
 /**
  * Create multi input operands for a graph.
+ * @param {MLContext} context - A ML context
  * @param {MLGraphBuilder} builder - A ML graph builder
  * @param {Object} resources - Resources used for building a graph
  * @returns {MLOperand[]} Input operands array
  */
-const createMultiInputOperands = (builder, resources) => {
+const createMultiInputOperands = (context, builder, resources) => {
   let inputOperands = [];
   const inputOperandNameArray = Object.keys(resources.inputs);
   inputOperandNameArray.forEach(inputOperandName => {
-    const operand = createSingleInputOperand(builder, resources, inputOperandName);
+    const operand =
+        createSingleInputOperand(context, builder, resources, inputOperandName);
     inputOperands.push(operand);
   });
   return inputOperands;
@@ -613,41 +717,67 @@ const createMultiInputOperands = (builder, resources) => {
 /**
  * Build an operation which has a single input.
  * @param {String} operationName - An operation name
+ * @param {MLContext} context - A ML context
  * @param {MLGraphBuilder} builder - A ML graph builder
  * @param {Object} resources - Resources used for building a graph
  * @returns {MLNamedOperands}
  */
-const buildOperationWithSingleInput = (operationName, builder, resources) => {
-  const namedOutputOperand = {};
-  const inputOperand = createSingleInputOperand(builder, resources);
-  const outputOperand = resources.options ?
-      builder[operationName](inputOperand, resources.options) : builder[operationName](inputOperand);
-  namedOutputOperand[resources.expected.name] = outputOperand;
-  return namedOutputOperand;
-};
+const buildOperationWithSingleInput =
+    (operationName, context, builder, resources) => {
+      const namedOutputOperand = {};
+      const inputOperand =
+          createSingleInputOperand(context, builder, resources);
+      let outputOperand = resources.options ?
+          builder[operationName](inputOperand, resources.options) :
+          builder[operationName](inputOperand);
+      if (!context.opSupportLimits().output.dataTypes.includes(
+              resources.expected.type)) {
+        const compatibleType = findCompatibleType(
+            resources.expected.type,
+            context.opSupportLimits().output.dataTypes);
+        outputOperand = builder.cast(outputOperand, compatibleType);
+        resources.expected.castedType = compatibleType;
+      }
+      namedOutputOperand[resources.expected.name] = outputOperand;
+      return namedOutputOperand;
+    };
 
 /**
  * Build an operation which has two inputs.
  * @param {String} operationName - An operation name
+ * @param {MLContext} context - A ML context
  * @param {MLGraphBuilder} builder - A ML graph builder
  * @param {Object} resources - Resources used for building a graph
  * @returns {MLNamedOperands}
  */
-const buildOperationWithTwoInputs = (operationName, builder, resources) => {
-  // For example: MLOperand matmul(MLOperand a, MLOperand b);
-  const namedOutputOperand = {};
-  const [inputOperandA, inputOperandB] = createMultiInputOperands(builder, resources);
-  const outputOperand = resources.options ?
-      builder[operationName](inputOperandA, inputOperandB, resources.options) : builder[operationName](inputOperandA, inputOperandB);
-  namedOutputOperand[resources.expected.name] = outputOperand;
-  return namedOutputOperand;
-};
+const buildOperationWithTwoInputs =
+    (operationName, context, builder, resources) => {
+      // For example: MLOperand matmul(MLOperand a, MLOperand b);
+      const namedOutputOperand = {};
+      const [inputOperandA, inputOperandB] =
+          createMultiInputOperands(context, builder, resources);
+      let outputOperand = resources.options ?
+          builder[operationName](
+              inputOperandA, inputOperandB, resources.options) :
+          builder[operationName](inputOperandA, inputOperandB);
+      if (!context.opSupportLimits().output.dataTypes.includes(
+              resources.expected.type)) {
+        const compatibleType = findCompatibleType(
+            resources.expected.type,
+            context.opSupportLimits().output.dataTypes);
+        outputOperand = builder.cast(outputOperand, compatibleType);
+        resources.expected.castedType = compatibleType;
+      }
+      namedOutputOperand[resources.expected.name] = outputOperand;
+      return namedOutputOperand;
+    };
 
-const buildBatchNorm = (operationName, builder, resources) => {
+const buildBatchNorm = (operationName, context, builder, resources) => {
   // MLOperand batchNormalization(MLOperand input, MLOperand mean, MLOperand variance,
   //                              optional MLBatchNormalizationOptions options = {});
   const namedOutputOperand = {};
-  const [inputOperand, meanOperand, varianceOperand] = createMultiInputOperands(builder, resources);
+  const [inputOperand, meanOperand, varianceOperand] =
+      createMultiInputOperands(context, builder, resources);
   const batchNormOptions = {...resources.options};
   if (batchNormOptions.scale) {
     batchNormOptions.scale = createConstantOperand(builder, batchNormOptions.scale);
@@ -655,25 +785,22 @@ const buildBatchNorm = (operationName, builder, resources) => {
   if (batchNormOptions.bias) {
     batchNormOptions.bias = createConstantOperand(builder, batchNormOptions.bias);
   }
-  if (batchNormOptions.activation) {
-    batchNormOptions.activation = builder[batchNormOptions.activation]();
-  }
   // invoke builder.batchNormalization()
   namedOutputOperand[resources.expected.name] =
       builder[operationName](inputOperand, meanOperand, varianceOperand, batchNormOptions);
   return namedOutputOperand;
 };
 
-const buildCast = (operationName, builder, resources) => {
+const buildCast = (operationName, context, builder, resources) => {
   // MLOperand cast(MLOperand input, MLOperandDataType type);
   const namedOutputOperand = {};
-  const inputOperand = createSingleInputOperand(builder, resources);
+  const inputOperand = createSingleInputOperand(context, builder, resources);
   // invoke builder.cast()
   namedOutputOperand[resources.expected.name] = builder[operationName](inputOperand, resources.type);
   return namedOutputOperand;
 };
 
-const buildConcat = (operationName, builder, resources) => {
+const buildConcat = (operationName, context, builder, resources) => {
   // MLOperand concat(sequence<MLOperand> inputs, unsigned long axis);
   const namedOutputOperand = {};
   const inputOperands = [];
@@ -691,47 +818,44 @@ const buildConcat = (operationName, builder, resources) => {
   return namedOutputOperand;
 };
 
-const buildConstantRange = (operationName, builder, resources) => {
+const buildConstantRange = (operationName, context, builder, resources) => {
   const namedOutputOperand = {};
   // invoke builder.constant(start, step, outputShape, type)
   namedOutputOperand[resources.expected.name] = builder[operationName](resources.inputs.start, resources.inputs.step, resources.outputShape, resources.type);
   return namedOutputOperand;
 };
 
-const buildConvTranspose2d = (operationName, builder, resources) => {
+const buildConvTranspose2d = (operationName, context, builder, resources) => {
   // MLOperand convTranspose2d(MLOperand input, MLOperand filter, optional MLConvTranspose2dOptions options = {});
   const namedOutputOperand = {};
-  const [inputOperand, filterOperand] = createMultiInputOperands(builder, resources);
+  const [inputOperand, filterOperand] =
+      createMultiInputOperands(context, builder, resources);
   let convTranspose2dOptions = {...resources.options};
   if (convTranspose2dOptions.bias) {
     convTranspose2dOptions.bias = createConstantOperand(builder, convTranspose2dOptions.bias);
-  }
-  if (convTranspose2dOptions.activation) {
-    convTranspose2dOptions.activation = builder[convTranspose2dOptions.activation]();
   }
   namedOutputOperand[resources.expected.name] = builder[operationName](inputOperand, filterOperand, convTranspose2dOptions);
   return namedOutputOperand;
 };
 
-const buildConv2d = (operationName, builder, resources) => {
+const buildConv2d = (operationName, context, builder, resources) => {
   // MLOperand conv2d(MLOperand input, MLOperand filter, optional MLConv2dOptions options = {});
   const namedOutputOperand = {};
-  const [inputOperand, filterOperand] = createMultiInputOperands(builder, resources);
+  const [inputOperand, filterOperand] =
+      createMultiInputOperands(context, builder, resources);
   let conv2dOptions = {...resources.options};
   if (conv2dOptions.bias) {
     conv2dOptions.bias = createConstantOperand(builder, conv2dOptions.bias);
-  }
-  if (conv2dOptions.activation) {
-    conv2dOptions.activation = builder[conv2dOptions.activation]();
   }
   namedOutputOperand[resources.expected.name] = builder[operationName](inputOperand, filterOperand, conv2dOptions);
   return namedOutputOperand;
 };
 
-const buildGemm = (operationName, builder, resources) => {
+const buildGemm = (operationName, context, builder, resources) => {
   // MLOperand gemm(MLOperand a, MLOperand b, optional MLGemmOptions options = {});
   const namedOutputOperand = {};
-  const [inputOperandA, inputOperandB] = createMultiInputOperands(builder, resources);
+  const [inputOperandA, inputOperandB] =
+      createMultiInputOperands(context, builder, resources);
   let gemmOptions = {...resources.options};
   if (gemmOptions.c) {
     if (gemmOptions.c.shape) {
@@ -746,11 +870,11 @@ const buildGemm = (operationName, builder, resources) => {
   return namedOutputOperand;
 };
 
-const buildLayerNorm = (operationName, builder, resources) => {
+const buildLayerNorm = (operationName, context, builder, resources) => {
   // MLOperand layerNormalization(MLOperand input, optional MLLayerNormalizationOptions options = {});
   // MLOperand instanceNormalization(MLOperand input, optional MLInstanceNormalizationOptions options = {});
   const namedOutputOperand = {};
-  const inputOperand = createSingleInputOperand(builder, resources);
+  const inputOperand = createSingleInputOperand(context, builder, resources);
   const layerNormOptions = {...resources.options};
   if (layerNormOptions.scale) {
     layerNormOptions.scale = createConstantOperand(builder, layerNormOptions.scale);
@@ -763,40 +887,54 @@ const buildLayerNorm = (operationName, builder, resources) => {
   return namedOutputOperand;
 };
 
-const buildPad = (operationName, builder, resources) => {
+const buildPad = (operationName, context, builder, resources) => {
   // MLOperand pad(MLOperand input, sequence<unsigned long> beginningPadding, sequence<unsigned long> endingPadding, optional MLPadOptions options = {});
   const namedOutputOperand = {};
-  const inputOperand = createSingleInputOperand(builder, resources);
+  const inputOperand = createSingleInputOperand(context, builder, resources);
   // invoke builder.pad()
   namedOutputOperand[resources.expected.name] = builder[operationName](inputOperand, resources.beginningPadding, resources.endingPadding, resources.options);
   return namedOutputOperand;
 };
 
-const buildReshape = (operationName, builder, resources) => {
+const buildReshape = (operationName, context, builder, resources) => {
   // MLOperand reshape(MLOperand input, sequence<unsigned long> newShape);
   // MLOperand expand(MLOperand input, sequence<unsigned long> newShape);
   const namedOutputOperand = {};
-  const inputOperand = createSingleInputOperand(builder, resources);
+  const inputOperand = createSingleInputOperand(context, builder, resources);
   // invoke builder.reshape() or builder.expand()
   namedOutputOperand[resources.expected.name] = builder[operationName](inputOperand, resources.newShape);
   return namedOutputOperand;
 };
 
-const buildSlice = (operationName, builder, resources) => {
+const buildSlice = (operationName, context, builder, resources) => {
   // MLOperand slice(MLOperand input, sequence<unsigned long> starts, sequence<unsigned long> sizes);
   const namedOutputOperand = {};
-  const inputOperand = createSingleInputOperand(builder, resources);
+  const inputOperand = createSingleInputOperand(context, builder, resources);
   // invoke builder.slice()
   namedOutputOperand[resources.expected.name] = builder[operationName](inputOperand, resources.starts, resources.sizes);
   return namedOutputOperand;
 };
 
-const buildSplit = (operationName, builder, resources) => {
+const buildSoftmax = (operationName, context, builder, resources) => {
+  // MLOperand softmax(MLOperand input, [EnforceRange] unsigned long axis);
+  const namedOutputOperand = {};
+  const inputOperand = createSingleInputOperand(context, builder, resources);
+  if (resources.axis !== undefined) {
+    // invoke builder.softmax(input, axis)
+    namedOutputOperand[resources.expected.name] = builder[operationName](inputOperand, resources.axis);
+  } else {
+    // invoke builder.softmax(input)
+    namedOutputOperand[resources.expected.name] = builder[operationName](inputOperand);
+  }
+  return namedOutputOperand;
+};
+
+const buildSplit = (operationName, context, builder, resources) => {
   // sequence<MLOperand> split(MLOperand input,
   //                           (unsigned long or sequence<unsigned long>) splits,
   //                           optional MLSplitOptions options = {});
   const namedOutputOperand = {};
-  const inputOperand = createSingleInputOperand(builder, resources);
+  const inputOperand = createSingleInputOperand(context, builder, resources);
   // invoke builder.split()
   const outputOperands = builder[operationName](inputOperand, resources.splits, resources.options);
   resources.expected.forEach((resourceDict, index) => {
@@ -805,10 +943,11 @@ const buildSplit = (operationName, builder, resources) => {
   return namedOutputOperand;
 };
 
-const buildWhere = (operationName, builder, resources) => {
+const buildWhere = (operationName, context, builder, resources) => {
   // MLOperand where(MLOperand condition, MLOperand trueValues, MLOperand falseValues);
   const namedOutputOperand = {};
-  const [conditionOperand, trueValuesOperand, falseValuesOperand] = createMultiInputOperands(builder, resources);
+  const [conditionOperand, trueValuesOperand, falseValuesOperand] =
+      createMultiInputOperands(context, builder, resources);
   // invoke builder.where()
   namedOutputOperand[resources.expected.name] = builder[operationName](conditionOperand, trueValuesOperand, falseValuesOperand);
   return namedOutputOperand;
@@ -817,20 +956,22 @@ const buildWhere = (operationName, builder, resources) => {
 /**
  * Build a graph.
  * @param {String} operationName - An operation name
+ * @param {MLContext} context - A ML context
  * @param {MLGraphBuilder} builder - A ML graph builder
  * @param {Object} resources - Resources used for building a graph
  * @param {Function} buildFunc - A build function for an operation
  * @returns [namedOperands, inputs, outputs]
  */
-const buildGraph = (operationName, builder, resources, buildFunc) => {
-  const namedOperands = buildFunc(operationName, builder, resources);
+const buildGraph = (operationName, context, builder, resources, buildFunc) => {
+  const namedOperands = buildFunc(operationName, context, builder, resources);
   let inputs = {};
   if (Array.isArray(resources.inputs)) {
     // the inputs of concat() is a sequence
     for (let subInput of resources.inputs) {
       if (!subInput.hasOwnProperty('constant') || !subInput.constant) {
         inputs[subInput.name] = getTypedArrayData(
-            subInput.type, sizeOfShape(subInput.shape), subInput.data);
+            subInput.castedType ? subInput.castedType : subInput.type,
+            sizeOfShape(subInput.shape), subInput.data);
       }
     }
   } else {
@@ -838,8 +979,9 @@ const buildGraph = (operationName, builder, resources, buildFunc) => {
       const subTestByName = resources.inputs[inputName];
       if (!subTestByName.hasOwnProperty('constant') || !subTestByName.constant) {
         inputs[inputName] = getTypedArrayData(
-            subTestByName.type, sizeOfShape(subTestByName.shape),
-            subTestByName.data);
+            subTestByName.castedType ? subTestByName.castedType :
+                                       subTestByName.type,
+            sizeOfShape(subTestByName.shape), subTestByName.data);
       }
     }
   }
@@ -853,7 +995,11 @@ const buildGraph = (operationName, builder, resources, buildFunc) => {
   } else {
     // matmul 1D with 1D produces a scalar which doesn't have its shape
     const shape = resources.expected.shape ? resources.expected.shape : [1];
-    outputs[resources.expected.name] = new TypedArrayDict[resources.expected.type](sizeOfShape(shape));
+    const expectedType = resources.expected.castedType ?
+        resources.expected.castedType :
+        resources.expected.type;
+    outputs[resources.expected.name] =
+        new TypedArrayDict[expectedType](sizeOfShape(shape));
   }
   return [namedOperands, inputs, outputs];
 };
@@ -868,7 +1014,8 @@ const buildGraph = (operationName, builder, resources, buildFunc) => {
  */
 const run = async (operationName, context, builder, resources, buildFunc) => {
   // build a graph
-  const [namedOutputOperands, inputs, outputs] = buildGraph(operationName, builder, resources, buildFunc);
+  const [namedOutputOperands, inputs, outputs] =
+      buildGraph(operationName, context, builder, resources, buildFunc);
   // compile the graph up to the output operand
   const graph = await builder.build(namedOutputOperands);
   // execute the compiled graph
@@ -886,7 +1033,9 @@ const contextOptions = kContextOptionsForVariant[variant];
  */
 const isMLBufferSupported =
     (ml_context) => {
-      return (createBuffer(ml_context, 4) !== undefined);
+      return (
+          createBuffer(ml_context, {dataType: 'int32', dimensions: [2, 2]}) !==
+          undefined);
     }
 
 /**
@@ -1036,14 +1185,19 @@ const toHalf = (value) => {
 /**
  * WebNN buffer creation.
  * @param {MLContext} context - the context used to create the buffer.
- * @param {Number} bufferSize - Size of the buffer to create, in bytes.
+ * @param {MLBufferDescriptor} bufferDescriptor - intended specs of the buffer.
  * @returns {MLBuffer} the created buffer.
  */
-const createBuffer = (context, bufferSize) => {
+const createBuffer = (context, bufferDescriptor) => {
   let buffer;
   try {
-    buffer = context.createBuffer({size: bufferSize});
-    assert_equals(buffer.size, bufferSize);
+    buffer = context.createBuffer(bufferDescriptor);
+    assert_equals(
+        buffer.dataType, bufferDescriptor.dataType,
+        'buffer data types do not match');
+    assert_array_equals(
+        buffer.shape, bufferDescriptor.dimensions,
+        'buffer shapes do not match');
   } catch (e) {
     assert_true(e instanceof DOMException);
     assert_equals(e.name, "NotSupportedError");
@@ -1067,8 +1221,8 @@ const testDestroyWebNNBuffer = (testName) => {
     }
     assert_implements(
         supported, `Unable to create context for ${variant} variant`);
-    buffer = createBuffer(context, 4);
-  });
+      buffer = createBuffer(context, {dataType: 'int32', dimensions: [2, 3]});
+        });
   promise_test(async () => {
     // MLBuffer is not supported for this deviceType.
     if (buffer === undefined) {
@@ -1082,9 +1236,9 @@ const testDestroyWebNNBuffer = (testName) => {
 /**
  * WebNN create buffer test.
  * @param {String} testName - The name of the test operation.
- * @param {Number} bufferSize - Size of the buffer to create, in bytes.
+ * @param {MLBufferDescriptor} bufferDescriptor - The intended buffer specs.
  */
-const testCreateWebNNBuffer = (testName, bufferSize) => {
+const testCreateWebNNBuffer = (testName, bufferDescriptor) => {
   let context;
 
   promise_setup(async () => {
@@ -1098,9 +1252,33 @@ const testCreateWebNNBuffer = (testName, bufferSize) => {
         supported, `Unable to create context for ${variant} variant`);
   });
   promise_test(async () => {
-    createBuffer(context, bufferSize);
-  }, `${testName} / ${bufferSize}`);
+    createBuffer(context, bufferDescriptor);
+  }, `${testName} / ${bufferDescriptor.dataType}`);
 };
+
+/**
+ * Same as above, but expect creating the buffer to fail.
+ * @param {String} testName - The name of the test operation.
+ * @param {MLBufferDescriptor} bufferDescriptor - The intended buffer specs.
+ */
+const testCreateWebNNBufferFails = (testName, bufferDescriptor) => {
+  let context;
+
+  promise_setup(async () => {
+    let supported = false;
+    try {
+      context = await navigator.ml.createContext(contextOptions);
+      supported = true;
+    } catch (e) {
+    }
+    assert_implements(
+        supported, `Unable to create context for ${variant} variant`);
+  });
+  promise_test(async () => {
+    assert_throws_js(TypeError, () => context.createBuffer(bufferDescriptor));
+  }, `${testName} / ${bufferDescriptor.dataType}`);
+};
+
 
 /**
  * Asserts the buffer data in MLBuffer matches expected.
@@ -1133,46 +1311,48 @@ const testWriteWebNNBuffer = (testName) => {
   });
 
   promise_test(async () => {
-    let ml_buffer = createBuffer(ml_context, 4);
+    const descriptor = {dataType: 'int32', dimensions: [1]};
+    let ml_buffer = createBuffer(ml_context, descriptor);
 
     // MLBuffer was unsupported for the deviceType.
     if (ml_buffer === undefined) {
       return;
     }
 
-    let array_buffer = new ArrayBuffer(ml_buffer.size);
+    const bufferByteLength = sizeOfDescriptor(descriptor);
+    let array_buffer = new ArrayBuffer(bufferByteLength);
 
     // Writing with a size that goes past that source buffer length.
     assert_throws_js(
         TypeError,
         () => ml_context.writeBuffer(
             ml_buffer, new Uint8Array(array_buffer), /*srcOffset=*/ 0,
-            /*srcSize=*/ ml_buffer.size + 1));
+            /*srcSize=*/ bufferByteLength + 1));
     assert_throws_js(
         TypeError,
         () => ml_context.writeBuffer(
             ml_buffer, new Uint8Array(array_buffer), /*srcOffset=*/ 3,
-            /*srcSize=*/ 4));
+            /*srcSize=*/ bufferByteLength));
 
     // Writing with a source offset that is out of range of the source size.
     assert_throws_js(
         TypeError,
         () => ml_context.writeBuffer(
             ml_buffer, new Uint8Array(array_buffer),
-            /*srcOffset=*/ ml_buffer.size + 1));
+            /*srcOffset=*/ bufferByteLength + 1));
 
     // Writing with a source offset that is out of range of implicit copy size.
     assert_throws_js(
         TypeError,
         () => ml_context.writeBuffer(
             ml_buffer, new Uint8Array(array_buffer),
-            /*srcOffset=*/ ml_buffer.size + 1, /*srcSize=*/ undefined));
+            /*srcOffset=*/ bufferByteLength + 1, /*srcSize=*/ undefined));
 
     assert_throws_js(
         TypeError,
         () => ml_context.writeBuffer(
             ml_buffer, new Uint8Array(array_buffer), /*srcOffset=*/ undefined,
-            /*srcSize=*/ ml_buffer.size + 1));
+            /*srcSize=*/ bufferByteLength + 1));
 
     assert_throws_js(
         TypeError,
@@ -1181,7 +1361,8 @@ const testWriteWebNNBuffer = (testName) => {
   }, `${testName} / error`);
 
   promise_test(async () => {
-    let ml_buffer = createBuffer(ml_context, 4);
+    const descriptor = {dataType: 'int32', dimensions: [2, 2]};
+    let ml_buffer = createBuffer(ml_context, descriptor);
 
     // MLBuffer was unsupported for the deviceType.
     if (ml_buffer === undefined) {
@@ -1193,27 +1374,13 @@ const testWriteWebNNBuffer = (testName) => {
 
     assert_throws_dom(
         'InvalidStateError',
-        () =>
-            ml_context.writeBuffer(ml_buffer, new Uint8Array(ml_buffer.size)));
+        () => ml_context.writeBuffer(
+            ml_buffer, new Uint8Array(sizeOfDescriptor(descriptor))));
   }, `${testName} / destroy`);
 
   promise_test(async () => {
-    let ml_buffer = createBuffer(ml_context, 4);
-
-    // MLBuffer was unsupported for the deviceType.
-    if (ml_buffer === undefined) {
-      return;
-    }
-
-    const array_buffer = new ArrayBuffer(ml_buffer.size);
-    const detached_buffer = array_buffer.transfer();
-    assert_true(array_buffer.detached, 'array buffer should be detached.');
-
-    ml_context.writeBuffer(ml_buffer, array_buffer);
-  }, `${testName} / detached`);
-
-  promise_test(async () => {
-    let ml_buffer = createBuffer(ml_context, 4);
+    const bufferDescriptor = {dataType: 'int32', dimensions: [2, 3]};
+    let ml_buffer = createBuffer(ml_context, bufferDescriptor);
 
     // MLBuffer was unsupported for the deviceType.
     if (ml_buffer === undefined) {
@@ -1221,9 +1388,10 @@ const testWriteWebNNBuffer = (testName) => {
     }
 
     let another_ml_context = await navigator.ml.createContext(contextOptions);
-    let another_ml_buffer = createBuffer(another_ml_context, ml_buffer.size);
+    let another_ml_buffer = createBuffer(another_ml_context, bufferDescriptor);
 
-    let input_data = new Uint8Array(ml_buffer.size).fill(0xAA);
+    let input_data =
+        new Uint8Array(sizeOfDescriptor(bufferDescriptor)).fill(0xAA);
     assert_throws_js(
         TypeError, () => ml_context.writeBuffer(another_ml_buffer, input_data));
     assert_throws_js(
@@ -1249,7 +1417,8 @@ const testReadWebNNBuffer = (testName) => {
   });
 
   promise_test(async t => {
-    let ml_buffer = createBuffer(ml_context, 4);
+    let ml_buffer =
+        createBuffer(ml_context, {dataType: 'int32', dimensions: [2, 2]});
 
     // MLBuffer was unsupported for the deviceType.
     if (ml_buffer === undefined) {
@@ -1264,7 +1433,8 @@ const testReadWebNNBuffer = (testName) => {
   }, `${testName} / destroy`);
 
   promise_test(async () => {
-    let ml_buffer = createBuffer(ml_context, 4);
+    let ml_buffer =
+        createBuffer(ml_context, {dataType: 'int32', dimensions: [1]});
 
     // MLBuffer was unsupported for the deviceType.
     if (ml_buffer === undefined) {
@@ -1282,7 +1452,8 @@ const testReadWebNNBuffer = (testName) => {
   }, `${testName} / full_size`);
 
   promise_test(async () => {
-    let ml_buffer = createBuffer(ml_context, 4);
+    let ml_buffer =
+        createBuffer(ml_context, {dataType: 'int32', dimensions: [1]});
 
     // MLBuffer was unsupported for the deviceType.
     if (ml_buffer === undefined) {
@@ -1302,26 +1473,8 @@ const testReadWebNNBuffer = (testName) => {
   }, `${testName} / src_offset_only`);
 
   promise_test(async () => {
-    let ml_buffer = createBuffer(ml_context, 4);
-
-    // MLBuffer was unsupported for the deviceType.
-    if (ml_buffer === undefined) {
-      return;
-    }
-
-    // Initialize the buffer.
-    const input_data = [0xAA, 0xAA, 0xAA, 0xAA];
-    ml_context.writeBuffer(ml_buffer, Uint8Array.from(input_data));
-
-    // Writing zero bytes at the end of the buffer.
-    ml_context.writeBuffer(
-        ml_buffer, Uint32Array.from([0xBBBBBBBB]), /*srcOffset=*/ 1);
-    await assert_buffer_data_equals(
-        ml_context, ml_buffer, Uint8Array.from(input_data));
-  }, `${testName} / zero_write`);
-
-  promise_test(async () => {
-    let ml_buffer = createBuffer(ml_context, 4);
+    let ml_buffer =
+        createBuffer(ml_context, {dataType: 'int32', dimensions: [1]});
 
     // MLBuffer was unsupported for the deviceType.
     if (ml_buffer === undefined) {
@@ -1341,7 +1494,8 @@ const testReadWebNNBuffer = (testName) => {
   }, `${testName} / src_offset_and_size`);
 
   promise_test(async () => {
-    let ml_buffer = createBuffer(ml_context, 4);
+    let ml_buffer =
+        createBuffer(ml_context, {dataType: 'int32', dimensions: [1]});
 
     // MLBuffer was unsupported for the deviceType.
     if (ml_buffer === undefined) {
@@ -1361,7 +1515,8 @@ const testReadWebNNBuffer = (testName) => {
   }, `${testName} / larger_src_data`);
 
   promise_test(async () => {
-    let ml_buffer = createBuffer(ml_context, 4);
+    let ml_buffer =
+        createBuffer(ml_context, {dataType: 'int32', dimensions: [1]});
 
     // MLBuffer was unsupported for the deviceType.
     if (ml_buffer === undefined) {
@@ -1379,7 +1534,8 @@ const testReadWebNNBuffer = (testName) => {
   }, `${testName} / no_src_offset`);
 
   promise_test(async t => {
-    let ml_buffer = createBuffer(ml_context, 4);
+    const bufferDescriptor = {dataType: 'int32', dimensions: [2, 3]};
+    let ml_buffer = createBuffer(ml_context, bufferDescriptor);
 
     // MLBuffer was unsupported for the deviceType.
     if (ml_buffer === undefined) {
@@ -1387,7 +1543,7 @@ const testReadWebNNBuffer = (testName) => {
     }
 
     let another_ml_context = await navigator.ml.createContext(contextOptions);
-    let another_ml_buffer = createBuffer(another_ml_context, ml_buffer.size);
+    let another_ml_buffer = createBuffer(another_ml_context, bufferDescriptor);
 
     await promise_rejects_js(
         t, TypeError, ml_context.readBuffer(another_ml_buffer));
@@ -1417,26 +1573,24 @@ const testDispatchWebNNBuffer = (testName) => {
         supported, `Unable to create context for ${variant} variant`);
     // Construct a simple graph: A = B + C, with two outputs.
     const builder = new MLGraphBuilder(ml_context);
-    const operandType = {dataType: 'float32', dimensions: shape};
-    const lhs_operand = builder.input('lhs', operandType);
-    const rhs_operand = builder.input('rhs', operandType);
+    const descriptor = {dataType: 'float32', dimensions: shape};
+    const lhs_operand = builder.input('lhs', descriptor);
+    const rhs_operand = builder.input('rhs', descriptor);
     const output_1_operand = builder.add(lhs_operand, rhs_operand);
     const output_2_operand = builder.add(lhs_operand, rhs_operand);
     ml_graph = await builder.build(
         {'output1': output_1_operand, 'output2': output_2_operand});
-    const ml_buffer_size =
-        TypedArrayDict['float32'].BYTES_PER_ELEMENT * sizeOfShape(shape);
     // MLBuffer was unsupported for the deviceType.
     if (!isMLBufferSupported(ml_context)) {
       return;
     }
     inputs = {
-      'lhs': ml_context.createBuffer({size: ml_buffer_size}),
-      'rhs': ml_context.createBuffer({size: ml_buffer_size}),
+      'lhs': ml_context.createBuffer(descriptor),
+      'rhs': ml_context.createBuffer(descriptor),
     };
     outputs = {
-      'output1': ml_context.createBuffer({size: ml_buffer_size}),
-      'output2': ml_context.createBuffer({size: ml_buffer_size}),
+      'output1': ml_context.createBuffer(descriptor),
+      'output2': ml_context.createBuffer(descriptor),
     };
   });
 
@@ -1456,16 +1610,16 @@ const testDispatchWebNNBuffer = (testName) => {
         TypeError,
         () => ml_context.dispatch(
             ml_graph, {
-              'lhs':
-                  another_ml_context.createBuffer({size: inputs['lhs'].size()}),
+              'lhs': another_ml_context.createBuffer(
+                  getDescriptorFromBuffer(inputs['lhs'])),
               'rhs': inputs['rhs'],
             },
             outputs));
 
     // Test the wrong context being used for outputs.
     assert_throws_js(TypeError, () => ml_context.dispatch(ml_graph, inputs, {
-      'output1':
-          another_ml_context.createBuffer({size: outputs['output1'].size()}),
+      'output1': another_ml_context.createBuffer(
+          getDescriptorFromBuffer(outputs['output1'])),
       'output2': outputs['output2'],
     }));
   }, `${testName} / context_mismatch`);
@@ -1476,15 +1630,19 @@ const testDispatchWebNNBuffer = (testName) => {
       return;
     }
 
-    // Control case, valid size.
+    // Control case, valid buffers.
     ml_context.dispatch(ml_graph, inputs, outputs);
 
-    // Input is too large.
+    // Input is a different shape.
     assert_throws_js(
         TypeError,
         () => ml_context.dispatch(
             ml_graph, {
-              'lhs': ml_context.createBuffer({size: inputs['lhs'].size() + 1}),
+              'lhs': ml_context.createBuffer({
+                dataType: inputs['lhs'].dataType,
+                // Input rank is too high.
+                dimensions: inputs['lhs'].shape.concat([2])
+              }),
               'rhs': inputs['rhs'],
             },
             outputs));
@@ -1494,21 +1652,94 @@ const testDispatchWebNNBuffer = (testName) => {
         () => ml_context.dispatch(
             ml_graph, {
               'lhs': inputs['lhs'],
-              'rhs': ml_context.createBuffer({size: inputs['rhs'].size() + 1}),
+              'rhs': ml_context.createBuffer({
+                dataType: inputs['rhs'].dataType,
+                // Input rank is too low.
+                dimensions: inputs['rhs'].shape.slice(1)
+              }),
             },
             outputs));
 
-    // Output is too large.
+    // Output is a different shape. Dimension value is too large.
+    let output1WrongShape = [...outputs['output1'].shape];
+    output1WrongShape[0] += 2;
     assert_throws_js(TypeError, () => ml_context.dispatch(ml_graph, inputs, {
-      'output1': ml_context.createBuffer({size: outputs['output1'].size() + 1}),
+      'output1': ml_context.createBuffer({
+        dataType: outputs['output1'].dataType,
+        dimensions: output1WrongShape
+      }),
+      'output2': outputs['output2'],
+    }));
+
+    // Output is a different shape. Dimension value is too small.
+    let output2WrongShape = [...outputs['output2'].shape];
+    output2WrongShape[1] -= 1;
+    assert_throws_js(TypeError, () => ml_context.dispatch(ml_graph, inputs, {
+      'output1': outputs['output1'],
+      'output2': ml_context.createBuffer({
+        dataType: outputs['output2'].dataType,
+        dimensions: output2WrongShape
+      }),
+    }));
+  }, `${testName} / invalid shape`);
+
+  promise_test(async () => {
+    // MLBuffer was unsupported for the deviceType.
+    if (!isMLBufferSupported(ml_context)) {
+      return;
+    }
+
+    // Control case, valid buffers.
+    ml_context.dispatch(ml_graph, inputs, outputs);
+
+    // Inputs are a different data type.
+    const inputWrongDataType = 'int32';
+    assert_not_equals(inputs['lhs'].dataType, inputWrongDataType);
+    assert_not_equals(inputs['rhs'].dataType, inputWrongDataType);
+    assert_throws_js(
+        TypeError,
+        () => ml_context.dispatch(
+            ml_graph, {
+              'lhs': ml_context.createBuffer({
+                dataType: inputWrongDataType,
+                dimensions: inputs['lhs'].shape
+              }),
+              'rhs': inputs['rhs'],
+            },
+            outputs));
+
+    assert_throws_js(
+        TypeError,
+        () => ml_context.dispatch(
+            ml_graph, {
+              'lhs': inputs['lhs'],
+              'rhs': ml_context.createBuffer({
+                dataType: inputWrongDataType,
+                dimensions: inputs['rhs'].shape
+              }),
+            },
+            outputs));
+
+    // Outputs are a different data type.
+    const outputWrongDataType = 'int32';
+    assert_not_equals(outputs['output1'].dataType, outputWrongDataType);
+    assert_not_equals(outputs['output2'].dataType, outputWrongDataType);
+    assert_throws_js(TypeError, () => ml_context.dispatch(ml_graph, inputs, {
+      'output1': ml_context.createBuffer({
+        dataType: outputWrongDataType,
+        dimensions: outputs['output1'].shape
+      }),
       'output2': outputs['output2'],
     }));
 
     assert_throws_js(TypeError, () => ml_context.dispatch(ml_graph, inputs, {
       'output1': outputs['output1'],
-      'output2': ml_context.createBuffer({size: outputs['output2'].size() + 1}),
+      'output2': ml_context.createBuffer({
+        dataType: outputWrongDataType,
+        dimensions: outputs['output2'].shape
+      }),
     }));
-  }, `${testName} / invalid_size`);
+  }, `${testName} / invalid data type`);
 
   promise_test(async () => {
     // MLBuffer was unsupported for the deviceType.
@@ -1568,8 +1799,8 @@ const testDispatchWebNNBuffer = (testName) => {
             ml_graph, {
               'lhs': inputs['lhs'],
               'rhs': inputs['rhs'],
-              'a_different_input_name':
-                  ml_context.createBuffer({size: inputs['rhs'].size()}),
+              'a_different_input_name': ml_context.createBuffer(
+                  getDescriptorFromBuffer(inputs['rhs'])),
             },
             outputs));
 
@@ -1583,7 +1814,7 @@ const testDispatchWebNNBuffer = (testName) => {
       'output1': outputs['output1'],
       'output2': outputs['output2'],
       'a_different_output_name':
-          ml_context.createBuffer({size: outputs['output2'].size()}),
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output2'])),
     }));
   }, `${testName} / invalid_name`);
 
@@ -1640,18 +1871,22 @@ const testDispatchWebNNBuffer = (testName) => {
     }
 
     const dispatch_inputs = {
-      'lhs': ml_context.createBuffer({size: inputs['lhs'].size}),
-      'rhs': ml_context.createBuffer({size: inputs['rhs'].size}),
+      'lhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['lhs'])),
+      'rhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['rhs'])),
     };
 
     const dispatch_1_outputs = {
-      'output1': ml_context.createBuffer({size: outputs['output1'].size}),
-      'output2': ml_context.createBuffer({size: outputs['output2'].size}),
+      'output1':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output1'])),
+      'output2':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output2'])),
     };
 
     const dispatch_2_outputs = {
-      'output1': ml_context.createBuffer({size: outputs['output1'].size}),
-      'output2': ml_context.createBuffer({size: outputs['output2'].size}),
+      'output1':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output1'])),
+      'output2':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output2'])),
     };
 
     // Initialize inputs
@@ -1690,18 +1925,20 @@ const testDispatchWebNNBuffer = (testName) => {
     }
 
     const dispatch_1_inputs = {
-      'lhs': ml_context.createBuffer({size: inputs['lhs'].size}),
-      'rhs': ml_context.createBuffer({size: inputs['rhs'].size}),
+      'lhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['lhs'])),
+      'rhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['rhs'])),
     };
 
     const dispatch_2_inputs = {
-      'lhs': ml_context.createBuffer({size: inputs['lhs'].size}),
-      'rhs': ml_context.createBuffer({size: inputs['rhs'].size}),
+      'lhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['lhs'])),
+      'rhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['rhs'])),
     };
 
     const dispatch_outputs = {
-      'output1': ml_context.createBuffer({size: outputs['output1'].size}),
-      'output2': ml_context.createBuffer({size: outputs['output2'].size}),
+      'output1':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output1'])),
+      'output2':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output2'])),
     };
 
     // Initialize inputs
@@ -1737,13 +1974,15 @@ const testDispatchWebNNBuffer = (testName) => {
     }
 
     const dispatch_inputs = {
-      'lhs': ml_context.createBuffer({size: inputs['lhs'].size}),
-      'rhs': ml_context.createBuffer({size: inputs['rhs'].size}),
+      'lhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['lhs'])),
+      'rhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['rhs'])),
     };
 
     const dispatch_outputs = {
-      'output1': ml_context.createBuffer({size: outputs['output1'].size}),
-      'output2': ml_context.createBuffer({size: outputs['output2'].size}),
+      'output1':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output1'])),
+      'output2':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output2'])),
     };
 
     // Initialize inputs
@@ -1772,18 +2011,22 @@ const testDispatchWebNNBuffer = (testName) => {
     }
 
     const dispatch_inputs = {
-      'lhs': ml_context.createBuffer({size: inputs['lhs'].size}),
-      'rhs': ml_context.createBuffer({size: inputs['rhs'].size}),
+      'lhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['lhs'])),
+      'rhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['rhs'])),
     };
 
     const dispatch_1_outputs = {
-      'output1': ml_context.createBuffer({size: outputs['output1'].size}),
-      'output2': ml_context.createBuffer({size: outputs['output2'].size}),
+      'output1':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output1'])),
+      'output2':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output2'])),
     };
 
     const dispatch_2_outputs = {
-      'output1': ml_context.createBuffer({size: outputs['output1'].size}),
-      'output2': ml_context.createBuffer({size: outputs['output2'].size}),
+      'output1':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output1'])),
+      'output2':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output2'])),
     };
 
     // Initialize inputs
@@ -1819,4 +2062,207 @@ const testDispatchWebNNBuffer = (testName) => {
         ml_context, dispatch_1_outputs['output2'],
         new Float32Array(sizeOfShape(shape)).fill(8));
   }, `${testName} / outputs_as_inputs`);
+
+  promise_test(async () => {
+    // MLBuffer was unsupported for the deviceType.
+    if (!isMLBufferSupported(ml_context)) {
+      return;
+    }
+
+    // Construct a simple graph: OUTPUT = LHS - RHS.
+    const builder = new MLGraphBuilder(ml_context);
+    const operandType = {dataType: 'float32', dimensions: shape};
+    const lhsOperand = builder.input('lhs', operandType);
+    const rhsOperand = builder.input('rhs', operandType);
+    const graph =
+        await builder.build({'output': builder.sub(lhsOperand, rhsOperand)});
+
+    const lhsBuffer =
+        ml_context.createBuffer(getDescriptorFromBuffer(inputs['lhs']));
+    const rhsBuffer =
+        ml_context.createBuffer(getDescriptorFromBuffer(inputs['rhs']));
+
+    const dispatchOutputs = {
+      'output':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output1']))
+    };
+
+    // Initialize inputs
+    ml_context.writeBuffer(
+        lhsBuffer, new TypedArrayDict['float32'](sizeOfShape(shape)).fill(5.0));
+    ml_context.writeBuffer(
+        rhsBuffer, new TypedArrayDict['float32'](sizeOfShape(shape)).fill(3.0));
+
+    // Output = LHS - RHS = 5 - 3 = 2
+    ml_context.dispatch(
+        graph, {
+          'lhs': lhsBuffer,
+          'rhs': rhsBuffer,
+        },
+        dispatchOutputs);
+
+    await assert_buffer_data_equals(
+        ml_context, dispatchOutputs['output'],
+        new Float32Array(sizeOfShape(shape)).fill(2));
+
+    // Output = RHS - LHS = 3 - 5 = -2
+    ml_context.dispatch(
+        graph, {
+          'lhs': rhsBuffer,
+          'rhs': lhsBuffer,
+        },
+        dispatchOutputs);
+
+    await assert_buffer_data_equals(
+        ml_context, dispatchOutputs['output'],
+        new Float32Array(sizeOfShape(shape)).fill(-2));
+  }, `${testName} / same name diff input buffers`);
+
+  promise_test(async () => {
+    // MLBuffer was unsupported for the deviceType.
+    if (!isMLBufferSupported(ml_context)) {
+      return;
+    }
+
+    const dispatchInputs = {
+      'lhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['lhs'])),
+      'rhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['rhs'])),
+    };
+
+    const outputBuffer1 =
+        ml_context.createBuffer(getDescriptorFromBuffer(outputs['output1']));
+    const outputBuffer2 =
+        ml_context.createBuffer(getDescriptorFromBuffer(outputs['output2']));
+
+    // Initialize inputs
+    const inputData1 =
+        new TypedArrayDict['float32'](sizeOfShape(shape)).fill(1.0);
+    ml_context.writeBuffer(dispatchInputs['lhs'], inputData1);
+    ml_context.writeBuffer(dispatchInputs['rhs'], inputData1);
+
+    // Output = LHS + RHS = 1 + 1 = 2
+    ml_context.dispatch(ml_graph, dispatchInputs, {
+      'output1': outputBuffer1,
+      'output2': outputBuffer2,
+    });
+
+    // Output = LHS + RHS = 2 + 2 = 4
+    const inputData2 =
+        new TypedArrayDict['float32'](sizeOfShape(shape)).fill(2.0);
+    ml_context.writeBuffer(dispatchInputs['lhs'], inputData2);
+    ml_context.writeBuffer(dispatchInputs['rhs'], inputData2);
+
+    ml_context.dispatch(ml_graph, dispatchInputs, {
+      'output1': outputBuffer1,
+      'output2':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output2'])),
+    });
+
+    // Ensure the last dispatch() did not modify the original second output
+    // buffer.
+    await assert_buffer_data_equals(
+        ml_context, outputBuffer2,
+        new Float32Array(sizeOfShape(shape)).fill(2));
+  }, `${testName} / same name diff outputs buffers`);
+
+  promise_test(async () => {
+    // MLBuffer was unsupported for the deviceType.
+    if (!isMLBufferSupported(ml_context)) {
+      return;
+    }
+
+    const dispatchInputs = {
+      'lhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['lhs'])),
+      'rhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['rhs'])),
+    };
+
+    const dispatchOutputs = {
+      'output1':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output1'])),
+      'output2':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output2'])),
+    };
+
+    // Initialize inputs
+    const inputData =
+        new TypedArrayDict['float32'](sizeOfShape(shape)).fill(1.0);
+    ml_context.writeBuffer(dispatchInputs['lhs'], inputData);
+    ml_context.writeBuffer(dispatchInputs['rhs'], inputData);
+
+    // Output = LHS + RHS = 1 + 1 = 2
+    ml_context.dispatch(ml_graph, dispatchInputs, dispatchOutputs);
+
+    // Check destroyed input buffers cannot be re-used in subsequent dispatches.
+    dispatchInputs['lhs'].destroy();
+    dispatchInputs['lhs'] =
+        ml_context.createBuffer(getDescriptorFromBuffer(inputs['lhs']));
+
+    const newInputData =
+        new TypedArrayDict['float32'](sizeOfShape(shape)).fill(2.0);
+    ml_context.writeBuffer(dispatchInputs['lhs'], newInputData);
+
+    // Output = LHS + RHS = 2 + 1 = 3
+    ml_context.dispatch(ml_graph, dispatchInputs, dispatchOutputs);
+
+    await assert_buffer_data_equals(
+        ml_context, dispatchOutputs['output1'],
+        new Float32Array(sizeOfShape(shape)).fill(3));
+
+    dispatchInputs['rhs'].destroy();
+    dispatchInputs['rhs'] =
+        ml_context.createBuffer(getDescriptorFromBuffer(inputs['rhs']));
+    ml_context.writeBuffer(dispatchInputs['rhs'], newInputData);
+
+    // Output = LHS + RHS = 2 + 2 = 4
+    ml_context.dispatch(ml_graph, dispatchInputs, dispatchOutputs);
+
+    await assert_buffer_data_equals(
+        ml_context, dispatchOutputs['output1'],
+        new Float32Array(sizeOfShape(shape)).fill(4));
+  }, `${testName} / same name diff inputs buffers destroy`);
+
+  promise_test(async () => {
+    // MLBuffer was unsupported for the deviceType.
+    if (!isMLBufferSupported(ml_context)) {
+      return;
+    }
+
+    const dispatchInputs = {
+      'lhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['lhs'])),
+      'rhs': ml_context.createBuffer(getDescriptorFromBuffer(inputs['rhs'])),
+    };
+
+    const dispatchOutputs = {
+      'output1':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output1'])),
+      'output2':
+          ml_context.createBuffer(getDescriptorFromBuffer(outputs['output2'])),
+    };
+
+    // Initialize inputs
+    const inputData =
+        new TypedArrayDict['float32'](sizeOfShape(shape)).fill(1.0);
+    ml_context.writeBuffer(dispatchInputs['lhs'], inputData);
+    ml_context.writeBuffer(dispatchInputs['rhs'], inputData);
+
+    // Output = LHS + RHS = 1 + 1 = 2
+    ml_context.dispatch(ml_graph, dispatchInputs, dispatchOutputs);
+
+    // Check destroyed output buffers cannot be re-used in subsequent
+    // dispatches.
+    dispatchOutputs['output1'].destroy();
+    dispatchOutputs['output1'] = ml_context.createBuffer(
+        getDescriptorFromBuffer(outputs['output1']));
+
+    const newInputData =
+        new TypedArrayDict['float32'](sizeOfShape(shape)).fill(2.0);
+    ml_context.writeBuffer(dispatchInputs['lhs'], newInputData);
+
+    // Output = LHS + RHS = 2 + 1 = 3
+    ml_context.dispatch(ml_graph, dispatchInputs, dispatchOutputs);
+
+    await assert_buffer_data_equals(
+        ml_context, dispatchOutputs['output1'],
+        new Float32Array(sizeOfShape(shape)).fill(3));
+  }, `${testName} / same name diff outputs buffers destroy`);
 };

@@ -812,8 +812,12 @@ def SetGCS(gclient_dict, dep_name, new_objects):
         raise ValueError("Number of revision objects must match the current "
                          "number of objects.")
 
+    # Allow only `keys_to_update` to be updated.
+    keys_to_update = ('object_name', 'sha256sum', 'size_bytes', 'generation')
     for index, object_node in enumerate(objects_node.elts):
         for key, value in zip(object_node.keys, object_node.values):
+            if key.s not in keys_to_update:
+                continue
             _UpdateAstString(tokens, value, new_objects[index][key.s])
 
     node.SetNode('objects', new_objects, objects_node)

@@ -14,6 +14,7 @@
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/notification_utils.h"
+#include "ash/public/cpp/resources/grit/ash_public_unscaled_resources.h"
 #include "ash/public/cpp/system/anchored_nudge_data.h"
 #include "ash/public/cpp/system/anchored_nudge_manager.h"
 #include "ash/public/cpp/system_tray_client.h"
@@ -169,6 +170,9 @@ const char kKeyboardNotificationPrefix[] = "welcome_experience_keyboards";
 const char kTouchpadNotificationPrefix[] = "welcome_experience_touchpad";
 const char kPointingStickNotificationPrefix[] =
     "welcome_experience_pointing_stick";
+const char kMouseNotificationPrefix[] = "welcome_experience_mouse";
+const char kGraphicsTabletNotificationPrefix[] =
+    "welcome_experience_graphics_tablet";
 const char kDelimiter[] = "_";
 
 bool IsRightClickRewriteDisabled(SimulateRightClickModifier active_modifier) {
@@ -234,17 +238,23 @@ std::string GetRightClickNotificationId(
   }
 }
 
-std::string GetPeripheralCustomizationMouseNotificationID(uint32_t id) {
-  return kInputDeviceSettingsMousePrefix + base::NumberToString(id);
-}
-
 std::string GetWelcomeExperienceNotificationId(const std::string& prefix,
                                                uint32_t id) {
   return prefix + kDelimiter + base::NumberToString(id);
 }
 
-std::string GetPeripheralCustomizationGraphicsTabletNotificationID(
-    uint32_t id) {
+std::string GetMouseNotificationID(uint32_t id) {
+  if (features::IsWelcomeExperienceEnabled()) {
+    return GetWelcomeExperienceNotificationId(kMouseNotificationPrefix, id);
+  }
+  return kInputDeviceSettingsMousePrefix + base::NumberToString(id);
+}
+
+std::string GetGraphicsTabletNotificationID(uint32_t id) {
+  if (features::IsWelcomeExperienceEnabled()) {
+    return GetWelcomeExperienceNotificationId(kGraphicsTabletNotificationPrefix,
+                                              id);
+  }
   return kInputDeviceSettingsGraphicsTabletPrefix + base::NumberToString(id);
 }
 
@@ -298,47 +308,56 @@ std::u16string GetSixPackKeyName(ui::KeyboardCode key_code) {
   }
 }
 
-std::u16string GetSixPackShortcutUpdatedString(
-    ui::KeyboardCode key_code,
-    SixPackShortcutModifier blocked_modifier) {
-  CHECK(blocked_modifier != SixPackShortcutModifier::kNone);
-  std::u16string input_key_string;
+std::u16string GetSixPackShortcutUpdatedString(ui::KeyboardCode key_code) {
   switch (key_code) {
     case ui::VKEY_PRIOR:
-      return blocked_modifier == SixPackShortcutModifier::kSearch
-                 ? l10n_util::GetStringUTF16(
-                       IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_SEARCH_PLUS_UP_NUDGE_DESCRIPTION)
-                 : l10n_util::GetStringUTF16(
-                       IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_ALT_PLUS_UP_NUDGE_DESCRIPTION);
+      return l10n_util::GetStringUTF16(
+          IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_PAGE_UP_NUDGE_DESCRIPTION);
     case ui::VKEY_NEXT:
-      return blocked_modifier == SixPackShortcutModifier::kSearch
-                 ? l10n_util::GetStringUTF16(
-                       IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_SEARCH_PLUS_DOWN_NUDGE_DESCRIPTION)
-                 : l10n_util::GetStringUTF16(
-                       IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_ALT_PLUS_DOWN_NUDGE_DESCRIPTION);
+      return l10n_util::GetStringUTF16(
+          IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_PAGE_DOWN_NUDGE_DESCRIPTION);
     case ui::VKEY_HOME:
-      return blocked_modifier == SixPackShortcutModifier::kSearch
-                 ? l10n_util::GetStringUTF16(
-                       IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_SEARCH_PLUS_LEFT_NUDGE_DESCRIPTION)
-                 : l10n_util::GetStringUTF16(
-                       IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_ALT_PLUS_LEFT_NUDGE_DESCRIPTION);
+      return l10n_util::GetStringUTF16(
+          IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_HOME_NUDGE_DESCRIPTION);
     case ui::VKEY_END:
-      return blocked_modifier == SixPackShortcutModifier::kSearch
-                 ? l10n_util::GetStringUTF16(
-                       IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_SEARCH_PLUS_RIGHT_NUDGE_DESCRIPTION)
-                 : l10n_util::GetStringUTF16(
-                       IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_ALT_PLUS_RIGHT_NUDGE_DESCRIPTION);
+      return l10n_util::GetStringUTF16(
+          IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_END_NUDGE_DESCRIPTION);
     case ui::VKEY_DELETE:
-      return blocked_modifier == SixPackShortcutModifier::kSearch
-                 ? l10n_util::GetStringUTF16(
-                       IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_SEARCH_PLUS_BACKSPACE_NUDGE_DESCRIPTION)
-                 : l10n_util::GetStringUTF16(
-                       IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_ALT_PLUS_BACKSPACE_NUDGE_DESCRIPTION);
+      return l10n_util::GetStringUTF16(
+          IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_DELETE_NUDGE_DESCRIPTION);
     case ui::VKEY_INSERT:
       return l10n_util::GetStringUTF16(
-          IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_SEARCH_PLUS_SHIFT_BACKSPACE_NUDGE_DESCRIPTION);
+          IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_INSERT_NUDGE_DESCRIPTION);
     default:
       NOTREACHED_NORETURN();
+  }
+}
+
+void InsertSixPackShortcutKeyboardCodes(
+    ui::KeyboardCode key_code,
+    std::vector<ui::KeyboardCode>& keyboard_codes) {
+  switch (key_code) {
+    case ui::VKEY_PRIOR:
+      keyboard_codes.push_back(ui::VKEY_UP);
+      break;
+    case ui::VKEY_NEXT:
+      keyboard_codes.push_back(ui::VKEY_DOWN);
+      break;
+    case ui::VKEY_HOME:
+      keyboard_codes.push_back(ui::VKEY_LEFT);
+      break;
+    case ui::VKEY_END:
+      keyboard_codes.push_back(ui::VKEY_RIGHT);
+      break;
+    case ui::VKEY_DELETE:
+      keyboard_codes.push_back(ui::VKEY_BACK);
+      break;
+    case ui::VKEY_INSERT:
+      keyboard_codes.push_back(ui::VKEY_SHIFT);
+      keyboard_codes.push_back(ui::VKEY_BACK);
+      break;
+    default:
+      NOTREACHED();
   }
 }
 
@@ -466,6 +485,13 @@ bool ButtonRemappingListsAreEqual(
   return true;
 }
 
+const std::u16string GetBatteryLevelMessage(
+    const mojom::BatteryInfo& battery_info) {
+  return l10n_util::GetStringFUTF16(
+      IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_WELCOME_EXPERIENCE_BATTERY_DESCRIPTION,
+      base::NumberToString16(battery_info.battery_percentage));
+}
+
 }  // namespace
 
 InputDeviceSettingsNotificationController::
@@ -571,10 +597,15 @@ void InputDeviceSettingsNotificationController::
 }
 
 void InputDeviceSettingsNotificationController::NotifyMouseFirstTimeConnected(
-    const mojom::Mouse& mouse) {
-  if (!IsActiveUserSession()) {
+    const mojom::Mouse& mouse,
+    const gfx::Image& device_image) {
+  if (!IsActiveUserSession() || !mouse.is_external) {
     return;
   }
+
+  const char* pref_name = features::IsWelcomeExperienceEnabled()
+                              ? prefs::kMiceWelcomeNotificationSeen
+                              : prefs::kPeripheralNotificationMiceSeen;
 
   // Avoid showing notification for the virtual mouse device.
   if (mouse.device_key == kVirtualMouseDeviceKey) {
@@ -585,17 +616,14 @@ void InputDeviceSettingsNotificationController::NotifyMouseFirstTimeConnected(
       Shell::Get()->session_controller()->GetActivePrefService();
   CHECK(prefs);
 
-  if (base::Contains(prefs->GetList(prefs::kPeripheralNotificationMiceSeen),
-                     mouse.device_key)) {
+  if (base::Contains(prefs->GetList(pref_name), mouse.device_key)) {
     return;
   }
 
-  auto seen_mouse_list =
-      prefs->GetList(prefs::kPeripheralNotificationMiceSeen).Clone();
+  auto seen_mouse_list = prefs->GetList(pref_name).Clone();
 
   seen_mouse_list.Append(mouse.device_key);
-  prefs->SetList(prefs::kPeripheralNotificationMiceSeen,
-                 std::move(seen_mouse_list));
+  prefs->SetList(pref_name, std::move(seen_mouse_list));
 
   CHECK(mouse.settings);
   // Do not show notification if the device remapping list has already been
@@ -605,12 +633,13 @@ void InputDeviceSettingsNotificationController::NotifyMouseFirstTimeConnected(
           mouse.settings->button_remappings)) {
     return;
   }
-  NotifyMouseIsCustomizable(mouse);
+  NotifyMouseIsCustomizable(mouse, device_image);
 }
 
 void InputDeviceSettingsNotificationController::
     NotifyGraphicsTabletFirstTimeConnected(
-        const mojom::GraphicsTablet& graphics_tablet) {
+        const mojom::GraphicsTablet& graphics_tablet,
+        const gfx::Image& device_image) {
   if (!IsActiveUserSession()) {
     return;
   }
@@ -619,8 +648,11 @@ void InputDeviceSettingsNotificationController::
       Shell::Get()->session_controller()->GetActivePrefService();
   CHECK(prefs);
 
-  auto seen_graphics_tablet_list =
-      prefs->GetList(prefs::kPeripheralNotificationGraphicsTabletsSeen).Clone();
+  const char* pref_name =
+      features::IsWelcomeExperienceEnabled()
+          ? prefs::kGraphicsTabletsWelcomeNotificationSeen
+          : prefs::kPeripheralNotificationGraphicsTabletsSeen;
+  auto seen_graphics_tablet_list = prefs->GetList(pref_name).Clone();
 
   for (const auto& value : seen_graphics_tablet_list) {
     if (value.is_string() && value.GetString() == graphics_tablet.device_key) {
@@ -628,8 +660,7 @@ void InputDeviceSettingsNotificationController::
     }
   }
   seen_graphics_tablet_list.Append(graphics_tablet.device_key);
-  prefs->SetList(prefs::kPeripheralNotificationGraphicsTabletsSeen,
-                 std::move(seen_graphics_tablet_list));
+  prefs->SetList(pref_name, std::move(seen_graphics_tablet_list));
 
   CHECK(graphics_tablet.settings);
   // Do not show notification if the device remapping list has already been
@@ -644,7 +675,7 @@ void InputDeviceSettingsNotificationController::
           graphics_tablet.settings->tablet_button_remappings)) {
     return;
   }
-  NotifyGraphicsTabletIsCustomizable(graphics_tablet);
+  NotifyGraphicsTabletIsCustomizable(graphics_tablet, device_image);
 }
 
 void InputDeviceSettingsNotificationController::
@@ -790,8 +821,9 @@ void InputDeviceSettingsNotificationController::
 }
 
 void InputDeviceSettingsNotificationController::
-    NotifyKeyboardFirstTimeConnected(const mojom::Keyboard& keyboard) {
-  if (!IsActiveUserSession()) {
+    NotifyKeyboardFirstTimeConnected(const mojom::Keyboard& keyboard,
+                                     const gfx::Image& device_image) {
+  if (!IsActiveUserSession() || !keyboard.is_external) {
     return;
   }
 
@@ -812,12 +844,13 @@ void InputDeviceSettingsNotificationController::
                  std::move(seen_keyboard_list));
 
   CHECK(keyboard.settings);
-  ShowKeyboardSettingsNotification(keyboard);
+  ShowKeyboardSettingsNotification(keyboard, device_image);
 }
 
 void InputDeviceSettingsNotificationController::
-    NotifyTouchpadFirstTimeConnected(const mojom::Touchpad& touchpad) {
-  if (!IsActiveUserSession()) {
+    NotifyTouchpadFirstTimeConnected(const mojom::Touchpad& touchpad,
+                                     const gfx::Image& device_image) {
+  if (!IsActiveUserSession() || !touchpad.is_external) {
     return;
   }
 
@@ -838,7 +871,7 @@ void InputDeviceSettingsNotificationController::
                  std::move(seen_touchpad_list));
 
   CHECK(touchpad.settings);
-  ShowTouchpadSettingsNotification(touchpad);
+  ShowTouchpadSettingsNotification(touchpad, device_image);
 }
 
 void InputDeviceSettingsNotificationController::
@@ -873,7 +906,7 @@ void InputDeviceSettingsNotificationController::
 void InputDeviceSettingsNotificationController::
     NotifyPointingStickFirstTimeConnected(
         const mojom::PointingStick& pointing_stick) {
-  if (!IsActiveUserSession()) {
+  if (!IsActiveUserSession() || !pointing_stick.is_external) {
     return;
   }
 
@@ -899,21 +932,27 @@ void InputDeviceSettingsNotificationController::
 }
 
 void InputDeviceSettingsNotificationController::NotifyMouseIsCustomizable(
-    const mojom::Mouse& mouse) {
+    const mojom::Mouse& mouse,
+    const gfx::Image& device_image) {
   const auto peripheral_name = base::UTF8ToUTF16(mouse.name);
-  const auto notification_id =
-      GetPeripheralCustomizationMouseNotificationID(mouse.id);
+  const auto notification_id = GetMouseNotificationID(mouse.id);
+  const auto message =
+      mouse.battery_info.is_null()
+          ? l10n_util::GetStringFUTF16(
+                IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_MOUSE_CUSTOMIZATION,
+                peripheral_name)
+          : GetBatteryLevelMessage(*mouse.battery_info);
   message_center::RichNotificationData rich_notification_data;
+  if (!device_image.IsEmpty()) {
+    rich_notification_data.image = device_image;
+  }
   rich_notification_data.buttons.emplace_back(l10n_util::GetStringUTF16(
       IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_OPEN_SETTINGS_BUTTON));
   auto notification = CreateSystemNotificationPtr(
       message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
       l10n_util::GetStringUTF16(
           IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_PERIPHERAL_CUSTOMIZATION_TITLE),
-      l10n_util::GetStringFUTF16(
-          IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_MOUSE_CUSTOMIZATION,
-          peripheral_name),
-      std::u16string(), GURL(),
+      message, std::u16string(), GURL(),
       message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
                                  kNotifierId,
                                  NotificationCatalogName::kInputDeviceSettings),
@@ -926,21 +965,28 @@ void InputDeviceSettingsNotificationController::NotifyMouseIsCustomizable(
 }
 
 void InputDeviceSettingsNotificationController::
-    ShowKeyboardSettingsNotification(const mojom::Keyboard& keyboard) {
+    ShowKeyboardSettingsNotification(const mojom::Keyboard& keyboard,
+                                     const gfx::Image& device_image) {
   const auto peripheral_name = base::UTF8ToUTF16(keyboard.name);
   const auto notification_id = GetWelcomeExperienceNotificationId(
       kKeyboardNotificationPrefix, keyboard.id);
+  const auto message =
+      keyboard.battery_info.is_null()
+          ? l10n_util::GetStringFUTF16(
+                IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_WELCOME_EXPERIENCE_KEYBOARD,
+                peripheral_name)
+          : GetBatteryLevelMessage(*keyboard.battery_info);
   message_center::RichNotificationData rich_notification_data;
+  if (!device_image.IsEmpty()) {
+    rich_notification_data.image = device_image;
+  }
   rich_notification_data.buttons.emplace_back(l10n_util::GetStringUTF16(
       IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_OPEN_SETTINGS_BUTTON));
   auto notification = CreateSystemNotificationPtr(
       message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
       l10n_util::GetStringUTF16(
           IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_WELCOME_EXPERIENCE_KEYBOARD_TITLE),
-      l10n_util::GetStringFUTF16(
-          IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_WELCOME_EXPERIENCE_KEYBOARD,
-          peripheral_name),
-      std::u16string(), GURL(),
+      message, std::u16string(), GURL(),
       message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
                                  kNotifierId,
                                  NotificationCatalogName::kInputDeviceSettings),
@@ -953,21 +999,28 @@ void InputDeviceSettingsNotificationController::
 }
 
 void InputDeviceSettingsNotificationController::
-    ShowTouchpadSettingsNotification(const mojom::Touchpad& touchpad) {
+    ShowTouchpadSettingsNotification(const mojom::Touchpad& touchpad,
+                                     const gfx::Image& device_image) {
   const auto peripheral_name = base::UTF8ToUTF16(touchpad.name);
+  const auto message =
+      touchpad.battery_info.is_null()
+          ? l10n_util::GetStringFUTF16(
+                IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_WELCOME_EXPERIENCE_TOUCHPAD,
+                peripheral_name)
+          : GetBatteryLevelMessage(*touchpad.battery_info);
   const auto notification_id = GetWelcomeExperienceNotificationId(
       kTouchpadNotificationPrefix, touchpad.id);
   message_center::RichNotificationData rich_notification_data;
+  if (!device_image.IsEmpty()) {
+    rich_notification_data.image = device_image;
+  }
   rich_notification_data.buttons.emplace_back(l10n_util::GetStringUTF16(
       IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_OPEN_SETTINGS_BUTTON));
   auto notification = CreateSystemNotificationPtr(
       message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
       l10n_util::GetStringUTF16(
           IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_WELCOME_EXPERIENCE_TOUCHPAD_TITLE),
-      l10n_util::GetStringFUTF16(
-          IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_WELCOME_EXPERIENCE_TOUCHPAD,
-          peripheral_name),
-      std::u16string(), GURL(),
+      message, std::u16string(), GURL(),
       message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
                                  kNotifierId,
                                  NotificationCatalogName::kInputDeviceSettings),
@@ -981,22 +1034,28 @@ void InputDeviceSettingsNotificationController::
 
 void InputDeviceSettingsNotificationController::
     NotifyGraphicsTabletIsCustomizable(
-        const mojom::GraphicsTablet& graphics_tablet) {
+        const mojom::GraphicsTablet& graphics_tablet,
+        const gfx::Image& device_image) {
   const auto peripheral_name = base::UTF8ToUTF16(graphics_tablet.name);
+  const auto message =
+      graphics_tablet.battery_info.is_null()
+          ? l10n_util::GetStringFUTF16(
+                IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_GRAPHICS_TABLET_CUSTOMIZATION,
+                peripheral_name)
+          : GetBatteryLevelMessage(*graphics_tablet.battery_info);
   const auto notification_id =
-      GetPeripheralCustomizationGraphicsTabletNotificationID(
-          graphics_tablet.id);
+      GetGraphicsTabletNotificationID(graphics_tablet.id);
   message_center::RichNotificationData rich_notification_data;
+  if (!device_image.IsEmpty()) {
+    rich_notification_data.image = device_image;
+  }
   rich_notification_data.buttons.emplace_back(l10n_util::GetStringUTF16(
       IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_OPEN_SETTINGS_BUTTON));
   auto notification = CreateSystemNotificationPtr(
       message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
       l10n_util::GetStringUTF16(
           IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_PERIPHERAL_CUSTOMIZATION_GRAPHICS_TABLET_TITLE),
-      l10n_util::GetStringFUTF16(
-          IDS_ASH_DEVICE_SETTINGS_NOTIFICATIONS_GRAPHICS_TABLET_CUSTOMIZATION,
-          peripheral_name),
-      std::u16string(), GURL(),
+      message, std::u16string(), GURL(),
       message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
                                  kNotifierId,
                                  NotificationCatalogName::kInputDeviceSettings),
@@ -1036,9 +1095,12 @@ void InputDeviceSettingsNotificationController::ShowTopRowRewritingNudge() {
   AnchoredNudgeData nudge_data(
       kTopRowKeyNoMatchNudgeId, NudgeCatalogName::kSearchTopRowKeyPressed,
       l10n_util::GetStringUTF16(
-          IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_SEARCH_NUDGE_DESCRIPTION));
+          IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_TOP_ROW_NUDGE_DESCRIPTION));
   nudge_data.title_text = l10n_util::GetStringUTF16(
       IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_NUDGE_TITLE);
+  nudge_data.image_model =
+      ui::ResourceBundle::GetSharedInstance().GetThemedLottieImageNamed(
+          IDR_KEYBOARD_FN_KEY_NUDGE_IMAGE);
 
   AnchoredNudgeManager::Get()->Show(nudge_data);
 }
@@ -1102,12 +1164,17 @@ void InputDeviceSettingsNotificationController::ShowSixPackKeyRewritingNudge(
   prefs->SetInteger(shown_count_pref_name, shown_count + 1);
   prefs->SetTime(last_shown_time_pref_name, now);
 
-  AnchoredNudgeData nudge_data(
-      kSixPackKeyNoMatchNudgeId, NudgeCatalogName::kSixPackRemappingPressed,
-      GetSixPackShortcutUpdatedString(key_code, old_matched_modifier));
+  AnchoredNudgeData nudge_data(kSixPackKeyNoMatchNudgeId,
+                               NudgeCatalogName::kSixPackRemappingPressed,
+                               GetSixPackShortcutUpdatedString(key_code));
   nudge_data.title_text = l10n_util::GetStringUTF16(
       IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_NUDGE_TITLE);
-
+  std::vector<ui::KeyboardCode> keyboard_codes = {ui::VKEY_FUNCTION};
+  InsertSixPackShortcutKeyboardCodes(key_code, keyboard_codes);
+  nudge_data.keyboard_codes = std::move(keyboard_codes);
+  nudge_data.image_model =
+      ui::ResourceBundle::GetSharedInstance().GetThemedLottieImageNamed(
+          IDR_KEYBOARD_FN_KEY_NUDGE_IMAGE);
   AnchoredNudgeManager::Get()->Show(nudge_data);
 }
 
@@ -1141,6 +1208,10 @@ void InputDeviceSettingsNotificationController::ShowCapsLockRewritingNudge() {
           IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_CAPS_LOCK_NUDGE_DESCRIPTION));
   nudge_data.title_text = l10n_util::GetStringUTF16(
       IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_NUDGE_TITLE);
+  nudge_data.keyboard_codes = {ui::VKEY_FUNCTION, ui::VKEY_RIGHT_ALT};
+  nudge_data.image_model =
+      ui::ResourceBundle::GetSharedInstance().GetThemedLottieImageNamed(
+          IDR_KEYBOARD_FN_KEY_NUDGE_IMAGE);
 
   AnchoredNudgeManager::Get()->Show(nudge_data);
 }

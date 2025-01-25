@@ -13,7 +13,7 @@
 namespace content {
 
 KeyboardEventProcessingResult RenderWidgetHostDelegate::PreHandleKeyboardEvent(
-    const NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   return KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
@@ -28,7 +28,7 @@ bool RenderWidgetHostDelegate::HandleWheelEvent(
 }
 
 bool RenderWidgetHostDelegate::HandleKeyboardEvent(
-    const NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   return false;
 }
 
@@ -62,7 +62,7 @@ BrowserAccessibilityManager*
 
 // If a delegate does not override this, the RenderWidgetHostView will
 // assume it is the sole platform event consumer.
-RenderWidgetHostInputEventRouter*
+input::RenderWidgetHostInputEventRouter*
 RenderWidgetHostDelegate::GetInputEventRouter() {
   return nullptr;
 }
@@ -159,10 +159,6 @@ ukm::SourceId RenderWidgetHostDelegate::GetCurrentPageUkmSourceId() {
 }
 
 bool RenderWidgetHostDelegate::IsShowingContextMenuOnPage() const {
-  return false;
-}
-
-bool RenderWidgetHostDelegate::IsPortal() {
   return false;
 }
 

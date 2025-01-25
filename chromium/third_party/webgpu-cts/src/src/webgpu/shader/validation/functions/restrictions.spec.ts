@@ -292,7 +292,7 @@ const kFunctionParamTypeCases: Record<string, ParamTypeCase> = {
   invalid_ptr5: { name: `ptr<private,u32,write>`, valid: false }, // Can't specify access mode
   invalid_ptr6: { name: `ptr<private,u32,read_write>`, valid: false }, // Can't specify access mode
   invalid_ptr7: { name: `ptr<private,clamp>`, valid: false }, // Invalid store type
-  invalid_ptr8: { name: `ptr<function, texture_external>`, valid: false }, // non-constructable pointer type
+  invalid_ptr8: { name: `ptr<function, texture_external>`, valid: false }, // non-constructible pointer type
 };
 
 g.test('function_parameter_types')
@@ -451,6 +451,12 @@ const kFunctionParamValueCases: Record<string, ParamValueCase> = {
   ptr3: { value: `&g_u32`, matches: ['ptr3'] },
   ptr4: { value: `&g_constructible`, matches: ['ptr4'] },
 
+  ptr_let1: { value: `ptr_f_u32`, matches: ['ptr1'] },
+  ptr_let2: { value: `ptr_f_constructible`, matches: ['ptr2'] },
+  ptr_let3: { value: `ptr_g_u32`, matches: ['ptr3'] },
+  ptr_let4: { value: `ptr_g_constructible`, matches: ['ptr4'] },
+  ptr_let5: { value: `let_let_f_u32`, matches: ['ptr1'] },
+
   // Requires 'unrestricted_pointer_parameters' WGSL feature
   ptr5: {
     value: `&f_constructible.b`,
@@ -602,6 +608,11 @@ fn foo() {
   var f_array5 : array<bool, 4>;
   var f_constructible : constructible;
   var f_struct_with_array : struct_with_array;
+  let ptr_f_u32 = &f_u32;
+  let ptr_f_constructible = &f_constructible;
+  let ptr_g_u32 = &g_u32;
+  let ptr_g_constructible = &g_constructible;
+  let let_let_f_u32 = ptr_f_u32;
 
   bar(${arg.value});
 }

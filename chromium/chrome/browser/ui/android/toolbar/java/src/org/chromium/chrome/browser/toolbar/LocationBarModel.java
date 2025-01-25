@@ -23,7 +23,6 @@ import org.jni_zero.NativeMethods;
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.omnibox.ChromeAutocompleteSchemeClassifier;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
@@ -152,12 +151,10 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
 
     private Tab mTab;
     private int mPrimaryColor;
-    private LayoutStateProvider mLayoutStateProvider;
 
-    private boolean mIsIncognito;
+    private boolean mIsIncognitoBranded;
+    private boolean mIsOffTheRecord;
     private boolean mIsUsingBrandColor;
-    private boolean mShouldShowOmniboxInOverviewMode;
-    private boolean mIsShowingStartSurface;
 
     private long mNativeLocationBarModelAndroid;
     private ObserverList<LocationBarDataProvider.Observer> mLocationBarDataObservers =
@@ -253,10 +250,12 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
         mProfile = profile;
         performProfileDependentInitializationIfRequired();
 
-        boolean isIncognito = profile.isOffTheRecord();
+        boolean isOffTheRecord = profile.isOffTheRecord();
+        boolean isIncognitoBranded = profile.isIncognitoBranded();
 
-        if (mIsIncognito != isIncognito) {
-            mIsIncognito = isIncognito;
+        if (mIsOffTheRecord != isOffTheRecord || mIsIncognitoBranded != isIncognitoBranded) {
+            mIsOffTheRecord = isOffTheRecord;
+            mIsIncognitoBranded = isIncognitoBranded;
             notifyIncognitoStateChanged();
         }
 
@@ -299,27 +298,17 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
 
     @Override
     public GURL getCurrentGurl() {
-        if (isInOverviewAndShowingOmnibox()) {
-            return UrlConstants.ntpGurl();
-        }
-
         return mVisibleGurl;
     }
 
     /**
      * Reterived updated cached values for the current URL.
+     *
      * @return whether the URL value has changed.
      */
     @VisibleForTesting
     boolean updateVisibleGurl() {
         try (TraceEvent te = TraceEvent.scoped("LocationBarModel.updateVisibleGurl")) {
-            if (isInOverviewAndShowingOmnibox()) {
-                mFormattedFullUrl = "";
-                mUrlForDisplay = "";
-                mVisibleGurl = UrlConstants.ntpGurl();
-                return true;
-            }
-
             GURL gurl = getUrlOfVisibleNavigationEntry();
             if (!gurl.equals(mVisibleGurl)) {
                 mVisibleGurl = gurl;
@@ -370,7 +359,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
             }
 
             GURL gurl = getCurrentGurl();
-            if (!UrlBarData.shouldShowUrl(gurl, isIncognito())) {
+            if (!UrlBarData.shouldShowUrl(gurl, isOffTheRecord())) {
                 return UrlBarData.EMPTY;
             }
 
@@ -423,7 +412,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
                 && shouldEmphasizeUrl()) {
             final @BrandedColorScheme int brandedColorScheme =
                     OmniboxResourceProvider.getBrandedColorScheme(
-                            mContext, isIncognito(), getPrimaryColor());
+                            mContext, isIncognitoBranded(), getPrimaryColor());
             final @ColorInt int nonEmphasizedColor =
                     OmniboxResourceProvider.getUrlBarSecondaryTextColor(
                             mContext, brandedColorScheme);
@@ -488,7 +477,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
      */
     @VisibleForTesting
     public boolean shouldEmphasizeHttpsScheme() {
-        return !isUsingBrandColor() && !isIncognito();
+        return !isUsingBrandColor() && !isIncognitoBranded();
     }
 
     @Override
@@ -507,7 +496,17 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
 
     @Override
     public boolean isIncognito() {
-        return mIsIncognito;
+        return mIsOffTheRecord;
+    }
+
+    @Override
+    public boolean isIncognitoBranded() {
+        return mIsIncognitoBranded;
+    }
+
+    @Override
+    public boolean isOffTheRecord() {
+        return mIsOffTheRecord;
     }
 
     private void notifyIncognitoStateChanged() {
@@ -516,46 +515,14 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
         }
     }
 
-    /**
-     * Returns whether the location bar is showing and the app is in overview mode. "Overview mode"
-     * here is a catchall for "UI steady state without a selected tab." In practice, there are only
-     * two possible scenarios for overview mode: the start surface and the tab switcher, the latter
-     * of which does not show the omnibox. This effectively means that this method only returns true
-     * when the start surface homepage is showing.
-     */
-    @Override
-    public boolean isInOverviewAndShowingOmnibox() {
-        if (!mShouldShowOmniboxInOverviewMode) return false;
-
-        return mLayoutStateProvider != null && mIsShowingStartSurface;
-    }
-
-    /**
-     * @return Whether the location bar should show when in overview mode.
-     */
-    @Override
-    public boolean shouldShowLocationBarInOverviewMode() {
-        return mShouldShowOmniboxInOverviewMode;
-    }
-
     @Override
     public Profile getProfile() {
         return mProfile;
     }
 
-    public void setLayoutStateProvider(LayoutStateProvider layoutStateProvider) {
-        mLayoutStateProvider = layoutStateProvider;
-    }
-
-    public void setShouldShowOmniboxInOverviewMode(boolean shouldShowOmniboxInOverviewMode) {
-        if (mShouldShowOmniboxInOverviewMode != shouldShowOmniboxInOverviewMode) {
-            mShouldShowOmniboxInOverviewMode = shouldShowOmniboxInOverviewMode;
-            notifyPrimaryColorChanged();
-        }
-    }
-
     /**
      * Sets the primary color and changes the state for isUsingBrandColor.
+     *
      * @param color The primary color for the current tab.
      */
     public void setPrimaryColor(int color) {
@@ -566,25 +533,21 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
 
     private void updateUsingBrandColor() {
         mIsUsingBrandColor =
-                !isIncognito()
+                !isIncognitoBranded()
                         && mPrimaryColor
-                                != ChromeColors.getDefaultThemeColor(mContext, isIncognito())
+                                != ChromeColors.getDefaultThemeColor(mContext, isIncognitoBranded())
                         && hasTab()
                         && !mTab.isNativePage();
     }
 
     @Override
     public int getPrimaryColor() {
-        return isInOverviewAndShowingOmnibox()
-                ? ChromeColors.getDefaultThemeColor(mContext, isIncognito())
-                : mPrimaryColor;
+        return mPrimaryColor;
     }
 
     @Override
     public boolean isUsingBrandColor() {
-        // If the overview is visible, force use of primary color, which is also overridden when the
-        // overview is visible.
-        return isInOverviewAndShowingOmnibox() || mIsUsingBrandColor;
+        return mIsUsingBrandColor;
     }
 
     public void notifyPrimaryColorChanged() {
@@ -595,18 +558,11 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
 
     @Override
     public boolean isOfflinePage() {
-        // Start Surface homepage is not bond with a tab and mTab is kept as the previous tab if
-        // homepage is shown. |!isInOverviewAndShowingOmnibox()| is added here to make sure Start
-        // Surface homepage is not regarded as offline.
-        return hasTab() && mOfflineStatus.isOfflinePage(mTab) && !isInOverviewAndShowingOmnibox();
+        return hasTab() && mOfflineStatus.isOfflinePage(mTab);
     }
 
     @Override
     public boolean isPaintPreview() {
-        // Start Surface homepage is not bound with a tab and mTab is kept as the previous tab if
-        // the homepage is shown. This is added here to make sure Start Surface homepage is not
-        // regarded as a paint preview.
-        if (isInOverviewAndShowingOmnibox()) return false;
         return hasTab() && TabbedPaintPreview.get(mTab).isShowing();
     }
 
@@ -618,10 +574,6 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     @Override
     public int getPageClassification(boolean isFocusedFromFakebox, boolean isPrefetch) {
         if (mNativeLocationBarModelAndroid == 0) return PageClassification.INVALID_SPEC_VALUE;
-
-        // Provide NTP as page class in overview mode (when Start Surface is enabled). No call
-        // to the backend necessary or possible, since there is no tab or navigation entry.
-        if (isInOverviewAndShowingOmnibox()) return PageClassification.NTP_VALUE;
 
         return LocationBarModelJni.get()
                 .getPageClassification(
@@ -656,7 +608,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     @VisibleForTesting
     @ConnectionSecurityLevel
     int getSecurityLevel(Tab tab, boolean isOfflinePage) {
-        if (tab == null || isOfflinePage || isInOverviewAndShowingOmnibox()) {
+        if (tab == null || isOfflinePage) {
             return ConnectionSecurityLevel.NONE;
         }
 
@@ -707,8 +659,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
                 (mProfile != null
                                 && !SearchEngineUtils.getForProfile(mProfile)
                                         .shouldShowSearchEngineLogo())
-                        || mNtpDelegate.isCurrentlyVisible()
-                        || isInOverviewAndShowingOmnibox();
+                        || mNtpDelegate.isCurrentlyVisible();
 
         return SecurityStatusIcon.getSecurityIconResource(
                 securityLevel,
@@ -726,24 +677,25 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
 
         final @ColorInt int color = getPrimaryColor();
         final @BrandedColorScheme int brandedColorScheme =
-                OmniboxResourceProvider.getBrandedColorScheme(mContext, isIncognito(), color);
+                OmniboxResourceProvider.getBrandedColorScheme(
+                        mContext, isIncognitoBranded(), color);
 
         // Assign red color to security icon if the page shows security warning.
         return getSecurityIconColorWithSecurityLevel(
-                getSecurityLevel(), brandedColorScheme, isIncognito());
+                getSecurityLevel(), brandedColorScheme, isIncognitoBranded());
     }
 
     /**
-     * Get the color for the security icon for different security levels.
-     * If we are using dark background (dark mode or incognito mode), we should return light red.
-     * If we are using light background (light mode, but not LIGHT_BRANDED_THEME), we should return
-     * dark red. The default brand color will be returned if no change is needed.
+     * Get the color for the security icon for different security levels. If we are using dark
+     * background (dark mode or incognito mode), we should return light red. If we are using light
+     * background (light mode, but not LIGHT_BRANDED_THEME), we should return dark red. The default
+     * brand color will be returned if no change is needed.
      *
      * @param connectionSecurityLevel The connection security level for the current website.
      * @param brandedColorScheme The branded color scheme for the omnibox.
      * @param isIncognito Whether the tab is in Incognito mode.
      * @return The color resource for the security icon, returns -1 if doe snot need to change
-     *         color.
+     *     color.
      */
     @VisibleForTesting
     protected @ColorRes int getSecurityIconColorWithSecurityLevel(
@@ -821,13 +773,8 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
                         mNativeLocationBarModelAndroid, LocationBarModel.this);
     }
 
-    /**
-     * Set whether the start surface is showing or not and notify changes.
-     *
-     * @param isShowingStartSurface Whether Start surface layout is showing or not.
-     */
-    public void updateForNonStaticLayout(boolean isShowingStartSurface) {
-        mIsShowingStartSurface = isShowingStartSurface;
+    /** Notify changes for non static layout. */
+    public void updateForNonStaticLayout() {
         notifyTitleChanged();
         notifyUrlChanged();
         notifyPrimaryColorChanged();

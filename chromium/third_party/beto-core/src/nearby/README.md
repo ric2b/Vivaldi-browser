@@ -32,10 +32,10 @@ Our project requires specific versions of system dependencies like OpenSSL and
 protobuf in order to build correctly. To make the setup of this easier you can
 use Docker to handle setting up the environment in a container.
 
-First install Docker then build and run the image:
+First install Docker then build and run the image from repo root:
 
 ```
-sudo docker build -t nearby_rust:v1.0 ..
+sudo docker build -t nearby_rust:v1.0 .
 sudo docker run --rm -it nearby_rust:v1.0
 ```
 

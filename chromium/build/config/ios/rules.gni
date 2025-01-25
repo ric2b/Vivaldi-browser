@@ -109,7 +109,7 @@ _ios_xcode_xcuitest_bundle_id = "com.apple.product-type.bundle.ui-testing"
 #
 #   transparent
 #       (optional) boolean, whether the bundle is "transparent"; defaults to
-#       "false" if ommitted; a bundle is considered "transparent" if it does
+#       "false" if omitted; a bundle is considered "transparent" if it does
 #       not package the "bundle_data" deps but forward them to all targets
 #       the depend on it (unless the "bundle_data" target sets "product_type"
 #       to the same value as the "create_signed_bundle" target).
@@ -341,7 +341,7 @@ template("create_signed_bundle") {
       # rebase_path here unless using RBE and system Xcode (as in that
       # case the system framework are found via a symlink in root_build_dir).
       foreach(_framework, invoker.extra_system_frameworks) {
-        if (use_system_xcode && (use_remoteexec || use_siso)) {
+        if (use_system_xcode && use_remoteexec) {
           _framework_path = rebase_path(_framework, root_build_dir)
         } else {
           _framework_path = _framework
@@ -511,6 +511,13 @@ template("ios_info_plist") {
 #       application. If defined, it must corresponds to a `swift_source_set`
 #       target configured with `generate_intents = true`.
 #
+#   transparent
+#       (optional) boolean, whether the bundle is "transparent"; defaults to
+#       "false" if omitted; a bundle is considered "transparent" if it does
+#       not package the "bundle_data" deps but forward them to all targets
+#       the depend on it (unless the "bundle_data" target sets "product_type"
+#       to the same value as the "create_signed_bundle" target).
+#
 # For more information, see "gn help executable".
 template("ios_app_bundle") {
   _output_name = target_name
@@ -620,6 +627,7 @@ template("ios_app_bundle") {
                              "info_plist_target",
                              "output_name",
                              "product_type",
+                             "transparent",
                              "visibility",
                              "xcode_extra_attributes",
                            ])
@@ -840,6 +848,7 @@ template("ios_app_bundle") {
                                "public_configs",
                                "public_deps",
                                "testonly",
+                               "transparent",
                                "visibility",
                                "xcode_extra_attributes",
                              ])
@@ -1209,7 +1218,7 @@ template("bundle_data_xcassets") {
 #
 #   transparent
 #       (optional) boolean, whether the bundle is "transparent"; defaults to
-#       "false" if ommitted; a bundle is considered "transparent" if it does
+#       "false" if omitted; a bundle is considered "transparent" if it does
 #       not package the "bundle_data" deps but forward them to all targets
 #       the depend on it (unless the "bundle_data" target sets "product_type"
 #       to "com.apple.product-type.framework").
@@ -1698,6 +1707,7 @@ template("ios_xctest_bundle") {
                              "data_deps",
                              "enable_code_signing",
                              "product_type",
+                             "transparent",
                              "xcode_test_application_name",
                            ])
 
@@ -1912,7 +1922,7 @@ template("ios_xcuitest_test_runner_bundle") {
              "-o=" + rebase_path(_output_name, root_build_dir),
            ] + rebase_path(sources, root_build_dir)
 
-    if (use_system_xcode && (use_remoteexec || use_siso)) {
+    if (use_system_xcode && use_remoteexec) {
       deps = [ "//build/config/ios:copy_xctrunner_app" ]
     }
   }
@@ -1945,7 +1955,7 @@ template("ios_xcuitest_test_runner_bundle") {
 
     outputs = [ "{{bundle_contents_dir}}/PkgInfo" ]
 
-    if (use_system_xcode && (use_remoteexec || use_siso)) {
+    if (use_system_xcode && use_remoteexec) {
       public_deps = [ "//build/config/ios:copy_xctrunner_app" ]
     }
   }

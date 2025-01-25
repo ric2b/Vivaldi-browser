@@ -11,6 +11,7 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/not_fatal_until.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
@@ -277,8 +278,6 @@ class PictureBufferManagerImpl : public PictureBufferManager {
 
     frame->set_color_space(picture.color_space());
 
-    frame->set_shared_image_format_type(picture.shared_image_format_type());
-
     frame->metadata().allow_overlay = picture.allow_overlay();
     frame->metadata().read_lock_fences_enabled =
         picture.read_lock_fences_enabled();
@@ -306,7 +305,7 @@ class PictureBufferManagerImpl : public PictureBufferManager {
     // Record the picture buffer as waiting for SyncToken release (even if it
     // has been dismissed already).
     const auto& it = picture_buffers_.find(picture_buffer_id);
-    DCHECK(it != picture_buffers_.end());
+    CHECK(it != picture_buffers_.end(), base::NotFatalUntil::M130);
     DCHECK_GT(it->second.output_count, 0);
     it->second.output_count--;
     it->second.waiting_for_synctoken_count++;
@@ -339,7 +338,7 @@ class PictureBufferManagerImpl : public PictureBufferManager {
     {
       base::AutoLock lock(picture_buffers_lock_);
       const auto& it = picture_buffers_.find(picture_buffer_id);
-      DCHECK(it != picture_buffers_.end());
+      CHECK(it != picture_buffers_.end(), base::NotFatalUntil::M130);
 
       DCHECK_GT(it->second.waiting_for_synctoken_count, 0);
       it->second.waiting_for_synctoken_count--;
@@ -372,7 +371,7 @@ class PictureBufferManagerImpl : public PictureBufferManager {
     {
       base::AutoLock lock(picture_buffers_lock_);
       const auto& it = picture_buffers_.find(picture_buffer_id);
-      DCHECK(it != picture_buffers_.end());
+      CHECK(it != picture_buffers_.end(), base::NotFatalUntil::M130);
       DCHECK(it->second.dismissed);
       DCHECK(!it->second.IsInUse());
       scoped_shared_images = std::move(it->second.scoped_shared_images);

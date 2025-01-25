@@ -139,9 +139,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   [self selectCollectionViewItemWithID:_selectedItemID animated:NO];
   [self scrollCollectionViewToSelectedItemAnimated:NO];
 
-  // Update the delegate, in case it wasn't set when `items` was populated.
-  [self.delegate pinnedTabsViewController:self didChangeItemCount:_items.count];
-
   _lastInsertedItemID = web::WebStateID();
   _contentAppeared = YES;
 }
@@ -315,8 +312,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
   [self updatePinnedTabsVisibility];
 
-  [self.delegate pinnedTabsViewController:self didChangeItemCount:items.count];
-
   [self.collectionView reloadData];
 
   [self deselectAllCollectionViewItemsAnimated:YES];
@@ -478,11 +473,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 - (UIContextMenuConfiguration*)collectionView:(UICollectionView*)collectionView
     contextMenuConfigurationForItemAtIndexPath:(NSIndexPath*)indexPath
                                          point:(CGPoint)point {
-  NSUInteger index = base::checked_cast<NSUInteger>(indexPath.item);
-  CHECK_LT(index, _items.count);
-  const web::WebStateID itemID = _items[index].identifier;
-  [self.delegate pinnedViewController:self
-      didRequestContextMenuForItemWithID:itemID];
+  [self.delegate pinnedViewControllerDidRequestContextMenu:self];
 
   PinnedCell* cell = base::apple::ObjCCastStrict<PinnedCell>(
       [self.collectionView cellForItemAtIndexPath:indexPath]);
@@ -564,9 +555,11 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (void)collectionView:(UICollectionView*)collectionView
     dropSessionDidEnter:(id<UIDropSession>)session {
-  _dropOverlayView.backgroundColor = [UIColor colorNamed:kBlueColor];
-  self.collectionView.backgroundColor = [UIColor colorNamed:kBlueColor];
-  self.collectionView.backgroundView.hidden = YES;
+  if (_dragSessionEnabled) {
+    _dropOverlayView.backgroundColor = [UIColor colorNamed:kBlueColor];
+    self.collectionView.backgroundColor = [UIColor colorNamed:kBlueColor];
+    self.collectionView.backgroundView.hidden = YES;
+  }
 }
 
 - (void)collectionView:(UICollectionView*)collectionView
@@ -742,7 +735,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   [_items insertObject:item atIndex:index];
   _selectedItemID = selectedItemID;
   _lastInsertedItemID = item.identifier;
-  [self.delegate pinnedTabsViewController:self didChangeItemCount:_items.count];
 
   [self.collectionView insertItemsAtIndexPaths:@[ CreateIndexPath(index) ]];
 }
@@ -755,7 +747,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                                       (web::WebStateID)selectedItemID {
   [_items removeObjectAtIndex:index];
   _selectedItemID = selectedItemID;
-  [self.delegate pinnedTabsViewController:self didChangeItemCount:_items.count];
 
   [self.collectionView deleteItemsAtIndexPaths:@[ CreateIndexPath(index) ]];
 }
@@ -763,13 +754,11 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 // Handles the completion of item insertion into the collection view.
 - (void)handleItemInsertionCompletion {
   [self updateCollectionViewAfterItemInsertion];
-  [self.delegate pinnedTabsViewController:self didChangeItemCount:_items.count];
 }
 
 // Handles the completion of item removal into the collection view.
 - (void)handleItemRemovalCompletion {
   [self updateCollectionViewAfterItemDeletion];
-  [self.delegate pinnedTabsViewController:self didChangeItemCount:_items.count];
 }
 
 // Configures the collectionView.

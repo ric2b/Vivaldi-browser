@@ -23,6 +23,11 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/wtf/text/string_hasher.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
@@ -409,22 +414,18 @@ TEST(StringHasherTest, StringHasher_computeHashAndMaskTop8Bits) {
 }
 
 TEST(StringHasherTest, StringHasher_hashMemory) {
-  EXPECT_EQ(kEmptyStringHash & 0xFFFFFF, StringHasher::HashMemory(nullptr, 0));
-  EXPECT_EQ(kEmptyStringHash & 0xFFFFFF,
-            StringHasher::HashMemory(kNullUChars, 0));
-  EXPECT_EQ(kEmptyStringHash & 0xFFFFFF, StringHasher::HashMemory<0>(nullptr));
-  EXPECT_EQ(kEmptyStringHash & 0xFFFFFF,
-            StringHasher::HashMemory<0>(kNullUChars));
+  EXPECT_EQ(kEmptyStringHash, StringHasher::HashMemory(nullptr, 0));
+  EXPECT_EQ(kEmptyStringHash, StringHasher::HashMemory(kNullUChars, 0));
+  EXPECT_EQ(kEmptyStringHash, StringHasher::HashMemory<0>(nullptr));
+  EXPECT_EQ(kEmptyStringHash, StringHasher::HashMemory<0>(kNullUChars));
 
-  EXPECT_EQ(kSingleNullCharacterHash & 0xFFFFFF,
-            StringHasher::HashMemory(kNullUChars, 2));
-  EXPECT_EQ(kSingleNullCharacterHash & 0xFFFFFF,
-            StringHasher::HashMemory<2>(kNullUChars));
+  EXPECT_EQ(kSingleNullCharacterHash, StringHasher::HashMemory(kNullUChars, 2));
+  EXPECT_EQ(kSingleNullCharacterHash, StringHasher::HashMemory<2>(kNullUChars));
 
-  EXPECT_EQ(kTestAHash5 & 0xFFFFFF, StringHasher::HashMemory(kTestAUChars, 10));
-  EXPECT_EQ(kTestAHash5 & 0xFFFFFF, StringHasher::HashMemory<10>(kTestAUChars));
-  EXPECT_EQ(kTestBHash5 & 0xFFFFFF, StringHasher::HashMemory(kTestBUChars, 10));
-  EXPECT_EQ(kTestBHash5 & 0xFFFFFF, StringHasher::HashMemory<10>(kTestBUChars));
+  EXPECT_EQ(kTestAHash5, StringHasher::HashMemory(kTestAUChars, 10));
+  EXPECT_EQ(kTestAHash5, StringHasher::HashMemory<10>(kTestAUChars));
+  EXPECT_EQ(kTestBHash5, StringHasher::HashMemory(kTestBUChars, 10));
+  EXPECT_EQ(kTestBHash5, StringHasher::HashMemory<10>(kTestBUChars));
 }
 
 }  // namespace WTF

@@ -329,8 +329,7 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   // otherwise alter their behavior to attempt to buffer media for further
   // playback.
   [[nodiscard]] bool AppendToParseBuffer(const std::string& id,
-                                         const uint8_t* data,
-                                         size_t length);
+                                         base::span<const uint8_t> data);
 
   // Tells the stream parser for the source buffer associated with `id` to parse
   // more of the data previously sent to it from this object's

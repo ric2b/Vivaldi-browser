@@ -12,7 +12,12 @@
 #include "components/manta/mahi_provider.h"
 #include "components/manta/manta_service.h"
 #include "components/manta/sparky/sparky_provider.h"
+#include "components/manta/sparky/sparky_util.h"
 #include "ui/gfx/image/image_skia.h"
+
+namespace gfx {
+class Rect;
+}  // namespace gfx
 
 namespace ash {
 
@@ -43,7 +48,10 @@ class SparkyManagerImpl : public chromeos::MahiManager, public KeyedService {
   void OnContextMenuClicked(
       crosapi::mojom::MahiContextMenuRequestPtr context_menu_request) override;
   void OpenFeedbackDialog() override;
+  void OpenMahiPanel(int64_t display_id,
+                     const gfx::Rect& mahi_menu_bounds) override {}
   bool IsEnabled() override;
+  void SetMediaAppPDFFocused() override;
 
   // Notifies the panel that refresh is available or not for the corresponding
   // surface.
@@ -67,8 +75,8 @@ class SparkyManagerImpl : public chromeos::MahiManager, public KeyedService {
 
   void OnSparkyProviderQAResponse(const std::u16string& question,
                                   MahiAnswerQuestionCallback callback,
-                                  const std::string& response,
-                                  manta::MantaStatus status);
+                                  manta::MantaStatus status,
+                                  manta::DialogTurn* latest_turn);
 
   crosapi::mojom::MahiPageInfoPtr current_page_info_ =
       crosapi::mojom::MahiPageInfo::New();
@@ -78,9 +86,9 @@ class SparkyManagerImpl : public chromeos::MahiManager, public KeyedService {
 
   raw_ptr<Profile> profile_;
 
-  // Pair of question and their corresponding answer for the current panel
-  // content.
-  std::vector<std::pair<std::string, std::string>> current_panel_qa_;
+  // Stores the dialog of the question and answers along with any associated
+  // actions.
+  std::vector<manta::DialogTurn> dialog_turns_;
 
   std::unique_ptr<manta::SparkyProvider> sparky_provider_;
 

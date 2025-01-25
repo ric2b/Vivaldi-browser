@@ -17,6 +17,7 @@
 #include "src/compiler/turboshaft/operation-matcher.h"
 #include "src/compiler/turboshaft/operations.h"
 #include "src/compiler/turboshaft/opmasks.h"
+#include "src/compiler/turboshaft/representations.h"
 #include "src/compiler/turboshaft/use-map.h"
 
 
@@ -74,8 +75,12 @@ struct TurbofanAdapter {
       return node_->opcode() == IrOpcode::kRelocatableInt32Constant;
     }
     int32_t int32_value() const {
-      DCHECK(is_int32() || is_relocatable_int32());
-      return OpParameter<int32_t>(node_->op());
+      if (is_int32()) return OpParameter<int32_t>(node_->op());
+      DCHECK(is_relocatable_int32());
+      RelocatablePtrConstantInfo constant_info =
+          OpParameter<RelocatablePtrConstantInfo>(node_->op());
+      DCHECK_EQ(RelocatablePtrConstantInfo::kInt32, constant_info.type());
+      return static_cast<int32_t>(constant_info.value());
     }
     bool is_int64() const {
       return node_->opcode() == IrOpcode::kInt64Constant;
@@ -84,8 +89,12 @@ struct TurbofanAdapter {
       return node_->opcode() == IrOpcode::kRelocatableInt64Constant;
     }
     int64_t int64_value() const {
-      DCHECK(is_int64() || is_relocatable_int64());
-      return OpParameter<int64_t>(node_->op());
+      if (is_int64()) return OpParameter<int64_t>(node_->op());
+      DCHECK(is_relocatable_int64());
+      RelocatablePtrConstantInfo constant_info =
+          OpParameter<RelocatablePtrConstantInfo>(node_->op());
+      DCHECK_EQ(RelocatablePtrConstantInfo::kInt64, constant_info.type());
+      return constant_info.value();
     }
     bool is_heap_object() const {
       return node_->opcode() == IrOpcode::kHeapConstant;
@@ -769,6 +778,12 @@ struct TurboshaftAdapter : public turboshaft::OperationMatcher {
       UNREACHABLE();
     }
 
+    const turboshaft::TSCallDescriptor* ts_call_descriptor() const {
+      if (call_op_) return call_op_->descriptor;
+      if (tail_call_op_) return tail_call_op_->descriptor;
+      UNREACHABLE();
+    }
+
     operator node_t() const { return node_; }
 
    private:
@@ -851,6 +866,14 @@ struct TurboshaftAdapter : public turboshaft::OperationMatcher {
     LoadRepresentation loaded_rep() const {
       DCHECK_NOT_NULL(load_);
       return load_->machine_type();
+    }
+    turboshaft::MemoryRepresentation ts_loaded_rep() const {
+      DCHECK_NOT_NULL(load_);
+      return load_->loaded_rep;
+    }
+    turboshaft::RegisterRepresentation ts_result_rep() const {
+      DCHECK_NOT_NULL(load_);
+      return load_->result_rep;
     }
     bool is_protected(bool* traps_on_null) const {
       if (kind().with_trap_handler) {
@@ -969,6 +992,9 @@ struct TurboshaftAdapter : public turboshaft::OperationMatcher {
     StoreRepresentation stored_rep() const {
       return {op_->stored_rep.ToMachineType().representation(),
               op_->write_barrier};
+    }
+    turboshaft::MemoryRepresentation ts_stored_rep() const {
+      return op_->stored_rep;
     }
     base::Optional<AtomicMemoryOrder> memory_order() const {
       // TODO(nicohartmann@): Currently we don't support memory orders.

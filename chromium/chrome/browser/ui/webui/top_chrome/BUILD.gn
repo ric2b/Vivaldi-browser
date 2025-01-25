@@ -4,13 +4,24 @@
 
 source_set("top_chrome") {
   sources = [
+    "per_profile_webui_tracker.cc",
+    "per_profile_webui_tracker.h",
+    "preload_candidate_selector.h",
+    "preload_context.cc",
+    "preload_context.h",
+    "profile_preload_candidate_selector.cc",
+    "profile_preload_candidate_selector.h",
     "top_chrome_web_ui_controller.cc",
     "top_chrome_web_ui_controller.h",
+    "top_chrome_webui_config.cc",
+    "top_chrome_webui_config.h",
     "untrusted_top_chrome_web_ui_controller.cc",
     "untrusted_top_chrome_web_ui_controller.h",
   ]
   deps = [
     "//base",
+    "//chrome/browser/profiles:profile",
+    "//components/site_engagement/content:content",
     "//content/public/browser",
     "//ui/webui",
   ]

@@ -4,6 +4,7 @@
 
 #include "osp/impl/service_publisher_impl.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "util/osp_logging.h"

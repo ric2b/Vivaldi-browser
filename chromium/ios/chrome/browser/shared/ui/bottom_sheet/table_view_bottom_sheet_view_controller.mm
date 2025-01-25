@@ -84,6 +84,22 @@ NSString* const kCustomDetentIdentifier = @"customDetent";
              : UITableViewCellAccessoryNone;
 }
 
+- (void)adjustTransactionsPrimaryActionButtonHorizontalConstraints {
+  CGFloat buttonHorizontalMargin =
+      ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad
+           ? 64.0
+           : 24.0);
+
+  [self.primaryActionButton.leadingAnchor
+      constraintEqualToAnchor:(self.view.leadingAnchor)
+                     constant:buttonHorizontalMargin]
+      .active = YES;
+  [self.primaryActionButton.trailingAnchor
+      constraintEqualToAnchor:(self.view.trailingAnchor)
+                     constant:-buttonHorizontalMargin]
+      .active = YES;
+}
+
 #pragma mark - Subclassing
 
 - (UITableView*)createTableView {

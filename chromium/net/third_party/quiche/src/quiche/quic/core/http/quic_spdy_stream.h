@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <list>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "absl/base/attributes.h"
@@ -38,8 +39,8 @@
 #include "quiche/quic/platform/api/quic_flags.h"
 #include "quiche/quic/platform/api/quic_socket_address.h"
 #include "quiche/common/capsule.h"
+#include "quiche/common/http/http_header_block.h"
 #include "quiche/common/platform/api/quiche_mem_slice.h"
-#include "quiche/spdy/core/http2_header_block.h"
 #include "quiche/spdy/core/spdy_framer.h"
 
 namespace quic {
@@ -118,6 +119,7 @@ class QUICHE_EXPORT QuicSpdyStream
 
   // QuicStream implementation
   void OnClose() override;
+  void StopReading() override;
 
   // Override to maybe close the write side after writing.
   void OnCanWrite() override;
@@ -155,7 +157,7 @@ class QUICHE_EXPORT QuicSpdyStream
   // number of bytes sent, including data sent on the encoder stream when using
   // QPACK.
   virtual size_t WriteHeaders(
-      spdy::Http2HeaderBlock header_block, bool fin,
+      quiche::HttpHeaderBlock header_block, bool fin,
       quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
           ack_listener);
 
@@ -167,7 +169,7 @@ class QUICHE_EXPORT QuicSpdyStream
   // always have the FIN flag set.  Returns the number of bytes sent, including
   // data sent on the encoder stream when using QPACK.
   virtual size_t WriteTrailers(
-      spdy::Http2HeaderBlock trailer_block,
+      quiche::HttpHeaderBlock trailer_block,
       quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
           ack_listener);
 
@@ -209,7 +211,7 @@ class QUICHE_EXPORT QuicSpdyStream
 
   // Returns true if header contains a valid 3-digit status and parse the status
   // code to |status_code|.
-  static bool ParseHeaderStatusCode(const spdy::Http2HeaderBlock& header,
+  static bool ParseHeaderStatusCode(const quiche::HttpHeaderBlock& header,
                                     int* status_code);
   // Returns true if status_value (associated with :status) contains a valid
   // 3-digit status and parse the status code to |status_code|.
@@ -235,7 +237,7 @@ class QUICHE_EXPORT QuicSpdyStream
   bool trailers_decompressed() const { return trailers_decompressed_; }
 
   // Returns whatever trailers have been received for this stream.
-  const spdy::Http2HeaderBlock& received_trailers() const {
+  const quiche::HttpHeaderBlock& received_trailers() const {
     return received_trailers_;
   }
 
@@ -341,6 +343,14 @@ class QUICHE_EXPORT QuicSpdyStream
   void RegisterMetadataVisitor(MetadataVisitor* visitor);
   void UnregisterMetadataVisitor();
 
+  // Returns how long header decoding was delayed due to waiting for data to
+  // arrive on the QPACK encoder stream.
+  // Returns zero if header block could be decoded as soon as it was received.
+  // Returns `nullopt` if header block is not decoded yet.
+  std::optional<QuicTime::Delta> header_decoding_delay() const {
+    return header_decoding_delay_;
+  }
+
  protected:
   // Called when the received headers are too large. By default this will
   // reset the stream.
@@ -351,18 +361,20 @@ class QUICHE_EXPORT QuicSpdyStream
   virtual void OnTrailingHeadersComplete(bool fin, size_t frame_len,
                                          const QuicHeaderList& header_list);
   virtual size_t WriteHeadersImpl(
-      spdy::Http2HeaderBlock header_block, bool fin,
+      quiche::HttpHeaderBlock header_block, bool fin,
       quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
           ack_listener);
 
   virtual bool CopyAndValidateTrailers(const QuicHeaderList& header_list,
                                        bool expect_final_byte_offset,
                                        size_t* final_byte_offset,
-                                       spdy::Http2HeaderBlock* trailers);
+                                       quiche::HttpHeaderBlock* trailers);
 
   Visitor* visitor() { return visitor_; }
 
   void set_headers_decompressed(bool val) { headers_decompressed_ = val; }
+
+  virtual bool uses_capsules() const { return capsule_parser_ != nullptr; }
 
   void set_ack_listener(
       quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
@@ -427,7 +439,7 @@ class QUICHE_EXPORT QuicSpdyStream
   QuicByteCount GetNumFrameHeadersInInterval(QuicStreamOffset offset,
                                              QuicByteCount data_length) const;
 
-  void MaybeProcessSentWebTransportHeaders(spdy::Http2HeaderBlock& headers);
+  void MaybeProcessSentWebTransportHeaders(quiche::HttpHeaderBlock& headers);
   void MaybeProcessReceivedWebTransportHeaders();
 
   // Writes HTTP/3 DATA frame header. If |force_write| is true, use
@@ -471,7 +483,7 @@ class QUICHE_EXPORT QuicSpdyStream
   bool trailers_consumed_;
 
   // The parsed trailers received from the peer.
-  spdy::Http2HeaderBlock received_trailers_;
+  quiche::HttpHeaderBlock received_trailers_;
 
   // Headers accumulator for decoding HEADERS frame payload.
   std::unique_ptr<QpackDecodedHeadersAccumulator>
@@ -529,6 +541,15 @@ class QUICHE_EXPORT QuicSpdyStream
 
   // Empty if the headers are valid.
   std::string invalid_request_details_;
+
+  // Time when entire header block was received.
+  // Only set if decoding was blocked.
+  QuicTime header_block_received_time_ = QuicTime::Zero();
+
+  // Header decoding delay due to waiting for data on the QPACK encoder stream.
+  // Zero if header block could be decoded as soon as it was received.
+  // `nullopt` if header block is not decoded yet.
+  std::optional<QuicTime::Delta> header_decoding_delay_;
 };
 
 }  // namespace quic

@@ -570,6 +570,11 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     ruleSourceItem.rules_list_checksum = ruleSource->rules_list_checksum;
     ruleSourceItem.is_fetching = ruleSource->is_fetching;
     ruleSourceItem.is_loaded = YES;
+
+    std::string unsafeTitle = ruleSource->unsafe_adblock_metadata.title;
+    if (!unsafeTitle.empty()) {
+      ruleSourceItem.title = base::SysUTF8ToNSString(unsafeTitle);
+    }
   } else {
     ruleSourceItem.is_fetching = NO;
   }

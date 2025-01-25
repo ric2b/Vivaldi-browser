@@ -127,11 +127,12 @@ struct BookmarkMenuContainer {
   const raw_ptr<Delegate> delegate;
 };
 
-VivaldiContextMenu* CreateVivaldiContextMenu(content::WebContents* web_contents,
-                                             ui::SimpleMenuModel* menu_model,
-                                             const gfx::Rect& rect,
-                                             bool force_views,
-                                             VivaldiRenderViewContextMenu* context_menu);
+VivaldiContextMenu* CreateVivaldiContextMenu(
+    content::WebContents* web_contents,
+    ui::SimpleMenuModel* menu_model,
+    const gfx::Rect& rect,
+    bool force_views,
+    VivaldiRenderViewContextMenu* render_view_context_menu);
 
 VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
     content::WebContents* web_contents,
@@ -176,7 +177,7 @@ class VivaldiContextMenu : public VivaldiMenu {
   virtual void SetIcon(const gfx::Image& icon, int id) {}
   virtual void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) {}
   virtual bool HasDarkTextColor();
-  virtual void SetParentView(gfx::NativeView parent_view) {}
+  virtual bool IsViews() = 0;
 };
 
 class VivaldiBookmarkMenu : public VivaldiMenu {

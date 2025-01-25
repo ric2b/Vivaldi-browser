@@ -28,7 +28,6 @@ limitations under the License.
 #include "third_party/gpus/cuda/include/cuda.h"
 #include "xla/service/gpu/kernels/custom_kernel.h"
 #include "xla/service/gpu/kernels/cutlass_gemm.h"
-#include "xla/statusor.h"
 #include "xla/stream_executor/device_description.h"
 #include "xla/stream_executor/kernel.h"
 #include "xla/stream_executor/kernel_spec.h"
@@ -101,7 +100,7 @@ KernelArgsPacking ArgsPacking(int32_t m, int32_t n, int32_t k,
   // object constructed in the storage. For now we ignore it, and it's textbook
   // definition of UB, but for CUTLASS kernels we use today it's perfectly safe.
   struct Params {
-    alignas(64) std::byte storage[1024];
+    alignas(128) std::byte storage[1024];
   };
 
   return [=](const se::Kernel& kernel, const se::KernelArgs& args) -> Packed {

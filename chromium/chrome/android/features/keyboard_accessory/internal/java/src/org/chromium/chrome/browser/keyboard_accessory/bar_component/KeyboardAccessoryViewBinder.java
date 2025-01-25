@@ -18,6 +18,7 @@ import static org.chromium.chrome.browser.keyboard_accessory.bar_component.Keybo
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.SKIP_CLOSING_ANIMATION;
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.VISIBLE;
 
+import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -50,6 +51,9 @@ import java.util.function.Function;
  * the view accordingly.
  */
 class KeyboardAccessoryViewBinder {
+    private static final float GRAYED_OUT_OPACITY_ALPHA = 0.38f;
+    private static final float COMPLETE_OPACITY_ALPHA = 1.0f;
+
     static BarItemViewHolder create(
             KeyboardAccessoryView keyboarAccessory,
             UiConfiguration uiConfiguration,
@@ -102,6 +106,7 @@ class KeyboardAccessoryViewBinder {
     }
 
     static class BarItemChipViewHolder extends BarItemViewHolder<AutofillBarItem, ChipView> {
+        private static final float LARGE_FONT_THRESHOLD = 1.3f;
         private final View mRootViewForIPH;
         private final KeyboardAccessoryView mKeyboardAccessory;
         private final Function<AutofillSuggestion, Drawable> mSuggestionDrawableFunction;
@@ -110,7 +115,7 @@ class KeyboardAccessoryViewBinder {
                 ViewGroup parent,
                 KeyboardAccessoryView keyboardAccessory,
                 Function<AutofillSuggestion, Drawable> suggestionDrawableFunction) {
-            super(parent, R.layout.keyboard_accessory_suggestion);
+            super(parent, selectLayoutForScale(parent.getContext()));
             mRootViewForIPH = parent.getRootView();
             mKeyboardAccessory = keyboardAccessory;
             mSuggestionDrawableFunction = suggestionDrawableFunction;
@@ -142,6 +147,17 @@ class KeyboardAccessoryViewBinder {
                                         mRootViewForIPH,
                                         item.getSuggestion().getItemTag());
                     }
+                } else if (item.getFeatureForIPH()
+                        .equals(
+                                FeatureConstants
+                                        .KEYBOARD_ACCESSORY_PLUS_ADDRESS_CREATE_SUGGESTION)) {
+                    isIPHShown =
+                            showHelpBubble(
+                                    mKeyboardAccessory.getFeatureEngagementTracker(),
+                                    item.getFeatureForIPH(),
+                                    chipView,
+                                    mRootViewForIPH,
+                                    item.getSuggestion().getIPHDescriptionText());
                 } else {
                     isIPHShown =
                             showHelpBubble(
@@ -209,10 +225,37 @@ class KeyboardAccessoryViewBinder {
                             return true; // Click event consumed!
                         });
             }
-            chipView.setIcon(
-                    mSuggestionDrawableFunction.apply(item.getSuggestion()),
-                    /* tintWithTextColor= */ false);
+
+            float iconAlpha;
+            int textAppearance;
+            if (item.getSuggestion().applyDeactivatedStyle()) {
+                iconAlpha = GRAYED_OUT_OPACITY_ALPHA;
+                textAppearance = R.style.TextAppearance_TextMedium_Disabled;
+                chipView.setOnClickListener(null);
+                chipView.setOnLongClickListener(null);
+            } else {
+                iconAlpha = COMPLETE_OPACITY_ALPHA;
+                textAppearance = R.style.TextAppearance_ChipText;
+            }
+            chipView.getPrimaryTextView().setTextAppearance(textAppearance);
+            chipView.getSecondaryTextView().setTextAppearance(textAppearance);
+            Drawable iconDrawable = mSuggestionDrawableFunction.apply(item.getSuggestion());
+            if (iconDrawable != null) {
+                iconDrawable.setAlpha((int) (255 * iconAlpha));
+            }
+            chipView.setIcon(iconDrawable, /* tintWithTextColor= */ false);
+
             TraceEvent.end("BarItemChipViewHolder#bind");
+        }
+
+        @LayoutRes
+        private static int selectLayoutForScale(Context context) {
+            if (!ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_ELEGANT_TEXT_HEIGHT)) {
+                return R.layout.keyboard_accessory_suggestion;
+            }
+            return context.getResources().getConfiguration().fontScale >= LARGE_FONT_THRESHOLD
+                    ? R.layout.keyboard_accessory_suggestion_large
+                    : R.layout.keyboard_accessory_suggestion;
         }
     }
 

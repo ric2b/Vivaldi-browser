@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 
+#include "absl/functional/any_invocable.h"
+#include "absl/status/statusor.h"
 #include "internal/base/observer_list.h"
 #include "sharing/proto/rpc_resources.pb.h"
 
@@ -33,21 +35,24 @@ namespace sharing {
 //   server as a proxy.
 //   2) All the user's contacts are uploaded to Nearby server, along with an
 //   indication of what contacts are allowed for selected-contacts visibility
-//   mode. The Nearby server will distribute all-contacts and selected-contacts
-//   visibility certificates accordingly. For privacy reasons, the Nearby server
-//   needs to explicitly receive the list of contacts from the device instead of
-//   pulling them directly from People API.
+//   mode. The Nearby server will distribute all-contacts visibility
+//   certificates accordingly. For privacy reasons, the Nearby server needs to
+//   explicitly receive the list of contacts from the device instead of pulling
+//   them directly from People API.
 //
 // All contact data and update notifications are conveyed via observer methods;
 // the manager does not return data directly from function calls.
 class NearbyShareContactManager {
  public:
+  using ContactsCallback = absl::AnyInvocable<
+      void(absl::StatusOr<std::vector<nearby::sharing::proto::ContactRecord>>,
+           uint32_t num_unreachable_contacts_filtered_out) &&>;
+
   class Observer {
    public:
     virtual ~Observer() = default;
 
     virtual void OnContactsDownloaded(
-        const std::set<std::string>& allowed_contact_ids,
         const std::vector<nearby::sharing::proto::ContactRecord>& contacts,
         uint32_t num_unreachable_contacts_filtered_out) = 0;
     virtual void OnContactsUploaded(
@@ -76,21 +81,14 @@ class NearbyShareContactManager {
   // OnContactsUploaded().
   virtual void DownloadContacts() = 0;
 
-  // Assigns the set of contacts that the local device allows sharing with when
-  // in selected-contacts visibility mode. (Note: This set is irrelevant for
-  // all-contact visibility mode.) The allowed contact list determines what
-  // contacts receive the local device's "selected-contacts" visibility public
-  // certificates. Changes to the allowlist will trigger RPC calls to upload the
-  // new allowlist to the Nearby Share server.
-  virtual void SetAllowedContacts(
-      const std::set<std::string>& allowed_contact_ids) = 0;
+  // Retrieves the user's contact list from the server.
+  virtual void GetContacts(ContactsCallback callback) = 0;
 
  protected:
   virtual void OnStart() = 0;
   virtual void OnStop() = 0;
 
   void NotifyContactsDownloaded(
-      const std::set<std::string>& allowed_contact_ids,
       const std::vector<nearby::sharing::proto::ContactRecord>& contacts,
       uint32_t num_unreachable_contacts_filtered_out);
   void NotifyContactsUploaded(bool did_contacts_change_since_last_upload);

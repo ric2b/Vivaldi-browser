@@ -103,8 +103,8 @@ automates most of the process. If the [gerrit merge](/developers/how-tos/drover)
 does not apply cleanly you may want to reconsider whether the fix will introduce
 an unacceptable breakage risk. In the event that you can’t use gerrit to merge a
 fix, you still have the option of manually merging from a branch checkout. This
-follows the normal developer [normal patch
-process](/developers/contributing-code).
+follows the normal developer
+[normal patch process](https://chromium.googlesource.com/chromium/src/+/main/docs/contributing.md).
 
 #### **Post-merge bug cleanup.**
 

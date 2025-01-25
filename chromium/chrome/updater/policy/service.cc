@@ -277,8 +277,8 @@ PolicyStatus<int> PolicyService::GetPolicyForAppInstalls(
 PolicyStatus<int> PolicyService::GetPolicyForAppUpdates(
     const std::string& app_id) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (app_id == kUpdaterAppId) {
-    return {};  // Self-updates for the updater can't be disabled by policy.
+  if (app_id == kUpdaterAppId || app_id == kQualificationAppId) {
+    return {};  // Updater self-updates and qualification can't be disabled.
   }
   return QueryAppPolicy(
       &PolicyManagerInterface::GetEffectivePolicyForAppUpdates, app_id);
@@ -341,7 +341,6 @@ PolicyStatus<int> PolicyService::DeprecatedGetLastCheckPeriodMinutes() const {
   return QueryPolicy(
       &PolicyManagerInterface::GetLastCheckPeriod,
       base::BindRepeating([](std::optional<base::TimeDelta> period) {
-        // TODO: C++23: `return period.transform(&base::TimeDelta::InMinutes);`
         return period ? std::make_optional(period->InMinutes()) : std::nullopt;
       }));
 }
@@ -406,7 +405,7 @@ base::Value PolicyService::GetAllPolicies() const {
         "DownloadPreference",
         base::Value::Dict()
             .Set("value", download_preference.policy())
-            .Set("source", update_supressed_times.effective_policy()->source));
+            .Set("source", download_preference.effective_policy()->source));
   }
 
   const PolicyStatus<int> cache_size_limit = GetPackageCacheSizeLimitMBytes();

@@ -24,6 +24,8 @@
 #include "chrome/browser/profiles/profile_keyed_service_factory.h"
 #include "chromeos/ash/components/drivefs/drivefs_host.h"
 #include "chromeos/ash/components/drivefs/drivefs_pinning_manager.h"
+#include "chromeos/ash/components/drivefs/mojom/drivefs.mojom.h"
+#include "chromeos/ash/components/drivefs/mojom/notifications.mojom.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/network_state_handler_observer.h"
@@ -36,6 +38,7 @@
 #include "google_apis/common/api_error_codes.h"
 #include "google_apis/common/auth_service_interface.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 
 class PrefService;
 
@@ -76,6 +79,26 @@ enum class DriveMountStatus {
 struct QuickAccessItem {
   base::FilePath path;
   double confidence;
+};
+
+// Notifications/Errors coming from DriveFs side which we need to persist in
+// the Chrome side.
+struct PersistedMessage {
+  // Where does the message come from in DriveFs.
+  enum Source {
+    kNotification = 0,
+    kError = 1,
+  };
+  Source source;
+
+  // DriveFs Notification/Error types which require persistence.
+  using Type = absl::variant<drivefs::mojom::DriveFsNotification::Tag,
+                             drivefs::mojom::MirrorSyncError::Type>;
+  Type type;
+
+  base::FilePath path;
+
+  int64_t stable_id;
 };
 
 // DriveIntegrationService is used to integrate Drive to Chrome. This class
@@ -355,6 +378,17 @@ class DriveIntegrationService : public KeyedService,
   void GetDocsOfflineStats(
       drivefs::mojom::DriveFs::GetDocsOfflineStatsCallback callback);
 
+  // Gets the mirror sync status for a specific file.
+  void GetMirrorSyncStatusForFile(
+      const base::FilePath& path,
+      drivefs::mojom::DriveFs::GetMirrorSyncStatusForFileCallback callback);
+
+  // Gets the mirror sync status for a specific directory.
+  void GetMirrorSyncStatusForDirectory(
+      const base::FilePath& path,
+      drivefs::mojom::DriveFs::GetMirrorSyncStatusForDirectoryCallback
+          callback);
+
   void OnNetworkChanged();
 
   // Register the drive related profile prefs.
@@ -468,13 +502,17 @@ class DriveIntegrationService : public KeyedService,
       std::optional<std::vector<drivefs::mojom::QueryItemPtr>> items);
 
   void OnEnableMirroringStatusUpdate(drivefs::mojom::MirrorSyncStatus status);
-  void OnMyFilesSyncRootAdded(drive::FileError status);
+  void OnMyFilesSyncPathAdded(drive::FileError status);
 
-  void OnGetSyncPathsForRemovingAllRoots(
-      drive::FileError status,
-      const std::vector<::base::FilePath>& paths);
-  void OnSyncRootRemoved(const base::FilePath& path, drive::FileError status);
   void OnDisableMirroringStatusUpdate(drivefs::mojom::MirrorSyncStatus status);
+
+  // Before adding a new root, get all existing roots first to see if it exists
+  // or not. If it exists, do nothing.
+  void OnGetSyncPathsForAddingPath(
+      const base::FilePath& path_to_add,
+      drivefs::mojom::DriveFs::ToggleSyncForPathCallback callback,
+      drive::FileError status,
+      const std::vector<base::FilePath>& paths);
 
   // Toggle syncing for |path| if the the directory exists.
   void ToggleSyncForPathIfDirectoryExists(
@@ -514,9 +552,6 @@ class DriveIntegrationService : public KeyedService,
   bool mirroring_enabled_ = false;
   bool is_online_ = true;
   bool remount_when_online_ = false;
-
-  // -1 means no sync roots to remove.
-  int number_of_sync_roots_to_remove_ = -1;
 
   // Custom mount point name that can be injected for testing in constructor.
   std::string mount_point_name_;

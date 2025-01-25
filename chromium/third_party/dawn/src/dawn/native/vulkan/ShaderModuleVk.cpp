@@ -78,13 +78,16 @@ bool TransformedShaderModuleCacheKey::operator==(
     if (maxSubgroupSizeForFullSubgroups != other.maxSubgroupSizeForFullSubgroups) {
         return false;
     }
+    if (emitPointSize != other.emitPointSize) {
+        return false;
+    }
     return true;
 }
 
 size_t TransformedShaderModuleCacheKeyHashFunc::operator()(
     const TransformedShaderModuleCacheKey& key) const {
     size_t hash = 0;
-    HashCombine(&hash, key.layoutPtr, key.entryPoint);
+    HashCombine(&hash, key.layoutPtr, key.entryPoint, key.emitPointSize);
     for (const auto& entry : key.constants) {
         HashCombine(&hash, entry.first, entry.second);
     }
@@ -114,7 +117,8 @@ class ShaderModule::ConcurrentTransformedShaderModuleCache {
     }
     ModuleAndSpirv AddOrGet(const TransformedShaderModuleCacheKey& key,
                             VkShaderModule module,
-                            CompiledSpirv compilation) {
+                            CompiledSpirv compilation,
+                            bool hasInputAttachment) {
         DAWN_ASSERT(module != VK_NULL_HANDLE);
         std::lock_guard<std::mutex> lock(mMutex);
 
@@ -123,7 +127,7 @@ class ShaderModule::ConcurrentTransformedShaderModuleCache {
             bool added = false;
             std::tie(iter, added) = mTransformedShaderModuleCache.emplace(
                 key, Entry{module, std::move(compilation.spirv),
-                           std::move(compilation.remappedEntryPoint)});
+                           std::move(compilation.remappedEntryPoint), hasInputAttachment});
             DAWN_ASSERT(added);
         } else {
             // No need to use FencedDeleter since this shader module was just created and does
@@ -139,13 +143,12 @@ class ShaderModule::ConcurrentTransformedShaderModuleCache {
         VkShaderModule vkModule;
         std::vector<uint32_t> spirv;
         std::string remappedEntryPoint;
+        bool hasInputAttachment;
 
         ModuleAndSpirv AsRefs() const {
             return {
-                vkModule,
-                spirv.data(),
-                spirv.size(),
-                remappedEntryPoint.c_str(),
+                vkModule,           spirv.data(), spirv.size(), remappedEntryPoint.c_str(),
+                hasInputAttachment,
             };
         }
     };
@@ -162,15 +165,18 @@ class ShaderModule::ConcurrentTransformedShaderModuleCache {
 ResultOrError<Ref<ShaderModule>> ShaderModule::Create(
     Device* device,
     const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
+    const std::vector<tint::wgsl::Extension>& internalExtensions,
     ShaderModuleParseResult* parseResult,
     OwnedCompilationMessages* compilationMessages) {
-    Ref<ShaderModule> module = AcquireRef(new ShaderModule(device, descriptor));
+    Ref<ShaderModule> module = AcquireRef(new ShaderModule(device, descriptor, internalExtensions));
     DAWN_TRY(module->Initialize(parseResult, compilationMessages));
     return module;
 }
 
-ShaderModule::ShaderModule(Device* device, const UnpackedPtr<ShaderModuleDescriptor>& descriptor)
-    : ShaderModuleBase(device, descriptor),
+ShaderModule::ShaderModule(Device* device,
+                           const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
+                           std::vector<tint::wgsl::Extension> internalExtensions)
+    : ShaderModuleBase(device, descriptor, std::move(internalExtensions)),
       mTransformedShaderModuleCache(
           std::make_unique<ConcurrentTransformedShaderModuleCache>(device)) {}
 
@@ -218,10 +224,13 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
 
     ScopedTintICEHandler scopedICEHandler(GetDevice());
 
-    // Check to see if we have the handle and spirv cached already.
+    // Check to see if we have the handle and spirv cached already
+    // TODO(chromium:345359083): Improve the computation of the cache key. For example, it isn't
+    // ideal to use `reinterpret_cast<uintptr_t>(layout)` as the layout may be freed and
+    // reallocated during the runtime.
     auto cacheKey = TransformedShaderModuleCacheKey{
         reinterpret_cast<uintptr_t>(layout), programmableStage.entryPoint.c_str(),
-        programmableStage.constants, maxSubgroupSizeForFullSubgroups};
+        programmableStage.constants, maxSubgroupSizeForFullSubgroups, emitPointSize};
     auto handleAndSpirv = mTransformedShaderModuleCache->Find(cacheKey);
     if (handleAndSpirv.has_value()) {
         return std::move(*handleAndSpirv);
@@ -307,9 +316,16 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
                     bindings.external_texture.emplace(
                         srcBindingPoint,
                         tint::spirv::writer::binding::ExternalTexture{metadata, plane0, plane1});
+                },
+                [&](const InputAttachmentBindingInfo& bindingInfo) {
+                    bindings.input_attachment.emplace(
+                        srcBindingPoint, tint::spirv::writer::binding::InputAttachment{
+                                             dstBindingPoint.group, dstBindingPoint.binding});
                 });
         }
     }
+
+    const bool hasInputAttachment = !bindings.input_attachment.empty();
 
     std::optional<tint::ast::transform::SubstituteOverride::Config> substituteOverrideConfig;
     if (!programmableStage.metadata->overrides.empty()) {
@@ -475,8 +491,8 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
         // Set the label on `newHandle` now, and not on `moduleAndSpirv.module` later
         // since `moduleAndSpirv.module` may be in use by multiple threads.
         SetDebugName(ToBackend(GetDevice()), newHandle, "Dawn_ShaderModule", GetLabel());
-        moduleAndSpirv =
-            mTransformedShaderModuleCache->AddOrGet(cacheKey, newHandle, compilation.Acquire());
+        moduleAndSpirv = mTransformedShaderModuleCache->AddOrGet(
+            cacheKey, newHandle, compilation.Acquire(), hasInputAttachment);
     }
 
     return std::move(moduleAndSpirv);

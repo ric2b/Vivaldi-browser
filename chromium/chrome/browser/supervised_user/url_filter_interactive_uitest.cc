@@ -27,14 +27,11 @@ static constexpr std::string_view kPermissionRequestUrl =
 
 // All tests in this unit are subject to flakiness because they interact with a
 // system that can be externally modified during execution.
-class UrlFilterUiTest : public InteractiveFamilyLiveTest,
-                        public testing::WithParamInterface<FamilyIdentifier> {
+class UrlFilterUiTest : public InteractiveFamilyLiveTest {
  public:
   UrlFilterUiTest()
       : InteractiveFamilyLiveTest(
-            /*family_identifier=*/GetParam(),
-            /*extra_enabled_hosts=*/std::vector<std::string>(
-                {"example.com", "bestgore.com"})) {}
+            /*extra_enabled_hosts=*/{"example.com", "bestgore.com"}) {}
 
  protected:
   auto ParentOpensControlListPage(ui::ElementIdentifier kParentTab,
@@ -131,8 +128,7 @@ class UrlFilterUiTest : public InteractiveFamilyLiveTest,
   }
 };
 
-// TODO(https://crbug.com/328036610): fails on win-live-tests-tester-rel
-IN_PROC_BROWSER_TEST_P(UrlFilterUiTest, DISABLED_ParentBlocksPage) {
+IN_PROC_BROWSER_TEST_F(UrlFilterUiTest, ParentBlocksPage) {
   DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kChildElementId);
   DEFINE_LOCAL_STATE_IDENTIFIER_VALUE(BrowserState::Observer,
                                       kSetSafeSitesStateObserverId);
@@ -168,8 +164,7 @@ IN_PROC_BROWSER_TEST_P(UrlFilterUiTest, DISABLED_ParentBlocksPage) {
 
 // Sanity test, if it fails it means that resetting the test state is not
 // functioning properly.
-// TODO(https://crbug.com/328036610): fails on win-live-tests-tester-rel
-IN_PROC_BROWSER_TEST_P(UrlFilterUiTest, DISABLED_ClearFamilyLinkSettings) {
+IN_PROC_BROWSER_TEST_F(UrlFilterUiTest, ClearFamilyLinkSettings) {
   DEFINE_LOCAL_STATE_IDENTIFIER_VALUE(BrowserState::Observer, kObserverId);
 
   TurnOnSyncFor(head_of_household());
@@ -180,9 +175,7 @@ IN_PROC_BROWSER_TEST_P(UrlFilterUiTest, DISABLED_ClearFamilyLinkSettings) {
                                       BrowserState::Reset()));
 }
 
-// TODO(https://crbug.com/328036610): fails on win-live-tests-tester-rel
-IN_PROC_BROWSER_TEST_P(UrlFilterUiTest,
-                       DISABLED_ParentAllowsPageBlockedBySafeSites) {
+IN_PROC_BROWSER_TEST_F(UrlFilterUiTest, ParentAllowsPageBlockedBySafeSites) {
   DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kChildElementId);
   DEFINE_LOCAL_STATE_IDENTIFIER_VALUE(BrowserState::Observer,
                                       kDefineStateObserverId);
@@ -211,9 +204,8 @@ IN_PROC_BROWSER_TEST_P(UrlFilterUiTest,
       WaitForStateChange(kChildElementId, PageWithMatchingTitle("Best Gore")));
 }
 
-// TODO(https://crbug.com/328036610): fails on win-live-tests-tester-rel
-IN_PROC_BROWSER_TEST_P(UrlFilterUiTest,
-                       DISABLED_ParentAprovesPermissionRequestForBlockedSite) {
+IN_PROC_BROWSER_TEST_F(UrlFilterUiTest,
+                       ParentAprovesPermissionRequestForBlockedSite) {
   DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kChildElementId);
   DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kParentApprovalTab);
   DEFINE_LOCAL_STATE_IDENTIFIER_VALUE(BrowserState::Observer,
@@ -255,14 +247,5 @@ IN_PROC_BROWSER_TEST_P(UrlFilterUiTest,
       Log("Then child gets unblocked"),
       WaitForStateChange(kChildElementId, PageWithMatchingTitle("Best Gore")));
 }
-
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    UrlFilterUiTest,
-    testing::Values(FamilyIdentifier("FAMILY_DMA_ELIGIBLE_NO_CONSENT"),
-                    FamilyIdentifier("FAMILY_DMA_ELIGIBLE_WITH_CONSENT"),
-                    FamilyIdentifier("FAMILY_DMA_INELIGIBLE")),
-    [](const auto& info) { return info.param->data(); });
-
 }  // namespace
 }  // namespace supervised_user

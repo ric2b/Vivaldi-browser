@@ -70,6 +70,7 @@ class LayoutCustomScrollbarPart;
 struct PaintInvalidatorContext;
 class PaintLayer;
 class ScrollingCoordinator;
+class SnappedQueryScrollSnapshot;
 
 struct CORE_EXPORT PaintLayerScrollableAreaRareData final
     : public GarbageCollected<PaintLayerScrollableAreaRareData> {
@@ -80,16 +81,16 @@ struct CORE_EXPORT PaintLayerScrollableAreaRareData final
   PaintLayerScrollableAreaRareData& operator=(
       const PaintLayerScrollableAreaRareData&) = delete;
 
-  void Trace(Visitor* visitor) const {}
+  void Trace(Visitor* visitor) const;
 
   std::optional<cc::SnapContainerData> snap_container_data_;
   // The ids of the elements that were reported as the selected snap targets
-  // along each axis during the last snapchanging event that fired.
-  std::optional<cc::TargetSnapAreaElementIds> snapchanging_target_ids_;
+  // along each axis during the last scrollsnapchanging event that fired.
+  std::optional<cc::TargetSnapAreaElementIds> scrollsnapchanging_target_ids_;
   std::unique_ptr<cc::SnapSelectionStrategy> impl_snap_strategy_;
   // The ids of the elements that were reported as the selected snap targets
-  // along each axis during the last snapchanged event that fired.
-  std::optional<cc::TargetSnapAreaElementIds> snapchanged_target_ids_;
+  // along each axis during the last scrollsnapchange event that fired.
+  std::optional<cc::TargetSnapAreaElementIds> scrollsnapchange_target_ids_;
   // If this is a snap container, this represents the cc::ElementId of the snap
   // area (snapped to by this snap container) that is targeted[1] or contains a
   // targeted[1] element.
@@ -98,6 +99,9 @@ struct CORE_EXPORT PaintLayerScrollableAreaRareData final
   // [1]https://drafts.csswg.org/selectors/#the-target-pseudo
   std::optional<cc::ElementId> targeted_snap_area_id_;
   Vector<gfx::Rect> tickmarks_override_;
+  // ScrollSnapshotClient for keeping track of snapped targets in both
+  // directions used for matching snapped @container queries.
+  Member<SnappedQueryScrollSnapshot> snapped_query_snapshot_;
 };
 
 // PaintLayerScrollableArea represents the scrollable area of a LayoutBox.
@@ -551,25 +555,26 @@ class CORE_EXPORT PaintLayerScrollableArea final
   const cc::SnapContainerData* GetSnapContainerData() const override;
   void SetSnapContainerData(std::optional<cc::SnapContainerData>) override;
   bool SetTargetSnapAreaElementIds(cc::TargetSnapAreaElementIds) override;
+  void UpdateFocusDataForSnapAreas() override;
 
   std::optional<gfx::PointF> GetSnapPositionAndSetTarget(
       const cc::SnapSelectionStrategy& strategy) override;
-  // Functions related to firing snapchanged events.
-  void SetSnapchangedTargetIds(
+  // Functions related to firing scrollsnapchange events.
+  void SetScrollsnapchangeTargetIds(
       std::optional<cc::TargetSnapAreaElementIds>) override;
-  void UpdateSnappedTargetsAndEnqueueSnapChanged() override;
+  void UpdateSnappedTargetsAndEnqueueScrollSnapChange() override;
 
-  // Functions related to firing snapchanging events.
-  std::optional<cc::TargetSnapAreaElementIds> GetSnapchangingTargetIds()
+  // Functions related to firing scrollsnapchanging events.
+  std::optional<cc::TargetSnapAreaElementIds> GetScrollsnapchangingTargetIds()
       const override;
-  void SetSnapchangingTargetIds(
+  void SetScrollsnapchangingTargetIds(
       std::optional<cc::TargetSnapAreaElementIds>) override;
-  void UpdateSnapChangingTargetsAndEnqueueSnapChanging(
+  void UpdateScrollSnapChangingTargetsAndEnqueueScrollSnapChanging(
       const cc::TargetSnapAreaElementIds& new_target_ids) override;
   const cc::SnapSelectionStrategy* GetImplSnapStrategy() const override;
   void SetImplSnapStrategy(
       std::unique_ptr<cc::SnapSelectionStrategy> strategy) override;
-  void EnqueueSnapChangingEventFromImplIfNeeded() override;
+  void EnqueueScrollSnapChangingEventFromImplIfNeeded() override;
 
   void DisposeImpl() override;
 
@@ -629,6 +634,12 @@ class CORE_EXPORT PaintLayerScrollableArea final
   }
 
   void DropCompositorScrollDeltaNextCommit() override;
+
+  SnappedQueryScrollSnapshot& EnsureSnappedQueryScrollSnapshot();
+
+  // Return the Element, if any, that should currently match the
+  // @container (snapped:...) query for the given axis.
+  Element* GetSnappedQueryTargetAlongAxis(cc::SnapAxis) const;
 
  private:
   bool NeedsHypotheticalScrollbarThickness(ScrollbarOrientation) const;
@@ -719,10 +730,20 @@ class CORE_EXPORT PaintLayerScrollableArea final
   bool UsedColorSchemeScrollbarsChanged(const ComputedStyle* old_style) const;
   bool IsGlobalRootNonOverlayScroller() const;
 
-  // Get the current target for a snap event of |type| (either "snapchanged" or
-  // snapchanging) along axis |axis|.
+  // Helper function to map element ids to Node* pointers. Used by both event
+  // dispatching and container queries.
+  Node* GetSnapTargetAlongAxis(cc::TargetSnapAreaElementIds,
+                               cc::SnapAxis) const;
+
+  // Get the current target for a snap event of |type| (either
+  // "scrollsnapchange" or scrollsnapchanging) along axis |axis|.
   Node* GetSnapEventTargetAlongAxis(const AtomicString& type,
                                     cc::SnapAxis) const override;
+
+  // Create a SnappedQueryScrollSnapshot if not already created, and one of the
+  // snapped target elements depend on snapped container queries.
+  void CreateAndSetSnappedQueryScrollSnapshotIfNeeded(
+      cc::TargetSnapAreaElementIds);
 
   // PaintLayer is destructed before PaintLayerScrollable area, during this
   // time before PaintLayerScrollableArea has been collected layer_ will

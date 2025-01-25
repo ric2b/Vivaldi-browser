@@ -37,6 +37,7 @@ import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
+import * as Protocol from '../../generated/protocol.js';
 import type * as IssuesManager from '../../models/issues_manager/issues_manager.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as CodeMirror from '../../third_party/codemirror.next/codemirror.next.js';
@@ -202,6 +203,10 @@ const UIStrings = {
    * to the Media Panel.
    */
   openMediaPanel: 'Jump to Media panel',
+  /**
+   *@description Text of a tooltip to redirect to another element in the Elements panel
+   */
+  showPopoverTarget: 'Show popover target',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/elements/ElementsTreeElement.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -217,8 +222,8 @@ type OpeningTagContext = {
     adorners: Adorners.Adorner.Adorner[],
     styleAdorners: Adorners.Adorner.Adorner[],
     readonly adornersThrottler: Common.Throttler.Throttler,
-    slot?: Adorners.Adorner.Adorner,
     canAddAttributes: boolean,
+    slot?: Adorners.Adorner.Adorner,
 };
 
 type ClosingTagContext = {
@@ -758,6 +763,12 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
       return;
     }
     let menuItem;
+
+    if (UI.ActionRegistry.ActionRegistry.instance().hasAction('freestyler.element-panel-context')) {
+      contextMenu.headerSection().appendAction(
+          'freestyler.element-panel-context',
+      );
+    }
 
     menuItem = contextMenu.clipboardSection().appendItem(
         i18nString(UIStrings.cut), treeOutline.performCopyOrCut.bind(treeOutline, true, this.nodeInternal),
@@ -1616,6 +1627,13 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
       setValueWithEntities.call(this, attrValueElement, value);
     }
 
+    if (name === 'popovertarget') {
+      const linkedPart = value ? attrValueElement : attrNameElement;
+      void this.linkifyElementByRelation(
+          linkedPart, Protocol.DOM.GetElementByRelationRequestRelation.PopoverTarget,
+          i18nString(UIStrings.showPopoverTarget));
+    }
+
     if (hasText) {
       UI.UIUtils.createTextChild(attrSpanElement, '"');
     }
@@ -1671,6 +1689,24 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     }
 
     return attrSpanElement;
+  }
+
+  private async linkifyElementByRelation(
+      linkContainer: Element, relation: Protocol.DOM.GetElementByRelationRequestRelation,
+      tooltip: string): Promise<void> {
+    const relatedElementId = await this.nodeInternal.domModel().getElementByRelation(this.nodeInternal.id, relation);
+    const relatedElement = this.nodeInternal.domModel().nodeForId(relatedElementId);
+    if (!relatedElement) {
+      return;
+    }
+    const link = await Common.Linkifier.Linkifier.linkify(relatedElement, {
+      preventKeyboardFocus: true,
+      tooltip,
+      textContent: linkContainer.textContent || undefined,
+      isDynamicLink: true,
+    });
+    linkContainer.removeChildren();
+    linkContainer.append(link);
   }
 
   private buildPseudoElementDOM(parentElement: DocumentFragment, pseudoElementName: string): void {

@@ -7,19 +7,20 @@
 #include <sstream>
 #include <utility>
 
+#include "build/build_config.h"
 #include "cast/common/channel/virtual_connection.h"
 #include "util/json/json_serialization.h"
 #include "util/json/json_value.h"
 #include "util/osp_logging.h"
 
-#if defined(__APPLE__) || defined(__MACH__)
+#if BUILDFLAG(IS_APPLE)
 #include <TargetConditionals.h>
 #endif
 
 namespace openscreen::cast {
 namespace {
 
-using ::cast::channel::CastMessage;
+using proto::CastMessage;
 
 // The value used for "sdkType" in a virtual CONNECT request. Historically, this
 // value was used in Chrome's C++ impl even though "2" refers to the Media
@@ -44,30 +45,20 @@ enum VirtualConnectPlatformValue {
   kCastDevice = 7,
 };
 
-#if defined(__APPLE__) || defined(__MACH__)
-constexpr VirtualConnectPlatformValue GetVirtualConnectPlatformMacFlavor() {
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
-  return kIOS;
-#else
-  return kMacOSX;
-#endif
-}
-#endif
-
 constexpr VirtualConnectPlatformValue GetVirtualConnectPlatform() {
   // Based on //build/build_config.h in the Chromium project. The order of these
   // matters!
-#if defined(__ANDROID__)
+#if BUILDFLAG(IS_ANDROID)
   return kAndroid;
-#elif defined(__APPLE__) || defined(__MACH__)
-  return GetVirtualConnectPlatformMacFlavor();
-#elif defined(_WIN32) || defined(_WIN64)
+#elif BUILDFLAG(IS_IOS)
+  return kIOS;
+#elif BUILDFLAG(IS_WIN)
   return kWindows;
-#elif defined(OS_CHROMEOS)
-  // Note: OS_CHROMEOS is defined via the compiler's command line in Chromium
-  // embedder builds by Chromium's //build/config/linux:runtime_library config.
+#elif BUILDFLAG(IS_MAC)
+  return kMacOSX;
+#elif BUILDFLAG(IS_CHROMEOS)
   return kChromeOS;
-#elif defined(__linux__)
+#elif BUILDFLAG(IS_LINUX)
   return kLinux;
 #else
   return kOtherPlatform;
@@ -104,7 +95,7 @@ CastMessage MakeSimpleUTF8Message(const std::string& namespace_,
   CastMessage message;
   message.set_protocol_version(kDefaultOutgoingMessageVersion);
   message.set_namespace_(namespace_);
-  message.set_payload_type(::cast::channel::CastMessage_PayloadType_STRING);
+  message.set_payload_type(proto::CastMessage_PayloadType_STRING);
   message.set_payload_utf8(std::move(payload));
   return message;
 }
@@ -113,8 +104,7 @@ CastMessage MakeConnectMessage(const std::string& source_id,
                                const std::string& destination_id) {
   CastMessage connect_message =
       MakeConnectionMessage(source_id, destination_id);
-  connect_message.set_payload_type(
-      ::cast::channel::CastMessage_PayloadType_STRING);
+  connect_message.set_payload_type(proto::CastMessage_PayloadType_STRING);
 
   // Historically, the CONNECT message was meant to come from a Chrome browser.
   // However, this library could be embedded in any app. So, properties like
@@ -125,7 +115,7 @@ CastMessage MakeConnectMessage(const std::string& source_id,
   message[kMessageKeyType] = CastMessageTypeToString(CastMessageType::kConnect);
   for (int i = 0; i <= 3; ++i) {
     message[kMessageKeyProtocolVersionList][i] =
-        ::cast::channel::CastMessage_ProtocolVersion_CASTV2_1_0 + i;
+        proto::CastMessage_ProtocolVersion_CASTV2_1_0 + i;
   }
   message[kMessageKeyUserAgent] = kUnknownVersion;
   message[kMessageKeyConnType] =
@@ -147,8 +137,7 @@ CastMessage MakeConnectMessage(const std::string& source_id,
 CastMessage MakeCloseMessage(const std::string& source_id,
                              const std::string& destination_id) {
   CastMessage close_message = MakeConnectionMessage(source_id, destination_id);
-  close_message.set_payload_type(
-      ::cast::channel::CastMessage_PayloadType_STRING);
+  close_message.set_payload_type(proto::CastMessage_PayloadType_STRING);
   close_message.set_payload_utf8(R"!({"type": "CLOSE"})!");
   return close_message;
 }
@@ -179,12 +168,43 @@ std::string ToString(const CastMessage& message) {
   return ss.str();
 }
 
+constexpr EnumNameTable<CastMessageType, 25> kCastMessageTypeNames{
+    {{"PING", CastMessageType::kPing},
+     {"PONG", CastMessageType::kPong},
+     {"RPC", CastMessageType::kRpc},
+     {"GET_APP_AVAILABILITY", CastMessageType::kGetAppAvailability},
+     {"GET_STATUS", CastMessageType::kGetStatus},
+     {"CONNECT", CastMessageType::kConnect},
+     {"CLOSE", CastMessageType::kCloseConnection},
+     {"APPLICATION_BROADCAST", CastMessageType::kBroadcast},
+     {"LAUNCH", CastMessageType::kLaunch},
+     {"STOP", CastMessageType::kStop},
+     {"RECEIVER_STATUS", CastMessageType::kReceiverStatus},
+     {"MEDIA_STATUS", CastMessageType::kMediaStatus},
+     {"LAUNCH_ERROR", CastMessageType::kLaunchError},
+     {"OFFER", CastMessageType::kOffer},
+     {"ANSWER", CastMessageType::kAnswer},
+     {"CAPABILITIES_RESPONSE", CastMessageType::kCapabilitiesResponse},
+     {"STATUS_RESPONSE", CastMessageType::kStatusResponse},
+     {"MULTIZONE_STATUS", CastMessageType::kMultizoneStatus},
+     {"INVALID_PLAYER_STATE", CastMessageType::kInvalidPlayerState},
+     {"LOAD_FAILED", CastMessageType::kLoadFailed},
+     {"LOAD_CANCELLED", CastMessageType::kLoadCancelled},
+     {"INVALID_REQUEST", CastMessageType::kInvalidRequest},
+     {"PRESENTATION", CastMessageType::kPresentation},
+     {"GET_CAPABILITIES", CastMessageType::kGetCapabilities},
+     {"OTHER", CastMessageType::kOther}}};
+
+const char* CastMessageTypeToString(CastMessageType type) {
+  return GetEnumName(kCastMessageTypeNames, type).value("OTHER");
+}
+
 const std::string& GetPayload(const CastMessage& message) {
   // Receiver messages will report if they are string or binary, but may
   // populate either the utf8 or the binary field with the message contents.
   // TODO(https://crbug.com/1429410): CastSocket's CastMessage results have
   // wrong payload field filled out.
-  OSP_CHECK_EQ(message.payload_type(), ::cast::channel::CastMessage::STRING);
+  OSP_CHECK_EQ(message.payload_type(), proto::CastMessage::STRING);
   return !message.payload_utf8().empty() ? message.payload_utf8()
                                          : message.payload_binary();
 }

@@ -1,50 +1,22 @@
 #version 310 es
-
-layout(binding = 0, std430) buffer SB_RW_ssbo {
-  int arg_0[];
-} sb_rw;
-
-layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
-  uint inner;
-} prevent_dce;
-
-void arrayLength_61b1c7() {
-  uint res = uint(sb_rw.arg_0.length());
-  prevent_dce.inner = res;
-}
-
-vec4 vertex_main() {
-  arrayLength_61b1c7();
-  return vec4(0.0f);
-}
-
-void main() {
-  gl_PointSize = 1.0;
-  vec4 inner_result = vertex_main();
-  gl_Position = inner_result;
-  gl_Position.y = -(gl_Position.y);
-  gl_Position.z = ((2.0f * gl_Position.z) - gl_Position.w);
-  return;
-}
-#version 310 es
 precision highp float;
 precision highp int;
 
-layout(binding = 0, std430) buffer SB_RW_ssbo {
-  int arg_0[];
-} sb_rw;
-
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uint inner;
 } prevent_dce;
 
-void arrayLength_61b1c7() {
+layout(binding = 1, std430) buffer SB_RW_ssbo {
+  int arg_0[];
+} sb_rw;
+
+uint arrayLength_61b1c7() {
   uint res = uint(sb_rw.arg_0.length());
-  prevent_dce.inner = res;
+  return res;
 }
 
 void fragment_main() {
-  arrayLength_61b1c7();
+  prevent_dce.inner = arrayLength_61b1c7();
 }
 
 void main() {
@@ -53,21 +25,21 @@ void main() {
 }
 #version 310 es
 
-layout(binding = 0, std430) buffer SB_RW_ssbo {
-  int arg_0[];
-} sb_rw;
-
 layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uint inner;
 } prevent_dce;
 
-void arrayLength_61b1c7() {
+layout(binding = 1, std430) buffer SB_RW_ssbo {
+  int arg_0[];
+} sb_rw;
+
+uint arrayLength_61b1c7() {
   uint res = uint(sb_rw.arg_0.length());
-  prevent_dce.inner = res;
+  return res;
 }
 
 void compute_main() {
-  arrayLength_61b1c7();
+  prevent_dce.inner = arrayLength_61b1c7();
 }
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;

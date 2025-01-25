@@ -11,12 +11,16 @@
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/autofill/content/common/mojom/autofill_agent.mojom.h"
 #include "components/autofill/core/browser/logging/stub_log_manager.h"
+#include "components/autofill/core/common/unique_ids.h"
 #include "components/password_manager/content/browser/form_meta_data.h"
 #include "components/password_manager/core/browser/password_form.h"
+#include "components/password_manager/core/browser/password_form_cache.h"
 #include "components/password_manager/core/browser/password_form_filling.h"
+#include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/safe_browsing/buildflags.h"
 #include "content/public/browser/navigation_entry.h"
@@ -156,6 +160,24 @@ class MockPasswordManager : public PasswordManager {
               OnPasswordFormCleared,
               (PasswordManagerDriver * driver, const autofill::FormData&),
               (override));
+  MOCK_METHOD(const PasswordFormCache*,
+              GetPasswordFormCache,
+              (),
+              (const override));
+};
+
+class MockPasswordFormCache : public PasswordFormCache {
+ public:
+  ~MockPasswordFormCache() override = default;
+
+  MOCK_METHOD(bool,
+              HasPasswordForm,
+              (PasswordManagerDriver*, autofill::FormRendererId),
+              (const override));
+  MOCK_METHOD(bool,
+              HasPasswordForm,
+              (PasswordManagerDriver*, autofill::FieldRendererId),
+              (const override));
 };
 
 PasswordFormFillData GetTestPasswordFormFillData() {
@@ -165,8 +187,8 @@ PasswordFormFillData GetTestPasswordFormFillData() {
   form_on_page.action = GURL("https://foo.com/login");
   form_on_page.signon_realm = "https://foo.com/";
   form_on_page.scheme = PasswordForm::Scheme::kHtml;
-  form_on_page.form_data.host_frame = autofill::LocalFrameToken(
-      base::UnguessableToken::CreateForTesting(98765, 43210));
+  form_on_page.form_data.set_host_frame(autofill::LocalFrameToken(
+      base::UnguessableToken::CreateForTesting(98765, 43210)));
 
   // Create an exact match in the database.
   PasswordForm preferred_match = form_on_page;
@@ -300,20 +322,49 @@ TEST_F(ContentPasswordManagerDriverTest, SetFrameAndFormMetaDataOfForm) {
   autofill::FormData form2 = GetFormWithFrameAndFormMetaData(main_rfh(), form);
 
   EXPECT_EQ(
-      form2.host_frame,
+      form2.host_frame(),
       autofill::LocalFrameToken(
           web_contents()->GetPrimaryMainFrame()->GetFrameToken().value()));
-  EXPECT_EQ(form2.url, GURL("https://hostname/path"));
-  EXPECT_EQ(form2.full_url, GURL("https://hostname/path?query#hash"));
-  EXPECT_EQ(form2.main_frame_origin,
+  EXPECT_EQ(form2.url(), GURL("https://hostname/path"));
+  EXPECT_EQ(form2.full_url(), GURL("https://hostname/path?query#hash"));
+  EXPECT_EQ(form2.main_frame_origin(),
             web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin());
-  EXPECT_EQ(form2.main_frame_origin,
+  EXPECT_EQ(form2.main_frame_origin(),
             url::Origin::CreateFromNormalizedTuple("https", "hostname", 443));
+}
+
+TEST_P(ContentPasswordManagerDriverTest, LogFilledFieldTypeMetric) {
+  base::HistogramTester histogram_tester;
+  MockPasswordManager password_manager_{&password_manager_client_};
+  MockPasswordFormCache password_form_cache_;
+  bool field_part_of_password_form = GetParam();
+
+  ON_CALL(password_manager_client_, GetPasswordManager())
+      .WillByDefault(Return(&password_manager_));
+  ON_CALL(password_manager_, GetPasswordFormCache())
+      .WillByDefault(Return(&password_form_cache_));
+  ON_CALL(password_form_cache_, HasPasswordForm(_, autofill::FieldRendererId()))
+      .WillByDefault(Return(field_part_of_password_form));
+
+  std::unique_ptr<ContentPasswordManagerDriver> driver(
+      new ContentPasswordManagerDriver(main_rfh(), &password_manager_client_));
+
+  driver->FillField(u"password");
+  histogram_tester.ExpectUniqueSample("Autofill.FilledFieldType.Password",
+                                      field_part_of_password_form, 1);
+
+  driver->FillSuggestion(u"username", u"password");
+  histogram_tester.ExpectUniqueSample("Autofill.FilledFieldType.Password",
+                                      field_part_of_password_form, 2);
+
+  driver->FillIntoFocusedField(true, u"password");
+  histogram_tester.ExpectUniqueSample("Autofill.FilledFieldType.Password",
+                                      field_part_of_password_form, 3);
 }
 
 INSTANTIATE_TEST_SUITE_P(All,
                          ContentPasswordManagerDriverTest,
-                         testing::Values(true, false));
+                         testing::Bool());
 
 class ContentPasswordManagerDriverURLTest
     : public ContentPasswordManagerDriverTest {
@@ -335,12 +386,12 @@ class ContentPasswordManagerDriverURLTest
 
   autofill::FormData ExpectedFormData() {
     autofill::FormData expected_form;
-    expected_form.url = GURL("https://hostname/path");
-    expected_form.full_url = GURL("https://hostname/path?query#hash");
-    expected_form.main_frame_origin =
-        url::Origin::CreateFromNormalizedTuple("https", "hostname", 443);
-    expected_form.host_frame = autofill::LocalFrameToken(
-        web_contents()->GetPrimaryMainFrame()->GetFrameToken().value());
+    expected_form.set_url(GURL("https://hostname/path"));
+    expected_form.set_full_url(GURL("https://hostname/path?query#hash"));
+    expected_form.set_main_frame_origin(
+        url::Origin::CreateFromNormalizedTuple("https", "hostname", 443));
+    expected_form.set_host_frame(autofill::LocalFrameToken(
+        web_contents()->GetPrimaryMainFrame()->GetFrameToken().value()));
     return expected_form;
   }
 
@@ -355,8 +406,8 @@ class ContentPasswordManagerDriverURLTest
 
 TEST_F(ContentPasswordManagerDriverURLTest, PasswordFormsParsed) {
   autofill::FormData form;
-  form.url = GURL("http://evil.com");
-  form.full_url = GURL("http://evil.com/path");
+  form.set_url(GURL("http://evil.com"));
+  form.set_full_url(GURL("http://evil.com/path"));
 
   EXPECT_CALL(password_manager_,
               OnPasswordFormsParsed(
@@ -367,8 +418,8 @@ TEST_F(ContentPasswordManagerDriverURLTest, PasswordFormsParsed) {
 
 TEST_F(ContentPasswordManagerDriverURLTest, PasswordFormsRendered) {
   autofill::FormData form;
-  form.url = GURL("http://evil.com");
-  form.full_url = GURL("http://evil.com/path");
+  form.set_url(GURL("http://evil.com"));
+  form.set_full_url(GURL("http://evil.com/path"));
 
   EXPECT_CALL(password_manager_,
               OnPasswordFormsRendered(
@@ -379,8 +430,8 @@ TEST_F(ContentPasswordManagerDriverURLTest, PasswordFormsRendered) {
 
 TEST_F(ContentPasswordManagerDriverURLTest, PasswordFormSubmitted) {
   autofill::FormData form;
-  form.url = GURL("http://evil.com");
-  form.full_url = GURL("http://evil.com/path");
+  form.set_url(GURL("http://evil.com"));
+  form.set_full_url(GURL("http://evil.com/path"));
 
   EXPECT_CALL(password_manager_,
               OnPasswordFormSubmitted(_, FormDataEqualTo(ExpectedFormData())));
@@ -390,8 +441,8 @@ TEST_F(ContentPasswordManagerDriverURLTest, PasswordFormSubmitted) {
 
 TEST_F(ContentPasswordManagerDriverURLTest, PasswordFormCleared) {
   autofill::FormData form;
-  form.url = GURL("http://evil.com");
-  form.full_url = GURL("http://evil.com/path");
+  form.set_url(GURL("http://evil.com"));
+  form.set_full_url(GURL("http://evil.com/path"));
 
   EXPECT_CALL(password_manager_,
               OnPasswordFormCleared(_, FormDataEqualTo(ExpectedFormData())));
@@ -437,17 +488,17 @@ TEST_F(ContentPasswordManagerDriverFencedFramesTest,
   // Verify all form data that are filled from a fenced frame's render frame
   // host, not from the primary main frame.
   EXPECT_EQ(
-      form_in_fenced_frame.host_frame,
+      form_in_fenced_frame.host_frame(),
       autofill::LocalFrameToken(fenced_frame_root->GetFrameToken().value()));
-  EXPECT_EQ(form_in_fenced_frame.url, GURL("https://hostname/path"));
-  EXPECT_EQ(form_in_fenced_frame.full_url,
+  EXPECT_EQ(form_in_fenced_frame.url(), GURL("https://hostname/path"));
+  EXPECT_EQ(form_in_fenced_frame.full_url(),
             GURL("https://hostname/path?query#hash"));
 
-  EXPECT_EQ(form_in_fenced_frame.main_frame_origin,
+  EXPECT_EQ(form_in_fenced_frame.main_frame_origin(),
             fenced_frame_root->GetLastCommittedOrigin());
-  EXPECT_NE(form_in_fenced_frame.main_frame_origin,
+  EXPECT_NE(form_in_fenced_frame.main_frame_origin(),
             web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin());
-  EXPECT_EQ(form_in_fenced_frame.main_frame_origin,
+  EXPECT_EQ(form_in_fenced_frame.main_frame_origin(),
             url::Origin::CreateFromNormalizedTuple("https", "hostname", 443));
 }
 

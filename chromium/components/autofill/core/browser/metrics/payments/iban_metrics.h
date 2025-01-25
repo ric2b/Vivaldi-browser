@@ -117,7 +117,7 @@ enum class UploadIbanActionMetric {
 void LogStoredIbanMetrics(
     const std::vector<std::unique_ptr<Iban>>& local_ibans,
     const std::vector<std::unique_ptr<Iban>>& server_ibans,
-    const base::TimeDelta& disused_data_threshold);
+    base::TimeDelta disused_data_threshold);
 
 // Logs the number of days since the given IBAN was last used.
 void LogDaysSinceLastIbanUse(const Iban& iban);
@@ -174,6 +174,20 @@ void LogServerIbanUnmaskLatency(base::TimeDelta latency, bool is_successful);
 
 // Logs the status for fetching a server IBAN in IbanAccessManager.
 void LogServerIbanUnmaskStatus(bool is_successful);
+
+// Logs that IBAN save was offered for the given country.
+void LogIbanSaveOfferedCountry(std::string_view country_code);
+
+// Logs that IBAN save was accepted for the given country.
+void LogIbanSaveAcceptedCountry(std::string_view country_code);
+
+// Logs that an IBAN was selected to be filled for the given country.
+void LogIbanSelectedCountry(std::string_view country_code);
+
+// Logs whether an IBAN was saved locally after a server save failure.
+// If `iban_saved_locally` is true, a new IBAN was saved locally. Otherwise, it
+// indicates that an existing local IBAN was not saved again.
+void LogIbanUploadSaveFailed(bool iban_saved_locally);
 
 }  // namespace autofill::autofill_metrics
 

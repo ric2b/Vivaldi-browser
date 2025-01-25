@@ -308,6 +308,40 @@ private:
     UniformCache::Index fLastIndex = UniformCache::kInvalidIndex;
 };
 
+class GradientBufferTracker {
+public:
+    bool writeData(SkSpan<const float> gradData, DrawBufferManager* bufferMgr) {
+        if (gradData.empty()) {
+            return true;
+        }
+
+        auto [writer, bufferInfo] = bufferMgr->getSsboWriter(gradData.size_bytes());
+
+        if (!writer) {
+            return false;
+        }
+
+        writer.write(gradData.data(), gradData.size_bytes());
+
+        fBufferInfo.fBuffer = bufferInfo.fBuffer;
+        fBufferInfo.fOffset = bufferInfo.fOffset;
+        fBufferInfo.fBindingSize = gradData.size_bytes();
+        fHasData = true;
+
+        return true;
+    }
+
+    void bindIfNeeded(DrawPassCommands::List* commandList) const {
+        if (fHasData) {
+            commandList->bindUniformBuffer(fBufferInfo, UniformSlot::kGradient);
+        }
+    }
+
+private:
+    BindUniformBufferInfo fBufferInfo;
+    bool fHasData = false;
+};
+
 } // namespace
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -472,7 +506,7 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     GraphicsPipelineCache pipelineCache;
 
     // Geometry uniforms are currently always UBO-backed.
-    const bool useStorageBuffers = recorder->priv().caps()->storageBufferPreferred();
+    const bool useStorageBuffers = recorder->priv().caps()->storageBufferSupport();
     const ResourceBindingRequirements& bindingReqs =
             recorder->priv().caps()->resourceBindingRequirements();
     Layout uniformLayout =
@@ -481,13 +515,14 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     UniformTracker geometryUniformTracker(useStorageBuffers);
     UniformTracker shadingUniformTracker(useStorageBuffers);
     TextureBindingTracker textureBindingTracker;
+    GradientBufferTracker gradientBufferTracker;
 
     ShaderCodeDictionary* dict = recorder->priv().shaderCodeDictionary();
     PaintParamsKeyBuilder builder(dict);
 
     // The initial layout we pass here is not important as it will be re-assigned when writing
     // shading and geometry uniforms below.
-    PipelineDataGatherer gatherer(recorder->priv().caps(), uniformLayout);
+    PipelineDataGatherer gatherer(uniformLayout);
 
     std::vector<SortKey> keys;
     keys.reserve(draws->renderStepCount());
@@ -499,6 +534,7 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
         UniquePaintParamsID shaderID;
         const UniformDataBlock* shadingUniforms = nullptr;
         const TextureDataBlock* paintTextures = nullptr;
+
         if (draw.fPaintParams.has_value()) {
             sk_sp<TextureProxy> curDst =
                     draw.fPaintParams->dstReadRequirement() == DstReadRequirement::kTextureCopy
@@ -547,7 +583,8 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     }
 
     if (!geometryUniformTracker.writeUniforms(bufferMgr) ||
-        !shadingUniformTracker.writeUniforms(bufferMgr)) {
+        !shadingUniformTracker.writeUniforms(bufferMgr) ||
+        !gradientBufferTracker.writeData(gatherer.gradientBufferData(), bufferMgr)) {
         // The necessary uniform data couldn't be written to the GPU, so the DrawPass is invalid.
         // Early out now since the next Recording snap will fail.
         return nullptr;
@@ -570,6 +607,10 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     SkASSERT(drawPass->fTarget->isFullyLazy() ||
              SkIRect::MakeSize(drawPass->fTarget->dimensions()).contains(lastScissor));
     drawPass->fCommandList.setScissor(lastScissor);
+
+    // All large gradients pack their data into a single buffer throughout the draw pass,
+    // therefore the gradient buffer only needs to be bound once.
+    gradientBufferTracker.bindIfNeeded(&drawPass->fCommandList);
 
     for (const SortKey& key : keys) {
         const DrawList::Draw& draw = key.draw();
@@ -681,8 +722,9 @@ bool DrawPass::prepareResources(ResourceProvider* resourceProvider,
         SkASSERT(fSampledTextures[i]->textureInfo().isValid());
         // Tasks should have been ordered to instantiate any scratch textures already, or any
         // client-owned image will have been instantiated at creation.
-        SkASSERT(fSampledTextures[i]->isInstantiated() ||
-                 fSampledTextures[i]->isLazy());
+        SkASSERTF(fSampledTextures[i]->isInstantiated() ||
+                  fSampledTextures[i]->isLazy(),
+                  "proxy label = %s", fSampledTextures[i]->label());
     }
 #endif
 

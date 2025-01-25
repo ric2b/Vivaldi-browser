@@ -1,6 +1,54 @@
 
 # cargo-vet imports lock
 
+[[publisher.libc]]
+version = "0.2.155"
+when = "2024-05-17"
+user-id = 5820
+user-login = "the8472"
+
+[[publisher.windows-sys]]
+version = "0.52.0"
+when = "2023-11-15"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
+[[publisher.windows-targets]]
+version = "0.52.5"
+when = "2024-04-12"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
+[[publisher.windows-targets]]
+version = "0.52.6"
+when = "2024-07-03"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
+[[publisher.windows_aarch64_msvc]]
+version = "0.52.6"
+when = "2024-07-03"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
+[[publisher.windows_i686_msvc]]
+version = "0.52.6"
+when = "2024-07-03"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
+[[publisher.windows_x86_64_msvc]]
+version = "0.52.6"
+when = "2024-07-03"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
 [audits.chromeos.criteria.crypto-safe]
 description = """
 All crypto algorithms in this crate have been reviewed by a relevant expert.
@@ -18,6 +66,46 @@ Note that certification of this does not require an expert on all forms of
 cryptography: it's expected for crates we import to be \"good enough\" citizens,
 so they'll at least be forthcoming if they try to implement something
 cryptographic. When in doubt, please ask an expert."""
+
+[audits.chromeos.criteria.ub-risk-0]
+description = """
+No unsafe code.
+
+Full description of the audit criteria can be found at
+https://github.com/google/rust-crate-audits/blob/main/auditing_standards.md#ub-risk-0
+"""
+
+[audits.chromeos.criteria.ub-risk-1]
+description = """
+Excellent soundness.
+
+Full description of the audit criteria can be found at
+https://github.com/google/rust-crate-audits/blob/main/auditing_standards.md#ub-risk-1
+"""
+
+[audits.chromeos.criteria.ub-risk-2]
+description = """
+Negligible unsoundness or average soundness.
+
+Full description of the audit criteria can be found at
+https://github.com/google/rust-crate-audits/blob/main/auditing_standards.md#ub-risk-2
+"""
+
+[audits.chromeos.criteria.ub-risk-3]
+description = """
+Mild unsoundness or suboptimal soundness.
+
+Full description of the audit criteria can be found at
+https://github.com/google/rust-crate-audits/blob/main/auditing_standards.md#ub-risk-3
+"""
+
+[audits.chromeos.criteria.ub-risk-4]
+description = """
+Extreme unsoundness.
+
+Full description of the audit criteria can be found at
+https://github.com/google/rust-crate-audits/blob/main/auditing_standards.md#ub-risk-4
+"""
 
 [[audits.chromeos.audits.anyhow]]
 who = "ChromeOS"
@@ -64,25 +152,6 @@ who = "ChromeOS"
 criteria = ["safe-to-run", "does-not-implement-crypto"]
 version = "0.4.3"
 
-[[audits.chromeos.audits.libc]]
-who = "George Burgess IV <gbiv@google.com>"
-criteria = ["safe-to-run", "does-not-implement-crypto"]
-version = "0.2.146"
-notes = """
-Much like the getrandom crate, this exports interfaces to APIs which perform
-crypto, but does not implement any crypto itself.
-"""
-
-[[audits.chromeos.audits.libc]]
-who = "George Burgess IV <gbiv@google.com>"
-criteria = ["safe-to-run", "does-not-implement-crypto"]
-delta = "0.2.146 -> 0.2.147"
-
-[[audits.chromeos.audits.libc]]
-who = "Daniel Verkamp <dverkamp@chromium.org>"
-criteria = ["safe-to-run", "does-not-implement-crypto"]
-delta = "0.2.147 -> 0.2.153"
-
 [[audits.chromeos.audits.log]]
 who = "ChromeOS"
 criteria = ["safe-to-run", "does-not-implement-crypto"]
@@ -92,6 +161,11 @@ version = "0.4.17"
 who = "George Burgess IV <gbiv@google.com>"
 criteria = ["safe-to-run", "does-not-implement-crypto"]
 delta = "0.4.17 -> 0.4.20"
+
+[[audits.chromeos.audits.memchr]]
+who = "Ying Hsu <yinghsu@chromium.org>"
+criteria = ["safe-to-run", "does-not-implement-crypto"]
+version = "2.7.2"
 
 [[audits.chromeos.audits.rand_chacha]]
 who = "Android Legacy"
@@ -214,7 +288,7 @@ https://github.com/google/rust-crate-audits/blob/main/auditing_standards.md#ub-r
 
 [[audits.google.audits.bytemuck]]
 who = [
-    "Manish Goregaokar <manishearth@gmail.com>",
+    "Manish Goregaokar <manishearth@google.com>",
     "Łukasz Anforowicz <lukasza@google.com>",
 ]
 criteria = ["does-not-implement-crypto", "ub-risk-2"]

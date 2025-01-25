@@ -3,10 +3,10 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/sharing/sharing_message_bridge_factory.h"
-#include "chrome/browser/sharing/sharing_message_bridge_impl.h"
 
 #include "base/no_destructor.h"
 #include "chrome/common/channel_info.h"
+#include "components/sharing_message/sharing_message_bridge_impl.h"
 #include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/model/client_tag_based_model_type_processor.h"
 
@@ -22,6 +22,9 @@ SharingMessageBridgeFactory::SharingMessageBridgeFactory()
               // TODO(crbug.com/40257657): Check if this service is needed in
               // Guest mode.
               .WithGuest(ProfileSelection::kOriginalOnly)
+              // TODO(crbug.com/41488885): Check if this service is needed for
+              // Ash Internals.
+              .WithAshInternals(ProfileSelection::kOriginalOnly)
               .Build()) {}
 
 SharingMessageBridgeFactory::~SharingMessageBridgeFactory() = default;

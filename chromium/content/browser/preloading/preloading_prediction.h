@@ -36,7 +36,9 @@ class PreloadingPrediction {
   // is associated with the WebContents primary page that triggered the
   // preloading prediction. This is done to easily analyze the impact of the
   // preloading prediction on the primary visible page.
-  void RecordPreloadingPredictionUKMs(ukm::SourceId navigated_page_source_id);
+  void RecordPreloadingPredictionUKMs(
+      ukm::SourceId navigated_page_source_id,
+      std::optional<double> sampling_likelihood);
 
   // Sets `is_accurate_prediction_` to true if `navigated_url` matches the URL
   // predicate. It also records `time_to_next_navigation_`.
@@ -133,6 +135,34 @@ class ExperimentalPreloadingPrediction {
   float normalized_score_;
   // The callback to verify that the navigated URL is a match.
   PreloadingURLMatchCallback url_match_predicate_;
+};
+
+// Stores data relating to a prediction made by the preloading ML model. Once
+// the outcome of whether the prediction is accurate is known, the provided
+// callback is invoked.
+class ModelPredictionTrainingData {
+ public:
+  using OutcomeCallback =
+      base::OnceCallback<void(std::optional<double> sampling_likelihood,
+                              bool is_accurate_prediction)>;
+
+  ModelPredictionTrainingData(OutcomeCallback on_record_outcome,
+                              PreloadingURLMatchCallback url_match_predicate);
+
+  ~ModelPredictionTrainingData();
+  ModelPredictionTrainingData(const ModelPredictionTrainingData&) = delete;
+  ModelPredictionTrainingData& operator=(const ModelPredictionTrainingData&) =
+      delete;
+  ModelPredictionTrainingData(ModelPredictionTrainingData&&);
+  ModelPredictionTrainingData& operator=(ModelPredictionTrainingData&&);
+
+  void SetIsAccuratePrediction(const GURL& navigated_url);
+  void Record(std::optional<double> sampling_likelihood);
+
+ private:
+  OutcomeCallback on_record_outcome_;
+  PreloadingURLMatchCallback url_match_predicate_;
+  bool is_accurate_prediction_ = false;
 };
 
 }  // namespace content

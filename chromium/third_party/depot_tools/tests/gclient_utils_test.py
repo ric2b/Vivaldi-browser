@@ -408,10 +408,10 @@ class GClientUtilsTest(trial_dir.TestCase):
 
         self.assertEqual('foo', gclient_utils.merge_conditions(None, 'foo'))
 
-        self.assertEqual('(foo) AND (bar)',
+        self.assertEqual('(foo) and (bar)',
                          gclient_utils.merge_conditions('foo', 'bar'))
 
-        self.assertEqual('(foo or bar) AND (baz)',
+        self.assertEqual('(foo or bar) and (baz)',
                          gclient_utils.merge_conditions('foo or bar', 'baz'))
 
 if __name__ == '__main__':

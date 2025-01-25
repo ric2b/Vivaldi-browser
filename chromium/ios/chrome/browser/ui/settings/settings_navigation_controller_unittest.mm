@@ -21,7 +21,6 @@
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state_manager.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
-#import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
@@ -68,8 +67,7 @@ class SettingsNavigationControllerTest : public PlatformTest {
 
     NSArray<Protocol*>* command_protocols = @[
       @protocol(ApplicationCommands), @protocol(BrowserCommands),
-      @protocol(BrowsingDataCommands), @protocol(SettingsCommands),
-      @protocol(SnackbarCommands)
+      @protocol(SettingsCommands), @protocol(SnackbarCommands)
     ];
     fake_command_endpoint_ =
         [[ProtocolFake alloc] initWithProtocols:command_protocols];
@@ -116,33 +114,35 @@ class SettingsNavigationControllerTest : public PlatformTest {
 // When navigation stack has more than one view controller,
 // -popViewControllerAnimated: successfully removes the top view controller.
 TEST_F(SettingsNavigationControllerTest, PopController) {
-    SettingsNavigationController* settingsController =
-        [SettingsNavigationController
-            mainSettingsControllerForBrowser:browser_.get()
-                                    delegate:nil];
-    UIViewController* viewController =
-        [[UIViewController alloc] initWithNibName:nil bundle:nil];
-    [settingsController pushViewController:viewController animated:NO];
-    EXPECT_EQ(2U, [[settingsController viewControllers] count]);
+  SettingsNavigationController* settingsController =
+      [SettingsNavigationController
+          mainSettingsControllerForBrowser:browser_.get()
+                                  delegate:nil
+                  hasDefaultBrowserBlueDot:NO];
+  UIViewController* viewController =
+      [[UIViewController alloc] initWithNibName:nil bundle:nil];
+  [settingsController pushViewController:viewController animated:NO];
+  EXPECT_EQ(2U, [[settingsController viewControllers] count]);
 
-    UIViewController* poppedViewController =
-        [settingsController popViewControllerAnimated:NO];
-    EXPECT_NSEQ(viewController, poppedViewController);
-    EXPECT_EQ(1U, [[settingsController viewControllers] count]);
-    [settingsController cleanUpSettings];
+  UIViewController* poppedViewController =
+      [settingsController popViewControllerAnimated:NO];
+  EXPECT_NSEQ(viewController, poppedViewController);
+  EXPECT_EQ(1U, [[settingsController viewControllers] count]);
+  [settingsController cleanUpSettings];
 }
 
 // When the navigation stack has only one view controller,
 // -popViewControllerAnimated: returns false.
 TEST_F(SettingsNavigationControllerTest, DontPopRootController) {
-    SettingsNavigationController* settingsController =
-        [SettingsNavigationController
-            mainSettingsControllerForBrowser:browser_.get()
-                                    delegate:nil];
-    EXPECT_EQ(1U, [[settingsController viewControllers] count]);
+  SettingsNavigationController* settingsController =
+      [SettingsNavigationController
+          mainSettingsControllerForBrowser:browser_.get()
+                                  delegate:nil
+                  hasDefaultBrowserBlueDot:NO];
+  EXPECT_EQ(1U, [[settingsController viewControllers] count]);
 
-    EXPECT_FALSE([settingsController popViewControllerAnimated:NO]);
-    [settingsController cleanUpSettings];
+  EXPECT_FALSE([settingsController popViewControllerAnimated:NO]);
+  [settingsController cleanUpSettings];
 }
 
 // When the settings navigation stack has more than one view controller, calling
@@ -150,19 +150,20 @@ TEST_F(SettingsNavigationControllerTest, DontPopRootController) {
 // reveal the view controller underneath.
 TEST_F(SettingsNavigationControllerTest,
        PopWhenNavigationStackSizeIsGreaterThanOne) {
-    SettingsNavigationController* settingsController =
-        [SettingsNavigationController
-            mainSettingsControllerForBrowser:browser_.get()
-                                    delegate:mockDelegate_];
-    UIViewController* viewController =
-        [[UIViewController alloc] initWithNibName:nil bundle:nil];
-    [settingsController pushViewController:viewController animated:NO];
-    EXPECT_EQ(2U, [[settingsController viewControllers] count]);
-    [[mockDelegate_ reject] closeSettings];
-    [settingsController popViewControllerOrCloseSettingsAnimated:NO];
-    EXPECT_EQ(1U, [[settingsController viewControllers] count]);
-    EXPECT_OCMOCK_VERIFY(mockDelegate_);
-    [settingsController cleanUpSettings];
+  SettingsNavigationController* settingsController =
+      [SettingsNavigationController
+          mainSettingsControllerForBrowser:browser_.get()
+                                  delegate:mockDelegate_
+                  hasDefaultBrowserBlueDot:NO];
+  UIViewController* viewController =
+      [[UIViewController alloc] initWithNibName:nil bundle:nil];
+  [settingsController pushViewController:viewController animated:NO];
+  EXPECT_EQ(2U, [[settingsController viewControllers] count]);
+  [[mockDelegate_ reject] closeSettings];
+  [settingsController popViewControllerOrCloseSettingsAnimated:NO];
+  EXPECT_EQ(1U, [[settingsController viewControllers] count]);
+  EXPECT_OCMOCK_VERIFY(mockDelegate_);
+  [settingsController cleanUpSettings];
 }
 
 // When the settings navigation stack only has one view controller, calling
@@ -171,33 +172,35 @@ TEST_F(SettingsNavigationControllerTest,
 TEST_F(SettingsNavigationControllerTest,
        CloseSettingsWhenNavigationStackSizeIsOne) {
   base::UserActionTester user_action_tester;
-    SettingsNavigationController* settingsController =
-        [SettingsNavigationController
-            mainSettingsControllerForBrowser:browser_.get()
-                                    delegate:mockDelegate_];
-    EXPECT_EQ(1U, [[settingsController viewControllers] count]);
-    [[mockDelegate_ expect] closeSettings];
-    ASSERT_EQ(0, user_action_tester.GetActionCount("MobileSettingsClose"));
-    [settingsController popViewControllerOrCloseSettingsAnimated:NO];
-    EXPECT_EQ(1, user_action_tester.GetActionCount("MobileSettingsClose"));
-    EXPECT_OCMOCK_VERIFY(mockDelegate_);
-    [settingsController cleanUpSettings];
+  SettingsNavigationController* settingsController =
+      [SettingsNavigationController
+          mainSettingsControllerForBrowser:browser_.get()
+                                  delegate:mockDelegate_
+                  hasDefaultBrowserBlueDot:NO];
+  EXPECT_EQ(1U, [[settingsController viewControllers] count]);
+  [[mockDelegate_ expect] closeSettings];
+  ASSERT_EQ(0, user_action_tester.GetActionCount("MobileSettingsClose"));
+  [settingsController popViewControllerOrCloseSettingsAnimated:NO];
+  EXPECT_EQ(1, user_action_tester.GetActionCount("MobileSettingsClose"));
+  EXPECT_OCMOCK_VERIFY(mockDelegate_);
+  [settingsController cleanUpSettings];
 }
 
 // Checks that metrics are correctly reported.
 TEST_F(SettingsNavigationControllerTest, Metrics) {
   base::UserActionTester user_action_tester;
-    SettingsNavigationController* settingsController =
-        [SettingsNavigationController
-            mainSettingsControllerForBrowser:browser_.get()
-                                    delegate:mockDelegate_];
-    std::string user_action = "MobileKeyCommandClose";
-    ASSERT_EQ(user_action_tester.GetActionCount(user_action), 0);
+  SettingsNavigationController* settingsController =
+      [SettingsNavigationController
+          mainSettingsControllerForBrowser:browser_.get()
+                                  delegate:mockDelegate_
+                  hasDefaultBrowserBlueDot:NO];
+  std::string user_action = "MobileKeyCommandClose";
+  ASSERT_EQ(user_action_tester.GetActionCount(user_action), 0);
 
-    [settingsController keyCommand_close];
+  [settingsController keyCommand_close];
 
-    EXPECT_EQ(user_action_tester.GetActionCount(user_action), 1);
-    [settingsController cleanUpSettings];
+  EXPECT_EQ(user_action_tester.GetActionCount(user_action), 1);
+  [settingsController cleanUpSettings];
 }
 
 }  // namespace

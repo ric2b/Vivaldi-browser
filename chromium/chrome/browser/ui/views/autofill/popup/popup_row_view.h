@@ -11,8 +11,9 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_view_utils.h"
-#include "content/public/common/input/native_web_keyboard_event.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -110,8 +111,7 @@ class PopupRowView : public views::View, public views::ViewObserver {
 
   // Attempts to process a key press `event`. Returns true if it did (and the
   // parent no longer needs to handle it).
-  virtual bool HandleKeyPressEvent(
-      const content::NativeWebKeyboardEvent& event);
+  virtual bool HandleKeyPressEvent(const input::NativeWebKeyboardEvent& event);
 
   // Returns the view representing the content area of the row.
   PopupRowContentView& GetContentView() { return *content_view_; }
@@ -119,6 +119,10 @@ class PopupRowView : public views::View, public views::ViewObserver {
   // Returns the view representing the suggestions expanding control of the row.
   views::View* GetExpandChildSuggestionsView() {
     return expand_child_suggestions_view_.get();
+  }
+
+  views::View* GetExpandChildSuggestionsIconViewForTesting() {
+    return expand_child_suggestions_view_icon_.get();
   }
 
  protected:
@@ -131,8 +135,21 @@ class PopupRowView : public views::View, public views::ViewObserver {
     return a11y_selection_delegate_.get();
   }
 
+  // Updates all UI parts that may have changed based on the current state,
+  // for now they are the background and expand control visibility.
+  void UpdateUI();
+
   // Updates the background according to the control cell highlighting state.
   void UpdateBackground();
+
+  // Updates the expand subpopup icon visibility. By default the icon is
+  // always visible in the case children suggestion exist. The exception is when
+  // `CanUpdateOpenSubPopupIconVisibilityOnHover()` returns true. In this case
+  // the icon is visible only when a cell is selected (e.g. when the row is
+  // hovered) or the sub-popup is open.
+  // TODO(crbug.com/40274514): Maybe remove this method once experiment is
+  // complete.
+  void UpdateOpenSubPopupIconVisibility();
 
   // The delegate used for accessibility announcements (implemented by the
   // parent view).
@@ -149,8 +166,13 @@ class PopupRowView : public views::View, public views::ViewObserver {
 
   // The view wrapping the content area of the row.
   raw_ptr<PopupRowContentView> content_view_ = nullptr;
+  base::ScopedObservation<PopupRowContentView, views::ViewObserver>
+      content_view_observer_{this};
   // The view wrapping the control area of the row.
   raw_ptr<views::View> expand_child_suggestions_view_ = nullptr;
+  raw_ptr<views::View> expand_child_suggestions_view_icon_ = nullptr;
+  base::ScopedObservation<views::View, views::ViewObserver>
+      expand_child_suggestions_view_observer_{this};
 
   // Overriding event handles for the content and control views.
   std::unique_ptr<ui::EventHandler> content_event_handler_;

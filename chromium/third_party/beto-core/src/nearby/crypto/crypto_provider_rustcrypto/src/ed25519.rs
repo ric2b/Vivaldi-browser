@@ -16,7 +16,7 @@ use ed25519_dalek::Signer;
 
 use crypto_provider::ed25519::{
     InvalidPublicKeyBytes, RawPrivateKey, RawPrivateKeyPermit, RawPublicKey, RawSignature,
-    Signature as _, SignatureError, PRIVATE_KEY_LENGTH, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH,
+    SignatureError, SignatureImpl, PRIVATE_KEY_LENGTH, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH,
 };
 
 pub struct Ed25519;
@@ -29,7 +29,7 @@ impl crypto_provider::ed25519::Ed25519Provider for Ed25519 {
 
 pub struct KeyPair(ed25519_dalek::SigningKey);
 
-impl crypto_provider::ed25519::KeyPair for KeyPair {
+impl crypto_provider::ed25519::KeyPairImpl for KeyPair {
     type PublicKey = PublicKey;
     type Signature = Signature;
 
@@ -54,14 +54,14 @@ impl crypto_provider::ed25519::KeyPair for KeyPair {
         Self(ed25519_dalek::SigningKey::generate(&mut csprng))
     }
 
-    fn public(&self) -> Self::PublicKey {
+    fn public_key(&self) -> Self::PublicKey {
         PublicKey(self.0.verifying_key())
     }
 }
 
 pub struct Signature(ed25519_dalek::Signature);
 
-impl crypto_provider::ed25519::Signature for Signature {
+impl crypto_provider::ed25519::SignatureImpl for Signature {
     fn from_bytes(bytes: &RawSignature) -> Self {
         Self(ed25519_dalek::Signature::from_bytes(bytes))
     }
@@ -73,7 +73,7 @@ impl crypto_provider::ed25519::Signature for Signature {
 
 pub struct PublicKey(ed25519_dalek::VerifyingKey);
 
-impl crypto_provider::ed25519::PublicKey for PublicKey {
+impl crypto_provider::ed25519::PublicKeyImpl for PublicKey {
     type Signature = Signature;
 
     fn from_bytes(bytes: &RawPublicKey) -> Result<Self, InvalidPublicKeyBytes>

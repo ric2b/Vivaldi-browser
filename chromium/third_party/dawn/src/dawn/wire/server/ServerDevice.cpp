@@ -71,12 +71,14 @@ WireResult Server::DoDevicePopErrorScope(Known<WGPUDevice> device,
     userdata->eventManager = eventManager;
     userdata->future = future;
 
-    mProcs.devicePopErrorScope(device->handle, ForwardToServer<&Server::OnDevicePopErrorScope>,
-                               userdata.release());
+    mProcs.devicePopErrorScope2(device->handle, {nullptr, WGPUCallbackMode_AllowProcessEvents,
+                                                 ForwardToServer2<&Server::OnDevicePopErrorScope>,
+                                                 userdata.release(), nullptr});
     return WireResult::Success;
 }
 
 void Server::OnDevicePopErrorScope(ErrorScopeUserdata* userdata,
+                                   WGPUPopErrorScopeStatus status,
                                    WGPUErrorType type,
                                    const char* message) {
     ReturnDevicePopErrorScopeCallbackCmd cmd;
@@ -104,9 +106,11 @@ WireResult Server::DoDeviceCreateComputePipelineAsync(
     userdata->future = future;
     userdata->pipelineObjectID = pipeline.id;
 
-    mProcs.deviceCreateComputePipelineAsync(
-        device->handle, descriptor, ForwardToServer<&Server::OnCreateComputePipelineAsyncCallback>,
-        userdata.release());
+    mProcs.deviceCreateComputePipelineAsync2(
+        device->handle, descriptor,
+        {nullptr, WGPUCallbackMode_AllowProcessEvents,
+         ForwardToServer2<&Server::OnCreateComputePipelineAsyncCallback>, userdata.release(),
+         nullptr});
     return WireResult::Success;
 }
 
@@ -144,9 +148,11 @@ WireResult Server::DoDeviceCreateRenderPipelineAsync(
     userdata->future = future;
     userdata->pipelineObjectID = pipeline.id;
 
-    mProcs.deviceCreateRenderPipelineAsync(
-        device->handle, descriptor, ForwardToServer<&Server::OnCreateRenderPipelineAsyncCallback>,
-        userdata.release());
+    mProcs.deviceCreateRenderPipelineAsync2(
+        device->handle, descriptor,
+        {nullptr, WGPUCallbackMode_AllowProcessEvents,
+         ForwardToServer2<&Server::OnCreateRenderPipelineAsyncCallback>, userdata.release(),
+         nullptr});
     return WireResult::Success;
 }
 

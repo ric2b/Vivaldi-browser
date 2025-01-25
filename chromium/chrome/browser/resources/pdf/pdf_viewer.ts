@@ -7,6 +7,9 @@ import './elements/viewer-error-dialog.js';
 import './elements/viewer-ink-host.js';
 // </if>
 import './elements/viewer-password-dialog.js';
+// <if expr="enable_pdf_ink2">
+import './elements/viewer-side-panel.js';
+// </if>
 import './elements/viewer-pdf-sidenav.js';
 import './elements/viewer-properties-dialog.js';
 import './elements/viewer-toolbar.js';
@@ -25,6 +28,9 @@ import type {Attachment, DocumentMetadata, ExtendedKeyEvent, Point} from './cons
 import {FittingType, SaveRequestType} from './constants.js';
 import type {MessageData} from './controller.js';
 import {PluginController} from './controller.js';
+// <if expr="enable_pdf_ink2">
+import {PluginControllerEventType} from './controller.js';
+// </if>
 // <if expr="enable_ink">
 import type {ContentController} from './controller.js';
 // </if>
@@ -195,6 +201,13 @@ export class PdfViewerElement extends PdfViewerBaseElement {
         value: false,
       },
 
+      // <if expr="enable_pdf_ink2">
+      hasInk2Edits_: {
+        type: Boolean,
+        value: false,
+      },
+      // </if>
+
       isFormFieldFocused_: {
         type: Boolean,
         value: false,
@@ -213,13 +226,6 @@ export class PdfViewerElement extends PdfViewerBaseElement {
 
       // <if expr="enable_pdf_ink2">
       pdfInk2Enabled_: {
-        type: Boolean,
-        value: false,
-      },
-      // </if>
-
-      // <if expr="enable_screen_ai_service">
-      pdfOcrEnabled_: {
         type: Boolean,
         value: false,
       },
@@ -279,6 +285,9 @@ export class PdfViewerElement extends PdfViewerBaseElement {
   private hadPassword_: boolean;
   private hasEdits_: boolean;
   private hasEnteredAnnotationMode_: boolean;
+  // <if expr="enable_pdf_ink2">
+  private hasInk2Edits_: boolean;
+  // </if>
   private isFormFieldFocused_: boolean;
   private loadProgress_: number;
   private navigator_: PdfNavigator|null = null;
@@ -286,9 +295,6 @@ export class PdfViewerElement extends PdfViewerBaseElement {
   private pdfAnnotationsEnabled_: boolean;
   // <if expr="enable_pdf_ink2">
   private pdfInk2Enabled_: boolean = false;
-  // </if>
-  // <if expr="enable_screen_ai_service">
-  private pdfOcrEnabled_: boolean;
   // </if>
   private pluginController_: PluginController|null = null;
   private printingEnabled_: boolean;
@@ -507,7 +513,7 @@ export class PdfViewerElement extends PdfViewerBaseElement {
       this.annotationMode_ = annotationMode;
       return;
     }
-    // </if> expr="enable_pdf_ink2"
+    // </if> enable_pdf_ink2
 
     // <if expr="enable_ink">
     if (annotationMode) {
@@ -561,7 +567,7 @@ export class PdfViewerElement extends PdfViewerBaseElement {
       this.currentController = this.pluginController_!;
       await this.pluginController_!.load(result.fileName, result.dataToSave);
     }
-    // </if> expr="enable_ink"
+    // </if> enable_ink
   }
 
   /** Exits annotation mode if active. */
@@ -573,10 +579,10 @@ export class PdfViewerElement extends PdfViewerBaseElement {
     this.annotationMode_ = false;
     // <if expr="enable_ink">
     await this.restoreSidenav_();
-    // </if> expr="enable_ink"
+    // </if> enable_ink
     await this.loaded;
   }
-  // </if> expr="enable_ink or enable_pdf_ink2"
+  // </if> enable_ink or enable_pdf_ink2
 
   private onDisplayAnnotationsChanged_(e: CustomEvent<boolean>) {
     assert(this.currentController);
@@ -766,9 +772,6 @@ export class PdfViewerElement extends PdfViewerBaseElement {
     // <if expr="enable_pdf_ink2">
     this.pdfInk2Enabled_ = loadTimeData.getBoolean('pdfInk2Enabled');
     // </if>
-    // <if expr="enable_screen_ai_service">
-    this.pdfOcrEnabled_ = loadTimeData.getBoolean('pdfOcrEnabled');
-    // </if>
     this.printingEnabled_ = loadTimeData.getBoolean('printingEnabled');
     const presetZoomFactors = this.viewport.presetZoomFactors;
     this.zoomBounds_.min = Math.round(presetZoomFactors[0] * 100);
@@ -853,6 +856,13 @@ export class PdfViewerElement extends PdfViewerBaseElement {
             destinationData.page, destinationData.x, destinationData.y,
             destinationData.zoom);
         return;
+      // <if expr="enable_pdf_ink2">
+      case 'finishInkStroke':
+        this.hasInk2Edits_ = true;
+        this.pluginController_!.getEventTarget().dispatchEvent(
+            new CustomEvent(PluginControllerEventType.FINISH_INK_STROKE));
+        return;
+      // </if>
       case 'metadata':
         const metadataData =
             data as unknown as {metadataData: DocumentMetadata};
@@ -1093,6 +1103,12 @@ export class PdfViewerElement extends PdfViewerBaseElement {
         (this.sidenavCollapsed_ ? 1 : 0).toString());
   }
 
+  // <if expr="enable_pdf_ink2">
+  private onCanUndoChanged_(e: CustomEvent<boolean>) {
+    this.hasInk2Edits_ = e.detail;
+  }
+  // </if>
+
   /**
    * Saves the current PDF document to disk.
    */
@@ -1107,20 +1123,29 @@ export class PdfViewerElement extends PdfViewerBaseElement {
     // Always send requests of type ORIGINAL to the plugin controller, not the
     // ink controller. The ink controller always saves the edited document.
     // TODO(dstockwell): Report an error to user if this fails.
-    let result: {fileName: string, dataToSave: ArrayBuffer}|null = null;
     assert(this.currentController);
-    if (requestType !== SaveRequestType.ORIGINAL || !this.annotationMode_) {
-      result = await this.currentController.save(requestType);
-    } else {
-      // <if expr="enable_ink">
-      // Request type original in annotation mode --> need to exit annotation
-      // mode before saving. See https://crbug.com/919364.
+
+    // <if expr="enable_ink">
+    // For Ink, request type original in annotation mode --> need to exit
+    // annotation mode before saving. See https://crbug.com/919364.
+    let shouldExitAnnotationMode =
+        this.annotationMode_ && requestType === SaveRequestType.ORIGINAL;
+
+    // Ink2 overrides Ink, and Ink2 does not need to exit annotation mode.
+    // Only exit annotation mode if Ink2 is disabled.
+    // <if expr="enable_pdf_ink2">
+    shouldExitAnnotationMode =
+        shouldExitAnnotationMode && !this.pdfInk2Enabled_;
+    // </if> enable_pdf_ink2
+
+    if (shouldExitAnnotationMode) {
       await this.exitAnnotationMode_();
       assert(!this.annotationMode_);
-      result = await this.currentController.save(SaveRequestType.ORIGINAL);
-      // </if>
     }
-    if (result == null) {
+    // </if> enable_ink
+
+    const result = await this.currentController.save(requestType);
+    if (result === null) {
       // The content controller handled the save internally.
       return;
     }
@@ -1157,6 +1182,13 @@ export class PdfViewerElement extends PdfViewerBaseElement {
             // </if>
           });
         });
+
+    // <if expr="enable_pdf_ink2">
+    // Ink2 doesn't need to exit annotation mode after save.
+    if (this.pdfInk2Enabled_) {
+      return;
+    }
+    // </if>
 
     // <if expr="enable_ink">
     // Saving in Annotation mode is destructive: crbug.com/919364
@@ -1206,6 +1238,15 @@ export class PdfViewerElement extends PdfViewerBaseElement {
   private isRotated_(): boolean {
     return this.clockwiseRotations_ !== 0;
   }
+
+  // <if expr="enable_pdf_ink2">
+  /**
+   * @returns Whether the PDF viewer has Ink2 enabled and is in annotation mode.
+   */
+  private inInk2AnnotationMode_() {
+    return this.pdfInk2Enabled_ && this.annotationMode_;
+  }
+  // </if>
 
   // <if expr="enable_ink">
   /**

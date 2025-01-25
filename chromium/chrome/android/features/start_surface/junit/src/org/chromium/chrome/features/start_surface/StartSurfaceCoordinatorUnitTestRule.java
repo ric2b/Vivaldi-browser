@@ -31,7 +31,6 @@ import org.chromium.base.jank_tracker.PlaceholderJankTracker;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
-import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.app.tabmodel.ChromeTabModelFilterFactory;
 import org.chromium.chrome.browser.back_press.BackPressManager;
@@ -40,7 +39,6 @@ import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.feed.FeedServiceBridge;
 import org.chromium.chrome.browser.feed.FeedServiceBridgeJni;
 import org.chromium.chrome.browser.feed.FeedSurfaceMediator;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
 import org.chromium.chrome.browser.init.ActivityLifecycleDispatcherImpl;
@@ -49,7 +47,6 @@ import org.chromium.chrome.browser.omnibox.OmniboxStub;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProviderJni;
@@ -62,7 +59,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelFilterFactory;
 import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
+import org.chromium.chrome.browser.tabmodel.TabWindowManager;
 import org.chromium.chrome.browser.tasks.tab_management.TabGridDialogView;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelperJni;
@@ -87,14 +84,17 @@ import java.util.List;
 /** Custom TestRule for tests using StartSurfaceCoordinator */
 public class StartSurfaceCoordinatorUnitTestRule implements TestRule {
     @Rule public JniMocker mJniMocker = new JniMocker();
-    @Rule public TestRule mProcessor = new Features.JUnitProcessor();
     @Rule public SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
     @Rule public BookmarkNativesMockRule mBookmarkNativesMockRule = new BookmarkNativesMockRule();
+
+    private Profile mProfile;
+    private Profile mIncogonitoProfile;
 
     private TabModelSelector mTabModelSelector;
     private ViewGroup mContainerView;
     private TemplateUrlService mTemplateUrlService;
     private LibraryLoader mLibraryLoader;
+    private TabWindowManager mTabWindowManager;
 
     private Activity mActivity;
     private StartSurfaceCoordinator mCoordinator;
@@ -104,15 +104,11 @@ public class StartSurfaceCoordinatorUnitTestRule implements TestRule {
     private ObservableSupplierImpl<Profile> mProfileSupplier = new ObservableSupplierImpl<>();
 
     private static class MockTabModelFilterProvider extends TabModelFilterProvider {
-        public MockTabModelFilterProvider(Activity activity) {
+        public MockTabModelFilterProvider(
+                Activity activity, Profile profile, Profile incogonitoProfile) {
             List<TabModel> tabModels = new ArrayList<>();
             MockTabModelSelector selector =
-                    new MockTabModelSelector(
-                            ProfileManager.getLastUsedRegularProfile(),
-                            ProfileManager.getLastUsedRegularProfile().getPrimaryOTRProfile(true),
-                            0,
-                            0,
-                            null);
+                    new MockTabModelSelector(profile, incogonitoProfile, 0, 0, null);
             tabModels.add(selector.getModel(false));
             tabModels.add(selector.getModel(true));
             selector.selectModel(true);
@@ -143,22 +139,21 @@ public class StartSurfaceCoordinatorUnitTestRule implements TestRule {
         return new Statement() {
             @Override
             public void evaluate() {
-                ChromeFeatureList.sStartSurfaceAndroid.setForTesting(true);
-                ChromeFeatureList.sShowNtpAtStartupAndroid.setForTesting(false);
-
+                mProfile = Mockito.mock(Profile.class);
+                mIncogonitoProfile = Mockito.mock(Profile.class);
                 mTabModelSelector = Mockito.mock(TabModelSelector.class);
                 mContainerView = Mockito.mock(ViewGroup.class);
                 mTemplateUrlService = Mockito.mock(TemplateUrlService.class);
                 mLibraryLoader = Mockito.mock(LibraryLoader.class);
+                mTabWindowManager = Mockito.mock(TabWindowManager.class);
 
                 initJniMocks();
                 initViewsMocks();
 
-                doReturn(new MockTabModelFilterProvider(mActivity))
+                doReturn(new MockTabModelFilterProvider(mActivity, mProfile, mIncogonitoProfile))
                         .when(mTabModelSelector)
                         .getTabModelFilterProvider();
 
-                Assert.assertTrue(ReturnToChromeUtil.isStartSurfaceEnabled(mActivity));
                 setUpCoordinator();
             }
         };
@@ -169,13 +164,10 @@ public class StartSurfaceCoordinatorUnitTestRule implements TestRule {
     }
 
     private void initJniMocks() {
-        Profile incognitoProfile = Mockito.mock(Profile.class);
-        Mockito.when(incognitoProfile.isOffTheRecord()).thenReturn(true);
-        Profile profile = Mockito.mock(Profile.class);
-        Mockito.when(profile.getPrimaryOTRProfile(Mockito.anyBoolean()))
-                .thenReturn(incognitoProfile);
+        when(mProfile.isOffTheRecord()).thenReturn(false);
+        when(mIncogonitoProfile.isOffTheRecord()).thenReturn(true);
+        when(mProfile.getPrimaryOTRProfile(Mockito.anyBoolean())).thenReturn(mIncogonitoProfile);
         PrefService prefService = Mockito.mock(PrefService.class);
-        ProfileManager.setLastUsedProfileForTesting(profile);
 
         mSuggestionsDeps.getFactory().offlinePageBridge = new FakeOfflinePageBridge();
         mSuggestionsDeps.getFactory().mostVisitedSites = new FakeMostVisitedSites();
@@ -192,8 +184,8 @@ public class StartSurfaceCoordinatorUnitTestRule implements TestRule {
         LibraryLoader.setLibraryLoaderForTesting(mLibraryLoader);
 
         UserPrefs.Natives userPrefsJniMock = Mockito.mock(UserPrefs.Natives.class);
-        Mockito.when(userPrefsJniMock.get(profile)).thenReturn(prefService);
-        when(userPrefsJniMock.get(profile)).thenReturn(prefService);
+        Mockito.when(userPrefsJniMock.get(mProfile)).thenReturn(prefService);
+        when(userPrefsJniMock.get(mProfile)).thenReturn(prefService);
         mJniMocker.mock(UserPrefsJni.TEST_HOOKS, userPrefsJniMock);
 
         IdentityServicesProvider.Natives identityServicesProviderJniMock =
@@ -236,7 +228,8 @@ public class StartSurfaceCoordinatorUnitTestRule implements TestRule {
         BrowserControlsManager browserControlsManager = new BrowserControlsManager(mActivity, 0);
         SnackbarManager snackbarManager =
                 new SnackbarManager(mActivity, mContainerView, windowAndroid);
-        TabContentManager tabContentManager = new TabContentManager(mActivity, null, false, null);
+        TabContentManager tabContentManager =
+                new TabContentManager(mActivity, null, false, null, mTabWindowManager);
 
         VoiceRecognitionHandler voiceRecognitionHandler =
                 Mockito.mock(VoiceRecognitionHandler.class);
@@ -275,6 +268,5 @@ public class StartSurfaceCoordinatorUnitTestRule implements TestRule {
 
         Assert.assertFalse(LibraryLoader.getInstance().isLoaded());
         when(mLibraryLoader.isInitialized()).thenReturn(true);
-        Assert.assertTrue(ReturnToChromeUtil.isStartSurfaceEnabled(mActivity));
     }
 }

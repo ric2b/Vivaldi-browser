@@ -33,6 +33,8 @@
 #include "src/codegen/arm64/register-arm64.h"
 #elif V8_TARGET_ARCH_X64
 #include "src/codegen/x64/register-x64.h"
+#elif V8_TARGET_ARCH_S390X
+#include "src/codegen/s390/register-s390.h"
 #else
 #error "Maglev does not supported this architecture."
 #endif
@@ -1161,7 +1163,7 @@ void StraightForwardRegisterAllocator::AddMoveBeforeCurrentNode(
           << PrintNodeLabel(graph_labeller(), node) << std::endl;
     }
     gap_move =
-        Node::New<ConstantGapMove>(compilation_info_->zone(), {}, node, target);
+        Node::New<ConstantGapMove>(compilation_info_->zone(), 0, node, target);
   } else {
     if (v8_flags.trace_maglev_regalloc) {
       printing_visitor_->os() << "  gap move: " << target << " ← "
@@ -1169,7 +1171,7 @@ void StraightForwardRegisterAllocator::AddMoveBeforeCurrentNode(
                               << source << std::endl;
     }
     gap_move =
-        Node::New<GapMove>(compilation_info_->zone(), {},
+        Node::New<GapMove>(compilation_info_->zone(), 0,
                            compiler::AllocatedOperand::cast(source), target);
   }
   if (compilation_info_->has_graph_labeller()) {

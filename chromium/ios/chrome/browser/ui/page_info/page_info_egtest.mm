@@ -10,6 +10,7 @@
 #import "base/test/ios/wait_util.h"
 #import "components/content_settings/core/browser/content_settings_uma_util.h"
 #import "components/content_settings/core/common/content_settings_types.h"
+#import "components/feature_engagement/public/feature_constants.h"
 #import "components/optimization_guide/core/optimization_guide_switches.h"
 #import "components/page_info/core/page_info_action.h"
 #import "components/strings/grit/components_branded_strings.h"
@@ -112,6 +113,8 @@ void ExpectPermissionChangedHistograms(ContentSettingsType type) {
   AppLaunchConfiguration config;
   config.relaunch_policy = NoForceRelaunchAndResetState;
 
+  config.features_enabled.push_back(
+      feature_engagement::kIPHiOSInlineEnhancedSafeBrowsingPromoFeature);
   if ([self isRunningTest:@selector(testLegacySecuritySection)]) {
     config.features_disabled.push_back(kRevampPageInfoIos);
   } else {
@@ -314,6 +317,11 @@ void ExpectPermissionChangedHistograms(ContentSettingsType type) {
   testShowTwoAccessiblePermissionsInPageInfo
 #endif
 - (void)MAYBE_testShowTwoAccessiblePermissionsInPageInfo {
+  // TODO(crbug.com/342245057): Camera access is broken in the simulator on iOS
+  // 17.5.
+  if (@available(iOS 17.5, *)) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 17.5.");
+  }
   // Open a page that requests microphone permissions.
   GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
   [ChromeEarlGrey loadURL:self.testServer->GetURL(

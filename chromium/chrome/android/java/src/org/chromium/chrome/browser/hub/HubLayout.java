@@ -64,6 +64,9 @@ import org.chromium.ui.resources.ResourceManager;
 import java.util.Collections;
 import java.util.function.DoubleConsumer;
 
+// Vivaldi
+import org.vivaldi.browser.hub.VivaldiHubPaneHostView;
+
 /**
  * A {@link Layout} for Hub that has an empty or single tab {@link SceneLayer}. Android UI for a
  * toolbar and panes will be rendered atop this layout.
@@ -165,7 +168,7 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
 
     @Override
     public void selectTabAndHideHubLayout(int tabId) {
-        TabModelUtils.selectTabById(mTabModelSelector, tabId, TabSelectionType.FROM_USER, false);
+        TabModelUtils.selectTabById(mTabModelSelector, tabId, TabSelectionType.FROM_USER);
         startHiding();
     }
 
@@ -292,6 +295,7 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
                             }
                         }
                     });
+            maybeAddPaneAnimationListener(mCurrentAnimationRunner);
 
             mRootView.setVisibility(View.VISIBLE);
             containerView.setVisibility(View.INVISIBLE);
@@ -302,12 +306,7 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
             }
             mRootView.addView(containerView, /* index= */ 0, params);
 
-            // For start surface transitions the behavior prior to Hub is to instantly switch
-            // between layouts. Ideally, there should be a coordinated fade between the layouts, but
-            // this is difficult to implement due to how LayoutManager works and results in a
-            // flicker of the window's background color. To avoid this skip the animation for start
-            // surface. See https://crbug.com/1520657.
-            if (!animate || previousLayoutType == LayoutType.START_SURFACE) {
+            if (!animate) {
                 // Don't post or wait for a layout as HubLayout is not in control of when the
                 // previous layout was hidden and this avoids a possibly empty frame.
                 queueAnimation();
@@ -317,6 +316,11 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
                 containerView.runOnNextLayout(this::queueAnimation);
             }
         }
+
+        // Vivaldi
+        VivaldiHubPaneHostView hubPaneHostView =
+                (VivaldiHubPaneHostView) mHubController.getPaneHostView();
+        hubPaneHostView.setPaneManager(mPaneManager);
     }
 
     @Override
@@ -375,8 +379,7 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
             updateEmptyLayerColor(mPaneManager.getFocusedPaneSupplier().get());
 
             HubContainerView containerView = mHubController.getContainerView();
-            HubLayoutAnimatorProvider animatorProvider =
-                    createHideAnimatorProvider(containerView, nextLayoutType);
+            HubLayoutAnimatorProvider animatorProvider = createHideAnimatorProvider(containerView);
 
             Callback<Bitmap> thumbnailCallback = animatorProvider.getThumbnailCallback();
             if (thumbnailCallback != null) {
@@ -400,23 +403,9 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
                             doneHiding();
                         }
                     });
+            maybeAddPaneAnimationListener(mCurrentAnimationRunner);
 
-            // For start surface transitions the behavior prior to Hub is to instantly switch
-            // between layouts. Ideally, there should be a coordinated fade between the layouts, but
-            // this is difficult to implement due to how LayoutManager works and results in a
-            // flicker of the window's background color. To avoid this skip the animation for start
-            // surface. See https://crbug.com/1520657.
-            if (nextLayoutType == LayoutType.START_SURFACE) {
-                // Posting is okay here as start surface won't show until doneHiding happens.
-                PostTask.postTask(
-                        TaskTraits.UI_DEFAULT,
-                        () -> {
-                            queueAnimation();
-                            forceAnimationToFinish();
-                        });
-            } else {
-                PostTask.postTask(TaskTraits.UI_DEFAULT, this::queueAnimation);
-            }
+            PostTask.postTask(TaskTraits.UI_DEFAULT, this::queueAnimation);
         }
     }
 
@@ -553,6 +542,7 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
                         doneHiding();
                     }
                 });
+        maybeAddPaneAnimationListener(mCurrentAnimationRunner);
 
         selectTabAndHideHubLayout(tabId);
     }
@@ -640,7 +630,7 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
         if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
             return TranslateHubLayoutAnimationFactory.createTranslateUpAnimatorProvider(
                     containerView, mScrimController, TRANSLATE_DURATION_MS, getContainerYOffset());
-        } else if (mPreviousLayoutTypeSupplier.get() == LayoutType.START_SURFACE || pane == null) {
+        } else if (pane == null) {
             return FadeHubLayoutAnimationFactory.createFadeInAnimatorProvider(
                     containerView, FADE_DURATION_MS, mOnToolbarAlphaChange);
         }
@@ -648,18 +638,27 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    HubLayoutAnimatorProvider createHideAnimatorProvider(
-            @NonNull HubContainerView containerView, @LayoutType int nextLayoutType) {
+    HubLayoutAnimatorProvider createHideAnimatorProvider(@NonNull HubContainerView containerView) {
         @Nullable Pane pane = mPaneManager.getFocusedPaneSupplier().get();
 
         if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
             return TranslateHubLayoutAnimationFactory.createTranslateDownAnimatorProvider(
                     containerView, mScrimController, TRANSLATE_DURATION_MS, getContainerYOffset());
-        } else if (nextLayoutType == LayoutType.START_SURFACE || pane == null) {
+        } else if (pane == null) {
             return FadeHubLayoutAnimationFactory.createFadeOutAnimatorProvider(
                     containerView, FADE_DURATION_MS, mOnToolbarAlphaChange);
         }
         return pane.createHideHubLayoutAnimatorProvider(containerView);
+    }
+
+    private void maybeAddPaneAnimationListener(HubLayoutAnimationRunner animationRunner) {
+        @Nullable Pane pane = mPaneManager.getFocusedPaneSupplier().get();
+        if (pane == null) return;
+
+        HubLayoutAnimationListener listener = pane.getHubLayoutAnimationListener();
+        if (listener == null) return;
+
+        animationRunner.addListener(listener);
     }
 
     private void queueAnimation() {

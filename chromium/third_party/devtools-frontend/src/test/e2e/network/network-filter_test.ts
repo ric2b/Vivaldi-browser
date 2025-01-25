@@ -9,9 +9,7 @@ import {
   $textContent,
   clickElement,
   disableExperiment,
-  enableExperiment,
   getTestServerPort,
-  reloadDevTools,
   step,
   typeText,
   waitFor,
@@ -20,6 +18,9 @@ import {
   waitForNone,
 } from '../../shared/helper.js';
 import {describe, it} from '../../shared/mocha-extensions.js';
+import {
+  reloadDevTools,
+} from '../helpers/cross-tool-helper.js';
 import {
   clearTextFilter,
   getAllRequestNames,
@@ -328,7 +329,7 @@ describe('The Network Tab', function() {
   this.timeout(5000);
 
   beforeEach(async () => {
-    await enableExperiment('network-panel-filter-bar-redesign');
+    await reloadDevTools({enableExperiments: ['network-panel-filter-bar-redesign']});
 
     await navigateToNetworkTab('empty.html');
     await setCacheDisabled(true);
@@ -377,7 +378,7 @@ describe('The Network Tab', function() {
 
     await categoryXHRFilter.click();
 
-    await reloadDevTools({selectedPanel: {name: 'network'}});
+    await reloadDevTools({selectedPanel: {name: 'network'}, enableExperiments: ['network-panel-filter-bar-redesign']});
     const filterText = await getTextFilterContent();
     assert.strictEqual(filterText, 'foo');
 

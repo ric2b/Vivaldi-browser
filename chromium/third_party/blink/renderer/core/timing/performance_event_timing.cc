@@ -40,6 +40,8 @@ PerformanceEventTiming* PerformanceEventTiming::CreateFirstInputTiming(
           entry->startTime(), entry->processingStart(), entry->processingEnd(),
           entry->cancelable(), entry->target(), entry->source());
   first_input->SetDuration(entry->duration());
+  first_input->SetInteractionIdAndOffset(entry->interactionId(),
+                                         entry->interactionOffset());
   return first_input;
 }
 
@@ -129,6 +131,7 @@ void PerformanceEventTiming::SetDuration(double duration) {
 
 void PerformanceEventTiming::BuildJSONValue(V8ObjectBuilder& builder) const {
   PerformanceEntry::BuildJSONValue(builder);
+  builder.AddInteger("interactionId", interactionId());
   builder.AddNumber("processingStart", processingStart());
   builder.AddNumber("processingEnd", processingEnd());
   builder.AddBoolean("cancelable", cancelable_);

@@ -340,6 +340,7 @@ cc_library(
     hdrs = ["rusage_profiler.h"],
     visibility = ["//visibility:public"],
     deps = [
+        ":periodic_action",
         ":rusage_stats",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/base:nullability",
@@ -363,6 +364,19 @@ cc_library(
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/time",
+    ],
+)
+
+cc_library(
+    name = "periodic_action",
+    srcs = ["periodic_action.cc"],
+    hdrs = ["periodic_action.h"],
+    deps = [
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
     ],
@@ -428,6 +442,7 @@ cc_library(
         ":pc_info",
         ":remote_file",
         ":workdir",
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
@@ -756,7 +771,6 @@ cc_library(
     name = "corpus_io",
     srcs = ["corpus_io.cc"],
     hdrs = ["corpus_io.h"],
-    # TODO(kcc): move corpus_io test from testing/centipede_test.cc into a dedicated test.
     deps = [
         ":blob_file",
         ":defs",
@@ -769,6 +783,7 @@ cc_library(
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -776,6 +791,7 @@ cc_library(
     name = "early_exit",
     srcs = ["early_exit.cc"],
     hdrs = ["early_exit.h"],
+    linkopts = ["-latomic"],  # for std::atomic::load()/store().
     visibility = PUBLIC_API_VISIBILITY,
 )
 
@@ -862,7 +878,7 @@ cc_library(
         ":centipede_callbacks",
         ":centipede_lib",
         ":command",
-        ":corpus",
+        ":corpus_io",
         ":coverage",
         ":defs",
         ":distill",
@@ -872,6 +888,7 @@ cc_library(
         ":minimize_crash",
         ":pc_info",
         ":remote_file",
+        ":runner_result",
         ":stats",
         ":util",
         ":workdir",
@@ -880,7 +897,10 @@ cc_library(
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
+        "@com_google_absl//absl/types:span",
+        "@com_google_fuzztest//fuzztest:configuration",
     ],
 )
 
@@ -923,6 +943,7 @@ cc_library(
         ":feature",
         ":feature_set",
         ":logging",
+        ":periodic_action",
         ":remote_file",
         ":resource_pool",
         ":rusage_profiler",
@@ -1361,8 +1382,6 @@ cc_test(
         ":distill",
         ":environment",
         ":feature",
-        ":resource_pool",
-        ":rusage_stats",
         ":test_util",
         ":util",
         ":workdir",
@@ -1599,6 +1618,24 @@ cc_test(
 )
 
 cc_test(
+    name = "corpus_io_test",
+    srcs = ["corpus_io_test.cc"],
+    deps = [
+        ":blob_file",
+        ":corpus",
+        ":corpus_io",
+        ":defs",
+        ":feature",
+        ":test_util",
+        ":util",
+        ":workdir",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "corpus_test",
     srcs = ["corpus_test.cc"],
     deps = [
@@ -1729,12 +1766,9 @@ cc_test(
         "@com_google_fuzztest//centipede/testing:test_input_filter",
     ],
     deps = [
-        ":blob_file",
         ":centipede_callbacks",
         ":centipede_default_callbacks",
         ":centipede_interface",
-        ":corpus",
-        ":corpus_io",
         ":defs",
         ":environment",
         ":feature",
@@ -1798,6 +1832,17 @@ cc_test(
         ":thread_pool",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/time",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "periodic_action_test",
+    srcs = ["periodic_action_test.cc"],
+    deps = [
+        ":logging",
+        ":periodic_action",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
     ],

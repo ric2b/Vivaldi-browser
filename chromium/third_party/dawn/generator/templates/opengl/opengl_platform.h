@@ -67,6 +67,9 @@ using GLDEBUGPROCAMD = void(KHRONOS_APIENTRY*)(GLuint id,
                                                const GLchar* message,
                                                void* userParam);
 
+using AnyGLProc = void (*)();
+using GLGetProcProc = AnyGLProc (KHRONOS_APIENTRY*) (const char*);
+
 {% for block in header_blocks %}
     // {{block.description}}
     {% for enum in block.enums %}
@@ -83,12 +86,5 @@ using GLDEBUGPROCAMD = void(KHRONOS_APIENTRY*)(GLuint id,
     {% endfor %}
 
 {% endfor%}
-
-// GL_ANGLE_base_vertex_base_instance
-// See crbug.com/dawn/1715 for why this is embedded
-using PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEANGLEPROC = void(KHRONOS_APIENTRY *)(GLenum mode, GLint first, GLsizei count, GLsizei instanceCount, GLuint baseInstance);
-using PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEANGLEPROC = void(KHRONOS_APIENTRY *)(GLenum mode, GLsizei count, GLenum type, const GLvoid * indices, GLsizei instanceCount, GLint baseVertex, GLuint baseInstance);
-using PFNGLMULTIDRAWARRAYSINSTANCEDBASEINSTANCEANGLEPROC = void(KHRONOS_APIENTRY *)(GLenum mode, const GLint * firsts, const GLsizei * counts, const GLsizei * instanceCounts, const GLuint * baseInstances, GLsizei drawcount);
-using PFNGLMULTIDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEANGLEPROC = void(KHRONOS_APIENTRY *)(GLenum mode, const GLsizei * counts, GLenum type, const GLvoid *const* indices, const GLsizei * instanceCounts, const GLint * baseVertices, const GLuint * baseInstances, GLsizei drawcount);
 
 #undef DAWN_GL_APIENTRY

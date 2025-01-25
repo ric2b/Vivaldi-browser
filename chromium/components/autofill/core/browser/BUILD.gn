@@ -47,7 +47,6 @@ action("regex_patterns_inl_h") {
     sources += [
       "form_parsing/internal_resources/0_default_regex_patterns.json",
       "form_parsing/internal_resources/1_experimental_regex_patterns.json",
-      "form_parsing/internal_resources/2_nextgen_regex_patterns.json",
     ]
   }
 
@@ -70,6 +69,8 @@ static_library("browser") {
     "address_normalizer_impl.h",
     "address_profile_save_manager.cc",
     "address_profile_save_manager.h",
+    "address_suggestion_generator.cc",
+    "address_suggestion_generator.h",
     "autocomplete_history_manager.cc",
     "autocomplete_history_manager.h",
     "autofill_ablation_study.cc",
@@ -104,8 +105,6 @@ static_library("browser") {
     "autofill_profile_import_process.cc",
     "autofill_profile_import_process.h",
     "autofill_shared_storage_handler.h",
-    "autofill_suggestion_generator.cc",
-    "autofill_suggestion_generator.h",
     "autofill_trigger_details.h",
     "autofill_type.cc",
     "autofill_type.h",
@@ -283,8 +282,6 @@ static_library("browser") {
     "geo/subkey_requester.h",
     "heuristic_source.cc",
     "heuristic_source.h",
-    "iban_manager.cc",
-    "iban_manager.h",
     "logging/log_buffer_submitter.cc",
     "logging/log_buffer_submitter.h",
     "logging/log_manager.cc",
@@ -309,6 +306,8 @@ static_library("browser") {
     "metrics/autofill_metrics.h",
     "metrics/autofill_metrics_utils.cc",
     "metrics/autofill_metrics_utils.h",
+    "metrics/autofill_settings_metrics.cc",
+    "metrics/autofill_settings_metrics.h",
     "metrics/fallback_autocomplete_unrecognized_metrics.cc",
     "metrics/fallback_autocomplete_unrecognized_metrics.h",
     "metrics/field_filling_stats_and_score_metrics.cc",
@@ -372,6 +371,8 @@ static_library("browser") {
     "metrics/profile_token_quality_metrics.h",
     "metrics/quality_metrics.cc",
     "metrics/quality_metrics.h",
+    "metrics/quality_metrics_filling.cc",
+    "metrics/quality_metrics_filling.h",
     "metrics/shadow_prediction_metrics.cc",
     "metrics/shadow_prediction_metrics.h",
     "metrics/stored_profile_metrics.cc",
@@ -405,6 +406,8 @@ static_library("browser") {
     "payments/full_card_request.h",
     "payments/iban_access_manager.cc",
     "payments/iban_access_manager.h",
+    "payments/iban_manager.cc",
+    "payments/iban_manager.h",
     "payments/iban_save_manager.cc",
     "payments/iban_save_manager.h",
     "payments/mandatory_reauth_manager.cc",
@@ -466,6 +469,8 @@ static_library("browser") {
     "payments/webauthn_callback_types.h",
     "payments_data_manager.cc",
     "payments_data_manager.h",
+    "payments_suggestion_generator.cc",
+    "payments_suggestion_generator.h",
     "personal_data_manager.cc",
     "personal_data_manager.h",
     "personal_data_manager_observer.h",
@@ -546,11 +551,12 @@ static_library("browser") {
     "ui/payments/payments_window_user_consent_dialog_controller.h",
     "ui/payments/payments_window_user_consent_dialog_controller_impl.cc",
     "ui/payments/payments_window_user_consent_dialog_controller_impl.h",
-    "ui/payments/save_card_and_virtual_card_enroll_confirmation_ui_params.cc",
-    "ui/payments/save_card_and_virtual_card_enroll_confirmation_ui_params.h",
+    "ui/payments/save_payment_method_and_virtual_card_enroll_confirmation_ui_params.cc",
+    "ui/payments/save_payment_method_and_virtual_card_enroll_confirmation_ui_params.h",
     "ui/payments/virtual_card_enroll_bubble_controller.h",
     "ui/payments/virtual_card_enroll_ui_model.cc",
     "ui/payments/virtual_card_enroll_ui_model.h",
+    "ui/popup_interaction.h",
     "ui/popup_open_enums.h",
     "ui/region_combobox_model.cc",
     "ui/region_combobox_model.h",
@@ -626,10 +632,15 @@ static_library("browser") {
     ]
   }
 
+  if (is_android) {
+    sources += [
+      "payments/autofill_save_iban_ui_info.cc",
+      "payments/autofill_save_iban_ui_info.h",
+    ]
+  }
+
   if (is_ios || is_android) {
     sources += [
-      "payments/autofill_credit_card_filling_infobar_delegate_mobile.cc",
-      "payments/autofill_credit_card_filling_infobar_delegate_mobile.h",
       "payments/autofill_save_card_delegate.cc",
       "payments/autofill_save_card_delegate.h",
       "payments/autofill_save_card_infobar_delegate_mobile.cc",
@@ -672,10 +683,10 @@ static_library("browser") {
     sources += [
       "ml_model/autofill_ml_prediction_model_handler.cc",
       "ml_model/autofill_ml_prediction_model_handler.h",
+      "ml_model/autofill_model_encoder.cc",
+      "ml_model/autofill_model_encoder.h",
       "ml_model/autofill_model_executor.cc",
       "ml_model/autofill_model_executor.h",
-      "ml_model/autofill_model_vectorizer.cc",
-      "ml_model/autofill_model_vectorizer.h",
     ]
   }
 
@@ -724,6 +735,8 @@ static_library("browser") {
     "//base:i18n",
     "//build:branding_buildflags",
     "//build:chromeos_buildflags",
+    "//components/autofill/core/common:autofill_regex",
+    "//components/autofill/core/common:credit_card_number_validation",
     "//components/commerce/core:commerce_types",
     "//components/commerce/core:feature_list",
     "//components/commerce/core:metrics",
@@ -836,9 +849,10 @@ static_library("test_support") {
     "autofill_form_test_utils.cc",
     "autofill_form_test_utils.h",
     "autofill_manager_test_api.h",
-    "autofill_suggestion_generator_test_api.h",
     "autofill_test_utils.cc",
     "autofill_test_utils.h",
+    "autofill_testing_pref_service.cc",
+    "autofill_testing_pref_service.h",
     "browser_autofill_manager_test_api.cc",
     "browser_autofill_manager_test_api.h",
     "browser_autofill_manager_test_delegate.cc",
@@ -882,8 +896,6 @@ static_library("test_support") {
     "mock_autofill_optimization_guide.h",
     "mock_autofill_plus_address_delegate.cc",
     "mock_autofill_plus_address_delegate.h",
-    "mock_iban_manager.cc",
-    "mock_iban_manager.h",
     "mock_merchant_promo_code_manager.cc",
     "mock_merchant_promo_code_manager.h",
     "mock_single_field_form_fill_router.cc",
@@ -893,6 +905,12 @@ static_library("test_support") {
     "payments/mock_iban_access_manager.h",
     "payments/mock_test_payments_network_interface.cc",
     "payments/mock_test_payments_network_interface.h",
+    "payments/payments_network_interface_test_base.cc",
+    "payments/payments_network_interface_test_base.h",
+    "payments/test/autofill_payments_test_utils.cc",
+    "payments/test/autofill_payments_test_utils.h",
+    "payments/test/mock_iban_manager.cc",
+    "payments/test/mock_iban_manager.h",
     "payments/test/mock_mandatory_reauth_manager.cc",
     "payments/test/mock_mandatory_reauth_manager.h",
     "payments/test/mock_payments_window_manager.cc",
@@ -955,6 +973,7 @@ static_library("test_support") {
     "ui/mock_autofill_suggestion_delegate.h",
     "ui/mock_fast_checkout_client.cc",
     "ui/mock_fast_checkout_client.h",
+    "ui/payments/virtual_card_enroll_ui_model_test_api.h",
     "ui/suggestion_test_helpers.cc",
     "ui/suggestion_test_helpers.h",
     "webdata/mock_autofill_webdata_backend.cc",
@@ -976,6 +995,7 @@ static_library("test_support") {
     "//base/test:test_support",
     "//components/autofill/core/browser",
     "//components/autofill/core/common",
+    "//components/autofill/core/common:credit_card_number_validation",
     "//components/device_reauth:test_support",
     "//components/feature_engagement",
     "//components/leveldb_proto",
@@ -990,6 +1010,9 @@ static_library("test_support") {
     "//components/translate/core/browser:test_support",
     "//components/ukm",
     "//components/ukm:test_support",
+    "//components/variations",
+    "//components/variations:test_support",
+    "//components/variations/net",
     "//components/version_info:version_info",
     "//google_apis:test_support",
     "//services/network:test_support",
@@ -1057,8 +1080,8 @@ bundle_data("unit_tests_bundle_data") {
     "//components/test/data/autofill/merge/output/singlemerge.out",
     "//components/test/data/autofill/merge/output/streetaddress.out",
     "//components/test/data/autofill/merge/output/validation.out",
-    "//components/test/data/autofill/ml_model/autofill_model-br-overfit.tflite",
-    "//components/test/data/autofill/ml_model/br_overfitted_dictionary_test.txt",
+    "//components/test/data/autofill/ml_model/autofill_model-fold-one.tflite",
+    "//components/test/data/autofill/ml_model/autofill_model_metadata.binarypb",
   ]
   outputs = [ "{{bundle_resources_dir}}/" +
               "{{source_root_relative_dir}}/{{source_file_part}}" ]
@@ -1072,6 +1095,7 @@ source_set("unit_tests") {
     "address_normalization_manager_unittest.cc",
     "address_normalizer_impl_unittest.cc",
     "address_profile_save_manager_unittest.cc",
+    "address_suggestion_generator_unittest.cc",
     "autocomplete_history_manager_unittest.cc",
     "autofill_ablation_study_unittest.cc",
     "autofill_address_util_unittest.cc",
@@ -1085,7 +1109,6 @@ source_set("unit_tests") {
     "autofill_merge_unittest.cc",
     "autofill_optimization_guide_unittest.cc",
     "autofill_profile_import_process_unittest.cc",
-    "autofill_suggestion_generator_unittest.cc",
     "autofill_type_unittest.cc",
     "browser_autofill_manager_unittest.cc",
     "crowdsourcing/autofill_crowdsourcing_encoding_unittest.cc",
@@ -1154,7 +1177,6 @@ source_set("unit_tests") {
     "geo/phone_number_i18n_unittest.cc",
     "geo/subkey_requester_unittest.cc",
     "heuristic_source_unittest.cc",
-    "iban_manager_unittest.cc",
     "logging/log_buffer_submitter_unittest.cc",
     "logging/log_manager_unittest.cc",
     "logging/log_router_unittest.cc",
@@ -1162,6 +1184,8 @@ source_set("unit_tests") {
     "manual_testing_import_unittest.cc",
     "merchant_promo_code_manager_unittest.cc",
     "metrics/autofill_metrics_unittest.cc",
+    "metrics/autofill_metrics_utils_unittest.cc",
+    "metrics/autofill_settings_metrics_unittest.cc",
     "metrics/fallback_autocomplete_unrecognized_metrics_unittest.cc",
     "metrics/field_filling_stats_and_score_metrics_unittest.cc",
     "metrics/form_events/address_form_event_logger_unittest.cc",
@@ -1177,6 +1201,7 @@ source_set("unit_tests") {
     "metrics/profile_deduplication_metrics_unittest.cc",
     "metrics/profile_import_metrics_unittest.cc",
     "metrics/profile_token_quality_metrics_unittest.cc",
+    "metrics/quality_metrics_filling_unittest.cc",
     "metrics/quality_metrics_unittest.cc",
     "metrics/shadow_prediction_metrics_unittest.cc",
     "metrics/stored_profile_metrics_unittest.cc",
@@ -1189,17 +1214,18 @@ source_set("unit_tests") {
     "payments/credit_card_save_manager_unittest.cc",
     "payments/full_card_request_unittest.cc",
     "payments/iban_access_manager_unittest.cc",
+    "payments/iban_manager_unittest.cc",
     "payments/iban_save_manager_unittest.cc",
     "payments/legal_message_line_unittest.cc",
     "payments/payments_data_cleaner_unittest.cc",
-    "payments/payments_network_interface_test_base.cc",
-    "payments/payments_network_interface_test_base.h",
     "payments/payments_network_interface_unittest.cc",
+    "payments/payments_requests/get_card_upload_details_request_unittest.cc",
     "payments/payments_requests/get_details_for_enrollment_request_unittest.cc",
     "payments/payments_requests/get_iban_upload_details_request_unittest.cc",
     "payments/payments_requests/unmask_card_request_unittest.cc",
     "payments/payments_requests/unmask_iban_request_unittest.cc",
     "payments/payments_requests/update_virtual_card_enrollment_request_unittest.cc",
+    "payments/payments_requests/upload_card_request_unittest.cc",
     "payments/payments_requests/upload_iban_request_unittest.cc",
     "payments/payments_service_url_unittest.cc",
     "payments/payments_util_unittest.cc",
@@ -1207,6 +1233,7 @@ source_set("unit_tests") {
     "payments/virtual_card_enrollment_manager_unittest.cc",
     "payments/wait_for_signal_or_timeout_unittest.cc",
     "payments_data_manager_unittest.cc",
+    "payments_suggestion_generator_unittest.cc",
     "personal_data_manager_test_base.cc",
     "personal_data_manager_test_base.h",
     "profile_requirement_utils_unittest.cc",
@@ -1228,7 +1255,7 @@ source_set("unit_tests") {
     "ui/payments/card_unmask_otp_input_dialog_controller_impl_unittest.cc",
     "ui/payments/card_unmask_prompt_controller_impl_unittest.cc",
     "ui/payments/payments_window_user_consent_dialog_controller_impl_unittest.cc",
-    "ui/payments/save_card_and_virtual_card_enroll_confirmation_ui_params_unittest.cc",
+    "ui/payments/save_payment_method_and_virtual_card_enroll_confirmation_ui_params_unittest.cc",
     "ui/payments/virtual_card_enroll_ui_model_unittest.cc",
     "ui/region_combobox_model_unittest.cc",
     "validation_unittest.cc",
@@ -1254,6 +1281,10 @@ source_set("unit_tests") {
   if (is_ios) {
     sources +=
         [ "autofill_save_update_address_profile_delegate_ios_unittest.cc" ]
+  }
+
+  if (is_android) {
+    sources += [ "payments/autofill_save_iban_ui_info_unittest.cc" ]
   }
 
   if (is_ios || is_android) {
@@ -1296,8 +1327,8 @@ source_set("unit_tests") {
   if (build_with_tflite_lib) {
     sources += [
       "ml_model/autofill_ml_prediction_model_handler_unittest.cc",
+      "ml_model/autofill_model_encoder_unittest.cc",
       "ml_model/autofill_model_executor_unittest.cc",
-      "ml_model/autofill_model_vectorizer_unittest.cc",
     ]
   }
 
@@ -1313,7 +1344,8 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//build:chromeos_buildflags",
-    "//components/autofill/core/common",
+    "//components/autofill/core/common:autofill_regex",
+    "//components/autofill/core/common:credit_card_number_validation",
     "//components/commerce/core:shopping_service_test_support",
     "//components/device_reauth:test_support",
     "//components/feature_engagement",

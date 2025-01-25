@@ -86,7 +86,6 @@
 <translation id="2439110203301358333">Iný program v počítači pridal rozšírenie, ktoré môže zmeniť spôsob fungovania prehliadača Vivaldi.</translation>
 <translation id="2443487764245141020">Weby tiež môžu rozpoznať vaše zariadenie pomocou identifikátora</translation>
 <translation id="2445081178310039857">Požaduje sa koreňový adresár rozšírenia.</translation>
-<translation id="2470702053775288986">Nepodporovaný typ rozšírenia bol zakázaný</translation>
 <translation id="2485422356828889247">Odinštalovať</translation>
 <translation id="2498539833203011245">Minimalizovať</translation>
 <translation id="2509495747794740764">Hodnota mierky musí byť v rozsahu od 10 do 200.</translation>
@@ -206,7 +205,6 @@
 <translation id="431076611119798497">&amp;Podrobnosti</translation>
 <translation id="4345587454538109430">Konfigurovať...</translation>
 <translation id="4348766275249686434">Zaznamenávať chyby</translation>
-<translation id="4363771538994847871">Nenašli sa žiadne ciele prenášania. Potrebujete pomoc?</translation>
 <translation id="4384652540891215547">Aktivovať rozšírenie</translation>
 <translation id="4394049700291259645">Zakázať</translation>
 <translation id="4409697491990005945">Okraje</translation>
@@ -390,7 +388,6 @@
 <translation id="7771452384635174008">Rozloženie</translation>
 <translation id="7782102568078991263">Žiadne ďalšie návrhy od spoločnosti Google</translation>
 <translation id="7786889348652477777">&amp;Znova načítať aplikáciu</translation>
-<translation id="7791543448312431591">Pridať</translation>
 <translation id="7800518121066352902">Otočiť &amp;proti smeru hodinových ručičiek</translation>
 <translation id="7814458197256864873">&amp;Kopírovať</translation>
 <translation id="7818135753970109980">Bol pridaný nový motív vzhľadu (<ph name="EXTENSION_NAME" />)</translation>

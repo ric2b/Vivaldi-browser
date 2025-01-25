@@ -68,7 +68,7 @@ ClipboardFormatType ClipboardFormatType::Deserialize(
   // |serialization| is expected to be a string representing the Windows
   // data_.cfFormat (format number) returned by GetType.
   if (!base::StringToInt(serialization, &clipboard_format)) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return ClipboardFormatType();
   }
   return ClipboardFormatType(clipboard_format);
@@ -294,7 +294,7 @@ const ClipboardFormatType& ClipboardFormatType::WebKitSmartPasteType() {
 }
 
 // static
-const ClipboardFormatType& ClipboardFormatType::WebCustomDataType() {
+const ClipboardFormatType& ClipboardFormatType::DataTransferCustomType() {
   // TODO(http://crbug.com/106449): Standardize this name.
   static base::NoDestructor<ClipboardFormatType> format(
       RegisterClipboardFormatChecked(L"Chromium Web Custom MIME Data Format"));

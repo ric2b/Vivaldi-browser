@@ -751,8 +751,7 @@ void MultiDeviceSection::AddLoadTimeData(
           GetHelpUrlWithBoard(phonehub::kPhoneHubLearnMoreLink)));
 
   html_source->AddBoolean("isCrossDeviceFeatureSuiteEnabled",
-                          base::FeatureList::IsEnabled(
-                              ash::features::kAllowCrossDeviceFeatureSuite));
+                          features::IsCrossDeviceFeatureSuiteAllowed());
 
   // We still need to register strings even if Nearby Share is not supported.
   // For example, the HTML is always built but only displayed if Nearby Share is
@@ -788,6 +787,9 @@ void MultiDeviceSection::AddLoadTimeData(
   html_source->AddBoolean(
       "isFastPairSoftwareScanningSupportEnabled",
       ash::features::IsFastPairSoftwareScanningSupportEnabled());
+
+  html_source->AddBoolean("isQuickShareV2Enabled",
+                          ::features::IsQuickShareV2Enabled());
 }
 
 void MultiDeviceSection::AddHandlers(content::WebUI* web_ui) {
@@ -891,8 +893,7 @@ void MultiDeviceSection::OnHostStatusChanged(
   updater.RemoveSearchTags(GetMultiDeviceOptedOutSearchConcepts());
   updater.RemoveSearchTags(GetMultiDeviceOptedInSearchConcepts());
 
-  if (!base::FeatureList::IsEnabled(
-          ash::features::kAllowCrossDeviceFeatureSuite)) {
+  if (!features::IsCrossDeviceFeatureSuiteAllowed()) {
     // Do not add multidevice search tags if Cross Device is disabled.
     return;
   }
@@ -914,8 +915,7 @@ void MultiDeviceSection::OnFeatureStatesChanged(
   updater.RemoveSearchTags(GetMultiDeviceOptedInWifiSyncSearchConcepts());
   updater.RemoveSearchTags(GetMultiDeviceOptedInPhoneHubAppsSearchConcepts());
 
-  if (!base::FeatureList::IsEnabled(
-          ash::features::kAllowCrossDeviceFeatureSuite)) {
+  if (!features::IsCrossDeviceFeatureSuiteAllowed()) {
     // Do not add multidevice search tags if Cross Device is disabled.
     return;
   }

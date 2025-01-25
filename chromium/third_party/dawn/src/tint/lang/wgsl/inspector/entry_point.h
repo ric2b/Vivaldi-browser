@@ -70,7 +70,15 @@ enum class PixelLocalMemberType : uint8_t {
 enum class InterpolationType : uint8_t { kPerspective, kLinear, kFlat, kUnknown };
 
 /// Type of interpolation sampling of a stage variable.
-enum class InterpolationSampling : uint8_t { kNone, kCenter, kCentroid, kSample, kUnknown };
+enum class InterpolationSampling : uint8_t {
+    kNone,
+    kCenter,
+    kCentroid,
+    kSample,
+    kFirst,
+    kEither,
+    kUnknown
+};
 
 /// Reflection data about an entry point input or output.
 struct StageVariable {
@@ -92,6 +100,8 @@ struct StageVariable {
         std::optional<uint32_t> location;
         /// Value of the color attribute, if set.
         std::optional<uint32_t> color;
+        /// Value of the blend_src attribute, if set.
+        std::optional<uint32_t> blend_src;
     } attributes;
     /// Scalar type that the variable is composed of.
     ComponentType component_type = ComponentType::kUnknown;

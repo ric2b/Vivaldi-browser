@@ -56,6 +56,8 @@ void VideoViewsTestsBase::SetUp() {
     DawnTestWithParams<Params>::SetUp();
     DAWN_TEST_UNSUPPORTED_IF(UsesWire());
     DAWN_TEST_UNSUPPORTED_IF(!IsMultiPlanarFormatsSupported());
+    // TODO(crbug.com/342213634): Crashes on ChromeOS volteer devices.
+    DAWN_SUPPRESS_TEST_IF(IsChromeOS() && IsVulkan() && IsIntel() && IsBackendValidationEnabled());
 }
 
 std::vector<wgpu::FeatureName> VideoViewsTestsBase::GetRequiredFeatures() {
@@ -73,6 +75,17 @@ std::vector<wgpu::FeatureName> VideoViewsTestsBase::GetRequiredFeatures() {
                           wgpu::FeatureName::SharedFenceMTLSharedEvent})) {
         requiredFeatures.push_back(wgpu::FeatureName::SharedTextureMemoryIOSurface);
         requiredFeatures.push_back(wgpu::FeatureName::SharedFenceMTLSharedEvent);
+    }
+
+    // Required for the Win tests.
+    if (SupportsFeatures({wgpu::FeatureName::SharedTextureMemoryD3D11Texture2D})) {
+        requiredFeatures.push_back(wgpu::FeatureName::SharedTextureMemoryD3D11Texture2D);
+    }
+    if (SupportsFeatures({wgpu::FeatureName::SharedTextureMemoryDXGISharedHandle})) {
+        requiredFeatures.push_back(wgpu::FeatureName::SharedTextureMemoryDXGISharedHandle);
+    }
+    if (SupportsFeatures({wgpu::FeatureName::SharedFenceDXGISharedHandle})) {
+        requiredFeatures.push_back(wgpu::FeatureName::SharedFenceDXGISharedHandle);
     }
 
     mIsMultiPlanarFormatP010Supported =
@@ -513,7 +526,7 @@ class VideoViewsTests : public VideoViewsTestsBase {
         DAWN_TEST_UNSUPPORTED_IF(!IsFormatSupported());
 
         mBackend = VideoViewsTestBackend::Create();
-        mBackend->OnSetUp(device.Get());
+        mBackend->OnSetUp(device);
     }
 
     void TearDown() override {
@@ -1465,12 +1478,20 @@ TEST_P(VideoViewsValidationTests, SamplingMultiPlanarTexture) {
 
 // Tests creating a texture with a multi-plane format.
 TEST_P(VideoViewsValidationTests, RenderAttachmentInvalid) {
+    // "Invalid Texture" error is expected if failed to create the video texture.
+    EXPECT_CALL(mDeviceErrorCallback,
+                Call(CHandleIs(device.Get()), testing::Ne(wgpu::ErrorType::NoError),
+                     testing::HasSubstr("Invalid Texture")))
+        .Times(testing::AnyNumber());
+
     // multi-planar formats are NOT allowed to be renderable by default and require
     // Feature::MultiPlanarRenderTargets.
-    ASSERT_DEVICE_ERROR(auto platformTexture = mBackend->CreateVideoTextureForTest(
-                            GetFormat(), wgpu::TextureUsage::RenderAttachment,
-                            /*isCheckerboard*/ true,
-                            /*initialized*/ true));
+    // "RenderAttachment is incompatible with the non-renderable format" error is expected.
+    ASSERT_DEVICE_ERROR_MSG(auto platformTexture = mBackend->CreateVideoTextureForTest(
+                                GetFormat(), wgpu::TextureUsage::RenderAttachment,
+                                /*isCheckerboard*/ true,
+                                /*initialized*/ true),
+                            testing::HasSubstr("is incompatible"));
     mBackend->DestroyVideoTextureForTest(std::move(platformTexture));
 }
 
@@ -1630,11 +1651,11 @@ class VideoViewsRenderTargetTests : public VideoViewsValidationTests {
             std::string outputStruct;
             {
                 std::ostringstream result;
-                result << "struct Output {" << std::endl;
+                result << "struct Output {\n";
                 for (size_t i = 0; i < destVideoWGPUTextures.size(); ++i) {
-                    result << "    @location(" << i << ") color" << i << " : vec4f," << std::endl;
+                    result << "    @location(" << i << ") color" << i << " : vec4f,\n";
                 }
-                result << "};" << std::endl;
+                result << "};\n";
                 outputStruct = std::move(result).str();
             }
 
@@ -1642,24 +1663,23 @@ class VideoViewsRenderTargetTests : public VideoViewsValidationTests {
             std::string returnOutput;
             {
                 std::ostringstream result;
-                result << "    var output : Output;" << std::endl;
+                result << "    var output : Output;\n";
                 for (size_t i = 0; i < destVideoWGPUTextures.size(); ++i) {
-                    result << "    output.color" << i << " = outputColor;" << std::endl;
+                    result << "    output.color" << i << " = outputColor;\n";
                 }
-                result << "    return output;" << std::endl;
+                result << "    return output;\n";
                 returnOutput = std::move(result).str();
             }
 
             std::ostringstream fsSource;
-            fsSource << "@group(0) @binding(0) var sampler0 : sampler;" << std::endl;
-            fsSource << "@group(0) @binding(1) var texture : texture_2d<f32>;" << std::endl;
-            fsSource << outputStruct << std::endl;
-            fsSource << "@fragment" << std::endl;
-            fsSource << "fn main(@location(0) texCoord : vec2f) -> Output {" << std::endl;
-            fsSource << "    let outputColor = textureSample(texture, sampler0, texCoord);"
-                     << std::endl;
-            fsSource << returnOutput << std::endl;
-            fsSource << "}" << std::endl;
+            fsSource << "@group(0) @binding(0) var sampler0 : sampler;\n";
+            fsSource << "@group(0) @binding(1) var texture : texture_2d<f32>;\n";
+            fsSource << outputStruct << "\n";
+            fsSource << "@fragment\n";
+            fsSource << "fn main(@location(0) texCoord : vec2f) -> Output {\n";
+            fsSource << "    let outputColor = textureSample(texture, sampler0, texCoord);\n";
+            fsSource << returnOutput << "\n";
+            fsSource << "}\n";
 
             auto fsModule = utils::CreateShaderModule(device, std::move(fsSource).str());
 

@@ -39,7 +39,7 @@ RazerChromaHandler::~RazerChromaHandler() {}
 bool RazerChromaHandler::Initialize() {
   if (initialized_ || !IsEnabled()) {
     NOTREACHED();
-    return false;
+    //return false;
   }
   if (platform_driver_) {
     initialized_ = platform_driver_->Initialize();

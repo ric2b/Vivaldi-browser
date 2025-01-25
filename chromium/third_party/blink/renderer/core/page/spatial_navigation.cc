@@ -26,6 +26,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/page/spatial_navigation.h"
 
 #include "base/containers/adapters.h"
@@ -105,7 +110,7 @@ static bool RectsIntersectOnOrthogonalAxis(SpatialNavigationDirection direction,
     case SpatialNavigationDirection::kDown:
       return a.Right() > b.X() && a.X() < b.Right();
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 }
@@ -139,7 +144,7 @@ static bool IsRectInDirection(SpatialNavigationDirection direction,
     case SpatialNavigationDirection::kDown:
       return Below(target_rect, cur_rect);
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 }
@@ -310,7 +315,7 @@ bool ScrollInDirection(Node* container, SpatialNavigationDirection direction) {
       dy = pixels_per_line_step;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 
@@ -388,25 +393,25 @@ bool CanScrollInDirection(const Node* container,
     case SpatialNavigationDirection::kLeft:
       return (container->GetLayoutObject()->Style()->OverflowX() !=
                   EOverflow::kHidden &&
-              scrollable_area->ScrollPosition().x() > 0);
+              scrollable_area->GetScrollOffset().x() >
+                  scrollable_area->MinimumScrollOffset().x());
     case SpatialNavigationDirection::kUp:
       return (container->GetLayoutObject()->Style()->OverflowY() !=
                   EOverflow::kHidden &&
-              scrollable_area->ScrollPosition().y() > 0);
+              scrollable_area->GetScrollOffset().y() >
+                  scrollable_area->MinimumScrollOffset().y());
     case SpatialNavigationDirection::kRight:
       return (container->GetLayoutObject()->Style()->OverflowX() !=
                   EOverflow::kHidden &&
-              LayoutUnit(scrollable_area->ScrollPosition().x()) +
-                      container->GetLayoutBox()->ClientWidth() <
-                  container->GetLayoutBox()->ScrollWidth());
+              scrollable_area->GetScrollOffset().x() <
+                  scrollable_area->MaximumScrollOffset().x());
     case SpatialNavigationDirection::kDown:
       return (container->GetLayoutObject()->Style()->OverflowY() !=
                   EOverflow::kHidden &&
-              LayoutUnit(scrollable_area->ScrollPosition().y()) +
-                      container->GetLayoutBox()->ClientHeight() <
-                  container->GetLayoutBox()->ScrollHeight());
+              scrollable_area->GetScrollOffset().y() <
+                  scrollable_area->MaximumScrollOffset().y());
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 }
@@ -444,7 +449,7 @@ bool CanScrollInDirection(const LocalFrame* frame,
     case SpatialNavigationDirection::kDown:
       return rect.Height() + offset.y() < size.height();
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 }
@@ -510,7 +515,7 @@ void EntryAndExitPointsForDirection(SpatialNavigationDirection direction,
         entry_point.SetY(starting_rect.Bottom());
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   switch (direction) {
@@ -553,7 +558,7 @@ void EntryAndExitPointsForDirection(SpatialNavigationDirection direction,
       }
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -574,7 +579,7 @@ double ProjectedOverlap(SpatialNavigationDirection direction,
       current.Intersect(candidate);
       return current.Width();
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return kMaxDistance;
   }
 }
@@ -595,7 +600,7 @@ double Alignment(SpatialNavigationDirection direction,
     case SpatialNavigationDirection::kDown:
       return (kAlignWeight * projected_overlap) / current.Width();
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return kMaxDistance;
   }
 }
@@ -699,7 +704,7 @@ double ComputeDistanceDataForNode(SpatialNavigationDirection direction,
           (x_axis + orthogonal_bias) * kOrthogonalWeightForUpDown;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return kMaxDistance;
   }
 
@@ -737,7 +742,7 @@ PhysicalRect OppositeEdge(SpatialNavigationDirection side,
       thin_rect.offset.top += 1;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   return thin_rect;
@@ -840,9 +845,7 @@ PhysicalRect ShrinkInlineBoxToLineBox(const LayoutObject& layout_object,
                                       PhysicalRect node_rect,
                                       int line_boxes) {
   if (!layout_object.IsInline() || layout_object.IsLayoutReplaced() ||
-      layout_object.IsButton() ||
-      (RuntimeEnabledFeatures::LayoutBlockButtonEnabled() &&
-       layout_object.IsButtonOrInputButton())) {
+      layout_object.IsButtonOrInputButton()) {
     return node_rect;
   }
 

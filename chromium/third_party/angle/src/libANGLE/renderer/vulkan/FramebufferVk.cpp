@@ -1386,20 +1386,13 @@ angle::Result FramebufferVk::blit(const gl::Context *context,
 
         if (canBlitWithCommand && areChannelsBlitCompatible && !reinterpretsColorspace)
         {
-            // Stash all images that involved with blit so that we can track them all at once.
-            angle::FixedVector<vk::ImageHelper *, 1 + gl::IMPLEMENTATION_MAX_DRAW_BUFFERS>
-                accessedImages;
-            accessedImages.push_back(&readRenderTarget->getImageForCopy());
             for (size_t colorIndexGL : mState.getEnabledDrawBuffers())
             {
                 RenderTargetVk *drawRenderTarget = mRenderTargetCache.getColors()[colorIndexGL];
                 ANGLE_TRY(blitWithCommand(contextVk, sourceArea, destArea, readRenderTarget,
                                           drawRenderTarget, filter, true, false, false, flipX,
                                           flipY));
-                accessedImages.push_back(&drawRenderTarget->getImageForWrite());
             }
-            contextVk->trackImagesWithOutsideRenderPassEvent(accessedImages.data(),
-                                                             accessedImages.size());
         }
         // If we're not flipping or rotating, use Vulkan's builtin resolve.
         else if (isColorResolve && !flipX && !flipY && areChannelsBlitCompatible &&
@@ -1507,8 +1500,6 @@ angle::Result FramebufferVk::blit(const gl::Context *context,
             ANGLE_TRY(blitWithCommand(contextVk, sourceArea, destArea, readRenderTarget,
                                       drawRenderTarget, filter, false, blitDepthBuffer,
                                       blitStencilBuffer, flipX, flipY));
-            contextVk->trackImagesWithOutsideRenderPassEvent(&readRenderTarget->getImageForCopy(),
-                                                             &drawRenderTarget->getImageForWrite());
         }
         else
         {
@@ -1853,8 +1844,6 @@ angle::Result FramebufferVk::generateFragmentShadingRateWithCPU(
                                   mFragmentShadingRateImage.getImage(),
                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
-    contextVk->trackImageWithOutsideRenderPassEvent(&mFragmentShadingRateImage);
-
     return angle::Result::Continue;
 }
 
@@ -1900,8 +1889,7 @@ angle::Result FramebufferVk::updateFoveationState(ContextVk *contextVk,
                                                   const gl::FoveationState &newFoveationState,
                                                   const gl::Extents &foveatedAttachmentSize)
 {
-    mFoveationState                               = newFoveationState;
-    const bool isFoveationEnabled                 = mFoveationState.isFoveated();
+    const bool isFoveationEnabled                 = newFoveationState.isFoveated();
     vk::ImageOrBufferViewSubresourceSerial serial = vk::kInvalidImageOrBufferViewSubresourceSerial;
     if (isFoveationEnabled)
     {
@@ -1914,8 +1902,11 @@ angle::Result FramebufferVk::updateFoveationState(ContextVk *contextVk,
             gl::SrgbOverride::Default);
     }
 
+    // Update state after the possible failure point.
+    mFoveationState = newFoveationState;
     mCurrentFramebufferDesc.updateFragmentShadingRate(serial);
-    mRenderPassDesc.setFragmentShadingAttachment(isFoveationEnabled);
+    // mRenderPassDesc will be updated later in updateRenderPassDesc() in case if
+    // mCurrentFramebufferDesc was changed.
     return angle::Result::Continue;
 }
 
@@ -1938,8 +1929,8 @@ angle::Result FramebufferVk::resolveColorWithSubpass(ContextVk *contextVk,
         contextVk->getStartedRenderPassCommands();
     ASSERT(!renderPassCommands.getRenderPassDesc().hasColorResolveAttachment(readColorIndexGL));
 
-    renderPassCommands.addColorResolveAttachment(readColorIndexGL, resolveImageView->getHandle());
-    drawRenderTarget->onColorResolve(contextVk, mCurrentFramebufferDesc.getLayerCount());
+    drawRenderTarget->onColorResolve(contextVk, mCurrentFramebufferDesc.getLayerCount(),
+                                     readColorIndexGL, *resolveImageView);
 
     // The render pass is already closed because of the change in the draw buffer.  Just don't let
     // it reactivate now that it has a resolve attachment.
@@ -1961,8 +1952,8 @@ angle::Result FramebufferVk::resolveDepthStencilWithSubpass(
         contextVk->getStartedRenderPassCommands();
     ASSERT(!renderPassCommands.getRenderPassDesc().hasDepthStencilResolveAttachment());
 
-    renderPassCommands.addDepthStencilResolveAttachment(resolveImageView->getHandle(), aspects);
-    drawRenderTarget->onDepthStencilResolve(contextVk, mCurrentFramebufferDesc.getLayerCount());
+    drawRenderTarget->onDepthStencilResolve(contextVk, mCurrentFramebufferDesc.getLayerCount(),
+                                            aspects, *resolveImageView);
 
     // The render pass is already closed because of the change in the draw buffer.  Just don't let
     // it reactivate now that it has a resolve attachment.
@@ -2009,8 +2000,6 @@ angle::Result FramebufferVk::resolveColorWithCommand(ContextVk *contextVk,
     resolveRegion.extent.depth                  = 1;
 
     angle::VulkanPerfCounters &perfCounters = contextVk->getPerfCounters();
-    angle::FixedVector<vk::ImageHelperPtr, 1 + gl::IMPLEMENTATION_MAX_DRAW_BUFFERS> accessedImages;
-    accessedImages.push_back(srcImage);
     for (size_t colorIndexGL : mState.getEnabledDrawBuffers())
     {
         RenderTargetVk *drawRenderTarget = mRenderTargetCache.getColors()[colorIndexGL];
@@ -2023,9 +2012,7 @@ angle::Result FramebufferVk::resolveColorWithCommand(ContextVk *contextVk,
         srcImage->resolve(&dstImage, resolveRegion, commandBuffer);
 
         perfCounters.resolveImageCommands++;
-        accessedImages.push_back(&dstImage);
     }
-    contextVk->trackImagesWithOutsideRenderPassEvent(accessedImages.data(), accessedImages.size());
 
     return angle::Result::Continue;
 }
@@ -2471,7 +2458,8 @@ angle::Result FramebufferVk::syncState(const gl::Context *context,
         // descriptor to reflect the new state.
         gl::SrgbWriteControlMode newSrgbWriteControlMode = mState.getWriteControlMode();
         mCurrentFramebufferDesc.setWriteControlMode(newSrgbWriteControlMode);
-        mRenderPassDesc.setWriteControlMode(newSrgbWriteControlMode);
+        // mRenderPassDesc will be updated later in updateRenderPassDesc() in case if
+        // mCurrentFramebufferDesc was changed.
     }
 
     if (shouldUpdateColorMaskAndBlend)
@@ -2759,6 +2747,8 @@ angle::Result FramebufferVk::createNewFramebuffer(
     const vk::FramebufferAttachmentsVector<VkImageView> &unpackedAttachments,
     const vk::FramebufferAttachmentsVector<RenderTargetInfo> &renderTargetsInfo)
 {
+    ASSERT(!contextVk->getFeatures().preferDynamicRendering.enabled);
+
     // The backbuffer framebuffer is cached in WindowSurfaceVk instead.
     ASSERT(mBackbuffer == nullptr);
     // Called only when a new framebuffer is needed.
@@ -2861,7 +2851,7 @@ angle::Result FramebufferVk::createNewFramebuffer(
                                      ? &info.renderTarget->getResolveImageForRenderPass()
                                      : &info.renderTarget->getImageForRenderPass();
 
-        const gl::LevelIndex level = info.renderTarget->getLevelIndex();
+        const gl::LevelIndex level = info.renderTarget->getLevelIndexForImage(*image);
         const uint32_t layerCount  = info.renderTarget->getLayerCount();
         const gl::Extents extents  = image->getLevelExtents2D(image->toVkLevel(level));
 
@@ -2910,7 +2900,13 @@ angle::Result FramebufferVk::getFramebuffer(ContextVk *contextVk,
     ANGLE_TRY(getAttachmentsAndRenderTargets(contextVk, &unpackedAttachments, &renderTargetsInfo));
 
     vk::Framebuffer framebufferHandle;
-    if (mCurrentFramebuffer.valid())
+    if (contextVk->getFeatures().preferDynamicRendering.enabled)
+    {
+        // Nothing to do with dynamic rendering.  The image views and other info are still placed in
+        // |framebufferOut| to be passed to |vkCmdBeginRendering| similarly to how they are used
+        // with imageless framebuffers with render pass objects.
+    }
+    else if (mCurrentFramebuffer.valid())
     {
         // If a valid framebuffer is already created, use it.  This is not done when the swapchain
         // is being resolved, because the appropriate framebuffer needs to be queried from the back
@@ -2942,21 +2938,29 @@ angle::Result FramebufferVk::getFramebuffer(ContextVk *contextVk,
                 mRenderPassDesc.hasFramebufferFetch() ? FramebufferFetchMode::Enabled
                                                       : FramebufferFetchMode::Disabled,
                 *compatibleRenderPass, &framebufferHandle));
-
-            // Account for swapchain pre-rotation
-            framebufferWidth  = renderTargetsInfo[0].renderTarget->getRotatedExtents().width;
-            framebufferHeight = renderTargetsInfo[0].renderTarget->getRotatedExtents().height;
         }
     }
 
+    if (mBackbuffer != nullptr)
+    {
+        // Account for swapchain pre-rotation
+        framebufferWidth  = renderTargetsInfo[0].renderTarget->getRotatedExtents().width;
+        framebufferHeight = renderTargetsInfo[0].renderTarget->getRotatedExtents().height;
+    }
+
     const vk::ImagelessFramebuffer imagelessFramebuffer =
-        contextVk->getFeatures().supportsImagelessFramebuffer.enabled && mBackbuffer == nullptr
+        contextVk->getFeatures().preferDynamicRendering.enabled ||
+                (contextVk->getFeatures().supportsImagelessFramebuffer.enabled &&
+                 mBackbuffer == nullptr)
             ? vk::ImagelessFramebuffer::Yes
             : vk::ImagelessFramebuffer::No;
+    const vk::RenderPassSource source = mBackbuffer == nullptr
+                                            ? vk::RenderPassSource::FramebufferObject
+                                            : vk::RenderPassSource::DefaultFramebuffer;
 
-    framebufferOut->setFramebuffer(std::move(framebufferHandle), std::move(unpackedAttachments),
-                                   framebufferWidth, framebufferHeight, framebufferLayers,
-                                   imagelessFramebuffer);
+    framebufferOut->setFramebuffer(
+        contextVk, std::move(framebufferHandle), std::move(unpackedAttachments), framebufferWidth,
+        framebufferHeight, framebufferLayers, imagelessFramebuffer, source);
 
     return angle::Result::Continue;
 }
@@ -3041,7 +3045,7 @@ angle::Result FramebufferVk::clearWithDraw(
         // TODO: implement clear of layered framebuffers.  UtilsVk::clearFramebuffer should add a
         // geometry shader that is instanced layerCount times (or loops layerCount times), each time
         // selecting a different layer.
-        // http://anglebug.com/5453
+        // http://anglebug.com/42263992
         ASSERT(mCurrentFramebufferDesc.isMultiview() || colorRenderTarget->getLayerCount() == 1);
 
         ANGLE_TRY(contextVk->getUtils().clearFramebuffer(contextVk, this, params));
@@ -3179,9 +3183,15 @@ void FramebufferVk::clearWithCommand(ContextVk *contextVk,
                 renderPassCommands->getRenderPassDesc().hasColorUnresolveAttachment(colorIndexGL) ||
                 !optimizeWithLoadOp)
             {
-                attachments.emplace_back(VkClearAttachment{VK_IMAGE_ASPECT_COLOR_BIT,
-                                                           static_cast<uint32_t>(colorIndexGL),
-                                                           (*clears)[colorIndexGL]});
+                // With render pass objects, the clears are indexed by the subpass-mapped locations.
+                // With dynamic rendering, they are indexed by the actual attachment index.
+                const uint32_t clearAttachmentIndex =
+                    contextVk->getFeatures().preferDynamicRendering.enabled
+                        ? colorIndexVk.get()
+                        : static_cast<uint32_t>(colorIndexGL);
+
+                attachments.emplace_back(VkClearAttachment{
+                    VK_IMAGE_ASPECT_COLOR_BIT, clearAttachmentIndex, (*clears)[colorIndexGL]});
                 clears->reset(colorIndexGL);
                 ++contextVk->getPerfCounters().colorClearAttachments;
 
@@ -3341,6 +3351,12 @@ angle::Result FramebufferVk::startNewRenderPass(ContextVk *contextVk,
     // Make sure render pass and framebuffer are in agreement w.r.t unresolve attachments.
     ASSERT(mCurrentFramebufferDesc.getUnresolveAttachmentMask() ==
            MakeUnresolveAttachmentMask(mRenderPassDesc));
+    // ... w.r.t sRGB write control.
+    ASSERT(mCurrentFramebufferDesc.getWriteControlMode() ==
+           mRenderPassDesc.getSRGBWriteControlMode());
+    // ... w.r.t foveation.
+    ASSERT(mCurrentFramebufferDesc.hasFragmentShadingRateAttachment() ==
+           mRenderPassDesc.hasFragmentShadingAttachment());
 
     // Color attachments.
     const auto &colorRenderTargets = mRenderTargetCache.getColors();
@@ -3752,12 +3768,27 @@ void FramebufferVk::switchToFramebufferFetchMode(ContextVk *contextVk, bool hasF
         return;
     }
 
-    // Make sure framebuffer is recreated.
-    releaseCurrentFramebuffer(contextVk);
     mCurrentFramebufferDesc.setFramebufferFetchMode(hasFramebufferFetch);
 
     mRenderPassDesc.setFramebufferFetchMode(hasFramebufferFetch);
     contextVk->onDrawFramebufferRenderPassDescChange(this, nullptr);
+
+    if (contextVk->getFeatures().preferDynamicRendering.enabled)
+    {
+        // Note: with dynamic rendering, |onDrawFramebufferRenderPassDescChange| is really
+        // unnecessary, but is called for simplicity.  The downside is unnecessary recreation of
+        // pipelines, which is mitigated by |permanentlySwitchToFramebufferFetchMode| which is
+        // automatically enabled with |preferDynamicRendering|.
+        //
+        // If |onDrawFramebufferRenderPassDescChange| is to be optimized away, care must be taken
+        // as GraphicsPipelineDesc::mRenderPassDesc::mHasFramebufferFetch can get out of sync with
+        // FramebufferDesc::mHasFramebufferFetch, and
+        // RenderPassCommandBufferHelper::mRenderPassDesc::mHasFramebufferFetch.
+        return;
+    }
+
+    // Make sure framebuffer is recreated.
+    releaseCurrentFramebuffer(contextVk);
 
     // Clear the framebuffer cache, as none of the old framebuffers are usable.
     if (contextVk->getFeatures().permanentlySwitchToFramebufferFetchMode.enabled)

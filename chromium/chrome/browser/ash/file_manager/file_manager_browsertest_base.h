@@ -141,9 +141,6 @@ class FileManagerBrowserTestBase
     // Whether Drive should act as if offline.
     bool offline = false;
 
-    // Whether test needs the files-app-experimental feature.
-    bool files_experimental = false;
-
     // Whether test should enable the conflict dialog.
     bool enable_conflict_dialog = false;
 
@@ -202,6 +199,10 @@ class FileManagerBrowserTestBase
     // Whether tests should set up justification mode for the file transfer
     // connector.
     bool bypass_requires_justification = false;
+
+    // Whether tests should disable Google One offer Files banner. This flag is
+    // disabled by default.
+    bool disable_google_one_offer_files_banner = false;
 
     // Whether tests should enable local image search by query.
     bool enable_local_image_search = false;

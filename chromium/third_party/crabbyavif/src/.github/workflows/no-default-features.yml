@@ -1,0 +1,38 @@
+name: No Default Features
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+# Cancel the workflow if a new one is triggered from the same PR, branch, or tag, except on main.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  no-default-features:
+    name: "No Default Features on ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      with:
+        toolchain: stable
+        target: i686-unknown-linux-gnu
+
+    - name: Build the library and run the tests without default features
+      run: cargo test --no-default-features -- --skip test_conformance
+
+    - name: Build the library without default features for 32-bit target
+      if: runner.os == 'Linux'
+      run: cargo check --target --target i686-unknown-linux-gnu --no-default-features

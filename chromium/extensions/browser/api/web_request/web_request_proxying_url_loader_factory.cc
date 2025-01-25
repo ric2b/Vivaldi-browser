@@ -20,6 +20,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
@@ -896,7 +897,7 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::
         pending_follow_redirect_params_->modified_headers.SetHeader(
             set_header, header_value);
       } else {
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
       }
     }
 
@@ -1019,7 +1020,7 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::
       state_ = State::kRejectedByOnAuthRequired;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
   }
 
@@ -1412,21 +1413,24 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::
 
 // Determines whether it is safe to redirect from |from_url| to |to_url|.
 bool WebRequestProxyingURLLoaderFactory::InProgressRequest::IsRedirectSafe(
-    const GURL& from_url,
-    const GURL& to_url,
+    const GURL& upstream_url,
+    const GURL& target_url,
     bool is_navigation_request) {
   // For navigations, non-web accessible resources will be blocked by
   // ExtensionNavigationThrottle.
-  if (!is_navigation_request && to_url.SchemeIs(extensions::kExtensionScheme)) {
+  if (!is_navigation_request &&
+      target_url.SchemeIs(extensions::kExtensionScheme)) {
     const Extension* extension =
         ExtensionRegistry::Get(factory_->browser_context_)
             ->enabled_extensions()
-            .GetByID(to_url.host());
-    return extension && WebAccessibleResourcesInfo::IsResourceWebAccessible(
-                            extension, to_url.path(),
-                            base::OptionalToPtr(original_initiator_));
+            .GetByID(target_url.host());
+    if (!extension) {
+      return false;
+    }
+    return WebAccessibleResourcesInfo::IsResourceWebAccessibleRedirect(
+        extension, target_url, original_initiator_, upstream_url);
   }
-  return content::IsSafeRedirectTarget(from_url, to_url);
+  return content::IsSafeRedirectTarget(upstream_url, target_url);
 }
 
 network::URLLoaderCompletionStatus WebRequestProxyingURLLoaderFactory::
@@ -1590,7 +1594,7 @@ void WebRequestProxyingURLLoaderFactory::OnLoaderCreated(
     return;
 
   auto request_it = requests_.find(it->second);
-  DCHECK(request_it != requests_.end());
+  CHECK(request_it != requests_.end(), base::NotFatalUntil::M130);
   request_it->second->OnLoaderCreated(std::move(receiver));
 }
 
@@ -1630,7 +1634,7 @@ void WebRequestProxyingURLLoaderFactory::HandleAuthRequest(
   }
 
   auto request_it = requests_.find(it->second);
-  DCHECK(request_it != requests_.end());
+  CHECK(request_it != requests_.end(), base::NotFatalUntil::M130);
   request_it->second->HandleAuthRequest(auth_info, std::move(response_headers),
                                         std::move(callback));
 }

@@ -328,7 +328,7 @@ media::MediaCapsImpl* CastContentBrowserClient::media_caps() {
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)
 scoped_refptr<device::BluetoothAdapterCast>
 CastContentBrowserClient::CreateBluetoothAdapter() {
-  NOTREACHED() << "Bluetooth Adapter is not supported!";
+  NOTREACHED_IN_MIGRATION() << "Bluetooth Adapter is not supported!";
   return nullptr;
 }
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)
@@ -553,6 +553,7 @@ void CastContentBrowserClient::AllowCertificateError(
 
 base::OnceClosure CastContentBrowserClient::SelectClientCertificate(
     content::BrowserContext* browser_context,
+    int process_id,
     content::WebContents* web_contents,
     net::SSLCertRequestInfo* cert_request_info,
     net::ClientCertIdentityList client_certs,

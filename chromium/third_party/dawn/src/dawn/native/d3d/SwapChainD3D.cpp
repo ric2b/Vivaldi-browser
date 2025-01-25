@@ -33,6 +33,7 @@
 
 #include <utility>
 
+#include "dawn/native/BlitTextureToBuffer.h"
 #include "dawn/native/Surface.h"
 #include "dawn/native/d3d/D3DError.h"
 #include "dawn/native/d3d/DeviceD3D.h"
@@ -49,7 +50,10 @@ uint32_t PresentModeToBufferCount(wgpu::PresentMode mode) {
             return 2;
         case wgpu::PresentMode::Mailbox:
             return 3;
+        default:
+            break;
     }
+    DAWN_UNREACHABLE();
 }
 
 uint32_t PresentModeToSwapInterval(wgpu::PresentMode mode) {
@@ -59,7 +63,10 @@ uint32_t PresentModeToSwapInterval(wgpu::PresentMode mode) {
             return 0;
         case wgpu::PresentMode::Fifo:
             return 1;
+        default:
+            break;
     }
+    DAWN_UNREACHABLE();
 }
 
 UINT PresentModeToSwapChainFlags(wgpu::PresentMode mode) {
@@ -72,11 +79,17 @@ UINT PresentModeToSwapChainFlags(wgpu::PresentMode mode) {
     return flags;
 }
 
-DXGI_USAGE ToDXGIUsage(wgpu::TextureUsage usage) {
+DXGI_USAGE ToDXGIUsage(DeviceBase* device, wgpu::TextureFormat format, wgpu::TextureUsage usage) {
     DXGI_USAGE dxgiUsage = DXGI_CPU_ACCESS_NONE;
     if (usage & wgpu::TextureUsage::TextureBinding) {
         dxgiUsage |= DXGI_USAGE_SHADER_INPUT;
     }
+
+    if (usage & wgpu::TextureUsage::CopySrc && device->IsToggleEnabled(Toggle::UseBlitForT2B) &&
+        IsFormatSupportedByTextureToBufferBlit(format)) {
+        dxgiUsage |= DXGI_USAGE_SHADER_INPUT;
+    }
+
     if (usage & wgpu::TextureUsage::StorageBinding) {
         dxgiUsage |= DXGI_USAGE_UNORDERED_ACCESS;
     }
@@ -103,9 +116,9 @@ MaybeError SwapChain::Initialize(SwapChainBase* previousSwapChain) {
 
     // Precompute the configuration parameters we want for the DXGI swapchain.
     mConfig.bufferCount = PresentModeToBufferCount(GetPresentMode());
-    mConfig.format = d3d::DXGITextureFormat(GetFormat());
+    mConfig.format = d3d::DXGITextureFormat(GetDevice(), GetFormat());
     mConfig.swapChainFlags = PresentModeToSwapChainFlags(GetPresentMode());
-    mConfig.usage = ToDXGIUsage(GetUsage());
+    mConfig.usage = ToDXGIUsage(GetDevice(), GetFormat(), GetUsage());
 
     // There is no previous swapchain so we can create one directly and don't have anything else
     // to do.

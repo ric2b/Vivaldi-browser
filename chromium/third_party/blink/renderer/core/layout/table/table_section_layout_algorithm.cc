@@ -9,7 +9,6 @@
 #include "third_party/blink/renderer/core/layout/constraint_space_builder.h"
 #include "third_party/blink/renderer/core/layout/fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/logical_box_fragment.h"
-#include "third_party/blink/renderer/core/layout/out_of_flow_layout_part.h"
 #include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
 
 namespace blink {
@@ -81,9 +80,7 @@ const LayoutResult* TableSectionLayoutAlgorithm::Layout() {
 
     if (constraint_space.HasBlockFragmentation()) {
       SetupSpaceBuilderForFragmentation(
-          constraint_space, row, offset.block_offset, &row_space_builder,
-          /* is_new_fc */ true,
-          container_builder_.RequiresContentBeforeBreaking());
+          container_builder_, row, offset.block_offset, &row_space_builder);
     }
 
     ConstraintSpace row_space = row_space_builder.ToConstraintSpace();
@@ -91,10 +88,10 @@ const LayoutResult* TableSectionLayoutAlgorithm::Layout() {
 
     if (constraint_space.HasBlockFragmentation()) {
       LayoutUnit fragmentainer_block_offset =
-          constraint_space.FragmentainerOffset() + offset.block_offset;
-      BreakStatus break_status = BreakBeforeChildIfNeeded(
-          constraint_space, row, *row_result, fragmentainer_block_offset,
-          !is_first_non_collapsed_row, &container_builder_);
+          FragmentainerOffsetForChildren() + offset.block_offset;
+      BreakStatus break_status =
+          BreakBeforeChildIfNeeded(row, *row_result, fragmentainer_block_offset,
+                                   !is_first_non_collapsed_row);
       if (break_status == BreakStatus::kNeedsEarlierBreak) {
         return RelayoutAndBreakEarlier<TableSectionLayoutAlgorithm>(
             container_builder_.GetEarlyBreak());
@@ -164,12 +161,11 @@ const LayoutResult* TableSectionLayoutAlgorithm::Layout() {
 
   if (UNLIKELY(InvolvedInBlockFragmentation(container_builder_))) {
     BreakStatus status = FinishFragmentation(
-        Node(), constraint_space, /* trailing_border_padding */ LayoutUnit(),
-        FragmentainerSpaceLeft(constraint_space), &container_builder_);
+        /*trailing_border_padding=*/LayoutUnit(), &container_builder_);
     DCHECK_EQ(status, BreakStatus::kContinue);
   }
 
-  OutOfFlowLayoutPart(Node(), constraint_space, &container_builder_).Run();
+  container_builder_.HandleOofsAndSpecialDescendants();
   return container_builder_.ToBoxFragment();
 }
 

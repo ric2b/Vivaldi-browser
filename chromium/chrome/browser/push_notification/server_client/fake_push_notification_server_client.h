@@ -19,7 +19,7 @@ namespace push_notification {
 // stores all request data. Only use in unit tests.
 class FakePushNotificationServerClient : public PushNotificationServerClient {
  public:
-  // Factory that creates FakePushNotificationServerClient instances. Use
+  // Factory that creates `FakePushNotificationServerClient` instances. Use
   // in PushNotificationServerClientDesktopImpl::Factory::SetFactoryForTesting()
   // in unit tests.
   class Factory : public PushNotificationServerClientDesktopImpl::Factory {
@@ -39,7 +39,11 @@ class FakePushNotificationServerClient : public PushNotificationServerClient {
         scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
         override;
 
-    raw_ptr<FakePushNotificationServerClient> last_created_fake_server_client_;
+    // Dangling pointer detection is disabled because this is only used in
+    // testing and is necessary to allow tests to invoke
+    // FakePushNotificationServerClient methods.
+    raw_ptr<FakePushNotificationServerClient, DisableDanglingPtrDetection>
+        last_created_fake_server_client_;
   };
 
   FakePushNotificationServerClient();
@@ -52,6 +56,8 @@ class FakePushNotificationServerClient : public PushNotificationServerClient {
   void InvokeRegisterWithPushNotificationServiceErrorCallback(
       PushNotificationDesktopApiCallFlow::PushNotificationApiCallFlowError
           error);
+
+  const proto::NotificationsMultiLoginUpdateRequest& GetRequestProto();
 
   bool HasRegisterWithPushNotificationServiceCallback() {
     return !register_with_push_notification_service_callback_.is_null();
@@ -69,6 +75,7 @@ class FakePushNotificationServerClient : public PushNotificationServerClient {
   std::optional<std::string> GetAccessTokenUsed() override;
 
   std::string access_token_used_;
+  proto::NotificationsMultiLoginUpdateRequest request_;
   RegisterWithPushNotificationServiceCallback
       register_with_push_notification_service_callback_;
   ErrorCallback register_with_push_notification_service_error_callback_;

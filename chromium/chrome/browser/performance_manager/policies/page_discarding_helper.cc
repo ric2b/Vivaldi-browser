@@ -12,17 +12,16 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequence_checker.h"
-#include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/performance_manager/mechanisms/page_discarder.h"
 #include "chrome/browser/performance_manager/policies/policy_features.h"
-#include "components/performance_manager/graph/node_attached_data_impl.h"
 #include "components/performance_manager/graph/page_node_impl.h"
 #include "components/performance_manager/public/decorators/tab_page_decorator.h"
 #include "components/performance_manager/public/graph/frame_node.h"
 #include "components/performance_manager/public/graph/graph_operations.h"
+#include "components/performance_manager/public/graph/node_attached_data.h"
 #include "components/performance_manager/public/graph/node_data_describer_registry.h"
 #include "components/performance_manager/public/graph/node_data_describer_util.h"
 #include "components/performance_manager/public/graph/page_node.h"
@@ -44,15 +43,11 @@ namespace {
 // TODO(sebmarchand): The only reason for a discard attempt to fail is if we try
 // to discard a prerenderer, remove this once we can detect if a PageNode is a
 // prerenderer in CanDiscard().
-class DiscardAttemptMarker : public NodeAttachedDataImpl<DiscardAttemptMarker> {
+class DiscardAttemptMarker
+    : public ExternalNodeAttachedDataImpl<DiscardAttemptMarker> {
  public:
-  struct Traits : public NodeAttachedDataInMap<PageNodeImpl> {};
-  ~DiscardAttemptMarker() override = default;
-
- private:
-  friend class ::performance_manager::NodeAttachedDataImpl<
-      DiscardAttemptMarker>;
   explicit DiscardAttemptMarker(const PageNodeImpl* page_node) {}
+  ~DiscardAttemptMarker() override = default;
 };
 
 const char kDescriberName[] = "PageDiscardingHelper";
@@ -84,7 +79,7 @@ NodeRssMap GetPageNodeRssEstimateKb(
   // Compute the resident set of each page by simply summing up the estimated
   // resident set of all its frames.
   for (const ProcessNode* process_node : process_nodes) {
-    base::flat_set<const FrameNode*> process_frames =
+    ProcessNode::NodeSetView<const FrameNode*> process_frames =
         process_node->GetFrameNodes();
     if (!process_frames.size()) {
       continue;
@@ -104,6 +99,18 @@ NodeRssMap GetPageNodeRssEstimateKb(
     }
   }
   return result;
+}
+
+void RecordDiscardedTabMetrics(const PageNodeSortProxy& candidate) {
+  // Logs a histogram entry to track the proportion of discarded tabs that
+  // were protected at the time of discard.
+  UMA_HISTOGRAM_BOOLEAN("Discarding.DiscardingProtectedTab",
+                        candidate.is_protected());
+
+  // Logs a histogram entry to track the proportion of discarded tabs that
+  // were focused at the time of discard.
+  UMA_HISTOGRAM_BOOLEAN("Discarding.DiscardingFocusedTab",
+                        candidate.is_focused());
 }
 
 }  // namespace
@@ -140,10 +147,8 @@ void PageDiscardingHelper::DiscardMultiplePages(
     std::move(post_discard_cb).Run(false);
   };
 
-  std::vector<const PageNode*> page_nodes = graph_->GetAllPageNodes();
-
   std::vector<PageNodeSortProxy> candidates;
-  for (const auto* page_node : page_nodes) {
+  for (const PageNode* page_node : GetOwningGraph()->GetAllPageNodes()) {
     CanDiscardResult can_discard_result =
         CanDiscard(page_node, discard_reason, minimum_time_in_background);
     if (can_discard_result == CanDiscardResult::kMarked) {
@@ -157,6 +162,7 @@ void PageDiscardingHelper::DiscardMultiplePages(
                             is_protected, page_node->IsFocused(),
                             page_node->GetTimeSinceLastVisibilityChange());
   }
+
   // Sorts with ascending importance.
   std::sort(candidates.begin(), candidates.end());
 
@@ -173,6 +179,9 @@ void PageDiscardingHelper::DiscardMultiplePages(
   if (!reclaim_target) {
     const PageNode* oldest = candidates[0].page_node();
     discard_attempts.emplace_back(oldest);
+
+    // Record metrics about the tab that is about to be discarded.
+    RecordDiscardedTabMetrics(candidates[0]);
   } else {
     const uint64_t reclaim_target_kb_value = reclaim_target->target_kb;
     uint64_t total_reclaim_kb = 0;
@@ -183,6 +192,10 @@ void PageDiscardingHelper::DiscardMultiplePages(
       }
       const PageNode* node = candidate.page_node();
       discard_attempts.emplace_back(node);
+
+      // Record metrics about the tab that is about to be discarded.
+      RecordDiscardedTabMetrics(candidate);
+
       // The node RSS value is updated by ProcessMetricsDecorator periodically.
       // The RSS value is 0 for nodes that have never been updated, estimate the
       // RSS value to 80 MiB for these nodes. 80 MiB is the average
@@ -284,8 +297,6 @@ void PageDiscardingHelper::RemovesDiscardAttemptMarkerForTesting(
 
 void PageDiscardingHelper::OnPassedToGraph(Graph* graph) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  graph_ = graph;
-  graph->RegisterObject(this);
   graph->GetNodeDataDescriberRegistry()->RegisterDescriber(this,
                                                            kDescriberName);
 }
@@ -293,8 +304,6 @@ void PageDiscardingHelper::OnPassedToGraph(Graph* graph) {
 void PageDiscardingHelper::OnTakenFromGraph(Graph* graph) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   graph->GetNodeDataDescriberRegistry()->UnregisterDescriber(this);
-  graph->UnregisterObject(this);
-  graph_ = nullptr;
 }
 
 const PageLiveStateDecorator::Data*
@@ -500,7 +509,7 @@ base::Value::Dict PageDiscardingHelper::DescribePageNodeData(
       TabPageDecorator::FromPageNode(node);
   if (tab_handle) {
     TabRevisitTracker* revisit_tracker =
-        graph_->GetRegisteredObjectAs<TabRevisitTracker>();
+        GetOwningGraph()->GetRegisteredObjectAs<TabRevisitTracker>();
     CHECK(revisit_tracker);
     TabRevisitTracker::StateBundle state =
         revisit_tracker->GetStateForTabHandle(tab_handle);

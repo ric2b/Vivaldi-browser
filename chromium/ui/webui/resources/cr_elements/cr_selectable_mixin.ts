@@ -5,24 +5,14 @@
 import {assert} from '//resources/js/assert.js';
 import type {CrLitElement, PropertyValues} from '//resources/lit/v3_0/lit.rollup.js';
 
-function toCamelCase(name: string): string {
-  const pieces = name.split('-');
-  let camel = pieces[0];
-  pieces.slice(1).forEach(
-      piece => camel = camel + piece[0].toUpperCase() + piece.substr(1));
-  return camel;
-}
-
 /**
  * CrSelectableMixin maintains a collection of selectable elements. The
- * elements are queried from a <slot>'s assignedElements, and are identified
- * using a |selectable| CSS selector, if specified. dom-if, dom-repeat,
- * dom-bind, and template children are excluded regardless of the value of
- * |selectable|.
+ * elements are queried from the light DOM, and are identified using a
+ * |selectable| CSS selector, if specified.
  *
  * The mixin observes click events on its children, and selects an item when
  * clicked. Items can also be selected using the select* methods, or by
- * updating the |selected| property. The mixin sets the 'iron-selected' CSS
+ * updating the |selected| property. The mixin sets the 'selected' CSS
  * class on the selected item, if any, and also sets the |selectedAttribute|
  * boolean attribute on the selected item if it is specified.
  *
@@ -45,14 +35,9 @@ export const CrSelectableMixin = <T extends Constructor<CrLitElement>>(
     static get properties() {
       return {
         /**
-         * To use an attribute value or property of an element for
-         * `selected` instead of the index, set this to the name of the
-         * attribute or property. Hyphenated values are converted to camel case
-         * when used to look up the property of a selectable element. Camel
-         * cased values are *not* converted to hyphenated values for attribute
-         * lookup. It's recommended that you provide the hyphenated form of the
-         * name so that selection works in both cases. (Use
-         * `attr-or-property-name` instead of `attrOrPropertyName`.)
+         * To use an attribute value of an element for determining `selected`
+         * instead of using the index, set this property to the name of the HTML
+         * attribute.
          */
         attrForSelected: {type: String},
 
@@ -87,7 +72,6 @@ export const CrSelectableMixin = <T extends Constructor<CrLitElement>>(
     selectOnClick: boolean = true;
 
     private items_: Element[] = [];
-    private observer_: MutationObserver;
     private selectedItem_: Element|null = null;
 
     override firstUpdated(changedProperties: PropertyValues<this>) {
@@ -116,7 +100,8 @@ export const CrSelectableMixin = <T extends Constructor<CrLitElement>>(
 
       if (changedProperties.has('attrForSelected')) {
         if (this.selectedItem_) {
-          const value = this.valueForItem_(this.selectedItem_);
+          assert(this.attrForSelected);
+          const value = this.selectedItem_.getAttribute(this.attrForSelected);
           assert(value !== null);
           this.selected = value;
         }
@@ -172,18 +157,23 @@ export const CrSelectableMixin = <T extends Constructor<CrLitElement>>(
     // Override this method in client code to modify this logic, for example to
     // grab children that don't reside in a <slot>.
     queryItems(): Element[] {
-      const elements = this.getSlot_().assignedElements();
-      const excluded = ['template', 'dom-bind', 'dom-if', 'dom-repeat'];
-      return elements.filter(el => {
-        if (excluded.includes(el.tagName)) {
-          return false;
-        }
-        return !this.selectable || el.matches(this.selectable);
-      });
+      const selectable = this.selectable === undefined ? '*' : this.selectable;
+      return Array.from(this.querySelectorAll(`:scope > ${selectable}`));
+    }
+
+    // If overriding queryItems(), override this method to return the list item
+    // element matching the CSS selector string |selector|.
+    queryMatchingItem(selector: string): HTMLElement|null {
+      const selectable = this.selectable || '*';
+      return this.querySelector<HTMLElement>(
+          `:scope > :is(${selectable})${selector}`);
     }
 
     private updateItems_() {
       this.items_ = this.queryItems();
+      this.items_.forEach(
+          (item, index) =>
+              item.setAttribute('data-selection-index', index.toString()));
     }
 
     get selectedItem(): Element|null {
@@ -211,7 +201,7 @@ export const CrSelectableMixin = <T extends Constructor<CrLitElement>>(
         return;
       }
 
-      item.classList.toggle('iron-selected', isSelected);
+      item.classList.toggle('selected', isSelected);
       if (this.selectedAttribute) {
         item.toggleAttribute(this.selectedAttribute, isSelected);
       }
@@ -224,7 +214,9 @@ export const CrSelectableMixin = <T extends Constructor<CrLitElement>>(
         return Number(value);
       }
 
-      return this.items_.findIndex(item => this.valueForItem_(item) === value);
+      const match =
+          this.queryMatchingItem(`[${this.attrForSelected}="${value}"]`);
+      return match ? Number(match.dataset['selectionIndex']) : -1;
     }
 
     private indexToValue_(index: number): string|number {
@@ -237,23 +229,7 @@ export const CrSelectableMixin = <T extends Constructor<CrLitElement>>(
         return index;
       }
 
-      const value = this.valueForItem_(item);
-      return value === null ? index : value;
-    }
-
-    private valueForItem_(item: Element|null): string|number|null {
-      if (!item || (!this.attrForSelected && !this.items_)) {
-        return null;
-      }
-      if (!this.attrForSelected) {
-        const index = this.items_.indexOf(item);
-        return index === -1 ? null : index;
-      }
-      const itemAsDict = item as (Element & {[key: string]: any});
-      const propValue = itemAsDict[toCamelCase(this.attrForSelected)];
-      return (propValue !== undefined && propValue !== null) ?
-          propValue :
-          item.getAttribute(this.attrForSelected);
+      return item.getAttribute(this.attrForSelected) || index;
     }
 
     itemsChanged() {
@@ -299,4 +275,5 @@ export interface CrSelectableMixinInterface {
   // Methods to override to modify default behavior.
   observeItems(): void;
   queryItems(): Element[];
+  queryMatchingItem(selector: string): HTMLElement|null;
 }

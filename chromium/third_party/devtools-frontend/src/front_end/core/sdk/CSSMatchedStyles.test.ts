@@ -27,9 +27,11 @@ function ruleMatch(
 }
 
 function createMatchedStyles(payload: Partial<SDK.CSSMatchedStyles.CSSMatchedStylesPayload>) {
+  const node = sinon.createStubInstance(SDK.DOMModel.DOMNode);
+  node.id = 1 as Protocol.DOM.NodeId;
   return SDK.CSSMatchedStyles.CSSMatchedStyles.create({
     cssModel: sinon.createStubInstance(SDK.CSSModel.CSSModel),
-    node: sinon.createStubInstance(SDK.DOMModel.DOMNode),
+    node,
     inlinePayload: null,
     attributesPayload: null,
     matchedPayload: [],
@@ -38,7 +40,6 @@ function createMatchedStyles(payload: Partial<SDK.CSSMatchedStyles.CSSMatchedSty
     inheritedPseudoPayload: [],
     animationsPayload: [],
     parentLayoutNodeId: undefined,
-    positionFallbackRules: [],
     positionTryRules: [],
     propertyRules: [],
     cssPropertyRegistrations: [],
@@ -48,89 +49,9 @@ function createMatchedStyles(payload: Partial<SDK.CSSMatchedStyles.CSSMatchedSty
 }
 
 describe('CSSMatchedStyles', () => {
-  describe('parseCSSVariableNameAndFallback', () => {
-    const {parseCSSVariableNameAndFallback} = SDK.CSSMatchedStyles;
-
-    it('correctly parses simple CSS variables without fallback', () => {
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--foo)'), {variableName: '--foo', fallback: ''});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--foo-bar)'), {variableName: '--foo-bar', fallback: ''});
-      assert.deepEqual(
-          parseCSSVariableNameAndFallback('var(\n--foo-bar\n)'), {variableName: '--foo-bar', fallback: ''});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(  --space  )'), {variableName: '--space', fallback: ''});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--123)'), {variableName: '--123', fallback: ''});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--123Abc)'), {variableName: '--123Abc', fallback: ''});
-    });
-
-    it('need to correctly parse escaped characters', () => {
-      // `var(--\)` is an invalid CSS value and must have at least 1 character.
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--\\ )'), {variableName: '--\\', fallback: ''});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--\\,)'), {variableName: '--\\,', fallback: ''});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--\\,,)'), {variableName: '--\\,', fallback: ''});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--\\,,,)'), {variableName: '--\\,', fallback: ','});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--\\,blue)'), {variableName: '--\\,blue', fallback: ''});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--\\,,green)'), {variableName: '--\\,', fallback: 'green'});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--\\,  ,red)'), {variableName: '--\\,', fallback: 'red'});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--fo\\ o)'), {variableName: '--fo\\ o', fallback: ''});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--fo\\ o,)'), {variableName: '--fo\\ o', fallback: ''});
-      assert.deepEqual(
-          parseCSSVariableNameAndFallback('var(--\\ bar\\ , blue)'), {variableName: '--\\ bar\\', fallback: 'blue'});
-
-      // test \)
-      assert.deepEqual(
-          parseCSSVariableNameAndFallback('var( --ba\\ z\\) )'), {variableName: '--ba\\ z\\)', fallback: ''});
-      assert.deepEqual(
-          parseCSSVariableNameAndFallback('var( --ba\\ z\\), )'), {variableName: '--ba\\ z\\)', fallback: ''});
-      assert.deepEqual(
-          parseCSSVariableNameAndFallback('var( --ba\\ z\\),  90%  )'),
-          {variableName: '--ba\\ z\\)', fallback: '90%  '});
-    });
-
-    it('correctly parses simple CSS variables with fallback', () => {
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--foo,1px)'), {variableName: '--foo', fallback: '1px'});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--x-y,2%)'), {variableName: '--x-y', fallback: '2%'});
-      assert.deepEqual(
-          parseCSSVariableNameAndFallback('var(--x-y , 100%  )'), {variableName: '--x-y', fallback: '100%  '});
-      assert.deepEqual(
-          parseCSSVariableNameAndFallback('var(--A123, 666 )'), {variableName: '--A123', fallback: '666 '});
-    });
-
-    it('property rejects non-custom variables', () => {
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(foo)'), {variableName: null, fallback: null});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(foo,1px)'), {variableName: null, fallback: null});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(-foo,1px)'), {variableName: null, fallback: null});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(-\ bar)'), {variableName: null, fallback: null});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(-\\- bar)'), {variableName: null, fallback: null});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(-90bar)'), {variableName: null, fallback: null});
-    });
-
-    it('correctly parses variables with special characters', () => {
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--🤖)'), {variableName: '--🤖', fallback: ''});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--foo-🤖)'), {variableName: '--foo-🤖', fallback: ''});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--🤖, 1px)'), {variableName: '--🤖', fallback: '1px'});
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--永,   国)'), {variableName: '--永', fallback: '国'});
-    });
-
-    it('correctly parses variables with escaped characters in name', () => {
-      assert.deepEqual(parseCSSVariableNameAndFallback('var(--_\x30-pink)'), {variableName: '--_0-pink', fallback: ''});
-
-      assert.deepEqual(
-          parseCSSVariableNameAndFallback('var(--_-color-blue)'), {variableName: '--_-color-blue', fallback: ''});
-      assert.deepEqual(
-          parseCSSVariableNameAndFallback('var(-\-_-color-blue)'), {variableName: '-\-_-color-blue', fallback: ''});
-      assert.deepEqual(
-          parseCSSVariableNameAndFallback('var(\--_-color-blue)'), {variableName: '\--_-color-blue', fallback: ''});
-      assert.deepEqual(
-          parseCSSVariableNameAndFallback('var(---three_hyphens)'), {variableName: '---three_hyphens', fallback: ''});
-    });
-  });
-
   describe('computeCSSVariable', () => {
-    const testCssValueEquals = async (text: string, value: unknown) => {
-      const node = sinon.createStubInstance(SDK.DOMModel.DOMNode);
-      node.id = 1 as Protocol.DOM.NodeId;
-
+    const testCssValueEquals = async (text: string, expectedValue: unknown) => {
       const matchedStyles = await createMatchedStyles({
-        node,
         matchedPayload: [
           ruleMatch(
               'div',
@@ -143,26 +64,44 @@ describe('CSSMatchedStyles', () => {
                 {name: '--theme', value: 'var(--dark)'},
                 {name: '--shadow', value: '1px var(--theme)'},
                 {name: '--width', value: '1px'},
+                {name: '--a', value: 'a'},
+                {name: '--b', value: 'var(--a)'},
+                {name: '--valid-fallback', value: 'var(--non-existent, fallback-value)'},
+                {name: '--var-reference-in-fallback', value: 'var(--non-existent, var(--foo))'},
+                {name: '--itself', value: 'var(--itself)'},
+                {name: '--itself-complex', value: '10px var(--itself-complex)'},
+                {name: '--cycle-1', value: 'var(--cycle-2)'},
+                {name: '--cycle-2', value: 'var(--cycle-1)'},
+                {name: '--cycle-a', value: 'var(--cycle-b, 50px)'},
+                {name: '--cycle-b', value: 'var(--cycle-a)'},
+                {name: '--cycle-in-fallback', value: 'var(--non-existent, var(--cycle-a))'},
+                {name: '--non-existent-fallback', value: 'var(--non-existent, var(--another-non-existent))'},
+                {name: '--out-of-cycle', value: 'var(--cycle-2, 20px)'},
+                {name: '--non-inherited', value: 'var(--inherited)'},
+                {name: '--also-inherited-overloaded', value: 'this is overloaded here'},
+              ]),
+          ruleMatch(
+              'html',
+              [
+                {name: '--inherited', value: 'var(--also-inherited-overloaded)'},
+                {name: '--also-inherited-overloaded', value: 'inherited and overloaded'},
               ]),
         ],
       });
 
-      const val = matchedStyles.computeCSSVariable(matchedStyles.nodeStyles()[0], text)?.value;
-      assert.strictEqual(val, value);
+      const actualValue = matchedStyles.computeCSSVariable(matchedStyles.nodeStyles()[0], text)?.value ?? null;
+      assert.strictEqual(actualValue, expectedValue);
     };
 
     it('should correctly compute the value of an expression that uses a variable', async () => {
       await testCssValueEquals('--foo', 'active-foo');
       await testCssValueEquals('--baz', 'active-baz !important');
-      await testCssValueEquals('--does-not-exist', undefined);
+      await testCssValueEquals('--does-not-exist', null);
       await testCssValueEquals('--dark', 'darkgrey');
       await testCssValueEquals('--light', 'lightgrey');
       await testCssValueEquals('--theme', 'darkgrey');
       await testCssValueEquals('--shadow', '1px darkgrey');
       await testCssValueEquals('--width', '1px');
-      await testCssValueEquals('--cycle-a', undefined);
-      await testCssValueEquals('--cycle-b', undefined);
-      await testCssValueEquals('--cycle-c', undefined);
     });
 
     it('correctly resolves the declaration', async () => {
@@ -224,37 +163,190 @@ describe('CSSMatchedStyles', () => {
       testComputedVariableValueEquals('--bar', styleFoo3, 'bar0', matchedStyles.registeredProperties()[0]);
       testComputedVariableValueEquals('--foo', styleBaz, 'foo3', styleFoo3.leadingProperties()[0]);
     });
-  });
 
-  describe('computeValue', () => {
-    const testComputedValueEquals = async (text: string, value: unknown) => {
-      const node = sinon.createStubInstance(SDK.DOMModel.DOMNode);
-      node.id = 1 as Protocol.DOM.NodeId;
-
-      const matchedStyles = await createMatchedStyles({
-        cssModel: sinon.createStubInstance(SDK.CSSModel.CSSModel),
-        node,
-        matchedPayload: [ruleMatch(
-            'div',
-            [
-              {name: '--width', value: '1px'},
-              {name: '--dark', value: 'darkgrey'},
-              {name: '--theme', value: 'var(--dark)'},
-            ])],
+    describe('cyclic references', () => {
+      it('should return `null` when the variable references itself', async () => {
+        await testCssValueEquals('--itself', null);
+        await testCssValueEquals('--itself-complex', null);
       });
 
-      const val = matchedStyles.computeValue(matchedStyles.nodeStyles()[0], text);
-      assert.strictEqual(val, value);
-    };
+      it('should return `null` when there is a simple cycle (1->2->1)', async () => {
+        await testCssValueEquals('--cycle-1', null);
+      });
 
-    it('should correctly compute the value of an expression that uses a variable', async () => {
-      await testComputedValueEquals('1px var(--dark) 2px var(--theme)', '1px darkgrey 2px darkgrey');
-      await testComputedValueEquals('1px var(--theme)', '1px darkgrey');
-      await testComputedValueEquals(
-          'rgb(100, 200, 300) var(--some-color, blue    ) 1px', 'rgb(100, 200, 300) blue 1px');
-      await testComputedValueEquals('var(--not-existing)', null);
-      await testComputedValueEquals('var(--not-existing-with-default, red)', 'red');
-      await testComputedValueEquals('var(--width)solid black', '1px solid black');
+      it('should return `null` if the var reference is inside the cycle', async () => {
+        await testCssValueEquals('--cycle-a', null);
+      });
+
+      it('should return fallback value if the expression is not inside the cycle', async () => {
+        await testCssValueEquals('--out-of-cycle', '20px');
+      });
+    });
+
+    describe('var references inside fallback', () => {
+      it('should resolve a `var()` reference inside fallback value too', async () => {
+        await testCssValueEquals('--var-reference-in-fallback', 'active-foo');
+      });
+
+      it('should return null when the fallback value contains a cyclic reference', async () => {
+        await testCssValueEquals('--cycle-in-fallback', null);
+      });
+
+      it('should return null when the fallback value is non existent too', async () => {
+        await testCssValueEquals('--non-existent-fallback', null);
+      });
+    });
+
+    it('should resolve a `var()` reference with nothing else', async () => {
+      await testCssValueEquals('--a', 'a');
+    });
+
+    it('should resolve a `var()` reference until no `var()` references left', async () => {
+      await testCssValueEquals('--b', 'a');
+    });
+
+    it('should resolve to fallback if the referenced variable does not exist', async () => {
+      await testCssValueEquals('--valid-fallback', 'fallback-value');
+    });
+
+    it('should correctly resolve the `var()` reference for complex inheritance case', async () => {
+      await testCssValueEquals('--non-inherited', 'inherited and overloaded');
+    });
+
+    it('correcty handles cycles', async () => {
+      async function compute(name: string, styleRules: string[], inheritedRules: string[][]) {
+        const ruleToRuleMatch = (rule: string, index: number) => ruleMatch(
+            `.${index}`,
+            rule.split(';')
+                .filter(decl => decl.trim())
+                .map(decl => decl.split(':'))
+                .map(decl => ({name: decl[0].trim(), value: decl.slice(1).join(':').trim()})));
+        const matchedPayload = styleRules.map(ruleToRuleMatch);
+        const inheritedPayload = inheritedRules.map(
+            ruleTexts => ({matchedCSSRules: ruleTexts.map((rule, i) => ruleToRuleMatch(rule, i + styleRules.length))}));
+
+        const matchedStyles = await createMatchedStyles({matchedPayload, inheritedPayload});
+        return matchedStyles.computeCSSVariable(matchedStyles.nodeStyles()[0], name)?.value ?? null;
+      }
+
+      const simpleCycle = `
+        --a: var(--b);
+        --b: var(--a);
+        `;
+      assert.strictEqual(await compute('--a', [simpleCycle], []), null);
+      assert.strictEqual(await compute('--b', [simpleCycle], []), null);
+
+      const cycleOnUnusedFallback = `
+        --a: 2;
+        --b: var(--a, var(--c));
+        --c: var(--b);
+        `;
+      assert.strictEqual(await compute('--a', [cycleOnUnusedFallback], []), '2');
+      assert.strictEqual(await compute('--b', [cycleOnUnusedFallback], []), '2');
+      assert.strictEqual(await compute('--c', [cycleOnUnusedFallback], []), '2');
+
+      const simpleCycleWithFallbacks = `
+        --a: var(--b, 1);
+        --b: var(--a, 2);
+        `;
+      assert.strictEqual(await compute('--a', [simpleCycleWithFallbacks], []), null);
+      assert.strictEqual(await compute('--b', [simpleCycleWithFallbacks], []), null);
+
+      const longerCycle = `
+        --a: var(--b);
+        --b: var(--c);
+        --c: var(--a);
+        `;
+      assert.strictEqual(await compute('--a', [longerCycle], []), null);
+      assert.strictEqual(await compute('--b', [longerCycle], []), null);
+      assert.strictEqual(await compute('--c', [longerCycle], []), null);
+
+      const longerCycleWithFallbacks = `
+        --a: var(--b, 2);
+        --b: var(--c, 3);
+        --c: var(--a, 4);
+        `;
+      assert.strictEqual(await compute('--a', [longerCycleWithFallbacks], []), null);
+      assert.strictEqual(await compute('--b', [longerCycleWithFallbacks], []), null);
+      assert.strictEqual(await compute('--c', [longerCycleWithFallbacks], []), null);
+
+      const pointingIntoCycle = `
+        ${longerCycle}
+        --d: var(--a);
+        --e: var(--b);
+        `;
+      assert.strictEqual(await compute('--a', [pointingIntoCycle], []), null);
+      assert.strictEqual(await compute('--b', [pointingIntoCycle], []), null);
+      assert.strictEqual(await compute('--c', [pointingIntoCycle], []), null);
+      assert.strictEqual(await compute('--d', [pointingIntoCycle], []), null);
+      assert.strictEqual(await compute('--e', [pointingIntoCycle], []), null);
+
+      const pointingIntoCycleWithFallback = `
+        ${longerCycle}
+        --d: var(--a, 4);
+        --e: var(--b, 5);
+        `;
+      assert.strictEqual(await compute('--a', [pointingIntoCycleWithFallback], []), null);
+      assert.strictEqual(await compute('--b', [pointingIntoCycleWithFallback], []), null);
+      assert.strictEqual(await compute('--c', [pointingIntoCycleWithFallback], []), null);
+      assert.strictEqual(await compute('--d', [pointingIntoCycleWithFallback], []), '4');
+      assert.strictEqual(await compute('--e', [pointingIntoCycleWithFallback], []), '5');
+
+      const multipleEdges = `
+        --a: var(--b);
+        --b: var(--c) var(--d);
+        --c: var(--a) var(--b);
+        --d: var(--c);
+        `;
+      assert.strictEqual(await compute('--a', [multipleEdges], []), null);
+      assert.strictEqual(await compute('--b', [multipleEdges], []), null);
+      assert.strictEqual(await compute('--c', [multipleEdges], []), null);
+      assert.strictEqual(await compute('--d', [multipleEdges], []), null);
+
+      const pointingIntoMultipleEdgeCycle = `
+        ${multipleEdges}
+        --e: var(--c) var(--d);
+        `;
+      assert.strictEqual(await compute('--a', [pointingIntoMultipleEdgeCycle], []), null);
+      assert.strictEqual(await compute('--b', [pointingIntoMultipleEdgeCycle], []), null);
+      assert.strictEqual(await compute('--c', [pointingIntoMultipleEdgeCycle], []), null);
+      assert.strictEqual(await compute('--d', [pointingIntoMultipleEdgeCycle], []), null);
+      assert.strictEqual(await compute('--e', [pointingIntoMultipleEdgeCycle], []), null);
+
+      const pointingIntoMultipleEdgeCycleWithFallback = `
+        ${multipleEdges}
+        --e: var(--c, 4) var(--d, 5);
+        `;
+      assert.strictEqual(await compute('--a', [pointingIntoMultipleEdgeCycleWithFallback], []), null);
+      assert.strictEqual(await compute('--b', [pointingIntoMultipleEdgeCycleWithFallback], []), null);
+      assert.strictEqual(await compute('--c', [pointingIntoMultipleEdgeCycleWithFallback], []), null);
+      assert.strictEqual(await compute('--d', [pointingIntoMultipleEdgeCycleWithFallback], []), null);
+      assert.strictEqual(await compute('--e', [pointingIntoMultipleEdgeCycleWithFallback], []), '4 5');
+
+      const multipleCyclesWithFallback = `
+        ${longerCycle}
+        --d: var(--e);
+        --e: var(--f);
+        --f: var(--d);
+        --g: var(--a, var(--d, 5));
+        `;
+      assert.strictEqual(await compute('--a', [multipleCyclesWithFallback], []), null);
+      assert.strictEqual(await compute('--b', [multipleCyclesWithFallback], []), null);
+      assert.strictEqual(await compute('--c', [multipleCyclesWithFallback], []), null);
+      assert.strictEqual(await compute('--d', [multipleCyclesWithFallback], []), null);
+      assert.strictEqual(await compute('--e', [multipleCyclesWithFallback], []), null);
+      assert.strictEqual(await compute('--f', [multipleCyclesWithFallback], []), null);
+      assert.strictEqual(await compute('--g', [multipleCyclesWithFallback], []), '5');
+
+      const notACycle = `
+        --a: var(--b, 1);
+        `;
+      const inherited = `
+        --a: var(--b);
+        --b: var(--a);
+        `;
+      assert.strictEqual(await compute('--a', [notACycle], [[inherited]]), '1');
+      assert.strictEqual(await compute('--b', [notACycle], [[inherited]]), null);
     });
   });
 
@@ -340,5 +432,22 @@ describeWithMockConnection('NodeCascade', () => {
     assert.strictEqual(
         matchedStyles.propertyState(nonInheritableProperty), SDK.CSSMatchedStyles.PropertyState.Overloaded);
     assert.strictEqual(matchedStyles.propertyState(inheritableProperty), SDK.CSSMatchedStyles.PropertyState.Active);
+  });
+
+  it('correctly computes active properties for nested at-rules', async () => {
+    const outerRule = ruleMatch('a', [{name: 'color', value: 'var(--inner)'}]);
+    const nestedRule = ruleMatch('&', [{name: '--inner', value: 'red'}]);
+    nestedRule.rule.nestingSelectors = ['a'];
+    nestedRule.rule.selectorList = {selectors: [], text: '&'};
+    nestedRule.rule.supports = [{
+      'text': '(--var:s)',
+      'active': true,
+      styleSheetId: nestedRule.rule.styleSheetId,
+    }];
+    const matchedStyles = await createMatchedStyles({
+      matchedPayload: [outerRule, nestedRule],
+    });
+
+    assert.deepEqual(matchedStyles.availableCSSVariables(matchedStyles.nodeStyles()[0]), ['--inner']);
   });
 });

@@ -1,11 +1,19 @@
 #version 310 es
 
+uint tint_div(uint lhs, uint rhs) {
+  return (lhs / ((rhs == 0u) ? 1u : rhs));
+}
+
+uint tint_mod(uint lhs, uint rhs) {
+  return (lhs % ((rhs == 0u) ? 1u : rhs));
+}
+
 shared vec3 tile[4][256];
 void tint_zero_workgroup_memory(uint local_idx) {
   {
     for(uint idx = local_idx; (idx < 1024u); idx = (idx + 64u)) {
-      uint i_1 = (idx / 256u);
-      uint i_2 = (idx % 256u);
+      uint i_1 = tint_div(idx, 256u);
+      uint i_2 = tint_mod(idx, 256u);
       tile[i_1][i_2] = vec3(0.0f);
     }
   }
@@ -23,7 +31,7 @@ layout(binding = 1, std140) uniform params_block_ubo {
   Params inner;
 } params;
 
-layout(rgba8) uniform highp writeonly image2D outputTex;
+layout(binding = 2, rgba8) uniform highp writeonly image2D outputTex;
 struct Flip {
   uint value;
   uint pad;
@@ -34,10 +42,6 @@ struct Flip {
 layout(binding = 3, std140) uniform flip_block_ubo {
   Flip inner;
 } flip;
-
-uint tint_div(uint lhs, uint rhs) {
-  return (lhs / ((rhs == 0u) ? 1u : rhs));
-}
 
 uniform highp sampler2D inputTex_samp;
 

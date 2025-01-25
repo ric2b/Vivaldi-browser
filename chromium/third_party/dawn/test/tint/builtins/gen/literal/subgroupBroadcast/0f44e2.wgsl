@@ -38,18 +38,20 @@
 // flags: --hlsl_shader_model 62
 
 
-enable chromium_experimental_subgroups;
+enable subgroups;
+enable subgroups_f16;
 
 enable f16;
 
-// fn subgroupBroadcast(value: vec<4, f16>, @const sourceLaneIndex: u32) -> vec<4, f16>
-fn subgroupBroadcast_0f44e2() {
-  var res: vec4<f16> = subgroupBroadcast(vec4<f16>(1.h), 1u);
-  prevent_dce = res;
-}
-@group(2) @binding(0) var<storage, read_write> prevent_dce : vec4<f16>;
+@group(0) @binding(0) var<storage, read_write> prevent_dce : vec4<f16>;
 
+
+// fn subgroupBroadcast(value: vec<4, f16>, @const sourceLaneIndex: u32) -> vec<4, f16>
+fn subgroupBroadcast_0f44e2() -> vec4<f16>{
+  var res: vec4<f16> = subgroupBroadcast(vec4<f16>(1.h), 1u);
+  return res;
+}
 @compute @workgroup_size(1)
 fn compute_main() {
-  subgroupBroadcast_0f44e2();
+  prevent_dce = subgroupBroadcast_0f44e2();
 }

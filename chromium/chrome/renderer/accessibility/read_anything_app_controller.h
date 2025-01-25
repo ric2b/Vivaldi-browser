@@ -14,16 +14,18 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/safe_ref.h"
 #include "chrome/common/accessibility/read_anything.mojom.h"
+#include "chrome/renderer/accessibility/read_aloud_app_model.h"
 #include "chrome/renderer/accessibility/read_anything_app_model.h"
+#include "content/public/renderer/render_frame_observer.h"
 #include "gin/wrappable.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
-#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_node_id_forward.h"
 #include "ui/accessibility/ax_node_position.h"
 #include "ui/accessibility/ax_position.h"
+#include "ui/accessibility/ax_tree_observer.h"
 #include "ui/accessibility/ax_tree_update_forward.h"
 
 namespace content {
@@ -65,8 +67,10 @@ class ReadAnythingAppControllerTest;
 //     the content nodes, their descendants, and their ancestors.
 //
 class ReadAnythingAppController
-    : public gin::Wrappable<ReadAnythingAppController>,
-      public read_anything::mojom::UntrustedPage {
+    : public content::RenderFrameObserver,
+      public gin::Wrappable<ReadAnythingAppController>,
+      public read_anything::mojom::UntrustedPage,
+      public ui::AXTreeObserver {
  public:
   static gin::WrapperInfo kWrapperInfo;
 
@@ -78,6 +82,9 @@ class ReadAnythingAppController
   // to page.
   static ReadAnythingAppController* Install(content::RenderFrame* render_frame);
 
+  // content::RenderFrameObserver:
+  void OnDestruct() override;
+
  private:
   friend ReadAnythingAppControllerTest;
 
@@ -88,6 +95,15 @@ class ReadAnythingAppController
   gin::ObjectTemplateBuilder GetObjectTemplateBuilder(
       v8::Isolate* isolate) override;
 
+  // ui::AXTreeObserver:
+  void OnNodeDataChanged(ui::AXTree* tree,
+                         const ui::AXNodeData& old_node_data,
+                         const ui::AXNodeData& new_node_data) override;
+
+  void OnNodeWillBeDeleted(ui::AXTree* tree, ui::AXNode* node) override;
+
+  void OnNodeDeleted(ui::AXTree* tree, ui::AXNodeID node) override;
+
   // read_anything::mojom::UntrustedPage:
   void AccessibilityEventReceived(
       const ui::AXTreeID& tree_id,
@@ -97,14 +113,13 @@ class ReadAnythingAppController
                                ukm::SourceId ukm_source_id,
                                bool is_pdf) override;
   void OnAXTreeDestroyed(const ui::AXTreeID& tree_id) override;
-  void OnThemeChanged(
-      read_anything::mojom::ReadAnythingThemePtr new_theme) override;
   void OnSettingsRestoredFromPrefs(
       read_anything::mojom::LineSpacing line_spacing,
       read_anything::mojom::LetterSpacing letter_spacing,
       const std::string& font,
       double font_size,
       bool links_enabled,
+      bool images_enabled,
       read_anything::mojom::Colors color,
       double speech_rate,
       base::Value::Dict voices,
@@ -123,20 +138,21 @@ class ReadAnythingAppController
   int StartOffset() const;
   ui::AXNodeID EndNodeId() const;
   int EndOffset() const;
-  SkColor BackgroundColor() const;
   std::string FontName() const;
   float FontSize() const;
   bool LinksEnabled() const;
-  float SpeechRate() const;
+  bool ImagesEnabled() const;
+  bool ImagesFeatureEnabled() const;
+  double SpeechRate() const;
   void OnFontSizeChanged(bool increase);
   void OnFontSizeReset();
   void OnLinksEnabledToggled();
-  SkColor ForegroundColor() const;
+  void OnImagesEnabledToggled();
   float LetterSpacing() const;
   float LineSpacing() const;
   int ColorTheme() const;
   int HighlightGranularity() const;
-  int HighlightOn() const;
+  bool IsHighlightOn();
   int StandardLineSpacing() const;
   int LooseLineSpacing() const;
   int VeryLooseLineSpacing() const;
@@ -177,8 +193,8 @@ class ReadAnythingAppController
                          ui::AXNodeID focus_node_id,
                          int focus_offset) const;
   void OnCollapseSelection() const;
+  void OnRestartReadAloud();
   bool IsGoogleDocs() const;
-  bool IsWebUIToolbarEnabled() const;
   bool IsReadAloudEnabled() const;
   bool IsChromeOsAsh() const;
   bool IsAutoVoiceSwitchingEnabled() const;
@@ -204,10 +220,12 @@ class ReadAnythingAppController
   void TurnedHighlightOff();
   double GetLineSpacingValue(int line_spacing) const;
   double GetLetterSpacingValue(int letter_spacing) const;
-  std::vector<std::string> GetSupportedFonts() const;
+  std::vector<std::string> GetSupportedFonts();
   void RequestImageDataUrl(ui::AXNodeID node_id) const;
   std::string GetImageDataUrl(ui::AXNodeID node_id) const;
-  void OnSpeechPlayingStateChanged(bool paused);
+  void OnSpeechPlayingStateChanged(bool is_speech_active);
+  std::string GetValidatedFontName(const std::string& font) const;
+  std::vector<std::string> GetAllFonts();
 
   // The language code that should be used to determine which voices are
   // supported for speech.
@@ -222,7 +240,7 @@ class ReadAnythingAppController
       const std::string& display_locale) const;
 
   void Distill();
-  void Draw();
+  void Draw(bool recompute_display_nodes);
   void DrawSelection();
 
   void ExecuteJavaScript(const std::string& script);
@@ -276,6 +294,16 @@ class ReadAnythingAppController
   // segment.
   int GetCurrentTextStartIndex(ui::AXNodeID node_id);
 
+  // Given a node id and the boundary position of the highlight start, return
+  // convert to the starting index that should be used for highlighting the
+  // next granularity.
+  // Note that this is only needed for custom granularity highlighting.
+  // Sentence highlighting is able to be handled directly in WebUI because the
+  // entire speech segment is highlighted at once.
+  // This allows us to correctly position the highlight within the current
+  // text segment.
+  int GetHighlightStartIndex(ui::AXNodeID node_id, int index);
+
   // Returns the Read Aloud ending text index for a node. For example,
   // if the entire text of the node should be read by Read Aloud at a particular
   // moment, this will return the length of the node's text. Returns -1 if the
@@ -290,10 +318,9 @@ class ReadAnythingAppController
 
   int GetNextWordHighlightLength(int index);
 
-  // SetContentForTesting, SetThemeForTesting, and SetLanguageForTesting are
-  // used by ReadAnythingAppTest and thus need to be kept in
-  // ReadAnythingAppController even though ReadAnythingAppControllerBrowserTest
-  // is friended.
+  // SetContentForTesting and SetLanguageForTesting are used by
+  // ReadAnythingAppTest and thus need to be kept in ReadAnythingAppController
+  // even though ReadAnythingAppControllerBrowserTest is friended.
   // Snapshot_lite is a data structure which resembles an
   // AXTreeUpdate. E.g.:
   //   const axTree = {
@@ -313,33 +340,26 @@ class ReadAnythingAppController
   //   };
   void SetContentForTesting(v8::Local<v8::Value> v8_snapshot_lite,
                             std::vector<ui::AXNodeID> content_node_ids);
-  void SetThemeForTesting(const std::string& font_name,
-                          float font_size,
-                          bool links_enabled,
-                          SkColor foreground_color,
-                          SkColor background_color,
-                          int line_spacing,
-                          int letter_spacing);
   void SetLanguageForTesting(const std::string& language_code);
 
   // Helpers for logging UmaHistograms based on times recorded in WebUI.
-  void LogUmaHistogramTimes(int64_t time, std::string metric);
-  void LogUmaHistogramLongTimes(int64_t time, std::string metric);
-  void IncrementMetricCount(std::string metric);
+  void IncrementMetricCount(const std::string& metric);
   void LogSpeechEventCounts();
 
-  void LogSpeechErrorEvent(std::string error_code);
-
-  content::RenderFrame* GetRenderFrame();
-
-  const blink::LocalFrameToken frame_token_;
   std::unique_ptr<AXTreeDistiller> distiller_;
   mojo::Remote<read_anything::mojom::UntrustedPageHandlerFactory>
       page_handler_factory_;
   mojo::Remote<read_anything::mojom::UntrustedPageHandler> page_handler_;
   mojo::Receiver<read_anything::mojom::UntrustedPage> receiver_{this};
 
-  // Model that holds state for this controller.
+  // Model that holds Read Aloud state for this controller.
+  ReadAloudAppModel read_aloud_model_;
+
+  // Set of nodes that will be deleted that are also displayed. A draw will
+  // occur when the set becomes empty.
+  std::set<ui::AXNodeID> displayed_nodes_pending_deletion_;
+
+  // Model that holds Reading mode state for this controller.
   ReadAnythingAppModel model_;
 
   // For metrics logging
@@ -351,6 +371,10 @@ class ReadAnythingAppController
 
   // The time when the WebUI connects i.e. when onConnected is called.
   base::TimeTicks web_ui_connected_time_ms_;
+
+  // A timer that causes a distillation after a user stops typing for a set
+  // number of seconds.
+  base::RetainingOneShotTimer post_user_entry_draw_timer_;
 
   base::WeakPtrFactory<ReadAnythingAppController> weak_ptr_factory_{this};
 };

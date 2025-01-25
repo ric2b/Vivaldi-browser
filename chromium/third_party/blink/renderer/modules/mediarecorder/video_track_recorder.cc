@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/mediarecorder/video_track_recorder.h"
 
 #include <memory>
@@ -108,7 +113,7 @@ libyuv::RotationMode MediaVideoRotationToRotationMode(
     case media::VIDEO_ROTATION_270:
       return libyuv::kRotate270;
   }
-  NOTREACHED() << rotation;
+  NOTREACHED_IN_MIGRATION() << rotation;
   return libyuv::kRotate0;
 }
 
@@ -331,7 +336,8 @@ GetCreateSoftwareVideoEncoderCallback(CodecId codec_id) {
           }));
 #endif  // BUILDFLAG(ENABLE_LIBAOM)
     default:
-      NOTREACHED() << "Unsupported codec=" << static_cast<int>(codec_id);
+      NOTREACHED_IN_MIGRATION()
+          << "Unsupported codec=" << static_cast<int>(codec_id);
       return base::NullCallback();
   }
 }
@@ -339,11 +345,11 @@ GetCreateSoftwareVideoEncoderCallback(CodecId codec_id) {
 
 VideoTrackRecorder::VideoTrackRecorder(
     scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
-    CallbackInterface* callback_interface)
+    WeakCell<CallbackInterface>* callback_interface)
     : TrackRecorder(base::BindPostTask(
           main_thread_task_runner,
           WTF::BindOnce(&CallbackInterface::OnSourceReadyStateChanged,
-                        WrapWeakPersistent(callback_interface)))),
+                        WrapPersistent(callback_interface)))),
       main_thread_task_runner_(std::move(main_thread_task_runner)),
       callback_interface_(callback_interface) {
   CHECK(main_thread_task_runner_);
@@ -526,7 +532,7 @@ void VideoTrackRecorderImpl::Encoder::StartFrameEncode(
 
   const bool is_format_supported =
       (video_frame->format() == media::PIXEL_FORMAT_NV12 &&
-       video_frame->HasGpuMemoryBuffer()) ||
+       video_frame->HasMappableGpuBuffer()) ||
       (video_frame->IsMappable() &&
        (video_frame->format() == media::PIXEL_FORMAT_I420 ||
         video_frame->format() == media::PIXEL_FORMAT_I420A));
@@ -539,7 +545,7 @@ void VideoTrackRecorderImpl::Encoder::StartFrameEncode(
   }
   if (frame && frame->format() == media::PIXEL_FORMAT_I420A &&
       !CanEncodeAlphaChannel()) {
-    CHECK(!frame->HasGpuMemoryBuffer());
+    CHECK(!frame->HasMappableGpuBuffer());
     // Drop alpha channel if the encoder does not support it yet.
     frame = media::WrapAsI420VideoFrame(std::move(frame));
   }
@@ -707,7 +713,7 @@ VideoTrackRecorderImpl::Encoder::ConvertToI420ForSoftwareEncoder(
     scoped_refptr<media::VideoFrame> frame) {
   DCHECK_EQ(frame->format(), media::VideoPixelFormat::PIXEL_FORMAT_NV12);
 
-  if (frame->HasGpuMemoryBuffer()) {
+  if (frame->HasMappableGpuBuffer()) {
     frame = media::ConvertToMemoryMappedFrame(frame);
   }
   if (!frame)
@@ -798,7 +804,7 @@ VideoTrackRecorderImpl::VideoTrackRecorderImpl(
     scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
     CodecProfile codec_profile,
     MediaStreamComponent* track,
-    CallbackInterface* callback_interface,
+    WeakCell<CallbackInterface>* callback_interface,
     uint32_t bits_per_second,
     KeyFrameRequestProcessor::Configuration key_frame_config)
     : VideoTrackRecorder(std::move(main_thread_task_runner),
@@ -811,7 +817,7 @@ VideoTrackRecorderImpl::VideoTrackRecorderImpl(
   auto on_encoded_video_cb = base::BindPostTask(
       main_thread_task_runner_,
       WTF::BindRepeating(&CallbackInterface::OnEncodedVideo,
-                         WrapWeakPersistent(callback_interface)));
+                         WrapPersistent(callback_interface)));
   initialize_encoder_cb_ = WTF::BindRepeating(
       &VideoTrackRecorderImpl::InitializeEncoder, weak_factory_.GetWeakPtr(),
       codec_profile, std::move(on_encoded_video_cb), bits_per_second);
@@ -892,7 +898,7 @@ VideoTrackRecorderImpl::CreateMediaVideoEncoder(
     on_error_cb = base::BindPostTask(
         main_thread_task_runner_,
         WTF::BindOnce(&CallbackInterface::OnVideoEncodingError,
-                      WrapWeakPersistent(callback_interface())));
+                      WrapPersistent(callback_interface())));
   }
 
   media::GpuVideoAcceleratorFactories* gpu_factories =
@@ -925,7 +931,7 @@ VideoTrackRecorderImpl::CreateSoftwareVideoEncoder(
           base::BindPostTask(
               main_thread_task_runner_,
               WTF::BindRepeating(&CallbackInterface::OnVideoEncodingError,
-                                 WrapWeakPersistent(callback_interface()))));
+                                 WrapPersistent(callback_interface()))));
 #endif
     case CodecId::kVp8:
     case CodecId::kVp9:
@@ -936,13 +942,13 @@ VideoTrackRecorderImpl::CreateSoftwareVideoEncoder(
           base::BindPostTask(
               main_thread_task_runner_,
               WTF::BindRepeating(&CallbackInterface::OnVideoEncodingError,
-                                 WrapWeakPersistent(callback_interface()))));
+                                 WrapPersistent(callback_interface()))));
 #if BUILDFLAG(ENABLE_LIBAOM)
     case CodecId::kAv1: {
       auto on_error_cb = base::BindPostTask(
           main_thread_task_runner_,
           WTF::BindOnce(&CallbackInterface::OnVideoEncodingError,
-                        WrapWeakPersistent(callback_interface())));
+                        WrapPersistent(callback_interface())));
       return std::make_unique<MediaRecorderEncoderWrapper>(
           std::move(encoding_task_runner), *codec_profile.profile,
           bits_per_second, is_screencast,
@@ -1030,7 +1036,9 @@ void VideoTrackRecorderImpl::InitializeEncoderOnEncoderSupportKnown(
   std::optional<media::VideoCodecProfile> profile =
       GetMediaVideoCodecProfile(codec_profile, input_size, allow_vea_encoder);
   if (!profile) {
-    callback_interface()->OnVideoEncodingError();
+    if (auto* callback = callback_interface()->Get()) {
+      callback->OnVideoEncodingError();
+    }
     return;
   }
 
@@ -1080,7 +1088,9 @@ void VideoTrackRecorderImpl::InitializeEncoderOnEncoderSupportKnown(
   base::WeakPtr<Encoder> weak_encoder = encoder->GetWeakPtr();
 
   auto metrics_provider =
-      callback_interface()->CreateVideoEncoderMetricsProvider();
+      callback_interface()->Get()
+          ? callback_interface()->Get()->CreateVideoEncoderMetricsProvider()
+          : nullptr;
   CHECK(metrics_provider);
   encoder_.emplace(encoding_task_runner, std::move(encoder));
   encoder_.AsyncCall(&Encoder::InitializeEncoder)
@@ -1123,7 +1133,7 @@ void VideoTrackRecorderImpl::DisconnectFromTrack() {
 VideoTrackRecorderPassthrough::VideoTrackRecorderPassthrough(
     scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
     MediaStreamComponent* track,
-    CallbackInterface* callback_interface,
+    WeakCell<CallbackInterface>* callback_interface,
     KeyFrameRequestProcessor::Configuration key_frame_config)
     : VideoTrackRecorder(std::move(main_thread_task_runner),
                          callback_interface),
@@ -1216,10 +1226,10 @@ void VideoTrackRecorderPassthrough::HandleEncodedVideoFrame(
                                        /*frame_rate=*/0.0f,
                                        /*codec=*/encoded_frame->Codec(),
                                        color_space);
-  if (callback_interface()) {
-    callback_interface()->OnPassthroughVideo(params, std::move(data), {},
-                                             estimated_capture_time,
-                                             encoded_frame->IsKeyFrame());
+  if (auto* callback = callback_interface()->Get()) {
+    callback->OnPassthroughVideo(params, std::move(data), {},
+                                 estimated_capture_time,
+                                 encoded_frame->IsKeyFrame());
   }
 }
 

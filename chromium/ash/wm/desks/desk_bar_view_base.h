@@ -15,6 +15,8 @@
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/scroll_arrow_button.h"
 #include "base/memory/raw_ptr.h"
+#include "base/scoped_observation.h"
+#include "ui/aura/window_occlusion_tracker.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/events/event.h"
 #include "ui/views/controls/scroll_view.h"
@@ -29,6 +31,7 @@ namespace ash {
 
 class DeskBarHoverObserver;
 class OverviewGrid;
+class WindowOcclusionCalculator;
 
 // Base class for desk bar views, including desk bar view within overview and
 // desk bar view for the desk button.
@@ -298,7 +301,10 @@ class ASH_EXPORT DeskBarViewBase : public views::View,
   friend class DeskBarScrollViewLayout;
   friend class DesksTestApi;
 
-  DeskBarViewBase(aura::Window* root, Type type);
+  DeskBarViewBase(
+      aura::Window* root,
+      Type type,
+      base::WeakPtr<WindowOcclusionCalculator> window_occlusion_calculator);
   ~DeskBarViewBase() override;
 
   // Return the X offset of the first mini_view on the left (if there's one),
@@ -438,6 +444,8 @@ class ASH_EXPORT DeskBarViewBase : public views::View,
 
   // Test closure that runs after the UI has been updated asynchronously.
   base::OnceClosure on_update_ui_closure_for_testing_;
+
+  const base::WeakPtr<WindowOcclusionCalculator> window_occlusion_calculator_;
 };
 
 }  // namespace ash

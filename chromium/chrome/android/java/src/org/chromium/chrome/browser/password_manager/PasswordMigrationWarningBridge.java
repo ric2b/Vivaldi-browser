@@ -67,8 +67,9 @@ class PasswordMigrationWarningBridge {
                         ManageSyncSettings.class,
                         new ExportFlow(),
                         (PasswordListObserver observer) ->
-                                PasswordManagerHandlerProvider.getInstance().addObserver(observer),
-                        new PasswordStoreBridge(),
+                                PasswordManagerHandlerProvider.getForProfile(profile)
+                                        .addObserver(observer),
+                        new PasswordStoreBridge(profile),
                         referrer,
                         ChromePureJavaExceptionReporter::reportJavaException);
         passwordMigrationWarningCoordinator.showWarning();

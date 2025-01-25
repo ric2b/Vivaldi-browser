@@ -15,6 +15,10 @@ export function isGooglePhotosIntegrationEnabled() {
   return loadTimeData.getBoolean('isGooglePhotosIntegrationEnabled');
 }
 
+export function isManagedSeaPenEnabled() {
+  return loadTimeData.getBoolean('isManagedSeaPenEnabled');
+}
+
 export function isGooglePhotosSharedAlbumsEnabled() {
   return loadTimeData.getBoolean('isGooglePhotosSharedAlbumsEnabled');
 }
@@ -25,10 +29,6 @@ export function isAmbientModeAllowed() {
 
 export function isRgbKeyboardSupported() {
   return loadTimeData.getBoolean('isRgbKeyboardSupported');
-}
-
-export function isPersonalizationJellyEnabled() {
-  return loadTimeData.getBoolean('isPersonalizationJellyEnabled');
 }
 
 export function isMultiZoneRgbKeyboardSupported() {

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "content/browser/tracing/startup_tracing_controller.h"
+
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
@@ -18,12 +19,12 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/typed_macros.h"
 #include "build/build_config.h"
-#include "components/tracing/common/trace_startup_config.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_config.h"
 #include "services/tracing/public/cpp/perfetto/trace_packet_tokenizer.h"
+#include "services/tracing/public/cpp/trace_startup_config.h"
 #include "third_party/perfetto/include/perfetto/ext/tracing/core/trace_packet.h"
 #include "third_party/perfetto/include/perfetto/tracing/core/trace_config.h"
 #include "third_party/perfetto/include/perfetto/tracing/tracing.h"
@@ -127,7 +128,8 @@ class StartupTracingController::BackgroundTracer {
       OpenFile(output_file_);
       tracing_session_->Setup(trace_config, file_.TakePlatformFile());
 #else
-      NOTREACHED() << "Streaming to file is not supported on Windows yet";
+      NOTREACHED_IN_MIGRATION()
+          << "Streaming to file is not supported on Windows yet";
 #endif
     } else {
       tracing_session_->Setup(trace_config);
@@ -341,7 +343,7 @@ base::FilePath StartupTracingController::GetOutputPath() {
   auto* command_line = base::CommandLine::ForCurrentProcess();
 
   base::FilePath path_from_config =
-      tracing::TraceStartupConfig::GetInstance()->GetResultFile();
+      tracing::TraceStartupConfig::GetInstance().GetResultFile();
   if (!path_from_config.empty())
     return path_from_config;
 
@@ -383,8 +385,8 @@ void StartupTracingController::StartIfNeeded() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK_NE(state_, State::kRunning);
 
-  auto* trace_startup_config = tracing::TraceStartupConfig::GetInstance();
-  if (!trace_startup_config->AttemptAdoptBySessionOwner(
+  auto& trace_startup_config = tracing::TraceStartupConfig::GetInstance();
+  if (!trace_startup_config.AttemptAdoptBySessionOwner(
           tracing::TraceStartupConfig::SessionOwner::kTracingController)) {
     return;
   }
@@ -398,7 +400,7 @@ void StartupTracingController::StartIfNeeded() {
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
 
   auto output_format =
-      tracing::TraceStartupConfig::GetInstance()->GetOutputFormat();
+      tracing::TraceStartupConfig::GetInstance().GetOutputFormat();
 
   BackgroundTracer::WriteMode write_mode;
 #if BUILDFLAG(IS_WIN)
@@ -415,16 +417,8 @@ void StartupTracingController::StartIfNeeded() {
           : BackgroundTracer::WriteMode::kAfterStopping;
 #endif
 
-  const auto& chrome_config =
-      tracing::TraceStartupConfig::GetInstance()->GetTraceConfig();
-  perfetto::TraceConfig perfetto_config = tracing::GetDefaultPerfettoConfig(
-      chrome_config, /*privacy_filtering_enabled=*/false,
-      /*convert_to_legacy_json=*/output_format ==
-          tracing::TraceStartupConfig::OutputFormat::kLegacyJSON);
-
-  int duration_in_seconds =
-      tracing::TraceStartupConfig::GetInstance()->GetStartupDuration();
-  perfetto_config.set_duration_ms(duration_in_seconds * 1000);
+  auto perfetto_config =
+      tracing::TraceStartupConfig::GetInstance().GetPerfettoConfig();
 
   background_tracer_ = base::SequenceBound<BackgroundTracer>(
       std::move(background_task_runner), write_mode, temp_file_policy_,
@@ -464,7 +458,7 @@ void StartupTracingController::OnStoppedOnUIThread() {
   if (on_tracing_finished_)
     std::move(on_tracing_finished_).Run();
 
-  tracing::TraceStartupConfig::GetInstance()->SetDisabled();
+  tracing::TraceStartupConfig::GetInstance().SetDisabled();
 }
 
 void StartupTracingController::SetUsingTemporaryFile(
@@ -476,14 +470,15 @@ void StartupTracingController::SetUsingTemporaryFile(
 void StartupTracingController::SetDefaultBasename(
     std::string basename,
     ExtensionType extension_type) {
-  if (!tracing::TraceStartupConfig::GetInstance()->IsEnabled())
+  if (!tracing::TraceStartupConfig::GetInstance().IsEnabled()) {
     return;
+  }
 
   if (basename_for_test_set_)
     return;
 
   if (extension_type == ExtensionType::kAppendAppropriate) {
-    switch (tracing::TraceStartupConfig::GetInstance()->GetOutputFormat()) {
+    switch (tracing::TraceStartupConfig::GetInstance().GetOutputFormat()) {
       case tracing::TraceStartupConfig::OutputFormat::kLegacyJSON:
         basename += ".json";
         break;

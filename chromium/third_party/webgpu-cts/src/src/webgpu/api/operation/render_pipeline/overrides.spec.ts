@@ -14,7 +14,7 @@ class F extends GPUTest {
     vertex: GPUVertexState,
     fragment: GPUFragmentState
   ) {
-    const renderTarget = this.device.createTexture({
+    const renderTarget = this.createTextureTracked({
       format,
       size: { width: 1, height: 1, depthOrArrayLayers: 1 },
       usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,
@@ -311,12 +311,12 @@ g.test('shared_shader_module')
       t.params.fragmentConstants1
     );
 
-    const renderTarget0 = t.device.createTexture({
+    const renderTarget0 = t.createTextureTracked({
       format,
       size: { width: 1, height: 1, depthOrArrayLayers: 1 },
       usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,
     });
-    const renderTarget1 = t.device.createTexture({
+    const renderTarget1 = t.createTextureTracked({
       format,
       size: { width: 1, height: 1, depthOrArrayLayers: 1 },
       usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,

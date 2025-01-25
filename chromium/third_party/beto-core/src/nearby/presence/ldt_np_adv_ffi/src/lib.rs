@@ -24,19 +24,19 @@
 
 extern crate alloc;
 
-use alloc::boxed::Box;
 use core::slice;
 use crypto_provider_default::CryptoProviderImpl;
+use ldt::LdtCipher;
 use ldt_np_adv::{
-    build_np_adv_decrypter_from_key_seed, salt_padder, LdtAdvDecryptError, LdtEncrypterXtsAes128,
-    LdtNpAdvDecrypterXtsAes128, LegacySalt,
+    build_np_adv_decrypter_from_key_seed, salt_padder, AuthenticatedNpLdtDecryptCipher,
+    LdtAdvDecryptError, NpLdtEncryptCipher, V0Salt, V0_IDENTITY_TOKEN_LEN,
 };
 use np_hkdf::NpKeySeedHkdf;
 
 mod handle_map;
 
-pub(crate) type LdtAdvDecrypter = LdtNpAdvDecrypterXtsAes128<CryptoProviderImpl>;
-pub(crate) type LdtAdvEncrypter = LdtEncrypterXtsAes128<CryptoProviderImpl>;
+pub(crate) type LdtAdvDecrypter = AuthenticatedNpLdtDecryptCipher<CryptoProviderImpl>;
+pub(crate) type LdtAdvEncrypter = NpLdtEncryptCipher<CryptoProviderImpl>;
 
 const SUCCESS: i32 = 0;
 
@@ -81,7 +81,7 @@ extern "C" fn NpLdtDecryptCreate(
 #[no_mangle]
 extern "C" fn NpLdtEncryptCreate(key_seed: NpLdtKeySeed) -> NpLdtEncryptHandle {
     let cipher = LdtAdvEncrypter::new(
-        &NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed.bytes).legacy_ldt_key(),
+        &NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed.bytes).v0_ldt_key(),
     );
     let handle = handle_map::get_enc_handle_map().insert::<CryptoProviderImpl>(Box::new(cipher));
     NpLdtEncryptHandle { handle }
@@ -116,7 +116,7 @@ extern "C" fn NpLdtEncrypt(
 ) -> i32 {
     map_to_error_code(|| {
         let data = unsafe { slice::from_raw_parts_mut(buffer, buffer_len) };
-        let padder = salt_padder::<16, CryptoProviderImpl>(LegacySalt::from(salt.bytes));
+        let padder = salt_padder::<CryptoProviderImpl>(V0Salt::from(salt.bytes));
         handle_map::get_enc_handle_map()
             .get(&handle.handle)
             .map(|cipher| {
@@ -137,8 +137,9 @@ extern "C" fn NpLdtDecryptAndVerify(
 ) -> i32 {
     map_to_error_code(|| {
         let data = unsafe { slice::from_raw_parts_mut(buffer, buffer_len) };
-        let padder = salt_padder::<16, CryptoProviderImpl>(LegacySalt::from(salt.bytes));
+        let padder = salt_padder::<CryptoProviderImpl>(V0Salt::from(salt.bytes));
 
+        #[allow(clippy::indexing_slicing)]
         handle_map::get_dec_handle_map()
             .get(&handle.handle)
             .map(|cipher| {
@@ -148,8 +149,10 @@ extern "C" fn NpLdtDecryptAndVerify(
                         LdtAdvDecryptError::InvalidLength(_) => DecryptError::InvalidLength,
                         LdtAdvDecryptError::MacMismatch => DecryptError::HmacDoesntMatch,
                     })
-                    .map(|plaintext| {
-                        data.copy_from_slice(plaintext.as_slice());
+                    .map(|(token, plaintext)| {
+                        // slicing is safe: token and plaintext sum to data's len
+                        data[..V0_IDENTITY_TOKEN_LEN].copy_from_slice(token.as_slice());
+                        data[V0_IDENTITY_TOKEN_LEN..].copy_from_slice(plaintext.as_slice());
                         SUCCESS
                     })
             })

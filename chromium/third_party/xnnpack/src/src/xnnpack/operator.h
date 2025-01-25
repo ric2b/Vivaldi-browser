@@ -11,16 +11,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <pthreadpool.h>
-
-#include <xnnpack/allocator.h>
-#include <xnnpack/cache.h>
-#include <xnnpack/compute.h>
-#include <xnnpack/config.h>
-#include <xnnpack/microkernel-type.h>
-#include <xnnpack/operator-type.h>
-#include <xnnpack/params.h>
-
+#include "xnnpack/allocator.h"
+#include "xnnpack/cache.h"
+#include "xnnpack/compute.h"
+#include "xnnpack/microkernel-type.h"
+#include "xnnpack/microparams.h"
+#include "xnnpack/operator-type.h"
+#include "xnnpack/params.h"
+#include "pthreadpool.h"
 
 // Maximum number of pthreadpool parallelization invocations per operator.
 #define XNN_MAX_COMPUTE_INVOCATIONS 3
@@ -145,6 +143,11 @@ struct subconvolution_params {
   size_t scaled_kernel_size;
 };
 
+struct f16_f32acc_mean_params {
+  union xnn_f16_f32acc_scale_params f16_f32acc_scale;
+  union xnn_f32_f16_cvt_params cvt_params;
+};
+
 struct xnn_operator {
   size_t batch_size;
   uint32_t padding_top;
@@ -229,11 +232,9 @@ struct xnn_operator {
     union xnn_f16_neg_params f16_neg;
     union xnn_f16_sigmoid_params f16_sigmoid;
     union xnn_f16_tanh_params f16_tanh;
-    union xnn_f32_abs_params f32_abs;
     union xnn_f32_default_params f32_default;
     union xnn_f32_elu_params f32_elu;
     union xnn_f32_lrelu_params f32_lrelu;
-    union xnn_f32_neg_params f32_neg;
     union xnn_f32_rnd_params f32_rnd;
     union xnn_f32_rsqrt_params f32_rsqrt;
     union xnn_f32_sigmoid_params f32_sigmoid;
@@ -249,21 +250,15 @@ struct xnn_operator {
       union xnn_f16_minmax_params f16_minmax;
       union xnn_f16_scaleminmax_params f16_scaleminmax;
     };
-    // Mean can use either f16_f32acc_scale, or f16_scale_minmax
-    struct {
-      union xnn_f16_f32acc_scale_params f16_f32acc_scale;
-      union xnn_f16_scaleminmax_params f16_scale_minmax;
-    };
+    struct f16_f32acc_mean_params mean_params;
     // Pixelwise Average Pooling normally use f32_minmax_params, but also initialize
     // f32_scaleminmax_params in case it needs to switch to Global Average Pooling operation.
     struct {
       union xnn_f32_minmax_params f32_minmax;
       union xnn_f32_scaleminmax_params f32_scaleminmax;
     };
-    // Mean can use either f32_scale, or f32_scale_minmax
     struct {
       union xnn_f32_scale_params f32_scale;
-      union xnn_f32_scaleminmax_params f32_scale_minmax;
     };
     union xnn_f16_chw_params f16_chw;
     union xnn_f32_chw_params f32_chw;
@@ -340,7 +335,9 @@ struct xnn_operator {
       const struct xnn_avgpool_config* avgpool_config;
       const struct xnn_gavgpool_config* gavgpool_config;
       const struct xnn_pavgpool_config* pavgpool_config;
-      const struct xnn_reduce_config* reduce_config;
+      const struct xnn_reduce_config* rdsum_config;
+      const struct xnn_reduce_config* rsum_config;
+      const struct xnn_unary_elementwise_config* cvt_config;
     };
     const struct xnn_gavgpool_cw_config* gavgpool_cw_config;
     const struct xnn_ibilinear_chw_config* ibilinear_chw_config;
@@ -432,6 +429,7 @@ struct xnn_operator {
     struct u8_softmax_context u8_softmax;
     struct f16_qd8_convert_context f16_qd8_convert;
     struct f32_qd8_convert_context f32_qd8_convert;
+    struct f32_qp8_convert_context f32_qp8_convert;
     struct univector_contiguous_context univector_contiguous;
     struct univector_strided_context univector_strided;
     struct unpooling_context unpooling;

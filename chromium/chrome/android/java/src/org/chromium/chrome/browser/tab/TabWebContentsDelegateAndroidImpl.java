@@ -432,6 +432,11 @@ final class TabWebContentsDelegateAndroidImpl extends TabWebContentsDelegateAndr
         return NativePageBitmapCapturer.maybeCaptureNativeView(mTab, callback);
     }
 
+    @Override
+    public void didBackForwardTransitionAnimationChange() {
+        mTab.handleBackForwardTransitionUiChanged();
+    }
+
     void showFramebustBlockInfobarForTesting(String url) {
         TabWebContentsDelegateAndroidImplJni.get()
                 .showFramebustBlockInfoBar(mTab.getWebContents(), url);
@@ -440,6 +445,11 @@ final class TabWebContentsDelegateAndroidImpl extends TabWebContentsDelegateAndr
     @Override
     public void didChangeCloseSignalInterceptStatus() {
         mTab.didChangeCloseSignalInterceptStatus();
+    }
+
+    @Override
+    public boolean isTrustedWebActivity(WebContents webContents) {
+        return mDelegate.isTrustedWebActivity(webContents);
     }
 
     @NativeMethods

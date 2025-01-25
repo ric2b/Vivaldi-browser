@@ -11,6 +11,7 @@ from blinkpy.common.net.git_cl import BuildStatus
 from blinkpy.common.net.git_cl_mock import MockGitCL
 from blinkpy.common.system.log_testing import LoggingTestCase
 from blinkpy.tool.commands.build_resolver import Build, BuildResolver
+from blinkpy.w3c.gerrit_mock import MockGerritAPI, MockGerritCL
 
 
 class BuildResolverTest(LoggingTestCase):
@@ -27,7 +28,10 @@ class BuildResolverTest(LoggingTestCase):
         # A CL should only be required for try builders without explicit build
         # numbers.
         self.git_cl = MockGitCL(self.host, issue_number='None')
-        self.resolver = BuildResolver(self.host.web, self.git_cl)
+        self.gerrit = MockGerritAPI()
+        self.resolver = BuildResolver(self.host,
+                                      self.git_cl,
+                                      gerrit=self.gerrit)
 
     def test_resolve_last_failing_ci_build(self):
         self.host.web.append_prpc_response({
@@ -155,7 +159,7 @@ class BuildResolverTest(LoggingTestCase):
                 }],
             })
 
-    def test_detect_interruption_from_shard_exit_codes(self):
+    def test_detect_interruption_from_shard_status(self):
         self.host.web.append_prpc_response({
             'responses': [{
                 'getBuild': {
@@ -180,26 +184,39 @@ class BuildResolverTest(LoggingTestCase):
                         }],
                     }],
                 },
-            } for build_num in [1, 2, 3]],
+            } for build_num in [1, 2, 3, 4]],
         })
 
         self.host.web.session.get.return_value.json.side_effect = [{
             'shards': [{
+                'state': 'COMPLETED',
                 'exit_code': '0',
             }, {
+                'state': 'TIMED_OUT',
                 'exit_code': str(exit_codes.INTERRUPTED_EXIT_STATUS),
             }],
         }, {
             'shards': [{
+                'state': 'COMPLETED',
                 'exit_code': '0',
             }, {
+                'state': 'COMPLETED',
                 'exit_code': str(exit_codes.EARLY_EXIT_STATUS),
             }],
         }, {
             'shards': [{
+                'state': 'DEDUPED',
                 'exit_code': '0',
             }, {
+                'state': 'COMPLETED',
                 'exit_code': '5',
+            }],
+        }, {
+            'shards': [{
+                'state': 'COMPLETED',
+                'exit_code': '0',
+            }, {
+                'state': 'EXPIRED',
             }],
         }]
 
@@ -207,16 +224,18 @@ class BuildResolverTest(LoggingTestCase):
             Build('linux-rel', 1),
             Build('linux-rel', 2),
             Build('linux-rel', 3),
+            Build('linux-rel', 4),
         ])
         self.assertEqual([
             call('https://logs.chromium.org/swarming',
                  params={'format': 'raw'}),
-        ] * 3, self.host.web.session.get.call_args_list)
+        ] * 4, self.host.web.session.get.call_args_list)
         self.assertEqual(
             build_statuses, {
                 Build('linux-rel', 1, '1'): BuildStatus.INFRA_FAILURE,
                 Build('linux-rel', 2, '2'): BuildStatus.INFRA_FAILURE,
                 Build('linux-rel', 3, '3'): BuildStatus.FAILURE,
+                Build('linux-rel', 4, '4'): BuildStatus.INFRA_FAILURE,
             })
 
     def test_detect_unrelated_failure(self):
@@ -242,3 +261,33 @@ class BuildResolverTest(LoggingTestCase):
         self.assertEqual(build_statuses, {
             Build('linux-rel', 1, '1'): BuildStatus.INFRA_FAILURE,
         })
+
+    def test_latest_nontrivial_patchset(self):
+        self.gerrit.cl = MockGerritCL(
+            {
+                'change_id': 'I01234abc',
+                'revisions': {
+                    '0123': {
+                        '_number': 1,
+                        'kind': 'REWORK',
+                    },
+                    '4567': {
+                        '_number': 2,
+                        'kind': 'TRIVIAL_REBASE',
+                    },
+                    '89ab': {
+                        '_number': 3,
+                        'kind': 'REWORK',
+                    },
+                    'cdef': {
+                        '_number': 4,
+                        'kind': 'TRIVIAL_REBASE_WITH_MESSAGE_UPDATE',
+                    },
+                    '01ab': {
+                        '_number': 5,
+                        'kind': 'NO_CODE_CHANGE',
+                    },
+                },
+            }, self.gerrit)
+        self.assertEqual(self.resolver.latest_nontrivial_patchset(999), 3)
+        self.assertEqual(self.gerrit.cls_queried, ['999'])

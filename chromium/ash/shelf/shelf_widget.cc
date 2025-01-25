@@ -34,7 +34,6 @@
 #include "ash/style/ash_color_id.h"
 #include "ash/style/style_util.h"
 #include "ash/system/status_area_widget.h"
-#include "ash/utility/forest_util.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/work_area_insets.h"
@@ -491,12 +490,11 @@ void ShelfWidget::DelegateView::UpdateOpaqueBackground() {
   const bool in_app = ShelfConfig::Get()->is_in_app();
 
   const bool in_overview_mode = ShelfConfig::Get()->in_overview_mode();
-  const bool in_oak_session =
-      in_overview_mode &&
-      (features::IsOakFeatureEnabled() || IsForestFeatureEnabled());
+  const bool in_forest_session =
+      in_overview_mode && features::IsForestFeatureEnabled();
   const bool split_view = ShelfConfig::Get()->in_split_view_with_overview();
   bool show_opaque_background =
-      (!in_oak_session) && (!tablet_mode || in_app || split_view);
+      !in_forest_session && (!tablet_mode || in_app || split_view);
   auto* opaque_back_ground_layer = opaque_background_layer();
   if (show_opaque_background != opaque_back_ground_layer->visible()) {
     opaque_back_ground_layer->SetVisible(show_opaque_background);
@@ -680,10 +678,10 @@ void ShelfWidget::Initialize(aura::Window* shelf_container) {
   DCHECK(shelf_container);
 
   views::Widget::InitParams params(
+      views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   params.name = "ShelfWidget";
   params.layer_type = ui::LAYER_NOT_DRAWN;
-  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.delegate = delegate_view_.get();
   params.parent = shelf_container;
 
@@ -1048,7 +1046,7 @@ void ShelfWidget::OnMouseEvent(ui::MouseEvent* event) {
     return;
   }
 
-  if (event->type() == ui::ET_MOUSE_PRESSED) {
+  if (event->type() == ui::EventType::kMousePressed) {
     keyboard::KeyboardUIController::Get()->HideKeyboardImplicitlyByUser();
 
     // If the shelf receives the mouse pressing event, the RootView of the shelf
@@ -1062,8 +1060,9 @@ void ShelfWidget::OnMouseEvent(ui::MouseEvent* event) {
 }
 
 void ShelfWidget::OnGestureEvent(ui::GestureEvent* event) {
-  if (event->type() == ui::ET_GESTURE_TAP_DOWN)
+  if (event->type() == ui::EventType::kGestureTapDown) {
     keyboard::KeyboardUIController::Get()->HideKeyboardImplicitlyByUser();
+  }
   ui::GestureEvent event_in_screen(*event);
   gfx::Point location_in_screen(event->location());
   ::wm::ConvertPointToScreen(GetNativeWindow(), &location_in_screen);
@@ -1071,7 +1070,8 @@ void ShelfWidget::OnGestureEvent(ui::GestureEvent* event) {
 
   // Tap on in-app shelf should show a contextual nudge for in-app to home
   // gesture.
-  if (event->type() == ui::ET_GESTURE_TAP && ShelfConfig::Get()->is_in_app() &&
+  if (event->type() == ui::EventType::kGestureTap &&
+      ShelfConfig::Get()->is_in_app() &&
       features::IsHideShelfControlsInTabletModeEnabled()) {
     if (delegate_view_->drag_handle()->MaybeShowDragHandleNudge()) {
       event->StopPropagation();

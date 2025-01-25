@@ -6,7 +6,6 @@
 
 #include "base/run_loop.h"
 #include "components/viz/common/resources/transferable_resource.h"
-#include "components/viz/test/test_gpu_memory_buffer_manager.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -32,7 +31,7 @@ TEST(CanvasResourceTest, PrepareTransferableResource_SharedBitmap) {
   viz::TransferableResource resource;
   CanvasResource::ReleaseCallback release_callback;
   bool success = canvas_resource->PrepareTransferableResource(
-      &resource, &release_callback, kUnverifiedSyncToken);
+      &resource, &release_callback, /*needs_verified_synctoken=*/false);
 
   EXPECT_TRUE(success);
   EXPECT_TRUE(resource.is_software);

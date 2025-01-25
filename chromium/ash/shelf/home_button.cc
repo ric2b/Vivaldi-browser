@@ -339,7 +339,7 @@ HomeButton::HomeButton(Shelf* shelf)
       jelly_enabled_(chromeos::features::IsJellyEnabled()),
       shelf_(shelf),
       controller_(this) {
-  SetAccessibleName(
+  GetViewAccessibility().SetName(
       l10n_util::GetStringUTF16(IDS_ASH_SHELF_APP_LIST_LAUNCHER_TITLE));
   button_controller()->set_notify_action(
       views::ButtonController::NotifyAction::kOnPress);
@@ -452,7 +452,8 @@ void HomeButton::OnGestureEvent(ui::GestureEvent* event) {
 
 std::u16string HomeButton::GetTooltipText(const gfx::Point& p) const {
   // Don't show a tooltip if we're already showing the app list.
-  return IsShowingAppList() ? std::u16string() : GetAccessibleName();
+  return IsShowingAppList() ? std::u16string()
+                            : GetViewAccessibility().GetCachedName();
 }
 
 void HomeButton::OnShelfButtonAboutToRequestFocusFromTabTraversal(
@@ -530,7 +531,7 @@ bool HomeButton::IsShowingAppList() const {
 }
 
 void HomeButton::HandleLocaleChange() {
-  SetAccessibleName(
+  GetViewAccessibility().SetName(
       l10n_util::GetStringUTF16(IDS_ASH_SHELF_APP_LIST_LAUNCHER_TITLE));
   TooltipTextChanged();
   // Reset the bounds rect so the child layer bounds get updated on next shelf
@@ -750,7 +751,7 @@ void HomeButton::CreateQuickAppButton() {
   quick_app_button_ = expandable_container_->AddChildView(
       std::make_unique<views::ImageButton>(base::BindRepeating(
           &HomeButton::QuickAppButtonPressed, base::Unretained(this))));
-  quick_app_button_->SetAccessibleName(
+  quick_app_button_->GetViewAccessibility().SetName(
       AppListModelProvider::Get()->quick_app_access_model()->GetAppName());
 
   const int control_size =

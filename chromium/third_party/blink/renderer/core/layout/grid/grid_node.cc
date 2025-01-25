@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/layout/grid/grid_node.h"
 
 #include "third_party/blink/renderer/core/layout/grid/grid_layout_algorithm.h"
@@ -189,16 +194,17 @@ MinMaxSizesResult GridNode::ComputeSubgridMinMaxSizes(
 
   auto* layout_grid = To<LayoutGrid>(box_.Get());
 
-  if (!layout_grid->HasCachedMinMaxSizes()) {
+  if (!layout_grid->HasCachedSubgridMinMaxSizes()) {
     const auto fragment_geometry = CalculateInitialFragmentGeometry(
         space, *this, /*break_token=*/nullptr, /*is_intrinsic=*/true);
 
-    layout_grid->SetMinMaxSizesCache(
+    layout_grid->SetSubgridMinMaxSizesCache(
         GridLayoutAlgorithm({*this, fragment_geometry, space})
-            .ComputeSubgridMinMaxSizes(sizing_subtree));
+            .ComputeSubgridMinMaxSizes(sizing_subtree),
+        sizing_subtree.LayoutData());
   }
 
-  return {layout_grid->CachedMinMaxSizes(),
+  return {layout_grid->CachedSubgridMinMaxSizes(),
           /*depends_on_block_constraints=*/false};
 }
 
@@ -210,7 +216,7 @@ LayoutUnit GridNode::ComputeSubgridIntrinsicBlockSize(
 
   auto* layout_grid = To<LayoutGrid>(box_.Get());
 
-  if (!layout_grid->HasCachedMinMaxSizes()) {
+  if (!layout_grid->HasCachedSubgridMinMaxSizes()) {
     const auto fragment_geometry = CalculateInitialFragmentGeometry(
         space, *this, /*break_token=*/nullptr, /*is_intrinsic=*/true);
 
@@ -220,12 +226,13 @@ LayoutUnit GridNode::ComputeSubgridIntrinsicBlockSize(
 
     // The min and max-content block size are both the box's "ideal" size after
     // layout (see https://drafts.csswg.org/css-sizing-3/#max-content).
-    layout_grid->SetMinMaxSizesCache(
-        {intrinsic_block_size, intrinsic_block_size});
+    layout_grid->SetSubgridMinMaxSizesCache(
+        {intrinsic_block_size, intrinsic_block_size},
+        sizing_subtree.LayoutData());
   }
 
   // Both intrinsic sizes are the same, so we can return either.
-  return layout_grid->CachedMinMaxSizes().max_size;
+  return layout_grid->CachedSubgridMinMaxSizes().max_size;
 }
 
 }  // namespace blink

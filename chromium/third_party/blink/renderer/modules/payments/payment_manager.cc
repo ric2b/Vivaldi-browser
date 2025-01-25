@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/modules/payments/payment_manager.h"
 
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
@@ -40,7 +40,7 @@ ScriptPromise<IDLBoolean> PaymentManager::enableDelegations(
   if (!script_state->ContextIsValid()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Cannot enable payment delegations");
-    return ScriptPromise<IDLBoolean>();
+    return EmptyPromise();
   }
 
   if (enable_delegations_resolver_) {
@@ -48,7 +48,7 @@ ScriptPromise<IDLBoolean> PaymentManager::enableDelegations(
         DOMExceptionCode::kInvalidStateError,
         "Cannot call enableDelegations() again until the previous "
         "enableDelegations() is finished");
-    return ScriptPromise<IDLBoolean>();
+    return EmptyPromise();
   }
 
   using MojoPaymentDelegation = payments::mojom::blink::PaymentDelegation;
@@ -69,7 +69,7 @@ ScriptPromise<IDLBoolean> PaymentManager::enableDelegations(
         mojo_delegation = MojoPaymentDelegation::PAYER_EMAIL;
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
     mojo_delegations.push_back(mojo_delegation);
   }

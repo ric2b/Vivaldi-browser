@@ -22,16 +22,32 @@ const str_ = i18n.i18n.registerUIStrings('panels/elements/DOMLinkifier.ts', UISt
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 export const decorateNodeLabel = function(
-    node: SDK.DOMModel.DOMNode, parentElement: HTMLElement, tooltipContent?: string): void {
+    node: SDK.DOMModel.DOMNode, parentElement: HTMLElement, options: Common.Linkifier.Options): void {
   const originalNode = node;
   const isPseudo = node.nodeType() === Node.ELEMENT_NODE && node.pseudoType();
   if (isPseudo && node.parentNode) {
     node = node.parentNode;
   }
 
-  let title = node.nodeNameInCorrectCase();
+  // Special case rendering the node links for view transition pseudo elements.
+  // We don't include the ancestor name in the node link because
+  // they always have the same ancestor. See crbug.com/340633630.
+  if (node.isViewTransitionPseudoNode()) {
+    const pseudoElement = parentElement.createChild('span', 'extra node-label-pseudo');
+    const viewTransitionPseudoText = `::${originalNode.pseudoType()}(${originalNode.pseudoIdentifier()})`;
+    UI.UIUtils.createTextChild(pseudoElement, viewTransitionPseudoText);
+    UI.Tooltip.Tooltip.install(parentElement, options.tooltip || viewTransitionPseudoText);
+    return;
+  }
 
   const nameElement = parentElement.createChild('span', 'node-label-name');
+  if (options.textContent) {
+    nameElement.textContent = options.textContent;
+    UI.Tooltip.Tooltip.install(parentElement, options.tooltip || options.textContent);
+    return;
+  }
+
+  let title = node.nodeNameInCorrectCase();
   nameElement.textContent = title;
 
   const idAttribute = node.getAttribute('id');
@@ -74,13 +90,15 @@ export const decorateNodeLabel = function(
     UI.UIUtils.createTextChild(pseudoElement, pseudoText);
     title += pseudoText;
   }
-  UI.Tooltip.Tooltip.install(parentElement, tooltipContent || title);
+  UI.Tooltip.Tooltip.install(parentElement, options.tooltip || title);
 };
 
 export const linkifyNodeReference = function(
     node: SDK.DOMModel.DOMNode|null, options: Common.Linkifier.Options|undefined = {
       tooltip: undefined,
       preventKeyboardFocus: undefined,
+      textContent: undefined,
+      isDynamicLink: false,
     }): Node {
   if (!node) {
     return document.createTextNode(i18nString(UIStrings.node));
@@ -91,9 +109,10 @@ export const linkifyNodeReference = function(
   const shadowRoot =
       UI.UIUtils.createShadowRootWithCoreStyles(root, {cssFile: [domLinkifierStyles], delegatesFocus: undefined});
   const link = (shadowRoot.createChild('button', 'node-link text-button link-style') as HTMLButtonElement);
+  link.classList.toggle('dynamic-link', options.isDynamicLink);
   link.setAttribute('jslog', `${VisualLogging.link('node').track({click: true, keydown: 'Enter'})}`);
 
-  decorateNodeLabel(node, link, options.tooltip);
+  decorateNodeLabel(node, link, options);
 
   link.addEventListener('click', () => {
     void Common.Revealer.reveal(node, false);

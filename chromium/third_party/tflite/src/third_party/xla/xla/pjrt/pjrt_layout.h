@@ -22,10 +22,10 @@ limitations under the License.
 
 #include "absl/hash/hash.h"
 #include "absl/log/check.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "xla/layout.h"
 #include "xla/service/hlo_parser.h"
-#include "xla/statusor.h"
 #include "tsl/platform/casts.h"
 #include "tsl/platform/statusor.h"
 
@@ -70,7 +70,8 @@ class PjRtXlaLayout : public PjRtLayout {
 
   std::string Serialize() const override { return xla_layout_.ToString(); }
 
-  static StatusOr<PjRtXlaLayout> Deserialize(absl::string_view serialized) {
+  static absl::StatusOr<PjRtXlaLayout> Deserialize(
+      absl::string_view serialized) {
     TF_ASSIGN_OR_RETURN(Layout xla_layout, ParseLayout(serialized));
     return PjRtXlaLayout(std::move(xla_layout));
   }

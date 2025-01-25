@@ -58,7 +58,7 @@ base::TimeDelta GetDefaultLocalChangeNudgeDelay(ModelType model_type) {
       return syncer::kTabGroupsSaveCustomNudgeDelay.Get();
     case BOOKMARKS:
     case PREFERENCES:
-    case COMPARE:
+    case PRODUCT_COMPARISON:
     case NOTES: // Vivaldi
       // Types with sometimes automatic changes get longer delays to allow more
       // coalescing.
@@ -107,9 +107,10 @@ base::TimeDelta GetDefaultLocalChangeNudgeDelay(ModelType model_type) {
     case POWER_BOOKMARK:
     case WEBAUTHN_CREDENTIAL:
     case PLUS_ADDRESS:
+    case PLUS_ADDRESS_SETTING:
       return kMediumLocalChangeNudgeDelay;
     case UNSPECIFIED:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return base::TimeDelta();
   }
 }
@@ -172,12 +173,13 @@ bool CanGetCommitsFromExtensions(ModelType model_type) {
     case SHARED_TAB_GROUP_DATA:
     case COLLABORATION_GROUP:
     case PLUS_ADDRESS:
-    case COMPARE:
+    case PLUS_ADDRESS_SETTING:
+    case PRODUCT_COMPARISON:
     case COOKIES:
     case NOTES: // Vivaldi
       return false;
     case UNSPECIFIED:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 }
@@ -327,7 +329,7 @@ base::TimeDelta DataTypeTracker::GetTimeUntilUnblock() const {
 base::TimeDelta DataTypeTracker::GetLastBackoffInterval() const {
   if (GetBlockingMode() !=
       WaitInterval::BlockingMode::kExponentialBackoffRetrying) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return base::Seconds(0);
   }
   return wait_interval_->length;

@@ -12,7 +12,9 @@
   "marked",
   "puppeteer",
   "puppeteer/third_party/mitt",
+  "puppeteer/third_party/parsel",
   "puppeteer/third_party/rxjs",
   "puppeteer-replay",
-  "wasmparser"
+  "wasmparser",
+  "web-vitals"
 ]

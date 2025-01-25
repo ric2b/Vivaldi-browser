@@ -57,7 +57,6 @@ class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker {
     kUnknown = 0,
     // A skipped check occurs in the following scenarios:
     //  - The URL is allowlisted (not the high-confidence allowlist).
-    //  - The request destination can't be checked.
     //  - It's a debugging URL like chrome://safe-browsing/match?type=malware.
     //  - The URL real-time check is unable to run, but |can_check_db_| is false
     //  so no other checks can run either.
@@ -72,19 +71,8 @@ class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker {
     kHashRealTimeCheck = 4,
   };
 
-  using NativeUrlCheckNotifier =
-      base::OnceCallback<void(bool /* proceed */,
-                              bool /* showed_interstitial */,
-                              bool /* has_post_commit_interstitial_skipped */,
-                              PerformedCheck /* performed_check */)>;
-
-  // If |slow_check_notifier| is not null, the callback is supposed to update
-  // this output parameter with a callback to receive complete notification. In
-  // that case, |proceed|, |showed_interstitial| and
-  // |has_post_commit_interstitial_skipped| should be ignored.
   using NativeCheckUrlCallback =
-      base::OnceCallback<void(NativeUrlCheckNotifier* /* slow_check_notifier */,
-                              bool /* proceed */,
+      base::OnceCallback<void(bool /* proceed */,
                               bool /* showed_interstitial */,
                               bool /* has_post_commit_interstitial_skipped */,
                               PerformedCheck /* performed_check */)>;
@@ -104,7 +92,6 @@ class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker {
   SafeBrowsingUrlCheckerImpl(
       const net::HttpRequestHeaders& headers,
       int load_flags,
-      network::mojom::RequestDestination request_destination,
       bool has_user_gesture,
       scoped_refptr<UrlCheckerDelegate> url_checker_delegate,
       const base::RepeatingCallback<content::WebContents*()>&
@@ -169,11 +156,9 @@ class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker {
    private:
     // Used in the mojo interface case.
     CheckUrlCallback callback_;
-    mojo::Remote<mojom::UrlCheckNotifier> slow_check_notifier_;
 
     // Used in the native call case.
     NativeCheckUrlCallback native_callback_;
-    NativeUrlCheckNotifier native_slow_check_notifier_;
   };
 
   struct KickOffLookupMechanismResult {
@@ -275,7 +260,6 @@ class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker {
   SEQUENCE_CHECKER(sequence_checker_);
   const net::HttpRequestHeaders headers_;
   const int load_flags_;
-  const network::mojom::RequestDestination request_destination_;
   const bool has_user_gesture_;
   // TODO(crbug.com/40683815): |weak_web_state_| is only used on iOS, and
   // |web_contents_getter_|, |render_process_id_|, |render_frame_token_|, and

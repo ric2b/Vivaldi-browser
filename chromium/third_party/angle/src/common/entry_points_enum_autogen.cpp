@@ -686,8 +686,12 @@ const char *GetEntryPointName(EntryPoint ep)
             return "glClearStencil";
         case EntryPoint::GLClearTexImage:
             return "glClearTexImage";
+        case EntryPoint::GLClearTexImageEXT:
+            return "glClearTexImageEXT";
         case EntryPoint::GLClearTexSubImage:
             return "glClearTexSubImage";
+        case EntryPoint::GLClearTexSubImageEXT:
+            return "glClearTexSubImageEXT";
         case EntryPoint::GLClientActiveTexture:
             return "glClientActiveTexture";
         case EntryPoint::GLClientWaitSync:
@@ -1120,6 +1124,8 @@ const char *GetEntryPointName(EntryPoint ep)
             return "glEndQueryEXT";
         case EntryPoint::GLEndQueryIndexed:
             return "glEndQueryIndexed";
+        case EntryPoint::GLEndTilingQCOM:
+            return "glEndTilingQCOM";
         case EntryPoint::GLEndTransformFeedback:
             return "glEndTransformFeedback";
         case EntryPoint::GLEvalCoord1d:
@@ -1398,6 +1404,8 @@ const char *GetEntryPointName(EntryPoint ep)
             return "glGetGraphicsResetStatus";
         case EntryPoint::GLGetGraphicsResetStatusEXT:
             return "glGetGraphicsResetStatusEXT";
+        case EntryPoint::GLGetGraphicsResetStatusKHR:
+            return "glGetGraphicsResetStatusKHR";
         case EntryPoint::GLGetInteger64i_v:
             return "glGetInteger64i_v";
         case EntryPoint::GLGetInteger64i_vRobustANGLE:
@@ -1804,16 +1812,22 @@ const char *GetEntryPointName(EntryPoint ep)
             return "glGetnUniformfv";
         case EntryPoint::GLGetnUniformfvEXT:
             return "glGetnUniformfvEXT";
+        case EntryPoint::GLGetnUniformfvKHR:
+            return "glGetnUniformfvKHR";
         case EntryPoint::GLGetnUniformfvRobustANGLE:
             return "glGetnUniformfvRobustANGLE";
         case EntryPoint::GLGetnUniformiv:
             return "glGetnUniformiv";
         case EntryPoint::GLGetnUniformivEXT:
             return "glGetnUniformivEXT";
+        case EntryPoint::GLGetnUniformivKHR:
+            return "glGetnUniformivKHR";
         case EntryPoint::GLGetnUniformivRobustANGLE:
             return "glGetnUniformivRobustANGLE";
         case EntryPoint::GLGetnUniformuiv:
             return "glGetnUniformuiv";
+        case EntryPoint::GLGetnUniformuivKHR:
+            return "glGetnUniformuivKHR";
         case EntryPoint::GLGetnUniformuivRobustANGLE:
             return "glGetnUniformuivRobustANGLE";
         case EntryPoint::GLHint:
@@ -2240,6 +2254,8 @@ const char *GetEntryPointName(EntryPoint ep)
             return "glPatchParameteri";
         case EntryPoint::GLPatchParameteriEXT:
             return "glPatchParameteriEXT";
+        case EntryPoint::GLPatchParameteriOES:
+            return "glPatchParameteriOES";
         case EntryPoint::GLPauseTransformFeedback:
             return "glPauseTransformFeedback";
         case EntryPoint::GLPixelLocalStorageBarrierANGLE:
@@ -2574,6 +2590,8 @@ const char *GetEntryPointName(EntryPoint ep)
             return "glReadnPixels";
         case EntryPoint::GLReadnPixelsEXT:
             return "glReadnPixelsEXT";
+        case EntryPoint::GLReadnPixelsKHR:
+            return "glReadnPixelsKHR";
         case EntryPoint::GLReadnPixelsRobustANGLE:
             return "glReadnPixelsRobustANGLE";
         case EntryPoint::GLRectd:
@@ -2728,6 +2746,8 @@ const char *GetEntryPointName(EntryPoint ep)
             return "glSignalSemaphoreEXT";
         case EntryPoint::GLSpecializeShader:
             return "glSpecializeShader";
+        case EntryPoint::GLStartTilingQCOM:
+            return "glStartTilingQCOM";
         case EntryPoint::GLStencilFunc:
             return "glStencilFunc";
         case EntryPoint::GLStencilFuncSeparate:

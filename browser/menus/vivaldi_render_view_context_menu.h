@@ -104,6 +104,7 @@ protected:
   void Show() override;
   // RenderViewContextMenuBase
   void InitMenu() override;
+  void RecordShownItem(int id, bool is_submenu) override {} // No need for this
 
   // Access to private members of RenderViewContextMenu for device controller
   const GURL& GetLinkUrl() const { return params_.link_url; }

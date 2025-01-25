@@ -18,7 +18,10 @@
 
 namespace vku {
 
-std::vector<std::pair<uint32_t, uint32_t>> custom_stype_info{};
+std::vector<std::pair<uint32_t, uint32_t>>& GetCustomStypeInfo() {
+    static std::vector<std::pair<uint32_t, uint32_t>> custom_stype_info{};
+    return custom_stype_info;
+}
 
 struct ASGeomKHRExtraData {
     ASGeomKHRExtraData(uint8_t* alloc, uint32_t primOffset, uint32_t primCount)
@@ -31,7 +34,12 @@ struct ASGeomKHRExtraData {
     uint32_t primitiveCount;
 };
 
-vku::concurrent::unordered_map<const safe_VkAccelerationStructureGeometryKHR*, ASGeomKHRExtraData*, 4> as_geom_khr_host_alloc;
+vku::concurrent::unordered_map<const safe_VkAccelerationStructureGeometryKHR*, ASGeomKHRExtraData*, 4>&
+GetAccelStructGeomHostAllocMap() {
+    static vku::concurrent::unordered_map<const safe_VkAccelerationStructureGeometryKHR*, ASGeomKHRExtraData*, 4>
+        as_geom_khr_host_alloc;
+    return as_geom_khr_host_alloc;
+}
 
 safe_VkAccelerationStructureGeometryKHR::safe_VkAccelerationStructureGeometryKHR(
     const VkAccelerationStructureGeometryKHR* in_struct, const bool is_host,
@@ -57,7 +65,7 @@ safe_VkAccelerationStructureGeometryKHR::safe_VkAccelerationStructureGeometryKHR
                 ppInstances[i] = &pInstances[i];
             }
             geometry.instances.data.hostAddress = allocation;
-            as_geom_khr_host_alloc.insert(
+            GetAccelStructGeomHostAllocMap().insert(
                 this, new ASGeomKHRExtraData(allocation, build_range_info->primitiveOffset, build_range_info->primitiveCount));
         } else {
             const auto primitive_offset = build_range_info->primitiveOffset;
@@ -68,7 +76,7 @@ safe_VkAccelerationStructureGeometryKHR::safe_VkAccelerationStructureGeometryKHR
             memcpy(allocation + primitive_offset, host_address + primitive_offset,
                    primitive_count * sizeof(VkAccelerationStructureInstanceKHR));
             geometry.instances.data.hostAddress = allocation;
-            as_geom_khr_host_alloc.insert(
+            GetAccelStructGeomHostAllocMap().insert(
                 this, new ASGeomKHRExtraData(allocation, build_range_info->primitiveOffset, build_range_info->primitiveCount));
         }
     }
@@ -85,8 +93,8 @@ safe_VkAccelerationStructureGeometryKHR::safe_VkAccelerationStructureGeometryKHR
     flags = copy_src.flags;
 
     pNext = SafePnextCopy(copy_src.pNext);
-    auto src_iter = as_geom_khr_host_alloc.find(&copy_src);
-    if (src_iter != as_geom_khr_host_alloc.end()) {
+    auto src_iter = GetAccelStructGeomHostAllocMap().find(&copy_src);
+    if (src_iter != GetAccelStructGeomHostAllocMap().end()) {
         auto& src_alloc = src_iter->second;
         if (geometry.instances.arrayOfPointers) {
             size_t pp_array_size = src_alloc->primitiveCount * sizeof(VkAccelerationStructureInstanceKHR*);
@@ -103,14 +111,14 @@ safe_VkAccelerationStructureGeometryKHR::safe_VkAccelerationStructureGeometryKHR
                 ppInstances[i] = &pInstances[i];
             }
             geometry.instances.data.hostAddress = allocation;
-            as_geom_khr_host_alloc.insert(
+            GetAccelStructGeomHostAllocMap().insert(
                 this, new ASGeomKHRExtraData(allocation, src_alloc->primitiveOffset, src_alloc->primitiveCount));
         } else {
             size_t array_size = src_alloc->primitiveOffset + src_alloc->primitiveCount * sizeof(VkAccelerationStructureInstanceKHR);
             uint8_t* allocation = new uint8_t[array_size];
             memcpy(allocation, src_alloc->ptr, array_size);
             geometry.instances.data.hostAddress = allocation;
-            as_geom_khr_host_alloc.insert(
+            GetAccelStructGeomHostAllocMap().insert(
                 this, new ASGeomKHRExtraData(allocation, src_alloc->primitiveOffset, src_alloc->primitiveCount));
         }
     }
@@ -120,8 +128,8 @@ safe_VkAccelerationStructureGeometryKHR& safe_VkAccelerationStructureGeometryKHR
     const safe_VkAccelerationStructureGeometryKHR& copy_src) {
     if (&copy_src == this) return *this;
 
-    auto iter = as_geom_khr_host_alloc.pop(this);
-    if (iter != as_geom_khr_host_alloc.end()) {
+    auto iter = GetAccelStructGeomHostAllocMap().pop(this);
+    if (iter != GetAccelStructGeomHostAllocMap().end()) {
         delete iter->second;
     }
     FreePnextChain(pNext);
@@ -132,8 +140,8 @@ safe_VkAccelerationStructureGeometryKHR& safe_VkAccelerationStructureGeometryKHR
     flags = copy_src.flags;
 
     pNext = SafePnextCopy(copy_src.pNext);
-    auto src_iter = as_geom_khr_host_alloc.find(&copy_src);
-    if (src_iter != as_geom_khr_host_alloc.end()) {
+    auto src_iter = GetAccelStructGeomHostAllocMap().find(&copy_src);
+    if (src_iter != GetAccelStructGeomHostAllocMap().end()) {
         auto& src_alloc = src_iter->second;
         if (geometry.instances.arrayOfPointers) {
             size_t pp_array_size = src_alloc->primitiveCount * sizeof(VkAccelerationStructureInstanceKHR*);
@@ -150,14 +158,14 @@ safe_VkAccelerationStructureGeometryKHR& safe_VkAccelerationStructureGeometryKHR
                 ppInstances[i] = &pInstances[i];
             }
             geometry.instances.data.hostAddress = allocation;
-            as_geom_khr_host_alloc.insert(
+            GetAccelStructGeomHostAllocMap().insert(
                 this, new ASGeomKHRExtraData(allocation, src_alloc->primitiveOffset, src_alloc->primitiveCount));
         } else {
             size_t array_size = src_alloc->primitiveOffset + src_alloc->primitiveCount * sizeof(VkAccelerationStructureInstanceKHR);
             uint8_t* allocation = new uint8_t[array_size];
             memcpy(allocation, src_alloc->ptr, array_size);
             geometry.instances.data.hostAddress = allocation;
-            as_geom_khr_host_alloc.insert(
+            GetAccelStructGeomHostAllocMap().insert(
                 this, new ASGeomKHRExtraData(allocation, src_alloc->primitiveOffset, src_alloc->primitiveCount));
         }
     }
@@ -166,8 +174,8 @@ safe_VkAccelerationStructureGeometryKHR& safe_VkAccelerationStructureGeometryKHR
 }
 
 safe_VkAccelerationStructureGeometryKHR::~safe_VkAccelerationStructureGeometryKHR() {
-    auto iter = as_geom_khr_host_alloc.pop(this);
-    if (iter != as_geom_khr_host_alloc.end()) {
+    auto iter = GetAccelStructGeomHostAllocMap().pop(this);
+    if (iter != GetAccelStructGeomHostAllocMap().end()) {
         delete iter->second;
     }
     FreePnextChain(pNext);
@@ -176,8 +184,8 @@ safe_VkAccelerationStructureGeometryKHR::~safe_VkAccelerationStructureGeometryKH
 void safe_VkAccelerationStructureGeometryKHR::initialize(const VkAccelerationStructureGeometryKHR* in_struct, const bool is_host,
                                                          const VkAccelerationStructureBuildRangeInfoKHR* build_range_info,
                                                          [[maybe_unused]] PNextCopyState* copy_state) {
-    auto iter = as_geom_khr_host_alloc.pop(this);
-    if (iter != as_geom_khr_host_alloc.end()) {
+    auto iter = GetAccelStructGeomHostAllocMap().pop(this);
+    if (iter != GetAccelStructGeomHostAllocMap().end()) {
         delete iter->second;
     }
     FreePnextChain(pNext);
@@ -204,7 +212,7 @@ void safe_VkAccelerationStructureGeometryKHR::initialize(const VkAccelerationStr
                 ppInstances[i] = &pInstances[i];
             }
             geometry.instances.data.hostAddress = allocation;
-            as_geom_khr_host_alloc.insert(
+            GetAccelStructGeomHostAllocMap().insert(
                 this, new ASGeomKHRExtraData(allocation, build_range_info->primitiveOffset, build_range_info->primitiveCount));
         } else {
             const auto primitive_offset = build_range_info->primitiveOffset;
@@ -215,7 +223,7 @@ void safe_VkAccelerationStructureGeometryKHR::initialize(const VkAccelerationStr
             memcpy(allocation + primitive_offset, host_address + primitive_offset,
                    primitive_count * sizeof(VkAccelerationStructureInstanceKHR));
             geometry.instances.data.hostAddress = allocation;
-            as_geom_khr_host_alloc.insert(
+            GetAccelStructGeomHostAllocMap().insert(
                 this, new ASGeomKHRExtraData(allocation, build_range_info->primitiveOffset, build_range_info->primitiveCount));
         }
     }
@@ -229,8 +237,8 @@ void safe_VkAccelerationStructureGeometryKHR::initialize(const safe_VkAccelerati
     flags = copy_src->flags;
 
     pNext = SafePnextCopy(copy_src->pNext);
-    auto src_iter = as_geom_khr_host_alloc.find(copy_src);
-    if (src_iter != as_geom_khr_host_alloc.end()) {
+    auto src_iter = GetAccelStructGeomHostAllocMap().find(copy_src);
+    if (src_iter != GetAccelStructGeomHostAllocMap().end()) {
         auto& src_alloc = src_iter->second;
         if (geometry.instances.arrayOfPointers) {
             size_t pp_array_size = src_alloc->primitiveCount * sizeof(VkAccelerationStructureInstanceKHR*);
@@ -247,14 +255,14 @@ void safe_VkAccelerationStructureGeometryKHR::initialize(const safe_VkAccelerati
                 ppInstances[i] = &pInstances[i];
             }
             geometry.instances.data.hostAddress = allocation;
-            as_geom_khr_host_alloc.insert(
+            GetAccelStructGeomHostAllocMap().insert(
                 this, new ASGeomKHRExtraData(allocation, src_alloc->primitiveOffset, src_alloc->primitiveCount));
         } else {
             size_t array_size = src_alloc->primitiveOffset + src_alloc->primitiveCount * sizeof(VkAccelerationStructureInstanceKHR);
             uint8_t* allocation = new uint8_t[array_size];
             memcpy(allocation, src_alloc->ptr, array_size);
             geometry.instances.data.hostAddress = allocation;
-            as_geom_khr_host_alloc.insert(
+            GetAccelStructGeomHostAllocMap().insert(
                 this, new ASGeomKHRExtraData(allocation, src_alloc->primitiveOffset, src_alloc->primitiveCount));
         }
     }
@@ -345,13 +353,11 @@ safe_VkGraphicsPipelineCreateInfo::safe_VkGraphicsPipelineCreateInfo(const VkGra
     else
         pInputAssemblyState = nullptr;
     bool has_tessellation_stage = false;
-    bool has_fragment_stage = false;
     if (stageCount && pStages) {
         for (uint32_t i = 0; i < stageCount; ++i) {
             if (pStages[i].stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT ||
                 pStages[i].stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)
                 has_tessellation_stage = true;
-            if (pStages[i].stage == VK_SHADER_STAGE_FRAGMENT_BIT) has_fragment_stage = true;
         }
     }
     if (in_struct->pTessellationState && has_tessellation_stage)
@@ -364,8 +370,9 @@ safe_VkGraphicsPipelineCreateInfo::safe_VkGraphicsPipelineCreateInfo(const VkGra
             if (in_struct->pDynamicState->pDynamicStates[i] == VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT)
                 is_dynamic_has_rasterization = true;
     }
+    // No pRasterizationState is same as dynamic, we assume rasterizerDiscardEnable is false
     const bool has_rasterization = is_dynamic_has_rasterization ||
-                                   (in_struct->pRasterizationState && !in_struct->pRasterizationState->rasterizerDiscardEnable);
+                                   (!in_struct->pRasterizationState || !in_struct->pRasterizationState->rasterizerDiscardEnable);
     if (in_struct->pViewportState && (has_rasterization || is_graphics_library)) {
         bool is_dynamic_viewports = false;
         bool is_dynamic_scissors = false;
@@ -383,8 +390,7 @@ safe_VkGraphicsPipelineCreateInfo::safe_VkGraphicsPipelineCreateInfo(const VkGra
         pRasterizationState = new safe_VkPipelineRasterizationStateCreateInfo(in_struct->pRasterizationState);
     else
         pRasterizationState = nullptr;
-    if (in_struct->pMultisampleState &&
-        ((has_rasterization && (renderPass != VK_NULL_HANDLE || has_fragment_stage)) || is_graphics_library))
+    if (in_struct->pMultisampleState && (has_rasterization || is_graphics_library))
         pMultisampleState = new safe_VkPipelineMultisampleStateCreateInfo(in_struct->pMultisampleState);
     else
         pMultisampleState = nullptr;  // original pMultisampleState pointer ignored
@@ -477,8 +483,9 @@ safe_VkGraphicsPipelineCreateInfo::safe_VkGraphicsPipelineCreateInfo(const safe_
             if (copy_src.pDynamicState->pDynamicStates[i] == VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT)
                 is_dynamic_has_rasterization = true;
     }
+    // No pRasterizationState is same as dynamic, we assume rasterizerDiscardEnable is false
     const bool has_rasterization =
-        is_dynamic_has_rasterization || (copy_src.pRasterizationState && !copy_src.pRasterizationState->rasterizerDiscardEnable);
+        is_dynamic_has_rasterization || (!copy_src.pRasterizationState || !copy_src.pRasterizationState->rasterizerDiscardEnable);
     if (copy_src.pViewportState && (has_rasterization || is_graphics_library)) {
         pViewportState = new safe_VkPipelineViewportStateCreateInfo(*copy_src.pViewportState);
     } else
@@ -571,8 +578,9 @@ safe_VkGraphicsPipelineCreateInfo& safe_VkGraphicsPipelineCreateInfo::operator=(
             if (copy_src.pDynamicState->pDynamicStates[i] == VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT)
                 is_dynamic_has_rasterization = true;
     }
+    // No pRasterizationState is same as dynamic, we assume rasterizerDiscardEnable is false
     const bool has_rasterization =
-        is_dynamic_has_rasterization || (copy_src.pRasterizationState && !copy_src.pRasterizationState->rasterizerDiscardEnable);
+        is_dynamic_has_rasterization || (!copy_src.pRasterizationState || !copy_src.pRasterizationState->rasterizerDiscardEnable);
     if (copy_src.pViewportState && (has_rasterization || is_graphics_library)) {
         pViewportState = new safe_VkPipelineViewportStateCreateInfo(*copy_src.pViewportState);
     } else
@@ -666,13 +674,11 @@ void safe_VkGraphicsPipelineCreateInfo::initialize(const VkGraphicsPipelineCreat
     else
         pInputAssemblyState = nullptr;
     bool has_tessellation_stage = false;
-    bool has_fragment_stage = false;
     if (stageCount && pStages) {
         for (uint32_t i = 0; i < stageCount; ++i) {
             if (pStages[i].stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT ||
                 pStages[i].stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)
                 has_tessellation_stage = true;
-            if (pStages[i].stage == VK_SHADER_STAGE_FRAGMENT_BIT) has_fragment_stage = true;
         }
     }
     if (in_struct->pTessellationState && has_tessellation_stage)
@@ -685,8 +691,9 @@ void safe_VkGraphicsPipelineCreateInfo::initialize(const VkGraphicsPipelineCreat
             if (in_struct->pDynamicState->pDynamicStates[i] == VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT)
                 is_dynamic_has_rasterization = true;
     }
+    // No pRasterizationState is same as dynamic, we assume rasterizerDiscardEnable is false
     const bool has_rasterization = is_dynamic_has_rasterization ||
-                                   (in_struct->pRasterizationState && !in_struct->pRasterizationState->rasterizerDiscardEnable);
+                                   (!in_struct->pRasterizationState || !in_struct->pRasterizationState->rasterizerDiscardEnable);
     if (in_struct->pViewportState && (has_rasterization || is_graphics_library)) {
         bool is_dynamic_viewports = false;
         bool is_dynamic_scissors = false;
@@ -704,8 +711,7 @@ void safe_VkGraphicsPipelineCreateInfo::initialize(const VkGraphicsPipelineCreat
         pRasterizationState = new safe_VkPipelineRasterizationStateCreateInfo(in_struct->pRasterizationState);
     else
         pRasterizationState = nullptr;
-    if (in_struct->pMultisampleState &&
-        ((has_rasterization && (renderPass != VK_NULL_HANDLE || has_fragment_stage)) || is_graphics_library))
+    if (in_struct->pMultisampleState && (has_rasterization || is_graphics_library))
         pMultisampleState = new safe_VkPipelineMultisampleStateCreateInfo(in_struct->pMultisampleState);
     else
         pMultisampleState = nullptr;  // original pMultisampleState pointer ignored
@@ -778,8 +784,9 @@ void safe_VkGraphicsPipelineCreateInfo::initialize(const safe_VkGraphicsPipeline
             if (copy_src->pDynamicState->pDynamicStates[i] == VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT)
                 is_dynamic_has_rasterization = true;
     }
+    // No pRasterizationState is same as dynamic, we assume rasterizerDiscardEnable is false
     const bool has_rasterization =
-        is_dynamic_has_rasterization || (copy_src->pRasterizationState && !copy_src->pRasterizationState->rasterizerDiscardEnable);
+        is_dynamic_has_rasterization || (!copy_src->pRasterizationState || !copy_src->pRasterizationState->rasterizerDiscardEnable);
     if (copy_src->pViewportState && (has_rasterization || is_graphics_library)) {
         pViewportState = new safe_VkPipelineViewportStateCreateInfo(*copy_src->pViewportState);
     } else

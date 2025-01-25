@@ -6,6 +6,7 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
@@ -27,10 +28,12 @@
 using ::dlcservice::DlcState;
 using ::testing::_;
 using ::testing::AllOf;
+using ::testing::Each;
 using ::testing::Field;
 using ::testing::FieldsAre;
 using ::testing::Invoke;
 using ::testing::Property;
+using ::testing::ResultOf;
 using ::testing::Return;
 using ::testing::StartsWith;
 using ::testing::WithArg;
@@ -481,12 +484,12 @@ TEST_F(LanguagePackManagerTest, RemoveObserverTest) {
 TEST_F(LanguagePackManagerTest, CheckAllLocalesAvailable) {
   // Handwriting Recognition.
   const std::vector<std::string> handwriting({
-      "am", "ar", "be", "bg",  "bn", "ca", "cs", "da", "de", "el",    "es",
-      "et", "fa", "fi", "fil", "fr", "ga", "gu", "hi", "hr", "hu",    "hy",
-      "id", "is", "it", "iw",  "ja", "ka", "kk", "km", "kn", "ko",    "lo",
-      "lt", "lv", "ml", "mn",  "mr", "ms", "mt", "my", "ne", "nl",    "no",
-      "or", "pa", "pl", "pt",  "ro", "ru", "si", "sk", "sl", "sr",    "sv",
-      "ta", "te", "th", "ti",  "tr", "uk", "ur", "vi", "zh", "zh-HK",
+      "am", "ar", "be", "bg", "bn",  "ca", "cs", "da", "de", "el", "en",
+      "es", "et", "fa", "fi", "fil", "fr", "ga", "gu", "hi", "hr", "hu",
+      "hy", "id", "is", "it", "iw",  "ja", "ka", "kk", "km", "kn", "ko",
+      "lo", "lt", "lv", "ml", "mn",  "mr", "ms", "mt", "my", "ne", "nl",
+      "no", "or", "pa", "pl", "pt",  "ro", "ru", "si", "sk", "sl", "sr",
+      "sv", "ta", "te", "th", "ti",  "tr", "uk", "ur", "vi", "zh", "zh-HK",
   });
   for (const auto& locale : handwriting) {
     EXPECT_TRUE(
@@ -504,6 +507,15 @@ TEST_F(LanguagePackManagerTest, CheckAllLocalesAvailable) {
   for (const auto& locale : tts) {
     EXPECT_TRUE(LanguagePackManager::IsPackAvailable(kTtsFeatureId, locale));
   }
+
+  const std::vector<std::string> fonts = {"ja", "ko"};
+  EXPECT_THAT(fonts, Each(ResultOf(
+                         "Font pack availability",
+                         [](const std::string& locale) {
+                           return LanguagePackManager::IsPackAvailable(
+                               kFontsFeatureId, locale);
+                         },
+                         true)));
 }
 
 TEST_F(LanguagePackManagerTest, IsPackAvailableFalseTest) {

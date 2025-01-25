@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/views/profiles/signin_view_controller_delegate_views.h"
 
-#include "base/check_deref.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -15,17 +14,15 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service.h"
-#include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service_factory.h"
 #include "chrome/browser/signin/reauth_result.h"
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/profiles/profile_picker.h"
-#include "chrome/browser/ui/search_engine_choice/search_engine_choice_tab_helper.h"
 #include "chrome/browser/ui/signin/signin_view_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -91,14 +88,6 @@ void CloseModalSigninInBrowser(
 
   browser->signin_view_controller()->CloseModalSignin();
 
-  SearchEngineChoiceDialogService* search_engine_choice_dialog_service =
-      SearchEngineChoiceDialogServiceFactory::GetForProfile(browser->profile());
-  if (search_engine_choice_dialog_service &&
-      search_engine_choice_dialog_service->CanShowDialog(
-          CHECK_DEREF(browser.get()))) {
-    ShowSearchEngineChoiceDialog(*browser);
-  }
-
   if (show_profile_switch_iph) {
     browser->window()->MaybeShowProfileSwitchIPH();
   }
@@ -127,14 +116,11 @@ class WidgetAutoResizingLayout : public views::FillLayout {
 std::unique_ptr<views::WebView>
 SigninViewControllerDelegateViews::CreateSyncConfirmationWebView(
     Browser* browser,
-    bool is_signin_intercept) {
+    SyncConfirmationStyle style,
+    bool is_sync_promo) {
   GURL url = GURL(chrome::kChromeUISyncConfirmationURL);
-  if (is_signin_intercept) {
-    url = AppendSyncConfirmationQueryParams(
-        url, SyncConfirmationStyle::kSigninInterceptModal);
-  }
   return CreateDialogWebView(
-      browser, url,
+      browser, AppendSyncConfirmationQueryParams(url, style, is_sync_promo),
       GetSyncConfirmationDialogPreferredHeight(browser->profile()),
       kSyncConfirmationDialogWidth, InitializeSigninWebDialogUI(true));
 }
@@ -196,7 +182,8 @@ SigninViewControllerDelegateViews::CreateManagedUserNoticeConfirmationWebView(
     bool is_oidc_account,
     bool profile_creation_required_by_policy,
     bool show_link_data_option,
-    signin::SigninChoiceCallback callback) {
+    signin::SigninChoiceCallbackVariant process_user_choice_callback,
+    base::OnceClosure done_callback) {
   bool enable_updated_dialog = base::FeatureList::IsEnabled(
       features::kEnterpriseUpdatedProfileCreationScreen);
 #if !BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -227,7 +214,7 @@ SigninViewControllerDelegateViews::CreateManagedUserNoticeConfirmationWebView(
           ? ManagedUserProfileNoticeUI::ScreenType::kEnterpriseOIDC
           : ManagedUserProfileNoticeUI::ScreenType::kEnterpriseAccountCreation,
       account_info, profile_creation_required_by_policy, show_link_data_option,
-      std::move(callback));
+      std::move(process_user_choice_callback), std::move(done_callback));
 
   return web_view;
 }
@@ -280,7 +267,7 @@ bool SigninViewControllerDelegateViews::HandleContextMenu(
 
 bool SigninViewControllerDelegateViews::HandleKeyboardEvent(
     content::WebContents* source,
-    const content::NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   // If this is a MODAL_TYPE_CHILD, then GetFocusManager() will return the focus
   // manager of the parent window, which has registered accelerators, and the
   // accelerators will fire. If this is a MODAL_TYPE_WINDOW, then this will have
@@ -469,10 +456,11 @@ END_METADATA
 SigninViewControllerDelegate*
 SigninViewControllerDelegate::CreateSyncConfirmationDelegate(
     Browser* browser,
-    bool is_signin_intercept) {
+    SyncConfirmationStyle style,
+    bool is_sync_promo) {
   return new SigninViewControllerDelegateViews(
       SigninViewControllerDelegateViews::CreateSyncConfirmationWebView(
-          browser, is_signin_intercept),
+          browser, style, is_sync_promo),
       browser, ui::MODAL_TYPE_WINDOW, true, false);
 }
 
@@ -520,13 +508,15 @@ SigninViewControllerDelegate::CreateManagedUserNoticeDelegate(
     bool is_oidc_account,
     bool profile_creation_required_by_policy,
     bool show_link_data_option,
-    signin::SigninChoiceCallback callback) {
+    signin::SigninChoiceCallbackVariant process_user_choice_callback,
+    base::OnceClosure done_callback) {
   return new SigninViewControllerDelegateViews(
       SigninViewControllerDelegateViews::
           CreateManagedUserNoticeConfirmationWebView(
               browser, account_info, is_oidc_account,
               profile_creation_required_by_policy, show_link_data_option,
-              std::move(callback)),
+              std::move(process_user_choice_callback),
+              std::move(done_callback)),
       browser, ui::MODAL_TYPE_WINDOW, true, false);
 }
 #endif

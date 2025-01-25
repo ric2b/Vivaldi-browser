@@ -909,7 +909,7 @@ void HTMLSelectListElement::OptionPartInserted(
     return;
   }
 
-  new_option_part->OptionInsertedIntoSelectListElementOrSelectDatalist();
+  new_option_part->OptionInsertedIntoSelectListElement();
   option_part_listener_->AddEventListeners(new_option_part);
 
   // TODO(crbug.com/1191131) The option part list should match the flat tree
@@ -936,7 +936,7 @@ void HTMLSelectListElement::OptionPartRemoved(HTMLOptionElement* option_part) {
     return;
   }
 
-  option_part->OptionRemovedFromSelectListElementOrSelectDatalist();
+  option_part->OptionRemovedFromSelectListElement();
   option_part_listener_->RemoveEventListeners(option_part);
   option_parts_.erase(option_part);
 
@@ -1067,13 +1067,15 @@ void HTMLSelectListElement::SetSelectedOption(
   }
   NotifyFormStateChanged();
 
-  // We set the Autofill state again because setting the autofill value
-  // triggers JavaScript events and the site may override the autofilled value,
-  // which resets the Autofilled state. Even if the website modifies the from
-  // control element's content during the autofill operation, we want the state
-  // to show as autofilled.
-  SetAutofillState(selected_option ? autofill_state
-                                   : WebAutofillState::kNotFilled);
+  if (!RuntimeEnabledFeatures::AllowJavaScriptToResetAutofillStateEnabled()) {
+    // We set the Autofill state again because setting the autofill value
+    // triggers JavaScript events and the site may override the autofilled
+    // value, which resets the Autofilled state. Even if the website modifies
+    // the from control element's content during the autofill operation, we want
+    // the state to show as autofilled.
+    SetAutofillState(selected_option ? autofill_state
+                                     : WebAutofillState::kNotFilled);
+  }
 }
 
 void HTMLSelectListElement::OptionElementChildrenChanged(

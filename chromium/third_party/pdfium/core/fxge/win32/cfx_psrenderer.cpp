@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fxge/win32/cfx_psrenderer.h"
 
 #include <math.h>
@@ -21,15 +16,15 @@
 
 #include "core/fxcrt/bytestring.h"
 #include "core/fxcrt/check_op.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_memory.h"
-#include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/fx_stream.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/span.h"
-#include "core/fxcrt/span_util.h"
+#include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_font.h"
 #include "core/fxge/cfx_fontcache.h"
@@ -572,7 +567,11 @@ bool CFX_PSRenderer::DrawDIBits(RetainPtr<const CFX_DIBBase> bitmap,
           bitmap = bitmap->ConvertTo(FXDIB_Format::kRgb);
         }
         break;
-      default:
+      case FXDIB_Format::kInvalid:
+      case FXDIB_Format::k1bppMask:
+      case FXDIB_Format::k8bppMask:
+      case FXDIB_Format::kRgb:
+      case FXDIB_Format::kArgb:
         break;
     }
     if (!bitmap) {
@@ -595,16 +594,18 @@ bool CFX_PSRenderer::DrawDIBits(RetainPtr<const CFX_DIBBase> bitmap,
       output_buf = FX_Alloc(uint8_t, output_size);
       for (int row = 0; row < height; row++) {
         const uint8_t* src_scan = bitmap->GetScanline(row).data();
-        uint8_t* dest_scan = output_buf + row * src_pitch;
+        uint8_t* dest_scan = UNSAFE_TODO(output_buf + row * src_pitch);
         if (bpp == 3) {
-          for (int col = 0; col < width; col++) {
-            *dest_scan++ = src_scan[2];
-            *dest_scan++ = src_scan[1];
-            *dest_scan++ = *src_scan;
-            src_scan += 3;
-          }
+          UNSAFE_TODO({
+            for (int col = 0; col < width; col++) {
+              *dest_scan++ = src_scan[2];
+              *dest_scan++ = src_scan[1];
+              *dest_scan++ = *src_scan;
+              src_scan += 3;
+            }
+          });
         } else {
-          FXSYS_memcpy(dest_scan, src_scan, src_pitch);
+          UNSAFE_TODO(FXSYS_memcpy(dest_scan, src_scan, src_pitch));
         }
       }
       // SAFETY: `output_size` passed to FX_Alloc() of `output_buf`.
@@ -754,19 +755,21 @@ void CFX_PSRenderer::DrawTextAsType3Font(int char_count,
   CFX_FontCache* pCache = CFX_GEModule::Get()->GetFontCache();
   RetainPtr<CFX_GlyphCache> pGlyphCache = pCache->GetGlyphCache(font);
   int last_fontnum = -1;
-  for (int i = 0; i < char_count; i++) {
-    int ps_fontnum;
-    int ps_glyphindex;
-    FindPSFontGlyph(pGlyphCache.Get(), font, char_pos[i], &ps_fontnum,
-                    &ps_glyphindex);
-    if (last_fontnum != ps_fontnum) {
-      buf << "/X" << ps_fontnum << " Ff " << font_size << " Fs Sf ";
-      last_fontnum = ps_fontnum;
+  UNSAFE_TODO({
+    for (int i = 0; i < char_count; i++) {
+      int ps_fontnum;
+      int ps_glyphindex;
+      FindPSFontGlyph(pGlyphCache.Get(), font, char_pos[i], &ps_fontnum,
+                      &ps_glyphindex);
+      if (last_fontnum != ps_fontnum) {
+        buf << "/X" << ps_fontnum << " Ff " << font_size << " Fs Sf ";
+        last_fontnum = ps_fontnum;
+      }
+      buf << char_pos[i].m_Origin.x << " " << char_pos[i].m_Origin.y << " m";
+      ByteString hex = ByteString::Format("<%02X>", ps_glyphindex);
+      buf << hex.AsStringView() << "Tj\n";
     }
-    buf << char_pos[i].m_Origin.x << " " << char_pos[i].m_Origin.y << " m";
-    ByteString hex = ByteString::Format("<%02X>", ps_glyphindex);
-    buf << hex.AsStringView() << "Tj\n";
-  }
+  });
 }
 
 bool CFX_PSRenderer::DrawTextAsType42Font(int char_count,
@@ -797,13 +800,15 @@ bool CFX_PSRenderer::DrawTextAsType42Font(int char_count,
   }
 
   buf << "/" << font->GetPsName() << " " << font_size << " selectfont\n";
-  for (int i = 0; i < char_count; ++i) {
-    buf << char_pos[i].m_Origin.x << " " << char_pos[i].m_Origin.y << " m";
-    uint8_t hi = char_pos[i].m_GlyphIndex / 256;
-    uint8_t lo = char_pos[i].m_GlyphIndex % 256;
-    ByteString hex = ByteString::Format("<%02X%02X>", hi, lo);
-    buf << hex.AsStringView() << "Tj\n";
-  }
+  UNSAFE_TODO({
+    for (int i = 0; i < char_count; ++i) {
+      buf << char_pos[i].m_Origin.x << " " << char_pos[i].m_Origin.y << " m";
+      uint8_t hi = char_pos[i].m_GlyphIndex / 256;
+      uint8_t lo = char_pos[i].m_GlyphIndex % 256;
+      ByteString hex = ByteString::Format("<%02X%02X>", hi, lo);
+      buf << hex.AsStringView() << "Tj\n";
+    }
+  });
   return true;
 }
 
@@ -872,8 +877,7 @@ CFX_PSRenderer::FaxCompressResult CFX_PSRenderer::FaxCompressData(
   result.data.resize(safe_size.ValueOrDie());
   auto dest_span = pdfium::make_span(result.data);
   for (int row = 0; row < height; row++) {
-    pdfium::span<const uint8_t> src_scan = src->GetScanline(row);
-    fxcrt::spancpy(dest_span.subspan(row * pitch, pitch), src_scan);
+    fxcrt::Copy(src->GetScanline(row), dest_span.subspan(row * pitch, pitch));
   }
   return result;
 }
@@ -912,7 +916,7 @@ void CFX_PSRenderer::WritePSBinary(pdfium::span<const uint8_t> data) {
   DataVector<uint8_t> encoded_data = m_pEncoderIface->pA85EncodeFunc(data);
   pdfium::span<const uint8_t> result =
       encoded_data.empty() ? data : encoded_data;
-  auto chars = fxcrt::reinterpret_span<const char>(result);
+  auto chars = pdfium::as_chars(result);
   m_Output.write(chars.data(), chars.size());
 }
 

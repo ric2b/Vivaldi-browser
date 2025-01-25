@@ -8,10 +8,13 @@
 #include <vector>
 
 #include "base/functional/bind.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "cc/test/pixel_test_utils.h"
+#include "components/viz/host/host_frame_sink_manager.h"
 #include "content/browser/browser_context_impl.h"
+#include "content/browser/compositor/surface_utils.h"
 #include "content/browser/renderer_host/navigation_transitions/navigation_entry_screenshot_cache.h"
 #include "content/browser/renderer_host/navigation_transitions/navigation_entry_screenshot_manager.h"
 #include "content/browser/renderer_host/navigation_transitions/navigation_transition_utils.h"
@@ -26,23 +29,33 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/navigation_transition_test_utils.h"
 #include "content/public/test/prerender_test_util.h"
+#include "content/public/test/scoped_web_ui_controller_factory_registration.h"
 #include "content/public/test/test_frame_navigation_observer.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "content/public/test/web_ui_browsertest_util.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "content/test/render_document_feature.h"
+#include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/default_handlers.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/android/view_android.h"
 #include "url/url_constants.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "base/android/build_info.h"
+#endif
 
 namespace content {
 
 namespace {
+
+using CacheHitOrMissReason = NavigationTransitionData::CacheHitOrMissReason;
 
 // A test-only alternative to
 // `NavigationEntryScreenshotCache::RemoveScreenshot` that does not evict the
@@ -63,14 +76,20 @@ NavigationEntryScreenshot* PreviewScreenshotForEntry(NavigationEntry* entry) {
 //   that its surface can be copied.
 void NavigateTabAndWaitForScreenshotCached(WebContents* tab,
                                            NavigationControllerImpl& controller,
-                                           const GURL& destination) {
+                                           const GURL& destination,
+                                           bool same_doc_nav = false) {
   const int num_request_before_nav =
       NavigationTransitionUtils::GetNumCopyOutputRequestIssuedForTesting();
   const int entries_count_before_nav = controller.GetEntryCount();
   ScopedScreenshotCapturedObserverForTesting observer(
       controller.GetLastCommittedEntryIndex());
   ASSERT_TRUE(NavigateToURL(tab, destination));
-  WaitForCopyableViewInWebContents(tab);
+  // We don't need to wait for the same-doc navigations. When the browser
+  // receives the screenshot for same-doc navigations, the renderer must have
+  // submitted a new frame. Using the observer on screenshot capture is enough.
+  if (!same_doc_nav) {
+    WaitForCopyableViewInWebContents(tab);
+  }
   observer.Wait();
   ASSERT_EQ(controller.GetEntryCount(), entries_count_before_nav + 1);
   ASSERT_EQ(
@@ -83,14 +102,17 @@ void NavigateTabAndWaitForScreenshotCached(WebContents* tab,
 void HistoryNavigateTabAndWaitForScreenshotCached(
     WebContents* tab,
     NavigationControllerImpl& controller,
-    int offset) {
+    int offset,
+    bool same_doc_nav = false) {
   const int num_request_before_nav =
       NavigationTransitionUtils::GetNumCopyOutputRequestIssuedForTesting();
   const int entries_count_before_nav = controller.GetEntryCount();
   ScopedScreenshotCapturedObserverForTesting observer(
       controller.GetLastCommittedEntryIndex());
   ASSERT_TRUE(HistoryGoToOffset(tab, offset));
-  WaitForCopyableViewInWebContents(tab);
+  if (!same_doc_nav) {
+    WaitForCopyableViewInWebContents(tab);
+  }
   observer.Wait();
   ASSERT_EQ(controller.GetEntryCount(), entries_count_before_nav);
   ASSERT_EQ(
@@ -171,13 +193,10 @@ class HostGetterCrossOrigin : public HostGetter {
 
 }  // namespace
 
-class NavigationEntryScreenshotBrowserTest
-    : public ContentBrowserTest,
-      public ::testing::WithParamInterface<
-          ScreenshotCaptureTestNavigationType> {
+class NavigationEntryScreenshotBrowserTestBase : public ContentBrowserTest {
  public:
-  NavigationEntryScreenshotBrowserTest() = default;
-  ~NavigationEntryScreenshotBrowserTest() override = default;
+  NavigationEntryScreenshotBrowserTestBase() = default;
+  ~NavigationEntryScreenshotBrowserTestBase() override = default;
 
   void SetUp() override {
     NavigationTransitionUtils::ResetNumCopyOutputRequestIssuedForTesting();
@@ -188,6 +207,131 @@ class NavigationEntryScreenshotBrowserTest
     NavigationTransitionUtils::ResetNumCopyOutputRequestIssuedForTesting();
     ContentBrowserTest::TearDown();
   }
+
+  void SetUpOnMainThread() override {
+    ContentBrowserTest::SetUpOnMainThread();
+
+    ASSERT_TRUE(
+        base::FeatureList::IsEnabled(blink::features::kBackForwardTransitions));
+
+    host_resolver()->AddRule("*", "127.0.0.1");
+    embedded_test_server()->ServeFilesFromSourceDirectory(
+        GetTestDataFilePath());
+    net::test_server::RegisterDefaultHandlers(embedded_test_server());
+    SetupCrossSiteRedirector(embedded_test_server());
+
+    ASSERT_TRUE(embedded_test_server()->Start());
+  }
+
+  static void ExpectBitmapRowsAreColor(
+      const SkBitmap& bitmap,
+      SkColor color,
+      std::optional<gfx::Rect> compare_region = std::nullopt) {
+    int num_pixel_mismatch = 0;
+    gfx::Rect err_bounding_box;
+
+    int row_start = 0;
+    int row_end = bitmap.height();
+    int col_start = 0;
+    int col_end = bitmap.width();
+
+    if (compare_region.has_value()) {
+      row_start = compare_region->y();
+      row_end = compare_region->bottom();
+      col_start = compare_region->x();
+      col_end = compare_region->right();
+    }
+
+    for (int r = row_start; r < row_end; ++r) {
+      for (int c = col_start; c < col_end; ++c) {
+        if (bitmap.getColor(c, r) != color) {
+          ++num_pixel_mismatch;
+          err_bounding_box.Union(gfx::Rect(c, r, 1, 1));
+        }
+      }
+    }
+    if (num_pixel_mismatch != 0) {
+      EXPECT_TRUE(false)
+          << "Number of pixel mismatches: " << num_pixel_mismatch
+          << "; error bounding box: " << err_bounding_box.ToString()
+          << "; bitmap size: "
+          << gfx::Size(bitmap.width(), bitmap.height()).ToString()
+          << "; expect color " << base::StringPrintf("%x", color)
+          << "; actual bitmap " << cc::GetPNGDataUrl(bitmap);
+    }
+  }
+
+  void ExpectScreenshotIsColor(
+      NavigationEntryScreenshot* screenshot,
+      SkColor color,
+      std::optional<gfx::Rect> compare_region = std::nullopt) {
+    EXPECT_NE(screenshot, nullptr);
+    EXPECT_EQ(screenshot->GetDimensions(), GetScaledViewportSize());
+
+    auto bitmap = screenshot->GetBitmapForTesting();
+    ExpectBitmapRowsAreColor(bitmap, color, compare_region);
+  }
+
+  void AssertOrderedScreenshotsAre(
+      NavigationControllerImpl& controller,
+      const std::vector<std::optional<SkColor>>& expected_screenshots,
+      std::optional<gfx::Rect> compare_region = std::nullopt) {
+    ASSERT_EQ(controller.GetEntryCount(),
+              static_cast<int>(expected_screenshots.size()));
+    for (int index = 0; index < controller.GetEntryCount(); ++index) {
+      auto* entry = controller.GetEntryAtIndex(index);
+      if (expected_screenshots[index].has_value()) {
+        auto* screenshot = PreviewScreenshotForEntry(entry);
+        ExpectScreenshotIsColor(screenshot, expected_screenshots[index].value(),
+                                compare_region);
+      } else {
+        EXPECT_EQ(PreviewScreenshotForEntry(entry), nullptr);
+      }
+    }
+  }
+
+  void AssertCacheHitOrMissReasonsAre(
+      NavigationControllerImpl& controller,
+      const std::vector<std::optional<CacheHitOrMissReason>>&
+          expected_reasons) {
+    ASSERT_EQ(controller.GetEntryCount(),
+              static_cast<int>(expected_reasons.size()));
+    for (int index = 0; index < controller.GetEntryCount(); ++index) {
+      auto* entry = controller.GetEntryAtIndex(index);
+      EXPECT_EQ(entry->navigation_transition_data().cache_hit_or_miss_reason(),
+                expected_reasons[index]);
+    }
+  }
+
+  gfx::Size GetScaledViewportSize() {
+    // Scale down the size to avoid memory pressure causing cache purging.
+    return ScaleToRoundedSize(
+        web_contents()->GetNativeView()->GetPhysicalBackingSize(),
+        /*scale=*/0.1);
+  }
+
+  size_t GetScaledViewportSizeInBytes() {
+    // 4 bytes per pixel.
+    return 4 * GetScaledViewportSize().Area64();
+  }
+
+  NavigationEntryScreenshotManager* GetManagerForTab(WebContents* tab) {
+    return BrowserContextImpl::From(tab->GetBrowserContext())
+        ->GetNavigationEntryScreenshotManager();
+  }
+
+  WebContentsImpl* web_contents() {
+    return static_cast<WebContentsImpl*>(shell()->web_contents());
+  }
+};
+
+class NavigationEntryScreenshotBrowserTest
+    : public NavigationEntryScreenshotBrowserTestBase,
+      public ::testing::WithParamInterface<
+          ScreenshotCaptureTestNavigationType> {
+ public:
+  NavigationEntryScreenshotBrowserTest() = default;
+  ~NavigationEntryScreenshotBrowserTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     std::vector<base::test::FeatureRefAndParams> enabled_features = {
@@ -208,25 +352,11 @@ class NavigationEntryScreenshotBrowserTest
       host_getter_ = std::make_unique<HostGetterCrossOrigin>();
     }
 
-    InitAndEnableRenderDocumentFeature(&scoped_feature_list_render_document_,
-                                       RenderDocumentFeatureFullyEnabled()[0]);
-
-    ContentBrowserTest::SetUpCommandLine(command_line);
+    NavigationEntryScreenshotBrowserTestBase::SetUpCommandLine(command_line);
   }
 
   void SetUpOnMainThread() override {
-    ContentBrowserTest::SetUpOnMainThread();
-
-    ASSERT_TRUE(
-        base::FeatureList::IsEnabled(blink::features::kBackForwardTransitions));
-
-    host_resolver()->AddRule("*", "127.0.0.1");
-    embedded_test_server()->ServeFilesFromSourceDirectory(
-        GetTestDataFilePath());
-    net::test_server::RegisterDefaultHandlers(embedded_test_server());
-    SetupCrossSiteRedirector(embedded_test_server());
-
-    ASSERT_TRUE(embedded_test_server()->Start());
+    NavigationEntryScreenshotBrowserTestBase::SetUpOnMainThread();
 
     // The default WebContents has only the initial navigation entry. This
     // WebContents does not have a RWHV associated with it, making
@@ -259,77 +389,6 @@ class NavigationEntryScreenshotBrowserTest
         GetScaledViewportSize());
   }
 
-  static void ExpectBitmapRowsAreColor(const SkBitmap& bitmap,
-                                       int row_start,
-                                       int row_end_exclusive,
-                                       SkColor color) {
-    int num_pixel_mismatch = 0;
-    gfx::Rect err_bounding_box;
-    for (int r = row_start; r < row_end_exclusive; ++r) {
-      for (int c = 0; c < bitmap.width(); ++c) {
-        if (bitmap.getColor(c, r) != color) {
-          ++num_pixel_mismatch;
-          err_bounding_box.Union(gfx::Rect(c, r, 1, 1));
-        }
-      }
-    }
-    if (num_pixel_mismatch != 0) {
-      EXPECT_TRUE(false)
-          << "Number of pixel mismatches: " << num_pixel_mismatch
-          << "; error bounding box: " << err_bounding_box.ToString()
-          << "; bitmap size: "
-          << gfx::Size(bitmap.width(), bitmap.height()).ToString();
-    }
-  }
-
-  void ExpectScreenshotIsColor(NavigationEntryScreenshot* screenshot,
-                               SkColor color) {
-    EXPECT_NE(screenshot, nullptr);
-    EXPECT_EQ(screenshot->GetDimensions(), GetScaledViewportSize());
-
-    auto bitmap = screenshot->GetBitmapForTesting();
-    ExpectBitmapRowsAreColor(bitmap, /*row_start=*/0,
-                             /*row_end_exclusive=*/bitmap.height(), color);
-  }
-
-  void AssertOrderedScreenshotsAre(
-      NavigationControllerImpl& controller,
-      const std::vector<std::optional<SkColor>>& expected_screenshots) {
-    ASSERT_EQ(controller.GetEntryCount(),
-              static_cast<int>(expected_screenshots.size()));
-    for (int index = 0; index < controller.GetEntryCount(); ++index) {
-      auto* entry = controller.GetEntryAtIndex(index);
-      if (expected_screenshots[index].has_value()) {
-        auto* screenshot = PreviewScreenshotForEntry(entry);
-        ExpectScreenshotIsColor(screenshot,
-                                expected_screenshots[index].value());
-      } else {
-        EXPECT_EQ(PreviewScreenshotForEntry(entry), nullptr);
-      }
-    }
-  }
-
-  gfx::Size GetScaledViewportSize() {
-    // Scale down the size to avoid memory pressure causing cache purging.
-    return ScaleToRoundedSize(
-        web_contents()->GetRenderWidgetHostView()->GetVisibleViewportSize(),
-        /*scale=*/0.1);
-  }
-
-  size_t GetScaledViewportSizeInBytes() {
-    // 4 bytes per pixel.
-    return 4 * GetScaledViewportSize().Area64();
-  }
-
-  NavigationEntryScreenshotManager* GetManagerForTab(WebContents* tab) {
-    return BrowserContextImpl::From(tab->GetBrowserContext())
-        ->GetNavigationEntryScreenshotManager();
-  }
-
-  WebContentsImpl* web_contents() {
-    return static_cast<WebContentsImpl*>(shell()->web_contents());
-  }
-
   std::string GetNextHost() { return host_getter_->Get(); }
 
   GURL GetNextUrl(std::string_view path) {
@@ -338,7 +397,6 @@ class NavigationEntryScreenshotBrowserTest
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-  base::test::ScopedFeatureList scoped_feature_list_render_document_;
 
   std::unique_ptr<HostGetter> host_getter_;
 };
@@ -348,6 +406,12 @@ class NavigationEntryScreenshotBrowserTest
 // navigation and history navigation.
 IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
                        PrimaryMainFrameNav) {
+// TODO(crbug.com/353908058): Re-enable this test for automotive.
+#if BUILDFLAG(IS_ANDROID)
+  if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+    GTEST_SKIP() << "This test is flaky on automotive. crbug.com/353908058";
+  }
+#endif  // BUILDFLAG(IS_ANDROID)
   // Max of three screenshots per Profile (BrowserContext).
   const size_t page_size = GetScaledViewportSizeInBytes();
   const size_t memory_budget = 3 * page_size;
@@ -822,8 +886,9 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, HistoryDotBack) {
 
 // Asserting that both the navigations from and to the about:blank triggers
 // screenshot capture.
+// Disabled because flaky. (See b/354018428)
 IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
-                       AboutBlankCaptured) {
+                       DISABLED_AboutBlankCaptured) {
   const size_t page_size = GetScaledViewportSizeInBytes();
   const size_t memory_budget = 10 * page_size;
   auto* manager = GetManagerForTab(web_contents());
@@ -978,22 +1043,24 @@ void AssertScreenshotForPageWithIFrameIs(NavigationEntry* entry,
 
   // Expect the embedder's color matches.
   NavigationEntryScreenshotBrowserTest::ExpectBitmapRowsAreColor(
-      bitmap, /*row_start=*/0, /*row_end_exclusive=*/half_height, embedder);
+      bitmap, embedder, gfx::Rect(0, 0, bitmap.width(), half_height));
 
   // Expect the iframe's color matches. Skip checking the middle row if the
   // height is an odd number.
   int iframe_height_start = is_height_odd ? half_height + 1 : half_height;
   NavigationEntryScreenshotBrowserTest::ExpectBitmapRowsAreColor(
-      bitmap, /*row_start=*/iframe_height_start,
-      /*row_end_exclusive=*/bitmap.height(), iframe);
+      bitmap, iframe,
+      gfx::Rect(0, iframe_height_start, bitmap.width(), half_height));
 }
 }  // namespace
 
 // Asserts that no screenshots captured for the navigations of iframes.
 //
 // TODO(crbug.com/40896219): Support iframe navigations.
+//
+// TODO(crbug.com/340929354): Reenable the test.
 IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
-                       SameOriginIFrame_NotCaptured) {
+                       DISABLED_SameOriginIFrame_NotCaptured) {
   const size_t page_size = GetScaledViewportSizeInBytes();
   const size_t memory_budget = 10 * page_size;
   auto* manager = GetManagerForTab(web_contents());
@@ -1057,6 +1124,117 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
 
 INSTANTIATE_TEST_SUITE_P(All,
                          NavigationEntryScreenshotBrowserTest,
+                         ::testing::ValuesIn(kNavTypes),
+                         &DescribeNavType);
+
+class NavigationEntryScreenshotBrowserTestWithWebUI
+    : public NavigationEntryScreenshotBrowserTest {
+ public:
+  ~NavigationEntryScreenshotBrowserTestWithWebUI() override = default;
+
+ private:
+  // Used to make the "web-ui" prefixed documents being rendered as WebUIs.
+  TestWebUIControllerFactory factory_;
+  ScopedWebUIControllerFactoryRegistration factory_registration_{&factory_};
+};
+
+IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTestWithWebUI,
+                       PrimaryMainFrameNavWebUI) {
+  // Max of three screenshots per Profile (BrowserContext).
+  const size_t page_size = GetScaledViewportSizeInBytes();
+  const size_t memory_budget = 3 * page_size;
+  auto* manager = GetManagerForTab(web_contents());
+  manager->SetMemoryBudgetForTesting(memory_budget);
+  auto& controller = web_contents()->GetController();
+
+  GURL webui_red(GetWebUIURL("web-ui/red.html"));
+  GURL webui_green(GetWebUIURL("web-ui/green.html"));
+
+  {
+    SCOPED_TRACE("[red*] -> [red&, webui_green*]");
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          webui_green);
+    AssertOrderedScreenshotsAre(controller, {SK_ColorRED, std::nullopt});
+    ASSERT_EQ(manager->GetCurrentCacheSize(), 1 * page_size);
+  }
+  {
+    SCOPED_TRACE("[red&, webui_green*] -> [red&, webui_green&, blue*]");
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          GetNextUrl("/blue.html"));
+    AssertOrderedScreenshotsAre(controller,
+                                {SK_ColorRED, SK_ColorGREEN, std::nullopt});
+    ASSERT_EQ(manager->GetCurrentCacheSize(), 2 * page_size);
+  }
+  {
+    SCOPED_TRACE(
+        "[red&, webui_green&, blue*] -> "
+        "[red&, webui_green&, blue&, webui_green*]");
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          webui_green);
+    AssertOrderedScreenshotsAre(
+        controller, {SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, std::nullopt});
+    ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
+  }
+  {
+    SCOPED_TRACE(
+        "[red&, webui_green&, blue&, webui_green*] -> "
+        "[red, webui_green&, blue&, webui_green&, webui_red*]");
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          webui_red);
+    AssertOrderedScreenshotsAre(
+        controller, {std::nullopt, SK_ColorGREEN, SK_ColorBLUE, SK_ColorGREEN,
+                     std::nullopt});
+    ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
+  }
+  {
+    SCOPED_TRACE(
+        "[red, webui_green&, blue&, webui_green&, webui_red*] -> "
+        "[red, webui_green, blue&, webui_green&, webui_red&, red*]");
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          GetNextUrl("/red.html"));
+    AssertOrderedScreenshotsAre(
+        controller, {std::nullopt, std::nullopt, SK_ColorBLUE, SK_ColorGREEN,
+                     SK_ColorRED, std::nullopt});
+    ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
+  }
+  {
+    SCOPED_TRACE(
+        "[red, webui_green, blue&, webui_green&, webui_red&, red*] -> "
+        "[red, webui_green, blue&, webui_green&, webui_red*, red&]");
+    {
+      std::unique_ptr<NavigationEntryScreenshot> screenshot =
+          controller.GetNavigationEntryScreenshotCache()->RemoveScreenshot(
+              controller.GetEntryAtOffset(-1));
+      ExpectScreenshotIsColor(screenshot.get(), SK_ColorRED);
+    }
+    HistoryNavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                                 -1);
+    AssertOrderedScreenshotsAre(
+        controller, {std::nullopt, std::nullopt, SK_ColorBLUE, SK_ColorGREEN,
+                     std::nullopt, SK_ColorRED});
+    ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
+  }
+  {
+    SCOPED_TRACE(
+        "[red, webui_green, blue&, webui_green&, webui_red*, red&] -> "
+        "[red, webui_green, blue*, webui_green&, webui_red&, red&]");
+    {
+      std::unique_ptr<NavigationEntryScreenshot> screenshot =
+          controller.GetNavigationEntryScreenshotCache()->RemoveScreenshot(
+              controller.GetEntryAtOffset(-2));
+      ExpectScreenshotIsColor(screenshot.get(), SK_ColorBLUE);
+    }
+    HistoryNavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                                 -2);
+    AssertOrderedScreenshotsAre(
+        controller, {std::nullopt, std::nullopt, std::nullopt, SK_ColorGREEN,
+                     SK_ColorRED, SK_ColorRED});
+    ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         NavigationEntryScreenshotBrowserTestWithWebUI,
                          ::testing::ValuesIn(kNavTypes),
                          &DescribeNavType);
 
@@ -1132,6 +1310,339 @@ INSTANTIATE_TEST_SUITE_P(
                                              .enable_bfcache = true},
          ScreenshotCaptureTestNavigationType{.same_origin = true,
                                              .enable_bfcache = false}}),
+    &DescribeNavType);
+
+namespace {
+
+void NavigateTabAndWaitForScreenshotCachedSameDoc(
+    WebContents* tab,
+    NavigationControllerImpl& controller,
+    const GURL& destination) {
+  NavigateTabAndWaitForScreenshotCached(tab, controller, destination, true);
+}
+
+void HistoryNavigateTabAndWaitForScreenshotCachedSameDoc(
+    WebContents* tab,
+    NavigationControllerImpl& controller,
+    int offset) {
+  HistoryNavigateTabAndWaitForScreenshotCached(tab, controller, offset, true);
+}
+
+}  // namespace
+
+class SameDocNavigationEntryScreenshotBrowserTest
+    : public NavigationEntryScreenshotBrowserTestBase {
+ public:
+  SameDocNavigationEntryScreenshotBrowserTest() = default;
+  ~SameDocNavigationEntryScreenshotBrowserTest() override = default;
+
+  void SetUp() override {
+    if (base::SysInfo::GetAndroidHardwareEGL() == "emulation") {
+      // crbug.com/337886037 and crrev.com/c/5504854/comment/b81b8fb6_95fb1381/:
+      // The CopyOutputRequests crash the GPU process. ANGLE is exporting the
+      // native fence support on Android emulators but it doesn't work properly.
+      GTEST_SKIP();
+    }
+    NavigationEntryScreenshotBrowserTestBase::SetUp();
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    std::vector<base::test::FeatureRefAndParams> enabled_features = {
+        {blink::features::kBackForwardTransitions, {}},
+        {blink::features::kIncrementLocalSurfaceIdForMainframeSameDocNavigation,
+         {}}};
+
+    scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features, {});
+
+    // Disable the vertical scroll bar, otherwise they might show up on the
+    // screenshot, making the test flaky.
+    command_line->AppendSwitch(switches::kHideScrollbars);
+    NavigationEntryScreenshotBrowserTestBase::SetUpCommandLine(command_line);
+  }
+
+  void SetUpOnMainThread() override {
+    NavigationEntryScreenshotBrowserTestBase::SetUpOnMainThread();
+
+    ASSERT_TRUE(NavigateToURL(web_contents(), embedded_test_server()->GetURL(
+                                                  "/changing_color.html")));
+    WaitForCopyableViewInWebContents(web_contents());
+
+    mojo::ScopedAllowSyncCallForTesting allowed_for_testing;
+    GetHostFrameSinkManager()->SetSameDocNavigationScreenshotSizeForTesting(
+        GetScaledViewportSize());
+  }
+
+  gfx::Rect GetCompareRegion() { return gfx::Rect(GetScaledViewportSize()); }
+
+  GURL GetURL(const std::string& hash) {
+    return embedded_test_server()->GetURL("/changing_color.html" + hash);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(SameDocNavigationEntryScreenshotBrowserTest, Basic) {
+  const size_t page_size = GetScaledViewportSizeInBytes();
+  const size_t memory_budget = 10 * page_size;
+  auto* manager = GetManagerForTab(web_contents());
+  manager->SetMemoryBudgetForTesting(memory_budget);
+  auto& controller = web_contents()->GetController();
+
+  {
+    SCOPED_TRACE("[red*] -> [red&, green*]");
+    NavigateTabAndWaitForScreenshotCachedSameDoc(web_contents(), controller,
+                                                 GetURL("#green"));
+    AssertCacheHitOrMissReasonsAre(
+        controller, {CacheHitOrMissReason::kCacheHit, std::nullopt});
+    AssertOrderedScreenshotsAre(controller, {SK_ColorRED, std::nullopt},
+                                GetCompareRegion());
+    ASSERT_EQ(manager->GetCurrentCacheSize(), 1 * page_size);
+  }
+  {
+    SCOPED_TRACE("[red&, green*] -> [red&, green&, blue*]");
+    NavigateTabAndWaitForScreenshotCachedSameDoc(web_contents(), controller,
+                                                 GetURL("#blue"));
+    AssertCacheHitOrMissReasonsAre(
+        controller, {CacheHitOrMissReason::kCacheHit,
+                     CacheHitOrMissReason::kCacheHit, std::nullopt});
+    AssertOrderedScreenshotsAre(controller,
+                                {SK_ColorRED, SK_ColorGREEN, std::nullopt},
+                                GetCompareRegion());
+    ASSERT_EQ(manager->GetCurrentCacheSize(), 2 * page_size);
+  }
+  {
+    SCOPED_TRACE("[red&, green&, blue*] -> [red&, green&, blue&, red*]");
+    NavigateTabAndWaitForScreenshotCachedSameDoc(web_contents(), controller,
+                                                 GetURL("#red"));
+    AssertCacheHitOrMissReasonsAre(
+        controller,
+        {CacheHitOrMissReason::kCacheHit, CacheHitOrMissReason::kCacheHit,
+         CacheHitOrMissReason::kCacheHit, std::nullopt});
+    AssertOrderedScreenshotsAre(
+        controller, {SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, std::nullopt},
+        GetCompareRegion());
+    ASSERT_EQ(manager->GetCurrentCacheSize(), 3 * page_size);
+  }
+  {
+    SCOPED_TRACE("[red&, green&, blue&, red*] -> [red&, green&, blue*, red&]");
+    HistoryNavigateTabAndWaitForScreenshotCachedSameDoc(web_contents(),
+                                                        controller, -1);
+    AssertCacheHitOrMissReasonsAre(
+        controller,
+        {CacheHitOrMissReason::kCacheHit, CacheHitOrMissReason::kCacheHit,
+         std::nullopt, CacheHitOrMissReason::kCacheHit});
+    AssertOrderedScreenshotsAre(
+        controller, {SK_ColorRED, SK_ColorGREEN, std::nullopt, SK_ColorRED},
+        GetCompareRegion());
+    ASSERT_EQ(manager->GetCurrentCacheSize(), 3 * page_size);
+  }
+  {
+    SCOPED_TRACE("[red&, green&, blue*, red&] -> [red*, green&, blue&, red&]");
+    HistoryNavigateTabAndWaitForScreenshotCachedSameDoc(web_contents(),
+                                                        controller, -2);
+    AssertCacheHitOrMissReasonsAre(
+        controller,
+        {std::nullopt, CacheHitOrMissReason::kCacheHit,
+         CacheHitOrMissReason::kCacheHit, CacheHitOrMissReason::kCacheHit});
+    AssertOrderedScreenshotsAre(
+        controller, {std::nullopt, SK_ColorGREEN, SK_ColorBLUE, SK_ColorRED},
+        GetCompareRegion());
+    ASSERT_EQ(manager->GetCurrentCacheSize(), 3 * page_size);
+  }
+}
+
+namespace {
+using NavigationEntryScreenshotCacheHitOrMissReasonBrowserTest =
+    NavigationEntryScreenshotBrowserTest;
+}  // namespace
+
+IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotCacheHitOrMissReasonBrowserTest,
+                       BasicNavigations) {
+  // Max of three screenshots per Profile (BrowserContext).
+  const size_t page_size = GetScaledViewportSizeInBytes();
+  const size_t memory_budget = 3 * page_size;
+  auto* manager = GetManagerForTab(web_contents());
+  manager->SetMemoryBudgetForTesting(memory_budget);
+  auto& controller = web_contents()->GetController();
+
+  {
+    SCOPED_TRACE("[red*] -> [red&, green*]");
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          GetNextUrl("/green.html"));
+    AssertCacheHitOrMissReasonsAre(
+        controller, {CacheHitOrMissReason::kCacheHit, std::nullopt});
+    AssertOrderedScreenshotsAre(controller, {SK_ColorRED, std::nullopt});
+    ASSERT_EQ(manager->GetCurrentCacheSize(), 1 * page_size);
+  }
+  {
+    SCOPED_TRACE("[red&, green*] -> [red&, green&, blue*]");
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          GetNextUrl("/blue.html"));
+    AssertCacheHitOrMissReasonsAre(
+        controller, {CacheHitOrMissReason::kCacheHit,
+                     CacheHitOrMissReason::kCacheHit, std::nullopt});
+    AssertOrderedScreenshotsAre(controller,
+                                {SK_ColorRED, SK_ColorGREEN, std::nullopt});
+    ASSERT_EQ(manager->GetCurrentCacheSize(), 2 * page_size);
+  }
+  {
+    SCOPED_TRACE(
+        "[red&, green&, blue*] -> "
+        "[red&, green&, blue&, green*]");
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          GetNextUrl("/green.html"));
+    AssertCacheHitOrMissReasonsAre(
+        controller,
+        {CacheHitOrMissReason::kCacheHit, CacheHitOrMissReason::kCacheHit,
+         CacheHitOrMissReason::kCacheHit, std::nullopt});
+    AssertOrderedScreenshotsAre(
+        controller, {SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, std::nullopt});
+    ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
+  }
+  {
+    SCOPED_TRACE(
+        "[red&, green&, blue&, green*] -> "
+        "[red, green&, blue&, green&, red*]");
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          GetNextUrl("/red.html"));
+    AssertCacheHitOrMissReasonsAre(
+        controller,
+        {CacheHitOrMissReason::kCacheMissEvicted,
+         CacheHitOrMissReason::kCacheHit, CacheHitOrMissReason::kCacheHit,
+         CacheHitOrMissReason::kCacheHit, std::nullopt});
+    AssertOrderedScreenshotsAre(
+        controller, {std::nullopt, SK_ColorGREEN, SK_ColorBLUE, SK_ColorGREEN,
+                     std::nullopt});
+    ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
+  }
+  {
+    SCOPED_TRACE(
+        "[red, green&, blue&, green&, red*] -> "
+        "[red, green&, blue&, green*, red&]");
+    {
+      std::unique_ptr<NavigationEntryScreenshot> screenshot =
+          controller.GetNavigationEntryScreenshotCache()->RemoveScreenshot(
+              controller.GetEntryAtOffset(-1));
+      ExpectScreenshotIsColor(screenshot.get(), SK_ColorGREEN);
+      AssertCacheHitOrMissReasonsAre(
+          controller,
+          {CacheHitOrMissReason::kCacheMissEvicted,
+           CacheHitOrMissReason::kCacheHit, CacheHitOrMissReason::kCacheHit,
+           std::nullopt, std::nullopt});
+    }
+    HistoryNavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                                 -1);
+    AssertCacheHitOrMissReasonsAre(
+        controller,
+        {CacheHitOrMissReason::kCacheMissEvicted,
+         CacheHitOrMissReason::kCacheHit, CacheHitOrMissReason::kCacheHit,
+         std::nullopt, CacheHitOrMissReason::kCacheHit});
+    AssertOrderedScreenshotsAre(
+        controller,
+        {std::nullopt, SK_ColorGREEN, SK_ColorBLUE, std::nullopt, SK_ColorRED});
+    ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
+  }
+}
+
+IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotCacheHitOrMissReasonBrowserTest,
+                       PurgeForMemoryPressure) {
+  // Max of three screenshots per Profile (BrowserContext).
+  const size_t page_size = GetScaledViewportSizeInBytes();
+  const size_t memory_budget = 3 * page_size;
+  auto* manager = GetManagerForTab(web_contents());
+  manager->SetMemoryBudgetForTesting(memory_budget);
+  auto& controller = web_contents()->GetController();
+  {
+    SCOPED_TRACE("[red*] -> [red, green&, blue&, green&, red*]");
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          GetNextUrl("/green.html"));
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          GetNextUrl("/blue.html"));
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          GetNextUrl("/green.html"));
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          GetNextUrl("/red.html"));
+    AssertCacheHitOrMissReasonsAre(
+        controller,
+        {CacheHitOrMissReason::kCacheMissEvicted,
+         CacheHitOrMissReason::kCacheHit, CacheHitOrMissReason::kCacheHit,
+         CacheHitOrMissReason::kCacheHit, std::nullopt});
+    AssertOrderedScreenshotsAre(
+        controller, {std::nullopt, SK_ColorGREEN, SK_ColorBLUE, SK_ColorGREEN,
+                     std::nullopt});
+    ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
+  }
+  {
+    SCOPED_TRACE(
+        "[red, green&, blue&, green&, red*] -> "
+        "[red, green, blue, green, red]");
+
+    controller.GetNavigationEntryScreenshotCache()->PurgeForMemoryPressure();
+    AssertCacheHitOrMissReasonsAre(
+        controller,
+        {CacheHitOrMissReason::kCacheMissEvicted,
+         CacheHitOrMissReason::kCacheMissPurgedMemoryPressure,
+         CacheHitOrMissReason::kCacheMissPurgedMemoryPressure,
+         CacheHitOrMissReason::kCacheMissPurgedMemoryPressure, std::nullopt});
+    AssertOrderedScreenshotsAre(
+        controller,
+        {std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt});
+  }
+}
+
+// To make sure the enum is set correctly when the user initiates a preview, the
+// cancels the gesture, then re-initiates the gesture.
+IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotCacheHitOrMissReasonBrowserTest,
+                       CancelAndReinitiateGesture) {
+  // Max of three screenshots per Profile (BrowserContext).
+  const size_t page_size = GetScaledViewportSizeInBytes();
+  const size_t memory_budget = 3 * page_size;
+  auto* manager = GetManagerForTab(web_contents());
+  manager->SetMemoryBudgetForTesting(memory_budget);
+  auto& controller = web_contents()->GetController();
+  {
+    SCOPED_TRACE("[red*] -> [red&, green&]");
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          GetNextUrl("/green.html"));
+    AssertCacheHitOrMissReasonsAre(
+        controller, {CacheHitOrMissReason::kCacheHit, std::nullopt});
+    AssertOrderedScreenshotsAre(controller, {SK_ColorRED, std::nullopt});
+  }
+  {
+    SCOPED_TRACE(
+        "[red&, green*] -> "
+        "[red*, green&]");
+    {
+      // Testing the scenario of canceling a gesture and redoing it.
+      // (e.g. Cancelling a swipe and swiping again after.)
+      std::unique_ptr<NavigationEntryScreenshot> screenshot1 =
+          controller.GetNavigationEntryScreenshotCache()->RemoveScreenshot(
+              controller.GetEntryAtOffset(-1));
+      AssertCacheHitOrMissReasonsAre(controller, {std::nullopt, std::nullopt});
+
+      controller.GetNavigationEntryScreenshotCache()->SetScreenshot(
+          nullptr, std::move(screenshot1), false);
+      AssertCacheHitOrMissReasonsAre(
+          controller, {CacheHitOrMissReason::kCacheHit, std::nullopt});
+
+      std::unique_ptr<NavigationEntryScreenshot> screenshot2 =
+          controller.GetNavigationEntryScreenshotCache()->RemoveScreenshot(
+              controller.GetEntryAtOffset(-1));
+      ExpectScreenshotIsColor(screenshot2.get(), SK_ColorRED);
+    }
+    HistoryNavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                                 -1);
+    AssertCacheHitOrMissReasonsAre(
+        controller, {std::nullopt, CacheHitOrMissReason::kCacheHit});
+    AssertOrderedScreenshotsAre(controller, {std::nullopt, SK_ColorGREEN});
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    NavigationEntryScreenshotCacheHitOrMissReasonBrowserTest,
+    ::testing::ValuesIn(kNavTypes),
     &DescribeNavType);
 
 }  // namespace content

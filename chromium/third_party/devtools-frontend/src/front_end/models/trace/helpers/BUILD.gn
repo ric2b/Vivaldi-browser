@@ -10,7 +10,9 @@ import("../../visibility.gni")
 devtools_module("helpers") {
   sources = [
     "Extensions.ts",
+    "Network.ts",
     "SamplesIntegrator.ts",
+    "SyntheticEvents.ts",
     "Timing.ts",
     "Trace.ts",
     "TreeHelpers.ts",
@@ -41,6 +43,7 @@ ts_library("unittests") {
 
   sources = [
     "SamplesIntegrator.test.ts",
+    "SyntheticEvents.test.ts",
     "Timing.test.ts",
     "Trace.test.ts",
     "TreeHelpers.test.ts",

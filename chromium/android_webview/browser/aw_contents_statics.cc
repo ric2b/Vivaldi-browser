@@ -8,7 +8,6 @@
 #include "android_webview/browser/aw_contents_io_thread_client.h"
 #include "android_webview/browser/aw_crash_keys.h"
 #include "android_webview/browser/safe_browsing/aw_safe_browsing_allowlist_manager.h"
-#include "android_webview/browser_jni_headers/AwContentsStatics_jni.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
@@ -26,6 +25,9 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/url_constants.h"
 #include "net/cert/cert_database.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "android_webview/browser_jni_headers/AwContentsStatics_jni.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
@@ -164,7 +166,7 @@ ScopedJavaLocalRef<jstring> JNI_AwContentsStatics_GetVariationsHeader(
       variations::VariationsIdsProvider::GetInstance()->GetClientDataHeaders(
           is_signed_in);
   if (!headers)
-    return base::android::ConvertUTF8ToJavaString(env, "");
+    return jni_zero::g_empty_string.AsLocalRef(env);
   return base::android::ConvertUTF8ToJavaString(
       env,
       headers->headers_map.at(variations::mojom::GoogleWebVisibility::ANY));

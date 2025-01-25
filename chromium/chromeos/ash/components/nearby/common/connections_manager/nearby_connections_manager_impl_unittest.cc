@@ -11,6 +11,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -55,6 +56,9 @@ const std::vector<uint8_t> kInvalidBluetoothMacAddress = {0x07, 0x07, 0x07};
 
 // Timeout for initiating a connection to a remote device.
 constexpr base::TimeDelta kInitiateNearbyConnectionTimeout = base::Seconds(60);
+
+constexpr base::TimeDelta kConnectV3ToSuccessfulConnectionLatency =
+    base::Milliseconds(123u);
 
 void VerifyFileReadWrite(base::File& input_file, base::File& output_file) {
   base::ScopedAllowBlockingForTesting allow_blocking;
@@ -165,6 +169,11 @@ class MockBandwidthUpgradeListener
     : public NearbyConnectionsManager::BandwidthUpgradeListener {
  public:
   MOCK_METHOD(void,
+              OnInitialMedium,
+              (const std::string& endpoint_id, const Medium medium),
+              (override));
+
+  MOCK_METHOD(void,
               OnBandwidthUpgrade,
               (const std::string& endpoint_id, const Medium medium),
               (override));
@@ -189,6 +198,7 @@ class NearbyConnectionsManagerImplTest : public testing::Test {
         std::make_unique<NearbyConnectionsManagerImpl>(&nearby_process_manager_,
                                                        kServiceId);
     scoped_feature_list_.InitAndEnableFeature(features::kNearbySharingWebRtc);
+    histogram_tester_ = std::make_unique<base::HistogramTester>();
 
     EXPECT_CALL(nearby_process_manager_, GetNearbyProcessReference)
         .WillRepeatedly([&](ash::nearby::NearbyProcessManager::
@@ -228,6 +238,8 @@ class NearbyConnectionsManagerImplTest : public testing::Test {
           EXPECT_TRUE(options->allowed_mediums->ble);
           EXPECT_EQ(should_use_web_rtc_, options->allowed_mediums->web_rtc);
           EXPECT_FALSE(options->allowed_mediums->wifi_lan);
+          EXPECT_EQ(should_use_wifidirect_,
+                    options->allowed_mediums->wifi_direct);
           EXPECT_EQ(
               device::BluetoothUUID("0000fef3-0000-1000-8000-00805f9b34fb"),
               options->fast_advertisement_service_uuid);
@@ -494,6 +506,7 @@ class NearbyConnectionsManagerImplTest : public testing::Test {
             EXPECT_FALSE(nearby_connection);
           }
         }));
+    task_environment_.FastForwardBy(kConnectV3ToSuccessfulConnectionLatency);
 
     request_connection_run_loop.Run();
     if (info_v3->authentication_status ==
@@ -534,11 +547,15 @@ class NearbyConnectionsManagerImplTest : public testing::Test {
     accept_or_reject_run_loop.Run();
   }
 
+  base::HistogramTester* histogram_tester() { return histogram_tester_.get(); }
+
   base::test::ScopedFeatureList scoped_feature_list_;
+  std::unique_ptr<base::HistogramTester> histogram_tester_;
   content::BrowserTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   bool should_use_web_rtc_ = true;
   bool should_use_wifilan_ = false;
+  bool should_use_wifidirect_ = false;
   NearbyConnectionsManager::DataUsage default_data_usage_ =
       NearbyConnectionsManager::DataUsage::kWifiOnly;
   std::unique_ptr<net::test::MockNetworkChangeNotifier> network_notifier_ =
@@ -656,6 +673,7 @@ using ConnectionMediumsTestParam =
     std::tuple<NearbyConnectionsManager::DataUsage,
                net::NetworkChangeNotifier::ConnectionType,
                bool,
+               bool,
                bool>;
 class NearbyConnectionsManagerImplTestConnectionMediums
     : public NearbyConnectionsManagerImplTest,
@@ -669,6 +687,7 @@ TEST_P(NearbyConnectionsManagerImplTestConnectionMediums,
       std::get<1>(param);
   bool is_webrtc_enabled = std::get<2>(GetParam());
   bool is_wifilan_enabled = std::get<3>(GetParam());
+  bool is_wifidirect_enabled = std::get<4>(GetParam());
 
   std::vector<base::test::FeatureRef> enabled_features;
   std::vector<base::test::FeatureRef> disabled_features;
@@ -681,6 +700,11 @@ TEST_P(NearbyConnectionsManagerImplTestConnectionMediums,
     enabled_features.push_back(features::kNearbySharingWifiLan);
   } else {
     disabled_features.push_back(features::kNearbySharingWifiLan);
+  }
+  if (is_wifidirect_enabled) {
+    enabled_features.push_back(features::kNearbySharingWifiDirect);
+  } else {
+    disabled_features.push_back(features::kNearbySharingWifiDirect);
   }
   scoped_feature_list_.Reset();
   scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
@@ -699,13 +723,15 @@ TEST_P(NearbyConnectionsManagerImplTestConnectionMediums,
   should_use_web_rtc_ = is_webrtc_enabled && should_use_internet;
   should_use_wifilan_ = is_wifilan_enabled && should_use_internet &&
                         is_connection_wifi_or_ethernet;
+  should_use_wifidirect_ = is_wifidirect_enabled;
 
   // TODO(crbug.com/1129069): Update when WiFi LAN is supported.
   auto expected_mediums = MediumSelection::New(
       /*bluetooth=*/true,
       /*ble=*/false,
       /*web_rtc=*/should_use_web_rtc_,
-      /*wifi_lan=*/should_use_wifilan_);
+      /*wifi_lan=*/should_use_wifilan_,
+      /*wifi_direct=*/should_use_wifidirect_);
 
   // StartDiscovery will succeed.
   mojo::Remote<EndpointDiscoveryListener> discovery_listener_remote;
@@ -747,6 +773,7 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(net::NetworkChangeNotifier::CONNECTION_NONE,
                         net::NetworkChangeNotifier::CONNECTION_WIFI,
                         net::NetworkChangeNotifier::CONNECTION_3G),
+        testing::Bool(),
         testing::Bool(),
         testing::Bool()));
 /******************************************************************************/
@@ -1749,7 +1776,8 @@ TEST_P(NearbyConnectionsManagerImplTestMediums, StartAdvertising_Options) {
       /*bluetooth=*/is_high_power,
       /*ble=*/use_ble,
       /*web_rtc=*/should_use_web_rtc_,
-      /*wifi_lan=*/false);
+      /*wifi_lan=*/false,
+      /*wifi_direct=*/false);
 
   base::RunLoop run_loop;
   const std::vector<uint8_t> local_endpoint_info(std::begin(kEndpointInfo),
@@ -2058,6 +2086,9 @@ TEST_F(NearbyConnectionsManagerImplTest, OnConnectionTimedOutV3) {
   on_connection_timed_out_run_loop.Run();
 
   EXPECT_FALSE(nearby_connection);
+  histogram_tester()->ExpectTimeBucketCount(
+      "Nearby.Connections.V3.ConnectionResult.Success.Latency",
+      kConnectV3ToSuccessfulConnectionLatency, 0);
 }
 
 TEST_F(NearbyConnectionsManagerImplTest, RequestConnectionV3Accept) {
@@ -2073,6 +2104,14 @@ TEST_F(NearbyConnectionsManagerImplTest, RequestConnectionV3Accept) {
                 /*is_incoming_connection=*/false,
                 nearby::connections::mojom::AuthenticationStatus::kSuccess),
             /*on_connection_result_status=*/Status::kSuccess);
+
+  histogram_tester()->ExpectBucketCount(
+      "Nearby.Connections.V3.Connection.Result", Status::kSuccess, 1);
+  histogram_tester()->ExpectTotalCount(
+      "Nearby.Connections.V3.Connection.Result", 1);
+  histogram_tester()->ExpectTimeBucketCount(
+      "Nearby.Connections.V3.ConnectionResult.Success.Latency",
+      kConnectV3ToSuccessfulConnectionLatency, 1);
 }
 
 TEST_F(NearbyConnectionsManagerImplTest, RequestConnectionV3Reject) {
@@ -2103,6 +2142,14 @@ TEST_F(NearbyConnectionsManagerImplTest, OnConnectionResultV3Rejected) {
                 /*is_incoming_connection=*/false,
                 nearby::connections::mojom::AuthenticationStatus::kFailure),
             /*on_connection_result_status=*/Status::kError);
+
+  histogram_tester()->ExpectBucketCount(
+      "Nearby.Connections.V3.Connection.Result", Status::kError, 1);
+  histogram_tester()->ExpectTotalCount(
+      "Nearby.Connections.V3.Connection.Result", 1);
+  histogram_tester()->ExpectTimeBucketCount(
+      "Nearby.Connections.V3.ConnectionResult.Success.Latency",
+      kConnectV3ToSuccessfulConnectionLatency, 0);
 }
 
 TEST_F(NearbyConnectionsManagerImplTest, DisconnectV3) {
@@ -2118,6 +2165,10 @@ TEST_F(NearbyConnectionsManagerImplTest, DisconnectV3) {
                 /*is_incoming_connection=*/false,
                 nearby::connections::mojom::AuthenticationStatus::kSuccess),
             /*on_connection_result_status=*/Status::kSuccess);
+
+  histogram_tester()->ExpectTimeBucketCount(
+      "Nearby.Connections.V3.ConnectionResult.Success.Latency",
+      kConnectV3ToSuccessfulConnectionLatency, 1);
 
   base::RunLoop disconnect_run_loop;
   EXPECT_CALL(nearby_connections_, DisconnectFromDeviceV3)
@@ -2213,11 +2264,15 @@ TEST_F(NearbyConnectionsManagerImplTest, OnBandwidthChangedV3) {
       presence_device.GetEndpointId(),
       nearby::connections::mojom::BandwidthInfo::New(BandwidthQuality::kMedium,
                                                      Medium::kBluetooth));
+  histogram_tester()->ExpectTotalCount(
+      "Nearby.Connections.V3.Medium.ChangedToMedium", 0);
   connection_listener_v3_remote->OnBandwidthChangedV3(
       presence_device.GetEndpointId(),
       nearby::connections::mojom::BandwidthInfo::New(BandwidthQuality::kHigh,
                                                      Medium::kWebRtc));
   bandwidth_run_loop.Run();
+  histogram_tester()->ExpectBucketCount(
+      "Nearby.Connections.V3.Medium.ChangedToMedium", Medium::kWebRtc, 1);
 }
 
 TEST_F(NearbyConnectionsManagerImplTest, PayloadListenerV3RemoteCallbacks) {
@@ -2262,4 +2317,138 @@ TEST_F(NearbyConnectionsManagerImplTest, PayloadListenerV3RemoteCallbacks) {
       PayloadTransferUpdate::New(kPayloadId, PayloadStatus::kSuccess,
                                  kTotalSize, /*bytes_transferred=*/kTotalSize));
   payload_transfer_update_run_loop.Run();
+}
+
+TEST_F(NearbyConnectionsManagerImplTest, InjectBluetoothEndpoint_Success) {
+  mojo::Remote<EndpointDiscoveryListener> discovery_listener_remote;
+  testing::NiceMock<MockDiscoveryListener> discovery_listener;
+  StartDiscovery(discovery_listener_remote, discovery_listener);
+
+  const std::vector<uint8_t> endpoint_info(std::begin(kEndpointInfo),
+                                           std::end(kEndpointInfo));
+  base::RunLoop run_loop;
+  base::OnceCallback<void(nearby::connections::mojom::Status)> callback =
+      base::BindLambdaForTesting(
+          [&run_loop](nearby::connections::mojom::Status status) {
+            EXPECT_EQ(status, nearby::connections::mojom::Status::kSuccess);
+            run_loop.Quit();
+          });
+  EXPECT_CALL(
+      nearby_connections_,
+      InjectBluetoothEndpoint(testing::Eq(kServiceId), testing::Eq(kEndpointId),
+                              testing::Eq(endpoint_info),
+                              testing::Eq(kBluetoothMacAddress), testing::_))
+      .WillOnce([&](const std::string& service_id,
+                    const std::string& endpoint_id,
+                    const std::vector<uint8_t> endpoint_info,
+                    const std::vector<uint8_t> bluetooth_mac_address,
+                    base::OnceCallback<void(nearby::connections::mojom::Status)>
+                        callback) {
+        EXPECT_EQ(kServiceId, service_id);
+        EXPECT_EQ(kEndpointId, endpoint_id);
+        EXPECT_EQ(std::vector<uint8_t>(std::begin(kEndpointInfo),
+                                       std::end(kEndpointInfo)),
+                  endpoint_info);
+        EXPECT_EQ(kBluetoothMacAddress, bluetooth_mac_address);
+        std::move(callback).Run(nearby::connections::mojom::Status::kSuccess);
+      });
+
+  nearby_connections_manager_->InjectBluetoothEndpoint(
+      kServiceId, kEndpointId, endpoint_info, kBluetoothMacAddress,
+      std::move(callback));
+  run_loop.Run();
+}
+
+TEST_F(NearbyConnectionsManagerImplTest,
+       InjectBluetoothEndpoint_Error_EndpointIdShort) {
+  mojo::Remote<EndpointDiscoveryListener> discovery_listener_remote;
+  testing::NiceMock<MockDiscoveryListener> discovery_listener;
+  StartDiscovery(discovery_listener_remote, discovery_listener);
+
+  const std::vector<uint8_t> endpoint_info(std::begin(kEndpointInfo),
+                                           std::end(kEndpointInfo));
+  base::RunLoop run_loop;
+  base::OnceCallback<void(nearby::connections::mojom::Status)> callback =
+      base::BindLambdaForTesting(
+          [&run_loop](nearby::connections::mojom::Status status) {
+            EXPECT_EQ(status, nearby::connections::mojom::Status::kError);
+            run_loop.Quit();
+          });
+
+  // Provide 2-byte endpoint id instead of required 4 byte endpoint id.
+  const std::string short_endpoint_id = "BS";
+
+  nearby_connections_manager_->InjectBluetoothEndpoint(
+      kServiceId, short_endpoint_id, endpoint_info, kBluetoothMacAddress,
+      std::move(callback));
+  run_loop.Run();
+}
+
+TEST_F(NearbyConnectionsManagerImplTest,
+       InjectBluetoothEndpoint_Error_EndpointInfoSize0) {
+  mojo::Remote<EndpointDiscoveryListener> discovery_listener_remote;
+  testing::NiceMock<MockDiscoveryListener> discovery_listener;
+  StartDiscovery(discovery_listener_remote, discovery_listener);
+
+  // Provide endpoint info size 0 to expect an error.
+  const std::vector<uint8_t> endpoint_info;
+  base::RunLoop run_loop;
+  base::OnceCallback<void(nearby::connections::mojom::Status)> callback =
+      base::BindLambdaForTesting(
+          [&run_loop](nearby::connections::mojom::Status status) {
+            EXPECT_EQ(status, nearby::connections::mojom::Status::kError);
+            run_loop.Quit();
+          });
+
+  nearby_connections_manager_->InjectBluetoothEndpoint(
+      kServiceId, kEndpointId, endpoint_info, kBluetoothMacAddress,
+      std::move(callback));
+  run_loop.Run();
+}
+
+TEST_F(NearbyConnectionsManagerImplTest,
+       InjectBluetoothEndpoint_Error_EndpointInfoSize131) {
+  mojo::Remote<EndpointDiscoveryListener> discovery_listener_remote;
+  testing::NiceMock<MockDiscoveryListener> discovery_listener;
+  StartDiscovery(discovery_listener_remote, discovery_listener);
+
+  // Provide endpoint info size >130 to expect an error.
+  const std::vector<uint8_t> endpoint_info(131, 0);
+  base::RunLoop run_loop;
+  base::OnceCallback<void(nearby::connections::mojom::Status)> callback =
+      base::BindLambdaForTesting(
+          [&run_loop](nearby::connections::mojom::Status status) {
+            EXPECT_EQ(status, nearby::connections::mojom::Status::kError);
+            run_loop.Quit();
+          });
+
+  nearby_connections_manager_->InjectBluetoothEndpoint(
+      kServiceId, kEndpointId, endpoint_info, kBluetoothMacAddress,
+      std::move(callback));
+  run_loop.Run();
+}
+
+TEST_F(NearbyConnectionsManagerImplTest,
+       InjectBluetoothEndpoint_Error_BluetoothMacAddressSizeNot6) {
+  mojo::Remote<EndpointDiscoveryListener> discovery_listener_remote;
+  testing::NiceMock<MockDiscoveryListener> discovery_listener;
+  StartDiscovery(discovery_listener_remote, discovery_listener);
+
+  const std::vector<uint8_t> endpoint_info(std::begin(kEndpointInfo),
+                                           std::end(kEndpointInfo));
+  base::RunLoop run_loop;
+  base::OnceCallback<void(nearby::connections::mojom::Status)> callback =
+      base::BindLambdaForTesting(
+          [&run_loop](nearby::connections::mojom::Status status) {
+            EXPECT_EQ(status, nearby::connections::mojom::Status::kError);
+            run_loop.Quit();
+          });
+
+  // Provide a bluetooth mac address with size !=6 to expect an error.
+  const std::vector<uint8_t> err_bluetooth_mac_address(7, 0);
+
+  nearby_connections_manager_->InjectBluetoothEndpoint(
+      kServiceId, kEndpointId, endpoint_info, err_bluetooth_mac_address,
+      std::move(callback));
+  run_loop.Run();
 }

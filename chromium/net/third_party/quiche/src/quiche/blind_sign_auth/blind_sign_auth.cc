@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/algorithm/container.h"
 #include "absl/functional/bind_front.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -148,6 +149,9 @@ void BlindSignAuth::GeneratePrivacyPassTokens(
   std::vector<uint16_t> kExpectedExtensionTypes = {
       /*ExpirationTimestamp=*/0x0001, /*GeoHint=*/0x0002,
       /*ServiceType=*/0xF001, /*DebugMode=*/0xF002, /*ProxyLayer=*/0xF003};
+  // TODO(b/345801768): Improve the API of
+  // `anonymous_tokens::ValidateExtensionsOrderAndValues` to
+  // avoid any possible TOCTOU problems.
   absl::Status result =
       anonymous_tokens::ValidateExtensionsOrderAndValues(
           *extensions, absl::MakeSpan(kExpectedExtensionTypes), absl::Now());
@@ -167,6 +171,11 @@ void BlindSignAuth::GeneratePrivacyPassTokens(
   }
   absl::Time public_metadata_expiry_time =
       absl::FromUnixSeconds(expiration_timestamp->timestamp);
+
+  absl::StatusOr<anonymous_tokens::GeoHint> geo_hint =
+      anonymous_tokens::GeoHint::FromExtension(
+          extensions->extensions.at(1));
+  QUICHE_CHECK(geo_hint.ok());
 
   // Create token challenge.
   anonymous_tokens::TokenChallenge challenge;
@@ -248,7 +257,7 @@ void BlindSignAuth::GeneratePrivacyPassTokens(
       absl::bind_front(&BlindSignAuth::PrivacyPassAuthAndSignCallback, this,
                        std::move(initial_data_response.privacy_pass_data()
                                      .public_metadata_extensions()),
-                       public_metadata_expiry_time, *use_case,
+                       public_metadata_expiry_time, *geo_hint, *use_case,
                        std::move(privacy_pass_clients), std::move(callback));
   // TODO(b/304811277): remove other usages of string.data()
   fetcher_->DoRequest(BlindSignMessageRequestType::kAuthAndSign, oauth_token,
@@ -258,6 +267,7 @@ void BlindSignAuth::GeneratePrivacyPassTokens(
 
 void BlindSignAuth::PrivacyPassAuthAndSignCallback(
     std::string encoded_extensions, absl::Time public_key_expiry_time,
+    anonymous_tokens::GeoHint geo_hint,
     anonymous_tokens::AnonymousTokensUseCase use_case,
     std::vector<std::unique_ptr<anonymous_tokens::
                                     PrivacyPassRsaBssaPublicMetadataClient>>
@@ -327,12 +337,13 @@ void BlindSignAuth::PrivacyPassAuthAndSignCallback(
 
     privacy::ppn::PrivacyPassTokenData privacy_pass_token_data;
     privacy_pass_token_data.mutable_token()->assign(
-        absl::WebSafeBase64Escape(*marshaled_token));
+        ConvertBase64ToWebSafeBase64(absl::Base64Escape(*marshaled_token)));
     privacy_pass_token_data.mutable_encoded_extensions()->assign(
-        absl::WebSafeBase64Escape(encoded_extensions));
+        ConvertBase64ToWebSafeBase64(absl::Base64Escape(encoded_extensions)));
     privacy_pass_token_data.set_use_case_override(use_case);
-    tokens_vec.push_back(BlindSignToken{
-        privacy_pass_token_data.SerializeAsString(), public_key_expiry_time});
+    tokens_vec.push_back(
+        BlindSignToken{privacy_pass_token_data.SerializeAsString(),
+                       public_key_expiry_time, geo_hint});
   }
 
   std::move(callback)(absl::Span<BlindSignToken>(tokens_vec));
@@ -350,6 +361,13 @@ privacy::ppn::ProxyLayer BlindSignAuth::QuicheProxyLayerToPpnProxyLayer(
   }
 }
 
+std::string BlindSignAuth::ConvertBase64ToWebSafeBase64(
+    std::string base64_string) {
+  absl::c_replace(base64_string, /*old_value=*/'+', /*new_value=*/'-');
+  absl::c_replace(base64_string, /*old_value=*/'/', /*new_value=*/'_');
+  return base64_string;
+}
+
 std::string BlindSignAuthServiceTypeToString(
     quiche::BlindSignAuthServiceType service_type) {
   switch (service_type) {
@@ -360,7 +378,10 @@ std::string BlindSignAuthServiceTypeToString(
       return "cronetipblinding";
     }
     case BlindSignAuthServiceType::kWebviewIpBlinding: {
-      return "webviewipblinding";
+      // Currently WebView uses the same service type as Chrome.
+      // TODO(b/280621504): Change this once we have a more specific service
+      // type.
+      return "chromeipblinding";
     }
   }
 }

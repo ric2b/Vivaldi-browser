@@ -18,6 +18,8 @@ crypto_provider.workspace = true
 crypto_provider_default = { workspace = true, default-features = false }
 lock_adapter.workspace = true
 lazy_static.workspace = true
+strum.workspace = true
+strum_macros.workspace = true
 
 [features]
 default = ["rustcrypto"]

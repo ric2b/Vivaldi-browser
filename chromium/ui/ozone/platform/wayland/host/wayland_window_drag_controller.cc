@@ -128,6 +128,22 @@ bool WaylandWindowDragController::StartDragSession(
   if (state_ != State::kIdle)
     return true;
 
+  // TODO(crbug.com/340398746): This should be a CHECK instead. However
+  // currently buggy compositors, eg: KWin 6, which do not send
+  // data_source.dnd_finish|cancelled in some cases. In such a case for a data
+  // drag, the data drag controller is left in an inconsistent state and shared
+  // dragging state is not reset. This may cause chrome to crash if a window
+  // drag session is requested before the shared dragging state is reset. Reset
+  // the shared drag state in this case, revert this handling once it stabilizes
+  // at compositors side (see also comment in
+  // WaylandDataDragController::StartSession).
+  if (connection_->IsDragInProgress()) {
+    LOG(ERROR) << "Received window drag request for active data drag, "
+                  "resetting shared data device state.";
+    data_device_->ResetDragDelegate();
+    CHECK(!connection_->IsDragInProgress());
+  }
+
   auto serial = GetSerial(drag_source, origin);
   if (!serial) {
     LOG(ERROR) << "Failed to retrieve dnd serial. origin=" << origin
@@ -161,6 +177,9 @@ bool WaylandWindowDragController::StartDragSession(
                           /*icon_surface=*/nullptr, this);
   pointer_grab_owner_ = origin_window_;
   should_process_drag_motion_events_ = false;
+  has_received_enter_ = false;
+  nested_dispatcher_ =
+      PlatformEventSource::GetInstance()->OverrideDispatcher(this);
 
   // Observe window so we can take ownership of the origin surface in case it
   // is destroyed during the DND session.
@@ -244,6 +263,7 @@ void WaylandWindowDragController::OnDragEnter(WaylandWindow* window,
   CHECK(data_source_);
   CHECK(data_offer_);
 
+  has_received_enter_ = true;
   drag_target_window_ = window;
 
   // Forward focus change event to the input delegate, so other components, such
@@ -330,9 +350,9 @@ void WaylandWindowDragController::OnDragLeave(base::TimeTicks timestamp) {
 
   drag_target_window_ = nullptr;
 
-  // In order to guarantee ET_MOUSE_RELEASED event is delivered once the DND
-  // session finishes, the focused window is not reset here. This is similar to
-  // the "implicit grab" behavior implemented by Wayland compositors for
+  // In order to guarantee EventType::kMouseReleased event is delivered once the
+  // DND session finishes, the focused window is not reset here. This is similar
+  // to the "implicit grab" behavior implemented by Wayland compositors for
   // wl_pointer events. Additionally, this makes it possible for the drag
   // controller to overcome deviations in the order that wl_data_source and
   // wl_pointer events arrive when the drop happens. For example, unlike Weston
@@ -417,11 +437,13 @@ void WaylandWindowDragController::OnDataSourceFinish(WaylandDataSource* source,
   VLOG(1) << "DataSourceFinish received. completed=" << completed
           << ", state=" << state_;
   // Release DND objects.
+  nested_dispatcher_.reset();
   data_offer_.reset();
   data_source_.reset();
   extended_drag_source_.reset();
   origin_surface_.reset();
   origin_window_ = nullptr;
+  has_received_enter_ = false;
 
   // When extended-drag is available and the drop happens while a non-null
   // surface was being dragged (i.e: detached mode) which had pointer focus
@@ -467,19 +489,34 @@ void WaylandWindowDragController::OnDataSourceSend(WaylandDataSource* source,
 }
 
 bool WaylandWindowDragController::CanDispatchEvent(const PlatformEvent& event) {
-  return state_ == State::kDetached;
+  return state_ != State::kIdle;
 }
 
 uint32_t WaylandWindowDragController::DispatchEvent(
     const PlatformEvent& event) {
-  DCHECK_EQ(state_, State::kDetached);
-  DCHECK(base::CurrentUIThread::IsSet());
+  CHECK_NE(state_, State::kIdle);
+  CHECK(base::CurrentUIThread::IsSet());
 
-  if (event->type() == ET_MOUSE_MOVED || event->type() == ET_MOUSE_DRAGGED ||
-      event->type() == ET_TOUCH_MOVED) {
+  // Currently, there's no reliable way in the protocol to determine when the
+  // drag session has effectively started, so as a best-effort heuristic we
+  // consider it started once wl_data_device.enter has been received at least
+  // once.
+  auto cancel_drag_cb = base::BindOnce(
+      &WaylandWindowDragController::OnDataSourceFinish, base::Unretained(this),
+      data_source_.get(), EventTimeForNow(), /*completed=*/false);
+  if (wl::MaybeHandlePlatformEventForDrag(
+          event, /*start_drag_ack_received=*/has_received_enter_,
+          std::move(cancel_drag_cb))) {
+    return POST_DISPATCH_STOP_PROPAGATION;
+  }
+
+  if (state_ == State::kDetached &&
+      (event->type() == EventType::kMouseMoved ||
+       event->type() == EventType::kMouseDragged ||
+       event->type() == EventType::kTouchMoved)) {
     HandleMotionEvent(event->AsLocatedEvent());
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-    if (event->type() != ET_TOUCH_MOVED) {
+    if (event->type() != EventType::kTouchMoved) {
       // Pass through touch so that touch position will be updated.
       return POST_DISPATCH_STOP_PROPAGATION;
     }
@@ -488,23 +525,6 @@ uint32_t WaylandWindowDragController::DispatchEvent(
 #endif
   }
   return POST_DISPATCH_PERFORM_DEFAULT;
-}
-
-void WaylandWindowDragController::OnToplevelWindowCreated(
-    WaylandToplevelWindow* window) {
-  // Skip unless a toplevel window is getting visible while in attached mode.
-  // E.g: A window/tab is being detached in a tab dragging session.
-  if (state_ != State::kAttached)
-    return;
-
-  DCHECK(window);
-  auto origin = window->GetBoundsInDIP().origin();
-  gfx::Vector2d offset = gfx::ToFlooredPoint(pointer_location_) - origin;
-  DVLOG(1) << "Toplevel window created (detached)."
-           << " widget=" << window->GetWidget()
-           << " calculated_offset=" << offset.ToString();
-
-  SetDraggedWindow(window, offset);
 }
 
 void WaylandWindowDragController::OnWindowRemoved(WaylandWindow* window) {
@@ -564,7 +584,7 @@ void WaylandWindowDragController::HandleMotionEvent(LocatedEvent* event) {
   should_process_drag_motion_events_ = false;
 }
 
-// Dispatch mouse release event (to tell clients that the drop just happened)
+// Dispatch mouse release events (to tell clients that the drop just happened)
 // clear focus and reset internal state. Must be called when the session is
 // about to finish.
 void WaylandWindowDragController::HandleDropAndResetState(
@@ -597,11 +617,8 @@ void WaylandWindowDragController::HandleDropAndResetState(
   } else {
     if (*drag_source_ == DragEventSource::kMouse) {
       if (pointer_grab_owner_) {
-        pointer_delegate_->OnPointerButtonEvent(
-            ET_MOUSE_RELEASED, EF_LEFT_MOUSE_BUTTON, timestamp,
-            pointer_grab_owner_, wl::EventDispatchPolicy::kImmediate,
-            /*allow_release_of_unpressed_button=*/false,
-            /*is_synthesized=*/true);
+        pointer_delegate_->ReleasePressedPointerButtons(pointer_grab_owner_,
+                                                        timestamp);
       }
     } else {
       const auto touch_pointer_ids = touch_delegate_->GetActiveTouchPointIds();
@@ -621,14 +638,10 @@ void WaylandWindowDragController::HandleDropAndResetState(
 void WaylandWindowDragController::RunLoop() {
   DCHECK_EQ(state_, State::kDetached);
   DCHECK(dragged_window_);
-  auto old_dispatcher = std::move(nested_dispatcher_);
+  CHECK(nested_dispatcher_);
 
   VLOG(1) << "Starting drag loop. widget=" << dragged_window_->GetWidget()
-          << " offset=" << drag_offset_.ToString()
-          << ", has old dispatcher=" << !!old_dispatcher;
-
-  nested_dispatcher_ =
-      PlatformEventSource::GetInstance()->OverrideDispatcher(this);
+          << " offset=" << drag_offset_.ToString();
 
   base::WeakPtr<WaylandWindowDragController> alive(weak_factory_.GetWeakPtr());
 
@@ -641,15 +654,12 @@ void WaylandWindowDragController::RunLoop() {
     return;
   }
 
-  nested_dispatcher_ = std::move(old_dispatcher);
-
   VLOG(1) << "Exited drag loop: state=" << state_;
 }
 
 void WaylandWindowDragController::QuitLoop() {
   DCHECK(!quit_loop_closure_.is_null());
-  VLOG(1) << "Quit Loop: resetting nested dispatcher=" << !!nested_dispatcher_;
-  nested_dispatcher_.reset();
+  VLOG(1) << "Quit Loop";
   std::move(quit_loop_closure_).Run();
 }
 

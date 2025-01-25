@@ -18,7 +18,9 @@ limitations under the License.
 #include <cstdint>
 #include <iterator>
 #include <optional>
+#include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -112,23 +114,22 @@ absl::Status MlirConcatenateFusion::EmitEntryFunction(
     auto thread_id_to_output_map = ComposeIndexingMaps(
         ComposeIndexingMaps(thread_id_to_input_map, input_to_output_map),
         epilogue_indexing);
+    thread_id_to_output_map.Simplify();
 
     auto loop_nest_body_builder =
         [&, operand_index = operand_index](
             ValueRange output_tensors, ValueRange dim_values,
             ValueRange symbol_values) -> SmallVector<Value> {
-      auto input_indices =
-          mlir_converter::ApplyAffineMap(thread_id_to_input_map.GetAffineMap(),
-                                         dim_values, symbol_values, builder);
+      auto input_indices = mlir_converter::ApplyIndexing(
+          thread_id_to_input_map, dim_values, symbol_values, builder);
 
       auto result_scalar = mlir_converter::ProvideParameter(
           root_computation, concat, operand_index, input_indices, call_targets,
           entry_function, builder);
       absl::flat_hash_map<const HloInstruction*, llvm::SmallVector<Value>>
-          hero_value{{concat, {result_scalar}}};
-      auto output_indices =
-          mlir_converter::ApplyAffineMap(thread_id_to_output_map.GetAffineMap(),
-                                         dim_values, symbol_values, builder);
+          hero_value{{concat, result_scalar}};
+      auto output_indices = mlir_converter::ApplyIndexing(
+          thread_id_to_output_map, dim_values, symbol_values, builder);
       auto result_scalars = EmitEpilogue(
           /*epilogue_index=*/0, computations, entry_function, hero_value,
           output_indices, builder)[&analysis_.fusion_root(0).instruction()];

@@ -22,8 +22,9 @@ import java.util.List;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
-import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsVisibilityManager;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+
 
 /**
  * A composited view that sits at the bottom of the screen and listens to changes in the browser
@@ -54,7 +55,7 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
     private ViewResourceFrameLayout mBottomView;
 
     /** Vivaldi */
-    private BrowserControlsSizer mControlsSizer;
+    private BrowserControlsVisibilityManager mBrowserControlsManager;
 
     /**
      * Build a composited bottom view layer.
@@ -131,7 +132,7 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
                 mCurrentYOffsetPx += mBottomView.getHeight();
             // After the scene gets visible again we need to reset the yoffset but only when
             // controls are completely shown. Fix for VAB-4178.
-        } else if (mControlsSizer.getBrowserControlHiddenRatio() == 0)
+        } else if (mBrowserControlsManager.getBrowserControlHiddenRatio() == 0)
             mCurrentYOffsetPx = 0;
 
         ScrollingBottomViewSceneLayerJni.get()
@@ -190,9 +191,9 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
     @Override
     public void getVirtualViews(List<VirtualView> views) {}
 
-    /* Vivaldi: Set the |BrowserControlsSizer| */
-    public void setBrowserControlsSizer(BrowserControlsSizer browserControlsSizer) {
-        mControlsSizer = browserControlsSizer;
+    /* Vivaldi: Set the |BrowserControlsVisibilityManager| */
+    public void setBrowserControlsManager(BrowserControlsVisibilityManager browserControlsManager) {
+        mBrowserControlsManager = browserControlsManager;
     }
 
     @NativeMethods

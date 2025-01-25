@@ -95,3 +95,15 @@ Validates that incompatible texture types don't work with ${builtin}
 
     t.expectCompileResult(expectSuccess, code);
   });
+
+g.test('must_use')
+  .desc('Tests that the result must be used')
+  .params(u => u.combine('use', [true, false] as const))
+  .fn(t => {
+    const code = `
+    @group(0) @binding(0) var t : texture_2d<f32>;
+    fn foo() {
+      ${t.params.use ? '_ =' : ''} textureNumLevels(t);
+    }`;
+    t.expectCompileResult(t.params.use, code);
+  });

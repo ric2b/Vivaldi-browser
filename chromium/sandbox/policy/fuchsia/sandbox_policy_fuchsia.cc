@@ -102,6 +102,7 @@ constexpr SandboxConfig kGpuConfig = {
         fuchsia::media::ProfileProvider::Name_,
         fuchsia::mediacodec::CodecFactory::Name_,
         fuchsia::sysmem::Allocator::Name_,
+        fuchsia::sysmem2::Allocator::Name_,
         "fuchsia.vulkan.loader.Loader",
         fuchsia::tracing::provider::Registry::Name_,
         fuchsia::ui::composition::Allocator::Name_,
@@ -128,6 +129,7 @@ constexpr SandboxConfig kRendererConfig = {
         fuchsia::media::ProfileProvider::Name_,
         fuchsia::memorypressure::Provider::Name_,
         fuchsia::sysmem::Allocator::Name_,
+        fuchsia::sysmem2::Allocator::Name_,
         fuchsia::ui::composition::Allocator::Name_,
     }),
     0,
@@ -137,6 +139,7 @@ constexpr SandboxConfig kVideoCaptureConfig = {
     base::make_span((const char* const[]){
         fuchsia::camera3::DeviceWatcher::Name_,
         fuchsia::sysmem::Allocator::Name_,
+        fuchsia::sysmem2::Allocator::Name_,
     }),
     0,
 };

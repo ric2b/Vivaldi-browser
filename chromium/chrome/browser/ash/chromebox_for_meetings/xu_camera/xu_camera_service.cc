@@ -20,7 +20,6 @@
 #include "base/strings/string_util.h"
 #include "chrome/browser/media/webrtc/media_device_salt_service_factory.h"
 #include "chromeos/ash/components/dbus/chromebox_for_meetings/cfm_hotline_client.h"
-#include "chromeos/ash/services/chromebox_for_meetings/public/cpp/service_connection.h"
 #include "components/media_device_salt/media_device_salt_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -271,8 +270,10 @@ void XuCameraService::GetUnitIdWithDevicePath(
     }
   }
 
-  content::GetDeviceService().BindUsbDeviceManager(
-      usb_manager_.BindNewPipeAndPassReceiver());
+  if(!usb_manager_) {
+    content::GetDeviceService().BindUsbDeviceManager(
+        usb_manager_.BindNewPipeAndPassReceiver());
+  }
   device::mojom::UsbEnumerationOptionsPtr options =
       device::mojom::UsbEnumerationOptions::New();
   usb_manager_->GetDevices(
@@ -540,7 +541,8 @@ uint8_t XuCameraService::QueryXuControl(const base::ScopedFD& file_descriptor,
 
   if (error < 0) {
     logging::SystemErrorCode err = logging::GetLastSystemErrorCode();
-    LOG(ERROR) << "ioctl call failed. error: " << logging::SystemErrorCodeToString(err);
+    LOG(ERROR) << "ioctl call failed. error: "
+               << logging::SystemErrorCodeToString(err);
     return err;
   }
   return error;

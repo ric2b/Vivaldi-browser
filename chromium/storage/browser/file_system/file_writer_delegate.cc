@@ -9,6 +9,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/location.h"
@@ -64,7 +65,7 @@ void FileWriterDelegate::Start(std::unique_ptr<BlobReader> blob_reader,
       // Do nothing.
       return;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void FileWriterDelegate::Start(mojo::ScopedDataPipeConsumerHandle data_pipe,
@@ -143,14 +144,15 @@ void FileWriterDelegate::Read() {
         // Do nothing.
         return;
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 
   DCHECK(data_pipe_);
-  size_t num_bytes = io_buffer_->size();
-  MojoResult result = data_pipe_->ReadData(io_buffer_->data(), &num_bytes,
-                                           MOJO_READ_DATA_FLAG_NONE);
+  size_t num_bytes = 0;
+  MojoResult result = data_pipe_->ReadData(
+      MOJO_READ_DATA_FLAG_NONE, base::as_writable_bytes(io_buffer_->span()),
+      num_bytes);
   if (result == MOJO_RESULT_SHOULD_WAIT) {
     data_pipe_watcher_.ArmOrNotify();
     return;
@@ -166,7 +168,7 @@ void FileWriterDelegate::Read() {
     return;
   }
   // Some unknown error, this shouldn't happen.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   OnReadError(base::File::FILE_ERROR_FAILED);
 }
 

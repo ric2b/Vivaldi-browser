@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Centipede Upload Linux ASan",
-              "project": "chromium-m126"
+              "project": "chromium-m128"
             },
             "builder_spec": {
               "builder_group": "chromium.fuzz",
@@ -36,7 +36,7 @@
         {
           "bucket": "ci",
           "builder": "Centipede Upload Linux ASan",
-          "project": "chromium-m126"
+          "project": "chromium-m128"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -44,12 +44,12 @@
           "builder": "linux-centipede-asan-rel",
           "group": "tryserver.chromium.linux"
         }
-      ]
+      ],
+      "retry_failed_shards": true
     }
   },
   "$build/reclient": {
     "instance": "rbe-chromium-trusted",
-    "jobs": 250,
     "metrics_project": "chromium-reclient-metrics",
     "scandeps_server": true
   },
@@ -72,6 +72,9 @@
   },
   "archive_prefix": "centipede",
   "builder_group": "chromium.fuzz",
+  "gardener_rotations": [
+    "chrome_browser_release"
+  ],
   "recipe": "chromium/fuzz",
   "sheriff_rotations": [
     "chrome_browser_release"

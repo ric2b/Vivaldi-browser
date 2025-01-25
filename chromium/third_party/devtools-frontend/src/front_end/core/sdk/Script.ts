@@ -27,23 +27,24 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+import type * as Platform from '../../core/platform/platform.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
-import type * as Platform from '../../core/platform/platform.js';
 import * as Common from '../common/common.js';
 import * as i18n from '../i18n/i18n.js';
 
 import {
-  Location,
-  type DebuggerModel,
   COND_BREAKPOINT_SOURCE_URL,
-  LOGPOINT_SOURCE_URL,
+  type DebuggerModel,
   Events,
+  Location,
+  LOGPOINT_SOURCE_URL,
 } from './DebuggerModel.js';
 import {type FrameAssociated} from './FrameAssociated.js';
 import {type PageResourceLoadInitiator} from './PageResourceLoader.js';
 import {ResourceTreeModel} from './ResourceTreeModel.js';
 import {type ExecutionContext} from './RuntimeModel.js';
+import {type SourceMap} from './SourceMap.js';
 import {type Target} from './Target.js';
 
 const UIStrings = {
@@ -60,7 +61,7 @@ const str_ = i18n.i18n.registerUIStrings('core/sdk/Script.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 let scriptCacheInstance: {
-  cache: Map<string, WeakRef<Promise<TextUtils.ContentProvider.DeferredContent>>>,
+  cache: Map<string, WeakRef<Promise<TextUtils.ContentData.ContentDataOrError>>>,
   registry: FinalizationRegistry<string>,
 }|null = null;
 
@@ -83,7 +84,7 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
   originStackTrace: Protocol.Runtime.StackTrace|null;
   readonly #codeOffsetInternal: number|null;
   readonly #language: string|null;
-  #contentPromise: Promise<TextUtils.ContentProvider.DeferredContent>|null;
+  #contentPromise: Promise<TextUtils.ContentData.ContentDataOrError>|null;
   readonly #embedderNameInternal: Platform.DevToolsPath.UrlString|null;
   readonly isModule: boolean|null;
   constructor(
@@ -180,14 +181,14 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
     return Common.ResourceType.resourceTypes.Script;
   }
 
-  private async loadTextContent(): Promise<TextUtils.ContentProvider.DeferredContent> {
+  private async loadTextContent(): Promise<TextUtils.ContentData.ContentData> {
     const result = await this.debuggerModel.target().debuggerAgent().invoke_getScriptSource({scriptId: this.scriptId});
     if (result.getError()) {
       throw new Error(result.getError());
     }
     const {scriptSource, bytecode} = result;
     if (bytecode) {
-      return {content: bytecode, isEncoded: true};
+      return new TextUtils.ContentData.ContentData(bytecode, /* isBase64 */ true, 'application/wasm');
     }
     let content: string = scriptSource || '';
     if (this.hasSourceURL && Common.ParsedURL.schemeIs(this.sourceURL, 'snippet:')) {
@@ -195,10 +196,10 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
       // a sourceURL comment before evaluation and removing it here.
       content = Script.trimSourceURLComment(content);
     }
-    return {content, isEncoded: false};
+    return new TextUtils.ContentData.ContentData(content, /* isBase64 */ false, 'text/javascript');
   }
 
-  private async loadWasmContent(): Promise<TextUtils.ContentProvider.DeferredContent> {
+  private async loadWasmContent(): Promise<TextUtils.ContentData.ContentDataOrError> {
     if (!this.isWasm()) {
       throw new Error('Not a wasm script');
     }
@@ -207,8 +208,9 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
 
     if (result.getError()) {
       // Fall through to text content loading if v8-based disassembly fails. This is to ensure backwards compatibility with
-      // older v8 versions;
-      return this.loadTextContent();
+      // older v8 versions.
+      const contentData = await this.loadTextContent();
+      return await disassembleWasm(contentData.base64);
     }
 
     const {streamId, functionBodyOffsets, chunk: {lines, bytecodeOffsets}} = result;
@@ -246,12 +248,11 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
     for (let i = 0; i < functionBodyOffsets.length; i += 2) {
       functionBodyRanges.push({start: functionBodyOffsets[i], end: functionBodyOffsets[i + 1]});
     }
-    const wasmDisassemblyInfo = new Common.WasmDisassembly.WasmDisassembly(
+    return new TextUtils.WasmDisassembly.WasmDisassembly(
         lines.concat(...lineChunks), bytecodeOffsets.concat(...bytecodeOffsetChunks), functionBodyRanges);
-    return {content: '', isEncoded: false, wasmDisassemblyInfo};
   }
 
-  requestContent(): Promise<TextUtils.ContentProvider.DeferredContent> {
+  requestContentData(): Promise<TextUtils.ContentData.ContentDataOrError> {
     if (!this.#contentPromise) {
       const fileSizeToCache = 65535;  // We won't bother cacheing files under 64K
       if (this.hash && !this.#isLiveEditInternal && this.contentLength > fileSizeToCache) {
@@ -290,15 +291,20 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
     return this.#contentPromise;
   }
 
-  private async requestContentInternal(): Promise<TextUtils.ContentProvider.DeferredContent> {
+  async requestContent(): Promise<TextUtils.ContentProvider.DeferredContent> {
+    const contentData = await this.requestContentData();
+    return TextUtils.ContentData.ContentData.asDeferredContent(contentData);
+  }
+
+  private async requestContentInternal(): Promise<TextUtils.ContentData.ContentDataOrError> {
     if (!this.scriptId) {
-      return {content: null, error: i18nString(UIStrings.scriptRemovedOrDeleted), isEncoded: false};
+      return {error: i18nString(UIStrings.scriptRemovedOrDeleted)};
     }
     try {
       return this.isWasm() ? await this.loadWasmContent() : await this.loadTextContent();
     } catch (err) {
       // TODO(bmeurer): Propagate errors as exceptions / rejections.
-      return {content: null, error: i18nString(UIStrings.unableToFetchScriptSource), isEncoded: false};
+      return {error: i18nString(UIStrings.unableToFetchScriptSource)};
     }
   }
 
@@ -310,7 +316,7 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
 
   originalContentProvider(): TextUtils.ContentProvider.ContentProvider {
     return new TextUtils.StaticContentProvider.StaticContentProvider(
-        this.contentURL(), this.contentType(), () => this.requestContent());
+        this.contentURL(), this.contentType(), () => this.requestContentData());
   }
 
   async searchInContent(query: string, caseSensitive: boolean, isRegex: boolean):
@@ -340,7 +346,7 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
     // We append correct #sourceURL to script for consistency only. It's not actually needed for things to work correctly.
     newSource = this.appendSourceURLCommentIfNeeded(newSource);
 
-    const {content: oldSource} = await this.requestContent();
+    const oldSource = TextUtils.ContentData.ContentData.textOr(await this.requestContentData(), null);
     if (oldSource === newSource) {
       return {changed: false, status: Protocol.Debugger.SetScriptSourceResponseStatus.Ok};
     }
@@ -353,7 +359,8 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
     }
 
     if (!response.getError() && response.status === Protocol.Debugger.SetScriptSourceResponseStatus.Ok) {
-      this.#contentPromise = Promise.resolve({content: newSource, isEncoded: false});
+      this.#contentPromise =
+          Promise.resolve(new TextUtils.ContentData.ContentData(newSource, /* isBase64 */ false, 'text/javascript'));
     }
 
     this.debuggerModel.dispatchEventToListeners(Events.ScriptSourceWasEdited, {script: this, status: response.status});
@@ -407,6 +414,14 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
    */
   get isBreakpointCondition(): boolean {
     return [COND_BREAKPOINT_SOURCE_URL, LOGPOINT_SOURCE_URL].includes(this.sourceURL);
+  }
+
+  /**
+   * @returns the currently attached source map for this Script or `undefined` if there is none or it
+   * hasn't loaded yet.
+   */
+  sourceMap(): SourceMap|undefined {
+    return this.debuggerModel.sourceMapManager().sourceMapForClient(this);
   }
 
   createPageResourceLoadInitiator(): PageResourceLoadInitiator {
@@ -481,4 +496,34 @@ function frameIdForScript(script: Script): Protocol.Page.FrameId|null {
   return resourceTreeModel.mainFrame.id;
 }
 
-export const sourceURLRegex = /^[\040\t]*\/\/[@#] sourceURL=\s*(\S*?)\s*$/;
+export const sourceURLRegex = /^[\x20\t]*\/\/[@#] sourceURL=\s*(\S*?)\s*$/;
+
+async function disassembleWasm(content: string): Promise<TextUtils.WasmDisassembly.WasmDisassembly> {
+  const worker = Common.Worker.WorkerWrapper.fromURL(
+      new URL('../../entrypoints/wasmparser_worker/wasmparser_worker-entrypoint.js', import.meta.url));
+  const promise = new Promise<TextUtils.WasmDisassembly.WasmDisassembly>((resolve, reject) => {
+    worker.onmessage = ({data}: MessageEvent) => {
+      if ('method' in data) {
+        switch (data.method) {
+          case 'disassemble':
+            if ('error' in data) {
+              reject(data.error);
+            } else if ('result' in data) {
+              const {lines, offsets, functionBodyOffsets} = data.result;
+              resolve(new TextUtils.WasmDisassembly.WasmDisassembly(lines, offsets, functionBodyOffsets));
+            }
+            break;
+        }
+      }
+    };
+    worker.onerror = reject;
+  });
+
+  worker.postMessage({method: 'disassemble', params: {content}});
+
+  try {
+    return await promise;  // The await is important here or we terminate the worker too early.
+  } finally {
+    worker.terminate();
+  }
+}

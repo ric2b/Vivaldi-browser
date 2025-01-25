@@ -10,7 +10,6 @@
 #include <string_view>
 #include <tuple>
 
-#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "base/check.h"
 #include "base/functional/callback_forward.h"
@@ -722,6 +721,10 @@ class EnrollmentState {
                                                                  : "no")
             << " packaged license.";
 
+    base::UmaHistogramBoolean(
+        base::StrCat({kUMAStateDeterminationIsInitialByState,
+                      AutoEnrollmentStateToUmaSuffix(result.state)}),
+        true);
     return std::move(completion_callback).Run(std::move(result));
   }
 
@@ -746,14 +749,17 @@ class EnrollmentState {
                       state_response.disabled_state().message());
     }
 
-    if (ash::features::IsAutoEnrollmentKioskInOobeEnabled() &&
-        state_response.has_license_type()) {
+    if (state_response.has_license_type()) {
       result.dict.Set(kDeviceStateLicenseType,
                       ConvertAutoEnrollmentLicenseType(
                           state_response.license_type().license_type()));
     }
 
     VLOG(1) << "Received restore mode " << mode;
+    base::UmaHistogramBoolean(
+        base::StrCat({kUMAStateDeterminationIsInitialByState,
+                      AutoEnrollmentStateToUmaSuffix(result.state)}),
+        false);
     return std::move(completion_callback).Run(std::move(result));
   }
 
@@ -1085,7 +1091,7 @@ class EnrollmentStateFetcherImpl::Sequence {
           return ReportResult(
               base::unexpected(AutoEnrollmentStateKeysRetrievalError{}));
         case ServerBackedStateKeysBroker::ErrorType::kNoError:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
       }
     }
     state_.Request(context_, base::BindOnce(&Sequence::OnStateRequestDone,

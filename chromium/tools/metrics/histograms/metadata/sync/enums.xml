@@ -216,9 +216,9 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(/components/sync_bookmarks/bookmark_model_merger.cc:RemoteBookmarkUpdateError) -->
 
-<!-- LINT.IfChange(SyncablePref) -->
-
 <enum name="SyncablePref">
+<!-- LINT.IfChange(CommonSyncablePref) -->
+
   <int value="0" label="(test) SyncablePrefForTesting"/>
   <int value="1" label="AutofillCreditCardEnabled"/>
   <int value="2" label="(obsolete) AutofillEnabledDeprecated"/>
@@ -294,6 +294,12 @@ chromium-metrics-reviews@google.com.
   <int value="71" label="ShowTabGroupsInBookmarkBar"/>
   <int value="72" label="FacilitatedPaymentsPix"/>
   <int value="73" label="SyncableTabGroups"/>
+  <int value="74" label="AutoPinNewTabGroups"/>
+  <int value="75" label="ShowGoogleLensShortcut"/>
+<!-- LINT.ThenChange(/components/sync_preferences/common_syncable_prefs_database.cc:CommonSyncablePref)-->
+
+<!-- LINT.IfChange(ChromeSyncablePref) -->
+
   <int value="100000" label="AppLanguagePromptShown"/>
   <int value="100001" label="(Obsolete) PrefExplicitLanguageAskShown"/>
   <int value="100002" label="ContextualSearchEnabled_Android"/>
@@ -337,7 +343,8 @@ chromium-metrics-reviews@google.com.
   <int value="100038" label="(obsolete) AccessibilityGreyscaleAmount"/>
   <int value="100039" label="(obsolete) AccessibilityHueRotationAmount"/>
   <int value="100040" label="(obsolete) AccessibilitySaturationAmount"/>
-  <int value="100041" label="AccessibilityScreenMagnifierCenterFocus"/>
+  <int value="100041"
+      label="(obsolete) AccessibilityScreenMagnifierCenterFocus"/>
   <int value="100042"
       label="AccessibilityScreenMagnifierFocusFollowingEnabled"/>
   <int value="100043" label="AccessibilityScreenMagnifierMouseFollowingMode"/>
@@ -443,7 +450,7 @@ chromium-metrics-reviews@google.com.
   <int value="100141" label="TabDiscardingExceptions"/>
   <int value="100142" label="AccessibilityImageLabelsEnabled"/>
   <int value="100143" label="AccessibilityImageLabelsOptInAccepted"/>
-  <int value="100144" label="AccessibilityPdfOcrAlwaysActive"/>
+  <int value="100144" label="(obsolete) AccessibilityPdfOcrAlwaysActive"/>
   <int value="100145"
       label="(obsolete, no longer synced)
              ApplyPageColorsOnlyOnIncreasedContrast"/>
@@ -553,7 +560,7 @@ chromium-metrics-reviews@google.com.
   <int value="100244" label="ReadAloudHighlightingEnabled"/>
   <int value="100245" label="HttpsFirstModeIncognito"/>
   <int value="100246"
-      label="AccessibilityReadAnythingOmniboxIconLabelShownCount"/>
+      label="(obsolete) AccessibilityReadAnythingOmniboxIconLabelShownCount"/>
   <int value="100247" label="ApplicationLocale"/>
   <int value="100248" label="ListenToThisPageEnabled"/>
   <int value="100249" label="IpProtectionEnabled"/>
@@ -601,6 +608,25 @@ chromium-metrics-reviews@google.com.
   <int value="100278" label="AccessibilityReadAnythingLanguagesEnabled"/>
   <int value="100279" label="KeyboardDefaultSplitModifierSettings"/>
   <int value="100280" label="DisplayAmbientLightSensorLastEnabled"/>
+  <int value="100281" label="AccessibilityMainNodeAnnotationsEnabled"/>
+  <int value="100282" label="SyncableVersionedWallpaperInfo"/>
+  <int value="100283" label="FocusModeSelectedTask"/>
+  <int value="100284" label="FocusModeSoundSection"/>
+  <int value="100285" label="kAccessibilityFaceGazeActionsEnabled"/>
+  <int value="100286" label="kAccessibilityFaceGazeCursorControlEnabled"/>
+  <int value="100287" label="kAccessibilityFaceGazeAdjustSpeedSeparately"/>
+  <int value="100288" label="KeyboardAmbientLightSensorLastEnabled"/>
+  <int value="100289" label="AccessibilityReadAnythingImagesEnabled"/>
+  <int value="100290" label="ShelfMallAppPinRolls"/>
+  <int value="100291" label="iOSAddressPromoLastImpressionTimestamp"/>
+  <int value="100292" label="iOSAddressPromoImpressionsCounter"/>
+  <int value="100293" label="iOSAddressPromoOptOut"/>
+  <int value="100294" label="MahiNudgeShownCount"/>
+  <int value="100295" label="AccessibilityMagnifierFollowsChromeVox"/>
+<!-- LINT.ThenChange(/chrome/browser/sync/prefs/chrome_syncable_prefs_database.cc:ChromeSyncablePref)-->
+
+<!-- LINT.IfChange(IosSyncablePref) -->
+
   <int value="200000" label="ArticlesForYouEnabled"/>
   <int value="200001" label="ContextualSearchEnabled_IOS"/>
   <int value="200002" label="DefaultCharset_IOS"/>
@@ -612,11 +638,9 @@ chromium-metrics-reviews@google.com.
   <int value="200008" label="SearchSuggestEnabled_IOS"/>
   <int value="200009" label="TrackPricesOnTabsEnabled"/>
   <int value="200010" label="VoiceSearchLocale"/>
+<!-- LINT.ThenChange(/ios/chrome/browser/sync/model/prefs/ios_chrome_syncable_prefs_database.cc:IosSyncablePref)-->
+
 </enum>
-
-<!-- LINT.ThenChange(/components/sync_preferences/common_syncable_prefs_database.cc:SyncablePref)-->
-
-<!-- TODO(crbug.com/249297195): Check common_, chrome_ OR ios_ file above. -->
 
 <!-- LINT.IfChange(SyncBookmarkModelMetadataCorruptionReason) -->
 
@@ -653,6 +677,18 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(/components/sync/protocol/sync.proto:SyncClientToServerMessageContents) -->
+
+<!-- LINT.IfChange(SyncConflictResolution) -->
+
+<enum name="SyncConflictResolution">
+  <int value="0" label="Changes match"/>
+  <int value="1" label="Use local"/>
+  <int value="2" label="Use remote"/>
+  <int value="3" label="Ignore local encryption"/>
+  <int value="4" label="Ignore remote encryption"/>
+</enum>
+
+<!-- LINT.ThenChange(/components/sync/model/conflict_resolution.h:SyncConflictResolution) -->
 
 <enum name="SyncCryptographerPendingKeysState">
   <int value="0" label="Does not have pending keys"/>
@@ -729,7 +765,7 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Sign in needs update"/>
   <int value="2" label="Service unavailable (deprecated)"/>
   <int value="3" label="Needs passphrase"/>
-  <int value="4" label="Unrecoverable error"/>
+  <int value="4" label="Unrecoverable error (deprecated)"/>
   <int value="5" label="Sync settings not confirmed"/>
   <int value="6" label="Sync needs trusted vault key"/>
   <int value="7" label="Sync trusted vault recoverability degraded"/>
@@ -978,8 +1014,10 @@ chromium-metrics-reviews@google.com.
   <int value="63" label="Shared Tab Group Data"/>
   <int value="64" label="Collaboration Groups"/>
   <int value="65" label="Plus Address"/>
-  <int value="66" label="Compare"/>
+  <int value="66" label="Product Comparison"/>
   <int value="67" label="Cookies"/>
+  <int value="68" label="Plus Address Settings"/>
+
   <int value="300" label="Notes"/>
 </enum>
 
@@ -1017,6 +1055,7 @@ chromium-metrics-reviews@google.com.
   <int value="0" label="PLACEHOLDER_TAB_FOUND"/>
   <int value="1" label="PLACEHOLDER_TAB_RESYNCED"/>
   <int value="2" label="PLACEHOLDER_TAB_NOT_SYNCED"/>
+  <int value="3" label="PLACEHOLDER_TAB_RESYNC_FAILED"/>
 </enum>
 
 <!-- LINT.ThenChange(/components/sync_sessions/local_session_event_handler_impl.cc:SyncPlaceholderTabResyncResult) -->
@@ -1027,12 +1066,17 @@ chromium-metrics-reviews@google.com.
   <int value="0" label="Shutdown"/>
   <int value="1" label="Unrecoverable error"/>
   <int value="2" label="Disabled account"/>
-  <int value="3" label="Requested pref change"/>
+  <int value="3"
+      label="(Obsolete) Requested pref change. Removed 04/2024 (and not used
+             for some time before that)"/>
   <int value="4" label="Stop and clear"/>
   <int value="5"
       label="(Obsolete) Set sync allowed by platform. Removed 01/2022."/>
   <int value="6" label="Credentials updated"/>
   <int value="7" label="Reset local Sync data"/>
+  <int value="8" label="Not signed in"/>
+  <int value="9" label="Enterprise policy"/>
+  <int value="10" label="Disable sync on client"/>
 </enum>
 
 <!-- LINT.ThenChange(/components/sync/service/sync_service_impl.h:SyncResetEngineReason) -->
@@ -1057,26 +1101,6 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(/components/sync/protocol/sharing_message_specifics.proto:SyncSharingMessageCommitErrorCode) -->
-
-<!-- LINT.IfChange(SyncStopSource) -->
-
-<enum name="SyncStopSource">
-  <int value="0"
-      label="(Obsolete) Profile destruction. Supposedly meant that Sync was
-             stopped due to the profile being destroyed. However, it was
-             recorded during most profile destructions, even if Sync was
-             never enabled in the first place. We stopped recording this in
-             2018-06."/>
-  <int value="1" label="Sign out"/>
-  <int value="2" label="Birthday error"/>
-  <int value="3" label="Chrome sync settings"/>
-  <int value="4"
-      label="(Obsolete) Android Chrome sync setting. Removed on 01/2022."/>
-  <int value="5"
-      label="(Obsolete) Android main sync setting. Removed on 01/2022."/>
-</enum>
-
-<!-- LINT.ThenChange(/components/sync/base/stop_source.h:SyncStopSource) -->
 
 <!-- LINT.IfChange(SyncToSigninMigrationDataTypeDecision) -->
 
@@ -1246,13 +1270,6 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(/components/sync/service/sync_service_utils.h:TrustedVaultRecoverabilityStatus) -->
-
-<!-- TODO(crbug.com/336793181): `git cl format` deletes the ThenChange above
-     unless this enum is here. Fix the issue and delete this fake enum.  -->
-
-<enum name="ZZZZZZ">
-  <int value="0" label="Z"/>
-</enum>
 
 </enums>
 

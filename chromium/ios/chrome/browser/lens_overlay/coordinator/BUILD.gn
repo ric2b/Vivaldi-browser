@@ -1,0 +1,84 @@
+# Copyright 2024 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("lens_overlay_availability") {
+  sources = [
+    "lens_overlay_availability.h",
+    "lens_overlay_availability.mm",
+  ]
+  deps = [
+    "//base",
+    "//components/lens:enterprise_policy",
+    "//components/prefs",
+    "//ios/chrome/browser/shared/model/application_context",
+    "//ios/chrome/browser/shared/model/prefs:pref_names",
+    "//ios/chrome/browser/shared/public/features:features",
+    "//ui/base",
+  ]
+}
+
+source_set("coordinator") {
+  sources = [
+    "lens_overlay_coordinator.h",
+    "lens_overlay_coordinator.mm",
+    "lens_overlay_mediator.h",
+    "lens_overlay_mediator.mm",
+    "lens_result_page_mediator.h",
+    "lens_result_page_mediator.mm",
+  ]
+  deps = [
+    ":lens_overlay_availability",
+    "//base",
+    "//ios/chrome/app/strings:ios_strings_grit",
+    "//ios/chrome/browser/lens_overlay/model",
+    "//ios/chrome/browser/lens_overlay/ui:protocols",
+    "//ios/chrome/browser/lens_overlay/ui:view_controller",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/model/application_context",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/browser/shared/model/browser_state",
+    "//ios/chrome/browser/shared/model/url",
+    "//ios/chrome/browser/shared/model/web_state_list",
+    "//ios/chrome/browser/shared/public/commands",
+    "//ios/chrome/browser/shared/public/features",
+    "//ios/chrome/browser/shared/ui/symbols",
+    "//ios/chrome/browser/snapshots/model",
+    "//ios/chrome/browser/tabs/model",
+    "//ios/chrome/browser/web/model",
+    "//ios/chrome/browser/web/model:delegate",
+    "//ios/chrome/browser/web_state_list/model",
+    "//ios/web/public/navigation",
+    "//ui/base",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "lens_overlay_coordinator_unittest.mm",
+    "lens_overlay_mediator_unittest.mm",
+    "lens_result_page_mediator_unittest.mm",
+  ]
+  deps = [
+    ":coordinator",
+    "//base/test:test_support",
+    "//components/lens:enterprise_policy",
+    "//ios/chrome/browser/lens_overlay/model",
+    "//ios/chrome/browser/lens_overlay/ui:view_controller",
+    "//ios/chrome/browser/shared/model/browser/test:test_support",
+    "//ios/chrome/browser/shared/model/browser_state:test_support",
+    "//ios/chrome/browser/shared/model/web_state_list:web_state_list",
+    "//ios/chrome/browser/shared/public/commands",
+    "//ios/chrome/browser/shared/public/features",
+    "//ios/chrome/browser/signin/model",
+    "//ios/chrome/browser/signin/model:test_support",
+    "//ios/chrome/browser/snapshots/model",
+    "//ios/chrome/browser/ui/lens:lens_entrypoint",
+    "//ios/chrome/test:test_support",
+    "//ios/testing:ocmock_support",
+    "//ios/web/public/test",
+    "//testing/gtest",
+    "//third_party/ocmock",
+  ]
+}

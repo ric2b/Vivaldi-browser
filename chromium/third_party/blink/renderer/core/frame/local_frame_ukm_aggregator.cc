@@ -192,14 +192,6 @@ void LocalFrameUkmAggregator::TransmitFinalSample(int64_t source_id,
                                                   ukm::UkmRecorder* recorder,
                                                   bool is_for_main_frame) {
   ReportUpdateTimeEvent(source_id, recorder);
-
-  base::UmaHistogramBoolean("Blink.LocalFrameRoot.DidReachFirstContentfulPaint",
-                            fcp_state_ != kBeforeFCPSignal);
-  if (is_for_main_frame) {
-    base::UmaHistogramBoolean(
-        "Blink.LocalFrameRoot.DidReachFirstContentfulPaint.MainFrame",
-        fcp_state_ != kBeforeFCPSignal);
-  }
 }
 
 bool LocalFrameUkmAggregator::ShouldMeasureMetric(int64_t metric_id) const {
@@ -421,6 +413,8 @@ void LocalFrameUkmAggregator::RecordForcedLayoutSample(
     case DocumentUpdateReason::kTest:
     // Don't report if we don't know why.
     case DocumentUpdateReason::kUnknown:
+    // TODO(https://crbug.com/336963892): Give prerender a dedicated metric.
+    case DocumentUpdateReason::kPrerender:
       break;
   }
 

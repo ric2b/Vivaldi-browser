@@ -14,6 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_computed_node_data.h"
+#include "ui/accessibility/ax_enums.mojom-shared.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_hypertext.h"
 #include "ui/accessibility/ax_language_detection.h"
@@ -725,8 +726,9 @@ std::optional<int> AXNode::CompareTo(const AXNode& other) const {
     return 1;
 
   if (our_ancestors.empty() || other_ancestors.empty()) {
-    NOTREACHED() << "The common ancestor should be followed by two uncommon "
-                    "children in the two corresponding lists of ancestors.";
+    NOTREACHED_IN_MIGRATION()
+        << "The common ancestor should be followed by two uncommon "
+           "children in the two corresponding lists of ancestors.";
     return std::nullopt;
   }
 
@@ -1007,16 +1009,7 @@ void AXNode::ClearComputedNodeData() {
 
 const std::string& AXNode::GetNameUTF8() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
-  const AXNode* node = this;
-  if (GetRole() == ax::mojom::Role::kPortal &&
-      GetNameFrom() == ax::mojom::NameFrom::kNone) {
-    const AXTreeManager* child_tree_manager =
-        AXTreeManager::ForChildTree(*this);
-    if (child_tree_manager)
-      node = child_tree_manager->GetRoot();
-  }
-
-  return node->GetStringAttribute(ax::mojom::StringAttribute::kName);
+  return this->GetStringAttribute(ax::mojom::StringAttribute::kName);
 }
 
 std::u16string AXNode::GetNameUTF16() const {
@@ -2180,8 +2173,9 @@ bool AXNode::IsLikelyARIAActiveDescendant() const {
   // This requirement may need to be removed if ARIA element reflection is
   // implemented. HTML attribute serialization must currently be turned on in
   // order to pass this requirement.
-  if (!HasHtmlAttribute("id"))
+  if (!HasStringAttribute(ax::mojom::StringAttribute::kHtmlId)) {
     return false;
+  }
 
   // Finally, check for the required ancestor.
   for (AXNode* ancestor_node = GetUnignoredParent(); ancestor_node;

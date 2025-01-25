@@ -13,6 +13,7 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_test_utils.h"
+#include "components/autofill/core/common/form_data_test_api.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -148,6 +149,9 @@ class ProfileMatchingTypesTest
          features::kAutofillEnableDependentLocalityParsing,
          features::kAutofillUseI18nAddressModel,
          features::kAutofillUseBRAddressModel,
+         features::kAutofillUseCAAddressModel,
+         features::kAutofillUseFRAddressModel,
+         features::kAutofillUseITAddressModel,
          features::kAutofillUseMXAddressModel},
         {});
   }
@@ -166,7 +170,8 @@ const ProfileMatchingTypesTestCase kProfileMatchingTypesTestCases[] = {
     {"Elvis Aaron Presley", {NAME_FULL}},
     {"theking@gmail.com", {EMAIL_ADDRESS}},
     {"RCA", {COMPANY_NAME}},
-    {"3734 Elvis Presley Blvd.", {ADDRESS_HOME_LINE1}},
+    {"3734 Elvis Presley Blvd.",
+     {ADDRESS_HOME_LINE1, ADDRESS_HOME_STREET_LOCATION}},
     {"3734", {ADDRESS_HOME_HOUSE_NUMBER}},
     {"Elvis Presley Blvd.", {ADDRESS_HOME_STREET_NAME}},
     {"Apt. 10", {ADDRESS_HOME_LINE2, ADDRESS_HOME_SUBPREMISE}},
@@ -177,10 +182,24 @@ const ProfileMatchingTypesTestCase kProfileMatchingTypesTestCases[] = {
     {"South Africa", {ADDRESS_HOME_COUNTRY}},
     {"12345678901", {PHONE_HOME_WHOLE_NUMBER}},
     {"+1 (234) 567-8901", {PHONE_HOME_WHOLE_NUMBER}},
-    {"(234)567-8901", {PHONE_HOME_CITY_AND_NUMBER}},
-    {"2345678901", {PHONE_HOME_CITY_AND_NUMBER}},
+    {"(234)567-8901",
+     base::FeatureList::IsEnabled(
+         features::kAutofillEnableSupportForPhoneNumberTrunkTypes)
+         ? FieldTypeSet{PHONE_HOME_CITY_AND_NUMBER,
+                        PHONE_HOME_CITY_AND_NUMBER_WITHOUT_TRUNK_PREFIX}
+         : FieldTypeSet{PHONE_HOME_CITY_AND_NUMBER}},
+    {"2345678901",
+     base::FeatureList::IsEnabled(
+         features::kAutofillEnableSupportForPhoneNumberTrunkTypes)
+         ? FieldTypeSet{PHONE_HOME_CITY_AND_NUMBER,
+                        PHONE_HOME_CITY_AND_NUMBER_WITHOUT_TRUNK_PREFIX}
+         : FieldTypeSet{PHONE_HOME_CITY_AND_NUMBER}},
     {"1", {PHONE_HOME_COUNTRY_CODE}},
-    {"234", {PHONE_HOME_CITY_CODE}},
+    {"234", base::FeatureList::IsEnabled(
+                features::kAutofillEnableSupportForPhoneNumberTrunkTypes)
+                ? FieldTypeSet{PHONE_HOME_CITY_CODE,
+                               PHONE_HOME_CITY_CODE_WITH_TRUNK_PREFIX}
+                : FieldTypeSet{PHONE_HOME_CITY_CODE}},
     {"5678901", {PHONE_HOME_NUMBER}},
     {"567", {PHONE_HOME_NUMBER_PREFIX}},
     {"8901", {PHONE_HOME_NUMBER_SUFFIX}},
@@ -224,8 +243,10 @@ const ProfileMatchingTypesTestCase kProfileMatchingTypesTestCases[] = {
     {"SoUTh AfRiCa", {ADDRESS_HOME_COUNTRY}},
 
     // Make sure fields that differ by punctuation match.
-    {"3734 Elvis Presley Blvd", {ADDRESS_HOME_LINE1}},
-    {"3734, Elvis    Presley Blvd.", {ADDRESS_HOME_LINE1}},
+    {"3734 Elvis Presley Blvd",
+     {ADDRESS_HOME_LINE1, ADDRESS_HOME_STREET_LOCATION}},
+    {"3734, Elvis    Presley Blvd.",
+     {ADDRESS_HOME_LINE1, ADDRESS_HOME_STREET_LOCATION}},
 
     // Make sure that a state's full name and abbreviation match.
     {"TN", {ADDRESS_HOME_STATE}},     // Saved as "Tennessee" in profile.
@@ -233,7 +254,12 @@ const ProfileMatchingTypesTestCase kProfileMatchingTypesTestCases[] = {
 
     // Special phone number case. A profile with no country code should
     // only match PHONE_HOME_CITY_AND_NUMBER.
-    {"5142821292", {PHONE_HOME_CITY_AND_NUMBER}},
+    {"5142821292",
+     base::FeatureList::IsEnabled(
+         features::kAutofillEnableSupportForPhoneNumberTrunkTypes)
+         ? FieldTypeSet{PHONE_HOME_CITY_AND_NUMBER,
+                        PHONE_HOME_CITY_AND_NUMBER_WITHOUT_TRUNK_PREFIX}
+         : FieldTypeSet{PHONE_HOME_CITY_AND_NUMBER}},
 
     // Make sure unsupported variants do not match.
     {"Elvis Aaron", {UNKNOWN_TYPE}},
@@ -290,10 +316,10 @@ TEST_P(ProfileMatchingTypesTest, DeterminePossibleFieldTypesForUpload) {
   credit_cards.push_back(credit_card);
 
   FormData form;
-  form.name = u"MyForm";
-  form.url = GURL("https://myform.com/form.html");
-  form.action = GURL("https://myform.com/submit.html");
-  form.fields.push_back(CreateTestFormField("", "1", test_case.input_value,
+  form.set_name(u"MyForm");
+  form.set_url(GURL("https://myform.com/form.html"));
+  form.set_action(GURL("https://myform.com/submit.html"));
+  test_api(form).Append(CreateTestFormField("", "1", test_case.input_value,
                                             FormControlType::kInputText));
 
   FormStructure form_structure(form);
@@ -329,16 +355,17 @@ TEST_F(DeterminePossibleFieldTypesForUploadTest, CrowdsourceCVCFieldByValue) {
   constexpr char kCreditCardNumber[] = "4234-5678-9012-3456";
 
   FormData form;
-  form.fields = {
-      CreateTestFormField("number", "number", kCreditCardNumber,
-                          FormControlType::kInputText),
-      // This field would not be detected as CVC heuristically if the CVC value
-      // wouldn't be known.
-      CreateTestFormField("not_cvc", "not_cvc", kFourDigitButNotCvc,
-                          FormControlType::kInputText),
-      // This field has the CVC value used to unlock the card and should be
-      // detected as the CVC field.
-      CreateTestFormField("c_v_c", "c_v_c", kCvc, FormControlType::kInputText)};
+  form.set_fields(
+      {CreateTestFormField("number", "number", kCreditCardNumber,
+                           FormControlType::kInputText),
+       // This field would not be detected as CVC heuristically if the CVC value
+       // wouldn't be known.
+       CreateTestFormField("not_cvc", "not_cvc", kFourDigitButNotCvc,
+                           FormControlType::kInputText),
+       // This field has the CVC value used to unlock the card and should be
+       // detected as the CVC field.
+       CreateTestFormField("c_v_c", "c_v_c", kCvc,
+                           FormControlType::kInputText)});
 
   FormStructure form_structure(form);
   form_structure.field(0)->set_possible_types({CREDIT_CARD_NUMBER});
@@ -361,16 +388,16 @@ TEST_F(DeterminePossibleFieldTypesForUploadTest,
   constexpr char cvc[] = "1234";
 
   FormData form;
-  form.fields = {CreateTestFormField("number", "number", credit_card_number,
-                                     FormControlType::kInputText),
-                 // Expiration date, but is not the expiration date of the used
-                 // credit card.
-                 CreateTestFormField("exp_year", "exp_year",
-                                     user_entered_credit_card_exp_year,
-                                     FormControlType::kInputText),
-                 // Must be CVC since expiration date was already identified.
-                 CreateTestFormField("cvc_number", "cvc_number", cvc,
-                                     FormControlType::kInputText)};
+  form.set_fields({CreateTestFormField("number", "number", credit_card_number,
+                                       FormControlType::kInputText),
+                   // Expiration date, but is not the expiration date of the
+                   // used credit card.
+                   CreateTestFormField("exp_year", "exp_year",
+                                       user_entered_credit_card_exp_year,
+                                       FormControlType::kInputText),
+                   // Must be CVC since expiration date was already identified.
+                   CreateTestFormField("cvc_number", "cvc_number", cvc,
+                                       FormControlType::kInputText)});
 
   FormStructure form_structure(form);
 
@@ -408,16 +435,16 @@ TEST_F(DeterminePossibleFieldTypesForUploadTest,
   constexpr char cvc[] = "1234";
 
   FormData form;
-  form.fields = {
-      CreateTestFormField("number", "number", credit_card_number,
-                          FormControlType::kInputText),
-      // Expiration date, that is the expiration date of the used credit card.
-      CreateTestFormField("date_or_cvc1", "date_or_cvc1",
-                          actual_credit_card_exp_year,
-                          FormControlType::kInputText),
-      // Must be CVC since expiration date was already identified.
-      CreateTestFormField("date_or_cvc2", "date_or_cvc2", cvc,
-                          FormControlType::kInputText)};
+  form.set_fields(
+      {CreateTestFormField("number", "number", credit_card_number,
+                           FormControlType::kInputText),
+       // Expiration date, that is the expiration date of the used credit card.
+       CreateTestFormField("date_or_cvc1", "date_or_cvc1",
+                           actual_credit_card_exp_year,
+                           FormControlType::kInputText),
+       // Must be CVC since expiration date was already identified.
+       CreateTestFormField("date_or_cvc2", "date_or_cvc2", cvc,
+                           FormControlType::kInputText)});
 
   FormStructure form_structure(form);
 
@@ -454,16 +481,16 @@ TEST_F(DeterminePossibleFieldTypesForUploadTest,
   constexpr char user_entered_credit_card_exp_year[] = "2031";
 
   FormData form;
-  form.fields = {CreateTestFormField("number", "number", credit_card_number,
-                                     FormControlType::kInputText),
-                 // Must be CVC since it is an implausible expiration date.
-                 CreateTestFormField("date_or_cvc2", "date_or_cvc2", "2130",
-                                     FormControlType::kInputText),
-                 // A field which is filled with a plausible expiration date
-                 // which is not the date of the credit card.
-                 CreateTestFormField("date_or_cvc1", "date_or_cvc1",
-                                     user_entered_credit_card_exp_year,
-                                     FormControlType::kInputText)};
+  form.set_fields({CreateTestFormField("number", "number", credit_card_number,
+                                       FormControlType::kInputText),
+                   // Must be CVC since it is an implausible expiration date.
+                   CreateTestFormField("date_or_cvc2", "date_or_cvc2", "2130",
+                                       FormControlType::kInputText),
+                   // A field which is filled with a plausible expiration date
+                   // which is not the date of the credit card.
+                   CreateTestFormField("date_or_cvc1", "date_or_cvc1",
+                                       user_entered_credit_card_exp_year,
+                                       FormControlType::kInputText)});
 
   FormStructure form_structure(form);
 
@@ -501,15 +528,15 @@ TEST_F(DeterminePossibleFieldTypesForUploadTest,
   constexpr char cvc[] = "2031";
 
   FormData form;
-  form.fields = {CreateTestFormField("number", "number", credit_card_number,
-                                     FormControlType::kInputText),
-                 // Server predicted as expiration year.
-                 CreateTestFormField("date_or_cvc1", "date_or_cvc1",
-                                     user_entered_credit_card_exp_year,
-                                     FormControlType::kInputText),
-                 // Must be CVC since expiration date was already identified.
-                 CreateTestFormField("date_or_cvc2", "date_or_cvc2", cvc,
-                                     FormControlType::kInputText)};
+  form.set_fields({CreateTestFormField("number", "number", credit_card_number,
+                                       FormControlType::kInputText),
+                   // Server predicted as expiration year.
+                   CreateTestFormField("date_or_cvc1", "date_or_cvc1",
+                                       user_entered_credit_card_exp_year,
+                                       FormControlType::kInputText),
+                   // Must be CVC since expiration date was already identified.
+                   CreateTestFormField("date_or_cvc2", "date_or_cvc2", cvc,
+                                       FormControlType::kInputText)});
 
   FormStructure form_structure(form);
 
@@ -543,15 +570,15 @@ TEST_F(DeterminePossibleFieldTypesForUploadTest,
   constexpr char cvc[] = "12";
 
   FormData form;
-  form.fields = {
-      CreateTestFormField("number", "number", credit_card_number,
-                          FormControlType::kInputText),
-      // Server predicted as expiration year.
-      CreateTestFormField("date_or_cvc1", "date_or_cvc1", credit_card_exp_year,
-                          FormControlType::kInputText),
-      // Must be CVC since expiration date was already identified.
-      CreateTestFormField("date_or_cvc2", "date_or_cvc2", cvc,
-                          FormControlType::kInputText)};
+  form.set_fields(
+      {CreateTestFormField("number", "number", credit_card_number,
+                           FormControlType::kInputText),
+       // Server predicted as expiration year.
+       CreateTestFormField("date_or_cvc1", "date_or_cvc1", credit_card_exp_year,
+                           FormControlType::kInputText),
+       // Must be CVC since expiration date was already identified.
+       CreateTestFormField("date_or_cvc2", "date_or_cvc2", cvc,
+                           FormControlType::kInputText)});
 
   FormStructure form_structure(form);
 
@@ -593,12 +620,12 @@ TEST_F(DeterminePossibleFieldTypesForUploadTest,
   profiles.push_back(profile);
 
   FormData form;
-  form.fields.push_back(CreateTestFormField("foo", "foo", "invalidemail",
+  test_api(form).Append(CreateTestFormField("foo", "foo", "invalidemail",
                                             FormControlType::kInputText));
   // The email value is different from the stored profile's email. The
   // classification is then extracted from matching the value and not the
   // profile's email.
-  form.fields.push_back(CreateTestFormField("foo", "foo", "myemail@gmail.com",
+  test_api(form).Append(CreateTestFormField("foo", "foo", "myemail@gmail.com",
                                             FormControlType::kInputText));
 
   FormStructure form_structure(form);

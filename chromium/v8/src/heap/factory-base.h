@@ -113,15 +113,15 @@ class FactoryBase : public TorqueGeneratedFactory<Impl> {
   // Numbers (e.g. literals) are pretenured by the parser.
   // The return value may be a smi or a heap number.
   template <AllocationType allocation = AllocationType::kYoung>
-  inline Handle<Object> NewNumber(double value);
+  inline Handle<Number> NewNumber(double value);
   template <AllocationType allocation = AllocationType::kYoung>
-  inline Handle<Object> NewNumberFromInt(int32_t value);
+  inline Handle<Number> NewNumberFromInt(int32_t value);
   template <AllocationType allocation = AllocationType::kYoung>
-  inline Handle<Object> NewNumberFromUint(uint32_t value);
+  inline Handle<Number> NewNumberFromUint(uint32_t value);
   template <AllocationType allocation = AllocationType::kYoung>
-  inline Handle<Object> NewNumberFromSize(size_t value);
+  inline Handle<Number> NewNumberFromSize(size_t value);
   template <AllocationType allocation = AllocationType::kYoung>
-  inline Handle<Object> NewNumberFromInt64(int64_t value);
+  inline Handle<Number> NewNumberFromInt64(int64_t value);
   template <AllocationType allocation = AllocationType::kYoung>
   inline Handle<HeapNumber> NewHeapNumber(double value);
   template <AllocationType allocation = AllocationType::kYoung>
@@ -189,7 +189,8 @@ class FactoryBase : public TorqueGeneratedFactory<Impl> {
       int length, AllocationType allocation = AllocationType::kYoung);
 
   // Allocates a trusted byte array in trusted space, initialized with zeros.
-  Handle<TrustedByteArray> NewTrustedByteArray(int length);
+  Handle<TrustedByteArray> NewTrustedByteArray(
+      int length, AllocationType allocation_type = AllocationType::kTrusted);
 
   Handle<ExternalPointerArray> NewExternalPointerArray(
       int length, AllocationType allocation = AllocationType::kYoung);
@@ -200,7 +201,8 @@ class FactoryBase : public TorqueGeneratedFactory<Impl> {
 
   Handle<BytecodeArray> NewBytecodeArray(
       int length, const uint8_t* raw_bytecodes, int frame_size,
-      uint16_t parameter_count, DirectHandle<TrustedFixedArray> constant_pool,
+      uint16_t parameter_count, uint16_t max_arguments,
+      DirectHandle<TrustedFixedArray> constant_pool,
       DirectHandle<TrustedByteArray> handler_table);
 
   Handle<BytecodeWrapper> NewBytecodeWrapper();
@@ -229,10 +231,10 @@ class FactoryBase : public TorqueGeneratedFactory<Impl> {
       DirectHandle<FixedArray> cooked_strings);
 
   Handle<Script> NewScript(
-      DirectHandle<PrimitiveHeapObject> source,
+      DirectHandle<UnionOf<String, Undefined>> source,
       ScriptEventType event_type = ScriptEventType::kCreate);
   Handle<Script> NewScriptWithId(
-      DirectHandle<PrimitiveHeapObject> source, int script_id,
+      DirectHandle<UnionOf<String, Undefined>> source, int script_id,
       ScriptEventType event_type = ScriptEventType::kCreate);
 
   Handle<SloppyArgumentsElements> NewSloppyArgumentsElements(
@@ -251,7 +253,7 @@ class FactoryBase : public TorqueGeneratedFactory<Impl> {
       DirectHandle<SharedFunctionInfo> other);
 
   Handle<SharedFunctionInfoWrapper> NewSharedFunctionInfoWrapper(
-      Handle<SharedFunctionInfo> sfi);
+      DirectHandle<SharedFunctionInfo> sfi);
 
   Handle<PreparseData> NewPreparseData(int data_length, int children_length);
 

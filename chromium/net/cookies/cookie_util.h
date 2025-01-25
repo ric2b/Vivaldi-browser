@@ -52,7 +52,22 @@ enum class StorageAccessResult {
   ACCESS_ALLOWED_3PCD_HEURISTICS_GRANT = 7,
   ACCESS_ALLOWED_CORS_EXCEPTION = 8,
   ACCESS_ALLOWED_TOP_LEVEL_3PCD_TRIAL = 9,
-  kMaxValue = ACCESS_ALLOWED_TOP_LEVEL_3PCD_TRIAL,
+  ACCESS_ALLOWED_SCHEME = 10,
+  kMaxValue = ACCESS_ALLOWED_SCHEME,
+};
+
+// This enum's values correspond to the values of the HTTP request header
+// `Sec-Fetch-Storage-Access`, which is applied to cross-site requests.
+enum class StorageAccessStatus {
+  // Applies to context that does not have unpartitioned cookie access, and does
+  // not have the `storage-access` permission.
+  kNone = 0,
+  // Applies to context that has `storage-access` permission, but has not opted
+  // into using it; the context also does not have unpartitioned cookie access
+  // through some other means.
+  kInactive = 1,
+  // Applies to context that has unpartitioned cookie access.
+  kActive = 2
 };
 
 // Helper to fire telemetry indicating if a given request for storage was

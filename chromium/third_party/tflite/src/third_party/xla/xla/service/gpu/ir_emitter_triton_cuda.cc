@@ -18,13 +18,16 @@ limitations under the License.
 #include "nvidia/include/NVGPUToLLVM/NVGPUToLLVMPass.h"
 #include "nvidia/include/TritonNVIDIAGPUToLLVM/Passes.h"
 #include "absl/status/status.h"
+#include "absl/strings/str_format.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"  // from @llvm-project
 #include "mlir/Conversion/IndexToLLVM/IndexToLLVM.h"  // from @llvm-project
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"  // from @llvm-project
 #include "mlir/Pass/PassManager.h"  // from @llvm-project
 #include "mlir/Transforms/Passes.h"  // from @llvm-project
 #include "xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h"
-#include "xla/service/gpu/matmul_utils.h"
+#include "xla/service/gpu/model/tiled_hlo_computation.h"
+#include "xla/service/gpu/prevent_mmav3_loop_unrolling.h"
+#include "xla/service/gpu/triton_sparse_extensions.h"
 #include "xla/service/hlo_module_config.h"
 #include "xla/stream_executor/device_description.h"
 #include "triton/Conversion/TritonGPUToLLVM/Passes.h"
@@ -40,7 +43,7 @@ namespace mt = ::mlir::triton;
 
 absl::Status CreateTritonPipeline(
     mlir::OpPassManager& pm, const se::GpuComputeCapability& cc,
-    const TritonGemmConfig& config,
+    const BlockLevelParameters& block_level_parameters,
     mt::nvidia_gpu::ClusterInfo& out_cluster_info) {
   auto ccCuda = std::get<se::CudaComputeCapability>(cc);
   const int ccAsInt = ccCuda.major * 10 + ccCuda.minor;
@@ -60,50 +63,63 @@ absl::Status CreateTritonPipeline(
   // Based on make_ttgir() in
   // @triton//:third_party/nvidia/backend/compiler.py
   pm.addPass(mt::createConvertTritonToTritonGPUPass(
-      config.num_warps, threadsPerWarp, config.num_ctas, ccAsInt));
-  pm.addPass(mt::gpu::createCoalescePass());
+      absl::StrFormat("cuda:%u", ccAsInt), block_level_parameters.num_warps,
+      threadsPerWarp, block_level_parameters.num_ctas));
+  pm.addPass(CreateAddSparseDotEncodingPass(block_level_parameters.num_warps,
+                                            threadsPerWarp,
+                                            block_level_parameters.num_ctas));
+  pm.addPass(mt::gpu::createTritonGPUCoalesce());
   if (ccCuda.IsAtLeastAmpere()) {
-    pm.addPass(mt::gpu::createF32DotTCPass());
+    pm.addPass(mt::gpu::createTritonGPUF32DotTC());
   }
   pm.addPass(mlir::createTritonNvidiaGPUPlanCTAPass(&out_cluster_info));
-  pm.addPass(mt::gpu::createRemoveLayoutConversionsPass());
-  pm.addPass(mt::gpu::createOptimizeThreadLocalityPass());
-  pm.addPass(mt::gpu::createAccelerateMatmulPass(ccAsInt));
-  pm.addPass(mt::gpu::createRemoveLayoutConversionsPass());
-  pm.addPass(mt::gpu::createOptimizeDotOperandsPass());
+  pm.addPass(mt::gpu::createTritonGPURemoveLayoutConversions());
+  pm.addPass(mt::gpu::createTritonGPUOptimizeThreadLocality());
+  pm.addPass(CreateSparseBlockedToMMAPass());
+  pm.addPass(mt::gpu::createTritonGPUAccelerateMatmul());
+  pm.addPass(mt::gpu::createTritonGPURemoveLayoutConversions());
+  pm.addPass(
+      mt::gpu::createTritonGPUOptimizeDotOperands({ccCuda.IsAtLeastAmpere()}));
   pm.addPass(mlir::createCSEPass());
 
-  pm.addPass(mt::gpu::createPipelinePass(config.num_stages, config.num_warps,
-                                         config.num_ctas, ccAsInt));
-
-  if (!ccCuda.IsAtLeastHopper()) {
-    pm.addPass(mt::gpu::createPrefetchPass());
+  // Even though we don't run on pre-Ampere architectures anymore, we keep this
+  // check for consistency with the upstream pipeline
+  if (ccCuda.IsAtLeastAmpere()) {
+    pm.addPass(mt::gpu::createTritonGPUCombineTensorSelectAndIf());
+    pm.addPass(
+        mt::gpu::createTritonGPUPipeline({block_level_parameters.num_stages}));
   }
-
-  pm.addPass(mt::gpu::createOptimizeDotOperandsPass());
-  // We need to disable this pass because it undoes the hoisting of dot_operand
-  // layout conversion done in
-  // triton/lib/Dialect/TritonGPU/Transforms/OptimizeDotOperands.cpp in
-  // HoistLayoutConversion pattern.
-  // Bug: b/331360119
-  // pm.addPass(mt::gpu::createRemoveLayoutConversionsPass());
-  pm.addPass(mt::gpu::createReduceDataDuplicationPass());
-  pm.addPass(mt::gpu::createReorderInstructionsPass());
+  pm.addPass(mt::gpu::createTritonGPUPrefetch());
+  pm.addPass(
+      mt::gpu::createTritonGPUOptimizeDotOperands({ccCuda.IsAtLeastAmpere()}));
+  pm.addPass(mt::gpu::createTritonGPURemoveLayoutConversions());
+  pm.addPass(mt::gpu::createTritonGPUReduceDataDuplication());
+  pm.addPass(mt::gpu::createTritonGPUReorderInstructions());
   pm.addPass(mlir::createCSEPass());
   pm.addPass(mlir::createSymbolDCEPass());
   if (ccCuda.IsAtLeastHopper()) {
     pm.addPass(mlir::createTritonNvidiaGPUFenceInsertionPass(ccAsInt));
+    pm.addPass(mlir::createTritonNvidiaGPUTMALoweringPass());
   }
   pm.addPass(mlir::createCanonicalizerPass());
 
   // Based on make_llir() in
   // @triton//:third_party/nvidia/backend/compiler.py
   pm.addPass(mt::NVIDIA::createDecomposeUnsupportedConversionsPass());
+  // This pass reduces Hopper compile time extensively: b/344841434.
+  if (ccCuda.IsAtLeastHopper()) {
+    pm.addPass(CreatePreventMmaV3LoopUnrollingPass());
+  }
   pm.addPass(mlir::createConvertSCFToCFPass());
   pm.addPass(mlir::createConvertIndexToLLVMPass());
   pm.addPass(mt::gpu::createAllocateSharedMemoryPass());
+  pm.addPass(CreateSparseLocalLoadToLLVMPass());
   pm.addPass(mt::createConvertTritonGPUToLLVMPass(ccAsInt));
+  // The triton_gpu.sparse_dot ops need to be rewritten after
+  // ModuleAxisInfoAnalysis inside convert-triton-gpu-to-llvm.
+  pm.addPass(CreateSparseDotOpToLLVMPass());
   pm.addPass(mt::createConvertNVGPUToLLVMPass());
+  pm.addPass(CreateSparseWGMMAOpToLLVMPass());
   pm.addPass(mlir::createArithToLLVMConversionPass());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createCSEPass());

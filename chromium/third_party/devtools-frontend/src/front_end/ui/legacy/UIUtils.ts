@@ -44,7 +44,6 @@ import * as VisualLogging from '../visual_logging/visual_logging.js';
 import applicationColorTokensStyles from './applicationColorTokens.css.legacy.js';
 import * as ARIAUtils from './ARIAUtils.js';
 import checkboxTextLabelStyles from './checkboxTextLabel.css.legacy.js';
-import closeButtonStyles from './closeButton.css.legacy.js';
 import confirmDialogStyles from './confirmDialog.css.legacy.js';
 import designTokensStyles from './designTokens.css.legacy.js';
 import {Dialog} from './Dialog.js';
@@ -90,11 +89,6 @@ const UIStrings = {
    *@description Text in UIUtils
    */
   promiseRejectedAsync: 'Promise rejected (async)',
-  /**
-   *@description Text in UIUtils
-   *@example {Promise} PH1
-   */
-  sAsync: '{PH1} (async)',
   /**
    *@description Text for the title of asynchronous function calls group in Call Stack
    */
@@ -617,14 +611,12 @@ export function asyncStackTraceLabel(
     if (description === 'Promise.reject') {
       return i18nString(UIStrings.promiseRejectedAsync);
     }
-    // TODO(crbug.com/1254259): Remove the check for 'async function'
-    // once the relevant V8 inspector CL rolls into Node LTS.
-    if ((description === 'await' || description === 'async function') && previousCallFrames.length !== 0) {
+    if (description === 'await' && previousCallFrames.length !== 0) {
       const lastPreviousFrame = previousCallFrames[previousCallFrames.length - 1];
       const lastPreviousFrameName = beautifyFunctionName(lastPreviousFrame.functionName);
       description = `await in ${lastPreviousFrameName}`;
     }
-    return i18nString(UIStrings.sAsync, {PH1: description});
+    return description;
   }
   return i18nString(UIStrings.asyncCall);
 }
@@ -1227,7 +1219,8 @@ export class CheckboxLabel extends HTMLSpanElement {
     this.shadowRootInternal.createChild('slot');
   }
 
-  static create(title?: string, checked?: boolean, subtitle?: string, jslogContext?: string): CheckboxLabel {
+  static create(title?: string, checked?: boolean, subtitle?: string, jslogContext?: string, small?: boolean):
+      CheckboxLabel {
     if (!CheckboxLabel.constructorInternal) {
       CheckboxLabel.constructorInternal = registerCustomElement('span', 'dt-checkbox', CheckboxLabel);
     }
@@ -1244,6 +1237,7 @@ export class CheckboxLabel extends HTMLSpanElement {
         element.textElement.createChild('div', 'dt-checkbox-subtitle').textContent = subtitle;
       }
     }
+    element.checkboxElement.classList.toggle('small', small);
     return element;
   }
 
@@ -1353,29 +1347,29 @@ export class DevToolsSmallBubble extends HTMLSpanElement {
 registerCustomElement('span', 'dt-small-bubble', DevToolsSmallBubble);
 
 export class DevToolsCloseButton extends HTMLDivElement {
-  private buttonElement: HTMLElement;
+  private button: Buttons.Button.Button;
 
   constructor() {
     super();
-    const root = createShadowRootWithCoreStyles(this, {cssFile: closeButtonStyles, delegatesFocus: undefined});
-    this.buttonElement = (root.createChild('div', 'close-button') as HTMLElement);
-    this.buttonElement.setAttribute('jslog', `${VisualLogging.close().track({click: true})}`);
-    Tooltip.install(this.buttonElement, i18nString(UIStrings.close));
-    ARIAUtils.setLabel(this.buttonElement, i18nString(UIStrings.close));
-    ARIAUtils.markAsButton(this.buttonElement);
-    const regularIcon = IconButton.Icon.create('cross');
-    this.buttonElement.appendChild(regularIcon);
+    const root = createShadowRootWithCoreStyles(this, {delegatesFocus: undefined});
+    this.button = new Buttons.Button.Button();
+    this.button.data = {variant: Buttons.Button.Variant.ICON, iconName: 'cross'};
+    this.button.classList.add('close-button');
+    this.button.setAttribute('jslog', `${VisualLogging.close().track({click: true})}`);
+    Tooltip.install(this.button, i18nString(UIStrings.close));
+    ARIAUtils.setLabel(this.button, i18nString(UIStrings.close));
+    root.appendChild(this.button);
   }
 
   setAccessibleName(name: string): void {
-    ARIAUtils.setLabel(this.buttonElement, name);
+    ARIAUtils.setLabel(this.button, name);
   }
 
   setTabbable(tabbable: boolean): void {
     if (tabbable) {
-      this.buttonElement.tabIndex = 0;
+      this.button.tabIndex = 0;
     } else {
-      this.buttonElement.tabIndex = -1;
+      this.button.tabIndex = -1;
     }
   }
 }
@@ -1547,9 +1541,17 @@ export function loadImage(url: string): Promise<HTMLImageElement|null> {
   });
 }
 
-export function createFileSelectorElement(callback: (arg0: File) => void): HTMLInputElement {
+/**
+ * Creates a file selector element.
+ * @param callback - the function that will be called with the file the user selected
+ * @param accept - optionally used to set the [`accept`](https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/accept) parameter to limit file-types the user can pick.
+ */
+export function createFileSelectorElement(callback: (arg0: File) => void, accept?: string): HTMLInputElement {
   const fileSelectorElement = document.createElement('input');
   fileSelectorElement.type = 'file';
+  if (accept) {
+    fileSelectorElement.setAttribute('accept', accept);
+  }
   fileSelectorElement.style.display = 'none';
   fileSelectorElement.tabIndex = -1;
   fileSelectorElement.onchange = () => {

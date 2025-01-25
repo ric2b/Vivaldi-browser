@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "osp/msgs/osp_messages.h"
-#include "osp/public/endpoint_config.h"
 #include "osp/public/message_demuxer.h"
 #include "osp/public/network_service_manager.h"
 #include "osp/public/presentation/presentation_controller.h"
@@ -24,6 +23,8 @@
 #include "osp/public/protocol_connection_client_factory.h"
 #include "osp/public/protocol_connection_server.h"
 #include "osp/public/protocol_connection_server_factory.h"
+#include "osp/public/protocol_connection_service_observer.h"
+#include "osp/public/service_config.h"
 #include "osp/public/service_listener.h"
 #include "osp/public/service_listener_factory.h"
 #include "osp/public/service_publisher.h"
@@ -160,16 +161,51 @@ class DemoPublisherObserver final : public ServicePublisher::Observer {
 class DemoConnectionClientObserver final
     : public ProtocolConnectionServiceObserver {
  public:
+  class ConnectionObserver final : public ProtocolConnection::Observer {
+   public:
+    explicit ConnectionObserver(DemoConnectionClientObserver& parent)
+        : parent_(parent) {}
+    ~ConnectionObserver() override = default;
+
+    void OnConnectionClosed(const ProtocolConnection& connection) override {
+      auto& connections = parent_.connections_;
+      connections.erase(
+          std::remove_if(
+              connections.begin(), connections.end(),
+              [this](const std::pair<std::unique_ptr<ConnectionObserver>,
+                                     std::unique_ptr<ProtocolConnection>>& p) {
+                return p.first.get() == this;
+              }),
+          connections.end());
+    }
+
+   private:
+    DemoConnectionClientObserver& parent_;
+  };
+
   ~DemoConnectionClientObserver() override = default;
   void OnRunning() override {}
   void OnStopped() override {}
+  void OnSuspended() override {}
 
   void OnMetrics(const NetworkMetrics& metrics) override {}
   void OnError(const Error& error) override {}
+
+  void OnIncomingConnection(
+      std::unique_ptr<ProtocolConnection> connection) override {
+    auto observer = std::make_unique<ConnectionObserver>(*this);
+    connection->SetObserver(observer.get());
+    connections_.emplace_back(std::move(observer), std::move(connection));
+  }
+
+ private:
+  std::vector<std::pair<std::unique_ptr<ConnectionObserver>,
+                        std::unique_ptr<ProtocolConnection>>>
+      connections_;
 };
 
 class DemoConnectionServerObserver final
-    : public ProtocolConnectionServer::Observer {
+    : public ProtocolConnectionServiceObserver {
  public:
   class ConnectionObserver final : public ProtocolConnection::Observer {
    public:
@@ -207,7 +243,6 @@ class DemoConnectionServerObserver final
     auto observer = std::make_unique<ConnectionObserver>(*this);
     connection->SetObserver(observer.get());
     connections_.emplace_back(std::move(observer), std::move(connection));
-    connections_.back().second->CloseWriteEnd();
   }
 
  private:
@@ -429,7 +464,7 @@ void ListenerDemo() {
   SignalThings();
 
   ServiceListener::Config listener_config;
-  EndpointConfig client_config;
+  ServiceConfig client_config;
   for (const InterfaceInfo& interface : GetNetworkInterfaces()) {
     OSP_VLOG << "Found interface: " << interface;
     if (!interface.addresses.empty() &&
@@ -532,10 +567,11 @@ void PublisherDemo(std::string_view friendly_name) {
 
   ServicePublisher::Config publisher_config = {
       .friendly_name = std::string(friendly_name),
-      .service_instance_name = "deadbeef",
+      .instance_name = "deadbeef",
       .connection_server_port = server_port};
 
-  EndpointConfig server_config;
+  ServiceConfig server_config = {.instance_name =
+                                     publisher_config.instance_name};
   for (const InterfaceInfo& interface : GetNetworkInterfaces()) {
     OSP_VLOG << "Found interface: " << interface;
     if (!interface.addresses.empty() &&
@@ -554,7 +590,7 @@ void PublisherDemo(std::string_view friendly_name) {
       server_config, demuxer, server_observer,
       PlatformClientPosix::GetInstance()->GetTaskRunner());
 
-  publisher_config.fingerprint = connection_server->GetFingerprint();
+  publisher_config.fingerprint = connection_server->GetAgentFingerprint();
   OSP_CHECK(!publisher_config.fingerprint.empty());
 
   DemoPublisherObserver publisher_observer;

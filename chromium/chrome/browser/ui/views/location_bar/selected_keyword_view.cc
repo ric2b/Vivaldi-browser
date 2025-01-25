@@ -5,9 +5,13 @@
 #include "chrome/browser/ui/views/location_bar/selected_keyword_view.h"
 
 #include "base/check.h"
+#include "chrome/browser/history_embeddings/history_embeddings_utils.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/history_embeddings/history_embeddings_features.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_starter_pack_data.h"
@@ -19,12 +23,19 @@
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/font_list.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
+#include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/text_constants.h"
+#include "ui/gfx/vector_icon_types.h"
+#include "ui/views/accessibility/view_accessibility.h"
 
 // static
 SelectedKeywordView::KeywordLabelNames
 SelectedKeywordView::GetKeywordLabelNames(const std::u16string& keyword,
-                                          TemplateURLService* service) {
+                                          const TemplateURLService* service) {
   KeywordLabelNames names;
   if (service) {
     bool is_extension_keyword = false;
@@ -46,10 +57,9 @@ SelectedKeywordView::GetKeywordLabelNames(const std::u16string& keyword,
 
 SelectedKeywordView::SelectedKeywordView(
     IconLabelBubbleView::Delegate* delegate,
-    TemplateURLService* template_url_service,
+    Profile* profile,
     const gfx::FontList& font_list)
-    : IconLabelBubbleView(font_list, delegate),
-      template_url_service_(template_url_service) {
+    : IconLabelBubbleView(font_list, delegate), profile_(profile) {
   full_label_.SetFontList(font_list);
   full_label_.SetVisible(false);
   partial_label_.SetFontList(font_list);
@@ -64,12 +74,13 @@ SelectedKeywordView::SelectedKeywordView(
   // be focusable, so paint checks will fail due to a lack of name. It might
   // make more sense to only set `FocusBehavior` when this view will be shown.
   // For now, Eliminate the paint check failure.
-  if (GetAccessibleName().empty()) {
-    SetAccessibilityProperties(/*role*/ std::nullopt,
-                               /*name*/ std::u16string(),
-                               /*description*/ std::nullopt,
-                               /*role_description*/ std::nullopt,
-                               ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
+  if (GetViewAccessibility().GetCachedName().empty()) {
+    GetViewAccessibility().SetProperties(
+        /*role*/ std::nullopt,
+        /*name*/ std::u16string(),
+        /*description*/ std::nullopt,
+        /*role_description*/ std::nullopt,
+        ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
   }
 }
 
@@ -82,17 +93,27 @@ void SelectedKeywordView::SetCustomImage(const gfx::Image& image) {
     return;
   }
 
-  // The @gemini starter pack isn't a search engine, so use the spark icon
-  // instead of the search icon. Use the search icon for all other keywords
-  // without a custom image.
+  // Use the search icon for most keywords. Use special icons for '@gemini' and
+  // @history'.
   const TemplateURL* template_url =
-      template_url_service_->GetTemplateURLForKeyword(keyword_);
-  bool use_spark_icon =
-      template_url &&
-      template_url->starter_pack_id() == TemplateURLStarterPackData::kAskGoogle;
+      TemplateURLServiceFactory::GetForProfile(profile_)
+          ->GetTemplateURLForKeyword(keyword_);
+
+  auto* vector_icon = &vector_icons::kSearchIcon;
+  if (template_url && template_url->starter_pack_id() ==
+                          TemplateURLStarterPackData::kAskGoogle) {
+    vector_icon = &omnibox::kSparkIcon;
+  } else if (history_embeddings::IsHistoryEmbeddingsEnabledForProfile(
+                 profile_) &&
+             history_embeddings::kOmniboxScoped.Get() && template_url &&
+             template_url->starter_pack_id() ==
+                 TemplateURLStarterPackData::kHistory) {
+    vector_icon = &omnibox::kSearchSparkIcon;
+  }
+
   IconLabelBubbleView::SetImageModel(ui::ImageModel::FromVectorIcon(
-      use_spark_icon ? omnibox::kSparkIcon : vector_icons::kSearchIcon,
-      GetForegroundColor(), GetLayoutConstant(LOCATION_BAR_ICON_SIZE)));
+      *vector_icon, GetForegroundColor(),
+      GetLayoutConstant(LOCATION_BAR_ICON_SIZE)));
 }
 
 void SelectedKeywordView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
@@ -125,13 +146,16 @@ void SelectedKeywordView::SetKeyword(const std::u16string& keyword) {
     return;
   keyword_ = keyword;
   OnPropertyChanged(&keyword_, views::kPropertyEffectsNone);
+
+  const auto* template_url_service =
+      TemplateURLServiceFactory::GetForProfile(profile_);
   // TODO(pkasting): Arguably, much of the code below would be better as
   // property change handlers in file-scope subclasses of Label etc.
-  if (keyword.empty() || !template_url_service_)
+  if (keyword.empty() || !template_url_service) {
     return;
+  }
 
-  KeywordLabelNames names =
-      GetKeywordLabelNames(keyword, template_url_service_);
+  KeywordLabelNames names = GetKeywordLabelNames(keyword, template_url_service);
   full_label_.SetText(names.full_name);
   partial_label_.SetText(names.short_name);
 

@@ -16,6 +16,7 @@ class BirchCalendarItem;
 class BirchFileItem;
 class BirchTabItem;
 class BirchWeatherItem;
+class BirchLostMediaItem;
 
 // Computes a ranking for birch items of various types. The ranking depends on
 // the time of day. The "now" time is a constructor parameter to allow testing.
@@ -34,6 +35,10 @@ class ASH_EXPORT BirchRanker {
   void RankAttachmentItems(std::vector<BirchAttachmentItem>* items);
   void RankFileSuggestItems(std::vector<BirchFileItem>* items);
   void RankRecentTabItems(std::vector<BirchTabItem>* items);
+  void RankLastActiveItems(std::vector<BirchLastActiveItem>* items);
+  void RankMostVisitedItems(std::vector<BirchMostVisitedItem>* items);
+  void RankSelfShareItems(std::vector<BirchSelfShareItem>* items);
+  void RankLostMediaItems(std::vector<BirchLostMediaItem>* items);
   void RankWeatherItems(std::vector<BirchWeatherItem>* items);
   void RankReleaseNotesItems(std::vector<BirchReleaseNotesItem>* items);
 

@@ -20,7 +20,7 @@ use ldt_tbc::TweakableBlockCipherDecrypter;
 use ldt_tbc::TweakableBlockCipherEncrypter;
 use ldt_tbc::TweakableBlockCipherKey;
 use wycheproof::cipher::TestGroup;
-use xts_aes::{self, XtsAes128Key, XtsAes256Key, XtsDecrypter, XtsEncrypter, XtsKey};
+use xts_aes::{XtsAes128Key, XtsAes256Key, XtsDecrypter, XtsEncrypter, XtsKey};
 
 #[test]
 fn run_wycheproof_vectors() {

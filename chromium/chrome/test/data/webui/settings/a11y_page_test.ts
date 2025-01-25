@@ -7,8 +7,7 @@ import 'chrome://settings/lazy_load.js';
 // clang-format off
 // <if expr="is_win or is_linux or is_macosx">
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
-import type {SettingsPdfOcrToggleElement} from 'chrome://settings/lazy_load.js';
-import {ScreenAiInstallStatus} from 'chrome://settings/lazy_load.js';
+import type {SettingsAxAnnotationsSectionElement} from 'chrome://settings/lazy_load.js';
 import {assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {isVisible} from 'chrome://webui-test/test_util.js';
@@ -20,27 +19,21 @@ import type {AccessibilityBrowserProxy, LanguageHelper, SettingsA11yPageElement}
 import {AccessibilityBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
 import type {SettingsPrefsElement} from 'chrome://settings/settings.js';
 import {CrSettingsPrefs, loadTimeData} from 'chrome://settings/settings.js';
-import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
-import {getFakeLanguagePrefs} from './fake_language_settings_private.js';
 import {FakeSettingsPrivate} from 'chrome://webui-test/fake_settings_private.js';
 import {fakeDataBind} from 'chrome://webui-test/polymer_test_util.js';
+import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
+
+import {getFakeLanguagePrefs} from './fake_language_settings_private.js';
 
 
 class TestAccessibilityBrowserProxy extends TestBrowserProxy implements
     AccessibilityBrowserProxy {
-  private pdfOcrState_: ScreenAiInstallStatus;
-
   constructor() {
     super([
       'openTrackpadGesturesSettings',
       'recordOverscrollHistoryNavigationChanged',
-      // <if expr="is_win or is_linux or is_macosx">
-      'getScreenAiInstallState',
-      // </if>
       'getScreenReaderState',
     ]);
-
-    this.pdfOcrState_ = ScreenAiInstallStatus.NOT_DOWNLOADED;
   }
 
   openTrackpadGesturesSettings() {
@@ -50,13 +43,6 @@ class TestAccessibilityBrowserProxy extends TestBrowserProxy implements
   recordOverscrollHistoryNavigationChanged(enabled: boolean) {
     this.methodCalled('recordOverscrollHistoryNavigationChanged', enabled);
   }
-
-  // <if expr="is_win or is_linux or is_macosx">
-  getScreenAiInstallState() {
-    this.methodCalled('getScreenAiInstallState');
-    return Promise.resolve(this.pdfOcrState_);
-  }
-  // </if>
 
   getScreenReaderState() {
     this.methodCalled('getScreenReaderState');
@@ -72,7 +58,7 @@ suite('A11yPage', () => {
 
   suiteSetup(function() {
     loadTimeData.overrideValues({
-      pdfOcrEnabled: true,
+      mainNodeAnnotationsEnabled: true,
     });
   });
 
@@ -110,29 +96,29 @@ suite('A11yPage', () => {
   });
 
   // <if expr="is_win or is_linux or is_macosx">
-  test('check pdf ocr toggle visibility', async () => {
-    assertTrue(loadTimeData.getBoolean('pdfOcrEnabled'));
+  test('check ax annotations subpage visibility', async () => {
+    assertTrue(loadTimeData.getBoolean('mainNodeAnnotationsEnabled'));
 
-    // Simulate disabling a screen reader to exclude the PDF OCR toggle in a
-    // DOM.
+    // Simulate disabling a screen reader to exclude the ax annotations subpage
+    // in a DOM.
     webUIListenerCallback('screen-reader-state-changed', false);
 
     await flushTasks();
-    let pdfOcrToggle =
-        a11yPage.shadowRoot!.querySelector<SettingsPdfOcrToggleElement>(
-            '#pdfOcrToggle');
-    assertFalse(!!pdfOcrToggle);
+    let axAnnotationsSection =
+        a11yPage.shadowRoot!.querySelector<SettingsAxAnnotationsSectionElement>(
+            '#AxAnnotationsSection');
+    assertFalse(!!axAnnotationsSection);
 
-    // Simulate enabling a screen reader to include the PDF OCR toggle in a
-    // DOM.
+    // Simulate enabling a screen reader to include the ax annotations subpage
+    // in a DOM.
     webUIListenerCallback('screen-reader-state-changed', true);
 
     await flushTasks();
-    pdfOcrToggle =
-        a11yPage.shadowRoot!.querySelector<SettingsPdfOcrToggleElement>(
-            '#pdfOcrToggle');
-    assertTrue(!!pdfOcrToggle);
-    assertTrue(isVisible(pdfOcrToggle));
+    axAnnotationsSection =
+        a11yPage.shadowRoot!.querySelector<SettingsAxAnnotationsSectionElement>(
+            '#AxAnnotationsSection');
+    assertTrue(!!axAnnotationsSection);
+    assertTrue(isVisible(axAnnotationsSection));
   });
   // </if>
 

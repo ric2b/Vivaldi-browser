@@ -199,7 +199,8 @@ void getExpectedColorAndMask(GLenum src_internal_format,
       break;
     }
     default:
-      NOTREACHED() << gl::GLEnums::GetStringEnum(src_internal_format);
+      NOTREACHED_IN_MIGRATION()
+          << gl::GLEnums::GetStringEnum(src_internal_format);
       break;
   }
 
@@ -275,7 +276,8 @@ void getExpectedColorAndMask(GLenum src_internal_format,
       setColor(1, 1, 1, 0, expected_mask);
       break;
     default:
-      NOTREACHED() << gl::GLEnums::GetStringEnum(dest_internal_format);
+      NOTREACHED_IN_MIGRATION()
+          << gl::GLEnums::GetStringEnum(dest_internal_format);
       break;
   }
 }
@@ -365,7 +367,7 @@ void getTextureDataAndExpectedRGBAs(FormatType src_format_type,
     }
     return;
   }
-  NOTREACHED() << gl::GLEnums::GetStringEnum(src_format_type.type);
+  NOTREACHED_IN_MIGRATION() << gl::GLEnums::GetStringEnum(src_format_type.type);
   return;
 }
 
@@ -433,7 +435,7 @@ class GLCopyTextureCHROMIUMTest
       case GL_BGRA8_EXT:
         return GL_BGRA_EXT;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return GL_NONE;
     }
   }
@@ -648,10 +650,9 @@ class GLCopyTextureCHROMIUMES3Test : public GLCopyTextureCHROMIUMTest {
     DCHECK(!ShouldSkipTest());
     const gl::GLVersionInfo& gl_version_info =
         gl_.decoder()->GetFeatureInfo()->gl_version_info();
-    // XB30 support was introduced in GLES 3.0/ OpenGL 3.3, before that it was
-    // signalled via a specific extension.
+    // XB30 support was introduced in GLES 3.0, before that it was signalled
+    // via a specific extension.
     const bool supports_rgb10_a2 =
-        gl_version_info.IsAtLeastGL(3, 3) ||
         gl_version_info.IsAtLeastGLES(3, 0) ||
         GLTestHelper::HasExtension("GL_EXT_texture_type_2_10_10_10_REV");
     EXPECT_TRUE(supports_rgb10_a2);

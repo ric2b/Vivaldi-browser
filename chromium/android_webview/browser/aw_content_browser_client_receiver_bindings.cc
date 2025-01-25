@@ -277,8 +277,7 @@ void AwContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
 #endif
 
   if (base::FeatureList::IsEnabled(
-          features::kWebViewMediaIntegrityApiBlinkExtension) &&
-      !base::FeatureList::IsEnabled(features::kWebViewMediaIntegrityApi)) {
+          features::kWebViewMediaIntegrityApiBlinkExtension)) {
     map->Add<blink::mojom::WebViewMediaIntegrityService>(
         base::BindRepeating(&BindMediaIntegrityServiceReceiver));
   }
@@ -287,9 +286,6 @@ void AwContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
 void AwContentBrowserClient::
     RegisterMojoBinderPoliciesForSameOriginPrerendering(
         content::MojoBinderPolicyMap& policy_map) {
-  if (!base::FeatureList::IsEnabled(features::kWebViewPrerender2)) {
-    return;
-  }
   policy_map.SetAssociatedPolicy<page_load_metrics::mojom::PageLoadMetrics>(
       content::MojoBinderAssociatedPolicy::kGrant);
 }

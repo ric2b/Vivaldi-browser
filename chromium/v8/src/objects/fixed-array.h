@@ -5,6 +5,7 @@
 #ifndef V8_OBJECTS_FIXED_ARRAY_H_
 #define V8_OBJECTS_FIXED_ARRAY_H_
 
+#include "src/common/globals.h"
 #include "src/handles/maybe-handles.h"
 #include "src/objects/heap-object.h"
 #include "src/objects/instance-type.h"
@@ -211,7 +212,7 @@ class FixedArray : public TaggedArrayBase<FixedArray, TaggedArrayShape> {
   // Return a grown copy if the index is bigger than the array's length.
   V8_EXPORT_PRIVATE static Handle<FixedArray> SetAndGrow(
       Isolate* isolate, Handle<FixedArray> array, int index,
-      Handle<Object> value);
+      DirectHandle<Object> value);
 
   // Right-trim the array.
   // Invariant: 0 < new_length <= length()
@@ -232,7 +233,6 @@ class FixedArray : public TaggedArrayBase<FixedArray, TaggedArrayShape> {
 
   static_assert(kHeaderSize == Internals::kFixedArrayHeaderSize);
 
-  DECL_CAST(FixedArray)
   DECL_PRINTER(FixedArray)
   DECL_VERIFIER(FixedArray)
 
@@ -244,7 +244,7 @@ class FixedArray : public TaggedArrayBase<FixedArray, TaggedArrayShape> {
 
  private:
   inline static Handle<FixedArray> Resize(
-      Isolate* isolate, Handle<FixedArray> xs, int new_capacity,
+      Isolate* isolate, DirectHandle<FixedArray> xs, int new_capacity,
       AllocationType allocation = AllocationType::kYoung,
       WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
 };
@@ -282,7 +282,6 @@ class TrustedFixedArray
   template <class IsolateT>
   static inline Handle<TrustedFixedArray> New(IsolateT* isolate, int capacity);
 
-  DECL_CAST(TrustedFixedArray)
   DECL_PRINTER(TrustedFixedArray)
   DECL_VERIFIER(TrustedFixedArray)
 
@@ -330,7 +329,6 @@ class ProtectedFixedArray
   static inline Handle<ProtectedFixedArray> New(IsolateT* isolate,
                                                 int capacity);
 
-  DECL_CAST(ProtectedFixedArray)
   DECL_PRINTER(ProtectedFixedArray)
   DECL_VERIFIER(ProtectedFixedArray)
 
@@ -379,7 +377,6 @@ class FixedArrayBase : public HeapObject {
   static constexpr int kMaxSize = 128 * kTaggedSize * MB;
   static_assert(Smi::IsValid(kMaxSize));
 
-  DECL_CAST(FixedArrayBase)
   DECL_VERIFIER(FixedArrayBase)
 };
 
@@ -501,7 +498,6 @@ class FixedDoubleArray
 
   inline void FillWithHoles(int from, int to);
 
-  DECL_CAST(FixedDoubleArray)
   DECL_PRINTER(FixedDoubleArray)
   DECL_VERIFIER(FixedDoubleArray)
 
@@ -539,7 +535,6 @@ class WeakFixedArray
       IsolateT* isolate, int capacity,
       AllocationType allocation = AllocationType::kYoung);
 
-  DECL_CAST(WeakFixedArray)
   DECL_PRINTER(WeakFixedArray)
   DECL_VERIFIER(WeakFixedArray)
 
@@ -578,7 +573,6 @@ class TrustedWeakFixedArray
   static inline Handle<TrustedWeakFixedArray> New(IsolateT* isolate,
                                                   int capacity);
 
-  DECL_CAST(TrustedWeakFixedArray)
   DECL_PRINTER(TrustedWeakFixedArray)
   DECL_VERIFIER(TrustedWeakFixedArray)
 
@@ -734,21 +728,21 @@ class ArrayList : public TaggedArrayBase<ArrayList, ArrayListShape> {
       Isolate* isolate, Handle<ArrayList> array, Tagged<Smi> obj,
       AllocationType allocation = AllocationType::kYoung);
   V8_EXPORT_PRIVATE static Handle<ArrayList> Add(
-      Isolate* isolate, Handle<ArrayList> array, Handle<Object> obj,
+      Isolate* isolate, Handle<ArrayList> array, DirectHandle<Object> obj,
       AllocationType allocation = AllocationType::kYoung);
   V8_EXPORT_PRIVATE static Handle<ArrayList> Add(
-      Isolate* isolate, Handle<ArrayList> array, Handle<Object> obj0,
-      Handle<Object> obj1, AllocationType allocation = AllocationType::kYoung);
+      Isolate* isolate, Handle<ArrayList> array, DirectHandle<Object> obj0,
+      DirectHandle<Object> obj1,
+      AllocationType allocation = AllocationType::kYoung);
 
   V8_EXPORT_PRIVATE static Handle<FixedArray> ToFixedArray(
-      Isolate* isolate, Handle<ArrayList> array,
+      Isolate* isolate, DirectHandle<ArrayList> array,
       AllocationType allocation = AllocationType::kYoung);
 
   // Right-trim the array.
   // Invariant: 0 < new_length <= length()
   void RightTrim(Isolate* isolate, int new_capacity);
 
-  DECL_CAST(ArrayList)
   DECL_PRINTER(ArrayList)
   DECL_VERIFIER(ArrayList)
 
@@ -810,7 +804,6 @@ class ByteArray : public PrimitiveArrayBase<ByteArray, ByteArrayShape> {
     return size_in_bytes - Shape::kHeaderSize;
   }
 
-  DECL_CAST(ByteArray)
   DECL_PRINTER(ByteArray)
   DECL_VERIFIER(ByteArray)
 
@@ -847,7 +840,9 @@ class TrustedByteArray
   using Shape = TrustedByteArrayShape;
 
   template <class IsolateT>
-  static inline Handle<TrustedByteArray> New(IsolateT* isolate, int capacity);
+  static inline Handle<TrustedByteArray> New(
+      IsolateT* isolate, int capacity,
+      AllocationType allocation_type = AllocationType::kTrusted);
 
   // Given the full object size in bytes, return the length that should be
   // passed to New s.t. an object of the same size is created.
@@ -857,7 +852,6 @@ class TrustedByteArray
     return size_in_bytes - Shape::kHeaderSize;
   }
 
-  DECL_CAST(TrustedByteArray)
   DECL_PRINTER(TrustedByteArray)
   DECL_VERIFIER(TrustedByteArray)
 
@@ -890,8 +884,6 @@ class FixedIntegerArrayBase : public Base {
 
   inline int length() const;
 
-  DECL_CAST(FixedIntegerArrayBase<T LITERAL_COMMA Base>)
-
   OBJECT_CONSTRUCTORS(FixedIntegerArrayBase<T LITERAL_COMMA Base>, Base);
 };
 
@@ -920,8 +912,6 @@ class FixedAddressArrayBase : public FixedIntegerArrayBase<Address, Base> {
   template <typename... MoreArgs>
   static inline Handle<FixedAddressArrayBase> New(Isolate* isolate, int length,
                                                   MoreArgs&&... more_args);
-
-  DECL_CAST(FixedAddressArrayBase<Base>)
 
   OBJECT_CONSTRUCTORS(FixedAddressArrayBase<Base>, Underlying);
 };
@@ -964,7 +954,6 @@ class ExternalPointerArray : public FixedArrayBase {
 
   static constexpr int kPointersOffset = kHeaderSize;
 
-  DECL_CAST(ExternalPointerArray)
   DECL_PRINTER(ExternalPointerArray)
   DECL_VERIFIER(ExternalPointerArray)
 
@@ -1021,7 +1010,6 @@ class PodArray : public PodArrayBase<T, ByteArray> {
       LocalIsolate* isolate, int length,
       AllocationType allocation = AllocationType::kOld);
 
-  DECL_CAST(PodArray<T>)
   OBJECT_CONSTRUCTORS(PodArray<T>, PodArrayBase<T, ByteArray>);
 };
 
@@ -1031,7 +1019,6 @@ class TrustedPodArray : public PodArrayBase<T, TrustedByteArray> {
   static Handle<TrustedPodArray<T>> New(Isolate* isolate, int length);
   static Handle<TrustedPodArray<T>> New(LocalIsolate* isolate, int length);
 
-  DECL_CAST(TrustedPodArray<T>)
   OBJECT_CONSTRUCTORS(TrustedPodArray<T>, PodArrayBase<T, TrustedByteArray>);
 };
 

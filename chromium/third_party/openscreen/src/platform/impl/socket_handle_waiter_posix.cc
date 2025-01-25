@@ -28,8 +28,8 @@ SocketHandleWaiterPosix::AwaitSocketsReadable(
     const std::vector<SocketHandleRef>& socket_handles,
     const Clock::duration& timeout) {
   int max_fd = -1;
-  fd_set read_handles;
-  fd_set write_handles;
+  fd_set read_handles{};
+  fd_set write_handles{};
 
   FD_ZERO(&read_handles);
   FD_ZERO(&write_handles);
@@ -42,7 +42,9 @@ SocketHandleWaiterPosix::AwaitSocketsReadable(
     return Error::Code::kIOFailure;
   }
 
-  struct timeval tv = ToTimeval(timeout);
+  struct timeval tv {
+    ToTimeval(timeout)
+  };
   // This value is set to 'max_fd + 1' by convention. Also, select() is
   // level-triggered so incomplete reads/writes by the caller are fine and will
   // be picked up again on the next select() call.  For more information, see:

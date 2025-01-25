@@ -9,20 +9,18 @@
 #include <utility>
 
 #include "base/check.h"
-#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback_helpers.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "build/chromeos_buildflags.h"
-#include "content/browser/model_execution/mock_model_manager.h"
+#include "content/browser/ai/echo_ai_manager_impl.h"
 #include "content/public/browser/anchor_element_preconnect_delegate.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/browser_context.h"
@@ -92,6 +90,7 @@
 #include "content/public/browser/tts_environment_android.h"
 #else
 #include "services/video_effects/public/mojom/video_effects_processor.mojom-forward.h"
+#include "third_party/blink/public/mojom/installedapp/related_application.mojom.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -128,6 +127,8 @@ bool ContentBrowserClient::IsShuttingDown() {
   return false;
 }
 
+void ContentBrowserClient::ThreadPoolWillTerminate() {}
+
 bool ContentBrowserClient::AllowGpuLaunchRetryOnIOThread() {
   return true;
 }
@@ -163,10 +164,16 @@ bool ContentBrowserClient::ShouldUseProcessPerSite(
   return false;
 }
 
-bool ContentBrowserClient::ShouldUseSpareRenderProcessHost(
+bool ContentBrowserClient::ShouldAllowProcessPerSiteForMultipleMainFrames(
+    BrowserContext* context) {
+  return true;
+}
+
+std::optional<ContentBrowserClient::SpareProcessRefusedByEmbedderReason>
+ContentBrowserClient::ShouldUseSpareRenderProcessHost(
     BrowserContext* browser_context,
     const GURL& site_url) {
-  return true;
+  return std::nullopt;
 }
 
 bool ContentBrowserClient::DoesSiteRequireDedicatedProcess(
@@ -174,6 +181,14 @@ bool ContentBrowserClient::DoesSiteRequireDedicatedProcess(
     const GURL& effective_site_url) {
   DCHECK(browser_context);
   return false;
+}
+
+bool ContentBrowserClient::ShouldAllowCrossProcessSandboxedFrameForPrecursor(
+    BrowserContext* browser_context,
+    const GURL& precursor,
+    const GURL& url) {
+  DCHECK(browser_context);
+  return true;
 }
 
 bool ContentBrowserClient::ShouldLockProcessToSite(
@@ -637,6 +652,7 @@ bool ContentBrowserClient::IsCookieDeprecationLabelAllowedForContext(
 
 bool ContentBrowserClient::IsFullCookieAccessAllowed(
     content::BrowserContext* browser_context,
+    content::WebContents* web_contents,
     const GURL& url,
     const blink::StorageKey& storage_key) {
   return true;
@@ -651,6 +667,11 @@ GeneratedCodeCacheSettings ContentBrowserClient::GetGeneratedCodeCacheSettings(
     BrowserContext* context) {
   // By default, code cache is disabled, embedders should override.
   return GeneratedCodeCacheSettings(false, 0, base::FilePath());
+}
+
+std::string ContentBrowserClient::GetWebUIHostnameForCodeCacheMetrics(
+    const GURL& webui_url) const {
+  return std::string();
 }
 
 void ContentBrowserClient::AllowCertificateError(
@@ -673,6 +694,7 @@ bool ContentBrowserClient::ShouldDenyRequestOnCertificateError(
 
 base::OnceClosure ContentBrowserClient::SelectClientCertificate(
     BrowserContext* browser_context,
+    int process_id,
     WebContents* web_contents,
     net::SSLCertRequestInfo* cert_request_info,
     net::ClientCertIdentityList client_certs,
@@ -957,12 +979,8 @@ std::wstring ContentBrowserClient::GetAppContainerSidForSandboxType(
       L"924012148-129201922");
 }
 
-std::string ContentBrowserClient::GetAppContainerId() {
-  return base::WideToUTF8(
-      base::CommandLine::ForCurrentProcess()->GetProgram().value());
-}
-
-bool ContentBrowserClient::IsRendererAppContainerDisabled() {
+bool ContentBrowserClient::IsAppContainerDisabled(
+    sandbox::mojom::Sandbox sandbox_type) {
   return false;
 }
 
@@ -977,9 +995,17 @@ bool ContentBrowserClient::IsRendererCodeIntegrityEnabled() {
   return false;
 }
 
+bool ContentBrowserClient::IsPdfFontProxyEnabled() {
+  return false;
+}
+
 bool ContentBrowserClient::ShouldEnableAudioProcessHighPriority() {
   // TODO(crbug.com/40242320): Delete this method when the
   // kAudioProcessHighPriorityEnabled enterprise policy is deprecated.
+  return false;
+}
+
+bool ContentBrowserClient::ShouldUseSkiaFontManager(const GURL& site_url) {
   return false;
 }
 
@@ -1064,7 +1090,7 @@ void ContentBrowserClient::CreateWebSocket(
     mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
         handshake_client) {
   // NOTREACHED because WillInterceptWebSocket returns false.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void ContentBrowserClient::WillCreateWebTransport(
@@ -1095,6 +1121,7 @@ ContentBrowserClient::WillCreateURLLoaderRequestInterceptors(
     content::NavigationUIData* navigation_ui_data,
     int frame_tree_node_id,
     int64_t navigation_id,
+    bool force_no_https_upgrade,
     scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner) {
   return std::vector<std::unique_ptr<URLLoaderRequestInterceptor>>();
 }
@@ -1209,11 +1236,6 @@ bool ContentBrowserClient::ShowPaymentHandlerWindow(
     base::OnceCallback<void(bool, int, int)> callback) {
   DCHECK(browser_context);
   return false;
-}
-
-bool ContentBrowserClient::CreateThreadPool(std::string_view name) {
-  base::ThreadPoolInstance::Create(name);
-  return true;
 }
 
 bool ContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn(
@@ -1531,15 +1553,6 @@ ContentBrowserClient::CreateIdentityRequestDialogController(
   return std::make_unique<IdentityRequestDialogController>();
 }
 
-void ContentBrowserClient::ShowDigitalIdentityInterstitialIfNeeded(
-    WebContents& web_contents,
-    const url::Origin& origin,
-    bool is_only_requesting_age,
-    DigitalIdentityInterstitialCallback callback) {
-  std::move(callback).Run(
-      DigitalIdentityProvider::RequestStatusForMetrics::kErrorOther);
-}
-
 std::unique_ptr<DigitalIdentityProvider>
 ContentBrowserClient::CreateDigitalIdentityProvider() {
   return nullptr;
@@ -1729,6 +1742,7 @@ ContentBrowserClient::GetIpProtectionProxyBypassPolicy() {
 
 void ContentBrowserClient::MaybePrewarmHttpDiskCache(
     BrowserContext& browser_context,
+    const std::optional<url::Origin>& initiator_origin,
     const GURL& navigation_url) {}
 
 void ContentBrowserClient::NotifyMultiCaptureStateChanged(
@@ -1744,10 +1758,21 @@ bool ContentBrowserClient::ShouldSuppressAXLoadComplete(RenderFrameHost* rfh) {
   return false;
 }
 
-void ContentBrowserClient::BindModelManager(
-    RenderFrameHost* rfh,
-    mojo::PendingReceiver<blink::mojom::ModelManager> receiver) {
-  MockModelManager::Create(rfh, std::move(receiver));
+void ContentBrowserClient::BindAIManager(
+    BrowserContext* browser_context,
+    mojo::PendingReceiver<blink::mojom::AIManager> receiver) {
+  EchoAIManagerImpl::Create(browser_context, std::move(receiver));
 }
+
+#if !BUILDFLAG(IS_ANDROID)
+void ContentBrowserClient::QueryInstalledWebAppsByManifestId(
+    const GURL& frame_url,
+    const GURL& manifest_id,
+    content::BrowserContext* browser_context,
+    base::OnceCallback<void(std::optional<blink::mojom::RelatedApplication>)>
+        callback) {
+  std::move(callback).Run(std::nullopt);
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace content

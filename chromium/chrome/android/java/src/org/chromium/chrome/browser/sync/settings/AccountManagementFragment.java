@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.sync.settings;
 
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.UserManager;
@@ -55,6 +56,7 @@ import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.metrics.SignoutReason;
 import org.chromium.components.sync.SyncService;
 import org.chromium.components.user_prefs.UserPrefs;
+import org.chromium.ui.UiUtils;
 import org.chromium.ui.modaldialog.ModalDialogManagerHolder;
 
 import java.util.List;
@@ -191,10 +193,14 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
                 .getCoreAccountInfos()
                 .then(this::updateAccountsList);
 
-        // TODO(crbug.com/40944114): Figure out the behaviour for child accounts.
-        mIdentityErrorCardPreference =
-                (IdentityErrorCardPreference) findPreference(PREF_IDENTITY_ERROR_CARD_PREFERENCE);
-        mIdentityErrorCardPreference.initialize(getProfile(), this);
+        if (!ChromeFeatureList.isEnabled(
+                ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)) {
+            // TODO(crbug.com/40944114): Figure out the behaviour for child accounts.
+            mIdentityErrorCardPreference =
+                    (IdentityErrorCardPreference)
+                            findPreference(PREF_IDENTITY_ERROR_CARD_PREFERENCE);
+            mIdentityErrorCardPreference.initialize(getProfile(), this);
+        }
     }
 
     /**
@@ -235,6 +241,21 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
                             return false;
                         }
 
+                        if (ChromeFeatureList.isEnabled(
+                                ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)) {
+                            SignOutCoordinator.startSignOutFlow(
+                                    requireContext(),
+                                    getProfile(),
+                                    getChildFragmentManager(),
+                                    ((ModalDialogManagerHolder) getActivity())
+                                            .getModalDialogManager(),
+                                    mSnackbarManager,
+                                    SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS,
+                                    /* showConfirmDialog= */ false,
+                                    () -> {});
+                            return true;
+                        }
+
                         if (IdentityServicesProvider.get()
                                         .getIdentityManager(getProfile())
                                         .getPrimaryAccountInfo(ConsentLevel.SYNC)
@@ -248,6 +269,7 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
                                             .getModalDialogManager(),
                                     mSnackbarManager,
                                     SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS,
+                                    /* showConfirmDialog= */ false,
                                     () -> {});
                         } else {
                             IdentityServicesProvider.get()
@@ -346,7 +368,12 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
         manageYourGoogleAccountPreference.setLayoutResource(
                 R.layout.account_management_account_row);
         manageYourGoogleAccountPreference.setTitle(R.string.manage_your_google_account);
-        manageYourGoogleAccountPreference.setIcon(R.drawable.ic_google_services_48dp);
+        Drawable googleServicesIcon =
+                UiUtils.getTintedDrawable(
+                        getContext(),
+                        R.drawable.ic_google_services_48dp,
+                        R.color.default_icon_color_tint_list);
+        manageYourGoogleAccountPreference.setIcon(googleServicesIcon);
         manageYourGoogleAccountPreference.setOnPreferenceClickListener(
                 SyncSettingsUtils.toOnClickListener(
                         this,
@@ -568,7 +595,8 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
         // SEED_ACCOUNTS_REVAMP is needed for using capabilities, otherwise
         // findExtendedAccountInfoByEmailAddress is not guaranteed to have the needed account
         if (ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.MIGRATE_ACCOUNT_MANAGEMENT_SETTINGS_TO_CAPABILITIES)
+                        ChromeFeatureList
+                                .REPLACE_PROFILE_IS_CHILD_WITH_ACCOUNT_CAPABILITIES_ON_ANDROID)
                 && SigninFeatureMap.isEnabled(SigninFeatures.SEED_ACCOUNTS_REVAMP)) {
             assert mSignedInCoreAccountInfo != null;
             AccountInfo accountinfo =

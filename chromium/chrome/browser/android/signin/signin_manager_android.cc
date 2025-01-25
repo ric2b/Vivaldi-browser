@@ -16,14 +16,12 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
-#include "chrome/android/chrome_jni_headers/SigninManagerImpl_jni.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service_mobile.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/signin/account_id_from_account_info.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
@@ -45,6 +43,9 @@
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/storage_partition.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "chrome/android/chrome_jni_headers/SigninManagerImpl_jni.h"
 
 using base::android::JavaParamRef;
 
@@ -171,7 +172,7 @@ SigninManagerAndroid::SigninManagerAndroid(
 
   java_signin_manager_ = Java_SigninManagerImpl_create(
       base::android::AttachCurrentThread(), reinterpret_cast<intptr_t>(this),
-      ProfileAndroid::FromProfile(profile_)->GetJavaObject(),
+      profile_->GetJavaObject(),
       identity_manager_->LegacyGetAccountTrackerServiceJavaObject(),
       identity_manager_->GetJavaObject(),
       identity_manager_->GetIdentityMutatorJavaObject(),
@@ -204,11 +205,11 @@ bool SigninManagerAndroid::IsSigninAllowed() const {
   return signin_allowed_.GetValue();
 }
 
-jboolean SigninManagerAndroid::IsSigninAllowedByPolicy(JNIEnv* env) const {
+bool SigninManagerAndroid::IsSigninAllowedByPolicy(JNIEnv* env) const {
   return IsSigninAllowed();
 }
 
-jboolean SigninManagerAndroid::IsForceSigninEnabled(JNIEnv* env) {
+bool SigninManagerAndroid::IsForceSigninEnabled(JNIEnv* env) {
   return force_browser_signin_.GetValue();
 }
 
@@ -257,12 +258,8 @@ void SigninManagerAndroid::RegisterPolicyWithAccount(
 void SigninManagerAndroid::FetchAndApplyCloudPolicy(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& j_account_info,
-    const base::android::JavaParamRef<jobject>& j_callback) {
+    const base::RepeatingClosure& callback) {
   CoreAccountInfo account = ConvertFromJavaCoreAccountInfo(env, j_account_info);
-  auto callback =
-      base::BindOnce(base::android::RunRunnableAndroid,
-                     base::android::ScopedJavaGlobalRef<jobject>(j_callback));
-
   RegisterPolicyWithAccount(
       account,
       base::BindOnce(&SigninManagerAndroid::OnPolicyRegisterDone,
@@ -368,20 +365,14 @@ SigninManagerAndroid::GetManagementDomain(JNIEnv* env) {
 
 void SigninManagerAndroid::WipeProfileData(
     JNIEnv* env,
-    const JavaParamRef<jobject>& j_callback) {
-  WipeData(
-      profile_, true /* all data */,
-      base::BindOnce(base::android::RunRunnableAndroid,
-                     base::android::ScopedJavaGlobalRef<jobject>(j_callback)));
+    const base::RepeatingClosure& callback) {
+  WipeData(profile_, true /* all data */, callback);
 }
 
 void SigninManagerAndroid::WipeGoogleServiceWorkerCaches(
     JNIEnv* env,
-    const JavaParamRef<jobject>& j_callback) {
-  WipeData(
-      profile_, false /* only Google service worker caches */,
-      base::BindOnce(base::android::RunRunnableAndroid,
-                     base::android::ScopedJavaGlobalRef<jobject>(j_callback)));
+    const base::RepeatingClosure& callback) {
+  WipeData(profile_, false /* only Google service worker caches */, callback);
 }
 
 // static
@@ -399,9 +390,9 @@ std::string JNI_SigninManagerImpl_ExtractDomainName(JNIEnv* env,
 
 void SigninManagerAndroid::SetUserAcceptedAccountManagement(
     JNIEnv* env,
-    jboolean acceptedAccountManagement) {
+    bool accepted_account_management) {
   chrome::enterprise_util::SetUserAcceptedAccountManagement(
-      profile_, acceptedAccountManagement);
+      profile_, accepted_account_management);
 }
 
 bool SigninManagerAndroid::GetUserAcceptedAccountManagement(JNIEnv* env) {

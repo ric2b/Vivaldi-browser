@@ -15,7 +15,6 @@
 <translation id="1728677426644403582">Dies ist der Quelltext einer Webseite</translation>
 <translation id="1734878702283171397">Setzen Sie sich mit dem Systemadministrator in Verbindung.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Versuchen Sie eine Windows Netzwerkdiagnose durchzuführen<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">Diese Website enthält schädliche Programme</translation>
 <translation id="1974060860693918893">Erweitert</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proxy und Firewall prüfen<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Ausgestellt für: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -40,7 +39,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Verbindungsdiagnose ausführen<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Die Verbindung wurde zurückgesetzt.</translation>
 <translation id="2826760142808435982">Die Verbindung ist mit <ph name="CIPHER" /> verschlüsselt und authentifiziert und verwendet <ph name="KX" /> als Mechanismus für den Schlüsselaustausch.</translation>
-<translation id="2856444702002559011">Angreifer könnten versuchen, Ihre Daten von <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> zu stehlen, zum Beispiel Passwörter, Nachrichten oder Kreditkartendaten. <ph name="BEGIN_LEARN_MORE_LINK" />Weitere Informationen<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Eine Netzwerkänderung ist aufgetreten.</translation>
 <translation id="2948083400971632585">Sie können jeden Proxy, der für eine Verbindung konfiguriert wurde, in den Einstellungen deaktivieren.</translation>
 <translation id="2991571918955627853">Sie können <ph name="SITE" /> zurzeit nicht aufrufen, da die Website HSTS verwendet. Netzwerkfehler und Angriffe sind in der Regel nur vorübergehend, sodass die Seite wahrscheinlich später wieder funktioniert.</translation>
@@ -87,7 +85,6 @@
 <translation id="4265872034478892965">Von Ihrem Administrator zugelassen</translation>
 <translation id="4305666528087210886">Zugriff auf die Datei nicht möglich</translation>
 <translation id="4312866146174492540">Blockieren (Standardeinstellung)</translation>
-<translation id="4356973930735388585">Angreifer könnten auf dieser Website versuchen, gefährliche Programme auf Ihrem Computer zu installieren, um Ihre Daten zu stehlen oder zu löschen (z.B. Fotos, Passwörter, Nachrichten und Kreditkartendaten).</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> hat Ihr Anmeldezertifikat nicht akzeptiert oder es wurde keines bereitgestellt.</translation>
 <translation id="4506599922270137252">Kontakt mit dem Systemadministrator aufnehmen</translation>
@@ -139,7 +136,6 @@
 <translation id="6305205051461490394"><ph name="URL" /> ist nicht erreichbar.</translation>
 <translation id="6321917430147971392">Überprüfen Sie Ihre DNS-Einstellungen.</translation>
 <translation id="6328639280570009161">Deaktivieren Sie die Netzwerkvervollständigung</translation>
-<translation id="6328786501058569169">Sie befinden sich auf einer betrügerischen Website</translation>
 <translation id="6348220984832452017">Aktive Variationen</translation>
 <translation id="6358450015545214790">Was bedeuten diese Hinweise?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> hat die Verbindung abgelehnt.</translation>
@@ -152,7 +148,6 @@
 <translation id="6890956352250146925">Optionen für Cookies und Websitedaten</translation>
 <translation id="6897140037006041989">User-Agent</translation>
 <translation id="7053983685419859001">Blockieren</translation>
-<translation id="7079718277001814089">Diese Website enthält Malware</translation>
 <translation id="7096937462164235847">Die Identität dieser Website ist nicht verifiziert.</translation>
 <translation id="7108819624672055576">Von einer Erweiterung zugelassen</translation>
 <translation id="7111012039238467737">(Gültig)</translation>
@@ -169,7 +164,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kann diese Anfrage momentan nicht verarbeiten.</translation>
 <translation id="7662298039739062396">Einstellung wird von einer Erweiterung gesteuert</translation>
 <translation id="7663736086183791259">Zertifikat <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Angreifer könnten Sie auf dieser Website dazu verleiten, Programme zu installieren, die Ihre Nutzung des Browsers beeinträchtigen (z.B. indem sie Ihre Startseite ändern oder zusätzliche Werbung auf von Ihnen besuchten Websites schalten).</translation>
 <translation id="7714464543167945231">Zertifikat</translation>
 <translation id="7716147886133743102">Von Ihrem Administrator blockiert</translation>
 <translation id="7716424297397655342">Diese Website kann nicht aus dem Cache geladen werden</translation>
@@ -178,7 +172,6 @@
 <translation id="7834399512844817676"><ph name="SITE" /> schützt Ihre Daten in der Regel durch Verschlüsselung. Als Vivaldi dieses Mal versuchte, eine Verbindung zu <ph name="SITE" /> herzustellen, sendete die Website ungewöhnliche und falsche Informationen zurück, um sich zu identifizieren. Entweder versucht ein Angreifer, sich als <ph name="SITE" /> auszugeben, oder die Verbindung wurde durch eine WLAN-Anmeldeseite unterbrochen. Da Vivaldi die Verbindung vor dem Austausch von Daten unterbrochen hat, sind Ihre Informationen weiterhin sicher.</translation>
 <translation id="7878562273885520351">Ihr Passwort könnte kompromittiert sein</translation>
 <translation id="7951415247503192394">(32-Bit)</translation>
-<translation id="8025119109950072390">Angreifer auf dieser Website können Sie dazu verleiten etwas Gefährliches zu tun, wie die Installation von Software oder die Offenlegung Ihrer persönlichen Daten (z. B. Passwörter, Telefonnummern oder Kreditkartendaten).</translation>
 <translation id="8037357227543935929">Nachfragen (Standardeinstellung)</translation>
 <translation id="8041940743680923270">Globalen Standard verwenden (Nachfragen)</translation>
 <translation id="808894953321890993">Passwort ändern</translation>

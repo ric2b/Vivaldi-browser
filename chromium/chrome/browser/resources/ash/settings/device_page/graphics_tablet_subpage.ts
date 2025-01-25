@@ -11,6 +11,7 @@
 import '../icons.html.js';
 import '../settings_shared.css.js';
 import './input_device_settings_shared.css.js';
+import './per_device_subsection_header.js';
 
 import {getInstance as getAnnouncerInstance} from 'chrome://resources/ash/common/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
 import {CrLinkRowElement} from 'chrome://resources/ash/common/cr_elements/cr_link_row/cr_link_row.js';
@@ -24,7 +25,7 @@ import {PrefsState} from '../common/types.js';
 import {Route, Router, routes} from '../router.js';
 
 import {getTemplate} from './graphics_tablet_subpage.html.js';
-import {GraphicsTablet} from './input_device_settings_types.js';
+import {GraphicsTablet, GraphicsTabletButtonConfig} from './input_device_settings_types.js';
 import {getDeviceStateChangesToAnnounce} from './input_device_settings_utils.js';
 
 const SettingsGraphicsTabletSubpageElementBase =
@@ -157,6 +158,15 @@ export class SettingsGraphicsTabletSubpageElement extends
         /* dynamicParams= */ this.getSelectedGraphicsTabletUrl(e),
         /* removeSearch= */ true);
     this.currentPenChanged = true;
+  }
+
+  private showCustomizeTabletButtonsRow(graphicsTablet: GraphicsTablet):
+      boolean {
+    // Hide the graphics tablet button page when there are no buttons
+    // due to having metadata about the device.
+    return (graphicsTablet.graphicsTabletButtonConfig ===
+            GraphicsTabletButtonConfig.kNoConfig) ||
+        (graphicsTablet.settings.tabletButtonRemappings.length !== 0);
   }
 
   private getSelectedGraphicsTabletUrl(e: PointerEvent): URLSearchParams {

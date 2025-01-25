@@ -148,24 +148,17 @@ TEST_F(AutofillWalletUsageDataSyncBridgeTest, VerifyGetStorageKey) {
             kExpectedClientTagAndStorageKey);
 }
 
-// Tests that `GetData()` returns all local usage data of matching usage data
-// id.
-TEST_F(AutofillWalletUsageDataSyncBridgeTest, GetData) {
+// Tests that `GetDataForCommit()` returns all local usage data of matching
+// usage data id.
+TEST_F(AutofillWalletUsageDataSyncBridgeTest, GetDataForCommit) {
   const VirtualCardUsageData usage_data1 = test::GetVirtualCardUsageData1();
   const VirtualCardUsageData usage_data2 = test::GetVirtualCardUsageData2();
   table()->SetVirtualCardUsageData({usage_data1, usage_data2});
 
-  // Synchronously get data the data of `usage_data_1`.
-  std::vector<VirtualCardUsageData> virtual_card_usage_data;
-  base::RunLoop loop;
-  bridge()->GetData(
-      {*usage_data1.usage_data_id()},
-      base::BindLambdaForTesting([&](std::unique_ptr<syncer::DataBatch> batch) {
-        virtual_card_usage_data =
-            ExtractVirtualCardUsageDataFromDataBatch(std::move(batch));
-        loop.Quit();
-      }));
-  loop.Run();
+  // Get data the data of `usage_data_1`.
+  std::vector<VirtualCardUsageData> virtual_card_usage_data =
+      ExtractVirtualCardUsageDataFromDataBatch(
+          bridge()->GetDataForCommit({*usage_data1.usage_data_id()}));
   EXPECT_THAT(virtual_card_usage_data, testing::ElementsAre(usage_data1));
 }
 
@@ -175,15 +168,9 @@ TEST_F(AutofillWalletUsageDataSyncBridgeTest, GetAllDataForDebugging) {
   const VirtualCardUsageData usage_data2 = test::GetVirtualCardUsageData2();
   table()->SetVirtualCardUsageData({usage_data1, usage_data2});
 
-  std::vector<VirtualCardUsageData> virtual_card_usage_data;
-  base::RunLoop loop;
-  bridge()->GetAllDataForDebugging(
-      base::BindLambdaForTesting([&](std::unique_ptr<syncer::DataBatch> batch) {
-        virtual_card_usage_data =
-            ExtractVirtualCardUsageDataFromDataBatch(std::move(batch));
-        loop.Quit();
-      }));
-  loop.Run();
+  std::vector<VirtualCardUsageData> virtual_card_usage_data =
+      ExtractVirtualCardUsageDataFromDataBatch(
+          bridge()->GetAllDataForDebugging());
   EXPECT_THAT(virtual_card_usage_data,
               testing::UnorderedElementsAre(usage_data1, usage_data2));
 }

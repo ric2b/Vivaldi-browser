@@ -20,10 +20,10 @@ target_link_libraries(nearby_protocol
 
 target_include_directories(nearby_protocol PUBLIC
         include/
-        ${CMAKE_SOURCE_DIR}/np_c_ffi/include/cpp/)
+        ${NEARBY_ROOT}/presence/np_c_ffi/include/cpp/)
 
 target_include_directories(nearby_protocol PRIVATE
-        ${CMAKE_SOURCE_DIR}/np_c_ffi/include/cpp/internal/)
+        ${NEARBY_ROOT}/presence/np_c_ffi/include/cpp/internal/)
 
 add_subdirectory(sample)
 

@@ -12,7 +12,6 @@
 #include "cast/streaming/frame_id.h"
 #include "cast/streaming/rtp_time.h"
 #include "platform/api/time.h"
-#include "util/enum_name_table.h"
 
 namespace openscreen::cast {
 
@@ -48,11 +47,6 @@ enum class StatisticsEventMediaType : int {
 };
 
 StatisticsEventMediaType ToMediaType(StreamType type);
-
-extern const EnumNameTable<StatisticsEventType,
-                           static_cast<size_t>(
-                               StatisticsEventType::kNumOfEvents)>
-    kStatisticEventTypeNames;
 
 struct StatisticsEvent {
   constexpr StatisticsEvent(FrameId frame_id,

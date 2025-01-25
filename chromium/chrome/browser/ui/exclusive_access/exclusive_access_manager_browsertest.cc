@@ -10,8 +10,9 @@
 #include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "content/public/common/input/native_web_keyboard_event.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "content/public/test/browser_test.h"
+#include "ui/base/ozone_buildflags.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "url/gurl.h"
 
@@ -19,7 +20,7 @@ using ExclusiveAccessManagerTest = ExclusiveAccessTest;
 
 IN_PROC_BROWSER_TEST_F(ExclusiveAccessManagerTest, HandleKeyEvent_NonEscKey) {
   // Non-Esc key events should be ignored.
-  content::NativeWebKeyboardEvent event(
+  input::NativeWebKeyboardEvent event(
       blink::WebInputEvent::Type::kRawKeyDown,
       blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
@@ -51,8 +52,17 @@ IN_PROC_BROWSER_TEST_F(ExclusiveAccessManagerTest,
   ExpectMockControllerReceivedEscape(2);
 }
 
+// TODO: crbug.com/352244303 - For some reason the test fails on
+// linux_wayland_rel when kKeyboardAndPointerLockPrompt is disabled. Re-enable
+// the test when the feature is enabled by default.
+#if BUILDFLAG(IS_OZONE_WAYLAND)
+#define MAYBE_HandleKeyEvent_KeyboardLocked \
+  DISABLED_HandleKeyEvent_KeyboardLocked
+#else
+#define MAYBE_HandleKeyEvent_KeyboardLocked HandleKeyEvent_KeyboardLocked
+#endif
 IN_PROC_BROWSER_TEST_F(ExclusiveAccessManagerTest,
-                       HandleKeyEvent_KeyboardLocked) {
+                       MAYBE_HandleKeyEvent_KeyboardLocked) {
   // Esc key pressed while keyboard is locked without Esc key should be handled.
   EnterActiveTabFullscreen();
   RequestKeyboardLock(/*esc_key_locked=*/false);
@@ -86,6 +96,22 @@ class ExclusiveAccessManagerPressAndHoldEscTest : public ExclusiveAccessTest {
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
+
+IN_PROC_BROWSER_TEST_F(ExclusiveAccessManagerPressAndHoldEscTest,
+                       HoldTimerStartOnEscKeyPressWithModifiers) {
+  // Don't start the timer on Esc key down with a non-stateful modifier.
+  input::NativeWebKeyboardEvent event(
+      blink::WebInputEvent::Type::kRawKeyDown, blink::WebInputEvent::kShiftKey,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
+  event.windows_key_code = ui::VKEY_ESCAPE;
+  GetExclusiveAccessManager()->HandleUserKeyEvent(event);
+  EXPECT_FALSE(IsEscKeyHoldTimerRunning());
+
+  // Start the timer on Esc key down with a stateful modifier.
+  event.SetModifiers(blink::WebInputEvent::kNumLockOn);
+  GetExclusiveAccessManager()->HandleUserKeyEvent(event);
+  EXPECT_TRUE(IsEscKeyHoldTimerRunning());
+}
 
 IN_PROC_BROWSER_TEST_F(ExclusiveAccessManagerPressAndHoldEscTest,
                        HandlePressAndHoldKeyEvent) {

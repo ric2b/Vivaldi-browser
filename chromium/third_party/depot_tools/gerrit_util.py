@@ -7,32 +7,86 @@ Utilities for requesting information for a Gerrit server via HTTPS.
 https://gerrit-review.googlesource.com/Documentation/rest-api.html
 """
 
+from __future__ import annotations
+
 import base64
 import contextlib
-import httplib2
+import http.cookiejar
 import json
 import logging
-import netrc
 import os
 import random
 import re
+import shutil
 import socket
-import stat
+import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.parse
+
+from dataclasses import dataclass
+from io import StringIO
 from multiprocessing.pool import ThreadPool
+from typing import Any, Container, Dict, List, Optional
+from typing import Tuple, TypedDict, cast
+
+import httplib2
+import httplib2.socks
 
 import auth
 import gclient_utils
 import metrics
 import metrics_utils
+import newauth
 import scm
 import subprocess2
 
-import http.cookiejar
-from io import StringIO
+
+# HACK: httplib2 has significant bugs with its proxy support in
+# python3. All httplib2 code should be rewritten to just use python
+# stdlib which does not have these bugs.
+#
+# Prior to that, however, we will directly patch the buggy
+# implementation of httplib2.socks.socksocket.__rewriteproxy which does
+# not properly expect bytes as its argument instead of str.
+#
+# Note that __rewriteproxy is inherently buggy, as it relies on the
+# python stdlib client to send the entire request header in a single
+# call to socket.sendall, which is not explicitly guaranteed.
+#
+# Changes:
+#   * all string literals changed to bytes literals.
+#   * all __symbols changed to _socksocket__symbols.
+#   * Type annotations added to function signature.
+def __fixed_rewrite_proxy(self: httplib2.socks.socksocket, header: bytes):
+    """ rewrite HTTP request headers to support non-tunneling proxies
+    (i.e. those which do not support the CONNECT method).
+    This only works for HTTP (not HTTPS) since HTTPS requires tunneling.
+    """
+    host, endpt = None, None
+    hdrs = header.split(b"\r\n")
+    for hdr in hdrs:
+        if hdr.lower().startswith(b"host:"):
+            host = hdr
+        elif hdr.lower().startswith(b"get") or hdr.lower().startswith(b"post"):
+            endpt = hdr
+    if host and endpt:
+        hdrs.remove(host)
+        hdrs.remove(endpt)
+        host = host.split(b" ")[1]
+        endpt = endpt.split(b" ")
+        if self._socksocket__proxy[4] != None \
+           and self._socksocket__proxy[5] != None:
+            hdrs.insert(0, self._socksocket__getauthheader())
+        hdrs.insert(0, b"Host: %s" % host)
+        hdrs.insert(0,
+                    b"%s http://%s%s %s" % (endpt[0], host, endpt[1], endpt[2]))
+    return b"\r\n".join(hdrs)
+
+
+httplib2.socks.socksocket._socksocket__rewriteproxy = __fixed_rewrite_proxy
 
 # TODO: Should fix these warnings.
 # pylint: disable=line-too-long
@@ -94,31 +148,393 @@ def _QueryString(params, first_param=None):
     return '+'.join(q)
 
 
-class Authenticator(object):
+class SSOHelper(object):
+    """SSOHelper finds a Google-internal SSO helper."""
+
+    _sso_cmd: Optional[str] = None
+
+    def find_cmd(self) -> str:
+        """Returns the cached command-line to invoke git-remote-sso.
+
+        If git-remote-sso is not in $PATH, returns None.
+        """
+        if self._sso_cmd is not None:
+            return self._sso_cmd
+        cmd = shutil.which('git-remote-sso')
+        if cmd is None:
+            cmd = ''
+        self._sso_cmd = cmd
+        return cmd
+
+
+# Global instance
+ssoHelper = SSOHelper()
+
+
+def ShouldUseSSO(host: str, email: str) -> bool:
+    """Return True if we should use SSO for the given Gerrit host and user."""
+    LOGGER.debug("Determining whether we should use SSO...")
+    if not newauth.Enabled():
+        LOGGER.debug("SSO=False: not opted in")
+        return False
+    if newauth.SkipSSO():
+        LOGGER.debug("SSO=False: set skip SSO config")
+        return False
+    if not ssoHelper.find_cmd():
+        LOGGER.debug("SSO=False: no SSO command")
+        return False
+    if not email:
+        LOGGER.debug(
+            "SSO=True: email is empty or missing (and SSO command available)")
+        return True
+    if email.endswith('@google.com'):
+        LOGGER.debug("SSO=True: email is google.com")
+        return True
+    if not email.endswith('@chromium.org'):
+        LOGGER.debug("SSO=False: not chromium.org")
+        return False
+    authenticator = SSOAuthenticator()
+    records = GetAccountEmails(host, 'self', authenticator=authenticator)
+    if any(email == r['email'] for r in records):
+        LOGGER.debug("SSO=True: email is linked to google.com")
+        return True
+    LOGGER.debug("SSO=False: unlinked chromium.org")
+    return False
+
+
+class _Authenticator(object):
     """Base authenticator class for authenticator implementations to subclass."""
-    def get_auth_header(self, host):
+
+    # Cached _Authenticator subclass instance, resolved via get().
+    _resolved: Optional[_Authenticator] = None
+    _resolved_lock = threading.Lock()
+
+    def authenticate(self, conn: HttpConn):
+        """Adds authentication information to the HttpConn."""
         raise NotImplementedError()
 
-    @staticmethod
-    def get():
-        """Returns: (Authenticator) The identified Authenticator to use.
+    def debug_summary_state(self) -> str:
+        """If this _Authenticator has any debugging information about its state,
+        _WriteGitPushTraces will call this to include in the git push traces.
+
+        Return value is any relevant debugging information with all PII/secrets
+        redacted.
+        """
+        raise NotImplementedError()
+
+    @classmethod
+    def is_applicable(cls, *, conn: Optional[HttpConn] = None) -> bool:
+        """Must return True if this Authenticator is available in the current
+        environment.
+
+        If conn is not None, return True if this Authenticator is
+        applicable to the given conn in the current environment.
+        """
+        raise NotImplementedError()
+
+    def ensure_authenticated(self, gerrit_host: str, git_host: str) -> Tuple[bool, str]:
+        """Returns (bypassable, error message).
+
+        If the error message is empty, there is no error to report.
+        If bypassable is true, the caller will allow the user to continue past the
+        error.
+        """
+        return (True, '')
+
+    @classmethod
+    def get(cls):
+        """Returns: (_Authenticator) The identified _Authenticator to use.
 
         Probes the local system and its environment and identifies the
-        Authenticator instance to use.
+        _Authenticator instance to use.
+
+        The resolved _Authenticator instance is cached as a class variable.
         """
-        # LUCI Context takes priority since it's normally present only on bots,
-        # which then must use it.
-        if LuciContextAuthenticator.is_luci():
-            return LuciContextAuthenticator()
-        # TODO(crbug.com/1059384): Automatically detect when running on
-        # cloudtop, and use CookiesAuthenticator instead.
-        if GceAuthenticator.is_gce():
-            return GceAuthenticator()
-        return CookiesAuthenticator()
+        with cls._resolved_lock:
+            if ret := cls._resolved:
+                return ret
+
+            use_new_auth = newauth.Enabled()
+
+            # Allow skipping SSOAuthenticator for local testing purposes.
+            skip_sso = newauth.SkipSSO()
+
+            if use_new_auth:
+                LOGGER.debug('_Authenticator.get: using new auth stack')
+                if LuciContextAuthenticator.is_applicable():
+                    LOGGER.debug(
+                        '_Authenticator.get: using LUCI context authenticator')
+                    ret = LuciContextAuthenticator()
+                else:
+                    LOGGER.debug(
+                        '_Authenticator.get: using chained authenticator')
+                    a = [
+                        SSOAuthenticator(),
+                        # GCE detection can't distinguish cloud workstations.
+                        GceAuthenticator(),
+                        LuciAuthAuthenticator(),
+                    ]
+                    if skip_sso:
+                        LOGGER.debug(
+                            'Authenticator.get: skipping SSOAuthenticator.')
+                        a = a[1:]
+                    ret = ChainedAuthenticator(a)
+                cls._resolved = ret
+                return ret
+            authenticators = [
+                LuciContextAuthenticator,
+                GceAuthenticator,
+                CookiesAuthenticator,
+            ]
+
+            for candidate in authenticators:
+                if candidate.is_applicable():
+                    LOGGER.debug('_Authenticator.get: Selected %s.',
+                                 candidate.__name__)
+                    ret = candidate()
+                    cls._resolved = ret
+                    return ret
+
+            auth_names = ', '.join(a.__name__ for a in authenticators)
+            raise ValueError(
+                f"Could not find suitable authenticator, tried: [{auth_names}]."
+            )
 
 
-class CookiesAuthenticator(Authenticator):
-    """Authenticator implementation that uses ".netrc" or ".gitcookies" for token.
+def debug_auth() -> Tuple[str, str]:
+    """Returns the name of the chosen auth scheme and any additional debugging
+    information for that authentication scheme. """
+    authn = _Authenticator.get()
+    return authn.__class__.__name__, authn.debug_summary_state()
+
+
+def ensure_authenticated(gerrit_host: str, git_host: str) -> Tuple[bool, str]:
+    """Returns (bypassable, error message).
+
+    If the error message is empty, there is no error to report. If bypassable is
+    true, the caller will allow the user to continue past the error.
+    """
+    return _Authenticator.get().ensure_authenticated(gerrit_host, git_host)
+
+
+class SSOAuthenticator(_Authenticator):
+    """SSOAuthenticator implements a Google-internal authentication scheme.
+
+    TEMPORARY configuration for Googlers (one `url` block for each Gerrit host):
+
+        [url "sso://chromium/"]
+          insteadOf = https://chromium.googlesource.com/
+          insteadOf = http://chromium.googlesource.com/
+        [depot-tools]
+          useNewAuthStack = 1
+    """
+
+    # This is set to true in tests, allows _parse_config to consume expired
+    # cookies.
+    _testing_load_expired_cookies = False
+
+    # How long we should wait for the sso helper to write and close stdout.
+    # Overridden in tests.
+    _timeout_secs = 5
+
+    @dataclass
+    class SSOInfo:
+        proxy: httplib2.ProxyInfo
+        cookies: http.cookiejar.CookieJar
+        headers: Dict[str, str]
+
+    # SSOInfo is a cached blob of information used by the `authenticate` method.
+    _sso_info: Optional[SSOInfo] = None
+    _sso_info_lock = threading.Lock()
+
+    @classmethod
+    def _resolve_sso_cmd(cls) -> Tuple[str, ...]:
+        """Returns the cached command-line to invoke git-remote-sso.
+
+        If git-remote-sso is not in $PATH, returns ().
+        """
+        cmd = ssoHelper.find_cmd()
+        if not cmd:
+            return ()
+        return (
+            cmd,
+            '-print_config',
+            'sso://*.git.corp.google.com',
+        )
+
+    @classmethod
+    def is_applicable(cls, *, conn: Optional[HttpConn] = None) -> bool:
+        if not cls._resolve_sso_cmd():
+            return False
+        email: str = scm.GIT.GetConfig(os.getcwd(), 'user.email', default='')
+        if conn is not None:
+            return ShouldUseSSO(conn.host, email)
+        return email.endswith('@google.com')
+
+    @classmethod
+    def _parse_config(cls, config: str) -> SSOInfo:
+        parsed: Dict[str, str] = dict(line.strip().split('=', 1)
+                                      for line in config.splitlines())
+
+        fullAuthHeader = cast(
+            str,
+            scm.GIT.Capture([
+                'config',
+                '-f',
+                parsed['include.path'],
+                'http.extraHeader',
+            ]))
+        headerKey, headerValue = fullAuthHeader.split(':', 1)
+        headers = {headerKey.strip(): headerValue.strip()}
+
+        proxy_host, proxy_port = parsed['http.proxy'].split(':', 1)
+
+        cfpath = parsed['http.cookiefile']
+        cj = http.cookiejar.MozillaCookieJar(cfpath)
+        # NOTE: python3.8 doesn't support httponly cookie lines, so we parse
+        # this manually. Once we move to python3.10+, this hack can be removed.
+        with open(cfpath) as cf:
+            cookiedata = cf.read().replace('#HttpOnly_', '')
+        # _really_load is the way that MozillaCookieJar subclasses
+        # FileCookieJar. Calling this directly is better than reimplementing the
+        # entire _really_load function manually.
+        cj._really_load(
+            StringIO(cookiedata),
+            cfpath,
+            ignore_discard=False,
+            ignore_expires=cls._testing_load_expired_cookies,
+        )
+
+        return cls.SSOInfo(proxy=httplib2.ProxyInfo(
+            httplib2.socks.PROXY_TYPE_HTTP_NO_TUNNEL, proxy_host.encode(),
+            int(proxy_port)),
+                           cookies=cj,
+                           headers=headers)
+
+    @classmethod
+    def _launch_sso_helper(cls) -> SSOInfo:
+        """Launches the git-remote-sso process and extracts the parsed SSOInfo.
+
+        Raises an exception if something goes wrong.
+        """
+        cmd = cls._resolve_sso_cmd()
+
+        with tempdir() as tdir:
+            tf = os.path.join(tdir, 'git-remote-sso.stderr')
+
+            with open(tf, mode='w') as stderr_file:
+                # NOTE: The git-remote-sso helper does the following:
+                #
+                # 1. writes files to disk.
+                # 2. writes config to stdout, referencing those files.
+                # 3. closes stdout (thus sending EOF to us, allowing
+                #    sys.stdout.read() to complete).
+                # 4. waits for stdin to close.
+                # 5. deletes files on disk (which is why we make sys.stdin a PIPE
+                #    instead of closing it outright).
+                #
+                # NOTE: the http.proxy value in the emitted config points to
+                # a socket which is owned by a system service, not `proc` itself.
+                with subprocess2.Popen(cmd,
+                                       stdout=subprocess2.PIPE,
+                                       stderr=stderr_file,
+                                       stdin=subprocess2.PIPE,
+                                       encoding='utf-8') as proc:
+                    stderr_file.close()  # we can close after process starts.
+                    timedout = False
+
+                    def _fire_timeout():
+                        nonlocal timedout
+                        timedout = True
+                        proc.kill()
+
+                    timer = threading.Timer(cls._timeout_secs, _fire_timeout)
+                    timer.start()
+                    try:
+                        stdout_data = proc.stdout.read()
+                    finally:
+                        timer.cancel()
+
+                    if timedout:
+                        LOGGER.error(
+                            'SSOAuthenticator: Timeout: %r: reading config.',
+                            cmd)
+                        raise subprocess.TimeoutExpired(
+                            cmd=cmd, timeout=cls._timeout_secs)
+
+                    # if the process already ended, then something is wrong.
+                    retcode = proc.poll()
+                    # if stdout was closed without any data, we need to wait for
+                    # end-of-process here and hope for an error message - the
+                    # poll above is racy in this case (we could see stdout EOF
+                    # but the process may not have quit yet).
+                    if not retcode and not stdout_data:
+                        retcode = proc.wait(timeout=cls._timeout_secs)
+                        # We timed out while doing `wait` - we can't safely open
+                        # stderr on windows, so just emit a generic timeout
+                        # exception.
+                        if retcode is None:
+                            LOGGER.error(
+                                'SSOAuthenticator: Timeout: %r: waiting error output.',
+                                cmd)
+                            raise subprocess.TimeoutExpired(
+                                cmd=cmd, timeout=cls._timeout_secs)
+
+                    # Finally, if the poll or wait ended up getting the retcode,
+                    # it means the process failed, so we can read the stderr
+                    # file and reflect it back to the user.
+                    if retcode is not None:
+                        # process failed - we should be able to read the tempfile.
+                        with open(tf, encoding='utf-8') as stderr:
+                            sys.exit(
+                                f'SSOAuthenticator: exit {retcode}: {stderr.read().strip()}'
+                            )
+
+                    return cls._parse_config(stdout_data)
+
+    @classmethod
+    def _get_sso_info(cls) -> SSOInfo:
+        with cls._sso_info_lock:
+            info = cls._sso_info
+            if not info:
+                info = cls._launch_sso_helper()
+                cls._sso_info = info
+            return info
+
+    def authenticate(self, conn: HttpConn):
+        sso_info = self._get_sso_info()
+        conn.proxy_info = sso_info.proxy
+        conn.req_headers.update(sso_info.headers)
+
+        # Now we must rewrite:
+        #   https://xxx.googlesource.com ->
+        #   http://xxx.git.corp.google.com
+        parsed = urllib.parse.urlparse(conn.req_uri)
+        parsed = parsed._replace(scheme='http')
+        if (hostname :=
+                parsed.hostname) and hostname.endswith('.googlesource.com'):
+            assert not parsed.port, "SSOAuthenticator: netloc: port not supported"
+            assert not parsed.username, "SSOAuthenticator: netloc: username not supported"
+            assert not parsed.password, "SSOAuthenticator: netloc: password not supported"
+
+            hostname_parts = hostname.rsplit('.', 2)  # X, googlesource, com
+            conn.req_host = hostname_parts[0] + '.git.corp.google.com'
+            parsed = parsed._replace(netloc=conn.req_host)
+        conn.req_uri = parsed.geturl()
+
+        # Finally, add cookies
+        sso_info.cookies.add_cookie_header(conn)
+        assert 'Cookie' in conn.req_headers, (
+            'sso_info.cookies.add_cookie_header failed to add Cookie'
+            ' (try running `git ls-remote sso://chromium/All-Projects` and retrying)'
+        )
+
+    def debug_summary_state(self) -> str:
+        return ''
+
+
+class CookiesAuthenticator(_Authenticator):
+    """_Authenticator implementation that uses ".gitcookies" for token.
 
     Expected case for developer workstations.
     """
@@ -127,18 +543,16 @@ class CookiesAuthenticator(Authenticator):
 
     def __init__(self):
         # Credentials will be loaded lazily on first use. This ensures
-        # Authenticator get() can always construct an authenticator, even if
+        # _Authenticator get() can always construct an authenticator, even if
         # something is broken. This allows 'creds-check' to proceed to actually
         # checking creds later, rigorously (instead of blowing up with a cryptic
         # error if they are wrong).
-        self._netrc = self._EMPTY
         self._gitcookies = self._EMPTY
 
-    @property
-    def netrc(self):
-        if self._netrc is self._EMPTY:
-            self._netrc = self._get_netrc()
-        return self._netrc
+    @classmethod
+    def is_applicable(cls, *, conn: Optional[HttpConn] = None) -> bool:
+        # We consider CookiesAuthenticator always applicable for now.
+        return True
 
     @property
     def gitcookies(self):
@@ -159,7 +573,7 @@ class CookiesAuthenticator(Authenticator):
         return 'https://%s/new-password' % ('.'.join(parts))
 
     @classmethod
-    def get_new_password_message(cls, host):
+    def _get_new_password_message(cls, host):
         if host is None:
             return ('Git host for Gerrit upload is unknown. Check your remote '
                     'and the branch your branch is tracking. This tool assumes '
@@ -168,59 +582,13 @@ class CookiesAuthenticator(Authenticator):
         return 'You can (re)generate your credentials by visiting %s' % url
 
     @classmethod
-    def get_netrc_path(cls):
-        path = '_netrc' if sys.platform.startswith('win') else '.netrc'
-        return os.path.expanduser(os.path.join('~', path))
+    def get_gitcookies_path(cls) -> str:
+        if envVal := os.getenv('GIT_COOKIES_PATH'):
+            return envVal
 
-    @classmethod
-    def _get_netrc(cls):
-        # Buffer the '.netrc' path. Use an empty file if it doesn't exist.
-        path = cls.get_netrc_path()
-        if not os.path.exists(path):
-            return netrc.netrc(os.devnull)
-
-        st = os.stat(path)
-        if st.st_mode & (stat.S_IRWXG | stat.S_IRWXO):
-            print('WARNING: netrc file %s cannot be used because its file '
-                  'permissions are insecure.  netrc file permissions should be '
-                  '600.' % path,
-                  file=sys.stderr)
-        with open(path) as fd:
-            content = fd.read()
-
-        # Load the '.netrc' file. We strip comments from it because processing
-        # them can trigger a bug in Windows. See crbug.com/664664.
-        content = '\n'.join(l for l in content.splitlines()
-                            if l.strip() and not l.strip().startswith('#'))
-        with tempdir() as tdir:
-            netrc_path = os.path.join(tdir, 'netrc')
-            with open(netrc_path, 'w') as fd:
-                fd.write(content)
-            os.chmod(netrc_path, (stat.S_IRUSR | stat.S_IWUSR))
-            return cls._get_netrc_from_path(netrc_path)
-
-    @classmethod
-    def _get_netrc_from_path(cls, path):
-        try:
-            return netrc.netrc(path)
-        except IOError:
-            print('WARNING: Could not read netrc file %s' % path,
-                  file=sys.stderr)
-            return netrc.netrc(os.devnull)
-        except netrc.NetrcParseError as e:
-            print('ERROR: Cannot use netrc file %s due to a parsing error: %s' %
-                  (path, e),
-                  file=sys.stderr)
-            return netrc.netrc(os.devnull)
-
-    @classmethod
-    def get_gitcookies_path(cls):
-        if os.getenv('GIT_COOKIES_PATH'):
-            return os.getenv('GIT_COOKIES_PATH')
-
-        return scm.GIT.GetConfig(
-            os.getcwd(), 'http.cookiefile',
-            os.path.expanduser(os.path.join('~', '.gitcookies')))
+        return os.path.expanduser(
+            scm.GIT.GetConfig(os.getcwd(), 'http.cookiefile',
+                              os.path.join('~', '.gitcookies')))
 
     @classmethod
     def _get_gitcookies(cls):
@@ -254,19 +622,65 @@ class CookiesAuthenticator(Authenticator):
     def _get_auth_for_host(self, host):
         for domain, creds in self.gitcookies.items():
             if http.cookiejar.domain_match(host, domain):
-                return (creds[0], None, creds[1])
-        return self.netrc.authenticators(host)
-
-    def get_auth_header(self, host):
-        a = self._get_auth_for_host(host)
-        if a:
-            if a[0]:
-                secret = base64.b64encode(
-                    ('%s:%s' % (a[0], a[2])).encode('utf-8'))
-                return 'Basic %s' % secret.decode('utf-8')
-
-            return 'Bearer %s' % a[2]
+                return (creds[0], creds[1])
         return None
+
+    def authenticate(self, conn: HttpConn):
+        a = self._get_auth_for_host(conn.req_host)
+        if a:
+            login, cred = a
+            if login:
+                secret = base64.b64encode(f'{login}:{cred}'.encode('utf-8'))
+                conn.req_headers[
+                    'Authorization'] = f'Basic {secret.decode("utf-8")}'
+            else:
+                conn.req_headers['Authorization'] = f'Bearer {cred}'
+
+    def ensure_authenticated(self, gerrit_host: str, git_host: str) -> Tuple[bool, str]:
+        """Returns (bypassable, error message).
+
+        If the error message is empty, there is no error to report.
+        If bypassable is true, the caller will allow the user to continue past the
+        error.
+        """
+        # Lazy-loader to identify Gerrit and Git hosts.
+        gerrit_auth = self._get_auth_for_host(gerrit_host)
+        git_auth = self._get_auth_for_host(git_host)
+        if gerrit_auth and git_auth:
+            if gerrit_auth == git_auth:
+                return True, ''
+            all_gsrc = self._get_auth_for_host('d0esN0tEx1st.googlesource.com')
+            print(
+                'WARNING: You have different credentials for Gerrit and git hosts:\n'
+                '           %s\n'
+                '           %s\n'
+                '        Consider running the following command:\n'
+                '          git cl creds-check\n'
+                '        %s\n'
+                '        %s' %
+                (git_host, gerrit_host,
+                 ('Hint: delete creds for .googlesource.com' if all_gsrc else
+                  ''), self._get_new_password_message(git_host)))
+            return True, 'If you know what you are doing'
+
+        missing = (([] if gerrit_auth else [gerrit_host]) +
+                   ([] if git_auth else [git_host]))
+        return False, ('Credentials for the following hosts are required:\n'
+                       '  %s\n'
+                       'These are read from %s\n'
+                       '%s' % ('\n  '.join(missing), self.get_gitcookies_path(),
+                               self._get_new_password_message(git_host)))
+
+
+    # Used to redact the cookies from the gitcookies file.
+    GITCOOKIES_REDACT_RE = re.compile(r'1/.*')
+
+    def debug_summary_state(self) -> str:
+        gitcookies_path = self.get_gitcookies_path()
+        if os.path.isfile(gitcookies_path):
+            gitcookies = gclient_utils.FileRead(gitcookies_path)
+            return self.GITCOOKIES_REDACT_RE.sub('REDACTED', gitcookies)
+        return ''
 
     def get_auth_email(self, host):
         """Best effort parsing of email to be used for auth for the given host."""
@@ -281,13 +695,8 @@ class CookiesAuthenticator(Authenticator):
         return '%s@%s' % (username, domain)
 
 
-# Backwards compatibility just in case somebody imports this outside of
-# depot_tools.
-NetrcAuthenticator = CookiesAuthenticator
-
-
-class GceAuthenticator(Authenticator):
-    """Authenticator implementation that uses GCE metadata service for token.
+class GceAuthenticator(_Authenticator):
+    """_Authenticator implementation that uses GCE metadata service for token.
     """
 
     _INFO_URL = 'http://metadata.google.internal'
@@ -300,7 +709,7 @@ class GceAuthenticator(Authenticator):
     _token_expiration = None
 
     @classmethod
-    def is_gce(cls):
+    def is_applicable(cls, *, conn: Optional[HttpConn] = None):
         if os.getenv('SKIP_GCE_AUTH_FOR_GIT'):
             return False
         if cls._cache_is_gce is None:
@@ -322,7 +731,7 @@ class GceAuthenticator(Authenticator):
             p = urllib.parse.urlparse(url)
             if p.scheme not in ('http', 'https'):
                 raise RuntimeError("Don't know how to work with protocol '%s'" %
-                                   protocol)
+                                   p.scheme)
             try:
                 resp, contents = httplib2.Http().request(url, 'GET', **kwargs)
             except (socket.error, httplib2.HttpLib2Error,
@@ -354,81 +763,201 @@ class GceAuthenticator(Authenticator):
         cls._token_expiration = cls._token_cache['expires_in'] + time_time()
         return cls._token_cache
 
-    def get_auth_header(self, _host):
+    def authenticate(self, conn: HttpConn):
         token_dict = self._get_token_dict()
         if not token_dict:
-            return None
-        return '%(token_type)s %(access_token)s' % token_dict
+            return
+        conn.req_headers[
+            'Authorization'] = '%(token_type)s %(access_token)s' % token_dict
+
+    def debug_summary_state(self) -> str:
+        # TODO(b/343230702) - report ambient account name.
+        return ''
 
 
-class LuciContextAuthenticator(Authenticator):
-    """Authenticator implementation that uses LUCI_CONTEXT ambient local auth.
+class LuciContextAuthenticator(_Authenticator):
+    """_Authenticator implementation that uses LUCI_CONTEXT ambient local auth.
     """
     @staticmethod
-    def is_luci():
+    def is_applicable(*, conn: Optional[HttpConn] = None):
         return auth.has_luci_context_local_auth()
 
     def __init__(self):
         self._authenticator = auth.Authenticator(' '.join(
             [auth.OAUTH_SCOPE_EMAIL, auth.OAUTH_SCOPE_GERRIT]))
 
-    def get_auth_header(self, _host):
-        return 'Bearer %s' % self._authenticator.get_access_token().token
+    def authenticate(self, conn: HttpConn):
+        conn.req_headers[
+            'Authorization'] = f'Bearer {self._authenticator.get_access_token().token}'
+
+    def debug_summary_state(self) -> str:
+        # TODO(b/343230702) - report ambient account name.
+        return ''
+
+
+class LuciAuthAuthenticator(LuciContextAuthenticator):
+    """_Authenticator implementation that uses `luci-auth` credentials.
+
+    This is the same as LuciContextAuthenticator, except that it is for local
+    non-google.com developer credentials.
+    """
+
+    @staticmethod
+    def is_applicable(*, conn: Optional[HttpConn] = None):
+        return True
+
+
+class ChainedAuthenticator(_Authenticator):
+    """_Authenticator that delegates to others in sequence.
+
+    Authenticators should implement the method `is_applicable_for`.
+    """
+
+    def __init__(self, authenticators: List[_Authenticator]):
+        self.authenticators = list(authenticators)
+
+    def is_applicable(self, *, conn: Optional[HttpConn] = None) -> bool:
+        return bool(any(
+            a.is_applicable(conn=conn) for a in self.authenticators))
+
+    def authenticate(self, conn: HttpConn):
+        for a in self.authenticators:
+            if a.is_applicable(conn=conn):
+                a.authenticate(conn)
+                break
+        else:
+            raise ValueError(
+                f'{self!r} has no applicable authenticator for {conn!r}')
+
+    def debug_summary_state(self) -> str:
+        return ''
+
+
+class ReqParams(TypedDict):
+    uri: str
+    method: str
+    headers: Dict[str, str]
+    body: Optional[str]
+
+
+class HttpConn(httplib2.Http):
+    """HttpConn is an httplib2.Http with additional request-specific fields."""
+
+    def __init__(self, *args, req_host: str, req_uri: str, req_method: str,
+                 req_headers: Dict[str, str], req_body: Optional[str],
+                 **kwargs) -> None:
+        self.req_host = req_host
+        self.req_uri = req_uri
+        self.req_method = req_method
+        self.req_headers = req_headers
+        self.req_body = req_body
+        super().__init__(*args, **kwargs)
+
+    @property
+    def req_params(self) -> ReqParams:
+        return {
+            'uri': self.req_uri,
+            'method': self.req_method,
+            'headers': self.req_headers,
+            'body': self.req_body,
+        }
+
+    # NOTE: We want to use HttpConn with CookieJar.add_cookie_header, so have
+    # compatible interface for that here.
+    #
+    # NOTE: Someone should really normalize this 'HttpConn' and httplib2
+    # implementation to just be plain python3 stdlib instead. All of this was
+    # written during the bad old days of python2.6/2.7, pre-vpython.
+    def has_header(self, header: str) -> bool:
+        return header in self.req_headers
+
+    def get_full_url(self) -> str:
+        return self.req_uri
+
+    def get_header(self,
+                   header: str,
+                   default: Optional[str] = None) -> Optional[str]:
+        return self.req_headers.get(header, default)
+
+    def add_unredirected_header(self, header: str, value: str):
+        # NOTE: httplib2 does not support unredirected headers.
+        self.req_headers[header] = value
+
+    @property
+    def unverifiable(self) -> bool:
+        return False
+
+    @property
+    def origin_req_host(self) -> str:
+        return self.req_host
+
+    @property
+    def type(self) -> str:
+        return urllib.parse.urlparse(self.req_uri).scheme
+
+    @property
+    def host(self) -> str:
+        return self.req_host
 
 
 def CreateHttpConn(host,
                    path,
                    reqtype='GET',
-                   headers=None,
-                   body=None,
-                   timeout=300):
+                   headers: Optional[Dict[str, str]] = None,
+                   body: Optional[Dict] = None,
+                   timeout=300,
+                   *,
+                   authenticator: Optional[_Authenticator] = None) -> HttpConn:
     """Opens an HTTPS connection to a Gerrit service, and sends a request."""
     headers = headers or {}
     bare_host = host.partition(':')[0]
 
-    a = Authenticator.get()
-    # TODO(crbug.com/1059384): Automatically detect when running on cloudtop.
-    if isinstance(a, GceAuthenticator):
-        print('If you\'re on a cloudtop instance, export '
-              'SKIP_GCE_AUTH_FOR_GIT=1 in your env.')
-
-    a = a.get_auth_header(bare_host)
-    if a:
-        headers.setdefault('Authorization', a)
-    else:
-        LOGGER.debug('No authorization found for %s.' % bare_host)
-
     url = path
     if not url.startswith('/'):
         url = '/' + url
-    if 'Authorization' in headers and not url.startswith('/a/'):
+    if not url.startswith('/a/'):
         url = '/a%s' % url
 
+    rendered_body: Optional[str] = None
     if body:
-        body = json.dumps(body, sort_keys=True)
+        rendered_body = json.dumps(body, sort_keys=True)
         headers.setdefault('Content-Type', 'application/json')
+
+    uri = urllib.parse.urljoin(f'{GERRIT_PROTOCOL}://{host}', url)
+    conn = HttpConn(timeout=timeout,
+                    req_host=host,
+                    req_uri=uri,
+                    req_method=reqtype,
+                    req_headers=headers,
+                    req_body=rendered_body)
+
+    if authenticator is None:
+        authenticator = _Authenticator.get()
+    # TODO(crbug.com/1059384): Automatically detect when running on cloudtop.
+    if isinstance(authenticator, GceAuthenticator):
+        print('If you\'re on a cloudtop instance, export '
+              'SKIP_GCE_AUTH_FOR_GIT=1 in your env.')
+
+    authenticator.authenticate(conn)
+
+    if 'Authorization' not in conn.req_headers:
+        LOGGER.debug('No authorization found for %s.' % bare_host)
+
     if LOGGER.isEnabledFor(logging.DEBUG):
-        LOGGER.debug('%s %s://%s%s' % (reqtype, GERRIT_PROTOCOL, host, url))
-        for key, val in headers.items():
-            if key == 'Authorization':
+        LOGGER.debug('%s %s', conn.req_method, conn.req_uri)
+        LOGGER.debug('conn.proxy_info=%r', conn.proxy_info)
+        for key, val in conn.req_headers.items():
+            if key in ('Authorization', 'Cookie'):
                 val = 'HIDDEN'
-            LOGGER.debug('%s: %s' % (key, val))
-        if body:
-            LOGGER.debug(body)
-    conn = httplib2.Http(timeout=timeout)
-    # HACK: httplib2.Http has no such attribute; we store req_host here for
-    # later use in ReadHttpResponse.
-    conn.req_host = host
-    conn.req_params = {
-        'uri': urllib.parse.urljoin('%s://%s' % (GERRIT_PROTOCOL, host), url),
-        'method': reqtype,
-        'headers': headers,
-        'body': body,
-    }
+            LOGGER.debug('%s: %s', key, val)
+        if conn.req_body:
+            LOGGER.debug(conn.req_body)
+
     return conn
 
 
-def ReadHttpResponse(conn, accept_statuses=frozenset([200])):
+def ReadHttpResponse(conn: HttpConn,
+                     accept_statuses: Container[int] = frozenset([200])):
     """Reads an HTTP response from a connection into a string buffer.
 
     Args:
@@ -438,6 +967,7 @@ def ReadHttpResponse(conn, accept_statuses=frozenset([200])):
     Returns:
         A string buffer containing the connection's reply.
     """
+    response = contents = None
     sleep_time = SLEEP_TIME
     for idx in range(TRY_LIMIT):
         before_response = time.time()
@@ -487,6 +1017,11 @@ def ReadHttpResponse(conn, accept_statuses=frozenset([200])):
             sleep_time = log_retry_and_sleep(sleep_time, idx)
     # end of retries loop
 
+    # Help the type checker a bit here - it can't figure out the `except` logic
+    # in the loop above.
+    assert response, (
+        'Impossible: End of retry loop without response or exception.')
+
     if response.status in accept_statuses:
         return StringIO(contents)
 
@@ -497,24 +1032,27 @@ def ReadHttpResponse(conn, accept_statuses=frozenset([200])):
         else:
             auth_match = re.search('realm="([^"]+)"', www_authenticate, re.I)
             host = auth_match.group(1) if auth_match else conn.req_host
+            new_password_url = CookiesAuthenticator.get_new_password_url(host)
             print('Authentication failed. Please make sure your .gitcookies '
-                  'file has credentials for %s.' % host)
+                  f'file has credentials for {host}.')
+            print(f'(Re)generate credentials here: {new_password_url}')
         print('Try:\n  git cl creds-check')
 
     reason = '%s: %s' % (response.reason, contents)
     raise GerritError(response.status, reason)
 
 
-def ReadHttpJsonResponse(conn, accept_statuses=frozenset([200])):
+def ReadHttpJsonResponse(
+    conn, accept_statuses: Container[int] = frozenset([200])) -> Dict:
     """Parses an https response as json."""
     fh = ReadHttpResponse(conn, accept_statuses)
     # The first line of the response should always be: )]}'
     s = fh.readline()
     if s and s.rstrip() != ")]}'":
-        raise GerritError(200, 'Unexpected json output: %s' % s)
+        raise GerritError(200, 'Unexpected json output: %s' % s[:100])
     s = fh.read()
     if not s:
-        return None
+        return {}
     return json.loads(s)
 
 
@@ -562,7 +1100,7 @@ def QueryChanges(host,
         path = '%s&n=%d' % (path, limit)
     if o_params:
         path = '%s&%s' % (path, '&'.join(['o=%s' % p for p in o_params]))
-    return ReadHttpJsonResponse(CreateHttpConn(host, path, timeout=30.0))
+    return ReadHttpJsonResponse(CreateHttpConn(host, path, timeout=30))
 
 
 def GenerateAllChanges(host,
@@ -689,10 +1227,11 @@ def GetChangeUrl(host, change):
     return '%s://%s/a/changes/%s' % (GERRIT_PROTOCOL, host, change)
 
 
-def GetChange(host, change):
+def GetChange(host, change, accept_statuses: Container[int] = frozenset([200])):
     """Queries a Gerrit server for information about a single change."""
     path = 'changes/%s' % change
-    return ReadHttpJsonResponse(CreateHttpConn(host, path))
+    return ReadHttpJsonResponse(CreateHttpConn(host, path),
+                                accept_statuses=accept_statuses)
 
 
 def GetChangeDetail(host, change, o_params=None):
@@ -847,6 +1386,15 @@ def CherryPick(host, change, destination, revision='current'):
     return ReadHttpJsonResponse(conn)
 
 
+def CherryPickCommit(host, project, commit, destination):
+    """Cherry-pick a commit from a project to a destination branch."""
+    project = urllib.parse.quote(project, '')
+    path = f'projects/{project}/commits/{commit}/cherrypick'
+    body = {'destination': destination}
+    conn = CreateHttpConn(host, path, reqtype='POST', body=body)
+    return ReadHttpJsonResponse(conn)
+
+
 def GetFileContents(host, change, path):
     """Get the contents of a file with the given path in the given revision.
 
@@ -947,7 +1495,7 @@ def AddReviewers(host,
                  reviewers=None,
                  ccs=None,
                  notify=True,
-                 accept_statuses=frozenset([200, 400, 422])):
+                 accept_statuses: Container[int] = frozenset([200, 400, 422])):
     """Add reviewers to a change."""
     if not reviewers and not ccs:
         return None
@@ -998,7 +1546,7 @@ def SetReview(host, change, msg=None, labels=None, notify=None, ready=None):
     if not msg and not labels:
         return
     path = 'changes/%s/revisions/current/review' % change
-    body = {'drafts': 'KEEP'}
+    body: Dict[str, Any] = {'drafts': 'KEEP'}
     if msg:
         body['message'] = msg
     if labels:
@@ -1197,6 +1745,38 @@ def GetAccountDetails(host, account_id='self'):
     """
     conn = CreateHttpConn(host, '/accounts/%s' % account_id)
     return ReadHttpJsonResponse(conn, accept_statuses=[200, 404])
+
+
+class EmailRecord(TypedDict):
+    email: str
+    preferred: bool  # This should be NotRequired[bool] in 3.11+
+
+
+def GetAccountEmails(host,
+                     account_id='self',
+                     *,
+                     authenticator: Optional[_Authenticator] = None
+                     ) -> Optional[List[EmailRecord]]:
+    """Returns all emails for this account, and an indication of which of these
+    is preferred.
+
+    If account_id is not given, uses magic value 'self' which corresponds to
+    whichever account user is authenticating as.
+
+    Requires Modify Account permission to view emails other than 'self'.
+
+    Documentation:
+    https://gerrit-review.googlesource.com/Documentation/rest-api-accounts.html#list-account-emails
+
+    Returns None if account is not found (i.e. Gerrit returned 404).
+    """
+    conn = CreateHttpConn(host,
+                          '/accounts/%s/emails' % account_id,
+                          authenticator=authenticator)
+    resp = ReadHttpJsonResponse(conn, accept_statuses=[200, 404])
+    if resp is None:
+        return None
+    return cast(List[EmailRecord], resp)
 
 
 def ValidAccounts(host, accounts, max_threads=10):

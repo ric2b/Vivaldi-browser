@@ -33,9 +33,9 @@ ui::EventType NotifyActionToMouseEventType(
     ButtonController::NotifyAction notify_action) {
   switch (notify_action) {
     case ButtonController::NotifyAction::kOnPress:
-      return ui::ET_MOUSE_PRESSED;
+      return ui::EventType::kMousePressed;
     case ButtonController::NotifyAction::kOnRelease:
-      return ui::ET_MOUSE_RELEASED;
+      return ui::EventType::kMouseReleased;
   }
 }
 }  // namespace
@@ -91,7 +91,8 @@ MenuButtonController::MenuButtonController(
   // Triggers on button press by default, unless drag-and-drop is enabled, see
   // MenuButtonController::IsTriggerableEventType.
   set_notify_action(ButtonController::NotifyAction::kOnPress);
-  button->SetAccessibleRole(ax::mojom::Role::kPopUpButton);
+  button->GetViewAccessibility().SetRole(ax::mojom::Role::kPopUpButton);
+  button->GetViewAccessibility().SetHasPopup(ax::mojom::HasPopup::kMenu);
 }
 
 MenuButtonController::~MenuButtonController() = default;
@@ -179,8 +180,10 @@ bool MenuButtonController::OnKeyReleased(const ui::KeyEvent& event) {
 }
 
 void MenuButtonController::UpdateAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ax::mojom::Role::kPopUpButton;
-  node_data->SetHasPopup(ax::mojom::HasPopup::kMenu);
+  // TODO(crbug.com/325137417): This property needs to be updated whenever the
+  // button's enabled state changes. To do so, we could add the virtual function
+  // `ButtonController::OnButtonEnabledChanged` and override it in this class.
+  // This function would then be called from `Button::OnEnabledChanged`.
   if (button()->GetEnabled()) {
     node_data->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kOpen);
   }
@@ -204,13 +207,13 @@ void MenuButtonController::OnGestureEvent(ui::GestureEvent* event) {
 
       return;
     }
-    if (event->type() == ui::ET_GESTURE_TAP_DOWN) {
+    if (event->type() == ui::EventType::kGestureTapDown) {
       event->SetHandled();
       if (pressed_lock_count_ == 0)
         button()->SetState(Button::STATE_HOVERED);
     } else if (button()->GetState() == Button::STATE_HOVERED &&
-               (event->type() == ui::ET_GESTURE_TAP_CANCEL ||
-                event->type() == ui::ET_GESTURE_END) &&
+               (event->type() == ui::EventType::kGestureTapCancel ||
+                event->type() == ui::EventType::kGestureEnd) &&
                pressed_lock_count_ == 0) {
       button()->SetState(Button::STATE_NORMAL);
     }
@@ -250,7 +253,7 @@ bool MenuButtonController::Activate(const ui::Event* event) {
 
     // TODO(pbos): Make sure we always propagate an event. This requires changes
     // to ShowAppMenu which now provides none.
-    ui::KeyEvent fake_event(ui::ET_KEY_PRESSED, ui::VKEY_SPACE,
+    ui::KeyEvent fake_event(ui::EventType::kKeyPressed, ui::VKEY_SPACE,
                             ui::EF_IS_SYNTHESIZED);
     if (!event)
       event = &fake_event;
@@ -297,10 +300,10 @@ bool MenuButtonController::IsTriggerableEventType(const ui::Event& event) {
         delegate()->GetDragOperations(mouse_event->location()) ==
                 ui::DragDropTypes::DRAG_NONE
             ? NotifyActionToMouseEventType(notify_action())
-            : ui::ET_MOUSE_RELEASED;
+            : ui::EventType::kMouseReleased;
     return event.type() == active_on;
   }
-  return event.type() == ui::ET_GESTURE_TAP;
+  return event.type() == ui::EventType::kGestureTap;
 }
 
 void MenuButtonController::NotifyClick() {

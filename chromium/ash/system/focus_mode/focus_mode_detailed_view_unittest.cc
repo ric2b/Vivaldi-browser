@@ -9,6 +9,7 @@
 #include "ash/capture_mode/capture_mode_test_util.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/glanceables/common/glanceables_util.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/icon_button.h"
@@ -69,6 +70,12 @@ class FocusModeDetailedViewTest : public AshTestBase {
   void SetUp() override {
     AshTestBase::SetUp();
 
+    // `g_network_handler` is null in tests, we need to manually set the network
+    // connected state. Also, the buttons or textfield under the tasks view will
+    // be enabled and the playlists under the sounds view will exists only when
+    // the user is online.
+    glanceables_util::SetIsNetworkConnectedForTest(true);
+
     widget_ = CreateFramelessTestWidget();
     widget_->SetFullscreen(true);
 
@@ -90,6 +97,13 @@ class FocusModeDetailedViewTest : public AshTestBase {
     widget_.reset();
 
     AshTestBase::TearDown();
+  }
+
+  void AdvanceClock(base::TimeDelta time_delta) {
+    // Note that AdvanceClock() is used here instead of FastForwardBy() to
+    // prevent long run time during an ash test session.
+    task_environment()->AdvanceClock(time_delta);
+    task_environment()->RunUntilIdle();
   }
 
   virtual void CreateFakeTasks(api::FakeTasksClient& tasks_client) {
@@ -116,6 +130,10 @@ class FocusModeDetailedViewTest : public AshTestBase {
     auto* scroll_view = focus_mode_detailed_view_->scroll_view_for_testing();
     scroll_view->ScrollToPosition(scroll_view->vertical_scroll_bar(),
                                   scroll_view->GetVisibleRect().bottom());
+  }
+
+  views::ScrollView* GetScrollView() {
+    return focus_mode_detailed_view_->scroll_view_for_testing();
   }
 
   views::Label* GetToggleRowLabel() {
@@ -300,7 +318,8 @@ TEST_F(FocusModeDetailedViewTest, ToggleRow) {
   auto validate_labels = [&](bool active, const std::string& trace_name) {
     SCOPED_TRACE(trace_name);
     EXPECT_EQ(active, focus_mode_controller->in_focus_session());
-    EXPECT_EQ(active ? u"Focusing" : u"Focus", GetToggleRowLabel()->GetText());
+    EXPECT_EQ(active ? u"Focus is on" : u"Focus",
+              GetToggleRowLabel()->GetText());
 
     EXPECT_EQ(active, IsToggleRowSubLabelVisible());
 
@@ -320,7 +339,7 @@ TEST_F(FocusModeDetailedViewTest, ToggleRow) {
   CreateFakeFocusModeDetailedView();
 
   // Wait a minute to test that the time remaining label updates.
-  task_environment()->FastForwardBy(base::Seconds(60));
+  AdvanceClock(base::Seconds(60));
   validate_labels(/*active=*/true, "Wait for a minute");
 
   LeftClickOn(GetToggleRowButton());
@@ -336,7 +355,7 @@ TEST_F(FocusModeDetailedViewTest, ToggleRow) {
 
   // Wait a second to avoid the time remaining being either 1500 seconds or
   // 1499.99 seconds.
-  task_environment()->FastForwardBy(base::Seconds(1));
+  AdvanceClock(base::Seconds(1));
   validate_labels(/*active=*/true, "Check time passed");
 
   LeftClickOn(GetToggleRowButton());
@@ -540,8 +559,7 @@ TEST_F(FocusModeDetailedViewTest, TimerSettingViewDecrements) {
 
 // Tests that the timer setting view is visible outside of a focus session and
 // the countdown view is visible in a focus session.
-// TODO(b/338629645): disabled due to flakes.
-TEST_F(FocusModeDetailedViewTest, DISABLED_TimerViewVisibility) {
+TEST_F(FocusModeDetailedViewTest, TimerViewVisibility) {
   auto* focus_mode_controller = FocusModeController::Get();
   auto* timer_setting_view = GetTimerSettingView();
   auto* countdown_view = GetTimerCountdownView();
@@ -560,7 +578,7 @@ TEST_F(FocusModeDetailedViewTest, DISABLED_TimerViewVisibility) {
             GetEndTimeLabel()->GetText());
 
   // Wait a minute to test that the end time label updates.
-  task_environment()->FastForwardBy(base::Seconds(60));
+  AdvanceClock(base::Seconds(60));
   EXPECT_EQ(focus_mode_util::GetFormattedEndTimeString(base::Time::Now() +
                                                        session_duration),
             GetEndTimeLabel()->GetText());
@@ -669,7 +687,8 @@ TEST_F(FocusModeDetailedViewTest, ExpandOrShrinkTaskViewContainer) {
   const int old_height_before_shrink = task_container_view->bounds().height();
 
   // 1. Shrink the `task_container_view`.
-  task_view->AddOrUpdateTask(u"my task title");
+  task_view->CommitTextfieldContents(u"my task title");
+  AdvanceClock(base::Milliseconds(10));
   views::test::RunScheduledLayout(task_container_view);
   EXPECT_TRUE(radio_button->GetVisible());
   EXPECT_FALSE(chip_carousel->GetVisible());
@@ -677,7 +696,7 @@ TEST_F(FocusModeDetailedViewTest, ExpandOrShrinkTaskViewContainer) {
 
   // 2. Expand the `task_container_view`.
   LeftClickOn(radio_button);
-  task_environment()->FastForwardBy(kStartAnimationDelay);
+  AdvanceClock(kStartAnimationDelay);
   views::test::RunScheduledLayout(task_container_view);
   EXPECT_EQ(old_height_before_shrink, task_container_view->bounds().height());
 }
@@ -768,6 +787,29 @@ TEST_F(FocusModeDetailedViewTest, StartSessionWithActiveTimerTextfield) {
       base::Minutes(1),
       Shell::Get()->session_controller()->GetActivePrefService()->GetTimeDelta(
           prefs::kFocusModeSessionDuration));
+}
+
+// Tests that when scrolling on the chip carousel, the scroll view of the focus
+// panel will be scrolled.
+TEST_F(FocusModeDetailedViewTest, ChipsNotAcceptVerticalScrollGesture) {
+  auto* chip_carousel = GetTaskView()->chip_carousel_for_testing();
+  EXPECT_TRUE(chip_carousel->HasTasks());
+  EXPECT_TRUE(chip_carousel->GetVisible());
+
+  // Before scrolling the focus panel, the visible rect for the scroll view
+  // should be in an initialized state.
+  auto* scroll_view = GetScrollView();
+  EXPECT_EQ(scroll_view->GetVisibleRect().y(), 0);
+
+  const auto center_point = chip_carousel->GetBoundsInScreen().CenterPoint();
+  const gfx::Vector2d offset(0, -100);
+  // Scroll down the chip carousel with `offset`.
+  GetEventGenerator()->GestureScrollSequence(
+      center_point, center_point + offset, base::Milliseconds(300), 3);
+
+  // After scrolling up the focus panel, the visible rect for the scroll view
+  // has been changed.
+  EXPECT_GT(scroll_view->GetVisibleRect().y(), 0);
 }
 
 class FocusModeDetailedViewWithLotsOfTasksTest

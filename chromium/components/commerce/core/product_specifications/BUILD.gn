@@ -12,6 +12,8 @@ source_set("product_specifications") {
     "product_specifications_sync_bridge.h",
   ]
   deps = [
+    "//base",
+    "//components/commerce/core:feature_list",
     "//components/keyed_service/core",
     "//components/sync",
     "//components/sync/model",
@@ -29,6 +31,21 @@ source_set("unit_tests") {
     ":product_specifications",
     "//base/test:test_support",
     "//components/commerce/core:commerce_types",
+    "//components/commerce/core:feature_list",
     "//components/sync:test_support",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "mock_product_specifications_service.cc",
+    "mock_product_specifications_service.h",
+  ]
+  deps = [
+    ":product_specifications",
+    "//base/test:test_support",
+    "//components/sync:test_support",
+    "//testing/gtest",
   ]
 }

@@ -28,9 +28,9 @@ namespace syncer {
 class ModelTypeChangeProcessor;
 }  // namespace syncer
 
-namespace cross_device {
+namespace ash::timer_factory {
 class TimerFactory;
-}  // namespace cross_device
+}  // namespace ash::timer_factory
 
 namespace ash {
 
@@ -57,7 +57,7 @@ class WifiConfigurationBridge : public syncer::ModelTypeSyncBridge,
       LocalNetworkCollector* local_network_collector,
       NetworkConfigurationHandler* network_configuration_handler,
       SyncedNetworkMetricsLogger* metrics_recorder,
-      cross_device::TimerFactory* timer_factory,
+      ash::timer_factory::TimerFactory* timer_factory,
       PrefService* pref_service,
       std::unique_ptr<syncer::ModelTypeChangeProcessor> change_processor,
       syncer::OnceModelTypeStoreFactory create_store_callback);
@@ -78,8 +78,9 @@ class WifiConfigurationBridge : public syncer::ModelTypeSyncBridge,
   std::optional<syncer::ModelError> ApplyIncrementalSyncChanges(
       std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
       syncer::EntityChangeList entity_changes) override;
-  void GetData(StorageKeyList storage_keys, DataCallback callback) override;
-  void GetAllDataForDebugging(DataCallback callback) override;
+  std::unique_ptr<syncer::DataBatch> GetDataForCommit(
+      StorageKeyList storage_keys) override;
+  std::unique_ptr<syncer::DataBatch> GetAllDataForDebugging() override;
   std::string GetClientTag(const syncer::EntityData& entity_data) override;
   std::string GetStorageKey(const syncer::EntityData& entity_data) override;
   void ApplyDisableSyncChanges(std::unique_ptr<syncer::MetadataChangeList>
@@ -167,7 +168,7 @@ class WifiConfigurationBridge : public syncer::ModelTypeSyncBridge,
   raw_ptr<LocalNetworkCollector, DanglingUntriaged> local_network_collector_;
   raw_ptr<NetworkConfigurationHandler> network_configuration_handler_;
   raw_ptr<SyncedNetworkMetricsLogger, DanglingUntriaged> metrics_recorder_;
-  raw_ptr<cross_device::TimerFactory, DanglingUntriaged> timer_factory_;
+  raw_ptr<ash::timer_factory::TimerFactory, DanglingUntriaged> timer_factory_;
   raw_ptr<PrefService, DanglingUntriaged> pref_service_;
   base::WeakPtr<NetworkMetadataStore> network_metadata_store_;
 

@@ -10,9 +10,10 @@
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_property.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_blend_factor.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_texture_format.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
-#include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/webgpu/dawn_object.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/webgpu_callback.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -161,6 +162,9 @@ class GPUDevice final : public EventTarget,
 
   bool ValidateTextureFormatUsage(V8GPUTextureFormat format,
                                   ExceptionState& exception_state);
+  bool ValidateBlendFactor(V8GPUBlendFactor blend_factor,
+                           ExceptionState& exception_state);
+
   std::string formattedLabel() const;
 
   // Store the buffer in a weak hash set so we can unmap it when the
@@ -184,20 +188,21 @@ class GPUDevice final : public EventTarget,
 
   void OnPopErrorScopeCallback(
       ScriptPromiseResolver<IDLNullable<GPUError>>* resolver,
-      WGPUErrorType type,
+      wgpu::PopErrorScopeStatus status,
+      wgpu::ErrorType type,
       const char* message);
 
   void OnCreateRenderPipelineAsyncCallback(
       const String& label,
       ScriptPromiseResolver<GPURenderPipeline>* resolver,
-      WGPUCreatePipelineAsyncStatus status,
-      WGPURenderPipeline render_pipeline,
+      wgpu::CreatePipelineAsyncStatus status,
+      wgpu::RenderPipeline render_pipeline,
       const char* message);
   void OnCreateComputePipelineAsyncCallback(
       const String& label,
       ScriptPromiseResolver<GPUComputePipeline>* resolver,
-      WGPUCreatePipelineAsyncStatus status,
-      WGPUComputePipeline compute_pipeline,
+      wgpu::CreatePipelineAsyncStatus status,
+      wgpu::ComputePipeline compute_pipeline,
       const char* message);
 
   void setLabelImpl(const String& value) override {

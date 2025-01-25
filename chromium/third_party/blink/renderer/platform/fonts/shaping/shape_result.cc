@@ -29,6 +29,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result.h"
 
 #include <hb.h>
@@ -934,7 +939,7 @@ float ShapeResult::ForEachGraphemeClusters(const StringView& text,
 // TODO(kojii): VC2015 fails to explicit instantiation of a member function.
 // Typed functions + this private function are to instantiate instances.
 template <typename TextContainerType>
-void ShapeResult::ApplySpacingImpl(
+float ShapeResult::ApplySpacingImpl(
     ShapeResultSpacing<TextContainerType>& spacing,
     int text_start_offset) {
   float offset = 0;
@@ -991,15 +996,16 @@ void ShapeResult::ApplySpacingImpl(
     if (space < 0)
       total_space += 1;
   }
+  return space;
 }
 
-void ShapeResult::ApplySpacing(ShapeResultSpacing<String>& spacing,
-                               int text_start_offset) {
+float ShapeResult::ApplySpacing(ShapeResultSpacing<String>& spacing,
+                                int text_start_offset) {
   // For simplicity, we apply spacing once only. If you want to do multiple
   // time, please get rid of below |DCHECK()|.
   DCHECK(!is_applied_spacing_) << this;
   is_applied_spacing_ = true;
-  ApplySpacingImpl(spacing, text_start_offset);
+  return ApplySpacingImpl(spacing, text_start_offset);
 }
 
 ShapeResult* ShapeResult::ApplySpacingToCopy(
@@ -1046,7 +1052,7 @@ void ShapeResult::ApplyLeadingExpansion(float expansion) {
     }
   }
   // No glyphs.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void ShapeResult::ApplyTrailingExpansion(float expansion) {
@@ -1068,7 +1074,7 @@ void ShapeResult::ApplyTrailingExpansion(float expansion) {
     return;
   }
   // No glyphs.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 bool ShapeResult::HasAutoSpacingAfter(unsigned offset) const {
@@ -2048,7 +2054,7 @@ void ShapeResult::ComputePositionData() const {
       // Do not overwrite.
       if (character_index >= num_characters_) {
         // We are not sure why we reach here. See http://crbug.com/1286882
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         continue;
       }
       if (next_character_index <= character_index) {
@@ -2248,7 +2254,7 @@ void AddRunInfoRanges(const ShapeResult::RunInfo& run_info,
     // TODO(crbug.com/1147011): This should not happen, but crash logs indicate
     // that this is happening.
     if (UNLIKELY(glyph.character_index >= character_widths.size())) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       character_widths.Grow(glyph.character_index + 1);
     }
     character_widths[glyph.character_index] += glyph.advance;

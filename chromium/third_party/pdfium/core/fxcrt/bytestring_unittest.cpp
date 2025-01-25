@@ -12,6 +12,7 @@
 #include <set>
 #include <vector>
 
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/span.h"
@@ -1181,7 +1182,7 @@ TEST(ByteStringView, Null) {
   EXPECT_TRUE(copied_null_string.IsEmpty());
   EXPECT_EQ(null_string, copied_null_string);
 
-  ByteStringView span_null_string = pdfium::span<const uint8_t>();
+  auto span_null_string = ByteStringView(pdfium::span<const uint8_t>());
   EXPECT_FALSE(span_null_string.unterminated_unsigned_str());
   EXPECT_EQ(0u, span_null_string.GetLength());
   EXPECT_TRUE(span_null_string.IsEmpty());
@@ -1208,7 +1209,7 @@ TEST(ByteStringView, Null) {
   EXPECT_EQ(null_string, assigned_nullptr_string);
 
   ByteStringView assigned_span_null_string("initially not null span");
-  assigned_span_null_string = pdfium::span<const uint8_t>();
+  assigned_span_null_string = ByteStringView(pdfium::span<const uint8_t>());
   EXPECT_FALSE(assigned_span_null_string.unterminated_unsigned_str());
   EXPECT_EQ(0u, assigned_span_null_string.GetLength());
   EXPECT_TRUE(assigned_span_null_string.IsEmpty());
@@ -1221,12 +1222,15 @@ TEST(ByteStringView, Null) {
 TEST(ByteStringView, NotNull) {
   ByteStringView string3("abc");
   ByteStringView string6("abcdef");
-  ByteStringView alternate_string3("abcdef", 3);
+  // SAFETY: known fixed-length string.
+  auto alternate_string3 = UNSAFE_BUFFERS(ByteStringView("abcdef", 3));
   const char abcd[] = "abcd";
   ByteStringView span_string4(
       pdfium::as_bytes(pdfium::make_span(abcd).first(4u)));
-  ByteStringView embedded_nul_string7("abc\0def", 7);
-  ByteStringView illegal_string7("abcdef", 7);
+  // SAFETY: known fixed-length string.
+  auto embedded_nul_string7 = UNSAFE_BUFFERS(ByteStringView("abc\0def", 7));
+  // SAFETY: known fixed-length string.
+  auto illegal_string7 = UNSAFE_BUFFERS(ByteStringView("abcdef", 7));
 
   EXPECT_EQ(3u, string3.GetLength());
   EXPECT_EQ(6u, string6.GetLength());
@@ -1882,7 +1886,7 @@ TEST(ByteString, OStreamOverload) {
   stream << "abc" << str << "ghi";
   EXPECT_EQ("abc123ghi", stream.str());
 
-  char stringWithNulls[]{'x', 'y', '\0', 'z'};
+  char stringWithNulls[] = {'x', 'y', '\0', 'z'};
 
   // Writing a ByteString with nulls and no specified length treats it as
   // a C-style null-terminated string.
@@ -1894,7 +1898,8 @@ TEST(ByteString, OStreamOverload) {
 
   // Writing a ByteString with nulls but specifying its length treats it as
   // a C++-style string.
-  str = ByteString(stringWithNulls, 4);
+  // SAFETY: required for testing, manual length calculation based on above.
+  str = UNSAFE_BUFFERS(ByteString(stringWithNulls, 4));
   EXPECT_EQ(4u, str.GetLength());
   stream.str("");
   stream << str;
@@ -1961,8 +1966,9 @@ TEST(ByteStringView, OStreamOverload) {
   // a C++-style string.
   {
     std::ostringstream stream;
-    char stringWithNulls[]{'x', 'y', '\0', 'z'};
-    ByteStringView str(stringWithNulls, 4);
+    char stringWithNulls[] = {'x', 'y', '\0', 'z'};
+    // SAFETY: known array above.
+    auto str = UNSAFE_BUFFERS(ByteStringView(stringWithNulls, 4));
     EXPECT_EQ(4u, str.GetLength());
     stream << str;
     EXPECT_EQ(4u, stream.tellp());

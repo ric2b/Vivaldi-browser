@@ -16,8 +16,12 @@ build_webui("build") {
   css_files = [ "css/print_preview_cros_shared.css" ]
 
   non_web_component_files = [
+    "js/data/capabilities_manager.ts",
     "js/data/destination_constants.ts",
     "js/data/destination_manager.ts",
+    "js/data/destination_provider_composite.ts",
+    "js/data/print_preview_page_handler_composite.ts",
+    "js/data/preview_ticket_manager.ts",
     "js/data/print_ticket_manager.ts",
     "js/data/ticket_constants.ts",
     "js/destination_dropdown_controller.ts",
@@ -25,11 +29,13 @@ build_webui("build") {
     "js/destination_select_controller.ts",
     "js/print_preview_cros_app_controller.ts",
     "js/summary_panel_controller.ts",
+    "js/fakes/fake_data.ts",
     "js/fakes/fake_destination_provider.ts",
     "js/fakes/fake_print_preview_page_handler.ts",
     "js/utils/event_utils.ts",
     "js/utils/mojo_data_providers.ts",
     "js/utils/print_preview_cros_app_types.ts",
+    "js/utils/validation_utils.ts",
   ]
 
   web_component_files = [
@@ -40,7 +46,20 @@ build_webui("build") {
     "js/summary_panel.ts",
   ]
 
+  mojo_files = [
+    "$root_gen_dir/ash/webui/print_preview_cros/mojom/destination_provider.mojom-webui.ts",
+    "$root_gen_dir/ash/webui/print_preview_cros/mojom/printer_capabilities.mojom-webui.ts",
+    "$root_gen_dir/printing/mojom/print.mojom-webui.ts",
+  ]
+
+  mojo_files_deps = [
+    "//ash/webui/print_preview_cros/mojom:mojom_ts__generator",
+    "//printing/mojom:mojom_ts__generator",
+  ]
+
   ts_composite = true
+
+  ts_definitions = [ "//tools/typescript/definitions/chrome_send.d.ts" ]
 
   ts_deps = [
     "//ash/webui/common/resources:build_ts",

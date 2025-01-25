@@ -114,14 +114,13 @@ class DependencyValidationTest(unittest.TestCase):
 
     def test_versioning_field(self):
         """Check that a validation error is returned for insufficient
-        versioning info."""
+        versioning info. No Date/Revision and Version is N/A."""
         dependency = dm.DependencyMetadata()
         dependency.add_entry(known_fields.NAME.get_name(),
                              "Test metadata missing versioning info")
         dependency.add_entry(known_fields.URL.get_name(),
                              "https://www.example.com")
         dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
-        dependency.add_entry(known_fields.REVISION.get_name(), "unknown")
         dependency.add_entry(known_fields.LICENSE.get_name(), "Public Domain")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
@@ -135,6 +134,89 @@ class DependencyValidationTest(unittest.TestCase):
         self.assertTrue(isinstance(results[0], vr.ValidationError))
         self.assertEqual(results[0].get_reason(),
                          "Versioning fields are insufficient.")
+
+    def test_versioning_with_invalid_revision(self):
+        """Check that a validation error is returned for insufficient
+        versioning info."""
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.NAME.get_name(),
+                             "Test metadata missing versioning info")
+        dependency.add_entry(known_fields.URL.get_name(),
+                             "https://www.example.com")
+        dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
+        dependency.add_entry(known_fields.REVISION.get_name(), "N/A")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "Public Domain")
+        dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
+        dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
+        dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
+
+        results = dependency.validate(
+            source_file_dir=os.path.join(_THIS_DIR, "data"),
+            repo_root_dir=_THIS_DIR,
+        )
+        self.assertEqual(len(results), 2)
+        self.assertTrue(isinstance(results[0], vr.ValidationError))
+        self.assertTrue(isinstance(results[1], vr.ValidationError))
+        self.assertEqual(results[0].get_reason(),
+                         "Revision is not a valid hexadecimal revision.")
+        self.assertEqual(results[1].get_reason(),
+                         "Versioning fields are insufficient.")
+
+    def test_invalid_revision(self):
+        """Check invalid revision formats return validation errors."""
+
+        # Test invalid revision format (non-hexadecimal).
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.NAME.get_name(), "Invalid Revision")
+        dependency.add_entry(known_fields.URL.get_name(),
+                             "https://www.example.com")
+        dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
+        dependency.add_entry(known_fields.REVISION.get_name(),
+                             "invalid_revision")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "Public Domain")
+        dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
+        dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
+        dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
+
+        results = dependency.validate(
+            source_file_dir=os.path.join(_THIS_DIR, "data"),
+            repo_root_dir=_THIS_DIR,
+        )
+        self.assertEqual(len(results), 1)
+        self.assertTrue(isinstance(results[0], vr.ValidationError))
+        self.assertEqual(
+            results[0].get_reason(),
+            "Revision is not a valid hexadecimal revision.",
+        )
+
+    def test_valid_revision(self):
+        """Check valid revision formats return no validation issues."""
+
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.NAME.get_name(), "Valid Revision")
+        dependency.add_entry(known_fields.URL.get_name(),
+                             "https://www.example.com")
+        dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "Public Domain")
+        dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
+        dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
+        dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
+
+        results = dependency.validate(
+            source_file_dir=os.path.join(_THIS_DIR, "data"),
+            repo_root_dir=_THIS_DIR,
+        )
+        # No errors for no revision.
+        self.assertEqual(len(results), 0)
+
+        dependency.add_entry(known_fields.REVISION.get_name(),
+                             "abcdef1")  # Valid.
+        results = dependency.validate(
+            source_file_dir=os.path.join(_THIS_DIR, "data"),
+            repo_root_dir=_THIS_DIR,
+        )
+        # No errors for valid revision.
+        self.assertEqual(len(results), 0)
 
     def test_required_field(self):
         """Check that a validation error is returned for a missing field."""

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/socket/ssl_client_socket_impl.h"
 
 #include <errno.h>
@@ -124,7 +129,7 @@ base::Value::Dict NetLogSSLMessageParams(bool is_write,
                                          size_t len,
                                          NetLogCaptureMode capture_mode) {
   if (len == 0) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return base::Value::Dict();
   }
 
@@ -188,7 +193,6 @@ class SSLClientSocketImpl::SSLContext {
   friend struct base::DefaultSingletonTraits<SSLContext>;
 
   SSLContext() {
-    crypto::EnsureOpenSSLInit();
     ssl_socket_data_index_ =
         SSL_get_ex_new_index(0, nullptr, nullptr, nullptr, nullptr);
     DCHECK_NE(ssl_socket_data_index_, -1);
@@ -512,7 +516,7 @@ int64_t SSLClientSocketImpl::GetTotalReceivedBytes() const {
 void SSLClientSocketImpl::GetSSLCertRequestInfo(
     SSLCertRequestInfo* cert_request_info) const {
   if (!ssl_) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 
@@ -1065,7 +1069,7 @@ ssl_verify_result_t SSLClientSocketImpl::VerifyCert() {
     //
     // See section 6.1.7 of draft-ietf-tls-esni-13.
     if (HostIsIPAddressNoBrackets(ech_name_override)) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       OpenSSLPutNetError(FROM_HERE, ERR_INVALID_ECH_CONFIG_LIST);
       return ssl_verify_invalid;
     }
@@ -1196,7 +1200,7 @@ int SSLClientSocketImpl::CheckCTRequirements() {
       return OK;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return OK;
 }
 
@@ -1240,7 +1244,7 @@ int SSLClientSocketImpl::DoHandshakeLoop(int last_io_result) {
       case STATE_NONE:
       default:
         rv = ERR_UNEXPECTED;
-        NOTREACHED() << "unexpected state" << state;
+        NOTREACHED_IN_MIGRATION() << "unexpected state" << state;
         break;
     }
   } while (rv != ERR_IO_PENDING && next_handshake_state_ != STATE_NONE);

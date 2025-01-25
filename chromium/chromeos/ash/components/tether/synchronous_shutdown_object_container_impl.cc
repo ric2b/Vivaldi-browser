@@ -31,13 +31,11 @@
 #include "chromeos/ash/components/tether/tether_session_completion_logger.h"
 #include "chromeos/ash/components/tether/top_level_host_scan_cache.h"
 #include "chromeos/ash/components/tether/wifi_hotspot_connector.h"
+#include "chromeos/ash/components/timer_factory/timer_factory.h"
+#include "chromeos/ash/components/timer_factory/timer_factory_impl.h"
 #include "chromeos/ash/services/secure_channel/public/cpp/client/secure_channel_client.h"
-#include "components/cross_device/timer_factory/timer_factory.h"
-#include "components/cross_device/timer_factory/timer_factory_impl.h"
 
-namespace ash {
-
-namespace tether {
+namespace ash::tether {
 
 // static
 SynchronousShutdownObjectContainerImpl::Factory*
@@ -114,7 +112,7 @@ SynchronousShutdownObjectContainerImpl::SynchronousShutdownObjectContainerImpl(
           tether_host_response_recorder_.get(),
           device_id_tether_network_guid_map_.get())),
       top_level_host_scan_cache_(std::make_unique<TopLevelHostScanCache>(
-          cross_device::TimerFactoryImpl::Factory::Create(),
+          ash::timer_factory::TimerFactoryImpl::Factory::Create(),
           active_host_.get(),
           network_host_scan_cache_.get(),
           persistent_host_scan_cache_.get())),
@@ -124,8 +122,7 @@ SynchronousShutdownObjectContainerImpl::SynchronousShutdownObjectContainerImpl(
           top_level_host_scan_cache_.get(),
           active_host_.get())),
       keep_alive_scheduler_(std::make_unique<KeepAliveScheduler>(
-          device_sync_client,
-          secure_channel_client,
+          asychronous_container->host_connection_factory(),
           active_host_.get(),
           top_level_host_scan_cache_.get(),
           device_id_tether_network_guid_map_.get())),
@@ -134,8 +131,7 @@ SynchronousShutdownObjectContainerImpl::SynchronousShutdownObjectContainerImpl(
               active_host_.get(),
               base::DefaultClock::GetInstance())),
       connection_preserver_(std::make_unique<ConnectionPreserverImpl>(
-          device_sync_client,
-          secure_channel_client,
+          asychronous_container->host_connection_factory(),
           network_state_handler_,
           active_host_.get(),
           tether_host_response_recorder_.get())),
@@ -144,7 +140,7 @@ SynchronousShutdownObjectContainerImpl::SynchronousShutdownObjectContainerImpl(
               SecureChannelTetherAvailabilityOperationOrchestrator::Factory>(
               asychronous_container->tether_host_fetcher(),
               device_sync_client,
-              secure_channel_client,
+              asychronous_container->host_connection_factory(),
               tether_host_response_recorder_.get(),
               connection_preserver_.get()),
           network_state_handler_,
@@ -161,8 +157,7 @@ SynchronousShutdownObjectContainerImpl::SynchronousShutdownObjectContainerImpl(
       host_connection_metrics_logger_(
           std::make_unique<HostConnectionMetricsLogger>(active_host_.get())),
       tether_connector_(std::make_unique<TetherConnectorImpl>(
-          device_sync_client,
-          secure_channel_client,
+          asychronous_container->host_connection_factory(),
           network_state_handler_,
           wifi_hotspot_connector_.get(),
           active_host_.get(),
@@ -220,6 +215,4 @@ SynchronousShutdownObjectContainerImpl::tether_disconnector() {
   return tether_disconnector_.get();
 }
 
-}  // namespace tether
-
-}  // namespace ash
+}  // namespace ash::tether

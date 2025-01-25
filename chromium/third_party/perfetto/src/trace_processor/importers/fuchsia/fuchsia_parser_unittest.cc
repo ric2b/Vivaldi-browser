@@ -15,26 +15,34 @@
  */
 
 #include "src/trace_processor/importers/fuchsia/fuchsia_trace_parser.h"
-#include "src/trace_processor/importers/fuchsia/fuchsia_trace_tokenizer.h"
+
+#include <memory>
 
 #include "perfetto/base/logging.h"
 #include "perfetto/ext/base/string_view.h"
 #include "perfetto/protozero/scattered_heap_buffer.h"
 #include "perfetto/trace_processor/trace_blob.h"
+
 #include "src/trace_processor/importers/common/args_tracker.h"
 #include "src/trace_processor/importers/common/args_translation_table.h"
+#include "src/trace_processor/importers/common/chunked_trace_reader.h"
 #include "src/trace_processor/importers/common/clock_tracker.h"
+#include "src/trace_processor/importers/common/cpu_tracker.h"
 #include "src/trace_processor/importers/common/event_tracker.h"
 #include "src/trace_processor/importers/common/flow_tracker.h"
+#include "src/trace_processor/importers/common/machine_tracker.h"
 #include "src/trace_processor/importers/common/metadata_tracker.h"
+#include "src/trace_processor/importers/common/process_track_translation_table.h"
 #include "src/trace_processor/importers/common/process_tracker.h"
 #include "src/trace_processor/importers/common/slice_tracker.h"
 #include "src/trace_processor/importers/common/stack_profile_tracker.h"
+#include "src/trace_processor/importers/common/trace_parser.h"
 #include "src/trace_processor/importers/common/track_tracker.h"
 #include "src/trace_processor/importers/ftrace/ftrace_sched_event_tracker.h"
+#include "src/trace_processor/importers/fuchsia/fuchsia_trace_tokenizer.h"
 #include "src/trace_processor/importers/proto/additional_modules.h"
 #include "src/trace_processor/importers/proto/default_modules.h"
-#include "src/trace_processor/importers/proto/proto_trace_parser.h"
+#include "src/trace_processor/importers/proto/proto_trace_parser_impl.h"
 #include "src/trace_processor/sorter/trace_sorter.h"
 #include "src/trace_processor/storage/metadata.h"
 #include "src/trace_processor/storage/trace_storage.h"
@@ -241,20 +249,26 @@ class FuchsiaTraceParserTest : public ::testing::Test {
     context_.args_translation_table.reset(new ArgsTranslationTable(storage_));
     context_.metadata_tracker.reset(
         new MetadataTracker(context_.storage.get()));
+    context_.machine_tracker.reset(new MachineTracker(&context_, 0));
+    context_.cpu_tracker.reset(new CpuTracker(&context_));
     event_ = new MockEventTracker(&context_);
     context_.event_tracker.reset(event_);
     sched_ = new MockSchedEventTracker(&context_);
     context_.ftrace_sched_tracker.reset(sched_);
     process_ = new NiceMock<MockProcessTracker>(&context_);
     context_.process_tracker.reset(process_);
+    context_.process_track_translation_table.reset(
+        new ProcessTrackTranslationTable(storage_));
     slice_ = new NiceMock<MockSliceTracker>(&context_);
     context_.slice_tracker.reset(slice_);
     context_.slice_translation_table.reset(new SliceTranslationTable(storage_));
     context_.clock_tracker.reset(new ClockTracker(&context_));
     clock_ = context_.clock_tracker.get();
     context_.flow_tracker.reset(new FlowTracker(&context_));
-    context_.sorter.reset(new TraceSorter(&context_, CreateParser(),
-                                          TraceSorter::SortingMode::kFullSort));
+    context_.fuchsia_record_parser.reset(new FuchsiaTraceParser(&context_));
+    context_.proto_trace_parser.reset(new ProtoTraceParserImpl(&context_));
+    context_.sorter.reset(
+        new TraceSorter(&context_, TraceSorter::SortingMode::kFullSort));
     context_.descriptor_pool_.reset(new DescriptorPool());
 
     RegisterDefaultModules(&context_);
@@ -275,8 +289,9 @@ class FuchsiaTraceParserTest : public ::testing::Test {
     const size_t num_bytes = trace_bytes_.size() * sizeof(uint64_t);
     std::unique_ptr<uint8_t[]> raw_trace(new uint8_t[num_bytes]);
     memcpy(raw_trace.get(), trace_bytes_.data(), num_bytes);
-    context_.chunk_reader.reset(new FuchsiaTraceTokenizer(&context_));
-    auto status = context_.chunk_reader->Parse(TraceBlobView(
+    context_.chunk_readers.push_back(
+        std::make_unique<FuchsiaTraceTokenizer>(&context_));
+    auto status = context_.chunk_readers.back()->Parse(TraceBlobView(
         TraceBlob::TakeOwnership(std::move(raw_trace), num_bytes)));
 
     ResetTraceBuffers();
@@ -285,9 +300,6 @@ class FuchsiaTraceParserTest : public ::testing::Test {
 
  protected:
   std::vector<uint64_t> trace_bytes_;
-  std::unique_ptr<TraceParser> CreateParser() {
-    return std::unique_ptr<TraceParser>(new FuchsiaTraceParser(&context_));
-  }
 
   TraceProcessorContext context_;
   MockEventTracker* event_;

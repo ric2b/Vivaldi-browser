@@ -38,7 +38,7 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
   // Overridden from WebContentsDelegate
   bool HandleKeyboardEvent(
       content::WebContents* source,
-      const content::NativeWebKeyboardEvent& event) override;
+      const input::NativeWebKeyboardEvent& event) override;
   void ContentsMouseEvent(content::WebContents* source,
                           const ui::Event& event) override;
   bool PreHandleGestureEvent(content::WebContents* source,

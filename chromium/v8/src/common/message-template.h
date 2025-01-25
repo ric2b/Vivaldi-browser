@@ -375,7 +375,7 @@ namespace internal {
   T(UnsupportedSuper, "Unsupported reference to 'super'")                      \
   T(AccessedUnavailableVariable, "Cannot access '%' from debugger")            \
   T(DisposableStackIsDisposed,                                                 \
-    "Cannot add resources to an already-disposed DisposableStack")             \
+    "Cannot call % on an already-disposed DisposableStack")                    \
   /* RangeError */                                                             \
   T(BigIntDivZero, "Division by zero")                                         \
   T(BigIntTooBig, "Maximum BigInt size exceeded")                              \
@@ -439,6 +439,8 @@ namespace internal {
   T(ValueOutOfRange, "Value % out of range for % options property %")          \
   T(CollectionGrowFailed, "% maximum size exceeded")                           \
   T(MustBePositive, "% must be positive")                                      \
+  T(ArgumentIsNotUndefinedOrNonNegativeInteger,                                \
+    "% argument must be undefined or a non-negative integer")                  \
   /* SyntaxError */                                                            \
   T(AmbiguousExport,                                                           \
     "The requested module '%' contains conflicting star exports for name '%'") \

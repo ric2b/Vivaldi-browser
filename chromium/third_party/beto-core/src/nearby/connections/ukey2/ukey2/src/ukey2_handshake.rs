@@ -16,10 +16,12 @@
 // TODO: remove this and convert all unwraps to expects
 #![allow(clippy::unwrap_used)]
 
-pub(crate) use crate::proto_adapter::{
-    CipherCommitment, ClientFinished, ClientInit, GenericPublicKey, HandshakeCipher,
-    IntoAdapter as _, ServerInit, ToWrappedMessage as _,
+use std::{
+    collections::HashSet,
+    fmt::{self, Formatter},
+    marker::PhantomData,
 };
+
 use crypto_provider::elliptic_curve::EphemeralSecret;
 use crypto_provider::p256::{P256EcdhProvider, P256PublicKey, P256};
 use crypto_provider::x25519::X25519;
@@ -30,13 +32,14 @@ use crypto_provider::{
     sha2::{Sha256, Sha512},
     CryptoRng,
 };
-use std::{
-    collections::hash_set,
-    fmt::{self, Formatter},
-    marker::PhantomData,
-};
 use ukey2_proto::protobuf::Message;
 use ukey2_proto::ukey2_all_proto::{securemessage, ukey};
+
+use crate::proto_adapter::NextProtocol;
+pub(crate) use crate::proto_adapter::{
+    CipherCommitment, ClientFinished, ClientInit, GenericPublicKey, HandshakeCipher,
+    IntoAdapter as _, ServerInit, ToWrappedMessage as _,
+};
 
 pub trait WireCompatibilityLayer {
     fn encode_public_key<C: CryptoProvider>(
@@ -145,7 +148,7 @@ impl WireCompatibilityLayer for HandshakeImplementation {
 }
 
 pub struct Ukey2ServerStage1<C: CryptoProvider> {
-    pub(crate) next_protocols: hash_set::HashSet<String>,
+    pub(crate) next_protocols: HashSet<NextProtocol>,
     pub(crate) handshake_impl: HandshakeImplementation,
     _marker: PhantomData<C>,
 }
@@ -157,11 +160,12 @@ impl<C: CryptoProvider> fmt::Debug for Ukey2ServerStage1<C> {
 }
 
 impl<C: CryptoProvider> Ukey2ServerStage1<C> {
-    pub fn from(
-        next_protocols: hash_set::HashSet<String>,
-        handshake_impl: HandshakeImplementation,
-    ) -> Self {
-        Self { next_protocols, handshake_impl, _marker: PhantomData }
+    pub fn from(next_protocols: HashSet<String>, handshake_impl: HandshakeImplementation) -> Self {
+        Self {
+            next_protocols: next_protocols.iter().filter_map(|p| p.try_into().ok()).collect(),
+            handshake_impl,
+            _marker: PhantomData,
+        }
     }
 
     pub(crate) fn handle_client_init<R: rand::Rng + rand::CryptoRng>(
@@ -174,10 +178,11 @@ impl<C: CryptoProvider> Ukey2ServerStage1<C> {
             return Err(ClientInitError::BadVersion);
         }
 
-        let next_protocol = client_init.next_protocol();
-        if !self.next_protocols.contains(next_protocol) {
+        let next_protocols = client_init.next_protocols();
+        let Some(selected_protocol) = next_protocols.intersection(&self.next_protocols).min()
+        else {
             return Err(ClientInitError::BadNextProtocol);
-        }
+        };
 
         // nothing to check here about client_init.random -- already been validated as 32 bytes
 
@@ -207,7 +212,7 @@ impl<C: CryptoProvider> Ukey2ServerStage1<C> {
                     commitment.clone(),
                     secret,
                     self.handshake_impl,
-                    next_protocol.to_string(),
+                    *selected_protocol,
                 ))
             }
             HandshakeCipher::P256Sha512 => {
@@ -224,7 +229,7 @@ impl<C: CryptoProvider> Ukey2ServerStage1<C> {
                     commitment.clone(),
                     secret,
                     self.handshake_impl,
-                    next_protocol.to_string(),
+                    *selected_protocol,
                 ))
             }
         }
@@ -242,7 +247,7 @@ pub struct Ukey2ServerStage2<C: CryptoProvider> {
     commitment: CipherCommitment,
     key_pair: ServerKeyPair<C>,
     pub(crate) handshake_impl: HandshakeImplementation,
-    next_protocol: String,
+    next_protocol: NextProtocol,
     _marker: PhantomData<C>,
 }
 
@@ -262,7 +267,7 @@ impl<C: CryptoProvider> Ukey2ServerStage2<C> {
         commitment: CipherCommitment,
         key_pair: ServerKeyPair<C>,
         handshake_impl: HandshakeImplementation,
-        next_protocol: String,
+        next_protocol: NextProtocol,
     ) -> Self {
         let random: [u8; 32] = rng.gen();
         let mut server_init = ukey::Ukey2ServerInit::default();
@@ -278,6 +283,7 @@ impl<C: CryptoProvider> Ukey2ServerStage2<C> {
                 )
                 .unwrap(),
         });
+        server_init.set_selected_next_protocol(next_protocol.to_string());
 
         Self {
             client_init_msg,
@@ -372,7 +378,7 @@ pub struct Ukey2ClientStage1<C: CryptoProvider> {
     client_init_bytes: Vec<u8>,
     commitment_ciphers: Vec<HandshakeCipher>,
     handshake_impl: HandshakeImplementation,
-    next_protocol: String,
+    next_protocols: Vec<NextProtocol>,
     _marker: PhantomData<C>,
 }
 
@@ -383,11 +389,15 @@ impl<C: CryptoProvider> fmt::Debug for Ukey2ClientStage1<C> {
 }
 
 impl<C: CryptoProvider> Ukey2ClientStage1<C> {
+    // Clippy: we assert that there must be at least one element in `next_protocols`, so indexing
+    // [0] is safe.
+    #[allow(clippy::indexing_slicing)]
     pub fn from<R: rand::Rng + rand::SeedableRng + rand::CryptoRng>(
         rng: &mut R,
-        next_protocol: String,
+        next_protocols: Vec<NextProtocol>,
         handshake_impl: HandshakeImplementation,
     ) -> Self {
+        assert!(!next_protocols.is_empty());
         let random = rng.gen::<[u8; 32]>().to_vec();
         // Curve25519 ClientFinished Message
         let curve25519_secret =
@@ -408,10 +418,10 @@ impl<C: CryptoProvider> Ukey2ClientStage1<C> {
 
         // P256 ClientFinished Message
         let p256_secret = <C::P256 as EcdhProvider<P256>>::EphemeralSecret::generate_random(
-                        &mut<<<C::P256 as EcdhProvider<P256>>::EphemeralSecret as EphemeralSecret<
-                            P256,
-                        >>::Rng as CryptoRng>::new(),
-                    );
+            &mut <<<C::P256 as EcdhProvider<P256>>::EphemeralSecret as EphemeralSecret<
+                P256,
+            >>::Rng as CryptoRng>::new(),
+        );
         let p256_client_finished_bytes = {
             let client_finished = ukey::Ukey2ClientFinished {
                 public_key: Some(
@@ -446,7 +456,8 @@ impl<C: CryptoProvider> Ukey2ClientStage1<C> {
                 version: Some(1),
                 random: Some(random),
                 cipher_commitments: vec![curve25519_commitment, p256_commitment],
-                next_protocol: Some(next_protocol.to_string()),
+                next_protocol: Some(next_protocols[0].to_string()),
+                next_protocols: next_protocols.iter().map(|x| x.to_string()).collect(),
                 ..Default::default()
             };
             client_init.to_wrapped_msg().write_to_bytes().unwrap()
@@ -463,7 +474,7 @@ impl<C: CryptoProvider> Ukey2ClientStage1<C> {
                 HandshakeCipher::P256Sha512,
             ],
             handshake_impl,
-            next_protocol,
+            next_protocols,
             _marker: PhantomData,
         }
     }
@@ -480,6 +491,11 @@ impl<C: CryptoProvider> Ukey2ClientStage1<C> {
         if server_init.version() != 1 {
             return Err(ServerInitError::BadVersion);
         }
+
+        if !self.next_protocols.contains(&server_init.selected_next_protocol()) {
+            return Err(ServerInitError::BadNextProtocol);
+        }
+        let next_protocol = server_init.selected_next_protocol();
 
         // loop over all commitments every time for a semblance of constant time-ness
         let server_cipher = self
@@ -537,7 +553,7 @@ impl<C: CryptoProvider> Ukey2ClientStage1<C> {
                 self.client_init_bytes,
                 server_init_bytes.to_vec(),
                 shared_secret_bytes,
-                self.next_protocol,
+                next_protocol,
             ),
         })
     }
@@ -551,6 +567,8 @@ pub(crate) enum ServerInitError {
     BadPublicKey,
     /// The diffie-hellman key exchange failed to generate a shared secret
     BadKeyExchange,
+    /// The server sent an invalid next protocol that is not available to the client.
+    BadNextProtocol,
 }
 
 #[derive(Clone)]
@@ -596,7 +614,7 @@ pub struct CompletedHandshake {
     client_init_bytes: Vec<u8>,
     server_init_bytes: Vec<u8>,
     shared_secret: Vec<u8>,
-    pub next_protocol: String,
+    pub next_protocol: NextProtocol,
 }
 
 impl CompletedHandshake {
@@ -604,7 +622,7 @@ impl CompletedHandshake {
         client_init_bytes: Vec<u8>,
         server_init_bytes: Vec<u8>,
         shared_secret: Vec<u8>,
-        next_protocol: String,
+        next_protocol: NextProtocol,
     ) -> Self {
         Self { client_init_bytes, server_init_bytes, shared_secret, next_protocol }
     }

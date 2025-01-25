@@ -4,6 +4,8 @@
 
 #include "core/fxcrt/widestring.h"
 
+#include <limits.h>
+
 #include <algorithm>
 #include <iterator>
 #include <vector>
@@ -1021,8 +1023,7 @@ TEST(WideString, GetBuffer) {
   WideString str2(L"cl");
   {
     pdfium::span<wchar_t> buffer = str2.GetBuffer(12);
-    // TODO(tsepez): make safe.
-    UNSAFE_BUFFERS(wcscpy(buffer.data() + 2, L"ams"));
+    UNSAFE_TODO(wcscpy(buffer.data() + 2, L"ams"));
   }
   str2.ReleaseBuffer(str2.GetStringLength());
   EXPECT_EQ(L"clams", str2);
@@ -1251,14 +1252,13 @@ TEST(WideString, FromUTF16BE) {
     WideString out;
   } const utf16be_decode_cases[] = {
       {"", L""},
-      {ByteString("\0a\0b\0c", 6), L"abc"},
-      {ByteString("\0a\0b\0c\0\0\0d\0e\0f", 14), WideString(L"abc\0def", 7)},
-      {ByteString(" &", 2), L"…"},
-      {ByteString("\xD8\x3C\xDF\xA8", 4), L"🎨"},
+      {UNSAFE_BUFFERS(ByteString("\0a\0b\0c", 6)), L"abc"},
+      {UNSAFE_BUFFERS(ByteString("\0a\0b\0c\0\0\0d\0e\0f", 14)),
+       UNSAFE_BUFFERS(WideString(L"abc\0def", 7))},
+      {UNSAFE_BUFFERS(ByteString(" &", 2)), L"…"},
+      {UNSAFE_BUFFERS(ByteString("\xD8\x3C\xDF\xA8", 4)), L"🎨"},
   };
-
-  // TODO(tsepez): make safe.
-  UNSAFE_BUFFERS({
+  UNSAFE_TODO({
     for (size_t i = 0; i < std::size(utf16be_decode_cases); ++i) {
       EXPECT_EQ(
           WideString::FromUTF16BE(utf16be_decode_cases[i].in.unsigned_span()),
@@ -1273,15 +1273,15 @@ TEST(WideString, FromUTF16LE) {
     ByteString in;
     WideString out;
   } const utf16le_decode_cases[] = {
+      // SAFETY: not required, control sizes for test.
       {"", L""},
-      {ByteString("a\0b\0c\0", 6), L"abc"},
-      {ByteString("a\0b\0c\0\0\0d\0e\0f\0", 14), WideString(L"abc\0def", 7)},
-      {ByteString("& ", 2), L"…"},
-      {ByteString("\x3C\xD8\xA8\xDF", 4), L"🎨"},
+      {UNSAFE_BUFFERS(ByteString("a\0b\0c\0", 6)), L"abc"},
+      {UNSAFE_BUFFERS(ByteString("a\0b\0c\0\0\0d\0e\0f\0", 14)),
+       UNSAFE_BUFFERS(WideString(L"abc\0def", 7))},
+      {UNSAFE_BUFFERS(ByteString("& ", 2)), L"…"},
+      {UNSAFE_BUFFERS(ByteString("\x3C\xD8\xA8\xDF", 4)), L"🎨"},
   };
-
-  // TODO(tsepez): make safe.
-  UNSAFE_BUFFERS({
+  UNSAFE_TODO({
     for (size_t i = 0; i < std::size(utf16le_decode_cases); ++i) {
       EXPECT_EQ(
           WideString::FromUTF16LE(utf16le_decode_cases[i].in.unsigned_span()),
@@ -1296,17 +1296,15 @@ TEST(WideString, ToUTF16LE) {
     WideString ws;
     ByteString bs;
   } const utf16le_encode_cases[] = {
-      {L"", ByteString("\0\0", 2)},
-      {L"abc", ByteString("a\0b\0c\0\0\0", 8)},
-      {L"abcdef", ByteString("a\0b\0c\0d\0e\0f\0\0\0", 14)},
-      {L"abc\0def", ByteString("a\0b\0c\0\0\0", 8)},
-      {L"\xaabb\xccdd", ByteString("\xbb\xaa\xdd\xcc\0\0", 6)},
-      {L"\x3132\x6162", ByteString("\x32\x31\x62\x61\0\0", 6)},
-      {L"🎨", ByteString("\x3C\xD8\xA8\xDF\0\0", 6)},
+      {L"", UNSAFE_TODO(ByteString("\0\0", 2))},
+      {L"abc", UNSAFE_TODO(ByteString("a\0b\0c\0\0\0", 8))},
+      {L"abcdef", UNSAFE_TODO(ByteString("a\0b\0c\0d\0e\0f\0\0\0", 14))},
+      {L"abc\0def", UNSAFE_TODO(ByteString("a\0b\0c\0\0\0", 8))},
+      {L"\xaabb\xccdd", UNSAFE_TODO(ByteString("\xbb\xaa\xdd\xcc\0\0", 6))},
+      {L"\x3132\x6162", UNSAFE_TODO(ByteString("\x32\x31\x62\x61\0\0", 6))},
+      {L"🎨", UNSAFE_TODO(ByteString("\x3C\xD8\xA8\xDF\0\0", 6))},
   };
-
-  // TODO(tsepez): make safe.
-  UNSAFE_BUFFERS({
+  UNSAFE_TODO({
     for (size_t i = 0; i < std::size(utf16le_encode_cases); ++i) {
       EXPECT_EQ(utf16le_encode_cases[i].bs,
                 utf16le_encode_cases[i].ws.ToUTF16LE())
@@ -1320,19 +1318,17 @@ TEST(WideString, ToUCS2LE) {
     WideString ws;
     ByteString bs;
   } const ucs2le_encode_cases[] = {
-      {L"", ByteString("\0\0", 2)},
-      {L"abc", ByteString("a\0b\0c\0\0\0", 8)},
-      {L"abcdef", ByteString("a\0b\0c\0d\0e\0f\0\0\0", 14)},
-      {L"abc\0def", ByteString("a\0b\0c\0\0\0", 8)},
-      {L"\xaabb\xccdd", ByteString("\xbb\xaa\xdd\xcc\0\0", 6)},
-      {L"\x3132\x6162", ByteString("\x32\x31\x62\x61\0\0", 6)},
+      {L"", UNSAFE_TODO(ByteString("\0\0", 2))},
+      {L"abc", UNSAFE_TODO(ByteString("a\0b\0c\0\0\0", 8))},
+      {L"abcdef", UNSAFE_TODO(ByteString("a\0b\0c\0d\0e\0f\0\0\0", 14))},
+      {L"abc\0def", UNSAFE_TODO(ByteString("a\0b\0c\0\0\0", 8))},
+      {L"\xaabb\xccdd", UNSAFE_TODO(ByteString("\xbb\xaa\xdd\xcc\0\0", 6))},
+      {L"\x3132\x6162", UNSAFE_TODO(ByteString("\x32\x31\x62\x61\0\0", 6))},
 #if defined(WCHAR_T_IS_32_BIT)
-      {L"🎨", ByteString("\0\0", 2)},
+      {L"🎨", UNSAFE_TODO(ByteString("\0\0", 2))},
 #endif
   };
-
-  // TODO(tsepez): make safe.
-  UNSAFE_BUFFERS({
+  UNSAFE_TODO({
     for (size_t i = 0; i < std::size(ucs2le_encode_cases); ++i) {
       EXPECT_EQ(ucs2le_encode_cases[i].bs, ucs2le_encode_cases[i].ws.ToUCS2LE())
           << " for case number " << i;
@@ -2016,7 +2012,8 @@ TEST(WideString, OStreamOverload) {
 
   // Writing a WideString with nulls but specifying its length treats it as
   // a C++-style string.
-  str = WideString(stringWithNulls, 4);
+  // SAFETY: known fixed-length string.
+  str = UNSAFE_BUFFERS(WideString(stringWithNulls, 4));
   EXPECT_EQ(4u, str.GetLength());
   stream.str("");
   stream << str;
@@ -2070,7 +2067,7 @@ TEST(WideString, WideOStreamOverload) {
 
   // Writing a WideString with nulls but specifying its length treats it as
   // a C++-style string.
-  str = WideString(stringWithNulls, 4);
+  str = UNSAFE_BUFFERS(WideString(stringWithNulls, 4));
   EXPECT_EQ(4u, str.GetLength());
   stream.str(L"");
   stream << str;
@@ -2145,8 +2142,9 @@ TEST(WideStringView, OStreamOverload) {
   // a C++-style string.
   {
     wchar_t stringWithNulls[]{'x', 'y', '\0', 'z'};
+    // SAFETY: known array above.
+    auto str = UNSAFE_BUFFERS(WideStringView(stringWithNulls, 4));
     std::ostringstream stream;
-    WideStringView str(stringWithNulls, 4);
     EXPECT_EQ(4u, str.GetLength());
     stream << str;
     EXPECT_EQ(4u, stream.tellp());
@@ -2223,8 +2221,9 @@ TEST(WideStringView, WideOStreamOverload) {
   // a C++-style string.
   {
     wchar_t stringWithNulls[]{'x', 'y', '\0', 'z'};
+    // SAFETY: known array above.
+    auto str = UNSAFE_BUFFERS(WideStringView(stringWithNulls, 4));
     std::wostringstream stream;
-    WideStringView str(stringWithNulls, 4);
     EXPECT_EQ(4u, str.GetLength());
     stream << str;
     EXPECT_EQ(4u, stream.tellp());

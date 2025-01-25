@@ -30,6 +30,7 @@
 
 #include <stdint.h>
 
+#include "libavutil/mem_internal.h"
 #include "libavutil/opt.h"
 #include "libavutil/tx.h"
 
@@ -40,7 +41,6 @@
 #include "codec_internal.h"
 #include "mathops.h"
 #include "me_cmp.h"
-#include "put_bits.h"
 #include "audiodsp.h"
 
 #ifndef AC3ENC_FLOAT
@@ -126,16 +126,16 @@ typedef struct AC3EncOptions {
  * Data for a single audio block.
  */
 typedef struct AC3Block {
-    CoefType **mdct_coef;                       ///< MDCT coefficients
-    int32_t  **fixed_coef;                      ///< fixed-point MDCT coefficients
-    uint8_t  **exp;                             ///< original exponents
-    uint8_t  **grouped_exp;                     ///< grouped exponents
-    int16_t  **psd;                             ///< psd per frequency bin
-    int16_t  **band_psd;                        ///< psd per critical band
-    int16_t  **mask;                            ///< masking curve
-    uint16_t **qmant;                           ///< quantized mantissas
-    uint8_t  **cpl_coord_exp;                   ///< coupling coord exponents           (cplcoexp)
-    uint8_t  **cpl_coord_mant;                  ///< coupling coord mantissas           (cplcomant)
+    CoefType *mdct_coef[AC3_MAX_CHANNELS];      ///< MDCT coefficients
+    int32_t  *fixed_coef[AC3_MAX_CHANNELS];     ///< fixed-point MDCT coefficients
+    uint8_t  *exp[AC3_MAX_CHANNELS];            ///< original exponents
+    uint8_t  *grouped_exp[AC3_MAX_CHANNELS];    ///< grouped exponents
+    int16_t  *psd[AC3_MAX_CHANNELS];            ///< psd per frequency bin
+    int16_t  *band_psd[AC3_MAX_CHANNELS];       ///< psd per critical band
+    int16_t  *mask[AC3_MAX_CHANNELS];           ///< masking curve
+    uint16_t *qmant[AC3_MAX_CHANNELS];          ///< quantized mantissas
+    uint8_t  *cpl_coord_exp[AC3_MAX_CHANNELS];  ///< coupling coord exponents           (cplcoexp)
+    uint8_t  *cpl_coord_mant[AC3_MAX_CHANNELS]; ///< coupling coord mantissas           (cplcomant)
     uint8_t  new_rematrixing_strategy;          ///< send new rematrixing flags in this block
     int      num_rematrixing_bands;             ///< number of rematrixing bands
     uint8_t  rematrixing_flags[4];              ///< rematrixing flags
@@ -150,6 +150,8 @@ typedef struct AC3Block {
     int      end_freq[AC3_MAX_CHANNELS];        ///< end frequency bin                  (endmant)
 } AC3Block;
 
+struct PutBitContext;
+
 /**
  * AC-3 encoder private context.
  */
@@ -157,7 +159,6 @@ typedef struct AC3EncodeContext {
     AVClass *av_class;                      ///< AVClass used for AVOption
     AC3EncOptions options;                  ///< encoding options
     AVCodecContext *avctx;                  ///< parent AVCodecContext
-    PutBitContext pb;                       ///< bitstream writer context
     AudioDSPContext adsp;
 #if AC3ENC_FLOAT
     AVFloatDSPContext *fdsp;
@@ -168,7 +169,6 @@ typedef struct AC3EncodeContext {
     AC3DSPContext ac3dsp;                   ///< AC-3 optimized functions
     AVTXContext *tx;                        ///< FFT context for MDCT calculation
     av_tx_fn tx_fn;
-    const SampleType *mdct_window;          ///< MDCT window function array
 
     AC3Block blocks[AC3_MAX_BLOCKS];        ///< per-block info
 
@@ -232,8 +232,7 @@ typedef struct AC3EncodeContext {
     int frame_bits;                         ///< all frame bits except exponents and mantissas
     int exponent_bits;                      ///< number of bits used for exponents
 
-    void *windowed_samples;
-    uint8_t **planar_samples;
+    uint8_t *planar_samples[AC3_MAX_CHANNELS - 1];
     uint8_t *bap_buffer;
     uint8_t *bap1_buffer;
     CoefType *mdct_coef_buffer;
@@ -244,8 +243,7 @@ typedef struct AC3EncodeContext {
     int16_t *band_psd_buffer;
     int16_t *mask_buffer;
     int16_t *qmant_buffer;
-    uint8_t *cpl_coord_exp_buffer;
-    uint8_t *cpl_coord_mant_buffer;
+    uint8_t *cpl_coord_buffer;
 
     uint8_t exp_strategy[AC3_MAX_CHANNELS][AC3_MAX_BLOCKS]; ///< exponent strategies
     uint8_t frame_exp_strategy[AC3_MAX_CHANNELS];           ///< frame exp strategy index
@@ -255,10 +253,19 @@ typedef struct AC3EncodeContext {
     int ref_bap_set;                                         ///< indicates if ref_bap pointers have been set
 
     /** fixed vs. float function pointers */
-    void (*encode_frame)(struct AC3EncodeContext *s);
+    void (*encode_frame)(struct AC3EncodeContext *s, uint8_t * const *samples);
 
     /* AC-3 vs. E-AC-3 function pointers */
-    void (*output_frame_header)(struct AC3EncodeContext *s);
+    void (*output_frame_header)(struct AC3EncodeContext *s, struct PutBitContext *pb);
+
+    union {
+        DECLARE_ALIGNED(32, float,   mdct_window_float)[AC3_BLOCK_SIZE];
+        DECLARE_ALIGNED(32, int32_t, mdct_window_fixed)[AC3_BLOCK_SIZE];
+    };
+    union {
+        DECLARE_ALIGNED(32, float,   windowed_samples_float)[AC3_WINDOW_SIZE];
+        DECLARE_ALIGNED(32, int32_t, windowed_samples_fixed)[AC3_WINDOW_SIZE];
+    };
 } AC3EncodeContext;
 
 extern const AVChannelLayout ff_ac3_ch_layouts[19];

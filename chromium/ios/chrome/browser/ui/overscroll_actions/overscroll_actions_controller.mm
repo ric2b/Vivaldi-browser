@@ -18,11 +18,11 @@
 #import "build/blink_buildflags.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/side_swipe/ui_bundled/side_swipe_mediator.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/scoped_fullscreen_disabler.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_gesture_recognizer.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_view.h"
-#import "ios/chrome/browser/ui/side_swipe/side_swipe_mediator.h"
 #import "ios/chrome/browser/voice/ui_bundled/voice_search_notification_names.h"
 #import "ios/chrome/common/material_timing.h"
 #import "ios/public/provider/chrome/browser/fullscreen/fullscreen_api.h"
@@ -432,10 +432,15 @@ UIEdgeInsets TopContentInset(UIScrollView* scrollView, CGFloat topInset) {
 - (void)forceAnimatedScrollRefresh {
   _forceStateUpdate = YES;
   [self scrollViewWillBeginDragging];
-  [self.scrollView
-      scrollRectToVisible:CGRectMake(0, -kHeaderMaxExpansionThreshold - 1, 1,
-                                     kHeaderMaxExpansionThreshold + 1)
-                 animated:YES];
+  const CGFloat animatedScrollHeight = kHeaderMaxExpansionThreshold + 10;
+  if (self.viewportAdjustsContentInset) {
+    [self.scrollView scrollRectToVisible:CGRectMake(0, -animatedScrollHeight, 1,
+                                                    animatedScrollHeight)
+                                animated:YES];
+  } else {
+    [self.scrollView setContentOffset:CGPointMake(0, -animatedScrollHeight)
+                             animated:YES];
+  }
 }
 
 - (BOOL)isOverscrollActionsAllowed {
@@ -629,7 +634,7 @@ UIEdgeInsets TopContentInset(UIScrollView* scrollView, CGFloat topInset) {
       [self.delegate overscrollActionRefresh:self];
       break;
     case OverscrollAction::NONE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }

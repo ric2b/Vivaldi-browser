@@ -77,6 +77,8 @@ class LocalSessionEventHandlerImpl : public LocalSessionEventHandler {
   sync_pb::SessionTab GetTabSpecificsFromDelegateForTest(
       SyncedTabDelegate& tab_delegate) const;
 
+  void OnVivDataModified(const std::string &) override;
+
  private:
   enum ReloadTabsOption { RELOAD_TABS, DONT_RELOAD_TABS };
 

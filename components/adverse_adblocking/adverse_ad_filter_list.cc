@@ -280,7 +280,7 @@ std::string* AdverseAdFilterListService::ReadFileToString(
 void AdverseAdFilterListService::ComputeSHA256Sum(const void* data,
                                                   size_t length) {
   sha256_sum_ =
-      crypto::SHA256HashString(base::StringPiece((const char*)data, length));
+      crypto::SHA256HashString(std::string_view((const char*)data, length));
 }
 
 void AdverseAdFilterListService::LoadAndInitializeFromString(

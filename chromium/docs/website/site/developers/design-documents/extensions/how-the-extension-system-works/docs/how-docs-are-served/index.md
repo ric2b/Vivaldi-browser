@@ -41,7 +41,7 @@ tracker](https://code.google.com/p/chromium/issues/list).
             serve on a different port).
 4.  After updating the documentation, upload the patch to
             codereview.chromium.org (see also: [Contributing
-            Code](/developers/contributing-code)).
+            Code](https://chromium.googlesource.com/chromium/src/+/main/docs/contributing.md)).
 5.  Others can preview your changes by visiting
             `https://chrome-apps-doc.appspot.com/_patch/*[issue
             id]*/extensions/` (or /apps/).

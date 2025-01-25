@@ -285,7 +285,8 @@ public class UrlUtilities {
                 && VivaldiUrlConstants.VIVALDI_SCHEME.compareTo(gurl.getScheme()) == 0;
         if (!is_vivaldi_scheme)
         if (!gurl.isValid() || !isInternalScheme(gurl)) return false;
-        return UrlConstants.NTP_HOST.equals(gurl.getHost());
+        return UrlConstants.NTP_HOST.equals(gurl.getHost())
+                || UrlConstants.NEW_TAB_PAGE_URL_LEGACY.equals(gurl.getValidSpecOrEmpty());
     }
 
     /**

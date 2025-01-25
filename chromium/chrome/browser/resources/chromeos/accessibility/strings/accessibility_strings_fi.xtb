@@ -264,7 +264,6 @@
 <translation id="2783001728278437613">{COUNT,plural, =1{+#}other{+#}}</translation>
 <translation id="2792200646155001340">Voit myös siirtää edellistä kohdetta pyyhkäisemällä oikealta vasemmalle yhdellä sormella. Kokeile nyt.</translation>
 <translation id="280499067616661124">ChromeVox-sivulta haku</translation>
-<translation id="2811019999044652585">Siirry näytön kohteisiin, esim. työkalupalkkeihin tai ilmaisinalueelle, painamalla Control + eteenpäin. Eteenpäin-näppäin on Chromebookin näppäimistöllä heti numeron kaksi yläpuolella.</translation>
 <translation id="2811204574343810641">Rivi</translation>
 <translation id="2816868829355607410">Harjoittelualue: siirtymiskomennot</translation>
 <translation id="2841013758207633010">Aika</translation>
@@ -520,6 +519,7 @@
 <translation id="4432457053224379116">Intianpunainen</translation>
 <translation id="4432896207833262240">Merkitty sisältö</translation>
 <translation id="4437615272777527928">Hae valikoista kirjoittamalla. Selaa tuloksia ylä- ja alanuolilla. Säädä tekstikursoria ja siirry valikoiden välillä vasemmalla ja oikealla nuolinäppäimellä.</translation>
+<translation id="4453530046591759283">Siirry muihin näytön osiin, kuten työkalupalkkeihin tai ilmaisinalueelle, painamalla Ctrl+F1. F1 on ensimmäinen Esc-näppäimen oikealla puolella oleva näppäin.</translation>
 <translation id="4457472090507035117">Valitse nykyinen ääni:</translation>
 <translation id="4476183483923481720">uusi rivi</translation>
 <translation id="4479068155583208887">Tiilenpunainen</translation>
@@ -880,6 +880,7 @@
 <translation id="7091296112653361280">Navajo-valkoinen</translation>
 <translation id="7095834689119144465">Muokkaa tekstiä vain numeraaleja</translation>
 <translation id="7096001299300236431">Edellinen mediakohde</translation>
+<translation id="7096668131290451939">Poistu opettelutilasta painamalla Esc uudelleen</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">sanojen puhuminen</translation>
 <translation id="7137397390322864165">Lohenpunainen</translation>

@@ -8,7 +8,7 @@
 #include <cstring>
 #include <mutex>
 
-#include <xnnpack/common.h>
+#include "xnnpack/common.h"
 
 #ifdef __linux__
   #include <sched.h>
@@ -24,9 +24,9 @@
   #include <cpuinfo.h>
 #endif  // XNN_ENABLE_CPUINFO
 
-#include <xnnpack.h>
-#include <xnnpack/allocator.h>
-#include <xnnpack/config.h>
+#include "xnnpack.h"
+#include "xnnpack/allocator.h"
+#include "xnnpack/hardware-config.h"
 
 #include "bench/utils.h"
 
@@ -494,6 +494,50 @@ void MultiThreadingParameters(benchmark::internal::Benchmark* benchmark) {
     return true;
   }
 #endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  bool CheckAVX256SKX(benchmark::State& state) {
+    const xnn_hardware_config* hardware_config = xnn_init_hardware_config();
+    if (hardware_config == nullptr || !hardware_config->use_x86_avx256skx) {
+      state.SkipWithError("no AVX256SKX extension");
+      return false;
+    }
+    return true;
+  }
+#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  bool CheckAVX256VNNI(benchmark::State& state) {
+    const xnn_hardware_config* hardware_config = xnn_init_hardware_config();
+    if (hardware_config == nullptr || !hardware_config->use_x86_avx256vnni) {
+      state.SkipWithError("no AVX256VNNI extension");
+      return false;
+    }
+    return true;
+  }
+#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  bool CheckAVX256VNNIGFNI(benchmark::State& state) {
+    const xnn_hardware_config* hardware_config = xnn_init_hardware_config();
+    if (hardware_config == nullptr || !hardware_config->use_x86_avx256vnnigfni) {
+      state.SkipWithError("no AVX256VNNIGFNI extension");
+      return false;
+    }
+    return true;
+  }
+#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
+
+#if XNN_ARCH_HEXAGON
+  bool CheckHVX(benchmark::State& state) {
+    const xnn_hardware_config* hardware_config = xnn_init_hardware_config();
+    if (hardware_config == nullptr || !hardware_config->use_hvx) {
+      state.SkipWithError("no HVX extension");
+      return false;
+    }
+    return true;
+  }
+#endif  // XNN_ARCH_HEXAGON
 
 #if XNN_ARCH_WASMRELAXEDSIMD
   bool CheckWAsmPSHUFB(benchmark::State& state) {

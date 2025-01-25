@@ -55,8 +55,6 @@ extern NSString* const vNTPToolbarMoreDarkTintColor;
 #pragma mark - ICONS
 // Image names for the search icon.
 extern NSString* vNTPSearchIcon;
-// Image name for toolbar sort icon
-extern NSString* vNTPToolbarSortIcon;
 // Image name for toolbar more icon
 extern NSString* vNTPToolbarMoreIcon;
 // Image name for add new speed dial

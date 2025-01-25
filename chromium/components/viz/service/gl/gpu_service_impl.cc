@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/allocator/partition_alloc_support.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -110,7 +111,6 @@
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if !BUILDFLAG(IS_CHROMEOS)
-#include "components/ml/webnn/features.mojom-features.h"
 #include "services/webnn/webnn_context_provider_impl.h"
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
@@ -909,8 +909,16 @@ void GpuServiceImpl::BindWebNNContextProvider(
                        std::move(pending_receiver), client_id));
     return;
   }
-  webnn::WebNNContextProviderImpl::Create(std::move(pending_receiver),
-                                          GetContextState(), gpu_feature_info_);
+
+  if (!webnn_context_provider_) {
+    // TODO(crbug.com/345352987): manage `WebNNContextProviderImpl` instance per
+    // `client_id` in order to support memory metrics.
+    webnn_context_provider_ = webnn::WebNNContextProviderImpl::Create(
+        GetContextState(), gpu_feature_info_, gpu_info_);
+  }
+
+  webnn_context_provider_->BindWebNNContextProvider(
+      std::move(pending_receiver));
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
@@ -922,10 +930,31 @@ void GpuServiceImpl::CreateGpuMemoryBuffer(
     int client_id,
     gpu::SurfaceHandle surface_handle,
     CreateGpuMemoryBufferCallback callback) {
-  DCHECK(io_runner_->BelongsToCurrentThread());
   // This needs to happen in the IO thread.
-  gpu_memory_buffer_factory_->CreateGpuMemoryBufferAsync(
-      id, size, format, usage, client_id, surface_handle, std::move(callback));
+  DCHECK(io_runner_->BelongsToCurrentThread());
+
+  // Create a native buffer handle if supported.
+  if (IsNativeBufferSupported(format, usage)) {
+    gpu_memory_buffer_factory_->CreateGpuMemoryBufferAsync(
+        id, size, format, usage, client_id, surface_handle,
+        std::move(callback));
+    return;
+  }
+
+  // Otherwise, create a shared memory handle if supported.
+  if (gpu::GpuMemoryBufferImplSharedMemory::IsUsageSupported(usage) &&
+      gpu::GpuMemoryBufferImplSharedMemory::IsSizeValidForFormat(size,
+                                                                 format)) {
+    gfx::GpuMemoryBufferHandle shm_handle;
+    shm_handle = gpu::GpuMemoryBufferImplSharedMemory::CreateGpuMemoryBuffer(
+        id, size, format, usage);
+    DCHECK_EQ(gfx::SHARED_MEMORY_BUFFER, shm_handle.type);
+    std::move(callback).Run(std::move(shm_handle));
+    return;
+  }
+
+  // By default, return a null handle.
+  std::move(callback).Run(gfx::GpuMemoryBufferHandle());
 }
 
 void GpuServiceImpl::DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
@@ -1085,6 +1114,9 @@ void GpuServiceImpl::LoadedBlob(const gpu::GpuDiskCacheHandle& handle,
   }
 
   std::string no_prefix_key = key;
+  const bool clear_shader_cache = base::FeatureList::IsEnabled(
+      features::kClearGrShaderDiskCacheOnInvalidPrefix);
+
   if (base::FeatureList::IsEnabled(
           features::kGenGpuDiskCacheKeyPrefixInGpuService) &&
       GetHandleType(handle) == gpu::GpuDiskCacheType::kGlShaders) {
@@ -1095,6 +1127,13 @@ void GpuServiceImpl::LoadedBlob(const gpu::GpuDiskCacheHandle& handle,
       // Remove the prefix from the key before load.
       no_prefix_key = key.substr(prefix.length() + 1);
     } else {
+      // If the prefix is not ok, its likely that all the other entries in the
+      // cache will have prefix that does not matches. Clear the whole disk
+      // cache in that case to remove all stale entries and make room for newer
+      // entries.
+      if (clear_shader_cache) {
+        gpu_host_->ClearGrShaderDiskCache();
+      }
       return;
     }
   }
@@ -1256,7 +1295,7 @@ void GpuServiceImpl::WakeUpGpuOnMainThread() {
 #if BUILDFLAG(IS_ANDROID)
     gpu_channel_manager_->WakeUpGpu();
 #else
-    NOTREACHED() << "WakeUpGpu() not supported on this platform.";
+    NOTREACHED_IN_MIGRATION() << "WakeUpGpu() not supported on this platform.";
 #endif
   }
 }
@@ -1346,7 +1385,7 @@ void GpuServiceImpl::OnBackgroundCleanupGpuMainThread() {
   DVLOG(1) << "GPU: Performing background cleanup";
   gpu_channel_manager_->OnBackgroundCleanup();
 #else
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #endif
 }
 
@@ -1356,7 +1395,7 @@ void GpuServiceImpl::OnBackgroundCleanupCompositorGpuThread() {
   if (compositor_gpu_thread_)
     compositor_gpu_thread_->OnBackgroundCleanup();
 #else
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #endif
 }
 
@@ -1382,6 +1421,8 @@ void GpuServiceImpl::OnBackgroundedOnMainThread() {
       UpdateGPUInfoGL();
     }
   }
+
+  base::allocator::PartitionAllocSupport::Get()->OnBackgrounded();
 }
 
 void GpuServiceImpl::OnForegrounded() {
@@ -1405,6 +1446,7 @@ void GpuServiceImpl::OnForegroundedOnMainThread() {
     }
   }
   gpu_channel_manager_->OnApplicationForegounded();
+  base::allocator::PartitionAllocSupport::Get()->OnForegrounded();
 }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -1452,7 +1494,7 @@ void GpuServiceImpl::ThrowJavaException() {
 #if BUILDFLAG(IS_ANDROID)
   ThrowUncaughtException();
 #else
-  NOTREACHED() << "Java exception not supported on this platform.";
+  NOTREACHED_IN_MIGRATION() << "Java exception not supported on this platform.";
 #endif
 }
 
@@ -1573,36 +1615,16 @@ void GpuServiceImpl::ClientGmbInterfaceImpl::CreateGpuMemoryBuffer(
     return;
   }
 
-  // Create a native buffer handle if supported.
-  if (gpu_service_->IsNativeBufferSupported(format, usage)) {
-    PendingBufferInfo pending_buffer_info;
-    pending_buffer_info.size = size;
-    pending_buffer_info.format = format;
-    pending_buffer_info.callback = std::move(callback);
-    pending_buffers_.emplace(id, std::move(pending_buffer_info));
-    gpu_service_->CreateGpuMemoryBuffer(
-        id, size, format, usage, client_id_, surface_handle,
-        base::BindOnce(
-            &GpuServiceImpl::ClientGmbInterfaceImpl::OnGpuMemoryBufferAllocated,
-            weak_ptr_, id));
-    return;
-  }
-
-  // Create shared memory handle since native buffers are not supported.
-  if (gpu::GpuMemoryBufferImplSharedMemory::IsUsageSupported(usage) &&
-      gpu::GpuMemoryBufferImplSharedMemory::IsSizeValidForFormat(size,
-                                                                 format)) {
-    gfx::GpuMemoryBufferHandle shm_handle;
-    shm_handle = gpu::GpuMemoryBufferImplSharedMemory::CreateGpuMemoryBuffer(
-        id, size, format, usage);
-    DCHECK_EQ(gfx::SHARED_MEMORY_BUFFER, shm_handle.type);
-    gpu::AllocatedBufferInfo buffer_info(shm_handle, size, format);
-    allocated_buffers_.emplace(id, buffer_info);
-    std::move(callback).Run(std::move(shm_handle));
-    return;
-  }
-  // return null handle.
-  std::move(callback).Run(gfx::GpuMemoryBufferHandle());
+  PendingBufferInfo pending_buffer_info;
+  pending_buffer_info.size = size;
+  pending_buffer_info.format = format;
+  pending_buffer_info.callback = std::move(callback);
+  pending_buffers_.emplace(id, std::move(pending_buffer_info));
+  gpu_service_->CreateGpuMemoryBuffer(
+      id, size, format, usage, client_id_, surface_handle,
+      base::BindOnce(
+          &GpuServiceImpl::ClientGmbInterfaceImpl::OnGpuMemoryBufferAllocated,
+          weak_ptr_, id));
 }
 
 void GpuServiceImpl::ClientGmbInterfaceImpl::DestroyGpuMemoryBuffer(

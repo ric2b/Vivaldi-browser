@@ -3,9 +3,11 @@
 // found in the LICENSE file.
 
 #include "content/browser/cache_storage/cache_storage_histogram_utils.h"
+
+#include <string_view>
+
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/string_piece.h"
 
 namespace content {
 
@@ -53,7 +55,7 @@ bool ShouldRecordOpUMA(CacheStorageSchedulerOp op_type) {
 std::string_view OpToName(CacheStorageSchedulerOp op_type) {
   switch (op_type) {
     case CacheStorageSchedulerOp::kBackgroundSync:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
     case CacheStorageSchedulerOp::kClose:
       RETURN_LITERAL_STRING_PIECE("Close");
@@ -80,7 +82,7 @@ std::string_view OpToName(CacheStorageSchedulerOp op_type) {
     case CacheStorageSchedulerOp::kSizeThenClose:
       RETURN_LITERAL_STRING_PIECE("SizeThenClose");
     case CacheStorageSchedulerOp::kTest:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
     case CacheStorageSchedulerOp::kWriteIndex:
       RETURN_LITERAL_STRING_PIECE("WriteIndex");

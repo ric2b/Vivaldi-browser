@@ -51,11 +51,6 @@ effect of a landmine:
 <td> dict()-ification of the GYP_DEFINES env var.</td>
 </tr>
 <tr>
-<td> distributor() </td>
-<td> 'goma', 'ib', or None</td>
-<td> the distributed compile technology in use for this build.</td>
-</tr>
-<tr>
 <td> builder()</td>
 <td> 'make', 'ninja', 'xcode', or 'msvs'</td>
 <td> the builder technology for this build. </td>

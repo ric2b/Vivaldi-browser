@@ -231,7 +231,7 @@ class FFT {
                         THIS_METHOD_IS_ONLY_FOR_EXPRESSIONS_WITH_DIRECT_MEMORY_ACCESS_SUCH_AS_MAP_OR_PLAIN_MATRICES)
 
     if (nfft < 1) nfft = src.size();
-    
+
     Index dst_size = nfft;
     if (NumTraits<src_type>::IsComplex == 0 && HasFlag(HalfSpectrum)) {
       dst_size = (nfft >> 1) + 1;

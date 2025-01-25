@@ -9,6 +9,8 @@ import static androidx.browser.customtabs.CustomTabsIntent.ACTIVITY_SIDE_SHEET_P
 import static androidx.browser.customtabs.CustomTabsIntent.ACTIVITY_SIDE_SHEET_ROUNDED_CORNERS_POSITION_NONE;
 import static androidx.browser.customtabs.CustomTabsIntent.CLOSE_BUTTON_POSITION_DEFAULT;
 
+import static org.chromium.chrome.browser.content.WebContentsFactory.DEFAULT_NETWORK_HANDLE;
+
 import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -27,12 +29,14 @@ import androidx.browser.trusted.sharing.ShareData;
 import androidx.browser.trusted.sharing.ShareTarget;
 
 import org.chromium.chrome.browser.flags.ActivityType;
+import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.device.mojom.ScreenOrientationLockType;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /** Base class for model classes which parse incoming intent for customization data. */
 public abstract class BrowserServicesIntentDataProvider {
@@ -77,9 +81,25 @@ public abstract class BrowserServicesIntentDataProvider {
     @Retention(RetentionPolicy.SOURCE)
     public @interface ActivitySideSheetSlideInBehavior {}
 
+    // The type of Profile and UI that is used by the custom tab.
+    @IntDef({
+        CustomTabProfileType.REGULAR,
+        CustomTabProfileType.INCOGNITO,
+        CustomTabProfileType.EPHEMERAL
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface CustomTabProfileType {
+        // The normal user profile.
+        int REGULAR = 0;
+        // An off-the-record profile with incognito UI.
+        int INCOGNITO = 1;
+        // An off-the-record profile without references to incognito mode.
+        int EPHEMERAL = 2;
+    }
+
     /**
-     * Side sheet's default slide-in behavior. Same as
-     * {@link ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_SIDE}.
+     * Side sheet's default slide-in behavior. Same as {@link
+     * ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_SIDE}.
      */
     public static final int ACTIVITY_SIDE_SHEET_SLIDE_IN_DEFAULT = 0;
 
@@ -155,12 +175,7 @@ public abstract class BrowserServicesIntentDataProvider {
         return 0;
     }
 
-    /**
-     * Checks whether or not the Intent is from Chrome or other trusted first party.
-     *
-     * @deprecated This method is not reliable, see https://crbug.com/832124
-     */
-    @Deprecated
+    /** Checks whether or not the Intent is from Chrome or other trusted first party. */
     public boolean isTrustedIntent() {
         return false;
     }
@@ -338,10 +353,18 @@ public abstract class BrowserServicesIntentDataProvider {
     }
 
     /**
-     * @return Whether the Activity should be opened in incognito mode.
+     * @return Whether the Activity uses an off-the-record profile.
      */
-    public boolean isIncognito() {
-        return false;
+    public boolean isOffTheRecord() {
+        return getCustomTabMode() == CustomTabProfileType.EPHEMERAL
+                || getCustomTabMode() == CustomTabProfileType.INCOGNITO;
+    }
+
+    /**
+     * @return Whether the Activity is a regular, incognito or ephemeral custom tab.
+     */
+    public @CustomTabProfileType int getCustomTabMode() {
+        return CustomTabProfileType.REGULAR;
     }
 
     /**
@@ -400,8 +423,17 @@ public abstract class BrowserServicesIntentDataProvider {
     }
 
     /**
-     * @return ISO 639 code of target language the page should be translated to.
-     * This method requires native.
+     * @return All origins associated with a TrustedWebActivity client app, including the initially
+     *     loaded origin.
+     */
+    @Nullable
+    public Set<Origin> getAllTrustedWebActivityOrigins() {
+        return null;
+    }
+
+    /**
+     * @return ISO 639 code of target language the page should be translated to. This method
+     *     requires native.
      */
     public @Nullable String getTranslateLanguage() {
         return null;
@@ -603,6 +635,19 @@ public abstract class BrowserServicesIntentDataProvider {
 
     /** Return whether calling package should be allowed to present an interactive Omnibox. */
     public boolean isInteractiveOmniboxAllowed() {
+        return false;
+    }
+
+    /**
+     * Return the network handle that should be used from this intent, the default value to be used
+     * when a network has not been explicitly set via intent.
+     */
+    public long getNetworkHandle() {
+        return DEFAULT_NETWORK_HANDLE;
+    }
+
+    /** Return {@code true} if the service was launched for authentication. */
+    public boolean isAuthView() {
         return false;
     }
 }

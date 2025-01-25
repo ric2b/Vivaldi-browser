@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <algorithm>
 
 #include "base/check_op.h"
@@ -534,7 +539,7 @@ void SingleChannelConvolveX1D(const unsigned char* source_data,
       filter.GetSingleFilter(&filter_size, &filter_offset, &filter_length);
 
   if (filter_values == NULL || image_size.width() < filter_size) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 
@@ -618,7 +623,7 @@ void SingleChannelConvolveY1D(const unsigned char* source_data,
       filter.GetSingleFilter(&filter_size, &filter_offset, &filter_length);
 
   if (filter_values == NULL || image_size.height() < filter_size) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 

@@ -86,6 +86,11 @@ const BINDINGS_TO_GENERATE: &[(&str, &str, BindingsType)] = &[
         BindingsType::Client(OPTS),
     ),
     (
+        "org_chromium_vm_cicerone",
+        "vm_tools/dbus_bindings/org.chromium.VmCicerone.xml",
+        BindingsType::Client(OPTS),
+    ),
+    (
         "org_chromium_vtpm",
         "vtpm/dbus_bindings/org.chromium.Vtpm.xml",
         BindingsType::Client(OPTS),
@@ -96,6 +101,7 @@ const BINDINGS_TO_GENERATE: &[(&str, &str, BindingsType)] = &[
 // When adding additional protos, remember to include the source project and subtree in the
 // ebuild. Otherwise, the source files will not be accessible when building dev-rust/system_api.
 const PROTOS_TO_GENERATE: &[(&str, &str)] = &[
+    ("apps", "system_api/dbus/vm_applications/apps.proto"),
     ("arc", "system_api/dbus/arc/arc.proto"),
     (
         "auth_factor",
@@ -104,6 +110,14 @@ const PROTOS_TO_GENERATE: &[(&str, &str)] = &[
     (
         "battery_saver",
         "system_api/dbus/power_manager/battery_saver.proto",
+    ),
+    (
+        "chunneld_service",
+        "system_api/dbus/chunneld/chunneld_service.proto",
+    ),
+    (
+        "cicerone_service",
+        "system_api/dbus/vm_cicerone/cicerone_service.proto",
     ),
     (
         "concierge_service",

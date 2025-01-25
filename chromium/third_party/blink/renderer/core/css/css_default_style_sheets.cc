@@ -32,6 +32,7 @@
 
 #include "third_party/blink/public/resources/grit/blink_resources.h"
 #include "third_party/blink/renderer/core/css/media_query_evaluator.h"
+#include "third_party/blink/renderer/core/css/parser/css_parser.h"
 #include "third_party/blink/renderer/core/css/rule_set.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
@@ -53,6 +54,15 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/leak_annotations.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
+
+namespace {
+String MaybeRemoveCSSImportant(String string) {
+  const StringView kImportantSuffix(" !important");
+  return string.EndsWith(kImportantSuffix)
+             ? string.Substring(0, string.length() - kImportantSuffix.length())
+             : string;
+}
+}  // namespace
 
 namespace blink {
 
@@ -130,7 +140,6 @@ void CSSDefaultStyleSheets::PrepareForLeakDetection() {
   stylable_select_style_sheet_.Clear();
   stylable_select_forced_colors_style_sheet_.Clear();
   marker_style_sheet_.Clear();
-  auto_sizes_style_sheet_.Clear();
   permission_element_style_sheet_.Clear();
   // Recreate the default style sheet to clean up possible SVG resources.
   String default_rules = UncompressResourceAsASCIIString(IDR_UASTYLE_HTML_CSS) +
@@ -195,6 +204,7 @@ void CSSDefaultStyleSheets::InitializeDefaultStyles() {
   default_fullscreen_style_ = MakeGarbageCollected<RuleSet>();
   default_forced_color_style_.Clear();
   default_pseudo_element_style_.Clear();
+  default_forced_colors_media_controls_style_.Clear();
 
   default_html_style_->AddRulesFromSheet(DefaultStyleSheet(), ScreenEval());
   default_html_quirks_style_->AddRulesFromSheet(QuirksStyleSheet(),
@@ -259,7 +269,20 @@ void CSSDefaultStyleSheets::AddRulesToDefaultStyleSheets(
   // Add to print and forced color for all namespaces.
   default_print_style_->AddRulesFromSheet(rules, PrintEval());
   if (default_forced_color_style_) {
-    default_forced_color_style_->AddRulesFromSheet(rules, ForcedColorsEval());
+    switch (type) {
+      case NamespaceType::kMediaControls:
+        if (!default_forced_colors_media_controls_style_) {
+          default_forced_colors_media_controls_style_ =
+              MakeGarbageCollected<RuleSet>();
+        }
+        default_forced_colors_media_controls_style_->AddRulesFromSheet(
+            rules, ForcedColorsEval());
+        break;
+      default:
+        default_forced_color_style_->AddRulesFromSheet(rules,
+                                                       ForcedColorsEval());
+        break;
+    }
   }
   VerifyUniversalRuleCount();
 }
@@ -308,15 +331,30 @@ bool CSSDefaultStyleSheets::EnsureDefaultStyleSheetsForElement(
   if (!text_track_style_sheet_ && IsA<HTMLVideoElement>(element)) {
     Settings* settings = element.GetDocument().GetSettings();
     if (settings) {
+      // Rules below override rules from html.css and other UA sheets regardless
+      // of specificity. See comment in StyleResolver::MatchUARules().
       StringBuilder builder;
-      builder.Append("video::-webkit-media-text-track-display { ");
-      AddTextTrackCSSProperties(&builder, CSSPropertyID::kBackgroundColor,
-                                settings->GetTextTrackWindowColor());
-      AddTextTrackCSSProperties(&builder, CSSPropertyID::kBorderRadius,
-                                settings->GetTextTrackWindowRadius());
-      builder.Append(" } video::cue { ");
-      AddTextTrackCSSProperties(&builder, CSSPropertyID::kBackgroundColor,
-                                settings->GetTextTrackBackgroundColor());
+      Color color;
+      // Use the text track window color if it is set and non-transparent,
+      // otherwise use the background color. This is only applicable to caption
+      // settings on MacOS, which allows users to specify a window color in
+      // addition to a background color. The WebVTT spec does not have a concept
+      // of a window background, so this workaround allows the default caption
+      // styles on MacOS to render as expected.
+      builder.Append("video::cue { ");
+      if (CSSParser::ParseColor(
+              color,
+              MaybeRemoveCSSImportant(settings->GetTextTrackWindowColor()),
+              /*strict=*/true) &&
+          color.Alpha() > 0) {
+        AddTextTrackCSSProperties(&builder, CSSPropertyID::kBackgroundColor,
+                                  settings->GetTextTrackWindowColor());
+        AddTextTrackCSSProperties(&builder, CSSPropertyID::kBorderRadius,
+                                  settings->GetTextTrackWindowRadius());
+      } else {
+        AddTextTrackCSSProperties(&builder, CSSPropertyID::kBackgroundColor,
+                                  settings->GetTextTrackBackgroundColor());
+      }
       AddTextTrackCSSProperties(&builder, CSSPropertyID::kFontFamily,
                                 settings->GetTextTrackFontFamily());
       AddTextTrackCSSProperties(&builder, CSSPropertyID::kFontStyle,
@@ -355,14 +393,6 @@ bool CSSDefaultStyleSheets::EnsureDefaultStyleSheetsForElement(
         UncompressResourceAsASCIIString(IDR_UASTYLE_STYLABLE_SELECT_CSS));
     AddRulesToDefaultStyleSheets(stylable_select_style_sheet_,
                                  NamespaceType::kHTML);
-    changed_default_style = true;
-  }
-
-  if (!auto_sizes_style_sheet_ && IsA<HTMLImageElement>(element) &&
-      RuntimeEnabledFeatures::AutoSizeLazyLoadedImagesEnabled()) {
-    auto_sizes_style_sheet_ = ParseUASheet(
-        UncompressResourceAsASCIIString(IDR_UASTYLE_AUTO_SIZES_CSS));
-    AddRulesToDefaultStyleSheets(auto_sizes_style_sheet_, NamespaceType::kHTML);
     changed_default_style = true;
   }
 
@@ -462,9 +492,13 @@ bool CSSDefaultStyleSheets::EnsureDefaultStyleSheetForForcedColors() {
     default_forced_color_style_->AddRulesFromSheet(SvgStyleSheet(),
                                                    ForcedColorsEval());
   }
+
   if (media_controls_style_sheet_) {
-    default_forced_color_style_->AddRulesFromSheet(MediaControlsStyleSheet(),
-                                                   ForcedColorsEval());
+    CHECK(!default_forced_colors_media_controls_style_);
+    default_forced_colors_media_controls_style_ =
+        MakeGarbageCollected<RuleSet>();
+    default_forced_colors_media_controls_style_->AddRulesFromSheet(
+        MediaControlsStyleSheet(), ForcedColorsEval());
   }
 
   return true;
@@ -517,8 +551,8 @@ void CSSDefaultStyleSheets::Trace(Visitor* visitor) const {
   visitor->Trace(stylable_select_style_sheet_);
   visitor->Trace(stylable_select_forced_colors_style_sheet_);
   visitor->Trace(marker_style_sheet_);
-  visitor->Trace(auto_sizes_style_sheet_);
   visitor->Trace(default_json_document_style_);
+  visitor->Trace(default_forced_colors_media_controls_style_);
 }
 
 }  // namespace blink

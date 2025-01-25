@@ -13,13 +13,11 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_user_data.h"
+#include "chrome/browser/ui/side_panel/side_panel_entry_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
-#include "chrome/browser/ui/views/side_panel/read_anything/read_anything_model.h"
-#include "chrome/browser/ui/views/side_panel/side_panel_entry_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 
 class Browser;
-class ReadAnythingController;
 class SidePanelRegistry;
 namespace views {
 class View;
@@ -29,9 +27,7 @@ class View;
 // ReadAnythingCoordinator
 //
 //  A class that coordinates the Read Anything feature. This class registers
-//  itself as a SidePanelEntry. It creates and owns the Read Anything controller
-//  and model. It also creates the Read Anything views when requested by the
-//  Side Panel controller.
+//  itself as a SidePanelEntry.
 //  The coordinator acts as the external-facing API for the Read Anything
 //  feature. Classes outside this feature should make calls to the coordinator.
 //  This class has the same lifetime as the browser.
@@ -47,20 +43,14 @@ class ReadAnythingCoordinator : public BrowserUserData<ReadAnythingCoordinator>,
     virtual void Activate(bool active) {}
     virtual void OnActivePageDistillable(bool distillable) {}
     virtual void OnCoordinatorDestroyed() = 0;
-    virtual void SetDefaultLanguageCode(const std::string& code) {}
   };
 
   void CreateAndRegisterEntry(SidePanelRegistry* global_registry);
   explicit ReadAnythingCoordinator(Browser* browser);
   ~ReadAnythingCoordinator() override;
 
-  ReadAnythingController* GetController();
-  ReadAnythingModel* GetModel();
-
   void AddObserver(ReadAnythingCoordinator::Observer* observer);
   void RemoveObserver(ReadAnythingCoordinator::Observer* observer);
-  void AddModelObserver(ReadAnythingModel::Observer* observer);
-  void RemoveModelObserver(ReadAnythingModel::Observer* observer);
 
   void OnReadAnythingSidePanelEntryShown();
   void OnReadAnythingSidePanelEntryHidden();
@@ -71,15 +61,12 @@ class ReadAnythingCoordinator : public BrowserUserData<ReadAnythingCoordinator>,
  private:
   friend class BrowserUserData<ReadAnythingCoordinator>;
   friend class ReadAnythingCoordinatorTest;
-  friend class ReadAnythingCoordinatorWebUIToolbarTest;
   friend class ReadAnythingCoordinatorScreen2xDataCollectionModeTest;
 
   void CreateAndRegisterEntriesForExistingWebContents(
       TabStripModel* tab_strip_model);
   void CreateAndRegisterEntryForWebContents(content::WebContents* web_contents);
 
-  // Used during construction to initialize the model with saved user prefs.
-  void InitModelWithUserPrefs();
   // Starts the delay for showing the IPH after the tab has changed.
   void StartPageChangeDelay();
   // Occurs when the timer set when changing tabs is finished.
@@ -113,12 +100,18 @@ class ReadAnythingCoordinator : public BrowserUserData<ReadAnythingCoordinator>,
 
   void InstallGDocsHelperExtension();
   void RemoveGDocsHelperExtension();
+  // The number of active local side panel that is currently shown in the
+  // browser. If there is no active local side panel (count is 0) after a
+  // timeout, we can safely remove the gdocs helper extension.
+  int active_local_side_panel_count_ = 0;
+  // Start a timer when the user leaves a local side panel. If they switch to
+  // another local side panel before it expires, keep the extension installed;
+  // otherwise, uninstall it. This prevents frequent
+  // installations/uninstallations.
+  base::RepeatingTimer local_side_panel_switch_delay_timer_;
+  void OnLocalSidePanelSwitchDelayTimeout();
 
   std::string default_language_code_;
-  std::unique_ptr<ReadAnythingModel> model_;
-  std::unique_ptr<ReadAnythingController> controller_;
-
-  const base::flat_set<std::string> distillable_urls_;
 
   base::ObserverList<Observer> observers_;
 
@@ -127,6 +120,8 @@ class ReadAnythingCoordinator : public BrowserUserData<ReadAnythingCoordinator>,
 
   // BrowserListObserver:
   void OnBrowserSetLastActive(Browser* browser) override;
+
+  base::WeakPtrFactory<ReadAnythingCoordinator> weak_ptr_factory_{this};
 
   BROWSER_USER_DATA_KEY_DECL();
 };

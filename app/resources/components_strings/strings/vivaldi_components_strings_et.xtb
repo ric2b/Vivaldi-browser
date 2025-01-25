@@ -16,7 +16,6 @@
 <translation id="1728677426644403582">See on veebilehe lähtekood</translation>
 <translation id="1734878702283171397">Proovi võtta ühendust süsteemiadministraatoriga.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Proovi, kas Windowsi võrgudiagnostika käitamine aitab<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">See sait sisaldab kahjulikke programme</translation>
 <translation id="1974060860693918893">Lisateave</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrolli puhverserveri ja tulemüüri seadistust<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Omanik: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -42,7 +41,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Käivita ühenduvusdiagnostika<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Ühendus lähtestati.</translation>
 <translation id="2826760142808435982">Ühendus on krüptitud ja autenditud šifriga <ph name="CIPHER" /> ning võtmevahetusmehhanism on <ph name="KX" />.</translation>
-<translation id="2856444702002559011">Ründajad võivad üritada varastada sinu teavet (nt paroole, sõnumeid või krediitkaardiandmeid) saidilt <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />. <ph name="BEGIN_LEARN_MORE_LINK" />Lisateave<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Tuvastati võrgumuudatus.</translation>
 <translation id="2948083400971632585">Seadete lehel saad keelata kõik ühenduse jaoks seadistatud puhverserverid.</translation>
 <translation id="2991571918955627853">Saiti <ph name="SITE" /> ei saa praegu külastada, sest see kasutab HSTS-i. Võrguvead ja -rünnakud on tavaliselt ajutised, nii et tõenäoliselt leht hiljem taas töötab.</translation>
@@ -69,6 +67,7 @@
 <translation id="3566021033012934673">See ühendus ei ole privaatne</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" />, <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Peida üksikasjad</translation>
+<translation id="3614001939154393113">Ründajad võivad üritada varastada saidilt <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> sinu teavet (nt paroole, sõnumeid või krediitkaardiandmeid). <ph name="BEGIN_LEARN_MORE_LINK" />Lisateave selle hoiatuse kohta<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3630155396527302611">Kui see on juba loendis kui programm, millele on lubatud võrgujuurdepääs,
       proovi see loendist eemaldada ja siis uuesti lisada.</translation>
 <translation id="3658742229777143148">Redaktsioon</translation>
@@ -92,7 +91,6 @@
 <translation id="4265872034478892965">Administraatori poolt lubatud</translation>
 <translation id="4305666528087210886">Failile ei pääsetud juurde</translation>
 <translation id="4312866146174492540">Blokeeritud (vaikimisi)</translation>
-<translation id="4356973930735388585">Selle saidi taga peituvad ründajad võivad üritada installida sinu arvutisse ohtlikke programme, mis varastavad või kustutavad sinu andmeid (nt fotosid, paroole, sõnumeid, krediitkaardi andmeid).</translation>
 <translation id="4408413947728134509">Küpsised <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544">Host <ph name="HOST_NAME" /> ei aktsepteerinud sisselogimise sertifikaati või sa ei esitanud seda.</translation>
 <translation id="4506599922270137252">Võta ühendust süsteemiadministraatoriga</translation>
@@ -104,7 +102,7 @@
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Käivita Windowsi võrgudiagnostika<ph name="END_LINK" /></translation>
 <translation id="4736016046474602958">jälitajate blokeerija</translation>
 <translation id="4744603770635761495">Täitmistee</translation>
-<translation id="4750917950439032686">Sinu andmed (nt paroolid või krediitkaardinumbrid) on sellele saidile edastamise ajal privaatsed.</translation>
+<translation id="4750917950439032686">Sinu andmed (nt paroolid või krediitkaardiandmed) on sellele saidile edastamise ajal privaatsed.</translation>
 <translation id="4764776831041365478">Veebileht aadressil <ph name="URL" /> võib olla ajutiselt maas või jäädavalt uuele veebiaadressile teisaldatud.</translation>
 <translation id="483241715238664915">Lülita hoiatused sisse</translation>
 <translation id="4943872375798546930">Tulemusi pole</translation>
@@ -128,7 +126,7 @@
 <translation id="5785756445106461925">Peale selle sisaldab leht ka muid ebaturvalisi ressursse. Teistel on võimalik neid ressursse edastamise ajal näha ning ründajatel on võimalik neid muuta, et lehe välimust mõjutada.</translation>
 <translation id="5799902971440853357">Saiti <ph name="SITE" /> ei saa praegu külastada, sest selle saadetud turvatunnused on loetamatul kujul, nii et Vivaldil pole võimalik neid töödelda. Võrguvead ja -rünnakud on tavaliselt ajutised, nii et tõenäoliselt leht hiljem taas töötab.</translation>
 <translation id="5810442152076338065">Ühendus domeeniga <ph name="DOMAIN" /> on krüptitud iganenud šifrikomplektiga.</translation>
-<translation id="5838278095973806738">Sellel saidil ei tohiks kuhugi sisestada tundlikke andmeid (nt paroole või krediitkaardi numbreid), kuna ründajad võivad need varastada.</translation>
+<translation id="5838278095973806738">Sellel saidil ei tohiks kuhugi sisestada tundlikke andmeid (nt paroole või krediitkaardiandmeid), kuna ründajad võivad need varastada.</translation>
 <translation id="5869405914158311789">Selle saidiga ei saa ühendust</translation>
 <translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 kasutusel} other {# kasutusel}}</translation>
 <translation id="5932224571077948991">Sait näitab pealetükkivaid võtteid kasutavaid või eksitavaid reklaame</translation>
@@ -144,7 +142,6 @@
 <translation id="6305205051461490394">URL-iga <ph name="URL" /> ei saa ühendust.</translation>
 <translation id="6321917430147971392">Kontrolli oma DNS-i seadeid</translation>
 <translation id="6328639280570009161">Proovi keelata võrguprognoos</translation>
-<translation id="6328786501058569169">See on petusait</translation>
 <translation id="6348220984832452017">Aktiivsed variatsioonid</translation>
 <translation id="6358450015545214790">Mida need tähendavad?</translation>
 <translation id="6433595998831338502">Host <ph name="HOST_NAME" /> keeldus ühendamast.</translation>
@@ -158,7 +155,6 @@
 <translation id="6897140037006041989">Kasutajaagent</translation>
 <translation id="6957624206566198865">Ava leht uuel privaatsel kaardil</translation>
 <translation id="7053983685419859001">Blokeeri</translation>
-<translation id="7079718277001814089">See sait sisaldab kahjurvara</translation>
 <translation id="7096937462164235847">Selle veebisaidi identiteet pole verifitseeritud.</translation>
 <translation id="7108819624672055576">Laienduse poolt lubatud</translation>
 <translation id="7111012039238467737">(kehtiv)</translation>
@@ -166,6 +162,7 @@
 <translation id="7210863904660874423">Host <ph name="HOST_NAME" /> ei pea turvastandarditest kinni.</translation>
 <translation id="7219179957768738017">Ühenduse jaoks on kasutusel <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">märguandeid näidata</translation>
+<translation id="7227747683324411744">Saidil, mida proovid külastada, võivad ründajad meelitada sind paigaldama kahjulikku tarkvara, mis mõjutab sinu sirvimisviisi – näiteks muutes sinu avalehte või näidates külastatavatel saitidel lisareklaame.</translation>
 <translation id="7353601530677266744">Käsurida</translation>
 <translation id="7364115444476960850">Vivaldi <ph name="BLOCKER_NAME" /> blokeeris juurdepääsu sellele lehele</translation>
 <translation id="7419106976560586862">Profiilikaust</translation>
@@ -173,9 +170,9 @@
 <translation id="7518003948725431193">Järgneval veebiaadressil ei olnud ühtegi veebilehte: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Selle veebilehe õigesti näitamiseks on vaja kasutada varem sisestatud andmeid. Võid need andmed uuesti saata, kuid see põhjustab lehe viimase toimingu kordamist.</translation>
 <translation id="759889825892636187">Host <ph name="HOST_NAME" /> ei saa praegu seda taotlust töödelda.</translation>
+<translation id="7605377493722372900">Saidil, mida proovid külastada, võivad ründajad paigaldada kahjuliku tarkvara, mis varastab või kustutab näiteks sinu parooli, fotod, sõnumid või krediitkaardiandmed.</translation>
 <translation id="7662298039739062396">Laienduse määratud valik</translation>
 <translation id="7663736086183791259">Sertifikaat <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Selle saidi taga peituvad ründajad võivad üritada sind ära petta, et installiksid mõne programmi, mis rikub veebi kasutuskogemust (nt muudab ära avalehe või näitab külastatavatel saititel lisareklaame).</translation>
 <translation id="7714464543167945231">Sertifikaat</translation>
 <translation id="7716147886133743102">Administraatori poolt blokeeritud</translation>
 <translation id="7716424297397655342">Seda saiti ei saa vahemälust laadida</translation>
@@ -185,7 +182,6 @@
 <translation id="7878562273885520351">Sinu parool võib olla lekkinud</translation>
 <translation id="7951415247503192394">(32-bitine)</translation>
 <translation id="7953236668995583915">Muudetud seadete saidile rakendamiseks laadi leht uuesti.</translation>
-<translation id="8025119109950072390">Selle saidi taga peituvad ründajad võivad üritada sind ära petta, et installiksid ohtlikku tarkvara või avaldaksid oma isiklikke andmeid (nt paroole, telefoninumbreid, krediitkaardi numbreid).</translation>
 <translation id="8037357227543935929">Küsitakse (vaikimisi)</translation>
 <translation id="8041940743680923270">Üldreegli järgi (küsitakse)</translation>
 <translation id="808894953321890993">Muuda parooli</translation>
@@ -200,6 +196,7 @@
 <translation id="8288807391153049143">Näita sertifikaati</translation>
 <translation id="8289355894181816810">Kui sa ei tea, mida see tähendab, võta ühendust oma võrguadministraatoriga.</translation>
 <translation id="8332188693563227489">Juurdepääs hostile <ph name="HOST_NAME" /> blokeeriti</translation>
+<translation id="8422228580902424274">Saidil, mida proovid külastada, võivad ründajad meelitada sind kahjulikku tarkvara paigaldama või näiteks parooli, telefoninumbrit või krediitkaardiandmeid avaldama.</translation>
 <translation id="8498891568109133222">Saidil <ph name="HOST_NAME" /> kulus vastamiseks liiga kaua aega.</translation>
 <translation id="8503813439785031346">Kasutajanimi</translation>
 <translation id="8703575177326907206">Ühendus domeeniga <ph name="DOMAIN" /> ei ole krüptitud.</translation>

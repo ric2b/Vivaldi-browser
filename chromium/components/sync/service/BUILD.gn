@@ -7,6 +7,8 @@ import("//build/config/features.gni")
 
 static_library("service") {
   sources = [
+    "account_pref_utils.cc",
+    "account_pref_utils.h",
     "active_devices_provider.h",
     "backend_migrator.cc",
     "backend_migrator.h",
@@ -19,6 +21,8 @@ static_library("service") {
     "data_type_manager_observer.h",
     "data_type_status_table.cc",
     "data_type_status_table.h",
+    "get_types_with_unsynced_data_request_barrier.cc",
+    "get_types_with_unsynced_data_request_barrier.h",
     "glue/sync_engine_backend.cc",
     "glue/sync_engine_backend.h",
     "glue/sync_engine_impl.cc",
@@ -33,6 +37,7 @@ static_library("service") {
     "model_load_manager.h",
     "model_type_controller.cc",
     "model_type_controller.h",
+    "model_type_local_data_batch_uploader.h",
     "non_ui_syncable_service_based_model_type_controller.cc",
     "non_ui_syncable_service_based_model_type_controller.h",
     "passphrase_type_metrics_provider.cc",
@@ -87,6 +92,7 @@ static_library("service") {
     "//components/sync/protocol",
     "//components/sync/protocol:util",
     "//components/trusted_vault",
+    "//components/url_formatter",
     "//net",
     "//url",
   ]
@@ -107,6 +113,7 @@ static_library("service") {
     "//components/version_info:generate_version_info",
     "//crypto",
     "//services/network/public/cpp",
+    "//ui/base",
   ]
 
   if (is_android) {

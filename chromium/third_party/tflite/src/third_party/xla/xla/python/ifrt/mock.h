@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef XLA_PYTHON_IFRT_MOCK_H_
 #define XLA_PYTHON_IFRT_MOCK_H_
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -28,20 +29,30 @@ limitations under the License.
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "llvm/Support/ExtensibleRTTI.h"
-#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
-#include "xla/pjrt/pjrt_client.h"
-#include "xla/pjrt/pjrt_device_description.h"
+#include "xla/hlo/ir/hlo_module.h"
+#include "xla/pjrt/pjrt_executable.h"
+#include "xla/pjrt/pjrt_layout.h"
 #include "xla/python/ifrt/array.h"
+#include "xla/python/ifrt/attribute_map.h"
 #include "xla/python/ifrt/client.h"
 #include "xla/python/ifrt/compiler.h"
 #include "xla/python/ifrt/device.h"
 #include "xla/python/ifrt/dtype.h"
+#include "xla/python/ifrt/executable.h"
+#include "xla/python/ifrt/executable_serdes.h"
+#include "xla/python/ifrt/future.h"
 #include "xla/python/ifrt/host_callback.h"
 #include "xla/python/ifrt/index_domain.h"
 #include "xla/python/ifrt/memory.h"
+#include "xla/python/ifrt/program.h"
+#include "xla/python/ifrt/shape.h"
 #include "xla/python/ifrt/sharding.h"
+#include "xla/python/ifrt/topology.h"
+#include "xla/python/ifrt/tuple.h"
+#include "xla/python/ifrt/value.h"
 #include "xla/test.h"
 #include "xla/tsl/concurrency/ref_count.h"
+#include "xla/tsl/framework/allocator.h"
 
 namespace xla {
 namespace ifrt {
@@ -77,10 +88,6 @@ class MockArray : public llvm::RTTIExtends<MockArray, Array> {
                std::optional<absl::Span<const int64_t>> byte_strides,
                ArrayCopySemantics semantics),
               (final));
-  MOCK_METHOD(absl::StatusOr<tsl::RCReference<Array>>, Reshard,
-              (std::shared_ptr<const Sharding> new_sharding,
-               ArrayCopySemantics semantics),
-              (final));
   // LINT.ThenChange(mock.cc:MockArrayDelegation)
 
   tsl::RCReference<xla::ifrt::Array> delegated() const { return delegated_; }
@@ -112,13 +119,25 @@ class MockClient : public llvm::RTTIExtends<MockClient, Client> {
                absl::Span<tsl::RCReference<Array>> arrays,
                ArrayCopySemantics semantics),
               (final));
+  MOCK_METHOD(absl::StatusOr<std::vector<tsl::RCReference<Array>>>, CopyArrays,
+              (absl::Span<tsl::RCReference<Array>> arrays,
+               std::optional<DeviceList> devices,
+               std::optional<MemoryKind> memory_kind,
+               ArrayCopySemantics semantics),
+              (final));
+  MOCK_METHOD(absl::StatusOr<std::vector<tsl::RCReference<Array>>>, RemapArrays,
+              (const RemapPlan& plan,
+               absl::Span<tsl::RCReference<Array>> arrays,
+               ArrayCopySemantics semantics),
+              (final));
+  MOCK_METHOD(Future<>, GetReadyFuture,
+              (absl::Span<const tsl::RCReference<Value>> values), (final));
   MOCK_METHOD(absl::StatusOr<tsl::RCReference<Tuple>>, MakeTuple,
               (absl::Span<tsl::RCReference<Value>> values), (final));
   MOCK_METHOD(absl::string_view, runtime_type, (), (const, final));
   MOCK_METHOD(absl::string_view, platform_name, (), (const, final));
   MOCK_METHOD(absl::string_view, platform_version, (), (const, final));
-  MOCK_METHOD((absl::flat_hash_map<std::string, Client::ClientAttribute>),
-              attributes, (), (const, final));
+  MOCK_METHOD((const AttributeMap&), Attributes, (), (const, final));
   MOCK_METHOD(int, device_count, (), (const, final));
   MOCK_METHOD(PlatformId, platform_id, (), (const, final));
   MOCK_METHOD(int, addressable_device_count, (), (const, final));
@@ -133,10 +152,8 @@ class MockClient : public llvm::RTTIExtends<MockClient, Client> {
   MOCK_METHOD(absl::StatusOr<Device*>, LookupAddressableDevice,
               (int local_hardware_id), (const, final));
   MOCK_METHOD(Compiler*, GetDefaultCompiler, (), (final));
-  MOCK_METHOD(
-      absl::StatusOr<std::shared_ptr<const xla::PjRtTopologyDescription>>,
-      GetTopologyForDevices, (const xla::ifrt::DeviceList& devices),
-      (const, final));
+  MOCK_METHOD(absl::StatusOr<std::shared_ptr<Topology>>, GetTopologyForDevices,
+              (const xla::ifrt::DeviceList& devices), (const, final));
   MOCK_METHOD(absl::StatusOr<std::unique_ptr<xla::PjRtLayout>>,
               GetDefaultLayoutForDevice,
               (xla::ifrt::DType dtype, absl::Span<const int64_t> dims,
@@ -158,6 +175,10 @@ class MockCompiler : public llvm::RTTIExtends<MockCompiler, Compiler> {
  public:
   MOCK_METHOD(absl::StatusOr<std::unique_ptr<LoadedExecutable>>, Compile,
               (std::unique_ptr<Program> program,
+               std::unique_ptr<CompileOptions> options),
+              (final));
+  MOCK_METHOD(absl::StatusOr<std::unique_ptr<Executable>>, Compile,
+              (std::unique_ptr<Program> program, const Topology& topology,
                std::unique_ptr<CompileOptions> options),
               (final));
   MOCK_METHOD(absl::StatusOr<std::unique_ptr<LoadedExecutable>>,
@@ -184,9 +205,7 @@ class MockDevice : public Device {
   MOCK_METHOD(absl::string_view, Kind, (), (const, final));
   MOCK_METHOD(absl::string_view, DebugString, (), (const, final));
   MOCK_METHOD(absl::string_view, ToString, (), (const, final));
-  MOCK_METHOD(
-      (const absl::flat_hash_map<std::string, xla::PjRtDeviceAttribute>&),
-      Attributes, (), (const, final));
+  MOCK_METHOD((const AttributeMap&), Attributes, (), (const, final));
   MOCK_METHOD(absl::StatusOr<Memory*>, DefaultMemory, (), (const, final));
   MOCK_METHOD(absl::Span<Memory* const>, Memories, (), (const, final));
   // LINT.ThenChange(mock.cc:MockDeviceDelegation)
@@ -230,9 +249,8 @@ class MockExecutable : public llvm::RTTIExtends<MockExecutable, Executable> {
               GetOutputLayouts, (), (const, final));
   MOCK_METHOD(absl::StatusOr<std::vector<std::shared_ptr<HloModule>>>,
               GetHloModules, (), (const, final));
-  MOCK_METHOD(
-      (absl::StatusOr<absl::flat_hash_map<std::string, CostAnalysisValue>>),
-      GetCostAnalysis, (), (const, final));
+  MOCK_METHOD(absl::StatusOr<xla::ifrt::AttributeMap>, GetCostAnalysis, (),
+              (const, final));
 
   static char ID;  // NOLINT
 };
@@ -262,10 +280,8 @@ class MockLoadedExecutable
               GetOutputMemoryKinds, (), (const, final));
   MOCK_METHOD(absl::StatusOr<std::vector<std::shared_ptr<HloModule>>>,
               GetHloModules, (), (const, final));
-  MOCK_METHOD(
-      (absl::StatusOr<
-          absl::flat_hash_map<std::string, Executable::CostAnalysisValue>>),
-      GetCostAnalysis, (), (const, final));
+  MOCK_METHOD(absl::StatusOr<xla::ifrt::AttributeMap>, GetCostAnalysis, (),
+              (const, final));
   MOCK_METHOD(absl::StatusOr<ExecuteResult>, Execute,
               (absl::Span<tsl::RCReference<Array>> args,
                const ExecuteOptions& options,
@@ -273,8 +289,6 @@ class MockLoadedExecutable
               (final));
   MOCK_METHOD(Future<>, Delete, (), (final));
   MOCK_METHOD(bool, IsDeleted, (), (const, final));
-  MOCK_METHOD(absl::Span<const LogicalDeviceIds>,
-              addressable_device_logical_ids, (), (const, final));
   MOCK_METHOD(absl::Span<Device* const>, addressable_devices, (),
               (const, final));
 

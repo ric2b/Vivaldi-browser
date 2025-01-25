@@ -8,7 +8,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "chrome/browser/password_manager/android/password_store_android_backend_api_error_codes.h"
 #include "components/password_manager/core/browser/features/password_features.h"
@@ -41,9 +40,10 @@ bool IsCurrentUserEvicted(const PrefService* prefs) {
 
 void EvictCurrentUser(int api_error_code, PrefService* prefs) {
   if (prefs->GetBoolean(password_manager::prefs::
-                            kUnenrolledFromGoogleMobileServicesDueToErrors))
+                            kUnenrolledFromGoogleMobileServicesDueToErrors)) {
     // User is already evicted, keep the original eviction reason.
     return;
+  }
 
   prefs->SetBoolean(
       password_manager::prefs::kUnenrolledFromGoogleMobileServicesDueToErrors,

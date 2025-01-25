@@ -6,7 +6,7 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
-import mock
+from unittest import mock
 import re
 
 from dashboard.pinpoint.models.change import commit
@@ -93,8 +93,8 @@ deps = {
   'some_dep': {'invalid_key': ''}
 }
     """
-
-    self.assertEqual(Commit(0).Deps(), frozenset([]))
+    with self.assertRaises(commit.DepsParsingError):
+      Commit(0).Deps()
 
   def testAsDict(self):
     self.commit_info.side_effect = None

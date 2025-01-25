@@ -16,7 +16,9 @@ class Profile;
 
 class VivaldiSyncServiceAndroid : public syncer::SyncServiceObserver {
  public:
-  VivaldiSyncServiceAndroid(JNIEnv* env, jobject obj);
+  VivaldiSyncServiceAndroid(
+      JNIEnv* env,
+      const base::android::JavaRef<jobject>& obj);
   ~VivaldiSyncServiceAndroid() override;
   VivaldiSyncServiceAndroid(const VivaldiSyncServiceAndroid&) = delete;
   VivaldiSyncServiceAndroid& operator=(const VivaldiSyncServiceAndroid&) =
@@ -38,9 +40,12 @@ class VivaldiSyncServiceAndroid : public syncer::SyncServiceObserver {
 
   base::android::ScopedJavaLocalRef<jstring> GetBackupEncryptionToken(
       JNIEnv* env);
+
   jboolean RestoreEncryptionToken(
       JNIEnv* env,
       const base::android::JavaParamRef<jstring>& token);
+
+  jboolean CanSyncFeatureStart(JNIEnv* env);
 
   // syncer::SyncServiceObserver implementation.
   void OnSyncCycleCompleted(syncer::SyncService* sync) override;

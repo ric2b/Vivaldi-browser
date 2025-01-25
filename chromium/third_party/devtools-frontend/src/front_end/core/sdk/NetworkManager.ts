@@ -79,13 +79,23 @@ const UIStrings = {
    */
   offline: 'Offline',
   /**
-   *@description Text in Network Manager
+   *@description Text in Network Manager representing the "3G" throttling preset.
    */
-  slowG: 'Slow 3G',
+  slowG: '3G',  // Named `slowG` for legacy reasons and because this value
+                // is serialized locally on the user's machine: if we
+                // change it we break their stored throttling settings.
+                // (See crrev.com/c/2947255)
   /**
-   *@description Text in Network Manager
+   *@description Text in Network Manager representing the "Slow 4G" throttling preset
    */
-  fastG: 'Fast 3G',
+  fastG: 'Slow 4G',  // Named `fastG` for legacy reasons and because this value
+                     // is serialized locally on the user's machine: if we
+                     // change it we break their stored throttling settings.
+                     // (See crrev.com/c/2947255)
+  /**
+   *@description Text in Network Manager representing the "Fast 4G" throttling preset
+   */
+  fast4G: 'Fast 4G',
   /**
    *@description Text in Network Manager
    *@example {https://example.com} PH1
@@ -234,6 +244,8 @@ export class NetworkManager extends SDKModel<EventTypes> {
     if (error) {
       return {error};
     }
+    // Wait for at least the `responseReceived event so we have accurate mimetype and charset.
+    await request.waitForResponseReceived();
     return new TextUtils.ContentData.ContentData(
         response.bufferedData, /* isBase64=*/ true, request.mimeType, request.charset() ?? undefined);
   }
@@ -261,13 +273,19 @@ export class NetworkManager extends SDKModel<EventTypes> {
     if (!conditions.download && !conditions.upload) {
       return Protocol.Network.ConnectionType.None;
     }
-    const title =
-        typeof conditions.title === 'function' ? conditions.title().toLowerCase() : conditions.title.toLowerCase();
-    for (const [name, protocolType] of CONNECTION_TYPES) {
-      if (title.includes(name)) {
-        return protocolType;
+    try {
+      const title =
+          typeof conditions.title === 'function' ? conditions.title().toLowerCase() : conditions.title.toLowerCase();
+      for (const [name, protocolType] of CONNECTION_TYPES) {
+        if (title.includes(name)) {
+          return protocolType;
+        }
       }
+    } catch {
+      // If the i18nKey for this condition has changed, calling conditions.title() will break, so in that case we reset to NONE
+      return Protocol.Network.ConnectionType.None;
     }
+
     return Protocol.Network.ConnectionType.Other;
   }
 
@@ -377,6 +395,13 @@ export type EventTypes = {
   [Events.ReportingApiEndpointsChangedForOrigin]: Protocol.Network.ReportingApiEndpointsChangedForOriginEvent,
 };
 
+/**
+ * Define some built-in DevTools throttling presets.
+ * Note that for the download, upload and RTT values we multiply them by adjustment factors to make DevTools' emulation more accurate.
+ * @see https://docs.google.com/document/d/10lfVdS1iDWCRKQXPfbxEn4Or99D64mvNlugP1AQuFlE/edit for historical context.
+ * @see https://crbug.com/342406608#comment10 for context around the addition of 4G presets in June 2024.
+ */
+
 export const NoThrottlingConditions: Conditions = {
   title: i18nLazyString(UIStrings.noThrottling),
   i18nTitleKey: UIStrings.noThrottling,
@@ -393,20 +418,45 @@ export const OfflineConditions: Conditions = {
   latency: 0,
 };
 
+const slow3GTargetLatency = 400;
 export const Slow3GConditions: Conditions = {
   title: i18nLazyString(UIStrings.slowG),
   i18nTitleKey: UIStrings.slowG,
+  // ~500Kbps down
   download: 500 * 1000 / 8 * .8,
+  // ~500Kbps up
   upload: 500 * 1000 / 8 * .8,
-  latency: 400 * 5,
+  // 400ms RTT
+  latency: slow3GTargetLatency * 5,
+  targetLatency: slow3GTargetLatency,
 };
 
-export const Fast3GConditions: Conditions = {
+// Note for readers: this used to be called "Fast 3G" but it was renamed in May
+// 2024 to align with LH (crbug.com/342406608).
+const slow4GTargetLatency = 150;
+export const Slow4GConditions: Conditions = {
   title: i18nLazyString(UIStrings.fastG),
   i18nTitleKey: UIStrings.fastG,
+  // ~1.6 Mbps down
   download: 1.6 * 1000 * 1000 / 8 * .9,
+  // ~0.75 Mbps up
   upload: 750 * 1000 / 8 * .9,
-  latency: 150 * 3.75,
+  // 150ms RTT
+  latency: slow4GTargetLatency * 3.75,
+  targetLatency: slow4GTargetLatency,
+};
+
+const fast4GTargetLatency = 60;
+export const Fast4GConditions: Conditions = {
+  title: i18nLazyString(UIStrings.fast4G),
+  i18nTitleKey: UIStrings.fast4G,
+  // 9 Mbps down
+  download: 9 * 1000 * 1000 / 8 * .9,
+  // 1.5 Mbps up
+  upload: 1.5 * 1000 * 1000 / 8 * .9,
+  // 60ms RTT
+  latency: fast4GTargetLatency * 2.75,
+  targetLatency: fast4GTargetLatency,
 };
 
 const MAX_EAGER_POST_REQUEST_BODY_LENGTH = 64 * 1024;  // bytes
@@ -572,6 +622,13 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
     const newResourceType = Common.ResourceType.ResourceType.fromMimeTypeOverride(networkRequest.mimeType);
     if (newResourceType) {
       networkRequest.setResourceType(newResourceType);
+    }
+    if (networkRequest.responseReceivedPromiseResolve) {
+      // Anyone interested in waiting for response headers being available?
+      networkRequest.responseReceivedPromiseResolve();
+    } else {
+      // If not, make sure no one will wait on it in the future.
+      networkRequest.responseReceivedPromise = Promise.resolve();
     }
   }
 
@@ -1185,6 +1242,9 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
 
   reportingApiEndpointsChangedForOrigin(data: Protocol.Network.ReportingApiEndpointsChangedForOriginEvent): void {
     this.#manager.dispatchEventToListeners(Events.ReportingApiEndpointsChangedForOrigin, data);
+  }
+
+  policyUpdated(): void {
   }
 
   /**
@@ -1918,8 +1978,11 @@ export class ConditionsSerializer implements Serializer<Conditions, Conditions> 
 export function networkConditionsEqual(first: Conditions, second: Conditions): boolean {
   // Caution: titles might be different function instances, which produce
   // the same value.
-  const firstTitle = typeof first.title === 'function' ? first.title() : first.title;
-  const secondTitle = typeof second.title === 'function' ? second.title() : second.title;
+  // We prefer to use the i18nTitleKey to prevent against locale changes or
+  // UIString changes that might change the value vs what the user has stored
+  // locally.
+  const firstTitle = first.i18nTitleKey || (typeof first.title === 'function' ? first.title() : first.title);
+  const secondTitle = second.i18nTitleKey || (typeof second.title === 'function' ? second.title() : second.title);
   return second.download === first.download && second.upload === first.upload && second.latency === first.latency &&
       first.packetLoss === second.packetLoss && first.packetQueueLength === second.packetQueueLength &&
       first.packetReordering === second.packetReordering && secondTitle === firstTitle;
@@ -1944,6 +2007,12 @@ export interface Conditions {
   // should not be irrecoverably baked, just in case the string changes
   // (or the user switches locales).
   i18nTitleKey?: string;
+  /**
+   * RTT values are multiplied by adjustment factors to make DevTools' emulation more accurate.
+   * This value represents the RTT value *before* the adjustment factor is applied.
+   * @see https://docs.google.com/document/d/10lfVdS1iDWCRKQXPfbxEn4Or99D64mvNlugP1AQuFlE/edit for historical context.
+   */
+  targetLatency?: number;
 }
 
 export interface BlockedPattern {

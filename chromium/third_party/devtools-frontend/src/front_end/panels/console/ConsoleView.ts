@@ -582,6 +582,7 @@ export class ConsoleView extends UI.Widget.VBox implements
     issuesManager.addEventListener(
         IssuesManager.IssuesManager.Events.IssuesCountUpdated, this.#onIssuesCountUpdateBound);
   }
+
   static appendSettingsCheckboxToToolbar(
       toolbar: UI.Toolbar.Toolbar, settingOrSetingName: Common.Settings.Setting<boolean>|string, title: string,
       alternateTitle?: string): UI.Toolbar.ToolbarSettingCheckbox {
@@ -610,6 +611,10 @@ export class ConsoleView extends UI.Widget.VBox implements
 
   #onIssuesCountUpdate(): void {
     void this.issueToolbarThrottle.schedule(async () => this.updateIssuesToolbarItem());
+    this.issuesCountUpdatedForTest();
+  }
+
+  issuesCountUpdatedForTest(): void {
   }
 
   modelAdded(model: SDK.ConsoleModel.ConsoleModel): void {
@@ -690,8 +695,9 @@ export class ConsoleView extends UI.Widget.VBox implements
         break;
     }
 
+    const source = message.source || Protocol.Log.LogEntrySource.Other;
     const consoleMessage = new SDK.ConsoleModel.ConsoleMessage(
-        null, Protocol.Log.LogEntrySource.Other, level, message.text,
+        null, source, level, message.text,
         {type: SDK.ConsoleModel.FrontendMessageType.System, timestamp: message.timestamp});
     this.addConsoleMessage(consoleMessage);
   }
@@ -712,6 +718,12 @@ export class ConsoleView extends UI.Widget.VBox implements
 
   override wasShown(): void {
     super.wasShown();
+    if (this.#isDetached) {
+      const issuesManager = IssuesManager.IssuesManager.IssuesManager.instance();
+      issuesManager.addEventListener(
+          IssuesManager.IssuesManager.Events.IssuesCountUpdated, this.#onIssuesCountUpdateBound);
+    }
+    this.#isDetached = false;
     this.updateIssuesToolbarItem();
     this.viewport.refresh();
     this.registerCSSFiles([consoleViewStyles, objectValueStyles, CodeHighlighter.Style.default]);
@@ -1650,9 +1662,7 @@ export class ConsoleViewFilter {
     ]));
 
     this.levelMenuButton =
-        new UI.Toolbar.ToolbarMenuButton(this.appendLevelMenuItems.bind(this), undefined, 'log-level');
-    this.levelMenuButton.setGlyph('');
-    this.levelMenuButton.turnIntoSelect();
+        new UI.Toolbar.ToolbarMenuButton(this.appendLevelMenuItems.bind(this), undefined, undefined, 'log-level');
 
     this.updateLevelMenuButtonText();
     this.messageLevelFiltersSetting.addChangeListener(this.updateLevelMenuButtonText.bind(this));
@@ -1690,6 +1700,19 @@ export class ConsoleViewFilter {
 
   private updateCurrentFilter(): void {
     const parsedFilters = this.filterParser.parse(this.textFilterUI.value());
+    for (const {key} of parsedFilters) {
+      switch (key) {
+        case FilterType.Context:
+          Host.userMetrics.actionTaken(Host.UserMetrics.Action.ConsoleFilterByContext);
+          break;
+        case FilterType.Source:
+          Host.userMetrics.actionTaken(Host.UserMetrics.Action.ConsoleFilterBySource);
+          break;
+        case FilterType.Url:
+          Host.userMetrics.actionTaken(Host.UserMetrics.Action.ConsoleFilterByUrl);
+          break;
+      }
+    }
     if (this.hideNetworkMessagesSetting.get()) {
       parsedFilters.push(
           {key: FilterType.Source, text: Protocol.Log.LogEntrySource.Network, negative: true, regex: undefined});

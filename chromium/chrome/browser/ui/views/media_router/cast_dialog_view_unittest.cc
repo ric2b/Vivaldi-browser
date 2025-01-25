@@ -101,7 +101,7 @@ CastDialogModel CreateModelWithSinks(std::vector<UIMediaSink> sinks) {
 }
 
 ui::MouseEvent CreateMouseEvent() {
-  return ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(0, 0),
+  return ui::MouseEvent(ui::EventType::kMousePressed, gfx::Point(0, 0),
                         gfx::Point(0, 0), ui::EventTimeForNow(), 0, 0);
 }
 
@@ -138,7 +138,9 @@ class CastDialogViewTest : public ChromeViewsTestBase {
     ChromeViewsTestBase::SetUp();
 
     // Create an anchor for the dialog.
-    anchor_widget_ = CreateTestWidget(views::Widget::InitParams::TYPE_WINDOW);
+    anchor_widget_ =
+        CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
+                         views::Widget::InitParams::TYPE_WINDOW);
     anchor_widget_->Show();
   }
 
@@ -171,7 +173,7 @@ class CastDialogViewTest : public ChromeViewsTestBase {
   }
 
   void NotifyButtonOfClick(views::Button* button) {
-    ui::MouseEvent mouse_event(ui::ET_MOUSE_PRESSED, gfx::Point(0, 0),
+    ui::MouseEvent mouse_event(ui::EventType::kMousePressed, gfx::Point(0, 0),
                                gfx::Point(0, 0), ui::EventTimeForNow(), 0, 0);
     views::test::ButtonTestApi(button).NotifyClick(mouse_event);
     // The request to cast/stop is sent asynchronously, so we must call
@@ -215,7 +217,7 @@ TEST_F(CastDialogViewTest, PopulateDialog) {
 
   EXPECT_TRUE(dialog_->ShouldShowCloseButton());
   EXPECT_EQ(model.dialog_header(), dialog_->GetWindowTitle());
-  EXPECT_EQ(ui::DIALOG_BUTTON_NONE, dialog_->GetDialogButtons());
+  EXPECT_EQ(ui::DIALOG_BUTTON_NONE, dialog_->buttons());
 }
 
 TEST_F(CastDialogViewTest, StartCasting) {

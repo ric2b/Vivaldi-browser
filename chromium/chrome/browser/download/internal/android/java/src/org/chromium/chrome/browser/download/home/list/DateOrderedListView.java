@@ -131,12 +131,8 @@ class DateOrderedListView {
                 (newDisplayStyle) -> {
                     int padding =
                             getPaddingForDisplayStyle(newDisplayStyle, context.getResources());
-                    ViewCompat.setPaddingRelative(
-                            mView,
-                            padding,
-                            mView.getPaddingTop(),
-                            padding,
-                            mView.getPaddingBottom());
+                    mView.setPaddingRelative(
+                            padding, mView.getPaddingTop(), padding, mView.getPaddingBottom());
                 });
         mOnConfigurationChangedCallback = onConfigurationChangedCallback;
     }

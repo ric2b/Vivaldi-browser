@@ -49,7 +49,9 @@ class FakeBaseTabStripController : public TabStripController {
   void ExtendSelectionTo(int index) override;
   void ToggleSelected(int index) override;
   void AddSelectionFromAnchorTo(int index) override;
-  bool BeforeCloseTab(int index, CloseTabSource source) override;
+  void OnCloseTab(int index,
+                  CloseTabSource source,
+                  base::OnceCallback<void()> callback) override;
   void CloseTab(int index) override;
   void ToggleTabAudioMute(int index) override;
   void MoveTab(int from_index, int to_index) override;
@@ -88,6 +90,7 @@ class FakeBaseTabStripController : public TabStripController {
   bool HasVisibleBackgroundTabShapes() const override;
   bool EverHasVisibleBackgroundTabShapes() const override;
   bool CanDrawStrokes() const override;
+  bool IsFrameButtonsRightAligned() const override;
   SkColor GetFrameColor(BrowserFrameActiveState active_state) const override;
   std::optional<int> GetCustomBackgroundId(
       BrowserFrameActiveState active_state) const override;

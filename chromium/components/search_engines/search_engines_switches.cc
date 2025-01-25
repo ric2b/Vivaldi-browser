@@ -4,6 +4,8 @@
 
 #include "components/search_engines/search_engines_switches.h"
 
+#include "base/feature_list.h"
+
 namespace switches {
 
 // Additional query params to insert in the search and instant URLs.  Useful for
@@ -35,19 +37,19 @@ const char kForceSearchEngineChoiceScreen[] =
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 BASE_FEATURE(kSearchEngineChoiceTrigger,
              "SearchEngineChoiceTrigger",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#elif BUILDFLAG(IS_IOS)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#elif BUILDFLAG(IS_WIN)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#elif BUILDFLAG(IS_CHROMEOS)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#else
-             base::FEATURE_DISABLED_BY_DEFAULT
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+BASE_FEATURE(kSearchEngineChoiceAttribution,
+             "SearchEngineChoiceAttribution",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
-);
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+BASE_FEATURE(kSearchEnginesSortingCleanup,
+             "kSearchEnginesSortingCleanup",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kPersistentSearchEngineChoiceImport,
@@ -56,18 +58,16 @@ BASE_FEATURE(kPersistentSearchEngineChoiceImport,
 #endif
 
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
-const base::FeatureParam<bool> kSearchEngineChoiceTriggerForTaggedProfilesOnly{
-    &kSearchEngineChoiceTrigger, /*name=*/"for_tagged_profiles_only", true};
-
-COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 const base::FeatureParam<bool> kSearchEngineChoiceTriggerWithForceEeaCountry{
     &kSearchEngineChoiceTrigger, /*name=*/"with_force_eea_country", false};
 
+// Use an explicit "NO_REPROMPT" value as default to avoid reprompting users
+// who saw the choice screen in M121.
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 const base::FeatureParam<std::string> kSearchEngineChoiceTriggerRepromptParams{
     &kSearchEngineChoiceTrigger,
     /*name=*/"reprompt",
-    /*default_value=*/"{}"};
+    /*default_value=*/kSearchEngineChoiceNoRepromptString};
 
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 const base::FeatureParam<bool> kSearchEngineChoiceTriggerSkipFor3p{
@@ -90,7 +90,17 @@ BASE_FEATURE(kSearchEngineChoice,
 
 BASE_FEATURE(kSearchEnginePromoDialogRewrite,
              "SearchEnginePromoDialogRewrite",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
+
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+BASE_FEATURE(kPrefetchParameterFix,
+             "PrefetchParameterFix",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+BASE_FEATURE(kRemoveSearchboxStatsParamFromPrefetchRequests,
+             "RemoveSearchboxStatsParamFromPrefetchRequests",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace switches

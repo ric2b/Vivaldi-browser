@@ -29,9 +29,20 @@
  * They will either have to be specced or also added to the main test file.
  * TODO(crbug.com/1511354): Spec these UA styles. */
 .stylable-select-option {
-  min-height: 1.2em;
-  padding: 0px 2px 1px;
+  padding-inline: 2px;
+  padding-block-start: 0;
+  padding-block-end: 1px;
   white-space: nowrap;
+  min-inline-size: 24px;
+  min-block-size: max(24px, 1.2em);
+  align-content: center;
+}
+
+.stylable-select-option::before {
+  content: '\2713' / '';
+}
+.stylable-select-option:not(.selected)::before {
+  visibility: hidden;
 }
 
 .stylable-select-button {

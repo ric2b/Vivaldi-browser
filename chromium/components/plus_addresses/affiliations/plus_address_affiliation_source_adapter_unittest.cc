@@ -8,34 +8,43 @@
 
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
+#include "components/affiliations/core/browser/mock_affiliation_service.h"
 #include "components/affiliations/core/browser/mock_affiliation_source.h"
 #include "components/plus_addresses/mock_plus_address_http_client.h"
 #include "components/plus_addresses/plus_address_http_client.h"
 #include "components/plus_addresses/plus_address_service.h"
 #include "components/plus_addresses/plus_address_test_utils.h"
 #include "components/plus_addresses/plus_address_types.h"
+#include "components/plus_addresses/settings/fake_plus_address_setting_service.h"
+#include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
 namespace plus_addresses {
+
 namespace {
+
 using ::affiliations::FacetURI;
 using ::affiliations::MockAffiliationSourceObserver;
 using ::testing::AssertionFailure;
 using ::testing::AssertionSuccess;
 using ::testing::ElementsAre;
+using ::testing::NiceMock;
 using ::testing::UnorderedElementsAreArray;
+
 }  // namespace
 
 class PlusAddressAffiliationSourceAdapterTest : public testing::Test {
  protected:
   PlusAddressAffiliationSourceAdapterTest() {
     service_ = std::make_unique<PlusAddressService>(
-        /*identity_manager=*/nullptr,
-        /*pref_service=*/nullptr,
-        std::make_unique<testing::NiceMock<MockPlusAddressHttpClient>>(),
-        /*webdata_service=*/nullptr);
+        identity_test_env_.identity_manager(), &setting_service_,
+        std::make_unique<NiceMock<MockPlusAddressHttpClient>>(),
+        /*webdata_service=*/nullptr,
+        /*affiliation_service=*/
+        &mock_affiliation_service_, /*feature_enabled_for_profile_check=*/
+        base::BindRepeating(&base::FeatureList::IsEnabled));
     adapter_ =
         std::make_unique<PlusAddressAffiliationSourceAdapter>(service_.get());
   }
@@ -62,7 +71,10 @@ class PlusAddressAffiliationSourceAdapterTest : public testing::Test {
  protected:
   base::test::SingleThreadTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
+  signin::IdentityTestEnvironment identity_test_env_;
+  FakePlusAddressSettingService setting_service_;
   testing::StrictMock<MockAffiliationSourceObserver> mock_source_observer_;
+  NiceMock<affiliations::MockAffiliationService> mock_affiliation_service_;
   std::unique_ptr<PlusAddressAffiliationSourceAdapter> adapter_;
   std::unique_ptr<PlusAddressService> service_;
 };

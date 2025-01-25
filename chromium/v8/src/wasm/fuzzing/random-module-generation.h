@@ -37,22 +37,10 @@ constexpr bool ShouldGenerateWasmGC(WasmModuleGenerationOptions options) {
   return options & kGenerateWasmGC;
 }
 
+#if !OFFICIAL_BUILD
 // Generate a valid Wasm module based on the given input bytes.
 // Returns an empty buffer on failure, valid module wire bytes otherwise.
 // The bytes will be allocated in the zone.
-#ifdef OFFICIAL_BUILD
-template <WasmModuleGenerationOptions options>
-inline base::Vector<uint8_t> GenerateRandomWasmModule(
-    Zone*, base::Vector<const uint8_t> data) {
-  UNIMPLEMENTED();
-}
-
-inline base::Vector<uint8_t> GenerateWasmModuleForInitExpressions(
-    Zone*, base::Vector<const uint8_t> data, size_t* count) {
-  UNIMPLEMENTED();
-}
-
-#else
 // Defined in random-module-generation.cc.
 template <WasmModuleGenerationOptions options>
 V8_EXPORT_PRIVATE base::Vector<uint8_t> GenerateRandomWasmModule(
@@ -84,6 +72,10 @@ extern template EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE)
 
 V8_EXPORT_PRIVATE base::Vector<uint8_t> GenerateWasmModuleForInitExpressions(
     Zone*, base::Vector<const uint8_t> data, size_t* count);
+
+V8_EXPORT_PRIVATE base::Vector<uint8_t> GenerateWasmModuleForDeopt(
+    Zone*, base::Vector<const uint8_t> data, std::vector<std::string>& callees,
+    std::vector<std::string>& inlinees);
 #endif
 
 }  // namespace v8::internal::wasm::fuzzing

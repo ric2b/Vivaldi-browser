@@ -10,13 +10,18 @@
 #include "base/observer_list_types.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
-#include "components/sync/protocol/compare_specifics.pb.h"
+#include "components/sync/protocol/product_comparison_specifics.pb.h"
 #include "url/gurl.h"
+
+namespace {
+class SingleClientProductSpecificationsSyncTest;
+}  // namespace
 
 namespace commerce {
 
 class ProductSpecificationsService;
 class ProductSpecificationsSyncBridge;
+class ProductSpecificationsSyncBridgeTest;
 
 // Contains a set of product specifications.
 class ProductSpecificationsSet {
@@ -27,10 +32,16 @@ class ProductSpecificationsSet {
         const ProductSpecificationsSet& product_specifications_set) {}
 
     // Invoked when a ProductSpecificationsSet is updated and provides the
-    // current and preious values.
+    // current and previous values.
     virtual void OnProductSpecificationsSetUpdate(
         const ProductSpecificationsSet& before,
         const ProductSpecificationsSet& after) {}
+
+    // Invoked when the name of a ProductSpecificationSet is updated and
+    // provides the current and previous values.
+    virtual void OnProductSpecificationsSetNameUpdate(
+        const std::string& before,
+        const std::string& after) {}
 
     virtual void OnProductSpecificationsSetRemoved(
         const ProductSpecificationsSet& product_specifications_set) {}
@@ -68,9 +79,13 @@ class ProductSpecificationsSet {
  private:
   friend commerce::ProductSpecificationsService;
   friend commerce::ProductSpecificationsSyncBridge;
+  friend commerce::ProductSpecificationsSyncBridgeTest;
+  friend ::SingleClientProductSpecificationsSyncTest;
 
   static ProductSpecificationsSet FromProto(
-      const sync_pb::CompareSpecifics& compare_specifics);
+      const sync_pb::ProductComparisonSpecifics& product_comparison_specifics);
+
+  sync_pb::ProductComparisonSpecifics ToProto() const;
 
   const base::Uuid uuid_;
   const base::Time creation_time_;

@@ -388,7 +388,14 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("fileDisplayLocalFilesDisabledUnmountRemovable")
             .DontMountVolumes()
             .EnableSkyVault(),
-        TestCase("fileDisplayLocalFilesDisableInMyFiles")
+        // TODO(b/347643334): Enable.
+        // TestCase("fileDisplayLocalFilesDisableInMyFiles")
+        //     .DontMountVolumes()
+        //     .EnableSkyVault(),
+        // TestCase("fileDisplayOneDrivePlaceholder")
+        //     .DontMountVolumes()
+        //     .EnableSkyVault(),
+        TestCase("fileDisplayFileSystemDisabled")
             .DontMountVolumes()
             .EnableSkyVault()));
 
@@ -962,13 +969,20 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
             .SetTestAccountType(TestAccountType::kNonManaged)
             .SetLocale("en-US")
             .SetCountry("us"),
-        // Disabled by the flag case.
+        // Disabled by the enable flag case. Used by Gamgee nudge.
         TestCase("driveGoogleOneOfferBannerDisabled")
             .SetDeviceMode(DeviceMode::kConsumerOwned)
             .SetTestAccountType(TestAccountType::kNonManaged)
             .SetLocale("en-US")
             .SetCountry("us")
             .DisableGoogleOneOfferFilesBanner(),
+        // Disabled by the disable flag case. Used by G1+ nudge.
+        TestCase("driveGoogleOneOfferBannerDisabled")
+            .SetDeviceMode(DeviceMode::kConsumerOwned)
+            .SetTestAccountType(TestAccountType::kNonManaged)
+            .SetLocale("en-US")
+            .SetCountry("us")
+            .DisableGoogleOneOfferFilesBannerWithG1Nudge(),
         // A country is not in supported countries set case.
         TestCase("driveGoogleOneOfferBannerDisabled")
             .SetDeviceMode(DeviceMode::kConsumerOwned)
@@ -1011,7 +1025,6 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
             .SetTestAccountType(TestAccountType::kNonManaged),
         // We do not show a banner if a profile is not an owner profile.
         TestCase("driveGoogleOneOfferBannerDisabled")
-            .EnableGoogleOneOfferFilesBanner()
             .SetLocale("en-US")
             .SetCountry("us")
             .SetDeviceMode(kConsumerOwned)
@@ -1382,6 +1395,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("recentsDownloadsAndDriveAndPlayFiles").EnableArc(),
         TestCase("recentsDownloadsAndDriveWithOverlap"),
         TestCase("recentsFilterResetToAll"),
+        TestCase("recentsSortingResetAfterChangingDirectory"),
         TestCase("recentsNested"),
         TestCase("recentsNoRenameForPlayFiles").EnableArc(),
         TestCase("recentsPlayFiles").EnableArc(),

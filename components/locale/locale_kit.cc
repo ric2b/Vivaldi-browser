@@ -33,7 +33,7 @@ std::string GetUserCountry() {
   return std::string(buffer, 2);
 }
 
-std::string FindBestMatchingLocale(base::span<const base::StringPiece> locales,
+std::string FindBestMatchingLocale(base::span<const std::string_view> locales,
                                    const std::string& application_locale) {
   // Locale may or may not contain the country part and it may be unrelated to
   // the user location, so always use the country from the system and strip the
@@ -43,21 +43,20 @@ std::string FindBestMatchingLocale(base::span<const base::StringPiece> locales,
     language.resize(2);
   }
   std::string country = GetUserCountry();
-  base::StringPiece locale = FindBestMatchingLocale(language, country, locales);
+  std::string_view locale = FindBestMatchingLocale(language, country, locales);
   return std::string(locale.data(), locale.length());
 }
 
 namespace {
 
-bool HasLanguageDashPrefix(base::StringPiece locale,
-                           base::StringPiece language) {
+bool HasLanguageDashPrefix(std::string_view locale, std::string_view language) {
   size_t n = language.length();
   if (locale.length() <= n)
     return false;
   return locale.substr(0, n) == language && locale[n] == '-';
 }
 
-bool HasDashCountrySuffix(base::StringPiece locale, base::StringPiece country) {
+bool HasDashCountrySuffix(std::string_view locale, std::string_view country) {
   if (locale.length() <= country.length())
     return false;
   size_t n = locale.length() - country.length();
@@ -66,13 +65,13 @@ bool HasDashCountrySuffix(base::StringPiece locale, base::StringPiece country) {
 
 }  // namespace
 
-base::StringPiece FindBestMatchingLocale(
-    base::StringPiece language,
-    base::StringPiece country,
-    base::span<const base::StringPiece> locales) {
+std::string_view FindBestMatchingLocale(
+    std::string_view language,
+    std::string_view country,
+    base::span<const std::string_view> locales) {
   if (!country.empty()) {
     auto i = std::find_if(locales.begin(), locales.end(),
-                          [&](base::StringPiece locale) {
+                          [&](std::string_view locale) {
                             return HasLanguageDashPrefix(locale, language) &&
                                    HasDashCountrySuffix(locale, country);
                           });
@@ -80,7 +79,7 @@ base::StringPiece FindBestMatchingLocale(
       return *i;
     // No exact match, see if we have a file for the country in any language
     i = std::find_if(locales.begin(), locales.end(),
-                     [&](base::StringPiece locale) {
+                     [&](std::string_view locale) {
                        return HasDashCountrySuffix(locale, country);
                      });
     if (i != locales.end()) {
@@ -96,7 +95,7 @@ base::StringPiece FindBestMatchingLocale(
     // the list is sorted so the first entry for the language with multiple
     // country-specific locales is one that we should use.
     auto i = std::find_if(locales.begin(), locales.end(),
-                          [&](base::StringPiece locale) {
+                          [&](std::string_view locale) {
                             return HasLanguageDashPrefix(locale, language);
                           });
     if (i != locales.end())
@@ -113,7 +112,7 @@ base::StringPiece FindBestMatchingLocale(
   if (i != locales.end())
     return *i;
 
-  return base::StringPiece();
+  return std::string_view();
 }
 
 }  // namespace locale_kit

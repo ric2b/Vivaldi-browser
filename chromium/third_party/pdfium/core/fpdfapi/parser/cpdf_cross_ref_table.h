@@ -22,7 +22,6 @@ class CPDF_CrossRefTable {
     kFree = 0,
     kNormal = 1,
     kCompressed = 2,
-    kNull = 3,  // Higher values reserved, treat all as the null object.
   };
 
   struct ObjectInfo {
@@ -58,7 +57,7 @@ class CPDF_CrossRefTable {
                  uint16_t gen_num,
                  bool is_object_stream,
                  FX_FILESIZE pos);
-  void SetFree(uint32_t obj_num);
+  void SetFree(uint32_t obj_num, uint16_t gen_num);
 
   void SetTrailer(RetainPtr<CPDF_Dictionary> trailer,
                   uint32_t trailer_object_number);

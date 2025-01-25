@@ -1,0 +1,22 @@
+[package]
+name = "np_java_ffi"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+handle_map.workspace = true
+np_adv.workspace = true
+np_ffi_core.workspace = true
+pourover.workspace = true
+pourover_macro.workspace = true
+crypto_provider_default.workspace = true # for setting features from cmdline
+
+jni.workspace = true
+
+[lib]
+# JNI wants a .so or equivalent
+crate-type = ["cdylib"]

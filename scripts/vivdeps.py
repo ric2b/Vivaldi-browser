@@ -97,7 +97,7 @@ def get_variables(a_checkout_os=None, a_target_cpu=None):
     elif checkout_os == "android":
       checkout_cpu.extend(["arm64", "x86"])
     elif checkout_os == "linux":
-      checkout_cpu.extend(["arm64", "arm"])
+      checkout_cpu.extend(["arm64", "arm", "x86"])
 
   checkout_os = "checkout_"+checkout_os
 
@@ -111,6 +111,9 @@ def get_variables(a_checkout_os=None, a_target_cpu=None):
   }
   for x in checkout_cpu:
     global_vars["checkout_"+x] = True
+
+  if checkout_os in ["checkout_linux"] and "arm" in checkout_cpu:
+    global_vars["checkout_x86"]= True # Linux Arm 32 requires x86 cpu for some targets
 
   if checkout_os in ["checkout_android", "checkout_linux"] :
     global_vars["checkout_linux"]= True # Always checking out android on linux systems
@@ -196,6 +199,7 @@ class VivaldiBaseDeps(gclient.GitDependency):
 
   def get_builtin_vars(self):
     our_vars = super(VivaldiBaseDeps, self).get_builtin_vars()
+    our_vars.update(self.viv_variables)
 
     for n,v in list(our_vars.items()):
       if n.startswith("checkout_"):
@@ -330,8 +334,10 @@ class VivaldiBaseDeps(gclient.GitDependency):
 
 class VivaldiDeps(VivaldiBaseDeps):
   def __init__(self, root_dir=SRC, variables=get_variables()[0], gn_vars=get_variables()[1], **kwargs):
+    self.viv_variables = dict(variables)
     return super(VivaldiDeps, self).__init__(root_dir = root_dir, variables=variables, gn_vars=gn_vars, **kwargs)
 
 class ChromiumDeps(VivaldiBaseDeps):
   def __init__(self, root_dir=os.path.join(SRC, "chromium"), variables=get_chromium_variables(), gn_vars=get_variables()[1],  **kwargs):
+    self.viv_variables = dict(variables)
     return super(ChromiumDeps, self).__init__(root_dir = root_dir, variables=variables, gn_vars=gn_vars, **kwargs)

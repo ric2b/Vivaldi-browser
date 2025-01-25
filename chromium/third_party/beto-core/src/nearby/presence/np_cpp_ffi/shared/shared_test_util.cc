@@ -29,6 +29,8 @@ std::string PanicReasonToString(nearby_protocol::PanicReason reason) {
     case nearby_protocol::PanicReason::InvalidStackDataStructure: {
       return "InvalidStackDataStructure";
     }
+    case np_ffi::internal::PanicReason::ExceededMaxHandleAllocations:
+      return "ExceededMaxHandleAllocations";
   }
 }
 

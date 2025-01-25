@@ -17,36 +17,32 @@ public class TrackingProtectionBridge {
         mProfile = profile;
     }
 
-    public @NoticeType int getRequiredNotice() {
-        return TrackingProtectionBridgeJni.get().getRequiredNotice(mProfile);
+    public @NoticeType int getRequiredNotice(@SurfaceType int surface) {
+        return TrackingProtectionBridgeJni.get().getRequiredNotice(mProfile, surface);
     }
 
-    public void noticeActionTaken(@NoticeType int noticeType, @NoticeAction int action) {
-        TrackingProtectionBridgeJni.get().noticeActionTaken(mProfile, noticeType, action);
+    public void noticeActionTaken(
+            @SurfaceType int surface, @NoticeType int noticeType, @NoticeAction int action) {
+        TrackingProtectionBridgeJni.get().noticeActionTaken(mProfile, surface, noticeType, action);
     }
 
-    public void noticeRequested(@NoticeType int noticeType) {
-        TrackingProtectionBridgeJni.get().noticeRequested(mProfile, noticeType);
+    public void noticeShown(@SurfaceType int surface, @NoticeType int noticeType) {
+        TrackingProtectionBridgeJni.get().noticeShown(mProfile, surface, noticeType);
     }
 
-    public void noticeShown(@NoticeType int noticeType) {
-        TrackingProtectionBridgeJni.get().noticeShown(mProfile, noticeType);
-    }
-
-    public boolean isOffboarded() {
-        return TrackingProtectionBridgeJni.get().isOffboarded(mProfile);
+    public boolean shouldRunUILogic(@SurfaceType int surface) {
+        return TrackingProtectionBridgeJni.get().shouldRunUILogic(mProfile, surface);
     }
 
     @NativeMethods
     public interface Natives {
-        void noticeRequested(@JniType("Profile*") Profile profile, int noticeType);
+        void noticeShown(@JniType("Profile*") Profile profile, int surface, int noticeType);
 
-        void noticeShown(@JniType("Profile*") Profile profile, int noticeType);
+        void noticeActionTaken(
+                @JniType("Profile*") Profile profile, int surface, int noticeType, int action);
 
-        void noticeActionTaken(@JniType("Profile*") Profile profile, int noticeType, int action);
+        int getRequiredNotice(@JniType("Profile*") Profile profile, int surface);
 
-        int getRequiredNotice(@JniType("Profile*") Profile profile);
-
-        boolean isOffboarded(@JniType("Profile*") Profile profile);
+        boolean shouldRunUILogic(@JniType("Profile*") Profile profile, int surface);
     }
 }

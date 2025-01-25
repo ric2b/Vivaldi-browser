@@ -51,7 +51,11 @@ class SharedResource : public ApiObjectBase {
 
     SharedResourceMemoryContents* GetSharedResourceMemoryContents() const;
 
-    virtual void SetHasAccess(bool hasAccess) = 0;
+    // Set the resource state to allow access.
+    virtual void OnBeginAccess() = 0;
+    // Set the resource state to disallow access, and return the last usage serial.
+    virtual ExecutionSerial OnEndAccess() = 0;
+    // Check whether the resource may be accessed.
     virtual bool HasAccess() const = 0;
     virtual bool IsDestroyed() const = 0;
     virtual void SetInitialized(bool initialized) = 0;
@@ -73,18 +77,18 @@ class SharedResourceMemory : public ApiObjectBase, public WeakRefSupport<SharedR
     // Returns true if access was acquired. If it returns true, then APIEndAccess must
     // be called to release access. Other errors may occur even if `true` is returned.
     // Use an error scope to catch them.
-    bool APIBeginAccess(TextureBase* texture,
-                        const SharedTextureMemoryBeginAccessDescriptor* descriptor);
+    wgpu::Status APIBeginAccess(TextureBase* texture,
+                                const SharedTextureMemoryBeginAccessDescriptor* descriptor);
     // Returns true if access was released.
-    bool APIEndAccess(TextureBase* texture, SharedTextureMemoryEndAccessState* state);
+    wgpu::Status APIEndAccess(TextureBase* texture, SharedTextureMemoryEndAccessState* state);
 
     // Returns true if access was acquired. If it returns true, then APIEndAccess must
     // be called to release access. Other errors may occur even if `true` is returned.
     // Use an error scope to catch them.
-    bool APIBeginAccess(BufferBase* buffer,
-                        const SharedBufferMemoryBeginAccessDescriptor* descriptor);
+    wgpu::Status APIBeginAccess(BufferBase* buffer,
+                                const SharedBufferMemoryBeginAccessDescriptor* descriptor);
     // Returns true if access was released.
-    bool APIEndAccess(BufferBase* buffer, SharedBufferMemoryEndAccessState* state);
+    wgpu::Status APIEndAccess(BufferBase* buffer, SharedBufferMemoryEndAccessState* state);
 
     // Returns true iff the device passed to this object on creation is now lost.
     // TODO(crbug.com/1506468): Eliminate this API once Chromium has been
@@ -107,10 +111,11 @@ class SharedResourceMemory : public ApiObjectBase, public WeakRefSupport<SharedR
     MaybeError BeginAccess(Resource* resource, const BeginAccessDescriptor* rawDescriptor);
 
     template <typename Resource, typename EndAccessState>
-    MaybeError EndAccess(Resource* resource, EndAccessState* state, bool* didEnd);
+    MaybeError EndAccess(Resource* resource, EndAccessState* state);
 
     template <typename Resource, typename EndAccessState>
-    ResultOrError<FenceAndSignalValue> EndAccessInternal(Resource* resource,
+    ResultOrError<FenceAndSignalValue> EndAccessInternal(ExecutionSerial lastUsageSerial,
+                                                         Resource* resource,
                                                          EndAccessState* rawState);
 
     // BeginAccessImpl validates the operation is valid on the backend, and performs any
@@ -126,9 +131,11 @@ class SharedResourceMemory : public ApiObjectBase, public WeakRefSupport<SharedR
     // It should also write out any backend specific state in chained out structs of EndAccessState.
     virtual ResultOrError<FenceAndSignalValue> EndAccessImpl(
         TextureBase* texture,
+        ExecutionSerial lastUsageSerial,
         UnpackedPtr<SharedTextureMemoryEndAccessState>& state);
     virtual ResultOrError<FenceAndSignalValue> EndAccessImpl(
         BufferBase* buffer,
+        ExecutionSerial lastUsageSerial,
         UnpackedPtr<SharedBufferMemoryEndAccessState>& state);
 
     Ref<SharedResource> mExclusiveAccess;
@@ -147,11 +154,6 @@ class SharedResourceMemoryContents : public RefCounted {
 
     void AcquirePendingFences(PendingFenceList* fences);
 
-    // Set the last usage serial. This indicates when the SharedFence exported
-    // from APIEndAccess will complete.
-    void SetLastUsageSerial(ExecutionSerial lastUsageSerial);
-    ExecutionSerial GetLastUsageSerial() const;
-
     const WeakRef<SharedResourceMemory>& GetSharedResourceMemory() const;
 
     bool HasWriteAccess() const;
@@ -162,7 +164,6 @@ class SharedResourceMemoryContents : public RefCounted {
     friend class SharedResourceMemory;
 
     PendingFenceList mPendingFences;
-    ExecutionSerial mLastUsageSerial{0};
 
     SharedResourceAccessState mSharedResourceAccessState = SharedResourceAccessState::NotAccessed;
     int mReadAccessCount = 0;

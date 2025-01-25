@@ -147,6 +147,10 @@ namespace v8::internal::compiler::turboshaft {
   V(F64x2Max, F64x4Max)                            \
   V(F64x2Pmin, F64x4Pmin)                          \
   V(F64x2Pmax, F64x4Pmax)                          \
+  V(F32x4RelaxedMin, F32x8RelaxedMin)              \
+  V(F32x4RelaxedMax, F32x8RelaxedMax)              \
+  V(F64x2RelaxedMin, F64x4RelaxedMin)              \
+  V(F64x2RelaxedMax, F64x4RelaxedMax)              \
   V(I16x8DotI8x16I7x16S, I16x16DotI8x32I7x32S)
 
 #define SIMD256_BINOP_SIGN_EXTENSION_OP(V)                           \
@@ -399,6 +403,9 @@ class SLPTree : public NON_EXPORTED_BASE(ZoneObject) {
   PackNode* NewPackNodeAndRecurs(const NodeGroup& node_group, int start_index,
                                  int count, unsigned depth);
 
+  PackNode* NewCommutativePackNodeAndRecurs(const NodeGroup& node_group,
+                                            unsigned depth);
+
   ShufflePackNode* NewShufflePackNode(const NodeGroup& node_group,
                                       ShufflePackNode::SpecificInfo::Kind kind);
 
@@ -557,6 +564,10 @@ class WasmRevecReducer : public UniformReducerAdapter<WasmRevecReducer, Next> {
   V<Simd128> REDUCE_INPUT_GRAPH(Simd128LoadTransform)(
       V<Simd128> ig_index, const Simd128LoadTransformOp& load_transform) {
     if (auto pnode = analyzer_.GetPackNode(ig_index)) {
+      if (pnode->is_force_pack()) {
+        return Adapter::ReduceInputGraphSimd128LoadTransform(ig_index,
+                                                             load_transform);
+      }
       V<Simd256> og_index = pnode->RevectorizedNode();
       // Skip revectorized node.
       if (!og_index.valid()) {
@@ -709,6 +720,9 @@ class WasmRevecReducer : public UniformReducerAdapter<WasmRevecReducer, Next> {
   V<Simd128> REDUCE_INPUT_GRAPH(Simd128Unary)(V<Simd128> ig_index,
                                               const Simd128UnaryOp& unary) {
     if (auto pnode = analyzer_.GetPackNode(ig_index)) {
+      if (pnode->is_force_pack()) {
+        return Adapter::ReduceInputGraphSimd128Unary(ig_index, unary);
+      }
       V<Simd256> og_index = pnode->RevectorizedNode();
       // Skip revectorized node.
       if (!og_index.valid()) {
@@ -729,6 +743,9 @@ class WasmRevecReducer : public UniformReducerAdapter<WasmRevecReducer, Next> {
   V<Simd128> REDUCE_INPUT_GRAPH(Simd128Binop)(V<Simd128> ig_index,
                                               const Simd128BinopOp& op) {
     if (auto pnode = analyzer_.GetPackNode(ig_index)) {
+      if (pnode->is_force_pack()) {
+        return Adapter::ReduceInputGraphSimd128Binop(ig_index, op);
+      }
       V<Simd256> og_index = pnode->RevectorizedNode();
       // Skip revectorized node.
       if (!og_index.valid()) {
@@ -917,8 +934,11 @@ class WasmRevecReducer : public UniformReducerAdapter<WasmRevecReducer, Next> {
                   idx, current_input_block);
             }
 
-            OpIndex og_right =
-                Continuation{this}.ReduceInputGraph(pnode->Nodes()[1], op);
+            OpIndex right_ig_index = pnode->Nodes()[1];
+            const Op& right_ig_op =
+                Asm().input_graph().Get(right_ig_index).template Cast<Op>();
+            OpIndex og_right = Continuation{this}.ReduceInputGraph(
+                right_ig_index, right_ig_op);
             og_index = __ SimdPack128To256(og_left, og_right);
             pnode->set_force_packed_pair(og_left, og_right);
             pnode->SetRevectorizedNode(og_index);

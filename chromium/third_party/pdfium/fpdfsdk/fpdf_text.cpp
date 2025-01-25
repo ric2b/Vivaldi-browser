@@ -74,6 +74,17 @@ FPDFText_GetUnicode(FPDF_TEXTPAGE text_page, int index) {
   return charinfo.m_Unicode;
 }
 
+FPDF_EXPORT FPDF_PAGEOBJECT FPDF_CALLCONV
+FPDFText_GetTextObject(FPDF_TEXTPAGE text_page, int index) {
+  CPDF_TextPage* textpage = GetTextPageForValidIndex(text_page, index);
+  if (!textpage) {
+    return nullptr;
+  }
+
+  return FPDFPageObjectFromCPDFPageObject(
+      textpage->GetCharInfo(index).m_pTextObj);
+}
+
 FPDF_EXPORT int FPDF_CALLCONV FPDFText_IsGenerated(FPDF_TEXTPAGE text_page,
                                                    int index) {
   CPDF_TextPage* textpage = GetTextPageForValidIndex(text_page, index);
@@ -151,20 +162,6 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFText_GetFontWeight(FPDF_TEXTPAGE text_page,
     return -1;
 
   return charinfo.m_pTextObj->GetFont()->GetFontWeight();
-}
-
-FPDF_EXPORT FPDF_TEXT_RENDERMODE FPDF_CALLCONV
-FPDFText_GetTextRenderMode(FPDF_TEXTPAGE text_page, int index) {
-  CPDF_TextPage* textpage = GetTextPageForValidIndex(text_page, index);
-  if (!textpage)
-    return FPDF_TEXTRENDERMODE_UNKNOWN;
-
-  const CPDF_TextPage::CharInfo& charinfo = textpage->GetCharInfo(index);
-  if (!charinfo.m_pTextObj)
-    return FPDF_TEXTRENDERMODE_UNKNOWN;
-
-  return static_cast<FPDF_TEXT_RENDERMODE>(
-      charinfo.m_pTextObj->GetTextRenderMode());
 }
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
@@ -345,8 +342,8 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFText_GetText(FPDF_TEXTPAGE page,
   ByteString str = textpage->GetPageText(start_index, char_count).ToUCS2LE();
   auto str_span = fxcrt::reinterpret_span<const unsigned short>(str.span());
 
-  // Hard CHECK() in spancpy if retrieved text is too long.
-  fxcrt::spancpy(result_span, str_span);
+  // Hard CHECK() in Copy() if retrieved text is too long.
+  fxcrt::Copy(str_span, result_span);
   return pdfium::checked_cast<int>(str_span.size());
 }
 
@@ -404,7 +401,7 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFText_GetBoundedText(FPDF_TEXTPAGE text_page,
   if (copy_span.size() > buffer_span.size()) {
     copy_span = copy_span.first(buffer_span.size());
   }
-  fxcrt::spancpy(buffer_span, copy_span);
+  fxcrt::Copy(copy_span, buffer_span);
   return pdfium::checked_cast<int>(copy_span.size());
 }
 
@@ -516,7 +513,7 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFLink_GetURL(FPDF_PAGELINK link_page,
       UNSAFE_BUFFERS(pdfium::make_span(buffer, buflen));
 
   size_t size = std::min(url_span.size(), result_span.size());
-  fxcrt::spancpy(result_span, url_span.first(size));
+  fxcrt::Copy(url_span.first(size), result_span);
   return pdfium::checked_cast<int>(size);
 }
 

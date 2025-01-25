@@ -57,6 +57,10 @@
           "pictureUrl": {
             "type": "string",
             "description": "A link to the user's avatar. This is typically an https url, but the server is free to provide any valid url."
+          },
+          "donationTier": {
+            "type": "string",
+            "descriptio": "The reward tier corresponding to the amount that was donated by the user."
           }
         }
       },

@@ -4,6 +4,11 @@
 //
 // Main entry point for all unit tests.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "rlz_test_helpers.h"
 
 #include <stddef.h>
@@ -153,7 +158,7 @@ void RlzLibTestNoMachineStateHelper::Reset() {
   ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
   rlz_lib::testing::SetRlzStoreDirectory(temp_dir_.GetPath());
 #else
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #endif  // BUILDFLAG(IS_POSIX)
 }
 

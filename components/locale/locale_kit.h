@@ -11,13 +11,13 @@ namespace locale_kit {
 
 std::string GetUserCountry();
 
-std::string FindBestMatchingLocale(base::span<const base::StringPiece> locales,
+std::string FindBestMatchingLocale(base::span<const std::string_view> locales,
                                    const std::string& application_locale);
 
-base::StringPiece FindBestMatchingLocale(
-    base::StringPiece language,
-    base::StringPiece country,
-    base::span<const base::StringPiece> locales);
+std::string_view FindBestMatchingLocale(
+    std::string_view language,
+    std::string_view country,
+    base::span<const std::string_view> locales);
 
 }  // namespace locale_kit
 

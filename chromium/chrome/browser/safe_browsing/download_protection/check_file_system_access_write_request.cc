@@ -45,7 +45,10 @@ CheckFileSystemAccessWriteRequest::CheckFileSystemAccessWriteRequest(
               service,
               *item)),
       item_(std::move(item)),
-      referrer_chain_data_(service->IdentifyReferrerChain(*item_)) {
+      referrer_chain_data_(
+          IdentifyReferrerChain(*item_,
+                                DownloadProtectionService::
+                                    GetDownloadAttributionUserGestureLimit())) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
@@ -116,7 +119,8 @@ void CheckFileSystemAccessWriteRequest::UploadBinary(
     enterprise_connectors::AnalysisSettings settings) {}
 
 bool CheckFileSystemAccessWriteRequest::ShouldImmediatelyDeepScan(
-    bool server_requests_prompt) const {
+    bool server_requests_prompt,
+    bool log_metrics) const {
   return false;
 }
 
@@ -155,7 +159,7 @@ bool CheckFileSystemAccessWriteRequest::IsAllowlistedByPolicy() const {
 
 void CheckFileSystemAccessWriteRequest::LogDeepScanningPrompt(
     bool did_prompt) const {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 }  // namespace safe_browsing

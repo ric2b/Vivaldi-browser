@@ -1,13 +1,21 @@
 CHANGES BETWEEN 2.13.2 and 2.13.3 (2024-Mmm-DD)
 
-  I. IMPORTANT BUG FIXES
+  I. IMPORTANT CHANGES
+
+  - Some  fields  in  the  `FT_Outline` structure  have been   changed
+    from signed  to unsigned type,  which  better reflects  the actual
+    usage.   It  is  also  an  additional  means  to  protect  against
+    malformed input.
+
+
+  II. IMPORTANT BUG FIXES
 
   - Rare double-free crashes in the cache subsystem have been fixed.
 
   - Excessive stack allocation in the autohinter has been fixed.
 
 
-  II. MISCELLANEOUS
+  III. MISCELLANEOUS
 
   - The B/W rasterizer  has  received a major upkeep  that resulted in
     large performance improvement.  The rendering speed  has increased
@@ -22,6 +30,10 @@ CHANGES BETWEEN 2.13.2 and 2.13.3 (2024-Mmm-DD)
     please use a higher-level library like HarfBuzz.
 
     Code contributed by David Saltzman <davidbsaltzman@gmail.com>.
+
+  - The internal structures  `PS_DesignMap` and `PS_Blend` related  to
+    parsing of old Multiple Masters fonts  have been removed  from the
+    public header file `t1tables.h`.
 
 
 ======================================================================

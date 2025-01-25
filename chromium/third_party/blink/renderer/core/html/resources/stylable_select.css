@@ -6,6 +6,8 @@
  * feature is enabled.
  */
 
+@namespace "http://www.w3.org/1999/xhtml";
+
 select {
   background-color: -internal-appearance-auto-base-select(Field, transparent);
   border: -internal-appearance-auto-base-select(1px, 0px),
@@ -36,7 +38,7 @@ select::select-fallback-datalist {
   min-block-size: 1lh;
   inset-block-start: anchor(self-end);
   inset-inline-start: anchor(self-start);
-  position-try-options:
+  position-try:
     -internal-selectlist-datalist-reverse-block,
     -internal-selectlist-datalist-reverse-inline,
     -internal-selectlist-datalist-reverse-both,
@@ -187,4 +189,25 @@ select::select-fallback-button-text {
 select:not(:-internal-list-box) option:not(:disabled):hover {
   background-color: SelectedItem;
   color: SelectedItemText;
+}
+
+select:not(:-internal-list-box) option {
+  /* min-size rules ensure that we meet accessibility guidelines for minimum target size.
+   * https://github.com/openui/open-ui/issues/1026
+   * https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html */
+  /* TODO(crbug.com/1511354): This might be able to be combined with the
+   * default select option rules at some point. This should be re-evaluted
+   * before StylableSelect is shipped. */
+  min-inline-size: 24px;
+  min-block-size: max(24px, 1.2em);
+  align-content: center;
+}
+
+/* TODO(crbug.com/1511354): Consider using ::marker or a whole new
+ * pseudo-element to implement this. */
+select:not(:-internal-list-box) option::before {
+  content: '\2713' / '';
+}
+select option:not(:checked)::before {
+  visibility: hidden;
 }

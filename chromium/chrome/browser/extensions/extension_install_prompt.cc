@@ -32,8 +32,8 @@
 #include "extensions/browser/install/extension_install_ui.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_features.h"
-#include "extensions/common/extension_icon_set.h"
 #include "extensions/common/extension_resource.h"
+#include "extensions/common/icons/extension_icon_set.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
@@ -146,12 +146,6 @@ std::u16string ExtensionInstallPrompt::Prompt::GetDialogTitle() const {
     case REPAIR_PROMPT:
       id = IDS_EXTENSION_REPAIR_PROMPT_TITLE;
       break;
-    case DELEGATED_PERMISSIONS_PROMPT:
-      // Special case: need to include the delegated username.
-      return l10n_util::GetStringFUTF16(
-          IDS_EXTENSION_DELEGATED_INSTALL_PROMPT_TITLE,
-          base::UTF8ToUTF16(extension_->name()),
-          base::UTF8ToUTF16(delegated_username_));
     case EXTENSION_REQUEST_PROMPT:
       id = IDS_EXTENSION_REQUEST_PROMPT_TITLE;
       break;
@@ -160,10 +154,12 @@ std::u16string ExtensionInstallPrompt::Prompt::GetDialogTitle() const {
       break;
     case UNSET_PROMPT_TYPE:
     case NUM_PROMPT_TYPES:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
-  return l10n_util::GetStringFUTF16(id, base::UTF8ToUTF16(extension_->name()));
+  return l10n_util::GetStringFUTF16(
+      id,
+      extensions::util::GetFixupExtensionNameForUIDisplay(extension_->name()));
 }
 
 int ExtensionInstallPrompt::Prompt::GetDialogButtons() const {
@@ -215,9 +211,6 @@ std::u16string ExtensionInstallPrompt::Prompt::GetAcceptButtonLabel() const {
       else
         id = IDS_EXTENSION_PROMPT_REPAIR_BUTTON_EXTENSION;
       break;
-    case DELEGATED_PERMISSIONS_PROMPT:
-      id = IDS_EXTENSION_PROMPT_INSTALL_BUTTON;
-      break;
     case EXTENSION_REQUEST_PROMPT:
       id = IDS_EXTENSION_INSTALL_PROMPT_REQUEST_BUTTON;
       break;
@@ -226,7 +219,7 @@ std::u16string ExtensionInstallPrompt::Prompt::GetAcceptButtonLabel() const {
       break;
     case UNSET_PROMPT_TYPE:
     case NUM_PROMPT_TYPES:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   return id != -1 ? l10n_util::GetStringUTF16(id) : std::u16string();
@@ -239,7 +232,6 @@ std::u16string ExtensionInstallPrompt::Prompt::GetAbortButtonLabel() const {
     case RE_ENABLE_PROMPT:
     case REMOTE_INSTALL_PROMPT:
     case REPAIR_PROMPT:
-    case DELEGATED_PERMISSIONS_PROMPT:
     case EXTENSION_REQUEST_PROMPT:
       id = IDS_CANCEL;
       break;
@@ -254,7 +246,7 @@ std::u16string ExtensionInstallPrompt::Prompt::GetAbortButtonLabel() const {
       break;
     case UNSET_PROMPT_TYPE:
     case NUM_PROMPT_TYPES:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   return l10n_util::GetStringUTF16(id);
@@ -266,7 +258,6 @@ std::u16string ExtensionInstallPrompt::Prompt::GetPermissionsHeading() const {
     case INSTALL_PROMPT:
     case EXTERNAL_INSTALL_PROMPT:
     case REMOTE_INSTALL_PROMPT:
-    case DELEGATED_PERMISSIONS_PROMPT:
     case EXTENSION_REQUEST_PROMPT:
     case EXTENSION_PENDING_REQUEST_PROMPT:
       id = IDS_EXTENSION_PROMPT_WILL_HAVE_ACCESS_TO;
@@ -282,7 +273,7 @@ std::u16string ExtensionInstallPrompt::Prompt::GetPermissionsHeading() const {
       break;
     case UNSET_PROMPT_TYPE:
     case NUM_PROMPT_TYPES:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return l10n_util::GetStringUTF16(id);
 }
@@ -568,13 +559,9 @@ void ExtensionInstallPrompt::ShowConfirmation() {
   if (custom_permissions_.get()) {
     permissions_to_display = custom_permissions_->Clone();
   } else if (extension_) {
-    // For delegated installs, all optional permissions are pre-approved by the
-    // person who triggers the install, so add them to the list.
-    bool include_optional_permissions =
-        prompt_->type() == DELEGATED_PERMISSIONS_PROMPT;
     permissions_to_display =
         extensions::util::GetInstallPromptPermissionSetForExtension(
-            extension_.get(), profile_, include_optional_permissions);
+            extension_.get(), profile_);
   }
 
   prompt_->set_extension(extension_.get());
@@ -645,6 +632,6 @@ bool ExtensionInstallPrompt::AutoConfirmPromptIfEnabled() {
     }
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }

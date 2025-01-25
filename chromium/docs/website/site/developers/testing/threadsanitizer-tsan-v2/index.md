@@ -32,13 +32,6 @@ name of your choice). Enter these variables in the resulting editor:
 
 Then build like normal with ninja -C out/tsan base_unittests
 
-In GYP:
-
-> `GYP_GENERATORS=ninja GYP_DEFINES='tsan=1 disable_nacl=1 use_goma=1' gclient
-> runhooks`
-
-> `ninja -C out/Release base_unittests`
-
 **Note:** TSan builds with libc++ by default (the `use_custom_libcxx=1` GYP
 flag). If your tests fail under TSan, make sure you're not relying on some
 unspecified libstdc++ behavior.
@@ -125,13 +118,13 @@ WARNING: ThreadSanitizer: data race (pid=22215)
     #0 New v8/src/zone-inl.h:66 (content_browsertests+0x000001568815)
     #1 zone v8/src/zone-inl.h:98 (content_browsertests+0x000001568815)
     #2 v8::internal::Parser::ParseLazy(v8::internal::Utf16CharacterStream*, v8::internal::ZoneScope*) v8/src/parser.cc:743 (content_browsertests+0x000001568815)
-  Previous write of size 4 at 0x7f8a8f1d99ec by thread T8: 
+  Previous write of size 4 at 0x7f8a8f1d99ec by thread T8:
     #0 New v8/src/zone-inl.h:66 (content_browsertests+0x0000013e5568)
     #1 zone v8/src/zone-inl.h:98 (content_browsertests+0x0000013e5568)
     #2 v8::internal::HGraphBuilder::CreateGraph() v8/src/hydrogen.cc:951 (content_browsertests+0x0000013e5568)
     #3 DoGenerateCode<v8::internal::FastCloneShallowArrayStub> v8/src/code-stubs-hydrogen.cc:288 (content_browsertests+0x0000012cb218)
-    #4 v8::internal::FastCloneShallowArrayStub::GenerateCode() v8/src/code-stubs-hydrogen.cc:355 
- 
+    #4 v8::internal::FastCloneShallowArrayStub::GenerateCode() v8/src/code-stubs-hydrogen.cc:355
+
   Location is global 'v8::internal::Zone::allocation_size_' of size 4 at 7f8a8f1d99ec (content_browsertests+0x0000063c69ec)
 ```
 

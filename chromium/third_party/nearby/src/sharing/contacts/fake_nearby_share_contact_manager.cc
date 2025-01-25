@@ -55,14 +55,12 @@ void FakeNearbyShareContactManager::DownloadContacts() {
   ++num_download_contacts_calls_;
 }
 
-void FakeNearbyShareContactManager::SetAllowedContacts(
-    const std::set<std::string>& allowed_contact_ids) {
-  set_allowed_contacts_calls_.push_back(allowed_contact_ids);
-}
 
 void FakeNearbyShareContactManager::OnStart() {}
 
 void FakeNearbyShareContactManager::OnStop() {}
+
+void FakeNearbyShareContactManager::GetContacts(ContactsCallback callback) {}
 
 }  // namespace sharing
 }  // namespace nearby

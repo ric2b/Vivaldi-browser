@@ -155,6 +155,13 @@ class CrasAudioClientImpl : public CrasAudioClient {
                        weak_ptr_factory_.GetWeakPtr()));
 
     cras_proxy_->ConnectToSignal(
+        cras::kCrasControlInterface, "EwmaPowerReported",
+        base::BindRepeating(&CrasAudioClientImpl::EwmaPowerReportedReceived,
+                            weak_ptr_factory_.GetWeakPtr()),
+        base::BindOnce(&CrasAudioClientImpl::SignalConnected,
+                       weak_ptr_factory_.GetWeakPtr()));
+
+    cras_proxy_->ConnectToSignal(
         cras::kCrasControlInterface,
         cras::kNumberOfNonChromeOutputStreamsChanged,
         base::BindRepeating(
@@ -177,6 +184,16 @@ class CrasAudioClientImpl : public CrasAudioClient {
         cras::kCrasControlInterface, cras::kNumberOfArcStreamsChanged,
         base::BindRepeating(
             &CrasAudioClientImpl::NumberOfArcStreamsChangedReceived,
+            weak_ptr_factory_.GetWeakPtr()),
+        base::BindOnce(&CrasAudioClientImpl::SignalConnected,
+                       weak_ptr_factory_.GetWeakPtr()));
+
+    // Monitor the D-Bus signal for sidetone supported.
+    cras_proxy_->ConnectToSignal(
+        cras::kCrasControlInterface,
+        "SidetoneSupportedChanged",  // TODO: Change to variable
+        base::BindRepeating(
+            &CrasAudioClientImpl::SidetoneSupportedChangedReceived,
             weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&CrasAudioClientImpl::SignalConnected,
                        weak_ptr_factory_.GetWeakPtr()));
@@ -377,6 +394,30 @@ class CrasAudioClientImpl : public CrasAudioClient {
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
+  void SetStyleTransferEnabled(bool style_transfer_on) override {
+    VLOG(1) << "cras_audio_client: Setting style transfer state: "
+            << style_transfer_on;
+    dbus::MethodCall method_call(cras::kCrasControlInterface,
+                                 cras::kSetStyleTransferEnabled);
+
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendBool(style_transfer_on);
+    cras_proxy_->CallMethod(&method_call,
+                            dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+                            base::DoNothing());
+  }
+
+  void GetStyleTransferSupported(
+      chromeos::DBusMethodCallback<bool> callback) override {
+    VLOG(1) << "cras_audio_client: Requesting style transfer support.";
+    dbus::MethodCall method_call(cras::kCrasControlInterface,
+                                 cras::kIsStyleTransferSupported);
+    cras_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&CrasAudioClientImpl::OnGetStyleTransferSupported,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  }
+
   void SetHfpMicSrEnabled(bool hfp_mic_sr_on) override {
     VLOG(1) << "cras_audio_client: Setting hfp_mic_sr state: " << hfp_mic_sr_on;
     dbus::MethodCall method_call(cras::kCrasControlInterface,
@@ -461,6 +502,39 @@ class CrasAudioClientImpl : public CrasAudioClient {
     cras_proxy_->CallMethod(&method_call,
                             dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
                             base::DoNothing());
+  }
+
+  void SetEwmaPowerReportEnabled(bool enabled) override {
+    dbus::MethodCall method_call(
+        cras::kCrasControlInterface,
+        "SetEwmaPowerReportEnabled");  // TODO change to variable;
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendBool(enabled);
+    cras_proxy_->CallMethod(&method_call,
+                            dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+                            base::DoNothing());
+  }
+
+  void SetSidetoneEnabled(bool enabled) override {
+    dbus::MethodCall method_call(
+        cras::kCrasControlInterface,
+        "SetSidetoneEnabled");  // TODO change to variable;
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendBool(enabled);
+    cras_proxy_->CallMethod(&method_call,
+                            dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+                            base::DoNothing());
+  }
+
+  void GetSidetoneSupported(
+      chromeos::DBusMethodCallback<bool> callback) override {
+    dbus::MethodCall method_call(
+        cras::kCrasControlInterface,
+        "GetSidetoneSupported");  // TODO: Change to variable
+    cras_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&CrasAudioClientImpl::OnGetSidetoneSupported,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
   void AddActiveInputNode(uint64_t node_id) override {
@@ -909,6 +983,17 @@ class CrasAudioClientImpl : public CrasAudioClient {
     }
   }
 
+  void EwmaPowerReportedReceived(dbus::Signal* signal) {
+    dbus::MessageReader reader(signal);
+    double power;
+    if (!reader.PopDouble(&power)) {
+      LOG(ERROR) << "Error reading signal from cras: " << signal->ToString();
+    }
+    for (auto& observer : observers_) {
+      observer.EwmaPowerReported(power);
+    }
+  }
+
   void NumberOfNonChromeOutputStreamsChangedReceived(dbus::Signal* signal) {
     for (auto& observer : observers_) {
       observer.NumberOfNonChromeOutputStreamsChanged();
@@ -929,6 +1014,17 @@ class CrasAudioClientImpl : public CrasAudioClient {
   void NumberOfArcStreamsChangedReceived(dbus::Signal* signal) {
     for (auto& observer : observers_) {
       observer.NumberOfArcStreamsChanged();
+    }
+  }
+
+  void SidetoneSupportedChangedReceived(dbus::Signal* signal) {
+    dbus::MessageReader reader(signal);
+    bool supported;
+    if (!reader.PopBool(&supported)) {
+      LOG(ERROR) << "Error reading signal from cras: " << signal->ToString();
+    }
+    for (auto& observer : observers_) {
+      observer.SidetoneSupportedChanged(supported);
     }
   }
 
@@ -1060,6 +1156,24 @@ class CrasAudioClientImpl : public CrasAudioClient {
     }
 
     std::move(callback).Run(std::move(node_list));
+  }
+
+  void OnGetSidetoneSupported(chromeos::DBusMethodCallback<bool> callback,
+                              dbus::Response* response) {
+    if (!response) {
+      LOG(ERROR) << "Error calling GetSidetoneSupported";
+      std::move(callback).Run(std::nullopt);
+      return;
+    }
+    bool available = false;
+    dbus::MessageReader reader(response);
+    if (!reader.PopBool(&available)) {
+      LOG(ERROR) << "Error reading response from cras: "
+                 << response->ToString();
+      std::move(callback).Run(std::nullopt);
+      return;
+    }
+    std::move(callback).Run(available);
   }
 
   void OnGetNumberOfNonChromeOutputStreams(
@@ -1208,6 +1322,26 @@ class CrasAudioClientImpl : public CrasAudioClient {
     std::move(callback).Run(is_noise_cancellation_supported);
     VLOG(1) << "cras_audio_client: Retrieved noise cancellation support: "
             << is_noise_cancellation_supported;
+  }
+
+  void OnGetStyleTransferSupported(chromeos::DBusMethodCallback<bool> callback,
+                                   dbus::Response* response) {
+    if (!response) {
+      LOG(ERROR) << "Error calling GetStyleTransferSupported";
+      std::move(callback).Run(std::nullopt);
+      return;
+    }
+    bool is_style_transfer_supported = 0;
+    dbus::MessageReader reader(response);
+    if (!reader.PopBool(&is_style_transfer_supported)) {
+      LOG(ERROR) << "Error reading response from cras: "
+                 << response->ToString();
+      std::move(callback).Run(std::nullopt);
+      return;
+    }
+    std::move(callback).Run(is_style_transfer_supported);
+    VLOG(1) << "cras_audio_client: Retrieved style transfer support: "
+            << is_style_transfer_supported;
   }
 
   void OnGetHfpMicSrSupported(chromeos::DBusMethodCallback<bool> callback,
@@ -1403,11 +1537,15 @@ void CrasAudioClient::Observer::SurveyTriggered(
 
 void CrasAudioClient::Observer::SpeakOnMuteDetected() {}
 
+void CrasAudioClient::Observer::EwmaPowerReported(double power) {}
+
 void CrasAudioClient::Observer::NumberOfNonChromeOutputStreamsChanged() {}
 
 void CrasAudioClient::Observer::NumStreamIgnoreUiGains(int32_t num) {}
 
 void CrasAudioClient::Observer::NumberOfArcStreamsChanged() {}
+
+void CrasAudioClient::Observer::SidetoneSupportedChanged(bool supported) {}
 
 CrasAudioClient::CrasAudioClient() {
   DCHECK(!g_instance);

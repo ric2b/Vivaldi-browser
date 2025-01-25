@@ -28,6 +28,7 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.params.ParameterAnnotations.UseMethodParameter;
 import org.chromium.base.test.params.ParameterAnnotations.UseRunnerDelegate;
 import org.chromium.base.test.params.ParameterProvider;
@@ -66,7 +67,6 @@ import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.content_settings.ProviderType;
 import org.chromium.components.content_settings.SessionModel;
 import org.chromium.content_public.browser.BrowserContextHandle;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.url.GURL;
 import org.chromium.url.Origin;
 
@@ -375,7 +375,7 @@ public class WebsitePermissionsFetcherTest {
     public void tearDown() throws TimeoutException {
         // Clean up permissions.
         CallbackHelper helper = new CallbackHelper();
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     BrowsingDataBridge.getForProfile(ProfileManager.getLastUsedRegularProfile())
                             .clearBrowsingData(
@@ -422,7 +422,7 @@ public class WebsitePermissionsFetcherTest {
     public void testFetcherDoesNotTimeOutWithManyUrls() throws Exception {
         final WebsitePermissionsWaiter waiter = new WebsitePermissionsWaiter();
         // Set lots of permissions values.
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     Profile profile = ProfileManager.getLastUsedRegularProfile();
                     for (String url : PERMISSION_URLS) {
@@ -700,7 +700,7 @@ public class WebsitePermissionsFetcherTest {
         // Otherwise, just update count in the assert.
         // TODO(https://b/332704817): Add test for Tracking Protection content setting after Android
         // integration.
-        assertEquals(108, ContentSettingsType.MAX_VALUE);
+        assertEquals(111, ContentSettingsType.MAX_VALUE);
         websitePreferenceBridge.addContentSettingException(
                 new ContentSettingException(
                         ContentSettingsType.COOKIES,
@@ -766,6 +766,13 @@ public class WebsitePermissionsFetcherTest {
                         /* isEmbargoed= */ false));
         websitePreferenceBridge.addContentSettingException(
                 new ContentSettingException(
+                        ContentSettingsType.JAVASCRIPT_OPTIMIZER,
+                        ORIGIN,
+                        ContentSettingValues.DEFAULT,
+                        ProviderType.PREF_PROVIDER,
+                        /* isEmbargoed= */ false));
+        websitePreferenceBridge.addContentSettingException(
+                new ContentSettingException(
                         ContentSettingsType.AUTO_DARK_WEB_CONTENT,
                         ORIGIN,
                         ContentSettingValues.DEFAULT,
@@ -805,9 +812,14 @@ public class WebsitePermissionsFetcherTest {
         if (isBDMEnabled) {
             var map = new HashMap<Origin, BrowsingDataInfo>();
             var origin = Origin.create(new GURL(ORIGIN));
-            map.put(origin, new BrowsingDataInfo(origin, 0, storageSize + sharedDictionarySize));
+            map.put(
+                    origin,
+                    new BrowsingDataInfo(origin, 0, storageSize + sharedDictionarySize, false));
 
-            Mockito.doReturn(map).when(mBrowsingDataModel).getBrowsingDataInfo();
+            Mockito.when(
+                            mBrowsingDataModel.getBrowsingDataInfo(
+                                    mSiteSettingsDelegate.getBrowserContextHandle(), false))
+                    .thenReturn(map);
 
             doAnswer(this::mockBDMCallback)
                     .when(mSiteSettingsDelegate)
@@ -898,6 +910,11 @@ public class WebsitePermissionsFetcherTest {
                             site.getContentSetting(
                                     UNUSED_BROWSER_CONTEXT_HANDLE,
                                     ContentSettingsType.JAVASCRIPT_JIT));
+                    assertEquals(
+                            Integer.valueOf(ContentSettingValues.DEFAULT),
+                            site.getContentSetting(
+                                    UNUSED_BROWSER_CONTEXT_HANDLE,
+                                    ContentSettingsType.JAVASCRIPT_OPTIMIZER));
                     assertEquals(
                             Integer.valueOf(ContentSettingValues.DEFAULT),
                             site.getContentSetting(
@@ -1470,7 +1487,7 @@ public class WebsitePermissionsFetcherTest {
                             /* isEmbargoed= */ false));
         }
 
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     fetcher.fetchPreferencesForCategoryAndPopulateFpsInfo(
                             SiteSettingsCategory.createFromType(
@@ -1541,7 +1558,7 @@ public class WebsitePermissionsFetcherTest {
                         null,
                         false));
         fetcher.fetchAllPreferences(waiter);
-        waiter.waitForFirst();
+        waiter.waitForOnly();
 
         // Check that only the ALLOW exception is fetched.
         assertEquals(1, waiter.getSites().size());

@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/search_engine_choice/search_engine_choice_view_controller.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/check.h"
 #import "base/i18n/rtl.h"
 #import "base/strings/sys_string_conversions.h"
@@ -29,8 +30,6 @@
 
 namespace {
 
-// Chrome logo with 40pt size.
-NSString* const kChromeIcon40pt = @"chrome_icon_40";
 // Space between the Chrome logo and the top of the screen.
 constexpr CGFloat kLogoTopMargin = 24.;
 // Logo dimensions.
@@ -73,9 +72,6 @@ SnippetSearchEngineButton* CreateSnippetSearchEngineButtonWithElement(
   button.snippetText = element.snippetDescription;
   button.translatesAutoresizingMaskIntoConstraints = NO;
   button.searchEngineKeyword = element.keyword;
-  button.accessibilityIdentifier =
-      [NSString stringWithFormat:@"%@%@", kSnippetSearchEngineIdentifierPrefix,
-                                 element.name];
   return button;
 }
 
@@ -137,7 +133,6 @@ UIButton* CreateSetAsDefaultButton() {
   SetConfigurationTitle(
       button, l10n_util::GetNSString(IDS_SEARCH_ENGINE_CHOICE_BUTTON_TITLE));
   button.translatesAutoresizingMaskIntoConstraints = NO;
-  button.accessibilityIdentifier = kSetAsDefaultSearchEngineIdentifier;
   // Add semantic group, so the user can skip all the search engine stack view,
   // and jump to the SetAsDefault button, using VoiceOver.
   button.accessibilityContainerType = UIAccessibilityContainerTypeSemanticGroup;
@@ -162,6 +157,17 @@ UIButton* CreateMorePillButton() {
   return morePillButton;
 }
 
+// Returns the `y` value from the `localReference` in the coordinator of
+// `mainView`.
+CGFloat ConvertVerticalCoordonateWithMainViewReference(UIView* mainView,
+                                                       UIView* referenceView,
+                                                       CGFloat y) {
+  CGPoint point = CGPointMake(0, y);
+  CGPoint pointWithMainViewReference = [mainView convertPoint:point
+                                                     fromView:referenceView];
+  return pointWithMainViewReference.y;
+}
+
 }  // namespace
 
 @interface SearchEngineChoiceViewController () <UITextViewDelegate>
@@ -179,7 +185,7 @@ UIButton* CreateMorePillButton() {
   // If the user already scroll onces to the button, the button will be hidden.
   // By default the title is "More". As soon as the user selects a search engine
   // the title is changed to "Continue" (the button action is the same).
-  UIButton* _morePillButton;
+  UIButton* _moreOrContinueButton;
   // Container to display the "Set as Default" button in the scroll view.
   // Related to `_inlineSetAsDefaultButton`. This container is used in
   // the animation to transition to `_floatingSetAsDefaultButtonContainer`.
@@ -251,7 +257,11 @@ UIButton* CreateMorePillButton() {
   // Add logo image.
   // Need to use a regular png instead of custom symbol to have a better control
   // on the size and the margin of the logo.
-  UIImage* logoImage = [UIImage imageNamed:kChromeIcon40pt];
+#if BUILDFLAG(IOS_USE_BRANDED_SYMBOLS)
+  UIImage* logoImage = [UIImage imageNamed:kChromeSearchEngineChoiceIcon];
+#else
+  UIImage* logoImage = [UIImage imageNamed:kChromiumSearchEngineChoiceIcon];
+#endif
   UIImageView* logoImageView = [[UIImageView alloc] initWithImage:logoImage];
   [scrollContentView addSubview:logoImageView];
   logoImageView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -359,6 +369,8 @@ UIButton* CreateMorePillButton() {
   _floatingSetAsDefaultButton = CreateSetAsDefaultButton();
   _floatingSetAsDefaultButton.translatesAutoresizingMaskIntoConstraints = NO;
   [_floatingSetAsDefaultButtonContainer addSubview:_floatingSetAsDefaultButton];
+  _floatingSetAsDefaultButton.accessibilityIdentifier =
+      kSetAsDefaultSearchEngineIdentifier;
   _floatingSetAsDefaultButtonContainer.accessibilityContainerType =
       UIAccessibilityContainerTypeSemanticGroup;
   [_floatingSetAsDefaultButton addTarget:self
@@ -368,12 +380,14 @@ UIButton* CreateMorePillButton() {
   // Add "More" pill button.
   // Needs to be the last element added to the view, so it is always above all
   // other elements.
-  _morePillButton = CreateMorePillButton();
-  _morePillButton.translatesAutoresizingMaskIntoConstraints = NO;
-  [view addSubview:_morePillButton];
-  [_morePillButton addTarget:self
-                      action:@selector(moreButtonAction)
-            forControlEvents:UIControlEventTouchUpInside];
+  _moreOrContinueButton = CreateMorePillButton();
+  _moreOrContinueButton.translatesAutoresizingMaskIntoConstraints = NO;
+  [view addSubview:_moreOrContinueButton];
+  _moreOrContinueButton.accessibilityIdentifier =
+      kSearchEngineMoreButtonIdentifier;
+  [_moreOrContinueButton addTarget:self
+                            action:@selector(moreButtonAction)
+                  forControlEvents:UIControlEventTouchUpInside];
 
   // Create a layout guide to constrain the width of the content, while still
   // allowing the scroll view to take the full screen width.
@@ -486,9 +500,10 @@ UIButton* CreateMorePillButton() {
         constraintEqualToAnchor:_searchEngineStackView.centerXAnchor],
 
     // More pill button constraints.
-    [_morePillButton.bottomAnchor
+    [_moreOrContinueButton.bottomAnchor
         constraintEqualToAnchor:buttonBottomMargin.topAnchor],
-    [_morePillButton.centerXAnchor constraintEqualToAnchor:view.centerXAnchor],
+    [_moreOrContinueButton.centerXAnchor
+        constraintEqualToAnchor:view.centerXAnchor],
 
     // _floatingSetAsDefaultButtonContainer constraints.
     [_floatingSetAsDefaultButtonContainer.bottomAnchor
@@ -526,6 +541,11 @@ UIButton* CreateMorePillButton() {
   // No need to update the more and SetAsDefault buttons. They will be updated
   // when the view will be appearing.
   [self loadSearchEngineButtons];
+  [[NSNotificationCenter defaultCenter]
+      addObserver:self
+         selector:@selector(accessibilityElementFocusedNotification:)
+             name:UIAccessibilityElementFocusedNotification
+           object:nil];
 }
 
 - (void)viewIsAppearing:(BOOL)animated {
@@ -586,7 +606,7 @@ UIButton* CreateMorePillButton() {
   }
   EnableSetAsDefaultButton(_inlineSetAsDefaultButton, /*is_enabled=*/YES);
   EnableSetAsDefaultButton(_floatingSetAsDefaultButton, /*is_enabled=*/YES);
-  if (!_morePillButton) {
+  if (!_moreOrContinueButton) {
     // If the more pill button is not visible, the user already saw the last
     // search engine, and since they selected one, then the "Set as Default"
     // button can appear now.
@@ -594,8 +614,10 @@ UIButton* CreateMorePillButton() {
   } else {
     // After selecting a search engine, needs to scroll down to see all
     // search engines before tapping on the "Set as Default" button.
-    SetPillButtonTitle(_morePillButton,
+    SetPillButtonTitle(_moreOrContinueButton,
                        IDS_SEARCH_ENGINE_CHOICE_CONTINUE_BUTTON);
+    _moreOrContinueButton.accessibilityIdentifier =
+        kSearchEngineContinueButtonIdentifier;
   }
 }
 
@@ -605,7 +627,7 @@ UIButton* CreateMorePillButton() {
 //     SetAsDefault is not visible yet).
 //  3- Scrolls up the scrollview to avoid covering the selected search engine.
 - (void)animateFloatingSetAsDefaultContainer {
-  CHECK(!_morePillButton, base::NotFatalUntil::M127);
+  CHECK(!_moreOrContinueButton, base::NotFatalUntil::M127);
 
   // 1- Fades grey color to blue color to have better animation.
   UIButton* fakeButtonForGreyToBlueFading = nil;
@@ -803,8 +825,8 @@ UIButton* CreateMorePillButton() {
   CGFloat scrollPosition =
       _scrollView.contentOffset.y + _scrollView.frame.size.height;
 
-  // 2- Hides `_morePillButton` if the scroll view reaches the end of the stack
-  //    view.
+  // 2- Hides `_moreOrContinueButton` if the scroll view reaches the end of
+  //    the stack view.
   // The limit to remove the more button is when `_searchEngineStackView` is
   // fully visible.
   CGFloat bottomStackViewLimit = _searchEngineStackView.frame.origin.y +
@@ -813,8 +835,8 @@ UIButton* CreateMorePillButton() {
     if (morePillButtonAnimation) {
       [self animateMorePillButtonAway];
     } else {
-      [_morePillButton removeFromSuperview];
-      _morePillButton = nil;
+      [_moreOrContinueButton removeFromSuperview];
+      _moreOrContinueButton = nil;
     }
   }
 
@@ -851,11 +873,11 @@ UIButton* CreateMorePillButton() {
 
 // Animate the more pill button to disappear to the bottom of the screen.
 - (void)animateMorePillButtonAway {
-  if (!_morePillButton) {
+  if (!_moreOrContinueButton) {
     return;
   }
-  UIButton* button = _morePillButton;
-  _morePillButton = nil;
+  UIButton* button = _moreOrContinueButton;
+  _moreOrContinueButton = nil;
   CGAffineTransform transform = button.transform;
   CGFloat translateDistance =
       CGRectGetMaxY(self.view.bounds) - CGRectGetMinY(button.frame);
@@ -871,6 +893,55 @@ UIButton* CreateMorePillButton() {
       completion:^(BOOL finished) {
         [button removeFromSuperview];
       }];
+}
+
+// Scrolls automatically `_scrollView` to make sure the search engine button
+// is always fully visible and not hidden by
+// `_floatingSetAsDefaultButtonContainer`.
+- (void)accessibilityElementFocusedNotification:(NSNotification*)notification {
+  CHECK([notification.name
+      isEqualToString:UIAccessibilityElementFocusedNotification])
+      << base::SysNSStringToUTF8(notification.name);
+  id focusedElement = notification.userInfo[UIAccessibilityFocusedElementKey];
+  if (!focusedElement ||
+      ![focusedElement isKindOfClass:SnippetSearchEngineButton.class] ||
+      _floatingSetAsDefaultButtonContainer.hidden) {
+    return;
+  }
+  SnippetSearchEngineButton* searchEngineButton =
+      base::apple::ObjCCast<SnippetSearchEngineButton>(focusedElement);
+  // Get the bottom of `searchEngineButton` in the reference of `self.view`.
+  CGFloat searchEngineButtonBottom =
+      ConvertVerticalCoordonateWithMainViewReference(
+          self.view, searchEngineButton,
+          CGRectGetMaxY(searchEngineButton.bounds));
+  // Get the top of `floatingSetAsDefaultContainerTop` in the reference of
+  // `self.view`.
+  CGFloat floatingSetAsDefaultContainerTop =
+      ConvertVerticalCoordonateWithMainViewReference(
+          self.view, _floatingSetAsDefaultButtonContainer,
+          CGRectGetMinY(_floatingSetAsDefaultButtonContainer.bounds));
+  if (searchEngineButtonBottom <= floatingSetAsDefaultContainerTop) {
+    // The bottom of `searchEngineButton` is visible, no need to scroll.
+    return;
+  }
+  // `_scrollView` should go down to reveal the bottom of `searchEngineButton`.
+  CGFloat distanceToScrollDown =
+      searchEngineButtonBottom - floatingSetAsDefaultContainerTop;
+  // Get the top of `searchEngineButton` in the reference of `self.view`.
+  CGFloat searchEngineButtonTop =
+      ConvertVerticalCoordonateWithMainViewReference(
+          self.view, searchEngineButton,
+          CGRectGetMinY(searchEngineButton.bounds));
+  if (searchEngineButtonTop - distanceToScrollDown < 0) {
+    // If the distance to scroll will hide the top of `searchEngineButton`,
+    // the scroll distance should be reduced to make sure at the top is visible.
+    distanceToScrollDown += searchEngineButtonTop - distanceToScrollDown;
+  }
+  // Update the scroll position.
+  CGPoint contentOffset = _scrollView.contentOffset;
+  contentOffset.y += distanceToScrollDown;
+  _scrollView.contentOffset = contentOffset;
 }
 
 #pragma mark - UITextViewDelegate

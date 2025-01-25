@@ -35,7 +35,10 @@ class ReadOnlyHeapImageDeserializer final {
       DCHECK_LT(bytecode_as_int, ro::kNumberOfBytecodes);
       switch (static_cast<Bytecode>(bytecode_as_int)) {
         case Bytecode::kAllocatePage:
-          AllocatePage();
+          AllocatePage(false);
+          break;
+        case Bytecode::kAllocatePageAt:
+          AllocatePage(true);
           break;
         case Bytecode::kSegment:
           DeserializeSegment();
@@ -52,14 +55,19 @@ class ReadOnlyHeapImageDeserializer final {
     }
   }
 
-  void AllocatePage() {
+  void AllocatePage(bool fixed_offset) {
+    CHECK_EQ(V8_STATIC_ROOTS_BOOL, fixed_offset);
     size_t expected_page_index = static_cast<size_t>(source_->GetUint30());
     size_t actual_page_index = static_cast<size_t>(-1);
     size_t area_size_in_bytes = static_cast<size_t>(source_->GetUint30());
-    if (V8_STATIC_ROOTS_BOOL) {
+    if (fixed_offset) {
+#ifdef V8_COMPRESS_POINTERS
       uint32_t compressed_page_addr = source_->GetUint32();
-      Address pos = isolate_->GetPtrComprCage()->base() + compressed_page_addr;
+      Address pos = isolate_->cage_base() + compressed_page_addr;
       actual_page_index = ro_space()->AllocateNextPageAt(pos);
+#else
+      UNREACHABLE();
+#endif  // V8_COMPRESS_POINTERS
     } else {
       actual_page_index = ro_space()->AllocateNextPage();
     }
@@ -216,7 +224,7 @@ class ObjectPostProcessor final {
     DCHECK_EQ(o->map(isolate_)->instance_type(), instance_type);
 #define V(TYPE)                                       \
   if (InstanceTypeChecker::Is##TYPE(instance_type)) { \
-    return PostProcess##TYPE(TYPE::cast(o));          \
+    return PostProcess##TYPE(Cast<TYPE>(o));          \
   }
     POST_PROCESS_TYPE_LIST(V)
 #undef V
@@ -317,7 +325,7 @@ void ReadOnlyDeserializer::PostProcessNewObjects() {
     const InstanceType instance_type = o->map(cage_base)->instance_type();
     if (should_rehash()) {
       if (InstanceTypeChecker::IsString(instance_type)) {
-        Tagged<String> str = String::cast(o);
+        Tagged<String> str = Cast<String>(o);
         str->set_raw_hash_field(Name::kEmptyHashField);
         PushObjectToRehash(handle(str, isolate()));
       } else if (o->NeedsRehashing(instance_type)) {

@@ -172,6 +172,11 @@ class CORE_EXPORT ConstraintSpace final {
     return copy;
   }
 
+  // If `this` needs to be modified for a block-in-inline child, creates a clone
+  // in `space`, modifies it, and returns it. Otherwise returns `*this`.
+  const ConstraintSpace& CloneForBlockInInlineIfNeeded(
+      std::optional<ConstraintSpace>& space) const;
+
   ~ConstraintSpace() {
     if (HasRareData())
       delete rare_data_;
@@ -207,7 +212,7 @@ class CORE_EXPORT ConstraintSpace final {
     switch (
         static_cast<PercentageStorage>(bitfields_.percentage_inline_storage)) {
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         [[fallthrough]];
       case kSameAsAvailable:
         return available_size_.inline_size;
@@ -225,7 +230,7 @@ class CORE_EXPORT ConstraintSpace final {
     switch (
         static_cast<PercentageStorage>(bitfields_.percentage_block_storage)) {
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         [[fallthrough]];
       case kSameAsAvailable:
         return available_size_.block_size;
@@ -260,7 +265,7 @@ class CORE_EXPORT ConstraintSpace final {
         DCHECK(HasRareData());
         return rare_data_->replaced_percentage_resolution_block_size;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
 
     return available_size_.block_size;
@@ -279,7 +284,6 @@ class CORE_EXPORT ConstraintSpace final {
       // @page margin and padding are different from those on regular CSS boxes.
       // Inline percentages are resolved against the inline-size of the margin
       // box, and block percentages are resolved against its block-size.
-      DCHECK(!IsOrthogonalWritingModeRoot());
       return PercentageResolutionSize();
     }
 
@@ -310,11 +314,6 @@ class CORE_EXPORT ConstraintSpace final {
       }
     }
     return LogicalSize(cb_inline_size, cb_inline_size);
-  }
-
-  std::optional<MinMaxSizes> OverrideMinMaxBlockSizes() const {
-    return HasRareData() ? rare_data_->OverrideMinMaxBlockSizes()
-                         : std::nullopt;
   }
 
   // True if we're using the "fallback" available inline-size. This typically
@@ -420,9 +419,9 @@ class CORE_EXPORT ConstraintSpace final {
   // fragmentainer, we'll return the block-offset relative to the current
   // fragmentainer.
   LayoutUnit FragmentainerOffset() const {
-    DCHECK(HasBlockFragmentation());
-    if (HasRareData())
+    if (HasRareData() && HasBlockFragmentation()) {
       return rare_data_->fragmentainer_offset;
+    }
     return LayoutUnit();
   }
 
@@ -795,12 +794,20 @@ class CORE_EXPORT ConstraintSpace final {
     return HasRareData() ? rare_data_->GetLineClampData() : LineClampData();
   }
 
+  MarginStrut LineClampEndMarginStrut() const {
+    return HasRareData() ? rare_data_->LineClampEndMarginStrut()
+                         : MarginStrut();
+  }
+
   // Return true if `text-box-trim` is in effect for the block-start/end.
   bool ShouldTextBoxTrimStart() const {
     return HasRareData() && rare_data_->should_text_box_trim_start;
   }
   bool ShouldTextBoxTrimEnd() const {
     return HasRareData() && rare_data_->should_text_box_trim_end;
+  }
+  bool ShouldForceTextBoxTrimEnd() const {
+    return HasRareData() && rare_data_->should_force_text_box_trim_end;
   }
 
   // Return how percentage-based margins and padding should be resolved.
@@ -942,7 +949,6 @@ class CORE_EXPORT ConstraintSpace final {
               other.replaced_percentage_resolution_block_size),
           block_start_annotation_space(other.block_start_annotation_space),
           bfc_offset(other.bfc_offset),
-          override_min_max_block_sizes(other.override_min_max_block_sizes),
           page_name(other.page_name),
           fragmentainer_block_size(other.fragmentainer_block_size),
           fragmentainer_offset(other.fragmentainer_offset),
@@ -965,8 +971,6 @@ class CORE_EXPORT ConstraintSpace final {
           is_past_break(other.is_past_break),
           min_block_size_should_encompass_intrinsic_size(
               other.min_block_size_should_encompass_intrinsic_size),
-          has_override_min_max_block_sizes(
-              other.has_override_min_max_block_sizes),
           uses_orthogonal_fallback_inline_size(
               other.uses_orthogonal_fallback_inline_size),
           min_break_appeal(other.min_break_appeal),
@@ -976,6 +980,7 @@ class CORE_EXPORT ConstraintSpace final {
           is_inside_repeatable_content(other.is_inside_repeatable_content),
           should_text_box_trim_start(other.should_text_box_trim_start),
           should_text_box_trim_end(other.should_text_box_trim_end),
+          should_force_text_box_trim_end(other.should_force_text_box_trim_end),
           decoration_percentage_resolution_type(
               other.decoration_percentage_resolution_type) {
       switch (GetDataUnionType()) {
@@ -1004,7 +1009,7 @@ class CORE_EXPORT ConstraintSpace final {
           new (&subgrid_data_) SubgridData(other.subgrid_data_);
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
       }
     }
     ~RareData() {
@@ -1033,7 +1038,7 @@ class CORE_EXPORT ConstraintSpace final {
           subgrid_data_.~SubgridData();
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
       }
     }
 
@@ -1061,6 +1066,8 @@ class CORE_EXPORT ConstraintSpace final {
           is_inside_repeatable_content != other.is_inside_repeatable_content ||
           should_text_box_trim_start != other.should_text_box_trim_start ||
           should_text_box_trim_end != other.should_text_box_trim_end ||
+          should_force_text_box_trim_end !=
+              other.should_force_text_box_trim_end ||
           decoration_percentage_resolution_type !=
               other.decoration_percentage_resolution_type) {
         return false;
@@ -1084,7 +1091,7 @@ class CORE_EXPORT ConstraintSpace final {
         case DataUnionType::kSubgridData:
           return subgrid_data_.MaySkipLayout(other.subgrid_data_);
       }
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
     }
 
@@ -1102,6 +1109,7 @@ class CORE_EXPORT ConstraintSpace final {
           propagate_child_break_values || is_at_fragmentainer_start ||
           should_repeat || is_inside_repeatable_content ||
           should_text_box_trim_start || should_text_box_trim_end ||
+          should_force_text_box_trim_end ||
           decoration_percentage_resolution_type) {
         return false;
       }
@@ -1124,7 +1132,7 @@ class CORE_EXPORT ConstraintSpace final {
         case DataUnionType::kSubgridData:
           return subgrid_data_.IsInitialForMaySkipLayout();
       }
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
     }
 
@@ -1173,22 +1181,6 @@ class CORE_EXPORT ConstraintSpace final {
                  : LayoutUnit::Min();
     }
 
-    std::optional<MinMaxSizes> OverrideMinMaxBlockSizes() const {
-      if (has_override_min_max_block_sizes)
-        return override_min_max_block_sizes;
-      return std::nullopt;
-    }
-
-    void SetOverrideMinMaxBlockSizes(const MinMaxSizes& min_max_sizes) {
-      if (min_max_sizes.IsEmpty()) {
-        has_override_min_max_block_sizes = false;
-        return;
-      }
-      DCHECK_GE(min_max_sizes.max_size, min_max_sizes.min_size);
-      has_override_min_max_block_sizes = true;
-      override_min_max_block_sizes = min_max_sizes;
-    }
-
     void SetClearanceOffset(LayoutUnit clearance_offset) {
       EnsureBlockData()->clearance_offset = clearance_offset;
     }
@@ -1201,6 +1193,16 @@ class CORE_EXPORT ConstraintSpace final {
 
     void SetLineClampData(LineClampData value) {
       EnsureBlockData()->line_clamp_data = value;
+    }
+
+    MarginStrut LineClampEndMarginStrut() const {
+      return GetDataUnionType() == DataUnionType::kBlockData
+                 ? block_data_.line_clamp_end_margin_strut
+                 : MarginStrut();
+    }
+
+    void SetLineClampEndMarginStrut(MarginStrut value) {
+      EnsureBlockData()->line_clamp_end_margin_strut = value;
     }
 
     void SetIsTableCell() { EnsureTableCellData(); }
@@ -1343,7 +1345,6 @@ class CORE_EXPORT ConstraintSpace final {
     LayoutUnit replaced_percentage_resolution_block_size;
     LayoutUnit block_start_annotation_space;
     BfcOffset bfc_offset;
-    MinMaxSizes override_min_max_block_sizes;
 
     AtomicString page_name;
     LayoutUnit fragmentainer_block_size = kIndefiniteSize;
@@ -1366,7 +1367,6 @@ class CORE_EXPORT ConstraintSpace final {
     unsigned is_in_column_bfc : 1 = false;
     unsigned is_past_break : 1 = false;
     unsigned min_block_size_should_encompass_intrinsic_size : 1 = false;
-    unsigned has_override_min_max_block_sizes : 1 = false;
     unsigned uses_orthogonal_fallback_inline_size : 1 = false;
     unsigned min_break_appeal
         : kBreakAppealBitsNeeded =
@@ -1377,6 +1377,7 @@ class CORE_EXPORT ConstraintSpace final {
     unsigned is_inside_repeatable_content : 1 = false;
     unsigned should_text_box_trim_start : 1 = false;
     unsigned should_text_box_trim_end : 1 = false;
+    unsigned should_force_text_box_trim_end : 1 = false;
     unsigned decoration_percentage_resolution_type : 1 = static_cast<unsigned>(
         DecorationPercentageResolutionType::kContainingBlockInlineSize);
 
@@ -1395,6 +1396,7 @@ class CORE_EXPORT ConstraintSpace final {
       std::optional<LayoutUnit> forced_bfc_block_offset;
       LayoutUnit clearance_offset = LayoutUnit::Min();
       LineClampData line_clamp_data;
+      MarginStrut line_clamp_end_margin_strut;
     };
 
     struct TableCellData {
@@ -1682,6 +1684,16 @@ class CORE_EXPORT ConstraintSpace final {
 
   void DisableMonolithicOverflowPropagation() {
     EnsureRareData()->is_monolithic_overflow_propagation_disabled = true;
+  }
+
+  void SetShouldTextBoxTrimStart() {
+    EnsureRareData()->should_text_box_trim_start = true;
+  }
+  void SetShouldTextBoxTrimEnd(bool value = true) {
+    EnsureRareData()->should_text_box_trim_end = value;
+  }
+  void SetShouldForceTextBoxTrimEnd(bool value = true) {
+    EnsureRareData()->should_force_text_box_trim_end = value;
   }
 
   LogicalSize available_size_;

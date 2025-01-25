@@ -46,7 +46,6 @@
 <translation id="241082044617551207">Nepoznati dodatak</translation>
 <translation id="2439110203301358333">Drugi program na vašem računalu dodao je proširenje koje može promijeniti način na koji radi Vivaldi.</translation>
 <translation id="2445081178310039857">Obavezan je korijenski direktorij proširenja.</translation>
-<translation id="2470702053775288986">Onemogućena su nepodržana proširenja</translation>
 <translation id="2553440850688409052">Sakrij ovaj dodatak</translation>
 <translation id="26224892172169984">Ne dopusti nijednoj web-lokaciji rukovanje protokolima</translation>
 <translation id="2662876636500006917">Vivaldi web-trgovina</translation>
@@ -98,7 +97,6 @@
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> K (<ph name="NUM_KILOBYTES_LIVE" /> K izravno)</translation>
 <translation id="4345587454538109430">Konfiguracija...</translation>
 <translation id="4348766275249686434">Prikupite pogreške</translation>
-<translation id="4363771538994847871">Nije pronađeno nijedno odredište za emitiranje. Trebate li pomoć?</translation>
 <translation id="4384652540891215547">Aktiviranje proširenja</translation>
 <translation id="4595560905247879544">Aplikacije i proširenja može mijenjati samo voditelj (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Proširenje je promijenilo stranicu koja se prikazuje kada otvorite novu karticu.</translation>
@@ -167,7 +165,6 @@
 <translation id="7704305437604973648">Zadatak</translation>
 <translation id="7710568461918838723">&amp;Prebaci...</translation>
 <translation id="7786889348652477777">&amp;Ponovo učitaj aplikaciju</translation>
-<translation id="7791543448312431591">Dodaj</translation>
 <translation id="7818135753970109980">Dodana je nova tema (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">K&amp;opiraj adresu videozapisa</translation>
 <translation id="786073089922909430">Usluga: <ph name="ARC_PROCESS_NAME" /></translation>

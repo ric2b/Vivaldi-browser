@@ -4,7 +4,7 @@
 
 // clang-format off
 import type {SettingsRoutes} from 'chrome://settings/settings.js';
-import {resetRouterForTesting, buildRouter, loadTimeData, Route, Router, routes, setPageVisibilityForTesting} from 'chrome://settings/settings.js';
+import {resetRouterForTesting, buildRouter, loadTimeData, Route, Router, routes, resetPageVisibilityForTesting} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
@@ -257,7 +257,7 @@ suite('Basic', function() {
 
     // <if expr="chromeos_ash">
     // Regression test for b/265453606.
-    assertFalse(!!routes.SIGN_OUT);
+    assertFalse('SIGN_OUT' in routes);
     // </if>
 
     // <if expr="not chromeos_ash">
@@ -274,7 +274,7 @@ suite('Basic', function() {
   });
 
   test('pageVisibility affects route availability', function() {
-    setPageVisibilityForTesting({
+    resetPageVisibilityForTesting({
       appearance: false,
       autofill: false,
       defaultBrowser: false,

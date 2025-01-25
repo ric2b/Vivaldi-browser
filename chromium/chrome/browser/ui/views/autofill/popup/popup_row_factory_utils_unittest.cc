@@ -44,7 +44,8 @@ class PopupRowFactoryUtilsTestBase : public ChromeViewsTestBase {
  public:
   void SetUp() override {
     ChromeViewsTestBase::SetUp();
-    widget_ = CreateTestWidget();
+    widget_ =
+        CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
     generator_ = std::make_unique<ui::test::EventGenerator>(
         GetRootWindow(widget_.get()));
   }
@@ -169,7 +170,8 @@ class PasswordPopupRowViewTest : public PopupRowFactoryUtilsTestBase {
   }
 
   void ShowPasswordSuggestionWithLoadingState(bool is_loading) {
-    Suggestion suggestion{u"ortiler", SuggestionType::kPasswordEntry};
+    Suggestion suggestion(u"ortiler", SuggestionType::kPasswordEntry);
+    suggestion.labels = {{Suggestion::Text(u"password")}};
     suggestion.is_loading = Suggestion::IsLoading(is_loading);
     ShowSuggestion(suggestion);
   }

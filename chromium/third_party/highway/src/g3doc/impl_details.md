@@ -1,7 +1,5 @@
 # Highway implementation details
 
-[TOC]
-
 ## Introduction
 
 This doc explains some of the Highway implementation details; understanding them
@@ -223,12 +221,12 @@ When adding a new op, it is often necessary to consult the reference for each
 platform's intrinsics.
 
 For x86 targets `HWY_SSE2`, `HWY_SSSE3`, `HWY_SSE4`, `HWY_AVX2`, `HWY_AVX3`,
-`HWY_AVX3_DL`, `HWY_AVX3_ZEN4` Intel provides a
+`HWY_AVX3_DL`, `HWY_AVX3_ZEN4`, `HWY_AVX3_SPR` Intel provides a
 [searchable reference](https://www.intel.com/content/www/us/en/docs/intrinsics-guide).
 
-For Arm targets `HWY_NEON`, `HWY_NEON_WITHOUT_AES`, `HWY_SVE` (plus its
-specialization for 256-bit vectors `HWY_SVE_256`), `HWY_SVE2` (plus its
-specialization for 128-bit vectors `HWY_SVE2_128`), Arm provides a
+For Arm targets `HWY_NEON`, `HWY_NEON_WITHOUT_AES`, `HWY_NEON_BF16`, `HWY_SVE`
+(plus its specialization for 256-bit vectors `HWY_SVE_256`), `HWY_SVE2` (plus
+its specialization for 128-bit vectors `HWY_SVE2_128`), Arm provides a
 [searchable reference](https://developer.arm.com/architectures/instruction-sets/intrinsics).
 
 For RISC-V target `HWY_RVV`, we refer to the assembly language
@@ -245,6 +243,11 @@ For POWER targets `HWY_PPC8`, `HWY_PPC9`, `HWY_PPC10`, there is
 [documentation of intrinsics](https://files.openpower.foundation/s/9nRDmJgfjM8MpR7),
 the [ISA](https://files.openpower.foundation/s/dAYSdGzTfW4j2r2), plus a
 [searchable reference](https://www.ibm.com/docs/en/openxl-c-and-cpp-aix/17.1.1?).
+
+For ZVector targets `HWY_Z14`, `HWY_Z15`, `HWY_Z16`, there is the
+[ISA](https://www.ibm.com/support/pages/zarchitecture-principles-operation)
+(requires IBMid login), plus a
+[searchable reference](https://www.ibm.com/docs/en/zos/2.5.0?topic=topics-using-vector-programming-support).
 
 ## Why scalar target
 

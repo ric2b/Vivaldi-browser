@@ -9,9 +9,9 @@
 
 namespace flag_descriptions {
 
-const char kNewStartPageLayout[] = "Enable new Start page layout";
-const char kNewStartPageLayoutDescription[] =
-    "When enabled, Vivaldi's new start page layout will be visible";
+const char kShowTopSites[] = "Enable top sites";
+const char kShowTopSitesDescription[] =
+    "When enabled, top sites are shown in start page and speed dial add dialog";
 
 const char kViewMarkdownAsHTMLName[] =
     "Enable 'View as HTML' toggle button in notes editor";

@@ -7,6 +7,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_app_interface.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_matchers.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -85,11 +86,27 @@ using base::test::ios::WaitUntilConditionOrTimeout;
     [OmniboxEarlGrey openPage:i testServer:testServer];
     GURL URL = testServer->GetURL(omnibox::PageURL(pageI));
     [ChromeEarlGreyUI
-        focusOmniboxAndType:base::SysUTF8ToNSString(omnibox::PageTitle(pageI))];
+        focusOmniboxAndReplaceText:base::SysUTF8ToNSString(
+                                       omnibox::PageTitle(pageI))];
     [[EarlGrey selectElementWithMatcher:omnibox::PopupRowWithUrlMatcher(URL)]
         performAction:grey_tap()];
     [ChromeEarlGrey waitForWebStateContainingText:omnibox::PageContent(pageI)];
   }
+}
+
+- (id<GREYMatcher>)isURLMatcher {
+  GREYMatchesBlock matches = ^BOOL(id element) {
+    return [OmniboxAppInterface isElementURL:element];
+  };
+  NSString* descriptionString =
+      [NSString stringWithFormat:@"Element is a valid URL."];
+  GREYDescribeToBlock describe = ^(id<GREYDescription> description) {
+    [description appendText:descriptionString];
+  };
+  id<GREYMatcher> URLMatcher =
+      [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
+                                           descriptionBlock:describe];
+  return URLMatcher;
 }
 
 @end

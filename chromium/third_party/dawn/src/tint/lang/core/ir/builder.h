@@ -30,9 +30,8 @@
 
 #include <utility>
 
-#include "src/tint/lang/core/constant/composite.h"
-#include "src/tint/lang/core/constant/scalar.h"
-#include "src/tint/lang/core/constant/splat.h"
+#include "src/tint/lang/core/constant/scalar.h"  // IWYU pragma: export
+#include "src/tint/lang/core/constant/splat.h"   // IWYU pragma: export
 #include "src/tint/lang/core/ir/access.h"
 #include "src/tint/lang/core/ir/bitcast.h"
 #include "src/tint/lang/core/ir/block_param.h"
@@ -56,6 +55,7 @@
 #include "src/tint/lang/core/ir/load.h"
 #include "src/tint/lang/core/ir/load_vector_element.h"
 #include "src/tint/lang/core/ir/loop.h"
+#include "src/tint/lang/core/ir/member_builtin_call.h"
 #include "src/tint/lang/core/ir/module.h"
 #include "src/tint/lang/core/ir/multi_in_block.h"
 #include "src/tint/lang/core/ir/next_iteration.h"
@@ -67,18 +67,20 @@
 #include "src/tint/lang/core/ir/terminate_invocation.h"
 #include "src/tint/lang/core/ir/unreachable.h"
 #include "src/tint/lang/core/ir/user_call.h"
-#include "src/tint/lang/core/ir/value.h"
+#include "src/tint/lang/core/ir/value.h"  // IWYU pragma: export
 #include "src/tint/lang/core/ir/var.h"
-#include "src/tint/lang/core/type/array.h"
-#include "src/tint/lang/core/type/bool.h"
-#include "src/tint/lang/core/type/f16.h"
-#include "src/tint/lang/core/type/f32.h"
-#include "src/tint/lang/core/type/i32.h"
+#include "src/tint/lang/core/type/array.h"  // IWYU pragma: export
+#include "src/tint/lang/core/type/bool.h"   // IWYU pragma: export
+#include "src/tint/lang/core/type/f16.h"    // IWYU pragma: export
+#include "src/tint/lang/core/type/f32.h"    // IWYU pragma: export
+#include "src/tint/lang/core/type/i32.h"    // IWYU pragma: export
 #include "src/tint/lang/core/type/matrix.h"
-#include "src/tint/lang/core/type/pointer.h"
-#include "src/tint/lang/core/type/u32.h"
+#include "src/tint/lang/core/type/memory_view.h"
+#include "src/tint/lang/core/type/pointer.h"  // IWYU pragma: export
+#include "src/tint/lang/core/type/type.h"     // IWYU pragma: export
+#include "src/tint/lang/core/type/u32.h"      // IWYU pragma: export
 #include "src/tint/lang/core/type/vector.h"
-#include "src/tint/lang/core/type/void.h"
+#include "src/tint/lang/core/type/void.h"  // IWYU pragma: export
 #include "src/tint/utils/ice/ice.h"
 #include "src/tint/utils/macros/scoped_assignment.h"
 #include "src/tint/utils/rtti/switch.h"
@@ -361,6 +363,10 @@ class Builder {
         return Constant(ConstantValue(v));
     }
 
+    /// Creates a new invalid ir::Constant
+    /// @returns the new constant
+    ir::Constant* InvalidConstant() { return Constant(ir.constant_values.Invalid()); }
+
     /// Retrieves the inner constant from an ir::Constant
     /// @param constant the ir constant
     /// @returns the core::constant::Value inside the constant
@@ -394,26 +400,37 @@ class Builder {
         return ir.constant_values.Get(v);
     }
 
+    /// Return a constant that has the same number of vector components as `match`, each with the
+    /// `value`. If `match` is scalar just return `value` as a constant.
+    /// @param value the value
+    /// @param match the type to match
+    /// @returns the new constant
+    template <typename ARG>
+    ir::Constant* MatchWidth(ARG&& value, const core::type::Type* match) {
+        auto* element = Constant(std::forward<ARG>(value));
+        if (match->Is<core::type::Vector>()) {
+            return Splat(ir.Types().match_width(element->Type(), match), element);
+        }
+        return element;
+    }
+
     /// Creates a new ir::Constant
     /// @param ty the splat type
     /// @param value the splat value
-    /// @param size the number of items
     /// @returns the new constant
     template <typename ARG>
-    ir::Constant* Splat(const core::type::Type* ty, ARG&& value, size_t size) {
-        return Constant(
-            ir.constant_values.Splat(ty, ConstantValue(std::forward<ARG>(value)), size));
+    ir::Constant* Splat(const core::type::Type* ty, ARG&& value) {
+        return Constant(ir.constant_values.Splat(ty, ConstantValue(std::forward<ARG>(value))));
     }
 
     /// Creates a new ir::Constant
     /// @tparam TYPE the splat type
     /// @param value the splat value
-    /// @param size the number of items
     /// @returns the new constant
     template <typename TYPE, typename ARG>
-    ir::Constant* Splat(ARG&& value, size_t size) {
+    ir::Constant* Splat(ARG&& value) {
         auto* type = ir.Types().Get<TYPE>();
-        return Splat(type, std::forward<ARG>(value), size);
+        return Splat(type, std::forward<ARG>(value));
     }
 
     /// Creates a new ir::Constant
@@ -434,6 +451,14 @@ class Builder {
     ir::Constant* Composite(ARGS&&... values) {
         auto* type = ir.Types().Get<TYPE>();
         return Composite(type, std::forward<ARGS>(values)...);
+    }
+
+    /// Creates a new zero-value ir::Constant
+    /// @tparam TYPE the constant type
+    /// @returns the new constant
+    template <typename TYPE>
+    ir::Constant* Zero() {
+        return Constant(ir.constant_values.Zero(ir.Types().Get<TYPE>()));
     }
 
     /// Creates a new zero-value ir::Constant
@@ -916,12 +941,8 @@ class Builder {
     /// @param val the value
     /// @returns the operation
     template <typename VAL>
-    ir::CoreBinary* Not(const core::type::Type* type, VAL&& val) {
-        if (auto* vec = type->As<core::type::Vector>()) {
-            return Equal(type, std::forward<VAL>(val), Splat(vec, false, vec->Width()));
-        } else {
-            return Equal(type, std::forward<VAL>(val), Constant(false));
-        }
+    ir::CoreUnary* Not(const core::type::Type* type, VAL&& val) {
+        return Unary(UnaryOp::kNot, type, std::forward<VAL>(val));
     }
 
     /// Creates a Not operation
@@ -929,7 +950,7 @@ class Builder {
     /// @param val the value
     /// @returns the operation
     template <typename TYPE, typename VAL>
-    ir::CoreBinary* Not(VAL&& val) {
+    ir::CoreUnary* Not(VAL&& val) {
         auto* type = ir.Types().Get<TYPE>();
         return Not(type, std::forward<VAL>(val));
     }
@@ -1061,6 +1082,43 @@ class Builder {
                                      Values(std::forward<ARGS>(args)...));
     }
 
+    /// Creates a member builtin call instruction with an existing instruction result.
+    /// @param result the instruction result to use
+    /// @param func the builtin function to call
+    /// @param obj the object
+    /// @param args the call arguments
+    /// @returns the instruction
+    template <typename KLASS, typename FUNC, typename OBJ, typename... ARGS>
+    tint::traits::EnableIf<tint::traits::IsTypeOrDerived<KLASS, ir::MemberBuiltinCall>, KLASS*>
+    MemberCallWithResult(ir::InstructionResult* result, FUNC func, OBJ&& obj, ARGS&&... args) {
+        return Append(ir.allocators.instructions.Create<KLASS>(
+            result, func, Value(std::forward<OBJ>(obj)), Values(std::forward<ARGS>(args)...)));
+    }
+
+    /// Creates a member builtin call instruction.
+    /// @param type the return type of the call
+    /// @param func the builtin function to call
+    /// @param obj the object
+    /// @param args the call arguments
+    /// @returns the instruction
+    template <typename KLASS, typename FUNC, typename OBJ, typename... ARGS>
+    tint::traits::EnableIf<tint::traits::IsTypeOrDerived<KLASS, ir::MemberBuiltinCall>, KLASS*>
+    MemberCall(const core::type::Type* type, FUNC func, OBJ&& obj, ARGS&&... args) {
+        return MemberCallWithResult<KLASS>(InstructionResult(type), func,
+                                           Value(std::forward<OBJ>(obj)),
+                                           Values(std::forward<ARGS>(args)...));
+    }
+
+    /// Creates a value conversion instruction with an existing instruction result.
+    /// @param result the instruction result to use
+    /// @param val the value to be converted
+    /// @returns the instruction
+    template <typename VAL>
+    ir::Convert* ConvertWithResult(ir::InstructionResult* result, VAL&& val) {
+        return Append(
+            ir.allocators.instructions.Create<ir::Convert>(result, Value(std::forward<VAL>(val))));
+    }
+
     /// Creates a value conversion instruction to the template type T
     /// @param val the value to be converted
     /// @returns the instruction
@@ -1076,8 +1134,7 @@ class Builder {
     /// @returns the instruction
     template <typename VAL>
     ir::Convert* Convert(const core::type::Type* to, VAL&& val) {
-        return Append(ir.allocators.instructions.Create<ir::Convert>(
-            InstructionResult(to), Value(std::forward<VAL>(val))));
+        return ConvertWithResult(InstructionResult(to), Value(std::forward<VAL>(val)));
     }
 
     /// Creates a value constructor instruction with an existing instruction result
@@ -1243,6 +1300,19 @@ class Builder {
         return Var(name, ir.Types().ptr<SPACE, T, ACCESS>());
     }
 
+    /// Creates a new `var` declaration with a name
+    /// @param name the var name
+    /// @param space the var's address space
+    /// @param subtype the storage pointer's element type
+    /// @param access the var's access mode
+    /// @returns the instruction
+    ir::Var* Var(std::string_view name,
+                 core::AddressSpace space,
+                 const core::type::Type* subtype,
+                 core::Access access = core::Access::kUndefined) {
+        return Var(name, ir.Types().ptr(space, subtype, access));
+    }
+
     /// Creates a new `let` declaration
     /// @param name the let name
     /// @param value the let value
@@ -1304,14 +1374,32 @@ class Builder {
     /// Creates a loop break-if instruction
     /// @param condition the break condition
     /// @param loop the loop being iterated
-    /// @param args the arguments for the target MultiInBlock
     /// @returns the instruction
-    template <typename CONDITION, typename... ARGS>
-    ir::BreakIf* BreakIf(ir::Loop* loop, CONDITION&& condition, ARGS&&... args) {
-        CheckForNonDeterministicEvaluation<CONDITION, ARGS...>();
+    template <typename CONDITION>
+    ir::BreakIf* BreakIf(ir::Loop* loop, CONDITION&& condition) {
+        CheckForNonDeterministicEvaluation<CONDITION>();
+        auto* cond_val = Value(std::forward<CONDITION>(condition));
+        return Append(ir.allocators.instructions.Create<ir::BreakIf>(cond_val, loop));
+    }
+
+    /// Creates a loop break-if instruction
+    /// @param condition the break condition
+    /// @param loop the loop being iterated
+    /// @param next_iter_values the arguments passed to the loop body MultiInBlock, if the break
+    /// condition evaluates to `false`.
+    /// @param exit_values the values returned by the loop, if the break condition evaluates to
+    /// `true`.
+    /// @returns the instruction
+    template <typename CONDITION, typename NEXT_ITER_VALUES, typename EXIT_VALUES>
+    ir::BreakIf* BreakIf(ir::Loop* loop,
+                         CONDITION&& condition,
+                         NEXT_ITER_VALUES&& next_iter_values,
+                         EXIT_VALUES&& exit_values) {
+        CheckForNonDeterministicEvaluation<CONDITION, NEXT_ITER_VALUES, EXIT_VALUES>();
         auto* cond_val = Value(std::forward<CONDITION>(condition));
         return Append(ir.allocators.instructions.Create<ir::BreakIf>(
-            cond_val, loop, Values(std::forward<ARGS>(args)...)));
+            cond_val, loop, Values(std::forward<NEXT_ITER_VALUES>(next_iter_values)),
+            Values(std::forward<EXIT_VALUES>(exit_values))));
     }
 
     /// Creates a continue instruction
@@ -1386,6 +1474,15 @@ class Builder {
     ir::BlockParam* BlockParam(std::string_view name) {
         auto* type = ir.Types().Get<TYPE>();
         return BlockParam(name, type);
+    }
+
+    /// Creates a new `BlockParam`
+    /// @tparam TYPE the parameter type
+    /// @returns the value
+    template <typename TYPE>
+    ir::BlockParam* BlockParam() {
+        auto* type = ir.Types().Get<TYPE>();
+        return BlockParam(type);
     }
 
     /// Creates a new `FunctionParam`

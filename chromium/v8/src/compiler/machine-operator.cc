@@ -567,6 +567,10 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
   IF_WASM(V, F32x4RelaxedMax, Operator::kNoProperties, 2, 0, 1)                \
   IF_WASM(V, F64x2RelaxedMin, Operator::kNoProperties, 2, 0, 1)                \
   IF_WASM(V, F64x2RelaxedMax, Operator::kNoProperties, 2, 0, 1)                \
+  IF_WASM(V, F32x8RelaxedMin, Operator::kNoProperties, 2, 0, 1)                \
+  IF_WASM(V, F32x8RelaxedMax, Operator::kNoProperties, 2, 0, 1)                \
+  IF_WASM(V, F64x4RelaxedMin, Operator::kNoProperties, 2, 0, 1)                \
+  IF_WASM(V, F64x4RelaxedMax, Operator::kNoProperties, 2, 0, 1)                \
   IF_WASM(V, I32x4RelaxedTruncF32x4S, Operator::kNoProperties, 1, 0, 1)        \
   IF_WASM(V, I32x4RelaxedTruncF32x4U, Operator::kNoProperties, 1, 0, 1)        \
   IF_WASM(V, I32x4RelaxedTruncF64x2SZero, Operator::kNoProperties, 1, 0, 1)    \
@@ -875,6 +879,7 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
   V(Int64MulWithOverflow, Operator::kAssociative | Operator::kCommutative)
 
 #define MACHINE_TYPE_LIST(V) \
+  V(Float16)                 \
   V(Float32)                 \
   V(Float64)                 \
   V(Simd128)                 \
@@ -898,6 +903,7 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
   V(Simd256)
 
 #define MACHINE_REPRESENTATION_LIST(V) \
+  V(kFloat16)                          \
   V(kFloat32)                          \
   V(kFloat64)                          \
   V(kSimd128)                          \
@@ -2701,17 +2707,14 @@ const Operator* MachineOperatorBuilder::LoadStackPointer() {
   return zone_->New<LoadStackPointerOperator>();
 }
 
-const Operator* MachineOperatorBuilder::SetStackPointer(
-    wasm::FPRelativeScope fp_scope) {
-  class SetStackPointerOperator final
-      : public Operator1<wasm::FPRelativeScope> {
+const Operator* MachineOperatorBuilder::SetStackPointer() {
+  class SetStackPointerOperator final : public Operator {
    public:
-    explicit SetStackPointerOperator(wasm::FPRelativeScope fp_scope)
-        : Operator1<wasm::FPRelativeScope>(IrOpcode::kSetStackPointer,
-                                           kNoProperties, "SetStackPointer", 1,
-                                           1, 0, 0, 1, 0, fp_scope) {}
+    SetStackPointerOperator()
+        : Operator(IrOpcode::kSetStackPointer, kNoProperties, "SetStackPointer",
+                   1, 1, 0, 0, 1, 0) {}
   };
-  return zone_->New<SetStackPointerOperator>(fp_scope);
+  return zone_->New<SetStackPointerOperator>();
 }
 #endif
 

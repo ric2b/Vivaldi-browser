@@ -12,14 +12,14 @@ layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uint inner;
 } prevent_dce;
 
-void atomicXor_c8e6be() {
+uint atomicXor_c8e6be() {
   uint res = atomicXor(arg_0, 1u);
-  prevent_dce.inner = res;
+  return res;
 }
 
 void compute_main(uint local_invocation_index) {
   tint_zero_workgroup_memory(local_invocation_index);
-  atomicXor_c8e6be();
+  prevent_dce.inner = atomicXor_c8e6be();
 }
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;

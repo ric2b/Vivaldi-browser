@@ -38,6 +38,16 @@
 namespace np_ffi {
 namespace internal {
 
+/// The possible boolean action types which can be present in an Actions data element
+enum class ActionType : uint8_t {
+  CrossDevSdk = 1,
+  CallTransfer = 4,
+  ActiveUnlock = 8,
+  NearbyShare = 9,
+  InstantTethering = 10,
+  PhoneHub = 11,
+};
+
 /// Result type for trying to add a V0 credential to a credential-slab.
 enum class AddV0CredentialToSlabResult : uint8_t {
   /// We succeeded in adding the credential to the slab.
@@ -112,27 +122,6 @@ enum class AdvertisementBuilderKind : uint8_t {
   Encrypted = 1,
 };
 
-/// The possible boolean action types which can be present in an Actions data element
-enum class BooleanActionType : uint8_t {
-  ActiveUnlock = 8,
-  NearbyShare = 9,
-  InstantTethering = 10,
-  PhoneHub = 11,
-  PresenceManager = 12,
-  Finder = 13,
-  FastPairSass = 14,
-};
-
-/// Discriminant for `BuildContextSyncSeqNumResult`.
-enum class BuildContextSyncSeqNumResultKind : uint8_t {
-  /// The sequence number was outside the allowed
-  /// 0-15 single-nibble range.
-  OutOfRange = 0,
-  /// The sequence number was in range,
-  /// and so a `ContextSyncSeqNum` was constructed.
-  Success = 1,
-};
-
 /// Discriminant for `BuildTxPowerResult`.
 enum class BuildTxPowerResultKind : uint8_t {
   /// The transmission power was outside the
@@ -149,45 +138,9 @@ enum class CreateCredentialBookResultKind : uint8_t {
   /// The associated payload may be obtained via
   /// `CreateCredentialBookResult#into_success()`.
   Success = 0,
-  /// There was no space left to create a new credential book
-  NoSpaceLeft = 1,
   /// The slab that we tried to create a credential-book from
   /// actually was an invalid handle.
-  InvalidSlabHandle = 2,
-};
-
-/// Discriminant for `CreateCredentialSlabResult`
-enum class CreateCredentialSlabResultKind : uint8_t {
-  /// There was no space left to create a new credential slab
-  NoSpaceLeft = 0,
-  /// We created a new credential slab behind the given handle.
-  /// The associated payload may be obtained via
-  /// `CreateCredentialSlabResult#into_success()`.
-  Success = 1,
-};
-
-/// Discriminant for `CreateV0AdvertisementBuilderResult`
-enum class CreateV0AdvertisementBuilderResultKind : uint8_t {
-  /// The attempt to create a new advertisement builder
-  /// failed since there are no more available
-  /// slots for V0 advertisement builders in their handle-map.
-  NoSpaceLeft = 0,
-  /// The attempt succeeded. The wrapped advertisement builder
-  /// may be obtained via
-  /// `CreateV0AdvertisementBuilderResult#into_success`.
-  Success = 1,
-};
-
-/// Discriminant for `CreateV1AdvertisementBuilderResult`
-enum class CreateV1AdvertisementBuilderResultKind : uint8_t {
-  /// The attempt to create a new advertisement builder
-  /// failed since there are no more available
-  /// slots for V1 advertisement builders in their handle-map.
-  NoSpaceLeft = 0,
-  /// The attempt succeeded. The wrapped advertisement builder
-  /// may be obtained via
-  /// `CreateV1AdvertisementBuilderResult#into_success`.
-  Success = 1,
+  InvalidSlabHandle = 1,
 };
 
 /// Discriminant for `CreateV1SectionBuilderResult`
@@ -213,9 +166,9 @@ enum class CreateV1SectionBuilderResultKind : uint8_t {
 /// succeeded or failed due to the requested handle not being present.
 enum class DeallocateResult {
   /// The requested handle to deallocate was not present in the map
-  NotPresent = 0,
+  NotPresent = 1,
   /// The object behind the handle was successfully deallocated
-  Success = 1,
+  Success = 2,
 };
 
 /// Discriminant for `DecryptMetadataResult`.
@@ -248,21 +201,21 @@ enum class DeserializedV0AdvertisementKind : uint8_t {
   /// The deserialized V0 advertisement was legible.
   /// The associated payload may be obtained via
   /// `DeserializedV0Advertisement#into_legible`.
-  Legible = 0,
+  Legible = 1,
   /// The deserialized V0 advertisement is illegible,
   /// likely meaning that the receiver does not hold
   /// the proper credentials to be able to read
   /// the received advertisement.
-  NoMatchingCredentials = 1,
+  NoMatchingCredentials = 2,
 };
 
 /// Discriminant for deserialized information about the V0
 /// identity utilized by a deserialized V0 advertisement.
 enum class DeserializedV0IdentityKind : uint8_t {
   /// The deserialized identity was a plaintext identity.
-  Plaintext = 0,
+  Plaintext = 1,
   /// The deserialized identity was some decrypted identity.
-  Decrypted = 1,
+  Decrypted = 2,
 };
 
 /// Discriminant for `DeserializedV1Identity`.
@@ -272,19 +225,6 @@ enum class DeserializedV1IdentityKind : uint8_t {
   /// The deserialized v1 identity corresponded
   /// to some kind of decrypted identity.
   Decrypted = 1,
-};
-
-/// The DE type for an encrypted identity
-enum class EncryptedIdentityType : uint8_t {
-  /// Identity for broadcasts to nearby devices with the same
-  /// logged-in-account (for some account).
-  Private = 1,
-  /// Identity for broadcasts to nearby devices which this
-  /// device has declared to trust.
-  Trusted = 2,
-  /// Identity for broadcasts to devices which have been provisioned
-  /// offline with this device.
-  Provisioned = 4,
 };
 
 enum class GetMetadataBufferPartsResultKind : uint8_t {
@@ -402,19 +342,26 @@ enum class PanicReason : uint8_t {
   /// be messing with stack-allocated data structures for this library
   /// in an entirely unexpected way.
   InvalidStackDataStructure = 2,
+  /// The maximum amount of allocations per type is `u32::MAX`, this panic handler is invoked
+  /// with this reason when this is exceeded. Clients should never need more than 4 Billions
+  /// handles and would certainly run into other issues before reaching that point
+  ExceededMaxHandleAllocations = 3,
 };
 
 /// Discriminant for `SerializeV0AdvertisementResult`.
 enum class SerializeV0AdvertisementResultKind : uint8_t {
   /// Serializing the advertisement to bytes was successful.
   Success = 0,
+  /// The advertisement builder handle was invalid.
+  InvalidAdvertisementBuilderHandle = 1,
   /// Serializing the advertisement to bytes failed
   /// because the data in the advertisement wasn't
   /// of an appropriate size for LDT encryption
   /// to succeed.
-  LdtError = 1,
-  /// The advertisement builder handle was invalid.
-  InvalidAdvertisementBuilderHandle = 2,
+  LdtError = 2,
+  /// Serializing an unencrypted adv failed because the adv data didn't meet the length
+  /// requirements.
+  UnencryptedError = 3,
 };
 
 /// Discriminant for `SerializeV1AdvertisementResult`.
@@ -445,11 +392,11 @@ enum class V0DataElementKind : uint8_t {
   /// A transmission Power (Tx Power) data-element.
   /// The associated payload may be obtained via
   /// `V0DataElement#into_tx_power`.
-  TxPower = 0,
+  TxPower = 1,
   /// The Actions data-element.
   /// The associated payload may be obtained via
   /// `V0DataElement#into_actions`.
-  Actions = 1,
+  Actions = 2,
 };
 
 /// Information about the verification scheme used
@@ -462,6 +409,17 @@ enum class V1VerificationMode : uint8_t {
   Signature = 1,
 };
 
+/// Holds the count of handles currently allocated for each handle type
+struct CurrentHandleAllocations {
+  uint32_t cred_book;
+  uint32_t cred_slab;
+  uint32_t decrypted_metadata;
+  uint32_t v0_payload;
+  uint32_t legible_v1_sections;
+  uint32_t v0_advertisement_builder;
+  uint32_t v1_advertisement_builder;
+};
+
 /// A `#[repr(C)]` handle to a value of type `CredentialBookInternals`
 struct CredentialBook {
   uint64_t handle_id;
@@ -471,7 +429,6 @@ struct CredentialBook {
 union CreateCredentialBookResult {
   enum class Tag : uint8_t {
     Success = 0,
-    NoSpaceLeft = 1,
     InvalidSlabHandle = 2,
   };
 
@@ -491,28 +448,11 @@ struct CredentialSlab {
   uint64_t handle_id;
 };
 
-/// Result type for `create_credential_slab`
-struct CreateCredentialSlabResult {
-  enum class Tag {
-    NoSpaceLeft,
-    Success,
-  };
-
-  struct Success_Body {
-    CredentialSlab _0;
-  };
-
-  Tag tag;
-  union {
-    Success_Body success;
-  };
-};
-
 /// Cryptographic information about a particular V0 discovery credential
 /// necessary to match and decrypt encrypted V0 advertisements.
 struct V0DiscoveryCredential {
   uint8_t key_seed[32];
-  uint8_t legacy_metadata_key_hmac[32];
+  uint8_t identity_token_hmac[32];
 };
 
 /// A representation of a MatchedCredential which is passable across the FFI boundary
@@ -534,8 +474,9 @@ struct V0MatchableCredential {
 /// necessary to match and decrypt encrypted V1 advertisement sections.
 struct V1DiscoveryCredential {
   uint8_t key_seed[32];
-  uint8_t expected_unsigned_metadata_key_hmac[32];
-  uint8_t expected_signed_metadata_key_hmac[32];
+  uint8_t expected_mic_short_salt_identity_token_hmac[32];
+  uint8_t expected_mic_extended_salt_identity_token_hmac[32];
+  uint8_t expected_signature_identity_token_hmac[32];
   uint8_t pub_key[32];
 };
 
@@ -627,8 +568,11 @@ struct LegibleV1Sections {
 
 /// Representation of a deserialized V1 advertisement
 struct DeserializedV1Advertisement {
+  /// The number of legible sections
   uint8_t num_legible_sections;
+  /// The number of sections that were unable to be decrypted
   uint8_t num_undecryptable_sections;
+  /// A handle to the set of legible (plain or decrypted) sections
   LegibleV1Sections legible_sections;
 };
 
@@ -687,7 +631,7 @@ struct TxPower {
   int8_t tx_power;
 };
 
-/// The bitfield data of a VOActions data element
+/// The bitfield data of a V0Actions data element
 struct V0ActionBits {
   uint32_t bitfield;
 };
@@ -758,13 +702,11 @@ struct GetV0DEResult {
 /// Information about the identity which matched a
 /// decrypted V0 advertisement.
 struct DeserializedV0IdentityDetails {
-  /// The identity type (private/provisioned/trusted)
-  EncryptedIdentityType identity_type;
   /// The ID of the credential which
   /// matched the deserialized adv
   uint32_t cred_id;
-  /// The 14-byte legacy metadata key
-  uint8_t metadata_key[14];
+  /// The 14-byte legacy identity token
+  uint8_t identity_token[14];
   /// The 2-byte advertisement salt
   uint8_t salt[2];
 };
@@ -873,8 +815,6 @@ struct GetV1DEResult {
 /// Information about the identity which matched
 /// a decrypted V1 section.
 struct DeserializedV1IdentityDetails {
-  /// The identity type (private/provisioned/trusted)
-  EncryptedIdentityType identity_type;
   /// The verification mode (MIC/Signature) which
   /// was used to verify the decrypted adv contents.
   V1VerificationMode verification_mode;
@@ -882,7 +822,7 @@ struct DeserializedV1IdentityDetails {
   /// matched the deserialized section.
   uint32_t cred_id;
   /// The 16-byte metadata key.
-  uint8_t metadata_key[16];
+  uint8_t identity_token[16];
 };
 
 /// The result of attempting to get the identity details
@@ -929,14 +869,8 @@ struct GetV1DE16ByteSaltResult {
 };
 
 /// A `#[repr(C)]` handle to a value of type `V0AdvertisementBuilderInternals`
-struct V0AdvertisementBuilderHandle {
-  uint64_t handle_id;
-};
-
-/// A handle to a builder for V0 advertisements.
 struct V0AdvertisementBuilder {
-  AdvertisementBuilderKind kind;
-  V0AdvertisementBuilderHandle handle;
+  uint64_t handle_id;
 };
 
 /// The result of attempting to serialize the contents
@@ -944,8 +878,9 @@ struct V0AdvertisementBuilder {
 struct SerializeV0AdvertisementResult {
   enum class Tag {
     Success,
-    LdtError,
     InvalidAdvertisementBuilderHandle,
+    LdtError,
+    UnencryptedError,
   };
 
   struct Success_Body {
@@ -958,28 +893,11 @@ struct SerializeV0AdvertisementResult {
   };
 };
 
-/// The result of attempting to create a new V0 advertisement builder.
-struct CreateV0AdvertisementBuilderResult {
-  enum class Tag {
-    NoSpaceLeft,
-    Success,
-  };
-
-  struct Success_Body {
-    V0AdvertisementBuilder _0;
-  };
-
-  Tag tag;
-  union {
-    Success_Body success;
-  };
-};
-
 /// Cryptographic information about a particular V0 broadcast credential
 /// necessary to LDT-encrypt V0 advertisements.
 struct V0BroadcastCredential {
   uint8_t key_seed[32];
-  uint8_t metadata_key[14];
+  uint8_t identity_token[14];
 };
 
 /// A `#[repr(C)]` handle to a value of type `V1AdvertisementBuilderInternals`
@@ -993,7 +911,8 @@ struct V1AdvertisementBuilder {
   V1AdvertisementBuilderHandle handle;
 };
 
-/// A handle to a builder for V1 sections.
+/// A handle to a builder for V1 sections. This is not a unique handle; it is the same handle as
+/// the advertisement builder the section builder was originated from.
 struct V1SectionBuilder {
   V1AdvertisementBuilder adv_builder;
   uint8_t section_index;
@@ -1023,7 +942,7 @@ struct CreateV1SectionBuilderResult {
 /// necessary to encrypt V1 MIC-verified and signature-verified sections.
 struct V1BroadcastCredential {
   uint8_t key_seed[32];
-  uint8_t metadata_key[16];
+  uint8_t identity_token[16];
   uint8_t private_key[32];
 };
 
@@ -1038,23 +957,6 @@ struct SerializeV1AdvertisementResult {
 
   struct Success_Body {
     ByteBuffer<250> _0;
-  };
-
-  Tag tag;
-  union {
-    Success_Body success;
-  };
-};
-
-/// The result of attempting to create a new V1 advertisement builder.
-struct CreateV1AdvertisementBuilderResult {
-  enum class Tag {
-    NoSpaceLeft,
-    Success,
-  };
-
-  struct Success_Body {
-    V1AdvertisementBuilder _0;
   };
 
   Tag tag;
@@ -1134,29 +1036,6 @@ struct SetV0ActionResult {
   union {
     Success_Body success;
     Error_Body error;
-  };
-};
-
-/// Representation of a context-sync sequence number.
-struct ContextSyncSeqNum {
-  uint8_t value;
-};
-
-/// Result type for attempting to construct a
-/// ContextSyncSeqNum from an unsigned byte.
-struct BuildContextSyncSeqNumResult {
-  enum class Tag {
-    OutOfRange,
-    Success,
-  };
-
-  struct Success_Body {
-    ContextSyncSeqNum _0;
-  };
-
-  Tag tag;
-  union {
-    Success_Body success;
   };
 };
 

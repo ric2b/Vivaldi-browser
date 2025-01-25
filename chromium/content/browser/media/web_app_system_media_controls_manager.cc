@@ -18,12 +18,30 @@
 #include "media/audio/audio_manager.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/media_session/public/mojom/audio_focus.mojom.h"
+#include "ui/gfx/native_widget_types.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "components/remote_cocoa/browser/application_host.h"
+#endif  // BUILDFLAG(IS_MAC)
+
+#if BUILDFLAG(IS_WIN)
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
-#include "ui/gfx/native_widget_types.h"
+#endif  // BUILDFLAG(IS_WIN)
 
 namespace {
 
+#if BUILDFLAG(IS_MAC)
+remote_cocoa::ApplicationHost* GetApplicationHostFromWebContents(
+    content::WebContents* web_contents) {
+  // Get the ApplicationHost (ie. the browser-side component corresponding to
+  // the NSApplication running in an app shim process) for the web contents.
+  return remote_cocoa::ApplicationHost::GetForNativeView(
+      web_contents ? web_contents->GetNativeView() : gfx::NativeView());
+}
+#endif  // BUILDFLAG(IS_MAC)
+
+#if BUILDFLAG(IS_WIN)
 intptr_t GetHWNDFromWebContents(content::WebContents* web_contents) {
   // Get the HWND for the window containing the web contents (Recreation
   // of HWNDForNativeView).
@@ -34,6 +52,7 @@ intptr_t GetHWNDFromWebContents(content::WebContents* web_contents) {
   }
   return -1;
 }
+#endif  // BUILDFLAG(IS_WIN)
 
 }  // namespace
 
@@ -138,14 +157,23 @@ void WebAppSystemMediaControlsManager::OnFocusGained(
 
   // if the controls don't exist, we need to make an SMC and the
   // controls object.
-  intptr_t window = -1;
   if (!existing_controls) {
-    window = GetHWNDFromWebContents(web_contents);
-
+#if BUILDFLAG(IS_WIN)
+    // |window| is -1 if no HWND found.
+    intptr_t window = GetHWNDFromWebContents(web_contents);
     std::unique_ptr<system_media_controls::SystemMediaControls>
         system_media_controls =
             system_media_controls::SystemMediaControls::Create(
                 media::AudioManager::GetGlobalAppName(), window);
+#else
+    remote_cocoa::ApplicationHost* application_host =
+        GetApplicationHostFromWebContents(web_contents);
+
+    std::unique_ptr<system_media_controls::SystemMediaControls>
+        system_media_controls =
+            system_media_controls::SystemMediaControls::Create(
+                application_host);
+#endif  // BUILDFLAG(IS_WIN)
 
     if (!system_media_controls) {
       DVLOG(1) << "WebAppSystemMediaControlsManager::OnFocusGained, "

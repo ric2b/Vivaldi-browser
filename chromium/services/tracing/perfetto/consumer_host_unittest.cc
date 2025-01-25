@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/extend.h"
+#include "base/containers/span.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
@@ -309,8 +311,7 @@ class TracingConsumerTest : public testing::Test,
     task_environment_ = std::make_unique<base::test::TaskEnvironment>(
         base::test::TaskEnvironment::MainThreadType::IO);
     tracing_environment_ = std::make_unique<base::test::TracingEnvironment>(
-        *task_environment_, base::SingleThreadTaskRunner::GetCurrentDefault(),
-        PerfettoTracedProcess::Get()->perfetto_platform_for_testing());
+        *task_environment_, base::SingleThreadTaskRunner::GetCurrentDefault());
     test_handle_ = tracing::PerfettoTracedProcess::SetupForTesting();
     PerfettoTracedProcess::Get()->ClearDataSourcesForTesting();
     threaded_service_ = std::make_unique<ThreadedPerfettoService>();
@@ -328,11 +329,9 @@ class TracingConsumerTest : public testing::Test,
   }
 
   // mojo::DataPipeDrainer::Client
-  void OnDataAvailable(const void* data, size_t num_bytes) override {
-    total_bytes_received_ += num_bytes;
-    std::copy(static_cast<const uint8_t*>(data),
-              static_cast<const uint8_t*>(data) + num_bytes,
-              std::back_inserter(received_data_));
+  void OnDataAvailable(base::span<const uint8_t> data) override {
+    total_bytes_received_ += data.size();
+    base::Extend(received_data_, data);
   }
 
   // mojo::DataPipeDrainer::Client

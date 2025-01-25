@@ -157,15 +157,15 @@ std::string MakeGoodResponse() {
   proto::SpeechRecognitionEvent proto_event;
   proto_event.set_status(proto::SpeechRecognitionEvent::STATUS_SUCCESS);
   proto::SpeechRecognitionResult* proto_result = proto_event.add_result();
-  blink::mojom::SpeechRecognitionResultPtr result =
-      blink::mojom::SpeechRecognitionResult::New();
-  result->hypotheses.push_back(blink::mojom::SpeechRecognitionHypothesis::New(
+  media::mojom::WebSpeechRecognitionResultPtr result =
+      media::mojom::WebSpeechRecognitionResult::New();
+  result->hypotheses.push_back(media::mojom::SpeechRecognitionHypothesis::New(
       u"Pictures of the moon", 1.0F));
   proto_result->set_final(!result->is_provisional);
   for (size_t i = 0; i < result->hypotheses.size(); ++i) {
     proto::SpeechRecognitionAlternative* proto_alternative =
         proto_result->add_alternative();
-    const blink::mojom::SpeechRecognitionHypothesisPtr& hypothesis =
+    const media::mojom::SpeechRecognitionHypothesisPtr& hypothesis =
         result->hypotheses[i];
     proto_alternative->set_confidence(hypothesis->confidence);
     proto_alternative->set_transcript(base::UTF16ToUTF8(hypothesis->utterance));
@@ -176,7 +176,7 @@ std::string MakeGoodResponse() {
 
   // Prepend 4 byte prefix length indication to the protobuf message as
   // envisaged by the google streaming recognition webservice protocol.
-  msg_string.insert(0u, base::as_string_view(base::numerics::U32ToBigEndian(
+  msg_string.insert(0u, base::as_string_view(base::U32ToBigEndian(
                             base::checked_cast<uint32_t>(msg_string.size()))));
   return msg_string;
 }

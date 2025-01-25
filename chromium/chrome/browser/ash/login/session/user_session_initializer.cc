@@ -49,7 +49,9 @@
 #include "chrome/browser/ui/webui/ash/settings/pages/privacy/peripheral_data_access_handler.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/dbus/pciguard/pciguard_client.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "chromeos/ash/components/network/network_cert_loader.h"
 #include "chromeos/ash/components/peripheral_notification/peripheral_notification_manager.h"
@@ -144,7 +146,7 @@ void UserSessionInitializer::OnUserProfileLoaded(const AccountId& account_id) {
     // TODO(https://crbug.com/1208416): Investigate why OnUserProfileLoaded
     // is called more than once.
     if (primary_profile_ != nullptr) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       CHECK_EQ(primary_profile_, profile);
       return;
     }
@@ -156,8 +158,7 @@ void UserSessionInitializer::OnUserProfileLoaded(const AccountId& account_id) {
     InitializePrimaryProfileServices(profile, user);
 
     FamilyUserMetricsServiceFactory::GetForBrowserContext(profile);
-    if (chromeos::features::IsMahiEnabled() &&
-        chromeos::features::IsSparkyEnabled()) {
+    if (chromeos::features::IsSparkyEnabled()) {
       ash::SparkyManagerServiceFactory::GetForProfile(profile);
     }
   }
@@ -288,8 +289,7 @@ void UserSessionInitializer::OnUserSessionStarted(bool is_primary_user) {
   if (is_primary_user) {
     DCHECK_EQ(primary_profile_, profile);
 
-    // Ensure that the `BirchKeyedService` for `profile` is created. It is
-    // created one per user in a multiprofile session.
+    // Ensure that one `BirchKeyedService` is created for the primary profile.
     BirchKeyedServiceFactory::GetInstance()->GetService(profile);
 
     // Ensure that PhoneHubManager and EcheAppManager are created for the
@@ -329,7 +329,16 @@ void UserSessionInitializer::OnUserSessionStarted(bool is_primary_user) {
     if (features::IsAudioHFPMicSRToggleEnabled()) {
       CrasAudioHandler::Get()->RefreshHfpMicSrState();
     }
+
+    CrasAudioHandler::Get()->RefreshStyleTransferState();
   }
+}
+
+void UserSessionInitializer::OnUserSessionStartUpTaskCompleted() {
+  const AccountId& account_id =
+      user_manager::UserManager::Get()->GetPrimaryUser()->GetAccountId();
+  SessionManagerClient::Get()->EmitStartedUserSession(
+      cryptohome::CreateAccountIdentifierFromAccountId(account_id));
 }
 
 void UserSessionInitializer::PreStartSession(bool is_primary_session) {

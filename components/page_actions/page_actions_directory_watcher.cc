@@ -36,7 +36,7 @@ std::unique_ptr<base::Value> ReadApkAssets(base::FilePath apk_assets) {
     return nullptr;
   }
 
-  base::StringPiece json_text(reinterpret_cast<char*>(mapped_file.data()),
+  std::string_view json_text(reinterpret_cast<char*>(mapped_file.data()),
                               mapped_file.length());
   JSONStringValueDeserializer deserializer(json_text);
   return deserializer.Deserialize(nullptr, nullptr);

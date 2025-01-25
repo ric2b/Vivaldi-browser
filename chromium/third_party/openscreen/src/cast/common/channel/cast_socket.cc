@@ -14,8 +14,8 @@
 
 namespace openscreen::cast {
 
-using ::cast::channel::CastMessage;
 using message_serialization::DeserializeResult;
+using proto::CastMessage;
 
 CastSocket::Client::~Client() = default;
 
@@ -44,7 +44,7 @@ Error CastSocket::Send(const CastMessage& message) {
     return out.error();
   }
 
-  if (!connection_->Send(out.value().data(), out.value().size())) {
+  if (!connection_->Send(out.value())) {
     return Error::Code::kAgain;
   }
   return Error::Code::kNone;

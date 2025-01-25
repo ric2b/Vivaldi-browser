@@ -12,6 +12,7 @@ import subprocess
 import sys
 
 import gclient_paths
+import gn_helper
 
 
 def findNinjaInPath():
@@ -28,7 +29,6 @@ def findNinjaInPath():
         ninja_path = os.path.join(bin_dir, exe)
         if os.path.isfile(ninja_path):
             return ninja_path
-
 
 def checkOutdir(ninja_args):
     out_dir = "."
@@ -54,7 +54,16 @@ def checkOutdir(ninja_args):
               (out_dir, out_dir),
               file=sys.stderr)
         sys.exit(1)
-
+    if os.environ.get("AUTONINJA_BUILD_ID"):
+        # autoninja sets AUTONINJA_BUILD_ID
+        return
+    for k, v in gn_helper.args(out_dir):
+        if k == "use_remoteexec" and v == "true":
+            print(
+                "depot_tools/ninja.py: detect use_remoteexec=true\n"
+                "Use `autoninja` to choose appropriate build tool\n",
+                file=sys.stderr)
+            sys.exit(1)
 
 def fallback(ninja_args):
     # Try to find ninja in PATH.

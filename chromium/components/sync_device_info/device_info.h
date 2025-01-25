@@ -20,6 +20,7 @@
 namespace sync_pb {
 enum SharingSpecificFields_EnabledFeatures : int;
 enum SyncEnums_DeviceType : int;
+enum SyncEnums_SendTabReceivingType : int;
 }  // namespace sync_pb
 
 namespace syncer {
@@ -45,6 +46,7 @@ class DeviceInfo {
   struct SharingInfo {
     SharingInfo(SharingTargetInfo vapid_target_info,
                 SharingTargetInfo sharing_target_info,
+                std::string chime_representative_target_id,
                 std::set<sync_pb::SharingSpecificFields_EnabledFeatures>
                     enabled_features);
     SharingInfo(const SharingInfo& other);
@@ -58,6 +60,9 @@ class DeviceInfo {
 
     // Target info using Sharing sender ID.
     SharingTargetInfo sender_id_target_info;
+
+    // Identifier used to send messages to a specific device through Chime.
+    std::string chime_representative_target_id;
 
     // Set of Sharing features enabled on the device.
     std::set<sync_pb::SharingSpecificFields_EnabledFeatures> enabled_features;
@@ -123,24 +128,27 @@ class DeviceInfo {
   //
   enum class FormFactor { kUnknown = 0, kDesktop = 1, kPhone = 2, kTablet = 3 };
 
-  DeviceInfo(const std::string& guid,
-             const std::string& client_name,
-             const std::string& chrome_version,
-             const std::string& sync_user_agent,
-             const sync_pb::SyncEnums_DeviceType device_type,
-             const OsType os_type,
-             const FormFactor form_factor,
-             const std::string& signin_scoped_device_id,
-             const std::string& manufacturer_name,
-             const std::string& model_name,
-             const std::string& full_hardware_class,
-             base::Time last_updated_timestamp,
-             base::TimeDelta pulse_interval,
-             bool send_tab_to_self_receiving_enabled,
-             const std::optional<SharingInfo>& sharing_info,
-             const std::optional<PhoneAsASecurityKeyInfo>& paask_info,
-             const std::string& fcm_registration_token,
-             const ModelTypeSet& interested_data_types);
+  DeviceInfo(
+      const std::string& guid,
+      const std::string& client_name,
+      const std::string& chrome_version,
+      const std::string& sync_user_agent,
+      const sync_pb::SyncEnums_DeviceType device_type,
+      const OsType os_type,
+      const FormFactor form_factor,
+      const std::string& signin_scoped_device_id,
+      const std::string& manufacturer_name,
+      const std::string& model_name,
+      const std::string& full_hardware_class,
+      base::Time last_updated_timestamp,
+      base::TimeDelta pulse_interval,
+      bool send_tab_to_self_receiving_enabled,
+      sync_pb::SyncEnums_SendTabReceivingType send_tab_to_self_receiving_type,
+      const std::optional<SharingInfo>& sharing_info,
+      const std::optional<PhoneAsASecurityKeyInfo>& paask_info,
+      const std::string& fcm_registration_token,
+      const ModelTypeSet& interested_data_types,
+      std::optional<base::Time> floating_workspace_last_signin_timestamp);
 
   DeviceInfo(const DeviceInfo&) = delete;
   DeviceInfo& operator=(const DeviceInfo&) = delete;
@@ -202,6 +210,12 @@ class DeviceInfo {
   // Whether the receiving side of the SendTabToSelf feature is enabled.
   bool send_tab_to_self_receiving_enabled() const;
 
+  // Enabled message types for the receiving side of the SendTabToSelf feature.
+  // This is meaningless if send_tab_to_self_receiving_enabled() returns false.
+  // If not set, the in-app message type will be assumed.
+  sync_pb::SyncEnums_SendTabReceivingType send_tab_to_self_receiving_type()
+      const;
+
   // Returns Sharing related info of the device.
   const std::optional<SharingInfo>& sharing_info() const;
 
@@ -213,6 +227,9 @@ class DeviceInfo {
   // Returns the data types for which this device receives invalidations.
   const ModelTypeSet& interested_data_types() const;
 
+  // Returns the time at which this device was last signed into the device.
+  std::optional<base::Time> floating_workspace_last_signin_timestamp() const;
+
   // Apps can set ids for a device that is meaningful to them but
   // not unique enough so the user can be tracked. Exposing |guid|
   // would lead to a stable unique id for a device which can potentially
@@ -222,6 +239,9 @@ class DeviceInfo {
   void set_full_hardware_class(const std::string& full_hardware_class);
 
   void set_send_tab_to_self_receiving_enabled(bool new_value);
+
+  void set_send_tab_to_self_receiving_type(
+      sync_pb::SyncEnums_SendTabReceivingType new_value);
 
   void set_sharing_info(const std::optional<SharingInfo>& sharing_info);
 
@@ -233,8 +253,17 @@ class DeviceInfo {
 
   void set_interested_data_types(const ModelTypeSet& data_types);
 
-  size_t vivaldi_total_synced_files_size() const;
-  void set_vivaldi_total_synced_files_size(size_t size);
+  void set_floating_workspace_last_signin_timestamp(
+      std::optional<base::Time> time);
+
+  // Vivaldi
+  size_t vivaldi_total_synced_files_size() const {
+    return vivaldi_total_synced_files_size_;
+  }
+
+  void set_vivaldi_total_synced_files_size(size_t size) {
+    vivaldi_total_synced_files_size_ = size;
+  }
 
  private:
   const std::string guid_;
@@ -271,6 +300,8 @@ class DeviceInfo {
 
   bool send_tab_to_self_receiving_enabled_;
 
+  sync_pb::SyncEnums_SendTabReceivingType send_tab_to_self_receiving_type_;
+
   std::optional<SharingInfo> sharing_info_;
 
   std::optional<PhoneAsASecurityKeyInfo> paask_info_;
@@ -280,6 +311,8 @@ class DeviceInfo {
 
   // Data types for which this device receives invalidations.
   ModelTypeSet interested_data_types_;
+
+  std::optional<base::Time> floating_workspace_last_signin_timestamp_;
 
   size_t vivaldi_total_synced_files_size_;
 

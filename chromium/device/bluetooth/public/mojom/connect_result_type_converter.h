@@ -61,10 +61,10 @@ struct TypeConverter<bluetooth::mojom::ConnectResult,
       case device::BluetoothDevice::ConnectErrorCode::ERROR_WAKELOCK:
         return bluetooth::mojom::ConnectResult::WAKELOCK;
       case device::BluetoothDevice::ConnectErrorCode::NUM_CONNECT_ERROR_CODES:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return bluetooth::mojom::ConnectResult::FAILED;
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return bluetooth::mojom::ConnectResult::FAILED;
   }
 };

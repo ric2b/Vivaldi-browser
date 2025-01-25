@@ -14,8 +14,6 @@
 extern crate alloc;
 pub use crate::prelude::*;
 use crate::CryptoProvider;
-use alloc::vec;
-use alloc::vec::Vec;
 use core::iter;
 use core::marker::PhantomData;
 use crypto_provider::hkdf::Hkdf;
@@ -51,7 +49,7 @@ fn hkdf_test_cases<C: CryptoProvider>(#[case] testcase: CryptoProviderTestCase<C
 
 const MAX_SHA256_LENGTH: usize = 255 * (256 / 8); // =8160
 
-///
+/// Content of a HKDF test-case.
 pub struct Test<'a> {
     ikm: &'a [u8],
     salt: &'a [u8],
@@ -79,9 +77,8 @@ pub fn basic_test_hkdf<C: CryptoProvider>(_: PhantomData<C>) {
     assert_eq!(okm, expected);
 }
 
-// Test Vectors from https://tools.ietf.org/html/rfc5869.
 #[rustfmt::skip]
-    ///
+    /// Test Vectors from <https://tools.ietf.org/html/rfc5869>.
     pub fn test_rfc5869_sha256<C: CryptoProvider>(_: PhantomData<C>) {
         let tests = [
             Test {
@@ -152,7 +149,7 @@ pub fn basic_test_hkdf<C: CryptoProvider>(_: PhantomData<C>) {
         }
     }
 
-///
+/// Tests a bunch of HKDFs of differing lengths.
 pub fn test_lengths<C: CryptoProvider>(_: PhantomData<C>) {
     let hkdf = C::HkdfSha256::new(None, &[]);
     let mut longest = vec![0u8; MAX_SHA256_LENGTH];
@@ -173,28 +170,28 @@ pub fn test_lengths<C: CryptoProvider>(_: PhantomData<C>) {
     }
 }
 
-///
+/// Tests an HKDF with the maximum length for Sha256.
 pub fn test_max_length<C: CryptoProvider>(_: PhantomData<C>) {
     let hkdf = C::HkdfSha256::new(Some(&[]), &[]);
     let mut okm = vec![0u8; MAX_SHA256_LENGTH];
     assert!(hkdf.expand(&[], &mut okm).is_ok());
 }
 
-///
+/// Tests an HKDF above the maximum length for Sha256.
 pub fn test_max_length_exceeded<C: CryptoProvider>(_: PhantomData<C>) {
     let hkdf = C::HkdfSha256::new(Some(&[]), &[]);
     let mut okm = vec![0u8; MAX_SHA256_LENGTH + 1];
     assert!(hkdf.expand(&[], &mut okm).is_err());
 }
 
-///
+/// Tests an HKDF with an unsupported length.
 pub fn test_unsupported_length<C: CryptoProvider>(_: PhantomData<C>) {
     let hkdf = C::HkdfSha256::new(Some(&[]), &[]);
     let mut okm = vec![0u8; 90000];
     assert!(hkdf.expand(&[], &mut okm).is_err());
 }
 
-///
+/// Tests HKDF-Expand on the concatenation of info components.
 pub fn test_expand_multi_info<C: CryptoProvider>(_: PhantomData<C>) {
     let info_components = &[
         &b"09090909090909090909090909090909090909090909"[..],
@@ -231,12 +228,12 @@ pub fn test_expand_multi_info<C: CryptoProvider>(_: PhantomData<C>) {
     }
 }
 
-///
+/// Runs hkdf test vectors using Sha256.
 pub fn run_hkdf_sha256_vectors<C: CryptoProvider>(_: PhantomData<C>) {
     run_hkdf_test_vectors::<C::HkdfSha256>(HashAlg::Sha256)
 }
 
-///
+/// Runs hkdf test vectors using Sha512.
 pub fn run_hkdf_sha512_vectors<C: CryptoProvider>(_: PhantomData<C>) {
     run_hkdf_test_vectors::<C::HkdfSha512>(HashAlg::Sha512)
 }
@@ -246,7 +243,7 @@ enum HashAlg {
     Sha512,
 }
 
-///
+/// Runs the wycheproof test vectors for the given hashing algorithm.
 fn run_hkdf_test_vectors<K: Hkdf>(hash: HashAlg) {
     let test_name = match hash {
         HashAlg::Sha256 => wycheproof::hkdf::TestName::HkdfSha256,

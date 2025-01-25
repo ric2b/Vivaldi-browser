@@ -25,6 +25,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/editing/serializers/markup_formatter.h"
 
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
@@ -158,7 +163,7 @@ void MarkupFormatter::AppendStartMarkup(StringBuilder& result,
                                         const Node& node) {
   switch (node.getNodeType()) {
     case Node::kTextNode:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case Node::kCommentNode:
       AppendComment(result, To<Comment>(node).data());
@@ -177,13 +182,13 @@ void MarkupFormatter::AppendStartMarkup(StringBuilder& result,
                                   To<ProcessingInstruction>(node).data());
       break;
     case Node::kElementNode:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case Node::kCdataSectionNode:
       AppendCDATASection(result, To<CDATASection>(node).data());
       break;
     case Node::kAttributeNode:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }

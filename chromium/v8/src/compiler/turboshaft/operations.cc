@@ -38,7 +38,7 @@ std::ostream& operator<<(std::ostream& os, AbortReason reason) {
 
 namespace v8::internal::compiler::turboshaft {
 
-void Print(const Operation& op) { std::cout << op << "\n"; }
+void Operation::Print() const { std::cout << *this << "\n"; }
 
 Zone* get_zone(Graph* graph) { return graph->graph_zone(); }
 
@@ -381,6 +381,8 @@ std::ostream& operator<<(std::ostream& os, ChangeOrDeoptOp::Kind kind) {
       return os << "Uint64ToInt64";
     case ChangeOrDeoptOp::Kind::kFloat64ToInt32:
       return os << "Float64ToInt32";
+    case ChangeOrDeoptOp::Kind::kFloat64ToUint32:
+      return os << "Float64ToUint32";
     case ChangeOrDeoptOp::Kind::kFloat64ToInt64:
       return os << "Float64ToInt64";
     case ChangeOrDeoptOp::Kind::kFloat64NotHole:
@@ -526,9 +528,19 @@ void ConstantOp::PrintOptions(std::ostream& os) const {
       break;
     case Kind::kFloat64:
       os << "float64: " << float64();
+      if (std::isnan(float64())) {
+        // Do not use float64() here as it may alter the bit representation.
+        os << " (0x" << std::hex << base::bit_cast<uint64_t>(storage.float64)
+           << std::dec << ')';
+      }
       break;
     case Kind::kFloat32:
       os << "float32: " << float32();
+      if (std::isnan(float32())) {
+        // Do not use float32() here as it may alter the bit representation.
+        os << " (0x" << std::hex << base::bit_cast<uint32_t>(storage.float32)
+           << std::dec << ')';
+      }
       break;
     case Kind::kExternal:
       os << "external: " << external_reference();
@@ -546,6 +558,10 @@ void ConstantOp::PrintOptions(std::ostream& os) const {
     case Kind::kRelocatableWasmStubCall:
       os << "relocatable wasm stub call: 0x"
          << reinterpret_cast<void*>(storage.integral);
+      break;
+    case Kind::kRelocatableWasmCanonicalSignatureId:
+      os << "relocatable wasm canonical signature ID: "
+         << static_cast<int32_t>(storage.integral);
       break;
   }
   os << ']';
@@ -728,6 +744,11 @@ void FrameStateOp::PrintOptions(std::ostream& os) const {
         os << "ArgumentsLength";
         break;
       }
+      case FrameStateData::Instr::kRestLength: {
+        it.ConsumeRestLength();
+        os << "RestLength";
+        break;
+      }
     }
   }
   os << ']';
@@ -777,6 +798,10 @@ void FrameStateOp::Validate(const Graph& graph) const {
         it.ConsumeArgumentsLength();
         break;
       }
+      case FrameStateData::Instr::kRestLength: {
+        it.ConsumeRestLength();
+        break;
+      }
     }
   }
 }
@@ -792,14 +817,17 @@ void DidntThrowOp::Validate(const Graph& graph) const {
   switch (graph.Get(throwing_operation()).opcode) {
     case Opcode::kCall: {
       auto& call_op = graph.Get(throwing_operation()).Cast<CallOp>();
-      DCHECK(call_op.descriptor->out_reps == outputs_rep());
+      DCHECK_EQ(call_op.descriptor->out_reps, outputs_rep());
       break;
     }
-    case Opcode::kFastApiCall: {
-      auto& call_op = graph.Get(throwing_operation()).Cast<FastApiCallOp>();
-      DCHECK(call_op.kOutReps == outputs_rep());
-      break;
-    }
+#define STATIC_OUTPUT_CASE(Name)                                           \
+  case Opcode::k##Name: {                                                  \
+    const Name##Op& op = graph.Get(throwing_operation()).Cast<Name##Op>(); \
+    DCHECK_EQ(op.kOutReps, outputs_rep());                                 \
+    break;                                                                 \
+  }
+      TURBOSHAFT_THROWING_STATIC_OUTPUTS_OPERATIONS_LIST(STATIC_OUTPUT_CASE)
+#undef STATIC_OUTPUT_CASE
     default:
       UNREACHABLE();
   }
@@ -1049,6 +1077,8 @@ std::ostream& operator<<(std::ostream& os, ObjectIsOp::Kind kind) {
       return os << "NonCallable";
     case ObjectIsOp::Kind::kNumber:
       return os << "Number";
+    case ObjectIsOp::Kind::kNumberOrBigInt:
+      return os << "NumberOrBigInt";
     case ObjectIsOp::Kind::kReceiver:
       return os << "Receiver";
     case ObjectIsOp::Kind::kReceiverOrNullOrUndefined:
@@ -1419,14 +1449,12 @@ std::ostream& operator<<(std::ostream& os,
   }
 }
 
-std::ostream& operator<<(std::ostream& os, StackCheckOp::Kind kind) {
+std::ostream& operator<<(std::ostream& os, JSStackCheckOp::Kind kind) {
   switch (kind) {
-    case StackCheckOp::Kind::kJSFunctionHeader:
-      return os << "JS function-entry";
-    case StackCheckOp::Kind::kWasmFunctionHeader:
-      return os << "Wasm function-entry";
-    case StackCheckOp::Kind::kWasmLoop:
-      return os << "Wasm loop";
+    case JSStackCheckOp::Kind::kFunctionEntry:
+      return os << "function-entry";
+    case JSStackCheckOp::Kind::kLoop:
+      return os << "loop";
   }
 }
 
@@ -1453,6 +1481,7 @@ const RegisterRepresentation& RepresentationFor(wasm::ValueType type) {
       return kWord32;
     case wasm::kI64:
       return kWord64;
+    case wasm::kF16:
     case wasm::kF32:
       return kFloat32;
     case wasm::kF64:
@@ -1653,6 +1682,10 @@ void Simd256ConstantOp::PrintOptions(std::ostream& os) const {
   PrintSimdValue(os, value);
 }
 
+void Simd256Extract128LaneOp::PrintOptions(std::ostream& os) const {
+  os << '[' << static_cast<int>(lane) << ']';
+}
+
 void Simd256LoadTransformOp::PrintOptions(std::ostream& os) const {
   os << '[';
   if (load_kind.maybe_unaligned) os << "unaligned, ";
@@ -1799,6 +1832,80 @@ void CheckExceptionOp::Validate(const Graph& graph) const {
   // `CheckException` should follow right after the throwing operation.
   DCHECK_EQ(throwing_operation(),
             V<Any>::Cast(graph.PreviousIndex(graph.Index(*this))));
+}
+
+namespace {
+BlockIndex index_for_bound_block(const Block* block) {
+  DCHECK_NOT_NULL(block);
+  const BlockIndex index = block->index();
+  DCHECK(index.valid());
+  return index;
+}
+}  // namespace
+
+size_t CallOp::hash_value(HashingStrategy strategy) const {
+  if (strategy == HashingStrategy::kMakeSnapshotStable) {
+    // Destructure here to cause a compilation error in case `options` is
+    // changed.
+    auto [descriptor_value, callee_effects] = options();
+    return HashWithOptions(*descriptor_value, callee_effects);
+  } else {
+    return Base::hash_value(strategy);
+  }
+}
+
+size_t CheckExceptionOp::hash_value(HashingStrategy strategy) const {
+  if (strategy == HashingStrategy::kMakeSnapshotStable) {
+    // Destructure here to cause a compilation error in case `options` is
+    // changed.
+    auto [didnt_throw_block_value, catch_block_value] = options();
+    return HashWithOptions(index_for_bound_block(didnt_throw_block_value),
+                           index_for_bound_block(catch_block_value));
+  } else {
+    return Base::hash_value(strategy);
+  }
+}
+
+size_t GotoOp::hash_value(HashingStrategy strategy) const {
+  if (strategy == HashingStrategy::kMakeSnapshotStable) {
+    // Destructure here to cause a compilation error in case `options` is
+    // changed.
+    auto [destination_value, is_backedge_value] = options();
+    return HashWithOptions(index_for_bound_block(destination_value),
+                           is_backedge_value);
+  } else {
+    return Base::hash_value(strategy);
+  }
+}
+
+size_t BranchOp::hash_value(HashingStrategy strategy) const {
+  if (strategy == HashingStrategy::kMakeSnapshotStable) {
+    // Destructure here to cause a compilation error in case `options` is
+    // changed.
+    auto [if_true_value, if_false_value, hint_value] = options();
+    return HashWithOptions(index_for_bound_block(if_true_value),
+                           index_for_bound_block(if_false_value), hint_value);
+  } else {
+    return Base::hash_value(strategy);
+  }
+}
+
+size_t SwitchOp::hash_value(HashingStrategy strategy) const {
+  if (strategy == HashingStrategy::kMakeSnapshotStable) {
+    // Destructure here to cause a compilation error in case `options` is
+    // changed.
+    auto [cases_value, default_case_value, default_hint_value] = options();
+    DCHECK_NOT_NULL(default_case_value);
+    size_t hash = HashWithOptions(index_for_bound_block(default_case_value),
+                                  default_hint_value);
+    for (const auto& c : cases_value) {
+      hash = fast_hash_combine(hash, c.value,
+                               index_for_bound_block(c.destination), c.hint);
+    }
+    return hash;
+  } else {
+    return Base::hash_value(strategy);
+  }
 }
 
 namespace {

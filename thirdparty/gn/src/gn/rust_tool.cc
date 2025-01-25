@@ -16,8 +16,15 @@ const char* RustTool::kRsToolStaticlib = "rust_staticlib";
 
 RustTool::RustTool(const char* n) : Tool(n) {
   CHECK(ValidateName(n));
-  // TODO: should these be settable in toolchain definition?
+  // TODO: should these be settable in toolchain definition? They would collide
+  // with the same switch names for C tools, however. So reading them from the
+  // toolchain definition would produce the incorrect switch unless we separate
+  // their names somehow.
   set_framework_switch("-lframework=");
+  // NOTE: No support for weak_framework in rustc, so we just use `-lframework`
+  // for now, to avoid more cryptic compiler errors.
+  // https://doc.rust-lang.org/rustc/command-line-arguments.html#-l-link-the-generated-crate-to-a-native-library
+  set_weak_framework_switch("-lframework=");
   set_framework_dir_switch("-Lframework=");
   set_lib_dir_switch("-Lnative=");
   set_lib_switch("-l");
@@ -119,7 +126,9 @@ bool RustTool::InitTool(Scope* scope, Toolchain* toolchain, Err* err) {
   }
 
   if (MayLink()) {
-    if (!ReadString(scope, "dynamic_link_switch", &dynamic_link_switch_, err)) {
+    if (!ReadString(scope, "rust_swiftmodule_switch", &swiftmodule_switch_,
+                    err) ||
+        !ReadString(scope, "dynamic_link_switch", &dynamic_link_switch_, err)) {
       return false;
     }
   }

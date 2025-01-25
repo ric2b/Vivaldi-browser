@@ -35,29 +35,7 @@ def _WarnIfReadmeIsUnchanged(input_api, output_api):
   ]))]
 
 
-def _WarnIfGenerateGnTestsFail(input_api, output_api):
-  """Error if generate_gn.py was changed and tests are now failing."""
-  should_run_tests = False
-  generate_gn_re = re.compile(r'.*generate_gn.*\.py$')
-  for f in input_api.AffectedFiles():
-    if generate_gn_re.match(f.LocalPath()):
-      should_run_tests = True
-      break
-
-  errors = []
-  if should_run_tests:
-    errors += input_api.RunTests(
-        input_api.canned_checks.GetUnitTests(
-            input_api, output_api,
-            ['chromium/scripts/generate_gn_unittest_wrapper.py'],
-            run_on_python2=False,
-            run_on_python3=True,
-            skip_shebang_check=False))
-
-  return errors
-
 def CheckChangeOnUpload(input_api, output_api):
   results = []
   results.extend(_WarnIfReadmeIsUnchanged(input_api, output_api))
-  results.extend(_WarnIfGenerateGnTestsFail(input_api, output_api))
   return results

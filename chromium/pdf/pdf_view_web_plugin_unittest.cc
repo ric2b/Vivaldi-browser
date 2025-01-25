@@ -132,8 +132,8 @@ struct PaintParams {
 };
 
 MATCHER(SearchStringResultEq, "") {
-  PDFEngine::Client::SearchStringResult l = std::get<0>(arg);
-  PDFEngine::Client::SearchStringResult r = std::get<1>(arg);
+  PDFiumEngineClient::SearchStringResult l = std::get<0>(arg);
+  PDFiumEngineClient::SearchStringResult r = std::get<1>(arg);
   return l.start_index == r.start_index && l.length == r.length;
 }
 
@@ -147,8 +147,8 @@ MATCHER_P(IsExpectedImeKeyEvent, expected_text, "") {
          event.native_key_code == expected_text[0] &&
          event.dom_code == static_cast<int>(ui::DomCode::NONE) &&
          event.dom_key == ui::DomKey::NONE && !event.is_system_key &&
-         !event.is_browser_shortcut && event.text == expected_text &&
-         event.unmodified_text == expected_text;
+         !event.is_browser_shortcut && event.text.data() == expected_text &&
+         event.unmodified_text.data() == expected_text;
 }
 
 base::Value::Dict ParseMessage(std::string_view json) {
@@ -231,7 +231,7 @@ class FakePdfViewWebPluginClient : public PdfViewWebPlugin::Client {
 
   MOCK_METHOD(std::unique_ptr<PDFiumEngine>,
               CreateEngine,
-              (PDFEngine::Client*, PDFiumFormFiller::ScriptOption),
+              (PDFiumEngineClient*, PDFiumFormFiller::ScriptOption),
               (override));
 
   MOCK_METHOD(void,
@@ -314,7 +314,8 @@ class FakePdfViewWebPluginClient : public PdfViewWebPlugin::Client {
               CreateAccessibilityDataHandler,
               (PdfAccessibilityActionHandler*,
                PdfAccessibilityImageFetcher*,
-               blink::WebPluginContainer*),
+               blink::WebPluginContainer*,
+               bool),
               (override));
 };
 
@@ -367,7 +368,7 @@ class PdfViewWebPluginWithoutInitializeTest
         });
     ON_CALL(*client_ptr_, CreateEngine)
         .WillByDefault([this](
-                           PDFEngine::Client* client,
+                           PDFiumEngineClient* client,
                            PDFiumFormFiller::ScriptOption /*script_option*/) {
           auto engine = std::make_unique<NiceMock<TestPDFiumEngine>>(client);
           engine_ptr_ = engine.get();
@@ -1605,16 +1606,16 @@ TEST_F(PdfViewWebPluginTest, FormTextFieldFocusChangeUpdatesTextInputType) {
             plugin_->GetPluginTextInputType());
 
   ExpectUpdateTextInputState(blink::WebTextInputType::kWebTextInputTypeText);
-  plugin_->FormFieldFocusChange(PDFEngine::FocusFieldType::kText);
+  plugin_->FormFieldFocusChange(PDFiumEngineClient::FocusFieldType::kText);
 
   ExpectUpdateTextInputState(blink::WebTextInputType::kWebTextInputTypeNone);
-  plugin_->FormFieldFocusChange(PDFEngine::FocusFieldType::kNoFocus);
+  plugin_->FormFieldFocusChange(PDFiumEngineClient::FocusFieldType::kNoFocus);
 
   ExpectUpdateTextInputState(blink::WebTextInputType::kWebTextInputTypeText);
-  plugin_->FormFieldFocusChange(PDFEngine::FocusFieldType::kText);
+  plugin_->FormFieldFocusChange(PDFiumEngineClient::FocusFieldType::kText);
 
   ExpectUpdateTextInputState(blink::WebTextInputType::kWebTextInputTypeNone);
-  plugin_->FormFieldFocusChange(PDFEngine::FocusFieldType::kNonText);
+  plugin_->FormFieldFocusChange(PDFiumEngineClient::FocusFieldType::kNonText);
 }
 
 TEST_F(PdfViewWebPluginTest, SearchString) {
@@ -1623,14 +1624,14 @@ TEST_F(PdfViewWebPluginTest, SearchString) {
       u"The quick brown fox jumped over the lazy Fox";
 
   {
-    static constexpr PDFEngine::Client::SearchStringResult kExpectation[] = {
+    static constexpr PDFiumEngineClient::SearchStringResult kExpectation[] = {
         {16, 3}};
     EXPECT_THAT(
         plugin_->SearchString(kTarget, kPattern, /*case_sensitive=*/true),
         Pointwise(SearchStringResultEq(), kExpectation));
   }
   {
-    static constexpr PDFEngine::Client::SearchStringResult kExpectation[] = {
+    static constexpr PDFiumEngineClient::SearchStringResult kExpectation[] = {
         {16, 3}, {41, 3}};
     EXPECT_THAT(
         plugin_->SearchString(kTarget, kPattern, /*case_sensitive=*/false),
@@ -1743,7 +1744,7 @@ class PdfViewWebPluginWithDocInfoTest : public PdfViewWebPluginTest {
  protected:
   class TestPDFiumEngineWithDocInfo : public TestPDFiumEngine {
    public:
-    explicit TestPDFiumEngineWithDocInfo(PDFEngine::Client* client)
+    explicit TestPDFiumEngineWithDocInfo(PDFiumEngineClient* client)
         : TestPDFiumEngine(client) {
       InitializeDocumentAttachments();
       InitializeDocumentMetadata();
@@ -2285,7 +2286,7 @@ class PdfViewWebPluginPrintPreviewTest : public PdfViewWebPluginTest {
 
 TEST_F(PdfViewWebPluginPrintPreviewTest, HandleResetPrintPreviewModeMessage) {
   EXPECT_CALL(*client_ptr_, CreateEngine)
-      .WillOnce([](PDFEngine::Client* client,
+      .WillOnce([](PDFiumEngineClient* client,
                    PDFiumFormFiller::ScriptOption script_option) {
         EXPECT_EQ(PDFiumFormFiller::ScriptOption::kNoJavaScript, script_option);
 
@@ -2308,7 +2309,7 @@ TEST_F(PdfViewWebPluginPrintPreviewTest, HandleResetPrintPreviewModeMessage) {
 TEST_F(PdfViewWebPluginPrintPreviewTest,
        HandleResetPrintPreviewModeMessageForPdf) {
   EXPECT_CALL(*client_ptr_, CreateEngine)
-      .WillOnce([](PDFEngine::Client* client,
+      .WillOnce([](PDFiumEngineClient* client,
                    PDFiumFormFiller::ScriptOption script_option) {
         EXPECT_EQ(PDFiumFormFiller::ScriptOption::kNoJavaScript, script_option);
 
@@ -2335,7 +2336,7 @@ TEST_F(PdfViewWebPluginPrintPreviewTest,
 TEST_F(PdfViewWebPluginPrintPreviewTest,
        HandleResetPrintPreviewModeMessageSetGrayscale) {
   EXPECT_CALL(*client_ptr_, CreateEngine)
-      .WillOnce([](PDFEngine::Client* client,
+      .WillOnce([](PDFiumEngineClient* client,
                    PDFiumFormFiller::ScriptOption /*script_option*/) {
         auto engine = std::make_unique<NiceMock<TestPDFiumEngine>>(client);
         EXPECT_CALL(*engine, SetGrayscale(true));
@@ -2439,5 +2440,66 @@ TEST_F(PdfViewWebPluginPrintPreviewTest,
     "pinchPhase": 0,
   })"));
 }
+
+#if BUILDFLAG(ENABLE_PDF_INK2)
+using PdfViewWebPluginInkTest = PdfViewWebPluginTest;
+
+TEST_F(PdfViewWebPluginInkTest, VisiblePageIndexFromPoint) {
+  ON_CALL(*engine_ptr_, GetPageContentsRect)
+      .WillByDefault([](int page_index) -> gfx::Rect {
+        // Uniform 80x180 page sizes, with a `kVerticalEmptySpace` gap above
+        // every page.
+        constexpr int kVerticalEmptySpace = 20;
+        constexpr int kHeight = 180;
+        int y = kHeight * page_index + kVerticalEmptySpace * (page_index + 1);
+        return gfx::Rect(/*x=*/10, /*y=*/y, /*width=*/80, /*height=*/kHeight);
+      });
+
+  // Top-left corner of screen.
+  constexpr gfx::PointF kScreenTopLeftCorner(0.0f, 0.0f);
+  // Top-left corner of first page.
+  constexpr gfx::PointF kPage0TopLeftCorner(10.0f, 20.0f);
+  // Bottom-right corner of first page.
+  constexpr gfx::PointF kPage0BottomRightCorner(89.0f, 199.0f);
+  // Gap between first and second page.
+  constexpr gfx::PointF kPage0Page1Gap(50.0f, 201.0f);
+  // Top of second page.
+  constexpr gfx::PointF kPage1Top(50.0f, 220.0f);
+  // Middle of last page.
+  constexpr gfx::PointF kPage12Middle(50.0f, 2510.0f);
+  // Bottom of last page.
+  constexpr gfx::PointF kPage12Bottom(60.0f, 2599.0f);
+  // Beyond the last page.
+  constexpr gfx::PointF kPageBelowLast(60.0f, 2700.0f);
+
+  // Start with the first 2 pages visible.
+  ON_CALL(*engine_ptr_, IsPageVisible)
+      .WillByDefault([](int page_index) -> bool {
+        return page_index >= 0 && page_index <= 1;
+      });
+
+  EXPECT_EQ(-1, plugin_->VisiblePageIndexFromPoint(kScreenTopLeftCorner));
+  EXPECT_EQ(0, plugin_->VisiblePageIndexFromPoint(kPage0TopLeftCorner));
+  EXPECT_EQ(0, plugin_->VisiblePageIndexFromPoint(kPage0BottomRightCorner));
+  EXPECT_EQ(-1, plugin_->VisiblePageIndexFromPoint(kPage0Page1Gap));
+  EXPECT_EQ(1, plugin_->VisiblePageIndexFromPoint(kPage1Top));
+  EXPECT_EQ(-1, plugin_->VisiblePageIndexFromPoint(kPage12Middle));
+  EXPECT_EQ(-1, plugin_->VisiblePageIndexFromPoint(kPage12Bottom));
+  EXPECT_EQ(-1, plugin_->VisiblePageIndexFromPoint(kPageBelowLast));
+
+  // Change the visible page to the last page.
+  ON_CALL(*engine_ptr_, IsPageVisible)
+      .WillByDefault([](int page_index) -> bool { return page_index == 12; });
+
+  EXPECT_EQ(-1, plugin_->VisiblePageIndexFromPoint(kScreenTopLeftCorner));
+  EXPECT_EQ(-1, plugin_->VisiblePageIndexFromPoint(kPage0TopLeftCorner));
+  EXPECT_EQ(-1, plugin_->VisiblePageIndexFromPoint(kPage0BottomRightCorner));
+  EXPECT_EQ(-1, plugin_->VisiblePageIndexFromPoint(kPage0Page1Gap));
+  EXPECT_EQ(-1, plugin_->VisiblePageIndexFromPoint(kPage1Top));
+  EXPECT_EQ(12, plugin_->VisiblePageIndexFromPoint(kPage12Middle));
+  EXPECT_EQ(12, plugin_->VisiblePageIndexFromPoint(kPage12Bottom));
+  EXPECT_EQ(-1, plugin_->VisiblePageIndexFromPoint(kPageBelowLast));
+}
+#endif  // BUILDFLAG(ENABLE_PDF_INK2)
 
 }  // namespace chrome_pdf

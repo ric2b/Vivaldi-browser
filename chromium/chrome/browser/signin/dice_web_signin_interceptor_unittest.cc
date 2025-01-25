@@ -64,7 +64,13 @@ class MockDiceWebSigninInterceptorDelegate
                    bubble_parameters,
                base::OnceCallback<void(SigninInterceptionResult)> callback),
               (override));
-
+  MOCK_METHOD(std::unique_ptr<ScopedWebSigninInterceptionBubbleHandle>,
+              ShowOidcInterceptionDialog,
+              (content::WebContents*,
+               const WebSigninInterceptor::Delegate::BubbleParameters&,
+               signin::SigninChoiceWithConfirmationCallback,
+               base::OnceClosure),
+              (override));
   void ShowFirstRunExperienceInNewProfile(
       Browser* browser,
       const CoreAccountId& account_id,
@@ -104,9 +110,12 @@ MatchBubbleParameters(
                      parameters.show_managed_disclaimer));
 }
 
-// If the account info is valid, does nothing. Otherwise fills the extended
-// fields with default values.
-void MakeValidAccountInfo(
+void MakeValidAccountCapabilities(AccountInfo* info) {
+  AccountCapabilitiesTestMutator mutator(&info->capabilities);
+  mutator.set_is_subject_to_parental_controls(true);
+}
+
+void MakeValidAccountInfoWithoutCapabilities(
     AccountInfo* info,
     const std::string& hosted_domain = kNoHostedDomainFound) {
   if (info->IsValid()) {
@@ -120,9 +129,16 @@ void MakeValidAccountInfo(
   DCHECK(info->IsValid());
 }
 
-void MakeValidAccountCapabilities(AccountInfo* info) {
-  AccountCapabilitiesTestMutator mutator(&info->capabilities);
-  mutator.set_is_subject_to_parental_controls(true);
+// If the account info is valid, does nothing. Otherwise fills the extended
+// fields with default values.
+void MakeValidAccountInfo(
+    AccountInfo* info,
+    const std::string& hosted_domain = kNoHostedDomainFound) {
+  if (info->IsValid()) {
+    return;
+  }
+  MakeValidAccountInfoWithoutCapabilities(info, hosted_domain);
+  MakeValidAccountCapabilities(info);
 }
 
 std::string ParamToTestSuffixForInterceptionAndSyncPromo(
@@ -1463,7 +1479,6 @@ TEST_F(
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("alice@example.com");
   MakeValidAccountInfo(&account_info, "example.com");
-  MakeValidAccountCapabilities(&account_info);
   identity_test_env()->UpdateAccountInfoForAccount(account_info);
 
   // Account info is already available, interception happens immediately.
@@ -1493,7 +1508,7 @@ TEST_F(
           "bob@example.com", signin::ConsentLevel::kSignin);
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("alice@example.com");
-  MakeValidAccountInfo(&account_info, "example.com");
+  MakeValidAccountInfoWithoutCapabilities(&account_info, "example.com");
   EXPECT_FALSE(interceptor()
                    ->GetHeuristicOutcome(/*is_new_account=*/true,
                                          /*is_sync_signin=*/false,
@@ -1611,7 +1626,7 @@ TEST_F(DiceWebSigninInterceptorTest,
           "bob@example.com", signin::ConsentLevel::kSignin);
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("alice@example.com");
-  MakeValidAccountInfo(&account_info, "example.com");
+  MakeValidAccountInfoWithoutCapabilities(&account_info, "example.com");
   identity_test_env()->UpdateAccountInfoForAccount(account_info);
   EXPECT_FALSE(interceptor()
                    ->GetHeuristicOutcome(/*is_new_account=*/true,

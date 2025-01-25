@@ -6,7 +6,7 @@
 #define V8_HEAP_PRETENURING_HANDLER_INL_H_
 
 #include "src/base/sanitizer/msan.h"
-#include "src/heap/mutable-page.h"
+#include "src/heap/mutable-page-metadata.h"
 #include "src/heap/new-spaces.h"
 #include "src/heap/pretenuring-handler.h"
 #include "src/heap/spaces.h"
@@ -41,8 +41,7 @@ void PretenuringHandler::UpdateAllocationSite(
   // to dereference the allocation site and rather have to postpone all checks
   // till actually merging the data.
   Address key = memento_candidate->GetAllocationSiteUnchecked();
-  (*pretenuring_feedback)[AllocationSite::unchecked_cast(
-      Tagged<Object>(key))]++;
+  (*pretenuring_feedback)[UncheckedCast<AllocationSite>(Tagged<Object>(key))]++;
 }
 
 template <PretenuringHandler::FindMementoMode mode>
@@ -90,7 +89,7 @@ Tagged<AllocationMemento> PretenuringHandler::FindAllocationMemento(
   }
 
   Tagged<AllocationMemento> memento_candidate =
-      AllocationMemento::cast(candidate);
+      Cast<AllocationMemento>(candidate);
 
   // Depending on what the memento is used for, we might need to perform
   // additional checks.

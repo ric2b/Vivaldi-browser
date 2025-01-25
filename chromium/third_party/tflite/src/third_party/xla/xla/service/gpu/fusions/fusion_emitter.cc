@@ -50,7 +50,6 @@ limitations under the License.
 #include "xla/service/gpu/kernel_arguments.h"
 #include "xla/service/gpu/kernel_reuse_cache.h"
 #include "xla/service/gpu/launch_dimensions.h"
-#include "xla/service/gpu/model/indexing_analysis.h"
 #include "xla/service/gpu/model/indexing_map.h"
 #include "xla/service/gpu/runtime/kernel_thunk.h"
 #include "xla/service/gpu/target_util.h"
@@ -58,7 +57,6 @@ limitations under the License.
 #include "xla/service/llvm_ir/llvm_util.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
-#include "xla/status.h"
 #include "xla/status_macros.h"
 #include "xla/stream_executor/device_description.h"
 #include "xla/util.h"
@@ -190,14 +188,8 @@ IndexingMap KernelFusionInterface::GetDefaultThreadIdIndexingMap(
       mlir::AffineMap::get(/*dimCount=*/6,
                            /*symbolCount=*/2, output_dims, ctx),
       dim_vars, range_vars, /*rt_vars=*/{});
-  // Remove the unroll_elem_id symbol if unrolling divides num_elements.
-  if (num_elements % unroll_factor == 0) {
-    indexing_map.AddConstraint(linear_index.replace({{unroll_elem_id, c0}}),
-                               Interval{0, num_elements - unroll_factor});
-  } else {
-    indexing_map.AddConstraint(linear_index, Interval{0, num_elements - 1});
-  }
-  indexing_map.Simplify(GetIndexingMapForInstruction);
+  indexing_map.AddConstraint(linear_index, Interval{0, num_elements - 1});
+  indexing_map.Simplify();
   return indexing_map;
 }
 

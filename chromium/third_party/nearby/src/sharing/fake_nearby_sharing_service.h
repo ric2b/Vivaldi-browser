@@ -19,11 +19,10 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "absl/strings/string_view.h"
 #include "internal/base/observer_list.h"
-#include "sharing/attachment.h"
+#include "sharing/attachment_container.h"
 #include "sharing/internal/api/sharing_rpc_notifier.h"
 #include "sharing/local_device_data/nearby_share_local_device_data_manager.h"
 #include "sharing/nearby_sharing_service.h"
@@ -32,6 +31,7 @@
 #include "sharing/share_target_discovered_callback.h"
 #include "sharing/transfer_metadata.h"
 #include "sharing/transfer_update_callback.h"
+#include "sharing/wrapped_share_target_discovered_callback.h"
 
 namespace nearby {
 namespace sharing {
@@ -58,12 +58,12 @@ class FakeNearbySharingService : public NearbySharingService {
   // Unregisters the current send surface.
   void UnregisterSendSurface(
       TransferUpdateCallback* transfer_callback,
-      ShareTargetDiscoveredCallback* discovery_callback,
       std::function<void(StatusCodes)> status_codes_callback) override;
 
   // Registers a receiver surface for handling payload transfer status.
   void RegisterReceiveSurface(
       TransferUpdateCallback* transfer_callback, ReceiveSurfaceState state,
+      Advertisement::BlockedVendorId vendor_id,
       std::function<void(StatusCodes)> status_codes_callback) override;
 
   // Unregisters the current receive surface.
@@ -97,7 +97,7 @@ class FakeNearbySharingService : public NearbySharingService {
   // Sends |attachments| to the remote |share_target|.
   void SendAttachments(
       int64_t share_target_id,
-      std::vector<std::unique_ptr<Attachment>> attachments,
+      std::unique_ptr<AttachmentContainer> attachment_container,
       std::function<void(StatusCodes)> status_codes_callback) override;
 
   // Accepts incoming share from the remote |share_target|.
@@ -120,7 +120,8 @@ class FakeNearbySharingService : public NearbySharingService {
   bool DidLocalUserCancelTransfer(int64_t share_target_id) override;
 
   // Opens attachments from the remote |share_target|.
-  void Open(const ShareTarget& share_target,
+  void Open(ShareTarget share_target,
+            std::unique_ptr<AttachmentContainer> attachment_container,
             std::function<void(StatusCodes status_codes)> status_codes_callback)
       override;
 
@@ -129,9 +130,6 @@ class FakeNearbySharingService : public NearbySharingService {
 
   // Copies text to cache/clipboard.
   void CopyText(absl::string_view text) override;
-
-  // Sets a cleanup callback to be called once done with transfer for ARC.
-  void SetArcTransferCleanupCallback(std::function<void()> callback) override;
 
   std::string Dump() const override;
 
@@ -155,11 +153,14 @@ class FakeNearbySharingService : public NearbySharingService {
   void FireShutdown();
 
   // Fire transfer update events.
-  void FireSendTransferUpdate(SendSurfaceState state, ShareTarget share_target,
+  void FireSendTransferUpdate(SendSurfaceState state,
+                              const ShareTarget& share_target,
+                              const AttachmentContainer& attachment_container,
                               TransferMetadata transfer_metadata);
-  void FireReceiveTransferUpdate(ReceiveSurfaceState state,
-                                 ShareTarget share_target,
-                                 TransferMetadata transfer_metadata);
+  void FireReceiveTransferUpdate(
+      ReceiveSurfaceState state, const ShareTarget& share_target,
+      const AttachmentContainer& attachment_container,
+      TransferMetadata transfer_metadata);
 
   // Fire discovery events.
   void FireShareTargetDiscovered(SendSurfaceState state,
@@ -169,12 +170,14 @@ class FakeNearbySharingService : public NearbySharingService {
  private:
   ObserverList<Observer> observers_;
   ObserverList<NearbyShareSettings::Observer> settings_observers_;
-  ObserverList<TransferUpdateCallback> foreground_send_transfer_callbacks_;
-  ObserverList<TransferUpdateCallback> background_send_transfer_callbacks_;
-  ObserverList<ShareTargetDiscoveredCallback>
-      foreground_send_discovered_callbacks_;
-  ObserverList<ShareTargetDiscoveredCallback>
-      background_send_discovered_callbacks_;
+  // A mapping of foreground transfer callbacks to foreground send surface data.
+  absl::flat_hash_map<TransferUpdateCallback*,
+                      WrappedShareTargetDiscoveredCallback>
+      foreground_send_surface_map_;
+  // A mapping of background transfer callbacks to background send surface data.
+  absl::flat_hash_map<TransferUpdateCallback*,
+                      WrappedShareTargetDiscoveredCallback>
+      background_send_surface_map_;
   ObserverList<TransferUpdateCallback> foreground_receive_transfer_callbacks_;
   ObserverList<TransferUpdateCallback> background_receive_transfer_callbacks_;
 };

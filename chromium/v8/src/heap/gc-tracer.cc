@@ -5,11 +5,12 @@
 #include "src/heap/gc-tracer.h"
 
 #include <cstdarg>
+#include <limits>
+#include <optional>
 
 #include "include/v8-metrics.h"
 #include "src/base/atomic-utils.h"
 #include "src/base/logging.h"
-#include "src/base/optional.h"
 #include "src/base/platform/time.h"
 #include "src/base/strings.h"
 #include "src/common/globals.h"
@@ -53,7 +54,7 @@ using BytesAndDuration = ::heap::base::BytesAndDuration;
 
 double BoundedAverageSpeed(
     const base::RingBuffer<BytesAndDuration>& buffer,
-    v8::base::Optional<v8::base::TimeDelta> selected_duration) {
+    std::optional<v8::base::TimeDelta> selected_duration) {
   constexpr size_t kMinNonEmptySpeedInBytesPerMs = 1;
   constexpr size_t kMaxSpeedInBytesPerMs = GB;
   return ::heap::base::AverageSpeed(
@@ -189,9 +190,10 @@ GCTracer::GCTracer(Heap* heap, base::TimeTicks startup_time,
 }
 
 void GCTracer::ResetForTesting() {
+  auto* heap = heap_;
   this->~GCTracer();
-  new (this) GCTracer(heap_, base::TimeTicks::Now(),
-                      GarbageCollectionReason::kTesting);
+  new (this)
+      GCTracer(heap, base::TimeTicks::Now(), GarbageCollectionReason::kTesting);
 }
 
 void GCTracer::StartObservablePause(base::TimeTicks time) {
@@ -652,24 +654,35 @@ void GCTracer::SampleConcurrencyEsimate(size_t concurrency) {
 void GCTracer::NotifyMarkingStart() {
   const auto marking_start = base::TimeTicks::Now();
 
-  uint16_t result = 1;
-  if (last_marking_start_time_.has_value()) {
-    const double diff_in_seconds = std::round(
-        (marking_start - last_marking_start_time_.value()).InSecondsF());
-    if (diff_in_seconds > UINT16_MAX) {
-      result = UINT16_MAX;
-    } else if (diff_in_seconds >= 1) {
-      result = static_cast<uint16_t>(diff_in_seconds);
+  // Handle code flushing time deltas. Times are incremented conservatively:
+  // 1. The first delta is 0s.
+  // 2. Any delta is rounded downwards to a full second.
+  // 3. 0s-deltas are carried over to the next GC with their precise diff. This
+  //    allows for frequent GCs (within a single second) to be attributed
+  //    correctly later on.
+  // 4. The first non-zero increment after a reset always just increments by 1s.
+  using SFIAgeType = decltype(code_flushing_increase_s_);
+  static_assert(SharedFunctionInfo::kAgeSize == sizeof(SFIAgeType));
+  static constexpr auto kMaxDeltaForSFIAge =
+      base::TimeDelta::FromSeconds(std::numeric_limits<SFIAgeType>::max());
+  SFIAgeType code_flushing_increase_s = 0;
+  if (last_marking_start_time_for_code_flushing_.has_value()) {
+    const auto diff =
+        marking_start - last_marking_start_time_for_code_flushing_.value();
+    if (diff > kMaxDeltaForSFIAge) {
+      code_flushing_increase_s = std::numeric_limits<SFIAgeType>::max();
+    } else {
+      code_flushing_increase_s = static_cast<SFIAgeType>(diff.InSeconds());
     }
   }
-  DCHECK_GT(result, 0);
-  DCHECK_LE(result, UINT16_MAX);
-
-  code_flushing_increase_s_ = result;
-  last_marking_start_time_ = marking_start;
-
+  DCHECK_LE(code_flushing_increase_s, std::numeric_limits<SFIAgeType>::max());
+  code_flushing_increase_s_ = code_flushing_increase_s;
+  if (!last_marking_start_time_for_code_flushing_.has_value() ||
+      code_flushing_increase_s > 0) {
+    last_marking_start_time_for_code_flushing_ = marking_start;
+  }
   if (V8_UNLIKELY(v8_flags.trace_flush_code)) {
-    PrintIsolate(heap_->isolate(), "code flushing time: %d second(s)\n",
+    PrintIsolate(heap_->isolate(), "code flushing: increasing time: %u s\n",
                  code_flushing_increase_s_);
   }
 }
@@ -984,8 +997,13 @@ void GCTracer::PrintNVP() const {
           "clear.slots_buffer=%.1f "
           "clear.weak_collections=%.1f "
           "clear.weak_lists=%.1f "
-          "clear.weak_references=%.1f "
+          "clear.weak_references_trivial=%.1f "
+          "clear.weak_references_non_trivial=%.1f "
+          "clear.weak_references_filter_non_trivial=%.1f "
+          "clear.js_weak_references=%.1f "
+          "clear.join_filter_job=%.1f"
           "clear.join_job=%.1f "
+          "weakness_handling=%.1f "
           "complete.sweep_array_buffers=%.1f "
           "complete.sweeping=%.1f "
           "epilogue=%.1f "
@@ -1073,8 +1091,13 @@ void GCTracer::PrintNVP() const {
           current_scope(Scope::MC_CLEAR_SLOTS_BUFFER),
           current_scope(Scope::MC_CLEAR_WEAK_COLLECTIONS),
           current_scope(Scope::MC_CLEAR_WEAK_LISTS),
-          current_scope(Scope::MC_CLEAR_WEAK_REFERENCES),
+          current_scope(Scope::MC_CLEAR_WEAK_REFERENCES_TRIVIAL),
+          current_scope(Scope::MC_CLEAR_WEAK_REFERENCES_NON_TRIVIAL),
+          current_scope(Scope::MC_CLEAR_WEAK_REFERENCES_FILTER_NON_TRIVIAL),
+          current_scope(Scope::MC_CLEAR_JS_WEAK_REFERENCES),
+          current_scope(Scope::MC_CLEAR_WEAK_REFERENCES_JOIN_FILTER_JOB),
           current_scope(Scope::MC_CLEAR_JOIN_JOB),
+          current_scope(Scope::MC_WEAKNESS_HANDLING),
           current_scope(Scope::MC_COMPLETE_SWEEP_ARRAY_BUFFERS),
           current_scope(Scope::MC_COMPLETE_SWEEPING),
           current_scope(Scope::MC_EPILOGUE), current_scope(Scope::MC_EVACUATE),
@@ -1167,7 +1190,7 @@ void GCTracer::RecordTimeToIncrementalMarkingTask(
   }
 }
 
-base::Optional<base::TimeDelta> GCTracer::AverageTimeToIncrementalMarkingTask()
+std::optional<base::TimeDelta> GCTracer::AverageTimeToIncrementalMarkingTask()
     const {
   return average_time_to_incremental_marking_task_;
 }
@@ -1184,11 +1207,11 @@ void GCTracer::RecordEmbedderSpeed(size_t bytes, double duration) {
 
 void GCTracer::RecordMutatorUtilization(base::TimeTicks mark_compact_end_time,
                                         base::TimeDelta mark_compact_duration) {
-  const base::TimeDelta total_duration =
+  total_duration_since_last_mark_compact_ =
       mark_compact_end_time - previous_mark_compact_end_time_;
-  DCHECK_GE(total_duration, base::TimeDelta());
+  DCHECK_GE(total_duration_since_last_mark_compact_, base::TimeDelta());
   const base::TimeDelta mutator_duration =
-      total_duration - mark_compact_duration;
+      total_duration_since_last_mark_compact_ - mark_compact_duration;
   DCHECK_GE(mutator_duration, base::TimeDelta());
   if (average_mark_compact_duration_ == 0 && average_mutator_duration_ == 0) {
     // This is the first event with mutator and mark-compact durations.
@@ -1202,9 +1225,10 @@ void GCTracer::RecordMutatorUtilization(base::TimeTicks mark_compact_end_time,
         (average_mutator_duration_ + mutator_duration.InMillisecondsF()) / 2;
   }
   current_mark_compact_mutator_utilization_ =
-      !total_duration.IsZero() ? mutator_duration.InMillisecondsF() /
-                                     total_duration.InMillisecondsF()
-                               : 0;
+      !total_duration_since_last_mark_compact_.IsZero()
+          ? mutator_duration.InMillisecondsF() /
+                total_duration_since_last_mark_compact_.InMillisecondsF()
+          : 0;
   previous_mark_compact_end_time_ = mark_compact_end_time;
 }
 
@@ -1294,28 +1318,28 @@ double GCTracer::CombineSpeedsInBytesPerMillisecond(double default_speed,
 }
 
 double GCTracer::NewSpaceAllocationThroughputInBytesPerMillisecond(
-    base::Optional<base::TimeDelta> selected_duration) const {
+    std::optional<base::TimeDelta> selected_duration) const {
   return BoundedAverageSpeed(
       recorded_new_generation_allocations_,
       selected_duration);
 }
 
 double GCTracer::OldGenerationAllocationThroughputInBytesPerMillisecond(
-    base::Optional<base::TimeDelta> selected_duration) const {
+    std::optional<base::TimeDelta> selected_duration) const {
   return BoundedAverageSpeed(
       recorded_old_generation_allocations_,
       selected_duration);
 }
 
 double GCTracer::EmbedderAllocationThroughputInBytesPerMillisecond(
-    base::Optional<base::TimeDelta> selected_duration) const {
+    std::optional<base::TimeDelta> selected_duration) const {
   return BoundedAverageSpeed(
       recorded_embedder_generation_allocations_,
       selected_duration);
 }
 
 double GCTracer::AllocationThroughputInBytesPerMillisecond(
-    base::Optional<base::TimeDelta> selected_duration) const {
+    std::optional<base::TimeDelta> selected_duration) const {
   return NewSpaceAllocationThroughputInBytesPerMillisecond(selected_duration) +
          OldGenerationAllocationThroughputInBytesPerMillisecond(
              selected_duration);
@@ -1542,7 +1566,7 @@ void GCTracer::ReportFullCycleToRecorder() {
   // Managed C++ heap statistics:
   if (cpp_heap) {
     cpp_heap->GetMetricRecorder()->FlushBatchedIncrementalEvents();
-    const base::Optional<cppgc::internal::MetricRecorder::GCCycle>
+    const std::optional<cppgc::internal::MetricRecorder::GCCycle>
         optional_cppgc_event =
             cpp_heap->GetMetricRecorder()->ExtractLastFullGcEvent();
     DCHECK(optional_cppgc_event.has_value());
@@ -1568,6 +1592,18 @@ void GCTracer::ReportFullCycleToRecorder() {
     DCHECK_NE(-1, cppgc_event.main_thread_efficiency_in_bytes_per_us);
     event.main_thread_efficiency_cpp_in_bytes_per_us =
         cppgc_event.main_thread_efficiency_in_bytes_per_us;
+
+    if (total_duration_since_last_mark_compact_.IsZero()) {
+      event.collection_weight_cpp_in_percent = 0;
+      event.main_thread_collection_weight_cpp_in_percent = 0;
+    } else {
+      event.collection_weight_cpp_in_percent =
+          event.total_cpp.total_wall_clock_duration_in_us /
+          total_duration_since_last_mark_compact_.InMicroseconds();
+      event.main_thread_collection_weight_cpp_in_percent =
+          event.main_thread_cpp.total_wall_clock_duration_in_us /
+          total_duration_since_last_mark_compact_.InMicroseconds();
+    }
   }
 
   // Unified heap statistics:
@@ -1648,12 +1684,55 @@ void GCTracer::ReportFullCycleToRecorder() {
   event.main_thread_incremental.sweep_wall_clock_duration_in_us =
       incremental_sweeping.InMicroseconds();
 
-  // TODO(chromium:1154636): Populate the following:
-  // - event.objects
-  // - event.memory
-  // - event.collection_rate_in_percent
-  // - event.efficiency_in_bytes_per_us
-  // - event.main_thread_efficiency_in_bytes_per_us
+  // Objects:
+  event.objects.bytes_before = current_.start_object_size;
+  event.objects.bytes_after = current_.end_object_size;
+  event.objects.bytes_freed =
+      current_.start_object_size - current_.end_object_size;
+  // Memory:
+  event.memory.bytes_before = current_.start_memory_size;
+  event.memory.bytes_after = current_.end_memory_size;
+  event.memory.bytes_freed =
+      current_.start_memory_size > current_.end_memory_size
+          ? current_.start_memory_size - current_.end_memory_size
+          : 0U;
+  // Collection Rate:
+  if (event.objects.bytes_before == 0) {
+    event.collection_rate_in_percent = 0;
+  } else {
+    event.collection_rate_in_percent =
+        static_cast<double>(event.objects.bytes_after) /
+        event.objects.bytes_before;
+  }
+  // Efficiency:
+  if (event.objects.bytes_freed == 0) {
+    event.efficiency_in_bytes_per_us = 0;
+    event.main_thread_efficiency_in_bytes_per_us = 0;
+  } else {
+    // Here, event.main_thread or even event.total can be
+    // zero if the clock resolution is not small enough and the entire GC was
+    // very short, so the timed value was zero. This appears to happen on
+    // Windows, see crbug.com/1338256 and crbug.com/1339180. In this case, we
+    // are only here if the number of freed bytes is nonzero and the division
+    // below produces an infinite value.
+    event.efficiency_in_bytes_per_us =
+        static_cast<double>(event.objects.bytes_freed) /
+        event.total.total_wall_clock_duration_in_us;
+    event.main_thread_efficiency_in_bytes_per_us =
+        static_cast<double>(event.objects.bytes_freed) /
+        event.main_thread.total_wall_clock_duration_in_us;
+  }
+  if (total_duration_since_last_mark_compact_.IsZero()) {
+    event.collection_weight_in_percent = 0;
+    event.main_thread_collection_weight_in_percent = 0;
+  } else {
+    event.collection_weight_in_percent =
+        event.total.total_wall_clock_duration_in_us /
+        total_duration_since_last_mark_compact_.InMicroseconds();
+    event.main_thread_collection_weight_in_percent =
+        event.main_thread.total_wall_clock_duration_in_us /
+        total_duration_since_last_mark_compact_.InMicroseconds();
+  }
 
   recorder->AddMainThreadEvent(event, GetContextId(heap_->isolate()));
 }
@@ -1668,7 +1747,7 @@ void GCTracer::ReportIncrementalMarkingStepToRecorder(double v8_duration) {
   if (!recorder->HasEmbedderRecorder()) return;
   incremental_mark_batched_events_.events.emplace_back();
   if (heap_->cpp_heap()) {
-    const base::Optional<
+    const std::optional<
         cppgc::internal::MetricRecorder::MainThreadIncrementalMark>
         cppgc_event = v8::internal::CppHeap::From(heap_->cpp_heap())
                           ->GetMetricRecorder()
@@ -1719,7 +1798,7 @@ void GCTracer::ReportYoungCycleToRecorder() {
   auto* cpp_heap = v8::internal::CppHeap::From(heap_->cpp_heap());
   if (cpp_heap && cpp_heap->generational_gc_supported()) {
     auto* metric_recorder = cpp_heap->GetMetricRecorder();
-    const base::Optional<cppgc::internal::MetricRecorder::GCCycle>
+    const std::optional<cppgc::internal::MetricRecorder::GCCycle>
         optional_cppgc_event = metric_recorder->ExtractLastYoungGcEvent();
     // We bail out from Oilpan's young GC if the full GC is already in progress.
     // Check here if the young generation event was reported.

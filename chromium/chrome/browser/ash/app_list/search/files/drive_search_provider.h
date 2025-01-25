@@ -29,25 +29,15 @@ namespace app_list {
 
 class DriveSearchProvider : public SearchProvider {
  public:
-  struct FileInfo {
-    base::FilePath reparented_path;
-    drivefs::mojom::FileMetadataPtr metadata;
-    std::optional<base::Time> last_accessed;
-
-    FileInfo(const base::FilePath& reparented_path,
-             drivefs::mojom::FileMetadataPtr metadata,
-             const std::optional<base::Time>& last_accessed);
-    ~FileInfo();
-
-    FileInfo(const FileInfo&) = delete;
-    FileInfo& operator=(const FileInfo&) = delete;
-  };
-
-  explicit DriveSearchProvider(Profile* profile);
+  explicit DriveSearchProvider(Profile* profile,
+                               bool should_filter_shared_files = true);
   ~DriveSearchProvider() override;
 
   DriveSearchProvider(const DriveSearchProvider&) = delete;
   DriveSearchProvider& operator=(const DriveSearchProvider&) = delete;
+
+  void SetQuerySource(
+      drivefs::mojom::QueryParameters::QuerySource query_source);
 
   // SearchProvider:
   ash::AppListSearchResultType ResultType() const override;
@@ -57,11 +47,12 @@ class DriveSearchProvider : public SearchProvider {
  private:
   void OnSearchDriveByFileName(drive::FileError error,
                                std::vector<drivefs::mojom::QueryItemPtr> items);
-  void SetSearchResults(std::vector<std::unique_ptr<FileInfo>> items);
   std::unique_ptr<FileResult> MakeResult(const base::FilePath& path,
                                          double relevance,
                                          FileResult::Type type,
                                          const GURL& url);
+
+  bool should_filter_shared_files_;
 
   // When the query began.
   base::TimeTicks query_start_time_;
@@ -73,6 +64,8 @@ class DriveSearchProvider : public SearchProvider {
 
   const raw_ptr<Profile> profile_;
   const raw_ptr<drive::DriveIntegrationService> drive_service_;
+  drivefs::mojom::QueryParameters::QuerySource query_source_ =
+      drivefs::mojom::QueryParameters::QuerySource::kLocalOnly;
 
   SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<DriveSearchProvider> weak_factory_{this};

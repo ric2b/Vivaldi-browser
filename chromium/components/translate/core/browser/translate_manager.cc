@@ -568,7 +568,9 @@ std::string TranslateManager::GetTargetLanguage(
     std::string auto_translate_language =
         translate::TranslateManager::GetAutoTargetLanguage(source_lang_code,
                                                            prefs);
-    if (!auto_translate_language.empty()) {
+    if (!auto_translate_language.empty() &&
+        TranslateDownloadManager::IsSupportedLanguage(
+            auto_translate_language)) {
       target_language_origin =
           TranslateBrowserMetrics::TargetLanguageOrigin::kAutoTranslate;
       return auto_translate_language;
@@ -579,7 +581,8 @@ std::string TranslateManager::GetTargetLanguage(
 
   // If we've recorded the most recent target language, use that.
   if (base::FeatureList::IsEnabled(kTranslateRecentTarget) &&
-      !recent_target.empty()) {
+      !recent_target.empty() &&
+      TranslateDownloadManager::IsSupportedLanguage(recent_target)) {
     target_language_origin =
         TranslateBrowserMetrics::TargetLanguageOrigin::kRecentTarget;
     return recent_target;

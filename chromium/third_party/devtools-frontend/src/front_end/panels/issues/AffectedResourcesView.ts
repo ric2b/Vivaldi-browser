@@ -72,8 +72,8 @@ export abstract class AffectedResourcesView extends UI.TreeOutline.TreeElement {
   #unresolvedFrameIds: Set<string>;
   protected requestResolver: Logs.RequestResolver.RequestResolver;
 
-  constructor(parent: IssueView, issue: AggregatedIssue) {
-    super();
+  constructor(parent: IssueView, issue: AggregatedIssue, jslogContext: string) {
+    super(/* title */ undefined, /* expandable */ undefined, jslogContext);
     this.#parentView = parent;
     this.issue = issue;
     this.toggleOnClick = true;
@@ -274,17 +274,25 @@ export abstract class AffectedResourcesView extends UI.TreeOutline.TreeElement {
     header.appendChild(info);
   }
 
-  protected createIssueDetailCell(textContent: string, additionalClass: string|null = null): HTMLTableDataCellElement {
+  protected createIssueDetailCell(textContent: string|HTMLElement, additionalClass: string|null = null):
+      HTMLTableDataCellElement {
     const cell = document.createElement('td');
-    cell.textContent = textContent;
+
+    if (typeof textContent === 'string') {
+      cell.textContent = textContent;
+    } else {
+      cell.appendChild(textContent);
+    }
+
     if (additionalClass) {
       cell.classList.add(additionalClass);
     }
     return cell;
   }
 
-  protected appendIssueDetailCell(element: HTMLElement, textContent: string, additionalClass: string|null = null):
-      HTMLTableDataCellElement {
+  protected appendIssueDetailCell(
+      element: HTMLElement, textContent: string|HTMLElement,
+      additionalClass: string|null = null): HTMLTableDataCellElement {
     const cell = this.createIssueDetailCell(textContent, additionalClass);
     element.appendChild(cell);
     return cell;

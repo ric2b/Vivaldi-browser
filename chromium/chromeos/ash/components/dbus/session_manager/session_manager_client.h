@@ -15,7 +15,7 @@
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
-#include "chromeos/dbus/common/dbus_method_call_status.h"
+#include "chromeos/dbus/common/dbus_callback.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "third_party/cros_system_api/dbus/login_manager/dbus-constants.h"
 
@@ -247,6 +247,11 @@ class COMPONENT_EXPORT(SESSION_MANAGER) SessionManagerClient {
   virtual void StartSessionEx(
       const cryptohome::AccountIdentifier& cryptohome_id,
       bool chrome_side_key_generation) = 0;
+
+  // Emits the "started-user-session" upstart signal to notify all the critical
+  // login tasks are completed.
+  virtual void EmitStartedUserSession(
+      const cryptohome::AccountIdentifier& cryptohome_id) = 0;
 
   // Stops the current session. Don't call directly unless there's no user on
   // the device. Use SessionTerminationManager::StopSession instead.

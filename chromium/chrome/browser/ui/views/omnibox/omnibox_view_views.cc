@@ -34,9 +34,10 @@
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/lens/lens_overlay_entry_point_controller.h"
 #include "chrome/browser/ui/omnibox/clipboard_utils.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -46,6 +47,7 @@
 #include "chrome/browser/ui/views/omnibox/omnibox_result_view.h"
 #include "chrome/browser/ui/views/send_tab_to_self/send_tab_to_self_bubble_controller.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/lens/lens_features.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_client.h"
@@ -90,7 +92,6 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/models/simple_menu_model.h"
-#include "ui/base/ui_base_features.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
@@ -191,17 +192,20 @@ OmniboxViewViews::OmniboxViewViews(std::unique_ptr<OmniboxClient> client,
         base::BindRepeating(&OmniboxViewViews::Update, base::Unretained(this)));
   }
 
-  if (features::IsChromeRefresh2023()) {
-    // Remove the default textfield hover effect. Omnibox has a custom hover
-    // effect over the entire location bar.
-    RemoveHoverEffect();
-  }
+  // Remove the default textfield hover effect. Omnibox has a custom hover
+  // effect over the entire location bar.
+  RemoveHoverEffect();
 
   // Sometimes there are additional ignored views, such as a View representing
   // the cursor, inside the address bar's text field. These should always be
   // ignored by accessibility since a plain text field should always be a leaf
   // node in the accessibility trees of all the platforms we support.
   GetViewAccessibility().SetIsLeaf(true);
+  if (popup_window_mode_) {
+    GetViewAccessibility().SetReadOnly(true);
+  } else {
+    GetViewAccessibility().SetIsEditable(true);
+  }
 }
 
 OmniboxViewViews::~OmniboxViewViews() {
@@ -525,6 +529,7 @@ void OmniboxViewViews::ExecuteCommand(int command_id, int event_flags) {
       model()->PasteAndGo(GetClipboardText(/*notify_if_restricted=*/true));
       return;
     case IDC_SHOW_FULL_URLS:
+    case IDC_SHOW_GOOGLE_LENS_SHORTCUT:
     case IDC_EDIT_SEARCH_ENGINES:
       location_bar_view_->command_updater()->ExecuteCommand(command_id);
       return;
@@ -843,6 +848,12 @@ void OmniboxViewViews::SetAccessibilityLabel(const std::u16string& display_text,
     friendly_suggestion_text_ =
         model()->GetPopupAccessibilityLabelForCurrentSelection(
             display_text, true, &friendly_suggestion_text_prefix_length_);
+
+    // If the line immediately after the current selection is the
+    // informational IPH row, append its accessibility label at the end of
+    // this selection's accessibility label.
+    friendly_suggestion_text_ +=
+        model()->MaybeGetPopupAccessibilityLabelForIPHSuggestion();
   }
 
   if (notify_text_changed)
@@ -1197,7 +1208,7 @@ void OmniboxViewViews::OnGestureEvent(ui::GestureEvent* event) {
   PermitExternalProtocolHandler();
 
   const bool gesture_should_take_focus =
-      !HasFocus() && event->type() == ui::ET_GESTURE_TAP;
+      !HasFocus() && event->type() == ui::EventType::kGestureTap;
   if (gesture_should_take_focus) {
     select_all_on_gesture_tap_ = true;
 
@@ -1214,19 +1225,20 @@ void OmniboxViewViews::OnGestureEvent(ui::GestureEvent* event) {
 
   views::Textfield::OnGestureEvent(event);
 
-  if (select_all_on_gesture_tap_ && event->type() == ui::ET_GESTURE_TAP) {
+  if (select_all_on_gesture_tap_ &&
+      event->type() == ui::EventType::kGestureTap) {
     // Select all in the reverse direction so as not to scroll the caret
     // into view and shift the contents jarringly.
     SelectAll(true);
   }
 
-  if (event->type() == ui::ET_GESTURE_TAP ||
-      event->type() == ui::ET_GESTURE_TAP_CANCEL ||
-      event->type() == ui::ET_GESTURE_TWO_FINGER_TAP ||
-      event->type() == ui::ET_GESTURE_SCROLL_BEGIN ||
-      event->type() == ui::ET_GESTURE_PINCH_BEGIN ||
-      event->type() == ui::ET_GESTURE_LONG_PRESS ||
-      event->type() == ui::ET_GESTURE_LONG_TAP) {
+  if (event->type() == ui::EventType::kGestureTap ||
+      event->type() == ui::EventType::kGestureTapCancel ||
+      event->type() == ui::EventType::kGestureTwoFingerTap ||
+      event->type() == ui::EventType::kGestureScrollBegin ||
+      event->type() == ui::EventType::kGesturePinchBegin ||
+      event->type() == ui::EventType::kGestureLongPress ||
+      event->type() == ui::EventType::kGestureLongTap) {
     select_all_on_gesture_tap_ = false;
   }
 }
@@ -1252,9 +1264,8 @@ void OmniboxViewViews::GetAccessibleNodeData(ui::AXNodeData* node_data) {
                                 "both");
 // Expose keyboard shortcut where it makes sense.
 #if BUILDFLAG(IS_MAC)
-  // Use cloverleaf symbol for command key.
   node_data->AddStringAttribute(ax::mojom::StringAttribute::kKeyShortcuts,
-                                base::WideToUTF8(L"\u2318L"));
+                                "⌘L");
 #else
   node_data->AddStringAttribute(ax::mojom::StringAttribute::kKeyShortcuts,
                                 "Ctrl+L");
@@ -1294,12 +1305,6 @@ void OmniboxViewViews::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->AddIntAttribute(
       ax::mojom::IntAttribute::kTextSelEnd,
       entry_end + friendly_suggestion_text_prefix_length_);
-
-  if (popup_window_mode_) {
-    node_data->SetRestriction(ax::mojom::Restriction::kReadOnly);
-  } else {
-    node_data->AddState(ax::mojom::State::kEditable);
-  }
 }
 
 bool OmniboxViewViews::HandleAccessibleAction(
@@ -1456,9 +1461,11 @@ bool OmniboxViewViews::IsCommandIdEnabled(int command_id) const {
                GetClipboardText(/*notify_if_restricted=*/false));
   }
 
-  // Menu item is only shown when it is valid.
-  if (command_id == IDC_SHOW_FULL_URLS)
+  // These menu items are only shown when they are valid.
+  if (command_id == IDC_SHOW_FULL_URLS ||
+      command_id == IDC_SHOW_GOOGLE_LENS_SHORTCUT) {
     return true;
+  }
 
   return Textfield::IsCommandIdEnabled(command_id) ||
          (location_bar_view_ &&
@@ -1563,7 +1570,7 @@ bool OmniboxViewViews::HandleKeyEvent(views::Textfield* textfield,
                                       const ui::KeyEvent& event) {
   PermitExternalProtocolHandler();
 
-  if (event.type() == ui::ET_KEY_RELEASED) {
+  if (event.type() == ui::EventType::kKeyReleased) {
     // The omnibox contents may change while the control key is pressed.
     if (event.key_code() == ui::VKEY_CONTROL)
       model()->OnControlKeyChanged(false);
@@ -1744,7 +1751,7 @@ void OmniboxViewViews::OnAfterCutOrCopy(ui::ClipboardBuffer clipboard_buffer) {
   ui::Clipboard* cb = ui::Clipboard::GetForCurrentThread();
   std::u16string selected_text;
   ui::DataTransferEndpoint data_dst = ui::DataTransferEndpoint(
-      ui::EndpointType::kDefault, /*notify_if_restricted=*/false);
+      ui::EndpointType::kDefault, {.notify_if_restricted = false});
   cb->ReadText(clipboard_buffer, &data_dst, &selected_text);
   GURL url;
   bool write_url = false;
@@ -1843,12 +1850,26 @@ void OmniboxViewViews::UpdateContextMenu(ui::SimpleMenuModel* menu_contents) {
     menu_contents->AddCheckItemWithStringId(IDC_SHOW_FULL_URLS,
                                             IDS_CONTEXT_MENU_SHOW_FULL_URLS);
   }
+
+  if (lens::features::IsOmniboxEntryPointEnabled() &&
+      location_bar_view_->browser()
+          ->GetFeatures()
+          .lens_overlay_entry_point_controller()
+          ->IsEnabled()) {
+    menu_contents->AddCheckItemWithStringId(
+        IDC_SHOW_GOOGLE_LENS_SHORTCUT,
+        IDS_CONTEXT_MENU_SHOW_GOOGLE_LENS_SHORTCUT);
+  }
 }
 
 bool OmniboxViewViews::IsCommandIdChecked(int id) const {
   if (id == IDC_SHOW_FULL_URLS) {
     return location_bar_view_->profile()->GetPrefs()->GetBoolean(
         omnibox::kPreventUrlElisionsInOmnibox);
+  }
+  if (id == IDC_SHOW_GOOGLE_LENS_SHORTCUT) {
+    return location_bar_view_->profile()->GetPrefs()->GetBoolean(
+        omnibox::kShowGoogleLensShortcut);
   }
   return false;
 }

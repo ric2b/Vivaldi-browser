@@ -873,7 +873,7 @@ VivaldiRenderViewContextMenu::HandleCommand(int command_id, int event_flags) {
     case IDC_WRITING_DIRECTION_DEFAULT:
       // WebKit's current behavior is for this menu item to always be disabled.
       NOTREACHED();
-      break;
+      //break;
     case IDC_WRITING_DIRECTION_RTL:
     case IDC_WRITING_DIRECTION_LTR: {
       content::RenderFrameHost* rfh = GetRenderFrameHost();

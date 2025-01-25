@@ -174,7 +174,7 @@ libharfbuzz_la_CPPFLAGS = $(HBCFLAGS) $(CODE_COVERAGE_CFLAGS)
 libharfbuzz_la_LDFLAGS = $(base_link_flags) $(export_symbols) $(CODE_COVERAGE_LDFLAGS)
 libharfbuzz_la_LIBADD = $(HBLIBS)
 EXTRA_libharfbuzz_la_DEPENDENCIES = $(harfbuzz_def_dependency)
-pkginclude_HEADERS = $(HBHEADERS)
+pkginclude_HEADERS = $(HBHEADERS) hb-features.h
 nodist_pkginclude_HEADERS =
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = harfbuzz.pc
@@ -443,6 +443,7 @@ COMPILED_TESTS = \
 	test-algs \
 	test-array \
 	test-bimap \
+	test-cff \
 	test-iter \
 	test-machinery \
 	test-map \
@@ -476,6 +477,10 @@ test_array_LDADD = libharfbuzz.la $(HBLIBS)
 test_bimap_SOURCES = test-bimap.cc hb-static.cc
 test_bimap_CPPFLAGS = $(COMPILED_TESTS_CPPFLAGS)
 test_bimap_LDADD = $(COMPILED_TESTS_LDADD)
+
+test_cff_SOURCES = test-cff.cc hb-static.cc
+test_cff_CPPFLAGS = $(COMPILED_TESTS_CPPFLAGS)
+test_cff_LDADD = $(COMPILED_TESTS_LDADD)
 
 test_iter_SOURCES = test-iter.cc hb-static.cc
 test_iter_CPPFLAGS = $(COMPILED_TESTS_CPPFLAGS)
@@ -533,11 +538,11 @@ test_instancer_solver_SOURCES = test-subset-instancer-solver.cc hb-subset-instan
 test_instancer_solver_CPPFLAGS = $(COMPILED_TESTS_CPPFLAGS)
 test_instancer_solver_LDADD = $(COMPILED_TESTS_LDADD)
 
-test_tuple_varstore_SOURCES = test-tuple-varstore.cc hb-subset-instancer-solver.cc hb-static.cc
+test_tuple_varstore_SOURCES = test-tuple-varstore.cc hb-subset-instancer-solver.cc hb-subset-instancer-iup.cc hb-static.cc
 test_tuple_varstore_CPPFLAGS = $(COMPILED_TESTS_CPPFLAGS)
 test_tuple_varstore_LDADD = $(COMPILED_TESTS_LDADD)
 
-test_item_varstore_SOURCES = test-item-varstore.cc hb-subset-instancer-solver.cc hb-static.cc
+test_item_varstore_SOURCES = test-item-varstore.cc hb-subset-instancer-solver.cc hb-subset-instancer-iup.cc hb-static.cc
 test_item_varstore_CPPFLAGS = $(COMPILED_TESTS_CPPFLAGS)
 test_item_varstore_LDADD = $(COMPILED_TESTS_LDADD)
 

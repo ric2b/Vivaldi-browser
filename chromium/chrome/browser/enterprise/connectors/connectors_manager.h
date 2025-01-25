@@ -10,10 +10,9 @@
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/enterprise/connectors/analysis/analysis_service_settings.h"
 #include "chrome/browser/enterprise/connectors/common.h"
-#include "chrome/browser/enterprise/connectors/reporting/extension_install_event_router.h"
-#include "chrome/browser/enterprise/connectors/reporting/reporting_service_settings.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "components/enterprise/buildflags/buildflags.h"
+#include "components/enterprise/connectors/reporting/reporting_service_settings.h"
 #include "components/enterprise/connectors/service_provider_config.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
@@ -29,7 +28,6 @@ class FileSystemURL;
 }
 
 namespace enterprise_connectors {
-class BrowserCrashEventRouter;
 
 // Manages access to Connector policies for a given profile. This class is
 // responsible for caching the Connector policies, validate them against
@@ -48,12 +46,9 @@ class ConnectorsManager {
   using ReportingConnectorsSettings =
       std::map<ReportingConnector, std::vector<ReportingServiceSettings>>;
 
-  ConnectorsManager(
-      std::unique_ptr<BrowserCrashEventRouter> browser_crash_event_router,
-      std::unique_ptr<ExtensionInstallEventRouter> extension_install_router,
-      PrefService* pref_service,
-      const ServiceProviderConfig* config,
-      bool observe_prefs = true);
+  ConnectorsManager(PrefService* pref_service,
+                    const ServiceProviderConfig* config,
+                    bool observe_prefs = true);
 #if BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
   ~ConnectorsManager() override;
 #else
@@ -105,10 +100,14 @@ class ConnectorsManager {
   std::vector<const AnalysisConfig*> GetAnalysisServiceConfigs(
       AnalysisConnector connector);
 
+  void SetTelemetryObserverCallback(base::RepeatingCallback<void()> callback);
+
   // Public testing functions.
   const AnalysisConnectorsSettings& GetAnalysisConnectorsSettingsForTesting()
       const;
   const ReportingConnectorsSettings& GetReportingConnectorsSettingsForTesting()
+      const;
+  const base::RepeatingCallback<void()> GetTelemetryObserverCallbackForTesting()
       const;
 
  private:
@@ -147,6 +146,7 @@ class ConnectorsManager {
   // Re-cache analysis connector policy and update local agent connection if
   // needed.
   void OnPrefChanged(AnalysisConnector connector);
+  void OnPrefChanged(ReportingConnector connector);
 
   // Sets up |pref_change_registrar_|. Used by the constructor and
   // SetUpForTesting.
@@ -179,11 +179,8 @@ class ConnectorsManager {
   // |connector_settings_|.
   PrefChangeRegistrar pref_change_registrar_;
 
-  // A router to report browser crash events via the reporting pipeline.
-  std::unique_ptr<BrowserCrashEventRouter> browser_crash_event_router_;
-
-  // An observer to report extension install events via the reporting pipeline.
-  std::unique_ptr<ExtensionInstallEventRouter> extension_install_event_router_;
+  // Used to report changes of reporting connector policy.
+  base::RepeatingCallback<void()> telemetry_observer_callback_;
 };
 
 }  // namespace enterprise_connectors

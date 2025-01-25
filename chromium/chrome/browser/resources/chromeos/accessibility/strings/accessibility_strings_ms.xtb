@@ -264,7 +264,6 @@
 <translation id="2783001728278437613">{COUNT,plural, =1{+#}other{+#}}</translation>
 <translation id="2792200646155001340">Anda juga boleh leret satu jari dari kanan ke kiri untuk beralih ke item sebelumnya. Cubalah sekarang.</translation>
 <translation id="280499067616661124">Cari dalam halaman Chromevox</translation>
-<translation id="2811019999044652585">Untuk melompat ke bahagian lain dalam skrin itu, misalnya bar alat atau dulang sistem, tekan Control + Forward. Pada Chromebook, kekunci Forward berada betul-betul di atas kekunci nombor 2.</translation>
 <translation id="2811204574343810641">Baris</translation>
 <translation id="2816868829355607410">Kawasan latihan: Perintah lompat</translation>
 <translation id="2841013758207633010">Masa</translation>
@@ -520,6 +519,7 @@
 <translation id="4432457053224379116">Merah India</translation>
 <translation id="4432896207833262240">Kandungan bertanda</translation>
 <translation id="4437615272777527928">Taip untuk mencari dalam menu. Gunakan anak panah ke atas dan ke bawah untuk pergi ke setiap hasil carian. Gunakan anak panah ke kiri dan ke kanan untuk melaraskan karet teks dan bergerak daripada satu menu kepada menu yang lain.</translation>
+<translation id="4453530046591759283">Untuk melangkau kepada bahagian lain skrin, seperti bar alat atau dulang sistem, tekan Control+F1. F1 ialah kekunci pertama sebelah kanan kekunci escape.</translation>
 <translation id="4457472090507035117">Pilih suara semasa:</translation>
 <translation id="4476183483923481720">baris baharu</translation>
 <translation id="4479068155583208887">Merah Bata Api</translation>
@@ -880,6 +880,7 @@
 <translation id="7091296112653361280">Putih Navajo</translation>
 <translation id="7095834689119144465">Edit teks angka sahaja</translation>
 <translation id="7096001299300236431">Media sebelumnya</translation>
+<translation id="7096668131290451939">Tekan kekunci escape sekali lagi untuk keluar daripada Mod Belajar</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">gema perkataan</translation>
 <translation id="7137397390322864165">Salmon</translation>

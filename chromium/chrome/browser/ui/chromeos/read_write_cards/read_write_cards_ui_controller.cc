@@ -32,29 +32,27 @@ namespace chromeos {
 
 namespace {
 
-constexpr int kQuickAnswersAndMahiSpacing = 10;
+constexpr int kQuickAnswersAndMahiSpacing = 8;
 
 views::Widget::InitParams CreateWidgetInitParams() {
-  views::Widget::InitParams params;
+  views::Widget::InitParams params(
+      views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+      views::Widget::InitParams::TYPE_POPUP);
   params.activatable = views::Widget::InitParams::Activatable::kNo;
   params.shadow_type = views::Widget::InitParams::ShadowType::kNone;
-  params.type = views::Widget::InitParams::TYPE_POPUP;
   params.z_order = ui::ZOrderLevel::kFloatingUIElement;
   params.child = true;
   params.name = ReadWriteCardsUiController::kWidgetName;
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
 
-  // Parent the widget to the owner of the menu.
   auto* active_menu_controller = views::MenuController::GetActiveInstance();
 
-  if (!active_menu_controller || !active_menu_controller->owner()) {
-    CHECK_IS_TEST();
-    return params;
+  // The menu might already be closed.
+  if (active_menu_controller && active_menu_controller->owner()) {
+    // This widget has to be a child of menu owner's widget to make keyboard
+    // focus work.
+    params.parent = active_menu_controller->owner()->GetNativeView();
   }
-
-  // This widget has to be a child of menu owner's widget to make keyboard focus
-  // work.
-  params.parent = active_menu_controller->owner()->GetNativeView();
 
   return params;
 }

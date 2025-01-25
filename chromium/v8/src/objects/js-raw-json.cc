@@ -18,7 +18,7 @@ MaybeHandle<JSRawJson> JSRawJson::Create(Isolate* isolate,
                                          Handle<Object> text) {
   Handle<String> json_string;
   ASSIGN_RETURN_ON_EXCEPTION(isolate, json_string,
-                             Object::ToString(isolate, text), JSRawJson);
+                             Object::ToString(isolate, text));
   Handle<String> flat = String::Flatten(isolate, json_string);
   if (String::IsOneByteRepresentationUnderneath(*flat)) {
     if (!JsonParser<uint8_t>::CheckRawJson(isolate, flat)) {
@@ -35,7 +35,7 @@ MaybeHandle<JSRawJson> JSRawJson::Create(Isolate* isolate,
       isolate->factory()->NewJSObjectFromMap(isolate->js_raw_json_map());
   result->InObjectPropertyAtPut(JSRawJson::kRawJsonInitialIndex, *flat);
   JSObject::SetIntegrityLevel(isolate, result, FROZEN, kThrowOnError).Check();
-  return Handle<JSRawJson>::cast(result);
+  return Cast<JSRawJson>(result);
 }
 
 }  // namespace internal

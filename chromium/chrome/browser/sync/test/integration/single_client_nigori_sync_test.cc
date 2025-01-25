@@ -37,7 +37,6 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/metrics/metrics_service.h"
-#include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/features/password_manager_features_util.h"
 #include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/signin/public/base/signin_switches.h"
@@ -323,16 +322,7 @@ class SingleClientNigoriSyncTestWithNotAwaitQuiescence
 class SingleClientNigoriCrossUserSharingPublicPrivateKeyPairSyncTest
     : public SingleClientNigoriSyncTest {
  public:
-  SingleClientNigoriCrossUserSharingPublicPrivateKeyPairSyncTest() {
-    // Enable the password receiving flow to verify cross-user sharing keys by
-    // decrypting incoming password sharing invitations.
-    override_features_.InitWithFeatures(
-        /*enabled_features=*/{syncer::kSharingOfferKeyPairBootstrap,
-                              password_manager::features::
-                                  kPasswordManagerEnableReceiverService},
-        /*disabled_features=*/{});
-  }
-
+  SingleClientNigoriCrossUserSharingPublicPrivateKeyPairSyncTest() = default;
   SingleClientNigoriCrossUserSharingPublicPrivateKeyPairSyncTest(
       const SingleClientNigoriCrossUserSharingPublicPrivateKeyPairSyncTest&) =
       delete;
@@ -418,9 +408,6 @@ class SingleClientNigoriCrossUserSharingPublicPrivateKeyPairSyncTest
         "title", GURL("http://abc.com")));
     return bookmarks_helper::BookmarksTitleChecker(0, "title", 1).Wait();
   }
-
- private:
-  base::test::ScopedFeatureList override_features_;
 };
 
 // Some tests are flaky on Chromeos when run with IP Protection enabled.
@@ -816,6 +803,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriSyncTest,
       /*keystore_decryptor_params=*/kKeystoreKeyParams,
       /*keystore_key_params=*/kKeystoreKeyParams);
 
+  const std::string kGroupName = "Cohort7_Control";
   sync_pb::TrustedVaultAutoUpgradeExperimentGroup* experiment_group =
       nigori_specifics.mutable_trusted_vault_debug_info()
           ->mutable_auto_upgrade_experiment_group();
@@ -829,19 +817,22 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriSyncTest,
 
   EXPECT_TRUE(ContainsTrialAndGroupName(
       GetSyntheticFieldTrials(),
-      syncer::kTrustedVaultAutoUpgradeSyntheticFieldTrialName,
-      "Cohort7_Control"));
+      syncer::kTrustedVaultAutoUpgradeSyntheticFieldTrialName, kGroupName));
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientNigoriSyncTest,
                        ShouldRegisterTrustedVaultSyntheticFieldTrial) {
+  // Same as in previous test (PRE_ test).
+  const std::string kGroupName = "Cohort7_Control";
+
   ASSERT_TRUE(SetupClients());
 
-  // Upon browser restart, the group should be re-registered automatically.
+  // Shortly after profile startup, the group should be re-registered
+  // automatically.
+  base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(ContainsTrialAndGroupName(
       GetSyntheticFieldTrials(),
-      syncer::kTrustedVaultAutoUpgradeSyntheticFieldTrialName,
-      "Cohort7_Control"));
+      syncer::kTrustedVaultAutoUpgradeSyntheticFieldTrialName, kGroupName));
 }
 
 IN_PROC_BROWSER_TEST_F(

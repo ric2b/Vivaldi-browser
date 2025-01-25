@@ -75,8 +75,8 @@ include_directories(AFTER
   ${PROJECT_BINARY_DIR}/src
 )
 
-# We need PYTHON_EXECUTABLE to be set for running the tests...
-include (FindPythonInterp)
+# We need Python3_EXECUTABLE to be set for running the tests...
+find_package(Python3 COMPONENTS Interpreter)
 
 ## Functions and headers
 include (CheckFunctionExists)
@@ -124,6 +124,7 @@ endif ()
 
 if (MSVC)
   add_definitions(-wd4244 -wd4267 -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_WARNINGS)
+  add_definitions(-bigobj)
 endif ()
 
 
@@ -377,13 +378,13 @@ if (HB_HAVE_GOBJECT)
     # in the standard cmd.exe shell that we use, so we need to
     # first determine whether glib-mkenums is a Python or PERL
     # script
-    execute_process(COMMAND "${PYTHON_EXECUTABLE}" "${GLIB_MKENUMS}" --version
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "${GLIB_MKENUMS}" --version
       RESULT_VARIABLE GLIB_MKENUMS_PYTHON
       OUTPUT_QUIET ERROR_QUIET
     )
     if (GLIB_MKENUMS_PYTHON EQUAL 0)
       message("${GLIB_MKENUMS} is a Python script.")
-      set (GLIB_MKENUMS_CMD "${PYTHON_EXECUTABLE}" "${GLIB_MKENUMS}")
+      set (GLIB_MKENUMS_CMD "${Python3_EXECUTABLE}" "${GLIB_MKENUMS}")
     else ()
       execute_process(COMMAND "${PERL_EXECUTABLE}" "${GLIB_MKENUMS}" --version
         RESULT_VARIABLE GLIB_MKENUMS_PERL
@@ -501,7 +502,7 @@ if (HB_BUILD_SUBSET)
   endif ()
 endif ()
 
-if (UNIX OR MINGW)
+if (UNIX OR MINGW OR VITA)
   # Make symbols link locally
   include (CheckCXXCompilerFlag)
   CHECK_CXX_COMPILER_FLAG(-Bsymbolic-functions CXX_SUPPORTS_FLAG_BSYMB_FUNCS)
@@ -589,8 +590,8 @@ if (HB_HAVE_INTROSPECTION)
 
   if (WIN32 AND NOT MINGW)
     # Note that since we already enable HB_HAVE_GOBJECT
-    # we would already have PYTHON_EXECUTABLE handy
-    set (G_IR_SCANNER_CMD "${PYTHON_EXECUTABLE}" "${G_IR_SCANNER}")
+    # we would already have Python3_EXECUTABLE handy
+    set (G_IR_SCANNER_CMD "${Python3_EXECUTABLE}" "${G_IR_SCANNER}")
   else ()
     set (G_IR_SCANNER_CMD "${G_IR_SCANNER}")
   endif ()
@@ -766,7 +767,7 @@ macro ( make_pkgconfig_pc_file name )
     string(REPLACE "%libdir%" "${CMAKE_INSTALL_LIBDIR}" FSTR ${FSTR})
   else ()
     string(REPLACE "%libdir%" "\${prefix}/${CMAKE_INSTALL_LIBDIR}" FSTR ${FSTR})
-  endif ()  
+  endif ()
 
   string(REPLACE "%VERSION%" "${HB_VERSION}" FSTR ${FSTR})
   string(REPLACE "%requires_private%" "${PC_REQUIRES_PRIV}" FSTR ${FSTR})

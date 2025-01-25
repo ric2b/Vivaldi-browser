@@ -17,7 +17,7 @@ FakeQuicStream::FakeQuicStream(Delegate& delegate, uint64_t id)
 
 FakeQuicStream::~FakeQuicStream() = default;
 
-void FakeQuicStream::ReceiveData(const ByteView& bytes) {
+void FakeQuicStream::ReceiveData(ByteView bytes) {
   OSP_CHECK(!read_end_closed_);
   read_buffer_.insert(read_buffer_.end(), bytes.data(),
                       bytes.data() + bytes.size());
@@ -39,7 +39,7 @@ uint64_t FakeQuicStream::GetStreamId() {
   return stream_id_;
 }
 
-void FakeQuicStream::Write(const ByteView& bytes) {
+void FakeQuicStream::Write(ByteView bytes) {
   OSP_CHECK(!write_end_closed_);
   write_buffer_.insert(write_buffer_.end(), bytes.data(),
                        bytes.data() + bytes.size());
@@ -50,19 +50,22 @@ void FakeQuicStream::CloseWriteEnd() {
 }
 
 FakeQuicConnection::FakeQuicConnection(
+    std::string_view instance_name,
     FakeQuicConnectionFactoryBridge& parent_factory,
-    std::string connection_id,
     Delegate& delegate)
-    : QuicConnection(delegate),
-      parent_factory_(parent_factory),
-      connection_id_(connection_id) {}
+    : QuicConnection(instance_name, delegate),
+      parent_factory_(parent_factory) {}
 
 FakeQuicConnection::~FakeQuicConnection() = default;
+
+void FakeQuicConnection::OnCryptoHandshakeComplete() {
+  instance_id_ = delegate_.OnCryptoHandshakeComplete(instance_name_);
+}
 
 FakeQuicStream* FakeQuicConnection::MakeIncomingStream() {
   uint64_t stream_id = next_stream_id_++;
   auto result = std::make_unique<FakeQuicStream>(
-      delegate().NextStreamDelegate(connection_id_, stream_id), stream_id);
+      delegate().GetStreamDelegate(instance_id_), stream_id);
   auto* stream_ptr = result.get();
   streams_.emplace(result->GetStreamId(), std::move(result));
   return stream_ptr;
@@ -73,8 +76,8 @@ void FakeQuicConnection::OnPacketReceived(const UdpPacket& packet) {
 }
 
 QuicStream* FakeQuicConnection::MakeOutgoingStream(
-    QuicStream::Delegate* delegate) {
-  auto result = std::make_unique<FakeQuicStream>(*delegate, next_stream_id_++);
+    QuicStream::Delegate& delegate) {
+  auto result = std::make_unique<FakeQuicStream>(delegate, next_stream_id_++);
   auto* stream_ptr = result.get();
   streams_.emplace(result->GetStreamId(), std::move(result));
   parent_factory_.OnOutgoingStream(this, stream_ptr);
@@ -83,7 +86,7 @@ QuicStream* FakeQuicConnection::MakeOutgoingStream(
 
 void FakeQuicConnection::Close() {
   parent_factory_.OnConnectionClosed(this);
-  delegate().OnConnectionClosed(connection_id_);
+  delegate().OnConnectionClosed(instance_id_);
   for (auto& stream : streams_) {
     stream.second->delegate().OnClose(stream.first);
     stream.second->delegate().OnReceived(stream.second.get(),

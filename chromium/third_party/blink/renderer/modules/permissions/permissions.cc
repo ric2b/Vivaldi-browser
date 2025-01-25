@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/metrics/histogram_functions.h"
+#include "base/time/time.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
@@ -73,14 +74,14 @@ ScriptPromise<PermissionStatus> Permissions::query(
       }
       exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                         "The document is not active");
-      return ScriptPromise<PermissionStatus>();
+      return EmptyPromise();
     }
   }
 
   PermissionDescriptorPtr descriptor =
       ParsePermissionDescriptor(script_state, raw_permission, exception_state);
   if (exception_state.HadException())
-    return ScriptPromise<PermissionStatus>();
+    return EmptyPromise();
 
   auto* resolver =
       MakeGarbageCollected<ScriptPromiseResolver<PermissionStatus>>(
@@ -92,10 +93,12 @@ ScriptPromise<PermissionStatus> Permissions::query(
   // permission prompt will be shown even if the returned permission will most
   // likely be "prompt".
   PermissionDescriptorPtr descriptor_copy = descriptor->Clone();
+  base::TimeTicks query_start_time;
   GetService(context)->HasPermission(
       std::move(descriptor),
-      WTF::BindOnce(&Permissions::TaskComplete, WrapPersistent(this),
-                    WrapPersistent(resolver), std::move(descriptor_copy)));
+      WTF::BindOnce(&Permissions::QueryTaskComplete, WrapPersistent(this),
+                    WrapPersistent(resolver), std::move(descriptor_copy),
+                    query_start_time));
   return promise;
 }
 
@@ -106,7 +109,7 @@ ScriptPromise<PermissionStatus> Permissions::request(
   PermissionDescriptorPtr descriptor =
       ParsePermissionDescriptor(script_state, raw_permission, exception_state);
   if (exception_state.HadException())
-    return ScriptPromise<PermissionStatus>();
+    return EmptyPromise();
 
   ExecutionContext* context = ExecutionContext::From(script_state);
 
@@ -134,7 +137,7 @@ ScriptPromise<PermissionStatus> Permissions::revoke(
   PermissionDescriptorPtr descriptor =
       ParsePermissionDescriptor(script_state, raw_permission, exception_state);
   if (exception_state.HadException())
-    return ScriptPromise<PermissionStatus>();
+    return EmptyPromise();
 
   auto* resolver =
       MakeGarbageCollected<ScriptPromiseResolver<PermissionStatus>>(
@@ -235,6 +238,15 @@ PermissionService* Permissions::GetService(
 
 void Permissions::ServiceConnectionError() {
   service_.reset();
+}
+void Permissions::QueryTaskComplete(
+    ScriptPromiseResolver<PermissionStatus>* resolver,
+    mojom::blink::PermissionDescriptorPtr descriptor,
+    base::TimeTicks query_start_time,
+    mojom::blink::PermissionStatus result) {
+  base::UmaHistogramTimes("Permissions.Query.QueryResponseTime",
+                          base::TimeTicks::Now() - query_start_time);
+  TaskComplete(resolver, std::move(descriptor), result);
 }
 
 void Permissions::TaskComplete(
@@ -378,7 +390,9 @@ std::optional<PermissionType> Permissions::GetPermissionType(
       descriptor.extension && descriptor.extension->is_clipboard() &&
           descriptor.extension->get_clipboard()->will_be_sanitized,
       descriptor.extension && descriptor.extension->is_clipboard() &&
-          descriptor.extension->get_clipboard()->has_user_gesture);
+          descriptor.extension->get_clipboard()->has_user_gesture,
+      descriptor.extension && descriptor.extension->is_fullscreen() &&
+          descriptor.extension->get_fullscreen()->allow_without_user_gesture);
 }
 
 mojom::blink::PermissionDescriptorPtr

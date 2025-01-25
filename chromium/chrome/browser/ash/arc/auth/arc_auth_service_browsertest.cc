@@ -305,6 +305,8 @@ class ArcAuthServiceTest : public InProcessBrowserTest,
         ash::standalone_browser::GetFeatureRefs();
     lacros.push_back(
         ash::standalone_browser::features::kLacrosForSupervisedUsers);
+    lacros.push_back(
+        ash::features::kSecondaryAccountAllowedInArcPolicy);
     if (IsArcAccountRestrictionsEnabled()) {
       feature_list_.InitWithFeatures(lacros, {});
     } else {
@@ -386,11 +388,6 @@ class ArcAuthServiceTest : public InProcessBrowserTest,
         break;
       case user_manager::UserType::kPublicAccount:
         user = fake_user_manager_->AddPublicAccountUser(account_id);
-        break;
-      case user_manager::UserType::kArcKioskApp:
-        user = fake_user_manager_->AddUserWithAffiliationAndTypeAndProfile(
-            account_id, false /*is_affiliated*/,
-            user_manager::UserType::kArcKioskApp, nullptr /*profile*/);
         break;
       default:
         ADD_FAILURE() << "Unexpected user type " << user_type;
@@ -679,7 +676,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, SuccessfulBackgroundProxyBypass) {
                                                    GetFakeAuthTokenResponse());
             break;
           default:
-            NOTREACHED();
+            NOTREACHED_IN_MIGRATION();
         }
         requests_count++;
       }));
@@ -1278,7 +1275,8 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, ChildAccountFetch) {
   EXPECT_FALSE(auth_instance().account_info()->is_managed);
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, ChildTransition) {
+// TODO(crbug.com/347393999): Re-enable this test.
+IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, DISABLED_ChildTransition) {
   SetAccountAndProfile(user_manager::UserType::kChild);
 
   session_manager::SessionManager::Get()

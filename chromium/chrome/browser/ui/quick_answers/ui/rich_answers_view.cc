@@ -110,7 +110,6 @@ views::UniqueWidgetPtr RichAnswersView::CreateWidget(
           anchor_view_bounds, controller, *result.unit_conversion_result.get());
       break;
     }
-    case ResultType::kKnowledgePanelEntityResult:
     case ResultType::kNoResult: {
       return views::UniqueWidgetPtr();
     }
@@ -118,11 +117,12 @@ views::UniqueWidgetPtr RichAnswersView::CreateWidget(
 
   CHECK(child_view);
 
-  views::Widget::InitParams params;
+  views::Widget::InitParams params(
+      views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+      views::Widget::InitParams::TYPE_POPUP);
   params.activatable = views::Widget::InitParams::Activatable::kYes;
   params.shadow_elevation = 2;
   params.shadow_type = views::Widget::InitParams::ShadowType::kDrop;
-  params.type = views::Widget::InitParams::TYPE_POPUP;
   params.z_order = ui::ZOrderLevel::kFloatingUIElement;
   params.corner_radius = kRoundedCornerRadius;
   params.name = kWidgetName;
@@ -150,7 +150,7 @@ void RichAnswersView::OnWidgetDestroying(views::Widget* widget) {
 
 void RichAnswersView::OnKeyEvent(ui::KeyEvent* event) {
   // TODO(b/283135347): Track rich card interaction types for metrics.
-  if (event->type() != ui::ET_KEY_PRESSED) {
+  if (event->type() != ui::EventType::kKeyPressed) {
     return;
   }
 

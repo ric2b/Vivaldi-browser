@@ -4,14 +4,14 @@
 
 #include "components/history_embeddings/passage_embeddings_service_controller.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "base/task/thread_pool.h"
+#include "components/history_embeddings/embedder.h"
+#include "components/history_embeddings/history_embeddings_features.h"
 #include "components/history_embeddings/vector_database.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
 
 namespace {
-
-// Time it takes before the remote idles.
-constexpr int kRemoteTimeoutSeconds = 60;
 
 passage_embeddings::mojom::PassageEmbeddingsLoadModelsParamsPtr MakeModelParams(
     const base::FilePath& embeddings_path,
@@ -27,6 +27,24 @@ passage_embeddings::mojom::PassageEmbeddingsLoadModelsParamsPtr MakeModelParams(
   return params;
 }
 
+class ScopedEmbeddingsModelInfoStatusLogger {
+ public:
+  ScopedEmbeddingsModelInfoStatusLogger() = default;
+  ~ScopedEmbeddingsModelInfoStatusLogger() {
+    CHECK_NE(history_embeddings::EmbeddingsModelInfoStatus::kUnknown, status_);
+    base::UmaHistogramEnumeration(history_embeddings::kModelInfoMetricName,
+                                  status_);
+  }
+
+  void set_status(history_embeddings::EmbeddingsModelInfoStatus status) {
+    status_ = status;
+  }
+
+ private:
+  history_embeddings::EmbeddingsModelInfoStatus status_ =
+      history_embeddings::EmbeddingsModelInfoStatus::kUnknown;
+};
+
 }  // namespace
 
 namespace history_embeddings {
@@ -36,7 +54,6 @@ PassageEmbeddingsServiceController::PassageEmbeddingsServiceController() =
 PassageEmbeddingsServiceController::~PassageEmbeddingsServiceController() =
     default;
 
-// TODO(b/338650221): Add histograms for bad model info.
 bool PassageEmbeddingsServiceController::MaybeUpdateModelPaths(
     base::optional_ref<const optimization_guide::ModelInfo> model_info) {
   // Reset everything, so if the model info is invalid, the service controller
@@ -46,7 +63,9 @@ bool PassageEmbeddingsServiceController::MaybeUpdateModelPaths(
   model_metadata_ = std::nullopt;
   ResetRemotes();
 
-  if (!model_info.has_value() || !model_info->GetModelMetadata()) {
+  ScopedEmbeddingsModelInfoStatusLogger logger;
+  if (!model_info.has_value()) {
+    logger.set_status(EmbeddingsModelInfoStatus::kEmpty);
     return false;
   }
 
@@ -54,16 +73,22 @@ bool PassageEmbeddingsServiceController::MaybeUpdateModelPaths(
   base::flat_set<base::FilePath> additional_files =
       model_info->GetAdditionalFiles();
   if (additional_files.size() != 1u) {
+    logger.set_status(EmbeddingsModelInfoStatus::kInvalidAdditionalFiles);
     return false;
   }
 
   // Check validity of model metadata.
   const std::optional<optimization_guide::proto::Any>& metadata =
       model_info->GetModelMetadata();
-  std::optional<history_embeddings::proto::PassageEmbeddingsModelMetadata>
-      embeddings_metadata = optimization_guide::ParsedAnyMetadata<
-          history_embeddings::proto::PassageEmbeddingsModelMetadata>(*metadata);
+  if (!metadata) {
+    logger.set_status(EmbeddingsModelInfoStatus::kNoMetadata);
+    return false;
+  }
+  std::optional<proto::PassageEmbeddingsModelMetadata> embeddings_metadata =
+      optimization_guide::ParsedAnyMetadata<
+          proto::PassageEmbeddingsModelMetadata>(*metadata);
   if (!embeddings_metadata) {
+    logger.set_status(EmbeddingsModelInfoStatus::kInvalidMetadata);
     return false;
   }
 
@@ -74,6 +99,7 @@ bool PassageEmbeddingsServiceController::MaybeUpdateModelPaths(
 
   CHECK(!embeddings_model_path_.empty());
   CHECK(!sp_model_path_.empty());
+  logger.set_status(EmbeddingsModelInfoStatus::kValid);
   return true;
 }
 
@@ -100,16 +126,22 @@ void PassageEmbeddingsServiceController::OnLoadModelsResult(bool success) {
 }
 
 EmbedderMetadata PassageEmbeddingsServiceController::GetEmbedderMetadata() {
+  if (model_metadata_->score_threshold() > 0.0) {
+    return EmbedderMetadata(model_version_, model_metadata_->output_size(),
+                            model_metadata_->score_threshold());
+  }
+
   return EmbedderMetadata(model_version_, model_metadata_->output_size());
 }
 
 void PassageEmbeddingsServiceController::GetEmbeddings(
     std::vector<std::string> passages,
+    passage_embeddings::mojom::PassagePriority priority,
     GetEmbeddingsCallback callback) {
   if (embeddings_model_path_.empty() || sp_model_path_.empty()) {
     VLOG(1) << "Missing model path: embeddings='" << embeddings_model_path_
             << "'; sp='" << sp_model_path_ << "'";
-    std::move(callback).Run({}, {});
+    std::move(callback).Run({}, {}, ComputeEmbeddingsStatus::MODEL_UNAVAILABLE);
     return;
   }
 
@@ -126,13 +158,13 @@ void PassageEmbeddingsServiceController::GetEmbeddings(
         base::BindOnce(&PassageEmbeddingsServiceController::OnDisconnected,
                        weak_ptr_factory_.GetWeakPtr()));
     embedder_remote_.set_idle_handler(
-        base::Seconds(kRemoteTimeoutSeconds),
+        history_embeddings::kEmbeddingsServiceTimeout.Get(),
         base::BindRepeating(&PassageEmbeddingsServiceController::ResetRemotes,
                             weak_ptr_factory_.GetWeakPtr()));
   }
 
   embedder_remote_->GenerateEmbeddings(
-      std::move(passages),
+      std::move(passages), priority,
       base::BindOnce(
           [](GetEmbeddingsCallback callback,
              std::vector<passage_embeddings::mojom::PassageEmbeddingsResultPtr>
@@ -144,10 +176,16 @@ void PassageEmbeddingsServiceController::GetEmbeddings(
               result_embeddings.emplace_back(result->embeddings);
               result_embeddings.back().Normalize();
             }
-            std::move(callback).Run(std::move(result_passages),
-                                    std::move(result_embeddings));
+            std::move(callback).Run(
+                std::move(result_passages), std::move(result_embeddings),
+                results.empty() ? ComputeEmbeddingsStatus::EXECUTION_FAILURE
+                                : ComputeEmbeddingsStatus::SUCCESS);
           },
           std::move(callback)));
+}
+
+bool PassageEmbeddingsServiceController::EmbedderReady() {
+  return !sp_model_path_.empty() && !embeddings_model_path_.empty();
 }
 
 void PassageEmbeddingsServiceController::ResetRemotes() {

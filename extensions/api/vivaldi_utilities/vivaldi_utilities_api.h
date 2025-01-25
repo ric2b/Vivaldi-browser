@@ -1018,48 +1018,6 @@ class UtilitiesSetProtocolHandlingFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
-class UtilitiesConnectProxyFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.connectProxy", UTILITIES_PROXY_CONNECT)
-  UtilitiesConnectProxyFunction() = default;
-
- private:
-  ~UtilitiesConnectProxyFunction() override = default;
-  ResponseAction Run() override;
-};
-
-class UtilitiesDisconnectProxyFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.disconnectProxy",
-                             UTILITIES_PROXY_DISCONNECT)
-  UtilitiesDisconnectProxyFunction() = default;
-
- private:
-  ~UtilitiesDisconnectProxyFunction() override = default;
-  ResponseAction Run() override;
-};
-
-class UtilitiesSupportsProxyFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.supportsProxy", UTILITIES_PROXY_SUPPORT)
-  UtilitiesSupportsProxyFunction() = default;
-
- private:
-  ~UtilitiesSupportsProxyFunction() override = default;
-  ResponseAction Run() override;
-};
-
-class UtilitiesGetOtherProxiesFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.getOtherProxies",
-                             UTILITIES_PROXY_GET_OTHER_PROXIES)
-  UtilitiesGetOtherProxiesFunction() = default;
-
- private:
-  ~UtilitiesGetOtherProxiesFunction() override = default;
-  ResponseAction Run() override;
-};
-
 class UtilitiesBrowserWindowReadyFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.browserWindowReady",
@@ -1121,6 +1079,54 @@ class UtilitiesGetDirectMatchFunction : public ExtensionFunction {
 
  private:
   ~UtilitiesGetDirectMatchFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesEmulateUserInputFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.emulateUserInput",
+                             UTILITIES_EMULATE_USER_INPUT)
+  UtilitiesEmulateUserInputFunction() = default;
+
+ private:
+  ~UtilitiesEmulateUserInputFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesIsVivaldiPinnedToLaunchBarFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.isVivaldiPinnedToLaunchBar",
+                             UTILITIES_IS_VIVALDI_PINNED_TO_LAUNCH_BAR)
+  UtilitiesIsVivaldiPinnedToLaunchBarFunction() = default;
+
+ private:
+  ~UtilitiesIsVivaldiPinnedToLaunchBarFunction() override = default;
+  ResponseAction Run() override;
+  std::optional<bool> CheckIsPinned();
+  void SendResult(std::optional<bool> isPinned);
+};
+
+class UtilitiesPinVivaldiToLaunchBarFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.pinVivaldiToLaunchBar",
+                             UTILITIES_PIN_VIVALDI_TO_LAUNCH_BAR)
+  UtilitiesPinVivaldiToLaunchBarFunction() = default;
+
+ private:
+  ~UtilitiesPinVivaldiToLaunchBarFunction() override = default;
+  ResponseAction Run() override;
+  bool PinToLaunchBar();
+  void SendResult(bool success);
+};
+
+class UtilitiesDownloadsDragFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.downloadsDrag",
+                             UTILITIES_DOWNLOADS_DRAG)
+  UtilitiesDownloadsDragFunction() = default;
+
+ private:
+  ~UtilitiesDownloadsDragFunction() override = default;
   ResponseAction Run() override;
 };
 

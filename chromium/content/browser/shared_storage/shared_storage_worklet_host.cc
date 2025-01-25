@@ -18,6 +18,7 @@
 #include "base/time/time.h"
 #include "components/services/storage/shared_storage/shared_storage_manager.h"
 #include "content/browser/attribution_reporting/attribution_manager.h"
+#include "content/browser/code_cache/generated_code_cache_context.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/devtools/shared_storage_worklet_devtools_manager.h"
 #include "content/browser/fenced_frame/fenced_frame_reporter.h"
@@ -26,6 +27,7 @@
 #include "content/browser/private_aggregation/private_aggregation_manager.h"
 #include "content/browser/renderer_host/page_impl.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
+#include "content/browser/shared_storage/shared_storage_code_cache_host_proxy.h"
 #include "content/browser/shared_storage/shared_storage_document_service_impl.h"
 #include "content/browser/shared_storage/shared_storage_render_thread_worklet_driver.h"
 #include "content/browser/shared_storage/shared_storage_url_loader_factory_proxy.h"
@@ -443,18 +445,42 @@ void SharedStorageWorkletHost::SelectURL(
                                 std::move(reporting_metadata));
   }
 
-  if (private_aggregation_config->context_id.has_value() &&
-      !blink::IsValidPrivateAggregationContextId(
-          private_aggregation_config->context_id.value())) {
-    receiver_.ReportBadMessage("Invalid context_id.");
-    LogSharedStorageWorkletError(blink::SharedStorageWorkletErrorType::
-                                     kSelectURLNonWebVisibleInvalidContextId);
-    return;
+  if (private_aggregation_config->context_id.has_value()) {
+    if (!blink::IsValidPrivateAggregationContextId(
+            private_aggregation_config->context_id.value())) {
+      receiver_.ReportBadMessage("Invalid context_id.");
+      LogSharedStorageWorkletError(blink::SharedStorageWorkletErrorType::
+                                       kSelectURLNonWebVisibleInvalidContextId);
+      return;
+    }
+
+    if (document_service_->render_frame_host().IsNestedWithinFencedFrame() &&
+        base::FeatureList::IsEnabled(
+            blink::features::kFencedFramesLocalUnpartitionedDataAccess)) {
+      receiver_.ReportBadMessage(
+          "contextId cannot be set inside of fenced frames.");
+      LogSharedStorageWorkletError(blink::SharedStorageWorkletErrorType::
+                                       kSelectURLNonWebVisibleInvalidContextId);
+      return;
+    }
   }
 
   if (!blink::IsValidPrivateAggregationFilteringIdMaxBytes(
           private_aggregation_config->filtering_id_max_bytes)) {
     receiver_.ReportBadMessage("Invalid fitering_id_byte_size.");
+    LogSharedStorageWorkletError(
+        blink::SharedStorageWorkletErrorType::
+            kSelectURLNonWebVisibleInvalidFilteringIdMaxBytes);
+    return;
+  }
+
+  if (document_service_->render_frame_host().IsNestedWithinFencedFrame() &&
+      private_aggregation_config->filtering_id_max_bytes !=
+          blink::kPrivateAggregationApiDefaultFilteringIdMaxBytes &&
+      base::FeatureList::IsEnabled(
+          blink::features::kFencedFramesLocalUnpartitionedDataAccess)) {
+    receiver_.ReportBadMessage(
+        "filteringIdMaxBytes cannot be set inside of fenced frames.");
     LogSharedStorageWorkletError(
         blink::SharedStorageWorkletErrorType::
             kSelectURLNonWebVisibleInvalidFilteringIdMaxBytes);
@@ -606,18 +632,42 @@ void SharedStorageWorkletHost::Run(
     return;
   }
 
-  if (private_aggregation_config->context_id.has_value() &&
-      !blink::IsValidPrivateAggregationContextId(
-          private_aggregation_config->context_id.value())) {
-    receiver_.ReportBadMessage("Invalid context_id.");
-    LogSharedStorageWorkletError(blink::SharedStorageWorkletErrorType::
-                                     kRunNonWebVisibleInvalidContextId);
-    return;
+  if (private_aggregation_config->context_id.has_value()) {
+    if (!blink::IsValidPrivateAggregationContextId(
+            private_aggregation_config->context_id.value())) {
+      receiver_.ReportBadMessage("Invalid context_id.");
+      LogSharedStorageWorkletError(blink::SharedStorageWorkletErrorType::
+                                       kRunNonWebVisibleInvalidContextId);
+      return;
+    }
+
+    if (document_service_->render_frame_host().IsNestedWithinFencedFrame() &&
+        base::FeatureList::IsEnabled(
+            blink::features::kFencedFramesLocalUnpartitionedDataAccess)) {
+      receiver_.ReportBadMessage(
+          "contextId cannot be set inside of fenced frames.");
+      LogSharedStorageWorkletError(blink::SharedStorageWorkletErrorType::
+                                       kRunNonWebVisibleInvalidContextId);
+      return;
+    }
   }
 
   if (!blink::IsValidPrivateAggregationFilteringIdMaxBytes(
           private_aggregation_config->filtering_id_max_bytes)) {
     receiver_.ReportBadMessage("Invalid fitering_id_byte_size.");
+    LogSharedStorageWorkletError(
+        blink::SharedStorageWorkletErrorType::
+            kRunNonWebVisibleInvalidFilteringIdMaxBytes);
+    return;
+  }
+
+  if (document_service_->render_frame_host().IsNestedWithinFencedFrame() &&
+      private_aggregation_config->filtering_id_max_bytes !=
+          blink::kPrivateAggregationApiDefaultFilteringIdMaxBytes &&
+      base::FeatureList::IsEnabled(
+          blink::features::kFencedFramesLocalUnpartitionedDataAccess)) {
+    receiver_.ReportBadMessage(
+        "filteringIdMaxBytes cannot be set inside of fenced frames.");
     LogSharedStorageWorkletError(
         blink::SharedStorageWorkletErrorType::
             kRunNonWebVisibleInvalidFilteringIdMaxBytes);
@@ -1097,6 +1147,20 @@ void SharedStorageWorkletHost::OnAddModuleOnWorkletFinished(
     blink::mojom::SharedStorageDocumentService::CreateWorkletCallback callback,
     bool success,
     const std::string& error_message) {
+  // After the initial script loading, accessing shared storage will be allowed.
+  // We want to disable the communication with network and with the cache, to
+  // prevent leaking shared storage data.
+  //
+  // Note: The last code cache message (i.e. `DidGenerateCacheableMetadata()`,
+  // if any) could race with this `OnAddModuleOnWorkletFinished()` callback, as
+  // they are from separate mojom channels. It could impact the utility (i.e.
+  // the generated code is not stored when the race happens).
+  //
+  // TODO(crbug.com/341690728): Measure how often the race happens, and
+  // rearchitect if necessary.
+  url_loader_factory_proxy_.reset();
+  code_cache_host_proxy_.reset();
+
   std::move(callback).Run(success, error_message);
 
   DecrementPendingOperationsCount();
@@ -1135,7 +1199,7 @@ void SharedStorageWorkletHost::
         const std::string& error_message,
         uint32_t index) {
   auto it = unresolved_urns_.find(urn_uuid);
-  DCHECK(it != unresolved_urns_.end());
+  CHECK(it != unresolved_urns_.end(), base::NotFatalUntil::M130);
 
   if ((success && index >= it->second.size()) || (!success && index != 0)) {
     // This could indicate a compromised worklet environment, so let's terminate
@@ -1167,7 +1231,7 @@ void SharedStorageWorkletHost::OnRunURLSelectionOperationOnWorkletFinished(
     uint32_t index,
     BudgetResult budget_result) {
   auto it = unresolved_urns_.find(urn_uuid);
-  DCHECK(it != unresolved_urns_.end());
+  CHECK(it != unresolved_urns_.end(), base::NotFatalUntil::M130);
 
   std::vector<blink::mojom::SharedStorageUrlWithMetadataPtr>
       urls_with_metadata = std::move(it->second);
@@ -1225,6 +1289,9 @@ void SharedStorageWorkletHost::OnRunURLSelectionOperationOnWorkletFinished(
                 urn_uuid, std::move(mapping_result));
 
     shared_storage_worklet_host_manager_->NotifyConfigPopulated(config);
+  } else {
+    LogSharedStorageWorkletError(
+        blink::SharedStorageWorkletErrorType::kSelectURLWebVisible);
   }
 
   base::UmaHistogramLongTimes(
@@ -1308,25 +1375,50 @@ SharedStorageWorkletHost::GetAndConnectToSharedStorageWorkletService() {
   DCHECK(document_service_);
 
   if (!shared_storage_worklet_service_) {
-    bool private_aggregation_permissions_policy_allowed =
-        document_service_->render_frame_host().IsFeatureEnabled(
-            blink::mojom::PermissionsPolicyFeature::kPrivateAggregation);
+    code_cache_host_receivers_ =
+        std::make_unique<CodeCacheHostImpl::ReceiverSet>(
+            storage_partition_->GetGeneratedCodeCacheContext());
+
+    RenderFrameHostImpl& rfh = static_cast<RenderFrameHostImpl&>(
+        document_service_->render_frame_host());
+
+    mojo::PendingRemote<blink::mojom::CodeCacheHost> actual_code_cache_host;
+    code_cache_host_receivers_->Add(
+        rfh.GetProcess()->GetID(), rfh.GetNetworkIsolationKey(),
+        rfh.GetStorageKey(),
+        actual_code_cache_host.InitWithNewPipeAndPassReceiver());
+
+    mojo::PendingRemote<blink::mojom::CodeCacheHost> proxied_code_cache_host;
+    code_cache_host_proxy_ = std::make_unique<SharedStorageCodeCacheHostProxy>(
+        std::move(actual_code_cache_host),
+        proxied_code_cache_host.InitWithNewPipeAndPassReceiver(),
+        script_source_url_);
 
     auto global_scope_creation_params =
         blink::mojom::WorkletGlobalScopeCreationParams::New(
             script_source_url_, shared_storage_origin_, origin_trial_features_,
             devtools_handle_->devtools_token(),
             devtools_handle_->BindNewPipeAndPassRemote(),
+            std::move(proxied_code_cache_host),
             devtools_handle_->wait_for_debugger());
 
     driver_->StartWorkletService(
         shared_storage_worklet_service_.BindNewPipeAndPassReceiver(),
         std::move(global_scope_creation_params));
 
+    const blink::PermissionsPolicy* permissions_policy =
+        rfh.permissions_policy();
+
+    bool private_aggregation_permissions_policy_allowed =
+        permissions_policy->IsFeatureEnabledForOrigin(
+            blink::mojom::PermissionsPolicyFeature::kPrivateAggregation,
+            shared_storage_origin_);
+
     auto embedder_context = static_cast<RenderFrameHostImpl&>(
                                 document_service_->render_frame_host())
                                 .frame_tree_node()
                                 ->GetEmbedderSharedStorageContextIfAllowed();
+
     shared_storage_worklet_service_->Initialize(
         shared_storage_worklet_service_client_.BindNewEndpointAndPassRemote(),
         private_aggregation_permissions_policy_allowed, embedder_context);

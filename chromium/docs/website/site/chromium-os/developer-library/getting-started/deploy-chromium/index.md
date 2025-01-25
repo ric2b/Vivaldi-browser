@@ -131,7 +131,7 @@ changes.
     <a href="/chromium-os/developer-library/getting-started/build-chromium">Build Chromium</a>
   </div>
   <div style="margin: 0 1rem; display: inline-block;">
-    <a href="/chromium-os/developer-library/getting-started/deploy-chromium">Test Chromium</a>
+    <a href="/chromium-os/developer-library/getting-started/test-chromium">Test Chromium</a>
     <span style="margin-left: 0.5rem;">></span>
   </div>
 </div>

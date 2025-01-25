@@ -33,10 +33,10 @@ std::unique_ptr<FrameContextData>
 BrowserFrameContextData::GetLocalParentOrOpener() const {
   CHECK(frame_);
   content::RenderFrameHost* parent_or_opener = frame_->GetParent();
-  // Non primary pages(e.g. fenced frame, prerendered page, bfcache, and
-  // portals) can't look at the opener, and WebContents::GetOpener returns the
-  // opener on the primary frame tree. Thus, GetOpener should be called when
-  // |frame_| is a primary main frame.
+  // Non primary pages (e.g. fenced frame, prerendered page, bfcache) can't look
+  // at the opener, and WebContents::GetOpener returns the opener on the primary
+  // frame tree. Thus, GetOpener should be called when `frame_` is a primary
+  // main frame.
   if (!parent_or_opener && frame_->IsInPrimaryMainFrame()) {
     parent_or_opener =
         content::WebContents::FromRenderFrameHost(frame_)->GetOpener();
@@ -77,12 +77,12 @@ url::Origin BrowserFrameContextData::GetOrigin() const {
 // BrowserFrameContextData::CanAccess is unable to replicate all of the
 // WebSecurityOrigin::CanAccess checks, so these methods should not be called.
 bool BrowserFrameContextData::CanAccess(const url::Origin& target) const {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return true;
 }
 
 bool BrowserFrameContextData::CanAccess(const FrameContextData& target) const {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return true;
 }
 

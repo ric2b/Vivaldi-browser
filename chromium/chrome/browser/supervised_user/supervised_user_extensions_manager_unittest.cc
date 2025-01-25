@@ -50,7 +50,7 @@ class SupervisedUserExtensionsManagerTestBase
     ExtensionServiceTestBase::SetUp();
     ExtensionServiceInitParams params;
     params.profile_is_supervised = true;
-    InitializeExtensionService(params);
+    InitializeExtensionService(std::move(params));
     // Flush the message loop, to ensure that credentials have been loaded in
     // Identity Manager.
     base::RunLoop().RunUntilIdle();
@@ -305,6 +305,9 @@ TEST_P(SupervisedUserExtensionsManagerTest,
       SupervisedUserExtensionsMetricsRecorder::UmaExtensionState::
           kLocalApprovalGranted,
       approved_extensions_count);
+  histogram_tester.ExpectTotalCount(
+      extensions::kInitialLocallyApprovedExtensionCountWinLinuxMacHistogramName,
+      approved_extensions_count);
 }
 
 // Tests that extensions missing parent approval are granted parent approval
@@ -348,6 +351,8 @@ TEST_P(SupervisedUserExtensionsManagerTest,
   EXPECT_TRUE(manager_->MustRemainDisabled(extn_with_switch_off.get(), &reason,
                                            &error));
 
+  histogram_tester.ExpectTotalCount(
+      extensions::kExtensionApprovalsCountOnExtensionToggleHistogramName, 0);
   // Set the Extensions switch to ON. Install another extension which should be
   // granted parental approval by the end of the installation, if the Extensions
   // switch manages them.
@@ -364,6 +369,18 @@ TEST_P(SupervisedUserExtensionsManagerTest,
       SupervisedUserExtensionsMetricsRecorder::kExtensionsHistogramName,
       SupervisedUserExtensionsMetricsRecorder::UmaExtensionState::
           kApprovalGrantedByDefault,
+      approved_extensions_count);
+  // The entry point of the implicit approval is recorded.
+  histogram_tester.ExpectBucketCount(
+      SupervisedUserExtensionsMetricsRecorder::
+          kImplicitParentApprovalGrantEntryPointHistogramName,
+      SupervisedUserExtensionsMetricsRecorder::
+          ImplicitExtensionApprovalEntryPoint::
+              kOnExtensionsSwitchFlippedToEnabled,
+      approved_extensions_count);
+  // The number of auto-approved extensions is reco
+  histogram_tester.ExpectTotalCount(
+      extensions::kExtensionApprovalsCountOnExtensionToggleHistogramName,
       approved_extensions_count);
 
   // Install an extension.
@@ -397,6 +414,21 @@ TEST_P(SupervisedUserExtensionsManagerTest,
       SupervisedUserExtensionsMetricsRecorder::UmaExtensionState::
           kLocalApprovalGranted,
       0);
+  histogram_tester.ExpectTotalCount(
+      extensions::kInitialLocallyApprovedExtensionCountWinLinuxMacHistogramName,
+      0);
+  // The entry point of the implicit approval is recorded.
+  histogram_tester.ExpectBucketCount(
+      SupervisedUserExtensionsMetricsRecorder::
+          kImplicitParentApprovalGrantEntryPointHistogramName,
+      SupervisedUserExtensionsMetricsRecorder::
+          ImplicitExtensionApprovalEntryPoint::
+              OnExtensionInstallationWithExtensionsSwitchEnabled,
+      is_extension_approved ? 1 : 0);
+  histogram_tester.ExpectTotalCount(
+      SupervisedUserExtensionsMetricsRecorder::
+          kImplicitParentApprovalGrantEntryPointHistogramName,
+      approved_extensions_count + (is_extension_approved ? 1 : 0));
 }
 
 // Tests that extensions missing parent approval are granted parent approval

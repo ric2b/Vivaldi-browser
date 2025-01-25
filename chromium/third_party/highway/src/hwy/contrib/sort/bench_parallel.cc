@@ -185,8 +185,9 @@ void RunWithoutVerify(Traits st, const Dist dist, const size_t num_keys,
 
 void BenchParallel() {
   // Not interested in benchmark results for other targets on x86
-  if (HWY_ARCH_X86 && (HWY_TARGET != HWY_AVX2 && HWY_TARGET != HWY_AVX3 &&
-                       HWY_TARGET != HWY_AVX3_ZEN4)) {
+  if (HWY_ARCH_X86 &&
+      (HWY_TARGET != HWY_AVX2 && HWY_TARGET != HWY_AVX3 &&
+       HWY_TARGET != HWY_AVX3_ZEN4 && HWY_TARGET != HWY_AVX3_SPR)) {
     return;
   }
 
@@ -205,7 +206,6 @@ void BenchParallel() {
   const Dist dist = Dist::kUniform32;
 
   SharedState shared;
-  shared.tls.resize(NT);
 
   std::vector<Result> results;
   for (size_t nt = 1; nt < NT; nt += HWY_MAX(1, NT / 16)) {
@@ -233,6 +233,7 @@ namespace hwy {
 namespace {
 HWY_BEFORE_TEST(BenchParallel);
 HWY_EXPORT_AND_TEST_P(BenchParallel, BenchParallel);
+HWY_AFTER_TEST();
 }  // namespace
 }  // namespace hwy
 

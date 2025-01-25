@@ -173,7 +173,6 @@ ManagePasswordsView::CreatePasswordDetailsView() {
             view->GetBubbleFrameView()->SetFootnoteView(
                 view->CreateFooterView());
             view->PreferredSizeChanged();
-            view->SizeToContents();
           },
           base::Unretained(this)),
       base::BindRepeating(&ManagePasswordsView::ExtendAuthValidity,
@@ -297,9 +296,7 @@ void ManagePasswordsView::RecreateLayout() {
     if (controller_.IsOptedInForAccountStorage() &&
         !controller_.get_currently_selected_password()
              .value()
-             .IsUsingAccountStore() &&
-        base::FeatureList::IsEnabled(
-            password_manager::features::kButterOnDesktopFollowup)) {
+             .IsUsingAccountStore()) {
       frame_view->SetFootnoteView(CreateMovePasswordFooterView());
       frame_view->SetProperty(views::kElementIdentifierKey, kFooterId);
     }
@@ -313,7 +310,6 @@ void ManagePasswordsView::RecreateLayout() {
             DISTANCE_CONTENT_LIST_VERTICAL_SINGLE)));
   }
   PreferredSizeChanged();
-  SizeToContents();
 }
 
 void ManagePasswordsView::SwitchToReadingMode() {

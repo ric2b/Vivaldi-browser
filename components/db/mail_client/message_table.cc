@@ -129,14 +129,14 @@ bool MessageTable::DeleteMessages(SearchListIDs search_list_ids) {
     }
   }
   sql.append(")");
-  sql::Statement statement(GetDB().GetUniqueStatement(sql.c_str()));
+  sql::Statement statement(GetDB().GetUniqueStatement(sql));
   return statement.Run();
 }
 
 bool MessageTable::UpdateToVersion2() {
   if (!GetDB().DoesTableExist("messages")) {
     NOTREACHED() << "messages table should exist before migration";
-    return false;
+    //return false;
   }
 
   if (!GetDB().Execute("DROP TRIGGER messages_au"))
@@ -182,7 +182,7 @@ bool MessageTable::DoesAttachedMessageTableExists() {
   std::string sql_str =
       "SELECT 1 FROM old.sqlite_master WHERE type='table' AND name= 'messages'";
 
-  sql::Statement statement(GetDB().GetUniqueStatement(sql_str.c_str()));
+  sql::Statement statement(GetDB().GetUniqueStatement(sql_str));
 
   return statement.Step();
 }
@@ -190,7 +190,7 @@ bool MessageTable::DoesAttachedMessageTableExists() {
 int MessageTable::CountRows(std::string table) {
   std::string sql_str = "SELECT COUNT(rowid) FROM " + table;
 
-  sql::Statement statement(GetDB().GetUniqueStatement(sql_str.c_str()));
+  sql::Statement statement(GetDB().GetUniqueStatement(sql_str));
 
   if (!statement.Step())
     return -1;
@@ -219,7 +219,7 @@ bool MessageTable::InsertIntoMigrationTable(int limit, int offset) {
 int MessageTable::SelectMaxOffsetFromMigration() {
   std::string sql_str = "SELECT max(offs) FROM migrationLogger;";
 
-  sql::Statement statement(GetDB().GetUniqueStatement(sql_str.c_str()));
+  sql::Statement statement(GetDB().GetUniqueStatement(sql_str));
 
   if (!statement.Step())
     return 0;

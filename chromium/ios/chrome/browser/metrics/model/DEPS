@@ -1,7 +1,8 @@
 include_rules = [
+  "+ios/chrome/browser/content_settings/model",
   "+ios/chrome/browser/history/model",
   "+ios/chrome/browser/sync/model",
-  "+ios/chrome/browser/sessions",
+  "+ios/chrome/browser/sessions/model",
   "+ios/chrome/browser/shared/ui/util/uikit_ui_util.h",
   "+ios/chrome/browser/prerender/model",
   "+ios/chrome/browser/variations/model",
@@ -13,6 +14,7 @@ include_rules = [
   "+ios/chrome/browser/signin/model",
   "+ios/chrome/browser/supervised_user/model",
   "+ios/chrome/browser/push_notification/model",
+  "+ios/chrome/browser/parcel_tracking",
 ]
 
 specific_include_rules = {
@@ -38,8 +40,8 @@ specific_include_rules = {
     "+ios/chrome/browser/shared/coordinator/scene/scene_state.h",
   ],
   "^ios_chrome_default_browser_metrics_provider.mm": [
-    "+ios/chrome/browser/ui/default_promo/default_browser_utils.h",
     "+ios/chrome/browser/default_browser/model/utils.h",
+    "+ios/chrome/browser/default_promo/ui_bundled/default_browser_utils.h",
   ],
   "^ios_chrome_metrics_service_client.mm": [
     "+ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h",

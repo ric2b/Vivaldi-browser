@@ -41,7 +41,7 @@
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/navigation_request_info.h"
-#include "content/browser/service_worker/service_worker_container_host.h"
+#include "content/browser/service_worker/service_worker_client.h"
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
 #include "content/browser/service_worker/service_worker_main_resource_loader_interceptor.h"
 #include "content/browser/storage_partition_impl.h"
@@ -92,7 +92,6 @@
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
-#include "services/network/public/cpp/attribution_reporting_runtime_features.h"
 #include "services/network/public/cpp/constants.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/parsed_headers.h"
@@ -109,6 +108,7 @@
 #include "third_party/blink/public/common/loader/throttling_url_loader.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_router_rule.mojom.h"
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -330,8 +330,8 @@ std::unique_ptr<network::ResourceRequest> CreateResourceRequest(
         *request_info.begin_params->trust_token_params;
   }
 
-  new_request->has_storage_access =
-      request_info.begin_params->has_storage_access;
+  new_request->storage_access_api_status =
+      request_info.begin_params->storage_access_api_status;
 
   WebContentsImpl* web_contents = static_cast<WebContentsImpl*>(
       WebContents::FromFrameTreeNodeId(frame_tree_node->frame_tree_node_id()));
@@ -344,11 +344,6 @@ std::unique_ptr<network::ResourceRequest> CreateResourceRequest(
       request_info.begin_params->impression.has_value()
           ? network::mojom::AttributionReportingEligibility::kNavigationSource
           : network::mojom::AttributionReportingEligibility::kUnset;
-
-  if (request_info.begin_params->impression.has_value()) {
-    new_request->attribution_reporting_runtime_features =
-        request_info.begin_params->impression->runtime_features;
-  }
 
   new_request->shared_storage_writable_eligible =
       request_info.shared_storage_writable_eligible;
@@ -393,7 +388,16 @@ bool IsSameOriginRedirect(const std::vector<GURL>& url_chain) {
   return previous_origin.IsSameOriginWith(url_chain[url_chain.size() - 1]);
 }
 
-#if DCHECK_IS_ON()
+// TODO(https://crbug.com/346000235) there is a known failure with extensions
+// See test: ExtensionWebRequestApiTestWithContextType.HSTSUpgradeAfterRedirect
+// We still want to check this in debug mode to avoid further regressions, but
+// because it was affecting to many developers with DCHECK_IS_ON() this was
+// downgraded as a DEBUG only check.
+// After getting the approval to rewrite the CSP parser in Rust, we should be
+// able to remove "pre-parsing" of CSP in the network process and directly
+// parse them later in the browser process. This will make this check to become
+// unnecessary.
+#ifndef NDEBUG
 void CheckParsedHeadersEquals(const network::mojom::ParsedHeadersPtr& lhs,
                               const network::mojom::ParsedHeadersPtr& rhs,
                               const GURL& url) {
@@ -457,11 +461,12 @@ void CheckParsedHeadersEquals(const network::mojom::ParsedHeadersPtr& lhs,
                      rhs->observe_browsing_topics));
   CHECK(mojo::Equals(adjusted_lhs->allow_cross_origin_event_reporting,
                      rhs->allow_cross_origin_event_reporting));
-  NOTREACHED() << "The parsed headers don't match, but we don't know which "
-                  "field does not match. Please add a DCHECK before this one "
-                  "checking for the missing field.";
+  NOTREACHED_IN_MIGRATION()
+      << "The parsed headers don't match, but we don't know which "
+         "field does not match. Please add a DCHECK before this one "
+         "checking for the missing field.";
 }
-#endif
+#endif  // NDEBUG
 
 }  // namespace
 
@@ -598,6 +603,7 @@ void NavigationURLLoaderImpl::CreateInterceptors() {
           GetContentClient()->browser()->WillCreateURLLoaderRequestInterceptors(
               navigation_ui_data_.get(), frame_tree_node_id_,
               request_info_->navigation_id,
+              request_info_->force_no_https_upgrade,
               GetUIThreadTaskRunner(
                   {BrowserTaskType::kNavigationNetworkResponse}));
   if (!browser_interceptors.empty()) {
@@ -930,8 +936,8 @@ void NavigationURLLoaderImpl::OnReceiveEarlyHints(
       FrameTreeNode::GloballyFindByID(frame_tree_node_id_);
 
   // Allow Early Hints preload only for outermost main frames. Calculating
-  // appropriate parameters to create URLLoaderFactory for subframes, fenced
-  // frames or portal are complicated and not supported yet.
+  // appropriate parameters to create URLLoaderFactory for subframes and fenced
+  // frames are complicated and not supported yet.
   if (frame_tree_node->GetParentOrOuterDocument())
     return;
 
@@ -979,6 +985,12 @@ void NavigationURLLoaderImpl::OnReceiveResponse(
   if (!head_update_params_.router_info.is_null()) {
     head->service_worker_router_info =
         std::move(head_update_params_.router_info);
+  }
+  if (!head_update_params_.load_timing_info
+           .service_worker_router_evaluation_start.is_null()) {
+    head->load_timing.service_worker_router_evaluation_start =
+        head_update_params_.load_timing_info
+            .service_worker_router_evaluation_start;
   }
 
   // If the default loader (network) was used to handle the URL load request
@@ -1143,7 +1155,7 @@ void NavigationURLLoaderImpl::OnUploadProgress(
     int64_t current_position,
     int64_t total_size,
     OnUploadProgressCallback callback) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void NavigationURLLoaderImpl::OnTransferSizeUpdated(
@@ -1404,7 +1416,7 @@ void NavigationURLLoaderImpl::ParseHeaders(
   // - ServiceWorker
   // - WebUI
   if (head->parsed_headers) {
-#if DCHECK_IS_ON()
+#ifndef NDEBUG
     // In debug mode, force reparsing the headers and check that they match.
     auto check = [](base::OnceClosure continuation,
                     network::mojom::URLResponseHead* head, GURL url,
@@ -1415,9 +1427,9 @@ void NavigationURLLoaderImpl::ParseHeaders(
     GetNetworkService()->ParseHeaders(
         url, head->headers,
         base::BindOnce(check, std::move(continuation), head, url));
-#else
+#else   // NDEBUG
     std::move(continuation).Run();
-#endif
+#endif  // NDEBUG
     return;
   }
 
@@ -1726,22 +1738,6 @@ void NavigationURLLoaderImpl::NotifyResponseStarted(
     }
   }
 
-  // When dispatching a ServiceWorker fetch event failed, controller is marked
-  // lost in `ServiceWorkerMainResourceLoader::DidDispatchFetchEvent`. In this
-  // case, the main resource loading should have already been fallen back to the
-  // network, and ServiceWorker subresource interception is reset here by
-  // detecting the controller lost, to completely cancel the ServiceWorker
-  // interception initially set in `MaybeCreateLoader()`.
-  //
-  // There might be other cases where the controller is lost here, but probably
-  // it's fine to reset ServiceWorker subresource interception as well, as the
-  // controller is anyway lost.
-  if (!subresource_loader_params_.service_worker_client ||
-      !subresource_loader_params_.service_worker_client->controller()) {
-    subresource_loader_params_.controller_service_worker_info = nullptr;
-    subresource_loader_params_.controller_service_worker_object_host = nullptr;
-  }
-
   // TODO(scottmg): This needs to do more of what
   // NavigationResourceHandler::OnResponseStarted() does.
   delegate_->OnResponseStarted(
@@ -1845,6 +1841,8 @@ void NavigationURLLoaderImpl::RecordServiceWorkerRouterEvaluationResults(
   builder
       .SetRouterRuleCount(ukm::GetExponentialBucketMinForCounts1000(
           router_info->route_rule_num))
+      .SetRouterEvaluationTime(
+          router_info->router_evaluation_time.InMicroseconds())
       .Record(ukm::UkmRecorder::Get());
 }
 

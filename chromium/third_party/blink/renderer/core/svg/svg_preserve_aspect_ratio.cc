@@ -19,6 +19,11 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/svg/svg_preserve_aspect_ratio.h"
 
 #include "base/notreached.h"
@@ -427,7 +432,7 @@ String SVGPreserveAspectRatio::ValueAsString() const {
 
 void SVGPreserveAspectRatio::Add(const SVGPropertyBase* other,
                                  const SVGElement*) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void SVGPreserveAspectRatio::CalculateAnimatedValue(
@@ -438,7 +443,7 @@ void SVGPreserveAspectRatio::CalculateAnimatedValue(
     const SVGPropertyBase* to_value,
     const SVGPropertyBase*,
     const SVGElement*) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 float SVGPreserveAspectRatio::CalculateDistance(

@@ -44,10 +44,8 @@ uint32_t CPDF_PatternCS::v_Load(CPDF_Document* pDoc,
   return m_pBaseCS->ComponentCount() + 1;
 }
 
-bool CPDF_PatternCS::GetRGB(pdfium::span<const float> pBuf,
-                            float* R,
-                            float* G,
-                            float* B) const {
+std::optional<FX_RGB_STRUCT<float>> CPDF_PatternCS::GetRGB(
+    pdfium::span<const float> pBuf) const {
   NOTREACHED_NORETURN();
 }
 
@@ -55,11 +53,11 @@ const CPDF_PatternCS* CPDF_PatternCS::AsPatternCS() const {
   return this;
 }
 
-std::optional<FX_COLORREF> CPDF_PatternCS::GetPatternColorRef(
+std::optional<FX_RGB_STRUCT<float>> CPDF_PatternCS::GetPatternRGB(
     const PatternValue& value) const {
   if (!m_pBaseCS) {
     return std::nullopt;
   }
 
-  return m_pBaseCS->GetColorRef(value.GetComps());
+  return m_pBaseCS->GetRGB(value.GetComps());
 }

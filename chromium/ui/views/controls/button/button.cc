@@ -200,8 +200,9 @@ void Button::SetTooltipText(const std::u16string& tooltip_text) {
     return;
   }
 
-  if (GetAccessibleName().empty() || GetAccessibleName() == tooltip_text_) {
-    SetAccessibleName(tooltip_text);
+  if (GetViewAccessibility().GetCachedName().empty() ||
+      GetViewAccessibility().GetCachedName() == tooltip_text_) {
+    GetViewAccessibility().SetName(tooltip_text);
   }
 
   tooltip_text_ = tooltip_text;
@@ -260,6 +261,7 @@ void Button::SetState(ButtonState state) {
   state_ = state;
 
   GetViewAccessibility().SetIsEnabled(state_ != STATE_DISABLED);
+  GetViewAccessibility().SetIsHovered(state_ == STATE_HOVERED);
 
   StateChanged(old_state);
   OnPropertyChanged(&state_, kPropertyEffectsPaint);
@@ -617,7 +619,6 @@ void Button::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 
   switch (state_) {
     case STATE_HOVERED:
-      node_data->AddState(ax::mojom::State::kHovered);
       break;
     case STATE_PRESSED:
       node_data->SetCheckedState(ax::mojom::CheckedState::kTrue);
@@ -709,7 +710,7 @@ Button::Button(PressedCallback callback)
   // if one hasn't been set.
   InkDrop::Get(ink_drop_view_)->SetBaseColor(gfx::kPlaceholderColor);
 
-  SetAccessibilityProperties(ax::mojom::Role::kButton);
+  GetViewAccessibility().SetProperties(ax::mojom::Role::kButton);
 }
 
 void Button::RequestFocusFromEvent() {

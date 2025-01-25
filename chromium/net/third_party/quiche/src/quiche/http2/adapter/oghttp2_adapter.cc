@@ -1,6 +1,8 @@
 #include "quiche/http2/adapter/oghttp2_adapter.h"
 
 #include <memory>
+#include <string>
+#include <utility>
 
 #include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
@@ -77,6 +79,15 @@ void OgHttp2Adapter::SubmitMetadata(Http2StreamId stream_id,
   session_->SubmitMetadata(stream_id, std::move(source));
 }
 
+void OgHttp2Adapter::SubmitMetadata(Http2StreamId stream_id,
+                                    size_t /* num_frames */) {
+  // Not necessary to pass max_frame_size along, since OgHttp2Session tracks the
+  // peer's advertised max frame size. Not necessary to pass the number of
+  // frames along, since OgHttp2Session will invoke the visitor method until it
+  // is done packing the payload.
+  session_->SubmitMetadata(stream_id);
+}
+
 int OgHttp2Adapter::Send() { return session_->Send(); }
 
 int OgHttp2Adapter::GetSendWindowSize() const {
@@ -134,7 +145,6 @@ int32_t OgHttp2Adapter::SubmitRequest(
     absl::Span<const Header> headers,
     std::unique_ptr<DataFrameSource> data_source, bool end_stream,
     void* user_data) {
-  QUICHE_DCHECK_EQ(end_stream, data_source == nullptr);
   return session_->SubmitRequest(headers, std::move(data_source), end_stream,
                                  user_data);
 }
@@ -143,7 +153,6 @@ int OgHttp2Adapter::SubmitResponse(Http2StreamId stream_id,
                                    absl::Span<const Header> headers,
                                    std::unique_ptr<DataFrameSource> data_source,
                                    bool end_stream) {
-  QUICHE_DCHECK_EQ(end_stream, data_source == nullptr);
   return session_->SubmitResponse(stream_id, headers, std::move(data_source),
                                   end_stream);
 }

@@ -352,7 +352,8 @@ class FilterMenuAdapter : public views::MenuModelAdapter {
         menu, model->GetCommandIdAt(model_index), view_delegate_);
     menu_item_view->SetTitle(model->GetLabelAt(model_index));
     menu_item_view->SetIcon(model->GetIconAt(model_index));
-    menu_item_view->SetAccessibleName(model->GetAccessibleNameAt(model_index));
+    menu_item_view->GetViewAccessibility().SetName(
+        model->GetAccessibleNameAt(model_index));
 
     const ui::ElementIdentifier element_id =
         model->GetElementIdentifierAt(model_index);
@@ -536,7 +537,7 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
     filter_button->SetFlipCanvasOnPaintForRTLUI(false);
     std::u16string filter_button_label(
         l10n_util::GetStringUTF16(IDS_ASH_SEARCH_BOX_FILTER_BUTTON_TOOLTIP));
-    filter_button->SetAccessibleName(
+    filter_button->GetViewAccessibility().SetName(
         l10n_util::GetStringUTF16(IDS_ASH_SEARCH_CATEGORY_FILTER_MENU_TITLE));
     filter_button->SetTooltipText(filter_button_label);
   }
@@ -545,7 +546,7 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
       &SearchBoxView::CloseButtonPressed, base::Unretained(this)));
   std::u16string close_button_label(
       l10n_util::GetStringUTF16(IDS_APP_LIST_CLEAR_SEARCHBOX));
-  close_button->SetAccessibleName(close_button_label);
+  close_button->GetViewAccessibility().SetName(close_button_label);
   close_button->SetTooltipText(close_button_label);
 
   views::ImageButton* assistant_button =
@@ -554,7 +555,7 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
   assistant_button->SetFlipCanvasOnPaintForRTLUI(false);
   std::u16string assistant_button_label(
       l10n_util::GetStringUTF16(IDS_APP_LIST_START_ASSISTANT));
-  assistant_button->SetAccessibleName(assistant_button_label);
+  assistant_button->GetViewAccessibility().SetName(assistant_button_label);
   assistant_button->SetTooltipText(assistant_button_label);
   SetShowAssistantButton(search_box_model->show_assistant_button());
 }
@@ -923,7 +924,7 @@ void SearchBoxView::OnAfterUserAction(views::Textfield* sender) {
 void SearchBoxView::OnKeyEvent(ui::KeyEvent* evt) {
   // Only handle the key event that triggers the focus or result selection
   // traversal here. Propagate the event to `delegate_` otherwise.
-  if (evt->type() != ui::ET_KEY_PRESSED ||
+  if (evt->type() != ui::EventType::kKeyPressed ||
       !(IsUnhandledArrowKeyEvent(*evt) || evt->key_code() == ui::VKEY_TAB)) {
     delegate_->OnSearchBoxKeyEvent(evt);
     return;
@@ -959,13 +960,8 @@ void SearchBoxView::OnKeyEvent(ui::KeyEvent* evt) {
   }
 
   // Check if the `delegate_` can handle the event if the focus is moving to
-  // result selection.
-  if (focus_on_filter_button ||
-      !delegate_->HandleFocusMoveAboveSearchResults(*evt)) {
-    EnterSearchResultSelection(*evt);
-  }
-
-  // All events focusing on the buttons should be handled now.
+  // result selection. All events focusing on the buttons should be handled now.
+  EnterSearchResultSelection(*evt);
   evt->SetHandled();
 }
 
@@ -1223,7 +1219,7 @@ void SearchBoxView::AssistantButtonPressed() {
   }
 
   // Activate the search box based on UX SPEC.
-  SetSearchBoxActive(true, /*event_type=*/ui::ET_UNKNOWN);
+  SetSearchBoxActive(true, /*event_type=*/ui::EventType::kUnknown);
 }
 
 void SearchBoxView::UpdateSearchIcon() {
@@ -1277,7 +1273,7 @@ void SearchBoxView::UpdatePlaceholderTextAndAccessibleName() {
           IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_TEMPLATE,
           l10n_util::GetStringUTF16(
               IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_SHORTCUTS)));
-      search_box()->SetAccessibleName(l10n_util::GetStringFUTF16(
+      search_box()->GetViewAccessibility().SetName(l10n_util::GetStringFUTF16(
           a11y_name_template,
           l10n_util::GetStringUTF16(
               IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_SHORTCUTS)));
@@ -1286,7 +1282,7 @@ void SearchBoxView::UpdatePlaceholderTextAndAccessibleName() {
       search_box()->SetPlaceholderText(l10n_util::GetStringFUTF16(
           IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_TEMPLATE,
           l10n_util::GetStringUTF16(IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_TABS)));
-      search_box()->SetAccessibleName(l10n_util::GetStringFUTF16(
+      search_box()->GetViewAccessibility().SetName(l10n_util::GetStringFUTF16(
           a11y_name_template,
           l10n_util::GetStringUTF16(IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_TABS)));
       break;
@@ -1295,7 +1291,7 @@ void SearchBoxView::UpdatePlaceholderTextAndAccessibleName() {
           IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_TEMPLATE,
           l10n_util::GetStringUTF16(
               IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_SETTINGS)));
-      search_box()->SetAccessibleName(l10n_util::GetStringFUTF16(
+      search_box()->GetViewAccessibility().SetName(l10n_util::GetStringFUTF16(
           a11y_name_template,
           l10n_util::GetStringUTF16(
               IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_SETTINGS)));
@@ -1305,7 +1301,7 @@ void SearchBoxView::UpdatePlaceholderTextAndAccessibleName() {
           IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_TEMPLATE,
           l10n_util::GetStringUTF16(
               IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_GAMES)));
-      search_box()->SetAccessibleName(l10n_util::GetStringFUTF16(
+      search_box()->GetViewAccessibility().SetName(l10n_util::GetStringFUTF16(
           a11y_name_template, l10n_util::GetStringUTF16(
                                   IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_GAMES)));
       break;
@@ -1314,7 +1310,7 @@ void SearchBoxView::UpdatePlaceholderTextAndAccessibleName() {
           IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_TEMPLATE,
           l10n_util::GetStringUTF16(
               IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_IMAGES)));
-      search_box()->SetAccessibleName(l10n_util::GetStringFUTF16(
+      search_box()->GetViewAccessibility().SetName(l10n_util::GetStringFUTF16(
           a11y_name_template, l10n_util::GetStringUTF16(
                                   IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_IMAGES)));
       break;
@@ -1439,7 +1435,7 @@ void SearchBoxView::ClearSearchAndDeactivateSearchBox() {
   // Set search box as inactive first, because ClearSearch() eventually calls
   // into AppListMainView::QueryChanged() which will hide search results based
   // on `is_search_box_active_`.
-  SetSearchBoxActive(false, ui::ET_UNKNOWN);
+  SetSearchBoxActive(false, ui::EventType::kUnknown);
   ClearSearch();
   MaybeSetAutocompleteGhostText(std::u16string(), std::u16string());
 }
@@ -1462,8 +1458,9 @@ void SearchBoxView::UseFixedPlaceholderTextForTest() {
 bool SearchBoxView::HandleKeyEvent(views::Textfield* sender,
                                    const ui::KeyEvent& key_event) {
   DCHECK(result_selection_controller_);
-  if (key_event.type() == ui::ET_KEY_RELEASED)
+  if (key_event.type() == ui::EventType::kKeyReleased) {
     return false;
+  }
 
   // Events occurring over an inactive search box are handled elsewhere, with
   // the exception of left/right arrow key events, and return.
@@ -1583,10 +1580,8 @@ bool SearchBoxView::HandleKeyEvent(views::Textfield* sender,
 
       // Check if the `delegate_` can handle the event if the focus is moving
       // out from the result selection.
-      if (!delegate_->HandleFocusMoveAboveSearchResults(key_event)) {
-        DCHECK(close_button()->GetVisible());
-        close_button()->RequestFocus();
-      }
+      DCHECK(close_button()->GetVisible());
+      close_button()->RequestFocus();
 
       SetA11yActiveDescendant(std::nullopt);
       break;
@@ -1617,11 +1612,13 @@ bool SearchBoxView::HandleKeyEvent(views::Textfield* sender,
 
 bool SearchBoxView::HandleMouseEvent(views::Textfield* sender,
                                      const ui::MouseEvent& mouse_event) {
-  if (mouse_event.type() == ui::ET_MOUSE_PRESSED && HasAutocompleteText())
+  if (mouse_event.type() == ui::EventType::kMousePressed &&
+      HasAutocompleteText()) {
     AcceptAutocompleteText();
+  }
 
   // Don't activate search box for context menu click.
-  if (mouse_event.type() == ui::ET_MOUSE_PRESSED &&
+  if (mouse_event.type() == ui::EventType::kMousePressed &&
       mouse_event.IsOnlyRightMouseButton()) {
     return false;
   }
@@ -1631,8 +1628,10 @@ bool SearchBoxView::HandleMouseEvent(views::Textfield* sender,
 
 bool SearchBoxView::HandleGestureEvent(views::Textfield* sender,
                                        const ui::GestureEvent& gesture_event) {
-  if (gesture_event.type() == ui::ET_GESTURE_TAP && HasAutocompleteText())
+  if (gesture_event.type() == ui::EventType::kGestureTap &&
+      HasAutocompleteText()) {
     AcceptAutocompleteText();
+  }
   return SearchBoxViewBase::HandleGestureEvent(sender, gesture_event);
 }
 

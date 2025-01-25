@@ -14,7 +14,6 @@ import 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar.js';
 import 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar_search_field.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
-import 'chrome://resources/polymer/v3_0/iron-location/iron-location.js';
 import './user_education_internals_card.js';
 
 import {ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
@@ -75,7 +74,8 @@ class UserEducationInternalsElement extends UserEducationInternalsElementBase {
       narrow_: Boolean,
 
       /**
-       * Indicates if the list of promo data is expanded or collapsed.
+       * Indicates if the information about session data is expanded or
+       * collapsed.
        */
       sessionExpanded_: {
         type: Boolean,

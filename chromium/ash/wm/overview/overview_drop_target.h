@@ -30,10 +30,12 @@ class OverviewDropTarget : public OverviewItemBase {
   void UpdateBackgroundVisibility(const gfx::Point& location_in_screen);
 
   // OverviewItemBase:
-  aura::Window::Windows GetWindowsForHomeGesture() override;
   void SetOpacity(float opacity) override;
+  aura::Window::Windows GetWindowsForHomeGesture() override;
   void HideForSavedDeskLibrary(bool animate) override;
   void RevertHideForSavedDeskLibrary(bool animate) override;
+  void UpdateMirrorsForDragging(bool is_touch_dragging) override;
+  void DestroyMirrorsForDragging() override;
   aura::Window* GetWindow() override;
   std::vector<raw_ptr<aura::Window, VectorExperimental>> GetWindows() override;
   bool HasVisibleOnAllDesksWindow() override;
@@ -51,6 +53,7 @@ class OverviewDropTarget : public OverviewItemBase {
   void ScaleUpSelectedItem(OverviewAnimationType animation_type) override;
   void EnsureVisible() override;
   std::vector<OverviewFocusableView*> GetFocusableViews() const override;
+  std::vector<views::Widget*> GetFocusableWidgets() override;
   views::View* GetBackDropView() const override;
   bool ShouldHaveShadow() const override;
   void UpdateRoundedCornersAndShadow() override;
@@ -58,7 +61,6 @@ class OverviewDropTarget : public OverviewItemBase {
   void PrepareForOverview() override;
   void SetShouldUseSpawnAnimation(bool value) override;
   void OnStartingAnimationComplete() override;
-  void CloseWindows() override;
   void Restack() override;
   void StartDrag() override;
   void OnOverviewItemDragStarted() override;
@@ -68,13 +70,11 @@ class OverviewDropTarget : public OverviewItemBase {
   void UpdateCannotSnapWarningVisibility(bool animate) override;
   void HideCannotSnapWarning(bool animate) override;
   void OnMovingItemToAnotherDesk() override;
-  void UpdateMirrorsForDragging(bool is_touch_dragging) override;
-  void DestroyMirrorsForDragging() override;
   void Shutdown() override;
   void AnimateAndCloseItem(bool up) override;
   void StopWidgetAnimation() override;
-  OverviewGridWindowFillMode GetWindowDimensionsType() const override;
-  void UpdateWindowDimensionsType() override;
+  OverviewItemFillMode GetOverviewItemFillMode() const override;
+  void UpdateOverviewItemFillMode() override;
   gfx::Point GetMagnifierFocusPointInScreen() const override;
   const gfx::RoundedCornersF GetRoundedCorners() const override;
 

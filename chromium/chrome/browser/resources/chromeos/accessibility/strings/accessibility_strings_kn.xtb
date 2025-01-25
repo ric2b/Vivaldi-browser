@@ -264,7 +264,6 @@
 <translation id="2783001728278437613">{COUNT,plural, =1{+#}one{+#}other{+#}}</translation>
 <translation id="2792200646155001340">ಹಿಂದಿನ ಐಟಂಗೆ ತೆರಳಲು, ನೀವು ಒಂದು ಬೆರಳನ್ನು ಬಲದಿಂದ ಎಡಕ್ಕೂ ಸಹ ಸ್ವೈಪ್ ಮಾಡಬಹುದು. ಇದನ್ನು ಈಗ ಪ್ರಯತ್ನಿಸಿ.</translation>
 <translation id="280499067616661124">ChromeVox ಪುಟದಲ್ಲಿ ಹುಡುಕಿ</translation>
-<translation id="2811019999044652585">ಪರಿಕರ ಪಟ್ಟಿ ಮತ್ತು ಸಿಸ್ಟಂ ಟ್ರೇನಂತಹ ಪರದೆಯ ಇತರೆ ಭಾಗಗಳಿಗೆ ಹೋಗಲು, Control+ಫಾರ್ವರ್ಡ್ ಒತ್ತಿ. Chromebook ನಲ್ಲಿ, ಸಂಖ್ಯೆ 2 ಕೀ ಮೇಲ್ಭಾಗದಲ್ಲಿಯೇ ಫಾರ್ವರ್ಡ್ ಕೀ ಇರುತ್ತದೆ.</translation>
 <translation id="2811204574343810641">ಸಾಲು</translation>
 <translation id="2816868829355607410">ಅಭ್ಯಾಸ ಪ್ರದೇಶ: ಜಂಪ್ ಕಮಾಂಡ್‌ಗಳು</translation>
 <translation id="2841013758207633010">ಸಮಯ</translation>
@@ -351,7 +350,7 @@
 <translation id="3244209481693235975"><ph name="LANGUAGE" />: <ph name="CONTENT" /></translation>
 <translation id="3260949043575829030">ಅದೇ ರೀತಿಯ ಹಿಂದಿನ ಐಟಂ</translation>
 <translation id="3270069636408109001">ಯಾವುದೇ ಮುಂದಿನ ಟೇಬಲ್ ಇಲ್ಲ</translation>
-<translation id="3273791280096244679">ಲೇಬಲ್ ಉಳಿಸಿ</translation>
+<translation id="3273791280096244679">ಲೇಬಲ್ ಸೇವ್ ಮಾಡಿ</translation>
 <translation id="3283583562490372694">ಗುರುತಿಸಲಾಗಿಲ್ಲ</translation>
 <translation id="3286372614333682499">ಪೋರ್ಟ್ರೇಟ್</translation>
 <translation id="3286390186030710347">ಸ್ಲೈಡರ್</translation>
@@ -520,6 +519,7 @@
 <translation id="4432457053224379116">ಇಂಡಿಯನ್ ರೆಡ್</translation>
 <translation id="4432896207833262240">ಗುರುತಿಸಲಾದ ಕಂಟೆಂಟ್‌</translation>
 <translation id="4437615272777527928">ಮೆನುಗಳನ್ನು ಹುಡುಕಲು, ಟೈಪ್ ಮಾಡಿ. ಫಲಿತಾಂಶಗಳ ಮೂಲಕ ಸ್ಕ್ರಾಲ್ ಮಾಡಲು ಮೇಲಿನ ಮತ್ತು ಕೆಳಗಿನ ಬಾಣಗಳನ್ನು ಬಳಸಿ. ಪಠ್ಯ ಕೆರೆಟ್ ಅನ್ನು ಹೊಂದಿಸಲು ಮತ್ತು ಮೆನುಗಳ ನಡುವೆ ಸರಿಸಲು ಎಡ ಮತ್ತು ಬಲ ಬಾಣಗಳನ್ನು ಬಳಸಿ.</translation>
+<translation id="4453530046591759283">ಟೂಲ್‌ಬಾರ್‌ಗಳು ಅಥವಾ ಸಿಸ್ಟಮ್ ಟ್ರೇನಂತಹ ಸ್ಕ್ರೀನ್‌ನ ಇತರ ಭಾಗಗಳಿಗೆ ಹೋಗಲು, Control+F1 ಒತ್ತಿ. Escape ಕೀಯ ಬಲಕ್ಕೆ F1 ಮೊದಲ ಕೀಲಿಯಾಗಿದೆ.</translation>
 <translation id="4457472090507035117">ಪ್ರಸ್ತುತ ಧ್ವನಿಯನ್ನು ಆಯ್ಕೆ ಮಾಡಿ:</translation>
 <translation id="4476183483923481720">ಹೊಸ ಸಾಲು</translation>
 <translation id="4479068155583208887">ಫೈರ್ ಬ್ರಿಕ್</translation>
@@ -880,6 +880,7 @@
 <translation id="7091296112653361280">ನವಾಜೊ ಬಿಳಿ</translation>
 <translation id="7095834689119144465">ಪಠ್ಯ ಸಂಖ್ಯೆ ಮಾತ್ರ ಎಡಿಟ್ ಮಾಡಿ</translation>
 <translation id="7096001299300236431">ಹಿಂದಿನ ಮಾಧ್ಯಮ</translation>
+<translation id="7096668131290451939">ಕಲಿಕೆಯ ಮೋಡ್‌ನಿಂದ ನಿರ್ಗಮಿಸಲು ಮತ್ತೊಮ್ಮೆ ಎಸ್ಕೇಪ್ ಅನ್ನು ಒತ್ತಿರಿ</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">ಪದ ಎಕೋ</translation>
 <translation id="7137397390322864165">ಗುಲಾಬಿ ಕಿತ್ತಳೆ ಬಣ್ಣ</translation>

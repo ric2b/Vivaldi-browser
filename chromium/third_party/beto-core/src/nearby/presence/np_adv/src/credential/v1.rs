@@ -14,92 +14,71 @@
 
 //! Cryptographic materials for v1 advertisement-format credentials.
 
-use crate::credential::{
-    protocol_version_seal, BroadcastCryptoMaterial, DiscoveryCryptoMaterial, ProtocolVersion,
-};
-use crate::MetadataKey;
-use crypto_provider::ed25519::InvalidPublicKeyBytes;
-use crypto_provider::{aes::Aes128Key, ed25519, ed25519::PublicKey, CryptoProvider, CryptoRng};
-use np_hkdf::UnsignedSectionKeys;
+use crate::credential::{protocol_version_seal, DiscoveryMetadataCryptoMaterial, ProtocolVersion};
+use crate::extended::V1IdentityToken;
+use crypto_provider::{aead::Aead, aes, ed25519, CryptoProvider};
+use np_hkdf::{DerivedSectionKeys, NpKeySeedHkdf};
 
 /// Cryptographic information about a particular V1 discovery credential
 /// necessary to match and decrypt encrypted V1 sections.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct V1DiscoveryCredential {
-    key_seed: [u8; 32],
-    expected_unsigned_metadata_key_hmac: [u8; 32],
-    expected_signed_metadata_key_hmac: [u8; 32],
-    validated_pub_key: sealed::ValidatedPublicKey,
+    /// The 32-byte key-seed used for generating other key material.
+    pub key_seed: [u8; 32],
+
+    /// The MIC-short-salt variant of the HMAC of the identity token.
+    pub expected_mic_short_salt_identity_token_hmac: [u8; 32],
+
+    /// The MIC-extended-salt variant of the HMAC of the identity token.
+    pub expected_mic_extended_salt_identity_token_hmac: [u8; 32],
+
+    /// The signed-extended-salt variant of the HMAC of the identity token.
+    pub expected_signed_extended_salt_identity_token_hmac: [u8; 32],
+
+    /// The ed25519 public key used for verification of signed sections.
+    pub public_key: ed25519::PublicKey,
 }
-
-mod sealed {
-    use crypto_provider::ed25519::InvalidPublicKeyBytes;
-    use crypto_provider::{ed25519, CryptoProvider};
-
-    // Wrapper of raw public ed25519 key bytes indicating the bytes stored
-    // actually represent a valid "edwards y" format and that said compressed
-    // point is actually a point on the curve.
-    #[derive(Clone, Copy)]
-    pub(crate) struct ValidatedPublicKey(ed25519::RawPublicKey);
-
-    impl ValidatedPublicKey {
-        pub(crate) fn from_raw_bytes<C: CryptoProvider>(
-            bytes: ed25519::RawPublicKey,
-        ) -> Result<Self, InvalidPublicKeyBytes> {
-            np_ed25519::PublicKey::<C>::from_bytes(&bytes)
-                .map(|_| Self(bytes))
-                .map_err(|_| InvalidPublicKeyBytes)
-        }
-
-        pub(crate) fn to_public_key<C: CryptoProvider>(self) -> np_ed25519::PublicKey<C> {
-            np_ed25519::PublicKey::<C>::from_bytes(&self.0)
-                .expect("The public key bytes were validated on construction")
-        }
-    }
-}
-pub(crate) use sealed::ValidatedPublicKey;
 
 impl V1DiscoveryCredential {
     /// Construct a V1 discovery credential from the provided identity data.
-    pub fn new<C: CryptoProvider>(
+    pub fn new(
         key_seed: [u8; 32],
-        expected_unsigned_metadata_key_hmac: [u8; 32],
-        expected_signed_metadata_key_hmac: [u8; 32],
-        pub_key: ed25519::RawPublicKey,
-    ) -> Result<Self, InvalidPublicKeyBytes> {
-        ValidatedPublicKey::from_raw_bytes::<C>(pub_key)
-            .map(|validated_pub_key| Self {
-                key_seed,
-                expected_unsigned_metadata_key_hmac,
-                expected_signed_metadata_key_hmac,
-                validated_pub_key,
-            })
-            .map_err(|_| InvalidPublicKeyBytes)
+        expected_mic_short_salt_identity_token_hmac: [u8; 32],
+        expected_mic_extended_salt_identity_token_hmac: [u8; 32],
+        expected_signed_extended_salt_identity_token_hmac: [u8; 32],
+        public_key: ed25519::PublicKey,
+    ) -> Self {
+        Self {
+            key_seed,
+            expected_mic_short_salt_identity_token_hmac,
+            expected_mic_extended_salt_identity_token_hmac,
+            expected_signed_extended_salt_identity_token_hmac,
+            public_key,
+        }
     }
 
     /// Constructs pre-calculated crypto material from this discovery credential.
     pub(crate) fn to_precalculated<C: CryptoProvider>(
         &self,
     ) -> PrecalculatedV1DiscoveryCryptoMaterial {
-        let signed_identity_resolution_material = self.signed_identity_resolution_material::<C>();
-        let unsigned_identity_resolution_material =
-            self.unsigned_identity_resolution_material::<C>();
-        let signed_verification_material = self.signed_verification_material::<C>();
-        let unsigned_verification_material = self.unsigned_verification_material::<C>();
-        let metadata_nonce = self.metadata_nonce::<C>();
         PrecalculatedV1DiscoveryCryptoMaterial {
-            signed_identity_resolution_material,
-            unsigned_identity_resolution_material,
-            signed_verification_material,
-            unsigned_verification_material,
-            metadata_nonce,
+            signed_identity_resolution_material: self.signed_identity_resolution_material::<C>(),
+            mic_short_salt_identity_resolution_material: self
+                .mic_short_salt_identity_resolution_material::<C>(),
+            mic_extended_salt_identity_resolution_material: self
+                .mic_extended_salt_identity_resolution_material::<C>(),
+            signed_verification_material: self.signed_verification_material::<C>(),
+            mic_short_salt_verification_material: self.mic_short_salt_verification_material::<C>(),
+            mic_extended_salt_verification_material: self
+                .mic_extended_salt_verification_material::<C>(),
+            metadata_nonce: self.metadata_nonce::<C>(),
         }
     }
 }
 
-impl DiscoveryCryptoMaterial<V1> for V1DiscoveryCredential {
+impl DiscoveryMetadataCryptoMaterial<V1> for V1DiscoveryCredential {
     fn metadata_nonce<C: CryptoProvider>(&self) -> [u8; 12] {
-        V1::metadata_nonce_from_key_seed::<C>(&self.key_seed)
+        np_hkdf::NpKeySeedHkdf::<C>::new(&self.key_seed).v1_metadata_nonce()
     }
 }
 
@@ -108,32 +87,50 @@ impl V1DiscoveryCryptoMaterial for V1DiscoveryCredential {
         &self,
     ) -> SignedSectionIdentityResolutionMaterial {
         let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&self.key_seed);
-        SignedSectionIdentityResolutionMaterial::from_hkdf_and_expected_metadata_key_hmac(
+        SignedSectionIdentityResolutionMaterial::from_hkdf_and_expected_identity_token_hmac(
             &hkdf,
-            self.expected_signed_metadata_key_hmac,
+            self.expected_signed_extended_salt_identity_token_hmac,
         )
     }
 
-    fn unsigned_identity_resolution_material<C: CryptoProvider>(
+    fn mic_short_salt_identity_resolution_material<C: CryptoProvider>(
         &self,
-    ) -> UnsignedSectionIdentityResolutionMaterial {
+    ) -> MicShortSaltSectionIdentityResolutionMaterial {
         let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&self.key_seed);
-        UnsignedSectionIdentityResolutionMaterial::from_hkdf_and_expected_metadata_key_hmac(
+        MicShortSaltSectionIdentityResolutionMaterial::from_hkdf_and_expected_identity_token_hmac(
             &hkdf,
-            self.expected_unsigned_metadata_key_hmac,
+            self.expected_mic_short_salt_identity_token_hmac,
+        )
+    }
+
+    fn mic_extended_salt_identity_resolution_material<C: CryptoProvider>(
+        &self,
+    ) -> MicExtendedSaltSectionIdentityResolutionMaterial {
+        let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&self.key_seed);
+        MicExtendedSaltSectionIdentityResolutionMaterial::from_hkdf_and_expected_identity_token_hmac(
+            &hkdf,
+            self.expected_mic_extended_salt_identity_token_hmac,
         )
     }
 
     fn signed_verification_material<C: CryptoProvider>(&self) -> SignedSectionVerificationMaterial {
-        SignedSectionVerificationMaterial { validated_public_key: self.validated_pub_key }
+        SignedSectionVerificationMaterial { public_key: self.public_key.clone() }
     }
 
-    fn unsigned_verification_material<C: CryptoProvider>(
+    fn mic_short_salt_verification_material<C: CryptoProvider>(
         &self,
-    ) -> UnsignedSectionVerificationMaterial {
+    ) -> MicShortSaltSectionVerificationMaterial {
         let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&self.key_seed);
-        let mic_hmac_key = *UnsignedSectionKeys::hmac_key(&hkdf).as_bytes();
-        UnsignedSectionVerificationMaterial { mic_hmac_key }
+        let mic_hmac_key = *hkdf.v1_mic_short_salt_keys().mic_hmac_key().as_bytes();
+        MicShortSaltSectionVerificationMaterial { mic_hmac_key }
+    }
+
+    fn mic_extended_salt_verification_material<C: CryptoProvider>(
+        &self,
+    ) -> MicExtendedSaltSectionVerificationMaterial {
+        let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&self.key_seed);
+        let mic_hmac_key = *hkdf.v1_mic_extended_salt_keys().mic_hmac_key().as_bytes();
+        MicExtendedSaltSectionVerificationMaterial { mic_hmac_key }
     }
 }
 
@@ -145,17 +142,18 @@ impl protocol_version_seal::ProtocolVersionSeal for V1 {}
 
 impl ProtocolVersion for V1 {
     type DiscoveryCredential = V1DiscoveryCredential;
-    type MetadataKey = MetadataKey;
+    type IdentityToken = V1IdentityToken;
 
-    fn metadata_nonce_from_key_seed<C: CryptoProvider>(key_seed: &[u8; 32]) -> [u8; 12] {
-        let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(key_seed);
-        hkdf.extended_metadata_nonce()
+    fn metadata_nonce_from_key_seed<C: CryptoProvider>(
+        hkdf: &NpKeySeedHkdf<C>,
+    ) -> <C::Aes128Gcm as Aead>::Nonce {
+        hkdf.v1_metadata_nonce()
     }
-    fn expand_metadata_key<C: CryptoProvider>(metadata_key: MetadataKey) -> MetadataKey {
-        metadata_key
-    }
-    fn gen_random_metadata_key<R: CryptoRng>(rng: &mut R) -> MetadataKey {
-        MetadataKey(rng.gen())
+
+    fn extract_metadata_key<C: CryptoProvider>(
+        identity_token: Self::IdentityToken,
+    ) -> aes::Aes128Key {
+        identity_token.into_bytes().into()
     }
 }
 
@@ -173,12 +171,12 @@ impl V1ProtocolVersion for V1 {}
 #[derive(Clone)]
 pub(crate) struct SectionIdentityResolutionMaterial {
     /// The AES key for decrypting section ciphertext
-    pub(crate) aes_key: Aes128Key,
-    /// The metadata key HMAC key for deriving and verifying the identity metadata
+    pub(crate) aes_key: aes::Aes128Key,
+    /// The identity token HMAC key for deriving and verifying the identity metadata
     /// key HMAC against the expected value.
-    pub(crate) metadata_key_hmac_key: [u8; 32],
-    /// The expected metadata key HMAC to check against for an identity match.
-    pub(crate) expected_metadata_key_hmac: [u8; 32],
+    pub(crate) identity_token_hmac_key: [u8; 32],
+    /// The expected identity token HMAC to check against for an identity match.
+    pub(crate) expected_identity_token_hmac: [u8; 32],
 }
 
 /// Cryptographic materials necessary for determining whether or not
@@ -206,50 +204,97 @@ impl SignedSectionIdentityResolutionMaterial {
     /// Constructs identity-resolution material for a signed section whose
     /// discovery credential leverages the provided HKDF and has the given
     /// expected metadata-key HMAC.
-    pub(crate) fn from_hkdf_and_expected_metadata_key_hmac<C: CryptoProvider>(
+    pub(crate) fn from_hkdf_and_expected_identity_token_hmac<C: CryptoProvider>(
         hkdf: &np_hkdf::NpKeySeedHkdf<C>,
-        expected_metadata_key_hmac: [u8; 32],
+        expected_identity_token_hmac: [u8; 32],
     ) -> Self {
         Self(SectionIdentityResolutionMaterial {
-            aes_key: hkdf.extended_signed_section_aes_key(),
-            metadata_key_hmac_key: *hkdf.extended_signed_metadata_key_hmac_key().as_bytes(),
-            expected_metadata_key_hmac,
+            aes_key: hkdf.v1_signature_keys().aes_key(),
+            identity_token_hmac_key: *hkdf.v1_signature_keys().identity_token_hmac_key().as_bytes(),
+            expected_identity_token_hmac,
         })
     }
 }
 
 /// Cryptographic materials necessary for determining whether or not
-/// a given V1 MIC advertisement section matches an identity.
+/// a given V1 MIC extended salt advertisement section matches an identity.
 #[derive(Clone)]
-pub struct UnsignedSectionIdentityResolutionMaterial(SectionIdentityResolutionMaterial);
+pub struct MicExtendedSaltSectionIdentityResolutionMaterial(SectionIdentityResolutionMaterial);
 
-impl UnsignedSectionIdentityResolutionMaterial {
-    #[cfg(test)]
-    pub(crate) fn from_raw(raw: SectionIdentityResolutionMaterial) -> Self {
-        Self(raw)
-    }
+impl MicExtendedSaltSectionIdentityResolutionMaterial {
     /// Extracts the underlying section-identity resolution material carried around
-    /// within this wrapper for resolution of unsigned sections.
+    /// within this wrapper for resolution of MIC extended salt sections.
     pub(crate) fn into_raw_resolution_material(self) -> SectionIdentityResolutionMaterial {
         self.0
     }
     /// Gets the underlying section-identity resolution material carried around
-    /// within this wrapper for resolution of unsigned sections.
+    /// within this wrapper for resolution of MIC extended salt sections.
     #[cfg(any(test, feature = "devtools"))]
     pub(crate) fn as_raw_resolution_material(&self) -> &SectionIdentityResolutionMaterial {
         &self.0
     }
-    /// Constructs identity-resolution material for an unsigned (MIC) section whose
+    #[cfg(test)]
+    pub(crate) fn as_mut_raw_resolution_material(
+        &mut self,
+    ) -> &mut SectionIdentityResolutionMaterial {
+        &mut self.0
+    }
+    /// Constructs identity-resolution material for an MIC extended salt section whose
     /// discovery credential leverages the provided HKDF and has the given
     /// expected metadata-key HMAC.
-    pub(crate) fn from_hkdf_and_expected_metadata_key_hmac<C: CryptoProvider>(
+    pub(crate) fn from_hkdf_and_expected_identity_token_hmac<C: CryptoProvider>(
         hkdf: &np_hkdf::NpKeySeedHkdf<C>,
-        expected_metadata_key_hmac: [u8; 32],
+        expected_identity_token_hmac: [u8; 32],
     ) -> Self {
         Self(SectionIdentityResolutionMaterial {
-            aes_key: UnsignedSectionKeys::aes_key(hkdf),
-            metadata_key_hmac_key: *hkdf.extended_unsigned_metadata_key_hmac_key().as_bytes(),
-            expected_metadata_key_hmac,
+            aes_key: hkdf.v1_mic_extended_salt_keys().aes_key(),
+            identity_token_hmac_key: *hkdf
+                .v1_mic_extended_salt_keys()
+                .identity_token_hmac_key()
+                .as_bytes(),
+            expected_identity_token_hmac,
+        })
+    }
+}
+
+/// Cryptographic materials necessary for determining whether
+/// a given V1 MIC short salt advertisement section matches an identity.
+#[derive(Clone)]
+pub struct MicShortSaltSectionIdentityResolutionMaterial(SectionIdentityResolutionMaterial);
+
+impl MicShortSaltSectionIdentityResolutionMaterial {
+    /// Extracts the underlying section-identity resolution material carried around
+    /// within this wrapper for resolution of MIC short salt sections.
+    pub(crate) fn into_raw_resolution_material(self) -> SectionIdentityResolutionMaterial {
+        self.0
+    }
+    /// Gets the underlying section-identity resolution material carried around
+    /// within this wrapper for resolution of MIC short salt sections.
+    #[cfg(any(test, feature = "devtools"))]
+    pub(crate) fn as_raw_resolution_material(&self) -> &SectionIdentityResolutionMaterial {
+        &self.0
+    }
+    #[cfg(test)]
+    pub(crate) fn as_mut_raw_resolution_material(
+        &mut self,
+    ) -> &mut SectionIdentityResolutionMaterial {
+        &mut self.0
+    }
+
+    /// Constructs identity-resolution material for a MIC short salt section whose
+    /// discovery credential leverages the provided HKDF and has the given
+    /// expected metadata-key HMAC.
+    pub(crate) fn from_hkdf_and_expected_identity_token_hmac<C: CryptoProvider>(
+        hkdf: &np_hkdf::NpKeySeedHkdf<C>,
+        expected_identity_token_hmac: [u8; 32],
+    ) -> Self {
+        Self(SectionIdentityResolutionMaterial {
+            aes_key: hkdf.v1_mic_short_salt_keys().aes_key(),
+            identity_token_hmac_key: *hkdf
+                .v1_mic_short_salt_keys()
+                .identity_token_hmac_key()
+                .as_bytes(),
+            expected_identity_token_hmac,
         })
     }
 }
@@ -260,32 +305,48 @@ impl UnsignedSectionIdentityResolutionMaterial {
 pub struct SignedSectionVerificationMaterial {
     /// The np_ed25519 public key to be
     /// used for signature verification of signed sections.
-    pub(crate) validated_public_key: sealed::ValidatedPublicKey,
+    pub(crate) public_key: ed25519::PublicKey,
 }
 
 impl SignedSectionVerificationMaterial {
     /// Gets the np_ed25519 public key for the given identity,
     /// used for signature verification of signed sections.
-    pub(crate) fn signature_verification_public_key<C: CryptoProvider>(
-        &self,
-    ) -> np_ed25519::PublicKey<C> {
-        self.validated_public_key.to_public_key()
+    pub(crate) fn signature_verification_public_key(&self) -> ed25519::PublicKey {
+        self.public_key.clone()
     }
 }
 
-/// Crypto materials for V1 unsigned sections which are not employed in identity resolution,
-/// but may be necessary to fully decrypt an unsigned section.
+/// Crypto materials for V1 MIC short salt sections which are not employed in identity resolution,
+/// but may be necessary to fully decrypt a MIC short salt section.
 #[derive(Clone)]
-pub struct UnsignedSectionVerificationMaterial {
-    /// The MIC HMAC key for verifying the integrity of unsigned sections.
+pub struct MicShortSaltSectionVerificationMaterial {
+    /// The MIC HMAC key for verifying the integrity of MIC short salt sections.
     pub(crate) mic_hmac_key: [u8; 32],
 }
 
-impl UnsignedSectionVerificationMaterial {
-    /// Returns the MIC HMAC key for unsigned sections
-    pub(crate) fn mic_hmac_key<C: CryptoProvider>(&self) -> np_hkdf::NpHmacSha256Key<C> {
+impl MicSectionVerificationMaterial for MicShortSaltSectionVerificationMaterial {
+    fn mic_hmac_key(&self) -> np_hkdf::NpHmacSha256Key {
         self.mic_hmac_key.into()
     }
+}
+
+/// Crypto materials for V1 MIC extended salt sections which are not employed in identity
+/// resolution, but may be necessary to fully decrypt a MIC extended salt section.
+#[derive(Clone)]
+pub struct MicExtendedSaltSectionVerificationMaterial {
+    /// The MIC HMAC key for verifying the integrity of MIC extended salt sections.
+    pub(crate) mic_hmac_key: [u8; 32],
+}
+
+impl MicSectionVerificationMaterial for MicExtendedSaltSectionVerificationMaterial {
+    fn mic_hmac_key(&self) -> np_hkdf::NpHmacSha256Key {
+        self.mic_hmac_key.into()
+    }
+}
+
+pub(crate) trait MicSectionVerificationMaterial {
+    /// Returns the HMAC key for calculating the MIC of the sections
+    fn mic_hmac_key(&self) -> np_hkdf::NpHmacSha256Key;
 }
 
 // Space-time tradeoffs:
@@ -299,39 +360,54 @@ impl UnsignedSectionVerificationMaterial {
 // is only used on the matching identity, not all identities.
 
 /// Cryptographic material for an individual NP credential used to decrypt and verify v1 sections.
-pub trait V1DiscoveryCryptoMaterial: DiscoveryCryptoMaterial<V1> {
+pub trait V1DiscoveryCryptoMaterial: DiscoveryMetadataCryptoMaterial<V1> {
     /// Constructs or copies the identity resolution material for signed sections
     fn signed_identity_resolution_material<C: CryptoProvider>(
         &self,
     ) -> SignedSectionIdentityResolutionMaterial;
 
-    /// Constructs or copies the identity resolution material for unsigned sections
-    fn unsigned_identity_resolution_material<C: CryptoProvider>(
+    /// Constructs or copies the identity resolution material for MIC short salt sections
+    fn mic_short_salt_identity_resolution_material<C: CryptoProvider>(
         &self,
-    ) -> UnsignedSectionIdentityResolutionMaterial;
+    ) -> MicShortSaltSectionIdentityResolutionMaterial;
+
+    /// Constructs or copies the identity resolution material for MIC extended salt sections
+    fn mic_extended_salt_identity_resolution_material<C: CryptoProvider>(
+        &self,
+    ) -> MicExtendedSaltSectionIdentityResolutionMaterial;
 
     /// Constructs or copies non-identity-resolution deserialization material for signed
     /// sections.
     fn signed_verification_material<C: CryptoProvider>(&self) -> SignedSectionVerificationMaterial;
 
-    /// Constructs or copies non-identity-resolution deserialization material for unsigned
+    /// Constructs or copies non-identity-resolution deserialization material for MIC short salt
     /// sections.
-    fn unsigned_verification_material<C: CryptoProvider>(
+    fn mic_short_salt_verification_material<C: CryptoProvider>(
         &self,
-    ) -> UnsignedSectionVerificationMaterial;
+    ) -> MicShortSaltSectionVerificationMaterial;
+
+    /// Constructs or copies non-identity-resolution deserialization material for MIC extended salt
+    /// sections.
+    fn mic_extended_salt_verification_material<C: CryptoProvider>(
+        &self,
+    ) -> MicExtendedSaltSectionVerificationMaterial;
 }
 
-/// V1 [`DiscoveryCryptoMaterial`] that minimizes CPU time when providing key material at
+/// [`V1DiscoveryCryptoMaterial`] that minimizes CPU time when providing key material at
 /// the expense of occupied memory
 pub struct PrecalculatedV1DiscoveryCryptoMaterial {
     pub(crate) signed_identity_resolution_material: SignedSectionIdentityResolutionMaterial,
-    pub(crate) unsigned_identity_resolution_material: UnsignedSectionIdentityResolutionMaterial,
+    pub(crate) mic_short_salt_identity_resolution_material:
+        MicShortSaltSectionIdentityResolutionMaterial,
+    pub(crate) mic_extended_salt_identity_resolution_material:
+        MicExtendedSaltSectionIdentityResolutionMaterial,
     pub(crate) signed_verification_material: SignedSectionVerificationMaterial,
-    pub(crate) unsigned_verification_material: UnsignedSectionVerificationMaterial,
+    pub(crate) mic_short_salt_verification_material: MicShortSaltSectionVerificationMaterial,
+    pub(crate) mic_extended_salt_verification_material: MicExtendedSaltSectionVerificationMaterial,
     pub(crate) metadata_nonce: [u8; 12],
 }
 
-impl DiscoveryCryptoMaterial<V1> for PrecalculatedV1DiscoveryCryptoMaterial {
+impl DiscoveryMetadataCryptoMaterial<V1> for PrecalculatedV1DiscoveryCryptoMaterial {
     fn metadata_nonce<C: CryptoProvider>(&self) -> [u8; 12] {
         self.metadata_nonce
     }
@@ -343,25 +419,39 @@ impl V1DiscoveryCryptoMaterial for PrecalculatedV1DiscoveryCryptoMaterial {
     ) -> SignedSectionIdentityResolutionMaterial {
         self.signed_identity_resolution_material.clone()
     }
-    fn unsigned_identity_resolution_material<C: CryptoProvider>(
+
+    fn mic_short_salt_identity_resolution_material<C: CryptoProvider>(
         &self,
-    ) -> UnsignedSectionIdentityResolutionMaterial {
-        self.unsigned_identity_resolution_material.clone()
+    ) -> MicShortSaltSectionIdentityResolutionMaterial {
+        self.mic_short_salt_identity_resolution_material.clone()
+    }
+
+    fn mic_extended_salt_identity_resolution_material<C: CryptoProvider>(
+        &self,
+    ) -> MicExtendedSaltSectionIdentityResolutionMaterial {
+        self.mic_extended_salt_identity_resolution_material.clone()
     }
     fn signed_verification_material<C: CryptoProvider>(&self) -> SignedSectionVerificationMaterial {
         self.signed_verification_material.clone()
     }
-    fn unsigned_verification_material<C: CryptoProvider>(
+
+    fn mic_short_salt_verification_material<C: CryptoProvider>(
         &self,
-    ) -> UnsignedSectionVerificationMaterial {
-        self.unsigned_verification_material.clone()
+    ) -> MicShortSaltSectionVerificationMaterial {
+        self.mic_short_salt_verification_material.clone()
+    }
+
+    fn mic_extended_salt_verification_material<C: CryptoProvider>(
+        &self,
+    ) -> MicExtendedSaltSectionVerificationMaterial {
+        self.mic_extended_salt_verification_material.clone()
     }
 }
 
 // Implementations for reference types -- we don't provide a blanket impl for references
 // due to the potential to conflict with downstream crates' implementations.
 
-impl<'a> DiscoveryCryptoMaterial<V1> for &'a V1DiscoveryCredential {
+impl<'a> DiscoveryMetadataCryptoMaterial<V1> for &'a V1DiscoveryCredential {
     fn metadata_nonce<C: CryptoProvider>(&self) -> [u8; 12] {
         (*self).metadata_nonce::<C>()
     }
@@ -373,22 +463,36 @@ impl<'a> V1DiscoveryCryptoMaterial for &'a V1DiscoveryCredential {
     ) -> SignedSectionIdentityResolutionMaterial {
         (*self).signed_identity_resolution_material::<C>()
     }
-    fn unsigned_identity_resolution_material<C: CryptoProvider>(
+
+    fn mic_short_salt_identity_resolution_material<C: CryptoProvider>(
         &self,
-    ) -> UnsignedSectionIdentityResolutionMaterial {
-        (*self).unsigned_identity_resolution_material::<C>()
+    ) -> MicShortSaltSectionIdentityResolutionMaterial {
+        (*self).mic_short_salt_identity_resolution_material::<C>()
+    }
+
+    fn mic_extended_salt_identity_resolution_material<C: CryptoProvider>(
+        &self,
+    ) -> MicExtendedSaltSectionIdentityResolutionMaterial {
+        (*self).mic_extended_salt_identity_resolution_material::<C>()
     }
     fn signed_verification_material<C: CryptoProvider>(&self) -> SignedSectionVerificationMaterial {
         (*self).signed_verification_material::<C>()
     }
-    fn unsigned_verification_material<C: CryptoProvider>(
+
+    fn mic_short_salt_verification_material<C: CryptoProvider>(
         &self,
-    ) -> UnsignedSectionVerificationMaterial {
-        (*self).unsigned_verification_material::<C>()
+    ) -> MicShortSaltSectionVerificationMaterial {
+        (*self).mic_short_salt_verification_material::<C>()
+    }
+
+    fn mic_extended_salt_verification_material<C: CryptoProvider>(
+        &self,
+    ) -> MicExtendedSaltSectionVerificationMaterial {
+        (*self).mic_extended_salt_verification_material::<C>()
     }
 }
 
-impl<'a> DiscoveryCryptoMaterial<V1> for &'a PrecalculatedV1DiscoveryCryptoMaterial {
+impl<'a> DiscoveryMetadataCryptoMaterial<V1> for &'a PrecalculatedV1DiscoveryCryptoMaterial {
     fn metadata_nonce<C: CryptoProvider>(&self) -> [u8; 12] {
         (*self).metadata_nonce::<C>()
     }
@@ -400,84 +504,92 @@ impl<'a> V1DiscoveryCryptoMaterial for &'a PrecalculatedV1DiscoveryCryptoMateria
     ) -> SignedSectionIdentityResolutionMaterial {
         (*self).signed_identity_resolution_material::<C>()
     }
-    fn unsigned_identity_resolution_material<C: CryptoProvider>(
+
+    fn mic_short_salt_identity_resolution_material<C: CryptoProvider>(
         &self,
-    ) -> UnsignedSectionIdentityResolutionMaterial {
-        (*self).unsigned_identity_resolution_material::<C>()
+    ) -> MicShortSaltSectionIdentityResolutionMaterial {
+        (*self).mic_short_salt_identity_resolution_material::<C>()
+    }
+
+    fn mic_extended_salt_identity_resolution_material<C: CryptoProvider>(
+        &self,
+    ) -> MicExtendedSaltSectionIdentityResolutionMaterial {
+        (*self).mic_extended_salt_identity_resolution_material::<C>()
     }
     fn signed_verification_material<C: CryptoProvider>(&self) -> SignedSectionVerificationMaterial {
         (*self).signed_verification_material::<C>()
     }
-    fn unsigned_verification_material<C: CryptoProvider>(
+
+    fn mic_short_salt_verification_material<C: CryptoProvider>(
         &self,
-    ) -> UnsignedSectionVerificationMaterial {
-        (*self).unsigned_verification_material::<C>()
+    ) -> MicShortSaltSectionVerificationMaterial {
+        (*self).mic_short_salt_verification_material::<C>()
+    }
+
+    fn mic_extended_salt_verification_material<C: CryptoProvider>(
+        &self,
+    ) -> MicExtendedSaltSectionVerificationMaterial {
+        (*self).mic_extended_salt_verification_material::<C>()
     }
 }
 
-/// Extension of [`BroadcastCryptoMaterial`] for `V1` to add
-/// crypto-materials which are necessary to sign V1 sections.
-pub trait SignedBroadcastCryptoMaterial: BroadcastCryptoMaterial<V1> {
-    /// Gets the advertisement-signing private key for constructing
-    /// signature-verified V1 sections.
-    ///
-    /// The private key is returned in an opaque, crypto-provider-independent
-    /// form to provide a safeguard against leaking the bytes of the key.
-    fn signing_key(&self) -> ed25519::PrivateKey;
+/// Crypto material for creating V1 sections.
+#[derive(Clone)]
+pub struct V1BroadcastCredential {
+    /// The 32-byte key-seed used for generating other key material.
+    pub key_seed: [u8; 32],
 
-    /// Constructs the V1 discovery credential which may be used to discover
-    /// V1 advertisement sections broadcasted using this broadcast crypto-material
-    fn derive_v1_discovery_credential<C: CryptoProvider>(&self) -> V1DiscoveryCredential {
-        let key_seed = self.key_seed();
-        let metadata_key = self.metadata_key();
-        let pub_key = self.signing_key().derive_public_key::<C::Ed25519>();
-        let pub_key = pub_key.to_bytes();
+    /// The 16-byte identity-token which identifies the sender.
+    pub identity_token: V1IdentityToken,
 
-        let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&key_seed);
-        let unsigned = hkdf
-            .extended_unsigned_metadata_key_hmac_key()
-            .calculate_hmac(metadata_key.0.as_slice());
-        let signed =
-            hkdf.extended_signed_metadata_key_hmac_key().calculate_hmac(metadata_key.0.as_slice());
-        V1DiscoveryCredential::new::<C>(key_seed, unsigned, signed, pub_key).expect("The public key bytes are guaranteed to be valid since they come from the key_pair construction above")
-    }
+    /// The ed25519 private key to be used for signing section contents.
+    pub private_key: ed25519::PrivateKey,
 }
 
-/// Concrete implementation of a [`SignedBroadcastCryptoMaterial`] which keeps the key
-/// seed, the V1 metadata key, and the signing key contiguous in memory.
-///
-/// For more flexible expression of broadcast
-/// credentials, feel free to directly implement [`SignedBroadcastCryptoMaterial`]
-/// for your own broadcast-credential-storing data-type.
-pub struct SimpleSignedBroadcastCryptoMaterial {
-    key_seed: [u8; 32],
-    metadata_key: MetadataKey,
-    signing_key: ed25519::PrivateKey,
-}
-
-impl SimpleSignedBroadcastCryptoMaterial {
+impl V1BroadcastCredential {
     /// Builds some simple V1 signed broadcast crypto-materials out of
-    /// the provided key-seed, metadata-key, and signing key.
+    /// the provided key-seed, metadata-key, and ed25519 private key.
     pub fn new(
         key_seed: [u8; 32],
-        metadata_key: MetadataKey,
-        signing_key: ed25519::PrivateKey,
+        identity_token: V1IdentityToken,
+        private_key: ed25519::PrivateKey,
     ) -> Self {
-        Self { key_seed, metadata_key, signing_key }
+        Self { key_seed, identity_token, private_key }
     }
-}
 
-impl BroadcastCryptoMaterial<V1> for SimpleSignedBroadcastCryptoMaterial {
-    fn key_seed(&self) -> [u8; 32] {
+    /// Key seed from which other keys are derived.
+    pub(crate) fn key_seed(&self) -> [u8; 32] {
         self.key_seed
     }
-    fn metadata_key(&self) -> MetadataKey {
-        self.metadata_key
-    }
-}
 
-impl SignedBroadcastCryptoMaterial for SimpleSignedBroadcastCryptoMaterial {
-    fn signing_key(&self) -> ed25519::PrivateKey {
-        self.signing_key.clone()
+    /// Identity token that will be incorporated into encrypted advertisements.
+    pub(crate) fn identity_token(&self) -> V1IdentityToken {
+        self.identity_token
+    }
+
+    /// Derive a discovery credential with the data necessary to discover advertisements produced
+    /// by this broadcast credential.
+    pub fn derive_discovery_credential<C: CryptoProvider>(&self) -> V1DiscoveryCredential {
+        let key_seed = self.key_seed();
+        let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&key_seed);
+
+        V1DiscoveryCredential::new(
+            key_seed,
+            hkdf.v1_mic_short_salt_keys()
+                .identity_token_hmac_key()
+                .calculate_hmac::<C>(self.identity_token.as_slice()),
+            hkdf.v1_mic_extended_salt_keys()
+                .identity_token_hmac_key()
+                .calculate_hmac::<C>(self.identity_token.as_slice()),
+            hkdf.v1_signature_keys()
+                .identity_token_hmac_key()
+                .calculate_hmac::<C>(self.identity_token.as_slice()),
+            self.signing_key().derive_public_key::<C::Ed25519>(),
+        )
+    }
+
+    /// Key used for signature-protected sections
+    pub(crate) fn signing_key(&self) -> ed25519::PrivateKey {
+        self.private_key.clone()
     }
 }

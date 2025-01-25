@@ -13,10 +13,16 @@
 // limitations under the License.
 
 use super::super::*;
-use crate::legacy::actions::{ActionBits, ActiveUnlock};
-use crate::legacy::data_elements::TxPowerDataElement;
-use crate::legacy::{Ciphertext, Plaintext};
-use crate::shared_data::TxPower;
+use crate::{
+    legacy::{
+        data_elements::{
+            actions::{ActionBits, ActiveUnlock},
+            tx_power::TxPowerDataElement,
+        },
+        Ciphertext, Plaintext,
+    },
+    shared_data::TxPower,
+};
 
 #[test]
 fn match_contains_tx_power() {
@@ -24,7 +30,7 @@ fn match_contains_tx_power() {
 
     let tx_power = TxPower::try_from(5).expect("within range");
     let result = filter.match_v0_legible_adv(|| {
-        [Ok(PlainDataElement::<Ciphertext>::TxPower(TxPowerDataElement::from(tx_power.clone())))]
+        [Ok(DeserializedDataElement::<Ciphertext>::TxPower(TxPowerDataElement::from(tx_power)))]
             .into_iter()
     });
     assert_eq!(result, Ok(()))
@@ -44,7 +50,7 @@ fn match_not_contains_actions() {
     let filter = V0DataElementsFilter { contains_tx_power: None, actions_filter: Some(filter) };
     let tx_power = TxPower::try_from(5).expect("within range");
     let result = filter.match_v0_legible_adv(|| {
-        [Ok(PlainDataElement::<Ciphertext>::TxPower(TxPowerDataElement::from(tx_power.clone())))]
+        [Ok(DeserializedDataElement::<Ciphertext>::TxPower(TxPowerDataElement::from(tx_power)))]
             .into_iter()
     });
     assert_eq!(result, Err(NoMatch))
@@ -62,8 +68,8 @@ fn match_contains_actions() {
 
     let result = filter.match_v0_legible_adv(|| {
         [
-            Ok(PlainDataElement::<Ciphertext>::TxPower(TxPowerDataElement::from(tx_power.clone()))),
-            Ok(PlainDataElement::Actions(action_bits.into())),
+            Ok(DeserializedDataElement::<Ciphertext>::TxPower(TxPowerDataElement::from(tx_power))),
+            Ok(DeserializedDataElement::Actions(action_bits.into())),
         ]
         .into_iter()
     });
@@ -83,8 +89,8 @@ fn match_contains_both() {
 
     let result = filter.match_v0_legible_adv(|| {
         [
-            Ok(PlainDataElement::<Ciphertext>::TxPower(TxPowerDataElement::from(tx_power.clone()))),
-            Ok(PlainDataElement::Actions(action_bits.into())),
+            Ok(DeserializedDataElement::<Ciphertext>::TxPower(TxPowerDataElement::from(tx_power))),
+            Ok(DeserializedDataElement::Actions(action_bits.into())),
         ]
         .into_iter()
     });
@@ -100,7 +106,7 @@ fn match_contains_either() {
     let tx_power = TxPower::try_from(5).expect("within range");
 
     let result = filter.match_v0_legible_adv(|| {
-        [Ok(PlainDataElement::<Ciphertext>::TxPower(TxPowerDataElement::from(tx_power.clone())))]
+        [Ok(DeserializedDataElement::<Ciphertext>::TxPower(TxPowerDataElement::from(tx_power)))]
             .into_iter()
     });
     assert_eq!(result, Err(NoMatch))

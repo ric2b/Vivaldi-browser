@@ -83,6 +83,7 @@ public class WebsitePermissionsFetcher {
             case ContentSettingsType.FEDERATED_IDENTITY_API:
             case ContentSettingsType.JAVASCRIPT:
             case ContentSettingsType.JAVASCRIPT_JIT:
+            case ContentSettingsType.JAVASCRIPT_OPTIMIZER:
             case ContentSettingsType.POPUPS:
             case ContentSettingsType.REQUEST_DESKTOP_SITE:
             case ContentSettingsType.SOUND:
@@ -697,7 +698,9 @@ public class WebsitePermissionsFetcher {
             public void runAsync(final TaskQueue queue) {
                 mSiteSettingsDelegate.getBrowsingDataModel(
                         (model) -> {
-                            Map<Origin, BrowsingDataInfo> result = model.getBrowsingDataInfo();
+                            Map<Origin, BrowsingDataInfo> result =
+                                    model.getBrowsingDataInfo(
+                                            mBrowserContextHandle, mFetchSiteImportantInfo);
                             for (var entry : result.entrySet()) {
                                 Origin origin = entry.getKey();
                                 if (origin == null) continue;
@@ -713,6 +716,7 @@ public class WebsitePermissionsFetcher {
                                                 origin.getHost(),
                                                 /* type= */ 0,
                                                 info.getStorageSize()));
+                                website.setDomainImportant(info.isDomainImportant());
                             }
                             queue.next();
                         });

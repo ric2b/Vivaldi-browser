@@ -29,6 +29,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/timing/performance.h"
 
 #include <algorithm>
@@ -940,8 +945,8 @@ PerformanceMark* Performance::mark(ScriptState* script_state,
                                   ("mark_interactive"));
   DEFINE_THREAD_SAFE_STATIC_LOCAL(const AtomicString, mark_feature_usage,
                                   ("mark_feature_usage"));
-  if (mark_options &&
-      (mark_options->hasStartTime() || mark_options->hasDetail())) {
+  bool has_start_time = mark_options && mark_options->hasStartTime();
+  if (has_start_time || (mark_options && mark_options->hasDetail())) {
     UseCounter::Count(GetExecutionContext(), WebFeature::kUserTimingL3);
   }
   PerformanceMark* performance_mark = PerformanceMark::Create(
@@ -981,6 +986,18 @@ PerformanceMark* Performance::mark(ScriptState* script_state,
     } else if (mark_name == mark_feature_usage && mark_options->hasDetail()) {
       if (RuntimeEnabledFeatures::PerformanceMarkFeatureUsageEnabled()) {
         ProcessUserFeatureMark(mark_options);
+      }
+    } else {
+      if (LocalDOMWindow* window = LocalDOMWindow::From(script_state)) {
+        if (window->GetFrame() && window->GetFrame()->IsOutermostMainFrame() &&
+            has_start_time) {
+          window->GetFrame()
+              ->Loader()
+              .GetDocumentLoader()
+              ->GetTiming()
+              .NotifyCustomUserTimingMarkAdded(
+                  mark_name, base::Milliseconds(performance_mark->startTime()));
+        }
       }
     }
     NotifyObserversOfEntry(*performance_mark);
@@ -1144,8 +1161,7 @@ PerformanceMeasure* Performance::MeasureInternal(
     end = MakeGarbageCollected<V8UnionDoubleOrString>(*end_mark);
   }
   return MeasureWithDetail(script_state, measure_name, start,
-                           /* duration = */ std::nullopt, end,
-                           ScriptValue::CreateNull(script_state->GetIsolate()),
+                           /* duration = */ std::nullopt, end, ScriptValue(),
                            exception_state);
 }
 

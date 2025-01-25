@@ -30,6 +30,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "dawn/native/Blob.h"
 #include "dawn/native/Serializable.h"
@@ -51,6 +52,7 @@ class ShaderModule final : public ShaderModuleBase {
     static ResultOrError<Ref<ShaderModule>> Create(
         Device* device,
         const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
+        const std::vector<tint::wgsl::Extension>& internalExtensions,
         ShaderModuleParseResult* parseResult,
         OwnedCompilationMessages* compilationMessages);
 
@@ -61,10 +63,12 @@ class ShaderModule final : public ShaderModuleBase {
         uint32_t compileFlags,
         const std::optional<dawn::native::d3d::InterStageShaderVariablesMask>&
             usedInterstageVariables = {},
-        const std::optional<tint::PixelLocalOptions>& pixelLocalOptions = {});
+        const std::optional<tint::hlsl::writer::PixelLocalOptions>& pixelLocalOptions = {});
 
   private:
-    ShaderModule(Device* device, const UnpackedPtr<ShaderModuleDescriptor>& descriptor);
+    ShaderModule(Device* device,
+                 const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
+                 std::vector<tint::wgsl::Extension> internalExtensions);
     ~ShaderModule() override = default;
     MaybeError Initialize(ShaderModuleParseResult* parseResult,
                           OwnedCompilationMessages* compilationMessages);

@@ -159,7 +159,7 @@ ContinueTaskView::ContinueTaskView(AppListViewDelegate* view_delegate,
   } else {
     bubble_utils::ApplyStyle(title_, TypographyToken::kCrosBody1);
   }
-  title_->SetAccessibleName(std::u16string());
+  title_->GetViewAccessibility().SetName(std::u16string());
   title_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
   title_->SetElideBehavior(gfx::ElideBehavior::ELIDE_TAIL);
 
@@ -331,7 +331,7 @@ void ContinueTaskView::ExecuteCommand(int command_id, int event_flags) {
       view_delegate_->SetHideContinueSection(true);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -391,7 +391,7 @@ ContinueTaskView::TaskResultType ContinueTaskView::GetTaskResultType() {
     case AppListSearchResultType::kZeroStateDrive:
       return TaskResultType::kDriveFile;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return TaskResultType::kUnknown;
 }

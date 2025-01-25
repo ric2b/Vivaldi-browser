@@ -28,6 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/mhtml/mhtml_parser.h"
 
 #include <stddef.h>
@@ -452,7 +457,8 @@ ArchiveResource* MHTMLParser::ParseNextPart(
       DVLOG(1) << "Invalid encoding for MHTML part.";
       return nullptr;
   }
-  scoped_refptr<SharedBuffer> content_buffer = SharedBuffer::AdoptVector(data);
+  scoped_refptr<SharedBuffer> content_buffer =
+      SharedBuffer::Create(std::move(data));
   // FIXME: the URL in the MIME header could be relative, we should resolve it
   // if it is.  The specs mentions 5 ways to resolve a URL:
   // http://tools.ietf.org/html/rfc2557#section-5

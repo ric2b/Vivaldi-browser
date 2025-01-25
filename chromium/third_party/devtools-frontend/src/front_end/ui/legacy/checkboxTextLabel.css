@@ -21,8 +21,8 @@ input {
   accent-color: var(--sys-color-primary-bright);
   color: var(--sys-color-on-primary);
 
-  &:focus {
-    outline: auto 5px -webkit-focus-ring-color;
+  &:not(.small) {
+    margin: 6px;
   }
 }
 
@@ -32,7 +32,6 @@ input.inside-datagrid {
 }
 
 .dt-checkbox-text {
-  margin-left: 3px;
   overflow: hidden;
   text-overflow: ellipsis;
 }

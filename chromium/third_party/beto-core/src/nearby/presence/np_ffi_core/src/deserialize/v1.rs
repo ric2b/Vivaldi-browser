@@ -14,25 +14,36 @@
 //! Core NP Rust FFI structures and methods for v1 advertisement deserialization.
 
 use super::DeserializeAdvertisementError;
-use crate::common::*;
-use crate::credentials::CredentialBook;
-use crate::credentials::MatchedCredential;
-use crate::deserialize::{allocate_decrypted_metadata_handle, DecryptMetadataResult};
-use crate::utils::*;
-use crate::v1::V1VerificationMode;
+use crate::{
+    common::*,
+    credentials::{CredentialBook, MatchedCredential},
+    deserialize::{allocate_decrypted_metadata_handle, DecryptMetadataResult},
+    utils::*,
+    v1::V1VerificationMode,
+};
 use array_view::ArrayView;
+use crypto_provider::CryptoProvider;
 use crypto_provider_default::CryptoProviderImpl;
-use handle_map::{declare_handle_map, HandleLike, HandleMapDimensions};
-use np_adv::extended::deserialize::DataElementParseError;
-use np_adv::HasIdentityMatch;
-use std::vec::Vec;
+use handle_map::{declare_handle_map, HandleLike};
+use np_adv::{
+    credential::matched::WithMatchedCredential,
+    extended::{
+        deserialize::{
+            data_element::DataElementParseError, V1AdvertisementContents, V1DeserializedSection,
+        },
+        salt::MultiSalt,
+    },
+};
 
 /// Representation of a deserialized V1 advertisement
 #[repr(C)]
 pub struct DeserializedV1Advertisement {
-    num_legible_sections: u8,
-    num_undecryptable_sections: u8,
-    legible_sections: LegibleV1Sections,
+    /// The number of legible sections
+    pub num_legible_sections: u8,
+    /// The number of sections that were unable to be decrypted
+    pub num_undecryptable_sections: u8,
+    /// A handle to the set of legible (plain or decrypted) sections
+    pub legible_sections: LegibleV1Sections,
 }
 
 impl DeserializedV1Advertisement {
@@ -46,8 +57,9 @@ impl DeserializedV1Advertisement {
         self.num_undecryptable_sections
     }
 
-    /// Gets the legible section with the given index
-    /// (which is bounded in `0..self.num_legible_sections()`)
+    /// Gets the legible section with the given index (which is bounded in
+    /// `0..self.num_legible_sections()`). This uses the internal handle but does not take
+    /// ownership of it.
     pub fn get_section(&self, legible_section_index: u8) -> GetV1SectionResult {
         match self.legible_sections.get() {
             Ok(sections_read_guard) => {
@@ -57,15 +69,16 @@ impl DeserializedV1Advertisement {
         }
     }
 
-    /// Attempts to deallocate memory utilized internally by this V1 advertisement
-    /// (which contains a handle to actual advertisement contents behind-the-scenes).
+    /// Attempts to deallocate memory utilized internally by this V1 advertisement (which contains
+    /// a handle to actual advertisement contents behind-the-scenes). This function takes ownership
+    /// of the internal handle.
     pub fn deallocate(self) -> DeallocateResult {
         self.legible_sections.deallocate().map(|_| ()).into()
     }
 
     pub(crate) fn allocate_with_contents(
-        contents: np_adv::V1AdvertisementContents<
-            np_adv::credential::ReferencedMatchedCredential<MatchedCredential>,
+        contents: V1AdvertisementContents<
+            np_adv::credential::matched::ReferencedMatchedCredential<MatchedCredential>,
         >,
     ) -> Result<Self, DeserializeAdvertisementError> {
         // 16-section limit enforced by np_adv
@@ -118,9 +131,9 @@ impl LegibleV1SectionsInternals {
 impl<'adv>
     TryFrom<
         Vec<
-            np_adv::V1DeserializedSection<
+            V1DeserializedSection<
                 'adv,
-                np_adv::credential::ReferencedMatchedCredential<'adv, MatchedCredential>,
+                np_adv::credential::matched::ReferencedMatchedCredential<'adv, MatchedCredential>,
             >,
         >,
     > for LegibleV1SectionsInternals
@@ -129,9 +142,9 @@ impl<'adv>
 
     fn try_from(
         contents: Vec<
-            np_adv::V1DeserializedSection<
+            V1DeserializedSection<
                 'adv,
-                np_adv::credential::ReferencedMatchedCredential<'adv, MatchedCredential>,
+                np_adv::credential::matched::ReferencedMatchedCredential<'adv, MatchedCredential>,
             >,
         >,
     ) -> Result<Self, Self::Error> {
@@ -143,23 +156,16 @@ impl<'adv>
     }
 }
 
-fn get_legible_v1_sections_handle_map_dimensions() -> HandleMapDimensions {
-    HandleMapDimensions {
-        num_shards: global_num_shards(),
-        max_active_handles: global_max_num_deserialized_v1_advertisements(),
-    }
-}
-
 /// A `#[repr(C)]` handle to a value of type `LegibleV1SectionsInternals`
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq)]
-struct LegibleV1Sections {
+pub struct LegibleV1Sections {
     handle_id: u64,
 }
 
 declare_handle_map!(
     legible_v1_sections,
-    super::get_legible_v1_sections_handle_map_dimensions(),
+    crate::common::default_handle_map_dimensions(),
     super::LegibleV1Sections,
     super::LegibleV1SectionsInternals
 );
@@ -169,14 +175,69 @@ impl LocksLongerThan<LegibleV1Sections> for CredentialBook {}
 impl LegibleV1Sections {
     pub(crate) fn allocate_with_contents(
         contents: Vec<
-            np_adv::V1DeserializedSection<
-                np_adv::credential::ReferencedMatchedCredential<MatchedCredential>,
+            V1DeserializedSection<
+                np_adv::credential::matched::ReferencedMatchedCredential<MatchedCredential>,
             >,
         >,
     ) -> Result<Self, DeserializeAdvertisementError> {
         let section = LegibleV1SectionsInternals::try_from(contents)
             .map_err(|_| DeserializeAdvertisementError)?;
         Self::allocate(move || section).map_err(|e| e.into())
+    }
+
+    /// Gets the legible section with the given index (which is bounded in
+    /// `0..self.num_legible_sections()`). This function uses this handle but does not take
+    /// ownership of it.
+    pub fn get_section(&self, legible_section_index: u8) -> GetV1SectionResult {
+        match self.get() {
+            Ok(sections_read_guard) => {
+                sections_read_guard.get_section(*self, legible_section_index)
+            }
+            Err(_) => GetV1SectionResult::Error,
+        }
+    }
+
+    /// Get a data element by section index and de index. Similar to `get_section().get_de()` but
+    /// will only lock the HandleMap once. This function uses this handle but does not take
+    /// ownership of it.
+    pub fn get_section_de(&self, legible_section_index: u8, de_index: u8) -> GetV1DEResult {
+        let Ok(sections) = self.get() else {
+            return GetV1DEResult::Error;
+        };
+        let Some(section) = sections.get_section_internals(legible_section_index) else {
+            return GetV1DEResult::Error;
+        };
+        section.get_de(de_index)
+    }
+
+    /// Gets identity details for the legible section at the given index. Similar to
+    /// `get_section().get_identity_details()` but will only lock the HandleMap once. This function
+    /// uses this handle but does not take ownership of it.
+    pub fn get_section_identity_details(
+        &self,
+        legible_section_index: u8,
+    ) -> GetV1IdentityDetailsResult {
+        let Ok(sections) = self.get() else {
+            return GetV1IdentityDetailsResult::Error;
+        };
+        let Some(section) = sections.get_section_internals(legible_section_index) else {
+            return GetV1IdentityDetailsResult::Error;
+        };
+        section.get_identity_details()
+    }
+
+    /// Decrypts metadata for the legible section at the given index. Similar to
+    /// `get_section().decrypt_metadata()` but will only lock the HandleMap once. This function
+    /// uses this handle but does not take ownership of it. The caller is given owenership of the
+    /// handle in the result if present.
+    pub fn decrypt_section_metadata(&self, legible_section_index: u8) -> DecryptMetadataResult {
+        let Ok(sections) = self.get() else {
+            return DecryptMetadataResult::Error;
+        };
+        let Some(section) = sections.get_section_internals(legible_section_index) else {
+            return DecryptMetadataResult::Error;
+        };
+        section.decrypt_metadata()
     }
 }
 
@@ -313,31 +374,33 @@ impl DeserializedV1SectionInternals {
     /// passed offset is 255 (causes overflow) or if the section
     /// is leveraging a public identity, and hence, doesn't have
     /// an associated salt.
-    pub(crate) fn derive_16_byte_salt_for_offset(&self, de_offset: u8) -> GetV1DE16ByteSaltResult {
+    pub(crate) fn derive_16_byte_salt_for_offset<C: CryptoProvider>(
+        &self,
+        de_offset: u8,
+    ) -> GetV1DE16ByteSaltResult {
         self.identity
             .as_ref()
-            .and_then(|x| x.derive_16_byte_salt_for_offset(de_offset))
+            .and_then(|x| x.derive_16_byte_salt_for_offset::<C>(de_offset))
             .map_or(GetV1DE16ByteSaltResult::Error, GetV1DE16ByteSaltResult::Success)
     }
 }
 
 impl<'adv>
     TryFrom<
-        np_adv::V1DeserializedSection<
+        V1DeserializedSection<
             'adv,
-            np_adv::credential::ReferencedMatchedCredential<'adv, MatchedCredential>,
+            np_adv::credential::matched::ReferencedMatchedCredential<'adv, MatchedCredential>,
         >,
     > for DeserializedV1SectionInternals
 {
     type Error = DataElementParseError;
 
     fn try_from(
-        section: np_adv::V1DeserializedSection<
-            np_adv::credential::ReferencedMatchedCredential<'adv, MatchedCredential>,
+        section: V1DeserializedSection<
+            np_adv::credential::matched::ReferencedMatchedCredential<'adv, MatchedCredential>,
         >,
     ) -> Result<Self, Self::Error> {
         use np_adv::extended::deserialize::Section;
-        use np_adv::V1DeserializedSection;
         match section {
             V1DeserializedSection::Plaintext(section) => {
                 let des = section
@@ -354,19 +417,14 @@ impl<'adv>
                     .map(|r| r.map(|de| V1DataElement::from(&de)))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                let identity_type = section.identity_type();
                 let verification_mode = section.verification_mode();
-                let salt = section.salt();
+                let salt = *section.salt();
 
                 let match_data = with_matched.clone_match_data();
-                let match_data = match_data.map(|x| x.metadata_key());
+                let match_data = match_data.map(|x| *x.identity_token());
 
-                let identity = Some(DeserializedV1IdentityInternals::new(
-                    identity_type,
-                    verification_mode,
-                    salt,
-                    match_data,
-                ));
+                let identity =
+                    Some(DeserializedV1IdentityInternals::new(verification_mode, salt, match_data));
                 Ok(Self { des, identity })
             }
         }
@@ -392,26 +450,21 @@ pub(crate) struct DeserializedV1IdentityInternals {
     /// The metadata key, together with the matched
     /// credential and enough information to decrypt
     /// the credential metadata, if desired.
-    match_data: np_adv::WithMatchedCredential<MatchedCredential, np_adv::MetadataKey>,
+    match_data: WithMatchedCredential<MatchedCredential, np_adv::extended::V1IdentityToken>,
     /// The 16-byte section salt
-    salt: np_adv::extended::deserialize::RawV1Salt,
+    salt: MultiSalt,
 }
 
 impl DeserializedV1IdentityInternals {
     pub(crate) fn new(
-        identity_type: np_adv::de_type::EncryptedIdentityDataElementType,
         verification_mode: np_adv::extended::deserialize::VerificationMode,
-        salt: np_adv::extended::deserialize::RawV1Salt,
-        match_data: np_adv::WithMatchedCredential<MatchedCredential, np_adv::MetadataKey>,
+        salt: MultiSalt,
+        match_data: WithMatchedCredential<MatchedCredential, np_adv::extended::V1IdentityToken>,
     ) -> Self {
         let cred_id = match_data.matched_credential().id();
-        let metadata_key = match_data.contents();
-        let details = DeserializedV1IdentityDetails::new(
-            cred_id,
-            identity_type,
-            verification_mode,
-            *metadata_key,
-        );
+        let identity_token = match_data.contents();
+        let details =
+            DeserializedV1IdentityDetails::new(cred_id, verification_mode, *identity_token);
         Self { details, match_data, salt }
     }
     /// Gets the directly-transmissible details about
@@ -427,13 +480,18 @@ impl DeserializedV1IdentityInternals {
     }
     /// For a given data-element offset, derives a 16-byte DE salt
     /// for a DE in that position within this section.
-    pub(crate) fn derive_16_byte_salt_for_offset(
+    pub(crate) fn derive_16_byte_salt_for_offset<C: CryptoProvider>(
         &self,
         de_offset: u8,
     ) -> Option<FixedSizeArray<16>> {
-        let section_salt = np_hkdf::v1_salt::V1Salt::<CryptoProviderImpl>::from(self.salt);
         let de_offset = np_hkdf::v1_salt::DataElementOffset::from(de_offset);
-        section_salt.derive::<16>(Some(de_offset)).map(FixedSizeArray::from_array)
+
+        match self.salt {
+            MultiSalt::Short(_) => None,
+            MultiSalt::Extended(s) => {
+                s.derive::<16, C>(Some(de_offset)).map(FixedSizeArray::from_array)
+            }
+        }
     }
 }
 
@@ -482,8 +540,6 @@ impl GetV1IdentityDetailsResult {
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct DeserializedV1IdentityDetails {
-    /// The identity type (private/provisioned/trusted)
-    identity_type: EncryptedIdentityType,
     /// The verification mode (MIC/Signature) which
     /// was used to verify the decrypted adv contents.
     verification_mode: V1VerificationMode,
@@ -491,38 +547,29 @@ pub struct DeserializedV1IdentityDetails {
     /// matched the deserialized section.
     cred_id: u32,
     /// The 16-byte metadata key.
-    metadata_key: [u8; 16],
+    identity_token: [u8; 16],
 }
 
 impl DeserializedV1IdentityDetails {
     pub(crate) fn new(
         cred_id: u32,
-        identity_type: np_adv::de_type::EncryptedIdentityDataElementType,
         verification_mode: np_adv::extended::deserialize::VerificationMode,
-        metadata_key: np_adv::MetadataKey,
+        identity_token: np_adv::extended::V1IdentityToken,
     ) -> Self {
-        let metadata_key = metadata_key.0;
-        let identity_type = identity_type.into();
         let verification_mode = verification_mode.into();
-        Self { cred_id, identity_type, verification_mode, metadata_key }
+        Self { cred_id, verification_mode, identity_token: identity_token.into_bytes() }
     }
-    /// Returns the ID of the credential which
-    /// matched the deserialized section.
+    /// Returns the ID of the credential which matched the deserialized section.
     pub fn cred_id(&self) -> u32 {
         self.cred_id
     }
-    /// Returns the identity type (private/provisioned/trusted)
-    pub fn identity_type(&self) -> EncryptedIdentityType {
-        self.identity_type
-    }
-    /// Returns the verification mode (MIC/Signature)
-    /// employed for the decrypted section.
+    /// Returns the verification mode (MIC/Signature) employed for the decrypted section.
     pub fn verification_mode(&self) -> V1VerificationMode {
         self.verification_mode
     }
-    /// Returns the 16-byte section metadata key.
-    pub fn metadata_key(&self) -> [u8; 16] {
-        self.metadata_key
+    /// Returns the 16-byte section identity token.
+    pub fn identity_token(&self) -> [u8; 16] {
+        self.identity_token
     }
 }
 
@@ -554,33 +601,31 @@ impl DeserializedV1Section {
             GetV1DEResult::Error,
         )
     }
-    /// Attempts to get the details of the identity employed
-    /// for the section referenced by this handle. May fail
-    /// if the handle is invalid, or if the advertisement
-    /// section leverages a public identity.
+    /// Attempts to get the details of the identity employed for the section referenced by this
+    /// handle. May fail if the handle is invalid, or if the advertisement section leverages a
+    /// public identity. This function does not take ownership of the handle.
     pub fn get_identity_details(&self) -> GetV1IdentityDetailsResult {
         self.apply_to_section_internals(
             DeserializedV1SectionInternals::get_identity_details,
             GetV1IdentityDetailsResult::Error,
         )
     }
-    /// Attempts to decrypt the metadata for the matched
-    /// credential for the V1 section referenced by
-    /// this handle (if any).
+    /// Attempts to decrypt the metadata for the matched credential for the V1 section referenced
+    /// by this handle (if any). This uses but does not take ownership of the handle.
     pub fn decrypt_metadata(&self) -> DecryptMetadataResult {
         self.apply_to_section_internals(
             DeserializedV1SectionInternals::decrypt_metadata,
             DecryptMetadataResult::Error,
         )
     }
-    /// Attempts to derive a 16-byte DE salt for a DE in this section
-    /// with the given DE offset. This operation may fail if the
-    /// passed offset is 255 (causes overflow) or if the section
-    /// is leveraging a public identity, and hence, doesn't have
-    /// an associated salt.
+    /// Attempts to derive a 16-byte DE salt for a DE in this section with the given DE offset.
+    /// This operation may fail if the passed offset is 255 (causes overflow) or if the section is
+    /// leveraging a public identity, and hence, doesn't have an associated salt.
     pub fn derive_16_byte_salt_for_offset(&self, de_offset: u8) -> GetV1DE16ByteSaltResult {
         self.apply_to_section_internals(
-            move |section_ref| section_ref.derive_16_byte_salt_for_offset(de_offset),
+            move |section_ref| {
+                section_ref.derive_16_byte_salt_for_offset::<CryptoProviderImpl>(de_offset)
+            },
             GetV1DE16ByteSaltResult::Error,
         )
     }
@@ -661,8 +706,8 @@ impl V1DataElement {
     }
 }
 
-impl<'a> From<&'a np_adv::extended::deserialize::DataElement<'a>> for V1DataElement {
-    fn from(de: &'a np_adv::extended::deserialize::DataElement<'a>) -> Self {
+impl<'a> From<&'a np_adv::extended::deserialize::data_element::DataElement<'a>> for V1DataElement {
+    fn from(de: &'a np_adv::extended::deserialize::data_element::DataElement<'a>) -> Self {
         let offset = de.offset().as_u8();
         let de_type = V1DEType::from(de.de_type());
         let contents_as_slice = de.contents();
@@ -698,8 +743,7 @@ impl GenericV1DataElement {
     pub fn de_type(&self) -> V1DEType {
         self.de_type
     }
-    /// Destructures this `GenericV1DataElement` into just the
-    /// DE payload byte-buffer.
+    /// Destructures this `GenericV1DataElement` into just the DE payload byte-buffer.
     pub fn into_payload(self) -> ByteBuffer<127> {
         self.payload
     }

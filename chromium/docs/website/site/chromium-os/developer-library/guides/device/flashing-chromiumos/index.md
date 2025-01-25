@@ -58,8 +58,7 @@ Navigate to the `chromiumos` directory and initialize the repo:
 
 ```shell
 ~/chromiumos$ repo init \
-    -u https://chrome-internal.googlesource.com/chromeos/manifest-internal.git \
-    --repo-url https://chromium.googlesource.com/external/repo.git -b stable
+    https://chrome-internal.googlesource.com/chromeos/manifest-internal.git
 ```
 
 ```shell

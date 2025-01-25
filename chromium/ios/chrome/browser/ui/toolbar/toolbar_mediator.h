@@ -46,9 +46,6 @@ class WebStateList;
 @property(nonatomic, weak) id<ToolbarMediatorDelegate> delegate;
 /// The omnibox consumer for this object.
 @property(nonatomic, weak) id<ToolbarOmniboxConsumer> omniboxConsumer;
-/// Pref service from the original browser state, used to observe preferred
-/// omnibox position.
-@property(nonatomic, assign) PrefService* originalPrefService;
 
 @property(nonatomic, assign)
     segmentation_platform::DeviceSwitcherResultDispatcher*
@@ -78,6 +75,12 @@ class WebStateList;
 
 /// Sets the omnibox initial position to the correct toolbar.
 - (void)setInitialOmniboxPosition;
+
+// Vivaldi
+/// Pref service from the original browser state, used to observe
+/// tab bar style.
+@property(nonatomic, assign) PrefService* originalPrefService;
+// End Vivaldi
 
 @end
 

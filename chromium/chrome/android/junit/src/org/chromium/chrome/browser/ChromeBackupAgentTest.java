@@ -51,6 +51,7 @@ import org.mockito.stubbing.Answer;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
+import org.robolectric.annotation.LooperMode;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
@@ -59,7 +60,6 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
-import org.chromium.base.test.util.Features.JUnitProcessor;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -109,9 +109,9 @@ import java.util.stream.Collectors;
         })
 @DisableFeatures(SigninFeatures.ENTERPRISE_POLICY_ON_SIGNIN)
 @EnableFeatures(SigninFeatures.UPDATE_METRICS_SERVICES_STATE_IN_RESTORE)
+@LooperMode(LooperMode.Mode.INSTRUMENTATION_TEST)
 public class ChromeBackupAgentTest {
     @Rule public TemporaryFolder mTempDir = new TemporaryFolder();
-    @Rule public JUnitProcessor mFeaturesProcessor = new JUnitProcessor();
 
     /** Shadow to allow counting of dataChanged calls. */
     @Implements(BackupManager.class)

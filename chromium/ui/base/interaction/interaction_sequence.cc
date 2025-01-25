@@ -18,6 +18,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_auto_reset.h"
 #include "base/memory/weak_ptr.h"
+#include "base/not_fatal_until.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/strings/stringprintf.h"
@@ -497,7 +498,7 @@ TrackedElement* InteractionSequence::GetNamedElement(std::string_view name) {
   if (it != named_elements_.end()) {
     result = it->second.get();
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
   return result;
 }
@@ -617,7 +618,7 @@ void InteractionSequence::OnElementHidden(TrackedElement* element) {
     if (next_step()->uses_named_element()) {
       // Find the named element; if it still exists, it hasn't been hidden.
       const auto it = named_elements_.find(next_step()->element_name);
-      DCHECK(it != named_elements_.end());
+      CHECK(it != named_elements_.end(), base::NotFatalUntil::M130);
       if (it->second.get())
         return;
     }
@@ -659,7 +660,7 @@ void InteractionSequence::OnTriggerDuringStepTransition(
         return;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
   }
 
@@ -725,7 +726,7 @@ void InteractionSequence::OnElementHiddenWaitingForEvent(
       case ContextMode::kAny:
         break;
       case ContextMode::kFromPreviousStep:
-        NOTREACHED()
+        NOTREACHED_IN_MIGRATION()
             << "Context should always have been updated by this point.";
         break;
     }
@@ -1210,7 +1211,7 @@ ElementContext InteractionSequence::UpdateNextStepContext(
         if (temp)
           current_context = *temp;
       } else {
-        NOTREACHED()
+        NOTREACHED_IN_MIGRATION()
             << "Should not specify kFromPreviousStep without a previous step.";
       }
       next.context = current_context;

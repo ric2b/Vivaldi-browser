@@ -7,12 +7,11 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test/pixel/ash_pixel_differ.h"
 #include "ash/test/pixel/ash_pixel_test_init_params.h"
-#include "base/test/scoped_feature_list.h"
-#include "ui/base/ui_base_features.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/touch_selection/touch_selection_magnifier_aura.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/textfield/textfield_test_api.h"
 #include "ui/views/view.h"
@@ -33,12 +32,7 @@ gfx::Rect GetCursorBoundsInScreen(views::Textfield* textfield, int cursor_pos) {
 
 class TouchSelectionPixelTest : public AshTestBase {
  public:
-  TouchSelectionPixelTest() {
-    scoped_features_.InitWithFeatures({::features::kChromeRefresh2023,
-                                       ::features::kChromeRefreshSecondary2023},
-                                      {});
-  }
-
+  TouchSelectionPixelTest() = default;
   TouchSelectionPixelTest(const TouchSelectionPixelTest&) = delete;
   TouchSelectionPixelTest& operator=(const TouchSelectionPixelTest&) = delete;
   ~TouchSelectionPixelTest() override = default;
@@ -62,15 +56,13 @@ class TouchSelectionPixelTest : public AshTestBase {
   // triggered.
   ui::ScopedAnimationDurationScaleMode disable_animations_{
       ui::ScopedAnimationDurationScaleMode::ZERO_DURATION};
-
-  base::test::ScopedFeatureList scoped_features_;
 };
 
 TEST_F(TouchSelectionPixelTest, MagnifierOnTextfield) {
   auto widget = CreateContainerWidget();
   auto* textfield = widget->GetContentsView()->AddChildView(
       std::make_unique<views::Textfield>());
-  textfield->SetAccessibleName(u"Textfield");
+  textfield->GetViewAccessibility().SetName(u"Textfield");
   textfield->SetBoundsRect(gfx::Rect(100, 100, 200, 30));
   textfield->SetText(u"Text in a textfield");
   textfield->SetSelectedRange({0, 9});

@@ -32,9 +32,13 @@
       initWithBaseViewController:_viewController
                          browser:self.browser];
   [_panelContentCoordinator start];
+
+  [_viewController animateAppearance];
 }
 
 - (void)stop {
+  [_panelContentCoordinator stop];
+
   [_viewController willMoveToParentViewController:nil];
   [_viewController.view removeFromSuperview];
   [_viewController removeFromParentViewController];

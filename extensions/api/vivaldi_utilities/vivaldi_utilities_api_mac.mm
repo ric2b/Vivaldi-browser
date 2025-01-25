@@ -5,6 +5,9 @@
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 
 #include <Cocoa/Cocoa.h>
+#include "base/apple/bundle_locations.h"
+
+#import "chrome/browser/mac/dock.h"
 
 namespace extensions {
 bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
@@ -44,6 +47,19 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
   date_formats->time_format = [timeFormat UTF8String];
 
   return true;
+}
+
+std::optional<bool> UtilitiesIsVivaldiPinnedToLaunchBarFunction::CheckIsPinned() {
+  dock::ChromeInDockStatus dock_launch_status = dock::ChromeIsInTheDock();
+
+  return dock_launch_status == dock::ChromeInDockTrue;
+}
+
+bool UtilitiesPinVivaldiToLaunchBarFunction::PinToLaunchBar() {
+  NSString* source_path = base::apple::OuterBundle().bundlePath;
+  dock::AddIconStatus status = dock::AddIcon(source_path, nullptr);
+
+  return status == dock::IconAddSuccess || status == dock::IconAlreadyPresent;
 }
 
 }  // namespace extensions

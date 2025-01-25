@@ -19,6 +19,7 @@ point to them. Items are colorized as follows:
 import os
 import sys
 
+import gclient_utils
 import git_common
 import setup_color
 import subprocess2
@@ -98,6 +99,10 @@ def main(argv, outbuf):
     if '-h' in argv or '--help' in argv:
         _print_help(outbuf)
         return 0
+    if gclient_utils.IsEnvCog():
+        print('map command is not supported in non-git environment.',
+              file=sys.stderr)
+        return 1
 
     map_extra = git_common.get_config_list('depot_tools.map_extra')
     cmd = [

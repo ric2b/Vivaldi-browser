@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/memory/memory.h"
 #include "quiche/quic/core/crypto/null_encrypter.h"
@@ -568,8 +569,7 @@ TEST_P(QuicServerSessionBaseTest, BandwidthEstimates) {
   if (!VersionUsesHttp3(transport_version())) {
     session_->RegisterStreamPriority(
         QuicUtils::GetHeadersStreamId(transport_version()),
-        /*is_static=*/true,
-        QuicStreamPriority::Default(session_->priority_type()));
+        /*is_static=*/true, QuicStreamPriority());
   }
 
   // Set some initial bandwidth values.

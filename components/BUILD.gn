@@ -87,3 +87,15 @@ action("search_engines_inc") {
     rebase_path(engines_inc, root_build_dir),
   ]
 }
+
+source_set("user_agent") {
+    sources = [
+      "//vivaldi/components/user_agent/vivaldi_user_agent.cc",
+      "//vivaldi/components/user_agent/vivaldi_user_agent.h",
+      "//vivaldi/components/user_agent/vivaldi_user_agent_white_list.inc",
+    ]
+    deps = [
+      "//base:base",
+      "//components/google/core/common",
+    ]
+}

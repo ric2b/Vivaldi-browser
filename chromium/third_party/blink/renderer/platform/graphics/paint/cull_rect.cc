@@ -8,7 +8,6 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/scroll_paint_property_node.h"
 #include "third_party/blink/renderer/platform/graphics/paint/transform_paint_property_node.h"
@@ -21,7 +20,7 @@ namespace blink {
 
 namespace {
 
-constexpr int kReasonablePixelLimit = kIntMaxForLayoutUnit;
+constexpr int kReasonablePixelLimit = LayoutUnit::kIntMax;
 constexpr int kChangedEnoughMinimumDistance = 512;
 
 // Returns the number of pixels to expand the cull rect for composited scroll
@@ -38,6 +37,24 @@ int LocalPixelDistanceToExpand(
     return pixel_distance_to_expand;
   }
   return scale * pixel_distance_to_expand;
+}
+
+bool CanExpandForScroll(const ScrollPaintPropertyNode& scroll) {
+  // kNotPreferred is used for selects/inputs which don't benefit from
+  // composited scrolling.
+  if (scroll.GetCompositedScrollingPreference() ==
+      CompositedScrollingPreference::kNotPreferred) {
+    return false;
+  }
+  if (RuntimeEnabledFeatures::ScrollNodeForOverflowHiddenEnabled() &&
+      !scroll.UserScrollable()) {
+    return false;
+  }
+  if (scroll.ContentsRect().width() <= scroll.ContainerRect().width() &&
+      scroll.ContentsRect().height() <= scroll.ContainerRect().height()) {
+    return false;
+  }
+  return true;
 }
 
 }  // anonymous namespace
@@ -95,28 +112,17 @@ std::pair<bool, bool> CullRect::ApplyScrollTranslation(
   if (disable_expansion) {
     return {false, false};
   }
-  // kNotPreferred is used for selects/inputs which don't benefit from
-  // composited scrolling.
-  if (scroll->GetCompositedScrollingPreference() ==
-      CompositedScrollingPreference::kNotPreferred) {
-    return {false, false};
-  }
-  if (RuntimeEnabledFeatures::ScrollNodeForOverflowHiddenEnabled() &&
-      !scroll->UserScrollable()) {
+  if (!CanExpandForScroll(*scroll)) {
     return {false, false};
   }
 
   gfx::Rect contents_rect = scroll->ContentsRect();
-  int scroll_range_x = contents_rect.width() - container_rect.width();
-  int scroll_range_y = contents_rect.height() - container_rect.height();
-  if (scroll_range_x <= 0 && scroll_range_y <= 0) {
-    return {false, false};
-  }
-
   // Expand the cull rect for scrolling contents for composited scrolling.
   std::pair<bool, bool> expanded{true, true};
   int outset = LocalPixelDistanceToExpand(root_transform, scroll_translation);
   if (RuntimeEnabledFeatures::DynamicScrollCullRectExpansionEnabled()) {
+    int scroll_range_x = contents_rect.width() - container_rect.width();
+    int scroll_range_y = contents_rect.height() - container_rect.height();
     if (scroll_range_x <= 0) {
       rect_.Outset(gfx::Outsets::VH(outset, 0));
       expanded.first = false;
@@ -417,7 +423,8 @@ bool CullRect::ChangedEnough(
 bool CullRect::HasScrolledEnough(
     const gfx::Vector2dF& delta,
     const TransformPaintPropertyNode& scroll_translation) {
-  if (!scroll_translation.ScrollNode()) {
+  if (!scroll_translation.ScrollNode() ||
+      !CanExpandForScroll(*scroll_translation.ScrollNode())) {
     return !delta.IsZero();
   }
   if (std::abs(delta.x()) < kChangedEnoughMinimumDistance &&

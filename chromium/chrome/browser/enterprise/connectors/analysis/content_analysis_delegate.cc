@@ -24,7 +24,6 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/enterprise/connectors/analysis/analysis_settings.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_dialog.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_features.h"
 #include "chrome/browser/enterprise/connectors/analysis/files_request_handler.h"
@@ -43,6 +42,7 @@
 #include "components/enterprise/buildflags/buildflags.h"
 #include "components/enterprise/common/files_scan_data.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
+#include "components/enterprise/connectors/analysis/analysis_settings.h"
 #include "components/policy/core/common/chrome_schema.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
@@ -207,7 +207,10 @@ void ContentAnalysisDelegate::BypassWarnings(
       content_size += entry.size();
 
     ReportAnalysisConnectorWarningBypass(
-        profile_, url_, url_, "", "", "Text data", std::string(), "text/plain",
+        profile_, /*url*/ url_, /*tab_url*/ url_,
+        /*source*/ data_.clipboard_source,
+        /*destination*/ url_.spec(), "Text data", /*download_digest_sha256*/ "",
+        "text/plain",
         extensions::SafeBrowsingPrivateEventRouter::kTriggerWebContentUpload,
         GetContentTransferMethod(), access_point_, content_size, text_response_,
         user_justification);
@@ -218,8 +221,10 @@ void ContentAnalysisDelegate::BypassWarnings(
     result_.image_result = true;
 
     ReportAnalysisConnectorWarningBypass(
-        profile_, url_, url_, "", "", "Image data", std::string(),
-        /*mime_type*/ std::string(),
+        profile_, /*url*/ url_, /*tab_url*/ url_,
+        /*source*/ data_.clipboard_source, /*destination*/ url_.spec(),
+        "Image data", /*download_digest_sha256*/ "",
+        /*mime_type*/ "",
         extensions::SafeBrowsingPrivateEventRouter::kTriggerWebContentUpload,
         GetContentTransferMethod(), access_point_, data_.image.size(),
         image_response_, user_justification);
@@ -299,11 +304,15 @@ std::optional<std::u16string> ContentAnalysisDelegate::GetCustomMessage()
 }
 
 std::optional<GURL> ContentAnalysisDelegate::GetCustomLearnMoreUrl() const {
-  auto element = data_.settings.tags.find(final_result_tag_);
-  if (element != data_.settings.tags.end() &&
-      element->second.custom_message.learn_more_url.is_valid() &&
-      !element->second.custom_message.learn_more_url.is_empty()) {
-    return element->second.custom_message.learn_more_url;
+  // Rule-based custom messages which don't have learn more urls take
+  // precedence over policy-based.
+  if (custom_rule_message_.message_segments().empty()) {
+    auto element = data_.settings.tags.find(final_result_tag_);
+    if (element != data_.settings.tags.end() &&
+        element->second.custom_message.learn_more_url.is_valid() &&
+        !element->second.custom_message.learn_more_url.is_empty()) {
+      return element->second.custom_message.learn_more_url;
+    }
   }
 
   return std::nullopt;
@@ -575,7 +584,10 @@ void ContentAnalysisDelegate::StringRequestCallback(
             text_complies);
 
   MaybeReportDeepScanningVerdict(
-      profile_, url_, url_, "", "", "Text data", std::string(), "text/plain",
+      profile_, /*url*/ url_, /*tab_url*/ url_,
+      /*source*/ data_.clipboard_source,
+      /*destination*/ url_.spec(), "Text data", /*download_digest_sha256*/ "",
+      "text/plain",
       extensions::SafeBrowsingPrivateEventRouter::kTriggerWebContentUpload,
       GetContentTransferMethod(), access_point_, content_size, result, response,
       CalculateEventResult(data_.settings, text_complies, should_warn));
@@ -619,8 +631,10 @@ void ContentAnalysisDelegate::ImageRequestCallback(
   result_.image_result = image_complies;
 
   MaybeReportDeepScanningVerdict(
-      profile_, url_, url_, "", "", "Image data", std::string(),
-      /*mime_type*/ std::string(),
+      profile_, /*url*/ url_, /*tab_url*/ url_,
+      /*source*/ data_.clipboard_source,
+      /*destination*/ url_.spec(), "Image data", /*download_digest_sha256*/ "",
+      /*mime_type*/ "",
       extensions::SafeBrowsingPrivateEventRouter::kTriggerWebContentUpload,
       GetContentTransferMethod(), access_point_, data_.image.size(), result,
       response,
@@ -828,6 +842,10 @@ void ContentAnalysisDelegate::PrepareTextRequest() {
                        weak_ptr_factory_.GetWeakPtr()));
 
     PrepareRequest(BULK_DATA_ENTRY, request.get());
+    request->set_destination(url_.spec());
+    if (!data_.clipboard_source.empty()) {
+      request->set_source(data_.clipboard_source);
+    }
     UploadTextForDeepScanning(std::move(request));
   }
 }

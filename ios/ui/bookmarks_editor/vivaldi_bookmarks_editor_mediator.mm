@@ -10,19 +10,18 @@
 #import "components/url_formatter/url_fixer.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
-#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
 #import "ios/chrome/browser/bookmarks/model/managed_bookmark_service_factory.h"
+#import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_utils_ios.h"
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/favicon/ui_bundled/favicon_attributes_provider.h"
 #import "ios/chrome/browser/features/vivaldi_features.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
-#import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
-#import "ios/chrome/browser/ui/content_suggestions/magic_stack/most_visited_tiles_config.h"
-#import "ios/chrome/browser/ui/favicon/favicon_attributes_provider.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/most_visited_tiles_config.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #import "ios/most_visited_sites/vivaldi_most_visited_sites_manager.h"
@@ -31,7 +30,6 @@
 #import "prefs/vivaldi_pref_names.h"
 #import "url/gurl.h"
 
-using bookmarks::BookmarkNode;
 using vivaldi_bookmark_kit::GetSpeeddial;
 using vivaldi_bookmark_kit::SetNodeDescription;
 using vivaldi_bookmark_kit::SetNodeNickname;
@@ -56,11 +54,14 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   // If `_folderNode` is `nullptr`, the user is adding a new folder. Otherwise
   // the user is editing an existing folder.
   const BookmarkNode* _bookmarkNode;
-  LegacyBookmarkModel* _bookmarkModel;
+  BookmarkModel* _bookmarkModel;
   // Preference service from the application context.
   PrefService* _prefs;
   // Observer for speed dials visibility state
   PrefBackedBoolean* _showSpeedDials;
+  // Whether the user manually changed the folder. In which case it must be
+  // saved as last used folder on "save".
+  BOOL _manuallyChangedTheFolder;
 }
 
 // Favicon loaded to fetch favicons from cache.
@@ -75,7 +76,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
 @implementation VivaldiBookmarksEditorMediator
 
-- (instancetype)initWithBookmarkModel:(LegacyBookmarkModel*)bookmarkModel
+- (instancetype)initWithBookmarkModel:(BookmarkModel*)bookmarkModel
                       bookmarkNode:(const bookmarks::BookmarkNode*)bookmarkNode
                       browserState:(ChromeBrowserState*)browserState {
   self = [super init];
@@ -83,7 +84,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     DCHECK(bookmarkModel);
     DCHECK(bookmarkModel->loaded());
 
-    DCHECK(bookmarkNode);
     _bookmarkModel = bookmarkModel;
     _bookmark = bookmarkNode;
     _bookmarkNode = bookmarkNode;
@@ -172,12 +172,12 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
     // Update description
     const std::string descriptionString = base::SysNSStringToUTF8(description);
-    SetNodeDescription(_bookmarkModel->getUnderlyingModel(),
+    SetNodeDescription(_bookmarkModel,
                        _bookmarkNode, descriptionString);
 
     // Update nickname
     const std::string nicknameString = base::SysNSStringToUTF8(nickname);
-    SetNodeNickname(_bookmarkModel->getUnderlyingModel(),
+    SetNodeNickname(_bookmarkModel,
                     _bookmarkNode, nicknameString);
 
     // Move
@@ -203,18 +203,19 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     if (description.length > 0) {
       const std::string descriptionString =
           base::SysNSStringToUTF8(description);
-      SetNodeDescription(_bookmarkModel->getUnderlyingModel(),
+      SetNodeDescription(_bookmarkModel,
                          node, descriptionString);
     }
 
     // Update the nickname
     if (nickname.length > 0) {
       const std::string nicknameString = base::SysNSStringToUTF8(nickname);
-      SetNodeNickname(_bookmarkModel->getUnderlyingModel(),
+      SetNodeNickname(_bookmarkModel,
                       node, nicknameString);
     }
   }
 
+  [self saveLastUsedFolder:parentNode];
   [self.consumer bookmarksEditorShouldClose];
 }
 
@@ -223,29 +224,21 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
                          parentNode:(const bookmarks::BookmarkNode*)parentNode {
 
   DCHECK(parentNode);
-  LegacyBookmarkModel* modelForParentFolder =
-      bookmark_utils_ios::GetBookmarkModelForNode(parentNode,
-                                                  _bookmarkModel,
-                                                  _bookmarkModel);
   DCHECK(title.length > 0);
   std::u16string folderTitle = base::SysNSStringToUTF16(title);
 
   if (_isEditing) {
     DCHECK(_bookmarkNode);
-    LegacyBookmarkModel* modelForFolder =
-        bookmark_utils_ios::GetBookmarkModelForNode(
-            _bookmarkNode, _bookmarkModel, _bookmarkModel);
-
     // Update title if changed
     if (_bookmarkNode->GetTitle() != folderTitle) {
-      modelForFolder->SetTitle(_bookmarkNode,
+      _bookmarkModel->SetTitle(_bookmarkNode,
                                folderTitle,
                                bookmarks::metrics::BookmarkEditSource::kUser);
     }
 
     // Set speed dial status if changed
     if (GetSpeeddial(_bookmarkNode) != useAsGroup) {
-      SetNodeSpeeddial(_bookmarkModel->getUnderlyingModel(),
+      SetNodeSpeeddial(_bookmarkModel,
                        _bookmarkNode,
                        useAsGroup);
     }
@@ -256,7 +249,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
       // TODO: @prio - Make snackbar works here when item moved.
       bookmark_utils_ios::MoveBookmarks(bookmarksVector,
                                         _bookmarkModel,
-                                        _bookmarkModel,
                                         parentNode);
       // Move might change the pointer, grab the updated value.
       CHECK_EQ(bookmarksVector.size(), 1u);
@@ -264,13 +256,14 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     }
   } else {
     DCHECK(!_bookmarkNode);
-    _bookmarkNode = modelForParentFolder->AddFolder(
+    _bookmarkNode = _bookmarkModel->AddFolder(
           parentNode, parentNode->children().size(), folderTitle);
     if (useAsGroup)
-      SetNodeSpeeddial(_bookmarkModel->getUnderlyingModel(),
+      SetNodeSpeeddial(_bookmarkModel,
                        _bookmarkNode, YES);
   }
 
+  [self saveLastUsedFolder:parentNode];
   [self.consumer didCreateNewFolder:_bookmarkNode];
   [self.consumer bookmarksEditorShouldClose];
 }
@@ -280,18 +273,19 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   DCHECK(_bookmarkNode);
   std::set<const BookmarkNode*> editedNodes;
   editedNodes.insert(_bookmarkNode);
-  LegacyBookmarkModel* modelForBookmark =
-      bookmark_utils_ios::GetBookmarkModelForNode(
-            _bookmarkNode, _bookmarkModel,_bookmarkModel);
   [self.snackbarCommandsHandler
       showSnackbarMessage:bookmark_utils_ios::DeleteBookmarksWithUndoToast(
-            editedNodes, {modelForBookmark}, _browserState, FROM_HERE)];
+            editedNodes, _bookmarkModel, _browserState, FROM_HERE)];
   [self.consumer bookmarksEditorShouldClose];
 }
 
 - (void)setPreferenceShowSpeedDials:(BOOL)showSpeedDials {
   if (showSpeedDials != [_showSpeedDials value])
     [_showSpeedDials setValue:showSpeedDials];
+}
+
+- (void)manuallyChangeFolder:(const bookmarks::BookmarkNode*)folder {
+  _manuallyChangedTheFolder = YES;
 }
 
 #pragma mark - VivaldiMostVisitedSitesConsumer
@@ -309,15 +303,9 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   }
 }
 
-#pragma mark - Properties
-- (LegacyBookmarkModel*)bookmarkModel {
-  return bookmark_utils_ios::GetBookmarkModelForNode(
-      self.bookmark, _bookmarkModel, _bookmarkModel);
-}
-
 #pragma mark - Private
 - (void)prepareTopSitesAndNotifyConsumersIfNeeded {
-  if (IsNewStartPageIsEnabled()) {
+  if (IsTopSitesEnabled()) {
     NSMutableArray<VivaldiBookmarksEditorTopSitesItem*>* topSites =
         [[NSMutableArray alloc] init];
     for (ContentSuggestionsMostVisitedItem* tile in
@@ -352,6 +340,16 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
   self.faviconLoader->FaviconForPageUrlOrHost(
         blockURL, kDesiredMediumFaviconSizePt, faviconLoadedBlock);
+}
+
+- (void)saveLastUsedFolder:(const bookmarks::BookmarkNode*)folder {
+  DCHECK(folder);
+  DCHECK(folder->is_folder());
+  if (_manuallyChangedTheFolder) {
+    BookmarkStorageType type = bookmark_utils_ios::GetBookmarkStorageType(
+        folder, _bookmarkModel);
+    SetLastUsedBookmarkFolder(_prefs, folder, type);
+  }
 }
 
 @end

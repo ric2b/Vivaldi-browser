@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Übernehmen</translation>
 <translation id="1603914832182249871">(Privat)</translation>
 <translation id="1627276047960621195">Dateideskriptoren</translation>
+<translation id="1654713139320245449">Keine Cast bzw. Streaming Ziele gefunden. Benötigen Sie Hilfe?</translation>
 <translation id="166278006618318542">Algorithmus für öffentlichen Schlüssel des Antragstellers</translation>
 <translation id="1682548588986054654">Neues privates Fenster</translation>
 <translation id="1708338024780164500">(Inaktiv)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Ein anderes Programm auf Ihrem Computer hat eine Erweiterung hinzugefügt, die sich möglicherweise auf die Funktionsweise von Vivaldi auswirkt.</translation>
 <translation id="2443487764245141020">Websites müssen Ihr Gerät möglicherweise auch anhand einer eindeutigen Kennung erkennen</translation>
 <translation id="2445081178310039857">Stammverzeichnis der Erweiterung ist erforderlich.</translation>
-<translation id="2470702053775288986">Nicht unterstützte Erweiterungen deaktiviert</translation>
 <translation id="2485422356828889247">Deinstallieren</translation>
 <translation id="2498539833203011245">Im Dock ablegen</translation>
 <translation id="2509495747794740764">Der Wert für die Skalierung muss zwischen 10 und 200 liegen.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Details</translation>
 <translation id="4345587454538109430">Konfigurieren...</translation>
 <translation id="4348766275249686434">Fehler erfassen</translation>
-<translation id="4363771538994847871">Kein Cast-Empfänger gefunden. Benötigen Sie Hilfe?</translation>
 <translation id="4384652540891215547">Erweiterung aktivieren</translation>
 <translation id="4394049700291259645">Deaktivieren</translation>
 <translation id="4409697491990005945">Ränder</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Layout</translation>
 <translation id="7782102568078991263">Keine weiteren Vorschläge von Google</translation>
 <translation id="7786889348652477777">&amp;App neu laden</translation>
-<translation id="7791543448312431591">Hinzufügen</translation>
 <translation id="7800518121066352902">&amp;Gegen den Uhrzeigersinn drehen</translation>
 <translation id="7814458197256864873">&amp;Kopieren</translation>
 <translation id="7818135753970109980">Neues Design hinzugefügt (<ph name="EXTENSION_NAME" />)</translation>

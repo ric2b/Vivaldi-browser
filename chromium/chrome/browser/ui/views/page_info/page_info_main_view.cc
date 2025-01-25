@@ -261,7 +261,7 @@ void PageInfoMainView::SetPermissionInfo(
   // permissions to align toggles.
   bool should_show_spacer = false;
   for (const auto& permission : permission_info_list) {
-    if (permissions::PermissionUtil::CanPermissionBeAllowedOnce(
+    if (permissions::PermissionUtil::DoesSupportTemporaryGrants(
             permission.type)) {
       should_show_spacer = true;
     }
@@ -553,7 +553,8 @@ gfx::Size PageInfoMainView::CalculatePreferredSize(
     width =
         std::max(width, security_container_view_->GetPreferredSize().width());
   }
-  return gfx::Size(width, views::View::GetHeightForWidth(width));
+  return gfx::Size(width,
+                   GetLayoutManager()->GetPreferredHeightForWidth(this, width));
 }
 
 void PageInfoMainView::ChildPreferredSizeChanged(views::View* child) {

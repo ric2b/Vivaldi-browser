@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/cert/internal/trust_store_mac.h"
 
 #include <Security/Security.h>
@@ -26,7 +31,7 @@
 #include "net/base/features.h"
 #include "net/base/hash_value.h"
 #include "net/base/network_notification_thread_mac.h"
-#include "net/cert/internal/trust_store_features.h"
+#include "net/cert/internal/platform_trust_store.h"
 #include "net/cert/test_keychain_search_list_mac.h"
 #include "net/cert/x509_util.h"
 #include "net/cert/x509_util_apple.h"
@@ -415,7 +420,7 @@ class TrustDomainCacheFullCerts {
         domain_name = "Admin";
         break;
       case kSecTrustSettingsDomainSystem:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
     base::UmaHistogramCounts1000(
@@ -1065,11 +1070,9 @@ bssl::CertificateTrust TrustStoreMac::GetTrust(
       // depend on the context the certificate is encountered in.
       bssl::CertificateTrust trust =
           bssl::CertificateTrust::ForTrustAnchorOrLeaf()
-              .WithEnforceAnchorExpiry();
-      if (IsLocalAnchorConstraintsEnforcementEnabled()) {
-        trust = trust.WithEnforceAnchorConstraints()
-                    .WithRequireAnchorBasicConstraints();
-      }
+              .WithEnforceAnchorExpiry()
+              .WithEnforceAnchorConstraints()
+              .WithRequireAnchorBasicConstraints();
       return trust;
     }
     case TrustStatus::DISTRUSTED:
@@ -1079,11 +1082,17 @@ bssl::CertificateTrust TrustStoreMac::GetTrust(
     case TrustStatus::UNKNOWN:
       // UNKNOWN is an implementation detail of TrustImpl and should never be
       // returned.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 
   return bssl::CertificateTrust::ForUnspecified();
+}
+
+std::vector<net::PlatformTrustStore::CertWithTrust>
+TrustStoreMac::GetAllUserAddedCerts() {
+  // TODO(crbug.com/40928765): implement this.
+  return {};
 }
 
 // static

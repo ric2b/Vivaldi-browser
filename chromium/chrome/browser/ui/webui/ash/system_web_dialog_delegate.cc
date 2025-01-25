@@ -44,7 +44,8 @@ std::list<SystemWebDialogDelegate*>* GetInstances() {
 // shadow since the dialog frame's border has its own shadow.
 views::Widget::InitParams CreateWidgetParams(
     SystemWebDialogDelegate::FrameKind frame_kind) {
-  views::Widget::InitParams params;
+  views::Widget::InitParams params(
+      views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET);
   params.corner_radius = kSystemDialogCornerRadiusDp;
   // Set shadow type according to the frame kind.
   switch (frame_kind) {
@@ -164,12 +165,19 @@ std::string SystemWebDialogDelegate::Id() {
   return GetDialogContentURL().spec();
 }
 
+void SystemWebDialogDelegate::StackAtTop() {
+  views::Widget::GetWidgetForNativeWindow(dialog_window())->StackAtTop();
+}
+
 void SystemWebDialogDelegate::Focus() {
   // Focusing a modal dialog does not make it the topmost dialog and does not
   // enable interaction. It does however remove focus from the current dialog,
   // preventing interaction with any dialog. TODO(stevenjb): Investigate and
   // fix, https://crbug.com/914133.
   if (GetDialogModalType() == ui::MODAL_TYPE_NONE) {
+    if (!dialog_window()->IsVisible()) {
+      dialog_window()->Show();
+    }
     dialog_window()->Focus();
   }
 }
@@ -192,7 +200,7 @@ void SystemWebDialogDelegate::OnDialogShown(content::WebUI* webui) {
   auto* zoom_map = content::HostZoomMap::GetForWebContents(web_contents);
   // Temporary means the lifetime of the WebContents.
   zoom_map->SetTemporaryZoomLevel(rfh->GetGlobalId(),
-                                  blink::PageZoomFactorToZoomLevel(1.0));
+                                  blink::ZoomFactorToZoomLevel(1.0));
 }
 
 void SystemWebDialogDelegate::ShowSystemDialogForBrowserContext(

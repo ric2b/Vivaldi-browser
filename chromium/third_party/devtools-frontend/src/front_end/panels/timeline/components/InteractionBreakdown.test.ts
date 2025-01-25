@@ -14,7 +14,7 @@ describeWithEnvironment('InteractionBreakdown', () => {
   const {InteractionBreakdown} = TimelineComponents.InteractionBreakdown;
 
   it('renders the breakdowns for an InteractionBreakdown', async function() {
-    const traceData = await TraceLoader.traceEngine(this, 'one-second-interaction.json.gz');
+    const {traceData} = await TraceLoader.traceEngine(this, 'one-second-interaction.json.gz');
     const longInteraction = traceData.UserInteractions.longestInteractionEvent;
     if (!longInteraction) {
       throw new Error('Could not find longest interaction');
@@ -27,12 +27,12 @@ describeWithEnvironment('InteractionBreakdown', () => {
     assert.isNotNull(breakdown.shadowRoot);
 
     const inputDelay = breakdown.shadowRoot.querySelector('[data-entry="input-delay"] .value')?.textContent;
-    assert.strictEqual(inputDelay, '1ms');
+    assert.strictEqual(inputDelay, '1.00\xA0ms');
     const processingDuration =
         breakdown.shadowRoot.querySelector('[data-entry="processing-duration"] .value')?.textContent;
-    assert.strictEqual(processingDuration, '977ms');
+    assert.strictEqual(processingDuration, '977.00\xA0ms');
     const presentationDelay =
         breakdown.shadowRoot.querySelector('[data-entry="presentation-delay"] .value')?.textContent;
-    assert.strictEqual(presentationDelay, '1.974ms');
+    assert.strictEqual(presentationDelay, '1.97\xA0ms');
   });
 });

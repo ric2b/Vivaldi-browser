@@ -28,7 +28,12 @@ class IsolateDaemon(AbstractContextManager):
             return self
 
         def __exit__(self, exc_type, exc_value, traceback):
-            return self._temp_dir.__exit__(exc_type, exc_value, traceback)
+            try:
+                self._temp_dir.__exit__(exc_type, exc_value, traceback)
+            except OSError:
+                # Ignore the errors when cleaning up the temporary folder.
+                pass
+            return True
 
         def name(self):
             """Returns the location of the isolate dir."""

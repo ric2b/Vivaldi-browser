@@ -54,7 +54,7 @@
 #endif
 
 #if BUILDFLAG(IS_MAC)
-#include "chrome/browser/web_applications/app_shim_registry_mac.h"
+#include "chrome/browser/web_applications/os_integration/mac/app_shim_registry.h"
 #endif
 
 using content::BrowserThread;
@@ -517,7 +517,7 @@ base::FilePath GetShortcutDataDir(const ShortcutInfo& shortcut_info) {
 #if !BUILDFLAG(IS_MAC)
 void DeleteMultiProfileShortcutsForApp(const std::string& app_id) {
   // Multi-profile shortcuts exist only on macOS.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 #endif
 

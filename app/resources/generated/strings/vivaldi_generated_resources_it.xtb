@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Applica</translation>
 <translation id="1603914832182249871">(Incognito)</translation>
 <translation id="1627276047960621195">Descrittori di file</translation>
+<translation id="1654713139320245449">Nessuna destinazione per la trasmissione. Hai bisogno di aiuto?</translation>
 <translation id="166278006618318542">Soggetto algoritmo chiave pubblica</translation>
 <translation id="1682548588986054654">Nuova finestra in incognito</translation>
 <translation id="1708338024780164500">(Inattivo)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Un altro programma sul computer ha aggiunto un'estensione che potrebbe modificare il funzionamento di Vivaldi.</translation>
 <translation id="2443487764245141020">I siti potrebbero anche dover riconoscere il tuo dispositivo tramite un identificatore</translation>
 <translation id="2445081178310039857">La directory principale dell'estensione è obbligatoria.</translation>
-<translation id="2470702053775288986">Estensioni non supportate disattivate</translation>
 <translation id="2485422356828889247">Disinstalla</translation>
 <translation id="2498539833203011245">Minimizza</translation>
 <translation id="2509495747794740764">Il valore Scala deve essere un numero compreso tra 10 e 200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Dettagli</translation>
 <translation id="4345587454538109430">Configura...</translation>
 <translation id="4348766275249686434">Raccogli errori</translation>
-<translation id="4363771538994847871">Nessuna destinazione trovata per la trasmissione. Hai bisogno di assistenza?</translation>
 <translation id="4384652540891215547">Attiva l'estensione</translation>
 <translation id="4394049700291259645">Disattiva</translation>
 <translation id="4409697491990005945">Margini</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Layout</translation>
 <translation id="7782102568078991263">Nessun altro suggerimento da Google</translation>
 <translation id="7786889348652477777">&amp;Ricarica app</translation>
-<translation id="7791543448312431591">Aggiungi</translation>
 <translation id="7800518121066352902">Ruota in senso A&amp;ntiorario</translation>
 <translation id="7814458197256864873">&amp;Copia</translation>
 <translation id="7818135753970109980">Nuovo tema aggiunto (<ph name="EXTENSION_NAME" />)</translation>

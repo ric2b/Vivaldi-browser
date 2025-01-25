@@ -21,6 +21,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/scroll_paint_property_node.h"
 #include "third_party/blink/renderer/platform/graphics/paint/transform_paint_property_node.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -126,11 +127,11 @@ bool PropertyTreeManager::DirectlyUpdateScrollOffsetTransform(
     return false;
 
   auto* property_trees = host.property_trees();
-  auto* cc_scroll_node = property_trees->scroll_tree_mutable().Node(
+  auto& scroll_tree = property_trees->scroll_tree_mutable();
+  auto* cc_scroll_node = scroll_tree.Node(
       scroll_node->CcNodeId(property_trees->sequence_number()));
   if (!cc_scroll_node ||
-      property_trees->scroll_tree().ShouldRealizeScrollsOnMain(
-          *cc_scroll_node)) {
+      scroll_tree.ShouldRealizeScrollsOnMain(*cc_scroll_node)) {
     return false;
   }
 
@@ -222,15 +223,27 @@ void PropertyTreeManager::DropCompositorScrollDeltaNextCommit(
   host.DropActiveScrollDeltaNextCommit(element_id);
 }
 
-static uint32_t NonCompositedMainThreadScrollingReasons(
-    const ScrollPaintPropertyNode& scroll) {
-  // TODO(crbug.com/1414885): We can't distinguish kNotOpaqueForTextAndLCDText
-  // and kCantPaintScrollingBackgroundAndLCDText here. We should probably
-  // merge the two reasons.
-  return scroll.GetCompositedScrollingPreference() ==
-                 CompositedScrollingPreference::kNotPreferred
-             ? cc::MainThreadScrollingReason::kPreferNonCompositedScrolling
-             : cc::MainThreadScrollingReason::kNotOpaqueForTextAndLCDText;
+uint32_t PropertyTreeManager::NonCompositedMainThreadScrollingReasons(
+    const TransformPaintPropertyNode& scroll_translation) const {
+  if (scroll_translation.ScrollNode()->GetCompositedScrollingPreference() ==
+      CompositedScrollingPreference::kNotPreferred) {
+    return cc::MainThreadScrollingReason::kPreferNonCompositedScrolling;
+  }
+  if (RuntimeEnabledFeatures::RasterInducingScrollEnabled()) {
+    // Opt out of raster-inducing scroll if the scroller is not user scrollable
+    // because the cull rect is not expanded (see CanExpandForScroll in
+    // cull_rect.cc). TODO(crbug.com/349864862): Even if we expand cull rect,
+    // virtual/threaded-prefer-compositing/fast/scroll-behavior/overflow-hidden-*.html
+    // will still time out, which will need investigating if we want to improve
+    // scroll performance of non-user-scrollable scrollers.
+    if (!scroll_translation.ScrollNode()->UserScrollable()) {
+      return cc::MainThreadScrollingReason::kPreferNonCompositedScrolling;
+    }
+    if (!client_.ShouldForceMainThreadRepaint(scroll_translation)) {
+      return cc::MainThreadScrollingReason::kNotScrollingOnMain;
+    }
+  }
+  return cc::MainThreadScrollingReason::kNotOpaqueForTextAndLCDText;
 }
 
 uint32_t PropertyTreeManager::GetMainThreadScrollingReasons(
@@ -247,8 +260,7 @@ uint32_t PropertyTreeManager::GetMainThreadScrollingReasons(
 bool PropertyTreeManager::UsesCompositedScrolling(
     const cc::LayerTreeHost& host,
     const ScrollPaintPropertyNode& scroll) {
-  CHECK(!RuntimeEnabledFeatures::RasterInducingScrollEnabled() ||
-        !RuntimeEnabledFeatures::ScrollTimelineAlwaysOnCompositorEnabled());
+  CHECK(!RuntimeEnabledFeatures::RasterInducingScrollEnabled());
   const auto* property_trees = host.property_trees();
   const auto* cc_scroll = property_trees->scroll_tree().Node(
       scroll.CcNodeId(property_trees->sequence_number()));
@@ -458,8 +470,8 @@ int PropertyTreeManager::EnsureCompositorTransformNode(
         transform_tree_.EnsureStickyPositionData(id);
     sticky_data.constraints = *sticky_constraint;
     const auto& scroll_ancestor = transform_node.NearestScrollTranslationNode();
-    sticky_data.scroll_ancestor =
-        EnsureCompositorScrollAndTransformNode(scroll_ancestor);
+    sticky_data.scroll_ancestor = EnsureCompositorScrollAndTransformNode(
+        scroll_ancestor, InfiniteIntRect());
     const auto& scroll_ancestor_compositor_node =
         *scroll_tree_.Node(sticky_data.scroll_ancestor);
     if (scroll_ancestor_compositor_node.scrolls_outer_viewport)
@@ -505,7 +517,7 @@ int PropertyTreeManager::EnsureCompositorTransformNode(
         client_.NeedsCompositedScrolling(transform_node);
     if (!scroll_node->is_composited) {
       scroll_node->main_thread_scrolling_reasons |=
-          NonCompositedMainThreadScrollingReasons(*transform_node.ScrollNode());
+          NonCompositedMainThreadScrollingReasons(transform_node);
     }
   }
 
@@ -628,10 +640,15 @@ int PropertyTreeManager::EnsureCompositorScrollNodeInternal(
 }
 
 int PropertyTreeManager::EnsureCompositorScrollAndTransformNode(
-    const TransformPaintPropertyNode& scroll_translation) {
+    const TransformPaintPropertyNode& scroll_translation,
+    const gfx::Rect& scrolling_contents_cull_rect) {
   const auto* scroll_node = scroll_translation.ScrollNode();
   DCHECK(scroll_node);
   EnsureCompositorTransformNode(scroll_translation);
+  if (!scrolling_contents_cull_rect.Contains(scroll_node->ContentsRect())) {
+    scroll_tree_.SetScrollingContentsCullRect(
+        scroll_node->GetCompositorElementId(), scrolling_contents_cull_rect);
+  }
   int id = scroll_node->CcNodeId(new_sequence_number_);
   DCHECK(scroll_tree_.Node(id));
   return id;
@@ -639,14 +656,16 @@ int PropertyTreeManager::EnsureCompositorScrollAndTransformNode(
 
 int PropertyTreeManager::EnsureCompositorInnerScrollAndTransformNode(
     const TransformPaintPropertyNode& scroll_translation) {
-  int node_id = EnsureCompositorScrollAndTransformNode(scroll_translation);
+  int node_id = EnsureCompositorScrollAndTransformNode(scroll_translation,
+                                                       InfiniteIntRect());
   scroll_tree_.Node(node_id)->scrolls_inner_viewport = true;
   return node_id;
 }
 
 int PropertyTreeManager::EnsureCompositorOuterScrollAndTransformNode(
     const TransformPaintPropertyNode& scroll_translation) {
-  int node_id = EnsureCompositorScrollAndTransformNode(scroll_translation);
+  int node_id = EnsureCompositorScrollAndTransformNode(scroll_translation,
+                                                       InfiniteIntRect());
   scroll_tree_.Node(node_id)->scrolls_outer_viewport = true;
   return node_id;
 }
@@ -689,7 +708,7 @@ void PropertyTreeManager::EmitClipMaskLayer() {
   mask_layer->SetTransformTreeIndex(
       EnsureCompositorTransformNode(*current_.transform));
   int scroll_id = EnsureCompositorScrollAndTransformNode(
-      current_.transform->NearestScrollTranslationNode());
+      current_.transform->NearestScrollTranslationNode(), InfiniteIntRect());
   mask_layer->SetScrollTreeIndex(scroll_id);
   mask_layer->SetClipTreeIndex(mask_effect.clip_id);
   mask_layer->SetEffectTreeIndex(mask_effect.id);
@@ -1025,7 +1044,7 @@ int PropertyTreeManager::SynthesizeCcEffectsForClipsIfNeeded(
     if (pending_clip.type & CcEffectType::kSyntheticForNonTrivialClip) {
       if (clip_id == cc::kInvalidPropertyNodeId) {
         const auto* clip = pending_clip.clip;
-        // Some virtual/view-transition/external/wpt/css/css-view-transitions/*
+        // Some virtual/threaded/external/wpt/css/css-view-transitions/*
         // tests will fail without the following condition.
         // TODO(crbug.com/1345805): Investigate the reason and remove the
         // condition if possible.

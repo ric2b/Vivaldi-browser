@@ -10,7 +10,8 @@ sections are placed consecutively in the order specified. This allows us
 to page in less code during start-up.
 
 Example usage:
-  tools/cygprofile/orderfile_generator_backend.py --use-goma --target-arch=arm
+  tools/cygprofile/orderfile_generator_backend.py --use-remoteexec \
+    --target-arch=arm
 """
 
 
@@ -227,6 +228,8 @@ class ClankCompiler:
     self._webview_target, webview_apk = self._GetWebViewTargetAndApk(
         native_library_build_variant, options.public, options.arch)
     self.webview_apk_path = str(out_dir / 'apks' / webview_apk)
+    self.webview_installer_path = str(self._out_dir / 'bin' /
+                                      self._webview_target)
 
     # Chrome targets
     self._chrome_target, chrome_apk = self._GetChromeTargetAndApk(
@@ -247,13 +250,12 @@ class ClankCompiler:
         'symbol_level=1',  # to fit 30 GiB RAM on the bot when LLD is running
         'target_os="android"',
         'enable_proguard_obfuscation=false',  # More debuggable stacktraces.
+        'use_siso=' + str(self._options.use_siso).lower(),
         'use_remoteexec=' + str(self._options.use_remoteexec).lower(),
         'use_order_profiling=' + str(instrumented).lower(),
         'devtools_instrumentation_dumping=' + str(instrumented).lower()
     ]
     gn_args += _ARCH_GN_ARGS[self._options.arch]
-    if self._options.goma_dir:
-      gn_args += ['goma_dir="%s"' % self._options.goma_dir]
 
     if os.path.exists(self._orderfile_location):
       # GN needs the orderfile path to be source-absolute.
@@ -414,18 +416,24 @@ class OrderfileUpdater:
     bucket = (self._CLOUD_STORAGE_BUCKET_FOR_DEBUG if use_debug_location
               else self._CLOUD_STORAGE_BUCKET)
     extension = _GetFileExtension(filename)
-    if use_new_cloud:
-      cmd = [self._UPLOAD_TO_NEW_CLOUD_COMMAND]
-    else:
-      cmd = [self._UPLOAD_TO_CLOUD_COMMAND]
-    cmd += ['--bucket', bucket]
+    cmd = [self._UPLOAD_TO_CLOUD_COMMAND, '--bucket', bucket]
     if extension:
       cmd.extend(['-z', extension])
     cmd.append(filename)
-    stdout: str = self._step_recorder.RunCommand(cmd,
-                                                 capture_output=True).stdout
+    # Keep both upload paths working as the upload script updates .sha1 files.
+    self._step_recorder.RunCommand(cmd)
     if use_new_cloud:
       logging.info('Uploading using the new cloud:')
+      bucket_name, prefix = bucket.split('/', 1)
+      new_cmd = [
+          self._UPLOAD_TO_NEW_CLOUD_COMMAND, '--bucket', bucket_name,
+          '--prefix', prefix
+      ]
+      if extension:
+        new_cmd.extend(['-z', extension])
+      new_cmd.append(filename)
+      stdout: str = self._step_recorder.RunCommand(new_cmd,
+                                                   capture_output=True).stdout
       # The first line is "Uploading ... ", the rest of the lines is valid json.
       json_string = stdout.split('\n', 1)[1]
       logging.info(json_string)
@@ -434,47 +442,28 @@ class OrderfileUpdater:
       output_file = os.path.basename(filename)
       logging.info(output_file)
       # Load existing objects to avoid overwriting other arch's objects.
-      getdep_cmd = ['gclient', 'getdep', '-r', 'orderfiles']
+      getdep_cmd = ['gclient', 'getdep', '-r', 'orderfile_binaries']
       dep_str: str = self._step_recorder.RunCommand(getdep_cmd,
                                                     cwd=self._repository_root,
                                                     capture_output=True).stdout
       # dep_str is a python representation of the object, not valid JSON.
       dep_objects = ast.literal_eval(dep_str)
       values = []
+      # Same set as depot_tools/gclient.py (CMDsetdep).
+      allowed_keys = ['object_name', 'sha256sum', 'size_bytes', 'generation']
+      # Order matters here, so preserve the order in dep_objects.
       for dep_object in dep_objects:
         if dep_object['output_file'] == output_file:
-          # Replace the values in this matching object with the new object.
-          values.append(",".join([
-              json_object['object_name'],
-              json_object['sha256sum'],
-              str(json_object['size_bytes']),
-              str(json_object['generation']),
-              output_file,
-          ]))
-        else:
-          values.append(",".join(map(str, dep_object.values())))
-      setdep_cmd = ['gclient', 'setdep', '-r', f'orderfiles@{"?".join(values)}']
+          # Use our newly uploaded info to update DEPS.
+          dep_object = json_object
+          # For 'gcs' deps `gclient setdep` only allows these specific keys.
+        values.append(','.join(str(dep_object[k]) for k in allowed_keys))
+      setdep_cmd = [
+          'gclient', 'setdep', '-r', f'orderfile_binaries@{"?".join(values)}'
+      ]
       self._step_recorder.RunCommand(setdep_cmd, cwd=self._repository_root)
     print('Download: https://sandbox.google.com/storage/%s/%s' %
           (bucket, _GenerateHash(filename)))
-
-  def _GetHashFilePathAndContents(self, filename):
-    """Gets the name and content of the hash file created from uploading the
-    given file.
-
-    Args:
-      filename: (str) The file that was uploaded to cloud storage.
-
-    Returns:
-      A tuple of the hash file name, relative to the reository root, and the
-      content, which should be the sha1 hash of the file
-      ('base_file.sha1', hash)
-    """
-    abs_hash_filename = filename + '.sha1'
-    rel_hash_filename = os.path.relpath(
-        abs_hash_filename, self._repository_root)
-    with open(abs_hash_filename, 'r') as f:
-      return (rel_hash_filename, f.read())
 
   def _GitStash(self):
     """Git stash the current clank tree.
@@ -521,6 +510,8 @@ class OrderfileGenerator:
     else:
       self._clank_dir = _SRC_PATH / 'clank'
     self._orderfiles_dir = self._clank_dir / 'orderfiles'
+    if self._options.profile_webview_startup:
+      self._orderfiles_dir = self._orderfiles_dir / 'webview'
     self._orderfiles_dir.mkdir(exist_ok=True)
 
   def _GetPathToOrderfile(self):
@@ -530,7 +521,7 @@ class OrderfileGenerator:
   def _GetUnpatchedOrderfileFilename(self):
     """Gets the path to the architecture-specific unpatched orderfile."""
     arch = self._options.arch
-    return str(self._orderfiles_dir / f'unpatched_orderfile.{arch}.out')
+    return str(self._orderfiles_dir / f'unpatched_orderfile.{arch}')
 
   def _SetDevice(self):
     """ Selects the device to be used by the script.
@@ -657,11 +648,14 @@ class OrderfileGenerator:
 
     assert self._compiler is not None, (
         'A valid compiler is needed to generate profiles.')
-    files = self._profiler.CollectSystemHealthProfile(
-        self._compiler.chrome_apk_path)
     if self._options.profile_webview_startup:
-      files += self._profiler.CollectWebViewStartupProfile(
+      self._profiler.InstallAndSetWebViewProvider(
+          self._compiler.webview_installer_path)
+      files = self._profiler.CollectWebViewStartupProfile(
           self._compiler.webview_apk_path)
+    else:
+      files = self._profiler.CollectSystemHealthProfile(
+          self._compiler.chrome_apk_path)
     self._MaybeSaveProfile()
     try:
       self._ProcessPhasedOrderfile(files)
@@ -742,8 +736,8 @@ class OrderfileGenerator:
 
   def _SaveForDebugging(self, filename: str):
     """Uploads the file to cloud storage or saves to a temporary location."""
-    file_sha1 = _GenerateHash(filename)
     if not self._options.buildbot:
+      file_sha1 = _GenerateHash(filename)
       self._SaveFileLocally(filename, file_sha1)
     else:
       print('Uploading file for debugging: ' + filename)
@@ -967,6 +961,8 @@ class OrderfileGenerator:
       if self._options.profile_webview_startup:
         self._compiler.CompileWebViewApk(instrumented=False,
                                          force_relink=True)
+        self._profiler.InstallAndSetWebViewProvider(
+            self._compiler.webview_installer_path)
         benchmark_results[
             'system_health.webview_startup'] = self._WebViewStartupBenchmark(
                 self._compiler.webview_apk_path)
@@ -1023,9 +1019,10 @@ class OrderfileGenerator:
         # If there are pregenerated profiles, the instrumented build should
         # not be changed to avoid invalidating the pregenerated profile
         # offsets.
-        self._compiler.CompileChromeApk(instrumented=True)
         if self._options.profile_webview_startup:
           self._compiler.CompileWebViewApk(instrumented=True)
+        else:
+          self._compiler.CompileChromeApk(instrumented=True)
       self._GenerateAndProcessProfile()
       self._MaybeArchiveOrderfile(self._GetUnpatchedOrderfileFilename())
     elif self._options.manual_symbol_offsets:
@@ -1064,9 +1061,8 @@ class OrderfileGenerator:
       self._compiler.CompileLibchrome(instrumented=False,
                                       force_relink=True)
       if self._VerifySymbolOrder():
-        self._MaybeArchiveOrderfile(
-            self._GetPathToOrderfile(),
-            use_new_cloud=bool(self._options.arch == 'arm64'))
+        self._MaybeArchiveOrderfile(self._GetPathToOrderfile(),
+                                    use_new_cloud=True)
       else:
         self._SaveForDebugging(self._GetPathToOrderfile())
 
@@ -1100,9 +1096,8 @@ class OrderfileGenerator:
         for filename in (self._GetUnpatchedOrderfileFilename(),
                          self._GetPathToOrderfile())
     ]
-    if self._options.arch == 'arm64':
-      # DEPS is updated as well in the new cloud flow.
-      paths.append(str(self._clank_dir / 'DEPS'))
+    # DEPS is updated as well in the new cloud flow.
+    paths.append(str(self._clank_dir / 'DEPS'))
     self._orderfile_updater._CommitStashedFiles(paths)
     return True
 
@@ -1136,9 +1131,6 @@ def CreateArgumentParser():
   parser.add_argument(
       '--skip-patch', action='store_false', dest='patch', default=True,
       help='Only generate the raw (unpatched) orderfile, don\'t patch it.')
-  parser.add_argument('--goma-dir', help='GOMA directory.')
-  parser.add_argument(
-      '--use-goma', action='store_true', help='Enable GOMA.', default=False)
   parser.add_argument('--use-remoteexec',
                       action='store_true',
                       help='Enable remoteexec. see //build/toolchain/rbe.gni.',
@@ -1214,6 +1206,10 @@ def CreateArgumentParser():
                       help='Set this to clear the entire out/ directory prior '
                       'to running any builds. This helps to clear the build '
                       'cache and restart with empty build dirs.')
+  parser.add_argument('--use-siso',
+                      action='store_true',
+                      default=False,
+                      help='Set this to turn on using siso.')
   parser.add_argument('-v',
                       '--verbose',
                       dest='verbosity',

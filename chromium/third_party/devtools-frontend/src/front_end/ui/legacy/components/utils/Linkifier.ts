@@ -234,7 +234,7 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
       tabStop: options?.tabStop,
       inlineFrameIndex: options?.inlineFrameIndex ?? 0,
       userMetric: options?.userMetric,
-      jslogContext: options?.jslogContext || 'script-source-url',
+      jslogContext: options?.jslogContext || 'script-location',
     };
     const {columnNumber, className = ''} = linkifyURLOptions;
     if (sourceURL) {
@@ -372,7 +372,7 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
     // All targets that can report stack traces also have a debugger model.
     const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel) as SDK.DebuggerModel.DebuggerModel;
 
-    const {link, linkInfo} = Linkifier.createLink('', '');
+    const {link, linkInfo} = Linkifier.createLink('', '', {jslogContext: 'script-location'});
     linkInfo.enableDecorator = this.useLinkDecorator;
     linkInfo.fallback = fallbackAnchor;
 
@@ -430,6 +430,7 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
       this.targetRemoved(target);
       this.targetAdded(target);
     }
+    this.listeners?.clear();
   }
 
   dispose(): void {
@@ -778,13 +779,7 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
         section: 'reveal',
         title: destination ? i18nString(UIStrings.revealInS, {PH1: destination}) : i18nString(UIStrings.reveal),
         jslogContext: 'reveal',
-        handler: () => {
-          if (revealable instanceof Breakpoints.BreakpointManager.BreakpointLocation) {
-            Host.userMetrics.breakpointEditDialogRevealedFrom(
-                Host.UserMetrics.BreakpointEditDialogRevealedFrom.Linkifier);
-          }
-          return Common.Revealer.reveal(revealable);
-        },
+        handler: () => Common.Revealer.reveal(revealable),
       });
     }
     if (contentProvider) {

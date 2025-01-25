@@ -55,10 +55,6 @@ void MediaBrowserTest::SetUpCommandLine(base::CommandLine* command_line) {
     features::kLogJsConsoleMessages,
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS)
-    media::kCrOSLegacyMediaFormats,
-#endif
-
 #if BUILDFLAG(ENABLE_HLS_DEMUXER) && BUILDFLAG(USE_PROPRIETARY_CODECS)
     media::kBuiltInHlsPlayer,
 #endif
@@ -341,15 +337,27 @@ IN_PROC_BROWSER_TEST_P(MediaTest, VideoBear3gpAacH264) {
 }
 
 #if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+// HEVC video stream with 8-bit 422 range extension profile
+IN_PROC_BROWSER_TEST_P(MediaTest, VideoBearMp4Hevc8bit422) {
+  MaybePlayVideo("hev1.4.10.L93.9d.8",
+                 "bear-1280x720-hevc-8bit-422-no-audio.mp4");
+}
+
+// HEVC video stream with 8-bit 444 range extension profile
+IN_PROC_BROWSER_TEST_P(MediaTest, VideoBearMp4Hevc8bit444) {
+  MaybePlayVideo("hev1.4.10.L93.9e.8",
+                 "bear-1280x720-hevc-8bit-444-no-audio.mp4");
+}
+
 // HEVC video stream with 10-bit 422 range extension profile
 IN_PROC_BROWSER_TEST_P(MediaTest, VideoBearMp4Hevc10bit422) {
-  MaybePlayVideo("hev1.4.10.L120.90",
+  MaybePlayVideo("hev1.4.10.L93.9d.8",
                  "bear-1280x720-hevc-10bit-422-no-audio.mp4");
 }
 
 // HEVC video stream with 10-bit 444 range extension profile
 IN_PROC_BROWSER_TEST_P(MediaTest, VideoBearMp4Hevc10bit444) {
-  MaybePlayVideo("hev1.4.10.L120.90",
+  MaybePlayVideo("hev1.4.10.L93.9c.8",
                  "bear-1280x720-hevc-10bit-444-no-audio.mp4");
 }
 
@@ -359,7 +367,7 @@ IN_PROC_BROWSER_TEST_P(MediaTest, VideoBearMp4Hevc8bit) {
   // `MaybePlayVideo` should be reporting the correct status for HEVC. The below
   // `REQUIRE_ACCELERATION_ON_ANDROID` flag is a temporary fix.
   REQUIRE_ACCELERATION_ON_ANDROID();
-  MaybePlayVideo("hev1.1.6.L120.90", "bear-1280x720-hevc-no-audio.mp4");
+  MaybePlayVideo("hev1.1.6.L93.90", "bear-1280x720-hevc-no-audio.mp4");
 }
 
 // HEVC video stream with 10-bit main10 profile
@@ -368,7 +376,7 @@ IN_PROC_BROWSER_TEST_P(MediaTest, VideoBearMp4Hevc10bit) {
   // `MaybePlayVideo` should be reporting the correct status for HEVC. The below
   // `REQUIRE_ACCELERATION_ON_ANDROID` flag is a temporary fix.
   REQUIRE_ACCELERATION_ON_ANDROID();
-  MaybePlayVideo("hev1.2.4.L120.90", "bear-1280x720-hevc-10bit-no-audio.mp4");
+  MaybePlayVideo("hev1.2.4.L93.90", "bear-1280x720-hevc-10bit-no-audio.mp4");
 }
 #endif  // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
 
@@ -396,19 +404,6 @@ IN_PROC_BROWSER_TEST_P(MediaTest, MAYBE_LoadManyVideos) {
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_CHROMEOS)
-IN_PROC_BROWSER_TEST_P(MediaTest, VideoBearAviMp3Mpeg4) {
-  PlayVideo("bear_mpeg4_mp3.avi");
-}
-
-IN_PROC_BROWSER_TEST_P(MediaTest, VideoBearAviMp3Mpeg4Asp) {
-  PlayVideo("bear_mpeg4asp_mp3.avi");
-}
-
-IN_PROC_BROWSER_TEST_P(MediaTest, VideoBearAviMp3Divx) {
-  PlayVideo("bear_divx_mp3.avi");
-}
-#endif  // BUILDFLAG(IS_CHROMEOS)
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
 IN_PROC_BROWSER_TEST_P(MediaTest, AudioBearFlac) {

@@ -1,0 +1,52 @@
+/*
+ * Copyright 2024 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+:host {
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  justify-content: flex-end;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding-bottom: 5px;
+}
+
+.label {
+  font-style: italic;
+  text-align: center;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 250px;
+  padding: 0 3px;
+  pointer-events: all;
+  user-select: none;
+
+  &.labelHidden {
+    /* Have to use this not display: none so it maintains its width */
+    user-select: none;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  &.offScreenLeft {
+    text-align: left;
+  }
+
+  &.offScreenRight {
+    text-align: right;
+  }
+}
+
+.label-text {
+  text-overflow: ellipsis;
+  max-height: 40px;
+  overflow: hidden;
+  display: -webkit-box;
+  white-space: break-spaces;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}

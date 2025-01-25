@@ -40,6 +40,7 @@
 
 namespace dawn::native {
 
+class SharedTextureMemoryContents;
 class SharedResourceMemoryContents;
 struct SharedTextureMemoryDescriptor;
 struct SharedTextureMemoryBeginAccessDescriptor;
@@ -55,10 +56,12 @@ class SharedTextureMemoryBase : public SharedResourceMemory {
     static Ref<SharedTextureMemoryBase> MakeError(DeviceBase* device,
                                                   const SharedTextureMemoryDescriptor* descriptor);
 
-    void APIGetProperties(SharedTextureMemoryProperties* properties) const;
+    wgpu::Status APIGetProperties(SharedTextureMemoryProperties* properties) const;
     TextureBase* APICreateTexture(const TextureDescriptor* descriptor);
 
     ObjectType GetType() const override;
+
+    SharedTextureMemoryContents* GetContents() const;
 
   protected:
     SharedTextureMemoryBase(DeviceBase* device,
@@ -70,11 +73,32 @@ class SharedTextureMemoryBase : public SharedResourceMemory {
 
   private:
     ResultOrError<Ref<TextureBase>> CreateTexture(const TextureDescriptor* rawDescriptor);
+    MaybeError GetProperties(SharedTextureMemoryProperties* properties) const;
+
+    Ref<SharedResourceMemoryContents> CreateContents() override;
 
     virtual ResultOrError<Ref<TextureBase>> CreateTextureImpl(
         const UnpackedPtr<TextureDescriptor>& descriptor) = 0;
 
+    virtual MaybeError GetChainedProperties(
+        UnpackedPtr<SharedTextureMemoryProperties>& properties) const {
+        return {};
+    }
+
     SharedTextureMemoryProperties mProperties;
+};
+
+class SharedTextureMemoryContents : public SharedResourceMemoryContents {
+  public:
+    explicit SharedTextureMemoryContents(WeakRef<SharedTextureMemoryBase> sharedTextureMemory);
+
+    SampleTypeBit GetExternalFormatSupportedSampleTypes() const;
+    void SetExternalFormatSupportedSampleTypes(SampleTypeBit supportedSampleType);
+
+  private:
+    friend class SharedTextureMemoryBase;
+
+    SampleTypeBit mSupportedExternalSampleTypes;
 };
 
 }  // namespace dawn::native

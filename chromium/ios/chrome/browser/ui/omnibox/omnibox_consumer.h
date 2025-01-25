@@ -46,6 +46,9 @@
 // resets.
 @optional
 - (void)resetOverriddenSearchEngine;
+// Updates the state with the enable search engine nickname preference value.
+@optional
+- (void)setPreferenceForEnableSearchEngineNickname:(BOOL)enable;
 // End Vivaldi
 
 @end

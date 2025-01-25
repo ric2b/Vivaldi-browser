@@ -60,8 +60,8 @@
 #include "chromeos/dbus/dlp/dlp_client.h"
 #include "chromeos/dbus/dlp/dlp_service.pb.h"
 #include "chromeos/ui/base/file_icon_util.h"
-#include "components/enterprise/data_controls/component.h"
-#include "components/enterprise/data_controls/dlp_histogram_helper.h"
+#include "components/enterprise/data_controls/core/component.h"
+#include "components/enterprise/data_controls/core/dlp_histogram_helper.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/common/constants.h"
@@ -256,7 +256,7 @@ void DlpFilesControllerAsh::CheckIfTransferAllowed(
     return;
   }
 
-  // If the destination file path is in My Files, all files transfers should be
+  // If the destination file path is in MyFiles, all files transfers should be
   // allowed.
   if (IsInLocalFileSystem(destination.path())) {
     std::move(result_callback).Run(std::vector<storage::FileSystemURL>());

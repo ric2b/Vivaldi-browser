@@ -228,8 +228,10 @@ protocol::DOM::PseudoType InspectorDOMAgent::ProtocolPseudoElementType(
       return protocol::DOM::PseudoTypeEnum::ScrollbarCorner;
     case kPseudoIdScrollMarker:
       return protocol::DOM::PseudoTypeEnum::ScrollMarker;
-    case kPseudoIdScrollMarkers:
-      return protocol::DOM::PseudoTypeEnum::ScrollMarkers;
+    case kPseudoIdScrollMarkerGroup:
+    case kPseudoIdScrollMarkerGroupAfter:
+    case kPseudoIdScrollMarkerGroupBefore:
+      return protocol::DOM::PseudoTypeEnum::ScrollMarkerGroup;
     case kPseudoIdResizer:
       return protocol::DOM::PseudoTypeEnum::Resizer;
     case kPseudoIdInputListButton:
@@ -1553,8 +1555,8 @@ protocol::Response InspectorDOMAgent::getNodeForLocation(
       optional_include_user_agent_shadow_dom.value_or(false);
   Document* document = inspected_frames_->Root()->GetDocument();
   PhysicalOffset document_point(
-      LayoutUnit(x * inspected_frames_->Root()->PageZoomFactor()),
-      LayoutUnit(y * inspected_frames_->Root()->PageZoomFactor()));
+      LayoutUnit(x * inspected_frames_->Root()->LayoutZoomFactor()),
+      LayoutUnit(y * inspected_frames_->Root()->LayoutZoomFactor()));
   HitTestRequest::HitTestRequestType hit_type =
       HitTestRequest::kMove | HitTestRequest::kReadOnly |
       HitTestRequest::kAllowChildFrameContent;
@@ -1730,6 +1732,50 @@ protocol::Response InspectorDOMAgent::getElementByRelation(
   return protocol::Response::Success();
 }
 
+protocol::Response InspectorDOMAgent::getAnchorElement(
+    int node_id,
+    protocol::Maybe<String> anchor_specifier,
+    int* anchor_element_id) {
+  *anchor_element_id = 0;
+  Node* node = nullptr;
+  protocol::Response response = AssertNode(node_id, node);
+  if (!response.IsSuccess()) {
+    return response;
+  }
+
+  const LayoutObject* querying_object = node->GetLayoutObject();
+  if (!querying_object) {
+    return protocol::Response::ServerError(
+        "No layout object for node, perhaps orphan or hidden node");
+  }
+
+  const auto* box = To<LayoutBox>(querying_object);
+  if (!box || !box->Container()) {
+    return protocol::Response::ServerError(
+        "The box or the container of the box does not exist");
+  }
+
+  const LayoutObject* target_object;
+  if (anchor_specifier.has_value()) {
+    target_object = box->FindTargetAnchor(*MakeGarbageCollected<ScopedCSSName>(
+        AtomicString(anchor_specifier.value()),
+        &querying_object->GetDocument()));
+  } else {
+    const ComputedStyle& style = box->StyleRef();
+    target_object = style.PositionAnchor()
+                        ? box->FindTargetAnchor(*style.PositionAnchor())
+                        : box->AcceptableImplicitAnchor();
+  }
+
+  if (target_object) {
+    Element* element = DynamicTo<Element>(target_object->GetNode());
+    if (element) {
+      *anchor_element_id = PushNodePathToFrontend(element);
+    }
+  }
+  return protocol::Response::Success();
+}
+
 // static
 const HeapVector<Member<Element>>
 InspectorDOMAgent::GetContainerQueryingDescendants(Element* container) {
@@ -1805,7 +1851,7 @@ protocol::DOM::ShadowRootType InspectorDOMAgent::GetShadowRootType(
     case ShadowRootMode::kClosed:
       return protocol::DOM::ShadowRootTypeEnum::Closed;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return protocol::DOM::ShadowRootTypeEnum::UserAgent;
 }
 
@@ -1820,7 +1866,7 @@ InspectorDOMAgent::GetDocumentCompatibilityMode(Document* document) {
     case Document::CompatibilityMode::kNoQuirksMode:
       return protocol::DOM::CompatibilityModeEnum::NoQuirksMode;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return protocol::DOM::CompatibilityModeEnum::NoQuirksMode;
 }
 
@@ -1910,8 +1956,9 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::BuildObjectForNode(
       }
     }
 
-    if (element->GetPseudoId()) {
-      value->setPseudoType(ProtocolPseudoElementType(element->GetPseudoId()));
+    if (element->IsPseudoElement()) {
+      value->setPseudoType(
+          ProtocolPseudoElementType(element->GetPseudoIdForStyling()));
       if (auto tag = To<PseudoElement>(element)->view_transition_name())
         value->setPseudoIdentifier(tag);
     } else {
@@ -2429,8 +2476,10 @@ void InspectorDOMAgent::PseudoElementCreated(PseudoElement* pseudo_element) {
   Element* parent = pseudo_element->ParentOrShadowHostElement();
   if (!parent)
     return;
-  if (!PseudoElement::IsWebExposed(pseudo_element->GetPseudoId(), parent))
+  if (!PseudoElement::IsWebExposed(pseudo_element->GetPseudoIdForStyling(),
+                                   parent)) {
     return;
+  }
   int parent_id = BoundNodeId(parent);
   if (!parent_id)
     return;

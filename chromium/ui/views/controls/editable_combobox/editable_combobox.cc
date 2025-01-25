@@ -40,6 +40,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/range/range.h"
 #include "ui/gfx/scoped_canvas.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_host.h"
@@ -84,7 +85,7 @@ class Arrow : public Button {
         ButtonController::NotifyAction::kOnPress);
 
     ConfigureComboboxButtonInkDrop(this);
-    SetAccessibilityProperties(ax::mojom::Role::kButton);
+    GetViewAccessibility().SetProperties(ax::mojom::Role::kButton);
   }
   Arrow(const Arrow&) = delete;
   Arrow& operator=(const Arrow&) = delete;
@@ -310,14 +311,14 @@ class EditableCombobox::EditableComboboxPreTargetHandler
 
   // ui::EventHandler overrides.
   void OnMouseEvent(ui::MouseEvent* event) override {
-    if (event->type() == ui::ET_MOUSE_PRESSED &&
+    if (event->type() == ui::EventType::kMousePressed &&
         event->button_flags() == event->changed_button_flags()) {
       HandlePressEvent(event->root_location());
     }
   }
 
   void OnTouchEvent(ui::TouchEvent* event) override {
-    if (event->type() == ui::ET_TOUCH_PRESSED) {
+    if (event->type() == ui::EventType::kTouchPressed) {
       HandlePressEvent(event->root_location());
     }
   }
@@ -375,7 +376,7 @@ EditableCombobox::EditableCombobox(
   }
 
   SetLayoutManager(std::make_unique<DelegatingLayoutManager>(this));
-  SetAccessibilityProperties(ax::mojom::Role::kComboBoxGrouping);
+  GetViewAccessibility().SetProperties(ax::mojom::Role::kComboBoxGrouping);
 }
 
 EditableCombobox::~EditableCombobox() {
@@ -417,9 +418,9 @@ void EditableCombobox::SelectRange(const gfx::Range& range) {
 }
 
 void EditableCombobox::OnAccessibleNameChanged(const std::u16string& new_name) {
-  textfield_->SetAccessibleName(new_name);
+  textfield_->GetViewAccessibility().SetName(new_name);
   if (arrow_) {
-    arrow_->SetAccessibleName(new_name);
+    arrow_->GetViewAccessibility().SetName(new_name);
   }
 }
 
@@ -458,7 +459,7 @@ void EditableCombobox::ContentsChanged(Textfield* sender,
 
 bool EditableCombobox::HandleKeyEvent(Textfield* sender,
                                       const ui::KeyEvent& key_event) {
-  if (key_event.type() == ui::ET_KEY_PRESSED &&
+  if (key_event.type() == ui::EventType::kKeyPressed &&
       (key_event.key_code() == ui::VKEY_UP ||
        key_event.key_code() == ui::VKEY_DOWN)) {
     ShowDropDownMenu(ui::MENU_SOURCE_KEYBOARD);

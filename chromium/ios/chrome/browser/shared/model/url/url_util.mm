@@ -40,6 +40,11 @@ bool UrlIsExternalFileReference(const GURL& url) {
                                           kChromeUIExternalFileHost);
 }
 
+bool UrlIsDownloadedFile(const GURL& url) {
+  return url.SchemeIs(kChromeUIScheme) &&
+         base::EqualsCaseInsensitiveASCII(url.host(), kChromeUIDownloadsHost);
+}
+
 bool UrlHasChromeScheme(const GURL& url) {
 
   if (IsVivaldiRunning()) {

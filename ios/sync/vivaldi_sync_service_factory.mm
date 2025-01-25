@@ -19,8 +19,8 @@
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_service_impl.h"
 #import "ios/chrome/browser/autofill/model/personal_data_manager_factory.h"
+#import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_undo_service_factory.h"
-#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_sync_service_factory.h"
 #import "ios/chrome/browser/consent_auditor/model/consent_auditor_factory.h"
 #import "ios/chrome/browser/favicon/model/favicon_service_factory.h"
@@ -62,8 +62,8 @@ VivaldiSyncServiceFactory::VivaldiSyncServiceFactory() {
   // destruction order.
   DependsOn(ConsentAuditorFactory::GetInstance());
   DependsOn(DeviceInfoSyncServiceFactory::GetInstance());
-  DependsOn(ios::LocalOrSyncableBookmarkModelFactory::GetInstance());
   DependsOn(ios::LocalOrSyncableBookmarkSyncServiceFactory::GetInstance());
+  DependsOn(ios::BookmarkModelFactory::GetInstance());
   DependsOn(ios::BookmarkUndoServiceFactory::GetInstance());
   DependsOn(ios::FaviconServiceFactory::GetInstance());
   DependsOn(ios::HistoryServiceFactory::GetInstance());
@@ -100,15 +100,13 @@ VivaldiSyncServiceFactory::BuildServiceInstanceFor(
       ChromeBrowserState::FromBrowserState(context);
 
   syncer::SyncServiceImpl::InitParams init_params;
-  init_params.identity_manager =
-      IdentityManagerFactory::GetForBrowserState(browser_state);
   init_params.sync_client =
       std::make_unique<IOSChromeSyncClient>(browser_state);
   init_params.url_loader_factory = browser_state->GetSharedURLLoaderFactory();
   init_params.network_connection_tracker =
       GetApplicationContext()->GetNetworkConnectionTracker();
   init_params.channel = ::GetChannel();
-  init_params.debug_identifier = browser_state->GetDebugName();
+  init_params.debug_identifier = browser_state->GetBrowserStateName();
 
   PrefService* local_state = GetApplicationContext()->GetLocalState();
   if (local_state)

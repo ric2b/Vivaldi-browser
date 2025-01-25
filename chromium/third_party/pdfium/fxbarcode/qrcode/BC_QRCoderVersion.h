@@ -10,7 +10,7 @@
 #include <array>
 #include <memory>
 
-#include "fxbarcode/qrcode/BC_QRCoderECBlocks.h"
+#include "fxbarcode/qrcode/BC_QRCoderECBlockData.h"
 
 class CBC_QRCoderErrorCorrectionLevel;
 
@@ -18,8 +18,7 @@ class CBC_QRCoderVersion {
  public:
   static constexpr int32_t kMaxVersion = 40;
 
-  CBC_QRCoderVersion(int32_t versionNumber,
-                     const CBC_QRCoderECBlockData data[4]);
+  CBC_QRCoderVersion(int32_t versionNumber, const ECBlockDataRow& row);
   ~CBC_QRCoderVersion();
 
   static void Initialize();
@@ -30,13 +29,13 @@ class CBC_QRCoderVersion {
   int32_t GetVersionNumber() const;
   int32_t GetTotalCodeWords() const;
   int32_t GetDimensionForVersion() const;
-  const CBC_QRCoderECBlocks* GetECBlocksForLevel(
+  const CBC_QRCoderECBlockData* GetECBlocksForLevel(
       const CBC_QRCoderErrorCorrectionLevel& ecLevel) const;
 
  private:
   const int32_t m_versionNumber;
   int32_t m_totalCodeWords;
-  std::array<std::unique_ptr<CBC_QRCoderECBlocks>, 4> m_ecBlocksArray;
+  std::array<std::unique_ptr<CBC_QRCoderECBlockData>, 4> m_ecBlocksArray;
 };
 
 #endif  // FXBARCODE_QRCODE_BC_QRCODERVERSION_H_

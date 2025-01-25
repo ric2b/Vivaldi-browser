@@ -7,6 +7,7 @@
 import logging
 import os
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -205,7 +206,9 @@ class RealGitTest(fake_repos.FakeReposTestBase):
         self.assertEqual('', scm.GIT.GetConfig(self.cwd, key))
         self.assertEqual('', scm.GIT.GetConfig(self.cwd, key, 'default-value'))
 
-        scm.GIT._clear_config(self.cwd)
+        # Clear the cache because we externally manipulate the git config with
+        # the subprocess call.
+        scm.GIT.drop_config_cache()
         subprocess.run(['git', 'config', key, 'line 1\nline 2\nline 3'],
                        cwd=self.cwd)
         self.assertEqual('line 1\nline 2\nline 3',
@@ -350,6 +353,48 @@ class RealGitTest(fake_repos.FakeReposTestBase):
         scm.GIT.Capture(['checkout', HEAD], cwd=self.cwd)
         self.assertIsNone(scm.GIT.GetBranchRef(self.cwd))
         scm.GIT.Capture(['checkout', 'main'], cwd=self.cwd)
+
+
+class DiffTestCase(unittest.TestCase):
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+
+        os.makedirs(os.path.join(self.root, "foo", "dir"))
+        with open(os.path.join(self.root, "foo", "file.txt"), "w") as f:
+            f.write("foo\n")
+        with open(os.path.join(self.root, "foo", "dir", "file.txt"), "w") as f:
+            f.write("foo dir\n")
+
+        os.makedirs(os.path.join(self.root, "baz_repo"))
+        with open(os.path.join(self.root, "baz_repo", "file.txt"), "w") as f:
+            f.write("baz\n")
+
+    @mock.patch('scm.GIT.ListSubmodules')
+    def testGetAllFiles_ReturnsAllFilesIfNoSubmodules(self, mockListSubmodules):
+        mockListSubmodules.return_value = []
+        files = scm.DIFF.GetAllFiles(self.root)
+
+        if sys.platform.startswith('win'):
+            self.assertCountEqual(
+                files,
+                ["foo\\file.txt", "foo\\dir\\file.txt", "baz_repo\\file.txt"])
+        else:
+            self.assertCountEqual(
+                files,
+                ["foo/file.txt", "foo/dir/file.txt", "baz_repo/file.txt"])
+
+    @mock.patch('scm.GIT.ListSubmodules')
+    def testGetAllFiles_IgnoresFilesInSubmodules(self, mockListSubmodules):
+        mockListSubmodules.return_value = ['baz_repo']
+        files = scm.DIFF.GetAllFiles(self.root)
+
+        if sys.platform.startswith('win'):
+            self.assertCountEqual(
+                files, ["foo\\file.txt", "foo\\dir\\file.txt", "baz_repo"])
+        else:
+            self.assertCountEqual(
+                files, ["foo/file.txt", "foo/dir/file.txt", "baz_repo"])
 
 
 if __name__ == '__main__':

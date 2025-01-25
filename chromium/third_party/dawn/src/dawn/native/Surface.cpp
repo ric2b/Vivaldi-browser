@@ -202,40 +202,12 @@ MaybeError ValidateSurfaceConfiguration(DeviceBase* device,
 
     DAWN_TRY(config->device->ValidateIsAlive());
 
-    const Format* format = nullptr;
-    DAWN_TRY_ASSIGN(format, device->GetInternalFormat(config->format));
-    DAWN_ASSERT(format != nullptr);
+    // Check that config matches capabilities, this implicitly validates the value of the enums.
+    DAWN_INVALID_IF(!IsSubset(config->usage, capabilities.usages),
+                    "Usages requested (%s) are not supported by the adapter (%s) which supports "
+                    "only %s for this surface.",
+                    config->usage, config->device->GetAdapter(), capabilities.usages);
 
-    if (device->HasFeature(Feature::SurfaceCapabilities)) {
-        wgpu::TextureUsage validUsage;
-        DAWN_TRY_ASSIGN(validUsage, device->GetSupportedSurfaceUsage(surface));
-        DAWN_INVALID_IF(
-            !IsSubset(config->usage, validUsage),
-            "Usage (%s) is not supported, %s are (currently) the only accepted usage flags.",
-            config->usage, validUsage);
-    } else {
-        DAWN_INVALID_IF(config->usage != wgpu::TextureUsage::RenderAttachment,
-                        "Usage (%s) is not %s, which is (currently) the only accepted usage. Other "
-                        "usage flags require enabling %s",
-                        config->usage, wgpu::TextureUsage::RenderAttachment,
-                        wgpu::FeatureName::SurfaceCapabilities);
-    }
-
-    for (size_t i = 0; i < config->viewFormatCount; ++i) {
-        const wgpu::TextureFormat apiViewFormat = config->viewFormats[i];
-        const Format* viewFormat = nullptr;
-        DAWN_TRY_ASSIGN(viewFormat, device->GetInternalFormat(apiViewFormat));
-        DAWN_ASSERT(viewFormat != nullptr);
-
-        DAWN_INVALID_IF(std::find(capabilities.formats.begin(), capabilities.formats.end(),
-                                  apiViewFormat) == capabilities.formats.end(),
-                        "View format (%s) is not supported by the adapter (%s) for this surface.",
-                        apiViewFormat, device->GetAdapter());
-    }
-
-    DAWN_TRY(ValidatePresentMode(config->presentMode));
-
-    // Check that config matches capabilities
     auto formatIt =
         std::find(capabilities.formats.begin(), capabilities.formats.end(), config->format);
     DAWN_INVALID_IF(formatIt == capabilities.formats.end(),
@@ -246,25 +218,27 @@ MaybeError ValidateSurfaceConfiguration(DeviceBase* device,
                                    capabilities.presentModes.end(), config->presentMode);
     DAWN_INVALID_IF(presentModeIt == capabilities.presentModes.end(),
                     "Present mode (%s) is not supported by the adapter (%s) for this surface.",
-                    config->format, config->device->GetAdapter());
+                    config->presentMode, config->device->GetAdapter());
 
     auto alphaModeIt = std::find(capabilities.alphaModes.begin(), capabilities.alphaModes.end(),
                                  config->alphaMode);
     DAWN_INVALID_IF(alphaModeIt == capabilities.alphaModes.end(),
                     "Alpha mode (%s) is not supported by the adapter (%s) for this surface.",
-                    config->format, config->device->GetAdapter());
+                    config->alphaMode, config->device->GetAdapter());
 
-    DAWN_INVALID_IF(config->width == 0 || config->height == 0,
-                    "Surface configuration size (width: %u, height: %u) is empty.", config->width,
-                    config->height);
+    // Validate the surface would produce valid textures.
+    TextureDescriptor textureDesc;
+    textureDesc.usage = config->usage;
+    textureDesc.size = {config->width, config->height};
+    textureDesc.format = config->format;
+    textureDesc.dimension = wgpu::TextureDimension::e2D;
+    textureDesc.viewFormatCount = config->viewFormatCount;
+    textureDesc.viewFormats = config->viewFormats;
 
-    DAWN_INVALID_IF(
-        config->width > device->GetLimits().v1.maxTextureDimension2D ||
-            config->height > device->GetLimits().v1.maxTextureDimension2D,
-        "Surface configuration size (width: %u, height: %u) is greater than the maximum 2D texture "
-        "size (width: %u, height: %u).",
-        config->width, config->height, device->GetLimits().v1.maxTextureDimension2D,
-        device->GetLimits().v1.maxTextureDimension2D);
+    UnpackedPtr<TextureDescriptor> unpackedTextureDesc;
+    DAWN_TRY_ASSIGN(unpackedTextureDesc, ValidateAndUnpack(&textureDesc));
+    DAWN_TRY_CONTEXT(ValidateTextureDescriptor(device, unpackedTextureDesc),
+                     "validating the configuration of %s would produce valid textures", surface);
 
     return {};
 }
@@ -275,7 +249,8 @@ class AdapterSurfaceCapCache {
     MaybeError WithAdapterCapabilities(AdapterBase* adapter, const Surface* surface, F f) {
         if (mCachedCapabilitiesAdapter.Promote().Get() != adapter) {
             const PhysicalDeviceBase* physicalDevice = adapter->GetPhysicalDevice();
-            DAWN_TRY_ASSIGN(mCachedCapabilities, physicalDevice->GetSurfaceCapabilities(surface));
+            DAWN_TRY_ASSIGN(mCachedCapabilities, physicalDevice->GetSurfaceCapabilities(
+                                                     adapter->GetInstance(), surface));
             mCachedCapabilitiesAdapter = GetWeakRef(adapter);
         }
         return f(mCachedCapabilities);
@@ -469,9 +444,11 @@ uint32_t Surface::GetXWindow() const {
     return mXWindow;
 }
 
-MaybeError Surface::Configure(const SurfaceConfiguration* config) {
+MaybeError Surface::Configure(const SurfaceConfiguration* configIn) {
     DAWN_INVALID_IF(IsError(), "%s is invalid.", this);
-    mCurrentDevice = config->device;  // next errors are routed to the new device
+
+    SurfaceConfiguration config = *configIn;
+    mCurrentDevice = config.device;  // next errors are routed to the new device
     DAWN_INVALID_IF(mIsSwapChainManagedBySurface == ManagesSwapChain::No,
                     "%s cannot be configured because it is used by legacy swapchain %s.", this,
                     mSwapChain.Get());
@@ -481,20 +458,25 @@ MaybeError Surface::Configure(const SurfaceConfiguration* config) {
     DAWN_TRY(mCapabilityCache->WithAdapterCapabilities(
         GetCurrentDevice()->GetAdapter(), this,
         [&](const PhysicalDeviceSurfaceCapabilities& caps) -> MaybeError {
-            return ValidateSurfaceConfiguration(GetCurrentDevice(), caps, config, this);
+            // The auto alphaMode default to alphaModes[0].
+            if (config.alphaMode == wgpu::CompositeAlphaMode::Auto) {
+                config.alphaMode = caps.alphaModes[0];
+            }
+
+            return ValidateSurfaceConfiguration(GetCurrentDevice(), caps, &config, this);
         }));
 
     // Reuse either the current swapchain, or the recycled swap chain
     SwapChainBase* previousSwapChain = mSwapChain.Get();
     if (previousSwapChain == nullptr && mRecycledSwapChain != nullptr &&
-        mRecycledSwapChain->GetDevice() == config->device) {
+        mRecycledSwapChain->GetDevice() == config.device) {
         previousSwapChain = mRecycledSwapChain.Get();
     }
 
     {
         auto deviceLock(GetCurrentDevice()->GetScopedLock());
         ResultOrError<Ref<SwapChainBase>> maybeNewSwapChain =
-            GetCurrentDevice()->CreateSwapChain(this, previousSwapChain, config);
+            GetCurrentDevice()->CreateSwapChain(this, previousSwapChain, &config);
 
         // Don't keep swap chains older than 1 call to Configure
         if (mRecycledSwapChain) {
@@ -540,12 +522,13 @@ MaybeError Surface::GetCapabilities(AdapterBase* adapter, SurfaceCapabilities* c
         adapter, this,
         [&capabilities](const PhysicalDeviceSurfaceCapabilities& caps) -> MaybeError {
             capabilities->nextInChain = nullptr;
-            DAWN_TRY(utils::AllocateApiSeqFromStdVector(capabilities->formats,
-                                                        capabilities->formatCount, caps.formats));
-            DAWN_TRY(utils::AllocateApiSeqFromStdVector(
-                capabilities->presentModes, capabilities->presentModeCount, caps.presentModes));
-            DAWN_TRY(utils::AllocateApiSeqFromStdVector(
-                capabilities->alphaModes, capabilities->alphaModeCount, caps.alphaModes));
+            capabilities->usages = caps.usages;
+            utils::AllocateApiSeqFromStdVector(&capabilities->formats, &capabilities->formatCount,
+                                               caps.formats);
+            utils::AllocateApiSeqFromStdVector(&capabilities->presentModes,
+                                               &capabilities->presentModeCount, caps.presentModes);
+            utils::AllocateApiSeqFromStdVector(&capabilities->alphaModes,
+                                               &capabilities->alphaModeCount, caps.alphaModes);
             return {};
         }));
 
@@ -553,14 +536,25 @@ MaybeError Surface::GetCapabilities(AdapterBase* adapter, SurfaceCapabilities* c
 }
 
 void APISurfaceCapabilitiesFreeMembers(WGPUSurfaceCapabilities capabilities) {
-    utils::FreeApiSeq(capabilities.formats, capabilities.formatCount);
-    utils::FreeApiSeq(capabilities.presentModes, capabilities.presentModeCount);
-    utils::FreeApiSeq(capabilities.alphaModes, capabilities.alphaModeCount);
+    utils::FreeApiSeq(&capabilities.formats, &capabilities.formatCount);
+    utils::FreeApiSeq(&capabilities.presentModes, &capabilities.presentModeCount);
+    utils::FreeApiSeq(&capabilities.alphaModes, &capabilities.alphaModeCount);
 }
 
 MaybeError Surface::GetCurrentTexture(SurfaceTexture* surfaceTexture) const {
+    surfaceTexture->texture = nullptr;
+    surfaceTexture->suboptimal = false;
+
+    surfaceTexture->status = wgpu::SurfaceGetCurrentTextureStatus::Error;
     DAWN_INVALID_IF(IsError(), "%s is invalid.", this);
     DAWN_INVALID_IF(!mSwapChain.Get(), "%s is not configured.", this);
+
+    surfaceTexture->status = wgpu::SurfaceGetCurrentTextureStatus::DeviceLost;
+    DAWN_TRY(GetCurrentDevice()->ValidateIsAlive());
+
+    // Set an error status that will be overwritten if there is a success or some other more
+    // specific error.
+    surfaceTexture->status = wgpu::SurfaceGetCurrentTextureStatus::Error;
 
     auto deviceLock(GetCurrentDevice()->GetScopedLock());
     DAWN_TRY_ASSIGN(*surfaceTexture, mSwapChain->GetCurrentTexture());
@@ -569,6 +563,10 @@ MaybeError Surface::GetCurrentTexture(SurfaceTexture* surfaceTexture) const {
 }
 
 ResultOrError<wgpu::TextureFormat> Surface::GetPreferredFormat(AdapterBase* adapter) const {
+    GetInstance()->EmitDeprecationWarning(
+        "GetPreferredFormat is deprecated, use GetCapabilities().format[0] instead as the "
+        "preferred format.");
+
     wgpu::TextureFormat format = wgpu::TextureFormat::Undefined;
 
     DAWN_TRY(mCapabilityCache->WithAdapterCapabilities(
@@ -606,26 +604,24 @@ void Surface::APIConfigure(const SurfaceConfiguration* config) {
     }
 }
 
-void Surface::APIGetCapabilities(AdapterBase* adapter, SurfaceCapabilities* capabilities) const {
+wgpu::Status Surface::APIGetCapabilities(AdapterBase* adapter,
+                                         SurfaceCapabilities* capabilities) const {
     MaybeError maybeError = GetCapabilities(adapter, capabilities);
     if (!GetCurrentDevice()) {
-        [[maybe_unused]] bool error = mInstance->ConsumedError(std::move(maybeError));
+        return mInstance->ConsumedError(std::move(maybeError)) ? wgpu::Status::Error
+                                                               : wgpu::Status::Success;
     } else {
-        [[maybe_unused]] bool error = GetCurrentDevice()->ConsumedError(
-            std::move(maybeError), "calling %s.Configure().", this);
+        return GetCurrentDevice()->ConsumedError(std::move(maybeError), "calling %s.Configure().",
+                                                 this)
+                   ? wgpu::Status::Error
+                   : wgpu::Status::Success;
     }
 }
 
 void Surface::APIGetCurrentTexture(SurfaceTexture* surfaceTexture) const {
     MaybeError maybeError = GetCurrentTexture(surfaceTexture);
     if (!GetCurrentDevice()) {
-        if (mInstance->ConsumedError(std::move(maybeError))) {
-            // TODO(dawn:2320): This is the closest status to "surface was not configured so there
-            // is no associated device" but SurfaceTexture may change soon upstream.
-            surfaceTexture->status = wgpu::SurfaceGetCurrentTextureStatus::DeviceLost;
-            surfaceTexture->suboptimal = true;
-            surfaceTexture->texture = nullptr;
-        }
+        [[maybe_unused]] bool error = mInstance->ConsumedError(std::move(maybeError));
     } else {
         [[maybe_unused]] bool error = GetCurrentDevice()->ConsumedError(std::move(maybeError));
     }

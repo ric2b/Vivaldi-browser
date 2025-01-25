@@ -7,9 +7,9 @@
 #include "base/base64url.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/not_fatal_until.h"
 #include "base/rand_util.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_piece.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -105,8 +105,6 @@ RTLookupRequest::OSType GetRTLookupRequestOSType() {
   return RTLookupRequest::OS_TYPE_ANDROID;
 #elif BUILDFLAG(IS_CHROMEOS)
   return RTLookupRequest::OS_TYPE_CHROME_OS;
-#elif BUILDFLAG(IS_FUCHSIA)
-  return RTLookupRequest::OS_TYPE_FUCHSIA;
 #elif BUILDFLAG(IS_IOS)
   return RTLookupRequest::OS_TYPE_IOS;
 #elif BUILDFLAG(IS_LINUX)
@@ -198,7 +196,7 @@ SBThreatType RealTimeUrlLookupServiceBase::GetSBThreatTypeForRTThreatType(
       case RTLookupResponse::ThreatInfo::SAFE:
         return SB_THREAT_TYPE_SAFE;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return SB_THREAT_TYPE_SAFE;
     }
   }
@@ -218,7 +216,8 @@ SBThreatType RealTimeUrlLookupServiceBase::GetSBThreatTypeForRTThreatType(
       return SB_THREAT_TYPE_BILLING;
     case RTLookupResponse::ThreatInfo::MANAGED_POLICY:
     case RTLookupResponse::ThreatInfo::THREAT_TYPE_UNSPECIFIED:
-      NOTREACHED() << "Unexpected RTLookupResponse::ThreatType encountered";
+      NOTREACHED_IN_MIGRATION()
+          << "Unexpected RTLookupResponse::ThreatType encountered";
       return SB_THREAT_TYPE_SAFE;
   }
 }
@@ -491,7 +490,8 @@ void RealTimeUrlLookupServiceBase::OnURLLoaderComplete(
   CHECK(first_request_start_time_);
 
   auto it = pending_requests_.find(url);
-  DCHECK(it != pending_requests_.end()) << "Request not found";
+  CHECK(it != pending_requests_.end(), base::NotFatalUntil::M130)
+      << "Request not found";
 
   RecordTimesWithAndWithoutSuffix("SafeBrowsing.RT.Network.Time",
                                   GetMetricSuffix(),
@@ -606,6 +606,11 @@ std::unique_ptr<RTLookupRequest> RealTimeUrlLookupServiceBase::FillRequestProto(
   std::optional<std::string> dm_token_string = GetDMTokenString();
   if (dm_token_string.has_value()) {
     request->set_dm_token(dm_token_string.value());
+
+    std::string email = GetUserEmail();
+    if (!email.empty()) {
+      request->set_email(std::move(email));
+    }
   }
 
   *request->mutable_population() = get_user_population_callback_.Run();

@@ -146,6 +146,18 @@ void ScopedCommandRecordingContext::SetNeedsFence() const {
     Get()->mNeedsFence = true;
 }
 
+void ScopedCommandRecordingContext::AddBufferForSyncingWithCPU(GPUUsableBuffer* buffer) const {
+    Get()->mBuffersToSyncWithCPU.push_back(buffer);
+}
+
+MaybeError ScopedCommandRecordingContext::FlushBuffersForSyncingWithCPU() const {
+    for (auto buffer : Get()->mBuffersToSyncWithCPU) {
+        DAWN_TRY(buffer->SyncGPUWritesToStaging(this));
+    }
+    Get()->mBuffersToSyncWithCPU.clear();
+    return {};
+}
+
 ScopedSwapStateCommandRecordingContext::ScopedSwapStateCommandRecordingContext(
     CommandRecordingContextGuard&& guard)
     : ScopedCommandRecordingContext(std::move(guard)),
@@ -252,7 +264,7 @@ ResultOrError<Ref<BufferBase>> CommandRecordingContext::CreateInternalUniformBuf
     descriptor.size = sizeof(uint32_t) * kMaxNumBuiltinElements;
     descriptor.usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst;
     descriptor.mappedAtCreation = false;
-    descriptor.label = "builtin uniform buffer";
+    descriptor.label = "BuiltinUniform";
 
     Ref<BufferBase> uniformBuffer;
     // Lock the device to protect the clearing of the built-in uniform buffer.
@@ -260,16 +272,19 @@ ResultOrError<Ref<BufferBase>> CommandRecordingContext::CreateInternalUniformBuf
     return device->CreateBuffer(&descriptor);
 }
 
-void CommandRecordingContext::SetInternalUniformBuffer(Ref<BufferBase> uniformBuffer) {
-    mUniformBuffer = ToBackend(std::move(uniformBuffer));
+MaybeError CommandRecordingContext::SetInternalUniformBuffer(Ref<BufferBase> uniformBuffer) {
+    mUniformBuffer = ToGPUUsableBuffer(std::move(uniformBuffer));
 
     // Always bind the uniform buffer to the reserved slot for all pipelines.
     // This buffer will be updated with the correct values before each draw or dispatch call.
-    ID3D11Buffer* bufferPtr = mUniformBuffer->GetD3D11ConstantBuffer();
+    ID3D11Buffer* bufferPtr;
+    DAWN_TRY_ASSIGN(bufferPtr, mUniformBuffer->GetD3D11ConstantBuffer(nullptr));
     mD3D11DeviceContext4->VSSetConstantBuffers(PipelineLayout::kReservedConstantBufferSlot, 1,
                                                &bufferPtr);
     mD3D11DeviceContext4->CSSetConstantBuffers(PipelineLayout::kReservedConstantBufferSlot, 1,
                                                &bufferPtr);
+
+    return {};
 }
 
 void CommandRecordingContext::ReleaseKeyedMutexes() {

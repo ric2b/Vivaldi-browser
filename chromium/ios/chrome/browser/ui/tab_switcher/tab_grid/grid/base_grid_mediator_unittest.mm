@@ -4,44 +4,77 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/base_grid_mediator.h"
 
+#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
+
+#import <memory>
+
 #import "base/apple/foundation_util.h"
 #import "base/containers/contains.h"
+#import "base/strings/sys_string_conversions.h"
+#import "base/test/ios/wait_util.h"
+#import "base/test/metrics/histogram_tester.h"
+#import "base/time/time.h"
 #import "components/commerce/core/commerce_feature_list.h"
+#import "components/saved_tab_groups/mock_tab_group_sync_service.h"
+#import "components/saved_tab_groups/saved_tab_group.h"
+#import "components/tab_groups/tab_group_id.h"
 #import "components/tab_groups/tab_group_visual_data.h"
 #import "ios/chrome/browser/commerce/model/shopping_persisted_data_tab_helper.h"
+#import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
+#import "ios/chrome/browser/main/model/browser_web_state_list_delegate.h"
+#import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
+#import "ios/chrome/browser/shared/model/web_state_list/test/web_state_list_builder_from_description.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/snapshots/model/snapshot_browser_agent.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_collection_drag_drop_metrics.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_item_identifier.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_mediator_test.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/incognito/incognito_grid_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/regular/regular_grid_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_toolbars_configuration.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/test/fake_tab_grid_toolbars_mediator.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_group_item.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_item.h"
 #import "ios/chrome/browser/ui/tab_switcher/test/fake_tab_collection_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/web_state_tab_switcher_item.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/test/fakes/fake_web_frames_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
+#import "ios/web/public/web_state.h"
 #import "ios/web/public/web_state_id.h"
-#import "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
 #import "ui/base/l10n/l10n_util_mac.h"
+#import "url/gurl.h"
+
+using tab_groups::TabGroupId;
 
 namespace {
+
+// URL to be used for drag and drop tests.
+const char kDraggedUrl[] = "https://dragged_url.com";
 
 // BaseGridMediatorTest is parameterized on this enum to test all children
 // mediator.
 enum GridMediatorType { TEST_REGULAR_MEDIATOR, TEST_INCOGNITO_MEDIATOR };
 
-const char kPriceTrackingWithOptimizationGuideParam[] =
-    "price_tracking_with_optimization_guide";
 const char kHasPriceDropUserAction[] = "Commerce.TabGridSwitched.HasPriceDrop";
 const char kHasNoPriceDropUserAction[] = "Commerce.TabGridSwitched.NoPriceDrop";
+
+// Returns a test `SavedTabGroup`.
+tab_groups::SavedTabGroup TestSavedGroup() {
+  tab_groups::SavedTabGroup saved_group(
+      u"Test title", tab_groups::TabGroupColorId::kBlue, {}, std::nullopt,
+      base::Uuid::GenerateRandomV4(), tab_groups::TabGroupId::GenerateNew());
+  return saved_group;
+}
 
 }  // namespace
 
@@ -73,20 +106,21 @@ class BaseGridMediatorTest
     GridMediatorTestClass::TearDown();
   }
 
+  // Checks that the drag item origin metric is logged in UMA.
+  void ExpectThatDragItemOriginMetricLogged(DragItemOrigin origin,
+                                            int count = 1) {
+    histogram_tester_.ExpectUniqueSample(kUmaGridViewDragOrigin, origin, count);
+  }
+
  protected:
   BaseGridMediator* mediator_;
+  base::HistogramTester histogram_tester_;
 };
 
 // Variation on BaseGridMediatorTest which enable PriceDropIndicatorsFlag.
 class BaseGridMediatorWithPriceDropIndicatorsTest
     : public BaseGridMediatorTest {
  protected:
-  void InitializeFeatureFlags() override {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {{commerce::kCommercePriceTracking,
-          {{kPriceTrackingWithOptimizationGuideParam, "true"}}}},
-        {});
-  }
 
   void SetFakePriceDrop(web::WebState* web_state) {
     ShoppingPersistedDataTabHelper::PriceDrop price_drop;
@@ -124,7 +158,8 @@ TEST_P(BaseGridMediatorTest, DragAndDropClosedItem) {
 // mediator.
 TEST_P(BaseGridMediatorTest, ConsumerPopulateItems) {
   EXPECT_EQ(3UL, consumer_.items.size());
-  EXPECT_EQ(original_selected_identifier_, consumer_.selectedItemID);
+  EXPECT_EQ(original_selected_identifier_,
+            consumer_.selectedItem.tabSwitcherItem.identifier);
 }
 
 // Tests that the consumer is notified when a web state is inserted.
@@ -138,7 +173,8 @@ TEST_P(BaseGridMediatorTest, ConsumerInsertItem) {
   EXPECT_EQ(4UL, consumer_.items.size());
   // The same ID should be selected after the insertion, since the new web state
   // wasn't selected.
-  EXPECT_EQ(original_selected_identifier_, consumer_.selectedItemID);
+  EXPECT_EQ(original_selected_identifier_,
+            consumer_.selectedItem.tabSwitcherItem.identifier);
   EXPECT_EQ(item_identifier, consumer_.items[1]);
   EXPECT_FALSE(base::Contains(original_identifiers_, item_identifier));
 }
@@ -150,16 +186,18 @@ TEST_P(BaseGridMediatorTest, ConsumerRemoveItem) {
   browser_->GetWebStateList()->CloseWebStateAt(1, WebStateList::CLOSE_NO_FLAGS);
   EXPECT_EQ(2UL, consumer_.items.size());
   // Expect that a different web state is selected now.
-  EXPECT_NE(original_selected_identifier_, consumer_.selectedItemID);
+  EXPECT_NE(original_selected_identifier_,
+            consumer_.selectedItem.tabSwitcherItem.identifier);
 }
 
 // Tests that the consumer is notified when the active web state is changed.
 TEST_P(BaseGridMediatorTest, ConsumerUpdateSelectedItem) {
-  EXPECT_EQ(original_selected_identifier_, consumer_.selectedItemID);
+  EXPECT_EQ(original_selected_identifier_,
+            consumer_.selectedItem.tabSwitcherItem.identifier);
   browser_->GetWebStateList()->ActivateWebStateAt(2);
   EXPECT_EQ(
       browser_->GetWebStateList()->GetWebStateAt(2)->GetUniqueIdentifier(),
-      consumer_.selectedItemID);
+      consumer_.selectedItem.tabSwitcherItem.identifier);
 }
 
 // Tests that the consumer is notified when a web state is replaced.
@@ -173,7 +211,8 @@ TEST_P(BaseGridMediatorTest, ConsumerReplaceItem) {
     browser_->GetWebStateList()->ReplaceWebStateAt(1, std::move(new_web_state));
   }
   EXPECT_EQ(3UL, consumer_.items.size());
-  EXPECT_EQ(new_item_identifier, consumer_.selectedItemID);
+  EXPECT_EQ(new_item_identifier,
+            consumer_.selectedItem.tabSwitcherItem.identifier);
   EXPECT_EQ(new_item_identifier, consumer_.items[1]);
   EXPECT_FALSE(base::Contains(original_identifiers_, new_item_identifier));
 }
@@ -197,7 +236,7 @@ TEST_P(BaseGridMediatorTest, SelectItemCommand) {
       browser_->GetWebStateList()->GetWebStateAt(2)->GetUniqueIdentifier();
   [mediator_ selectItemWithID:identifier pinned:NO isFirstActionOnTabGrid:NO];
   EXPECT_EQ(2, browser_->GetWebStateList()->active_index());
-  EXPECT_EQ(identifier, consumer_.selectedItemID);
+  EXPECT_EQ(identifier, consumer_.selectedItem.tabSwitcherItem.identifier);
 }
 
 // Tests that the active index is updated when `-selectItemWithID:` is called.
@@ -216,25 +255,25 @@ TEST_P(BaseGridMediatorTest, SelectPinnedItemCommand) {
       web_state_list->GetWebStateAt(2)->GetUniqueIdentifier();
   [mediator_ setPinState:YES forItemWithID:identifier_0];
   ASSERT_EQ(1, browser_->GetWebStateList()->active_index());
-  ASSERT_EQ(identifier_1, consumer_.selectedItemID);
+  ASSERT_EQ(identifier_1, consumer_.selectedItem.tabSwitcherItem.identifier);
 
   [mediator_ selectItemWithID:identifier_0
                        pinned:YES
        isFirstActionOnTabGrid:NO];
 
   EXPECT_EQ(0, browser_->GetWebStateList()->active_index());
-  EXPECT_EQ(identifier_0, consumer_.selectedItemID);
+  EXPECT_EQ(identifier_0, consumer_.selectedItem.tabSwitcherItem.identifier);
 
   [mediator_ selectItemWithID:identifier_2 pinned:NO isFirstActionOnTabGrid:NO];
 
   EXPECT_EQ(2, browser_->GetWebStateList()->active_index());
-  EXPECT_EQ(identifier_2, consumer_.selectedItemID);
+  EXPECT_EQ(identifier_2, consumer_.selectedItem.tabSwitcherItem.identifier);
 
   // Selecting the pinned one with pinned = NO fails.
   [mediator_ selectItemWithID:identifier_0 pinned:NO isFirstActionOnTabGrid:NO];
 
   EXPECT_EQ(2, browser_->GetWebStateList()->active_index());
-  EXPECT_EQ(identifier_2, consumer_.selectedItemID);
+  EXPECT_EQ(identifier_2, consumer_.selectedItem.tabSwitcherItem.identifier);
 }
 
 // Tests the pinned tab command.
@@ -258,14 +297,16 @@ TEST_P(BaseGridMediatorTest, PinItemCommand) {
   // The pinned web state moved to the first position, moving the others.
   EXPECT_EQ(1, web_state_list->pinned_tabs_count());
   EXPECT_EQ(2, web_state_list->active_index());
-  EXPECT_EQ(selected_identifier, consumer_.selectedItemID);
+  EXPECT_EQ(selected_identifier,
+            consumer_.selectedItem.tabSwitcherItem.identifier);
 
   [mediator_ setPinState:NO forItemWithID:identifier];
 
   // The pinned web state moves back to the end of the WebStateList.
   EXPECT_EQ(0, web_state_list->pinned_tabs_count());
   EXPECT_EQ(1, web_state_list->active_index());
-  EXPECT_EQ(selected_identifier, consumer_.selectedItemID);
+  EXPECT_EQ(selected_identifier,
+            consumer_.selectedItem.tabSwitcherItem.identifier);
 }
 
 // Tests that the WebStateList count is decremented when
@@ -302,7 +343,7 @@ TEST_P(BaseGridMediatorTest, AddNewItemAtEndCommand) {
   EXPECT_FALSE(base::Contains(original_identifiers_, identifier));
   // Consumer checks.
   EXPECT_EQ(4UL, consumer_.items.size());
-  EXPECT_EQ(identifier, consumer_.selectedItemID);
+  EXPECT_EQ(identifier, consumer_.selectedItem.tabSwitcherItem.identifier);
   EXPECT_EQ(identifier, consumer_.items[3]);
 }
 
@@ -362,7 +403,8 @@ TEST_P(BaseGridMediatorTest, resetToAllItems) {
   // consumer should revert back to have the items from the webstate list.
   ASSERT_TRUE(WaitForConsumerUpdates(3UL));
   // Active index should not change.
-  EXPECT_EQ(original_selected_identifier_, consumer_.selectedItemID);
+  EXPECT_EQ(original_selected_identifier_,
+            consumer_.selectedItem.tabSwitcherItem.identifier);
 
   // The order of the items on the consumer be the exact same order as the in
   // WebStateList.
@@ -564,8 +606,10 @@ TEST_P(BaseGridMediatorTest, SelectedTabWithGroup) {
 
   [mediator_ selectTabsButtonTapped:nil];
   browser_->GetWebStateList()->CreateGroup(
-      {1}, tab_groups::TabGroupVisualData(u"My group",
-                                          tab_groups::TabGroupColorId::kBlue));
+      {1},
+      tab_groups::TabGroupVisualData(u"My group",
+                                     tab_groups::TabGroupColorId::kBlue),
+      TabGroupId::GenerateNew());
 
   // Simulate a user who tapped on a tab.
   [mediator_ userTappedOnItemID:[GridItemIdentifier
@@ -629,8 +673,10 @@ TEST_P(BaseGridMediatorTest, SelectedTabAndGroupWithGroup) {
 
   [mediator_ selectTabsButtonTapped:nil];
   browser_->GetWebStateList()->CreateGroup(
-      {1}, tab_groups::TabGroupVisualData(u"My group",
-                                          tab_groups::TabGroupColorId::kBlue));
+      {1},
+      tab_groups::TabGroupVisualData(u"My group",
+                                     tab_groups::TabGroupColorId::kBlue),
+      TabGroupId::GenerateNew());
 
   // Simulate a user who tapped on a tab and on the group.
   [mediator_ userTappedOnItemID:[GridItemIdentifier
@@ -687,30 +733,63 @@ TEST_P(BaseGridMediatorTest, SelectedTabAndGroupWithGroup) {
   EXPECT_NSEQ(@"My group", groups.children[0].title);
 }
 
-// Tests that ungrouping a group is working.
-TEST_P(BaseGridMediatorTest, UngroupGroup) {
+// Tests that ungrouping a group correctly deletes the group.
+TEST_P(BaseGridMediatorTest, UnGroup) {
+  scoped_feature_list_.InitWithFeatures(
+      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+
+  tab_groups::MockTabGroupSyncService* mock_service =
+      static_cast<tab_groups::MockTabGroupSyncService*>(
+          tab_groups::TabGroupSyncServiceFactory::GetForBrowserState(
+              browser_state_.get()));
+
   WebStateList* web_state_list = browser_->GetWebStateList();
-
-  web_state_list->CreateGroup({1}, {});
+  TabGroupId tab_group_id = TabGroupId::GenerateNew();
+  web_state_list->CreateGroup({1}, {}, tab_group_id);
   const TabGroup* group = web_state_list->GetGroupOfWebStateAt(1);
-
-  EXPECT_EQ(3UL, consumer_.items.size());
+  EXPECT_EQ(1u, web_state_list->GetGroups().size());
   EXPECT_EQ(3, web_state_list->count());
-  EXPECT_EQ(1UL, web_state_list->GetGroups().size());
-  EXPECT_NE(nullptr, group);
+
+  EXPECT_CALL(*mock_service, RemoveLocalTabGroupMapping(tab_group_id)).Times(0);
 
   [mediator_ ungroupTabGroup:group];
-
-  EXPECT_EQ(3UL, consumer_.items.size());
+  EXPECT_EQ(0u, web_state_list->GetGroups().size());
   EXPECT_EQ(3, web_state_list->count());
-  EXPECT_EQ(0UL, web_state_list->GetGroups().size());
-  EXPECT_EQ(nullptr, web_state_list->GetGroupOfWebStateAt(1));
+}
+
+// Tests that ungrouping a group from another browser (e.g from Search)
+// correctly deletes the group.
+TEST_P(BaseGridMediatorTest, UnGroupFromAnotherBrowser) {
+  scoped_feature_list_.InitWithFeatures(
+      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+  mediator_.currentMode = TabGridModeSearch;
+
+  WebStateList* other_web_state_list = other_browser_->GetWebStateList();
+  WebStateListBuilderFromDescription builder(other_web_state_list);
+  ASSERT_TRUE(builder.BuildWebStateListFromDescription(
+      "| a b c d e f g", other_browser_->GetBrowserState()));
+
+  tab_groups::MockTabGroupSyncService* mock_service =
+      static_cast<tab_groups::MockTabGroupSyncService*>(
+          tab_groups::TabGroupSyncServiceFactory::GetForBrowserState(
+              browser_state_.get()));
+  TabGroupId tab_group_id = TabGroupId::GenerateNew();
+  other_web_state_list->CreateGroup({1}, {}, tab_group_id);
+  const TabGroup* group = other_web_state_list->GetGroupOfWebStateAt(1);
+  EXPECT_EQ(1u, other_web_state_list->GetGroups().size());
+  EXPECT_EQ(7, other_web_state_list->count());
+
+  EXPECT_CALL(*mock_service, RemoveLocalTabGroupMapping(tab_group_id)).Times(0);
+
+  [mediator_ ungroupTabGroup:group];
+  EXPECT_EQ(0u, other_web_state_list->GetGroups().size());
+  EXPECT_EQ(7, other_web_state_list->count());
 }
 
 // Tests that closing the last tab of a selected group clears the selection.
 TEST_P(BaseGridMediatorTest, CloseSelectedGroup) {
   WebStateList* web_state_list = browser_->GetWebStateList();
-  web_state_list->CreateGroup({1}, {});
+  web_state_list->CreateGroup({1}, {}, TabGroupId::GenerateNew());
   const TabGroup* group = web_state_list->GetGroupOfWebStateAt(1);
   [mediator_ switchToMode:TabGridModeSelection];
   [mediator_
@@ -724,11 +803,71 @@ TEST_P(BaseGridMediatorTest, CloseSelectedGroup) {
   EXPECT_EQ(0UL, [mediator_ allSelectedDragItems].count);
 }
 
+// Tests that closing a group locally removes the mapping from the sync service.
+TEST_P(BaseGridMediatorTest, CloseGroupLocally) {
+  scoped_feature_list_.InitWithFeatures(
+      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+
+  tab_groups::MockTabGroupSyncService* mock_service =
+      static_cast<tab_groups::MockTabGroupSyncService*>(
+          tab_groups::TabGroupSyncServiceFactory::GetForBrowserState(
+              browser_state_.get()));
+
+  WebStateList* web_state_list = browser_->GetWebStateList();
+  TabGroupId tab_group_id = TabGroupId::GenerateNew();
+  web_state_list->CreateGroup({1}, {}, tab_group_id);
+  const TabGroup* group = web_state_list->GetGroupOfWebStateAt(1);
+  EXPECT_EQ(1u, web_state_list->GetGroups().size());
+
+  EXPECT_CALL(*mock_service, GetGroup(tab_group_id))
+      .WillOnce(testing::Return(TestSavedGroup()));
+  EXPECT_CALL(*mock_service, RemoveLocalTabGroupMapping(tab_group_id));
+  EXPECT_CALL(*mock_service, RemoveGroup(tab_group_id)).Times(0);
+
+  [mediator_ closeItemWithIdentifier:[GridItemIdentifier
+                                          groupIdentifier:group
+                                         withWebStateList:web_state_list]];
+  EXPECT_EQ(0u, web_state_list->GetGroups().size());
+}
+
+// Tests that closing a group locally from another browser (e.g from Search)
+// correctly closes the group and removes the mapping from the sync service.
+TEST_P(BaseGridMediatorTest, CloseGroupFromAnotherBrowser) {
+  scoped_feature_list_.InitWithFeatures(
+      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+  mediator_.currentMode = TabGridModeSearch;
+
+  WebStateList* other_web_state_list = other_browser_->GetWebStateList();
+  WebStateListBuilderFromDescription builder(other_web_state_list);
+  ASSERT_TRUE(builder.BuildWebStateListFromDescription(
+      "| a b c d e f g", other_browser_->GetBrowserState()));
+
+  tab_groups::MockTabGroupSyncService* mock_service =
+      static_cast<tab_groups::MockTabGroupSyncService*>(
+          tab_groups::TabGroupSyncServiceFactory::GetForBrowserState(
+              browser_state_.get()));
+  TabGroupId tab_group_id = TabGroupId::GenerateNew();
+  other_web_state_list->CreateGroup({1}, {}, tab_group_id);
+  const TabGroup* group = other_web_state_list->GetGroupOfWebStateAt(1);
+  EXPECT_EQ(1u, other_web_state_list->GetGroups().size());
+
+  EXPECT_CALL(*mock_service, GetGroup(tab_group_id))
+      .WillOnce(testing::Return(TestSavedGroup()));
+  EXPECT_CALL(*mock_service, RemoveLocalTabGroupMapping(tab_group_id));
+  EXPECT_CALL(*mock_service, RemoveGroup(tab_group_id)).Times(0);
+
+  [mediator_
+      closeItemWithIdentifier:[GridItemIdentifier
+                                   groupIdentifier:group
+                                  withWebStateList:other_web_state_list]];
+  EXPECT_EQ(0u, other_web_state_list->GetGroups().size());
+}
+
 // Tests that closing the last tab of a selected group in a batch operation
 // clears the selection.
 TEST_P(BaseGridMediatorTest, CloseSelectedGroupInBatch) {
   WebStateList* web_state_list = browser_->GetWebStateList();
-  web_state_list->CreateGroup({1}, {});
+  web_state_list->CreateGroup({1}, {}, TabGroupId::GenerateNew());
   const TabGroup* group = web_state_list->GetGroupOfWebStateAt(1);
   [mediator_ switchToMode:TabGridModeSelection];
   [mediator_
@@ -744,6 +883,269 @@ TEST_P(BaseGridMediatorTest, CloseSelectedGroupInBatch) {
   }
 
   EXPECT_EQ(0UL, [mediator_ allSelectedDragItems].count);
+}
+
+// Tests that moving the selected tab from one group to another correctly
+// updates the selected element of the Grid, whether the tab itself is moving in
+// the web state list or not.
+TEST_P(BaseGridMediatorTest, SelectionAfterChangingGroup) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip}, {});
+
+  WebStateList* web_state_list = browser_->GetWebStateList();
+  CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
+  WebStateListBuilderFromDescription builder(web_state_list);
+  ASSERT_TRUE(builder.BuildWebStateListFromDescription(
+      "| [ 1 a* b ] [ 2 c ]", browser_->GetBrowserState()));
+  const TabGroup* group1 = builder.GetTabGroupForIdentifier('1');
+  const TabGroup* group2 = builder.GetTabGroupForIdentifier('2');
+
+  ASSERT_EQ(group1, consumer_.selectedItem.tabGroupItem.tabGroup);
+
+  // Check after a move.
+  web_state_list->MoveToGroup({0}, group2);
+  ASSERT_EQ("| [ 1 b ] [ 2 c a* ]", builder.GetWebStateListDescription());
+  EXPECT_EQ(group2, consumer_.selectedItem.tabGroupItem.tabGroup);
+
+  // Check after a status-only change.
+  web_state_list->ActivateWebStateAt(1);
+  web_state_list->MoveToGroup({1}, group1);
+  ASSERT_EQ("| [ 1 b c* ] [ 2 a ]", builder.GetWebStateListDescription());
+  EXPECT_EQ(group1, consumer_.selectedItem.tabGroupItem.tabGroup);
+}
+
+// Tests dropping a local tab (e.g. drag from same window) in the grid.
+TEST_P(BaseGridMediatorTest, DropLocalTab) {
+  WebStateList* web_state_list = browser_->GetWebStateList();
+  CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
+
+  WebStateListBuilderFromDescription builder(web_state_list);
+  ASSERT_TRUE(builder.BuildWebStateListFromDescription(
+      "| a* b c ", browser_->GetBrowserState()));
+
+  web::WebStateID web_state_id =
+      web_state_list->GetWebStateAt(2)->GetUniqueIdentifier();
+
+  id local_object = [[TabInfo alloc] initWithTabID:web_state_id
+                                      browserState:browser_->GetBrowserState()];
+  NSItemProvider* item_provider = [[NSItemProvider alloc] init];
+  UIDragItem* drag_item =
+      [[UIDragItem alloc] initWithItemProvider:item_provider];
+  drag_item.localObject = local_object;
+
+  // Drop item.
+  [mediator_ dropItem:drag_item toIndex:0 fromSameCollection:YES];
+
+  EXPECT_EQ("| c a* b", builder.GetWebStateListDescription());
+  ExpectThatDragItemOriginMetricLogged(DragItemOrigin::kSameCollection);
+}
+
+// Tests dropping a tabs from the tab group view in the grid.
+TEST_P(BaseGridMediatorTest, DropLocalTabFromTabGroup) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip}, {});
+
+  WebStateList* web_state_list = browser_->GetWebStateList();
+  CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
+
+  WebStateListBuilderFromDescription builder(web_state_list);
+  ASSERT_TRUE(builder.BuildWebStateListFromDescription(
+      "| a* b c [ 0 d e f ] g", browser_->GetBrowserState()));
+
+  // Drop "D" (in a group) after "A".
+  web::WebStateID web_state_id =
+      web_state_list->GetWebStateAt(3)->GetUniqueIdentifier();
+  id local_object = [[TabInfo alloc] initWithTabID:web_state_id
+                                      browserState:browser_->GetBrowserState()];
+  NSItemProvider* item_provider = [[NSItemProvider alloc] init];
+  UIDragItem* drag_item =
+      [[UIDragItem alloc] initWithItemProvider:item_provider];
+  drag_item.localObject = local_object;
+  [mediator_ dropItem:drag_item toIndex:1 fromSameCollection:NO];
+  EXPECT_EQ("| a* d b c [ 0 e f ] g", builder.GetWebStateListDescription());
+  ExpectThatDragItemOriginMetricLogged(DragItemOrigin::kSameBrowser, 1);
+
+  // Drop "E" (in a group) before "G".
+  web_state_id = web_state_list->GetWebStateAt(4)->GetUniqueIdentifier();
+  local_object = [[TabInfo alloc] initWithTabID:web_state_id
+                                   browserState:browser_->GetBrowserState()];
+  item_provider = [[NSItemProvider alloc] init];
+  drag_item = [[UIDragItem alloc] initWithItemProvider:item_provider];
+  drag_item.localObject = local_object;
+  [mediator_ dropItem:drag_item toIndex:5 fromSameCollection:NO];
+  EXPECT_EQ("| a* d b c [ 0 f ] e g", builder.GetWebStateListDescription());
+  ExpectThatDragItemOriginMetricLogged(DragItemOrigin::kSameBrowser, 2);
+}
+
+// Tests dropping a tab from another browser (e.g. drag from another window) in
+// the grid.
+TEST_P(BaseGridMediatorTest, DropCrossWindowTab) {
+  auto other_browser = std::make_unique<TestBrowser>(
+      browser_state_.get(), scene_state_,
+      std::make_unique<BrowserWebStateListDelegate>());
+  SnapshotBrowserAgent::CreateForBrowser(other_browser.get());
+
+  browser_list_->AddBrowser(other_browser.get());
+
+  GURL url_to_load = GURL(kDraggedUrl);
+  std::unique_ptr<web::FakeWebState> other_web_state =
+      CreateFakeWebStateWithURL(url_to_load);
+  web::WebStateID other_id = other_web_state->GetUniqueIdentifier();
+  other_browser->GetWebStateList()->InsertWebState(std::move(other_web_state));
+
+  WebStateList* web_state_list = browser_->GetWebStateList();
+  CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
+
+  WebStateListBuilderFromDescription builder(web_state_list);
+  ASSERT_TRUE(builder.BuildWebStateListFromDescription(
+      "| a* b c ", browser_->GetBrowserState()));
+
+  id local_object = [[TabInfo alloc] initWithTabID:other_id
+                                      browserState:browser_->GetBrowserState()];
+  NSItemProvider* item_provider = [[NSItemProvider alloc] init];
+  UIDragItem* drag_item =
+      [[UIDragItem alloc] initWithItemProvider:item_provider];
+  drag_item.localObject = local_object;
+
+  // Drop item.
+  [mediator_ dropItem:drag_item toIndex:1 fromSameCollection:NO];
+
+  EXPECT_EQ(4, web_state_list->count());
+  EXPECT_EQ(0, other_browser->GetWebStateList()->count());
+  EXPECT_EQ(url_to_load, web_state_list->GetWebStateAt(1)->GetVisibleURL());
+  ExpectThatDragItemOriginMetricLogged(DragItemOrigin::kOtherBrowser);
+}
+
+// Tests dropping a local Tab Group (i.e. from the same window).
+TEST_P(BaseGridMediatorTest, DropLocalTabGroup) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip}, {});
+
+  WebStateList* web_state_list = browser_->GetWebStateList();
+  CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
+
+  WebStateListBuilderFromDescription builder(web_state_list);
+  ASSERT_TRUE(builder.BuildWebStateListFromDescription(
+      "| [ 1 a* b ] c [ 2 d e ]", browser_->GetBrowserState()));
+
+  const TabGroup* tab_group = web_state_list->GetGroupOfWebStateAt(4);
+
+  id local_object =
+      [[TabGroupInfo alloc] initWithTabGroup:tab_group
+                                browserState:browser_state_.get()];
+  NSItemProvider* item_provider = [[NSItemProvider alloc] init];
+  UIDragItem* drag_item =
+      [[UIDragItem alloc] initWithItemProvider:item_provider];
+  drag_item.localObject = local_object;
+
+  // Drop item.
+  [mediator_ dropItem:drag_item toIndex:1 fromSameCollection:YES];
+
+  EXPECT_EQ("| [ 1 a* b ] [ 2 d e ] c", builder.GetWebStateListDescription());
+  ExpectThatDragItemOriginMetricLogged(DragItemOrigin::kSameCollection);
+}
+
+// TODO:(crbug.com/346293139): Re-enable this test.
+// Tests dropping a Tab Group from another browser (i.e. from the same window).
+TEST_P(BaseGridMediatorTest, DISABLED_DropCrossBrowserTabGroup) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip}, {});
+
+  // Prepare the web state list in which the group will be dropped.
+  WebStateList* web_state_list = browser_->GetWebStateList();
+  CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
+
+  WebStateListBuilderFromDescription builder(web_state_list);
+  ASSERT_TRUE(builder.BuildWebStateListFromDescription(
+      "| [ 1 a* b ] c [ 2 d e ]", browser_->GetBrowserState()));
+
+  // Prepare the other web state list, from which the group will be dragged.
+  auto other_browser = std::make_unique<TestBrowser>(
+      browser_state_.get(), scene_state_,
+      std::make_unique<BrowserWebStateListDelegate>());
+  SnapshotBrowserAgent::CreateForBrowser(other_browser.get());
+
+  browser_list_->AddBrowser(other_browser.get());
+
+  GURL url_to_load = GURL(kDraggedUrl);
+  other_browser->GetWebStateList()->InsertWebState(
+      CreateFakeWebStateWithURL(url_to_load));
+  other_browser->GetWebStateList()->CreateGroup({0}, {},
+                                                TabGroupId::GenerateNew());
+
+  const TabGroup* other_tab_group =
+      other_browser->GetWebStateList()->GetGroupOfWebStateAt(0);
+
+  id local_object =
+      [[TabGroupInfo alloc] initWithTabGroup:other_tab_group
+                                browserState:browser_state_.get()];
+  NSItemProvider* item_provider = [[NSItemProvider alloc] init];
+  UIDragItem* drag_item =
+      [[UIDragItem alloc] initWithItemProvider:item_provider];
+  drag_item.localObject = local_object;
+
+  // Drop item.
+  [mediator_ dropItem:drag_item toIndex:2 fromSameCollection:NO];
+
+  EXPECT_EQ(nullptr, web_state_list->GetGroupOfWebStateAt(2));
+  EXPECT_EQ(other_tab_group, web_state_list->GetGroupOfWebStateAt(3));
+  ExpectThatDragItemOriginMetricLogged(DragItemOrigin::kOtherBrowser);
+}
+
+// Tests dropping an interal URL (e.g. drag from omnibox) in the grid.
+TEST_P(BaseGridMediatorTest, DropInternalURL) {
+  WebStateList* web_state_list = browser_->GetWebStateList();
+  CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
+  WebStateListBuilderFromDescription builder(web_state_list);
+  ASSERT_TRUE(builder.BuildWebStateListFromDescription(
+      "| a* b c ", browser_->GetBrowserState()));
+
+  GURL url_to_load = GURL(kDraggedUrl);
+  id local_object = [[URLInfo alloc] initWithURL:url_to_load title:@"My title"];
+  NSItemProvider* item_provider = [[NSItemProvider alloc] init];
+  UIDragItem* drag_item =
+      [[UIDragItem alloc] initWithItemProvider:item_provider];
+  drag_item.localObject = local_object;
+
+  // Drop item.
+  [mediator_ dropItem:drag_item toIndex:1 fromSameCollection:YES];
+
+  EXPECT_EQ(4, web_state_list->count());
+  web::WebState* web_state = web_state_list->GetWebStateAt(1);
+  EXPECT_EQ(url_to_load,
+            web_state->GetNavigationManager()->GetPendingItem()->GetURL());
+  ExpectThatDragItemOriginMetricLogged(DragItemOrigin::kOther);
+}
+
+// Tests dropping an external URL in the grid.
+TEST_P(BaseGridMediatorTest, DropExternalURL) {
+  WebStateList* web_state_list = browser_->GetWebStateList();
+  CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
+  WebStateListBuilderFromDescription builder(web_state_list);
+  ASSERT_TRUE(builder.BuildWebStateListFromDescription(
+      "| a* b c ", browser_->GetBrowserState()));
+
+  NSItemProvider* item_provider = [[NSItemProvider alloc]
+      initWithContentsOfURL:[NSURL URLWithString:base::SysUTF8ToNSString(
+                                                     kDraggedUrl)]];
+
+  // Drop item.
+  [mediator_ dropItemFromProvider:item_provider
+                          toIndex:1
+               placeholderContext:nil];
+
+  EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
+      base::Seconds(1), ^bool(void) {
+        return web_state_list->count() == 4;
+      }));
+  web::WebState* web_state = web_state_list->GetWebStateAt(1);
+  EXPECT_EQ(GURL(kDraggedUrl),
+            web_state->GetNavigationManager()->GetPendingItem()->GetURL());
+  ExpectThatDragItemOriginMetricLogged(DragItemOrigin::kOther);
 }
 
 INSTANTIATE_TEST_SUITE_P(

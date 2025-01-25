@@ -21,6 +21,7 @@
 #include "net/reporting/reporting_context.h"
 #include "net/reporting/reporting_delegate.h"
 #include "net/reporting/reporting_service.h"
+#include "net/reporting/reporting_target_type.h"
 #include "net/reporting/reporting_uploader.h"
 #include "net/test/test_with_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -195,7 +196,8 @@ class ReportingTestBase : public TestWithTaskEnvironment {
   ~ReportingTestBase() override;
 
   void UsePolicy(const ReportingPolicy& policy);
-  void UseStore(ReportingCache::PersistentReportingStore* store);
+  void UseStore(
+      std::unique_ptr<ReportingCache::PersistentReportingStore> store);
 
   // Finds a particular endpoint in the cache and returns it (or an invalid
   // ReportingEndpoint, if not found).
@@ -221,6 +223,11 @@ class ReportingTestBase : public TestWithTaskEnvironment {
                             const base::UnguessableToken& reporting_source,
                             const IsolationInfo& isolation_info,
                             const GURL& url);
+
+  // Sets an enterprise endpoint with the given group_key and url as origin in
+  // the enterprise endpoints vector.
+  void SetEnterpriseEndpointInCache(const ReportingEndpointGroupKey& group_key,
+                                    const GURL& url);
 
   // Returns whether an endpoint with the given properties exists in the cache.
   bool EndpointExistsInCache(const ReportingEndpointGroupKey& group_key,
@@ -271,7 +278,7 @@ class ReportingTestBase : public TestWithTaskEnvironment {
   ReportingGarbageCollector* garbage_collector() {
     return context_->garbage_collector();
   }
-  ReportingCache::PersistentReportingStore* store() { return store_; }
+  ReportingCache::PersistentReportingStore* store() { return store_.get(); }
 
   base::TimeTicks yesterday();
   base::TimeTicks now();
@@ -289,9 +296,8 @@ class ReportingTestBase : public TestWithTaskEnvironment {
 
   base::SimpleTestClock clock_;
   base::SimpleTestTickClock tick_clock_;
+  std::unique_ptr<ReportingCache::PersistentReportingStore> store_;
   std::unique_ptr<TestReportingContext> context_;
-  raw_ptr<ReportingCache::PersistentReportingStore, DanglingUntriaged> store_ =
-      nullptr;
 };
 
 class TestReportingService : public ReportingService {
@@ -350,7 +356,8 @@ class TestReportingService : public ReportingService {
       const std::string& group,
       const std::string& type,
       base::Value::Dict body,
-      int depth) override;
+      int depth,
+      ReportingTargetType target_type) override;
 
   void ProcessReportToHeader(
       const url::Origin& url,

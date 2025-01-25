@@ -36,11 +36,13 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
+#include "third_party/gpus/cuda/include/cuda.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_opcode.h"
+#include "xla/pjrt/distributed/key_value_store_interface.h"
 #include "xla/service/algebraic_simplifier.h"
 #include "xla/service/call_inliner.h"
 #include "xla/service/convert_mover.h"
@@ -66,6 +68,7 @@ limitations under the License.
 #include "xla/service/gpu/dot_sparsity_rewriter.h"
 #include "xla/service/gpu/gemm_algorithm_picker.h"
 #include "xla/service/gpu/gemm_fusion_autotuner.h"
+#include "xla/service/gpu/gpu_algebraic_simplifier.h"
 #include "xla/service/gpu/gpu_asm_opts_util.h"
 #include "xla/service/gpu/gpu_compiler.h"
 #include "xla/service/gpu/gpu_conv_padding_legalization.h"
@@ -73,7 +76,7 @@ limitations under the License.
 #include "xla/service/gpu/gpu_sort_rewriter.h"
 #include "xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h"
 #include "xla/service/gpu/metrics.h"
-#include "xla/service/gpu/move_copy_to_users.h"
+#include "xla/service/gpu/runtime/thunk.h"
 #include "xla/service/gpu/target_constants.h"
 #include "xla/service/gpu/triangular_solve_rewriter.h"
 #include "xla/service/hlo_constant_folding.h"
@@ -84,12 +87,9 @@ limitations under the License.
 #include "xla/service/hlo_pass_fix.h"
 #include "xla/service/hlo_pass_pipeline.h"
 #include "xla/service/hlo_verifier.h"
-#include "xla/service/layout_normalization.h"
 #include "xla/service/llvm_ir/llvm_util.h"
-#include "xla/service/reshape_decomposer.h"
 #include "xla/service/reshape_mover.h"
 #include "xla/service/tuple_simplifier.h"
-#include "xla/status.h"
 #include "xla/stream_executor/cuda/cuda_asm_compiler.h"
 #include "xla/stream_executor/cuda/cuda_diagnostics.h"
 #include "xla/stream_executor/cuda/cuda_platform_id.h"
@@ -98,7 +98,6 @@ limitations under the License.
 #include "xla/stream_executor/device_description.h"
 #include "xla/stream_executor/device_memory_allocator.h"
 #include "xla/stream_executor/dnn.h"
-#include "xla/stream_executor/gpu/asm_compiler.h"
 #include "xla/stream_executor/gpu/gpu_asm_opts.h"
 #include "xla/stream_executor/gpu/gpu_driver.h"
 #include "xla/stream_executor/gpu/gpu_executor.h"
@@ -112,6 +111,7 @@ limitations under the License.
 #include "tsl/platform/status.h"
 #include "tsl/platform/statusor.h"
 #include "tsl/platform/threadpool.h"
+#include "tsl/profiler/lib/scoped_annotation.h"
 #include "tsl/profiler/lib/traceme.h"
 
 namespace xla {
@@ -175,6 +175,8 @@ class MatmulBfloat16Support : public FloatSupport {
 
 }  // namespace
 
+int32_t NVPTXCompiler::GetToolkitVersion() const { return CUDA_VERSION; }
+
 absl::Status NVPTXCompiler::OptimizeHloConvolutionCanonicalization(
     HloModule* hlo_module, se::GpuComputeCapability gpu_version,
     se::dnn::VersionInfo dnn_version,
@@ -197,8 +199,9 @@ absl::Status NVPTXCompiler::OptimizeHloConvolutionCanonicalization(
   pipeline.AddPass<FloatNormalization>(&matmul_bf16_support);
 
   pipeline.AddPass<GpusolverRewriter>();
-  pipeline.AddPass<GpuConvRewriter>();
-  pipeline.AddPass<CudnnFusedConvRewriter>(cuda_compute_capability);
+  pipeline.AddPass<GpuConvRewriter>(cuda_compute_capability);
+  pipeline.AddPass<CudnnFusedConvRewriter>(cuda_compute_capability, dnn_version,
+                                           GetToolkitVersion());
   pipeline.AddPass<GpuConvPaddingLegalization>();
   pipeline.AddPass<CudnnPadForConvolutions>(cuda_compute_capability);
   pipeline.AddPass<CudnnVectorizeConvolutions>(cuda_compute_capability,
@@ -213,7 +216,8 @@ absl::Status NVPTXCompiler::OptimizeHloConvolutionCanonicalization(
       GetAlgebraicSimplifierOptions(hlo_module->config());
   algsimp_options.set_enable_conv_operand_swap(false);
   algsimp_options.set_enable_unconditional_reduce_of_concat_replacement(false);
-  pipeline.AddPass<HloPassFix<AlgebraicSimplifier>>(algsimp_options);
+  pipeline.AddPass<HloPassFix<GpuAlgebraicSimplifier>>(algsimp_options,
+                                                       gpu_version);
 
   // CudnnSimplifyPadding gets rid of some padding introduced by
   // CudnnPadForConvolutions and used by CudnnVectorizeConvolutions.  The
@@ -230,7 +234,7 @@ absl::Status NVPTXCompiler::OptimizeHloConvolutionCanonicalization(
     ReshapeMoverOptions reshape_mover_options;
     reshape_mover_options.reshape_of_1d_broadcast_is_cheap = true;
     pipeline.AddPass<ReshapeMover>(reshape_mover_options);
-    pipeline.AddPass<AlgebraicSimplifier>(algsimp_options);
+    pipeline.AddPass<GpuAlgebraicSimplifier>(algsimp_options, gpu_version);
   }();
 
   // The reshapes and transposes can possibly be eliminated using
@@ -241,7 +245,7 @@ absl::Status NVPTXCompiler::OptimizeHloConvolutionCanonicalization(
   [&, &pipeline = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
           "simplify_after_conv_canonicalization")] {
     pipeline.AddPass<ConvertMover>();
-    pipeline.AddPass<AlgebraicSimplifier>(algsimp_options);
+    pipeline.AddPass<GpuAlgebraicSimplifier>(algsimp_options, gpu_version);
   }();
 
   // GpuConvRewriter, GpuConvPaddingLegalization and
@@ -279,8 +283,10 @@ absl::Status NVPTXCompiler::OptimizeHloPostLayoutAssignment(
         false);
 
     mha_fusion_pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true);
-    mha_fusion_pipeline.AddPass<HloPassFix<AlgebraicSimplifier>>(
-        alg_sim_options);
+    se::GpuComputeCapability gpu_version =
+        gpu_target_config.device_description.gpu_compute_capability();
+    mha_fusion_pipeline.AddPass<HloPassFix<GpuAlgebraicSimplifier>>(
+        alg_sim_options, gpu_version);
     mha_fusion_pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true);
     // Rewrite Multi-Headed Attention modules to Fused MHA custom-calls.
     if (stream_exec) {
@@ -290,7 +296,8 @@ absl::Status NVPTXCompiler::OptimizeHloPostLayoutAssignment(
       mha_fusion_pipeline.AddPass<CudnnFusedMHARewriter>(
           cuda_compute_capability, gpu_target_config.dnn_version_info);
     }
-    mha_fusion_pipeline.AddPass<AlgebraicSimplifier>(alg_sim_options);
+    mha_fusion_pipeline.AddPass<GpuAlgebraicSimplifier>(alg_sim_options,
+                                                        gpu_version);
     mha_fusion_pipeline.AddPass<CudnnFusedMHATransposeFusion>();
     mha_fusion_pipeline.AddPass<HloDCE>();
     mha_fusion_pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true);
@@ -365,8 +372,10 @@ absl::Status NVPTXCompiler::AddConvAndGemmAutotuningPasses(
 
 absl::Status NVPTXCompiler::AddGemmFusionAutotuningPasses(
     HloPassPipeline* pipeline, HloModule* hlo_module,
-    AutotuneConfig& autotune_config, tsl::thread::ThreadPool* thread_pool) {
-  pipeline->AddPass<GemmFusionAutotuner>(autotune_config, thread_pool);
+    AutotuneConfig& autotune_config, tsl::thread::ThreadPool* thread_pool,
+    const MultiProcessKeyValueStore& key_value_store) {
+  pipeline->AddPass<GemmFusionAutotuner>(autotune_config, GetToolkitVersion(),
+                                         thread_pool, key_value_store);
   return absl::OkStatus();
 }
 
@@ -643,15 +652,10 @@ static absl::StatusOr<std::vector<uint8_t>> AssembleOptionsAndCompile(
   }
 
   if (maybe_cubin.status().code() == absl::StatusCode::kCancelled) {
-    // Register spilling has occurred during autotuning.
-    CHECK(options.is_autotuning_compilation) << maybe_cubin.status();
     return maybe_cubin;
   }
 
   if (maybe_cubin.status().code() == absl::StatusCode::kResourceExhausted) {
-    // Exhausting the register limit during autotuning is not a fatal
-    // error, we should just skip the problematic tiling.
-    CHECK(options.is_autotuning_compilation) << maybe_cubin.status();
     return maybe_cubin;
   }
 
@@ -736,20 +740,32 @@ static bool IsNvlinkEnabled() {
   return use_nvlink;
 }
 
+// Returns the version of the PTX compiler that will be used for the given
+// debug options and preferred CUDA directory (Either libnvptxcompiler or ptxas)
+static absl::StatusOr<stream_executor::ToolVersion> GetAsmCompilerVersion(
+    const DebugOptions& debug_options, const std::string& preferred_cuda_dir) {
+  if (debug_options.xla_gpu_enable_libnvptxcompiler() &&
+      se::IsLibNvPtxCompilerSupported()) {
+    return stream_executor::GetLibNvPtxCompilerVersion();
+  }
+
+  return se::GetAsmCompilerVersion(preferred_cuda_dir);
+}
+
 absl::StatusOr<NVPTXCompiler::LinkingMethod> ChooseLinkingMethodImpl(
     const DebugOptions& debug_options, const std::string& preferred_cuda_dir) {
   using LinkingMethod = NVPTXCompiler::LinkingMethod;
-  TF_ASSIGN_OR_RETURN(auto ptxas_version_tuple,
-                      se::GetAsmCompilerVersion(preferred_cuda_dir));
+  TF_ASSIGN_OR_RETURN(auto asm_compiler_version,
+                      GetAsmCompilerVersion(debug_options, preferred_cuda_dir));
 
   auto nvlink_version = stream_executor::GetNvLinkVersion(preferred_cuda_dir);
   if (IsNvlinkEnabled() && nvlink_version.ok() &&
-      nvlink_version.value() >= ptxas_version_tuple) {
+      nvlink_version.value() >= asm_compiler_version) {
     return LinkingMethod::kNvLink;
   }
 
-  int ptxas_version = std::get<0>(ptxas_version_tuple) * 1000 +
-                      std::get<1>(ptxas_version_tuple) * 10;
+  int ptxas_version = std::get<0>(asm_compiler_version) * 1000 +
+                      std::get<1>(asm_compiler_version) * 10;
   TF_ASSIGN_OR_RETURN(int driver_version,
                       se::gpu::GpuDriver::GetDriverVersion());
 
@@ -761,15 +777,13 @@ absl::StatusOr<NVPTXCompiler::LinkingMethod> ChooseLinkingMethodImpl(
       << "The NVIDIA driver's CUDA version is "
       << absl::StrFormat("%d.%d", driver_version / 1000,
                          (driver_version % 1000) / 10)
-      << " which is older than the ptxas CUDA version "
-      << absl::StrFormat("(%d.%d.%d)", std::get<0>(ptxas_version_tuple),
-                         std::get<1>(ptxas_version_tuple),
-                         std::get<2>(ptxas_version_tuple))
-      << ". Because the driver is older than the ptxas version, XLA is "
-         "disabling parallel compilation, which may slow down "
-         "compilation. "
-         "You should update your NVIDIA driver or use the "
-         "NVIDIA-provided "
+      << " which is older than the PTX compiler version "
+      << absl::StrFormat("(%d.%d.%d)", std::get<0>(asm_compiler_version),
+                         std::get<1>(asm_compiler_version),
+                         std::get<2>(asm_compiler_version))
+      << ". Because the driver is older than the PTX compiler version, XLA is "
+         "disabling parallel compilation, which may slow down compilation. "
+         "You should update your NVIDIA driver or use the NVIDIA-provided "
          "CUDA forward compatibility packages.";
 
   return LinkingMethod::kNone;

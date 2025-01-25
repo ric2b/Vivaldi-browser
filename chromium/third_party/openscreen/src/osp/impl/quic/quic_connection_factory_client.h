@@ -17,6 +17,11 @@ namespace openscreen::osp {
 
 class QuicConnectionFactoryClient : public QuicConnectionFactoryBase {
  public:
+  struct ConnectData {
+    std::string instance_name;
+    std::string fingerprint;
+  };
+
   explicit QuicConnectionFactoryClient(TaskRunner& task_runner);
   ~QuicConnectionFactoryClient() override;
 
@@ -29,7 +34,7 @@ class QuicConnectionFactoryClient : public QuicConnectionFactoryBase {
   virtual ErrorOr<std::unique_ptr<QuicConnection>> Connect(
       const IPEndpoint& local_endpoint,
       const IPEndpoint& remote_endpoint,
-      const std::string& fingerprint,
+      const ConnectData& connect_data,
       QuicConnection::Delegate* connection_delegate);
 
  private:

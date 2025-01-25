@@ -87,6 +87,9 @@ class PasskeyModel : public KeyedService {
   // to sync.
   virtual bool IsReady() const = 0;
 
+  // Returns true if there are no passkeys in the account.
+  virtual bool IsEmpty() const = 0;
+
   virtual base::flat_set<std::string> GetAllSyncIds() const = 0;
 
   // Returns the list of all passkeys, including those that are shadowed.
@@ -112,6 +115,9 @@ class PasskeyModel : public KeyedService {
   // otherwise.
   virtual bool DeletePasskey(const std::string& credential_id,
                              const base::Location& location) = 0;
+
+  // Deletes all passkeys.
+  virtual void DeleteAllPasskeys() = 0;
 
   // Updates attributes of the passkey with the given `credential_id`. Returns
   // true if the credential was found and updated, false otherwise.

@@ -21,6 +21,9 @@
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/assistant/assistant_util.h"
+// TODO(b/342514059): Depending on chrome/browser/ash/child_accounts is not
+// ideal because it's in chrome.
+#include "chrome/browser/ash/child_accounts/on_device_controls/app_controls_service_factory.h"
 #include "chrome/browser/ash/input_method/editor_mediator_factory.h"
 #include "chrome/browser/ash/input_method/editor_switch.h"
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_utils.h"
@@ -108,6 +111,9 @@ void PopulateLoadTimeData(content::WebUI* web_ui,
           editor_mediator != nullptr && editor_mediator->IsAllowedForUse();
     }
     source->AddBoolean("isEditorSwitchAllowed", isEditorSwitchAllowed);
+    source->AddBoolean("isOnDeviceAppControlsAvailable",
+                       ash::on_device_controls::AppControlsServiceFactory::
+                           IsOnDeviceAppControlsAvailable(profile));
     source->AddBoolean(
         "isSeaPenAllowed",
         ash::features::IsSeaPenEnabled() &&
@@ -116,6 +122,8 @@ void PopulateLoadTimeData(content::WebUI* web_ui,
         "isVcBackgroundReplaceAllowed",
         ash::features::IsVcBackgroundReplaceEnabled() &&
             ash::personalization_app::IsEligibleForSeaPen(profile));
+    source->AddBoolean("isCrosSwitcherEnabled",
+                       ash::features::IsCrosSwitcherEnabled());
     source->AddBoolean(
         "featureManagementShowoff",
         base::FeatureList::IsEnabled(ash::features::kFeatureManagementShowoff));
@@ -136,12 +144,9 @@ void PopulateLoadTimeData(content::WebUI* web_ui,
     source->AddBoolean("HelpAppAutoTriggerInstallDialog",
                        base::FeatureList::IsEnabled(
                            features::kHelpAppAutoTriggerInstallDialog));
-    // Only use the action URL if both the uri and dialog features have been
-    // enabled.
-    source->AddBoolean("UseActionUrl",
-                       chromeos::features::IsAppInstallServiceUriEnabled() &&
-                           base::FeatureList::IsEnabled(
-                               chromeos::features::kCrosWebAppInstallDialog));
+    // Only use the action URL if the install URI is enabled.
+    // TODO(b/346687914): Clean up flag in Showoff code.
+    source->AddBoolean("UseActionUrl", true);
   }
 
   PrefService* pref_service = profile->GetPrefs();

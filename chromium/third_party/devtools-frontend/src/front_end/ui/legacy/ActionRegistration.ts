@@ -99,7 +99,7 @@ const str_ = i18n.i18n.registerUIStrings('ui/legacy/ActionRegistration.ts', UISt
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 export interface ActionDelegate {
-  handleAction(_context: Context, _actionId: string): boolean;
+  handleAction(context: Context, actionId: string): boolean;
 }
 
 export class Action extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
@@ -264,7 +264,12 @@ export function getRegisteredActionExtensions(): Array<Action> {
         }
 
         return Root.Runtime.Runtime.isDescriptorEnabled(
-            {experiment: action.experiment(), condition: action.condition()});
+            {
+              experiment: action.experiment(),
+              condition: action.condition(),
+            },
+            Common.Settings.Settings.instance().getHostConfig(),
+        );
       })
       .sort((firstAction, secondAction) => {
         const order1 = firstAction.order() || 0;
@@ -396,6 +401,7 @@ export const enum IconClass {
   UNDO = 'undo',
   COPY = 'copy',
   IMPORT = 'import',
+  SPARK = 'spark',
 }
 
 export const enum KeybindSet {

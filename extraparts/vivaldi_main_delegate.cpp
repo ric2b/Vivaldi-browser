@@ -10,14 +10,15 @@
 
 VivaldiMainDelegate::VivaldiMainDelegate()
 #if !BUILDFLAG(IS_ANDROID)
-    : VivaldiMainDelegate(base::TimeTicks())
+    : VivaldiMainDelegate({.exe_entry_point_ticks = base::TimeTicks::Now()})
 #endif
 {
 }
 
 #if !BUILDFLAG(IS_ANDROID)
-VivaldiMainDelegate::VivaldiMainDelegate(base::TimeTicks exe_entry_point_ticks)
-    : ChromeMainDelegate(exe_entry_point_ticks) {}
+VivaldiMainDelegate::VivaldiMainDelegate(
+    const StartupTimestamps& timestamps)
+    : ChromeMainDelegate(timestamps) {}
 #endif
 
 VivaldiMainDelegate::~VivaldiMainDelegate() {}

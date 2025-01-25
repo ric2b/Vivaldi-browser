@@ -9,8 +9,10 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "chrome/services/sharing/nearby/platform/ble_v2_remote_peripheral.h"
 #include "device/bluetooth/public/mojom/adapter.mojom.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/shared_remote.h"
 #include "third_party/nearby/src/internal/platform/implementation/ble_v2.h"
@@ -127,6 +129,17 @@ class BleV2Medium : public ::nearby::api::ble_v2::BleMedium,
       base::WaitableEvent* register_gatt_services_waitable_event,
       bool in_registration_success);
 
+  void DoConnectToGattServer(
+      mojo::PendingRemote<bluetooth::mojom::Device>* device,
+      const std::string& address,
+      base::WaitableEvent* connect_to_gatt_server_waitable_event);
+  void OnConnectToGattServer(
+      base::TimeTicks gatt_connection_start_time,
+      mojo::PendingRemote<bluetooth::mojom::Device>* out_device,
+      base::WaitableEvent* connect_to_gatt_server_waitable_event,
+      bluetooth::mojom::ConnectResult result,
+      mojo::PendingRemote<bluetooth::mojom::Device> in_device);
+
   void Shutdown(base::WaitableEvent* shutdown_waitable_event);
 
   // `task_runner_` is used in `StartAdvertising()` to post a task to register
@@ -147,6 +160,10 @@ class BleV2Medium : public ::nearby::api::ble_v2::BleMedium,
   // Track all pending register GATT service waitable events.
   base::flat_set<raw_ptr<base::WaitableEvent>>
       pending_register_gatt_services_waitable_events_;
+
+  // Track all pending connect to remote GATT servers waitable events.
+  base::flat_set<raw_ptr<base::WaitableEvent>>
+      pending_connect_to_gatt_server_waitable_events_;
 
   // Only set while discovery is active.
   mojo::Remote<bluetooth::mojom::DiscoverySession> discovery_session_;

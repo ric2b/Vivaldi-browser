@@ -25,10 +25,10 @@ limitations under the License.
 
 #include "absl/container/inlined_vector.h"
 #include "absl/log/log.h"
+#include "absl/status/status.h"
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/cublas_cudnn.h"
 #include "xla/shape.h"
-#include "xla/status.h"
 #include "xla/stream_executor/device_memory.h"
 #include "xla/stream_executor/dnn.h"
 #include "xla/stream_executor/lazy_op_runner.h"
@@ -100,11 +100,16 @@ struct GpufMHABackwardDescriptor {
   std::optional<Shape> mask_shape;
   std::optional<Shape> d_bias_shape;
   std::optional<Shape> bias_shape;
+  bool force_deterministic;
 };
+
 // Structure to describe static properties of a GPU fused Multi-Headed
 // Attention.
 struct GpufMHAConfig {
   static absl::StatusOr<GpufMHAConfig> For(const GpufMHADescriptor& fmha_desc);
+
+  absl::StatusOr<se::dnn::FusedMHAOp::Config> AsDnnFusedMHAOpConfig() const;
+
   PrimitiveType
       input_type;  // Capture the primitive type of one of the inputs of BMM1
   PrimitiveType output_type;
@@ -133,6 +138,10 @@ struct GpufMHAConfig {
 struct GpufMHABackwardConfig {
   static absl::StatusOr<GpufMHABackwardConfig> For(
       const GpufMHABackwardDescriptor& fmha_desc);
+
+  absl::StatusOr<se::dnn::FusedMHABackwardOp::Config>
+  AsDnnFusedMHABackwardOpConfig() const;
+
   PrimitiveType
       input_type;  // Capture the primitive type of one of the inputs of BMM1
   PrimitiveType output_type;
@@ -158,6 +167,7 @@ struct GpufMHABackwardConfig {
   std::optional<se::dnn::TensorDescriptor> d_bias;
   std::optional<se::dnn::TensorDescriptor> fwd_output;
   std::optional<se::dnn::TensorDescriptor> bias;
+  bool force_deterministic;
 };
 
 // Implementation struct exposed for debugging and log analysis.

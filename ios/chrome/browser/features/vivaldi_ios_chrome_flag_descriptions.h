@@ -7,8 +7,8 @@
 
 namespace flag_descriptions {
 
-extern const char kNewStartPageLayout[];
-extern const char kNewStartPageLayoutDescription[];
+extern const char kShowTopSites[];
+extern const char kShowTopSitesDescription[];
 
 extern const char kViewMarkdownAsHTMLName[];
 extern const char kkViewMarkdownAsHTMLDescription[];

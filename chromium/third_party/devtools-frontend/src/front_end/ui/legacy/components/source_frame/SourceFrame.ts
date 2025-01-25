@@ -176,7 +176,7 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
   private selectionToSet: TextUtils.TextRange.TextRange|null;
   private loadedInternal: boolean;
   private contentRequested: boolean;
-  private wasmDisassemblyInternal: Common.WasmDisassembly.WasmDisassembly|null;
+  private wasmDisassemblyInternal: TextUtils.WasmDisassembly.WasmDisassembly|null;
   contentSet: boolean;
   private selfXssWarningDisabledSetting: Common.Settings.Setting<boolean>;
 
@@ -348,7 +348,7 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
     }
   }
 
-  get wasmDisassembly(): Common.WasmDisassembly.WasmDisassembly|null {
+  get wasmDisassembly(): TextUtils.WasmDisassembly.WasmDisassembly|null {
     return this.wasmDisassemblyInternal;
   }
 
@@ -565,14 +565,6 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
       const {wasmDisassemblyInfo} = deferredContent;
       content = CodeMirror.Text.of(wasmDisassemblyInfo.lines);
       this.wasmDisassemblyInternal = wasmDisassemblyInfo;
-    } else if (this.contentType === 'application/wasm') {
-      // If the input is wasm but v8-based wasm disassembly failed, fall back to wasmparser for backwards compatibility.
-      try {
-        this.wasmDisassemblyInternal = await disassembleWasm(deferredContent.content, progressIndicator);
-        content = CodeMirror.Text.of(this.wasmDisassemblyInternal.lines);
-      } catch (e) {
-        content = error = e.message;
-      }
     } else {
       content = deferredContent.content;
       this.wasmDisassemblyInternal = null;
@@ -1260,7 +1252,7 @@ export function isBreakableLine(state: CodeMirror.EditorState, line: CodeMirror.
   return !found;
 }
 
-function markNonBreakableLines(disassembly: Common.WasmDisassembly.WasmDisassembly): CodeMirror.Extension {
+function markNonBreakableLines(disassembly: TextUtils.WasmDisassembly.WasmDisassembly): CodeMirror.Extension {
   // Mark non-breakable lines in the Wasm disassembly after setting
   // up the content for the text editor (which creates the gutter).
   return nonBreakableLines.init(state => {
@@ -1274,42 +1266,6 @@ function markNonBreakableLines(disassembly: Common.WasmDisassembly.WasmDisassemb
   });
 }
 
-async function disassembleWasm(content: string, progressIndicator: UI.ProgressIndicator.ProgressIndicator):
-    Promise<Common.WasmDisassembly.WasmDisassembly> {
-  const worker = Common.Worker.WorkerWrapper.fromURL(
-      new URL('../../../../entrypoints/wasmparser_worker/wasmparser_worker-entrypoint.js', import.meta.url));
-  const promise = new Promise<Common.WasmDisassembly.WasmDisassembly>((resolve, reject) => {
-    worker.onmessage = ({data}: MessageEvent) => {
-      if ('event' in data) {
-        switch (data.event) {
-          case 'progress':
-            progressIndicator.setWorked(data.params.percentage);
-            break;
-        }
-      } else if ('method' in data) {
-        switch (data.method) {
-          case 'disassemble':
-            if ('error' in data) {
-              reject(data.error);
-            } else if ('result' in data) {
-              const {lines, offsets, functionBodyOffsets} = data.result;
-              resolve(new Common.WasmDisassembly.WasmDisassembly(lines, offsets, functionBodyOffsets));
-            }
-            break;
-        }
-      }
-    };
-    worker.onerror = reject;
-  });
-
-  worker.postMessage({method: 'disassemble', params: {content}});
-
-  try {
-    return await promise;  // The await is important here or we terminate the worker too early.
-  } finally {
-    worker.terminate();
-  }
-}
 const sourceFrameTheme = CodeMirror.EditorView.theme({
   '&.cm-editor': {height: '100%'},
   '.cm-scroller': {overflow: 'auto'},

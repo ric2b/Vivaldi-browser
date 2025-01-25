@@ -87,8 +87,7 @@ void CustomProperty::ApplyInitial(StyleResolverState& state) const {
     return;
   }
 
-  const StyleInitialData* initial_data =
-      state.StyleBuilder().InitialData().get();
+  const StyleInitialData* initial_data = state.StyleBuilder().InitialData();
   DCHECK(initial_data);
   CSSVariableData* initial_variable_data = initial_data->GetVariableData(name_);
   const CSSValue* initial_value = initial_data->GetVariableValue(name_);
@@ -206,7 +205,7 @@ void CustomProperty::ApplyValue(StyleResolverState& state,
 
   registered_value = &StyleBuilderConverter::ConvertRegisteredPropertyValue(
       state, *registered_value, context);
-  scoped_refptr<CSSVariableData> data =
+  CSSVariableData* data =
       StyleBuilderConverter::ConvertRegisteredPropertyVariableData(
           *registered_value, is_animation_tainted);
 
@@ -214,11 +213,11 @@ void CustomProperty::ApplyValue(StyleResolverState& state,
   builder.SetVariableValue(name_, registered_value, is_inherited_property);
 }
 
-const CSSValue* CustomProperty::ParseSingleValueFromRange(
-    CSSParserTokenRange& range,
+const CSSValue* CustomProperty::ParseSingleValue(
+    CSSParserTokenStream& stream,
     const CSSParserContext& context,
     const CSSParserLocalContext& local_context) const {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 

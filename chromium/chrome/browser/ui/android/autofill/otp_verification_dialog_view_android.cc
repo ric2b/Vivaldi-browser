@@ -7,12 +7,14 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/ui/android/autofill/internal/jni_headers/OtpVerificationDialogBridge_jni.h"
 #include "chrome/browser/ui/autofill/payments/view_factory.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_otp_input_dialog_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "chrome/browser/ui/android/autofill/internal/jni_headers/OtpVerificationDialogBridge_jni.h"
 
 using base::android::ConvertJavaStringToUTF16;
 using base::android::ConvertUTF16ToJavaString;
@@ -30,7 +32,7 @@ OtpVerificationDialogViewAndroid::~OtpVerificationDialogViewAndroid() = default;
 void OtpVerificationDialogViewAndroid::ShowPendingState() {
   // For Android, the Java code takes care of showing the pending state after
   // user submits the OTP.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void OtpVerificationDialogViewAndroid::ShowInvalidState(

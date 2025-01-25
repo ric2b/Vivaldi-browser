@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fpdfapi/page/cpdf_meshstream.h"
 
 #include <utility>
@@ -21,6 +16,7 @@
 #include "core/fpdfapi/parser/cpdf_stream_acc.h"
 #include "core/fxcrt/cfx_bitstream.h"
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/span.h"
 
 namespace {
@@ -150,7 +146,6 @@ bool CPDF_MeshStream::Load() {
     m_ColorMin[i] = pDecode->GetFloatAt(i * 2 + 4);
     m_ColorMax[i] = pDecode->GetFloatAt(i * 2 + 5);
   }
-
   if (ShouldCheckBPC(m_type)) {
     m_CoordMax = m_nCoordBits == 32 ? -1 : (1 << m_nCoordBits) - 1;
     m_ComponentMax = (1 << m_nComponentBits) - 1;
@@ -205,31 +200,25 @@ CFX_PointF CPDF_MeshStream::ReadCoords() const {
   return pos;
 }
 
-FX_RGB<float> CPDF_MeshStream::ReadColor() const {
+FX_RGB_STRUCT<float> CPDF_MeshStream::ReadColor() const {
   DCHECK(ShouldCheckBPC(m_type));
 
-  float color_value[kMaxComponents];
+  std::array<float, kMaxComponents> color_value;
   for (uint32_t i = 0; i < m_nComponents; ++i) {
-    color_value[i] = m_ColorMin[i] + m_BitStream->GetBits(m_nComponentBits) *
-                                         (m_ColorMax[i] - m_ColorMin[i]) /
-                                         m_ComponentMax;
+      color_value[i] = m_ColorMin[i] + m_BitStream->GetBits(m_nComponentBits) *
+                                           (m_ColorMax[i] - m_ColorMin[i]) /
+                                           m_ComponentMax;
   }
-
-  FX_RGB<float> rgb = {};
   if (m_funcs.empty()) {
-    m_pCS->GetRGB(color_value, &rgb.red, &rgb.green, &rgb.blue);
-    return rgb;
+    return m_pCS->GetRGBOrZerosOnError(color_value);
   }
-
   float result[kMaxComponents] = {};
   for (const auto& func : m_funcs) {
     if (func && func->OutputCount() <= kMaxComponents) {
-      func->Call(pdfium::make_span(color_value, 1u), result);
+      func->Call(pdfium::make_span(color_value).first<1u>(), result);
     }
   }
-
-  m_pCS->GetRGB(result, &rgb.red, &rgb.green, &rgb.blue);
-  return rgb;
+  return m_pCS->GetRGBOrZerosOnError(result);
 }
 
 bool CPDF_MeshStream::ReadVertex(const CFX_Matrix& pObject2Bitmap,

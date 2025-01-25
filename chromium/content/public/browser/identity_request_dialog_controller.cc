@@ -45,11 +45,13 @@ IdentityProviderData::IdentityProviderData(const IdentityProviderData& other) =
     default;
 IdentityProviderData::~IdentityProviderData() = default;
 
-int IdentityRequestDialogController::GetBrandIconIdealSize() {
+int IdentityRequestDialogController::GetBrandIconIdealSize(
+    blink::mojom::RpMode rp_mode) {
   return 0;
 }
 
-int IdentityRequestDialogController::GetBrandIconMinimumSize() {
+int IdentityRequestDialogController::GetBrandIconMinimumSize(
+    blink::mojom::RpMode rp_mode) {
   return 0;
 }
 
@@ -57,9 +59,8 @@ void IdentityRequestDialogController::SetIsInterceptionEnabled(bool enabled) {
   is_interception_enabled_ = enabled;
 }
 
-void IdentityRequestDialogController::ShowAccountsDialog(
-    const std::string& top_frame_for_display,
-    const std::optional<std::string>& iframe_for_display,
+bool IdentityRequestDialogController::ShowAccountsDialog(
+    const std::string& rp_for_display,
     const std::vector<IdentityProviderData>& identity_provider_data,
     IdentityRequestAccount::SignInMode sign_in_mode,
     blink::mojom::RpMode rp_mode,
@@ -70,12 +71,13 @@ void IdentityRequestDialogController::ShowAccountsDialog(
     AccountsDisplayedCallback accounts_displayed_callback) {
   if (!is_interception_enabled_) {
     std::move(dismiss_callback).Run(DismissReason::kOther);
+    return false;
   }
+  return true;
 }
 
-void IdentityRequestDialogController::ShowFailureDialog(
-    const std::string& top_frame_for_display,
-    const std::optional<std::string>& iframe_for_display,
+bool IdentityRequestDialogController::ShowFailureDialog(
+    const std::string& rp_for_display,
     const std::string& idp_for_display,
     blink::mojom::RpContext rp_context,
     blink::mojom::RpMode rp_mode,
@@ -84,12 +86,13 @@ void IdentityRequestDialogController::ShowFailureDialog(
     LoginToIdPCallback login_callback) {
   if (!is_interception_enabled_) {
     std::move(dismiss_callback).Run(DismissReason::kOther);
+    return false;
   }
+  return true;
 }
 
-void IdentityRequestDialogController::ShowErrorDialog(
-    const std::string& top_frame_for_display,
-    const std::optional<std::string>& iframe_for_display,
+bool IdentityRequestDialogController::ShowErrorDialog(
+    const std::string& rp_for_display,
     const std::string& idp_for_display,
     blink::mojom::RpContext rp_context,
     blink::mojom::RpMode rp_mode,
@@ -99,18 +102,22 @@ void IdentityRequestDialogController::ShowErrorDialog(
     MoreDetailsCallback more_details_callback) {
   if (!is_interception_enabled_) {
     std::move(dismiss_callback).Run(DismissReason::kOther);
+    return false;
   }
+  return true;
 }
 
-void IdentityRequestDialogController::ShowLoadingDialog(
-    const std::string& top_frame_for_display,
+bool IdentityRequestDialogController::ShowLoadingDialog(
+    const std::string& rp_for_display,
     const std::string& idp_for_display,
     blink::mojom::RpContext rp_context,
     blink::mojom::RpMode rp_mode,
     DismissCallback dismiss_callback) {
   if (!is_interception_enabled_) {
     std::move(dismiss_callback).Run(DismissReason::kOther);
+    return false;
   }
+  return true;
 }
 
 std::string IdentityRequestDialogController::GetTitle() const {
@@ -126,6 +133,7 @@ void IdentityRequestDialogController::ShowUrl(LinkType type, const GURL& url) {}
 
 WebContents* IdentityRequestDialogController::ShowModalDialog(
     const GURL& url,
+    blink::mojom::RpMode rp_mode,
     DismissCallback dismiss_callback) {
   if (!is_interception_enabled_) {
     std::move(dismiss_callback).Run(DismissReason::kOther);
@@ -134,6 +142,10 @@ WebContents* IdentityRequestDialogController::ShowModalDialog(
 }
 
 void IdentityRequestDialogController::CloseModalDialog() {}
+
+WebContents* IdentityRequestDialogController::GetRpWebContents() {
+  return nullptr;
+}
 
 void IdentityRequestDialogController::RequestIdPRegistrationPermision(
     const url::Origin& origin,

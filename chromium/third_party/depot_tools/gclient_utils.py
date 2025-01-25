@@ -1397,5 +1397,5 @@ def merge_conditions(*conditions):
         if not condition:
             condition = current_condition
             continue
-        condition = f'({condition}) AND ({current_condition})'
+        condition = f'({condition}) and ({current_condition})'
     return condition

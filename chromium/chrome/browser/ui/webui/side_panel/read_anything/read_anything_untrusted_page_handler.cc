@@ -16,17 +16,19 @@
 #include "chrome/browser/accessibility/pdf_ocr_controller.h"
 #include "chrome/browser/accessibility/pdf_ocr_controller_factory.h"
 #include "chrome/browser/browser_features.h"
+#include "chrome/browser/language/language_model_manager_factory.h"
+#include "chrome/browser/pdf/pdf_viewer_stream_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/screen_ai/screen_ai_service_router.h"
 #include "chrome/browser/screen_ai/screen_ai_service_router_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/views/side_panel/read_anything/read_anything_controller.h"
 #include "chrome/browser/ui/webui/side_panel/read_anything/read_anything_prefs.h"
 #include "chrome/common/accessibility/read_anything.mojom-forward.h"
 #include "chrome/common/accessibility/read_anything.mojom.h"
-#include "chrome/common/accessibility/read_anything_constants.h"
+#include "components/language/core/browser/language_model.h"
+#include "components/language/core/browser/language_model_manager.h"
 #include "components/language/core/common/locale_util.h"
 #include "components/pdf/common/pdf_util.h"
 #include "components/prefs/pref_service.h"
@@ -39,6 +41,7 @@
 #include "content/public/browser/scoped_accessibility_mode.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/browser/web_ui.h"
+#include "pdf/pdf_features.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom-shared.h"
@@ -56,7 +59,6 @@ using ash::language_packs::PackResult;
 
 using read_anything::mojom::ErrorCode;
 using read_anything::mojom::InstallationState;
-using read_anything::mojom::ReadAnythingTheme;
 using read_anything::mojom::UntrustedPage;
 using read_anything::mojom::UntrustedPageHandler;
 using read_anything::mojom::VoicePackInstallationState;
@@ -246,57 +248,66 @@ ReadAnythingUntrustedPageHandler::ReadAnythingUntrustedPageHandler(
   if (features::IsReadAnythingLocalSidePanelEnabled()) {
     auto* active_web_contents =
         browser_->tab_strip_model()->GetActiveWebContents();
-    ObserveWebContentsSidePanelController(active_web_contents);
+    if (active_web_contents) {
+      ObserveWebContentsSidePanelController(active_web_contents);
+    }
   } else {
     coordinator_ = ReadAnythingCoordinator::FromBrowser(browser_.get());
     if (coordinator_) {
       coordinator_->AddObserver(this);
-      coordinator_->AddModelObserver(this);
     }
   }
 
-  if (features::IsReadAnythingWebUIToolbarEnabled()) {
-    PrefService* prefs = browser_->profile()->GetPrefs();
-    double speechRate =
-        features::IsReadAnythingReadAloudEnabled()
-            ? prefs->GetDouble(prefs::kAccessibilityReadAnythingSpeechRate)
-            : kReadAnythingDefaultSpeechRate;
-    read_anything::mojom::HighlightGranularity highlightGranularity =
-        features::IsReadAnythingReadAloudEnabled()
-            ? static_cast<read_anything::mojom::HighlightGranularity>(
-                  prefs->GetDouble(
-                      prefs::kAccessibilityReadAnythingHighlightGranularity))
-            : read_anything::mojom::HighlightGranularity::kDefaultValue;
-    base::Value::Dict voices = base::Value::Dict();
-    if (features::IsReadAnythingReadAloudEnabled()) {
-      if (features::IsReadAloudAutoVoiceSwitchingEnabled()) {
-        voices =
-            prefs->GetDict(prefs::kAccessibilityReadAnythingVoiceName).Clone();
-      } else {
-        std::string voice_name =
-            prefs->GetString(prefs::kAccessibilityReadAnythingVoiceName);
-        if (!voice_name.empty()) {
-          voices.Set("", voice_name);
-        }
+  PrefService* prefs = browser_->profile()->GetPrefs();
+  double speechRate =
+      features::IsReadAnythingReadAloudEnabled()
+          ? prefs->GetDouble(prefs::kAccessibilityReadAnythingSpeechRate)
+          : kReadAnythingDefaultSpeechRate;
+  read_anything::mojom::HighlightGranularity highlightGranularity =
+      features::IsReadAnythingReadAloudEnabled()
+          ? static_cast<read_anything::mojom::HighlightGranularity>(
+                prefs->GetDouble(
+                    prefs::kAccessibilityReadAnythingHighlightGranularity))
+          : read_anything::mojom::HighlightGranularity::kDefaultValue;
+  base::Value::Dict voices = base::Value::Dict();
+  if (features::IsReadAnythingReadAloudEnabled()) {
+    if (features::IsReadAloudAutoVoiceSwitchingEnabled()) {
+      voices =
+          prefs->GetDict(prefs::kAccessibilityReadAnythingVoiceName).Clone();
+    } else {
+      std::string voice_name =
+          prefs->GetString(prefs::kAccessibilityReadAnythingVoiceName);
+      if (!voice_name.empty()) {
+        voices.Set("", voice_name);
       }
     }
-    page_->OnSettingsRestoredFromPrefs(
-        static_cast<read_anything::mojom::LineSpacing>(
-            prefs->GetInteger(prefs::kAccessibilityReadAnythingLineSpacing)),
-        static_cast<read_anything::mojom::LetterSpacing>(
-            prefs->GetInteger(prefs::kAccessibilityReadAnythingLetterSpacing)),
-        prefs->GetString(prefs::kAccessibilityReadAnythingFontName),
-        prefs->GetDouble(prefs::kAccessibilityReadAnythingFontScale),
-        prefs->GetBoolean(prefs::kAccessibilityReadAnythingLinksEnabled),
-        static_cast<read_anything::mojom::Colors>(
-            prefs->GetInteger(prefs::kAccessibilityReadAnythingColorInfo)),
-        speechRate, std::move(voices),
-        features::IsReadAnythingReadAloudEnabled()
-            ? prefs->GetList(prefs::kAccessibilityReadAnythingLanguagesEnabled)
-                  .Clone()
-            : base::Value::List(),
-        highlightGranularity);
   }
+
+  page_->OnSettingsRestoredFromPrefs(
+      static_cast<read_anything::mojom::LineSpacing>(
+          prefs->GetInteger(prefs::kAccessibilityReadAnythingLineSpacing)),
+      static_cast<read_anything::mojom::LetterSpacing>(
+          prefs->GetInteger(prefs::kAccessibilityReadAnythingLetterSpacing)),
+      prefs->GetString(prefs::kAccessibilityReadAnythingFontName),
+      prefs->GetDouble(prefs::kAccessibilityReadAnythingFontScale),
+      prefs->GetBoolean(prefs::kAccessibilityReadAnythingLinksEnabled),
+      prefs->GetBoolean(prefs::kAccessibilityReadAnythingImagesEnabled),
+      static_cast<read_anything::mojom::Colors>(
+          prefs->GetInteger(prefs::kAccessibilityReadAnythingColorInfo)),
+      speechRate, std::move(voices),
+      features::IsReadAnythingReadAloudEnabled()
+          ? prefs->GetList(prefs::kAccessibilityReadAnythingLanguagesEnabled)
+                .Clone()
+          : base::Value::List(),
+      highlightGranularity);
+
+  // Get user's default language to check for compatible fonts.
+  language::LanguageModel* language_model =
+      LanguageModelManagerFactory::GetForBrowserContext(browser_->profile())
+          ->GetPrimaryModel();
+  std::string prefs_lang = language_model->GetLanguages().front().lang_code;
+  prefs_lang = language::ExtractBaseLanguage(prefs_lang);
+  SetDefaultLanguageCode(prefs_lang);
 
   if (features::IsReadAnythingWithScreen2xEnabled()) {
     screen_ai::ScreenAIServiceRouterFactory::GetForBrowserContext(
@@ -342,7 +353,6 @@ ReadAnythingUntrustedPageHandler::~ReadAnythingUntrustedPageHandler() {
     // |this| from the observer lists. In the cases where the coordinator is
     // destroyed first, these will have been destroyed before this call.
     coordinator_->RemoveObserver(this);
-    coordinator_->RemoveModelObserver(this);
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -464,6 +474,14 @@ void ReadAnythingUntrustedPageHandler::OnLinksEnabledChanged(bool enabled) {
         prefs::kAccessibilityReadAnythingLinksEnabled, enabled);
   }
 }
+
+void ReadAnythingUntrustedPageHandler::OnImagesEnabledChanged(bool enabled) {
+  if (browser_) {
+    browser_->profile()->GetPrefs()->SetBoolean(
+        prefs::kAccessibilityReadAnythingImagesEnabled, enabled);
+  }
+}
+
 void ReadAnythingUntrustedPageHandler::OnColorChange(
     read_anything::mojom::Colors color) {
   if (browser_) {
@@ -596,39 +614,8 @@ void ReadAnythingUntrustedPageHandler::OnSnapshotRequested() {
   web_snapshotter_->RequestSnapshot(main_observer_->web_contents());
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// ReadAnythingModel::Observer:
-///////////////////////////////////////////////////////////////////////////////
-
-void ReadAnythingUntrustedPageHandler::OnReadAnythingThemeChanged(
-    const std::string& font_name,
-    double font_scale,
-    bool links_enabled,
-    ui::ColorId foreground_color_id,
-    ui::ColorId background_color_id,
-    ui::ColorId separator_color_id,
-    ui::ColorId dropdown_color_id,
-    ui::ColorId selected_dropdown_color_id,
-    ui::ColorId focus_ring_color_id,
-    read_anything::mojom::LineSpacing line_spacing,
-    read_anything::mojom::LetterSpacing letter_spacing) {
-  // Elsewhere in this file, `web_contents` refers to the active web contents
-  // in the tab strip. In this case, `web_contents` refers to the web contents
-  // hosting the WebUI.
-  content::WebContents* web_contents = web_ui_->GetWebContents();
-  SkColor foreground_skcolor =
-      web_contents->GetColorProvider().GetColor(foreground_color_id);
-  SkColor background_skcolor =
-      web_contents->GetColorProvider().GetColor(background_color_id);
-
-  page_->OnThemeChanged(ReadAnythingTheme::New(
-      font_name, font_scale, links_enabled, foreground_skcolor,
-      background_skcolor, line_spacing, letter_spacing));
-}
-
 void ReadAnythingUntrustedPageHandler::SetDefaultLanguageCode(
     const std::string& code) {
-  default_language_code_ = code;
   page_->SetLanguageCode(code);
   page_->SetDefaultLanguageCode(code);
 }
@@ -707,36 +694,48 @@ void ReadAnythingUntrustedPageHandler::OnActiveWebContentsChanged() {
 void ReadAnythingUntrustedPageHandler::SetUpPdfObserver() {
   pdf_observer_.reset();
   content::WebContents* main_contents = main_observer_->web_contents();
-  std::vector<content::WebContents*> inner_contents =
-      main_contents ? main_contents->GetInnerWebContents()
-                    : std::vector<content::WebContents*>();
-  // Check if this is a pdf.
-  if (inner_contents.size() == 1 &&
-      IsPdfExtensionOrigin(
-          inner_contents[0]->GetPrimaryMainFrame()->GetLastCommittedOrigin())) {
-    pdf_observer_ = std::make_unique<ReadAnythingWebContentsObserver>(
-        weak_factory_.GetSafeRef(), inner_contents[0], kReadAnythingAXMode);
-    if (features::IsPdfOcrEnabled()) {
-      screen_ai::PdfOcrControllerFactory::GetForProfile(browser_->profile())
-          ->Activate();
+  // TODO(crbug.com/340272378): When removing this feature flag, delete
+  // `pdf_observer_` and integrate ReadAnythingWebContentsObserver with
+  // ReadAnythingUntrustedPageHandler.
+  if (!chrome_pdf::features::IsOopifPdfEnabled()) {
+    std::vector<content::WebContents*> inner_contents =
+        main_contents ? main_contents->GetInnerWebContents()
+                      : std::vector<content::WebContents*>();
+    // Check if this is a pdf.
+    if (inner_contents.size() == 1 &&
+        IsPdfExtensionOrigin(inner_contents[0]
+                                 ->GetPrimaryMainFrame()
+                                 ->GetLastCommittedOrigin())) {
+      pdf_observer_ = std::make_unique<ReadAnythingWebContentsObserver>(
+          weak_factory_.GetSafeRef(), inner_contents[0], kReadAnythingAXMode);
     }
+  }
+  if (features::IsPdfOcrEnabled()) {
+    screen_ai::PdfOcrControllerFactory::GetForProfile(browser_->profile())->Activate();
   }
 }
 
 void ReadAnythingUntrustedPageHandler::OnActiveAXTreeIDChanged() {
-  bool is_pdf = !!pdf_observer_;
   if (!main_observer_ || !active_) {
     page_->OnActiveAXTreeIDChanged(ui::AXTreeIDUnknown(), ukm::kInvalidSourceId,
-                                   is_pdf);
+                                   /*is_pdf=*/false);
     return;
   }
 
-  content::WebContents* contents =
-      is_pdf ? pdf_observer_->web_contents() : main_observer_->web_contents();
+  content::WebContents* contents = !!pdf_observer_
+                                       ? pdf_observer_->web_contents()
+                                       : main_observer_->web_contents();
   if (!contents) {
     page_->OnActiveAXTreeIDChanged(ui::AXTreeIDUnknown(), ukm::kInvalidSourceId,
-                                   is_pdf);
+                                   /*is_pdf=*/false);
     return;
+  }
+
+  bool is_pdf;
+  if (chrome_pdf::features::IsOopifPdfEnabled()) {
+    is_pdf = !!pdf::PdfViewerStreamManager::FromWebContents(contents);
+  } else {
+    is_pdf = !!pdf_observer_;
   }
 
   // Observe the new contents so we can get the page language once it's
@@ -746,16 +745,19 @@ void ReadAnythingUntrustedPageHandler::OnActiveAXTreeIDChanged() {
     translate::TranslateDriver* driver = translate_client->GetTranslateDriver();
     const std::string& source_language =
         translate_client->GetLanguageState().source_language();
-    // If the language is empty and we're not already observing these web
-    // contents, then observe them so we can get a callback when the language is
-    // determined. If we are already observing them, then the language couldn't
-    // be determined, so pass the empty code to SetLanguageCode. If the language
-    // is not empty then the language was already determined so we pass that to
-    // SetLanguageCode.
-    if (source_language.empty() &&
-        !translate_observation_.IsObservingSource(driver)) {
+    // If we're not already observing these web contents, then observe them so
+    // we can get a callback when the language is determined. Otherwise, we
+    // just set the language directly.
+    if (!translate_observation_.IsObservingSource(driver)) {
       translate_observation_.Reset();
       translate_observation_.Observe(driver);
+      // The language may have already been determined before (and then
+      // unobserved), so send the language if it's not empty. If the language
+      // is outdated, we'll receive a call in OnLanguageDetermined and send
+      // the updated lang there.
+      if (!source_language.empty()) {
+        SetLanguageCode(source_language);
+      }
     } else {
       SetLanguageCode(source_language);
     }
@@ -775,7 +777,7 @@ void ReadAnythingUntrustedPageHandler::OnActiveAXTreeIDChanged() {
 
   content::RenderFrameHost* rfh = contents->GetPrimaryMainFrame();
   if (!rfh) {
-    // THis case doesn't seem possible.
+    // This case doesn't seem possible.
     page_->OnActiveAXTreeIDChanged(ui::AXTreeIDUnknown(), ukm::kInvalidSourceId,
                                    /*is_pdf=*/false);
     return;
@@ -788,9 +790,7 @@ void ReadAnythingUntrustedPageHandler::OnActiveAXTreeIDChanged() {
 void ReadAnythingUntrustedPageHandler::SetLanguageCode(
     const std::string& code) {
   const std::string& language_code =
-      (code.empty() || code == translate::kUnknownLanguageCode)
-          ? default_language_code_
-          : code;
+      (code.empty() || code == translate::kUnknownLanguageCode) ? "" : code;
   // Only send the language code if it's a new language.
   if (language_code != current_language_code_) {
     current_language_code_ = language_code;
@@ -825,10 +825,10 @@ void ReadAnythingUntrustedPageHandler::LogTextStyle() {
                                 maximum_font_scale_logging + 1);
   std::string font_name =
       prefs->GetString(prefs::kAccessibilityReadAnythingFontName);
-  if (font_map_.find(font_name) != font_map_.end()) {
-    ReadAnythingFont font = font_map_.at(font_name);
-    base::UmaHistogramEnumeration(string_constants::kFontNameHistogramName,
-                                  font);
+  if (fonts::kFontInfos.contains(font_name)) {
+    base::UmaHistogramEnumeration(
+        string_constants::kFontNameHistogramName,
+        fonts::kFontInfos.at(font_name).logging_value);
   }
   read_anything::mojom::Colors color =
       static_cast<read_anything::mojom::Colors>(

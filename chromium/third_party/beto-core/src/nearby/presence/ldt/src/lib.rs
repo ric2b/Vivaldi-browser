@@ -19,10 +19,19 @@
 #[cfg(feature = "std")]
 extern crate std;
 
-use core::{fmt, marker::PhantomData};
+use core::{fmt, marker::PhantomData, ops};
 use crypto_provider::CryptoProvider;
 use ldt_tbc::{ConcatenatedKeyArray, TweakableBlockCipher, TweakableBlockCipherKey};
 use ldt_tbc::{TweakableBlockCipherDecrypter, TweakableBlockCipherEncrypter};
+
+/// Common functionality for [LdtEncryptCipher] and [LdtDecryptCipher]
+pub trait LdtCipher<const B: usize, T: TweakableBlockCipher<B>> {
+    /// The range of input lengths the cipher can operate on
+    const VALID_INPUT_LEN: ops::Range<usize>;
+
+    /// Create a new cipher with the provided [TweakableBlockCipher] and [Mix] function
+    fn new(key: &LdtKey<T::Key>) -> Self;
+}
 
 /// Implementation of the [LDT](https://eprint.iacr.org/2017/841.pdf) length doubler encryption cipher.
 ///
@@ -36,16 +45,21 @@ pub struct LdtEncryptCipher<const B: usize, T: TweakableBlockCipher<B>, M: Mix> 
     mix_phantom: PhantomData<M>,
 }
 
-impl<const B: usize, T: TweakableBlockCipher<B>, M: Mix> LdtEncryptCipher<B, T, M> {
-    /// Create an [LdtEncryptCipher] with the provided Tweakable block cipher and Mix function
-    pub fn new(key: &LdtKey<T::Key>) -> Self {
+impl<const B: usize, T: TweakableBlockCipher<B>, M: Mix> LdtCipher<B, T>
+    for LdtEncryptCipher<B, T, M>
+{
+    const VALID_INPUT_LEN: ops::Range<usize> = input_len_range::<B>();
+
+    fn new(key: &LdtKey<T::Key>) -> Self {
         LdtEncryptCipher {
             cipher_1: T::EncryptionCipher::new(&key.key_1),
             cipher_2: T::EncryptionCipher::new(&key.key_2),
             mix_phantom: PhantomData,
         }
     }
+}
 
+impl<const B: usize, T: TweakableBlockCipher<B>, M: Mix> LdtEncryptCipher<B, T, M> {
     /// Encrypt `data` in place, performing the pad operation with `padder`.
     ///
     /// Unless you have particular padding needs, use [DefaultPadder].
@@ -79,13 +93,6 @@ pub struct LdtDecryptCipher<const B: usize, T: TweakableBlockCipher<B>, M: Mix> 
 
 impl<const B: usize, T: TweakableBlockCipher<B>, M: Mix> LdtDecryptCipher<B, T, M> {
     /// Create an [LdtDecryptCipher] with the provided Tweakable block cipher and Mix function
-    pub fn new(key: &LdtKey<T::Key>) -> Self {
-        LdtDecryptCipher {
-            cipher_1: T::DecryptionCipher::new(&key.key_1),
-            cipher_2: T::DecryptionCipher::new(&key.key_2),
-            mix_phantom: PhantomData,
-        }
-    }
 
     /// Decrypt `data` in place, performing the pad operation with `padder`.
     ///
@@ -106,6 +113,26 @@ impl<const B: usize, T: TweakableBlockCipher<B>, M: Mix> LdtDecryptCipher<B, T, 
     }
 }
 
+impl<const B: usize, T: TweakableBlockCipher<B>, M: Mix> LdtCipher<B, T>
+    for LdtDecryptCipher<B, T, M>
+{
+    const VALID_INPUT_LEN: ops::Range<usize> = input_len_range::<B>();
+
+    fn new(key: &LdtKey<T::Key>) -> Self {
+        LdtDecryptCipher {
+            cipher_1: T::DecryptionCipher::new(&key.key_1),
+            cipher_2: T::DecryptionCipher::new(&key.key_2),
+            mix_phantom: PhantomData,
+        }
+    }
+}
+
+/// Returns the range of valid input lengths to encrypt or decrypt with LDT for a given tweakable
+/// block cipher block size `B`, namely `[B, B * 2)`.
+const fn input_len_range<const B: usize>() -> ops::Range<usize> {
+    B..B * 2
+}
+
 // internal implementation of ldt cipher operations, re-used by encryption and decryption, by providing
 // the corresponding cipher_op and mix operation
 fn do_ldt<const B: usize, T, O, C, X, P>(
@@ -124,7 +151,7 @@ where
     X: for<'a, 'b> Fn(&'a [u8], &'b [u8]) -> (&'b [u8], &'a [u8]),
     P: Padder<B, T>,
 {
-    if data.len() < B || data.len() >= B * 2 {
+    if !input_len_range::<B>().contains(&data.len()) {
         return Err(LdtError::InvalidLength(data.len()));
     }
     let s = data.len() - B;
@@ -229,6 +256,7 @@ pub trait Mix {
 
 /// Per section 2.4, swapping `a` and `b` is a valid mix function
 pub struct Swap {}
+
 impl Mix for Swap {
     fn forwards<'a, 'b>(a: &'a [u8], b: &'b [u8]) -> (&'b [u8], &'a [u8]) {
         debug_assert_eq!(a.len(), b.len());

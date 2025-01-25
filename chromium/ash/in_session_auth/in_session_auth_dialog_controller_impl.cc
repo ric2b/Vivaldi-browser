@@ -13,6 +13,7 @@
 #include "ash/in_session_auth/in_session_auth_dialog_contents_view.h"
 #include "ash/public/cpp/in_session_auth_dialog_controller.h"
 #include "ash/public/cpp/in_session_auth_token_provider.h"
+#include "ash/public/cpp/webauthn_dialog_controller.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "base/check.h"
@@ -27,9 +28,11 @@
 #include "chromeos/ash/components/cryptohome/constants.h"
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/ash/components/login/auth/auth_performer.h"
+#include "chromeos/ash/components/osauth/impl/auth_surface_registry.h"
 #include "chromeos/ash/components/osauth/public/auth_factor_status_consumer.h"
 #include "chromeos/ash/components/osauth/public/auth_hub.h"
 #include "chromeos/ash/components/osauth/public/common_types.h"
+#include "chromeos/components/webauthn/webauthn_request_registrar.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -51,8 +54,8 @@ AuthPurpose InSessionAuthReasonToAuthPurpose(
 std::unique_ptr<views::Widget> CreateAuthDialogWidget(
     std::unique_ptr<views::View> contents_view) {
   views::Widget::InitParams params(
+      views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
-  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.delegate = new views::WidgetDelegate();
   params.show_state = ui::SHOW_STATE_NORMAL;
@@ -60,7 +63,7 @@ std::unique_ptr<views::Widget> CreateAuthDialogWidget(
   params.name = "AuthDialogWidget";
 
   params.delegate->SetInitiallyFocusedView(contents_view.get());
-  params.delegate->SetModalType(ui::MODAL_TYPE_NONE);
+  params.delegate->SetModalType(ui::MODAL_TYPE_SYSTEM);
   params.delegate->SetOwnedByWidget(true);
 
   std::unique_ptr<views::Widget> widget = std::make_unique<views::Widget>();
@@ -142,6 +145,22 @@ void InSessionAuthDialogControllerImpl::ShowAuthDialog(
   }
 }
 
+void InSessionAuthDialogControllerImpl::ShowLegacyWebAuthnDialog(
+    const std::string& rp_id,
+    const std::string& window_id,
+    WebAuthNDialogController::FinishCallback on_auth_complete) {
+  aura::Window* source_window =
+      chromeos::webauthn::WebAuthnRequestRegistrar::Get()
+          ->GetWindowForRequestId(window_id);
+  if (!source_window) {
+    LOG(ERROR) << "Can't find the window for the given window id.";
+    std::move(on_auth_complete).Run(false);
+    return;
+  }
+  WebAuthNDialogController::Get()->ShowAuthenticationDialog(
+      source_window, rp_id, std::move(on_auth_complete));
+}
+
 void InSessionAuthDialogControllerImpl::SetTokenProvider(
     InSessionAuthTokenProvider* auth_token_provider) {
   auth_token_provider_ = auth_token_provider;
@@ -155,6 +174,7 @@ void InSessionAuthDialogControllerImpl::OnUserAuthAttemptConfirmed(
     AuthHubConnector* connector,
     raw_ptr<AuthFactorStatusConsumer>& out_consumer) {
   CHECK_EQ(state_, State::kShowing);
+  CHECK_EQ(contents_view_, nullptr);
 
   auto contents_view = std::make_unique<InSessionAuthDialogContentsView>(
       prompt_,
@@ -163,12 +183,15 @@ void InSessionAuthDialogControllerImpl::OnUserAuthAttemptConfirmed(
       base::BindRepeating(
           &InSessionAuthDialogControllerImpl::OnAuthPanelPreferredSizeChanged,
           weak_factory_.GetWeakPtr()),
-      connector);
+      connector, AuthHub::Get());
 
+  contents_view_ = contents_view.get();
   out_consumer = contents_view->GetAuthPanel();
   dialog_ = CreateAuthDialogWidget(std::move(contents_view));
   dialog_->Show();
   state_ = State::kShown;
+  AuthParts::Get()->GetAuthSurfaceRegistry()->NotifyInSessionAuthDialogShown(
+      connector);
 }
 
 void InSessionAuthDialogControllerImpl::OnAuthPanelPreferredSizeChanged() {
@@ -180,27 +203,43 @@ void InSessionAuthDialogControllerImpl::OnAccountNotFound() {
 }
 
 void InSessionAuthDialogControllerImpl::OnUserAuthAttemptCancelled() {
-  NOTIMPLEMENTED();
+  NotifyFailure();
+  OnEndAuthentication();
 }
 
 void InSessionAuthDialogControllerImpl::OnFactorAttemptFailed(
     AshAuthFactor factor) {
-  NOTIMPLEMENTED();
+  contents_view_->ShowAuthError(factor);
 }
 
-void InSessionAuthDialogControllerImpl::OnUserAuthSuccess(
-    AshAuthFactor factor,
+void InSessionAuthDialogControllerImpl::NotifySuccess(
     const AuthProofToken& token) {
   if (!on_auth_complete_) {
     LOG(ERROR) << "Encountered null auth completion callback, possible double "
                   "invocation?";
     return;
   }
+
   std::move(on_auth_complete_)
       .Run(true, token, cryptohome::kAuthsessionInitialLifetime);
 }
 
+void InSessionAuthDialogControllerImpl::NotifyFailure() {
+  if (on_auth_complete_) {
+    std::move(on_auth_complete_)
+        .Run(false, /*token=*/{},
+             /*timeout=*/{});
+  }
+}
+
+void InSessionAuthDialogControllerImpl::OnUserAuthSuccess(
+    AshAuthFactor factor,
+    const AuthProofToken& token) {
+  NotifySuccess(token);
+}
+
 void InSessionAuthDialogControllerImpl::OnEndAuthentication() {
+  contents_view_ = nullptr;
   dialog_.reset();
   state_ = State::kNotShown;
 }

@@ -229,7 +229,7 @@ EGLDisplay GetPlatformANGLEDisplay(
         display_attribs.push_back(EGL_HIGH_POWER_ANGLE);
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -376,7 +376,7 @@ EGLDisplay GetDisplayFromType(
           display, EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE, enabled_angle_features,
           disabled_angle_features, extra_display_attribs);
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return EGL_NO_DISPLAY;
   }
 }
@@ -452,7 +452,7 @@ const char* DisplayTypeString(DisplayType display_type) {
     case ANGLE_METAL_NULL:
       return "MetalNull";
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "Err";
   }
 }
@@ -536,13 +536,11 @@ GLDisplayPlatform* GLDisplay::GetAs() {
   bool type_checked = false;
   switch (type_) {
     case NONE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
 
     case EGL:
-#if defined(USE_EGL)
       type_checked = std::is_same<GLDisplayPlatform, GLDisplayEGL>::value;
-#endif  // defined(USE_EGL)
       break;
   }
   if (type_checked)
@@ -551,12 +549,9 @@ GLDisplayPlatform* GLDisplay::GetAs() {
   return nullptr;
 }
 
-#if defined(USE_EGL)
 template EXPORT_TEMPLATE_DEFINE(GL_EXPORT)
     GLDisplayEGL* GLDisplay::GetAs<GLDisplayEGL>();
-#endif  // defined(USE_EGL)
 
-#if defined(USE_EGL)
 GLDisplayEGL::EGLGpuSwitchingObserver::EGLGpuSwitchingObserver(
     EGLDisplay display)
     : display_(display) {
@@ -722,6 +717,11 @@ bool GLDisplayEGL::InitializeDisplay(bool supports_angle,
   bool supports_egl_debug = g_driver_egl.client_ext.b_EGL_KHR_debug;
   if (supports_egl_debug) {
     SetEglDebugMessageControl();
+  }
+
+  if (g_driver_egl.client_ext.b_EGL_ANGLE_no_error &&
+      !features::IsANGLEValidationEnabled()) {
+    eglSetValidationEnabledANGLE(EGL_FALSE);
   }
 
   std::vector<std::string> enabled_angle_features;
@@ -894,6 +894,5 @@ void GLDisplayEGL::InitializeCommon(bool for_testing) {
   InitMetalSharedEventStorage();
 #endif
 }
-#endif  // defined(USE_EGL)
 
 }  // namespace gl

@@ -47,12 +47,21 @@ const size_t kSubFormatOffset = 24;
 // A convenience struct for passing WAV parameters around. AudioParameters is
 // too heavyweight for this. Keep this class internal to this implementation.
 struct WavAudioParameters {
-  WavAudioHandler::AudioFormat audio_format;
-  uint16_t num_channels;
-  uint32_t sample_rate;
-  uint16_t bits_per_sample;
-  uint16_t valid_bits_per_sample;
-  bool is_extensible;
+  // TODO(crbug.com/340824112): note that zero-initializing this field does not
+  // correspond to any enumerator value defined in the `AudioFormat` enum.
+  // However, not initializing is also problematic: `ParseFmtChunk()` simply
+  // early-returns on failure, leaving random fields uninitialized and causing
+  // MSan errors elsewhere. A better long-term solution would be for
+  // `ParseFmtChunk` to return a `std::optional<WavAudioParameters>`. For now,
+  // zero-initializing this field has a (small) benefit that it won't
+  // correspond to any valid format and is guaranteed to fail the
+  // `ParamsAreValid()` check.
+  WavAudioHandler::AudioFormat audio_format = {};
+  uint16_t num_channels = 0;
+  uint32_t sample_rate = 0;
+  uint16_t bits_per_sample = 0;
+  uint16_t valid_bits_per_sample = 0;
+  bool is_extensible = false;
 };
 
 bool ParamsAreValid(const WavAudioParameters& params) {
@@ -89,16 +98,16 @@ bool ParseFmtChunk(base::span<const uint8_t> data, WavAudioParameters* params) {
   }
 
   // Read in serialized parameters.
-  params->audio_format = static_cast<WavAudioHandler::AudioFormat>(
-      base::numerics::U16FromLittleEndian(
+  params->audio_format =
+      static_cast<WavAudioHandler::AudioFormat>(base::U16FromLittleEndian(
           data.subspan<kAudioFormatOffset,
                        sizeof(WavAudioHandler::AudioFormat)>()));
   params->num_channels =
-      base::numerics::U16FromLittleEndian(data.subspan<kChannelOffset, 2u>());
-  params->sample_rate = base::numerics::U32FromLittleEndian(
-      data.subspan<kSampleRateOffset, 4u>());
-  params->bits_per_sample = base::numerics::U16FromLittleEndian(
-      data.subspan<kBitsPerSampleOffset, 2u>());
+      base::U16FromLittleEndian(data.subspan<kChannelOffset, 2u>());
+  params->sample_rate =
+      base::U32FromLittleEndian(data.subspan<kSampleRateOffset, 4u>());
+  params->bits_per_sample =
+      base::U16FromLittleEndian(data.subspan<kBitsPerSampleOffset, 2u>());
 
   if (params->audio_format ==
       WavAudioHandler::AudioFormat::kAudioFormatExtensible) {
@@ -108,11 +117,11 @@ bool ParseFmtChunk(base::span<const uint8_t> data, WavAudioParameters* params) {
     }
 
     params->is_extensible = true;
-    params->audio_format = static_cast<WavAudioHandler::AudioFormat>(
-        base::numerics::U16FromLittleEndian(
+    params->audio_format =
+        static_cast<WavAudioHandler::AudioFormat>(base::U16FromLittleEndian(
             data.subspan<kSubFormatOffset,
                          sizeof(WavAudioHandler::AudioFormat)>()));
-    params->valid_bits_per_sample = base::numerics::U16FromLittleEndian(
+    params->valid_bits_per_sample = base::U16FromLittleEndian(
         data.subspan<kValidBitsPerSampleOffset, 2u>());
   } else {
     params->is_extensible = false;
@@ -155,8 +164,7 @@ bool ParseWavData(const std::string_view wav_data,
     // We should be at the beginning of a subsection. The next 8 bytes are the
     // header and should look like: "|f|m|t| |1|2|3|4|" or "|d|a|t|a|1|2|3|4|".
     base::span<const uint8_t, 4u> chunk_fmt = *buf.Read<4u>();
-    uint32_t chunk_length =
-        base::numerics::U32FromLittleEndian(*buf.Read<4u>());
+    uint32_t chunk_length = base::U32FromLittleEndian(*buf.Read<4u>());
 
     // Read `chunk_length` bytes of payload. If that is impossible, read all
     // remaining bytes as the payload.
@@ -273,7 +281,7 @@ bool WavAudioHandler::CopyTo(AudioBus* bus, size_t* frames_written) {
               reinterpret_cast<const int32_t*>(source), frames);
           break;
         default:
-          NOTREACHED()
+          NOTREACHED_IN_MIGRATION()
               << "Unsupported bytes per sample encountered for integer PCM: "
               << bytes_per_frame;
           bus->ZeroFrames(frames);
@@ -290,15 +298,15 @@ bool WavAudioHandler::CopyTo(AudioBus* bus, size_t* frames_written) {
               reinterpret_cast<const double*>(source), frames);
           break;
         default:
-          NOTREACHED()
+          NOTREACHED_IN_MIGRATION()
               << "Unsupported bytes per sample encountered for float PCM: "
               << bytes_per_frame;
           bus->ZeroFrames(frames);
       }
       break;
     default:
-      NOTREACHED() << "Unsupported audio format encountered: "
-                   << static_cast<uint16_t>(audio_format_);
+      NOTREACHED_IN_MIGRATION() << "Unsupported audio format encountered: "
+                                << static_cast<uint16_t>(audio_format_);
       bus->ZeroFrames(frames);
   }
   *frames_written = frames;

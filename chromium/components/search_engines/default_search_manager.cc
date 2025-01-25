@@ -8,11 +8,9 @@
 #include <stdint.h>
 
 #include <memory>
-#include <optional>
 #include <utility>
 
 #include "base/check.h"
-#include "base/check_is_test.h"
 #include "base/compiler_specific.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -22,12 +20,10 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "base/values.h"
 #include "build/chromeos_buildflags.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_value_map.h"
-#include "components/search_engines/choice_made_location.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_data_util.h"
@@ -118,8 +114,6 @@ const char DefaultSearchManager::kIsActive[] = "is_active";
 const char DefaultSearchManager::kStarterPackId[] = "starter_pack_id";
 const char DefaultSearchManager::kEnforcedByPolicy[] = "enforced_by_policy";
 
-const char DefaultSearchManager::kChoiceLocation[] = "choice_location";
-
 // Vivaldi
 const char DefaultSearchManager::kPosition[] = "position";
 
@@ -140,7 +134,8 @@ DefaultSearchManager::DefaultSearchManager(
                            ,
                            bool for_lacros_main_profile
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-      ) {}
+      ) {
+}
 
 DefaultSearchManager::DefaultSearchManager(
     PrefService* pref_service,
@@ -159,7 +154,8 @@ DefaultSearchManager::DefaultSearchManager(
       ,
       for_lacros_main_profile_(for_lacros_main_profile)
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-      , vivaldi_default_pref_(vivaldi_default_pref) {
+      ,
+      vivaldi_default_pref_(vivaldi_default_pref) {
   if (pref_service_) {
     pref_change_registrar_.Init(pref_service_);
     pref_change_registrar_.Add(
@@ -171,7 +167,7 @@ DefaultSearchManager::DefaultSearchManager(
         base::BindRepeating(&DefaultSearchManager::OnOverridesPrefChanged,
                             base::Unretained(this)));
   }
-  LoadPrepopulatedDefaultSearch();
+  LoadPrepopulatedFallbackSearch();
   LoadDefaultSearchEngineFromPrefs();
 }
 
@@ -182,9 +178,6 @@ DefaultSearchManager::~DefaultSearchManager() {
 void DefaultSearchManager::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterDictionaryPref(kDefaultSearchProviderDataPrefName);
-  registry->RegisterIntegerPref(
-      kDefaultSearchProviderChoiceLocationPrefName,
-      static_cast<int>(search_engines::ChoiceMadeLocation::kOther));
 
   // Vivaldi
   registry->RegisterDictionaryPref(kDefaultPrivateSearchProviderDataPrefName);
@@ -276,55 +269,22 @@ DefaultSearchManager::GetDefaultSearchEngineSource() const {
   return source;
 }
 
-search_engines::ChoiceMadeLocation
-DefaultSearchManager::GetChoiceMadeLocationForUserSelectedDefaultSearchEngine()
-    const {
-  if (!pref_service_) {
-    CHECK_IS_TEST();
-    return search_engines::ChoiceMadeLocation::kOther;
-  }
-
-  const base::Value::Dict& template_url_dictionary =
-      pref_service_->GetDict(kDefaultSearchProviderDataPrefName);
-  std::optional<int> choice_made_location =
-      template_url_dictionary.FindInt(kChoiceLocation);
-
-  if (GetDefaultSearchEngineSource() != Source::FROM_USER ||
-      !choice_made_location.has_value()) {
-    return search_engines::ChoiceMadeLocation::kOther;
-  }
-
-  if (choice_made_location.value() < 0 ||
-      choice_made_location.value() >
-          static_cast<int>(search_engines::ChoiceMadeLocation::kMaxValue)) {
-    return search_engines::ChoiceMadeLocation::kOther;
-  }
-  return static_cast<search_engines::ChoiceMadeLocation>(
-      choice_made_location.value());
-}
-
 const TemplateURLData* DefaultSearchManager::GetFallbackSearchEngine() const {
   return g_fallback_search_engines_disabled ? nullptr
                                             : fallback_default_search_.get();
 }
 
 void DefaultSearchManager::SetUserSelectedDefaultSearchEngine(
-    const TemplateURLData& data,
-    search_engines::ChoiceMadeLocation choice_location) {
+    const TemplateURLData& data) {
   if (!pref_service_) {
     prefs_default_search_ = std::make_unique<TemplateURLData>(data);
     MergePrefsDataWithPrepopulated();
     NotifyObserver();
     return;
   }
-  base::Value::Dict template_url_dictionary = TemplateURLDataToDictionary(data);
-  template_url_dictionary.Set(kChoiceLocation,
-                              static_cast<int>(choice_location));
 
   pref_service_->SetDict(vivaldi_default_pref_,
                          TemplateURLDataToDictionary(data));
-  pref_service_->SetInteger(kDefaultSearchProviderChoiceLocationPrefName,
-                            static_cast<int>(choice_location));
 #if BUILDFLAG(IS_ANDROID)
   // Commit the pref immediately so it isn't lost if the app is killed.
   pref_service_->CommitPendingWrite();
@@ -333,9 +293,7 @@ void DefaultSearchManager::SetUserSelectedDefaultSearchEngine(
 
 void DefaultSearchManager::ClearUserSelectedDefaultSearchEngine() {
   if (pref_service_) {
-    pref_service_->ClearPref(kDefaultSearchProviderDataPrefName);
     pref_service_->ClearPref(vivaldi_default_pref_);
-    pref_service_->ClearPref(kDefaultSearchProviderChoiceLocationPrefName);
   } else {
     prefs_default_search_.reset();
     NotifyObserver();
@@ -374,7 +332,7 @@ void DefaultSearchManager::OnDefaultSearchPrefChanged() {
 }
 
 void DefaultSearchManager::OnOverridesPrefChanged() {
-  LoadPrepopulatedDefaultSearch();
+  LoadPrepopulatedFallbackSearch();
 
   const TemplateURLData* effective_data = GetDefaultSearchEngine(nullptr);
   if (effective_data && effective_data->prepopulate_id) {
@@ -398,7 +356,7 @@ void DefaultSearchManager::MergePrefsDataWithPrepopulated() {
 
   std::vector<std::unique_ptr<TemplateURLData>> prepopulated_urls =
       TemplateURLPrepopulateData::GetPrepopulatedEngines(
-          pref_service_, search_engine_choice_service_, nullptr);
+          pref_service_, search_engine_choice_service_);
 
   auto default_engine = base::ranges::find(
       prepopulated_urls, prefs_default_search_->prepopulate_id,
@@ -462,9 +420,9 @@ void DefaultSearchManager::LoadDefaultSearchEngineFromPrefs() {
   }
 }
 
-void DefaultSearchManager::LoadPrepopulatedDefaultSearch() {
+void DefaultSearchManager::LoadPrepopulatedFallbackSearch() {
   std::unique_ptr<TemplateURLData> data =
-      TemplateURLPrepopulateData::GetPrepopulatedDefaultSearch(
+      TemplateURLPrepopulateData::GetPrepopulatedFallbackSearch(
           pref_service_, search_engine_choice_service_, GetPrepopulatedType(vivaldi_default_pref_));
   fallback_default_search_ = std::move(data);
   MergePrefsDataWithPrepopulated();

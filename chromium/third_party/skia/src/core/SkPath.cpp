@@ -15,6 +15,7 @@
 #include "include/private/SkPathRef.h"
 #include "include/private/base/SkFloatingPoint.h"
 #include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkSpan_impl.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTDArray.h"
 #include "include/private/base/SkTo.h"
@@ -325,7 +326,15 @@ bool SkPath::conservativelyContainsRect(const SkRect& rect) const {
                 int nextPt = pointCount;
                 segmentCount++;
 
-                if (SkPathVerb::kConic == verb) {
+                if (prevPt == pts[nextPt]) {
+                    // A pre-condition to getting here is that the path is convex, so if a
+                    // verb's start and end points are the same, it means it's the only
+                    // verb in the contour (and the only contour). While it's possible for
+                    // such a single verb to be a convex curve, we do not have any non-zero
+                    // length edges to conservatively test against without splitting or
+                    // evaluating the curve. For simplicity, just reject the rectangle.
+                    return false;
+                } else if (SkPathVerb::kConic == verb) {
                     SkConic orig;
                     orig.set(pts, *weight);
                     SkPoint quadPts[5];
@@ -3508,7 +3517,7 @@ SkPathVerbAnalysis sk_path_analyze_verbs(const uint8_t vbs[], int verbCount) {
     bool needMove = true;
     bool invalid = false;
 
-    if (verbCount >= (INT_MAX / 3)) {
+    if (verbCount >= (INT_MAX / 3)) SK_UNLIKELY {
         // A path with an extremely high number of quad, conic or cubic verbs could cause
         // `info.points` to overflow. To prevent against this, we reject extremely large paths. This
         // check is conservative and assumes the worst case (in particular, it assumes that every
@@ -3618,9 +3627,9 @@ SkPath SkPath::MakeInternal(const SkPathVerbAnalysis& analysis,
                             SkPathFillType fillType,
                             bool isVolatile) {
   return SkPath(sk_sp<SkPathRef>(new SkPathRef(
-                                     SkPathRef::PointsArray(points, analysis.points),
-                                     SkPathRef::VerbsArray(verbs, verbCount),
-                                     SkPathRef::ConicWeightsArray(conics, analysis.weights),
+                                     SkSpan(points, analysis.points),
+                                     SkSpan(verbs, verbCount),
+                                     SkSpan(conics, analysis.weights),
                                      analysis.segmentMask)),
                 fillType, isVolatile, SkPathConvexity::kUnknown, SkPathFirstDirection::kUnknown);
 }

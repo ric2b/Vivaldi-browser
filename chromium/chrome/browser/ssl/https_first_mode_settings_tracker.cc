@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ssl/https_first_mode_settings_tracker.h"
+
 #include <string_view>
 
 #include "base/feature_list.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
 #include "chrome/browser/ssl/https_upgrades_interceptor.h"
+#include "chrome/browser/ssl/https_upgrades_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -212,33 +214,12 @@ std::string GetSyntheticFieldTrialGroupName(HttpsFirstModeSetting setting) {
     case HttpsFirstModeSetting::kDisabled:
       return kHttpsFirstModeSyntheticFieldTrialDisabledGroup;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
   }
 }
 
 }  // namespace
-
-// static
-void HttpsFirstModeService::FixTypicallySecureUserPrefs(Profile* profile) {
-  if (!base::FeatureList::IsEnabled(
-          features::kHttpsFirstModeV2ForTypicallySecureUsers)) {
-    // HFM-for-typically-secure-users has never been enabled intentionally. If
-    // we see that the preference is enabled, that was by accident. Unset the
-    // relevant preferences to undo the damage.
-    if (profile->GetPrefs()->GetBoolean(prefs::kHttpsOnlyModeAutoEnabled)) {
-      // If HFM had already been enabled, the code wouldn't have toggled
-      // kHttpsOnlyModeAutoEnabled. That means it's safe to disable HFM here --
-      // HFM can only be enabled because we set it that way. We clear the pref
-      // here so it is treated as though the user has not explicitly set it.
-      profile->GetPrefs()->ClearPref(prefs::kHttpsOnlyModeEnabled);
-      // Clear the kHttpsOnlyModeAutoEnabled pref entirely, as some of the
-      // HFM-for-typically-secure users logic relies on checking whether it has
-      // ever been set.
-      profile->GetPrefs()->ClearPref(prefs::kHttpsOnlyModeAutoEnabled);
-    }
-  }
-}
 
 HttpsFirstModeService::HttpsFirstModeService(Profile* profile,
                                              base::Clock* clock)
@@ -485,6 +466,7 @@ void HttpsFirstModeService::MaybeEnableHttpsFirstModeForEngagedSites(
   // If HFM or the auto-enable prefs were previously set, do not modify HFM
   // status.
   if (profile_->GetPrefs()->HasPrefPath(prefs::kHttpsOnlyModeEnabled) ||
+      IsBalanceModeEnabled() ||
       profile_->GetPrefs()->HasPrefPath(prefs::kHttpsOnlyModeAutoEnabled)) {
     if (!done_callback.is_null()) {
       std::move(done_callback).Run();
@@ -641,7 +623,12 @@ HttpsFirstModeServiceFactory::HttpsFirstModeServiceFactory()
           // Don't create a service for non-regular profiles. This includes
           // Incognito (which uses the settings of the main profile) and Guest
           // Mode.
-          ProfileSelections::BuildForRegularProfile()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOriginalOnly)
+              // TODO(crbug.com/41488885): Check if this service is needed for
+              // Ash Internals.
+              .WithAshInternals(ProfileSelection::kOriginalOnly)
+              .Build()) {
   DependsOn(
       safe_browsing::AdvancedProtectionStatusManagerFactory::GetInstance());
 }

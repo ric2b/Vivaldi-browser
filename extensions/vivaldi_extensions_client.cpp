@@ -44,7 +44,7 @@ class VivaldiExtensionsAPIProvider : public ExtensionsAPIProvider {
     return vivaldi::VivaldiGeneratedSchemas::IsGenerated(name);
   }
 
-  base::StringPiece GetAPISchema(const std::string& name) override {
+  std::string_view GetAPISchema(const std::string& name) override {
     return vivaldi::VivaldiGeneratedSchemas::Get(name);
   }
 

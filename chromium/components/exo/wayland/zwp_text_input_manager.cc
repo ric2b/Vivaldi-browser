@@ -4,6 +4,7 @@
 
 #include "components/exo/wayland/zwp_text_input_manager.h"
 
+#include <sys/mman.h>
 #include <text-input-extension-unstable-v1-server-protocol.h>
 #include <text-input-unstable-v1-server-protocol.h>
 #include <wayland-server-core.h>
@@ -24,6 +25,7 @@
 #include "components/exo/wayland/server_util.h"
 #include "components/exo/wayland/wl_seat.h"
 #include "components/exo/xkb_tracker.h"
+#include "net/base/data_url.h"
 #include "ui/base/ime/utf_offset.h"
 #include "ui/base/wayland/wayland_server_input_types.h"
 #include "ui/events/event.h"
@@ -244,7 +246,7 @@ class WaylandTextInputDelegate : public TextInput::Delegate {
       VLOG(0) << "Unable to find keysym for: " << event.ToString();
     }
 
-    bool pressed = (event.type() == ui::ET_KEY_PRESSED);
+    bool pressed = (event.type() == ui::EventType::kKeyPressed);
     zwp_text_input_v1_send_keysym(
         text_input_, TimeTicksToMilliseconds(event.time_stamp()),
         serial_tracker_->GetNextSerial(SerialTracker::EventType::OTHER_EVENT),
@@ -341,18 +343,10 @@ class WaylandTextInputDelegate : public TextInput::Delegate {
       return;
     }
 
-    if (base::FeatureList::IsEnabled(
-            ash::features::kExoSurroundingTextOffset)) {
-      std::vector<size_t> offsets{range.GetMin(), range.GetMax()};
-      base::UTF16ToUTF8AndAdjustOffsets(surrounding_text, &offsets);
-      zcr_extended_text_input_v1_send_set_autocorrect_range(
-          extended_text_input_, offsets[0], offsets[1]);
-    } else {
-      // Fallback to the old implementation for transition.
-      // TODO(crbug.com/40251329): Remove once new way is widely distributed.
-      zcr_extended_text_input_v1_send_set_autocorrect_range(
-          extended_text_input_, range.GetMin(), range.GetMax());
-    }
+    std::vector<size_t> offsets{range.GetMin(), range.GetMax()};
+    base::UTF16ToUTF8AndAdjustOffsets(surrounding_text, &offsets);
+    zcr_extended_text_input_v1_send_set_autocorrect_range(
+        extended_text_input_, offsets[0], offsets[1]);
     wl_client_flush(client());
   }
 
@@ -367,6 +361,44 @@ class WaylandTextInputDelegate : public TextInput::Delegate {
 
   void InsertImage(const GURL& src) override {
     if (!extended_text_input_) {
+      return;
+    }
+
+    // Due to the limit of wayland protocol, we should check the size of
+    // payload here.
+    static constexpr size_t kSizeLimit = 4000;
+    const size_t src_size = src.spec().size();
+    if (src_size > kSizeLimit) {
+      if (wl_resource_get_version(extended_text_input_) <
+          ZCR_EXTENDED_TEXT_INPUT_V1_INSERT_IMAGE_WITH_LARGE_URL_SINCE_VERSION) {
+        LOG(ERROR) << "Inserting image with large URL is not supported";
+        return;
+      }
+
+      std::string mime_type, charset, raw_data;
+      if (!net::DataURL::Parse(src, &mime_type, &charset, &raw_data)) {
+        LOG(ERROR) << "Failed to parse data url";
+        return;
+      }
+
+      base::ScopedFD memfd(memfd_create("inserting_image", MFD_CLOEXEC));
+      if (!memfd.get()) {
+        PLOG(ERROR) << "Failed to create memfd";
+        return;
+      }
+
+      if (!base::WriteFileDescriptor(memfd.get(), raw_data)) {
+        LOG(ERROR) << "Failed to write into memfd";
+        return;
+      }
+      if (lseek(memfd.get(), 0, SEEK_SET) != 0) {
+        LOG(ERROR) << "Failed to reset file descriptor";
+        return;
+      }
+      zcr_extended_text_input_v1_send_insert_image_with_large_url(
+          extended_text_input_, mime_type.c_str(), charset.c_str(), memfd.get(),
+          raw_data.size());
+      wl_client_flush(client());
       return;
     }
 
@@ -539,9 +571,7 @@ void SetSurroundingTextImpl(TextInput* text_input,
   // Original implementation did not convert the range. Guard this by the
   // feature flag to be reverted to old behavior just in case for transition
   // period.
-  // TODO(crbug.com/40251329): Remove the guard once transition is done.
-  if (autocorrect_info.has_value() &&
-      base::FeatureList::IsEnabled(ash::features::kExoSurroundingTextOffset)) {
+  if (autocorrect_info.has_value()) {
     size_t index = grammar_fragment.has_value() ? 4u : 2u;
     autocorrect_info->range = gfx::Range(offsets[index] + offset_utf16,
                                          offsets[index + 1] + offset_utf16);

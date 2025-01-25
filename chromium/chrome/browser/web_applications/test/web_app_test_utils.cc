@@ -4,29 +4,34 @@
 
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
 
+#include <stddef.h>
+
 #include <algorithm>
-#include <cstdint>
+#include <array>
+#include <functional>
+#include <iterator>
+#include <limits>
 #include <optional>
 #include <ostream>
 #include <random>
 #include <set>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/check.h"
 #include "base/check_op.h"
-#include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/containers/flat_tree.h"
 #include "base/containers/span.h"
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/clamped_math.h"
-#include "base/numerics/safe_conversions.h"
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
@@ -37,28 +42,33 @@
 #include "base/test/test_future.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "base/version.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/web_applications/web_app_dialogs.h"
-#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_source.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_integrity_block_data.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_storage_location.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
+#include "chrome/browser/web_applications/proto/web_app.pb.h"
+#include "chrome/browser/web_applications/proto/web_app_isolation_data.pb.h"
 #include "chrome/browser/web_applications/proto/web_app_os_integration_state.pb.h"
 #include "chrome/browser/web_applications/proto/web_app_proto_package.pb.h"
+#include "chrome/browser/web_applications/scope_extension_info.h"
 #include "chrome/browser/web_applications/test/web_app_test_observers.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_chromeos_data.h"
+#include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
+#include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_proto_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/base32/base32.h"
 #include "components/prefs/pref_service.h"
@@ -68,6 +78,8 @@
 #include "components/services/app_service/public/cpp/share_target.h"
 #include "components/services/app_service/public/cpp/url_handler_info.h"
 #include "components/sync/base/time.h"
+#include "components/sync/model/string_ordinal.h"
+#include "components/sync/protocol/web_app_specifics.pb.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
@@ -75,13 +87,17 @@
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "third_party/blink/public/common/safe_url_pattern.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/manifest/capture_links.mojom-shared.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
+#include "third_party/blink/public/mojom/manifest/manifest.mojom-shared.h"
+#include "third_party/blink/public/mojom/manifest/manifest_launch_handler.mojom-shared.h"
 #include "third_party/liburlpattern/pattern.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -89,6 +105,18 @@ namespace {
 
 std::vector<std::string> test_features = {
     "default_on_feature", "default_self_feature", "default_disabled_feature"};
+
+constexpr std::string_view kEd25519PublicKeyBase64 =
+    "3QrKLntnXWmBkrbLLoobC0uh7u0ahMcKQSqsbX4q7MM=";
+constexpr std::string_view kEd25519SignatureHex =
+    "94FBD9E3E0C0A4CD475067F1DC315E9EA30A5010350A9D3A4392CA9E0EBA854315372D7A6B"
+    "48B6C4DDF9A5FAAE4E159D3B80632413DA2850B54A4D5D98EAE906";
+
+constexpr std::string_view kEcdsaP256PublicKeyBase64 =
+    "AxyCBzvQfu1yaF01392k1gu2qCtT1uA2+WfIEhlyJB5S";
+constexpr std::string_view kEcdsaP256SHA256SignatureHex =
+    "3044022007381524F538B04F99CCC62703F06C87F66EF41BDA18A22D8E57952AA23E53A6"
+    "022063C7F81D3A44798CB95823FA38FC23B15E0483744657FF49E1E83AB8C06B63C2";
 
 }  // namespace
 
@@ -125,12 +153,12 @@ class RandomHelper {
 
   int64_t next_proto_time() { return syncer::TimeToProtoTime(next_time()); }
 
-  template <typename T>
+  template <typename T, auto min = T::kMinValue, auto max = T::kMaxValue>
   T next_enum() {
-    constexpr uint32_t min = static_cast<uint32_t>(T::kMinValue);
-    constexpr uint32_t max = static_cast<uint32_t>(T::kMaxValue);
-    static_assert(min <= max, "min cannot be greater than max");
-    return static_cast<T>(min + next_uint(max - min));
+    constexpr uint32_t min_u32 = static_cast<uint32_t>(min);
+    constexpr uint32_t max_u32 = static_cast<uint32_t>(max);
+    static_assert(min_u32 <= max_u32, "min cannot be greater than max");
+    return static_cast<T>(min_u32 + next_uint(max_u32 - min_u32));
   }
 
  private:
@@ -533,6 +561,23 @@ proto::WebAppOsIntegrationState GenerateRandomWebAppOsIntegrationState(
   return state;
 }
 
+std::optional<IsolatedWebAppIntegrityBlockData> CreateIntegrityBlockData(
+    RandomHelper& random) {
+  if (!random.next_bool()) {
+    return std::nullopt;
+  }
+
+  auto signatures = CreateSignatures();
+
+  std::mt19937 rng(random.next_uint());
+  base::ranges::shuffle(signatures, rng);
+
+  size_t signatures_count = random.next_uint(signatures.size()) + 1;
+  signatures.erase(signatures.begin() + signatures_count, signatures.end());
+
+  return IsolatedWebAppIntegrityBlockData(std::move(signatures));
+}
+
 }  // namespace
 
 std::unique_ptr<WebApp> CreateWebApp(const GURL& start_url,
@@ -545,7 +590,13 @@ std::unique_ptr<WebApp> CreateWebApp(const GURL& start_url,
   web_app->AddSource(source_type);
   web_app->SetUserDisplayMode(mojom::UserDisplayMode::kStandalone);
   web_app->SetName("Name");
-  web_app->SetIsLocallyInstalled(true);
+  // Adding OS integration to this app introduces too many edge cases in tests.
+  // Simply set this to partially installed w/ no os integration, and the
+  // correct OS integration state to match that.
+  web_app->SetInstallState(
+      proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION);
+  proto::WebAppOsIntegrationState os_state;
+  web_app->SetCurrentOsIntegrationStates(os_state);
 
   return web_app;
 }
@@ -661,7 +712,10 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
   app->SetDarkModeThemeColor(dark_mode_theme_color);
   app->SetBackgroundColor(background_color);
   app->SetDarkModeBackgroundColor(dark_mode_background_color);
-  app->SetIsLocallyInstalled(random.next_bool());
+  app->SetInstallState(random.next_enum<proto::InstallState,
+                                        /*min=*/proto::InstallState_MIN,
+                                        /*max=*/
+                                        proto::InstallState_MAX>());
   app->SetIsFromSyncAndPendingInstallation(random.next_bool());
 
   const sync_pb::WebAppSpecifics::UserDisplayMode user_display_modes[3] = {
@@ -720,7 +774,6 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
     app->SetLaunchQueryParams(base::NumberToString(random.next_uint()));
 
   app->SetRunOnOsLoginMode(random.next_enum<RunOnOsLoginMode>());
-  app->SetRunOnOsLoginOsIntegrationState(RunOnOsLoginMode::kNotRun);
 
   const SquareSizePx size = 256;
   const int num_icons = random.next_uint(10);
@@ -973,6 +1026,10 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
     });
 
     WebApp::IsolationData isolation_data(get_location_type(), version);
+
+    std::optional<IsolatedWebAppIntegrityBlockData> integrity_block_data =
+        CreateIntegrityBlockData(random);
+    isolation_data.integrity_block_data = integrity_block_data;
     if (random.next_bool()) {
       isolation_data.controlled_frame_partitions.insert("partition_name");
     }
@@ -983,7 +1040,7 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
           random.next_uint(),
       });
       WebApp::IsolationData::PendingUpdateInfo pending_update_info(
-          get_location_type(), pending_version);
+          get_location_type(), pending_version, integrity_block_data);
       isolation_data.SetPendingUpdateInfo(pending_update_info);
     }
     app->SetIsolationData(isolation_data);
@@ -1108,6 +1165,37 @@ void SynchronizeOsIntegration(Profile* profile,
   WebAppProvider::GetForTest(profile)->scheduler().SynchronizeOsIntegration(
       app_id, sync_future.GetCallback(), options);
   EXPECT_TRUE(sync_future.Wait());
+}
+
+std::vector<web_package::SignedWebBundleSignatureInfo> CreateSignatures() {
+  std::vector<web_package::SignedWebBundleSignatureInfo> signatures;
+
+  // EcdsaP256SHA256:
+  {
+    auto public_key = *web_package::EcdsaP256PublicKey::Create(
+        *base::Base64Decode(kEcdsaP256PublicKeyBase64));
+    std::vector<uint8_t> data;
+    CHECK(base::HexStringToBytes(kEcdsaP256SHA256SignatureHex, &data));
+    auto signature = *web_package::EcdsaP256SHA256Signature::Create(data);
+    signatures.push_back(
+        web_package::SignedWebBundleSignatureInfoEcdsaP256SHA256(
+            std::move(public_key), std::move(signature)));
+  }
+
+  // Ed25519:
+  {
+    auto public_key = *web_package::Ed25519PublicKey::Create(
+        *base::Base64Decode(kEd25519PublicKeyBase64));
+    std::vector<uint8_t> data;
+    CHECK(base::HexStringToBytes(kEd25519SignatureHex, &data));
+    auto signature = *web_package::Ed25519Signature::Create(data);
+    signatures.push_back(web_package::SignedWebBundleSignatureInfoEd25519(
+        std::move(public_key), std::move(signature)));
+  }
+
+  // Unknown:
+  signatures.push_back(web_package::SignedWebBundleSignatureInfoUnknown());
+  return signatures;
 }
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)

@@ -86,7 +86,6 @@
 <translation id="2439110203301358333">Ձեր համակարգչի մեկ այլ ծրագիր ավելացրել է ընդլայնում, որը կարող է ազդել Vivaldi-ի աշխատանքի վրա ու փոխել այն։</translation>
 <translation id="2443487764245141020">Կայքերին կարող է նաև անհրաժեշտ լինել Ձեր սարքը ճանաչել իդենտիֆիկատորի միջոցով</translation>
 <translation id="2445081178310039857">Պահանջվում է ընդլայնման արմատային պանակը։</translation>
-<translation id="2470702053775288986">Չաջակցվող ընդլայնումներն անջատվել են</translation>
 <translation id="2485422356828889247">Տեղահանել</translation>
 <translation id="2498539833203011245">Ծալել</translation>
 <translation id="2509495747794740764">Մասշտաբի արժեքը պետք է լինի թիվ 10-ի ու 200-ի միջև։</translation>
@@ -206,7 +205,6 @@
 <translation id="431076611119798497">&amp;Մանրամասներ</translation>
 <translation id="4345587454538109430">Կարգավորել…</translation>
 <translation id="4348766275249686434">Սխալները ժողովել</translation>
-<translation id="4363771538994847871">Հեռարձակման վերջնակետեր չեն գտնվել։ Օգնություն պե՞տք է։</translation>
 <translation id="4384652540891215547">Միացնել ընդլայնումը</translation>
 <translation id="4394049700291259645">Անջատել</translation>
 <translation id="4409697491990005945">Լուսանցքներ</translation>
@@ -390,7 +388,6 @@
 <translation id="7771452384635174008">Դասավորում</translation>
 <translation id="7782102568078991263">Առաջարկներ Google-ից այլևս չկան</translation>
 <translation id="7786889348652477777">Կրկին բե&amp;ռնել հավելվածը</translation>
-<translation id="7791543448312431591">Ավելացնել</translation>
 <translation id="7800518121066352902">Պտտել ժ&amp;ամսլաքին հակառակ</translation>
 <translation id="7814458197256864873">&amp;Պատճենել</translation>
 <translation id="7818135753970109980">Ավելացված է նոր ոճ (<ph name="EXTENSION_NAME" />)</translation>

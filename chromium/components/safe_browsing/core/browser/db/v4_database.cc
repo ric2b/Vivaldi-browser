@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/not_fatal_until.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -117,14 +118,7 @@ void V4Database::CreateOnTaskRunner(
   if (!g_store_factory.Get())
     g_store_factory.Get() = std::make_unique<V4StoreFactory>();
 
-  // TODO(crbug.com/40904161): This is being used temporarily to investigate why
-  // this NOTREACHED is being triggered.
-  base::File::Error error = base::File::FILE_OK;
-  bool success = base::CreateDirectoryAndGetError(base_path, &error);
-  base::UmaHistogramExactLinear(
-      "SafeBrowsing.V4Database.DirectoryCreationResult", -error,
-      -base::File::FILE_ERROR_MAX);
-  if (!success) {
+  if (!base::CreateDirectory(base_path)) {
     return;
   }
 
@@ -140,8 +134,11 @@ void V4Database::CreateOnTaskRunner(
     }
 
     const base::FilePath store_path = base_path.AppendASCII(it.filename());
-    store_map->insert({it.list_id(), g_store_factory.Get()->CreateV4Store(
-                                         db_task_runner, store_path)});
+    V4StorePtr store =
+        g_store_factory.Get()->CreateV4Store(db_task_runner, store_path);
+    base::UmaHistogramBoolean("SafeBrowsing.V4Store.ReadyOnStartup",
+                              store->HasValidData());
+    store_map->insert({it.list_id(), std::move(store)});
   }
 
   if (!g_db_factory.Get())
@@ -231,7 +228,8 @@ void V4Database::ApplyUpdate(
                                       std::move(store_ready_callback)));
       }
     } else {
-      NOTREACHED() << "Got update for unexpected identifier: " << identifier;
+      NOTREACHED_IN_MIGRATION()
+          << "Got update for unexpected identifier: " << identifier;
     }
   }
 
@@ -304,7 +302,7 @@ void V4Database::GetStoresMatchingFullHash(
       continue;
     }
     const auto& store_pair = store_map_->find(identifier);
-    DCHECK(store_pair != store_map_->end());
+    CHECK(store_pair != store_map_->end(), base::NotFatalUntil::M130);
     stores.emplace_back(identifier, store_pair->second.get());
   }
 

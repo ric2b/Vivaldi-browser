@@ -10,7 +10,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -32,7 +31,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
@@ -44,7 +42,6 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
@@ -52,8 +49,6 @@ import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
-import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
@@ -65,13 +60,11 @@ import org.chromium.chrome.browser.tab_ui.TabSwitcherCustomViewManager;
 import org.chromium.chrome.browser.tab_ui.TabThumbnailView;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
-import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab.TitleProvider;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabGridDialogMediator.DialogController;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelperJni;
-import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -94,26 +87,22 @@ public class TabSwitcherPaneCoordinatorUnitTest {
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
-    @Rule public TestRule mProcessor = new Features.JUnitProcessor();
-
     @Rule
     public ActivityScenarioRule<TestActivity> mActivityScenarioRule =
             new ActivityScenarioRule<>(TestActivity.class);
 
-    @Mock private ActivityLifecycleDispatcher mLifecycleDispatcher;
     @Mock private ProfileProvider mProfileProvider;
     @Mock private Profile mProfile;
     @Mock private TabGroupModelFilter mTabModelFilter;
     @Mock private TabContentManager mTabContentManager;
     @Mock private TabCreatorManager mTabCreatorManager;
-    @Mock private TitleProvider mTitleProvider;
     @Mock private BrowserControlsStateProvider mBrowserControlsStateProvider;
-    @Mock private MultiWindowModeStateDispatcher mMultiWindowModeStateDispatcher;
     @Mock private ScrimCoordinator mScrimCoordinator;
-    @Mock private SnackbarManager mSnackbarManager;
     @Mock private ModalDialogManager mModalDialogManager;
+    @Mock private TabSwitcherMessageManager mMessageManager;
     @Mock private TabSwitcherResetHandler mResetHandler;
     @Mock private Callback<Integer> mOnTabClickedCallback;
+    @Mock private Callback<Boolean> mHairlineVisibilityCallback;
     @Mock private FaviconHelper.Natives mFaviconHelperJniMock;
     @Mock private Tracker mTracker;
     @Mock private BottomSheetController mBottomSheetController;
@@ -133,6 +122,7 @@ public class TabSwitcherPaneCoordinatorUnitTest {
     private FrameLayout mContainerView;
     private FrameLayout mCoordinatorView;
     private TabSwitcherPaneCoordinator mCoordinator;
+    private boolean mDestroyed;
 
     @Before
     public void setUp() {
@@ -143,6 +133,7 @@ public class TabSwitcherPaneCoordinatorUnitTest {
 
         when(mProfile.isOffTheRecord()).thenReturn(false);
         when(mProfileProvider.getOriginalProfile()).thenReturn(mProfile);
+        when(mProfile.getOriginalProfile()).thenReturn(mProfile);
 
         PriceTrackingFeatures.setPriceTrackingEnabledForTesting(true);
         PriceTrackingFeatures.setIsSignedInAndSyncEnabledForTesting(true);
@@ -172,34 +163,39 @@ public class TabSwitcherPaneCoordinatorUnitTest {
         HistogramWatcher watcher =
                 HistogramWatcher.newSingleRecordWatcher(
                         "Android.TabSwitcher.SetupRecyclerView.Time");
+        mDestroyed = false;
         mCoordinator =
                 new TabSwitcherPaneCoordinator(
                         activity,
-                        mLifecycleDispatcher,
                         mProfileProviderSupplier,
                         mTabModelFilterSupplier,
-                        () -> mTabModel,
                         mTabContentManager,
                         mTabCreatorManager,
-                        mTitleProvider,
                         mBrowserControlsStateProvider,
-                        mMultiWindowModeStateDispatcher,
                         mScrimCoordinator,
-                        mSnackbarManager,
                         mModalDialogManager,
                         mBottomSheetController,
+                        mMessageManager,
                         mContainerView,
                         mResetHandler,
                         mIsVisibleSupplier,
                         mIsAnimatingSupplier,
                         mOnTabClickedCallback,
+                        mHairlineVisibilityCallback,
                         TabListMode.GRID,
-                        /* supportsEmptyState= */ true);
+                        /* supportsEmptyState= */ true,
+                        /* onTabGroupCreation= */ null,
+                        () -> {
+                            mDestroyed = true;
+                        });
         watcher.assertExpected();
 
         mCoordinator.initWithNative();
 
         mIsVisibleSupplier.set(true);
+
+        verify(mMessageManager).registerMessages(any());
+        verify(mMessageManager).bind(any(), any(), any(), any());
     }
 
     DialogController showTabGridDialogWithTabs() {
@@ -223,6 +219,7 @@ public class TabSwitcherPaneCoordinatorUnitTest {
     @After
     public void tearDown() {
         mCoordinator.destroy();
+        assertTrue(mDestroyed);
     }
 
     @Test
@@ -335,11 +332,10 @@ public class TabSwitcherPaneCoordinatorUnitTest {
         Bitmap bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
         doCallback(2, (Callback<Bitmap> callback) -> callback.onResult(bitmap))
                 .when(mTabContentManager)
-                .getTabThumbnailWithCallback(eq(tabId), any(), any(), anyBoolean(), anyBoolean());
+                .getTabThumbnailWithCallback(eq(tabId), any(), any());
         mCoordinator.resetWithTabList(mTabModelFilter);
 
-        TabListRecyclerView recyclerView =
-                (TabListRecyclerView) mActivity.findViewById(R.id.tab_list_recycler_view);
+        TabListRecyclerView recyclerView = mActivity.findViewById(R.id.tab_list_recycler_view);
         // Manually size the view so that the children get added this is to work around robolectric
         // view testing limitations.
         recyclerView.measure(0, 0);
@@ -350,15 +346,15 @@ public class TabSwitcherPaneCoordinatorUnitTest {
         // This gets called three times
         // 1) Once when the fetcher is set.
         // 2) Twice due to thumbnail size changes on initial and repeat layout.
-        verify(mTabContentManager, times(3))
-                .getTabThumbnailWithCallback(eq(tabId), any(), any(), anyBoolean(), anyBoolean());
+        verify(mTabContentManager, times(3)).getTabThumbnailWithCallback(eq(tabId), any(), any());
 
-        TabThumbnailView thumbnailView =
-                (TabThumbnailView) mActivity.findViewById(R.id.tab_thumbnail);
+        TabThumbnailView thumbnailView = mActivity.findViewById(R.id.tab_thumbnail);
         assertNotNull(thumbnailView);
         assertFalse(thumbnailView.isPlaceholder());
 
         mIsVisibleSupplier.set(false);
+
+        verify(mMessageManager, times(2)).unbind(any());
 
         mCoordinator.softCleanup();
         assertTrue(thumbnailView.isPlaceholder());

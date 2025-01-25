@@ -129,7 +129,7 @@ HttpStreamFactory::~HttpStreamFactory() = default;
 
 void HttpStreamFactory::ProcessAlternativeServices(
     HttpNetworkSession* session,
-    const net::NetworkAnonymizationKey& network_anonymization_key,
+    const NetworkAnonymizationKey& network_anonymization_key,
     const HttpResponseHeaders* headers,
     const url::SchemeHostPort& http_server) {
   if (!headers->HasHeader(kAlternativeServiceHeader))
@@ -280,7 +280,7 @@ void HttpStreamFactory::OnJobControllerComplete(JobController* controller) {
   if (it != job_controller_set_.end()) {
     job_controller_set_.erase(it);
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 

@@ -82,7 +82,7 @@ LayoutObject* ListMarker::ListItem(const LayoutObject& marker) const {
   DCHECK_EQ(Get(&marker), this);
   LayoutObject* list_item = marker.GetNode()->parentNode()->GetLayoutObject();
   DCHECK(list_item);
-  DCHECK(list_item->IsListItemIncludingNG());
+  DCHECK(list_item->IsListItem());
   return list_item;
 }
 
@@ -93,7 +93,7 @@ int ListMarker::ListItemValue(const LayoutObject& list_item) const {
   if (auto* inline_list_item = DynamicTo<LayoutInlineListItem>(list_item)) {
     return inline_list_item->Value();
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0;
 }
 
@@ -211,7 +211,7 @@ ListMarker::MarkerTextType ListMarker::MarkerText(
       return kOrdinalValue;
     }
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return kStatic;
 }
 
@@ -446,10 +446,11 @@ PhysicalRect ListMarker::RelativeSymbolMarkerRect(
                                 LayoutUnit(3 * (ascent - ascent * 2 / 3) / 2),
                                 bullet_width, bullet_width);
   }
-  // TextDirection and the outer height don't matter here.
+  // TextDirection doesn't matter here.  Passing
+  // `relative_rect.size.inline_size` to get a correct result in sideways-lr.
   WritingModeConverter converter(
       {ToLineWritingMode(style.GetWritingMode()), TextDirection::kLtr},
-      PhysicalSize(width, LayoutUnit()));
+      PhysicalSize(width, relative_rect.size.inline_size));
   return converter.ToPhysical(relative_rect);
 }
 

@@ -179,7 +179,7 @@ using base::UserMetricsAction;
      break;
 
     default:
-      NOTREACHED() << "Unexpected identifier";
+      NOTREACHED_IN_MIGRATION() << "Unexpected identifier";
       break;
   }
 

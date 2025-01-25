@@ -147,15 +147,26 @@ int QuarantineTabs(content::BrowserContext* browser_context,
                    base::FilePath name, bool value, std::vector<int32_t> ids);
 // Returns quarantine state.
 bool IsTabQuarantined(const SessionTab* tab);
-// Saves title. tab_id must refer to a tab that is part of a tab stack.
+// Saves title. tab_id must refer to tabs that are regular tabs.
+int SetTabTitle(content::BrowserContext* browser_context,
+                base::FilePath path, int32_t tab_id, std::string title);
+// Saves title. tab_ids must refer to tabs that are part of a tab stack.
 int SetTabStackTitle(content::BrowserContext* browser_context,
-                     base::FilePath name, int32_t tab_id, std::string title);
+                     base::FilePath path,
+                     std::vector<int32_t> tab_ids,
+                     std::string title);
 // Returns tab stack id of a tab. String is empty if no stack id is set.
 std::string GetTabStackId(const SessionTab* tab);
-// Returns all tabstacks of a window (id and opitonally title).
-// ext data must be fecthed from the window object (not tab).
+// Returns all tabstacks of a window (id and optionally title).
+// ext data must be fetched from the window object (not tab). By VB-23686 this
+// data is not written to the window segment anymore.
 std::unique_ptr<base::Value::Dict> GetTabStackTitles(
   const SessionWindow* window);
+// Looks up tab and stack titles of a tab and, if set, assigns to 'title'
+// and 'groupTitle'. These are titles added by user, not the title of the active
+// page.
+bool GetFixedTabTitles(const sessions::SessionTab* tab,
+                       std::string& title, std::string& groupTitle);
 
 void GetContent(base::FilePath name, SessionContent& content);
 // Dump cpntent of a tab

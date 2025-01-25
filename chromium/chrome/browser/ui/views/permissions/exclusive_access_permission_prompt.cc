@@ -5,9 +5,11 @@
 #include "chrome/browser/ui/views/permissions/exclusive_access_permission_prompt.h"
 
 #include "base/memory/raw_ptr.h"
+#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/permissions/embedded_permission_prompt_content_scrim_view.h"
 #include "chrome/browser/ui/views/permissions/exclusive_access_permission_prompt_view.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/compositor/layer.h"
 
 ExclusiveAccessPermissionPrompt::ExclusiveAccessPermissionPrompt(
     Browser* browser,
@@ -16,6 +18,13 @@ ExclusiveAccessPermissionPrompt::ExclusiveAccessPermissionPrompt(
     : PermissionPromptDesktop(browser, web_contents, delegate),
       delegate_(delegate) {
   ShowPrompt();
+
+  LocationBarView* lbv = GetLocationBarView();
+
+  // Before showing a chip make sure the LocationBar is in a valid state. That
+  // fixes a bug when a chip overlays the padlock icon.
+  lbv->InvalidateLayout();
+  lbv->GetChipController()->ShowPermissionChip(delegate->GetWeakPtr());
 }
 
 ExclusiveAccessPermissionPrompt::~ExclusiveAccessPermissionPrompt() {
@@ -50,7 +59,9 @@ void ExclusiveAccessPermissionPrompt::ShowPrompt() {
   content_scrim_widget_ =
       EmbeddedPermissionPromptContentScrimView::CreateScrimWidget(
           weak_factory_.GetWeakPtr(),
-          SkColorSetA(SK_ColorBLACK, SK_AlphaOPAQUE * 0.9f));
+          web_contents()->GetColorProvider().GetColor(ui::kColorSysStateScrim));
+  content_scrim_widget_->GetContentsView()->SetPaintToLayer(ui::LAYER_TEXTURED);
+  content_scrim_widget_->GetContentsView()->layer()->SetBackgroundBlur(4.0f);
   prompt_view->UpdateAnchor(content_scrim_widget_.get());
   prompt_view->Show();
 }

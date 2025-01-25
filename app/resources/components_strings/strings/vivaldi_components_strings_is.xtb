@@ -16,7 +16,6 @@
 <translation id="1728677426644403582">Þú ert að skoða frumgögn síðu</translation>
 <translation id="1734878702283171397">Reyndu að hafa samband við kerfisstjóra.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Reyndu að keyra Windows villugreiningu á neti<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">Þessi síða inniheldur hættuleg forrit</translation>
 <translation id="1974060860693918893">Nánar</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Athuga proxy og eldvegginn<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Útgefið af: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -42,7 +41,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Keyri villugreiningu á nettenginu<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Tengingin var endurstillt.</translation>
 <translation id="2826760142808435982">Tengingin er dulrituð og auðkennd með <ph name="CIPHER" /> og notar <ph name="KX" /> sem aðferð til að flytja lykil á milli.</translation>
-<translation id="2856444702002559011">Tölvuþrjótar gætu verið að reyna að stela upplýsingum þínum frá <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (til dæmis lykilorðum, skilaboðum eða kortaupplýsingum). <ph name="BEGIN_LEARN_MORE_LINK" />Frekari upplýsingar<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Netstillingar hafa breyst.</translation>
 <translation id="2948083400971632585">Þú getur aftengt öll vefsel sem sett hafa verið upp til tengingar á stillingarsíðunni.</translation>
 <translation id="2991571918955627853">Þú getur ekki heimsótt <ph name="SITE" /> núna þar sem að vefsíðan notar HSTS. Tengi vandamál og netárásir eru yfirleitt tímabundnar þannnig að síðan mun líklega virka aftur síðar.</translation>
@@ -69,6 +67,7 @@
 <translation id="3566021033012934673">Tengingin þín er aðgengileg af öðrum</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Fela frekari upplýsingar</translation>
+<translation id="3614001939154393113">Tölvuþrjótar gætu verið að stela upplýsingum þínum frá <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (t.d. aðgangsorðum, skilaboðum eða kreditkortaupplýsingum). <ph name="BEGIN_LEARN_MORE_LINK" />Nánar um þessa viðvörun<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3630155396527302611">Ef þetta er nú þegar listað sem forrit sem hefur aðgang að netinu reyndu þá
       að fjarlægja það úr listanum og bæta því við aftur.</translation>
 <translation id="3658742229777143148">Útgáfa</translation>
@@ -92,7 +91,6 @@
 <translation id="4265872034478892965">Leyfi gefið af kerfisstjóra</translation>
 <translation id="4305666528087210886">Ekki var hægt að opna skrána þína</translation>
 <translation id="4312866146174492540">Hamla (sjálfvalið)</translation>
-<translation id="4356973930735388585">Tölvuþrjótar á þessari síðu gætu reynt að fá þig til þess að setja upp hættulegt forrit á tölvunni þinni sem stelur eða eyðir upplýsingunum þínum (til dæmis ljósmyndum, lykilorðum, skilaboðum eða kreditkortum).</translation>
 <translation id="4408413947728134509">Vafrakökur <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> ekki tókst að sannreyna innskráningarskilríkin þín, eða skilríkin vantar.</translation>
 <translation id="4506599922270137252">Hafðu samband við kerfisstóra</translation>
@@ -144,7 +142,6 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="6305205051461490394">Það næst ekki í <ph name="URL" />.</translation>
 <translation id="6321917430147971392">Athugaðu DNS stillingarnar þínar</translation>
 <translation id="6328639280570009161">Reyndu að slökkva á spám á tengingum</translation>
-<translation id="6328786501058569169">Þessi síða er villandi</translation>
 <translation id="6348220984832452017">Virk afbrigði</translation>
 <translation id="6358450015545214790">Hvað þýðir þetta?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> hafnaði tengingu.</translation>
@@ -158,7 +155,6 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="6897140037006041989">Kennistrengur</translation>
 <translation id="6957624206566198865">Opna síðu í nýjum einkaflipa</translation>
 <translation id="7053983685419859001">Hamla</translation>
-<translation id="7079718277001814089">Þessi síða inniheldur spilliforrit</translation>
 <translation id="7096937462164235847">Auðkenni þessa vefsvæðis er óstaðfest.</translation>
 <translation id="7108819624672055576">Leyfi fengið gegnum viðbót</translation>
 <translation id="7111012039238467737">(Gilt)</translation>
@@ -166,6 +162,7 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> fylgir ekki öryggisstöðlum.</translation>
 <translation id="7219179957768738017">Tengingin notar <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Sýna tilkynningar</translation>
+<translation id="7227747683324411744">Tölvuþrjótar á vefsvæðinu sem þú ert að reyna að opna gætu reynt að plata þig til að setja upp skaðlegan hugbúnað sem hefur áhrif á það hvernig þú vafrar. Til dæmis með því að breyta heimasíðunni þinni eða birta þér viðbótarauglýsingar á vefsvæðum sem þú opnar.</translation>
 <translation id="7353601530677266744">Skipanalína</translation>
 <translation id="7364115444476960850">Síðan sem þú reyndir að komast inná er varin af <ph name="BLOCKER_NAME" /> frá Vivaldi</translation>
 <translation id="7419106976560586862">Slóð að notendaaðgangi</translation>
@@ -173,9 +170,9 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="7518003948725431193">Engin vefsíða var fundin fyrir veffangið: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Þessi síða þarfnast gagna sem þú hefur áður skráð inn til þess að birtast rétt. Þú getur sent þessi gögn aftur en með því að gera það munt þú endurtaka allar skiparnir sem þessi síða hefur þegar framkvæmt.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> er, í augnablikinu, ófær um að bregðast við fyrirspurninni.</translation>
+<translation id="7605377493722372900">Tölvuþrjótar á vefsvæðinu sem þú ert að reyna að opna gætu sett upp skaðlegan hugbúnað sem stelur eða eyðir atriðum á borð við aðgangsorð, myndir, skilaboð eða kreditkortanúmer.</translation>
 <translation id="7662298039739062396">Stillingu stýrt af viðbót</translation>
 <translation id="7663736086183791259">Vottorð <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Tölvuþrjótar á þessari síðu gætu reynt að plata þig til þess að setja upp forrit sem gæti skaðað notendaupplifun þína (til dæmis breytt heimasíðunni þinni eða sýnt auka auglýsingar á síðum sem þú heimsækir).</translation>
 <translation id="7714464543167945231">Vottorð</translation>
 <translation id="7716147886133743102">Hamlað af kerfisstjóra</translation>
 <translation id="7716424297397655342">Þessari síðu getur ekki verið hlaðið upp úr skyndimynni</translation>
@@ -185,7 +182,6 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="7878562273885520351">Lykilorðinu þínu gæti hafa verið lekið</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="7953236668995583915">Endurnýjaðu þessa síðu til að nota uppfærðar stillingar á þessu vefsvæði</translation>
-<translation id="8025119109950072390">Tölvuþrjótar á þessari síðu gætu platað þig í að gera eitthvað hættulegt eins og að setja upp forrit eða gefa upp persónulegar upplýsingar (til dæmis lykilorð, símanúmer eða kortanúmer).</translation>
 <translation id="8037357227543935929">Spyrja (sjálfgefið)</translation>
 <translation id="8041940743680923270">Nota algilda sjálfgefna stillingu (Spyrja)</translation>
 <translation id="808894953321890993">Breyta lykilorði</translation>
@@ -200,6 +196,7 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="8288807391153049143">Sýna vottorð</translation>
 <translation id="8289355894181816810">Hafðu samband við kerfistjóra ef þú ert ekki viss um hvað þetta þýðir.</translation>
 <translation id="8332188693563227489">Þú hefur ekki aðgang að <ph name="HOST_NAME" /></translation>
+<translation id="8422228580902424274">Tölvuþrjótar á vefsvæðinu sem þú ert að reyna að opna gætu reynt að plata þig til að setja upp hugbúnað eða afhjúpað atriði á borð við aðgangsorðið þitt, símanúmerið eða kreditkortanúmerið.</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> svar tók of langan tíma.</translation>
 <translation id="8503813439785031346">Notendanafn</translation>
 <translation id="8703575177326907206">Tenging þín við <ph name="DOMAIN" /> er ekki dulrituð.</translation>

@@ -71,6 +71,8 @@ const char kKernelFeatureEnable[] = "KernelFeatureEnable";
 // PacketCaptureStart method isn't defined as it's not needed by any component.
 const char kPacketCaptureStop[] = "PacketCaptureStop";
 const char kDRMTraceAnnotateLog[] = "DRMTraceAnnotateLog";
+const char kBluetoothStartBtsnoop[] = "BluetoothStartBtsnoop";
+const char kBluetoothStopBtsnoop[] = "BluetoothStopBtsnoop";
 
 // Signals.
 const char kPacketCaptureStartSignal[] = "PacketCaptureStart";
@@ -165,6 +167,7 @@ enum FeedbackLogType {
 // categories of binary data that can be added to feedback reports.
 enum FeedbackBinaryLogType {
   WIFI_FIRMWARE_DUMP = 0,
+  BLUETOOTH_FIRMWARE_DUMP = 1,
 };
 
 // PrintscanDebugCategories flags. These values must align with those in
@@ -197,10 +200,11 @@ namespace u2f_flags {
 constexpr char kU2f[] = "u2f";
 constexpr char kG2f[] = "g2f";
 constexpr char kVerbose[] = "verbose";
-constexpr char kUserKeys[] = "user_keys";
 constexpr char kAllowlistData[] = "allowlist_data";
 constexpr char kDisableCorpProtocol[] = "disable_corp_protocol";
 constexpr char kActivateFips[] = "activate_fips";
+constexpr char kEnableGlobalKey[] = "enable_global_key";
+constexpr char kUserKeys[] = "user_keys";
 }  // namespace u2f_flags
 
 }  // namespace debugd

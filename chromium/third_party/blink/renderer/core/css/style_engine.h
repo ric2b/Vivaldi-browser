@@ -57,7 +57,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/layout/geometry/axis.h"
-#include "third_party/blink/renderer/core/style/position_try_options.h"
+#include "third_party/blink/renderer/core/style/position_try_fallbacks.h"
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
 #include "third_party/blink/renderer/platform/fonts/font_selector_client.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
@@ -572,12 +572,18 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void MarkCounterStylesNeedUpdate();
   void UpdateCounterStyles();
 
-  // Set a flag to invalidate elements using position-try-options on next
+  // Set a flag to invalidate elements using position-try-fallbacks on next
   // lifecycle update when @position-try rules are added or removed.
-  void MarkPositionTryStylesDirty();
+  void MarkPositionTryStylesDirty(
+      const HeapHashSet<Member<RuleSet>>& changed_rule_sets);
 
   // Mark elements affected by @position-try rules for style and layout update.
   void InvalidatePositionTryStyles();
+
+  void MarkLastSuccessfulPositionFallbackDirtyForElement(Element& element) {
+    CHECK(RuntimeEnabledFeatures::LastSuccessfulPositionOptionEnabled());
+    last_successful_option_dirty_set_.insert(&element);
+  }
 
   StyleRuleKeyframes* KeyframeStylesForAnimation(
       const AtomicString& animation_name);
@@ -598,7 +604,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   DocumentStyleEnvironmentVariables& EnsureEnvironmentVariables();
 
-  scoped_refptr<StyleInitialData> MaybeCreateAndGetInitialData();
+  StyleInitialData* MaybeCreateAndGetInitialData();
 
   bool NeedsStyleInvalidation() const {
     return style_invalidation_root_.GetRootNode();
@@ -642,6 +648,13 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   }
   bool InPositionTryStyleRecalc() const {
     return in_position_try_style_recalc_;
+  }
+  void SetInScrollMarkersAttachment(bool in_scroll_markers_attachment) {
+    DCHECK(!in_scroll_markers_attachment_ || !in_scroll_markers_attachment);
+    in_scroll_markers_attachment_ = in_scroll_markers_attachment;
+  }
+  bool InScrollMarkersAttachment() const {
+    return in_scroll_markers_attachment_;
   }
   // Get the root element of an interleaving recalc, if any. This function will
   // return nullptr if the interleaving root is a PseudoElement, because such
@@ -718,6 +731,9 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                                  GetDocument().GetLayoutView()));
     return viewport_size_;
   }
+
+  // Returns true if marked dirty for layout
+  bool UpdateLastSuccessfulPositionFallbacks();
 
  private:
   void UpdateCounters(const Element& element,
@@ -958,6 +974,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   bool in_layout_tree_rebuild_{false};
   bool in_container_query_style_recalc_{false};
   bool in_position_try_style_recalc_{false};
+  bool in_scroll_markers_attachment_{false};
   bool in_dom_removal_{false};
   bool in_detach_scope_{false};
   bool in_apply_animation_update_{false};
@@ -1026,9 +1043,9 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   Member<CascadeLayerMap> user_cascade_layer_map_;
 
-  scoped_refptr<DocumentStyleEnvironmentVariables> environment_variables_;
+  Member<DocumentStyleEnvironmentVariables> environment_variables_;
 
-  scoped_refptr<StyleInitialData> initial_data_;
+  Member<StyleInitialData> initial_data_;
 
   // Page color schemes set by the viewport meta tag. E.g.
   // <meta name="color-scheme" content="light dark">.
@@ -1092,7 +1109,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // A cache for CSSURIValue objects for SVG element presentation attributes for
   // fill and clip path. See SVGElement::CollectStyleForPresentationAttribute()
   // for more info.
-  HeapHashMap<AtomicString, Member<const CSSValue>>
+  HeapHashMap<AtomicString, WeakMember<const CSSValue>>
       fill_or_clip_path_uri_value_cache_;
 
   // Cached because it can be expensive to compute anew for each element.
@@ -1102,6 +1119,17 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // Stores various "flip sets" used to implement <try-tactic> from
   // CSS Anchor Positioning.
   TryValueFlips try_value_flips_;
+
+  // Elements which had their computed position-try-fallbacks changed since last
+  // time resize observers were considered. May need to have their last
+  // successful option invalidated.
+  HeapHashSet<Member<Element>> last_successful_option_dirty_set_;
+
+  // Names of @position-try rules which were added, removed, or modified since
+  // last time resize observers were considered. Anchored elements with a last
+  // successful option with position-try-fallbacks referring any of these names
+  // will be invalidated.
+  HashSet<AtomicString> dirty_position_try_names_;
 };
 
 void PossiblyScheduleNthPseudoInvalidations(Node& node);

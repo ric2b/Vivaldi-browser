@@ -41,6 +41,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event_modifiers.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/views/interaction/widget_focus_observer.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
@@ -129,34 +130,34 @@ class FeaturePromoLifecycleUiTest : public TestBase {
 
   auto CheckSnoozePrefs(bool is_dismissed, int show_count, int snooze_count) {
     return std::move(
-        CheckBrowser(base::BindLambdaForTesting([this, is_dismissed, show_count,
-                                                 snooze_count](
-                                                    Browser* browser) {
-          auto data = GetStorageService(browser)->ReadPromoData(
-              kFeaturePromoLifecycleTestPromo);
+        CheckBrowser(
+            base::BindLambdaForTesting([this, is_dismissed, show_count,
+                                        snooze_count](Browser* browser) {
+              auto data = GetStorageService(browser)->ReadPromoData(
+                  kFeaturePromoLifecycleTestPromo);
 
-          if (!data.has_value()) {
-            return false;
-          }
+              if (!data.has_value()) {
+                return false;
+              }
 
-          EXPECT_EQ(data->is_dismissed, is_dismissed);
-          EXPECT_EQ(data->show_count, show_count);
-          EXPECT_EQ(data->snooze_count, snooze_count);
+              EXPECT_EQ(data->is_dismissed, is_dismissed);
+              EXPECT_EQ(data->show_count, show_count);
+              EXPECT_EQ(data->snooze_count, snooze_count);
 
-          // last_show_time is only meaningful if a show has occurred.
-          if (data->show_count > 0) {
-            EXPECT_GE(data->last_show_time, last_show_time_.first);
-            EXPECT_LE(data->last_show_time, last_show_time_.second);
-          }
+              // last_show_time is only meaningful if a show has occurred.
+              if (data->show_count > 0) {
+                EXPECT_GE(data->last_show_time, last_show_time_.first);
+                EXPECT_LE(data->last_show_time, last_show_time_.second);
+              }
 
-          // last_snooze_time is only meaningful if a snooze has occurred.
-          if (data->snooze_count > 0) {
-            EXPECT_GE(data->last_snooze_time, last_snooze_time_.first);
-            EXPECT_LE(data->last_snooze_time, last_snooze_time_.second);
-          }
+              // last_snooze_time is only meaningful if a snooze has occurred.
+              if (data->snooze_count > 0) {
+                EXPECT_GE(data->last_snooze_time, last_snooze_time_.first);
+                EXPECT_LE(data->last_snooze_time, last_snooze_time_.second);
+              }
 
-          return !testing::Test::HasNonfatalFailure();
-        }))
+              return !testing::Test::HasNonfatalFailure();
+            }))
             .SetDescription(base::StringPrintf("CheckSnoozePrefs(%s, %d, %d)",
                                                is_dismissed ? "true" : "false",
                                                show_count, snooze_count)));
@@ -438,8 +439,21 @@ IN_PROC_BROWSER_TEST_F(FeaturePromoLifecycleUiTest,
 IN_PROC_BROWSER_TEST_F(FeaturePromoLifecycleUiTest,
                        PressingEscRecordsHistogram) {
   const ui::Accelerator kEsc(ui::VKEY_ESCAPE, ui::MODIFIER_NONE);
+  views::Widget* bubble_widget = nullptr;
   RunTestSequence(
+      ObserveState(views::test::kCurrentWidgetFocus),
       ShowPromoRecordingTime(kFeaturePromoLifecycleTestPromo),
+      // Ensure that the bubble is active before trying to send an accelerator;
+      // widgets cannot accept accelerators before they become active.
+      // TODO(dfried): need to create a common WaitForActivation() verb.
+      WithView(user_education::HelpBubbleView::kHelpBubbleElementIdForTesting,
+               [&bubble_widget](views::View* view) {
+                 bubble_widget = view->GetWidget();
+               }),
+      If([&bubble_widget]() { return !bubble_widget->IsActive(); },
+         WaitForState(
+             views::test::kCurrentWidgetFocus,
+             [&bubble_widget]() { return bubble_widget->GetNativeView(); })),
       SendAccelerator(
           user_education::HelpBubbleView::kHelpBubbleElementIdForTesting, kEsc),
       WaitForHide(

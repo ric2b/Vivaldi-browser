@@ -29,6 +29,7 @@
 
 #include "avfilter.h"
 #include "formats.h"
+#include "framesync.h"
 #include "internal.h"
 #include "scale_eval.h"
 #include "video.h"
@@ -58,6 +59,17 @@ static const char *const var_names[] = {
 #if FF_API_FRAME_PKT
     "pos",
 #endif
+    "ref_w", "rw",
+    "ref_h", "rh",
+    "ref_a",
+    "ref_sar",
+    "ref_dar", "rdar",
+    "ref_hsub",
+    "ref_vsub",
+    "ref_n",
+    "ref_t",
+    "ref_pos",
+    /* Legacy variables for scale2ref */
     "main_w",
     "main_h",
     "main_a",
@@ -88,6 +100,16 @@ enum var_name {
 #if FF_API_FRAME_PKT
     VAR_POS,
 #endif
+    VAR_REF_W, VAR_RW,
+    VAR_REF_H, VAR_RH,
+    VAR_REF_A,
+    VAR_REF_SAR,
+    VAR_REF_DAR, VAR_RDAR,
+    VAR_REF_HSUB,
+    VAR_REF_VSUB,
+    VAR_REF_N,
+    VAR_REF_T,
+    VAR_REF_POS,
     VAR_S2R_MAIN_W,
     VAR_S2R_MAIN_H,
     VAR_S2R_MAIN_A,
@@ -113,6 +135,7 @@ typedef struct ScaleContext {
     struct SwsContext *isws[2]; ///< software scaler context for interlaced material
     // context used for forwarding options to sws
     struct SwsContext *sws_opts;
+    FFFrameSync fs;
 
     /**
      * New dimensions. Special values are:
@@ -129,6 +152,7 @@ typedef struct ScaleContext {
     int input_is_pal;           ///< set to 1 if the input format is paletted
     int output_is_pal;          ///< set to 1 if the output format is paletted
     int interlaced;
+    int uses_ref;
 
     char *w_expr;               ///< width  expression string
     char *h_expr;               ///< height expression string
@@ -186,6 +210,38 @@ static int check_exprs(AVFilterContext *ctx)
     if ((vars_w[VAR_OUT_H] || vars_w[VAR_OH]) &&
         (vars_h[VAR_OUT_W] || vars_h[VAR_OW])) {
         av_log(ctx, AV_LOG_WARNING, "Circular references detected for width '%s' and height '%s' - possibly invalid.\n", scale->w_expr, scale->h_expr);
+    }
+
+    if (vars_w[VAR_REF_W]    || vars_h[VAR_REF_W]    ||
+        vars_w[VAR_RW]       || vars_h[VAR_RW]       ||
+        vars_w[VAR_REF_H]    || vars_h[VAR_REF_H]    ||
+        vars_w[VAR_RH]       || vars_h[VAR_RH]       ||
+        vars_w[VAR_REF_A]    || vars_h[VAR_REF_A]    ||
+        vars_w[VAR_REF_SAR]  || vars_h[VAR_REF_SAR]  ||
+        vars_w[VAR_REF_DAR]  || vars_h[VAR_REF_DAR]  ||
+        vars_w[VAR_RDAR]     || vars_h[VAR_RDAR]     ||
+        vars_w[VAR_REF_HSUB] || vars_h[VAR_REF_HSUB] ||
+        vars_w[VAR_REF_VSUB] || vars_h[VAR_REF_VSUB] ||
+        vars_w[VAR_REF_N]    || vars_h[VAR_REF_N]    ||
+        vars_w[VAR_REF_T]    || vars_h[VAR_REF_T]    ||
+        vars_w[VAR_REF_POS]  || vars_h[VAR_REF_POS]) {
+        scale->uses_ref = 1;
+    }
+
+    if (ctx->filter != &ff_vf_scale2ref &&
+        (vars_w[VAR_S2R_MAIN_W]    || vars_h[VAR_S2R_MAIN_W]    ||
+         vars_w[VAR_S2R_MAIN_H]    || vars_h[VAR_S2R_MAIN_H]    ||
+         vars_w[VAR_S2R_MAIN_A]    || vars_h[VAR_S2R_MAIN_A]    ||
+         vars_w[VAR_S2R_MAIN_SAR]  || vars_h[VAR_S2R_MAIN_SAR]  ||
+         vars_w[VAR_S2R_MAIN_DAR]  || vars_h[VAR_S2R_MAIN_DAR]  ||
+         vars_w[VAR_S2R_MDAR]      || vars_h[VAR_S2R_MDAR]      ||
+         vars_w[VAR_S2R_MAIN_HSUB] || vars_h[VAR_S2R_MAIN_HSUB] ||
+         vars_w[VAR_S2R_MAIN_VSUB] || vars_h[VAR_S2R_MAIN_VSUB] ||
+         vars_w[VAR_S2R_MAIN_N]    || vars_h[VAR_S2R_MAIN_N]    ||
+         vars_w[VAR_S2R_MAIN_T]    || vars_h[VAR_S2R_MAIN_T]    ||
+         vars_w[VAR_S2R_MAIN_POS]  || vars_h[VAR_S2R_MAIN_POS]) ) {
+        av_log(ctx, AV_LOG_ERROR, "Expressions with scale2ref variables are not valid in scale filter.\n");
+        return AVERROR(EINVAL);
     }
 
     if (ctx->filter != &ff_vf_scale2ref &&
@@ -287,6 +343,8 @@ static av_cold int preinit(AVFilterContext *ctx)
     if (ret < 0)
         return ret;
 
+    ff_framesync_preinit(&scale->fs);
+
     return 0;
 }
 
@@ -302,11 +360,16 @@ static const int sws_colorspaces[] = {
     -1
 };
 
+static int do_scale(FFFrameSync *fs);
+
 static av_cold int init(AVFilterContext *ctx)
 {
     ScaleContext *scale = ctx->priv;
     int64_t threads;
     int ret;
+
+    if (ctx->filter == &ff_vf_scale2ref)
+        av_log(ctx, AV_LOG_WARNING, "scale2ref is deprecated, use scale=rw:rh instead\n");
 
     if (scale->size_str && (scale->w_expr || scale->h_expr)) {
         av_log(ctx, AV_LOG_ERROR,
@@ -379,6 +442,16 @@ static av_cold int init(AVFilterContext *ctx)
     if (!threads)
         av_opt_set_int(scale->sws_opts, "threads", ff_filter_get_nb_threads(ctx), 0);
 
+    if (ctx->filter != &ff_vf_scale2ref && scale->uses_ref) {
+        AVFilterPad pad = {
+            .name = "ref",
+            .type = AVMEDIA_TYPE_VIDEO,
+        };
+        ret = ff_append_inpad(ctx, &pad);
+        if (ret < 0)
+            return ret;
+    }
+
     return 0;
 }
 
@@ -388,6 +461,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_expr_free(scale->w_pexpr);
     av_expr_free(scale->h_pexpr);
     scale->w_pexpr = scale->h_pexpr = NULL;
+    ff_framesync_uninit(&scale->fs);
     sws_freeContext(scale->sws_opts);
     sws_freeContext(scale->sws);
     sws_freeContext(scale->isws[0]);
@@ -497,6 +571,20 @@ static int scale_eval_dimensions(AVFilterContext *ctx)
             scale->var_values[VAR_S2R_MAIN_A] * scale->var_values[VAR_S2R_MAIN_SAR];
         scale->var_values[VAR_S2R_MAIN_HSUB] = 1 << main_desc->log2_chroma_w;
         scale->var_values[VAR_S2R_MAIN_VSUB] = 1 << main_desc->log2_chroma_h;
+    }
+
+    if (scale->uses_ref) {
+        const AVFilterLink *reflink = ctx->inputs[1];
+        const AVPixFmtDescriptor *ref_desc = av_pix_fmt_desc_get(reflink->format);
+        scale->var_values[VAR_REF_W] = scale->var_values[VAR_RW] = reflink->w;
+        scale->var_values[VAR_REF_H] = scale->var_values[VAR_RH] = reflink->h;
+        scale->var_values[VAR_REF_A] = (double) reflink->w / reflink->h;
+        scale->var_values[VAR_REF_SAR] = reflink->sample_aspect_ratio.num ?
+            (double) reflink->sample_aspect_ratio.num / reflink->sample_aspect_ratio.den : 1;
+        scale->var_values[VAR_REF_DAR] = scale->var_values[VAR_RDAR] =
+            scale->var_values[VAR_REF_A] * scale->var_values[VAR_REF_SAR];
+        scale->var_values[VAR_REF_HSUB] = 1 << ref_desc->log2_chroma_w;
+        scale->var_values[VAR_REF_VSUB] = 1 << ref_desc->log2_chroma_h;
     }
 
     res = av_expr_eval(scale->w_pexpr, scale->var_values, NULL);
@@ -676,6 +764,29 @@ static int config_props(AVFilterLink *outlink)
            outlink->sample_aspect_ratio.num, outlink->sample_aspect_ratio.den,
            flags_val);
     av_freep(&flags_val);
+
+    if (ctx->filter != &ff_vf_scale2ref) {
+        ff_framesync_uninit(&scale->fs);
+        ret = ff_framesync_init(&scale->fs, ctx, ctx->nb_inputs);
+        if (ret < 0)
+            return ret;
+        scale->fs.on_event        = do_scale;
+        scale->fs.in[0].time_base = ctx->inputs[0]->time_base;
+        scale->fs.in[0].sync      = 1;
+        scale->fs.in[0].before    = EXT_STOP;
+        scale->fs.in[0].after     = EXT_STOP;
+        if (scale->uses_ref) {
+            av_assert0(ctx->nb_inputs == 2);
+            scale->fs.in[1].time_base = ctx->inputs[1]->time_base;
+            scale->fs.in[1].sync      = 0;
+            scale->fs.in[1].before    = EXT_NULL;
+            scale->fs.in[1].after     = EXT_INFINITY;
+        }
+
+        ret = ff_framesync_configure(&scale->fs);
+        if (ret < 0)
+            return ret;
+    }
 
     return 0;
 
@@ -894,6 +1005,71 @@ scale:
     return ret;
 }
 
+static int do_scale(FFFrameSync *fs)
+{
+    AVFilterContext *ctx = fs->parent;
+    ScaleContext *scale = ctx->priv;
+    AVFilterLink *outlink = ctx->outputs[0];
+    AVFrame *out, *in = NULL, *ref = NULL;
+    int ret = 0, frame_changed;
+
+    ret = ff_framesync_get_frame(fs, 0, &in, 1);
+    if (ret < 0)
+        goto err;
+
+    if (scale->uses_ref) {
+        ret = ff_framesync_get_frame(fs, 1, &ref, 0);
+        if (ret < 0)
+            goto err;
+    }
+
+    if (ref) {
+        AVFilterLink *reflink = ctx->inputs[1];
+        frame_changed = ref->width  != reflink->w ||
+                        ref->height != reflink->h ||
+                        ref->format != reflink->format ||
+                        ref->sample_aspect_ratio.den != reflink->sample_aspect_ratio.den ||
+                        ref->sample_aspect_ratio.num != reflink->sample_aspect_ratio.num ||
+                        ref->colorspace != reflink->colorspace ||
+                        ref->color_range != reflink->color_range;
+
+        if (frame_changed) {
+            reflink->format = ref->format;
+            reflink->w = ref->width;
+            reflink->h = ref->height;
+            reflink->sample_aspect_ratio.num = ref->sample_aspect_ratio.num;
+            reflink->sample_aspect_ratio.den = ref->sample_aspect_ratio.den;
+            reflink->colorspace = ref->colorspace;
+            reflink->color_range = ref->color_range;
+
+            ret = config_props(outlink);
+            if (ret < 0)
+                goto err;
+        }
+
+        if (scale->eval_mode == EVAL_MODE_FRAME) {
+            scale->var_values[VAR_REF_N] = reflink->frame_count_out;
+            scale->var_values[VAR_REF_T] = TS2T(ref->pts, reflink->time_base);
+#if FF_API_FRAME_PKT
+FF_DISABLE_DEPRECATION_WARNINGS
+            scale->var_values[VAR_REF_POS] = ref->pkt_pos == -1 ? NAN : ref->pkt_pos;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
+        }
+    }
+
+    ret = scale_frame(ctx->inputs[0], in, &out);
+    if (out) {
+        out->pts = av_rescale_q(fs->pts, fs->time_base, outlink->time_base);
+        return ff_filter_frame(outlink, out);
+    }
+
+err:
+    if (ret < 0)
+        av_frame_free(&in);
+    return ret;
+}
+
 static int filter_frame(AVFilterLink *link, AVFrame *in)
 {
     AVFilterContext *ctx = link->dst;
@@ -972,11 +1148,24 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     return ret;
 }
 
+static int activate(AVFilterContext *ctx)
+{
+    ScaleContext *scale = ctx->priv;
+    return ff_framesync_activate(&scale->fs);
+}
+
 static const AVClass *child_class_iterate(void **iter)
 {
-    const AVClass *c = *iter ? NULL : sws_get_class();
-    *iter = (void*)(uintptr_t)c;
-    return c;
+    switch ((uintptr_t) *iter) {
+    case 0:
+        *iter = (void*)(uintptr_t) 1;
+        return sws_get_class();
+    case 1:
+        *iter = (void*)(uintptr_t) 2;
+        return &ff_framesync_class;
+    }
+
+    return NULL;
 }
 
 static void *child_next(void *obj, void *prev)
@@ -984,6 +1173,8 @@ static void *child_next(void *obj, void *prev)
     ScaleContext *s = obj;
     if (!prev)
         return s->sws_opts;
+    if (prev == s->sws_opts)
+        return &s->fs;
     return NULL;
 }
 
@@ -1038,7 +1229,7 @@ static const AVOption scale_options[] = {
 };
 
 static const AVClass scale_class = {
-    .class_name       = "scale(2ref)",
+    .class_name       = "scale",
     .item_name        = av_default_item_name,
     .option           = scale_options,
     .version          = LIBAVUTIL_VERSION_INT,
@@ -1051,7 +1242,6 @@ static const AVFilterPad avfilter_vf_scale_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
-        .filter_frame = filter_frame,
     },
 };
 
@@ -1074,7 +1264,34 @@ const AVFilter ff_vf_scale = {
     FILTER_INPUTS(avfilter_vf_scale_inputs),
     FILTER_OUTPUTS(avfilter_vf_scale_outputs),
     FILTER_QUERY_FUNC(query_formats),
+    .activate        = activate,
     .process_command = process_command,
+    .flags           = AVFILTER_FLAG_DYNAMIC_INPUTS,
+};
+
+static const AVClass *scale2ref_child_class_iterate(void **iter)
+{
+    const AVClass *c = *iter ? NULL : sws_get_class();
+    *iter = (void*)(uintptr_t)c;
+    return c;
+}
+
+static void *scale2ref_child_next(void *obj, void *prev)
+{
+    ScaleContext *s = obj;
+    if (!prev)
+        return s->sws_opts;
+    return NULL;
+}
+
+static const AVClass scale2ref_class = {
+    .class_name       = "scale(2ref)",
+    .item_name        = av_default_item_name,
+    .option           = scale_options,
+    .version          = LIBAVUTIL_VERSION_INT,
+    .category         = AV_CLASS_CATEGORY_FILTER,
+    .child_class_iterate = scale2ref_child_class_iterate,
+    .child_next          = scale2ref_child_next,
 };
 
 static const AVFilterPad avfilter_vf_scale2ref_inputs[] = {
@@ -1112,7 +1329,7 @@ const AVFilter ff_vf_scale2ref = {
     .init            = init,
     .uninit          = uninit,
     .priv_size       = sizeof(ScaleContext),
-    .priv_class      = &scale_class,
+    .priv_class      = &scale2ref_class,
     FILTER_INPUTS(avfilter_vf_scale2ref_inputs),
     FILTER_OUTPUTS(avfilter_vf_scale2ref_outputs),
     FILTER_QUERY_FUNC(query_formats),

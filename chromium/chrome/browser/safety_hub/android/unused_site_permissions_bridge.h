@@ -25,4 +25,32 @@ base::android::ScopedJavaLocalRef<jobject> ToJavaPermissionsData(
 
 std::vector<PermissionsData> GetRevokedPermissions(Profile* profile);
 
+void RegrantPermissions(Profile* profile, std::string& primary_pattern);
+
+void UndoRegrantPermissions(Profile* profile,
+                            PermissionsData& permissions_data);
+
+void ClearRevokedPermissionsReviewList(Profile* profile);
+
+void RestoreRevokedPermissionsReviewList(
+    Profile* profile,
+    std::vector<PermissionsData>& permissions_data_list);
+
+namespace jni_zero {
+
+template <>
+inline PermissionsData FromJniType<PermissionsData>(
+    JNIEnv* env,
+    const JavaRef<jobject>& jobject) {
+  return FromJavaPermissionsData(env, jobject);
+}
+
+template <>
+inline ScopedJavaLocalRef<jobject> ToJniType(JNIEnv* env,
+                                             const PermissionsData& obj) {
+  return ToJavaPermissionsData(env, obj);
+}
+
+}  // namespace jni_zero
+
 #endif  // CHROME_BROWSER_SAFETY_HUB_ANDROID_UNUSED_SITE_PERMISSIONS_BRIDGE_H_

@@ -4,6 +4,8 @@
 
 #include "chromeos/ash/components/nearby/common/connections_manager/nearby_connections_manager_impl.h"
 
+#include <string>
+
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
 #include "base/functional/callback_helpers.h"
@@ -32,10 +34,9 @@ const nearby::connections::mojom::Strategy kStrategy =
 // Timeout for initiating a connection to a remote device.
 constexpr base::TimeDelta kInitiateNearbyConnectionTimeout = base::Seconds(60);
 
-// Whether or not WifiLan is supported for advertising or discovery. Support as
+// Whether or not WifiLan is supported for advertising. Support as
 // a bandwidth upgrade medium is behind a feature flag.
 constexpr bool kIsWifiLanAdvertisingSupported = false;
-constexpr bool kIsWifiLanDiscoverySupported = false;
 
 bool ShouldUseInternet(NearbyConnectionsManager::DataUsage data_usage,
                        NearbyConnectionsManager::PowerLevel power_level) {
@@ -116,6 +117,9 @@ std::string MediumSelectionToString(
   if (mediums.wifi_lan) {
     ss << "wifilan ";
   }
+  if (mediums.wifi_direct) {
+    ss << "wifidirect ";
+  }
   ss << "}";
 
   return ss.str();
@@ -167,7 +171,9 @@ void NearbyConnectionsManagerImpl::StartAdvertising(
       /*wifi_lan=*/
       ShouldEnableWifiLan(data_usage,
                           NearbyConnectionsManager::PowerLevel::kHighPower) &&
-          kIsWifiLanAdvertisingSupported);
+          kIsWifiLanAdvertisingSupported,
+      /*wifi_direct=*/
+      base::FeatureList::IsEnabled(features::kNearbySharingWifiDirect));
   CD_LOG(VERBOSE, Feature::NEARBY_INFRA)
       << __func__ << ": " << "is_high_power=" << (is_high_power ? "yes" : "no")
       << "use_ble=" << (use_ble ? "yes" : "no") << ", data_usage=" << data_usage
@@ -225,6 +231,52 @@ void NearbyConnectionsManagerImpl::StopAdvertising(
       service_id_, std::move(callback));
 }
 
+void NearbyConnectionsManagerImpl::InjectBluetoothEndpoint(
+    const std::string& service_id,
+    const std::string& endpoint_id,
+    const std::vector<uint8_t> endpoint_info,
+    const std::vector<uint8_t> remote_bluetooth_mac_address,
+    ConnectionsCallback callback) {
+  nearby::connections::mojom::NearbyConnections* nearby_connections =
+      GetNearbyConnections();
+  if (!nearby_connections) {
+    CD_LOG(ERROR, Feature::NS)
+        << __func__ << " Nearby Connections cannot be retrieved.";
+    std::move(callback).Run(ConnectionsStatus::kError);
+    return;
+  }
+
+  if (endpoint_id.length() != 4) {
+    CD_LOG(ERROR, Feature::NS)
+        << __func__ << " endpoint ID must be length 4. Actual size: "
+        << base::NumberToString(endpoint_id.length());
+    std::move(callback).Run(ConnectionsStatus::kError);
+    return;
+  }
+
+  if (endpoint_info.size() == 0 || endpoint_info.size() > 130) {
+    CD_LOG(ERROR, Feature::NS)
+        << __func__
+        << " endpoint info must have size >0 and <131. Actual size: "
+        << base::NumberToString(endpoint_info.size());
+    std::move(callback).Run(ConnectionsStatus::kError);
+    return;
+  }
+
+  if (remote_bluetooth_mac_address.size() != 6) {
+    CD_LOG(ERROR, Feature::NS)
+        << __func__
+        << " bluetooth mac address size must be 6 bytes. Actual size: "
+        << base::NumberToString(remote_bluetooth_mac_address.size());
+    std::move(callback).Run(ConnectionsStatus::kError);
+    return;
+  }
+
+  nearby_connections->InjectBluetoothEndpoint(
+      service_id, endpoint_id, endpoint_info, remote_bluetooth_mac_address,
+      std::move(callback));
+}
+
 void NearbyConnectionsManagerImpl::StartDiscovery(
     DiscoveryListener* listener,
     NearbyConnectionsManager::DataUsage data_usage,
@@ -246,9 +298,10 @@ void NearbyConnectionsManagerImpl::StartDiscovery(
       ShouldEnableWebRtc(data_usage,
                          NearbyConnectionsManager::PowerLevel::kHighPower),
       /*wifi_lan=*/
-      ShouldEnableWifiLan(data_usage,
-                          NearbyConnectionsManager::PowerLevel::kHighPower) &&
-          kIsWifiLanDiscoverySupported);
+      ShouldEnableWifiLan(data_usage, PowerLevel::kHighPower) &&
+          ::features::IsNearbyMdnsEnabled(),
+      /*wifi_direct=*/
+      base::FeatureList::IsEnabled(features::kNearbySharingWifiDirect));
   CD_LOG(VERBOSE, Feature::NEARBY_INFRA)
       << __func__ << ": " << "data_usage=" << data_usage
       << ", allowed_mediums=" << MediumSelectionToString(*allowed_mediums);
@@ -305,11 +358,10 @@ void NearbyConnectionsManagerImpl::Connect(
   auto allowed_mediums = MediumSelection::New(
       /*bluetooth=*/true,
       /*ble=*/false,
-      ShouldEnableWebRtc(data_usage,
-                         NearbyConnectionsManager::PowerLevel::kHighPower),
-      /*wifi_lan=*/
-      ShouldEnableWifiLan(data_usage,
-                          NearbyConnectionsManager::PowerLevel::kHighPower));
+      /*web_rtc=*/ShouldEnableWebRtc(data_usage, PowerLevel::kHighPower),
+      /*wifi_lan=*/ShouldEnableWifiLan(data_usage, PowerLevel::kHighPower),
+      /*wifi_direct=*/
+      base::FeatureList::IsEnabled(features::kNearbySharingWifiDirect));
   CD_LOG(VERBOSE, Feature::NEARBY_INFRA)
       << __func__ << ": " << "data_usage=" << data_usage
       << ", allowed_mediums=" << MediumSelectionToString(*allowed_mediums);
@@ -580,9 +632,11 @@ void NearbyConnectionsManagerImpl::UpgradeBandwidth(
     return;
   }
 
-  // The only bandwidth upgrade mediums at this point are WebRTC and WifiLan.
+  // The only bandwidth upgrade mediums at this point are WebRTC, WifiLan, and
+  // WifiDirect.
   if (!base::FeatureList::IsEnabled(features::kNearbySharingWebRtc) &&
-      !base::FeatureList::IsEnabled(features::kNearbySharingWifiLan)) {
+      !base::FeatureList::IsEnabled(features::kNearbySharingWifiLan) &&
+      !base::FeatureList::IsEnabled(features::kNearbySharingWifiDirect)) {
     return;
   }
 
@@ -618,12 +672,10 @@ void NearbyConnectionsManagerImpl::ConnectV3(
   // TODO(b/287340241): Enable BLE connections as an allowed medium.
   auto allowed_mediums = MediumSelection::New(
       /*bluetooth=*/true,
-      /*ble=*/false,
-      ShouldEnableWebRtc(data_usage,
-                         NearbyConnectionsManager::PowerLevel::kHighPower),
-      /*wifi_lan=*/
-      ShouldEnableWifiLan(data_usage,
-                          NearbyConnectionsManager::PowerLevel::kHighPower));
+      /*ble=*/false, ShouldEnableWebRtc(data_usage, PowerLevel::kHighPower),
+      /*wifi_lan=*/ShouldEnableWifiLan(data_usage, PowerLevel::kHighPower),
+      /*wifi_direct=*/
+      base::FeatureList::IsEnabled(features::kNearbySharingWifiDirect));
   CD_LOG(VERBOSE, Feature::NEARBY_INFRA)
       << __func__ << ": " << "data_usage=" << data_usage
       << ", allowed_mediums=" << MediumSelectionToString(*allowed_mediums);
@@ -640,6 +692,9 @@ void NearbyConnectionsManagerImpl::ConnectV3(
       base::BindOnce(&NearbyConnectionsManagerImpl::OnConnectionTimedOutV3,
                      weak_ptr_factory_.GetWeakPtr(), endpoint_id));
   connect_timeout_timers_v3_.emplace(endpoint_id, std::move(timeout_timer));
+
+  endpoint_id_to_connect_v3_start_time_.emplace(endpoint_id,
+                                                base::TimeTicks::Now());
 
   auto presence_device =
       *endpoint_id_to_presence_device_map_.at(endpoint_id).get();
@@ -872,6 +927,9 @@ void NearbyConnectionsManagerImpl::OnBandwidthChanged(
     CD_LOG(VERBOSE, Feature::NEARBY_INFRA)
         << __func__ << ": Initial call with medium=" << medium
         << "; endpoint_id=" << endpoint_id;
+    if (bandwidth_upgrade_listener_) {
+      bandwidth_upgrade_listener_->OnInitialMedium(endpoint_id, medium);
+    }
     on_bandwidth_changed_endpoint_ids_.emplace(endpoint_id);
   } else {
     CD_LOG(VERBOSE, Feature::NEARBY_INFRA)
@@ -1007,15 +1065,15 @@ void NearbyConnectionsManagerImpl::OnConnectionInitiatedV3(
 void NearbyConnectionsManagerImpl::OnConnectionResultV3(
     const std::string& endpoint_id,
     Status status) {
-  CD_LOG(INFO, Feature::NEARBY_INFRA)
-      << __func__ << ": OnConnectionResult result=" << status;
+  CD_LOG(INFO, Feature::NEARBY_INFRA) << __func__ << ": result=" << status;
 
   auto it = pending_outgoing_connections_.find(endpoint_id);
-  if (it == pending_outgoing_connections_.end()) {
-    connection_listener_v3s_.ReportBadMessage(
-        base::StringPrintf("OnConnectionResult() received endpoint_id=%s which "
-                           "does not exist in connections V3",
-                           endpoint_id.c_str()));
+  if (it == pending_outgoing_connections_.end() ||
+      !base::Contains(endpoint_id_to_connect_v3_start_time_, endpoint_id)) {
+    connection_listener_v3s_.ReportBadMessage(base::StringPrintf(
+        "OnConnectionResultV3() received endpoint_id=%s which "
+        "does not exist in connections V3",
+        endpoint_id.c_str()));
     return;
   }
 
@@ -1026,12 +1084,20 @@ void NearbyConnectionsManagerImpl::OnConnectionResultV3(
     std::move(it->second)
         .Run(
             /*nearby_connection=*/result.first->second.get());
+
+    base::UmaHistogramTimes(
+        "Nearby.Connections.V3.ConnectionResult.Success.Latency",
+        base::TimeTicks::Now() -
+            endpoint_id_to_connect_v3_start_time_.at(endpoint_id));
   } else {
     std::move(it->second).Run(/*nearby_connection=*/nullptr);
   }
 
+  base::UmaHistogramEnumeration("Nearby.Connections.V3.Connection.Result",
+                                status);
   pending_outgoing_connections_.erase(it);
   connect_timeout_timers_v3_.erase(endpoint_id);
+  endpoint_id_to_connect_v3_start_time_.erase(endpoint_id);
 }
 
 void NearbyConnectionsManagerImpl::OnDisconnectedV3(
@@ -1091,13 +1157,12 @@ void NearbyConnectionsManagerImpl::OnBandwidthChangedV3(
         << "; endpoint_id=" << endpoint_id;
     on_bandwidth_changed_endpoint_ids_v3_.emplace(endpoint_id);
   } else {
-    // TODO(b/325534442): Emit to a metric in the same that v1
-    // `NearbyConnectionsManagerImpl::OnBandwidthChanged()` emits
-    // "Nearby.Share.Medium.ChangedToMedium".
     CD_LOG(VERBOSE, Feature::NEARBY_INFRA)
         << __func__ << ": (V3) Changed to medium=" << bandwidth_info->medium
         << " , quality=" << bandwidth_info->quality
         << "; endpoint_id=" << endpoint_id;
+    base::UmaHistogramEnumeration(
+        "Nearby.Connections.V3.Medium.ChangedToMedium", bandwidth_info->medium);
     current_upgraded_mediums_v3_.insert_or_assign(endpoint_id,
                                                   bandwidth_info->medium);
 
@@ -1193,6 +1258,7 @@ void NearbyConnectionsManagerImpl::Reset() {
   on_bandwidth_changed_endpoint_ids_v3_.clear();
   current_upgraded_mediums_.clear();
   current_upgraded_mediums_v3_.clear();
+  endpoint_id_to_connect_v3_start_time_.clear();
 
   for (auto& entry : pending_outgoing_connections_) {
     std::move(entry.second).Run(/*connection=*/nullptr);

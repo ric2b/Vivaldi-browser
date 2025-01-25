@@ -13,7 +13,7 @@
 #include "src/common/ptr-compr-inl.h"
 #include "src/heap/heap-write-barrier-inl.h"
 #include "src/heap/memory-chunk-metadata.h"
-#include "src/heap/mutable-page.h"
+#include "src/heap/mutable-page-metadata.h"
 #include "src/heap/read-only-spaces.h"
 #include "src/heap/third-party/heap-api.h"
 #include "src/objects/heap-object-inl.h"
@@ -286,11 +286,16 @@ bool ReadOnlyHeap::Contains(Address address) {
 
 // static
 bool ReadOnlyHeap::Contains(Tagged<HeapObject> object) {
-  if (V8_ENABLE_THIRD_PARTY_HEAP_BOOL) {
-    return third_party_heap::Heap::InReadOnlySpace(object.address());
-  } else {
-    return MemoryChunk::FromHeapObject(object)->InReadOnlySpace();
-  }
+  return Contains(object.address());
+}
+
+// static
+bool ReadOnlyHeap::SandboxSafeContains(Tagged<HeapObject> object) {
+#ifdef V8_ENABLE_SANDBOX
+  return MemoryChunk::FromHeapObject(object)->SandboxSafeInReadOnlySpace();
+#else
+  return Contains(object);
+#endif
 }
 
 ReadOnlyHeapObjectIterator::ReadOnlyHeapObjectIterator(

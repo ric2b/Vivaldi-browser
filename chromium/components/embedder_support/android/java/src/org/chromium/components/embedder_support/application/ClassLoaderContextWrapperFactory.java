@@ -4,6 +4,10 @@
 
 package org.chromium.components.embedder_support.application;
 
+import static android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+import static android.content.res.Configuration.UI_MODE_NIGHT_NO;
+import static android.content.res.Configuration.UI_MODE_NIGHT_YES;
+
 import android.content.ComponentCallbacks;
 import android.content.Context;
 import android.content.ContextWrapper;
@@ -11,6 +15,7 @@ import android.content.Intent;
 import android.content.res.AssetManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 
 import org.chromium.base.ContextUtils;
@@ -44,10 +49,21 @@ public class ClassLoaderContextWrapperFactory {
      * Sets light and dark mode contexts that will override the return values from getAssets(),
      * getResources(), and getSystemService() when asking for layout inflater.
      */
-    public static void setLightDarkResourceOverrideContext(
-            Context lightModeContext, Context darkModeContext) {
-        sLightModeResourceOverrideContext = lightModeContext;
-        sDarkModeResourceOverrideContext = darkModeContext;
+    public static void setWebViewResourceOverrideContext(
+            Context webViewResourceOverrideContext, int theme) {
+        Configuration lightModeConfig =
+                new Configuration(webViewResourceOverrideContext.getResources().getConfiguration());
+        lightModeConfig.uiMode = (lightModeConfig.uiMode & ~UI_MODE_NIGHT_MASK) | UI_MODE_NIGHT_NO;
+        Configuration darkModeConfig = new Configuration(lightModeConfig);
+        darkModeConfig.uiMode = (lightModeConfig.uiMode & ~UI_MODE_NIGHT_MASK) | UI_MODE_NIGHT_YES;
+        sLightModeResourceOverrideContext =
+                new ContextThemeWrapper(
+                        webViewResourceOverrideContext.createConfigurationContext(lightModeConfig),
+                        theme);
+        sDarkModeResourceOverrideContext =
+                new ContextThemeWrapper(
+                        webViewResourceOverrideContext.createConfigurationContext(darkModeConfig),
+                        theme);
     }
 
     public static Context get(Context ctx) {
@@ -65,6 +81,20 @@ public class ClassLoaderContextWrapperFactory {
             }
         }
         return wrapper;
+    }
+
+    /**
+     * Should be used by WebView code only to lookup files in the Resources/Assets folder or for
+     * algorithmic darkening code.
+     *
+     * @param context the Context. If this is not a ClassLoaderContextWrapper, it is returned.
+     * @return the Context for the embedding application or {@code context}.
+     */
+    public static Context getOriginalApplicationContext(Context context) {
+        if (context instanceof ClassLoaderContextWrapper wrapper) {
+            return wrapper.getBaseContext();
+        }
+        return context;
     }
 
     private static class ClassLoaderContextWrapper extends ContextWrapper {

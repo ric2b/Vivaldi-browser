@@ -11,8 +11,9 @@
 #include <string.h>
 
 #include "absl/base/macros.h"
+#include "absl/log/absl_log.h"
+#include "absl/types/optional.h"
 #include "gtest/gtest.h"
-#include "util/logging.h"
 #include "re2/re2.h"
 
 namespace re2 {
@@ -137,7 +138,7 @@ TEST(RE2ArgTest, Uint64Test) {
 TEST(RE2ArgTest, ParseFromTest) {
   struct {
     bool ParseFrom(const char* str, size_t n) {
-      LOG(INFO) << "str = " << str << ", n = " << n;
+      ABSL_LOG(INFO) << "str = " << str << ", n = " << n;
       return true;
     }
   } obj1;
@@ -146,7 +147,7 @@ TEST(RE2ArgTest, ParseFromTest) {
 
   struct {
     bool ParseFrom(const char* str, size_t n) {
-      LOG(INFO) << "str = " << str << ", n = " << n;
+      ABSL_LOG(INFO) << "str = " << str << ", n = " << n;
       return false;
     }
     // Ensure that RE2::Arg works even with overloaded ParseFrom().

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/sharing/fake_device_info.h"
 
+#include <optional>
+
 #include "components/sync_device_info/device_info_util.h"
 
 std::unique_ptr<syncer::DeviceInfo> CreateFakeDeviceInfo(
@@ -22,8 +24,13 @@ std::unique_ptr<syncer::DeviceInfo> CreateFakeDeviceInfo(
       form_factor, "device_id", manufacturer_name, model_name,
       full_hardware_class, last_updated_timestamp,
       syncer::DeviceInfoUtil::GetPulseInterval(),
-      /*send_tab_to_self_receiving_enabled=*/false, sharing_info,
+      /*send_tab_to_self_receiving_enabled=*/
+      false,
+      sync_pb::
+          SyncEnums_SendTabReceivingType_SEND_TAB_RECEIVING_TYPE_CHROME_OR_UNSPECIFIED,
+      sharing_info,
       /*paask_info=*/std::nullopt,
       /*fcm_registration_token=*/std::string(),
-      /*interested_data_types=*/syncer::ModelTypeSet());
+      /*interested_data_types=*/syncer::ModelTypeSet(),
+      /*floating_workspace_last_signin_timestamp=*/std::nullopt);
 }

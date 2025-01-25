@@ -19,10 +19,10 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
-#include <iterator>
-#include <limits>
 #include <memory>
+#include <optional>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -83,12 +83,7 @@ SearchValidationResult SetIdStorage::ChainImpl::ValidateSearchConstraints(
     if (op == FilterOp::kIsNotNull) {
       return SearchValidationResult::kAllData;
     }
-    if (op == FilterOp::kIsNull) {
-      return SearchValidationResult::kNoData;
-    }
-    PERFETTO_FATAL(
-        "Invalid filter operation. NULL should only be compared with 'IS NULL' "
-        "and 'IS NOT NULL'");
+    return SearchValidationResult::kNoData;
   }
 
   // FilterOp checks. Switch so that we get a warning if new FilterOp is not
@@ -248,36 +243,17 @@ void SetIdStorage::ChainImpl::IndexSearchValidated(FilterOp op,
   }
 }
 
-Range SetIdStorage::ChainImpl::OrderedIndexSearchValidated(
-    FilterOp op,
-    SqlValue sql_val,
-    const OrderedIndices& indices) const {
-  // OrderedIndices are monotonic non-contiguous values.
-  auto res = SearchValidated(
-      op, sql_val, Range(indices.data[0], indices.data[indices.size - 1] + 1));
-  PERFETTO_CHECK(res.IsRange());
-  Range res_range = std::move(res).TakeIfRange();
-
-  const auto* start_ptr = std::lower_bound(
-      indices.data, indices.data + indices.size, res_range.start);
-  const auto* end_ptr =
-      std::lower_bound(start_ptr, indices.data + indices.size, res_range.end);
-
-  return {static_cast<uint32_t>(std::distance(indices.data, start_ptr)),
-          static_cast<uint32_t>(std::distance(indices.data, end_ptr))};
-}
-
 Range SetIdStorage::ChainImpl::BinarySearchIntrinsic(FilterOp op,
                                                      SetId val,
                                                      Range range) const {
   switch (op) {
     case FilterOp::kEq: {
-      if (values_->data()[val] != val) {
-        return Range();
+      if ((*values_)[val] != val) {
+        return {};
       }
       uint32_t start = std::max(val, range.start);
       uint32_t end = UpperBoundIntrinsic(values_->data(), val, range);
-      return Range(std::min(start, end), end);
+      return {std::min(start, end), end};
     }
     case FilterOp::kLe: {
       return {range.start, UpperBoundIntrinsic(values_->data(), val, range)};
@@ -300,23 +276,78 @@ Range SetIdStorage::ChainImpl::BinarySearchIntrinsic(FilterOp op,
   return {};
 }
 
-void SetIdStorage::ChainImpl::StableSort(SortToken* start,
-                                         SortToken* end,
+void SetIdStorage::ChainImpl::StableSort(Token* start,
+                                         Token* end,
                                          SortDirection direction) const {
+  PERFETTO_TP_TRACE(metatrace::Category::DB,
+                    "SetIdStorage::ChainImpl::StableSort");
   switch (direction) {
     case SortDirection::kAscending:
-      std::stable_sort(start, end,
-                       [this](const SortToken& a, const SortToken& b) {
-                         return (*values_)[a.index] < (*values_)[b.index];
-                       });
+      std::stable_sort(start, end, [this](const Token& a, const Token& b) {
+        return (*values_)[a.index] < (*values_)[b.index];
+      });
       break;
     case SortDirection::kDescending:
-      std::stable_sort(start, end,
-                       [this](const SortToken& a, const SortToken& b) {
-                         return (*values_)[a.index] > (*values_)[b.index];
-                       });
+      std::stable_sort(start, end, [this](const Token& a, const Token& b) {
+        return (*values_)[a.index] > (*values_)[b.index];
+      });
       break;
   }
+}
+
+void SetIdStorage::ChainImpl::Distinct(Indices& indices) const {
+  PERFETTO_TP_TRACE(metatrace::Category::DB,
+                    "SetIdStorage::ChainImpl::Distinct");
+  std::unordered_set<uint32_t> s;
+  indices.tokens.erase(
+      std::remove_if(indices.tokens.begin(), indices.tokens.end(),
+                     [&s, this](const Token& idx) {
+                       return !s.insert((*values_)[idx.index]).second;
+                     }),
+      indices.tokens.end());
+}
+
+std::optional<Token> SetIdStorage::ChainImpl::MaxElement(
+    Indices& indices) const {
+  PERFETTO_TP_TRACE(metatrace::Category::DB,
+                    "SetIdStorage::ChainImpl::MaxElement");
+
+  auto tok =
+      std::max_element(indices.tokens.begin(), indices.tokens.end(),
+                       [this](const Token& t1, const Token& t2) {
+                         return (*values_)[t1.index] < (*values_)[t2.index];
+                       });
+
+  if (tok == indices.tokens.end()) {
+    return std::nullopt;
+  }
+  return *tok;
+}
+
+std::optional<Token> SetIdStorage::ChainImpl::MinElement(
+    Indices& indices) const {
+  PERFETTO_TP_TRACE(metatrace::Category::DB,
+                    "SetIdStorage::ChainImpl::MinElement");
+  auto tok =
+      std::min_element(indices.tokens.begin(), indices.tokens.end(),
+                       [this](const Token& t1, const Token& t2) {
+                         return (*values_)[t1.index] < (*values_)[t2.index];
+                       });
+  if (tok == indices.tokens.end()) {
+    return std::nullopt;
+  }
+
+  return *tok;
+}
+
+std::unique_ptr<DataLayer> SetIdStorage::ChainImpl::Flatten(
+    std::vector<uint32_t>&) const {
+  return std::unique_ptr<DataLayer>(new SetIdStorage(values_));
+}
+
+SqlValue SetIdStorage::ChainImpl::Get_AvoidUsingBecauseSlow(
+    uint32_t index) const {
+  return SqlValue::Long((*values_)[index]);
 }
 
 void SetIdStorage::ChainImpl::Serialize(StorageProto* msg) const {

@@ -160,7 +160,9 @@ namespace internal {
   V(JSDataView)                                 \
   V(JSDataViewOrRabGsabDataView)                \
   V(JSDate)                                     \
-  V(JSDisposableStack)                          \
+  V(JSDisposableStackBase)                      \
+  V(JSSyncDisposableStack)                      \
+  V(JSAsyncDisposableStack)                     \
   V(JSError)                                    \
   V(JSExternalObject)                           \
   V(JSFinalizationRegistry)                     \
@@ -357,6 +359,7 @@ namespace internal {
   APPLY(V, ProtectedFixedArray, PROTECTED_FIXED_ARRAY)                     \
   APPLY(V, TrustedByteArray, TRUSTED_BYTE_ARRAY)                           \
   APPLY(V, TrustedFixedArray, TRUSTED_FIXED_ARRAY)                         \
+  APPLY(V, TrustedForeign, TRUSTED_FOREIGN)                                \
   APPLY(V, TrustedWeakFixedArray, TRUSTED_WEAK_FIXED_ARRAY)                \
   IF_WASM(APPLY, V, WasmApiFunctionRef, WASM_API_FUNCTION_REF)             \
   IF_WASM(APPLY, V, WasmCapiFunctionData, WASM_CAPI_FUNCTION_DATA)         \

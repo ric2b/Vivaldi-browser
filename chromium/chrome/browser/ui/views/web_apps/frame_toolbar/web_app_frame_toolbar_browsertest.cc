@@ -27,6 +27,7 @@
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/themes/custom_theme_supplier.h"
+#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/download/download_display.h"
@@ -68,6 +69,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/permissions/permission_request_manager.h"
@@ -91,6 +93,7 @@
 #include "ui/base/hit_test.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/test/views_test_utils.h"
@@ -409,7 +412,7 @@ IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest,
   views::View* const menu_button =
       helper()->browser_view()->toolbar_button_provider()->GetAppMenuButton();
 
-  EXPECT_EQ(menu_button->GetAccessibleName(),
+  EXPECT_EQ(menu_button->GetViewAccessibility().GetCachedName(),
             u"Customize and control A minimal-ui app");
   EXPECT_EQ(menu_button->GetTooltipText(gfx::Point()),
             u"Customize and control A minimal-ui app");
@@ -498,9 +501,11 @@ IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_NoElidedExtensionsMenu,
 class BorderlessIsolatedWebAppBrowserTest
     : public web_app::IsolatedWebAppBrowserTestHarness {
  public:
-  BorderlessIsolatedWebAppBrowserTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        blink::features::kWebAppBorderless);
+  BorderlessIsolatedWebAppBrowserTest() = default;
+
+  void SetUp() override {
+    SetupBorderlessFeatureFlag();
+    IsolatedWebAppBrowserTestHarness::SetUp();
   }
 
   void InstallAndLaunchIsolatedWebApp(bool uses_borderless) {
@@ -520,7 +525,6 @@ class BorderlessIsolatedWebAppBrowserTest
           browser_view()->GetActiveWebContents(), kBorderlessAppOnloadTitle);
       EXPECT_EQ(title_watcher.WaitAndGetTitle(), kBorderlessAppOnloadTitle);
     }
-    EXPECT_EQ(uses_borderless, browser_view()->AppUsesBorderlessMode());
 
     views::NonClientFrameView* frame_view =
         browser_view()->GetWidget()->non_client_view()->frame_view();
@@ -613,8 +617,13 @@ class BorderlessIsolatedWebAppBrowserTest
     }
   }
 
- private:
+  virtual void SetupBorderlessFeatureFlag() {
+    scoped_feature_list_.InitAndEnableFeature(
+        blink::features::kWebAppBorderless);
+  }
   base::test::ScopedFeatureList scoped_feature_list_;
+
+ private:
   std::unique_ptr<net::EmbeddedTestServer> isolated_web_app_dev_server_;
   raw_ptr<Browser, AcrossTasksDanglingUntriaged> browser_;
   raw_ptr<BrowserView, AcrossTasksDanglingUntriaged> browser_view_;
@@ -624,6 +633,8 @@ class BorderlessIsolatedWebAppBrowserTest
 IN_PROC_BROWSER_TEST_F(BorderlessIsolatedWebAppBrowserTest,
                        AppUsesBorderlessModeAndHasWindowManagementPermission) {
   InstallAndLaunchIsolatedWebApp(/*uses_borderless=*/true);
+  EXPECT_TRUE(browser_view()->AppUsesBorderlessMode());
+
   GrantWindowManagementPermission();
 
   ASSERT_TRUE(
@@ -635,6 +646,7 @@ IN_PROC_BROWSER_TEST_F(BorderlessIsolatedWebAppBrowserTest,
 IN_PROC_BROWSER_TEST_F(BorderlessIsolatedWebAppBrowserTest,
                        BorderlessModeHidesTitlebarAndWindowingControls) {
   InstallAndLaunchIsolatedWebApp(/*uses_borderless=*/true);
+  EXPECT_TRUE(browser_view()->AppUsesBorderlessMode());
 
 #if BUILDFLAG(IS_CHROMEOS)
   // `chromeos::FrameCaptionButtonContainerView` is ChromeOS only thing.
@@ -658,6 +670,7 @@ IN_PROC_BROWSER_TEST_F(BorderlessIsolatedWebAppBrowserTest,
 IN_PROC_BROWSER_TEST_F(BorderlessIsolatedWebAppBrowserTest,
                        DisplayModeMediaCSS) {
   InstallAndLaunchIsolatedWebApp(/*uses_borderless=*/true);
+  EXPECT_TRUE(browser_view()->AppUsesBorderlessMode());
   auto* web_contents = browser_view()->GetActiveWebContents();
 
   std::string get_background_color = R"(
@@ -689,6 +702,7 @@ IN_PROC_BROWSER_TEST_F(
     BorderlessIsolatedWebAppBrowserTest,
     AppUsesBorderlessModeAndDoesNotHaveWindowManagementPermission) {
   InstallAndLaunchIsolatedWebApp(/*uses_borderless=*/true);
+  EXPECT_TRUE(browser_view()->AppUsesBorderlessMode());
   ASSERT_TRUE(browser_view()->borderless_mode_enabled_for_testing());
   ASSERT_FALSE(
       browser_view()->window_management_permission_granted_for_testing());
@@ -698,6 +712,7 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(BorderlessIsolatedWebAppBrowserTest,
                        AppDoesntUseBorderlessMode) {
   InstallAndLaunchIsolatedWebApp(/*uses_borderless=*/false);
+  EXPECT_FALSE(browser_view()->AppUsesBorderlessMode());
   ASSERT_FALSE(browser_view()->borderless_mode_enabled_for_testing());
   ASSERT_FALSE(
       browser_view()->window_management_permission_granted_for_testing());
@@ -707,6 +722,7 @@ IN_PROC_BROWSER_TEST_F(BorderlessIsolatedWebAppBrowserTest,
 IN_PROC_BROWSER_TEST_F(BorderlessIsolatedWebAppBrowserTest,
                        PopupToItselfIsBorderless) {
   InstallAndLaunchIsolatedWebApp(/*uses_borderless=*/true);
+  EXPECT_TRUE(browser_view()->AppUsesBorderlessMode());
   GrantWindowManagementPermission();
   ASSERT_TRUE(browser_view()->IsBorderlessModeEnabled());
 
@@ -722,6 +738,7 @@ IN_PROC_BROWSER_TEST_F(BorderlessIsolatedWebAppBrowserTest,
 IN_PROC_BROWSER_TEST_F(BorderlessIsolatedWebAppBrowserTest,
                        PopupToAnyOtherOriginIsNotBorderless) {
   InstallAndLaunchIsolatedWebApp(/*uses_borderless=*/true);
+  EXPECT_TRUE(browser_view()->AppUsesBorderlessMode());
   GrantWindowManagementPermission();
   ASSERT_TRUE(browser_view()->IsBorderlessModeEnabled());
 
@@ -735,6 +752,7 @@ IN_PROC_BROWSER_TEST_F(
     BorderlessIsolatedWebAppBrowserTest,
     PopupSize_CanSubceedMinimumWindowSize_And_InnerAndOuterSizesAreCorrect) {
   InstallAndLaunchIsolatedWebApp(/*uses_borderless=*/true);
+  EXPECT_TRUE(browser_view()->AppUsesBorderlessMode());
   GrantWindowManagementPermission();
   ASSERT_TRUE(browser_view()->IsBorderlessModeEnabled());
 
@@ -784,6 +802,7 @@ IN_PROC_BROWSER_TEST_F(
     BorderlessIsolatedWebAppBrowserTest,
     PopupResize_CanSubceedMinimumWindowSize_And_InnerAndOuterSizesAreCorrect) {
   InstallAndLaunchIsolatedWebApp(/*uses_borderless=*/true);
+  EXPECT_TRUE(browser_view()->AppUsesBorderlessMode());
   GrantWindowManagementPermission();
   ASSERT_TRUE(browser_view()->IsBorderlessModeEnabled());
 
@@ -851,6 +870,7 @@ IN_PROC_BROWSER_TEST_F(
 // possible. To test the fix for b/265935069.
 IN_PROC_BROWSER_TEST_F(BorderlessIsolatedWebAppBrowserTest, FrameMinimumSize) {
   InstallAndLaunchIsolatedWebApp(/*uses_borderless=*/true);
+  EXPECT_TRUE(browser_view()->AppUsesBorderlessMode());
   GrantWindowManagementPermission();
 
   ASSERT_TRUE(browser_view()->borderless_mode_enabled_for_testing());
@@ -867,6 +887,25 @@ IN_PROC_BROWSER_TEST_F(BorderlessIsolatedWebAppBrowserTest, FrameMinimumSize) {
 #elif BUILDFLAG(IS_LINUX)
   EXPECT_EQ(frame_view()->GetMinimumSize(), gfx::Size(1, 1));
 #endif
+}
+
+class BorderlessIsolatedWebAppBrowserTestDisabledFlag
+    : public BorderlessIsolatedWebAppBrowserTest {
+ protected:
+  void SetupBorderlessFeatureFlag() override {
+    scoped_feature_list_.InitAndDisableFeature(
+        blink::features::kWebAppBorderless);
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(BorderlessIsolatedWebAppBrowserTestDisabledFlag,
+                       AppCannotUseFeatureWhenBorderlessFlagIsDisabled) {
+  InstallAndLaunchIsolatedWebApp(/*uses_borderless=*/true);
+
+  EXPECT_FALSE(browser_view()->AppUsesBorderlessMode());
+  EXPECT_FALSE(
+      browser_view()->window_management_permission_granted_for_testing());
+  EXPECT_FALSE(browser_view()->IsBorderlessModeEnabled());
 }
 #endif  // (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS))
 
@@ -1225,7 +1264,12 @@ IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_WindowControlsOverlay,
   int client_view_height =
       frame_view_cros->frame()->client_view()->GetMinimumSize().height();
 
-  EXPECT_EQ(frame_view_height, caption_container_height + client_view_height);
+  // Frame view minimum height also includes radius of window to ensure correct
+  // rounding of window. See b/294588040.
+  int window_radius = chromeos::features::RoundedWindowsRadius();
+
+  EXPECT_EQ(frame_view_height,
+            caption_container_height + client_view_height + window_radius);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
@@ -1367,7 +1411,7 @@ IN_PROC_BROWSER_TEST_F(WebAppFrameToolbarBrowserTest_WindowControlsOverlay,
   views::NamedWidgetShownWaiter widget_waiter(
       views::test::AnyWidgetTestPasskey{}, "FindBarHost");
   // Press Ctrl+F to open find bar.
-  content::NativeWebKeyboardEvent event(
+  input::NativeWebKeyboardEvent event(
       blink::WebKeyboardEvent::Type::kRawKeyDown,
       blink::WebInputEvent::kControlKey,
       blink::WebInputEvent::GetStaticTimeStampForTests());

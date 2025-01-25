@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/mahi/mahi_content_extraction_delegate.h"
 
 #include <algorithm>
+#include <optional>
 #include <string>
 
 #include "base/check.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/screen_ai/screen_ai_service_router.h"
 #include "chrome/browser/screen_ai/screen_ai_service_router_factory.h"
+#include "chromeos/components/mahi/public/cpp/mahi_util.h"
 #include "chromeos/components/mahi/public/mojom/content_extraction.mojom.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/crosapi/mojom/mahi.mojom.h"
@@ -25,6 +27,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/screen_ai/public/mojom/screen_ai_service.mojom.h"
+#include "ui/accessibility/ax_tree_update.h"
 #include "url/gurl.h"
 
 #if DCHECK_IS_ON()
@@ -39,8 +42,6 @@
 namespace mahi {
 
 namespace {
-// The word count threshold for a distillable page.
-static constexpr int kWordCountThreshold = 50;
 
 #if DCHECK_IS_ON()
 // Save the contents to the `Download` directory. This function is used for
@@ -59,11 +60,8 @@ void SaveContentToDiskOnWorker(const base::FilePath& download_path,
 #endif
 }  // namespace
 
-MahiContentExtractionDelegate::MahiContentExtractionDelegate(
-    base::RepeatingCallback<void(const base::UnguessableToken&, bool)>
-        distillable_check_callback)
-    : distillable_check_callback_(std::move(distillable_check_callback)),
-      io_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+MahiContentExtractionDelegate::MahiContentExtractionDelegate()
+    : io_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
           {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {
   // Do not bind to the services if mahi is not enabled.
@@ -72,7 +70,7 @@ MahiContentExtractionDelegate::MahiContentExtractionDelegate(
   }
 
   // Builds connection with mahi content extraction service.
-  SetUpContentExtractionService();
+  EnsureContentExtractionServiceIsSetUp();
   EnsureServiceIsConnected();
 
   // Builds connection with screen ai service.
@@ -87,10 +85,10 @@ MahiContentExtractionDelegate::MahiContentExtractionDelegate(
 
 MahiContentExtractionDelegate::~MahiContentExtractionDelegate() = default;
 
-bool MahiContentExtractionDelegate::SetUpContentExtractionService() {
+bool MahiContentExtractionDelegate::EnsureContentExtractionServiceIsSetUp() {
   if (remote_content_extraction_service_factory_ &&
       remote_content_extraction_service_factory_.is_bound()) {
-    return false;
+    return true;
   }
 
   content::ServiceProcessHost::Launch(
@@ -101,18 +99,22 @@ bool MahiContentExtractionDelegate::SetUpContentExtractionService() {
 
   remote_content_extraction_service_factory_.reset_on_disconnect();
 
-  return true;
+  return remote_content_extraction_service_factory_ &&
+         remote_content_extraction_service_factory_.is_bound();
 }
 
-void MahiContentExtractionDelegate::EnsureServiceIsConnected() {
+bool MahiContentExtractionDelegate::EnsureServiceIsConnected() {
   if (remote_content_extraction_service_ &&
       remote_content_extraction_service_.is_bound()) {
-    return;
+    return true;
   }
 
   remote_content_extraction_service_factory_->BindContentExtractionService(
       remote_content_extraction_service_.BindNewPipeAndPassReceiver());
   remote_content_extraction_service_.reset_on_disconnect();
+
+  return remote_content_extraction_service_ &&
+         remote_content_extraction_service_.is_bound();
 }
 
 void MahiContentExtractionDelegate::ExtractContent(
@@ -125,17 +127,22 @@ void MahiContentExtractionDelegate::ExtractContent(
     return;
   }
 
-  // Both algorithms are used for content extraction.
-  mojom::ExtractionMethodsPtr extraction_methods =
-      mojom::ExtractionMethods::New(/*use_algorithm=*/true,
-                                    /*use_screen2x=*/true);
-
   // Generates the extraction request.
   mojom::ExtractionRequestPtr extraction_request =
       mojom::ExtractionRequest::New(
           /*ukm_source_id=*/web_content_state.ukm_source_id,
-          /*snapshot=*/web_content_state.snapshot,
-          /*extraction_methods=*/std::move(extraction_methods));
+          /*snapshot=*/std::make_optional(web_content_state.snapshot),
+          /*extraction_methods=*/
+          mojom::ExtractionMethods::New(/*use_algorithm=*/true,
+                                        /*use_screen2x=*/true),
+          /*updates=*/std::nullopt);
+
+  if (!EnsureContentExtractionServiceIsSetUp() || !EnsureServiceIsConnected()) {
+    std::move(callback).Run(nullptr);
+    LOG(ERROR) << "Remote content extraction service is not available.";
+    return;
+  }
+  MaybeBindScreenAIContentExtraction();
 
   remote_content_extraction_service_->ExtractContent(
       std::move(extraction_request),
@@ -145,43 +152,34 @@ void MahiContentExtractionDelegate::ExtractContent(
                      web_content_state.url, std::move(callback)));
 }
 
-void MahiContentExtractionDelegate::CheckDistillablity(
+void MahiContentExtractionDelegate::ExtractContent(
     const WebContentState& web_content_state,
-    const base::Time& start_time) {
-  // Early returns if the snapshot is not valid.
-  // TODO(b/318565573) consider adding some error states so that OS side have a
-  // better sense of the operations on the browser side.
-  if (web_content_state.snapshot.root_id == ui::kInvalidAXNodeID) {
-    return;
-  }
-
-  // Only rule based algorithm is used for triggering check.
-  mojom::ExtractionMethodsPtr extraction_methods =
-      mojom::ExtractionMethods::New(/*use_algorithm=*/true,
-                                    /*use_screen2x=*/false);
-
+    const std::vector<ui::AXTreeUpdate>& updates,
+    const base::UnguessableToken& client_id,
+    GetContentCallback callback) {
   // Generates the extraction request.
   mojom::ExtractionRequestPtr extraction_request =
       mojom::ExtractionRequest::New(
           /*ukm_source_id=*/web_content_state.ukm_source_id,
-          /*snapshot=*/web_content_state.snapshot,
-          /*extraction_methods=*/std::move(extraction_methods));
+          /*snapshot=*/std::nullopt,
+          /*extraction_methods=*/
+          mojom::ExtractionMethods::New(/*use_algorithm=*/true,
+                                        /*use_screen2x=*/true),
+          /*updates=*/std::make_optional(updates));
 
-  remote_content_extraction_service_->GetContentSize(
+  if (!EnsureContentExtractionServiceIsSetUp() || !EnsureServiceIsConnected()) {
+    std::move(callback).Run(nullptr);
+    LOG(ERROR) << "Remote content extraction service is not available.";
+    return;
+  }
+  MaybeBindScreenAIContentExtraction();
+
+  remote_content_extraction_service_->ExtractContent(
       std::move(extraction_request),
-      base::BindOnce(&MahiContentExtractionDelegate::OnGetContentSize,
+      base::BindOnce(&MahiContentExtractionDelegate::OnGetContent,
                      weak_pointer_factory_.GetWeakPtr(),
-                     web_content_state.page_id, start_time));
-}
-
-void MahiContentExtractionDelegate::OnGetContentSize(
-    const base::UnguessableToken& page_id,
-    const base::Time& start_time,
-    mojom::ContentSizeResponsePtr response) {
-  base::UmaHistogramMicrosecondsTimes(kMahiContentExtractionTriggeringLatency,
-                                      base::Time::Now() - start_time);
-  distillable_check_callback_.Run(page_id,
-                                  response->word_count >= kWordCountThreshold);
+                     web_content_state.page_id, client_id,
+                     web_content_state.url, std::move(callback)));
 }
 
 void MahiContentExtractionDelegate::OnGetContent(
@@ -213,14 +211,27 @@ void MahiContentExtractionDelegate::OnGetContent(
 
 void MahiContentExtractionDelegate::OnScreenAIServiceInitialized(
     bool successful) {
+  screen_ai_service_initialized_ = successful;
   if (!successful) {
+    LOG(ERROR) << "ScreenAI service was unsuccessfuly initialized.";
     return;
   }
 
-  CHECK(remote_content_extraction_service_factory_.is_bound());
-  // If initialization is successful, creates both a pending receiver and its
-  // corresponding pending remote so that we can build a direct communication
-  // between two utility processes.
+  MaybeBindScreenAIContentExtraction();
+}
+
+void MahiContentExtractionDelegate::MaybeBindScreenAIContentExtraction() {
+  // Screen AI service isn't initialize yet or Screen AI content extraction is
+  // already bound.
+  if (!screen_ai_service_initialized_ || is_screen_ai_service_bound_) {
+    return;
+  }
+
+  if (!EnsureContentExtractionServiceIsSetUp()) {
+    LOG(ERROR) << "Content extraction service isn't available.";
+    return;
+  }
+
   mojo::PendingReceiver<screen_ai::mojom::Screen2xMainContentExtractor>
       screen_ai_receiver;
   auto screen_ai_remote = screen_ai_receiver.InitWithNewPipeAndPassRemote();
@@ -230,6 +241,7 @@ void MahiContentExtractionDelegate::OnScreenAIServiceInitialized(
       ->BindMainContentExtractor(std::move(screen_ai_receiver));
   remote_content_extraction_service_factory_->OnScreen2xReady(
       std::move(screen_ai_remote));
+  is_screen_ai_service_bound_ = true;
 }
 
 }  // namespace mahi

@@ -385,9 +385,10 @@ void BrowserTestBase::SetUp() {
     enable_pixel_output_ = true;
 
   if (command_line->HasSwitch(switches::kDisableGLDrawingForTests)) {
-    NOTREACHED() << "kDisableGLDrawingForTests should not be used as it "
-                    "is chosen by tests. Use kEnablePixelOutputInTests "
-                    "to enable pixel output.";
+    NOTREACHED_IN_MIGRATION()
+        << "kDisableGLDrawingForTests should not be used as it "
+           "is chosen by tests. Use kEnablePixelOutputInTests "
+           "to enable pixel output.";
   }
 
   // Don't enable pixel output for browser tests unless they override and force
@@ -623,6 +624,8 @@ void BrowserTestBase::SetUp() {
   ASSERT_TRUE(delegate);
   ASSERT_TRUE(GetContentClientForTesting());
 
+  delegate->CreateThreadPool("Browser");
+
   std::optional<int> startup_error = delegate->BasicStartupComplete();
   ASSERT_FALSE(startup_error.has_value());
 
@@ -649,9 +652,6 @@ void BrowserTestBase::SetUp() {
     if (delegate->ShouldInitializeMojo(invoked_in_browser))
       InitializeMojoCore();
 
-    const bool has_thread_pool =
-        GetContentClientForTesting()->browser()->CreateThreadPool("Browser");
-
     std::optional<int> pre_browser_main_exit_code = delegate->PreBrowserMain();
     ASSERT_FALSE(pre_browser_main_exit_code.has_value());
 
@@ -667,8 +667,7 @@ void BrowserTestBase::SetUp() {
         delegate->PostEarlyInitialization(invoked_in_browser);
     ASSERT_FALSE(post_early_initialization_exit_code.has_value());
 
-    if (has_thread_pool)
-      StartBrowserThreadPool();
+    StartBrowserThreadPool();
 
     BrowserTaskExecutor::PostFeatureListSetup();
     tracing::InitTracingPostThreadPoolStartAndFeatureList(

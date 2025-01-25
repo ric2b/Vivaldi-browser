@@ -61,22 +61,20 @@
 namespace nearby_protocol {
 
 // Re-exporting cbindgen generated types which are used in the public API
+using np_ffi::internal::ActionType;
 using np_ffi::internal::AddV0CredentialToSlabResult;
 using np_ffi::internal::AddV0DEResult;
 using np_ffi::internal::AddV1CredentialToSlabResult;
 using np_ffi::internal::AdvertisementBuilderKind;
-using np_ffi::internal::BooleanActionType;
 using np_ffi::internal::CreateCredentialBookResultKind;
-using np_ffi::internal::CreateCredentialSlabResultKind;
-using np_ffi::internal::CreateV0AdvertisementBuilderResultKind;
 using np_ffi::internal::CreateV1SectionBuilderResultKind;
+using np_ffi::internal::CurrentHandleAllocations;
 using np_ffi::internal::DeserializeAdvertisementResultKind;
 using np_ffi::internal::DeserializedV0AdvertisementKind;
 using np_ffi::internal::DeserializedV0IdentityDetails;
 using np_ffi::internal::DeserializedV0IdentityKind;
 using np_ffi::internal::DeserializedV1IdentityDetails;
 using np_ffi::internal::DeserializedV1IdentityKind;
-using np_ffi::internal::EncryptedIdentityType;
 using np_ffi::internal::GetV0DEResultKind;
 using np_ffi::internal::PanicReason;
 using np_ffi::internal::SerializeV0AdvertisementResultKind;
@@ -140,43 +138,17 @@ class GlobalConfig {
   // np_ffi_global_config_set_num_shards in np_cpp_ffi_functions.h for more info
   static void SetNumShards(uint8_t num_shards);
 
-  // Sets the maximum number of active handles to credential slabs which may be
-  // active at any one time. See
-  // np_ffi_global_config_set_max_num_credential_slabs in np_cpp_ffi_functions.h
-  // for more info
-  static void SetMaxNumCredentialSlabs(uint32_t max_num_credential_slabs);
-
-  // Sets the maximum number of active handles to credential books which may be
-  // active at any one time. See
-  // np_ffi_global_config_set_max_num_credential_books in np_cpp_ffi_functions.h
-  // for more info
-  static void SetMaxNumCredentialBooks(uint32_t max_num_credential_books);
-
-  // Sets the maximum number of active handles to deserialized v0 advertisements
-  // which may be active at any one time. See
-  // np_ffi_global_config_set_max_num_deserialized_v0_advertisements for more
-  // info.
-  static void SetMaxNumDeserializedV0Advertisements(
-      uint32_t max_num_deserialized_v0_advertisements);
-
-  // Sets the maximum number of active handles to deserialized v1 advertisements
-  // which may be active at any one time
-  static void SetMaxNumDeserializedV1Advertisements(
-      uint32_t max_num_deserialized_v1_advertisements);
-
-  // Sets the maximum number of active handles to v0 advertisement builders
-  // which may be active at any one time
-  static void SetMaxNumV0AdvertisementBuilders(
-      uint32_t max_num_v0_advertisement_builders);
+  // Checks the current count of all outstanding handle allocations, useful for
+  // debugging, logging, and testing
+  static CurrentHandleAllocations GetCurrentHandleAllocationCount();
 };
 
 // Holds the credentials used in the construction of a credential book
 // using CredentialBook::TryCreateFromSlab()
 class CredentialSlab {
  public:
-  // Don't allow copy constructor, copy-assignment or default constructor, since
+  // Don't allow copy constructor or copy-assignment since
   // this class wraps a handle to externally allocated resources.
-  CredentialSlab() = delete;
   CredentialSlab(const CredentialSlab &other) = delete;
   CredentialSlab &operator=(const CredentialSlab &other) = delete;
 
@@ -185,26 +157,23 @@ class CredentialSlab {
   CredentialSlab(CredentialSlab &&other) noexcept;
   CredentialSlab &operator=(CredentialSlab &&other) noexcept;
 
+  // Creates a new instance of a CredentialSlab, returns the CredentialSlab on
+  // success or a Status code on failure
+  CredentialSlab();
+
   // The destructor for a CredentialSlab, this will be called when a
   // CredentialSlab instance goes out of scope and will free the underlying
   // resources
   ~CredentialSlab();
 
-  // Creates a new instance of a CredentialSlab, returns the CredentialSlab on
-  // success or a Status code on failure
-  [[nodiscard]] static absl::StatusOr<CredentialSlab> TryCreate();
-
   // Adds a V0 credential to the slab
-  [[nodiscard]] absl::Status AddV0Credential(V0MatchableCredential v0_cred);
+  void AddV0Credential(V0MatchableCredential v0_cred);
 
   // Adds a V1 credential to the slab
   [[nodiscard]] absl::Status AddV1Credential(V1MatchableCredential v1_cred);
 
  private:
   friend class CredentialBook;
-  explicit CredentialSlab(np_ffi::internal::CredentialSlab credential_slab)
-      : credential_slab_(credential_slab), moved_(false) {}
-
   np_ffi::internal::CredentialSlab credential_slab_;
   bool moved_;
 };
@@ -234,14 +203,10 @@ class CredentialBook {
   // returning the CredentialBook on success or a Status code on failure.
   // The passed credential-slab will be deallocated if this operation
   // is successful.
-  [[nodiscard]] static absl::StatusOr<CredentialBook> TryCreateFromSlab(
-      CredentialSlab &slab);
+  CredentialBook(CredentialSlab &slab);
 
  private:
   friend class Deserializer;
-  explicit CredentialBook(np_ffi::internal::CredentialBook credential_book)
-      : credential_book_(credential_book), moved_(false) {}
-
   np_ffi::internal::CredentialBook credential_book_;
   bool moved_;
 };
@@ -311,9 +276,9 @@ class V0BroadcastCredential {
   V0BroadcastCredential() = delete;
 
   // Creates a new V0Broadcast credential with the given
-  // key seed and metadata key.
+  // key seed and identity token.
   [[nodiscard]] V0BroadcastCredential(std::array<uint8_t, 32> key_seed,
-                                      std::array<uint8_t, 14> metadata_key);
+                                      std::array<uint8_t, 14> identity_token);
 
  private:
   friend class V0AdvertisementBuilder;
@@ -578,12 +543,12 @@ class V0Payload {
   // Decrypts the metadata of the credential which matched with this
   // advertisement, or returns an error if the metadata key is invalid and
   // unable to successfully decrypt the metadata.
-  [[nodiscard]] absl::StatusOr<std::vector<uint8_t>> DecryptMetadata() const;
+  [[nodiscard]] absl::StatusOr<std::vector<uint8_t>> TryDecryptMetadata() const;
 
   // Gets the details of the identity data element of this payload or returns an
   // error if the payload does not have an identity (public advertisement)
   [[nodiscard]] absl::StatusOr<DeserializedV0IdentityDetails>
-  GetIdentityDetails() const;
+  TryGetIdentityDetails() const;
 
  private:
   friend class LegibleDeserializedV0Advertisement;
@@ -638,28 +603,6 @@ class V0DataElement {
   np_ffi::internal::V0DataElement v0_data_element_;
 };
 
-// A Context Sync Sequence Number [0-15]
-class ContextSyncSeqNum {
- public:
-  ContextSyncSeqNum() = delete;
-
-  // Gets the value of this context-sync sequence number.
-  [[nodiscard]] uint8_t GetAsU8() const;
-
-  // Attempts to construct a context-sync sequence number with the given
-  // value contained in an unsigned byte. If the number may not be
-  // represented in a single nibble, this method will return an
-  // invalid argument error.
-  [[nodiscard]] static absl::StatusOr<ContextSyncSeqNum> TryBuildFromU8(
-      uint8_t value);
-
- private:
-  friend class V0Actions;
-  explicit ContextSyncSeqNum(np_ffi::internal::ContextSyncSeqNum seq_num)
-      : seq_num_(seq_num) {}
-  np_ffi::internal::ContextSyncSeqNum seq_num_;
-};
-
 // A V0 Actions Data Element
 class V0Actions {
  public:
@@ -670,20 +613,14 @@ class V0Actions {
   [[nodiscard]] uint32_t GetAsU32() const;
 
   /// Return whether a boolean action type is present in this data element
-  [[nodiscard]] bool HasAction(BooleanActionType action) const;
-
-  /// Gets the 4 bit context sync sequence number from this data element
-  [[nodiscard]] ContextSyncSeqNum GetContextSyncSequenceNumber() const;
+  [[nodiscard]] bool HasAction(ActionType action) const;
 
   /// Attempts to set the given action bit to the given boolean value.
   /// This operation may fail with an invalid argument error
   /// if the requested action bit may not be set given the encoding
   /// of the containing advertisement.
   /// In this case, the action bits will be unaltered by this call.
-  absl::Status TrySetAction(BooleanActionType action, bool value);
-
-  /// Sets the context sync sequence number.
-  void SetContextSyncSequenceNumber(ContextSyncSeqNum seq_num);
+  absl::Status TrySetAction(ActionType action, bool value);
 
   // Constructs an all-zeroed V0 actions DE for the given advertisement builder
   // kind.
@@ -746,7 +683,8 @@ class DeserializedV1Section {
       uint8_t index) const;
 
   // Decrypts the metadata of the credential which matched with this section
-  [[nodiscard]] absl::StatusOr<std::vector<uint8_t>> DecryptMetadata() const;
+  // or returns an error in the case that the metadata could not be decrypted
+  [[nodiscard]] absl::StatusOr<std::vector<uint8_t>> TryDecryptMetadata() const;
 
   // Gets the details of the identity data element of this section or returns an
   // error if the section does not contain an identity (public section)
@@ -829,20 +767,14 @@ class V0AdvertisementBuilder {
 
   // Creates a new V0 advertisement builder for a public advertisement,
   // or returns a Status code on failure.
-  [[nodiscard]] static absl::StatusOr<V0AdvertisementBuilder> TryCreatePublic();
+  [[nodiscard]] static V0AdvertisementBuilder CreatePublic();
 
   // Creates a new V0 advertisement builder for an encrypted advertisement,
   // or returns a Status code on failure.
-  [[nodiscard]] static absl::StatusOr<V0AdvertisementBuilder>
-  TryCreateEncrypted(V0BroadcastCredential broadcast_cred,
-                     EncryptedIdentityType identity_type,
-                     std::array<uint8_t, 2> salt);
+  [[nodiscard]] static V0AdvertisementBuilder CreateEncrypted(
+      V0BroadcastCredential broadcast_cred, std::array<uint8_t, 2> salt);
 
  private:
-  [[nodiscard]] static absl::StatusOr<V0AdvertisementBuilder>
-  CreateV0AdvertisementBuilderResultToInternal(
-      np_ffi::internal::CreateV0AdvertisementBuilderResult result);
-
   explicit V0AdvertisementBuilder(
       np_ffi::internal::V0AdvertisementBuilder adv_builder)
       : adv_builder_(adv_builder), moved_(false) {}

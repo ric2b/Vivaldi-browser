@@ -283,6 +283,11 @@ public abstract class FirstRunFlowSequencer {
                         || FirstRunStatus.getLightweightFirstRunFlowComplete())) {
             return false;
         }
+        // Vivaldi
+        if (BuildConfig.IS_OEM_MERCEDES_BUILD && isCct) {
+            // Ref. https://bugs.vivaldi.com/browse/AUTO-165. Skip first-run sequence for CCT.
+            return false;
+        }
         return true;
     }
 

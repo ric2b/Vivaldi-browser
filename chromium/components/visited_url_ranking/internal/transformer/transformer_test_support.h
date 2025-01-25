@@ -16,9 +16,6 @@
 
 namespace visited_url_ranking {
 
-inline constexpr char kSampleSearchUrl[] =
-    "https://www.google.com/search?q=sample";
-
 class URLVisitAggregatesTransformerTest : public testing::Test {
  public:
   URLVisitAggregatesTransformerTest();
@@ -33,6 +30,8 @@ class URLVisitAggregatesTransformerTest : public testing::Test {
   using Result = std::pair<URLVisitAggregatesTransformer::Status,
                            std::vector<URLVisitAggregate>>;
   Result TransformAndGetResult(std::vector<URLVisitAggregate> aggregates);
+  Result TransformAndGetResult(std::vector<URLVisitAggregate> aggregates,
+                               const FetchOptions& options);
 
  protected:
   base::test::TaskEnvironment task_env_;

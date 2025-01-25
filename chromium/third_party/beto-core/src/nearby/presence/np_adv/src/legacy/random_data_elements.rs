@@ -16,18 +16,18 @@
 
 extern crate std;
 
+use crate::legacy::data_elements::actions::tests::{
+    set_ciphertexttext_action, set_plaintext_action,
+};
 use crate::{
     legacy::{
-        actions::*,
-        data_elements::*,
-        de_type::PlainDataElementType,
-        deserialize::PlainDataElement,
-        serialize::{DataElementBundle, ToDataElementBundle},
+        data_elements::{actions::*, de_type::DataElementType, tx_power::TxPowerDataElement, *},
+        deserialize::DeserializedDataElement,
         Ciphertext, PacketFlavor, PacketFlavorEnum, Plaintext,
     },
-    shared_data::{ContextSyncSeqNum, TxPower},
+    shared_data::TxPower,
 };
-use rand_ext::rand::{self, distributions, prelude::SliceRandom as _};
+use rand_ext::rand::{distributions, prelude::SliceRandom as _};
 use std::prelude::rust_2021::*;
 use strum::IntoEnumIterator;
 
@@ -45,25 +45,16 @@ impl distributions::Distribution<ActionsDataElement<Plaintext>> for distribution
         let mut bits = ActionBits::default();
 
         for a in selected_actions {
-            match a {
-                ActionType::ContextSyncSeqNum => {
-                    bits.set_action(ContextSyncSeqNum::try_from(rng.gen_range(0..=15)).unwrap())
-                }
-                // generating boolean actions with `true` since we already did our random selection
-                // of which actions to use above
-                ActionType::NearbyShare => bits.set_action(NearbyShare::from(true)),
-                ActionType::Finder => bits.set_action(Finder::from(true)),
-                ActionType::FastPairSass => bits.set_action(FastPairSass::from(true)),
-                ActionType::ActiveUnlock
-                | ActionType::PresenceManager
-                | ActionType::InstantTethering
-                | ActionType::PhoneHub => unreachable!("not plaintext actions"),
-            }
+            // generating boolean actions with `true` since we already did our random selection
+            // of which actions to use above
+
+            set_plaintext_action(*a, true, &mut bits);
         }
 
         ActionsDataElement::from(bits)
     }
 }
+
 impl distributions::Distribution<ActionsDataElement<Ciphertext>> for distributions::Standard {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> ActionsDataElement<Ciphertext> {
         let mut available_actions = ActionType::iter()
@@ -78,20 +69,9 @@ impl distributions::Distribution<ActionsDataElement<Ciphertext>> for distributio
         let mut bits = ActionBits::default();
 
         for a in selected_actions {
-            match a {
-                ActionType::ContextSyncSeqNum => {
-                    bits.set_action(ContextSyncSeqNum::try_from(rng.gen_range(0..=15)).unwrap())
-                }
-                ActionType::ActiveUnlock => bits.set_action(ActiveUnlock::from(true)),
-                // generating boolean actions with `true` since we already did our random selection
-                // of which actions to use above
-                ActionType::NearbyShare => bits.set_action(NearbyShare::from(true)),
-                ActionType::PresenceManager => bits.set_action(PresenceManager::from(true)),
-                ActionType::InstantTethering => bits.set_action(InstantTethering::from(true)),
-                ActionType::PhoneHub => bits.set_action(PhoneHub::from(true)),
-                ActionType::Finder => bits.set_action(Finder::from(true)),
-                ActionType::FastPairSass => bits.set_action(FastPairSass::from(true)),
-            }
+            // generating boolean actions with `true` since we already did our random selection
+            // of which actions to use above
+            set_ciphertexttext_action(*a, true, &mut bits);
         }
 
         ActionsDataElement::from(bits)
@@ -112,60 +92,45 @@ impl distributions::Distribution<TxPowerDataElement> for distributions::Standard
     }
 }
 
-/// Generate a random instance of the requested DE and return it wrapped in [PlainDataElement] along
-/// with its bundle representation.
-pub(crate) fn rand_de_and_bundle<F, D, E, R>(
-    to_enum: E,
-    rng: &mut R,
-) -> (PlainDataElement<F>, DataElementBundle<F>)
+/// Generate a random instance of the requested DE and return it wrapped in [DeserializedDataElement].
+pub(crate) fn rand_de<F, D, E, R>(to_enum: E, rng: &mut R) -> DeserializedDataElement<F>
 where
     F: PacketFlavor,
-    D: ToDataElementBundle<F>,
-    E: Fn(D) -> PlainDataElement<F>,
+    D: SerializeDataElement<F>,
+    E: Fn(D) -> DeserializedDataElement<F>,
     R: rand::Rng,
     distributions::Standard: distributions::Distribution<D>,
 {
     let de = rng.gen::<D>();
-    let bundle = de.to_de_bundle();
-    (to_enum(de), bundle)
+    to_enum(de)
 }
 
 /// Generate a random instance of the requested de type, or `None` if that type does not support
 /// plaintext.
 pub(crate) fn random_de_plaintext<R>(
-    de_type: PlainDataElementType,
+    de_type: DataElementType,
     rng: &mut R,
-) -> Option<(PlainDataElement<Plaintext>, DataElementBundle<Plaintext>)>
+) -> DeserializedDataElement<Plaintext>
 where
     R: rand::Rng,
 {
-    let opt = match de_type {
-        PlainDataElementType::TxPower => Some(rand_de_and_bundle(PlainDataElement::TxPower, rng)),
-        PlainDataElementType::Actions => Some(rand_de_and_bundle(PlainDataElement::Actions, rng)),
-    };
-
-    // make sure flavor support is consistent
-    assert_eq!(opt.is_some(), de_type.supports_flavor(PacketFlavorEnum::Plaintext));
-
-    opt
+    match de_type {
+        DataElementType::TxPower => rand_de(DeserializedDataElement::TxPower, rng),
+        DataElementType::Actions => rand_de(DeserializedDataElement::Actions, rng),
+    }
 }
 
 /// Generate a random instance of the requested de type, or `None` if that type does not support
 /// ciphertext.
 pub(crate) fn random_de_ciphertext<R>(
-    de_type: PlainDataElementType,
+    de_type: DataElementType,
     rng: &mut R,
-) -> Option<(PlainDataElement<Ciphertext>, DataElementBundle<Ciphertext>)>
+) -> DeserializedDataElement<Ciphertext>
 where
     R: rand::Rng,
 {
-    let opt = match de_type {
-        PlainDataElementType::TxPower => Some(rand_de_and_bundle(PlainDataElement::TxPower, rng)),
-        PlainDataElementType::Actions => Some(rand_de_and_bundle(PlainDataElement::Actions, rng)),
-    };
-
-    // make sure flavor support is consistent
-    assert_eq!(opt.is_some(), de_type.supports_flavor(PacketFlavorEnum::Ciphertext));
-
-    opt
+    match de_type {
+        DataElementType::TxPower => rand_de(DeserializedDataElement::TxPower, rng),
+        DataElementType::Actions => rand_de(DeserializedDataElement::Actions, rng),
+    }
 }

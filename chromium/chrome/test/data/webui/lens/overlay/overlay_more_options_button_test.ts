@@ -5,8 +5,8 @@
 import 'chrome-untrusted://lens/lens_overlay_app.js';
 
 import {BrowserProxyImpl} from 'chrome-untrusted://lens/browser_proxy.js';
+import {UserAction} from 'chrome-untrusted://lens/lens.mojom-webui.js';
 import type {LensOverlayAppElement} from 'chrome-untrusted://lens/lens_overlay_app.js';
-import {UserAction} from 'chrome-untrusted://lens/metrics_utils.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 import type {MetricsTracker} from 'chrome-untrusted://webui-test/metrics_test_support.js';
 import {fakeMetricsPrivate} from 'chrome-untrusted://webui-test/metrics_test_support.js';
@@ -19,7 +19,7 @@ suite('OverlayFeedbackButton', () => {
   let lensOverlayElement: LensOverlayAppElement;
   let metrics: MetricsTracker;
 
-  setup(() => {
+  setup(async () => {
     // Resetting the HTML needs to be the first thing we do in setup to
     // guarantee that any singleton instances don't change while any UI is still
     // attached to the DOM.
@@ -29,6 +29,7 @@ suite('OverlayFeedbackButton', () => {
     BrowserProxyImpl.setInstance(testBrowserProxy);
 
     lensOverlayElement = document.createElement('lens-overlay-app');
+    await testBrowserProxy.handler.whenCalled('getOverlayInvocationSource');
     document.body.appendChild(lensOverlayElement);
     metrics = fakeMetricsPrivate();
     return waitBeforeNextRender(lensOverlayElement);
@@ -49,7 +50,9 @@ suite('OverlayFeedbackButton', () => {
   });
 
   test('verify clicking my activity calls browser proxy', async () => {
-    lensOverlayElement.shadowRoot!.querySelector<HTMLElement>('#myActivity')!
+    // My activity button
+    lensOverlayElement.shadowRoot!
+        .querySelector<HTMLElement>('[aria-labelledby="myActivity"]')!
         .dispatchEvent(new MouseEvent('click', {
           button: 1,
           altKey: false,
@@ -68,11 +71,21 @@ suite('OverlayFeedbackButton', () => {
     assertEquals(
         1,
         metrics.count(
-            'Lens.Overlay.Overlay.UserAction', UserAction.MY_ACTIVITY));
+            'Lens.Overlay.Overlay.UserAction', UserAction.kMyActivity));
+    assertEquals(
+        1,
+        metrics.count(
+            'Lens.Overlay.Overlay.ByInvocationSource.AppMenu.UserAction',
+            UserAction.kMyActivity));
+    const action = await testBrowserProxy.handler.whenCalled(
+        'recordUkmAndTaskCompletionForLensOverlayInteraction');
+    assertEquals(UserAction.kMyActivity, action);
   });
 
   test('verify clicking learn more calls browser proxy', async () => {
-    lensOverlayElement.shadowRoot!.querySelector<HTMLElement>('#learnMore')!
+    // Learn more button
+    lensOverlayElement.shadowRoot!
+        .querySelector<HTMLElement>('[aria-labelledby="learnMore"]')!
         .dispatchEvent(new MouseEvent('click', {
           button: 1,
           altKey: false,
@@ -91,17 +104,35 @@ suite('OverlayFeedbackButton', () => {
     assertEquals(
         1,
         metrics.count(
-            'Lens.Overlay.Overlay.UserAction', UserAction.LEARN_MORE));
+            'Lens.Overlay.Overlay.UserAction', UserAction.kLearnMore));
+    assertEquals(
+        1,
+        metrics.count(
+            'Lens.Overlay.Overlay.ByInvocationSource.AppMenu.UserAction',
+            UserAction.kLearnMore));
+    const action = await testBrowserProxy.handler.whenCalled(
+        'recordUkmAndTaskCompletionForLensOverlayInteraction');
+    assertEquals(UserAction.kLearnMore, action);
   });
 
-  test('verify clicking send feedback calls browser proxy', () => {
-    lensOverlayElement.shadowRoot!.querySelector<HTMLElement>(
-                                      '#sendFeedback')!.click();
+  test('verify clicking send feedback calls browser proxy', async () => {
+    // Send feedback button
+    lensOverlayElement.shadowRoot!
+        .querySelector<HTMLElement>(
+            '[aria-labelledby="sendFeedback"]')!.click();
     assertEquals(1, metrics.count('Lens.Overlay.Overlay.UserAction'));
     assertEquals(
         1,
         metrics.count(
-            'Lens.Overlay.Overlay.UserAction', UserAction.SEND_FEEDBACK));
+            'Lens.Overlay.Overlay.UserAction', UserAction.kSendFeedback));
+    assertEquals(
+        1,
+        metrics.count(
+            'Lens.Overlay.Overlay.ByInvocationSource.AppMenu.UserAction',
+            UserAction.kSendFeedback));
+    const action = await testBrowserProxy.handler.whenCalled(
+        'recordUkmAndTaskCompletionForLensOverlayInteraction');
+    assertEquals(UserAction.kSendFeedback, action);
     return testBrowserProxy.handler.whenCalled('feedbackRequestedByOverlay');
   });
 });

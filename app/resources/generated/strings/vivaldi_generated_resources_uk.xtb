@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Застосувати</translation>
 <translation id="1603914832182249871">(Анонімний)</translation>
 <translation id="1627276047960621195">Дескриптори файлу</translation>
+<translation id="1654713139320245449">Немає пристроїв для трансляції. Потрібна допомога?</translation>
 <translation id="166278006618318542">Алгоритм відкритого ключа суб'єкта</translation>
 <translation id="1682548588986054654">Нове приватне вікно</translation>
 <translation id="1708338024780164500">(Неактивно)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Інша програма на вашому комп’ютері додала розширення, яке може змінити роботу Vivaldi.</translation>
 <translation id="2443487764245141020">Щоб розпізнавати ваш пристрій, сайтам, можливо, буде потрібен ідентифікатор</translation>
 <translation id="2445081178310039857">Потрібен кореневий каталог розширення.</translation>
-<translation id="2470702053775288986">Непідтримувані розширення вимкнено</translation>
 <translation id="2485422356828889247">Видалити</translation>
 <translation id="2498539833203011245">Згорнути</translation>
 <translation id="2509495747794740764">Вкажіть значення від 10 до 200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Деталі</translation>
 <translation id="4345587454538109430">Налаштування...</translation>
 <translation id="4348766275249686434">Зібрати помилки</translation>
-<translation id="4363771538994847871">Немає пристроїв для трансляції. Потрібна допомога?</translation>
 <translation id="4384652540891215547">Активувати розширення</translation>
 <translation id="4394049700291259645">Вимкнути</translation>
 <translation id="4409697491990005945">Поля</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Орієнтація</translation>
 <translation id="7782102568078991263">Більше немає пропозицій від Google</translation>
 <translation id="7786889348652477777">&amp;Перезавантажити додаток</translation>
-<translation id="7791543448312431591">Додати</translation>
 <translation id="7800518121066352902">Повернути п&amp;роти годинникової стрілки</translation>
 <translation id="7814458197256864873">&amp;Копіювати</translation>
 <translation id="7818135753970109980">Додано нову тему (<ph name="EXTENSION_NAME" />)</translation>

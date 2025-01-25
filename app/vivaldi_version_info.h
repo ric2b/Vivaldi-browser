@@ -3,6 +3,18 @@
 #ifndef APP_VIVALDI_VERSION_INFO_H_
 #define APP_VIVALDI_VERSION_INFO_H_
 
+/*
+* NOTE! NOTE! NOTE!
+*
+* Sources in targets using this header file MUST add the below
+* in the relevant GN target:
+*
+*   configs += [
+*     "//vivaldi/gn/config:release_kind"
+*   ]
+*
+*/
+
 #include <string>
 
 // Defines used when determining build versions.

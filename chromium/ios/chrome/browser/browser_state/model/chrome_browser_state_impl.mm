@@ -4,6 +4,8 @@
 
 #import "ios/chrome/browser/browser_state/model/chrome_browser_state_impl.h"
 
+#import <Foundation/Foundation.h>
+
 #import <utility>
 
 #import "base/apple/backup_util.h"
@@ -11,6 +13,7 @@
 #import "base/feature_list.h"
 #import "base/files/file_path.h"
 #import "base/files/file_util.h"
+#import "base/strings/sys_string_conversions.h"
 #import "base/task/sequenced_task_runner.h"
 #import "base/threading/thread_restrictions.h"
 #import "components/bookmarks/browser/bookmark_model.h"
@@ -31,8 +34,6 @@
 #import "components/supervised_user/core/common/features.h"
 #import "components/sync_preferences/pref_service_syncable.h"
 #import "components/user_prefs/user_prefs.h"
-#import "ios/chrome/browser/bookmarks/model/account_bookmark_model_factory.h"
-#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/browser_state/model/constants.h"
 #import "ios/chrome/browser/browser_state/model/off_the_record_chrome_browser_state_impl.h"
 #import "ios/chrome/browser/content_settings/model/host_content_settings_map_factory.h"
@@ -54,11 +55,18 @@
 #import "ios/ad_blocker/adblock_rule_service_factory.h"
 // End Vivaldi
 
-// Returns a bool indicating whether the necessary directories were able to be
-// created (or already existed).
-bool EnsureBrowserStateDirectoriesCreated(const base::FilePath& path,
-                                          const base::FilePath& otr_path,
-                                          const base::FilePath& cache_path) {
+enum class BrowserStateCreationResult {
+  kCreated,
+  kExisting,
+  kFailed,
+};
+
+// Returns an integer corresponded to a BrowserStateCreationResult enum
+// indicating if the necessary directories were newly created, already existed,
+// or failed to be created.
+int EnsureBrowserStateDirectoriesCreated(const base::FilePath& path,
+                                         const base::FilePath& otr_path,
+                                         const base::FilePath& cache_path) {
   // Create the browser state directory synchronously otherwise we would need to
   // sequence every otherwise independent I/O operation inside the browser state
   // directory with this operation. base::CreateDirectory() should be a
@@ -67,21 +75,33 @@ bool EnsureBrowserStateDirectoriesCreated(const base::FilePath& path,
   // thread.
   base::ScopedAllowBlocking allow_blocking_to_create_directory;
 
-  if (!base::PathExists(path) && !base::CreateDirectory(path)) {
-    return false;
+  BrowserStateCreationResult result = BrowserStateCreationResult::kExisting;
+
+  if (!base::PathExists(path)) {
+    result = BrowserStateCreationResult::kCreated;
+    if (!base::CreateDirectory(path)) {
+      return static_cast<int>(BrowserStateCreationResult::kFailed);
+    }
   }
+
   // Create the directory for the OTR stash state now, even though it won't
   // necessarily be needed: the OTR browser state itself is created
   // synchronously on an as-needed basis on the UI thread, so creation of its
   // stash state directory cannot easily be done at that point.
-  if (!base::PathExists(otr_path) && !base::CreateDirectory(otr_path)) {
-    return false;
+  if (!base::PathExists(otr_path)) {
+    result = BrowserStateCreationResult::kCreated;
+    if (!base::CreateDirectory(otr_path)) {
+      return static_cast<int>(BrowserStateCreationResult::kFailed);
+    }
   }
   base::apple::SetBackupExclusion(otr_path);
-  if (!base::PathExists(cache_path) && !base::CreateDirectory(cache_path)) {
-    return false;
+  if (!base::PathExists(cache_path)) {
+    result = BrowserStateCreationResult::kCreated;
+    if (!base::CreateDirectory(cache_path)) {
+      return static_cast<int>(BrowserStateCreationResult::kFailed);
+    }
   }
-  return true;
+  return static_cast<int>(result);
 }
 
 namespace {
@@ -95,6 +115,7 @@ base::FilePath GetCachePath(const base::FilePath& base) {
 // static
 std::unique_ptr<ChromeBrowserState> ChromeBrowserState::CreateBrowserState(
     const base::FilePath& path,
+    const std::string& browser_state_name,
     CreationMode creation_mode,
     Delegate* delegate) {
   // Get sequenced task runner for making sure that file operations of
@@ -104,19 +125,25 @@ std::unique_ptr<ChromeBrowserState> ChromeBrowserState::CreateBrowserState(
       base::ThreadPool::CreateSequencedTaskRunner(
           {base::TaskShutdownBehavior::BLOCK_SHUTDOWN, base::MayBlock()});
 
-  return base::WrapUnique(new ChromeBrowserStateImpl(path, io_task_runner,
-                                                     creation_mode, delegate));
+  return base::WrapUnique(new ChromeBrowserStateImpl(
+      path, browser_state_name, io_task_runner, creation_mode, delegate));
 }
 
 ChromeBrowserStateImpl::ChromeBrowserStateImpl(
     const base::FilePath& state_path,
+    const std::string& browser_state_name,
     scoped_refptr<base::SequencedTaskRunner> io_task_runner,
     CreationMode creation_mode,
     Delegate* delegate)
-    : ChromeBrowserState(state_path, std::move(io_task_runner)),
+    : ChromeBrowserState(state_path,
+                         browser_state_name,
+                         std::move(io_task_runner)),
       delegate_(delegate),
       pref_registry_(new user_prefs::PrefRegistrySyncable),
       io_data_(new ChromeBrowserStateImplIOData::Handle(this)) {
+  DCHECK(!browser_state_name.empty());
+  BrowserStateDependencyManager::GetInstance()->MarkBrowserStateLive(this);
+
   profile_metrics::SetBrowserProfileType(
       this, profile_metrics::BrowserProfileType::kRegular);
 
@@ -130,9 +157,11 @@ ChromeBrowserStateImpl::ChromeBrowserStateImpl(
   base::FilePath base_cache_path;
   ios::GetUserCacheDirectory(state_path, &base_cache_path);
 
-  bool directories_created = EnsureBrowserStateDirectoriesCreated(
-      state_path, GetOffTheRecordStatePath(), base_cache_path);
-  DCHECK(directories_created);
+  BrowserStateCreationResult directories_created =
+      static_cast<BrowserStateCreationResult>(
+          EnsureBrowserStateDirectoriesCreated(
+              state_path, GetOffTheRecordStatePath(), base_cache_path));
+  DCHECK_NE(directories_created, BrowserStateCreationResult::kFailed);
 
   // Bring up the policy system before creating `prefs_`.
   BrowserPolicyConnectorIOS* connector =
@@ -153,6 +182,7 @@ ChromeBrowserStateImpl::ChromeBrowserStateImpl(
       BuildBrowserStatePolicyConnector(policy_schema_registry_.get(), connector,
                                        user_cloud_policy_manager_.get());
 
+  // Register BrowserState preferences.
   RegisterBrowserStatePrefs(pref_registry_.get());
   BrowserStateDependencyManager::GetInstance()
       ->RegisterBrowserStatePrefsForServices(pref_registry_.get());
@@ -175,9 +205,6 @@ ChromeBrowserStateImpl::ChromeBrowserStateImpl(
 
   // Migrate obsolete prefs.
   MigrateObsoleteBrowserStatePrefs(state_path, prefs_.get());
-
-  BrowserStateDependencyManager::GetInstance()->CreateBrowserStateServices(
-      this);
 
   // In //chrome/browser, SupervisedUserSettingsService is a SimpleKeyedService
   // and can be created to initialize SupervisedUserPrefStore.
@@ -205,9 +232,28 @@ ChromeBrowserStateImpl::ChromeBrowserStateImpl(
   base::FilePath cache_path = GetCachePath(base_cache_path);
   int cache_max_size = 0;
 
+  // `storage_uuid_` can be empty when the profile is newly created or already
+  // existed.
+  storage_uuid_ = GetPrefs()->GetString(prefs::kBrowserStateStorageIdentifier);
+  // For newly created profiles, generate a UUID and use a separated data store.
+  // TODO(crbug.com/346754380): Remove a default data store completely.
+  if (storage_uuid_.empty() &&
+      directories_created == BrowserStateCreationResult::kCreated) {
+    storage_uuid_ = base::SysNSStringToUTF8([NSUUID UUID].UUIDString);
+    // Store the UUID value to PrefService locally.
+    GetPrefs()->SetString(prefs::kBrowserStateStorageIdentifier, storage_uuid_);
+  }
+
   // Make sure we initialize the io_data_ after everything else has been
   // initialized that we might be reading from the IO thread.
   io_data_->Init(cookie_path, cache_path, cache_max_size, state_path);
+
+  // DO NOT ADD ANY INITIALISATION AFTER THIS LINE.
+
+  // The initialisation of the ChromeBrowserState is now complete and the
+  // service can be safely created.
+  BrowserStateDependencyManager::GetInstance()->CreateBrowserStateServices(
+      this);
 
   if (delegate_) {
     // TODO(crbug.com/333865629): pass correct values for `success` and
@@ -289,6 +335,10 @@ ChromeBrowserStateImpl::GetSyncablePrefs() {
 
 bool ChromeBrowserStateImpl::IsOffTheRecord() const {
   return false;
+}
+
+const std::string& ChromeBrowserStateImpl::GetWebKitStorageID() const {
+  return storage_uuid_;
 }
 
 void ChromeBrowserStateImpl::SetOffTheRecordChromeBrowserState(

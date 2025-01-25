@@ -115,6 +115,26 @@ std::string GetStringNameForOptimizationType(
       return "AmericanExpressCreditCardSubscriptionBenefits";
     case proto::OptimizationType::CAPITAL_ONE_CREDIT_CARD_BENEFITS_BLOCKED:
       return "CapitalOneCreditCardBenefitsBlocked";
+    case proto::OptimizationType::VCN_MERCHANT_OPT_OUT_DISCOVER:
+      return "VcnMerchantOptOutDiscover";
+    case proto::OptimizationType::VCN_MERCHANT_OPT_OUT_MASTERCARD:
+      return "VcnMerchantOptOutMastercard";
+    case proto::OptimizationType::PIX_MERCHANT_ORIGINS_ALLOWLIST:
+      return "PixMerchantOriginsAllowlist";
+    case proto::OptimizationType::HISTORY_EMBEDDINGS:
+      return "HistoryEmbeddings";
+    case proto::OptimizationType::AUTOFILL_ABLATION_SITES_LIST1:
+      return "AutofillAblationSitesList1";
+    case proto::OptimizationType::AUTOFILL_ABLATION_SITES_LIST2:
+      return "AutofillAblationSitesList2";
+    case proto::OptimizationType::AUTOFILL_ABLATION_SITES_LIST3:
+      return "AutofillAblationSitesList3";
+    case proto::OptimizationType::AUTOFILL_ABLATION_SITES_LIST4:
+      return "AutofillAblationSitesList4";
+    case proto::OptimizationType::AUTOFILL_ABLATION_SITES_LIST5:
+      return "AutofillAblationSitesList5";
+    case proto::OptimizationType::AUTOFILL_ABLATION_SITES_LIST6:
+      return "AutofillAblationSitesList6";
   }
 
   // The returned string is used to record histograms for the optimization type.
@@ -123,7 +143,7 @@ std::string GetStringNameForOptimizationType(
   // variant list in
   // //tools/metrics/histograms/metadata/optimization/histograms.xml. Also
   // update enums.xml when adding new value in OptimizationType.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 

@@ -4,8 +4,10 @@
 
 #import "ios/chrome/browser/contextual_panel/entrypoint/ui/contextual_panel_entrypoint_view_controller.h"
 
+#import "base/i18n/rtl.h"
 #import "base/memory/weak_ptr.h"
 #import "base/strings/sys_string_conversions.h"
+#import "ios/chrome/browser/bubble/ui_bundled/bubble_util.h"
 #import "ios/chrome/browser/contextual_panel/entrypoint/ui/contextual_panel_entrypoint_mutator.h"
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_item_configuration.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -29,10 +31,12 @@ const CGFloat kLabelTrailingSpaceMultiplier = 0.375;
 const CGFloat kLabelLeadingSpaceMultiplier = 0.095;
 
 // Amount of time animating the entrypoint into the location bar should take.
-const NSTimeInterval kEntrypointDisplayingAnimationTime = 0.8;
+const NSTimeInterval kEntrypointDisplayingAnimationTime = 0.3;
 
-// Amount of time animating the large entrypoint (label) appearance.
-const NSTimeInterval kLargeEntrypointDisplayingAnimationTime = 0.3;
+// Amount of time animating the large entrypoint (label)
+// appearance/disappearance.
+const NSTimeInterval kLargeEntrypointAppearingAnimationTime = 0.2;
+const NSTimeInterval kLargeEntrypointDisappearingAnimationTime = 0.3;
 
 // Entrypoint container shadow constants.
 const float kEntrypointContainerShadowOpacity = 0.09f;
@@ -120,7 +124,32 @@ NSString* const kContextualPanelEntrypointLabelIdentifier =
 }
 
 - (void)displayEntrypointView:(BOOL)display {
+  if (!display) {
+    [self.mutator dismissIPHAnimated:NO];
+  }
   self.view.hidden = !display || !_entrypointDisplayed;
+}
+
+- (CGPoint)helpAnchorUsingBottomOmnibox:(BOOL)isBottomOmnibox {
+  CGPoint anchorPointInSuperview =
+      CGPointMake(CGRectGetMidX(_entrypointContainer.bounds),
+                  isBottomOmnibox ? CGRectGetMinY(_entrypointContainer.bounds)
+                                  : CGRectGetMaxY(_entrypointContainer.bounds));
+  CGPoint anchorPointInWindow =
+      [self.view.window convertPoint:anchorPointInSuperview
+                            fromView:_entrypointContainer];
+
+  // The default bubble alignment is the minimum distance from the edge of the
+  // window that the bubble can appear at, so use MAX (or MIN in RTL) between
+  // that and the MidX of the entrypoint container.
+  anchorPointInWindow.x =
+      base::i18n::IsRTL() ? MIN(self.view.window.bounds.size.width -
+                                    bubble_util::BubbleDefaultAlignmentOffset(),
+                                anchorPointInWindow.x)
+                          : MAX(bubble_util::BubbleDefaultAlignmentOffset(),
+                                anchorPointInWindow.x);
+
+  return anchorPointInWindow;
 }
 
 #pragma mark - private
@@ -132,6 +161,8 @@ NSString* const kContextualPanelEntrypointLabelIdentifier =
   button.backgroundColor =
       [UIColor colorNamed:kContextualPanelEntrypointBackgroundColor];
   button.clipsToBounds = NO;
+  button.pointerInteractionEnabled = YES;
+  button.pointerStyleProvider = CreateLiftEffectCirclePointerStyleProvider();
 
   // Configure shadow.
   button.layer.shadowColor = [[UIColor blackColor] CGColor];
@@ -319,13 +350,14 @@ NSString* const kContextualPanelEntrypointLabelIdentifier =
 
   // Animate the entrypoint appearance.
   self.view.alpha = 0;
-  self.view.transform = CGAffineTransformMakeScale(0.85, 0.85);
+  self.view.transform = CGAffineTransformMakeScale(0.95, 0.95);
 
   self.view.hidden = !_entrypointDisplayed;
 
   [UIView animateWithDuration:kEntrypointDisplayingAnimationTime
                         delay:0
-                      options:UIViewAnimationOptionCurveEaseOut
+                      options:(UIViewAnimationOptionCurveEaseIn |
+                               UIViewAnimationOptionAllowUserInteraction)
                    animations:^{
                      self.view.alpha = 1;
                      self.view.transform = CGAffineTransformIdentity;
@@ -364,7 +396,7 @@ NSString* const kContextualPanelEntrypointLabelIdentifier =
     [strongSelf.view layoutIfNeeded];
   };
 
-  [UIView animateWithDuration:kLargeEntrypointDisplayingAnimationTime
+  [UIView animateWithDuration:kLargeEntrypointAppearingAnimationTime
                         delay:0
                       options:(UIViewAnimationOptionCurveEaseOut |
                                UIViewAnimationOptionAllowUserInteraction)
@@ -391,7 +423,7 @@ NSString* const kContextualPanelEntrypointLabelIdentifier =
     [strongSelf.view layoutIfNeeded];
   };
 
-  [UIView animateWithDuration:kLargeEntrypointDisplayingAnimationTime
+  [UIView animateWithDuration:kLargeEntrypointDisappearingAnimationTime
                         delay:0
                       options:(UIViewAnimationOptionCurveEaseOut |
                                UIViewAnimationOptionAllowUserInteraction)

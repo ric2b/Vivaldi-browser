@@ -22,7 +22,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
@@ -134,15 +134,6 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // Invalidate a frame_sink_id that might still have associated sequences,
   // possibly because a renderer process has crashed.
   void InvalidateFrameSinkId(const FrameSinkId& frame_sink_id);
-
-  // Register a relationship between two namespaces.  This relationship means
-  // that surfaces from the child namespace will be displayed in the parent.
-  // Children are allowed to use any begin frame source that their parent can
-  // use.
-  void RegisterFrameSinkHierarchy(const FrameSinkId& parent_frame_sink_id,
-                                  const FrameSinkId& child_frame_sink_id);
-  void UnregisterFrameSinkHierarchy(const FrameSinkId& parent_frame_sink_id,
-                                    const FrameSinkId& child_frame_sink_id);
 
   // Returns the top level root SurfaceId. Surfaces that are not reachable
   // from the top level root may be garbage collected. It will not be a valid
@@ -312,7 +303,7 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
       frame_sink_id_to_allocation_groups_;
   base::flat_map<SurfaceId, std::unique_ptr<Surface>> surface_map_;
   base::ObserverList<SurfaceObserver>::Unchecked observer_list_;
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   base::flat_map<SurfaceId, base::TimeTicks> surfaces_to_destroy_;
 

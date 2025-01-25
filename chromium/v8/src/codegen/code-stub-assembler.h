@@ -9,6 +9,7 @@
 
 #include "src/base/macros.h"
 #include "src/codegen/bailout-reason.h"
+#include "src/codegen/heap-object-list.h"
 #include "src/codegen/tnode.h"
 #include "src/common/globals.h"
 #include "src/common/message-template.h"
@@ -20,6 +21,7 @@
 #include "src/objects/cell.h"
 #include "src/objects/dictionary.h"
 #include "src/objects/feedback-vector.h"
+#include "src/objects/foreign.h"
 #include "src/objects/heap-number.h"
 #include "src/objects/hole.h"
 #include "src/objects/js-function.h"
@@ -52,231 +54,6 @@ class StatsCounter;
 class StubCache;
 
 enum class PrimitiveType { kBoolean, kNumber, kString, kSymbol };
-
-#define HEAP_MUTABLE_IMMOVABLE_OBJECT_LIST(V)                                  \
-  V(ArrayIteratorProtector, array_iterator_protector, ArrayIteratorProtector)  \
-  V(ArraySpeciesProtector, array_species_protector, ArraySpeciesProtector)     \
-  V(IsConcatSpreadableProtector, is_concat_spreadable_protector,               \
-    IsConcatSpreadableProtector)                                               \
-  V(MapIteratorProtector, map_iterator_protector, MapIteratorProtector)        \
-  V(NoElementsProtector, no_elements_protector, NoElementsProtector)           \
-  V(MegaDOMProtector, mega_dom_protector, MegaDOMProtector)                    \
-  V(NumberStringCache, number_string_cache, NumberStringCache)                 \
-  V(NumberStringNotRegexpLikeProtector,                                        \
-    number_string_not_regexp_like_protector,                                   \
-    NumberStringNotRegexpLikeProtector)                                        \
-  V(PromiseResolveProtector, promise_resolve_protector,                        \
-    PromiseResolveProtector)                                                   \
-  V(PromiseSpeciesProtector, promise_species_protector,                        \
-    PromiseSpeciesProtector)                                                   \
-  V(PromiseThenProtector, promise_then_protector, PromiseThenProtector)        \
-  V(RegExpSpeciesProtector, regexp_species_protector, RegExpSpeciesProtector)  \
-  V(SetIteratorProtector, set_iterator_protector, SetIteratorProtector)        \
-  V(StringIteratorProtector, string_iterator_protector,                        \
-    StringIteratorProtector)                                                   \
-  V(StringWrapperToPrimitiveProtector, string_wrapper_to_primitive_protector,  \
-    StringWrapperToPrimitiveProtector)                                         \
-  V(TypedArraySpeciesProtector, typed_array_species_protector,                 \
-    TypedArraySpeciesProtector)                                                \
-  V(AsyncFunctionAwaitRejectSharedFun, async_function_await_reject_shared_fun, \
-    AsyncFunctionAwaitRejectSharedFun)                                         \
-  V(AsyncFunctionAwaitResolveSharedFun,                                        \
-    async_function_await_resolve_shared_fun,                                   \
-    AsyncFunctionAwaitResolveSharedFun)                                        \
-  V(AsyncGeneratorAwaitRejectSharedFun,                                        \
-    async_generator_await_reject_shared_fun,                                   \
-    AsyncGeneratorAwaitRejectSharedFun)                                        \
-  V(AsyncGeneratorAwaitResolveSharedFun,                                       \
-    async_generator_await_resolve_shared_fun,                                  \
-    AsyncGeneratorAwaitResolveSharedFun)                                       \
-  V(AsyncGeneratorReturnClosedRejectSharedFun,                                 \
-    async_generator_return_closed_reject_shared_fun,                           \
-    AsyncGeneratorReturnClosedRejectSharedFun)                                 \
-  V(AsyncGeneratorReturnClosedResolveSharedFun,                                \
-    async_generator_return_closed_resolve_shared_fun,                          \
-    AsyncGeneratorReturnClosedResolveSharedFun)                                \
-  V(AsyncGeneratorReturnResolveSharedFun,                                      \
-    async_generator_return_resolve_shared_fun,                                 \
-    AsyncGeneratorReturnResolveSharedFun)                                      \
-  V(AsyncGeneratorYieldWithAwaitResolveSharedFun,                              \
-    async_generator_yield_with_await_resolve_shared_fun,                       \
-    AsyncGeneratorYieldWithAwaitResolveSharedFun)                              \
-  V(AsyncFromSyncIteratorCloseSyncAndRethrowSharedFun,                         \
-    async_from_sync_iterator_close_sync_and_rethrow_shared_fun,                \
-    AsyncFromSyncIteratorCloseSyncAndRethrowSharedFun)                         \
-  V(AsyncIteratorValueUnwrapSharedFun, async_iterator_value_unwrap_shared_fun, \
-    AsyncIteratorValueUnwrapSharedFun)                                         \
-  V(PromiseAllResolveElementSharedFun, promise_all_resolve_element_shared_fun, \
-    PromiseAllResolveElementSharedFun)                                         \
-  V(PromiseAllSettledRejectElementSharedFun,                                   \
-    promise_all_settled_reject_element_shared_fun,                             \
-    PromiseAllSettledRejectElementSharedFun)                                   \
-  V(PromiseAllSettledResolveElementSharedFun,                                  \
-    promise_all_settled_resolve_element_shared_fun,                            \
-    PromiseAllSettledResolveElementSharedFun)                                  \
-  V(PromiseAnyRejectElementSharedFun, promise_any_reject_element_shared_fun,   \
-    PromiseAnyRejectElementSharedFun)                                          \
-  V(PromiseCapabilityDefaultRejectSharedFun,                                   \
-    promise_capability_default_reject_shared_fun,                              \
-    PromiseCapabilityDefaultRejectSharedFun)                                   \
-  V(PromiseCapabilityDefaultResolveSharedFun,                                  \
-    promise_capability_default_resolve_shared_fun,                             \
-    PromiseCapabilityDefaultResolveSharedFun)                                  \
-  V(PromiseCatchFinallySharedFun, promise_catch_finally_shared_fun,            \
-    PromiseCatchFinallySharedFun)                                              \
-  V(PromiseGetCapabilitiesExecutorSharedFun,                                   \
-    promise_get_capabilities_executor_shared_fun,                              \
-    PromiseGetCapabilitiesExecutorSharedFun)                                   \
-  V(PromiseThenFinallySharedFun, promise_then_finally_shared_fun,              \
-    PromiseThenFinallySharedFun)                                               \
-  V(PromiseThrowerFinallySharedFun, promise_thrower_finally_shared_fun,        \
-    PromiseThrowerFinallySharedFun)                                            \
-  V(PromiseValueThunkFinallySharedFun, promise_value_thunk_finally_shared_fun, \
-    PromiseValueThunkFinallySharedFun)                                         \
-  V(ProxyRevokeSharedFun, proxy_revoke_shared_fun, ProxyRevokeSharedFun)       \
-  V(ShadowRealmImportValueFulfilledSFI,                                        \
-    shadow_realm_import_value_fulfilled_sfi,                                   \
-    ShadowRealmImportValueFulfilledSFI)                                        \
-  V(ArrayFromAsyncIterableOnFulfilledSharedFun,                                \
-    array_from_async_iterable_on_fulfilled_shared_fun,                         \
-    ArrayFromAsyncIterableOnFulfilledSharedFun)                                \
-  V(ArrayFromAsyncIterableOnRejectedSharedFun,                                 \
-    array_from_async_iterable_on_rejected_shared_fun,                          \
-    ArrayFromAsyncIterableOnRejectedSharedFun)                                 \
-  V(ArrayFromAsyncArrayLikeOnFulfilledSharedFun,                               \
-    array_from_async_array_like_on_fulfilled_shared_fun,                       \
-    ArrayFromAsyncArrayLikeOnFulfilledSharedFun)                               \
-  V(ArrayFromAsyncArrayLikeOnRejectedSharedFun,                                \
-    array_from_async_array_like_on_rejected_shared_fun,                        \
-    ArrayFromAsyncArrayLikeOnRejectedSharedFun)
-
-#define UNIQUE_INSTANCE_TYPE_IMMUTABLE_IMMOVABLE_MAP_ADAPTER( \
-    V, rootIndexName, rootAccessorName, class_name)           \
-  V(rootIndexName, rootAccessorName, class_name##Map)
-
-#define HEAP_IMMUTABLE_IMMOVABLE_OBJECT_LIST(V)                              \
-  V(AllocationSiteWithoutWeakNextMap, allocation_site_without_weaknext_map,  \
-    AllocationSiteWithoutWeakNextMap)                                        \
-  V(AllocationSiteWithWeakNextMap, allocation_site_map, AllocationSiteMap)   \
-  V(arguments_to_string, arguments_to_string, ArgumentsToString)             \
-  V(ArrayListMap, array_list_map, ArrayListMap)                              \
-  V(Array_string, Array_string, ArrayString)                                 \
-  V(array_to_string, array_to_string, ArrayToString)                         \
-  V(BooleanMap, boolean_map, BooleanMap)                                     \
-  V(boolean_to_string, boolean_to_string, BooleanToString)                   \
-  V(class_fields_symbol, class_fields_symbol, ClassFieldsSymbol)             \
-  V(ConsOneByteStringMap, cons_one_byte_string_map, ConsOneByteStringMap)    \
-  V(ConsTwoByteStringMap, cons_two_byte_string_map, ConsTwoByteStringMap)    \
-  V(constructor_string, constructor_string, ConstructorString)               \
-  V(date_to_string, date_to_string, DateToString)                            \
-  V(default_string, default_string, DefaultString)                           \
-  V(EmptyArrayList, empty_array_list, EmptyArrayList)                        \
-  V(EmptyByteArray, empty_byte_array, EmptyByteArray)                        \
-  V(EmptyFixedArray, empty_fixed_array, EmptyFixedArray)                     \
-  V(EmptyOrderedHashSet, empty_ordered_hash_set, EmptyOrderedHashSet)        \
-  V(EmptyScopeInfo, empty_scope_info, EmptyScopeInfo)                        \
-  V(EmptyPropertyDictionary, empty_property_dictionary,                      \
-    EmptyPropertyDictionary)                                                 \
-  V(EmptyOrderedPropertyDictionary, empty_ordered_property_dictionary,       \
-    EmptyOrderedPropertyDictionary)                                          \
-  V(EmptySwissPropertyDictionary, empty_swiss_property_dictionary,           \
-    EmptySwissPropertyDictionary)                                            \
-  V(EmptySlowElementDictionary, empty_slow_element_dictionary,               \
-    EmptySlowElementDictionary)                                              \
-  V(empty_string, empty_string, EmptyString)                                 \
-  V(error_to_string, error_to_string, ErrorToString)                         \
-  V(error_string, error_string, ErrorString)                                 \
-  V(errors_string, errors_string, ErrorsString)                              \
-  V(FalseValue, false_value, False)                                          \
-  V(FixedArrayMap, fixed_array_map, FixedArrayMap)                           \
-  V(FixedCOWArrayMap, fixed_cow_array_map, FixedCOWArrayMap)                 \
-  V(Function_string, function_string, FunctionString)                        \
-  V(function_to_string, function_to_string, FunctionToString)                \
-  V(get_string, get_string, GetString)                                       \
-  V(has_instance_symbol, has_instance_symbol, HasInstanceSymbol)             \
-  V(has_string, has_string, HasString)                                       \
-  V(Infinity_string, Infinity_string, InfinityString)                        \
-  V(is_concat_spreadable_symbol, is_concat_spreadable_symbol,                \
-    IsConcatSpreadableSymbol)                                                \
-  V(Iterator_string, Iterator_string, IteratorString)                        \
-  V(iterator_symbol, iterator_symbol, IteratorSymbol)                        \
-  V(keys_string, keys_string, KeysString)                                    \
-  V(async_iterator_symbol, async_iterator_symbol, AsyncIteratorSymbol)       \
-  V(length_string, length_string, LengthString)                              \
-  V(ManyClosuresCellMap, many_closures_cell_map, ManyClosuresCellMap)        \
-  V(match_symbol, match_symbol, MatchSymbol)                                 \
-  V(megamorphic_symbol, megamorphic_symbol, MegamorphicSymbol)               \
-  V(mega_dom_symbol, mega_dom_symbol, MegaDOMSymbol)                         \
-  V(message_string, message_string, MessageString)                           \
-  V(minus_Infinity_string, minus_Infinity_string, MinusInfinityString)       \
-  V(MinusZeroValue, minus_zero_value, MinusZero)                             \
-  V(name_string, name_string, NameString)                                    \
-  V(NanValue, nan_value, Nan)                                                \
-  V(NaN_string, NaN_string, NaNString)                                       \
-  V(next_string, next_string, NextString)                                    \
-  V(NoClosuresCellMap, no_closures_cell_map, NoClosuresCellMap)              \
-  V(null_to_string, null_to_string, NullToString)                            \
-  V(NullValue, null_value, Null)                                             \
-  IF_WASM(V, WasmNull, wasm_null, WasmNull)                                  \
-  V(number_string, number_string, NumberString)                              \
-  V(number_to_string, number_to_string, NumberToString)                      \
-  V(Object_string, Object_string, ObjectString)                              \
-  V(object_string, object_string, objectString)                              \
-  V(object_to_string, object_to_string, ObjectToString)                      \
-  V(SeqOneByteStringMap, seq_one_byte_string_map, SeqOneByteStringMap)       \
-  V(OneClosureCellMap, one_closure_cell_map, OneClosureCellMap)              \
-  V(OnePointerFillerMap, one_pointer_filler_map, OnePointerFillerMap)        \
-  V(PromiseCapabilityMap, promise_capability_map, PromiseCapabilityMap)      \
-  V(promise_forwarding_handler_symbol, promise_forwarding_handler_symbol,    \
-    PromiseForwardingHandlerSymbol)                                          \
-  V(PromiseFulfillReactionJobTaskMap, promise_fulfill_reaction_job_task_map, \
-    PromiseFulfillReactionJobTaskMap)                                        \
-  V(promise_handled_by_symbol, promise_handled_by_symbol,                    \
-    PromiseHandledBySymbol)                                                  \
-  V(PromiseReactionMap, promise_reaction_map, PromiseReactionMap)            \
-  V(PromiseRejectReactionJobTaskMap, promise_reject_reaction_job_task_map,   \
-    PromiseRejectReactionJobTaskMap)                                         \
-  V(PromiseResolveThenableJobTaskMap, promise_resolve_thenable_job_task_map, \
-    PromiseResolveThenableJobTaskMap)                                        \
-  V(prototype_string, prototype_string, PrototypeString)                     \
-  V(replace_symbol, replace_symbol, ReplaceSymbol)                           \
-  V(regexp_to_string, regexp_to_string, RegexpToString)                      \
-  V(resolve_string, resolve_string, ResolveString)                           \
-  V(return_string, return_string, ReturnString)                              \
-  V(search_symbol, search_symbol, SearchSymbol)                              \
-  V(SingleCharacterStringTable, single_character_string_table,               \
-    SingleCharacterStringTable)                                              \
-  V(size_string, size_string, SizeString)                                    \
-  V(species_symbol, species_symbol, SpeciesSymbol)                           \
-  V(StaleRegister, stale_register, StaleRegister)                            \
-  V(StoreHandler0Map, store_handler0_map, StoreHandler0Map)                  \
-  V(string_string, string_string, StringString)                              \
-  V(string_to_string, string_to_string, StringToString)                      \
-  V(suppressed_string, suppressed_string, SuppressedString)                  \
-  V(SeqTwoByteStringMap, seq_two_byte_string_map, SeqTwoByteStringMap)       \
-  V(TheHoleValue, the_hole_value, TheHole)                                   \
-  V(PropertyCellHoleValue, property_cell_hole_value, PropertyCellHole)       \
-  V(HashTableHoleValue, hash_table_hole_value, HashTableHole)                \
-  V(PromiseHoleValue, promise_hole_value, PromiseHole)                       \
-  V(then_string, then_string, ThenString)                                    \
-  V(toJSON_string, toJSON_string, ToJSONString)                              \
-  V(toString_string, toString_string, ToStringString)                        \
-  V(to_primitive_symbol, to_primitive_symbol, ToPrimitiveSymbol)             \
-  V(to_string_tag_symbol, to_string_tag_symbol, ToStringTagSymbol)           \
-  V(TrueValue, true_value, True)                                             \
-  V(undefined_to_string, undefined_to_string, UndefinedToString)             \
-  V(UndefinedValue, undefined_value, Undefined)                              \
-  V(uninitialized_symbol, uninitialized_symbol, UninitializedSymbol)         \
-  V(valueOf_string, valueOf_string, ValueOfString)                           \
-  V(wasm_wrapped_object_symbol, wasm_wrapped_object_symbol,                  \
-    WasmWrappedObjectSymbol)                                                 \
-  V(zero_string, zero_string, ZeroString)                                    \
-  UNIQUE_INSTANCE_TYPE_MAP_LIST_GENERATOR(                                   \
-      UNIQUE_INSTANCE_TYPE_IMMUTABLE_IMMOVABLE_MAP_ADAPTER, V)
-
-#define HEAP_IMMOVABLE_OBJECT_LIST(V)   \
-  HEAP_MUTABLE_IMMOVABLE_OBJECT_LIST(V) \
-  HEAP_IMMUTABLE_IMMOVABLE_OBJECT_LIST(V)
 
 #ifdef DEBUG
 #define CSA_CHECK(csa, x) \
@@ -924,31 +701,31 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   void Dcheck(const BranchGenerator& branch, const char* message,
               const char* file, int line,
               std::initializer_list<ExtraNode> extra_nodes = {},
-              SourceLocation loc = SourceLocation::Current());
+              const SourceLocation& loc = SourceLocation::Current());
   void Dcheck(const NodeGenerator<BoolT>& condition_body, const char* message,
               const char* file, int line,
               std::initializer_list<ExtraNode> extra_nodes = {},
-              SourceLocation loc = SourceLocation::Current());
+              const SourceLocation& loc = SourceLocation::Current());
   void Dcheck(TNode<Word32T> condition_node, const char* message,
               const char* file, int line,
               std::initializer_list<ExtraNode> extra_nodes = {},
-              SourceLocation loc = SourceLocation::Current());
+              const SourceLocation& loc = SourceLocation::Current());
   void Check(const BranchGenerator& branch, const char* message,
              const char* file, int line,
              std::initializer_list<ExtraNode> extra_nodes = {},
-             SourceLocation loc = SourceLocation::Current());
+             const SourceLocation& loc = SourceLocation::Current());
   void Check(const NodeGenerator<BoolT>& condition_body, const char* message,
              const char* file, int line,
              std::initializer_list<ExtraNode> extra_nodes = {},
-             SourceLocation loc = SourceLocation::Current());
+             const SourceLocation& loc = SourceLocation::Current());
   void Check(TNode<Word32T> condition_node, const char* message,
              const char* file, int line,
              std::initializer_list<ExtraNode> extra_nodes = {},
-             SourceLocation loc = SourceLocation::Current());
+             const SourceLocation& loc = SourceLocation::Current());
   void FailAssert(const char* message,
                   const std::vector<FileAndLine>& files_and_lines,
                   std::initializer_list<ExtraNode> extra_nodes = {},
-                  SourceLocation loc = SourceLocation::Current());
+                  const SourceLocation& loc = SourceLocation::Current());
 
   void FastCheck(TNode<BoolT> condition);
 
@@ -1308,9 +1085,10 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
         object, IntPtrConstant(offset - kHeapObjectTag)));
   }
 
-  TNode<RawPtrT> LoadForeignForeignAddressPtr(TNode<Foreign> object) {
+  TNode<RawPtrT> LoadForeignForeignAddressPtr(TNode<Foreign> object,
+                                              ExternalPointerTag tag) {
     return LoadExternalPointerFromObject(object, Foreign::kForeignAddressOffset,
-                                         kGenericForeignTag);
+                                         tag);
   }
 
   TNode<RawPtrT> LoadFunctionTemplateInfoJsCallbackPtr(
@@ -1345,8 +1123,15 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   }
 
 #if V8_ENABLE_WEBASSEMBLY
+  // Returns WasmTrustedInstanceData|Smi.
+  TNode<Object> LoadInstanceDataFromWasmApiFunctionRef(
+      TNode<WasmApiFunctionRef> ref) {
+    return LoadProtectedPointerField(
+        ref, WasmApiFunctionRef::kProtectedInstanceDataOffset);
+  }
+
   // Returns WasmApiFunctionRef or WasmTrustedInstanceData.
-  TNode<ExposedTrustedObject> LoadRefFromWasmInternalFunction(
+  TNode<TrustedObject> LoadRefFromWasmInternalFunction(
       TNode<WasmInternalFunction> object) {
     TNode<Object> obj = LoadProtectedPointerField(
         object, WasmInternalFunction::kProtectedRefOffset);
@@ -1374,6 +1159,13 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
       TNode<WasmFunctionData> data) {
     return CAST(LoadProtectedPointerField(
         data, WasmFunctionData::kProtectedInternalOffset));
+  }
+
+  TNode<WasmTrustedInstanceData>
+  LoadWasmTrustedInstanceDataFromWasmExportedFunctionData(
+      TNode<WasmExportedFunctionData> data) {
+    return CAST(LoadProtectedPointerField(
+        data, WasmExportedFunctionData::kProtectedInstanceDataOffset));
   }
 #endif  // V8_ENABLE_WEBASSEMBLY
 
@@ -1427,32 +1219,24 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   TNode<Uint64T> LoadUint64Ptr(TNode<RawPtrT> ptr, TNode<IntPtrT> index);
 
   // Load a field from an object on the heap.
-  template <class T, typename std::enable_if<
-                         std::is_convertible<TNode<T>, TNode<Object>>::value &&
-                             std::is_base_of<T, Map>::value,
-                         int>::type = 0>
+  template <typename T>
   TNode<T> LoadObjectField(TNode<HeapObject> object, int offset) {
-    const MachineType machine_type = offset == HeapObject::kMapOffset
-                                         ? MachineType::MapInHeader()
-                                         : MachineTypeOf<T>::value;
-    return CAST(LoadFromObject(machine_type, object,
-                               IntPtrConstant(offset - kHeapObjectTag)));
-  }
-  template <class T, typename std::enable_if<
-                         std::is_convertible<TNode<T>, TNode<Object>>::value &&
-                             !std::is_base_of<T, Map>::value,
-                         int>::type = 0>
-  TNode<T> LoadObjectField(TNode<HeapObject> object, int offset) {
-    return CAST(LoadFromObject(MachineTypeOf<T>::value, object,
-                               IntPtrConstant(offset - kHeapObjectTag)));
-  }
-  template <class T, typename std::enable_if<
-                         std::is_convertible<TNode<T>, TNode<UntaggedT>>::value,
-                         int>::type = 0>
-  TNode<T> LoadObjectField(TNode<HeapObject> object, int offset) {
-    return UncheckedCast<T>(
-        LoadFromObject(MachineTypeOf<T>::value, object,
-                       IntPtrConstant(offset - kHeapObjectTag)));
+    MachineType machine_type = MachineTypeOf<T>::value;
+    TNode<IntPtrT> raw_offset = IntPtrConstant(offset - kHeapObjectTag);
+    if constexpr (is_subtype_v<T, UntaggedT>) {
+      // Load an untagged field.
+      return UncheckedCast<T>(LoadFromObject(machine_type, object, raw_offset));
+    } else {
+      static_assert(is_subtype_v<T, Object>);
+      // Load a tagged field.
+      if constexpr (is_subtype_v<T, Map>) {
+        // If this is potentially loading a map, we need to check the offset.
+        if (offset == HeapObject::kMapOffset) {
+          machine_type = MachineType::MapInHeader();
+        }
+      }
+      return CAST(LoadFromObject(machine_type, object, raw_offset));
+    }
   }
   TNode<Object> LoadObjectField(TNode<HeapObject> object, int offset) {
     return UncheckedCast<Object>(
@@ -1951,6 +1735,11 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   TNode<BytecodeArray> LoadSharedFunctionInfoBytecodeArray(
       TNode<SharedFunctionInfo> sfi);
 
+  TNode<Int32T> LoadBytecodeArrayParameterCount(
+      TNode<BytecodeArray> bytecode_array);
+  TNode<Int32T> LoadBytecodeArrayParameterCountWithoutReceiver(
+      TNode<BytecodeArray> bytecode_array);
+
   void StoreObjectByteNoWriteBarrier(TNode<HeapObject> object, int offset,
                                      TNode<Word32T> value);
 
@@ -2393,6 +2182,12 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
       ElementsKind kind, TNode<TIndex> capacity,
       AllocationFlags flags = AllocationFlag::kNone,
       base::Optional<TNode<Map>> fixed_array_map = base::nullopt);
+
+  template <typename Function>
+  TNode<Object> FastCloneJSObject(TNode<HeapObject> source,
+                                  TNode<Map> source_map, TNode<Map> target_map,
+                                  const Function& materialize_target,
+                                  bool target_is_new);
 
   TNode<NativeContext> GetCreationContextFromMap(TNode<Map> map,
                                                  Label* if_bailout);
@@ -3106,7 +2901,7 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   TNode<BoolT> IsMapIteratorProtectorCellInvalid();
   void InvalidateStringWrapperToPrimitiveProtector();
 
-  TNode<IntPtrT> LoadBasicMemoryChunkFlags(TNode<HeapObject> object);
+  TNode<IntPtrT> LoadMemoryChunkFlags(TNode<HeapObject> object);
 
   TNode<BoolT> LoadRuntimeFlag(ExternalReference address_of_flag) {
     TNode<Word32T> flag_value = UncheckedCast<Word32T>(
@@ -3358,6 +3153,12 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   template <typename T>
   TNode<BoolT> IsSetWord32(TNode<Word32T> word32) {
     return IsSetWord32(word32, T::kMask);
+  }
+
+  // Returns true if none of the |T|'s bits in given |word32| are set.
+  template <typename T>
+  TNode<BoolT> IsNotSetWord32(TNode<Word32T> word32) {
+    return IsNotSetWord32(word32, T::kMask);
   }
 
   // Returns true if any of the mask's bits in given |word32| are set.
@@ -4078,7 +3879,7 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
 
   template <typename TIndex>
   void BuildFastArrayForEach(
-      TNode<UnionT<UnionT<FixedArray, PropertyArray>, HeapObject>> array,
+      TNode<UnionOf<FixedArray, PropertyArray, HeapObject>> array,
       ElementsKind kind, TNode<TIndex> first_element_inclusive,
       TNode<TIndex> last_element_exclusive, const FastArrayForEachBody& body,
       LoopUnrollingMode loop_unrolling_mode,
@@ -4249,7 +4050,9 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
                     TNode<Smi>* cache_length_out,
                     UpdateFeedbackMode update_feedback_mode);
 
-  TNode<String> Typeof(TNode<Object> value);
+  TNode<String> Typeof(
+      TNode<Object> value, std::optional<TNode<UintPtrT>> slot_id = {},
+      std::optional<TNode<HeapObject>> maybe_feedback_vector = {});
 
   TNode<HeapObject> GetSuperConstructor(TNode<JSFunction> active_function);
 
@@ -4748,14 +4551,36 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
                               TNode<Uint8T> property_details,
                               Label* needs_resize);
 
-  TNode<Object> CallOnCentralStack(TNode<Context> context, TNode<Object> target,
-                                   TNode<Int32T> num_args,
-                                   TNode<FixedArray> args);
+  // If the current code is running on a secondary stack, move the stack pointer
+  // to the central stack (but not the frame pointer) and adjust the stack
+  // limit. Returns the old stack pointer, or nullptr if no switch was
+  // performed.
+  TNode<RawPtrT> SwitchToTheCentralStackIfNeeded();
+  // Switch the SP back to the secondary stack after switching to the central
+  // stack.
+  void SwitchFromTheCentralStack(TNode<RawPtrT> old_sp);
 
   TNode<BoolT> IsMarked(TNode<Object> object);
 
   void GetMarkBit(TNode<IntPtrT> object, TNode<IntPtrT>* cell,
                   TNode<IntPtrT>* mask);
+
+  TNode<BoolT> IsPageFlagSet(TNode<IntPtrT> object, int mask) {
+    TNode<IntPtrT> header = MemoryChunkFromAddress(object);
+    TNode<IntPtrT> flags = UncheckedCast<IntPtrT>(
+        Load(MachineType::Pointer(), header,
+             IntPtrConstant(MemoryChunkLayout::kFlagsOffset)));
+    return WordNotEqual(WordAnd(flags, IntPtrConstant(mask)),
+                        IntPtrConstant(0));
+  }
+
+  TNode<BoolT> IsPageFlagReset(TNode<IntPtrT> object, int mask) {
+    TNode<IntPtrT> header = MemoryChunkFromAddress(object);
+    TNode<IntPtrT> flags = UncheckedCast<IntPtrT>(
+        Load(MachineType::Pointer(), header,
+             IntPtrConstant(MemoryChunkLayout::kFlagsOffset)));
+    return WordEqual(WordAnd(flags, IntPtrConstant(mask)), IntPtrConstant(0));
+  }
 
  private:
   friend class CodeStubArguments;
@@ -4810,6 +4635,9 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   template <typename Array>
   TNode<Uint32T> NumberOfEntries(TNode<Array> array);
 
+  template <typename Array>
+  constexpr int MaxNumberOfEntries();
+
   // Implements [Descriptor/Transition]Array::GetSortedKeyIndex.
   template <typename Array>
   TNode<Uint32T> GetSortedKeyIndex(TNode<Array> descriptors,
@@ -4857,7 +4685,7 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
 
   template <typename TIndex>
   void StoreFixedArrayOrPropertyArrayElement(
-      TNode<UnionT<FixedArray, PropertyArray>> array, TNode<TIndex> index,
+      TNode<UnionOf<FixedArray, PropertyArray>> array, TNode<TIndex> index,
       TNode<Object> value, WriteBarrierMode barrier_mode = UPDATE_WRITE_BARRIER,
       int additional_offset = 0);
 
@@ -4909,9 +4737,7 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
       TNode<Object> value, ElementsKind elements_kind,
       TNode<TValue> converted_value, TVariable<Object>* maybe_converted_value);
 
-  TNode<RawPtrT> SwitchToTheCentralStackForJS(TNode<Object> callable_node);
-  void SwitchFromTheCentralStackForJS(TNode<RawPtrT> old_sp,
-                                      TNode<Object> callable);
+  TNode<RawPtrT> SwitchToTheCentralStack();
 };
 
 class V8_EXPORT_PRIVATE CodeStubArguments {

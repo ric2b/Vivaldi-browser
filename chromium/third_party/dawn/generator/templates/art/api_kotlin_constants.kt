@@ -24,13 +24,13 @@
 //* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 //* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 //* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-package {{ metadata.kotlin_package }}
+package {{ kotlin_package }}
 
 object Constants {
     val UINT32_MAX = Integer.parseUnsignedInt("4294967295")
     val UINT64_MAX = java.lang.Long.parseUnsignedLong("18446744073709551615")
     val SIZE_MAX = UINT64_MAX
     {% for constant in by_category['constant'] %}
-        val {{ as_ktName(constant.name.SNAKE_CASE() ) }} = {{ constant.value }};
+        val {{ as_ktName(constant.name.SNAKE_CASE() ) }} = {{ constant.value }}
     {% endfor %}
 }

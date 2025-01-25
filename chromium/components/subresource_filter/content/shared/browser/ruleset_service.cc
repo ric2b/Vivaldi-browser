@@ -7,6 +7,7 @@
 #include <string_view>
 #include <utility>
 
+#include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/span.h"
 #include "base/files/file_enumerator.h"
@@ -16,6 +17,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/not_fatal_until.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -26,15 +28,14 @@
 #include "base/trace_event/traced_value.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "components/subresource_filter/content/shared/browser/ruleset_publisher_impl.h"
+#include "components/subresource_filter/content/shared/browser/ruleset_publisher.h"
 #include "components/subresource_filter/content/shared/browser/unindexed_ruleset_stream_generator.h"
 #include "components/subresource_filter/core/browser/copying_file_stream.h"
-#include "components/subresource_filter/core/browser/ruleset_config.h"
-#include "components/subresource_filter/core/browser/ruleset_publisher.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/subresource_filter/core/common/common_features.h"
 #include "components/subresource_filter/core/common/indexed_ruleset.h"
+#include "components/subresource_filter/core/common/ruleset_config.h"
 #include "components/subresource_filter/core/common/time_measurements.h"
 #include "components/subresource_filter/core/common/unindexed_ruleset.h"
 #include "components/url_pattern_index/proto/rules.pb.h"
@@ -171,7 +172,8 @@ decltype(&base::ReplaceFile) RulesetService::g_replace_file_func =
 std::unique_ptr<RulesetService> RulesetService::Create(
     const RulesetConfig& config,
     PrefService* local_state,
-    const base::FilePath& user_data_dir) {
+    const base::FilePath& user_data_dir,
+    const RulesetPublisher::Factory& publisher_factory) {
   // Runner for tasks critical for user experience.
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
       base::ThreadPool::CreateSequencedTaskRunner(
@@ -189,8 +191,9 @@ std::unique_ptr<RulesetService> RulesetService::Create(
           .Append(kIndexedRulesetBaseDirectoryName);
 
   return std::make_unique<RulesetService>(
-      config, local_state, background_task_runner, indexed_ruleset_base_dir,
-      blocking_task_runner);
+      config, local_state, std::move(background_task_runner),
+      indexed_ruleset_base_dir, std::move(blocking_task_runner),
+      publisher_factory);
 }
 
 RulesetService::RulesetService(
@@ -199,17 +202,16 @@ RulesetService::RulesetService(
     scoped_refptr<base::SequencedTaskRunner> background_task_runner,
     const base::FilePath& indexed_ruleset_base_dir,
     scoped_refptr<base::SequencedTaskRunner> blocking_task_runner,
-    std::unique_ptr<RulesetPublisher> publisher)
+    const RulesetPublisher::Factory& publisher_factory)
     : config_(config),
       local_state_(local_state),
       background_task_runner_(std::move(background_task_runner)),
       is_initialized_(false),
       indexed_ruleset_base_dir_(indexed_ruleset_base_dir) {
-  DCHECK_NE(local_state_->GetInitializationStatus(),
-            PrefService::INITIALIZATION_STATUS_WAITING);
-  publisher_ = publisher ? std::move(publisher)
-                         : std::make_unique<RulesetPublisherImpl>(
-                               this, blocking_task_runner);
+  CHECK_NE(local_state_->GetInitializationStatus(),
+           PrefService::INITIALIZATION_STATUS_WAITING,
+           base::NotFatalUntil::M129);
+  publisher_ = publisher_factory.Create(this, std::move(blocking_task_runner));
   IndexedRulesetVersion most_recently_indexed_version(config.filter_tag);
   most_recently_indexed_version.ReadFromPrefs(local_state_);
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("loading"),
@@ -222,7 +224,8 @@ RulesetService::RulesetService(
     IndexedRulesetVersion(config.filter_tag).SaveToPrefs(local_state_);
   }
 
-  DCHECK(publisher_->BestEffortTaskRunner()->BelongsToCurrentThread());
+  CHECK(publisher_->BestEffortTaskRunner()->BelongsToCurrentThread(),
+        base::NotFatalUntil::M129);
   publisher_->BestEffortTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&RulesetService::FinishInitialization,
                                 weak_ptr_factory_.GetWeakPtr()));
@@ -342,7 +345,7 @@ IndexedRulesetVersion RulesetService::IndexAndWriteRuleset(
   if (result != IndexAndWriteRulesetResult::SUCCESS)
     return IndexedRulesetVersion(config.filter_tag);
 
-  DCHECK(indexed_version.IsValid());
+  CHECK(indexed_version.IsValid(), base::NotFatalUntil::M129);
   return indexed_version;
 }
 
@@ -351,14 +354,10 @@ bool RulesetService::IndexRuleset(
     const RulesetConfig& config,
     UnindexedRulesetStreamGenerator* unindexed_ruleset_stream_generator,
     RulesetIndexer* indexer) {
-  // TODO(crbug.com/336333963): Re-implement these macros as functions so
-  // metrics may be collected for different filters. Until then, only record
-  // metrics for Safe Browsing. This is a stopgap and will be removed.
-  if (config.uma_tag == "SubresourceFilter") {
-    SCOPED_UMA_HISTOGRAM_TIMER("SubresourceFilter.IndexRuleset.WallDuration");
-    SCOPED_UMA_HISTOGRAM_THREAD_TIMER(
-        "SubresourceFilter.IndexRuleset.CPUDuration");
-  }
+  base::ScopedUmaHistogramTimer scoped_timer(
+      base::StrCat({config.uma_tag, ".IndexRuleset.WallDuration"}));
+  ScopedUmaHistogramThreadTimer scoped_thread_timer(
+      base::StrCat({config.uma_tag, ".IndexRuleset.CPUDuration"}));
 
   int64_t unindexed_ruleset_size =
       unindexed_ruleset_stream_generator->ruleset_size();
@@ -411,7 +410,8 @@ RulesetService::IndexAndWriteRulesetResult RulesetService::WriteRuleset(
 
   // Creating a temporary directory also makes sure the path (except for the
   // final segment) gets created. ReplaceFile would not create the path.
-  DCHECK(base::PathExists(indexed_ruleset_version_dir.DirName()));
+  CHECK(base::PathExists(indexed_ruleset_version_dir.DirName()),
+        base::NotFatalUntil::M129);
 
   // Need to manually delete the previously stored ruleset with the same
   // version, if any, as ReplaceFile would not overwrite a non-empty directory.
@@ -453,7 +453,8 @@ void RulesetService::FinishInitialization() {
 void RulesetService::IndexAndStoreRuleset(
     const UnindexedRulesetInfo& unindexed_ruleset_info,
     WriteRulesetCallback success_callback) {
-  DCHECK(!unindexed_ruleset_info.content_version.empty());
+  CHECK(!unindexed_ruleset_info.content_version.empty(),
+        base::NotFatalUntil::M129);
   background_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(&RulesetService::IndexAndWriteRuleset, config_,
@@ -465,7 +466,7 @@ void RulesetService::IndexAndStoreRuleset(
 
 void RulesetService::OnWrittenRuleset(WriteRulesetCallback result_callback,
                                       const IndexedRulesetVersion& version) {
-  DCHECK(!result_callback.is_null());
+  CHECK(!result_callback.is_null(), base::NotFatalUntil::M129);
   if (!version.IsValid())
     return;
   version.SaveToPrefs(local_state_);

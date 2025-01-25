@@ -18,6 +18,7 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
+#include "components/web_package/signed_web_bundles/signed_web_bundle_integrity_block.h"
 #include "components/webapps/browser/installable/installable_logging.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-forward.h"
 #include "url/gurl.h"
@@ -79,6 +80,18 @@ class IsolatedWebAppInstallCommandHelper {
   IsolatedWebAppInstallCommandHelper& operator=(
       const IsolatedWebAppInstallCommandHelper&) = delete;
 
+  // Checks trust and signatures of IWA.
+  // Returns the integrity block if the IWA is backed by a signed web bundle.
+  void CheckTrustAndSignatures(
+      const IwaSourceWithMode& location,
+      Profile* profile,
+      base::OnceCallback<
+          void(base::expected<
+               std::optional<web_package::SignedWebBundleIntegrityBlock>,
+               std::string>)> callback);
+
+  // Checks trust and signatures of IWA.
+  // Use this overload if you don't need the returned integrity block.
   void CheckTrustAndSignatures(
       const IwaSourceWithMode& location,
       Profile* profile,
@@ -92,29 +105,15 @@ class IsolatedWebAppInstallCommandHelper {
       webapps::WebAppUrlLoader& url_loader,
       base::OnceCallback<void(base::expected<void, std::string>)> callback);
 
-  struct ManifestAndUrl {
-    ManifestAndUrl(blink::mojom::ManifestPtr manifest, GURL url);
-    ~ManifestAndUrl();
-
-    ManifestAndUrl(const ManifestAndUrl&) = delete;
-    ManifestAndUrl& operator=(const ManifestAndUrl&) = delete;
-
-    ManifestAndUrl(ManifestAndUrl&&);
-    ManifestAndUrl& operator=(ManifestAndUrl&&);
-
-    blink::mojom::ManifestPtr manifest;
-    GURL url;
-  };
-
   void CheckInstallabilityAndRetrieveManifest(
       content::WebContents& web_contents,
-      base::OnceCallback<void(base::expected<ManifestAndUrl, std::string>)>
-          callback);
+      base::OnceCallback<void(
+          base::expected<blink::mojom::ManifestPtr, std::string>)> callback);
 
   base::expected<WebAppInstallInfo, std::string>
   ValidateManifestAndCreateInstallInfo(
       const std::optional<base::Version>& expected_version,
-      const ManifestAndUrl& manifest_and_url);
+      const blink::mojom::Manifest& manifest);
 
   void RetrieveIconsAndPopulateInstallInfo(
       WebAppInstallInfo install_info,
@@ -126,10 +125,16 @@ class IsolatedWebAppInstallCommandHelper {
   void CheckTrustAndSignaturesOfBundle(
       const base::FilePath& path,
       bool dev_mode,
-      base::OnceCallback<void(base::expected<void, std::string>)> callback);
+      base::OnceCallback<
+          void(base::expected<
+               std::optional<web_package::SignedWebBundleIntegrityBlock>,
+               std::string>)> callback);
 
   void OnTrustAndSignaturesOfBundleChecked(
-      base::OnceCallback<void(base::expected<void, std::string>)> callback,
+      base::OnceCallback<
+          void(base::expected<
+               std::optional<web_package::SignedWebBundleIntegrityBlock>,
+               std::string>)> callback,
       base::expected<std::unique_ptr<IsolatedWebAppResponseReader>,
                      UnusableSwbnFileError> status);
 
@@ -138,10 +143,9 @@ class IsolatedWebAppInstallCommandHelper {
       webapps::WebAppUrlLoaderResult result);
 
   void OnCheckInstallabilityAndRetrieveManifest(
-      base::OnceCallback<void(base::expected<ManifestAndUrl, std::string>)>
-          callback,
+      base::OnceCallback<void(
+          base::expected<blink::mojom::ManifestPtr, std::string>)> callback,
       blink::mojom::ManifestPtr opt_manifest,
-      const GURL& manifest_url,
       bool valid_manifest_for_web_app,
       webapps::InstallableStatusCode error_code);
 

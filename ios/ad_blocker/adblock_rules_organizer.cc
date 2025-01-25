@@ -29,8 +29,7 @@ constexpr size_t kMaxAllowAndGenericAllowRules =
 class BlockListListMaker {
  public:
   BlockListListMaker(base::Value::List&& allow_rules)
-      : max_rules_(kMaxRules),
-        allow_rules_(std::move(allow_rules)) {
+      : max_rules_(kMaxRules), allow_rules_(std::move(allow_rules)) {
     next_list_.reserve(kMaxAllowRules);
   }
   ~BlockListListMaker() {
@@ -218,6 +217,7 @@ base::Value OrganizeRules(
       std::move(all_network_allow_rules));
   BlockListListMaker network_generic_block_lists_maker(
       std::move(all_network_allow_and_generic_allow_rules));
+  BlockListListMaker network_block_important_lists_maker(base::Value::List{});
   std::map<std::string, base::Value::Dict> rules_for_selectors;
 
   for (const auto& [id, compiled_rules] : all_compiled_rules) {
@@ -248,6 +248,12 @@ base::Value OrganizeRules(
               generic_block_rules->Clone());
         }
       }
+      const base::Value::List* block_important_rules =
+          network_rules->FindList(rules_json::kBlockImportantRules);
+      if (block_important_rules) {
+        network_block_important_lists_maker.AddRules(
+            block_important_rules->Clone());
+      }
     }
 
     const base::Value::Dict* cosmetic_rules =
@@ -265,8 +271,9 @@ base::Value OrganizeRules(
   }
 
   base::Value::List ios_content_blocker_rules;
-  for (auto* maker : {&network_specific_block_lists_maker,
-                      &network_generic_block_lists_maker}) {
+  for (auto* maker :
+       {&network_specific_block_lists_maker, &network_generic_block_lists_maker,
+        &network_block_important_lists_maker}) {
     base::Value::List lists = maker->GetAndReset();
     for (auto& list : lists) {
       ios_content_blocker_rules.Append(std::move(list));

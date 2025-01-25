@@ -7,14 +7,13 @@ import os.path
 import subprocess
 import sys
 import unittest
+from unittest import mock
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
-from testing_support.presubmit_canned_checks_test_mocks import MockFile
-from testing_support.presubmit_canned_checks_test_mocks import (MockInputApi,
-                                                                MockOutputApi)
-from testing_support.presubmit_canned_checks_test_mocks import MockChange
+from testing_support.presubmit_canned_checks_test_mocks import (
+    MockFile, MockAffectedFile, MockInputApi, MockOutputApi, MockChange)
 
 import presubmit_canned_checks
 
@@ -438,6 +437,66 @@ class CheckUpdateOwnersFileReferences(unittest.TestCase):
         ]
         results = presubmit_canned_checks.CheckUpdateOwnersFileReferences(
             input_api, MockOutputApi())
+        self.assertEqual(0, len(results))
+
+
+class CheckNoNewGitFilesAddedInDependenciesTest(unittest.TestCase):
+
+    @mock.patch('presubmit_canned_checks._readDeps')
+    def testNonNested(self, readDeps):
+        readDeps.return_value = '''deps = {
+      'src/foo': {'url': 'bar', 'condition': 'non_git_source'},
+      'src/components/foo/bar': {'url': 'bar', 'condition': 'non_git_source'},
+    }'''
+
+        input_api = MockInputApi()
+        input_api.files = [
+            MockFile('components/foo/file1.java', ['otherFunction']),
+            MockFile('components/foo/file2.java', ['hasSyncConsent']),
+            MockFile('chrome/foo/file3.java', ['canSyncFeatureStart']),
+            MockFile('chrome/foo/file4.java', ['isSyncFeatureEnabled']),
+            MockFile('chrome/foo/file5.java', ['isSyncFeatureActive']),
+        ]
+        results = presubmit_canned_checks.CheckNoNewGitFilesAddedInDependencies(
+            input_api, MockOutputApi())
+
+        self.assertEqual(0, len(results))
+
+    @mock.patch('presubmit_canned_checks._readDeps')
+    def testCollision(self, readDeps):
+        readDeps.return_value = '''deps = {
+      'src/foo': {'url': 'bar', 'condition': 'non_git_source'},
+      'src/baz': {'url': 'baz'},
+    }'''
+
+        input_api = MockInputApi()
+        input_api.files = [
+            MockAffectedFile('fo', 'content'),  # no conflict
+            MockAffectedFile('foo', 'content'),  # conflict
+            MockAffectedFile('foo/bar', 'content'),  # conflict
+            MockAffectedFile('baz/qux', 'content'),  # conflict, but ignored
+        ]
+        results = presubmit_canned_checks.CheckNoNewGitFilesAddedInDependencies(
+            input_api, MockOutputApi())
+
+        self.assertEqual(2, len(results))
+        self.assertIn('File: foo', str(results))
+        self.assertIn('File: foo/bar', str(results))
+
+    @mock.patch('presubmit_canned_checks._readDeps')
+    def testNoDeps(self, readDeps):
+        readDeps.return_value = ''  # Empty deps
+
+        input_api = MockInputApi()
+        input_api.files = [
+            MockAffectedFile('fo', 'content'),  # no conflict
+            MockAffectedFile('foo', 'content'),  # conflict
+            MockAffectedFile('foo/bar', 'content'),  # conflict
+            MockAffectedFile('baz/qux', 'content'),  # conflict, but ignored
+        ]
+        results = presubmit_canned_checks.CheckNoNewGitFilesAddedInDependencies(
+            input_api, MockOutputApi())
+
         self.assertEqual(0, len(results))
 
 

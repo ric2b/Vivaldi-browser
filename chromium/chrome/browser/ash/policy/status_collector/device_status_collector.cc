@@ -45,7 +45,6 @@
 #include "base/task/thread_pool.h"
 #include "base/values.h"
 #include "base/version.h"
-#include "chrome/browser/ash/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/ash/app_mode/kiosk_chrome_app_manager.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
@@ -93,6 +92,7 @@
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/cloud_policy_util.h"
+#include "components/policy/core/common/device_local_account_type.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -220,7 +220,8 @@ std::string ReadCPUStatistics() {
       }
     }
     // First line should always start with "cpu ".
-    NOTREACHED() << "Could not parse /proc/stat contents: " << contents;
+    NOTREACHED_IN_MIGRATION()
+        << "Could not parse /proc/stat contents: " << contents;
   }
   LOG(WARNING) << "Unable to read CPU statistics from " << kProcStat;
   return std::string();
@@ -595,7 +596,7 @@ em::CrashReportInfo::CrashReportUploadStatus GetCrashReportUploadStatus(
       return em::CrashReportInfo::UPLOAD_STATUS_UNKNOWN;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 // Filter the loaded crash reports.
@@ -639,30 +640,27 @@ void ReadCrashReportInfo(
 
 em::ActiveTimePeriod::SessionType GetSessionType(
     const std::string& user_email) {
-  DeviceLocalAccount::Type type;
-  if (!IsDeviceLocalAccountUser(user_email, &type)) {
+  auto type = GetDeviceLocalAccountType(user_email);
+  if (!type.has_value()) {
     return em::ActiveTimePeriod::SESSION_AFFILIATED_USER;
   }
 
-  switch (type) {
-    case DeviceLocalAccount::TYPE_PUBLIC_SESSION:
-    case DeviceLocalAccount::TYPE_SAML_PUBLIC_SESSION:
+  switch (type.value()) {
+    case DeviceLocalAccountType::kPublicSession:
+    case DeviceLocalAccountType::kSamlPublicSession:
       return em::ActiveTimePeriod::SESSION_MANAGED_GUEST;
 
-    case DeviceLocalAccount::TYPE_KIOSK_APP:
+    case DeviceLocalAccountType::kKioskApp:
       return em::ActiveTimePeriod::SESSION_KIOSK;
 
-    case DeviceLocalAccount::TYPE_ARC_KIOSK_APP:
-      return em::ActiveTimePeriod::SESSION_ARC_KIOSK;
-
-    case DeviceLocalAccount::TYPE_WEB_KIOSK_APP:
+    case DeviceLocalAccountType::kWebKioskApp:
       return em::ActiveTimePeriod::SESSION_WEB_KIOSK;
 
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return em::ActiveTimePeriod::SESSION_UNKNOWN;
 }
 
@@ -679,7 +677,7 @@ em::TpmVersionInfo_GscVersion ConvertTpmGscVersion(
       return em::TpmVersionInfo::GSC_VERSION_TI50;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return em::TpmVersionInfo::GSC_VERSION_UNSPECIFIED;
 }
 
@@ -2706,16 +2704,12 @@ bool DeviceStatusCollector::GetRunningKioskApp(
       }
       break;
     }
-    case DeviceLocalAccountType::kArcKioskApp:
-      // Use package name as app ID for ARC Kiosks.
-      running_kiosk_app->set_app_id(account->arc_kiosk_app_info.package_name());
-      break;
     case DeviceLocalAccountType::kWebKioskApp:
       running_kiosk_app->set_app_id(account->web_kiosk_app_info.url());
       break;
     case DeviceLocalAccountType::kPublicSession:
     case DeviceLocalAccountType::kSamlPublicSession:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return true;
 }
@@ -2999,16 +2993,12 @@ bool DeviceStatusCollector::GetKioskSessionStatus(
       }
       break;
     }
-    case DeviceLocalAccountType::kArcKioskApp:
-      // Use package name as app ID for ARC Kiosks.
-      app_status->set_app_id(account->arc_kiosk_app_info.package_name());
-      break;
     case DeviceLocalAccountType::kWebKioskApp:
       app_status->set_app_id(account->web_kiosk_app_info.url());
       break;
     case DeviceLocalAccountType::kPublicSession:
     case DeviceLocalAccountType::kSamlPublicSession:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   return true;
@@ -3086,7 +3076,7 @@ bool DeviceStatusCollector::IsReportingActivityTimes() const {
     return false;
   }
   std::string user_email = GetUserForActivityReporting();
-  return !user_email.empty() && !IsDeviceLocalAccountUser(user_email, nullptr);
+  return !user_email.empty() && !IsDeviceLocalAccountUser(user_email);
 }
 bool DeviceStatusCollector::IsReportingNetworkData() const {
   return report_network_configuration_ || report_network_status_;
@@ -3105,7 +3095,7 @@ bool DeviceStatusCollector::IsReportingUsers() const {
     return false;
   }
   std::string user_email = GetUserForActivityReporting();
-  return !user_email.empty() && !IsDeviceLocalAccountUser(user_email, nullptr);
+  return !user_email.empty() && !IsDeviceLocalAccountUser(user_email);
 }
 bool DeviceStatusCollector::IsReportingCrashReportInfo() const {
   return report_crash_report_info_ && stat_reporting_pref_;

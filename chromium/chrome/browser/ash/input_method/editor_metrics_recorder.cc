@@ -37,6 +37,8 @@ std::string GetToneStringFromEnum(EditorTone tone) {
       return "Elaborate";
     case EditorTone::kFormalize:
       return "Formalize";
+    case EditorTone::kProofread:
+      return "Proofread";
     case EditorTone::kFreeformRewrite:
       return "FreeformRewrite";
     case EditorTone::kUnset:
@@ -62,6 +64,9 @@ EditorTone GetEditorToneFromString(std::string_view tone) {
   if (tone == "FORMALIZE") {
     return EditorTone::kFormalize;
   }
+  if (tone == "PROOFREAD") {
+    return EditorTone::kProofread;
+  }
   return EditorTone::kUnknown;
 }
 
@@ -71,22 +76,40 @@ std::string_view AsString(const EditorOpportunityMode& mode) {
       return "Write";
     case EditorOpportunityMode::kRewrite:
       return "Rewrite";
-    case EditorOpportunityMode::kNone:
-      return "None";
+    case EditorOpportunityMode::kNotAllowedForUse:
+      return "NotAllowed";
+    case EditorOpportunityMode::kInvalidInput:
+      return "InvalidInput";
   }
 }
 
 std::string_view AsString(const LanguageCategory& category) {
   switch (category) {
+    case LanguageCategory::kDanish:
+      return "Danish";
+    case LanguageCategory::kDutch:
+      return "Dutch";
+    case LanguageCategory::kFinnish:
+      return "Finnish";
     case LanguageCategory::kEnglish:
       return "English";
     case LanguageCategory::kFrench:
       return "French";
     case LanguageCategory::kGerman:
       return "German";
+    case LanguageCategory::kItalian:
+      return "Italian";
     case LanguageCategory::kJapanese:
       return "Japanese";
-    case LanguageCategory::kOther:
+    case LanguageCategory::kNorwegian:
+      return "Norwegian";
+    case LanguageCategory::kPortugese:
+      return "Portugese";
+    case LanguageCategory::kSpanish:
+      return "Spanish";
+    case LanguageCategory::kSwedish:
+      return "Swedish";
+    default:
       return "Other";
   }
 }
@@ -113,6 +136,20 @@ std::string_view AsEnglishOrOther(const LanguageCategory& category) {
     default:
       return "Other";
   }
+}
+
+bool IsInternationalizedPathEnabled() {
+  return base::FeatureList::IsEnabled(features::kOrcaDanish) ||
+         base::FeatureList::IsEnabled(features::kOrcaDutch) ||
+         base::FeatureList::IsEnabled(features::kOrcaFinnish) ||
+         base::FeatureList::IsEnabled(features::kOrcaFrench) ||
+         base::FeatureList::IsEnabled(features::kOrcaGerman) ||
+         base::FeatureList::IsEnabled(features::kOrcaItalian) ||
+         base::FeatureList::IsEnabled(features::kOrcaJapanese) ||
+         base::FeatureList::IsEnabled(features::kOrcaNorwegian) ||
+         base::FeatureList::IsEnabled(features::kOrcaPortugese) ||
+         base::FeatureList::IsEnabled(features::kOrcaSpanish) ||
+         base::FeatureList::IsEnabled(features::kOrcaSwedish);
 }
 
 }  // namespace
@@ -153,21 +190,21 @@ EditorStates ToEditorStatesMetric(EditorBlockedReason reason) {
 EditorStates ToEditorStatesMetric(orca::mojom::TextQueryErrorCode error_code) {
   switch (error_code) {
     case orca::mojom::TextQueryErrorCode::kUnknown:
-      return EditorStates::ErrorUnknown;
+      return EditorStates::kErrorUnknown;
     case orca::mojom::TextQueryErrorCode::kInvalidArgument:
-      return EditorStates::ErrorInvalidArgument;
+      return EditorStates::kErrorInvalidArgument;
     case orca::mojom::TextQueryErrorCode::kResourceExhausted:
-      return EditorStates::ErrorResourceExhausted;
+      return EditorStates::kErrorResourceExhausted;
     case orca::mojom::TextQueryErrorCode::kBackendFailure:
-      return EditorStates::ErrorBackendFailure;
+      return EditorStates::kErrorBackendFailure;
     case orca::mojom::TextQueryErrorCode::kNoInternetConnection:
-      return EditorStates::ErrorNoInternetConnection;
+      return EditorStates::kErrorNoInternetConnection;
     case orca::mojom::TextQueryErrorCode::kUnsupportedLanguage:
-      return EditorStates::ErrorUnsupportedLanguage;
+      return EditorStates::kErrorUnsupportedLanguage;
     case orca::mojom::TextQueryErrorCode::kBlockedOutputs:
-      return EditorStates::ErrorBlockedOutputs;
+      return EditorStates::kErrorBlockedOutputs;
     case orca::mojom::TextQueryErrorCode::kRestrictedRegion:
-      return EditorStates::ErrorRestrictedRegion;
+      return EditorStates::kErrorRestrictedRegion;
   }
 }
 
@@ -204,8 +241,8 @@ EditorTone ToEditorMetricTone(orca::mojom::TriggerContextPtr trigger_context) {
       return EditorTone::kFormalize;
     case orca::mojom::PresetTextQueryType::kEmojify:
       return EditorTone::kEmojify;
-    // TODO: b:329164491 - support metrics for proofread
     case orca::mojom::PresetTextQueryType::kProofread:
+      return EditorTone::kProofread;
     case orca::mojom::PresetTextQueryType::kUnknown:
       return EditorTone::kUnknown;
   }
@@ -238,14 +275,10 @@ void EditorMetricsRecorder::SetTone(EditorTone tone) {
 }
 
 void EditorMetricsRecorder::LogEditorState(EditorStates state) {
-  if (mode_ == EditorOpportunityMode::kNone) {
-    return;
-  }
-
   base::UmaHistogramEnumeration(
       base::StrCat({"InputMethod.Manta.Orca.States.", AsString(mode_)}), state);
 
-  if (base::FeatureList::IsEnabled(chromeos::features::kOrcaInternationalize)) {
+  if (IsInternationalizedPathEnabled()) {
     base::UmaHistogramEnumeration(
         base::StrCat({"InputMethod.Manta.Orca.",
                       AsString(InputMethodToLanguageCategory(
@@ -271,7 +304,8 @@ void EditorMetricsRecorder::LogEditorState(EditorStates state) {
 
 void EditorMetricsRecorder::LogNumberOfCharactersInserted(
     int number_of_characters) {
-  if (mode_ == EditorOpportunityMode::kNone) {
+  if (mode_ == EditorOpportunityMode::kInvalidInput ||
+      mode_ == EditorOpportunityMode::kNotAllowedForUse) {
     return;
   }
 
@@ -280,7 +314,7 @@ void EditorMetricsRecorder::LogNumberOfCharactersInserted(
           {"InputMethod.Manta.Orca.CharactersInserted.", AsString(mode_)}),
       number_of_characters);
 
-  if (base::FeatureList::IsEnabled(chromeos::features::kOrcaInternationalize)) {
+  if (IsInternationalizedPathEnabled()) {
     base::UmaHistogramCounts100000(
         base::StrCat({"InputMethod.Manta.Orca.",
                       AsEnglishOrOther(InputMethodToLanguageCategory(
@@ -300,7 +334,8 @@ void EditorMetricsRecorder::LogNumberOfCharactersInserted(
 
 void EditorMetricsRecorder::LogNumberOfCharactersSelectedForInsert(
     int number_of_characters) {
-  if (mode_ == EditorOpportunityMode::kNone) {
+  if (mode_ == EditorOpportunityMode::kInvalidInput ||
+      mode_ == EditorOpportunityMode::kNotAllowedForUse) {
     return;
   }
 
@@ -309,7 +344,7 @@ void EditorMetricsRecorder::LogNumberOfCharactersSelectedForInsert(
                     AsString(mode_)}),
       number_of_characters);
 
-  if (base::FeatureList::IsEnabled(chromeos::features::kOrcaInternationalize)) {
+  if (IsInternationalizedPathEnabled()) {
     base::UmaHistogramCounts100000(
         base::StrCat({"InputMethod.Manta.Orca.",
                       AsEnglishOrOther(InputMethodToLanguageCategory(
@@ -330,7 +365,8 @@ void EditorMetricsRecorder::LogNumberOfCharactersSelectedForInsert(
 
 void EditorMetricsRecorder::LogNumberOfResponsesFromServer(
     int number_of_responses) {
-  if (mode_ == EditorOpportunityMode::kNone) {
+  if (mode_ == EditorOpportunityMode::kInvalidInput ||
+      mode_ == EditorOpportunityMode::kNotAllowedForUse) {
     return;
   }
 
@@ -338,7 +374,7 @@ void EditorMetricsRecorder::LogNumberOfResponsesFromServer(
       base::StrCat({"InputMethod.Manta.Orca.NumResponses.", AsString(mode_)}),
       number_of_responses, kMaxNumResponsesFromServer);
 
-  if (base::FeatureList::IsEnabled(chromeos::features::kOrcaInternationalize)) {
+  if (IsInternationalizedPathEnabled()) {
     base::UmaHistogramExactLinear(
         base::StrCat({"InputMethod.Manta.Orca.",
                       AsEnglishOrOther(InputMethodToLanguageCategory(
@@ -359,7 +395,8 @@ void EditorMetricsRecorder::LogNumberOfResponsesFromServer(
 
 void EditorMetricsRecorder::LogLengthOfLongestResponseFromServer(
     int number_of_characters) {
-  if (mode_ == EditorOpportunityMode::kNone) {
+  if (mode_ == EditorOpportunityMode::kInvalidInput ||
+      mode_ == EditorOpportunityMode::kNotAllowedForUse) {
     return;
   }
 
@@ -368,7 +405,7 @@ void EditorMetricsRecorder::LogLengthOfLongestResponseFromServer(
           {"InputMethod.Manta.Orca.LengthOfLongestResponse.", AsString(mode_)}),
       number_of_characters);
 
-  if (base::FeatureList::IsEnabled(chromeos::features::kOrcaInternationalize)) {
+  if (IsInternationalizedPathEnabled()) {
     base::UmaHistogramCounts100000(
         base::StrCat({"InputMethod.Manta.Orca.",
                       AsEnglishOrOther(InputMethodToLanguageCategory(

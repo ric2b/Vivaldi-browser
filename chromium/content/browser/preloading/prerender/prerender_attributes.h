@@ -12,6 +12,7 @@
 #include "content/public/browser/preloading_trigger_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
+#include "net/http/http_no_vary_search_data.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom.h"
 #include "third_party/blink/public/mojom/speculation_rules/speculation_rules.mojom-shared.h"
@@ -29,6 +30,7 @@ struct CONTENT_EXPORT PrerenderAttributes {
       std::optional<blink::mojom::SpeculationTargetHint> target_hint,
       Referrer referrer,
       std::optional<blink::mojom::SpeculationEagerness> eagerness,
+      std::optional<net::HttpNoVarySearchData> no_vary_search_expected,
       std::optional<url::Origin> initiator_origin,
       int initiator_process_id,
       base::WeakPtr<WebContents> initiator_web_contents,
@@ -36,6 +38,7 @@ struct CONTENT_EXPORT PrerenderAttributes {
       int initiator_frame_tree_node_id,
       ukm::SourceId initiator_ukm_id,
       ui::PageTransition transition_type,
+      bool should_warm_up_compositor,
       base::RepeatingCallback<bool(const GURL&)> url_match_predicate,
       base::RepeatingCallback<void(NavigationHandle&)>
           prerender_navigation_handle_callback,
@@ -69,6 +72,10 @@ struct CONTENT_EXPORT PrerenderAttributes {
   // This is std::nullopt when prerendering is initiated by the browser.
   std::optional<blink::mojom::SpeculationEagerness> eagerness;
 
+  // Records the No-Vary-Search hint of the corresponding speculation rule.
+  // This is std::nullopt when No-Vary-Search hint is not specified.
+  std::optional<net::HttpNoVarySearchData> no_vary_search_expected;
+
   // This is std::nullopt when prerendering is initiated by the browser
   // (not by a renderer using Speculation Rules API).
   std::optional<url::Origin> initiator_origin;
@@ -92,6 +99,11 @@ struct CONTENT_EXPORT PrerenderAttributes {
   ukm::SourceId initiator_ukm_id = ukm::kInvalidSourceId;
 
   ui::PageTransition transition_type;
+
+  // If true, warms up compositor on a certain loading event of prerender
+  // initial navigation. Please see crbug.com/41496019 and comments on
+  // Page::should_warm_up_compositor_on_prerender_ for more details.
+  bool should_warm_up_compositor = false;
 
   // If the caller wants to override the default holdback processing, they can
   // set this. Otherwise, it will be computed as part of

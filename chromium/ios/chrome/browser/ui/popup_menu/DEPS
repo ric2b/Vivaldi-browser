@@ -1,7 +1,7 @@
 include_rules = [
   "+ios/chrome/browser/ui/browser_container",
-  "+ios/chrome/browser/ui/bookmarks",
-  "+ios/chrome/browser/ui/bubble",
+  "+ios/chrome/browser/bookmarks/ui_bundled",
+  "+ios/chrome/browser/bubble/ui_bundled",
   "+ios/chrome/browser/ui/lens/lens_entrypoint.h",
   "+ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h",
   "+ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_constants.h",
@@ -13,6 +13,7 @@ include_rules = [
   "+ios/chrome/browser/ui/sharing",
   "+ios/chrome/browser/ui/tab_switcher/tab_utils.h",
   "+ios/chrome/browser/ui/policy/user_policy_util.h",
+  "+ios/chrome/browser/ui/settings/clear_browsing_data/features.h",
 ]
 
 specific_include_rules = {

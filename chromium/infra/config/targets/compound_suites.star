@@ -123,6 +123,8 @@ targets.legacy_compound_suite(
     basic_suites = [
         "bfcache_android_specific_gtests",
         "bfcache_generic_gtests",
+        "webview_bot_instrumentation_test_apk_bfcache_mutations_gtest",
+        "webview_cts_tests_bfcache_mutations_gtest",
     ],
 )
 
@@ -404,6 +406,18 @@ targets.legacy_compound_suite(
 )
 
 targets.legacy_compound_suite(
+    name = "chromium_mac_osxbeta_rel_isolated_scripts",
+    basic_suites = [
+        "chromedriver_py_tests_isolated_scripts",
+        "components_perftests_isolated_scripts",
+        "desktop_chromium_mac_osxbeta_scripts",
+        "mac_specific_isolated_scripts",
+        "mojo_python_unittests_isolated_scripts",
+        "telemetry_perf_unittests_isolated_scripts",
+    ],
+)
+
+targets.legacy_compound_suite(
     name = "chromium_mac_rel_isolated_scripts_and_sizes",
     basic_suites = [
         "chrome_sizes_suite",
@@ -441,6 +455,14 @@ targets.legacy_compound_suite(
     ],
 )
 
+# Multiscreen tests for desktop platforms. See: crbug.com/346565331.
+targets.legacy_compound_suite(
+    name = "chromium_multiscreen_gtests_fyi",
+    basic_suites = [
+        "chromium_multiscreen_gtests",
+    ],
+)
+
 # Pixel tests only enabled on Win 10. So this is
 # 'chromium_win_gtests' + 'pixel_browser_tests_gtests' +
 # 'non_android_chromium_gtests_skia_gold'. When changing
@@ -459,13 +481,6 @@ targets.legacy_compound_suite(
         "pixel_browser_tests_gtests",
         "vr_platform_specific_chromium_gtests",
         "win_specific_chromium_gtests",
-    ],
-)
-
-targets.legacy_compound_suite(
-    name = "chromium_win10_gtests_multiscreen_fyi",
-    basic_suites = [
-        "chromium_gtests_for_windows_multiscreen",
     ],
 )
 
@@ -878,7 +893,6 @@ targets.legacy_compound_suite(
     name = "gpu_fyi_linux_debug_gtests",
     basic_suites = [
         "gpu_common_gtests_passthrough",
-        "gpu_gles2_conform_gtests",
     ],
 )
 
@@ -897,7 +911,6 @@ targets.legacy_compound_suite(
         "gpu_angle_unit_gtests",
         "gpu_common_gtests_passthrough",
         "gpu_desktop_specific_gtests",
-        "gpu_gles2_conform_gtests",
         "gpu_memory_buffer_impl_tests_suite",
         "gpu_vulkan_gtests",
     ],
@@ -935,7 +948,6 @@ targets.legacy_compound_suite(
         "gpu_common_gtests_passthrough",
         "gpu_fyi_and_optional_non_linux_gtests",
         "gpu_fyi_mac_specific_gtests",
-        "gpu_gles2_conform_gtests",
     ],
 )
 
@@ -969,7 +981,6 @@ targets.legacy_compound_suite(
         "gpu_desktop_specific_gtests",
         "gpu_fyi_and_optional_non_linux_gtests",
         "gpu_fyi_mac_specific_gtests",
-        "gpu_gles2_conform_gtests",
     ],
 )
 
@@ -1041,7 +1052,6 @@ targets.legacy_compound_suite(
         "gpu_desktop_specific_gtests",
         "gpu_fyi_and_optional_non_linux_gtests",
         "gpu_fyi_and_optional_win_specific_gtests",
-        "gpu_gles2_conform_gtests",
     ],
 )
 
@@ -1270,6 +1280,15 @@ targets.legacy_compound_suite(
         "webview_cts_tests_gtest_no_field_trial",
         "webview_ui_instrumentation_tests",
         "webview_ui_instrumentation_tests_no_field_trial",
+    ],
+)
+
+targets.legacy_compound_suite(
+    name = "webview_native_coverage_bot_gtests",
+    basic_suites = [
+        "webview_bot_instrumentation_test_apk_mutations_gtest",
+        "webview_bot_instrumentation_test_apk_no_field_trial_gtest",
+        "webview_bot_unittests_gtest",
     ],
 )
 

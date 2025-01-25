@@ -201,7 +201,7 @@ static void XGetter(Local<Name> name,
                     const v8::PropertyCallbackInfo<v8::Value>& info) {
   v8::Isolate* isolate = info.GetIsolate();
   CHECK(x_holder_global.Get(isolate)
-            ->Equals(isolate->GetCurrentContext(), info.Holder())
+            ->Equals(isolate->GetCurrentContext(), info.HolderV2())
             .FromJust());
   XGetter(info, 0);
 }
@@ -221,7 +221,7 @@ Local<v8::Object> GetHolder(const Info& info);
 template <>
 Local<v8::Object> GetHolder<v8::PropertyCallbackInfo<void>>(
     const v8::PropertyCallbackInfo<void>& info) {
-  return info.Holder();
+  return info.HolderV2();
 }
 
 template <>
@@ -242,7 +242,6 @@ static void XSetter(Local<Value> value, const Info& info, int offset) {
             .FromJust());
   x_register[offset] =
       value->Int32Value(isolate->GetCurrentContext()).FromJust();
-  info.GetReturnValue().Set(v8_num(-1));
 }
 
 static void XSetter(Local<Name> name, Local<Value> value,
@@ -253,6 +252,7 @@ static void XSetter(Local<Name> name, Local<Value> value,
 static void XSetter(const v8::FunctionCallbackInfo<v8::Value>& info) {
   CHECK_EQ(1, info.Length());
   XSetter(info[0], info, 1);
+  info.GetReturnValue().Set(v8_num(-1));
 }
 
 
@@ -343,8 +343,13 @@ THREADED_TEST(HandleScopePop) {
   CHECK_EQ(count_before, count_after);
 }
 
+// Allow usages of v8::PropertyCallbackInfo<T>::Holder() for now.
+// TODO(https://crbug.com/333672197): remove.
+START_ALLOW_USE_DEPRECATED()
+
 static void CheckAccessorArgsCorrect(
     Local<Name> name, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  i::ValidateCallbackInfo(info);
   CHECK(info.GetIsolate() == CcTest::isolate());
   CHECK(info.This() == info.Holder());
   CHECK(info.Data()
@@ -364,6 +369,10 @@ static void CheckAccessorArgsCorrect(
             .FromJust());
   info.GetReturnValue().Set(17);
 }
+
+// Allow usages of v8::PropertyCallbackInfo<T>::Holder() for now.
+// TODO(https://crbug.com/333672197): remove.
+END_ALLOW_USE_DEPRECATED()
 
 THREADED_TEST(DirectCall) {
   LocalContext context;
@@ -537,7 +546,12 @@ static void StackCheck(Local<Name> name,
   i::StackFrameIterator iter(isolate);
   for (int i = 0; !iter.done(); i++) {
     i::StackFrame* frame = iter.frame();
-    CHECK(i != 0 || (frame->type() == i::StackFrame::EXIT));
+    if (i == 0) {
+      // The topmost frame could be either EXIT frame in case the callback
+      // was called from IC miss or API_ACCESSOR_EXIT in case the callback
+      // was called via CallApiGetter builtin.
+      CHECK(frame->is_exit() || frame->is_api_accessor_exit());
+    }
     i::Tagged<i::Code> code = frame->LookupCode();
     CHECK(code->contains(isolate, frame->pc()));
     iter.Advance();

@@ -88,6 +88,12 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 // Returns whether the bottom omnibox steady state feature is enabled.
 - (BOOL)isBottomOmniboxAvailable;
 
+// Returns whether the current layout is showing the bottom omnibox.
+- (BOOL)isCurrentLayoutBottomOmnibox;
+
+// Returns whether the Enhanced Safe Browsing Infobar Promo feature is enabled.
+- (BOOL)isEnhancedSafeBrowsingInfobarEnabled;
+
 #pragma mark - History Utilities (EG2)
 
 // Clears browsing history. Raises an EarlGrey exception if history is not
@@ -216,9 +222,6 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 
 // Forces every request to fail in a way that simulates a network failure.
 - (void)disconnectFakeSyncServerNetwork;
-
-// Signs in with `identity` without sync consent.
-- (void)signInWithoutSyncWithIdentity:(FakeSystemIdentity*)identity;
 
 // Injects user demographics into the fake sync server. `rawBirthYear` is the
 // true birth year, pre-noise, and the gender corresponds to the proto enum
@@ -822,6 +825,10 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 - (void)setTimeValue:(base::Time)value
     forLocalStatePref:(const std::string&)prefName;
 
+// Sets the time value for the user pref in the original browser state.
+- (void)setTimeValue:(base::Time)value
+         forUserPref:(const std::string&)UTF8PrefName;
+
 // Sets the string value for the local state pref with `prefName`. `value` Local
 // State contains the preferences that are shared between all browser states.
 - (void)setStringValue:(const std::string&)value
@@ -842,8 +849,8 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 - (void)setBoolValue:(BOOL)value forUserPref:(const std::string&)UTF8PrefName;
 - (void)setIntegerValue:(int)value forUserPref:(const std::string&)UTF8PrefName;
 
-// Returns true if the Preference is currently using its default value,
-// and has not been set by any higher-priority source (even with the same
+// Returns true if the LocaState Preference is currently using its default
+// value, and has not been set by any higher-priority source (even with the same
 // value).
 - (bool)prefWithNameIsDefaultValue:(const std::string&)prefName;
 

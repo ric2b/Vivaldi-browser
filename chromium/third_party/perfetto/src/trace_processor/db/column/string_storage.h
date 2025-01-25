@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -57,13 +58,19 @@ class StringStorage final : public DataLayer {
 
     void IndexSearchValidated(FilterOp, SqlValue, Indices&) const override;
 
-    Range OrderedIndexSearchValidated(FilterOp,
-                                      SqlValue,
-                                      const OrderedIndices&) const override;
-
-    void StableSort(SortToken* start,
-                    SortToken* end,
+    void StableSort(Token* start,
+                    Token* end,
                     SortDirection direction) const override;
+
+    void Distinct(Indices&) const override;
+
+    std::optional<Token> MaxElement(Indices&) const override;
+
+    std::optional<Token> MinElement(Indices&) const override;
+
+    std::unique_ptr<DataLayer> Flatten(std::vector<uint32_t>&) const override;
+
+    SqlValue Get_AvoidUsingBecauseSlow(uint32_t index) const override;
 
     void Serialize(StorageProto*) const override;
 
@@ -84,6 +91,26 @@ class StringStorage final : public DataLayer {
     Range BinarySearchIntrinsic(FilterOp op,
                                 SqlValue val,
                                 Range search_range) const;
+
+    inline bool LessForTokens(const Token& lhs, const Token& rhs) const {
+      // If RHS is NULL, we know that LHS is not less than
+      // NULL, as nothing is less then null. This check is
+      // only required to keep the stability of the sort.
+      if ((*data_)[rhs.index] == StringPool::Id::Null()) {
+        return false;
+      }
+
+      // If LHS is NULL, it will always be smaller than any
+      // RHS value.
+      if ((*data_)[lhs.index] == StringPool::Id::Null()) {
+        return true;
+      }
+
+      // If neither LHS or RHS are NULL, we have to simply
+      // check which string is smaller.
+      return string_pool_->Get((*data_)[lhs.index]) <
+             string_pool_->Get((*data_)[rhs.index]);
+    }
 
     // TODO(b/307482437): After the migration vectors should be owned by
     // storage, so change from pointer to value.

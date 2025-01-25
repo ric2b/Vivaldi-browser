@@ -11,7 +11,7 @@
 #endif
 
 std::optional<base::Value> NSDataToDict(NSData* data) {
-  const base::StringPiece server_reply(static_cast<const char*>([data bytes]),
+  const std::string_view server_reply(static_cast<const char*>([data bytes]),
                                         [data length]);
   return base::JSONReader::Read(server_reply);
 }

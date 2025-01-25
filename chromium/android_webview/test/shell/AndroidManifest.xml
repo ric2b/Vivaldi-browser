@@ -94,6 +94,9 @@
     <service android:name="org.chromium.android_webview.services.VariationsSeedServer"
              android:exported="true"
              android:process=":webview_service" />
+    <service android:name="org.chromium.android_webview.services.AwNetLogService"
+             android:exported="true"
+             android:process=":webview_service" />
     <service android:name="org.chromium.android_webview.services.MetricsUploadService"
              android:exported="true"/>
     <service android:name="org.chromium.android_webview.services.MetricsBridgeService"
@@ -121,6 +124,13 @@
               android:launchMode="singleTask"
               android:windowSoftInputMode="adjustPan">
     </activity>
+    <provider android:name="androidx.core.content.FileProvider"
+              android:exported="false"
+              android:authorities="org.chromium.android_webview.shell.net_logs_provider"
+              android:grantUriPermissions="true">
+              <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                  android:resource="@xml/provider_paths" />
+    </provider>
     <provider android:name="org.chromium.android_webview.services.DeveloperModeContentProvider"
               android:exported="true"
               android:authorities="org.chromium.android_webview.shell.DeveloperModeContentProvider"/>

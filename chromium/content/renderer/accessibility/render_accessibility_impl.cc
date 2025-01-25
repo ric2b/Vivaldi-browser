@@ -162,7 +162,8 @@ void RenderAccessibilityImpl::NotifyAccessibilityModeChange(
 
   if (old_mode == mode) {
     DCHECK(ax_context_);
-    NOTREACHED() << "Do not call AccessibilityModeChanged unless it changes.";
+    NOTREACHED_IN_MIGRATION()
+        << "Do not call AccessibilityModeChanged unless it changes.";
     return;
   }
 
@@ -210,6 +211,16 @@ void RenderAccessibilityImpl::set_reset_token(uint32_t reset_token) {
     ax_context_->SetSerializationResetToken(reset_token);
   }
 }
+
+#if BUILDFLAG(IS_CHROMEOS)
+void RenderAccessibilityImpl::FireLayoutComplete() {
+  if (ax_context_) {
+    ax_context_->AddEventToSerializationQueue(
+        ui::AXEvent(ComputeRoot().AxID(), ax::mojom::Event::kLayoutComplete),
+        true);
+  }
+}
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 void RenderAccessibilityImpl::FireLoadCompleteIfLoaded() {
   if (GetMainDocument().IsLoaded() &&
@@ -371,7 +382,7 @@ void RenderAccessibilityImpl::PerformAction(const ui::AXActionData& data) {
     case ax::mojom::Action::kHitTest:
     case ax::mojom::Action::kReplaceSelectedText:
     case ax::mojom::Action::kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case ax::mojom::Action::kGetTextLocation:
       break;
@@ -524,22 +535,21 @@ bool RenderAccessibilityImpl::SendAccessibilitySerialization(
   }
 #endif
 
-  blink::mojom::AXUpdatesAndEventsPtr updates_and_events =
-      blink::mojom::AXUpdatesAndEvents::New();
-  updates_and_events->updates = std::move(updates);
-  updates_and_events->events = std::move(events);
+  ui::AXUpdatesAndEvents updates_and_events;
+  updates_and_events.updates = std::move(updates);
+  updates_and_events.events = std::move(events);
 
-  for (auto& update : updates_and_events->updates) {
+  for (auto& update : updates_and_events.updates) {
     ax_annotators_manager_->Annotate(document, &update,
                                      had_load_complete_messages);
   }
 
-  ax_annotators_manager_->AddDebuggingAttributes(updates_and_events->updates);
+  ax_annotators_manager_->AddDebuggingAttributes(updates_and_events.updates);
 
   CHECK(!weak_factory_for_pending_events_.HasWeakPtrs());
   CHECK(reset_token_);
   render_accessibility_manager_->HandleAccessibilityEvents(
-      std::move(updates_and_events), *reset_token_,
+      updates_and_events, *reset_token_,
       base::BindOnce(&RenderAccessibilityImpl::OnSerializationReceived,
                      weak_factory_for_pending_events_.GetWeakPtr()));
 

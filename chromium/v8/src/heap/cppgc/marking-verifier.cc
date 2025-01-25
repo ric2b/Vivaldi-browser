@@ -4,6 +4,8 @@
 
 #include "src/heap/cppgc/marking-verifier.h"
 
+#include <optional>
+
 #include "src/base/logging.h"
 #include "src/heap/cppgc/heap-object-header.h"
 #include "src/heap/cppgc/marking-visitor.h"
@@ -50,8 +52,8 @@ MarkingVerifierBase::MarkingVerifierBase(
       visitor_(std::move(visitor)),
       collection_type_(collection_type) {}
 
-void MarkingVerifierBase::Run(
-    StackState stack_state, v8::base::Optional<size_t> expected_marked_bytes) {
+void MarkingVerifierBase::Run(StackState stack_state,
+                              std::optional<size_t> expected_marked_bytes) {
   Traverse(heap_.raw_heap());
 // Avoid verifying the stack when running with TSAN as the TSAN runtime changes
 // stack contents when e.g. working with locks. Specifically, the marker uses
@@ -82,6 +84,12 @@ void MarkingVerifierBase::Run(
 #endif  // !defined(THREAD_SANITIZER)
   if (expected_marked_bytes && verifier_found_marked_bytes_are_exact_) {
     CHECK_EQ(expected_marked_bytes.value(), verifier_found_marked_bytes_);
+    // Minor GCs use sticky markbits and as such cannot expect that the marked
+    // bytes on pages match the marked bytes accumulated by the marker.
+    if (collection_type_ != CollectionType::kMinor) {
+      CHECK_EQ(expected_marked_bytes.value(),
+               verifier_found_marked_bytes_in_pages_);
+    }
   }
 }
 
@@ -110,6 +118,16 @@ void MarkingVerifierBase::VisitPointer(const void* address) {
   // - Fully constructed objects: Visit()
   // - Objects in construction: VisitInConstructionConservatively()
   TraceConservativelyIfNeeded(address);
+}
+
+bool MarkingVerifierBase::VisitNormalPage(NormalPage& page) {
+  verifier_found_marked_bytes_in_pages_ += page.marked_bytes();
+  return false;  // Continue visitation.
+}
+
+bool MarkingVerifierBase::VisitLargePage(LargePage& page) {
+  verifier_found_marked_bytes_in_pages_ += page.marked_bytes();
+  return false;  // Continue visitation.
 }
 
 bool MarkingVerifierBase::VisitHeapObjectHeader(HeapObjectHeader& header) {

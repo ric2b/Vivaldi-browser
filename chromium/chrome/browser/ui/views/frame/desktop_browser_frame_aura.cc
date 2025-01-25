@@ -69,7 +69,8 @@ void DesktopBrowserFrameAura::InitNativeWidget(
 // DesktopBrowserFrameAura, NativeBrowserFrame implementation:
 
 views::Widget::InitParams DesktopBrowserFrameAura::GetWidgetParams() {
-  views::Widget::InitParams params;
+  views::Widget::InitParams params(
+      views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET);
   params.native_widget = this;
   return params;
 }
@@ -105,12 +106,12 @@ void DesktopBrowserFrameAura::GetWindowPlacement(
 
 content::KeyboardEventProcessingResult
 DesktopBrowserFrameAura::PreHandleKeyboardEvent(
-    const content::NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
 bool DesktopBrowserFrameAura::HandleKeyboardEvent(
-    const content::NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   return false;
 }
 

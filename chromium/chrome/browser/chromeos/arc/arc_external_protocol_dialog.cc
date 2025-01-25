@@ -9,6 +9,7 @@
 #include "base/functional/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/not_fatal_until.h"
 #include "base/ranges/algorithm.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -381,7 +382,7 @@ void HandleDeviceSelection(WebContents* web_contents,
 
   const auto it =
       base::ranges::find(devices, device_guid, &SharingTargetDeviceInfo::guid);
-  DCHECK(it != devices.end());
+  CHECK(it != devices.end(), base::NotFatalUntil::M130);
   const SharingTargetDeviceInfo& device = *it;
 
   ClickToCallUiController::GetOrCreateFromWebContents(web_contents)
@@ -557,11 +558,11 @@ void OnIntentPickerClosed(
       break;
     case apps::IntentPickerCloseReason::PREFERRED_APP_FOUND:
       // We shouldn't be here if a preferred app was found.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;  // no UMA recording.
     case apps::IntentPickerCloseReason::STAY_IN_CHROME:
       LOG(ERROR) << "Chrome is not a valid option for external protocol URLs";
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;  // no UMA recording.
     case apps::IntentPickerCloseReason::ERROR_BEFORE_PICKER:
       // This can happen since an error could occur right before invoking

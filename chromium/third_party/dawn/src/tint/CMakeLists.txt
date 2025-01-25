@@ -41,10 +41,27 @@ if(NOT TINT_BUILD_AS_OTHER_OS)
   endif()
 endif()
 
-if (TARGET libprotobuf)
-  set(TINT_BUILD_IR_BINARY 1)
-else()
-  set(TINT_BUILD_IR_BINARY 0)
+################################################################################
+# Dependent flag checks
+################################################################################
+
+if (TINT_BUILD_IR_BINARY)
+  if (NOT DAWN_BUILD_PROTOBUF)
+    message(FATAL_ERROR "Building IR binary format 'TINT_BUILD_IR_BINARY' is "
+                        "enabled, but building protobuf 'DAWN_BUILD_PROTOBUF' "
+                        "is not")
+  endif()
+  if (NOT TARGET libprotobuf)
+    message(FATAL_ERROR "Building IR binary format 'TINT_BUILD_IR_BINARY' is "
+                        "enabled, but protobuf target is not available, "
+                        "possibly missing '${DAWN_THIRD_PARTY_DIR}/protobuf'")
+  endif()
+endif()
+
+if (TINT_BUILD_IR_FUZZER AND NOT TINT_BUILD_IR_BINARY)
+  message(FATAL_ERROR "Building IR fuzzer 'TINT_BUILD_IR_FUZZER' is enabled, "
+                      "but building IR binary format 'TINT_BUILD_IR_BINARY' is "
+                      "not")
 endif()
 
 ################################################################################
@@ -57,6 +74,7 @@ function(tint_core_compile_options TARGET)
   target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_GLSL_WRITER=$<BOOL:${TINT_BUILD_GLSL_WRITER}>)
   target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_HLSL_WRITER=$<BOOL:${TINT_BUILD_HLSL_WRITER}>)
   target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_IR_BINARY=$<BOOL:${TINT_BUILD_IR_BINARY}>)
+  target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_IR_FUZZER=$<BOOL:${TINT_BUILD_IR_FUZZER}>)
   target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_IS_LINUX=$<BOOL:${TINT_BUILD_IS_LINUX}>)
   target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_IS_MAC=$<BOOL:${TINT_BUILD_IS_MAC}>)
   target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_IS_WIN=$<BOOL:${TINT_BUILD_IS_WIN}>)
@@ -154,7 +172,7 @@ function(tint_default_compile_options TARGET)
     endif()
 
     # Some versions of MSVC ignores the [[noreturn]] on ~InternalCompilerError(), triggering a
-    # warning if its the last statement on a function that has a return value.
+    # warning if it is the last statement on a function that has a return value.
     target_compile_options(${TARGET} PRIVATE
       /wd4715 # not all control paths return a value
     )
@@ -518,12 +536,16 @@ function(tint_target_add_external_dependencies TARGET KIND)
   foreach(DEPENDENCY ${DEPENDENCIES})  # Each external dependency requires special handling...
     if(${DEPENDENCY} STREQUAL "abseil")
       target_link_libraries(${TARGET} PRIVATE
-        absl_strings
+        absl::strings
       )
     elseif(${DEPENDENCY} STREQUAL "dl")
       target_link_libraries(${TARGET} PRIVATE ${CMAKE_DL_LIBS})
     elseif(${DEPENDENCY} STREQUAL "dxc-include")
       target_include_directories(${TARGET} PRIVATE "${DAWN_THIRD_PARTY_DIR}/dxc/include")
+    elseif(${DEPENDENCY} STREQUAL "dxcompiler-for-fuzzer")
+      if(TINT_BUILD_FUZZERS) # TODO: and target arch is not x86
+        target_link_libraries(${TARGET} PRIVATE dxcompiler)
+      endif()
     elseif(${DEPENDENCY} STREQUAL "jsoncpp")
       target_link_libraries(${TARGET} PRIVATE jsoncpp_static)
     elseif(${DEPENDENCY} STREQUAL "langsvr")
@@ -553,6 +575,8 @@ function(tint_target_add_external_dependencies TARGET KIND)
     elseif(${DEPENDENCY} STREQUAL "gtest")
       target_include_directories(${TARGET} PRIVATE ${gmock_SOURCE_DIR}/include)
       target_link_libraries(${TARGET} PRIVATE gmock)
+    elseif(${DEPENDENCY} STREQUAL "libprotobuf-mutator")
+      target_link_libraries(${TARGET} PRIVATE libprotobuf-mutator)
     elseif(${DEPENDENCY} STREQUAL "metal")
       find_library(CoreGraphicsFramework CoreGraphics REQUIRED)
       find_library(FoundationFramework Foundation REQUIRED)
@@ -670,15 +694,17 @@ endif(TINT_BUILD_FUZZERS)
 ################################################################################
 # Generate protobuf sources
 ################################################################################
-foreach(PROTO_TARGET ${TINT_PROTO_TARGETS})
-  generate_protos(
-    TARGET ${PROTO_TARGET}
-    PROTOC_OUT_DIR "${DAWN_BUILD_GEN_DIR}/src/tint/")
-  target_include_directories(${PROTO_TARGET} PRIVATE "${DAWN_BUILD_GEN_DIR}/src/tint/")
-  target_include_directories(${PROTO_TARGET} PUBLIC "${DAWN_BUILD_GEN_DIR}")
-  target_link_libraries(${PROTO_TARGET} libprotobuf)
-endforeach()
-
+if (DAWN_BUILD_PROTOBUF)
+  foreach(PROTO_TARGET ${TINT_PROTO_TARGETS})
+    generate_protos(
+      TARGET ${PROTO_TARGET}
+      IMPORT_DIRS "${TINT_ROOT_SOURCE_DIR}"
+      PROTOC_OUT_DIR "${DAWN_BUILD_GEN_DIR}")
+    target_include_directories(${PROTO_TARGET} PRIVATE "${DAWN_BUILD_GEN_DIR}/src/tint/")
+    target_include_directories(${PROTO_TARGET} PUBLIC "${DAWN_BUILD_GEN_DIR}")
+    target_link_libraries(${PROTO_TARGET} PUBLIC libprotobuf)
+  endforeach()
+endif()
 
 ################################################################################
 # tintd (VSCode WGSL language server)

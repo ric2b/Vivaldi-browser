@@ -272,7 +272,7 @@ TEST_P(FramebufferFormatsTest, RenderbufferMultisample_STENCIL_INDEX8)
 // Test that binding an incomplete cube map is rejected by ANGLE.
 TEST_P(FramebufferFormatsTest, IncompleteCubeMap)
 {
-    // http://anglebug.com/3145
+    // http://anglebug.com/42261821
     ANGLE_SKIP_TEST_IF(IsFuchsia() && IsIntel() && IsVulkan());
 
     // First make a complete CubeMap.
@@ -1219,7 +1219,7 @@ TEST_P(FramebufferTest_ES3, ClearNonexistentDepthStencil)
 TEST_P(FramebufferTest_ES3, ClearDeletedAttachment)
 {
     // An INVALID_FRAMEBUFFER_OPERATION error was seen in this test on Mac, not sure where it might
-    // be originating from. http://anglebug.com/2834
+    // be originating from. http://anglebug.com/42261536
     ANGLE_SKIP_TEST_IF(IsMac() && IsOpenGL());
 
     GLFramebuffer fbo;
@@ -3626,7 +3626,7 @@ TEST_P(FramebufferTest_ES31, MultisampleResolveWithBlitNonZeroLevel)
 // object's default width and height.
 TEST_P(FramebufferTest_ES31, RenderingLimitToDefaultFBOSizeWithNoAttachments)
 {
-    // anglebug.com/2253
+    // anglebug.com/40644635
     ANGLE_SKIP_TEST_IF(IsLinux() && IsAMD() && IsDesktopOpenGL());
 
     constexpr char kVS1[] = R"(#version 310 es
@@ -4252,7 +4252,7 @@ TEST_P(FramebufferTest_ES31, ClearWithColorMasksRGB5A1)
     glDisable(GL_DITHER);
 
     // Attach textures with internal format GL_RGB5_A1 to each framebuffer color attachment
-    GLTexture textures[maxDrawBuffers];
+    std::vector<GLTexture> textures(maxDrawBuffers);
     std::vector<unsigned char> pixelData(kSize * kSize * 4, 255);
     for (int i = 0; i < maxDrawBuffers; ++i)
     {
@@ -4516,7 +4516,7 @@ class AddMockTextureNoRenderTargetTest : public ANGLETest<>
     }
 };
 
-// Test to verify workaround succeeds when no program outputs exist http://anglebug.com/2283
+// Test to verify workaround succeeds when no program outputs exist http://anglebug.com/42260995
 TEST_P(AddMockTextureNoRenderTargetTest, NoProgramOutputWorkaround)
 {
     constexpr char kVS[] = "void main() {}";
@@ -4583,7 +4583,7 @@ TEST_P(FramebufferTest_ES3, AttachmentStateChange)
 // (https://issuetracker.google.com/175584609) is doing exactly this.
 TEST_P(FramebufferTest_ES3, SampleFromAttachedTextureWithDifferentLOD)
 {
-    // TODO: https://anglebug.com/5760
+    // TODO: https://anglebug.com/42264297
     ANGLE_SKIP_TEST_IF(IsD3D());
 
     constexpr GLuint kLevel0Size = 4;
@@ -4651,7 +4651,7 @@ TEST_P(FramebufferTest_ES3, SampleFromAttachedTextureWithDifferentLOD)
 // change.
 TEST_P(FramebufferTest_ES3, SampleFromAttachedTextureWithDifferentLODAndFBOSwitch)
 {
-    // TODO: https://anglebug.com/5760
+    // TODO: https://anglebug.com/42264297
     ANGLE_SKIP_TEST_IF(IsD3D());
 
     constexpr GLuint kLevel0Size = 4;
@@ -6075,7 +6075,7 @@ void main()
 // Tests blits between draw and read surfaces with different pre-rotation values.
 TEST_P(FramebufferTest_ES3, BlitWithDifferentPreRotations)
 {
-    // TODO(anglebug.com/7594): Untriaged bot failures with non-Vulkan backends
+    // TODO(anglebug.com/42266059): Untriaged bot failures with non-Vulkan backends
     ANGLE_SKIP_TEST_IF(!IsVulkan());
 
     EGLWindow *window = getEGLWindow();
@@ -7866,6 +7866,72 @@ void main()
     EXPECT_PIXEL_RECT_EQ(0, 0, kWidth * 2, kHeight * 2, GLColor::yellow);
     ASSERT_GL_NO_ERROR();
 }
+
+// Test that invalidation tracking works when glBlitFramebuffer resolves into an invalidated
+// framebuffer.
+TEST_P(FramebufferTest_ES31, InvalidateThenResolve)
+{
+    ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Simple(), essl1_shaders::fs::UniformColor());
+    glUseProgram(program);
+    GLint colorLoc = glGetUniformLocation(program, angle::essl1_shaders::ColorUniform());
+    ASSERT_NE(colorLoc, -1);
+
+    constexpr int kWidth  = 36;
+    constexpr int kHeight = 20;
+    glViewport(0, 0, kWidth, kHeight);
+
+    GLTexture color;
+    glBindTexture(GL_TEXTURE_2D, color);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, kWidth, kHeight);
+
+    GLFramebuffer FBO;
+    glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color, 0);
+    ASSERT_GL_NO_ERROR();
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+
+    // Initialize the single-sampled image but discard it right away.
+    glUniform4fv(colorLoc, 1, GLColor::green.toNormalizedVector().data());
+    drawQuad(program, essl1_shaders::PositionAttrib(), 0.5f);
+    const GLenum discard[] = {GL_COLOR_ATTACHMENT0};
+    glInvalidateFramebuffer(GL_FRAMEBUFFER, 1, discard);
+
+    GLTexture msaaColor;
+    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, msaaColor);
+    glTexStorage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_RGBA8, kWidth, kHeight, false);
+
+    GLFramebuffer msaaFBO;
+    glBindFramebuffer(GL_FRAMEBUFFER, msaaFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE,
+                           msaaColor, 0);
+    ASSERT_GL_NO_ERROR();
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+
+    // Draw into the MSAA image
+    glUniform4fv(colorLoc, 1, GLColor::red.toNormalizedVector().data());
+    drawQuad(program, essl1_shaders::PositionAttrib(), 0.5f);
+
+    // Resolve into the single-sampled image
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, FBO);
+    glBlitFramebuffer(0, 0, kWidth, kHeight, 0, 0, kWidth, kHeight, GL_COLOR_BUFFER_BIT,
+                      GL_NEAREST);
+    ASSERT_GL_NO_ERROR();
+
+    // At this point, the contents of the single-sampled image must be considered well-defined (not
+    // invalidated).  Blend transparent blue in it for verification.
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+
+    glUniform4f(colorLoc, 0, 0, 1, 0);
+    drawQuad(program, essl1_shaders::PositionAttrib(), 0.5f);
+
+    // Verify resolve results
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, FBO);
+    EXPECT_PIXEL_RECT_EQ(0, 0, kWidth, kHeight, GLColor::magenta);
+    ASSERT_GL_NO_ERROR();
+}
+
 ANGLE_INSTANTIATE_TEST_ES2_AND(AddMockTextureNoRenderTargetTest,
                                ES2_D3D9().enable(Feature::AddMockTextureNoRenderTarget),
                                ES2_D3D11().enable(Feature::AddMockTextureNoRenderTarget));

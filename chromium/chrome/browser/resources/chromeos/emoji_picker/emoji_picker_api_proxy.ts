@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
 
-import {Category, PageHandlerFactory, PageHandlerRemote, Status, TenorGifResponse} from './emoji_picker.mojom-webui.js';
+import {Category, HistoryItem, PageHandlerFactory, PageHandlerRemote, Status, TenorGifResponse} from './emoji_picker.mojom-webui.js';
 import {EmojiSearch} from './emoji_search.mojom-webui.js';
 import {NewWindowProxy} from './new_window_proxy.mojom-webui.js';
 import {EmojiVariants, GifSubcategoryData, VisualContent} from './types.js';
@@ -110,6 +110,23 @@ export class EmojiPickerApiProxy {
 
   getInitialQuery(): Promise<{query: string}> {
     return this.handler.getInitialQuery();
+  }
+
+  updateHistoryInPrefs(category: Category, history: HistoryItem[]): void {
+    this.handler.updateHistoryInPrefs(category, history);
+  }
+
+  updatePreferredVariantsInPrefs(preferredVariants: Record<string, string>):
+      void {
+    this.handler.updatePreferredVariantsInPrefs(
+        Object.keys(preferredVariants).map(base => ({
+                                             'base': base,
+                                             'variant': preferredVariants[base],
+                                           })));
+  }
+
+  getHistoryFromPrefs(category: Category): Promise<{history: HistoryItem[]}> {
+    return this.handler.getHistoryFromPrefs(category);
   }
 
   onUiFullyLoaded(): void {

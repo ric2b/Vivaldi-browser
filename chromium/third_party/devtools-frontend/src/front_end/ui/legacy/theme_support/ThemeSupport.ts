@@ -46,8 +46,34 @@ export class ThemeSupport extends EventTarget {
   private customSheets: Set<string> = new Set();
   private computedStyleOfHTML = Common.Lazy.lazy(() => window.getComputedStyle(document.documentElement));
 
+  readonly #documentsToTheme: Set<Document> = new Set([document]);
+
+  readonly #darkThemeMediaQuery: MediaQueryList;
+  readonly #highContrastMediaQuery: MediaQueryList;
+  readonly #onThemeChangeListener = (): void => this.#applyTheme();
+  readonly #onHostThemeChangeListener = (): void => this.fetchColorsAndApplyHostTheme();
+
   private constructor(private setting: Common.Settings.Setting<string>) {
     super();
+
+    // When the theme changes we instantiate a new theme support and reapply.
+    // Equally if the user has set to match the system and the OS preference changes
+    // we perform the same change.
+    this.#darkThemeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    this.#highContrastMediaQuery = window.matchMedia('(forced-colors: active)');
+    this.#darkThemeMediaQuery.addEventListener('change', this.#onThemeChangeListener);
+    this.#highContrastMediaQuery.addEventListener('change', this.#onThemeChangeListener);
+    setting.addChangeListener(this.#onThemeChangeListener);
+    Host.InspectorFrontendHost.InspectorFrontendHostInstance.events.addEventListener(
+        Host.InspectorFrontendHostAPI.Events.ColorThemeChanged, this.#onHostThemeChangeListener);
+  }
+
+  #dispose(): void {
+    this.#darkThemeMediaQuery.removeEventListener('change', this.#onThemeChangeListener);
+    this.#highContrastMediaQuery.removeEventListener('change', this.#onThemeChangeListener);
+    this.setting.removeChangeListener(this.#onThemeChangeListener);
+    Host.InspectorFrontendHost.InspectorFrontendHostInstance.events.removeEventListener(
+        Host.InspectorFrontendHostAPI.Events.ColorThemeChanged, this.#onHostThemeChangeListener);
   }
 
   static hasInstance(): boolean {
@@ -64,10 +90,22 @@ export class ThemeSupport extends EventTarget {
         throw new Error(`Unable to create theme support: setting must be provided: ${new Error().stack}`);
       }
 
+      if (themeSupportInstance) {
+        themeSupportInstance.#dispose();
+      }
       themeSupportInstance = new ThemeSupport(setting);
     }
 
     return themeSupportInstance;
+  }
+
+  /**
+   * Adds additional `Document` instances that should be themed besides the default
+   * `window.document` in which this ThemeSupport instance was created.
+   */
+  addDocumentToTheme(document: Document): void {
+    this.#documentsToTheme.add(document);
+    this.#fetchColorsAndApplyHostTheme(document);
   }
 
   getComputedValue(propertyName: string, target: Element|null = null): string {
@@ -133,24 +171,19 @@ export class ThemeSupport extends EventTarget {
     this.customSheets.add(sheetText);
   }
 
-  applyTheme(document: Document): void {
+  #applyTheme(): void {
+    for (const document of this.#documentsToTheme) {
+      this.#applyThemeToDocument(document);
+    }
+  }
+
+  #applyThemeToDocument(document: Document): void {
     const isForcedColorsMode = window.matchMedia('(forced-colors: active)').matches;
     const systemPreferredTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
 
     const useSystemPreferred = this.setting.get() === 'systemPreferred' || isForcedColorsMode;
     this.themeNameInternal = useSystemPreferred ? systemPreferredTheme : this.setting.get();
-
-    const wasDarkThemed = document.documentElement.classList.contains('-theme-with-dark-background');
-    document.documentElement.classList.toggle('-theme-with-dark-background', this.themeNameInternal === 'dark');
-
-    const isDarkThemed = document.documentElement.classList.contains('-theme-with-dark-background');
-
-    // In the event the theme changes we need to clear caches and notify subscribers.
-    if (wasDarkThemed !== isDarkThemed) {
-      themeValueByTargetByName.clear();
-      this.customSheets.clear();
-      this.dispatchEvent(new ThemeChangeEvent());
-    }
+    document.documentElement.classList.toggle('theme-with-dark-background', this.themeNameInternal === 'dark');
 
     // Baseline is the name of Chrome's default color theme and there are two of these: default and grayscale.
     // The collective name for the rest of the color themes is dynamic.
@@ -159,16 +192,26 @@ export class ThemeSupport extends EventTarget {
     const selectedTheme = getComputedStyle(document.body).getPropertyValue('--user-color-source');
     document.documentElement.classList.toggle('baseline-default', selectedTheme === 'baseline-default');
     document.documentElement.classList.toggle('baseline-grayscale', selectedTheme === 'baseline-grayscale');
+
+    // In the event the theme changes we need to clear caches and notify subscribers.
+    themeValueByTargetByName.clear();
+    this.customSheets.clear();
+    this.dispatchEvent(new ThemeChangeEvent());
   }
+
   static clearThemeCache(): void {
     themeValueByTargetByName.clear();
   }
 
-  static fetchColors(document?: Document): void {
-    if (Host.InspectorFrontendHost.InspectorFrontendHostInstance.isHostedMode()) {
-      return;
+  fetchColorsAndApplyHostTheme(): void {
+    for (const document of this.#documentsToTheme) {
+      this.#fetchColorsAndApplyHostTheme(document);
     }
-    if (!document) {
+  }
+
+  #fetchColorsAndApplyHostTheme(document: Document): void {
+    if (Host.InspectorFrontendHost.InspectorFrontendHostInstance.isHostedMode()) {
+      this.#applyThemeToDocument(document);
       return;
     }
 
@@ -182,7 +225,7 @@ export class ThemeSupport extends EventTarget {
       if (oldColorsCssLink) {
         oldColorsCssLink.remove();
       }
-      ThemeSupport.instance().applyTheme(document);
+      this.#applyThemeToDocument(document);
     };
     document.body.appendChild(newColorsCssLink);
   }

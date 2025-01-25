@@ -138,7 +138,7 @@ class Device final : public DeviceBase {
 
     float GetTimestampPeriodInNS() const override;
 
-    bool IsResolveTextureBlitWithDrawSupported() const override;
+    bool CanTextureLoadResolveTargetInTheSameRenderpass() const override;
 
   private:
     using DeviceBase::DeviceBase;
@@ -160,6 +160,7 @@ class Device final : public DeviceBase {
     ResultOrError<Ref<SamplerBase>> CreateSamplerImpl(const SamplerDescriptor* descriptor) override;
     ResultOrError<Ref<ShaderModuleBase>> CreateShaderModuleImpl(
         const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
+        const std::vector<tint::wgsl::Extension>& internalExtensions,
         ShaderModuleParseResult* parseResult,
         OwnedCompilationMessages* compilationMessages) override;
     ResultOrError<Ref<SwapChainBase>> CreateSwapChainImpl(
@@ -172,9 +173,6 @@ class Device final : public DeviceBase {
         TextureBase* texture,
         const UnpackedPtr<TextureViewDescriptor>& descriptor) override;
 
-    ResultOrError<wgpu::TextureUsage> GetSupportedSurfaceUsageImpl(
-        const Surface* surface) const override;
-
     void DestroyImpl() override;
 
     std::vector<std::unique_ptr<PendingOperation>> mPendingOperations;
@@ -185,9 +183,7 @@ class Device final : public DeviceBase {
 
 class PhysicalDevice : public PhysicalDeviceBase {
   public:
-    // Create null adapter without providing toggles state for testing, only inherit instance's
-    // toggles state
-    explicit PhysicalDevice(InstanceBase* instance);
+    PhysicalDevice();
     ~PhysicalDevice() override;
 
     // PhysicalDeviceBase Implementation
@@ -196,6 +192,7 @@ class PhysicalDevice : public PhysicalDeviceBase {
     bool SupportsFeatureLevel(FeatureLevel featureLevel) const override;
 
     ResultOrError<PhysicalDeviceSurfaceCapabilities> GetSurfaceCapabilities(
+        InstanceBase* instance,
         const Surface* surface) const override;
 
     // Used for the tests that intend to use an adapter without all features enabled.
@@ -210,8 +207,10 @@ class PhysicalDevice : public PhysicalDeviceBase {
         wgpu::FeatureName feature,
         const TogglesState& toggles) const override;
 
-    void SetupBackendAdapterToggles(TogglesState* adapterToggles) const override;
-    void SetupBackendDeviceToggles(TogglesState* deviceToggles) const override;
+    void SetupBackendAdapterToggles(dawn::platform::Platform* platform,
+                                    TogglesState* adapterToggles) const override;
+    void SetupBackendDeviceToggles(dawn::platform::Platform* platform,
+                                   TogglesState* deviceToggles) const override;
     ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(
         AdapterBase* adapter,
         const UnpackedPtr<DeviceDescriptor>& descriptor,

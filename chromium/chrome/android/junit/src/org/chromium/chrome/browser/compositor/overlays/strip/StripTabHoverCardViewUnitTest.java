@@ -38,7 +38,6 @@ import androidx.core.content.ContextCompat;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
@@ -53,7 +52,6 @@ import org.chromium.base.Callback;
 import org.chromium.base.SysUtils;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.Features;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripTabHoverCardViewUnitTest.ShadowSysUtils;
 import org.chromium.chrome.browser.tab.Tab;
@@ -83,7 +81,6 @@ public class StripTabHoverCardViewUnitTest {
         }
     }
 
-    @Rule public TestRule mFeaturesProcessorRule = new Features.JUnitProcessor();
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Captor private ArgumentCaptor<Callback<Bitmap>> mGetThumbnailCallbackCaptor;
@@ -166,9 +163,7 @@ public class StripTabHoverCardViewUnitTest {
                 .getTabThumbnailWithCallback(
                         anyInt(),
                         refEq(new Size(mThumbnailView.getWidth(), mThumbnailView.getHeight())),
-                        mGetThumbnailCallbackCaptor.capture(),
-                        eq(false),
-                        eq(false));
+                        mGetThumbnailCallbackCaptor.capture());
         mGetThumbnailCallbackCaptor.getValue().onResult(mBitmap);
 
         assertEquals(
@@ -215,9 +210,7 @@ public class StripTabHoverCardViewUnitTest {
                 .getTabThumbnailWithCallback(
                         anyInt(),
                         refEq(new Size(mThumbnailView.getWidth(), mThumbnailView.getHeight())),
-                        mGetThumbnailCallbackCaptor.capture(),
-                        eq(false),
-                        eq(false));
+                        mGetThumbnailCallbackCaptor.capture());
         mGetThumbnailCallbackCaptor.getValue().onResult(null);
         assertFalse(
                 "Thumbnail drawable should not contain a bitmap.",
@@ -240,9 +233,7 @@ public class StripTabHoverCardViewUnitTest {
                 .getTabThumbnailWithCallback(
                         anyInt(),
                         refEq(new Size(mThumbnailView.getWidth(), mThumbnailView.getHeight())),
-                        mGetThumbnailCallbackCaptor.capture(),
-                        eq(false),
-                        eq(false));
+                        mGetThumbnailCallbackCaptor.capture());
         mGetThumbnailCallbackCaptor.getValue().onResult(mBitmap);
         assertFalse(
                 "Thumbnail drawable should not contain a bitmap.",
@@ -272,9 +263,7 @@ public class StripTabHoverCardViewUnitTest {
                 .getTabThumbnailWithCallback(
                         anyInt(),
                         refEq(new Size(mThumbnailView.getWidth(), mThumbnailView.getHeight())),
-                        mGetThumbnailCallbackCaptor.capture(),
-                        eq(false),
-                        eq(false));
+                        mGetThumbnailCallbackCaptor.capture());
         mGetThumbnailCallbackCaptor.getValue().onResult(mBitmap);
         assertFalse(
                 "Thumbnail drawable should not contain a bitmap.",

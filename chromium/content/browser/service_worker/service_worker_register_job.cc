@@ -22,8 +22,8 @@
 #include "content/browser/renderer_host/private_network_access_util.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
+#include "content/browser/service_worker/service_worker_client.h"
 #include "content/browser/service_worker/service_worker_consts.h"
-#include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_job_coordinator.h"
@@ -229,7 +229,7 @@ ServiceWorkerVersion* ServiceWorkerRegisterJob::new_version() {
 void ServiceWorkerRegisterJob::SetPhase(Phase phase) {
   switch (phase) {
     case INITIAL:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case START:
       DCHECK(phase_ == INITIAL) << phase_;
@@ -509,7 +509,8 @@ void ServiceWorkerRegisterJob::StartScriptFetchForNewWorker(
               creator_policy_container_policies_.ip_address_space,
               DerivePrivateNetworkRequestPolicy(
                   creator_policy_container_policies_,
-                  PrivateNetworkRequestContext::kWorker)));
+                  PrivateNetworkRequestContext::kWorker),
+              creator_policy_container_policies_.document_isolation_policy));
 
   new_script_fetcher_ = std::make_unique<ServiceWorkerNewScriptFetcher>(
       *context_, version, std::move(loader_factory),
@@ -613,7 +614,8 @@ void ServiceWorkerRegisterJob::UpdateAndContinue() {
               creator_policy_container_policies_.ip_address_space,
               DerivePrivateNetworkRequestPolicy(
                   creator_policy_container_policies_,
-                  PrivateNetworkRequestContext::kWorker)));
+                  PrivateNetworkRequestContext::kWorker),
+              creator_policy_container_policies_.document_isolation_policy));
   if (!loader_factory) {
     // We can't continue with update checking appropriately without
     // |loader_factory|. Null |loader_factory| means that the storage partition
@@ -912,9 +914,10 @@ void ServiceWorkerRegisterJob::AddRegistrationToMatchingContainerHosts(
   // Include bfcached clients because they need to have the correct
   // information about the matching registrations if, e.g., claim() is called
   // while they are in bfcache or after they are restored from bfcache.
-  for (auto it = context_->GetServiceWorkerClients(
-           registration->key(), true /* include_reserved_clients */,
-           true /* include_back_forward_cached_clients */);
+  for (auto it =
+           context_->service_worker_client_owner().GetServiceWorkerClients(
+               registration->key(), true /* include_reserved_clients */,
+               true /* include_back_forward_cached_clients */);
        !it.IsAtEnd(); ++it) {
     if (!blink::ServiceWorkerScopeMatches(registration->scope(),
                                           it->GetUrlForScopeMatch())) {

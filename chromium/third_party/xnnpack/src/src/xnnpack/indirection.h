@@ -10,10 +10,9 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <stdbool.h>
 
-#include <xnnpack.h>
-#include <xnnpack/common.h>
+#include "xnnpack.h"
+#include "xnnpack/common.h"
 
 #ifdef __cplusplus
 extern "C" {

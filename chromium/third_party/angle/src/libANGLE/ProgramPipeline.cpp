@@ -25,7 +25,7 @@ ProgramPipelineState::ProgramPipelineState(rx::GLImplFactory *factory)
     : mLabel(),
       mActiveShaderProgram(nullptr),
       mValid(false),
-      mExecutable(new ProgramExecutable(factory, &mInfoLog)),
+      mExecutable(makeNewExecutable(factory, {})),
       mIsLinked(false)
 {
     for (const ShaderType shaderType : AllShaderTypes())
@@ -44,6 +44,16 @@ const std::string &ProgramPipelineState::getLabel() const
 void ProgramPipelineState::activeShaderProgram(Program *shaderProgram)
 {
     mActiveShaderProgram = shaderProgram;
+}
+
+SharedProgramExecutable ProgramPipelineState::makeNewExecutable(
+    rx::GLImplFactory *factory,
+    ShaderMap<SharedProgramExecutable> &&ppoProgramExecutables)
+{
+    SharedProgramExecutable newExecutable = std::make_shared<ProgramExecutable>(factory, &mInfoLog);
+    newExecutable->mIsPPO                 = true;
+    newExecutable->mPPOProgramExecutables = std::move(ppoProgramExecutables);
+    return newExecutable;
 }
 
 void ProgramPipelineState::useProgramStage(const Context *context,
@@ -498,9 +508,8 @@ angle::Result ProgramPipeline::link(const Context *context)
     mState.destroyDiscardedExecutables(context);
 
     // Make a new executable to hold the result of the link.
-    SharedProgramExecutable newExecutable =
-        std::make_shared<ProgramExecutable>(context->getImplementation(), &mState.mInfoLog);
-    newExecutable->mPPOProgramExecutables = std::move(mState.mExecutable->mPPOProgramExecutables);
+    SharedProgramExecutable newExecutable = mState.makeNewExecutable(
+        context->getImplementation(), std::move(mState.mExecutable->mPPOProgramExecutables));
 
     InstallExecutable(context, newExecutable, &mState.mExecutable);
     onStateChange(angle::SubjectMessage::ProgramUnlinked);
@@ -672,7 +681,7 @@ bool ProgramPipeline::linkVaryings()
         previousShaderType = shaderType;
     }
 
-    // TODO: http://anglebug.com/3571 and http://anglebug.com/3572
+    // TODO: http://anglebug.com/42262233 and http://anglebug.com/42262234
     // Need to move logic of validating builtin varyings inside the for-loop above.
     // This is because the built-in symbols `gl_ClipDistance` and `gl_CullDistance`
     // can be redeclared in Geometry or Tessellation shaders as well.
@@ -798,9 +807,6 @@ void ProgramPipeline::onSubjectStateChange(angle::SubjectIndex index, angle::Sub
             }
             mState.mExecutable->mActiveSamplerRefCounts.fill(0);
             mState.updateExecutableTextures();
-            break;
-        case angle::SubjectMessage::ProgramUniformUpdated:
-            mProgramPipelineImpl->onProgramUniformUpdate(static_cast<ShaderType>(index));
             break;
         default:
             if (angle::IsProgramUniformBlockBindingUpdatedMessage(message))

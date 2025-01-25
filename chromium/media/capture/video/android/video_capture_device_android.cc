@@ -17,11 +17,13 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "media/capture/mojom/image_capture_types.h"
-#include "media/capture/video/android/capture_jni_headers/VideoCapture_jni.h"
 #include "media/capture/video/android/photo_capabilities.h"
 #include "media/capture/video/android/video_capture_device_factory_android.h"
 #include "third_party/libyuv/include/libyuv.h"
 #include "ui/gfx/geometry/point_f.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "media/capture/video/android/capture_jni_headers/VideoCapture_jni.h"
 
 using base::android::AttachCurrentThread;
 using base::android::CheckException;
@@ -48,7 +50,7 @@ mojom::MeteringMode ToMojomMeteringMode(
       return mojom::MeteringMode::NONE;
     case PhotoCapabilities::AndroidMeteringMode::NOT_SET:
     case PhotoCapabilities::AndroidMeteringMode::NUM_ENTRIES:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return mojom::MeteringMode::NONE;
 }
@@ -79,7 +81,7 @@ mojom::FillLightMode ToMojomFillLightMode(
       return mojom::FillLightMode::OFF;
     case PhotoCapabilities::AndroidFillLightMode::NOT_SET:
     case PhotoCapabilities::AndroidFillLightMode::NUM_ENTRIES:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   NOTREACHED_NORETURN();
 }
@@ -393,7 +395,7 @@ void VideoCaptureDeviceAndroid::OnGetPhotoCapabilitiesReply(
       base::ranges::find(get_photo_state_callbacks_, cb,
                          &std::unique_ptr<GetPhotoStateCallback>::get);
   if (reference_it == get_photo_state_callbacks_.end()) {
-    NOTREACHED() << "|callback_id| not found.";
+    NOTREACHED_IN_MIGRATION() << "|callback_id| not found.";
     return;
   }
   if (result == nullptr) {
@@ -556,7 +558,7 @@ void VideoCaptureDeviceAndroid::OnPhotoTaken(
   const auto reference_it = base::ranges::find(
       take_photo_callbacks_, cb, &std::unique_ptr<TakePhotoCallback>::get);
   if (reference_it == take_photo_callbacks_.end()) {
-    NOTREACHED() << "|callback_id| not found.";
+    NOTREACHED_IN_MIGRATION() << "|callback_id| not found.";
     return;
   }
 

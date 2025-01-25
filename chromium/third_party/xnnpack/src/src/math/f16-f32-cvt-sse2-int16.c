@@ -4,12 +4,11 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <emmintrin.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#include <emmintrin.h>
-
-#include <xnnpack/math-stubs.h>
+#include "xnnpack/math-stubs.h"
 
 
 void xnn_math_f16_f32_cvt__sse2_int16(

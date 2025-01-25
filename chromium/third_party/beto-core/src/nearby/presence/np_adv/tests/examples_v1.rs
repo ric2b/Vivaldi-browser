@@ -14,36 +14,45 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
 
-use crypto_provider::{CryptoProvider, CryptoRng};
+use crypto_provider::{ed25519, CryptoProvider, CryptoRng};
 use crypto_provider_default::CryptoProviderImpl;
-use np_adv::extended::data_elements::TxPowerDataElement;
-use np_adv::extended::serialize::{AdvertisementType, PublicSectionEncoder, SingleTypeDataElement};
-use np_adv::extended::NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT;
-use np_adv::shared_data::TxPower;
+use np_adv::credential::matched::{
+    EmptyMatchedCredential, MetadataMatchedCredential, WithMatchedCredential,
+};
+use np_adv::extended::deserialize::{Section, V1DeserializedSection};
+use np_adv::extended::{V1IdentityToken, V1_ENCODING_UNENCRYPTED};
 use np_adv::{
     credential::{
         book::CredentialBookBuilder,
-        v1::{SimpleSignedBroadcastCryptoMaterial, V1DiscoveryCredential, V1},
-        EmptyMatchedCredential, MatchableCredential, MetadataMatchedCredential,
+        v1::{V1BroadcastCredential, V1DiscoveryCredential, V1},
+        MatchableCredential,
     },
-    de_type::*,
+    deserialization_arena, deserialize_advertisement,
     extended::{
-        deserialize::{Section, VerificationMode},
-        serialize::{AdvBuilder, SignedEncryptedSectionEncoder},
+        data_elements::TxPowerDataElement,
+        deserialize::VerificationMode,
+        serialize::{
+            AdvBuilder, AdvertisementType, SignedEncryptedSectionEncoder, SingleTypeDataElement,
+            UnencryptedSectionEncoder,
+        },
+        NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT,
     },
-    PlaintextIdentityMode, *,
+    shared_data::TxPower,
+    AdvDeserializationError, AdvDeserializationErrorDetailsHazmat,
 };
-use np_hkdf::v1_salt;
+use np_hkdf::{v1_salt, DerivedSectionKeys};
 use serde::{Deserialize, Serialize};
+
+type Ed25519ProviderImpl = <CryptoProviderImpl as CryptoProvider>::Ed25519;
 
 #[test]
 fn v1_deser_plaintext() {
     let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
-    let mut section_builder = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
+    let mut section_builder = adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
     section_builder
         .add_de(|_salt| TxPowerDataElement::from(TxPower::try_from(6).unwrap()))
         .unwrap();
-    section_builder.add_to_advertisement();
+    section_builder.add_to_advertisement::<CryptoProviderImpl>();
     let adv = adv_builder.into_advertisement();
 
     let cred_book = CredentialBookBuilder::<EmptyMatchedCredential>::build_cached_slice_book::<
@@ -69,12 +78,11 @@ fn v1_deser_plaintext() {
         V1DeserializedSection::Plaintext(s) => s,
         _ => panic!("this is a plaintext adv"),
     };
-    assert_eq!(PlaintextIdentityMode::Public, section.identity());
     let data_elements = section.iter_data_elements().collect::<Result<Vec<_>, _>>().unwrap();
     assert_eq!(1, data_elements.len());
 
     let de = &data_elements[0];
-    assert_eq!(v1_salt::DataElementOffset::from(1), de.offset());
+    assert_eq!(v1_salt::DataElementOffset::from(0), de.offset());
     assert_eq!(TxPowerDataElement::DE_TYPE, de.de_type());
     assert_eq!(&[6], de.contents());
 }
@@ -104,14 +112,13 @@ impl IdentityMetadata {
 fn v1_deser_ciphertext() {
     // identity material
     let mut rng = <CryptoProviderImpl as CryptoProvider>::CryptoRng::new();
-    let metadata_key: [u8; 16] = rng.gen();
-    let metadata_key = MetadataKey(metadata_key);
-    let key_pair = np_ed25519::KeyPair::<CryptoProviderImpl>::generate();
+    let token_array: [u8; 16] = rng.gen();
+    let identity_token = V1IdentityToken::from(token_array);
+    let private_key = ed25519::PrivateKey::generate::<Ed25519ProviderImpl>();
     let key_seed = rng.gen();
     let hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
 
-    let broadcast_cm =
-        SimpleSignedBroadcastCryptoMaterial::new(key_seed, metadata_key, key_pair.private_key());
+    let broadcast_cred = V1BroadcastCredential::new(key_seed, identity_token, private_key.clone());
 
     // Serialize and encrypt some identity metadata (sender-side)
     let sender_metadata = IdentityMetadata {
@@ -121,37 +128,40 @@ fn v1_deser_ciphertext() {
     };
     let sender_metadata_bytes = sender_metadata.to_bytes();
     let encrypted_sender_metadata = MetadataMatchedCredential::<Vec<u8>>::encrypt_from_plaintext::<
-        _,
-        _,
+        V1,
         CryptoProviderImpl,
-    >(&broadcast_cm, &sender_metadata_bytes);
+    >(&hkdf, identity_token, &sender_metadata_bytes);
 
     // prepare advertisement
     let mut adv_builder = AdvBuilder::new(AdvertisementType::Encrypted);
 
     let mut section_builder = adv_builder
-        .section_builder(SignedEncryptedSectionEncoder::<CryptoProviderImpl>::new_random_salt(
+        .section_builder(SignedEncryptedSectionEncoder::new_random_salt::<CryptoProviderImpl>(
             &mut rng,
-            EncryptedIdentityDataElementType::Private,
-            &broadcast_cm,
+            &broadcast_cred,
         ))
         .unwrap();
     section_builder
         .add_de(|_salt| TxPowerDataElement::from(TxPower::try_from(7).unwrap()))
         .unwrap();
-    section_builder.add_to_advertisement();
+    section_builder.add_to_advertisement::<CryptoProviderImpl>();
     let adv = adv_builder.into_advertisement();
 
-    let discovery_credential = V1DiscoveryCredential::new::<CryptoProviderImpl>(
+    let discovery_credential = V1DiscoveryCredential::new(
         key_seed,
+        [0; 32],
         [0; 32], // Zeroing out MIC HMAC, since it's unused in examples here.
-        hkdf.extended_signed_metadata_key_hmac_key().calculate_hmac(&metadata_key.0),
-        key_pair.public().to_bytes(),
-    )
-    .expect("Public key bytes are valid points on the curve since theyc ame from the keypair");
+        hkdf.v1_signature_keys()
+            .identity_token_hmac_key()
+            .calculate_hmac::<CryptoProviderImpl>(identity_token.bytes()),
+        private_key.derive_public_key::<Ed25519ProviderImpl>(),
+    );
 
     let credentials: [MatchableCredential<V1, MetadataMatchedCredential<_>>; 1] =
-        [MatchableCredential { discovery_credential, match_data: encrypted_sender_metadata }];
+        [MatchableCredential {
+            discovery_credential,
+            match_data: encrypted_sender_metadata.clone(),
+        }];
     let cred_book = CredentialBookBuilder::build_cached_slice_book::<0, 0, CryptoProviderImpl>(
         &[],
         &credentials,
@@ -182,21 +192,52 @@ fn v1_deser_ciphertext() {
 
     let section = matched.contents();
 
-    assert_eq!(EncryptedIdentityDataElementType::Private, section.identity_type());
     assert_eq!(VerificationMode::Signature, section.verification_mode());
-    assert_eq!(metadata_key, section.metadata_key());
+    assert_eq!(&identity_token, section.identity_token());
 
     let data_elements = section.iter_data_elements().collect::<Result<Vec<_>, _>>().unwrap();
     assert_eq!(1, data_elements.len());
 
     let de = &data_elements[0];
-    assert_eq!(v1_salt::DataElementOffset::from(2), de.offset());
+    assert_eq!(v1_salt::DataElementOffset::from(0), de.offset());
     assert_eq!(TxPowerDataElement::DE_TYPE, de.de_type());
     assert_eq!(&[7], de.contents());
+
+    // Uncomment if you need to regenerate C++ v1_private_identity_tests data
+    // {
+    //     use test_helper::hex_bytes;
+    //     use np_adv::extended::salt::MultiSalt;
+    //     use np_adv_credential_matched::MatchedCredential;
+    //     println!("adv:\n{}", hex_bytes(adv.as_slice()));
+    //     println!("key seed:\n{}", hex_bytes(key_seed));
+    //     println!(
+    //         "identity token hmac:\n{}",
+    //         hex_bytes(
+    //             hkdf.v1_signature_keys()
+    //                 .identity_token_hmac_key()
+    //                 .calculate_hmac(identity_token.bytes())
+    //         )
+    //     );
+    //     println!("public key:\n{}", hex_bytes(key_pair.public().to_bytes()));
+    //     println!(
+    //         "encrypted metadata:\n{}",
+    //         hex_bytes(encrypted_sender_metadata.fetch_encrypted_metadata().unwrap())
+    //     );
+    //     std::println!("offset is: {:?}", de.offset());
+    //     let derived_salt = match section.salt() {
+    //         MultiSalt::Short(_) => panic!(),
+    //         MultiSalt::Extended(s) => {
+    //             s.derive::<16, CryptoProviderImpl>(Some(de.offset())).unwrap()
+    //         }
+    //     };
+    //     println!("DE derived salt:\n{}", hex_bytes(derived_salt));
+    //     panic!();
+    // }
 }
 
 #[test]
 fn v1_deser_no_section() {
+    // TODO: we shouldn't allow this invalid advertisement to be serialized
     let adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
     let adv = adv_builder.into_advertisement();
     let cred_book = CredentialBookBuilder::<EmptyMatchedCredential>::build_cached_slice_book::<
@@ -220,19 +261,18 @@ fn v1_deser_no_section() {
 fn v1_deser_plaintext_over_max_sections() {
     let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
     for _ in 0..NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT {
-        let mut section_builder =
-            adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
+        let mut section_builder = adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
         section_builder
             .add_de(|_salt| TxPowerDataElement::from(TxPower::try_from(7).unwrap()))
             .unwrap();
-        section_builder.add_to_advertisement();
+        section_builder.add_to_advertisement::<CryptoProviderImpl>();
     }
     let mut adv = adv_builder.into_advertisement().as_slice().to_vec();
     // Push an extra section
     adv.extend_from_slice(
         [
             0x01, // Section header
-            0x03, // Public identity
+            V1_ENCODING_UNENCRYPTED,
         ]
         .as_slice(),
     );

@@ -15,227 +15,167 @@
  * limitations under the License.
  */
 
-#include <string>
-
-#include "src/base/test/status_matchers.h"
 #include "src/trace_redaction/collect_timeline_events.h"
+#include "protos/perfetto/trace/ftrace/sched.gen.h"
+#include "src/base/test/status_matchers.h"
 #include "src/trace_redaction/trace_redaction_framework.h"
 
 #include "protos/perfetto/trace/ftrace/ftrace_event.gen.h"
 #include "protos/perfetto/trace/ftrace/ftrace_event_bundle.gen.h"
-#include "protos/perfetto/trace/ftrace/sched.gen.h"
+#include "protos/perfetto/trace/ftrace/task.gen.h"
 #include "protos/perfetto/trace/ps/process_tree.gen.h"
 #include "protos/perfetto/trace/trace_packet.gen.h"
 
 namespace perfetto::trace_redaction {
 
-// Test packet (a small clip of a later trace):
-//
-// packet {
-//  process_tree{
-//    processes {
-//      pid: 1093
-//      ppid: 1
-//      cmdline: "zygote"
-//      uid: 0
-//    }
-//    processes {
-//      pid: 7105
-//      ppid: 1093
-//      cmdline: "com.Unity.com.unity.multiplayer.samples.coop"
-//      uid: 10252
-//    }
-//    threads {
-//      tid: 7127
-//      tgid: 7105
-//    }
-//    collection_end_timestamp: 6702093738547594
-//  }
-//  trusted_uid: 9999
-//  timestamp: 6702093635419927
-//  trusted_packet_sequence_id: 6
-//  incremental_state_cleared: true
-//  previous_packet_dropped: true
-// }
-
 namespace {
 
-constexpr uint64_t kNoPackage = 0;
-constexpr uint64_t kUnityPackage = 10252;
+constexpr uint64_t kPackage = 0;
+constexpr int32_t kPid = 1093;
 
-constexpr uint64_t kZygotePid = 1093;
-constexpr uint64_t kUnityPid = 7105;
-constexpr uint64_t kUnityTid = 7127;
-
-constexpr uint64_t kProcessTreeTimestamp = 6702093635419927;
-constexpr uint64_t kThreadFreeTimestamp = 6702094703928940;
-
-class TestParams {
- public:
-  TestParams(uint64_t ts, int32_t pid, uint64_t uid)
-      : ts_(ts), pid_(pid), uid_(uid) {}
-
-  uint64_t ts() const { return ts_; }
-  int32_t pid() const { return pid_; }
-  uint64_t uid() const { return uid_; }
-
- private:
-  uint64_t ts_;
-  int32_t pid_;
-  uint64_t uid_;
-};
+constexpr uint64_t kFullStep = 1000;
+constexpr uint64_t kTimeA = 0;
+constexpr uint64_t kTimeB = kFullStep;
+constexpr uint64_t kTimeC = kFullStep * 2;
 
 }  // namespace
 
-class CollectTimelineEventsTest
-    : public testing::Test,
-      public testing::WithParamInterface<TestParams> {
+// Base class for all collect timeline event tests. Creates a simple trace that
+// contains trace elements that should create timeline events.
+class CollectTimelineEventsTest : public testing::Test {
  protected:
-  std::string CreateProcessTreePacket(uint64_t timestamp) {
+  void SetUp() { ASSERT_OK(collector_.Begin(&context_)); }
+
+  Context context_;
+  CollectTimelineEvents collector_;
+};
+
+TEST_F(CollectTimelineEventsTest, OpenEventForProcessTreeProcess) {
+  {
     protos::gen::TracePacket packet;
-    packet.set_trusted_uid(9999);
-    packet.set_timestamp(timestamp);
-    packet.set_trusted_packet_sequence_id(6);
-    packet.set_incremental_state_cleared(true);
-    packet.set_previous_packet_dropped(true);
+    packet.set_timestamp(kTimeA);
 
     auto* process_tree = packet.mutable_process_tree();
 
-    auto* zygote = process_tree->add_processes();
-    zygote->set_pid(kZygotePid);
-    zygote->set_ppid(1);
-    zygote->add_cmdline("zygote");
-    zygote->set_uid(0);
+    auto* process = process_tree->add_processes();
+    process->set_pid(kPid);
+    process->set_ppid(1);
+    process->set_uid(kPackage);
 
-    auto* unity = process_tree->add_processes();
-    unity->set_pid(kUnityPid);
-    unity->set_ppid(1093);
-    unity->add_cmdline("com.Unity.com.unity.multiplayer.samples.coop");
-    unity->set_uid(kUnityPackage);
+    auto buffer = packet.SerializeAsString();
 
-    auto* thread = process_tree->add_threads();
-    thread->set_tid(kUnityTid);
-    thread->set_tgid(kUnityPid);
+    protos::pbzero::TracePacket::Decoder decoder(buffer);
 
-    process_tree->set_collection_end_timestamp(timestamp);
-
-    return packet.SerializeAsString();
+    ASSERT_OK(collector_.Collect(decoder, &context_));
   }
 
-  std::string CreateSchedProcessFreePacket(uint64_t timestamp) {
+  ASSERT_OK(collector_.End(&context_));
+
+  const auto* event = context_.timeline->GetOpeningEvent(kTimeA, kPid);
+  ASSERT_TRUE(event);
+  ASSERT_TRUE(event->valid());
+}
+
+TEST_F(CollectTimelineEventsTest, OpenEventForProcessTreeThread) {
+  {
+    protos::gen::TracePacket packet;
+    packet.set_timestamp(kTimeA);
+
+    auto* process_tree = packet.mutable_process_tree();
+
+    auto* process = process_tree->add_threads();
+    process->set_tid(kPid);
+    process->set_tgid(1);
+
+    auto buffer = packet.SerializeAsString();
+
+    protos::pbzero::TracePacket::Decoder decoder(buffer);
+
+    ASSERT_OK(collector_.Collect(decoder, &context_));
+  }
+
+  ASSERT_OK(collector_.End(&context_));
+
+  const auto* event = context_.timeline->GetOpeningEvent(kTimeA, kPid);
+  ASSERT_TRUE(event);
+  ASSERT_TRUE(event->valid());
+}
+
+TEST_F(CollectTimelineEventsTest, OpenEventForNewTask) {
+  {
+    protos::gen::TracePacket packet;
+    auto* event = packet.mutable_ftrace_events()->add_event();
+    event->set_timestamp(kTimeA);
+
+    auto* new_task = event->mutable_task_newtask();
+    new_task->set_clone_flags(0);
+    new_task->set_comm("");
+    new_task->set_oom_score_adj(0);
+    new_task->set_pid(kPid);
+
+    auto buffer = packet.SerializeAsString();
+
+    protos::pbzero::TracePacket::Decoder decoder(buffer);
+
+    ASSERT_OK(collector_.Collect(decoder, &context_));
+  }
+
+  ASSERT_OK(collector_.End(&context_));
+
+  const auto* open_event = context_.timeline->GetOpeningEvent(kTimeA, kPid);
+  ASSERT_TRUE(open_event);
+  ASSERT_TRUE(open_event->valid());
+}
+
+TEST_F(CollectTimelineEventsTest, ProcFreeEndsThread) {
+  {
     protos::gen::TracePacket packet;
 
-    packet.set_trusted_uid(9999);
-    packet.set_timestamp(timestamp);
-    packet.set_trusted_packet_sequence_id(6);
-    packet.set_incremental_state_cleared(true);
-    packet.set_previous_packet_dropped(true);
+    auto* event = packet.mutable_ftrace_events()->add_event();
+    event->set_timestamp(kTimeA);
 
-    auto* ftrace_events = packet.mutable_ftrace_events();
-    auto* ftrace_event = ftrace_events->add_event();
-    ftrace_event->set_timestamp(timestamp);
-    ftrace_event->set_pid(10);  // kernel thread - e.g. "rcuop/0"
+    auto* new_task = event->mutable_task_newtask();
+    new_task->set_clone_flags(0);
+    new_task->set_comm("");
+    new_task->set_oom_score_adj(0);
+    new_task->set_pid(kPid);
 
-    auto* process_free = ftrace_event->mutable_sched_process_free();
-    process_free->set_comm("UnityMain");
-    process_free->set_pid(kUnityTid);
-    process_free->set_prio(120);
+    auto buffer = packet.SerializeAsString();
 
-    return packet.SerializeAsString();
+    protos::pbzero::TracePacket::Decoder decoder(buffer);
+    ASSERT_OK(collector_.Collect(decoder, &context_));
   }
-};
 
-class CollectTimelineEventsWithProcessTree : public CollectTimelineEventsTest {
-};
+  {
+    protos::gen::TracePacket packet;
 
-TEST_P(CollectTimelineEventsWithProcessTree, FindsOpenSpans) {
-  auto params = GetParam();
+    auto* event = packet.mutable_ftrace_events()->add_event();
+    event->set_timestamp(kTimeB);
 
-  auto packet_str = CreateProcessTreePacket(kProcessTreeTimestamp);
+    auto* process_free = event->mutable_sched_process_free();
+    process_free->set_comm("");
+    process_free->set_pid(kPid);
+    process_free->set_prio(0);
 
-  protos::pbzero::TracePacket::Decoder packet(packet_str);
+    auto buffer = packet.SerializeAsString();
 
-  Context context;
-  CollectTimelineEvents collector;
-  auto begin_status = collector.Begin(&context);
-  ASSERT_OK(begin_status) << begin_status.message();
+    protos::pbzero::TracePacket::Decoder decoder(buffer);
+    ASSERT_OK(collector_.Collect(decoder, &context_));
+  }
 
-  auto packet_status = collector.Collect(packet, &context);
-  ASSERT_OK(packet_status) << packet_status.message();
+  ASSERT_OK(collector_.End(&context_));
 
-  auto end_status = collector.End(&context);
-  ASSERT_OK(end_status) << end_status.message();
+  const auto* start = context_.timeline->GetOpeningEvent(kTimeA, kPid);
+  ASSERT_TRUE(start);
+  ASSERT_TRUE(start->valid());
 
-  auto slice = context.timeline->Search(params.ts(), params.pid());
-  ASSERT_EQ(slice.pid, params.pid());
-  ASSERT_EQ(slice.uid, params.uid());
+  // The end event was correctly set so that the free event is inclusive.
+  const auto* end = context_.timeline->GetOpeningEvent(kTimeB, kPid);
+  ASSERT_TRUE(end);
+  ASSERT_TRUE(end->valid());
+
+  const auto* after = context_.timeline->GetOpeningEvent(kTimeC, kPid);
+  ASSERT_FALSE(after);
 }
-
-INSTANTIATE_TEST_SUITE_P(
-    AcrossWholeTimeline,
-    CollectTimelineEventsWithProcessTree,
-    testing::Values(
-        // Before the processes/threads existed.
-        TestParams(0, kZygotePid, kNoPackage),
-        TestParams(0, kUnityPid, kNoPackage),
-        TestParams(0, kUnityTid, kNoPackage),
-
-        // When the process tree started.
-        TestParams(kProcessTreeTimestamp, kZygotePid, kNoPackage),
-        TestParams(kProcessTreeTimestamp, kUnityPid, kUnityPackage),
-        TestParams(kProcessTreeTimestamp, kUnityTid, kUnityPackage),
-
-        // After the process tree started.
-        TestParams(kProcessTreeTimestamp + 1, kZygotePid, kNoPackage),
-        TestParams(kProcessTreeTimestamp + 1, kUnityPid, kUnityPackage),
-        TestParams(kProcessTreeTimestamp + 1, kUnityTid, kUnityPackage)));
-
-// Assumes all CollectTimelineEventsWithProcessTree tests pass.
-class CollectTimelineEventsWithFreeProcess : public CollectTimelineEventsTest {
-};
-
-TEST_P(CollectTimelineEventsWithFreeProcess, FindsClosedSpans) {
-  auto params = GetParam();
-
-  auto packet_1_str = CreateProcessTreePacket(kProcessTreeTimestamp);
-  auto packet_2_str = CreateSchedProcessFreePacket(kThreadFreeTimestamp);
-
-  protos::pbzero::TracePacket::Decoder packet_1(packet_1_str);
-  protos::pbzero::TracePacket::Decoder packet_2(packet_2_str);
-
-  Context context;
-  CollectTimelineEvents collector;
-  auto begin_status = collector.Begin(&context);
-  ASSERT_OK(begin_status) << begin_status.message();
-
-  auto packet_1_status = collector.Collect(packet_1, &context);
-  ASSERT_OK(packet_1_status) << packet_1_status.message();
-
-  auto packet_2_status = collector.Collect(packet_2, &context);
-  ASSERT_OK(packet_2_status) << packet_2_status.message();
-
-  auto end_status = collector.End(&context);
-  ASSERT_OK(end_status) << end_status.message();
-
-  auto slice = context.timeline->Search(params.ts(), params.pid());
-  ASSERT_EQ(slice.pid, params.pid());
-  ASSERT_EQ(slice.uid, params.uid());
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    AcrossWholeTimeline,
-    CollectTimelineEventsWithFreeProcess,
-    testing::Values(
-        TestParams(kThreadFreeTimestamp - 1, kZygotePid, kNoPackage),
-        TestParams(kThreadFreeTimestamp - 1, kUnityPid, kUnityPackage),
-        TestParams(kThreadFreeTimestamp - 1, kUnityTid, kUnityPackage),
-
-        TestParams(kThreadFreeTimestamp, kZygotePid, kNoPackage),
-        TestParams(kThreadFreeTimestamp, kUnityPid, kUnityPackage),
-        TestParams(kThreadFreeTimestamp, kUnityTid, kNoPackage),
-
-        TestParams(kThreadFreeTimestamp + 1, kZygotePid, kNoPackage),
-        TestParams(kThreadFreeTimestamp + 1, kUnityPid, kUnityPackage),
-        TestParams(kThreadFreeTimestamp + 1, kUnityTid, kNoPackage)));
 
 }  // namespace perfetto::trace_redaction

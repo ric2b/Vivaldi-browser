@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/dns/address_sorter_posix.h"
 
 #include <netinet/in.h>
@@ -77,7 +82,7 @@ unsigned GetPolicyValue(const AddressSorterPosix::PolicyTable& table,
     if (IPAddressMatchesPrefix(address, prefix, entry.prefix_length))
       return entry.value;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   // The last entry is the least restrictive, so assume it's default.
   return table.back().value;
 }
@@ -128,7 +133,7 @@ AddressSorterPosix::AddressScope GetScope(
     return static_cast<AddressSorterPosix::AddressScope>(
         GetPolicyValue(ipv4_scope_table, address));
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return AddressSorterPosix::SCOPE_NODELOCAL;
   }
 }

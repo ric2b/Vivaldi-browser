@@ -3,11 +3,9 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <math.h>
-#include <stdbool.h>
 #include <stddef.h>
 
-#include <xnnpack/common.h>
+#include "xnnpack/common.h"
 
 #if _WIN32
   #include <windows.h>
@@ -21,6 +19,7 @@
 #if XNN_ARCH_X86_64 && defined(__linux__) && !defined(CHROMIUM)
 #include <sys/syscall.h>
 #include <unistd.h>
+
 #define XFEATURE_XTILEDATA 18
 #define ARCH_REQ_XCOMP_PERM 0x1023
 #endif
@@ -38,12 +37,16 @@
   #include <sys/auxv.h>
 #endif
 
-#if XNN_ARCH_WASMRELAXEDSIMD
-  #include <wasm_simd128.h>
+#if XNN_ARCH_WASM || XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
+#include <math.h>
 #endif
 
-#include <xnnpack/config.h>
-#include <xnnpack/log.h>
+#if XNN_ARCH_WASMRELAXEDSIMD
+#include <wasm_simd128.h>
+#endif
+
+#include "xnnpack/hardware-config.h"
+#include "xnnpack/log.h"
 
 #if XNN_ARCH_X86_64 && defined(__linux__) && !defined(CHROMIUM)
 ssize_t xnn_syscall(size_t rax, size_t rdi, size_t rsi, size_t rdx) {
@@ -120,14 +123,12 @@ static void init_hardware_config(void) {
     hardware_config.use_x86_avx512vnni = hardware_config.use_x86_avx512skx && cpuinfo_has_x86_avx512vnni();
     hardware_config.use_x86_avx512vnnigfni = hardware_config.use_x86_avx512vnni && cpuinfo_has_x86_gfni();
 #if XNN_ENABLE_AVX512FP16
-    hardware_config.use_x86_avx512fp16 = hardware_config.use_x86_avx512vnnigfni && cpuinfo_has_x86_avx512fp16();
+    hardware_config.use_x86_avx512fp16 = cpuinfo_has_x86_avx512fp16();
 #else
     hardware_config.use_x86_avx512fp16 = 0;
 #endif
 #if XNN_ENABLE_AVX512AMX
-    // TODO(fbarchard): Use cpuinfo_has_x86_amx_int8 when available.
-    // Infer AMX support from Sapphire Rapids having fp16 and amx.
-    hardware_config.use_x86_avx512amx = hardware_config.use_x86_avx512vnnigfni && cpuinfo_has_x86_avx512fp16();
+    hardware_config.use_x86_avx512amx = hardware_config.use_x86_avx512vnnigfni && cpuinfo_has_x86_amx_int8();
 #if XNN_ARCH_X86_64 && defined(__linux__) && !defined(CHROMIUM)
     if (hardware_config.use_x86_avx512amx) {
       size_t status = xnn_syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA, 0);
@@ -145,7 +146,33 @@ static void init_hardware_config(void) {
 #else
     hardware_config.use_x86_avxvnni = 0;
 #endif
-  #endif  // !XNN_ARCH_X86 && !XNN_ARCH_X86_64
+#if XNN_ENABLE_AVX256SKX && XNN_ENABLE_AVX512AMX
+    // Using cpuinfo_has_x86_amx_int8 as placeholder for cpuinfo_has_x86_avx10
+    hardware_config.use_x86_avx256skx = hardware_config.use_x86_avx512skx || cpuinfo_has_x86_amx_int8();
+#else
+    hardware_config.use_x86_avx256skx = 0;
+#endif
+#if XNN_ENABLE_AVX256VNNI && XNN_ENABLE_AVX512AMX
+    // Using cpuinfo_has_x86_amx_int8 as placeholder for cpuinfo_has_x86_avx10
+    hardware_config.use_x86_avx256vnni = (hardware_config.use_x86_avx512skx && cpuinfo_has_x86_avxvnni()) || cpuinfo_has_x86_amx_int8();
+#else
+    hardware_config.use_x86_avx256vnni = 0;
+#endif
+#if XNN_ENABLE_AVX256VNNIGFNI && XNN_ENABLE_AVX512AMX
+    // Using cpuinfo_has_x86_amx_int8 as placeholder for cpuinfo_has_x86_avx10
+    hardware_config.use_x86_avx256vnnigfni = hardware_config.use_x86_avx256vnni && cpuinfo_has_x86_gfni();
+#else
+    hardware_config.use_x86_avx256vnnigfni = 0;
+#endif
+#endif  // !XNN_ARCH_X86 && !XNN_ARCH_X86_64
+
+#if XNN_ARCH_HEXAGON
+#if XNN_ENABLE_HVX
+    hardware_config.use_hvx = 1;
+#else
+    hardware_config.use_hvx = 0;
+#endif  // XNN_ENABLE_HVX
+#endif  // XNN_ARCH_HEXAGON
 
   #if XNN_ARCH_RISCV
     const long hwcap = getauxval(AT_HWCAP);

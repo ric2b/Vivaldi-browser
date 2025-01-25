@@ -812,6 +812,8 @@ export const kFeatureNameInfo: {
   'shader-f16':               {},
   'rg11b10ufloat-renderable': {},
   'float32-filterable':       {},
+  'clip-distances':           {},
+  'dual-source-blending':     {},
 };
 /** List of all GPUFeatureName values. */
 export const kFeatureNames = keysOf(kFeatureNameInfo);

@@ -37,8 +37,6 @@ ABSL_CONST_INIT const char kNearbySharingAllowedContactsName[] =
     "nearby_sharing.allowed_contacts";
 ABSL_CONST_INIT const char kNearbySharingBackgroundVisibilityName[] =
     "nearby_sharing.background_visibility";
-ABSL_CONST_INIT const char kNearbySharingBackgroundTemporarilyVisibleName[] =
-    "nearby_sharing.background_temporarily_visible";
 ABSL_CONST_INIT const char kNearbySharingBackgroundFallbackVisibilityName[] =
     "nearby_sharing.background_fallback_visibility";
 ABSL_CONST_INIT const char
@@ -54,8 +52,6 @@ ABSL_CONST_INIT const char kNearbySharingDeviceIdName[] =
     "nearby_sharing.device_id";
 ABSL_CONST_INIT const char kNearbySharingDeviceNameName[] =
     "nearby_sharing.device_name";
-ABSL_CONST_INIT const char kNearbySharingEnabledName[] =
-    "nearby_sharing.enabled";
 ABSL_CONST_INIT const char kNearbySharingFastInitiationNotificationStateName[] =
     "nearby_sharing.fast_initiation_notification_state";
 ABSL_CONST_INIT const char kNearbySharingOnboardingCompleteName[] =
@@ -94,14 +90,10 @@ ABSL_CONST_INIT const char
     kNearbySharingSchedulerUploadLocalDeviceCertificatesName[] =
         "nearby_sharing.scheduler.upload_local_device_certificates";
 ABSL_CONST_INIT const char kNearbySharingUsersName[] = "nearby_sharing.users";
-ABSL_CONST_INIT const char kNearbySharingIsReceivingName[] =
-    "nearby_sharing.is_receiving";
 ABSL_CONST_INIT const char kNearbySharingIsAnalyticsEnabledName[] =
     "nearby_sharing.is_analytics_enabled";
 ABSL_CONST_INIT const char kNearbySharingIsAllContactsEnabledName[] =
     "nearby_sharing.is_all_contacts_enabled";
-ABSL_CONST_INIT const char kNearbySharingAutoAppStartEnabledName[] =
-    "nearby_sharing.auto_app_start_enabled";
 
 void RegisterNearbySharingPrefs(PreferenceManager& preference_manager,
                                 bool skip_persistent_ones) {
@@ -111,7 +103,6 @@ void RegisterNearbySharingPrefs(PreferenceManager& preference_manager,
     // During logging out, we reset all settings and set these settings to new
     // values. To avoid setting them twice, we skip them here if
     // skip_persistent_ones is set to true.
-    preference_manager.SetBoolean(kNearbySharingEnabledName, false);
     preference_manager.SetString(kNearbySharingCustomSavePath, std::string());
     preference_manager.SetBoolean(kNearbySharingOnboardingCompleteName, false);
     preference_manager.SetInteger(kNearbySharingBackgroundVisibilityName,
@@ -119,7 +110,7 @@ void RegisterNearbySharingPrefs(PreferenceManager& preference_manager,
     preference_manager.SetInteger(
         kNearbySharingBackgroundFallbackVisibilityName,
         static_cast<int>(kDefaultFallbackVisibility));
-    preference_manager.SetBoolean(kNearbySharingIsReceivingName, true);
+    preference_manager.SetBoolean(kNearbySharingIsAnalyticsEnabledName, false);
   }
 
   preference_manager.SetInteger(
@@ -167,9 +158,7 @@ void RegisterNearbySharingPrefs(PreferenceManager& preference_manager,
       kNearbySharingSchedulerUploadLocalDeviceCertificatesName);
   preference_manager.Remove(kNearbySharingUsersName);
 
-  preference_manager.SetBoolean(kNearbySharingIsAnalyticsEnabledName, false);
   preference_manager.SetBoolean(kNearbySharingIsAllContactsEnabledName, true);
-  preference_manager.SetBoolean(kNearbySharingAutoAppStartEnabledName, true);
 }
 
 void ResetSchedulers(PreferenceManager& preference_manager) {

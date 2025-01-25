@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.compositor.overlays.strip;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -13,6 +15,7 @@ import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
 import android.os.Handler;
 import android.os.SystemClock;
+import android.util.FloatProperty;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnDragListener;
@@ -21,12 +24,16 @@ import android.view.animation.Interpolator;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.DrawableRes;
+import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
 
+import org.chromium.base.Callback;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
@@ -44,12 +51,14 @@ import org.chromium.chrome.browser.layouts.EventFilter;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider.LayoutStateObserver;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.layouts.SceneOverlay;
+import org.chromium.chrome.browser.layouts.animation.CompositorAnimator;
 import org.chromium.chrome.browser.layouts.components.VirtualView;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneOverlayLayer;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.lifecycle.TopResumedActivityChangedObserver;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
+import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.Tab.LoadUrlResult;
 import org.chromium.chrome.browser.tab.TabCreationState;
@@ -65,11 +74,11 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
-import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
+import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil;
 import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
-import org.chromium.chrome.browser.toolbar.top.TabStripTransitionCoordinator.TabStripHeightObserver;
+import org.chromium.chrome.browser.toolbar.top.tab_strip.TabStripTransitionCoordinator.TabStripTransitionDelegate;
 import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderState;
 import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderUtils;
 import org.chromium.chrome.browser.ui.desktop_windowing.DesktopWindowStateProvider;
@@ -88,6 +97,8 @@ import org.chromium.ui.resources.ResourceManager;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.url.GURL;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -103,6 +114,7 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.listmenu.ListMenuButton;
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.build.BuildConfig;
 
 import android.view.Gravity;
 import android.view.View;
@@ -115,7 +127,7 @@ import android.widget.FrameLayout;
 public class StripLayoutHelperManager
         implements SceneOverlay,
                 PauseResumeWithNativeObserver,
-                TabStripHeightObserver,
+                TabStripTransitionDelegate,
                 TopResumedActivityChangedObserver,
                 AppHeaderObserver {
 
@@ -148,6 +160,34 @@ public class StripLayoutHelperManager
         }
     }
 
+    /** Defines if the strip is visible or hidden. */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({
+        StripVisibilityState.UNKNOWN,
+        StripVisibilityState.VISIBLE,
+        StripVisibilityState.GONE,
+        StripVisibilityState.INVISIBLE,
+    })
+    @interface StripVisibilityState {
+        int UNKNOWN = 0; // Strip visibility is unknown.
+        int VISIBLE = 1; // Strip is visible.
+        int GONE = 2; // Strip is hidden by a height transition.
+        int INVISIBLE = 3; // Strip is hidden by an in-place fade transition.
+    }
+
+    private static final FloatProperty<StripLayoutHelperManager> SCRIM_OPACITY =
+            new FloatProperty<>("scrimOpacity") {
+                @Override
+                public void setValue(StripLayoutHelperManager object, float value) {
+                    object.mStripTransitionScrimOpacity = value;
+                }
+
+                @Override
+                public Float get(StripLayoutHelperManager object) {
+                    return object.mStripTransitionScrimOpacity;
+                }
+            };
+
     // Model selector buttons constants.
     private static final float MODEL_SELECTOR_BUTTON_BACKGROUND_Y_OFFSET_DP = 10.f; // Vivaldi
     private static final float MODEL_SELECTOR_BUTTON_BACKGROUND_WIDTH_DP = 24.f; // Vivaldi
@@ -156,8 +196,6 @@ public class StripLayoutHelperManager
     private static final float MODEL_SELECTOR_BUTTON_HOVER_BACKGROUND_DEFAULT_OPACITY = 0.08f;
     private static final float MODEL_SELECTOR_BUTTON_CLICK_SLOP_DP = 12.f;
     private static final float BUTTON_DESIRED_TOUCH_TARGET_SIZE = 48.f;
-    private static final float EXPERIMENT_LEFT_MARGIN_DP = 10f;
-    private static final float EXPERIMENT_RIGHT_MARGIN_DP = 20f;
 
     // Tab strip transition constants.
     @VisibleForTesting
@@ -199,9 +237,9 @@ public class StripLayoutHelperManager
     private TintedCompositorButton mModelSelectorButton;
     private Context mContext;
     private boolean mTabStripObscured;
-    private boolean mIsHidden;
     private float mStripTransitionScrimOpacity;
-    private boolean mIsTransitioning;
+    private Animator mFadeTransitionAnimator;
+    private boolean mIsHeightTransitioning;
     private final ToolbarManager mToolbarManager;
     private final StatusBarColorController mStatusBarColorController;
     private TabStripSceneLayer mTabStripTreeProvider;
@@ -212,7 +250,6 @@ public class StripLayoutHelperManager
     private float mModelSelectorWidth;
     private float mLastVisibleViewportOffsetY;
 
-    // Desktop windowing mode constants.
     /**
      * Whether the current activity is the top resumed activity. This is only relevant for use in
      * the desktop windowing mode, to determine the tab strip background color.
@@ -238,6 +275,9 @@ public class StripLayoutHelperManager
     private final String mDefaultTitle;
     private ObservableSupplier<LayerTitleCache> mLayerTitleCacheSupplier; // Vivaldi not final
     private final BrowserControlsStateProvider mBrowserControlsStateProvider;
+    private final Callback<Integer> mStripVisibilityStateObserver;
+    private ObservableSupplierImpl<Integer> mStripVisibilityStateSupplier;
+    private boolean mAnimationsDisabledForTesting;
 
     // Vivaldi
     private final ChromeTabbedActivity mActivity;
@@ -260,7 +300,7 @@ public class StripLayoutHelperManager
             // toolbar is at the bottom in order to handle the input events.
             if (ChromeApplicationImpl.isVivaldi()) y = getValueOfY(y);
 
-            if (mModelSelectorButton.onDown(x, y, fromMouse)) {
+            if (mModelSelectorButton.onDown(x, y, fromMouse, buttons)) {
                 return;
             }
             getActiveStripLayoutHelper().onDown(time(), x, y, fromMouse, buttons);
@@ -298,7 +338,7 @@ public class StripLayoutHelperManager
             // Vivaldi - consider the offset of y when the toolbar is at the bottom
             if (ChromeApplicationImpl.isVivaldi()) y = getValueOfY(y);
             long time = time();
-            if (mModelSelectorButton.click(x, y)) {
+            if (mModelSelectorButton.click(x, y, fromMouse, buttons)) {
                 mModelSelectorButton.handleClick(time);
                 return;
             }
@@ -379,6 +419,10 @@ public class StripLayoutHelperManager
         public void onStartedHiding(@LayoutType int layoutType) {
             if (layoutType != LayoutType.TAB_SWITCHER) return;
             mTabStripObscured = false;
+
+            // Expand tab group on GTS exit.
+            mNormalHelper.expandGroupOnGtsExit();
+            mIncognitoHelper.expandGroupOnGtsExit();
         }
     }
 
@@ -429,7 +473,8 @@ public class StripLayoutHelperManager
             // TODO(crbug.com/40939440): Avoid passing the ToolbarManager instance. Potentially
             // implement an interface to manage strip transition states.
             @NonNull ToolbarManager toolbarManager,
-            @Nullable DesktopWindowStateProvider desktopWindowStateProvider) {
+            @Nullable DesktopWindowStateProvider desktopWindowStateProvider,
+            ActionConfirmationManager actionConfirmationManager) {
         Resources res = context.getResources();
         mUpdateHost = updateHost;
         mLayerTitleCacheSupplier = layerTitleCacheSupplier;
@@ -454,6 +499,18 @@ public class StripLayoutHelperManager
                         : mScrollableStripHeight;
         mTopPadding = mHeight - mScrollableStripHeight;
         mDesktopWindowStateProvider = desktopWindowStateProvider;
+        mStripVisibilityStateSupplier = new ObservableSupplierImpl<>(StripVisibilityState.UNKNOWN);
+        mStripVisibilityStateObserver =
+                state -> {
+                    if (BuildConfig.IS_VIVALDI) { // Vivaldi VAB-9744 //
+                        mEventFilter.setEventArea(mStripFilterArea);
+                        return;
+                    } // End Vivaldi
+                    // Consume motion events only on a visible strip.
+                    mEventFilter.setEventArea(
+                            state == StripVisibilityState.VISIBLE ? mStripFilterArea : null);
+                };
+        mStripVisibilityStateSupplier.addObserver(mStripVisibilityStateObserver);
 
         CompositorOnClickHandler selectorClickHandler = time -> handleModelSelectorButtonClick();
         createModelSelectorButton(context, selectorClickHandler);
@@ -527,7 +584,7 @@ public class StripLayoutHelperManager
         mTabStripObscured = false;
 
         mTabHoverCardViewStub = tabHoverCardViewStub;
-        if (TabUiFeatureUtilities.isTabDragEnabled()) {
+        if (MultiWindowUtils.isMultiInstanceApi31Enabled()) {
             mTabDragSource =
                     new TabDragSource(
                             context,
@@ -555,7 +612,13 @@ public class StripLayoutHelperManager
                         mModelSelectorButton,
                         mTabDragSource,
                         toolbarContainerView,
-                        windowAndroid);
+                        windowAndroid,
+                        actionConfirmationManager,
+                        toolbarManager.getTabStripHeightSupplier().get(),
+                        () ->
+                                !mTabStripObscured
+                                        && getStripVisibilityState()
+                                                == StripVisibilityState.VISIBLE);
         mIncognitoHelper =
                 new StripLayoutHelper(
                         context,
@@ -566,7 +629,13 @@ public class StripLayoutHelperManager
                         mModelSelectorButton,
                         mTabDragSource,
                         toolbarContainerView,
-                        windowAndroid);
+                        windowAndroid,
+                        actionConfirmationManager,
+                        toolbarManager.getTabStripHeightSupplier().get(),
+                        () ->
+                                !mTabStripObscured
+                                        && getStripVisibilityState()
+                                                == StripVisibilityState.VISIBLE);
 
         tabHoverCardViewStub.setOnInflateListener(
                 (viewStub, view) -> {
@@ -655,12 +724,15 @@ public class StripLayoutHelperManager
         if (mDesktopWindowStateProvider != null) {
             mDesktopWindowStateProvider.removeObserver(this);
         }
+        mStripVisibilityStateSupplier.removeObserver(mStripVisibilityStateObserver);
+        mStripVisibilityStateSupplier = null;
     }
 
-    /** Mark whether tab strip |isHidden|. */
+    /** Mark whether tab strip is hidden by a height transition. */
     public void setIsTabStripHidden(boolean isHidden) {
-        mIsHidden = isHidden;
-        mStatusBarColorController.setTabStripHiddenOnTablet(mIsHidden);
+        mStripVisibilityStateSupplier.set(
+                isHidden ? StripVisibilityState.GONE : StripVisibilityState.VISIBLE);
+        mStatusBarColorController.setTabStripHiddenOnTablet(isHidden);
     }
 
     @Override
@@ -687,6 +759,7 @@ public class StripLayoutHelperManager
         getActiveStripLayoutHelper().finishAnimationsAndPushTabUpdates();
         if (!mModelSelectorButton.isVisible()) return;
         mTabModelSelector.selectModel(!mTabModelSelector.isIncognitoSelected());
+        RecordUserAction.record("MobileToolbarModelSelected");
     }
 
     @VisibleForTesting
@@ -749,10 +822,9 @@ public class StripLayoutHelperManager
                         ? TabModel.INVALID_TAB_INDEX
                         : getActiveStripLayoutHelper().getLastHoveredTab().getId();
 
-        float scrimOpacity = 0.0f;
         // When tab strip is hiding, animation will trigger the toolbar moving up and tab
         // strip fade-out in place. In this case the tab strip should not move at all.
-        if (duringTabStripTransition()) {
+        if (duringTabStripHeightTransition()) {
             // During tab strip transition, make the yOffset stick to the top of the browser
             // controls. This assumes on tablet there are no other components on top of the control
             // container.
@@ -761,14 +833,14 @@ public class StripLayoutHelperManager
 
             // The fade-out is implemented by adding a scrim layer on top of the tab strip, with the
             // same bg as the toolbar background color.
-            scrimOpacity = calculateScrimOpacityDuringTransition(visibleHeight);
+            calculateScrimOpacityDuringHeightTransition(visibleHeight);
             mStatusBarColorController.setTabStripColorOverlay(
-                    getStripTransitionScrimColor(), scrimOpacity);
+                    getStripTransitionScrimColor(), mStripTransitionScrimOpacity);
 
             yOffset = 0;
-        } else if (mIsHidden) {
-            // When tab strip is hidden, the stable offset of this scene layer should be a negative
-            // value.
+        } else if (getStripVisibilityState() == StripVisibilityState.GONE) {
+            // When the tab strip is hidden by a height transition, the stable offset of this scene
+            // layer should be a negative value.
             yOffset -= getHeight();
         }
         mTabStripTreeProvider.pushAndUpdateStrip(
@@ -781,7 +853,7 @@ public class StripLayoutHelperManager
                 selectedTabId,
                 hoveredTabId,
                 getStripTransitionScrimColor(),
-                scrimOpacity,
+                mStripTransitionScrimOpacity,
                 mLeftPadding,
                 mRightPadding,
                 mTopPadding);
@@ -789,9 +861,6 @@ public class StripLayoutHelperManager
     }
 
     private int getStripTransitionScrimColor() {
-        if (!ToolbarFeatures.shouldUseToolbarBgColorForStripTransitionScrim()) {
-            return getBackgroundColor();
-        }
         return mToolbarManager.getPrimaryColor();
     }
 
@@ -866,26 +935,32 @@ public class StripLayoutHelperManager
                 if (!VivaldiUtils.isTabStackVisible())
                     mStripFilterArea.set(0, 0, mWidth, getHeight());
             }
+            mEventFilter.setEventArea(mStripFilterArea); // VAB-9797
         } else
         mStripFilterArea.set(
                 mLeftPadding,
                 mTopPadding,
                 mWidth - mRightPadding,
                 Math.min(getHeight(), visibleViewportOffsetY));
-        mEventFilter.setEventArea(mStripFilterArea);
+        // Avoid handling motion events when invisible strip state persists after a size change.
+        if (getStripVisibilityState() == StripVisibilityState.VISIBLE) {
+            mEventFilter.setEventArea(mStripFilterArea);
+        }
     }
 
-    // Implements TabStripHeightObserver
+    // Implements TabStripTransitionDelegate.
 
     @Override
     public void onHeightChanged(int newHeightPx) {
-        mIsTransitioning = true;
-        mIsHidden = newHeightPx == 0;
-        mStripTransitionScrimOpacity = mIsHidden ? 0f : 1f;
+        mIsHeightTransitioning = true;
+        boolean hideStrip = newHeightPx == 0;
+        mStripVisibilityStateSupplier.set(
+                hideStrip ? StripVisibilityState.GONE : StripVisibilityState.VISIBLE);
+        mStripTransitionScrimOpacity = hideStrip ? 0f : 1f;
         // Update the strip visibility state in StatusBarController just after the margins are
         // updated during a hide->show transition so that the status bar assumes the base tab strip
         // color for the remaining duration of the transition while a scrim is applied.
-        if (!mIsHidden) {
+        if (!hideStrip) {
             mStatusBarColorController.setTabStripHiddenOnTablet(false);
         }
         // Set the status bar color and scrim overlay at the start of the transition.
@@ -903,31 +978,72 @@ public class StripLayoutHelperManager
     }
 
     @Override
-    public void onTransitionFinished() {
-        mIsTransitioning = false;
+    public void onFadeTransitionRequested(float startOpacity, float endOpacity, int durationMs) {
+        boolean showStrip = endOpacity == 0f;
+        if (mAnimationsDisabledForTesting) {
+            onFadeTransitionEnd(showStrip);
+            return;
+        }
+        if (mFadeTransitionAnimator != null && mFadeTransitionAnimator.isRunning()) {
+            mFadeTransitionAnimator.cancel();
+        }
+        mFadeTransitionAnimator =
+                CompositorAnimator.ofFloatProperty(
+                        mUpdateHost.getAnimationHandler(),
+                        this,
+                        StripLayoutHelperManager.SCRIM_OPACITY,
+                        startOpacity,
+                        endOpacity,
+                        durationMs);
+        mFadeTransitionAnimator.addListener(
+                new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(@NonNull Animator animation) {
+                        onFadeTransitionEnd(showStrip);
+                    }
+                });
+        mFadeTransitionAnimator.start();
+    }
+
+    private void onFadeTransitionEnd(boolean showStrip) {
+        mFadeTransitionAnimator = null;
+        mStripVisibilityStateSupplier.set(
+                showStrip ? StripVisibilityState.VISIBLE : StripVisibilityState.INVISIBLE);
+    }
+
+    @Override
+    public void onHeightTransitionFinished() {
+        mIsHeightTransitioning = false;
         mStripTransitionScrimOpacity = 0f;
         //  Update the strip visibility state in StatusBarColorController only after a show->hide
         // transition, so that the status bar assumes the toolbar color when the strip is hidden.
-        if (mIsHidden) {
+        if (getStripVisibilityState() == StripVisibilityState.GONE) {
             mStatusBarColorController.setTabStripHiddenOnTablet(true);
         }
         mStatusBarColorController.setTabStripColorOverlay(
                 ScrimProperties.INVALID_COLOR, mStripTransitionScrimOpacity);
     }
 
-    private boolean duringTabStripTransition() {
-        return mIsTransitioning;
+    private boolean duringTabStripHeightTransition() {
+        return mIsHeightTransitioning;
     }
 
     @VisibleForTesting
-    float calculateScrimOpacityDuringTransition(float visibleHeight) {
-        if (!duringTabStripTransition()) {
+    float calculateScrimOpacityDuringHeightTransition(float visibleHeight) {
+        if (!duringTabStripHeightTransition()) {
             return 0.0f;
+        }
+
+        // Stop any running fade transition animation that is updating the scrim opacity.
+        if (mFadeTransitionAnimator != null && mFadeTransitionAnimator.isRunning()) {
+            mFadeTransitionAnimator.cancel();
         }
 
         // Otherwise, the alpha fraction is based on the percent of the tab strip visibility.
         float ratio = 1 - visibleHeight / mHeight;
         float newOpacity = TAB_STRIP_TRANSITION_INTERPOLATOR.getInterpolation(ratio);
+
+        boolean isHidden = getStripVisibilityState() == StripVisibilityState.GONE;
 
         // There is a known issue where the scrim opacity for a hide->show transition incorrectly
         // gets updated to 1f (when yOffset = 0) in concluding frame updates during the transition,
@@ -938,8 +1054,8 @@ public class StripLayoutHelperManager
         // If the tab strip is hiding, new opacity should be >= current opacity; if the tab strip is
         // showing, new opacity should be <= current opacity. Otherwise, ignore the new value and
         // use the current value.
-        if ((mIsHidden && newOpacity >= mStripTransitionScrimOpacity)
-                || (!mIsHidden && newOpacity <= mStripTransitionScrimOpacity)) {
+        if ((isHidden && newOpacity >= mStripTransitionScrimOpacity)
+                || (!isHidden && newOpacity <= mStripTransitionScrimOpacity)) {
             mStripTransitionScrimOpacity = newOpacity;
         }
 
@@ -998,7 +1114,10 @@ public class StripLayoutHelperManager
     @Override
     public void getVirtualViews(List<VirtualView> views) {
         if (mTabStripObscured) return;
-        if (duringTabStripTransition() || mIsHidden) return;
+        if (duringTabStripHeightTransition()
+                || getStripVisibilityState() == StripVisibilityState.GONE) {
+            return;
+        }
         // Remove the a11y views when top controls is partially invisible.
         if (mBrowserControlsStateProvider.getTopControlOffset() < 0) return;
 
@@ -1019,11 +1138,20 @@ public class StripLayoutHelperManager
         return false;
     }
 
-    /** Update the touchable area on the strip and exclude those from system gesture area. */
+    /** Allow / disallow system gestures on touchable areas on the strip. */
     private void updateTouchableAreas() {
         // #setSystemGestureExclusionRects requires API Q.
         if (VERSION.SDK_INT < VERSION_CODES.Q || !mIsLayoutOptimizationsEnabled) return;
 
+        if (getStripVisibilityState() == StripVisibilityState.INVISIBLE) {
+            // Reset the system gesture exclusion rects to allow system gestures on the tab strip
+            // area.
+            mToolbarControlContainer.setSystemGestureExclusionRects(List.of(new Rect(0, 0, 0, 0)));
+            return;
+        }
+
+        // #setSystemGestureExclusionRects allows Chrome to receive touch events on the tab strip
+        // when it is drawn under the system gesture area so that the strip remains accessible.
         List<Rect> rects = new ArrayList<>();
         RectF tabStripRectDp = new RectF(getActiveStripLayoutHelper().getTouchableRect());
         tabStripRectDp.top = mTopPadding;
@@ -1161,6 +1289,12 @@ public class StripLayoutHelperManager
                     @Override
                     public void multipleTabsPendingClosure(List<Tab> tabs, boolean isAllTabs) {
                         getActiveStripLayoutHelper().updateLayout(System.currentTimeMillis());
+                    }
+
+                    // Vivaldi
+                    @Override
+                    public void restoreCompleted() {
+                        updateTitleCacheForInit();
                     }
                 };
         modelSelector.getTabModelFilterProvider().addTabModelFilterObserver(mTabModelObserver);
@@ -1335,23 +1469,8 @@ public class StripLayoutHelperManager
                     }
 
                     @Override
-                    public void onPageLoadStarted(Tab tab, GURL url) {
-                        getStripLayoutHelper(tab.isIncognito()).tabPageLoadStarted(tab.getId());
-                    }
-
-                    @Override
-                    public void onPageLoadFinished(Tab tab, GURL url) {
-                        getStripLayoutHelper(tab.isIncognito()).tabPageLoadFinished(tab.getId());
-                    }
-
-                    @Override
-                    public void onPageLoadFailed(Tab tab, int errorCode) {
-                        getStripLayoutHelper(tab.isIncognito()).tabPageLoadFinished(tab.getId());
-                    }
-
-                    @Override
                     public void onCrash(Tab tab) {
-                        getStripLayoutHelper(tab.isIncognito()).tabPageLoadFinished(tab.getId());
+                        getStripLayoutHelper(tab.isIncognito()).tabLoadFinished(tab.getId());
                     }
 
                     @Override
@@ -1547,6 +1666,12 @@ public class StripLayoutHelperManager
         return mIsIncognito ? mNormalHelper : mIncognitoHelper;
     }
 
+    @VisibleForTesting
+    @StripVisibilityState
+    int getStripVisibilityState() {
+        return mStripVisibilityStateSupplier.get();
+    }
+
     void simulateHoverEventForTesting(int event, float x, float y) {
         if (event == MotionEvent.ACTION_HOVER_ENTER) {
             mTabStripEventHandler.onHoverEnter(x, y);
@@ -1569,12 +1694,20 @@ public class StripLayoutHelperManager
         return mTabHoverCardViewStub;
     }
 
+    void disableAnimationsForTesting() {
+        mAnimationsDisabledForTesting = true;
+    }
+
     public TabDragSource getTabDragSourceForTesting() {
         return mTabDragSource;
     }
 
     public void setIsIncognitoForTesting(boolean isIncognito) {
         mIsIncognito = isIncognito;
+    }
+
+    public boolean isStripScrimVisibleForTesting() {
+        return mStripTransitionScrimOpacity == 1f;
     }
 
     /** Vivaldi **/
@@ -1629,7 +1762,8 @@ public class StripLayoutHelperManager
     private void showTabSwitcherPopupMenu() {
         // For now we don't show the popup on the stack strip.
         if (mIsStackStrip) return;
-        TabSwitcherActionMenuCoordinator menu = new TabSwitcherActionMenuCoordinator();
+        TabSwitcherActionMenuCoordinator menu = new TabSwitcherActionMenuCoordinator(
+                mTabModelSelector.getCurrentModel().getProfile());
         View anchorView = mActivity.findViewById(R.id.tab_switcher_menu_helper_button);
         // Note(nagamani@vivaldi.com): We are using dummy button with 0dp width and 0dp height as
         // anchorView
@@ -1671,4 +1805,5 @@ public class StripLayoutHelperManager
         if (mIsStackStrip) newColor = ColorUtils.overlayColor(color, 0xFF000000, 0.2f);
         return newColor;
     }
+    // End Vivaldi
 }

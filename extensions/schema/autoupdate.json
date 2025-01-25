@@ -290,6 +290,12 @@
             "description": "The reason for the error."
           }
         ]
+      },
+      {
+        "name": "onUpdateFinished",
+        "type": "function",
+        "description": "Signal sent when update completed without installation. Currently, only sent by macOS for exit on silent error.",
+        "parameters": []
       }
     ]
   }

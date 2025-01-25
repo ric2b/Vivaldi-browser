@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/mediastream/media_stream_device_observer.h"
 
 #include <stddef.h>
@@ -303,7 +308,7 @@ void MediaStreamDeviceObserver::AddStream(const String& label,
   else if (IsVideoInputMediaType(device.type))
     stream.video_devices.push_back(device);
   else
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
 
   label_stream_map_.Set(label, Vector<Stream>{std::move(stream)});
 }

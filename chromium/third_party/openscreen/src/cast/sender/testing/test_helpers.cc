@@ -18,7 +18,7 @@
 
 namespace openscreen::cast {
 
-using ::cast::channel::CastMessage;
+using proto::CastMessage;
 
 void VerifyAppAvailabilityRequest(const CastMessage& message,
                                   const std::string& expected_app_id,
@@ -36,8 +36,7 @@ void VerifyAppAvailabilityRequest(const CastMessage& message,
                                   std::string* sender_id_out) {
   EXPECT_EQ(message.namespace_(), kReceiverNamespace);
   EXPECT_EQ(message.destination_id(), kPlatformReceiverId);
-  EXPECT_EQ(message.payload_type(),
-            ::cast::channel::CastMessage_PayloadType_STRING);
+  EXPECT_EQ(message.payload_type(), proto::CastMessage_PayloadType_STRING);
   EXPECT_NE(message.source_id(), kPlatformSenderId);
   *sender_id_out = message.source_id();
 

@@ -5,16 +5,14 @@
 #import "UIKit/UIKit.h"
 
 #import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ui/base/l10n/l10n_util.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 const CGFloat locationContainerVerticalPadding = 4;
-const CGFloat locationContainerHorizontalPadding = 12;
+const CGFloat locationContainerHorizontalPadding = 52;
 const CGFloat locationImageViewWidth = 14;
 const CGFloat locationImageViewYOffset = 0.5;
 const CGFloat locationImageViewRightPadding = 2;
@@ -26,6 +24,9 @@ const CGFloat locationImageViewRightPadding = 2;
 @property(nonatomic,weak) UILabel* locationLabel;
 @property(nonatomic,weak) UIImageView* locationIconImageView;
 @property(nonatomic,copy) NSString* securityLevelAccessibilityString;
+
+// Boolean to determine if the full address should be shown.
+@property(nonatomic, assign) BOOL showFullAddress;
 
 // Constraints to hide the location image view.
 @property(nonatomic, strong)
@@ -139,11 +140,31 @@ const CGFloat locationImageViewRightPadding = 2;
 
 
 #pragma mark - SETTERS
-- (void)setText:(NSString*)text
-       clipTail:(BOOL)clipTail {
-  self.locationLabel.text = text;
-  self.locationLabel.lineBreakMode =
-      clipTail ? NSLineBreakByTruncatingTail : NSLineBreakByTruncatingHead;
+- (void)updateLocationText:(NSString*)text
+                    domain:(NSString*)domain
+                  showFull:(BOOL)showFull {
+  if (self.showFullAddress != showFull)
+    self.showFullAddress = showFull;
+
+  self.locationLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+
+  if (showFull && ![text isEqualToString:domain] && [text length] > 0) {
+    UIColor *fullTextColor =
+        [[UIColor labelColor]
+            colorWithAlphaComponent:vLocationBarSteadyViewFullAddressOpacity];
+    UIColor *domainColor =
+        [[UIColor labelColor]
+             colorWithAlphaComponent:vLocationBarSteadyViewDomainOpacity];
+    NSAttributedString *attributedString =
+        [VivaldiGlobalHelpers attributedStringWithText:text
+                                             highlight:domain
+                                             textColor:fullTextColor
+                                        highlightColor:domainColor];
+    self.locationLabel.attributedText = attributedString;
+  } else {
+    self.locationLabel.text = text;
+    self.locationLabel.textColor = [UIColor labelColor];
+  }
   [self updateAccessibility];
 }
 

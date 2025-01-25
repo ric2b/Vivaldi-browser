@@ -27,14 +27,10 @@
 
 #include "src/tint/lang/wgsl/reader/program_to_ir/program_to_ir.h"
 
-#include <iostream>
-#include <unordered_map>
 #include <utility>
 #include <variant>
-#include <vector>
 
 #include "src/tint/lang/core/fluent_types.h"
-#include "src/tint/lang/core/ir/block_param.h"
 #include "src/tint/lang/core/ir/builder.h"
 #include "src/tint/lang/core/ir/exit_if.h"
 #include "src/tint/lang/core/ir/exit_loop.h"
@@ -43,19 +39,16 @@
 #include "src/tint/lang/core/ir/if.h"
 #include "src/tint/lang/core/ir/loop.h"
 #include "src/tint/lang/core/ir/module.h"
-#include "src/tint/lang/core/ir/store.h"
 #include "src/tint/lang/core/ir/switch.h"
 #include "src/tint/lang/core/ir/value.h"
 #include "src/tint/lang/core/type/pointer.h"
 #include "src/tint/lang/core/type/reference.h"
 #include "src/tint/lang/core/type/struct.h"
-#include "src/tint/lang/core/type/void.h"
 #include "src/tint/lang/wgsl/ast/accessor_expression.h"
 #include "src/tint/lang/wgsl/ast/alias.h"
 #include "src/tint/lang/wgsl/ast/assignment_statement.h"
 #include "src/tint/lang/wgsl/ast/binary_expression.h"
 #include "src/tint/lang/wgsl/ast/block_statement.h"
-#include "src/tint/lang/wgsl/ast/bool_literal_expression.h"
 #include "src/tint/lang/wgsl/ast/break_if_statement.h"
 #include "src/tint/lang/wgsl/ast/break_statement.h"
 #include "src/tint/lang/wgsl/ast/call_expression.h"
@@ -67,16 +60,13 @@
 #include "src/tint/lang/wgsl/ast/diagnostic_directive.h"
 #include "src/tint/lang/wgsl/ast/discard_statement.h"
 #include "src/tint/lang/wgsl/ast/enable.h"
-#include "src/tint/lang/wgsl/ast/float_literal_expression.h"
 #include "src/tint/lang/wgsl/ast/for_loop_statement.h"
 #include "src/tint/lang/wgsl/ast/function.h"
-#include "src/tint/lang/wgsl/ast/id_attribute.h"
 #include "src/tint/lang/wgsl/ast/identifier.h"
 #include "src/tint/lang/wgsl/ast/identifier_expression.h"
 #include "src/tint/lang/wgsl/ast/if_statement.h"
 #include "src/tint/lang/wgsl/ast/increment_decrement_statement.h"
 #include "src/tint/lang/wgsl/ast/index_accessor_expression.h"
-#include "src/tint/lang/wgsl/ast/int_literal_expression.h"
 #include "src/tint/lang/wgsl/ast/interpolate_attribute.h"
 #include "src/tint/lang/wgsl/ast/invariant_attribute.h"
 #include "src/tint/lang/wgsl/ast/let.h"
@@ -89,8 +79,6 @@
 #include "src/tint/lang/wgsl/ast/return_statement.h"
 #include "src/tint/lang/wgsl/ast/statement.h"
 #include "src/tint/lang/wgsl/ast/struct.h"
-#include "src/tint/lang/wgsl/ast/struct_member_align_attribute.h"
-#include "src/tint/lang/wgsl/ast/struct_member_size_attribute.h"
 #include "src/tint/lang/wgsl/ast/switch_statement.h"
 #include "src/tint/lang/wgsl/ast/templated_identifier.h"
 #include "src/tint/lang/wgsl/ast/unary_op_expression.h"
@@ -99,12 +87,12 @@
 #include "src/tint/lang/wgsl/ast/while_statement.h"
 #include "src/tint/lang/wgsl/ir/builtin_call.h"
 #include "src/tint/lang/wgsl/program/program.h"
+#include "src/tint/lang/wgsl/sem/builtin_enum_expression.h"
 #include "src/tint/lang/wgsl/sem/builtin_fn.h"
 #include "src/tint/lang/wgsl/sem/call.h"
 #include "src/tint/lang/wgsl/sem/function.h"
 #include "src/tint/lang/wgsl/sem/index_accessor_expression.h"
 #include "src/tint/lang/wgsl/sem/load.h"
-#include "src/tint/lang/wgsl/sem/materialize.h"
 #include "src/tint/lang/wgsl/sem/member_accessor_expression.h"
 #include "src/tint/lang/wgsl/sem/module.h"
 #include "src/tint/lang/wgsl/sem/switch_statement.h"
@@ -270,24 +258,6 @@ class Impl {
         return std::move(mod);
     }
 
-    core::Interpolation ExtractInterpolation(const ast::InterpolateAttribute* interp) {
-        auto type = program_.Sem()
-                        .Get(interp->type)
-                        ->As<sem::BuiltinEnumExpression<core::InterpolationType>>();
-        core::InterpolationType interpolation_type = type->Value();
-
-        core::InterpolationSampling interpolation_sampling =
-            core::InterpolationSampling::kUndefined;
-        if (interp->sampling) {
-            auto sampling = program_.Sem()
-                                .Get(interp->sampling)
-                                ->As<sem::BuiltinEnumExpression<core::InterpolationSampling>>();
-            interpolation_sampling = sampling->Value();
-        }
-
-        return core::Interpolation{interpolation_type, interpolation_sampling};
-    }
-
     void EmitFunction(const ast::Function* ast_func) {
         // The flow stack should have been emptied when the previous function finished building.
         TINT_ASSERT(control_stack_.IsEmpty());
@@ -321,30 +291,16 @@ class Impl {
                 }
             }
 
-            // Note, interpolated is only valid when paired with Location, so it will only be set
-            // when the location is set.
-            std::optional<core::Interpolation> interpolation;
             for (auto* attr : ast_func->return_type_attributes) {
                 tint::Switch(
                     attr,  //
                     [&](const ast::InterpolateAttribute* interp) {
-                        interpolation = ExtractInterpolation(interp);
+                        ir_func->SetReturnInterpolation(interp->interpolation);
                     },
                     [&](const ast::InvariantAttribute*) { ir_func->SetReturnInvariant(true); },
-                    [&](const ast::BuiltinAttribute* b) {
-                        if (auto* ident_sem =
-                                program_.Sem()
-                                    .Get(b)
-                                    ->As<sem::BuiltinEnumExpression<core::BuiltinValue>>()) {
-                            ir_func->SetReturnBuiltin(ident_sem->Value());
-                        } else {
-                            TINT_ICE() << "Builtin attribute sem invalid";
-                        }
-                    });
+                    [&](const ast::BuiltinAttribute* b) { ir_func->SetReturnBuiltin(b->builtin); });
             }
-            if (sem->ReturnLocation().has_value()) {
-                ir_func->SetReturnLocation(sem->ReturnLocation().value(), interpolation);
-            }
+            ir_func->SetReturnLocation(sem->ReturnLocation());
         }
 
         scopes_.Push();
@@ -356,33 +312,17 @@ class Impl {
             auto* ty = param_sem->Type()->Clone(clone_ctx_.type_ctx);
             auto* param = builder_.FunctionParam(p->name->symbol.NameView(), ty);
 
-            // Note, interpolated is only valid when paired with Location, so it will only be set
-            // when the location is set.
-            std::optional<core::Interpolation> interpolation;
             for (auto* attr : p->attributes) {
                 tint::Switch(
                     attr,  //
                     [&](const ast::InterpolateAttribute* interp) {
-                        interpolation = ExtractInterpolation(interp);
+                        param->SetInterpolation(interp->interpolation);
                     },
                     [&](const ast::InvariantAttribute*) { param->SetInvariant(true); },
-                    [&](const ast::BuiltinAttribute* b) {
-                        if (auto* ident_sem =
-                                program_.Sem()
-                                    .Get(b)
-                                    ->As<sem::BuiltinEnumExpression<core::BuiltinValue>>()) {
-                            param->SetBuiltin(ident_sem->Value());
-                        } else {
-                            TINT_ICE() << "Builtin attribute sem invalid";
-                        }
-                    });
+                    [&](const ast::BuiltinAttribute* b) { param->SetBuiltin(b->builtin); });
 
-                if (param_sem->Attributes().location.has_value()) {
-                    param->SetLocation(param_sem->Attributes().location.value(), interpolation);
-                }
-                if (param_sem->Attributes().color.has_value()) {
-                    TINT_UNIMPLEMENTED() << "IR does not currently support texel fetch extension";
-                }
+                param->SetLocation(param_sem->Attributes().location);
+                param->SetColor(param_sem->Attributes().color);
             }
 
             scopes_.Set(p->name->symbol, param);
@@ -1178,33 +1118,33 @@ class Impl {
                     [&](const ast::BinaryExpression* e) {
                         if (e->op == core::BinaryOp::kLogicalAnd ||
                             e->op == core::BinaryOp::kLogicalOr) {
-                            tasks.Push([=] { EndShortCircuit(e); });
-                            tasks.Push([=] { Process(e->rhs); });
-                            tasks.Push([=] { BeginShortCircuit(e); });
-                            tasks.Push([=] { Process(e->lhs); });
+                            tasks.Push([this, e] { EndShortCircuit(e); });
+                            tasks.Push([this, e] { Process(e->rhs); });
+                            tasks.Push([this, e] { BeginShortCircuit(e); });
+                            tasks.Push([this, e] { Process(e->lhs); });
                         } else {
-                            tasks.Push([=] { EmitBinary(e); });
-                            tasks.Push([=] { Process(e->rhs); });
-                            tasks.Push([=] { Process(e->lhs); });
+                            tasks.Push([this, e] { EmitBinary(e); });
+                            tasks.Push([this, e] { Process(e->rhs); });
+                            tasks.Push([this, e] { Process(e->lhs); });
                         }
                     },
                     [&](const ast::IndexAccessorExpression* e) {
-                        tasks.Push([=] { EmitAccess(e); });
-                        tasks.Push([=] { Process(e->index); });
-                        tasks.Push([=] { Process(e->object); });
+                        tasks.Push([this, e] { EmitAccess(e); });
+                        tasks.Push([this, e] { Process(e->index); });
+                        tasks.Push([this, e] { Process(e->object); });
                     },
                     [&](const ast::MemberAccessorExpression* e) {
-                        tasks.Push([=] { EmitAccess(e); });
-                        tasks.Push([=] { Process(e->object); });
+                        tasks.Push([this, e] { EmitAccess(e); });
+                        tasks.Push([this, e] { Process(e->object); });
                     },
                     [&](const ast::UnaryOpExpression* e) {
-                        tasks.Push([=] { EmitUnary(e); });
-                        tasks.Push([=] { Process(e->expr); });
+                        tasks.Push([this, e] { EmitUnary(e); });
+                        tasks.Push([this, e] { Process(e->expr); });
                     },
                     [&](const ast::CallExpression* e) {
-                        tasks.Push([=] { EmitCall(e); });
+                        tasks.Push([this, e] { EmitCall(e); });
                         for (auto* arg : tint::Reverse(e->args)) {
-                            tasks.Push([=] { Process(arg); });
+                            tasks.Push([this, arg] { Process(arg); });
                         }
                     },
                     [&](const ast::LiteralExpression* e) { EmitLiteral(e); },
@@ -1247,9 +1187,15 @@ class Impl {
                 }
                 current_block_->Append(val);
 
-                if (auto* gv = sem->As<sem::GlobalVariable>(); gv && var->HasBindingPoint()) {
-                    val->SetBindingPoint(gv->Attributes().binding_point->group,
-                                         gv->Attributes().binding_point->binding);
+                if (auto* gv = sem->As<sem::GlobalVariable>(); gv) {
+                    if (var->HasBindingPoint()) {
+                        val->SetBindingPoint(gv->Attributes().binding_point->group,
+                                             gv->Attributes().binding_point->binding);
+                    }
+                    if (var->HasInputAttachmentIndex()) {
+                        val->SetInputAttachmentIndex(
+                            gv->Attributes().input_attachment_index.value());
+                    }
                 }
 
                 // Store the declaration so we can get the instruction to store too

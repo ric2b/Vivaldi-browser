@@ -10,13 +10,13 @@
 
 namespace adblock_filter {
 class RulesIndexManager;
-class BlockedUrlsReporter;
+class TabHandler;
 class Resources;
 
 class AdBlockRequestFilter : public vivaldi::RequestFilter {
  public:
   AdBlockRequestFilter(base::WeakPtr<RulesIndexManager> rules_index_manager,
-                       base::WeakPtr<BlockedUrlsReporter> blocked_urls_reporter,
+                       base::WeakPtr<TabHandler> tab_handler,
                        base::WeakPtr<Resources> resources);
   ~AdBlockRequestFilter() override;
   AdBlockRequestFilter(const AdBlockRequestFilter&) = delete;
@@ -53,7 +53,7 @@ class AdBlockRequestFilter : public vivaldi::RequestFilter {
 
  private:
   base::WeakPtr<RulesIndexManager> rules_index_manager_;
-  base::WeakPtr<BlockedUrlsReporter> blocked_urls_reporter_;
+  base::WeakPtr<TabHandler> tab_handler_;
   base::WeakPtr<Resources> resources_;
 };
 

@@ -12,8 +12,8 @@
 #import "base/strings/utf_string_conversions.h"
 #import "components/sessions/core/tab_restore_service_impl.h"
 #import "ios/chrome/browser/history/model/history_service_factory.h"
-#import "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_client.h"
-#import "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
+#import "ios/chrome/browser/sessions/model/ios_chrome_tab_restore_service_client.h"
+#import "ios/chrome/browser/sessions/model/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
@@ -89,11 +89,11 @@ class TabsSearchServiceTest : public PlatformTest {
 
     incognito_browser_ = std::make_unique<TestBrowser>(
         chrome_browser_state_->GetOffTheRecordChromeBrowserState());
-    browser_list_->AddIncognitoBrowser(incognito_browser_.get());
+    browser_list_->AddBrowser(incognito_browser_.get());
 
     other_incognito_browser_ = std::make_unique<TestBrowser>(
         chrome_browser_state_->GetOffTheRecordChromeBrowserState());
-    browser_list_->AddIncognitoBrowser(other_incognito_browser_.get());
+    browser_list_->AddBrowser(other_incognito_browser_.get());
   }
 
  protected:

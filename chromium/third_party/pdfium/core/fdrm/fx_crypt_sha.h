@@ -9,51 +9,50 @@
 
 #include <stdint.h>
 
+#include <array>
+
+#include "core/fxcrt/data_vector.h"
+#include "core/fxcrt/span.h"
+
 struct CRYPT_sha1_context {
   uint64_t total_bytes;
   uint32_t blkused;  // Constrained to [0, 64).
-  uint32_t h[5];
-  uint8_t block[64];
+  std::array<uint32_t, 5> h;
+  std::array<uint8_t, 64> block;
 };
 
 struct CRYPT_sha2_context {
   uint64_t total_bytes;
-  uint64_t state[8];
+  std::array<uint64_t, 8> state;
   uint8_t buffer[128];
 };
 
 void CRYPT_SHA1Start(CRYPT_sha1_context* context);
 void CRYPT_SHA1Update(CRYPT_sha1_context* context,
-                      const uint8_t* data,
-                      uint32_t size);
-void CRYPT_SHA1Finish(CRYPT_sha1_context* context, uint8_t digest[20]);
-void CRYPT_SHA1Generate(const uint8_t* data, uint32_t size, uint8_t digest[20]);
+                      pdfium::span<const uint8_t> data);
+void CRYPT_SHA1Finish(CRYPT_sha1_context* context,
+                      pdfium::span<uint8_t, 20> digest);
+DataVector<uint8_t> CRYPT_SHA1Generate(pdfium::span<const uint8_t> data);
 
 void CRYPT_SHA256Start(CRYPT_sha2_context* context);
 void CRYPT_SHA256Update(CRYPT_sha2_context* context,
-                        const uint8_t* data,
-                        uint32_t size);
-void CRYPT_SHA256Finish(CRYPT_sha2_context* context, uint8_t digest[32]);
-void CRYPT_SHA256Generate(const uint8_t* data,
-                          uint32_t size,
-                          uint8_t digest[32]);
+                        pdfium::span<const uint8_t> data);
+void CRYPT_SHA256Finish(CRYPT_sha2_context* context,
+                        pdfium::span<uint8_t, 32> digest);
+DataVector<uint8_t> CRYPT_SHA256Generate(pdfium::span<const uint8_t> data);
 
 void CRYPT_SHA384Start(CRYPT_sha2_context* context);
 void CRYPT_SHA384Update(CRYPT_sha2_context* context,
-                        const uint8_t* data,
-                        uint32_t size);
-void CRYPT_SHA384Finish(CRYPT_sha2_context* context, uint8_t digest[48]);
-void CRYPT_SHA384Generate(const uint8_t* data,
-                          uint32_t size,
-                          uint8_t digest[48]);
+                        pdfium::span<const uint8_t> data);
+void CRYPT_SHA384Finish(CRYPT_sha2_context* context,
+                        pdfium::span<uint8_t, 48> digest);
+DataVector<uint8_t> CRYPT_SHA384Generate(pdfium::span<const uint8_t> data);
 
 void CRYPT_SHA512Start(CRYPT_sha2_context* context);
 void CRYPT_SHA512Update(CRYPT_sha2_context* context,
-                        const uint8_t* data,
-                        uint32_t size);
-void CRYPT_SHA512Finish(CRYPT_sha2_context* context, uint8_t digest[64]);
-void CRYPT_SHA512Generate(const uint8_t* data,
-                          uint32_t size,
-                          uint8_t digest[64]);
+                        pdfium::span<const uint8_t> data);
+void CRYPT_SHA512Finish(CRYPT_sha2_context* context,
+                        pdfium::span<uint8_t, 64> digest);
+DataVector<uint8_t> CRYPT_SHA512Generate(pdfium::span<const uint8_t> data);
 
 #endif  // CORE_FDRM_FX_CRYPT_SHA_H_

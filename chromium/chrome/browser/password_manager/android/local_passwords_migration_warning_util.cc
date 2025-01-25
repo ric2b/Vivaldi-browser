@@ -8,8 +8,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
-#include "chrome/android/chrome_jni_headers/PasswordMigrationWarningBridge_jni.h"
-#include "chrome/browser/profiles/profile_android.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/password_store/split_stores_and_local_upm.h"
@@ -20,6 +19,9 @@
 #include "components/version_info/android/channel_getter.h"
 #include "ui/android/window_android.h"
 #include "ui/gfx/native_widget_types.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "chrome/android/chrome_jni_headers/PasswordMigrationWarningBridge_jni.h"
 
 using base::android::AttachCurrentThread;
 using password_manager::prefs::UseUpmLocalAndSeparateStoresState;
@@ -55,8 +57,7 @@ void ShowWarning(
   SaveWarningShownTimestamp(profile->GetPrefs());
 
   Java_PasswordMigrationWarningBridge_showWarning(
-      AttachCurrentThread(), window->GetJavaObject(),
-      ProfileAndroid::FromProfile(profile)->GetJavaObject(),
+      AttachCurrentThread(), window->GetJavaObject(), profile->GetJavaObject(),
       static_cast<int>(trigger_source));
 
   RecordPasswordMigrationWarningTriggerSource(trigger_source);
@@ -75,14 +76,20 @@ void ShowWarningWithActivity(
 
   Java_PasswordMigrationWarningBridge_showWarningWithActivity(
       AttachCurrentThread(), activity, bottom_sheet_controller,
-      ProfileAndroid::FromProfile(profile)->GetJavaObject(),
-      static_cast<int>(trigger_source));
+      profile->GetJavaObject(), static_cast<int>(trigger_source));
 
   RecordPasswordMigrationWarningTriggerSource(trigger_source);
 }
 
 bool ShouldShowWarning(Profile* profile) {
   if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+    return false;
+  }
+  // If we're showing the access loss warnings, there is no need to show the
+  // migration warning anymore.
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::
+              kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning)) {
     return false;
   }
   if (password_manager::UsesSplitStoresAndUPMForLocal(profile->GetPrefs())) {
@@ -111,10 +118,12 @@ bool ShouldShowWarning(Profile* profile) {
     return false;
   }
 
-  // TODO(crbug.com/40067770): Migrate away from `ConsentLevel::kSync` on
-  // Android.
-  if (password_manager::sync_util::IsSyncFeatureEnabledIncludingPasswords(
+  if (password_manager::sync_util::HasChosenToSyncPasswords(
           SyncServiceFactory::GetForProfile(profile))) {
+    // No signed-in / syncing users with password sync enabled should see the
+    // warning. This is an oversimplification to avoid confusion, in reality
+    // some users in this group *do* save to LoginDatabase (e.g. if GmsCore is
+    // outdated).
     return false;
   }
 
@@ -146,8 +155,7 @@ void MaybeShowPostMigrationSheet(const gfx::NativeWindow window,
   }
 
   Java_PasswordMigrationWarningBridge_maybeShowPostMigrationSheet(
-      AttachCurrentThread(), window->GetJavaObject(),
-      ProfileAndroid::FromProfile(profile)->GetJavaObject());
+      AttachCurrentThread(), window->GetJavaObject(), profile->GetJavaObject());
 }
 
 bool ShouldShowPostMigrationSheet(Profile* profile) {

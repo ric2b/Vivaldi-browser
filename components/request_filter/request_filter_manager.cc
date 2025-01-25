@@ -7,6 +7,7 @@
 #include <optional>
 #include <utility>
 
+#include "base/not_fatal_until.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/request_filter/request_filter_manager_factory.h"
 #include "components/request_filter/request_filter_proxying_url_loader_factory.h"
@@ -54,7 +55,7 @@ void RequestFilterManager::ProxySet::RemoveProxy(Proxy* proxy) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   auto proxy_it = proxies_.find(proxy);
-  DCHECK(proxy_it != proxies_.end());
+  CHECK(proxy_it != proxies_.end(), base::NotFatalUntil::M130);
   proxies_.erase(proxy_it);
 }
 
@@ -346,7 +347,7 @@ int RequestFilterManager::RequestHandler::OnBeforeRequest(
   pending_request.collapse = collapse;
 
   int num_filters_handling = 0;
-  int priority = 0;
+  size_t priority = 0;
   for (const auto& filter : filter_manager_->request_filters_) {
     if (filter->OnBeforeRequest(
             browser_context, request,
@@ -391,7 +392,10 @@ void RequestFilterManager::RequestHandler::OnBeforeRequestHandled(
       *pending_request.collapse = true;
   }
 
-  if (filter_priority > pending_request.new_url_priority &&
+  // All filters have different priorities and the callbacks only runs once, so
+  // the value here would normally never be equal. However, the initial value is
+  // 0 and we want filter 0 to be able to have a say.
+  if (filter_priority >= pending_request.new_url_priority &&
       new_url.is_valid()) {
     *(pending_request.new_url) = new_url;
     pending_request.new_url_priority = filter_priority;
@@ -433,7 +437,7 @@ int RequestFilterManager::RequestHandler::OnBeforeSendHeaders(
       filter_manager_->request_filters_.size());
 
   int num_filters_handling = 0;
-  int priority = 0;
+  size_t priority = 0;
   for (const auto& filter : filter_manager_->request_filters_) {
     if (filter->OnBeforeSendHeaders(
             browser_context, request, headers,
@@ -580,7 +584,7 @@ int RequestFilterManager::RequestHandler::OnHeadersReceived(
   pending_request.collapse = collapse;
 
   int num_filters_handling = 0;
-  int priority = 0;
+  size_t priority = 0;
   for (const auto& filter : filter_manager_->request_filters_) {
     if (filter->OnHeadersReceived(
             browser_context, request, original_response_headers,
@@ -630,7 +634,10 @@ void RequestFilterManager::RequestHandler::OnHeadersReceivedHandled(
       *pending_request.collapse = true;
   }
 
-  if (filter_priority > pending_request.new_url_priority &&
+  // All filters have different priorities and the callbacks only runs once, so
+  // the value here would normally never be equal. However, the initial value is
+  // 0 and we want filter 0 to be able to have a say.
+  if (filter_priority >= pending_request.new_url_priority &&
       new_url.is_valid()) {
     *(pending_request.new_url) = new_url;
     pending_request.new_url_priority = filter_priority;

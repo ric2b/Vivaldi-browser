@@ -48,10 +48,10 @@
 #include "gin/object_template_builder.h"
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/web/modules/canvas/canvas_test_utils.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
@@ -153,7 +153,7 @@ int GestureSourceTypeAsInt(content::mojom::GestureSourceType type) {
     case content::mojom::GestureSourceType::kPenInput:
       return 3;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0;
 }
 
@@ -368,7 +368,7 @@ int ToKeyModifiers(std::string_view key) {
     return blink::WebInputEvent::kNumLockOn;
   if (key == "AltGraph")
     return blink::WebInputEvent::kAltGrKey;
-  NOTREACHED() << "invalid key modifier";
+  NOTREACHED_IN_MIGRATION() << "invalid key modifier";
   return 0;
 }
 
@@ -383,7 +383,7 @@ int ToButtonModifiers(std::string_view button) {
     return blink::WebMouseEvent::kBackButtonDown;
   if (button == "Forward")
     return blink::WebMouseEvent::kForwardButtonDown;
-  NOTREACHED() << "invalid button modifier";
+  NOTREACHED_IN_MIGRATION() << "invalid button modifier";
   return 0;
 }
 
@@ -632,7 +632,7 @@ GpuBenchmarking::~GpuBenchmarking() = default;
 
 void GpuBenchmarking::EnsureRemoteInterface() {
   if (!input_injector_) {
-    render_frame_->GetBrowserInterfaceBroker()->GetInterface(
+    render_frame_->GetBrowserInterfaceBroker().GetInterface(
         input_injector_.BindNewPipeAndPassReceiver(
             render_frame_->GetTaskRunner(blink::TaskType::kInternalDefault)));
   }
@@ -1225,7 +1225,7 @@ void GpuBenchmarking::SetBrowserControlsShown(bool show) {
       cc::BrowserControlsState::kBoth,
       show ? cc::BrowserControlsState::kShown
            : cc::BrowserControlsState::kHidden,
-      false);
+      false, std::nullopt);
 }
 
 float GpuBenchmarking::VisualViewportY() {
@@ -1323,9 +1323,7 @@ bool GpuBenchmarking::PointerActionSequence(gin::Arguments* args) {
   std::unique_ptr<base::Value> value =
       V8ValueConverter::Create()->FromV8Value(obj, v8_context);
   if (!value.get()) {
-    // TODO(dtapuska): Throw an error here, some web tests start
-    // failing when this is done though.
-    // args->ThrowTypeError(actions_parser.error_message());
+    args->ThrowError();
     return false;
   }
 
@@ -1334,9 +1332,7 @@ bool GpuBenchmarking::PointerActionSequence(gin::Arguments* args) {
   ActionsParser actions_parser(
       base::Value::FromUniquePtrValue(std::move(value)));
   if (!actions_parser.Parse()) {
-    // TODO(dtapuska): Throw an error here, some web tests start
-    // failing when this is done though.
-    // args->ThrowTypeError(actions_parser.error_message());
+    args->ThrowTypeError(actions_parser.error_message());
     return false;
   }
 

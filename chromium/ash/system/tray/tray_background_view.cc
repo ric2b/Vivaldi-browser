@@ -29,7 +29,6 @@
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
 #include "ash/system/tray/tray_event_filter.h"
-#include "ash/user_education/user_education_class_properties.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -604,7 +603,10 @@ void TrayBackgroundView::AboutToRequestFocusFromTabTraversal(bool reverse) {
 
 void TrayBackgroundView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   views::Button::GetAccessibleNodeData(node_data);
-  node_data->SetName(GetAccessibleNameForTray());
+  // Override the name set in `LabelButton::SetText`.
+  // TODO(crbug.com/325137417): Remove this once the accessible name is set in
+  // the cache as soon as the name is updated.
+  GetViewAccessibility().SetName(GetAccessibleNameForTray());
 
   if (LockScreen::HasInstance()) {
     GetViewAccessibility().SetNextFocus(LockScreen::Get()->widget());
@@ -686,12 +688,6 @@ void TrayBackgroundView::UpdateBackground() {
     layer()->SetColor(ShelfConfig::Get()->GetShelfControlButtonColor(widget));
   }
   UpdateBackgroundColor(is_active_);
-
-  // Update ping insets when background insets change so that ping animations
-  // emanate from user perceived bounds instead of actual bounds.
-  if (features::IsUserEducationEnabled()) {
-    SetProperty(kPingInsetsKey, GetBackgroundInsets());
-  }
 }
 
 void TrayBackgroundView::OnHideAnimationStarted() {

@@ -6,10 +6,11 @@
 #define COMPONENTS_REPORTING_STORAGE_STORAGE_UPLOADER_INTERFACE_H_
 
 #include <cstdint>
+#include <list>
 #include <memory>
+#include <string_view>
 
 #include "base/functional/callback.h"
-#include "base/strings/string_piece.h"
 #include "components/reporting/proto/synced/record.pb.h"
 #include "components/reporting/proto/synced/record_constants.pb.h"
 #include "components/reporting/resources/resource_manager.h"
@@ -42,9 +43,6 @@ class UploaderInterface {
     MAX_REASON = 8,        // Anything beyond this is illegal
   };
 
-  // using AsyncStartUploaderCb =
-  //     base::RepeatingCallback<StatusOr<std::unique_ptr<UploaderInterface>>(
-  //         bool need_encryption_key)>;
   // Asynchronous callback that instantiates uploader.
   // To start upload, call |AsyncStartUploaderCb| on a thread pool. Once
   // uploader is instantiated, |AsyncStartUploaderCb| calls its parameter

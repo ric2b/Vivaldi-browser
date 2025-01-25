@@ -55,6 +55,7 @@
         'os_type': 'android',
         'mixins': [
           'gpu_pixel_4_stable',
+          'temp_band_below_30C',
           'timeout_120m',
         ],
         'test_suites': {
@@ -75,6 +76,7 @@
         'os_type': 'android',
         'mixins': [
           'gpu_pixel_6_stable',
+          'temp_band_below_30C',
           'timeout_120m',
         ],
         'test_suites': {
@@ -230,7 +232,6 @@
           'mac_retina_amd_gpu_experimental',
         ],
         'test_suites': {
-          'gtest_tests': 'mac_amd_and_intel_gtests',
         },
       },
       'mac-exp-intel': {
@@ -271,9 +272,11 @@
       'win10-x64-exp-intel': {
         'os_type': 'win',
         'mixins': [
-          'win10_intel_uhd_630_experimental',
+          'win10_intel_uhd_770_stable',
         ],
         'test_suites': {
+          'gtest_tests': 'win10_intel_gtests',
+          'isolated_scripts': 'isolated_scripts_group_common',
         },
       },
       'win10-x64-intel': {

@@ -59,7 +59,7 @@ class QuicServerTest : public Test {
   std::unique_ptr<ProtocolConnection> ExpectIncomingConnection() {
     MockConnectRequest mock_connect_request;
     NetworkServiceManager::Get()->GetProtocolConnectionClient()->Connect(
-        quic_bridge_.kReceiverEndpoint, &mock_connect_request);
+        quic_bridge_.kInstanceName, connect_request_, &mock_connect_request);
     std::unique_ptr<ProtocolConnection> stream;
     EXPECT_CALL(mock_connect_request, OnConnectionOpenedMock());
     EXPECT_CALL(quic_bridge_.mock_server_observer, OnIncomingConnectionMock(_))
@@ -78,13 +78,16 @@ class QuicServerTest : public Test {
                                   std::move(quic_bridge_.quic_server));
   }
 
-  void TearDown() override { NetworkServiceManager::Dispose(); }
+  void TearDown() override {
+    connect_request_.MarkComplete();
+    NetworkServiceManager::Dispose();
+  }
 
   void SendTestMessage(ProtocolConnection* connection) {
     MockMessageCallback mock_message_callback;
     MessageDemuxer::MessageWatch message_watch =
         quic_bridge_.controller_demuxer->WatchMessageType(
-            0, msgs::Type::kPresentationConnectionMessage,
+            1, msgs::Type::kPresentationConnectionMessage,
             &mock_message_callback);
 
     msgs::CborEncodeBuffer buffer;
@@ -100,9 +103,9 @@ class QuicServerTest : public Test {
     msgs::PresentationConnectionMessage received_message;
     EXPECT_CALL(mock_message_callback,
                 OnStreamMessage(
-                    0, _, msgs::Type::kPresentationConnectionMessage, _, _, _))
+                    1, _, msgs::Type::kPresentationConnectionMessage, _, _, _))
         .WillOnce(Invoke([&decode_result, &received_message](
-                             uint64_t endpoint_id, uint64_t connection_id,
+                             uint64_t instance_id, uint64_t connection_id,
                              msgs::Type message_type, const uint8_t* buf,
                              size_t buffer_size, Clock::time_point now) {
           decode_result = msgs::DecodePresentationConnectionMessage(
@@ -121,6 +124,7 @@ class QuicServerTest : public Test {
     EXPECT_EQ(received_message.message.str, message.message.str);
   }
 
+  QuicClient::ConnectRequest connect_request_;
   FakeClock fake_clock_;
   FakeTaskRunner task_runner_;
   FakeQuicBridge quic_bridge_;
@@ -145,7 +149,7 @@ TEST_F(QuicServerTest, OpenImmediate) {
   ASSERT_TRUE(connection1);
 
   std::unique_ptr<ProtocolConnection> connection2 =
-      server_->CreateProtocolConnection(connection1->endpoint_id());
+      server_->CreateProtocolConnection(connection1->instance_id());
 
   SendTestMessage(connection2.get());
 
@@ -192,17 +196,17 @@ TEST_F(QuicServerTest, RequestIds) {
   std::unique_ptr<ProtocolConnection> connection = ExpectIncomingConnection();
   ASSERT_TRUE(connection);
 
-  uint64_t endpoint_id = connection->endpoint_id();
-  EXPECT_EQ(1u, server_->endpoint_request_ids()->GetNextRequestId(endpoint_id));
-  EXPECT_EQ(3u, server_->endpoint_request_ids()->GetNextRequestId(endpoint_id));
+  uint64_t instance_id = connection->instance_id();
+  EXPECT_EQ(1u, server_->GetInstanceRequestIds().GetNextRequestId(instance_id));
+  EXPECT_EQ(3u, server_->GetInstanceRequestIds().GetNextRequestId(instance_id));
 
   connection->CloseWriteEnd();
   connection.reset();
   quic_bridge_.RunTasksUntilIdle();
-  EXPECT_EQ(5u, server_->endpoint_request_ids()->GetNextRequestId(endpoint_id));
+  EXPECT_EQ(5u, server_->GetInstanceRequestIds().GetNextRequestId(instance_id));
 
   server_->Stop();
-  EXPECT_EQ(1u, server_->endpoint_request_ids()->GetNextRequestId(endpoint_id));
+  EXPECT_EQ(1u, server_->GetInstanceRequestIds().GetNextRequestId(instance_id));
 }
 
 }  // namespace openscreen::osp

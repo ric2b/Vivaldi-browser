@@ -27,6 +27,11 @@ suite('<settings-storage> for device page', () => {
   let browserProxy: TestDevicePageBrowserProxy;
 
   setup(async () => {
+    // Default is persistent user. If any test needs it, they can override.
+    loadTimeData.overrideValues({
+      isCryptohomeDataEphemeral: false,
+    });
+
     fakeSystemDisplay = new FakeSystemDisplay();
     setDisplayApiForTesting(fakeSystemDisplay);
 
@@ -48,6 +53,21 @@ suite('<settings-storage> for device page', () => {
     await flushTasks();
 
     storageSubpage['stopPeriodicUpdate_']();
+  }
+
+  async function assertDriveOfflineSizeVisibility(
+      driveEnabled: boolean, visible: boolean): Promise<void> {
+    await createStorageSubpage();
+    storageSubpage.set('prefs.gdata.disabled.value', !driveEnabled);
+    await flushTasks();
+
+    const expectedState = visible ? 'be visible' : 'not be visible';
+    assertEquals(
+        visible,
+        isVisible(
+            storageSubpage.shadowRoot!.querySelector('#driveOfflineSize')),
+        `Expected #driveOfflineSize to ${expectedState} with driveEnabled: ${
+            driveEnabled}. isVisible: ${visible}`);
   }
 
   /**
@@ -191,7 +211,7 @@ suite('<settings-storage> for device page', () => {
     assertEquals('7.5 GB', availableArea.innerText);
   });
 
-  test('system size', async () => {
+  test('system size default', async () => {
     await createStorageSubpage();
 
     const systemSizeLabel =
@@ -213,15 +233,21 @@ suite('<settings-storage> for device page', () => {
         '#systemSizeSubLabel');
     assertTrue(!!systemSizeSubLabel);
     assertEquals('8.4 GB', systemSizeSubLabel.innerText);
+  });
 
+  test('system size guest mode', async () => {
     // In guest mode, the system row should be hidden.
-    storageSubpage.set('isEphemeralUser_', true);
+    loadTimeData.overrideValues({
+      isCryptohomeDataEphemeral: true,
+    });
+    await createStorageSubpage();
+
     flush();
     assertFalse(
         isVisible(storageSubpage.shadowRoot!.querySelector('#systemSize')));
   });
 
-  test('apps extensions size', async () => {
+  test('apps extensions size default', async () => {
     await createStorageSubpage();
 
     const expectedLabel =
@@ -235,13 +261,11 @@ suite('<settings-storage> for device page', () => {
     assertEquals('59.5 KB', getStorageItemSubLabelFromId('appsSize'));
   });
 
-  test('other users size', async () => {
+  test('other users size default', async () => {
     await createStorageSubpage();
 
     // The other users row is visible by default, displaying
     // "calculating...".
-    assertTrue(
-        isVisible(storageSubpage.shadowRoot!.querySelector('#otherUsersSize')));
     assertEquals('Other users', getStorageItemLabelFromId('otherUsersSize'));
     assertEquals(
         'Calculating…', getStorageItemSubLabelFromId('otherUsersSize'));
@@ -267,39 +291,22 @@ suite('<settings-storage> for device page', () => {
         isVisible(storageSubpage.shadowRoot!.querySelector('#otherUsersSize')));
   });
 
-  test('drive offline size', async () => {
-    interface Params {
-      isDriveEnabled: boolean;
-      isVisible: boolean;
-    }
+  test('drive offline size drive disabled', async () => {
+    await assertDriveOfflineSizeVisibility(
+        false, /* isDriveEnabled */
+        false, /* isVisible */
+    );
 
-    async function assertDriveOfflineSizeVisibility(params: Params):
-        Promise<void> {
-      await createStorageSubpage();
-      storageSubpage.set('prefs.gdata.disabled.value', !params.isDriveEnabled);
-      await flushTasks();
-
-      const expectedState = params.isVisible ? 'be visible' : 'not be visible';
-      assertEquals(
-          params.isVisible,
-          isVisible(
-              storageSubpage.shadowRoot!.querySelector('#driveOfflineSize')),
-          `Expected #driveOfflineSize to ${expectedState} with params: ${
-              JSON.stringify(params)}`);
-    }
-
-    await assertDriveOfflineSizeVisibility({
-      isDriveEnabled: false,
-      isVisible: false,
-    });
-
-    await assertDriveOfflineSizeVisibility({
-      isDriveEnabled: true,
-      isVisible: true,
-    });
+    await assertDriveOfflineSizeVisibility(
+        true, /* isDriveEnabled */
+        true, /* isVisible */
+    );
   });
 
   test('my files skyvault disabled', async () => {
+    loadTimeData.overrideValues({
+      enableSkyVault: false,
+    });
     await createStorageSubpage();
 
     checkMyFilesElement('myFilesSizeLink', true);
@@ -328,5 +335,36 @@ suite('<settings-storage> for device page', () => {
     await setLocalUserFilesAllowed(true);
     checkMyFilesElement('myFilesSizeLink', true);
     checkMyFilesElement('myFilesSizeDiv', false);
+  });
+
+  test('system encryption', async () => {
+    await createStorageSubpage();
+    const systemEncryptionLabel =
+        storageSubpage.shadowRoot!.querySelector<HTMLElement>(
+            '#systemEncryptionLabel');
+    assertTrue(!!systemEncryptionLabel);
+    assertEquals('User data encryption', systemEncryptionLabel.innerText);
+
+    let systemEncryptionSubLabel =
+        storageSubpage.shadowRoot!.querySelector<HTMLElement>(
+            '#systemEncryptionSubLabel');
+    assertTrue(!!systemEncryptionSubLabel);
+
+    systemEncryptionSubLabel =
+        storageSubpage.shadowRoot!.querySelector<HTMLElement>(
+            '#systemEncryptionSubLabel');
+    assertTrue(!!systemEncryptionSubLabel);
+    assertEquals('AES-256', systemEncryptionSubLabel.innerText);
+  });
+
+  test('system encryption with guest user', async () => {
+    loadTimeData.overrideValues({
+      isCryptohomeDataEphemeral: true,
+    });
+    await createStorageSubpage();
+
+    flush();
+    assertFalse(isVisible(
+        storageSubpage.shadowRoot!.querySelector('#systemEncryption')));
   });
 });

@@ -1,30 +1,24 @@
-SKIP: FAILED
+#include <metal_stdlib>
+using namespace metal;
 
-../../src/tint/lang/msl/writer/printer/printer.cc:1257 internal compiler error: In = struct @align(16) {
-  pos:vec4<f32> @offset(0), @builtin(position)
-  uv:vec4<f32> @offset(16), @location(0)
-  fbf:vec4<f32> @offset(32)
+struct In {
+  float4 pos;
+  float4 uv;
+  float4 fbf;
+};
+
+struct f_inputs {
+  float4 In_uv [[user(locn0)]];
+  float4 In_fbf [[color(0)]];
+};
+
+void g(float a, float b, float c) {
 }
 
-%g = func(%a:f32, %b:f32, %c:f32):void {
-  $B1: {
-    ret
-  }
-}
-%f = @fragment func(%in:In):void {
-  $B2: {
-    %7:f32 = access %in, 0u, 0u
-    %8:f32 = access %in, 1u, 0u
-    %9:f32 = access %in, 2u, 1u
-    %10:void = call %g, %7, %8, %9
-    ret
-  }
+void f_inner(In in) {
+  g(in.pos[0u], in.uv[0u], in.fbf[1u]);
 }
 
-invalid entry point IO struct uses
-********************************************************************
-*  The tint shader compiler has encountered an unexpected error.   *
-*                                                                  *
-*  Please help us fix this issue by submitting a bug report at     *
-*  crbug.com/tint with the source program that triggered the bug.  *
-********************************************************************
+fragment void f(float4 In_pos [[position]], f_inputs inputs [[stage_in]]) {
+  f_inner(In{.pos=In_pos, .uv=inputs.In_uv, .fbf=inputs.In_fbf});
+}

@@ -71,7 +71,7 @@ class ElementTrackerMac::MenuData {
     if (it == elements_.end()) {
       it = recycle_bin_.find(identifier);
       if (it == recycle_bin_.end()) {
-        DUMP_WILL_BE_NOTREACHED_NORETURN()
+        DUMP_WILL_BE_NOTREACHED()
             << "Element " << identifier
             << " had its activation sent after its menu was destroyed. This "
                "may be due to a race condition with renderer context menus; "
@@ -96,8 +96,8 @@ class ElementTrackerMac::MenuData {
         LOG(WARNING) << "Element " << identifier
                      << " hidden multiple times in a row.";
       } else {
-        NOTREACHED() << "Element " << identifier
-                     << " hidden after its menu was destroyed.";
+        NOTREACHED_IN_MIGRATION() << "Element " << identifier
+                                  << " hidden after its menu was destroyed.";
       }
       return;
     }

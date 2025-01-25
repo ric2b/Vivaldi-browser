@@ -25,11 +25,11 @@ use rand_chacha::ChaCha20Rng;
 #[cfg(not(feature = "std"))]
 use lock_adapter::spin::Mutex;
 #[cfg(feature = "std")]
-use lock_adapter::std::Mutex;
+use lock_adapter::stdlib::Mutex;
 
 use ukey2_connections::{
     D2DConnectionContextV1, D2DHandshakeContext, HandleMessageError, HandshakeImplementation,
-    InitiatorD2DHandshakeContext, ServerD2DHandshakeContext,
+    InitiatorD2DHandshakeContext, NextProtocol, ServerD2DHandshakeContext,
 };
 
 #[repr(C)]
@@ -188,6 +188,7 @@ pub extern "C" fn to_connection_context(handle: u64) -> u64 {
 pub extern "C" fn responder_new() -> u64 {
     let ctx = Box::new(ServerD2DHandshakeContext::<CryptoProvider>::new(
         HandshakeImplementation::PublicKeyInProtobuf,
+        &[NextProtocol::Aes256CbcHmacSha256],
     ));
     insert_gen_handle(ctx)
 }
@@ -200,6 +201,7 @@ pub extern "C" fn responder_new() -> u64 {
 pub extern "C" fn initiator_new() -> u64 {
     let ctx = Box::new(InitiatorD2DHandshakeContext::<CryptoProvider>::new(
         HandshakeImplementation::PublicKeyInProtobuf,
+        vec![NextProtocol::Aes256CbcHmacSha256],
     ));
     insert_gen_handle(ctx)
 }

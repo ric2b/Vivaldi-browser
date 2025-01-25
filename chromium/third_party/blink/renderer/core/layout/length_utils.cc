@@ -107,17 +107,19 @@ LayoutUnit ResolveInlineLengthInternal(
           (available_size - margins.InlineSum()).ClampNegativeToZero();
       return min_max_sizes.ShrinkToFit(fill_available);
     }
-    case Length::kAuto:
     case Length::kContent:
+      return min_max_sizes_func(MinMaxSizesType::kContent).sizes.max_size;
+    case Length::kAuto:
     case Length::kNone:
       return unresolvable_length_result;
     case Length::kDeviceWidth:
     case Length::kDeviceHeight:
     case Length::kExtendToZoom:
-      NOTREACHED() << "These should only be used for viewport definitions";
+      NOTREACHED_IN_MIGRATION()
+          << "These should only be used for viewport definitions";
       [[fallthrough]];
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return unresolvable_length_result;
   }
 }
@@ -202,10 +204,11 @@ LayoutUnit ResolveBlockLengthInternal(
     case Length::kDeviceWidth:
     case Length::kDeviceHeight:
     case Length::kExtendToZoom:
-      NOTREACHED() << "These should only be used for viewport definitions";
+      NOTREACHED_IN_MIGRATION()
+          << "These should only be used for viewport definitions";
       [[fallthrough]];
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return border_padding.BlockSum();
   }
 }
@@ -304,7 +307,8 @@ MinMaxSizesResult ComputeMinAndMaxContentContributionInternal(
       is_parent_writing_mode_horizontal ? style.Width() : style.Height();
 
   MinMaxSizesResult result;
-  // TODO(https://crbug.com/313072): Rewrite this test for calc-size().
+  // TODO(https://crbug.com/40339056): These parts need to be merged
+  // together to handle calc-size() correctly.
   if (inline_size.HasAuto() || inline_size.HasPercent() ||
       inline_size.IsFillAvailable() || inline_size.IsFitContent()) {
     result = min_max_sizes_func(MinMaxSizesType::kContent);
@@ -328,23 +332,14 @@ MinMaxSizesResult ComputeMinAndMaxContentContributionInternal(
     result = {{size, size}, /* depends_on_block_constraints */ false};
   }
 
-  const auto& max_inline_size =
-      is_parent_writing_mode_horizontal ? style.MaxWidth() : style.MaxHeight();
-  result.sizes.Constrain(
+  const MinMaxSizes min_max_sizes =
       is_parallel_with_parent
-          ? ResolveMaxInlineLength(space, style, border_padding,
-                                   min_max_sizes_func, max_inline_size)
-          : ResolveMaxBlockLength(space, style, border_padding,
-                                  max_inline_size));
+          ? ComputeMinMaxInlineSizes(space, child, border_padding,
+                                     min_max_sizes_func)
+          : ComputeMinMaxBlockSizes(space, style, border_padding);
 
-  const auto& min_inline_size =
-      is_parent_writing_mode_horizontal ? style.MinWidth() : style.MinHeight();
-  result.sizes.Encompass(
-      is_parallel_with_parent
-          ? ResolveMinInlineLength(space, style, border_padding,
-                                   min_max_sizes_func, min_inline_size)
-          : ResolveMinBlockLength(space, style, border_padding,
-                                  min_inline_size));
+  result.sizes.Constrain(min_max_sizes.max_size);
+  result.sizes.Encompass(min_max_sizes.min_size);
 
   // Tables need to apply one final constraint. They are never allowed to go
   // below their min-intrinsic size (even if they have an inline-size, etc).
@@ -446,12 +441,12 @@ LayoutUnit ComputeInlineSizeForFragmentInternal(
   const Length& logical_width = style.LogicalWidth();
   bool apply_automatic_min_size = false;
 
-  // TODO(https://crbug.com/313072): Fix these IsMinContent/IsMaxContent tests
-  // for calc-size().
+  // TODO(https://crbug.com/40339056): This still isn't right -- we need to do
+  // more math here for calc-size()!
   if (!style.AspectRatio().IsAuto() &&
       ((logical_width.HasAuto() &&
         space.InlineAutoBehavior() != AutoSizeBehavior::kStretchExplicit) ||
-       logical_width.IsMinContent() || logical_width.IsMaxContent())) {
+       logical_width.HasMinContent() || logical_width.HasMaxContent())) {
     extent = ComputeInlineSizeFromAspectRatio(space, style, border_padding);
 
     if (extent != kIndefiniteSize) {
@@ -527,11 +522,6 @@ MinMaxSizes ComputeMinMaxBlockSizes(const ConstraintSpace& space,
                                     const ComputedStyle& style,
                                     const BoxStrut& border_padding,
                                     LayoutUnit override_available_size) {
-  if (const std::optional<MinMaxSizes> override_sizes =
-          space.OverrideMinMaxBlockSizes()) {
-    DCHECK_GE(override_sizes->max_size, override_sizes->min_size);
-    return *override_sizes;
-  }
   MinMaxSizes sizes = {
       ResolveMinBlockLength(space, style, border_padding,
                             style.LogicalMinHeight(), override_available_size,
@@ -919,7 +909,7 @@ LogicalSize ComputeReplacedSizeInternal(const BlockNode& node,
       size = ResolveMainInlineLength(
           space, style, border_padding,
           [](MinMaxSizesType) -> MinMaxSizesResult {
-            NOTREACHED();
+            NOTREACHED_IN_MIGRATION();
             return MinMaxSizesResult();
           },
           Length::FillAvailable(), /* auto_length */ nullptr,
@@ -1219,25 +1209,19 @@ LayoutUnit ColumnInlineProgression(LayoutUnit available_size,
 
 PhysicalBoxStrut ComputePhysicalMargins(
     const ComputedStyle& style,
-    LogicalSize percentage_resolution_size) {
+    PhysicalSize percentage_resolution_size) {
   if (!style.MayHaveMargin())
     return PhysicalBoxStrut();
 
-  // This function may be called for determining intrinsic margins, clamp
-  // indefinite %-sizes to zero. See:
-  // https://drafts.csswg.org/css-sizing-3/#min-percentage-contribution
-  percentage_resolution_size =
-      percentage_resolution_size.ClampIndefiniteToZero();
-
   return PhysicalBoxStrut(
       MinimumValueForLength(style.MarginTop(),
-                            percentage_resolution_size.block_size),
+                            percentage_resolution_size.height),
       MinimumValueForLength(style.MarginRight(),
-                            percentage_resolution_size.inline_size),
+                            percentage_resolution_size.width),
       MinimumValueForLength(style.MarginBottom(),
-                            percentage_resolution_size.block_size),
+                            percentage_resolution_size.height),
       MinimumValueForLength(style.MarginLeft(),
-                            percentage_resolution_size.inline_size));
+                            percentage_resolution_size.width));
 }
 
 BoxStrut ComputeMarginsFor(const ConstraintSpace& constraint_space,
@@ -1352,6 +1336,41 @@ void ResolveInlineAutoMargins(const ComputedStyle& style,
   }
 }
 
+void ResolveAutoMargins(Length start_length,
+                        Length end_length,
+                        LayoutUnit additional_space,
+                        LayoutUnit* start_result,
+                        LayoutUnit* end_result) {
+  bool start_is_auto = start_length.IsAuto();
+  bool end_is_auto = end_length.IsAuto();
+  if (start_is_auto) {
+    if (end_is_auto) {
+      *start_result = additional_space / 2;
+      additional_space -= *start_result;
+    } else {
+      *start_result = additional_space;
+    }
+  }
+  if (end_is_auto) {
+    *end_result = additional_space;
+  }
+}
+
+void ResolveAutoMargins(Length inline_start_length,
+                        Length inline_end_length,
+                        Length block_start_length,
+                        Length block_end_length,
+                        LayoutUnit additional_inline_space,
+                        LayoutUnit additional_block_space,
+                        BoxStrut* margins) {
+  ResolveAutoMargins(inline_start_length, inline_end_length,
+                     additional_inline_space, &margins->inline_start,
+                     &margins->inline_end);
+  ResolveAutoMargins(block_start_length, block_end_length,
+                     additional_block_space, &margins->block_start,
+                     &margins->block_end);
+}
+
 LayoutUnit LineOffsetForTextAlign(ETextAlign text_align,
                                   TextDirection direction,
                                   LayoutUnit space_left) {
@@ -1394,7 +1413,7 @@ LayoutUnit LineOffsetForTextAlign(ETextAlign text_align,
       return space_left;
     }
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return LayoutUnit();
   }
 }

@@ -8,17 +8,24 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/commerce/shopping_service_factory.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/webui/commerce/shopping_ui_handler_delegate.h"
+#include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/sanitized_image_source.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/commerce_product_specifications_resources.h"
 #include "chrome/grit/commerce_product_specifications_resources_map.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/commerce/core/commerce_constants.h"
 #include "components/commerce/core/commerce_feature_list.h"
+#include "components/commerce/core/feature_utils.h"
 #include "components/commerce/core/shopping_service.h"
 #include "components/commerce/core/webui/shopping_service_handler.h"
+#include "components/favicon_base/favicon_url_parser.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
@@ -34,8 +41,7 @@ ProductSpecificationsUI::ProductSpecificationsUI(content::WebUI* web_ui)
   commerce::ShoppingService* shopping_service =
       commerce::ShoppingServiceFactory::GetForBrowserContext(profile);
   if (!shopping_service ||
-      !shopping_service->IsRegionLockedFeatureEnabled(
-          kProductSpecifications, kProductSpecificationsRegionLaunched)) {
+      !IsProductSpecificationsEnabled(shopping_service->GetAccountChecker())) {
     return;
   }
   // Add ThemeSource to serve the chrome logo.
@@ -43,6 +49,9 @@ ProductSpecificationsUI::ProductSpecificationsUI(content::WebUI* web_ui)
   // Add SanitizedImageSource to embed images in WebUI.
   content::URLDataSource::Add(profile,
                               std::make_unique<SanitizedImageSource>(profile));
+  content::URLDataSource::Add(
+      profile, std::make_unique<FaviconSource>(
+                   profile, chrome::FaviconUrlFormat::kFavicon2));
 
   // Set up the chrome://compare source.
   content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
@@ -55,27 +64,49 @@ ProductSpecificationsUI::ProductSpecificationsUI(content::WebUI* web_ui)
                       kCommerceProductSpecificationsResourcesSize),
       IDR_COMMERCE_PRODUCT_SPECIFICATIONS_PRODUCT_SPECIFICATIONS_HTML);
 
+  // Set up chrome://compare/disclosure
+  source->AddResourcePath(
+      "disclosure/",
+      IDR_COMMERCE_PRODUCT_SPECIFICATIONS_DISCLOSURE_PRODUCT_SPECIFICATIONS_DISCLOSURE_HTML);
+  source->AddResourcePath(
+      "disclosure",
+      IDR_COMMERCE_PRODUCT_SPECIFICATIONS_DISCLOSURE_PRODUCT_SPECIFICATIONS_DISCLOSURE_HTML);
+
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
+      {"acceptDisclosure", IDS_PRODUCT_SPECIFICATIONS_DISCLOSURE_ACCEPT},
+      {"addToNewGroup", IDS_PRODUCT_SPECIFICATIONS_ADD_TO_NEW_GROUP},
+      {"delete", IDS_PRODUCT_SPECIFICATIONS_DELETE},
+      {"disclosureAboutItem", IDS_PRODUCT_SPECIFICATIONS_DISCLOSURE_ABOUT_ITEM},
+      {"disclosureAccountItem",
+       IDS_PRODUCT_SPECIFICATIONS_DISCLOSURE_ACCOUNT_ITEM},
+      {"disclosureDataItem", IDS_PRODUCT_SPECIFICATIONS_DISCLOSURE_DATA_ITEM},
+      {"disclosureItemsHeader",
+       IDS_PRODUCT_SPECIFICATIONS_DISCLOSURE_ITEMS_HEADER},
+      {"disclosureTitle", IDS_PRODUCT_SPECIFICATIONS_DISCLOSURE_TITLE},
       {"emptyMenu", IDS_PRODUCT_SPECIFICATIONS_EMPTY_SELECTION_MENU},
       {"emptyProductSelector",
        IDS_PRODUCT_SPECIFICATIONS_EMPTY_PRODUCT_SELECTOR},
       {"emptyStateDescription",
        IDS_PRODUCT_SPECIFICATIONS_EMPTY_STATE_TITLE_DESCRIPTION},
       {"emptyStateTitle", IDS_PRODUCT_SPECIFICATIONS_EMPTY_STATE_TITLE},
+      {"experimentalFeatureDisclaimer", IDS_PRODUCT_SPECIFICATIONS_DISCLAIMER},
+      {"learnMore", IDS_LEARN_MORE},
+      {"learnMoreA11yLabel", IDS_PRODUCT_SPECIFICATIONS_LEARN_MORE_A11Y_LABEL},
+      {"priceRowTitle", IDS_PRODUCT_SPECIFICATIONS_PRICE_ROW_TITLE},
+      {"recentlyViewedTabs",
+       IDS_PRODUCT_SPECIFICATIONS_RECENTLY_VIEWED_TABS_SECTION},
+      {"removeColumn", IDS_PRODUCT_SPECIFICATIONS_REMOVE_COLUMN},
+      {"renameGroup", IDS_PRODUCT_SPECIFICATIONS_RENAME_GROUP},
+      {"seeAll", IDS_PRODUCT_SPECIFICATIONS_SEE_ALL},
+      {"suggestedTabs", IDS_PRODUCT_SPECIFICATIONS_SUGGESTIONS_SECTION},
+      {"thumbsDown", IDS_THUMBS_DOWN},
+      {"thumbsUp", IDS_THUMBS_UP},
   };
   source->AddLocalizedStrings(kLocalizedStrings);
 
   source->AddString("message", "Some example content...");
   source->AddString("pageTitle", "Product Specifications");
   source->AddString("summaryTitle", "Summary");
-
-  static constexpr webui::LocalizedString kStrings[] = {
-      {"openTabs", IDS_PRODUCT_SPECIFICATIONS_OPEN_TABS_SECTION},
-      {"recentlyViewedTabs",
-       IDS_PRODUCT_SPECIFICATIONS_RECENTLY_VIEWED_TABS_SECTION},
-  };
-
-  source->AddLocalizedStrings(kStrings);
 }
 
 void ProductSpecificationsUI::BindInterface(
@@ -103,10 +134,18 @@ void ProductSpecificationsUI::CreateShoppingServiceHandler(
       commerce::ShoppingServiceFactory::GetForBrowserContext(profile);
   feature_engagement::Tracker* const tracker =
       feature_engagement::TrackerFactory::GetForBrowserContext(profile);
+  auto* optimization_guide_keyed_service =
+      OptimizationGuideKeyedServiceFactory::GetForProfile(profile);
   shopping_service_handler_ =
       std::make_unique<commerce::ShoppingServiceHandler>(
           std::move(page), std::move(receiver), bookmark_model,
-          shopping_service, profile->GetPrefs(), tracker, nullptr);
+          shopping_service, profile->GetPrefs(), tracker,
+          std::make_unique<commerce::ShoppingUiHandlerDelegate>(nullptr,
+                                                                profile),
+          optimization_guide_keyed_service
+              ? optimization_guide_keyed_service
+                    ->GetModelQualityLogsUploaderService()
+              : nullptr);
 }
 
 ProductSpecificationsUI::~ProductSpecificationsUI() = default;

@@ -77,6 +77,7 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   void StopCaching() override;
   int64_t GetTotalReceivedBytes() const override;
   int64_t GetTotalSentBytes() const override;
+  int64_t GetReceivedBodyBytes() const override;
   void DoneReading() override;
   const HttpResponseInfo* GetResponseInfo() const override;
   LoadState GetLoadState() const override;
@@ -95,8 +96,7 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
       ResponseHeadersCallback callback) override;
   void SetResponseHeadersCallback(ResponseHeadersCallback callback) override;
   void SetModifyRequestHeadersCallback(
-      base::RepeatingCallback<void(net::HttpRequestHeaders*)> callback)
-      override;
+      base::RepeatingCallback<void(HttpRequestHeaders*)> callback) override;
   void SetIsSharedDictionaryReadAllowedCallback(
       base::RepeatingCallback<bool()> callback) override;
   int ResumeNetworkStart() override;
@@ -476,8 +476,7 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
 
   // The callback to modify the request header. They will be called just before
   // sending the request to the network.
-  base::RepeatingCallback<void(net::HttpRequestHeaders*)>
-      modify_headers_callbacks_;
+  base::RepeatingCallback<void(HttpRequestHeaders*)> modify_headers_callbacks_;
 
   ConnectionAttempts connection_attempts_;
   IPEndPoint remote_endpoint_;
@@ -500,6 +499,14 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
 
   // Set to true when the server required HTTP/1.1 fallback.
   bool http_1_1_was_required_ = false;
+
+  // If set, these values are used as DNS resolution times, rather than
+  // using DNS times coming from the established stream.
+  base::TimeTicks dns_resolution_start_time_override_;
+  base::TimeTicks dns_resolution_end_time_override_;
+
+  // The number of bytes of the body received from network.
+  int64_t received_body_bytes_ = 0;
 };
 
 }  // namespace net

@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/not_fatal_until.h"
 #include "base/strings/string_split.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -67,47 +68,13 @@ namespace safe_browsing {
 
 namespace {
 
+inline constexpr int kDownloadAttributionUserGestureLimit = 2;
+inline constexpr int kDownloadAttributionUserGestureLimitForExtendedReporting =
+    5;
+
 const int64_t kDownloadRequestTimeoutMs = 7000;
 // We sample 1% of allowlisted downloads to still send out download pings.
 const double kAllowlistDownloadSampleRate = 0.01;
-
-// The number of user gestures we trace back for download attribution.
-const int kDownloadAttributionUserGestureLimit = 2;
-const int kDownloadAttributionUserGestureLimitForExtendedReporting = 5;
-
-void AddEventUrlToReferrerChain(const download::DownloadItem& item,
-                                content::RenderFrameHost* render_frame_host,
-                                ReferrerChain* out_referrer_chain) {
-  ReferrerChainEntry* event_url_entry = out_referrer_chain->Add();
-  event_url_entry->set_url(item.GetURL().spec());
-  event_url_entry->set_type(ReferrerChainEntry::EVENT_URL);
-  event_url_entry->set_referrer_url(
-      render_frame_host->GetLastCommittedURL().spec());
-  event_url_entry->set_is_retargeting(false);
-  event_url_entry->set_navigation_time_msec(
-      base::Time::Now().InMillisecondsSinceUnixEpoch());
-  for (const GURL& url : item.GetUrlChain())
-    event_url_entry->add_server_redirect_chain()->set_url(url.spec());
-}
-
-int GetDownloadAttributionUserGestureLimit(const download::DownloadItem& item) {
-  content::WebContents* web_contents =
-      content::DownloadItemUtils::GetWebContents(&item);
-  if (!web_contents)
-    return kDownloadAttributionUserGestureLimit;
-
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents->GetBrowserContext());
-  if (!profile)
-    return kDownloadAttributionUserGestureLimit;
-
-  const PrefService* prefs = profile->GetPrefs();
-  if (!prefs)
-    return kDownloadAttributionUserGestureLimit;
-  if (!IsExtendedReportingEnabled(*prefs))
-    return kDownloadAttributionUserGestureLimit;
-  return kDownloadAttributionUserGestureLimitForExtendedReporting;
-}
 
 bool IsDownloadSecuritySensitive(safe_browsing::DownloadCheckResult result) {
   using Result = safe_browsing::DownloadCheckResult;
@@ -135,7 +102,7 @@ bool IsDownloadSecuritySensitive(safe_browsing::DownloadCheckResult result) {
     case Result::IMMEDIATE_DEEP_SCAN:
       return false;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -432,7 +399,7 @@ void DownloadProtectionService::PPAPIDownloadCheckRequestFinished(
     PPAPIDownloadRequest* request) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto it = ppapi_download_requests_.find(request);
-  DCHECK(it != ppapi_download_requests_.end());
+  CHECK(it != ppapi_download_requests_.end(), base::NotFatalUntil::M130);
   ppapi_download_requests_.erase(it);
 }
 
@@ -593,124 +560,6 @@ void DownloadProtectionService::ReportDelayedBypassEvent(
   download_protection_observer_.ReportDelayedBypassEvent(download, danger_type);
 }
 
-std::unique_ptr<ReferrerChainData>
-DownloadProtectionService::IdentifyReferrerChain(
-    const download::DownloadItem& item) {
-  std::unique_ptr<ReferrerChain> referrer_chain =
-      std::make_unique<ReferrerChain>();
-  content::WebContents* web_contents =
-      content::DownloadItemUtils::GetWebContents(
-          const_cast<download::DownloadItem*>(&item));
-  // If web_contents is null, return immediately. This could happen in tests.
-  if (!web_contents) {
-    return nullptr;
-  }
-
-  content::RenderFrameHost* render_frame_host =
-      content::DownloadItemUtils::GetRenderFrameHost(&item);
-  content::RenderFrameHost* outermost_render_frame_host =
-      render_frame_host ? render_frame_host->GetOutermostMainFrame() : nullptr;
-  content::GlobalRenderFrameHostId frame_id =
-      outermost_render_frame_host ? outermost_render_frame_host->GetGlobalId()
-                                  : content::GlobalRenderFrameHostId();
-
-  SessionID download_tab_id =
-      sessions::SessionTabHelper::IdForTab(web_contents);
-  // We look for the referrer chain that leads to the download url first.
-  SafeBrowsingNavigationObserverManager::AttributionResult result =
-      GetNavigationObserverManager(web_contents)
-          ->IdentifyReferrerChainByEventURL(
-              item.GetURL(), download_tab_id, frame_id,
-              GetDownloadAttributionUserGestureLimit(item),
-              referrer_chain.get());
-
-  // If no navigation event is found, this download is not triggered by regular
-  // navigation (e.g. html5 file apis, etc). We look for the referrer chain
-  // based on relevant RenderFrameHost instead.
-  if (result ==
-          SafeBrowsingNavigationObserverManager::NAVIGATION_EVENT_NOT_FOUND &&
-      web_contents && outermost_render_frame_host &&
-      outermost_render_frame_host->GetLastCommittedURL().is_valid()) {
-    AddEventUrlToReferrerChain(item, outermost_render_frame_host,
-                               referrer_chain.get());
-    result = GetNavigationObserverManager(web_contents)
-                 ->IdentifyReferrerChainByRenderFrameHost(
-                     outermost_render_frame_host,
-                     GetDownloadAttributionUserGestureLimit(item),
-                     referrer_chain.get());
-  }
-
-  UMA_HISTOGRAM_ENUMERATION(
-      "SafeBrowsing.ReferrerAttributionResult.DownloadAttribution", result,
-      SafeBrowsingNavigationObserverManager::ATTRIBUTION_FAILURE_TYPE_MAX);
-
-  size_t referrer_chain_length = referrer_chain->size();
-
-  // Determines how many recent navigation events to append to referrer chain
-  // if any.
-  auto* profile =
-      Profile::FromBrowserContext(web_contents->GetBrowserContext());
-  size_t recent_navigations_to_collect =
-      web_contents ? SafeBrowsingNavigationObserverManager::
-                         CountOfRecentNavigationsToAppend(
-                             profile, profile->GetPrefs(), result)
-                   : 0u;
-  GetNavigationObserverManager(web_contents)
-      ->AppendRecentNavigations(recent_navigations_to_collect,
-                                referrer_chain.get());
-
-  return std::make_unique<ReferrerChainData>(std::move(referrer_chain),
-                                             referrer_chain_length,
-                                             recent_navigations_to_collect);
-}
-
-std::unique_ptr<ReferrerChainData>
-DownloadProtectionService::IdentifyReferrerChain(
-    const content::FileSystemAccessWriteItem& item) {
-  // If web_contents is null, return immediately. This can happen when the
-  // file system API is called in PerformAfterWriteChecks.
-  if (!item.web_contents) {
-    return nullptr;
-  }
-
-  std::unique_ptr<ReferrerChain> referrer_chain =
-      std::make_unique<ReferrerChain>();
-
-  SessionID tab_id = sessions::SessionTabHelper::IdForTab(item.web_contents);
-
-  GURL tab_url = item.web_contents->GetVisibleURL();
-
-  SafeBrowsingNavigationObserverManager::AttributionResult result =
-      GetNavigationObserverManager(item.web_contents)
-          ->IdentifyReferrerChainByHostingPage(
-              item.frame_url, tab_url, item.outermost_main_frame_id, tab_id,
-              item.has_user_gesture, kDownloadAttributionUserGestureLimit,
-              referrer_chain.get());
-
-  UMA_HISTOGRAM_ENUMERATION(
-      "SafeBrowsing.ReferrerAttributionResult.NativeFileSystemWriteAttribution",
-      result,
-      SafeBrowsingNavigationObserverManager::ATTRIBUTION_FAILURE_TYPE_MAX);
-
-  size_t referrer_chain_length = referrer_chain->size();
-
-  // Determines how many recent navigation events to append to referrer chain
-  // if any.
-  auto* profile = Profile::FromBrowserContext(item.browser_context);
-  size_t recent_navigations_to_collect =
-      item.browser_context ? SafeBrowsingNavigationObserverManager::
-                                 CountOfRecentNavigationsToAppend(
-                                     profile, profile->GetPrefs(), result)
-                           : 0u;
-  GetNavigationObserverManager(item.web_contents)
-      ->AppendRecentNavigations(recent_navigations_to_collect,
-                                referrer_chain.get());
-
-  return std::make_unique<ReferrerChainData>(std::move(referrer_chain),
-                                             referrer_chain_length,
-                                             recent_navigations_to_collect);
-}
-
 void DownloadProtectionService::AddReferrerChainToPPAPIClientDownloadRequest(
     content::WebContents* web_contents,
     const GURL& initiating_frame_url,
@@ -729,7 +578,7 @@ void DownloadProtectionService::AddReferrerChainToPPAPIClientDownloadRequest(
           ->IdentifyReferrerChainByHostingPage(
               initiating_frame_url, initiating_main_frame_url,
               initiating_outermost_main_frame_id, tab_id, has_user_gesture,
-              kDownloadAttributionUserGestureLimit,
+              GetDownloadAttributionUserGestureLimit(),
               out_request->mutable_referrer_chain());
   UMA_HISTOGRAM_COUNTS_100(
       "SafeBrowsing.ReferrerURLChainSize.PPAPIDownloadAttribution",
@@ -805,8 +654,7 @@ bool DownloadProtectionService::MaybeBeginFeedbackForDownload(
     download::DownloadItem* download,
     DownloadCommands::Command download_command) {
   PrefService* prefs = profile->GetPrefs();
-  bool is_extended_reporting =
-      ExtendedReportingPrefExists(*prefs) && IsExtendedReportingEnabled(*prefs);
+  bool is_extended_reporting = IsExtendedReportingEnabled(*prefs);
   if (!profile->IsOffTheRecord() && is_extended_reporting) {
     feedback_service_->BeginFeedbackForDownload(profile, download,
                                                 download_command);
@@ -967,9 +815,32 @@ void DownloadProtectionService::RemovePendingDownloadRequests(
   context_download_requests_.erase(browser_context);
 }
 
+// static
+int DownloadProtectionService::GetDownloadAttributionUserGestureLimit(
+    download::DownloadItem* item) {
+  if (!item) {
+    return kDownloadAttributionUserGestureLimit;
+  }
+
+  content::WebContents* web_contents =
+      content::DownloadItemUtils::GetWebContents(item);
+  if (!web_contents) {
+    return kDownloadAttributionUserGestureLimit;
+  }
+
+  if (Profile* profile =
+          Profile::FromBrowserContext(web_contents->GetBrowserContext());
+      profile && profile->GetPrefs() &&
+      IsExtendedReportingEnabled(*profile->GetPrefs())) {
+    return kDownloadAttributionUserGestureLimitForExtendedReporting;
+  }
+
+  return kDownloadAttributionUserGestureLimit;
+}
+
 void DownloadProtectionService::RequestFinished(DeepScanningRequest* request) {
   auto it = deep_scanning_requests_.find(request);
-  DCHECK(it != deep_scanning_requests_.end());
+  CHECK(it != deep_scanning_requests_.end(), base::NotFatalUntil::M130);
   deep_scanning_requests_.erase(it);
 }
 

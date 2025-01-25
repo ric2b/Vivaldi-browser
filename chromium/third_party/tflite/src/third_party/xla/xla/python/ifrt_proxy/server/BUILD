@@ -44,7 +44,7 @@ cc_library(
 ifrt_proxy_cc_test(
     name = "grpc_server_test",
     srcs = ["grpc_server_test.cc"],
-    tags = ["no_aarch64"],  # TODO(b/326080238): Fix this.
+    tags = ["not_run:arm"],  # TODO(b/326080238): Fix this.
     deps = [
         ":grpc_server",
         "//xla/python/ifrt_proxy/common:grpc_ifrt_service_cc_grpc_proto",
@@ -90,7 +90,7 @@ ifrt_proxy_cc_test(
     name = "grpc_service_impl_test",
     size = "small",
     srcs = ["grpc_service_impl_test.cc"],
-    tags = ["no_aarch64"],  # TODO(b/326080238): Fix this.
+    tags = ["not_run:arm"],  # TODO(b/326080238): Fix this.
     deps = [
         ":grpc_server",
         ":grpc_service_impl",
@@ -171,10 +171,9 @@ ifrt_proxy_cc_test(
         "//xla:test",
         "//xla:xla_data_proto_cc",
         "//xla/pjrt:host_callback",
-        "//xla/pjrt:pjrt_common",
-        "//xla/pjrt:pjrt_device_description",
         "//xla/pjrt:pjrt_layout",
         "//xla/python/ifrt",
+        "//xla/python/ifrt:attribute_map",
         "//xla/python/ifrt:mock",
         "//xla/python/ifrt:serdes",
         "//xla/python/ifrt:sharding_serdes",
@@ -196,6 +195,7 @@ ifrt_proxy_cc_test(
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
         "@llvm-project//llvm:Support",
+        "@local_tsl//tsl/lib/core:status_test_util",
         "@local_tsl//tsl/platform:env",
         "@local_tsl//tsl/platform:errors",
         "@local_tsl//tsl/platform:protobuf",

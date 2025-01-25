@@ -13,24 +13,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "hwy/contrib/sort/vqsort.h"
+#include "hwy/contrib/sort/vqsort.h"  // VQSort
 
 #undef HWY_TARGET_INCLUDE
 #define HWY_TARGET_INCLUDE "hwy/contrib/sort/vqsort_f32a.cc"
 #include "hwy/foreach_target.h"  // IWYU pragma: keep
 
 // After foreach_target
-#include "hwy/contrib/sort/traits-inl.h"
 #include "hwy/contrib/sort/vqsort-inl.h"
 
 HWY_BEFORE_NAMESPACE();
 namespace hwy {
 namespace HWY_NAMESPACE {
 
-void SortF32Asc(float* HWY_RESTRICT keys, size_t num, float* HWY_RESTRICT buf) {
-  SortTag<float> d;
-  detail::SharedTraits<detail::TraitsLane<detail::OrderAscending<float>>> st;
-  Sort(d, st, keys, num, buf);
+void SortF32Asc(float* HWY_RESTRICT keys, const size_t num) {
+  return VQSortStatic(keys, num, SortAscending());
+}
+
+void PartialSortF32Asc(float* HWY_RESTRICT keys, const size_t num,
+                       const size_t k) {
+  return VQPartialSortStatic(keys, num, k, SortAscending());
+}
+
+void SelectF32Asc(float* HWY_RESTRICT keys, const size_t num, const size_t k) {
+  return VQSelectStatic(keys, num, k, SortAscending());
 }
 
 // NOLINTNEXTLINE(google-readability-namespace-comments)
@@ -42,11 +48,22 @@ HWY_AFTER_NAMESPACE();
 namespace hwy {
 namespace {
 HWY_EXPORT(SortF32Asc);
+HWY_EXPORT(PartialSortF32Asc);
+HWY_EXPORT(SelectF32Asc);
 }  // namespace
 
-void Sorter::operator()(float* HWY_RESTRICT keys, size_t n,
-                        SortAscending) const {
-  HWY_DYNAMIC_DISPATCH(SortF32Asc)(keys, n, Get<float>());
+void VQSort(float* HWY_RESTRICT keys, const size_t n, SortAscending) {
+  HWY_DYNAMIC_DISPATCH(SortF32Asc)(keys, n);
+}
+
+void VQPartialSort(float* HWY_RESTRICT keys, const size_t n, const size_t k,
+                   SortAscending) {
+  HWY_DYNAMIC_DISPATCH(PartialSortF32Asc)(keys, n, k);
+}
+
+void VQSelect(float* HWY_RESTRICT keys, const size_t n, const size_t k,
+              SortAscending) {
+  HWY_DYNAMIC_DISPATCH(SelectF32Asc)(keys, n, k);
 }
 
 }  // namespace hwy

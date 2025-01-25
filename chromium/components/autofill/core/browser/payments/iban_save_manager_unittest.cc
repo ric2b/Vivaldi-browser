@@ -12,6 +12,7 @@
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/iban.h"
 #include "components/autofill/core/browser/payments/mock_test_payments_network_interface.h"
+#include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/payments/payments_network_interface.h"
 #include "components/autofill/core/browser/payments_data_manager.h"
 #include "components/autofill/core/browser/strike_databases/payments/iban_save_strike_database.h"
@@ -52,6 +53,9 @@ constexpr char kInvalidLegalMessageLines[] =
     "  } ]"
     "}";
 
+constexpr char16_t kCapitalizedIbanRegex[] =
+    u"^[A-Z]{2}[0-9]{2}[A-Z0-9]{4}[0-9]{7}[A-Z0-9]{0,18}$";
+
 }  // namespace
 
 class IbanSaveManagerTest : public testing::Test {
@@ -70,8 +74,7 @@ class IbanSaveManagerTest : public testing::Test {
     autofill_client_.set_test_strike_database(std::move(test_strike_database));
     personal_data().payments_data_manager().SetSyncingForTest(true);
     personal_data().SetPrefService(autofill_client_.GetPrefs());
-    iban_save_manager_ =
-        std::make_unique<IbanSaveManager>(&personal_data(), &autofill_client_);
+    iban_save_manager_ = std::make_unique<IbanSaveManager>(&autofill_client_);
   }
 
   using SaveIbanOfferUserDecision =
@@ -81,20 +84,24 @@ class IbanSaveManagerTest : public testing::Test {
 
   void SetUpGetIbanUploadDetailsResponse(
       bool is_successful,
+      const std::u16string& regex = kCapitalizedIbanRegex,
       bool includes_invalid_legal_message = false) {
     ON_CALL(*payments_network_interface(), GetIbanUploadDetails)
         .WillByDefault(
-            [is_successful, includes_invalid_legal_message](
+            [is_successful, regex, includes_invalid_legal_message](
                 const std::string& app_locale, int64_t billing_customer_number,
                 int billable_service_number, const std::string& country_code,
                 base::OnceCallback<void(
-                    AutofillClient::PaymentsRpcResult, const std::u16string&,
+                    payments::PaymentsAutofillClient::PaymentsRpcResult,
+                    const std::u16string& validation_regex,
+                    const std::u16string& context_token,
                     std::unique_ptr<base::Value::Dict>)> callback) {
               std::move(callback).Run(
-                  is_successful
-                      ? AutofillClient::PaymentsRpcResult::kSuccess
-                      : AutofillClient::PaymentsRpcResult::kPermanentFailure,
-                  u"this is a context token",
+                  is_successful ? payments::PaymentsAutofillClient::
+                                      PaymentsRpcResult::kSuccess
+                                : payments::PaymentsAutofillClient::
+                                      PaymentsRpcResult::kPermanentFailure,
+                  regex, u"this is a context token",
                   includes_invalid_legal_message
                       ? std::make_unique<base::Value::Dict>(
                             base::JSONReader::ReadDict(
@@ -112,12 +119,14 @@ class IbanSaveManagerTest : public testing::Test {
             [is_successful](
                 const payments::PaymentsNetworkInterface::
                     UploadIbanRequestDetails& request_details,
-                base::OnceCallback<void(AutofillClient::PaymentsRpcResult)>
+                base::OnceCallback<void(
+                    payments::PaymentsAutofillClient::PaymentsRpcResult)>
                     callback) {
               std::move(callback).Run(
-                  is_successful
-                      ? AutofillClient::PaymentsRpcResult::kSuccess
-                      : AutofillClient::PaymentsRpcResult::kPermanentFailure);
+                  is_successful ? payments::PaymentsAutofillClient::
+                                      PaymentsRpcResult::kSuccess
+                                : payments::PaymentsAutofillClient::
+                                      PaymentsRpcResult::kPermanentFailure);
             });
   }
 
@@ -168,6 +177,26 @@ TEST_F(IbanSaveManagerTest, ShouldOfferUploadSave_NewIban_FlagOff) {
   iban.set_value(std::u16string(test::kIbanValue16));
   EXPECT_EQ(IbanSaveManager::TypeOfOfferToSave::kOfferLocalSave,
             GetIbanSaveManager().DetermineHowToSaveIbanForTesting(iban));
+}
+
+// Test that new IBANs should not be offered upload save due to reaching the
+// maximum limit.
+TEST_F(IbanSaveManagerTest, ShouldOfferUploadSave_MaxServerIban) {
+  Iban iban;
+  iban.set_value(std::u16string(test::kIbanValue16));
+  for (int num_server_ibans = 1; num_server_ibans <= kMaxNumServerIbans + 1;
+       num_server_ibans++) {
+    Iban server_iban((Iban::InstrumentId(num_server_ibans)));
+    server_iban.set_prefix(u"DE");
+    server_iban.set_suffix(
+        (base::UTF8ToUTF16(base::NumberToString(10 + num_server_ibans))));
+    server_iban.set_length(22);
+    personal_data().test_payments_data_manager().AddServerIban(server_iban);
+    EXPECT_EQ(num_server_ibans <= kMaxNumServerIbans
+                  ? IbanSaveManager::TypeOfOfferToSave::kOfferServerSave
+                  : IbanSaveManager::TypeOfOfferToSave::kOfferLocalSave,
+              GetIbanSaveManager().DetermineHowToSaveIbanForTesting(iban));
+  }
 }
 
 // Test that new IBANs should be offered upload save to Google Payments.
@@ -525,6 +554,25 @@ TEST_F(IbanSaveManagerTest, OfferUploadSave_NewIban_Success) {
                    ->ConfirmSaveIbanLocallyWasCalled());
 }
 
+// Test that upload save should be not be offered for a new IBAN when the
+// regex validation does not pass.
+TEST_F(IbanSaveManagerTest, OfferUploadSave_NewIban_FailureOnRegexNotMatch) {
+  Iban iban;
+  // Set up a valid France IBAN value.
+  iban.set_value(std::u16string(test::kIbanValue16));
+  // Set up a Finland validation regex.
+  SetUpGetIbanUploadDetailsResponse(
+      /*is_successful=*/true,
+      u"^FI{2}[0-9]{2}[A-Z0-9]{4}[0-9]{7}[A-Z0-9]{0,18}$",
+      /*includes_invalid_legal_message=*/false);
+
+  EXPECT_TRUE(GetIbanSaveManager().AttemptToOfferUploadSaveForTesting(iban));
+  EXPECT_FALSE(autofill_client_.GetPaymentsAutofillClient()
+                   ->ConfirmUploadIbanToCloudWasCalled());
+  EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
+                  ->ConfirmSaveIbanLocallyWasCalled());
+}
+
 // Test that upload save should not be offered when the preflight call failed.
 // In this case, local save should be offered because the extracted IBAN is a
 // new IBAN.
@@ -553,6 +601,7 @@ TEST_F(
   iban.set_value(std::u16string(test::kIbanValue16));
 
   SetUpGetIbanUploadDetailsResponse(/*is_successful=*/true,
+                                    kCapitalizedIbanRegex,
                                     /*includes_invalid_legal_message=*/true);
 
   EXPECT_TRUE(GetIbanSaveManager().AttemptToOfferUploadSaveForTesting(iban));
@@ -842,6 +891,118 @@ TEST_F(IbanSaveManagerTest, Metric_IgnoredOfferedIbanOrigin_LocalIban) {
       /*sample=*/
       autofill_metrics::UploadIbanOriginMetric::kLocalIban,
       /*expected_count=*/1);
+}
+
+TEST_F(IbanSaveManagerTest, Metric_CountryOfSaveOffered_LocalIban) {
+  base::test::ScopedFeatureList disable_server_iban;
+  disable_server_iban.InitAndDisableFeature(
+      features::kAutofillEnableServerIban);
+  base::HistogramTester histogram_tester;
+  Iban iban;
+  iban.set_value(u"FR7630006000011234567890189");
+  ASSERT_TRUE(GetIbanSaveManager().AttemptToOfferSave(iban));
+
+  histogram_tester.ExpectUniqueSample("Autofill.Iban.CountryOfSaveOfferedIban",
+                                      Iban::IbanSupportedCountry::kFR, 1);
+}
+
+TEST_F(IbanSaveManagerTest, Metric_CountryOfSaveOffered_ServerIban) {
+  base::HistogramTester histogram_tester;
+  Iban iban;
+  iban.set_value(u"FR7630006000011234567890189");
+  ASSERT_TRUE(GetIbanSaveManager().AttemptToOfferSave(iban));
+
+  histogram_tester.ExpectUniqueSample("Autofill.Iban.CountryOfSaveOfferedIban",
+                                      Iban::IbanSupportedCountry::kFR, 1);
+}
+
+TEST_F(IbanSaveManagerTest, Metric_CountryOfSaveAccepted_LocalIban) {
+  base::HistogramTester histogram_tester;
+  Iban iban;
+  iban.set_value(u"FR7630006000011234567890189");
+  EXPECT_TRUE(GetIbanSaveManager().AttemptToOfferLocalSaveForTesting(iban));
+
+  GetIbanSaveManager().OnUserDidDecideOnLocalSaveForTesting(
+      iban, SaveIbanOfferUserDecision::kAccepted, u"IBAN nickname");
+
+  histogram_tester.ExpectUniqueSample("Autofill.Iban.CountryOfSaveAcceptedIban",
+                                      Iban::IbanSupportedCountry::kFR, 1);
+}
+
+TEST_F(IbanSaveManagerTest, Metric_CountryOfSaveAccepted_ServerIban) {
+  base::HistogramTester histogram_tester;
+  SetUpGetIbanUploadDetailsResponse(/*is_successful=*/true);
+  SetUpUploadIbanResponse(/*is_successful=*/true);
+  Iban iban;
+  iban.set_value(u"FR7630006000011234567890189");
+
+  EXPECT_TRUE(GetIbanSaveManager().AttemptToOfferSave(iban));
+  GetIbanSaveManager().OnUserDidDecideOnUploadSaveForTesting(
+      iban, /*show_save_prompt=*/true, SaveIbanOfferUserDecision::kAccepted,
+      u"IBAN nickname");
+
+  histogram_tester.ExpectUniqueSample("Autofill.Iban.CountryOfSaveAcceptedIban",
+                                      Iban::IbanSupportedCountry::kFR, 1);
+}
+
+// Tests that the `RanLocalSaveFallback` metric records that a new IBAN was
+// saved during the local IBAN save fallback for a server upload failure.
+TEST_F(IbanSaveManagerTest,
+       Metrics_OnUploadIban_FallbackToLocalSave_NewIbanAdded) {
+  base::HistogramTester histogram_tester;
+  Iban iban;
+  iban.set_value(std::u16string(test::kIbanValue16));
+  ASSERT_TRUE(personal_data().payments_data_manager().GetLocalIbans().empty());
+  GetIbanSaveManager().OnDidUploadIbanForTesting(
+      iban, /*show_save_prompt=*/true,
+      payments::PaymentsAutofillClient::PaymentsRpcResult::kPermanentFailure);
+
+  histogram_tester.ExpectUniqueSample("Autofill.IbanUpload.SaveFailed", true,
+                                      1);
+  EXPECT_EQ(personal_data().payments_data_manager().GetLocalIbans().size(), 1U);
+}
+
+// Tests that the `RanLocalSaveFallback` metric records that an existing local
+// IBAN was not saved during the local IBAN save fallback for a server upload
+// failure.
+TEST_F(IbanSaveManagerTest,
+       Metrics_OnUploadIban_FallbackToLocalSave_LocalIbanNotAdded) {
+  base::HistogramTester histogram_tester;
+  Iban iban;
+  iban.set_value(std::u16string(test::kIbanValue16));
+  personal_data().payments_data_manager().AddAsLocalIban(iban);
+  ASSERT_EQ(personal_data().payments_data_manager().GetLocalIbans().size(), 1U);
+  GetIbanSaveManager().OnDidUploadIbanForTesting(
+      iban, /*show_save_prompt=*/true,
+      payments::PaymentsAutofillClient::PaymentsRpcResult::kPermanentFailure);
+
+  histogram_tester.ExpectUniqueSample("Autofill.IbanUpload.SaveFailed", false,
+                                      1);
+  EXPECT_EQ(personal_data().payments_data_manager().GetLocalIbans().size(), 1U);
+}
+
+// Tests that the `RanLocalSaveFallback` metric records that a matched local
+// IBAN (same IBAN value but different nickname) was not saved during the local
+// IBAN save fallback for a server upload failure.
+TEST_F(
+    IbanSaveManagerTest,
+    Metrics_OnUploadIban_FallbackToLocalSave_LocalIbanWithDifferentNicknameNotAdded) {
+  base::HistogramTester histogram_tester;
+  Iban iban;
+  iban.set_value(std::u16string(test::kIbanValue16));
+  personal_data().payments_data_manager().AddAsLocalIban(iban);
+  ASSERT_EQ(personal_data().payments_data_manager().GetLocalIbans().size(), 1U);
+  iban.set_nickname(u"new nickname");
+  GetIbanSaveManager().OnDidUploadIbanForTesting(
+      iban, /*show_save_prompt=*/true,
+      payments::PaymentsAutofillClient::PaymentsRpcResult::kPermanentFailure);
+
+  histogram_tester.ExpectUniqueSample("Autofill.IbanUpload.SaveFailed", false,
+                                      1);
+  EXPECT_EQ(personal_data().payments_data_manager().GetLocalIbans().size(), 1U);
+  EXPECT_EQ(
+      personal_data().payments_data_manager().GetLocalIbans()[0]->nickname(),
+      u"");
 }
 
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)

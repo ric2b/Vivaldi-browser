@@ -42,7 +42,7 @@ NavigationPresence GetNavigationPresence(
     case UserEventSpecifics::EVENT_NOT_SET:
       break;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return kEitherOkay;
 }
 
@@ -87,7 +87,7 @@ EventTypeForUMA GetEventTypeForUMA(UserEventSpecifics::EventCase event_case) {
     case UserEventSpecifics::EVENT_NOT_SET:
       break;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return EventTypeForUMA::kUnknown;
 }
 

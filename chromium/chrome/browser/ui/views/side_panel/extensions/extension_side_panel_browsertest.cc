@@ -10,20 +10,19 @@
 #include "chrome/browser/extensions/extension_context_menu_model.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/extension_action_test_helper.h"
 #include "chrome/browser/ui/extensions/extensions_container.h"
+#include "chrome/browser/ui/side_panel/side_panel_entry_observer.h"
 #include "chrome/browser/ui/tabs/tab_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
-#include "chrome/browser/ui/views/frame/browser_actions.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/side_panel/extensions/extension_side_panel_coordinator.h"
 #include "chrome/browser/ui/views/side_panel/extensions/extension_side_panel_manager.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
-#include "chrome/browser/ui/views/side_panel/side_panel_entry_observer.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_registry.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_registry_observer.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_test_utils.h"
@@ -92,8 +91,6 @@ class TestSidePanelEntryWaiter : public SidePanelEntryObserver {
 
   void WaitForEntryHidden() { entry_hidden_run_loop_.Run(); }
 
-  void WaitForIconUpdated() { icon_updated_run_loop_.Run(); }
-
  private:
   void OnEntryShown(SidePanelEntry* entry) override {
     entry_shown_run_loop_.QuitWhenIdle();
@@ -103,13 +100,8 @@ class TestSidePanelEntryWaiter : public SidePanelEntryObserver {
     entry_hidden_run_loop_.QuitWhenIdle();
   }
 
-  void OnEntryIconUpdated(SidePanelEntry* entry) override {
-    icon_updated_run_loop_.QuitWhenIdle();
-  }
-
   base::RunLoop entry_shown_run_loop_;
   base::RunLoop entry_hidden_run_loop_;
-  base::RunLoop icon_updated_run_loop_;
   base::ScopedObservation<SidePanelEntry, SidePanelEntryObserver>
       side_panel_entry_observation_{this};
 };
@@ -163,9 +155,7 @@ class ExtensionSidePanelBrowserTest : public ExtensionBrowserTest {
  public:
   ExtensionSidePanelBrowserTest() {
     feature_list_.InitWithFeatures(
-        {extensions_features::kExtensionSidePanelIntegration,
-         features::kSidePanelPinning, features::kChromeRefresh2023},
-        {});
+        {extensions_features::kExtensionSidePanelIntegration}, {});
   }
 
  protected:
@@ -379,7 +369,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionSidePanelBrowserTest,
   ASSERT_TRUE(side_panel_extension);
 
   // Check if ActionItem is created.
-  BrowserActions* browser_actions = BrowserActions::FromBrowser(browser());
+  BrowserActions* browser_actions = browser()->browser_actions();
   actions::ActionItem* action_item =
       GetActionItemForExtension(side_panel_extension.get(), browser_actions);
   EXPECT_EQ(action_item->GetText(),
@@ -471,7 +461,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionSidePanelBrowserTest, MultipleBrowsers) {
   SidePanelEntry::Key extension_key = GetKey(extension->id());
 
   EXPECT_TRUE(global_registry()->GetEntryForKey(extension_key));
-  BrowserActions* browser_actions = BrowserActions::FromBrowser(browser());
+  BrowserActions* browser_actions = browser()->browser_actions();
   actions::ActionItem* browser_one_action_item =
       GetActionItemForExtension(extension.get(), browser_actions);
   EXPECT_EQ(browser_one_action_item->GetText(),
@@ -481,7 +471,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionSidePanelBrowserTest, MultipleBrowsers) {
   // registered for the new window's global SidePanelRegistry.
   Browser* second_browser = CreateBrowser(browser()->profile());
   BrowserActions* browser_actions_second_browser =
-      BrowserActions::FromBrowser(second_browser);
+      second_browser->browser_actions();
 
   SidePanelRegistry* second_global_registry =
       SidePanelCoordinator::GetGlobalSidePanelRegistry(second_browser);
@@ -547,16 +537,16 @@ IN_PROC_BROWSER_TEST_F(ExtensionSidePanelBrowserTest,
       test_data_dir_.AppendASCII("api_test/side_panel/simple_default"));
   ASSERT_TRUE(extension);
 
-  SidePanelEntry::Key extension_key = GetKey(extension->id());
-  SidePanelEntry* extension_entry =
-      global_registry()->GetEntryForKey(extension_key);
+  BrowserActions* browser_actions = browser()->browser_actions();
+  actions::ActionItem* action_item =
+      GetActionItemForExtension(extension.get(), browser_actions);
 
   // Check that the entry's icon bitmap is identical to the bitmap of the
   // extension's icon scaled down to `extension_misc::EXTENSION_ICON_BITTY`.
   SkBitmap expected_icon_bitmap = TestImageLoader::LoadAndGetExtensionBitmap(
       extension.get(), "icon.png", extension_misc::EXTENSION_ICON_BITTY);
   const SkBitmap& actual_icon_bitmap =
-      *extension_entry->icon().GetImage().ToSkBitmap();
+      *action_item->GetImage().GetImage().ToSkBitmap();
   EXPECT_TRUE(
       gfx::test::AreBitmapsEqual(expected_icon_bitmap, actual_icon_bitmap));
 }
@@ -786,13 +776,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionSidePanelBrowserTest,
 // Test that calling window.close() from an extension side panel when it is
 // shown closes the side panel even if another entry is loading and will be
 // shown.
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-#define MAYBE_WindowCloseCalledWhenLoading DISABLED_WindowCloseCalledWhenLoading
-#else
-#define MAYBE_WindowCloseCalledWhenLoading WindowCloseCalledWhenLoading
-#endif
+// TODO(crbug.com/347643170) Test is flaky.
 IN_PROC_BROWSER_TEST_F(ExtensionSidePanelBrowserTest,
-                       MAYBE_WindowCloseCalledWhenLoading) {
+                       DISABLED_WindowCloseCalledWhenLoading) {
   // Install an extension and show its side panel.
   scoped_refptr<const extensions::Extension> extension = LoadExtension(
       test_data_dir_.AppendASCII("api_test/side_panel/simple_default"));
@@ -1371,7 +1357,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionSidePanelBrowserTest,
   ASSERT_TRUE(extension);
 
   // Check if ActionItem is created.
-  BrowserActions* browser_actions = BrowserActions::FromBrowser(browser());
+  BrowserActions* browser_actions = browser()->browser_actions();
   actions::ActionItem* action_item =
       GetActionItemForExtension(extension.get(), browser_actions);
   EXPECT_EQ(action_item->GetText(), base::UTF8ToUTF16(extension->short_name()));

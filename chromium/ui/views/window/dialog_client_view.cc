@@ -135,8 +135,9 @@ gfx::Size DialogClientView::CalculatePreferredSize(
   const int fixed_width = GetDialogDelegate()->fixed_width();
   if (fixed_width) {
     const int content_width = fixed_width - content_margins.width();
-    contents_size = gfx::Size(content_width,
-                              ClientView::GetHeightForWidth(content_width));
+    contents_size = ClientView::CalculatePreferredSize(
+        views::SizeBounds(content_width, {}));
+    contents_size.set_width(content_width);
   } else {
     SizeBounds content_available_size(available_size);
     content_available_size.Enlarge(-content_margins.width(),
@@ -335,15 +336,13 @@ void DialogClientView::UpdateDialogButtons() {
   InvalidateLayout();
 }
 
-void DialogClientView::UpdateDialogButton(
-    raw_ptr<MdTextButton, DanglingUntriaged>* member,
-    ui::DialogButton type) {
+void DialogClientView::UpdateDialogButton(raw_ptr<MdTextButton>* member,
+                                          ui::DialogButton type) {
   DialogDelegate* const delegate = GetDialogDelegate();
-  if (!(delegate->GetDialogButtons() & type)) {
+  if (!(delegate->buttons() & type)) {
     if (*member) {
-      button_row_container_->RemoveChildViewT(*member);
+      button_row_container_->RemoveChildViewT(std::exchange(*member, nullptr));
     }
-    *member = nullptr;
     return;
   }
 
@@ -508,10 +507,6 @@ void DialogClientView::SetupLayout() {
       .SetLinkedColumnSizeLimit(layout_provider->GetDistanceMetric(
           DISTANCE_BUTTON_MAX_LINKABLE_WIDTH));
 
-  // Track which columns to link sizes under MD.
-  constexpr size_t kViewToColumnIndex[] = {1, 3, 5};
-  std::vector<size_t> columns_to_link;
-
   // Skip views that are not a button, or are a specific subclass of Button
   // that should never be linked. Otherwise, link everything.
   auto should_link = [](views::View* view) {
@@ -519,19 +514,27 @@ void DialogClientView::SetupLayout() {
            !IsViewClass<ImageButton>(view);
   };
 
-  for (size_t view_index = 0; view_index < kNumButtons; ++view_index) {
-    if (views[view_index]) {
-      RemoveFillerView(view_index);
-      button_row_container_->ReorderChildView(views[view_index], view_index);
-      if (should_link(views[view_index])) {
-        columns_to_link.push_back(kViewToColumnIndex[view_index]);
-      }
+  for (size_t i = 0; i < kNumButtons; ++i) {
+    if (views[i]) {
+      RemoveFillerView(i);
+      button_row_container_->ReorderChildView(views[i], i);
     } else {
-      AddFillerView(view_index);
+      AddFillerView(i);
     }
   }
 
-  layout->LinkColumnSizes(columns_to_link);
+  {
+    std::vector<size_t> cols;
+    for (size_t i = 0; i < kNumButtons; ++i) {
+      if (should_link(views[i])) {
+        // View columns are interspersed with padding columns, so view i is at
+        // column i * 2 + 1 in the TableLayout (view 0 is in column 1, view 1 is
+        // in column 3, etc).
+        cols.push_back(i * 2 + 1);
+      }
+    }
+    layout->LinkColumnSizes(cols);
+  }
 
   // The default focus is lost when child views are added back into the dialog.
   // This restores focus if the button is still available.

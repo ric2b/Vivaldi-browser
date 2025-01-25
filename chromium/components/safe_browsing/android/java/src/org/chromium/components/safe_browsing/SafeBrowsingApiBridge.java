@@ -214,6 +214,13 @@ public final class SafeBrowsingApiBridge {
                                 callbackId, resultStatus, metadata, checkDelta);
             }
         }
+
+        @Override
+        public void onVerifyAppsEnabledDone(long callbackId, int result) {
+            synchronized (sSafetyNetApiHandlerLock) {
+                SafeBrowsingApiBridgeJni.get().onVerifyAppsEnabledDone(callbackId, result);
+            }
+        }
     }
 
     private static class SafeBrowsingApiLookupDoneObserver
@@ -227,6 +234,9 @@ public final class SafeBrowsingApiBridge {
                 int responseStatus,
                 long checkDelta) {
             if (callbackId == CALLBACK_ID_FOR_STARTUP) {
+                // Not delivering the callback result to native if this is the call for startup. The
+                // native library may not be ready, and there is no one on the native side listening
+                // to the call for startup anyway.
                 return;
             }
             synchronized (sSafeBrowsingApiHandlerLock) {
@@ -298,12 +308,51 @@ public final class SafeBrowsingApiBridge {
         synchronized (sSafeBrowsingApiHandlerLock) {
             if (sSafeBrowsingApiHandler == null) {
                 // sSafeBrowsingApiHandler can only be null in tests.
-                SafeBrowsingApiBridgeJni.get()
-                        .onUrlCheckDoneBySafeBrowsingApi(
-                                callbackId, LookupResult.FAILURE_HANDLER_NULL, 0, new int[0], 0, 0);
+                // Not delivering the callback result to native if this is the call for startup. The
+                // native library may not be ready, and there is no one on the native side listening
+                // to the call for startup anyway.
+                // This is handled the same way as in onUrlCheckDone.
+                if (callbackId != CALLBACK_ID_FOR_STARTUP) {
+                    SafeBrowsingApiBridgeJni.get()
+                            .onUrlCheckDoneBySafeBrowsingApi(
+                                    callbackId,
+                                    LookupResult.FAILURE_HANDLER_NULL,
+                                    0,
+                                    new int[0],
+                                    0,
+                                    0);
+                }
                 return;
             }
             sSafeBrowsingApiHandler.startUriLookup(callbackId, uri, threatTypes, protocol);
+        }
+    }
+
+    /**
+     * Check if app verification is enabled through the SafetyNet API.
+     *
+     * <p>Must only be called if {@link #ensureSafetyNetApiInitialized()} returns true.
+     */
+    @CalledByNative
+    public static void isVerifyAppsEnabled(long callbackId) {
+        synchronized (sSafetyNetApiHandlerLock) {
+            assert sSafetyNetApiHandlerInitCalled;
+            assert sSafetyNetApiHandler != null;
+            sSafetyNetApiHandler.isVerifyAppsEnabled(callbackId);
+        }
+    }
+
+    /**
+     * Prompt the user to enable app verification through the SafetyNet API.
+     *
+     * <p>Must only be called if {@link #ensureSafetyNetApiInitialized()} returns true.
+     */
+    @CalledByNative
+    public static void enableVerifyApps(long callbackId) {
+        synchronized (sSafetyNetApiHandlerLock) {
+            assert sSafetyNetApiHandlerInitCalled;
+            assert sSafetyNetApiHandler != null;
+            sSafetyNetApiHandler.enableVerifyApps(callbackId);
         }
     }
 
@@ -319,5 +368,7 @@ public final class SafeBrowsingApiBridge {
                 int[] threatAttributes,
                 int responseStatus,
                 long checkDelta);
+
+        void onVerifyAppsEnabledDone(long callbackId, int result);
     }
 }

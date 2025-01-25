@@ -18,8 +18,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
-#include "chrome/android/features/keyboard_accessory/internal/jni/ManualFillingComponentBridge_jni.h"
-#include "chrome/android/features/keyboard_accessory/public/jni/UserInfoField_jni.h"
 #include "chrome/browser/keyboard_accessory/android/accessory_sheet_data.h"
 #include "chrome/browser/keyboard_accessory/android/accessory_sheet_enums.h"
 #include "chrome/browser/keyboard_accessory/android/manual_filling_controller.h"
@@ -32,6 +30,10 @@
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
 #include "url/android/gurl_android.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "chrome/android/features/keyboard_accessory/internal/jni/ManualFillingComponentBridge_jni.h"
+#include "chrome/android/features/keyboard_accessory/public/jni/UserInfoField_jni.h"
 
 using autofill::AccessorySheetData;
 using autofill::AccessorySheetField;
@@ -90,6 +92,15 @@ ScopedJavaGlobalRef<jobject> ConvertAccessorySheetDataToJavaObject(
     Java_ManualFillingComponentBridge_addOptionToggleToAccessorySheetData(
         env, java_object, j_tab_data, toggle.display_text(),
         toggle.is_enabled(), static_cast<int>(toggle.accessory_action()));
+  }
+
+  for (const autofill::PlusAddressSection& plus_address_section :
+       tab_data.plus_address_section_list()) {
+    Java_ManualFillingComponentBridge_addPlusAddressSectionToAccessorySheetData(
+        env, java_object, j_tab_data,
+        static_cast<int>(tab_data.get_sheet_type()),
+        plus_address_section.origin(),
+        plus_address_section.plus_address().display_text());
   }
 
   for (const autofill::PasskeySection& passkey_section :

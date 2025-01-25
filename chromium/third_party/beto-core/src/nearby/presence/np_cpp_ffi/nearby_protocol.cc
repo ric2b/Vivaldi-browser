@@ -74,54 +74,13 @@ void GlobalConfig::SetNumShards(const uint8_t num_shards) {
   np_ffi::internal::np_ffi_global_config_set_num_shards(num_shards);
 }
 
-void GlobalConfig::SetMaxNumCredentialSlabs(
-    const uint32_t max_num_credential_slabs) {
-  np_ffi::internal::np_ffi_global_config_set_max_num_credential_slabs(
-      max_num_credential_slabs);
+CurrentHandleAllocations GlobalConfig::GetCurrentHandleAllocationCount() {
+  return np_ffi::internal::np_ffi_global_config_get_current_allocation_count();
 }
 
-void GlobalConfig::SetMaxNumCredentialBooks(
-    const uint32_t max_num_credential_books) {
-  np_ffi::internal::np_ffi_global_config_set_max_num_credential_books(
-      max_num_credential_books);
-}
-
-void GlobalConfig::SetMaxNumDeserializedV0Advertisements(
-    const uint32_t max_num_deserialized_v0_advertisements) {
-  np_ffi::internal::
-      np_ffi_global_config_set_max_num_deserialized_v0_advertisements(
-          max_num_deserialized_v0_advertisements);
-}
-
-void GlobalConfig::SetMaxNumDeserializedV1Advertisements(
-    const uint32_t max_num_deserialized_v1_advertisements) {
-  np_ffi::internal::
-      np_ffi_global_config_set_max_num_deserialized_v1_advertisements(
-          max_num_deserialized_v1_advertisements);
-}
-
-void GlobalConfig::SetMaxNumV0AdvertisementBuilders(
-    uint32_t max_num_v0_advertisement_builders) {
-  np_ffi::internal::np_ffi_global_config_set_max_num_v0_advertisement_builders(
-      max_num_v0_advertisement_builders);
-}
-
-absl::StatusOr<CredentialSlab> CredentialSlab::TryCreate() {
-  auto result = np_ffi::internal::np_ffi_create_credential_slab();
-  auto kind = np_ffi::internal::np_ffi_CreateCredentialSlabResult_kind(result);
-
-  switch (kind) {
-    case CreateCredentialSlabResultKind::Success: {
-      auto slab = CredentialSlab(
-          np_ffi::internal::np_ffi_CreateCredentialSlabResult_into_SUCCESS(
-              result));
-      return slab;
-    }
-    case CreateCredentialSlabResultKind::NoSpaceLeft: {
-      return absl::ResourceExhaustedError(
-          "No space left to create credential slab");
-    }
-  }
+CredentialSlab::CredentialSlab() {
+  this->credential_slab_ = np_ffi::internal::np_ffi_create_credential_slab();
+  this->moved_ = false;
 }
 
 CredentialSlab::~CredentialSlab() {
@@ -155,20 +114,13 @@ CredentialSlab& CredentialSlab::operator=(CredentialSlab&& other) noexcept {
   return *this;
 }
 
-absl::Status CredentialSlab::AddV0Credential(
-    const V0MatchableCredential v0_cred) {
+void CredentialSlab::AddV0Credential(const V0MatchableCredential v0_cred) {
   assert_panic(!this->moved_);
   auto result = np_ffi::internal::np_ffi_CredentialSlab_add_v0_credential(
       this->credential_slab_, v0_cred.internal_);
-  switch (result) {
-    case AddV0CredentialToSlabResult::Success: {
-      return absl::OkStatus();
-    }
-    case AddV0CredentialToSlabResult::InvalidHandle: {
-      return absl::InvalidArgumentError(
-          "invalid credential slab handle provided");
-    }
-  }
+  // Add V0 is infallible since the handle is guaranteed to be correct by the
+  // C++ wrapper
+  assert_panic(result == AddV0CredentialToSlabResult::Success);
 }
 
 absl::Status CredentialSlab::AddV1Credential(
@@ -191,29 +143,17 @@ absl::Status CredentialSlab::AddV1Credential(
   }
 }
 
-absl::StatusOr<CredentialBook> CredentialBook::TryCreateFromSlab(
-    CredentialSlab& slab) {
+CredentialBook::CredentialBook(CredentialSlab& slab) {
   assert_panic(!slab.moved_);
   auto result = np_ffi::internal::np_ffi_create_credential_book_from_slab(
       slab.credential_slab_);
   auto kind = np_ffi::internal::np_ffi_CreateCredentialBookResult_kind(result);
-  switch (kind) {
-    case CreateCredentialBookResultKind::Success: {
-      auto book =
-          np_ffi::internal::np_ffi_CreateCredentialBookResult_into_SUCCESS(
-              result);
-      slab.moved_ = true;
-      return CredentialBook(book);
-    }
-    case CreateCredentialBookResultKind::NoSpaceLeft: {
-      return absl::ResourceExhaustedError(
-          "No space left to create credential book");
-    }
-    case CreateCredentialBookResultKind::InvalidSlabHandle: {
-      return absl::NotFoundError(
-          "The slab referenced by the given handle was not found.");
-    }
-  }
+  // Handle is guaranteed to be valid by the C++ wrapper
+  assert_panic(kind == CreateCredentialBookResultKind::Success);
+  slab.moved_ = true;
+  this->credential_book_ =
+      np_ffi::internal::np_ffi_CreateCredentialBookResult_into_SUCCESS(result);
+  this->moved_ = false;
 }
 
 CredentialBook::~CredentialBook() {
@@ -500,12 +440,13 @@ absl::StatusOr<std::vector<uint8_t>> MetadataResultToVec(
       return result;
     }
     case np_ffi::internal::DecryptMetadataResultKind::Error: {
-      return absl::InvalidArgumentError("Invalid V0 payload handle");
+      return absl::InvalidArgumentError(
+          "Decrypt attempt failed, identity is missing or invalid");
     }
   }
 }
 
-absl::StatusOr<DeserializedV0IdentityDetails> V0Payload::GetIdentityDetails()
+absl::StatusOr<DeserializedV0IdentityDetails> V0Payload::TryGetIdentityDetails()
     const {
   assert_panic(!this->moved_);
   auto result = np_ffi::internal::np_ffi_V0Payload_get_identity_details(
@@ -513,7 +454,8 @@ absl::StatusOr<DeserializedV0IdentityDetails> V0Payload::GetIdentityDetails()
   auto kind = np_ffi::internal::np_ffi_GetV0IdentityDetailsResult_kind(result);
   switch (kind) {
     case np_ffi::internal::GetV0IdentityDetailsResultKind::Error: {
-      return absl::InvalidArgumentError("Invalid handle");
+      return absl::InvalidArgumentError(
+          "Identity details not available for public advertisements");
     }
     case np_ffi::internal::GetV0IdentityDetailsResultKind::Success: {
       return np_ffi::internal::np_ffi_GetV0IdentityDetailsResult_into_SUCCESS(
@@ -522,7 +464,7 @@ absl::StatusOr<DeserializedV0IdentityDetails> V0Payload::GetIdentityDetails()
   }
 }
 
-absl::StatusOr<std::vector<uint8_t>> V0Payload::DecryptMetadata() const {
+absl::StatusOr<std::vector<uint8_t>> V0Payload::TryDecryptMetadata() const {
   assert_panic(!this->moved_);
   auto decrypt_result =
       np_ffi::internal::np_ffi_V0Payload_decrypt_metadata(this->v0_payload_);
@@ -558,17 +500,11 @@ uint32_t V0Actions::GetAsU32() const {
   return np_ffi::internal::np_ffi_V0Actions_as_u32(actions_);
 }
 
-bool V0Actions::HasAction(BooleanActionType action) const {
+bool V0Actions::HasAction(ActionType action) const {
   return np_ffi::internal::np_ffi_V0Actions_has_action(actions_, action);
 }
 
-ContextSyncSeqNum V0Actions::GetContextSyncSequenceNumber() const {
-  return ContextSyncSeqNum(
-      np_ffi::internal::np_ffi_V0Actions_get_context_sync_sequence_number(
-          actions_));
-}
-
-absl::Status V0Actions::TrySetAction(BooleanActionType action, bool value) {
+absl::Status V0Actions::TrySetAction(ActionType action, bool value) {
   auto result =
       np_ffi::internal::np_ffi_V0Actions_set_action(actions_, action, value);
   auto kind = np_ffi::internal::np_ffi_SetV0ActionResult_kind(result);
@@ -587,40 +523,9 @@ absl::Status V0Actions::TrySetAction(BooleanActionType action, bool value) {
   }
 }
 
-void V0Actions::SetContextSyncSequenceNumber(ContextSyncSeqNum seq_num) {
-  actions_ =
-      np_ffi::internal::np_ffi_V0Actions_set_context_sync_sequence_number(
-          actions_, seq_num.seq_num_);
-}
-
 V0Actions V0Actions::BuildNewZeroed(AdvertisementBuilderKind kind) {
   auto actions = np_ffi::internal::np_ffi_build_new_zeroed_V0Actions(kind);
   return V0Actions(actions);
-}
-
-uint8_t ContextSyncSeqNum::GetAsU8() const {
-  return np_ffi::internal::np_ffi_ContextSyncSeqNum_as_unsigned_byte(seq_num_);
-}
-
-absl::StatusOr<ContextSyncSeqNum> ContextSyncSeqNum::TryBuildFromU8(
-    uint8_t value) {
-  auto result =
-      np_ffi::internal::np_ffi_ContextSyncSeqNum_build_from_unsigned_byte(
-          value);
-  auto kind =
-      np_ffi::internal::np_ffi_BuildContextSyncSeqNumResult_kind(result);
-  switch (kind) {
-    case np_ffi::internal::BuildContextSyncSeqNumResultKind::Success: {
-      return ContextSyncSeqNum(
-          np_ffi::internal::np_ffi_BuildContextSyncSeqNumResult_into_SUCCESS(
-              result));
-    }
-    case np_ffi::internal::BuildContextSyncSeqNumResultKind::OutOfRange: {
-      return absl::InvalidArgumentError(
-          "Attempted to build a context sync sequence number from a non-nibble "
-          "value.");
-    }
-  }
 }
 
 int8_t TxPower::GetAsI8() const {
@@ -733,7 +638,7 @@ absl::StatusOr<V1DataElement> DeserializedV1Section::TryGetDataElement(
   }
 }
 
-absl::StatusOr<std::vector<uint8_t>> DeserializedV1Section::DecryptMetadata()
+absl::StatusOr<std::vector<uint8_t>> DeserializedV1Section::TryDecryptMetadata()
     const {
   assert_panic(this->owning_v1_advertisement_ != nullptr);
   auto decrypt_result =
@@ -751,7 +656,8 @@ DeserializedV1Section::GetIdentityDetails() const {
   auto kind = np_ffi::internal::np_ffi_GetV1IdentityDetailsResult_kind(result);
   switch (kind) {
     case np_ffi::internal::GetV1IdentityDetailsResultKind::Error: {
-      return absl::InvalidArgumentError("Invalid handle");
+      return absl::InvalidArgumentError(
+          "Identity details are not available for public advertisements");
     }
     case np_ffi::internal::GetV1IdentityDetailsResultKind::Success: {
       return np_ffi::internal::np_ffi_GetV1IdentityDetailsResult_into_SUCCESS(
@@ -812,31 +718,31 @@ V0MatchableCredential::V0MatchableCredential(
     const MatchedCredentialData matched_credential_data) {
   np_ffi::internal::V0DiscoveryCredential discovery_cred{};
   CopyToRawArray(discovery_cred.key_seed, key_seed);
-  CopyToRawArray(discovery_cred.legacy_metadata_key_hmac,
-                 legacy_metadata_key_hmac);
+  CopyToRawArray(discovery_cred.identity_token_hmac, legacy_metadata_key_hmac);
   this->internal_ = {discovery_cred, matched_credential_data.data_};
 }
 
 V1MatchableCredential::V1MatchableCredential(
     const std::array<uint8_t, 32> key_seed,
-    const std::array<uint8_t, 32> expected_unsigned_metadata_key_hmac,
-    const std::array<uint8_t, 32> expected_signed_metadata_key_hmac,
+    const std::array<uint8_t, 32>
+        expected_mic_extended_salt_identity_token_hmac,
+    const std::array<uint8_t, 32> expected_signature_identity_token_hmac,
     const std::array<uint8_t, 32> pub_key,
     const MatchedCredentialData matched_credential_data) {
   np_ffi::internal::V1DiscoveryCredential discovery_cred{};
   CopyToRawArray(discovery_cred.key_seed, key_seed);
-  CopyToRawArray(discovery_cred.expected_unsigned_metadata_key_hmac,
-                 expected_unsigned_metadata_key_hmac);
-  CopyToRawArray(discovery_cred.expected_signed_metadata_key_hmac,
-                 expected_signed_metadata_key_hmac);
+  CopyToRawArray(discovery_cred.expected_mic_extended_salt_identity_token_hmac,
+                 expected_mic_extended_salt_identity_token_hmac);
+  CopyToRawArray(discovery_cred.expected_signature_identity_token_hmac,
+                 expected_signature_identity_token_hmac);
   CopyToRawArray(discovery_cred.pub_key, pub_key);
   this->internal_ = {discovery_cred, matched_credential_data.data_};
 }
 
 V0BroadcastCredential::V0BroadcastCredential(
-    std::array<uint8_t, 32> key_seed, std::array<uint8_t, 14> metadata_key) {
+    std::array<uint8_t, 32> key_seed, std::array<uint8_t, 14> identity_token) {
   CopyToRawArray(internal_.key_seed, key_seed);
-  CopyToRawArray(internal_.metadata_key, metadata_key);
+  CopyToRawArray(internal_.identity_token, identity_token);
 }
 
 V0AdvertisementBuilder::~V0AdvertisementBuilder() {
@@ -920,6 +826,10 @@ V0AdvertisementBuilder::TrySerialize() {
           "The advertisement contents were not of a proper size for LDT "
           "encryption");
     }
+    case SerializeV0AdvertisementResultKind::UnencryptedError: {
+      return absl::OutOfRangeError(
+          "The advertisement contents did not meet the length requirements");
+    }
     case SerializeV0AdvertisementResultKind::
         InvalidAdvertisementBuilderHandle: {
       return absl::InvalidArgumentError(
@@ -928,30 +838,10 @@ V0AdvertisementBuilder::TrySerialize() {
   }
 }
 
-[[nodiscard]] absl::StatusOr<V0AdvertisementBuilder>
-V0AdvertisementBuilder::CreateV0AdvertisementBuilderResultToInternal(
-    np_ffi::internal::CreateV0AdvertisementBuilderResult result) {
-  auto kind =
-      np_ffi::internal::np_ffi_CreateV0AdvertisementBuilderResult_kind(result);
-  switch (kind) {
-    case CreateV0AdvertisementBuilderResultKind::Success: {
-      auto adv_builder = np_ffi::internal::
-          np_ffi_CreateV0AdvertisementBuilderResult_into_SUCCESS(result);
-      return V0AdvertisementBuilder(adv_builder);
-    }
-    case CreateV0AdvertisementBuilderResultKind::NoSpaceLeft: {
-      return absl::ResourceExhaustedError(
-          "No space left to create v0 advertisement builder");
-    }
-  }
-}
-
-[[nodiscard]] absl::StatusOr<V0AdvertisementBuilder>
-V0AdvertisementBuilder::TryCreatePublic() {
+[[nodiscard]] V0AdvertisementBuilder V0AdvertisementBuilder::CreatePublic() {
   auto result =
       np_ffi::internal::np_ffi_create_v0_public_advertisement_builder();
-  return V0AdvertisementBuilder::CreateV0AdvertisementBuilderResultToInternal(
-      result);
+  return V0AdvertisementBuilder(result);
 }
 
 template <uintptr_t N>
@@ -962,15 +852,12 @@ template <uintptr_t N>
   return result;
 }
 
-[[nodiscard]] absl::StatusOr<V0AdvertisementBuilder>
-V0AdvertisementBuilder::TryCreateEncrypted(V0BroadcastCredential broadcast_cred,
-                                           EncryptedIdentityType identity_type,
-                                           std::array<uint8_t, 2> salt) {
+[[nodiscard]] V0AdvertisementBuilder V0AdvertisementBuilder::CreateEncrypted(
+    V0BroadcastCredential broadcast_cred, std::array<uint8_t, 2> salt) {
   auto result =
       np_ffi::internal::np_ffi_create_v0_encrypted_advertisement_builder(
-          broadcast_cred.internal_, identity_type, ToFFIArray(salt));
-  return V0AdvertisementBuilder::CreateV0AdvertisementBuilderResultToInternal(
-      result);
+          broadcast_cred.internal_, ToFFIArray(salt));
+  return V0AdvertisementBuilder(result);
 }
 
 }  // namespace nearby_protocol

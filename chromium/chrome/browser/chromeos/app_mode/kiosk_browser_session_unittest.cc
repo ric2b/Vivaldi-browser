@@ -2,7 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/chromeos/app_mode/kiosk_browser_session.h"
+
 #include <memory>
+#include <set>
+#include <utility>
+#include <vector>
 
 #include "ash/constants/ash_switches.h"
 #include "base/check_deref.h"
@@ -19,7 +24,6 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "base/time/time.h"
-#include "chrome/browser/chromeos/app_mode/kiosk_browser_session.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_browser_window_handler.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_metrics_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -57,7 +61,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_types.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/ash/system_web_apps/test_support/test_system_web_app_installation.h"
 #include "chrome/browser/ash/system_web_apps/test_support/test_system_web_app_manager.h"
@@ -67,6 +70,7 @@
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"  // nogncheck
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chromeos/ash/components/standalone_browser/feature_refs.h"
+#include "components/policy/core/common/device_local_account_type.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user.h"
 #include "ui/events/event_constants.h"
@@ -190,7 +194,7 @@ class FullscreenTestBrowserWindow : public TestBrowserWindow,
 
   // ExclusiveAccessContext:
   Profile* GetProfile() override { return profile_; }
-  content::WebContents* GetActiveWebContents() override {
+  content::WebContents* GetWebContentsForExclusiveAccess() override {
     NOTIMPLEMENTED();
     return nullptr;
   }
@@ -212,10 +216,11 @@ std::unique_ptr<FakeBrowser> CreateBrowserWithFullscreenTestWindowForParams(
     bool is_main_browser = false) {
   // The main browser window for the kiosk is always fullscreen in the
   // production.
-  FullscreenTestBrowserWindow* window =
-      new FullscreenTestBrowserWindow(profile, /*fullscreen=*/is_main_browser);
-  new TestBrowserWindowOwner(window);
-  params.window = window;
+  auto window = std::make_unique<FullscreenTestBrowserWindow>(
+      profile, /*fullscreen=*/is_main_browser);
+  params.window = window.get();
+  // Self deleting.
+  new TestBrowserWindowOwner(std::move(window));
   return std::make_unique<FakeBrowser>(params);
 }
 
@@ -925,9 +930,10 @@ class KioskBrowserSessionTroubleshootingTest
   std::unique_ptr<FakeBrowser> CreateDevToolsBrowserWithTestWindow() {
     auto params = Browser::CreateParams::CreateForDevTools(profile());
 
-    TestBrowserWindow* test_window_ = new TestBrowserWindow;
-    new TestBrowserWindowOwner(test_window_);
-    params.window = test_window_;
+    auto test_window = std::make_unique<TestBrowserWindow>();
+    params.window = test_window.get();
+    // Self deleting.
+    new TestBrowserWindowOwner(std::move(test_window));
 
     return std::make_unique<FakeBrowser>(params);
   }
@@ -1345,9 +1351,10 @@ class KioskBrowserSessionSwaTest : public KioskBrowserSessionBaseTest<bool> {
         /*window_bounds=*/gfx::Rect(), profile(),
         /*user_gesture=*/true);
 
-    TestBrowserWindow* test_window = new TestBrowserWindow;
-    new TestBrowserWindowOwner(test_window);
-    params.window = test_window;
+    auto test_window = std::make_unique<TestBrowserWindow>();
+    params.window = test_window.get();
+    // Self deleting.
+    new TestBrowserWindowOwner(std::move(test_window));
 
     return std::make_unique<FakeBrowser>(params);
   }
@@ -1498,7 +1505,7 @@ class KioskBrowserSessionAshWithLacrosEnabledTest
  private:
   ash::KioskAppId CreateKioskAppId() {
     std::string email = policy::GenerateDeviceLocalAccountUserId(
-        kTestWebAppUrl, policy::DeviceLocalAccount::Type::TYPE_WEB_KIOSK_APP);
+        kTestWebAppUrl, policy::DeviceLocalAccountType::kWebKioskApp);
     AccountId account_id(AccountId::FromUserEmail(email));
     return ash::KioskAppId::ForWebApp(account_id);
   }

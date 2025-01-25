@@ -27,11 +27,12 @@
 #include "core/fxcrt/cfx_read_only_vector_stream.h"
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/check_op.h"
-#include "core/fxcrt/compiler_specific.h"
+#include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/stl_util.h"
 
 namespace {
 
@@ -321,12 +322,13 @@ ByteString CPDF_SyntaxParser::ReadString() {
   return buf;
 }
 
-ByteString CPDF_SyntaxParser::ReadHexString() {
+DataVector<uint8_t> CPDF_SyntaxParser::ReadHexString() {
   uint8_t ch;
-  if (!GetNextChar(ch))
-    return ByteString();
+  if (!GetNextChar(ch)) {
+    return DataVector<uint8_t>();
+  }
 
-  ByteString buf;
+  DataVector<uint8_t> buf;
   bool bFirst = true;
   uint8_t code = 0;
   while (true) {
@@ -339,16 +341,18 @@ ByteString CPDF_SyntaxParser::ReadHexString() {
         code = val * 16;
       } else {
         code += val;
-        buf += static_cast<char>(code);
+        buf.push_back(code);
       }
       bFirst = !bFirst;
     }
 
-    if (!GetNextChar(ch))
+    if (!GetNextChar(ch)) {
       break;
+    }
   }
-  if (!bFirst)
-    buf += static_cast<char>(code);
+  if (!bFirst) {
+    buf.push_back(code);
+  }
 
   return buf;
 }
@@ -465,10 +469,11 @@ void CPDF_SyntaxParser::RecordingToNextWord() {
 CPDF_SyntaxParser::WordResult CPDF_SyntaxParser::GetNextWord() {
   CPDF_ReadValidator::ScopedSession read_session(GetValidator());
   WordType word_type = GetNextWordInternal();
-  ByteString word;
-  if (!GetValidator()->has_read_problems())
-    word = ByteString(m_WordBuffer.data(), m_WordSize);
-  return {word, word_type == WordType::kNumber};
+  ByteStringView word;
+  if (!GetValidator()->has_read_problems()) {
+    word = ByteStringView(pdfium::make_span(m_WordBuffer).first(m_WordSize));
+  }
+  return {ByteString(word), word_type == WordType::kNumber};
 }
 
 ByteString CPDF_SyntaxParser::PeekNextWord() {
@@ -532,12 +537,11 @@ RetainPtr<CPDF_Object> CPDF_SyntaxParser::GetObjectBodyInternal(
     return pdfium::MakeRetain<CPDF_Null>();
 
   if (word == "(") {
-    ByteString str = ReadString();
-    return pdfium::MakeRetain<CPDF_String>(m_pPool, str, false);
+    return pdfium::MakeRetain<CPDF_String>(m_pPool, ReadString());
   }
   if (word == "<") {
-    ByteString str = ReadHexString();
-    return pdfium::MakeRetain<CPDF_String>(m_pPool, str, true);
+    return pdfium::MakeRetain<CPDF_String>(m_pPool, ReadHexString(),
+                                           CPDF_String::DataType::kIsHex);
   }
   if (word == "[") {
     auto pArray = pdfium::MakeRetain<CPDF_Array>();
@@ -750,9 +754,8 @@ RetainPtr<CPDF_Stream> CPDF_SyntaxParser::ReadStream(
   if (len >= 0) {
     CPDF_ReadValidator::ScopedSession read_session(GetValidator());
     m_Pos += ReadEOLMarkers(GetPos());
-    // TODO(tsepez): investigate safety.
-    UNSAFE_BUFFERS(
-        FXSYS_memset(m_WordBuffer.data(), 0, kEndStreamStr.GetLength() + 1));
+    const size_t zap_length = kEndStreamStr.GetLength() + 1;
+    fxcrt::Fill(pdfium::make_span(m_WordBuffer).first(zap_length), 0);
     GetNextWordInternal();
     if (GetValidator()->has_read_problems())
       return nullptr;
@@ -811,9 +814,8 @@ RetainPtr<CPDF_Stream> CPDF_SyntaxParser::ReadStream(
     stream = pdfium::MakeRetain<CPDF_Stream>(std::move(pDict));
   }
   const FX_FILESIZE end_stream_offset = GetPos();
-  // TODO(tsepez): investigate safety.
-  UNSAFE_BUFFERS(
-      FXSYS_memset(m_WordBuffer.data(), 0, kEndObjStr.GetLength() + 1));
+  const size_t zap_length = kEndObjStr.GetLength() + 1;
+  fxcrt::Fill(pdfium::make_span(m_WordBuffer).first(zap_length), 0);
   GetNextWordInternal();
 
   // Allow whitespace after endstream and before a newline.

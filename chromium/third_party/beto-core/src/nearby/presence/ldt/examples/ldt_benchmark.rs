@@ -18,7 +18,7 @@
 
 use clap::Parser as _;
 use crypto_provider_rustcrypto::RustCrypto;
-use ldt::{LdtDecryptCipher, LdtEncryptCipher, LdtKey, Mix, Swap, XorPadder};
+use ldt::{LdtCipher, LdtDecryptCipher, LdtEncryptCipher, LdtKey, Mix, Swap, XorPadder};
 
 use crypto_provider::{CryptoProvider, CryptoRng};
 use ldt_tbc::TweakableBlockCipher;

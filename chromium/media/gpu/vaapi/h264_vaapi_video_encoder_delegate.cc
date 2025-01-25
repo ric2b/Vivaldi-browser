@@ -21,7 +21,7 @@
 #include "media/gpu/macros.h"
 #include "media/gpu/vaapi/vaapi_common.h"
 #include "media/gpu/vaapi/vaapi_wrapper.h"
-#include "media/video/h264_level_limits.h"
+#include "media/parsers/h264_level_limits.h"
 #include "media/video/video_encode_accelerator.h"
 
 namespace media {
@@ -38,11 +38,12 @@ constexpr uint32_t kIPeriod = 0;
 constexpr uint32_t kIPPeriod = 1;
 
 // The qp range is 0-51 in H264. Select 26 because of the center value.
+// WebRTC H264 encoder uses 1-51. We set the minimum QP to 1 for camera
+// and 10 for screen sharing to mitigate the bitrate overshoot due
+// to a scene, and maximum qp to 42 to pass the CTS test (b/354557852).
 constexpr uint8_t kDefaultQP = 26;
-// Note: Webrtc default values are 24 and 37 respectively, see
-// h264_encoder_impl.cc.
-// These values are selected to make our VEA tests pass.
-constexpr uint8_t kMinQP = 24;
+constexpr uint8_t kMinQP = 1;
+constexpr uint8_t kScreenMinQP = 10;
 constexpr uint8_t kMaxQP = 42;
 
 // Subjectively chosen bitrate window size for rate control, in ms.
@@ -267,6 +268,11 @@ bool H264VaapiVideoEncoderDelegate::Initialize(
       return false;
     }
     level_ = *valid_level;
+  }
+
+  if (config.content_type ==
+      VideoEncodeAccelerator::Config::ContentType::kDisplay) {
+    curr_params_.min_qp = kScreenMinQP;
   }
 
   num_temporal_layers_ = 1;
@@ -578,7 +584,7 @@ void H264VaapiVideoEncoderDelegate::UpdateSPS() {
       current_sps_.cbr_flag[0] = false;
       break;
     case Bitrate::Mode::kExternal:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   current_sps_.initial_cpb_removal_delay_length_minus_1 =
@@ -804,7 +810,7 @@ bool H264VaapiVideoEncoderDelegate::SubmitFrameParameters(
 
   VAEncPictureParameterBufferH264 pic_param = {};
 
-  auto va_surface_id = pic->AsVaapiH264Picture()->GetVASurfaceID();
+  auto va_surface_id = pic->AsVaapiH264Picture()->va_surface_id();
   pic_param.CurrPic.picture_id = va_surface_id;
   pic_param.CurrPic.TopFieldOrderCnt = pic->top_field_order_cnt;
   pic_param.CurrPic.BottomFieldOrderCnt = pic->bottom_field_order_cnt;
@@ -856,7 +862,7 @@ bool H264VaapiVideoEncoderDelegate::SubmitFrameParameters(
     H264Picture& ref_pic = *ref_pic_list0[i];
     VAPictureH264 va_pic_h264;
     InitVAPictureH264(&va_pic_h264);
-    va_pic_h264.picture_id = ref_pic.AsVaapiH264Picture()->GetVASurfaceID();
+    va_pic_h264.picture_id = ref_pic.AsVaapiH264Picture()->va_surface_id();
     va_pic_h264.flags = VA_PICTURE_H264_SHORT_TERM_REFERENCE;
     va_pic_h264.frame_idx = ref_pic.frame_num;
     va_pic_h264.TopFieldOrderCnt = ref_pic.top_field_order_cnt;

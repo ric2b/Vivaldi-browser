@@ -101,10 +101,7 @@ void CommandIterator::Reset() {
     if (mBlocks.empty()) {
         // This will case the first NextCommandId call to try to move to the next block and stop
         // the iteration immediately, without special casing the initialization.
-        mCurrentPtr = reinterpret_cast<uint8_t*>(&mEndOfBlock);
-        mBlocks.emplace_back();
-        mBlocks[0].size = sizeof(mEndOfBlock);
-        mBlocks[0].block = mCurrentPtr;
+        mCurrentPtr = reinterpret_cast<char*>(&mEndOfBlock);
     } else {
         mCurrentPtr = AlignPtr(mBlocks[0].block.get(), alignof(uint32_t));
     }
@@ -115,17 +112,14 @@ void CommandIterator::MakeEmptyAsDataWasDestroyed() {
         return;
     }
 
-    mCurrentPtr = reinterpret_cast<uint8_t*>(&mEndOfBlock);
-    for (BlockDef& block : mBlocks) {
-        free(block.block.ExtractAsDangling());
-    }
+    mCurrentPtr = reinterpret_cast<char*>(&mEndOfBlock);
     mBlocks.clear();
     Reset();
     DAWN_ASSERT(IsEmpty());
 }
 
 bool CommandIterator::IsEmpty() const {
-    return mBlocks[0].block == reinterpret_cast<const uint8_t*>(&mEndOfBlock);
+    return mBlocks.empty();
 }
 
 // Potential TODO(crbug.com/dawn/835):
@@ -172,34 +166,31 @@ CommandAllocator& CommandAllocator::operator=(CommandAllocator&& other) {
 
 void CommandAllocator::Reset() {
     ResetPointers();
-    for (BlockDef& block : mBlocks) {
-        free(block.block.ExtractAsDangling());
-    }
     mBlocks.clear();
     mLastAllocationSize = kDefaultBaseAllocationSize;
 }
 
 bool CommandAllocator::IsEmpty() const {
-    return mCurrentPtr == reinterpret_cast<const uint8_t*>(&mPlaceholderEnum[0]);
+    return mCurrentPtr == reinterpret_cast<const char*>(&mPlaceholderSpace[0]);
 }
 
 CommandBlocks&& CommandAllocator::AcquireBlocks() {
     DAWN_ASSERT(mCurrentPtr != nullptr && mEndPtr != nullptr);
     DAWN_ASSERT(IsPtrAligned(mCurrentPtr, alignof(uint32_t)));
-    DAWN_ASSERT(mCurrentPtr.get() + sizeof(uint32_t) <= mEndPtr);
-    *reinterpret_cast<uint32_t*>(mCurrentPtr.get()) = detail::kEndOfBlock;
+    DAWN_ASSERT(mCurrentPtr + sizeof(uint32_t) <= mEndPtr);
+    *reinterpret_cast<uint32_t*>(mCurrentPtr) = detail::kEndOfBlock;
 
     mCurrentPtr = nullptr;
     mEndPtr = nullptr;
     return std::move(mBlocks);
 }
 
-uint8_t* CommandAllocator::AllocateInNewBlock(uint32_t commandId,
-                                              size_t commandSize,
-                                              size_t commandAlignment) {
+char* CommandAllocator::AllocateInNewBlock(uint32_t commandId,
+                                           size_t commandSize,
+                                           size_t commandAlignment) {
     // When there is not enough space, we signal the kEndOfBlock, so that the iterator knows
     // to move to the next one. kEndOfBlock on the last block means the end of the commands.
-    uint32_t* idAlloc = reinterpret_cast<uint32_t*>(mCurrentPtr.get());
+    uint32_t* idAlloc = reinterpret_cast<uint32_t*>(mCurrentPtr);
     *idAlloc = detail::kEndOfBlock;
 
     // We'll request a block that can contain at least the command ID, the command and an
@@ -221,20 +212,20 @@ bool CommandAllocator::GetNewBlock(size_t minimumSize) {
     // Allocate blocks doubling sizes each time, to a maximum of 16k (or at least minimumSize).
     mLastAllocationSize = std::max(minimumSize, std::min(mLastAllocationSize * 2, size_t(16384)));
 
-    uint8_t* block = static_cast<uint8_t*>(malloc(mLastAllocationSize));
+    auto block = std::unique_ptr<char[]>(new (std::nothrow) char[mLastAllocationSize]);
     if (DAWN_UNLIKELY(block == nullptr)) {
         return false;
     }
 
-    mBlocks.push_back({mLastAllocationSize, block});
-    mCurrentPtr = AlignPtr(block, alignof(uint32_t));
-    mEndPtr = block + mLastAllocationSize;
+    mCurrentPtr = AlignPtr(block.get(), alignof(uint32_t));
+    mEndPtr = block.get() + mLastAllocationSize;
+    mBlocks.push_back({mLastAllocationSize, std::move(block)});
     return true;
 }
 
 void CommandAllocator::ResetPointers() {
-    mCurrentPtr = reinterpret_cast<uint8_t*>(&mPlaceholderEnum[0]);
-    mEndPtr = reinterpret_cast<uint8_t*>(&mPlaceholderEnum[1]);
+    mCurrentPtr = reinterpret_cast<char*>(&mPlaceholderSpace[0]);
+    mEndPtr = reinterpret_cast<char*>(&mPlaceholderSpace[1]);
 }
 
 }  // namespace dawn::native

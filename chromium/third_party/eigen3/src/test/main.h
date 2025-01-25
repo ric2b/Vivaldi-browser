@@ -52,9 +52,6 @@
 #if __cplusplus >= 201103L || (defined(_MSVC_LANG) && _MSVC_LANG >= 201103L)
 #include <random>
 #include <chrono>
-#ifdef EIGEN_USE_THREADS
-#include <future>
-#endif
 #endif
 #if __cplusplus > 201703L
 // libstdc++ 9's <memory> indirectly uses max() via <bit>.
@@ -219,7 +216,6 @@ class EigenTest {
 }  // namespace Eigen
 
 #define TRACK std::cerr << __FILE__ << " " << __LINE__ << std::endl
-// #define TRACK while()
 
 #define EIGEN_DEFAULT_IO_FORMAT IOFormat(4, 0, "  ", "\n", "", "", "", "")
 
@@ -336,7 +332,9 @@ static std::vector<std::string> eigen_assert_list;
 
 #endif  // EIGEN_NO_ASSERTION_CHECKING
 
+#ifndef EIGEN_TESTING_CONSTEXPR
 #define EIGEN_INTERNAL_DEBUGGING
+#endif
 #include <Eigen/QR>  // required for createRandomPIMatrixOfRank and generateRandomMatrixSvs
 
 inline void verify_impl(bool condition, const char* testname, const char* file, int line,

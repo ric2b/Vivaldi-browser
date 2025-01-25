@@ -42,8 +42,10 @@ import * as SDK from '../../core/sdk/sdk.js';
 import * as AutofillManager from '../../models/autofill_manager/autofill_manager.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Breakpoints from '../../models/breakpoints/breakpoints.js';
+import * as CrUXManager from '../../models/crux-manager/crux-manager.js';
 import * as Extensions from '../../models/extensions/extensions.js';
 import * as IssuesManager from '../../models/issues_manager/issues_manager.js';
+import * as LiveMetrics from '../../models/live-metrics/live-metrics.js';
 import * as Logs from '../../models/logs/logs.js';
 import * as Persistence from '../../models/persistence/persistence.js';
 import * as Workspace from '../../models/workspace/workspace.js';
@@ -147,18 +149,36 @@ export class MainImpl {
   async #loaded(): Promise<void> {
     console.timeStamp('Main._loaded');
     Root.Runtime.Runtime.setPlatform(Host.Platform.platform());
-    const prefs = await new Promise<{[key: string]: string}>(resolve => {
+    const prefsPromise = new Promise<{[key: string]: string}>(resolve => {
       Host.InspectorFrontendHost.InspectorFrontendHostInstance.getPreferences(resolve);
     });
+    const configPromise = new Promise<Root.Runtime.HostConfig>(resolve => {
+      Host.InspectorFrontendHost.InspectorFrontendHostInstance.getHostConfig(resolve);
+    });
+    const [prefs, config] = await Promise.all([prefsPromise, configPromise]);
 
     console.timeStamp('Main._gotPreferences');
     this.#initializeGlobalsForLayoutTests();
-    this.createSettings(prefs);
+    this.createSettings(prefs, config);
     await this.requestAndRegisterLocaleData();
 
     Host.userMetrics.syncSetting(Common.Settings.Settings.instance().moduleSetting<boolean>('sync-preferences').get());
-    if (Root.Runtime.Runtime.queryParam('veLogging')) {
-      void VisualLogging.startLogging();
+    const veLogging = Common.Settings.Settings.instance().getHostConfig()?.devToolsVeLogging;
+    if (veLogging?.enabled) {
+      if (veLogging?.testing) {
+        VisualLogging.setVeDebugLoggingEnabled(true, VisualLogging.DebugLoggingFormat.Test);
+        const options = {
+          processingThrottler: new Common.Throttler.Throttler(10),
+          keyboardLogThrottler: new Common.Throttler.Throttler(10),
+          hoverLogThrottler: new Common.Throttler.Throttler(10),
+          dragLogThrottler: new Common.Throttler.Throttler(10),
+          clickLogThrottler: new Common.Throttler.Throttler(10),
+          resizeLogThrottler: new Common.Throttler.Throttler(10),
+        };
+        void VisualLogging.startLogging(options);
+      } else {
+        void VisualLogging.startLogging();
+      }
     }
     void this.#createAppUI();
   }
@@ -209,9 +229,11 @@ export class MainImpl {
     }
   }
 
-  createSettings(prefs: {
-    [x: string]: string,
-  }): void {
+  createSettings(
+      prefs: {
+        [x: string]: string,
+      },
+      config: Root.Runtime.HostConfig): void {
     this.#initializeExperiments();
     let storagePrefix = '';
     if (Host.Platform.isCustomDevtoolsFrontend()) {
@@ -255,7 +277,7 @@ export class MainImpl {
     // setting can't change storage buckets during a single DevTools session.
     const syncedStorage = new Common.Settings.SettingsStorage(prefs, hostSyncedStorage, storagePrefix);
     const globalStorage = new Common.Settings.SettingsStorage(prefs, hostUnsyncedStorage, storagePrefix);
-    Common.Settings.Settings.instance({forceNew: true, syncedStorage, globalStorage, localStorage});
+    Common.Settings.Settings.instance({forceNew: true, syncedStorage, globalStorage, localStorage, config});
 
     // Needs to be created after Settings are available.
     new SettingTracker();
@@ -275,9 +297,6 @@ export class MainImpl {
     Root.Runtime.experiments.register('sampling-heap-profiler-timeline', 'Sampling heap profiler timeline', true);
     Root.Runtime.experiments.register(
         'show-option-tp-expose-internals-in-heap-snapshot', 'Show option to expose internals in heap snapshots');
-    Root.Runtime.experiments.register(
-        'heap-snapshot-treat-backing-store-as-containing-object',
-        'In heap snapshots, treat backing store size as part of the containing object');
 
     // Timeline
     Root.Runtime.experiments.register(
@@ -285,8 +304,6 @@ export class MainImpl {
     Root.Runtime.experiments.register('timeline-show-all-events', 'Performance panel: show all events', true);
     Root.Runtime.experiments.register(
         'timeline-v8-runtime-call-stats', 'Performance panel: V8 runtime call stats', true);
-    Root.Runtime.experiments.register(
-        'timeline-extensions', 'Performance panel: enable user timings based extensions', true);
     Root.Runtime.experiments.register(
         'timeline-enhanced-traces', 'Performance panel: Enable collecting enhanced traces', true);
     Root.Runtime.experiments.register(
@@ -389,14 +406,20 @@ export class MainImpl {
     );
 
     Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.PERF_PANEL_ANNOTATIONS,
-        'Enable saving and loading traces with annotations in the Performance panel',
+        Root.Runtime.ExperimentName.TIMELINE_ANNOTATIONS_OVERLAYS,
+        'Performance panel: enable annotations',
+        true,
     );
 
     Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.TIMELINE_EXECUTE_OLD_ENGINE,
-        'Enable the legacy tracing model when inspecting Chrome traces using the performance panel',
-        true,  // mark as unstable as we don't expect users to change this setting
+        Root.Runtime.ExperimentName.TIMELINE_SIDEBAR,
+        'Performance panel: enable sidebar',
+        true,
+    );
+
+    Root.Runtime.experiments.register(
+        Root.Runtime.ExperimentName.TIMELINE_OBSERVATIONS,
+        'Performance panel: enable live metrics landing page',
     );
 
     Root.Runtime.experiments.enableExperimentsByDefault([
@@ -404,7 +427,6 @@ export class MainImpl {
       Root.Runtime.ExperimentName.OUTERMOST_TARGET_SELECTOR,
       Root.Runtime.ExperimentName.PRELOADING_STATUS_PANEL,
       Root.Runtime.ExperimentName.AUTOFILL_VIEW,
-      Root.Runtime.ExperimentName.TIMELINE_EXECUTE_OLD_ENGINE,
       ...(Root.Runtime.Runtime.queryParam('isChromeForTesting') ? ['protocol-monitor'] : []),
     ]);
 
@@ -444,24 +466,6 @@ export class MainImpl {
     if (!ThemeSupport.ThemeSupport.hasInstance()) {
       ThemeSupport.ThemeSupport.instance({forceNew: true, setting: themeSetting});
     }
-
-    ThemeSupport.ThemeSupport.instance().applyTheme(document);
-
-    const onThemeChange = (): void => {
-      ThemeSupport.ThemeSupport.instance().applyTheme(document);
-    };
-
-    // When the theme changes we instantiate a new theme support and reapply.
-    // Equally if the user has set to match the system and the OS preference changes
-    // we perform the same change.
-    const darkThemeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const highContrastMediaQuery = window.matchMedia('(forced-colors: active)');
-    darkThemeMediaQuery.addEventListener('change', onThemeChange);
-    highContrastMediaQuery.addEventListener('change', onThemeChange);
-    themeSetting.addChangeListener(onThemeChange);
-
-    Host.InspectorFrontendHost.InspectorFrontendHostInstance.events.addEventListener(
-        Host.InspectorFrontendHostAPI.Events.ColorThemeChanged, () => ThemeSupport.ThemeSupport.fetchColors(document));
 
     UI.UIUtils.installComponentRootStyles((document.body as Element));
 
@@ -547,6 +551,11 @@ export class MainImpl {
 
     AutofillManager.AutofillManager.AutofillManager.instance();
 
+    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_OBSERVATIONS)) {
+      LiveMetrics.LiveMetrics.instance({forceNew: true});
+      CrUXManager.CrUXManager.instance({forceNew: true});
+    }
+
     new PauseListener();
 
     const actionRegistryInstance = UI.ActionRegistry.ActionRegistry.instance({forceNew: true});
@@ -568,7 +577,7 @@ export class MainImpl {
     const app = (appProvider as Common.AppProvider.AppProvider).createApp();
     // It is important to kick controller lifetime after apps are instantiated.
     UI.DockController.DockController.instance().initialize();
-    ThemeSupport.ThemeSupport.fetchColors(document);
+    ThemeSupport.ThemeSupport.instance().fetchColorsAndApplyHostTheme();
     app.presentUI(document);
 
     if (UI.ActionRegistry.ActionRegistry.instance().hasAction('elements.toggle-element-search')) {
@@ -785,7 +794,9 @@ let mainMenuItemInstance: MainMenuItem;
 export class MainMenuItem implements UI.Toolbar.Provider {
   readonly #itemInternal: UI.Toolbar.ToolbarMenuButton;
   constructor() {
-    this.#itemInternal = new UI.Toolbar.ToolbarMenuButton(this.#handleContextMenu.bind(this), true, 'main-menu');
+    this.#itemInternal = new UI.Toolbar.ToolbarMenuButton(
+        this.#handleContextMenu.bind(this), /* isIconDropdown */ true, /* useSoftMenu */ true, 'main-menu');
+    this.#itemInternal.setGlyph('dots-vertical');
     this.#itemInternal.element.classList.add('main-menu');
     this.#itemInternal.setTitle(i18nString(UIStrings.customizeAndControlDevtools));
   }
@@ -826,12 +837,13 @@ export class MainMenuItem implements UI.Toolbar.Provider {
           'jslog', `${VisualLogging.item('dock-side').track({keydown: 'ArrowDown|ArrowLeft|ArrowRight'})}`);
       dockItemToolbar.makeBlueOnHover();
       const undock = new UI.Toolbar.ToolbarToggle(
-          i18nString(UIStrings.undockIntoSeparateWindow), 'dock-window', undefined, 'undock');
-      const bottom =
-          new UI.Toolbar.ToolbarToggle(i18nString(UIStrings.dockToBottom), 'dock-bottom', undefined, 'dock-bottom');
-      const right =
-          new UI.Toolbar.ToolbarToggle(i18nString(UIStrings.dockToRight), 'dock-right', undefined, 'dock-right');
-      const left = new UI.Toolbar.ToolbarToggle(i18nString(UIStrings.dockToLeft), 'dock-left', undefined, 'dock-left');
+          i18nString(UIStrings.undockIntoSeparateWindow), 'dock-window', undefined, 'current-dock-state-undock');
+      const bottom = new UI.Toolbar.ToolbarToggle(
+          i18nString(UIStrings.dockToBottom), 'dock-bottom', undefined, 'current-dock-state-bottom');
+      const right = new UI.Toolbar.ToolbarToggle(
+          i18nString(UIStrings.dockToRight), 'dock-right', undefined, 'current-dock-state-right');
+      const left = new UI.Toolbar.ToolbarToggle(
+          i18nString(UIStrings.dockToLeft), 'dock-left', undefined, 'current-dock-state-left');
       undock.addEventListener(UI.Toolbar.ToolbarButton.Events.MouseDown, event => event.data.consume());
       bottom.addEventListener(UI.Toolbar.ToolbarButton.Events.MouseDown, event => event.data.consume());
       right.addEventListener(UI.Toolbar.ToolbarButton.Events.MouseDown, event => event.data.consume());
@@ -901,7 +913,8 @@ export class MainMenuItem implements UI.Toolbar.Provider {
     contextMenu.appendItemsAtLocation('mainMenu');
     const moreTools =
         contextMenu.defaultSection().appendSubMenuItem(i18nString(UIStrings.moreTools), false, 'more-tools');
-    const viewExtensions = UI.ViewManager.getRegisteredViewExtensions();
+    const viewExtensions =
+        UI.ViewManager.getRegisteredViewExtensions(Common.Settings.Settings.instance().getHostConfig());
     viewExtensions.sort((extension1, extension2) => {
       const title1 = extension1.title();
       const title2 = extension2.title();

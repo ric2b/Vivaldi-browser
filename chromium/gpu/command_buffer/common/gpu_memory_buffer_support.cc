@@ -17,10 +17,6 @@
 
 namespace gpu {
 
-#if BUILDFLAG(IS_MAC)
-static uint32_t macos_specific_texture_target = GL_TEXTURE_RECTANGLE_ARB;
-#endif  // BUILDFLAG(IS_MAC)
-
 bool IsImageFromGpuMemoryBufferFormatSupported(
     gfx::BufferFormat format,
     const gpu::Capabilities& capabilities) {
@@ -63,7 +59,7 @@ bool IsImageSizeValidForGpuMemoryBufferFormat(const gfx::Size& size,
 #endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -106,7 +102,7 @@ GPU_EXPORT bool IsPlaneValidForGpuMemoryBufferFormat(gfx::BufferPlane plane,
       return plane == gfx::BufferPlane::DEFAULT;
   }
 #endif
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -146,7 +142,7 @@ gfx::BufferFormat GetPlaneBufferFormat(gfx::BufferPlane plane,
       break;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return format;
 }
 
@@ -176,70 +172,6 @@ gfx::Size GetPlaneSize(gfx::BufferPlane plane, const gfx::Size& size) {
     case gfx::BufferPlane::UV:
       return gfx::ScaleToCeiledSize(size, 0.5);
   }
-}
-
-uint32_t GetPlatformSpecificTextureTarget() {
-#if BUILDFLAG(IS_MAC)
-  return macos_specific_texture_target;
-#elif BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
-  return GL_TEXTURE_EXTERNAL_OES;
-#elif BUILDFLAG(IS_IOS)
-  return GL_TEXTURE_2D;
-#elif BUILDFLAG(IS_FUCHSIA)
-  // Fuchsia uses Vulkan.
-  return 0;
-#elif BUILDFLAG(IS_NACL)
-  NOTREACHED();
-  return 0;
-#else
-#error Unsupported OS
-#endif
-}
-
-#if BUILDFLAG(IS_MAC)
-GPU_EXPORT void SetMacOSSpecificTextureTarget(uint32_t texture_target) {
-  DCHECK(texture_target == GL_TEXTURE_2D ||
-         texture_target == GL_TEXTURE_RECTANGLE_ARB);
-  macos_specific_texture_target = texture_target;
-}
-#endif  // BUILDFLAG(IS_MAC)
-
-GPU_EXPORT bool NativeBufferNeedsPlatformSpecificTextureTarget(
-    gfx::BufferFormat format,
-    gfx::BufferPlane plane) {
-#if BUILDFLAG(IS_OZONE) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
-    BUILDFLAG(IS_WIN)
-  // Always use GL_TEXTURE_2D as the target for RGB textures.
-  // https://crbug.com/916728
-  if (format == gfx::BufferFormat::R_8 || format == gfx::BufferFormat::RG_88 ||
-#if BUILDFLAG(IS_CHROMEOS)
-      format == gfx::BufferFormat::RGBA_F16 ||
-#endif
-      format == gfx::BufferFormat::RGBA_8888 ||
-      format == gfx::BufferFormat::BGRA_8888 ||
-      format == gfx::BufferFormat::RGBX_8888 ||
-      format == gfx::BufferFormat::BGRX_8888 ||
-      format == gfx::BufferFormat::RGBA_1010102 ||
-      format == gfx::BufferFormat::BGRA_1010102) {
-    return false;
-  }
-#if BUILDFLAG(IS_CHROMEOS)
-  // Use GL_TEXTURE_2D when importing the NV12 DMA-buf as two GL textures, Y
-  // plane as gfx::BufferFormat::R_8, UV plane as gfx::BufferFormat::RG_88, then
-  // we can sample and write to NV12 DMA-buf through the two GL textures.
-  if (format == gfx::BufferFormat::YUV_420_BIPLANAR &&
-      (plane == gfx::BufferPlane::Y || plane == gfx::BufferPlane::UV)) {
-    return false;
-  }
-#endif
-#elif BUILDFLAG(IS_ANDROID)
-  if (format == gfx::BufferFormat::BGR_565 ||
-      format == gfx::BufferFormat::RGBA_8888) {
-    return false;
-  }
-#endif
-  return true;
 }
 
 }  // namespace gpu

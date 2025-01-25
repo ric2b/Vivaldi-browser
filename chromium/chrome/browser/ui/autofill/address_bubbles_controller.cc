@@ -28,6 +28,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/core/browser/autofill_address_util.h"
@@ -180,7 +181,7 @@ void AddressBubblesController::OnBubbleClosed() {
   UpdatePageActionIcon();
 }
 
-void AddressBubblesController::OnPageActionIconClicked() {
+void AddressBubblesController::OnIconClicked() {
   // Don't show the bubble if it's already visible.
   if (bubble_view()) {
     return;

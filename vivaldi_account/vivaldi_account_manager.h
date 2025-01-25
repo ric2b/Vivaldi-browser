@@ -56,9 +56,6 @@ class VivaldiAccountManager : public KeyedService,
     // Called when an attempt to obtain a new token from the server failed for
     // any reason.
     virtual void OnTokenFetchFailed() {}
-    // Some parts of the account information are retrieved from the server after
-    // login. This is called if that fetch fails.
-    virtual void OnAccountInfoFetchFailed() {}
     // This service is about to shut down. Observers should unregister
     // themselves.
     virtual void OnVivaldiAccountShutdown() = 0;
@@ -75,6 +72,11 @@ class VivaldiAccountManager : public KeyedService,
     // A link to the user's avatar, as provided by the server. It will typically
     // be an https url, but it can be any sort of URL
     std::string picture_url;
+
+    // The reward tier corresponding to the amount donated by the user.
+    std::string donation_tier;
+
+    bool operator==(const AccountInfo& other) const;
   };
 
   explicit VivaldiAccountManager(
@@ -142,18 +144,13 @@ class VivaldiAccountManager : public KeyedService,
   void OnTokenRequestDone(bool using_password,
                           std::unique_ptr<network::SimpleURLLoader> url_loader,
                           std::unique_ptr<std::string> response_body);
-  void OnAccountInfoRequestDone(
-      std::unique_ptr<network::SimpleURLLoader> url_loader,
-      std::unique_ptr<std::string> response_body);
+  bool UpdateAccountInfoFromJwt(const std::string& jwt);
 
   void NotifyAccountUpdated();
   void NotifyTokenFetchSucceeded();
   void NotifyTokenFetchFailed(FetchErrorType type,
                               const std::string& server_message,
                               int error_code);
-  void NotifyAccountInfoFetchFailed(FetchErrorType type,
-                                    const std::string& server_message,
-                                    int error_code);
   void NotifyShutdown();
 
   void MigrateOldCredentialsIfNeeded();

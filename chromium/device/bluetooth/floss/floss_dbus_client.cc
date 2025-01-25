@@ -1,6 +1,11 @@
 // Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
 #include "device/bluetooth/floss/floss_dbus_client.h"
 
 #include <string>
@@ -230,6 +235,11 @@ FlossDBusClient::BtifStatusToConnectErrorCode(
       return device::BluetoothDevice::ConnectErrorCode::ERROR_WAKELOCK;
     case BtifStatus::kTimeout:
       return device::BluetoothDevice::ConnectErrorCode::ERROR_NON_AUTH_TIMEOUT;
+    case BtifStatus::kDeviceNotFound:
+    case BtifStatus::kUnexpectedState:
+    case BtifStatus::kSocketError:
+    default:
+      return device::BluetoothDevice::ConnectErrorCode::ERROR_FAILED;
   }
 }
 

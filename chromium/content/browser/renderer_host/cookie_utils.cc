@@ -467,7 +467,7 @@ void ReportLegacyTechEvent(
       }
 
       LegacyTechCookieIssueDetails cookie_issue_details = {
-          cookie_details->url.spec(),
+          /* transfer_or_script_url= */ cookie_details->url,
           cookie->cookie_or_line->get_cookie().Name(),
           cookie->cookie_or_line->get_cookie().Domain(),
           cookie->cookie_or_line->get_cookie().Path(),
@@ -519,7 +519,7 @@ void SplitCookiesIntoAllowedAndBlocked(
         // check for !(net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES).
         return cookie_and_access_result->access_result.status.IsInclude();
       });
-  allowed->cookie_list.reserve(allowed_count);
+  allowed->cookie_access_result_list.reserve(allowed_count);
 
   *blocked = CookieAccessDetails({cookie_details->type,
                                   cookie_details->url,
@@ -537,16 +537,18 @@ void SplitCookiesIntoAllowedAndBlocked(
         return cookie_and_access_result->access_result.status
             .ExcludedByUserPreferencesOrTPCD();
       });
-  blocked->cookie_list.reserve(blocked_count);
+  blocked->cookie_access_result_list.reserve(blocked_count);
 
   for (const auto& cookie_and_access_result : cookie_details->cookie_list) {
     if (cookie_and_access_result->access_result.status
             .ExcludedByUserPreferencesOrTPCD()) {
-      blocked->cookie_list.emplace_back(
-          std::move(cookie_and_access_result->cookie_or_line->get_cookie()));
+      blocked->cookie_access_result_list.emplace_back(
+          std::move(cookie_and_access_result->cookie_or_line->get_cookie()),
+          cookie_and_access_result->access_result);
     } else if (cookie_and_access_result->access_result.status.IsInclude()) {
-      allowed->cookie_list.emplace_back(
-          std::move(cookie_and_access_result->cookie_or_line->get_cookie()));
+      allowed->cookie_access_result_list.emplace_back(
+          std::move(cookie_and_access_result->cookie_or_line->get_cookie()),
+          cookie_and_access_result->access_result);
     }
   }
 }

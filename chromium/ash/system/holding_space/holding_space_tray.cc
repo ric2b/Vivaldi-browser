@@ -43,6 +43,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
@@ -349,9 +350,6 @@ void HoldingSpaceTray::CloseBubble() {
   holding_space_metrics::RecordPodAction(
       holding_space_metrics::PodAction::kCloseBubble);
 
-  HoldingSpaceController::Get()->OnHoldingSpaceTrayBubbleVisibilityChanged(
-      this, /*visible=*/false);
-
   widget_observer_.Reset();
 
   bubble_.reset();
@@ -367,11 +365,15 @@ void HoldingSpaceTray::ShowBubble() {
 
   DCHECK(tray_container());
 
+  // Refresh suggestions before showing the bubble so that cached suggestions
+  // will be shown immediately rather than being animated in. This reduces the
+  // likelihood of a suggestions related animation occurring while also
+  // animating in the bubble. Note that a suggestions related animation may
+  // still occur in the case of a cache miss.
+  HoldingSpaceController::Get()->client()->RefreshSuggestions();
+
   bubble_ = std::make_unique<HoldingSpaceTrayBubble>(this);
   bubble_->Init();
-
-  HoldingSpaceController::Get()->OnHoldingSpaceTrayBubbleVisibilityChanged(
-      this, /*visible=*/true);
 
   // Observe the bubble widget so that we can close the bubble when a holding
   // space item is being dragged.
@@ -410,7 +412,7 @@ bool HoldingSpaceTray::GetDropFormats(
   // Support custom web data so that file system sources can be retrieved from
   // pickled data. That is the storage location at which the Files app stores
   // both file paths *and* directory paths.
-  format_types->insert(ui::ClipboardFormatType::WebCustomDataType());
+  format_types->insert(ui::ClipboardFormatType::DataTransferCustomType());
   return true;
 }
 
@@ -520,14 +522,6 @@ void HoldingSpaceTray::UpdateVisibility() {
     return;
   }
 
-  // Always show the holding space tray if there are clients forcing it to show
-  // in shelf. Note that this is intentionally respected only while the holding
-  // space model is attached and the user session is unblocked.
-  if (controller->force_show_in_shelf()) {
-    SetVisiblePreferred(true);
-    return;
-  }
-
   // If the predictability flag is enabled, always show the holding space tray.
   if (features::IsHoldingSpacePredictabilityEnabled()) {
     SetVisiblePreferred(true);
@@ -582,7 +576,7 @@ HoldingSpaceTray::CreateContextMenuModel() {
         static_cast<int>(HoldingSpaceCommandId::kHidePreviews),
         l10n_util::GetStringUTF16(
             IDS_ASH_HOLDING_SPACE_CONTEXT_MENU_HIDE_PREVIEWS),
-        ui::ImageModel::FromVectorIcon(kVisibilityOffIcon,
+        ui::ImageModel::FromVectorIcon(vector_icons::kVisibilityOffIcon,
                                        ui::kColorAshSystemUIMenuIcon,
                                        kHoldingSpaceIconSize));
   } else {
@@ -590,7 +584,7 @@ HoldingSpaceTray::CreateContextMenuModel() {
         static_cast<int>(HoldingSpaceCommandId::kShowPreviews),
         l10n_util::GetStringUTF16(
             IDS_ASH_HOLDING_SPACE_CONTEXT_MENU_SHOW_PREVIEWS),
-        ui::ImageModel::FromVectorIcon(kVisibilityIcon,
+        ui::ImageModel::FromVectorIcon(vector_icons::kVisibilityIcon,
                                        ui::kColorAshSystemUIMenuIcon,
                                        kHoldingSpaceIconSize));
   }
@@ -621,16 +615,6 @@ void HoldingSpaceTray::OnHoldingSpaceModelAttached(HoldingSpaceModel* model) {
 
 void HoldingSpaceTray::OnHoldingSpaceModelDetached(HoldingSpaceModel* model) {
   model_observer_.Reset();
-  UpdateVisibility();
-  UpdatePreviewsState();
-}
-
-void HoldingSpaceTray::OnHoldingSpaceForceShowInShelfChanged() {
-  // Animations are distracting when forcibly toggling holding space visibility
-  // in the shelf. Disable them temporarily. Note that animations will be
-  // re-enabled when items are added/removed from the holding space model.
-  SetShouldAnimate(false);
-
   UpdateVisibility();
   UpdatePreviewsState();
 }
@@ -693,7 +677,7 @@ void HoldingSpaceTray::ExecuteCommand(int command_id, int event_flags) {
           Shell::Get()->session_controller()->GetActivePrefService(), true);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }

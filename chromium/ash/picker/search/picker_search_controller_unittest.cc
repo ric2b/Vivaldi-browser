@@ -21,6 +21,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -49,9 +50,7 @@ using ::testing::VariantWith;
 
 constexpr base::TimeDelta kBurnInPeriod = base::Milliseconds(400);
 
-// Before burn-in, after GIF debouncing.
 constexpr base::TimeDelta kBeforeBurnIn = base::Milliseconds(300);
-static_assert(PickerSearchRequest::kGifDebouncingDelay < kBeforeBurnIn);
 static_assert(kBeforeBurnIn < kBurnInPeriod);
 
 constexpr base::TimeDelta kAfterBurnIn = base::Milliseconds(700);
@@ -68,6 +67,11 @@ constexpr base::span<const PickerCategory> kAllCategories = {(PickerCategory[]){
     PickerCategory::kDatesTimes,
     PickerCategory::kUnitsMaths,
 }};
+
+constexpr PickerSearchRequest::Options kDefaultSearchOptions{
+    .available_categories = kAllCategories,
+    .caps_lock_state_to_search = false,
+};
 
 // Matcher for the last element of a collection.
 MATCHER_P(LastElement, matcher, "") {
@@ -98,7 +102,7 @@ TEST_F(PickerSearchControllerTest, SendsQueryToCrosSearchImmediately) {
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
 }
@@ -110,7 +114,7 @@ TEST_F(PickerSearchControllerTest, DoesNotPublishResultsDuringBurnIn) {
                                     /*burn_in_period=*/base::Milliseconds(100));
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   client().cros_search_callback().Run(
@@ -144,7 +148,7 @@ TEST_F(PickerSearchControllerTest, ShowsResultsFromOmniboxSearch) {
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
 
@@ -213,7 +217,7 @@ TEST_F(PickerSearchControllerTest, DoesNotFlashEmptyResultsFromOmniboxSearch) {
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&first_search_results_callback)));
   after_start_search.Call();
@@ -223,7 +227,7 @@ TEST_F(PickerSearchControllerTest, DoesNotFlashEmptyResultsFromOmniboxSearch) {
           GURL("https://www.google.com/search?q=cat"), u"cat - Google Search",
           ui::ImageModel())});
   controller.StartSearch(
-      u"dog", std::nullopt, kAllCategories,
+      u"dog", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&second_search_results_callback)));
 }
@@ -234,7 +238,7 @@ TEST_F(PickerSearchControllerTest, RecordsOmniboxMetricsBeforeBurnIn) {
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   task_environment().FastForwardBy(kBeforeBurnIn);
@@ -254,7 +258,7 @@ TEST_F(PickerSearchControllerTest, RecordsOmniboxMetricsAfterBurnIn) {
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   task_environment().FastForwardBy(kAfterBurnIn);
@@ -283,7 +287,7 @@ TEST_F(PickerSearchControllerTest,
         search_started = false;
       });
   EXPECT_CALL(client(), StartCrosSearch)
-      .Times(2)
+      .Times(1)
       .WillRepeatedly([&search_started, this](
                           const std::u16string& query,
                           std::optional<PickerCategory> category,
@@ -295,14 +299,11 @@ TEST_F(PickerSearchControllerTest,
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   task_environment().FastForwardBy(kBeforeBurnIn);
-  controller.StartSearch(
-      u"dog", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
+  controller.StopSearch();
 
   histogram.ExpectTotalCount("Ash.Picker.Search.OmniboxProvider.QueryTime", 0);
 }
@@ -322,7 +323,7 @@ TEST_F(PickerSearchControllerTest,
         search_started = false;
       });
   EXPECT_CALL(client(), StartCrosSearch)
-      .Times(2)
+      .Times(1)
       .WillRepeatedly([&search_started, this](
                           const std::u16string& query,
                           std::optional<PickerCategory> category,
@@ -334,17 +335,14 @@ TEST_F(PickerSearchControllerTest,
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   task_environment().FastForwardBy(kBeforeBurnIn);
   client().cros_search_callback().Run(
       ash::AppListSearchResultType::kFileSearch,
       {ash::PickerSearchResult::Text(u"monorail_cat.jpg")});
-  controller.StartSearch(
-      u"dog", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
+  controller.StopSearch();
 
   histogram.ExpectTotalCount("Ash.Picker.Search.OmniboxProvider.QueryTime", 0);
 }
@@ -353,26 +351,26 @@ TEST_F(
     PickerSearchControllerTest,
     DoesNotRecordOmniboxMetricsTwiceIfSearchResultsArePublishedAfterStopSearch) {
   base::HistogramTester histogram;
-  NiceMock<MockSearchResultsCallback> first_search_results_callback;
-  NiceMock<MockSearchResultsCallback> second_search_results_callback;
+  NiceMock<MockSearchResultsCallback> search_results_callback;
   // CrOS search calls `StopSearch()` automatically on starting a search.
   // If `StopSearch` actually stops a search, some providers such as the omnibox
   // automatically call the search result callback from the _last_ search with
   // an empty vector.
   // Ensure that we don't record metrics twice if this happens.
   bool search_started = false;
-  ON_CALL(client(), StopCrosQuery).WillByDefault([&search_started, this]() {
-    if (search_started) {
-      client().cros_search_callback().Run(AppListSearchResultType::kOmnibox,
-                                          {});
-    }
-    search_started = false;
-  });
-  ON_CALL(client(), StartCrosSearch)
-      .WillByDefault([&search_started, this](
-                         const std::u16string& query,
-                         std::optional<PickerCategory> category,
-                         PickerClient::CrosSearchResultsCallback callback) {
+  EXPECT_CALL(client(), StopCrosQuery)
+      .WillRepeatedly([&search_started, this]() {
+        if (search_started) {
+          client().cros_search_callback().Run(AppListSearchResultType::kOmnibox,
+                                              {});
+        }
+        search_started = false;
+      });
+  EXPECT_CALL(client(), StartCrosSearch)
+      .WillRepeatedly([&search_started, this](
+                          const std::u16string& query,
+                          std::optional<PickerCategory> category,
+                          PickerClient::CrosSearchResultsCallback callback) {
         client().StopCrosQuery();
         search_started = true;
         client().cros_search_callback() = std::move(callback);
@@ -380,18 +378,15 @@ TEST_F(
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&first_search_results_callback)));
+                          base::Unretained(&search_results_callback)));
   client().cros_search_callback().Run(
       ash::AppListSearchResultType::kOmnibox,
       {ash::PickerSearchResult::BrowsingHistory(
           GURL("https://www.google.com/search?q=cat"), u"cat - Google Search",
           ui::ImageModel())});
-  controller.StartSearch(
-      u"dog", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&second_search_results_callback)));
+  controller.StopSearch();
 
   histogram.ExpectTotalCount("Ash.Picker.Search.OmniboxProvider.QueryTime", 1);
 }
@@ -403,7 +398,7 @@ TEST_F(PickerSearchControllerTest, ShowsResultsFromFileSearch) {
       search_results_callback,
       Call(Contains(AllOf(
           Property("type", &PickerSearchResultsSection::type,
-                   PickerSectionType::kFiles),
+                   PickerSectionType::kLocalFiles),
           Property("results", &PickerSearchResultsSection::results,
                    ElementsAre(Property(
                        "data", &PickerSearchResult::data,
@@ -414,7 +409,7 @@ TEST_F(PickerSearchControllerTest, ShowsResultsFromFileSearch) {
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   client().cros_search_callback().Run(
@@ -429,7 +424,7 @@ TEST_F(PickerSearchControllerTest, RecordsFileMetricsBeforeBurnIn) {
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   task_environment().FastForwardBy(kBeforeBurnIn);
@@ -447,7 +442,7 @@ TEST_F(PickerSearchControllerTest, RecordsFileMetricsAfterBurnIn) {
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   task_environment().FastForwardBy(kAfterBurnIn);
@@ -473,7 +468,7 @@ TEST_F(PickerSearchControllerTest, DoesNotRecordFileMetricsIfNoFileResponse) {
         search_started = false;
       });
   EXPECT_CALL(client(), StartCrosSearch)
-      .Times(2)
+      .Times(1)
       .WillRepeatedly([&search_started, this](
                           const std::u16string& query,
                           std::optional<PickerCategory> category,
@@ -485,14 +480,11 @@ TEST_F(PickerSearchControllerTest, DoesNotRecordFileMetricsIfNoFileResponse) {
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   task_environment().FastForwardBy(kBeforeBurnIn);
-  controller.StartSearch(
-      u"dog", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
+  controller.StopSearch();
 
   histogram.ExpectTotalCount("Ash.Picker.Search.FileProvider.QueryTime", 0);
 }
@@ -512,7 +504,7 @@ TEST_F(PickerSearchControllerTest,
         search_started = false;
       });
   EXPECT_CALL(client(), StartCrosSearch)
-      .Times(2)
+      .Times(1)
       .WillRepeatedly([&search_started, this](
                           const std::u16string& query,
                           std::optional<PickerCategory> category,
@@ -524,7 +516,7 @@ TEST_F(PickerSearchControllerTest,
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   task_environment().FastForwardBy(kBeforeBurnIn);
@@ -533,10 +525,7 @@ TEST_F(PickerSearchControllerTest,
       {ash::PickerSearchResult::BrowsingHistory(
           GURL("https://www.google.com/search?q=cat"), u"cat - Google Search",
           ui::ImageModel())});
-  controller.StartSearch(
-      u"dog", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
+  controller.StopSearch();
 
   histogram.ExpectTotalCount("Ash.Picker.Search.FileProvider.QueryTime", 0);
 }
@@ -559,7 +548,7 @@ TEST_F(PickerSearchControllerTest, ShowsResultsFromDriveSearch) {
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   client().cros_search_callback().Run(
@@ -574,7 +563,7 @@ TEST_F(PickerSearchControllerTest, RecordsDriveMetricsBeforeBurnIn) {
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   task_environment().FastForwardBy(kBeforeBurnIn);
@@ -592,7 +581,7 @@ TEST_F(PickerSearchControllerTest, RecordsDriveMetricsAfterBurnIn) {
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   task_environment().FastForwardBy(kAfterBurnIn);
@@ -618,7 +607,7 @@ TEST_F(PickerSearchControllerTest, DoesNotRecordDriveMetricsIfNoDriveResponse) {
         search_started = false;
       });
   EXPECT_CALL(client(), StartCrosSearch)
-      .Times(2)
+      .Times(1)
       .WillRepeatedly([&search_started, this](
                           const std::u16string& query,
                           std::optional<PickerCategory> category,
@@ -630,14 +619,11 @@ TEST_F(PickerSearchControllerTest, DoesNotRecordDriveMetricsIfNoDriveResponse) {
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   task_environment().FastForwardBy(kBeforeBurnIn);
-  controller.StartSearch(
-      u"dog", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
+  controller.StopSearch();
 
   histogram.ExpectTotalCount("Ash.Picker.Search.DriveProvider.QueryTime", 0);
 }
@@ -657,7 +643,7 @@ TEST_F(PickerSearchControllerTest,
         search_started = false;
       });
   EXPECT_CALL(client(), StartCrosSearch)
-      .Times(2)
+      .Times(1)
       .WillRepeatedly([&search_started, this](
                           const std::u16string& query,
                           std::optional<PickerCategory> category,
@@ -669,7 +655,7 @@ TEST_F(PickerSearchControllerTest,
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   task_environment().FastForwardBy(kBeforeBurnIn);
@@ -678,216 +664,9 @@ TEST_F(PickerSearchControllerTest,
       {ash::PickerSearchResult::BrowsingHistory(
           GURL("https://www.google.com/search?q=cat"), u"cat - Google Search",
           ui::ImageModel())});
-  controller.StartSearch(
-      u"dog", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
+  controller.StopSearch();
 
   histogram.ExpectTotalCount("Ash.Picker.Search.DriveProvider.QueryTime", 0);
-}
-
-TEST_F(PickerSearchControllerTest, DoesNotSendQueryToGifSearchImmediately) {
-  NiceMock<MockSearchResultsCallback> search_results_callback;
-  EXPECT_CALL(client(), FetchGifSearch(Eq("cat"), _)).Times(0);
-  PickerSearchController controller(&client(), kBurnInPeriod);
-
-  controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
-}
-
-TEST_F(PickerSearchControllerTest, SendsQueryToGifSearchAfterDelay) {
-  NiceMock<MockSearchResultsCallback> search_results_callback;
-  EXPECT_CALL(client(), FetchGifSearch(Eq("cat"), _)).Times(1);
-  PickerSearchController controller(&client(), kBurnInPeriod);
-
-  controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
-  task_environment().FastForwardBy(PickerSearchRequest::kGifDebouncingDelay);
-}
-
-TEST_F(PickerSearchControllerTest,
-       ShowsResultsFromGifSearchAfterDriveSearchFinishes) {
-  MockSearchResultsCallback search_results_callback;
-  EXPECT_CALL(search_results_callback, Call).Times(AnyNumber());
-  EXPECT_CALL(
-      search_results_callback,
-      Call(Contains(AllOf(
-          Property("type", &PickerSearchResultsSection::type,
-                   PickerSectionType::kGifs),
-          Property(
-              "results", &PickerSearchResultsSection::results,
-              Contains(Property(
-                  "data", &PickerSearchResult::data,
-                  VariantWith<PickerSearchResult::GifData>(AllOf(
-                      Field("full_url", &PickerSearchResult::GifData::full_url,
-                            Property("spec", &GURL::spec,
-                                     "https://media.tenor.com/GOabrbLMl4AAAAAC/"
-                                     "plink-cat-plink.gif")),
-                      Field("content_description",
-                            &PickerSearchResult::GifData::content_description,
-                            u"cat blink"))))))))))
-      .Times(AtLeast(1));
-  PickerSearchController controller(&client(), kBurnInPeriod);
-
-  controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
-  task_environment().FastForwardBy(PickerSearchRequest::kGifDebouncingDelay);
-
-  client().cros_search_callback().Run(
-      ash::AppListSearchResultType::kDriveSearch,
-      {ash::PickerSearchResult::Text(u"drive")});
-  std::move(client().gif_search_callback())
-      .Run({ash::PickerSearchResult::Gif(
-          GURL("https://media.tenor.com/GOabrbLMl4AAAAAd/plink-cat-plink.gif"),
-          GURL("https://media.tenor.com/GOabrbLMl4AAAAAe/plink-cat-plink.png"),
-          gfx::Size(360, 360),
-          GURL("https://media.tenor.com/GOabrbLMl4AAAAAC/plink-cat-plink.gif"),
-          gfx::Size(480, 480), u"cat blink")});
-  task_environment().FastForwardBy(kBurnInPeriod -
-                                   PickerSearchRequest::kGifDebouncingDelay);
-}
-
-TEST_F(PickerSearchControllerTest, StopsOldGifSearches) {
-  MockSearchResultsCallback search_results_callback;
-  PickerClient::FetchGifsCallback old_gif_callback;
-  EXPECT_CALL(search_results_callback, Call).Times(AnyNumber());
-  EXPECT_CALL(
-      search_results_callback,
-      Call(Contains(AllOf(
-          Property("type", &PickerSearchResultsSection::type,
-                   PickerSectionType::kGifs),
-          Property(
-              "results", &PickerSearchResultsSection::results,
-              Contains(Property(
-                  "data", &PickerSearchResult::data,
-                  VariantWith<PickerSearchResult::GifData>(AllOf(
-                      Field("full_url", &PickerSearchResult::GifData::full_url,
-                            Property("spec", &GURL::spec,
-                                     "https://media.tenor.com/GOabrbLMl4AAAAAC/"
-                                     "plink-cat-plink.gif")),
-                      Field("content_description",
-                            &PickerSearchResult::GifData::content_description,
-                            u"cat blink"))))))))))
-      .Times(0);
-  ON_CALL(client(), StopGifSearch)
-      .WillByDefault(
-          Invoke(&old_gif_callback, &PickerClient::FetchGifsCallback::Reset));
-  PickerSearchController controller(&client(), kBurnInPeriod);
-
-  controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
-  task_environment().FastForwardBy(PickerSearchRequest::kGifDebouncingDelay);
-  old_gif_callback = std::move(client().gif_search_callback());
-  EXPECT_FALSE(old_gif_callback.is_null());
-  controller.StartSearch(
-      u"dog", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
-  EXPECT_TRUE(old_gif_callback.is_null());
-}
-
-TEST_F(PickerSearchControllerTest, ShowGifResultsLast) {
-  MockSearchResultsCallback search_results_callback;
-  EXPECT_CALL(search_results_callback, Call).Times(AnyNumber());
-  EXPECT_CALL(search_results_callback,
-              Call(LastElement(AllOf(
-                  Property("type", &PickerSearchResultsSection::type,
-                           PickerSectionType::kGifs),
-                  Property("results", &PickerSearchResultsSection::results,
-                           Contains(Property(
-                               "data", &PickerSearchResult::data,
-                               VariantWith<PickerSearchResult::TextData>(Field(
-                                   "primary_text",
-                                   &PickerSearchResult::TextData::primary_text,
-                                   u"gif")))))))))
-      .Times(1);
-  PickerSearchController controller(&client(), kBurnInPeriod);
-
-  controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
-  task_environment().FastForwardBy(PickerSearchRequest::kGifDebouncingDelay);
-
-  std::move(client().gif_search_callback())
-      .Run({ash::PickerSearchResult::Text(u"gif")});
-  client().cros_search_callback().Run(
-      ash::AppListSearchResultType::kDriveSearch,
-      {ash::PickerSearchResult::Text(u"drive")});
-  task_environment().FastForwardBy(kBurnInPeriod -
-                                   PickerSearchRequest::kGifDebouncingDelay);
-}
-
-TEST_F(PickerSearchControllerTest, RecordsGifMetricsBeforeBurnIn) {
-  base::HistogramTester histogram;
-  NiceMock<MockSearchResultsCallback> search_results_callback;
-  PickerSearchController controller(&client(), kBurnInPeriod);
-
-  controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
-  task_environment().FastForwardBy(kBeforeBurnIn);
-  std::move(client().gif_search_callback())
-      .Run({ash::PickerSearchResult::Gif(
-          GURL("https://media.tenor.com/GOabrbLMl4AAAAAd/plink-cat-plink.gif"),
-          GURL("https://media.tenor.com/GOabrbLMl4AAAAAe/plink-cat-plink.png"),
-          gfx::Size(360, 360),
-          GURL("https://media.tenor.com/GOabrbLMl4AAAAAC/plink-cat-plink.gif"),
-          gfx::Size(480, 480), u"cat blink")});
-
-  histogram.ExpectUniqueTimeSample(
-      "Ash.Picker.Search.GifProvider.QueryTime",
-      kBeforeBurnIn - PickerSearchRequest::kGifDebouncingDelay, 1);
-}
-
-TEST_F(PickerSearchControllerTest, RecordsGifMetricsAfterBurnIn) {
-  base::HistogramTester histogram;
-  NiceMock<MockSearchResultsCallback> search_results_callback;
-  PickerSearchController controller(&client(), kBurnInPeriod);
-
-  controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
-  task_environment().FastForwardBy(kAfterBurnIn);
-  std::move(client().gif_search_callback())
-      .Run({ash::PickerSearchResult::Gif(
-          GURL("https://media.tenor.com/GOabrbLMl4AAAAAd/plink-cat-plink.gif"),
-          GURL("https://media.tenor.com/GOabrbLMl4AAAAAe/plink-cat-plink.png"),
-          gfx::Size(360, 360),
-          GURL("https://media.tenor.com/GOabrbLMl4AAAAAC/plink-cat-plink.gif"),
-          gfx::Size(480, 480), u"cat blink")});
-
-  histogram.ExpectUniqueTimeSample(
-      "Ash.Picker.Search.GifProvider.QueryTime",
-      kAfterBurnIn - PickerSearchRequest::kGifDebouncingDelay, 1);
-}
-
-TEST_F(PickerSearchControllerTest, DoesNotRecordGifMetricsIfNoResponse) {
-  base::HistogramTester histogram;
-  NiceMock<MockSearchResultsCallback> search_results_callback;
-  PickerSearchController controller(&client(), kBurnInPeriod);
-
-  controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
-  task_environment().FastForwardBy(kBeforeBurnIn);
-  controller.StartSearch(
-      u"dog", std::nullopt, kAllCategories,
-      base::BindRepeating(&MockSearchResultsCallback::Call,
-                          base::Unretained(&search_results_callback)));
-
-  histogram.ExpectTotalCount("Ash.Picker.Search.GifProvider.QueryTime", 0);
 }
 
 TEST_F(PickerSearchControllerTest, CombinesSearchResults) {
@@ -906,7 +685,7 @@ TEST_F(PickerSearchControllerTest, CombinesSearchResults) {
                                  &PickerSearchResult::TextData::primary_text,
                                  u"omnibox")))))),
           AllOf(Property("type", &PickerSearchResultsSection::type,
-                         PickerSectionType::kFiles),
+                         PickerSectionType::kLocalFiles),
                 Property("results", &PickerSearchResultsSection::results,
                          Contains(Property(
                              "data", &PickerSearchResult::data,
@@ -923,24 +702,15 @@ TEST_F(PickerSearchControllerTest, CombinesSearchResults) {
                                  "primary_text",
                                  &PickerSearchResult::TextData::primary_text,
                                  u"drive")))))),
-          AllOf(Property("type", &PickerSearchResultsSection::type,
-                         PickerSectionType::kGifs),
-                Property("results", &PickerSearchResultsSection::results,
-                         Contains(Property(
-                             "data", &PickerSearchResult::data,
-                             VariantWith<PickerSearchResult::TextData>(Field(
-                                 "primary_text",
-                                 &PickerSearchResult::TextData::primary_text,
-                                 u"gif")))))),
       })))
       .Times(AtLeast(1));
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
-  task_environment().FastForwardBy(PickerSearchRequest::kGifDebouncingDelay);
+  task_environment().FastForwardBy(kBeforeBurnIn);
 
   client().cros_search_callback().Run(
       ash::AppListSearchResultType::kOmnibox,
@@ -950,27 +720,19 @@ TEST_F(PickerSearchControllerTest, CombinesSearchResults) {
   client().cros_search_callback().Run(
       ash::AppListSearchResultType::kDriveSearch,
       {ash::PickerSearchResult::Text(u"drive")});
-  std::move(client().gif_search_callback())
-      .Run({ash::PickerSearchResult::Text(u"gif")});
-  task_environment().FastForwardBy(kBurnInPeriod -
-                                   PickerSearchRequest::kGifDebouncingDelay);
+  task_environment().FastForwardBy(kBurnInPeriod - kBeforeBurnIn);
 }
 
 TEST_F(PickerSearchControllerTest, DoNotShowEmptySectionsDuringBurnIn) {
   MockSearchResultsCallback search_results_callback;
-  EXPECT_CALL(search_results_callback, Call).Times(AnyNumber());
-  EXPECT_CALL(
-      search_results_callback,
-      Call(Not(Contains(Property("type", &PickerSearchResultsSection::type,
-                                 PickerSectionType::kLinks)))))
-      .Times(AtLeast(1));
+  EXPECT_CALL(search_results_callback, Call).Times(0);
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
-  task_environment().FastForwardBy(PickerSearchRequest::kGifDebouncingDelay);
+  task_environment().FastForwardBy(kBeforeBurnIn);
 
   client().cros_search_callback().Run(ash::AppListSearchResultType::kOmnibox,
                                       {});
@@ -979,16 +741,11 @@ TEST_F(PickerSearchControllerTest, DoNotShowEmptySectionsDuringBurnIn) {
 
 TEST_F(PickerSearchControllerTest, DoNotShowEmptySectionsAfterBurnIn) {
   MockSearchResultsCallback search_results_callback;
-  EXPECT_CALL(search_results_callback, Call).Times(AnyNumber());
-  EXPECT_CALL(
-      search_results_callback,
-      Call(Not(Contains(Property("type", &PickerSearchResultsSection::type,
-                                 PickerSectionType::kLinks)))))
-      .Times(AtLeast(1));
+  EXPECT_CALL(search_results_callback, Call).Times(0);
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   task_environment().FastForwardBy(kBurnInPeriod);
@@ -1016,7 +773,7 @@ TEST_F(PickerSearchControllerTest, ShowResultsEvenAfterBurnIn) {
   PickerSearchController controller(&client(), kBurnInPeriod);
 
   controller.StartSearch(
-      u"cat", std::nullopt, kAllCategories,
+      u"cat", std::nullopt, kDefaultSearchOptions,
       base::BindRepeating(&MockSearchResultsCallback::Call,
                           base::Unretained(&search_results_callback)));
   task_environment().FastForwardBy(kBurnInPeriod);
@@ -1035,15 +792,140 @@ TEST_F(PickerSearchControllerTest, OnlyStartCrosSearchForCertainCategories) {
   EXPECT_CALL(client(),
               StartCrosSearch(Eq(u"cat"), Eq(PickerCategory::kLocalFiles), _))
       .Times(1);
-  EXPECT_CALL(client(), FetchGifSearch(_, _)).Times(0);
   PickerSearchController controller(&client(), kBurnInPeriod);
 
-  controller.StartSearch(u"ant", PickerCategory::kLinks, kAllCategories,
+  controller.StartSearch(u"ant", PickerCategory::kLinks, kDefaultSearchOptions,
                          base::DoNothing());
-  controller.StartSearch(u"bat", PickerCategory::kDriveFiles, kAllCategories,
-                         base::DoNothing());
-  controller.StartSearch(u"cat", PickerCategory::kLocalFiles, kAllCategories,
-                         base::DoNothing());
+  controller.StartSearch(u"bat", PickerCategory::kDriveFiles,
+                         kDefaultSearchOptions, base::DoNothing());
+  controller.StartSearch(u"cat", PickerCategory::kLocalFiles,
+                         kDefaultSearchOptions, base::DoNothing());
+}
+
+TEST_F(PickerSearchControllerTest,
+       PublishesEmptyResultsAfterResultsOnceDoneDuringBurnIn) {
+  MockSearchResultsCallback search_results_callback;
+  {
+    ::testing::InSequence seq;
+    // "cat" shouldn't match any categories.
+    EXPECT_CALL(
+        search_results_callback,
+        Call(Contains(Property("type", &PickerSearchResultsSection::type,
+                               PickerSectionType::kLinks))))
+        .Times(1);
+    EXPECT_CALL(search_results_callback, Call(IsEmpty())).Times(1);
+  }
+  PickerSearchController controller(&client(), kBurnInPeriod);
+
+  controller.StartSearch(
+      u"cat", std::nullopt,
+      {.available_categories = {{PickerCategory::kLinks}}},
+      base::BindRepeating(&MockSearchResultsCallback::Call,
+                          base::Unretained(&search_results_callback)));
+
+  task_environment().FastForwardBy(kBeforeBurnIn);
+  client().cros_search_callback().Run(AppListSearchResultType::kOmnibox,
+                                      {PickerSearchResult::Text(u"cat")});
+}
+
+TEST_F(PickerSearchControllerTest,
+       PublishesEmptyResultsAfterResultsOnceDoneAfterDoneAfterBurnIn) {
+  MockSearchResultsCallback search_results_callback;
+  {
+    ::testing::InSequence seq;
+    // "cat" shouldn't match any categories.
+    EXPECT_CALL(
+        search_results_callback,
+        Call(Contains(Property("type", &PickerSearchResultsSection::type,
+                               PickerSectionType::kLinks))))
+        .Times(1);
+    EXPECT_CALL(search_results_callback, Call(IsEmpty())).Times(1);
+  }
+  PickerSearchController controller(&client(), kBurnInPeriod);
+
+  controller.StartSearch(
+      u"cat", std::nullopt,
+      {.available_categories = {{PickerCategory::kLinks}}},
+      base::BindRepeating(&MockSearchResultsCallback::Call,
+                          base::Unretained(&search_results_callback)));
+
+  task_environment().FastForwardBy(kBurnInPeriod);
+  client().cros_search_callback().Run(AppListSearchResultType::kOmnibox,
+                                      {PickerSearchResult::Text(u"cat")});
+}
+
+TEST_F(PickerSearchControllerTest,
+       DoesNotPublishResultsWhenInterruptedDuringBurnIn) {
+  MockSearchResultsCallback search_results_callback;
+  EXPECT_CALL(search_results_callback, Call).Times(AnyNumber());
+  EXPECT_CALL(search_results_callback,
+              Call(Contains(Property("type", &PickerSearchResultsSection::type,
+                                     PickerSectionType::kLinks))))
+      .Times(0);
+  PickerSearchController controller(&client(), kBurnInPeriod);
+
+  controller.StartSearch(
+      u"cat", std::nullopt, kDefaultSearchOptions,
+      base::BindRepeating(&MockSearchResultsCallback::Call,
+                          base::Unretained(&search_results_callback)));
+
+  task_environment().FastForwardBy(kBeforeBurnIn);
+  client().cros_search_callback().Run(AppListSearchResultType::kOmnibox,
+                                      {PickerSearchResult::Text(u"cat")});
+  controller.StopSearch();
+}
+
+TEST_F(PickerSearchControllerTest,
+       DoesNotPublishEmptyResultsWhenInterruptedDuringBurnIn) {
+  MockSearchResultsCallback search_results_callback;
+  EXPECT_CALL(search_results_callback, Call).Times(AnyNumber());
+  EXPECT_CALL(search_results_callback, Call(IsEmpty())).Times(0);
+  PickerSearchController controller(&client(), kBurnInPeriod);
+
+  controller.StartSearch(
+      u"cat", std::nullopt, kDefaultSearchOptions,
+      base::BindRepeating(&MockSearchResultsCallback::Call,
+                          base::Unretained(&search_results_callback)));
+
+  task_environment().FastForwardBy(kBeforeBurnIn);
+  client().cros_search_callback().Run(AppListSearchResultType::kOmnibox,
+                                      {PickerSearchResult::Text(u"cat")});
+  controller.StopSearch();
+}
+
+TEST_F(PickerSearchControllerTest,
+       DoesNotPublishEmptyResultsWhenInterruptedAfterBurnIn) {
+  MockSearchResultsCallback search_results_callback;
+  EXPECT_CALL(search_results_callback, Call).Times(AnyNumber());
+  EXPECT_CALL(search_results_callback, Call(IsEmpty())).Times(0);
+  NiceMock<MockSearchResultsCallback> second_search_results_callback;
+  PickerSearchController controller(&client(), kBurnInPeriod);
+
+  controller.StartSearch(
+      u"cat", std::nullopt, kDefaultSearchOptions,
+      base::BindRepeating(&MockSearchResultsCallback::Call,
+                          base::Unretained(&search_results_callback)));
+
+  task_environment().FastForwardBy(kBurnInPeriod);
+  client().cros_search_callback().Run(AppListSearchResultType::kOmnibox,
+                                      {PickerSearchResult::Text(u"cat")});
+  controller.StopSearch();
+}
+
+TEST_F(PickerSearchControllerTest, StopSearchDoesNotCallOldCallbackAfterwards) {
+  MockSearchResultsCallback search_results_callback;
+  EXPECT_CALL(search_results_callback, Call).Times(0);
+  MockSearchResultsCallback second_search_results_callback;
+  PickerSearchController controller(&client(), kBurnInPeriod);
+
+  controller.StartSearch(
+      u"cat", std::nullopt, kDefaultSearchOptions,
+      base::BindRepeating(&MockSearchResultsCallback::Call,
+                          base::Unretained(&search_results_callback)));
+  client().cros_search_callback().Run(AppListSearchResultType::kOmnibox,
+                                      {PickerSearchResult::Text(u"cat")});
+  controller.StopSearch();
+  task_environment().FastForwardBy(kBurnInPeriod);
 }
 
 }  // namespace

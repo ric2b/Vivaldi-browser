@@ -60,7 +60,9 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
   }
   */
 
+  // <if expr="use_nss_certs">
   r.CERTIFICATES = r.SECURITY.createChild('/certificates');
+  // </if>
 
   if (loadTimeData.getBoolean('enableSecurityKeysSubpage')) {
     r.SECURITY_KEYS = r.SECURITY.createChild('/securityKeys');
@@ -193,6 +195,9 @@ function createRoutes(): SettingsRoutes {
     if (loadTimeData.getBoolean('enablePageContentSetting')) {
       r.PAGE_CONTENT = r.SYNC.createChild('/syncSetup/pageContent');
     }
+    if (loadTimeData.getBoolean('showHistorySearchControl')) {
+      r.HISTORY_SEARCH = r.SYNC.createChild('/historySearch');
+    }
   }
 
   const visibility = pageVisibility || {};
@@ -272,12 +277,6 @@ function createRoutes(): SettingsRoutes {
 
     // <if expr="is_linux">
     r.CAPTIONS = r.ACCESSIBILITY.createChild('/captions');
-    // </if>
-
-    // <if expr="is_win">
-    if (!loadTimeData.getBoolean('isWindows10OrNewer')) {
-      r.CAPTIONS = r.ACCESSIBILITY.createChild('/captions');
-    }
     // </if>
 
     // <if expr="not chromeos_ash">

@@ -159,6 +159,7 @@ class RootVisitor;
   V(Map, protected_fixed_array_map, ProtectedFixedArrayMap)                    \
   V(Map, interpreter_data_map, InterpreterDataMap)                             \
   V(Map, shared_function_info_wrapper_map, SharedFunctionInfoWrapperMap)       \
+  V(Map, trusted_foreign_map, TrustedForeignMap)                               \
   /* String maps */                                                            \
   V(Map, seq_two_byte_string_map, SeqTwoByteStringMap)                         \
   V(Map, cons_two_byte_string_map, ConsTwoByteStringMap)                       \
@@ -361,6 +362,12 @@ class RootVisitor;
     AtomicsMutexAsyncUnlockRejectHandlerSFI)                                   \
   V(SharedFunctionInfo, atomics_condition_acquire_lock_sfi,                    \
     AtomicsConditionAcquireLockSFI)                                            \
+  V(SharedFunctionInfo, async_disposable_stack_on_fulfilled_shared_fun,        \
+    AsyncDisposableStackOnFulfilledSharedFun)                                  \
+  V(SharedFunctionInfo, async_disposable_stack_on_rejected_shared_fun,         \
+    AsyncDisposableStackOnRejectedSharedFun)                                   \
+  V(SharedFunctionInfo, async_dispose_from_sync_dispose_shared_fun,            \
+    AsyncDisposeFromSyncDisposeSharedFun)                                      \
   TRUSTED_ROOT_LIST(V)
 
 // These root references can be updated by the mutator.
@@ -374,7 +381,6 @@ class RootVisitor;
   V(WeakArrayList, script_list, ScriptList)                                 \
   V(FixedArray, materialized_objects, MaterializedObjects)                  \
   V(WeakArrayList, detached_contexts, DetachedContexts)                     \
-  V(WeakArrayList, retaining_path_targets, RetainingPathTargets)            \
   /* Feedback vectors that we need for code coverage or type profile */     \
   V(Object, feedback_vectors_for_profiling_tools,                           \
     FeedbackVectorsForProfilingTools)                                       \

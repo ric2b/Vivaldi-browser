@@ -244,7 +244,7 @@ Linux example:
 
 ```none
 {
- // Pass -j1024 if (and only if!) building with GOMA.
+ // Pass -j1024 if (and only if!) building with reclient/RBE.
  "cmd": ["ninja", "-C", "out/Debug", "blink", "-j1024"],
  "working_dir": "${project_path}/src",
  // Ninja/GN build errors are build-dir relative, however file_regexp
@@ -281,7 +281,7 @@ documentation](http://sublimetext.info/docs/en/reference/build_systems.html) (as
 of Nov 2014 older is more complete).
 
 This will make hitting Ctrl-B build chrome.exe (really quickly, thanks to
-ninja), F4 will navigate to the next build error, etc. If you're using Goma, you
+ninja), F4 will navigate to the next build error, etc. If you're using RBE, you
 can play with something like: "cmd": \["ninja", ***"-j", "200",*** "-C",
 "out\\\\Debug", "chrome.exe"\],.
 
@@ -368,8 +368,8 @@ Here's an example for how you could add a binding to your User key bindings
 
 ```none
 [
-    {  
-        "keys": ["ctrl+shift+l"], "command": "run_lint"  
+    {
+        "keys": ["ctrl+shift+l"], "command": "run_lint"
     }
 ]
 ```

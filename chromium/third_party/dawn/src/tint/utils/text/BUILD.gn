@@ -46,6 +46,8 @@ libtint_source_set("text") {
   sources = [
     "base64.cc",
     "base64.h",
+    "color_mode.cc",
+    "color_mode.h",
     "string.cc",
     "string.h",
     "string_stream.cc",

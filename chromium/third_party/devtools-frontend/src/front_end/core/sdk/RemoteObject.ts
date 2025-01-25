@@ -489,9 +489,6 @@ export class RemoteObjectImpl extends RemoteObject {
       if (!property.value) {
         continue;
       }
-      if (property.name === '[[StableObjectId]]') {
-        continue;
-      }
       const propertyValue = this.runtimeModelInternal.createRemoteObject(property.value);
       internalPropertiesResult.push(
           new RemoteObjectProperty(property.name, propertyValue, true, false, undefined, undefined, undefined, true));
@@ -1182,9 +1179,7 @@ const descriptionLengthSquareRegex = /\[([0-9]+)\]/;
 
 const enum UnserializableNumber {
   Negative0 = ('-0'),
-  // @ts-expect-error
   NaN = ('NaN'),
-  // @ts-expect-error
   Infinity = ('Infinity'),
   NegativeInfinity = ('-Infinity'),
 }

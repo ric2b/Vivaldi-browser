@@ -36,8 +36,8 @@ use jni::{
     JNIEnv,
 };
 
-use ldt::XorPadder;
-use ldt_np_adv::{LdtAdvDecryptError, LdtEncrypterXtsAes128, LdtNpAdvDecrypterXtsAes128};
+use ldt::{LdtCipher, XorPadder};
+use ldt_np_adv::{AuthenticatedNpLdtDecryptCipher, LdtAdvDecryptError, NpLdtEncryptCipher};
 use np_hkdf::NpKeySeedHkdf;
 
 use crypto_provider_default::CryptoProviderImpl;
@@ -56,10 +56,11 @@ const CREATE_ERROR: jlong = 0;
 /// Status code returned on successful cipher operations
 const SUCCESS: jint = 0;
 
-type LdtAdvDecrypter = LdtNpAdvDecrypterXtsAes128<CryptoProviderImpl>;
-type LdtAdvEncrypter = LdtEncrypterXtsAes128<CryptoProviderImpl>;
+type LdtAdvDecrypter = AuthenticatedNpLdtDecryptCipher<CryptoProviderImpl>;
+type LdtAdvEncrypter = NpLdtEncryptCipher<CryptoProviderImpl>;
 
 /// Marker trait to ensure above types are thread safe
+#[allow(dead_code)]
 trait JniThreadSafe: Send + Sync {}
 
 impl JniThreadSafe for LdtAdvDecrypter {}
@@ -90,7 +91,7 @@ extern "system" fn Java_com_google_android_gms_nearby_presence_hazmat_LdtNpJni_c
             key_seed.as_slice().try_into().expect("Length is checked above"),
         );
 
-        let cipher = LdtAdvEncrypter::new(&hkdf_key_seed.legacy_ldt_key());
+        let cipher = LdtAdvEncrypter::new(&hkdf_key_seed.v0_ldt_key());
         box_to_handle(cipher).map_err(|_| CREATE_ERROR)
     })
 }
@@ -221,14 +222,15 @@ extern "system" fn Java_com_google_android_gms_nearby_presence_hazmat_LdtNpJni_d
             })?;
 
         with_handle::<LdtAdvDecrypter, _, _>(handle, |cipher| {
-            let result = cipher
+            let (identity_token, plaintext) = cipher
                 .decrypt_and_verify(buffer.as_mut_slice(), &expand_np_salt_to_padder(salt))
                 .map_err(|err| match err {
                     LdtAdvDecryptError::InvalidLength(_) => DecryptError::DataLen,
                     LdtAdvDecryptError::MacMismatch => DecryptError::MacMisMatch,
                 })?;
 
-            let jbyte_buffer = bytes_to_jbytes(result.as_slice());
+            let concatenated = &[identity_token.as_slice(), plaintext.as_slice()].concat();
+            let jbyte_buffer = bytes_to_jbytes(concatenated);
 
             env.set_byte_array_region(&data, 0, jbyte_buffer)
                 .map_err(|_| DecryptError::JniOp)
@@ -301,7 +303,7 @@ fn box_to_handle<T>(thing: T) -> Result<jlong, ()> {
 /// Returns a XorPadder containing the HKDF of the salt.
 fn expand_np_salt_to_padder(np_salt: jchar) -> XorPadder<{ crypto_provider::aes::BLOCK_SIZE }> {
     let salt_bytes = np_salt.to_be_bytes();
-    ldt_np_adv::salt_padder::<16, CryptoProviderImpl>(salt_bytes.into())
+    ldt_np_adv::salt_padder::<CryptoProviderImpl>(salt_bytes.into())
 }
 
 fn map_to_error_code<E: JniError, F: Fn() -> Result<jint, E>>(f: F) -> jint {

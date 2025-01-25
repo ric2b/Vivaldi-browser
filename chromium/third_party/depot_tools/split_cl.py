@@ -64,7 +64,7 @@ def FormatDirectoriesForPrinting(directories, prefix=None):
 
 def FormatDescriptionOrComment(txt, directories):
     """Replaces $directory with |directories| in |txt|."""
-    to_insert = FormatDirectoriesForPrinting(directories, prefix='/')
+    to_insert = FormatDirectoriesForPrinting(directories)
     return txt.replace('$directory', to_insert)
 
 

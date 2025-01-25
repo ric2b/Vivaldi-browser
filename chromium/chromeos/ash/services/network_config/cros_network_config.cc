@@ -48,8 +48,10 @@
 #include "chromeos/ash/components/network/proxy/ui_proxy_config_service.h"
 #include "chromeos/ash/components/network/technology_state_controller.h"
 #include "chromeos/ash/components/network/text_message_suppression_state.h"
+#include "chromeos/ash/components/network/traffic_counters_handler.h"
 #include "chromeos/ash/components/sync_wifi/network_eligibility_checker.h"
 #include "chromeos/ash/components/system/statistics_provider.h"
+#include "chromeos/components/onc/onc_utils.h"
 #include "chromeos/services/network_config/public/cpp/cros_network_config_util.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom-shared.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
@@ -94,9 +96,6 @@ const char kErrorUserIsProhibitedFromConfiguringVpn[] =
 const char kDefaultCellularProviderName[] = "MobileNetwork";
 const char kDefaultCellularProviderCode[] = "000000";
 
-// Default traffic counter reset day.
-const int kDefaultResetDay = 1;
-
 std::string ShillToOnc(const std::string& shill_string,
                        const onc::StringTranslationEntry table[]) {
   std::string onc_string;
@@ -116,7 +115,8 @@ mojom::NetworkType NetworkPatternToMojo(NetworkTypePattern type) {
     return mojom::NetworkType::kVPN;
   if (type.Equals(NetworkTypePattern::WiFi()))
     return mojom::NetworkType::kWiFi;
-  NOTREACHED() << "Unsupported network type: " << type.ToDebugString();
+  NOTREACHED_IN_MIGRATION()
+      << "Unsupported network type: " << type.ToDebugString();
   return mojom::NetworkType::kAll;  // Unsupported
 }
 
@@ -148,7 +148,7 @@ NetworkTypePattern MojoTypeToPattern(mojom::NetworkType type) {
     case mojom::NetworkType::kWiFi:
       return NetworkTypePattern::WiFi();
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return NetworkTypePattern::Default();
 }
 
@@ -157,7 +157,8 @@ mojom::IPConfigType OncIPConfigTypeToMojo(const std::string& ip_config_type) {
     return mojom::IPConfigType::kIPv4;
   if (ip_config_type == ::onc::ipconfig::kIPv6)
     return mojom::IPConfigType::kIPv6;
-  NOTREACHED() << "Unsupported ONC IPConfig type: " << ip_config_type;
+  NOTREACHED_IN_MIGRATION()
+      << "Unsupported ONC IPConfig type: " << ip_config_type;
   return mojom::IPConfigType::kIPv4;
 }
 
@@ -168,7 +169,7 @@ std::string MojoIPConfigTypeToOnc(mojom::IPConfigType type) {
     case mojom::IPConfigType::kIPv6:
       return ::onc::ipconfig::kIPv6;
   }
-  NOTREACHED() << "Unexpected mojo IPConfig type: " << type;
+  NOTREACHED_IN_MIGRATION() << "Unexpected mojo IPConfig type: " << type;
   return ::onc::ipconfig::kIPv4;
 }
 
@@ -189,7 +190,7 @@ std::string MojoNetworkTypeToOnc(mojom::NetworkType type) {
     case mojom::NetworkType::kWiFi:
       return ::onc::network_type::kWiFi;
   }
-  NOTREACHED() << "Unsupported mojo to ONC type: " << type;
+  NOTREACHED_IN_MIGRATION() << "Unsupported mojo to ONC type: " << type;
   return std::string();
 }
 
@@ -235,7 +236,8 @@ std::string MojoSecurityTypeToOnc(mojom::SecurityType security_type) {
     case mojom::SecurityType::kWpaPsk:
       return ::onc::wifi::kWPA_PSK;
   }
-  NOTREACHED() << "Unsupported mojo to ONC type: " << security_type;
+  NOTREACHED_IN_MIGRATION()
+      << "Unsupported mojo to ONC type: " << security_type;
   return std::string();
 }
 
@@ -253,7 +255,8 @@ mojom::MatchType PasspointMatchTypeToMojo(
   if (*match_type == shill::kPasspointMatchTypeUnknown) {
     return mojom::MatchType::kUnknown;
   }
-  NOTREACHED() << "Unsupported Passpoint match type: " << *match_type;
+  NOTREACHED_IN_MIGRATION()
+      << "Unsupported Passpoint match type: " << *match_type;
   return mojom::MatchType::kUnknown;
 }
 
@@ -270,7 +273,7 @@ mojom::VpnType OncVpnTypeToMojo(const std::string& onc_vpn_type) {
     return mojom::VpnType::kExtension;
   if (onc_vpn_type == ::onc::vpn::kArcVpn)
     return mojom::VpnType::kArc;
-  NOTREACHED() << "Unsupported ONC VPN type: " << onc_vpn_type;
+  NOTREACHED_IN_MIGRATION() << "Unsupported ONC VPN type: " << onc_vpn_type;
   return mojom::VpnType::kOpenVPN;
 }
 
@@ -289,7 +292,7 @@ std::string MojoVpnTypeToOnc(mojom::VpnType mojo_vpn_type) {
     case mojom::VpnType::kArc:
       return ::onc::vpn::kArcVpn;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ::onc::vpn::kOpenVPN;
 }
 
@@ -324,7 +327,7 @@ mojom::DeviceStateType GetMojoDeviceStateType(
     case NetworkStateHandler::TECHNOLOGY_PROHIBITED:
       return mojom::DeviceStateType::kProhibited;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return mojom::DeviceStateType::kUnavailable;
 }
 
@@ -342,7 +345,7 @@ mojom::PortalState GetMojoPortalState(
     case NetworkState::PortalState::kNoInternet:
       return mojom::PortalState::kNoInternet;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return mojom::PortalState::kUnknown;
 }
 
@@ -382,7 +385,7 @@ mojom::OncSource GetMojoOncSource(const NetworkState* network) {
     case ::onc::ONC_SOURCE_USER_POLICY:
       return mojom::OncSource::kUserPolicy;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return mojom::OncSource::kNone;
 }
 
@@ -534,6 +537,7 @@ mojom::NetworkStatePropertiesPtr NetworkStateToMojo(
       wifi->security = network->GetMojoSecurity();
       wifi->signal_strength = network->signal_strength();
       wifi->ssid = network->name();
+      wifi->visible = network->visible();
       wifi->hidden_ssid = network->hidden_ssid();
       wifi->passpoint_id = network->passpoint_id();
       result->type_state =
@@ -543,7 +547,8 @@ mojom::NetworkStatePropertiesPtr NetworkStateToMojo(
     case mojom::NetworkType::kAll:
     case mojom::NetworkType::kMobile:
     case mojom::NetworkType::kWireless:
-      NOTREACHED() << "NetworkStateProperties can not be of type: " << type;
+      NOTREACHED_IN_MIGRATION()
+          << "NetworkStateProperties can not be of type: " << type;
       break;
   }
   return result;
@@ -656,17 +661,15 @@ mojom::DeviceStatePropertiesPtr DeviceStateToMojo(
     result->inhibit_reason =
         GetInhibitReason(network_state_handler, cellular_inhibitor);
     result->imei = device->imei();
-    if (features::IsCellularCarrierLockEnabled() && serial_number &&
-        !serial_number->empty()) {
+    if (serial_number && !serial_number->empty()) {
       result->serial = serial_number.value();
     }
-    if (features::IsCellularCarrierLockEnabled()) {
-      carrier_lock::ModemLockStatus status =
-          carrier_lock::CarrierLockManager::GetModemLockStatus();
-      if (status == carrier_lock::ModemLockStatus::kCarrierLocked) {
-        result->is_carrier_locked = true;
-      }
+    carrier_lock::ModemLockStatus status =
+        carrier_lock::CarrierLockManager::GetModemLockStatus();
+    if (status == carrier_lock::ModemLockStatus::kCarrierLocked) {
+      result->is_carrier_locked = true;
     }
+    result->is_flashing = device->flashing();
   }
   return result;
 }
@@ -731,7 +734,7 @@ std::vector<std::string> GetRequiredStringList(const base::Value::Dict* dict,
                                                const char* key) {
   const base::Value* v = dict->Find(key);
   if (!v) {
-    NOTREACHED() << "Required key missing: " << key;
+    NOTREACHED_IN_MIGRATION() << "Required key missing: " << key;
     return {};
   }
   if (!v->is_list()) {
@@ -1056,7 +1059,7 @@ mojom::ApnState OncApnStateTypeToMojo(const std::string* state) {
   if (*state == ::onc::cellular_apn::kStateDisabled)
     return mojom::ApnState::kDisabled;
 
-  NOTREACHED() << "Unexpected ONC APN State type: " << state;
+  NOTREACHED_IN_MIGRATION() << "Unexpected ONC APN State type: " << state;
   return mojom::ApnState::kEnabled;
 }
 
@@ -1068,7 +1071,7 @@ std::string MojoApnStateTypeToOnc(mojom::ApnState state) {
     case mojom::ApnState::kEnabled:
       return ::onc::cellular_apn::kStateEnabled;
   }
-  NOTREACHED() << "Unexpected mojo ApnState type: " << state;
+  NOTREACHED_IN_MIGRATION() << "Unexpected mojo ApnState type: " << state;
   return ::onc::cellular_apn::kStateEnabled;
 }
 
@@ -1082,8 +1085,8 @@ std::string MojoApnAuthenticationTypeToOnc(
     case mojom::ApnAuthenticationType::kChap:
       return ::onc::cellular_apn::kAuthenticationChap;
   }
-  NOTREACHED() << "Unexpected mojo AuthenticationType type: "
-               << authentication_type;
+  NOTREACHED_IN_MIGRATION()
+      << "Unexpected mojo AuthenticationType type: " << authentication_type;
   return ::onc::cellular_apn::kAuthenticationAutomatic;
 }
 
@@ -1099,7 +1102,7 @@ std::string MojoApnIpTypeToOnc(mojom::ApnIpType ip_type) {
     case mojom::ApnIpType::kIpv4Ipv6:
       return ::onc::cellular_apn::kIpTypeIpv4Ipv6;
   }
-  NOTREACHED() << "Unexpected mojo ApnIpType type: " << ip_type;
+  NOTREACHED_IN_MIGRATION() << "Unexpected mojo ApnIpType type: " << ip_type;
   return ::onc::cellular_apn::kIpTypeAutomatic;
 }
 
@@ -1114,7 +1117,7 @@ std::string MojoApnSourceToOnc(mojom::ApnSource source) {
       return ::onc::cellular_apn::kSourceUi;
       // TODO(b/5429735): Add mojom::ApnSource::kAdmin in follow up CL
   }
-  NOTREACHED() << "Unexpected mojo ApnSource: " << source;
+  NOTREACHED_IN_MIGRATION() << "Unexpected mojo ApnSource: " << source;
   return ::onc::cellular_apn::kSourceModem;
 }
 
@@ -1507,6 +1510,29 @@ mojom::ManagedWireGuardPropertiesPtr GetManagedWireGuardProperties(
   return wg;
 }
 
+mojom::TrafficCounterPropertiesPtr CreateTrafficCounterProperties(
+    const base::Value::Dict* properties,
+    const std::string& guid) {
+  auto traffic_counter_properties = mojom::TrafficCounterProperties::New();
+  const std::optional<double> last_reset_time =
+      properties->FindDouble(::onc::network_config::kTrafficCounterResetTime);
+  if (last_reset_time) {
+    traffic_counter_properties->last_reset_time =
+        base::Time::FromDeltaSinceWindowsEpoch(
+            base::Milliseconds(last_reset_time.value()));
+    traffic_counter_properties->friendly_date =
+        base::UTF16ToUTF8(base::TimeFormatFriendlyDate(
+            traffic_counter_properties->last_reset_time.value()));
+  } else {
+    traffic_counter_properties->last_reset_time = std::nullopt;
+    traffic_counter_properties->friendly_date = std::nullopt;
+  }
+  traffic_counter_properties->user_specified_reset_day =
+      traffic_counters::TrafficCountersHandler::Get()->GetUserSpecifiedResetDay(
+          guid);
+  return traffic_counter_properties;
+}
+
 mojom::ManagedPropertiesPtr ManagedPropertiesToMojo(
     NetworkStateHandler* network_state_handler,
     CellularESimProfileHandler* cellular_esim_profile_handler,
@@ -1689,10 +1715,8 @@ mojom::ManagedPropertiesPtr ManagedPropertiesToMojo(
       cellular->sim_locked = cellular_device &&
                              cellular_device->iccid() == cellular->iccid &&
                              cellular_device->IsSimLocked();
-      if (features::IsCellularCarrierLockEnabled()) {
-        if (cellular->sim_locked) {
-          cellular->sim_lock_type = cellular_device->sim_lock_type();
-        }
+      if (cellular->sim_locked) {
+        cellular->sim_lock_type = cellular_device->sim_lock_type();
       }
         UserTextMessageSuppressionState state =
             NetworkHandler::Get()
@@ -1720,6 +1744,12 @@ mojom::ManagedPropertiesPtr ManagedPropertiesToMojo(
 
       result->type_properties =
           mojom::NetworkTypeManagedProperties::NewCellular(std::move(cellular));
+
+      if (features::IsTrafficCountersEnabled()) {
+        result->traffic_counter_properties =
+            CreateTrafficCounterProperties(properties, result->guid);
+      }
+
       break;
     }
     case mojom::NetworkType::kEthernet: {
@@ -1852,42 +1882,20 @@ mojom::ManagedPropertiesPtr ManagedPropertiesToMojo(
 
       result->type_properties =
           mojom::NetworkTypeManagedProperties::NewWifi(std::move(wifi));
+
+      if (features::IsTrafficCountersForWiFiTestingEnabled()) {
+        result->traffic_counter_properties =
+            CreateTrafficCounterProperties(properties, result->guid);
+      }
       break;
     }
     case mojom::NetworkType::kAll:
     case mojom::NetworkType::kMobile:
     case mojom::NetworkType::kWireless:
-      NOTREACHED() << "NetworkStateProperties can not be of type: " << type;
+      NOTREACHED_IN_MIGRATION()
+          << "NetworkStateProperties can not be of type: " << type;
       break;
   }
-
-  // Traffic Counter Properties
-  auto traffic_counter_properties = mojom::TrafficCounterProperties::New();
-  const std::optional<double> last_reset_time =
-      properties->FindDouble(::onc::network_config::kTrafficCounterResetTime);
-  if (last_reset_time) {
-    traffic_counter_properties->last_reset_time =
-        base::Time::FromDeltaSinceWindowsEpoch(
-            base::Milliseconds(last_reset_time.value()));
-    traffic_counter_properties->friendly_date =
-        base::UTF16ToUTF8(base::TimeFormatFriendlyDate(
-            traffic_counter_properties->last_reset_time.value()));
-  } else {
-    traffic_counter_properties->last_reset_time = std::nullopt;
-    traffic_counter_properties->friendly_date = std::nullopt;
-  }
-
-  const base::Value* user_specified_reset_day =
-      NetworkHandler::IsInitialized()
-          ? NetworkHandler::Get()
-                ->network_metadata_store()
-                ->GetDayOfTrafficCountersAutoReset(result->guid)
-          : nullptr;
-  traffic_counter_properties->user_specified_reset_day =
-      user_specified_reset_day && user_specified_reset_day->is_int()
-          ? user_specified_reset_day->GetInt()
-          : kDefaultResetDay;
-  result->traffic_counter_properties = std::move(traffic_counter_properties);
 
   return result;
 }
@@ -1905,7 +1913,7 @@ bool NetworkTypeCanBeDisabled(mojom::NetworkType type) {
     case mojom::NetworkType::kWireless:
       return false;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -2269,7 +2277,7 @@ mojom::TrafficCounterSource ConvertToTrafficCounterSourceEnum(
   if (source == shill::kTrafficCounterSourceWiFiLOHS) {
     return mojom::TrafficCounterSource::kChrome;
   }
-  NOTREACHED() << "Unknown traffic counter source: " << source;
+  NOTREACHED_IN_MIGRATION() << "Unknown traffic counter source: " << source;
   return mojom::TrafficCounterSource::kUnknown;
 }
 
@@ -2392,14 +2400,13 @@ CrosNetworkConfig::CrosNetworkConfig(
   if (network_configuration_handler_) {
     network_configuration_handler_->AddObserver(this);
   }
-  if (features::IsCellularCarrierLockEnabled()) {
-    const std::optional<std::string_view> serial_number =
-        system::StatisticsProvider::GetInstance()->GetMachineID();
-    if (!serial_number || serial_number->empty()) {
-      LOG(WARNING) << "Serial number not set.";
-    } else {
-      serial_number_ = std::string(serial_number.value());
-    }
+
+  const std::optional<std::string_view> serial_number =
+      system::StatisticsProvider::GetInstance()->GetMachineID();
+  if (!serial_number || serial_number->empty()) {
+    LOG(WARNING) << "Serial number not set.";
+  } else {
+    serial_number_ = std::string(serial_number.value());
   }
 }
 
@@ -2712,6 +2719,16 @@ void CrosNetworkConfig::SetPropertiesInternal(const std::string& guid,
                                               base::Value::Dict onc,
                                               SetPropertiesCallback callback) {
   NET_LOG(DEBUG) << "Configuring properties for " << guid << ": " << onc;
+
+  if (features::IsApnRevampAndAllowApnModificationPolicyEnabled()) {
+    if (const base::Value::List* existing_custom_apn_list =
+            NetworkHandler::Get()->network_metadata_store()->GetCustomApnList(
+                guid)) {
+      chromeos::onc::FillInCellularCustomAPNListFieldsInOncObject(
+          chromeos::onc::kNetworkConfigurationSignature, onc,
+          existing_custom_apn_list);
+    }
+  }
 
   int callback_id = callback_id_++;
   set_properties_callbacks_[callback_id] = std::move(callback);
@@ -3150,7 +3167,7 @@ void CrosNetworkConfig::GetGlobalPolicy(GetGlobalPolicyCallback callback) {
   // If there is no key (in the case of non-managed devices), the default
   // mojom::GlobalPolicy() boolean value(s) specified explicitly in
   // cros_network_config.mojom is used instead.
-  if (features::IsApnRevampAndPoliciesEnabled()) {
+  if (features::IsApnRevampAndAllowApnModificationPolicyEnabled()) {
     result->allow_apn_modification = GetBoolean(
         global_policy_dict, ::onc::global_network_config::kAllowAPNModification,
         /*value_if_key_missing_from_dict=*/result->allow_apn_modification);
@@ -3373,7 +3390,8 @@ void CrosNetworkConfig::OnGetAlwaysOnVpn(GetAlwaysOnVpnCallback callback,
   } else if (mode == shill::kAlwaysOnVpnModeStrict) {
     vpn_mode = mojom::AlwaysOnVpnMode::kStrict;
   } else {
-    NOTREACHED() << "OnGetAlwaysOnVpn: invalid always-on VPN mode: " << mode;
+    NOTREACHED_IN_MIGRATION()
+        << "OnGetAlwaysOnVpn: invalid always-on VPN mode: " << mode;
     vpn_mode = mojom::AlwaysOnVpnMode::kOff;
   }
 
@@ -3412,7 +3430,8 @@ void CrosNetworkConfig::SetAlwaysOnVpn(
       mode = shill::kAlwaysOnVpnModeOff;
       break;
     default:
-      NOTREACHED() << "SetAlwaysOnVpn: invalid mode: " << properties->mode;
+      NOTREACHED_IN_MIGRATION()
+          << "SetAlwaysOnVpn: invalid mode: " << properties->mode;
       return;
   }
   network_profile_handler_->SetAlwaysOnVpnMode(profile->path, mode);
@@ -3455,6 +3474,14 @@ void CrosNetworkConfig::OnGetSupportedVpnTypes(
 void CrosNetworkConfig::RequestTrafficCounters(
     const std::string& guid,
     RequestTrafficCountersCallback callback) {
+  if (!traffic_counters::TrafficCountersHandler::IsInitialized()) {
+    NET_LOG(ERROR)
+        << "RequestTrafficCounters failure: traffic counters handler not "
+        << "initialized while requesting traffic counters for network guid "
+        << guid;
+    std::move(callback).Run({});
+    return;
+  }
   std::string service_path = GetServicePathFromGuid(guid);
   if (service_path.empty()) {
     NET_LOG(ERROR) << "RequestTrafficCounters: service path for guid " << guid
@@ -3462,7 +3489,7 @@ void CrosNetworkConfig::RequestTrafficCounters(
     std::move(callback).Run({});
     return;
   }
-  network_state_handler_->RequestTrafficCounters(
+  traffic_counters::TrafficCountersHandler::Get()->RequestTrafficCounters(
       service_path,
       base::BindOnce(&CrosNetworkConfig::PopulateTrafficCounters,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
@@ -3522,36 +3549,44 @@ void CrosNetworkConfig::PopulateTrafficCounters(
 }
 
 void CrosNetworkConfig::ResetTrafficCounters(const std::string& guid) {
+  if (!traffic_counters::TrafficCountersHandler::IsInitialized()) {
+    NET_LOG(ERROR)
+        << "ResetTrafficCounters failure: traffic counters handler not "
+        << "initialized while resetting traffic counters for network guid "
+        << guid;
+    return;
+  }
   std::string service_path = GetServicePathFromGuid(guid);
   if (service_path.empty()) {
     NET_LOG(ERROR) << "ResetTrafficCounters: service path for guid " << guid
                    << " not found";
     return;
   }
-  network_state_handler_->ResetTrafficCounters(service_path);
+  traffic_counters::TrafficCountersHandler::Get()->ResetTrafficCounters(
+      service_path);
 }
 
 void CrosNetworkConfig::SetTrafficCountersResetDay(
     const std::string& guid,
     mojom::UInt32ValuePtr day,
     SetTrafficCountersResetDayCallback callback) {
-  if (!day) {
-    NET_LOG(ERROR) << "Failed to set reset day for " << guid << ": a valid "
-                   << "day between 1 and 31 (inclusive) must be provided.";
+  if (!traffic_counters::TrafficCountersHandler::IsInitialized()) {
+    NET_LOG(ERROR)
+        << "SetTrafficCountersResetDay failure: traffic counters handler not "
+        << "initialized while setting reset day for network guid " << guid;
     std::move(callback).Run(/*success=*/false);
     return;
   }
-  if (day && (day->value < 1 || day->value > 31)) {
-    NET_LOG(ERROR) << "Failed to set reset day " << day->value << " for "
-                   << guid << ": day must be between 1 and 31 (inclusive)";
+  std::string service_path = GetServicePathFromGuid(guid);
+  if (service_path.empty()) {
+    NET_LOG(ERROR) << "SetTrafficCountersResetDay failure: service path not "
+                      "found for guid "
+                   << guid;
     std::move(callback).Run(/*success=*/false);
     return;
   }
-  NetworkHandler::Get()
-      ->network_metadata_store()
-      ->SetDayOfTrafficCountersAutoReset(
-          guid, day ? std::optional<int>(day->value) : std::nullopt);
-  std::move(callback).Run(/*success=*/true);
+  traffic_counters::TrafficCountersHandler::Get()->SetTrafficCountersResetDay(
+      guid, day->value, std::move(callback));
 }
 
 void CrosNetworkConfig::CreateCustomApn(const std::string& network_guid,
@@ -3565,7 +3600,7 @@ void CrosNetworkConfig::CreateCustomApn(const std::string& network_guid,
     return;
   }
 
-  if (features::IsApnRevampAndPoliciesEnabled() &&
+  if (features::IsApnRevampAndAllowApnModificationPolicyEnabled() &&
       !network_configuration_handler_->AllowApnModification()) {
     NET_LOG(ERROR)
         << "Cannot create custom APN if AllowAPNModification is false.";
@@ -3683,7 +3718,7 @@ void CrosNetworkConfig::RemoveCustomApn(const std::string& network_guid,
     return;
   }
 
-  if (features::IsApnRevampAndPoliciesEnabled() &&
+  if (features::IsApnRevampAndAllowApnModificationPolicyEnabled() &&
       !network_configuration_handler_->AllowApnModification()) {
     NET_LOG(ERROR)
         << "Cannot remove custom APN if AllowAPNModification is false.";
@@ -3772,7 +3807,7 @@ void CrosNetworkConfig::ModifyCustomApn(const std::string& network_guid,
     return;
   }
 
-  if (features::IsApnRevampAndPoliciesEnabled() &&
+  if (features::IsApnRevampAndAllowApnModificationPolicyEnabled() &&
       !network_configuration_handler_->AllowApnModification()) {
     NET_LOG(ERROR)
         << "Cannot modify custom APN if AllowAPNModification is false.";

@@ -14,15 +14,11 @@
 #include "base/synchronization/lock.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/thread_annotations.h"
-#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/buildflags.h"
 #include "partition_alloc/partition_alloc_config.h"
 #include "partition_alloc/thread_cache.h"
 
 namespace base::allocator {
-
-#if PA_BUILDFLAG(USE_STARSCAN)
-BASE_EXPORT void RegisterPCScanStatsReporter();
-#endif
 
 // Starts a periodic timer on the current thread to purge all thread caches.
 BASE_EXPORT void StartThreadCachePeriodicPurge();
@@ -81,7 +77,9 @@ class BASE_EXPORT PartitionAllocSupport {
   void ReconfigureAfterTaskRunnerInit(const std::string& process_type);
 
   // |has_main_frame| tells us if the renderer contains a main frame.
-  void OnForegrounded(bool has_main_frame);
+  // The default value is intended for other process types, where the parameter
+  // does not make sense.
+  void OnForegrounded(bool has_main_frame = false);
   void OnBackgrounded();
 
 #if PA_BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
@@ -114,7 +112,7 @@ class BASE_EXPORT PartitionAllocSupport {
 #if PA_CONFIG(THREAD_CACHE_SUPPORTED) && \
     PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
   size_t largest_cached_size_ =
-      ::partition_alloc::ThreadCacheLimits::kDefaultSizeThreshold;
+      ::partition_alloc::kThreadCacheDefaultSizeThreshold;
 #endif
 };
 

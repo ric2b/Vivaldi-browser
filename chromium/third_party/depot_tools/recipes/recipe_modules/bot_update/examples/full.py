@@ -93,7 +93,7 @@ def RunSteps(api):
     api.bot_update.deapply_patch(bot_update_step)
 
   if api.properties.get('resolve_chromium_fixed_version'):
-    api.bot_update.resolve_fixed_revision(bot_update_step.json.output, 'src')
+    api.bot_update.resolve_fixed_revision(bot_update_step, 'src')
 
 def GenTests(api):
 
@@ -185,12 +185,15 @@ def GenTests(api):
       api.expect_status('INFRA_FAILURE'),
   )
 
-  yield (
-      api.test('tryjob_fail_missing_bot_update_json', status="INFRA_FAILURE") +
-      try_build() + api.override_step_data('bot_update', retcode=1) +
-      api.post_process(post_process.ResultReasonRE, 'Infra Failure.*') +
-      api.post_process(post_process.StatusException) +
-      api.post_process(post_process.DropExpectation))
+  yield api.test(
+      'tryjob_fail_missing_bot_update_json',
+      try_build(),
+      api.override_step_data('bot_update', retcode=1),
+      api.post_process(post_process.SummaryMarkdownRE, 'Infra Failure.*'),
+      api.post_process(post_process.StatusException),
+      api.post_process(post_process.DropExpectation),
+      status='INFRA_FAILURE')
+
   yield (
       api.test('clobber') +
       api.properties(clobber=1)
@@ -338,3 +341,9 @@ def GenTests(api):
       ci_build(revision='HEAD'),
       api.bot_update.commit_positions(False),
   )
+
+  yield (api.test('stale-process-duration-override') + api.properties(
+      **
+      {'$depot_tools/bot_update': {
+          'stale_process_duration_override': 3000,
+      }}) + ci_build())

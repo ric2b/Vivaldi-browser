@@ -16,21 +16,18 @@
 //! a valid Nearby Presence advertisement and if so which was its corresponding identity
 //! it matched with. Used as a first pass option to quickly check if a buffer should
 //! further processed.
-use crate::credential::MatchedCredential;
+use crate::credential::matched::MatchedCredential;
+use crate::header::{NpVersionHeader, V0Encoding, V1AdvHeader};
 use crate::legacy::data_elements::DataElementDeserializeError;
+use crate::legacy::deserialize::intermediate::{IntermediateAdvContents, LdtAdvContents};
 use crate::legacy::deserialize::DecryptedAdvContents;
 use crate::{
     credential::{book::CredentialBook, v0::V0DiscoveryCryptoMaterial},
-    legacy,
     legacy::{
-        actions,
-        actions::ActionsDataElement,
-        deserialize::{
-            DecryptError, EncryptedAdvContents, IntermediateAdvContents, PlainDataElement,
-        },
+        data_elements::actions::{self, ActionsDataElement},
+        deserialize::{DecryptError, DeserializedDataElement},
         PacketFlavor,
     },
-    parse_adv_header, AdvHeader, V1Header,
 };
 use array_view::ArrayView;
 use core::fmt::Debug;
@@ -91,7 +88,7 @@ pub struct V0DataElementsFilter {
 }
 
 /// The total number of unique boolean action types
-const NUM_ACTIONS: usize = 7;
+const NUM_ACTIONS: usize = 6;
 
 /// Specify which specific actions bits to filter on, will filter on if any of the specified
 /// actions are matched
@@ -117,17 +114,17 @@ impl FilterOptions {
         B: CredentialBook<'a>,
         P: CryptoProvider,
     {
-        parse_adv_header(adv)
+        NpVersionHeader::parse(adv)
             .map(|(remaining, header)| match header {
-                AdvHeader::V0 => {
+                NpVersionHeader::V0(encoding) => {
                     let filter = match self {
                         FilterOptions::V0FilterOptions(filter) => filter,
                         FilterOptions::Either(filter, _) => filter,
                         _ => return Err(NoMatch),
                     };
-                    filter.match_v0_adv::<B, P>(cred_book, remaining)
+                    filter.match_v0_adv::<B, P>(encoding, cred_book, remaining)
                 }
-                AdvHeader::V1(header) => {
+                NpVersionHeader::V1(header) => {
                     let filter = match self {
                         FilterOptions::V1FilterOptions(filter) => filter,
                         FilterOptions::Either(_, filter) => filter,
@@ -145,6 +142,7 @@ impl V0Filter {
     /// match the filter criteria
     fn match_v0_adv<'a, B, P>(
         &self,
+        encoding: V0Encoding,
         cred_book: &'a B,
         remaining: &[u8],
     ) -> Result<FilterResult<B::Matched>, NoMatch>
@@ -153,16 +151,16 @@ impl V0Filter {
         P: CryptoProvider,
     {
         let contents =
-            legacy::deserialize::deserialize_adv_contents::<P>(remaining).map_err(|_| NoMatch)?;
+            IntermediateAdvContents::deserialize::<P>(encoding, remaining).map_err(|_| NoMatch)?;
         match contents {
-            IntermediateAdvContents::Plaintext(p) => match self.identity {
+            IntermediateAdvContents::Unencrypted(p) => match self.identity {
                 IdentityFilterType::Public | IdentityFilterType::Any => self
                     .data_elements
                     .match_v0_legible_adv(|| p.data_elements())
                     .map(|()| FilterResult::Public),
                 _ => Err(NoMatch),
             },
-            IntermediateAdvContents::Ciphertext(c) => match self.identity {
+            IntermediateAdvContents::Ldt(c) => match self.identity {
                 IdentityFilterType::Private | IdentityFilterType::Any => {
                     let (legible_adv, m) = try_decrypt_and_match::<B, P>(cred_book.v0_iter(), &c)?;
                     self.data_elements
@@ -177,7 +175,7 @@ impl V0Filter {
 
 fn try_decrypt_and_match<'cred, B, P>(
     v0_creds: B::V0Iterator,
-    adv: &EncryptedAdvContents,
+    adv: &LdtAdvContents,
 ) -> Result<(DecryptedAdvContents, B::Matched), NoMatch>
 where
     B: CredentialBook<'cred>,
@@ -189,9 +187,6 @@ where
             Ok(c) => return Ok((c, m)),
             Err(e) => match e {
                 DecryptError::DecryptOrVerifyError => continue,
-                DecryptError::DeserializeError(_) => {
-                    return Err(NoMatch);
-                }
             },
         }
     }
@@ -203,12 +198,14 @@ impl V0DataElementsFilter {
     fn match_v0_legible_adv<F, I>(&self, data_elements: impl Fn() -> I) -> Result<(), NoMatch>
     where
         F: PacketFlavor,
-        I: Iterator<Item = Result<PlainDataElement<F>, DataElementDeserializeError>>,
+        I: Iterator<Item = Result<DeserializedDataElement<F>, DataElementDeserializeError>>,
     {
         match &self.contains_tx_power {
             None => Ok(()),
             Some(c) => {
-                if c == &data_elements().any(|de| matches!(de, Ok(PlainDataElement::TxPower(_)))) {
+                if c == &data_elements()
+                    .any(|de| matches!(de, Ok(DeserializedDataElement::TxPower(_))))
+                {
                     Ok(())
                 } else {
                     Err(NoMatch)
@@ -224,7 +221,7 @@ impl V0DataElementsFilter {
                 }
                 // find if an actions DE exists, if so match on the provided action filter
                 let actions = data_elements().find_map(|de| match de {
-                    Ok(PlainDataElement::Actions(actions)) => Some(actions),
+                    Ok(DeserializedDataElement::Actions(actions)) => Some(actions),
                     _ => None,
                 });
                 if let Some(actions) = actions {
@@ -262,11 +259,7 @@ impl V0ActionsFilter {
         actions: &ActionsDataElement<F>,
     ) -> Result<(), NoMatch> {
         for action in self.actions.as_slice().iter() {
-            if actions
-                .action
-                .has_action(&action.expect("This will always contain Some"))
-                .unwrap_or(false)
-            {
+            if actions.action.has_action(action.expect("This will always contain Some")) {
                 return Ok(());
             }
         }
@@ -285,7 +278,7 @@ impl V1Filter {
         &self,
         _cred_book: &'a B,
         _remaining: &[u8],
-        _header: V1Header,
+        _header: V1AdvHeader,
     ) -> Result<FilterResult<B::Matched>, NoMatch>
     where
         B: CredentialBook<'a>,

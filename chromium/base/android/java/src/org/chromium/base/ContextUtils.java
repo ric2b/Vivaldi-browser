@@ -12,7 +12,6 @@ import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.content.res.AssetManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Process;
@@ -22,8 +21,6 @@ import androidx.annotation.Nullable;
 
 import org.jni_zero.JNINamespace;
 
-import org.chromium.base.compat.ApiHelperForM;
-import org.chromium.base.compat.ApiHelperForO;
 import org.chromium.build.BuildConfig;
 
 /** This class provides Android application context related utility methods. */
@@ -139,23 +136,6 @@ public class ContextUtils {
     }
 
     /**
-     * In most cases, {@link Context#getAssets()} can be used directly. Modified resources are
-     * used downstream and are set up on application startup, and this method provides access to
-     * regular assets before that initialization is complete.
-     *
-     * This method should ONLY be used for accessing files within the assets folder.
-     *
-     * @return Application assets.
-     */
-    public static AssetManager getApplicationAssets() {
-        Context context = getApplicationContext();
-        while (context instanceof ContextWrapper) {
-            context = ((ContextWrapper) context).getBaseContext();
-        }
-        return context.getAssets();
-    }
-
-    /**
      * @return Whether the process is isolated.
      */
     @SuppressWarnings("NewApi")
@@ -180,9 +160,11 @@ public class ContextUtils {
         return ApiCompatibilityUtils.getProcessName();
     }
 
-    /** @return Whether the current process is 64-bit. */
+    /**
+     * @return Whether the current process is 64-bit.
+     */
     public static boolean isProcess64Bit() {
-        return ApiHelperForM.isProcess64Bit();
+        return Process.is64Bit();
     }
 
     /**
@@ -314,8 +296,7 @@ public class ContextUtils {
             Handler scheduler,
             int flags) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            return ApiHelperForO.registerReceiver(
-                    context, receiver, filter, permission, scheduler, flags);
+            return context.registerReceiver(receiver, filter, permission, scheduler, flags);
         } else {
             return context.registerReceiver(receiver, filter, permission, scheduler);
         }

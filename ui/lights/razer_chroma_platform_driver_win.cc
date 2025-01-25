@@ -294,7 +294,7 @@ void RazerChromaPlatformDriverWin::RunEffectsOnThread(
 void RazerChromaPlatformDriverWin::DeleteEffectImpl(RZEFFECTID effect_id) {
   if (pDeleteEffect == nullptr) {
     NOTREACHED();
-    return;
+    //return;
   }
   auto iterator = effects_.find(effect_id);
   if (iterator != effects_.end()) {

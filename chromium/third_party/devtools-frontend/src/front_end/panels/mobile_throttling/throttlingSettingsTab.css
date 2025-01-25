@@ -18,7 +18,7 @@
 
 .add-conditions-button {
   flex: none;
-  margin: 10px 2px;
+  margin: 10px 5px;
   min-width: 140px;
   align-self: flex-start;
 }
@@ -43,6 +43,10 @@
   color: var(--sys-color-on-surface);
   text-align: center;
   position: relative;
+
+  & > input {
+    scroll-margin-left: 5px;
+  }
 }
 
 .conditions-list-text:last-child {
@@ -59,10 +63,6 @@
 
 .conditions-list-title-text {
   flex: auto;
-}
-
-.conditions-list-title-text:last-child {
-  text-align: center;
 }
 
 .conditions-list-separator {
@@ -85,8 +85,16 @@
 }
 
 .conditions-edit-row input {
-  width: 100%;
-  text-align: inherit;
+  &[type="checkbox"] {
+    display: block;
+    margin: auto;
+    top: 6px;
+  }
+
+  &:not([type="checkbox"]) {
+    width: 100%;
+    text-align: inherit;
+  }
 }
 
 .conditions-edit-optional {

@@ -333,8 +333,8 @@ class UserCloudPolicyManagerAsh
   // to load policy with error |DM_STATUS_SERVICE_DEVICE_NOT_FOUND|.
   bool is_in_reregistration_state_ = false;
 
-  // Tracks LocalUserDataEnabled policy changes and removes user files if
-  // needed.
+  // Tracks LocalUserFilesAllowed policy changes and removes user files if
+  // needed. Used for SkyVault TT version.
   std::unique_ptr<local_user_files::LocalFilesCleanup> local_files_cleanup_;
 };
 

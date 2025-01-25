@@ -3,11 +3,10 @@
 # license that can be found in the LICENSE file.
 
 import os
+import re
 import setuptools
 import setuptools.command.build_ext
 import shutil
-import sys
-import sysconfig
 
 long_description = r"""A drop-in replacement for the re module.
 
@@ -67,10 +66,7 @@ class BuildExt(setuptools.command.build_ext.build_ext):
     except KeyError:
       pass
     # Register the local Python toolchains with highest priority.
-    self.generate_python_toolchains()
     cmd.append('--extra_toolchains=//python/toolchains:all')
-    # Print debug information during toolchain resolution.
-    cmd.append('--toolchain_resolution_debug=.*')
     cmd += ['--compilation_mode=opt', '--', ':all']
     self.spawn(cmd)
 
@@ -81,88 +77,6 @@ class BuildExt(setuptools.command.build_ext.build_ext):
 
     cmd = ['bazel', 'clean', '--expunge']
     self.spawn(cmd)
-
-  def generate_python_toolchains(self):
-    include = sysconfig.get_path('include')
-    libs = os.path.join(include, '../libs')
-
-    os.makedirs('toolchains')
-    shutil.copytree(include, 'toolchains/include')
-    try:
-      shutil.copytree(libs, 'toolchains/libs')
-    except FileNotFoundError:
-      # We must not be running on Windows. :)
-      pass
-
-    with open('toolchains/BUILD.bazel', 'x') as file:
-      file.write(
-          """\
-load("@rules_python//python/cc:py_cc_toolchain.bzl", "py_cc_toolchain")
-load("@rules_python//python:py_runtime.bzl", "py_runtime")
-load("@rules_python//python:py_runtime_pair.bzl", "py_runtime_pair")
-
-package(default_visibility = ["//visibility:public"])
-
-toolchain(
-    name = "py",
-    toolchain = ":py_toolchain",
-    toolchain_type = "@rules_python//python:toolchain_type",
-)
-
-py_runtime_pair(
-    name = "py_toolchain",
-    py3_runtime = ":interpreter",
-)
-
-py_runtime(
-    name = "interpreter",
-    interpreter_path = "{interpreter_path}",
-    interpreter_version_info = {{
-        "major": "{major}",
-        "minor": "{minor}",
-    }},
-    python_version = "PY3",
-)
-
-toolchain(
-    name = "py_cc",
-    toolchain = ":py_cc_toolchain",
-    toolchain_type = "@rules_python//python/cc:toolchain_type",
-)
-
-py_cc_toolchain(
-    name = "py_cc_toolchain",
-    headers = ":headers",
-    libs = ":libraries",
-    python_version = "{major}.{minor}",
-)
-
-cc_library(
-    name = "headers",
-    hdrs = glob(["include/**/*.h"]),
-    includes = ["include"],
-    deps = select({{
-        "@platforms//os:windows": [":interface_library"],
-        "//conditions:default": [],
-    }}),
-)
-
-cc_import(
-    name = "interface_library",
-    interface_library = select({{
-        "@platforms//os:windows": "libs/python{major}{minor}.lib",
-        "//conditions:default": None,
-    }}),
-    system_provided = True,
-)
-
-# Not actually necessary for our purposes. :)
-cc_library(
-    name = "libraries",
-)
-""".format(interpreter_path=sys.executable.replace('\\', '/'),
-           major=sys.version_info.major,
-           minor=sys.version_info.minor))
 
 
 def options():
@@ -190,25 +104,55 @@ ext_module = setuptools.Extension(
     extra_compile_args=['-fvisibility=hidden'],
 )
 
-setuptools.setup(
-    name='google-re2',
-    version='1.1.20240501',
-    description='RE2 Python bindings',
-    long_description=long_description,
-    long_description_content_type='text/plain',
-    author='The RE2 Authors',
-    author_email='re2-dev@googlegroups.com',
-    url='https://github.com/google/re2',
-    py_modules=['re2'],
-    ext_modules=[ext_module],
-    classifiers=[
-        'Development Status :: 5 - Production/Stable',
-        'Intended Audience :: Developers',
-        'License :: OSI Approved :: BSD License',
-        'Programming Language :: C++',
-        'Programming Language :: Python :: 3.8',
-    ],
-    options=options(),
-    cmdclass={'build_ext': BuildExt},
-    python_requires='~=3.8',
-)
+# We need `re2` to be a package, not a module, because it appears that
+# modules can't have `.pyi` files, so munge the module into a package.
+PACKAGE = 're2'
+try:
+  # If we are building from the sdist, we are already in package form.
+  if not os.path.exists('PKG-INFO'):
+    os.makedirs(PACKAGE)
+    for filename in (
+        're2.py',
+        # TODO(junyer): Populate as per https://github.com/google/re2/issues/496.
+        # 're2.pyi',
+        # '_re2.pyi',
+    ):
+      with open(filename, 'r') as file:
+        contents = file.read()
+      filename = re.sub(r'^re2(?=\.py)', '__init__', filename)
+      contents = re.sub(r'^(?=import _)', 'from . ', contents, flags=re.MULTILINE)
+      with open(f'{PACKAGE}/{filename}', 'x') as file:
+        file.write(contents)
+    # TODO(junyer): Populate as per https://github.com/google/re2/issues/496.
+    # with open(f'{PACKAGE}/py.typed', 'x') as file:
+    #   pass
+
+  setuptools.setup(
+      name='google-re2',
+      version='1.1.20240702',
+      description='RE2 Python bindings',
+      long_description=long_description,
+      long_description_content_type='text/plain',
+      author='The RE2 Authors',
+      author_email='re2-dev@googlegroups.com',
+      url='https://github.com/google/re2',
+      packages=[PACKAGE],
+      ext_package=PACKAGE,
+      ext_modules=[ext_module],
+      classifiers=[
+          'Development Status :: 5 - Production/Stable',
+          'Intended Audience :: Developers',
+          'License :: OSI Approved :: BSD License',
+          'Programming Language :: C++',
+          'Programming Language :: Python :: 3.8',
+      ],
+      options=options(),
+      cmdclass={'build_ext': BuildExt},
+      python_requires='~=3.8',
+  )
+except:
+  raise
+else:
+  # If we are building from the sdist, we are already in package form.
+  if not os.path.exists('PKG-INFO'):
+    shutil.rmtree(PACKAGE)

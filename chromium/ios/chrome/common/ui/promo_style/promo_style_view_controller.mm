@@ -641,8 +641,8 @@ const CGFloat kHeaderImageShadowShadowInset = 20;
   _primaryButtonSpinnerEnabled = enabled;
 
   if (enabled) {
-    CHECK(!self.primaryButtonActivityIndicatorView, base::NotFatalUntil::M128);
-    CHECK(self.primaryActionString, base::NotFatalUntil::M128);
+    CHECK(!self.primaryButtonActivityIndicatorView);
+    CHECK(self.primaryActionString);
     // Disable the button.
     self.primaryActionButton.enabled = NO;
     // Set blank button text and set accessibility label.
@@ -662,7 +662,7 @@ const CGFloat kHeaderImageShadowShadowInset = 20;
                              self.primaryActionButton);
     [self.primaryButtonActivityIndicatorView startAnimating];
   } else {
-    CHECK(self.primaryButtonActivityIndicatorView, base::NotFatalUntil::M128);
+    CHECK(self.primaryButtonActivityIndicatorView);
     // Remove the spinner.
     [self.primaryButtonActivityIndicatorView removeFromSuperview];
     self.primaryButtonActivityIndicatorView = nil;

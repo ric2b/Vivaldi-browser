@@ -20,7 +20,7 @@ exports_files(["tflite_convert.py"])
 
 flatbuffer_py_library(
     name = "schema_py",
-    srcs = ["//tensorflow/lite/schema:schema.fbs"],
+    srcs = ["//tensorflow/compiler/mlir/lite/schema:schema.fbs"],
 )
 
 flatbuffer_py_library(
@@ -52,6 +52,9 @@ py_strict_test(
         "//tensorflow/lite/python/testdata:interpreter_test_data",
         "//tensorflow/lite/python/testdata:test_delegate.so",
     ],
+    # Static linking is required because this loads a cc_binary as a shared
+    # library, which would otherwise create ODR violations.
+    # copybara:uncomment linking_mode = "static",
     python_version = "PY3",
     srcs_version = "PY3",
     tags = [
@@ -197,6 +200,7 @@ py_strict_library(
         "//tensorflow/compiler/mlir/quantization/tensorflow/python:representative_dataset",
         "//tensorflow/core:protos_all_py",
         "//tensorflow/lite/experimental/microfrontend:audio_microfrontend_py",
+        "//tensorflow/lite/profiling/proto:profiling_info_py",
         "//tensorflow/lite/python/metrics",
         "//tensorflow/lite/python/optimize:calibrator",
         "//tensorflow/lite/tools:flatbuffer_utils",
@@ -404,6 +408,7 @@ py_strict_library(
         "//tensorflow/python/framework:error_interpolation",
         "//tensorflow/python/grappler:tf_optimizer",
         "//tensorflow/python/training:saver",
+        "//third_party/py/numpy",
         "@absl_py//absl/logging",
         "@flatbuffers//:runtime_py",
     ],
@@ -452,19 +457,6 @@ py_strict_library(
 )
 
 py_strict_library(
-    name = "wrap_toco",
-    srcs = [
-        "wrap_toco.py",
-    ],
-    srcs_version = "PY3",
-    deps = [
-        "//tensorflow/compiler/mlir/quantization/tensorflow/python:py_function_lib_py",
-        "//tensorflow/python:_pywrap_toco_api",
-        "//tensorflow/python:pywrap_tensorflow",
-    ],
-)
-
-py_strict_library(
     name = "lite_constants",
     srcs = ["lite_constants.py"],
     srcs_version = "PY3",
@@ -485,10 +477,10 @@ pytype_strict_library(
         ":convert_phase",
         ":lite_constants",
         ":util",
-        ":wrap_toco",
+        "//tensorflow/compiler/mlir/lite/metrics:converter_error_data_proto_py",
+        "//tensorflow/compiler/mlir/lite/python:wrap_converter",
         "//tensorflow/compiler/mlir/quantization/stablehlo:quantization_config_proto_py",
         "//tensorflow/compiler/mlir/quantization/stablehlo:quantization_options_proto_py",
-        "//tensorflow/lite/python/metrics:converter_error_data_proto_py",
         "//tensorflow/lite/python/metrics:metrics_wrapper",
         "//tensorflow/lite/toco:model_flags_proto_py",
         "//tensorflow/lite/toco:toco_flags_proto_py",
@@ -528,7 +520,7 @@ pytype_strict_contrib_test(
         ":convert",
         ":interpreter",
         ":op_hint",
-        "//tensorflow/lite/python/metrics:converter_error_data_proto_py",
+        "//tensorflow/compiler/mlir/lite/metrics:converter_error_data_proto_py",
         "//tensorflow/lite/python/metrics:metrics_wrapper",
         "//tensorflow/lite/toco:toco_flags_proto_py",
         "//tensorflow/python/client:session",
@@ -629,8 +621,8 @@ py_strict_library(
     srcs_version = "PY3",
     visibility = ["//tensorflow/lite:__subpackages__"],
     deps = [
+        "//tensorflow/compiler/mlir/lite/metrics:converter_error_data_proto_py",
         "//tensorflow/lite/python/metrics",
-        "//tensorflow/lite/python/metrics:converter_error_data_proto_py",
     ],
 )
 
@@ -642,7 +634,7 @@ py_strict_library(
     srcs_version = "PY3",
     visibility = ["//visibility:public"],
     deps = [
-        ":wrap_toco",
+        "//tensorflow/compiler/mlir/lite/python:wrap_converter",
         "//tensorflow/lite/python/analyzer_wrapper:_pywrap_analyzer_wrapper",
         "//tensorflow/python/util:tf_export",
     ],

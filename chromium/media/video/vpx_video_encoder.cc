@@ -10,6 +10,7 @@
 
 #include "base/containers/heap_array.h"
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/numerics/checked_math.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
@@ -271,9 +272,8 @@ std::optional<VideoPixelFormat> GetConversionFormat(VideoCodecProfile profile,
       }
       break;
     default:
-      NOTREACHED();  // Checked during Initialize().
+      NOTREACHED_NORETURN();  // Checked during Initialize().
   }
-
   return std::nullopt;
 }
 
@@ -415,7 +415,7 @@ void VpxVideoEncoder::Initialize(VideoCodecProfile profile,
       codec_config_.g_input_bit_depth = 10;
       break;
     default:
-      NOTREACHED();  // Enforced via a profile check above.
+      NOTREACHED_NORETURN();  // Enforced via a profile check above.
   }
 
   auto status = SetUpVpxConfig(options, profile_, &codec_config_);
@@ -456,9 +456,19 @@ void VpxVideoEncoder::Initialize(VideoCodecProfile profile,
     // Set the number of column tiles in encoding an input frame, with number of
     // tile columns (in Log2 unit) as the parameter.
     // The minimum width of a tile column is 256 pixels, the maximum is 4096.
+    unsigned int tile_columns = (codec_config_.g_w + 255) / 256;
+    // The valid range of VP9E_SET_TILE_COLUMNS is [0..6].
     int log2_tile_columns =
-        static_cast<int>(std::log2(codec_config_.g_w / 256));
-    vpx_codec_control(codec.get(), VP9E_SET_TILE_COLUMNS, log2_tile_columns);
+        std::min(static_cast<int>(std::log2(tile_columns)), 6);
+    vpx_error = vpx_codec_control(codec.get(), VP9E_SET_TILE_COLUMNS,
+                                  log2_tile_columns);
+    if (vpx_error != VPX_CODEC_OK) {
+      auto msg = LogVpxErrorMessage(
+          codec.get(), "VPX encoder VP9E_SET_TILE_COLUMNS error", vpx_error);
+      std::move(done_cb).Run(EncoderStatus(
+          EncoderStatus::Codes::kEncoderInitializationError, msg));
+      return;
+    }
 
     // Turn on row level multi-threading.
     vpx_codec_control(codec.get(), VP9E_SET_ROW_MT, 1);
@@ -543,16 +553,16 @@ void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
   bool key_frame = encode_options.key_frame;
   if (!frame) {
     std::move(done_cb).Run(
-        EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
+        EncoderStatus(EncoderStatus::Codes::kInvalidInputFrame,
                       "No frame provided for encoding."));
     return;
   }
 
-  if (frame->format() == PIXEL_FORMAT_NV12 && frame->HasGpuMemoryBuffer()) {
+  if (frame->format() == PIXEL_FORMAT_NV12 && frame->HasMappableGpuBuffer()) {
     frame = ConvertToMemoryMappedFrame(frame);
     if (!frame) {
       std::move(done_cb).Run(
-          EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
+          EncoderStatus(EncoderStatus::Codes::kSystemAPICallError,
                         "Convert GMB frame to MemoryMappedFrame failed."));
       return;
     }
@@ -560,9 +570,9 @@ void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
 
   if (!frame->IsMappable()) {
     std::move(done_cb).Run(
-        EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
-                      "Unexpected frame format.")
-            .WithData("IsMappable", frame->IsMappable())
+        EncoderStatus(EncoderStatus::Codes::kInvalidInputFrame,
+                      "Frame is not mappable")
+            .WithData("storage type", frame->storage_type())
             .WithData("format", frame->format()));
     return;
   }
@@ -578,7 +588,7 @@ void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
         options_.frame_size, frame->timestamp());
     if (!temp_frame) {
       std::move(done_cb).Run(
-          EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
+          EncoderStatus(EncoderStatus::Codes::kOutOfMemoryError,
                         "Can't allocate a temporary frame for conversion"));
       return;
     }
@@ -586,9 +596,7 @@ void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
     // If `frame->format()` is unsupported ConvertAndScale() will fail.
     auto convert_status = frame_converter_.ConvertAndScale(*frame, *temp_frame);
     if (!convert_status.is_ok()) {
-      std::move(done_cb).Run(
-          EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode)
-              .AddCause(std::move(convert_status)));
+      std::move(done_cb).Run(std::move(convert_status));
       return;
     }
 
@@ -665,7 +673,7 @@ void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
       break;
 
     default:
-      NOTREACHED();  // Checked during Initialize().
+      NOTREACHED_NORETURN();  // Checked during Initialize().
   }
 
   // Use zero as a timestamp, so encoder will not use it for rate control.
@@ -728,7 +736,7 @@ void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
     if (output.key_frame) {
       temporal_svc_frame_index_ = 0;
     }
-    if (output.size != 0) {
+    if (!output.data.empty()) {
       temporal_svc_frame_index_++;
     }
   }
@@ -856,10 +864,9 @@ VideoEncoderOutput VpxVideoEncoder::GetEncoderOutput(
     if (pkt->kind == VPX_CODEC_CX_FRAME_PKT) {
       // The encoder is operating synchronously. There should be exactly one
       // encoded packet, or the frame is dropped.
-      CHECK_EQ(output.size, 0u);
-      output.size = pkt->data.frame.sz;
-      output.data = base::HeapArray<uint8_t>::Uninit(output.size);
-      memcpy(output.data.data(), pkt->data.frame.buf, output.size);
+      output.data = base::HeapArray<uint8_t>::CopiedFrom(
+          {reinterpret_cast<uint8_t*>(pkt->data.frame.buf),
+           pkt->data.frame.sz});
       output.key_frame = (pkt->data.frame.flags & VPX_FRAME_IS_KEY) != 0;
       output.temporal_id = output.key_frame ? 0 : temporal_id;
       output.color_space = color_space;

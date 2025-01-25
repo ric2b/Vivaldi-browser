@@ -11,7 +11,6 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
-#include "base/strings/string_piece.h"
 #include "base/task/thread_pool.h"
 #include "components/reporting/proto/synced/record.pb.h"
 #include "components/reporting/resources/resource_manager.h"
@@ -43,7 +42,7 @@ void CompressionModule::CompressRecord(
     return;
   }
   // Compress if record is larger than the compression threshold and compression
-  // enabled
+  // enabled.
   switch (compression_type_) {
     case CompressionInformation::COMPRESSION_NONE: {
       // Don't compress, simply return serialized record

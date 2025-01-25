@@ -27,6 +27,13 @@ group("icu") {
   ]
 }
 
+# Allow access to normalization test data from unit/integration tests.
+copy("normalization_test") {
+  testonly = true
+  sources = [ "source/data/unidata/NormalizationTest.txt" ]
+  outputs = [ "$root_out_dir/testdata/{{source_file_part}}" ]
+}
+
 # Shared config used by ICU and all dependents.
 config("icu_config") {
   defines = [

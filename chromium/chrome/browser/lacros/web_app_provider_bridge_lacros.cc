@@ -20,9 +20,11 @@
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chromeos/crosapi/mojom/web_app_service.mojom.h"
 #include "chromeos/crosapi/mojom/web_app_types.mojom.h"
@@ -150,9 +152,15 @@ void WebAppProviderBridgeLacros::WebAppInstalledInArcImpl(
     Profile* profile) {
   DCHECK(profile);
   auto* provider = web_app::WebAppProvider::GetForWebApps(profile);
-  auto install_info = std::make_unique<web_app::WebAppInstallInfo>();
+  GURL start_url = arc_install_info->start_url;
+  // TODO(b:340994232): ARC-installed web apps should pass through a manifest ID
+  // and use it here instead of assuming it is not set and generating it from
+  // the start URL.
+  webapps::ManifestId manifest_id =
+      web_app::GenerateManifestIdFromStartUrlOnly(start_url);
+  auto install_info =
+      std::make_unique<web_app::WebAppInstallInfo>(manifest_id, start_url);
   install_info->title = arc_install_info->title;
-  install_info->start_url = arc_install_info->start_url;
   install_info->display_mode = blink::mojom::DisplayMode::kStandalone;
   install_info->user_display_mode =
       web_app::mojom::UserDisplayMode::kStandalone;

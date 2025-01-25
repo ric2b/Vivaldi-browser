@@ -41,7 +41,7 @@ class PacketWriterImpl final : public quic::QuicPacketWriter {
   UdpSocket* socket() { return socket_; }
 
  private:
-  UdpSocket* socket_;
+  UdpSocket* socket_ = nullptr;
 };
 
 }  // namespace openscreen::osp

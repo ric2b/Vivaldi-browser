@@ -193,7 +193,7 @@ void CellularMetricsLogger::RecordSimLockNotificationLockType(
     base::UmaHistogramEnumeration(kSimLockNotificationLockType,
                                   SimPinLockType::kCarrierLocked);
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -787,7 +787,7 @@ void CellularMetricsLogger::CheckForSIMStatusMetric(
   } else if (sim_lock_type.empty()) {
     lock_type = SimPinLockType::kUnlocked;
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   if (managed_network_configuration_handler_->AllowCellularSimLock()) {
@@ -1078,17 +1078,22 @@ void CellularMetricsLogger::CheckForCellularServiceCountMetric() {
 
   if (managed_network_configuration_handler_->AllowCellularSimLock()) {
     UMA_HISTOGRAM_COUNTS_100(
-        "Network.Cellular.Unrestricted.PSim.ServiceAtLogin.Count",
+        "Network.Cellular.PSim.ServiceAtLoginCount.SimLockAllowedByPolicy",
         psim_networks);
     UMA_HISTOGRAM_COUNTS_100(
-        "Network.Cellular.Unrestricted.ESim.ServiceAtLogin.Count",
+        "Network.Cellular.ESim.ServiceAtLoginCount.SimLockAllowedByPolicy",
         esim_profiles);
   } else {
     UMA_HISTOGRAM_COUNTS_100(
-        "Network.Cellular.Restricted.PSim.ServiceAtLogin.Count", psim_networks);
+        "Network.Cellular.PSim.ServiceAtLoginCount.SimLockProhibitedByPolicy",
+        psim_networks);
     UMA_HISTOGRAM_COUNTS_100(
-        "Network.Cellular.Restricted.ESim.ServiceAtLogin.Count", esim_profiles);
+        "Network.Cellular.ESim.ServiceAtLoginCount.SimLockProhibitedByPolicy",
+        esim_profiles);
   }
+
+  UMA_HISTOGRAM_COUNTS_100("Network.Cellular.ESim.ServiceAtLoginCount",
+                           esim_profiles);
 
   UMA_HISTOGRAM_COUNTS_100("Network.Cellular.ESim.Policy.ServiceAtLogin.Count",
                            esim_policy_profiles);

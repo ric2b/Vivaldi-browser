@@ -134,9 +134,9 @@ class Connection {
   }
 
   // These methods should only be called when we are connected.
-  uint64_t endpoint_id() const {
-    OSP_CHECK(endpoint_id_);
-    return endpoint_id_.value();
+  uint64_t instance_id() const {
+    OSP_CHECK(instance_id_);
+    return instance_id_.value();
   }
   uint64_t connection_id() const {
     OSP_CHECK(connection_id_);
@@ -162,7 +162,7 @@ class Connection {
   // Called by the receiver when the OnPresentationStarted logic happens. This
   // notifies the delegate and updates our internal stream and ids.
   void OnConnected(uint64_t connection_id,
-                   uint64_t endpoint_id,
+                   uint64_t instance_id,
                    std::unique_ptr<ProtocolConnection> stream);
 
   void OnClosedByError(const Error& cause);
@@ -179,10 +179,10 @@ class Connection {
 
   PresentationInfo presentation_;
   State state_ = State::kConnecting;
-  Delegate* delegate_;
-  ParentDelegate* parent_delegate_;
+  Delegate* delegate_ = nullptr;
+  ParentDelegate* parent_delegate_ = nullptr;
   std::optional<uint64_t> connection_id_;
-  std::optional<uint64_t> endpoint_id_;
+  std::optional<uint64_t> instance_id_;
   std::unique_ptr<ProtocolConnection> protocol_connection_;
 
   OSP_DISALLOW_COPY_AND_ASSIGN(Connection);
@@ -190,13 +190,13 @@ class Connection {
 
 class ConnectionManager final : public MessageDemuxer::MessageCallback {
  public:
-  explicit ConnectionManager(MessageDemuxer* demuxer);
+  explicit ConnectionManager(MessageDemuxer& demuxer);
 
   void AddConnection(Connection* connection);
   void RemoveConnection(Connection* connection);
 
   // MessasgeDemuxer::MessageCallback overrides.
-  ErrorOr<size_t> OnStreamMessage(uint64_t endpoint_id,
+  ErrorOr<size_t> OnStreamMessage(uint64_t instance_id,
                                   uint64_t connection_id,
                                   msgs::Type message_type,
                                   const uint8_t* buffer,
@@ -207,9 +207,9 @@ class ConnectionManager final : public MessageDemuxer::MessageCallback {
   size_t ConnectionCount() const;
 
  private:
-  // TODO(btolsch): Connection IDs were changed to be per-endpoint, but this
-  // table then needs to be <endpoint id, connection id> since connection id is
-  // still not unique globally.
+  // TODO(btolsch): Connection IDs were changed to be per-instance, but this
+  // table then needs to be <instance id, connection id> since connection id
+  // is still not unique globally.
   std::map<uint64_t, Connection*> connections_;
 
   MessageDemuxer::MessageWatch message_watch_;

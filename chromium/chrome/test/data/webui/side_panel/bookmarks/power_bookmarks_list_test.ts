@@ -19,6 +19,7 @@ import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {TestMock} from 'chrome://webui-test/test_mock.js';
+import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
 import {TestBrowserProxy} from './commerce/test_shopping_service_api_proxy.js';
 import {TestBookmarksApiProxy} from './test_bookmarks_api_proxy.js';
@@ -95,11 +96,16 @@ suite('SidePanelPowerBookmarksListTest', () => {
     return getBookmarks().find((bookmark) => bookmark.id === id);
   }
 
+  function getPowerBookmarksRowElement(id: string): PowerBookmarkRowElement|
+      undefined {
+    return powerBookmarksList.shadowRoot!
+               .querySelector<PowerBookmarkRowElement>(`#bookmark-${id}`) ||
+        undefined;
+  }
+
   function getCrUrlListItemElementWithId(id: string): CrUrlListItemElement|
       undefined {
-    const powerBookmarkRowElement =
-        powerBookmarksList.shadowRoot!.querySelector<PowerBookmarkRowElement>(
-            `#bookmark-${id}`);
+    const powerBookmarkRowElement = getPowerBookmarksRowElement(id);
     if (!powerBookmarkRowElement) {
       return undefined;
     }
@@ -113,10 +119,12 @@ suite('SidePanelPowerBookmarksListTest', () => {
   async function performSearch(query: string) {
     const searchField = powerBookmarksList.shadowRoot!.querySelector(
         'cr-toolbar-search-field')!;
+    const searchChanged = eventToPromise('search-changed', searchField);
     searchField.$.searchInput.value = query;
     searchField.onSearchTermInput();
     searchField.onSearchTermSearch();
 
+    await searchChanged;
     await flushTasks();
   }
 
@@ -126,6 +134,35 @@ suite('SidePanelPowerBookmarksListTest', () => {
     powerBookmarksList.clickBookmarkRowForTests(bookmark);
 
     await flushTasks();
+  }
+
+  async function selectBookmark(id: string) {
+    const checkboxClicked =
+        eventToPromise('checkbox-change', getPowerBookmarksRowElement(id)!);
+    const bookmarkListItem = getCrUrlListItemElementWithId(id);
+    assertTrue(!!bookmarkListItem);
+    await bookmarkListItem.updateComplete;
+    bookmarkListItem.click();
+    await checkboxClicked;
+  }
+
+  async function initializeUI() {
+    // Remove all children from document.body
+    while (document.body.firstChild) {
+      document.body.removeChild(document.body.firstChild);
+    }
+    powerBookmarksList = document.createElement('power-bookmarks-list');
+
+    // Ensure the PowerBookmarksListElement is given a fixed height to expand
+    // to.
+    const parentElement = document.createElement('div');
+    parentElement.style.height = '500px';
+    parentElement.appendChild(powerBookmarksList);
+    document.body.appendChild(parentElement);
+
+    await bookmarksApi.whenCalled('getFolders');
+    await waitAfterNextRender(powerBookmarksList);
+    flush();
   }
 
   setup(async () => {
@@ -154,20 +191,10 @@ suite('SidePanelPowerBookmarksListTest', () => {
       emptyBodyFolder: 'folder body',
       emptyTitleGuest: 'guest title',
       emptyBodyGuest: 'guest body',
+      bookmarksTreeViewEnabled: false,
     });
 
-    powerBookmarksList = document.createElement('power-bookmarks-list');
-
-    // Ensure the PowerBookmarksListElement is given a fixed height to expand
-    // to.
-    const parentElement = document.createElement('div');
-    parentElement.style.height = '500px';
-    parentElement.appendChild(powerBookmarksList);
-    document.body.appendChild(parentElement);
-
-    await bookmarksApi.whenCalled('getFolders');
-    await waitAfterNextRender(powerBookmarksList);
-    flush();
+    await initializeUI();
   });
 
   test('GetsAndShowsTopLevelBookmarks', () => {
@@ -207,7 +234,7 @@ suite('SidePanelPowerBookmarksListTest', () => {
     assertEquals(2, getBookmarksInList(1).length);
   });
 
-  test('UpdatesChangedBookmarks', () => {
+  test('UpdatesChangedBookmarks', async () => {
     const changedBookmark = folders[1]!.children![0]!;
     bookmarksApi.callbackRouter.onChanged.callListeners(changedBookmark.id, {
       title: 'New title',
@@ -223,6 +250,7 @@ suite('SidePanelPowerBookmarksListTest', () => {
 
     const crUrlListItemElement = getCrUrlListItemElementWithId('3');
     assertTrue(!!crUrlListItemElement);
+    await crUrlListItemElement.updateComplete;
 
     assertEquals('New title', crUrlListItemElement.title);
   });
@@ -480,17 +508,19 @@ suite('SidePanelPowerBookmarksListTest', () => {
 
     await flushTasks();
 
-    const rowElement =
-        powerBookmarksList.shadowRoot!.querySelector<PowerBookmarkRowElement>(
-            `#bookmark-${renamedBookmarkId}`);
+    const rowElement = getPowerBookmarksRowElement(renamedBookmarkId);
     assertTrue(!!rowElement);
     let input =
         rowElement.shadowRoot!.querySelector<CrInputElement>('cr-input');
     assertTrue(!!input);
+
+    const inputChange = eventToPromise('input-change', rowElement);
+
     const newName = 'foo';
     input.value = newName;
     input.inputElement.dispatchEvent(new Event('change'));
 
+    await inputChange;
     await flushTasks();
 
     // Committing a new input value should rename the bookmark and remove the
@@ -515,8 +545,11 @@ suite('SidePanelPowerBookmarksListTest', () => {
     assertTrue(!!rowElement);
     let input =
         rowElement.shadowRoot!.querySelector<CrInputElement>('cr-input');
+    const inputBlurred = eventToPromise(
+        'input-change', getPowerBookmarksRowElement(renamedBookmarkId)!);
     assertTrue(!!input);
     input.inputElement.blur();
+    await inputBlurred;
 
     await flushTasks();
 
@@ -541,24 +574,21 @@ suite('SidePanelPowerBookmarksListTest', () => {
     assertNotEquals(0, childFolderElement.imageUrls.length);
   });
 
-  test('DeletesSelectedBookmarks', () => {
+  test('DeletesSelectedBookmarks', async () => {
     const editButton: HTMLElement =
         powerBookmarksList.shadowRoot!.querySelector('#editButton')!;
     editButton.click();
 
     flush();
 
-    const bookmarkElement3 = getCrUrlListItemElementWithId('3');
-    assertTrue(!!bookmarkElement3);
-    bookmarkElement3.click();
-    const bookmarkElement5 = getCrUrlListItemElementWithId('5');
-    assertTrue(!!bookmarkElement5);
-    bookmarkElement5.click();
+    await selectBookmark('3');
+    await selectBookmark('5');
 
     flush();
 
-    const deleteButton: HTMLElement =
+    const deleteButton: HTMLButtonElement =
         powerBookmarksList.shadowRoot!.querySelector('#deleteButton')!;
+    assertFalse(deleteButton.disabled);
     deleteButton.click();
 
     flush();
@@ -629,11 +659,35 @@ suite('SidePanelPowerBookmarksListTest', () => {
         currentPrice: '$56',
         previousPrice: '$78',
         clusterId: BigInt(12345),
+        categoryLabels: [],
       },
     };
     shoppingServiceApi.getCallbackRouterRemote().priceTrackedForBookmark(
         newProduct);
     await flushTasks();
     assertFalse(isHidden(labels));
+  });
+
+  test('ShowsExpandButtonForFolders', async () => {
+    // Enabling the feature flag for ShowsExpandButtonForFolders test.
+    loadTimeData.overrideValues({bookmarksTreeViewEnabled: true});
+    await initializeUI();
+
+    const folderElement = getPowerBookmarksRowElement('5');
+    assertTrue(!!folderElement);
+
+    let expandButton =
+        folderElement.shadowRoot!.querySelector<PowerBookmarkRowElement>(
+            '#expandButton');
+    // Assert that the expand button is present for folders
+    assertTrue(!!expandButton);
+
+    const singleBookmarkElement = getPowerBookmarksRowElement('3');
+    assertTrue(!!singleBookmarkElement);
+
+    expandButton = singleBookmarkElement.shadowRoot!
+                       .querySelector<PowerBookmarkRowElement>('#expandButton');
+    // Assert that the expand button is not present for single bookmarks
+    assertFalse(!!expandButton);
   });
 });

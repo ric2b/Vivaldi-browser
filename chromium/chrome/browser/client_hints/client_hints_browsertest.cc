@@ -656,16 +656,17 @@ class ClientHintsBrowserTest : public policy::PolicyTest {
 
   ~ClientHintsBrowserTest() override {}
 
-  virtual std::unique_ptr<base::FeatureList> EnabledFeatures() {
+  virtual void SetUpScopedFeatureList(
+      base::test::ScopedFeatureList& scoped_feature_list) {
     std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
     // Force-enable the ClientHintsFormFactors feature, so that the header is
     // represented in the various header counts.
     feature_list->InitFromCommandLine(kDefaultFeatures, "");
-    return feature_list;
+    scoped_feature_list.InitWithFeatureList(std::move(feature_list));
   }
 
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatureList(EnabledFeatures());
+    SetUpScopedFeatureList(scoped_feature_list_);
     InProcessBrowserTest::SetUp();
   }
 
@@ -1310,7 +1311,7 @@ class ClientHintsBrowserTest : public policy::PolicyTest {
       } else if (expected_ect == net::EFFECTIVE_CONNECTION_TYPE_3G) {
         EXPECT_NEAR(450, rtt_value, 90);
       } else {
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
       }
 
       // Effective connection type is forced to 2G using command line in these
@@ -1321,7 +1322,7 @@ class ClientHintsBrowserTest : public policy::PolicyTest {
       } else if (expected_ect == net::EFFECTIVE_CONNECTION_TYPE_3G) {
         EXPECT_NEAR(0.4, mbps_value, 0.1);
       } else {
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
       }
 
       EXPECT_EQ(expected_ect == net::EFFECTIVE_CONNECTION_TYPE_2G ? "2g" : "3g",
@@ -3320,7 +3321,8 @@ class ClientHintsWebHoldbackBrowserTest : public ClientHintsBrowserTest {
     return web_effective_connection_type_override_;
   }
 
-  std::unique_ptr<base::FeatureList> EnabledFeatures() override {
+  void SetUpScopedFeatureList(
+      base::test::ScopedFeatureList& scoped_feature_list) override {
     base::FieldTrialParamAssociator::GetInstance()->ClearAllParamsForTesting();
     const std::string kTrialName = "TrialFoo";
     const std::string kGroupName = "GroupFoo";  // Value not used
@@ -3345,7 +3347,7 @@ class ClientHintsWebHoldbackBrowserTest : public ClientHintsBrowserTest {
     feature_list->RegisterFieldTrialOverride(
         features::kNetworkQualityEstimatorWebHoldback.name,
         base::FeatureList::OVERRIDE_ENABLE_FEATURE, trial.get());
-    return feature_list;
+    scoped_feature_list.InitWithFeatureList(std::move(feature_list));
   }
 
  private:
@@ -4580,7 +4582,7 @@ class ThirdPartyUaReductionBrowserTest : public UaReductionBrowserTest {
     if (value != nullptr) {
       last_user_agent_ = *value;
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -4825,10 +4827,11 @@ class GreaseFeatureParamOptOutTest : public ClientHintsBrowserTest {
   // Test that feature param opt outs are able to trigger the old algorithm,
   // which we will maintain until additional confidence in the permutations of
   // the new algorithm is attained.
-  std::unique_ptr<base::FeatureList> EnabledFeatures() override {
+  void SetUpScopedFeatureList(
+      base::test::ScopedFeatureList& scoped_feature_list) override {
     std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
     feature_list->InitFromCommandLine("GreaseUACH:updated_algorithm/false", "");
-    return feature_list;
+    scoped_feature_list.InitWithFeatureList(std::move(feature_list));
   }
 };
 
@@ -4845,11 +4848,12 @@ IN_PROC_BROWSER_TEST_F(GreaseFeatureParamOptOutTest,
 
 class XRClientHintsTest : public ClientHintsBrowserTest {
   // Enables ClientHintsXRFormFactor feature in addition to the default ones.
-  std::unique_ptr<base::FeatureList> EnabledFeatures() override {
+  void SetUpScopedFeatureList(
+      base::test::ScopedFeatureList& scoped_feature_list) override {
     std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
     feature_list->InitFromCommandLine(
         base::StrCat({kDefaultFeatures, ",ClientHintsXRFormFactor"}), "");
-    return feature_list;
+    scoped_feature_list.InitWithFeatureList(std::move(feature_list));
   }
 };
 
@@ -4874,40 +4878,6 @@ IN_PROC_BROWSER_TEST_F(XRClientHintsTest, UAHintsXRMode) {
                         base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   EXPECT_TRUE(base::Contains(form_factors, "\"XR\""))
       << main_frame_ua_form_factors_observed();
-}
-
-class GreaseEnterprisePolicyTest : public ClientHintsBrowserTest {
-  void SetUpInProcessBrowserTestFixture() override {
-    policy::PolicyTest::SetUpInProcessBrowserTestFixture();
-    policy::PolicyMap policies;
-    SetPolicy(&policies, policy::key::kUserAgentClientHintsGREASEUpdateEnabled,
-              std::optional<base::Value>(false));
-    provider_.UpdateChromePolicy(policies);
-  }
-};
-
-// Makes sure that the enterprise policy is able to prevent updated GREASE.
-IN_PROC_BROWSER_TEST_F(GreaseEnterprisePolicyTest, GreaseEnterprisePolicyTest) {
-  const GURL gurl = accept_ch_url();
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), gurl));
-  std::string ua_ch_result = main_frame_ua_observed();
-
-  ASSERT_TRUE(SawOldGrease(ua_ch_result));
-}
-IN_PROC_BROWSER_TEST_F(GreaseEnterprisePolicyTest,
-                       GreaseEnterprisePolicyDynamicRefreshTest) {
-  const GURL gurl = accept_ch_url();
-  // Reset the policy that was already set to false in the setup, then see if
-  // the change is reflected in the sec-ch-ua header without requiring a
-  // browser restart.
-  policy::PolicyMap policies;
-  SetPolicy(&policies, policy::key::kUserAgentClientHintsGREASEUpdateEnabled,
-            std::optional<base::Value>(true));
-  provider_.UpdateChromePolicy(policies);
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), gurl));
-  std::string ua_ch_result = main_frame_ua_observed();
-
-  ASSERT_TRUE(SawUpdatedGrease(ua_ch_result) && !SawOldGrease(ua_ch_result));
 }
 
 // Tests that user-agent reduction on a redirect request.
@@ -5029,11 +4999,12 @@ IN_PROC_BROWSER_TEST_F(PrefersReducedTransparencyExplicitlyDisabledBrowserTest,
 
 class QUICClientHintsTest : public ClientHintsBrowserTest {
   // Enables quic feature to make sure no crash happen.
-  std::unique_ptr<base::FeatureList> EnabledFeatures() override {
+  void SetUpScopedFeatureList(
+      base::test::ScopedFeatureList& scoped_feature_list) override {
     std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
     feature_list->InitFromCommandLine(
         base::StrCat({kDefaultFeatures, ",UseNewAlpsCodepointQUIC"}), "");
-    return feature_list;
+    scoped_feature_list.InitWithFeatureList(std::move(feature_list));
   }
 
   void SetUpCommandLine(base::CommandLine* cmd) override {
@@ -5050,4 +5021,75 @@ IN_PROC_BROWSER_TEST_F(QUICClientHintsTest, BasicQUICAlps) {
   histogram_tester.ExpectBucketCount(
       "ClientHints.AcceptCHFrame",
       content::AcceptCHFrameRestart::kNavigationRestarted, 1);
+}
+
+class ClientHintsBrowserTestForBlockAcceptClientHintsExperiment
+    : public ClientHintsBrowserTest,
+      public testing::WithParamInterface<bool> {
+ private:
+  void SetUpScopedFeatureList(
+      base::test::ScopedFeatureList& scoped_feature_list) override {
+    // Setup kBlockAcceptClientHints experiment, based on the test parameter.
+    if (GetParam()) {
+      scoped_feature_list.InitAndEnableFeatureWithParameters(
+          network::features::kBlockAcceptClientHints,
+          {{network::features::kBlockAcceptClientHintsBlockedSite.name,
+            url::Origin::Create(accept_ch_url()).Serialize()}});
+    }
+  }
+};
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ClientHintsBrowserTestForBlockAcceptClientHintsExperiment,
+    testing::Bool());
+
+IN_PROC_BROWSER_TEST_P(
+    ClientHintsBrowserTestForBlockAcceptClientHintsExperiment,
+    Block) {
+  base::HistogramTester histogram_tester;
+  ContentSettingsForOneType host_settings =
+      HostContentSettingsMapFactory::GetForProfile(browser()->profile())
+          ->GetSettingsForOneType(ContentSettingsType::CLIENT_HINTS);
+  EXPECT_EQ(0u, host_settings.size());
+
+  // Fetching `gurl` should persist the request for client hints iff using
+  // headers without the experiment targeting the URL.
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), accept_ch_url()));
+
+  const size_t expected_count = GetParam() ? 0 : 1;
+  histogram_tester.ExpectUniqueSample("ClientHints.UpdateEventCount", 1,
+                                      expected_count);
+
+  content::FetchHistogramsFromChildProcesses();
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+  base::RunLoop().RunUntilIdle();
+
+  histogram_tester.ExpectUniqueSample(
+      "ClientHints.UpdateSize", expected_client_hints_number, expected_count);
+
+  // Clients hints preferences for one origin should be persisted iff the url is
+  // not targeted as the blocked site.
+  host_settings =
+      HostContentSettingsMapFactory::GetForProfile(browser()->profile())
+          ->GetSettingsForOneType(ContentSettingsType::CLIENT_HINTS);
+  EXPECT_EQ(expected_count, host_settings.size());
+
+  // Expects extra sec-ch headers attached iff the url is not targeted as the
+  // blocked site.
+  SetClientHintExpectationsOnMainFrame(expected_count);
+  SetClientHintExpectationsOnSubresources(expected_count);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), without_accept_ch_url()));
+
+  // The user agent hint is attached to all three requests regardless of the
+  // blocked site setting.
+  EXPECT_EQ(3u, count_user_agent_hint_headers_seen());
+  EXPECT_EQ(3u, count_ua_mobile_client_hints_headers_seen());
+  EXPECT_EQ(3u, count_ua_platform_client_hints_headers_seen());
+  EXPECT_EQ(0u, count_save_data_client_hints_headers_seen());
+
+  // Expected number of specified extra hints attached to the image request, and
+  // the same number to the main frame request. The expectation must be 0 iff
+  // the url is targeted as the blocked site.
+  EXPECT_EQ(expected_client_hints_number * 2 * expected_count,
+            count_client_hints_headers_seen());
 }

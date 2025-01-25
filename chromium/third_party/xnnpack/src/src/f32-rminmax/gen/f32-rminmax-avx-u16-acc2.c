@@ -11,8 +11,8 @@
 
 #include <immintrin.h>
 
-#include <xnnpack/common.h>
-#include <xnnpack/reduce.h>
+#include "xnnpack/common.h"
+#include "xnnpack/reduce.h"
 
 
 void xnn_f32_rminmax_ukernel__avx_u16_acc2(
@@ -25,6 +25,7 @@ void xnn_f32_rminmax_ukernel__avx_u16_acc2(
   assert(batch % sizeof(float) == 0);
   assert(input != NULL);
   assert(output != NULL);
+  assert(params != NULL);
 
   __m256 vmin0 = _mm256_broadcast_ss(input);
   __m256 vmax0 = vmin0;

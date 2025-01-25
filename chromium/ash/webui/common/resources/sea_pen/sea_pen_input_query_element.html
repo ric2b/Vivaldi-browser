@@ -1,4 +1,4 @@
-<style include="wallpaper common cros-button-style">
+<style include="wallpaper common cros-button-style sea-pen">
   #container {
     align-items: center;
     display: flex;
@@ -7,24 +7,27 @@
     justify-content: center;
   }
 
-  #queryInput {
-    --cr-input-error-display: none;
-    padding: 32px 0 12px;
-    text-align: center;
-    width: 50%;
-  }
-
-  #searchButtons {
-    align-items: center;
-    box-sizing: border-box;
+  #innerContainer {
     display: flex;
-    justify-content: center;
-    margin-block: 24px;
+    flex-direction: column;
+    transition: height 300ms cubic-bezier(0, 0, 0, 1);
+    width: 100%;
   }
 
-  #searchButtons cr-button {
-    margin: 0 4px;
-    padding-inline-end: 16px;
+  #queryInput {
+    --cr-input-background-color: var(--cros-sys-input_field_on_shaded);
+    --cr-input-border-radius: 20px;
+    --cr-input-error-display: none;
+    --cr-input-min-height: 72px;
+    font: var(--cros-body-1-font);
+    margin-top: 16px;
+    text-align: center;
+    width: 100%;
+  }
+
+  #searchButtons #promptingGuide {
+    left: 0;
+    position: absolute;
   }
 
   #thumbnailsLoadingText {
@@ -41,26 +44,56 @@
 <div id="container">
   <cr-input id="queryInput"
       maxlength="[[maxTextLength_]]"
-      placeholder="Describe your wallpaper"
-      on-change="onClickInputQuerySearchButton_"
+      placeholder="[[i18n('seaPenFreeformInputPlaceholder')]]"
+      on-keypress="onClickInputQuerySearchButton_"
+      on-focus="onTextInputFocused_"
       type="text"
       value="{{textValue_}}">
   </cr-input>
-  <div id="searchButtons">
-    <template is="dom-if" if="[[thumbnailsLoading_]]">
-      <span id="thumbnailsLoadingText" aria-description="{{textValue_}}" aria-live="polite">
-        [[i18n('seaPenThumbnailsLoading')]]
-      </span>
+  <div id="innerContainer">
+    <template is="dom-if" if="[[shouldShowSuggestions_]]"
+        on-dom-change="onSeaPenSuggestionsDomChanged_" restamp>
+      <sea-pen-suggestions class="fade-in-200ms"
+          on-sea-pen-suggestion-selected="onSuggestionSelected_">
+      </sea-pen-suggestions>
     </template>
-    <template is="dom-if" if="[[!thumbnailsLoading_]]" restamp>
-      <cr-button
-          id="searchButton"
-          class="action-button"
-          on-click="onClickInputQuerySearchButton_">
-        <iron-icon icon$="[[searchButtonIcon_]]" slot="prefix-icon">
-        </iron-icon>
-        <p>[[searchButtonText_]]</p>
-      </cr-button>
-    </template>
+    <div id="searchButtons">
+      <template is="dom-if" if="[[thumbnailsLoading_]]">
+        <span id="thumbnailsLoadingText" aria-description="{{textValue_}}" aria-live="polite">
+          [[i18n('seaPenThumbnailsLoading')]]
+        </span>
+      </template>
+      <template is="dom-if" if="[[!thumbnailsLoading_]]" restamp>
+        <a id="promptingGuide"
+            href="chrome://help-app/help/sub/3399710/id/1251809"
+            target="_blank">
+          [[i18n('seaPenFreeformPromptingGuide')]]
+        </a>
+        <cr-button
+            id="inspire"
+            on-click="onClickInspire_"
+            on-mouseleave="stopInspireIconAnimation_"
+            on-mouseenter="startInspireIconAnimation_">
+          <cros-lottie-renderer
+              id="inspireMeAnimation"
+              slot="prefix-icon"
+              asset-url="chrome://resources/ash/common/sea_pen/lightbulb_icon.json"
+              loop
+              dynamic
+              aria-hidden>
+          </cros-lottie-renderer>
+          <iron-icon id="inspireIcon" icon="sea-pen:inspire" slot="prefix-icon"></iron-icon>
+          <p>[[i18n('seaPenInspireMeButton')]]</p>
+        </cr-button>
+        <cr-button
+            id="searchButton"
+            class="action-button"
+            on-click="onClickInputQuerySearchButton_">
+          <iron-icon icon$="[[searchButtonIcon_]]" slot="prefix-icon">
+          </iron-icon>
+          <p>[[searchButtonText_]]</p>
+        </cr-button>
+      </template>
+    </div>
   </div>
 </div>

@@ -552,12 +552,7 @@ void SyntaxTreePrinter::EmitAttributes(VectorRef<const ast::Attribute*> attrs) {
                 Line() << "]";
             },
             [&](const ast::BuiltinAttribute* builtin) {
-                Line() << "BuiltinAttribute [";
-                {
-                    ScopedIndent ba(this);
-                    EmitExpression(builtin->builtin);
-                }
-                Line() << "]";
+                Line() << "BuiltinAttribute [" << core::ToString(builtin->builtin) << "]";
             },
             [&](const ast::DiagnosticAttribute* diagnostic) {
                 EmitDiagnosticControl(diagnostic->control);
@@ -569,14 +564,15 @@ void SyntaxTreePrinter::EmitAttributes(VectorRef<const ast::Attribute*> attrs) {
                     Line() << "type: [";
                     {
                         ScopedIndent ty(this);
-                        EmitExpression(interpolate->type);
+                        Line() << core::ToString(interpolate->interpolation.type);
                     }
                     Line() << "]";
-                    if (interpolate->sampling) {
+                    if (interpolate->interpolation.sampling !=
+                        core::InterpolationSampling::kUndefined) {
                         Line() << "sampling: [";
                         {
                             ScopedIndent sa(this);
-                            EmitExpression(interpolate->sampling);
+                            Line() << core::ToString(interpolate->interpolation.sampling);
                         }
                         Line() << "]";
                     }

@@ -31,9 +31,9 @@
 #include "extensions/browser/image_loader.h"
 #include "extensions/browser/permissions_manager.h"
 #include "extensions/common/extension.h"
-#include "extensions/common/extension_icon_set.h"
 #include "extensions/common/extension_resource.h"
 #include "extensions/common/extension_set.h"
+#include "extensions/common/icons/extension_icon_set.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/permissions/permission_set.h"
@@ -232,7 +232,7 @@ int BackgroundApplicationListModel::GetPosition(
       return position;
     ++position;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return -1;
 }
 
@@ -385,7 +385,7 @@ void BackgroundApplicationListModel::OnExtensionPermissionsUpdated(
         // Policy changes are only used for host permissions, so the
         // "background"
         // permission would never be present in  permissions .
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 }

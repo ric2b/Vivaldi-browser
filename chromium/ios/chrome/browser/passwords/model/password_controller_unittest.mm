@@ -47,9 +47,11 @@
 #import "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #import "components/sync_preferences/testing_pref_service_syncable.h"
 #import "ios/chrome/browser/autofill/model/form_suggestion_controller.h"
+#import "ios/chrome/browser/autofill/ui_bundled/form_input_accessory/form_input_accessory_mediator.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_mediator.h"
+#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state_manager.h"
 #import "ios/chrome/browser/web/model/chrome_web_client.h"
+#import "ios/chrome/test/testing_application_context.h"
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/navigation/navigation_item.h"
@@ -234,7 +236,13 @@ struct TestPasswordFormData {
 class PasswordControllerTest : public PlatformTest {
  public:
   PasswordControllerTest() : web_client_(std::make_unique<ChromeWebClient>()) {
-    browser_state_ = TestChromeBrowserState::Builder().Build();
+    TestChromeBrowserState::Builder test_cbs_builder;
+    browser_state_manager_ = std::make_unique<TestChromeBrowserStateManager>(
+        test_cbs_builder.Build());
+    TestingApplicationContext::GetGlobal()->SetChromeBrowserStateManager(
+        browser_state_manager_.get());
+    browser_state_ =
+        browser_state_manager_->GetLastUsedBrowserStateForTesting();
 
     web::WebState::CreateParams params(browser_state_.get());
     web_state_ = web::WebState::Create(params);
@@ -481,9 +489,10 @@ class PasswordControllerTest : public PlatformTest {
                                                   feature);
   }
 
+  std::unique_ptr<TestChromeBrowserStateManager> browser_state_manager_;
   web::ScopedTestingWebClient web_client_;
   web::WebTaskEnvironment task_environment_;
-  std::unique_ptr<TestChromeBrowserState> browser_state_;
+  raw_ptr<ChromeBrowserState> browser_state_;
   // `autofill_client_` mocks KeyedServices, which need to outlive the
   // `BrowserAutofillManager` owned by frame (`web_state`).
   autofill::TestAutofillClient autofill_client_;
@@ -608,7 +617,7 @@ void PasswordControllerTest::FillFormAndValidate(TestPasswordFormData test_data,
       suggestionWithValue:suggestion_text
        displayDescription:nil
                      icon:nil
-              popupItemId:autofill::SuggestionType::kAutocompleteEntry
+                     type:autofill::SuggestionType::kAutocompleteEntry
         backendIdentifier:nil
            requiresReauth:NO];
 
@@ -720,8 +729,8 @@ TEST_F(PasswordControllerTest, FindPasswordFormsInView) {
         }));
     if (data.expected_form_found) {
       ASSERT_EQ(1U, forms.size());
-      EXPECT_EQ(data.expected_number_of_fields, forms[0].fields.size());
-      EXPECT_EQ(data.expected_form_name, base::UTF16ToUTF8(forms[0].name));
+      EXPECT_EQ(data.expected_number_of_fields, forms[0].fields().size());
+      EXPECT_EQ(data.expected_form_name, base::UTF16ToUTF8(forms[0].name()));
     } else {
       ASSERT_TRUE(forms.empty());
     }
@@ -1917,7 +1926,7 @@ TEST_F(PasswordControllerTest, FindDynamicallyAddedForm2) {
   auto form_managers = passwordController_.passwordManager->form_managers();
   ASSERT_EQ(1u, form_managers.size());
   auto* password_form = form_managers[0]->observed_form();
-  EXPECT_EQ(u"dynamic_form", password_form->name);
+  EXPECT_EQ(u"dynamic_form", password_form->name());
 }
 
 // Tests that submission is detected on removal of the form that had user input.

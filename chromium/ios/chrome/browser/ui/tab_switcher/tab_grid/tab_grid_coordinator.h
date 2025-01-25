@@ -13,7 +13,6 @@
 
 @protocol ApplicationCommands;
 class Browser;
-@protocol BrowsingDataCommands;
 @protocol TabGridCoordinatorDelegate;
 
 @interface TabGridCoordinator : ChromeCoordinator
@@ -21,8 +20,6 @@ class Browser;
 - (instancetype)initWithWindow:(UIWindow*)window
      applicationCommandEndpoint:
          (id<ApplicationCommands>)applicationCommandEndpoint
-    browsingDataCommandEndpoint:
-        (id<BrowsingDataCommands>)browsingDataCommandEndpoint
                  regularBrowser:(Browser*)regularBrowser
                 inactiveBrowser:(Browser*)inactiveBrowser
                incognitoBrowser:(Browser*)incognitoBrowser
@@ -70,6 +67,11 @@ class Browser;
 
 // Sets the `mode` as the active one.
 - (void)setActiveMode:(TabGridMode)mode;
+
+// Vivaldi
+// Hide and show the tab grid(regular and private) from outside of this class.
+- (void)setTabGridHidden:(BOOL)hidden;
+// End Vivaldi
 
 @end
 

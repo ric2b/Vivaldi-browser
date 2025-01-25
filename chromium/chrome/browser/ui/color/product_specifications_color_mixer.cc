@@ -14,14 +14,27 @@ void AddProductSpecificationsColorMixer(ui::ColorProvider* provider,
                                         const ui::ColorProviderKey& key) {
   ui::ColorMixer& mixer = provider->AddMixer();
   mixer[kColorProductSpecificationsButtonBackground] = {ui::kColorSysSurface2};
-  mixer[kColorProductSpecificationsTonalButtonBackground] = {
-      ui::kColorSysTonalContainer};
-  mixer[kColorProductSpecificationsContentBackground] = {
-      ui::kColorSysBaseContainer};
+  mixer[kColorProductSpecificationsDisclosureBackground] = {
+      ui::kColorPrimaryBackground};
+  mixer[kColorProductSpecificationsDisclosureForeground] = {
+      ui::kColorPrimaryForeground};
+  mixer[kColorProductSpecificationsDisclosureGradientEnd] = {
+      ui::kColorSysGradientTertiary};
+  mixer[kColorProductSpecificationsDisclosureGradientStart] = {
+      ui::kColorSysGradientPrimary};
+  mixer[kColorProductSpecificationsDisclosureSummaryBackground] = {
+      ui::kColorSysSurface4};
+  mixer[kColorProductSpecificationsDivider] = {ui::kColorSysDivider};
+  mixer[kColorProductSpecificationsIcon] = {ui::kColorIcon};
   mixer[kColorProductSpecificationsPageBackground] = {ui::kColorSysSurface2};
-  mixer[kColorProductSpecificationsSummaryBackground] = {ui::kColorSysSurface};
-  mixer[kColorProductSpecificationsPrimaryTitle] = {ui::kColorSysOnSurface};
+  mixer[kColorProductSpecificationsPrimaryTitle] = {
+      ui::kColorPrimaryForeground};
   mixer[kColorProductSpecificationsSecondaryTitle] = {
       ui::kColorSysOnSurfaceSecondary};
-  mixer[kColorProductSpecificationsDivider] = {ui::kColorSysDivider};
+  mixer[kColorProductSpecificationsSummaryBackground] = {
+      ui::kColorPrimaryBackground};
+  mixer[kColorProductSpecificationsSummaryBackgroundDragging] = {
+      ui::kColorSysStateRippleNeutralOnSubtle};
+  mixer[kColorProductSpecificationsTonalButtonBackground] = {
+      ui::kColorSysTonalContainer};
 }

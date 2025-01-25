@@ -6,6 +6,7 @@ import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 
 import {type Loggable} from './Loggable.js';
 import {type LoggingConfig, VisualElements} from './LoggingConfig.js';
+import {pendingWorkComplete} from './LoggingDriver.js';
 import {getLoggingState, type LoggingState} from './LoggingState.js';
 
 let veDebuggingEnabled = false;
@@ -76,66 +77,143 @@ function processElementForDebugging(element: Element, loggingState: LoggingState
   }
 }
 
-export function processEventForDebugging(event: string, state: LoggingState|null, extraInfo?: Entry): void {
-  const veDebugLoggingEnabled = localStorage.getItem('veDebugLoggingEnabled');
-  if (!veDebuggingEnabled && !veDebugLoggingEnabled) {
+type EventType = 'Click'|'Drag'|'Hover'|'Change'|'KeyDown'|'Resize';
+export function processEventForDebugging(
+    event: EventType, state: LoggingState|null, extraInfo?: EventAttributes): void {
+  const format = localStorage.getItem('veDebugLoggingEnabled');
+  if (!format) {
     return;
   }
 
-  const entry: Entry =
-      {event, ve: state ? VisualElements[state?.config.ve] : undefined, context: state?.config.context, ...extraInfo};
+  switch (format) {
+    case DebugLoggingFormat.Intuitive:
+      processEventForIntuitiveDebugging(event, state, extraInfo);
+      break;
+    case DebugLoggingFormat.Test:
+      processEventForTestDebugging(event, state, extraInfo);
+      break;
+    case DebugLoggingFormat.AdHocAnalysis:
+      processEventForAdHocAnalysisDebugging(event, state, extraInfo);
+      break;
+  }
+}
+
+export function processEventForIntuitiveDebugging(
+    event: EventType, state: LoggingState|null, extraInfo?: EventAttributes): void {
+  const entry: IntuitiveLogEntry = {
+    event,
+    ve: state ? VisualElements[state?.config.ve] : undefined,
+    veid: state?.veid,
+    context: state?.config.context,
+    time: Date.now() - sessionStartTime,
+    ...extraInfo,
+  };
+  deleteUndefinedFields(entry);
+  maybeLogDebugEvent(entry);
+}
+
+export function processEventForTestDebugging(
+    event: EventType, state: LoggingState|null, _extraInfo?: EventAttributes): void {
+  lastImpressionLogEntry = null;
+  maybeLogDebugEvent({interaction: `${event}: ${veTestKeys.get(state?.veid || 0) || ''}`});
+}
+
+export function processEventForAdHocAnalysisDebugging(
+    event: EventType, state: LoggingState|null, extraInfo?: EventAttributes): void {
+  const ve = state ? adHocAnalysisEntries.get(state.veid) : null;
+  if (ve) {
+    const interaction: AdHocAnalysisInteraction = {time: Date.now() - sessionStartTime, type: event, ...extraInfo};
+    deleteUndefinedFields(interaction);
+    ve.interactions.push(interaction);
+  }
+}
+
+function deleteUndefinedFields<T>(entry: T): void {
   for (const stringKey in entry) {
-    const key = stringKey as keyof Entry;
+    const key = stringKey as keyof T;
     if (typeof entry[key] === 'undefined') {
       delete entry[key];
     }
   }
-
-  if (veDebuggingEnabled) {
-    showDebugPopover(`${Object.entries(entry).map(([k, v]) => `${k}: ${v}`).join('; ')}`);
-  }
-  const time = Date.now() - sessionStartTime;
-  maybeLogDebugEvent({...entry, veid: state?.veid, time});
 }
 
-type Entry = {
-  event?: string,
-  ve?: string,
+export type EventAttributes = {
   context?: string,
-  veid?: number,
-  children?: Entry[],
-  parent?: number,
-  time?: number,
   width?: number,
   height?: number,
   mouseButton?: number,
   doubleClick?: boolean,
 };
 
+type VisualElementAttributes = {
+  ve: string,
+  veid: number,
+  context?: string,
+  width?: number,
+  height?: number,
+};
+
+type IntuitiveLogEntry = {
+  event?: EventType|'Impression'|'SessionStart',
+  children?: IntuitiveLogEntry[],
+  parent?: number,
+  time?: number,
+}&Partial<VisualElementAttributes>;
+
+type AdHocAnalysisVisualElement = VisualElementAttributes&{
+  parent?: AdHocAnalysisVisualElement,
+};
+
+type AdHocAnalysisInteraction = {
+  type: EventType,
+  time: number,
+}&EventAttributes;
+
+type AdHocAnalysisLogEntry = AdHocAnalysisVisualElement&{
+  time: number,
+  interactions: AdHocAnalysisInteraction[],
+};
+
+type TestLogEntry = {
+  impressions: string[],
+}|{
+  interaction: string,
+};
+
 export function processImpressionsForDebugging(states: LoggingState[]): void {
-  if (!localStorage.getItem('veDebugLoggingEnabled')) {
-    return;
+  const format = localStorage.getItem('veDebugLoggingEnabled');
+  switch (format) {
+    case DebugLoggingFormat.Intuitive:
+      processImpressionsForIntuitiveDebugLog(states);
+      break;
+    case DebugLoggingFormat.Test:
+      processImpressionsForTestDebugLog(states);
+      break;
+    case DebugLoggingFormat.AdHocAnalysis:
+      processImpressionsForAdHocAnalysisDebugLog(states);
+      break;
+    default:
   }
-  const impressions = new Map<number, Entry>();
+}
+
+function processImpressionsForIntuitiveDebugLog(states: LoggingState[]): void {
+  const impressions = new Map<number, IntuitiveLogEntry>();
   for (const state of states) {
-    const entry: Entry = {
+    const entry: IntuitiveLogEntry = {
       event: 'Impression',
       ve: VisualElements[state.config.ve],
+      context: state?.config.context,
+      width: state.size.width,
+      height: state.size.height,
+      veid: state.veid,
     };
-    if (state.config.context) {
-      entry.context = state.config.context;
-    }
-    if (state.size) {
-      entry.width = state.size.width;
-      entry.height = state.size.height;
-    }
-    entry.veid = state.veid,
+    deleteUndefinedFields(entry);
 
     impressions.set(state.veid, entry);
     if (!state.parent || !impressions.has(state.parent?.veid)) {
       entry.parent = state.parent?.veid;
     } else {
-      const parent = impressions.get(state.parent?.veid) as Entry;
+      const parent = impressions.get(state.parent?.veid) as IntuitiveLogEntry;
       parent.children = parent.children || [];
       parent.children.push(entry);
     }
@@ -147,6 +225,52 @@ export function processImpressionsForDebugging(states: LoggingState[]): void {
     maybeLogDebugEvent(entries[0]);
   } else {
     maybeLogDebugEvent({event: 'Impression', children: entries, time: Date.now() - sessionStartTime});
+  }
+}
+
+const veTestKeys = new Map<number, string>();
+let lastImpressionLogEntry: {impressions: string[]}|null = null;
+
+function processImpressionsForTestDebugLog(states: LoggingState[]): void {
+  if (!lastImpressionLogEntry) {
+    lastImpressionLogEntry = {impressions: []};
+    veDebugEventsLog.push(lastImpressionLogEntry);
+  }
+  for (const state of states) {
+    let key = '';
+    if (state.parent) {
+      key = (veTestKeys.get(state.parent.veid) || '<UNKNOWN>') + ' > ';
+    }
+    key += VisualElements[state.config.ve];
+    if (state.config.context) {
+      key += ': ' + state.config.context;
+    }
+    veTestKeys.set(state.veid, key);
+    lastImpressionLogEntry.impressions.push(key);
+  }
+}
+
+const adHocAnalysisEntries = new Map<number, AdHocAnalysisLogEntry>();
+
+function processImpressionsForAdHocAnalysisDebugLog(states: LoggingState[]): void {
+  for (const state of states) {
+    const buildVe = (state: LoggingState): AdHocAnalysisVisualElement => {
+      const ve: AdHocAnalysisVisualElement = {
+        ve: VisualElements[state.config.ve],
+        veid: state.veid,
+        width: state.size?.width,
+        height: state.size?.height,
+        context: state.config.context,
+      };
+      deleteUndefinedFields(ve);
+      if (state.parent) {
+        ve.parent = buildVe(state.parent);
+      }
+      return ve;
+    };
+    const entry = {...buildVe(state), interactions: [], time: Date.now() - sessionStartTime};
+    adHocAnalysisEntries.set(state.veid, entry);
+    maybeLogDebugEvent(entry);
   }
 }
 
@@ -196,27 +320,36 @@ export function debugString(config: LoggingConfig): string {
   return components.join('; ');
 }
 
-const veDebugEventsLog: Entry[] = [];
+const veDebugEventsLog: (IntuitiveLogEntry|AdHocAnalysisLogEntry|TestLogEntry)[] = [];
 
-function maybeLogDebugEvent(entry: Entry): void {
-  if (!localStorage.getItem('veDebugLoggingEnabled')) {
+function maybeLogDebugEvent(entry: IntuitiveLogEntry|AdHocAnalysisLogEntry|TestLogEntry): void {
+  const format = localStorage.getItem('veDebugLoggingEnabled');
+  if (!format) {
     return;
   }
   veDebugEventsLog.push(entry);
-  // eslint-disable-next-line no-console
-  console.info('VE Debug:', entry);
+  if (format === DebugLoggingFormat.Intuitive) {
+    // eslint-disable-next-line no-console
+    console.info('VE Debug:', entry);
+  }
 }
 
-function setVeDebugLoggingEnabled(enabled: boolean): void {
+export enum DebugLoggingFormat {
+  Intuitive = 'Intuitive',
+  Test = 'Test',
+  AdHocAnalysis = 'AdHocAnalysis',
+}
+
+export function setVeDebugLoggingEnabled(enabled: boolean, format = DebugLoggingFormat.Intuitive): void {
   if (enabled) {
-    localStorage.setItem('veDebugLoggingEnabled', 'true');
+    localStorage.setItem('veDebugLoggingEnabled', format);
   } else {
     localStorage.removeItem('veDebugLoggingEnabled');
   }
 }
 
-function findVeDebugImpression(veid: number, includeAncestorChain?: boolean): Entry|undefined {
-  const findImpression = (entry: Entry): Entry|undefined => {
+function findVeDebugImpression(veid: number, includeAncestorChain?: boolean): IntuitiveLogEntry|undefined {
+  const findImpression = (entry: IntuitiveLogEntry): IntuitiveLogEntry|undefined => {
     if (entry.event === 'Impression' && entry.veid === veid) {
       return entry;
     }
@@ -235,14 +368,211 @@ function findVeDebugImpression(veid: number, includeAncestorChain?: boolean): En
     }
     return undefined;
   };
-  return findImpression({children: veDebugEventsLog});
+  return findImpression({children: veDebugEventsLog as IntuitiveLogEntry[]});
+}
+
+function fieldValuesForSql<T>(
+    obj: T,
+    fields: {strings: readonly(keyof T)[], numerics: readonly(keyof T)[], booleans: readonly(keyof T)[]}): string {
+  return [
+    ...fields.strings.map(f => obj[f] ? `"${obj[f]}"` : '$NullString'),
+    ...fields.numerics.map(f => obj[f] ?? 'null'),
+    ...fields.booleans.map(f => obj[f] ?? '$NullBool'),
+  ].join(', ');
+}
+
+function exportAdHocAnalysisLogForSql(): void {
+  const VE_FIELDS = {
+    strings: ['ve', 'context'] as const,
+    numerics: ['veid', 'width', 'height'] as const,
+    booleans: [] as const,
+  };
+  const INTERACTION_FIELDS = {
+    strings: ['type', 'context'] as const,
+    numerics: ['width', 'height', 'mouseButton', 'time'] as const,
+    booleans: ['width', 'height', 'mouseButton', 'time'] as const,
+  };
+
+  const fieldsDefsForSql = (fields: string[]): string => fields.map((f, i) => `$${i + 1} as ${f}`).join(', ');
+
+  const veForSql = (e: AdHocAnalysisVisualElement): string =>
+      `$VeFields(${fieldValuesForSql(e, VE_FIELDS)}, ${e.parent ? `STRUCT(${veForSql(e.parent)})` : null})`;
+
+  const interactionForSql = (i: AdHocAnalysisInteraction): string =>
+      `$Interaction(${fieldValuesForSql(i, INTERACTION_FIELDS)})`;
+
+  const entryForSql = (e: AdHocAnalysisLogEntry): string =>
+      `$Entry(${veForSql(e)}, ([${e.interactions.map(interactionForSql).join(', ')}]), ${e.time})`;
+
+  const entries = veDebugEventsLog as AdHocAnalysisLogEntry[];
+
+  // eslint-disable-next-line no-console
+  console.log(`
+DEFINE MACRO NullString CAST(null AS STRING);
+DEFINE MACRO NullBool CAST(null AS BOOL);
+DEFINE MACRO VeFields ${fieldsDefsForSql([
+    ...VE_FIELDS.strings,
+    ...VE_FIELDS.numerics,
+    'parent',
+  ])};
+DEFINE MACRO Interaction STRUCT(${
+      fieldsDefsForSql([
+        ...INTERACTION_FIELDS.strings,
+        ...INTERACTION_FIELDS.numerics,
+        ...INTERACTION_FIELDS.booleans,
+      ])});
+DEFINE MACRO Entry STRUCT($1, $2 AS interactions, $3 AS time);
+
+// This fake entry put first fixes nested struct fiels names being lost
+DEFINE MACRO FakeVeFields $VeFields("", $NullString, 0, 0, 0, $1);
+DEFINE MACRO FakeVe STRUCT($FakeVeFields($1));
+DEFINE MACRO FakeEntry $Entry($FakeVeFields($FakeVe($FakeVe($FakeVe($FakeVe($FakeVe($FakeVe($FakeVe(null)))))))), ([]), 0);
+
+WITH
+  processed_logs AS (
+      SELECT * FROM UNNEST([
+        $FakeEntry,
+        ${entries.map(entryForSql).join(', \n')}
+      ])
+    )
+
+
+
+SELECT * FROM processed_logs;`);
+}
+
+type StateFlowNode = {
+  type: 'Session',
+  children: StateFlowNode[],
+}|({type: 'Impression', children: StateFlowNode[], time: number}&AdHocAnalysisVisualElement)|AdHocAnalysisInteraction;
+
+type StateFlowMutation = (AdHocAnalysisLogEntry|(AdHocAnalysisInteraction&{veid: number}));
+
+function getStateFlowMutations(): StateFlowMutation[] {
+  const mutations: StateFlowMutation[] = [];
+  for (const entry of (veDebugEventsLog as AdHocAnalysisLogEntry[])) {
+    mutations.push(entry);
+    const veid = entry.veid;
+    for (const interaction of entry.interactions) {
+      mutations.push({...interaction, veid});
+    }
+  }
+  mutations.sort((e1, e2) => e1.time - e2.time);
+  return mutations;
+}
+
+class StateFlowElementsByArea {
+  #data = new Map<number, AdHocAnalysisVisualElement>();
+
+  add(e: AdHocAnalysisVisualElement): void {
+    this.#data.set(e.veid, e);
+  }
+
+  get(veid: number): AdHocAnalysisVisualElement|undefined {
+    return this.#data.get(veid);
+  }
+
+  getArea(e: AdHocAnalysisVisualElement): number {
+    let area = (e.width || 0) * (e.height || 0);
+    const parent = e.parent ? this.#data.get(e.parent?.veid) : null;
+    if (!parent) {
+      return area;
+    }
+    const parentArea = this.getArea(parent);
+    if (area > parentArea) {
+      area = parentArea;
+    }
+    return area;
+  }
+
+  get data(): readonly AdHocAnalysisVisualElement[] {
+    return [...this.#data.values()].filter(e => this.getArea(e)).sort((e1, e2) => this.getArea(e2) - this.getArea(e1));
+  }
+}
+
+function updateStateFlowTree(
+    rootNode: StateFlowNode, elements: StateFlowElementsByArea, time: number,
+    interactions: AdHocAnalysisInteraction[]): void {
+  let node = rootNode;
+  for (const element of elements.data) {
+    if (!('children' in node)) {
+      return;
+    }
+    let nextNode = node.children[node.children.length - 1];
+    const nextNodeId = nextNode?.type === 'Impression' ? nextNode.veid : null;
+    if (nextNodeId !== element.veid) {
+      node.children.push(...interactions);
+      interactions.length = 0;
+      nextNode = {type: 'Impression', ve: element.ve, veid: element.veid, context: element.context, time, children: []};
+      node.children.push(nextNode);
+    }
+    node = nextNode;
+  }
+}
+
+function normalizeNode(node: StateFlowNode): void {
+  if (node.type !== 'Impression') {
+    return;
+  }
+  while (node.children.length === 1) {
+    if (node.children[0].type === 'Impression') {
+      node.children = node.children[0].children;
+    }
+  }
+  for (const child of node.children) {
+    normalizeNode(child);
+  }
+}
+
+function buildStateFlow(): StateFlowNode {
+  const mutations = getStateFlowMutations();
+  const elements = new StateFlowElementsByArea();
+  const rootNode: StateFlowNode = {type: 'Session', children: []};
+
+  let time = mutations[0].time;
+  const interactions: AdHocAnalysisInteraction[] = [];
+  for (const mutation of mutations) {
+    if (mutation.time > time + 1000) {
+      updateStateFlowTree(rootNode, elements, time, interactions);
+      interactions.length = 0;
+    }
+    if (!('type' in mutation)) {
+      elements.add(mutation);
+    } else if (mutation.type === 'Resize') {
+      const element = elements.get(mutation.veid);
+      if (!element) {
+        continue;
+      }
+      const oldArea = elements.getArea(element);
+      element.width = mutation.width;
+      element.height = mutation.height;
+      if (elements.getArea(element) !== 0 && oldArea !== 0) {
+        interactions.push(mutation);
+      }
+    } else {
+      interactions.push(mutation);
+    }
+    time = mutation.time;
+  }
+  updateStateFlowTree(rootNode, elements, time, interactions);
+
+  normalizeNode(rootNode);
+  return rootNode;
 }
 
 let sessionStartTime: number = Date.now();
 
 export function processStartLoggingForDebugging(): void {
   sessionStartTime = Date.now();
-  maybeLogDebugEvent({event: 'SessionStart'});
+  if (localStorage.getItem('veDebugLoggingEnabled') === DebugLoggingFormat.Intuitive) {
+    maybeLogDebugEvent({event: 'SessionStart'});
+  }
+}
+
+async function getVeDebugEventsLog(): Promise<(IntuitiveLogEntry | AdHocAnalysisLogEntry | TestLogEntry)[]> {
+  await pendingWorkComplete();
+  lastImpressionLogEntry = null;
+  return veDebugEventsLog;
 }
 
 // @ts-ignore
@@ -251,3 +581,9 @@ globalThis.setVeDebugLoggingEnabled = setVeDebugLoggingEnabled;
 globalThis.veDebugEventsLog = veDebugEventsLog;
 // @ts-ignore
 globalThis.findVeDebugImpression = findVeDebugImpression;
+// @ts-ignore
+globalThis.exportAdHocAnalysisLogForSql = exportAdHocAnalysisLogForSql;
+// @ts-ignore
+globalThis.buildStateFlow = buildStateFlow;
+// @ts-ignore
+globalThis.getVeDebugEventsLog = getVeDebugEventsLog;

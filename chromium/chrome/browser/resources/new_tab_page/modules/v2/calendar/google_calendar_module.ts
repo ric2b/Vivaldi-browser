@@ -2,47 +2,83 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import './calendar.js';
 import '../../module_header.js';
 
-import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
-import {I18nMixin, loadTimeData} from '../../../i18n_setup.js';
+import type {CalendarEvent, GoogleCalendarPageHandlerRemote} from '../../../google_calendar.mojom-webui.js';
+import {I18nMixinLit} from '../../../i18n_setup.js';
 import {ModuleDescriptor} from '../../module_descriptor.js';
-import type {MenuItem, ModuleHeaderElementV2} from '../module_header.js';
+import type {MenuItem, ModuleHeaderElement} from '../module_header.js';
 
-import {getTemplate} from './google_calendar_module.html.js';
+import type {CalendarElement} from './calendar.js';
+import {getCss} from './google_calendar_module.css.js';
+import {getHtml} from './google_calendar_module.html.js';
+import {GoogleCalendarProxyImpl} from './google_calendar_proxy.js';
 
 export interface GoogleCalendarModuleElement {
   $: {
-    moduleHeaderElementV2: ModuleHeaderElementV2,
+    calendar: CalendarElement,
+    moduleHeaderElementV2: ModuleHeaderElement,
   };
 }
 
+const GoogleCalendarModuleElementBase = I18nMixinLit(CrLitElement);
+
 /**
- * The Google Calendar module, which serves as an inside look in to upcoming
+ * The Google Calendar module, which serves as an inside look in to today's
  * events on a user's Google Calendar .
  */
-export class GoogleCalendarModuleElement extends I18nMixin
-(PolymerElement) {
+export class GoogleCalendarModuleElement extends
+    GoogleCalendarModuleElementBase {
   static get is() {
     return 'ntp-google-calendar-module';
   }
 
-  static get template() {
-    return getTemplate();
+  static override get styles() {
+    return getCss();
   }
 
-  static get properties() {
-    return {};
+  override render() {
+    return getHtml.bind(this)();
   }
 
-  private getMenuItemGroups_(): MenuItem[][] {
+  static override get properties() {
+    return {
+      events_: {type: Object},
+      showInfoDialog_: {type: Boolean},
+    };
+  }
+
+  protected events_: CalendarEvent[];
+  protected showInfoDialog_: boolean;
+
+  private handler_: GoogleCalendarPageHandlerRemote;
+
+  constructor(events: CalendarEvent[]) {
+    super();
+    this.handler_ = GoogleCalendarProxyImpl.getInstance().handler;
+    this.events_ = events;
+  }
+
+  protected getMenuItemGroups_(): MenuItem[][] {
     return [
       [
         {
+          action: 'dismiss',
+          icon: 'modules:visibility_off',
+          text: this.i18n('modulesGoogleCalendarDismissButtonText'),
+        },
+        {
           action: 'disable',
           icon: 'modules:block',
-          text: this.i18n('modulesTodayCalendarDisableButtonText'),
+          text: this.i18n('modulesGoogleCalendarDisableButtonText'),
+        },
+        {
+          action: 'info',
+          icon: 'modules:info',
+          text: this.i18n('moduleInfoButtonTitle'),
         },
       ],
       [
@@ -55,19 +91,37 @@ export class GoogleCalendarModuleElement extends I18nMixin
     ];
   }
 
-  private onDisableButtonClick_() {
+  protected onDisableButtonClick_() {
     const disableEvent = new CustomEvent('disable-module', {
       composed: true,
       detail: {
-        message: loadTimeData.getStringF(
-            'disableModuleToastMessage',
-            loadTimeData.getString('modulesTodayCalendarHeader')),
+        message: this.i18n('modulesGoogleCalendarDisableToastMessage'),
       },
     });
     this.dispatchEvent(disableEvent);
   }
 
-  private onMenuButtonClick_(e: Event) {
+  protected onDismissButtonClick_() {
+    this.handler_.dismissModule();
+    this.dispatchEvent(new CustomEvent('dismiss-module-instance', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        message: this.i18n('modulesGoogleCalendarDismissToastMessage'),
+        restoreCallback: this.handler_.restoreModule,
+      },
+    }));
+  }
+
+  protected onInfoButtonClick_() {
+    this.showInfoDialog_ = true;
+  }
+
+  protected onInfoDialogClose_() {
+    this.showInfoDialog_ = false;
+  }
+
+  protected onMenuButtonClick_(e: Event) {
     this.$.moduleHeaderElementV2.showAt(e);
   }
 }
@@ -77,8 +131,9 @@ customElements.define(
 
 async function createGoogleCalendarElement():
     Promise<GoogleCalendarModuleElement|null> {
-  return new Promise<GoogleCalendarModuleElement>(
-      (resolve) => resolve(new GoogleCalendarModuleElement()));
+  const {events} =
+      await GoogleCalendarProxyImpl.getInstance().handler.getEvents();
+  return events.length > 0 ? new GoogleCalendarModuleElement(events) : null;
 }
 
 export const googleCalendarDescriptor: ModuleDescriptor = new ModuleDescriptor(

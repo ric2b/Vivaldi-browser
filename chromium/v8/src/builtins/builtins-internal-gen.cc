@@ -11,7 +11,7 @@
 #include "src/codegen/macro-assembler-inl.h"
 #include "src/common/globals.h"
 #include "src/execution/frame-constants.h"
-#include "src/heap/mutable-page.h"
+#include "src/heap/mutable-page-metadata.h"
 #include "src/ic/accessor-assembler.h"
 #include "src/ic/keyed-store-generic.h"
 #include "src/logging/counters.h"
@@ -85,7 +85,7 @@ TF_BUILTIN(DebugBreakTrampoline, CodeStubAssembler) {
   TNode<ExternalReference> f =
       ExternalConstant(ExternalReference::debug_break_at_entry_function());
   TNode<ExternalReference> isolate_ptr =
-      ExternalConstant(ExternalReference::isolate_address(isolate()));
+      ExternalConstant(ExternalReference::isolate_address());
   TNode<SharedFunctionInfo> shared =
       CAST(LoadObjectField(function, JSFunction::kSharedFunctionInfoOffset));
   TNode<IntPtrT> result = UncheckedCast<IntPtrT>(
@@ -130,19 +130,10 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
   }
 
   TNode<BoolT> UsesSharedHeap() {
-    TNode<ExternalReference> uses_shared_heap_addr = ExternalConstant(
-        ExternalReference::uses_shared_heap_flag_address(this->isolate()));
+    TNode<ExternalReference> uses_shared_heap_addr =
+        IsolateField(IsolateFieldId::kUsesSharedHeapFlag);
     return Word32NotEqual(Load<Uint8T>(uses_shared_heap_addr),
                           Int32Constant(0));
-  }
-
-  TNode<BoolT> IsPageFlagSet(TNode<IntPtrT> object, int mask) {
-    TNode<IntPtrT> header = MemoryChunkFromAddress(object);
-    TNode<IntPtrT> flags = UncheckedCast<IntPtrT>(
-        Load(MachineType::Pointer(), header,
-             IntPtrConstant(MemoryChunkLayout::kFlagsOffset)));
-    return WordNotEqual(WordAnd(flags, IntPtrConstant(mask)),
-                        IntPtrConstant(0));
   }
 
   TNode<BoolT> IsUnmarked(TNode<IntPtrT> object) {
@@ -243,14 +234,7 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
   }
 
   void IndirectPointerWriteBarrier(SaveFPRegsMode fp_mode) {
-    // Currently, only objects living in (local) old space are referenced
-    // through a pointer table indirection and we have DCHECKs in the CPP write
-    // barrier code to check that. This simplifies the write barrier code for
-    // these cases.
-    Label marking_is_on(this), next(this);
-    Branch(IsMarking(), &marking_is_on, &next);
-
-    BIND(&marking_is_on);
+    CSA_DCHECK(this, IsMarking());
 
     // For this barrier, the slot contains an index into a pointer table and not
     // directly a pointer to a HeapObject. Further, the slot address is tagged
@@ -271,9 +255,6 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
         std::make_pair(MachineTypeOf<IntPtrT>::value, object),
         std::make_pair(MachineTypeOf<IntPtrT>::value, slot),
         std::make_pair(MachineTypeOf<IntPtrT>::value, tag));
-    Goto(&next);
-
-    BIND(&next);
   }
 
   void GenerationalOrSharedBarrierSlow(TNode<IntPtrT> slot, Label* next,
@@ -348,17 +329,27 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
     TNode<IntPtrT> object = BitcastTaggedToWord(
         UncheckedParameter<Object>(WriteBarrierDescriptor::kObject));
 
-    InYoungGeneration(object, next, &generational_barrier_check);
+    if (!v8_flags.sticky_mark_bits) {
+      // With sticky markbits we know everything will be old after the GC so no
+      // need to check the age.
+      InYoungGeneration(object, next, &generational_barrier_check);
 
-    BIND(&generational_barrier_check);
+      BIND(&generational_barrier_check);
+    }
 
     TNode<IntPtrT> value = BitcastTaggedToWord(Load<HeapObject>(slot));
-    InYoungGeneration(value, &generational_barrier_slow, &shared_barrier_check);
 
-    BIND(&generational_barrier_slow);
-    GenerationalBarrierSlow(slot, next, fp_mode);
+    if (!v8_flags.sticky_mark_bits) {
+      // With sticky markbits we know everything will be old after the GC so no
+      // need to track old-to-new references.
+      InYoungGeneration(value, &generational_barrier_slow,
+                        &shared_barrier_check);
 
-    BIND(&shared_barrier_check);
+      BIND(&generational_barrier_slow);
+      GenerationalBarrierSlow(slot, next, fp_mode);
+
+      BIND(&shared_barrier_check);
+    }
 
     InSharedHeap(value, &shared_barrier_slow, next);
 
@@ -370,10 +361,14 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
   void InYoungGeneration(TNode<IntPtrT> object, Label* true_label,
                          Label* false_label) {
     if (v8_flags.sticky_mark_bits) {
+      // This method is currently only used when marking is disabled. Checking
+      // markbits while marking is active may result in unexpected results.
+      CSA_DCHECK(this, Word32Equal(IsMarking(), BoolConstant(false)));
+
       Label not_read_only(this);
 
-      TNode<BoolT> is_read_only_page = IsPageFlagSet(
-          object, MemoryChunk::kIsInReadOnlyHeapOrMajorGCInProgressMask);
+      TNode<BoolT> is_read_only_page =
+          IsPageFlagSet(object, MemoryChunk::kIsOnlyOldOrMajorGCInProgressMask);
       Branch(is_read_only_page, false_label, &not_read_only);
 
       BIND(&not_read_only);
@@ -397,9 +392,14 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
                                     SaveFPRegsMode fp_mode, Label* next) {
     Label check_is_unmarked(this, Label::kDeferred);
 
-    InYoungGeneration(value, &check_is_unmarked, next);
+    if (!v8_flags.sticky_mark_bits) {
+      // With sticky markbits, InYoungGeneration and IsUnmarked below are
+      // equivalent.
+      InYoungGeneration(value, &check_is_unmarked, next);
 
-    BIND(&check_is_unmarked);
+      BIND(&check_is_unmarked);
+    }
+
     GotoIfNot(IsUnmarked(value), next);
 
     {
@@ -568,7 +568,7 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
     TNode<ExternalReference> function = ExternalConstant(
         ExternalReference::ephemeron_key_write_barrier_function());
     TNode<ExternalReference> isolate_constant =
-        ExternalConstant(ExternalReference::isolate_address(isolate()));
+        ExternalConstant(ExternalReference::isolate_address());
     // In this method we limit the allocatable registers so we have to use
     // UncheckedParameter. Parameter does not work because the checked cast
     // needs more registers.

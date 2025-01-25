@@ -6,6 +6,8 @@
 
 #include "public/fpdf_edit.h"
 
+#include <math.h>
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -93,8 +95,7 @@ bool LoadJpegHelper(FPDF_PAGE* pages,
 
   if (pages) {
     for (int index = 0; index < count; index++) {
-      // TODO(crbug.com/pdfium/2155): resolve safety issues.
-      CPDF_Page* pPage = CPDFPageFromFPDFPage(UNSAFE_BUFFERS(pages[index]));
+      CPDF_Page* pPage = CPDFPageFromFPDFPage(UNSAFE_TODO(pages[index]));
       if (pPage) {
         pImgObj->GetImage()->ResetCache(pPage);
       }
@@ -175,8 +176,7 @@ FPDFImageObj_SetBitmap(FPDF_PAGE* pages,
 
   if (pages) {
     for (int index = 0; index < count; index++) {
-      // TODO(crbug.com/pdfium/2155): resolve safety issues.
-      CPDF_Page* pPage = CPDFPageFromFPDFPage(UNSAFE_BUFFERS(pages[index]));
+      CPDF_Page* pPage = CPDFPageFromFPDFPage(UNSAFE_TODO(pages[index]));
       if (pPage) {
         pImgObj->GetImage()->ResetCache(pPage);
       }
@@ -222,32 +222,30 @@ FPDFImageObj_GetBitmap(FPDF_PAGEOBJECT image_object) {
   ConversionOp op;
   switch (pSource->GetFormat()) {
     case FXDIB_Format::k1bppMask:
-    case FXDIB_Format::k8bppMask:
+    case FXDIB_Format::k8bppMask: {
       // Masks do not have palettes, so they can be safely converted to
       // `FXDIB_Format::k8bppRgb`.
       CHECK(!pSource->HasPalette());
       op = ConversionOp::kConvertTo8bppRgb;
       break;
-    case FXDIB_Format::k1bppRgb:
+    }
+    case FXDIB_Format::k1bppRgb: {
       // If there is a palette, then convert to `FXDIB_Format::kRgb` to avoid
       // creating a bitmap with a palette.
       op = pSource->HasPalette() ? ConversionOp::kConvertToRgb
                                  : ConversionOp::kConvertTo8bppRgb;
       break;
+    }
     case FXDIB_Format::k8bppRgb:
+    case FXDIB_Format::kArgb:
+    case FXDIB_Format::kRgb:
+    case FXDIB_Format::kRgb32: {
       // If there is a palette, then convert to `FXDIB_Format::kRgb` to avoid
       // creating a bitmap with a palette.
       op = pSource->HasPalette() ? ConversionOp::kConvertToRgb
                                  : ConversionOp::kRealize;
       break;
-
-    case FXDIB_Format::kArgb:
-    case FXDIB_Format::kRgb:
-    case FXDIB_Format::kRgb32:
-      CHECK(!pSource->HasPalette());
-      op = ConversionOp::kRealize;
-      break;
-
+    }
     case FXDIB_Format::kInvalid: {
       NOTREACHED_NORETURN();
     }
@@ -290,11 +288,14 @@ FPDFImageObj_GetRenderedBitmap(FPDF_DOCUMENT document,
 
   // Create |result_bitmap|.
   const CFX_Matrix& image_matrix = image->matrix();
-  int output_width = image_matrix.a;
-  int output_height = image_matrix.d;
+  float output_width = std::ceil(hypotf(image_matrix.a, image_matrix.c));
+  float output_height = std::ceil(hypotf(image_matrix.b, image_matrix.d));
   auto result_bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  if (!result_bitmap->Create(output_width, output_height, FXDIB_Format::kArgb))
+  if (!result_bitmap->Create(static_cast<int>(output_width),
+                             static_cast<int>(output_height),
+                             FXDIB_Format::kArgb)) {
     return nullptr;
+  }
 
   // Set up all the rendering code.
   RetainPtr<CPDF_Dictionary> page_resources =
@@ -310,7 +311,9 @@ FPDFImageObj_GetRenderedBitmap(FPDF_DOCUMENT document,
   CFX_Matrix render_matrix(1, 0, 0, -1, 0, output_height);
 
   // Then take |image_matrix|'s offset into account.
-  render_matrix.Translate(-image_matrix.e, image_matrix.f);
+  float min_x = image_matrix.e + std::min(image_matrix.a, image_matrix.c);
+  float min_y = image_matrix.f + std::min(image_matrix.b, image_matrix.d);
+  render_matrix.Translate(-min_x, min_y);
 
   // Do the actual rendering.
   bool should_continue = renderer.Start(image, render_matrix,

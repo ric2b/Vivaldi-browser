@@ -25,6 +25,21 @@
 
 namespace ash::settings {
 
+// Note that these values are persisted to histograms so existing values
+// should remain unchanged and new values should be added to the end.
+enum class KeyboardAmbientLightSensorDisabledCause {
+  // The keyboard ambient light sensor was disabled directly through the
+  // settings app by the user.
+  kUserRequestSettingsApp = 0,
+  // The keyboard ambient light sensor was disabled as a result of the user
+  // manually adjusting the brightness.
+  kBrightnessUserRequest = 1,
+  // The keyboard ambient light sensor was disabled as a result of the user
+  // adjusting the brightness through the settings app.
+  kBrightnessUserRequestSettingsApp = 2,
+  kMaxValue = kBrightnessUserRequestSettingsApp,
+};
+
 class InputDeviceSettingsProvider
     : public mojom::InputDeviceSettingsProvider,
       public InputDeviceSettingsController::Observer,
@@ -61,6 +76,9 @@ class InputDeviceSettingsProvider
       mojo::PendingRemote<mojom::ButtonPressObserver> observer) override;
   void ObserveKeyboardBrightness(
       mojo::PendingRemote<mojom::KeyboardBrightnessObserver> observer) override;
+  void ObserveKeyboardAmbientLightSensor(
+      mojo::PendingRemote<mojom::KeyboardAmbientLightSensorObserver> observer)
+      override;
 
   void RestoreDefaultKeyboardRemappings(uint32_t device_id) override;
   void SetKeyboardSettings(uint32_t device_id,
@@ -122,17 +140,31 @@ class InputDeviceSettingsProvider
   void OnMouseBatteryInfoChanged(const ::ash::mojom::Mouse& mouse) override;
   void OnTouchpadBatteryInfoChanged(
       const ::ash::mojom::Touchpad& touchpad) override;
+  void OnMouseCompanionAppInfoChanged(
+      const ::ash::mojom::Mouse& mouse) override;
+  void OnKeyboardCompanionAppInfoChanged(
+      const ::ash::mojom::Keyboard& keyboard) override;
+  void OnTouchpadCompanionAppInfoChanged(
+      const ::ash::mojom::Touchpad& touchpad) override;
+  void OnGraphicsTabletCompanionAppInfoChanged(
+      const ::ash::mojom::GraphicsTablet& graphics_tablet) override;
 
   void StartObserving(uint32_t device_id) override;
   void StopObserving() override;
   void GetActionsForMouseButtonCustomization(
       GetActionsForMouseButtonCustomizationCallback callback) override;
+
+  void GetDeviceIconImage(const std::string& device_key,
+                          GetDeviceIconImageCallback callback) override;
   void GetActionsForGraphicsTabletButtonCustomization(
       GetActionsForGraphicsTabletButtonCustomizationCallback callback) override;
+  void LaunchCompanionApp(const std::string& package_id_str) override;
 
   // chromeos::PowerManagerClient observer:
   void KeyboardBrightnessChanged(
       const power_manager::BacklightBrightnessChange& change) override;
+  void KeyboardAmbientLightSensorEnabledChanged(
+      const power_manager::AmbientLightSensorChange& change) override;
 
   // ash::ShellObserver:
   void OnShellDestroying() override;
@@ -143,7 +175,7 @@ class InputDeviceSettingsProvider
   void OnWidgetDestroyed(views::Widget* widget) override;
 
   void SetWidgetForTesting(views::Widget* widget);
-  void HasLauncherButton(HasLauncherButtonCallback callback) override;
+  void GetMetaKeyToDisplay(GetMetaKeyToDisplayCallback callback) override;
   void HasKeyboardBacklight(HasKeyboardBacklightCallback callback) override;
   void HasAmbientLightSensor(HasAmbientLightSensorCallback callback) override;
   void IsRgbKeyboardSupported(IsRgbKeyboardSupportedCallback callback) override;
@@ -172,6 +204,12 @@ class InputDeviceSettingsProvider
 
   void OnReceiveKeyboardBrightness(std::optional<double> brightness_percent);
 
+  void OnReceiveKeyboardAmbientLightSensorEnabled(
+      std::optional<bool> keyboard_ambient_light_sensor_enabled);
+
+  void OnReceiveDeviceImage(GetDeviceIconImageCallback callback,
+                            const std::optional<std::string>& data_url);
+
   // Denotes whether button observing should be paused due to the settings app
   // being out of focus or minimized. Default to true to require a valid widget
   // to observe devices.
@@ -189,6 +227,8 @@ class InputDeviceSettingsProvider
       graphics_tablet_settings_observers_;
   mojo::RemoteSet<mojom::ButtonPressObserver> button_press_observers_;
   mojo::Remote<mojom::KeyboardBrightnessObserver> keyboard_brightness_observer_;
+  mojo::Remote<mojom::KeyboardAmbientLightSensorObserver>
+      keyboard_ambient_light_sensor_observer_;
 
   raw_ptr<views::Widget> widget_ = nullptr;
 

@@ -579,12 +579,6 @@ EIGEN_DEVICE_FUNC inline Packet pandnot(const Packet& a, const Packet& b) {
   return pand(a, pnot(b));
 }
 
-/** \internal \returns isnan(a) */
-template <typename Packet>
-EIGEN_DEVICE_FUNC inline Packet pisnan(const Packet& a) {
-  return pandnot(ptrue(a), pcmp_eq(a, a));
-}
-
 // In the general case, use bitwise select.
 template <typename Packet, typename EnableIf = void>
 struct pselect_impl {
@@ -1001,6 +995,20 @@ EIGEN_DEVICE_FUNC inline Packet pcplxflip(const Packet& a) {
 /**************************
  * Special math functions
  ***************************/
+
+/** \internal \returns isnan(a) */
+template <typename Packet>
+EIGEN_DEVICE_FUNC inline Packet pisnan(const Packet& a) {
+  return pandnot(ptrue(a), pcmp_eq(a, a));
+}
+
+/** \internal \returns isinf(a) */
+template <typename Packet>
+EIGEN_DEVICE_FUNC inline Packet pisinf(const Packet& a) {
+  using Scalar = typename unpacket_traits<Packet>::type;
+  constexpr Scalar inf = NumTraits<Scalar>::infinity();
+  return pcmp_eq(pabs(a), pset1<Packet>(inf));
+}
 
 /** \internal \returns the sine of \a a (coeff-wise) */
 template <typename Packet>

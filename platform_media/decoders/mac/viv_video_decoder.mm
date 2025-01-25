@@ -742,8 +742,8 @@ bool VivVideoDecoder::ProcessTaskQueue() {
 
     case TASK_DESTROY:
       NOTREACHED() << "Can't destroy while in STATE_DECODING";
-      NotifyError("Can't destroy while in STATE_DECODING");
-      return false;
+      //NotifyError("Can't destroy while in STATE_DECODING");
+      //return false;
   }
 }
 

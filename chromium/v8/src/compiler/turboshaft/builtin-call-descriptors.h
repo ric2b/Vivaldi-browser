@@ -9,6 +9,7 @@
 #include "src/codegen/callable.h"
 #include "src/codegen/interface-descriptors.h"
 #include "src/compiler/frame.h"
+#include "src/compiler/globals.h"
 #include "src/compiler/turboshaft/operations.h"
 #include "src/compiler/turboshaft/representations.h"
 #include "src/compiler/write-barrier-kind.h"
@@ -20,7 +21,9 @@ struct BuiltinCallDescriptor {
  private:
   template <typename Derived>
   struct Descriptor {
-    static const TSCallDescriptor* Create(StubCallMode call_mode, Zone* zone) {
+    static const TSCallDescriptor* Create(
+        StubCallMode call_mode, Zone* zone,
+        LazyDeoptOnThrow lazy_deopt_on_throw = LazyDeoptOnThrow::kNo) {
       CallInterfaceDescriptor interface_descriptor =
           Builtins::CallInterfaceDescriptorFor(Derived::kFunction);
       auto descriptor = Linkage::GetStubCallDescriptor(
@@ -34,7 +37,8 @@ struct BuiltinCallDescriptor {
 #endif  // DEBUG
       bool can_throw = !(Derived::kProperties & Operator::kNoThrow);
       return TSCallDescriptor::Create(
-          descriptor, can_throw ? CanThrow::kYes : CanThrow::kNo, zone);
+          descriptor, can_throw ? CanThrow::kYes : CanThrow::kNo,
+          lazy_deopt_on_throw, zone);
     }
 
 #ifdef DEBUG
@@ -256,6 +260,17 @@ struct BuiltinCallDescriptor {
         base_effects.CanReadMemory().CanAllocateWithoutIdentity();
   };
 
+  struct ToString : public Descriptor<ToString> {
+    static constexpr auto kFunction = Builtin::kToString;
+    using arguments_t = std::tuple<V<Object>>;
+    using results_t = std::tuple<V<String>>;
+
+    static constexpr bool kNeedsFrameState = true;
+    static constexpr bool kNeedsContext = true;
+    static constexpr Operator::Properties kProperties = Operator::kNoProperties;
+    static constexpr OpEffects kEffects = base_effects.CanCallAnything();
+  };
+
   struct PlainPrimitiveToNumber : public Descriptor<PlainPrimitiveToNumber> {
     static constexpr auto kFunction = Builtin::kPlainPrimitiveToNumber;
     using arguments_t = std::tuple<V<PlainPrimitive>>;
@@ -427,7 +442,7 @@ struct BuiltinCallDescriptor {
   struct ToObject : public Descriptor<ToObject> {
     static constexpr auto kFunction = Builtin::kToObject;
     using arguments_t = std::tuple<V<JSPrimitive>>;
-    using results_t = std::tuple<V<Object>>;
+    using results_t = std::tuple<V<JSReceiver>>;
 
     static constexpr bool kNeedsFrameState = false;
     static constexpr bool kNeedsContext = true;
@@ -546,7 +561,7 @@ struct BuiltinCallDescriptor {
 
     static constexpr bool kNeedsFrameState = false;
     static constexpr bool kNeedsContext = false;
-    static constexpr Operator::Properties kProperties = Operator::kPure;
+    static constexpr Operator::Properties kProperties = Operator::kEliminatable;
     static constexpr OpEffects kEffects =
         base_effects.CanReadMemory().CanAllocateWithoutIdentity();
   };
@@ -798,7 +813,7 @@ struct BuiltinCallDescriptor {
 
   struct WasmFunctionTableGet : public Descriptor<WasmFunctionTableGet> {
     static constexpr auto kFunction = Builtin::kWasmFunctionTableGet;
-    using arguments_t = std::tuple<V<WordPtr>, V<Word32>, V<Word32>>;
+    using arguments_t = std::tuple<V<WordPtr>, V<WordPtr>, V<Word32>>;
     using results_t = std::tuple<V<Object>>;
 
     static constexpr bool kNeedsFrameState = false;
@@ -811,7 +826,7 @@ struct BuiltinCallDescriptor {
   struct WasmTableSetFuncRef : public Descriptor<WasmTableSetFuncRef> {
     static constexpr auto kFunction = Builtin::kWasmTableSetFuncRef;
     using arguments_t =
-        std::tuple<V<WordPtr>, V<Word32>, V<Word32>, V<WasmFuncRef>>;
+        std::tuple<V<WordPtr>, V<Word32>, V<WordPtr>, V<WasmFuncRef>>;
     using results_t = std::tuple<V<Object>>;
 
     static constexpr bool kNeedsFrameState = false;
@@ -822,7 +837,8 @@ struct BuiltinCallDescriptor {
 
   struct WasmTableSet : public Descriptor<WasmTableSet> {
     static constexpr auto kFunction = Builtin::kWasmTableSet;
-    using arguments_t = std::tuple<V<WordPtr>, V<Word32>, V<Word32>, V<Object>>;
+    using arguments_t =
+        std::tuple<V<WordPtr>, V<Word32>, V<WordPtr>, V<Object>>;
     using results_t = std::tuple<V<Object>>;
 
     static constexpr bool kNeedsFrameState = false;
@@ -834,7 +850,7 @@ struct BuiltinCallDescriptor {
   struct WasmTableInit : public Descriptor<WasmTableInit> {
     static constexpr auto kFunction = Builtin::kWasmTableInit;
     using arguments_t =
-        std::tuple<V<Word32>, V<Word32>, V<Word32>, V<Smi>, V<Smi>, V<Smi>>;
+        std::tuple<V<WordPtr>, V<Word32>, V<Word32>, V<Smi>, V<Smi>, V<Smi>>;
     using results_t = std::tuple<V<Object>>;
 
     static constexpr bool kNeedsFrameState = false;
@@ -846,7 +862,7 @@ struct BuiltinCallDescriptor {
   struct WasmTableCopy : public Descriptor<WasmTableCopy> {
     static constexpr auto kFunction = Builtin::kWasmTableCopy;
     using arguments_t =
-        std::tuple<V<Word32>, V<Word32>, V<Word32>, V<Smi>, V<Smi>, V<Smi>>;
+        std::tuple<V<WordPtr>, V<WordPtr>, V<WordPtr>, V<Smi>, V<Smi>, V<Smi>>;
     using results_t = std::tuple<V<Object>>;
 
     static constexpr bool kNeedsFrameState = false;
@@ -858,7 +874,7 @@ struct BuiltinCallDescriptor {
 
   struct WasmTableGrow : public Descriptor<WasmTableGrow> {
     static constexpr auto kFunction = Builtin::kWasmTableGrow;
-    using arguments_t = std::tuple<V<Smi>, V<Word32>, V<Word32>, V<Object>>;
+    using arguments_t = std::tuple<V<Smi>, V<WordPtr>, V<Word32>, V<Object>>;
     using results_t = std::tuple<V<Smi>>;
 
     static constexpr bool kNeedsFrameState = false;
@@ -871,7 +887,7 @@ struct BuiltinCallDescriptor {
   struct WasmTableFill : public Descriptor<WasmTableFill> {
     static constexpr auto kFunction = Builtin::kWasmTableFill;
     using arguments_t =
-        std::tuple<V<Word32>, V<Word32>, V<Word32>, V<Smi>, V<Object>>;
+        std::tuple<V<WordPtr>, V<WordPtr>, V<Word32>, V<Smi>, V<Object>>;
     using results_t = std::tuple<V<Object>>;
 
     static constexpr bool kNeedsFrameState = false;
@@ -1083,7 +1099,7 @@ struct BuiltinCallDescriptor {
 
     static constexpr bool kNeedsFrameState = false;
     static constexpr bool kNeedsContext = false;
-    static constexpr Operator::Properties kProperties = Operator::kPure;
+    static constexpr Operator::Properties kProperties = Operator::kEliminatable;
     static constexpr OpEffects kEffects = base_effects.CanReadMemory();
   };
 
@@ -1094,7 +1110,7 @@ struct BuiltinCallDescriptor {
 
     static constexpr bool kNeedsFrameState = false;
     static constexpr bool kNeedsContext = false;
-    static constexpr Operator::Properties kProperties = Operator::kPure;
+    static constexpr Operator::Properties kProperties = Operator::kEliminatable;
     static constexpr OpEffects kEffects = base_effects.CanReadMemory();
   };
 

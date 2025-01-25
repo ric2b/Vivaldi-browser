@@ -11,12 +11,61 @@
 #include <benchmark/benchmark.h>
 #include "bench/utils.h"
 #include "bench/vcvt-benchmark.h"
+#include "xnnpack.h"
+#include "xnnpack/common.h"
+#include "xnnpack/microfnptr.h"
+#include "xnnpack/microparams-init.h"
+#include "xnnpack/vcvt.h"
 
-#include <xnnpack.h>
-#include <xnnpack/common.h>
-#include <xnnpack/microfnptr.h>
-#include <xnnpack/microparams-init.h>
-#include <xnnpack/vcvt.h>
+
+#if XNN_ENABLE_HVX && XNN_ARCH_HEXAGON
+  BENCHMARK_CAPTURE(f32_qs8_vcvt, hvx_u32,
+                    xnn_f32_qs8_vcvt_ukernel__hvx_u32,
+                    xnn_init_f32_qs8_cvt_hvx_params,
+                    benchmark::utils::CheckHVX)
+    ->Apply(benchmark::utils::UnaryElementwiseParameters<float, int8_t>)
+    ->UseRealTime();
+#endif  // XNN_ENABLE_HVX && XNN_ARCH_HEXAGON
+
+
+#if XNN_ENABLE_HVX && XNN_ARCH_HEXAGON
+  BENCHMARK_CAPTURE(f32_qs8_vcvt, hvx_u64,
+                    xnn_f32_qs8_vcvt_ukernel__hvx_u64,
+                    xnn_init_f32_qs8_cvt_hvx_params,
+                    benchmark::utils::CheckHVX)
+    ->Apply(benchmark::utils::UnaryElementwiseParameters<float, int8_t>)
+    ->UseRealTime();
+#endif  // XNN_ENABLE_HVX && XNN_ARCH_HEXAGON
+
+
+#if XNN_ENABLE_HVX && XNN_ARCH_HEXAGON
+  BENCHMARK_CAPTURE(f32_qs8_vcvt, hvx_u96,
+                    xnn_f32_qs8_vcvt_ukernel__hvx_u96,
+                    xnn_init_f32_qs8_cvt_hvx_params,
+                    benchmark::utils::CheckHVX)
+    ->Apply(benchmark::utils::UnaryElementwiseParameters<float, int8_t>)
+    ->UseRealTime();
+#endif  // XNN_ENABLE_HVX && XNN_ARCH_HEXAGON
+
+
+#if XNN_ENABLE_HVX && XNN_ARCH_HEXAGON
+  BENCHMARK_CAPTURE(f32_qs8_vcvt, hvx_u128,
+                    xnn_f32_qs8_vcvt_ukernel__hvx_u128,
+                    xnn_init_f32_qs8_cvt_hvx_params,
+                    benchmark::utils::CheckHVX)
+    ->Apply(benchmark::utils::UnaryElementwiseParameters<float, int8_t>)
+    ->UseRealTime();
+#endif  // XNN_ENABLE_HVX && XNN_ARCH_HEXAGON
+
+
+#if XNN_ENABLE_HVX && XNN_ARCH_HEXAGON
+  BENCHMARK_CAPTURE(f32_qs8_vcvt, hvx_u256,
+                    xnn_f32_qs8_vcvt_ukernel__hvx_u256,
+                    xnn_init_f32_qs8_cvt_hvx_params,
+                    benchmark::utils::CheckHVX)
+    ->Apply(benchmark::utils::UnaryElementwiseParameters<float, int8_t>)
+    ->UseRealTime();
+#endif  // XNN_ENABLE_HVX && XNN_ARCH_HEXAGON
 
 
 #if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD

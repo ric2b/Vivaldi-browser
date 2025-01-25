@@ -40,9 +40,9 @@ static constexpr char kPlatformReceiverId[] = "receiver-0";
 
 static constexpr char kBroadcastId[] = "*";
 
-static constexpr ::cast::channel::CastMessage_ProtocolVersion
+static constexpr proto::CastMessage_ProtocolVersion
     kDefaultOutgoingMessageVersion =
-        ::cast::channel::CastMessage_ProtocolVersion_CASTV2_1_0;
+        proto::CastMessage_ProtocolVersion_CASTV2_1_0;
 
 // JSON message key strings.
 static constexpr char kMessageKeyType[] = "type";
@@ -159,38 +159,9 @@ enum class AppAvailabilityResult {
 
 std::string ToString(AppAvailabilityResult availability);
 
-static const EnumNameTable<CastMessageType, 25> kCastMessageTypeNames{
-    {{"PING", CastMessageType::kPing},
-     {"PONG", CastMessageType::kPong},
-     {"RPC", CastMessageType::kRpc},
-     {"GET_APP_AVAILABILITY", CastMessageType::kGetAppAvailability},
-     {"GET_STATUS", CastMessageType::kGetStatus},
-     {"CONNECT", CastMessageType::kConnect},
-     {"CLOSE", CastMessageType::kCloseConnection},
-     {"APPLICATION_BROADCAST", CastMessageType::kBroadcast},
-     {"LAUNCH", CastMessageType::kLaunch},
-     {"STOP", CastMessageType::kStop},
-     {"RECEIVER_STATUS", CastMessageType::kReceiverStatus},
-     {"MEDIA_STATUS", CastMessageType::kMediaStatus},
-     {"LAUNCH_ERROR", CastMessageType::kLaunchError},
-     {"OFFER", CastMessageType::kOffer},
-     {"ANSWER", CastMessageType::kAnswer},
-     {"CAPABILITIES_RESPONSE", CastMessageType::kCapabilitiesResponse},
-     {"STATUS_RESPONSE", CastMessageType::kStatusResponse},
-     {"MULTIZONE_STATUS", CastMessageType::kMultizoneStatus},
-     {"INVALID_PLAYER_STATE", CastMessageType::kInvalidPlayerState},
-     {"LOAD_FAILED", CastMessageType::kLoadFailed},
-     {"LOAD_CANCELLED", CastMessageType::kLoadCancelled},
-     {"INVALID_REQUEST", CastMessageType::kInvalidRequest},
-     {"PRESENTATION", CastMessageType::kPresentation},
-     {"GET_CAPABILITIES", CastMessageType::kGetCapabilities},
-     {"OTHER", CastMessageType::kOther}}};
+const char* CastMessageTypeToString(CastMessageType type);
 
-inline const char* CastMessageTypeToString(CastMessageType type) {
-  return GetEnumName(kCastMessageTypeNames, type).value("OTHER");
-}
-
-inline bool IsAuthMessage(const ::cast::channel::CastMessage& message) {
+inline bool IsAuthMessage(const proto::CastMessage& message) {
   return message.namespace_() == kAuthNamespace;
 }
 
@@ -199,16 +170,13 @@ inline bool IsTransportNamespace(std::string_view namespace_) {
          (namespace_.find_first_of(kTransportNamespacePrefix) == 0);
 }
 
-::cast::channel::CastMessage MakeSimpleUTF8Message(
-    const std::string& namespace_,
-    std::string payload);
+proto::CastMessage MakeSimpleUTF8Message(const std::string& namespace_,
+                                         std::string payload);
 
-::cast::channel::CastMessage MakeConnectMessage(
-    const std::string& source_id,
-    const std::string& destination_id);
-::cast::channel::CastMessage MakeCloseMessage(
-    const std::string& source_id,
-    const std::string& destination_id);
+proto::CastMessage MakeConnectMessage(const std::string& source_id,
+                                      const std::string& destination_id);
+proto::CastMessage MakeCloseMessage(const std::string& source_id,
+                                    const std::string& destination_id);
 
 // Returns a session/transport ID string that is unique within this application
 // instance, having the format "prefix-12345". For example, calling this with a
@@ -219,10 +187,10 @@ std::string MakeUniqueSessionId(const char* prefix);
 bool HasType(const Json::Value& object, CastMessageType type);
 
 // Serializes a given cast message to a string.
-std::string ToString(const ::cast::channel::CastMessage& message);
+std::string ToString(const proto::CastMessage& message);
 
 // Helper to get the actual message payload out of a cast message.
-const std::string& GetPayload(const ::cast::channel::CastMessage& message);
+const std::string& GetPayload(const proto::CastMessage& message);
 
 }  // namespace openscreen::cast
 

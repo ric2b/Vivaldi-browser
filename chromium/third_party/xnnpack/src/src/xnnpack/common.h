@@ -171,11 +171,6 @@
   #define XNN_COMPILER_ICC 0
 #endif
 
-
-#ifndef XNN_TEST_MODE
-  #define XNN_TEST_MODE 0
-#endif
-
 #ifndef XNN_MAX_UARCH_TYPES
   #if (XNN_ARCH_ARM || XNN_ARCH_ARM64) && !XNN_PLATFORM_IOS
     #define XNN_MAX_UARCH_TYPES 3
@@ -325,6 +320,16 @@
   #endif
 #endif
 
+#ifndef XNN_WEAK_SYMBOL
+  #if defined(_WIN32)
+    #define XNN_WEAK_SYMBOL __declspec(selectany)
+  #elif XNN_COMPILER_CLANG || XNN_COMPILER_GCC || XNN_COMPILER_ICC
+    #define XNN_WEAK_SYMBOL __attribute__((weak))
+  #else
+    #define XNN_WEAK_SYMBOL
+  #endif
+#endif
+
 #if defined(__clang__)
   #define XNN_PRAGMA_CLANG(pragma) _Pragma(pragma)
 #else
@@ -339,6 +344,8 @@
   #else
     #define XNN_ALLOCATION_ALIGNMENT 64
   #endif
+#elif XNN_ARCH_HEXAGON
+  #define XNN_ALLOCATION_ALIGNMENT 128
 #else
   #define XNN_ALLOCATION_ALIGNMENT 16
 #endif

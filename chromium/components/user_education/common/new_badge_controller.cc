@@ -6,6 +6,8 @@
 
 #include "components/user_education/common/feature_promo_data.h"
 #include "components/user_education/common/feature_promo_storage_service.h"
+#include "components/user_education/common/user_education_features.h"
+#include "ui/base/models/simple_menu_model.h"
 
 namespace user_education {
 
@@ -36,13 +38,14 @@ void NewBadgeController::InitData() {
 
 NewBadgeController::~NewBadgeController() = default;
 
-bool NewBadgeController::MaybeShowNewBadge(const base::Feature& feature) {
+DisplayNewBadge NewBadgeController::MaybeShowNewBadge(
+    const base::Feature& feature) {
   if (disable_new_badges_) {
-    return false;
+    return DisplayNewBadge();
   }
 
   if (!CheckPrerequisites(feature, /*allow_not_registered=*/false)) {
-    return false;
+    return DisplayNewBadge();
   }
 
   NewBadgeData data = storage_service_->ReadNewBadgeData(feature);
@@ -50,16 +53,15 @@ bool NewBadgeController::MaybeShowNewBadge(const base::Feature& feature) {
       << "Feature enabled time for " << feature.name
       << " is null; this value should have been set during initialization.";
 
-  if (!policy_->ShouldShowNewBadge(
-          feature, data.show_count, data.used_count,
-          storage_service_->GetCurrentTime() - data.feature_enabled_time)) {
-    return false;
+  // Check the policy.
+  if (!policy_->ShouldShowNewBadge(data, *storage_service_)) {
+    return ui::IsNewFeatureAtValue();
   }
 
   ++data.show_count;
   storage_service_->SaveNewBadgeData(feature, data);
   policy_->RecordNewBadgeShown(feature, data.show_count);
-  return true;
+  return DisplayNewBadge(base::PassKey<NewBadgeController>(), true);
 }
 
 void NewBadgeController::NotifyFeatureUsed(const base::Feature& feature) {

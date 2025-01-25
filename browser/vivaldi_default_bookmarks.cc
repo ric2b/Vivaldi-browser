@@ -50,7 +50,7 @@ const char kVersionKey[] = "version";
 
 const char kBookmarksFolderName[] = "Bookmarks";
 
-base::StringPiece bookmark_locales[] = {
+std::string_view bookmark_locales[] = {
 #include "components/bookmarks/bookmark_locales.inc"
 };
 
@@ -208,7 +208,17 @@ void DefaultBookmarkParser::ParseBookmarkList(
     if (base::Value* children = dict.GetDict().Find(kChildrenKey)) {
       // Folder
       item.uuid = details->uuid;
-      item.title = details->title;
+      // Support for a localized name from the bookmark file. If not set we
+      // fall back to partner specified name (not localized).
+      if (std::string* value = dict.GetDict().FindString(kTitleKey)) {
+        item.title = std::move(*value);
+      } else {
+        item.title = details->title;
+      }
+      if (item.title.empty()) {
+        tree->valid = false;
+        LOG(ERROR) << "folder without title";
+      }
       item.speeddial = details->speeddial;
       if (!used_details.insert(details).second) {
         tree->valid = false;
@@ -460,7 +470,7 @@ void BookmarkUpdater::AddRecursively(
 
 void BookmarkUpdater::UpdatePartnerNode(const DefaultBookmarkItem& item,
                                         const BookmarkNode* node) {
-  auto error = [&](base::StringPiece message) -> void {
+  auto error = [&](std::string_view message) -> void {
     LOG(ERROR) << message << " - " << item.title;
     stats_.failed_updates++;
   };

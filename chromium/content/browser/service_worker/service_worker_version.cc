@@ -21,6 +21,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/not_fatal_until.h"
 #include "base/observer_list.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
@@ -35,6 +36,7 @@
 #include "content/browser/renderer_host/back_forward_cache_can_store_document_result.h"
 #include "content/browser/renderer_host/private_network_access_util.h"
 #include "content/browser/service_worker/payment_handler_support.h"
+#include "content/browser/service_worker/service_worker_client.h"
 #include "content/browser/service_worker/service_worker_consts.h"
 #include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
@@ -64,6 +66,7 @@
 #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
 #include "third_party/blink/public/common/service_worker/service_worker_type_converters.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker.mojom.h"
 
 namespace content {
 namespace {
@@ -97,7 +100,8 @@ void RunCallbackAfterStartWorker(base::WeakPtr<ServiceWorkerVersion> version,
       version->running_status() != blink::EmbeddedWorkerStatus::kRunning) {
     // We've tried to start the worker (and it has succeeded), but
     // it looks it's not running yet.
-    NOTREACHED() << "The worker's not running after successful StartWorker";
+    NOTREACHED_IN_MIGRATION()
+        << "The worker's not running after successful StartWorker";
     std::move(callback).Run(
         blink::ServiceWorkerStatusCode::kErrorStartWorkerFailed);
     return;
@@ -391,7 +395,7 @@ void ServiceWorkerVersion::SetStatus(Status status) {
     switch (status_) {
       case NEW:
         // |skip_waiting_| should not be set before the version is NEW.
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return;
       case INSTALLING:
         // Do nothing until INSTALLED time.
@@ -622,7 +626,7 @@ void ServiceWorkerVersion::StopWorker(base::OnceClosure callback) {
       RunSoon(std::move(callback));
       return;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void ServiceWorkerVersion::TriggerIdleTerminationAsap() {
@@ -932,6 +936,9 @@ void ServiceWorkerVersion::AddControllee(
   // crash.
   CHECK(!base::Contains(controllee_map_, uuid));
 
+  if (!context_) {
+    return;
+  }
   controllee_map_[uuid] = service_worker_client->AsWeakPtr();
   embedded_worker_->UpdateForegroundPriority();
   ClearTick(&no_controllees_time_);
@@ -985,7 +992,7 @@ void ServiceWorkerVersion::OnControlleeNavigationCommitted(
 #if DCHECK_IS_ON()
   // Ensures this function is only called for a known window client.
   auto it = controllee_map_.find(client_uuid);
-  DCHECK(it != controllee_map_.end());
+  CHECK(it != controllee_map_.end(), base::NotFatalUntil::M130);
 
   DCHECK_EQ(it->second->GetClientType(),
             blink::mojom::ServiceWorkerClientType::kWindow);
@@ -1038,7 +1045,11 @@ void ServiceWorkerVersion::RestoreControlleeFromBackForwardCacheMap(
 
 void ServiceWorkerVersion::RemoveControlleeFromBackForwardCacheMap(
     const std::string& client_uuid) {
-  DCHECK(IsBackForwardCacheEnabled());
+  CHECK(IsBackForwardCacheEnabled());
+  // TODO(crbug.com/341322515): Investigate why sometimes
+  // `bfcache_controllee_map_` does not contain the client.
+  SCOPED_CRASH_KEY_BOOL("ServiceWorkerBfcache", "in_controllee_map",
+                        base::Contains(controllee_map_, client_uuid));
   CHECK(base::Contains(bfcached_controllee_map_, client_uuid));
   bfcached_controllee_map_.erase(client_uuid);
 }
@@ -1641,7 +1652,8 @@ void ServiceWorkerVersion::GetClient(const std::string& client_uuid,
     return;
   }
   ServiceWorkerClient* service_worker_client =
-      context_->GetServiceWorkerClientByClientID(client_uuid);
+      context_->service_worker_client_owner().GetServiceWorkerClientByClientID(
+          client_uuid);
   if (!service_worker_client ||
       service_worker_client->url().DeprecatedGetOriginAsURL() !=
           script_url_.DeprecatedGetOriginAsURL()) {
@@ -1672,7 +1684,8 @@ void ServiceWorkerVersion::GetClientInternal(const std::string& client_uuid,
   }
 
   ServiceWorkerClient* service_worker_client =
-      context_->GetServiceWorkerClientByClientID(client_uuid);
+      context_->service_worker_client_owner().GetServiceWorkerClientByClientID(
+          client_uuid);
   if (!service_worker_client || !service_worker_client->is_execution_ready()) {
     std::move(callback).Run(nullptr);
     return;
@@ -1723,7 +1736,8 @@ void ServiceWorkerVersion::PostMessageToClient(
   if (!context_)
     return;
   ServiceWorkerClient* service_worker_client =
-      context_->GetServiceWorkerClientByClientID(client_uuid);
+      context_->service_worker_client_owner().GetServiceWorkerClientByClientID(
+          client_uuid);
   if (!service_worker_client) {
     // The client may already have been closed, just ignore.
     return;
@@ -1747,8 +1761,6 @@ void ServiceWorkerVersion::PostMessageToClient(
     receiver_.reset();
     return;
   }
-  base::UmaHistogramBoolean("ServiceWorker.PostMessage.IsExecutionReady",
-                            service_worker_client->is_execution_ready());
   if (!service_worker_client->is_execution_ready()) {
     // It's subtle why this ReportBadMessage is correct. Consider the
     // sequence:
@@ -1780,7 +1792,8 @@ void ServiceWorkerVersion::PostMessageToClient(
   // As we don't track tasks between workers and renderers, we can nullify the
   // message's parent task ID.
   message.parent_task_id = std::nullopt;
-  service_worker_client->PostMessageToClient(this, std::move(message));
+  service_worker_client->container_host()->PostMessageToClient(
+      *this, std::move(message));
 }
 
 void ServiceWorkerVersion::FocusClient(const std::string& client_uuid,
@@ -1790,7 +1803,8 @@ void ServiceWorkerVersion::FocusClient(const std::string& client_uuid,
     return;
   }
   ServiceWorkerClient* service_worker_client =
-      context_->GetServiceWorkerClientByClientID(client_uuid);
+      context_->service_worker_client_owner().GetServiceWorkerClientByClientID(
+          client_uuid);
   if (!service_worker_client) {
     // The client may already have been closed, just fail.
     std::move(callback).Run(nullptr /* client */);
@@ -1846,7 +1860,8 @@ void ServiceWorkerVersion::NavigateClient(const std::string& client_uuid,
   }
 
   ServiceWorkerClient* service_worker_client =
-      context_->GetServiceWorkerClientByClientID(client_uuid);
+      context_->service_worker_client_owner().GetServiceWorkerClientByClientID(
+          client_uuid);
   if (!service_worker_client) {
     std::move(callback).Run(false /* success */, nullptr /* client */,
                             std::string("The client was not found."));
@@ -1926,15 +1941,22 @@ void ServiceWorkerVersion::AddRoutes(
         "Unexpected router registration call during the feature is disabled.");
     return;
   }
-  if (!SetupRouterEvaluator(rules)) {
-    // The renderer should have denied calling this method while the setup
-    // fails.
-    // TODO(crbug.com/40241479): revisit this to confirm no case for this error.
-    associated_interface_receiver_.ReportBadMessage(
-        "Failed to configure a router. Possibly a syntax error");
-    return;
+  auto error = SetupRouterEvaluator(rules);
+  bool is_parse_error = false;
+  switch (error) {
+    case ServiceWorkerRouterEvaluatorErrorEnums::kNoError:
+      break;
+    case ServiceWorkerRouterEvaluatorErrorEnums::kParseError:
+      is_parse_error = true;
+      break;
+    default:
+      // The renderer should have denied calling this method while the setup
+      // fails.
+      associated_interface_receiver_.ReportBadMessage(
+          "Failed to configure a router. Possibly a syntax error");
+      return;
   }
-  std::move(callback).Run();
+  std::move(callback).Run(is_parse_error);
 }
 
 void ServiceWorkerVersion::OnSetCachedMetadataFinished(int64_t callback_id,
@@ -2060,6 +2082,13 @@ ServiceWorkerVersion::cross_origin_embedder_policy() const {
              : nullptr;
 }
 
+const network::DocumentIsolationPolicy*
+ServiceWorkerVersion::document_isolation_policy() const {
+  return policy_container_host_
+             ? &policy_container_host_->document_isolation_policy()
+             : nullptr;
+}
+
 const network::mojom::ClientSecurityStatePtr
 ServiceWorkerVersion::BuildClientSecurityState() const {
   if (!policy_container_host_) {
@@ -2072,7 +2101,8 @@ ServiceWorkerVersion::BuildClientSecurityState() const {
       policies.ip_address_space,
       DerivePrivateNetworkRequestPolicy(policies.ip_address_space,
                                         policies.is_web_secure_context,
-                                        PrivateNetworkRequestContext::kWorker));
+                                        PrivateNetworkRequestContext::kWorker),
+      policies.document_isolation_policy);
 }
 
 // static
@@ -2087,7 +2117,7 @@ bool ServiceWorkerVersion::IsInstalled(ServiceWorkerVersion::Status status) {
     case ServiceWorkerVersion::ACTIVATED:
       return true;
   }
-  NOTREACHED() << "Unexpected status: " << status;
+  NOTREACHED_IN_MIGRATION() << "Unexpected status: " << status;
   return false;
 }
 
@@ -2108,7 +2138,7 @@ std::string ServiceWorkerVersion::VersionStatusToString(
     case ServiceWorkerVersion::REDUNDANT:
       return "redundant";
   }
-  NOTREACHED() << status;
+  NOTREACHED_IN_MIGRATION() << status;
   return std::string();
 }
 
@@ -2940,7 +2970,7 @@ ServiceWorkerVersion::compared_script_info_map() const {
 ServiceWorkerUpdateChecker::ComparedScriptInfo
 ServiceWorkerVersion::TakeComparedScriptInfo(const GURL& script_url) {
   auto it = compared_script_info_map_.find(script_url);
-  DCHECK(it != compared_script_info_map_.end());
+  CHECK(it != compared_script_info_map_.end(), base::NotFatalUntil::M130);
   ServiceWorkerUpdateChecker::ComparedScriptInfo info = std::move(it->second);
   compared_script_info_map_.erase(it);
   return info;
@@ -3042,7 +3072,8 @@ void ServiceWorkerVersion::SetResources(
       script_url_, script_cache_map_, fetch_handler_type_);
 }
 
-bool ServiceWorkerVersion::SetupRouterEvaluator(
+ServiceWorkerRouterEvaluatorErrorEnums
+ServiceWorkerVersion::SetupRouterEvaluator(
     const blink::ServiceWorkerRouterRules& rules) {
   CHECK(IsStaticRouterEnabled());
   blink::ServiceWorkerRouterRules new_rules;
@@ -3059,16 +3090,22 @@ bool ServiceWorkerVersion::SetupRouterEvaluator(
   }
   router_evaluator_ = std::make_unique<ServiceWorkerRouterEvaluator>(new_rules);
   if (!router_evaluator_->IsValid()) {
+    auto error = router_evaluator_->invalid_error_code();
+    CHECK(error.has_value());
     router_evaluator_.reset();
-    return false;
+    return *error;
   }
   CHECK_NE(fetch_handler_existence(), FetchHandlerExistence::UNKNOWN);
+
+  // Check if we have fetch handler. This is a rare case, since this should have
+  // been validated in the renderer already when adding a new router rule.
   if (router_evaluator_->has_fetch_event_source() &&
       fetch_handler_existence() == FetchHandlerExistence::DOES_NOT_EXIST) {
     router_evaluator_.reset();
-    return false;
+    return ServiceWorkerRouterEvaluatorErrorEnums::
+        kFetchSourceWithoutFetchHandler;
   }
-  return true;
+  return ServiceWorkerRouterEvaluatorErrorEnums::kNoError;
 }
 
 bool ServiceWorkerVersion::NeedRouterEvaluate() const {
@@ -3143,8 +3180,14 @@ ServiceWorkerVersion::GetRemoteCacheStorage() {
     return mojo::NullRemote();
   }
 
+  // Similarly, DIP should be passed to cache storage to enforce it.
+  const network::DocumentIsolationPolicy* dip = document_isolation_policy();
+  if (!dip) {
+    return mojo::NullRemote();
+  }
+
   mojo::PendingRemote<blink::mojom::CacheStorage> remote;
-  control->AddReceiver(*coep, embedded_worker()->GetCoepReporter(),
+  control->AddReceiver(*coep, embedded_worker()->GetCoepReporter(), *dip,
                        storage::BucketLocator::ForDefaultBucket(key()),
                        storage::mojom::CacheStorageOwner::kCacheAPI,
                        remote.InitWithNewPipeAndPassReceiver());
@@ -3161,7 +3204,7 @@ ServiceWorkerVersion::GetControllerMode() const {
     case ServiceWorkerVersion::FetchHandlerExistence::UNKNOWN:
       // UNKNOWN means the controller is still installing. It's not possible to
       // have a controller that hasn't finished installing.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return blink::mojom::ControllerServiceWorkerMode::kNoController;
   }
 }

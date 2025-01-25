@@ -18,6 +18,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
@@ -40,6 +41,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/checkbox.h"
@@ -120,15 +122,13 @@ class RatingStar : public views::ImageView {
   METADATA_HEADER(RatingStar, views::ImageView)
 
  public:
-  explicit RatingStar(const ui::ImageModel& image) { SetImage(image); }
+  explicit RatingStar(const ui::ImageModel& image) {
+    SetImage(image);
+    GetViewAccessibility().SetRole(ax::mojom::Role::kNone);
+  }
   RatingStar(const RatingStar&) = delete;
   RatingStar& operator=(const RatingStar&) = delete;
   ~RatingStar() override = default;
-
-  // views::ImageView:
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    node_data->role = ax::mojom::Role::kNone;
-  }
 };
 
 BEGIN_METADATA(RatingStar)
@@ -141,14 +141,20 @@ class RatingLabel : public views::Label {
 
  public:
   RatingLabel(const std::u16string& text, int text_context)
-      : views::Label(text, text_context, views::style::STYLE_PRIMARY) {}
+      : views::Label(text, text_context, views::style::STYLE_PRIMARY) {
+    GetViewAccessibility().SetRole(ax::mojom::Role::kNone);
+    GetViewAccessibility().SetName(
+        std::string(), ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
+  }
+
   RatingLabel(const RatingLabel&) = delete;
   RatingLabel& operator=(const RatingLabel&) = delete;
   ~RatingLabel() override = default;
 
-  // views::Label:
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    node_data->role = ax::mojom::Role::kNone;
+  void AdjustAccessibleName(std::u16string& new_name,
+                            ax::mojom::NameFrom& name_from) override {
+    // Override and do nothing so that the name set from
+    // Label::AdjustAccessibleName isn't used.
   }
 };
 
@@ -166,6 +172,18 @@ void ShowExtensionInstallDialogImpl(
     ExtensionInstallPrompt::DoneCallback done_callback,
     std::unique_ptr<ExtensionInstallPrompt::Prompt> prompt) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  // If the dialog has to be parented to WebContents, force activate the
+  // contents. See crbug.com/40059470.
+  content::WebContents* web_contents = show_params->GetParentWebContents();
+  Browser* browser =
+      web_contents ? chrome::FindBrowserWithTab(web_contents) : nullptr;
+
+  if (browser &&
+      browser->tab_strip_model()->GetActiveWebContents() != web_contents) {
+    browser->ActivateContents(web_contents);
+  }
+
   gfx::NativeWindow parent_window = show_params->GetParentWindow();
   ExtensionInstallDialogView* dialog = new ExtensionInstallDialogView(
       std::move(show_params), std::move(done_callback), std::move(prompt));
@@ -208,12 +226,10 @@ struct ExtensionInfoSection {
 
 // Adds a section to |sections| for permissions of |perm_type| if there are any.
 void AddPermissions(ExtensionInstallPrompt::Prompt* prompt,
-                    std::vector<ExtensionInfoSection>& sections,
-                    int available_width) {
+                    std::vector<ExtensionInfoSection>& sections) {
   DCHECK_GT(prompt->GetPermissionCount(), 0u);
 
-  auto permissions_view =
-      std::make_unique<ExtensionPermissionsView>(available_width);
+  auto permissions_view = std::make_unique<ExtensionPermissionsView>();
 
   for (size_t i = 0; i < prompt->GetPermissionCount(); ++i) {
     permissions_view->AddItem(prompt->GetPermission(i),
@@ -631,9 +647,6 @@ void ExtensionInstallDialogView::CreateContents() {
           views::BoxLayout::Orientation::kVertical, gfx::Insets(),
           provider->GetDistanceMetric(
               views::DISTANCE_UNRELATED_CONTROL_VERTICAL)));
-  const int content_width =
-      GetPreferredSize().width() -
-      extension_info_and_justification_container->GetInsets().width();
   auto* extension_info_container =
       extension_info_and_justification_container->AddChildView(
           std::make_unique<views::View>());
@@ -643,7 +656,7 @@ void ExtensionInstallDialogView::CreateContents() {
 
   std::vector<ExtensionInfoSection> sections;
   if (prompt_->GetPermissionCount() > 0) {
-    AddPermissions(prompt_.get(), sections, content_width);
+    AddPermissions(prompt_.get(), sections);
   }
 
   if (sections.empty() &&
@@ -666,7 +679,6 @@ void ExtensionInstallDialogView::CreateContents() {
         section.header, views::style::CONTEXT_DIALOG_BODY_TEXT);
     header_label->SetMultiLine(true);
     header_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    header_label->SizeToFit(content_width);
     extension_info_container->AddChildView(header_label);
 
     if (section.contents_view)

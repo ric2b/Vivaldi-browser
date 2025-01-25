@@ -5,6 +5,7 @@
 #include "components/permissions/permission_util.h"
 
 #include "base/check.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
@@ -205,6 +206,9 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
     case ContentSettingsType::POINTER_LOCK:
       *out = PermissionType::POINTER_LOCK;
       break;
+    case ContentSettingsType::AUTOMATIC_FULLSCREEN:
+      *out = PermissionType::AUTOMATIC_FULLSCREEN;
+      break;
     default:
       return false;
   }
@@ -237,19 +241,13 @@ bool PermissionUtil::IsGuardContentSetting(ContentSettingsType type) {
   }
 }
 
-bool PermissionUtil::CanPermissionBeAllowedOnce(ContentSettingsType type) {
-  switch (type) {
-#if !BUILDFLAG(IS_ANDROID)
-    case ContentSettingsType::CAMERA_PAN_TILT_ZOOM:
-#endif
-    case ContentSettingsType::GEOLOCATION:
-    case ContentSettingsType::MEDIASTREAM_MIC:
-    case ContentSettingsType::MEDIASTREAM_CAMERA:
-    case ContentSettingsType::SMART_CARD_DATA:
-      return true;
-    default:
-      return false;
-  }
+bool PermissionUtil::DoesSupportTemporaryGrants(ContentSettingsType type) {
+  return base::Contains(content_settings::GetTypesWithTemporaryGrants(), type);
+}
+
+bool PermissionUtil::DoesStoreTemporaryGrantsInHcsm(ContentSettingsType type) {
+  return base::Contains(content_settings::GetTypesWithTemporaryGrantsInHcsm(),
+                        type);
 }
 
 // Due to dependency issues, this method is duplicated in
@@ -354,6 +352,8 @@ ContentSettingsType PermissionUtil::PermissionTypeToContentSettingTypeSafe(
       return ContentSettingsType::KEYBOARD_LOCK;
     case PermissionType::POINTER_LOCK:
       return ContentSettingsType::POINTER_LOCK;
+    case PermissionType::AUTOMATIC_FULLSCREEN:
+      return ContentSettingsType::AUTOMATIC_FULLSCREEN;
     case PermissionType::NUM:
       break;
   }
@@ -393,7 +393,7 @@ ContentSetting PermissionUtil::PermissionStatusToContentSetting(
       return CONTENT_SETTING_BLOCK;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return CONTENT_SETTING_DEFAULT;
 }
 
@@ -413,7 +413,7 @@ blink::mojom::PermissionStatus PermissionUtil::ContentSettingToPermissionStatus(
       break;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return blink::mojom::PermissionStatus::DENIED;
 }
 
@@ -491,7 +491,7 @@ bool PermissionUtil::CanPermissionRequestIgnoreStatus(
       return true;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 // static

@@ -23,7 +23,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.test.util.Batch;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags.Add;
 import org.chromium.base.test.util.Criteria;
@@ -42,7 +42,6 @@ import org.chromium.components.javascript_dialogs.JavascriptAppModalDialog;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer.OnEvaluateJavaScriptResultHelper;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.content_public.browser.test.util.WebContentsUtils;
 
@@ -51,7 +50,7 @@ import java.util.concurrent.TimeoutException;
 
 /** Test suite for displaying and functioning of app modal JavaScript onbeforeunload dialogs. */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@Batch(JavascriptAppModalDialogTest.JAVASCRIPT_DIALOG_BATCH_NAME)
+// TODO(crbug.com/344665752): Failing when batched, batch this again.
 @Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class JavascriptAppModalDialogTest {
     public static final String JAVASCRIPT_DIALOG_BATCH_NAME = "javascript_dialog";
@@ -138,7 +137,7 @@ public class JavascriptAppModalDialogTest {
         TabUiTestHelper.verifyTabModelTabCount(activity, 2, 0);
         // JavaScript onbeforeunload dialogs require a user gesture.
         tapViewAndWait();
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     activity.onBackPressed();
                 });
@@ -236,7 +235,7 @@ public class JavascriptAppModalDialogTest {
         tapViewAndWait();
         executeJavaScriptAndWaitForDialog("history.back();");
 
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     ChromeTabbedActivity activity = sActivityTestRule.getActivity();
                     activity.getCurrentTabModel().closeTab(activity.getActivityTab());
@@ -250,7 +249,7 @@ public class JavascriptAppModalDialogTest {
     private void tapViewAndWait() throws TimeoutException {
         final TapGestureStateListener tapGestureStateListener = new TapGestureStateListener();
         int callCount = tapGestureStateListener.getCallCount();
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     WebContentsUtils.getGestureListenerManager(sActivityTestRule.getWebContents())
                             .addListener(tapGestureStateListener);
@@ -284,7 +283,7 @@ public class JavascriptAppModalDialogTest {
      * showing.
      */
     private JavascriptAppModalDialog getCurrentDialog() throws ExecutionException {
-        return TestThreadUtils.runOnUiThreadBlocking(
+        return ThreadUtils.runOnUiThreadBlocking(
                 () -> JavascriptAppModalDialog.getCurrentDialogForTest());
     }
 

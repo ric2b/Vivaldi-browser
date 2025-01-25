@@ -7,8 +7,6 @@
 
 #include <stddef.h>
 
-#include <map>
-#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -17,6 +15,7 @@
 #include "base/memory/raw_ref.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
+#include "content/browser/aggregation_service/aggregatable_report.h"
 #include "content/browser/private_aggregation/private_aggregation_budget_key.h"
 #include "content/browser/private_aggregation/private_aggregation_budgeter.h"
 #include "content/common/content_export.h"
@@ -101,6 +100,12 @@ class CONTENT_EXPORT PrivateAggregationHost
                 "Maximum length of context_id should be aligned between Shared "
                 "Storage and Private Aggregation.");
 
+  // The duration of time that `SendReportOnTimeoutOrDisconnect()`
+  // unconditionally adds to the scheduled report time. Marked public for
+  // testing.
+  static constexpr base::TimeDelta kTimeForLocalProcessing =
+      base::Milliseconds(100);
+
   // `on_report_request_details_received` and `browser_context` must be
   // non-null.
   PrivateAggregationHost(
@@ -122,10 +127,7 @@ class CONTENT_EXPORT PrivateAggregationHost
   // timeout, regardless of when the disconnection actually happens. `timeout`
   // must be positive if set. If `timeout` is set, `context_id` must be set too.
   // If `aggregation_coordinator_origin` is set, the origin must be on the
-  // allowlist. But if the `kPrivateAggregationApiMultipleCloudProviders`
-  // feature is disabled, this function will act as if
-  // `aggregation_coordinator_origin` was not set. `filtering_id_max_bytes` must
-  // be positive and no greater than
+  // allowlist. `filtering_id_max_bytes` must be positive and no greater than
   // `AggregationServicePayloadContents::kMaximumFilteringIdMaxBytes`. The
   // return value indicates whether the receiver was accepted. Virtual for
   // testing.
@@ -160,6 +162,7 @@ class CONTENT_EXPORT PrivateAggregationHost
       base::ElapsedTimer timeout_or_disconnect_timer,
       blink::mojom::DebugModeDetailsPtr debug_mode_details,
       base::Time scheduled_report_time,
+      AggregatableReportRequest::DelayType delay_type,
       base::Uuid report_id,
       const url::Origin& reporting_origin,
       PrivateAggregationBudgetKey::Api api_for_budgeting,
@@ -171,8 +174,7 @@ class CONTENT_EXPORT PrivateAggregationHost
 
   void CloseCurrentPipe(PipeResult pipe_result);
 
-  void OnTimeoutBeforeDisconnect(mojo::ReceiverId id,
-                                 ReceiverContext* receiver_context);
+  void OnTimeoutBeforeDisconnect(mojo::ReceiverId id);
 
   void OnReceiverDisconnected();
 
@@ -189,14 +191,8 @@ class CONTENT_EXPORT PrivateAggregationHost
       PrivateAggregationBudgeter::BudgetDeniedBehavior)>
       on_report_request_details_received_;
 
-  mojo::ReceiverSet<blink::mojom::PrivateAggregationHost,
-                    std::unique_ptr<ReceiverContext>>
+  mojo::ReceiverSet<blink::mojom::PrivateAggregationHost, ReceiverContext>
       receiver_set_;
-
-  // A map containing a timer tracking the duration of time that each mojo pipe
-  // has been open. Used for duration measurement to ensure they are being
-  // closed appropriately.
-  std::map<mojo::ReceiverId, base::ElapsedTimer> pipe_duration_timers_;
 
   // The number of open pipes where a timeout was specified.
   int pipes_with_timeout_count_ = 0;

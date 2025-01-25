@@ -1,5 +1,7 @@
 # Copyright 2023 Vivaldi Technologies. All rights reserved.
 
+import("//build/config/ios/swift_source_set.gni")
+
 source_set("helpers") {
   sources = [
     "vivaldi_colors_helper.h",
@@ -25,4 +27,14 @@ source_set("helpers") {
   "UIKit.framework",
   "Foundation.framework",
  ]
+}
+
+swift_source_set("helpers_swift") {
+  sources = [
+    "vivaldi_string_extension.swift",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+  ]
 }

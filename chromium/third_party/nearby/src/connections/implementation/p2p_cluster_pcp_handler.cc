@@ -15,6 +15,7 @@
 #include "connections/implementation/p2p_cluster_pcp_handler.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <utility>
@@ -22,25 +23,47 @@
 
 #include "absl/functional/bind_front.h"
 #include "absl/strings/escaping.h"
+#include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
+#include "connections/advertising_options.h"
+#include "connections/discovery_options.h"
 #include "connections/implementation/base_pcp_handler.h"
 #include "connections/implementation/ble_advertisement.h"
 #include "connections/implementation/ble_endpoint_channel.h"
 #include "connections/implementation/ble_v2_endpoint_channel.h"
+#include "connections/implementation/bluetooth_device_name.h"
 #include "connections/implementation/bluetooth_endpoint_channel.h"
 #include "connections/implementation/bwu_manager.h"
+#include "connections/implementation/client_proxy.h"
+#include "connections/implementation/endpoint_channel_manager.h"
+#include "connections/implementation/endpoint_manager.h"
 #include "connections/implementation/flags/nearby_connections_feature_flags.h"
+#include "connections/implementation/injected_bluetooth_device_store.h"
+#include "connections/implementation/mediums/bluetooth_classic.h"
+#include "connections/implementation/mediums/mediums.h"
 #include "connections/implementation/mediums/utils.h"
+#include "connections/implementation/pcp.h"
+#include "connections/implementation/pcp_handler.h"
 #include "connections/implementation/wifi_lan_endpoint_channel.h"
+#include "connections/implementation/wifi_lan_service_info.h"
 #include "connections/medium_selector.h"
+#include "connections/out_of_band_connection_metadata.h"
 #include "connections/power_level.h"
 #include "connections/status.h"
+#include "connections/v3/connection_listening_options.h"
 #include "internal/flags/nearby_flags.h"
 #include "internal/interop/device.h"
+#include "internal/platform/ble.h"
+#include "internal/platform/ble_v2.h"
+#include "internal/platform/bluetooth_adapter.h"
+#include "internal/platform/bluetooth_classic.h"
+#include "internal/platform/byte_array.h"
 #include "internal/platform/implementation/platform.h"
 #include "internal/platform/logging.h"
 #include "internal/platform/nsd_service_info.h"
 #include "internal/platform/os_name.h"
 #include "internal/platform/types.h"
+#include "internal/platform/wifi_lan.h"
 #include "proto/connections_enums.pb.h"
 
 namespace nearby {
@@ -796,7 +819,7 @@ void P2pClusterPcpHandler::BleV2PeripheralLostHandler(
           NEARBY_LOGS(ERROR) << ble_status_or.status();
           return;
         }
-        auto advertisement = ble_status_or.value();
+        const auto& advertisement = ble_status_or.value();
 
         // Make sure the BLE advertisement points to a valid
         // endpoint we're discovering.
@@ -846,6 +869,44 @@ void P2pClusterPcpHandler::BleV2PeripheralLostHandler(
                                      WebRtcState::kUndefined,
                                  });
         }
+      });
+}
+
+void P2pClusterPcpHandler::BleV2LegacyDeviceDiscoveredHandler() {
+  if (!NearbyFlags::GetInstance().GetBoolFlag(
+          config_package_nearby::nearby_connections_feature::
+              kDisableBluetoothClassicScanning)) {
+    return;
+  }
+
+  RunOnPcpHandlerThread(
+      "p2p-ble-legacy-peripheral-discovered",
+      [this]() RUN_ON_PCP_HANDLER_THREAD() {
+        if (paused_bluetooth_clients_discoveries_.empty()) {
+          return;
+        }
+
+        NEARBY_LOGS(INFO) << "Found nearby legacy BLE device, pending "
+                             "bluetooth discovery size :"
+                          << paused_bluetooth_clients_discoveries_.size();
+
+        for (auto& paused_bluetooth_client :
+             paused_bluetooth_clients_discoveries_) {
+          if (!paused_bluetooth_client.second->IsDiscoveringServiceId(
+                  paused_bluetooth_client.first)) {
+            NEARBY_LOGS(INFO) << "Do not start bluetooth scanning since client "
+                                 "is no longer discovering for service id: "
+                              << paused_bluetooth_client.first;
+            continue;
+          }
+
+          // Start the paused bluetooth discovery.
+          StartBluetoothDiscovery(paused_bluetooth_client.second,
+                                  paused_bluetooth_client.first);
+        }
+
+        // Remove all pending bluetooth clients.
+        paused_bluetooth_clients_discoveries_.clear();
       });
 }
 
@@ -995,16 +1056,6 @@ BasePcpHandler::StartOperationResult P2pClusterPcpHandler::StartDiscoveryImpl(
     }
   }
 
-  if (discovery_options.allowed.bluetooth) {
-    Medium bluetooth_medium = StartBluetoothDiscovery(client, service_id);
-    if (bluetooth_medium !=
-        location::nearby::proto::connections::UNKNOWN_MEDIUM) {
-      NEARBY_LOG(INFO, "P2pClusterPcpHandler::StartDiscoveryImpl: BT added");
-      mediums_started_successfully.push_back(bluetooth_medium);
-      bluetooth_classic_discoverer_client_id_ = client->GetClientId();
-    }
-  }
-
   if (discovery_options.allowed.ble) {
     if (NearbyFlags::GetInstance().GetBoolFlag(
             config_package_nearby::nearby_connections_feature::kEnableBleV2)) {
@@ -1028,6 +1079,24 @@ BasePcpHandler::StartOperationResult P2pClusterPcpHandler::StartDiscoveryImpl(
     }
   }
 
+  if (discovery_options.allowed.bluetooth) {
+    if (NearbyFlags::GetInstance().GetBoolFlag(
+            config_package_nearby::nearby_connections_feature::
+                kDisableBluetoothClassicScanning)) {
+      StartBluetoothDiscoveryWithPause(client, service_id, discovery_options,
+                                       mediums_started_successfully);
+    } else {
+      Medium bluetooth_medium = StartBluetoothDiscovery(client, service_id);
+      if (bluetooth_medium !=
+          location::nearby::proto::connections::UNKNOWN_MEDIUM) {
+        NEARBY_LOG(INFO, "P2pClusterPcpHandler::StartDiscoveryImpl: BT added");
+        mediums_started_successfully.push_back(bluetooth_medium);
+        bluetooth_classic_client_id_to_service_id_map_.insert(
+            {client->GetClientId(), service_id});
+      }
+    }
+  }
+
   if (mediums_started_successfully.empty()) {
     NEARBY_LOGS(ERROR)
         << "Failed StartDiscovery() for client=" << client->GetClientId()
@@ -1047,14 +1116,16 @@ BasePcpHandler::StartOperationResult P2pClusterPcpHandler::StartDiscoveryImpl(
 
 Status P2pClusterPcpHandler::StopDiscoveryImpl(ClientProxy* client) {
   wifi_lan_medium_.StopDiscovery(client->GetDiscoveryServiceId());
-  if (client->GetClientId() == bluetooth_classic_discoverer_client_id_) {
-    bluetooth_medium_.StopDiscovery();
-    bluetooth_classic_discoverer_client_id_ = 0;
+  if (bluetooth_classic_client_id_to_service_id_map_.contains(
+          client->GetClientId())) {
+    bluetooth_medium_.StopDiscovery(
+        bluetooth_classic_client_id_to_service_id_map_.at(
+            client->GetClientId()));
+    bluetooth_classic_client_id_to_service_id_map_.erase(client->GetClientId());
   } else {
     NEARBY_LOGS(INFO) << "Skipped BT StopDiscovery for client="
                       << client->GetClientId()
-                      << ", client that started discovery is "
-                      << bluetooth_classic_discoverer_client_id_;
+                      << " because it is not in discovery.";
   }
 
   if (NearbyFlags::GetInstance().GetBoolFlag(
@@ -1063,6 +1134,14 @@ Status P2pClusterPcpHandler::StopDiscoveryImpl(ClientProxy* client) {
   } else {
     ble_medium_.StopScanning(client->GetDiscoveryServiceId());
   }
+
+  if (NearbyFlags::GetInstance().GetBoolFlag(
+          config_package_nearby::nearby_connections_feature::
+              kDisableBluetoothClassicScanning)) {
+    paused_bluetooth_clients_discoveries_.erase(
+        client->GetDiscoveryServiceId());
+  }
+
   return {Status::kSuccess};
 }
 
@@ -1463,7 +1542,7 @@ P2pClusterPcpHandler::UpdateDiscoveryOptionsImpl(
   if (NeedsToTurnOffDiscoveryMedium(Medium::BLUETOOTH, old_options,
                                     discovery_options) ||
       needs_restart) {
-    bluetooth_medium_.StopDiscovery();
+    bluetooth_medium_.StopDiscovery(std::string(service_id));
     StartEndpointLostByMediumAlarms(client, Medium::BLUETOOTH);
   }
   // wifi lan
@@ -1478,21 +1557,6 @@ P2pClusterPcpHandler::UpdateDiscoveryOptionsImpl(
   bool should_start_discovery = false;
   auto new_mediums = discovery_options.allowed;
   auto old_mediums = old_options.allowed;
-  // bt classic
-  if (new_mediums.bluetooth && !discovery_options.low_power) {
-    should_start_discovery = true;
-    if (!needs_restart && old_mediums.bluetooth) {
-      restarted_mediums.push_back(Medium::BLUETOOTH);
-    } else {
-      if (StartBluetoothDiscovery(client, std::string(service_id)) !=
-          location::nearby::proto::connections::UNKNOWN_MEDIUM) {
-        restarted_mediums.push_back(Medium::BLUETOOTH);
-      } else {
-        NEARBY_LOGS(WARNING)
-            << "UpdateDiscoveryOptionsImpl: unable to restart bt scanning";
-      }
-    }
-  }
   // ble
   if (new_mediums.ble) {
     should_start_discovery = true;
@@ -1519,6 +1583,28 @@ P2pClusterPcpHandler::UpdateDiscoveryOptionsImpl(
         } else {
           NEARBY_LOGS(WARNING)
               << "UpdateDiscoveryOptionsImpl: unable to restart ble scanning";
+        }
+      }
+    }
+  }
+  // bt classic
+  if (new_mediums.bluetooth && !discovery_options.low_power) {
+    should_start_discovery = true;
+    if (!needs_restart && old_mediums.bluetooth) {
+      restarted_mediums.push_back(Medium::BLUETOOTH);
+    } else {
+      if (NearbyFlags::GetInstance().GetBoolFlag(
+              config_package_nearby::nearby_connections_feature::
+                  kDisableBluetoothClassicScanning)) {
+        StartBluetoothDiscoveryWithPause(client, std::string(service_id),
+                                         discovery_options, restarted_mediums);
+      } else {
+        if (StartBluetoothDiscovery(client, std::string(service_id)) !=
+            location::nearby::proto::connections::UNKNOWN_MEDIUM) {
+          restarted_mediums.push_back(Medium::BLUETOOTH);
+        } else {
+          NEARBY_LOGS(WARNING)
+              << "UpdateDiscoveryOptionsImpl: unable to restart bt scanning";
         }
       }
     }
@@ -1659,17 +1745,19 @@ Medium P2pClusterPcpHandler::StartBluetoothAdvertising(
 Medium P2pClusterPcpHandler::StartBluetoothDiscovery(
     ClientProxy* client, const std::string& service_id) {
   if (bluetooth_radio_.Enable() &&
-      bluetooth_medium_.StartDiscovery({
-          .device_discovered_cb = absl::bind_front(
-              &P2pClusterPcpHandler::BluetoothDeviceDiscoveredHandler, this,
-              client, service_id),
-          .device_name_changed_cb = absl::bind_front(
-              &P2pClusterPcpHandler::BluetoothNameChangedHandler, this, client,
-              service_id),
-          .device_lost_cb = absl::bind_front(
-              &P2pClusterPcpHandler::BluetoothDeviceLostHandler, this, client,
-              service_id),
-      })) {
+      bluetooth_medium_.StartDiscovery(
+          service_id,
+          {
+              .device_discovered_cb = absl::bind_front(
+                  &P2pClusterPcpHandler::BluetoothDeviceDiscoveredHandler, this,
+                  client, service_id),
+              .device_name_changed_cb = absl::bind_front(
+                  &P2pClusterPcpHandler::BluetoothNameChangedHandler, this,
+                  client, service_id),
+              .device_lost_cb = absl::bind_front(
+                  &P2pClusterPcpHandler::BluetoothDeviceLostHandler, this,
+                  client, service_id),
+          })) {
     NEARBY_LOGS(INFO) << "In StartBluetoothDiscovery(), client="
                       << client->GetClientId()
                       << " started scanning for Bluetooth for service_id="
@@ -1681,6 +1769,55 @@ Medium P2pClusterPcpHandler::StartBluetoothDiscovery(
                       << " couldn't start scanning on Bluetooth for service_id="
                       << service_id;
     return location::nearby::proto::connections::UNKNOWN_MEDIUM;
+  }
+}
+
+void P2pClusterPcpHandler::StartBluetoothDiscoveryWithPause(
+    ClientProxy* client, const std::string& service_id,
+    const DiscoveryOptions& discovery_options,
+    std::vector<Medium>& mediums_started_successfully) {
+  if (bluetooth_radio_.IsEnabled()) {
+    if (ble_v2_medium_.IsExtendedAdvertisementsAvailable() &&
+        std::find(mediums_started_successfully.begin(),
+                  mediums_started_successfully.end(),
+                  location::nearby::proto::connections::BLE) !=
+            mediums_started_successfully.end()) {
+      if (bluetooth_medium_.IsDiscovering(service_id)) {
+        NEARBY_LOGS(INFO) << "xxxxx";
+        // If we are already discovering, we don't need to start again.
+        Medium bluetooth_medium = StartBluetoothDiscovery(client, service_id);
+        if (bluetooth_medium !=
+            location::nearby::proto::connections::UNKNOWN_MEDIUM) {
+          NEARBY_LOG(INFO,
+                     "P2pClusterPcpHandler::StartBluetoothDiscoveryWithPause: "
+                     "BT added");
+          mediums_started_successfully.push_back(bluetooth_medium);
+          bluetooth_classic_client_id_to_service_id_map_.insert(
+              {client->GetClientId(), service_id});
+        }
+      } else {
+        NEARBY_LOGS(INFO) << "Pause bluetooth discovery for service id : "
+                          << service_id;
+        paused_bluetooth_clients_discoveries_.insert({service_id, client});
+      }
+    } else {
+      // Always start bluetooth discovery if BLE doesn't support extended
+      // advertisements.
+      Medium bluetooth_medium = StartBluetoothDiscovery(client, service_id);
+      if (bluetooth_medium !=
+          location::nearby::proto::connections::UNKNOWN_MEDIUM) {
+        NEARBY_LOG(
+            INFO,
+            "P2pClusterPcpHandler::StartBluetoothDiscoveryWithPause: BT added");
+        mediums_started_successfully.push_back(bluetooth_medium);
+        bluetooth_classic_client_id_to_service_id_map_.insert(
+            {client->GetClientId(), service_id});
+      }
+    }
+  } else {
+    NEARBY_LOGS(WARNING) << "Ignore to discover on bluetooth for service id: "
+                         << service_id
+                         << " because bluetooth is disabled or low power mode.";
   }
 }
 
@@ -2108,6 +2245,9 @@ Medium P2pClusterPcpHandler::StartBleV2Scanning(
               .peripheral_lost_cb = absl::bind_front(
                   &P2pClusterPcpHandler::BleV2PeripheralLostHandler, this,
                   client),
+              .legacy_device_discovered_cb = absl::bind_front(
+                  &P2pClusterPcpHandler::BleV2LegacyDeviceDiscoveredHandler,
+                  this),
           })) {
     NEARBY_LOGS(INFO)
         << "In StartBleV2Scanning(), client=" << client->GetClientId()

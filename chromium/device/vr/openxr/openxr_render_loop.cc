@@ -210,15 +210,7 @@ void OpenXrRenderLoop::RequestSession(
   request_session_callback_ =
       base::BindPostTask(main_thread_task_runner_, std::move(callback));
 
-  EnableSupportedFeatures(options->mode, options->required_features,
-                          options->optional_features);
-
   StartRuntime(std::move(on_visibility_state_changed), std::move(options));
-}
-
-bool OpenXrRenderLoop::IsFeatureEnabled(
-    device::mojom::XRSessionFeature feature) const {
-  return base::Contains(enabled_features_, feature);
 }
 
 void OpenXrRenderLoop::SetVisibilityState(
@@ -364,14 +356,19 @@ void OpenXrRenderLoop::StartRuntimeFinish(
   session->data_provider = frame_data_receiver_.BindNewPipeAndPassRemote();
   session->submit_frame_sink = std::move(submit_frame_sink);
 
+  const auto& enabled_features = openxr_->GetEnabledFeatures();
   session->enabled_features.insert(session->enabled_features.end(),
-                                   enabled_features_.begin(),
-                                   enabled_features_.end());
+                                   enabled_features.begin(),
+                                   enabled_features.end());
 
   session->device_config = device::mojom::XRSessionDeviceConfig::New();
   session->device_config->enable_anti_aliasing =
       openxr_->CanEnableAntiAliasing();
   session->device_config->views = openxr_->GetDefaultViews();
+  if (auto* depth = openxr_->GetDepthSensor(); depth) {
+    session->device_config->depth_configuration = depth->GetDepthConfig();
+  }
+
   session->enviroment_blend_mode =
       openxr_->PickEnvironmentBlendModeForSession(options->mode);
   session->interaction_mode = device::mojom::XRInteractionMode::kWorldSpace;
@@ -638,46 +635,50 @@ mojom::XRFrameDataPtr OpenXrRenderLoop::GetNextFrameData() {
     frame_data->buffer_sync_token = swap_chain_info.sync_token;
   }
 
-  frame_data->time_delta =
-      base::Nanoseconds(openxr_->GetPredictedDisplayTime());
+  const XrTime frame_time = openxr_->GetPredictedDisplayTime();
+
+  frame_data->time_delta = base::Nanoseconds(frame_time);
   frame_data->views = openxr_->GetViews();
   frame_data->input_state = openxr_->GetInputState();
 
   frame_data->mojo_from_viewer = openxr_->GetViewerPose();
 
-  if (openxr_->StageParametersEnabled()) {
-    UpdateStageParameters();
-  }
+  UpdateStageParameters();
 
   if (openxr_->HasFrameState()) {
-    if (IsFeatureEnabled(device::mojom::XRSessionFeature::ANCHORS)) {
-      OpenXrAnchorManager* anchor_manager =
-          openxr_->GetOrCreateAnchorManager(*extension_helper_);
+    OpenXrAnchorManager* anchor_manager = openxr_->GetAnchorManager();
 
-      if (anchor_manager) {
-        frame_data->anchors_data = anchor_manager->ProcessAnchorsForFrame(
-            openxr_.get(), current_stage_parameters_,
-            frame_data->input_state.value(),
-            openxr_->GetPredictedDisplayTime());
-      }
+    if (anchor_manager) {
+      frame_data->anchors_data = anchor_manager->ProcessAnchorsForFrame(
+          openxr_.get(), current_stage_parameters_,
+          frame_data->input_state.value(), frame_time);
+    }
+
+    OpenXrLightEstimator* light_estimator = openxr_->GetLightEstimator();
+
+    if (light_estimator) {
+      frame_data->light_estimation_data =
+          light_estimator->GetLightEstimate(frame_time);
     }
   }
 
-  if (IsFeatureEnabled(device::mojom::XRSessionFeature::HIT_TEST) &&
-      frame_data->mojo_from_viewer->position &&
+  OpenXRSceneUnderstandingManager* scene_understanding_manager =
+      openxr_->GetSceneUnderstandingManager();
+
+  if (scene_understanding_manager && frame_data->mojo_from_viewer->position &&
       frame_data->mojo_from_viewer->orientation) {
-    OpenXRSceneUnderstandingManager* scene_understanding_manager =
-        openxr_->GetOrCreateSceneUnderstandingManager(*extension_helper_);
-    if (scene_understanding_manager) {
-      scene_understanding_manager->OnFrameUpdate(
-          openxr_->GetPredictedDisplayTime());
-      device::Pose mojo_from_viewer(*frame_data->mojo_from_viewer->position,
-                                    *frame_data->mojo_from_viewer->orientation);
-      // Get results for hit test subscriptions.
-      frame_data->hit_test_subscription_results =
-          scene_understanding_manager->GetHitTestResults(
-              mojo_from_viewer.ToTransform(), frame_data->input_state.value());
-    }
+    scene_understanding_manager->OnFrameUpdate(frame_time);
+    device::Pose mojo_from_viewer(*frame_data->mojo_from_viewer->position,
+                                  *frame_data->mojo_from_viewer->orientation);
+    // Get results for hit test subscriptions.
+    frame_data->hit_test_subscription_results =
+        scene_understanding_manager->GetHitTestResults(
+            mojo_from_viewer.ToTransform(), frame_data->input_state.value());
+  }
+
+  OpenXrDepthSensor* depth_sensor = openxr_->GetDepthSensor();
+  if (depth_sensor) {
+    depth_sensor->PopulateDepthData(frame_time, frame_data->views);
   }
 
   return frame_data;
@@ -717,14 +718,14 @@ void OpenXrRenderLoop::StartRuntime(
 
   SessionStartedCallback on_session_started_callback = base::BindOnce(
       &OpenXrRenderLoop::OnOpenXrSessionStarted, weak_ptr_factory_.GetWeakPtr(),
-      std::move(on_visibility_state_changed), std::move(options));
+      std::move(on_visibility_state_changed));
   SessionEndedCallback on_session_ended_callback = base::BindRepeating(
       &OpenXrRenderLoop::ExitPresent, weak_ptr_factory_.GetWeakPtr());
   VisibilityChangedCallback on_visibility_state_changed_callback =
       base::BindRepeating(&OpenXrRenderLoop::SetVisibilityState,
                           weak_ptr_factory_.GetWeakPtr());
   if (XR_FAILED(openxr_->InitSession(
-          enabled_features_, *extension_helper_,
+          std::move(options), *extension_helper_,
           std::move(on_session_started_callback),
           std::move(on_session_ended_callback),
           std::move(on_visibility_state_changed_callback)))) {
@@ -788,34 +789,6 @@ void OpenXrRenderLoop::StopRuntime() {
   // depends on it.
   graphics_binding_.reset();
   context_provider_.reset();
-}
-
-void OpenXrRenderLoop::EnableSupportedFeatures(
-    device::mojom::XRSessionMode mode,
-    const std::vector<device::mojom::XRSessionFeature>& required_features,
-    const std::vector<device::mojom::XRSessionFeature>& optional_features) {
-  enabled_features_.clear();
-  // `OpenXRDevice::RequestSession` validates that we can support all required
-  // features so that it can reject the session early, so we assume that all
-  // required features are enabled. Looping through and doing this string
-  // comparison again can be redundant, but this will help potentially catch
-  // a developer error.
-#if DCHECK_IS_ON()
-  CHECK(base::ranges::all_of(
-      required_features, [this](device::mojom::XRSessionFeature feature) {
-        return extension_helper_->IsFeatureSupported(feature);
-      }));
-#endif
-  base::ranges::copy(
-      required_features,
-      std::inserter(enabled_features_, enabled_features_.begin()));
-  base::ranges::copy_if(
-      optional_features,
-      std::inserter(enabled_features_, enabled_features_.begin()),
-      [this, mode](device::mojom::XRSessionFeature feature) {
-        return IsFeatureSupportedForMode(feature, mode) &&
-               extension_helper_->IsFeatureSupported(feature);
-      });
 }
 
 bool OpenXrRenderLoop::HasSessionEnded() {
@@ -887,9 +860,12 @@ void OpenXrRenderLoop::UpdateStageParameters() {
   if (openxr_->GetStageParameters(stage_bounds, local_from_stage)) {
     mojom::VRStageParametersPtr stage_parameters =
         mojom::VRStageParameters::New();
-    // mojo_from_local is identity, as is stage_from_floor, so we can directly
-    // assign local_from_stage and mojo_from_floor.
-    stage_parameters->mojo_from_floor = local_from_stage;
+    // mojo_from_local is currently identity.
+    gfx::Transform mojo_from_local;
+    // stage_from_floor is identity.
+    gfx::Transform stage_from_floor;
+    stage_parameters->mojo_from_floor =
+        mojo_from_local * local_from_stage * stage_from_floor;
     stage_parameters->bounds = std::move(stage_bounds);
     SetStageParameters(std::move(stage_parameters));
   } else {
@@ -916,7 +892,7 @@ void OpenXrRenderLoop::SubscribeToHitTest(
            << ", ray direction=" << ray->direction.ToString();
 
   OpenXRSceneUnderstandingManager* scene_understanding_manager =
-      openxr_->GetOrCreateSceneUnderstandingManager(*extension_helper_);
+      openxr_->GetSceneUnderstandingManager();
 
   if (!scene_understanding_manager) {
     std::move(callback).Run(
@@ -949,7 +925,7 @@ void OpenXrRenderLoop::SubscribeToHitTestForTransientInput(
            << ", ray direction=" << ray->direction.ToString();
 
   OpenXRSceneUnderstandingManager* scene_understanding_manager =
-      openxr_->GetOrCreateSceneUnderstandingManager(*extension_helper_);
+      openxr_->GetSceneUnderstandingManager();
 
   if (!scene_understanding_manager) {
     std::move(callback).Run(
@@ -975,7 +951,7 @@ void OpenXrRenderLoop::SubscribeToHitTestForTransientInput(
 void OpenXrRenderLoop::UnsubscribeFromHitTest(uint64_t subscription_id) {
   DVLOG(2) << __func__;
   OpenXRSceneUnderstandingManager* scene_understanding_manager =
-      openxr_->GetOrCreateSceneUnderstandingManager(*extension_helper_);
+      openxr_->GetSceneUnderstandingManager();
   if (scene_understanding_manager)
     scene_understanding_manager->UnsubscribeFromHitTest(
         HitTestSubscriptionId(subscription_id));
@@ -985,8 +961,7 @@ void OpenXrRenderLoop::CreateAnchor(
     mojom::XRNativeOriginInformationPtr native_origin_information,
     const device::Pose& native_origin_from_anchor,
     CreateAnchorCallback callback) {
-  OpenXrAnchorManager* anchor_manager =
-      openxr_->GetOrCreateAnchorManager(*extension_helper_);
+  OpenXrAnchorManager* anchor_manager = openxr_->GetAnchorManager();
   if (!anchor_manager) {
     return;
   }
@@ -1005,8 +980,7 @@ void OpenXrRenderLoop::CreatePlaneAnchor(
 }
 
 void OpenXrRenderLoop::DetachAnchor(uint64_t anchor_id) {
-  OpenXrAnchorManager* anchor_manager =
-      openxr_->GetOrCreateAnchorManager(*extension_helper_);
+  OpenXrAnchorManager* anchor_manager = openxr_->GetAnchorManager();
   if (!anchor_manager) {
     return;
   }

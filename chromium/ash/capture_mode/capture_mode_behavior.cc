@@ -17,11 +17,13 @@
 #include "ash/capture_mode/capture_mode_util.h"
 #include "ash/capture_mode/game_capture_bar_view.h"
 #include "ash/capture_mode/normal_capture_bar_view.h"
+#include "ash/constants/ash_features.h"
 #include "ash/projector/projector_controller_impl.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
@@ -131,7 +133,9 @@ class ProjectorBehavior : public CaptureModeBehavior {
         return true;
     }
   }
-  bool ShouldCreateRecordingOverlayController() const override { return true; }
+  bool ShouldCreateAnnotationsOverlayController() const override {
+    return true;
+  }
   bool ShouldShowUserNudge() const override { return false; }
   bool ShouldAutoSelectFirstCamera() const override { return true; }
   bool RequiresCaptureFolderCreation() const override { return true; }
@@ -375,7 +379,10 @@ bool CaptureModeBehavior::ShouldSkipVideoRecordingCountDown() const {
   return false;
 }
 
-bool CaptureModeBehavior::ShouldCreateRecordingOverlayController() const {
+bool CaptureModeBehavior::ShouldCreateAnnotationsOverlayController() const {
+  if (base::FeatureList::IsEnabled(ash::features::kAnnotatorMode)) {
+    return true;
+  }
   return false;
 }
 
@@ -393,7 +400,7 @@ bool CaptureModeBehavior::RequiresCaptureFolderCreation() const {
 
 void CaptureModeBehavior::CreateCaptureFolder(
     OnCaptureFolderCreatedCallback callback) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 std::vector<RecordingType> CaptureModeBehavior::GetSupportedRecordingTypes()
@@ -408,7 +415,7 @@ std::vector<RecordingType> CaptureModeBehavior::GetSupportedRecordingTypes()
 
 void CaptureModeBehavior::SetPreSelectedWindow(
     aura::Window* pre_selected_window) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 const char* CaptureModeBehavior::GetClientMetricComponent() const {

@@ -16,7 +16,6 @@
 <translation id="1728677426644403582">Jo besjogge de boarne fan in webstee</translation>
 <translation id="1734878702283171397">Besykje kontakt op te nimmen mei de systeembehearder.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Besykje it útfieren fan Windows netwurk diagnoaze<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">Dizze webstee befettet skealike programma's</translation>
 <translation id="1974060860693918893">Avansearre</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrolearje de proksy en de brânmuorre<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Ferlient oan: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -42,7 +41,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Ferbining diagnoaze útfiere<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">De ferbining is reset.</translation>
 <translation id="2826760142808435982">De ferbining is fersifere en identifisearre mei <ph name="CIPHER" /> en brûkt <ph name="KX" /> as it meganisme foar kaai útwikseling.</translation>
-<translation id="2856444702002559011">Oanfollers besykje mooglik jo gegevens te stellen fan <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (bygelyks wachtwurden , berjochten, of kredytkaart gegevens). <ph name="BEGIN_LEARN_MORE_LINK" />Mear ynformaasje<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">In netwurk feroaring is ûntdutsen.</translation>
 <translation id="2948083400971632585">Jo kinne ynstelde ferbining proksy's útskeakelje yn de ynstellings menu.</translation>
 <translation id="2991571918955627853">Jo kinne <ph name="SITE" /> op it stuit net besykje omdat de webstee HSTS brûkt. Netwurk flaters en oanfollen binne meastentiids tydlik, dus dizze side wurket letter wierskynlik wer goed.</translation>
@@ -91,7 +89,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="4265872034478892965">Tastean troch jo behearder</translation>
 <translation id="4305666528087210886">De wie gjin tagong ta de triem</translation>
 <translation id="4312866146174492540">Tsjinkeare (standert)</translation>
-<translation id="4356973930735388585">Oanfallers op dizze webstee besykje mooglik om gefaarlike programma's op jo kompjûter te ynstallearjen, wêrmei gegevens stellen of wiske kinne wurde (lykas foto's, wachtwurden, berjochten en kredytkaarten).</translation>
 <translation id="4408413947728134509"><ph name="NUM_COOKIES" /> koekjes</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> hat jo ynloch sertifikaat net akseptearre, of der is net ien ferskaft.</translation>
 <translation id="4506599922270137252">Nim kontakt om mei de systeembehearder</translation>
@@ -143,7 +140,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="6305205051461490394"><ph name="URL" /> is net te berikken.</translation>
 <translation id="6321917430147971392">Kontrolearje jo DNS ynstellingen</translation>
 <translation id="6328639280570009161">Besykje netwurk foarsizzing út te skeakeljen</translation>
-<translation id="6328786501058569169">Dizze webstee ferrifelet</translation>
 <translation id="6348220984832452017">Aktieve fariaasjes</translation>
 <translation id="6358450015545214790">Wat hâld it yn?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> wegeret te ferbinen.</translation>
@@ -157,7 +153,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="6897140037006041989">Brûkers agint</translation>
 <translation id="6957624206566198865">Side iepenje nij privee ljepper</translation>
 <translation id="7053983685419859001">Tsjinkeare</translation>
-<translation id="7079718277001814089">Dizze webstee befettet malware</translation>
 <translation id="7096937462164235847">De identiteit fan dizze webstee is net ferifiearre.</translation>
 <translation id="7108819624672055576">Tastean troch in tafoeging</translation>
 <translation id="7111012039238467737">(Jildich)</translation>
@@ -174,7 +169,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> is op it stuit net yn steat om dit fersyk te ferwurkjen.</translation>
 <translation id="7662298039739062396">Ynstelling beheard troch in tafoeging</translation>
 <translation id="7663736086183791259">Sertifikaat <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Oanfallers op dizze webstee besykje jo mooglik oer te heljen om programma's te ynstallearjen dy gefaarlik bine foar de sneup ûnderfining (lykas de hiemside te feroarjen of ekstra advertinsjes wer te jaan op websteeën dy't jo besykje).</translation>
 <translation id="7714464543167945231">Sertifikaat</translation>
 <translation id="7716147886133743102">Tsjinkeard troch jo behearder</translation>
 <translation id="7716424297397655342">Dizze webstee koe net laden wurde út it lytsûnthâld</translation>
@@ -184,7 +178,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="7878562273885520351">Jo wachtwurd is mooglik hackt</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="7953236668995583915">Dizze side ferfarskje om de fernijde ynstellingen op dizze side ta te passen</translation>
-<translation id="8025119109950072390">Oanfallers op dizze webstee besykje jo te ferrifeljen om eat gefaarliks te dwaan, lykas sêftguod ynstallearje of jo persoanlike gegevens bekend meitsje (lykas wachtwurden, telefoannûmers of kredytkaarten).</translation>
 <translation id="8037357227543935929">Freegje (standert)</translation>
 <translation id="8041940743680923270">Algemiene standert ynstelling brûke (Freegje)</translation>
 <translation id="808894953321890993">Wachtwurd feroarje</translation>

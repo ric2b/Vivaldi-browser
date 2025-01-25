@@ -4,6 +4,8 @@
 
 #include "chrome/test/base/test_browser_window.h"
 
+#include <utility>
+
 #include "base/feature_list.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -13,6 +15,7 @@
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "components/user_education/common/feature_promo_controller.h"
 #include "components/user_education/common/feature_promo_handle.h"
+#include "components/user_education/common/new_badge_controller.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/color/color_provider_key.h"
@@ -24,15 +27,17 @@
 std::unique_ptr<Browser> CreateBrowserWithTestWindowForParams(
     Browser::CreateParams params) {
   DCHECK(!params.window);
-  TestBrowserWindow* window = new TestBrowserWindow;
-  new TestBrowserWindowOwner(window);
-  params.window = window;
-  window->set_is_minimized(params.initial_show_state ==
-                           ui::SHOW_STATE_MINIMIZED);
+  auto window = std::make_unique<TestBrowserWindow>();
+  auto* window_ptr = window.get();
+  new TestBrowserWindowOwner(std::move(window));
+  params.window = window_ptr;
+  window_ptr->set_is_minimized(params.initial_show_state ==
+                               ui::SHOW_STATE_MINIMIZED);
   // Tests generally expect TestBrowserWindows not to be active.
-  window->set_is_active(params.initial_show_state != ui::SHOW_STATE_INACTIVE &&
-                        params.initial_show_state != ui::SHOW_STATE_DEFAULT &&
-                        params.initial_show_state != ui::SHOW_STATE_MINIMIZED);
+  window_ptr->set_is_active(
+      params.initial_show_state != ui::SHOW_STATE_INACTIVE &&
+      params.initial_show_state != ui::SHOW_STATE_DEFAULT &&
+      params.initial_show_state != ui::SHOW_STATE_MINIMIZED);
 
   return std::unique_ptr<Browser>(Browser::Create(params));
 }
@@ -194,12 +199,12 @@ ExtensionsContainer* TestBrowserWindow::GetExtensionsContainer() {
 
 content::KeyboardEventProcessingResult
 TestBrowserWindow::PreHandleKeyboardEvent(
-    const content::NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
 bool TestBrowserWindow::HandleKeyboardEvent(
-    const content::NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   return false;
 }
 
@@ -312,6 +317,9 @@ bool TestBrowserWindow::IsDownloadShelfVisible() const {
 DownloadShelf* TestBrowserWindow::GetDownloadShelf() {
   return &download_shelf_;
 }
+views::View* TestBrowserWindow::GetTopContainer() {
+  return nullptr;
+}
 
 DownloadBubbleUIController* TestBrowserWindow::GetDownloadBubbleUIController() {
   return nullptr;
@@ -408,9 +416,9 @@ void TestBrowserWindow::NotifyFeatureEngagementEvent(const char* event_name) {}
 
 void TestBrowserWindow::NotifyPromoFeatureUsed(const base::Feature& feature) {}
 
-bool TestBrowserWindow::MaybeShowNewBadgeFor(
+user_education::DisplayNewBadge TestBrowserWindow::MaybeShowNewBadgeFor(
     const base::Feature& new_badge_feature) {
-  return false;
+  return user_education::DisplayNewBadge();
 }
 
 user_education::FeaturePromoController*
@@ -423,8 +431,9 @@ TestBrowserWindow::SetFeaturePromoController(
 
 // TestBrowserWindowOwner -----------------------------------------------------
 
-TestBrowserWindowOwner::TestBrowserWindowOwner(TestBrowserWindow* window)
-    : window_(window) {
+TestBrowserWindowOwner::TestBrowserWindowOwner(
+    std::unique_ptr<TestBrowserWindow> window)
+    : window_(std::move(window)) {
   BrowserList::AddObserver(this);
 }
 

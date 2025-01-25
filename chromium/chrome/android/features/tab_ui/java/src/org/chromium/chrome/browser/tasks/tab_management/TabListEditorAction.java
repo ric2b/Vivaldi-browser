@@ -17,10 +17,10 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
-import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiMetricsHelper.TabListEditorExitMetricGroups;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -111,6 +111,9 @@ public abstract class TabListEditorAction {
 
         /** Retrieves the SnackbarManager for the selection editor. */
         SnackbarManager getSnackbarManager();
+
+        /** Retrieves the BottomSheetController for the selection editor. */
+        BottomSheetController getBottomSheetController();
     }
 
     private ObserverList<ActionObserver> mObsevers = new ObserverList<>();
@@ -280,6 +283,7 @@ public abstract class TabListEditorAction {
         mSelectionDelegate = selectionDelegate;
         mActionDelegate = actionDelegate;
         mEditorSupportsActionOnRelatedTabs = editorSupportsActionOnRelatedTabs;
+        onSelectionStateChange(mSelectionDelegate.getSelectedItemsAsList());
     }
 
     PropertyModel getPropertyModel() {
@@ -305,7 +309,7 @@ public abstract class TabListEditorAction {
     private List<Tab> getTabsFromSelection() {
         List<Tab> selectedTabs = new ArrayList<>();
         for (int tabId : mSelectionDelegate.getSelectedItems()) {
-            Tab tab = TabModelUtils.getTabById(getTabGroupModelFilter().getTabModel(), tabId);
+            Tab tab = getTabGroupModelFilter().getTabModel().getTabById(tabId);
             if (tab == null) continue;
 
             selectedTabs.add(tab);
@@ -333,7 +337,7 @@ public abstract class TabListEditorAction {
             TabGroupModelFilter tabGroupModelFilter, List<Integer> tabIds) {
         int tabCount = 0;
         for (int tabId : tabIds) {
-            Tab tab = TabModelUtils.getTabById(tabGroupModelFilter.getTabModel(), tabId);
+            Tab tab = tabGroupModelFilter.getTabModel().getTabById(tabId);
             // TODO(crbug.com/41495189): Find out how we can have a tab ID that is no longer
             // in the tab model here.
             if (tab == null) continue;

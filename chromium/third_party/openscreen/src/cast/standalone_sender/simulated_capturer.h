@@ -43,7 +43,7 @@ class SimulatedCapturer {
   void SetPlaybackRate(double rate);
 
  protected:
-  SimulatedCapturer(Environment* environment,
+  SimulatedCapturer(Environment& environment,
                     const char* path,
                     AVMediaType media_type,
                     Clock::time_point start_time,
@@ -140,7 +140,7 @@ class SimulatedAudioCapturer final : public SimulatedCapturer {
   // Constructor: `num_channels` and `sample_rate` specify the required audio
   // format. If necessary, audio from the file will be resampled to match the
   // required format.
-  SimulatedAudioCapturer(Environment* environment,
+  SimulatedAudioCapturer(Environment& environment,
                          const char* path,
                          int num_channels,
                          int sample_rate,
@@ -203,10 +203,10 @@ class SimulatedVideoCapturer final : public SimulatedCapturer {
     ~Client() override;
   };
 
-  SimulatedVideoCapturer(Environment* environment,
+  SimulatedVideoCapturer(Environment& environment,
                          const char* path,
                          Clock::time_point start_time,
-                         Client* client);
+                         Client& client);
 
   ~SimulatedVideoCapturer() final;
 

@@ -15,7 +15,7 @@ RulesetFileParser::RulesetFileParser(ParseResult* parse_result,
 }
 RulesetFileParser::~RulesetFileParser() = default;
 
-void RulesetFileParser::Parse(base::StringPiece file_contents) {
+void RulesetFileParser::Parse(std::string_view file_contents) {
   parse_result_->rules_info = RulesInfo();
 
   for (auto rule_string :
@@ -31,7 +31,7 @@ void RulesetFileParser::Parse(base::StringPiece file_contents) {
   }
 }
 
-void RulesetFileParser::ParseLine(base::StringPiece string_piece) {
+void RulesetFileParser::ParseLine(std::string_view string_piece) {
   switch (parser_.Parse(string_piece)) {
     case RuleParser::kMetadata:
     case RuleParser::kComment:

@@ -4,11 +4,11 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
-#include <math.h>
-
 #include <immintrin.h>
+#include <stddef.h>
+#include <stdint.h>
 
-#include <xnnpack/math-stubs.h>
+#include "xnnpack/math-stubs.h"
 
 
 void xnn_math_f16_expminus__avx2_rr1_p2(

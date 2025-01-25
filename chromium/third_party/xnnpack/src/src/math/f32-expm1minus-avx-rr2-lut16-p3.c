@@ -4,12 +4,12 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
-#include <stddef.h>
-
 #include <immintrin.h>
+#include <stddef.h>
+#include <stdint.h>
 
-#include <xnnpack/common.h>
-#include <xnnpack/math-stubs.h>
+#include "xnnpack/common.h"
+#include "xnnpack/math-stubs.h"
 
 
 // Table of exp2(k / 16) values decremented (as integer) by (k << 19), k = 0..15

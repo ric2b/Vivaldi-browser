@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 
 #include "ash/accessibility/a11y_feature_type.h"
 #include "ash/accessibility/accessibility_notification_controller.h"
@@ -20,6 +21,7 @@
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "ui/display/display_observer.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/rect.h"
 
 class PrefChangeRegistrar;
@@ -59,6 +61,7 @@ class DictationBubbleController;
 enum class DictationBubbleHintType;
 enum class DictationBubbleIconType;
 enum class DictationNotificationType;
+class DisableTrackpadEventRewriter;
 class FloatingAccessibilityController;
 class PointScanController;
 class ScopedBacklightsForcedOff;
@@ -171,17 +174,6 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
     const raw_ptr<AccessibilityController> owner_;
   };
 
-  // Helper struct to store information about a11y dialog -- pref name, resource
-  // ids for title and body. Also stores the information whether this dialog is
-  // mandatory for every SetEnabled call.
-  struct Dialog {
-    std::string pref_name;
-    int title_resource_id;
-    int body_resource_id;
-    // Whether this dialog should be shown on every SetEnabled action.
-    bool mandatory;
-  };
-
   // Some features have confirmation dialog associated with them.
   // Dialog can be applied for all SetEnabled() actions, or only to ones
   // associated with accelerators.
@@ -192,7 +184,7 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
                       const gfx::VectorIcon* icon,
                       const int name_resource_id,
                       const bool toggleable_in_quicksettings,
-                      const Dialog& dialog,
+                      const std::string& dialog_pref_name,
                       AccessibilityController* controller);
     ~FeatureWithDialog() override;
 
@@ -200,7 +192,7 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
     bool WasDialogAccepted() const;
 
    private:
-    Dialog dialog_;
+    const std::string dialog_pref_;
   };
 
   // Contains data used to give an accessibility-related notification.
@@ -243,15 +235,14 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
   // Getters for the corresponding features.
   Feature& autoclick() const;
   Feature& caret_highlight() const;
+  Feature& color_correction() const;
+  Feature& cursor_color() const;
   Feature& cursor_highlight() const;
   Feature& dictation() const;
-  Feature& color_correction() const;
+  Feature& disable_trackpad() const;
   Feature& face_gaze() const;
   Feature& floating_menu() const;
   Feature& focus_highlight() const;
-  FeatureWithDialog& fullscreen_magnifier() const;
-  FeatureWithDialog& docked_magnifier() const;
-  FeatureWithDialog& high_contrast() const;
   Feature& large_cursor() const;
   Feature& live_caption() const;
   Feature& mono_audio() const;
@@ -262,7 +253,9 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
   Feature& sticky_keys() const;
   Feature& switch_access() const;
   Feature& virtual_keyboard() const;
-  Feature& cursor_color() const;
+  FeatureWithDialog& docked_magnifier() const;
+  FeatureWithDialog& fullscreen_magnifier() const;
+  FeatureWithDialog& high_contrast() const;
 
   void SetDisplayRotationAcceleratorDialogBeenAccepted();
   bool HasDisplayRotationAcceleratorDialogBeenAccepted() const;
@@ -344,6 +337,9 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
   bool IsStickyKeysSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForStickyKeys();
 
+  bool IsReducedAnimationsSettingVisibleInTray();
+  bool IsEnterpriseIconVisibleForReducedAnimations();
+
   // Switch access may be disabled in prefs but still running when the disable
   // dialog is displaying.
   bool IsSwitchAccessRunning() const;
@@ -351,6 +347,7 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
   bool IsEnterpriseIconVisibleForSwitchAccess();
   void SetAccessibilityEventRewriter(
       AccessibilityEventRewriter* accessibility_event_rewriter);
+  void SetDisableTrackpadEventRewriter(DisableTrackpadEventRewriter* rewriter);
   bool IsPointScanEnabled();
 
   bool IsVirtualKeyboardSettingVisibleInTray();
@@ -496,6 +493,13 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
   // Starts or stops dictation. Records metrics for toggling via SwitchAccess.
   void ToggleDictationFromSource(DictationToggleSource source);
 
+  // Enables Select to Speak if the feature is currently disabled. If Select to
+  // Speak has not been enabled on the current profile before, then this method
+  // shows a dialog giving background about the feature. Once the dialog is
+  // accepted, it is never shown again for that profile. This method does
+  // nothing if the Select to Speak is currently enabled.
+  void EnableSelectToSpeakWithDialog();
+
   // Enables Dictation if the feature is currently disabled. Toggles (starts or
   // stops) Dictation if the feature is currently enabled.
   void EnableOrToggleDictationFromSource(DictationToggleSource source);
@@ -514,6 +518,9 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
 
   // Shows or hides the virtual keyboard.
   void SetVirtualKeyboardVisible(bool is_visible);
+
+  // Toggle Mouse Keys.
+  void ToggleMouseKeys();
 
   // Perform the action assigned to the accessibility key.
   void PerformAccessibilityAction();
@@ -563,6 +570,10 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
   // Cancels all of spoken feedback's current and queued speech immediately.
   void SilenceSpokenFeedback();
 
+  // Determines the action key that corresponds to F7 for the caret browsing
+  // dialog.
+  std::optional<ui::KeyboardCode> GetCaretBrowsingActionKey();
+
   // Shows an accessibility-related toast.
   void ShowToast(AccessibilityToastType type);
 
@@ -583,10 +594,12 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
   // voices.
   void ShowConfirmationDialog(const std::u16string& title,
                               const std::u16string& description,
+                              const std::u16string& confirm_name,
                               const std::u16string& cancel_name,
                               base::OnceClosure on_accept_callback,
                               base::OnceClosure on_cancel_callback,
                               base::OnceClosure on_close_callback);
+  gfx::Rect GetConfirmationDialogBoundsInScreen();
 
   // SessionObserver:
   void OnSigninScreenPrefServiceInitialized(PrefService* prefs) override;
@@ -595,6 +608,7 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
 
   // Test helpers:
   AccessibilityEventRewriter* GetAccessibilityEventRewriterForTest();
+  DisableTrackpadEventRewriter* GetDisableTrackpadEventRewriterForTest();
   SwitchAccessMenuBubbleController* GetSwitchAccessBubbleControllerForTest() {
     return switch_access_bubble_controller_.get();
   }
@@ -670,6 +684,7 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
   void UpdateMouseKeysDisableInTextFieldsFromPref();
   void UpdateMouseKeysAccelerationFromPref();
   void UpdateMouseKeysMaxSpeedFromPref();
+  void UpdateMouseKeysUsePrimaryKeysFromPref();
   void UpdateMouseKeysDominantHandFromPref();
   void UpdateFloatingMenuPositionFromPref();
   void UpdateLargeCursorFromPref();
@@ -697,6 +712,10 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
   void ShowDictationKeyboardDialog();
   void OnDictationKeyboardDialogAccepted();
   void OnDictationKeyboardDialogDismissed();
+
+  void ShowSelectToSpeakKeyboardDialog();
+  void OnSelectToSpeakKeyboardDialogAccepted();
+  void OnSelectToSpeakKeyboardDialogDismissed();
 
   void RecordSelectToSpeakSpeechDuration(SelectToSpeakState old_state,
                                          SelectToSpeakState new_state);
@@ -733,6 +752,8 @@ class ASH_EXPORT AccessibilityController : public SessionObserver,
   std::unique_ptr<SwitchAccessMenuBubbleController>
       switch_access_bubble_controller_;
   raw_ptr<AccessibilityEventRewriter> accessibility_event_rewriter_ = nullptr;
+  raw_ptr<DisableTrackpadEventRewriter> disable_trackpad_event_rewriter_ =
+      nullptr;
   // Used in tests to disable the dialog shown when Auto Click is turned on.
   bool no_auto_click_confirmation_dialog_for_testing_ = false;
   bool no_switch_access_disable_confirmation_dialog_for_testing_ = false;

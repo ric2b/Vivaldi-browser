@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fxge/dib/cfx_dibitmap.h"
 
 #include <limits>
@@ -27,6 +22,7 @@
 #include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/span.h"
 #include "core/fxcrt/span_util.h"
+#include "core/fxcrt/stl_util.h"
 #include "core/fxge/calculate_pitch.h"
 #include "core/fxge/cfx_cliprgn.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
@@ -44,10 +40,10 @@ bool CFX_DIBitmap::Create(int width,
                           uint8_t* pBuffer,
                           uint32_t pitch) {
   m_pBuffer = nullptr;
-  m_Format = format;
-  m_Width = 0;
-  m_Height = 0;
-  m_Pitch = 0;
+  SetFormat(format);
+  SetWidth(0);
+  SetHeight(0);
+  SetPitch(0);
 
   std::optional<PitchAndSize> pitch_size =
       CalculatePitchAndSize(width, height, format, pitch);
@@ -67,9 +63,9 @@ bool CFX_DIBitmap::Create(int width,
     if (!m_pBuffer)
       return false;
   }
-  m_Width = width;
-  m_Height = height;
-  m_Pitch = pitch_size.value().pitch;
+  SetWidth(width);
+  SetHeight(height);
+  SetPitch(pitch_size.value().pitch);
   return true;
 }
 
@@ -83,8 +79,8 @@ bool CFX_DIBitmap::Copy(RetainPtr<const CFX_DIBBase> source) {
 
   SetPalette(source->GetPaletteSpan());
   for (int row = 0; row < source->GetHeight(); row++) {
-    FXSYS_memcpy(m_pBuffer.Get() + row * m_Pitch,
-                 source->GetScanline(row).data(), m_Pitch);
+    UNSAFE_TODO(FXSYS_memcpy(m_pBuffer.Get() + row * GetPitch(),
+                             source->GetScanline(row).data(), GetPitch()));
   }
   return true;
 }
@@ -95,8 +91,8 @@ pdfium::span<const uint8_t> CFX_DIBitmap::GetBuffer() const {
   if (!m_pBuffer)
     return pdfium::span<const uint8_t>();
 
-  // TODO(tsepez): investigate safety.
-  return UNSAFE_BUFFERS(pdfium::make_span(m_pBuffer.Get(), m_Height * m_Pitch));
+  return UNSAFE_TODO(
+      pdfium::make_span(m_pBuffer.Get(), GetHeight() * GetPitch()));
 }
 
 pdfium::span<const uint8_t> CFX_DIBitmap::GetScanline(int line) const {
@@ -104,7 +100,7 @@ pdfium::span<const uint8_t> CFX_DIBitmap::GetScanline(int line) const {
   if (buffer_span.empty())
     return pdfium::span<const uint8_t>();
 
-  return buffer_span.subspan(line * m_Pitch, m_Pitch);
+  return buffer_span.subspan(line * GetPitch(), GetPitch());
 }
 
 size_t CFX_DIBitmap::GetEstimatedImageMemoryBurden() const {
@@ -128,73 +124,57 @@ RetainPtr<const CFX_DIBitmap> CFX_DIBitmap::RealizeIfNeeded() const {
 
 void CFX_DIBitmap::TakeOver(RetainPtr<CFX_DIBitmap>&& pSrcBitmap) {
   m_pBuffer = std::move(pSrcBitmap->m_pBuffer);
-  m_palette = std::move(pSrcBitmap->m_palette);
+  palette_ = std::move(pSrcBitmap->palette_);
   pSrcBitmap->m_pBuffer = nullptr;
-  m_Format = pSrcBitmap->m_Format;
-  m_Width = pSrcBitmap->m_Width;
-  m_Height = pSrcBitmap->m_Height;
-  m_Pitch = pSrcBitmap->m_Pitch;
+  SetFormat(pSrcBitmap->GetFormat());
+  SetWidth(pSrcBitmap->GetWidth());
+  SetHeight(pSrcBitmap->GetHeight());
+  SetPitch(pSrcBitmap->GetPitch());
 }
 
 void CFX_DIBitmap::Clear(uint32_t color) {
-  if (!m_pBuffer)
+  auto buffer = GetWritableBuffer();
+  if (buffer.empty()) {
     return;
+  }
 
-  uint8_t* pBuffer = m_pBuffer.Get();
   switch (GetFormat()) {
+    case FXDIB_Format::kInvalid:
+      break;
     case FXDIB_Format::k1bppMask:
-      FXSYS_memset(pBuffer, (color & 0xff000000) ? 0xff : 0,
-                   m_Pitch * m_Height);
+      fxcrt::Fill(buffer, (color & 0xff000000) ? 0xff : 0);
       break;
-    case FXDIB_Format::k1bppRgb: {
-      int index = FindPalette(color);
-      FXSYS_memset(pBuffer, index ? 0xff : 0, m_Pitch * m_Height);
+    case FXDIB_Format::k1bppRgb:
+      fxcrt::Fill(buffer, FindPalette(color) ? 0xff : 0);
       break;
-    }
     case FXDIB_Format::k8bppMask:
-      FXSYS_memset(pBuffer, color >> 24, m_Pitch * m_Height);
+      fxcrt::Fill(buffer, color >> 24);
       break;
-    case FXDIB_Format::k8bppRgb: {
-      int index = FindPalette(color);
-      FXSYS_memset(pBuffer, index, m_Pitch * m_Height);
+    case FXDIB_Format::k8bppRgb:
+      fxcrt::Fill(buffer, FindPalette(color));
       break;
-    }
     case FXDIB_Format::kRgb: {
-      int a;
-      int r;
-      int g;
-      int b;
-      std::tie(a, r, g, b) = ArgbDecode(color);
-      if (r == g && g == b) {
-        FXSYS_memset(pBuffer, r, m_Pitch * m_Height);
+      const FX_BGR_STRUCT<uint8_t> bgr = ArgbToBGRStruct(color);
+      if (bgr.red == bgr.green && bgr.green == bgr.blue) {
+        fxcrt::Fill(buffer, bgr.red);
       } else {
-        int byte_pos = 0;
-        for (int col = 0; col < m_Width; col++) {
-          pBuffer[byte_pos++] = b;
-          pBuffer[byte_pos++] = g;
-          pBuffer[byte_pos++] = r;
-        }
-        for (int row = 1; row < m_Height; row++) {
-          FXSYS_memcpy(pBuffer + row * m_Pitch, pBuffer, m_Pitch);
+        for (int row = 0; row < GetHeight(); row++) {
+          fxcrt::Fill(GetWritableScanlineAs<FX_BGR_STRUCT<uint8_t>>(row), bgr);
         }
       }
       break;
     }
     case FXDIB_Format::kRgb32:
-    case FXDIB_Format::kArgb: {
-      if (CFX_DefaultRenderDevice::UseSkiaRenderer() &&
-          FXDIB_Format::kRgb32 == GetFormat()) {
+      if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
         // TODO(crbug.com/pdfium/2016): This is not reliable because alpha may
         // be modified outside of this operation.
         color |= 0xFF000000;
       }
-      for (int i = 0; i < m_Width; i++)
-        reinterpret_cast<uint32_t*>(pBuffer)[i] = color;
-      for (int row = 1; row < m_Height; row++)
-        FXSYS_memcpy(pBuffer + row * m_Pitch, pBuffer, m_Pitch);
-      break;
-    }
-    default:
+      [[fallthrough]];
+    case FXDIB_Format::kArgb:
+      for (int row = 0; row < GetHeight(); row++) {
+        fxcrt::Fill(GetWritableScanlineAs<uint32_t>(row), color);
+      }
       break;
   }
 }
@@ -245,8 +225,9 @@ bool CFX_DIBitmap::TransferWithUnequalFormats(
   if (HasPalette())
     return false;
 
-  if (GetBppFromFormat(m_Format) == 8)
+  if (GetBPP() == 8) {
     dest_format = FXDIB_Format::k8bppMask;
+  }
 
   FX_SAFE_UINT32 offset = dest_left;
   offset *= GetBPP();
@@ -255,9 +236,10 @@ bool CFX_DIBitmap::TransferWithUnequalFormats(
     return false;
 
   pdfium::span<uint8_t> dest_buf = GetWritableBuffer().subspan(
-      dest_top * m_Pitch + static_cast<uint32_t>(offset.ValueOrDie()));
-  DataVector<uint32_t> dest_palette = ConvertBuffer(
-      dest_format, dest_buf, m_Pitch, width, height, source, src_left, src_top);
+      dest_top * GetPitch() + static_cast<uint32_t>(offset.ValueOrDie()));
+  DataVector<uint32_t> dest_palette =
+      ConvertBuffer(dest_format, dest_buf, GetPitch(), width, height, source,
+                    src_left, src_top);
   CHECK(dest_palette.empty());
   return true;
 }
@@ -270,13 +252,15 @@ void CFX_DIBitmap::TransferWithMultipleBPP(int dest_left,
                                            int src_left,
                                            int src_top) {
   int Bpp = GetBPP() / 8;
-  for (int row = 0; row < height; ++row) {
-    uint8_t* dest_scan =
-        m_pBuffer.Get() + (dest_top + row) * m_Pitch + dest_left * Bpp;
-    const uint8_t* src_scan =
-        source->GetScanline(src_top + row).subspan(src_left * Bpp).data();
-    FXSYS_memcpy(dest_scan, src_scan, width * Bpp);
-  }
+  UNSAFE_TODO({
+    for (int row = 0; row < height; ++row) {
+      uint8_t* dest_scan =
+          m_pBuffer.Get() + (dest_top + row) * GetPitch() + dest_left * Bpp;
+      const uint8_t* src_scan =
+          source->GetScanline(src_top + row).subspan(src_left * Bpp).data();
+      FXSYS_memcpy(dest_scan, src_scan, width * Bpp);
+    }
+  });
 }
 
 void CFX_DIBitmap::TransferEqualFormatsOneBPP(
@@ -287,89 +271,80 @@ void CFX_DIBitmap::TransferEqualFormatsOneBPP(
     RetainPtr<const CFX_DIBBase> source,
     int src_left,
     int src_top) {
-  for (int row = 0; row < height; ++row) {
-    uint8_t* dest_scan = m_pBuffer.Get() + (dest_top + row) * m_Pitch;
-    const uint8_t* src_scan = source->GetScanline(src_top + row).data();
-    for (int col = 0; col < width; ++col) {
-      int src_idx = src_left + col;
-      int dest_idx = dest_left + col;
-      if (src_scan[(src_idx) / 8] & (1 << (7 - (src_idx) % 8)))
-        dest_scan[(dest_idx) / 8] |= 1 << (7 - (dest_idx) % 8);
-      else
-        dest_scan[(dest_idx) / 8] &= ~(1 << (7 - (dest_idx) % 8));
+  UNSAFE_TODO({
+    for (int row = 0; row < height; ++row) {
+      uint8_t* dest_scan = m_pBuffer.Get() + (dest_top + row) * GetPitch();
+      const uint8_t* src_scan = source->GetScanline(src_top + row).data();
+      for (int col = 0; col < width; ++col) {
+        int src_idx = src_left + col;
+        int dest_idx = dest_left + col;
+        if (src_scan[(src_idx) / 8] & (1 << (7 - (src_idx) % 8))) {
+          dest_scan[(dest_idx) / 8] |= 1 << (7 - (dest_idx) % 8);
+        } else {
+          dest_scan[(dest_idx) / 8] &= ~(1 << (7 - (dest_idx) % 8));
+        }
+      }
     }
-  }
+  });
 }
 
 void CFX_DIBitmap::SetRedFromAlpha() {
   CHECK_EQ(FXDIB_Format::kArgb, GetFormat());
   CHECK(m_pBuffer);
 
-  for (int row = 0; row < m_Height; row++) {
-    constexpr int kSrcOffset = 3;
-    constexpr int kDestOffset = 2;
-    constexpr int kBytes = 4;
-    uint8_t* dest_pos = GetWritableScanline(row).subspan(kDestOffset).data();
-    const uint8_t* src_pos = GetScanline(row).subspan(kSrcOffset).data();
-    for (int col = 0; col < m_Width; col++) {
-      *dest_pos = *src_pos;
-      dest_pos += kBytes;
-      src_pos += kBytes;
+  for (int row = 0; row < GetHeight(); row++) {
+    auto scanline =
+        GetWritableScanlineAs<FX_BGRA_STRUCT<uint8_t>>(row).first(GetWidth());
+    for (auto& pixel : scanline) {
+      pixel.red = pixel.alpha;
     }
   }
 }
 
-bool CFX_DIBitmap::SetUniformOpaqueAlpha() {
+void CFX_DIBitmap::SetUniformOpaqueAlpha() {
   CHECK_EQ(FXDIB_Format::kArgb, GetFormat());
+  CHECK(m_pBuffer);
 
-  if (!m_pBuffer)
-    return false;
-
-  for (int row = 0; row < m_Height; row++) {
-    constexpr int kDestOffset = 3;
-    constexpr int kDestBytes = 4;
-    uint8_t* dest_pos = GetWritableScanline(row).subspan(kDestOffset).data();
-    for (int col = 0; col < m_Width; col++) {
-      *dest_pos = 0xff;
-      dest_pos += kDestBytes;
+  for (int row = 0; row < GetHeight(); row++) {
+    auto scanline =
+        GetWritableScanlineAs<FX_BGRA_STRUCT<uint8_t>>(row).first(GetWidth());
+    for (auto& pixel : scanline) {
+      pixel.alpha = 0xff;
     }
   }
-  return true;
 }
 
 bool CFX_DIBitmap::MultiplyAlphaMask(RetainPtr<const CFX_DIBitmap> mask) {
-  CHECK_EQ(m_Width, mask->GetWidth());
-  CHECK_EQ(m_Height, mask->GetHeight());
+  CHECK_EQ(GetWidth(), mask->GetWidth());
+  CHECK_EQ(GetHeight(), mask->GetHeight());
   CHECK_EQ(FXDIB_Format::k8bppMask, mask->GetFormat());
   CHECK(m_pBuffer);
 
-  constexpr int kDestOffset = 3;
-  constexpr int kDestBytes = 4;
   if (GetFormat() == FXDIB_Format::kRgb32) {
     if (!ConvertFormat(FXDIB_Format::kArgb)) {
       return false;
     }
 
-    for (int row = 0; row < m_Height; row++) {
-      uint8_t* dest_pos = GetWritableScanline(row).subspan(kDestOffset).data();
-      const uint8_t* mask_scan = mask->GetScanline(row).data();
-      for (int col = 0; col < m_Width; col++) {
-        // Since the `dest_pos` value always starts out as 255 in this case,
+    for (int row = 0; row < GetHeight(); row++) {
+      auto dest_scan =
+          GetWritableScanlineAs<FX_BGRA_STRUCT<uint8_t>>(row).first(GetWidth());
+      auto mask_scan = mask->GetScanline(row).first(GetWidth());
+      for (int col = 0; col < GetWidth(); col++) {
+        // Since the `dest_scan` value always starts out as 255 in this case,
         // simplify 255 * x / 255.
-        *dest_pos = mask_scan[col];
-        dest_pos += kDestBytes;
+        dest_scan[col].alpha = mask_scan[col];
       }
     }
     return true;
   }
 
   CHECK_EQ(GetFormat(), FXDIB_Format::kArgb);
-  for (int row = 0; row < m_Height; row++) {
-    uint8_t* dest_pos = GetWritableScanline(row).subspan(kDestOffset).data();
-    const uint8_t* mask_scan = mask->GetScanline(row).data();
-    for (int col = 0; col < m_Width; col++) {
-      *dest_pos = (*dest_pos) * mask_scan[col] / 255;
-      dest_pos += kDestBytes;
+  for (int row = 0; row < GetHeight(); row++) {
+    auto dest_scan =
+        GetWritableScanlineAs<FX_BGRA_STRUCT<uint8_t>>(row).first(GetWidth());
+    auto mask_scan = mask->GetScanline(row).first(GetWidth());
+    for (int col = 0; col < GetWidth(); col++) {
+      dest_scan[col].alpha = dest_scan[col].alpha * mask_scan[col] / 255;
     }
   }
   return true;
@@ -393,13 +368,11 @@ bool CFX_DIBitmap::MultiplyAlpha(float alpha) {
   }
 
   const int bitmap_alpha = static_cast<int>(alpha * 255.0f);
-  for (int row = 0; row < m_Height; row++) {
-    constexpr int kDestOffset = 3;
-    constexpr int kDestBytes = 4;
-    uint8_t* dest_pos = GetWritableScanline(row).subspan(kDestOffset).data();
-    for (int col = 0; col < m_Width; col++) {
-      *dest_pos = (*dest_pos) * bitmap_alpha / 255;
-      dest_pos += kDestBytes;
+  for (int row = 0; row < GetHeight(); row++) {
+    auto dest_scan =
+        GetWritableScanlineAs<FX_BGRA_STRUCT<uint8_t>>(row).first(GetWidth());
+    for (auto& pixel : dest_scan) {
+      pixel.alpha = pixel.alpha * bitmap_alpha / 255;
     }
   }
   return true;
@@ -416,8 +389,11 @@ uint32_t CFX_DIBitmap::GetPixelForTesting(int x, int y) const {
   if (!offset.IsValid())
     return 0;
 
-  uint8_t* pos = m_pBuffer.Get() + y * m_Pitch + offset.ValueOrDie();
+  uint8_t* pos =
+      UNSAFE_TODO(m_pBuffer.Get() + y * GetPitch() + offset.ValueOrDie());
   switch (GetFormat()) {
+    case FXDIB_Format::kInvalid:
+      return 0;
     case FXDIB_Format::k1bppMask: {
       if ((*pos) & (1 << (7 - x % 8))) {
         return 0xff000000;
@@ -437,13 +413,10 @@ uint32_t CFX_DIBitmap::GetPixelForTesting(int x, int y) const {
                           : ArgbEncode(0xff, *pos, *pos, *pos);
     case FXDIB_Format::kRgb:
     case FXDIB_Format::kRgb32:
-      return FXARGB_GetDIB(pos) | 0xff000000;
+      return UNSAFE_TODO(FXARGB_GetDIB(pos) | 0xff000000);
     case FXDIB_Format::kArgb:
-      return FXARGB_GetDIB(pos);
-    default:
-      break;
+      return UNSAFE_TODO(FXARGB_GetDIB(pos));
   }
-  return 0;
 }
 #endif  // defined(PDF_USE_SKIA)
 
@@ -455,45 +428,49 @@ void CFX_DIBitmap::ConvertBGRColorScale(uint32_t forecolor,
   int br = FXSYS_GetRValue(backcolor);
   int bg = FXSYS_GetGValue(backcolor);
   int bb = FXSYS_GetBValue(backcolor);
-  if (GetBppFromFormat(m_Format) <= 8) {
+  if (GetBPP() <= 8) {
     if (forecolor == 0 && backcolor == 0xffffff && !HasPalette())
       return;
 
     BuildPalette();
-    int size = 1 << GetBppFromFormat(m_Format);
+    int size = 1 << GetBPP();
     for (int i = 0; i < size; ++i) {
-      int gray = FXRGB2GRAY(FXARGB_R(m_palette[i]), FXARGB_G(m_palette[i]),
-                            FXARGB_B(m_palette[i]));
-      m_palette[i] =
+      int gray = FXRGB2GRAY(FXARGB_R(palette_[i]), FXARGB_G(palette_[i]),
+                            FXARGB_B(palette_[i]));
+      palette_[i] =
           ArgbEncode(0xff, br + (fr - br) * gray / 255,
                      bg + (fg - bg) * gray / 255, bb + (fb - bb) * gray / 255);
     }
     return;
   }
   if (forecolor == 0 && backcolor == 0xffffff) {
-    for (int row = 0; row < m_Height; ++row) {
-      uint8_t* scanline = m_pBuffer.Get() + row * m_Pitch;
-      int gap = GetBppFromFormat(m_Format) / 8 - 2;
-      for (int col = 0; col < m_Width; ++col) {
-        int gray = FXRGB2GRAY(scanline[2], scanline[1], scanline[0]);
-        *scanline++ = gray;
-        *scanline++ = gray;
-        *scanline = gray;
-        scanline += gap;
-      }
+    for (int row = 0; row < GetHeight(); ++row) {
+      UNSAFE_TODO({
+        uint8_t* scanline = m_pBuffer.Get() + row * GetPitch();
+        int gap = GetBPP() / 8 - 2;
+        for (int col = 0; col < GetWidth(); ++col) {
+          int gray = FXRGB2GRAY(scanline[2], scanline[1], scanline[0]);
+          *scanline++ = gray;
+          *scanline++ = gray;
+          *scanline = gray;
+          scanline += gap;
+        }
+      });
     }
     return;
   }
-  for (int row = 0; row < m_Height; ++row) {
-    uint8_t* scanline = m_pBuffer.Get() + row * m_Pitch;
-    int gap = GetBppFromFormat(m_Format) / 8 - 2;
-    for (int col = 0; col < m_Width; ++col) {
-      int gray = FXRGB2GRAY(scanline[2], scanline[1], scanline[0]);
-      *scanline++ = bb + (fb - bb) * gray / 255;
-      *scanline++ = bg + (fg - bg) * gray / 255;
-      *scanline = br + (fr - br) * gray / 255;
-      scanline += gap;
-    }
+  for (int row = 0; row < GetHeight(); ++row) {
+    UNSAFE_TODO({
+      uint8_t* scanline = m_pBuffer.Get() + row * GetPitch();
+      int gap = GetBPP() / 8 - 2;
+      for (int col = 0; col < GetWidth(); ++col) {
+        int gray = FXRGB2GRAY(scanline[2], scanline[1], scanline[0]);
+        *scanline++ = bb + (fb - bb) * gray / 255;
+        *scanline++ = bg + (fg - bg) * gray / 255;
+        *scanline = br + (fr - br) * gray / 255;
+        scanline += gap;
+      }
+    });
   }
 }
 
@@ -555,8 +532,9 @@ bool CFX_DIBitmap::CompositeBitmap(int dest_left,
   if (!m_pBuffer)
     return false;
 
-  if (GetBppFromFormat(m_Format) < 8)
+  if (GetBPP() < 8) {
     return false;
+  }
 
   if (!GetOverlapRect(dest_left, dest_top, width, height, source->GetWidth(),
                       source->GetHeight(), src_left, src_top, pClipRgn)) {
@@ -575,7 +553,7 @@ bool CFX_DIBitmap::CompositeBitmap(int dest_left,
                        pClipMask != nullptr, bRgbByteOrder)) {
     return false;
   }
-  const int dest_Bpp = GetBppFromFormat(m_Format) / 8;
+  const int dest_Bpp = GetBPP() / 8;
   const int src_Bpp = source->GetBPP() / 8;
   const bool bRgb = src_Bpp > 1;
   if (!bRgb && !source->HasPalette()) {
@@ -619,8 +597,9 @@ bool CFX_DIBitmap::CompositeMask(int dest_left,
   if (!m_pBuffer)
     return false;
 
-  if (GetBppFromFormat(m_Format) < 8)
+  if (GetBPP() < 8) {
     return false;
+  }
 
   if (!GetOverlapRect(dest_left, dest_top, width, height, pMask->GetWidth(),
                       pMask->GetHeight(), src_left, src_top, pClipRgn)) {
@@ -674,23 +653,23 @@ void CFX_DIBitmap::CompositeOneBPPMask(int dest_left,
   if (GetBPP() != 1) {
     return;
   }
-
   if (!GetOverlapRect(dest_left, dest_top, width, height, source->GetWidth(),
                       source->GetHeight(), src_left, src_top, nullptr)) {
     return;
   }
-
-  for (int row = 0; row < height; ++row) {
-    uint8_t* dest_scan = m_pBuffer.Get() + (dest_top + row) * m_Pitch;
-    const uint8_t* src_scan = source->GetScanline(src_top + row).data();
-    for (int col = 0; col < width; ++col) {
-      int src_idx = src_left + col;
-      int dest_idx = dest_left + col;
-      if (src_scan[src_idx / 8] & (1 << (7 - src_idx % 8))) {
-        dest_scan[dest_idx / 8] |= 1 << (7 - dest_idx % 8);
+  UNSAFE_TODO({
+    for (int row = 0; row < height; ++row) {
+      uint8_t* dest_scan = m_pBuffer.Get() + (dest_top + row) * GetPitch();
+      const uint8_t* src_scan = source->GetScanline(src_top + row).data();
+      for (int col = 0; col < width; ++col) {
+        int src_idx = src_left + col;
+        int dest_idx = dest_left + col;
+        if (src_scan[src_idx / 8] & (1 << (7 - src_idx % 8))) {
+          dest_scan[dest_idx / 8] |= 1 << (7 - dest_idx % 8);
+        }
       }
     }
-  }
+  });
 }
 
 bool CFX_DIBitmap::CompositeRect(int left,
@@ -706,73 +685,79 @@ bool CFX_DIBitmap::CompositeRect(int left,
     return true;
 
   FX_RECT rect(left, top, left + width, top + height);
-  rect.Intersect(0, 0, m_Width, m_Height);
+  rect.Intersect(0, 0, GetWidth(), GetHeight());
   if (rect.IsEmpty())
     return true;
 
   width = rect.Width();
   uint32_t dst_color = color;
   uint8_t* color_p = reinterpret_cast<uint8_t*>(&dst_color);
-  if (GetBppFromFormat(m_Format) == 8) {
-    uint8_t gray = IsMaskFormat() ? 255
-                                  : (uint8_t)FXRGB2GRAY((int)color_p[2],
-                                                        color_p[1], color_p[0]);
-    for (int row = rect.top; row < rect.bottom; row++) {
-      uint8_t* dest_scan = m_pBuffer.Get() + row * m_Pitch + rect.left;
-      if (src_alpha == 255) {
-        FXSYS_memset(dest_scan, gray, width);
-      } else {
-        for (int col = 0; col < width; col++) {
-          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, gray, src_alpha);
-          dest_scan++;
+  if (GetBPP() == 8) {
+    UNSAFE_TODO({
+      uint8_t gray =
+          IsMaskFormat()
+              ? 255
+              : (uint8_t)FXRGB2GRAY((int)color_p[2], color_p[1], color_p[0]);
+      for (int row = rect.top; row < rect.bottom; row++) {
+        uint8_t* dest_scan = m_pBuffer.Get() + row * GetPitch() + rect.left;
+        if (src_alpha == 255) {
+          FXSYS_memset(dest_scan, gray, width);
+        } else {
+          for (int col = 0; col < width; col++) {
+            *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, gray, src_alpha);
+            dest_scan++;
+          }
         }
       }
-    }
+    });
     return true;
   }
-  if (GetBppFromFormat(m_Format) == 1) {
-    int left_shift = rect.left % 8;
-    int right_shift = rect.right % 8;
-    int new_width = rect.right / 8 - rect.left / 8;
-    int index = 0;
-    if (HasPalette()) {
-      for (int i = 0; i < 2; i++) {
-        if (GetPaletteSpan()[i] == color)
-          index = i;
-      }
-    } else {
-      index = (static_cast<uint8_t>(color) == 0xff) ? 1 : 0;
-    }
-    for (int row = rect.top; row < rect.bottom; row++) {
-      uint8_t* dest_scan_top =
-          GetWritableScanline(row).subspan(rect.left / 8).data();
-      uint8_t* dest_scan_top_r =
-          GetWritableScanline(row).subspan(rect.right / 8).data();
-      uint8_t left_flag = *dest_scan_top & (255 << (8 - left_shift));
-      uint8_t right_flag = *dest_scan_top_r & (255 >> right_shift);
-      if (new_width) {
-        FXSYS_memset(dest_scan_top + 1, index ? 255 : 0, new_width - 1);
-        if (!index) {
-          *dest_scan_top &= left_flag;
-          *dest_scan_top_r &= right_flag;
-        } else {
-          *dest_scan_top |= ~left_flag;
-          *dest_scan_top_r |= ~right_flag;
+  if (GetBPP() == 1) {
+    UNSAFE_TODO({
+      int left_shift = rect.left % 8;
+      int right_shift = rect.right % 8;
+      int new_width = rect.right / 8 - rect.left / 8;
+      int index = 0;
+      if (HasPalette()) {
+        for (int i = 0; i < 2; i++) {
+          if (GetPaletteSpan()[i] == color) {
+            index = i;
+          }
         }
       } else {
-        if (!index) {
-          *dest_scan_top &= left_flag | right_flag;
+        index = (static_cast<uint8_t>(color) == 0xff) ? 1 : 0;
+      }
+      for (int row = rect.top; row < rect.bottom; row++) {
+        uint8_t* dest_scan_top =
+            GetWritableScanline(row).subspan(rect.left / 8).data();
+        uint8_t* dest_scan_top_r =
+            GetWritableScanline(row).subspan(rect.right / 8).data();
+        uint8_t left_flag = *dest_scan_top & (255 << (8 - left_shift));
+        uint8_t right_flag = *dest_scan_top_r & (255 >> right_shift);
+        if (new_width) {
+          FXSYS_memset(dest_scan_top + 1, index ? 255 : 0, new_width - 1);
+          if (!index) {
+            *dest_scan_top &= left_flag;
+            *dest_scan_top_r &= right_flag;
+          } else {
+            *dest_scan_top |= ~left_flag;
+            *dest_scan_top_r |= ~right_flag;
+          }
         } else {
-          *dest_scan_top |= ~(left_flag | right_flag);
+          if (!index) {
+            *dest_scan_top &= left_flag | right_flag;
+          } else {
+            *dest_scan_top |= ~(left_flag | right_flag);
+          }
         }
       }
-    }
+    });
     return true;
   }
 
-  CHECK_GE(GetBppFromFormat(m_Format), 24);
-  color_p[3] = static_cast<uint8_t>(src_alpha);
-  int Bpp = GetBppFromFormat(m_Format) / 8;
+  CHECK_GE(GetBPP(), 24);
+  UNSAFE_TODO({ color_p[3] = static_cast<uint8_t>(src_alpha); });
+  int Bpp = GetBPP() / 8;
   const bool bAlpha = IsAlphaFormat();
   if (bAlpha) {
     // Other formats with alpha have already been handled above.
@@ -780,44 +765,57 @@ bool CFX_DIBitmap::CompositeRect(int left,
   }
   if (src_alpha == 255) {
     for (int row = rect.top; row < rect.bottom; row++) {
-      uint8_t* dest_scan = m_pBuffer.Get() + row * m_Pitch + rect.left * Bpp;
-      if (Bpp == 4) {
-        uint32_t* scan = reinterpret_cast<uint32_t*>(dest_scan);
-        for (int col = 0; col < width; col++)
-          *scan++ = dst_color;
-      } else {
-        for (int col = 0; col < width; col++) {
-          *dest_scan++ = color_p[0];
-          *dest_scan++ = color_p[1];
-          *dest_scan++ = color_p[2];
+      UNSAFE_TODO({
+        uint8_t* dest_scan =
+            m_pBuffer.Get() + row * GetPitch() + rect.left * Bpp;
+        if (Bpp == 4) {
+          uint32_t* scan = reinterpret_cast<uint32_t*>(dest_scan);
+          for (int col = 0; col < width; col++) {
+            *scan++ = dst_color;
+          }
+        } else {
+          for (int col = 0; col < width; col++) {
+            *dest_scan++ = color_p[0];
+            *dest_scan++ = color_p[1];
+            *dest_scan++ = color_p[2];
+          }
         }
-      }
+      });
     }
     return true;
   }
-  for (int row = rect.top; row < rect.bottom; row++) {
-    uint8_t* dest_scan = m_pBuffer.Get() + row * m_Pitch + rect.left * Bpp;
-    if (bAlpha) {
-      for (int col = 0; col < width; col++) {
-        uint8_t back_alpha = dest_scan[3];
-        if (back_alpha == 0) {
-          FXARGB_SetDIB(dest_scan, ArgbEncode(src_alpha, color_p[2], color_p[1],
-                                              color_p[0]));
-          dest_scan += 4;
-          continue;
+  if (bAlpha) {
+    for (int row = rect.top; row < rect.bottom; row++) {
+      UNSAFE_TODO({
+        uint8_t* dest_scan =
+            m_pBuffer.Get() + row * GetPitch() + rect.left * Bpp;
+        for (int col = 0; col < width; col++) {
+          uint8_t back_alpha = dest_scan[3];
+          if (back_alpha == 0) {
+            FXARGB_SetDIB(dest_scan, ArgbEncode(src_alpha, color_p[2],
+                                                color_p[1], color_p[0]));
+            dest_scan += 4;
+            continue;
+          }
+          uint8_t dest_alpha =
+              back_alpha + src_alpha - back_alpha * src_alpha / 255;
+          int alpha_ratio = src_alpha * 255 / dest_alpha;
+          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, color_p[0], alpha_ratio);
+          dest_scan++;
+          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, color_p[1], alpha_ratio);
+          dest_scan++;
+          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, color_p[2], alpha_ratio);
+          dest_scan++;
+          *dest_scan++ = dest_alpha;
         }
-        uint8_t dest_alpha =
-            back_alpha + src_alpha - back_alpha * src_alpha / 255;
-        int alpha_ratio = src_alpha * 255 / dest_alpha;
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, color_p[0], alpha_ratio);
-        dest_scan++;
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, color_p[1], alpha_ratio);
-        dest_scan++;
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, color_p[2], alpha_ratio);
-        dest_scan++;
-        *dest_scan++ = dest_alpha;
-      }
-    } else {
+      });
+    }
+    return true;
+  }
+
+  for (int row = rect.top; row < rect.bottom; row++) {
+    UNSAFE_TODO({
+      uint8_t* dest_scan = m_pBuffer.Get() + row * GetPitch() + rect.left * Bpp;
       for (int col = 0; col < width; col++) {
         for (int comps = 0; comps < Bpp; comps++) {
           if (comps == 3) {
@@ -828,7 +826,7 @@ bool CFX_DIBitmap::CompositeRect(int left,
           dest_scan++;
         }
       }
-    }
+    });
   }
   return true;
 }
@@ -839,44 +837,49 @@ bool CFX_DIBitmap::ConvertFormat(FXDIB_Format dest_format) {
          dest_format == FXDIB_Format::kRgb32 ||
          dest_format == FXDIB_Format::kRgb);
 
-  if (dest_format == m_Format)
-    return true;
-
-  if (dest_format == FXDIB_Format::k8bppMask &&
-      m_Format == FXDIB_Format::k8bppRgb && !HasPalette()) {
-    m_Format = FXDIB_Format::k8bppMask;
+  if (dest_format == GetFormat()) {
     return true;
   }
-  if (dest_format == FXDIB_Format::kArgb && m_Format == FXDIB_Format::kRgb32) {
-    m_Format = FXDIB_Format::kArgb;
-    for (int row = 0; row < m_Height; row++) {
-      uint8_t* scanline = m_pBuffer.Get() + row * m_Pitch + 3;
-      for (int col = 0; col < m_Width; col++) {
-        *scanline = 0xff;
-        scanline += 4;
+
+  if (dest_format == FXDIB_Format::k8bppMask &&
+      GetFormat() == FXDIB_Format::k8bppRgb && !HasPalette()) {
+    SetFormat(FXDIB_Format::k8bppMask);
+    return true;
+  }
+  if (dest_format == FXDIB_Format::kArgb &&
+      GetFormat() == FXDIB_Format::kRgb32) {
+    SetFormat(FXDIB_Format::kArgb);
+    UNSAFE_TODO({
+      for (int row = 0; row < GetHeight(); row++) {
+        uint8_t* scanline = m_pBuffer.Get() + row * GetPitch() + 3;
+        for (int col = 0; col < GetWidth(); col++) {
+          *scanline = 0xff;
+          scanline += 4;
+        }
       }
-    }
+    });
     return true;
   }
   int dest_bpp = GetBppFromFormat(dest_format);
-  int dest_pitch = fxge::CalculatePitch32OrDie(dest_bpp, m_Width);
-  const size_t dest_buf_size = dest_pitch * m_Height + 4;
+  int dest_pitch = fxge::CalculatePitch32OrDie(dest_bpp, GetWidth());
+  const size_t dest_buf_size = dest_pitch * GetHeight() + 4;
   std::unique_ptr<uint8_t, FxFreeDeleter> dest_buf(
       FX_TryAlloc(uint8_t, dest_buf_size));
   if (!dest_buf)
     return false;
 
   if (dest_format == FXDIB_Format::kArgb) {
-    FXSYS_memset(dest_buf.get(), 0xff, dest_buf_size);
+    UNSAFE_TODO(FXSYS_memset(dest_buf.get(), 0xff, dest_buf_size));
   }
   RetainPtr<CFX_DIBBase> holder(this);
   // SAFETY: `dest_buf` allocated with `dest_buf_size` bytes above.
-  m_palette = ConvertBuffer(
+  palette_ = ConvertBuffer(
       dest_format,
       UNSAFE_BUFFERS(pdfium::make_span(dest_buf.get(), dest_buf_size)),
-      dest_pitch, m_Width, m_Height, holder, /*src_left=*/0, /*src_top=*/0);
+      dest_pitch, GetWidth(), GetHeight(), holder, /*src_left=*/0,
+      /*src_top=*/0);
   m_pBuffer = std::move(dest_buf);
-  m_Format = dest_format;
-  m_Pitch = dest_pitch;
+  SetFormat(dest_format);
+  SetPitch(dest_pitch);
   return true;
 }

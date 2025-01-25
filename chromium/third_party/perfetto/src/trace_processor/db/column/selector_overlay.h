@@ -19,6 +19,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "perfetto/trace_processor/basic_types.h"
@@ -56,13 +57,17 @@ class SelectorOverlay final : public DataLayer {
 
     void IndexSearchValidated(FilterOp p, SqlValue, Indices&) const override;
 
-    Range OrderedIndexSearchValidated(FilterOp,
-                                      SqlValue,
-                                      const OrderedIndices&) const override;
+    void StableSort(Token* start, Token* end, SortDirection) const override;
 
-    void StableSort(SortToken* start,
-                    SortToken* end,
-                    SortDirection) const override;
+    void Distinct(Indices&) const override;
+
+    std::optional<Token> MaxElement(Indices&) const override;
+
+    std::optional<Token> MinElement(Indices&) const override;
+
+    std::unique_ptr<DataLayer> Flatten(std::vector<uint32_t>&) const override;
+
+    SqlValue Get_AvoidUsingBecauseSlow(uint32_t index) const override;
 
     void Serialize(StorageProto*) const override;
 
@@ -71,6 +76,7 @@ class SelectorOverlay final : public DataLayer {
     std::string DebugString() const override { return "SelectorOverlay"; }
 
    private:
+    void TranslateToInnerIndices(Indices& indices) const;
     std::unique_ptr<DataLayerChain> inner_ = nullptr;
     const BitVector* selector_ = nullptr;
   };

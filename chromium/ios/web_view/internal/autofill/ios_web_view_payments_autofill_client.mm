@@ -4,28 +4,33 @@
 
 #import "ios/web_view/internal/autofill/ios_web_view_payments_autofill_client.h"
 
+#import <optional>
+
 #import "base/check_deref.h"
 #import "components/autofill/core/browser/payments/credit_card_cvc_authenticator.h"
+#import "components/autofill/core/browser/payments/payments_autofill_client.h"
 #import "components/autofill/core/browser/payments/payments_network_interface.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web_view/internal/autofill/web_view_autofill_client_ios.h"
 #import "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#import "url/gurl.h"
 
 namespace autofill::payments {
 
 IOSWebViewPaymentsAutofillClient::IOSWebViewPaymentsAutofillClient(
     autofill::WebViewAutofillClientIOS* client,
     id<CWVAutofillClientIOSBridge> bridge,
-    web::BrowserState* browser_state)
+    web::WebState* web_state)
     : client_(CHECK_DEREF(client)),
       bridge_(bridge),
       payments_network_interface_(
           std::make_unique<payments::PaymentsNetworkInterface>(
               base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
-                  browser_state->GetURLLoaderFactory()),
+                  web_state->GetBrowserState()->GetURLLoaderFactory()),
               client->GetIdentityManager(),
               &client->GetPersonalDataManager()->payments_data_manager(),
-              browser_state->IsOffTheRecord())) {}
+              web_state->GetBrowserState()->IsOffTheRecord())),
+      web_state_(CHECK_DEREF(web_state)) {}
 
 IOSWebViewPaymentsAutofillClient::~IOSWebViewPaymentsAutofillClient() = default;
 
@@ -34,8 +39,22 @@ void IOSWebViewPaymentsAutofillClient::LoadRiskData(
   [bridge_ loadRiskData:std::move(callback)];
 }
 
+void IOSWebViewPaymentsAutofillClient::ConfirmSaveCreditCardToCloud(
+    const CreditCard& card,
+    const LegalMessageLines& legal_message_lines,
+    AutofillClient::SaveCreditCardOptions options,
+    UploadSaveCardPromptCallback callback) {
+  DCHECK(options.show_prompt);
+  [bridge_ confirmSaveCreditCardToCloud:card
+                      legalMessageLines:legal_message_lines
+                  saveCreditCardOptions:options
+                               callback:std::move(callback)];
+}
+
 void IOSWebViewPaymentsAutofillClient::CreditCardUploadCompleted(
-    bool card_saved) {
+    bool card_saved,
+    std::optional<OnConfirmationClosedCallback>
+        on_confirmation_closed_callback) {
   [bridge_ handleCreditCardUploadCompleted:card_saved];
 }
 
@@ -54,7 +73,7 @@ void IOSWebViewPaymentsAutofillClient::ShowUnmaskPrompt(
 }
 
 void IOSWebViewPaymentsAutofillClient::OnUnmaskVerificationResult(
-    AutofillClient::PaymentsRpcResult result) {
+    payments::PaymentsAutofillClient::PaymentsRpcResult result) {
   [bridge_ didReceiveUnmaskVerificationResult:result];
 }
 
@@ -65,6 +84,14 @@ IOSWebViewPaymentsAutofillClient::GetCvcAuthenticator() {
         std::make_unique<CreditCardCvcAuthenticator>(&client_.get());
   }
   return *cvc_authenticator_;
+}
+
+void IOSWebViewPaymentsAutofillClient::OpenPromoCodeOfferDetailsURL(
+    const GURL& url) {
+  web_state_->OpenURL(web::WebState::OpenURLParams(
+      url, web::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui::PageTransition::PAGE_TRANSITION_AUTO_TOPLEVEL,
+      /*is_renderer_initiated=*/false));
 }
 
 void IOSWebViewPaymentsAutofillClient::set_bridge(

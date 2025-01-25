@@ -87,8 +87,8 @@ message Ukey2ClientInit {
 
   // Next protocol that the client wants to speak.
   optional string next_protocol = 4;
-  // Other next protocols the client can speak.
-  repeated string other_next_protocols = 5;
+  // Next protocols the client can speak.
+  repeated string next_protocols = 5;
 }
 
 message Ukey2ServerInit {

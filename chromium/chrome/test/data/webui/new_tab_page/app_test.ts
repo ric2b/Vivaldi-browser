@@ -78,11 +78,6 @@ suite('NewTabPageAppTest', () => {
   });
 
   suite('Misc', () => {
-    test('customize dialog closed on start', () => {
-      // Assert.
-      assertFalse(!!app.shadowRoot!.querySelector('ntp-customize-dialog'));
-    });
-
     test('logs height', async () => {
       // Assert.
       assertEquals(1, metrics.count('NewTabPage.Height'));
@@ -1022,6 +1017,12 @@ suite('NewTabPageAppTest', () => {
         });
       });
 
+      test('does not increment button shown count on startup'), () => {
+        assertEquals(
+            0,
+            handler.getCallCount('incrementWallpaperSearchButtonShownCount'));
+      };
+
       test('wallpaper search button is not shown if it is disabled', () => {
         assertTrue(!!app.shadowRoot!.querySelector('#customizeButton'));
         assertFalse(!!app.shadowRoot!.querySelector('#wallpaperSearchButton'));
@@ -1058,6 +1059,27 @@ suite('NewTabPageAppTest', () => {
           });
     });
 
+    function assertButtonAnimated() {
+      assertNotStyle(
+          $$(app, '#wallpaperSearchButton')!, 'animation-name', 'none');
+      assertNotStyle(
+          $$(app, '#wallpaperSearchButton .customize-icon')!, 'animation-name',
+          'none');
+      assertStyle(
+          $$(app, '#wallpaperSearchButton .customize-text')!, 'animation-name',
+          'none');
+    }
+
+    function assertButtonNotAnimated() {
+      assertStyle($$(app, '#wallpaperSearchButton')!, 'animation-name', 'none');
+      assertStyle(
+          $$(app, '#wallpaperSearchButton .customize-icon')!, 'animation-name',
+          'none');
+      assertStyle(
+          $$(app, '#wallpaperSearchButton .customize-text')!, 'animation-name',
+          'none');
+    }
+
     suite('ButtonEnabled', () => {
       suiteSetup(() => {
         loadTimeData.overrideValues({
@@ -1066,21 +1088,43 @@ suite('NewTabPageAppTest', () => {
         });
       });
 
+      test('increments button shown count on startup'), () => {
+        assertEquals(
+            1,
+            handler.getCallCount('incrementWallpaperSearchButtonShownCount'));
+      };
+
       test('wallpaper search button shows if it is enabled', () => {
         assertTrue(!!app.shadowRoot!.querySelector('#customizeButton'));
         assertTrue(!!app.shadowRoot!.querySelector('#wallpaperSearchButton'));
       });
 
-      test('button has animation if the flag is enabled', () => {
-        assertNotStyle(
-            $$(app, '#wallpaperSearchButton')!, 'animation-name', 'none');
-        assertNotStyle(
-            $$(app, '#wallpaperSearchButton .customize-icon')!,
-            'animation-name', 'none');
-        assertStyle(
-            $$(app, '#wallpaperSearchButton .customize-text')!,
-            'animation-name', 'none');
+      test('button has animation', () => {
+        assertButtonAnimated();
       });
+
+      [NtpBackgroundImageSource.kWallpaperSearch,
+       NtpBackgroundImageSource.kWallpaperSearchInspiration]
+          .forEach((imageSource) => {
+            test(
+                `having wallpaper search theme ${
+                    imageSource} disables animation`,
+                async () => {
+                  // Arrange.
+                  const theme = createTheme();
+                  theme.backgroundImage =
+                      createBackgroundImage('https://foo.com');
+                  theme.backgroundImage.imageSource = imageSource;
+                  assertButtonAnimated();
+
+                  // Act.
+                  callbackRouterRemote.setTheme(theme);
+                  await callbackRouterRemote.$.flushForTesting();
+
+                  // Assert.
+                  assertButtonNotAnimated();
+                });
+          });
 
       ([
         ['#customizeButton', NtpElement.CUSTOMIZE_BUTTON],
@@ -1275,19 +1319,13 @@ suite('NewTabPageAppTest', () => {
     suite('AnimationDisabled', () => {
       suiteSetup(() => {
         loadTimeData.overrideValues({
+          wallpaperSearchButtonEnabled: true,
           wallpaperSearchButtonAnimationEnabled: false,
         });
       });
 
       test('button has no animation if the flag is disabled', () => {
-        assertStyle(
-            $$(app, '#wallpaperSearchButton')!, 'animation-name', 'none');
-        assertStyle(
-            $$(app, '#wallpaperSearchButton .customize-icon')!,
-            'animation-name', 'none');
-        assertStyle(
-            $$(app, '#wallpaperSearchButton .customize-text')!,
-            'animation-name', 'none');
+        assertButtonNotAnimated();
       });
     });
   });

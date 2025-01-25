@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "mojo/core/node_controller.h"
 
 #include <limits>
@@ -1447,7 +1452,7 @@ void NodeController::AttemptShutdownIfRequested() {
 void NodeController::ForceDisconnectProcessForTestingOnIOThread(
     base::ProcessId process_id) {
 #if BUILDFLAG(IS_NACL) || BUILDFLAG(IS_IOS)
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #else
   DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
   RequestContext request_context;

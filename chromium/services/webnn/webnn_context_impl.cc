@@ -7,8 +7,12 @@
 #include <memory>
 #include <utility>
 
+#include "base/sequence_checker.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "services/webnn/error.h"
+#include "services/webnn/public/cpp/graph_validation_utils.h"
+#include "services/webnn/public/mojom/webnn_context_provider.mojom-forward.h"
+#include "services/webnn/public/mojom/webnn_error.mojom.h"
 #include "services/webnn/webnn_buffer_impl.h"
 #include "services/webnn/webnn_context_provider_impl.h"
 #include "services/webnn/webnn_graph_impl.h"
@@ -17,9 +21,18 @@ namespace webnn {
 
 WebNNContextImpl::WebNNContextImpl(
     mojo::PendingReceiver<mojom::WebNNContext> receiver,
-    WebNNContextProviderImpl* context_provider)
-    : receiver_(this, std::move(receiver)),
-      context_provider_(context_provider) {
+    mojo::PendingRemote<mojom::WebNNContextClient> client_remote,
+    WebNNContextProviderImpl* context_provider,
+    ContextProperties properties,
+    mojom::CreateContextOptionsPtr options,
+    base::UnguessableToken context_handle)
+    // TODO(crbug.com/345352987): pass token by value to WebNNObjectImpl.
+    : WebNNObjectImpl(std::move(context_handle)),
+      receiver_(this, std::move(receiver)),
+      client_remote_(std::move(client_remote)),
+      context_provider_(context_provider),
+      properties_(IntersectWithBaseProperties(std::move(properties))),
+      options_(std::move(options)) {
   CHECK(context_provider_);
   // Safe to use base::Unretained because the context_provider_ owns this class
   // that won't be destroyed until this callback executes.
@@ -33,15 +46,27 @@ void WebNNContextImpl::OnConnectionError() {
   context_provider_->OnConnectionError(this);
 }
 
+#if DCHECK_IS_ON()
+void WebNNContextImpl::AssertCalledOnValidSequence() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+}
+#endif
+
 void WebNNContextImpl::CreateGraph(
     mojom::GraphInfoPtr graph_info,
     mojom::WebNNContext::CreateGraphCallback callback) {
-  if (!WebNNGraphImpl::ValidateGraph(graph_info)) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  auto compute_resource_info =
+      WebNNGraphImpl::ValidateGraph(properties_, *graph_info);
+  if (!compute_resource_info.has_value()) {
     receiver_.ReportBadMessage(kBadMessageInvalidGraph);
     return;
   }
-  // Call CreateGraphImpl() implemented by a backend.
-  CreateGraphImpl(std::move(graph_info), std::move(callback));
+
+  CreateGraphImpl(std::move(graph_info), *std::move(compute_resource_info),
+                  base::BindOnce(&WebNNContextImpl::DidCreateWebNNGraphImpl,
+                                 AsWeakPtr(), std::move(callback)));
 }
 
 void WebNNContextImpl::CreateBuffer(
@@ -80,10 +105,27 @@ void WebNNContextImpl::DisconnectAndDestroyWebNNBufferImpl(
   buffer_impls_.erase(it);
 }
 
-void WebNNContextImpl::OnWebNNGraphImplCreated(
-    mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
-    std::unique_ptr<WebNNGraphImpl> graph_impl) {
-  graph_impls_.Add(std::move(graph_impl), std::move(receiver));
+void WebNNContextImpl::DidCreateWebNNGraphImpl(
+    mojom::WebNNContext::CreateGraphCallback callback,
+    base::expected<std::unique_ptr<WebNNGraphImpl>, mojom::ErrorPtr> result) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (!result.has_value()) {
+    std::move(callback).Run(
+        mojom::CreateGraphResult::NewError(std::move(result.error())));
+    return;
+  }
+
+  mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver;
+  std::move(callback).Run(mojom::CreateGraphResult::NewGraphRemote(
+      receiver.InitWithNewEndpointAndPassRemote()));
+
+  graph_impls_.Add(*std::move(result), std::move(receiver));
+}
+
+void WebNNContextImpl::OnLost(const std::string& message) {
+  client_remote_->OnLost(message);
+  context_provider_->OnConnectionError(this);
 }
 
 base::optional_ref<WebNNBufferImpl> WebNNContextImpl::GetWebNNBufferImpl(
@@ -94,6 +136,18 @@ base::optional_ref<WebNNBufferImpl> WebNNContextImpl::GetWebNNBufferImpl(
     return std::nullopt;
   }
   return it->get();
+}
+
+ContextProperties WebNNContextImpl::IntersectWithBaseProperties(
+    ContextProperties backend_context_properties) {
+  // Only intersects for ones that have limits defined in the specification.
+  // For ones that has no limit, no need to intersect with
+  // `SupportedDataTypes::All()`.
+  backend_context_properties.data_type_limits.gather_indices.RetainAll(
+      DataTypeConstraint::kGatherOperatorIndexDataTypes);
+  backend_context_properties.data_type_limits.where_condition.RetainAll(
+      {OperandDataType::kUint8});
+  return backend_context_properties;
 }
 
 }  // namespace webnn

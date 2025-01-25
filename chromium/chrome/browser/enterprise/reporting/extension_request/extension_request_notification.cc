@@ -58,10 +58,7 @@ ExtensionRequestNotification::ExtensionRequestNotification(
 ExtensionRequestNotification::~ExtensionRequestNotification() = default;
 
 void ExtensionRequestNotification::Show(NotificationCloseCallback callback) {
-  if (extension_ids_.empty()) {
-    NOTREACHED();
-    return;
-  }
+  CHECK(!extension_ids_.empty());
 
   callback_ = std::move(callback);
 

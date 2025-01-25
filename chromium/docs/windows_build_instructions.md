@@ -12,7 +12,7 @@ Are you a Google employee? See
 
 ## System requirements
 
-* A 64-bit Intel machine with at least 8GB of RAM. More than 16GB is highly
+* An x86-64 machine with at least 8GB of RAM. More than 16GB is highly
   recommended.
 * At least 100GB of free disk space on an NTFS-formatted hard drive. FAT32
   will not work, as some of the Git packfiles are larger than 4GB.
@@ -257,25 +257,6 @@ Google employees can visit
 for more information. For external contributors, Reclient does not support
 Windows builds.
 
-#### Use Goma (deprecated)
-
-In addition, Google employees should use goma, a distributed compilation system.
-Detailed information is available internally but the relevant gn arg is:
-* `use_goma = true`
-
-To get any benefit from goma it is important to pass a large -j value to ninja.
-A good default is 10\*numCores to 20\*numCores. If you run autoninja then it
-will automatically pass an appropriate -j value to ninja for goma or not.
-
-```shell
-$ autoninja -C out\Default chrome
-```
-
-When invoking ninja, specify 'chrome' as the target to avoid building all test
-binaries as well.
-
-Still, builds will take many hours on many machines.
-
 #### Use SCCACHE
 
 You might be able to use [sccache](https://github.com/mozilla/sccache) for the
@@ -453,6 +434,19 @@ $ out\Default\unit_tests.exe --gtest_filter="BrowserListUnitTest.*"
 
 You can find out more about GoogleTest at its
 [GitHub page](https://github.com/google/googletest).
+
+## Build an Installer
+
+Build the `mini_installer` target to create a self-contained installer. This
+has everything needed to install your browser on a machine.
+
+```shell
+$ autoninja -C out\Default mini_installer
+```
+
+See [//chrome/installer/setup/README.md](../chrome/installer/setup/README.md)
+and [//chrome/installer/mini_installer/README.md](../chrome/installer/mini_installer/README.md)
+for more information.
 
 ## Update your checkout
 

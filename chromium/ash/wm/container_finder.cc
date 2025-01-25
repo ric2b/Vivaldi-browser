@@ -13,6 +13,7 @@
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
+#include "chromeos/components/mahi/public/cpp/mahi_util.h"
 #include "components/app_restore/window_properties.h"
 #include "components/live_caption/views/caption_bubble.h"
 #include "ui/aura/client/aura_constants.h"
@@ -132,9 +133,16 @@ aura::Window* GetDefaultParentForWindow(aura::Window* window,
         kShellWindowId_DragImageAndTooltipContainer);
   }
 
-  // Live caption bubble always goes into the shelf bubble container, above the
+  // Live caption bubble always goes into its dedicated container, above the
   // float, always-on-top and shelf containers for example.
   if (window->GetProperty(captions::kIsCaptionBubbleKey)) {
+    return target_root->GetChildById(kShellWindowId_LiveCaptionContainer);
+  }
+
+  // The MahiMenu always goes into the settings bubble container, this ensures
+  // that it is displayed on top of the MahiPanelWidget which can often
+  // intersect with the MahiMenu.
+  if (window->GetProperty(chromeos::mahi::kIsMahiMenuKey)) {
     return target_root->GetChildById(kShellWindowId_SettingBubbleContainer);
   }
 
@@ -157,8 +165,8 @@ aura::Window* GetDefaultParentForWindow(aura::Window* window,
       return target_root->GetChildById(
           kShellWindowId_DragImageAndTooltipContainer);
     default:
-      NOTREACHED() << "Window " << window->GetId() << " has unhandled type "
-                   << window->GetType();
+      NOTREACHED_IN_MIGRATION() << "Window " << window->GetId()
+                                << " has unhandled type " << window->GetType();
       break;
   }
   return nullptr;

@@ -20,13 +20,10 @@
 #include <functional>
 #include <memory>
 #include <optional>
-#include <string>
 #include <vector>
 
-#include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "internal/platform/clock.h"
-#include "internal/platform/device_info.h"
 #include "proto/sharing_enums.pb.h"
 #include "sharing/certificates/nearby_share_certificate_manager.h"
 #include "sharing/certificates/nearby_share_decrypted_public_certificate.h"
@@ -52,10 +49,16 @@ class PairedKeyVerificationRunner
     kUnable,
   };
 
+  struct VisibilityHistory {
+    proto::DeviceVisibility visibility;
+    proto::DeviceVisibility last_visibility;
+    absl::Time last_visibility_time;
+  };
+
   PairedKeyVerificationRunner(
-      Clock* clock, DeviceInfo& device_info, int64_t share_target_id,
-      bool share_target_is_incoming, proto::DeviceVisibility visibility,
-      proto::DeviceVisibility last_visibility, absl::Time last_visibility_time,
+      Clock* clock, location::nearby::proto::sharing::OSType os_type,
+      bool share_target_is_incoming,
+      const VisibilityHistory& visibility_history,
       const std::vector<uint8_t>& token, NearbyConnection* connection,
       const std::optional<NearbyShareDecryptedPublicCertificate>& certificate,
       NearbyShareCertificateManager* certificate_manager,
@@ -91,11 +94,8 @@ class PairedKeyVerificationRunner
   bool IsVisibilityRecentlyUpdated() const;
 
   nearby::Clock* const clock_;
-  nearby::DeviceInfo& device_info_;
-  const int64_t share_target_id_;
-  proto::DeviceVisibility visibility_;
-  proto::DeviceVisibility last_visibility_;
-  absl::Time last_visibility_time_;
+  const location::nearby::proto::sharing::OSType os_type_;
+  VisibilityHistory visibility_history_;
   std::vector<uint8_t> raw_token_;
   NearbyConnection* connection_;
   std::optional<NearbyShareDecryptedPublicCertificate> certificate_;

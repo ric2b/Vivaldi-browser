@@ -110,22 +110,8 @@ pub extern "C" fn np_ffi_build_new_zeroed_V0Actions(kind: AdvertisementBuilderKi
 
 /// Return whether a boolean action type is set in this data element
 #[no_mangle]
-pub extern "C" fn np_ffi_V0Actions_has_action(
-    actions: V0Actions,
-    action_type: BooleanActionType,
-) -> bool {
+pub extern "C" fn np_ffi_V0Actions_has_action(actions: V0Actions, action_type: ActionType) -> bool {
     match actions.has_action(action_type) {
-        Ok(b) => b,
-        Err(_) => panic(PanicReason::InvalidStackDataStructure),
-    }
-}
-
-/// Gets the 4 bit context sync sequence number as a u8 from this data element
-#[no_mangle]
-pub extern "C" fn np_ffi_V0Actions_get_context_sync_sequence_number(
-    actions: V0Actions,
-) -> ContextSyncSeqNum {
-    match actions.get_context_sync_seq_num() {
         Ok(b) => b,
         Err(_) => panic(PanicReason::InvalidStackDataStructure),
     }
@@ -140,19 +126,10 @@ pub extern "C" fn np_ffi_V0Actions_get_context_sync_sequence_number(
 #[no_mangle]
 pub extern "C" fn np_ffi_V0Actions_set_action(
     actions: V0Actions,
-    action_type: BooleanActionType,
+    action_type: ActionType,
     value: bool,
 ) -> SetV0ActionResult {
     panic_if_invalid(actions.set_action(action_type, value))
-}
-
-/// Sets the context sequence number for the given Actions DE.
-#[no_mangle]
-pub extern "C" fn np_ffi_V0Actions_set_context_sync_sequence_number(
-    actions: V0Actions,
-    value: ContextSyncSeqNum,
-) -> V0Actions {
-    panic_if_invalid(actions.set_context_sync_seq_num(value))
 }
 
 /// Returns the representation of the passed `V0Actions` as an unsigned
@@ -160,36 +137,4 @@ pub extern "C" fn np_ffi_V0Actions_set_context_sync_sequence_number(
 #[no_mangle]
 pub extern "C" fn np_ffi_V0Actions_as_u32(actions: V0Actions) -> u32 {
     actions.as_u32()
-}
-
-/// Gets the tag of a `BuildContextSyncSeqNumResult` tagged-union.
-#[no_mangle]
-pub extern "C" fn np_ffi_BuildContextSyncSeqNumResult_kind(
-    result: BuildContextSyncSeqNumResult,
-) -> BuildContextSyncSeqNumResultKind {
-    result.kind()
-}
-
-/// Casts a `BuildContextSyncSeqNumResult` to the `Success` variant, panicking in the
-/// case where the passed value is of a different enum variant.
-#[no_mangle]
-pub extern "C" fn np_ffi_BuildContextSyncSeqNumResult_into_SUCCESS(
-    result: BuildContextSyncSeqNumResult,
-) -> ContextSyncSeqNum {
-    unwrap(result.into_success(), PanicReason::EnumCastFailed)
-}
-
-/// Attempts to build a new context sync sequence number
-/// from the given unsigned byte.
-#[no_mangle]
-pub extern "C" fn np_ffi_ContextSyncSeqNum_build_from_unsigned_byte(
-    value: u8,
-) -> BuildContextSyncSeqNumResult {
-    ContextSyncSeqNum::build_from_unsigned_byte(value)
-}
-
-/// Gets the value of the given context-sync sequence number as an unsigned byte.
-#[no_mangle]
-pub extern "C" fn np_ffi_ContextSyncSeqNum_as_unsigned_byte(seq_num: ContextSyncSeqNum) -> u8 {
-    seq_num.as_u8()
 }

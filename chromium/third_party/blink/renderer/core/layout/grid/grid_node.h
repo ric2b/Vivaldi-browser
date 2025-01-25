@@ -30,8 +30,14 @@ class CORE_EXPORT GridNode final : public BlockNode {
     return CachedPlacementData().line_resolver;
   }
 
-  void InvalidateMinMaxSizesCache() const {
-    To<LayoutGrid>(box_.Get())->InvalidateMinMaxSizesCache();
+  void InvalidateSubgridMinMaxSizesCache() const {
+    box_->SetSubgridMinMaxSizesCacheDirty(true);
+  }
+
+  bool ShouldInvalidateSubgridMinMaxSizesCacheFor(
+      const GridLayoutData& layout_data) const {
+    return To<LayoutGrid>(box_.Get())
+        ->ShouldInvalidateSubgridMinMaxSizesCacheFor(layout_data);
   }
 
   // If `oof_children` is provided, aggregate any out of flow children.

@@ -18,6 +18,14 @@
 #include "chrome/updater/test/server.h"
 #include "chrome/updater/update_service.h"
 
+#if BUILDFLAG(IS_WIN)
+#include <windows.h>
+
+#include <wrl/client.h>
+
+#include "chrome/updater/app/server/win/updater_legacy_idl.h"
+#endif
+
 class GURL;
 
 namespace base {
@@ -28,6 +36,7 @@ class Version;
 
 namespace updater {
 enum class UpdaterScope;
+struct RegistrationRequest;
 }  // namespace updater
 
 namespace wireless_android_enterprise_devicemanagement {
@@ -96,6 +105,12 @@ void CleanProcesses();
 // Verifies that test processes are not running.
 void ExpectCleanProcesses();
 
+// Prints the provided file to stdout.
+void PrintFile(const base::FilePath& file);
+
+// Returns all the updater log files found in %TMP%.
+std::vector<base::FilePath> GetUpdaterLogFilesInTmp();
+
 // Prints the updater.log file to stdout.
 void PrintLog(UpdaterScope scope);
 
@@ -131,11 +146,12 @@ void SetPlatformPolicies(const base::Value::Dict& values);
 void SetMachineManaged(bool is_managed_device);
 
 // Expects to find no crashes. If there are any crashes, causes the test to
-// fail. Copies any crashes found to the isolate directory.
+// fail. Copies any crashes found to the isolate directory. In system scope,
+// this checks for crashes from both the system and the user updaters.
 void ExpectNoCrashes(UpdaterScope scope);
 
 // Copies the logs to a location where they can be retrieved by ResultDB.
-void CopyLog(const base::FilePath& src_dir);
+void CopyLog(const base::FilePath& src_dir, const std::string& infix);
 
 // Expects that the updater is installed on the system.
 void ExpectInstalled(UpdaterScope scope);
@@ -267,15 +283,19 @@ void ExpectAppTag(UpdaterScope scope,
                   const std::string& app_id,
                   const std::string& tag);
 
+void SetAppTag(UpdaterScope scope,
+               const std::string& app_id,
+               const std::string& tag);
+
 void ExpectAppVersion(UpdaterScope scope,
                       const std::string& app_id,
                       const base::Version& version);
 
-void RegisterApp(UpdaterScope scope,
-                 const std::string& app_id,
-                 const base::Version& version);
+void RegisterApp(UpdaterScope scope, const RegistrationRequest& registration);
+void RegisterAppByValue(UpdaterScope scope,
+                        const base::Value::Dict& registration_data);
 
-[[nodiscard]] bool WaitForUpdaterExit(UpdaterScope scope);
+[[nodiscard]] bool WaitForUpdaterExit();
 
 #if BUILDFLAG(IS_WIN)
 void ExpectInterfacesRegistered(UpdaterScope scope);
@@ -293,6 +313,11 @@ void ExpectLegacyAppCommandWebSucceeds(UpdaterScope scope,
                                        const std::string& command_id,
                                        const base::Value::List& parameters,
                                        int expected_exit_code);
+void ExpectPolicyStatusValues(
+    Microsoft::WRL::ComPtr<IPolicyStatusValue> policy_status_value,
+    const std::wstring& expected_source,
+    const std::wstring& expected_value,
+    VARIANT_BOOL expected_has_conflict);
 void ExpectLegacyPolicyStatusSucceeds(UpdaterScope scope);
 
 // Calls a function defined in test/service/win/rpc_client.py.

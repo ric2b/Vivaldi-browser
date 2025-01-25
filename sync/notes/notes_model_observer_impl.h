@@ -68,8 +68,7 @@ class NotesModelObserverImpl : public vivaldi::NotesModelObserver {
 
  private:
   syncer::UniquePosition ComputePosition(const vivaldi::NoteNode& parent,
-                                         size_t index,
-                                         const std::string& sync_id);
+                                         size_t index) const;
 
   // Processes the deletion of a note node and updates the
   // `note_tracker_` accordingly. If `node` is a note, it gets marked

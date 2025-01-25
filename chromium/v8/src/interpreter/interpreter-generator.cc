@@ -1372,7 +1372,9 @@ IGNITION_HANDLER(LogicalNot, InterpreterAssembler) {
 // object in the accumulator.
 IGNITION_HANDLER(TypeOf, InterpreterAssembler) {
   TNode<Object> value = GetAccumulator();
-  TNode<String> result = Typeof(value);
+  TNode<UintPtrT> slot_id = BytecodeOperandIdx(0);
+  TNode<HeapObject> maybe_feedback_vector = LoadFeedbackVector();
+  TNode<String> result = Typeof(value, slot_id, maybe_feedback_vector);
   SetAccumulator(result);
   Dispatch();
 }
@@ -1654,7 +1656,7 @@ IGNITION_HANDLER(ConstructWithSpread, InterpreterAssembler) {
 IGNITION_HANDLER(ConstructForwardAllArgs, InterpreterAssembler) {
   TNode<Object> new_target = GetAccumulator();
   TNode<Object> constructor = LoadRegisterAtOperandIndex(0);
-  TNode<UintPtrT> slot_id = BytecodeOperandIdx(1);
+  TNode<TaggedIndex> slot_id = BytecodeOperandIdxTaggedIndex(1);
   TNode<Context> context = GetContext();
   TNode<Object> result =
       ConstructForwardAllArgs(constructor, context, new_target, slot_id);
@@ -3187,17 +3189,11 @@ IGNITION_HANDLER(SuspendGenerator, InterpreterAssembler) {
   TNode<JSGeneratorObject> generator = CAST(LoadRegisterAtOperandIndex(0));
   TNode<FixedArray> array = CAST(LoadObjectField(
       generator, JSGeneratorObject::kParametersAndRegistersOffset));
-  TNode<JSFunction> closure = LoadFunctionClosure();
   TNode<Context> context = GetContext();
   RegListNodePair registers = GetRegisterListAtOperandIndex(1);
   TNode<Smi> suspend_id = BytecodeOperandUImmSmi(3);
 
-  TNode<SharedFunctionInfo> shared =
-      CAST(LoadObjectField(closure, JSFunction::kSharedFunctionInfoOffset));
-  TNode<Int32T> formal_parameter_count =
-      LoadSharedFunctionInfoFormalParameterCountWithoutReceiver(shared);
-
-  ExportParametersAndRegisterFile(array, registers, formal_parameter_count);
+  ExportParametersAndRegisterFile(array, registers);
   StoreObjectField(generator, JSGeneratorObject::kContextOffset, context);
   StoreObjectField(generator, JSGeneratorObject::kContinuationOffset,
                    suspend_id);
@@ -3263,18 +3259,12 @@ IGNITION_HANDLER(SwitchOnGeneratorState, InterpreterAssembler) {
 // state as executing.
 IGNITION_HANDLER(ResumeGenerator, InterpreterAssembler) {
   TNode<JSGeneratorObject> generator = CAST(LoadRegisterAtOperandIndex(0));
-  TNode<JSFunction> closure = LoadFunctionClosure();
   RegListNodePair registers = GetRegisterListAtOperandIndex(1);
-
-  TNode<SharedFunctionInfo> shared =
-      CAST(LoadObjectField(closure, JSFunction::kSharedFunctionInfoOffset));
-  TNode<Int32T> formal_parameter_count =
-      LoadSharedFunctionInfoFormalParameterCountWithoutReceiver(shared);
 
   ImportRegisterFile(
       CAST(LoadObjectField(generator,
                            JSGeneratorObject::kParametersAndRegistersOffset)),
-      registers, formal_parameter_count);
+      registers);
 
   // Return the generator's input_or_debug_pos in the accumulator.
   SetAccumulator(

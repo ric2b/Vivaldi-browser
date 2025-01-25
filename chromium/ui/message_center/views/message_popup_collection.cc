@@ -9,6 +9,7 @@
 
 #include "base/containers/adapters.h"
 #include "base/functional/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
@@ -128,13 +129,7 @@ void MessagePopupCollection::NotifyPopupResized() {
 }
 
 void MessagePopupCollection::NotifyPopupClosed(MessagePopupView* popup) {
-  for (auto& item : popup_items_) {
-    if (item.popup && item.popup == popup) {
-      // Make sure this item's popup is closed before removing it.
-      item.popup->Close();
-      item.popup = nullptr;
-    }
-  }
+  CloseAndRemovePopupFromPopupItem(popup);
 }
 
 void MessagePopupCollection::AnimateResize() {
@@ -335,6 +330,17 @@ bool MessagePopupCollection::IsNextEdgeOutsideWorkArea(
 void MessagePopupCollection::ClosePopupItem(const PopupItem& item) {
   if (MessagePopupView* popup = item.popup) {
     popup->Close();
+    // Re-check item.popup since the Close() call may have deleted it.
+    if (popup == item.popup) {
+      if (!popup->view_added_to_widget()) {
+        // Take ownership and delete when leaving scope.
+        auto owned_popup = base::WrapUnique(popup);
+        // This doesn't delete the delegate, but does ensure notifications about
+        // it are still sent.
+        owned_popup->DeleteDelegate();
+        CloseAndRemovePopupFromPopupItem(owned_popup.get(), true);
+      }
+    }
   }
 }
 
@@ -475,10 +481,12 @@ void MessagePopupCollection::CalculateAndUpdateBounds() {
     popup_bounds_origin_y = base;
   }
 
+  int notification_width = GetNotificationWidth();
+
   for (size_t i = 0; i < popup_items_.size(); ++i) {
     gfx::Size preferred_size(
-        kNotificationWidth,
-        GetPopupItem(i)->popup->GetHeightForWidth(kNotificationWidth));
+        notification_width,
+        GetPopupItem(i)->popup->GetHeightForWidth(notification_width));
 
     int origin_x = GetPopupOriginX(gfx::Rect(preferred_size));
 
@@ -509,7 +517,7 @@ void MessagePopupCollection::CalculateAndUpdateBounds() {
 
   popup_collection_bounds_ =
       gfx::Rect(popup_bounds_origin_x, popup_bounds_origin_y,
-                kNotificationWidth, popup_bounds_height - kMarginBetweenPopups);
+                notification_width, popup_bounds_height - kMarginBetweenPopups);
 
   if (old_popup_collection_height != popup_collection_bounds_.height()) {
     NotifyPopupCollectionHeightChanged();
@@ -640,8 +648,8 @@ void MessagePopupCollection::MarkRemovedPopup() {
 }
 
 int MessagePopupCollection::GetNextEdge(const PopupItem& item) const {
-  const int delta =
-      item.popup->GetHeightForWidth(kNotificationWidth) + kMarginBetweenPopups;
+  const int delta = item.popup->GetHeightForWidth(GetNotificationWidth()) +
+                    kMarginBetweenPopups;
 
   int base = 0;
   if (popup_items_.empty()) {
@@ -689,14 +697,28 @@ void MessagePopupCollection::RemoveClosedPopupItems() {
   std::erase_if(popup_items_, [](const auto& item) { return !item.popup; });
 }
 
+void MessagePopupCollection::CloseAndRemovePopupFromPopupItem(
+    MessagePopupView* popup,
+    bool remove_only) {
+  for (auto& item : popup_items_) {
+    if (item.popup && item.popup == popup) {
+      if (!remove_only) {
+        popup->Close();
+      }
+      item.popup = nullptr;
+    }
+  }
+}
+
 bool MessagePopupCollection::CollapseAllPopups() {
   bool changed = false;
+  int notification_width = GetNotificationWidth();
   for (auto& item : popup_items_) {
-    int old_height = item.popup->GetHeightForWidth(kNotificationWidth);
+    int old_height = item.popup->GetHeightForWidth(notification_width);
 
     item.popup->AutoCollapse();
 
-    int new_height = item.popup->GetHeightForWidth(kNotificationWidth);
+    int new_height = item.popup->GetHeightForWidth(notification_width);
     if (old_height != new_height)
       changed = true;
   }

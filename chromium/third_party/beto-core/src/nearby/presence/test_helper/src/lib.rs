@@ -16,6 +16,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use itertools::Itertools;
 use std::fs;
 use std::io::Read;
 
@@ -61,4 +62,17 @@ pub fn extract_key_array<const N: usize>(value: &serde_json::Value, key: &str) -
 /// Convert a hex string to a Vec of the hex bytes
 pub fn string_to_hex(str: &str) -> Vec<u8> {
     hex::decode(str).unwrap()
+}
+
+/// Format data as hex bytes for the convenience of test data in FFI tests.
+///
+/// # Examples
+///
+/// ```
+/// use test_helper::hex_bytes;
+///
+/// assert_eq!("0x12, 0x34", hex_bytes(&[0x12, 0x34]));
+/// ```
+pub fn hex_bytes(data: impl AsRef<[u8]>) -> String {
+    hex::encode_upper(data).chars().tuples().map(|(a, b)| format!("0x{}{}", a, b)).join(", ")
 }

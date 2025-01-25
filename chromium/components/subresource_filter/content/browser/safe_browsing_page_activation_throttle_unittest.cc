@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
@@ -32,13 +33,13 @@
 #include "components/subresource_filter/content/browser/subresource_filter_safe_browsing_client.h"
 #include "components/subresource_filter/content/browser/subresource_filter_safe_browsing_client_request.h"
 #include "components/subresource_filter/content/browser/throttle_manager_test_support.h"
-#include "components/subresource_filter/content/shared/browser/page_activation_throttle_delegate.h"
 #include "components/subresource_filter/content/shared/common/subresource_filter_utils.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features_test_support.h"
 #include "components/subresource_filter/core/browser/verified_ruleset_dealer.h"
 #include "components/subresource_filter/core/common/activation_decision.h"
 #include "components/subresource_filter/core/common/activation_list.h"
+#include "components/subresource_filter/core/common/constants.h"
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
 #include "components/subresource_filter/core/common/test_ruleset_utils.h"
 #include "components/subresource_filter/core/mojom/subresource_filter.mojom.h"
@@ -79,7 +80,7 @@ const char kActivationListHistogram[] =
 const char kSubresourceFilterActionsHistogram[] = "SubresourceFilter.Actions2";
 
 class TestSafeBrowsingActivationThrottleDelegate
-    : public PageActivationThrottleDelegate {
+    : public SafeBrowsingPageActivationThrottle::Delegate {
  public:
   TestSafeBrowsingActivationThrottleDelegate() = default;
   ~TestSafeBrowsingActivationThrottleDelegate() override = default;
@@ -88,12 +89,12 @@ class TestSafeBrowsingActivationThrottleDelegate
   TestSafeBrowsingActivationThrottleDelegate& operator=(
       const TestSafeBrowsingActivationThrottleDelegate&) = delete;
 
-  // PageActivationThrottleDelegate:
+  // SafeBrowsingActivationThrottle::Delegate:
   mojom::ActivationLevel OnPageActivationComputed(
       content::NavigationHandle* handle,
       mojom::ActivationLevel effective_level,
       ActivationDecision* decision) override {
-    DCHECK(handle->IsInMainFrame());
+    CHECK(handle->IsInMainFrame());
     if (allowlisted_hosts_.count(handle->GetURL().host())) {
       if (effective_level ==
           subresource_filter::mojom::ActivationLevel::kEnabled)
@@ -174,7 +175,8 @@ class SafeBrowsingPageActivationThrottleTest
     ASSERT_NO_FATAL_FAILURE(test_ruleset_creator_.CreateRulesetWithRules(
         rules, &test_ruleset_pair_));
     ruleset_dealer_ = std::make_unique<VerifiedRulesetDealer::Handle>(
-        base::SingleThreadTaskRunner::GetCurrentDefault());
+        base::SingleThreadTaskRunner::GetCurrentDefault(),
+        kSafeBrowsingRulesetConfig);
     ruleset_dealer_->TryOpenAndSetRulesetFile(test_ruleset_pair_.indexed.path,
                                               /*expected_checksum=*/0,
                                               base::DoNothing());
@@ -713,7 +715,7 @@ TEST_F(SafeBrowsingPageActivationThrottleTest, ActivationList) {
 }
 
 // Regression test for an issue where synchronous failure from the SB database
-// caused a double cancel. This is DCHECKed in the fake database.
+// caused a double cancel. This is CHECKed in the fake database.
 TEST_F(SafeBrowsingPageActivationThrottleTest,
        SynchronousResponse) {
   const GURL url(kURL);

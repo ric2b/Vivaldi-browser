@@ -16,7 +16,6 @@
 <translation id="1728677426644403582">Estàs consultant el codi font d'una pàgina web</translation>
 <translation id="1734878702283171397">Prova de contactar amb l'administrador del sistema.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" /> Prova d'executar els diagnòstics de xarxa de Windows<ph name="END_LINK" /> .</translation>
-<translation id="1834321415901700177">Aquest lloc conté programes perjudicials</translation>
 <translation id="1974060860693918893">Avançat</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Comprova el servidor intermediari i el tallafoc<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emès per a: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -42,7 +41,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Executa els diagnòstics de connectivitat<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">S'ha restablert la connexió.</translation>
 <translation id="2826760142808435982">La connexió s'ha xifrat i autenticat mitjançant <ph name="CIPHER" /> i fa servir <ph name="KX" /> com a mecanisme d'intercanvi clau.</translation>
-<translation id="2856444702002559011">Pot ser que algun atacant provi de robar la teva informació del lloc web <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (per exemple, contrasenyes, missatges o targetes de crèdit). <ph name="BEGIN_LEARN_MORE_LINK" />Més informació<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">S'ha detectat un canvi a la xarxa.</translation>
 <translation id="2948083400971632585">Pots desactivar qualsevol servidor intermediari configurat per a una connexió des de la pàgina d'ajustos.</translation>
 <translation id="2991571918955627853">En aquest moment no pots visitar la pàgina <ph name="SITE" /> perquè el lloc web fa servir HSTS. Els atacs i els errors de xarxa acostumen a ser temporals, o sigui que probablement la pàgina funcionarà més endavant.</translation>
@@ -69,6 +67,7 @@
 <translation id="3566021033012934673">La teva connexió no és privada</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Amaga els detalls</translation>
+<translation id="3614001939154393113">És possible que hi hagi atacants que estiguin provant de robar-vos informació de <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (per exemple, contrasenyes, missatges o targetes de crèdit). <ph name="BEGIN_LEARN_MORE_LINK" />Més informació sobre aquest advertiment<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3630155396527302611">Si ja està inclòs a la llista de programes autoritzats per accedir a la xarxa, prova
       de suprimir-lo de la llista i torna'l a afegir.</translation>
 <translation id="3658742229777143148">Revisió</translation>
@@ -92,7 +91,6 @@
 <translation id="4265872034478892965">Permès per l'administrador</translation>
 <translation id="4305666528087210886">No s'ha pogut accedir al fitxer</translation>
 <translation id="4312866146174492540">Bloqueja (predeterminat)</translation>
-<translation id="4356973930735388585">Algun atacant d'aquest lloc podria provar d'instal·lar programes perillosos al dispositiu per robar o suprimir la teva informació (per exemple, les fotos, les contrasenyes, els missatges i les targetes de crèdit).</translation>
 <translation id="4408413947728134509">Galetes <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> no ha acceptat el certificat d'inici de sessió o pot ser que no se n'hagi proporcionat cap.</translation>
 <translation id="4506599922270137252">Contacta l'administrador del sistema</translation>
@@ -144,7 +142,6 @@
 <translation id="6305205051461490394">No es pot accedir a <ph name="URL" />.</translation>
 <translation id="6321917430147971392">Revisa la configuració de DNS</translation>
 <translation id="6328639280570009161">Prova de desactivar la predicció de xarxa</translation>
-<translation id="6328786501058569169">Aquest lloc web és enganyós</translation>
 <translation id="6348220984832452017">Variacions actives</translation>
 <translation id="6358450015545214790">Què vol dir això?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> ha refusat la connexió.</translation>
@@ -158,7 +155,6 @@
 <translation id="6897140037006041989">Agent d'usuari</translation>
 <translation id="6957624206566198865">Obre la pàgina a una pestanya privada nova</translation>
 <translation id="7053983685419859001">Bloqueja</translation>
-<translation id="7079718277001814089">Aquest lloc conté programari maliciós</translation>
 <translation id="7096937462164235847">La identitat d'aquest lloc web no s'ha verificat.</translation>
 <translation id="7108819624672055576">Permès per un complement</translation>
 <translation id="7111012039238467737">(Vàlid)</translation>
@@ -166,6 +162,7 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> no compleix la normativa de seguretat.</translation>
 <translation id="7219179957768738017">La connexió usa <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Mostra les notificacions</translation>
+<translation id="7227747683324411744">Els atacants del lloc web que proves de visitar poden enganyar-te perquè instal·lis programari nociu que afecti la manera com navegues. Per exemple, poden canviar-te la pàgina d'inici o mostrar-te anuncis addicionals als llocs web que visites.</translation>
 <translation id="7353601530677266744">Línia de comandes</translation>
 <translation id="7364115444476960850">La pàgina a la que intentaves accedir ha estat bloquejada per <ph name="BLOCKER_NAME" /> de Vivaldi</translation>
 <translation id="7419106976560586862">Ruta del perfil</translation>
@@ -173,9 +170,9 @@
 <translation id="7518003948725431193">No s'ha trobat cap pàgina web per a l'adreça: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Aquesta pàgina web necessita dades que has introduït anteiorment per poder mostrar-la correctament. Pot tornar a enviar les dades, però es tornarà a repetir qualsevol acció que la pàgina hagi dut a terme prèviament.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> no pot gestionar la sol·licitud en aquest moment.</translation>
+<translation id="7605377493722372900">Els atacants del lloc web que proves de visitar poden instal·lar programari nociu que et robi o et suprimeixi dades com ara la contrasenya, fotos, missatges o el número de la targeta de crèdit.</translation>
 <translation id="7662298039739062396">Ajust controlat per un complement</translation>
 <translation id="7663736086183791259">Certificat <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">És possible que algun atacant d'aquest lloc intenti enganyar-te perquè instal·lis programes que perjudiquen la teva navegació (per exemple, canviant la pàgina d'inici o mostrant anuncis addicionals als llocs que visites).</translation>
 <translation id="7714464543167945231">Certificat</translation>
 <translation id="7716147886133743102">Bloquejat per l'administrador</translation>
 <translation id="7716424297397655342">Aquest lloc no es pot carregar des de la memòria cau</translation>
@@ -185,7 +182,6 @@
 <translation id="7878562273885520351">La teva contrasenya pot estar compromesa</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
 <translation id="7953236668995583915">Torna a carregar aquesta pàgina per aplicar la configuració actualitzada en aquest lloc web</translation>
-<translation id="8025119109950072390">Algun atacant d'aquest lloc et podria enganyar perquè facis alguna acció perillosa, com ara instal·lar programari o enviar informació personal (per exemple, contrasenyes, números de telèfon o targetes de crèdit).</translation>
 <translation id="8037357227543935929">Pregunta (predeterminat)</translation>
 <translation id="8041940743680923270">Utilitza l'opció predeterminada global (pregunta)</translation>
 <translation id="808894953321890993">Canvia la contrasenya</translation>
@@ -200,6 +196,7 @@
 <translation id="8288807391153049143">Mostra el certificat</translation>
 <translation id="8289355894181816810">Si no estàs segur de què significa això, contacta amb l'administrador de la xarxa.</translation>
 <translation id="8332188693563227489">S'ha rebutjat l'accés a <ph name="HOST_NAME" /></translation>
+<translation id="8422228580902424274">Els atacants del lloc que proves de visitar poden enganyar-te perquè instal·lis programari o perquè revelis dades com ara la contrasenya, el telèfon o el número de la targeta de crèdit.</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ha trigat massa a respondre.</translation>
 <translation id="8503813439785031346">Nom d'usuari</translation>
 <translation id="8703575177326907206">La teva connexió a <ph name="DOMAIN" /> no està xifrada.</translation>

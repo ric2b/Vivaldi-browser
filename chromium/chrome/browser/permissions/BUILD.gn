@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/ui.gni")
 import("//components/optimization_guide/features.gni")
 import("//third_party/protobuf/proto_library.gni")
 
@@ -52,6 +53,13 @@ source_set("permissions") {
     "quiet_notification_permission_ui_config.h",
     "quiet_notification_permission_ui_state.cc",
     "quiet_notification_permission_ui_state.h",
+    "system/system_permission_settings.cc",
+    "system/system_permission_settings.h",
+  ]
+
+  public_deps = [
+    "//chrome/browser:browser_public_dependencies",
+    "//chrome/browser/resource_coordinator:tab_lifecycle_observer",
   ]
 
   deps = [
@@ -62,6 +70,7 @@ source_set("permissions") {
     "//chrome/browser/profiles:profile",
     "//chrome/browser/profiles:profiles",
     "//chrome/browser/safe_browsing",
+    "//chrome/browser/search_engines",
     "//chrome/browser/storage_access_api",
     "//chrome/browser/top_level_storage_access_api:permissions",
     "//chrome/common",
@@ -119,9 +128,29 @@ source_set("permissions") {
       "//ui/android",
     ]
   }
+  allow_circular_includes_from = []
 
   if (is_chromeos_ash) {
-    deps += [ "//chrome/browser/ash" ]
+    deps += [
+      "//chrome/browser/ash",
+      "//chrome/browser/ash/app_mode/web_app",
+      "//chrome/browser/ash/shimless_rma",
+    ]
+    allow_circular_includes_from += [
+      "//chrome/browser/ash/app_mode/web_app",
+      "//chrome/browser/ash/shimless_rma",
+    ]
+  }
+
+  if (is_mac) {
+    sources += [ "system/system_permission_settings_mac.cc" ]
+    deps += [ "//chrome//browser/web_applications" ]
+  } else if (is_chromeos_ash) {
+    sources += [ "system/system_permission_settings_chromeos.cc" ]
+  } else if (is_win) {
+    sources += [ "system/system_permission_settings_win.cc" ]
+  } else {
+    sources += [ "system/system_permission_settings_default.cc" ]
   }
 
   if (build_with_tflite_lib) {
@@ -159,6 +188,7 @@ source_set("unit_tests") {
   deps = [
     ":permissions",
     ":permissions_proto",
+    "//chrome/browser/search_engines",
     "//chrome/test:test_support",
     "//components/site_engagement/content",
     "//components/ukm/content",
@@ -183,7 +213,10 @@ source_set("unit_tests") {
   }
 
   if (is_chromeos_ash) {
-    deps += [ "//chrome/browser/ash:test_support" ]
+    deps += [
+      "//chrome/browser/ash:test_support",
+      "//chrome/browser/ash/app_mode/web_app",
+    ]
   }
 }
 

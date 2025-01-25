@@ -17,9 +17,10 @@ import detect_host_arch
 import gclient_utils
 import metrics_utils
 import subprocess2
+import utils
 
 DEPOT_TOOLS = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(DEPOT_TOOLS, 'metrics.cfg')
+CONFIG_FILE = utils.depot_tools_config_path('metrics.cfg')
 UPLOAD_SCRIPT = os.path.join(DEPOT_TOOLS, 'upload_metrics.py')
 
 DEFAULT_COUNTDOWN = 10

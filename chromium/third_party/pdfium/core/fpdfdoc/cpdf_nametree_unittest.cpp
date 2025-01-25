@@ -13,7 +13,7 @@
 namespace {
 
 void AddNameKeyValue(CPDF_Array* names, const char* key, int value) {
-  names->AppendNew<CPDF_String>(key, false);
+  names->AppendNew<CPDF_String>(key);
   names->AppendNew<CPDF_Number>(value);
 }
 
@@ -30,8 +30,8 @@ void AddLimitsArray(CPDF_Dictionary* node,
                     const char* least,
                     const char* greatest) {
   auto limits = node->SetNewFor<CPDF_Array>("Limits");
-  limits->AppendNew<CPDF_String>(least, false);
-  limits->AppendNew<CPDF_String>(greatest, false);
+  limits->AppendNew<CPDF_String>(least);
+  limits->AppendNew<CPDF_String>(greatest);
 }
 
 void CheckLimitsArray(const CPDF_Dictionary* node,
@@ -107,8 +107,8 @@ TEST(cpdf_nametree, GetUnicodeNameWithBOM) {
   auto pNames = pRootDict->SetNewFor<CPDF_Array>("Names");
 
   // Add the key "1" (with BOM) and value 100 into the array.
-  constexpr char kData[] = "\xFE\xFF\x00\x31";
-  pNames->AppendNew<CPDF_String>(ByteString(kData, sizeof(kData) - 1), true);
+  constexpr uint8_t kData[] = {0xFE, 0xFF, 0x00, 0x31};
+  pNames->AppendNew<CPDF_String>(kData, CPDF_String::DataType::kIsHex);
   pNames->AppendNew<CPDF_Number>(100);
 
   // Check that the key is as expected.

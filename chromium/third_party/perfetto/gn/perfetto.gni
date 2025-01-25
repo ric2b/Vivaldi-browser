@@ -70,6 +70,10 @@ if (!defined(is_nacl)) {
   is_nacl = false
 }
 
+if (!defined(is_gcc)) {
+  is_gcc = !is_clang && !is_win
+}
+
 declare_args() {
   # The Android blueprint file generator set this to true (as well as
   # is_perfetto_build_generator). This is just about being built in the
@@ -312,8 +316,10 @@ declare_args() {
   # Enables function name demangling using sources from llvm. Otherwise
   # trace_processor falls back onto using the c++ runtime demangler, which
   # typically handles only itanium mangling.
+  # llvm-demangle is incompatible with GCC and can be used only when building
+  # with clang.
   enable_perfetto_llvm_demangle =
-      enable_perfetto_trace_processor && perfetto_build_standalone
+      is_clang && enable_perfetto_trace_processor && perfetto_build_standalone
 
   # Enables gRPC in the Perfetto codebase. gRPC significantly increases build
   # times and the general footprint of Perfetto. As it only required for
@@ -337,6 +343,11 @@ declare_args() {
   # time. Incremental builds that add/remove files will not be supported without
   # rerunning gn.
   enable_perfetto_site = false
+
+  # Check that the merged perfetto_trace.proto can be translated to a C++ lite
+  # proto and compiled. This is disabled by default because it's expensive (it
+  # can take a couple of minutes).
+  enable_perfetto_merged_protos_check = false
 
   # Skip buildtools dependency checks (needed for ChromeOS).
   skip_buildtools_check = false

@@ -16,15 +16,16 @@ limitations under the License.
 #include "xla/service/gpu/cudnn_workspace_rewriter.h"
 
 #include <optional>
-#include <string>
+#include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
+#include "absl/container/inlined_vector.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
-#include "third_party/gpus/cudnn/cudnn_version.h"
 #include "xla/hlo/ir/dfs_hlo_visitor_with_default.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_clone_context.h"
@@ -32,17 +33,16 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/hlo/ir/hlo_module.h"
-#include "xla/hlo/ir/hlo_opcode.h"
-#include "xla/primitive_util.h"
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/cublas_cudnn.h"
 #include "xla/service/gpu/gpu_fused_mha_runner.h"
-#include "xla/service/gpu/ir_emission_utils.h"
 #include "xla/service/gpu/stream_executor_util.h"
+#include "xla/shape.h"
+#include "xla/shape_util.h"
+#include "xla/status_macros.h"
 #include "xla/stream_executor/cuda/cuda_dnn.h"
-#include "xla/stream_executor/cuda/cudnn_frontend_helpers.h"
+#include "xla/stream_executor/dnn.h"
 #include "xla/util.h"
-#include "tsl/platform/errors.h"
 #include "tsl/platform/statusor.h"
 
 namespace xla {
@@ -50,13 +50,9 @@ namespace gpu {
 
 namespace {
 
-namespace fe = cudnn_frontend;
-namespace graph = fe::graph;
-
 // create cuDNN graphs from HloCustomCall
 absl::StatusOr<se::gpu::CudnnGraph> HloCustomCallToCuDnnGraph(
-    se::dnn::DnnSupport& dnn_support,
-    const HloCustomCallInstruction* custom_call) {
+    se::dnn::DnnSupport& dnn_support, HloCustomCallInstruction* custom_call) {
   if (IsFwdCustomCallTofMHA(*custom_call)) {
     TF_ASSIGN_OR_RETURN(const xla::gpu::CudnnfMHAKind kind,
                         xla::gpu::GetCudnnfMHAKind(custom_call));
@@ -121,10 +117,10 @@ absl::StatusOr<se::gpu::CudnnGraph> HloCustomCallToCuDnnGraph(
     return std::move(graph);
   } else {
     TF_ASSIGN_OR_RETURN(
-        const auto gpu_config,
+        auto gpu_config,
         custom_call->backend_config<xla::gpu::GpuBackendConfig>());
-    const xla::gpu::CudnnfMHABackendConfig& config =
-        gpu_config.cudnn_fmha_backend_config();
+    xla::gpu::CudnnfMHABackendConfig& config =
+        *gpu_config.mutable_cudnn_fmha_backend_config();
 
     int input_index = 0;
     Shape bmm1_grad_gemm1_rhs_shape =
@@ -177,6 +173,16 @@ absl::StatusOr<se::gpu::CudnnGraph> HloCustomCallToCuDnnGraph(
                  custom_call->shape().tuple_shapes().size() - 1);
     TF_ASSIGN_OR_RETURN(CudnnfMHAMaskKind cudnn_mask_type,
                         AsCudnnFmhaMaskKind(config.mask_type()));
+
+    const DebugOptions& debug_options =
+        custom_call->GetModule()->config().debug_options();
+    bool force_deterministic =
+        debug_options.xla_gpu_deterministic_ops() ||
+        debug_options.xla_gpu_exclude_nondeterministic_ops();
+    // set the correct force_deterministic attribute here
+    config.set_force_deterministic(force_deterministic);
+    TF_RETURN_IF_ERROR(custom_call->set_backend_config(gpu_config));
+
     GpufMHABackwardDescriptor descriptor = {
         kind,
         config,
@@ -197,13 +203,15 @@ absl::StatusOr<se::gpu::CudnnGraph> HloCustomCallToCuDnnGraph(
         fwd_output_shape,
         mask_shape,
         d_bias_shape,
-        bias_shape};
+        bias_shape,
+        force_deterministic};
 
     TF_ASSIGN_OR_RETURN(GpufMHABackwardConfig fmha_config,
                         GpufMHABackwardConfig::For(descriptor));
     TF_ASSIGN_OR_RETURN(
         se::dnn::FMHAMaskKind dnn_mask_type,
         GetDNNFmhaMaskKindFromCudnnFmhaMaskKind(fmha_config.mask_type));
+
     TF_ASSIGN_OR_RETURN(
         se::gpu::CudnnGraph graph,
         se::gpu::GetCudnnFlashAttentionBackwardOperationGraph(
@@ -214,7 +222,8 @@ absl::StatusOr<se::gpu::CudnnGraph> HloCustomCallToCuDnnGraph(
             fmha_config.d_bmm2_rhs, fmha_config.bias, fmha_config.dropout_rate,
             fmha_config.seed, *fmha_config.fmha_scale,
             fmha_config.dropout_rate && *fmha_config.dropout_rate > 0.0,
-            fmha_config.bias != std::nullopt, dnn_mask_type));
+            fmha_config.bias != std::nullopt, dnn_mask_type,
+            force_deterministic));
     return std::move(graph);
   }
 }

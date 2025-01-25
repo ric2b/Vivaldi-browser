@@ -77,8 +77,6 @@ import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.BrowserContextHandle;
-import org.chromium.content_public.browser.ContentFeatureList;
-import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
@@ -88,7 +86,6 @@ import org.chromium.ui.modaldialog.ModalDialogProperties.Controller;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
-import org.chromium.ui.text.SpanApplier.SpanInfo;
 import org.chromium.ui.widget.Toast;
 
 import java.lang.annotation.Retention;
@@ -103,6 +100,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+
+// Vivaldi
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 /**
  * Shows a list of sites in a particular Site Settings category. For example, this could show all
@@ -638,6 +638,11 @@ public class SingleCategorySettings extends BaseSiteSettingsFragment
             } else if (type == SiteSettingsCategory.Type.AUTO_DARK_WEB_CONTENT) {
                 AutoDarkMetrics.recordAutoDarkSettingsChangeSource(
                         AutoDarkSettingsChangeSource.SITE_SETTINGS_GLOBAL, toggleValue);
+                // Vivaldi - VAB-7122: sync the site settings dark mode option with theme settings
+                ChromeSharedPreferences.getInstance().writeBoolean(
+                        "dark_mode_for_webpages", toggleValue);
+                WebsitePreferenceBridge.setContentSettingEnabled(browserContextHandle,
+                        ContentSettingsType.AUTO_DARK_WEB_CONTENT, toggleValue);
             } else if (type == SiteSettingsCategory.Type.REQUEST_DESKTOP_SITE) {
                 recordSiteLayoutChanged(toggleValue);
                 updateDesktopSiteWindowSetting();
@@ -1276,9 +1281,7 @@ public class SingleCategorySettings extends BaseSiteSettingsFragment
         }
 
         // Configure/hide the desktop site window setting, as needed.
-        if (mCategory.getType() == SiteSettingsCategory.Type.REQUEST_DESKTOP_SITE
-                && ContentFeatureMap.isEnabled(
-                        ContentFeatureList.REQUEST_DESKTOP_SITE_WINDOW_SETTING)) {
+        if (mCategory.getType() == SiteSettingsCategory.Type.REQUEST_DESKTOP_SITE) {
             mDesktopSiteWindowPref.setOnPreferenceChangeListener(this);
             updateDesktopSiteWindowSetting();
         } else {
@@ -1372,7 +1375,6 @@ public class SingleCategorySettings extends BaseSiteSettingsFragment
         params.isFirstPartySetsDataAccessEnabled =
                 getSiteSettingsDelegate().isFirstPartySetsDataAccessEnabled();
         triStateCookieToggle.setState(params);
-        maybeShowOffboardingCard();
     }
 
     private int getCookieControlsMode() {
@@ -1473,10 +1475,6 @@ public class SingleCategorySettings extends BaseSiteSettingsFragment
     // TODO(crbug.com/40852484): Looking at a different class setup for SingleCategorySettings that
     // allows category specific logic to live in separate files.
     private void updateDesktopSiteWindowSetting() {
-        if (!ContentFeatureMap.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_WINDOW_SETTING)) {
-            return;
-        }
-
         BrowserContextHandle browserContextHandle =
                 getSiteSettingsDelegate().getBrowserContextHandle();
         Boolean categoryEnabled =
@@ -1655,28 +1653,6 @@ public class SingleCategorySettings extends BaseSiteSettingsFragment
                 return false;
             }
         };
-    }
-
-    private void maybeShowOffboardingCard() {
-        if (getSiteSettingsDelegate().shouldShowSettingsOffboardingNotice()) {
-            mCardPreference = findPreference(CARD_PREFERENCE_KEY);
-            mCardPreference.setVisible(true);
-            mCardPreference.setSummary(
-                    SpanApplier.applySpans(
-                            getResources()
-                                    .getString(
-                                            R.string.tracking_protection_settings_rollback_notice),
-                            new SpanInfo(
-                                    "<link>",
-                                    "</link>",
-                                    new NoUnderlineClickableSpan(
-                                            getContext(),
-                                            (view) -> openUrlInCct(TP_LEARN_MORE_URL)))));
-            mCardPreference.setIconDrawable(
-                    SettingsUtils.getTintedIcon(getContext(), R.drawable.infobar_warning));
-            mCardPreference.setCloseIconVisibility(View.VISIBLE);
-            mCardPreference.setOnCloseClickListener(this::onOffboardingCardCloseClick);
-        }
     }
 
     private void onOffboardingCardCloseClick(View button) {

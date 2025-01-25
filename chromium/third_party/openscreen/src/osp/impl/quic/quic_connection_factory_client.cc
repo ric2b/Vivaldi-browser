@@ -12,6 +12,7 @@
 #include "osp/impl/quic/quic_utils.h"
 #include "quiche/quic/core/crypto/web_transport_fingerprint_proof_verifier.h"
 #include "quiche/quic/core/quic_utils.h"
+#include "util/base64.h"
 #include "util/osp_logging.h"
 #include "util/std_util.h"
 #include "util/trace_logging.h"
@@ -52,7 +53,7 @@ void QuicConnectionFactoryClient::OnRead(UdpSocket* socket,
 ErrorOr<std::unique_ptr<QuicConnection>> QuicConnectionFactoryClient::Connect(
     const IPEndpoint& local_endpoint,
     const IPEndpoint& remote_endpoint,
-    const std::string& fingerprint,
+    const ConnectData& connect_data,
     QuicConnection::Delegate* connection_delegate) {
   auto create_result = UdpSocket::Create(task_runner_, this, local_endpoint);
   if (!create_result) {
@@ -73,9 +74,12 @@ ErrorOr<std::unique_ptr<QuicConnection>> QuicConnectionFactoryClient::Connect(
     auto proof_verifier =
         std::make_unique<quic::WebTransportFingerprintProofVerifier>(
             helper_->GetClock(), /*max_validity_days=*/3650);
-    const bool success =
-        proof_verifier->AddFingerprint(quic::CertificateFingerprint{
-            quic::CertificateFingerprint::kSha256, fingerprint});
+    std::vector<uint8_t> decoded_fingerprint;
+    base64::Decode(connect_data.fingerprint, &decoded_fingerprint);
+    std::string fingerprint{decoded_fingerprint.begin(),
+                            decoded_fingerprint.end()};
+    const bool success = proof_verifier->AddFingerprint(quic::WebTransportHash{
+        quic::WebTransportHash::kSha256, std::move(fingerprint)});
     if (!success) {
       return Error::Code::kSha256HashFailure;
     }
@@ -84,13 +88,11 @@ ErrorOr<std::unique_ptr<QuicConnection>> QuicConnectionFactoryClient::Connect(
   }
 
   auto connection_impl = std::make_unique<QuicConnectionImpl>(
-      *this, *connection_delegate, *helper_->GetClock());
-  // NOTE: Switch to `._openscreen._udp` when QUICHE supports. Currently, QUICHE
-  // doesn't support the last component starting with `_`. Check the link below
-  // for details:
-  // https://source.chromium.org/chromium/chromium/src/+/main:net/third_party/quiche/src/quiche/common/platform/api/quiche_hostname_utils.cc;l=77
-  std::string host = fingerprint + "._openscreen.udp";
-  host.erase(std::remove(host.begin(), host.end(), ':'), host.end());
+      connect_data.instance_name, *connection_delegate, *helper_->GetClock());
+  // NOTE: Use instance name + domain temporarily to prevent blocking the
+  // project. There is an ongoing discussion about this, see blow link：
+  // https://github.com/w3c/openscreenprotocol/issues/275
+  std::string host = connect_data.instance_name + ".local";
   OpenScreenSessionBase* session = new OpenScreenClientSession(
       std::move(connection), *crypto_client_config_, *connection_impl, config_,
       quic::QuicServerId(std::move(host), remote_endpoint.port),
@@ -115,11 +117,15 @@ void QuicConnectionFactoryClient::OnConnectionClosed(
       [connection](const decltype(connections_)::value_type& entry) {
         return entry.second.connection == connection;
       });
-  OSP_CHECK(entry != connections_.end());
+
+  if (entry == connections_.end()) {
+    return;
+  }
+
   UdpSocket* const socket = entry->second.socket;
   connections_.erase(entry);
 
-  // If none of the remaining |connections_| reference the socket, close/destroy
+  // If none of the remaining `connections_` reference the socket, close/destroy
   // it.
   if (!ContainsIf(connections_,
                   [socket](const decltype(connections_)::value_type& entry) {

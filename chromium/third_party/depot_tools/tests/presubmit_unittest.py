@@ -950,7 +950,7 @@ def CheckChangeOnCommit(input_api, output_api):
                                'random_file.txt']))
 
     def testMainUnversionedFail(self):
-        scm.determine_scm.return_value = None
+        scm.determine_scm.return_value = 'diff'
 
         with self.assertRaises(SystemExit) as e:
             presubmit.main(['--root', self.fake_root_dir])
@@ -960,7 +960,7 @@ def CheckChangeOnCommit(input_api, output_api):
             sys.stderr.getvalue(),
             'usage: presubmit_unittest.py [options] <files...>\n'
             'presubmit_unittest.py: error: unversioned directories must '
-            'specify <files> or <diff_file>.\n')
+            'specify <files>, <all_files>, or <diff_file>.\n')
 
     @mock.patch('presubmit_support.Change', mock.Mock())
     def testParseChange_Files(self):
@@ -979,9 +979,9 @@ def CheckChangeOnCommit(input_api, output_api):
         presubmit._parse_files.assert_called_once_with(options.files,
                                                        options.recursive)
 
-    def testParseChange_NoFilesAndNoScm(self):
+    def testParseChange_NoFilesAndDiff(self):
         presubmit._parse_files.return_value = []
-        scm.determine_scm.return_value = None
+        scm.determine_scm.return_value = 'diff'
         parser = mock.Mock()
         parser.error.side_effect = [SystemExit]
         options = mock.Mock(files=[], diff_file='', all_files=False)
@@ -989,7 +989,8 @@ def CheckChangeOnCommit(input_api, output_api):
         with self.assertRaises(SystemExit):
             presubmit._parse_change(parser, options)
         parser.error.assert_called_once_with(
-            'unversioned directories must specify <files> or <diff_file>.')
+            'unversioned directories must specify '
+            '<files>, <all_files>, or <diff_file>.')
 
     def testParseChange_FilesAndAllFiles(self):
         parser = mock.Mock()

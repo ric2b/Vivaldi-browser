@@ -4,18 +4,16 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
+#include <array>
 #include <iterator>
 #include <memory>
 #include <utility>
 
 #include "build/build_config.h"
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_codepage.h"
+#include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_folderfontinfo.h"
 #include "core/fxge/cfx_fontmgr.h"
 #include "core/fxge/cfx_gemodule.h"
@@ -28,40 +26,41 @@
 
 namespace {
 
-enum JpFontFamily : uint8_t {
+enum JpFontFamilyRowIndex : uint8_t {
   kJpFontPGothic,
   kJpFontGothic,
   kJpFontPMincho,
   kJpFontMincho,
-  kCount
 };
 
-const char* const kLinuxJpFontList[][JpFontFamily::kCount] = {
-    {"TakaoPGothic", "VL PGothic", "IPAPGothic", "VL Gothic"},
-    {"TakaoGothic", "VL Gothic", "IPAGothic", "Kochi Gothic"},
-    {"TakaoPMincho", "IPAPMincho", "VL Gothic", "Kochi Mincho"},
-    {"TakaoMincho", "IPAMincho", "VL Gothic", "Kochi Mincho"},
-};
+constexpr size_t kJpFontFamilyColumnCount = 5;
+using JpFontFamilyRow = std::array<const char*, kJpFontFamilyColumnCount>;
+constexpr auto kJpFontTable = fxcrt::ToArray<const JpFontFamilyRow>({
+    {{"MS PGothic", "TakaoPGothic", "VL PGothic", "IPAPGothic", "VL Gothic"}},
+    {{"MS Gothic", "TakaoGothic", "VL Gothic", "IPAGothic", "Kochi Gothic"}},
+    {{"MS PMincho", "TakaoPMincho", "IPAPMincho", "VL Gothic", "Kochi Mincho"}},
+    {{"MS Mincho", "TakaoMincho", "IPAMincho", "VL Gothic", "Kochi Mincho"}},
+});
 
-const char* const kLinuxGbFontList[] = {
+const char* const kGbFontList[] = {
     "AR PL UMing CN Light",
     "WenQuanYi Micro Hei",
     "AR PL UKai CN",
 };
 
-const char* const kLinuxB5FontList[] = {
+const char* const kB5FontList[] = {
     "AR PL UMing TW Light",
     "WenQuanYi Micro Hei",
     "AR PL UKai TW",
 };
 
-const char* const kLinuxHGFontList[] = {
+const char* const kHGFontList[] = {
     "UnDotum",
 };
 
-JpFontFamily GetJapanesePreference(const ByteString& face,
-                                   int weight,
-                                   int pitch_family) {
+JpFontFamilyRowIndex GetJapanesePreference(const ByteString& face,
+                                           int weight,
+                                           int pitch_family) {
   if (face.Contains("Gothic") ||
       face.Contains("\x83\x53\x83\x56\x83\x62\x83\x4e")) {
     if (face.Contains("PGothic") ||
@@ -109,9 +108,9 @@ void* CFX_LinuxFontInfo::MapFont(int weight,
   bool bCJK = true;
   switch (charset) {
     case FX_Charset::kShiftJIS: {
-      JpFontFamily index = GetJapanesePreference(face, weight, pitch_family);
-      DCHECK(index < std::size(kLinuxJpFontList));
-      for (const char* name : kLinuxJpFontList[index]) {
+      JpFontFamilyRowIndex index =
+          GetJapanesePreference(face, weight, pitch_family);
+      for (const char* name : kJpFontTable[index]) {
         auto it = m_FontList.find(name);
         if (it != m_FontList.end())
           return it->second.get();
@@ -119,7 +118,7 @@ void* CFX_LinuxFontInfo::MapFont(int weight,
       break;
     }
     case FX_Charset::kChineseSimplified: {
-      for (const char* name : kLinuxGbFontList) {
+      for (const char* name : kGbFontList) {
         auto it = m_FontList.find(name);
         if (it != m_FontList.end())
           return it->second.get();
@@ -127,7 +126,7 @@ void* CFX_LinuxFontInfo::MapFont(int weight,
       break;
     }
     case FX_Charset::kChineseTraditional: {
-      for (const char* name : kLinuxB5FontList) {
+      for (const char* name : kB5FontList) {
         auto it = m_FontList.find(name);
         if (it != m_FontList.end())
           return it->second.get();
@@ -135,7 +134,7 @@ void* CFX_LinuxFontInfo::MapFont(int weight,
       break;
     }
     case FX_Charset::kHangul: {
-      for (const char* name : kLinuxHGFontList) {
+      for (const char* name : kHGFontList) {
         auto it = m_FontList.find(name);
         if (it != m_FontList.end())
           return it->second.get();
@@ -153,8 +152,12 @@ bool CFX_LinuxFontInfo::ParseFontCfg(const char** pUserPaths) {
   if (!pUserPaths)
     return false;
 
-  for (const char** pPath = pUserPaths; *pPath; ++pPath)
-    AddPath(*pPath);
+  // SAFETY: nullptr-terminated array required from caller.
+  UNSAFE_BUFFERS({
+    for (const char** pPath = pUserPaths; *pPath; ++pPath) {
+      AddPath(*pPath);
+    }
+  });
   return true;
 }
 

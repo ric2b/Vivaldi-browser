@@ -5,10 +5,6 @@
 
 #pragma once
 
-#include <xnnpack.h>
-#include <xnnpack/microfnptr.h>
-#include <xnnpack/microparams.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -18,9 +14,12 @@
 #include <random>
 #include <vector>
 
-#include "replicable_random_device.h"
 #include <gtest/gtest.h>
 #include <fp16/fp16.h>
+#include "xnnpack.h"
+#include "xnnpack/microfnptr.h"
+#include "xnnpack/microparams.h"
+#include "replicable_random_device.h"
 
 class VCMulMicrokernelTester {
  public:
@@ -82,7 +81,7 @@ class VCMulMicrokernelTester {
       } else if (inplace_b()) {
         std::copy(b.cbegin(), b.cend(), y.begin());
       } else {
-        std::fill(y.begin(), y.end(), nanf(""));
+        std::fill(y.begin(), y.end(), UINT16_C(0x7E00) /* NaN */);
       }
       const uint16_t* a_data = inplace_a() ? y.data() : a.data();
       const uint16_t* b_data = inplace_b() ? y.data() : b.data();

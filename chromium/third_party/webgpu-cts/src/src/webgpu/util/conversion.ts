@@ -1202,7 +1202,7 @@ export function concreteTypeOf(ty: Type, allowedScalarTypes?: Type[]): Type {
           return Type.f32;
         }
         if (allowedScalarTypes.includes(Type.f16)) {
-          return Type.f32;
+          return Type.f16;
         }
         throw new Error(`no ${ty}`);
     }

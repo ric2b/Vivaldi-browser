@@ -17,6 +17,7 @@
 #include "ash/shell.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/events/ash/keyboard_capability.h"
 
 namespace ash {
 
@@ -44,7 +45,10 @@ std::vector<mojom::StandardAcceleratorPropertiesPtr> GetAcceleratorsForActionId(
 }  // namespace
 
 AcceleratorFetcher::AcceleratorFetcher() {
-  CHECK(::features::IsShortcutCustomizationEnabled());
+  if (!::features::IsShortcutCustomizationEnabled()) {
+    return;
+  }
+
   if (Shell::HasInstance()) {
     Shell::Get()
         ->accelerator_controller()
@@ -57,6 +61,10 @@ AcceleratorFetcher::AcceleratorFetcher() {
 }
 
 AcceleratorFetcher::~AcceleratorFetcher() {
+  if (!::features::IsShortcutCustomizationEnabled()) {
+    return;
+  }
+
   if (Shell::HasInstance()) {
     Shell::Get()
         ->accelerator_controller()
@@ -75,10 +83,18 @@ void AcceleratorFetcher::BindInterface(
 }
 
 void AcceleratorFetcher::ObserveAcceleratorChanges(
-    const std::vector<AcceleratorAction>& actionIds,
+    const std::vector<AcceleratorAction>& action_ids,
     mojo::PendingRemote<common::mojom::AcceleratorFetcherObserver> observer) {
-  actions_for_receivers_[accelerator_observers_.Add(std::move(observer))] =
-      actionIds;
+  mojo::RemoteSetElementId id = accelerator_observers_.Add(std::move(observer));
+  actions_for_receivers_[id] = action_ids;
+
+  common::mojom::AcceleratorFetcherObserver* receiver =
+      accelerator_observers_.Get(id);
+  // Notify the observer immediately after adding it.
+  for (const AcceleratorAction& action_id : action_ids) {
+    receiver->OnAcceleratorsUpdated(action_id,
+                                    GetAcceleratorsForActionId(action_id));
+  }
 }
 
 void AcceleratorFetcher::OnAcceleratorsUpdated() {
@@ -89,6 +105,12 @@ void AcceleratorFetcher::OnAcceleratorsUpdated() {
                                   GetAcceleratorsForActionId(action_id));
     }
   }
+}
+
+void AcceleratorFetcher::GetMetaKeyToDisplay(
+    GetMetaKeyToDisplayCallback callback) {
+  std::move(callback).Run(
+      Shell::Get()->keyboard_capability()->GetMetaKeyToDisplay());
 }
 
 void AcceleratorFetcher::OnObserverDisconnect(mojo::RemoteSetElementId id) {

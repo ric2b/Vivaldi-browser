@@ -83,7 +83,6 @@ KNOWN_PROJECT_URLS = {
     'https://chromium.googlesource.com/crashpad/crashpad',
     'https://chromium.googlesource.com/external/gyp',
     'https://chromium.googlesource.com/external/naclports',
-    'https://chromium.googlesource.com/infra/goma/client',
     'https://chromium.googlesource.com/infra/infra',
     'https://chromium.googlesource.com/native_client/',
     'https://chromium.googlesource.com/syzygy',

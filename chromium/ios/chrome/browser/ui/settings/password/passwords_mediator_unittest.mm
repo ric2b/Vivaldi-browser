@@ -7,7 +7,6 @@
 #import "base/apple/foundation_util.h"
 #import "base/location.h"
 #import "base/memory/raw_ptr.h"
-#import "base/strings/string_piece.h"
 #import "base/strings/string_util.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/test/bind.h"
@@ -67,7 +66,7 @@ std::unique_ptr<KeyedService> BuildFeatureEngagementMockTracker(
 }  // namespace
 
 @interface FakePasswordsConsumer : NSObject <PasswordsConsumer> {
-  std::vector<password_manager::CredentialUIEntry> _passwords;
+  std::vector<password_manager::CredentialUIEntry> _credentials;
   std::vector<password_manager::CredentialUIEntry> _blockedSites;
   std::vector<password_manager::AffiliatedGroup> _affiliatedGroups;
 }
@@ -89,10 +88,11 @@ std::unique_ptr<KeyedService> BuildFeatureEngagementMockTracker(
          insecurePasswordsCount:(NSInteger)insecureCount {
 }
 
-- (void)setPasswords:(std::vector<password_manager::CredentialUIEntry>)passwords
-        blockedSites:
-            (std::vector<password_manager::CredentialUIEntry>)blockedSites {
-  _passwords = passwords;
+- (void)setCredentials:
+            (std::vector<password_manager::CredentialUIEntry>)credentials
+          blockedSites:
+              (std::vector<password_manager::CredentialUIEntry>)blockedSites {
+  _credentials = credentials;
   _blockedSites = blockedSites;
 }
 

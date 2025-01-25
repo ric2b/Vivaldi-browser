@@ -8,6 +8,7 @@ import "mojo/public/mojom/base/time.mojom";
 import "services/viz/public/mojom/compositing/begin_frame_args.mojom";
 import "services/viz/public/mojom/compositing/compositor_frame_transition_directive.mojom";
 import "ui/gfx/mojom/delegated_ink_metadata.mojom";
+import "services/viz/public/mojom/compositing/offset_tag.mojom";
 import "services/viz/public/mojom/compositing/frame_deadline.mojom";
 import "services/viz/public/mojom/compositing/region_capture_bounds.mojom";
 import "services/viz/public/mojom/compositing/selection.mojom";
@@ -31,7 +32,6 @@ struct CompositorFrameMetadata {
   gfx.mojom.ContentColorUsage content_color_usage;
   bool may_contain_video;
   bool may_throttle_if_undrawn_frames;
-  bool is_resourceless_software_draw_with_scroll_or_animation;
   bool is_handling_interaction;
   skia.mojom.SkColor4f root_background_color;
   array<ui.mojom.LatencyInfo> latency_info;
@@ -41,17 +41,11 @@ struct CompositorFrameMetadata {
   BeginFrameAck begin_frame_ack;
   uint32 frame_token;
   bool send_frame_token_to_embedder;
-  // TODO(crbug.com/40489779): This should be a absl::optional<float>.
+  // TODO(crbug.com/40489779): This should be a `float?`.
   bool top_controls_visible_height_set;
   float top_controls_visible_height;
 
   float min_page_scale_factor;
-
-  // Specifies the interval at which the client's content is updated. This can
-  // be used to configure the display to the optimal vsync interval available.
-  // If unspecified, or set to BeginFrameArgs::MinInterval, it is assumed that
-  // the client can animate at the maximum frame rate supported by the Display.
-  mojo_base.mojom.TimeDelta? preferred_frame_interval;
 
   gfx.mojom.OverlayTransform display_transform_hint;
 
@@ -89,4 +83,7 @@ struct CompositorFrameMetadata {
   // When set, this frame contains software resources. See
   // TransferableResource::is_software for details.
   bool is_software;
+
+  array<OffsetTagDefinition> offset_tag_definitions;
+  array<OffsetTagValue> offset_tag_values;
 };

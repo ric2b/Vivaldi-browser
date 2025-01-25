@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/fonts/script_run_iterator.h"
 
 #include <algorithm>
@@ -60,7 +65,7 @@ ScriptRunIterator::UScriptCodeList GetHanScriptExtensions() {
     list.resize(count);
     return list;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ScriptRunIterator::UScriptCodeList();
 }
 
@@ -102,7 +107,7 @@ void FixScriptsByEastAsianWidth(UChar32 ch,
     if (UNLIKELY(han_scripts.empty())) {
       // When |GetHanScriptExtensions| returns an empty list, replacing with it
       // will crash later, which makes the analysis complicated.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
     }
     set->Shrink(0);

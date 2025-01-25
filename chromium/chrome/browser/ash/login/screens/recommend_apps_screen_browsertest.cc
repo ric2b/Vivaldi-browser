@@ -12,7 +12,6 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/memory/raw_ptr.h"
-#include "base/strings/string_piece.h"
 #include "base/test/test_future.h"
 #include "base/values.h"
 #include "chrome/browser/apps/app_discovery_service/recommended_arc_apps/recommend_apps_fetcher.h"
@@ -123,7 +122,7 @@ class StubRecommendAppsFetcher : public apps::RecommendAppsFetcher {
     EXPECT_FALSE(started_);
     started_ = true;
   }
-  void Retry() override { NOTREACHED(); }
+  void Retry() override { NOTREACHED_IN_MIGRATION(); }
 
  protected:
   const raw_ptr<apps::RecommendAppsFetcherDelegate> delegate_;

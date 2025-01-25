@@ -29,34 +29,21 @@
 #define SRC_DAWN_NATIVE_OPENGL_DEVICEGL_H_
 
 #include <memory>
+#include <vector>
 
 #include "dawn/native/dawn_platform.h"
 
 #include "dawn/common/Platform.h"
 #include "dawn/native/Device.h"
 #include "dawn/native/QuerySet.h"
+#include "dawn/native/opengl/EGLFunctions.h"
 #include "dawn/native/opengl/Forward.h"
 #include "dawn/native/opengl/GLFormat.h"
 #include "dawn/native/opengl/OpenGLFunctions.h"
 
-// Remove windows.h macros after glad's include of windows.h
-#if DAWN_PLATFORM_IS(WINDOWS)
-#include "dawn/common/windows_with_undefs.h"
-#endif
-
 namespace dawn::native::opengl {
 
-struct EGLFunctions;
-
-enum class EGLExtension {
-    DisplayTextureShareGroupANGLE,
-    CreateContextRobustnessEXT,
-    FenceSyncKHR,
-    ReusableSyncKHR,
-
-    EnumCount,
-};
-using EGLExtensionSet = ityp::bitset<EGLExtension, static_cast<size_t>(EGLExtension::EnumCount)>;
+class ContextEGL;
 
 class Device final : public DeviceBase {
   public:
@@ -64,19 +51,20 @@ class Device final : public DeviceBase {
     static ResultOrError<Ref<Device>> Create(AdapterBase* adapter,
                                              const UnpackedPtr<DeviceDescriptor>& descriptor,
                                              const OpenGLFunctions& functions,
-                                             std::unique_ptr<Context> context,
+                                             std::unique_ptr<ContextEGL> context,
                                              const TogglesState& deviceToggles,
                                              Ref<DeviceBase::DeviceLostEvent>&& lostEvent);
     ~Device() override;
 
     MaybeError Initialize(const UnpackedPtr<DeviceDescriptor>& descriptor);
 
-    // Returns all the OpenGL entry points and ensures that the associated
-    // Context is current.
+    // Returns all the OpenGL entry points and ensures that the associated GL context is current.
     const OpenGLFunctions& GetGL() const;
+
+    // Helper functions to get access to relevant EGL objects.
     const EGLFunctions& GetEGL(bool makeCurrent) const;
-    const EGLExtensionSet& GetEGLExtensions() const;
     EGLDisplay GetEGLDisplay() const;
+    ContextEGL* GetContext() const;
 
     const GLFormat& GetGLFormat(const Format& format);
 
@@ -113,21 +101,11 @@ class Device final : public DeviceBase {
     bool MayRequireDuplicationOfIndirectParameters() const override;
     bool ShouldApplyIndexBufferOffsetToFirstIndex() const override;
 
-    class Context {
-      public:
-        virtual ~Context() {}
-        virtual void MakeCurrent() = 0;
-        // TODO(dawn:2544) Abstract EGL-isms for use with desktop GL.
-        virtual EGLDisplay GetEGLDisplay() const = 0;
-        virtual const EGLFunctions& GetEGL() const = 0;
-        virtual const EGLExtensionSet& GetExtensions() const = 0;
-    };
-
   private:
     Device(AdapterBase* adapter,
            const UnpackedPtr<DeviceDescriptor>& descriptor,
            const OpenGLFunctions& functions,
-           std::unique_ptr<Context> context,
+           std::unique_ptr<ContextEGL> context,
            const TogglesState& deviceToggles,
            Ref<DeviceBase::DeviceLostEvent>&& lostEvent);
 
@@ -144,6 +122,7 @@ class Device final : public DeviceBase {
     ResultOrError<Ref<SamplerBase>> CreateSamplerImpl(const SamplerDescriptor* descriptor) override;
     ResultOrError<Ref<ShaderModuleBase>> CreateShaderModuleImpl(
         const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
+        const std::vector<tint::wgsl::Extension>& internalExtensions,
         ShaderModuleParseResult* parseResult,
         OwnedCompilationMessages* compilationMessages) override;
     ResultOrError<Ref<SwapChainBase>> CreateSwapChainImpl(
@@ -160,16 +139,13 @@ class Device final : public DeviceBase {
     Ref<RenderPipelineBase> CreateUninitializedRenderPipelineImpl(
         const UnpackedPtr<RenderPipelineDescriptor>& descriptor) override;
 
-    ResultOrError<wgpu::TextureUsage> GetSupportedSurfaceUsageImpl(
-        const Surface* surface) const override;
-
     GLenum GetBGRAInternalFormat(const OpenGLFunctions& gl) const;
     void DestroyImpl() override;
 
     const OpenGLFunctions mGL;
 
     GLFormatTable mFormatTable;
-    std::unique_ptr<Context> mContext = nullptr;
+    std::unique_ptr<ContextEGL> mContext;
     int mMaxTextureMaxAnisotropy = 0;
 };
 

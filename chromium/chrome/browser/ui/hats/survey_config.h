@@ -16,6 +16,7 @@
 extern const char kHatsSurveyTriggerAutofillAddress[];
 extern const char kHatsSurveyTriggerAutofillAddressUserPerception[];
 extern const char kHatsSurveyTriggerAutofillCreditCardUserPerception[];
+extern const char kHatsSurveyTriggerAutofillPasswordUserPerception[];
 extern const char kHatsSurveyTriggerAutofillCard[];
 extern const char kHatsSurveyTriggerAutofillPassword[];
 extern const char kHatsSurveyTriggerDevToolsIssuesCOEP[];
@@ -62,6 +63,8 @@ extern const char kHatsSurveyTriggerTrustSafetyV2DownloadWarningUI[];
 extern const char kHatsSurveyTriggerTrustSafetyV2PasswordCheck[];
 extern const char kHatsSurveyTriggerTrustSafetyV2PasswordProtectionUI[];
 extern const char kHatsSurveyTriggerTrustSafetyV2SafetyCheck[];
+extern const char kHatsSurveyTriggerTrustSafetyV2SafetyHubNotification[];
+extern const char kHatsSurveyTriggerTrustSafetyV2SafetyHubInteraction[];
 extern const char kHatsSurveyTriggerTrustSafetyV2TrustedSurface[];
 extern const char kHatsSurveyTriggerTrustSafetyV2PrivacyGuide[];
 extern const char kHatsSurveyTriggerTrustSafetyV2PrivacySandbox4ConsentAccept[];
@@ -75,7 +78,8 @@ extern const char kHatsSurveyTriggerWallpaperSearch[];
 extern const char kHatsSurveyTriggerWhatsNew[];
 #else
 extern const char kHatsSurveyTriggerAndroidStartupSurvey[];
-#endif
+extern const char kHatsSurveyTriggerQuickDelete[];
+#endif  // #if !BUILDFLAG(IS_ANDROID)
 
 extern const char kHatsSurveyTriggerPermissionsPrompt[];
 

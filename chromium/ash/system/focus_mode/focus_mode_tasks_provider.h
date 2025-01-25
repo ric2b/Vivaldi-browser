@@ -5,6 +5,7 @@
 #ifndef ASH_SYSTEM_FOCUS_MODE_FOCUS_MODE_TASKS_PROVIDER_H_
 #define ASH_SYSTEM_FOCUS_MODE_FOCUS_MODE_TASKS_PROVIDER_H_
 
+#include <compare>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,24 @@ struct Task;
 
 class TaskFetcher;
 
+// Encapsulate information required to uniquely identify a task. Tasks are
+// expected to be referenced within a list. However, we treat tasks as a flat
+// collection so the list id needs to be retained.
+struct TaskId {
+  bool empty() const { return !pending && (id.empty() || list_id.empty()); }
+
+  std::strong_ordering operator<=>(const TaskId& other) const;
+  bool operator==(const TaskId& other) const = default;
+  bool operator<(const TaskId& other) const = default;
+
+  std::string list_id;
+  std::string id;
+
+  // If true, the task is waiting to be sent to the server and does not have a
+  // valid `list_id` or `id`.
+  bool pending = false;
+};
+
 // Represents a task.
 struct ASH_EXPORT FocusModeTask {
   FocusModeTask();
@@ -32,11 +51,12 @@ struct ASH_EXPORT FocusModeTask {
   FocusModeTask& operator=(FocusModeTask&&);
 
   // TODO: Replace the condition below with `FocusModeTask::IsValid()`.
-  bool empty() const { return task_list_id.empty(); }
+  bool empty() const { return task_id.empty(); }
 
-  std::string task_list_id;
-  std::string task_id;
+  TaskId task_id;
   std::string title;
+
+  bool completed;
 
   // The time when this task was last updated.
   base::Time updated;
@@ -59,6 +79,9 @@ class ASH_EXPORT FocusModeTasksProvider {
   using OnGetTasksCallback =
       base::OnceCallback<void(const std::vector<FocusModeTask>& tasks)>;
 
+  using OnGetTaskCallback =
+      base::OnceCallback<void(const FocusModeTask& task_entry)>;
+
   FocusModeTasksProvider();
   FocusModeTasksProvider(const FocusModeTasksProvider&) = delete;
   FocusModeTasksProvider& operator=(const FocusModeTasksProvider&) = delete;
@@ -68,6 +91,15 @@ class ASH_EXPORT FocusModeTasksProvider {
   // in Focus Mode. The provided `callback` is invoked asynchronously when tasks
   // have been fetched.
   void GetSortedTaskList(OnGetTasksCallback callback);
+
+  // Gets an individual task from the `task_list_id` with `task_id`. Since
+  // completed tasks will not be returned by the delegate, we will update the
+  // `completed` field to signifiy if the task has been completed or not.
+  // Returns a `FocusModeTask` in `callback`, or an empty `FocusModeTask` if an
+  // error has occurred.
+  void GetTask(const std::string& task_list_id,
+               const std::string& task_id,
+               OnGetTaskCallback callback);
 
   // Creates a new task with name `title` and adds it to `task_list_`. Returns
   // the added `FocusModeTask` in `callback`, or an empty `FocusModeTask` if an
@@ -88,6 +120,11 @@ class ASH_EXPORT FocusModeTasksProvider {
 
  private:
   void OnTasksFetched();
+  void OnTasksFetchedForTask(const std::string& task_list_id,
+                             const std::string& task_id,
+                             OnGetTaskCallback callback,
+                             bool success,
+                             const ui::ListModel<api::Task>* api_tasks);
   void OnTaskSaved(const std::string& task_list_id,
                    const std::string& task_id,
                    bool completed,
@@ -114,11 +151,11 @@ class ASH_EXPORT FocusModeTasksProvider {
 
   // Holds a set of tasks that have been created or updated during the lifetime
   // of the provider. These tasks are pushed to the front of the sort order.
-  base::flat_set<std::string> created_task_ids_;
+  base::flat_set<TaskId> created_task_ids_;
 
   // Holds a set of tasks that have been deleted during the lifetime of the
   // provider.
-  base::flat_set<std::string> deleted_task_ids_;
+  base::flat_set<TaskId> deleted_task_ids_;
 
   // Populated when the provider is requesting tasks from the API, otherwise
   // empty.

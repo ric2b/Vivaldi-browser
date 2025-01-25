@@ -1,17 +1,17 @@
 ; SPIR-V
 ; Version: 1.3
 ; Generator: Google Tint Compiler; 0
-; Bound: 56
+; Bound: 73
 ; Schema: 0
                OpCapability Shader
-               OpCapability ImageQuery
                OpMemoryModel Logical GLSL450
-               OpEntryPoint Vertex %vertex_main "vertex_main" %value %vertex_point_size
                OpEntryPoint Fragment %fragment_main "fragment_main"
                OpEntryPoint GLCompute %compute_main "compute_main"
+               OpEntryPoint Vertex %vertex_main "vertex_main" %pos_1 %prevent_dce_1 %vertex_point_size
                OpExecutionMode %fragment_main OriginUpperLeft
                OpExecutionMode %compute_main LocalSize 1 1 1
-               OpName %value "value"
+               OpName %pos_1 "pos_1"
+               OpName %prevent_dce_1 "prevent_dce_1"
                OpName %vertex_point_size "vertex_point_size"
                OpName %ext_tex_plane_1 "ext_tex_plane_1"
                OpName %ext_tex_params_block_std140 "ext_tex_params_block_std140"
@@ -32,30 +32,36 @@
                OpMemberName %GammaTransferParams 7 "padding"
                OpMemberName %ExternalTextureParams_std140 4 "gammaEncodeParams"
                OpMemberName %ExternalTextureParams_std140 5 "gamutConversionMatrix"
-               OpMemberName %ExternalTextureParams_std140 6 "coordTransformationMatrix_0"
-               OpMemberName %ExternalTextureParams_std140 7 "coordTransformationMatrix_1"
-               OpMemberName %ExternalTextureParams_std140 8 "coordTransformationMatrix_2"
-               OpMemberName %ExternalTextureParams_std140 9 "loadTransformationMatrix_0"
-               OpMemberName %ExternalTextureParams_std140 10 "loadTransformationMatrix_1"
-               OpMemberName %ExternalTextureParams_std140 11 "loadTransformationMatrix_2"
+               OpMemberName %ExternalTextureParams_std140 6 "sampleTransform_0"
+               OpMemberName %ExternalTextureParams_std140 7 "sampleTransform_1"
+               OpMemberName %ExternalTextureParams_std140 8 "sampleTransform_2"
+               OpMemberName %ExternalTextureParams_std140 9 "loadTransform_0"
+               OpMemberName %ExternalTextureParams_std140 10 "loadTransform_1"
+               OpMemberName %ExternalTextureParams_std140 11 "loadTransform_2"
                OpMemberName %ExternalTextureParams_std140 12 "samplePlane0RectMin"
                OpMemberName %ExternalTextureParams_std140 13 "samplePlane0RectMax"
                OpMemberName %ExternalTextureParams_std140 14 "samplePlane1RectMin"
                OpMemberName %ExternalTextureParams_std140 15 "samplePlane1RectMax"
-               OpMemberName %ExternalTextureParams_std140 16 "displayVisibleRectMax"
+               OpMemberName %ExternalTextureParams_std140 16 "visibleSize"
                OpMemberName %ExternalTextureParams_std140 17 "plane1CoordFactor"
                OpName %ext_tex_params "ext_tex_params"
-               OpName %arg_0 "arg_0"
                OpName %prevent_dce_block "prevent_dce_block"
                OpMemberName %prevent_dce_block 0 "inner"
                OpName %prevent_dce "prevent_dce"
+               OpName %arg_0 "arg_0"
                OpName %textureDimensions_cdc6c9 "textureDimensions_cdc6c9"
                OpName %res "res"
-               OpName %vertex_main_inner "vertex_main_inner"
-               OpName %vertex_main "vertex_main"
                OpName %fragment_main "fragment_main"
                OpName %compute_main "compute_main"
-               OpDecorate %value BuiltIn Position
+               OpName %VertexOutput "VertexOutput"
+               OpMemberName %VertexOutput 0 "pos"
+               OpMemberName %VertexOutput 1 "prevent_dce"
+               OpName %vertex_main_inner "vertex_main_inner"
+               OpName %out "out"
+               OpName %vertex_main "vertex_main"
+               OpDecorate %pos_1 BuiltIn Position
+               OpDecorate %prevent_dce_1 Location 0
+               OpDecorate %prevent_dce_1 Flat
                OpDecorate %vertex_point_size BuiltIn PointSize
                OpDecorate %ext_tex_plane_1 DescriptorSet 1
                OpDecorate %ext_tex_plane_1 Binding 1
@@ -94,78 +100,101 @@
                OpDecorate %ext_tex_params NonWritable
                OpDecorate %ext_tex_params DescriptorSet 1
                OpDecorate %ext_tex_params Binding 2
-               OpDecorate %arg_0 DescriptorSet 1
-               OpDecorate %arg_0 Binding 0
                OpDecorate %prevent_dce_block Block
                OpMemberDecorate %prevent_dce_block 0 Offset 0
-               OpDecorate %prevent_dce DescriptorSet 2
+               OpDecorate %prevent_dce DescriptorSet 0
                OpDecorate %prevent_dce Binding 0
+               OpDecorate %arg_0 DescriptorSet 1
+               OpDecorate %arg_0 Binding 0
+               OpMemberDecorate %VertexOutput 0 Offset 0
+               OpMemberDecorate %VertexOutput 1 Offset 16
       %float = OpTypeFloat 32
     %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
           %5 = OpConstantNull %v4float
-      %value = OpVariable %_ptr_Output_v4float Output %5
-%_ptr_Output_float = OpTypePointer Output %float
-          %8 = OpConstantNull %float
-%vertex_point_size = OpVariable %_ptr_Output_float Output %8
-         %11 = OpTypeImage %float 2D 0 0 0 1 Unknown
-%_ptr_UniformConstant_11 = OpTypePointer UniformConstant %11
-%ext_tex_plane_1 = OpVariable %_ptr_UniformConstant_11 UniformConstant
+      %pos_1 = OpVariable %_ptr_Output_v4float Output %5
        %uint = OpTypeInt 32 0
+     %v2uint = OpTypeVector %uint 2
+%_ptr_Output_v2uint = OpTypePointer Output %v2uint
+         %10 = OpConstantNull %v2uint
+%prevent_dce_1 = OpVariable %_ptr_Output_v2uint Output %10
+%_ptr_Output_float = OpTypePointer Output %float
+         %13 = OpConstantNull %float
+%vertex_point_size = OpVariable %_ptr_Output_float Output %13
+         %16 = OpTypeImage %float 2D 0 0 0 1 Unknown
+%_ptr_UniformConstant_16 = OpTypePointer UniformConstant %16
+%ext_tex_plane_1 = OpVariable %_ptr_UniformConstant_16 UniformConstant
 %mat3v4float = OpTypeMatrix %v4float 3
 %GammaTransferParams = OpTypeStruct %float %float %float %float %float %float %float %uint
     %v3float = OpTypeVector %float 3
 %mat3v3float = OpTypeMatrix %v3float 3
     %v2float = OpTypeVector %float 2
-     %v2uint = OpTypeVector %uint 2
 %ExternalTextureParams_std140 = OpTypeStruct %uint %uint %mat3v4float %GammaTransferParams %GammaTransferParams %mat3v3float %v2float %v2float %v2float %v2float %v2float %v2float %v2float %v2float %v2float %v2float %v2uint %v2float
 %ext_tex_params_block_std140 = OpTypeStruct %ExternalTextureParams_std140
 %_ptr_Uniform_ext_tex_params_block_std140 = OpTypePointer Uniform %ext_tex_params_block_std140
 %ext_tex_params = OpVariable %_ptr_Uniform_ext_tex_params_block_std140 Uniform
-      %arg_0 = OpVariable %_ptr_UniformConstant_11 UniformConstant
 %prevent_dce_block = OpTypeStruct %v2uint
 %_ptr_StorageBuffer_prevent_dce_block = OpTypePointer StorageBuffer %prevent_dce_block
 %prevent_dce = OpVariable %_ptr_StorageBuffer_prevent_dce_block StorageBuffer
-       %void = OpTypeVoid
-         %27 = OpTypeFunction %void
-        %int = OpTypeInt 32 1
-      %int_0 = OpConstant %int 0
-%_ptr_Function_v2uint = OpTypePointer Function %v2uint
-         %37 = OpConstantNull %v2uint
+      %arg_0 = OpVariable %_ptr_UniformConstant_16 UniformConstant
+         %30 = OpTypeFunction %v2uint
      %uint_0 = OpConstant %uint 0
+    %uint_16 = OpConstant %uint 16
+%_ptr_Uniform_v2uint = OpTypePointer Uniform %v2uint
+     %uint_1 = OpConstant %uint 1
+         %39 = OpConstantComposite %v2uint %uint_1 %uint_1
+%_ptr_Function_v2uint = OpTypePointer Function %v2uint
+       %void = OpTypeVoid
+         %44 = OpTypeFunction %void
 %_ptr_StorageBuffer_v2uint = OpTypePointer StorageBuffer %v2uint
-         %42 = OpTypeFunction %v4float
+%VertexOutput = OpTypeStruct %v4float %v2uint
+         %55 = OpTypeFunction %VertexOutput
+%_ptr_Function_VertexOutput = OpTypePointer Function %VertexOutput
+         %61 = OpConstantNull %VertexOutput
+%_ptr_Function_v4float = OpTypePointer Function %v4float
     %float_1 = OpConstant %float 1
-%textureDimensions_cdc6c9 = OpFunction %void None %27
-         %30 = OpLabel
-        %res = OpVariable %_ptr_Function_v2uint Function %37
-         %32 = OpLoad %11 %arg_0
-         %31 = OpImageQuerySizeLod %v2uint %32 %int_0
-               OpStore %res %31
-         %40 = OpAccessChain %_ptr_StorageBuffer_v2uint %prevent_dce %uint_0
-         %41 = OpLoad %v2uint %res
-               OpStore %40 %41
-               OpReturn
+%textureDimensions_cdc6c9 = OpFunction %v2uint None %30
+         %32 = OpLabel
+        %res = OpVariable %_ptr_Function_v2uint Function %10
+         %36 = OpAccessChain %_ptr_Uniform_v2uint %ext_tex_params %uint_0 %uint_16
+         %37 = OpLoad %v2uint %36
+         %40 = OpIAdd %v2uint %37 %39
+               OpStore %res %40
+         %43 = OpLoad %v2uint %res
+               OpReturnValue %43
                OpFunctionEnd
-%vertex_main_inner = OpFunction %v4float None %42
-         %44 = OpLabel
-         %45 = OpFunctionCall %void %textureDimensions_cdc6c9
-               OpReturnValue %5
-               OpFunctionEnd
-%vertex_main = OpFunction %void None %27
+%fragment_main = OpFunction %void None %44
          %47 = OpLabel
-         %48 = OpFunctionCall %v4float %vertex_main_inner
-               OpStore %value %48
+         %49 = OpAccessChain %_ptr_StorageBuffer_v2uint %prevent_dce %uint_0
+         %50 = OpFunctionCall %v2uint %textureDimensions_cdc6c9
+               OpStore %49 %50
+               OpReturn
+               OpFunctionEnd
+%compute_main = OpFunction %void None %44
+         %52 = OpLabel
+         %53 = OpAccessChain %_ptr_StorageBuffer_v2uint %prevent_dce %uint_0
+         %54 = OpFunctionCall %v2uint %textureDimensions_cdc6c9
+               OpStore %53 %54
+               OpReturn
+               OpFunctionEnd
+%vertex_main_inner = OpFunction %VertexOutput None %55
+         %58 = OpLabel
+        %out = OpVariable %_ptr_Function_VertexOutput Function %61
+         %63 = OpAccessChain %_ptr_Function_v4float %out %uint_0
+               OpStore %63 %5
+         %64 = OpAccessChain %_ptr_Function_v2uint %out %uint_1
+         %65 = OpFunctionCall %v2uint %textureDimensions_cdc6c9
+               OpStore %64 %65
+         %66 = OpLoad %VertexOutput %out
+               OpReturnValue %66
+               OpFunctionEnd
+%vertex_main = OpFunction %void None %44
+         %68 = OpLabel
+         %69 = OpFunctionCall %VertexOutput %vertex_main_inner
+         %70 = OpCompositeExtract %v4float %69 0
+               OpStore %pos_1 %70
+         %71 = OpCompositeExtract %v2uint %69 1
+               OpStore %prevent_dce_1 %71
                OpStore %vertex_point_size %float_1
-               OpReturn
-               OpFunctionEnd
-%fragment_main = OpFunction %void None %27
-         %51 = OpLabel
-         %52 = OpFunctionCall %void %textureDimensions_cdc6c9
-               OpReturn
-               OpFunctionEnd
-%compute_main = OpFunction %void None %27
-         %54 = OpLabel
-         %55 = OpFunctionCall %void %textureDimensions_cdc6c9
                OpReturn
                OpFunctionEnd

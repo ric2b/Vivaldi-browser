@@ -13,8 +13,8 @@
           {
             "builder_id": {
               "bucket": "ci",
-              "builder": "android-12-x64-rel",
-              "project": "chromium-m126"
+              "builder": "android-13-x64-rel",
+              "project": "chromium-m128"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -44,7 +44,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-webview-13-x64-hostside-rel",
-              "project": "chromium-m126"
+              "project": "chromium-m128"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -75,13 +75,13 @@
       "builder_ids": [
         {
           "bucket": "ci",
-          "builder": "android-12-x64-rel",
-          "project": "chromium-m126"
+          "builder": "android-13-x64-rel",
+          "project": "chromium-m128"
         },
         {
           "bucket": "ci",
           "builder": "android-webview-13-x64-hostside-rel",
-          "project": "chromium-m126"
+          "project": "chromium-m128"
         }
       ]
     }

@@ -14,7 +14,6 @@
 #include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/strings/string_piece.h"
 #include "chrome/common/extensions/api/passwords_private.h"
 #include "components/password_manager/core/browser/export/export_progress_status.h"
 #include "components/password_manager/core/browser/import/import_results.h"
@@ -47,6 +46,8 @@ class PasswordsPrivateDelegate
 
   using StartPasswordCheckCallback =
       base::OnceCallback<void(password_manager::BulkLeakCheckService::State)>;
+
+  using AuthenticationCallback = base::OnceCallback<void(bool)>;
 
   // Gets the saved passwords list.
   using UiEntries = std::vector<api::passwords_private::PasswordUiEntry>;
@@ -244,9 +245,11 @@ class PasswordsPrivateDelegate
   virtual void RestartAuthTimer() = 0;
 
   // Switches Biometric authentication before filling state after
-  // successful authentication.
+  // successful authentication.  Invokes `callback` with true if the
+  // authentication was successful, with false otherwise.
   virtual void SwitchBiometricAuthBeforeFillingState(
-      content::WebContents* web_contents) = 0;
+      content::WebContents* web_contents,
+      AuthenticationCallback callback) = 0;
 
   // Triggers a dialog for installing the shortcut for PasswordManager page.
   virtual void ShowAddShortcutDialog(content::WebContents* web_contents) = 0;
@@ -260,10 +263,11 @@ class PasswordsPrivateDelegate
       content::WebContents* web_contents,
       base::OnceCallback<void(bool)> success_callback) = 0;
 
-  // Returns true if it's allowed to change the password manager PIN, if it
+  // Replies true if it's allowed to change the password manager PIN, if it
   // exists.
-  virtual bool IsPasswordManagerPinAvailable(
-      content::WebContents* web_contents) = 0;
+  virtual void IsPasswordManagerPinAvailable(
+      content::WebContents* web_contents,
+      base::OnceCallback<void(bool)> pin_available_callback) = 0;
 
   // Starts the flow for disconnecting a Desktop Chrome client from the cloud
   // authenticator.
@@ -273,6 +277,10 @@ class PasswordsPrivateDelegate
 
   virtual bool IsConnectedToCloudAuthenticator(
       content::WebContents* web_contents) = 0;
+
+  virtual void DeleteAllPasswordManagerData(
+      content::WebContents* web_contents,
+      base::OnceCallback<void(bool)> success_callback) = 0;
 
   // Vivaldi. Trigger the OS authentication dialog, if needed.
   // web_contents must not be null.

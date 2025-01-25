@@ -11,6 +11,7 @@ import "mojo/public/mojom/base/values.mojom";
 import "services/network/public/mojom/content_security_policy.mojom";
 import "services/network/public/mojom/fetch_api.mojom";
 import "services/network/public/mojom/source_location.mojom";
+import "services/network/public/mojom/storage_access_api.mojom";
 import "services/network/public/mojom/trust_tokens.mojom";
 import "services/network/public/mojom/url_loader.mojom";
 import "services/network/public/mojom/url_request.mojom";
@@ -42,6 +43,7 @@ import "third_party/blink/public/mojom/tokens/tokens.mojom";
 import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
 import "third_party/blink/public/mojom/conversions/conversions.mojom";
+import "services/viz/public/mojom/compositing/local_surface_id.mojom";
 
 enum NavigationType {
   // Reload the page, validating only cache entry for the main resource.
@@ -182,16 +184,16 @@ struct BeginNavigationParams {
   // TODO(https://github.com/whatwg/html/issues/8846): clarify this further.
   bool is_container_initiated = false;
 
-  // True if the initiator requested the tab become fullscreen after navigation.
-  // See: https://chromestatus.com/feature/6002307972464640
-  bool is_fullscreen_requested = false;
-
-  // Whether this navigation can include cookies via the Storage Access API,
-  // according to the renderer. Note that this is not trusted; cookies will not
-  // actually be attached unless there is also a matching permission grant
+  // The renderer's Storage Access API status (e.g. whether it has opted into
+  // accessing cross-site cookies). Note that this is not trusted; cookies will
+  // not actually be attached unless there is also a matching permission grant
   // created by the browser process. (Also note that the Storage Access API is
   // only relevant when third-party cookies are blocked.)
-  bool has_storage_access = false;
+  network.mojom.StorageAccessApiStatus storage_access_api_status = kNone;
+
+  // True if the initiator explicitly asked for opener relationships to be
+  // preserved, via rel="opener".
+  bool has_rel_opener = false;
 };
 
 // Provided by the browser or the renderer -------------------------------------
@@ -368,15 +370,6 @@ struct CommitNavigationParams {
   // `storage_key`. The final storage key is computed by the document loader
   // taking into account the origin computed by the renderer.
   blink.mojom.StorageKey storage_key;
-
-  // The storage key here is the one the browser process believes the renderer
-  // should use when binding session storage. This may differ from `storage_key`
-  // as a deprecation trial can prevent the partitioning of session storage.
-  // The document loader should verify this storage key is (1) the same as
-  // `storage_key` or (2) a first-party storage key at `storage_key.origin`.
-  //
-  // TODO(crbug.com/1407150): Remove this when deprecation trial is complete.
-  blink.mojom.StorageKey session_storage_key;
 
   // Whether or not the user agent override string should be used.
   bool is_overriding_user_agent = false;
@@ -615,9 +608,9 @@ struct CommitNavigationParams {
   // cross-document main frame history navigations.
   blink.mojom.BackForwardCacheNotRestoredReasons? not_restored_reasons;
 
-  // Indicates whether the target document of this navigation should load with
-  // the `has_storage_access` bit set.
-  bool load_with_storage_access = false;
+  // The StorageAccessApiStatus value that the target document of this
+  // navigation should be loaded with.
+  network.mojom.StorageAccessApiStatus load_with_storage_access = kNone;
 
   // Indicates which browsing context group this frame belongs to. This starts
   // as nullopt and is only set when we commit a main frame in another browsing
@@ -649,6 +642,17 @@ struct CommitNavigationParams {
   // sending salt values to the renderer after the :visited link hashtable has
   // been initialized.
   uint64? visited_link_salt;
+
+  // Provides the LocalSurfaceId to assign to the new Document when this
+  // navigation commits. This is only set for navigations where the new Document
+  // uses the same compositor as the old Document, i.e., same-RFH navigations.
+  //
+  // Note: We always assign a LocalSurfaceId to the new Document when the
+  // navigation commits in the browser (DidCommitNavigation). But if the old
+  // Document will be screenshotted by the browser, we need to generate an ID
+  // earlier to ensure the new Document doesn't render frames using the same ID
+  // as the old Document when it is committed in the renderer.
+  viz.mojom.LocalSurfaceId? local_surface_id;
 };
 
 // Parameters used to dispatch the `pageswap` event on the old Document for

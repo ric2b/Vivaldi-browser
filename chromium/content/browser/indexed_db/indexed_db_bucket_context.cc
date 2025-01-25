@@ -7,6 +7,7 @@
 #include <inttypes.h>
 #include <stddef.h>
 
+#include <algorithm>
 #include <atomic>
 #include <compare>
 #include <list>
@@ -43,6 +44,7 @@
 #include "base/task/task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/common/trace_event_common.h"
 #include "base/trace_event/memory_allocator_dump.h"
@@ -186,6 +188,9 @@ base::Time GenerateNextGlobalCompactionTime(base::Time now) {
 // * It times out the request if the quota manager is taking too long.
 struct GetBucketSpaceRequestWrapper {
   static constexpr base::TimeDelta kTimeoutDuration = base::Seconds(45);
+  // The timeout is split into 3 steps. See similar logic in
+  // IndexedDBTransaction::kMaxTimeoutStrikes for reasoning.
+  static constexpr int kTimeoutFraction = 3;
 
   explicit GetBucketSpaceRequestWrapper(
       base::OnceCallback<void(storage::QuotaErrorOr<int64_t>)> callback)
@@ -202,10 +207,20 @@ struct GetBucketSpaceRequestWrapper {
   ~GetBucketSpaceRequestWrapper() { InvokeCallback(); }
 
   void StartTimer() {
-    timeout.Start(FROM_HERE,
-                  kTimeoutDuration - (base::TimeTicks::Now() - start_time),
-                  base::BindOnce(&GetBucketSpaceRequestWrapper::InvokeCallback,
-                                 base::Unretained(this)));
+    timeout.Start(
+        FROM_HERE,
+        (timeouts_observed + 1) * (kTimeoutDuration / kTimeoutFraction) -
+            (base::TimeTicks::Now() - start_time),
+        base::BindOnce(&GetBucketSpaceRequestWrapper::TimeOut,
+                       base::Unretained(this)));
+  }
+
+  void TimeOut() {
+    if (++timeouts_observed == kTimeoutFraction) {
+      InvokeCallback();
+    } else {
+      StartTimer();
+    }
   }
 
   void InvokeCallback() {
@@ -214,21 +229,22 @@ struct GetBucketSpaceRequestWrapper {
     }
 
     static const char kDroppedRequest[] =
-        "IndexedDB.QuotaCheckTime.DroppedRequest";
-    static const char kSuccess[] = "IndexedDB.QuotaCheckTime.Success";
-    static const char kQuotaError[] = "IndexedDB.QuotaCheckTime.QuotaError";
+        "IndexedDB.QuotaCheckTime2.DroppedRequest";
+    static const char kSuccess[] = "IndexedDB.QuotaCheckTime2.Success";
+    static const char kQuotaError[] = "IndexedDB.QuotaCheckTime2.QuotaError";
     const char* histogram =
         result_value ? result_value->has_value() ? kSuccess : kQuotaError
                      : kDroppedRequest;
     base::UmaHistogramCustomTimes(
         histogram, base::TimeTicks::Now() - start_time, base::Milliseconds(1),
-        kTimeoutDuration, /*buckets=*/50U);
+        kTimeoutDuration * 2, /*buckets=*/50U);
 
     std::move(wrapped_callback)
         .Run(result_value.value_or(
             base::unexpected(storage::QuotaError::kUnknownError)));
   }
 
+  int timeouts_observed = 0;
   base::OneShotTimer timeout;
   base::OnceCallback<void(storage::QuotaErrorOr<int64_t>)> wrapped_callback;
   std::optional<storage::QuotaErrorOr<int64_t>> result_value;
@@ -274,7 +290,8 @@ leveldb_env::Options GetLevelDBOptions() {
 
   // Thread-safe: static local construction, and `ChromiumEnv` implements
   // internal synchronization.
-  static base::NoDestructor<leveldb_env::ChromiumEnv> g_leveldb_env;
+  static base::NoDestructor<leveldb_env::ChromiumEnv> g_leveldb_env{
+      /*log_lock_errors=*/true};
   options.env = g_leveldb_env.get();
 
   return options;
@@ -301,7 +318,7 @@ CreateLevelDBState(const leveldb_env::Options& base_options,
     leveldb::Status status =
         leveldb_env::OpenDB(in_memory_options, std::string(), &db);
 
-    if (UNLIKELY(!status.ok())) {
+    if (!status.ok()) [[unlikely]] {
       LOG(ERROR) << "Failed to open in-memory LevelDB database: "
                  << status.ToString();
       return {nullptr, status, false};
@@ -320,7 +337,7 @@ CreateLevelDBState(const leveldb_env::Options& base_options,
   std::unique_ptr<leveldb::DB> db;
   leveldb::Status status =
       leveldb_env::OpenDB(options, file_name.AsUTF8Unsafe(), &db);
-  if (UNLIKELY(!status.ok())) {
+  if (!status.ok()) [[unlikely]] {
     if (!create_if_missing && status.IsInvalidArgument()) {
       return {nullptr, leveldb::Status::NotFound("", ""), false};
     }
@@ -594,8 +611,7 @@ void IndexedDBBucketContext::ForceClose(bool doom) {
     // interrupted, so it can cause shutdown hangs.
     close_timer_.AbandonAndStop();
     if (pre_close_task_queue_) {
-      pre_close_task_queue_->Stop(
-          IndexedDBPreCloseTaskQueue::StopReason::FORCE_CLOSE);
+      pre_close_task_queue_->Stop();
       pre_close_task_queue_.reset();
     }
     skip_closing_sequence_ = true;
@@ -603,6 +619,36 @@ void IndexedDBBucketContext::ForceClose(bool doom) {
 
   // Initiate deletion if appropriate.
   RunTasks();
+}
+
+void IndexedDBBucketContext::StartMetadataRecording() {
+  CHECK(!metadata_recording_enabled_);
+  metadata_recording_start_time_ = base::Time::Now();
+  metadata_recording_enabled_ = true;
+  RecordInternalsSnapshot();  // Capture the initial snapshot.
+}
+
+std::vector<storage::mojom::IdbBucketMetadataPtr>
+IndexedDBBucketContext::StopMetadataRecording() {
+  metadata_recording_enabled_ = false;
+  return std::move(metadata_recording_buffer_);
+}
+
+void IndexedDBBucketContext::GetDevToolsTokenForClient(
+    base::UnguessableToken client_token,
+    OptionalTokenCallback callback) {
+  for (const auto& [receiver_id, context] : receivers_.GetAllContexts()) {
+    if (context->client_token == client_token) {
+      context->client_state_checker_remote->GetDevToolsToken(base::BindOnce(
+          [](OptionalTokenCallback callback,
+             const base::UnguessableToken& token) {
+            std::move(callback).Run(token);
+          },
+          std::move(callback)));
+      return;
+    }
+  }
+  std::move(callback).Run(std::nullopt);
 }
 
 int64_t IndexedDBBucketContext::GetInMemorySize() {
@@ -800,16 +846,18 @@ void IndexedDBBucketContext::RunTasks() {
 void IndexedDBBucketContext::AddReceiver(
     mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
         client_state_checker_remote,
+    base::UnguessableToken client_token,
     mojo::PendingReceiver<blink::mojom::IDBFactory> pending_receiver) {
   // When `on_ready_for_destruction` is non-null, `this` hasn't requested its
   // own destruction. When it is null, this is to be torn down and has to bounce
   // the AddReceiver request back to the delegate.
   if (delegate().on_ready_for_destruction) {
-    receivers_.Add(this, std::move(pending_receiver),
-                   ReceiverContext(std::move(client_state_checker_remote)));
+    receivers_.Add(
+        this, std::move(pending_receiver),
+        ReceiverContext(std::move(client_state_checker_remote), client_token));
   } else {
-    CHECK(base::FeatureList::IsEnabled(features::kIndexedDBShardBackingStores));
     delegate().on_receiver_bounced.Run(std::move(client_state_checker_remote),
+                                       client_token,
                                        std::move(pending_receiver));
   }
 }
@@ -876,7 +924,7 @@ void IndexedDBBucketContext::Open(
   connection->was_cold_open = was_cold_open;
   connection->data_loss_info = data_loss_info;
   ReceiverContext& client = receivers_.current_context();
-  connection->client_id = receivers_.current_receiver();
+  connection->client_token = client.client_token;
   // Null in unit tests.
   if (client.client_state_checker_remote) {
     mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
@@ -993,86 +1041,21 @@ storage::mojom::IdbBucketMetadataPtr IndexedDBBucketContext::FillInMetadata(
     storage::mojom::IdbBucketMetadataPtr info) {
   // TODO(jsbell): Sort by name?
   std::vector<storage::mojom::IdbDatabaseMetadataPtr> database_list;
-
   if (backing_store_ && backing_store_->in_memory()) {
     info->size = GetInMemorySize();
   }
-
   for (const auto& [name, db] : databases_) {
-    storage::mojom::IdbDatabaseMetadataPtr db_info =
-        storage::mojom::IdbDatabaseMetadata::New();
-
-    db_info->name = db->name();
-    db_info->connection_count = db->ConnectionCount();
     info->connection_count += db->ConnectionCount();
-    db_info->active_open_delete = db->ActiveOpenDeleteCount();
-    db_info->pending_open_delete = db->PendingOpenDeleteCount();
-
-    std::vector<storage::mojom::IdbTransactionMetadataPtr> transaction_list;
-
-    for (IndexedDBConnection* connection : db->connections()) {
-      for (const auto& transaction_id_pair : connection->transactions()) {
-        const content::IndexedDBTransaction* transaction =
-            transaction_id_pair.second.get();
-        storage::mojom::IdbTransactionMetadataPtr transaction_info =
-            storage::mojom::IdbTransactionMetadata::New();
-
-        transaction_info->mode =
-            static_cast<storage::mojom::IdbTransactionMode>(
-                transaction->mode());
-
-        switch (transaction->state()) {
-          case IndexedDBTransaction::CREATED:
-            transaction_info->status =
-                storage::mojom::IdbTransactionState::kBlocked;
-            break;
-          case IndexedDBTransaction::STARTED:
-            if (transaction->diagnostics().tasks_scheduled > 0) {
-              transaction_info->status =
-                  storage::mojom::IdbTransactionState::kRunning;
-            } else {
-              transaction_info->status =
-                  storage::mojom::IdbTransactionState::kStarted;
-            }
-            break;
-          case IndexedDBTransaction::COMMITTING:
-            transaction_info->status =
-                storage::mojom::IdbTransactionState::kCommitting;
-            break;
-          case IndexedDBTransaction::FINISHED:
-            transaction_info->status =
-                storage::mojom::IdbTransactionState::kFinished;
-            break;
-        }
-
-        transaction_info->tid = transaction->id();
-        transaction_info->age =
-            (base::Time::Now() - transaction->diagnostics().creation_time)
-                .InMillisecondsF();
-        transaction_info->runtime =
-            (base::Time::Now() - transaction->diagnostics().start_time)
-                .InMillisecondsF();
-        transaction_info->tasks_scheduled =
-            transaction->diagnostics().tasks_scheduled;
-        transaction_info->tasks_completed =
-            transaction->diagnostics().tasks_completed;
-
-        for (const int64_t& id : transaction->scope()) {
-          auto stores_it = db->metadata().object_stores.find(id);
-          if (stores_it != db->metadata().object_stores.end()) {
-            transaction_info->scope.emplace_back(stores_it->second.name);
-          }
-        }
-
-        transaction_list.push_back(std::move(transaction_info));
-      }
-    }
-    db_info->transactions = std::move(transaction_list);
-
-    database_list.push_back(std::move(db_info));
+    database_list.push_back(db->GetIdbInternalsMetadata());
   }
   info->databases = std::move(database_list);
   return info;
+}
+
+void IndexedDBBucketContext::NotifyOfIdbInternalsRelevantChange() {
+  if (metadata_recording_enabled_) {
+    RecordInternalsSnapshot();
+  }
 }
 
 IndexedDBBucketContext* IndexedDBBucketContext::GetReferenceForTesting() {
@@ -1139,8 +1122,7 @@ void IndexedDBBucketContext::OnHandleCreated() {
     closing_stage_ = ClosingState::kNotClosing;
     close_timer_.AbandonAndStop();
     if (pre_close_task_queue_) {
-      pre_close_task_queue_->Stop(
-          IndexedDBPreCloseTaskQueue::StopReason::NEW_CONNECTION);
+      pre_close_task_queue_->Stop();
       pre_close_task_queue_.reset();
     }
   }
@@ -1383,9 +1365,9 @@ void IndexedDBBucketContext::HandleBackingStoreCorruption(
   const base::FilePath file_path =
       data_path_.Append(indexed_db::GetLevelDBFileName(bucket_locator()));
   ForceClose(/*doom=*/false);
-
-  // NB: `this` will be synchronously deleted here while
-  // kIndexedDBShardBackingStores is false.
+  // In order to successfully delete the corrupted DB, the open handle must
+  // first be closed.
+  ResetBackingStore();
 
   // Note: DestroyDB only deletes LevelDB files, leaving all others,
   //       so our corruption info file will remain.
@@ -1471,7 +1453,7 @@ IndexedDBBucketContext::OpenAndVerifyIndexedDBBackingStore(
     // database.
     std::string corruption_message =
         indexed_db::ReadCorruptionInfo(data_directory, bucket_locator());
-    if (UNLIKELY(!corruption_message.empty())) {
+    if (!corruption_message.empty()) [[unlikely]] {
       LOG(ERROR) << "IndexedDB recovering from a corrupted (and deleted) "
                     "database.";
       if (is_first_attempt) {
@@ -1487,7 +1469,7 @@ IndexedDBBucketContext::OpenAndVerifyIndexedDBBackingStore(
       status =
           leveldb::DestroyDB(database_path.AsUTF8Unsafe(), leveldb_options_);
 
-      if (UNLIKELY(!status.ok())) {
+      if (!status.ok()) [[unlikely]] {
         LOG(ERROR) << "Unable to delete backing store: " << status.ToString();
         return {nullptr, status, data_loss_info, /*is_disk_full=*/false};
       }
@@ -1504,7 +1486,7 @@ IndexedDBBucketContext::OpenAndVerifyIndexedDBBackingStore(
         leveldb_options_, database_path, create_if_missing,
         base::StringPrintf("indexedDB-bucket-%" PRId64,
                            bucket_info().id.GetUnsafeValue()));
-    if (UNLIKELY(!status.ok())) {
+    if (!status.ok()) [[unlikely]] {
       if (!status.IsNotFound()) {
         indexed_db::ReportLevelDBError("WebCore.IndexedDB.LevelDBOpenErrors",
                                        status);
@@ -1531,7 +1513,7 @@ IndexedDBBucketContext::OpenAndVerifyIndexedDBBackingStore(
                                 base::Unretained(this))));
     status = scopes->Initialize();
 
-    if (UNLIKELY(!status.ok())) {
+    if (!status.ok()) [[unlikely]] {
       return {nullptr, status, std::move(data_loss_info),
               /*is_disk_full=*/false};
     }
@@ -1546,7 +1528,7 @@ IndexedDBBucketContext::OpenAndVerifyIndexedDBBackingStore(
 
   bool are_schemas_known = false;
   std::tie(are_schemas_known, status) = AreSchemasKnown(database.get());
-  if (UNLIKELY(!status.ok())) {
+  if (!status.ok()) [[unlikely]] {
     LOG(ERROR) << "IndexedDB had an error checking schema, treating it as "
                   "failure to open: "
                << status.ToString();
@@ -1555,7 +1537,7 @@ IndexedDBBucketContext::OpenAndVerifyIndexedDBBackingStore(
             INDEXED_DB_BACKING_STORE_OPEN_FAILED_IO_ERROR_CHECKING_SCHEMA,
         bucket_locator());
     return {nullptr, status, std::move(data_loss_info), /*is_disk_full=*/false};
-  } else if (UNLIKELY(!are_schemas_known)) {
+  } else if (!are_schemas_known) [[unlikely]] {
     LOG(ERROR) << "IndexedDB backing store had unknown schema, treating it as "
                   "failure to open.";
     ReportOpenStatus(
@@ -1580,7 +1562,7 @@ IndexedDBBucketContext::OpenAndVerifyIndexedDBBackingStore(
   status = backing_store->Initialize(
       /*clean_active_blob_journal=*/!in_memory);
 
-  if (UNLIKELY(!status.ok())) {
+  if (!status.ok()) [[unlikely]] {
     return {nullptr, status, IndexedDBDataLossInfo(), /*is_disk_full=*/false};
   }
 
@@ -1593,10 +1575,6 @@ IndexedDBBucketContext::InitBackingStoreIfNeeded(bool create_if_missing) {
   if (backing_store_) {
     return {};
   }
-
-  UMA_HISTOGRAM_ENUMERATION(
-      indexed_db::kBackingStoreActionUmaName,
-      indexed_db::IndexedDBAction::kBackingStoreOpenAttempt);
 
   const bool in_memory = data_path_.empty();
   base::FilePath blob_path;
@@ -1628,10 +1606,10 @@ IndexedDBBucketContext::InitBackingStoreIfNeeded(bool create_if_missing) {
         OpenAndVerifyIndexedDBBackingStore(data_path_, database_path, blob_path,
                                            lock_manager.get(), is_first_attempt,
                                            create_if_missing);
-    if (LIKELY(is_first_attempt)) {
+    if (is_first_attempt) [[likely]] {
       first_try_status = status;
     }
-    if (LIKELY(status.ok())) {
+    if (status.ok()) [[likely]] {
       break;
     }
     if (!create_if_missing && status.IsNotFound()) {
@@ -1654,18 +1632,24 @@ IndexedDBBucketContext::InitBackingStoreIfNeeded(bool create_if_missing) {
     }
   }
 
+  // Record this here because the !create_if_missing && not_found case shouldn't
+  // count as either a success or failure.
+  base::UmaHistogramEnumeration(
+      indexed_db::kBackingStoreActionUmaName,
+      indexed_db::IndexedDBAction::kBackingStoreOpenAttempt);
+
   UMA_HISTOGRAM_ENUMERATION(
       "WebCore.IndexedDB.BackingStore.OpenFirstTryResult",
       leveldb_env::GetLevelDBStatusUMAValue(first_try_status),
       leveldb_env::LEVELDB_STATUS_MAX);
 
-  if (LIKELY(first_try_status.ok())) {
+  if (first_try_status.ok()) [[likely]] {
     UMA_HISTOGRAM_TIMES(
         "WebCore.IndexedDB.BackingStore.OpenFirstTrySuccessTime",
         open_timer.Elapsed());
   }
 
-  if (LIKELY(status.ok())) {
+  if (status.ok()) [[likely]] {
     base::UmaHistogramTimes("WebCore.IndexedDB.BackingStore.OpenSuccessTime",
                             open_timer.Elapsed());
   } else {
@@ -1708,10 +1692,13 @@ void IndexedDBBucketContext::ResetBackingStore() {
       backing_store_->ForceRunBlobCleanup();
     }
 
+    const auto start = base::TimeTicks::Now();
     base::WaitableEvent leveldb_destruct_event;
     backing_store_->TearDown(&leveldb_destruct_event);
     backing_store_.reset();
     leveldb_destruct_event.Wait();
+    base::UmaHistogramTimes("IndexedDB.BackingStoreCloseDuration",
+                            base::TimeTicks::Now() - start);
   }
 
   task_run_queued_ = false;
@@ -1738,10 +1725,22 @@ void IndexedDBBucketContext::OnReceiverDisconnected() {
   }
 }
 
+void IndexedDBBucketContext::RecordInternalsSnapshot() {
+  storage::mojom::IdbBucketMetadataPtr metadata =
+      storage::mojom::IdbBucketMetadata::New();
+  metadata->bucket_locator = bucket_locator();
+  metadata = FillInMetadata(std::move(metadata));
+  metadata->delta_recording_start_ms =
+      (base::Time::Now() - metadata_recording_start_time_).InMilliseconds();
+  metadata_recording_buffer_.push_back(std::move(metadata));
+}
+
 IndexedDBBucketContext::ReceiverContext::ReceiverContext(
     mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
-        client_state_checker)
-    : client_state_checker_remote(std::move(client_state_checker)) {}
+        client_state_checker,
+    base::UnguessableToken client_token)
+    : client_state_checker_remote(std::move(client_state_checker)),
+      client_token(client_token) {}
 
 IndexedDBBucketContext::ReceiverContext::ReceiverContext(
     IndexedDBBucketContext::ReceiverContext&&) noexcept = default;

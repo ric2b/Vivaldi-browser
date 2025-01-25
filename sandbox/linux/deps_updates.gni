@@ -1,0 +1,14 @@
+# Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
+# Linux only (included as such)
+
+update_target("//sandbox/policy:policy") {
+  public_deps += [ "//sandbox/linux:sandbox_services" ]
+}
+
+update_target("//sandbox/linux:sandbox_services") {
+  public_deps += [ "//dbus" ]
+}
+
+update_target("//chrome/common:constants") {
+  deps += [ "//sandbox/linux:sandbox_services" ]
+}

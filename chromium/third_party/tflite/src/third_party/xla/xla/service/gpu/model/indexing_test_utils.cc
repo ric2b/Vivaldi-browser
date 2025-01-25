@@ -17,31 +17,53 @@ limitations under the License.
 
 #include <cctype>
 #include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <limits>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
-#include <gtest/gtest.h>
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/container/inlined_vector.h"
 #include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/MathExtras.h"
 #include "mlir/AsmParser/AsmParser.h"  // from @llvm-project
 #include "mlir/IR/AffineExpr.h"  // from @llvm-project
 #include "mlir/IR/BuiltinAttributes.h"  // from @llvm-project
 #include "mlir/IR/MLIRContext.h"  // from @llvm-project
 #include "mlir/Support/LLVM.h"  // from @llvm-project
 #include "xla/hlo/ir/hlo_instruction.h"
-#include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/service/gpu/model/indexing_analysis.h"
 #include "xla/service/gpu/model/indexing_map.h"
-#include "xla/tests/hlo_test_base.h"
+#include "xla/status_macros.h"
+#include "tsl/platform/errors.h"
 
 namespace xla {
 namespace gpu {
+namespace {
 
 using ::mlir::AffineExpr;
 using ::mlir::AffineMap;
 using ::mlir::MLIRContext;
+
+std::string FormatDimsAndSyms(absl::Span<int64_t const> dims,
+                              absl::Span<int64_t const> syms) {
+  return absl::StrCat("(", absl::StrJoin(dims, ", "), ")[",
+                      absl::StrJoin(syms, ", "), "]");
+}
+
+}  // namespace
 
 HloInstruction* IndexingTestBase::ParseAndGetRoot(
     absl::string_view hlo_string) {
@@ -140,78 +162,225 @@ AffineExpr ParseAffineExpr(absl::string_view serialized_affine_expr,
       .getResult(0);
 }
 
-inline std::vector<std::string> split_string(std::string s,
-                                             std::string pattern) {
-  std::vector<std::string> result;
-  size_t pos = 0;
-  while ((pos = s.find(pattern)) != std::string::npos) {
-    result.push_back(s.substr(0, pos));
-    s.erase(0, pos + pattern.length());
-  }
-  if (!s.empty()) result.push_back(s);
-  return result;
-}
-
-inline bool startswith(const std::string& s, const std::string& pattern) {
-  return s.substr(0, pattern.size()) == pattern;
-}
-
 bool ApproximateMatch(std::string_view lhs, std::string_view rhs) {
-  std::string lhs_unspaced, rhs_unspaced;
-  for (auto c : lhs) {
-    if (!std::isspace(c)) {
-      lhs_unspaced += c;
+  size_t lhs_length = lhs.size();
+  size_t rhs_length = rhs.size();
+  size_t l = 0, r = 0;
+  while (l < lhs_length || r < rhs_length) {
+    while (l < lhs_length && std::isspace(lhs[l])) {
+      ++l;
     }
-  }
-  for (auto c : rhs) {
-    if (!std::isspace(c)) {
-      rhs_unspaced += c;
+    while (r < rhs_length && std::isspace(rhs[r])) {
+      ++r;
     }
-  }
-
-  if (lhs_unspaced.find("###") == std::string::npos)
-    return lhs_unspaced == rhs_unspaced;
-
-  std::vector<std::string> frags = split_string(lhs_unspaced, "###");
-
-  while (frags.size() >= 2) {
-    if (!startswith(rhs_unspaced, frags[0])) {
+    if (l == lhs_length || r == rhs_length) {
+      break;
+    }
+    if (lhs[l++] != rhs[r++]) {
       return false;
     }
-
-    rhs_unspaced = rhs_unspaced.substr(frags[0].size());
-
-    auto terms = split_string(frags[1], "+");
-    // iterate through permutations of terms
-    std::vector<int> indexes(terms.size());
-    for (auto i = 0; i < terms.size(); i++) {
-      indexes[i] = i;
-    }
-    bool match = false;
-    do {
-      std::string permuted = "";
-      for (auto i : indexes) {
-        permuted += terms[i] + "+";
-      }
-      permuted.pop_back();
-      if (startswith(rhs_unspaced, permuted)) {
-        match = true;
-        break;
-      }
-    } while (std::next_permutation(indexes.begin(), indexes.end()));
-
-    if (!match) {
-      return false;
-    }
-
-    rhs_unspaced = rhs_unspaced.substr(frags[1].size());
-    frags.erase(frags.begin());
-    frags.erase(frags.begin());
   }
-  if (frags.empty())
-    return rhs_unspaced.empty();
-  else
-    return rhs_unspaced == frags[0];
+  return l == lhs_length && r == rhs_length;
+}
+
+std::optional<int64_t> SafeEvaluateAffineExpr(mlir::AffineExpr expr,
+                                              absl::Span<int64_t const> dims,
+                                              absl::Span<int64_t const> syms) {
+  if (auto sym = mlir::dyn_cast<mlir::AffineSymbolExpr>(expr)) {
+    if (sym.getPosition() < 0 || sym.getPosition() >= syms.size()) {
+      return std::nullopt;
+    }
+    return syms[sym.getPosition()];
+  }
+  if (auto dim = mlir::dyn_cast<mlir::AffineDimExpr>(expr)) {
+    if (dim.getPosition() < 0 || dim.getPosition() >= dims.size()) {
+      return std::nullopt;
+    }
+    return dims[dim.getPosition()];
+  }
+  if (auto cst = mlir::dyn_cast<mlir::AffineConstantExpr>(expr)) {
+    return cst.getValue();
+  }
+  auto binary = mlir::cast<mlir::AffineBinaryOpExpr>(expr);
+  auto lhs = SafeEvaluateAffineExpr(binary.getLHS(), dims, syms);
+  auto rhs = SafeEvaluateAffineExpr(binary.getRHS(), dims, syms);
+  if (!lhs || !rhs) return std::nullopt;
+
+  int64_t result;
+  bool result_division_is_undefined =
+      rhs == 0 || (lhs == std::numeric_limits<int64_t>::min() && rhs == -1);
+  switch (binary.getKind()) {
+    case mlir::AffineExprKind::Add:
+      if (llvm::AddOverflow(*lhs, *rhs, result)) {
+        return std::nullopt;
+      }
+      return result;
+    case mlir::AffineExprKind::Mul:
+      if (llvm::MulOverflow(*lhs, *rhs, result)) {
+        return std::nullopt;
+      }
+      return result;
+    case mlir::AffineExprKind::FloorDiv:
+      return result_division_is_undefined
+                 ? std::nullopt
+                 : std::make_optional(llvm::divideFloorSigned(*lhs, *rhs));
+    case mlir::AffineExprKind::CeilDiv:
+      return result_division_is_undefined
+                 ? std::nullopt
+                 : std::make_optional(llvm::divideCeilSigned(*lhs, *rhs));
+    case mlir::AffineExprKind::Mod:
+      return rhs <= 0 ? std::nullopt
+                      : std::make_optional(llvm::mod(*lhs, *rhs));
+    default:
+      LOG(FATAL) << "Unknown binary op: " << static_cast<int>(binary.getKind());
+  }
+}
+
+absl::Status EnumerateDomain(
+    const IndexingMap& indexing_map,
+    const std::function<absl::Status(absl::Span<int64_t const> dims,
+                                     absl::Span<int64_t const> syms)>&
+        callback) {
+  std::vector<int64_t> dims(indexing_map.GetDimensionCount());
+  std::vector<int64_t> syms(indexing_map.GetSymbolCount());
+  std::function<absl::Status(int64_t dim, int64_t sym)> enumerate;
+
+  absl::Status status = absl::OkStatus();
+  auto enumerate_range = [&](int64_t next_dim, int64_t next_sym, Interval range,
+                             int64_t& induction_var) -> absl::Status {
+    for (int64_t i = range.lower; i <= range.upper; ++i) {
+      induction_var = i;
+      TF_RETURN_IF_ERROR(enumerate(next_dim, next_sym));
+    }
+    return absl::OkStatus();
+  };
+
+  enumerate = [&](int64_t dim_id, int64_t sym_id) -> absl::Status {
+    if (dim_id < dims.size()) {
+      return enumerate_range(dim_id + 1, sym_id,
+                             indexing_map.GetDimensionBound(dim_id),
+                             dims[dim_id]);
+    }
+
+    if (sym_id < syms.size()) {
+      return enumerate_range(dim_id, sym_id + 1,
+                             indexing_map.GetSymbolBound(sym_id), syms[sym_id]);
+    }
+
+    for (auto [expr, interval] : indexing_map.GetConstraints()) {
+      auto constraint_value = SafeEvaluateAffineExpr(expr, dims, syms);
+      TF_RET_CHECK(constraint_value.has_value())
+          << "Constraint evaluation triggered undefined behavior at "
+          << FormatDimsAndSyms(dims, syms);
+      if (!interval.Contains(*constraint_value)) return absl::OkStatus();
+    }
+
+    return callback(dims, syms);
+  };
+
+  return enumerate(0, 0);
+}
+
+absl::Status VerifyBijection(const IndexingMap& indexing_map,
+                             absl::Span<Interval const> expected_codomain) {
+  mlir::AffineMap affine_map = indexing_map.GetAffineMap();
+  absl::flat_hash_map<absl::InlinedVector<int64_t, 4>,
+                      std::pair<absl::InlinedVector<int64_t, 6>,
+                                absl::InlinedVector<int64_t, 3>>>
+      codomain_to_domain;
+  TF_RETURN_IF_ERROR(EnumerateDomain(
+      indexing_map,
+      [&](absl::Span<int64_t const> dims,
+          absl::Span<int64_t const> syms) -> absl::Status {
+        absl::InlinedVector<int64_t, 4> codomain_point;
+        for (auto result : affine_map.getResults()) {
+          auto value = SafeEvaluateAffineExpr(result, dims, syms);
+          TF_RET_CHECK(value.has_value())
+              << "Indexing map evaluation triggered undefined behavior at "
+              << FormatDimsAndSyms(dims, syms);
+          codomain_point.push_back(*value);
+        }
+
+        for (auto [coordinate, interval] :
+             llvm::zip(codomain_point, expected_codomain)) {
+          TF_RET_CHECK(interval.Contains(coordinate))
+              << "Indexing map maps " << FormatDimsAndSyms(dims, syms)
+              << " to [" << absl::StrJoin(codomain_point, ", ")
+              << "], which lies outside the expected codomain.";
+        }
+
+        auto& entry = codomain_to_domain[codomain_point];
+        TF_RET_CHECK(entry.first.empty() && entry.second.empty())
+            << "Indexing map is not a bijection. Domain points "
+            << FormatDimsAndSyms(entry.first, entry.second) << " and "
+            << FormatDimsAndSyms(dims, syms) << " map to the same point ["
+            << absl::StrJoin(codomain_point, ", ") << "].";
+
+        entry = {{dims.begin(), dims.end()}, {syms.begin(), syms.end()}};
+        return absl::OkStatus();
+      }));
+
+  int64_t num_expected_points = 1;
+  for (auto interval : expected_codomain) {
+    num_expected_points *= interval.GetLoopTripCount();
+  }
+
+  TF_RET_CHECK(codomain_to_domain.size() == num_expected_points)
+      << "Indexing map codomain has " << codomain_to_domain.size()
+      << " points, expected " << num_expected_points;
+
+  return absl::OkStatus();
+}
+
+std::vector<int64_t> GetLoopTripCounts(const IndexingMap& indexing_map) {
+  std::vector<int64_t> trip_counts;
+  trip_counts.reserve(indexing_map.GetSymbolCount());
+  for (int i = 0; i < indexing_map.GetSymbolCount(); ++i) {
+    trip_counts.push_back(indexing_map.GetSymbolBound(i).GetLoopTripCount());
+  }
+  return trip_counts;
+}
+
+absl::Status VerifyExprsAreIdentical(
+    mlir::AffineExpr reference, mlir::AffineExpr other,
+    absl::Span<Interval const> dimension_ranges,
+    absl::Span<Interval const> symbol_ranges) {
+  std::vector<DimVar> dims;
+  dims.reserve(dimension_ranges.size());
+  for (const auto& interval : dimension_ranges) {
+    dims.push_back({interval});
+  }
+
+  std::vector<RangeVar> symbols;
+  symbols.reserve(symbol_ranges.size());
+  for (const auto& interval : symbol_ranges) {
+    symbols.push_back({interval});
+  }
+
+  IndexingMap map(mlir::AffineMap::get(dimension_ranges.size(),
+                                       symbol_ranges.size(), reference),
+                  dims, symbols, {});
+  return EnumerateDomain(
+      map,
+      [&](absl::Span<int64_t const> dims,
+          absl::Span<int64_t const> syms) -> absl::Status {
+        auto reference_value = SafeEvaluateAffineExpr(reference, dims, syms);
+        // If the reference value is undefined, there is no meaningful way to
+        // compare it to the other value.
+        if (!reference_value.has_value()) {
+          return absl::OkStatus();
+        }
+        auto other_value = SafeEvaluateAffineExpr(other, dims, syms);
+        TF_RET_CHECK(other_value.has_value())
+            << "Domain point " << FormatDimsAndSyms(dims, syms)
+            << " triggers undefined behavior in `other`.";
+
+        TF_RET_CHECK(reference_value == other_value)
+            << "Domain point " << FormatDimsAndSyms(dims, syms)
+            << " maps to different values: " << *reference_value << " vs. "
+            << *other_value << ".";
+        return absl::OkStatus();
+      });
 }
 
 }  // namespace gpu

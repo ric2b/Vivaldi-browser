@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.tab;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
-import org.chromium.base.ContextUtils;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.net.NetError;
 import org.chromium.ui.base.WindowAndroid;
@@ -15,6 +14,7 @@ import org.chromium.ui.base.WindowAndroid;
 // Vivaldi
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
+import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.url.GURL;
 import org.vivaldi.browser.common.VivaldiUtils;

@@ -732,7 +732,8 @@ void TimeZone::getOffset(UDate date, UBool local, int32_t& rawOffset,
         int32_t year, month, dom, dow, millis;
         double day = ClockMath::floorDivide(date, U_MILLIS_PER_DAY, &millis);
 
-        Grego::dayToFields(day, year, month, dom, dow);
+        Grego::dayToFields(day, year, month, dom, dow, ec);
+        if (U_FAILURE(ec)) return;
 
         dstOffset = getOffset(GregorianCalendar::AD, year, month, dom,
                               (uint8_t) dow, millis,

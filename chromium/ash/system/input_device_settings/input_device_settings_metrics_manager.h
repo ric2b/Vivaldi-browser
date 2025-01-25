@@ -16,6 +16,13 @@ namespace ash {
 
 class ASH_EXPORT InputDeviceSettingsMetricsManager {
  public:
+  enum class PeripheralCustomizationMetricsType {
+    kMouse,
+    kGraphicsTablet,
+    kGraphicsTabletPen,
+    kMaxValue = kGraphicsTabletPen,
+  };
+
   InputDeviceSettingsMetricsManager();
   InputDeviceSettingsMetricsManager(const InputDeviceSettingsMetricsManager&) =
       delete;
@@ -31,6 +38,7 @@ class ASH_EXPORT InputDeviceSettingsMetricsManager {
       const mojom::Keyboard& keyboard,
       const mojom::KeyboardSettings& default_settings);
   void RecordModifierRemappingHash(const mojom::Keyboard& keyboard);
+  void RecordSplitModifierRemappingHash(const mojom::Keyboard& keyboard);
   void RecordSixPackKeyInfo(const mojom::Keyboard& keyboard,
                             ui::KeyboardCode key_code,
                             bool is_initial_value);
@@ -53,11 +61,12 @@ class ASH_EXPORT InputDeviceSettingsMetricsManager {
       const mojom::GraphicsTabletSettings& old_settings);
   void RecordKeyboardMouseComboDeviceMetric(const mojom::Keyboard& keyboard,
                                             const mojom::Mouse& mouse);
-  void RecordNewButtonRegisteredMetrics(const mojom::Button& button,
-                                        const char* peripheral_kind);
+  void RecordNewButtonRegisteredMetrics(
+      const mojom::Button& button,
+      PeripheralCustomizationMetricsType peripheral_kind);
   void RecordRemappingActionWhenButtonPressed(
       const mojom::RemappingAction& remapping_action,
-      const char* peripheral_kind);
+      PeripheralCustomizationMetricsType peripheral_kind);
 
  private:
   base::flat_map<AccountId, base::flat_set<std::string>> recorded_keyboards_;

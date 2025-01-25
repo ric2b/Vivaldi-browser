@@ -49,6 +49,8 @@ class QUICHE_NO_EXPORT BTreeScheduler {
   bool HasScheduled() const { return !schedule_.empty(); }
   // Returns the number of currently scheduled streams.
   size_t NumScheduled() const { return schedule_.size(); }
+  // Returns the total number of currently registered streams.
+  size_t NumRegistered() const { return streams_.size(); }
 
   // Counts the number of scheduled entries in the range [min, max].  If either
   // min or max is omitted, negative or positive infinity is assumed.
@@ -91,7 +93,7 @@ class QUICHE_NO_EXPORT BTreeScheduler {
     ABSL_ATTRIBUTE_NO_UNIQUE_ADDRESS Priority priority;
     // If present, the sequence number with which the stream is currently
     // scheduled.  If absent, indicates that the stream is not scheduled.
-    std::optional<int> current_sequence_number;
+    std::optional<int> current_sequence_number = std::nullopt;
 
     bool scheduled() const { return current_sequence_number.has_value(); }
   };

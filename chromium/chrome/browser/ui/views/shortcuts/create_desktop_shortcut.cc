@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ui/views/shortcuts/create_desktop_shortcut.h"
+
 #include <string>
 
 #include "base/check_is_test.h"
@@ -14,7 +16,7 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/views/controls/site_icon_text_and_origin_view.h"
-#include "chrome/browser/ui/views/shortcuts/create_desktop_shortcut.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/shortcuts/create_desktop_shortcut_delegate.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -27,9 +29,10 @@
 #include "ui/base/models/dialog_model.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/bubble/bubble_dialog_model_host.h"
+#include "ui/views/interaction/element_tracker_views.h"
 #include "url/gurl.h"
 
-namespace chrome {
+namespace shortcuts {
 
 namespace {
 
@@ -65,10 +68,10 @@ void ShowCreateDesktopShortcutDialog(
   Profile* current_profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   if (current_profile) {
-    title = shortcuts::AppendProfileNameToTitleIfNeeded(current_profile, title);
+    title = AppendProfileNameToTitleIfNeeded(current_profile, title);
   }
 
-  auto delegate = std::make_unique<shortcuts::CreateDesktopShortcutDelegate>(
+  auto delegate = std::make_unique<CreateDesktopShortcutDelegate>(
       web_contents, std::move(dialog_action_and_text_callback));
   auto delegate_weak_ptr = delegate->AsWeakPtr();
 
@@ -79,21 +82,19 @@ void ShowCreateDesktopShortcutDialog(
               IDS_CREATE_SHORTCUT_NOT_APPS_DIALOG_TITLE))
           .SetSubtitle(l10n_util::GetStringUTF16(
               IDS_CREATE_SHORTCUT_NOT_APPS_DIALOG_SUBTITLE))
-          .AddOkButton(base::BindOnce(
-                           &shortcuts::CreateDesktopShortcutDelegate::OnAccept,
-                           delegate_weak_ptr),
+          .AddOkButton(base::BindOnce(&CreateDesktopShortcutDelegate::OnAccept,
+                                      delegate_weak_ptr),
                        ui::DialogModel::Button::Params()
                            .SetLabel(l10n_util::GetStringUTF16(
                                IDS_CREATE_SHORTCUTS_BUTTON_LABEL))
-                           .SetId(shortcuts::CreateDesktopShortcutDelegate::
+                           .SetId(CreateDesktopShortcutDelegate::
                                       kCreateShortcutDialogOkButtonId))
           // Dialog cancellations and closes are handled properly by the dialog
           // destroying callback.
           .AddCancelButton(base::DoNothing())
-          .SetDialogDestroyingCallback(
-              base::BindOnce(&shortcuts::CreateDesktopShortcutDelegate::OnClose,
-                             delegate_weak_ptr))
-          .OverrideDefaultButton(ui::DialogButton::DIALOG_BUTTON_NONE)
+          .SetDialogDestroyingCallback(base::BindOnce(
+              &CreateDesktopShortcutDelegate::OnClose, delegate_weak_ptr))
+          .OverrideDefaultButton(ui::DialogButton::DIALOG_BUTTON_CANCEL)
           .Build();
 
   dialog_model->AddCustomField(
@@ -104,30 +105,25 @@ void ShowCreateDesktopShortcutDialog(
                   IDS_CREATE_SHORTCUT_NOT_APPS_AX_BUBBLE_LABEL),
               web_contents->GetLastCommittedURL(), web_contents,
               base::BindRepeating(
-                  &shortcuts::CreateDesktopShortcutDelegate::OnTitleUpdated,
+                  &CreateDesktopShortcutDelegate::OnTitleUpdated,
                   delegate_weak_ptr)),
-          views::BubbleDialogModelHost::FieldType::kControl));
+          views::BubbleDialogModelHost::FieldType::kControl),
+      shortcuts::CreateDesktopShortcutDelegate::
+          kCreateShortcutDialogTitleFieldId);
 
   auto dialog = views::BubbleDialogModelHost::CreateModal(
       std::move(dialog_model), ui::MODAL_TYPE_CHILD);
 
   base::RecordAction(
       base::UserMetricsAction("CreateDesktopShortcutDialogShown"));
-  constrained_window::ShowWebModalDialogViews(dialog.release(), web_contents);
+  views::Widget* create_shortcuts_dialog_widget =
+      constrained_window::ShowWebModalDialogViews(dialog.release(),
+                                                  web_contents);
+  delegate_weak_ptr->StartObservingForPictureInPictureOcclusion(
+      create_shortcuts_dialog_widget);
 }
 
 }  // namespace
-
-void CreateDesktopShortcutForActiveWebContents(Browser* browser) {
-  content::WebContents* const web_contents =
-      browser->tab_strip_model()->GetActiveWebContents();
-
-  if (!web_contents) {
-    return;
-  }
-
-  CreateShortcutForWebContents(web_contents, base::DoNothing());
-}
 
 void ShowCreateDesktopShortcutDialogForTesting(
     content::WebContents* web_contents,
@@ -143,10 +139,25 @@ void CreateShortcutForWebContents(
     content::WebContents* web_contents,
     base::OnceCallback<void(bool shortcuts_created)>
         shortcut_creation_callback) {
-  shortcuts::CreateShortcutForCurrentWebContentsTask::CreateAndStart(
+  CreateShortcutForCurrentWebContentsTask::CreateAndStart(
       *web_contents,
       base::BindOnce(&ShowCreateDesktopShortcutDialog, web_contents),
       std::move(shortcut_creation_callback));
+}
+
+}  // namespace shortcuts
+
+namespace chrome {
+
+void CreateDesktopShortcutForActiveWebContents(Browser* browser) {
+  content::WebContents* const web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+
+  if (!web_contents) {
+    return;
+  }
+
+  shortcuts::CreateShortcutForWebContents(web_contents, base::DoNothing());
 }
 
 }  // namespace chrome

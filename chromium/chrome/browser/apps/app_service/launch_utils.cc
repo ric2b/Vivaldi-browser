@@ -17,6 +17,7 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/file_utils.h"
 #include "chrome/browser/apps/app_service/intent_util.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -72,10 +73,10 @@ crosapi::mojom::LaunchContainer ConvertAppServiceToCrosapiLaunchContainer(
     case apps::LaunchContainer::kLaunchContainerNone:
       return crosapi::mojom::LaunchContainer::kLaunchContainerNone;
     case apps::LaunchContainer::kLaunchContainerPanelDeprecated:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return crosapi::mojom::LaunchContainer::kLaunchContainerNone;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 apps::LaunchContainer ConvertCrosapiToAppServiceLaunchContainer(
@@ -88,7 +89,7 @@ apps::LaunchContainer ConvertCrosapiToAppServiceLaunchContainer(
     case crosapi::mojom::LaunchContainer::kLaunchContainerNone:
       return apps::LaunchContainer::kLaunchContainerNone;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 crosapi::mojom::WindowOpenDisposition ConvertWindowOpenDispositionToCrosapi(
@@ -112,11 +113,11 @@ crosapi::mojom::WindowOpenDisposition ConvertWindowOpenDispositionToCrosapi(
     case WindowOpenDisposition::OFF_THE_RECORD:
     case WindowOpenDisposition::IGNORE_ACTION:
     case WindowOpenDisposition::SWITCH_TO_TAB:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return crosapi::mojom::WindowOpenDisposition::kUnknown;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 WindowOpenDisposition ConvertWindowOpenDispositionFromCrosapi(
@@ -136,7 +137,7 @@ WindowOpenDisposition ConvertWindowOpenDispositionFromCrosapi(
       return WindowOpenDisposition::NEW_POPUP;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 }  // namespace
@@ -328,6 +329,8 @@ extensions::AppLaunchSource GetAppLaunchSource(LaunchSource launch_source) {
       return extensions::AppLaunchSource::kSourceAppHomePage;
     case LaunchSource::kFromFocusMode:
       return extensions::AppLaunchSource::kSourceFocusMode;
+    case LaunchSource::kFromSparky:
+      return extensions::AppLaunchSource::kSourceSparky;
     // No equivalent extensions launch source or not needed in extensions:
     case LaunchSource::kFromReparenting:
     case LaunchSource::kFromProfileMenu:
@@ -350,7 +353,7 @@ int GetEventFlags(WindowOpenDisposition disposition, bool prefer_container) {
     case WindowOpenDisposition::NEW_FOREGROUND_TAB:
       return ui::EF_MIDDLE_MOUSE_BUTTON | ui::EF_SHIFT_DOWN;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return ui::EF_NONE;
   }
 }
@@ -512,5 +515,31 @@ void MaybeLaunchPreferredAppForUrl(Profile* profile,
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+void LaunchUrlInInstalledAppOrBrowser(Profile* profile,
+                                      const GURL& url,
+                                      LaunchSource launch_source) {
+  if (AppServiceProxyFactory::IsAppServiceAvailableForProfile(profile)) {
+    auto* proxy = AppServiceProxyFactory::GetForProfile(profile);
+    AppIdsToLaunchForUrl candidate_apps = FindAppIdsToLaunchForUrl(proxy, url);
+    std::optional<std::string> app_id = candidate_apps.preferred;
+    if (!app_id && candidate_apps.candidates.size() == 1) {
+      app_id = candidate_apps.candidates[0];
+    }
+    if (app_id) {
+      proxy->LaunchAppWithUrl(*app_id,
+                              /*event_flags=*/0, url, launch_source);
+      return;
+    }
+  }
+
+  CHECK(ash::NewWindowDelegate::GetPrimary());
+
+  ash::NewWindowDelegate::GetPrimary()->OpenUrl(
+      url, ash::NewWindowDelegate::OpenUrlFrom::kUserInteraction,
+      ash::NewWindowDelegate::Disposition::kNewForegroundTab);
+}
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 }  // namespace apps

@@ -7,12 +7,13 @@
 #import "app/vivaldi_apptools.h"
 #import "base/ios/ios_util.h"
 #import "base/strings/utf_string_conversions.h"
+#import "ios/chrome/browser/bookmarks/ui_bundled/home/bookmarks_coordinator.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller.h"
-#import "ios/chrome/browser/ui/bookmarks/home/bookmarks_coordinator.h"
 #import "ios/chrome/browser/ui/history/history_coordinator.h"
 #import "ios/chrome/browser/ui/history/history_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/history/history_table_view_controller.h"
@@ -231,15 +232,9 @@ enum class PresentedState {
 
 #pragma mark - Private
 - (void)startObservingOmniboxPositionChange {
-  if (!_browser)
-    return;
-
-  if (!_browser->GetBrowserState()->GetPrefs())
-    return;
-
   _bottomOmniboxEnabled =
       [[PrefBackedBoolean alloc]
-          initWithPrefService:_browser->GetBrowserState()->GetPrefs()
+          initWithPrefService:GetApplicationContext()->GetLocalState()
                      prefName:prefs::kBottomOmnibox];
   [_bottomOmniboxEnabled setObserver:self];
   // Initialize to the correct value.

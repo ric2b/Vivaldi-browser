@@ -1,0 +1,23 @@
+[package]
+name = "derive_fuzztest_macro"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+quote.workspace = true
+proc-macro2.workspace = true
+syn = { workspace = true, features = ["extra-traits"]}
+
+[dev-dependencies]
+derive_fuzztest.workspace = true
+pretty_assertions.workspace = true
+prettyplease.workspace = true
+
+[features]
+quickcheck = []
+proptest = []
+
+[lib]
+proc-macro = true
+doc = false

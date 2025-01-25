@@ -62,7 +62,7 @@ impl<T, const N: usize> ArrayView<T, N> {
         }
     }
 
-    /// Returns the prefix of the array as a slice.
+    /// Returns the occupied portion of the array as a slice.
     pub fn as_slice(&self) -> &[T] {
         &self.array[..self.len]
     }
@@ -105,9 +105,8 @@ impl<T, const N: usize> borrow::Borrow<[T]> for ArrayView<T, N> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-
     extern crate std;
     use crate::ArrayView;
     use std::format;

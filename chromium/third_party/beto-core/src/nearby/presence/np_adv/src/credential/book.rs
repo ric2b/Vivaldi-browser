@@ -16,27 +16,25 @@
 //! the credentials to try for either advertisement version.
 //! See [`CredentialBookBuilder`] for batteries-included implementations.
 
-use crate::credential::source::{
-    CredentialSource, DiscoveryCredentialSource, SliceCredentialSource,
-};
-use crate::credential::v0::{V0DiscoveryCryptoMaterial, V0};
-use crate::credential::v1::{
-    SignedSectionIdentityResolutionMaterial, SignedSectionVerificationMaterial,
-    UnsignedSectionIdentityResolutionMaterial, UnsignedSectionVerificationMaterial,
-    V1DiscoveryCryptoMaterial, V1,
-};
-#[cfg(feature = "alloc")]
-use crate::credential::ReferencedMatchedCredential;
 use crate::credential::{
-    DiscoveryCryptoMaterial, MatchableCredential, MatchedCredential, ProtocolVersion,
+    source::{CredentialSource, SliceCredentialSource},
+    v0::{V0DiscoveryCryptoMaterial, V0},
+    v1::{
+        MicExtendedSaltSectionIdentityResolutionMaterial,
+        MicExtendedSaltSectionVerificationMaterial, MicShortSaltSectionIdentityResolutionMaterial,
+        MicShortSaltSectionVerificationMaterial, SignedSectionIdentityResolutionMaterial,
+        SignedSectionVerificationMaterial, V1DiscoveryCryptoMaterial, V1,
+    },
+    DiscoveryMetadataCryptoMaterial, MatchableCredential, MatchedCredential, ProtocolVersion,
 };
-use core::borrow::Borrow;
-use core::marker::PhantomData;
+use core::{borrow::Borrow, marker::PhantomData};
 use crypto_provider::CryptoProvider;
 
-#[cfg(feature = "alloc")]
+#[cfg(any(feature = "alloc", test))]
 extern crate alloc;
-#[cfg(feature = "alloc")]
+#[cfg(any(feature = "alloc", test))]
+use crate::credential::ReferencedMatchedCredential;
+#[cfg(any(feature = "alloc", test))]
 use alloc::vec::Vec;
 
 /// A collection of credentials to try when attempting to deserialize
@@ -171,17 +169,15 @@ where
 /// refer to the "precalculated" crypto-material variants
 /// for each protocol version.
 pub(crate) mod precalculated_for_version {
-    use crate::credential::v0::{
-        PrecalculatedV0DiscoveryCryptoMaterial, V0DiscoveryCredential, V0,
+    use crate::credential::{
+        v0::{PrecalculatedV0DiscoveryCryptoMaterial, V0DiscoveryCredential, V0},
+        v1::{PrecalculatedV1DiscoveryCryptoMaterial, V1DiscoveryCredential, V1},
+        DiscoveryMetadataCryptoMaterial, ProtocolVersion,
     };
-    use crate::credential::v1::{
-        PrecalculatedV1DiscoveryCryptoMaterial, V1DiscoveryCredential, V1,
-    };
-    use crate::credential::{DiscoveryCryptoMaterial, ProtocolVersion};
     use crypto_provider::CryptoProvider;
 
     pub trait MappingTrait<V: ProtocolVersion> {
-        type Output: DiscoveryCryptoMaterial<V>;
+        type Output: DiscoveryMetadataCryptoMaterial<V>;
         /// Provides pre-calculated crypto-material for the given
         /// discovery credential.
         fn precalculate<C: CryptoProvider>(
@@ -222,13 +218,12 @@ where
 }
 
 /// Iterator type for [`CachedCredentialSource`].
-pub struct CachedCredentialSourceIterator<
-    'a,
-    V: ProtocolVersion + 'a,
-    S: DiscoveryCredentialSource<'a, V> + 'a,
-    const N: usize,
-> where
+pub struct CachedCredentialSourceIterator<'a, V, S, const N: usize>
+where
     precalculated_for_version::Marker: precalculated_for_version::MappingTrait<V>,
+    V: ProtocolVersion + 'a,
+    S: CredentialSource<'a, V> + 'a,
+    S::Crypto: Borrow<V::DiscoveryCredential>,
 {
     /// The current index of the (enumerated) elements that we're iterating over.
     /// Always counts up at every iteration, and may lie outside of the range
@@ -244,10 +239,12 @@ pub struct CachedCredentialSourceIterator<
     source_iterator: S::Iterator,
 }
 
-impl<'a, V: ProtocolVersion + 'a, S: DiscoveryCredentialSource<'a, V> + 'a, const N: usize> Iterator
-    for CachedCredentialSourceIterator<'a, V, S, N>
+impl<'a, V, S, const N: usize> Iterator for CachedCredentialSourceIterator<'a, V, S, N>
 where
     precalculated_for_version::Marker: precalculated_for_version::MappingTrait<V>,
+    V: ProtocolVersion + 'a,
+    S: CredentialSource<'a, V> + 'a,
+    S::Crypto: Borrow<V::DiscoveryCredential>,
 {
     type Item = (PossiblyCachedDiscoveryCryptoMaterial<'a, V>, S::Matched);
     fn next(&mut self) -> Option<Self::Item> {
@@ -272,7 +269,7 @@ where
     }
 }
 
-/// A [`CredentialSource`] which augments the externally-provided [`DiscoveryCredentialSource`] with
+/// A [`CredentialSource`] which augments the externally-provided [`CredentialSource`] with
 /// a cache containing up to the specified number of pre-calculated credentials.
 pub struct CachedCredentialSource<V: ProtocolVersion, S, const N: usize>
 where
@@ -292,7 +289,8 @@ pub(crate) fn init_cache_from_source<'a, V: ProtocolVersion, S, const N: usize, 
     original: &'a S,
 ) -> [Option<PrecalculatedCryptoForProtocolVersion<V>>; N]
 where
-    S: DiscoveryCredentialSource<'a, V> + 'a,
+    S: CredentialSource<'a, V> + 'a,
+    S::Crypto: Borrow<V::DiscoveryCredential>,
     precalculated_for_version::Marker: precalculated_for_version::MappingTrait<V>,
 {
     let mut cache = [0u8; N].map(|_| None);
@@ -307,10 +305,10 @@ where
 
 impl<'a, V: ProtocolVersion, S, const N: usize> CachedCredentialSource<V, S, N>
 where
-    S: DiscoveryCredentialSource<'a, V> + 'a,
+    S: CredentialSource<'a, V> + 'a,
     precalculated_for_version::Marker: precalculated_for_version::MappingTrait<V>,
 {
-    /// Constructs a [`CachedCredentialSource`] from the given [`DiscoveryCredentialSource`]
+    /// Constructs a [`CachedCredentialSource`] from the given [`CredentialSource`]
     /// and the given (initial) cache contents, as constructed via the
     /// [`init_cache_from_source`] helper function.
     pub(crate) fn new(
@@ -354,7 +352,7 @@ where
     }
 }
 
-impl<'a, V: ProtocolVersion> DiscoveryCryptoMaterial<V>
+impl<'a, V: ProtocolVersion> DiscoveryMetadataCryptoMaterial<V>
     for PossiblyCachedDiscoveryCryptoMaterial<'a, V>
 where
     precalculated_for_version::Marker: precalculated_for_version::MappingTrait<V>,
@@ -368,7 +366,7 @@ where
 }
 
 impl<'a> V0DiscoveryCryptoMaterial for PossiblyCachedDiscoveryCryptoMaterial<'a, V0> {
-    fn ldt_adv_cipher<C: CryptoProvider>(&self) -> ldt_np_adv::LdtNpAdvDecrypterXtsAes128<C> {
+    fn ldt_adv_cipher<C: CryptoProvider>(&self) -> ldt_np_adv::AuthenticatedNpLdtDecryptCipher<C> {
         match &self.wrapped {
             PossiblyCachedDiscoveryCryptoMaterialKind::Discovery(x) => x.ldt_adv_cipher::<C>(),
             PossiblyCachedDiscoveryCryptoMaterialKind::Precalculated(x) => x.ldt_adv_cipher::<C>(),
@@ -390,15 +388,28 @@ impl<'a> V1DiscoveryCryptoMaterial for PossiblyCachedDiscoveryCryptoMaterial<'a,
         }
     }
 
-    fn unsigned_identity_resolution_material<C: CryptoProvider>(
+    fn mic_short_salt_identity_resolution_material<C: CryptoProvider>(
         &self,
-    ) -> UnsignedSectionIdentityResolutionMaterial {
+    ) -> MicShortSaltSectionIdentityResolutionMaterial {
         match &self.wrapped {
             PossiblyCachedDiscoveryCryptoMaterialKind::Discovery(x) => {
-                x.unsigned_identity_resolution_material::<C>()
+                x.mic_short_salt_identity_resolution_material::<C>()
             }
             PossiblyCachedDiscoveryCryptoMaterialKind::Precalculated(x) => {
-                x.unsigned_identity_resolution_material::<C>()
+                x.mic_short_salt_identity_resolution_material::<C>()
+            }
+        }
+    }
+
+    fn mic_extended_salt_identity_resolution_material<C: CryptoProvider>(
+        &self,
+    ) -> MicExtendedSaltSectionIdentityResolutionMaterial {
+        match &self.wrapped {
+            PossiblyCachedDiscoveryCryptoMaterialKind::Discovery(x) => {
+                x.mic_extended_salt_identity_resolution_material::<C>()
+            }
+            PossiblyCachedDiscoveryCryptoMaterialKind::Precalculated(x) => {
+                x.mic_extended_salt_identity_resolution_material::<C>()
             }
         }
     }
@@ -414,15 +425,28 @@ impl<'a> V1DiscoveryCryptoMaterial for PossiblyCachedDiscoveryCryptoMaterial<'a,
         }
     }
 
-    fn unsigned_verification_material<C: CryptoProvider>(
+    fn mic_short_salt_verification_material<C: CryptoProvider>(
         &self,
-    ) -> UnsignedSectionVerificationMaterial {
+    ) -> MicShortSaltSectionVerificationMaterial {
         match &self.wrapped {
             PossiblyCachedDiscoveryCryptoMaterialKind::Discovery(x) => {
-                x.unsigned_verification_material::<C>()
+                x.mic_short_salt_verification_material::<C>()
             }
             PossiblyCachedDiscoveryCryptoMaterialKind::Precalculated(x) => {
-                x.unsigned_verification_material::<C>()
+                x.mic_short_salt_verification_material::<C>()
+            }
+        }
+    }
+
+    fn mic_extended_salt_verification_material<C: CryptoProvider>(
+        &self,
+    ) -> MicExtendedSaltSectionVerificationMaterial {
+        match &self.wrapped {
+            PossiblyCachedDiscoveryCryptoMaterialKind::Discovery(x) => {
+                x.mic_extended_salt_verification_material::<C>()
+            }
+            PossiblyCachedDiscoveryCryptoMaterialKind::Precalculated(x) => {
+                x.mic_extended_salt_verification_material::<C>()
             }
         }
     }
@@ -432,11 +456,12 @@ impl<'a, V: ProtocolVersion, S, const N: usize> CredentialSource<'a, V>
     for CachedCredentialSource<V, S, N>
 where
     Self: 'a,
-    S: DiscoveryCredentialSource<'a, V> + 'a,
+    S: CredentialSource<'a, V> + 'a,
+    S::Crypto: Borrow<V::DiscoveryCredential>,
     precalculated_for_version::Marker: precalculated_for_version::MappingTrait<V>,
-    PossiblyCachedDiscoveryCryptoMaterial<'a, V>: DiscoveryCryptoMaterial<V>,
+    PossiblyCachedDiscoveryCryptoMaterial<'a, V>: DiscoveryMetadataCryptoMaterial<V>,
 {
-    type Matched = <S as DiscoveryCredentialSource<'a, V>>::Matched;
+    type Matched = <S as CredentialSource<'a, V>>::Matched;
     type Crypto = PossiblyCachedDiscoveryCryptoMaterial<'a, V>;
     type Iterator = CachedCredentialSourceIterator<'a, V, S, N>;
 
@@ -454,7 +479,7 @@ where
 /// can store an arbitrary amount of pre-calculated crypto-materials.
 ///
 /// Requires `alloc` as a result of internally leveraging a `Vec`.
-#[cfg(feature = "alloc")]
+#[cfg(any(feature = "alloc", test))]
 pub struct PrecalculatedOwnedCredentialSource<V: ProtocolVersion, M: MatchedCredential>
 where
     precalculated_for_version::Marker: precalculated_for_version::MappingTrait<V>,
@@ -462,7 +487,7 @@ where
     credentials: Vec<(PrecalculatedCryptoForProtocolVersion<V>, M)>,
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(any(feature = "alloc", test))]
 impl<'a, V: ProtocolVersion + 'a, M: MatchedCredential + 'a>
     PrecalculatedOwnedCredentialSource<V, M>
 where
@@ -486,7 +511,7 @@ where
     }
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(any(feature = "alloc", test))]
 fn reference_crypto_and_match_data<C, M: MatchedCredential>(
     pair_ref: &(C, M),
 ) -> (&C, ReferencedMatchedCredential<M>) {
@@ -494,13 +519,13 @@ fn reference_crypto_and_match_data<C, M: MatchedCredential>(
     (c, m.into())
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(any(feature = "alloc", test))]
 impl<'a, V: ProtocolVersion, M: MatchedCredential> CredentialSource<'a, V>
     for PrecalculatedOwnedCredentialSource<V, M>
 where
     Self: 'a,
     precalculated_for_version::Marker: precalculated_for_version::MappingTrait<V>,
-    &'a PrecalculatedCryptoForProtocolVersion<V>: DiscoveryCryptoMaterial<V>,
+    &'a PrecalculatedCryptoForProtocolVersion<V>: DiscoveryMetadataCryptoMaterial<V>,
 {
     type Matched = ReferencedMatchedCredential<'a, M>;
     type Crypto = &'a PrecalculatedCryptoForProtocolVersion<V>;
@@ -531,7 +556,7 @@ pub type CachedSliceCredentialBook<'a, M, const N0: usize, const N1: usize> =
         CachedSliceCredentialSource<'a, V1, M, N1>,
     >;
 
-#[cfg(feature = "alloc")]
+#[cfg(any(feature = "alloc", test))]
 /// A credential-book which owns all of its (non-matched) credential data,
 /// and maintains pre-calculated cryptographic information about all
 /// stored credentials for speedy advertisement deserialization.

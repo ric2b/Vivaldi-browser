@@ -7,9 +7,9 @@
 
 #include <iosfwd>
 
+#include "partition_alloc/buildflags.h"
 #include "partition_alloc/partition_alloc_base/compiler_specific.h"
 #include "partition_alloc/partition_alloc_base/component_export.h"
-#include "partition_alloc/partition_alloc_base/debug/debugging_buildflags.h"
 #include "partition_alloc/partition_alloc_base/immediate_crash.h"
 #include "partition_alloc/partition_alloc_base/log_message.h"
 #include "partition_alloc/partition_alloc_base/strings/cstring_builder.h"
@@ -93,7 +93,7 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC_BASE) CheckError {
 
   union {
     LogMessage log_message_;
-#if BUILDFLAG(IS_WIN)
+#if PA_BUILDFLAG(IS_WIN)
     Win32ErrorLogMessage errno_log_message_;
 #else
     ErrnoLogMessage errno_log_message_;
@@ -145,7 +145,7 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC_BASE) NotImplemented
 #error "Debug builds are not expected to be optimized as official builds."
 #endif  // defined(OFFICIAL_BUILD) && !defined(NDEBUG)
 
-#if defined(OFFICIAL_BUILD) && !PA_BUILDFLAG(PA_DCHECK_IS_ON)
+#if defined(OFFICIAL_BUILD) && !PA_BUILDFLAG(DCHECKS_ARE_ON)
 
 // Discard log strings to reduce code bloat.
 //
@@ -185,7 +185,7 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC_BASE) NotImplemented
 
 #endif
 
-#if PA_BUILDFLAG(PA_DCHECK_IS_ON)
+#if PA_BUILDFLAG(DCHECKS_ARE_ON)
 
 #define PA_BASE_DCHECK(condition)                                \
   PA_LAZY_CHECK_STREAM(                                          \

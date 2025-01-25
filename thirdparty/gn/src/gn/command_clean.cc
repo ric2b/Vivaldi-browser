@@ -44,13 +44,20 @@ bool CleanOneDir(const std::string& dir) {
     return false;
   }
 
-  // Erase everything but (user-created) args.gn and the build.ninja files we
-  // just wrote.
-  const base::FilePath::CharType* remaining[]{
+  // Erase everything but (user-created) args.gn, its imports and the
+  // build.ninja files we just wrote.
+  std::vector<base::FilePath::StringType> remaining{
       FILE_PATH_LITERAL("args.gn"),
       FILE_PATH_LITERAL("build.ninja"),
       FILE_PATH_LITERAL("build.ninja.d"),
   };
+  for (const auto& f :
+       setup->build_settings().build_args().build_args_dependency_files()) {
+    if (IsStringInOutputDir(setup->build_settings().build_dir(), f.value())) {
+      remaining.push_back(UTF8ToFilePath(f.GetName()).value());
+    }
+  }
+
   base::FileEnumerator traversal(
       build_dir, false,
       base::FileEnumerator::FILES | base::FileEnumerator::DIRECTORIES);

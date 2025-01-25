@@ -201,9 +201,6 @@ void WebAppPolicyManager::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterListPref(prefs::kWebAppInstallForceList);
   registry->RegisterListPref(prefs::kWebAppSettings);
-#if BUILDFLAG(IS_CHROMEOS)
-  registry->RegisterListPref(prefs::kIsolatedWebAppInstallForceList);
-#endif
 }
 
 void WebAppPolicyManager::InitChangeRegistrarAndRefreshPolicy(
@@ -695,7 +692,7 @@ void WebAppPolicyManager::RefreshPolicyInstalledAppsForTesting(
 
 void WebAppPolicyManager::OnAppsSynchronized(
     std::map<GURL, ExternallyManagedAppManager::InstallResult> install_results,
-    std::map<GURL, bool> uninstall_results) {
+    std::map<GURL, webapps::UninstallResultCode> uninstall_results) {
   is_refreshing_ = false;
 
   if (!install_results.empty())

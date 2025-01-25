@@ -42,6 +42,7 @@
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/find_result_waiter.h"
@@ -81,6 +82,7 @@
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "third_party/blink/public/common/chrome_debug_urls.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/views/test/widget_activation_waiter.h"
 #include "ui/views/widget/widget_interactive_uitest_utils.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -593,6 +595,31 @@ void ToggleFullscreenModeAndWait(Browser* browser) {
   waiter.Wait();
 }
 
+void WaitUntilBrowserBecomeActive(Browser* browser) {
+  CHECK(browser);
+  views::Widget* widget =
+      BrowserView::GetBrowserViewForBrowser(browser)->GetWidget();
+  views::test::WaitForWidgetActive(widget, /*active=*/true);
+}
+
+bool IsBrowserActive(Browser* browser) {
+  CHECK(browser);
+  views::Widget* widget =
+      BrowserView::GetBrowserViewForBrowser(browser)->GetWidget();
+  return widget->native_widget_active();
+}
+
+Browser* OpenNewEmptyWindowAndWaitUntilActivated(
+    Profile* profile,
+    bool should_trigger_session_restore) {
+  BrowserChangeObserver new_browser_observer(
+      nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
+  chrome::NewEmptyWindow(profile, should_trigger_session_restore);
+  Browser* new_browser = new_browser_observer.Wait();
+  WaitUntilBrowserBecomeActive(new_browser);
+  return new_browser;
+}
+
 BrowserSetLastActiveWaiter::BrowserSetLastActiveWaiter(
     Browser* browser,
     bool wait_for_set_last_active_observed)
@@ -632,17 +659,6 @@ void WaitForBrowserSetLastActive(Browser* browser,
                                  bool wait_for_set_last_active_observed) {
   BrowserSetLastActiveWaiter waiter(browser, wait_for_set_last_active_observed);
   waiter.Wait();
-}
-
-Browser* OpenNewEmptyWindowAndWaitUntilSetAsLastActive(
-    Profile* profile,
-    bool should_trigger_session_restore) {
-  BrowserChangeObserver new_browser_observer(
-      nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
-  chrome::NewEmptyWindow(profile, should_trigger_session_restore);
-  Browser* new_browser = new_browser_observer.Wait();
-  WaitForBrowserSetLastActive(new_browser);
-  return new_browser;
 }
 
 void SendToOmniboxAndSubmit(Browser* browser,

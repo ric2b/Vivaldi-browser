@@ -83,7 +83,10 @@ test("device_unittests") {
   }
 
   if (is_mac) {
-    sources += [ "bluetooth/bluetooth_adapter_mac_unittest.mm" ]
+    sources += [
+      "bluetooth/bluetooth_adapter_mac_unittest.mm",
+      "bluetooth/bluetooth_classic_device_mac_unittest.mm",
+    ]
   }
 
   if (is_android) {
@@ -120,6 +123,7 @@ test("device_unittests") {
     "//components/apdu",
     "//components/cbor",
     "//components/device_event_log",
+    "//components/prefs:test_support",
     "//crypto:test_support",
     "//device/base",
     "//device/base/synchronization",
@@ -181,6 +185,7 @@ test("device_unittests") {
       "fido/ctap_request_unittest.cc",
       "fido/ctap_response_unittest.cc",
       "fido/enclave/enclave_protocol_utils_unittest.cc",
+      "fido/enclave/verify/amd_unittest.cc",
       "fido/enclave/verify/claim_unittest.cc",
       "fido/enclave/verify/endorsement_unittest.cc",
       "fido/enclave/verify/rekor_unittest.cc",
@@ -198,7 +203,6 @@ test("device_unittests") {
       "fido/make_credential_handler_unittest.cc",
       "fido/make_credential_task_unittest.cc",
       "fido/pin_unittest.cc",
-      "fido/test_callback_receiver_unittest.cc",
       "fido/u2f_command_constructor_unittest.cc",
       "fido/u2f_register_operation_unittest.cc",
       "fido/u2f_sign_operation_unittest.cc",

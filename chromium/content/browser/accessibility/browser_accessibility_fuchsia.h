@@ -45,6 +45,7 @@ class CONTENT_EXPORT BrowserAccessibilityFuchsia : public BrowserAccessibility {
   // BrowserAccessibility overrides.
   void OnDataChanged() override;
   void OnLocationChanged() override;
+  ui::AXPlatformNode* GetAXPlatformNode() const override;
   bool AccessibilityPerformAction(const ui::AXActionData& action_data) override;
 
   // Returns this object's AXUniqueID as a uint32_t.
@@ -78,6 +79,9 @@ class CONTENT_EXPORT BrowserAccessibilityFuchsia : public BrowserAccessibility {
   // ui::IsListItem
   // (https://source.chromium.org/chromium/chromium/src/+/main:ui/accessibility/ax_role_properties.cc;drc=2c712b0d61f0788c0ed1b05176ae7430e8c705e5;l=413).
   bool IsListElement() const;
+
+  // Returns true if this AXNode should be mapped to Fuchsia's Default action.
+  bool IsFuchsiaDefaultAction() const;
 
   // Fuchsia-specific representation of this node.
   ui::AXPlatformNodeFuchsia* platform_node_;

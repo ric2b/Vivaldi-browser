@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -28,15 +29,15 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/task_environment.h"
 #include "base/test/test_simple_task_runner.h"
 #include "build/build_config.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/subresource_filter/content/shared/browser/ruleset_publisher.h"
 #include "components/subresource_filter/content/shared/browser/unindexed_ruleset_stream_generator.h"
-#include "components/subresource_filter/core/browser/ruleset_publisher.h"
-#include "components/subresource_filter/core/browser/subresource_filter_constants.h"
+#include "components/subresource_filter/core/common/constants.h"
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
 #include "components/url_pattern_index/proto/rules.pb.h"
+#include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/resource/mock_resource_bundle_delegate.h"
@@ -95,18 +96,47 @@ std::vector<uint8_t> ReadFileContentsToVector(base::File* file) {
 
 // Mocks ----------------------------------------------------------------------
 
-class MockRulesetPublisherImpl : public RulesetPublisher {
+class MockRulesetPublisher : public RulesetPublisher {
  public:
-  explicit MockRulesetPublisherImpl(
+  explicit MockRulesetPublisher(
+      RulesetService* ruleset_service,
       scoped_refptr<base::TestSimpleTaskRunner> blocking_task_runner,
       scoped_refptr<base::TestSimpleTaskRunner> best_effort_task_runner)
-      : blocking_task_runner_(std::move(blocking_task_runner)),
+      : RulesetPublisher(ruleset_service,
+                         blocking_task_runner,
+                         ruleset_service->config()),
+        blocking_task_runner_(std::move(blocking_task_runner)),
         best_effort_task_runner_(std::move(best_effort_task_runner)) {}
 
-  MockRulesetPublisherImpl(const MockRulesetPublisherImpl&) = delete;
-  MockRulesetPublisherImpl& operator=(const MockRulesetPublisherImpl&) = delete;
+  MockRulesetPublisher(const MockRulesetPublisher&) = delete;
+  MockRulesetPublisher& operator=(const MockRulesetPublisher&) = delete;
 
-  ~MockRulesetPublisherImpl() override = default;
+  class Factory : public RulesetPublisher::Factory {
+   public:
+    Factory(scoped_refptr<base::TestSimpleTaskRunner> blocking_task_runner,
+            scoped_refptr<base::TestSimpleTaskRunner> best_effort_task_runner)
+        : blocking_task_runner_(std::move(blocking_task_runner)),
+          best_effort_task_runner_(std::move(best_effort_task_runner)) {}
+
+    std::unique_ptr<RulesetPublisher> Create(
+        RulesetService* ruleset_service,
+        scoped_refptr<base::SequencedTaskRunner> blocking_task_runner)
+        const override {
+      // Intentionally ignore the task runner argument.
+      return std::make_unique<MockRulesetPublisher>(
+          ruleset_service, blocking_task_runner_, best_effort_task_runner_);
+    }
+
+   private:
+    scoped_refptr<base::TestSimpleTaskRunner> blocking_task_runner_;
+    scoped_refptr<base::TestSimpleTaskRunner> best_effort_task_runner_;
+  };
+
+  ~MockRulesetPublisher() override = default;
+
+  void SendRulesetToRenderProcess(
+      base::File* file,
+      content::RenderProcessHost* process) override {}
 
   void TryOpenAndSetRulesetFile(
       const base::FilePath& path,
@@ -116,8 +146,7 @@ class MockRulesetPublisherImpl : public RulesetPublisher {
     //   1. Open file on task runner.
     //   2. Reply with result on current thread runner.
     blocking_task_runner_->PostTaskAndReplyWithResult(
-        FROM_HERE,
-        base::BindOnce(&MockRulesetPublisherImpl::OpenRulesetFile, path),
+        FROM_HERE, base::BindOnce(&MockRulesetPublisher::OpenRulesetFile, path),
         std::move(callback));
   }
 
@@ -242,8 +271,8 @@ class SubresourceFilteringRulesetServiceTest : public ::testing::Test {
     service_ = std::make_unique<RulesetService>(
         kSafeBrowsingRulesetConfig, &pref_service_, background_task_runner_,
         base_dir(), blocking_task_runner_,
-        std::make_unique<MockRulesetPublisherImpl>(blocking_task_runner_,
-                                                   best_effort_task_runner_));
+        MockRulesetPublisher::Factory(blocking_task_runner_,
+                                      background_task_runner_));
   }
 
   void ClearRulesetService() {
@@ -328,7 +357,7 @@ class SubresourceFilteringRulesetServiceTest : public ::testing::Test {
 
   // Mark the initialization complete and run task queues until all are empty.
   void SimulateStartupCompletedAndWaitForTasks() {
-    DCHECK(mock_publisher());
+    CHECK(mock_publisher());
     mock_publisher()->RunBestEffortUntilIdle();
     RunAllUntilIdle();
   }
@@ -420,8 +449,8 @@ class SubresourceFilteringRulesetServiceTest : public ::testing::Test {
 
   PrefService* prefs() { return &pref_service_; }
   RulesetService* service() { return service_.get(); }
-  MockRulesetPublisherImpl* mock_publisher() {
-    return static_cast<MockRulesetPublisherImpl*>(service_->publisher_.get());
+  MockRulesetPublisher* mock_publisher() {
+    return static_cast<MockRulesetPublisher*>(service_->publisher_.get());
   }
 
   virtual base::FilePath effective_temp_dir() const {
@@ -437,7 +466,7 @@ class SubresourceFilteringRulesetServiceTest : public ::testing::Test {
   }
 
  private:
-  base::test::TaskEnvironment task_environment_;
+  content::BrowserTaskEnvironment task_environment_;
   base::ScopedTempDir scoped_temp_dir_;
 
   scoped_refptr<base::TestSimpleTaskRunner> blocking_task_runner_;

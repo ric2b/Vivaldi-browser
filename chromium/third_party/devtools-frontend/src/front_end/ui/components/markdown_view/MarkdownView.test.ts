@@ -23,7 +23,43 @@ function getFakeToken(token: TestToken): Marked.Marked.Token {
 }
 
 describeWithEnvironment('MarkdownView', () => {
-  describe('renderToken', () => {
+  describe('tokenizer', () => {
+    it('tokenizers links in single quotes', () => {
+      assert.deepStrictEqual(Marked.Marked.lexer('\'https://example.com\''), [
+        {
+          'raw': '\'https://example.com\'',
+          'text': '\'https://example.com\'',
+          'tokens': [
+            {
+              'raw': '\'',
+              'text': '&#39;',
+              'type': 'text',
+            },
+            {
+              'href': 'https://example.com',
+              'raw': 'https://example.com',
+              'text': 'https://example.com',
+              'tokens': [
+                {
+                  'raw': 'https://example.com',
+                  'text': 'https://example.com',
+                  'type': 'text',
+                },
+              ],
+              'type': 'link',
+            },
+            {
+              'raw': '\'',
+              'text': '&#39;',
+              'type': 'text',
+            },
+          ],
+          'type': 'paragraph',
+        },
+      ] as unknown as Marked.Marked.TokensList);
+    });
+  });
+  describe('MarkdownLitRenderer renderToken', () => {
     const renderer = new MarkdownView.MarkdownView.MarkdownLitRenderer();
 
     it('wraps paragraph tokens in <p> tags', () => {
@@ -125,6 +161,28 @@ describeWithEnvironment('MarkdownView', () => {
     });
   });
 
+  describe('MarkdownInsightRenderer renderToken', () => {
+    const renderer = new MarkdownView.MarkdownView.MarkdownInsightRenderer();
+    it('renders link as an x-link', () => {
+      const result =
+          renderer.renderToken({type: 'link', text: 'learn more', href: 'exampleLink'} as Marked.Marked.Token);
+      assert((result.values[0] as HTMLElement).tagName === 'X-LINK');
+    });
+    it('renders images as an x-link', () => {
+      const result =
+          renderer.renderToken({type: 'image', text: 'learn more', href: 'exampleLink'} as Marked.Marked.Token);
+      assert((result.values[0] as HTMLElement).tagName === 'X-LINK');
+    });
+    it('renders headers as a strong element', () => {
+      const result = renderer.renderToken({type: 'heading', text: 'learn more'} as Marked.Marked.Token);
+      assert(result.strings.join('').includes('<strong>'));
+    });
+    it('renders unsupported tokens', () => {
+      const result = renderer.renderToken({type: 'html', raw: '<!DOCTYPE html>'} as Marked.Marked.Token);
+      assert(result.values.join('').includes('<!DOCTYPE html>'));
+    });
+  });
+
   const paragraphText =
       'Single paragraph with a sentence of text and some list items to test that the component works end-to-end.';
   const listItemTexts = ['Simple unordered list item 1', 'Simple unordered list item 2'];
@@ -180,7 +238,7 @@ console.log('test')
               if (token.type === 'codespan') {
                 return LitHtml.html`<code>overriden</code>`;
               }
-              return super.templateForToken(token);
+              return super.templateForToken(token as Marked.Marked.MarkedToken);
             }
           }());
       assert.strictEqual(codeBlock.innerText, 'overriden');

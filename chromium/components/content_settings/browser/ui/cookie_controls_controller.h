@@ -17,6 +17,7 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/cookie_blocking_3pcd_status.h"
 #include "components/content_settings/core/common/cookie_controls_enforcement.h"
+#include "components/content_settings/core/common/tracking_protection_feature.h"
 #include "components/fingerprinting_protection_filter/browser/fingerprinting_protection_observer.h"
 #include "components/fingerprinting_protection_filter/browser/fingerprinting_protection_web_contents_helper.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -80,11 +81,19 @@ class CookieControlsController final
 
  private:
   struct Status {
+    Status(bool controls_visible,
+           bool protections_on,
+           CookieControlsEnforcement enforcement,
+           CookieBlocking3pcdStatus blocking_status,
+           base::Time expiration,
+           std::vector<TrackingProtectionFeature> features);
+    ~Status();
     bool controls_visible;
     bool protections_on;
     CookieControlsEnforcement enforcement;
     CookieBlocking3pcdStatus blocking_status;
     base::Time expiration;
+    std::vector<TrackingProtectionFeature> features;
   };
 
   // The observed WebContents changes during the lifetime of the
@@ -148,12 +157,25 @@ class CookieControlsController final
 
   Status GetStatus(content::WebContents* web_contents);
 
+  std::vector<TrackingProtectionFeature> CreateTrackingProtectionFeatureList(
+      CookieControlsEnforcement enforcement,
+      bool cookies_allowed,
+      bool protections_on);
+
+  CookieControlsEnforcement GetEnforcementForThirdPartyCookieBlocking(
+      CookieBlocking3pcdStatus status,
+      const GURL url,
+      SettingInfo info,
+      bool cookies_allowed);
+
   bool HasOriginSandboxedTopLevelDocument() const;
 
   // Updates user bypass visibility and/or highlighting.
   void UpdateUserBypass();
 
-  void OnPageReloadDetected(int recent_reloads_count);
+  void UpdateLastVisitedSitesMap();
+
+  void UpdatePageReloadStatus(int recent_reloads_count);
 
   void OnPageFinishedLoading();
 
@@ -178,8 +200,10 @@ class CookieControlsController final
                         int third_party_blocked_sites);
 
   bool ShouldHighlightUserBypass();
-  bool ShouldUserBypassIconBeVisible(bool protections_on,
-                                     bool controls_visible);
+  bool ShouldUserBypassIconBeVisible(
+      std::vector<TrackingProtectionFeature> features,
+      bool protections_on,
+      bool controls_visible);
   content::WebContents* GetWebContents() const;
 
   std::unique_ptr<TabObserver> tab_observer_;

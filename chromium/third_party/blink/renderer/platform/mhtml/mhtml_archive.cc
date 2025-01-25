@@ -28,6 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/mhtml/mhtml_archive.h"
 
 #include <stddef.h>
@@ -403,7 +408,7 @@ void MHTMLArchive::GenerateMHTMLPart(const String& boundary,
   } else {
     // FIXME: ideally we would encode the content as a stream without having to
     // fetch it all.
-    const SharedBuffer::DeprecatedFlatData flat_data(resource.data);
+    const SegmentedBuffer::DeprecatedFlatData flat_data(resource.data.get());
     const char* data = flat_data.Data();
     wtf_size_t data_length = base::checked_cast<wtf_size_t>(flat_data.size());
     Vector<char> encoded_data;

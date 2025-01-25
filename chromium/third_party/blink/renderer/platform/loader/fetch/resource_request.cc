@@ -39,7 +39,6 @@
 #include "third_party/blink/renderer/platform/network/encoded_form_data.h"
 #include "third_party/blink/renderer/platform/network/http_names.h"
 #include "third_party/blink/renderer/platform/network/network_utils.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/referrer.h"
 
 namespace blink {
@@ -233,8 +232,6 @@ std::unique_ptr<ResourceRequest> ResourceRequestHead::CreateRedirectRequest(
   request->SetAttributionReportingSupport(GetAttributionReportingSupport());
   request->SetAttributionReportingEligibility(
       GetAttributionReportingEligibility());
-  request->SetAttributionReportingRuntimeFeatures(
-      GetAttributionReportingRuntimeFeatures());
   request->SetAttributionReportingSrcToken(GetAttributionSrcToken());
 
   return request;

@@ -14,6 +14,7 @@
 #include "ash/wm/overview/birch/birch_bar_controller.h"
 #include "ash/wm/overview/birch/birch_chip_context_menu_model.h"
 #include "base/types/cxx23_to_underlying.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/events/types/event_type.h"
@@ -53,12 +54,11 @@ constexpr int kCalendarCornerRadius = 20;
 constexpr int kIllustrationSize = 40;
 constexpr int kIllustrationCornerRadius = 8;
 constexpr int kWeatherImageSize = 32;
+constexpr int kErrorImageSize = 32;
 
 // The colors of icons.
 constexpr ui::ColorId kIconBackgroundColorId =
     cros_tokens::kCrosSysSystemOnBase;
-constexpr ui::ColorId kWeatherImageBackgroundColorId =
-    cros_tokens::kCrosSysOnSurface;
 
 // The colors and fonts of title and subtitle.
 constexpr int kTitleSpacing = 2;
@@ -70,7 +70,7 @@ constexpr ui::ColorId kSubtitleColorId = cros_tokens::kCrosSysOnSurfaceVariant;
 void StylizeIconForItemType(views::ImageView* icon, BirchItemType type) {
   int icon_size;
   int rounded_corners;
-  ui::ColorId background_color_id;
+  std::optional<ui::ColorId> background_color_id;
 
   switch (type) {
     case BirchItemType::kCalendar:
@@ -80,8 +80,6 @@ void StylizeIconForItemType(views::ImageView* icon, BirchItemType type) {
       break;
     case BirchItemType::kWeather:
       icon_size = kWeatherImageSize;
-      rounded_corners = 0;
-      background_color_id = kWeatherImageBackgroundColorId;
       break;
     case BirchItemType::kReleaseNotes:
       icon_size = kIllustrationSize;
@@ -98,12 +96,10 @@ void StylizeIconForItemType(views::ImageView* icon, BirchItemType type) {
   icon->SetImageSize(gfx::Size(icon_size, icon_size));
   icon->SetBorder(
       views::CreateEmptyBorder(gfx::Insets((kIconViewSize - icon_size) / 2)));
-  if (rounded_corners) {
+
+  if (background_color_id) {
     icon->SetBackground(views::CreateThemedRoundedRectBackground(
-        background_color_id, rounded_corners));
-  } else {
-    icon->SetBackground(
-        views::CreateThemedSolidBackground(background_color_id));
+        background_color_id.value(), rounded_corners));
   }
 }
 
@@ -112,12 +108,19 @@ BirchSuggestionType GetSuggestionTypeFromItemType(BirchItemType item_type) {
     case BirchItemType::kWeather:
       return BirchSuggestionType::kWeather;
     case BirchItemType::kCalendar:
-    case BirchItemType::kAttachment:
       return BirchSuggestionType::kCalendar;
+    // Attachments are considered Drive suggestions in the UI.
+    case BirchItemType::kAttachment:
     case BirchItemType::kFile:
       return BirchSuggestionType::kDrive;
+    // All tab types are "Chrome browser" in the UI.
     case BirchItemType::kTab:
-      return BirchSuggestionType::kTab;
+    case BirchItemType::kLastActive:
+    case BirchItemType::kMostVisited:
+    case BirchItemType::kSelfShare:
+      return BirchSuggestionType::kChromeTab;
+    case BirchItemType::kLostMedia:
+      return BirchSuggestionType::kMedia;
     case BirchItemType::kReleaseNotes:
       return BirchSuggestionType::kExplore;
     default:
@@ -168,8 +171,6 @@ BirchChipButton::BirchChipButton()
   // Build up the chip's contents.
   views::Builder<BirchChipButtonBase>(this)
       .SetLayoutManager(std::move(flex_layout))
-      // TODO(zxdan): verbalize all the contents in following changes.
-      .SetAccessibleName(u"Birch Chip")
       .AddChildren(
           // Icon.
           views::Builder<views::ImageView>().CopyAddressTo(&icon_).SetProperty(
@@ -220,11 +221,15 @@ void BirchChipButton::Init(BirchItem* item) {
                             base::Unretained(item_)),
         *item_->secondary_action(), PillButton::Type::kSecondaryWithoutIcon));
     button->SetProperty(views::kMarginsKey, gfx::Insets::VH(0, 16));
+    button->SetTooltipText(
+        l10n_util::GetStringUTF16(IDS_ASH_BIRCH_CALENDAR_JOIN_BUTTON_TOOLTIP));
   }
 
   StylizeIconForItemType(icon_, item_->GetType());
   item_->LoadIcon(base::BindOnce(&BirchChipButton::SetIconImage,
                                  weak_factory_.GetWeakPtr()));
+
+  SetAccessibleName(item_->title() + u" " + item_->subtitle());
 }
 
 const BirchItem* BirchChipButton::GetItem() const {
@@ -239,12 +244,20 @@ void BirchChipButton::Shutdown() {
   item_ = nullptr;
 }
 
-void BirchChipButton::SetIconImage(const ui::ImageModel& icon_image) {
+void BirchChipButton::SetIconImage(const ui::ImageModel& icon_image,
+                                   bool success) {
   icon_->SetImage(icon_image);
+
+  // Enlarge error icons.
+  if (!success) {
+    icon_->SetImageSize(gfx::Size(kErrorImageSize, kErrorImageSize));
+    icon_->SetBorder(views::CreateEmptyBorder(
+        gfx::Insets((kIconViewSize - kErrorImageSize) / 2)));
+  }
 }
 
 void BirchChipButton::OnGestureEvent(ui::GestureEvent* event) {
-  if (event->type() == ui::ET_GESTURE_LONG_PRESS) {
+  if (event->type() == ui::EventType::kGestureLongPress) {
     // Show removal chip panel.
     gfx::Point screen_location(event->location());
     views::View::ConvertPointToScreen(this, &screen_location);
@@ -273,6 +286,9 @@ void BirchChipButton::ExecuteCommand(int command_id, int event_flags) {
       birch_bar_controller->SetShowSuggestionType(BirchSuggestionType::kWeather,
                                                   /*show=*/false);
       break;
+    case base::to_underlying(CommandId::kToggleTemperatureUnits):
+      birch_bar_controller->ToggleTemperatureUnits();
+      break;
     case base::to_underlying(CommandId::kHideCalendarSuggestions):
       birch_bar_controller->SetShowSuggestionType(
           BirchSuggestionType::kCalendar,
@@ -282,8 +298,13 @@ void BirchChipButton::ExecuteCommand(int command_id, int event_flags) {
       birch_bar_controller->SetShowSuggestionType(BirchSuggestionType::kDrive,
                                                   /*show=*/false);
       break;
-    case base::to_underlying(CommandId::kHideOtherDeviceSuggestions):
-      birch_bar_controller->SetShowSuggestionType(BirchSuggestionType::kTab,
+    case base::to_underlying(CommandId::kHideChromeTabSuggestions):
+      birch_bar_controller->SetShowSuggestionType(
+          BirchSuggestionType::kChromeTab,
+          /*show=*/false);
+      break;
+    case base::to_underlying(CommandId::kHideMediaSuggestions):
+      birch_bar_controller->SetShowSuggestionType(BirchSuggestionType::kMedia,
                                                   /*show=*/false);
       break;
     case base::to_underlying(CommandId::kFeedback):

@@ -8,6 +8,7 @@
 #include <stack>
 #include <vector>
 
+#include "src/common/simd128.h"
 #include "src/deoptimizer/frame-translation-builder.h"
 #include "src/objects/deoptimization-data.h"
 #include "src/objects/feedback-vector.h"
@@ -83,6 +84,7 @@ class TranslatedValue {
     kFloat,
     kDouble,
     kHoleyDouble,
+    kSimd128,
     kCapturedObject,   // Object captured by the escape analysis.
                        // The number of nested objects can be obtained
                        // with the DeferredObjectLength() method
@@ -115,6 +117,7 @@ class TranslatedValue {
   static TranslatedValue NewDouble(TranslatedState* container, Float64 value);
   static TranslatedValue NewHoleyDouble(TranslatedState* container,
                                         Float64 value);
+  static TranslatedValue NewSimd128(TranslatedState* container, Simd128 value);
   static TranslatedValue NewInt32(TranslatedState* container, int32_t value);
   static TranslatedValue NewInt64(TranslatedState* container, int64_t value);
   static TranslatedValue NewInt64ToBigInt(TranslatedState* container,
@@ -174,6 +177,8 @@ class TranslatedValue {
     Float64 double_value_;
     // kind is kDuplicatedObject or kCapturedObject.
     MaterializedObjectInfo materialization_info_;
+    // kind is kSimd128.
+    Simd128 simd128_value_;
   };
 
   // Checked accessors for the union members.
@@ -184,6 +189,7 @@ class TranslatedValue {
   uint64_t uint64_value() const;
   Float32 float_value() const;
   Float64 double_value() const;
+  Simd128 simd_value() const;
   int object_length() const;
   int object_index() const;
 };
@@ -206,7 +212,7 @@ class TranslatedFrame {
     kInvalid
   };
 
-  int GetValueCount();
+  int GetValueCount() const;
 
   Kind kind() const { return kind_; }
   BytecodeOffset bytecode_offset() const { return bytecode_offset_; }
@@ -281,6 +287,11 @@ class TranslatedFrame {
     DCHECK_EQ(kind(), kJSToWasmBuiltinContinuation);
     return return_kind_;
   }
+
+  int wasm_function_index() const {
+    DCHECK_EQ(kind(), kLiftoffFunction);
+    return wasm_function_index_;
+  }
 #endif  // V8_ENABLE_WEBASSEMBLY
 
  private:
@@ -309,7 +320,8 @@ class TranslatedFrame {
   static TranslatedFrame JSToWasmBuiltinContinuationFrame(
       BytecodeOffset bailout_id, Tagged<SharedFunctionInfo> shared_info,
       int height, base::Optional<wasm::ValueKind> return_type);
-  static TranslatedFrame LiftoffFrame(BytecodeOffset bailout_id, int height);
+  static TranslatedFrame LiftoffFrame(BytecodeOffset bailout_id, int height,
+                                      int function_index);
 #endif  // V8_ENABLE_WEBASSEMBLY
   static TranslatedFrame JavaScriptBuiltinContinuationFrame(
       BytecodeOffset bailout_id, Tagged<SharedFunctionInfo> shared_info,
@@ -352,6 +364,8 @@ class TranslatedFrame {
 #if V8_ENABLE_WEBASSEMBLY
   // Only for Kind == kJSToWasmBuiltinContinuation
   base::Optional<wasm::ValueKind> return_kind_;
+  // Only for Kind == kLiftOffFunction
+  int wasm_function_index_ = -1;
 #endif  // V8_ENABLE_WEBASSEMBLY
 };
 
@@ -463,7 +477,8 @@ class TranslatedState {
 
   void UpdateFromPreviouslyMaterializedObjects();
   void MaterializeFixedDoubleArray(TranslatedFrame* frame, int* value_index,
-                                   TranslatedValue* slot, Handle<Map> map);
+                                   TranslatedValue* slot,
+                                   DirectHandle<Map> map);
   void MaterializeHeapNumber(TranslatedFrame* frame, int* value_index,
                              TranslatedValue* slot);
 
@@ -472,9 +487,9 @@ class TranslatedState {
   void SkipSlots(int slots_to_skip, TranslatedFrame* frame, int* value_index);
 
   Handle<ByteArray> AllocateStorageFor(TranslatedValue* slot);
-  void EnsureJSObjectAllocated(TranslatedValue* slot, Handle<Map> map);
+  void EnsureJSObjectAllocated(TranslatedValue* slot, DirectHandle<Map> map);
   void EnsurePropertiesAllocatedAndMarked(TranslatedValue* properties_slot,
-                                          Handle<Map> map);
+                                          DirectHandle<Map> map);
   void EnsureChildrenAllocated(int count, TranslatedFrame* frame,
                                int* value_index, std::stack<int>* worklist);
   void EnsureCapturedObjectAllocatedAt(int object_index,
@@ -483,11 +498,11 @@ class TranslatedState {
   void InitializeCapturedObjectAt(int object_index, std::stack<int>* worklist,
                                   const DisallowGarbageCollection& no_gc);
   void InitializeJSObjectAt(TranslatedFrame* frame, int* value_index,
-                            TranslatedValue* slot, Handle<Map> map,
+                            TranslatedValue* slot, DirectHandle<Map> map,
                             const DisallowGarbageCollection& no_gc);
   void InitializeObjectWithTaggedFieldsAt(
       TranslatedFrame* frame, int* value_index, TranslatedValue* slot,
-      Handle<Map> map, const DisallowGarbageCollection& no_gc);
+      DirectHandle<Map> map, const DisallowGarbageCollection& no_gc);
 
   void ReadUpdateFeedback(DeoptTranslationIterator* iterator,
                           Tagged<DeoptimizationLiteralArray> literal_array,
@@ -504,6 +519,7 @@ class TranslatedState {
   static uint64_t GetUInt64Slot(Address fp, int slot_index);
   static Float32 GetFloatSlot(Address fp, int slot_index);
   static Float64 GetDoubleSlot(Address fp, int slot_index);
+  static Simd128 getSimd128Slot(Address fp, int slot_index);
 
   Purpose const purpose_;
   std::vector<TranslatedFrame> frames_;

@@ -39,6 +39,9 @@ import org.chromium.components.translate.TranslateTabLayout;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.widget.Toast;
 
+// Vivaldi
+import android.os.Handler;
+import org.chromium.build.BuildConfig;
 import org.vivaldi.browser.common.VivaldiUtils;
 
 /** Java version of the compact translate infobar. */
@@ -252,7 +255,7 @@ public class TranslateCompactInfoBar extends InfoBar
                     }
                 });
 
-        mTabLayout = (TranslateTabLayout) content.findViewById(R.id.translate_infobar_tabs);
+        mTabLayout = content.findViewById(R.id.translate_infobar_tabs);
         if (mDefaultTextColor > 0) {
             mTabLayout.setTabTextColors(
                     SemanticColorUtils.getDefaultTextColor(getContext()),
@@ -379,6 +382,14 @@ public class TranslateCompactInfoBar extends InfoBar
     /** Begins the translation process and marks it as initiated by the user. */
     private void startUserInitiatedTranslation() {
         mUserInteracted = true;
+        // Vivaldi
+        if (BuildConfig.IS_VIVALDI) {
+            mTabLayout.showProgressBarOnTab(TARGET_TAB_INDEX);
+            // Revert to original language to reset js script properly.
+            onButtonClicked(ActionType.TRANSLATE_SHOW_ORIGINAL);
+            // Wait for execution of js to be finished before attempting translation.
+            new Handler().postDelayed(() -> onButtonClicked(ActionType.TRANSLATE), 500);
+        } else
         onButtonClicked(ActionType.TRANSLATE);
     }
 
@@ -395,7 +406,10 @@ public class TranslateCompactInfoBar extends InfoBar
         boolean errorUIShown = false;
         if (mTabLayout != null) {
             mTabLayout.hideProgressBar();
-            if (errorType != 0) {
+            // Vivaldi
+            // NOTE(jarle@vivaldi.com): Error type 4 (UNSUPPORTED_LANGUAGE) is not an error
+            // condition since we trust the Vivaldi Translate server to auto-detect source language.
+            if (errorType != 0 && errorType != 4) {
                 Toast toast =
                         Toast.makeText(
                                 getContext(), R.string.translate_infobar_error, Toast.LENGTH_SHORT);

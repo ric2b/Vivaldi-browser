@@ -113,9 +113,9 @@ class OmniboxPopupViewViews : public views::View,
   // at the specified point.
   size_t GetIndexForPoint(const gfx::Point& point);
 
-  LocationBarView* location_bar_view() const { return location_bar_view_; }
-
  private:
+  void UpdateExpandedCollapsedAccessibleState() const;
+
   // The popup that contains this view.  We create this, but it deletes itself
   // when its window is destroyed.  This is a WeakPtr because it's possible for
   // the OS to destroy the window and thus delete this object before we're

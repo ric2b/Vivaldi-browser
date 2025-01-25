@@ -55,8 +55,7 @@ void SimTest::SetUp() {
   // WebViewImpl given to SetWebView().
   network_ = std::make_unique<SimNetwork>();
   compositor_ = std::make_unique<SimCompositor>();
-  web_frame_client_ =
-      std::make_unique<frame_test_helpers::TestWebFrameClient>();
+  web_frame_client_ = CreateWebFrameClientForMainFrame();
   page_ = std::make_unique<SimPage>();
   web_view_helper_ =
       std::make_unique<frame_test_helpers::WebViewHelper>(WTF::BindRepeating(
@@ -125,6 +124,23 @@ void SimTest::InitializeFencedFrameRoot(
       local_frame_root_->FrameWidgetImpl()->LayerTreeHostForTesting());
 }
 
+void SimTest::InitializePrerenderPageRoot() {
+  web_view_helper_->InitializeWithOpener(
+      /*opener=*/nullptr,
+      /*frame_client=*/nullptr,
+      /*view_client=*/nullptr,
+      /*update_settings_func=*/nullptr,
+      /*fenced_frame_mode=*/std::nullopt,
+      /*is_prerendering=*/true);
+  compositor_->SetWebView(WebView());
+  page_->SetPage(WebView().GetPage());
+  web_frame_client_ =
+      std::make_unique<frame_test_helpers::TestWebFrameClient>();
+  local_frame_root_ = WebView().MainFrameImpl();
+  compositor_->SetLayerTreeHost(
+      local_frame_root_->FrameWidgetImpl()->LayerTreeHostForTesting());
+}
+
 void SimTest::LoadURL(const String& url_string) {
   KURL url(url_string);
   frame_test_helpers::LoadFrameDontWait(local_frame_root_.Get(), url);
@@ -173,6 +189,10 @@ SimCompositor& SimTest::Compositor() {
   return *compositor_;
 }
 
+frame_test_helpers::WebViewHelper& SimTest::WebViewHelper() {
+  return *web_view_helper_;
+}
+
 Vector<String>& SimTest::ConsoleMessages() {
   return web_frame_client_->ConsoleMessages();
 }
@@ -203,6 +223,11 @@ frame_test_helpers::TestWebFrameWidget* SimTest::CreateWebFrameWidget(
       std::move(frame_widget), std::move(widget_host), std::move(widget),
       std::move(task_runner), frame_sink_id, hidden, never_composited,
       is_for_child_local_root, is_for_nested_main_frame, is_for_scalable_page);
+}
+
+std::unique_ptr<frame_test_helpers::TestWebFrameClient>
+SimTest::CreateWebFrameClientForMainFrame() {
+  return std::make_unique<frame_test_helpers::TestWebFrameClient>();
 }
 
 void SimTest::SetPreferCompositingToLCDText(bool enabled) {

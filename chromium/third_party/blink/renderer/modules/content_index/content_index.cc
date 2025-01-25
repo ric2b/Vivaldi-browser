@@ -8,7 +8,7 @@
 
 #include "base/feature_list.h"
 #include "base/task/sequenced_task_runner.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_content_icon_definition.h"
@@ -95,7 +95,7 @@ ScriptPromise<IDLUndefined> ContentIndex::add(
   if (!registration_->active()) {
     exception_state.ThrowTypeError(
         "No active registration available on the ServiceWorkerRegistration.");
-    return ScriptPromise<IDLUndefined>();
+    return EmptyPromise();
   }
 
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
@@ -103,14 +103,14 @@ ScriptPromise<IDLUndefined> ContentIndex::add(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotAllowedError,
         "ContentIndex is not allowed in fenced frames.");
-    return ScriptPromise<IDLUndefined>();
+    return EmptyPromise();
   }
 
   WTF::String description_error =
       ValidateDescription(*description, registration_.Get());
   if (!description_error.IsNull()) {
     exception_state.ThrowTypeError(description_error);
-    return ScriptPromise<IDLUndefined>();
+    return EmptyPromise();
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
@@ -218,7 +218,7 @@ void ContentIndex::DidAdd(ScriptPromiseResolver<IDLUndefined>* resolver,
       return;
     case mojom::blink::ContentIndexError::INVALID_PARAMETER:
       // The renderer should have been killed.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
     case mojom::blink::ContentIndexError::NO_SERVICE_WORKER:
       resolver->RejectWithTypeError("Service worker must be active");
@@ -233,7 +233,7 @@ ScriptPromise<IDLUndefined> ContentIndex::deleteDescription(
   if (!registration_->active()) {
     exception_state.ThrowTypeError(
         "No active registration available on the ServiceWorkerRegistration.");
-    return ScriptPromise<IDLUndefined>();
+    return EmptyPromise();
   }
 
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
@@ -241,7 +241,7 @@ ScriptPromise<IDLUndefined> ContentIndex::deleteDescription(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotAllowedError,
         "ContentIndex is not allowed in fenced frames.");
-    return ScriptPromise<IDLUndefined>();
+    return EmptyPromise();
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
@@ -269,11 +269,11 @@ void ContentIndex::DidDeleteDescription(
       return;
     case mojom::blink::ContentIndexError::INVALID_PARAMETER:
       // The renderer should have been killed.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
     case mojom::blink::ContentIndexError::NO_SERVICE_WORKER:
       // This value shouldn't apply to this callback.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
   }
 }
@@ -328,11 +328,11 @@ void ContentIndex::DidGetDescriptions(
       return;
     case mojom::blink::ContentIndexError::INVALID_PARAMETER:
       // The renderer should have been killed.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
     case mojom::blink::ContentIndexError::NO_SERVICE_WORKER:
       // This value shouldn't apply to this callback.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
   }
 }

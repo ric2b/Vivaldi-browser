@@ -51,7 +51,7 @@
 #include "url/android/gurl_android.h"
 #include "url/origin.h"
 
-// Must come after other includes, because FromJniType() uses Profile.
+// Must come after all headers that specialize FromJniType() / ToJniType().
 #include "chrome/android/chrome_jni_headers/DownloadItem_jni.h"
 #include "chrome/android/chrome_jni_headers/DownloadManagerService_jni.h"
 #include "chrome/browser/download/android/jni_headers/DownloadInfo_jni.h"
@@ -545,7 +545,7 @@ void DownloadManagerService::EnqueueDownloadAction(
       iter->second = download_action;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -612,7 +612,7 @@ void DownloadManagerService::OnPendingDownloadsLoaded() {
         CancelDownloadInternal(download_guid, profile_key);
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
   }

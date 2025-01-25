@@ -17,7 +17,7 @@
 #include "base/containers/fixed_flat_set.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
-#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/buildflags.h"
 #include "third_party/abseil-cpp/absl/strings/ascii.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -247,6 +247,11 @@ constexpr auto kAllocatorDumpNameAllowlist =
 #endif
         "partition_alloc/partitions/layout",
         "skia/gpu_resources/context_0x?",
+        "skia/gpu_resources/graphite_context_0x?",
+        "skia/gpu_resources/gpu_main_graphite_image_provider_0x?",
+        "skia/gpu_resources/gpu_main_graphite_recorder_0x?",
+        "skia/gpu_resources/viz_compositor_graphite_image_provider_0x?",
+        "skia/gpu_resources/viz_compositor_graphite_recorder_0x?",
         "skia/sk_glyph_cache",
         "skia/sk_resource_cache",
         "sqlite",

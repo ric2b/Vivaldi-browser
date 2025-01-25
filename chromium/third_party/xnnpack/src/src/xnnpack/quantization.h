@@ -6,13 +6,12 @@
 #pragma once
 
 #include <assert.h>
-#include <stdint.h>
 #include <math.h>
+#include <stdint.h>
 
 #include <fp16/fp16.h>
-
-#include <xnnpack/math.h>
-#include <xnnpack/microparams.h>
+#include "xnnpack/math.h"
+#include "xnnpack/microparams.h"
 
 static inline struct xnn_qd8_quantization_params xnn_qd8_asymmetric_quantization_params(
     float min, float max)

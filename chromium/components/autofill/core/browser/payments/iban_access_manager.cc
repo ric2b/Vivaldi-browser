@@ -4,6 +4,7 @@
 
 #include "components/autofill/core/browser/payments/iban_access_manager.h"
 
+#include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/metrics/payments/iban_metrics.h"
 #include "components/autofill/core/browser/payments/autofill_error_dialog_context.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
@@ -96,8 +97,8 @@ void IbanAccessManager::FetchValue(const Suggestion::BackendId& backend_id,
   payments::PaymentsNetworkInterface::UnmaskIbanRequestDetails request_details;
   request_details.billable_service_number =
       payments::kUnmaskPaymentMethodBillableServiceNumber;
-  request_details.billing_customer_number =
-      payments::GetBillingCustomerId(client_->GetPersonalDataManager());
+  request_details.billing_customer_number = payments::GetBillingCustomerId(
+      &client_->GetPersonalDataManager()->payments_data_manager());
   request_details.instrument_id = instrument_id;
   base::TimeTicks unmask_request_timestamp = base::TimeTicks::Now();
   client_->GetPaymentsAutofillClient()
@@ -112,9 +113,10 @@ void IbanAccessManager::FetchValue(const Suggestion::BackendId& backend_id,
 void IbanAccessManager::OnUnmaskResponseReceived(
     OnIbanFetchedCallback on_iban_fetched,
     base::TimeTicks unmask_request_timestamp,
-    AutofillClient::PaymentsRpcResult result,
+    payments::PaymentsAutofillClient::PaymentsRpcResult result,
     const std::u16string& value) {
-  bool is_successful = result == AutofillClient::PaymentsRpcResult::kSuccess;
+  bool is_successful =
+      result == payments::PaymentsAutofillClient::PaymentsRpcResult::kSuccess;
   autofill_metrics::LogServerIbanUnmaskLatency(
       base::TimeTicks::Now() - unmask_request_timestamp, is_successful);
   autofill_metrics::LogServerIbanUnmaskStatus(is_successful);
@@ -159,7 +161,7 @@ void IbanAccessManager::OnUnmaskResponseReceived(
 }
 
 void IbanAccessManager::OnServerIbanUnmaskCancelled() {
-  // TODO(b/296651899): Log the cancel metrics.
+  // TODO(crbug.com/296651899): Log the cancel metrics.
 }
 
 void IbanAccessManager::StartDeviceAuthenticationForFilling(

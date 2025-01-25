@@ -248,7 +248,8 @@
                         "errormessage",
                         "flowto",
                         "labelledby",
-                        "owns"
+                        "owns",
+                        "url"
                     ]
                 },
                 {
@@ -1220,6 +1221,8 @@
                         "CoopSandboxedIFrameCannotNavigateToCoopPage",
                         "CorpNotSameOrigin",
                         "CorpNotSameOriginAfterDefaultedToSameOriginByCoep",
+                        "CorpNotSameOriginAfterDefaultedToSameOriginByDip",
+                        "CorpNotSameOriginAfterDefaultedToSameOriginByCoepAndDip",
                         "CorpNotSameSite"
                     ]
                 },
@@ -1604,7 +1607,6 @@
                     "id": "GenericIssueErrorType",
                     "type": "string",
                     "enum": [
-                        "CrossOriginPortalPostMessageError",
                         "FormLabelForNameError",
                         "FormDuplicateIdForInputError",
                         "FormInputWithNoLabelError",
@@ -1704,6 +1706,10 @@
                         {
                             "name": "isOptOutTopLevel",
                             "type": "boolean"
+                        },
+                        {
+                            "name": "operation",
+                            "$ref": "CookieOperation"
                         }
                     ]
                 },
@@ -1747,7 +1753,9 @@
                         "ClientMetadataNoResponse",
                         "ClientMetadataInvalidResponse",
                         "ClientMetadataInvalidContentType",
+                        "IdpNotPotentiallyTrustworthy",
                         "DisabledInSettings",
+                        "DisabledInFlags",
                         "ErrorFetchingSignin",
                         "InvalidSigninResponse",
                         "AccountsHttpNotFound",
@@ -1769,7 +1777,10 @@
                         "ThirdPartyCookiesBlocked",
                         "NotSignedInWithIdp",
                         "MissingTransientUserActivation",
-                        "ReplacedByButtonMode"
+                        "ReplacedByButtonMode",
+                        "InvalidFieldsSpecified",
+                        "RelyingPartyOriginIsOpaque",
+                        "TypeNotMatching"
                     ]
                 },
                 {
@@ -2699,6 +2710,12 @@
                         {
                             "name": "allowWithoutSanitization",
                             "description": "For \"clipboard\" permission, may specify allowWithoutSanitization.",
+                            "optional": true,
+                            "type": "boolean"
+                        },
+                        {
+                            "name": "allowWithoutGesture",
+                            "description": "For \"fullscreen\" permission, must specify allowWithoutGesture:true.",
                             "optional": true,
                             "type": "boolean"
                         },
@@ -4199,6 +4216,10 @@
                             "name": "style",
                             "description": "Associated style declaration.",
                             "$ref": "CSSStyle"
+                        },
+                        {
+                            "name": "active",
+                            "type": "boolean"
                         }
                     ]
                 },
@@ -4610,12 +4631,18 @@
                         },
                         {
                             "name": "cssPositionTryRules",
-                            "description": "A list of CSS @position-try rules matching this node, based on the position-try-options property.",
+                            "description": "A list of CSS @position-try rules matching this node, based on the position-try-fallbacks property.",
                             "optional": true,
                             "type": "array",
                             "items": {
                                 "$ref": "CSSPositionTryRule"
                             }
+                        },
+                        {
+                            "name": "activePositionFallbackIndex",
+                            "description": "Index of the active fallback in the applied position-try-fallback property,\nwill not be set if there is no active position-try fallback.",
+                            "optional": true,
+                            "type": "integer"
                         },
                         {
                             "name": "cssPropertyRules",
@@ -7066,6 +7093,31 @@
                             }
                         }
                     ]
+                },
+                {
+                    "name": "getAnchorElement",
+                    "description": "Returns the target anchor element of the given anchor query according to\nhttps://www.w3.org/TR/css-anchor-position-1/#target.",
+                    "experimental": true,
+                    "parameters": [
+                        {
+                            "name": "nodeId",
+                            "description": "Id of the positioned element from which to find the anchor.",
+                            "$ref": "NodeId"
+                        },
+                        {
+                            "name": "anchorSpecifier",
+                            "description": "An optional anchor specifier, as defined in\nhttps://www.w3.org/TR/css-anchor-position-1/#anchor-specifier.\nIf not provided, it will return the implicit anchor element for\nthe given positioned element.",
+                            "optional": true,
+                            "type": "string"
+                        }
+                    ],
+                    "returns": [
+                        {
+                            "name": "nodeId",
+                            "description": "The anchor element of the given anchor query.",
+                            "$ref": "NodeId"
+                        }
+                    ]
                 }
             ],
             "events": [
@@ -9074,6 +9126,37 @@
                     ]
                 },
                 {
+                    "id": "PressureSource",
+                    "experimental": true,
+                    "type": "string",
+                    "enum": [
+                        "cpu"
+                    ]
+                },
+                {
+                    "id": "PressureState",
+                    "experimental": true,
+                    "type": "string",
+                    "enum": [
+                        "nominal",
+                        "fair",
+                        "serious",
+                        "critical"
+                    ]
+                },
+                {
+                    "id": "PressureMetadata",
+                    "experimental": true,
+                    "type": "object",
+                    "properties": [
+                        {
+                            "name": "available",
+                            "optional": true,
+                            "type": "boolean"
+                        }
+                    ]
+                },
+                {
                     "id": "DisabledImageType",
                     "description": "Enum of image types that can be disabled.",
                     "experimental": true,
@@ -9426,6 +9509,41 @@
                         {
                             "name": "reading",
                             "$ref": "SensorReading"
+                        }
+                    ]
+                },
+                {
+                    "name": "setPressureSourceOverrideEnabled",
+                    "description": "Overrides a pressure source of a given type, as used by the Compute\nPressure API, so that updates to PressureObserver.observe() are provided\nvia setPressureStateOverride instead of being retrieved from\nplatform-provided telemetry data.",
+                    "experimental": true,
+                    "parameters": [
+                        {
+                            "name": "enabled",
+                            "type": "boolean"
+                        },
+                        {
+                            "name": "source",
+                            "$ref": "PressureSource"
+                        },
+                        {
+                            "name": "metadata",
+                            "optional": true,
+                            "$ref": "PressureMetadata"
+                        }
+                    ]
+                },
+                {
+                    "name": "setPressureStateOverride",
+                    "description": "Provides a given pressure state that will be processed and eventually be\ndelivered to PressureObserver users. |source| must have been previously\noverridden by setPressureSourceOverrideEnabled.",
+                    "experimental": true,
+                    "parameters": [
+                        {
+                            "name": "source",
+                            "$ref": "PressureSource"
+                        },
+                        {
+                            "name": "state",
+                            "$ref": "PressureState"
                         }
                     ]
                 },
@@ -9830,6 +9948,108 @@
                             "name": "uuid",
                             "description": "UUID of the specified Blob.",
                             "type": "string"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "domain": "FileSystem",
+            "experimental": true,
+            "dependencies": [
+                "Network",
+                "Storage"
+            ],
+            "types": [
+                {
+                    "id": "File",
+                    "type": "object",
+                    "properties": [
+                        {
+                            "name": "name",
+                            "type": "string"
+                        },
+                        {
+                            "name": "lastModified",
+                            "description": "Timestamp",
+                            "$ref": "Network.TimeSinceEpoch"
+                        },
+                        {
+                            "name": "size",
+                            "description": "Size in bytes",
+                            "type": "number"
+                        },
+                        {
+                            "name": "type",
+                            "type": "string"
+                        }
+                    ]
+                },
+                {
+                    "id": "Directory",
+                    "type": "object",
+                    "properties": [
+                        {
+                            "name": "name",
+                            "type": "string"
+                        },
+                        {
+                            "name": "nestedDirectories",
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        {
+                            "name": "nestedFiles",
+                            "description": "Files that are directly nested under this directory.",
+                            "type": "array",
+                            "items": {
+                                "$ref": "File"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "id": "BucketFileSystemLocator",
+                    "type": "object",
+                    "properties": [
+                        {
+                            "name": "storageKey",
+                            "description": "Storage key",
+                            "$ref": "Storage.SerializedStorageKey"
+                        },
+                        {
+                            "name": "bucketName",
+                            "description": "Bucket name. Not passing a `bucketName` will retrieve the default Bucket. (https://developer.mozilla.org/en-US/docs/Web/API/Storage_API#storage_buckets)",
+                            "optional": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "pathComponents",
+                            "description": "Path to the directory using each path component as an array item.",
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    ]
+                }
+            ],
+            "commands": [
+                {
+                    "name": "getDirectory",
+                    "parameters": [
+                        {
+                            "name": "bucketFileSystemLocator",
+                            "$ref": "BucketFileSystemLocator"
+                        }
+                    ],
+                    "returns": [
+                        {
+                            "name": "directory",
+                            "description": "Returns the directory object at the path.",
+                            "$ref": "Directory"
                         }
                     ]
                 }
@@ -12124,6 +12344,20 @@
                             "type": "number"
                         },
                         {
+                            "name": "workerRouterEvaluationStart",
+                            "description": "Started ServiceWorker static routing source evaluation.",
+                            "experimental": true,
+                            "optional": true,
+                            "type": "number"
+                        },
+                        {
+                            "name": "workerCacheLookupStart",
+                            "description": "Started cache lookup when the source was evaluated to `cache`.",
+                            "experimental": true,
+                            "optional": true,
+                            "type": "number"
+                        },
+                        {
                             "name": "sendStart",
                             "description": "Started sending request.",
                             "type": "number"
@@ -12443,6 +12677,8 @@
                         "coop-sandboxed-iframe-cannot-navigate-to-coop-page",
                         "corp-not-same-origin",
                         "corp-not-same-origin-after-defaulted-to-same-origin-by-coep",
+                        "corp-not-same-origin-after-defaulted-to-same-origin-by-dip",
+                        "corp-not-same-origin-after-defaulted-to-same-origin-by-coep-and-dip",
                         "corp-not-same-site"
                     ]
                 },
@@ -12593,6 +12829,12 @@
                         {
                             "name": "matchedSourceType",
                             "description": "The router source of the matched rule. If there is a matched rule, this\nfield will be set, otherwise no value will be set.",
+                            "optional": true,
+                            "$ref": "ServiceWorkerRouterSource"
+                        },
+                        {
+                            "name": "actualSourceType",
+                            "description": "The actual router source used.",
                             "optional": true,
                             "$ref": "ServiceWorkerRouterSource"
                         }
@@ -12914,6 +13156,24 @@
                     ]
                 },
                 {
+                    "id": "CookiePartitionKey",
+                    "description": "cookiePartitionKey object\nThe representation of the components of the key that are created by the cookiePartitionKey class contained in net/cookies/cookie_partition_key.h.",
+                    "experimental": true,
+                    "type": "object",
+                    "properties": [
+                        {
+                            "name": "topLevelSite",
+                            "description": "The site of the top-level URL the browser was visiting at the start\nof the request to the endpoint that set the cookie.",
+                            "type": "string"
+                        },
+                        {
+                            "name": "hasCrossSiteAncestor",
+                            "description": "Indicates if the cookie has any ancestors that are cross-site to the topLevelSite.",
+                            "type": "boolean"
+                        }
+                    ]
+                },
+                {
                     "id": "Cookie",
                     "description": "Cookie object",
                     "type": "object",
@@ -12996,10 +13256,10 @@
                         },
                         {
                             "name": "partitionKey",
-                            "description": "Cookie partition key. The site of the top-level URL the browser was visiting at the start\nof the request to the endpoint that set the cookie.",
+                            "description": "Cookie partition key.",
                             "experimental": true,
                             "optional": true,
-                            "type": "string"
+                            "$ref": "CookiePartitionKey"
                         },
                         {
                             "name": "partitionKeyOpaque",
@@ -13078,7 +13338,8 @@
                         "EnterprisePolicy",
                         "StorageAccess",
                         "TopLevelStorageAccess",
-                        "CorsOptIn"
+                        "CorsOptIn",
+                        "Scheme"
                     ]
                 },
                 {
@@ -13245,10 +13506,10 @@
                         },
                         {
                             "name": "partitionKey",
-                            "description": "Cookie partition key. The site of the top-level URL the browser was visiting at the start\nof the request to the endpoint that set the cookie.\nIf not set, the cookie will be set as not partitioned.",
+                            "description": "Cookie partition key. If not set, the cookie will be set as not partitioned.",
                             "experimental": true,
                             "optional": true,
-                            "type": "string"
+                            "$ref": "CookiePartitionKey"
                         }
                     ]
                 },
@@ -13595,7 +13856,8 @@
                         "RestrictProperties",
                         "UnsafeNone",
                         "SameOriginPlusCoep",
-                        "RestrictPropertiesPlusCoep"
+                        "RestrictPropertiesPlusCoep",
+                        "NoopenerAllowPopups"
                     ]
                 },
                 {
@@ -14000,10 +14262,10 @@
                         },
                         {
                             "name": "partitionKey",
-                            "description": "If specified, deletes only cookies with the the given name and partitionKey where domain\nmatches provided URL.",
+                            "description": "If specified, deletes only cookies with the the given name and partitionKey where\nall partition key attributes match the cookie partition key attribute.",
                             "experimental": true,
                             "optional": true,
-                            "type": "string"
+                            "$ref": "CookiePartitionKey"
                         }
                     ]
                 },
@@ -14407,10 +14669,10 @@
                         },
                         {
                             "name": "partitionKey",
-                            "description": "Cookie partition key. The site of the top-level URL the browser was visiting at the start\nof the request to the endpoint that set the cookie.\nIf not set, the cookie will be set as not partitioned.",
+                            "description": "Cookie partition key. If not set, the cookie will be set as not partitioned.",
                             "experimental": true,
                             "optional": true,
-                            "type": "string"
+                            "$ref": "CookiePartitionKey"
                         }
                     ],
                     "returns": [
@@ -15246,8 +15508,9 @@
                         {
                             "name": "cookiePartitionKey",
                             "description": "The cookie partition key that will be used to store partitioned cookies set in this response.\nOnly sent when partitioned cookies are enabled.",
+                            "experimental": true,
                             "optional": true,
-                            "type": "string"
+                            "$ref": "CookiePartitionKey"
                         },
                         {
                             "name": "cookiePartitionKeyOpaque",
@@ -15299,7 +15562,7 @@
                                 "FailedPrecondition",
                                 "ResourceExhausted",
                                 "AlreadyExists",
-                                "Unavailable",
+                                "ResourceLimited",
                                 "Unauthorized",
                                 "BadResponse",
                                 "InternalError",
@@ -15334,6 +15597,11 @@
                             "type": "integer"
                         }
                     ]
+                },
+                {
+                    "name": "policyUpdated",
+                    "description": "Fired once security policy has been updated.",
+                    "experimental": true
                 },
                 {
                     "name": "subresourceWebBundleMetadataReceived",
@@ -16744,6 +17012,8 @@
                         "clipboard-write",
                         "compute-pressure",
                         "cross-origin-isolated",
+                        "deferred-fetch",
+                        "digital-credentials-get",
                         "direct-sockets",
                         "display-capture",
                         "document-domain",
@@ -18047,6 +18317,11 @@
                         "HTTPAuthRequired",
                         "CookieFlushed",
                         "BroadcastChannelOnMessage",
+                        "WebViewSettingsChanged",
+                        "WebViewJavaScriptObjectChanged",
+                        "WebViewMessageListenerInjected",
+                        "WebViewSafeBrowsingAllowlistChanged",
+                        "WebViewDocumentStartJavascriptChanged",
                         "WebSocket",
                         "WebTransport",
                         "WebRTC",
@@ -18076,7 +18351,6 @@
                         "Printing",
                         "WebDatabase",
                         "PictureInPicture",
-                        "Portal",
                         "SpeechRecognizer",
                         "IdleManager",
                         "PaymentManager",
@@ -21396,6 +21670,58 @@
                     ]
                 },
                 {
+                    "id": "AttributionReportingAggregatableDebugReportingData",
+                    "experimental": true,
+                    "type": "object",
+                    "properties": [
+                        {
+                            "name": "keyPiece",
+                            "$ref": "UnsignedInt128AsBase16"
+                        },
+                        {
+                            "name": "value",
+                            "description": "number instead of integer because not all uint32 can be represented by\nint",
+                            "type": "number"
+                        },
+                        {
+                            "name": "types",
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "id": "AttributionReportingAggregatableDebugReportingConfig",
+                    "experimental": true,
+                    "type": "object",
+                    "properties": [
+                        {
+                            "name": "budget",
+                            "description": "number instead of integer because not all uint32 can be represented by\nint, only present for source registrations",
+                            "optional": true,
+                            "type": "number"
+                        },
+                        {
+                            "name": "keyPiece",
+                            "$ref": "UnsignedInt128AsBase16"
+                        },
+                        {
+                            "name": "debugData",
+                            "type": "array",
+                            "items": {
+                                "$ref": "AttributionReportingAggregatableDebugReportingData"
+                            }
+                        },
+                        {
+                            "name": "aggregationCoordinatorOrigin",
+                            "optional": true,
+                            "type": "string"
+                        }
+                    ]
+                },
+                {
                     "id": "AttributionReportingSourceRegistration",
                     "experimental": true,
                     "type": "object",
@@ -21470,6 +21796,14 @@
                         {
                             "name": "triggerDataMatching",
                             "$ref": "AttributionReportingTriggerDataMatching"
+                        },
+                        {
+                            "name": "destinationLimitPriority",
+                            "$ref": "SignedInt64AsBase10"
+                        },
+                        {
+                            "name": "aggregatableDebugReportingConfig",
+                            "$ref": "AttributionReportingAggregatableDebugReportingConfig"
                         }
                     ]
                 },
@@ -21490,7 +21824,8 @@
                         "destinationBothLimitsReached",
                         "reportingOriginsPerSiteLimitReached",
                         "exceedsMaxChannelCapacity",
-                        "exceedsMaxTriggerStateCardinality"
+                        "exceedsMaxTriggerStateCardinality",
+                        "destinationPerDayReportingLimitReached"
                     ]
                 },
                 {
@@ -21515,6 +21850,10 @@
                             "name": "value",
                             "description": "number instead of integer because not all uint32 can be represented by\nint",
                             "type": "number"
+                        },
+                        {
+                            "name": "filteringId",
+                            "$ref": "UnsignedInt64AsBase10"
                         }
                     ]
                 },
@@ -21641,6 +21980,10 @@
                             }
                         },
                         {
+                            "name": "aggregatableFilteringIdMaxBytes",
+                            "type": "integer"
+                        },
+                        {
                             "name": "debugReporting",
                             "type": "boolean"
                         },
@@ -21657,6 +22000,10 @@
                             "name": "triggerContextId",
                             "optional": true,
                             "type": "string"
+                        },
+                        {
+                            "name": "aggregatableDebugReportingConfig",
+                            "$ref": "AttributionReportingAggregatableDebugReportingConfig"
                         }
                     ]
                 },
@@ -22917,7 +23264,7 @@
                         },
                         {
                             "name": "subtype",
-                            "description": "Provides additional details for specific target types. For example, for\nthe type of \"page\", this may be set to \"portal\" or \"prerender\".",
+                            "description": "Provides additional details for specific target types. For example, for\nthe type of \"page\", this may be set to \"prerender\".",
                             "experimental": true,
                             "optional": true,
                             "type": "string"
@@ -25675,7 +26022,8 @@
                         "ActivationUrlHasEffectiveUrl",
                         "JavaScriptInterfaceAdded",
                         "JavaScriptInterfaceRemoved",
-                        "AllPrerenderingCanceled"
+                        "AllPrerenderingCanceled",
+                        "WindowClosed"
                     ]
                 },
                 {
@@ -26147,6 +26495,15 @@
                             "type": "string"
                         }
                     ]
+                },
+                {
+                    "id": "DisplayMode",
+                    "description": "If user prefers opening the app in browser or an app window.",
+                    "type": "string",
+                    "enum": [
+                        "standalone",
+                        "browser"
+                    ]
                 }
             ],
             "commands": [
@@ -26192,7 +26549,7 @@
                 },
                 {
                     "name": "uninstall",
-                    "description": "Uninstals the given manifest_id and closes any opened app windows.",
+                    "description": "Uninstalls the given manifest_id and closes any opened app windows.",
                     "parameters": [
                         {
                             "name": "manifestId",
@@ -26202,7 +26559,7 @@
                 },
                 {
                     "name": "launch",
-                    "description": "Launches the installed web app, or an url in the same web app instead of the\ndefault start url if it is provided. Returns a tab / web contents based\nTarget.TargetID which can be used to attach to via Target.attachToTarget or\nsimilar APIs.",
+                    "description": "Launches the installed web app, or an url in the same web app instead of the\ndefault start url if it is provided. Returns a page Target.TargetID which\ncan be used to attach to via Target.attachToTarget or similar APIs.",
                     "parameters": [
                         {
                             "name": "manifestId",
@@ -26219,6 +26576,64 @@
                             "name": "targetId",
                             "description": "ID of the tab target created as a result.",
                             "$ref": "Target.TargetID"
+                        }
+                    ]
+                },
+                {
+                    "name": "launchFilesInApp",
+                    "description": "Opens one or more local files from an installed web app identified by its\nmanifestId. The web app needs to have file handlers registered to process\nthe files. The API returns one or more page Target.TargetIDs which can be\nused to attach to via Target.attachToTarget or similar APIs.\nIf some files in the parameters cannot be handled by the web app, they will\nbe ignored. If none of the files can be handled, this API returns an error.\nIf no files are provided as the parameter, this API also returns an error.\n\nAccording to the definition of the file handlers in the manifest file, one\nTarget.TargetID may represent a page handling one or more files. The order\nof the returned Target.TargetIDs is not guaranteed.\n\nTODO(crbug.com/339454034): Check the existences of the input files.",
+                    "parameters": [
+                        {
+                            "name": "manifestId",
+                            "type": "string"
+                        },
+                        {
+                            "name": "files",
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    ],
+                    "returns": [
+                        {
+                            "name": "targetIds",
+                            "description": "IDs of the tab targets created as the result.",
+                            "type": "array",
+                            "items": {
+                                "$ref": "Target.TargetID"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "openCurrentPageInApp",
+                    "description": "Opens the current page in its web app identified by the manifest id, needs\nto be called on a page target. This function returns immediately without\nwaiting for the app to finish loading.",
+                    "parameters": [
+                        {
+                            "name": "manifestId",
+                            "type": "string"
+                        }
+                    ]
+                },
+                {
+                    "name": "changeAppUserSettings",
+                    "description": "Changes user settings of the web app identified by its manifestId. If the\napp was not installed, this command returns an error. Unset parameters will\nbe ignored; unrecognized values will cause an error.\n\nUnlike the ones defined in the manifest files of the web apps, these\nsettings are provided by the browser and controlled by the users, they\nimpact the way the browser handling the web apps.\n\nSee the comment of each parameter.",
+                    "parameters": [
+                        {
+                            "name": "manifestId",
+                            "type": "string"
+                        },
+                        {
+                            "name": "linkCapturing",
+                            "description": "If user allows the links clicked on by the user in the app's scope, or\nextended scope if the manifest has scope extensions and the flags\n`DesktopPWAsLinkCapturingWithScopeExtensions` and\n`WebAppEnableScopeExtensions` are enabled.\n\nNote, the API does not support resetting the linkCapturing to the\ninitial value, uninstalling and installing the web app again will reset\nit.\n\nTODO(crbug.com/339453269): Setting this value on ChromeOS is not\nsupported yet.",
+                            "optional": true,
+                            "type": "boolean"
+                        },
+                        {
+                            "name": "displayMode",
+                            "optional": true,
+                            "$ref": "DisplayMode"
                         }
                     ]
                 }

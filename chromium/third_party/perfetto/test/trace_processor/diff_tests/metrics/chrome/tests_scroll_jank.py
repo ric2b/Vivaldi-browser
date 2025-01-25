@@ -429,32 +429,55 @@ class ChromeScrollJankMetrics(TestSuite):
         query=Metric('chrome_scroll_jank_v3'),
         out=TextProto(r"""
         [perfetto.protos.chrome_scroll_jank_v3] {
-          trace_num_frames: 291
-          trace_num_janky_frames: 3
-          trace_scroll_jank_percentage: 1.0309278350515463
-          vsync_interval_ms: 16.368
+          trace_num_frames: 364
+          trace_num_janky_frames: 6
+          trace_scroll_jank_percentage: 1.6483516483516483
+          vsync_interval_ms: 10.318
           scrolls {
-            num_frames: 105
-            num_janky_frames: 2
-            scroll_jank_percentage: 1.9047619047619047
-            max_delay_since_last_frame: 6.126221896383187
+            num_frames: 119
+            num_janky_frames: 1
+            scroll_jank_percentage: 0.8403361344537815
+            max_delay_since_last_frame: 2.153421205660012
             scroll_jank_causes {
-              cause: "RendererCompositorQueueingDelay"
-              delay_since_last_frame: 2.044354838709678
-            }
-            scroll_jank_causes {
-              cause: "RendererCompositorFinishedToBeginImplFrame"
-              delay_since_last_frame: 6.126221896383187
+              cause: "SubmitCompositorFrameToPresentationCompositorFrame"
+              sub_cause: "StartDrawToSwapStart"
+              delay_since_last_frame: 2.153421205660012
             }
           }
           scrolls {
-            num_frames: 84
+            num_frames: 6
             num_janky_frames: 1
-            scroll_jank_percentage: 1.1904761904761905
-            max_delay_since_last_frame: 2.040811339198436
+            scroll_jank_percentage: 16.666666666666668
+            max_delay_since_last_frame: 2.155456483814693
+            scroll_jank_causes {
+              cause: "SubmitCompositorFrameToPresentationCompositorFrame"
+              sub_cause: "StartDrawToSwapStart"
+              delay_since_last_frame: 2.155456483814693
+            }
+          }
+          scrolls {
+            num_frames: 129
+            num_janky_frames: 4
+            scroll_jank_percentage: 3.10077519379845
+            max_delay_since_last_frame: 2.1642760224849775
+            scroll_jank_causes {
+              cause: "SubmitCompositorFrameToPresentationCompositorFrame"
+              sub_cause: "StartDrawToSwapStart"
+              delay_since_last_frame: 2.1556503198294243
+            }
+            scroll_jank_causes {
+              cause: "SubmitCompositorFrameToPresentationCompositorFrame"
+              sub_cause: "BufferReadyToLatch"
+              delay_since_last_frame: 2.1564256638883506
+            }
+            scroll_jank_causes {
+              cause: "SubmitCompositorFrameToPresentationCompositorFrame"
+              sub_cause: "StartDrawToSwapStart"
+              delay_since_last_frame: 2.15758867997674
+            }
             scroll_jank_causes {
               cause: "RendererCompositorQueueingDelay"
-              delay_since_last_frame: 2.040811339198436
+              delay_since_last_frame: 2.1642760224849775
             }
           }
         }
@@ -469,8 +492,8 @@ class ChromeScrollJankMetrics(TestSuite):
         INCLUDE PERFETTO MODULE chrome.scroll_jank.scroll_jank_v3;
 
         SELECT
-          _HAS_DESCENDANT_SLICE_WITH_NAME(
-            (SELECT id from slice where dur = 46046000),
+          HAS_DESCENDANT_SLICE_WITH_NAME(
+            (SELECT id from slice where dur = 60156000),
             'SwapEndToPresentationCompositorFrame') AS has_descendant;
         """,
         out=Csv("""
@@ -487,8 +510,8 @@ class ChromeScrollJankMetrics(TestSuite):
         INCLUDE PERFETTO MODULE chrome.scroll_jank.scroll_jank_v3;
 
         SELECT
-          _HAS_DESCENDANT_SLICE_WITH_NAME(
-            (SELECT id from slice where dur = 11666000),
+          HAS_DESCENDANT_SLICE_WITH_NAME(
+            (SELECT id from slice where dur = 77247000),
             'SwapEndToPresentationCompositorFrame') AS has_descendant;
         """,
         out=Csv("""
@@ -506,7 +529,7 @@ class ChromeScrollJankMetrics(TestSuite):
 
         SELECT
           _DESCENDANT_SLICE_END(
-            (SELECT id from slice where dur = 11666000),
+            (SELECT id from slice where dur = 77247000),
             'SwapEndToPresentationCompositorFrame') AS end_ts;
         """,
         out=Csv("""
@@ -524,10 +547,10 @@ class ChromeScrollJankMetrics(TestSuite):
 
         SELECT
           _DESCENDANT_SLICE_END(
-            (SELECT id from slice where dur = 46046000),
+            (SELECT id from slice where dur = 60156000),
             'SwapEndToPresentationCompositorFrame') AS end_ts;
         """,
         out=Csv("""
         "end_ts"
-        174797566610797
+        1035869424631926
         """))

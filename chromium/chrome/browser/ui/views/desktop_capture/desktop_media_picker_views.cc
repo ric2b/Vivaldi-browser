@@ -28,7 +28,9 @@
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/desktop_capture/desktop_media_source_view.h"
+#include "chrome/browser/ui/views/desktop_capture/screen_capture_permission_checker.h"
 #include "chrome/browser/ui/views/desktop_capture/share_this_tab_dialog_views.h"
+#include "chrome/browser/ui/views/extensions/security_dialog_tracker.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -59,7 +61,6 @@
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/style/typography.h"
-#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
 #if defined(USE_AURA)
@@ -127,6 +128,15 @@ void RecordUma(GDMResult result, base::TimeTicks dialog_open_time) {
       /*bucket_count=*/91, base::HistogramBase::kUmaTargetedHistogramFlag);
   histogram->AddTime(elapsed);
 }
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class PermissionInteraction {
+  kNotShown = 0,
+  kShown = 1,
+  kClicked = 2,
+  kMaxValue = kClicked
+};
 
 void RecordUmaCancellation(DialogType dialog_type,
                            base::TimeTicks dialog_open_time) {
@@ -206,6 +216,34 @@ void RecordUmaSelection(DialogType dialog_type,
   }
 }
 
+#if BUILDFLAG(IS_MAC)
+void RecordUma(PermissionInteraction permission_interaction) {
+  base::UmaHistogramEnumeration(
+      "Media.Ui.GetDisplayMedia.PermissionInteractionMac",
+      permission_interaction);
+}
+
+void RecordPermissionButtonOpenedAction(DesktopMediaList::Type type) {
+  switch (type) {
+    case DesktopMediaList::Type::kScreen:
+      RecordAction(base::UserMetricsAction(
+          "GetDisplayMedia.PermissionPane.Screen.Opened"));
+      return;
+
+    case DesktopMediaList::Type::kWindow:
+      RecordAction(base::UserMetricsAction(
+          "GetDisplayMedia.PermissionPane.Window.Opened"));
+      return;
+
+    case DesktopMediaList::Type::kWebContents:
+    case DesktopMediaList::Type::kCurrentTab:
+    case DesktopMediaList::Type::kNone:
+      break;
+  }
+  NOTREACHED_NORETURN();
+}
+#endif  // BUILDFLAG(IS_MAC)
+
 std::u16string GetLabelForReselectButton(DesktopMediaList::Type type) {
   switch (type) {
     case DesktopMediaList::Type::kScreen:
@@ -279,9 +317,7 @@ bool ShouldSelectTab(DesktopMediaList::Type type,
 
 std::unique_ptr<views::ScrollView> CreateScrollView(bool audio_requested) {
   auto scroll_view = std::make_unique<views::ScrollView>();
-  scroll_view->SetBackgroundThemeColorId(
-      features::IsChromeRefresh2023() ? ui::kColorSysSurface4
-                                      : ui::kColorSubtleEmphasisBackground);
+  scroll_view->SetBackgroundThemeColorId(ui::kColorSysSurface4);
   // The overflow indicator is disabled to reduce clutter next to the
   // separator to the audio control when audio is requested or the bottom of
   // the dialog when audio is not requested.
@@ -296,9 +332,6 @@ std::unique_ptr<views::ScrollView> CreateScrollView(bool audio_requested) {
 BASE_FEATURE(kShareThisTabDialog,
              "ShareThisTabDialog",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(DesktopMediaPickerDialogView,
-                                      kDesktopMediaPickerDialogViewIdentifier);
 
 bool DesktopMediaPickerDialogView::AudioSupported(DesktopMediaList::Type type) {
   switch (type) {
@@ -361,14 +394,18 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
   DCHECK(!params.force_audio_checkboxes_to_default_checked ||
          !params.exclude_system_audio);
   RecordAction(base::UserMetricsAction("GetDisplayMedia.ShowDialog"));
-  SetProperty(views::kElementIdentifierKey,
-              kDesktopMediaPickerDialogViewIdentifier);
+
+#if BUILDFLAG(IS_MAC)
+  screen_capture_permission_checker_ =
+      ScreenCapturePermissionChecker::MaybeCreate(
+          base::BindRepeating(&DesktopMediaPickerDialogView::OnPermissionUpdate,
+                              weak_factory_.GetWeakPtr()));
+#endif
+
   SetModalType(params.modality);
   SetButtonLabel(ui::DIALOG_BUTTON_OK,
                  l10n_util::GetStringUTF16(IDS_DESKTOP_MEDIA_PICKER_SHARE));
-  if (features::IsChromeRefresh2023()) {
-    SetButtonStyle(ui::DIALOG_BUTTON_CANCEL, ui::ButtonStyle::kTonal);
-  }
+  SetButtonStyle(ui::DIALOG_BUTTON_CANCEL, ui::ButtonStyle::kTonal);
   RegisterDeleteDelegateCallback(base::BindOnce(
       [](DesktopMediaPickerDialogView* dialog) {
         // If the dialog is being closed then notify the parent about it.
@@ -610,6 +647,8 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
     widget->Show();
   }
 
+  extensions::SecurityDialogTracker::GetInstance()->AddSecurityDialog(widget);
+
 #if BUILDFLAG(IS_MAC)
   // On Mac, even modals are shown using separate native windows.
   bool is_separate_native_window = true;
@@ -637,13 +676,18 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
 #endif
   }
 
-  for (const auto& category : categories_)
+  for (auto& category : categories_) {
     category.controller->StartUpdating(dialog_window_id);
+  }
 
   GetSelectedController()->FocusView();
 }
 
-DesktopMediaPickerDialogView::~DesktopMediaPickerDialogView() = default;
+DesktopMediaPickerDialogView::~DesktopMediaPickerDialogView() {
+#if BUILDFLAG(IS_MAC)
+  RecordPermissionInteractionUma();
+#endif
+}
 
 void DesktopMediaPickerDialogView::RecordUmaDismissal() const {
   if (dialog_type_ == DialogType::kPreferCurrentTab) {
@@ -671,9 +715,20 @@ void DesktopMediaPickerDialogView::ConfigureUIForNewPane(int index) {
 
   const DisplaySurfaceCategory& category = categories_[index];
   MaybeCreateReselectButtonForPane(category);
-  if (category.pane && audio_requested_ && category.audio_offered) {
+
+  if (!category.pane) {
+    return;
+  }
+
+  if (audio_requested_ && category.audio_offered) {
     category.pane->SetAudioSharingApprovedByUser(category.audio_checked);
   }
+#if BUILDFLAG(IS_MAC)
+  if (category.pane->IsPermissionPaneVisible()) {
+    permission_pane_was_shown_ = true;
+    RecordPermissionButtonOpenedAction(category.type);
+  }
+#endif
 }
 
 void DesktopMediaPickerDialogView::StoreAudioCheckboxState() {
@@ -778,7 +833,7 @@ std::unique_ptr<views::View> DesktopMediaPickerDialogView::SetupPane(
                                              category.audio_offered)
           : nullptr;
   auto pane = std::make_unique<DesktopMediaPaneView>(
-      std::move(content_view), std::move(share_audio_view));
+      category.type, std::move(content_view), std::move(share_audio_view));
   if (audio_requested_ && audio_offered) {
     pane->SetAudioSharingApprovedByUser(audio_checked);
   }
@@ -1055,6 +1110,48 @@ void DesktopMediaPickerDialogView::OnCanReselectChanged(
   reselect_button_->SetEnabled(controller->can_reselect());
 }
 
+#if BUILDFLAG(IS_MAC)
+void DesktopMediaPickerDialogView::OnPermissionUpdate(bool has_permission) {
+  CHECK(screen_capture_permission_checker_);
+
+  if (!initial_permission_state_.has_value()) {
+    initial_permission_state_ = has_permission;
+  }
+
+  if (has_permission) {
+    // Avoid needless polling.
+    // (A user who revokes permission while the media-picker is visible,
+    // likely knows what they are doing, and can recover by themselves.)
+    screen_capture_permission_checker_->Stop();
+  }
+
+  for (auto& category : categories_) {
+    category.pane->OnScreenCapturePermissionUpdate(has_permission);
+  }
+}
+
+void DesktopMediaPickerDialogView::RecordPermissionInteractionUma() const {
+  if (initial_permission_state_.value_or(true)) {
+    return;
+  }
+
+  bool permission_button_was_clicked = false;
+  for (auto& category : categories_) {
+    if (category.pane->WasPermissionButtonClicked()) {
+      permission_button_was_clicked = true;
+      break;
+    }
+  }
+
+  const PermissionInteraction permission_interaction =
+      permission_button_was_clicked ? PermissionInteraction::kClicked
+      : permission_pane_was_shown_  ? PermissionInteraction::kShown
+                                    : PermissionInteraction::kNotShown;
+
+  RecordUma(permission_interaction);
+}
+#endif
+
 BEGIN_METADATA(DesktopMediaPickerDialogView)
 END_METADATA
 
@@ -1074,7 +1171,7 @@ void DesktopMediaPickerViews::Show(
     const DesktopMediaPicker::Params& params,
     std::vector<std::unique_ptr<DesktopMediaList>> source_lists,
     DoneCallback done_callback) {
-  DesktopMediaPickerManager::Get()->OnShowDialog();
+  DesktopMediaPickerManager::Get()->OnShowDialog(params);
 
   request_source_ = params.request_source;
   callback_ = std::move(done_callback);

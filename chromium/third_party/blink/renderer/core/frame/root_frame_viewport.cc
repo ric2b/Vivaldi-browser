@@ -20,7 +20,6 @@
 #include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/core/scroll/smooth_scroll_sequencer.h"
-#include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace blink {
@@ -386,13 +385,18 @@ PhysicalRect RootFrameViewport::ScrollIntoView(
 
   if (new_scroll_offset != GetScrollOffset()) {
     if (params->is_for_scroll_sequence) {
-      CHECK(GetSmoothScrollSequencer());
-      DCHECK(params->type == mojom::blink::ScrollType::kProgrammatic ||
-             params->type == mojom::blink::ScrollType::kUser);
       mojom::blink::ScrollBehavior behavior = DetermineScrollBehavior(
           params->behavior, GetLayoutBox()->StyleRef().GetScrollBehavior());
-      GetSmoothScrollSequencer()->QueueAnimation(this, new_scroll_offset,
-                                                 behavior);
+      if (RuntimeEnabledFeatures::MultiSmoothScrollIntoViewEnabled()) {
+        ScrollableArea::SetScrollOffset(new_scroll_offset, params->type,
+                                        behavior);
+      } else {
+        CHECK(GetSmoothScrollSequencer());
+        DCHECK(params->type == mojom::blink::ScrollType::kProgrammatic ||
+               params->type == mojom::blink::ScrollType::kUser);
+        GetSmoothScrollSequencer()->QueueAnimation(this, new_scroll_offset,
+                                                   behavior);
+      }
     } else {
       ScrollableArea::SetScrollOffset(new_scroll_offset, params->type);
     }
@@ -748,23 +752,24 @@ void RootFrameViewport::Trace(Visitor* visitor) const {
   ScrollableArea::Trace(visitor);
 }
 
-void RootFrameViewport::UpdateSnappedTargetsAndEnqueueSnapChanged() {
-  LayoutViewport().UpdateSnappedTargetsAndEnqueueSnapChanged();
+void RootFrameViewport::UpdateSnappedTargetsAndEnqueueScrollSnapChange() {
+  LayoutViewport().UpdateSnappedTargetsAndEnqueueScrollSnapChange();
 }
 
 std::optional<cc::TargetSnapAreaElementIds>
-RootFrameViewport::GetSnapchangingTargetIds() const {
-  return LayoutViewport().GetSnapchangingTargetIds();
+RootFrameViewport::GetScrollsnapchangingTargetIds() const {
+  return LayoutViewport().GetScrollsnapchangingTargetIds();
 }
 
-void RootFrameViewport::SetSnapchangingTargetIds(
+void RootFrameViewport::SetScrollsnapchangingTargetIds(
     std::optional<cc::TargetSnapAreaElementIds> new_target_ids) {
-  LayoutViewport().SetSnapchangingTargetIds(new_target_ids);
+  LayoutViewport().SetScrollsnapchangingTargetIds(new_target_ids);
 }
 
-void RootFrameViewport::UpdateSnapChangingTargetsAndEnqueueSnapChanging(
-    const cc::TargetSnapAreaElementIds& new_target_ids) {
-  LayoutViewport().UpdateSnapChangingTargetsAndEnqueueSnapChanging(
+void RootFrameViewport::
+    UpdateScrollSnapChangingTargetsAndEnqueueScrollSnapChanging(
+        const cc::TargetSnapAreaElementIds& new_target_ids) {
+  LayoutViewport().UpdateScrollSnapChangingTargetsAndEnqueueScrollSnapChanging(
       new_target_ids);
 }
 
@@ -778,8 +783,8 @@ void RootFrameViewport::SetImplSnapStrategy(
   LayoutViewport().SetImplSnapStrategy(std::move(strategy));
 }
 
-void RootFrameViewport::EnqueueSnapChangingEventFromImplIfNeeded() {
-  LayoutViewport().EnqueueSnapChangingEventFromImplIfNeeded();
+void RootFrameViewport::EnqueueScrollSnapChangingEventFromImplIfNeeded() {
+  LayoutViewport().EnqueueScrollSnapChangingEventFromImplIfNeeded();
 }
 
 std::optional<cc::ElementId> RootFrameViewport::GetTargetedSnapAreaId() {

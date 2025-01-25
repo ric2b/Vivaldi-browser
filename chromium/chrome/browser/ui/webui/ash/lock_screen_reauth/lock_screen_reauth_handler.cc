@@ -55,7 +55,7 @@ bool ShouldDoSamlRedirect(const std::string& email,
   // have to skip any user verification notice page. For SAML this is currently
   // only possible with redirect endpoint. Once reauth endpoint enables this,
   // remove auto_start_reauth from this function.
-  if (!auto_start_reauth && features::IsGaiaReauthEndpointEnabled()) {
+  if (!auto_start_reauth) {
     return false;
   }
 
@@ -138,7 +138,6 @@ void LockScreenReauthHandler::LoadAuthenticatorParam() {
 
   authenticator_state_ = AuthenticatorState::LOADING;
   login::GaiaContext context;
-  context.force_reload = true;
   context.email = email_;
   context.gaia_id = user_manager::UserManager::Get()
                         ->GetPrimaryUser()
@@ -213,6 +212,7 @@ void LockScreenReauthHandler::OnSetCookieForLoadGaiaWithPartition(
   bool do_saml_redirect =
       ShouldDoSamlRedirect(context.email, auto_start_reauth);
   params.Set("doSamlRedirect", do_saml_redirect);
+  // TODO(b/341898144): native verification notice can be deprecated.
   // If automatic re-authentication start is enabled, user verification notice
   // page shouldn't be shown to ensure faster user flow.
   params.Set("showVerificationNotice", do_saml_redirect && !auto_start_reauth);
@@ -224,8 +224,7 @@ void LockScreenReauthHandler::OnSetCookieForLoadGaiaWithPartition(
   if (do_saml_redirect) {
     params.Set("gaiaPath",
                gaia_urls.saml_redirect_chromeos_url().path().substr(1));
-  } else if (features::IsGaiaReauthEndpointEnabled() &&
-             !context.email.empty()) {
+  } else if (!context.email.empty()) {
     params.Set("gaiaPath",
                gaia_urls.embedded_reauth_chromeos_url().path().substr(1));
   } else {
@@ -314,7 +313,7 @@ void LockScreenReauthHandler::HandleCompleteAuthentication(
     auto challenge_response_key_or_error = login::ExtractClientCertificates(
         *extension_provided_client_cert_usage_observer_);
     if (!challenge_response_key_or_error.has_value()) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
     }
     challenge_response_key = challenge_response_key_or_error.value();
@@ -365,7 +364,8 @@ void LockScreenReauthHandler::FinishAuthentication(
 }
 
 void LockScreenReauthHandler::OnCookieWaitTimeout() {
-  NOTREACHED() << "Cookie has timed out while attempting to login in.";
+  NOTREACHED_IN_MIGRATION()
+      << "Cookie has timed out while attempting to login in.";
   LockScreenStartReauthDialog::Dismiss();
 }
 

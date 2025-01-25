@@ -13,7 +13,9 @@ class SyncedFileStore;
 
 class SyncedFileStoreAndroid {
  public:
-  SyncedFileStoreAndroid(JNIEnv* env, jobject obj);
+  SyncedFileStoreAndroid(
+      JNIEnv* env,
+      const base::android::JavaRef<jobject>& obj);
   ~SyncedFileStoreAndroid();
   SyncedFileStoreAndroid(const SyncedFileStoreAndroid&) = delete;
   SyncedFileStoreAndroid& operator=(const SyncedFileStoreAndroid&) = delete;

@@ -49,7 +49,7 @@ class LoginRequiredError(Exception):
     """Interaction with the user is required to authenticate."""
     def __init__(self, scopes=OAUTH_SCOPE_EMAIL):
         msg = ('You are not logged in. Please login first by running:\n'
-               '  luci-auth login -scopes %s' % scopes)
+               '  luci-auth login -scopes "%s"' % scopes)
         super(LoginRequiredError, self).__init__(msg)
 
 
@@ -107,7 +107,7 @@ class Authenticator(object):
             return self._access_token
 
         # Nope, still expired. Needs user interaction.
-        logging.error('Failed to create access token')
+        logging.debug('Failed to create access token')
         raise LoginRequiredError(self._scopes)
 
     def get_id_token(self):
@@ -127,7 +127,7 @@ class Authenticator(object):
             return self._id_token
 
         # Nope, still expired. Needs user interaction.
-        logging.error('Failed to create id token')
+        logging.debug('Failed to create id token')
         raise LoginRequiredError()
 
     def authorize(self, http, use_id_token=False):

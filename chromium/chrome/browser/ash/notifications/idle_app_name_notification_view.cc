@@ -64,10 +64,10 @@ void CreateAndShowWidget(views::WidgetDelegateView* delegate,
   gfx::Size view_size = delegate->GetPreferredSize();
   gfx::Rect bounds((display_size.width() - view_size.width()) / 2,
                    -view_size.height(), view_size.width(), view_size.height());
-  views::Widget::InitParams params;
-  params.type = views::Widget::InitParams::TYPE_POPUP;
+  views::Widget::InitParams params(
+      views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+      views::Widget::InitParams::TYPE_POPUP);
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
-  params.ownership = views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET;
   params.accept_events = false;
   params.z_order = ui::ZOrderLevel::kFloatingUIElement;
   params.delegate = delegate;
@@ -129,7 +129,7 @@ class IdleAppNameNotificationDelegateView
                       base::Milliseconds(message_visibility_time_in_ms), this,
                       &IdleAppNameNotificationDelegateView::RemoveMessage);
 
-    SetAccessibilityProperties(ax::mojom::Role::kAlert, app_name);
+    GetViewAccessibility().SetProperties(ax::mojom::Role::kAlert, app_name);
   }
 
   IdleAppNameNotificationDelegateView(

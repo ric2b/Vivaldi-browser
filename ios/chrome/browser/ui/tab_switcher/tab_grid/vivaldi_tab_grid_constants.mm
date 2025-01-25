@@ -2,6 +2,10 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
 
+// Notifications
+NSString* const vTabGridWillCloseAllTabsNotification =
+    @"vTabGridWillCloseAllTabsNotification";
+
 // Accessibility identifiers for automated testing.
 NSString* const vTabGridRecentlyClosedTabsPageButtonIdentifier =
     @"TabGridRecentlyClosedTabsPageButtonIdentifier";

@@ -14,6 +14,7 @@ sys.path.insert(0, ROOT_DIR)
 
 import metrics
 import metrics_utils
+import utils
 
 # TODO: Should fix these warnings.
 # pylint: disable=line-too-long
@@ -30,7 +31,7 @@ class TimeMock(object):
 
 class MetricsCollectorTest(unittest.TestCase):
     def setUp(self):
-        self.config_file = os.path.join(ROOT_DIR, 'metrics.cfg')
+        self.config_file = utils.depot_tools_config_path('metrics.cfg')
         self.collector = metrics.MetricsCollector()
 
         # Keep track of the URL requests, file reads/writes and subprocess

@@ -17,9 +17,12 @@ import shutil
 import sys
 import tempfile
 import unittest
+
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import scm_mock
 
 import metrics
 import metrics_utils
@@ -40,9 +43,6 @@ import subprocess2
 
 # TODO: Should fix these warnings.
 # pylint: disable=line-too-long
-
-NETRC_FILENAME = '_netrc' if sys.platform == 'win32' else '.netrc'
-
 
 def callError(code=1, cmd='', cwd='', stdout=b'', stderr=b''):
     return subprocess2.CalledProcessError(code, cmd, cwd, stdout, stderr)
@@ -87,33 +87,6 @@ class ChangelistMock(object):
         return ('origin', 'refs/remotes/origin/main')
 
 
-class GitMocks(object):
-    def __init__(self, config=None, branchref=None):
-        self.branchref = branchref or 'refs/heads/main'
-        self.config = config or {}
-
-    def GetBranchRef(self, _root):
-        return self.branchref
-
-    def NewBranch(self, branchref):
-        self.branchref = branchref
-
-    def GetConfig(self, root, key, default=None):
-        if root != '':
-            key = '%s:%s' % (root, key)
-        return self.config.get(key, default)
-
-    def SetConfig(self, root, key, value=None):
-        if root != '':
-            key = '%s:%s' % (root, key)
-        if value:
-            self.config[key] = value
-            return
-        if key not in self.config:
-            raise CERR1
-        del self.config[key]
-
-
 class WatchlistsMock(object):
     def __init__(self, _):
         pass
@@ -145,16 +118,16 @@ class AuthenticatorMock(object):
 
 
 def CookiesAuthenticatorMockFactory(hosts_with_creds=None, same_auth=False):
-    """Use to mock Gerrit/Git credentials from ~/.netrc or ~/.gitcookies.
+    """Use to mock Gerrit/Git credentials from ~/.gitcookies.
 
     Usage:
         >>> self.mock(git_cl.gerrit_util, "CookiesAuthenticator",
-                    CookiesAuthenticatorMockFactory({'host': ('user', _, 'pass')})
+                    CookiesAuthenticatorMockFactory({'host': ('user', 'pass')})
 
     OR
         >>> self.mock(git_cl.gerrit_util, "CookiesAuthenticator",
                     CookiesAuthenticatorMockFactory(
-                        same_auth=('user', '', 'pass'))
+                        same_auth=('user', 'pass'))
     """
     class CookiesAuthenticatorMock(git_cl.gerrit_util.CookiesAuthenticator):
         def __init__(self):  # pylint: disable=super-init-not-called
@@ -165,10 +138,6 @@ def CookiesAuthenticatorMockFactory(hosts_with_creds=None, same_auth=False):
         @classmethod
         def get_gitcookies_path(cls):
             return os.path.join('~', '.gitcookies')
-
-        @classmethod
-        def get_netrc_path(cls):
-            return os.path.join('~', NETRC_FILENAME)
 
         def _get_auth_for_host(self, host):
             if same_auth:
@@ -332,6 +301,7 @@ class TestGitClBasic(unittest.TestCase):
         options.force = False
         options.preserve_tryjobs = False
         options.message_file = "message.txt"
+        options.commit_description = None
 
         with self.assertRaises(SystemExitMock):
             cl.CMDUploadChange(options, [], 'foo',
@@ -652,29 +622,25 @@ class TestGitCl(unittest.TestCase):
                    lambda h, i, msg=None, labels=None, notify=None, ready=None:
                    (self._mocked_call('SetReview', h, i, msg, labels, notify,
                                       ready))).start()
-        mock.patch('git_cl.gerrit_util.LuciContextAuthenticator.is_luci',
+        mock.patch('git_cl.gerrit_util.LuciContextAuthenticator.is_applicable',
                    return_value=False).start()
-        mock.patch('git_cl.gerrit_util.GceAuthenticator.is_gce',
+        mock.patch('git_cl.gerrit_util.GceAuthenticator.is_applicable',
                    return_value=False).start()
         mock.patch('git_cl.gerrit_util.ValidAccounts',
                    lambda *a: self._mocked_call('ValidAccounts', *a)).start()
         mock.patch('sys.exit', side_effect=SystemExitMock).start()
         mock.patch('git_cl.Settings.GetRoot', return_value='').start()
-        self.mockGit = GitMocks()
-        mock.patch('scm.GIT.GetBranchRef', self.mockGit.GetBranchRef).start()
-        mock.patch('scm.GIT.GetConfig', self.mockGit.GetConfig).start()
+        scm_mock.GIT(self)
         mock.patch('scm.GIT.ResolveCommit', return_value='hash').start()
         mock.patch('scm.GIT.IsValidRevision', return_value=True).start()
-        mock.patch('scm.GIT.SetConfig', self.mockGit.SetConfig).start()
-        mock.patch('git_new_branch.create_new_branch',
-                   self.mockGit.NewBranch).start()
         mock.patch('scm.GIT.FetchUpstreamTuple',
                    return_value=('origin', 'refs/heads/main')).start()
         mock.patch('scm.GIT.CaptureStatus',
                    return_value=[('M', 'foo.txt')]).start()
         # It's important to reset settings to not have inter-tests interference.
-        git_cl.settings = None
+        git_cl.settings = git_cl.Settings()
         self.addCleanup(mock.patch.stopall)
+        gerrit_util._Authenticator._resolved = None
 
     def tearDown(self):
         try:
@@ -869,7 +835,8 @@ class TestGitCl(unittest.TestCase):
         calls = []
 
         if squash_mode in ('override_squash', 'override_nosquash'):
-            self.mockGit.config['gerrit.override-squash-uploads'] = (
+            scm.GIT.SetConfig(
+                '', 'gerrit.override-squash-uploads',
                 'true' if squash_mode == 'override_squash' else 'false')
 
         if not git_footers.get_footer_change_id(description) and not squash:
@@ -938,7 +905,7 @@ class TestGitCl(unittest.TestCase):
             metrics_arguments.append('wip')
 
         # If issue is given, then description is fetched from Gerrit instead.
-        if not title:
+        if not title and squash_mode != "override_nosquash":
             if issue is None:
                 if squash:
                     title = 'Initial upload'
@@ -1122,8 +1089,22 @@ class TestGitCl(unittest.TestCase):
                 (
                     ([
                         'FileWrite',
-                        os.path.join('TEMP_DIR', 'gitcookies'),
+                        os.path.join(
+                            'TEMP_DIR',
+                            'CookiesAuthenticatorMock.debug_summary_state'),
                         'gitcookies REDACTED'
+                    ], ),
+                    None,
+                ),
+            ]
+        else:
+            calls += [
+                (
+                    ([
+                        'FileWrite',
+                        os.path.join(
+                            'TEMP_DIR',
+                            'CookiesAuthenticatorMock.debug_summary_state'), ''
                     ], ),
                     None,
                 ),
@@ -1189,7 +1170,7 @@ class TestGitCl(unittest.TestCase):
         mock.patch(
             'git_cl.gerrit_util.CookiesAuthenticator',
             CookiesAuthenticatorMockFactory(same_auth=('git-owner.example.com',
-                                                       '', 'pass'))).start()
+                                                       'pass'))).start()
         mock.patch('git_cl.Changelist._GerritCommitMsgHookCheck',
                    lambda offer_removal: None).start()
         mock.patch('git_cl.Changelist.GetMostRecentPatchset',
@@ -1235,12 +1216,22 @@ class TestGitCl(unittest.TestCase):
             'gclient_utils.AskForData',
             lambda prompt: self._mocked_call('ask_for_data', prompt)).start()
 
-        self.mockGit.config['gerrit.host'] = 'true'
-        self.mockGit.config['branch.main.gerritissue'] = (str(issue)
-                                                          if issue else None)
-        self.mockGit.config['remote.origin.url'] = (
-            'https://%s.googlesource.com/my/repo' % short_hostname)
-        self.mockGit.config['user.email'] = 'me@example.com'
+        scm.GIT.SetConfig('', 'gerrit.host', 'true')
+        scm.GIT.SetConfig('', 'branch.main.gerritissue',
+                          (str(issue) if issue else None))
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          f'https://{short_hostname}.googlesource.com/my/repo')
+        scm.GIT.SetConfig('', 'user.email', 'owner@example.com')
+
+        self.calls = []
+        if squash_mode == "override_nosquash":
+            if issue:
+                mock.patch('gerrit_util.GetChange',
+                           return_value={
+                               '_number': issue
+                           }).start()
+            else:
+                mock.patch('gerrit_util.GetChange', return_value={}).start()
 
         self.calls = self._gerrit_base_calls(
             issue=issue,
@@ -1402,8 +1393,8 @@ class TestGitCl(unittest.TestCase):
         mockUploadAllPrecheck.return_value = (cls, True)
 
         upstream_gerrit_commit = 'upstream-commit'
-        self.mockGit.config[
-            'branch.upstream-branch.gerritsquashhash'] = upstream_gerrit_commit
+        scm.GIT.SetConfig('', 'branch.upstream-branch.gerritsquashhash',
+                          upstream_gerrit_commit)
 
         reviewers = []
         ccs = []
@@ -1711,13 +1702,13 @@ class TestGitCl(unittest.TestCase):
         # (so no LAST_UPLOAD_HASH_CONIFG_KEY)
 
         # Case 4: upstream2's last_upload is behind upstream3's base_commit
-        self.mockGit.config['branch.upstream2.%s' %
-                            git_cl.LAST_UPLOAD_HASH_CONFIG_KEY] = 'commit2.3'
+        key = f'branch.upstream2.{git_cl.LAST_UPLOAD_HASH_CONFIG_KEY}'
+        scm.GIT.SetConfig('', key, 'commit2.3')
         mockIsAncestor.side_effect = [True]
 
         # Case 3: upstream1's last_upload matches upstream2's base_commit
-        self.mockGit.config['branch.upstream1.%s' %
-                            git_cl.LAST_UPLOAD_HASH_CONFIG_KEY] = 'commit1.5'
+        key = f'branch.upstream1.{git_cl.LAST_UPLOAD_HASH_CONFIG_KEY}'
+        scm.GIT.SetConfig('', key, 'commit1.5')
 
         cls, cherry_pick = git_cl._UploadAllPrecheck(options, orig_args)
         self.assertFalse(cherry_pick)
@@ -1839,8 +1830,8 @@ class TestGitCl(unittest.TestCase):
         mockGitGetBranchConfigValue.return_value = None
 
         # Case 5: current's base_commit is behind upstream3's last_upload.
-        self.mockGit.config['branch.upstream3.%s' %
-                            git_cl.LAST_UPLOAD_HASH_CONFIG_KEY] = 'commit3.7'
+        key = f'branch.upstream3.{git_cl.LAST_UPLOAD_HASH_CONFIG_KEY}'
+        scm.GIT.SetConfig('', key, 'commit3.7')
         mockIsAncestor.side_effect = [False, True]
         with self.assertRaises(SystemExitMock):
             options = optparse.Values()
@@ -1885,8 +1876,8 @@ class TestGitCl(unittest.TestCase):
         mockIsAncestor.return_value = True
 
         # Give upstream3 a last upload hash
-        self.mockGit.config['branch.upstream3.%s' %
-                            git_cl.LAST_UPLOAD_HASH_CONFIG_KEY] = 'commit3.4'
+        key = f'branch.upstream3.{git_cl.LAST_UPLOAD_HASH_CONFIG_KEY}'
+        scm.GIT.SetConfig('', key, 'commit3.4')
 
         # end commits
         mockRunGit.return_value = 'commit4'
@@ -2096,6 +2087,7 @@ class TestGitCl(unittest.TestCase):
                                     mockGetBugPrefix=None,
                                     mockIsCodeOwnersEnabledOnHost=None,
                                     initial_description='desc',
+                                    commit_description=None,
                                     bug=None,
                                     fixed=None,
                                     branch='branch',
@@ -2126,7 +2118,8 @@ class TestGitCl(unittest.TestCase):
             fixed=fixed,
             reviewers=reviewers,
             add_owners_to=add_owners_to,
-            message=initial_description),
+            message=initial_description,
+            commit_description=commit_description),
                                              git_diff_args=None,
                                              files=list(owners_by_path))
         self.assertEqual(expected_description, actual.description)
@@ -2203,6 +2196,16 @@ class TestGitCl(unittest.TestCase):
                 '',
                 'R=a@example.com, b@example.com',
             ]))
+
+    def testGetDescriptionForUpload_NewDesc(self):
+        self.getDescriptionForUploadTest(
+            commit_description='this is a new desc',
+            expected_description='this is a new desc')
+
+    @mock.patch('sys.stdin', io.StringIO('this is a new desc'))
+    def testGetDescriptionForUpload_NewDescFromStdin(self):
+        self.getDescriptionForUploadTest(
+            commit_description='-', expected_description='this is a new desc')
 
     def test_description_append_footer(self):
         for init_desc, footer_line, expected_desc in [
@@ -2360,8 +2363,8 @@ class TestGitCl(unittest.TestCase):
 
     def _patch_common(self, git_short_host='chromium'):
         mock.patch('scm.GIT.ResolveCommit', return_value='deadbeef').start()
-        self.mockGit.config['remote.origin.url'] = (
-            'https://%s.googlesource.com/my/repo' % git_short_host)
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          f'https://{git_short_host}.googlesource.com/my/repo')
         gerrit_util.GetChangeDetail.return_value = {
             'current_revision': '7777777777',
             'revisions': {
@@ -2474,8 +2477,8 @@ class TestGitCl(unittest.TestCase):
                 side_effect=gerrit_util.GerritError(404, ''))
     @mock.patch('sys.stderr', io.StringIO())
     def test_patch_gerrit_not_exists(self, *_mocks):
-        self.mockGit.config['remote.origin.url'] = (
-            'https://chromium.googlesource.com/my/repo')
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          'https://chromium.googlesource.com/my/repo')
         with self.assertRaises(SystemExitMock):
             self.assertEqual(1, git_cl.main(['patch', '123456']))
         self.assertEqual(
@@ -2519,8 +2522,8 @@ class TestGitCl(unittest.TestCase):
         mock.patch(
             'git_cl.gerrit_util.CookiesAuthenticator',
             CookiesAuthenticatorMockFactory(hosts_with_creds=auth)).start()
-        self.mockGit.config['remote.origin.url'] = (
-            'https://chromium.googlesource.com/my/repo')
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          'https://chromium.googlesource.com/my/repo')
         cl = git_cl.Changelist()
         cl.branch = 'main'
         cl.branchref = 'refs/heads/main'
@@ -2528,31 +2531,26 @@ class TestGitCl(unittest.TestCase):
 
     @mock.patch('sys.stderr', io.StringIO())
     def test_gerrit_ensure_authenticated_missing(self):
-        cl = self._test_gerrit_ensure_authenticated_common(
-            auth={
-                'chromium.googlesource.com': ('git-is.ok', '',
-                                              'but gerrit is missing'),
-            })
+        cl = self._test_gerrit_ensure_authenticated_common(auth={
+            'chromium.googlesource.com': ('git-is.ok', 'but gerrit is missing'),
+        })
         with self.assertRaises(SystemExitMock):
             cl.EnsureAuthenticated(force=False)
         self.assertEqual(
             'Credentials for the following hosts are required:\n'
             '  chromium-review.googlesource.com\n'
-            'These are read from ~%(sep)s.gitcookies '
-            '(or legacy ~%(sep)s%(netrc)s)\n'
+            'These are read from ~%(sep)s.gitcookies\n'
             'You can (re)generate your credentials by visiting '
             'https://chromium.googlesource.com/new-password\n' % {
                 'sep': os.sep,
-                'netrc': NETRC_FILENAME,
             }, sys.stderr.getvalue())
 
     def test_gerrit_ensure_authenticated_conflict(self):
         cl = self._test_gerrit_ensure_authenticated_common(
             auth={
-                'chromium.googlesource.com': ('git-one.example.com', None,
-                                              'secret1'),
+                'chromium.googlesource.com': ('git-one.example.com', 'secret1'),
                 'chromium-review.googlesource.com': ('git-other.example.com',
-                                                     None, 'secret2'),
+                                                     'secret2'),
             })
         self.calls.append((('ask_for_data', 'If you know what you are doing '
                             'press Enter to continue, or Ctrl+C to abort'), ''))
@@ -2561,20 +2559,19 @@ class TestGitCl(unittest.TestCase):
     def test_gerrit_ensure_authenticated_ok(self):
         cl = self._test_gerrit_ensure_authenticated_common(
             auth={
-                'chromium.googlesource.com': ('git-same.example.com', None,
-                                              'secret'),
+                'chromium.googlesource.com': ('git-same.example.com', 'secret'),
                 'chromium-review.googlesource.com': ('git-same.example.com',
-                                                     None, 'secret'),
+                                                     'secret'),
             })
         self.assertIsNone(cl.EnsureAuthenticated(force=False))
 
     def test_gerrit_ensure_authenticated_skipped(self):
-        self.mockGit.config['gerrit.skip-ensure-authenticated'] = 'true'
+        scm.GIT.SetConfig('', 'gerrit.skip-ensure-authenticated', 'true')
         cl = self._test_gerrit_ensure_authenticated_common(auth={})
         self.assertIsNone(cl.EnsureAuthenticated(force=False))
 
     def test_gerrit_ensure_authenticated_sso(self):
-        self.mockGit.config['remote.origin.url'] = 'sso://repo'
+        scm.GIT.SetConfig('', 'remote.origin.url', 'sso://repo')
 
         mock.patch(
             'git_cl.gerrit_util.CookiesAuthenticator',
@@ -2589,16 +2586,22 @@ class TestGitCl(unittest.TestCase):
     def test_gerrit_ensure_authenticated_bearer_token(self):
         cl = self._test_gerrit_ensure_authenticated_common(
             auth={
-                'chromium.googlesource.com': ('', None, 'secret'),
-                'chromium-review.googlesource.com': ('', None, 'secret'),
+                'chromium.googlesource.com': ('', 'secret'),
+                'chromium-review.googlesource.com': ('', 'secret'),
             })
         self.assertIsNone(cl.EnsureAuthenticated(force=False))
-        header = gerrit_util.CookiesAuthenticator().get_auth_header(
-            'chromium.googlesource.com')
-        self.assertTrue('Bearer' in header)
+        conn = gerrit_util.HttpConn(
+            req_uri='???',
+            req_method='GET',
+            req_host='chromium.googlesource.com',
+            req_headers={},
+            req_body=None,
+        )
+        gerrit_util.CookiesAuthenticator().authenticate(conn)
+        self.assertTrue('Bearer' in conn.req_headers['Authorization'])
 
     def test_gerrit_ensure_authenticated_non_https_sso(self):
-        self.mockGit.config['remote.origin.url'] = 'custom-scheme://repo'
+        scm.GIT.SetConfig('', 'remote.origin.url', 'custom-scheme://repo')
         self.calls = [
             (('logging.warning',
               'Ignoring branch %(branch)s with non-https remote '
@@ -2619,8 +2622,8 @@ class TestGitCl(unittest.TestCase):
         self.assertIsNone(cl.EnsureAuthenticated(force=False))
 
     def test_gerrit_ensure_authenticated_non_url(self):
-        self.mockGit.config['remote.origin.url'] = (
-            'git@somehost.example:foo/bar.git')
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          'git@somehost.example:foo/bar.git')
         self.calls = [
             (('logging.error',
               'Remote "%(remote)s" for branch "%(branch)s" points to "%(url)s", '
@@ -2642,11 +2645,11 @@ class TestGitCl(unittest.TestCase):
         self.assertIsNone(cl.EnsureAuthenticated(force=False))
 
     def _cmd_set_commit_gerrit_common(self, vote, notify=None):
-        self.mockGit.config['branch.main.gerritissue'] = '123'
-        self.mockGit.config['branch.main.gerritserver'] = (
-            'https://chromium-review.googlesource.com')
-        self.mockGit.config['remote.origin.url'] = (
-            'https://chromium.googlesource.com/infra/infra')
+        scm.GIT.SetConfig('', 'branch.main.gerritissue', '123')
+        scm.GIT.SetConfig('', 'branch.main.gerritserver',
+                          'https://chromium-review.googlesource.com')
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          'https://chromium.googlesource.com/infra/infra')
         self.calls = [
             (('SetReview', 'chromium-review.googlesource.com',
               'infra%2Finfra~123', None, {
@@ -2701,8 +2704,8 @@ class TestGitCl(unittest.TestCase):
         self.assertEqual(git_cl.main(['set-close', '--issue', '1']), 0)
 
     def test_description(self):
-        self.mockGit.config['remote.origin.url'] = (
-            'https://chromium.googlesource.com/my/repo')
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          'https://chromium.googlesource.com/my/repo')
         gerrit_util.GetChangeDetail.return_value = {
             'current_revision': 'sha1',
             'revisions': {
@@ -2752,7 +2755,7 @@ class TestGitCl(unittest.TestCase):
                    UpdateDescription).start()
         mock.patch('git_cl.gclient_utils.RunEditor', RunEditor).start()
 
-        self.mockGit.config['branch.main.gerritissue'] = '123'
+        scm.GIT.SetConfig('', 'branch.main.gerritissue', '123')
         self.assertEqual(0, git_cl.main(['description']))
 
     def test_description_does_not_append_bug_line_if_fixed_is_present(self):
@@ -2772,7 +2775,7 @@ class TestGitCl(unittest.TestCase):
                    lambda *args: current_desc).start()
         mock.patch('git_cl.gclient_utils.RunEditor', RunEditor).start()
 
-        self.mockGit.config['branch.main.gerritissue'] = '123'
+        scm.GIT.SetConfig('', 'branch.main.gerritissue', '123')
         self.assertEqual(0, git_cl.main(['description']))
 
     def test_description_set_stdin(self):
@@ -2919,20 +2922,20 @@ class TestGitCl(unittest.TestCase):
                             'archived/{issue}-{branch}']))
 
     def test_cmd_issue_erase_existing(self):
-        self.mockGit.config['branch.main.gerritissue'] = '123'
-        self.mockGit.config['branch.main.gerritserver'] = (
-            'https://chromium-review.googlesource.com')
+        scm.GIT.SetConfig('', 'branch.main.gerritissue', '123')
+        scm.GIT.SetConfig('', 'branch.main.gerritserver',
+                          'https://chromium-review.googlesource.com')
         self.calls = [
             ((['git', 'log', '-1', '--format=%B'], ), 'This is a description'),
         ]
         self.assertEqual(0, git_cl.main(['issue', '0']))
-        self.assertNotIn('branch.main.gerritissue', self.mockGit.config)
-        self.assertNotIn('branch.main.gerritserver', self.mockGit.config)
+        self.assertIsNone(scm.GIT.GetConfig('root', 'branch.main.gerritissue'))
+        self.assertIsNone(scm.GIT.GetConfig('root', 'branch.main.gerritserver'))
 
     def test_cmd_issue_erase_existing_with_change_id(self):
-        self.mockGit.config['branch.main.gerritissue'] = '123'
-        self.mockGit.config['branch.main.gerritserver'] = (
-            'https://chromium-review.googlesource.com')
+        scm.GIT.SetConfig('', 'branch.main.gerritissue', '123')
+        scm.GIT.SetConfig('', 'branch.main.gerritserver',
+                          'https://chromium-review.googlesource.com')
         mock.patch(
             'git_cl.Changelist.FetchDescription',
             lambda _: 'This is a description\n\nChange-Id: Ideadbeef').start()
@@ -2943,15 +2946,15 @@ class TestGitCl(unittest.TestCase):
                'This is a description\n'], ), ''),
         ]
         self.assertEqual(0, git_cl.main(['issue', '0']))
-        self.assertNotIn('branch.main.gerritissue', self.mockGit.config)
-        self.assertNotIn('branch.main.gerritserver', self.mockGit.config)
+        self.assertIsNone(scm.GIT.GetConfig('root', 'branch.main.gerritissue'))
+        self.assertIsNone(scm.GIT.GetConfig('root', 'branch.main.gerritserver'))
 
     def test_cmd_issue_json(self):
-        self.mockGit.config['branch.main.gerritissue'] = '123'
-        self.mockGit.config['branch.main.gerritserver'] = (
-            'https://chromium-review.googlesource.com')
-        self.mockGit.config['remote.origin.url'] = (
-            'https://chromium.googlesource.com/chromium/src')
+        scm.GIT.SetConfig('', 'branch.main.gerritissue', '123')
+        scm.GIT.SetConfig('', 'branch.main.gerritserver',
+                          'https://chromium-review.googlesource.com')
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          'https://chromium.googlesource.com/chromium/src')
         self.calls = [(
             (
                 'write_json',
@@ -3015,9 +3018,9 @@ class TestGitCl(unittest.TestCase):
         cl._GerritCommitMsgHookCheck(offer_removal=True)
 
     def test_GerritCmdLand(self):
-        self.mockGit.config['branch.main.gerritsquashhash'] = 'deadbeaf'
-        self.mockGit.config['branch.main.gerritserver'] = (
-            'chromium-review.googlesource.com')
+        scm.GIT.SetConfig('', 'branch.main.gerritsquashhash', 'deadbeaf')
+        scm.GIT.SetConfig('', 'branch.main.gerritserver',
+                          'chromium-review.googlesource.com')
         self.calls += [
             ((['git', 'diff', 'deadbeaf'], ), ''),  # No diff.
         ]
@@ -3109,26 +3112,22 @@ class TestGitCl(unittest.TestCase):
                     'host.googlesource.com': ('user', 'pass'),
                     'host-review.googlesource.com': ('user', 'pass'),
                 }
-                self.netrc = self
-                self.netrc.hosts = {
-                    'github.com': ('user2', None, 'pass2'),
-                    'host2.googlesource.com': ('user3', None, 'pass'),
-                }
 
         mock.patch('git_cl.gerrit_util.CookiesAuthenticator',
                    CookiesAuthenticatorMock).start()
-        git_cl._GitCookiesChecker().print_current_creds(include_netrc=True)
+        git_cl._GitCookiesChecker().print_current_creds()
         self.assertEqual(list(sys.stdout.getvalue().splitlines()), [
-            '                        Host\t User\t Which file',
-            '============================\t=====\t===========',
-            'host-review.googlesource.com\t user\t.gitcookies',
-            '       host.googlesource.com\t user\t.gitcookies',
-            '      host2.googlesource.com\tuser3\t     .netrc',
+            'Your .gitcookies have credentials for these hosts:',
+            '                        Host\tUser\t Which file',
+            '============================\t====\t===========',
+            'host-review.googlesource.com\tuser\t.gitcookies',
+            '       host.googlesource.com\tuser\t.gitcookies',
         ])
         sys.stdout.seek(0)
         sys.stdout.truncate(0)
-        git_cl._GitCookiesChecker().print_current_creds(include_netrc=False)
+        git_cl._GitCookiesChecker().print_current_creds()
         self.assertEqual(list(sys.stdout.getvalue().splitlines()), [
+            'Your .gitcookies have credentials for these hosts:',
             '                        Host\tUser\t Which file',
             '============================\t====\t===========',
             'host-review.googlesource.com\tuser\t.gitcookies',
@@ -3141,7 +3140,7 @@ class TestGitCl(unittest.TestCase):
             if dirname == os.path.expanduser('~'):
                 dirname = '~'
             base = os.path.basename(path)
-            if base in (NETRC_FILENAME, '.gitcookies'):
+            if base == '.gitcookies':
                 return self._mocked_call('os.path.exists',
                                          os.path.join(dirname, base))
             # git cl also checks for existence other files not relevant to this
@@ -3156,10 +3155,9 @@ class TestGitCl(unittest.TestCase):
     def test_creds_check_gitcookies_not_configured(self):
         self._common_creds_check_mocks()
         mock.patch('git_cl._GitCookiesChecker.get_hosts_with_creds',
-                   lambda _, include_netrc=False: []).start()
+                   lambda _: []).start()
         self.calls = [
             ((['git', 'config', '--global', 'http.cookiefile'], ), CERR1),
-            (('os.path.exists', os.path.join('~', NETRC_FILENAME)), True),
             (('ask_for_data', 'Press Enter to setup .gitcookies, '
               'or Ctrl+C to abort'), ''),
             (([
@@ -3168,15 +3166,13 @@ class TestGitCl(unittest.TestCase):
             ], ), ''),
         ]
         self.assertEqual(0, git_cl.main(['creds-check']))
-        self.assertTrue(sys.stdout.getvalue().startswith(
-            'You seem to be using outdated .netrc for git credentials:'))
         self.assertIn('\nConfigured git to use .gitcookies from',
                       sys.stdout.getvalue())
 
     def test_creds_check_gitcookies_configured_custom_broken(self):
         self._common_creds_check_mocks()
         mock.patch('git_cl._GitCookiesChecker.get_hosts_with_creds',
-                   lambda _, include_netrc=False: []).start()
+                   lambda _: []).start()
         custom_cookie_path = ('C:\\.gitcookies' if sys.platform == 'win32' else
                               '/custom/.gitcookies')
         self.calls = [
@@ -3198,9 +3194,9 @@ class TestGitCl(unittest.TestCase):
                       sys.stdout.getvalue())
 
     def test_git_cl_comment_add_gerrit(self):
-        self.mockGit.branchref = None
-        self.mockGit.config['remote.origin.url'] = (
-            'https://chromium.googlesource.com/infra/infra')
+        git_new_branch.create_new_branch(None)  # hits mock from scm_mock.GIT.
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          'https://chromium.googlesource.com/infra/infra')
         self.calls = [
             (('SetReview', 'chromium-review.googlesource.com',
               'infra%2Finfra~10', 'msg', None, None, None), None),
@@ -3209,8 +3205,8 @@ class TestGitCl(unittest.TestCase):
 
     @mock.patch('git_cl.Changelist.GetBranch', return_value='foo')
     def test_git_cl_comments_fetch_gerrit(self, *_mocks):
-        self.mockGit.config['remote.origin.url'] = (
-            'https://chromium.googlesource.com/infra/infra')
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          'https://chromium.googlesource.com/infra/infra')
         gerrit_util.GetChangeDetail.return_value = {
             'owner': {
                 'email': 'owner@example.com'
@@ -3364,8 +3360,8 @@ class TestGitCl(unittest.TestCase):
         # git cl comments also fetches robot comments (which are considered a
         # type of autogenerated comment), and unlike other types of comments,
         # only robot comments from the latest patchset are shown.
-        self.mockGit.config['remote.origin.url'] = (
-            'https://x.googlesource.com/infra/infra')
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          'https://x.googlesource.com/infra/infra')
         gerrit_util.GetChangeDetail.return_value = {
             'owner': {
                 'email': 'owner@example.com'
@@ -3481,8 +3477,8 @@ class TestGitCl(unittest.TestCase):
         mock.patch('os.path.isdir', selective_os_path_isdir_mock).start()
 
         url = 'https://chromium.googlesource.com/my/repo'
-        self.mockGit.config['remote.origin.url'] = ('/cache/this-dir-exists')
-        self.mockGit.config['/cache/this-dir-exists:remote.origin.url'] = (url)
+        scm.GIT.SetConfig('', 'remote.origin.url', '/cache/this-dir-exists')
+        scm.GIT.SetConfig('/cache/this-dir-exists', 'remote.origin.url', url)
         self.calls = [
             (('os.path.isdir', '/cache/this-dir-exists'), True),
         ]
@@ -3502,8 +3498,8 @@ class TestGitCl(unittest.TestCase):
         mock.patch('logging.error',
                    lambda *a: self._mocked_call('logging.error', *a)).start()
 
-        self.mockGit.config['remote.origin.url'] = (
-            '/cache/this-dir-doesnt-exist')
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          '/cache/this-dir-doesnt-exist')
         self.calls = [
             (('os.path.isdir', '/cache/this-dir-doesnt-exist'), False),
             (('logging.error',
@@ -3529,7 +3525,7 @@ class TestGitCl(unittest.TestCase):
         mock.patch('logging.error',
                    lambda *a: self._mocked_call('logging.error', *a)).start()
 
-        self.mockGit.config['remote.origin.url'] = ('/cache/this-dir-exists')
+        scm.GIT.SetConfig('', 'remote.origin.url', '/cache/this-dir-exists')
         self.calls = [
             (('os.path.isdir', '/cache/this-dir-exists'), True),
             (('logging.error',
@@ -3546,8 +3542,8 @@ class TestGitCl(unittest.TestCase):
         self.assertIsNone(cl.GetRemoteUrl())
 
     def test_gerrit_change_identifier_with_project(self):
-        self.mockGit.config['remote.origin.url'] = (
-            'https://chromium.googlesource.com/a/my/repo.git/')
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          'https://chromium.googlesource.com/a/my/repo.git/')
         cl = git_cl.Changelist(issue=123456)
         self.assertEqual(cl._GerritChangeIdentifier(), 'my%2Frepo~123456')
 
@@ -3573,6 +3569,16 @@ class TestGitCl(unittest.TestCase):
             'desc ✔\n\nBUG=\n\nChange-Id: I123456789\n', [],
             squash=False,
             squash_mode='override_nosquash',
+            change_id='I123456789',
+            default_branch='main')
+
+    def test_gerrit_nosquash_with_issue(self):
+        self._run_gerrit_upload_test(
+            [],
+            'desc ✔\n\nBUG=\n\nChange-Id: I123456789\n', [],
+            squash=False,
+            squash_mode='override_nosquash',
+            issue=123456,
             change_id='I123456789',
             default_branch='main')
 
@@ -3607,11 +3613,11 @@ class ChangelistTest(unittest.TestCase):
                    return_value='project').start()
         mock.patch('sys.exit', side_effect=SystemExitMock).start()
 
+        scm_mock.GIT(self)
+
         self.addCleanup(mock.patch.stopall)
         self.temp_count = 0
-        self.mockGit = GitMocks()
-        mock.patch('scm.GIT.GetConfig', self.mockGit.GetConfig).start()
-        mock.patch('scm.GIT.SetConfig', self.mockGit.SetConfig).start()
+        gerrit_util._Authenticator._resolved = None
 
     def testRunHook(self):
         expected_results = {
@@ -4079,6 +4085,7 @@ class ChangelistTest(unittest.TestCase):
         options.private = False
         options.no_autocc = False
         options.message_file = None
+        options.commit_description = None
         options.cc = ['chicken@bok.farm']
         parent = '420parent'
         latest_tree = '420latest_tree'
@@ -4202,10 +4209,10 @@ class ChangelistTest(unittest.TestCase):
         cl.PostUploadUpdates(options, new_upload, '12345')
         mockSetPatchset.assert_called_once_with(3)
         self.assertEqual(
-            self.mockGit.config['root:branch.current-branch.gerritsquashhash'],
+            scm.GIT.GetConfig('root', 'branch.current-branch.gerritsquashhash'),
             new_upload.commit_to_push)
         self.assertEqual(
-            self.mockGit.config['root:branch.current-branch.last-upload-hash'],
+            scm.GIT.GetConfig('root', 'branch.current-branch.last-upload-hash'),
             new_upload.new_last_uploaded_commit)
 
         mockAddReviewers.assert_called_once_with('chromium',

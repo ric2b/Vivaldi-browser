@@ -58,6 +58,7 @@ build_webui("build") {
   mojo_files = [
     "$root_gen_dir/chrome/browser/ui/webui/ash/login/mojom/screens_common.mojom-webui.ts",
     "$root_gen_dir/chrome/browser/ui/webui/ash/login/mojom/screens_factory.mojom-webui.ts",
+    "$root_gen_dir/chrome/browser/ui/webui/ash/login/mojom/screens_login.mojom-webui.ts",
     "$root_gen_dir/chrome/browser/ui/webui/ash/login/mojom/screens_oobe.mojom-webui.ts",
     "$root_gen_dir/chrome/browser/ui/webui/ash/login/mojom/screens_osauth.mojom-webui.ts",
   ]
@@ -98,6 +99,7 @@ build_webui("build") {
     "screens/common/family_link_notice.ts",
     "screens/common/gaia_info.ts",
     "screens/common/gaia_signin.ts",
+    "screens/common/gemini_intro.ts",
     "screens/common/gesture_navigation.ts",
     "screens/common/guest_tos.ts",
     "screens/common/hw_data_collection.ts",
@@ -112,6 +114,7 @@ build_webui("build") {
     "screens/common/os_trial.ts",
     "screens/common/parental_handoff.ts",
     "screens/common/quick_start.ts",
+    "screens/common/perks_discovery.ts",
     "screens/common/personalized_recommend_apps.ts",
     "screens/common/remote_activity_notification.ts",
 
@@ -125,7 +128,6 @@ build_webui("build") {
     "screens/common/theme_selection.ts",
     "screens/common/touchpad_scroll.ts",
     "screens/common/tpm_error.ts",
-    "screens/common/tuna.ts",
     "screens/common/user_allowlist_check_screen.ts",
     "screens/common/user_creation.ts",
     "screens/common/wrong_hwid.ts",
@@ -146,7 +148,6 @@ build_webui("build") {
     "screens/osauth/cryptohome_recovery_setup.ts",
     "screens/osauth/factor_setup_success.ts",
     "screens/osauth/fingerprint_setup.ts",
-    "screens/osauth/gaia_password_changed.ts",
     "screens/osauth/local_password_setup.ts",
     "screens/osauth/local_data_loss_warning.ts",
     "screens/osauth/enter_old_password.ts",
@@ -190,13 +191,14 @@ build_webui("build") {
   ]
 
   non_web_component_files = [
-    "components/behaviors/oobe_dialog_host_behavior.js",
-    "components/behaviors/login_screen_behavior.js",
-    "components/behaviors/multi_step_behavior.js",
     "components/buttons/oobe_base_button.ts",
+    "components/mixins/oobe_base_mixin.ts",
+    "components/mixins/oobe_dialog_host_mixin.ts",
     "components/mixins/oobe_focus_mixin.ts",
     "components/mixins/oobe_i18n_mixin.ts",
     "components/mixins/oobe_scrollable_mixin.ts",
+    "components/mixins/login_screen_mixin.ts",
+    "components/mixins/multi_step_mixin.ts",
     "components/display_manager_types.ts",
     "components/keyboard_utils.ts",
     "components/keyboard_utils_oobe.ts",
@@ -207,8 +209,8 @@ build_webui("build") {
     "components/web_view_helper.ts",
     "components/web_view_loader.ts",
     "cr_ui.ts",
-    "debug/debug.js",
-    "debug/no_debug.js",
+    "debug/debug.ts",
+    "debug/no_debug.ts",
     "display_manager.ts",
     "i18n_setup.ts",
     "install_oobe_error_store.ts",

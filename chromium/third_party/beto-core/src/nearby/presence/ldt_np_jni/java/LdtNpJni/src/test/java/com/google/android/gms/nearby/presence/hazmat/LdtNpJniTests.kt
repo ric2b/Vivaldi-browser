@@ -22,15 +22,15 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
 const val KEY_SEED = "CCDB2489E9FCAC42B39348B8941ED19A1D360E75E098C8C15E6B1CC2B620CD39"
-const val HMAC_TAG = "DFB90A1F9B1FE28D18BBCCA52240B5CC2CCB5F8D5289A3CB64EB3541CA614BB4"
+const val HMAC_TAG = "B4C59FA599241B81758D976B5A621C05232FE1BF89AE5987CA254C3554DCE50E"
 const val PLAINTEXT = "CD683FE1A1D1F846543D0A13D4AEA40040C8D67B"
-const val SALT_BYTES = "32EE"
-const val EXPECTED_CIPHER_TEXT = "04344411F1E57C841FE0F7150636BC782455059A"
+const val SALT_BYTES = "0C0F"
+const val EXPECTED_CIPHER_TEXT = "61E481C12F4DE24F2D4AB22D8908F80D3A3F9B40"
 
 class LdtNpJniTests {
   @Test
   fun roundTripTest() {
-    // Data taken from first test case in ldt_np_adv/resources/test/np_adv_test_vectors.json
+    // Data taken from ldt_ffi_test_scenario()
     val keySeed = KEY_SEED.decodeHex()
     val hmacTag = HMAC_TAG.decodeHex()
     val plaintext = PLAINTEXT.decodeHex()

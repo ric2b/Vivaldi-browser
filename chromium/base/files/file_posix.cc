@@ -41,8 +41,6 @@ static_assert(sizeof(base::stat_wrapper_t::st_size) >= 8);
 #include "base/os_compat_android.h"
 #endif
 
-#include "app/vivaldi_apptools.h"
-
 namespace base {
 
 // Make sure our Whence mappings match the system headers.
@@ -475,11 +473,6 @@ File File::Duplicate() const {
 
 #if BUILDFLAG(IS_APPLE)
 void File::InitializeFeatures() {
-  // NOTE(yngve) DO NOT remove; causes some unit_tests to slow down significantly
-  if (vivaldi::IsVivaldiRunning()) {
-      g_mac_file_flush_mechanism.store(MacFileFlushMechanism::kFlush,
-                                       std::memory_order_relaxed);
-  } else
   if (FeatureList::IsEnabled(kMacEfficientFileFlush)) {
     // "relaxed" because there is no dependency between these memory operations
     // and other memory operations.

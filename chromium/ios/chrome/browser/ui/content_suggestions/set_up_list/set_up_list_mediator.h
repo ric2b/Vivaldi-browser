@@ -10,7 +10,6 @@
 #import "base/ios/block_types.h"
 
 class AuthenticationService;
-@protocol ContentSuggestionsConsumer;
 @protocol ContentSuggestionsDelegate;
 @class ContentSuggestionsMetricsRecorder;
 @protocol ContentSuggestionsViewControllerAudience;
@@ -62,6 +61,7 @@ class SyncService;
                     identityManager:(signin::IdentityManager*)identityManager
               authenticationService:(AuthenticationService*)authService
                          sceneState:(SceneState*)sceneState
+              isDefaultSearchEngine:(BOOL)isDefaultSearchEngine
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
@@ -70,9 +70,6 @@ class SyncService;
 
 // Returns YES if the conditions are right to display the Set Up List.
 - (BOOL)shouldShowSetUpList;
-
-// Sends the SetUpList items up to the consumer.
-- (void)showSetUpList;
 
 // Returns the Set Up List module configuration(s) to show.
 - (NSArray<SetUpListConfig*>*)setUpListConfigs;
@@ -90,9 +87,6 @@ class SyncService;
 // Indicates to the mediator to disable SetUpList entirely.
 - (void)disableModule;
 
-// Consumer for this mediator.
-@property(nonatomic, weak) id<ContentSuggestionsConsumer> consumer;
-
 // Receiver for Set Up List actions.
 @property(nonatomic, weak) id<ContentSuggestionsViewControllerAudience>
     commandHandler;
@@ -106,9 +100,6 @@ class SyncService;
 // Recorder for content suggestions metrics.
 @property(nonatomic, weak)
     ContentSuggestionsMetricsRecorder* contentSuggestionsMetricsRecorder;
-
-// `YES` if the user is using Google as default search engine.
-@property(nonatomic, assign) BOOL isDefaultSearchEngine;
 
 @end
 

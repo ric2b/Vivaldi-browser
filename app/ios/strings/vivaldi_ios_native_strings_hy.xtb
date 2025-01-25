@@ -52,10 +52,10 @@
 <translation id="1813686536470127172">Այլ պանակ</translation>
 <translation id="1828800626900562968">Հպեք պլյուսի նշանը ստորև՝ նոր ներդիր ստեղծելու համար։</translation>
 <translation id="1861262398884155592">Այս պանակը դատարկ է</translation>
-<translation id="1887193815546011584">Նոր Արագ կանչ</translation>
+<translation id="1887193815546011584">Նոր արագ կոճակ</translation>
 <translation id="1929299157575856072">ՍՏԱՆԴԱՐՏ ԱՐԳԵԼԱՓԱԿՄԱՆ ՄԱԿԱՐԴԱԿ</translation>
 <translation id="2030706494969937066">Չհաջողվեց ստանալ Ձեր մուտքի տվյալները։ Խնդրում ենք նորից մուտք գործել։</translation>
-<translation id="2034405583989639424">Խմբագրել արագ կանչը</translation>
+<translation id="2034405583989639424">Խմբագրել արագ կոճակը</translation>
 <translation id="2048247880942380698">Արաբերեն (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Հետ բերել</translation>
 <translation id="2129408066358825297">Տարիք</translation>
@@ -79,7 +79,6 @@
 <translation id="2536780277491102902">ԲԱՑԱՌՈՒԹՅՈՒՆՆԵՐ</translation>
 <translation id="2558801801411970131">Արգելափակված են հետևիչները</translation>
 <translation id="2562040727226360285">Հեռացնել անհանգստացնող բաները, կայքերը կարող է լավ չաշխատեն (<ph name="ORIGIN" />)</translation>
-<translation id="2563886993995570961">Սյունակների առավելագույն քանակ</translation>
 <translation id="257674075312929031">Խումբ</translation>
 <translation id="2577446409661931381">Նոր նոթ</translation>
 <translation id="261264557609353020">Սկզբնական էջ</translation>
@@ -106,7 +105,6 @@
 <translation id="2961573414320947355">Ուզո՞ւմ եք բոլոր հղումները բացել Vivaldi-ում։ Դարձրեք այն հիմնական բրաուզերը։</translation>
 <translation id="3006429105107822794">Ձեզ պետք չի լինի հիշել այս գաղտնաբառը։ Այլ կպահպանվի Vivaldi-ի գաղտնաբառերի կառավարչում։</translation>
 <translation id="3018244467214569202">Հունարեն (<ph name="ORIGIN" />)</translation>
-<translation id="3029426144711327484">Ցույց տալ Արագ կանչի տարրերը</translation>
 <translation id="3039671569659952257">Ջնջել պանակը</translation>
 <translation id="3073196329485613487">Մուտք գործել հաշիվ</translation>
 <translation id="307859903981308731">Շարունակելով՝ Դուք համաձայնում եք Vivaldi-ի</translation>
@@ -115,7 +113,6 @@
 <translation id="3091563570137981919">Հետևիչների և գովազդի արգելափակում</translation>
 <translation id="3134385238404760368">Վերջին ժամանակի ներդիրներ չկան</translation>
 <translation id="3157931365184549694">Վերականգնել</translation>
-<translation id="3159285901314605198">Ֆոնի նկար</translation>
 <translation id="3177673846235066154">Սերվերը մերժեց Ձեր մուտքի տվյալները։</translation>
 <translation id="3229182533910980085">Ավելացրեք Ձեր առաջին էջանիշը՝ հպելով պլյուսի նշանը ստորև</translation>
 <translation id="3236835587712044564">Դո՞ւր է գալիս Vivaldi-ն։ Դարձրեք այն Ձեր հիմնականը։</translation>
@@ -231,7 +228,7 @@
 <translation id="505774819758747674">Գործիքների երիզի նախադիտում՝ ընտրված շեշտման գույնով</translation>
 <translation id="5094183365876568934">Որոշ կայքեր ձևավորում են իրենց գունային սխեման ըստ օգտվողի նախընտրության։ Ընտրեք՝ որ գունային սխեման կուզեք, որ այս կայքերն օգտագործեն։</translation>
 <translation id="5094376253685335202">Միացնել սինքրոնացումը</translation>
-<translation id="5116316489033177455">Սինքրոնացնել էջանիշերն ու Արագ կանչը</translation>
+<translation id="5116316489033177455">Սինքրոնացնել էջանիշերն ու արագ կոճակները</translation>
 <translation id="5122095890854520072">Լատիշերեն (<ph name="ORIGIN" />)</translation>
 <translation id="5153806174841856652">Մուտքը ձախողվեց</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Նորից կոդ ուղարկել<ph name="END_LINK" /></translation>
@@ -248,12 +245,10 @@
 <translation id="5378841821586202982">Աղբաման</translation>
 <translation id="5398772614898833570">Գովազդ է արգելափակված</translation>
 <translation id="5421638721143596928">Չհաջողվեց վերծանել Ձեր մուտքի տվյալները։ Խնդրում ենք նորից մուտք գործել։</translation>
-<translation id="5422086212043657100">Օգտագործել որպես Արագ կանչի պանակ</translation>
 <translation id="5439835075346716808">Գրանցումը տվյալ IP-ից ժամանակավորապես արգելափակված է։ Նորից փորձեք ավելի ուշ։</translation>
 <translation id="5486261815000869482">Հաստատեք գաղտնաբառը</translation>
 <translation id="5494016731375030300">Վերջերս փակված ներդիրներ</translation>
 <translation id="5564687523685713029">Ցույց տալ միայն խմբերը</translation>
-<translation id="5600792731098584229">Արագ կանչի տարրի չափս</translation>
 <translation id="5639137028584114536">Ձեր կազմակերպությունը պահանջում է նավարկել գաղտնի։ Ներդիրները գաղտնի ռեժիմում չեն պահպանվում։
         <ph name="BEGIN_LINK" />Իմանալ ավելին<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">Ցանկ</translation>
@@ -271,8 +266,7 @@
 <translation id="5900160494089383343">Այս օգտվողի անունը հասանելի չէ։</translation>
 <translation id="6005497458542935062">Պանակից դուրս հանել</translation>
 <translation id="6042308850641462728">Ավելին</translation>
-<translation id="6077943432358741146">Արագ կանչ</translation>
-<translation id="6079696972035130497">Անսահմանափակ</translation>
+<translation id="6077943432358741146">Արագ կոճակ</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> նոթ տեղափոխված է</translation>
 <translation id="6147094071357011481">Վերջերս փակված ներդիրները հասանելի չեն</translation>
 <translation id="6193995664633100765">Հնդկական (<ph name="ORIGIN" />)</translation>
@@ -303,7 +297,6 @@
 <translation id="681368974849482173">Նոթը ստեղծված է</translation>
 <translation id="6830986331692390764">Սինքրոնացման տվյալները մաքրվում են։ Խնդրում ենք սպասել։</translation>
 <translation id="6875510405870945573">Ընտրեք Ձեր ուզած արգելափակման մարակդակը։</translation>
-<translation id="6885837502028760851">Ցույց տալ միայն Արագ կանչի պանակները</translation>
 <translation id="6887143077297974801">Սինքրոնացումը չհաջողվեց մեկնարկել։</translation>
 <translation id="691132463664340655">Բրաուզերի ոճ</translation>
 <translation id="6937750621455385628">Մուտք գործելու համար Դուք պետք է օգտագործեք Vivaldi-ի հաշիվ։</translation>
@@ -316,6 +309,7 @@
 <translation id="7006864796794806241">Գաղտնաբառի վերականգնում</translation>
 <translation id="7029809446516969842">Գաղտնաբառեր</translation>
 <translation id="7041964446309059643">Ձեռքով</translation>
+<translation id="7083011465470143310">Մոռացե՞լ եք <ph name="BEGIN_LINK" />գաղտնաբառը<ph name="END_LINK" /></translation>
 <translation id="7110758301321962823">Օգտվողի անվան վերականգնում</translation>
 <translation id="7158507293261405349">Ավելացնել նոր խումբ</translation>
 <translation id="7192066917392691622">Նվազման կարգով</translation>
@@ -349,7 +343,7 @@
 <translation id="7658239707568436148">Չեղարկել</translation>
 <translation id="767363698559661695">Ընտրեք ներդիրների տեսքը</translation>
 <translation id="7702907602086592255">Դոմեն</translation>
-<translation id="7703885416803110670">Արագ կանչի խմբերն էջանիշերը դասավորելու շատ հարմար ձև են։</translation>
+<translation id="7703885416803110670">Արագ կոճակների խմբերն էջանիշերը դասավորելու շատ հարմար ձև են։</translation>
 <translation id="7730831244010940855">Դարձնե՞լ Vivaldi-ն iPad-ում Ձեր հիմնականը։</translation>
 <translation id="7732622593814325274">Կառավարել հետևիչների արգելափակման աղբյուրները</translation>
 <translation id="7765158879357617694">Տեղափոխել</translation>
@@ -367,6 +361,7 @@
 <translation id="8076492880354921740">Ներդիրներ</translation>
 <translation id="8112996065264879835">Այս կոդը չի համընկնում այն մեկին, որը Ձեզ ուղարկել ենք։
         Դուք հասել եք սխալ փորձերի առավելագույն սահմանաչափին։ Խնդրում ենք նոր կոդի հարցում կատարել՝ ստորև առկա նորից ուղարկելու տարբերակով։</translation>
+<translation id="8134672010161840864">Մատները մոտեցրեք/հեռացրեք՝ պատկերը կտրելու և դիրքավորելու համար</translation>
 <translation id="8142291334394582384">Հակադարձել որոնման առաջարկների հերթականությունը</translation>
 <translation id="8147118677117542370">Խնդրում ենք նշել Ձեր տարիքը։</translation>
 <translation id="8165573437634525334">Տվյալները պաշտպանված են ծածկագրման գաղտնաբառով</translation>
@@ -378,7 +373,6 @@
 <translation id="8275038454117074363">Ներկրել</translation>
 <translation id="8284356787013856231">Ֆայլը բացելու թույլտվությունը մերժված է</translation>
 <translation id="8289933454364510719">Վերևում կամ ներքևում</translation>
-<translation id="8304044605002588416">Փոփոխել սկզբնական էջի կոճակը</translation>
 <translation id="8326104954595890674">Նոր գաղտնի ներդիր</translation>
 <translation id="8329813750766387010">Թարմացված է՝ <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Հեռացնել քուքիների զգուշացումները (<ph name="TYPE" />)</translation>

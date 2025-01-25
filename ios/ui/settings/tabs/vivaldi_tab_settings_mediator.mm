@@ -18,6 +18,9 @@
   PrefBackedBoolean* _bottomOmniboxEnabled;
   PrefBackedBoolean* _reverseSearchResultsEnabled;
   PrefBackedBoolean* _tabBarEnabled;
+  PrefBackedBoolean* _showXButtonBackgroundTabsEnabled;
+  PrefBackedBoolean* _openNTPOnClosingLastTabEnabled;
+  PrefBackedBoolean* _focusOmniboxOnNTPEnabled;
 }
 @end
 
@@ -37,7 +40,7 @@
     _local_prefs = localPrefService;
 
     _bottomOmniboxEnabled =
-        [[PrefBackedBoolean alloc] initWithPrefService:originalPrefService
+        [[PrefBackedBoolean alloc] initWithPrefService:localPrefService
                                               prefName:prefs::kBottomOmnibox];
     [_bottomOmniboxEnabled setObserver:self];
 
@@ -52,6 +55,24 @@
             initWithPrefService:originalPrefService
                        prefName:vivaldiprefs::kVivaldiDesktopTabsEnabled];
     [_tabBarEnabled setObserver:self];
+
+    _showXButtonBackgroundTabsEnabled =
+        [[PrefBackedBoolean alloc]
+            initWithPrefService:originalPrefService
+               prefName:vivaldiprefs::kVivaldiShowXButtonBackgroundTabsEnabled];
+    [_showXButtonBackgroundTabsEnabled setObserver:self];
+
+    _openNTPOnClosingLastTabEnabled =
+        [[PrefBackedBoolean alloc]
+            initWithPrefService:originalPrefService
+                prefName:vivaldiprefs::kVivaldiOpenNTPOnClosingLastTabEnabled];
+    [_openNTPOnClosingLastTabEnabled setObserver:self];
+
+    _focusOmniboxOnNTPEnabled =
+        [[PrefBackedBoolean alloc]
+            initWithPrefService:originalPrefService
+                prefName:vivaldiprefs::kVivaldiFocusOmniboxOnNTPEnabled];
+    [_focusOmniboxOnNTPEnabled setObserver:self];
 
     if (IsInactiveTabsAvailable()) {
       _prefChangeRegistrar.Init(_local_prefs);
@@ -78,6 +99,18 @@
   [_tabBarEnabled stop];
   [_tabBarEnabled setObserver:nil];
   _tabBarEnabled = nil;
+
+  [_showXButtonBackgroundTabsEnabled stop];
+  [_showXButtonBackgroundTabsEnabled setObserver:nil];
+  _showXButtonBackgroundTabsEnabled = nil;
+
+  [_openNTPOnClosingLastTabEnabled stop];
+  [_openNTPOnClosingLastTabEnabled setObserver:nil];
+  _openNTPOnClosingLastTabEnabled = nil;
+
+  [_focusOmniboxOnNTPEnabled stop];
+  [_focusOmniboxOnNTPEnabled setObserver:nil];
+  _focusOmniboxOnNTPEnabled = nil;
 
   if (IsInactiveTabsAvailable()) {
     _prefChangeRegistrar.RemoveAll();
@@ -109,6 +142,27 @@
   return [_tabBarEnabled value];
 }
 
+- (BOOL)showXButtonInBackgroundTab {
+  if (!_showXButtonBackgroundTabsEnabled) {
+    return NO;
+  }
+  return [_showXButtonBackgroundTabsEnabled value];
+}
+
+- (BOOL)openNTPOnClosingLastTab {
+  if (!_openNTPOnClosingLastTabEnabled) {
+    return YES;
+  }
+  return [_openNTPOnClosingLastTabEnabled value];
+}
+
+- (BOOL)focusOmniboxOnNTP {
+  if (!_focusOmniboxOnNTPEnabled) {
+    return YES;
+  }
+  return [_focusOmniboxOnNTPEnabled value];
+}
+
 - (int)defaultThreshold {
   // Use InactiveTabsTimeThreshold() instead of reading the pref value
   // directly as this function also manage flag and default value.
@@ -126,6 +180,13 @@
   [self.consumer setPreferenceForReverseSearchResultOrder:
       [self isReverseSearchResultOrder]];
   [self.consumer setPreferenceForShowTabBar:[self isTabBarEnabled]];
+  [self.consumer
+      setPreferenceShowXButtonInBackgroundTab:
+            [self showXButtonInBackgroundTab]];
+  [self.consumer
+      setPreferenceOpenNTPOnClosingLastTab:[self openNTPOnClosingLastTab]];
+  [self.consumer
+      setPreferenceFocusOmniboxOnNTP:[self focusOmniboxOnNTP]];
 
   [self.consumer setPreferenceForShowInactiveTabs:
       [VivaldiTabSettingPrefs isInactiveTabsAvailable]];
@@ -151,6 +212,21 @@
     [_tabBarEnabled setValue:showTabBar];
 }
 
+- (void)setPreferenceOpenNTPOnClosingLastTab:(BOOL)openNTP {
+  if (openNTP != [self openNTPOnClosingLastTab])
+    [_openNTPOnClosingLastTabEnabled setValue:openNTP];
+}
+
+- (void)setPreferenceFocusOmniboxOnNTP:(BOOL)focusOmnibox {
+  if (focusOmnibox != [self focusOmniboxOnNTP])
+    [_focusOmniboxOnNTPEnabled setValue:focusOmnibox];
+}
+
+- (void)setPreferenceShowXButtonInBackgroundTab:(BOOL)showXButton {
+  if (showXButton != [self showXButtonInBackgroundTab])
+    [_showXButtonBackgroundTabsEnabled setValue:showXButton];
+}
+
 - (void)setPreferenceForInactiveTabsTimeThreshold:(int)threshold {
   // No op.
 }
@@ -165,6 +241,15 @@
         [observableBoolean value]];
   } else if (observableBoolean == _tabBarEnabled) {
     [self.consumer setPreferenceForShowTabBar:[observableBoolean value]];
+  } else if (observableBoolean == _showXButtonBackgroundTabsEnabled) {
+    [self.consumer
+        setPreferenceShowXButtonInBackgroundTab:[observableBoolean value]];
+  } else if (observableBoolean == _openNTPOnClosingLastTabEnabled) {
+    [self.consumer
+        setPreferenceOpenNTPOnClosingLastTab:[observableBoolean value]];
+  } else if (observableBoolean == _focusOmniboxOnNTPEnabled) {
+    [self.consumer
+        setPreferenceFocusOmniboxOnNTP:[observableBoolean value]];
   }
 }
 

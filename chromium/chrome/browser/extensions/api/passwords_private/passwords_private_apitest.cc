@@ -16,7 +16,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/observer_list.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -170,6 +169,10 @@ class PasswordsPrivateApiTest : public ExtensionApiTest {
 
   bool get_disconnect_cloud_authenticator_called() const {
     return test_delegate_->get_disconnect_cloud_authenticator_called();
+  }
+
+  bool get_delete_all_password_manager_data_called() const {
+    return test_delegate_->get_delete_all_password_manager_data_called();
   }
 
  private:
@@ -456,6 +459,10 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, DisconnectCloudAuthenticator) {
 IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
                        IsConnectedToCloudAuthenticator) {
   EXPECT_TRUE(RunPasswordsSubtest("isConnectedToCloudAuthenticator"));
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, DeleteAllPasswordManagerData) {
+  EXPECT_TRUE(RunPasswordsSubtest("deleteAllPasswordManagerData"));
 }
 
 }  // namespace extensions

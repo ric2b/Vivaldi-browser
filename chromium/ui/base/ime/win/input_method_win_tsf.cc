@@ -8,7 +8,6 @@
 #include "ui/base/ime/virtual_keyboard_controller.h"
 #include "ui/base/ime/win/tsf_bridge.h"
 #include "ui/base/ime/win/tsf_event_router.h"
-#include "ui/base/ime/win/tsf_input_scope.h"
 
 namespace ui {
 
@@ -56,14 +55,14 @@ InputMethodWinTSF::~InputMethodWinTSF() {
   // trying to use it. Note that everything happens on the same thread here.
   //
   // See crbug.com/41488962
-  if (is_focused_ && ui::TSFBridge::GetInstance()) {
-    ui::TSFBridge::GetInstance()->RemoveImeKeyEventDispatcher();
+  if (ui::TSFBridge::GetInstance()) {
+    ui::TSFBridge::GetInstance()->RemoveImeKeyEventDispatcher(
+        InputMethodBase::ime_key_event_dispatcher());
   }
 }
 
 void InputMethodWinTSF::OnFocus() {
   InputMethodBase::OnFocus();
-  is_focused_ = true;
   if (!ui::TSFBridge::GetInstance()) {
     // TSFBridge can be null for tests.
     return;
@@ -76,13 +75,13 @@ void InputMethodWinTSF::OnFocus() {
 
 void InputMethodWinTSF::OnBlur() {
   InputMethodBase::OnBlur();
-  is_focused_ = false;
   if (!ui::TSFBridge::GetInstance()) {
     // TSFBridge can be null for tests.
     return;
   }
   tsf_event_router_->SetManager(nullptr);
-  ui::TSFBridge::GetInstance()->RemoveImeKeyEventDispatcher();
+  ui::TSFBridge::GetInstance()->RemoveImeKeyEventDispatcher(
+      InputMethodBase::ime_key_event_dispatcher());
 }
 
 bool InputMethodWinTSF::OnUntranslatedIMEMessage(

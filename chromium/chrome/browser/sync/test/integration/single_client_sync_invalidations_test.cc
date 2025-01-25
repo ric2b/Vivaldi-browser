@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "base/memory/raw_ptr.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "chrome/browser/sync/device_info_sync_service_factory.h"
 #include "chrome/browser/sync/sync_invalidations_service_factory.h"
@@ -42,12 +41,12 @@ using bookmarks_helper::GetBookmarkBarNode;
 using bookmarks_helper::ServerBookmarksEqualityChecker;
 using syncer::ModelType;
 using testing::AllOf;
+using testing::Contains;
 using testing::ElementsAre;
 using testing::IsEmpty;
 using testing::Not;
 using testing::NotNull;
 using testing::SizeIs;
-using testing::UnorderedElementsAre;
 
 constexpr char kSyncedBookmarkURL[] = "http://www.mybookmark.com";
 constexpr char kSyncedBookmarkTitle[] = "Title";
@@ -261,9 +260,6 @@ sync_pb::DeviceInfoSpecifics CreateDeviceInfoSpecifics(
 class SingleClientSyncInvalidationsTest : public SyncTest {
  public:
   SingleClientSyncInvalidationsTest() : SyncTest(SINGLE_CLIENT) {
-    override_features_.InitWithFeatures(
-        /*enabled_features=*/{syncer::kSyncPersistInvalidations},
-        /*disabled_features=*/{});
   }
 
   // Injects a test DeviceInfo entity to the fake server.
@@ -286,12 +282,11 @@ class SingleClientSyncInvalidationsTest : public SyncTest {
   }
 
   std::string GetLocalCacheGuid() {
-    syncer::SyncTransportDataPrefs prefs(GetProfile(0)->GetPrefs());
+    syncer::SyncTransportDataPrefs prefs(
+        GetProfile(0)->GetPrefs(),
+        GetClient(0)->GetGaiaIdHashForPrimaryAccount());
     return prefs.GetCacheGuid();
   }
-
- private:
-  base::test::ScopedFeatureList override_features_;
 };
 
 IN_PROC_BROWSER_TEST_F(SingleClientSyncInvalidationsTest,
@@ -683,12 +678,11 @@ IN_PROC_BROWSER_TEST_F(SingleClientSyncInvalidationsTest,
            ->GetFCMRegistrationToken();
   EXPECT_NE(new_token, old_token);
   EXPECT_FALSE(new_token.empty());
-  // New device info should eventually be committed to the server (but the old
-  // device info will remain on the server). The FCM token should be present.
-  EXPECT_TRUE(ServerDeviceInfoMatchChecker(
-                  UnorderedElementsAre(HasInstanceIdToken(old_token),
-                                       HasInstanceIdToken(new_token)))
-                  .Wait());
+  // The new device info (including the new FCM token) should eventually be
+  // committed to the server.
+  EXPECT_TRUE(
+      ServerDeviceInfoMatchChecker(Contains(HasInstanceIdToken(new_token)))
+          .Wait());
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 

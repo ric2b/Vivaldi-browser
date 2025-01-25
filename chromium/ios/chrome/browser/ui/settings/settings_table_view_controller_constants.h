@@ -63,6 +63,7 @@ typedef NS_ENUM(NSInteger, SettingsItemType) {
 
   // Vivaldi
   SettingsItemTypeVivaldiSyncSettings,
+  SettingsItemTypeAddressBarSettings,
   SettingsItemTypeVivaldiTabsSettings,
   SettingsItemTypeAppearanceSettings,
   SettingsItemTypeVivaldiStartPageSettings,
@@ -212,9 +213,6 @@ extern NSString* const kSettingsTabsCellId;
 
 // The accessibility identifier of the move inactive tabs settings cell.
 extern NSString* const kSettingsMoveInactiveTabsCellId;
-
-// The accessibility identifier of the tab pickup settings cell.
-extern NSString* const kSettingsTabPickupCellId;
 
 // The accessibility identifier of the Privacy Guide settings cell.
 extern NSString* const kSettingsPrivacyGuideCellId;

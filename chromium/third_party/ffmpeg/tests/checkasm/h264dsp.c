@@ -27,17 +27,17 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem_internal.h"
 
-static const uint32_t pixel_mask[3] = { 0xffffffff, 0x01ff01ff, 0x03ff03ff };
+static const uint32_t pixel_mask[5] = { 0xffffffff, 0x01ff01ff, 0x03ff03ff, 0x0fff0fff, 0x3fff3fff };
 static const uint32_t pixel_mask_lf[3] = { 0xff0fff0f, 0x01ff000f, 0x03ff000f };
 
 #define SIZEOF_PIXEL ((bit_depth + 7) / 8)
 #define SIZEOF_COEF  (2 * ((bit_depth + 7) / 8))
 #define PIXEL_STRIDE 16
 
-#define randomize_buffers()                                                  \
+#define randomize_buffers(idx)                                               \
     do {                                                                     \
         int x, y;                                                            \
-        uint32_t mask = pixel_mask[bit_depth - 8];                           \
+        uint32_t mask = pixel_mask[(idx)];                                   \
         for (y = 0; y < sz; y++) {                                           \
             for (x = 0; x < PIXEL_STRIDE; x += 4) {                          \
                 AV_WN32A(src + y * PIXEL_STRIDE + x, rnd() & mask);          \
@@ -83,7 +83,7 @@ static void dct4x4_##size(dctcoef *coef)                                     \
     }                                                                        \
     for (y = 0; y < 4; y++) {                                                \
         for (x = 0; x < 4; x++) {                                            \
-            static const int scale[] = { 13107 * 10, 8066 * 13, 5243 * 16 }; \
+            const int64_t scale[] = { 13107 * 10, 8066 * 13, 5243 * 16 };    \
             const int idx = (y & 1) + (x & 1);                               \
             coef[y*4 + x] = (coef[y*4 + x] * scale[idx] + (1 << 14)) >> 15;  \
         }                                                                    \
@@ -173,6 +173,7 @@ static void dct8x8(int16_t *coef, int bit_depth)
 
 static void check_idct(void)
 {
+    static const int depths[5] = { 8, 9, 10, 12, 14 };
     LOCAL_ALIGNED_16(uint8_t, src,  [8 * 8 * 2]);
     LOCAL_ALIGNED_16(uint8_t, dst,  [8 * 8 * 2]);
     LOCAL_ALIGNED_16(uint8_t, dst0, [8 * 8 * 2]);
@@ -181,13 +182,14 @@ static void check_idct(void)
     LOCAL_ALIGNED_16(int16_t, subcoef0, [8 * 8 * 2]);
     LOCAL_ALIGNED_16(int16_t, subcoef1, [8 * 8 * 2]);
     H264DSPContext h;
-    int bit_depth, sz, align, dc;
+    int bit_depth, sz, align, dc, i;
     declare_func_emms(AV_CPU_FLAG_MMX, void, uint8_t *dst, int16_t *block, int stride);
 
-    for (bit_depth = 8; bit_depth <= 10; bit_depth++) {
+    for (i = 0; i < FF_ARRAY_ELEMS(depths); i++) {
+        bit_depth = depths[i];
         ff_h264dsp_init(&h, bit_depth, 1);
         for (sz = 4; sz <= 8; sz += 4) {
-            randomize_buffers();
+            randomize_buffers(i);
 
             if (sz == 4)
                 dct4x4(coef, bit_depth);
@@ -275,7 +277,7 @@ static void check_idct_multiple(void)
                 int offset = (block_y * 16 + block_x) * SIZEOF_PIXEL;
                 int nnz = rnd() % 3;
 
-                randomize_buffers();
+                randomize_buffers(bit_depth - 8);
                 if (sz == 4)
                     dct4x4(coef, bit_depth);
                 else

@@ -15,28 +15,36 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_keyed_service_factory.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
 #include "chrome/browser/sync/session_sync_service_factory.h"
+#include "chrome/browser/visited_url_ranking/url_deduplication/search_engine_url_strip_handler.h"
 #include "chrome/common/channel_info.h"
 #include "components/bookmarks/browser/bookmark_model.h"
-#include "components/bookmarks/browser/core_bookmark_model.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history_clusters/core/config.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/url_deduplication/url_deduplication_helper.h"
 #include "components/visited_url_ranking/internal/history_url_visit_data_fetcher.h"
 #include "components/visited_url_ranking/internal/session_url_visit_data_fetcher.h"
 #include "components/visited_url_ranking/internal/transformer/bookmarks_url_visit_aggregates_transformer.h"
 #include "components/visited_url_ranking/internal/transformer/default_app_url_visit_aggregates_transformer.h"
 #include "components/visited_url_ranking/internal/transformer/history_url_visit_aggregates_categories_transformer.h"
 #include "components/visited_url_ranking/internal/transformer/history_url_visit_aggregates_visibility_score_transformer.h"
-#include "components/visited_url_ranking/internal/url_visit_util.h"
+#include "components/visited_url_ranking/internal/transformer/recency_filter_transformer.h"
+#include "components/visited_url_ranking/internal/transformer/url_visit_aggregates_segmentation_metrics_transformer.h"
 #include "components/visited_url_ranking/internal/visited_url_ranking_service_impl.h"
+#include "components/visited_url_ranking/public/features.h"
 #include "components/visited_url_ranking/public/url_visit_aggregates_transformer.h"
 #include "components/visited_url_ranking/public/url_visit_data_fetcher.h"
+#include "components/visited_url_ranking/public/url_visit_util.h"
 #include "components/visited_url_ranking/public/visited_url_ranking_service.h"
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/visited_url_ranking/desktop_tab_model_url_visit_data_fetcher.h"
+#elif BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/visited_url_ranking/android_tab_model_url_visit_data_fetcher.h"
 #endif
 
 namespace visited_url_ranking {
@@ -63,6 +71,8 @@ VisitedURLRankingServiceFactory::VisitedURLRankingServiceFactory()
               .WithGuest(ProfileSelection::kNone)
               .WithAshInternals(ProfileSelection::kNone)
               .Build()) {
+  DependsOn(
+      segmentation_platform::SegmentationPlatformServiceFactory::GetInstance());
   DependsOn(SessionSyncServiceFactory::GetInstance());
   DependsOn(BookmarkModelFactory::GetInstance());
   DependsOn(HistoryServiceFactory::GetInstance());
@@ -73,9 +83,33 @@ VisitedURLRankingServiceFactory::~VisitedURLRankingServiceFactory() = default;
 std::unique_ptr<KeyedService>
 VisitedURLRankingServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
+  if (!base::FeatureList::IsEnabled(features::kVisitedURLRankingService)) {
+    return nullptr;
+  }
+
   auto* profile = Profile::FromBrowserContext(context);
   if (profile->IsOffTheRecord()) {
     return nullptr;
+  }
+
+  auto* sps =
+      segmentation_platform::SegmentationPlatformServiceFactory::GetForProfile(
+          profile);
+  if (!sps) {
+    return nullptr;
+  }
+
+  std::unique_ptr<url_deduplication::URLDeduplicationHelper>
+      deduplication_helper;
+  if (base::FeatureList::IsEnabled(
+          visited_url_ranking::features::kVisitedURLRankingDeduplication)) {
+    deduplication_helper = CreateDefaultURLDeduplicationHelper();
+    if (features::kVisitedURLRankingDeduplicationSearchEngine.Get() &&
+        profile) {
+      deduplication_helper->AddStripHandler(
+          std::make_unique<url_deduplication::SearchEngineURLStripHandler>(
+              TemplateURLServiceFactory::GetForProfile(profile)));
+    }
   }
 
   std::map<Fetcher, std::unique_ptr<URLVisitDataFetcher>> data_fetchers;
@@ -84,6 +118,11 @@ VisitedURLRankingServiceFactory::BuildServiceInstanceForBrowserContext(
   data_fetchers.emplace(
       Fetcher::kTabModel,
       std::make_unique<visited_url_ranking::DesktopTabModelURLVisitDataFetcher>(
+          profile));
+#elif BUILDFLAG(IS_ANDROID)
+  data_fetchers.emplace(
+      Fetcher::kTabModel,
+      std::make_unique<visited_url_ranking::AndroidTabModelURLVisitDataFetcher>(
           profile));
 #endif
 
@@ -98,15 +137,18 @@ VisitedURLRankingServiceFactory::BuildServiceInstanceForBrowserContext(
   if (hs) {
     data_fetchers.emplace(
         Fetcher::kHistory,
-        std::make_unique<visited_url_ranking::HistoryURLVisitDataFetcher>(
-            hs->AsWeakPtr()));
+        std::make_unique<visited_url_ranking::HistoryURLVisitDataFetcher>(hs));
   }
 
-  // TODO(crbug.com/329242209): Add various aggregate transformers (e.g,
-  // shopping) to the service's map of supported transformers.
+  // TODO(crbug.com/349317344): Move transformers map to a shareable helper
+  // method to avoid having to update the various factories when adding new
+  // transformers.
   std::map<URLVisitAggregatesTransformType,
            std::unique_ptr<URLVisitAggregatesTransformer>>
       transformers = {};
+  transformers.emplace(
+      URLVisitAggregatesTransformType::kSegmentationMetricsData,
+      std::make_unique<URLVisitAggregatesSegmentationMetricsTransformer>(sps));
   auto* bookmark_model = BookmarkModelFactory::GetForBrowserContext(profile);
   if (bookmark_model) {
     auto bookmarks_transformer =
@@ -124,6 +166,8 @@ VisitedURLRankingServiceFactory::BuildServiceInstanceForBrowserContext(
       std::make_unique<HistoryURLVisitAggregatesCategoriesTransformer>(
           base::flat_set<std::string>(kBlocklistedCategories.begin(),
                                       kBlocklistedCategories.end())));
+  transformers.emplace(URLVisitAggregatesTransformType::kRecencyFilter,
+                       std::make_unique<RecencyFilterTransformer>());
 
 #if BUILDFLAG(IS_ANDROID)
   base::flat_set<std::string_view> default_app_blocklist(
@@ -136,7 +180,8 @@ VisitedURLRankingServiceFactory::BuildServiceInstanceForBrowserContext(
 #endif  // BUILDFLAG(IS_ANDROID)
 
   return std::make_unique<VisitedURLRankingServiceImpl>(
-      std::move(data_fetchers), std::move(transformers));
+      sps, std::move(data_fetchers), std::move(transformers),
+      std::move(deduplication_helper));
 }
 
 bool VisitedURLRankingServiceFactory::ServiceIsCreatedWithBrowserContext()
@@ -145,7 +190,7 @@ bool VisitedURLRankingServiceFactory::ServiceIsCreatedWithBrowserContext()
 }
 
 bool VisitedURLRankingServiceFactory::ServiceIsNULLWhileTesting() const {
-  return false;
+  return true;
 }
 
 }  // namespace visited_url_ranking

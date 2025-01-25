@@ -94,17 +94,14 @@ gpu::SurfaceHandle SkiaOutputDeviceVulkan::GetChildSurfaceHandle() {
 }
 #endif
 
-bool SkiaOutputDeviceVulkan::Reshape(const SkImageInfo& image_info,
-                                     const gfx::ColorSpace& color_space,
-                                     int sample_count,
-                                     float device_scale_factor,
-                                     gfx::OverlayTransform transform) {
+bool SkiaOutputDeviceVulkan::Reshape(const ReshapeParams& params) {
   DCHECK(!scoped_write_);
 
   if (UNLIKELY(!vulkan_surface_))
     return false;
 
-  return RecreateSwapChain(image_info, sample_count, transform);
+  return RecreateSwapChain(params.image_info, params.sample_count,
+                           params.transform);
 }
 
 void SkiaOutputDeviceVulkan::Submit(bool sync_cpu, base::OnceClosure callback) {
@@ -263,7 +260,7 @@ void SkiaOutputDeviceVulkan::EndPaint() {
   if (UNLIKELY(
           !context_provider_->GetGrContext()->abandoned() &&
           !GrBackendRenderTargets::GetVkImageInfo(backend, &vk_image_info))) {
-    NOTREACHED() << "Failed to get the image info.";
+    NOTREACHED_IN_MIGRATION() << "Failed to get the image info.";
   }
   DCHECK_EQ(vk_image_info.fImageLayout, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 #endif
@@ -338,12 +335,12 @@ bool SkiaOutputDeviceVulkan::Initialize() {
   auto sk_color_type = surface_format == VK_FORMAT_R8G8B8A8_UNORM
                            ? kRGBA_8888_SkColorType
                            : kBGRA_8888_SkColorType;
-  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::RGBA_8888)] =
+  capabilities_.sk_color_type_map[SinglePlaneFormat::kRGBA_8888] =
       sk_color_type;
-  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::BGRA_8888)] =
+  capabilities_.sk_color_type_map[SinglePlaneFormat::kBGRA_8888] =
       sk_color_type;
   // BGRX_8888 is used on Windows.
-  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::BGRX_8888)] =
+  capabilities_.sk_color_type_map[SinglePlaneFormat::kBGRX_8888] =
       sk_color_type;
   return true;
 }

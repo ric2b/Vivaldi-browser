@@ -39,11 +39,10 @@ class ManualFillingControllerImpl
   ~ManualFillingControllerImpl() override;
 
   // ManualFillingController:
-  void RefreshSuggestions(
-      const autofill::AccessorySheetData& accessory_sheet_data) override;
   void NotifyFocusedInputChanged(
       autofill::FieldRendererId focused_field_id,
       autofill::mojom::FocusedFieldType focused_field_type) override;
+  autofill::FieldGlobalId GetLastFocusedFieldId() const override;
   void UpdateSourceAvailability(FillingSource source,
                                 bool has_suggestions) override;
   void Hide() override;
@@ -146,9 +145,6 @@ class ManualFillingControllerImpl
 
   // This set contains sources to be shown to the user.
   base::flat_set<FillingSource> available_sources_;
-
-  // This map contains sheets for each sources to be shown to the user.
-  base::flat_map<FillingSource, autofill::AccessorySheetData> available_sheets_;
 
   // The unique renderer ID of the last known selected field.
   autofill::FieldGlobalId last_focused_field_id_;

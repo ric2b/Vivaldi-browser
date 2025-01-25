@@ -67,11 +67,11 @@ class GpuArcVideoFramePool : public mojom::VideoFramePool,
                      ImportFrameCb import_frame_cb) override;
   media::VideoFrame::StorageType GetFrameStorageType() const override;
 
-  // Get the id associated with the specified |video_frame|.
+  // Get the mojo frame ID associated with the specified |video_frame|.
   std::optional<int32_t> GetVideoFrameId(const media::VideoFrame* video_frame);
 
   // Called when all references to a video frame have been dropped.
-  void OnFrameReleased(scoped_refptr<media::VideoFrame> origin_frame);
+  void OnFrameReleased(scoped_refptr<media::FrameResource> origin_frame);
 
   // Get a weak reference to the video frame pool.
   base::WeakPtr<GpuArcVideoFramePool> WeakThis() { return weak_this_; }
@@ -84,15 +84,20 @@ class GpuArcVideoFramePool : public mojom::VideoFramePool,
       media::VideoPixelFormat pixel_format,
       uint64_t modifier);
 
-  // Create a video frame from the specified |gmb_handle|.
-  scoped_refptr<media::VideoFrame> CreateVideoFrame(
+  // Create a frame from the specified |gmb_handle|.
+  scoped_refptr<media::FrameResource> CreateFrame(
       gfx::GpuMemoryBufferHandle gmb_handle,
       media::VideoPixelFormat pixel_format) const;
+
+  void OnRequestVideoFramesDone();
+
+  void Stop();
 
   // The local video frame pool mojo service.
   mojo::AssociatedReceiver<mojom::VideoFramePool> video_frame_pool_receiver_;
   // The remote video frame pool mojo client.
   mojo::AssociatedRemote<mojom::VideoFramePoolClient> pool_client_;
+  std::optional<uint32_t> pool_client_version_;
 
   // callback used to notify the video frame pool of new video frame formats,
   // used when the pool requests new frames using RequestFrames().
@@ -104,16 +109,21 @@ class GpuArcVideoFramePool : public mojom::VideoFramePool,
 
   // The coded size currently used for video frames.
   gfx::Size coded_size_;
-  // The current video frame layout.
-  std::optional<media::VideoFrameLayout> video_frame_layout_;
 
   // Map of video frame buffer ids to the associated video frame ids.
-  std::map<gfx::GpuMemoryBufferId, int32_t> buffer_id_to_video_frame_id_;
+  std::map<gfx::GenericSharedMemoryId, int32_t> buffer_id_to_video_frame_id_;
 
   // The protected buffer manager, used when decoding an encrypted video.
   scoped_refptr<ProtectedBufferManager> protected_buffer_manager_;
   // Whether we're decoding an encrypted video.
   std::optional<bool> secure_mode_;
+
+  // If true, this pool is waiting from ACK message from the client after
+  // calling mojom::VideoFramePoolClient::RequestVideoFrames().
+  bool awaiting_request_frames_ack_ = false;
+  static constexpr uint32_t kMinVersionForRequestFramesAck = 1;
+
+  bool has_error_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
 
   // The client task runner and its sequence checker. All methods should be run
   // on this task runner.

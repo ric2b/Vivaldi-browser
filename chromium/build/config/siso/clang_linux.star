@@ -11,6 +11,7 @@ load("./clang_all.star", "clang_all")
 load("./clang_code_coverage_wrapper.star", "clang_code_coverage_wrapper")
 load("./config.star", "config")
 load("./cros.star", "cros")
+load("./gn_logs.star", "gn_logs")
 
 # TODO: b/323091468 - Propagate target android ABI and android SDK version
 # from GN, and remove the hardcoded filegroups.
@@ -125,8 +126,9 @@ def __step_config(ctx, step_config):
     })
     step_config["input_deps"].update(clang_all.input_deps)
 
-    # Disable remote compiles on Clang ToT builds.
-    remote = not config.get(ctx, "clang-tot")
+    input_root_absolute_path = gn_logs.read(ctx).get("clang_need_input_root_absolute_path") == "true"
+    canonicalize_dir = not input_root_absolute_path
+
     step_config["rules"].extend([
         {
             "name": "clang/cxx",
@@ -136,8 +138,9 @@ def __step_config(ctx, step_config):
                 "third_party/llvm-build/Release+Asserts/bin/clang++",
             ],
             "exclude_input_patterns": ["*.stamp"],
-            "remote": remote,
-            "canonicalize_dir": True,
+            "remote": True,
+            "input_root_absolute_path": input_root_absolute_path,
+            "canonicalize_dir": canonicalize_dir,
             "timeout": "2m",
         },
         {
@@ -148,8 +151,9 @@ def __step_config(ctx, step_config):
                 "third_party/llvm-build/Release+Asserts/bin/clang",
             ],
             "exclude_input_patterns": ["*.stamp"],
-            "remote": remote,
-            "canonicalize_dir": True,
+            "remote": True,
+            "input_root_absolute_path": input_root_absolute_path,
+            "canonicalize_dir": canonicalize_dir,
             "timeout": "2m",
         },
         {
@@ -159,8 +163,9 @@ def __step_config(ctx, step_config):
             "inputs": [
                 "third_party/llvm-build/Release+Asserts/bin/clang",
             ],
-            "remote": remote and config.get(ctx, "cog"),
-            "canonicalize_dir": True,
+            "remote": config.get(ctx, "cog"),
+            "input_root_absolute_path": input_root_absolute_path,
+            "canonicalize_dir": canonicalize_dir,
             "timeout": "2m",
         },
         {
@@ -172,8 +177,9 @@ def __step_config(ctx, step_config):
             ],
             "exclude_input_patterns": ["*.stamp"],
             "handler": "clang_compile_coverage",
-            "remote": remote,
-            "canonicalize_dir": True,
+            "remote": True,
+            "input_root_absolute_path": input_root_absolute_path,
+            "canonicalize_dir": canonicalize_dir,
             "timeout": "2m",
         },
         {
@@ -185,8 +191,9 @@ def __step_config(ctx, step_config):
             ],
             "exclude_input_patterns": ["*.stamp"],
             "handler": "clang_compile_coverage",
-            "remote": remote,
-            "canonicalize_dir": True,
+            "remote": True,
+            "input_root_absolute_path": input_root_absolute_path,
+            "canonicalize_dir": canonicalize_dir,
             "timeout": "2m",
         },
     ])
@@ -211,6 +218,7 @@ def __step_config(ctx, step_config):
                 ],
                 "remote": config.get(ctx, "remote-library-link"),
                 "canonicalize_dir": True,
+                "timeout": "2m",
                 "platform_ref": "large",
                 "accumulate": True,
             },
@@ -236,6 +244,7 @@ def __step_config(ctx, step_config):
                 "remote": config.get(ctx, "remote-library-link"),
                 "canonicalize_dir": True,
                 "platform_ref": "large",
+                "timeout": "2m",
             },
             {
                 "name": "clang/link/gcc_link_wrapper",

@@ -26,8 +26,8 @@ You can help improve the extension docs for Google Chrome in a couple of ways:
     *   If possible, tell us the exact text you'd like to see
 *   Fix the doc yourself
     *   See [Contributing
-                Code](http://www.chromium.org/developers/contributing-code) for
-                general rules
+                Code](https://chromium.googlesource.com/chromium/src/+/main/docs/contributing.md)
+                for general rules
     *   Note that pages could take months to show up in the default doc.
                 To get around this, someone needs to merge your changes into the
                 various branches.

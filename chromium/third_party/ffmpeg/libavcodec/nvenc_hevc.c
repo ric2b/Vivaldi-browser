@@ -183,6 +183,9 @@ static const AVOption options[] = {
     { "fullres",      "Two Pass encoding is enabled where first Pass is full resolution",
                                                             0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_TWO_PASS_FULL_RESOLUTION },    0,                          0,                               VE, .unit = "multipass" },
 #endif
+#ifdef NVENC_HAVE_NEW_BIT_DEPTH_API
+    { "highbitdepth", "Enable 10 bit encode for 8 bit input",OFFSET(highbitdepth),AV_OPT_TYPE_BOOL,  { .i64 = 0 }, 0, 1, VE },
+#endif
 #ifdef NVENC_HAVE_LDKFS
     { "ldkfs",        "Low delay key frame scale; Specifies the Scene Change frame size increase allowed in case of single frame VBV and CBR",
                                                             OFFSET(ldkfs),        AV_OPT_TYPE_INT,   { .i64 = 0 }, 0, UCHAR_MAX, VE },
@@ -216,6 +219,14 @@ static const AVOption options[] = {
 #endif
 #ifdef NVENC_HAVE_UNIDIR_B
     { "unidir_b",     "Enable use of unidirectional B-Frames.", OFFSET(unidir_b), AV_OPT_TYPE_BOOL,  { .i64 = 0 }, 0, 1, VE },
+#endif
+#ifdef NVENC_HAVE_SPLIT_FRAME_ENCODING
+    { "split_encode_mode", "Specifies the split encoding mode", OFFSET(split_encode_mode), AV_OPT_TYPE_INT, { .i64 = NV_ENC_SPLIT_AUTO_MODE }, 0, NV_ENC_SPLIT_DISABLE_MODE, VE, .unit = "split_encode_mode" },
+    { "disabled",          "Disabled for all configurations",                                                0, AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_DISABLE_MODE },      0, 0, VE, .unit = "split_encode_mode" },
+    { "auto",              "Enabled or disabled depending on the preset and tuning info",                    0, AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_AUTO_MODE },         0, 0, VE, .unit = "split_encode_mode" },
+    { "forced",            "Enabled with number of horizontal strips selected by the driver",                0, AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_AUTO_FORCED_MODE },  0, 0, VE, .unit = "split_encode_mode" },
+    { "2",                 "Enabled with number of horizontal strips forced to 2 when number of NVENCs > 1", 0, AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_TWO_FORCED_MODE },   0, 0, VE, .unit = "split_encode_mode" },
+    { "3",                 "Enabled with number of horizontal strips forced to 3 when number of NVENCs > 2", 0, AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_THREE_FORCED_MODE }, 0, 0, VE, .unit = "split_encode_mode" },
 #endif
     { NULL }
 };

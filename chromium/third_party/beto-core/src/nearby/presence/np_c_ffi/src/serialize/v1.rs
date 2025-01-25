@@ -15,7 +15,7 @@
 //! NP Rust C FFI functionality for V1 advertisement serialization.
 
 use crate::{unwrap, PanicReason};
-use np_ffi_core::common::{ByteBuffer, EncryptedIdentityType, FixedSizeArray};
+use np_ffi_core::common::{ByteBuffer, FixedSizeArray};
 use np_ffi_core::credentials::V1BroadcastCredential;
 use np_ffi_core::serialize::v1::*;
 use np_ffi_core::serialize::AdvertisementBuilderKind;
@@ -56,10 +56,9 @@ pub extern "C" fn np_ffi_V1AdvertisementBuilder_public_section_builder(
 pub extern "C" fn np_ffi_V1AdvertisementBuilder_encrypted_section_builder(
     adv_builder: V1AdvertisementBuilder,
     broadcast_cred: V1BroadcastCredential,
-    identity_type: EncryptedIdentityType,
     verification_mode: V1VerificationMode,
 ) -> CreateV1SectionBuilderResult {
-    adv_builder.encrypted_section_builder(broadcast_cred, identity_type, verification_mode)
+    adv_builder.encrypted_section_builder(broadcast_cred, verification_mode)
 }
 
 /// Attempts to serialize the contents of the advertisement builder
@@ -73,30 +72,16 @@ pub extern "C" fn np_ffi_V1AdvertisementBuilder_into_advertisement(
     adv_builder.into_advertisement()
 }
 
-/// Gets the tag of a `CreateV1AdvertisementBuilderResult` tagged-union.
-#[no_mangle]
-pub extern "C" fn np_ffi_CreateV1AdvertisementBuilderResult_kind(
-    result: CreateV1AdvertisementBuilderResult,
-) -> CreateV1AdvertisementBuilderResultKind {
-    result.kind()
-}
-
-/// Casts a `CreateV1AdvertisementBuilderResult` to the `Success` variant,
-/// panicking in the case where the passed value is of a different enum variant.
-#[no_mangle]
-pub extern "C" fn np_ffi_CreateV1AdvertisementBuilderResult_into_SUCCESS(
-    result: CreateV1AdvertisementBuilderResult,
-) -> V1AdvertisementBuilder {
-    unwrap(result.into_success(), PanicReason::EnumCastFailed)
-}
-
 /// Creates a new V1 advertisement builder for the given advertisement
 /// kind (public/encrypted).
 #[no_mangle]
 pub extern "C" fn np_ffi_create_v1_advertisement_builder(
     kind: AdvertisementBuilderKind,
-) -> CreateV1AdvertisementBuilderResult {
-    create_v1_advertisement_builder(kind)
+) -> V1AdvertisementBuilder {
+    unwrap(
+        create_v1_advertisement_builder(kind).into_success(),
+        PanicReason::ExceededMaxHandleAllocations,
+    )
 }
 
 /// Gets the tag of a `SerializeV1AdvertisementResult` tagged-union.

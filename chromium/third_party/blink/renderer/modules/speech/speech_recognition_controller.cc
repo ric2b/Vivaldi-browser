@@ -26,8 +26,10 @@
 #include "third_party/blink/renderer/modules/speech/speech_recognition_controller.h"
 
 #include <memory>
+#include <optional>
 
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "media/mojo/mojom/speech_recognizer.mojom-blink.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/modules/speech/speech_grammar_list.h"
@@ -58,21 +60,27 @@ SpeechRecognitionController::~SpeechRecognitionController() {
 }
 
 void SpeechRecognitionController::Start(
-    mojo::PendingReceiver<mojom::blink::SpeechRecognitionSession>
+    mojo::PendingReceiver<media::mojom::blink::SpeechRecognitionSession>
         session_receiver,
-    mojo::PendingRemote<mojom::blink::SpeechRecognitionSessionClient>
+    mojo::PendingRemote<media::mojom::blink::SpeechRecognitionSessionClient>
         session_client,
     const SpeechGrammarList& grammars,
     const String& lang,
     bool continuous,
     bool interim_results,
-    uint32_t max_alternatives) {
-  mojom::blink::StartSpeechRecognitionRequestParamsPtr msg_params =
-      mojom::blink::StartSpeechRecognitionRequestParams::New();
+    uint32_t max_alternatives,
+    bool on_device,
+    bool allow_cloud_fallback,
+    mojo::PendingReceiver<media::mojom::blink::SpeechRecognitionAudioForwarder>
+        audio_forwarder,
+    std::optional<media::AudioParameters> audio_parameters) {
+  media::mojom::blink::StartSpeechRecognitionRequestParamsPtr msg_params =
+      media::mojom::blink::StartSpeechRecognitionRequestParams::New();
   for (unsigned i = 0; i < grammars.length(); i++) {
     SpeechGrammar* grammar = grammars.item(i);
-    msg_params->grammars.push_back(mojom::blink::SpeechRecognitionGrammar::New(
-        grammar->src(), grammar->weight()));
+    msg_params->grammars.push_back(
+        media::mojom::blink::SpeechRecognitionGrammar::New(grammar->src(),
+                                                           grammar->weight()));
   }
   msg_params->language = lang.IsNull() ? g_empty_string : lang;
   msg_params->max_hypotheses = max_alternatives;
@@ -89,7 +97,7 @@ void SpeechRecognitionController::Trace(Visitor* visitor) const {
   visitor->Trace(speech_recognizer_);
 }
 
-mojom::blink::SpeechRecognizer*
+media::mojom::blink::SpeechRecognizer*
 SpeechRecognitionController::GetSpeechRecognizer() {
   if (!speech_recognizer_.is_bound()) {
     GetSupplementable()->GetBrowserInterfaceBroker().GetInterface(

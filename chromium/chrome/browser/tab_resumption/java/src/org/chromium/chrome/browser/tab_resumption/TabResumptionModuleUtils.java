@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.tab_resumption;
 
-import android.content.res.Resources;
 import android.text.TextUtils;
 
 import org.chromium.base.cached_flags.BooleanCachedFieldTrialParameter;
@@ -14,19 +13,19 @@ import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.url.GURL;
 
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 /** Utilities for the tab resumption module. */
 public class TabResumptionModuleUtils {
     private static final int DEFAULT_MAX_TILES_NUMBER = 2;
 
     /** Callback to handle click on suggestion tiles. */
-    public interface SuggestionClickCallbacks {
-        // Called to open a URL.
-        void onSuggestionClickByUrl(GURL gurl);
+    public interface SuggestionClickCallback {
+        void onSuggestionClicked(SuggestionEntry entry);
+    }
 
-        // Called to switch to an existing Tab.
-        void onSuggestionClickByTabId(int tabId);
+    /** Overrides getCurrentTime() return value, for testing. */
+    public interface FakeGetCurrentTimeMs {
+        long get();
     }
 
     /**
@@ -82,30 +81,44 @@ public class TabResumptionModuleUtils {
                     TAB_RESUMPTION_USE_DEFAULT_APP_FILTER_PARAM,
                     false);
 
+    private static final String TAB_RESUMPTION_DISABLE_BLEND_PARAM = "disable_blend";
+    public static final BooleanCachedFieldTrialParameter TAB_RESUMPTION_DISABLE_BLEND =
+            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.TAB_RESUMPTION_MODULE_ANDROID,
+                    TAB_RESUMPTION_DISABLE_BLEND_PARAM,
+                    false);
+
+    private static final String TAB_RESUMPTION_FETCH_HISTORY_BACKEND_PARAM =
+            "fetch_history_backend";
+    public static final BooleanCachedFieldTrialParameter TAB_RESUMPTION_FETCH_HISTORY_BACKEND =
+            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.TAB_RESUMPTION_MODULE_ANDROID,
+                    TAB_RESUMPTION_FETCH_HISTORY_BACKEND_PARAM,
+                    false);
+
+    private static final String TAB_RESUMPTION_FETCH_LOCAL_TABS_BACKEND_PARAM =
+            "fetch_local_tabs_backend";
+    public static final BooleanCachedFieldTrialParameter TAB_RESUMPTION_FETCH_LOCAL_TABS_BACKEND =
+            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.TAB_RESUMPTION_MODULE_ANDROID,
+                    TAB_RESUMPTION_FETCH_LOCAL_TABS_BACKEND_PARAM,
+                    false);
+
+    private static FakeGetCurrentTimeMs sFakeGetCurrentTimeMs;
+
     /**
-     * Computes the string representation of how recent an event was, given the time delta.
-     *
-     * @param res Resources for string resource retrieval.
-     * @param timeDelta Time delta in milliseconds.
+     * Overrides the getCurrentTimeMs() results. Using a function instead of static value for
+     * flexibility, which is useful for simulating an advancing clock. Passing null disables this.
      */
-    static String getRecencyString(Resources res, long timeDeltaMs) {
-        if (timeDeltaMs < 0L) timeDeltaMs = 0L;
+    static void setFakeCurrentTimeMsForTesting(FakeGetCurrentTimeMs fakeGetCurrentTimeMs) {
+        sFakeGetCurrentTimeMs = fakeGetCurrentTimeMs;
+    }
 
-        long daysElapsed = TimeUnit.MILLISECONDS.toDays(timeDeltaMs);
-        if (daysElapsed > 0L) {
-            return res.getQuantityString(R.plurals.n_days_ago, (int) daysElapsed, daysElapsed);
-        }
-
-        long hoursElapsed = TimeUnit.MILLISECONDS.toHours(timeDeltaMs);
-        if (hoursElapsed > 0L) {
-            return res.getQuantityString(
-                    R.plurals.n_hours_ago_narrow, (int) hoursElapsed, hoursElapsed);
-        }
-
-        // Bound recency to 1 min.
-        long minutesElapsed = Math.max(1L, TimeUnit.MILLISECONDS.toMinutes(timeDeltaMs));
-        return res.getQuantityString(
-                R.plurals.n_minutes_ago_narrow, (int) minutesElapsed, minutesElapsed);
+    /** Returns the current time in ms since the epock. Mockable. */
+    static long getCurrentTimeMs() {
+        return (sFakeGetCurrentTimeMs == null)
+                ? System.currentTimeMillis()
+                : sFakeGetCurrentTimeMs.get();
     }
 
     /**

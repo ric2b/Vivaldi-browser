@@ -98,7 +98,7 @@ AndroidLiveTabContext::GetVisualDataForGroup(
 
   // Since we never return a group from GetTabGroupForTab(), this should never
   // be called.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 
@@ -122,7 +122,7 @@ void AndroidLiveTabContext::SetVisualDataForGroup(
   // TODO(crbug.com/40647050): ensure this never gets called (or remove
   // NOTREACHED) if we implement restoring groups for foreign session
   // windows.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 const gfx::Rect AndroidLiveTabContext::GetRestoredBounds() const {
@@ -202,7 +202,8 @@ sessions::LiveTabContext* AndroidLiveTabContext::FindContextForWebContents(
     return nullptr;
   }
 
-  TabModel* model = TabModelList::FindTabModelWithId(tab_android->window_id());
+  TabModel* model =
+      TabModelList::FindTabModelWithId(tab_android->GetWindowId());
 
   return model ? model->GetLiveTabContext() : nullptr;
 }

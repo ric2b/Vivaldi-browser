@@ -16,6 +16,7 @@
 #include "base/system/sys_info.h"
 #include "base/uuid.h"
 #include "base/values.h"
+#include "base/version_info/version_info.h"
 #include "build/build_config.h"
 #include "chrome/browser/ash/login/help_app_launcher.h"
 #include "chrome/browser/ash/login/oobe_screen.h"
@@ -136,15 +137,10 @@ bool ShouldSpecifyLicenseType(const policy::EnrollmentConfig& config) {
   if (config.license_type == policy::LicenseType::kNone) {
     return false;
   }
-  // Retrieve if the device is Education for InitialEnrollment.
-  if (features::IsEducationEnrollmentOobeFlowEnabled()) {
-    return true;
-  }
 
   // Retrieve the License already used for enrollment from DMServer
   // for AutoEnrollment from message DeviceStateRetrievalResponse.
-  if (features::IsAutoEnrollmentKioskInOobeEnabled() &&
-      config.is_automatic_enrollment()) {
+  if (config.is_automatic_enrollment()) {
     return true;
   }
 
@@ -203,8 +199,7 @@ void EnrollmentScreenHandler::ShowUserError(const std::string& email) {
   // start from enter your account view.
   CallExternalAPI("doReload");
 
-  if (features::IsEducationEnrollmentOobeFlowEnabled() &&
-      config_.license_type == policy::LicenseType::kEducation) {
+  if (config_.license_type == policy::LicenseType::kEducation) {
     ShowErrorMessage(
         l10n_util::GetStringFUTF8(
             IDS_ENTERPRISE_ENROLLMENT_CONSUMER_ACCOUNT_WITH_EDU_PACKAGED_LICENSE_ACCOUNT_CHECK,
@@ -274,7 +269,7 @@ void EnrollmentScreenHandler::ShowAuthError(
     case GoogleServiceAuthError::NUM_STATES:
       break;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void EnrollmentScreenHandler::ShowOtherError(
@@ -289,7 +284,7 @@ void EnrollmentScreenHandler::ShowOtherError(
                 /*retry=*/true);
       return;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void EnrollmentScreenHandler::Shutdown() {
@@ -339,8 +334,7 @@ void EnrollmentScreenHandler::ShowEnrollmentStatus(
                     /*retry=*/true);
           break;
         case policy::DM_STATUS_SERVICE_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE:
-          if (features::IsEducationEnrollmentOobeFlowEnabled() &&
-              config_.license_type == policy::LicenseType::kEducation) {
+          if (config_.license_type == policy::LicenseType::kEducation) {
             ShowError(
                 IDS_ENTERPRISE_ENROLLMENT_CONSUMER_ACCOUNT_WITH_EDU_PACKAGED_LICENSE,
                 /*retry=*/true);
@@ -449,7 +443,7 @@ void EnrollmentScreenHandler::ShowEnrollmentStatus(
                     /*retry=*/true);
           return;
       }
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
     case policy::EnrollmentStatus::Code::kStoreError:
       ShowErrorMessage(
@@ -476,7 +470,7 @@ void EnrollmentScreenHandler::ShowEnrollmentStatus(
                 /*retry=*/false);
       return;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 // EnrollmentScreenHandler BaseScreenHandler implementation -----
@@ -628,7 +622,7 @@ void EnrollmentScreenHandler::HandleClose(const std::string& reason) {
   } else if (reason == "done") {
     controller_->OnConfirmationClosed();
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -876,6 +870,10 @@ base::Value::Dict EnrollmentScreenHandler::ScreenDataCommon() {
   // auto-enrollment.
   screen_data.Set("attestationBased", config_.is_automatic_enrollment());
   screen_data.Set("flow", GetFlowString(flow_type_));
+
+  if (ash::features::IsOobeAddUserDuringEnrollmentEnabled()) {
+    screen_data.Set("clientVersion", version_info::GetVersionNumber());
+  }
 
   if (ShouldSpecifyLicenseType(config_)) {
     screen_data.Set("license", GetLicenseString(config_.license_type));

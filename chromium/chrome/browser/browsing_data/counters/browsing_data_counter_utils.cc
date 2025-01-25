@@ -23,6 +23,7 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_utils.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/sync/base/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/text/bytes_formatting.h"
 
@@ -62,8 +63,12 @@ std::u16string FormatBytesMBOrHigher(ResultInt bytes) {
 
 bool ShouldShowCookieException(Profile* profile) {
   if (AccountConsistencyModeManager::IsMirrorEnabledForProfile(profile)) {
+    signin::ConsentLevel consent_level =
+        base::FeatureList::IsEnabled(syncer::kReplaceSyncPromosWithSignInPromos)
+            ? signin::ConsentLevel::kSignin
+            : signin::ConsentLevel::kSync;
     auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
-    return identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync);
+    return identity_manager->HasPrimaryAccount(consent_level);
   }
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   if (AccountConsistencyModeManager::IsDiceEnabledForProfile(profile)) {
@@ -139,7 +144,7 @@ std::u16string GetChromeCounterTextFromResult(
   }
   if (pref_name == browsing_data::prefs::kDeleteCookiesBasic) {
     // The basic tab doesn't show cookie counter results.
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
   if (pref_name == browsing_data::prefs::kDeleteCookies) {
     // Site data counter.
@@ -235,9 +240,9 @@ std::u16string GetChromeCounterTextFromResult(
             IDS_DEL_PASSWORDS_AND_SIGNIN_DATA_COUNTER_COMBINATION, counts[0],
             counts[1]);
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
 #if BUILDFLAG(IS_ANDROID)

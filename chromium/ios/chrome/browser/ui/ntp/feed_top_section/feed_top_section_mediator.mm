@@ -232,7 +232,7 @@ using base::UserMetricsAction;
     return true;
   }
 
-  if (!IsContentNotificationExperimentEnalbed() ||
+  if (!IsContentNotificationExperimentEnabled() ||
       !IsContentNotificationPromoEnabled([self isUserSignedIn],
                                          self.isDefaultSearchEngine,
                                          self.prefService)) {
@@ -327,6 +327,8 @@ using base::UserMetricsAction;
   if ([self shouldShowNotificationsPromo]) {
     self.consumer.visiblePromoViewType = PromoViewTypeNotifications;
     [self.consumer showPromo];
+    [self logHistogramForAction:ContentNotificationTopOfFeedPromoAction::
+                                    kDisplayed];
     return;
   }
 }

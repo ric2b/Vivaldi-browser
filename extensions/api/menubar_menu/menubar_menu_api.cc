@@ -426,7 +426,7 @@ std::string MenubarMenuShowFunction::PopulateModel(
             bookmark_menu_container_->sort_field =
                 ::vivaldi::BookmarkSorter::FIELD_NICKNAME;
             break;
-          case vivaldi::menubar_menu::SortField::kDateadded:
+          case vivaldi::menubar_menu::SortField::kDateAdded:
             bookmark_menu_container_->sort_field =
                 ::vivaldi::BookmarkSorter::FIELD_DATEADDED;
             break;

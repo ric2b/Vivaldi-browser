@@ -256,14 +256,9 @@ void PositionView(UIView* view, CGPoint point) {
     return;
   } // End Vivaldi
 
-  if (self.window) {
-    if (self.theme == GridThemeLight) {
-      UIUserInterfaceStyle previousStyle =
-          self.window.overrideUserInterfaceStyle;
-      self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
-      self.overrideUserInterfaceStyle =
-          self.window.traitCollection.userInterfaceStyle;
-      self.window.overrideUserInterfaceStyle = previousStyle;
+  if (self.theme == GridThemeLight) {
+    if (@available(iOS 17, *)) {
+      [self updateInterfaceStyleForWindow:self.window];
     }
   }
 }
@@ -323,19 +318,21 @@ void PositionView(UIView* view, CGPoint point) {
   if (_theme == theme)
     return;
 
-  self.overrideUserInterfaceStyle = (theme == GridThemeDark)
-                                        ? UIUserInterfaceStyleDark
-                                        : UIUserInterfaceStyleUnspecified;
-
   // The light and dark themes have different colored borders based on the
   // theme, regardless of dark mode, so `overrideUserInterfaceStyle` is not
   // enough here.
   switch (theme) {
     case GridThemeLight:
+      if (@available(iOS 17, *)) {
+        [self updateInterfaceStyleForWindow:self.window];
+      } else {
+        self.overrideUserInterfaceStyle = UIUserInterfaceStyleLight;
+      }
       self.border.layer.borderColor =
           [UIColor colorNamed:kStaticBlue400Color].CGColor;
       break;
     case GridThemeDark:
+      self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
       self.border.layer.borderColor = UIColor.whiteColor.CGColor;
       break;
   }
@@ -689,7 +686,32 @@ void PositionView(UIView* view, CGPoint point) {
              : kGridCellHeaderHeight;
 }
 
-#pragma mark - VIVALID
+// If window is not nil, register for updates to its interface style updates and
+// set the user interface style to be the same as the window.
+- (void)updateInterfaceStyleForWindow:(UIWindow*)window {
+  if (!window) {
+    return;
+  }
+  if (@available(iOS 17, *)) {
+    [self.window.windowScene
+        registerForTraitChanges:@[ UITraitUserInterfaceStyle.self ]
+                     withTarget:self
+                         action:@selector(interfaceStyleChangedForWindow:
+                                                         traitCollection:)];
+    self.overrideUserInterfaceStyle =
+        self.window.windowScene.traitCollection.userInterfaceStyle;
+  }
+}
+
+// Callback for the observation of the user interface style trait of the window
+// scene.
+- (void)interfaceStyleChangedForWindow:(UIView*)window
+                       traitCollection:(UITraitCollection*)traitCollection {
+  self.overrideUserInterfaceStyle =
+      self.window.windowScene.traitCollection.userInterfaceStyle;
+}
+
+#pragma mark - VIVALDI
 - (void)setSelected:(BOOL)selected {
   self.isItemSelected = selected;
   self.contentView.layer.borderColor = selected ?
@@ -734,7 +756,7 @@ void PositionView(UIView* view, CGPoint point) {
 
 - (void)setTopCellView:(UIView*)topCellView {
   // The top cell view is `topBar` and can't be changed.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 - (UIView*)topCellView {
@@ -750,7 +772,7 @@ void PositionView(UIView* view, CGPoint point) {
 
 - (void)setMainCellView:(UIView*)mainCellView {
   // The main cell view is the snapshot view and can't be changed.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 - (UIView*)mainCellView {
@@ -846,5 +868,19 @@ void PositionView(UIView* view, CGPoint point) {
   ScaleView(self.bottomTabView, scale);
   _previousTabViewWidth = self.mainTabView.frame.size.width;
 }
+
+// Vivaldi
+- (void)removeSelectionBorder {
+  self.contentView.layer.borderColor =
+      [UIColor colorNamed:vTabGridNotSelectedColor].CGColor;
+  self.contentView.layer.borderWidth = vTabGridNotSelectedBorderWidth;
+}
+
+- (void)setTopHeaderColor:(BOOL)isIncognito {
+  self.topBar.backgroundColor = isIncognito ?
+      [UIColor colorNamed:vPrivateModeToolbarBackgroundColor] :
+      [UIColor colorNamed:vNTPBackgroundColor];
+}
+// End Vivaldi
 
 @end

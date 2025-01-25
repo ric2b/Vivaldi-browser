@@ -294,7 +294,7 @@ ScriptPromise<ImageBitmap> OffscreenCanvas::CreateImageBitmap(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "`createImageBitmap()` cannot be called with open layers.");
-    return ScriptPromise<ImageBitmap>();
+    return EmptyPromise();
   }
   if (context_) {
     context_->FinalizeFrame(FlushReason::kCreateImageBitmap);
@@ -318,20 +318,20 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
   if (is_neutered_) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "OffscreenCanvas object is detached.");
-    return ScriptPromise<Blob>();
+    return EmptyPromise();
   }
 
   if (ContextHasOpenLayers(context_)) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "`convertToBlob()` cannot be called while layers are opened.");
-    return ScriptPromise<Blob>();
+    return EmptyPromise();
   }
 
   if (!OriginClean()) {
     error_msg << "Tainted " << object_name << " may not be exported.";
     exception_state.ThrowSecurityError(error_msg.str().c_str());
-    return ScriptPromise<Blob>();
+    return EmptyPromise();
   }
 
   // It's possible that there are recorded commands that have not been resolved
@@ -345,14 +345,14 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
     error_msg << "The size of " << object_name << " is zero.";
     exception_state.ThrowDOMException(DOMExceptionCode::kIndexSizeError,
                                       error_msg.str().c_str());
-    return ScriptPromise<Blob>();
+    return EmptyPromise();
   }
 
   if (!context_) {
     error_msg << object_name << " has no rendering context.";
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       error_msg.str().c_str());
-    return ScriptPromise<Blob>();
+    return EmptyPromise();
   }
 
   base::TimeTicks start_time = base::TimeTicks::Now();
@@ -376,7 +376,7 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
   }
   exception_state.ThrowDOMException(DOMExceptionCode::kNotReadableError,
                                     "Readback of the source image has failed.");
-  return ScriptPromise<Blob>();
+  return EmptyPromise();
 }
 
 bool OffscreenCanvas::IsOpaque() const {
@@ -467,6 +467,19 @@ bool OffscreenCanvas::OriginClean() const {
 
 bool OffscreenCanvas::IsAccelerated() const {
   return GetRasterMode() == RasterMode::kGPU;
+}
+
+bool OffscreenCanvas::EnableAcceleration() {
+  // Unlike HTML canvases, offscreen canvases don't automatically shift between
+  // CPU and GPU. Instead, we just return true if the canvas exists on GPU, or
+  // false if the canvas is CPU-bound. If the canvas' resource provider doesn't
+  // exist yet, we create it here.
+  // Note that `OffscreenCanvas::IsAccelerated` above is not equivalent! This
+  // returns false if the canvas resource provider doesn't exist yet, even if it
+  // will be an accelerated canvas once it has been created.
+  CanvasResourceProvider* provider =
+      GetOrCreateCanvasResourceProvider(RasterModeHint::kPreferGPU);
+  return provider->IsAccelerated();
 }
 
 bool OffscreenCanvas::HasPlaceholderCanvas() const {

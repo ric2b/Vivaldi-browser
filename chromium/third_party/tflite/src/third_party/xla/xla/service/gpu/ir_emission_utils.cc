@@ -15,7 +15,6 @@ limitations under the License.
 
 #include "xla/service/gpu/ir_emission_utils.h"
 
-#include <climits>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -30,6 +29,7 @@ limitations under the License.
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
+#include "absl/strings/escaping.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "llvm/ADT/SmallVector.h"
@@ -44,16 +44,6 @@ limitations under the License.
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TargetParser/Triple.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
-#include "mlir/IR/BuiltinAttributes.h"  // from @llvm-project
-#include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
-#include "mlir/IR/Location.h"  // from @llvm-project
-#include "mlir/IR/Operation.h"  // from @llvm-project
-#include "mlir/IR/Types.h"  // from @llvm-project
-#include "mlir/IR/Value.h"  // from @llvm-project
-#include "mlir/IR/Visitors.h"  // from @llvm-project
-#include "mlir/Interfaces/SideEffectInterfaces.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
@@ -64,18 +54,17 @@ limitations under the License.
 #include "xla/service/buffer_assignment.h"
 #include "xla/service/gpu/hlo_traversal.h"
 #include "xla/service/gpu/target_util.h"
-#include "xla/service/hlo_parser.h"
 #include "xla/service/llvm_ir/buffer_assignment_util.h"
 #include "xla/service/llvm_ir/llvm_type_conversion_util.h"
 #include "xla/service/llvm_ir/llvm_util.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
-#include "xla/status.h"
-#include "xla/statusor.h"
+#include "xla/status_macros.h"
 #include "xla/translate/mhlo_to_hlo/location_exporter.h"
 #include "xla/translate/mhlo_to_hlo/type_to_shape.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
+#include "tsl/lib/strings/proto_serialization.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/statusor.h"
 
@@ -92,22 +81,6 @@ bool IsRank2(const Shape& shape, int64_t batch_dimensions_size) {
 // Return whether the given shape is rank 1 excluding the batch dimensions.
 bool IsRank1(const Shape& shape, int64_t batch_dimensions_size) {
   return shape.rank() == batch_dimensions_size + 1;
-}
-
-Shape GetShapeFromTensorType(mlir::Value value) {
-  constexpr char kDefaultLayoutAttrName[] = "xla_shape";
-
-  mlir::Operation* op = value.getDefiningOp();
-  CHECK(op);
-  CHECK(mlir::isa<mlir::TensorType>(value.getType()));
-  Shape shape;
-  if (auto attr = op->getAttrOfType<mlir::StringAttr>(kDefaultLayoutAttrName)) {
-    shape = *xla::ParseShape(
-        absl::string_view(attr.getValue().data(), attr.getValue().size()));
-  } else {
-    shape = TypeToShape(value.getType());
-  }
-  return shape;
 }
 
 }  // namespace
@@ -230,6 +203,35 @@ llvm::Value* EmitAMDGPUShflDown(llvm::Value* value, llvm::Value* offset,
   return b->CreateBitCast(result, value->getType());
 }
 
+llvm::Value* EmitAMDGPUShflDownSwizzle(llvm::Value* value, llvm::Value* offset,
+                                       llvm::IRBuilder<>* b) {
+  llvm::Module* module = b->GetInsertBlock()->getModule();
+  CHECK_EQ(value->getType()->getPrimitiveSizeInBits(), 32);
+  auto* i32_ty = b->getInt32Ty();
+
+  llvm::Function* intrinsic = llvm::cast<llvm::Function>(
+      module
+          ->getOrInsertFunction(
+              "llvm.amdgcn.ds.swizzle",
+              llvm::FunctionType::get(/*Result=*/i32_ty, {i32_ty, i32_ty},
+                                      /*isVarArg=*/false))
+          .getCallee());
+
+  // Ensure that the first argument to the AMDGPU intrinsic is i32.
+  llvm::Value* bitcast_value = b->CreateBitCast(value, i32_ty);
+
+  // Calculate the control value for the swizzle operation.
+  llvm::Value* control_value =
+      b->CreateAdd(b->CreateMul(offset, b->getInt32(0x20)), b->getInt32(0x1f));
+
+  // Create the call to the intrinsic function.
+  llvm::Value* result =
+      b->CreateCall(intrinsic, {bitcast_value, control_value});
+
+  // Bitcast the result back to the original type of the input value.
+  return b->CreateBitCast(result, value->getType());
+}
+
 // Helper function to emit call to NVPTX shfl_down intrinsic.
 llvm::Value* EmitNVPTXShflDown(llvm::Value* value, llvm::Value* offset,
                                llvm::IRBuilder<>* b) {
@@ -270,8 +272,9 @@ llvm::Value* EmitSPIRShflDown(llvm::Value* value, llvm::Value* offset,
   }
 }
 
-llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
-                                     llvm::IRBuilder<>* builder) {
+llvm::Value* EmitFullWarpShuffleDown(
+    llvm::Value* value, llvm::Value* offset, llvm::IRBuilder<>* builder,
+    const se::DeviceDescription& gpu_device_info) {
   int bit_width = value->getType()->getPrimitiveSizeInBits();
   llvm::Module* module = builder->GetInsertBlock()->getModule();
   llvm::Triple target_triple = llvm::Triple(module->getTargetTriple());
@@ -281,6 +284,9 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
     if (target_triple.isNVPTX()) {
       return EmitNVPTXShflDown(value, offset, builder);
     } else if (target_triple.getArch() == llvm::Triple::amdgcn) {
+      if (gpu_device_info.rocm_compute_capability().gfx9_mi100_or_later()) {
+        return EmitAMDGPUShflDownSwizzle(value, offset, builder);
+      }
       return EmitAMDGPUShflDown(value, offset, builder);
     } else if (target_triple.isSPIR()) {
       return EmitSPIRShflDown(value, offset, builder);
@@ -303,8 +309,13 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
       insert_val = EmitNVPTXShflDown(builder->CreateExtractElement(x, i),
                                      offset, builder);
     } else if (target_triple.getArch() == llvm::Triple::amdgcn) {
-      insert_val = EmitAMDGPUShflDown(builder->CreateExtractElement(x, i),
-                                      offset, builder);
+      if (gpu_device_info.rocm_compute_capability().gfx9_mi100_or_later()) {
+        insert_val = EmitAMDGPUShflDownSwizzle(
+            builder->CreateExtractElement(x, i), offset, builder);
+      } else {
+        insert_val = EmitAMDGPUShflDown(builder->CreateExtractElement(x, i),
+                                        offset, builder);
+      }
     } else if (target_triple.isSPIR()) {
       insert_val = EmitSPIRShflDown(builder->CreateExtractElement(x, i), offset,
                                     builder);
@@ -329,30 +340,6 @@ llvm::Value* IsBlock0Thread0(llvm::IRBuilder<>* b) {
       b->getInt32(0),
       EmitCallToTargetIntrinsic(TargetIntrinsicID::kBlockIdx, {}, {}, b));
   return b->CreateAnd(is_thread0, is_block0);
-}
-
-bool WritesMlirBuffer(mlir::Operation* op, mlir::Value operand) {
-  llvm::SmallVector<mlir::MemoryEffects::EffectInstance, 2> effects;
-  mlir::cast<mlir::MemoryEffectOpInterface>(op).getEffectsOnValue(operand,
-                                                                  effects);
-  return absl::c_any_of(
-      effects, [](const mlir::MemoryEffects::EffectInstance& instance) {
-        return mlir::isa<mlir::MemoryEffects::Write>(instance.getEffect());
-      });
-}
-
-static int64_t GetMemRefSizeInBytes(mlir::MemRefType type) {
-  // For i1 memrefs, the underlying allocation is 8 bits.
-  if (type.getElementType().isInteger(/*width=*/1)) {
-    return type.getNumElements();
-  } else if (auto complexType =
-                 mlir::dyn_cast<mlir::ComplexType>(type.getElementType())) {
-    auto elementType = complexType.getElementType();
-    return elementType.getIntOrFloatBitWidth() * type.getNumElements() * 2 /
-           CHAR_BIT;
-  } else {
-    return type.getNumElements() * type.getElementTypeBitWidth() / CHAR_BIT;
-  }
 }
 
 absl::StatusOr<BufferAllocation::Slice> GetAllocationSlice(
@@ -389,7 +376,9 @@ absl::InlinedVector<const HloInstruction*, 4> GetStartIndices(T instr) {
 
 absl::StatusOr<bool> CanEmitFusedDynamicUpdateSliceInPlaceForGpu(
     const HloFusionInstruction* fusion,
-    const BufferAssignment* buffer_assignment,
+    std::function<absl::StatusOr<BufferAllocation::Slice>(
+        const HloInstruction* instr, const ShapeIndex& index)>
+        get_allocation_slice,
     absl::Span<HloInstructionAdaptor const> roots) {
   std::vector<const HloInstruction*> dus_instrs =
       GetOutputDefiningDynamicUpdateSlices(roots);
@@ -400,7 +389,7 @@ absl::StatusOr<bool> CanEmitFusedDynamicUpdateSliceInPlaceForGpu(
       fusion->shape(), [&](const Shape& shape, const ShapeIndex index) {
         if (shape.IsArray()) {
           TF_ASSIGN_OR_RETURN(BufferAllocation::Slice buffer,
-                              buffer_assignment->GetUniqueSlice(fusion, index));
+                              get_allocation_slice(fusion, index));
           output_buffers.push_back(buffer);
         }
         return absl::OkStatus();
@@ -525,7 +514,7 @@ absl::StatusOr<bool> CanEmitFusedDynamicUpdateSliceInPlaceForGpu(
 
     const HloInstruction* lhs = fusion->operand(parameter->parameter_number());
     TF_ASSIGN_OR_RETURN(BufferAllocation::Slice lhs_buffer,
-                        buffer_assignment->GetUniqueSlice(lhs, {}));
+                        get_allocation_slice(lhs, {}));
     BufferAllocation::Slice rhs_buffer = output_buffers[i];
     if (lhs_buffer != rhs_buffer) {
       return false;
@@ -533,25 +522,6 @@ absl::StatusOr<bool> CanEmitFusedDynamicUpdateSliceInPlaceForGpu(
   }
 
   return true;
-}
-
-Shape GetShape(mlir::Value value) {
-  Shape shape;
-  if (mlir::isa<mlir::MemRefType>(value.getType())) {
-    shape = TypeToShape(value.getType());
-  } else if (mlir::isa<mlir::TensorType>(value.getType())) {
-    shape = GetShapeFromTensorType(value);
-  } else if (mlir::isa<mlir::TupleType>(value.getType())) {
-    shape = TypeToShape(value.getType());
-  } else {
-    LOG(FATAL) << "Unexpected value type to get shape for";
-  }
-  if (primitive_util::IsSubByteNonPredType(shape.element_type())) {
-    // 4-bit types are always packed on the GPU
-    shape.mutable_layout()->set_element_size_in_bits(
-        primitive_util::BitWidth(shape.element_type()));
-  }
-  return shape;
 }
 
 static std::optional<TransposeDescription> FindTiledTranspose(
@@ -637,29 +607,11 @@ std::optional<TransposeDescription> GetDescriptionForTiledTransposeEmitter(
   return std::nullopt;
 }
 
-bool IsIntermediate(const HloInstruction* instr, int allowed_operand_count,
-                    const HloFusionAdaptor* fusion,
-                    bool add_single_user_check) {
+bool IsIntermediate(const HloInstruction* instr, int allowed_operand_count) {
   // Number of operands should be in range [1, allowed_operand_count].
   if (instr->operand_count() == 0 ||
       instr->operand_count() > allowed_operand_count) {
     return false;
-  }
-
-  if (add_single_user_check) {
-    // Check that intermediate `instr` doesn't have multiple users. If we have a
-    // fusion, only consider users within the fusion.
-    // TODO(akuegel): Figure out why we still need this check for transpose
-    // fusions.
-    int64_t num_users =
-        fusion
-            ? absl::c_count_if(
-                  HloInstructionAdaptor{*instr, fusion}.GetUsers(),
-                  [&](auto user) { return fusion->ContainsInstruction(user); })
-            : instr->user_count();
-    if (num_users > 1) {
-      return false;
-    }
   }
 
   if (instr->IsElementwise()) {
@@ -701,11 +653,7 @@ static std::optional<HloInstructionAdaptor> FindNonTrivialHero(
       return TraversalResult::kSkip;
     }
 
-    // We set add_single_user_check to true because it could be that it causes
-    // problems if we have more than one user in a transpose fusion.
-    // TODO(akuegel): Verify and possibly fix this.
-    if (!IsIntermediate(&node.instruction(), /*allowed_operand_count=*/3,
-                        /*fusion=*/nullptr, /*add_single_user_check=*/true)) {
+    if (!IsIntermediate(&node.instruction(), /*allowed_operand_count=*/3)) {
       return TraversalResult::kSkip;
     }
     return TraversalResult::kAdvance;
@@ -717,14 +665,10 @@ static std::optional<HloInstructionAdaptor> FindNonTrivialHero(
 
   // Make sure that no non-elementwise op is reachable from the transpose.
   auto is_nontrivial = [](HloInstructionAdaptor node) {
-    // We set add_single_user_check to true because it could be that it causes
-    // problems if we have more than one user in a transpose fusion.
-    // TODO(akuegel): Verify and possibly fix this.
     return node.instruction().opcode() != HloOpcode::kTuple &&
            node.instruction().opcode() != HloOpcode::kParameter &&
            !IsIntermediate(&node.instruction(),
-                           /*allowed_operand_count=*/3, /*fusion=*/nullptr,
-                           /*add_single_user_check=*/true);
+                           /*allowed_operand_count=*/3);
   };
   bool visit_operands = false;
   if (HloAnyOf(hero->GetUsers(), hero->parent(), is_nontrivial,
@@ -741,8 +685,7 @@ HloInstructionAdaptor FindNonTrivialHero(const HloInstructionAdaptor& instr) {
   // Go up the chain of trivial element-wise(+bitcast, -copy) operations. Note
   // that no memoization is needed due to number of operands constraints: we
   // never have to revisit same nodes.
-  while (IsIntermediate(&hero.instruction(), /*allowed_operand_count=*/1,
-                        &hero.parent()) &&
+  while (IsIntermediate(&hero.instruction(), /*allowed_operand_count=*/1) &&
          hero.parent().ContainsInstruction(hero.GetOperand(0))) {
     hero = hero.GetOperand(0);
   }
@@ -751,7 +694,8 @@ HloInstructionAdaptor FindNonTrivialHero(const HloInstructionAdaptor& instr) {
   // transpose and concat emitters also work if there are elementwise ops with
   // more than 1 operand on the path between root and the root op.
   auto is_transpose = [](const HloInstruction& node) {
-    return FindTiledLogicalTranspose(node).has_value();
+    return FindTiledLogicalTranspose(node).has_value() ||
+           FindTiledTranspose(node).has_value();
   };
   if (auto transpose = FindNonTrivialHero(hero, is_transpose)) {
     return *transpose;
@@ -839,11 +783,6 @@ llvm::Type* GetIndexTypeForKernel(const HloInstruction* hlo,
   return b->getInt32Ty();
 }
 
-std::string GetIrNameFromLoc(mlir::Location loc) {
-  return llvm_ir::SanitizeConstantName(
-      mlir::mhlo::GetDebugNameFromLocation(loc));
-}
-
 bool IsAMDGPU(const llvm::Module* module) {
   return llvm::Triple(module->getTargetTriple()).isAMDGPU();
 }
@@ -875,6 +814,13 @@ absl::StatusOr<DenseDataIntermediate> LiteralToXlaFormat(
 
   return DenseDataIntermediate::Alias(absl::MakeSpan(
       reinterpret_cast<const uint8_t*>(literal.untyped_data()), byte_size));
+}
+
+absl::StatusOr<std::string> GetProtoFingerprint(
+    const tsl::protobuf::MessageLite& proto) {
+  std::string result;
+  TF_RET_CHECK(tsl::SerializeToStringDeterministic(proto, &result));
+  return absl::WebSafeBase64Escape(result);
 }
 
 }  // namespace gpu

@@ -4,8 +4,8 @@ use ffi::{FillLinearParams, FillRadialParams};
 // in the LICENSE file.
 use font_types::{BoundingBox, GlyphId, Pen};
 use read_fonts::{
-    tables::colr::CompositeMode, tables::os2::SelectionFlags, FileRef, FontRef, ReadError,
-    TableProvider,
+    tables::{colr::CompositeMode, cpal::Cpal, os2::SelectionFlags},
+    FileRef, FontRef, ReadError, TableProvider,
 };
 use skrifa::{
     attribute::Style,
@@ -13,7 +13,7 @@ use skrifa::{
     color::{Brush, ColorGlyphFormat, ColorPainter, Transform},
     instance::{Location, Size},
     metrics::{GlyphMetrics, Metrics},
-    outline::DrawSettings,
+    outline::{DrawSettings, HintingInstance, LcdLayout},
     setting::VariationSetting,
     string::{LocalizedStrings, StringId},
     MetadataProvider, OutlineGlyphCollection, Tag,
@@ -31,6 +31,58 @@ fn make_mapping_index<'a>(font_ref: &'a BridgeFontRef) -> Box<BridgeMappingIndex
     font_ref
         .with_font(|f| Some(Box::new(BridgeMappingIndex(MappingIndex::new(f)))))
         .unwrap()
+}
+
+unsafe fn no_hinting_instance<'a>() -> Box<BridgeHintingInstance> {
+    Box::new(BridgeHintingInstance(None))
+}
+
+unsafe fn make_hinting_instance<'a>(
+    outlines: &BridgeOutlineCollection,
+    size: f32,
+    coords: &BridgeNormalizedCoords,
+    do_lcd_antialiasing: bool,
+    lcd_orientation_vertical: bool,
+    preserve_linear_metrics: bool,
+) -> Box<BridgeHintingInstance> {
+    let hinting_instance = match &outlines.0 {
+        Some(outlines) => {
+            let lcd_subpixel = match (do_lcd_antialiasing, lcd_orientation_vertical) {
+                (true, false) => Some(LcdLayout::Horizontal),
+                (true, true) => Some(LcdLayout::Vertical),
+                _ => None,
+            };
+            HintingInstance::new(
+                outlines,
+                Size::new(size),
+                &coords.normalized_coords,
+                skrifa::outline::HintingMode::Smooth {
+                    lcd_subpixel,
+                    preserve_linear_metrics,
+                },
+            )
+            .ok()
+        }
+        _ => None,
+    };
+    Box::new(BridgeHintingInstance(hinting_instance))
+}
+
+unsafe fn make_mono_hinting_instance<'a>(
+    outlines: &BridgeOutlineCollection,
+    size: f32,
+    coords: &BridgeNormalizedCoords,
+) -> Box<BridgeHintingInstance> {
+    let hinting_instance = outlines.0.as_ref().and_then(|outlines| {
+        HintingInstance::new(
+            outlines,
+            Size::new(size),
+            &coords.normalized_coords,
+            skrifa::outline::HintingMode::Strong,
+        )
+        .ok()
+    });
+    Box::new(BridgeHintingInstance(hinting_instance))
 }
 
 fn lookup_glyph_or_zero(font_ref: &BridgeFontRef, map: &BridgeMappingIndex, codepoint: u32) -> u16 {
@@ -87,6 +139,20 @@ impl<'a> Pen for PathWrapperPen<'a> {
     fn close(&mut self) {
         self.path_wrapper.as_mut().close();
     }
+}
+
+struct NoOpPen {}
+
+impl<'a> Pen for NoOpPen {
+    fn move_to(&mut self, _x: f32, _y: f32) {}
+
+    fn line_to(&mut self, _x: f32, _y: f32) {}
+
+    fn quad_to(&mut self, _cx0: f32, _cy0: f32, _x: f32, _y: f32) {}
+
+    fn curve_to(&mut self, _cx0: f32, _cy0: f32, _cx1: f32, _cy1: f32, _x: f32, _y: f32) {}
+
+    fn close(&mut self) {}
 }
 
 struct ColorPainterImpl<'a> {
@@ -334,6 +400,7 @@ fn get_path(
     glyph_id: u16,
     size: f32,
     coords: &BridgeNormalizedCoords,
+    hinting_instance: &BridgeHintingInstance,
     path_wrapper: Pin<&mut PathWrapper>,
     scaler_metrics: &mut BridgeScalerMetrics,
 ) -> bool {
@@ -342,7 +409,11 @@ fn get_path(
         .as_ref()
         .and_then(|outlines| {
             let glyph = outlines.get(GlyphId::new(glyph_id))?;
-            let draw_settings = DrawSettings::unhinted(Size::new(size), &coords.normalized_coords);
+
+            let draw_settings = match &hinting_instance.0 {
+                Some(instance) => DrawSettings::hinted(instance, false),
+                _ => DrawSettings::unhinted(Size::new(size), &coords.normalized_coords),
+            };
 
             let mut pen_dump = PathWrapperPen { path_wrapper };
             match glyph.draw(draw_settings, &mut pen_dump) {
@@ -356,7 +427,7 @@ fn get_path(
         .is_some()
 }
 
-fn advance_width_or_zero(
+fn unhinted_advance_width_or_zero(
     font_ref: &BridgeFontRef,
     size: f32,
     coords: &BridgeNormalizedCoords,
@@ -368,6 +439,30 @@ fn advance_width_or_zero(
                 .advance_width(GlyphId::new(glyph_id))
         })
         .unwrap_or_default()
+}
+
+fn scaler_hinted_advance_width(
+    outlines: &BridgeOutlineCollection,
+    hinting_instance: &BridgeHintingInstance,
+    glyph_id: u16,
+    out_advance_width: &mut f32,
+) -> bool {
+    hinting_instance
+        .0
+        .as_ref()
+        .and_then(|instance| {
+            let draw_settings = DrawSettings::hinted(instance, false);
+
+            let outlines = outlines.0.as_ref()?;
+            let glyph = outlines.get(GlyphId::new(glyph_id))?;
+            let mut pen_dump = NoOpPen {};
+            let adjusted_metrics = glyph.draw(draw_settings, &mut pen_dump).ok()?;
+            adjusted_metrics.advance_width.map(|adjusted_advance| {
+                *out_advance_width = adjusted_advance;
+                ()
+            })
+        })
+        .is_some()
 }
 
 fn units_per_em_or_zero(font_ref: &BridgeFontRef) -> u16 {
@@ -387,8 +482,8 @@ fn convert_metrics(skrifa_metrics: &Metrics) -> ffi::Metrics {
         leading: skrifa_metrics.leading,
         avg_char_width: skrifa_metrics.average_width.unwrap_or(0.0),
         max_char_width: skrifa_metrics.max_width.unwrap_or(0.0),
-        x_height: skrifa_metrics.x_height.unwrap_or(0.0),
-        cap_height: skrifa_metrics.cap_height.unwrap_or(0.0),
+        x_height: -skrifa_metrics.x_height.unwrap_or(0.0),
+        cap_height: -skrifa_metrics.cap_height.unwrap_or(0.0),
         underline_position: skrifa_metrics.underline.map_or(f32::NAN, |u| u.offset),
         underline_thickness: skrifa_metrics.underline.map_or(f32::NAN, |u| u.thickness),
         strikeout_position: skrifa_metrics.strikeout.map_or(f32::NAN, |s| s.offset),
@@ -483,25 +578,30 @@ fn resolve_palette(
     base_palette: u16,
     palette_overrides: &[PaletteOverride],
 ) -> Vec<u32> {
-    font_ref
-        .with_font(|f| {
-            let cpal = f.cpal().ok()?;
-
-            let start_index: usize = cpal
-                .color_record_indices()
-                .get(usize::from(base_palette))?
-                .get()
-                .into();
-            let num_entries: usize = cpal.num_palette_entries().into();
-
-            let color_records = cpal.color_records_array()?.ok()?;
-            let mut palette: Vec<u32> = color_records
+    let cpal_to_vector = |cpal: &Cpal, palette_index| -> Option<Vec<u32>> {
+        let start_index: usize = cpal
+            .color_record_indices()
+            .get(usize::from(palette_index))?
+            .get()
+            .into();
+        let num_entries: usize = cpal.num_palette_entries().into();
+        let color_records = cpal.color_records_array()?.ok()?;
+        Some(
+            color_records
                 .get(start_index..start_index + num_entries)?
                 .iter()
                 .map(|record| {
                     u32::from_be_bytes([record.alpha, record.red, record.green, record.blue])
                 })
-                .collect();
+                .collect(),
+        )
+    };
+
+    font_ref
+        .with_font(|f| {
+            let cpal = f.cpal().ok()?;
+
+            let mut palette = cpal_to_vector(&cpal, base_palette).or(cpal_to_vector(&cpal, 0))?;
 
             for override_entry in palette_overrides {
                 let index = override_entry.index as usize;
@@ -813,7 +913,7 @@ fn num_color_stops(color_stops: &BridgeColorStops) -> usize {
 fn get_font_style(
     font_ref: &BridgeFontRef,
     coords: &BridgeNormalizedCoords,
-    style: &mut BridgeFontStyle
+    style: &mut BridgeFontStyle,
 ) -> bool {
     font_ref
         .with_font(|f| {
@@ -1203,6 +1303,7 @@ mod bitmap {
 }
 
 pub struct BridgeMappingIndex(MappingIndex);
+pub struct BridgeHintingInstance(Option<HintingInstance>);
 
 #[cxx::bridge(namespace = "fontations_ffi")]
 mod ffi {
@@ -1345,6 +1446,23 @@ mod ffi {
 
         type BridgeMappingIndex;
         unsafe fn make_mapping_index<'a>(font_ref: &'a BridgeFontRef) -> Box<BridgeMappingIndex>;
+
+        type BridgeHintingInstance;
+        unsafe fn make_hinting_instance<'a>(
+            outlines: &BridgeOutlineCollection,
+            size: f32,
+            coords: &BridgeNormalizedCoords,
+            do_lcd_antialiasing: bool,
+            lcd_orientation_vertical: bool,
+            preserve_linear_metrics: bool,
+        ) -> Box<BridgeHintingInstance>;
+        unsafe fn make_mono_hinting_instance<'a>(
+            outlines: &BridgeOutlineCollection,
+            size: f32,
+            coords: &BridgeNormalizedCoords,
+        ) -> Box<BridgeHintingInstance>;
+        unsafe fn no_hinting_instance<'a>() -> Box<BridgeHintingInstance>;
+
         fn lookup_glyph_or_zero(
             font_ref: &BridgeFontRef,
             map: &BridgeMappingIndex,
@@ -1356,15 +1474,22 @@ mod ffi {
             glyph_id: u16,
             size: f32,
             coords: &BridgeNormalizedCoords,
+            hinting_instance: &BridgeHintingInstance,
             path_wrapper: Pin<&mut PathWrapper>,
             scaler_metrics: &mut BridgeScalerMetrics,
         ) -> bool;
-        fn advance_width_or_zero(
+        fn unhinted_advance_width_or_zero(
             font_ref: &BridgeFontRef,
             size: f32,
             coords: &BridgeNormalizedCoords,
             glyph_id: u16,
         ) -> f32;
+        fn scaler_hinted_advance_width(
+            outlines: &BridgeOutlineCollection,
+            hinting_instance: &BridgeHintingInstance,
+            glyph_id: u16,
+            out_advance_width: &mut f32,
+        ) -> bool;
         fn units_per_em_or_zero(font_ref: &BridgeFontRef) -> u16;
         fn get_skia_metrics(
             font_ref: &BridgeFontRef,
@@ -1463,7 +1588,7 @@ mod ffi {
         fn get_font_style(
             font_ref: &BridgeFontRef,
             coords: &BridgeNormalizedCoords,
-            font_style: &mut BridgeFontStyle
+            font_style: &mut BridgeFontStyle,
         ) -> bool;
 
         // Additional low-level access functions needed for generateAdvancedMetrics().
@@ -1592,7 +1717,8 @@ mod test {
     use crate::{
         coordinates_for_shifted_named_instance_index,
         ffi::{BridgeFontStyle, PaletteOverride, SkiaDesignCoordinate},
-        font_or_collection, font_ref_is_valid, get_font_style, make_font_ref, resolve_palette,
+        font_or_collection, font_ref_is_valid, get_font_style, make_font_ref,
+        resolve_into_normalized_coords, resolve_palette,
     };
     use std::fs;
 
@@ -1653,9 +1779,20 @@ mod test {
             (palette[11], palette[12], palette[13],),
             (0xff68c7e8, 0xffffdc01, 0xff808080)
         );
+    }
 
-        let no_palette = resolve_palette(&font_ref, 10, &out_of_bounds_overrides);
-        assert_eq!(no_palette.len(), 0);
+    #[test]
+    fn test_default_palette_for_invalid_index() {
+        let file_buffer =
+            fs::read(TEST_FONT_FILENAME).expect("COLRv0/v1 test font could not be opened.");
+        let font_ref = make_font_ref(&file_buffer, 0);
+        assert!(font_ref_is_valid(&font_ref));
+        let palette = resolve_palette(&font_ref, 65535, &[]);
+        assert_eq!(palette.len(), 14);
+        assert_eq!(
+            (palette[0], palette[6], palette[13],),
+            (0xFFFF0000, 0xFFEE82EE, 0xFF808080)
+        );
     }
 
     #[test]
@@ -1685,11 +1822,12 @@ mod test {
         let file_buffer = fs::read(TEST_CONDENSED_BOLD_ITALIC)
             .expect("Font to test font styles could not be opened.");
         let font_ref = make_font_ref(&file_buffer, 0);
+        let coords = resolve_into_normalized_coords(&font_ref, &[]);
         assert!(font_ref_is_valid(&font_ref));
 
         let mut font_style = BridgeFontStyle::default();
 
-        if get_font_style(font_ref.as_ref(), &mut font_style) {
+        if get_font_style(font_ref.as_ref(), &coords, &mut font_style) {
             assert_eq!(font_style.width, 5); // The font should have condenced width attribute but
                                              // it's condenced itself so we have the normal width
             assert_eq!(font_style.slant, 1); // Skia italic
@@ -1704,11 +1842,12 @@ mod test {
         let file_buffer =
             fs::read(TEST_VARIABLE).expect("Font to test font styles could not be opened.");
         let font_ref = make_font_ref(&file_buffer, 0);
+        let coords = resolve_into_normalized_coords(&font_ref, &[]);
         assert!(font_ref_is_valid(&font_ref));
 
         let mut font_style = BridgeFontStyle::default();
 
-        assert!(get_font_style(font_ref.as_ref(), &mut font_style));
+        assert!(get_font_style(font_ref.as_ref(), &coords, &mut font_style));
         assert_eq!(font_style.width, 5); // Skia normal
         assert_eq!(font_style.slant, 0); // Skia upright
         assert_eq!(font_style.weight, 400); // Skia normal

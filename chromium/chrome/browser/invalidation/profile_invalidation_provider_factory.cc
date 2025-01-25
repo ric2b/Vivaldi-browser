@@ -26,7 +26,7 @@
 #include "components/invalidation/impl/invalidation_prefs.h"
 #include "components/invalidation/impl/per_user_topic_subscription_manager.h"
 #include "components/invalidation/impl/profile_identity_provider.h"
-#include "components/invalidation/impl/profile_invalidation_provider.h"
+#include "components/invalidation/profile_invalidation_provider.h"
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry.h"
@@ -101,6 +101,9 @@ ProfileInvalidationProviderFactory::ProfileInvalidationProviderFactory()
               // TODO(crbug.com/40257657): Check if this service is needed in
               // Guest mode.
               .WithGuest(ProfileSelection::kOriginalOnly)
+              // TODO(crbug.com/41488885): Check if this service is needed for
+              // Ash Internals.
+              .WithAshInternals(ProfileSelection::kOriginalOnly)
               .Build()) {
   DependsOn(IdentityManagerFactory::GetInstance());
   DependsOn(gcm::GCMProfileServiceFactory::GetInstance());
@@ -111,7 +114,7 @@ ProfileInvalidationProviderFactory::~ProfileInvalidationProviderFactory() =
     default;
 
 void ProfileInvalidationProviderFactory::RegisterTestingFactory(
-    TestingFactory testing_factory) {
+    GlobalTestingFactory testing_factory) {
   testing_factory_ = std::move(testing_factory);
 }
 

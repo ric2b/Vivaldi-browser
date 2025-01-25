@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_PHYSICAL_FRAGMENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_PHYSICAL_FRAGMENT_H_
 
@@ -85,6 +90,9 @@ class CORE_EXPORT PhysicalFragment : public GarbageCollected<PhysicalFragment> {
     // includes a non-optional kPageArea child.
     // See https://drafts.csswg.org/css-page-3/#page-model
     kPageBorderBox,
+    // Page margin fragment (e.g. author-specified header / footer). Used by
+    // printing.
+    kPageMargin,
     // A page area fragment. Used by printing. This is a fragmentainer, into
     // which document contents flow and get fragmented. It is sized with respect
     // to any given @page size when possible, and also honors scaling from print
@@ -130,10 +138,6 @@ class CORE_EXPORT PhysicalFragment : public GarbageCollected<PhysicalFragment> {
                    unsigned sub_type);
 
   PhysicalFragment(const PhysicalFragment& other);
-
-  ~PhysicalFragment();
-
-  void Dispose();
 
   FragmentType Type() const { return static_cast<FragmentType>(type_); }
   bool IsContainer() const {
@@ -524,10 +528,11 @@ class CORE_EXPORT PhysicalFragment : public GarbageCollected<PhysicalFragment> {
 
   // Dump the fragment tree, optionally mark |target| if it's found. If not
   // found, the subtree established by |target| will be dumped as well.
-  String DumpFragmentTree(DumpFlags,
-                          const PhysicalFragment* target = nullptr,
-                          std::optional<PhysicalOffset> = std::nullopt,
-                          unsigned indent = 2) const;
+  [[nodiscard]] String DumpFragmentTree(
+      DumpFlags,
+      const PhysicalFragment* target = nullptr,
+      std::optional<PhysicalOffset> = std::nullopt,
+      unsigned indent = 2) const;
 
   // Dump the fragment tree, starting at |root| (searching inside legacy
   // subtrees to find all fragments), optionally mark |target| if it's found. If
@@ -535,9 +540,10 @@ class CORE_EXPORT PhysicalFragment : public GarbageCollected<PhysicalFragment> {
   //
   // Note that if we're in the middle of layout somewhere inside the subtree,
   // behavior is undefined.
-  static String DumpFragmentTree(const LayoutObject& root,
-                                 DumpFlags,
-                                 const PhysicalFragment* target = nullptr);
+  [[nodiscard]] static String DumpFragmentTree(
+      const LayoutObject& root,
+      DumpFlags,
+      const PhysicalFragment* target = nullptr);
 
   void Trace(Visitor*) const;
   void TraceAfterDispatch(Visitor*) const;
@@ -563,6 +569,8 @@ class CORE_EXPORT PhysicalFragment : public GarbageCollected<PhysicalFragment> {
       using difference_type = ptrdiff_t;
       using pointer = value_type*;
       using reference = value_type&;
+
+      ConstIterator() = default;
 
       ConstIterator(const PhysicalFragmentLink* current, wtf_size_t size)
           : current_(current), end_(current + size) {
@@ -603,8 +611,8 @@ class CORE_EXPORT PhysicalFragment : public GarbageCollected<PhysicalFragment> {
         }
       }
 
-      const PhysicalFragmentLink* current_;
-      const PhysicalFragmentLink* end_;
+      const PhysicalFragmentLink* current_ = nullptr;
+      const PhysicalFragmentLink* end_ = nullptr;
       PhysicalFragmentLink post_layout_;
     };
     using const_iterator = ConstIterator;
@@ -727,6 +735,8 @@ class CORE_EXPORT PhysicalFragment : public GarbageCollected<PhysicalFragment> {
   bool NeedsOOFPositionedInfoPropagation() const;
 
  protected:
+  ~PhysicalFragment() = default;
+
   const ComputedStyle& SlowEffectiveStyle() const;
 
   void AddOutlineRectsForNormalChildren(

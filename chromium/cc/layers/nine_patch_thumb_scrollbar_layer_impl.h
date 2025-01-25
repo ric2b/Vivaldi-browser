@@ -6,6 +6,7 @@
 #define CC_LAYERS_NINE_PATCH_THUMB_SCROLLBAR_LAYER_IMPL_H_
 
 #include <memory>
+#include <vector>
 
 #include "cc/cc_export.h"
 #include "cc/input/scrollbar.h"
@@ -32,6 +33,7 @@ class CC_EXPORT NinePatchThumbScrollbarLayerImpl
   ~NinePatchThumbScrollbarLayerImpl() override;
 
   // LayerImpl implementation.
+  mojom::LayerType GetLayerType() const override;
   std::unique_ptr<LayerImpl> CreateLayerImpl(
       LayerTreeImpl* tree_impl) const override;
   void PushPropertiesTo(LayerImpl* layer) override;
@@ -71,8 +73,6 @@ class CC_EXPORT NinePatchThumbScrollbarLayerImpl
   bool IsThumbResizable() const override;
 
  private:
-  const char* LayerTypeAsString() const override;
-
   void AppendThumbQuads(viz::CompositorRenderPass* render_pass,
                         AppendQuadsData* append_quads_data,
                         viz::SharedQuadState* shared_quad_state);
@@ -93,6 +93,7 @@ class CC_EXPORT NinePatchThumbScrollbarLayerImpl
   gfx::Rect aperture_;
 
   NinePatchGenerator quad_generator_;
+  std::vector<NinePatchGenerator::Patch> patches_;
 };
 
 }  // namespace cc

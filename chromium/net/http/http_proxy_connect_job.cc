@@ -275,7 +275,7 @@ LoadState HttpProxyConnectJob::GetLoadState() const {
       return LOAD_STATE_ESTABLISHING_PROXY_TUNNEL;
     // This state shouldn't be possible to be called in.
     case STATE_TRANSPORT_CONNECT:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       [[fallthrough]];
     case STATE_BEGIN_CONNECT:
     case STATE_NONE:
@@ -327,7 +327,7 @@ void HttpProxyConnectJob::OnNeedsProxyAuth(
   // challenges. Instead, the challenges are returned by the ProxyClientSocket
   // implementations after nested_connect_job_ has already established a
   // connection.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 base::TimeDelta HttpProxyConnectJob::AlternateNestedConnectionTimeout(
@@ -398,7 +398,7 @@ void HttpProxyConnectJob::RestartWithAuthCredentials() {
   next_state_ = STATE_RESTART_WITH_AUTH;
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&HttpProxyConnectJob::OnIOComplete,
-                                weak_ptr_factory_.GetWeakPtr(), net::OK));
+                                weak_ptr_factory_.GetWeakPtr(), OK));
 }
 
 int HttpProxyConnectJob::DoLoop(int result) {
@@ -452,7 +452,7 @@ int HttpProxyConnectJob::DoLoop(int result) {
         rv = DoRestartWithAuthComplete(rv);
         break;
       default:
-        NOTREACHED() << "bad state";
+        NOTREACHED_IN_MIGRATION() << "bad state";
         rv = ERR_FAILED;
         break;
     }
@@ -479,7 +479,7 @@ int HttpProxyConnectJob::DoBeginConnect() {
       next_state_ = STATE_TRANSPORT_CONNECT;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return OK;
 }
@@ -664,12 +664,16 @@ int HttpProxyConnectJob::DoSpdyProxyCreateStream() {
     nested_connect_job_.reset();
   } else {
     // Create a session direct to the proxy itself
-    spdy_session = common_connect_job_params()
-                       ->spdy_session_pool->CreateAvailableSessionFromSocket(
-                           key, nested_connect_job_->PassSocket(),
-                           nested_connect_job_->connect_timing(), net_log());
-    DCHECK(spdy_session);
+    base::expected<base::WeakPtr<SpdySession>, int> spdy_session_result =
+        common_connect_job_params()
+            ->spdy_session_pool->CreateAvailableSessionFromSocket(
+                key, nested_connect_job_->PassSocket(),
+                nested_connect_job_->connect_timing(), net_log());
     nested_connect_job_.reset();
+    if (!spdy_session_result.has_value()) {
+      return spdy_session_result.error();
+    }
+    spdy_session = std::move(spdy_session_result.value());
   }
 
   next_state_ = STATE_SPDY_PROXY_CREATE_STREAM_COMPLETE;

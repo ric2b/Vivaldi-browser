@@ -30,6 +30,10 @@ struct AllocatorDispatch {
                           void* address,
                           size_t size,
                           void* context);
+  using ReallocUncheckedFn = void*(const AllocatorDispatch* self,
+                                   void* ptr,
+                                   size_t size,
+                                   void* context);
   using FreeFn = void(const AllocatorDispatch* self,
                       void* address,
                       void* context);
@@ -64,11 +68,20 @@ struct AllocatorDispatch {
                                 size_t size,
                                 size_t alignment,
                                 void* context);
+  using AlignedMallocUncheckedFn = void*(const AllocatorDispatch* self,
+                                         size_t size,
+                                         size_t alignment,
+                                         void* context);
   using AlignedReallocFn = void*(const AllocatorDispatch* self,
                                  void* address,
                                  size_t size,
                                  size_t alignment,
                                  void* context);
+  using AlignedReallocUncheckedFn = void*(const AllocatorDispatch* self,
+                                          void* address,
+                                          size_t size,
+                                          size_t alignment,
+                                          void* context);
   using AlignedFreeFn = void(const AllocatorDispatch* self,
                              void* address,
                              void* context);
@@ -78,6 +91,7 @@ struct AllocatorDispatch {
   AllocZeroInitializedFn* alloc_zero_initialized_function;
   AllocAlignedFn* alloc_aligned_function;
   ReallocFn* realloc_function;
+  ReallocUncheckedFn* realloc_unchecked_function;
   FreeFn* free_function;
   GetSizeEstimateFn* get_size_estimate_function;
   GoodSizeFn* good_size_function;
@@ -91,7 +105,9 @@ struct AllocatorDispatch {
   // _aligned_malloc, _aligned_realloc, and _aligned_free are specific to the
   // Windows allocator.
   AlignedMallocFn* aligned_malloc_function;
+  AlignedMallocUncheckedFn* aligned_malloc_unchecked_function;
   AlignedReallocFn* aligned_realloc_function;
+  AlignedReallocUncheckedFn* aligned_realloc_unchecked_function;
   AlignedFreeFn* aligned_free_function;
 
   const AllocatorDispatch* next;
@@ -112,8 +128,9 @@ struct AllocatorDispatch {
   // which is more efficient than having {this_alloc, this_free} where
   // this_free is a function just calls next_free.
   //
-  // Note that it's hard for toolchains to apply TCO (tail-call optimization)
-  // because the allocator shim chain is built runtime.
+  // Given its performance sensitivity, it is recommended to use tail-call
+  // optimizations wherever possible. Use MUSTTAIL on return statements in
+  // AllocatorDispatch.
   //
   // Note that this optimization works well because there is no case to remove
   // a shim in the middle of the allocator shim chain nor to reorder the shims
@@ -145,6 +162,7 @@ struct AllocatorDispatch {
     COPY_IF_NULLPTR(alloc_zero_initialized_function);
     COPY_IF_NULLPTR(alloc_aligned_function);
     COPY_IF_NULLPTR(realloc_function);
+    COPY_IF_NULLPTR(realloc_unchecked_function);
     COPY_IF_NULLPTR(free_function);
     COPY_IF_NULLPTR(get_size_estimate_function);
     COPY_IF_NULLPTR(good_size_function);
@@ -154,7 +172,9 @@ struct AllocatorDispatch {
     COPY_IF_NULLPTR(free_definite_size_function);
     COPY_IF_NULLPTR(try_free_default_function);
     COPY_IF_NULLPTR(aligned_malloc_function);
+    COPY_IF_NULLPTR(aligned_malloc_unchecked_function);
     COPY_IF_NULLPTR(aligned_realloc_function);
+    COPY_IF_NULLPTR(aligned_realloc_unchecked_function);
     COPY_IF_NULLPTR(aligned_free_function);
 
 #undef COPY_IF_NULLPTR

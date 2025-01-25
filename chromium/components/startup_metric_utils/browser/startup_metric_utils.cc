@@ -148,7 +148,7 @@ void UmaHistogramWithTemperature(
     case UNDETERMINED_STARTUP_TEMPERATURE:
       break;
     case STARTUP_TEMPERATURE_COUNT:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -161,10 +161,10 @@ void UmaHistogramWithTraceAndTemperature(
   UmaHistogramWithTemperature(histogram_function, histogram_basename,
                               end_ticks - begin_ticks);
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1(
-      "startup", histogram_basename, TRACE_ID_WITH_SCOPE(histogram_basename, 0),
+      "startup", histogram_basename, TRACE_ID_LOCAL(histogram_basename),
       begin_ticks, "Temperature", g_startup_temperature);
   TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
-      "startup", histogram_basename, TRACE_ID_WITH_SCOPE(histogram_basename, 0),
+      "startup", histogram_basename, TRACE_ID_LOCAL(histogram_basename),
       end_ticks);
 }
 
@@ -350,6 +350,14 @@ void BrowserStartupMetricRecorder::RecordBrowserMainMessageLoopStart(
         GetCommon().application_start_ticks_,
         GetCommon().chrome_main_entry_ticks_);
   }
+
+  // PreReadFile time.
+  if (!GetCommon().preread_end_ticks_.is_null() &&
+      !GetCommon().preread_begin_ticks_.is_null()) {
+    UmaHistogramWithTraceAndTemperature(
+        &base::UmaHistogramLongTimes, "Startup.Browser.LoadTime.PreReadFile",
+        GetCommon().preread_begin_ticks_, GetCommon().preread_end_ticks_);
+  }
 }
 
 void BrowserStartupMetricRecorder::RecordBrowserMainLoopFirstIdle(
@@ -533,17 +541,10 @@ void BrowserStartupMetricRecorder::RecordExternalStartupMetric(
 // a) Component registration, when there is existing component file on disk.
 // b) Component installation, when the component is downloaded.
 //
-// There are several factors that affect the timing of `ComponentReady()`:
-// 1. Feature `kPrivacySandboxAttestationsHigherComponentRegistrationPriority`
-// controls whether a higher task priority is used for component registration.
-// - When feature on, registration takes place almost immediately after opening
-// the browser.
-// - When feature off, registration takes place in a few seconds after opening
-// the browser.
-// 2. Non-browser UI during startup, for example, profile picker.
-// - When the above feature is off, and the user stays at the profile picker
-// indefinitely. The registration takes place in around 4 minutes after opening
-// the browser.
+// The following factors affect the timing of `ComponentReady()`:
+// Non-browser UI during startup, for example, profile picker.
+// - When the user stays at the profile picker indefinitely. The registration
+// takes place in around 4 minutes after opening the browser.
 //
 // The purpose of this metric is to understand the time gap between the time
 // users are able to navigate and the time the Privacy Sandbox attestations map

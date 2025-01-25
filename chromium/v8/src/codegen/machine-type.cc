@@ -39,6 +39,8 @@ const char* MachineReprToString(MachineRepresentation rep) {
       return "kRepWord32";
     case MachineRepresentation::kWord64:
       return "kRepWord64";
+    case MachineRepresentation::kFloat16:
+      return "kRepFloat16";
     case MachineRepresentation::kFloat32:
       return "kRepFloat32";
     case MachineRepresentation::kFloat64:
@@ -89,6 +91,8 @@ std::ostream& operator<<(std::ostream& os, MachineSemantic type) {
       return os << "kTypeUnsignedBigInt64";
     case MachineSemantic::kNumber:
       return os << "kTypeNumber";
+    case MachineSemantic::kHoleyFloat64:
+      return os << "kTypeHoleyFloat64";
     case MachineSemantic::kAny:
       return os << "kTypeAny";
   }

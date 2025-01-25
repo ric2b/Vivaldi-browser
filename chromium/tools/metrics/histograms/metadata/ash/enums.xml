@@ -91,6 +91,15 @@ ash/ambient/util/time_of_day_utils.h -->
   <int value="5" label="Google Photos No Albums"/>
 </enum>
 
+<enum name="AmbientModeTopicSource">
+<!-- This enum needs to match TopicSource in
+ash/webui/personalization_app/mojom/personalization_app.mojom -->
+
+  <int value="0" label="Google Photos"/>
+  <int value="1" label="Art Gallery"/>
+  <int value="2" label="Video"/>
+</enum>
+
 <enum name="AmbientModeVideo">
   <int value="0" label="Clouds"/>
   <int value="1" label="New Mexico"/>
@@ -603,6 +612,12 @@ ash/ambient/util/time_of_day_utils.h -->
       label="Desk switch by clicking on a mini view in the desk button desk
              bar"/>
   <int value="16" label="Desk switch due to session restore"/>
+</enum>
+
+<enum name="DisclaimerViewAction">
+  <int value="0" label="Show"/>
+  <int value="1" label="AcceptButtonPressed"/>
+  <int value="2" label="DeclineButtonPressed"/>
 </enum>
 
 <enum name="DNDStateOnFocusEndType">
@@ -1191,10 +1206,22 @@ ash/ambient/util/time_of_day_utils.h -->
   <int value="5" label="Hit maximum number of template status"/>
 </enum>
 
+<enum name="FocusModeEndingMomentBubbleClosedReason">
+  <int value="0" label="Ignored"/>
+  <int value="1" label="Extended"/>
+  <int value="2" label="Opened"/>
+</enum>
+
 <enum name="FocusModeEndSessionSource">
   <int value="0" label="Focus panel"/>
   <int value="1" label="Contextual panel"/>
   <int value="2" label="Feature pod"/>
+</enum>
+
+<enum name="FocusModeStartedWithTaskState">
+  <int value="0" label="Newly selected task"/>
+  <int value="1" label="Previously selected task"/>
+  <int value="2" label="No task"/>
 </enum>
 
 <enum name="FocusModeStartSessionSource">
@@ -1473,6 +1500,8 @@ ash/ambient/util/time_of_day_utils.h -->
   <int value="31" label="Search Plus Top Row Key Pressed Nudge"/>
   <int value="32" label="Six Pack Key Pressed Nudge"/>
   <int value="33" label="Switch Caps Lock Key Pressed Nudge"/>
+  <int value="34" label="Help Me Read Nudge"/>
+  <int value="35" label="Birch Privacy Nudge"/>
 </enum>
 
 <enum name="OnDeviceToServerSpeechRecognitionFallbackReason">
@@ -1672,6 +1701,7 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="7" label="Avatar"/>
   <int value="8" label="SeaPen Collection"/>
   <int value="9" label="SeaPen Results"/>
+  <int value="10" label="SeaPen Freeform"/>
 </enum>
 
 <enum name="PersonalizationThemeColorMode">
@@ -1697,6 +1727,13 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="0" label="Backfilled to enabled"/>
   <int value="1" label="Backfilled to disabled due to policy"/>
   <int value="2" label="Backfilled to disabled due to PIN length."/>
+</enum>
+
+<enum name="PlaylistTypesSelectedDuringSessionType">
+  <int value="0" label="None"/>
+  <int value="1" label="YTM"/>
+  <int value="2" label="Soundscapes"/>
+  <int value="3" label="YTM And Soundscapes"/>
 </enum>
 
 <enum name="PrivacyIndicatorsSource">
@@ -1901,7 +1938,7 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
 </enum>
 
 <enum name="SeaPenTemplateId">
-<!-- Defined in ash/webui/common/mojom/sea_pen.mojom -->
+<!-- Defined in ash/webui/common/mojom/sea_pen_generated.mojom -->
 
   <int value="0" label="kFlower"/>
   <int value="1" label="kMineral"/>
@@ -1924,6 +1961,8 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="105" label="kVcBackgroundDreamscapesVc"/>
   <int value="106" label="kVcBackgroundCharacters"/>
   <int value="107" label="kVcBackgroundGlowscapes"/>
+  <int value="999" label="Freeform"/>
+  <int value="1000" label="VcBackgroundFreeform"/>
 </enum>
 
 <enum name="SeaPenWallpaperManagerMigrationStatus">
@@ -2039,9 +2078,26 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
 
 <enum name="SnapGroupExitPoint">
   <int value="0" label="Drag window out"/>
-  <int value="1" label="Window state change"/>
+  <int value="1" label="[Deprecated] Window state change"/>
   <int value="2" label="Window destruction"/>
   <int value="3" label="Tablet transition"/>
+  <int value="4" label="Window state changed to default state"/>
+  <int value="5" label="Window state changed to normal state"/>
+  <int value="6" label="Window state changed to minimized state"/>
+  <int value="7" label="Window state changed to maximized state"/>
+  <int value="8" label="Window state changed to inactive state"/>
+  <int value="9" label="Window state changed to fullscreen state"/>
+  <int value="10" label="Window state changed to primary snapped state"/>
+  <int value="11" label="Window state changed to secondary snapped state"/>
+  <int value="12" label="Window state changed to pinned state"/>
+  <int value="13" label="Window state changed to trusted pinned state"/>
+  <int value="14" label="Window state changed to pip state"/>
+  <int value="15" label="Window state changed to floated state"/>
+  <int value="16" label="Window bounds change"/>
+  <int value="17" label="Snapped bounds no longer fit work area"/>
+  <int value="18" label="Snap to replace"/>
+  <int value="19" label="Visible on all desks"/>
+  <int value="20" label="Select a window in Snap Group in partial Overview"/>
 </enum>
 
 <enum name="SpeechRecognitionEndState">
@@ -2088,7 +2144,7 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
 <enum name="TimeManagementGlanceablesFeatureStatus">
   <int value="0" label="Disabled"/>
   <int value="1" label="Enabled - trusted tester (deprecated)"/>
-  <int value="2" label="Enabled - GlanceablesV2 flag"/>
+  <int value="2" label="Enabled - GlanceablesV2 flag (deprecated)"/>
   <int value="3" label="Enabled with pref bypass switch (deprecated)"/>
   <int value="4" label="Enabled - full launch"/>
 </enum>
@@ -2145,7 +2201,7 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="47" label="Dictation Mic Muted"/>
   <int value="48" label="Video Conference Speak On Mute Opt In Confirmation"/>
   <int value="50" label="Game Dashboard Disabled In Tablet Mode"/>
-  <int value="51" label="Pine Onboarding Turn On Ask Every Time"/>
+  <int value="51" label="Informed Restore Onboarding Turn On Ask Every Time"/>
 </enum>
 
 <enum name="TrayBackgroundViewCatalogName">
@@ -2639,6 +2695,17 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="3" label="Tile"/>
 </enum>
 
+<enum name="WallpaperMigrationFailureReason">
+  <int value="0" label="Failed to fetch online variants"/>
+  <int value="1" label="Failed to find a valid online variant"/>
+</enum>
+
+<enum name="WallpaperMigrationStatus">
+  <int value="0" label="Succeeded"/>
+  <int value="1" label="Failed"/>
+  <int value="2" label="Not supported due to missing location"/>
+</enum>
+
 <enum name="WallpaperType">
   <int value="0" label="Daily">
     Surprise wallpaper from the user selected collection.
@@ -2715,6 +2782,8 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="17"
       label="Window is snapped by long pressing lacros window caption button
              or window layout menu"/>
+  <int value="18"
+      label="Window is snapped during the windows swapping in a Snap Group"/>
 </enum>
 
 <enum name="WindowSplittingDragType">

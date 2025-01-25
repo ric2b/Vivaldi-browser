@@ -51,6 +51,18 @@ enum SmartCardSignatureAlgorithm {
   CHALLENGE_RSASSA_PKCS1_V1_5_SHA512 = 4;
 }
 
+// Request data for challenge requests of the |CHALLENGE_TYPE_SIGNATURE| request
+// type.
+message SignatureKeyChallengeRequestData {
+  // The blob of data for which the signature is asked.
+  bytes data_to_sign = 1;
+  // Specifies the key which is asked to sign the data. Contains the DER-encoded
+  // blob of the X.509 Subject Public Key Info.
+  bytes public_key_spki_der = 2;
+  // Specifies the signature algorithm that has to be used.
+  SmartCardSignatureAlgorithm signature_algorithm = 3;
+}
+
 // An intent specifies the set of operations that can be performed after
 // successfully authenticating an Auth Session.
 enum AuthIntent {
@@ -66,13 +78,8 @@ enum AuthIntent {
   // Intent to specify the WebAuthn secret should be populated after authorizing
   // when applicable, i.e., when the AuthFactor type isn't kLegacyFingerprint.
   AUTH_INTENT_WEBAUTHN = 3;
-  // Intent to authenticate user and authorize user for KeyRestore on lock
-  // screen. This intent drives a full authentication.
-  AUTH_INTENT_RESTORE_KEY = 4;
-  // Intent to allow forensic access to homedir for an enterprise user. This
-  // will only allow login with recovery key and only updating the recovery key.
-  // The mount will only be read-only to preserve against any data change.
-  AUTH_INTENT_FORENSICS = 5;
+
+  reserved 4, 5;
 }
 
 // Password AuthFactor requires a secret to be passed for derivation and
@@ -189,11 +196,38 @@ message CryptohomeRecoveryPrepareInput {
   reserved 1;
 }
 
+// Smartcard input specifies the algorithm.
+message SmartCardPrepareInput {
+  // Specifies the signature algorithms that are supported by an individual
+  // smart card.
+  repeated SmartCardSignatureAlgorithm signature_algorithms = 1;
+}
+
+// Smartcard input specifies the algorithm.
+message SmartCardPrepareOutput {  // Specifies challenge types.
+  enum ChallengeType {
+    CHALLENGE_TYPE_UNSPECIFIED = 0;
+    // Challenge is a request of a cryptographic signature of the specified data
+    // using the specified key.
+    CHALLENGE_TYPE_SIGNATURE = 1;
+  }
+  // Type of the requested challenge.
+  optional ChallengeType challenge_type = 1;
+  // Is set when |challenge_type| is |CHALLENGE_TYPE_SIGNATURE|. Contains the
+  // challenge request data.
+  optional SignatureKeyChallengeRequestData signature_request_data = 2;
+  // If more_challenges_remaining is set to true, then the caller needs to
+  // call PrepareAuthFactor again to complete the prepare request.
+  // The challenge passed in this can still be continued to process.
+  optional bool more_challenges_remaining = 3;
+}
+
 // PrepareInput is a wrapper around any secret or input data that is required to
 // prepare for authentication with a factor.
 message PrepareInput {
   oneof input {
     CryptohomeRecoveryPrepareInput cryptohome_recovery_input = 1;
+    SmartCardPrepareInput smart_card_input = 2;
   }
 }
 
@@ -210,6 +244,7 @@ message CryptohomeRecoveryPrepareOutput {
 message PrepareOutput {
   oneof output {
     CryptohomeRecoveryPrepareOutput cryptohome_recovery_output = 1;
+    SmartCardPrepareOutput smart_card_output = 2;
   }
 }
 

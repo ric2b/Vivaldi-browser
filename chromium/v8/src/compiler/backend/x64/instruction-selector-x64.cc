@@ -1004,6 +1004,83 @@ X64OperandGeneratorT<TurbofanAdapter>::GetEffectiveAddressMemoryOperand(
 
 namespace {
 
+ArchOpcode GetLoadOpcode(turboshaft::MemoryRepresentation loaded_rep,
+                         turboshaft::RegisterRepresentation result_rep) {
+  // NOTE: The meaning of `loaded_rep` = `MemoryRepresentation::AnyTagged()` is
+  // we are loading a compressed tagged field, while `result_rep` =
+  // `RegisterRepresentation::Tagged()` refers to an uncompressed tagged value.
+  using namespace turboshaft;  // NOLINT(build/namespaces)
+  switch (loaded_rep) {
+    case MemoryRepresentation::Int8():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Word32());
+      return kX64Movsxbl;
+    case MemoryRepresentation::Uint8():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Word32());
+      return kX64Movzxbl;
+    case MemoryRepresentation::Int16():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Word32());
+      return kX64Movsxwl;
+    case MemoryRepresentation::Uint16():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Word32());
+      return kX64Movzxwl;
+    case MemoryRepresentation::Int32():
+    case MemoryRepresentation::Uint32():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Word32());
+      return kX64Movl;
+    case MemoryRepresentation::Int64():
+    case MemoryRepresentation::Uint64():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Word64());
+      return kX64Movq;
+    case MemoryRepresentation::Float16():
+      UNIMPLEMENTED();
+    case MemoryRepresentation::Float32():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Float32());
+      return kX64Movss;
+    case MemoryRepresentation::Float64():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Float64());
+      return kX64Movsd;
+#ifdef V8_COMPRESS_POINTERS
+    case MemoryRepresentation::AnyTagged():
+    case MemoryRepresentation::TaggedPointer():
+      if (result_rep == RegisterRepresentation::Compressed()) {
+        return kX64Movl;
+      }
+      DCHECK_EQ(result_rep, RegisterRepresentation::Tagged());
+      return kX64MovqDecompressTagged;
+    case MemoryRepresentation::TaggedSigned():
+      if (result_rep == RegisterRepresentation::Compressed()) {
+        return kX64Movl;
+      }
+      DCHECK_EQ(result_rep, RegisterRepresentation::Tagged());
+      return kX64MovqDecompressTaggedSigned;
+#else
+    case MemoryRepresentation::AnyTagged():
+    case MemoryRepresentation::TaggedPointer():
+    case MemoryRepresentation::TaggedSigned():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Tagged());
+      return kX64Movq;
+#endif
+    case MemoryRepresentation::AnyUncompressedTagged():
+    case MemoryRepresentation::UncompressedTaggedPointer():
+    case MemoryRepresentation::UncompressedTaggedSigned():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Tagged());
+      return kX64Movq;
+    case MemoryRepresentation::ProtectedPointer():
+      CHECK(V8_ENABLE_SANDBOX_BOOL);
+      return kX64MovqDecompressProtected;
+    case MemoryRepresentation::IndirectPointer():
+      UNREACHABLE();
+    case MemoryRepresentation::SandboxedPointer():
+      return kX64MovqDecodeSandboxedPointer;
+    case MemoryRepresentation::Simd128():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Simd128());
+      return kX64Movdqu;
+    case MemoryRepresentation::Simd256():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Simd256());
+      return kX64Movdqu256;
+  }
+}
+
 ArchOpcode GetLoadOpcode(LoadRepresentation load_rep) {
   ArchOpcode opcode;
   switch (load_rep.representation()) {
@@ -1060,12 +1137,57 @@ ArchOpcode GetLoadOpcode(LoadRepresentation load_rep) {
     case MachineRepresentation::kSimd256:  // Fall through.
       opcode = kX64Movdqu256;
       break;
+    case MachineRepresentation::kFloat16:
+      UNIMPLEMENTED();
     case MachineRepresentation::kNone:     // Fall through.
     case MachineRepresentation::kMapWord:  // Fall through.
     case MachineRepresentation::kIndirectPointer:  // Fall through.
       UNREACHABLE();
   }
   return opcode;
+}
+
+ArchOpcode GetStoreOpcode(turboshaft::MemoryRepresentation stored_rep) {
+  using namespace turboshaft;  // NOLINT(build/namespaces)
+  switch (stored_rep) {
+    case MemoryRepresentation::Int8():
+    case MemoryRepresentation::Uint8():
+      return kX64Movb;
+    case MemoryRepresentation::Int16():
+    case MemoryRepresentation::Uint16():
+      return kX64Movw;
+    case MemoryRepresentation::Int32():
+    case MemoryRepresentation::Uint32():
+      return kX64Movl;
+    case MemoryRepresentation::Int64():
+    case MemoryRepresentation::Uint64():
+      return kX64Movq;
+    case MemoryRepresentation::Float16():
+      UNIMPLEMENTED();
+    case MemoryRepresentation::Float32():
+      return kX64Movss;
+    case MemoryRepresentation::Float64():
+      return kX64Movsd;
+    case MemoryRepresentation::AnyTagged():
+    case MemoryRepresentation::TaggedPointer():
+    case MemoryRepresentation::TaggedSigned():
+      return kX64MovqCompressTagged;
+    case MemoryRepresentation::AnyUncompressedTagged():
+    case MemoryRepresentation::UncompressedTaggedPointer():
+    case MemoryRepresentation::UncompressedTaggedSigned():
+      return kX64Movq;
+    case MemoryRepresentation::ProtectedPointer():
+      // We never store directly to protected pointers from generated code.
+      UNREACHABLE();
+    case MemoryRepresentation::IndirectPointer():
+      return kX64MovqStoreIndirectPointer;
+    case MemoryRepresentation::SandboxedPointer():
+      return kX64MovqEncodeSandboxedPointer;
+    case MemoryRepresentation::Simd128():
+      return kX64Movdqu;
+    case MemoryRepresentation::Simd256():
+      return kX64Movdqu256;
+  }
 }
 
 ArchOpcode GetStoreOpcode(StoreRepresentation store_rep) {
@@ -1102,10 +1224,12 @@ ArchOpcode GetStoreOpcode(StoreRepresentation store_rep) {
       return kX64Movdqu;
     case MachineRepresentation::kSimd256:
       return kX64Movdqu256;
+    case MachineRepresentation::kFloat16:
+      UNIMPLEMENTED();
     case MachineRepresentation::kNone:
     case MachineRepresentation::kMapWord:
-      // We never store directly to protected pointers from generated code.
     case MachineRepresentation::kProtectedPointer:
+      // We never store directly to protected pointers from generated code.
       UNREACHABLE();
   }
 }
@@ -1134,6 +1258,27 @@ ArchOpcode GetSeqCstStoreOpcode(StoreRepresentation store_rep) {
   }
 }
 
+// Used for pmin/pmax and relaxed min/max.
+template <typename Adapter, VectorLength vec_len>
+void VisitMinOrMax(InstructionSelectorT<Adapter>* selector,
+                   typename Adapter::node_t node, ArchOpcode opcode,
+                   bool flip_inputs) {
+  X64OperandGeneratorT<Adapter> g(selector);
+  DCHECK_EQ(selector->value_input_count(node), 2);
+  InstructionOperand dst = selector->IsSupported(AVX)
+                               ? g.DefineAsRegister(node)
+                               : g.DefineSameAsFirst(node);
+  InstructionCode instr_code = opcode | VectorLengthField::encode(vec_len);
+  if (flip_inputs) {
+    // Due to the way minps/minpd work, we want the dst to be same as the second
+    // input: b = pmin(a, b) directly maps to minps b a.
+    selector->Emit(instr_code, dst, g.UseRegister(selector->input_at(node, 1)),
+                   g.UseRegister(selector->input_at(node, 0)));
+  } else {
+    selector->Emit(instr_code, dst, g.UseRegister(selector->input_at(node, 0)),
+                   g.UseRegister(selector->input_at(node, 1)));
+  }
+}
 }  // namespace
 
 template <typename Adapter>
@@ -1488,6 +1633,50 @@ void InstructionSelectorT<TurboshaftAdapter>::VisitSimd256LoadTransform(
   VisitLoad(node, node, code);
 }
 
+template <>
+void InstructionSelectorT<TurbofanAdapter>::VisitF32x8RelaxedMin(Node* node) {
+  UNREACHABLE();
+}
+
+template <>
+void InstructionSelectorT<TurbofanAdapter>::VisitF32x8RelaxedMax(Node* node) {
+  UNREACHABLE();
+}
+
+template <>
+void InstructionSelectorT<TurbofanAdapter>::VisitF64x4RelaxedMin(Node* node) {
+  UNREACHABLE();
+}
+
+template <>
+void InstructionSelectorT<TurbofanAdapter>::VisitF64x4RelaxedMax(Node* node) {
+  UNREACHABLE();
+}
+
+template <>
+void InstructionSelectorT<TurboshaftAdapter>::VisitF32x8RelaxedMin(
+    node_t node) {
+  VisitMinOrMax<TurboshaftAdapter, kV256>(this, node, kX64Minps, false);
+}
+
+template <>
+void InstructionSelectorT<TurboshaftAdapter>::VisitF32x8RelaxedMax(
+    node_t node) {
+  VisitMinOrMax<TurboshaftAdapter, kV256>(this, node, kX64Maxps, false);
+}
+
+template <>
+void InstructionSelectorT<TurboshaftAdapter>::VisitF64x4RelaxedMin(
+    node_t node) {
+  VisitMinOrMax<TurboshaftAdapter, kV256>(this, node, kX64Minpd, false);
+}
+
+template <>
+void InstructionSelectorT<TurboshaftAdapter>::VisitF64x4RelaxedMax(
+    node_t node) {
+  VisitMinOrMax<TurboshaftAdapter, kV256>(this, node, kX64Maxpd, false);
+}
+
 #ifdef V8_TARGET_ARCH_X64
 template <>
 void InstructionSelectorT<TurbofanAdapter>::VisitSimd256Shufd(Node* node) {
@@ -1616,11 +1805,19 @@ void InstructionSelectorT<Adapter>::VisitLoad(node_t node, node_t value,
   Emit(code, 1, outputs, input_count, inputs, temp_count, temps);
 }
 
-template <typename Adapter>
-void InstructionSelectorT<Adapter>::VisitLoad(node_t node) {
+template <>
+void InstructionSelectorT<TurbofanAdapter>::VisitLoad(node_t node) {
   LoadRepresentation load_rep = this->load_view(node).loaded_rep();
   DCHECK(!load_rep.IsMapWord());
   VisitLoad(node, node, GetLoadOpcode(load_rep));
+}
+
+template <>
+void InstructionSelectorT<TurboshaftAdapter>::VisitLoad(node_t node) {
+  using namespace turboshaft;  // NOLINT(build/namespaces)
+  TurboshaftAdapter::LoadView view = this->load_view(node);
+  VisitLoad(node, node,
+            GetLoadOpcode(view.ts_loaded_rep(), view.ts_result_rep()));
 }
 
 template <typename Adapter>
@@ -1665,7 +1862,7 @@ void VisitStoreCommon(InstructionSelectorT<Adapter>* selector,
   base::Optional<AtomicMemoryOrder> atomic_order = store.memory_order();
   MemoryAccessKind acs_kind = store.access_kind();
 
-  StoreRepresentation store_rep = store.stored_rep();
+  const StoreRepresentation store_rep = store.stored_rep();
   DCHECK_NE(store_rep.representation(), MachineRepresentation::kMapWord);
   WriteBarrierKind write_barrier_kind = store_rep.write_barrier_kind();
   const bool is_seqcst =
@@ -1687,6 +1884,16 @@ void VisitStoreCommon(InstructionSelectorT<Adapter>* selector,
       !v8_flags.disable_write_barriers) {
     DCHECK(
         CanBeTaggedOrCompressedOrIndirectPointer(store_rep.representation()));
+    if constexpr (Adapter::IsTurboshaft) {
+      using namespace turboshaft;  // NOLINT(build/namespaces)
+      // Uncompressed stores should not happen if we need a write barrier.
+      CHECK((store.ts_stored_rep() !=
+             MemoryRepresentation::AnyUncompressedTagged()) &&
+            (store.ts_stored_rep() !=
+             MemoryRepresentation::UncompressedTaggedPointer()) &&
+            (store.ts_stored_rep() !=
+             MemoryRepresentation::UncompressedTaggedPointer()));
+    }
     AddressingMode addressing_mode;
     InstructionOperand inputs[5];
     size_t input_count = 0;
@@ -1772,7 +1979,11 @@ void VisitStoreCommon(InstructionSelectorT<Adapter>* selector,
                                              ? g.UseImmediate(value)
                                              : g.UseRegister(value, reg_kind);
       inputs[input_count++] = value_operand;
-      opcode = GetStoreOpcode(store_rep);
+      if constexpr (Adapter::IsTurboshaft) {
+        opcode = GetStoreOpcode(store.ts_stored_rep());
+      } else {
+        opcode = GetStoreOpcode(store_rep);
+      }
     }
 
     InstructionCode code = opcode
@@ -4224,7 +4435,7 @@ void VisitWord64EqualImpl(InstructionSelectorT<Adapter>* selector,
       DCHECK_EQ(equal.kind, ComparisonOp::Kind::kEqual);
       Handle<HeapObject> object;
       if (equal.rep == RegisterRepresentation::Tagged() &&
-          selector->MatchTaggedConstant(equal.right(), &object)) {
+          selector->MatchHeapConstant(equal.right(), &object)) {
         if (roots_table.IsRootHandle(object, &root_index)) {
           InstructionCode opcode =
               kX64Cmp | AddressingModeField::encode(kMode_Root);
@@ -4277,7 +4488,7 @@ bool MatchHeapObjectEqual(InstructionSelectorT<TurboshaftAdapter>* selector,
   using namespace turboshaft;  // NOLINT(build/namespaces)
   const ComparisonOp& equal = selector->Get(node).Cast<ComparisonOp>();
   DCHECK_EQ(equal.kind, ComparisonOp::Kind::kEqual);
-  if (selector->MatchTaggedConstant(equal.right(), right)) {
+  if (selector->MatchHeapConstant(equal.right(), right)) {
     *left = equal.left();
     return true;
   }
@@ -6862,87 +7073,64 @@ void InstructionSelectorT<Adapter>::VisitI64x4RelaxedLaneSelect(node_t node) {
 }
 #endif  // V8_ENABLE_WASM_SIMD256_REVEC
 
-namespace {
-// Used for pmin/pmax and relaxed min/max.
-template <typename Adapter>
-void VisitMinOrMax(InstructionSelectorT<Adapter>* selector,
-                   typename Adapter::node_t node, ArchOpcode opcode,
-                   bool flip_inputs) {
-  X64OperandGeneratorT<Adapter> g(selector);
-  DCHECK_EQ(selector->value_input_count(node), 2);
-  InstructionOperand dst = selector->IsSupported(AVX)
-                               ? g.DefineAsRegister(node)
-                               : g.DefineSameAsFirst(node);
-  if (flip_inputs) {
-    // Due to the way minps/minpd work, we want the dst to be same as the second
-    // input: b = pmin(a, b) directly maps to minps b a.
-    selector->Emit(opcode, dst, g.UseRegister(selector->input_at(node, 1)),
-                   g.UseRegister(selector->input_at(node, 0)));
-  } else {
-    selector->Emit(opcode, dst, g.UseRegister(selector->input_at(node, 0)),
-                   g.UseRegister(selector->input_at(node, 1)));
-  }
-}
-}  // namespace
-
 template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitF32x4Pmin(node_t node) {
-  VisitMinOrMax(this, node, kX64Minps, true);
+  VisitMinOrMax<Adapter, kV128>(this, node, kX64Minps, true);
 }
 
 template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitF32x4Pmax(node_t node) {
-  VisitMinOrMax(this, node, kX64Maxps, true);
+  VisitMinOrMax<Adapter, kV128>(this, node, kX64Maxps, true);
 }
 
 template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitF64x2Pmin(node_t node) {
-  VisitMinOrMax(this, node, kX64Minpd, true);
+  VisitMinOrMax<Adapter, kV128>(this, node, kX64Minpd, true);
 }
 
 template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitF64x2Pmax(node_t node) {
-  VisitMinOrMax(this, node, kX64Maxpd, true);
+  VisitMinOrMax<Adapter, kV128>(this, node, kX64Maxpd, true);
 }
 
 template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitF32x8Pmin(node_t node) {
-  VisitMinOrMax(this, node, kX64F32x8Pmin, true);
+  VisitMinOrMax<Adapter, kV256>(this, node, kX64F32x8Pmin, true);
 }
 
 template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitF32x8Pmax(node_t node) {
-  VisitMinOrMax(this, node, kX64F32x8Pmax, true);
+  VisitMinOrMax<Adapter, kV256>(this, node, kX64F32x8Pmax, true);
 }
 
 template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitF64x4Pmin(node_t node) {
-  VisitMinOrMax(this, node, kX64F64x4Pmin, true);
+  VisitMinOrMax<Adapter, kV256>(this, node, kX64F64x4Pmin, true);
 }
 
 template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitF64x4Pmax(node_t node) {
-  VisitMinOrMax(this, node, kX64F64x4Pmax, true);
+  VisitMinOrMax<Adapter, kV256>(this, node, kX64F64x4Pmax, true);
 }
 
 template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitF32x4RelaxedMin(node_t node) {
-  VisitMinOrMax(this, node, kX64Minps, false);
+  VisitMinOrMax<Adapter, kV128>(this, node, kX64Minps, false);
 }
 
 template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitF32x4RelaxedMax(node_t node) {
-  VisitMinOrMax(this, node, kX64Maxps, false);
+  VisitMinOrMax<Adapter, kV128>(this, node, kX64Maxps, false);
 }
 
 template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitF64x2RelaxedMin(node_t node) {
-  VisitMinOrMax(this, node, kX64Minpd, false);
+  VisitMinOrMax<Adapter, kV128>(this, node, kX64Minpd, false);
 }
 
 template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitF64x2RelaxedMax(node_t node) {
-  VisitMinOrMax(this, node, kX64Maxpd, false);
+  VisitMinOrMax<Adapter, kV128>(this, node, kX64Maxpd, false);
 }
 
 template <typename Adapter>
@@ -7245,11 +7433,18 @@ template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitI32x8DotI8x32I7x32AddS(node_t node) {
   X64OperandGeneratorT<Adapter> g(this);
   DCHECK_EQ(this->value_input_count(node), 3);
-  InstructionOperand temps[] = {g.TempSimd256Register()};
-  Emit(kX64I32x8DotI8x32I7x32AddS, g.DefineSameAsInput(node, 2),
-       g.UseUniqueRegister(this->input_at(node, 0)),
-       g.UseUniqueRegister(this->input_at(node, 1)),
-       g.UseUniqueRegister(this->input_at(node, 2)), arraysize(temps), temps);
+  if (CpuFeatures::IsSupported(AVX_VNNI)) {
+    Emit(kX64I32x8DotI8x32I7x32AddS, g.DefineSameAsInput(node, 2),
+         g.UseRegister(this->input_at(node, 0)),
+         g.UseRegister(this->input_at(node, 1)),
+         g.UseRegister(this->input_at(node, 2)));
+  } else {
+    InstructionOperand temps[] = {g.TempSimd256Register()};
+    Emit(kX64I32x8DotI8x32I7x32AddS, g.DefineSameAsInput(node, 2),
+         g.UseUniqueRegister(this->input_at(node, 0)),
+         g.UseUniqueRegister(this->input_at(node, 1)),
+         g.UseUniqueRegister(this->input_at(node, 2)), arraysize(temps), temps);
+  }
 }
 #endif
 

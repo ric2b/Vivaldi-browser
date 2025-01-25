@@ -148,4 +148,9 @@
     [self.delegate didSelectItemToShare:item parent:parent fromView:view];
 }
 
+- (void)didTapOnCollectionViewEmptyArea {
+  if (self.delegate)
+    [self.delegate didTapOnCollectionViewEmptyArea];
+}
+
 @end

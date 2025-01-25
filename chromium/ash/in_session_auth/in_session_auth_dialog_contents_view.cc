@@ -18,9 +18,11 @@
 #include "ash/style/ash_color_id.h"
 #include "base/check.h"
 #include "base/functional/callback_forward.h"
+#include "base/notimplemented.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/ash/components/auth_panel/impl/auth_panel.h"
 #include "chromeos/ash/components/auth_panel/impl/factor_auth_view_factory.h"
+#include "chromeos/ash/components/osauth/public/auth_hub.h"
 #include "components/account_id/account_id.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -31,6 +33,7 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
@@ -70,11 +73,23 @@ UserAvatar GetActiveUserAvatar() {
 
 }  // namespace
 
+InSessionAuthDialogContentsView::TestApi::TestApi(
+    InSessionAuthDialogContentsView* contents_view)
+    : contents_view_(contents_view) {}
+
+InSessionAuthDialogContentsView::TestApi::~TestApi() = default;
+
+views::Button* InSessionAuthDialogContentsView::TestApi::GetCloseButton() {
+  return contents_view_->close_button_;
+}
+
 InSessionAuthDialogContentsView::InSessionAuthDialogContentsView(
     const std::optional<std::string>& prompt,
     base::OnceClosure on_end_authentication,
     base::RepeatingClosure on_ui_initialized,
-    AuthHubConnector* connector) {
+    AuthHubConnector* connector,
+    AuthHub* auth_hub)
+    : auth_hub_(auth_hub) {
   SetLayoutManager(std::make_unique<views::FlexLayout>())
       ->SetOrientation(views::LayoutOrientation::kVertical)
       .SetMainAxisAlignment(views::LayoutAlignment::kStart)
@@ -133,17 +148,16 @@ void InSessionAuthDialogContentsView::AddCloseButton() {
       .SetCrossAxisAlignment(views::LayoutAlignment::kStart)
       .SetCollapseMargins(true);
 
-  auto callback = [](const ui::Event& event) {
-    // TODO(b/271248452): placeholder.
-    LOG(ERROR) << "pressed";
-  };
-
   std::unique_ptr<views::ImageButton> close_button =
       views::CreateVectorImageButtonWithNativeTheme(
-          base::BindRepeating(callback), views::kIcCloseIcon);
+          base::BindRepeating(
+              &InSessionAuthDialogContentsView::OnCloseButtonPressed,
+              weak_ptr_factory_.GetWeakPtr()),
+          views::kIcCloseIcon);
 
   close_button->SetTooltipText(l10n_util::GetStringUTF16(IDS_APP_CLOSE));
-  close_button->SetAccessibleName(l10n_util::GetStringUTF16(IDS_APP_CLOSE));
+  close_button->GetViewAccessibility().SetName(
+      l10n_util::GetStringUTF16(IDS_APP_CLOSE));
   close_button->SizeToPreferredSize();
   close_button->SetVisible(true);
   close_button->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
@@ -185,7 +199,7 @@ void InSessionAuthDialogContentsView::AddTitle() {
       l10n_util::GetStringUTF16(IDS_ASH_IN_SESSION_AUTH_TITLE);
   title_->SetText(title_text);
   title_->SetEnabledColorId(kColorAshTextColorPrimary);
-  title_->SetAccessibleName(title_text);
+  title_->GetViewAccessibility().SetName(title_text);
 }
 
 void InSessionAuthDialogContentsView::AddPrompt(const std::string& prompt) {
@@ -195,10 +209,15 @@ void InSessionAuthDialogContentsView::AddPrompt(const std::string& prompt) {
   prompt_view_->SetAutoColorReadabilityEnabled(false);
   prompt_view_->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 
-  prompt_view_->SetText(base::UTF8ToUTF16(prompt));
+  std::u16string prompt_text = base::UTF8ToUTF16(prompt);
+  prompt_view_->SetText(prompt_text);
   prompt_view_->SetMultiLine(true);
   prompt_view_->SetMaximumWidth(kPreferredWidth);
   prompt_view_->SetLineHeight(kPromptLineHeight);
+  prompt_view_->GetViewAccessibility().SetName(
+      prompt_text, prompt_text.empty()
+                       ? ax::mojom::NameFrom::kAttributeExplicitlyEmpty
+                       : ax::mojom::NameFrom::kAttribute);
 
   prompt_view_->SetPreferredSize(gfx::Size(
       kPreferredWidth, prompt_view_->GetHeightForWidth(kPreferredWidth)));
@@ -211,7 +230,7 @@ void InSessionAuthDialogContentsView::AddAuthPanel(
     AuthHubConnector* connector) {
   auth_panel_ = AddChildView(std::make_unique<AuthPanel>(
       std::make_unique<FactorAuthViewFactory>(),
-      std::make_unique<AuthFactorStoreFactory>(),
+      std::make_unique<AuthFactorStoreFactory>(auth_hub_),
       std::make_unique<AuthPanelEventDispatcherFactory>(),
       std::move(on_end_authentication), std::move(on_ui_initialized),
       connector));
@@ -219,6 +238,39 @@ void InSessionAuthDialogContentsView::AddAuthPanel(
 
 AuthPanel* InSessionAuthDialogContentsView::GetAuthPanel() {
   return auth_panel_;
+}
+
+void InSessionAuthDialogContentsView::ShowAuthError(AshAuthFactor factor) {
+  switch (factor) {
+    case AshAuthFactor::kGaiaPassword:
+    case AshAuthFactor::kLocalPassword:
+      title_->SetText(l10n_util::GetStringUTF16(
+          IDS_ASH_IN_SESSION_AUTH_PASSWORD_INCORRECT));
+      break;
+    case AshAuthFactor::kCryptohomePin:
+    case AshAuthFactor::kSmartCard:
+    case AshAuthFactor::kSmartUnlock:
+    case AshAuthFactor::kRecovery:
+    case AshAuthFactor::kLegacyPin:
+    case AshAuthFactor::kLegacyFingerprint:
+    case AshAuthFactor::kFingerprint:
+      NOTIMPLEMENTED();
+      break;
+  }
+
+  title_->SetEnabledColorId(cros_tokens::kCrosSysError);
+}
+
+bool InSessionAuthDialogContentsView::OnKeyPressed(const ui::KeyEvent& event) {
+  if (event.key_code() == ui::KeyboardCode::VKEY_ESCAPE) {
+    auth_hub_->CancelCurrentAttempt(connector_);
+    return true;
+  }
+  return false;
+}
+
+void InSessionAuthDialogContentsView::OnCloseButtonPressed() {
+  auth_hub_->CancelCurrentAttempt(connector_);
 }
 
 BEGIN_METADATA(InSessionAuthDialogContentsView)

@@ -17,7 +17,7 @@
 #include "src/compiler/osr.h"
 #include "src/execution/frame-constants.h"
 #include "src/execution/frames.h"
-#include "src/heap/mutable-page.h"
+#include "src/heap/mutable-page-metadata.h"
 #include "src/objects/smi.h"
 
 #if V8_ENABLE_WEBASSEMBLY
@@ -68,16 +68,9 @@ class IA32OperandConverter : public InstructionOperandConverter {
 
   Immediate ToImmediate(InstructionOperand* operand) {
     Constant constant = ToConstant(operand);
-#if V8_ENABLE_WEBASSEMBLY
-    if (constant.type() == Constant::kInt32 &&
-        RelocInfo::IsWasmReference(constant.rmode())) {
-      return Immediate(static_cast<Address>(constant.ToInt32()),
-                       constant.rmode());
-    }
-#endif  // V8_ENABLE_WEBASSEMBLY
     switch (constant.type()) {
       case Constant::kInt32:
-        return Immediate(constant.ToInt32());
+        return Immediate(constant.ToInt32(), constant.rmode());
       case Constant::kFloat32:
         return Immediate::EmbeddedNumber(constant.ToFloat32());
       case Constant::kFloat64:
@@ -1608,7 +1601,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         size_t index = 0;
         Operand operand = i.MemoryOperand(&index);
         if (HasImmediateInput(instr, index)) {
-          __ mov(operand, i.InputImmediate(index));
+          __ Move(operand, i.InputImmediate(index));
         } else {
           __ mov(operand, i.InputRegister(index));
         }
@@ -4215,8 +4208,7 @@ void CodeGenerator::AssembleReturn(InstructionOperand* additional_pop_count) {
     __ j(greater, &mismatch_return, Label::kNear);
     __ Ret(parameter_slots * kSystemPointerSize, scratch_reg);
     __ bind(&mismatch_return);
-    __ DropArguments(argc_reg, scratch_reg, MacroAssembler::kCountIsInteger,
-                     MacroAssembler::kCountIncludesReceiver);
+    __ DropArguments(argc_reg, scratch_reg);
     // We use a return instead of a jump for better return address prediction.
     __ Ret();
   } else if (additional_pop_count->IsImmediate()) {
@@ -4430,6 +4422,8 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
         Register dst = g.ToRegister(destination);
         if (src.type() == Constant::kHeapObject) {
           __ Move(dst, src.ToHeapObject());
+        } else if (src.type() == Constant::kExternalReference) {
+          __ Move(dst, Immediate(src.ToExternalReference()));
         } else {
           __ Move(dst, g.ToImmediate(source));
         }

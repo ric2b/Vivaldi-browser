@@ -17,6 +17,11 @@
 #include <errno.h>
 #include <string.h>
 
+#include "absl/base/attributes.h"
+#include "absl/base/const_init.h"
+#include "absl/base/thread_annotations.h"
+#include "absl/synchronization/mutex.h"
+
 #if defined(__linux__)
 #include <unistd.h>
 #endif
@@ -29,7 +34,8 @@ namespace fuzztest::internal {
 
 namespace {
 
-FILE* stderr_file_ = stderr;
+ABSL_CONST_INIT absl::Mutex stderr_file_guard_(absl::kConstInit);
+FILE* stderr_file_ ABSL_GUARDED_BY(stderr_file_guard_);  // Zero-initialized.
 
 }  // namespace
 
@@ -37,7 +43,7 @@ FILE* stderr_file_ = stderr;
 
 namespace {
 
-FILE* stdout_file_ = stdout;
+FILE* stdout_file_ = stdout;  // Never accessed concurrently.
 
 void Silence(int fd) {
   FILE* tmp = fopen("/dev/null", "w");
@@ -63,6 +69,7 @@ void DupAndSilence(int fd) {
     if (fd == STDOUT_FILENO) {
       stdout_file_ = new_output_file;
     } else {
+      absl::MutexLock lock(&stderr_file_guard_);
       stderr_file_ = new_output_file;
     }
     Silence(fd);
@@ -76,20 +83,27 @@ void SilenceTargetStdoutAndStderr() {
 }
 
 void RestoreTargetStdoutAndStderr() {
-  FUZZTEST_INTERNAL_CHECK(stderr_file_ != stderr,
+  // The CHECK-s below call GetStderr(), which accesses stderr_file_, which
+  // would lead to a deadlock if we kept the guard locked and the CHECK-s
+  // failed. To avoid this, we use a local variable.
+  stderr_file_guard_.Lock();
+  FILE* silenced_stderr = stderr_file_;
+  stderr_file_ = stderr;
+  stderr_file_guard_.Unlock();
+  FUZZTEST_INTERNAL_CHECK(silenced_stderr != stderr,
                           "Error, calling RestoreStderr without calling"
                           "DupandSilenceStderr first.");
+  FUZZTEST_INTERNAL_CHECK(dup2(fileno(silenced_stderr), STDERR_FILENO) != -1,
+                          "dup2 error:", strerror(errno));
+  FUZZTEST_INTERNAL_CHECK(fclose(silenced_stderr) == 0,
+                          "close() error:", strerror(errno));
+
   FUZZTEST_INTERNAL_CHECK(stdout_file_ != stdout,
                           "Error, calling RestoreStdout without calling"
                           "DupandSilenceStdout first.");
-  FUZZTEST_INTERNAL_CHECK(dup2(fileno(stderr_file_), STDERR_FILENO) != -1,
-                          "dup2 error:", strerror(errno));
-  FUZZTEST_INTERNAL_CHECK(close(fileno(stderr_file_)) == 0,
-                          "close() error:", strerror(errno));
-  stderr_file_ = stderr;
   FUZZTEST_INTERNAL_CHECK(dup2(fileno(stdout_file_), STDOUT_FILENO) != -1,
                           "dup2() error:", strerror(errno));
-  FUZZTEST_INTERNAL_CHECK(close(fileno(stdout_file_)) == 0,
+  FUZZTEST_INTERNAL_CHECK(fclose(stdout_file_) == 0,
                           "close() error:", strerror(errno));
   stdout_file_ = stdout;
 }
@@ -108,7 +122,13 @@ bool IsSilenceTargetEnabled() { return false; }
 
 #endif  // defined(__linux__)
 
-FILE* GetStderr() { return stderr_file_; }
+FILE* GetStderr() {
+  absl::MutexLock lock(&stderr_file_guard_);
+  if (!stderr_file_) {
+    stderr_file_ = stderr;
+  }
+  return stderr_file_;
+}
 
 void Abort(const char* file, int line, const std::string& message) {
   fprintf(GetStderr(), "%s:%d: %s\n", file, line, message.c_str());

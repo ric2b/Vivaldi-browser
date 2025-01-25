@@ -36,7 +36,13 @@ namespace tint::ast::transform {
 namespace {
 
 bool CanRun(const Program& program,
+            const fuzz::wgsl::Context& context,
             const MultiplanarExternalTexture::NewBindingPoints& remappings) {
+    if (context.program_properties.Contains(fuzz::wgsl::ProgramProperties::kBuiltinFnsShadowed) ||
+        context.program_properties.Contains(fuzz::wgsl::ProgramProperties::kBuiltinTypesShadowed)) {
+        return false;  // MultiplanarExternalTexture assumes the Renamer transform has been run
+    }
+
     Hashset<BindingPoint, 8> all_binding_points;
     for (auto* global : program.AST().GlobalVariables()) {
         if (auto* sem = program.Sem().Get<sem::GlobalVariable>(global)) {
@@ -63,7 +69,7 @@ bool CanRun(const Program& program,
         }
         Hashset<BindingPoint, 8> new_binding_points;
         for (auto& remapping : remappings.bindings_map) {
-            if (all_binding_points.Remove(remapping.first)) {
+            if (all_binding_points.Contains(remapping.first)) {
                 if (!new_binding_points.Add(remapping.second.params)) {
                     return false;  // Binding collision
                 }
@@ -83,8 +89,9 @@ bool CanRun(const Program& program,
 
 void MultiplanarExternalTextureFuzzer(
     const Program& program,
+    const fuzz::wgsl::Context& context,
     const MultiplanarExternalTexture::NewBindingPoints& binding_points) {
-    if (!CanRun(program, binding_points)) {
+    if (!CanRun(program, context, binding_points)) {
         return;
     }
 

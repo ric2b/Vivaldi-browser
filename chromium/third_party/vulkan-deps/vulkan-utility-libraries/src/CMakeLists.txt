@@ -41,7 +41,7 @@ if (VUL_IS_TOP_LEVEL)
     include(CMakePackageConfigHelpers)
 
     install(
-        DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/${API_TYPE}/"
+        DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/vulkan/"
         DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/vulkan"
     )
 

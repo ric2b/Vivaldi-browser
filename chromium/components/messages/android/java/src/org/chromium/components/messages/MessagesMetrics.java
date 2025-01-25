@@ -410,6 +410,12 @@ public class MessagesMetrics {
                 return "PromptHatsMicrophoneGenericInvitation";
             case MessageIdentifier.PERMISSION_BLOCKED:
                 return "PermissionBlocked";
+            case MessageIdentifier.SAVE_CARD_FAILURE:
+                return "SaveCardFailure";
+            case MessageIdentifier.VIRTUAL_CARD_ENROLL_FAILURE:
+                return "VirtualCardEnrollFailure";
+            case MessageIdentifier.PROMPT_HATS_QUICK_DELETE:
+                return "PromptHatsQuickDelete";
             default:
                 return "Unknown";
         }

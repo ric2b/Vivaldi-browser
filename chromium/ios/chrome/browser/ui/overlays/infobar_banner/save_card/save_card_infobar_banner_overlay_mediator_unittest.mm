@@ -24,6 +24,8 @@
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
 
+using testing::_;
+
 // Test fixture for SaveCardInfobarBannerOverlayMediator.
 class SaveCardInfobarBannerOverlayMediatorTest : public PlatformTest {
  public:

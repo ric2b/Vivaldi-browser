@@ -19,16 +19,17 @@
 
 #include <filesystem>  // NOLINT(build/c++17)
 #include <functional>
+#include <limits>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "absl/random/random.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "internal/base/files.h"
 #include "internal/interop/authentication_status.h"
-#include "internal/platform/crypto.h"
 #include "sharing/common/compatible_u8_string.h"
 
 namespace nearby {
@@ -205,6 +206,7 @@ struct AdvertisingOptions {
                      bool enforce_topology_constraints,
                      bool enable_bluetooth_listening,
                      bool enable_webrtc_listening,
+                     bool use_stable_endpoint_id,
                      Uuid fast_advertisement_service_uuid) {
     this->strategy = strategy;
     this->allowed_mediums = allowed_mediums;
@@ -212,6 +214,7 @@ struct AdvertisingOptions {
     this->enforce_topology_constraints = enforce_topology_constraints;
     this->enable_bluetooth_listening = enable_bluetooth_listening;
     this->enable_webrtc_listening = enable_webrtc_listening;
+    this->use_stable_endpoint_id = use_stable_endpoint_id;
     this->fast_advertisement_service_uuid = fast_advertisement_service_uuid;
   }
 
@@ -238,6 +241,9 @@ struct AdvertisingOptions {
   // By default, this option is false. If true, this allows listening on
   // incoming WebRTC connections while advertising.
   bool enable_webrtc_listening = false;
+  // Indicates whether the endpoint id should be stable. When visibility is
+  // everyone mode, we should set this to true to avoid duplicated endpoint ids.
+  bool use_stable_endpoint_id = false;
   // Optional. If set, BLE advertisements will be in their "fast advertisement"
   // form, use this UUID, and non-connectable; if empty, BLE advertisements
   // will otherwise be normal and connectable.
@@ -414,9 +420,9 @@ struct PayloadContent {
   FilePayload file_payload;
   enum class Type { kUnknown = 0, kBytes = 1, kStream = 2, kFile = 3 };
   Type type;
-  bool is_bytes() { return type == Type::kBytes; }
-  bool is_file() { return type == Type::kFile; }
-  bool is_stream() { return type == Type::kStream; }
+  bool is_bytes() const { return type == Type::kBytes; }
+  bool is_file() const { return type == Type::kFile; }
+  bool is_stream() const { return type == Type::kStream; }
 };
 
 // A Payload sent between devices. Payloads sent with a particular content type
@@ -471,9 +477,9 @@ struct Payload {
       : Payload(GenerateId(), std::vector<uint8_t>(bytes, bytes + size)) {}
 
   int64_t GenerateId() {
-    int64_t id;
-    RandBytes(&id, sizeof(id));
-    return id;
+    absl::BitGen bitgen;
+    return absl::Uniform<int64_t>(absl::IntervalOpenClosed, bitgen, 0,
+                                  std::numeric_limits<int64_t>::max());
   }
 };
 

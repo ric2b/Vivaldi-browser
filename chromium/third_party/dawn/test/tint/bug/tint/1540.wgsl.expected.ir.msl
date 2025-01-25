@@ -1,23 +1,13 @@
-SKIP: FAILED
-
 #include <metal_stdlib>
 using namespace metal;
+
 struct S {
   bool e;
 };
 
 kernel void tint_symbol() {
   bool b = false;
-  S v = {.e=(true & b)};
+  bool const v_1 = b;
+  uint const v_2 = uint(true);
+  S v = S{.e=bool((v_2 & uint(v_1)))};
 }
-program_source:9:13: error: non-constant-expression cannot be narrowed from type 'int' to 'bool' in initializer list [-Wc++11-narrowing]
-  S v = {.e=(true & b)};
-            ^~~~~~~~~~
-program_source:9:13: note: insert an explicit cast to silence this issue
-  S v = {.e=(true & b)};
-            ^~~~~~~~~~
-            static_cast<bool>( )
-program_source:9:5: warning: unused variable 'v' [-Wunused-variable]
-  S v = {.e=(true & b)};
-    ^
-

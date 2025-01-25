@@ -468,6 +468,8 @@ ArchOpcode SelectLoadOpcode(LoadRepresentation load_rep) {
     case MachineRepresentation::kSimd128:
       opcode = kS390_LoadSimd128;
       break;
+    case MachineRepresentation::kFloat16:
+      UNIMPLEMENTED();
     case MachineRepresentation::kProtectedPointer:  // Fall through.
     case MachineRepresentation::kSimd256:  // Fall through.
     case MachineRepresentation::kMapWord:  // Fall through.
@@ -727,8 +729,8 @@ void GenerateRightOperands(InstructionSelectorT<TurboshaftAdapter>* selector,
     if (right_op.Is<LoadOp>() && selector->CanCover(node, right) &&
         canCombineWithLoad(
             SelectLoadOpcode(selector->load_view(right).loaded_rep()))) {
-      AddressingMode mode = g.GetEffectiveAddressMemoryOperand(
-          right, inputs, input_count, OpcodeImmMode(*opcode));
+      AddressingMode mode =
+          g.GetEffectiveAddressMemoryOperand(right, inputs, input_count);
       *opcode |= AddressingModeField::encode(mode);
       *operand_mode &= ~OperandMode::kAllowImmediate;
       if (*operand_mode & OperandMode::kAllowRM)
@@ -1176,6 +1178,8 @@ static void VisitGeneralStore(
         }
         break;
       }
+      case MachineRepresentation::kFloat16:
+        UNIMPLEMENTED();
       case MachineRepresentation::kProtectedPointer:  // Fall through.
       case MachineRepresentation::kSimd256:  // Fall through.
       case MachineRepresentation::kMapWord:  // Fall through.
@@ -4463,8 +4467,6 @@ InstructionSelector::SupportedMachineOperatorFlags() {
          MachineOperatorBuilder::kFloat64RoundTiesEven |
          MachineOperatorBuilder::kFloat64RoundTiesAway |
          MachineOperatorBuilder::kWord32Popcnt |
-         MachineOperatorBuilder::kInt32AbsWithOverflow |
-         MachineOperatorBuilder::kInt64AbsWithOverflow |
          MachineOperatorBuilder::kWord64Popcnt;
 }
 

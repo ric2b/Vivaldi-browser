@@ -14,7 +14,6 @@
 <translation id="1728677426644403582">Actualmente vizualizați sursa unei pagini web</translation>
 <translation id="1734878702283171397">Încearcați să contactați administratorul de sistem.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Încercați să rulați diagnosticele de rețea Windows<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">Acest site web conține programe dăunătoare</translation>
 <translation id="1974060860693918893">Avansate</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Verificarea proxy-ul și firewall-ul<ph name="END_LINK" /></translation>
 <translation id="2166378884831602661">Acest site web nu poate oferi o conexiune securizată</translation>
@@ -30,7 +29,6 @@
 <translation id="2705137772291741111">Copia salvată (în memoria cache) a acestui site nu a putut fi citită.</translation>
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Rulare diagnostice de conectivitate<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Conexiunea a fost resetată.</translation>
-<translation id="2856444702002559011">Atacatorii ar putea încerca să vă fure informațiile de pe <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (de exemplu parole, mesaje sau informații despre cardurile de credit). <ph name="BEGIN_LEARN_MORE_LINK" />Aflați mai multe<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">A fost detectată o schimbare a rețelei.</translation>
 <translation id="2948083400971632585">Puteți dezactiva din pagina de setări oricare proxy configurat pentru o conexiune.</translation>
 <translation id="2991571918955627853">Nu puteți vizita <ph name="SITE" /> chiar acum, deoarece site-ul web folosește HSTS. Erorile de rețea și atacurile sunt de obicei temporare, astfel încât această pagină va funcționa probabil mai târziu.</translation>
@@ -69,7 +67,6 @@
 <translation id="4250431568374086873">Conexiunea la acest site web nu este complet securizată</translation>
 <translation id="4265872034478892965">Autorizat de administrator</translation>
 <translation id="4312866146174492540">Blochează (implicit)</translation>
-<translation id="4356973930735388585">Atacatorii de pe acest site web pot încerca să instaleze pe calculator programe periculoase care să vă fure sau să vă șteargă informațiile (de exemplu fotografii, parole, mesaje și informații despre cardurile de credit).</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> nu a acceptat certificatul de conectare sau un astfel de certificat nu a fost oferit.</translation>
 <translation id="4506599922270137252">Contactarea administratorului de sistem</translation>
 <translation id="4522570452068850558">Detalii</translation>
@@ -110,7 +107,6 @@
 <translation id="6305205051461490394"><ph name="URL" />  nu poate fi accesat.</translation>
 <translation id="6321917430147971392">Verificați setările DNS</translation>
 <translation id="6328639280570009161">Încercați să dezactivați predicția rețelei</translation>
-<translation id="6328786501058569169">Acest site web este înșelător</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> a refuzat conexiunea.</translation>
 <translation id="6451458296329894277">Confirmați retrimiterea formularului</translation>
 <translation id="6569060085658103619">Actualmente vizualizați pagina unei extensii</translation>
@@ -118,7 +114,6 @@
 <translation id="6711464428925977395">A apărut o problemă la serverul proxy sau adresa nu este corectă.</translation>
 <translation id="6897140037006041989">Agent utilizator</translation>
 <translation id="7053983685419859001">Blochează</translation>
-<translation id="7079718277001814089">Acest site web conține programe malware</translation>
 <translation id="7108819624672055576">Autorizat de o extensie</translation>
 <translation id="7111012039238467737">(Valid)</translation>
 <translation id="7113310725918019676">Permite <ph name="BLOCKED_TYPE" /> de la <ph name="DOMAIN" /></translation>
@@ -135,7 +130,6 @@
 <translation id="7758069387465995638">Este posibil ca firewall-ul sau software-ul antivirus să fi blocat conexiunea.</translation>
 <translation id="7834399512844817676">Site-ul web <ph name="SITE" /> folosește în mod normal criptarea pentru a vă proteja informațiile. Când Vivaldi a încercat să se conecteze de această dată la <ph name="SITE" />, site-ul web a returnat acreditări neobișnuite și incorecte. Acest lucru se poate întâmpla atunci când un atacator încearcă să pretindă a fi <ph name="SITE" />, sau pentru că un ecran de conectare Wi-Fi a întrerupt conexiunea. Securitatea informațiilor nu a fost afectată, deoarece Vivaldi a oprit conexiunea înainte ca datele să fie transferate.</translation>
 <translation id="7951415247503192394">(32 de biți)</translation>
-<translation id="8025119109950072390">Atacatorii de pe acest site web vă pot înșela să faceți ceva periculos, cum ar fi instalarea de software sau dezvăluirea informațiilor personale (de exemplu parole, numere de telefon sau informații despre cardurile de credit).</translation>
 <translation id="8037357227543935929">Întreabă (implicit)</translation>
 <translation id="808894953321890993">Schimbă parola</translation>
 <translation id="8150722005171944719">Fișierul de la <ph name="URL" /> nu poate fi citit.  Este posibil să fi fost eliminat ori mutat sau ca permisiunile pentru fișiere să împiedice accesarea acestuia.</translation>

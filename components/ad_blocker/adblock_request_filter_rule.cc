@@ -4,6 +4,8 @@
 
 #include <iomanip>
 
+#include "base/strings/string_util.h"
+
 namespace adblock_filter {
 namespace {
 std::string PatternTypeToString(RequestFilterRule::PatternType pattern_type) {
@@ -26,43 +28,44 @@ RequestFilterRule& RequestFilterRule::operator=(
     RequestFilterRule&& request_filter_rule) = default;
 
 bool RequestFilterRule::operator==(const RequestFilterRule& other) const {
-  return is_allow_rule == other.is_allow_rule &&
+  return decision == other.decision && modify_block == other.modify_block &&
+         modifier == other.modifier && modifier_value == other.modifier_value &&
+         activation_types == other.activation_types &&
          is_case_sensitive == other.is_case_sensitive &&
-         is_csp_rule == other.is_csp_rule &&
-         resource_types == other.resource_types &&
-         activation_types == other.activation_types && party == other.party &&
+         resource_types == other.resource_types && party == other.party &&
          anchor_type == other.anchor_type &&
          pattern_type == other.pattern_type && pattern == other.pattern &&
          ngram_search_string == other.ngram_search_string &&
-         host == other.host && redirect == other.redirect && csp == other.csp &&
-         excluded_domains == other.excluded_domains &&
+         host == other.host && excluded_domains == other.excluded_domains &&
          included_domains == other.included_domains;
 }
 
 std::ostream& operator<<(std::ostream& os, const RequestFilterRule& rule) {
-  os << std::endl
-     << std::setw(20) << PatternTypeToString(rule.pattern_type) << rule.pattern
-     << std::endl
-     << std::setw(20) << "NGram search string:" << rule.ngram_search_string
-     << std::endl
-     << std::setw(20) << "Anchored:" << rule.anchor_type << std::endl
-     << std::setw(20) << "Party:" << rule.party << std::endl
-     << std::setw(20) << "Resources:" << rule.resource_types << std::endl
-     << std::setw(20) << "Activations:" << rule.activation_types << std::endl
-     << std::setw(20) << "Allow rule:" << rule.is_allow_rule << std::endl
-     << std::setw(20) << "Case sensitive:" << rule.is_case_sensitive
-     << std::endl
-     << std::setw(20) << "Host:" << rule.host << std::endl
-     << std::setw(20) << "Redirect:" << rule.redirect << std::endl
-     << std::setw(20) << "CSP rule:" << rule.is_csp_rule << std::endl
-     << std::setw(20) << "CSP:" << rule.csp << std::endl
-     << std::setw(20) << "Included domains:";
-  for (const auto& included_domain : rule.included_domains)
-    os << included_domain << "|";
-  os << std::endl << std::setw(20) << "Excluded domains:";
-  for (const auto& excluded_domain : rule.excluded_domains)
-    os << excluded_domain << "|";
-  return os << std::endl;
+  return os << std::endl
+            << std::setw(20) << "Decision:" << rule.decision << std::endl
+            << std::setw(20) << "Modify block:" << rule.modify_block
+            << std::endl
+            << std::setw(20) << "Modifier:" << rule.modifier << std::endl
+            << std::setw(20)
+            << "Modifier value:" << rule.modifier_value.value_or("<NULL>")
+            << std::endl
+            << std::setw(20) << PatternTypeToString(rule.pattern_type)
+            << rule.pattern << std::endl
+            << std::setw(20) << "NGram search string:"
+            << rule.ngram_search_string.value_or("<NULL>") << std::endl
+            << std::setw(20) << "Anchored:" << rule.anchor_type << std::endl
+            << std::setw(20) << "Party:" << rule.party << std::endl
+            << std::setw(20) << "Resources:" << rule.resource_types << std::endl
+            << std::setw(20) << "Activations:" << rule.activation_types
+            << std::endl
+            << std::setw(20) << "Case sensitive:" << rule.is_case_sensitive
+            << std::endl
+            << std::setw(20) << "Host:" << rule.host.value_or("<NULL>")
+            << std::endl
+            << std::setw(20) << "Included domains:"
+            << base::JoinString(rule.included_domains, "|") << std::endl
+            << std::setw(20) << "Excluded domains:"
+            << base::JoinString(rule.excluded_domains, "|") << std::endl;
 }
 
 }  // namespace adblock_filter

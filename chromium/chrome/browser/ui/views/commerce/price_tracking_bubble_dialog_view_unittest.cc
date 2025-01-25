@@ -39,7 +39,8 @@ class PriceTrackingBubbleDialogViewUnitTest : public BrowserWithTestWindowTest {
 
     anchor_widget_ =
         views::UniqueWidgetPtr(std::make_unique<ChromeTestWidget>());
-    views::Widget::InitParams widget_params;
+    views::Widget::InitParams widget_params(
+        views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET);
     widget_params.context = GetContext();
     anchor_widget_->Init(std::move(widget_params));
 
@@ -64,12 +65,11 @@ class PriceTrackingBubbleDialogViewUnitTest : public BrowserWithTestWindowTest {
   }
 
   TestingProfile::TestingFactories GetTestingFactories() override {
-    TestingProfile::TestingFactories factories = {
-        {BookmarkModelFactory::GetInstance(),
-         BookmarkModelFactory::GetDefaultFactory()}};
-    IdentityTestEnvironmentProfileAdaptor::
-        AppendIdentityTestEnvironmentFactories(&factories);
-    return factories;
+    return IdentityTestEnvironmentProfileAdaptor::
+        GetIdentityTestEnvironmentFactoriesWithAppendedFactories(
+            {TestingProfile::TestingFactory{
+                BookmarkModelFactory::GetInstance(),
+                BookmarkModelFactory::GetDefaultFactory()}});
   }
 
   void CreateBubbleViewAndShow(PriceTrackingBubbleDialogView::Type type) {

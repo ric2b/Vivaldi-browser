@@ -153,10 +153,6 @@ FeedbackSlot BytecodeArrayIterator::GetSlotOperand(int operand_index) const {
   return FeedbackVector::ToSlot(index);
 }
 
-Register BytecodeArrayIterator::GetReceiver() const {
-  return Register::FromParameterIndex(0);
-}
-
 Register BytecodeArrayIterator::GetParameter(int parameter_index) const {
   DCHECK_GE(parameter_index, 0);
   // The parameter indices are shifted by 1 (receiver is the
@@ -254,7 +250,7 @@ bool BytecodeArrayIterator::IsConstantAtIndexSmi(int index) const {
 }
 
 Tagged<Smi> BytecodeArrayIterator::GetConstantAtIndexAsSmi(int index) const {
-  return Smi::cast(bytecode_array()->constant_pool()->get(index));
+  return Cast<Smi>(bytecode_array()->constant_pool()->get(index));
 }
 
 template <typename IsolateT>

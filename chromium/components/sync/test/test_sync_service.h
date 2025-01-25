@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
+#include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
 #include "components/sync/engine/sync_status.h"
@@ -40,26 +41,39 @@ class TestSyncService : public SyncService {
 
   ~TestSyncService() override;
 
-  // High-level setters that configure common scenarios.
-  void SetSignedInWithoutSyncFeature();
-  void SetSignedInWithoutSyncFeature(const CoreAccountInfo& account_info);
-  void SetSignedInWithSyncFeatureOn();
-  void SetSignedInWithSyncFeatureOn(const CoreAccountInfo& account_info);
+  // High-level setters that configure common scenarios. Passing
+  // ConsentLevel::kSync will also mark the first sync-the-feature setup as
+  // complete.
+  void SetSignedIn(signin::ConsentLevel consent_level);
+  void SetSignedIn(signin::ConsentLevel consent_level,
+                   const CoreAccountInfo& account_info);
   void SetSignedOut();
 
   // Mimics the user resetting Sync from the web dashboard. On ChromeOS Ash,
   // this also flips SetSyncFeatureDisabledViaDashboard().
   void MimicDashboardClear();
 
-  // Lower-level setters.
-  void SetDisableReasons(DisableReasonSet disable_reasons);
-  void SetTransportState(TransportState transport_state);
+  // Controls DISABLE_REASON_ENTERPRISE_POLICY and consequently
+  // GetTransportState(). The default is true.
+  void SetAllowedByEnterprisePolicy(bool allowed);
+
+  // Controls DISABLE_REASON_UNRECOVERABLE_ERROR and consequently
+  // GetTransportState(). The default is false.
+  void SetHasUnrecoverableError(bool has_error);
+
+  // The "max transport state" is the one yielded by GetTransportState() *if*
+  // there is no auth error set by SetPersistentAuthError() - in which the
+  // TransportState would be PAUSED - and no DisableReason - in which case it'd
+  // be DISABLED. The default "max transport state" is ACTIVE.
+  // Use this method only to test intermediate states like INITIALIZING or
+  // START_DEFERRED. Calling with DISABLED or PAUSED will crash.
+  void SetMaxTransportState(TransportState max_transport_state);
+
   void SetLocalSyncEnabled(bool local_sync_enabled);
-  void SetAccountInfo(const CoreAccountInfo& account_info);
-  void SetHasSyncConsent(bool has_consent);
 
   // Setters to mimic common auth error scenarios. Note that these functions
   // may change the transport state, as returned by GetTransportState().
+  // SetSignedOut() resets the auth error.
   void SetPersistentAuthError();
   void ClearAuthError();
 
@@ -153,9 +167,6 @@ class TestSyncService : public SyncService {
   void GetAllNodesForDebugging(
       base::OnceCallback<void(base::Value::List)> callback) override;
   ModelTypeDownloadStatus GetDownloadStatusFor(ModelType type) const override;
-  void RecordReasonIfWaitingForUpdates(
-      ModelType type,
-      const std::string& histogram_name) const override;
   void SetInvalidationsForSessionsEnabled(bool enabled) override;
   bool SupportsExplicitPassphrasePlatformClient() override;
   void SendExplicitPassphraseToPlatformClient() override;
@@ -176,7 +187,8 @@ class TestSyncService : public SyncService {
 
   TestSyncUserSettings user_settings_;
   DisableReasonSet disable_reasons_;
-  TransportState transport_state_ = TransportState::ACTIVE;
+  TransportState max_transport_state_ = TransportState::ACTIVE;
+  bool has_persistent_auth_error_ = false;
   bool local_sync_enabled_ = false;
   CoreAccountInfo account_info_;
   bool has_sync_consent_ = true;

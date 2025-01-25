@@ -22,12 +22,15 @@
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
+#include "chrome/browser/web_applications/web_app_install_params.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+
+using base::BucketsAre;
 
 namespace web_app {
 
@@ -52,10 +55,10 @@ class InstallFromInfoCommandTest : public WebAppBrowserTestBase {
 };
 
 IN_PROC_BROWSER_TEST_F(InstallFromInfoCommandTest, SuccessInstall) {
-  auto info = std::make_unique<WebAppInstallInfo>();
   base::HistogramTester tester;
+  auto info = WebAppInstallInfo::CreateWithStartUrlForTesting(
+      GURL("http://test.com/path"));
   info->title = u"Test name";
-  info->start_url = GURL("http://test.com/path");
 
   const webapps::WebappInstallSource install_source =
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -66,7 +69,7 @@ IN_PROC_BROWSER_TEST_F(InstallFromInfoCommandTest, SuccessInstall) {
 
   base::RunLoop loop;
   webapps::AppId result_app_id;
-  provider().scheduler().InstallFromInfoNoIntegrationForTesting(
+  provider().scheduler().InstallFromInfoWithParams(
       std::move(info),
       /*overwrite_existing_manifest_fields=*/false, install_source,
       base::BindLambdaForTesting(
@@ -74,14 +77,18 @@ IN_PROC_BROWSER_TEST_F(InstallFromInfoCommandTest, SuccessInstall) {
             EXPECT_EQ(code, webapps::InstallResultCode::kSuccessNewInstall);
             result_app_id = app_id;
             loop.Quit();
-          }));
+          }),
+      WebAppInstallParams());
   loop.Run();
 
   EXPECT_TRUE(provider().registrar_unsafe().IsActivelyInstalled(result_app_id));
 
   // Ensure histogram is only measured once.
-  tester.ExpectBucketCount("WebApp.Install.Result", /*sample=*/true,
-                           /*expected_count=*/1);
+
+  EXPECT_THAT(tester.GetAllSamples("WebApp.Install.Result"),
+              BucketsAre(base::Bucket(true, 1)));
+  EXPECT_THAT(tester.GetAllSamples("WebApp.Install.Source.Success"),
+              BucketsAre(base::Bucket(install_source, 1)));
 
   const WebApp* web_app =
       provider().registrar_unsafe().GetAppById(result_app_id);
@@ -96,12 +103,11 @@ IN_PROC_BROWSER_TEST_F(InstallFromInfoCommandTest, SuccessInstall) {
 }
 
 IN_PROC_BROWSER_TEST_F(InstallFromInfoCommandTest, InstallWithParams) {
-  auto info = std::make_unique<WebAppInstallInfo>();
+  auto info = WebAppInstallInfo::CreateWithStartUrlForTesting(
+      GURL("http://test.com/path"));
   info->title = u"Test name";
-  info->start_url = GURL("http://test.com/path");
 
   WebAppInstallParams install_params;
-  install_params.bypass_os_hooks = false;
   install_params.add_to_applications_menu = true;
   install_params.add_to_desktop = true;
 

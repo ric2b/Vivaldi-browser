@@ -45,22 +45,30 @@ class CONTENT_EXPORT PreloadingAttemptImpl : public PreloadingAttempt {
   // if the attempt was accurate.
   void RecordPreloadingAttemptMetrics(ukm::SourceId navigated_page);
 
+  void SetNoVarySearchMatchPredicate(
+      PreloadingURLMatchCallback no_vary_search_match_predicate);
+
   // Sets `is_accurate_triggering_` to true if `navigated_url` matches the
   // predicate URL logic. It also records `time_to_next_navigation_`.
   void SetIsAccurateTriggering(const GURL& navigated_url);
 
   bool IsAccurateTriggering() const { return is_accurate_triggering_; }
 
-  PreloadingAttemptImpl(const PreloadingPredictor& creating_predictor,
-                        const PreloadingPredictor& enacting_predictor,
-                        PreloadingType preloading_type,
-                        ukm::SourceId triggered_primary_page_source_id,
-                        PreloadingURLMatchCallback url_match_predicate,
-                        uint32_t sampling_seed);
+  PreloadingAttemptImpl(
+      const PreloadingPredictor& creating_predictor,
+      const PreloadingPredictor& enacting_predictor,
+      PreloadingType preloading_type,
+      ukm::SourceId triggered_primary_page_source_id,
+      PreloadingURLMatchCallback url_match_predicate,
+      std::optional<PreloadingType> planned_max_preloading_type,
+      uint32_t sampling_seed);
 
   std::vector<PreloadingPredictor> GetPredictors() const;
 
   PreloadingType preloading_type() const { return preloading_type_; }
+  PreloadingType planned_max_preloading_type() const {
+    return planned_max_preloading_type_;
+  }
 
   void SetSpeculationEagerness(blink::mojom::SpeculationEagerness eagerness);
 
@@ -119,6 +127,12 @@ class CONTENT_EXPORT PreloadingAttemptImpl : public PreloadingAttempt {
   // Triggers can specify their own predicate for judging whether two URLs are
   // considered as pointing to the same destination.
   const PreloadingURLMatchCallback url_match_predicate_;
+
+  // Set when a predicted page provides No-Vary-Search header.
+  PreloadingURLMatchCallback no_vary_search_match_predicate_;
+
+  // Max PreloadingType that this attempt can be upgraded to in the future.
+  const PreloadingType planned_max_preloading_type_;
 
   // Set to true if this PreloadingAttempt was used for the next navigation.
   bool is_accurate_triggering_ = false;

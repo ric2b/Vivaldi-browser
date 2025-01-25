@@ -21,8 +21,9 @@ namespace {
 std::unique_ptr<syncer::ClientTagBasedModelTypeProcessor>
 CreateChangeProcessor() {
   return std::make_unique<syncer::ClientTagBasedModelTypeProcessor>(
-      syncer::COMPARE, base::BindRepeating(&syncer::ReportUnrecoverableError,
-                                           chrome::GetChannel()));
+      syncer::PRODUCT_COMPARISON,
+      base::BindRepeating(&syncer::ReportUnrecoverableError,
+                          chrome::GetChannel()));
 }
 
 }  // namespace
@@ -33,11 +34,10 @@ namespace commerce {
 commerce::ProductSpecificationsService*
 ProductSpecificationsServiceFactory::GetForBrowserContext(
     content::BrowserContext* context) {
-  // Not available in incognito mode. Only available if
-  // kProductSpecificationsSync is enabled. as the sync integration
-  // is still under development
+  // Not available in incognito mode. Only available if kProductSpecifications
+  // is enabled as the service is gated along with the rest of the feature.
   if (!context->IsOffTheRecord() &&
-      base::FeatureList::IsEnabled(commerce::kProductSpecificationsSync)) {
+      base::FeatureList::IsEnabled(commerce::kProductSpecifications)) {
     return static_cast<commerce::ProductSpecificationsService*>(
         GetInstance()->GetServiceForBrowserContext(context, true));
   }
@@ -57,6 +57,9 @@ ProductSpecificationsServiceFactory::ProductSpecificationsServiceFactory()
           ProfileSelections::Builder()
               .WithRegular(ProfileSelection::kRedirectedToOriginal)
               .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/41488885): Check if this service is needed for
+              // Ash Internals.
+              .WithAshInternals(ProfileSelection::kRedirectedToOriginal)
               .Build()) {}
 
 ProductSpecificationsServiceFactory::~ProductSpecificationsServiceFactory() =
@@ -66,11 +69,10 @@ std::unique_ptr<KeyedService>
 ProductSpecificationsServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   return std::make_unique<commerce::ProductSpecificationsService>(
-      std::make_unique<ProductSpecificationsSyncBridge>(
-          ModelTypeStoreServiceFactory::GetForProfile(
-              Profile::FromBrowserContext(context))
-              ->GetStoreFactory(),
-          CreateChangeProcessor()));
+      ModelTypeStoreServiceFactory::GetForProfile(
+          Profile::FromBrowserContext(context))
+          ->GetStoreFactory(),
+      CreateChangeProcessor());
 }
 
 }  // namespace commerce

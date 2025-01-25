@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "ash/constants/ash_features.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
@@ -21,6 +22,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "chromeos/ash/components/audio/audio_devices_pref_handler.h"
 #include "chromeos/ash/components/audio/audio_devices_pref_handler_stub.h"
@@ -33,6 +35,7 @@
 #include "services/media_session/public/mojom/media_controller.mojom-test-utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/message_center/message_center.h"
 
 namespace ash {
@@ -175,7 +178,7 @@ class FakeMediaControllerManager
  private:
   // media_session::mojom::MediaControllerManagerInterceptorForTesting:
   MediaControllerManager* GetForwardingInterface() override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
 
@@ -226,6 +229,10 @@ class TestObserver : public CrasAudioHandler::AudioObserver {
     return noise_cancellation_state_change_count_;
   }
 
+  int style_transfer_state_change_count() const {
+    return style_transfer_state_change_count_;
+  }
+
   int hfp_mic_sr_state_change_count() const {
     return hfp_mic_sr_state_change_count_;
   }
@@ -255,6 +262,10 @@ class TestObserver : public CrasAudioHandler::AudioObserver {
   }
 
   int survey_triggerd_count() const { return survey_triggerd_count_; }
+
+  int input_muted_by_security_curtain_changed_count() const {
+    return input_muted_by_security_curtain_changed_count_;
+  }
 
   const CrasAudioHandler::AudioSurvey& survey_triggerd_recv() const {
     return survey_triggerd_recv_;
@@ -304,6 +315,10 @@ class TestObserver : public CrasAudioHandler::AudioObserver {
     ++noise_cancellation_state_change_count_;
   }
 
+  void OnStyleTransferStateChanged() override {
+    ++style_transfer_state_change_count_;
+  }
+
   void OnHfpMicSrStateChanged() override { ++hfp_mic_sr_state_change_count_; }
 
   void OnOutputStarted() override { ++output_started_change_count_; }
@@ -335,6 +350,10 @@ class TestObserver : public CrasAudioHandler::AudioObserver {
     number_of_arc_stream_changed_latest_value_ = num;
   }
 
+  void OnInputMutedBySecurityCurtainChanged(bool muted) override {
+    ++input_muted_by_security_curtain_changed_count_;
+  }
+
  private:
   int active_output_node_changed_count_ = 0;
   int active_input_node_changed_count_ = 0;
@@ -345,6 +364,7 @@ class TestObserver : public CrasAudioHandler::AudioObserver {
   int input_gain_changed_count_ = 0;
   int output_channel_remixing_changed_count_ = 0;
   int noise_cancellation_state_change_count_ = 0;
+  int style_transfer_state_change_count_ = 0;
   int hfp_mic_sr_state_change_count_ = 0;
   int output_started_change_count_ = 0;
   int output_stopped_change_count_ = 0;
@@ -353,6 +373,7 @@ class TestObserver : public CrasAudioHandler::AudioObserver {
   int number_of_arc_stream_changed_latest_value_ = 0;
   int number_of_arc_stream_changed_count_ = 0;
   int survey_triggerd_count_ = 0;
+  int input_muted_by_security_curtain_changed_count_ = 0;
   CrasAudioHandler::AudioSurvey survey_triggerd_recv_;
 };
 
@@ -414,7 +435,7 @@ class CrasAudioHandlerTest : public testing::TestWithParam<int> {
  public:
   CrasAudioHandlerTest()
       : task_environment_(
-            base::test::SingleThreadTaskEnvironment::MainThreadType::UI) {}
+            base::test::SingleThreadTaskEnvironment::TimeSource::MOCK_TIME) {}
 
   CrasAudioHandlerTest(const CrasAudioHandlerTest&) = delete;
   CrasAudioHandlerTest& operator=(const CrasAudioHandlerTest&) = delete;
@@ -540,6 +561,25 @@ class CrasAudioHandlerTest : public testing::TestWithParam<int> {
         /*noise_cancellation_supported=*/true);
     audio_pref_handler_ = base::MakeRefCounted<AudioDevicesPrefHandlerStub>();
     audio_pref_handler_->SetNoiseCancellationState(noise_cancellation_enabled);
+    CrasAudioHandler::Initialize(fake_manager_->MakeRemote(),
+                                 audio_pref_handler_);
+    cras_audio_handler_ = CrasAudioHandler::Get();
+    test_observer_ = std::make_unique<TestObserver>();
+    cras_audio_handler_->AddAudioObserver(test_observer_.get());
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void SetUpCrasAudioHandlerWithPrimaryActiveNodeAndStyleTransferState(
+      const AudioNodeList& audio_nodes,
+      const AudioNode& primary_active_node,
+      bool style_transfer_enabled) {
+    CrasAudioClient::InitializeFake();
+    fake_cras_audio_client()->SetAudioNodesForTesting(audio_nodes);
+    fake_cras_audio_client()->SetActiveOutputNode(primary_active_node.id);
+    fake_cras_audio_client()->SetStyleTransferSupported(
+        /*style_transfer_supported=*/true);
+    audio_pref_handler_ = base::MakeRefCounted<AudioDevicesPrefHandlerStub>();
+    audio_pref_handler_->SetStyleTransferState(style_transfer_enabled);
     CrasAudioHandler::Initialize(fake_manager_->MakeRemote(),
                                  audio_pref_handler_);
     cras_audio_handler_ = CrasAudioHandler::Get();
@@ -723,15 +763,44 @@ class CrasAudioHandlerTest : public testing::TestWithParam<int> {
     return message_center->NotificationCount();
   }
 
+  // Gets the title of audio selection notification. If not found, return
+  // std::nullopt.
+  const std::optional<std::u16string> GetNotificationTitle() {
+    auto* message_center = message_center::MessageCenter::Get();
+    message_center::Notification* notification =
+        message_center->FindNotificationById(
+            AudioSelectionNotificationHandler::kAudioSelectionNotificationId);
+    return notification ? std::make_optional(notification->title())
+                        : std::nullopt;
+  }
+
   // Helper function to call SyncDevicePrefSetMap.
   void SyncDevicePrefSetMap(bool is_input) {
     cras_audio_handler_->SyncDevicePrefSetMap(is_input);
   }
 
   // Retrieves input_device_pref_set_map_ or output_device_pref_set_map_.
-  std::map<std::string, std::string>& GetDevicePrefSetMap(bool is_input) {
-    return is_input ? cras_audio_handler_->input_device_pref_set_map_
-                    : cras_audio_handler_->output_device_pref_set_map_;
+  const std::map<std::string, std::string>& GetDevicePrefSetMap() {
+    return audio_pref_handler_->GetDevicePreferenceSetMap();
+  }
+
+  // Mock time fast forward.
+  void FastForwardBy(base::TimeDelta delta) {
+    task_environment_.FastForwardBy(delta);
+  }
+
+  // Helper function to call GetDeviceFromStableDeviceId.
+  std::optional<AudioDevice> GetDeviceFromStableDeviceId(
+      bool is_input,
+      uint64_t stable_device_id) {
+    const AudioDevice* device =
+        cras_audio_handler_->GetDeviceFromStableDeviceId(is_input,
+                                                         stable_device_id);
+    if (device) {
+      return *device;
+    } else {
+      return std::nullopt;
+    }
   }
 
  protected:
@@ -1211,6 +1280,7 @@ TEST_P(CrasAudioHandlerTest,
   system_monitor_observer_.reset_count();
 
   // Verify notification shows up for unseen new connected HDMI device.
+  FastForwardBy(AudioSelectionNotificationHandler::kDebounceTime);
   EXPECT_EQ(1u, GetNotificationCount());
 
   // Disconnect hdmi headset.
@@ -1231,6 +1301,11 @@ TEST_P(CrasAudioHandlerTest,
   ExpectActiveDevice(/*is_input=*/false,
                      /*expected_active_device=*/kInternalSpeaker,
                      /*has_alternative_device=*/false);
+
+  // Verify that the notification is removed because the hotplugged HDMI output
+  // is disconnected.
+  FastForwardBy(CrasAudioHandler::kRemoveNotificationDelay);
+  EXPECT_EQ(0u, GetNotificationCount());
 }
 
 TEST_P(CrasAudioHandlerTest, HandleHeadphoneAndHDMIOutput) {
@@ -1369,6 +1444,7 @@ TEST_P(CrasAudioHandlerTest,
   system_monitor_observer_.reset_count();
 
   // Verify notification shows up for unseen new connected USB headphone device.
+  FastForwardBy(AudioSelectionNotificationHandler::kDebounceTime);
   EXPECT_EQ(1u, GetNotificationCount());
 
   // Unplug usb headphone.
@@ -1389,6 +1465,11 @@ TEST_P(CrasAudioHandlerTest,
   ExpectActiveDevice(/*is_input=*/false,
                      /*expected_active_device=*/kInternalSpeaker,
                      /*has_alternative_device=*/false);
+
+  // Verify that the notification is removed because the hotplugged USB output
+  // is disconnected.
+  FastForwardBy(CrasAudioHandler::kRemoveNotificationDelay);
+  EXPECT_EQ(0u, GetNotificationCount());
 }
 
 TEST_P(CrasAudioHandlerTest, HandleMultipleUSBHeadphones) {
@@ -1460,13 +1541,14 @@ TEST_P(CrasAudioHandlerTest,
 
   // Expect that notification is displayed since the device set was unseen
   // before.
+  FastForwardBy(AudioSelectionNotificationHandler::kDebounceTime);
   EXPECT_EQ(1u, GetNotificationCount());
 
   // Plug in another usb headphone.
   AudioNodeList audio_nodes;
-  AudioNode inernal_speaker = GenerateAudioNode(kInternalSpeaker);
-  inernal_speaker.active = true;
-  audio_nodes.push_back(inernal_speaker);
+  AudioNode internal_speaker = GenerateAudioNode(kInternalSpeaker);
+  internal_speaker.active = true;
+  audio_nodes.push_back(internal_speaker);
   AudioNode usb_headphone_1 = GenerateAudioNode(kUSBHeadphone1);
   usb_headphone_1.plugged_time = 80000000;
   audio_nodes.push_back(usb_headphone_1);
@@ -1489,11 +1571,12 @@ TEST_P(CrasAudioHandlerTest,
                      /*has_alternative_device=*/true);
 
   // Verify notification shows up for unseen new connected USB headphone device.
+  FastForwardBy(AudioSelectionNotificationHandler::kDebounceTime);
   EXPECT_EQ(1u, GetNotificationCount());
 
   // Unplug the 2nd usb headphone.
   audio_nodes.clear();
-  audio_nodes.push_back(inernal_speaker);
+  audio_nodes.push_back(internal_speaker);
   audio_nodes.push_back(usb_headphone_1);
   ChangeAudioNodes(audio_nodes);
 
@@ -1509,6 +1592,11 @@ TEST_P(CrasAudioHandlerTest,
   ExpectActiveDevice(/*is_input=*/false,
                      /*expected_active_device=*/kInternalSpeaker,
                      /*has_alternative_device=*/true);
+
+  // Verify that the notification is removed because the hotplugged USB output
+  // is disconnected.
+  FastForwardBy(CrasAudioHandler::kRemoveNotificationDelay);
+  EXPECT_EQ(0u, GetNotificationCount());
 }
 
 TEST_P(CrasAudioHandlerTest, UnplugUSBHeadphonesWithActiveSpeaker) {
@@ -1678,6 +1766,71 @@ TEST_P(CrasAudioHandlerTest, NoiseCancellationRefreshPrefDisableWithNC) {
   // Noise cancellation should still be disabled since the pref is disabled.
   EXPECT_FALSE(fake_cras_audio_client()->noise_cancellation_enabled());
   EXPECT_FALSE(audio_pref_handler_->GetNoiseCancellationState());
+}
+
+TEST_P(CrasAudioHandlerTest, StyleTransferRefreshPrefEnabledNoStyleTransfer) {
+  AudioNodeList audio_nodes = GenerateAudioNodeList({});
+  // Set up initial audio devices, only with internal mic.
+  AudioNode internalMic = GenerateAudioNode(kInternalMic);
+  // Clear the audio effect, no style transfer supported.
+  internalMic.audio_effect = 0u;
+  audio_nodes.push_back(internalMic);
+  // Simulate enable pref for style transfer.
+  SetUpCrasAudioHandlerWithPrimaryActiveNodeAndStyleTransferState(
+      audio_nodes, internalMic, /*style_transfer_enabled=*/true);
+
+  // Style transfer should still be disabled despite the pref being enabled
+  // since the audio_effect of the internal mic is unavailable.
+  EXPECT_FALSE(fake_cras_audio_client()->style_transfer_enabled());
+  EXPECT_TRUE(audio_pref_handler_->GetStyleTransferState());
+}
+
+TEST_P(CrasAudioHandlerTest, StyleTransferRefreshPrefEnabledWithStyleTransfer) {
+  AudioNodeList audio_nodes = GenerateAudioNodeList({});
+  // Set up initial audio devices, only with internal mic.
+  AudioNode internalMic = GenerateAudioNode(kInternalMic);
+  // Enable style transfer effect.
+  internalMic.audio_effect = cras::EFFECT_TYPE_STYLE_TRANSFER;
+  audio_nodes.push_back(internalMic);
+  // Simulate enable pref for style transfer.
+  SetUpCrasAudioHandlerWithPrimaryActiveNodeAndStyleTransferState(
+      audio_nodes, internalMic, /*style_transfer_enabled=*/true);
+
+  // Style transfer is enabled.
+  EXPECT_TRUE(fake_cras_audio_client()->style_transfer_enabled());
+  EXPECT_TRUE(audio_pref_handler_->GetStyleTransferState());
+}
+
+TEST_P(CrasAudioHandlerTest, StyleTransferRefreshPrefDisableNoStyleTransfer) {
+  AudioNodeList audio_nodes = GenerateAudioNodeList({});
+  // Set up initial audio devices, only with internal mic.
+  AudioNode internalMic = GenerateAudioNode(kInternalMic);
+  // Clear audio effect, no style transfer.
+  internalMic.audio_effect = 0u;
+  audio_nodes.push_back(internalMic);
+  // Simulate enable pref for style transfer.
+  SetUpCrasAudioHandlerWithPrimaryActiveNodeAndStyleTransferState(
+      audio_nodes, internalMic, /*style_transfer_enabled=*/false);
+
+  // Style transfer should still be disabled since the pref is disabled.
+  EXPECT_FALSE(fake_cras_audio_client()->style_transfer_enabled());
+  EXPECT_FALSE(audio_pref_handler_->GetStyleTransferState());
+}
+
+TEST_P(CrasAudioHandlerTest, StyleTransferRefreshPrefDisableWithStyleTransfer) {
+  AudioNodeList audio_nodes = GenerateAudioNodeList({});
+  // Set up initial audio devices, only with internal mic.
+  AudioNode internalMic = GenerateAudioNode(kInternalMic);
+  // Enable style transfer effect.
+  internalMic.audio_effect = cras::EFFECT_TYPE_STYLE_TRANSFER;
+  audio_nodes.push_back(internalMic);
+  // Simulate enable pref for style transfer.
+  SetUpCrasAudioHandlerWithPrimaryActiveNodeAndStyleTransferState(
+      audio_nodes, internalMic, /*style_transfer_enabled=*/false);
+
+  // Style transfer should still be disabled since the pref is disabled.
+  EXPECT_FALSE(fake_cras_audio_client()->style_transfer_enabled());
+  EXPECT_FALSE(audio_pref_handler_->GetStyleTransferState());
 }
 
 TEST_P(CrasAudioHandlerTest, HfpMicSrRefreshPrefEnabledNoHfpMicSr) {
@@ -1850,6 +2003,7 @@ TEST_P(CrasAudioHandlerTest, PlugUSBMic_AudioSelectionImprovementFlagOn) {
   EXPECT_TRUE(cras_audio_handler_->has_alternative_input());
 
   // Verify notification shows up for unseen new connected USB mic device.
+  FastForwardBy(AudioSelectionNotificationHandler::kDebounceTime);
   EXPECT_EQ(1u, GetNotificationCount());
 }
 
@@ -1991,6 +2145,7 @@ TEST_P(CrasAudioHandlerTest,
   EXPECT_TRUE(cras_audio_handler_->has_alternative_input());
 
   // Verify notification shows up for unseen new connected USB mic device.
+  FastForwardBy(AudioSelectionNotificationHandler::kDebounceTime);
   EXPECT_EQ(1u, GetNotificationCount());
 
   // Verify the active output device is not changed.
@@ -2178,7 +2333,7 @@ TEST_P(CrasAudioHandlerTest, MultipleNodesChangedSignalsOnPlugInHeadphone) {
     } else if (audio_devices[i].id == headphone.id) {
       EXPECT_TRUE(audio_devices[i].active);
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
 }
@@ -2222,7 +2377,7 @@ TEST_P(CrasAudioHandlerTest, MultipleNodesChangedSignalsOnPlugInUSBMic) {
     } else if (audio_devices[i].id == usb_mic.id) {
       EXPECT_TRUE(audio_devices[i].active);
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
 }
@@ -2271,7 +2426,7 @@ TEST_P(
     } else if (audio_devices[i].id == usb_mic.id) {
       EXPECT_FALSE(audio_devices[i].active);
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
 }
@@ -2319,7 +2474,7 @@ TEST_P(CrasAudioHandlerTest, MultipleNodesChangedSignalsOnSystemBoot) {
     } else if (audio_devices[i].id == internal_mic.id) {
       EXPECT_TRUE(audio_devices[i].active);
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
 }
@@ -5828,6 +5983,23 @@ TEST_P(CrasAudioHandlerTest,
   EXPECT_TRUE(cras_audio_handler_->IsInputMuted());
 }
 
+TEST_P(CrasAudioHandlerTest, IsInputMutedBySecurityCurtainChangeObserver) {
+  AudioNodeList audio_nodes = GenerateAudioNodeList({kInternalMic, kMicJack});
+  SetUpCrasAudioHandler(audio_nodes);
+
+  EXPECT_EQ(0, test_observer_->input_muted_by_security_curtain_changed_count());
+
+  cras_audio_handler_->SetInputMuteLockedBySecurityCurtain(true);
+  EXPECT_EQ(1, test_observer_->input_muted_by_security_curtain_changed_count());
+
+  // Security curtain is already on. Trying to turn it on again should be no-op.
+  cras_audio_handler_->SetInputMuteLockedBySecurityCurtain(true);
+  EXPECT_EQ(1, test_observer_->input_muted_by_security_curtain_changed_count());
+
+  cras_audio_handler_->SetInputMuteLockedBySecurityCurtain(false);
+  EXPECT_EQ(2, test_observer_->input_muted_by_security_curtain_changed_count());
+}
+
 TEST_P(CrasAudioHandlerTest, IsNoiseCancellationSupportedForDeviceNoNC) {
   AudioNodeList audio_nodes = GenerateAudioNodeList({});
   // Set up initial audio devices, only with internal mic.
@@ -5930,6 +6102,74 @@ TEST_P(CrasAudioHandlerTest, SetNoiseCancellationStateObserver) {
       false, CrasAudioHandler::AudioSettingsChangeSource::kSystemTray);
 
   EXPECT_EQ(1, test_observer_->noise_cancellation_state_change_count());
+}
+
+TEST_P(CrasAudioHandlerTest, IsStyleTransferSupportedForDevice) {
+  AudioNodeList audio_nodes = GenerateAudioNodeList({});
+
+  AudioNode internalMic = GenerateAudioNode(kInternalMic);
+  internalMic.audio_effect = cras::EFFECT_TYPE_STYLE_TRANSFER;
+  audio_nodes.push_back(internalMic);
+
+  AudioNode micJack = GenerateAudioNode(kMicJack);
+  micJack.audio_effect = 0u;  // no style transfer supported.
+  audio_nodes.push_back(micJack);
+
+  SetUpCrasAudioHandlerWithPrimaryActiveNodeAndStyleTransferState(
+      audio_nodes, /*primary_active_node=*/audio_nodes[0],
+      /*style_transfer_enabled=*/true);
+
+  EXPECT_TRUE(
+      cras_audio_handler_->IsStyleTransferSupportedForDevice(kInternalMicId));
+  EXPECT_FALSE(
+      cras_audio_handler_->IsStyleTransferSupportedForDevice(kMicJackId));
+}
+
+TEST_P(CrasAudioHandlerTest, SetStyleTransferStateUpdatesAudioPrefAndClient) {
+  AudioNodeList audio_nodes = GenerateAudioNodeList({});
+
+  AudioNode internalMic = GenerateAudioNode(kInternalMic);
+  internalMic.audio_effect = cras::EFFECT_TYPE_STYLE_TRANSFER;
+  audio_nodes.push_back(internalMic);
+
+  // On.
+  SetUpCrasAudioHandlerWithPrimaryActiveNodeAndStyleTransferState(
+      audio_nodes, /*primary_active_node=*/audio_nodes[0],
+      /*style_transfer_enabled=*/true);
+
+  EXPECT_TRUE(audio_pref_handler_->GetStyleTransferState());
+  EXPECT_TRUE(fake_cras_audio_client()->style_transfer_enabled());
+
+  // Off.
+  cras_audio_handler_->SetStyleTransferState(/*style_transfer_on=*/false);
+
+  EXPECT_FALSE(audio_pref_handler_->GetStyleTransferState());
+  EXPECT_FALSE(fake_cras_audio_client()->style_transfer_enabled());
+
+  // On.
+  cras_audio_handler_->SetStyleTransferState(/*style_transfer_on=*/true);
+
+  EXPECT_TRUE(audio_pref_handler_->GetStyleTransferState());
+  EXPECT_TRUE(fake_cras_audio_client()->style_transfer_enabled());
+}
+
+TEST_P(CrasAudioHandlerTest, SetStyleTransferStateObserver) {
+  AudioNodeList audio_nodes = GenerateAudioNodeList({});
+
+  AudioNode internalMic = GenerateAudioNode(kInternalMic);
+  internalMic.audio_effect = cras::EFFECT_TYPE_STYLE_TRANSFER;
+  audio_nodes.push_back(internalMic);
+
+  SetUpCrasAudioHandlerWithPrimaryActiveNodeAndStyleTransferState(
+      audio_nodes, /*primary_active_node=*/audio_nodes[0],
+      /*style_transfer_enabled=*/true);
+
+  EXPECT_EQ(0, test_observer_->style_transfer_state_change_count());
+
+  // Change style transfer state to trigger observer.
+  cras_audio_handler_->SetStyleTransferState(false);
+
+  EXPECT_EQ(1, test_observer_->style_transfer_state_change_count());
 }
 
 TEST_P(CrasAudioHandlerTest, IsHfpMicSrSupportedForDeviceNoHfpMicSr) {
@@ -7091,6 +7331,7 @@ TEST_P(CrasAudioHandlerTest,
       /*expected_has_alternative_input=*/std::nullopt,
       /*expected_has_alternative_output=*/true);
 
+  FastForwardBy(AudioSelectionNotificationHandler::kDebounceTime);
   EXPECT_EQ(1u, GetNotificationCount());
 }
 
@@ -7108,6 +7349,7 @@ TEST_P(CrasAudioHandlerTest,
       /*expected_has_alternative_input=*/std::nullopt,
       /*expected_has_alternative_output=*/true);
 
+  FastForwardBy(AudioSelectionNotificationHandler::kDebounceTime);
   EXPECT_EQ(1u, GetNotificationCount());
 }
 
@@ -7177,17 +7419,376 @@ TEST_P(CrasAudioHandlerTest,
 // and no crashes.
 TEST_P(CrasAudioHandlerTest, SyncDevicePrefSetMap) {
   SetUpCrasAudioHandler({});
-  std::map<std::string, std::string>& input_device_pref_set_map =
-      GetDevicePrefSetMap(/*is_input=*/true);
-  std::map<std::string, std::string>& output_device_pref_set_map =
-      GetDevicePrefSetMap(/*is_input=*/false);
-  EXPECT_TRUE(input_device_pref_set_map.empty());
-  EXPECT_TRUE(output_device_pref_set_map.empty());
+  const std::map<std::string, std::string>& device_pref_set_map =
+      GetDevicePrefSetMap();
+  EXPECT_TRUE(device_pref_set_map.empty());
 
   SyncDevicePrefSetMap(/*is_input=*/true);
   SyncDevicePrefSetMap(/*is_input=*/false);
-  EXPECT_TRUE(input_device_pref_set_map.empty());
-  EXPECT_TRUE(output_device_pref_set_map.empty());
+  EXPECT_TRUE(device_pref_set_map.empty());
+}
+
+// Tests that showing notification is debounced for audio output device.
+TEST_P(CrasAudioHandlerTest,
+       DebounceNotificationForOutput_AudioSelectionImprovementFlagOn) {
+  scoped_feature_list_.InitAndEnableFeature(
+      ash::features::kAudioSelectionImprovement);
+
+  // Initialize with internal speaker.
+  SetupAudioNodesAndExpectActiveNodes(
+      /*initial_nodes=*/{kInternalSpeaker},
+      /*expected_active_input_node=*/nullptr,
+      /*expected_active_output_node=*/kInternalSpeaker,
+      /*expected_has_alternative_input=*/std::nullopt,
+      /*expected_has_alternative_output=*/false);
+
+  // Expect that notification is not displayed since there is only one output
+  // device connected.
+  EXPECT_EQ(0u, GetNotificationCount());
+
+  // Plug in a usb headphone without fast forward time.
+  AudioNodeList audio_nodes;
+  AudioNode internal_speaker = GenerateAudioNode(kInternalSpeaker);
+  internal_speaker.active = true;
+  audio_nodes.push_back(internal_speaker);
+  AudioNode usb_headphone_1 = GenerateAudioNode(kUSBHeadphone1);
+  audio_nodes.push_back(usb_headphone_1);
+  ChangeAudioNodes(audio_nodes);
+
+  // Although notification is supposed to show up for unseen new connected USB
+  // headphone device, the debounce function will delay the display of
+  // notification.
+  EXPECT_EQ(0u, GetNotificationCount());
+
+  // Plug in another usb headphone with fast forward time.
+  AudioNode usb_headphone_2 = GenerateAudioNode(kUSBHeadphone2);
+  audio_nodes.push_back(usb_headphone_2);
+  ChangeAudioNodes(audio_nodes);
+
+  // Verify the active output device is not switched because the new connected
+  // device is not seen before.
+  EXPECT_EQ(0, test_observer_->active_output_node_changed_count());
+  ExpectActiveDevice(/*is_input=*/false,
+                     /*expected_active_device=*/kInternalSpeaker,
+                     /*has_alternative_device=*/true);
+
+  // Verify notification is displayed at this moment.
+  FastForwardBy(AudioSelectionNotificationHandler::kDebounceTime);
+  EXPECT_EQ(1u, GetNotificationCount());
+
+  // Verify that the notification is for multiple audio sources detected.
+  // when two new devices are hot plugged quickly, due to the debounce
+  // mechanism, rather than showing different notifications for each of them
+  // (with the first one being overridden quickly), we show notification to
+  // handle both of them together.
+  std::optional<std::u16string> title = GetNotificationTitle();
+  EXPECT_TRUE(title.has_value());
+  EXPECT_EQ(
+      l10n_util::GetStringUTF16(IDS_ASH_AUDIO_SELECTION_MULTIPLE_DEVICES_TITLE),
+      title.value());
+}
+
+// Tests that showing notification is debounced for audio input device.
+TEST_P(CrasAudioHandlerTest,
+       DebounceNotificationForInput_AudioSelectionImprovementFlagOn) {
+  scoped_feature_list_.InitAndEnableFeature(
+      ash::features::kAudioSelectionImprovement);
+
+  // Initialize with internal mic.
+  SetupAudioNodesAndExpectActiveNodes(
+      /*initial_nodes=*/{kInternalMic},
+      /*expected_active_input_node=*/kInternalMic,
+      /*expected_active_output_node=*/nullptr,
+      /*expected_has_alternative_input=*/false,
+      /*expected_has_alternative_output=*/std::nullopt);
+
+  // Expect that notification is not displayed since there is only one input
+  // device connected.
+  EXPECT_EQ(0u, GetNotificationCount());
+
+  // Plug in a usb mic without fast forward time.
+  AudioNodeList audio_nodes;
+  AudioNode inernal_mic = GenerateAudioNode(kInternalMic);
+  inernal_mic.active = true;
+  audio_nodes.push_back(inernal_mic);
+  AudioNode usb_mic_1 = GenerateAudioNode(kUSBMic1);
+  audio_nodes.push_back(usb_mic_1);
+  ChangeAudioNodes(audio_nodes);
+
+  // Although notification is supposed to show up for unseen new connected USB
+  // mic device, the debounce function will delay the display of
+  // notification.
+  EXPECT_EQ(0u, GetNotificationCount());
+
+  // Plug in another usb mic with fast forward time.
+  AudioNode usb_mic_2 = GenerateAudioNode(kUSBMic2);
+  audio_nodes.push_back(usb_mic_2);
+  ChangeAudioNodes(audio_nodes);
+
+  // Verify the active output device is not switched because the new connected
+  // device is not seen before.
+  EXPECT_EQ(0, test_observer_->active_input_node_changed_count());
+  ExpectActiveDevice(/*is_input=*/true,
+                     /*expected_active_device=*/kInternalMic,
+                     /*has_alternative_device=*/true);
+
+  // Verify notification is displayed at this moment.
+  FastForwardBy(AudioSelectionNotificationHandler::kDebounceTime);
+  EXPECT_EQ(1u, GetNotificationCount());
+
+  // Verify that the notification is for multiple audio sources detected.
+  // when two new devices are hot plugged quickly, due to the debounce
+  // mechanism, rather than showing different notifications for each of them
+  // (with the first one being overridden quickly), we show notification to
+  // handle both of them together.
+  std::optional<std::u16string> title = GetNotificationTitle();
+  EXPECT_TRUE(title.has_value());
+  EXPECT_EQ(
+      l10n_util::GetStringUTF16(IDS_ASH_AUDIO_SELECTION_MULTIPLE_DEVICES_TITLE),
+      title.value());
+}
+
+// Tests that in a rare case where both input and output have the same stable
+// id, manually switch output device should keep the input device unchanged.
+TEST_P(CrasAudioHandlerTest,
+       SwitchOutputShouldKeepInputUnchanged_AudioSelectionImprovementFlagOn) {
+  scoped_feature_list_.InitAndEnableFeature(
+      ash::features::kAudioSelectionImprovement);
+
+  // Initialize with internal devices.
+  SetupAudioNodesAndExpectActiveNodes(
+      /*initial_nodes=*/{kInternalMic, kInternalSpeaker},
+      /*expected_active_input_node=*/kInternalMic,
+      /*expected_active_output_node=*/kInternalSpeaker,
+      /*expected_has_alternative_input=*/false,
+      /*expected_has_alternative_output=*/false);
+
+  // Plug USB input and output devices with the same stable id.
+  AudioNodeList audio_nodes;
+  AudioNode inernal_mic = GenerateAudioNode(kInternalMic);
+  inernal_mic.active = true;
+  audio_nodes.push_back(inernal_mic);
+  AudioNode internal_speaker = GenerateAudioNode(kInternalSpeaker);
+  internal_speaker.active = true;
+  audio_nodes.push_back(internal_speaker);
+
+  uint64_t id = 100;
+  uint64_t stable_device_id_v1 = 12345;
+  uint64_t stable_device_id_v2 = 6789;
+  AudioNode usb_input = AudioNode(
+      /*is_input=*/true, id, /*has_v2_stable_device_id=*/true,
+      stable_device_id_v1, stable_device_id_v2,
+      /*device_name=*/"usb_input",
+      /*type=*/"USB", /*name=*/"usb_input", false /* is_active*/,
+      /*plugged_time=*/100, kInputMaxSupportedChannels, kInputAudioEffect,
+      /*number_of_volume_steps=*/0);
+  audio_nodes.push_back(usb_input);
+  AudioNode usb_output = AudioNode(
+      /*is_input=*/false, id, /*has_v2_stable_device_id=*/true,
+      stable_device_id_v1, stable_device_id_v2,
+      /*device_name=*/"usb_output",
+      /*type=*/"USB", /*name=*/"usb_output", false /* is_active*/,
+      /*plugged_time=*/100, kOutputMaxSupportedChannels, kOutputAudioEffect,
+      /*number_of_volume_steps=*/0);
+  audio_nodes.push_back(usb_output);
+  ChangeAudioNodes(audio_nodes);
+
+  // Verify internal device is still active.
+  ExpectActiveDevice(/*is_input=*/true,
+                     /*expected_active_device=*/kInternalMic,
+                     /*has_alternative_device=*/true);
+  ExpectActiveDevice(/*is_input=*/false,
+                     /*expected_active_device=*/kInternalSpeaker,
+                     /*has_alternative_device=*/true);
+
+  // Switch to usb_output.
+  AudioDevice usb_output_device(usb_output);
+  cras_audio_handler_->SwitchToDevice(usb_output_device, true,
+                                      DeviceActivateType::kActivateByUser);
+  ChangeAudioNodes(audio_nodes);
+
+  // Verify output is switched to usb_output, input statys the same.
+  ExpectActiveDevice(/*is_input=*/true,
+                     /*expected_active_device=*/kInternalMic,
+                     /*has_alternative_device=*/true);
+  EXPECT_EQ(usb_output_device.id,
+            cras_audio_handler_->GetPrimaryActiveOutputNode());
+}
+
+// Tests that GetDeviceFromStableDeviceId can get the correct device when an
+// input and an output device have the same stable id.
+TEST_P(CrasAudioHandlerTest,
+       GetDeviceFromStableDeviceId_AudioSelectionImprovementFlagOn) {
+  scoped_feature_list_.InitAndEnableFeature(
+      ash::features::kAudioSelectionImprovement);
+
+  // Plug USB input and output devices with the same stable id.
+  AudioNodeList audio_nodes;
+  uint64_t stable_device_id = 12345;
+  std::string input_device_name = "usb_input";
+  std::string output_device_name = "usb_output";
+  AudioNode usb_input = AudioNode(
+      /*is_input=*/true, /*id=*/800, /*has_v2_stable_device_id=*/true,
+      stable_device_id, stable_device_id,
+      /*device_name=*/input_device_name,
+      /*type=*/"USB", /*name=*/input_device_name, /*active=*/false,
+      /*plugged_time=*/100, kInputMaxSupportedChannels, kInputAudioEffect,
+      /*number_of_volume_steps=*/0);
+
+  AudioNode usb_output = AudioNode(
+      /*is_input=*/false, /*id=*/900, /*has_v2_stable_device_id=*/true,
+      stable_device_id, stable_device_id,
+      /*device_name=*/output_device_name,
+      /*type=*/"USB", /*name=*/output_device_name, /*active=*/false,
+      /*plugged_time=*/100, kOutputMaxSupportedChannels, kOutputAudioEffect,
+      /*number_of_volume_steps=*/0);
+  audio_nodes.push_back(usb_input);
+  audio_nodes.push_back(usb_output);
+  SetUpCrasAudioHandler(audio_nodes);
+
+  std::optional<AudioDevice> device1 =
+      GetDeviceFromStableDeviceId(/*is_input=*/false, stable_device_id);
+  EXPECT_TRUE(device1.has_value());
+  EXPECT_FALSE(device1->is_input);
+  EXPECT_EQ(device1->device_name, output_device_name);
+
+  std::optional<AudioDevice> device2 =
+      GetDeviceFromStableDeviceId(/*is_input=*/true, stable_device_id);
+  EXPECT_TRUE(device2.has_value());
+  EXPECT_TRUE(device2->is_input);
+  EXPECT_EQ(device2->device_name, input_device_name);
+}
+
+// Tests that notification is removed if the hot plugged device that triggered
+// the notification has already been activated via settings or quick settings.
+TEST_P(
+    CrasAudioHandlerTest,
+    RemoveNotificationIfHotPluggedDeviceHasBeenActivated_AudioSelectionImprovementFlagOn) {
+  scoped_feature_list_.InitAndEnableFeature(
+      ash::features::kAudioSelectionImprovement);
+
+  // Initialize with internal speaker.
+  SetupAudioNodesAndExpectActiveNodes(
+      /*initial_nodes=*/{kInternalSpeaker},
+      /*expected_active_input_node=*/nullptr,
+      /*expected_active_output_node=*/kInternalSpeaker,
+      /*expected_has_alternative_input=*/std::nullopt,
+      /*expected_has_alternative_output=*/false);
+
+  // Expect that notification is not displayed since there is only one output
+  // device connected.
+  EXPECT_EQ(0u, GetNotificationCount());
+
+  // Plug in a usb headphone.
+  AudioNodeList audio_nodes;
+  AudioNode internal_speaker = GenerateAudioNode(kInternalSpeaker);
+  internal_speaker.active = true;
+  audio_nodes.push_back(internal_speaker);
+  AudioNode usb_headphone_1 = GenerateAudioNode(kUSBHeadphone1);
+  audio_nodes.push_back(usb_headphone_1);
+  ChangeAudioNodes(audio_nodes);
+
+  // Verify the active output device is not switched because the new connected
+  // device is not seen before.
+  EXPECT_EQ(0, test_observer_->active_output_node_changed_count());
+  ExpectActiveDevice(/*is_input=*/false,
+                     /*expected_active_device=*/kInternalSpeaker,
+                     /*has_alternative_device=*/true);
+
+  // Verify notification is displayed.
+  FastForwardBy(AudioSelectionNotificationHandler::kDebounceTime);
+  EXPECT_EQ(1u, GetNotificationCount());
+
+  // Activate the kUSBHeadphone1 by system, expect that notification is not
+  // removed.
+  AudioDevice usb_headphone_device(usb_headphone_1);
+  cras_audio_handler_->SwitchToDevice(usb_headphone_device, true,
+                                      DeviceActivateType::kActivateByPriority);
+  EXPECT_EQ(1u, GetNotificationCount());
+
+  // Switch back to internal speaker.
+  AudioDevice internal_speaker_device(internal_speaker);
+  cras_audio_handler_->SwitchToDevice(internal_speaker_device, true,
+                                      DeviceActivateType::kActivateByPriority);
+
+  // Manually activate the kUSBHeadphone1, expect that notification is removed.
+  cras_audio_handler_->SwitchToDevice(usb_headphone_device, true,
+                                      DeviceActivateType::kActivateByUser);
+  EXPECT_EQ(0u, GetNotificationCount());
+}
+
+// Tests that notification is not removed if the hot plugged device that
+// triggered the notification was disconnected and reconnected within grace
+// period.
+TEST_P(
+    CrasAudioHandlerTest,
+    DoNotRemoveNotificationIfHotPluggedDeviceWasDiconnectedAndReconnectedQuickly_AudioSelectionImprovementFlagOn) {
+  scoped_feature_list_.InitAndEnableFeature(
+      ash::features::kAudioSelectionImprovement);
+
+  // Initialize with internal speaker.
+  SetupAudioNodesAndExpectActiveNodes(
+      /*initial_nodes=*/{kInternalSpeaker},
+      /*expected_active_input_node=*/nullptr,
+      /*expected_active_output_node=*/kInternalSpeaker,
+      /*expected_has_alternative_input=*/std::nullopt,
+      /*expected_has_alternative_output=*/false);
+
+  // Expect that notification is not displayed since there is only one output
+  // device connected.
+  EXPECT_EQ(0u, GetNotificationCount());
+
+  // Plug in a usb headphone.
+  AudioNodeList audio_nodes;
+  AudioNode internal_speaker = GenerateAudioNode(kInternalSpeaker);
+  internal_speaker.active = true;
+  audio_nodes.push_back(internal_speaker);
+  AudioNode usb_headphone_1 = GenerateAudioNode(kUSBHeadphone1);
+  audio_nodes.push_back(usb_headphone_1);
+  ChangeAudioNodes(audio_nodes);
+
+  // Verify the active output device is not switched because the new connected
+  // device is not seen before.
+  EXPECT_EQ(0, test_observer_->active_output_node_changed_count());
+  ExpectActiveDevice(/*is_input=*/false,
+                     /*expected_active_device=*/kInternalSpeaker,
+                     /*has_alternative_device=*/true);
+
+  // Verify notification is displayed.
+  FastForwardBy(AudioSelectionNotificationHandler::kDebounceTime);
+  EXPECT_EQ(1u, GetNotificationCount());
+
+  // Disconnect the usb headphone.
+  audio_nodes.clear();
+  audio_nodes.push_back(internal_speaker);
+  ChangeAudioNodes(audio_nodes);
+
+  // Notification still shows within grace period.
+  FastForwardBy(base::Milliseconds(2000));
+  EXPECT_EQ(1u, GetNotificationCount());
+
+  // Reconnect the usb headphone within grace period.
+  audio_nodes.clear();
+  audio_nodes.push_back(internal_speaker);
+  audio_nodes.push_back(usb_headphone_1);
+  ChangeAudioNodes(audio_nodes);
+
+  // Verify that notification still displays.
+  FastForwardBy(base::Milliseconds(2000));
+  EXPECT_EQ(1u, GetNotificationCount());
+
+  // Verify that notification after grace period.
+  FastForwardBy(CrasAudioHandler::kRemoveNotificationDelay);
+  EXPECT_EQ(1u, GetNotificationCount());
+
+  // Remove the usb headphone again.
+  audio_nodes.clear();
+  audio_nodes.push_back(internal_speaker);
+  ChangeAudioNodes(audio_nodes);
+
+  // Notification is removed after grace period.
+  FastForwardBy(CrasAudioHandler::kRemoveNotificationDelay);
+  EXPECT_EQ(0u, GetNotificationCount());
 }
 
 }  // namespace ash

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_APPLE)
@@ -862,7 +867,7 @@ int UDPSocketPosix::SetMulticastOptions() {
         break;
       }
       default:
-        NOTREACHED() << "Invalid address family";
+        NOTREACHED_IN_MIGRATION() << "Invalid address family";
         return ERR_ADDRESS_INVALID;
     }
   }
@@ -933,7 +938,7 @@ int UDPSocketPosix::JoinGroup(const IPAddress& group_address) const {
       return OK;
     }
     default:
-      NOTREACHED() << "Invalid address family";
+      NOTREACHED_IN_MIGRATION() << "Invalid address family";
       return ERR_ADDRESS_INVALID;
   }
 }
@@ -977,7 +982,7 @@ int UDPSocketPosix::LeaveGroup(const IPAddress& group_address) const {
       return OK;
     }
     default:
-      NOTREACHED() << "Invalid address family";
+      NOTREACHED_IN_MIGRATION() << "Invalid address family";
       return ERR_ADDRESS_INVALID;
   }
 }

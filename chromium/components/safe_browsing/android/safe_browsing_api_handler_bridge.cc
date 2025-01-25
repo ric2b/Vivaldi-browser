@@ -18,12 +18,14 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
-#include "components/safe_browsing/android/jni_headers/SafeBrowsingApiBridge_jni.h"
 #include "components/safe_browsing/android/safe_browsing_api_handler_util.h"
 #include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "components/safe_browsing/android/jni_headers/SafeBrowsingApiBridge_jni.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
@@ -291,7 +293,7 @@ SafetyNetJavaThreatType SBThreatTypeToSafetyNetJavaThreatType(
     case SB_THREAT_TYPE_CSD_ALLOWLIST:
       return SafetyNetJavaThreatType::CSD_ALLOWLIST;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return SafetyNetJavaThreatType::MAX_VALUE;
   }
 }
@@ -347,7 +349,7 @@ SafeBrowsingJavaThreatType SBThreatTypeToSafeBrowsingApiJavaThreatType(
     case SB_THREAT_TYPE_BILLING:
       return SafeBrowsingJavaThreatType::BILLING;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return SafeBrowsingJavaThreatType::NO_THREAT;
   }
 }
@@ -420,6 +422,19 @@ PendingSafeBrowsingCallbacksMap& GetPendingSafeBrowsingCallbacksMap() {
   static base::NoDestructor<PendingSafeBrowsingCallbacksMap>
       pending_safe_browsing_callbacks;
   return *pending_safe_browsing_callbacks;
+}
+
+using PendingVerifyAppsCallbacksMap = std::unordered_map<
+    jlong,
+    SafeBrowsingApiHandlerBridge::VerifyAppsResponseCallback>;
+PendingVerifyAppsCallbacksMap& GetPendingVerifyAppsCallbacks() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  // Holds the list of callback objects that we are currently waiting to hear
+  // the result of from GmsCore.
+  // The key is a unique count-up integer.
+  static base::NoDestructor<PendingVerifyAppsCallbacksMap> pending_callbacks;
+  return *pending_callbacks;
 }
 
 bool StartAllowlistCheck(const GURL& url, const SBThreatType& sb_threat_type) {
@@ -614,6 +629,30 @@ void JNI_SafeBrowsingApiBridge_OnUrlCheckDoneBySafeBrowsingApi(
                      response_status, check_delta_microseconds));
 }
 
+void OnVerifyAppsEnabledDone(jlong callback_id, jint j_result) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  PendingVerifyAppsCallbacksMap& pending_callbacks =
+      GetPendingVerifyAppsCallbacks();
+  bool found = base::Contains(pending_callbacks, callback_id);
+  DCHECK(found) << "Not found in pending_verify_apps_callbacks: "
+                << callback_id;
+  if (!found) {
+    return;
+  }
+
+  SafeBrowsingApiHandlerBridge::VerifyAppsResponseCallback callback =
+      std::move(pending_callbacks[callback_id]);
+  std::move(callback).Run(static_cast<VerifyAppsEnabledResult>(j_result));
+}
+
+void JNI_SafeBrowsingApiBridge_OnVerifyAppsEnabledDone(JNIEnv* env,
+                                                       jlong callback_id,
+                                                       jint j_result) {
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(&OnVerifyAppsEnabledDone, callback_id, j_result));
+}
+
 //
 // SafeBrowsingApiHandlerBridge
 //
@@ -700,9 +739,14 @@ void SafeBrowsingApiHandlerBridge::StartUrlCheckBySafeBrowsing(
   base::UmaHistogramBoolean("SafeBrowsing.GmsSafeBrowsingApi.IsAvailable" +
                                 GetSafeBrowsingJavaProtocolUmaSuffix(protocol),
                             is_safe_browsing_api_available_);
+
   if (!is_safe_browsing_api_available_) {
-    // Fall back to SafetyNet if SafeBrowsing API is not available.
-    StartUrlCheckBySafetyNet(std::move(callback), url, threat_types);
+    // Mark all requests as safe. Only users who have an old, broken GMSCore or
+    // have sideloaded Chrome w/o PlayStore should land here.
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(*callback), SBThreatType::SB_THREAT_TYPE_SAFE,
+                       ThreatMetadata()));
     return;
   }
 
@@ -729,6 +773,39 @@ bool SafeBrowsingApiHandlerBridge::StartCSDAllowlistCheck(const GURL& url) {
     return false;
   return StartAllowlistCheck(
       url, safe_browsing::SBThreatType::SB_THREAT_TYPE_CSD_ALLOWLIST);
+}
+
+void SafeBrowsingApiHandlerBridge::StartIsVerifyAppsEnabled(
+    VerifyAppsResponseCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (verify_apps_enabled_for_testing_.has_value()) {
+    std::move(callback).Run(verify_apps_enabled_for_testing_.value());
+    return;
+  }
+
+  JNIEnv* env = AttachCurrentThread();
+  if (!Java_SafeBrowsingApiBridge_ensureSafetyNetApiInitialized(env)) {
+    std::move(callback).Run(VerifyAppsEnabledResult::FAILED);
+    return;
+  }
+
+  jlong callback_id = next_verify_apps_callback_id_++;
+  GetPendingVerifyAppsCallbacks().insert({callback_id, std::move(callback)});
+  Java_SafeBrowsingApiBridge_isVerifyAppsEnabled(env, callback_id);
+}
+void SafeBrowsingApiHandlerBridge::StartEnableVerifyApps(
+    VerifyAppsResponseCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  JNIEnv* env = AttachCurrentThread();
+  if (!Java_SafeBrowsingApiBridge_ensureSafetyNetApiInitialized(env)) {
+    std::move(callback).Run(VerifyAppsEnabledResult::FAILED);
+    return;
+  }
+
+  jlong callback_id = next_verify_apps_callback_id_++;
+  GetPendingVerifyAppsCallbacks().insert({callback_id, std::move(callback)});
+  Java_SafeBrowsingApiBridge_enableVerifyApps(env, callback_id);
 }
 
 void SafeBrowsingApiHandlerBridge::OnSafeBrowsingApiNonRecoverableFailure() {

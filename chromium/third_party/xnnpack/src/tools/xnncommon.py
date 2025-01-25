@@ -50,9 +50,13 @@ _ISA_TO_MACRO_MAP = {
   "rvv": "XNN_ENABLE_RISCV_VECTOR",
   "rvvfp16arith": "XNN_ENABLE_RISCV_FP16_VECTOR",
   "avxvnni": "XNN_ENABLE_AVXVNNI",
+  "avx256skx": "XNN_ENABLE_AVX256SKX",
+  "avx256vnni": "XNN_ENABLE_AVX256VNNI",
+  "avx256vnnigfni": "XNN_ENABLE_AVX256VNNIGFNI",
   "avx512vnnigfni": "XNN_ENABLE_AVX512VNNIGFNI",
   "avx512amx": "XNN_ENABLE_AVX512AMX",
   "avx512fp16": "XNN_ENABLE_AVX512FP16",
+  "hvx": "XNN_ENABLE_HVX",
 }
 
 _ISA_TO_ARCH_MAP = {
@@ -83,6 +87,11 @@ _ISA_TO_ARCH_MAP = {
   "avx512amx": ["x86-32", "x86-64"],
   "avx512fp16": ["x86-32", "x86-64"],
   "avxvnni": ["x86-32", "x86-64"],
+  "avx256skx": ["x86-32", "x86-64"],
+  "avx256vnni": ["x86-32", "x86-64"],
+  "avx256vnnigfni": ["x86-32", "x86-64"],
+  "hexagon": ["hexagon"],
+  "hvx": ["hexagon"],
   "rvv": ["riscv"],
   "rvvfp16arith": ["riscv"],
   "wasm32": ["wasm", "wasmsimd"],
@@ -120,6 +129,10 @@ _ISA_TO_UTILCHECK_MAP = {
   "avx512amx": "CheckAVX512AMX",
   "avx512fp16": "CheckAVX512FP16",
   "avxvnni": "CheckAVXVNNI",
+  "avx256skx": "CheckAVX256SKX",
+  "avx256vnni": "CheckAVX256VNNI",
+  "avx256vnnigfni": "CheckAVX256VNNIGFNI",
+  "hvx": "CheckHVX",
   "rvv": "CheckRVV",
   "rvvfp16arith": "CheckRVVFP16ARITH",
   "wasmpshufb": "CheckWAsmPSHUFB",
@@ -155,6 +168,10 @@ _ISA_TO_CHECK_MAP = {
   "avx512amx": "TEST_REQUIRES_X86_AVX512AMX",
   "avx512fp16": "TEST_REQUIRES_X86_AVX512FP16",
   "avxvnni": "TEST_REQUIRES_X86_AVXVNNI",
+  "avx256skx": "TEST_REQUIRES_X86_AVX256SKX",
+  "avx256vnni": "TEST_REQUIRES_X86_AVX256VNNI",
+  "avx256vnnigfni": "TEST_REQUIRES_X86_AVX256VNNIGFNI",
+  "hvx": "TEST_REQUIRES_HVX",
   "rvv": "TEST_REQUIRES_RISCV_VECTOR",
   "rvvfp16arith": "TEST_REQUIRES_RISCV_VECTOR_FP16_ARITH",
   "wasmpshufb": "TEST_REQUIRES_WASM_PSHUFB",
@@ -224,6 +241,9 @@ _ISA_HIERARCHY = [
   "avx512skx",
   "avx512vbmi",
   "avxvnni",
+  "avx256skx",
+  "avx256vnni",
+  "avx256vnnigfni",
   "avx512vnni",
   "avx512vnnigfni",
   "avx512fp16",
@@ -239,6 +259,8 @@ _ISA_HIERARCHY = [
   "wasmrelaxedsimd",
   "rvv",
   "rvvfp16",
+  "hexagon",
+  "hvx"
 ]
 
 _ISA_HIERARCHY_MAP = {isa: v for v, isa in enumerate(_ISA_HIERARCHY)}

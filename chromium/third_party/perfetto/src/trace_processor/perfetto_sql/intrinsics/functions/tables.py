@@ -20,13 +20,23 @@ from python.generators.trace_processor_table.public import Table
 # This class should contain all table schemas for functions (scalar or
 # aggregate) which return tables.
 
-DFS_TABLE = Table(
+# Helper table to return any sort of "tree-like" table from functions.
+TREE_TABLE = Table(
     python_module=__file__,
-    class_name="DfsTable",
-    sql_name="__intrinsic_dfs",
+    class_name="TreeTable",
+    sql_name="__unused",
     columns=[
         C("node_id", CppUint32()),
         C("parent_node_id", CppOptional(CppUint32())),
+    ])
+
+DOMINATOR_TREE_TABLE = Table(
+    python_module=__file__,
+    class_name="DominatorTreeTable",
+    sql_name="__intrinsic_dominator_tree",
+    columns=[
+        C("node_id", CppUint32()),
+        C("dominator_node_id", CppOptional(CppUint32())),
     ])
 
 STRUCTURAL_TREE_PARTITION_TABLE = Table(
@@ -41,6 +51,7 @@ STRUCTURAL_TREE_PARTITION_TABLE = Table(
 
 # Keep this list sorted.
 ALL_TABLES = [
-    DFS_TABLE,
+    DOMINATOR_TREE_TABLE,
     STRUCTURAL_TREE_PARTITION_TABLE,
+    TREE_TABLE,
 ]

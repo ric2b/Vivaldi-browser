@@ -215,6 +215,9 @@ void FeatureTile::CreateChildViews() {
       ->SetOrientation(is_compact ? views::LayoutOrientation::kVertical
                                   : views::LayoutOrientation::kHorizontal)
       .SetMainAxisAlignment(views::LayoutAlignment::kCenter);
+  // TODO(crbug.com/40232718): See View::SetLayoutManagerUseConstrainedSpace.
+  SetLayoutManagerUseConstrainedSpace(false);
+
   // Set `MaximumFlexSizeRule` to `kUnbounded` so the view takes up all of the
   // available space in its parent container.
   SetProperty(views::kFlexBehaviorKey,
@@ -651,20 +654,6 @@ void FeatureTile::SetDownloadState(DownloadState state, int progress) {
   // Once the tile's UI has been updated, notify any observers of the download
   // state change.
   NotifyDownloadStateChanged();
-}
-
-void FeatureTile::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  views::Button::GetAccessibleNodeData(node_data);
-  // If the icon is clickable then the main feature tile usually takes the user
-  // to a detailed page (like Network or Bluetooth). Those tiles act more like a
-  // regular button than a toggle button.
-  if (is_togglable_ && !is_icon_clickable_) {
-    node_data->role = ax::mojom::Role::kToggleButton;
-    node_data->SetCheckedState(toggled_ ? ax::mojom::CheckedState::kTrue
-                                        : ax::mojom::CheckedState::kFalse);
-  } else {
-    node_data->role = ax::mojom::Role::kButton;
-  }
 }
 
 void FeatureTile::AddLayerToRegion(ui::Layer* layer,

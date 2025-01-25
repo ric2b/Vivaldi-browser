@@ -28,6 +28,8 @@ from pylib import constants
 from pylib.local.emulator import ini
 from pylib.local.emulator.proto import avd_pb2
 
+from lib.proto import exception_recorder
+
 # A common root directory to store the CIPD packages for creating or starting
 # the emulator instance, e.g. emulator binary, system images, AVDs.
 COMMON_CIPD_ROOT = os.path.join(constants.DIR_SOURCE_ROOT, '.android_emulator')
@@ -842,7 +844,7 @@ class AvdConfig:
         for line in cmd_helper.IterCmdOutputLines(ensure_cmd):
           logging.info('    %s', line)
       except subprocess.CalledProcessError as e:
-        # avd.py is executed with python2.
+        exception_recorder.register(e)
         # pylint: disable=W0707
         raise AvdException('Failed to install CIPD packages: %s' % str(e),
                            command=ensure_cmd)
@@ -970,7 +972,8 @@ class _AvdInstance:
             debug_tags=None,
             disk_size=None,
             enable_network=False,
-            require_fast_start=False):
+            require_fast_start=False,
+            retries=0):
     """Starts the emulator running an instance of the given AVD.
 
     Note when ensure_system_settings is True, the program will wait until the
@@ -1014,14 +1017,18 @@ class _AvdInstance:
       avd_type = self._avd_name.split('_')[1]
       logging.info('Emulator Type: %s', avd_type)
 
-      if avd_type == 'car':
-        logging.info('Auto emulator will start slow')
+      if avd_type in ('car', '32'):
+        logging.info('Auto, Tablet emulator will start slow')
         is_slow_start = True
 
       if wipe_data:
         emulator_cmd.append('-wipe-data')
       if disk_size:
         emulator_cmd.extend(['-partition-size', str(disk_size)])
+      elif not require_fast_start:
+        # This emulator is being run locally, ensure it has a large enough disk.
+        emulator_cmd.extend(['-partition-size', '12000'])
+
       if read_only:
         emulator_cmd.append('-read-only')
       if writable_system:
@@ -1047,8 +1054,8 @@ class _AvdInstance:
           emulator_cmd.append('-show-kernel')
 
       emulator_env = {
-          # kill immediately when emulator hang.
-          'ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL': '0',
+          # kill as early as possible when emulator hang.
+          'ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL': '1',
           # Sets the emulator configuration directory
           'ANDROID_EMULATOR_HOME': self._emulator_home,
       }
@@ -1100,7 +1107,7 @@ class _AvdInstance:
         self._emulator_serial = timeout_retry.Run(
             listen_for_serial,
             timeout=120 if is_slow_start else 30,
-            retries=0,
+            retries=retries,
             args=[sock])
         logging.info('%s started', self._emulator_serial)
       except Exception:
@@ -1114,7 +1121,7 @@ class _AvdInstance:
       assert self.device is not None, '`instance.device` not initialized.'
       logging.info('Waiting for device to be fully booted.')
       self.device.WaitUntilFullyBooted(timeout=360 if is_slow_start else 90,
-                                       retries=0)
+                                       retries=retries)
       logging.info('Device fully booted, verifying system settings.')
       _EnsureSystemSettings(self.device)
 

@@ -64,18 +64,103 @@ suite('item tests', function() {
     assertEquals(displayUrl, item.$.url.text);
   });
 
+  test('referrer url is hidden when showReferrerUrl disabled', () => {
+    loadTimeData.overrideValues({showReferrerUrl: false});
+    const item = document.createElement('downloads-item');
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    document.body.appendChild(item);
+    item.set('data', createDownload({
+               hideDate: false,
+               state: State.kComplete,
+               referrerUrl: stringToMojoUrl('http://test.com'),
+             }));
+    flush();
+
+    assertTrue(isVisible(item.$.url));
+    assertFalse(isVisible(item.$['referrer-url']));
+  });
+
+  test(
+      'referrer url on downloads without referrer url in data isn\'t displayed',
+      () => {
+        loadTimeData.overrideValues({showReferrerUrl: true});
+        const item = document.createElement('downloads-item');
+        document.body.innerHTML = window.trustedTypes!.emptyHTML;
+        document.body.appendChild(item);
+        item.set('data', createDownload({
+                   hideDate: false,
+                   state: State.kComplete,
+                   referrerUrl: undefined,
+                   displayReferrerUrl: stringToMojoString16(''),
+                 }));
+        flush();
+
+        assertFalse(isVisible(item.$.url));
+        assertFalse(isVisible(item.$['referrer-url']));
+        assertEquals(null, item.getReferrerUrlAnchorElement());
+      });
+
+  test('referrer url on dangerous downloads isn\'t linkable', () => {
+    const referrerUrl = 'https://test.com';
+    const displayReferrerUrl = 'https://displaytest.com';
+    item.set('data', createDownload({
+               dangerType: DangerType.kDangerousFile,
+               fileExternallyRemoved: false,
+               hideDate: true,
+               state: State.kDangerous,
+               referrerUrl: stringToMojoUrl(referrerUrl),
+               displayReferrerUrl: stringToMojoString16(displayReferrerUrl),
+             }));
+    flush();
+
+    const referrerUrlLink = item.getReferrerUrlAnchorElement();
+    assertTrue(!!referrerUrlLink);
+    assertTrue(isVisible(referrerUrlLink));
+    assertFalse(referrerUrlLink.hasAttribute('href'));
+    assertEquals(displayReferrerUrl, referrerUrlLink.text);
+  });
+
+  test('referrer url display string is a link to the referrer url', () => {
+    const url = 'https://' +
+        'b'.repeat(1000) + '.com/document.pdf';
+    const referrerUrl = 'https://' +
+        'a'.repeat(1000) + '.com/document.pdf';
+    const displayReferrerUrl = 'https://' +
+        '啊'.repeat(1000) + '.com/document.pdf';
+    item.set('data', createDownload({
+               hideDate: false,
+               state: State.kComplete,
+               url: stringToMojoUrl(url),
+               referrerUrl: stringToMojoUrl(referrerUrl),
+               displayReferrerUrl: stringToMojoString16(displayReferrerUrl),
+             }));
+    flush();
+
+    assertEquals(url, item.$.url.href);
+    const referrerUrlLink = item.getReferrerUrlAnchorElement();
+    assertTrue(!!referrerUrlLink);
+    assertEquals(referrerUrl, referrerUrlLink.href);
+    assertEquals(displayReferrerUrl, referrerUrlLink.text);
+  });
+
   test('failed deep scans aren\'t linkable', () => {
+    loadTimeData.overrideValues({showReferrerUrl: true});
     item.set('data', createDownload({
                dangerType: DangerType.kDeepScannedFailed,
                fileExternallyRemoved: false,
                hideDate: true,
                state: State.kComplete,
                url: stringToMojoUrl('http://evil.com'),
+               referrerUrl: stringToMojoUrl('http://referrer.com'),
+               displayReferrerUrl: stringToMojoString16('http://display.com'),
              }));
     flush();
 
     assertFalse(isVisible(item.$['file-link']));
     assertFalse(item.$.url.hasAttribute('href'));
+    const referrerUrlLink = item.getReferrerUrlAnchorElement();
+    assertTrue(!!referrerUrlLink);
+    assertFalse(referrerUrlLink.hasAttribute('href'));
   });
 
   test('url display string is a link to the original url', () => {
@@ -115,56 +200,8 @@ suite('item tests', function() {
     assertTrue(item.getFileIcon().hidden);
   });
 
-  test('icon overridden by danger type', async () => {
-    loadTimeData.overrideValues({improvedDownloadWarningsUX: false});
-    const item = document.createElement('downloads-item');
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    document.body.appendChild(item);
-    testIconLoader.setShouldIconsLoad(true);
-    item.set('data', createDownload({
-               filePath: 'unique1',
-               hideDate: false,
-               dangerType: DangerType.kSensitiveContentBlock,
-             }));
-
-    assertEquals('cr:error', item.shadowRoot!.querySelector('iron-icon')!.icon);
-    assertTrue(item.$['file-icon'].hidden);
-
-    item.set('data', createDownload({
-               filePath: 'unique1',
-               hideDate: false,
-               dangerType: DangerType.kBlockedTooLarge,
-             }));
-
-    assertEquals('cr:error', item.shadowRoot!.querySelector('iron-icon')!.icon);
-    assertTrue(item.$['file-icon'].hidden);
-
-    item.set('data', createDownload({
-               filePath: 'unique1',
-               hideDate: false,
-               dangerType: DangerType.kBlockedPasswordProtected,
-             }));
-
-    assertEquals('cr:error', item.shadowRoot!.querySelector('iron-icon')!.icon);
-    assertTrue(item.$['file-icon'].hidden);
-
-    item.set('data', createDownload({
-               filePath: 'unique1',
-               hideDate: false,
-               dangerType: DangerType.kDeepScannedFailed,
-             }));
-
-    assertEquals('cr:info', item.shadowRoot!.querySelector('iron-icon')!.icon);
-    assertTrue(item.$['file-icon'].hidden);
-  });
-
   test(
-      'icon overridden by display type for improvedDownloadWarningsUX',
-      async () => {
-        loadTimeData.overrideValues({improvedDownloadWarningsUX: true});
-        const item = document.createElement('downloads-item');
-        document.body.innerHTML = window.trustedTypes!.emptyHTML;
-        document.body.appendChild(item);
+      'icon overridden by display type', async () => {
         testIconLoader.setShouldIconsLoad(true);
         item.set('data', createDownload({
                    filePath: 'unique1',
@@ -269,16 +306,25 @@ suite('item tests', function() {
             'red',
             item.shadowRoot!.querySelector('iron-icon')!.getAttribute(
                 'icon-color'));
+
+        item.set('data', createDownload({
+                   filePath: 'unique1',
+                   hideDate: false,
+                   dangerType: DangerType.kCookieTheft,
+                 }));
+
+        assertEquals(
+            'downloads:dangerous',
+            item.shadowRoot!.querySelector('iron-icon')!.icon);
+        assertTrue(item.$['file-icon'].hidden);
+        assertEquals(
+            'red',
+            item.shadowRoot!.querySelector('iron-icon')!.getAttribute(
+                'icon-color'));
       });
 
   test(
-      'description color set by display type for improvedDownloadWarningsUX',
-      async () => {
-        loadTimeData.overrideValues({improvedDownloadWarningsUX: true});
-        const item = document.createElement('downloads-item');
-        document.body.innerHTML = window.trustedTypes!.emptyHTML;
-        document.body.appendChild(item);
-
+      'description color set by display type', async () => {
         item.set('data', createDownload({
                    filePath: 'unique1',
                    hideDate: false,
@@ -363,11 +409,6 @@ suite('item tests', function() {
       });
 
   test('description text overridden by tailored warning type', () => {
-    loadTimeData.overrideValues({improvedDownloadWarningsUX: true});
-    const item = document.createElement('downloads-item');
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    document.body.appendChild(item);
-
     function assertDescriptionText(expected: string) {
       assertEquals(
           expected,
@@ -422,12 +463,7 @@ suite('item tests', function() {
   });
 
   test(
-      'icon aria-hidden determined by display type for improvedDownloadWarningsUX',
-      () => {
-        loadTimeData.overrideValues({improvedDownloadWarningsUX: true});
-        const item = document.createElement('downloads-item');
-        document.body.innerHTML = window.trustedTypes!.emptyHTML;
-        document.body.appendChild(item);
+      'icon aria-hidden determined by display type', () => {
         testIconLoader.setShouldIconsLoad(true);
 
         const iconWrapper = item.shadowRoot!.querySelector('.icon-wrapper');
@@ -460,10 +496,6 @@ suite('item tests', function() {
       });
 
   test('save dangerous click fires event for dangerous', () => {
-    loadTimeData.overrideValues({improvedDownloadWarningsUX: true});
-    const item = document.createElement('downloads-item');
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    document.body.appendChild(item);
     item.set('data', createDownload({
                filePath: 'unique1',
                hideDate: false,
@@ -472,7 +504,10 @@ suite('item tests', function() {
              }));
     flush();
     const whenFired = eventToPromise('save-dangerous-click', item);
-    item.getMoreActionsButton().click();
+    const moreActionsButton = item.getMoreActionsButton();
+    assertTrue(!!moreActionsButton);
+    assertTrue(isVisible(moreActionsButton));
+    moreActionsButton.click();
     const saveDangerousButton =
         item.shadowRoot!.querySelector<HTMLElement>('#save-dangerous');
     assertTrue(!!saveDangerousButton);
@@ -483,10 +518,6 @@ suite('item tests', function() {
   });
 
   test('save dangerous click does not fire event for suspicious', async () => {
-    loadTimeData.overrideValues({improvedDownloadWarningsUX: true});
-    const item = document.createElement('downloads-item');
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    document.body.appendChild(item);
     item.set('data', createDownload({
                id: 'itemId',
                filePath: 'unique1',
@@ -503,7 +534,10 @@ suite('item tests', function() {
       assertNotReached('Unexpected event fired');
     });
 
-    item.getMoreActionsButton().click();
+    const moreActionsButton = item.getMoreActionsButton();
+    assertTrue(!!moreActionsButton);
+    assertTrue(isVisible(moreActionsButton));
+    moreActionsButton.click();
     const saveDangerousButton =
         item.shadowRoot!.querySelector<HTMLElement>('#save-dangerous');
     assertTrue(!!saveDangerousButton);
@@ -517,17 +551,16 @@ suite('item tests', function() {
   });
 
   test('deep scan dropdown buttons shown on correct state', () => {
-    loadTimeData.overrideValues({improvedDownloadWarningsUX: true});
-    const item = document.createElement('downloads-item');
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    document.body.appendChild(item);
     item.set('data', createDownload({
                filePath: 'unique1',
                hideDate: false,
                state: State.kPromptForScanning,
              }));
     flush();
-    item.getMoreActionsButton().click();
+    const moreActionsButton = item.getMoreActionsButton();
+    assertTrue(!!moreActionsButton);
+    assertTrue(isVisible(moreActionsButton));
+    moreActionsButton.click();
     assertTrue(
         isVisible(item.shadowRoot!.querySelector<HTMLElement>('#deep-scan')));
     assertTrue(isVisible(
@@ -535,10 +568,6 @@ suite('item tests', function() {
   });
 
   test('local decryption scan icon and text', () => {
-    loadTimeData.overrideValues({'improvedDownloadWarningsUX': true});
-    const item = document.createElement('downloads-item');
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    document.body.appendChild(item);
     item.set('data', createDownload({
                filePath: 'unique1',
                hideDate: false,
@@ -557,10 +586,6 @@ suite('item tests', function() {
   });
 
   test('open anyway dropdown button shown on failed deep scan', () => {
-    loadTimeData.overrideValues({improvedDownloadWarningsUX: true});
-    const item = document.createElement('downloads-item');
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    document.body.appendChild(item);
     item.set('data', createDownload({
                filePath: 'unique1',
                hideDate: false,
@@ -568,42 +593,45 @@ suite('item tests', function() {
                dangerType: DangerType.kDeepScannedFailed,
              }));
     flush();
-    item.getMoreActionsButton().click();
+    const moreActionsButton = item.getMoreActionsButton();
+    assertTrue(!!moreActionsButton);
+    assertTrue(isVisible(moreActionsButton));
+    moreActionsButton.click();
     assertTrue(
         isVisible(item.shadowRoot!.querySelector<HTMLElement>('#open-anyway')));
   });
 
   test('undo is shown in toast', () => {
-    loadTimeData.overrideValues({improvedDownloadWarningsUX: true});
-    const item = document.createElement('downloads-item');
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    document.body.appendChild(item);
     item.set('data', createDownload({hideDate: false}));
     flush();
-    toastManager = document.createElement('cr-toast-manager');
-    document.body.appendChild(toastManager);
     toastManager.show('', /* hideSlotted= */ true);
     assertTrue(toastManager.slottedHidden);
-    item.getMoreActionsButton().click();
-    const removeButton = item.shadowRoot!.querySelector<HTMLElement>('#remove');
-    assertTrue(!!removeButton);
-    removeButton!.click();
+    // There's no menu button when the item is normal (not dangerous) and
+    // completed.
+    const moreActionsButton = item.getMoreActionsButton();
+    assertFalse(isVisible(moreActionsButton));
+    const quickRemoveButton =
+        item.shadowRoot!.querySelector<HTMLElement>('#quick-remove');
+    assertTrue(!!quickRemoveButton);
+    assertTrue(isVisible(quickRemoveButton));
+    quickRemoveButton.click();
     assertFalse(toastManager.slottedHidden);
     assertFalse(item.getMoreActionsMenu().open);
   });
 
   test('undo is not shown in toast when item is dangerous', () => {
-    loadTimeData.overrideValues({improvedDownloadWarningsUX: true});
-    const item = document.createElement('downloads-item');
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    document.body.appendChild(item);
-    item.set('data', createDownload({hideDate: false, isDangerous: true}));
+    item.set('data', createDownload({
+               hideDate: false,
+               isDangerous: true,
+               state: State.kDangerous,
+             }));
     flush();
-    toastManager = document.createElement('cr-toast-manager');
-    document.body.appendChild(toastManager);
     toastManager.show('', /* hideSlotted= */ false);
     assertFalse(toastManager.slottedHidden);
-    item.getMoreActionsButton().click();
+    const moreActionsButton = item.getMoreActionsButton();
+    assertTrue(!!moreActionsButton);
+    assertTrue(isVisible(moreActionsButton));
+    moreActionsButton.click();
     const removeButton =
         item.shadowRoot!.querySelector<HTMLElement>('#discard-dangerous');
     assertTrue(!!removeButton);
@@ -613,23 +641,60 @@ suite('item tests', function() {
   });
 
   test('undo is not shown in toast when item is insecure', () => {
-    loadTimeData.overrideValues({improvedDownloadWarningsUX: true});
-    const item = document.createElement('downloads-item');
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    document.body.appendChild(item);
-    item.set('data', createDownload({hideDate: false, isInsecure: true}));
+    item.set('data', createDownload({
+               hideDate: false,
+               isInsecure: true,
+               state: State.kInsecure,
+             }));
     flush();
-    toastManager = document.createElement('cr-toast-manager');
-    document.body.appendChild(toastManager);
     toastManager.show('', /* hideSlotted= */ false);
     assertFalse(toastManager.slottedHidden);
-    item.getMoreActionsButton().click();
+    const moreActionsButton = item.getMoreActionsButton();
+    assertTrue(!!moreActionsButton);
+    assertTrue(isVisible(moreActionsButton));
+    moreActionsButton.click();
     const removeButton =
         item.shadowRoot!.querySelector<HTMLElement>('#discard-dangerous');
     assertTrue(!!removeButton);
     removeButton.click();
     assertTrue(toastManager.slottedHidden);
     assertFalse(item.getMoreActionsMenu().open);
+  });
+
+  test('quick remove button discards dangerous item', async function() {
+    item.set('data', createDownload({
+               id: 'itemId',
+               filePath: 'unique1',
+               hideDate: false,
+               isDangerous: true,
+               state: State.kDangerous,
+             }));
+    flush();
+    const quickRemoveButton =
+        item.shadowRoot!.querySelector<HTMLElement>('#quick-remove');
+    assertTrue(!!quickRemoveButton);
+    assertTrue(isVisible(quickRemoveButton));
+    quickRemoveButton.click();
+    flush();
+    const id = await testDownloadsProxy.handler.whenCalled('discardDangerous');
+    assertEquals('itemId', id);
+  });
+
+  test('quick remove button removes normal item', async function() {
+    item.set('data', createDownload({
+               id: 'itemId',
+               filePath: 'unique1',
+               hideDate: false,
+             }));
+    flush();
+    const quickRemoveButton =
+        item.shadowRoot!.querySelector<HTMLElement>('#quick-remove');
+    assertTrue(!!quickRemoveButton);
+    assertTrue(isVisible(quickRemoveButton));
+    quickRemoveButton.click();
+    flush();
+    const id = await testDownloadsProxy.handler.whenCalled('remove');
+    assertEquals('itemId', id);
   });
 
   // <if expr="_google_chrome">

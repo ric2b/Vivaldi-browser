@@ -54,16 +54,6 @@ TEST_F(ResolverUnresolvedIdentifierSuggestions, AddressSpace) {
 Possible values: 'function', 'pixel_local', 'private', 'push_constant', 'storage', 'uniform', 'workgroup')");
 }
 
-TEST_F(ResolverUnresolvedIdentifierSuggestions, BuiltinValue) {
-    Func("f", Vector{Param("p", ty.i32(), Vector{Builtin(Expr(Source{{12, 34}}, "positon"))})},
-         ty.void_(), tint::Empty, Vector{Stage(ast::PipelineStage::kVertex)});
-
-    EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), R"(12:34 error: unresolved builtin value 'positon'
-12:34 note: Did you mean 'position'?
-Possible values: 'frag_depth', 'front_facing', 'global_invocation_id', 'instance_index', 'local_invocation_id', 'local_invocation_index', 'num_workgroups', 'position', 'sample_index', 'sample_mask', 'subgroup_invocation_id', 'subgroup_size', 'vertex_index', 'workgroup_id')");
-}
-
 TEST_F(ResolverUnresolvedIdentifierSuggestions, TexelFormat) {
     GlobalVar("v", ty("texture_storage_1d", Expr(Source{{12, 34}}, "rba8unorm"), "read"));
 
@@ -86,35 +76,6 @@ TEST_F(ResolverUnresolvedIdentifierSuggestions, AccessMode) {
     EXPECT_EQ(r()->error(), R"(12:34 error: unresolved access 'reed'
 12:34 note: Did you mean 'read'?
 Possible values: 'read', 'read_write', 'write')");
-}
-
-TEST_F(ResolverUnresolvedIdentifierSuggestions, InterpolationSampling) {
-    Structure("s", Vector{
-                       Member("m", ty.vec4<f32>(),
-                              Vector{
-                                  Interpolate(core::InterpolationType::kLinear,
-                                              Expr(Source{{12, 34}}, "centre")),
-                              }),
-                   });
-
-    EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), R"(12:34 error: unresolved interpolation sampling 'centre'
-12:34 note: Did you mean 'center'?
-Possible values: 'center', 'centroid', 'sample')");
-}
-
-TEST_F(ResolverUnresolvedIdentifierSuggestions, InterpolationType) {
-    Structure("s", Vector{
-                       Member("m", ty.vec4<f32>(),
-                              Vector{
-                                  Interpolate(Expr(Source{{12, 34}}, "liner")),
-                              }),
-                   });
-
-    EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), R"(12:34 error: unresolved interpolation type 'liner'
-12:34 note: Did you mean 'linear'?
-Possible values: 'flat', 'linear', 'perspective')");
 }
 
 }  // namespace

@@ -6,6 +6,7 @@
 
 #include <windows.h>
 #include <winnls.h>
+#include <optional>
 #include <string>
 
 #include "base/stl_util.h"
@@ -62,6 +63,14 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
   date_formats->long_date_format = longdateformat;
   date_formats->time_format = timeformat;
   return true;
+}
+
+std::optional<bool> UtilitiesIsVivaldiPinnedToLaunchBarFunction::CheckIsPinned() {
+  return std::nullopt;
+}
+
+bool UtilitiesPinVivaldiToLaunchBarFunction::PinToLaunchBar() {
+  return false;
 }
 
 }  // namespace extensions

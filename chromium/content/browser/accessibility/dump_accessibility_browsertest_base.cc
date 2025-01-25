@@ -43,6 +43,10 @@
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/base/ui_base_features.h"
 
+#if BUILDFLAG(IS_ANDROID)
+#include "ui/accessibility/android/accessibility_state.h"
+#endif
+
 namespace content {
 
 namespace {
@@ -355,8 +359,7 @@ void DumpAccessibilityTestBase::WaitForExpectedText(ui::AXMode mode) {
 
     // Block until the next accessibility notification in any frame.
     VLOG(1) << "Waiting until the next accessibility event";
-    AccessibilityNotificationWaiter accessibility_waiter(
-        GetWebContents(), mode, ax::mojom::Event::kNone);
+    AccessibilityNotificationWaiter accessibility_waiter(GetWebContents());
     ASSERT_TRUE(accessibility_waiter.WaitForNotification());
   }
 }
@@ -384,6 +387,11 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
   // Ignore the hovered state (set when the mouse is hovering over
   // an object) because it makes test output change based on the mouse position.
   BrowserAccessibility::ignore_hovered_state_for_testing_ = true;
+
+  // For Android, set a consistent user preference for how password display.
+#if BUILDFLAG(IS_ANDROID)
+  ui::AccessibilityState::ForceRespectDisplayedPasswordTextForTesting();
+#endif
 
   // Normally some accessibility events that would be fired are suppressed or
   // delayed, depending on what has focus or the type of event. For testing,
@@ -475,8 +483,7 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
       VLOG(1) << "Waiting until the next accessibility event";
       // TODO(aleventhal) Try waiting for kEndOfTest to make sure all events
       // after code execution are captured.
-      AccessibilityNotificationWaiter accessibility_waiter(
-          web_contents, ui::AXMode(), ax::mojom::Event::kNone);
+      AccessibilityNotificationWaiter accessibility_waiter(web_contents);
       ASSERT_TRUE(accessibility_waiter.WaitForNotification());
     }
   }
@@ -559,8 +566,7 @@ void DumpAccessibilityTestBase::WaitForAllFramesLoaded(ui::AXMode mode) {
 
     // Block until the next accessibility notification in any frame.
     VLOG(1) << "Waiting until the next accessibility event";
-    AccessibilityNotificationWaiter accessibility_waiter(
-        web_contents, mode, ax::mojom::Event::kNone);
+    AccessibilityNotificationWaiter accessibility_waiter(web_contents);
     ASSERT_TRUE(accessibility_waiter.WaitForNotification());
   }
 }
@@ -614,8 +620,7 @@ DumpAccessibilityTestBase::CaptureEvents(InvokeAction invoke_action,
   // This will ensure that after calling the go() function, we
   // block until we've received an accessibility event generated as
   // a result of this function.
-  AccessibilityNotificationWaiter waiter(GetWebContents(), mode,
-                                         ax::mojom::Event::kNone);
+  AccessibilityNotificationWaiter waiter(GetWebContents());
 
   // Run any script, e.g. go().
   // If an action was performed, we already waited for the kClicked event in
@@ -666,42 +671,29 @@ BrowserAccessibility* DumpAccessibilityTestBase::FindNodeInSubtree(
   return nullptr;
 }
 
-bool DumpAccessibilityTestBase::HasHtmlAttribute(
-    BrowserAccessibility& node,
-    const char* attr,
-    const std::string& value) const {
-  std::string result;
-  if (node.GetHtmlAttribute(attr, &result))
-    return result == value;
-
-  if (base::EqualsCaseInsensitiveASCII(attr, "class"))
-    return node.GetStringAttribute(ax::mojom::StringAttribute::kClassName) ==
-           value;
-
-  return false;
-}
-
-BrowserAccessibility* DumpAccessibilityTestBase::FindNodeByHTMLAttribute(
-    const char* attr,
+BrowserAccessibility* DumpAccessibilityTestBase::FindNodeByStringAttribute(
+    const ax::mojom::StringAttribute attr,
     const std::string& value) const {
   BrowserAccessibility* root = GetManager()->GetBrowserAccessibilityRoot();
 
   CHECK(root);
-  return FindNodeByHTMLAttributeInSubtree(*root, attr, value);
+  return FindNodeByStringAttributeInSubtree(*root, attr, value);
 }
 
 BrowserAccessibility*
-DumpAccessibilityTestBase::FindNodeByHTMLAttributeInSubtree(
+DumpAccessibilityTestBase::FindNodeByStringAttributeInSubtree(
     BrowserAccessibility& node,
-    const char* attr,
+    const ax::mojom::StringAttribute attr,
     const std::string& value) const {
-  if (HasHtmlAttribute(node, attr, value))
+  if (node.GetStringAttribute(attr) == value) {
     return &node;
+  }
 
   for (unsigned int i = 0; i < node.PlatformChildCount(); ++i) {
-    if (BrowserAccessibility* result = FindNodeByHTMLAttributeInSubtree(
-            *node.PlatformGetChild(i), attr, value))
+    if (BrowserAccessibility* result = FindNodeByStringAttributeInSubtree(
+            *node.PlatformGetChild(i), attr, value)) {
       return result;
+    }
   }
   return nullptr;
 }

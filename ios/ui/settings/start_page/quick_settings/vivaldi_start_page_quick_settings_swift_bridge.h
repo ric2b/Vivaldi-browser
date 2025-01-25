@@ -7,6 +7,7 @@
 /// pure Obj-C and have no C++ in them.
 
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_features.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_column.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_settings_swift_bridge.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_style.h"

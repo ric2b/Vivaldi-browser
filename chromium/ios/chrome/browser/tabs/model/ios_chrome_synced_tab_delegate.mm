@@ -10,15 +10,15 @@
 #import "components/sync_sessions/sync_sessions_client.h"
 #import "components/sync_sessions/synced_window_delegates_getter.h"
 #import "ios/chrome/browser/complex_tasks/model/ios_task_tab_helper.h"
-#import "ios/chrome/browser/sessions/ios_chrome_session_tab_helper.h"
+#import "ios/chrome/browser/sessions/model/ios_chrome_session_tab_helper.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/web_state.h"
 
 // TODO(crbug.com/40945317): Remove those imports and the corresponding deps
 // when support for legacy session storage is removed.
-#import "ios/chrome/browser/sessions/session_restoration_service.h"
-#import "ios/chrome/browser/sessions/session_restoration_service_factory.h"
+#import "ios/chrome/browser/sessions/model/session_restoration_service.h"
+#import "ios/chrome/browser/sessions/model/session_restoration_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/web/public/session/crw_navigation_item_storage.h"
 #import "ios/web/public/session/crw_session_storage.h"
@@ -174,7 +174,7 @@ bool IOSChromeSyncedTabDelegate::ProfileHasChildAccount() const {
 
 const std::vector<std::unique_ptr<const sessions::SerializedNavigationEntry>>*
 IOSChromeSyncedTabDelegate::GetBlockedNavigations() const {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 
@@ -215,12 +215,7 @@ bool IOSChromeSyncedTabDelegate::ShouldSync(
 
   int entry_count = GetEntryCount();
   for (int i = 0; i < entry_count; ++i) {
-    const GURL& virtual_url = GetVirtualURLAtIndex(i);
-    if (!virtual_url.is_valid()) {
-      continue;
-    }
-
-    if (sessions_client->ShouldSyncURL(virtual_url)) {
+    if (sessions_client->ShouldSyncURL(GetVirtualURLAtIndex(i))) {
       return true;
     }
   }
@@ -254,9 +249,10 @@ int64_t IOSChromeSyncedTabDelegate::GetRootTaskIdForNavigationId(
 }
 
 std::unique_ptr<sync_sessions::SyncedTabDelegate>
-IOSChromeSyncedTabDelegate::CreatePlaceholderTabSyncedTabDelegate() {
-  NOTREACHED()
-      << "CreatePlaceholderTabSyncedTabDelegate is not supported for the "
+IOSChromeSyncedTabDelegate::ReadPlaceholderTabSnapshotIfItShouldSync(
+    sync_sessions::SyncSessionsClient* sessions_client) {
+  NOTREACHED_IN_MIGRATION()
+      << "ReadPlaceholderTabSnapshotIfItShouldSync is not supported for the "
          "iOS platform.";
   return nullptr;
 }

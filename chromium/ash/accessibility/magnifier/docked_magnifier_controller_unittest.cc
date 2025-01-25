@@ -23,7 +23,7 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/test_window_builder.h"
-#include "ash/wm/desks/legacy_desk_bar_view.h"
+#include "ash/wm/desks/overview_desk_bar_view.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_item.h"
@@ -156,8 +156,9 @@ class DockedMagnifierTest : public NoSessionAshTestBase {
       const gfx::Rect& bounds) {
     auto* widget_delegate_view = new views::WidgetDelegateView();
     widget_delegate_view->SetModalType(ui::MODAL_TYPE_SYSTEM);
-    return CreateTestWidget(widget_delegate_view,
-                            kShellWindowId_LockSystemModalContainer, bounds);
+    return CreateTestWidget(
+        views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
+        widget_delegate_view, kShellWindowId_LockSystemModalContainer, bounds);
   }
 
   // Test that display work area and a modal window is adjusted correctly
@@ -512,6 +513,14 @@ TEST_F(DockedMagnifierTest, DisplaysWorkAreasOverviewMode) {
 }
 
 TEST_F(DockedMagnifierTest, OverviewTabbing) {
+  // In production code, `DockedMagnifierController::CenterOnPoint()` is called
+  // via an extension function. This code path will not be triggered in ash unit
+  // tests.
+  if (features::IsOverviewNewFocusEnabled()) {
+    GTEST_SKIP() << "Overview new focus uses `views::View::RequestFocus()` and "
+                    "has no custom magnifier logic anymore.";
+  }
+
   auto window = CreateTestWindow();
   controller()->SetEnabled(true);
 
@@ -528,7 +537,7 @@ TEST_F(DockedMagnifierTest, OverviewTabbing) {
 
   // Tab once. The viewport should be centered on the beginning of the overview
   // item's title.
-  SendKey(ui::VKEY_TAB);
+  PressAndReleaseKey(ui::VKEY_TAB);
   auto* item = GetOverviewItemForWindow(window.get());
   ASSERT_TRUE(item);
   TestMagnifierLayerTransform(item->GetMagnifierFocusPointInScreen(),
@@ -536,13 +545,13 @@ TEST_F(DockedMagnifierTest, OverviewTabbing) {
 
   // Tab one more time. The viewport should be centered on the center of the
   // default desk button in the zero state desks bar.
-  SendKey(ui::VKEY_TAB);
+  PressAndReleaseKey(ui::VKEY_TAB);
   TestMagnifierLayerTransform(
       default_desk_button->GetBoundsInScreen().CenterPoint(), root_window);
 
   // Tab one more time. The viewport should be centered on the center of the
   // new desk button in the zero state desks bar.
-  SendKey(ui::VKEY_TAB);
+  PressAndReleaseKey(ui::VKEY_TAB);
   TestMagnifierLayerTransform(
       new_desk_button->GetBoundsInScreen().CenterPoint(), root_window);
 }

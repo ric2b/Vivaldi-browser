@@ -31,15 +31,24 @@ class Profile;
 
 namespace content {
 class WebContents;
+class BrowserContext;
 }
 
 namespace gfx {
 class ImageSkia;
 }  // namespace gfx
 
+namespace permissions {
+class ChooserController;
+}  // namespace permissions
+
 namespace extensions {
 
 class Extension;
+
+void ShowConstrainedDeviceChooserDialog(
+    content::WebContents* web_contents,
+    std::unique_ptr<permissions::ChooserController> controller);
 
 // Shows a dialog to notify the user that the extension installation is
 // blocked due to policy. It also shows additional information from
@@ -69,6 +78,30 @@ void ShowExtensionMultipleUninstallDialog(
     const std::vector<ExtensionId>& extension_ids,
     base::OnceClosure accept_callback,
     base::OnceClosure cancel_callback);
+
+// Shows a dialog when `extension_ids` were disabled due to the MV2 deprecation.
+void ShowMv2DeprecationDisabledDialog(
+    Profile* profile,
+    gfx::NativeWindow parent,
+    const std::vector<ExtensionId>& extension_ids,
+    base::OnceClosure remove_callback,
+    base::OnceClosure manage_callback);
+
+// Shows a dialog when the user triggers the warning dismissal for an extension
+// affected by the MV2 deprecation.
+void ShowMv2DeprecationKeepDialog(content::BrowserContext* browser_context,
+                                  gfx::NativeWindow parent,
+                                  const Extension& extension,
+                                  base::OnceClosure accept_callback,
+                                  base::OnceClosure cancel_callback);
+
+// Shows a dialog when the user re-enables an extension affected by the MV2
+// deprecation.
+void ShowMv2DeprecationReEnableDialog(
+    gfx::NativeWindow parent,
+    const ExtensionId& extension_id,
+    const std::string& extension_name,
+    base::OnceCallback<void(bool)> done_callback);
 
 // Shows a dialog when extensions require a refresh for their action
 // to be run or blocked. When the dialog is accepted, `callback` is

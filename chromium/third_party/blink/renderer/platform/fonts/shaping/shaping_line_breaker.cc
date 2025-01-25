@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/fonts/shaping/shaping_line_breaker.h"
 
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result.h"
@@ -496,7 +501,7 @@ const ShapeResultView* ShapingLineBreaker::ShapeLine(
         break;
       if (UNLIKELY(last_safe > break_opportunity.offset)) {
         // TODO(crbug.com/1787026): This should not happen, but we see crashes.
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
       }
 

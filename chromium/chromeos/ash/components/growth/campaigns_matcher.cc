@@ -5,16 +5,19 @@
 #include "chromeos/ash/components/growth/campaigns_matcher.h"
 
 #include <memory>
+#include <optional>
 #include <string_view>
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/features.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/version.h"
+#include "base/version_info/version_info.h"
 #include "chromeos/ash/components/demo_mode/utils/dimensions_utils.h"
 #include "chromeos/ash/components/growth/campaigns_manager_client.h"
 #include "chromeos/ash/components/growth/campaigns_model.h"
@@ -45,10 +48,17 @@ inline constexpr char kEventTriggerParam[] =
 
 inline constexpr char kEventImpressionParam[] =
     "name:ChromeOSAshGrowthCampaigns_Campaign%d_Impression;comparator:<%d;"
-    "window:365;storage:365";
+    "window:3650;storage:3650";
 inline constexpr char kEventDismissalParam[] =
     "name:ChromeOSAshGrowthCampaigns_Campaign%d_Dismissed;comparator:<%d;"
-    "window:365;storage:365";
+    "window:3650;storage:3650";
+
+inline constexpr char kEventGroupImpressionParam[] =
+    "name:ChromeOSAshGrowthCampaigns_Group%d_Impression;comparator:<%d;"
+    "window:3650;storage:3650";
+inline constexpr char kEventGroupDismissalParam[] =
+    "name:ChromeOSAshGrowthCampaigns_Group%d_Dismissed;comparator:<%d;"
+    "window:3650;storage:3650";
 
 bool MatchPref(const base::Value::List* criterias,
                std::string_view pref_path,
@@ -77,6 +87,10 @@ bool MatchPref(const base::Value::List* criterias,
 
 int GetMilestone() {
   return version_info::GetMajorVersionNumberAsInt();
+}
+
+const base::Version& GetVersion() {
+  return version_info::GetVersion();
 }
 
 bool MatchTimeWindow(const base::Time& start_time,
@@ -109,9 +123,24 @@ bool MatchSchedulings(const std::vector<std::unique_ptr<TimeWindowTargeting>>&
   return false;
 }
 
-bool MatchExperimentTags(const base::Value::List* experiment_tags) {
+bool MatchExperimentTags(const base::Value::List* experiment_tags,
+                         std::optional<const base::Feature*> feature) {
   if (!ash::features::IsGrowthCampaignsExperimentTagTargetingEnabled()) {
     // Campaign not match if experiment tag targeting is not enabled.
+    return false;
+  }
+
+  // TODO: b/344673533 - verify that valid experiment targeting should have
+  // both feature and experiment tag. Ignore the campaign if it is not the case.
+
+  if (!feature.has_value()) {
+    // Campaign matched if there is no targeted feature config.
+    return true;
+  }
+
+  const auto* targeted_feature = feature.value();
+  if (!targeted_feature) {
+    // Campaign not matched if feaure config is invalid.
     return false;
   }
 
@@ -121,8 +150,7 @@ bool MatchExperimentTags(const base::Value::List* experiment_tags) {
   }
 
   const auto exp_tag = base::GetFieldTrialParamValueByFeature(
-      ash::features::kGrowthCampaignsExperimentTagTargeting,
-      kCampaignsExperimentTag);
+      *targeted_feature, kCampaignsExperimentTag);
 
   if (exp_tag.empty()) {
     // Campaign not match if no experiment tag exists.
@@ -134,6 +162,131 @@ bool MatchExperimentTags(const base::Value::List* experiment_tags) {
   return base::Contains(*experiment_tags, exp_tag);
 }
 
+// Match if any entry in target values is in user pref.
+bool CompareListValue(const base::Value::List& pref_values,
+                      const base::Value::List& target_values) {
+  for (auto& value : target_values) {
+    if (base::Contains(pref_values, value)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Match if target value is not provided or any value in the target is found in
+// user pref.
+bool MatchOneUserPref(const PrefService& pref_service,
+                      const std::string_view& pref_name,
+                      const base::Value::List& target_values) {
+  if (target_values.empty()) {
+    return true;
+  }
+
+  auto* pref = pref_service.FindPreference(pref_name);
+  if (!pref) {
+    growth::RecordCampaignsManagerError(
+        growth::CampaignsManagerError::kTargetingUserPrefNotFound);
+    LOG(ERROR) << "Targeting user pref not found: " << pref_name;
+    return false;
+  }
+
+  auto* pref_value = pref->GetValue();
+  CHECK(pref_value);
+
+  if (pref_value->is_none() || pref_value->is_dict()) {
+    LOG(ERROR) << "User pref type is not supported: " << pref_name;
+    return false;
+  }
+
+  // If the user pref is a list, match if any entry in target values is in user
+  // pref.
+  if (pref_value->is_list()) {
+    return CompareListValue(pref_value->GetList(), target_values);
+  }
+
+  // If the user pref is not a list, match if any entry in target values is the
+  // pref value.
+  return base::Contains(target_values, *pref_value);
+}
+
+// TODO: b/354060160 - Add more data type to pref targeting.
+// Match a set of user preference, only list is supported at this time. The
+// structure looks like:
+// {
+//   "prefA": ["A"],
+//   "prefB": ["B"]
+// }
+// conditions_met = A && B
+bool MatchUserPrefSet(const PrefService& pref_service,
+                      const base::Value::Dict& target_user_prefs) {
+  for (auto [pref_name, target_values] : target_user_prefs) {
+    if (!target_values.is_list()) {
+      LOG(ERROR) << "Invalid user pref targeting type.";
+      return false;
+    }
+    if (!MatchOneUserPref(pref_service, pref_name, target_values.GetList())) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Match the user preference. The structure looks like:
+// "userPref": [ // These two conditions are logic OR.
+//   { // These two conditions are logic AND.
+//     "prefA": ["A1", "A2"], // these means prefA contains A1 or A2.
+//     "prefB": ["B1"]
+//   },
+//   {
+//     "prefC": ["C1"]
+//   }
+// ]
+// conditions_met = (A1 OR A2) && B1 || C1;
+bool MatchUserPrefs(const PrefService* pref_service,
+                    const base::Value::List* user_pref_targettings) {
+  if (!user_pref_targettings || user_pref_targettings->empty()) {
+    return true;
+  }
+
+  if (!pref_service) {
+    RecordCampaignsManagerError(
+        CampaignsManagerError::kUserPrefUnavailableAtMatching);
+    LOG(ERROR) << "Matching user pref before user pref service is available";
+    return false;
+  }
+
+  // If any targeting set is matched, the campaign will be selected.
+  for (auto& targeting : *user_pref_targettings) {
+    if (!targeting.is_dict()) {
+      LOG(ERROR) << "Invalid user pref targeting set.";
+      continue;
+    }
+    if (MatchUserPrefSet(*pref_service, targeting.GetDict())) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool MatchVersion(const base::Version& current_version,
+                  std::optional<base::Version> min_version,
+                  std::optional<base::Version> max_version) {
+  if (!current_version.IsValid()) {
+    // Not match if current version is invalid.
+    return false;
+  }
+
+  if (min_version && min_version->CompareTo(current_version) == 1) {
+    return false;
+  }
+
+  if (max_version && max_version->CompareTo(current_version) == -1) {
+    return false;
+  }
+
+  return true;
+}
+
 bool IsCampaignValid(const Campaign* campaign) {
   if (!GetCampaignId(campaign)) {
     LOG(ERROR) << "Invalid campaign: missing campaign ID.";
@@ -142,6 +295,16 @@ bool IsCampaignValid(const Campaign* campaign) {
   }
 
   return true;
+}
+
+std::map<std::string, std::string> CreateBasicConditionParams() {
+  std::map<std::string, std::string> conditions_params;
+  // `event_used` and `event_trigger` are required for feature_engagement
+  // config, although they are not used in campaign matching.
+  conditions_params[kEventUsedKey] = kEventUsedParam;
+  conditions_params[kEventTriggerKey] = kEventTriggerParam;
+
+  return conditions_params;
 }
 
 }  // namespace
@@ -190,8 +353,8 @@ void CampaignsMatcher::SetIsUserOwner(bool is_user_owner) {
   is_user_owner_ = is_user_owner;
 }
 
-void CampaignsMatcher::SetTrigger(TriggeringType trigger) {
-  trigger_ = trigger;
+void CampaignsMatcher::SetTrigger(const Trigger&& trigger) {
+  trigger_ = std::move(trigger);
 }
 
 void CampaignsMatcher::SetPrefs(PrefService* prefs) {
@@ -229,7 +392,8 @@ bool CampaignsMatcher::IsCampaignMatched(const Campaign* campaign,
     return false;
   }
 
-  if (Matched(targetings, campaign_id.value(), is_prematch)) {
+  if (Matched(targetings, campaign_id.value(), GetCampaignGroupId(campaign),
+              is_prematch)) {
     return true;
   }
 
@@ -274,28 +438,9 @@ bool CampaignsMatcher::MatchRetailers(
 
 bool CampaignsMatcher::MatchDemoModeAppVersion(
     const DemoModeTargeting& targeting) const {
-  const auto* min_version = targeting.GetAppMinVersion();
-  const auto* max_version = targeting.GetAppMaxVersion();
-  if (!min_version && !max_version) {
-    // Match if no app version targeting.
-    return true;
-  }
-
-  const auto version = client_->GetDemoModeAppVersion();
-  if (!version.IsValid()) {
-    // Not match if the app version is invalid.
-    return false;
-  }
-
-  if (min_version && version.CompareTo(base::Version(*min_version)) == -1) {
-    return false;
-  }
-
-  if (max_version && version.CompareTo(base::Version(*max_version)) == 1) {
-    return false;
-  }
-
-  return true;
+  return MatchVersion(client_->GetDemoModeAppVersion(),
+                      targeting.GetAppMinVersion(),
+                      targeting.GetAppMaxVersion());
 }
 
 bool CampaignsMatcher::MaybeMatchDemoModeTargeting(
@@ -328,7 +473,6 @@ bool CampaignsMatcher::MaybeMatchDemoModeTargeting(
 
 bool CampaignsMatcher::MatchMilestone(const DeviceTargeting& targeting) const {
   const auto milestone = GetMilestone();
-
   auto min_milestone = targeting.GetMinMilestone();
   if (min_milestone && milestone < min_milestone) {
     return false;
@@ -340,6 +484,12 @@ bool CampaignsMatcher::MatchMilestone(const DeviceTargeting& targeting) const {
   }
 
   return true;
+}
+
+bool CampaignsMatcher::MatchMilestoneVersion(
+    const DeviceTargeting& targeting) const {
+  return MatchVersion(GetVersion(), targeting.GetMinVersion(),
+                      targeting.GetMaxVersion());
 }
 
 bool CampaignsMatcher::MatchDeviceTargeting(
@@ -362,6 +512,11 @@ bool CampaignsMatcher::MatchDeviceTargeting(
     return false;
   }
 
+  const auto* user_locales = targeting.GetUserLocales();
+  if (user_locales && !Contains(*user_locales, client_->GetUserLocale())) {
+    return false;
+  }
+
   const auto registered_time_targeting = targeting.GetRegisteredTime();
   if (!MatchRegisteredTime(registered_time_targeting)) {
     return false;
@@ -372,7 +527,19 @@ bool CampaignsMatcher::MatchDeviceTargeting(
     return false;
   }
 
-  return MatchMilestone(targeting);
+  const auto* included_countries = targeting.GetIncludedCountries();
+  if (included_countries &&
+      !Contains(*included_countries, client_->GetCountryCode())) {
+    return false;
+  }
+
+  const auto* excluded_countries = targeting.GetExcludedCountries();
+  if (excluded_countries &&
+      Contains(*excluded_countries, client_->GetCountryCode())) {
+    return false;
+  }
+
+  return MatchMilestone(targeting) && MatchMilestoneVersion(targeting);
 }
 
 bool CampaignsMatcher::MatchRegisteredTime(
@@ -413,15 +580,45 @@ bool CampaignsMatcher::MatchDeviceAge(
                          /*target=*/base::Time::Now());
 }
 
-bool CampaignsMatcher::MatchTriggeringType(
-    const std::vector<TriggeringType>& trigger_targetings) const {
+bool CampaignsMatcher::MatchTriggerTargeting(
+    const std::vector<std::unique_ptr<TriggerTargeting>>& trigger_targetings)
+    const {
   if (trigger_targetings.empty()) {
     // Campaigns matched if `trigger_targetings` is empty.
     return true;
   }
 
   for (const auto& trigger : trigger_targetings) {
-    if (trigger == trigger_) {
+    auto trigger_type = trigger->GetTriggerType();
+    if (!trigger_type) {
+      // Ignore if trigger type is missing from the targeting.
+      // TODO: b/341374525 - Record the error when the trigger type is missing.
+      continue;
+    }
+
+    // TODO: b/330931877 - Add bounds check for casting to enum from value in
+    // campaign.
+    if (trigger_.type != static_cast<TriggerType>(trigger_type.value())) {
+      continue;
+    }
+
+    // Only `kEvent` trigger needs to check event name, so other trigger type
+    // is matched at this point.
+    if (trigger_.type != TriggerType::kEvent) {
+      return true;
+    }
+
+    const base::Value::List* trigger_events = trigger->GetTriggerEvents();
+    if (!trigger_events) {
+      // If the trigger type is `kEvent`, but the `trigger_events` is not valid,
+      // does not match.
+      // TODO: b/341164013 - Add new specific error type for this case.
+      RecordCampaignsManagerError(CampaignsManagerError::kInvalidTrigger);
+      LOG(ERROR) << "Invalid trigger events, requires a list of strings.";
+      continue;
+    }
+
+    if (Contains(*trigger_events, trigger_.event)) {
       return true;
     }
   }
@@ -451,10 +648,39 @@ bool CampaignsMatcher::MatchOpenedApp(
   return false;
 }
 
+bool CampaignsMatcher::ReachCap(const std::string& cap_event_name,
+                                int id,
+                                std::optional<int> cap) const {
+  if (!cap) {
+    // There is no cap, return false.
+    return false;
+  }
+
+  std::map<std::string, std::string> conditions_params =
+      CreateBasicConditionParams();
+  // Event can be put in any key starting with `event_`.
+  // Please see `components/feature_engagement/README.md#featureconfig`.
+  conditions_params[kEventKey] =
+      base::StringPrintf(cap_event_name.c_str(), id, cap.value());
+
+  return !client_->WouldTriggerHelpUI(conditions_params);
+}
+
 bool CampaignsMatcher::MatchActiveUrlRegexes(
     const std::vector<std::string>& active_url_regrexes) const {
   if (active_url_regrexes.empty()) {
     // Campaigns matched if active URL targeting is empty.
+    return true;
+  }
+
+  if (active_url_.is_empty()) {
+    // Campaigns matched if no active URL is set. Active URL is used for
+    // targeting web app and PWA. When active URL is empty, it is likely not
+    // triggered by opening web app or PWA. In this case, defer to other
+    // targeting to match campaign.
+    // An example is G1 nudge is triggered by a group of app opened (PWA, Web
+    // App and ARC app), the active URL targeting is used for PWA and Web App
+    // while doesn't apply for ARC app.
     return true;
   }
 
@@ -467,38 +693,32 @@ bool CampaignsMatcher::MatchActiveUrlRegexes(
 }
 
 bool CampaignsMatcher::MatchEvents(std::unique_ptr<EventsTargeting> config,
-                                   int campaign_id) const {
+                                   int campaign_id,
+                                   std::optional<int> group_id) const {
   if (!config) {
     // Campaign is matched if there is no events targeting.
     return true;
   }
 
-  std::map<std::string, std::string> conditions_params;
-  // `event_used` and `event_trigger` are required for feature_engagement
-  // config, although they are not used in campaign matching.
-  conditions_params[kEventUsedKey] = kEventUsedParam;
-  conditions_params[kEventTriggerKey] = kEventTriggerParam;
-
-  // Check impression cap and dismissal cap.
-  int impression_cap = config->GetImpressionCap();
-
-  // Event can be put in any key starting with `event_`.
-  // Please see `components/feature_engagement/README.md#featureconfig`.
-  conditions_params[kEventKey] =
-      base::StringPrintf(kEventImpressionParam, campaign_id, impression_cap);
-  if (!client_->WouldTriggerHelpUI(conditions_params)) {
-    // Campaign is not matched if the impression cap condition is not met.
+  // Check group impression cap and dismissal cap.
+  if (group_id && (ReachCap(kEventGroupImpressionParam, /*id=*/group_id.value(),
+                            config->GetGroupImpressionCap()) ||
+                   ReachCap(kEventGroupDismissalParam, /*id=*/group_id.value(),
+                            config->GetGroupDismissalCap()))) {
+    // Reached group impression cap or dismissal cap.
     return false;
   }
 
-  int dismissal_cap = config->GetDismissalCap();
-  conditions_params[kEventKey] =
-      base::StringPrintf(kEventDismissalParam, campaign_id, dismissal_cap);
-  if (!client_->WouldTriggerHelpUI(conditions_params)) {
-    // Campaign is not matched if the dismissal cap condition is not met.
+  // Check campaign impression cap and dismissal cap.
+  if (ReachCap(kEventImpressionParam, /*id=*/campaign_id,
+               config->GetImpressionCap()) ||
+      ReachCap(kEventDismissalParam, /*id=*/campaign_id,
+               config->GetDismissalCap())) {
     return false;
   }
 
+  std::map<std::string, std::string> conditions_params =
+      CreateBasicConditionParams();
   // Here is to handle custom events targeting conditions.
   // The outer loop is AND logic and the inner loop is OR logic.
   const base::Value::List* conditions = config->GetEventsConditions();
@@ -588,27 +808,32 @@ bool CampaignsMatcher::MatchSessionTargeting(
     return true;
   }
 
-  return MatchExperimentTags(targeting.GetExperimentTags()) &&
+  return MatchExperimentTags(targeting.GetExperimentTags(),
+                             targeting.GetFeature()) &&
          MatchMinorUser(targeting.GetMinorUser()) &&
          MatchOwner(targeting.GetIsOwner());
 }
 
-bool CampaignsMatcher::MatchRuntimeTargeting(const RuntimeTargeting& targeting,
-                                             int campaign_id) const {
+bool CampaignsMatcher::MatchRuntimeTargeting(
+    const RuntimeTargeting& targeting,
+    int campaign_id,
+    std::optional<int> group_id) const {
   if (!targeting.IsValid()) {
     // Campaigns matched if there is no runtime targeting.
     return true;
   }
 
-  return MatchTriggeringType(targeting.GetTriggers()) &&
+  return MatchTriggerTargeting(targeting.GetTriggers()) &&
          MatchSchedulings(targeting.GetSchedulings()) &&
          MatchOpenedApp(targeting.GetAppsOpened()) &&
          MatchActiveUrlRegexes(targeting.GetActiveUrlRegexes()) &&
-         MatchEvents(targeting.GetEventsConfig(), campaign_id);
+         MatchEvents(targeting.GetEventsConfig(), campaign_id, group_id) &&
+         MatchUserPrefs(prefs_, targeting.GetUserPrefTargetings());
 }
 
 bool CampaignsMatcher::Matched(const Targeting* targeting,
                                int campaign_id,
+                               std::optional<int> group_id,
                                bool is_prematch) const {
   if (!targeting) {
     // Targeting is invalid. Skip the current campaign.
@@ -623,18 +848,20 @@ bool CampaignsMatcher::Matched(const Targeting* targeting,
   }
 
   return MatchSessionTargeting(SessionTargeting(targeting)) &&
-         MatchRuntimeTargeting(RuntimeTargeting(targeting), campaign_id);
+         MatchRuntimeTargeting(RuntimeTargeting(targeting), campaign_id,
+                               group_id);
 }
 
 bool CampaignsMatcher::Matched(const Targetings* targetings,
                                int campaign_id,
+                               std::optional<int> group_id,
                                bool is_prematch) const {
   if (!targetings || targetings->empty()) {
     return true;
   }
 
   for (const auto& targeting : *targetings) {
-    if (Matched(targeting.GetIfDict(), campaign_id, is_prematch)) {
+    if (Matched(targeting.GetIfDict(), campaign_id, group_id, is_prematch)) {
       return true;
     }
   }

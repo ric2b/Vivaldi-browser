@@ -407,6 +407,7 @@ def write_multi_gpu_category(multi_gpu_category, data_file):
   suffix_for_category = {
     'primary': 'Primary',
     'secondary': 'Secondary',
+    'npu': 'Npu',
     'active': 'Active',
     'any': 'Any',
     '': 'None',
@@ -687,7 +688,10 @@ def write_intel_gpu_series_list(entry_id, is_exception, exception_id,
       'alderlake': 'kAlderlake',
       'alchemist': 'kAlchemist',
       'raptorlake': 'kRaptorlake',
-      'meteorlake': 'kMeteorlake'
+      'meteorlake': 'kMeteorlake',
+      'arrowlake': 'kArrowlake',
+      'lunarlake': 'kLunarlake',
+      'battlemage': 'kBattlemage'
     }
     for series in intel_gpu_series_list:
       assert series in intel_gpu_series_map

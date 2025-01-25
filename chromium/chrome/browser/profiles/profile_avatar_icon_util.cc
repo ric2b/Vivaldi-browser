@@ -36,6 +36,7 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_switches.h"
+#include "components/vector_icons/vector_icons.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
@@ -45,6 +46,8 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/color/color_id.h"
+#include "ui/color/color_provider_key.h"
+#include "ui/color/dynamic_color/palette_factory.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/favicon_size.h"
@@ -52,8 +55,10 @@
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/native_theme/native_theme.h"
 #include "url/url_canon.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -71,6 +76,11 @@
 
 // Helper methods for transforming and drawing avatar icons.
 namespace {
+
+// Palette color tones for the material color utils used to select a
+// material-appropriate color for a given profile color,
+constexpr float kIconToneDark = 40.f;
+constexpr float kIconToneLight = 80.f;
 
 #if BUILDFLAG(IS_WIN)
 const int kOldAvatarIconWidth = 38;
@@ -244,6 +254,36 @@ class ImageWithBackgroundSource : public gfx::CanvasImageSource {
   const SkColor background_;
 };
 
+// Returns icon with padding with no background.
+const gfx::ImageSkia CreatePaddedIcon(const gfx::VectorIcon& icon,
+                                      int size,
+                                      SkColor color,
+                                      float icon_to_image_ratio) {
+  const int padding =
+      static_cast<int>(size * (1.0f - icon_to_image_ratio) / 2.0f);
+
+  const gfx::ImageSkia sized_icon =
+      gfx::CreateVectorIcon(icon, size - 2 * padding, color);
+  return gfx::CanvasImageSource::CreatePadded(sized_icon, gfx::Insets(padding));
+}
+
+// Returns a filled person avatar icon.
+gfx::Image GetLegacyPlaceholderAvatarIconWithColors(SkColor fill_color,
+                                                    SkColor stroke_color,
+                                                    int size) {
+  CHECK(!base::FeatureList::IsEnabled(kOutlineSilhouetteIcon));
+
+  const gfx::VectorIcon& person_icon =
+      size >= 40 ? kPersonFilledPaddedLargeIcon : kPersonFilledPaddedSmallIcon;
+  const gfx::ImageSkia icon_without_background = gfx::CreateVectorIcon(
+      gfx::IconDescription(person_icon, size, stroke_color));
+  const gfx::ImageSkia icon_with_background(
+      std::make_unique<ImageWithBackgroundSource>(icon_without_background,
+                                                  fill_color),
+      gfx::Size(size, size));
+  return gfx::Image(icon_with_background);
+}
+
 }  // namespace
 
 namespace profiles {
@@ -303,8 +343,7 @@ constexpr size_t kPlaceholderAvatarIndex = 0;
 
 ui::ImageModel GetGuestAvatar(int size) {
   return ui::ImageModel::FromVectorIcon(
-      features::IsChromeRefresh2023() ? kUserAccountAvatarRefreshIcon
-                                      : kUserAccountAvatarIcon,
+      kUserAccountAvatarRefreshIcon,
       switches::IsExplicitBrowserSigninUIOnDesktopEnabled()
           ? ui::kColorMenuIcon
           : ui::kColorAvatarIconGuest,
@@ -363,9 +402,14 @@ gfx::Image GetAvatarIconForNSMenu(const base::FilePath& profile_path) {
     return gfx::Image();
   }
 
+  PlaceholderAvatarIconParams icon_params =
+      GetPlaceholderAvatarIconParamsVisibleAgainstColor(
+          ui::NativeTheme::GetInstanceForNativeUi()->ShouldUseDarkColors()
+              ? SK_ColorBLACK
+              : SK_ColorWHITE);
   // Get a higher res than 16px so it looks good after cropping to a circle.
-  gfx::Image icon =
-      entry->GetAvatarIcon(kAvatarIconSize, /*download_high_res=*/false);
+  gfx::Image icon = entry->GetAvatarIcon(
+      kAvatarIconSize, /*download_high_res=*/false, icon_params);
   return profiles::GetSizedAvatarIcon(
       icon, kMenuAvatarIconSize, kMenuAvatarIconSize, profiles::SHAPE_CIRCLE);
 }
@@ -619,18 +663,62 @@ const IconResourceInfo* GetDefaultAvatarIconResourceInfo(size_t index) {
   return &resource_info[index];
 }
 
-gfx::Image GetPlaceholderAvatarIconWithColors(SkColor fill_color,
-                                              SkColor stroke_color,
-                                              int size) {
+gfx::Image GetPlaceholderAvatarIconVisibleAgainstBackground(
+    SkColor profile_color_seed,
+    int size,
+    AvatarVisibilityAgainstBackground visibility) {
+  CHECK(base::FeatureList::IsEnabled(kOutlineSilhouetteIcon));
+
   const gfx::VectorIcon& person_icon =
-      size >= 40 ? kPersonFilledPaddedLargeIcon : kPersonFilledPaddedSmallIcon;
-  gfx::ImageSkia icon_without_background = gfx::CreateVectorIcon(
-      gfx::IconDescription(person_icon, size, stroke_color));
-  gfx::ImageSkia icon_with_background(
-      std::make_unique<ImageWithBackgroundSource>(icon_without_background,
-                                                  fill_color),
-      gfx::Size(size, size));
-  return gfx::Image(icon_with_background);
+      vector_icons::kAccountCircleChromeRefreshIcon;
+
+  // The palette is generated using the user color, which is independent of the
+  // profile's light or dark theme.
+  const ui::TonalPalette color_palette =
+      ui::GeneratePalette(profile_color_seed,
+                          ui::ColorProviderKey::SchemeVariant::kTonalSpot)
+          ->primary();
+  const SkColor visible_stroke_color =
+      visibility == AvatarVisibilityAgainstBackground::kVisibleAgainstDarkTheme
+          ? color_palette.get(kIconToneLight)
+          : color_palette.get(kIconToneDark);
+
+  const gfx::ImageSkia icon_without_background = gfx::CreateVectorIcon(
+      gfx::IconDescription(person_icon, size, visible_stroke_color));
+  return gfx::Image(icon_without_background);
+}
+
+gfx::Image GetPlaceholderAvatarIconWithColors(
+    SkColor fill_color,
+    SkColor stroke_color,
+    int size,
+    const PlaceholderAvatarIconParams& icon_params) {
+  if (!base::FeatureList::IsEnabled(kOutlineSilhouetteIcon)) {
+    return GetLegacyPlaceholderAvatarIconWithColors(fill_color, stroke_color,
+                                                    size);
+  }
+
+  // If the icon should be an outline icon visible against the background, use
+  // `GetPlaceholderAvatarIconVisibleAgainstBackground()` instead.
+  CHECK(!icon_params.visibility_against_background.has_value());
+
+  const gfx::VectorIcon& person_icon =
+      vector_icons::kAccountCircleChromeRefreshIcon;
+
+  const gfx::ImageSkia avatar_icon_without_background =
+      icon_params.has_padding
+          ? CreatePaddedIcon(person_icon, size, stroke_color, 0.5f)
+          : gfx::CreateVectorIcon(
+                gfx::IconDescription(person_icon, size, stroke_color));
+
+  if (icon_params.has_background) {
+    return gfx::Image(
+        gfx::ImageSkia(std::make_unique<ImageWithBackgroundSource>(
+                           avatar_icon_without_background, fill_color),
+                       gfx::Size(size, size)));
+  } else {
+    return gfx::Image(avatar_icon_without_background);
+  }
 }
 
 int GetDefaultAvatarIconResourceIDAtIndex(size_t index) {
@@ -827,7 +915,9 @@ void SetDefaultProfileAvatarIndex(Profile* profile, size_t avatar_icon_index) {
 #if BUILDFLAG(IS_WIN)
 SkBitmap GetWin2xAvatarImage(ProfileAttributesEntry* entry) {
   // Request just one size large enough for all uses.
-  return GetSkBitmapCopy(entry->GetAvatarIcon(IconUtil::kLargeIconSize));
+  return GetSkBitmapCopy(
+      entry->GetAvatarIcon(IconUtil::kLargeIconSize, /*use_high_res_file=*/true,
+                           /*icon_params=*/{.has_padding = false}));
 }
 
 SkBitmap GetWin2xAvatarIconAsSquare(const SkBitmap& source_bitmap) {

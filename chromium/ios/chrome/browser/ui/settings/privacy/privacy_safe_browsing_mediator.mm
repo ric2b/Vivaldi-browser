@@ -118,7 +118,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       safeBrowsingState = safe_browsing::SafeBrowsingState::NO_SAFE_BROWSING;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   safe_browsing::SetSafeBrowsingState(self.userPrefService, safeBrowsingState);
@@ -271,7 +271,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       return safeBrowsingState ==
              safe_browsing::SafeBrowsingState::NO_SAFE_BROWSING;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return NO;
   }
 }
@@ -313,6 +313,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
     } else {
       base::RecordAction(base::UserMetricsAction(
           "SafeBrowsing.Settings.EnhancedProtectionClicked"));
+      if (self.openedFromPromoInteraction) {
+        base::RecordAction(base::UserMetricsAction(
+            "SafeBrowsing.Settings.EnhancedProtectionClickedDueToPromo"));
+      }
       [self selectSettingItem:item];
     }
   }
@@ -357,7 +361,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [self.handler showSafeBrowsingStandardProtection];
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }

@@ -4,14 +4,10 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fpdfdoc/cpvt_section.h"
 
 #include <algorithm>
+#include <array>
 
 #include "core/fpdfdoc/cpvt_variabletext.h"
 #include "core/fpdfdoc/cpvt_wordinfo.h"
@@ -20,7 +16,7 @@
 
 namespace {
 
-constexpr uint8_t kSpecialChars[128] = {
+constexpr std::array<const uint8_t, 128> kSpecialChars = {{
     0x00, 0x0C, 0x08, 0x0C, 0x08, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x08, 0x00,
@@ -32,12 +28,12 @@ constexpr uint8_t kSpecialChars[128] = {
     0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
     0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
     0x01, 0x01, 0x01, 0x0C, 0x00, 0x08, 0x00, 0x00,
-};
+}};
 
 bool IsLatin(uint16_t word) {
-  if (word <= 0x007F)
+  if (word <= 0x007F) {
     return !!(kSpecialChars[word] & 0x01);
-
+  }
   return ((word >= 0x00C0 && word <= 0x00FF) ||
           (word >= 0x0100 && word <= 0x024F) ||
           (word >= 0x1E00 && word <= 0x1EFF) ||
@@ -73,16 +69,15 @@ bool IsCJK(uint32_t word) {
 }
 
 bool IsPunctuation(uint32_t word) {
-  if (word <= 0x007F)
+  if (word <= 0x007F) {
     return !!(kSpecialChars[word] & 0x08);
-
+  }
   if (word >= 0x0080 && word <= 0x00FF) {
     return (word == 0x0082 || word == 0x0084 || word == 0x0085 ||
             word == 0x0091 || word == 0x0092 || word == 0x0093 ||
             word <= 0x0094 || word == 0x0096 || word == 0x00B4 ||
             word == 0x00B8);
   }
-
   if (word >= 0x2000 && word <= 0x206F) {
     return (
         word == 0x2010 || word == 0x2011 || word == 0x2012 || word == 0x2013 ||
@@ -92,7 +87,6 @@ bool IsPunctuation(uint32_t word) {
         word == 0x2036 || word == 0x2037 || word == 0x203C || word == 0x203D ||
         word == 0x203E || word == 0x2044);
   }
-
   if (word >= 0x3000 && word <= 0x303F) {
     return (
         word == 0x3001 || word == 0x3002 || word == 0x3003 || word == 0x3005 ||
@@ -102,10 +96,9 @@ bool IsPunctuation(uint32_t word) {
         word == 0x3017 || word == 0x3018 || word == 0x3019 || word == 0x301A ||
         word == 0x301B || word == 0x301D || word == 0x301E || word == 0x301F);
   }
-
-  if (word >= 0xFE50 && word <= 0xFE6F)
+  if (word >= 0xFE50 && word <= 0xFE6F) {
     return (word >= 0xFE50 && word <= 0xFE5E) || word == 0xFE63;
-
+  }
   if (word >= 0xFF00 && word <= 0xFFEF) {
     return (
         word == 0xFF01 || word == 0xFF02 || word == 0xFF07 || word == 0xFF08 ||
@@ -115,7 +108,6 @@ bool IsPunctuation(uint32_t word) {
         word == 0xFF5D || word == 0xFF61 || word == 0xFF62 || word == 0xFF63 ||
         word == 0xFF64 || word == 0xFF65 || word == 0xFF9E || word == 0xFF9F);
   }
-
   return false;
 }
 
@@ -124,9 +116,9 @@ bool IsConnectiveSymbol(uint32_t word) {
 }
 
 bool IsOpenStylePunctuation(uint32_t word) {
-  if (word <= 0x007F)
+  if (word <= 0x007F) {
     return !!(kSpecialChars[word] & 0x04);
-
+  }
   return (word == 0x300A || word == 0x300C || word == 0x300E ||
           word == 0x3010 || word == 0x3014 || word == 0x3016 ||
           word == 0x3018 || word == 0x301A || word == 0xFF08 ||

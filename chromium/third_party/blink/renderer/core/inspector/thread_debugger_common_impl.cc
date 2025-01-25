@@ -3,12 +3,6 @@
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/inspector/thread_debugger_common_impl.h"
-#include "third_party/blink/renderer/core/dom/attr.h"
-#include "third_party/blink/renderer/core/dom/attribute.h"
-#include "third_party/blink/renderer/core/dom/node.h"
-#include "third_party/blink/renderer/core/dom/node_list.h"
-#include "third_party/blink/renderer/core/html/html_collection.h"
-#include "third_party/blink/renderer/platform/bindings/v8_dom_wrapper.h"
 
 #include <memory>
 
@@ -33,9 +27,14 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_trusted_script.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_trusted_script_url.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_window.h"
+#include "third_party/blink/renderer/core/dom/attr.h"
+#include "third_party/blink/renderer/core/dom/attribute.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/dom/node.h"
+#include "third_party/blink/renderer/core/dom/node_list.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/html/html_collection.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
 #include "third_party/blink/renderer/core/inspector/inspector_dom_debugger_agent.h"
@@ -49,6 +48,7 @@
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
 #include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/bindings/v8_dom_wrapper.h"
+#include "third_party/blink/renderer/platform/bindings/v8_set_return_value.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
@@ -132,12 +132,13 @@ unsigned ThreadDebuggerCommonImpl::PromiseRejected(
     const String& error_message,
     v8::Local<v8::Value> exception,
     std::unique_ptr<SourceLocation> location) {
-  const String default_message = "Uncaught (in promise)";
+  const StringView default_message = "Uncaught (in promise)";
   String message = error_message;
-  if (message.empty())
-    message = default_message;
-  else if (message.StartsWith("Uncaught "))
-    message = message.Substring(0, 8) + " (in promise)" + message.Substring(8);
+  if (message.empty()) {
+    message = "Uncaught (in promise)";
+  } else if (message.StartsWith("Uncaught ")) {
+    message = "Uncaught (in promise)" + StringView(message, 8);
+  }
 
   ReportConsoleMessage(
       ToExecutionContext(context), mojom::ConsoleMessageSource::kJavaScript,
@@ -897,7 +898,8 @@ void ThreadDebuggerCommonImpl::GetAccessibleNameCallback(
   if (node && !node->GetLayoutObject())
     return;
   if (auto* element = DynamicTo<Element>(node)) {
-    V8SetReturnValueString(info, element->computedName(), isolate);
+    bindings::V8SetReturnValue(info, element->computedName(), isolate,
+                               bindings::V8ReturnValue::kNonNullable);
   }
 }
 
@@ -914,7 +916,8 @@ void ThreadDebuggerCommonImpl::GetAccessibleRoleCallback(
   if (node && !node->GetLayoutObject())
     return;
   if (auto* element = DynamicTo<Element>(node)) {
-    V8SetReturnValueString(info, element->computedRole(), isolate);
+    bindings::V8SetReturnValue(info, element->computedRole(), isolate,
+                               bindings::V8ReturnValue::kNonNullable);
   }
 }
 
@@ -977,36 +980,33 @@ void ThreadDebuggerCommonImpl::GetEventListenersCallback(
 }
 
 static uint64_t GetTraceId(ThreadDebuggerCommonImpl* this_thread_debugger,
-                           const v8_inspector::StringView& title_view) {
-  WTF::String title = ToCoreString(title_view);
-  unsigned title_hash = WTF::GetHash(title);
-  return title_hash ^ (reinterpret_cast<uintptr_t>(this_thread_debugger));
+                           v8::Local<v8::String> label) {
+  unsigned label_hash = label->GetIdentityHash();
+  return label_hash ^ (reinterpret_cast<uintptr_t>(this_thread_debugger));
 }
 
-void ThreadDebuggerCommonImpl::consoleTime(
-    const v8_inspector::StringView& title_view) {
+void ThreadDebuggerCommonImpl::consoleTime(v8::Isolate* isolate,
+                                           v8::Local<v8::String> label) {
   TRACE_EVENT_COPY_NESTABLE_ASYNC_BEGIN0(
-      "blink.console", ToCoreString(title_view).Utf8().c_str(),
+      "blink.console", ToCoreString(isolate, label).Utf8().c_str(),
       TRACE_ID_WITH_SCOPE("console.time",
-                          TRACE_ID_LOCAL(GetTraceId(this, title_view))));
+                          TRACE_ID_LOCAL(GetTraceId(this, label))));
 }
 
-void ThreadDebuggerCommonImpl::consoleTimeEnd(
-    const v8_inspector::StringView& title_view) {
+void ThreadDebuggerCommonImpl::consoleTimeEnd(v8::Isolate* isolate,
+                                              v8::Local<v8::String> label) {
   TRACE_EVENT_COPY_NESTABLE_ASYNC_END0(
-      "blink.console", ToCoreString(title_view).Utf8().c_str(),
+      "blink.console", ToCoreString(isolate, label).Utf8().c_str(),
       TRACE_ID_WITH_SCOPE("console.time",
-                          TRACE_ID_LOCAL(GetTraceId(this, title_view))));
+                          TRACE_ID_LOCAL(GetTraceId(this, label))));
 }
 
-void ThreadDebuggerCommonImpl::consoleTimeStamp(
-    const v8_inspector::StringView& title) {
-  ExecutionContext* ec = CurrentExecutionContext(isolate_);
-  // TODO(dgozman): we can save on a copy here if TracedValue would take a
-  // StringView.
+void ThreadDebuggerCommonImpl::consoleTimeStamp(v8::Isolate* isolate,
+                                                v8::Local<v8::String> label) {
   DEVTOOLS_TIMELINE_TRACE_EVENT_INSTANT(
-      "TimeStamp", inspector_time_stamp_event::Data, ec, ToCoreString(title));
-  probe::ConsoleTimeStamp(ec, ToCoreString(title));
+      "TimeStamp", inspector_time_stamp_event::Data,
+      CurrentExecutionContext(isolate_), ToCoreString(isolate, label));
+  probe::ConsoleTimeStamp(isolate_, label);
 }
 
 void ThreadDebuggerCommonImpl::startRepeatingTimer(

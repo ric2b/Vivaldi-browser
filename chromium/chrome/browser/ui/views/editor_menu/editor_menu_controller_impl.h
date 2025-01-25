@@ -11,10 +11,10 @@
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/ui/chromeos/read_write_cards/read_write_card_controller.h"
 #include "chrome/browser/ui/views/editor_menu/editor_manager.h"
 #include "chrome/browser/ui/views/editor_menu/editor_menu_view_delegate.h"
 #include "chrome/browser/ui/views/editor_menu/utils/editor_types.h"
-#include "chromeos/components/editor_menu/public/cpp/read_write_card_controller.h"
 #include "content/public/browser/browser_context.h"
 #include "ui/views/widget/unique_widget_ptr.h"
 #include "ui/views/widget/widget.h"
@@ -51,15 +51,18 @@ class EditorMenuControllerImpl : public chromeos::ReadWriteCardController,
 
   void SetBrowserContext(content::BrowserContext* context);
   void LogEditorMode(const EditorMode& editor_mode);
-  void GetEditorMode(base::OnceCallback<void(const EditorMode)> callback);
+  void GetEditorContext(
+      base::OnceCallback<void(const EditorContext&)> callback);
   void DismissCard();
+  void TryCreatingEditorSession();
 
   views::Widget* editor_menu_widget_for_testing() {
     return editor_menu_widget_.get();
   }
 
-  void OnGetEditorPanelContextResultForTesting(const gfx::Rect& anchor_bounds,
-                                               EditorContext context);
+  void OnGetAnchorBoundsAndEditorContextForTesting(
+      const gfx::Rect& anchor_bounds,
+      const EditorContext& context);
 
   base::WeakPtr<EditorMenuControllerImpl> GetWeakPtr();
 
@@ -93,11 +96,11 @@ class EditorMenuControllerImpl : public chromeos::ReadWriteCardController,
     std::unique_ptr<EditorManager> manager_;
   };
 
-  void OnGetEditorModeResult(
-      base::OnceCallback<void(const EditorMode)> callback,
-      EditorContext context);
-  void OnGetEditorPanelContextResult(const gfx::Rect& anchor_bounds,
-                                     EditorContext context);
+  void OnGetEditorContext(
+      base::OnceCallback<void(const EditorContext&)> callback,
+      const EditorContext& context);
+  void OnGetAnchorBoundsAndEditorContext(const gfx::Rect& anchor_bounds,
+                                         const EditorContext& context);
 
   // This method is fired whenever the EditorPromoCard, or EditorMenu cards are
   // hidden from the user's view.

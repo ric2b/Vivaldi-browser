@@ -77,6 +77,9 @@ class CSSDefaultStyleSheets final
   RuleSet* DefaultMediaControlsStyle() {
     return default_media_controls_style_.Get();
   }
+  RuleSet* DefaultForcedColorsMediaControlsStyle() {
+    return default_forced_colors_media_controls_style_.Get();
+  }
   RuleSet* DefaultFullscreenStyle() { return default_fullscreen_style_.Get(); }
 
   StyleSheetContents* DefaultStyleSheet() { return default_style_sheet_.Get(); }
@@ -101,9 +104,6 @@ class CSSDefaultStyleSheets final
   StyleSheetContents* MarkerStyleSheet() { return marker_style_sheet_.Get(); }
   StyleSheetContents* ForcedColorsStyleSheet() {
     return forced_colors_style_sheet_.Get();
-  }
-  StyleSheetContents* AutoSizesStyleSheet() {
-    return auto_sizes_style_sheet_.Get();
   }
 
   CORE_EXPORT void PrepareForLeakDetection();
@@ -152,6 +152,7 @@ class CSSDefaultStyleSheets final
   Member<RuleSet> default_media_controls_style_;
   Member<RuleSet> default_fullscreen_style_;
   Member<RuleSet> default_json_document_style_;
+  Member<RuleSet> default_forced_colors_media_controls_style_;
   // If new RuleSets are added, make sure to add a new check in
   // VerifyUniversalRuleCount() as universal rule buckets are performance
   // sensitive. At least if the added UA styles are matched against all elements
@@ -170,7 +171,6 @@ class CSSDefaultStyleSheets final
   Member<StyleSheetContents> stylable_select_forced_colors_style_sheet_;
   Member<StyleSheetContents> marker_style_sheet_;
   Member<StyleSheetContents> forced_colors_style_sheet_;
-  Member<StyleSheetContents> auto_sizes_style_sheet_;
 
   std::unique_ptr<UAStyleSheetLoader> media_controls_style_sheet_loader_;
 };

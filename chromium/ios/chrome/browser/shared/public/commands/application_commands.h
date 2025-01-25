@@ -59,6 +59,12 @@ enum class TabGridOpeningMode {
 // Shows the Settings UI, presenting from `baseViewController`.
 - (void)showSettingsFromViewController:(UIViewController*)baseViewController;
 
+// TODO(crbug.com/41352590) : Do not pass baseViewController through dispatcher.
+// Shows the Settings UI, presenting from `baseViewController` and with blue dot
+// for default browser settings if specified.
+- (void)showSettingsFromViewController:(UIViewController*)baseViewController
+              hasDefaultBrowserBlueDot:(BOOL)hasDefaultBrowserBlueDot;
+
 // Presents the Trusted Vault reauth dialog.
 // `baseViewController` presents the sign-in.
 // `trigger` UI elements where the trusted vault reauth has been triggered.
@@ -157,8 +163,8 @@ enum class TabGridOpeningMode {
 // Open a new window with `userActivity`
 - (void)openNewWindowWithActivity:(NSUserActivity*)userActivity;
 
-// Closes all open modals and ensures that a non-incognito tab is open. If
-// incognito is forced, then it will ensure an incognito tab is open.
+// Closes all open modals and ensures that a non-incognito NTP tab is open. If
+// incognito is forced, then it will ensure an incognito NTP tab is open.
 - (void)prepareToPresentModal:(ProceduralBlock)completion;
 
 @end

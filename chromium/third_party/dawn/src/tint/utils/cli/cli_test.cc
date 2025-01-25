@@ -51,10 +51,34 @@ TEST_F(CLITest, ShowHelp_ValueWithParameter) {
     opts.Add<ValueOption<int>>("my_option", "sets the awesome value");
 
     std::stringstream out;
-    out << std::endl;
+    out << "\n";
     opts.ShowHelp(out);
     EXPECT_EQ(out.str(), R"(
 --my_option <value>  sets the awesome value
+)");
+}
+
+TEST_F(CLITest, ShowHelp_ValueWithParameter_ExplicitEqualsFormFalse) {
+    OptionSet opts;
+    opts.Add<ValueOption<int>>("my_option", "sets the awesome value");
+
+    std::stringstream out;
+    out << "\n";
+    opts.ShowHelp(out, false);
+    EXPECT_EQ(out.str(), R"(
+--my_option <value>  sets the awesome value
+)");
+}
+
+TEST_F(CLITest, ShowHelp_ValueWithParameter_ExplicitEqualsFormTrue) {
+    OptionSet opts;
+    opts.Add<ValueOption<int>>("my_option", "sets the awesome value");
+
+    std::stringstream out;
+    out << "\n";
+    opts.ShowHelp(out, true);
+    EXPECT_EQ(out.str(), R"(
+--my_option=<value>  sets the awesome value
 )");
 }
 
@@ -63,7 +87,7 @@ TEST_F(CLITest, ShowHelp_ValueWithAlias) {
     opts.Add<ValueOption<int>>("my_option", "sets the awesome value", Alias{"alias"});
 
     std::stringstream out;
-    out << std::endl;
+    out << "\n";
     opts.ShowHelp(out);
     EXPECT_EQ(out.str(), R"(
 --my_option <value>  sets the awesome value
@@ -75,7 +99,7 @@ TEST_F(CLITest, ShowHelp_ValueWithShortName) {
     opts.Add<ValueOption<int>>("my_option", "sets the awesome value", ShortName{"a"});
 
     std::stringstream out;
-    out << std::endl;
+    out << "\n";
     opts.ShowHelp(out);
     EXPECT_EQ(out.str(), R"(
 --my_option <value>  sets the awesome value
@@ -91,7 +115,7 @@ for an option
 )");
 
     std::stringstream out;
-    out << std::endl;
+    out << "\n";
     opts.ShowHelp(out);
     EXPECT_EQ(out.str(), R"(
 --an-option <value>  this is a
@@ -107,7 +131,7 @@ TEST_F(CLITest, ShowHelp_LongName) {
                                "this is an option that has a silly long name", ShortName{"a"});
 
     std::stringstream out;
-    out << std::endl;
+    out << "\n";
     opts.ShowHelp(out);
     EXPECT_EQ(out.str(), R"(
 --an-option-with-a-really-really-long-name <value>
@@ -128,7 +152,7 @@ TEST_F(CLITest, ShowHelp_EnumValue) {
                             });
 
     std::stringstream out;
-    out << std::endl;
+    out << "\n";
     opts.ShowHelp(out);
     EXPECT_EQ(out.str(), R"(
 --my_enum_option <X|Y|Z>  sets the awesome value
@@ -150,7 +174,7 @@ TEST_F(CLITest, ShowHelp_MixedValues) {
                             });
 
     std::stringstream out;
-    out << std::endl;
+    out << "\n";
     opts.ShowHelp(out);
     EXPECT_EQ(out.str(), R"(
 --option-a <value>  an integer

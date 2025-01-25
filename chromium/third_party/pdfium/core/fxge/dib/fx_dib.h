@@ -9,7 +9,6 @@
 
 #include <stdint.h>
 
-#include <tuple>
 #include <utility>
 
 #include "core/fxcrt/compiler_specific.h"
@@ -29,19 +28,75 @@ enum class FXDIB_Format : uint16_t {
   kArgb = 0x220,
 };
 
-using FX_ARGB = uint32_t;
-using FX_CMYK = uint32_t;
+// Endian-dependent (in theory).
+using FX_ARGB = uint32_t;  // A in high bits, ..., B in low bits.
+using FX_CMYK = uint32_t;  // C in high bits, ..., K in low bits.
 
 // FX_COLORREF, like win32 COLORREF, is BGR. i.e. 0x00BBGGRR.
 // Note that while the non-existent alpha component should be set to 0, some
 // parts of the codebase use 0xFFFFFFFF as a sentinel value to indicate error.
 using FX_COLORREF = uint32_t;
 
+// Endian-independent, name-ordered by increasing address.
 template <typename T>
-struct FX_RGB {
-  T red;
-  T green;
-  T blue;
+struct FX_RGB_STRUCT {
+  T red = 0;
+  T green = 0;
+  T blue = 0;
+};
+
+template <typename T>
+struct FX_BGR_STRUCT {
+  T blue = 0;
+  T green = 0;
+  T red = 0;
+};
+
+template <typename T>
+struct FX_ARGB_STRUCT {
+  T alpha = 0;
+  T red = 0;
+  T green = 0;
+  T blue = 0;
+};
+
+template <typename T>
+struct FX_ABGR_STRUCT {
+  T alpha = 0;
+  T blue = 0;
+  T green = 0;
+  T red = 0;
+};
+
+template <typename T>
+struct FX_RGBA_STRUCT {
+  T red = 0;
+  T green = 0;
+  T blue = 0;
+  T alpha = 0;
+};
+
+template <typename T>
+struct FX_BGRA_STRUCT {
+  T blue = 0;
+  T green = 0;
+  T red = 0;
+  T alpha = 0;
+};
+
+template <typename T>
+struct FX_CMYK_STRUCT {
+  T cyan = 0;
+  T magenta = 0;
+  T yellow = 0;
+  T key = 0;
+};
+
+template <typename T>
+struct FX_LAB_STRUCT {
+  T lightness_star = 0;
+  T a_star = 0;
+  T b_star = 0;
 };
 
 struct FXDIB_ResampleOptions {
@@ -111,10 +166,10 @@ inline bool GetIsMaskFromFormat(FXDIB_Format format) {
   return !!(static_cast<uint16_t>(format) & 0x100);
 }
 
-FXDIB_Format MakeRGBFormat(int bpp);
+FX_BGRA_STRUCT<uint8_t> ArgbToBGRAStruct(FX_ARGB argb);
 
-// Returns (a, r, g, b)
-std::tuple<int, int, int, int> ArgbDecode(FX_ARGB argb);
+// Ignores alpha.
+FX_BGR_STRUCT<uint8_t> ArgbToBGRStruct(FX_ARGB argb);
 
 // Returns (a, FX_COLORREF)
 std::pair<int, FX_COLORREF> ArgbToAlphaAndColorRef(FX_ARGB argb);

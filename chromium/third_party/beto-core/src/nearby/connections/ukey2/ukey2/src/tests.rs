@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(clippy::unwrap_used)]
+use std::collections::hash_set;
+
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
+use sha2::Digest;
 
 use crate::{
     proto_adapter::{IntoAdapter as _, MessageType, ToWrappedMessage as _},
     ukey2_handshake::HandshakeCipher,
-    HandshakeImplementation, StateMachine, Ukey2ClientStage1, Ukey2ServerStage1,
+    HandshakeImplementation, NextProtocol, StateMachine, Ukey2ClientStage1, Ukey2ServerStage1,
 };
 use crypto_provider::elliptic_curve::{EcdhProvider, EphemeralSecret, PublicKey};
 use crypto_provider::p256::P256;
 use crypto_provider::x25519::X25519;
 use crypto_provider::{CryptoProvider, CryptoRng};
 use crypto_provider_default::CryptoProviderImpl;
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
-use sha2::Digest;
-use std::collections::hash_set;
 use ukey2_proto::protobuf::Message;
 use ukey2_proto::ukey2_all_proto::ukey;
 
@@ -39,11 +39,12 @@ type P256EphemeralSecret =
     <<CryptoProviderImpl as CryptoProvider>::P256 as EcdhProvider<P256>>::EphemeralSecret;
 
 #[test]
+#[allow(clippy::unwrap_used)]
 fn advance_from_init_to_finish_client_test() {
     let mut rng = StdRng::from_entropy();
     let client1 = Ukey2ClientStage1::<CryptoProviderImpl>::from(
         &mut rng,
-        "next protocol".to_string(),
+        vec![NextProtocol::Aes256CbcHmacSha256],
         HandshakeImplementation::Spec,
     );
 
@@ -68,6 +69,7 @@ fn advance_from_init_to_finish_client_test() {
 }
 
 #[test]
+#[allow(clippy::unwrap_used)]
 fn advance_from_init_to_complete_server_x25519_test() {
     let mut rng = StdRng::from_entropy();
     let mut next_protocols = hash_set::HashSet::new();
@@ -121,6 +123,7 @@ fn advance_from_init_to_complete_server_x25519_test() {
 }
 
 #[test]
+#[allow(clippy::unwrap_used)]
 fn advance_from_init_to_complete_server_p256_test() {
     let mut rng = StdRng::from_entropy();
     let mut next_protocols = hash_set::HashSet::new();
@@ -182,6 +185,7 @@ fn cipher_type_discriminant() {
 }
 
 #[test]
+#[allow(clippy::unwrap_used)]
 fn convert_to_message_type() {
     assert_eq!(
         MessageType::ClientInit,
@@ -198,7 +202,28 @@ fn convert_to_message_type() {
 }
 
 #[test]
+#[allow(clippy::unwrap_used)]
 fn convert_to_cipher_type() {
     assert_eq!(HandshakeCipher::P256Sha512, 100.into_adapter().unwrap());
     assert_eq!(HandshakeCipher::Curve25519Sha512, 200.into_adapter().unwrap());
+}
+
+#[test]
+fn convert_next_protocols() {
+    assert_eq!(
+        (&"AES_256_CBC-HMAC_SHA256".to_string()).try_into(),
+        Ok(NextProtocol::Aes256CbcHmacSha256)
+    );
+    assert_eq!((&"AES_256_GCM_SIV".to_string()).try_into(), Ok(NextProtocol::Aes256GcmSiv));
+    assert_eq!(
+        TryInto::<NextProtocol>::try_into(&"Random protocol".to_string()),
+        Err(ukey::ukey2alert::AlertType::BAD_NEXT_PROTOCOL)
+    );
+}
+
+#[test]
+fn sort_next_protocols() {
+    let mut next_protocols = [NextProtocol::Aes256CbcHmacSha256, NextProtocol::Aes256GcmSiv];
+    next_protocols.sort();
+    assert_eq!(next_protocols, [NextProtocol::Aes256GcmSiv, NextProtocol::Aes256CbcHmacSha256])
 }

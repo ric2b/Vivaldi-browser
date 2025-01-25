@@ -91,9 +91,9 @@ std::optional<FeatureMap> ParseFeatures(base::Value json) {
     }
 #endif
     if (const std::string* value = dict.GetDict().FindString("os")) {
-      std::vector<base::StringPiece> os_list = base::SplitStringPiece(
+      std::vector<std::string_view> os_list = base::SplitStringPiece(
           *value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-      base::StringPiece current_os;
+      std::string_view current_os;
 #if BUILDFLAG(IS_MAC)
       current_os = "mac";
 #elif BUILDFLAG(IS_WIN)
@@ -152,7 +152,7 @@ EnabledSet CreateEnabledSet(PrefService* prefs) {
   if (list_value.is_list()) {
     for (const base::Value& v : list_value.GetList()) {
       if (v.is_string()) {
-        base::StringPiece name(v.GetString());
+        std::string_view name(v.GetString());
         bool enabled = true;
         if (!name.empty() && name[0] == negation_prefix) {
           enabled = false;
@@ -237,7 +237,7 @@ const EnabledSet* GetEnabled(content::BrowserContext* browser_context) {
 }
 
 bool IsEnabled(content::BrowserContext* browser_context,
-               base::StringPiece feature_name) {
+               std::string_view feature_name) {
   if (!g_initialized)
     return false;
 
@@ -248,7 +248,7 @@ bool IsEnabled(content::BrowserContext* browser_context,
 }
 
 bool Enable(content::BrowserContext* browser_context,
-            base::StringPiece feature_name,
+            std::string_view feature_name,
             bool enabled) {
   DCHECK(g_initialized);
   const FeatureMap& feature_map = GetFeatureMapStorage();
@@ -277,7 +277,7 @@ bool Enable(content::BrowserContext* browser_context,
   for (const base::Value& v : list_value) {
     if (!v.is_string())
       continue;
-    base::StringPiece name = v.GetString();
+    std::string_view name = v.GetString();
     if (name.empty())
       continue;
     if (name[0] == negation_prefix) {

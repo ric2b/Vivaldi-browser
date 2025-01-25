@@ -13,7 +13,9 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "absl/types/span.h"
 #include "anonymous_tokens/cpp/crypto/crypto_utils.h"
 #include "anonymous_tokens/cpp/privacy_pass/token_encodings.h"
 #include "anonymous_tokens/cpp/testing/utils.h"
@@ -213,25 +215,6 @@ class BlindSignAuthTest : public QuicheTest {
     sign_response_ = response;
   }
 
-  void ValidateGetTokensOutput(absl::Span<BlindSignToken> tokens) {
-    for (const auto& token : tokens) {
-      privacy::ppn::SpendTokenData spend_token_data;
-      ASSERT_TRUE(spend_token_data.ParseFromString(token.token));
-      // Validate token structure.
-      EXPECT_EQ(spend_token_data.public_metadata().SerializeAsString(),
-                public_metadata_info_.public_metadata().SerializeAsString());
-      EXPECT_THAT(spend_token_data.unblinded_token(), StartsWith("blind:"));
-      EXPECT_GE(spend_token_data.unblinded_token_signature().size(),
-                spend_token_data.unblinded_token().size());
-      EXPECT_EQ(spend_token_data.signing_key_version(),
-                public_key_proto_.key_version());
-      EXPECT_NE(spend_token_data.use_case(),
-                anonymous_tokens::AnonymousTokensUseCase::
-                    ANONYMOUS_TOKENS_USE_CASE_UNDEFINED);
-      EXPECT_NE(spend_token_data.message_mask(), "");
-    }
-  }
-
   void ValidatePrivacyPassTokensOutput(absl::Span<BlindSignToken> tokens) {
     for (const auto& token : tokens) {
       privacy::ppn::PrivacyPassTokenData privacy_pass_token_data;
@@ -240,9 +223,16 @@ class BlindSignAuthTest : public QuicheTest {
       std::string decoded_token;
       ASSERT_TRUE(absl::WebSafeBase64Unescape(privacy_pass_token_data.token(),
                                               &decoded_token));
+      // Extensions should be padded and web-safe.
+      EXPECT_EQ(privacy_pass_token_data.encoded_extensions().back(), '=');
       std::string decoded_extensions;
       ASSERT_TRUE(absl::WebSafeBase64Unescape(
           privacy_pass_token_data.encoded_extensions(), &decoded_extensions));
+      // Validate GeoHint in BlindSignToken.
+      EXPECT_EQ(token.geo_hint.geo_hint, "US,US-AL,ALABASTER");
+      EXPECT_EQ(token.geo_hint.country_code, "US");
+      EXPECT_EQ(token.geo_hint.region, "US-AL");
+      EXPECT_EQ(token.geo_hint.city, "ALABASTER");
     }
   }
 

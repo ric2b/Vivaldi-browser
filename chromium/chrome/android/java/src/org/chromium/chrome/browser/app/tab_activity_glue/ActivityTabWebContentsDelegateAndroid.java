@@ -39,7 +39,6 @@ import org.chromium.chrome.browser.media.PictureInPicture;
 import org.chromium.chrome.browser.night_mode.WebContentsDarkModeController;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
 import org.chromium.chrome.browser.policy.PolicyAuditor.AuditEvent;
-import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -64,6 +63,7 @@ import org.chromium.url.GURL;
 
 // Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.night_mode.settings.ThemeSettingsFragment;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 /**
@@ -243,7 +243,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
         TabModel model = mTabModelSelectorSupplier.get().getModel(mTab.isIncognito());
         int index = model.indexOf(mTab);
         if (index == TabModel.INVALID_TAB_INDEX) return;
-        TabModelUtils.setIndex(model, index, false);
+        TabModelUtils.setIndex(model, index);
 
         // Do nothing if the mActivity is visible (STOPPED is the only valid invisible state as we
         // explicitly check isActivityFinishingOrDestroyed above).
@@ -449,7 +449,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
 
         if (ChromeApplicationImpl.isVivaldi()) {
             return ChromeSharedPreferences.getInstance().readBoolean(
-                    "dark_mode_for_webpages", false)
+                    ThemeSettingsFragment.KEY_DARK_MODE_FOR_WEBPAGES, false)
                     && WebContentsDarkModeController.isEnabledForUrl(
                             profile, webContents.getVisibleUrl());
         }

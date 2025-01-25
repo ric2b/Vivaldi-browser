@@ -12,143 +12,272 @@ import android.content.pm.PackageManager;
 import android.os.IBinder;
 import android.os.RemoteException;
 
+import androidx.annotation.GuardedBy;
+import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 
-import com.google.protobuf.InvalidProtocolBufferException;
+import org.jni_zero.CalledByNative;
+import org.jni_zero.CalledByNativeForTesting;
+import org.jni_zero.JNINamespace;
 
+import org.chromium.base.ContextUtils;
+import org.chromium.base.Log;
+import org.chromium.base.ThreadUtils;
+import org.chromium.components.ip_protection_auth.common.IErrorCode;
 import org.chromium.components.ip_protection_auth.common.IIpProtectionAuthAndSignCallback;
 import org.chromium.components.ip_protection_auth.common.IIpProtectionAuthService;
 import org.chromium.components.ip_protection_auth.common.IIpProtectionGetInitialDataCallback;
-import org.chromium.components.ip_protection_auth.common.proto.IpProtectionAuthProtos.AuthAndSignRequest;
-import org.chromium.components.ip_protection_auth.common.proto.IpProtectionAuthProtos.AuthAndSignResponse;
-import org.chromium.components.ip_protection_auth.common.proto.IpProtectionAuthProtos.GetInitialDataRequest;
-import org.chromium.components.ip_protection_auth.common.proto.IpProtectionAuthProtos.GetInitialDataResponse;
 
-/**
- * Client interface for the IP Protection Auth service.
- *
- * The methods in this class are thread-safe (except for close() which should not be called
- * concurrently with other methods).
- *
- * TODO(abhijithnair): Update documentation once production ready.
- * DO NOT DEPEND. CURRENTLY UNDER DEVELOPMENT.
- */
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.util.HashSet;
+import java.util.Set;
+
+/** Client interface for the IP Protection Auth service. */
+@JNINamespace("ip_protection::android")
 public final class IpProtectionAuthClient implements AutoCloseable {
-    // Only used for testing.
-    private static final String IP_PROTECTION_AUTH_STUB_SERVICE_NAME =
-            "org.chromium.components.ip_protection_auth.mock_service.IpProtectionAuthServiceMock";
-    private static final String IP_PROTECTION_AUTH_ACTION_NAME =
+    private static final String TAG = "IppAuthClient";
+
+    private static final String IP_PROTECTION_AUTH_ACTION =
             "android.net.http.IpProtectionAuthService";
 
     // mService being null signifies that the object has been closed by calling close().
     @Nullable private IIpProtectionAuthService mService;
     // We need to store this to unbind from the service.
     @Nullable private ConnectionSetup mConnection;
+    @NonNull final CallbackTracker mCallbackTracker;
 
+    // These values must be kept in sync with AuthRequestError in
+    // ip_protection_auth_client_interface.h
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({AuthRequestError.TRANSIENT, AuthRequestError.PERSISTENT, AuthRequestError.OTHER})
+    public @interface AuthRequestError {
+        int TRANSIENT = 0;
+        int PERSISTENT = 1;
+        int OTHER = 2;
+    }
+
+    /**
+     * Convert IErrorCode value to AuthRequestError value.
+     *
+     * <p>Invalid values are mapped to AuthRequestError.OTHER.
+     */
+    private static int convertErrorCodeToAuthRequestError(int errorCode) {
+        switch (errorCode) {
+            case IErrorCode.IP_PROTECTION_AUTH_SERVICE_TRANSIENT_ERROR:
+                return AuthRequestError.TRANSIENT;
+            case IErrorCode.IP_PROTECTION_AUTH_SERVICE_PERSISTENT_ERROR:
+                return AuthRequestError.PERSISTENT;
+            default:
+                return AuthRequestError.OTHER;
+        }
+    }
+
+    /** This class must be used exclusively from the main thread. */
     private static final class ConnectionSetup implements ServiceConnection {
         private final IpProtectionAuthServiceCallback mCallback;
         private final Context mContext;
+        private IpProtectionAuthClient mIpProtectionClient;
+        private boolean mBound;
 
         ConnectionSetup(
                 @NonNull Context context, @NonNull IpProtectionAuthServiceCallback callback) {
             mContext = context;
             mCallback = callback;
+            mIpProtectionClient = null;
+            mBound = true;
         }
 
         @Override
         public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
-            IpProtectionAuthClient ipProtectionClient =
+            mIpProtectionClient =
                     new IpProtectionAuthClient(
                             this, IIpProtectionAuthService.Stub.asInterface(iBinder));
-            mCallback.onResult(ipProtectionClient);
+            mCallback.onResult(mIpProtectionClient);
         }
 
         @Override
         public void onServiceDisconnected(ComponentName componentName) {
-            mContext.unbindService(this);
+            unbindIfBound();
+            mIpProtectionClient.mCallbackTracker.rejectUnresolvedCallbacks(AuthRequestError.OTHER);
         }
 
         @Override
         public void onBindingDied(ComponentName name) {
-            mContext.unbindService(this);
+            unbindIfBound();
+            mIpProtectionClient.mCallbackTracker.rejectUnresolvedCallbacks(AuthRequestError.OTHER);
         }
 
         @Override
         public void onNullBinding(ComponentName name) {
-            mContext.unbindService(this);
+            unbindIfBound();
+            mCallback.onError("Service returned null from onBind()");
+        }
+
+        public void unbindIfBound() {
+            ThreadUtils.assertOnUiThread();
+            if (mBound) {
+                mBound = false;
+                mContext.unbindService(this);
+            }
         }
     }
 
-    private static final class IIpProtectionGetInitialDataCallbackStub
+    /**
+     * Enforces single-run semantics for callbacks across potentially competing threads and provides
+     * mechanisms for running callbacks for abandoned requests.
+     */
+    static final class CallbackTracker {
+        // Callbacks must never be run from code holding this lock.
+        @NonNull private final Object mUnresolvedCallbacksLock;
+
+        @GuardedBy("mUnresolvedCallbacksLock")
+        @NonNull
+        final Set<IpProtectionByteArrayCallback> mUnresolvedCallbacks;
+
+        /**
+         * A thread-safe wrapper around a callback that enforces that it's used (at most) once.
+         *
+         * <p>Note that this only enforces thread-safety for deciding whether a callback should be
+         * run (in the case where there are threads competing to call the same callback). It does
+         * not enforce any thread-safety for the underlying callback's logic.
+         */
+        public final class TrackedCallback implements IpProtectionByteArrayCallback {
+            @NonNull private final IpProtectionByteArrayCallback mInner;
+
+            // See CallbackTracker.wrapCallback.
+            public TrackedCallback(@NonNull IpProtectionByteArrayCallback inner) {
+                mInner = inner;
+                synchronized (mUnresolvedCallbacksLock) {
+                    mUnresolvedCallbacks.add(inner);
+                }
+            }
+
+            @Override
+            public void onResult(@NonNull byte[] result) {
+                IpProtectionByteArrayCallback callback = unwrap();
+                if (callback != null) {
+                    callback.onResult(result);
+                }
+            }
+
+            @Override
+            public void onError(int authRequestError) {
+                IpProtectionByteArrayCallback callback = unwrap();
+                if (callback != null) {
+                    callback.onError(authRequestError);
+                }
+            }
+
+            /**
+             * Extract the wrapped callback.
+             *
+             * <p>The previously wrapped callback will no longer be tracked.
+             *
+             * @return The unwrapped callback if the callback has not bean consumed yet (unwrapped
+             *     or triggered), or null if the callback has already been consumed. Null does not
+             *     necessarily indicate a programming error - merely that the callback was
+             *     resolved/rejected due to some other mechanism first, perhaps on a competing
+             *     thread.
+             */
+            @Nullable
+            public IpProtectionByteArrayCallback unwrap() {
+                final boolean isUnresolved;
+                synchronized (mUnresolvedCallbacksLock) {
+                    isUnresolved = mUnresolvedCallbacks.remove(mInner);
+                }
+                if (!isUnresolved) {
+                    Log.w(TAG, "callback already used");
+                    return null;
+                }
+                return mInner;
+            }
+        }
+
+        public CallbackTracker() {
+            mUnresolvedCallbacksLock = new Object();
+            mUnresolvedCallbacks = new HashSet<>();
+        }
+
+        /**
+         * Wraps a callback in a thread-safe wrapper that ensures the callback is used only once.
+         *
+         * <p>The wrapped callback should be considered owned by the callback tracker and thus only
+         * be used via the wrapper or the callback tracker.
+         */
+        @NonNull
+        public TrackedCallback wrapCallback(@NonNull IpProtectionByteArrayCallback callback) {
+            return new TrackedCallback(callback);
+        }
+
+        /**
+         * Unwraps the callbacks from all unresolved tracked callbacks and returns the unwrapped
+         * callbacks.
+         */
+        private IpProtectionByteArrayCallback[] unwrapAllCallbacks() {
+            final IpProtectionByteArrayCallback[] callbacks;
+            synchronized (mUnresolvedCallbacksLock) {
+                callbacks = mUnresolvedCallbacks.toArray(new IpProtectionByteArrayCallback[0]);
+                mUnresolvedCallbacks.clear();
+            }
+            return callbacks;
+        }
+
+        /** Call onError for all unresolved callbacks. */
+        public void rejectUnresolvedCallbacks(int authRequestError) {
+            for (IpProtectionByteArrayCallback callback : unwrapAllCallbacks()) {
+                callback.onError(authRequestError);
+            }
+        }
+    }
+
+    private final class IIpProtectionGetInitialDataCallbackStub
             extends IIpProtectionGetInitialDataCallback.Stub {
-        private final GetInitialDataCallback mCallback;
+        private final CallbackTracker.TrackedCallback mCallback;
 
-        IIpProtectionGetInitialDataCallbackStub(GetInitialDataCallback callback) {
+        IIpProtectionGetInitialDataCallbackStub(CallbackTracker.TrackedCallback callback) {
             mCallback = callback;
         }
 
         @Override
         public void reportResult(byte[] bytes) {
-            try {
-                mCallback.onResult(GetInitialDataResponse.parser().parseFrom(bytes));
-            } catch (InvalidProtocolBufferException ex) {
-                // TODO(abhijithnair): Handle this case correctly.
-                throw new RuntimeException(ex);
+            if (bytes == null) {
+                Log.e(TAG, "null getInitialData response");
+                mCallback.onError(AuthRequestError.OTHER);
+                return;
             }
+            mCallback.onResult(bytes);
         }
 
         @Override
-        public void reportError(byte[] bytes) {
-            mCallback.onError(bytes);
+        public void reportError(int errorCode) {
+            mCallback.onError(convertErrorCodeToAuthRequestError(errorCode));
         }
     }
 
-    private static final class IIpProtectionAuthAndSignCallbackStub
+    private final class IIpProtectionAuthAndSignCallbackStub
             extends IIpProtectionAuthAndSignCallback.Stub {
-        private final AuthAndSignCallback mCallback;
+        private final CallbackTracker.TrackedCallback mCallback;
 
-        IIpProtectionAuthAndSignCallbackStub(AuthAndSignCallback callback) {
+        IIpProtectionAuthAndSignCallbackStub(CallbackTracker.TrackedCallback callback) {
             mCallback = callback;
         }
 
         @Override
         public void reportResult(byte[] bytes) {
-            try {
-                mCallback.onResult(AuthAndSignResponse.parser().parseFrom(bytes));
-            } catch (InvalidProtocolBufferException ex) {
-                // TODO(abhijithnair): Handle this case correctly.
-                throw new RuntimeException(ex);
+            if (bytes == null) {
+                Log.e(TAG, "null authAndSign response");
+                mCallback.onError(AuthRequestError.OTHER);
+                return;
             }
+            mCallback.onResult(bytes);
         }
 
         @Override
-        public void reportError(byte[] bytes) {
-            mCallback.onError(bytes);
+        public void reportError(int errorCode) {
+            mCallback.onError(convertErrorCodeToAuthRequestError(errorCode));
         }
-    }
-
-    public interface IpProtectionAuthServiceCallback {
-        void onResult(IpProtectionAuthClient client);
-
-        void onError(String error);
-    }
-
-    public interface GetInitialDataCallback {
-        // TODO(abhijithnair): Consider using a non-proto generated class.
-        void onResult(GetInitialDataResponse result);
-
-        // TODO(abhijithnair): Change to using a error specific class.
-        void onError(byte[] error);
-    }
-
-    public interface AuthAndSignCallback {
-        // TODO(abhijithnair): Consider using a non-proto generated class.
-        void onResult(AuthAndSignResponse result);
-
-        // TODO(abhijithnair): Change to using a error specific class.
-        void onError(byte[] error);
     }
 
     IpProtectionAuthClient(
@@ -156,91 +285,122 @@ public final class IpProtectionAuthClient implements AutoCloseable {
             @NonNull IIpProtectionAuthService ipProtectionAuthService) {
         mConnection = connectionSetup;
         mService = ipProtectionAuthService;
+        mCallbackTracker = new CallbackTracker();
     }
 
-    @VisibleForTesting
-    public static void createConnectedInstanceForTestingAsync(
-            @NonNull Context context, @NonNull IpProtectionAuthServiceCallback callback) {
-        ComponentName componentName =
-                new ComponentName(context, IP_PROTECTION_AUTH_STUB_SERVICE_NAME);
-        Intent intent = new Intent();
-        intent.setComponent(componentName);
-        ConnectionSetup connectionSetup = new ConnectionSetup(context, callback);
-        context.bindService(intent, connectionSetup, Context.BIND_AUTO_CREATE);
+    @CalledByNativeForTesting
+    public static void createConnectedInstanceForTesting(
+            @NonNull String mockServicePackageName,
+            @NonNull String mockServiceClassName,
+            @NonNull IpProtectionAuthServiceCallback callback) {
+        Intent intent = new Intent(IP_PROTECTION_AUTH_ACTION);
+        intent.setClassName(mockServicePackageName, mockServiceClassName);
+        createConnectedInstanceCommon(intent, PackageManager.MATCH_DISABLED_COMPONENTS, callback);
     }
 
-    public static void createConnectedInstance(
-            @NonNull Context context, @NonNull IpProtectionAuthServiceCallback callback)
-            throws RemoteException {
-        // Use IP_PROTECTION_AUTH_ACTION_NAME to resolve system service that satisfies
-        // the intent, going from implicit to explicit intent.
+    @CalledByNative
+    public static void createConnectedInstance(@NonNull IpProtectionAuthServiceCallback callback) {
+        // Use IP_PROTECTION_AUTH_ACTION to resolve system service that satisfies
+        // the intent, going from implicit to explicit intent in createConnectedInstanceCommon.
+        var intent = new Intent(IP_PROTECTION_AUTH_ACTION);
+        createConnectedInstanceCommon(intent, PackageManager.MATCH_SYSTEM_ONLY, callback);
+    }
+
+    /**
+     * Converts the given intent to an explicit intent and binds to the service.
+     *
+     * <p>The intent is converted to an explicit intent by resolving via the PackageManager. The
+     * callback is called with either an IpProtectionAuthClient bound to the service or an error
+     * string.
+     */
+    private static void createConnectedInstanceCommon(
+            @NonNull Intent intent,
+            int resolveFlags,
+            @NonNull IpProtectionAuthServiceCallback callback) {
+        var context = ContextUtils.getApplicationContext();
         var packageManager = context.getPackageManager();
-        var intent = new Intent(IP_PROTECTION_AUTH_ACTION_NAME);
         // When Chromium moves to API level 33 as minimum-supported version,
         // we can switch resolveService to use PackageManager.ResolveInfoFlags.
-        var resolveInfo = packageManager.resolveService(intent, PackageManager.MATCH_SYSTEM_ONLY);
+        var resolveInfo = packageManager.resolveService(intent, resolveFlags);
         if (resolveInfo == null || resolveInfo.serviceInfo == null) {
-            throw new RemoteException(
+            final String error =
                     "Unable to locate the IP Protection authentication provider package ("
-                            + IP_PROTECTION_AUTH_ACTION_NAME
+                            + intent.getAction()
                             + " action). This is expected if the host system is not set up to"
-                            + " provide IP Protection services.");
+                            + " provide IP Protection services.";
+            ThreadUtils.postOnUiThread(() -> callback.onError(error));
+            return;
         }
         var serviceInfo = resolveInfo.serviceInfo;
         var componentName = new ComponentName(serviceInfo.packageName, serviceInfo.name);
         intent.setComponent(componentName);
-
-        var connectionSetup = new ConnectionSetup(context, callback);
-        try {
-            boolean binding =
-                    context.bindService(intent, connectionSetup, Context.BIND_AUTO_CREATE);
-            if (binding) {
-                return;
-            } else {
-                context.unbindService(connectionSetup);
-                throw new RemoteException("bindService() failed: returned false");
-            }
-        } catch (SecurityException e) {
-            context.unbindService(connectionSetup);
-            throw new RemoteException("Failed to bind service: " + e);
-        }
+        ThreadUtils.postOnUiThread(
+                () -> {
+                    var connectionSetup = new ConnectionSetup(context, callback);
+                    try {
+                        boolean binding =
+                                context.bindService(
+                                        intent, connectionSetup, Context.BIND_AUTO_CREATE);
+                        if (!binding) {
+                            connectionSetup.unbindIfBound();
+                            callback.onError("bindService() failed: returned false");
+                            return;
+                        }
+                    } catch (SecurityException e) {
+                        connectionSetup.unbindIfBound();
+                        callback.onError("Failed to bind service: " + e);
+                        return;
+                    }
+                });
     }
 
-    public void getInitialData(GetInitialDataRequest request, GetInitialDataCallback callback) {
+    // See documentation in native IpProtectionAuthClient::GetInitialData
+    @CalledByNative
+    public void getInitialData(byte[] request, IpProtectionByteArrayCallback callback) {
         if (mService == null) {
-            // This denotes a coding error by the caller so it makes sense to throw an unchecked
-            // exception.
+            // This denotes a coding error by the caller so it makes sense to throw an
+            // unchecked exception.
             throw new IllegalStateException("Already closed");
         }
-
+        CallbackTracker.TrackedCallback trackedCallback = mCallbackTracker.wrapCallback(callback);
         IIpProtectionGetInitialDataCallbackStub callbackStub =
-                new IIpProtectionGetInitialDataCallbackStub(callback);
+                new IIpProtectionGetInitialDataCallbackStub(trackedCallback);
         try {
-            mService.getInitialData(request.toByteArray(), callbackStub);
-        } catch (RemoteException ex) {
-            // TODO(abhijithnair): Handle this case correctly.
+            mService.getInitialData(request, callbackStub);
+        } catch (RuntimeException | RemoteException ex) {
+            Log.e(TAG, "error calling getInitialData", ex);
+            trackedCallback.onError(AuthRequestError.OTHER);
         }
     }
 
-    public void authAndSign(AuthAndSignRequest request, AuthAndSignCallback callback) {
+    // See documentation in native IpProtectionAuthClient::AuthAndSign
+    @CalledByNative
+    public void authAndSign(byte[] request, IpProtectionByteArrayCallback callback) {
         if (mService == null) {
-            // This denotes a coding error by the caller so it makes sense to throw an unchecked
-            // exception.
+            // This denotes a coding error by the caller so it makes sense to throw an
+            // unchecked exception.
             throw new IllegalStateException("Already closed");
         }
+        CallbackTracker.TrackedCallback trackedCallback = mCallbackTracker.wrapCallback(callback);
         IIpProtectionAuthAndSignCallbackStub callbackStub =
-                new IIpProtectionAuthAndSignCallbackStub(callback);
+                new IIpProtectionAuthAndSignCallbackStub(trackedCallback);
         try {
-            mService.authAndSign(request.toByteArray(), callbackStub);
-        } catch (RemoteException ex) {
-            // TODO(abhijithnair): Handle this case correctly.
+            mService.authAndSign(request, callbackStub);
+        } catch (RuntimeException | RemoteException ex) {
+            Log.e(TAG, "error calling authAndSign", ex);
+            trackedCallback.onError(AuthRequestError.OTHER);
         }
     }
 
     @Override
+    @CalledByNative
     public void close() {
-        mConnection.mContext.unbindService(mConnection);
+        if (mService == null) {
+            return;
+        }
+        ThreadUtils.runOnUiThread(mConnection::unbindIfBound);
         mConnection = null;
         mService = null;
+        mCallbackTracker.rejectUnresolvedCallbacks(AuthRequestError.OTHER);
     }
 }

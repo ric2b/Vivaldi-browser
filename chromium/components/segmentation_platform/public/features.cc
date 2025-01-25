@@ -69,10 +69,6 @@ BASE_FEATURE(kContextualPageActions,
              "ContextualPageActions",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kContextualPageActionPriceTracking,
-             "ContextualPageActionPriceTracking",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kContextualPageActionReaderMode,
              "ContextualPageActionReaderMode",
 #if defined(VIVALDI_BUILD)
@@ -127,6 +123,10 @@ BASE_FEATURE(kSegmentationPlatformIosModuleRanker,
 
 BASE_FEATURE(kSegmentationPlatformAndroidHomeModuleRanker,
              "SegmentationPlatformAndroidHomeModuleRanker",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSegmentationPlatformAndroidHomeModuleRankerV2,
+             "SegmentationPlatformAndroidHomeModuleRankerV2",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSegmentationPlatformTimeDelaySampling,
@@ -165,5 +165,9 @@ BASE_FEATURE(kSegmentationPlatformIosModuleRankerSplitBySurface,
 #else
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
+
+BASE_FEATURE(kSegmentationPlatformURLVisitResumptionRanker,
+             "SegmentationPlatformURLVisitResumptionRanker",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace segmentation_platform::features

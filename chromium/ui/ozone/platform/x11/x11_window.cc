@@ -69,8 +69,9 @@ bool CoalesceEventsIfNeeded(const x11::Event& xev,
                             x11::Event* out) {
   if (xev.As<x11::MotionNotifyEvent>() ||
       (xev.As<x11::Input::DeviceEvent>() &&
-       (type == ui::ET_TOUCH_MOVED || type == ui::ET_MOUSE_MOVED ||
-        type == ui::ET_MOUSE_DRAGGED))) {
+       (type == ui::EventType::kTouchMoved ||
+        type == ui::EventType::kMouseMoved ||
+        type == ui::EventType::kMouseDragged))) {
     return ui::CoalescePendingMotionEvents(xev, out) > 0;
   }
   return false;
@@ -141,7 +142,7 @@ x11::NotifyMode XI2ModeToXMode(x11::Input::NotifyMode xi2_mode) {
     case x11::Input::NotifyMode::WhileGrabbed:
       return x11::NotifyMode::WhileGrabbed;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return x11::NotifyMode::Normal;
   }
 }
@@ -867,6 +868,8 @@ void X11Window::MoveCursorTo(const gfx::Point& location_px) {
       .dst_x = static_cast<int16_t>(bounds_in_pixels_.x() + location_px.x()),
       .dst_y = static_cast<int16_t>(bounds_in_pixels_.y() + location_px.y()),
   });
+  // The cached cursor location is no longer valid.
+  X11EventSource::GetInstance()->ClearLastCursorLocation();
 }
 
 void X11Window::ConfineCursorToBounds(const gfx::Rect& bounds) {
@@ -1288,7 +1291,7 @@ bool X11Window::HandleAsAtkEvent(const x11::KeyEvent& key_event,
                                  bool transient) {
 #if !BUILDFLAG(USE_ATK)
   // TODO(crbug.com/40653448): Support ATK in Ozone/X11.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 #else
   if (!x11_extension_delegate_) {
@@ -1301,7 +1304,7 @@ bool X11Window::HandleAsAtkEvent(const x11::KeyEvent& key_event,
 
 void X11Window::OnEvent(const x11::Event& xev) {
   auto event_type = ui::EventTypeFromXEvent(xev);
-  if (event_type != ET_UNKNOWN) {
+  if (event_type != EventType::kUnknown) {
     // If this event can be translated, it will be handled in ::DispatchEvent.
     // Otherwise, we end up processing XEvents twice that could lead to unwanted
     // behaviour like loosing activation during tab drag and etc.
@@ -1379,7 +1382,8 @@ void X11Window::DispatchUiEvent(ui::Event* event, const x11::Event& xev) {
   if (event->IsLocatedEvent() && located_events_grabber &&
       located_events_grabber != this) {
     if (event->IsMouseEvent() ||
-        (event->IsTouchEvent() && event->type() == ui::ET_TOUCH_PRESSED)) {
+        (event->IsTouchEvent() &&
+         event->type() == ui::EventType::kTouchPressed)) {
       // Another X11Window has installed itself as capture. Translate the
       // event's location and dispatch to the other.
       ConvertEventLocationToTargetWindowLocation(
@@ -1930,6 +1934,8 @@ void X11Window::Map(bool inactive) {
 
   UpdateMinAndMaxSize();
 
+  UpdateDecorationInsets();
+
   if (window_properties_.empty()) {
     connection_->DeleteProperty(xwindow_, x11::GetAtom("_NET_WM_STATE"));
   } else {
@@ -2395,8 +2401,8 @@ void X11Window::UpdateWMUserTime(Event* event) {
   }
   DCHECK(event);
   EventType type = event->type();
-  if (type == ET_MOUSE_PRESSED || type == ET_KEY_PRESSED ||
-      type == ET_TOUCH_PRESSED) {
+  if (type == EventType::kMousePressed || type == EventType::kKeyPressed ||
+      type == EventType::kTouchPressed) {
     uint32_t wm_user_time_ms =
         (event->time_stamp() - base::TimeTicks()).InMilliseconds();
     connection_->SetProperty(xwindow_, x11::GetAtom("_NET_WM_USER_TIME"),

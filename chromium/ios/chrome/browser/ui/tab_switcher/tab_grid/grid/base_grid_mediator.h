@@ -25,6 +25,7 @@ class Browser;
 @protocol TabGridIdleStatusHandler;
 @class TabGridToolbarsConfiguration;
 @protocol TabGridToolbarsMainTabGridDelegate;
+@protocol TabGridToolbarCommands;
 @protocol TabGroupsCommands;
 @protocol TabPresentationDelegate;
 class WebStateList;
@@ -61,8 +62,10 @@ class WebState;
 @property(nonatomic, weak) id<GridConsumer> gridConsumer;
 // Delegate to handle presenting tab UI.
 @property(nonatomic, weak) id<TabPresentationDelegate> tabPresentationDelegate;
-// Tab Groups Dispatcher.
-@property(nonatomic, weak) id<TabGroupsCommands> dispatcher;
+// Tab Groups handler.
+@property(nonatomic, weak) id<TabGroupsCommands> tabGroupsHandler;
+// Handler for tab grid toolbar commands.
+@property(nonatomic, weak) id<TabGridToolbarCommands> tabGridToolbarHandler;
 // Tab grid idle status handler.
 @property(nonatomic, weak) id<TabGridIdleStatusHandler>
     tabGridIdleStatusHandler;
@@ -104,8 +107,9 @@ class WebState;
 - (void)addObservationForWebState:(web::WebState*)webState;
 - (void)removeObservationForWebState:(web::WebState*)webState;
 
-// Inserts a new WebState at the given WebStateList `index`.
-- (void)insertNewWebStateAtIndex:(int)index withURL:(const GURL&)newTabURL;
+// Inserts a new WebState at the given grid `index` with `newTabURL`. This is
+// clamping the index to make sure it is in correct bounds.
+- (void)insertNewWebStateAtGridIndex:(int)index withURL:(const GURL&)newTabURL;
 
 // Inserts `item` before the WebState at `nextWebStateIndex`.
 - (void)insertItem:(GridItemIdentifier*)item
@@ -116,6 +120,15 @@ class WebState;
 
 // Reconfigures the item containing the `webState`.
 - (void)updateConsumerItemForWebState:(web::WebState*)webState;
+
+// Closes all tabs in `group`, optionally deleting it from the sync service.
+// If 'deleteGroup' is YES, the group is removed permanently.
+// If 'deleteGroup' is NO, the group is closed locally but remains on the sync
+// service.
+- (void)closeTabGroup:(const TabGroup*)group andDeleteGroup:(BOOL)deleteGroup;
+
+// Ungroups all tabs in `group`. The tabs in the group remain open.
+- (void)ungroupTabGroup:(const TabGroup*)group;
 
 @end
 

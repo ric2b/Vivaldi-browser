@@ -16,7 +16,6 @@
 <translation id="1728677426644403582">Du ser på kildekoden til en nettside</translation>
 <translation id="1734878702283171397">Prøv å kontakte systemadministratoren.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Prøv å kjøre Windows Nettverksdiagnose<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">Denne siden inneholder skadelig programvare</translation>
 <translation id="1974060860693918893">Avansert</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Sjekk mellomtjeneren og brannmuren<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Utstedt til <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -42,7 +41,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Kjør Tilkoblingsdiagnostikk<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Tilkoblingen ble nullstilt.</translation>
 <translation id="2826760142808435982">Tilkoblingen er kryptert og autentisert med <ph name="CIPHER" /> og bruker <ph name="KX" /> som nøkkelutvekslingsmekanisme.</translation>
-<translation id="2856444702002559011">Angripere kan kanskje prøve å stjele informasjonen din fra <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (for eksempel passord, meldinger og kredittkort). <ph name="BEGIN_LEARN_MORE_LINK" />Lær mer<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">En nettverksendring ble oppdaget.</translation>
 <translation id="2948083400971632585">På innstillingssiden kan du deaktivere eventuelle mellomtjenere for tilkoblinger.</translation>
 <translation id="2991571918955627853">Du kan ikke besøke <ph name="SITE" /> akkurat nå, fordi nettsiden bruker HSTS. Nettverksfeil og -angrep er ofte midlertidige, så denne siden vil trolig virke igjen senere.</translation>
@@ -92,7 +90,6 @@
 <translation id="4265872034478892965">Tillatt av administratoren</translation>
 <translation id="4305666528087210886">Fikk ikke tilgang til filen</translation>
 <translation id="4312866146174492540">Blokker (standard)</translation>
-<translation id="4356973930735388585">Angripere på dette nettstedet kan prøve å installere programvare på datamaskinen eller avsløre personlig informasjon (for eksempel bilder, passord, meldinger og kredittkort).</translation>
 <translation id="4408413947728134509">Infokapsler <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> godtok ikke innlogginssertifikatet ditt, eller sertifikatet manglet.</translation>
 <translation id="4506599922270137252">Kontakte systemadministratoren</translation>
@@ -144,7 +141,6 @@
 <translation id="6305205051461490394"><ph name="URL" /> kan ikke nås.</translation>
 <translation id="6321917430147971392">Sjekk DNS-innstillingene</translation>
 <translation id="6328639280570009161">Prøv å deaktivere nettverksforslag</translation>
-<translation id="6328786501058569169">Denne siden er villedende</translation>
 <translation id="6348220984832452017">Aktive variasjoner</translation>
 <translation id="6358450015545214790">Hva innebærer dette?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> avviste tilkoblingen.</translation>
@@ -158,7 +154,6 @@
 <translation id="6897140037006041989">Brukeragent</translation>
 <translation id="6957624206566198865">Åpne side i ny privatfane</translation>
 <translation id="7053983685419859001">Blokker</translation>
-<translation id="7079718277001814089">Denne siden inneholder ondsinnet programvare</translation>
 <translation id="7096937462164235847">Identiteten til dette nettstedet er ikke bekreftet.</translation>
 <translation id="7108819624672055576">Tillatt av en utvidelse</translation>
 <translation id="7111012039238467737">(Gyldig)</translation>
@@ -175,7 +170,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> er for øyeblikket ikke i stand til å håndtere forespørselen.</translation>
 <translation id="7662298039739062396">Innstillingen kontrolleres av en utvidelse</translation>
 <translation id="7663736086183791259">Sertifikat <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Angripere på dette nettstedet kan prøve å lure deg til å installere programvare som skader nettleseropplevelsen (for eksempel ved å endre hjemmeside eller vise ekstra reklame på sider du besøker).</translation>
 <translation id="7714464543167945231">Sertifikat</translation>
 <translation id="7716147886133743102">Blokkert av administratoren</translation>
 <translation id="7716424297397655342">Denne siden kan ikke innlastes fra hurtiglager</translation>
@@ -185,7 +179,6 @@
 <translation id="7878562273885520351">Passordet ditt kan være kompromittert</translation>
 <translation id="7951415247503192394">(32-biters)</translation>
 <translation id="7953236668995583915">Last inn denne siden på nytt for å ta i bruk de oppdaterte innstillingene dine på dette nettstedet</translation>
-<translation id="8025119109950072390">Angripere på dette nettstedet kan lure deg til å gjøre noe farlig, som å installere programvare eller avsløre personlig informasjon (for eksempel passord, telefonnummere og kredittkort).</translation>
 <translation id="8037357227543935929">Spør (standard)</translation>
 <translation id="8041940743680923270">Bruk global standardinnstilling (Spør)</translation>
 <translation id="808894953321890993">Endre passord</translation>

@@ -16,16 +16,16 @@ limitations under the License.
 #ifndef XLA_PJRT_STATUS_CASTERS_H_
 #define XLA_PJRT_STATUS_CASTERS_H_
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "xla/pjrt/exceptions.h"
-#include "xla/status.h"
-#include "xla/statusor.h"
 #include "tsl/platform/macros.h"
 
 namespace xla {
 
 // C++ -> Python caster helpers.
 //
-// Failing statuses become Python exceptions; OK Status() becomes None.
+// Failing statuses become Python exceptions; OK absl::Status() becomes None.
 //
 // Given there can be only a single global pybind11 type_caster for the
 // `absl::Status` type, and given XLA wants a custom exception being raised,
@@ -139,7 +139,7 @@ struct ThrowIfErrorWrapper<absl::Status(Args...) const, C> {
 
 // Utilities for `StatusOr`.
 template <typename T>
-T ValueOrThrow(StatusOr<T> v) {
+T ValueOrThrow(absl::StatusOr<T> v) {
   if (!v.ok()) {
     throw xla::XlaRuntimeError(v.status());
   }

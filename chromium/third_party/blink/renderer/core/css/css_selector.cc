@@ -24,6 +24,11 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/css/css_selector.h"
 
 #include <algorithm>
@@ -79,6 +84,49 @@ struct SameSizeAsCSSSelector {
 };
 
 ASSERT_SIZE(CSSSelector, SameSizeAsCSSSelector);
+
+CSSSelector::CSSSelector(MatchType match_type,
+                         const QualifiedName& attribute,
+                         AttributeMatchType case_sensitivity)
+    : bits_(
+          RelationField::encode(kSubSelector) | MatchField::encode(match_type) |
+          PseudoTypeField::encode(kPseudoUnknown) |
+          IsLastInSelectorListField::encode(false) |
+          IsLastInComplexSelectorField::encode(false) |
+          HasRareDataField::encode(false) | IsForPageField::encode(false) |
+          IsImplicitlyAddedField::encode(false) |
+          IsCoveredByBucketingField::encode(false) |
+          SignalField::encode(static_cast<unsigned>(Signal::kNone)) |
+          IsInvisibleField::encode(false) |
+          AttributeMatchField::encode(static_cast<unsigned>(case_sensitivity)) |
+          IsCaseSensitiveAttributeField::encode(
+              HTMLDocument::IsCaseSensitiveAttribute(attribute))),
+      data_(attribute) {
+  DCHECK_EQ(match_type, kAttributeSet);
+}
+
+CSSSelector::CSSSelector(MatchType match_type,
+                         const QualifiedName& attribute,
+                         AttributeMatchType case_sensitivity,
+                         const AtomicString& value)
+    : bits_(
+          RelationField::encode(kSubSelector) |
+          MatchField::encode(static_cast<unsigned>(match_type)) |
+          PseudoTypeField::encode(kPseudoUnknown) |
+          IsLastInSelectorListField::encode(false) |
+          IsLastInComplexSelectorField::encode(false) |
+          HasRareDataField::encode(true) | IsForPageField::encode(false) |
+          IsImplicitlyAddedField::encode(false) |
+          IsCoveredByBucketingField::encode(false) |
+          SignalField::encode(static_cast<unsigned>(Signal::kNone)) |
+          IsInvisibleField::encode(false) |
+          AttributeMatchField::encode(static_cast<unsigned>(case_sensitivity)) |
+          IsCaseSensitiveAttributeField::encode(
+              HTMLDocument::IsCaseSensitiveAttribute(attribute))),
+      data_(MakeGarbageCollected<RareData>(value)) {
+  DCHECK(IsAttributeSelector());
+  data_.rare_data_->attribute_ = attribute;
+}
 
 void CSSSelector::CreateRareData() {
   DCHECK_NE(Match(), kTag);
@@ -196,7 +244,7 @@ inline unsigned CSSSelector::SpecificityForOneSelector() const {
       switch (GetPseudoType()) {
         case kPseudoSlotted:
           DCHECK(SelectorList()->HasOneSelector());
-          return kClassLikeSpecificity + SelectorList()->First()->Specificity();
+          return kTagSpecificity + SelectorList()->First()->Specificity();
         case kPseudoViewTransitionGroup:
         case kPseudoViewTransitionImagePair:
         case kPseudoViewTransitionOld:
@@ -204,12 +252,12 @@ inline unsigned CSSSelector::SpecificityForOneSelector() const {
           CHECK(!IdentList().empty());
           return (IdentList().size() == 1u && IdentList()[0].IsNull())
                      ? 0
-                     : kClassLikeSpecificity;
+                     : kTagSpecificity;
         }
         default:
           break;
       }
-      return kClassLikeSpecificity;
+      return kTagSpecificity;
     case kClass:
     case kAttributeExact:
     case kAttributeSet:
@@ -226,12 +274,12 @@ inline unsigned CSSSelector::SpecificityForOneSelector() const {
       return kTagSpecificity;
     case kInvalidList:
     case kPagePseudoClass:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return 0;
     case kUnknown:
       return 0;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0;
 }
 
@@ -255,7 +303,7 @@ unsigned CSSSelector::SpecificityForPage() const {
             s += 1;
             break;
           default:
-            NOTREACHED();
+            NOTREACHED_IN_MIGRATION();
         }
         break;
       default:
@@ -285,8 +333,8 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
       return kPseudoIdScrollbar;
     case kPseudoScrollMarker:
       return kPseudoIdScrollMarker;
-    case kPseudoScrollMarkers:
-      return kPseudoIdScrollMarkers;
+    case kPseudoScrollMarkerGroup:
+      return kPseudoIdScrollMarkerGroup;
     case kPseudoScrollbarButton:
       return kPseudoIdScrollbarButton;
     case kPseudoScrollbarCorner:
@@ -438,16 +486,15 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
       return kPseudoIdNone;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return kPseudoIdNone;
 }
 
-void CSSSelector::Reparent(StyleRule* old_parent, StyleRule* new_parent) {
+void CSSSelector::Reparent(StyleRule* new_parent) {
   if (GetPseudoType() == CSSSelector::kPseudoParent) {
-    DCHECK_EQ(old_parent, ParentRule());
     data_.parent_rule_ = new_parent;
   } else if (HasRareData() && data_.rare_data_->selector_list_) {
-    data_.rare_data_->selector_list_->Reparent(old_parent, new_parent);
+    data_.rare_data_->selector_list_->Reparent(new_parent);
   }
 }
 
@@ -460,7 +507,7 @@ struct NameToPseudoStruct {
 };
 
 // These tables must be kept sorted.
-const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
+constexpr static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"-internal-autofill-previewed", CSSSelector::kPseudoAutofillPreviewed},
     {"-internal-autofill-selected", CSSSelector::kPseudoAutofillSelected},
     {"-internal-dialog-in-top-layer", CSSSelector::kPseudoDialogInTopLayer},
@@ -561,7 +608,7 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"root", CSSSelector::kPseudoRoot},
     {"scope", CSSSelector::kPseudoScope},
     {"scroll-marker", CSSSelector::kPseudoScrollMarker},
-    {"scroll-markers", CSSSelector::kPseudoScrollMarkers},
+    {"scroll-marker-group", CSSSelector::kPseudoScrollMarkerGroup},
     {"search-text", CSSSelector::kPseudoSearchText},
     {"select-fallback-button", CSSSelector::kPseudoSelectFallbackButton},
     {"select-fallback-button-icon",
@@ -585,7 +632,7 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"xr-overlay", CSSSelector::kPseudoXrOverlay},
 };
 
-const static NameToPseudoStruct kPseudoTypeWithArgumentsMap[] = {
+constexpr static NameToPseudoStruct kPseudoTypeWithArgumentsMap[] = {
     {"-webkit-any", CSSSelector::kPseudoAny},
     {"active-view-transition-type",
      CSSSelector::kPseudoActiveViewTransitionType},
@@ -673,7 +720,7 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
   }
 
   if ((match->type == CSSSelector::kPseudoScrollMarker ||
-       match->type == CSSSelector::kPseudoScrollMarkers) &&
+       match->type == CSSSelector::kPseudoScrollMarkerGroup) &&
       !RuntimeEnabledFeatures::CSSPseudoScrollMarkersEnabled()) {
     return CSSSelector::kPseudoUnknown;
   }
@@ -786,7 +833,7 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoScrollbarTrack:
     case kPseudoScrollbarTrackPiece:
     case kPseudoScrollMarker:
-    case kPseudoScrollMarkers:
+    case kPseudoScrollMarkerGroup:
     case kPseudoSelectFallbackButton:
     case kPseudoSelectFallbackButtonIcon:
     case kPseudoSelectFallbackButtonText:
@@ -1076,7 +1123,7 @@ bool CSSSelector::SerializeSimpleSelector(StringBuilder& builder) const {
         builder.Append('&');
         break;
       case kPseudoRelativeAnchor:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return false;
       case kPseudoActiveViewTransitionType: {
         CHECK(!IdentList().empty());
@@ -1259,7 +1306,7 @@ String CSSSelector::SelectorText() const {
         break;
       case kSubSelector:
       case kScopeActivation:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
       case kShadowPart:
       case kUAShadow:
@@ -1276,7 +1323,7 @@ String CSSSelector::SelectorText() const {
         return "~ " + builder.ReleaseString() + result;
     }
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return String();
 }
 
@@ -1291,15 +1338,6 @@ String CSSSelector::SimpleSelectorTextForDebug() const {
     SerializeSimpleSelector(builder);
   }
   return builder.ToString();
-}
-
-void CSSSelector::SetAttribute(const QualifiedName& value,
-                               AttributeMatchType match_type) {
-  CreateRareData();
-  data_.rare_data_->attribute_ = value;
-  data_.rare_data_->bits_.attr_.attribute_match_ = match_type;
-  data_.rare_data_->bits_.attr_.is_case_sensitive_attribute_ =
-      HTMLDocument::IsCaseSensitiveAttribute(value);
 }
 
 void CSSSelector::SetArgument(const AtomicString& value) {
@@ -1342,7 +1380,7 @@ static bool ValidateSubSelector(const CSSSelector* selector) {
     case CSSSelector::kPseudoClass:
       break;
     case CSSSelector::kInvalidList:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   switch (selector->GetPseudoType()) {
@@ -1668,9 +1706,42 @@ CSSSelector::RelationType ConvertRelationToRelative(
     case CSSSelector::kIndirectAdjacent:
       return CSSSelector::kRelativeIndirectAdjacent;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return {};
   }
 }
+
+constexpr bool IsPseudoMapSorted(const NameToPseudoStruct* map, unsigned size) {
+  for (unsigned i = 0; i < size - 1; i++) {
+    // strcmp/strncmp would be much better here, but unfortunately they aren't
+    // constexpr.
+    const char* current_string = map[i].string;
+    const char* next_string = map[i + 1].string;
+    while (true) {
+      if (*current_string > *next_string) {
+        return false;
+      }
+      if (*current_string < *next_string) {
+        break;
+      }
+      if (!*current_string) {
+        break;
+      }
+      if (!*next_string) {
+        return false;
+      }
+      current_string++;
+      next_string++;
+    }
+  }
+  return true;
+}
+
+static_assert(IsPseudoMapSorted(kPseudoTypeWithoutArgumentsMap,
+                                std::size(kPseudoTypeWithoutArgumentsMap)),
+              "kPseudoTypeWithoutArgumentsMap must be sorted.");
+static_assert(IsPseudoMapSorted(kPseudoTypeWithArgumentsMap,
+                                std::size(kPseudoTypeWithArgumentsMap)),
+              "kPseudoTypeWithArgumentsMap must be sorted.");
 
 }  // namespace blink

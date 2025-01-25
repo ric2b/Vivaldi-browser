@@ -5,12 +5,6 @@
 
 #pragma once
 
-#include <xnnpack.h>
-#include <xnnpack/aligned-allocator.h>
-#include <xnnpack/microfnptr.h>
-#include <xnnpack/microparams.h>
-#include <xnnpack/requantization.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -21,9 +15,14 @@
 #include <random>
 #include <vector>
 
-#include "replicable_random_device.h"
 #include <gtest/gtest.h>
 #include <fp16/fp16.h>
+#include "xnnpack.h"
+#include "xnnpack/aligned-allocator.h"
+#include "xnnpack/microfnptr.h"
+#include "xnnpack/microparams.h"
+#include "xnnpack/requantization.h"
+#include "replicable_random_device.h"
 
 class RDSumMicrokernelTester {
  public:
@@ -121,19 +120,64 @@ class RDSumMicrokernelTester {
     return this->iterations_;
   }
 
+  uint8_t qmin() const {
+    return this->qmin_;
+  }
+
+  uint8_t qmax() const {
+    return this->qmax_;
+  }
+
+  void Test(xnn_qs8_rdsum_ukernel_fn rdsum,
+      xnn_init_qs8_rsum_params_fn init_params) const {
+    xnnpack::ReplicableRandomDevice rng;
+    std::uniform_int_distribution<int32_t> i8dist(
+      std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
+    std::vector<int8_t> input((rows() - 1) * input_stride() + channels() + XNN_EXTRA_BYTES);
+    std::vector<int8_t> zero(channels() + XNN_EXTRA_BYTES, 0);
+    std::vector<int32_t> output(channels());
+    std::vector<int32_t> output_ref(channels());
+    {//for (size_t iteration = 0; iteration < iterations(); iteration++) {
+      std::generate(input.begin(), input.end(), [&]() { return i8dist(rng); });
+      std::generate(output.begin(), output.end(), [&]() { return i8dist(rng); });
+      std::fill(output.begin(), output.end(), 0);
+      output_ref = output;
+
+      // Compute reference results, without clamping.
+      for (size_t c = 0; c < channels(); c++) {
+        for (size_t n = 0; n < rows(); n++) {
+          output_ref[c] += int32_t(input[n * input_stride() + c]);
+        }
+      }
+
+      // Prepare parameters.
+      union xnn_qs8_rsum_params params;
+      init_params(&params);
+
+      // Call optimized micro-kernel.
+      rdsum(rows(), channels(), input.data(), input_stride(), zero.data(), output.data(), &params);
+
+      // Verify results.
+      for (size_t c = 0; c < channels(); c++) {
+        EXPECT_EQ(output[c], output_ref[c])
+          << "at position " << c << ", rows = " << rows() << ", channels = " << channels();
+      }
+    }
+  }
+
   void Test(xnn_f16_f32acc_rdsum_ukernel_fn rdsum, xnn_init_f16_f32acc_scale_params_fn init_params) const {
     xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.01f, 1.0f);
 
     std::vector<uint16_t> input((rows() - 1) * input_stride() + channels() + XNN_EXTRA_BYTES / sizeof(uint16_t));
     std::vector<uint16_t> zero(channels() + XNN_EXTRA_BYTES / sizeof(uint16_t), 0);
-    std::vector<uint16_t> output(channels());
+    std::vector<float> output(channels());
     std::vector<float> output_ref(channels());
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-      std::generate(output.begin(), output.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
+      std::generate(output.begin(), output.end(), [&]() { return f32dist(rng); });
       for (size_t i = 0; i < output.size(); ++i) {
-        output_ref[i] = fp16_ieee_to_fp32_value(output[i]);
+        output_ref[i] = output[i];
       }
 
       // Compute reference results, without clamping.
@@ -154,7 +198,7 @@ class RDSumMicrokernelTester {
 
       // Verify results.
       for (size_t c = 0; c < channels(); c++) {
-        EXPECT_NEAR(fp16_ieee_to_fp32_value(output[c]), output_ref[c], std::abs(output_ref[c]) * 1.0e-3f)
+        EXPECT_NEAR(output[c], output_ref[c], std::abs(output_ref[c]) * 1.0e-5f)
           << "at position " << c << ", rows = " << rows() << ", channels = " << channels();
       }
     }
@@ -206,5 +250,7 @@ class RDSumMicrokernelTester {
   float output_scale_{0.75f};
   uint8_t input_zero_point_{121};
   uint8_t output_zero_point_{133};
-  size_t iterations_{15};
+  size_t iterations_{3};
+  uint8_t qmin_{0};
+  uint8_t qmax_{255};
 };

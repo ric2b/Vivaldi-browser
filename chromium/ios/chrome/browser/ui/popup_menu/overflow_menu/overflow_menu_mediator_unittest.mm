@@ -12,9 +12,10 @@
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_feature_list.h"
 #import "base/time/default_clock.h"
+#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/browser/bookmark_utils.h"
-#import "components/bookmarks/browser/core_bookmark_model.h"
 #import "components/bookmarks/common/bookmark_pref_names.h"
+#import "components/bookmarks/test/bookmark_test_helpers.h"
 #import "components/feature_engagement/test/mock_tracker.h"
 #import "components/language/ios/browser/ios_language_detection_tab_helper.h"
 #import "components/language/ios/browser/language_detection_java_script_feature.h"
@@ -27,8 +28,12 @@
 #import "components/reading_list/core/reading_list_model.h"
 #import "components/signin/public/base/consent_level.h"
 #import "components/signin/public/base/signin_metrics.h"
+#import "components/signin/public/identity_manager/identity_manager.h"
+#import "components/signin/public/identity_manager/identity_test_utils.h"
 #import "components/supervised_user/core/browser/supervised_user_preferences.h"
+#import "components/supervised_user/core/common/features.h"
 #import "components/supervised_user/core/common/pref_names.h"
+#import "components/supervised_user/test_support/supervised_user_signin_test_utils.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/test/mock_sync_service.h"
 #import "components/sync_preferences/pref_service_mock_factory.h"
@@ -36,11 +41,7 @@
 #import "components/translate/core/browser/translate_pref_names.h"
 #import "components/translate/core/browser/translate_prefs.h"
 #import "components/translate/core/language_detection/language_detection_model.h"
-#import "ios/chrome/browser/bookmarks/model/account_bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
-#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
-#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model_test_helpers.h"
-#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presenter.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_request.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_request_queue.h"
@@ -68,7 +69,9 @@
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/model/fake_authentication_service_delegate.h"
+#import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity_manager.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/signin/model/system_identity.h"
 #import "ios/chrome/browser/signin/model/system_identity_manager.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_service_factory.h"
@@ -130,7 +133,7 @@ constexpr syncer::SyncService::UserActionableError
 // when Sync is turned OFF.
 constexpr syncer::SyncService::UserActionableError
     kIneligibleIdentityErrorWhenSyncOff =
-        syncer::SyncService::UserActionableError::kGenericUnrecoverableError;
+        syncer::SyncService::UserActionableError::kSignInNeedsUpdate;
 
 void CleanupNSUserDefaults() {
   [[NSUserDefaults standardUserDefaults]
@@ -177,9 +180,6 @@ class OverflowMenuMediatorTest : public PlatformTest {
     builder.AddTestingFactory(
         ios::TemplateURLServiceFactory::GetInstance(),
         ios::TemplateURLServiceFactory::GetDefaultFactory());
-    builder.AddTestingFactory(
-        ios::LocalOrSyncableBookmarkModelFactory::GetInstance(),
-        ios::LocalOrSyncableBookmarkModelFactory::GetDefaultFactory());
     builder.AddTestingFactory(ios::BookmarkModelFactory::GetInstance(),
                               ios::BookmarkModelFactory::GetDefaultFactory());
     builder.AddTestingFactory(
@@ -302,20 +302,11 @@ class OverflowMenuMediatorTest : public PlatformTest {
   }
 
   void SetUpBookmarks() {
-    local_or_syncable_bookmark_model_ =
-        ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
-            browser_state_.get());
-    DCHECK(local_or_syncable_bookmark_model_);
-    account_bookmark_model_ =
-        ios::AccountBookmarkModelFactory::GetForBrowserState(
-            browser_state_.get());
-
-    WaitForLegacyBookmarkModelToLoad(local_or_syncable_bookmark_model_);
-    if (account_bookmark_model_) {
-      WaitForLegacyBookmarkModelToLoad(account_bookmark_model_);
-    }
-    mediator_.localOrSyncableBookmarkModel = local_or_syncable_bookmark_model_;
-    mediator_.accountBookmarkModel = account_bookmark_model_;
+    bookmark_model_ =
+        ios::BookmarkModelFactory::GetForBrowserState(browser_state_.get());
+    DCHECK(bookmark_model_);
+    bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model_);
+    mediator_.bookmarkModel = bookmark_model_;
   }
 
   void SetUpReadingList() {
@@ -423,6 +414,30 @@ class OverflowMenuMediatorTest : public PlatformTest {
     return found_destination;
   }
 
+  signin::IdentityManager* identity_manager() {
+    return IdentityManagerFactory::GetForBrowserState(browser_state_.get());
+  }
+
+  FakeSystemIdentityManager* fake_system_identity_manager() {
+    return FakeSystemIdentityManager::FromSystemIdentityManager(
+        GetApplicationContext()->GetSystemIdentityManager());
+  }
+
+  void SignInPrimaryAccountWithSupervisionStatus(bool is_supervised) {
+    const FakeSystemIdentity* identity = [FakeSystemIdentity fakeIdentity1];
+    fake_system_identity_manager()->AddIdentityWithUnknownCapabilities(
+        identity);
+    AuthenticationServiceFactory::GetForBrowserState(browser_state_.get())
+        ->SignIn(identity, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+    CoreAccountInfo core_account_info =
+        identity_manager()->GetPrimaryAccountInfo(
+            signin::ConsentLevel::kSignin);
+    AccountInfo account =
+        identity_manager()->FindExtendedAccountInfo(core_account_info);
+    supervised_user::UpdateSupervisionStatusForAccount(
+        account, identity_manager(), is_supervised);
+  }
+
   web::WebTaskEnvironment task_env_;
   // Set a local state for the test ApplicationContext that is scoped to the
   // test (cleaned up on teardown). This is needed for certains factories that
@@ -437,8 +452,7 @@ class OverflowMenuMediatorTest : public PlatformTest {
   OverflowMenuModel* model_;
   OverflowMenuMediator* mediator_;
   OverflowMenuOrderer* orderer_;
-  raw_ptr<LegacyBookmarkModel> local_or_syncable_bookmark_model_;
-  raw_ptr<LegacyBookmarkModel> account_bookmark_model_;
+  raw_ptr<bookmarks::BookmarkModel> bookmark_model_;
   raw_ptr<ReadingListModel> reading_list_model_;
   std::unique_ptr<TestingPrefServiceSimple> browserStatePrefs_;
   std::unique_ptr<TestingPrefServiceSimple> localStatePrefs_;
@@ -501,6 +515,8 @@ TEST_F(OverflowMenuMediatorTest, TestMenuItemsCount) {
     @(number_of_tab_actions),
     // Other actions, depending on configuration.
     @(number_of_action_items),
+    // Customization button
+    @(1),
     // Feedback/help actions.
     @(number_of_help_items),
   ]);
@@ -628,17 +644,16 @@ TEST_F(OverflowMenuMediatorTest, TestEnterpriseInfoShownForUserLevelPolicies) {
       {});
 
   // Add managed account to sign in with.
-  FakeSystemIdentityManager* fake_system_identity_manager =
-      FakeSystemIdentityManager::FromSystemIdentityManager(
-          GetApplicationContext()->GetSystemIdentityManager());
-  fake_system_identity_manager->AddManagedIdentities(@[ @"managedfoo" ]);
-  ChromeAccountManagerService* account_manager =
-      ChromeAccountManagerServiceFactory::GetForBrowserState(
-          browser_state_.get());
+  FakeSystemIdentity* fake_system_identity =
+      [FakeSystemIdentity fakeManagedIdentity];
+  fake_system_identity_manager()->AddIdentity(fake_system_identity);
 
   // Emulate signing in with managed account.
   AuthenticationService* authentication_service =
       AuthenticationServiceFactory::GetForBrowserState(browser_state_.get());
+  ChromeAccountManagerService* account_manager =
+      ChromeAccountManagerServiceFactory::GetForBrowserState(
+          browser_state_.get());
   authentication_service->SignIn(
       account_manager->GetDefaultIdentity(),
       signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
@@ -691,6 +706,31 @@ TEST_F(OverflowMenuMediatorTest,
 
 // Tests that the Family Link item is hidden for non-supervised users.
 TEST_F(OverflowMenuMediatorTest, TestFamilyLinkInfoHidden) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      supervised_user::kReplaceSupervisionPrefsWithAccountCapabilitiesOnIOS);
+
+  // Sign in unsupervised user.
+  SignInPrimaryAccountWithSupervisionStatus(/*is_supervised=*/false);
+
+  CreateMediator(/*is_incognito=*/NO);
+  SetUpActiveWebState();
+
+  mediator_.webStateList = browser_->GetWebStateList();
+
+  // Force model update.
+  mediator_.model = model_;
+
+  ASSERT_FALSE(HasFamilyLinkInfoItem());
+}
+
+// Tests that the Family Link item is hidden for non-supervised users with
+// pref-based supervision status.
+TEST_F(OverflowMenuMediatorTest, TestFamilyLinkInfoHiddenWithSupervisionPrefs) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      supervised_user::kReplaceSupervisionPrefsWithAccountCapabilitiesOnIOS);
+
   supervised_user::DisableParentalControls(*browser_state_->GetPrefs());
 
   CreateMediator(/*is_incognito=*/NO);
@@ -706,6 +746,31 @@ TEST_F(OverflowMenuMediatorTest, TestFamilyLinkInfoHidden) {
 
 // Tests that the Family Link item is shown for supervised users.
 TEST_F(OverflowMenuMediatorTest, TestFamilyLinkInfoShown) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      supervised_user::kReplaceSupervisionPrefsWithAccountCapabilitiesOnIOS);
+
+  // Sign in supervised user.
+  SignInPrimaryAccountWithSupervisionStatus(/*is_supervised=*/true);
+
+  CreateMediator(/*is_incognito=*/NO);
+  SetUpActiveWebState();
+
+  mediator_.webStateList = browser_->GetWebStateList();
+
+  // Force model update.
+  mediator_.model = model_;
+
+  ASSERT_TRUE(HasFamilyLinkInfoItem());
+}
+
+// Tests that the Family Link item is shown for supervised users with pref-based
+// supervision status.
+TEST_F(OverflowMenuMediatorTest, TestFamilyLinkInfoShownWithSupervisionPrefs) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      supervised_user::kReplaceSupervisionPrefsWithAccountCapabilitiesOnIOS);
+
   supervised_user::EnableParentalControls(*browser_state_->GetPrefs());
 
   CreateMediator(/*is_incognito=*/NO);
@@ -733,9 +798,9 @@ TEST_F(OverflowMenuMediatorTest, TestBookmarksToolsMenuButtons) {
   CreateMediator(/*is_incognito=*/NO);
   CreateBrowserStatePrefs();
   SetUpBookmarks();
-  local_or_syncable_bookmark_model_->AddURL(
-      local_or_syncable_bookmark_model_->mobile_node(), 0,
-      base::SysNSStringToUTF16(@"Test bookmark"), bookmarkedURL);
+  bookmark_model_->AddURL(bookmark_model_->mobile_node(), 0,
+                          base::SysNSStringToUTF16(@"Test bookmark"),
+                          bookmarkedURL);
   mediator_.webStateList = browser_->GetWebStateList();
   mediator_.browserStatePrefs = browserStatePrefs_.get();
 

@@ -114,6 +114,11 @@ UIView* SecondaryToolbarLocationBarContainerView(
   // `buttonStackView.topAnchor`. Active when the omnibox is in the bottom
   // toolbar.
   NSLayoutConstraint* _locationBarBottomConstraint;
+
+  // Visual effect view to make the toolbar appear translucent when necessary.
+  UIVisualEffectView* _visualEffectView;
+  // Content view to hold the main toolbar content above the visual effect view.
+  UIView* _contentView;
 }
 
 @synthesize allButtons = _allButtons;
@@ -162,7 +167,8 @@ UIView* SecondaryToolbarLocationBarContainerView(
     _locationBarKeyboardConstraint.active = NO;
 
     // UIKeyboardLayoutGuide is updated sooner in superview's
-    // keyboardLayoutGuide rendering smoother animation. Constraint is updated
+    // keyboardLayoutGuide rendering smoother animation. Constraint is
+    // updated
     // in view controller.
     _locationBarKeyboardConstraint = [newSuperview.keyboardLayoutGuide.topAnchor
         constraintGreaterThanOrEqualToAnchor:self.locationBarContainer
@@ -182,10 +188,28 @@ UIView* SecondaryToolbarLocationBarContainerView(
 
   self.translatesAutoresizingMaskIntoConstraints = NO;
 
-  self.backgroundColor =
-      self.buttonFactory.toolbarConfiguration.backgroundColor;
+  UIBlurEffect* blurEffect =
+      [UIBlurEffect effectWithStyle:UIBlurEffectStyleRegular];
+  _visualEffectView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+  _visualEffectView.translatesAutoresizingMaskIntoConstraints = NO;
+  _visualEffectView.hidden = YES;
 
-  UIView* contentView = self;
+  [self addSubview:_visualEffectView];
+  AddSameConstraints(self, _visualEffectView);
+
+  _contentView = [[UIView alloc] init];
+  _contentView.translatesAutoresizingMaskIntoConstraints = NO;
+  [self addSubview:_contentView];
+  AddSameConstraints(self, _contentView);
+
+  // Note:(prio@vivaldi.com) - We set background color outside of this view
+  // based on accent color. Skip this upstream override.
+  if (!IsVivaldiRunning()) {
+  _contentView.backgroundColor =
+      self.buttonFactory.toolbarConfiguration.backgroundColor;
+  } // End Vivaldi
+
+  UIView* contentView = _contentView;
 
   // Toolbar buttons.
   self.backButton = [self.buttonFactory backButton];
@@ -225,7 +249,7 @@ UIView* SecondaryToolbarLocationBarContainerView(
   self.separator = [[UIView alloc] init];
   self.separator.backgroundColor = [UIColor colorNamed:kToolbarShadowColor];
   self.separator.translatesAutoresizingMaskIntoConstraints = NO;
-  [self addSubview:self.separator];
+  [contentView addSubview:self.separator];
 
   // Button StackView.
   self.buttonStackView =
@@ -237,7 +261,6 @@ UIView* SecondaryToolbarLocationBarContainerView(
   UILayoutGuide* safeArea = self.safeAreaLayoutGuide;
 
   if (IsBottomOmniboxAvailable()) {
-    self.buttonStackView.backgroundColor = self.backgroundColor;
     self.collapsedToolbarButton = SecondaryToolbarCollapsedToolbarButton();
     self.locationBarContainer =
         SecondaryToolbarLocationBarContainerView(self.buttonFactory);
@@ -302,7 +325,7 @@ UIView* SecondaryToolbarLocationBarContainerView(
         [UIColor colorNamed:kToolbarShadowColor];
     self.bottomSeparator.translatesAutoresizingMaskIntoConstraints = NO;
     self.bottomSeparator.alpha = 0.0;
-    [self addSubview:self.bottomSeparator];
+    [contentView addSubview:self.bottomSeparator];
     AddSameConstraintsToSides(self, self.bottomSeparator,
                               LayoutSides::kLeading | LayoutSides::kTrailing);
 
@@ -440,6 +463,29 @@ UIView* SecondaryToolbarLocationBarContainerView(
   } else {
     _buttonStackViewNoOmniboxConstraint.active = YES;
   }
+}
+
+- (void)makeTranslucent {
+
+  // Note:(prio@vivaldi.com) - We set background color outside of this view
+  // based on accent color. Skip this upstream override.
+  if (!IsVivaldiRunning()) {
+  _visualEffectView.hidden = NO;
+  _contentView.backgroundColor = nil;
+  } // End Vivaldi
+
+}
+
+- (void)makeOpaque {
+
+  // Note:(prio@vivaldi.com) - We set background color outside of this view
+  // based on accent color. Skip this upstream override.
+  if (!IsVivaldiRunning()) {
+  _visualEffectView.hidden = YES;
+  _contentView.backgroundColor =
+      self.buttonFactory.toolbarConfiguration.backgroundColor;
+  } // End Vivaldi
+
 }
 
 #pragma mark: - Vivaldi

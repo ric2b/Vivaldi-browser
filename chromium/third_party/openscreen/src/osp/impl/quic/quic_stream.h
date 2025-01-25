@@ -16,7 +16,7 @@ class QuicStream {
  public:
   class Delegate {
    public:
-    virtual void OnReceived(QuicStream* stream, const ByteView& bytes) = 0;
+    virtual void OnReceived(QuicStream* stream, ByteView bytes) = 0;
     virtual void OnClose(uint64_t stream_id) = 0;
 
    protected:
@@ -27,7 +27,7 @@ class QuicStream {
   virtual ~QuicStream() = default;
 
   virtual uint64_t GetStreamId() = 0;
-  virtual void Write(const ByteView& bytes) = 0;
+  virtual void Write(ByteView bytes) = 0;
   virtual void CloseWriteEnd() = 0;
 
  protected:

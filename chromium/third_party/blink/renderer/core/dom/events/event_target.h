@@ -54,7 +54,6 @@ class MessagePort;
 class Node;
 class Observable;
 class ObservableEventListenerOptions;
-class PortalHost;
 class ScriptState;
 class ServiceWorker;
 class V8EventListener;
@@ -145,7 +144,10 @@ class CORE_EXPORT EventTarget : public ScriptWrappable {
   virtual LocalDOMWindow* ToLocalDOMWindow();
   virtual MessagePort* ToMessagePort();
   virtual ServiceWorker* ToServiceWorker();
-  virtual PortalHost* ToPortalHost();
+
+  // This method is called when the enqueued event is dispatched.
+  // The input is the event type of the current dispatched event.
+  virtual void ResetEventQueueStatus(const AtomicString& event_type);
 
   static EventTarget* Create(ScriptState*);
 
@@ -307,8 +309,8 @@ class CORE_EXPORT EventTarget : public ScriptWrappable {
   DEFINE_ATTRIBUTE_EVENT_LISTENER(selectionchange, kSelectionchange)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(selectstart, kSelectstart)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(slotchange, kSlotchange)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(snapchanged, kSnapchanged)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(snapchanging, kSnapchanging)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(scrollsnapchange, kScrollsnapchange)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(scrollsnapchanging, kScrollsnapchanging)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(stalled, kStalled)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(submit, kSubmit)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(suspend, kSuspend)

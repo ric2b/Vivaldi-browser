@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 // The tests in this file attempt to verify the following through simulation:
 // a) That a server experiencing overload will actually benefit from the
 //    anti-DDoS throttling logic, i.e. that its traffic spike will subside
@@ -215,7 +220,7 @@ class Server : public DiscreteTimeSimulation::Actor {
     if (num_ticks % ticks_per_column)
       ++num_columns;
     DCHECK_LE(num_columns, terminal_width);
-    std::unique_ptr<int[]> columns(new int[num_columns]);
+    std::vector<int> columns(num_columns);
     for (int tx = 0; tx < num_ticks; ++tx) {
       int cx = tx / ticks_per_column;
       if (tx % ticks_per_column == 0)

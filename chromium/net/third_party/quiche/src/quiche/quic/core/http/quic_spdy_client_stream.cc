@@ -4,6 +4,7 @@
 
 #include "quiche/quic/core/http/quic_spdy_client_stream.h"
 
+#include <string>
 #include <utility>
 
 #include "absl/strings/str_cat.h"
@@ -18,7 +19,7 @@
 #include "quiche/common/quiche_text_utils.h"
 #include "quiche/spdy/core/spdy_protocol.h"
 
-using spdy::Http2HeaderBlock;
+using quiche::HttpHeaderBlock;
 
 namespace quic {
 
@@ -45,7 +46,7 @@ QuicSpdyClientStream::~QuicSpdyClientStream() = default;
 
 bool QuicSpdyClientStream::CopyAndValidateHeaders(
     const QuicHeaderList& header_list, int64_t& content_length,
-    spdy::Http2HeaderBlock& headers) {
+    quiche::HttpHeaderBlock& headers) {
   return SpdyUtils::CopyAndValidateHeaders(header_list, &content_length,
                                            &headers);
 }
@@ -106,10 +107,7 @@ void QuicSpdyClientStream::OnInitialHeadersComplete(
     if (!web_transport()->ready()) {
       // The request was rejected by WebTransport, typically due to not having a
       // 2xx status.  The reason we're using Reset() here rather than closing
-      // cleanly is that even if the server attempts to send us any form of body
-      // with a 4xx request, we've already set up the capsule parser, and we
-      // don't have any way to process anything from the response body in
-      // question.
+      // cleanly is to avoid having to process the response body.
       Reset(QUIC_STREAM_CANCELLED);
       return;
     }
@@ -117,6 +115,10 @@ void QuicSpdyClientStream::OnInitialHeadersComplete(
 
   if (!ParseAndValidateStatusCode()) {
     return;
+  }
+
+  if (uses_capsules() && (response_code_ < 200 || response_code_ >= 300)) {
+    capsules_failed_ = true;
   }
 
   ConsumeHeaderList();
@@ -156,7 +158,7 @@ void QuicSpdyClientStream::OnBodyAvailable() {
   }
 }
 
-size_t QuicSpdyClientStream::SendRequest(Http2HeaderBlock headers,
+size_t QuicSpdyClientStream::SendRequest(HttpHeaderBlock headers,
                                          absl::string_view body, bool fin) {
   QuicConnection::ScopedPacketFlusher flusher(session_->connection());
   bool send_fin_with_headers = fin && body.empty();

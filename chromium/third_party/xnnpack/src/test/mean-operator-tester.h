@@ -5,10 +5,6 @@
 
 #pragma once
 
-#include <xnnpack.h>
-#include <xnnpack/aligned-allocator.h>
-#include <xnnpack/common.h>
-
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -23,10 +19,13 @@
 #include <random>
 #include <vector>
 
-#include "pthreadpool.h"
-#include "replicable_random_device.h"
 #include <gtest/gtest.h>
 #include <fp16/fp16.h>
+#include "xnnpack.h"
+#include "xnnpack/aligned-allocator.h"
+#include "xnnpack/common.h"
+#include "replicable_random_device.h"
+#include "pthreadpool.h"
 
 class MeanOperatorTester {
  public:
@@ -305,8 +304,6 @@ class MeanOperatorTester {
       // Smart pointer to automatically delete mean_op.
       std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_mean_op(mean_op, xnn_delete_operator);
 
-      size_t workspace_size = SIZE_MAX;
-      size_t workspace_alignment = SIZE_MAX;
       ASSERT_EQ(xnn_status_success,
         xnn_reshape_mean_nd_f32(
           mean_op,
@@ -314,17 +311,11 @@ class MeanOperatorTester {
           reduction_axes().data(),
           num_input_dims(),
           input_shape().data(),
-          &workspace_size, &workspace_alignment,
           auto_threadpool.get()));
-
-      ASSERT_NE(workspace_size, SIZE_MAX);
-      ASSERT_LE(workspace_alignment, XNN_ALLOCATION_ALIGNMENT);
-      std::vector<char, AlignedAllocator<char, XNN_ALLOCATION_ALIGNMENT>> workspace(workspace_size);
 
       ASSERT_EQ(xnn_status_success,
         xnn_setup_mean_nd_f32(
           mean_op,
-          workspace.data(),
           input.data(), output.data()));
 
       ASSERT_EQ(xnn_status_success,

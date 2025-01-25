@@ -50,6 +50,7 @@ class Graph final : public ZoneObject {
   const BasicBlock* operator[](int i) const { return blocks_[i]; }
 
   int num_blocks() const { return static_cast<int>(blocks_.size()); }
+  ZoneVector<BasicBlock*>& blocks() { return blocks_; }
 
   BlockConstIterator begin() const { return blocks_.begin(); }
   BlockConstIterator end() const { return blocks_.end(); }
@@ -59,6 +60,8 @@ class Graph final : public ZoneObject {
   BasicBlock* last_block() const { return blocks_.back(); }
 
   void Add(BasicBlock* block) { blocks_.push_back(block); }
+
+  void set_blocks(ZoneVector<BasicBlock*> blocks) { blocks_ = blocks; }
 
   uint32_t tagged_stack_slots() const { return tagged_stack_slots_; }
   uint32_t untagged_stack_slots() const { return untagged_stack_slots_; }
@@ -129,7 +132,7 @@ class Graph final : public ZoneObject {
     return osr_values().back()->stack_slot() + 1;
   }
 
-  int NewObjectId() { return object_ids_++; }
+  uint32_t NewObjectId() { return object_ids_++; }
 
   // Resolve the scope info of a context value.
   // An empty result means we don't statically know the context's scope.
@@ -211,7 +214,7 @@ class Graph final : public ZoneObject {
   bool has_recursive_calls_ = false;
   int total_inlined_bytecode_size_ = 0;
   bool is_osr_ = false;
-  int object_ids_ = 0;
+  uint32_t object_ids_ = 0;
   ZoneUnorderedMap<ValueNode*, compiler::OptionalScopeInfoRef> scope_infos_;
 };
 

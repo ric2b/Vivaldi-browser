@@ -21,17 +21,16 @@ You should have
 *   [Ubuntu](http://www.ubuntu.com/) Linux (version == 22.04 - Jammy)
     *   This is the only officially support distro, but building
                 Chromium OS should work fine on any x86_64 Linux distro running
-                a 2.6.16+ kernel
+                a recent kernel
 
 *   a 64-bit system for performing the build
 
 *   an account with sudo access
 
-1.  Install the git revision control system, the curl download helper, and
-            xz-utils. On Ubuntu, the magic incantation to do this is:
+1.  Install required tools. On Ubuntu, the command is:
 
     ```none
-    sudo apt-get install git gitk git-gui curl xz-utils
+    sudo apt-get install git gitk git-gui curl xz-utils zstd
     ```
 
 2.  You must also [install

@@ -7,6 +7,7 @@
 
 namespace patchpanel {
 
+// Patchpanel main D-Bus service constants.
 constexpr char kPatchPanelInterface[] = "org.chromium.PatchPanel";
 constexpr char kPatchPanelServicePath[] = "/org/chromium/PatchPanel";
 constexpr char kPatchPanelServiceName[] = "org.chromium.PatchPanel";
@@ -47,6 +48,10 @@ constexpr char kNetworkConfigurationChangedSignal[] =
     "NetworkConfigurationChanged";
 constexpr char kNeighborReachabilityEventSignal[] = "NeighborReachabilityEvent";
 
+// Socket service, secondary D-Bus service constants.
+constexpr char kSocketServiceInterface[] = "org.chromium.SocketService";
+constexpr char kSocketServicePath[] = "/org/chromium/SocketService";
+constexpr char kSocketServiceName[] = "org.chromium.SocketService";
 }  // namespace patchpanel
 
 #endif  // SYSTEM_API_DBUS_PATCHPANEL_DBUS_CONSTANTS_H_

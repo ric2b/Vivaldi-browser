@@ -24,6 +24,7 @@
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -272,6 +273,8 @@ const CGFloat kSmallerLocationLabelFontMultiplier = 0.75;
               _locationContainerView.trailingAnchor],
         [_leadingButton.centerYAnchor
             constraintEqualToAnchor:_locationContainerView.centerYAnchor],
+        [_leadingButton.widthAnchor constraintEqualToConstant:kButtonSize],
+        [_leadingButton.heightAnchor constraintEqualToConstant:kButtonSize],
       ];
     } else {
     _showLocationImageConstraints = @[
@@ -507,7 +510,9 @@ const CGFloat kSmallerLocationLabelFontMultiplier = 0.75;
   self.locationIconImageView.tintColor = self.colorScheme.fontColor;
 
   // Vivaldi
-  self.locationLabel.textColor = self.colorScheme.fontColor;
+  if (!self.showFullAddress) {
+    self.locationLabel.textColor = self.colorScheme.fontColor;
+  }
   self.leadingButton.tintColor = self.colorScheme.fontColor;
   // End Vivaldi
 }
@@ -805,6 +810,33 @@ const CGFloat kSmallerLocationLabelFontMultiplier = 0.75;
 
 - (CGRect)sourceRect {
   return self.locationLabel.bounds;
+}
+
+- (void)updateLocationText:(NSString*)text
+                    domain:(NSString*)domain
+                  showFull:(BOOL)showFull {
+  if (self.showFullAddress != showFull)
+    self.showFullAddress = showFull;
+
+  self.locationLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+
+  if (showFull && ![text isEqualToString:domain] && [text length] > 0) {
+    UIColor *fullTextColor =
+        [self.colorScheme.fontColor
+            colorWithAlphaComponent:vLocationBarSteadyViewFullAddressOpacity];
+    UIColor *domainColor =
+        [self.colorScheme.fontColor
+            colorWithAlphaComponent:vLocationBarSteadyViewDomainOpacity];
+    NSAttributedString *attributedString =
+        [VivaldiGlobalHelpers attributedStringWithText:text
+                                             highlight:domain
+                                             textColor:fullTextColor
+                                        highlightColor:domainColor];
+    self.locationLabel.attributedText = attributedString;
+  } else {
+    [self setLocationLabelText:text];
+  }
+  [self updateAccessibility];
 }
 
 - (void)fadeSteadyViewContentsWithAlpha:(CGFloat)alpha {

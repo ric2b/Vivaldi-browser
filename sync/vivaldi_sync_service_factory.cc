@@ -176,7 +176,6 @@ VivaldiSyncServiceFactory::BuildServiceInstanceForBrowserContext(
   init_params.channel = chrome::GetChannel();
   init_params.debug_identifier = profile->GetDebugName();
 
-  bool local_sync_backend_enabled = false;
 // Only check the local sync backend pref on the supported platforms of
 // Windows, Mac and Linux.
 // TODO(crbug.com/1052397): Reassess whether the following block needs to be
@@ -184,6 +183,7 @@ VivaldiSyncServiceFactory::BuildServiceInstanceForBrowserContext(
 // complete.
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
     (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+  bool local_sync_backend_enabled = false;
   syncer::SyncPrefs prefs(profile->GetPrefs());
   local_sync_backend_enabled = prefs.IsLocalSyncEnabled();
   if (local_sync_backend_enabled) {
@@ -198,11 +198,6 @@ VivaldiSyncServiceFactory::BuildServiceInstanceForBrowserContext(
   }
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || (BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS_LACROS))
-
-  if (!local_sync_backend_enabled) {
-    init_params.identity_manager =
-        IdentityManagerFactory::GetForProfile(profile);
-  }
 
   PrefService* local_state = g_browser_process->local_state();
   if (local_state)

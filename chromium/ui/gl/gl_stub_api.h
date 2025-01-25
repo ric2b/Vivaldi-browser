@@ -33,10 +33,8 @@ class GL_EXPORT GLStubApi: public GLStubApiBase {
   GLsync glFenceSyncFn(GLenum condition, GLbitfield flags) override;
   void glGenBuffersARBFn(GLsizei n, GLuint* buffers) override;
   void glGenerateMipmapEXTFn(GLenum target) override;
-  void glGenFencesAPPLEFn(GLsizei n, GLuint* fences) override;
   void glGenFencesNVFn(GLsizei n, GLuint* fences) override;
   void glGenFramebuffersEXTFn(GLsizei n, GLuint* framebuffers) override;
-  GLuint glGenPathsNVFn(GLsizei range) override;
   void glGenQueriesFn(GLsizei n, GLuint* ids) override;
   void glGenRenderbuffersEXTFn(GLsizei n, GLuint* renderbuffers) override;
   void glGenSamplersFn(GLsizei n, GLuint* samplers) override;
@@ -58,10 +56,8 @@ class GL_EXPORT GLStubApi: public GLStubApiBase {
   const GLubyte* glGetStringiFn(GLenum name, GLuint index) override;
   GLboolean glIsBufferFn(GLuint buffer) override;
   GLboolean glIsEnabledFn(GLenum cap) override;
-  GLboolean glIsFenceAPPLEFn(GLuint fence) override;
   GLboolean glIsFenceNVFn(GLuint fence) override;
   GLboolean glIsFramebufferEXTFn(GLuint framebuffer) override;
-  GLboolean glIsPathNVFn(GLuint path) override;
   GLboolean glIsProgramFn(GLuint program) override;
   GLboolean glIsQueryFn(GLuint query) override;
   GLboolean glIsRenderbufferEXTFn(GLuint renderbuffer) override;
@@ -71,7 +67,6 @@ class GL_EXPORT GLStubApi: public GLStubApiBase {
   GLboolean glIsTextureFn(GLuint texture) override;
   GLboolean glIsTransformFeedbackFn(GLuint id) override;
   GLboolean glIsVertexArrayOESFn(GLuint array) override;
-  GLboolean glTestFenceAPPLEFn(GLuint fence) override;
   GLboolean glTestFenceNVFn(GLuint fence) override;
   GLboolean glUnmapBufferFn(GLenum target) override;
 

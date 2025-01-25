@@ -1175,6 +1175,74 @@ bool TryEmitMultiplySub(InstructionSelectorT<TurboshaftAdapter>* selector,
 }
 
 std::tuple<InstructionCode, ImmediateMode> GetStoreOpcodeAndImmediate(
+    turboshaft::MemoryRepresentation stored_rep, bool paired) {
+  using namespace turboshaft;  // NOLINT(build/namespaces)
+  switch (stored_rep) {
+    case MemoryRepresentation::Int8():
+    case MemoryRepresentation::Uint8():
+      CHECK(!paired);
+      return {kArm64Strb, kLoadStoreImm8};
+    case MemoryRepresentation::Int16():
+    case MemoryRepresentation::Uint16():
+      CHECK(!paired);
+      return {kArm64Strh, kLoadStoreImm16};
+    case MemoryRepresentation::Int32():
+    case MemoryRepresentation::Uint32():
+      return {paired ? kArm64StrWPair : kArm64StrW, kLoadStoreImm32};
+    case MemoryRepresentation::Int64():
+    case MemoryRepresentation::Uint64():
+      return {paired ? kArm64StrPair : kArm64Str, kLoadStoreImm64};
+    case MemoryRepresentation::Float16():
+      UNIMPLEMENTED();
+    case MemoryRepresentation::Float32():
+      CHECK(!paired);
+      return {kArm64StrS, kLoadStoreImm32};
+    case MemoryRepresentation::Float64():
+      CHECK(!paired);
+      return {kArm64StrD, kLoadStoreImm64};
+    case MemoryRepresentation::AnyTagged():
+    case MemoryRepresentation::TaggedPointer():
+    case MemoryRepresentation::TaggedSigned():
+      if (paired) {
+        // There is an inconsistency here on how we treat stores vs. paired
+        // stores. In the normal store case we have special opcodes for
+        // compressed fields and the backend decides whether to write 32 or 64
+        // bits. However, for pairs this does not make sense, since the
+        // paired values could have different representations (e.g.,
+        // compressed paired with word32). Therefore, we decide on the actual
+        // machine representation already in instruction selection.
+#ifdef V8_COMPRESS_POINTERS
+        static_assert(ElementSizeLog2Of(MachineRepresentation::kTagged) == 2);
+        return {kArm64StrWPair, kLoadStoreImm32};
+#else
+        static_assert(ElementSizeLog2Of(MachineRepresentation::kTagged) == 3);
+        return {kArm64StrPair, kLoadStoreImm64};
+#endif
+      }
+      return {kArm64StrCompressTagged,
+              COMPRESS_POINTERS_BOOL ? kLoadStoreImm32 : kLoadStoreImm64};
+    case MemoryRepresentation::AnyUncompressedTagged():
+    case MemoryRepresentation::UncompressedTaggedPointer():
+    case MemoryRepresentation::UncompressedTaggedSigned():
+      CHECK(!paired);
+      return {kArm64Str, kLoadStoreImm64};
+    case MemoryRepresentation::ProtectedPointer():
+      // We never store directly to protected pointers from generated code.
+      UNREACHABLE();
+    case MemoryRepresentation::IndirectPointer():
+      return {kArm64StrIndirectPointer, kLoadStoreImm32};
+    case MemoryRepresentation::SandboxedPointer():
+      CHECK(!paired);
+      return {kArm64StrEncodeSandboxedPointer, kLoadStoreImm64};
+    case MemoryRepresentation::Simd128():
+      CHECK(!paired);
+      return {kArm64StrQ, kNoImmediate};
+    case MemoryRepresentation::Simd256():
+      UNREACHABLE();
+  }
+}
+
+std::tuple<InstructionCode, ImmediateMode> GetStoreOpcodeAndImmediate(
     MachineRepresentation rep, bool paired) {
   InstructionCode opcode = kArchNop;
   ImmediateMode immediate_mode = kNoImmediate;
@@ -1255,10 +1323,12 @@ std::tuple<InstructionCode, ImmediateMode> GetStoreOpcodeAndImmediate(
       opcode = kArm64StrQ;
       immediate_mode = kNoImmediate;
       break;
+    case MachineRepresentation::kFloat16:
+      UNIMPLEMENTED();
     case MachineRepresentation::kSimd256:
     case MachineRepresentation::kMapWord:
-      // We never store directly to protected pointers from generated code.
     case MachineRepresentation::kProtectedPointer:
+      // We never store directly to protected pointers from generated code.
     case MachineRepresentation::kNone:
       UNREACHABLE();
   }
@@ -1699,6 +1769,138 @@ void InstructionSelectorT<TurbofanAdapter>::VisitLoadTransform(Node* node) {
 }
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+std::tuple<InstructionCode, ImmediateMode> GetLoadOpcodeAndImmediate(
+    turboshaft::MemoryRepresentation loaded_rep,
+    turboshaft::RegisterRepresentation result_rep) {
+  // NOTE: The meaning of `loaded_rep` = `MemoryRepresentation::AnyTagged()` is
+  // we are loading a compressed tagged field, while `result_rep` =
+  // `RegisterRepresentation::Tagged()` refers to an uncompressed tagged value.
+  using namespace turboshaft;  // NOLINT(build/namespaces)
+  switch (loaded_rep) {
+    case MemoryRepresentation::Int8():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Word32());
+      return {kArm64LdrsbW, kLoadStoreImm8};
+    case MemoryRepresentation::Uint8():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Word32());
+      return {kArm64Ldrb, kLoadStoreImm8};
+    case MemoryRepresentation::Int16():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Word32());
+      return {kArm64LdrshW, kLoadStoreImm16};
+    case MemoryRepresentation::Uint16():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Word32());
+      return {kArm64Ldrh, kLoadStoreImm16};
+    case MemoryRepresentation::Int32():
+    case MemoryRepresentation::Uint32():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Word32());
+      return {kArm64LdrW, kLoadStoreImm32};
+    case MemoryRepresentation::Int64():
+    case MemoryRepresentation::Uint64():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Word64());
+      return {kArm64Ldr, kLoadStoreImm64};
+    case MemoryRepresentation::Float16():
+      UNIMPLEMENTED();
+    case MemoryRepresentation::Float32():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Float32());
+      return {kArm64LdrS, kLoadStoreImm32};
+    case MemoryRepresentation::Float64():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Float64());
+      return {kArm64LdrD, kLoadStoreImm64};
+#ifdef V8_COMPRESS_POINTERS
+    case MemoryRepresentation::AnyTagged():
+    case MemoryRepresentation::TaggedPointer():
+      if (result_rep == RegisterRepresentation::Compressed()) {
+        return {kArm64LdrW, kLoadStoreImm32};
+      }
+      DCHECK_EQ(result_rep, RegisterRepresentation::Tagged());
+      return {kArm64LdrDecompressTagged, kLoadStoreImm32};
+    case MemoryRepresentation::TaggedSigned():
+      if (result_rep == RegisterRepresentation::Compressed()) {
+        return {kArm64LdrW, kLoadStoreImm32};
+      }
+      DCHECK_EQ(result_rep, RegisterRepresentation::Tagged());
+      return {kArm64LdrDecompressTaggedSigned, kLoadStoreImm32};
+#else
+    case MemoryRepresentation::AnyTagged():
+    case MemoryRepresentation::TaggedPointer():
+    case MemoryRepresentation::TaggedSigned():
+      return {kArm64Ldr, kLoadStoreImm64};
+#endif
+    case MemoryRepresentation::AnyUncompressedTagged():
+    case MemoryRepresentation::UncompressedTaggedPointer():
+    case MemoryRepresentation::UncompressedTaggedSigned():
+      DCHECK_EQ(result_rep, RegisterRepresentation::Tagged());
+      return {kArm64Ldr, kLoadStoreImm64};
+    case MemoryRepresentation::ProtectedPointer():
+      CHECK(V8_ENABLE_SANDBOX_BOOL);
+      return {kArm64LdrDecompressProtected, kNoImmediate};
+    case MemoryRepresentation::IndirectPointer():
+      UNREACHABLE();
+    case MemoryRepresentation::SandboxedPointer():
+      return {kArm64LdrDecodeSandboxedPointer, kLoadStoreImm64};
+    case MemoryRepresentation::Simd128():
+      return {kArm64LdrQ, kNoImmediate};
+    case MemoryRepresentation::Simd256():
+      UNREACHABLE();
+  }
+}
+
+std::tuple<InstructionCode, ImmediateMode> GetLoadOpcodeAndImmediate(
+    LoadRepresentation load_rep) {
+  switch (load_rep.representation()) {
+    case MachineRepresentation::kFloat32:
+      return {kArm64LdrS, kLoadStoreImm32};
+    case MachineRepresentation::kFloat64:
+      return {kArm64LdrD, kLoadStoreImm64};
+    case MachineRepresentation::kBit:  // Fall through.
+    case MachineRepresentation::kWord8:
+      return {load_rep.IsUnsigned()                            ? kArm64Ldrb
+              : load_rep.semantic() == MachineSemantic::kInt32 ? kArm64LdrsbW
+                                                               : kArm64Ldrsb,
+              kLoadStoreImm8};
+    case MachineRepresentation::kWord16:
+      return {load_rep.IsUnsigned()                            ? kArm64Ldrh
+              : load_rep.semantic() == MachineSemantic::kInt32 ? kArm64LdrshW
+                                                               : kArm64Ldrsh,
+              kLoadStoreImm16};
+    case MachineRepresentation::kWord32:
+      return {kArm64LdrW, kLoadStoreImm32};
+    case MachineRepresentation::kCompressedPointer:  // Fall through.
+    case MachineRepresentation::kCompressed:
+#ifdef V8_COMPRESS_POINTERS
+      return {kArm64LdrW, kLoadStoreImm32};
+#else
+      UNREACHABLE();
+#endif
+#ifdef V8_COMPRESS_POINTERS
+    case MachineRepresentation::kTaggedSigned:
+      return {kArm64LdrDecompressTaggedSigned, kLoadStoreImm32};
+    case MachineRepresentation::kTaggedPointer:
+    case MachineRepresentation::kTagged:
+      return {kArm64LdrDecompressTagged, kLoadStoreImm32};
+#else
+    case MachineRepresentation::kTaggedSigned:   // Fall through.
+    case MachineRepresentation::kTaggedPointer:  // Fall through.
+    case MachineRepresentation::kTagged:         // Fall through.
+#endif
+    case MachineRepresentation::kWord64:
+      return {kArm64Ldr, kLoadStoreImm64};
+    case MachineRepresentation::kProtectedPointer:
+      CHECK(V8_ENABLE_SANDBOX_BOOL);
+      return {kArm64LdrDecompressProtected, kNoImmediate};
+    case MachineRepresentation::kSandboxedPointer:
+      return {kArm64LdrDecodeSandboxedPointer, kLoadStoreImm64};
+    case MachineRepresentation::kSimd128:
+      return {kArm64LdrQ, kNoImmediate};
+    case MachineRepresentation::kFloat16:
+      UNIMPLEMENTED();
+    case MachineRepresentation::kSimd256:  // Fall through.
+    case MachineRepresentation::kMapWord:  // Fall through.
+    case MachineRepresentation::kIndirectPointer:  // Fall through.
+    case MachineRepresentation::kNone:
+      UNREACHABLE();
+  }
+}
+
 template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitLoad(node_t node) {
   InstructionCode opcode = kArchNop;
@@ -1706,77 +1908,11 @@ void InstructionSelectorT<Adapter>::VisitLoad(node_t node) {
   auto load = this->load_view(node);
   LoadRepresentation load_rep = load.loaded_rep();
   MachineRepresentation rep = load_rep.representation();
-  switch (rep) {
-    case MachineRepresentation::kFloat32:
-      opcode = kArm64LdrS;
-      immediate_mode = kLoadStoreImm32;
-      break;
-    case MachineRepresentation::kFloat64:
-      opcode = kArm64LdrD;
-      immediate_mode = kLoadStoreImm64;
-      break;
-    case MachineRepresentation::kBit:  // Fall through.
-    case MachineRepresentation::kWord8:
-      opcode = load_rep.IsUnsigned()                            ? kArm64Ldrb
-               : load_rep.semantic() == MachineSemantic::kInt32 ? kArm64LdrsbW
-                                                                : kArm64Ldrsb;
-      immediate_mode = kLoadStoreImm8;
-      break;
-    case MachineRepresentation::kWord16:
-      opcode = load_rep.IsUnsigned()                            ? kArm64Ldrh
-               : load_rep.semantic() == MachineSemantic::kInt32 ? kArm64LdrshW
-                                                                : kArm64Ldrsh;
-      immediate_mode = kLoadStoreImm16;
-      break;
-    case MachineRepresentation::kWord32:
-      opcode = kArm64LdrW;
-      immediate_mode = kLoadStoreImm32;
-      break;
-    case MachineRepresentation::kCompressedPointer:  // Fall through.
-    case MachineRepresentation::kCompressed:
-#ifdef V8_COMPRESS_POINTERS
-      opcode = kArm64LdrW;
-      immediate_mode = kLoadStoreImm32;
-      break;
-#else
-      UNREACHABLE();
-#endif
-#ifdef V8_COMPRESS_POINTERS
-    case MachineRepresentation::kTaggedSigned:
-      opcode = kArm64LdrDecompressTaggedSigned;
-      immediate_mode = kLoadStoreImm32;
-      break;
-    case MachineRepresentation::kTaggedPointer:
-    case MachineRepresentation::kTagged:
-      opcode = kArm64LdrDecompressTagged;
-      immediate_mode = kLoadStoreImm32;
-      break;
-#else
-    case MachineRepresentation::kTaggedSigned:   // Fall through.
-    case MachineRepresentation::kTaggedPointer:  // Fall through.
-    case MachineRepresentation::kTagged:         // Fall through.
-#endif
-    case MachineRepresentation::kWord64:
-      opcode = kArm64Ldr;
-      immediate_mode = kLoadStoreImm64;
-      break;
-    case MachineRepresentation::kProtectedPointer:
-      CHECK(V8_ENABLE_SANDBOX_BOOL);
-      opcode = kArm64LdrDecompressProtected;
-      break;
-    case MachineRepresentation::kSandboxedPointer:
-      opcode = kArm64LdrDecodeSandboxedPointer;
-      immediate_mode = kLoadStoreImm64;
-      break;
-    case MachineRepresentation::kSimd128:
-      opcode = kArm64LdrQ;
-      immediate_mode = kNoImmediate;
-      break;
-    case MachineRepresentation::kSimd256:  // Fall through.
-    case MachineRepresentation::kMapWord:  // Fall through.
-    case MachineRepresentation::kIndirectPointer:  // Fall through.
-    case MachineRepresentation::kNone:
-      UNREACHABLE();
+  if constexpr (Adapter::IsTurboshaft) {
+    std::tie(opcode, immediate_mode) =
+        GetLoadOpcodeAndImmediate(load.ts_loaded_rep(), load.ts_result_rep());
+  } else {
+    std::tie(opcode, immediate_mode) = GetLoadOpcodeAndImmediate(load_rep);
   }
   bool traps_on_null;
   if (load.is_protected(&traps_on_null)) {
@@ -1798,7 +1934,7 @@ template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitStorePair(node_t node) {
   Arm64OperandGeneratorT<Adapter> g(this);
   if constexpr (Adapter::IsTurboshaft) {
-  UNIMPLEMENTED();
+    UNIMPLEMENTED();
   } else {
     auto rep_pair = StorePairRepresentationOf(node->op());
     CHECK_EQ(rep_pair.first.write_barrier_kind(), kNoWriteBarrier);
@@ -1871,7 +2007,7 @@ void InstructionSelectorT<Adapter>::VisitStore(typename Adapter::node_t node) {
   DCHECK_EQ(store_view.displacement(), 0);
   WriteBarrierKind write_barrier_kind =
       store_view.stored_rep().write_barrier_kind();
-  MachineRepresentation representation =
+  const MachineRepresentation representation =
       store_view.stored_rep().representation();
 
   Arm64OperandGeneratorT<Adapter> g(this);
@@ -1922,9 +2058,15 @@ void InstructionSelectorT<Adapter>::VisitStore(typename Adapter::node_t node) {
   size_t input_count = 0;
 
   MachineRepresentation approx_rep = representation;
-  auto info = GetStoreOpcodeAndImmediate(approx_rep, false);
-  InstructionCode opcode = std::get<InstructionCode>(info);
-  ImmediateMode immediate_mode = std::get<ImmediateMode>(info);
+  InstructionCode opcode;
+  ImmediateMode immediate_mode;
+  if constexpr (Adapter::IsTurboshaft) {
+    std::tie(opcode, immediate_mode) =
+        GetStoreOpcodeAndImmediate(store_view.ts_stored_rep(), false);
+  } else {
+    std::tie(opcode, immediate_mode) =
+        GetStoreOpcodeAndImmediate(approx_rep, false);
+  }
 
   if (v8_flags.enable_unconditional_write_barriers) {
     if (CanBeTaggedOrCompressedPointer(representation)) {
@@ -2102,7 +2244,7 @@ class CompareChainNode final : public ZoneObject {
     if (IsFlagSetting()) {
       NegateFlags();
     } else {
-      requires_negation_ = true;
+      requires_negation_ = !requires_negation_;
     }
   }
   void NegateFlags() {
@@ -2201,6 +2343,8 @@ static base::Optional<CompareChainNode*> FindCompareChain(
         return nodes.back();
       }
     }
+    // Ensure we remove any valid sub-trees that now cannot be used.
+    nodes.clear();
     return base::nullopt;
   } else if (selector->valid(user) && selector->CanCover(user, node)) {
     base::Optional<FlagsCondition> user_condition =
@@ -6032,7 +6176,7 @@ void InstructionSelectorT<TurboshaftAdapter>::VisitWord32Equal(node_t node) {
     // HeapConstants and CompressedHeapConstants can be treated the same when
     // using them as an input to a 32-bit comparison. Check whether either is
     // present.
-    if (MatchTaggedConstant(node, &right) && !right.is_null() &&
+    if (MatchHeapConstant(node, &right) && !right.is_null() &&
         roots_table.IsRootHandle(right, &root_index)) {
       if (RootsTable::IsReadOnly(root_index)) {
         Tagged_t ptr =
@@ -6438,9 +6582,11 @@ void InstructionSelectorT<TurboshaftAdapter>::VisitBitcastWord32PairToFloat64(
   node_t hi = bitcast.high_word32();
   node_t lo = bitcast.low_word32();
 
-  InstructionOperand temps[] = {g.TempRegister()};
-  Emit(kArm64Float64FromWord32Pair, g.DefineAsRegister(node), g.Use(hi),
-       g.Use(lo), arraysize(temps), temps);
+  int vreg = g.AllocateVirtualRegister();
+  Emit(kArm64Bfi, g.DefineSameAsFirstForVreg(vreg), g.UseRegister(lo),
+       g.UseRegister(hi), g.TempImmediate(32), g.TempImmediate(32));
+  Emit(kArm64Float64MoveU64, g.DefineAsRegister(node),
+       g.UseRegisterForVreg(vreg));
 }
 
 template <typename Adapter>
@@ -8099,15 +8245,7 @@ template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitSetStackPointer(node_t node) {
   OperandGenerator g(this);
   auto input = g.UseRegister(this->input_at(node, 0));
-  wasm::FPRelativeScope fp_scope;
-  if constexpr (Adapter::IsTurboshaft) {
-    fp_scope =
-        this->Get(node).template Cast<turboshaft::SetStackPointerOp>().fp_scope;
-  } else {
-    fp_scope = OpParameter<wasm::FPRelativeScope>(node->op());
-  }
-  Emit(kArchSetStackPointer | MiscField::encode(fp_scope), 0, nullptr, 1,
-       &input);
+  Emit(kArchSetStackPointer, 0, nullptr, 1, &input);
 }
 
 #endif  // V8_ENABLE_WEBASSEMBLY

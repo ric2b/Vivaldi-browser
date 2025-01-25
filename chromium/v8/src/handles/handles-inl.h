@@ -10,6 +10,7 @@
 #include "src/execution/local-isolate.h"
 #include "src/handles/handles.h"
 #include "src/handles/local-handles-inl.h"
+#include "src/objects/casting.h"
 #include "src/objects/objects.h"
 
 #ifdef DEBUG
@@ -44,11 +45,11 @@ Handle<T> Handle<T>::New(Tagged<T> object, Isolate* isolate) {
   return Handle(HandleScope::CreateHandle(isolate, object.ptr()));
 }
 
-template <typename T>
-template <typename S>
-const Handle<T> Handle<T>::cast(Handle<S> that) {
-  T::cast(*FullObjectSlot(that.location()));
-  return Handle<T>(that.location_);
+template <typename To, typename From>
+inline Handle<To> Cast(Handle<From> value, const v8::SourceLocation& loc) {
+  DCHECK_WITH_MSG_AND_LOC(value.is_null() || Is<To>(*value),
+                          V8_PRETTY_FUNCTION_VALUE_OR("Cast type check"), loc);
+  return Handle<To>(value.location());
 }
 
 template <typename T>
@@ -107,19 +108,12 @@ template <typename T>
 V8_INLINE DirectHandle<T>::DirectHandle(Tagged<T> object)
     : DirectHandle(object.ptr()) {}
 
-template <typename T>
-template <typename S>
-V8_INLINE const DirectHandle<T> DirectHandle<T>::cast(DirectHandle<S> that) {
-  T::cast(Tagged<Object>(that.address()));
-  return DirectHandle<T>(that.address());
-}
-
-template <typename T>
-template <typename S>
-V8_INLINE const DirectHandle<T> DirectHandle<T>::cast(Handle<S> that) {
-  DCHECK(that.location() != nullptr);
-  T::cast(*FullObjectSlot(that.address()));
-  return DirectHandle<T>(*that.location());
+template <typename To, typename From>
+inline DirectHandle<To> Cast(DirectHandle<From> value,
+                             const v8::SourceLocation& loc) {
+  DCHECK_WITH_MSG_AND_LOC(value.is_null() || Is<To>(*value),
+                          V8_PRETTY_FUNCTION_VALUE_OR("Cast type check"), loc);
+  return DirectHandle<To>(value.obj_);
 }
 
 template <typename T>

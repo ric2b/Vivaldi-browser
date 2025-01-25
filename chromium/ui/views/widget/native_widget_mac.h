@@ -10,10 +10,12 @@
 
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
+#include "base/scoped_observation.h"
 #include "ui/base/ime/ime_key_event_dispatcher.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/widget/native_widget_private.h"
+#include "ui/views/widget/widget_observer.h"
 
 #if defined(__OBJC__)
 @class NativeWidgetMacNSWindow;
@@ -39,10 +41,12 @@ class NativeWidgetMacTest;
 }  // namespace test
 
 class NativeWidgetMacNSWindowHost;
+class Widget;
 
 class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
                                      public FocusChangeListener,
-                                     public ui::ImeKeyEventDispatcher {
+                                     public ui::ImeKeyEventDispatcher,
+                                     public WidgetObserver {
  public:
   explicit NativeWidgetMac(internal::NativeWidgetDelegate* delegate);
   NativeWidgetMac(const NativeWidgetMac&) = delete;
@@ -180,8 +184,7 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
   void SetAspectRatio(const gfx::SizeF& aspect_ratio,
                       const gfx::Size& excluded_margin) override;
   void FlashFrame(bool flash_frame) override;
-  void RunShellDrag(View* view,
-                    std::unique_ptr<ui::OSExchangeData> data,
+  void RunShellDrag(std::unique_ptr<ui::OSExchangeData> data,
                     const gfx::Point& location,
                     int operation,
                     ui::mojom::DragEventSource source) override;
@@ -208,6 +211,8 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
   void OnSizeConstraintsChanged() override;
   void OnNativeViewHierarchyWillChange() override;
   void OnNativeViewHierarchyChanged() override;
+  bool SetAllowScreenshots(bool allow) override;
+  bool AreScreenshotsAllowed() override;
   std::string GetName() const override;
   base::WeakPtr<internal::NativeWidgetPrivate> GetWeakPtr() override;
 
@@ -224,7 +229,7 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
 
   virtual void PopulateCreateWindowParams(
       const Widget::InitParams& widget_params,
-      remote_cocoa::mojom::CreateWindowParams* params) {}
+      remote_cocoa::mojom::CreateWindowParams* params);
 
   // Creates the NSWindow that will be passed to the NativeWidgetNSWindowBridge.
   // Called by InitNativeWidget.
@@ -243,7 +248,9 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
   // Optional hook for subclasses invoked by WindowDestroying().
   virtual void OnWindowDestroying(gfx::NativeWindow window) {}
 
-  internal::NativeWidgetDelegate* delegate() { return delegate_; }
+  internal::NativeWidgetDelegate* delegate_for_testing() {
+    return delegate_.get();
+  }
 
   // Return the mojo interface for the NSWindow. The interface may be
   // implemented in-process or out-of-process.
@@ -267,12 +274,18 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
   // ui::ImeKeyEventDispatcher:
   ui::EventDispatchDetails DispatchKeyEventPostIME(ui::KeyEvent* key) override;
 
+  // WidgetObserver:
+  void OnWidgetDestroyed(Widget* widget) override;
+
  private:
   friend class test::MockNativeWidgetMac;
   friend class views::test::NativeWidgetMacTest;
   class ZoomFocusMonitor;
 
-  raw_ptr<internal::NativeWidgetDelegate> delegate_;
+  // Applies to all `Widget::InitParams::Ownership` types.
+  const base::WeakPtr<internal::NativeWidgetDelegate> delegate_;
+  // Only applies to `Widget::InitParams::Ownership::NATIVE_WIDGET_OWNS_WIDGET`.
+  std::unique_ptr<internal::NativeWidgetDelegate> owned_delegate_;
   std::unique_ptr<NativeWidgetMacNSWindowHost> ns_window_host_;
 
   Widget::InitParams::Ownership ownership_ =
@@ -292,6 +305,7 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
   std::unique_ptr<ZoomFocusMonitor> zoom_focus_monitor_;
   // Held while this widget is active if it's a child.
   std::unique_ptr<Widget::PaintAsActiveLock> parent_key_lock_;
+  base::ScopedObservation<Widget, WidgetObserver> widget_observation_{this};
   // The following factory is used to provide references to the NativeWidgetMac
   // instance.
   base::WeakPtrFactory<NativeWidgetMac> weak_factory{this};

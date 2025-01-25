@@ -57,7 +57,7 @@ ContactPropertyNameEnum APIAddpropertyTypeToInternal(
     default:
       NOTREACHED();
   }
-  return ContactPropertyNameEnum::NONE;
+  //return ContactPropertyNameEnum::NONE;
 }
 
 EmailAddress GetEmail(const contact::EmailAddressRow& row) {

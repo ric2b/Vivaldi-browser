@@ -67,7 +67,6 @@
 <translation id="2423578206845792524">Sàbhail an d&amp;ealbh mar...</translation>
 <translation id="2439110203301358333">Chuir prògram eile air a’ choimpiutair agad leudachan ris aig a bheil buaidh air obrachadh Vivaldi ma dh’fhaoidte.</translation>
 <translation id="2445081178310039857">Tha feum air pasgan root an leudachain.</translation>
-<translation id="2470702053775288986">Chaidh leudachain ris nach eil taic a chur à comas</translation>
 <translation id="2498539833203011245">Fìor-lùghdaich</translation>
 <translation id="2509495747794740764">Feumaidh an sgèile a bhith na àireamh eadar 10 is 200.</translation>
 <translation id="253557089021624350">Cunntas Keepalive</translation>
@@ -146,7 +145,6 @@
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K live)</translation>
 <translation id="4345587454538109430">Rèitich...</translation>
 <translation id="4348766275249686434">Cruinnich mearachdan</translation>
-<translation id="4363771538994847871">Cha deach ceann-uidhe tilgeil a lorg. A bheil cobhair a dhìth ort?</translation>
 <translation id="4384652540891215547">Cuir an leudachan an gnìomh</translation>
 <translation id="4409697491990005945">Marghain</translation>
 <translation id="4423376891418188461">Aisig na roghainnean</translation>
@@ -275,7 +273,6 @@
 <translation id="7771452384635174008">Co-dhealbhachd</translation>
 <translation id="7782102568078991263">Chan eil barrachd mholaidhean aig Google</translation>
 <translation id="7786889348652477777">&amp;Ath-luchdaich an aplacaid</translation>
-<translation id="7791543448312431591">Cuir ris</translation>
 <translation id="7818135753970109980">Chaidh an t-ùrlar ùr “(<ph name="EXTENSION_NAME" />)” a chur ris</translation>
 <translation id="782057141565633384">Dèan l&amp;ethbhreac de sheòladh a’ video</translation>
 <translation id="786073089922909430">Seirbheis: <ph name="ARC_PROCESS_NAME" /></translation>

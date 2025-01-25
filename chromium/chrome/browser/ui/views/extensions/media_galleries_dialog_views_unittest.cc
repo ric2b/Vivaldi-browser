@@ -62,6 +62,7 @@ class MediaGalleriesDialogTest : public ChromeViewsTestBase {
   }
 
   views::Widget::InitParams CreateParams(
+      views::Widget::InitParams::Ownership ownership,
       views::Widget::InitParams::Type type) override {
     // This relies on the setup done in the ToggleCheckboxes test below.
     auto dialog = std::make_unique<MediaGalleriesDialogViews>(controller());
@@ -70,7 +71,8 @@ class MediaGalleriesDialogTest : public ChromeViewsTestBase {
     checkbox_ = dialog->checkbox_map_[1]->checkbox();
     EXPECT_TRUE(checkbox_->GetChecked());
 
-    views::Widget::InitParams params = ChromeViewsTestBase::CreateParams(type);
+    views::Widget::InitParams params =
+        ChromeViewsTestBase::CreateParams(ownership, type);
     params.delegate = dialog.release();
     params.delegate->SetOwnedByWidget(true);
     return params;
@@ -119,11 +121,12 @@ TEST_F(MediaGalleriesDialogTest, ToggleCheckboxes) {
   EXPECT_CALL(*controller(), GetSectionEntries(0)).
       WillRepeatedly(Return(attached_permissions));
 
-  std::unique_ptr<views::Widget> widget = CreateTestWidget();
+  std::unique_ptr<views::Widget> widget =
+      CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
 
   EXPECT_CALL(*controller(), DidToggleEntry(1, false));
   views::test::ButtonTestApi test_api(checkbox());
-  ui::KeyEvent dummy_event(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::EF_NONE);
+  ui::KeyEvent dummy_event(ui::EventType::kKeyPressed, ui::VKEY_A, ui::EF_NONE);
   test_api.NotifyClick(dummy_event);  // Toggles to unchecked before notifying.
 
   EXPECT_CALL(*controller(), DidToggleEntry(1, true));

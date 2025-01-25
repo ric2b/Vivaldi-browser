@@ -6,24 +6,6 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
-static_library("list_family_members_service") {
-  sources = [
-    "list_family_members_service.cc",
-    "list_family_members_service.h",
-  ]
-
-  deps = [
-    ":fetcher",
-    ":fetcher_config",
-    "//base",
-    "//components/keyed_service/core",
-    "//components/prefs",
-    "//components/signin/public/identity_manager",
-    "//components/supervised_user/core/browser/proto",
-    "//components/supervised_user/core/common:features",
-  ]
-}
-
 static_library("fetcher_config") {
   sources = [
     "fetcher_config.cc",
@@ -80,11 +62,15 @@ static_library("browser") {
     "family_link_user_log_record.h",
     "kids_chrome_management_url_checker_client.cc",
     "kids_chrome_management_url_checker_client.h",
+    "list_family_members_service.cc",
+    "list_family_members_service.h",
     "permission_request_creator.h",
     "permission_request_creator_impl.cc",
     "permission_request_creator_impl.h",
     "remote_web_approvals_manager.cc",
     "remote_web_approvals_manager.h",
+    "supervised_user_capabilities.cc",
+    "supervised_user_capabilities.h",
     "supervised_user_content_settings_provider.cc",
     "supervised_user_content_settings_provider.h",
     "supervised_user_error_page.cc",
@@ -128,13 +114,13 @@ static_library("browser") {
   deps = [
     ":fetcher",
     ":fetcher_config",
-    ":list_family_members_service",
     "//base",
     "//components/content_settings/core/browser",
     "//components/feed/core/shared_prefs:feed_shared_prefs",
     "//components/google/core/common",
     "//components/prefs",
     "//components/resources:components_resources",
+    "//components/signin/internal/identity_manager",
     "//components/signin/public/base",
     "//components/signin/public/identity_manager",
     "//components/strings:components_strings_grit",
@@ -188,7 +174,6 @@ source_set("unit_tests") {
     ":browser",
     ":fetcher",
     ":fetcher_config",
-    ":list_family_members_service",
     "//base",
     "//base/test:test_support",
     "//components/content_settings/core/browser:test_support",

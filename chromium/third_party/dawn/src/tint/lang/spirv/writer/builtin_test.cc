@@ -1906,7 +1906,7 @@ TEST_F(SpirvWriterTest, Builtin_WorkgroupBarrier) {
 TEST_F(SpirvWriterTest, Builtin_SubgroupBallot) {
     auto* func = b.Function("foo", ty.vec4<u32>());
     b.Append(func->Block(), [&] {
-        auto* result = b.Call(ty.vec4<u32>(), core::BuiltinFn::kSubgroupBallot);
+        auto* result = b.Call(ty.vec4<u32>(), core::BuiltinFn::kSubgroupBallot, true);
         mod.SetName(result, "result");
         b.Return(func, result);
     });
@@ -2022,10 +2022,10 @@ TEST_F(SpirvWriterTest, Builtin_Dot4I8Packed) {
                OpExecutionMode %unused_entry_point LocalSize 1 1 1
 
                ; Debug Information
-               OpName %foo "foo"  ; id %1
-               OpName %arg1 "arg1"  ; id %4
-               OpName %arg2 "arg2"  ; id %5
-               OpName %result "result"  ; id %8
+               OpName %foo "foo"                    ; id %1
+               OpName %arg1 "arg1"                  ; id %4
+               OpName %arg2 "arg2"                  ; id %5
+               OpName %result "result"              ; id %8
                OpName %unused_entry_point "unused_entry_point"  ; id %9
 
                ; Types, variables and constants
@@ -2067,10 +2067,10 @@ TEST_F(SpirvWriterTest, Builtin_Dot4U8Packed) {
                OpExecutionMode %unused_entry_point LocalSize 1 1 1
 
                ; Debug Information
-               OpName %foo "foo"  ; id %1
-               OpName %arg1 "arg1"  ; id %3
-               OpName %arg2 "arg2"  ; id %4
-               OpName %result "result"  ; id %7
+               OpName %foo "foo"                    ; id %1
+               OpName %arg1 "arg1"                  ; id %3
+               OpName %arg2 "arg2"                  ; id %4
+               OpName %result "result"              ; id %7
                OpName %unused_entry_point "unused_entry_point"  ; id %8
 
                ; Types, variables and constants

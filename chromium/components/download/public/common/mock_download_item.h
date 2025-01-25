@@ -100,6 +100,7 @@ class MockDownloadItem : public DownloadItem {
   }
   MOCK_METHOD1(DeleteFile_, void(base::OnceCallback<void(bool)>& cb));
   MOCK_METHOD0(GetDownloadFile, DownloadFile*());
+  MOCK_METHOD0(GetRenameHandler, DownloadItemRenameHandler*());
 #if BUILDFLAG(IS_ANDROID)
   MOCK_METHOD0(IsFromExternalApp, bool());
   MOCK_METHOD0(IsMustDownload, bool());
@@ -116,6 +117,7 @@ class MockDownloadItem : public DownloadItem {
   MOCK_CONST_METHOD0(GetReceivedBytes, int64_t());
   MOCK_CONST_METHOD0(GetReceivedSlices,
                      const std::vector<DownloadItem::ReceivedSlice>&());
+  MOCK_CONST_METHOD0(GetUploadedBytes, int64_t());
   MOCK_CONST_METHOD0(GetStartTime, base::Time());
   MOCK_CONST_METHOD0(GetEndTime, base::Time());
   MOCK_METHOD0(CanShowInFolder, bool());

@@ -288,26 +288,6 @@ D3D12_DEPTH_STENCILOP_DESC StencilOpDesc(const StencilFaceState& descriptor) {
     return desc;
 }
 
-D3D12_DEPTH_STENCIL_DESC ComputeDepthStencilDesc(const DepthStencilState* descriptor) {
-    D3D12_DEPTH_STENCIL_DESC depthStencilDescriptor = {};
-    depthStencilDescriptor.DepthEnable =
-        (descriptor->depthCompare == wgpu::CompareFunction::Always &&
-         !descriptor->depthWriteEnabled)
-            ? FALSE
-            : TRUE;
-    depthStencilDescriptor.DepthWriteMask =
-        descriptor->depthWriteEnabled ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
-    depthStencilDescriptor.DepthFunc = ToD3D12ComparisonFunc(descriptor->depthCompare);
-
-    depthStencilDescriptor.StencilEnable = StencilTestEnabled(descriptor) ? TRUE : FALSE;
-    depthStencilDescriptor.StencilReadMask = static_cast<UINT8>(descriptor->stencilReadMask);
-    depthStencilDescriptor.StencilWriteMask = static_cast<UINT8>(descriptor->stencilWriteMask);
-
-    depthStencilDescriptor.FrontFace = StencilOpDesc(descriptor->stencilFront);
-    depthStencilDescriptor.BackFace = StencilOpDesc(descriptor->stencilBack);
-    return depthStencilDescriptor;
-}
-
 D3D12_INDEX_BUFFER_STRIP_CUT_VALUE ComputeIndexBufferStripCutValue(
     wgpu::PrimitiveTopology primitiveTopology,
     wgpu::IndexFormat indexFormat) {
@@ -421,7 +401,7 @@ MaybeError RenderPipeline::InitializeImpl() {
     descriptorD3D12.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
 
     if (HasDepthStencilAttachment()) {
-        descriptorD3D12.DSVFormat = d3d::DXGITextureFormat(GetDepthStencilFormat());
+        descriptorD3D12.DSVFormat = d3d::DXGITextureFormat(device, GetDepthStencilFormat());
     }
 
     static_assert(kMaxColorAttachments == 8);
@@ -432,7 +412,7 @@ MaybeError RenderPipeline::InitializeImpl() {
     auto highestColorAttachmentIndexPlusOne = GetHighestBitIndexPlusOne(GetColorAttachmentsMask());
     for (auto i : IterateBitSet(GetColorAttachmentsMask())) {
         descriptorD3D12.RTVFormats[static_cast<uint8_t>(i)] =
-            d3d::DXGITextureFormat(GetColorAttachmentFormat(i));
+            d3d::DXGITextureFormat(device, GetColorAttachmentFormat(i));
         descriptorD3D12.BlendState.RenderTarget[static_cast<uint8_t>(i)] =
             ComputeColorDesc(device, GetColorTargetState(i));
     }
@@ -442,7 +422,7 @@ MaybeError RenderPipeline::InitializeImpl() {
     descriptorD3D12.BlendState.AlphaToCoverageEnable = IsAlphaToCoverageEnabled();
     descriptorD3D12.BlendState.IndependentBlendEnable = TRUE;
 
-    descriptorD3D12.DepthStencilState = ComputeDepthStencilDesc(GetDepthStencilState());
+    descriptorD3D12.DepthStencilState = ComputeDepthStencilDesc();
 
     descriptorD3D12.SampleMask = GetSampleMask();
     descriptorD3D12.PrimitiveTopologyType = D3D12PrimitiveTopologyType(GetPrimitiveTopology());
@@ -567,6 +547,28 @@ D3D12_INPUT_LAYOUT_DESC RenderPipeline::ComputeInputLayout(
     inputLayoutDescriptor.pInputElementDescs = &(*inputElementDescriptors)[0];
     inputLayoutDescriptor.NumElements = count;
     return inputLayoutDescriptor;
+}
+
+D3D12_DEPTH_STENCIL_DESC RenderPipeline::ComputeDepthStencilDesc() {
+    const DepthStencilState* descriptor = GetDepthStencilState();
+
+    D3D12_DEPTH_STENCIL_DESC depthStencilDescriptor = {};
+    depthStencilDescriptor.DepthEnable =
+        (descriptor->depthCompare == wgpu::CompareFunction::Always &&
+         !descriptor->depthWriteEnabled)
+            ? FALSE
+            : TRUE;
+    depthStencilDescriptor.DepthWriteMask =
+        descriptor->depthWriteEnabled ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
+    depthStencilDescriptor.DepthFunc = ToD3D12ComparisonFunc(descriptor->depthCompare);
+
+    depthStencilDescriptor.StencilEnable = UsesStencil() ? TRUE : FALSE;
+    depthStencilDescriptor.StencilReadMask = static_cast<UINT8>(descriptor->stencilReadMask);
+    depthStencilDescriptor.StencilWriteMask = static_cast<UINT8>(descriptor->stencilWriteMask);
+
+    depthStencilDescriptor.FrontFace = StencilOpDesc(descriptor->stencilFront);
+    depthStencilDescriptor.BackFace = StencilOpDesc(descriptor->stencilBack);
+    return depthStencilDescriptor;
 }
 
 }  // namespace dawn::native::d3d12

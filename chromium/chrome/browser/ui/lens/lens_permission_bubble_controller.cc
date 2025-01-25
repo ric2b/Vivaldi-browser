@@ -9,11 +9,11 @@
 #include "base/metrics/user_metrics_action.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-#include "chrome/browser/ui/lens/lens_overlay_permission_utils.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/lens/lens_features.h"
+#include "components/lens/lens_overlay_permission_utils.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/common/referrer.h"
@@ -127,7 +127,7 @@ LensPermissionBubbleController::CreateLensPermissionDialogModel() {
               weak_ptr_factory_.GetWeakPtr()),
           ui::DialogModel::Button::Params()
               .SetLabel(l10n_util::GetStringUTF16(
-                  IDS_LENS_PERMISSION_BUBBLE_DIALOG_CLOSE_BUTTON))
+                  IDS_LENS_PERMISSION_BUBBLE_DIALOG_CANCEL_BUTTON))
               .SetId(kLensPermissionDialogCancelButtonElementId)
               .SetStyle(ui::ButtonStyle::kTonal))
       .SetCloseActionCallback(base::BindOnce(
@@ -143,7 +143,7 @@ bool LensPermissionBubbleController::HasOpenDialogWidget() {
 void LensPermissionBubbleController::OnHelpCenterLinkClicked(
     const ui::Event& event) {
   LogUserAction(UserAction::kLinkOpened, invocation_source_);
-  browser_window_interface_->OpenURL(
+  browser_window_interface_->OpenGURL(
       GURL(lens::features::GetLensOverlayHelpCenterURL()),
       ui::DispositionFromEventFlags(event.flags(),
                                     WindowOpenDisposition::NEW_BACKGROUND_TAB));

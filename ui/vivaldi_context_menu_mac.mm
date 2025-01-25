@@ -83,14 +83,14 @@ VivaldiContextMenu* CreateVivaldiContextMenu(
     ui::SimpleMenuModel* menu_model,
     const gfx::Rect& rect,
     bool force_views,
-    VivaldiRenderViewContextMenu* context_menu
+    VivaldiRenderViewContextMenu* render_view_context_menu
     ) {
   if (force_views) {
     return new VivaldiContextMenuViews(web_contents, menu_model, rect,
-                                       context_menu);
+                                       render_view_context_menu);
   } else {
     return new VivaldiContextMenuMac(web_contents, menu_model, rect,
-                                     context_menu);
+                                     render_view_context_menu);
   }
 }
 
@@ -98,14 +98,15 @@ VivaldiContextMenuMac::VivaldiContextMenuMac(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
     const gfx::Rect& rect,
-    vivaldi::VivaldiRenderViewContextMenu* context_menu)
+    vivaldi::VivaldiRenderViewContextMenu* render_view_context_menu)
   :web_contents_(web_contents),
    menu_model_(menu_model),
    rect_(rect) {
-  if (context_menu) {
+  if (render_view_context_menu) {
     std::unique_ptr<RenderViewContextMenu::ToolkitDelegate> delegate(
         new VivaldiToolkitDelegateMac(this));
-    context_menu->set_toolkit_delegate(std::move(delegate));
+    render_view_context_menu->set_toolkit_delegate(std::move(delegate));
+    parent_view_ = render_view_context_menu->parent_view().GetNativeNSView();
   }
 }
 
@@ -123,11 +124,10 @@ bool VivaldiContextMenuMac::Show() {
   if (!parent_view)
     return false;
 
-  // TODO: Test properly for problems wrt ARC transition
   menu_controller_ =
       [[MenuControllerCocoa alloc] initWithModel:menu_model_
-                     delegate:nil
-                     useWithPopUpButtonCell:NO];
+                                        delegate:nil
+                          useWithPopUpButtonCell:NO];
 
   // Synthesize an event for the click, as there is no certainty that
   // [NSApp currentEvent] will return a valid event.
@@ -173,10 +173,6 @@ void VivaldiContextMenuMac::SetIcon(const gfx::Image& icon, int id) {
                                             [menu_controller_ menu],
                                             id);
   item.image = icon.ToNSImage();
-}
-
-void VivaldiContextMenuMac::SetParentView(gfx::NativeView parent_view) {
-  parent_view_ = parent_view.GetNativeNSView();
 }
 
 void VivaldiContextMenuMac::UpdateItem(int id,

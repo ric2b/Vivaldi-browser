@@ -4,6 +4,7 @@
 
 #include "chromeos/ash/components/login/auth/auth_session_authenticator.h"
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -13,8 +14,6 @@
 #include "ash/constants/ash_switches.h"
 #include "base/check.h"
 #include "base/command_line.h"
-#include "base/functional/callback_helpers.h"
-#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/scoped_feature_list.h"
@@ -22,23 +21,19 @@
 #include "base/test/test_future.h"
 #include "chromeos/ash/components/cryptohome/system_salt_getter.h"
 #include "chromeos/ash/components/dbus/cryptohome/UserDataAuth.pb.h"
+#include "chromeos/ash/components/dbus/cryptohome/auth_factor.pb.h"
 #include "chromeos/ash/components/dbus/cryptohome/key.pb.h"
-#include "chromeos/ash/components/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/ash/components/dbus/userdataauth/cryptohome_misc_client.h"
 #include "chromeos/ash/components/dbus/userdataauth/mock_userdataauth_client.h"
-#include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/ash/components/login/auth/auth_events_recorder.h"
+#include "chromeos/ash/components/login/auth/authenticator.h"
 #include "chromeos/ash/components/login/auth/mock_auth_status_consumer.h"
 #include "chromeos/ash/components/login/auth/mock_safe_mode_delegate.h"
 #include "chromeos/ash/components/login/auth/public/auth_failure.h"
 #include "chromeos/ash/components/login/auth/public/cryptohome_key_constants.h"
-#include "chromeos/ash/components/login/auth/public/key.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
 #include "components/account_id/account_id.h"
-#include "components/prefs/pref_service_factory.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/prefs/testing_pref_store.h"
-#include "components/user_manager/user_directory_integrity_manager.h"
 #include "components/user_manager/user_type.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -52,7 +47,6 @@ using user_data_auth::AddAuthFactorReply;
 using user_data_auth::AUTH_FACTOR_TYPE_KIOSK;
 using user_data_auth::AUTH_FACTOR_TYPE_PASSWORD;
 using user_data_auth::AUTH_INTENT_DECRYPT;
-using user_data_auth::AUTH_INTENT_RESTORE_KEY;
 using user_data_auth::AUTH_INTENT_VERIFY_ONLY;
 using user_data_auth::AuthenticateAuthFactorReply;
 using user_data_auth::AuthFactor;
@@ -62,7 +56,6 @@ using user_data_auth::PrepareEphemeralVaultReply;
 using user_data_auth::PrepareGuestVaultReply;
 using user_data_auth::PreparePersistentVaultReply;
 using user_data_auth::RemoveReply;
-using user_data_auth::RestoreDeviceKeyReply;
 using user_data_auth::StartAuthSessionReply;
 
 namespace ash {
@@ -182,6 +175,13 @@ StartAuthSessionReply BuildStartReply(const std::string& auth_session_id,
   reply.set_user_exists(user_exists);
   for (const auto& factor : factors) {
     (*reply.add_auth_factors()) = factor;
+
+    auto* factor_with_status = reply.add_configured_auth_factors_with_status();
+    factor_with_status->mutable_status_info();
+    *factor_with_status->mutable_auth_factor() = factor;
+    factor_with_status->mutable_status_info()->set_time_available_in(0);
+    factor_with_status->mutable_status_info()->set_time_expiring_in(
+        std::numeric_limits<uint64_t>::max());
   }
   return reply;
 }
@@ -352,7 +352,7 @@ class AuthSessionAuthenticatorTest : public testing::Test,
   std::unique_ptr<AuthEventsRecorder> auth_events_recorder_;
 };
 
-INSTANTIATE_TEST_SUITE_P(All,
+INSTANTIATE_TEST_SUITE_P(,
                          AuthSessionAuthenticatorTest,
                          /*local_passwords_feature_enabled=*/testing::Bool());
 
@@ -397,43 +397,6 @@ TEST_P(AuthSessionAuthenticatorTest, CompleteLoginRegularNew) {
   EXPECT_EQ(got_user_context.GetAuthSessionId(), kFirstAuthSessionId);
 }
 
-// Test the `RestoreDeviceKey()` method for the key eviction on the user
-// session.
-TEST_P(AuthSessionAuthenticatorTest, RestoreDeviceKeyOnLockScreen) {
-  // Arrange.
-
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kRestoreKeyOnLockScreen);
-
-  CreateAuthenticator();
-  auto user_context = std::make_unique<UserContext>(
-      user_manager::UserType::kRegular, kAccountId);
-  user_context->SetKey(Key(kPassword));
-  EXPECT_CALL(
-      userdataauth(),
-      StartAuthSession(WithPersistentAccountId(AUTH_INTENT_RESTORE_KEY), _))
-      .WillOnce(ReplyWith(BuildStartReply(
-          kFirstAuthSessionId, /*user_exists=*/true,
-          /*factors=*/{PasswordFactor(kCryptohomeGaiaKeyLabel)})));
-  EXPECT_CALL(userdataauth(),
-              AuthenticateAuthFactor(
-                  AllOf(WithFirstAuthSessionId(),
-                        WithPasswordFactorAuth(kCryptohomeGaiaKeyLabel)),
-                  _))
-      .WillOnce(ReplyWith(BuildAuthenticateFactorSuccessReply()));
-  EXPECT_CALL(userdataauth(), RestoreDeviceKey(WithFirstAuthSessionId(), _))
-      .WillOnce(ReplyWith(RestoreDeviceKeyReply()));
-
-  // Act.
-  authenticator().AuthenticateToUnlock(/*ephemeral=*/false,
-                                       std::move(user_context));
-  const UserContext got_user_context = on_auth_success_future().Get();
-
-  // Assert.
-  EXPECT_EQ(got_user_context.GetAccountId(), kAccountId);
-  EXPECT_EQ(got_user_context.GetAuthSessionId(), kFirstAuthSessionId);
-}
-
 // Test the `CompleteLogin()` method in the existing regular user scenario.
 TEST_P(AuthSessionAuthenticatorTest, CompleteLoginRegularExisting) {
   // Arrange.
@@ -455,6 +418,15 @@ TEST_P(AuthSessionAuthenticatorTest, CompleteLoginRegularExisting) {
   EXPECT_CALL(userdataauth(),
               PreparePersistentVault(WithFirstAuthSessionId(), _))
       .WillOnce(ReplyWith(PreparePersistentVaultReply()));
+
+  user_data_auth::ListAuthFactorsReply reply;
+  auto* factor = reply.add_configured_auth_factors();
+  factor->set_type(user_data_auth::AUTH_FACTOR_TYPE_PASSWORD);
+  factor->set_label(kCryptohomeGaiaKeyLabel);
+  reply.add_supported_auth_factors(user_data_auth::AUTH_FACTOR_TYPE_PASSWORD);
+  reply.add_supported_auth_factors(user_data_auth::AUTH_FACTOR_TYPE_PIN);
+  EXPECT_CALL(userdataauth(), ListAuthFactors(WithAccountId(), _))
+      .WillOnce(ReplyWith(reply));
 
   // Act.
   authenticator().CompleteLogin(/*ephemeral=*/false, std::move(user_context));

@@ -10,6 +10,7 @@
 #include <limits>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
@@ -30,14 +31,14 @@ namespace cc {
 
 namespace {
 
-
-void RunBenchmark(RasterSource* raster_source,
+void RunBenchmark(const PictureLayerTiling& tiling,
                   ImageDecodeCache* image_decode_cache,
                   const gfx::Rect& content_rect,
                   const gfx::Vector2dF& contents_scale,
                   size_t repeat_count,
                   base::TimeDelta* min_time,
                   bool* is_solid_color) {
+  RasterSource* raster_source = tiling.raster_source().get();
   // Parameters for base::LapTimer.
   const int kTimeLimitMillis = 1;
   const int kWarmupRuns = 0;
@@ -71,7 +72,10 @@ void RunBenchmark(RasterSource* raster_source,
       PlaybackImageProvider image_provider(
           image_decode_cache, TargetColorParams(), std::move(image_settings));
       RasterSource::PlaybackSettings settings;
+      ScrollOffsetMap raster_inducing_scroll_offsets =
+          tiling.client()->GetRasterInducingScrollOffsets();
       settings.image_provider = &image_provider;
+      settings.raster_inducing_scroll_offsets = &raster_inducing_scroll_offsets;
 
       raster_source->PlaybackToCanvas(
           &canvas, raster_source->GetContentSize(contents_scale), content_rect,
@@ -125,15 +129,16 @@ class FixedInvalidationPictureLayerTilingClient
     return base_client_->GetPaintWorkletRecords();
   }
 
-  bool ScrollInteractionInProgress() const override {
-    return base_client_->ScrollInteractionInProgress();
-  }
-
-  bool CurrentScrollCheckerboardsDueToNoRecording() const override {
-    return base_client_->CurrentScrollCheckerboardsDueToNoRecording();
-  }
-
   void OnTilesAdded() override { return base_client_->OnTilesAdded(); }
+
+  std::vector<const DrawImage*> GetDiscardableImagesInRect(
+      const gfx::Rect& rect) const override {
+    return base_client_->GetDiscardableImagesInRect(rect);
+  }
+
+  ScrollOffsetMap GetRasterInducingScrollOffsets() const override {
+    return base_client_->GetRasterInducingScrollOffsets();
+  }
 
  private:
   raw_ptr<PictureLayerTilingClient> base_client_;
@@ -228,7 +233,6 @@ void RasterizeAndRecordBenchmarkImpl::RunOnLayer(PictureLayerImpl* layer) {
       layer->GetRasterSource());
   tiling->set_resolution(HIGH_RESOLUTION);
   tiling->CreateAllTilesForTesting();
-  RasterSource* raster_source = tiling->raster_source().get();
   for (PictureLayerTiling::CoverageIterator it(
            tiling, tiling->contents_scale_key(), layer->visible_layer_rect());
        it; ++it) {
@@ -239,7 +243,7 @@ void RasterizeAndRecordBenchmarkImpl::RunOnLayer(PictureLayerImpl* layer) {
 
     base::TimeDelta min_time;
     bool is_solid_color = false;
-    RunBenchmark(raster_source, layer->layer_tree_impl()->image_decode_cache(),
+    RunBenchmark(*tiling, layer->layer_tree_impl()->image_decode_cache(),
                  content_rect, contents_scale, rasterize_repeat_count_,
                  &min_time, &is_solid_color);
 

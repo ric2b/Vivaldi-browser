@@ -35,6 +35,7 @@ namespace {
 
 using namespace tint::core::number_suffixes;  // NOLINT
 using IR_BreakIfTest = IRTestHelper;
+using IR_BreakIfDeathTest = IR_BreakIfTest;
 
 TEST_F(IR_BreakIfTest, Usage) {
     auto* loop = b.Loop();
@@ -59,14 +60,14 @@ TEST_F(IR_BreakIfTest, Results) {
     EXPECT_TRUE(brk->Results().IsEmpty());
 }
 
-TEST_F(IR_BreakIfTest, Fail_NullLoop) {
+TEST_F(IR_BreakIfDeathTest, Fail_NullLoop) {
     EXPECT_DEATH_IF_SUPPORTED(
         {
             Module mod;
             Builder b{mod};
             b.BreakIf(nullptr, true);
         },
-        "");
+        "internal compiler error");
 }
 
 TEST_F(IR_BreakIfTest, Clone) {
@@ -111,6 +112,21 @@ TEST_F(IR_BreakIfTest, CloneNoArgs) {
 
     auto args = new_brk->Args();
     EXPECT_EQ(0u, args.Length());
+}
+
+TEST_F(IR_BreakIfTest, SetLoop) {
+    auto* loop1 = b.Loop();
+    auto* loop2 = b.Loop();
+    auto* cond = b.Constant(true);
+    auto* arg1 = b.Constant(1_u);
+    auto* arg2 = b.Constant(2_u);
+
+    auto* brk = b.BreakIf(loop1, cond, arg1, arg2);
+    EXPECT_THAT(loop1->Exits(), testing::ElementsAre(brk));
+
+    brk->SetLoop(loop2);
+    EXPECT_TRUE(loop1->Exits().IsEmpty());
+    EXPECT_THAT(loop2->Exits(), testing::ElementsAre(brk));
 }
 
 }  // namespace

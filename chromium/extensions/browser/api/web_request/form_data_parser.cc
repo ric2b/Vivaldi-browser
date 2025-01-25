@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "extensions/browser/api/web_request/form_data_parser.h"
 
 #include <stddef.h>
@@ -346,7 +351,8 @@ std::unique_ptr<FormDataParser> FormDataParser::CreateFromContentTypeHeader(
     case ERROR_CHOICE:
       return nullptr;
   }
-  NOTREACHED();  // Some compilers do not believe this is unreachable.
+  NOTREACHED_IN_MIGRATION();  // Some compilers do not believe this is
+                              // unreachable.
   return nullptr;
 }
 

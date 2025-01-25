@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os/developer-library/guides
   - ChromiumOS > Developer Library > Guides
-page_name: igt
+page_name: cv3-getting-started
 title: Getting Started with Chamelium V3
 ---
 
@@ -76,6 +76,15 @@ FPGA_DP2 = 5
 ```
 The ITE ship can still support only 1 display, so you can only get 1 HDMI, but the FPGA chip can support multiple physical displays, so the most you can do here is 3 simultaneous ports: (`ITE_HDMI1|2`), `FPGA_DP1` and `FPGA_DP2`.
 *NOTE: Physically speaking, `ITE_DP1`&`FPGA_DP1` relate to the same physical port (same for \*_DP2), but the port ID is what tells Chameleon whether it's able to drive multiple displays and reroutes the correct hardware.*
+**Activate a Port**
+To "turn on" a port, 2 steps are needed: Setting an EDID and Plugging the port. You can't plug a port without setting an EDID.
+There is no default EDIDs set. After `Reset()` all EDIDs are cleared. Test code needs to explicitly call `ApplyEdid()` before plugging the port.
+If you don't care what EDID is set, there is a predefined EDID 0 ready to be applied so `CreateEdid()` call can be skipped and following pattern can be used:
+```
+X = chameleond.GetSupportedPorts()[0] # discover any port, here I take the first one
+chameleond.ApplyEdid(X, 0)
+chameleond.Plug(X)
+```
 **MST**
 The discussion is long, so jump to [Understand MST](#n-understand-mst) section below
 
@@ -96,7 +105,8 @@ The discussion is long, so jump to [Understand MST](#n-understand-mst) section b
 *NOTE: This interactive shell can be run from within Chamelium itself*
 1. `ssh cv3`
 2. `python chameleon/client/test_server.py --chameleon_host localhost`
-3. `>>> p.Plug(0)`
+3. `>>> p.ApplyEdid(0, 0)`
+4. `>>> p.Plug(0)`
 
 All calls are found in the [interface file](https://chromium.googlesource.com/chromiumos/platform/chameleon/+/refs/heads/main/chameleond/interface.py)
 
@@ -169,3 +179,93 @@ Using the standard `Plug()` on the MST parent will plug just this port without a
 def Unplug(mst_port)
 ```
 To unplug all MST ports just use regular `Unplug`.
+
+## 6. ChameleonD
+ChameleonD is the daemon that runs on Cv3 and is responsible for all the heavy lifting. It's the one that interacts with the hardware and exposes the API for the clients to interact with.
+The daemon is written in Python and can be found in the [chameleond directory](https://chromium.googlesource.com/chromiumos/platform/chameleon/+/refs/heads/main/v3/chameleond/).
+This is what you will interact with through the XMLRPC interface calls, or interactively as described above.
+All available calls are listed [here](./chameleond.md)
+
+## 7. Run Your First Test
+The following guide assumes you're familiar with running IGT and can run a test such as `kms_atomic` on your DUT.
+If not, please refer to the [IGT guide](../igt/index.md) to get started. The guide will also help you building and deploying IGT on your DUT if they're not already there.
+
+### Configure the device to run a chamelium test
+For a chamelium test, you run it like any other IGT test, but there is a one-time setup (per DUT image) that needs to be done to tell your DUT how to find its associated chamelium.
+*MOTE: This is also document in [IGT docs](https://gitlab.freedesktop.org/drm/igt-gpu-tools/-/blob/15562e123ee6ed88163c7da2ef330dfe9bbd16a5/docs/chamelium.txt#L78)*
+
+0. ssh to your DUT (you would be accessing through root@)
+1. Remove rootfs verification if you haven't already `(cros device)$ sudo /usr/share/vboot/bin/make_dev_ssd.sh --remove_rootfs_verification -f`
+2. Create a new file on your DUT `~/.igtrc`
+3. Add the following in `.igtrc` (Modify it as needed: especially the `URL`(leave the port number as `9992`) and `ChameliumPortID`)
+```
+[Common]
+# The path to dump frames that fail comparison checks
+FrameDumpPath=/tmp
+
+[DUT]
+SuspendResumeDelay=15
+
+# IP address of the Chamelium
+# The ONLY mandatory field (the rest of the file can be blank yet IGT will be usable)
+# Replace the URL below by yours
+[Chamelium]
+URL=http://192.168.0.36:9992
+
+# The ID of the chamelium port <> DUT port mapping
+# DUT port can be found using `modetest -c`
+# Replace the IDs below by yours
+# It's an optional field. When no set, Chamelium will perform autodiscovery.
+#[Chamelium:DP-4]
+#ChameliumPortID=0
+
+```
+**The steps above can be generated automatically to you using [generate_igtrc.sh](https://source.chromium.org/chromiumos/chromiumos/codesearch/+/main:src/platform/dev/contrib/chameleon/generate_igtrc.sh)**
+
+### Bash functions
+If you're building using `cros_sdk`, you can add the following functions to your `.bashrc` to make your life easier.
+The following assumes you did `cros-workon` for IGT.
+
+1. Build and deploy to the DUT all of IGT, useful when you change more than 1 test and/or a library/helper
+```
+igtdeploy() { # expecting dest
+  local dest="${1:-"crbook"}"
+  cros_sdk emerge-${BOARD} igt-gpu-tools && cros_sdk cros deploy ${dest} igt-gpu-tools --root /usr/local
+}
+```
+2. Build and deploy a single IGT test
+```
+igtscp() { # expecting test name and dest
+  local dest="${2:-"crbook"}"
+  cros_sdk emerge-${BOARD} igt-gpu-tools && scp /sda/cros/chroot/build/${BOARD}/usr/libexec/igt-gpu-tools/$1 ${dest}:///usr/local/libexec/igt-gpu-tools
+}
+```
+3. When using a new device, build all dependencies needed for subsequent IGT builds
+```
+igtdeploydeps() { #expecting DUT
+  local dest="${1:-"crbook"}" #crbook is my default DUT hostname
+  cros_sdk emerge-${BOARD} sys-libs/llvm-libunwind  && cros_sdk cros deploy ${dest} sys-libs/llvm-libunwind &
+  cros_sdk emerge-${BOARD} x11-libs/libpciaccess  && cros_sdk cros deploy ${dest} x11-libs/libpciaccess &
+  cros_sdk emerge-${BOARD} dev-libs/xmlrpc-c  && cros_sdk cros deploy ${dest} dev-libs/xmlrpc-c &
+  cros_sdk emerge-${BOARD} sci-libs/gsl  && cros_sdk cros deploy ${dest} sci-libs/gsl &
+  wait
+  igtdeploy $1
+}
+```
+4. rebase my current work on the latest master # nocheck
+```
+igtsync() {
+  local br_name=$(git rev-parse --abbrev-ref HEAD)
+  local old_stash_count=$(git stash list | wc -l)
+  git stash
+  git checkout upstream/master # nocheck
+  git pull
+  git checkout $br_name
+  git rebase upstream/master # nocheck
+  local new_stash_count=$(git stash list | wc -l)
+  if [ $old_stash_count -lt $new_stash_count ]
+  then
+    git stash pop
+  fi
+}
+```

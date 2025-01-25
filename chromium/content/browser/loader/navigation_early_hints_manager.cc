@@ -97,7 +97,7 @@ network::mojom::CSPDirectiveName LinkAsAttributeToCSPDirective(
     case network::mojom::LinkAsAttribute::kFetch:
       return network::mojom::CSPDirectiveName::ConnectSrc;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return network::mojom::CSPDirectiveName::Unknown;
 }
 
@@ -174,7 +174,7 @@ network::mojom::RequestMode CalculateRequestMode(
     case network::mojom::CrossOriginAttribute::kUseCredentials:
       return network::mojom::RequestMode::kCors;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return network::mojom::RequestMode::kSameOrigin;
 }
 
@@ -194,7 +194,7 @@ network::mojom::CredentialsMode CalculateCredentialsMode(
     case network::mojom::CrossOriginAttribute::kAnonymous:
       return network::mojom::CredentialsMode::kSameOrigin;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return network::mojom::CredentialsMode::kOmit;
 }
 
@@ -324,7 +324,7 @@ class NavigationEarlyHintsManager::PreloadURLLoaderClient
   void OnUploadProgress(int64_t current_position,
                         int64_t total_size,
                         OnUploadProgressCallback callback) override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
   void OnTransferSizeUpdated(int32_t transfer_size_diff) override {
     network::RecordOnTransferSizeUpdatedUMA(
@@ -341,7 +341,7 @@ class NavigationEarlyHintsManager::PreloadURLLoaderClient
   }
 
   // mojo::DataPipeDrainer::Client overrides:
-  void OnDataAvailable(const void* data, size_t num_bytes) override {}
+  void OnDataAvailable(base::span<const uint8_t> data) override {}
   void OnDataComplete() override {
     DCHECK(response_body_drainer_);
     response_body_drainer_.reset();

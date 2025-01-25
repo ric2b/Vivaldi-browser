@@ -22,13 +22,13 @@ We don't have a common instruction yet. The below is an example, and you don't
 need to follow it. Important points are:
 
 *   Reduce the number of [Component=Blink
-            bugs](https://issues.chromium.org/?q=customfield1222907:Blink%20status:open)
+            bugs](https://issues.chromium.org/issues?q=customfield1222907:Blink%20status:open)
 *   Newer bugs are important.
 
 ### Task 1: Handling Component=Blink issues (mandatory, daily)
 
 1) Search for ["Component=Blink -Hotlist=CodeHealth -Needs=Feedback
--Needs=Reduction"](https://g-issues.chromium.org/issues?q=customfield1222907:Blink%20status:open%20-hotlistid:5433459%20-customfield1223031:Needs-Reduction%20-customfield1223031:Hotlist-CodeHealth)
+-Needs=Reduction"](https://issues.chromium.org/issues?q=customfield1222907:Blink%20status:open%20-hotlistid:5433459%20-customfield1223031:Needs-Reduction%20-customfield1223031:Hotlist-CodeHealth)
 
 2) Read the issue description and comments and add Blink&gt;*Foo* component and
 remove Blink component, if the area/ownership is clear. Otherwise:
@@ -53,7 +53,7 @@ remove Blink component, if the area/ownership is clear. Otherwise:
 **Task 2: Handling Component=UI issues (mandatory, daily)**
 
 1) Search for untriaged
-[Component=UI](https://issues.chromium.org/?q=customfield1222907:UI%20status:open%20-status:Assigned%20-hotlistid:5433459%20-type:feature_request%20-type:task)
+[Component=UI](https://issues.chromium.org/issues?q=customfield1222907:UI%20status:open%20-status:Assigned%20-hotlistid:5433459%20-type:feature_request%20-type:task)
 bugs
 
 2) Read the issue description and add comments or move to sub-components of UI
@@ -67,9 +67,9 @@ an issue isn't related to Blink, add appropriate non-Blink components such as
 Component:`UI`, Component:`Internals`.
 
 *   [All bugs without
-            components](https://issues.chromium.org/?q=customfield1222907:None%20status:open%20-status:Assigned%20-hotlistid:5433459%20-hotlist:%205562294)
+            components](https://issues.chromium.org/issues?q=customfield1222907:None%20status:open%20-status:Assigned%20-hotlistid:5433459%20-hotlist:%205562294)
 *   [All bugs without
-            owners](https://issues.chromium.org/?q=status:open%20-status:Assigned%20-hotlistid:5433459%20-hotlist:%205562294)
+            owners](https://issues.chromium.org/issues?q=status:open%20-status:Assigned%20-hotlistid:5433459%20-hotlist:%205562294)
 
 **Task 4: monitor stale P0/P1 security bugs (optional)**
 

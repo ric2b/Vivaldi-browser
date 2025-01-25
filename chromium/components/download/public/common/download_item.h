@@ -52,6 +52,7 @@ class HttpResponseHeaders;
 
 namespace download {
 class DownloadFile;
+class DownloadItemRenameHandler;
 
 // One DownloadItem per download. This is the model class that stores all the
 // state for a download.
@@ -439,6 +440,10 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItem : public base::SupportsUserData {
   // Gets the pointer to the DownloadFile owned by this object.
   virtual DownloadFile* GetDownloadFile() = 0;
 
+  // Gets a handler to perform the rename for a download item. Returns nullptr
+  // if no special rename handling is required.
+  virtual DownloadItemRenameHandler* GetRenameHandler() = 0;
+
 #if BUILDFLAG(IS_ANDROID)
   // Gets whether the download is triggered from external app.
   virtual bool IsFromExternalApp() = 0;
@@ -481,6 +486,9 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItem : public base::SupportsUserData {
   // Return the slices that have been received so far, ordered by their offset.
   // This is only used when parallel downloading is enabled.
   virtual const std::vector<ReceivedSlice>& GetReceivedSlices() const = 0;
+
+  // Total number of bytes that have been uploaded to the cloud.
+  virtual int64_t GetUploadedBytes() const = 0;
 
   // Time the download was first started. This timestamp is always valid and
   // doesn't change.

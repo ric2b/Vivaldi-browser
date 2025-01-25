@@ -23,16 +23,16 @@ if (!is_android) {
     ]
   }
 
-  update_target("//chrome/common/importer:importer") {
-    deps += [
-      "//vivaldi/importer:browser",
-      "//vivaldi/importer:importer",
-    ]
-    allow_circular_includes_from = [
-      "//vivaldi/importer:browser",
-      "//vivaldi/importer:importer",
-    ]
-  }
+  #update_target("//chrome/common/importer:importer") {
+  #  deps += [
+  #    "//vivaldi/importer:browser",
+  #    "//vivaldi/importer:importer",
+  #  ]
+  #  allow_circular_includes_from = [
+  #    "//vivaldi/importer:browser",
+  #    "//vivaldi/importer:importer",
+  #  ]
+  #}
 
   update_target("//chrome/utility:utility") {
     deps += [
@@ -45,14 +45,14 @@ if (!is_android) {
     ]
   }
 
-  update_target("//chrome/common:ini_parser") {
-    public_deps = [
-      "//vivaldi/importer:browser",
-      "//vivaldi/importer:importer",
-    ]
-    allow_circular_includes_from = [
-      "//vivaldi/importer:browser",
-      "//vivaldi/importer:importer",
-    ]
-  }
+  #update_target("//chrome/common:ini_parser") {
+  #  public_deps = [
+  #    "//vivaldi/importer:browser",
+  #    "//vivaldi/importer:importer",
+  #  ]
+  #  allow_circular_includes_from = [
+  #    "//vivaldi/importer:browser",
+  #    "//vivaldi/importer:importer",
+  #  ]
+  #}
 }

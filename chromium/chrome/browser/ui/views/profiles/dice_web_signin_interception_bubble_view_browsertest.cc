@@ -60,7 +60,7 @@ AvatarToolbarButton* GetAvatarButton(Browser* browser) {
 // the delegate web view.
 void SimulateEscapeKeyPress(content::WebContents* web_content) {
   // Create the escape key press event.
-  content::NativeWebKeyboardEvent event(
+  input::NativeWebKeyboardEvent event(
       blink::WebKeyboardEvent::Type::kRawKeyDown,
       blink::WebInputEvent::kNoModifiers, base::TimeTicks::Now());
   event.dom_key = ui::DomKey::ESCAPE;
@@ -435,7 +435,7 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptionBubbleBrowserTest,
 // tab.
 IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptionBubbleBrowserTest,
                        OpenLearnMoreLinkInNewTab) {
-  const GURL bubble_url("chrome://signin-dice-web-intercept/");
+  const GURL bubble_url(chrome::kChromeUIDiceWebSigninInterceptURL);
   const GURL learn_more_url = google_util::AppendGoogleLocaleParam(
       GURL(chrome::kSigninInterceptManagedDisclaimerLearnMoreURL),
       g_browser_process->GetApplicationLocale());

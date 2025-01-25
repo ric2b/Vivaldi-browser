@@ -18,6 +18,10 @@ SELECT RUN_METRIC('android/cpu_info.sql');
 
 -- Create the base tables and views containing the launch spans.
 INCLUDE PERFETTO MODULE android.startup.startups;
+
+-- TTID and TTFD
+INCLUDE PERFETTO MODULE android.startup.time_to_display;
+
 SELECT RUN_METRIC('android/process_metadata.sql');
 
 -- Define the helper functions which will be used throught the remainder
@@ -160,6 +164,16 @@ SELECT
     'activity_hosting_process_count', (
       SELECT COUNT(1) FROM android_startup_processes p
       WHERE p.startup_id =launches.startup_id
+    ),
+    'time_to_initial_display', (
+      SELECT time_to_initial_display
+      FROM android_startup_time_to_display s
+      WHERE s.startup_id = launches.startup_id
+    ),
+    'time_to_full_display', (
+      SELECT time_to_full_display
+      FROM android_startup_time_to_display s
+      WHERE s.startup_id = launches.startup_id
     ),
     'event_timestamps', AndroidStartupMetric_EventTimestamps(
       'intent_received', launches.ts,
@@ -500,7 +514,7 @@ SELECT
 
       )
     ),
-    'slow_start_reason_detailed', get_slow_start_reason_detailed(launches.startup_id)
+    'slow_start_reason_with_details', get_slow_start_reason_with_details(launches.startup_id)
   ) AS startup
 FROM android_startups launches;
 

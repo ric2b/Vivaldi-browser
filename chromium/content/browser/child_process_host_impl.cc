@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "content/browser/child_process_host_impl.h"
 
 #include <limits>
@@ -45,6 +50,12 @@
 #include "content/browser/mac_helpers.h"
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
+
+// Vivaldi: Flatpak support.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#include "sandbox/linux/services/flatpak_sandbox.h"
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+
 namespace {
 
 // Global atomic to generate child process unique IDs.
@@ -73,7 +84,12 @@ base::FilePath ChildProcessHost::GetChildPath(int flags) {
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   // Use /proc/self/exe rather than our known binary path so updates
   // can't swap out the binary from underneath us.
-  if (child_path.empty() && flags & CHILD_ALLOW_SELF) {
+  // This is not needed for Flatpaks, where updates are going to be in
+  // a new hardlink tree.
+  if ((child_path.empty() &&
+       vivaldi::sandbox::FlatpakSandbox::GetInstance()->GetSandboxLevel() ==
+           vivaldi::sandbox::FlatpakSandbox::SandboxLevel::kNone) &&
+      flags & CHILD_ALLOW_SELF) {
     child_path = base::FilePath(base::kProcSelfExe);
   }
 #endif
@@ -104,7 +120,7 @@ base::FilePath ChildProcessHost::GetChildPath(int flags) {
       child_base_name +=
           GetContentClient()->browser()->GetChildProcessSuffix(flags);
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
 
     child_path = child_path.Append(child_base_name + ".app")
@@ -428,5 +444,10 @@ void ChildProcessHostImpl::NotifyMemoryPressureToChildProcess(
   child_process()->OnMemoryPressure(level);
 }
 #endif
+
+void ChildProcessHostImpl::SetBatterySaverMode(
+    bool battery_saver_mode_enabled) {
+  child_process()->SetBatterySaverMode(battery_saver_mode_enabled);
+}
 
 }  // namespace content

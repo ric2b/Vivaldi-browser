@@ -36,6 +36,7 @@
 #include "components/sync_bookmarks/bookmark_remote_updates_handler.h"
 #include "components/sync_bookmarks/bookmark_specifics_conversions.h"
 #include "components/sync_bookmarks/parent_guid_preprocessing.h"
+#include "components/sync_bookmarks/synced_bookmark_tracker.h"
 #include "components/sync_bookmarks/synced_bookmark_tracker_entity.h"
 #include "components/undo/bookmark_undo_utils.h"
 #include "ui/base/models/tree_node_iterator.h"
@@ -121,6 +122,18 @@ size_t CountSyncableBookmarksFromModel(BookmarkModelView* model) {
     }
   }
   return count;
+}
+
+void RecordModelTypeNumUnsyncedEntitiesOnModelReadyForBookmarks(
+    const SyncedBookmarkTracker& tracker) {
+  size_t num_unsynced_entities = 0;
+  for (const auto* entity : tracker.GetAllEntities()) {
+    if (entity->IsUnsynced()) {
+      num_unsynced_entities++;
+    }
+  }
+  syncer::SyncRecordModelTypeNumUnsyncedEntitiesOnModelReady(
+      syncer::BOOKMARKS, num_unsynced_entities);
 }
 
 }  // namespace
@@ -367,6 +380,8 @@ void BookmarkModelTypeProcessor::ModelReadyToSync(
           vivaldi_synced_file_store_);
 
       StartTrackingMetadata();
+      RecordModelTypeNumUnsyncedEntitiesOnModelReadyForBookmarks(
+          *bookmark_tracker_);
     } else if (!metadata_str.empty()) {
       DLOG(WARNING)
           << "Persisted bookmark sync metadata invalidated when loading.";
@@ -520,13 +535,13 @@ void BookmarkModelTypeProcessor::OnSyncStopping(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Disabling sync for a type shouldn't happen before the model is loaded
   // because OnSyncStopping() is not allowed to be called before
-  // OnSyncStarting() has completed..
+  // OnSyncStarting() has completed.
   DCHECK(bookmark_model_);
   DCHECK(!start_callback_);
 
   activation_request_ = syncer::DataTypeActivationRequest{};
 
-  worker_.reset();
+  DisconnectSync();
 
   switch (metadata_fate) {
     case syncer::KEEP_METADATA: {
@@ -549,9 +564,8 @@ void BookmarkModelTypeProcessor::OnSyncStopping(
     }
   }
 
-  // Do not let any delayed callbacks to be called.
+  // Do not let any delayed callbacks be called.
   weak_ptr_factory_for_controller_.InvalidateWeakPtrs();
-  weak_ptr_factory_for_worker_.InvalidateWeakPtrs();
 }
 
 void BookmarkModelTypeProcessor::NudgeForCommitIfNeeded() {
@@ -673,6 +687,12 @@ void BookmarkModelTypeProcessor::StartTrackingMetadata() {
                      base::Unretained(this)),
       bookmark_tracker_.get());
   bookmark_model_->AddObserver(bookmark_model_observer_.get());
+}
+
+void BookmarkModelTypeProcessor::HasUnsyncedData(
+    base::OnceCallback<void(bool)> callback) {
+  std::move(callback).Run(bookmark_tracker_ &&
+                          bookmark_tracker_->HasLocalChanges());
 }
 
 void BookmarkModelTypeProcessor::GetAllNodesForDebugging(

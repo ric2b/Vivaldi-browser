@@ -8,6 +8,7 @@
 #include "base/json/json_reader.h"
 #include "base/rand_util.h"
 #include "base/strings/escape.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -32,13 +33,8 @@ namespace vivaldi {
 
 namespace {
 
-#if TO_RELEASE_TYPE_ID(VIVALDI_RELEASE_KIND) != RELEASE_TYPE_ID_vivaldi_final
 constexpr char kClientId[] = "AxWv6DRV0M0WK03xcNof5gNf6RAa";
 constexpr char kClientSecret[] = "OgyH7rCuaGaLLdIJ9tlVYw416y4a";
-#else
-constexpr char kClientId[] = "2s_O6XheApKcXNKG3jUeHjPRKDMa";
-constexpr char kClientSecret[] = "AESC013J3umoN7tpkuaHROXAD28a";
-#endif
 
 constexpr char kRequestTokenFromRefreshToken[] =
     "client_id=%s&"
@@ -60,6 +56,7 @@ constexpr char kExpiresInKey[] = "expires_in";
 
 constexpr char kAccountIdKey[] = "sub";
 constexpr char kPictureUrlKey[] = "picture";
+constexpr char kDonationTierKey[] = "donator";
 
 constexpr char kErrorDescriptionKey[] = "error_description";
 
@@ -97,26 +94,6 @@ bool ParseGetAccessTokenSuccessResponse(
   return true;
 }
 
-bool ParseGetAccountInfoSuccessResponse(
-    std::unique_ptr<std::string> response_body,
-    std::string& account_id,
-    std::string& picture_url) {
-  std::optional<base::Value::Dict> dict =
-      ParseServerResponse(std::move(response_body));
-  if (!dict)
-    return false;
-  std::string* account_id_value = dict->FindString(kAccountIdKey);
-  std::string* picture_url_value = dict->FindString(kPictureUrlKey);
-
-  // Picture url field is optional.
-  if (!account_id_value)
-    return false;
-  account_id = std::move(*account_id_value);
-  picture_url =
-      picture_url_value ? std::move(*picture_url_value) : std::string();
-  return true;
-}
-
 std::string ParseFailureResponse(std::unique_ptr<std::string> response_body) {
   std::optional<base::Value::Dict> dict =
       ParseServerResponse(std::move(response_body));
@@ -136,6 +113,9 @@ VivaldiAccountManager::FetchError::FetchError(FetchErrorType type,
                                               std::string server_message,
                                               int error_code)
     : type(type), server_message(server_message), error_code(error_code) {}
+
+bool VivaldiAccountManager::AccountInfo::operator==(
+    const AccountInfo& other) const = default;
 
 VivaldiAccountManager::VivaldiAccountManager(
     PrefService* prefs,
@@ -404,65 +384,55 @@ void VivaldiAccountManager::OnTokenRequestDone(
   token_received_time_ = base::Time::Now();
   NotifyTokenFetchSucceeded();
 
-  if (account_info_.account_id.empty() || account_info_.picture_url.empty()) {
-    const GURL open_id_server_url(
-        local_state_->GetString(vivaldiprefs::kVivaldiAccountServerUrlOpenId));
-    net::HttpRequestHeaders headers;
-    headers.SetHeader(net::HttpRequestHeaders::kAuthorization,
-                      std::string("Bearer ") + access_token_);
-    account_info_request_handler_ =
-        std::make_unique<VivaldiAccountManagerRequestHandler>(
-            url_loader_factory_, open_id_server_url, "", headers,
-            base::BindRepeating(
-                &VivaldiAccountManager::OnAccountInfoRequestDone,
-                weak_factory_.GetWeakPtr()));
+  if (UpdateAccountInfoFromJwt(access_token)) {
+    NotifyAccountUpdated();
   }
-
-  return;
 }
 
-void VivaldiAccountManager::OnAccountInfoRequestDone(
-    std::unique_ptr<network::SimpleURLLoader> url_loader,
-    std::unique_ptr<std::string> response_body) {
-  if (!url_loader->ResponseInfo() || !url_loader->ResponseInfo()->headers) {
-    account_info_request_handler_->Retry();
-    NotifyAccountInfoFetchFailed(
-        NETWORK_ERROR, net::ErrorToShortString(url_loader->NetError()),
-        url_loader->NetError());
-    return;
+bool VivaldiAccountManager::UpdateAccountInfoFromJwt(const std::string& jwt) {
+  std::vector<std::string_view> jwt_parts = base::SplitStringPiece(
+      access_token_, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+
+  if (jwt_parts.size() != 3) {
+    return false;
   }
 
-  int response_code = url_loader->ResponseInfo()->headers->response_code();
+  std::string decoded;
 
-  if (response_code >= net::HTTP_INTERNAL_SERVER_ERROR) {
-    account_info_request_handler_->Retry();
-    std::string server_message;
-    if (response_body.get())
-      server_message.swap(*response_body);
-    NotifyAccountInfoFetchFailed(SERVER_ERROR, server_message, response_code);
-    return;
+  if (!base::Base64Decode(jwt_parts[1], &decoded,
+                          base::Base64DecodePolicy::kForgiving)) {
+    return false;
   }
 
-  if (response_code != net::HTTP_OK) {
-    std::string server_message = ParseFailureResponse(std::move(response_body));
-    NotifyAccountInfoFetchFailed(INVALID_CREDENTIALS, server_message,
-                                 response_code);
-    RequestNewToken();
-    return;
+  std::optional<base::Value> value = base::JSONReader::Read(decoded);
+
+  if (!value || !value->is_dict()) {
+    return false;
   }
 
-  if (!ParseGetAccountInfoSuccessResponse(std::move(response_body),
-                                          account_info_.account_id,
-                                          account_info_.picture_url)) {
-    account_info_request_handler_->Retry();
-    NotifyAccountInfoFetchFailed(SERVER_ERROR, "", response_code);
-    return;
+  const base::Value::Dict& token_info = value->GetDict();
+  const std::string* account_id = token_info.FindString(kAccountIdKey);
+  const std::string* picture_url = token_info.FindString(kPictureUrlKey);
+  const std::string* donation_tier = token_info.FindString(kDonationTierKey);
+
+  if (!account_id) {
+    return false;
   }
+
+  AccountInfo new_account_info{
+      .username = account_info_.username,
+      .account_id = *account_id,
+      .picture_url = picture_url ? *picture_url : "",
+      .donation_tier = donation_tier ? *donation_tier: ""};
+
+  if (account_info_ == new_account_info) {
+    return false;
+  }
+
+  account_info_ = new_account_info;
 
   prefs_->SetString(vivaldiprefs::kVivaldiAccountId, account_info_.account_id);
-
-  NotifyAccountUpdated();
-  return;
+  return true;
 }
 
 void VivaldiAccountManager::AddObserver(Observer* observer) {
@@ -516,16 +486,6 @@ void VivaldiAccountManager::NotifyTokenFetchFailed(
 
   for (auto& observer : observers_) {
     observer.OnTokenFetchFailed();
-  }
-}
-
-void VivaldiAccountManager::NotifyAccountInfoFetchFailed(
-    FetchErrorType type,
-    const std::string& server_message,
-    int error_code) {
-  last_account_info_fetch_error_ = FetchError(type, server_message, error_code);
-  for (auto& observer : observers_) {
-    observer.OnAccountInfoFetchFailed();
   }
 }
 

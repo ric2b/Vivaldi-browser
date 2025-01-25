@@ -117,9 +117,7 @@ class PasswordStoreProxyBackendBaseTest : public testing::Test {
         prefs::kEmptyProfileStoreLoginDatabase, true);
   }
 
-  void SetUp() override {
-    proxy_backend_ = CreateProxyBackend();
-  }
+  void SetUp() override { proxy_backend_ = CreateProxyBackend(); }
 
   virtual std::unique_ptr<PasswordStoreProxyBackend> CreateProxyBackend() {
     auto built_in_backend =
@@ -407,8 +405,12 @@ TEST_F(PasswordStoreProxyBackendBaseTest,
                    prefs::kCurrentMigrationVersionToGoogleMobileServices));
 }
 
+// TODO: crbug.com/40265507 - Clean up when M4 feature flag is removed.
 TEST_F(PasswordStoreProxyBackendBaseTest,
        InitialUPMMigrationPrefIsNotResetOnSyncInit) {
+  base::test::ScopedFeatureList features;
+  features.InitAndDisableFeature(
+      features::kUnifiedPasswordManagerSyncOnlyInGMSCore);
   prefs()->SetInteger(prefs::kCurrentMigrationVersionToGoogleMobileServices, 1);
   EnablePasswordSync();
 
@@ -418,8 +420,12 @@ TEST_F(PasswordStoreProxyBackendBaseTest,
                    prefs::kCurrentMigrationVersionToGoogleMobileServices));
 }
 
+// TODO: crbug.com/40265507 - Clean up when M4 feature flag is removed.
 TEST_F(PasswordStoreProxyBackendBaseTest,
        InitialUPMMigrationPrefIsResetOnSyncChange) {
+  base::test::ScopedFeatureList features;
+  features.InitAndDisableFeature(
+      features::kUnifiedPasswordManagerSyncOnlyInGMSCore);
   prefs()->SetInteger(prefs::kCurrentMigrationVersionToGoogleMobileServices, 1);
   EnablePasswordSync();
 
@@ -450,10 +456,12 @@ class PasswordStoreProxyBackendTest
       public testing::WithParamInterface<UpmVariationParam> {
  public:
   void SetUp() override {
+    // TODO: crbug.com/40265507 - Clean up when M4 feature flag is removed.
     PasswordStoreProxyBackendBaseTest::SetUp();
-    scoped_feature_list_.InitWithFeatureState(
-        password_manager::features::kUnifiedPasswordManagerSyncOnlyInGMSCore,
-        GetParam().is_M4_feature_enabled);
+    scoped_feature_list_.InitWithFeatureStates(
+        {{features::kUnifiedPasswordManagerSyncOnlyInGMSCore,
+          GetParam().is_M4_feature_enabled},
+         {features::kClearLoginDatabaseForUPMUsers, false}});
 
     if (GetParam().is_sync_enabled) {
       EnablePasswordSync();
@@ -1028,10 +1036,8 @@ INSTANTIATE_TEST_SUITE_P(
     PasswordStoreProxyBackendBaseTest,
     PasswordStoreProxyBackendTestWithErrorsForFallbacks,
     testing::Values(
-        FallbackParam{.error = kUnrecoverableError,
-                      .should_fallback = true},
-        FallbackParam{.error = kRecoverableError,
-                      .should_fallback = false}),
+        FallbackParam{.error = kUnrecoverableError, .should_fallback = true},
+        FallbackParam{.error = kRecoverableError, .should_fallback = false}),
     [](const ::testing::TestParamInfo<FallbackParam>& info) {
       if (info.param.error == kUnrecoverableError) {
         return "Unrecoverable";

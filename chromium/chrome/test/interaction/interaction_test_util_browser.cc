@@ -50,8 +50,8 @@ class PixelTestUi : public TestBrowserUi {
   ~PixelTestUi() override = default;
 
   // TestBrowserUi:
-  void ShowUi(const std::string& name) override { NOTREACHED(); }
-  void WaitForUserDismissal() override { NOTREACHED(); }
+  void ShowUi(const std::string& name) override { NOTREACHED_IN_MIGRATION(); }
+  void WaitForUserDismissal() override { NOTREACHED_IN_MIGRATION(); }
 
   bool VerifyUi() override {
     return VerifyUiWithResult() != ui::test::ActionResult::kFailed;
@@ -267,9 +267,11 @@ class InteractionTestUtilSimulatorBrowser
       return ui::test::ActionResult::kNotAttempted;
     auto* const view = element->AsA<views::TrackedElementViews>()->view();
     if (auto* const omnibox = views::AsViewClass<OmniboxViewViews>(view)) {
-      ui::KeyEvent press(ui::ET_KEY_PRESSED, ui::VKEY_RETURN, ui::EF_NONE);
+      ui::KeyEvent press(ui::EventType::kKeyPressed, ui::VKEY_RETURN,
+                         ui::EF_NONE);
       omnibox->OnKeyEvent(&press);
-      ui::KeyEvent release(ui::ET_KEY_RELEASED, ui::VKEY_RETURN, ui::EF_NONE);
+      ui::KeyEvent release(ui::EventType::kKeyReleased, ui::VKEY_RETURN,
+                           ui::EF_NONE);
       omnibox->OnKeyEvent(&release);
       return ui::test::ActionResult::kSucceeded;
     }

@@ -68,7 +68,7 @@ class AddressBubblesController
   void OnBubbleClosed() override;
 
   // SaveAddressProfileIconController:
-  void OnPageActionIconClicked() override;
+  void OnIconClicked() override;
   bool IsBubbleActive() const override;
   std::u16string GetPageActionIconTootip() const override;
   AutofillBubbleBase* GetBubbleView() const override;
@@ -92,8 +92,8 @@ class AddressBubblesController
   friend class content::WebContentsUserData<
       AddressBubblesController>;
 
-  // TODO(b/325440757): Remove `profile` and `original_profile`, put them in
-  // specific bubble controllers.
+  // TODO(crbug.com/325440757): Remove `profile` and `original_profile`, put
+  // them in specific bubble controllers.
   void SetUpAndShowBubble(
       ShowBubbleViewCallback show_bubble_view_callback,
       std::u16string page_action_icon_tootip,

@@ -44,4 +44,32 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
       translate_language_list_;
 };
 
+// Used for non-Vivaldi running
+class VivaldiBrowserMainExtraPartsSmall : public ChromeBrowserMainExtraParts {
+ public:
+  VivaldiBrowserMainExtraPartsSmall() {}
+  ~VivaldiBrowserMainExtraPartsSmall() override;
+  VivaldiBrowserMainExtraPartsSmall(const VivaldiBrowserMainExtraPartsSmall&) =
+      delete;
+  VivaldiBrowserMainExtraPartsSmall& operator=(
+      const VivaldiBrowserMainExtraPartsSmall&) =
+      delete;
+
+  // Overridden from ChromeBrowserMainExtraParts:
+  void PostEarlyInitialization() override;
+  void PreProfileInit() override;
+
+  void PostProfileInit(Profile* profile, bool is_initial_profile) override;
+
+  void PreMainMessageLoopRun() override;
+  void PostMainMessageLoopRun() override;
+
+  void PostDestroyThreads() override;
+
+  static std::unique_ptr<VivaldiBrowserMainExtraPartsSmall> Create();
+
+ private:
+  void EnsureBrowserContextKeyedServiceFactoriesBuilt();
+};
+
 #endif  // EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_H_

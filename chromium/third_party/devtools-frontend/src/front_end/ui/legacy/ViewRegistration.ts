@@ -150,6 +150,10 @@ export interface ViewRegistration {
    * Words used to find the view in the Command Menu.
    */
   tags?: Array<() => Platform.UIString.LocalizedString>;
+  /**
+   * Icon to be used next to view's title.
+   */
+  iconName?: string;
 }
 
 const viewIdSet = new Set<string>();
@@ -162,9 +166,10 @@ export function registerViewExtension(registration: ViewRegistration): void {
   registeredViewExtensions.push(new PreRegisteredView(registration));
 }
 
-export function getRegisteredViewExtensions(): Array<PreRegisteredView> {
+export function getRegisteredViewExtensions(config?: Root.Runtime.HostConfig): Array<PreRegisteredView> {
   return registeredViewExtensions.filter(
-      view => Root.Runtime.Runtime.isDescriptorEnabled({experiment: view.experiment(), condition: view.condition()}));
+      view => Root.Runtime.Runtime.isDescriptorEnabled(
+          {experiment: view.experiment(), condition: view.condition()}, config));
 }
 
 export function maybeRemoveViewExtension(viewId: string): boolean {

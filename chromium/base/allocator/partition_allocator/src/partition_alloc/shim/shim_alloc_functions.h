@@ -9,14 +9,13 @@
 #ifndef PARTITION_ALLOC_SHIM_SHIM_ALLOC_FUNCTIONS_H_
 #define PARTITION_ALLOC_SHIM_SHIM_ALLOC_FUNCTIONS_H_
 
-#include <bit>
 #include <cerrno>
 
 #include "partition_alloc/build_config.h"
+#include "partition_alloc/buildflags.h"
 #include "partition_alloc/partition_alloc_base/bits.h"
 #include "partition_alloc/partition_alloc_base/compiler_specific.h"
 #include "partition_alloc/partition_alloc_base/memory/page_size.h"
-#include "partition_alloc/partition_alloc_buildflags.h"
 #include "partition_alloc/partition_alloc_check.h"
 
 namespace {
@@ -56,17 +55,17 @@ PA_ALWAYS_INLINE void* ShimCppNew(size_t size) {
   void* ptr;
   do {
     void* context = nullptr;
-#if BUILDFLAG(IS_APPLE) && !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if PA_BUILDFLAG(IS_APPLE) && !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
     context = malloc_default_zone();
 #endif
     ptr = chain_head->alloc_function(chain_head, size, context);
-  } while (!ptr && allocator_shim::internal::CallNewHandler(size));
+  } while (PA_UNLIKELY(!ptr && allocator_shim::internal::CallNewHandler(size)));
   return ptr;
 }
 
 PA_ALWAYS_INLINE void* ShimCppNewNoThrow(size_t size) {
   void* context = nullptr;
-#if BUILDFLAG(IS_APPLE) && !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if PA_BUILDFLAG(IS_APPLE) && !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
   context = malloc_default_zone();
 #endif
   const allocator_shim::AllocatorDispatch* const chain_head =
@@ -80,18 +79,18 @@ PA_ALWAYS_INLINE void* ShimCppAlignedNew(size_t size, size_t alignment) {
   void* ptr;
   do {
     void* context = nullptr;
-#if BUILDFLAG(IS_APPLE) && !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if PA_BUILDFLAG(IS_APPLE) && !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
     context = malloc_default_zone();
 #endif
     ptr = chain_head->alloc_aligned_function(chain_head, alignment, size,
                                              context);
-  } while (!ptr && allocator_shim::internal::CallNewHandler(size));
+  } while (PA_UNLIKELY(!ptr && allocator_shim::internal::CallNewHandler(size)));
   return ptr;
 }
 
 PA_ALWAYS_INLINE void ShimCppDelete(void* address) {
   void* context = nullptr;
-#if BUILDFLAG(IS_APPLE) && !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if PA_BUILDFLAG(IS_APPLE) && !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
   context = malloc_default_zone();
 #endif
   const allocator_shim::AllocatorDispatch* const chain_head =
@@ -105,9 +104,9 @@ PA_ALWAYS_INLINE void* ShimMalloc(size_t size, void* context) {
   void* ptr;
   do {
     ptr = chain_head->alloc_function(chain_head, size, context);
-  } while (!ptr &&
-           allocator_shim::internal::g_call_new_handler_on_malloc_failure &&
-           allocator_shim::internal::CallNewHandler(size));
+  } while (PA_UNLIKELY(
+      !ptr && allocator_shim::internal::g_call_new_handler_on_malloc_failure &&
+      allocator_shim::internal::CallNewHandler(size)));
   return ptr;
 }
 
@@ -118,9 +117,9 @@ PA_ALWAYS_INLINE void* ShimCalloc(size_t n, size_t size, void* context) {
   do {
     ptr = chain_head->alloc_zero_initialized_function(chain_head, n, size,
                                                       context);
-  } while (!ptr &&
-           allocator_shim::internal::g_call_new_handler_on_malloc_failure &&
-           allocator_shim::internal::CallNewHandler(size));
+  } while (PA_UNLIKELY(
+      !ptr && allocator_shim::internal::g_call_new_handler_on_malloc_failure &&
+      allocator_shim::internal::CallNewHandler(size)));
   return ptr;
 }
 
@@ -132,9 +131,10 @@ PA_ALWAYS_INLINE void* ShimRealloc(void* address, size_t size, void* context) {
   void* ptr;
   do {
     ptr = chain_head->realloc_function(chain_head, address, size, context);
-  } while (!ptr && size &&
-           allocator_shim::internal::g_call_new_handler_on_malloc_failure &&
-           allocator_shim::internal::CallNewHandler(size));
+  } while (PA_UNLIKELY(
+      !ptr && size &&
+      allocator_shim::internal::g_call_new_handler_on_malloc_failure &&
+      allocator_shim::internal::CallNewHandler(size)));
   return ptr;
 }
 
@@ -147,9 +147,9 @@ PA_ALWAYS_INLINE void* ShimMemalign(size_t alignment,
   do {
     ptr = chain_head->alloc_aligned_function(chain_head, alignment, size,
                                              context);
-  } while (!ptr &&
-           allocator_shim::internal::g_call_new_handler_on_malloc_failure &&
-           allocator_shim::internal::CallNewHandler(size));
+  } while (PA_UNLIKELY(
+      !ptr && allocator_shim::internal::g_call_new_handler_on_malloc_failure &&
+      allocator_shim::internal::CallNewHandler(size)));
   return ptr;
 }
 
@@ -158,7 +158,8 @@ PA_ALWAYS_INLINE int ShimPosixMemalign(void** res,
                                        size_t size) {
   // posix_memalign is supposed to check the arguments. See tc_posix_memalign()
   // in tc_malloc.cc.
-  if (((alignment % sizeof(void*)) != 0) || !std::has_single_bit(alignment)) {
+  if (((alignment % sizeof(void*)) != 0) ||
+      !partition_alloc::internal::base::bits::HasSingleBit(alignment)) {
     return EINVAL;
   }
   void* ptr = ShimMemalign(alignment, size, nullptr);
@@ -252,9 +253,9 @@ PA_ALWAYS_INLINE void* ShimAlignedMalloc(size_t size,
   do {
     ptr = chain_head->aligned_malloc_function(chain_head, size, alignment,
                                               context);
-  } while (!ptr &&
-           allocator_shim::internal::g_call_new_handler_on_malloc_failure &&
-           allocator_shim::internal::CallNewHandler(size));
+  } while (PA_UNLIKELY(
+      !ptr && allocator_shim::internal::g_call_new_handler_on_malloc_failure &&
+      allocator_shim::internal::CallNewHandler(size)));
   return ptr;
 }
 
@@ -270,9 +271,10 @@ PA_ALWAYS_INLINE void* ShimAlignedRealloc(void* address,
   do {
     ptr = chain_head->aligned_realloc_function(chain_head, address, size,
                                                alignment, context);
-  } while (!ptr && size &&
-           allocator_shim::internal::g_call_new_handler_on_malloc_failure &&
-           allocator_shim::internal::CallNewHandler(size));
+  } while (PA_UNLIKELY(
+      !ptr && size &&
+      allocator_shim::internal::g_call_new_handler_on_malloc_failure &&
+      allocator_shim::internal::CallNewHandler(size)));
   return ptr;
 }
 

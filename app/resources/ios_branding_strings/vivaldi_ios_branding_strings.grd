@@ -155,6 +155,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_SETTINGS_OPEN_SETTINGS_STEP" desc="Text of the row indicating the first step of setting the default browser.">
         1. Open Vivaldi Settings
       </message>
+      <message name="IDS_IOS_SHORT_PRODUCT_NAME" desc="The application short name">
+        Vivaldi
+      </message>
     </messages>
   </release>
 </grit>

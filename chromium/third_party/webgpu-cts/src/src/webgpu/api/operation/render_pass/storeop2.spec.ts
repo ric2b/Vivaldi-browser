@@ -19,7 +19,7 @@ TODO: needs review and rename
     { storeOp: 'discard', _expected: 0 },
   ] as const)
   .fn(t => {
-    const renderTexture = t.device.createTexture({
+    const renderTexture = t.createTextureTracked({
       size: { width: 1, height: 1, depthOrArrayLayers: 1 },
       format: 'r8unorm',
       usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,

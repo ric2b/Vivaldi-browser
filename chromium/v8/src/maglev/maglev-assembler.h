@@ -263,17 +263,21 @@ class V8_EXPORT_PRIVATE MaglevAssembler : public MacroAssembler {
   inline MemOperand DataViewElementOperand(Register data_pointer,
                                            Register index);
 
+  enum class CharCodeMaskMode { kValueIsInRange, kMustApplyMask };
+
   // Warning: Input registers {string} and {index} will be scratched.
   // {result} is allowed to alias with one the other 3 input registers.
   // {result} is an int32.
   void StringCharCodeOrCodePointAt(
       BuiltinStringPrototypeCharCodeOrCodePointAt::Mode mode,
       RegisterSnapshot& register_snapshot, Register result, Register string,
-      Register index, Register scratch, Label* result_fits_one_byte);
+      Register index, Register scratch1, Register scratch2,
+      Label* result_fits_one_byte);
   // Warning: Input {char_code} will be scratched.
   void StringFromCharCode(RegisterSnapshot register_snapshot,
                           Label* char_code_fits_one_byte, Register result,
-                          Register char_code, Register scratch);
+                          Register char_code, Register scratch,
+                          CharCodeMaskMode mask_mode);
 
   void ToBoolean(Register value, CheckType check_type, ZoneLabelRef is_true,
                  ZoneLabelRef is_false, bool fallthrough_when_true);
@@ -341,6 +345,9 @@ class V8_EXPORT_PRIVATE MaglevAssembler : public MacroAssembler {
   template <typename Function, typename... Args>
   inline void JumpToDeferredIf(Condition cond, Function&& deferred_code_gen,
                                Args&&... args);
+  void JumpIfNotCallable(Register object, Register scratch,
+                         CheckType check_type, Label* target,
+                         Label::Distance distance = Label::kFar);
   void JumpIfUndetectable(Register object, Register scratch,
                           CheckType check_type, Label* target,
                           Label::Distance distance = Label::kFar);
@@ -370,6 +377,8 @@ class V8_EXPORT_PRIVATE MaglevAssembler : public MacroAssembler {
   inline void IncrementInt32(Register reg);
   inline void DecrementInt32(Register reg);
   inline void AddInt32(Register reg, int amount);
+  inline void AndInt32(Register reg, int mask);
+  inline void OrInt32(Register reg, int mask);
   inline void ShiftLeft(Register reg, int amount);
   inline void IncrementAddress(Register reg, int32_t delta);
   inline void LoadAddress(Register dst, MemOperand location);
@@ -643,6 +652,9 @@ class V8_EXPORT_PRIVATE MaglevAssembler : public MacroAssembler {
 
   void GenerateCheckConstTrackingLetCellFooter(Register context, Register data,
                                                int index, Label* done);
+
+  void TryMigrateInstance(Register object, RegisterSnapshot& register_snapshot,
+                          Label* fail);
 
   compiler::NativeContextRef native_context() const {
     return code_gen_state()->broker()->target_native_context();

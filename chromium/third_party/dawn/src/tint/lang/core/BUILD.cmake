@@ -34,6 +34,7 @@
 #                       Do not modify this file directly
 ################################################################################
 
+include(lang/core/common/BUILD.cmake)
 include(lang/core/constant/BUILD.cmake)
 include(lang/core/intrinsic/BUILD.cmake)
 include(lang/core/ir/BUILD.cmake)
@@ -65,6 +66,7 @@ tint_add_target(tint_lang_core lib
   lang/core/interpolation_sampling.h
   lang/core/interpolation_type.cc
   lang/core/interpolation_type.h
+  lang/core/io_attributes.h
   lang/core/number.cc
   lang/core/number.h
   lang/core/parameter_usage.cc

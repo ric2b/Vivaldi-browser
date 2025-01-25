@@ -37,7 +37,8 @@ enum class TipsNotificationType {
   kWhatsNew = 1,
   kSignin = 2,
   kError = 3,
-  kMaxValue = kError,
+  kSetUpListContinuation = 4,
+  kMaxValue = kSetUpListContinuation,
 };
 // LINT.ThenChange(/tools/metrics/histograms/metadata/ios/enums.xml)
 
@@ -61,6 +62,9 @@ UNNotificationRequest* TipsNotificationRequest(TipsNotificationType type);
 // Returns the notification content for a given Tips notification type.
 UNNotificationContent* ContentForTipsNotificationType(
     TipsNotificationType type);
+
+// Returns the time delta used to trigger Tips notifications.
+base::TimeDelta TipsNotificationTriggerDelta();
 
 // Returns a trigger to be used when requesting a Tips notification.
 UNNotificationTrigger* TipsNotificationTrigger();

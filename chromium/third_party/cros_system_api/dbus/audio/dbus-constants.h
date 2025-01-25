@@ -54,6 +54,8 @@ const char kResendBluetoothBattery[] = "ResendBluetoothBattery";
 const char kGetDeprioritizeBtWbsMic[] = "GetDeprioritizeBtWbsMic";
 const char kSetNoiseCancellationEnabled[] = "SetNoiseCancellationEnabled";
 const char kIsNoiseCancellationSupported[] = "IsNoiseCancellationSupported";
+const char kSetStyleTransferEnabled[] = "SetStyleTransferEnabled";
+const char kIsStyleTransferSupported[] = "IsStyleTransferSupported";
 const char kSetFlossEnabled[] = "SetFlossEnabled";
 const char kSetSpeakOnMuteDetection[] = "SetSpeakOnMuteDetection";
 const char kSpeakOnMuteDetectionEnabled[] = "SpeakOnMuteDetectionEnabled";
@@ -85,6 +87,7 @@ const char kNumberOfSevereUnderrunsProperty[] = "NumberOfSevereUnderruns";
 enum AudioEffectType {
   EFFECT_TYPE_NOISE_CANCELLATION = 1 << 0,
   EFFECT_TYPE_HFP_MIC_SR = 1 << 1,
+  EFFECT_TYPE_STYLE_TRANSFER = 1 << 2,
 };
 // Screen Rotation in clock-wise degrees.
 // This enum corresponds to enum Rotation in chromium ui/display/display.h

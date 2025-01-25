@@ -30,7 +30,7 @@ class CPDF_Color {
 
   CPDF_Color& operator=(const CPDF_Color& that);
 
-  bool IsNull() const { return m_Buffer.empty() && !m_pValue; }
+  bool IsNull() const { return buffer_.empty() && !value_; }
   bool IsPattern() const;
   void SetColorSpace(RetainPtr<CPDF_ColorSpace> colorspace);
   void SetValueForNonPattern(std::vector<float> values);
@@ -39,7 +39,12 @@ class CPDF_Color {
 
   uint32_t ComponentCount() const;
   bool IsColorSpaceRGB() const;
+  bool IsColorSpaceGray() const;
+  // Wrapper around GetRGB() that returns the RGB value as FX_COLORREF. The
+  // GetRGB() return value is clamped to fit into FX_COLORREF, where the color
+  // components are 8-bit fields within an unsigned integer.
   std::optional<FX_COLORREF> GetColorRef() const;
+  std::optional<FX_RGB_STRUCT<float>> GetRGB() const;
 
   // Should only be called if IsPattern() returns true.
   RetainPtr<CPDF_Pattern> GetPattern() const;
@@ -47,9 +52,9 @@ class CPDF_Color {
  protected:
   bool IsPatternInternal() const;
 
-  std::vector<float> m_Buffer;             // Used for non-pattern colorspaces.
-  std::unique_ptr<PatternValue> m_pValue;  // Used for pattern colorspaces.
-  RetainPtr<CPDF_ColorSpace> m_pCS;
+  std::vector<float> buffer_;            // Used for non-pattern colorspaces.
+  std::unique_ptr<PatternValue> value_;  // Used for pattern colorspaces.
+  RetainPtr<CPDF_ColorSpace> cs_;
 };
 
 #endif  // CORE_FPDFAPI_PAGE_CPDF_COLOR_H_

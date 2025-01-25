@@ -9,15 +9,16 @@
 
 #include "base/android/jni_string.h"
 #include "base/check.h"
-#include "chrome/android/chrome_jni_headers/DisplayAgent_jni.h"
 #include "chrome/browser/android/profile_key_util.h"
 #include "chrome/browser/notifications/scheduler/notification_schedule_service_factory.h"
 #include "chrome/browser/notifications/scheduler/public/notification_schedule_service.h"
 #include "chrome/browser/notifications/scheduler/public/user_action_handler.h"
-#include "chrome/browser/profiles/profile_android.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
 #include "ui/gfx/android/java_bitmap.h"
 
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "chrome/android/chrome_jni_headers/DisplayAgent_jni.h"
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 

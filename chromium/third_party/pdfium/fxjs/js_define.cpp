@@ -11,7 +11,6 @@
 
 #include <algorithm>
 #include <limits>
-#include <vector>
 
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_extension.h"
@@ -25,7 +24,7 @@
 #include "v8/include/v8-isolate.h"
 
 void JSDestructor(v8::Local<v8::Object> obj) {
-  CFXJS_Engine::SetObjectPrivate(obj, nullptr);
+  CFXJS_Engine::SetBinding(obj, nullptr);
 }
 
 double JS_DateParse(v8::Isolate* pIsolate, const WideString& str) {

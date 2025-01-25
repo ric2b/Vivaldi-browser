@@ -100,14 +100,14 @@ void VivaldiUIWebContentsDelegate::Initialize() {
 
 bool VivaldiUIWebContentsDelegate::HandleKeyboardEvent(
     content::WebContents* source,
-    const content::NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   return window_->HandleKeyboardEvent(event);
 }
 
 void VivaldiUIWebContentsDelegate::ContentsMouseEvent(
     content::WebContents* source,
     const ui::Event& event) {
-  window_->HandleMouseChange(event.type() == ui::ET_MOUSE_MOVED);
+  window_->HandleMouseChange(event.type() == ui::kMouseMoved);
 }
 
 bool VivaldiUIWebContentsDelegate::PreHandleGestureEvent(

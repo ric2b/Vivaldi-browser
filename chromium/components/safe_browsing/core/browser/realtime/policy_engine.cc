@@ -14,7 +14,6 @@
 #include "components/unified_consent/pref_names.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/variations/service/variations_service.h"
-#include "services/network/public/cpp/request_destination.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/metrics/field_trial_params.h"
@@ -67,8 +66,9 @@ bool RealTimePolicyEngine::CanPerformFullURLLookup(
 
   // |variations_service| can be nullptr in tests.
   if (variations_service &&
-      IsInExcludedCountry(variations_service->GetStoredPermanentCountry()))
+      IsInExcludedCountry(variations_service->GetLatestCountry())) {
     return false;
+  }
 
   return IsUserEpOptedIn(pref_service) || IsUserMbbOptedIn(pref_service);
 }
@@ -116,14 +116,6 @@ bool RealTimePolicyEngine::CanPerformEnterpriseFullURLLookup(
   }
 
   return true;
-}
-
-// static
-bool RealTimePolicyEngine::CanPerformFullURLLookupForRequestDestination(
-    network::mojom::RequestDestination request_destination) {
-  UMA_HISTOGRAM_ENUMERATION("SafeBrowsing.RT.RequestDestinations.Requested",
-                            request_destination);
-  return request_destination == network::mojom::RequestDestination::kDocument;
 }
 
 }  // namespace safe_browsing

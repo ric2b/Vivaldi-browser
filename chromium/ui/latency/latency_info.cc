@@ -13,6 +13,7 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/trace_event/trace_event.h"
 #include "services/tracing/public/cpp/perfetto/flow_event_utils.h"
 #include "services/tracing/public/cpp/perfetto/macros.h"
@@ -44,7 +45,7 @@ ChromeLatencyInfo::LatencyComponentType GetComponentProtoEnum(
     CASE_TYPE(INPUT_EVENT_GPU_SWAP_BUFFER);
     CASE_TYPE(INPUT_EVENT_LATENCY_FRAME_SWAP);
     default:
-      NOTREACHED() << "Unhandled LatencyComponentType: " << type;
+      NOTREACHED_IN_MIGRATION() << "Unhandled LatencyComponentType: " << type;
       return ChromeLatencyInfo::COMPONENT_UNSPECIFIED;
   }
 #undef CASE_TYPE
@@ -63,7 +64,7 @@ struct LatencyInfoEnabledInitializer {
           kTraceCategoriesForAsyncEvents)) {
   }
 
-  const unsigned char* latency_info_enabled;
+  raw_ptr<const unsigned char> latency_info_enabled;
 };
 
 static base::LazyInstance<LatencyInfoEnabledInitializer>::Leaky
@@ -74,8 +75,6 @@ static base::LazyInstance<LatencyInfoEnabledInitializer>::Leaky
 namespace ui {
 
 LatencyInfo::LatencyInfo() = default;
-
-LatencyInfo::LatencyInfo(SourceEventType type) : source_event_type_(type) {}
 
 LatencyInfo::LatencyInfo(const LatencyInfo& other) = default;
 LatencyInfo::LatencyInfo(LatencyInfo&& other) = default;
@@ -120,13 +119,9 @@ void LatencyInfo::TraceIntermediateFlowEvents(
 }
 
 void LatencyInfo::AddNewLatencyFrom(const LatencyInfo& other) {
-  // Don't clobber an existing trace_id_ or ukm_source_id_.
+  // Don't clobber an existing trace_id_.
   if (trace_id_ == -1) {
     trace_id_ = other.trace_id();
-  }
-
-  if (ukm_source_id_ == ukm::kInvalidSourceId) {
-    ukm_source_id_ = other.ukm_source_id();
   }
 
   for (const auto& lc : other.latency_components()) {

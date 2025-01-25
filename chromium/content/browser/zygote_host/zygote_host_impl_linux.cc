@@ -33,6 +33,9 @@
 #include "content/public/common/zygote/zygote_handle.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
+// Vivaldi: Provides hooks for flatpak handling.
+#include "content/browser/zygote_host/vivaldi_zygote_host_linux_utils.h"
+
 namespace content {
 
 namespace {
@@ -72,7 +75,9 @@ ZygoteHostImpl::ZygoteHostImpl()
       use_suid_sandbox_for_adj_oom_score_(false),
       sandbox_binary_(),
       zygote_pids_lock_(),
-      zygote_pids_() {}
+      zygote_pids_(),
+      vivaldi_use_flatpak_sandbox_(false)
+{}
 
 ZygoteHostImpl::~ZygoteHostImpl() {}
 
@@ -108,7 +113,10 @@ void ZygoteHostImpl::Init(const base::CommandLine& command_line) {
     sandbox_binary_ = setuid_sandbox_host->GetSandboxBinaryPath().value();
   }
 
-  if (!command_line.HasSwitch(
+  if (vivaldi::sandbox::FlatpakSandbox::GetInstance()->GetSandboxLevel() !=
+      vivaldi::sandbox::FlatpakSandbox::SandboxLevel::kNone) {
+    vivaldi_use_flatpak_sandbox_ = true;
+  } else if (!command_line.HasSwitch(
           sandbox::policy::switches::kDisableNamespaceSandbox) &&
       sandbox::Credentials::CanCreateProcessInNewUserNS()) {
     use_namespace_sandbox_ = true;
@@ -177,10 +185,15 @@ pid_t ZygoteHostImpl::LaunchZygote(
     sandbox_host->SetupLaunchEnvironment();
   }
 
-  base::Process process =
-      (is_sandboxed_zygote && use_namespace_sandbox_)
-          ? sandbox::NamespaceSandbox::LaunchProcess(*cmd_line, options)
-          : base::LaunchProcess(*cmd_line, options);
+  base::Process process;
+  if (is_sandboxed_zygote && use_namespace_sandbox_) {
+    process = sandbox::NamespaceSandbox::LaunchProcess(*cmd_line, options);
+  } else if (is_sandboxed_zygote && vivaldi_use_flatpak_sandbox_) {
+    process = vivaldi::LaunchFlatpakZygote(*cmd_line, &options);
+  } else {
+    process = base::LaunchProcess(*cmd_line, options);
+  }
+
   CHECK(process.IsValid()) << "Failed to launch zygote process";
 
   dummy_fd.reset();
@@ -189,7 +202,8 @@ pid_t ZygoteHostImpl::LaunchZygote(
 
   pid_t pid = process.Pid();
 
-  if (is_sandboxed_zygote && (use_namespace_sandbox_ || use_suid_sandbox_)) {
+  if (is_sandboxed_zygote &&
+      (use_namespace_sandbox_ || use_suid_sandbox_ || vivaldi_use_flatpak_sandbox_)) {
     // The namespace and SUID sandbox will execute the zygote in a new
     // PID namespace, and the main zygote process will then fork from
     // there. Watch now our elaborate dance to find and validate the
@@ -217,7 +231,11 @@ pid_t ZygoteHostImpl::LaunchZygote(
 
     if (real_pid != pid) {
       // Reap the sandbox.
-      base::EnsureProcessGetsReaped(std::move(process));
+      if (vivaldi_use_flatpak_sandbox_) {
+        vivaldi::sandbox::FlatpakSandbox::GetInstance()->IgnoreExitStatus(pid);
+      } else {
+      base::EnsureProcessGetsReaped(base::Process(pid));
+      }
     }
     pid = real_pid;
   }
@@ -267,6 +285,10 @@ void ZygoteHostImpl::AdjustRendererOOMScore(base::ProcessHandle pid,
         has_selinux_files && access(kSelinuxPath.value().c_str(), X_OK) == 0;
     selinux_valid = true;
   }
+
+  // Flatpaks cannot modify their OOM score.
+  if (vivaldi_use_flatpak_sandbox_)
+    return;
 
   if (!use_suid_sandbox_for_adj_oom_score_) {
     if (!base::AdjustOOMScore(pid, score))

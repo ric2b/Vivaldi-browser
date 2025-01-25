@@ -27,6 +27,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
+#include "base/test/metrics/user_action_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
@@ -96,6 +97,7 @@
 #include "components/permissions/test/object_permission_context_base_mock_permission_observer.h"
 #include "components/permissions/test/permission_test_util.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/app_update.h"
@@ -316,7 +318,7 @@ class ContentSettingSourceSetter {
         return prefs::kManagedDefaultNotificationsSetting;
       default:
         // Add support as needed.
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return "";
     }
   }
@@ -336,8 +338,9 @@ class SiteSettingsHandlerBaseTest : public testing::Test {
     EXPECT_TRUE(testing_profile_manager_->SetUp());
     profile_ = testing_profile_manager_->CreateTestingProfile(
         kTestUserEmail,
-        {{HistoryServiceFactory::GetInstance(),
-          HistoryServiceFactory::GetDefaultFactory()}},
+        {TestingProfile::TestingFactory{
+            HistoryServiceFactory::GetInstance(),
+            HistoryServiceFactory::GetDefaultFactory()}},
         /*is_main_profile=*/true);
     EXPECT_TRUE(profile_);
 
@@ -992,6 +995,9 @@ class SiteSettingsHandlerBaseTest : public testing::Test {
   const std::string_view kCookies =
       site_settings::ContentSettingsTypeToGroupName(
           ContentSettingsType::COOKIES);
+  const std::string_view kTrackingProtection =
+      site_settings::ContentSettingsTypeToGroupName(
+          ContentSettingsType::TRACKING_PROTECTION);
 
   const ContentSettingsType kPermissionNotifications =
       ContentSettingsType::NOTIFICATIONS;
@@ -2257,6 +2263,82 @@ TEST_F(SiteSettingsHandlerTest, NotificationPermissionRevokeUkm) {
                 ContentSettingsType::NOTIFICATIONS));
   EXPECT_EQ(*ukm_recorder.GetEntryMetric(entry, "Action"),
             static_cast<int64_t>(permissions::PermissionAction::REVOKED));
+}
+
+TEST_F(SiteSettingsHandlerTest, IncrementsTrackingProtectionMetrics) {
+  constexpr char kOrigin[] = "https://www.test.com:443";
+  base::UserActionTester user_actions;
+
+  base::Value::List set_args;
+  set_args.Append(kOrigin);        // Primary pattern.
+  set_args.Append(std::string());  // Secondary pattern.
+  set_args.Append(kTrackingProtection);
+  set_args.Append(
+      content_settings::ContentSettingToString(CONTENT_SETTING_ALLOW));
+  set_args.Append(false);  // Incognito
+  handler()->HandleSetCategoryPermissionForPattern(set_args);
+  EXPECT_EQ(user_actions.GetActionCount(
+                "Settings.TrackingProtection.SiteExceptionAdded"),
+            1);
+
+  base::Value::List reset_args;
+  reset_args.Append(kOrigin);        // Primary pattern.
+  reset_args.Append(std::string());  // Secondary pattern.
+  reset_args.Append(kTrackingProtection);
+  reset_args.Append(false);  // Incognito
+  handler()->HandleResetCategoryPermissionForPattern(reset_args);
+  EXPECT_EQ(user_actions.GetActionCount(
+                "Settings.TrackingProtection.SiteExceptionRemoved"),
+            1);
+}
+
+class Reset3pcCategoryPermissionTest
+    : public SiteSettingsHandlerBaseTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  Reset3pcCategoryPermissionTest() {
+    if (GetParam()) {
+      feature_list_.InitAndEnableFeature(
+          privacy_sandbox::kTrackingProtectionContentSettingInSettings);
+    }
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(All, Reset3pcCategoryPermissionTest, testing::Bool());
+
+TEST_P(Reset3pcCategoryPermissionTest,
+       RemovesTrackingProtectionExceptionsWhenFeatureIsOff) {
+  constexpr char kOrigin[] = "https://www.test.com:443";
+  base::Value::List set_args;
+  set_args.Append("*");        // Primary pattern.
+  set_args.Append(kOrigin);  // Secondary pattern.
+  set_args.Append(kTrackingProtection);
+  set_args.Append(
+      content_settings::ContentSettingToString(CONTENT_SETTING_ALLOW));
+  set_args.Append(false);  // Incognito
+  handler()->HandleSetCategoryPermissionForPattern(set_args);
+  // We should have 1 Tracking Protection exception
+  base::Value::List initial_exceptions;
+  site_settings::GetExceptionsForContentType(
+      ContentSettingsType::TRACKING_PROTECTION, profile(), web_ui(),
+      /*incognito=*/false, &initial_exceptions);
+  EXPECT_EQ(initial_exceptions.size(), 1U);
+
+  base::Value::List reset_args;
+  reset_args.Append("*");      // Primary pattern.
+  reset_args.Append(kOrigin);  // Secondary pattern.
+  reset_args.Append(kCookies);
+  reset_args.Append(false);  // Incognito
+  handler()->HandleResetCategoryPermissionForPattern(reset_args);
+  base::Value::List actual_exceptions;
+  site_settings::GetExceptionsForContentType(
+      ContentSettingsType::TRACKING_PROTECTION, profile(), web_ui(),
+      /*incognito=*/false, &actual_exceptions);
+  // The exception should only have been removed if the feature is off.
+  EXPECT_EQ(actual_exceptions.size(), GetParam() ? 1U : 0U);
 }
 
 // TODO(crbug.com/40688152): Test flakes on TSAN and ASAN.
@@ -4269,7 +4351,7 @@ class SiteSettingsHandlerChooserExceptionTest
                                  GetDevicesFromVendor18D2DisplayName()));
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
 
@@ -4331,7 +4413,7 @@ class SiteSettingsHandlerChooserExceptionTest
                           GetUnknownProductDisplayName()));
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
     }
@@ -4372,7 +4454,7 @@ class SiteSettingsHandlerChooserExceptionTest
                                    GetDevicesFromVendor18D2DisplayName()));
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
     }
@@ -4431,7 +4513,7 @@ class SiteSettingsHandlerChooserExceptionTest
                                    GetDevicesFromVendor18D2DisplayName()));
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
     }
@@ -4486,7 +4568,7 @@ class SiteSettingsHandlerChooserExceptionTest
                                    GetDevicesFromVendor18D2DisplayName()));
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
 
@@ -4550,7 +4632,7 @@ class SiteSettingsHandlerChooserExceptionTest
                           GetUnknownProductDisplayName()));
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
 
@@ -4618,7 +4700,7 @@ class SiteSettingsHandlerChooserExceptionTest
                                    GetUnknownProductDisplayName()));
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
       EXPECT_FALSE(ChooserExceptionContainsSiteException(
@@ -4661,7 +4743,7 @@ class SiteSettingsHandlerChooserExceptionTest
                           GetUnknownProductDisplayName()));
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
       EXPECT_TRUE(ChooserExceptionContainsSiteException(
@@ -4705,7 +4787,7 @@ class SiteSettingsHandlerChooserExceptionTest
                                    GetUnknownProductDisplayName()));
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
       EXPECT_FALSE(ChooserExceptionContainsSiteException(
@@ -4743,7 +4825,7 @@ class SiteSettingsHandlerChooserExceptionTest
                                    GetUnknownProductDisplayName()));
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
     }
@@ -4780,7 +4862,7 @@ class SiteSettingsHandlerChooserExceptionTest
                                    GetUnknownProductDisplayName()));
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
     }

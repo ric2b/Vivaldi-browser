@@ -71,7 +71,6 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/buildflags/buildflags.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/ui_base_types.h"
@@ -664,13 +663,16 @@ void RecordAppWindowLaunchMetric(Profile* profile,
   }
 
   // Reparenting launches don't respect the launch_handler setting.
-  if (launch_source != apps::LaunchSource::kFromReparenting &&
-      base::FeatureList::IsEnabled(
-          blink::features::kWebAppEnableLaunchHandler)) {
+  if (launch_source != apps::LaunchSource::kFromReparenting) {
     base::UmaHistogramEnumeration(
         "Launch.WebAppLaunchHandlerClientMode",
         web_app->launch_handler().value_or(LaunchHandler()).client_mode);
   }
+
+  base::UmaHistogramEnumeration("Launch.WebApp.DiyOrCrafted",
+                                web_app->is_diy_app()
+                                    ? LaunchedAppType::kDiy
+                                    : LaunchedAppType::kCrafted);
 }
 
 void RecordAppTabLaunchMetric(Profile* profile,
@@ -700,9 +702,7 @@ void RecordAppTabLaunchMetric(Profile* profile,
   }
 
   // Reparenting launches don't respect the launch_handler setting.
-  if (launch_source != apps::LaunchSource::kFromReparenting &&
-      base::FeatureList::IsEnabled(
-          blink::features::kWebAppEnableLaunchHandler)) {
+  if (launch_source != apps::LaunchSource::kFromReparenting) {
     base::UmaHistogramEnumeration(
         "Launch.BrowserTab.WebAppLaunchHandlerClientMode",
         web_app->launch_handler().value_or(LaunchHandler()).client_mode);

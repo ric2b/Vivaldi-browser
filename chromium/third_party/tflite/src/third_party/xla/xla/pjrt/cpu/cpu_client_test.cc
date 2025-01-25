@@ -15,27 +15,38 @@ limitations under the License.
 
 #include "xla/pjrt/cpu/cpu_client.h"
 
+#include "xla/service/hlo.pb.h"
+#include "xla/xla_data.pb.h"
+
 #ifndef _WIN32
 #include <unistd.h>
 #endif
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include "absl/status/status.h"
+#include "absl/strings/string_view.h"
 #include "absl/synchronization/notification.h"
+#include "xla/client/xla_computation.h"
 #include "xla/ffi/ffi.h"
 #include "xla/ffi/ffi_api.h"
 #include "xla/literal.h"
 #include "xla/literal_util.h"
+#include "xla/pjrt/host_memory_spaces.h"
+#include "xla/pjrt/pjrt_client.h"
+#include "xla/pjrt/pjrt_executable.h"
 #include "xla/service/hlo_parser.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
-#include "xla/status.h"
+#include "xla/tests/literal_test_util.h"
 #include "xla/tests/test_utils.h"
 #include "xla/util.h"
 #include "tsl/lib/core/status_test_util.h"
@@ -50,31 +61,55 @@ namespace xla {
 namespace {
 
 using ::testing::Each;
+using ::testing::ElementsAre;
 using ::testing::ElementsAreArray;
 using ::testing::HasSubstr;
 using ::testing::IsFalse;
+using ::tsl::testing::IsOkAndHolds;
 
-static absl::Status TestError(ffi::BufferBase, ffi::Result<ffi::BufferBase>,
-                              ffi::Result<ffi::BufferBase>) {
+static absl::Status TestError(ffi::AnyBuffer, ffi::Result<ffi::AnyBuffer>,
+                              ffi::Result<ffi::AnyBuffer>) {
   return absl::InternalError("test error.");
 }
 
 XLA_FFI_DEFINE_HANDLER(kTestError, TestError,
                        ffi::Ffi::Bind()
-                           .Arg<ffi::BufferBase>()  // in
-                           .Ret<ffi::BufferBase>()  // out0
-                           .Ret<ffi::BufferBase>()  // out1
+                           .Arg<ffi::AnyBuffer>()  // in
+                           .Ret<ffi::AnyBuffer>()  // out0
+                           .Ret<ffi::AnyBuffer>()  // out1
 );
 
 XLA_FFI_REGISTER_HANDLER(ffi::GetXlaFfiApi(), "__xla_test$$TestError", "Host",
                          kTestError);
 
+TEST(TfrtCpuClientTest, MemorySpace) {
+  TF_ASSERT_OK_AND_ASSIGN(auto client, GetTfrtCpuClient(CpuClientOptions()));
+  ASSERT_GE(client->devices().size(), 1);
+
+  ASSERT_EQ(client->memory_spaces().size(),
+            client->addressable_devices().size());
+  for (auto* device : client->devices()) {
+    TF_ASSERT_OK_AND_ASSIGN(auto* memory_space, device->default_memory_space());
+    EXPECT_THAT(device->memory_spaces(), ElementsAre(memory_space));
+    EXPECT_EQ(memory_space->kind(), UnpinnedHostMemorySpace::kKind);
+    EXPECT_EQ(memory_space->kind_id(), UnpinnedHostMemorySpace::kKindId);
+    EXPECT_THAT(device->memory_space_by_kind(UnpinnedHostMemorySpace::kKind),
+                IsOkAndHolds(memory_space));
+  }
+}
+
 TEST(TfrtCpuClientTest, DonationWithExecutionError) {
   constexpr char kProgram[] =
-      R"(HloModule DonationWithExecutionError, input_output_alias={ {}: (0, {}, must-alias) }
+      R"(
+HloModule DonationWithExecutionError,
+          input_output_alias={ {}: (0, {}, must-alias) }
+
 ENTRY DonationWithExecutionError() -> f32[2, 2] {
     %input = f32[2, 2] parameter(0)
-    %custom-call = (f32[2, 2], u8[0]) custom-call(%input), custom_call_target="__xla_test$$TestError", api_version=API_VERSION_TYPED_FFI, output_to_operand_aliasing={{0}: (0, {})}
+    %custom-call = (f32[2, 2], u8[0]) custom-call(%input),
+                      custom_call_target="__xla_test$$TestError",
+                      api_version=API_VERSION_TYPED_FFI,
+                      output_to_operand_aliasing={{0}: (0, {})}
     ROOT %result = f32[2, 2] get-tuple-element(%custom-call), index=0
 })";
 
@@ -323,6 +358,62 @@ TEST(TfrtCpuClientTest, AsyncTransferRawDataToSubBuffer) {
   TF_ASSERT_OK_AND_ASSIGN(auto literal, buffer->ToLiteralSync());
   ASSERT_EQ(literal->element_count(), 3 * 2);
   EXPECT_THAT(literal->data<uint32_t>(), Each(0x42424242));
+}
+
+// User-defined data type to be passed to FFI handler via the execute context
+// side channel.
+struct MemsetValue {
+  explicit MemsetValue(float value) : value(value) {}
+  float value;
+};
+
+static absl::Status MemsetFromValue(
+    ffi::Result<ffi::BufferR1<PrimitiveType::F32>> result,
+    MemsetValue* memset_value) {
+  for (size_t i = 0; i < result->element_count(); ++i) {
+    result->typed_data()[i] = memset_value->value;
+  }
+  return absl::OkStatus();
+}
+
+XLA_FFI_DEFINE_HANDLER(kMemsetFromValue, MemsetFromValue,
+                       ffi::Ffi::Bind()
+                           .Ret<ffi::BufferR1<PrimitiveType::F32>>()
+                           .Ctx<ffi::UserData<MemsetValue>>());
+
+XLA_FFI_REGISTER_HANDLER(ffi::GetXlaFfiApi(), "MemsetFromValue", "HOST",
+                         kMemsetFromValue);
+
+TEST(TfrtCpuClientTest, ForwardUserDataToFfiHandler) {
+  static constexpr char const* kProgram = R"(
+    HloModule ffi_handler
+    ENTRY main {
+      ROOT %custom-call = f32[4] custom-call(),
+                          custom_call_target="MemsetFromValue",
+                          api_version=API_VERSION_TYPED_FFI
+    })";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto client, GetTfrtCpuClient(CpuClientOptions()));
+
+  TF_ASSERT_OK_AND_ASSIGN(auto hlo_module,
+                          ParseAndReturnUnverifiedModule(kProgram, {}));
+  XlaComputation xla_computation(hlo_module->ToProto());
+  TF_ASSERT_OK_AND_ASSIGN(auto executable,
+                          client->Compile(xla_computation, {}));
+
+  ExecuteContext context;
+  TF_ASSERT_OK(context.ffi_context().Emplace<MemsetValue>(42.0f));
+
+  ExecuteOptions opts;
+  opts.context = &context;
+
+  auto result = executable->Execute(/*argument_handles=*/{{}}, opts);
+
+  TF_ASSERT_OK_AND_ASSIGN(std::shared_ptr<xla::Literal> result_literal,
+                          result->at(0).at(0)->ToLiteralSync());
+  EXPECT_TRUE(LiteralTestUtil::Equal(
+      LiteralUtil::CreateR1<float>({42.0f, 42.0f, 42.0f, 42.0f}),
+      *result_literal));
 }
 
 }  // namespace

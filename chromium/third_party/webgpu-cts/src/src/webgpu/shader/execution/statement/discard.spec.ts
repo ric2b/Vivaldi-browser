@@ -71,7 +71,7 @@ function drawFullScreen(
   });
 
   const bytesPerWord = 4;
-  const framebuffer = t.device.createTexture({
+  const framebuffer = t.createTextureTracked({
     size: [kWidth, kHeight],
     usage:
       GPUTextureUsage.COPY_SRC |
@@ -80,7 +80,6 @@ function drawFullScreen(
       GPUTextureUsage.TEXTURE_BINDING,
     format: 'r32uint',
   });
-  t.trackForCleanup(framebuffer);
 
   // Create a buffer to copy the framebuffer contents into.
   // Initialize with a sentinel value and load this buffer to detect unintended writes.
@@ -94,7 +93,7 @@ function drawFullScreen(
   // (0,1) = u32
   const dataSize = 2 * kWidth * kHeight * bytesPerWord;
   const dataBufferSize = dataSize + bytesPerWord;
-  const dataBuffer = t.device.createBuffer({
+  const dataBuffer = t.createBufferTracked({
     size: dataBufferSize,
     usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
   });

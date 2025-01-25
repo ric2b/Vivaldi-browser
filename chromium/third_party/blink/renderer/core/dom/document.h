@@ -48,6 +48,7 @@
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/facilitated_payments/payment_link_handler.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/page/page.mojom-blink-forward.h"
@@ -87,6 +88,7 @@
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/heap_observer_set.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 #include "third_party/blink/renderer/platform/timer.h"
@@ -143,6 +145,7 @@ class AriaNotificationOptions;
 class Attr;
 class BeforeUnloadEventListener;
 class CaretPosition;
+class CaretPositionFromPointOptions;
 class CDATASection;
 class CSSStyleSheet;
 class CanvasFontCache;
@@ -489,12 +492,12 @@ class CORE_EXPORT Document : public ContainerNode,
 
   // Returns a |CaretPosition| from given point. If the point is inside a shadow
   // tree, then |CaretPosition| only points inside the shadow tree if it's
-  // provided in the |shadow_roots| argument.
+  // provided in the |shadowRoots| vector in |options| argument.
   // https://drafts.csswg.org/cssom-view/#ref-for-dom-document-caretpositionfrompoint
   CaretPosition* caretPositionFromPoint(
       float x,
       float y,
-      const HeapVector<Member<ShadowRoot>>& shadow_roots);
+      const CaretPositionFromPointOptions* options);
   Element* scrollingElement();
 
   // When calling from C++ code, use this method. scrollingElement() is
@@ -510,6 +513,7 @@ class CORE_EXPORT Document : public ContainerNode,
   Element* ScrollingElementNoLayout();
 
   bool KeyboardFocusableScrollersEnabled();
+  bool StandardizedBrowserZoomEnabled() const;
 
   String readyState() const;
 
@@ -1184,9 +1188,12 @@ class CORE_EXPORT Document : public ContainerNode,
         kDOMCharacterDataModifiedListener,
   };
 
-  bool HasAnyListenerTypes() const { return listener_types_; }
   bool HasListenerType(ListenerType listener_type) const;
   void AddListenerTypeIfNeeded(const AtomicString& event_type, EventTarget&);
+
+  void DidAddEventListeners(uint32_t count);
+  void DidRemoveEventListeners(uint32_t count);
+  bool HasAnyNodeWithEventListeners() const { return event_listener_counts_; }
 
   bool HasMutationObserversOfType(MutationType type) const {
     return mutation_observer_types_ & type;
@@ -1523,12 +1530,12 @@ class CORE_EXPORT Document : public ContainerNode,
   void EnqueueVisualViewportScrollEvent();
   void EnqueueVisualViewportScrollEndEvent();
   void EnqueueVisualViewportResizeEvent();
-  void EnqueueSnapChangedEvent(Node* target,
-                               Member<Node>& block_target,
-                               Member<Node>& inline_target);
-  void EnqueueSnapChangingEvent(Node* target,
-                                Member<Node>& block_target,
-                                Member<Node>& inline_target);
+  void EnqueueScrollSnapChangeEvent(Node* target,
+                                    Member<Node>& block_target,
+                                    Member<Node>& inline_target);
+  void EnqueueScrollSnapChangingEvent(Node* target,
+                                      Member<Node>& block_target,
+                                      Member<Node>& inline_target);
 
   void DispatchEventsForPrinting();
 
@@ -1789,6 +1796,11 @@ class CORE_EXPORT Document : public ContainerNode,
   // attempts (both successful and not successful) by the page. This will return
   // null if the document is stopped.
   FontMatchingMetrics* GetFontMatchingMetrics();
+
+  void MaybeRecordShapeTextElapsedTime(base::TimeDelta elapsed_time);
+  void MaybeRecordSvgImageProcessingTime(
+      int data_change_count,
+      base::TimeDelta data_change_elapsed_time) const;
 
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(TaskType);
 
@@ -2095,6 +2107,20 @@ class CORE_EXPORT Document : public ContainerNode,
   void ScheduleShadowTreeCreation(HTMLInputElement& element);
   void UnscheduleShadowTreeCreation(HTMLInputElement& element);
 
+  void ScheduleSelectionchangeEvent();
+
+  // Reset to false after the event gets callbacked
+  void ResetEventQueueStatus(const AtomicString& event_type) override {
+    if (event_type == event_type_names::kSelectionchange)
+      has_scheduled_selectionchange_event_on_document_ = false;
+  }
+
+#if BUILDFLAG(IS_ANDROID)
+  // This method is invoked when a payment link element is encountered. It
+  // passes the payment link back to browser process through the mojo pipe.
+  void HandlePaymentLink(const KURL& href);
+#endif
+
  protected:
   void ClearXMLVersion() { xml_version_ = String(); }
 
@@ -2307,11 +2333,6 @@ class CORE_EXPORT Document : public ContainerNode,
   const AtomicString& BodyAttributeValue(const QualifiedName&) const;
   void SetBodyAttribute(const QualifiedName&, const AtomicString&);
 
-  // Returns true if use of |method_name| for markup insertion is allowed by
-  // permissions policy; otherwise returns false and throws a DOM exception.
-  bool AllowedToUseDynamicMarkUpInsertion(const char* method_name,
-                                          ExceptionState&);
-
   void SetFreezingInProgress(bool is_freezing_in_progress) {
     is_freezing_in_progress_ = is_freezing_in_progress;
   }
@@ -2337,6 +2358,10 @@ class CORE_EXPORT Document : public ContainerNode,
   Resource* GetPendingLinkPreloadForTesting(const KURL&);
 
   ResizeObserver& GetLazyLoadedAutoSizedImgObserver();
+
+  // Initiates data loading for print that is dependent on style or layout.
+  // Returns true if data loading has started.
+  bool InitiateStyleOrLayoutDependentLoadForPrint();
 
   // Mutable because the token is lazily-generated on demand if no token is
   // explicitly set.
@@ -2484,6 +2509,10 @@ class CORE_EXPORT Document : public ContainerNode,
 
   uint16_t listener_types_;
 
+  // Used to record the counts of event listeners added from the nodes in the
+  // document.
+  uint32_t event_listener_counts_;
+
   MutationObserverOptions mutation_observer_types_;
 
   Member<ElementIntersectionObserverData>
@@ -2534,7 +2563,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool should_update_selection_after_layout_ = false;
 
-  Member<Element> css_target_;
+  WeakMember<Element> css_target_;
   bool css_target_is_selector_fragment_ = false;
 
   bool was_discarded_;
@@ -2806,6 +2835,9 @@ class CORE_EXPORT Document : public ContainerNode,
   // the site has support for reduced motion.
   bool supports_reduced_motion_ = false;
 
+  // Indicate whether there is one scheduled selectionchange event.
+  bool has_scheduled_selectionchange_event_on_document_ = false;
+
   Member<RenderBlockingResourceManager> render_blocking_resource_manager_;
 
   // Record if the previous UpdateStyleAndLayoutTreeForThisDocument() happened
@@ -2865,6 +2897,14 @@ class CORE_EXPORT Document : public ContainerNode,
   // certain state, when the insertion is triggered via the state-preserving
   // atomic move API (so far, `Node#moveBefore()`).
   bool state_preserving_atomic_move_in_progress_ = false;
+
+#if BUILDFLAG(IS_ANDROID)
+  HeapMojoRemote<payments::facilitated::mojom::blink::PaymentLinkHandler>
+      payment_link_handler_{nullptr};
+
+  // If a payment link is handled before.
+  bool payment_link_handled_ = false;
+#endif
 
   // If you want to add new data members to blink::Document, please reconsider
   // if the members really should be in blink::Document.  document.h is a very

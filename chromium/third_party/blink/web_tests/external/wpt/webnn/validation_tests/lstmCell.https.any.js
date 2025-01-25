@@ -187,8 +187,8 @@ multi_builder_test(async (t, builder, otherBuilder) => {
 }, '[lstmCell] throw if peepholeWeight option is from another builder');
 
 multi_builder_test(async (t, builder, otherBuilder) => {
-  const activation = builder.clamp();
-  const activationFromOtherBuilder = otherBuilder.clamp();
+  const activation = builder.relu();
+  const activationFromOtherBuilder = otherBuilder.relu();
   const options = {activations: [activation, activationFromOtherBuilder]};
 
   const input = builder.input('input', kExampleInputDescriptor);
@@ -560,7 +560,7 @@ tests.forEach(
           });
         }
         if (test.options.recurrentBias) {
-          options.bias = builder.input('recurrentBias', {
+          options.recurrentBias = builder.input('recurrentBias', {
             dataType: test.options.recurrentBias.dataType,
             dimensions: test.options.recurrentBias.dimensions
           });

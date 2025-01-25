@@ -40,6 +40,11 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
+#import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
+#import "prefs/vivaldi_pref_names.h"
 
 using vivaldi::IsVivaldiRunning;
 using TemplateURLService::kDefaultSearchMain;
@@ -48,7 +53,14 @@ using TemplateURLService::kDefaultSearchPrivate;
 
 using base::UserMetricsAction;
 
+#if defined(VIVALDI_BUILD)
+@interface OmniboxMediator () <BooleanObserver, SearchEngineObserving> {
+  // Boolean observer for search engine nickname
+  PrefBackedBoolean* _searchEngineNicknameEnabled;
+}
+#else
 @interface OmniboxMediator () <SearchEngineObserving>
+#endif // End Vivaldi
 
 // Is Browser incognito.
 @property(nonatomic, assign, readonly) BOOL isIncognito;
@@ -86,6 +98,11 @@ using base::UserMetricsAction;
     _searchEngineSupportsLens = NO;
     _isIncognito = isIncognito;
     _tracker = tracker;
+
+    if (IsVivaldiRunning()) {
+      [self setUpObserverForSearchEngineNicknameSettings];
+    } // End Vivaldi
+
   }
   return self;
 }
@@ -109,6 +126,11 @@ using base::UserMetricsAction;
         std::make_unique<SearchEngineObserverBridge>(self, templateURLService);
   } else {
     _searchEngineObserver.reset();
+
+    if (IsVivaldiRunning()) {
+      [self stopObservingSearchEngineNicknameSettings];
+    } // End Vivaldi
+
   }
 }
 
@@ -532,6 +554,32 @@ using base::UserMetricsAction;
 }
 
 #pragma mark - VIVALDI
+
+// Private
+- (void)setUpObserverForSearchEngineNicknameSettings {
+  PrefService* localPrefs = GetApplicationContext()->GetLocalState();
+  _searchEngineNicknameEnabled =
+      [[PrefBackedBoolean alloc]
+          initWithPrefService:localPrefs
+            prefName:vivaldiprefs::kVivaldiEnableSearchEngineNickname];
+  [_searchEngineNicknameEnabled setObserver:self];
+  [self booleanDidChange:_searchEngineNicknameEnabled];
+}
+
+- (void)stopObservingSearchEngineNicknameSettings {
+  [_searchEngineNicknameEnabled stop];
+  [_searchEngineNicknameEnabled setObserver:nil];
+  _searchEngineNicknameEnabled = nil;
+}
+
+- (BOOL)searchEngineNicknameEnabled {
+  if (!_searchEngineNicknameEnabled) {
+    return YES;
+  }
+  return [_searchEngineNicknameEnabled value];
+}
+
+// Public
 - (void)searchEngineShortcutActivatedForURL:(TemplateURL*)templateURL {
   if (!_templateURLService)
     return;
@@ -544,6 +592,15 @@ using base::UserMetricsAction;
   if (_templateURLService->VivaldiIsDefaultOverridden()) {
     _templateURLService->VivaldiResetDefaultOverride();
     [self.consumer resetOverriddenSearchEngine];
+  }
+}
+
+#pragma mark - BooleanObserver
+- (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
+  if (observableBoolean == _searchEngineNicknameEnabled) {
+    [self.consumer
+        setPreferenceForEnableSearchEngineNickname:
+            [self searchEngineNicknameEnabled]];
   }
 }
 

@@ -245,7 +245,7 @@ def GenerateLastCommitPosition(host, header):
   describe_output = subprocess.check_output(
       ['git', 'describe', 'HEAD', '--abbrev=12', '--match', ROOT_TAG],
       shell=host.is_windows(), cwd=REPO_ROOT)
-  mo = re.match(ROOT_TAG + '-(\d+)-g([0-9a-f]+)', describe_output.decode())
+  mo = re.match(ROOT_TAG + r'-(\d+)-g([0-9a-f]+)', describe_output.decode())
   if not mo:
     raise ValueError(
         'Unexpected output from git describe when generating version header')
@@ -321,7 +321,12 @@ def WriteGenericNinja(path, static_libraries, executables,
 
   if platform.is_windows():
     executable_ext = '.exe'
-    library_ext = '.lib'
+
+    if platform.is_msvc():
+      library_ext = '.lib'
+    else:
+      library_ext = '.a'
+
     object_ext = '.obj'
   else:
     executable_ext = ''
@@ -509,21 +514,16 @@ def WriteGNNinja(path, platform, host, options, args_list):
       if not options.no_static_libstdcpp:
         ldflags.append('-static-libstdc++')
 
-      if platform.is_mingw() or platform.is_msys():
-        cflags.remove('-std=c++20')
-        cflags.extend([
-          '-Wno-deprecated-copy',
-          '-Wno-implicit-fallthrough',
-          '-Wno-redundant-move',
-          '-Wno-unused-variable',
-          '-Wno-format',             # Use of %llx, which is supported by _UCRT, false positive
-          '-Wno-strict-aliasing',    # Dereferencing punned pointer
-          '-Wno-cast-function-type', # Casting FARPROC to RegDeleteKeyExPtr
-          '-std=gnu++20',
-        ])
-      else:
-        # This is needed by libc++.
-        libs.append('-ldl')
+      cflags.extend([
+        '-Wno-deprecated-copy',
+        '-Wno-implicit-fallthrough',
+        '-Wno-redundant-move',
+        '-Wno-unused-variable',
+        '-Wno-format',             # Use of %llx, which is supported by _UCRT, false positive
+        '-Wno-strict-aliasing',    # Dereferencing punned pointer
+        '-Wno-cast-function-type', # Casting FARPROC to RegDeleteKeyExPtr
+      ])
+
     elif platform.is_darwin():
       min_mac_version_flag = '-mmacosx-version-min=10.9'
       cflags.append(min_mac_version_flag)

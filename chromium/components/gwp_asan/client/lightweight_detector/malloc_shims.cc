@@ -9,6 +9,7 @@
 
 #include "base/allocator/partition_allocator/src/partition_alloc/shim/allocator_shim.h"
 #include "base/check_op.h"
+#include "base/compiler_specific.h"
 #include "base/notreached.h"
 #include "base/numerics/checked_math.h"
 #include "components/gwp_asan/client/lightweight_detector/random_eviction_quarantine.h"
@@ -57,7 +58,7 @@ void FreeFn(const AllocatorDispatch* self, void* address, void* context) {
     return;
   }
 
-  self->next->free_function(self->next, address, context);
+  MUSTTAIL return self->next->free_function(self->next, address, context);
 }
 
 void FreeDefiniteSizeFn(const AllocatorDispatch* self,
@@ -69,7 +70,8 @@ void FreeDefiniteSizeFn(const AllocatorDispatch* self,
     return;
   }
 
-  self->next->free_definite_size_function(self->next, address, size, context);
+  MUSTTAIL return self->next->free_definite_size_function(self->next, address,
+                                                          size, context);
 }
 
 void TryFreeDefaultFn(const AllocatorDispatch* self,
@@ -80,7 +82,8 @@ void TryFreeDefaultFn(const AllocatorDispatch* self,
     return;
   }
 
-  self->next->try_free_default_function(self->next, address, context);
+  MUSTTAIL return self->next->try_free_default_function(self->next, address,
+                                                        context);
 }
 
 static void AlignedFreeFn(const AllocatorDispatch* self,
@@ -91,7 +94,8 @@ static void AlignedFreeFn(const AllocatorDispatch* self,
     return;
   }
 
-  self->next->aligned_free_function(self->next, address, context);
+  MUSTTAIL return self->next->aligned_free_function(self->next, address,
+                                                    context);
 }
 
 AllocatorDispatch g_allocator_dispatch = {
@@ -100,6 +104,7 @@ AllocatorDispatch g_allocator_dispatch = {
     nullptr,             // alloc_zero_initialized_function
     nullptr,             // alloc_aligned_function
     nullptr,             // realloc_function
+    nullptr,             // realloc_unchecked_function
     FreeFn,              // free_function
     nullptr,             // get_size_estimate_function
     nullptr,             // good_size_function
@@ -109,7 +114,9 @@ AllocatorDispatch g_allocator_dispatch = {
     FreeDefiniteSizeFn,  // free_definite_size_function
     TryFreeDefaultFn,    // try_free_default_function
     nullptr,             // aligned_malloc_function
+    nullptr,             // aligned_malloc_unchecked_function
     nullptr,             // aligned_realloc_function
+    nullptr,             // aligned_realloc_unchecked_function
     AlignedFreeFn,       // aligned_free_function
     nullptr              // next
 };

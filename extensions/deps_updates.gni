@@ -64,6 +64,7 @@ update_target("//components/guest_view/browser:browser") {
 update_target("//components/zoom:zoom") {
   deps += [
     "//extensions/buildflags",
+    "//vivaldi/prefs:browser_prefs",
   ]
 }
 

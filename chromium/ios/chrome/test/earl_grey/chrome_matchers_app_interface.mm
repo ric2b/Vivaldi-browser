@@ -9,6 +9,17 @@
 #import "components/safe_browsing/core/common/features.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/autofill/model/form_suggestion_constants.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/address_view_controller.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/card_coordinator.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/card_view_controller.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_accessory_view_controller.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_address_mediator.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_card_mediator.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_password_cell.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_password_mediator.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/password_view_controller.h"
+#import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_ui_constants.h"
+#import "ios/chrome/browser/download/ui_bundled/download_manager_constants.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
@@ -16,19 +27,8 @@
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/address_view_controller.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/card_coordinator.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/card_view_controller.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_accessory_view_controller.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_address_mediator.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_card_mediator.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_password_cell.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_password_mediator.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/password_view_controller.h"
-#import "ios/chrome/browser/ui/bookmarks/bookmark_ui_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
-#import "ios/chrome/browser/ui/download/download_manager_constants.h"
 #import "ios/chrome/browser/ui/history/history_ui_constants.h"
 #import "ios/chrome/browser/ui/incognito_interstitial/incognito_interstitial_constants.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants.h"
@@ -196,6 +196,13 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 + (id<GREYMatcher>)buttonWithAccessibilityLabelID:(int)messageID {
   return [ChromeMatchersAppInterface
       buttonWithAccessibilityLabel:l10n_util::GetNSStringWithFixup(messageID)];
+}
+
++ (id<GREYMatcher>)buttonWithAccessibilityLabelID:(int)messageID
+                                  numberForPlural:(int)number {
+  return [ChromeMatchersAppInterface
+      buttonWithAccessibilityLabel:l10n_util::GetPluralNSStringF(messageID,
+                                                                 number)];
 }
 
 + (id<GREYMatcher>)buttonWithForegroundColor:(NSString*)colorName {
@@ -502,12 +509,6 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
   return matcher;
 }
 
-+ (id<GREYMatcher>)omniboxAutocompleteLabel {
-  return grey_allOf(
-      grey_accessibilityID(kOmniboxAutocompleteLabelAccessibilityIdentifier),
-      grey_sufficientlyVisible(), nil);
-}
-
 + (id<GREYMatcher>)locationViewContainingText:(NSString*)text {
   GREYElementMatcherBlock* matcher = [GREYElementMatcherBlock
       matcherWithMatchesBlock:^BOOL(LocationBarSteadyView* element) {
@@ -704,13 +705,7 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 }
 
 + (id<GREYMatcher>)omniboxPopupRow {
-  if (base::FeatureList::IsEnabled(kOmniboxPopupRowContentConfiguration)) {
-    return grey_kindOfClassName(@"UITableViewCell");
-  } else if (base::FeatureList::IsEnabled(kOmniboxSuggestionsRTLImprovements)) {
-    return grey_kindOfClassName(@"OmniboxPopupRowCellExperimental");
-  } else {
-    return grey_kindOfClassName(@"OmniboxPopupRowCell");
-  }
+  return grey_kindOfClassName(@"UITableViewCell");
 }
 
 + (id<GREYMatcher>)omniboxPopupRowWithString:(NSString*)string {
@@ -801,11 +796,6 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 + (id<GREYMatcher>)inactiveTabsSettingsButton {
   return [ChromeMatchersAppInterface
       buttonWithAccessibilityLabelID:(IDS_IOS_OPTIONS_MOVE_INACTIVE_TABS)];
-}
-
-+ (id<GREYMatcher>)tabPickupSettingsButton {
-  return [ChromeMatchersAppInterface
-      buttonWithAccessibilityLabelID:(IDS_IOS_OPTIONS_TAB_PICKUP)];
 }
 
 + (id<GREYMatcher>)tabsSettingsButton {
@@ -1076,6 +1066,12 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
       grey_interactable(), nil);
 }
 
++ (id<GREYMatcher>)openPDFButton {
+  return grey_allOf(
+      grey_accessibilityID(kDownloadManagerOpenAccessibilityIdentifier),
+      grey_interactable(), nil);
+}
+
 + (id<GREYMatcher>)tabGridCellAtIndex:(unsigned int)index {
   return grey_allOf(grey_accessibilityID(IdentifierForGridCellAtIndex(index)),
                     grey_sufficientlyVisible(), nil);
@@ -1194,6 +1190,13 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
       grey_ancestor(grey_accessibilityID(IdentifierForGridCellAtIndex(index))),
       grey_accessibilityID(kGridCellCloseButtonIdentifier),
       grey_sufficientlyVisible(), nil);
+}
+
++ (id<GREYMatcher>)tabGridCloseButtonForGroupCellAtIndex:(unsigned int)index {
+  return grey_allOf(grey_ancestor(grey_accessibilityID(
+                        IdentifierForGridGroupCellAtIndex(index))),
+                    grey_accessibilityID(kGridCellCloseButtonIdentifier),
+                    grey_sufficientlyVisible(), nil);
 }
 
 + (id<GREYMatcher>)settingsPasswordMatcher {
@@ -1565,9 +1568,11 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 }
 
 + (id<GREYMatcher>)tabGridEditMenuCloseAllButton {
+  int ID = IsTabGroupSyncEnabled()
+               ? IDS_IOS_CONTENT_CONTEXT_CLOSEALLTABSANDGROUPS
+               : IDS_IOS_CONTENT_CONTEXT_CLOSEALLTABS;
   return grey_allOf(
-      [ChromeMatchersAppInterface contextMenuItemWithAccessibilityLabelID:
-                                      (IDS_IOS_CONTENT_CONTEXT_CLOSEALLTABS)],
+      [ChromeMatchersAppInterface contextMenuItemWithAccessibilityLabelID:ID],
       grey_sufficientlyVisible(), nil);
 }
 

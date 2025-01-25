@@ -319,15 +319,12 @@ void MojoVideoDecoder::OnDecodeDone(uint64_t decode_id,
 void MojoVideoDecoder::Reset(base::OnceClosure reset_cb) {
   DVLOG(2) << __func__;
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!reset_cb_);
 
   if (has_connection_error_) {
     task_runner_->PostTask(FROM_HERE, std::move(reset_cb));
     return;
   }
-
-  // TODO(crbug.com/335001233): rollback the change or replace it with a CHECK
-  // before closing the bug.
-  DUMP_WILL_BE_CHECK(reset_cb);
 
   reset_cb_ = std::move(reset_cb);
   remote_decoder_->Reset(
@@ -491,6 +488,9 @@ void MojoVideoDecoder::Stop() {
 
   if (reset_cb_)
     std::move(reset_cb_).Run();
+
+  // Drop any outstanding callbacks.
+  weak_factory_.InvalidateWeakPtrs();
 }
 
 }  // namespace media

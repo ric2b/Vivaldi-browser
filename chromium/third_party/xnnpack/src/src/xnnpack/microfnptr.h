@@ -5,11 +5,12 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#include <xnnpack/common.h>
-#include <xnnpack/microparams.h>
+#include "xnnpack/common.h"
+#include "xnnpack/microparams.h"
 
 
 /****************** Microkernel pointers for dense inference *****************/
@@ -262,6 +263,19 @@ typedef void (*xnn_qd8_f16_qc4w_gemm_ukernel_fn)(
     const union xnn_f16_qc4w_minmax_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)],
     const struct xnn_qd8_quantization_params* quantization_params);
 
+typedef void (*xnn_qd8_f16_qb4w_gemm_ukernel_fn)(
+    size_t mr,
+    size_t nr,
+    size_t k,
+    const int8_t* a,
+    size_t a_stride,
+    const void* w,
+    uint16_t* c,
+    size_t cm_stride,
+    size_t cn_stride,
+    const union xnn_f16_qb4w_minmax_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)],
+    const struct xnn_qd8_quantization_params* quantization_params);
+
 typedef void (*xnn_qd8_f32_qc4w_gemm_ukernel_fn)(
     size_t mr,
     size_t nr,
@@ -273,6 +287,19 @@ typedef void (*xnn_qd8_f32_qc4w_gemm_ukernel_fn)(
     size_t cm_stride,
     size_t cn_stride,
     const union xnn_f32_qc4w_minmax_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)],
+    const struct xnn_qd8_quantization_params* quantization_params);
+
+typedef void (*xnn_qd8_f32_qb4w_gemm_ukernel_fn)(
+    size_t mr,
+    size_t nr,
+    size_t k,
+    const int8_t* a,
+    size_t a_stride,
+    const void* w,
+    float* c,
+    size_t cm_stride,
+    size_t cn_stride,
+    const union xnn_f32_qb4w_minmax_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)],
     const struct xnn_qd8_quantization_params* quantization_params);
 
 typedef void (*xnn_qs8_qc8w_gemm_minmax_ukernel_fn)(
@@ -298,6 +325,20 @@ typedef void (*xnn_qu8_gemm_minmax_ukernel_fn)(
     size_t cm_stride,
     size_t cn_stride,
     const union xnn_qu8_conv_minmax_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
+
+// GEMM: GEneral Matrix Multiplication with packed and quantized LHS operand.
+
+typedef void (*xnn_qp8_f32_qc4w_gemm_minmax_ukernel_fn)(
+    size_t m,
+    size_t n,
+    size_t k,
+    const int8_t* lhs_packed,
+    const void* rhs_packed,
+    float* dst,
+    size_t dst_stride_row,
+    size_t dst_stride_col,
+    union xnn_f32_minmax_params
+        minmax_params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
 
 // GEMMINC: GEMM INCremental with Min+Max activation
 
@@ -1351,6 +1392,22 @@ typedef void (*xnn_x32_zerob_gemm_ukernel_fn)(
     size_t channel_subtile_stride,
     const union xnn_x32_packb_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
 
+// PACKQ: PACK and Quantize (weights) the left-hand operator for GEMM matrix
+// multiplication.
+
+typedef void (*xnn_x8_packq_f32qp8_ukernel_fn)(
+    size_t m,   // Number of rows to pack.
+    size_t k,   // Number of columns/channels per row.
+    size_t mr,  // Number of rows to interleave in the same output row.
+    size_t kr,  // Number of columns/channels loaded per step in the matmul
+                // microkernel.
+    size_t sr,  // Number of `kr` splits.
+    size_t m_idx_start,         // Starting index in `lhs_packed`.
+    const float* XNN_RESTRICT lhs,  // Left-hand operator to pack.
+    size_t lhs_stride,          // Stride in bytes between the rows of `lhs`.
+    void* XNN_RESTRICT lhs_packed   // The quantized and packed output.
+);
+
 // PACKW: PACK W (weights) for GEMM matrix multiplication
 // Weights in GOI layout: Groups, Output channels, Input channels.
 
@@ -1550,13 +1607,22 @@ typedef void (*xnn_u8_reduce_ukernel_fn)(
 
 // RDSUM: Discontiguous Reduce-Sum
 
-typedef void (*xnn_f16_f32acc_rdsum_ukernel_fn)(
+typedef void (*xnn_rdsum_ukernel_fn)(
     size_t rows,
     size_t channels,
     const void* input,
     size_t input_stride,
     const void* zero,
     void* output,
+    const void* params);
+
+typedef void (*xnn_f16_f32acc_rdsum_ukernel_fn)(
+    size_t rows,
+    size_t channels,
+    const void* input,
+    size_t input_stride,
+    const void* zero,
+    float* output,
     const union xnn_f16_f32acc_scale_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
 
 typedef void (*xnn_f32_rdsum_ukernel_fn)(
@@ -1568,6 +1634,14 @@ typedef void (*xnn_f32_rdsum_ukernel_fn)(
     float* output,
     const union xnn_f32_scale_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
 
+typedef void (*xnn_qs8_rdsum_ukernel_fn)(
+    size_t rows,
+    size_t channels,
+    const int8_t* input,
+    size_t input_stride,
+    const int8_t* zero,
+    int32_t* output,
+    const union xnn_qs8_rsum_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
 // RSUM: Reduce-Sum
 
 typedef void (*xnn_f16_rsum_ukernel_fn)(
@@ -1579,7 +1653,7 @@ typedef void (*xnn_f16_rsum_ukernel_fn)(
 typedef void (*xnn_f16_f32acc_rsum_ukernel_fn)(
     size_t batch,
     const void* input,
-    void* output,
+    float* output,
     const union xnn_f16_f32acc_scale_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
 
 typedef void (*xnn_f32_rsum_ukernel_fn)(
@@ -1587,6 +1661,12 @@ typedef void (*xnn_f32_rsum_ukernel_fn)(
     const float* input,
     float* output,
     const union xnn_f32_scale_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
+
+typedef void (*xnn_qs8_rsum_ukernel_fn)(
+    size_t batch,
+    const int8_t* input,
+    int32_t* output,
+    const union xnn_qs8_rsum_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
 
 // RMAX: Reduce-MAX
 
@@ -1666,7 +1746,7 @@ typedef void (*xnn_f32_vabs_ukernel_fn)(
     size_t batch,
     const float* input,
     float* output,
-    const union xnn_f32_abs_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
+    const union xnn_f32_default_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
 
 // VCLAMP: Vector CLAMP elementwise
 
@@ -1693,6 +1773,15 @@ typedef void (*xnn_u8_vclamp_ukernel_fn)(
     const uint8_t* input,
     uint8_t* output,
     const union xnn_u8_minmax_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
+
+// VCOPYSIGN: Vector Copysign elementwise
+
+typedef void (*xnn_f32_vcopysign_ukernel_fn)(
+    size_t batch,
+    const float* input_a,
+    const float* input_b,
+    float* output,
+    const union xnn_f32_default_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
 
 // VCVT: Vector ConVerT elementwise
 
@@ -1776,6 +1865,14 @@ typedef void (*xnn_f32_velu_ukernel_fn)(
     float* output,
     const union xnn_f32_elu_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
 
+// VGELU: Vector Gaussian Error Linear Unit elementwise
+
+typedef void (*xnn_f32_vgelu_ukernel_fn)(
+    size_t batch,
+    const float* input,
+    float* output,
+    const union xnn_f32_default_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
+
 // VHSWISH: Vector Hard SWISH elementwise
 
 typedef void (*xnn_f16_vhswish_ukernel_fn)(
@@ -1840,7 +1937,7 @@ typedef void (*xnn_f32_vneg_ukernel_fn)(
     size_t batch,
     const float* input,
     float* output,
-    const union xnn_f32_neg_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
+    const union xnn_f32_default_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
 
 // VRELU: Vector REctified Linear Unit elementwise
 
@@ -1943,6 +2040,22 @@ typedef void (*xnn_f32_vtanh_ukernel_fn)(
     const float* input,
     float* output,
     const union xnn_f32_tanh_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
+
+// VEXP: Vector Exp elementwise
+
+typedef void (*xnn_f32_vexp_ukernel_fn)(
+    size_t batch,
+    const float* input,
+    float* output,
+    const union xnn_f32_default_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
+
+// VLOG: Vector Log elementwise
+
+typedef void (*xnn_f32_vlog_ukernel_fn)(
+    size_t batch,
+    const float* input,
+    float* output,
+    const union xnn_f32_default_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
 
 // LUT: vector LookUp Table elementwise
 
@@ -2437,6 +2550,9 @@ typedef size_t (*xnn_init_qu8_conv_minmax_params_fn)(
   uint8_t output_min,
   uint8_t output_max);
 
+typedef size_t (*xnn_init_qs8_rsum_params_fn)(
+  union xnn_qs8_rsum_params params[XNN_MIN_ELEMENTS(1)]);
+
 typedef size_t (*xnn_init_qs8_avgpool_minmax_params_fn)(
   union xnn_qs8_avgpool_minmax_params params[XNN_MIN_ELEMENTS(1)],
   int32_t bias,
@@ -2512,9 +2628,6 @@ typedef size_t (*xnn_init_bf16_abs_params_fn)(
 typedef size_t (*xnn_init_f16_abs_params_fn)(
   union xnn_f16_abs_params params[XNN_MIN_ELEMENTS(1)]);
 
-typedef size_t (*xnn_init_f32_abs_params_fn)(
-  union xnn_f32_abs_params params[XNN_MIN_ELEMENTS(1)]);
-
 typedef size_t (*xnn_init_f16_default_params_fn)(
   union xnn_f16_default_params params[XNN_MIN_ELEMENTS(1)]);
 
@@ -2532,6 +2645,9 @@ typedef size_t (*xnn_init_f16_elu_params_fn)(
   uint16_t prescale,
   uint16_t alpha,
   uint16_t beta);
+
+typedef size_t (*xnn_init_f32_exp_params_fn)(
+  union xnn_f32_default_params params[XNN_MIN_ELEMENTS(1)]);
 
 typedef size_t (*xnn_init_f32_elu_params_fn)(
   union xnn_f32_elu_params params[XNN_MIN_ELEMENTS(1)],
@@ -2566,6 +2682,9 @@ typedef size_t (*xnn_init_f16_lrelu_params_fn)(
 typedef size_t (*xnn_init_f32_lrelu_params_fn)(
   union xnn_f32_lrelu_params params[XNN_MIN_ELEMENTS(1)],
   float slope);
+
+typedef size_t (*xnn_init_f32_log_params_fn)(
+  union xnn_f32_default_params params[XNN_MIN_ELEMENTS(1)]);
 
 typedef size_t (*xnn_init_f32_relu_params_fn)(
   union xnn_f32_relu_params params[XNN_MIN_ELEMENTS(1)]);
@@ -2605,11 +2724,25 @@ typedef size_t (*xnn_init_f16_qc4w_minmax_params_fn)(
   uint16_t max,
   uint8_t kernel_zero_point);
 
+typedef size_t (*xnn_init_f16_qb4w_minmax_params_fn)(
+  union xnn_f16_qb4w_minmax_params params[XNN_MIN_ELEMENTS(1)],
+  uint16_t min,
+  uint16_t max,
+  uint8_t kernel_zero_point,
+  size_t blocksize);
+
 typedef size_t (*xnn_init_f32_qc4w_minmax_params_fn)(
   union xnn_f32_qc4w_minmax_params params[XNN_MIN_ELEMENTS(1)],
   float min,
   float max,
   uint8_t kernel_zero_point);
+
+typedef size_t (*xnn_init_f32_qb4w_minmax_params_fn)(
+  union xnn_f32_qb4w_minmax_params params[XNN_MIN_ELEMENTS(1)],
+  float min,
+  float max,
+  uint8_t kernel_zero_point,
+  size_t blocksize);
 
 typedef size_t (*xnn_init_s8_minmax_params_fn)(
   union xnn_s8_minmax_params params[XNN_MIN_ELEMENTS(1)],
@@ -2623,9 +2756,6 @@ typedef size_t (*xnn_init_u8_minmax_params_fn)(
 
 typedef size_t (*xnn_init_f16_neg_params_fn)(
   union xnn_f16_neg_params params[XNN_MIN_ELEMENTS(1)]);
-
-typedef size_t (*xnn_init_f32_neg_params_fn)(
-  union xnn_f32_neg_params params[XNN_MIN_ELEMENTS(1)]);
 
 typedef size_t (*xnn_init_f16_rnd_params_fn)(
   union xnn_f16_rnd_params params[XNN_MIN_ELEMENTS(1)]);
@@ -2689,6 +2819,16 @@ typedef size_t (*xnn_init_f16_tanh_params_fn)(
 typedef size_t (*xnn_init_f32_tanh_params_fn)(
   union xnn_f32_tanh_params params[XNN_MIN_ELEMENTS(1)]);
 
+typedef void (*xnn_init_scale_params_fn)(
+  size_t channels,
+  size_t channels_tile,
+  size_t channels_subtile,
+  size_t stride,
+  size_t substride,
+  size_t stride_offset,
+  const void* scale,
+  void* packed_w);
+
 typedef void (*xnn_init_qs8_qc8w_scale_params_fn)(
   size_t channels,
   size_t channels_tile,
@@ -2698,6 +2838,48 @@ typedef void (*xnn_init_qs8_qc8w_scale_params_fn)(
   size_t stride_offset,
   const float scale[XNN_MIN_ELEMENTS(1)],
   void* packed_w);
+
+struct xnn_gemm_config;
+
+// Pack weights and biases for GEMM microkernels.
+//
+// Implementations call the correct packing function selected using flags and
+// pack any extra data required using init_extra_data_fns. Accumulators are
+// initialized with accumulator_init.
+typedef void (*xnn_pack_weights_and_biases_fn)(
+    uint32_t flags,                             //
+    const struct xnn_gemm_config* gemm_config,  //
+    size_t input_channels,                      //
+    size_t output_channels,                     //
+    size_t groups,                              //
+    // We tile packing by output channels, in GIO layout, the k (row) index
+    // needs to be able to skip by the actual number of output channels, and not
+    // just the argument nc. E.g. if weights is 1x3x5, and nr is 2, we tile the
+    // packing by output channels, 2 + 2 + 1, with 3 calls to this packing
+    // function. In the first call nc == nr == 2, but to address the second row
+    // of k, we need to skip by 5 elements, not 2 (nc). So k_stride should be
+    // set to 5.
+    size_t k_stride,                               //
+    const void* accumulator_init,                  //
+    const void* weights,                           //
+    xnn_init_scale_params_fn init_extra_data0_fn,  //
+    const void* extra_data0,                       //
+    size_t extra_data0_element_size,               //
+    xnn_init_scale_params_fn init_extra_data1_fn,  //
+    const void* extra_data1,                       //
+    size_t extra_data1_element_size,               //
+    void* packed_weights_ptr,                      //
+    const void* params);
+
+// Computes the stride of the packing used by a corresponding
+// `xnn_pack_weights_and_biases_fn`. The `k_stride` parameter is provided for
+// our older packing functions, new wrappers should rely on `gemm_config` and
+// `k` instead.
+typedef size_t (*xnn_packed_stride_weights_and_biases_fn)(
+    const struct xnn_gemm_config* gemm_config,  //
+    size_t k,                                   //
+    size_t k_stride,                            //
+    size_t extra_bytes);
 
 typedef size_t (*xnn_init_f16_gavgpool_neon_params_fn)(
   union xnn_f16_gavgpool_params params[XNN_MIN_ELEMENTS(1)],
@@ -2775,3 +2957,74 @@ typedef void (*xnn_indirection_init_resize_bilinear2d_hwc_fn)(
   void* packed_weights,
   bool align_corners,
   bool tensorflow_legacy);
+
+struct xnn_generated_code_chunk {
+  size_t offset;
+  size_t offset_end;
+};
+
+struct xnn_hmp_dqgemm_ukernel {
+  xnn_dqgemm_ukernel_fn function[XNN_MAX_UARCH_TYPES];
+#if XNN_PLATFORM_JIT
+  struct xnn_generated_code_chunk generated_code_chunk[XNN_MAX_UARCH_TYPES];
+#endif  // XNN_PLATFORM_JIT
+};
+
+struct xnn_hmp_gemm_ukernel {
+  xnn_gemm_ukernel_fn function[XNN_MAX_UARCH_TYPES];
+#if XNN_PLATFORM_JIT
+  struct xnn_generated_code_chunk generated_code_chunk[XNN_MAX_UARCH_TYPES];
+#endif  // XNN_PLATFORM_JIT
+};
+
+struct xnn_hmp_dqigemm_ukernel {
+  xnn_dqigemm_ukernel_fn function[XNN_MAX_UARCH_TYPES];
+#if XNN_PLATFORM_JIT
+  struct xnn_generated_code_chunk generated_code_chunk[XNN_MAX_UARCH_TYPES];
+#endif  // XNN_PLATFORM_JIT
+};
+
+struct xnn_hmp_igemm_ukernel {
+  xnn_igemm_ukernel_fn function[XNN_MAX_UARCH_TYPES];
+#if XNN_PLATFORM_JIT
+  struct xnn_generated_code_chunk generated_code_chunk[XNN_MAX_UARCH_TYPES];
+#endif  // XNN_PLATFORM_JIT
+};
+
+struct xnn_hmp_qp8gemm_ukernel {
+  xnn_qp8_f32_qc4w_gemm_minmax_ukernel_fn function[XNN_MAX_UARCH_TYPES];
+#if XNN_PLATFORM_JIT
+  struct xnn_generated_code_chunk generated_code_chunk[XNN_MAX_UARCH_TYPES];
+#endif  // XNN_PLATFORM_JIT
+};
+
+// Largest GEMM/IGEMM MR used in init.c is 16 (x86 AVX512AMX).
+// Largest GEMM/IGEMM MR is 8 in e2e benchmarks.
+#define XNN_MAX_MR 16
+
+struct gemm_fused_ukernels {
+  union {
+    struct xnn_hmp_gemm_ukernel gemm[XNN_MAX_MR];
+    struct xnn_hmp_dqgemm_ukernel dqgemm[XNN_MAX_MR];
+    struct xnn_hmp_qp8gemm_ukernel qp8gemm[XNN_MAX_MR];
+  };
+  union {
+    struct xnn_hmp_igemm_ukernel igemm[XNN_MAX_MR];
+    struct xnn_hmp_dqigemm_ukernel dqigemm[XNN_MAX_MR];
+  };
+};
+
+#if XNN_PLATFORM_JIT
+struct xnn_hmp_gemm_codegen {
+  xnn_jit_gemm_code_generator_fn function[XNN_MAX_UARCH_TYPES];
+};
+
+struct xnn_hmp_igemm_codegen {
+  xnn_jit_igemm_code_generator_fn function[XNN_MAX_UARCH_TYPES];
+};
+
+struct gemm_codegens {
+  struct xnn_hmp_gemm_codegen gemm[XNN_MAX_MR];
+  struct xnn_hmp_igemm_codegen igemm[XNN_MAX_MR];
+};
+#endif  // XNN_PLATFORM_JIT

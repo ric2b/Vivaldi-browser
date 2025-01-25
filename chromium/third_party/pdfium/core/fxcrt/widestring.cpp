@@ -59,8 +59,7 @@ constexpr wchar_t kWideTrimChars[] = L"\x09\x0a\x0b\x0c\x0d\x20";
 std::optional<size_t> GuessSizeForVSWPrintf(const wchar_t* pFormat,
                                             va_list argList) {
   size_t nMaxLen = 0;
-  // SAFETY: TODO(tsepez): investigate lack of safety.
-  UNSAFE_BUFFERS({
+  UNSAFE_TODO({
     for (const wchar_t* pStr = pFormat; *pStr != 0; pStr++) {
       if (*pStr != '%' || *(pStr = pStr + 1) == '%') {
         ++nMaxLen;
@@ -393,7 +392,6 @@ WideString WideString::Format(const wchar_t* pFormat, ...) {
   return ret;
 }
 
-// TODO(tsepez): should be UNSAFE_BUFFER_USAGE.
 WideString::WideString(const wchar_t* pStr, size_t nLen) {
   if (nLen) {
     // SAFETY: caller ensures `pStr` points to al least `nLen` wchar_t.

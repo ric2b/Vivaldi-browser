@@ -3,14 +3,14 @@
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_coordinator.h"
 
 #import "base/strings/sys_string_conversions.h"
+#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/browser/bookmark_node.h"
-#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
-#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/ui_bundled/folder_chooser/bookmarks_folder_chooser_coordinator.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
-#import "ios/chrome/browser/ui/bookmarks/folder_chooser/bookmarks_folder_chooser_coordinator.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_consumer.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_mediator.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_swift.h"
@@ -246,8 +246,8 @@ using bookmarks::BookmarkNode;
 - (void)setupBookmarkEditingMediator {
   ChromeBrowserState *browserState =
       self.browser->GetBrowserState()->GetOriginalChromeBrowserState();
-  LegacyBookmarkModel *bookmarkModel =
-    ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(browserState);
+  BookmarkModel *bookmarkModel =
+      ios::BookmarkModelFactory::GetForBrowserState(browserState);
   self.mediator =
     [[VivaldiBookmarksEditorMediator alloc] initWithBookmarkModel:bookmarkModel
         bookmarkNode:self.editingItem.bookmarkNode
@@ -281,7 +281,7 @@ using bookmarks::BookmarkNode;
   std::u16string title = base::SysNSStringToUTF16([self titleForEntryPoint]);
   return _isEditing ?
       GetNSStringF(IDS_IOS_EDIT_ITEM_WITH_TYPE, title) :
-      GetNSStringF(IDS_IOS_ADD_ITEM_WITH_TYPE, title);
+      GetNSStringF(IDS_IOS_NEW_ITEM_WITH_TYPE, title);
 }
 
 /// Updates the parent folder view componets
@@ -351,9 +351,12 @@ using bookmarks::BookmarkNode;
 (const bookmarks::BookmarkNode*)folder {
   DCHECK(_folderChooserCoordinator);
   DCHECK(folder);
-  self.parentFolderItem.bookmarkNode = folder;
+  VivaldiSpeedDialItem* parentFolderItem =
+      [[VivaldiSpeedDialItem alloc] initWithBookmark:folder];
+  self.parentFolderItem = parentFolderItem;
   [self updateFolderState];
   [self stopFolderChooserCordinator];
+  [self.mediator manuallyChangeFolder:folder];
 }
 
 - (void)bookmarksFolderChooserCoordinatorDidCancel:

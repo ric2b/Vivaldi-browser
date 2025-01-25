@@ -6,43 +6,42 @@
 
 #include <optional>
 #include <string>
-#include <utility>
 
 #include "apps/test/app_window_waiter.h"
-#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen_test_api.h"
-#include "ash/webui/settings/public/constants/routes.mojom.h"
+#include "ash/webui/settings/public/constants/routes.mojom-forward.h"
 #include "base/command_line.h"
 #include "base/functional/callback_forward.h"
 #include "base/json/json_reader.h"
-#include "base/logging.h"
 #include "base/notreached.h"
-#include "base/test/bind.h"
 #include "base/test/test_future.h"
 #include "base/values.h"
+#include "base/version.h"
+#include "chrome/browser/ash/app_mode/fake_cws.h"
 #include "chrome/browser/ash/app_mode/kiosk_app.h"
+#include "chrome/browser/ash/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_types.h"
 #include "chrome/browser/ash/app_mode/kiosk_chrome_app_manager.h"
 #include "chrome/browser/ash/app_mode/kiosk_controller.h"
-#include "chrome/browser/ash/login/app_mode/kiosk_launch_controller.h"
+#include "chrome/browser/ash/app_mode/kiosk_test_helper.h"
 #include "chrome/browser/ash/login/app_mode/network_ui_controller.h"
 #include "chrome/browser/ash/login/app_mode/test/kiosk_apps_mixin.h"
 #include "chrome/browser/ash/login/app_mode/test/kiosk_test_helpers.h"
-#include "chrome/browser/ash/login/screens/error_screen.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/test/js_checker.h"
-#include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
+#include "chrome/browser/ash/login/test/oobe_base_test.h"
 #include "chrome/browser/ash/login/test/oobe_window_visibility_waiter.h"
-#include "chrome/browser/ash/login/test/test_condition_waiter.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/extensions/browsertest_util.h"
 #include "chrome/browser/profiles/profile_impl.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
+#include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/app_window/app_window.h"
+#include "extensions/browser/app_window/app_window_registry.h"
+#include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
-#include "extensions/components/native_app_window/native_app_window_views.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -81,22 +80,6 @@ KioskBaseTest::KioskBaseTest()
 KioskBaseTest::~KioskBaseTest() = default;
 
 // static
-KioskChromeAppManager::ConsumerKioskAutoLaunchStatus
-KioskBaseTest::GetConsumerKioskModeStatus() {
-  base::test::TestFuture<KioskChromeAppManager::ConsumerKioskAutoLaunchStatus>
-      future;
-  KioskChromeAppManager::Get()->GetConsumerKioskAutoLaunchStatus(
-      future.GetCallback());
-  KioskChromeAppManager::ConsumerKioskAutoLaunchStatus status = future.Take();
-  LOG(INFO) << "KioskChromeAppManager::ConsumerKioskModeStatus = "
-            << static_cast<int>(status);
-  EXPECT_NE(
-      status,
-      static_cast<KioskChromeAppManager::ConsumerKioskAutoLaunchStatus>(-1));
-  return status;
-}
-
-// static
 int KioskBaseTest::WaitForWidthChange(content::DOMMessageQueue* message_queue,
                                       int current_width) {
   std::string message;
@@ -124,13 +107,8 @@ int KioskBaseTest::WaitForWidthChange(content::DOMMessageQueue* message_queue,
   return current_width;
 }
 
-// static
-KioskLaunchController* KioskBaseTest::GetKioskLaunchController() {
-  return KioskController::Get().GetLaunchController();
-}
-
 void KioskBaseTest::SetUp() {
-  SetTestApp(KioskAppsMixin::kKioskAppId);
+  SetTestApp(KioskAppsMixin::kTestChromeAppId);
   needs_background_networking_ = true;
   ProfileHelper::SetAlwaysReturnPrimaryUserForTesting(true);
 
@@ -165,10 +143,6 @@ void KioskBaseTest::TearDownOnMainThread() {
 void KioskBaseTest::SetUpCommandLine(base::CommandLine* command_line) {
   OobeBaseTest::SetUpCommandLine(command_line);
   fake_cws_->Init(embedded_test_server());
-
-  if (use_consumer_kiosk_mode_) {
-    command_line->AppendSwitch(switches::kEnableConsumerKiosk);
-  }
 }
 
 bool KioskBaseTest::LaunchApp(const std::string& app_id) {
@@ -306,8 +280,7 @@ void KioskBaseTest::SimulateNetworkOffline() {
 
 void KioskBaseTest::BlockAppLaunch(bool block) {
   if (block) {
-    block_app_launch_override_ =
-        KioskLaunchController::BlockAppLaunchForTesting();
+    block_app_launch_override_ = KioskTestHelper::BlockAppLaunch();
   } else {
     block_app_launch_override_.reset();
   }

@@ -6,10 +6,12 @@
 #define V8_COMPILER_TURBOSHAFT_MAGLEV_EARLY_LOWERING_REDUCER_INL_H_
 
 #include "src/compiler/feedback-source.h"
+#include "src/compiler/globals.h"
 #include "src/compiler/turboshaft/assembler.h"
 #include "src/compiler/turboshaft/index.h"
 #include "src/compiler/turboshaft/representations.h"
 #include "src/deoptimizer/deoptimize-reason.h"
+#include "src/objects/contexts.h"
 #include "src/objects/instance-type-inl.h"
 
 namespace v8::internal::compiler::turboshaft {
@@ -45,8 +47,8 @@ class MaglevEarlyLoweringReducer : public Next {
         base::Optional<RootIndex> expected_index =
             InstanceTypeChecker::UniqueMapOfInstanceType(first_instance_type);
         CHECK(expected_index.has_value());
-        Handle<HeapObject> expected_map = Handle<HeapObject>::cast(
-            isolate_->root_handle(expected_index.value()));
+        Handle<HeapObject> expected_map =
+            Cast<HeapObject>(isolate_->root_handle(expected_index.value()));
         __ DeoptimizeIfNot(__ TaggedEqual(map, __ HeapConstant(expected_map)),
                            frame_state, DeoptimizeReason::kWrongInstanceType,
                            feedback);
@@ -58,8 +60,8 @@ class MaglevEarlyLoweringReducer : public Next {
                          frame_state, DeoptimizeReason::kWrongInstanceType,
                          feedback);
     } else {
-      __ DeoptimizeIfNot(CompareInstanceTypeRange(map, first_instance_type,
-                                                  last_instance_type),
+      __ DeoptimizeIfNot(CheckInstanceTypeIsInRange(map, first_instance_type,
+                                                    last_instance_type),
                          frame_state, DeoptimizeReason::kWrongInstanceType,
                          feedback);
     }
@@ -132,7 +134,8 @@ class MaglevEarlyLoweringReducer : public Next {
     GOTO_IF(__ IsSmi(construct_result), done, implicit_receiver);
 
     // Check if the type of the result is not an object in the ECMA sense.
-    GOTO_IF(JSAnyIsNotPrimitive(construct_result), done, construct_result);
+    GOTO_IF(JSAnyIsNotPrimitive(V<HeapObject>::Cast(construct_result)), done,
+            construct_result);
 
     // Throw away the result of the constructor invocation and use the
     // implicit receiver as the result.
@@ -140,6 +143,28 @@ class MaglevEarlyLoweringReducer : public Next {
 
     BIND(done, result);
     return result;
+  }
+
+  void CheckDerivedConstructResult(V<Object> construct_result,
+                                   V<FrameState> frame_state,
+                                   V<NativeContext> native_context,
+                                   LazyDeoptOnThrow lazy_deopt_on_throw) {
+    // The result of a derived construct should be an object (in the ECMA
+    // sense).
+    Label<> do_throw(this);
+
+    // If the result is a smi, it is *not* an object in the ECMA sense.
+    GOTO_IF(__ IsSmi(construct_result), do_throw);
+
+    // Check if the type of the result is not an object done the ECMA sense.
+    IF_NOT (JSAnyIsNotPrimitive(V<HeapObject>::Cast(construct_result))) {
+      GOTO(do_throw);
+      BIND(do_throw);
+      __ CallRuntime_ThrowConstructorReturnedNonObject(
+          isolate_, frame_state, native_context, lazy_deopt_on_throw);
+      // ThrowConstructorReturnedNonObject should not return.
+      __ Unreachable();
+    }
   }
 
   void CheckConstTrackingLetCellTagged(V<Context> context, V<Object> value,
@@ -191,8 +216,76 @@ class MaglevEarlyLoweringReducer : public Next {
     return length_tagged;
   }
 
- private:
-  V<Word32> JSAnyIsNotPrimitive(V<Object> heap_object) {
+  void TransitionElementsKindOrCheckMap(
+      V<Object> object, V<FrameState> frame_state, bool check_heap_object,
+      const ZoneVector<compiler::MapRef>& transition_sources,
+      const MapRef transition_target, const FeedbackSource& feedback) {
+    Label<> end(this);
+    Label<> if_smi(this);
+
+    TransitionElementsKind(object, transition_sources, transition_target,
+                           check_heap_object, if_smi, end);
+
+    __ DeoptimizeIfNot(
+        __ TaggedEqual(__ LoadMapField(object),
+                       __ HeapConstant(transition_target.object())),
+        frame_state, DeoptimizeReason::kWrongMap, feedback);
+    GOTO(end);
+
+    if (check_heap_object && if_smi.has_incoming_jump()) {
+      BIND(if_smi);
+      __ Deoptimize(frame_state, DeoptimizeReason::kSmi, feedback);
+    } else {
+      DCHECK(!if_smi.has_incoming_jump());
+    }
+
+    BIND(end);
+  }
+
+  void TransitionMultipleElementsKind(
+      V<Object> object, const ZoneVector<compiler::MapRef>& transition_sources,
+      const MapRef transition_target) {
+    Label<> end(this);
+
+    TransitionElementsKind(object, transition_sources, transition_target,
+                           /* check_heap_object */ true, end, end);
+
+    GOTO(end);
+    BIND(end);
+  }
+
+  void TransitionElementsKind(
+      V<Object> object, const ZoneVector<compiler::MapRef>& transition_sources,
+      const MapRef transition_target, bool check_heap_object, Label<>& if_smi,
+      Label<>& end) {
+    if (check_heap_object) {
+      GOTO_IF(__ ObjectIsSmi(object), if_smi);
+    }
+
+    // Turboshaft's TransitionElementsKind operation loads the map everytime, so
+    // we don't call it to have a single map load (in practice,
+    // LateLoadElimination should probably eliminate the subsequent map loads,
+    // but let's not risk it).
+    V<Map> map = __ LoadMapField(object);
+    V<Map> target_map = __ HeapConstant(transition_target.object());
+
+    for (const compiler::MapRef transition_source : transition_sources) {
+      bool is_simple = IsSimpleMapChangeTransition(
+          transition_source.elements_kind(), transition_target.elements_kind());
+      IF (__ TaggedEqual(map, __ HeapConstant(transition_source.object()))) {
+        if (is_simple) {
+          __ StoreField(object, AccessBuilder::ForMap(), target_map);
+        } else {
+          __ CallRuntime_TransitionElementsKind(
+              isolate_, __ NoContextConstant(), V<HeapObject>::Cast(object),
+              target_map);
+        }
+        GOTO(end);
+      }
+    }
+  }
+
+  V<Word32> JSAnyIsNotPrimitive(V<HeapObject> heap_object) {
     V<Map> map = __ LoadMapField(heap_object);
     if (V8_STATIC_ROOTS_BOOL) {
       // All primitive object's maps are allocated at the start of the read only
@@ -208,9 +301,63 @@ class MaglevEarlyLoweringReducer : public Next {
     }
   }
 
-  V<Word32> CompareInstanceTypeRange(V<Map> map,
-                                     InstanceType first_instance_type,
-                                     InstanceType last_instance_type) {
+  V<Boolean> HasInPrototypeChain(V<Object> object, HeapObjectRef prototype,
+                                 V<FrameState> frame_state,
+                                 V<NativeContext> native_context,
+                                 LazyDeoptOnThrow lazy_deopt_on_throw) {
+    Label<Boolean> done(this);
+
+    V<Boolean> true_bool = __ HeapConstant(factory_->true_value());
+    V<Boolean> false_bool = __ HeapConstant(factory_->false_value());
+    V<HeapObject> target_proto = __ HeapConstant(prototype.object());
+
+    GOTO_IF(__ IsSmi(object), done, false_bool);
+
+    LoopLabel<Map> loop(this);
+    GOTO(loop, __ LoadMapField(object));
+
+    BIND_LOOP(loop, map) {
+      Label<> object_is_direct(this);
+
+      IF (UNLIKELY(CheckInstanceTypeIsInRange(map, FIRST_TYPE,
+                                              LAST_SPECIAL_RECEIVER_TYPE))) {
+        Label<> call_runtime(this);
+        V<Word32> instance_type = __ LoadInstanceTypeField(map);
+
+        GOTO_IF(__ Word32Equal(instance_type, JS_PROXY_TYPE), call_runtime);
+
+        V<Word32> bitfield =
+            __ template LoadField<Word32>(map, AccessBuilder::ForMapBitField());
+        int mask = Map::Bits1::HasNamedInterceptorBit::kMask |
+                   Map::Bits1::IsAccessCheckNeededBit::kMask;
+        GOTO_IF_NOT(__ Word32BitwiseAnd(bitfield, mask), object_is_direct);
+        GOTO(call_runtime);
+
+        BIND(call_runtime);
+        GOTO(done, __ CallRuntime_HasInPrototypeChain(
+                       isolate_, frame_state, native_context,
+                       lazy_deopt_on_throw, object, target_proto));
+      }
+      GOTO(object_is_direct);
+
+      BIND(object_is_direct);
+      V<HeapObject> proto = __ template LoadField<HeapObject>(
+          map, AccessBuilder::ForMapPrototype());
+      GOTO_IF(__ RootEqual(proto, RootIndex::kNullValue, isolate_), done,
+              false_bool);
+      GOTO_IF(__ TaggedEqual(proto, target_proto), done, true_bool);
+
+      GOTO(loop, __ LoadMapField(proto));
+    }
+
+    BIND(done, result);
+    return result;
+  }
+
+ private:
+  V<Word32> CheckInstanceTypeIsInRange(V<Map> map,
+                                       InstanceType first_instance_type,
+                                       InstanceType last_instance_type) {
     V<Word32> instance_type = __ LoadInstanceTypeField(map);
 
     if (first_instance_type == 0) {
@@ -222,9 +369,10 @@ class MaglevEarlyLoweringReducer : public Next {
     }
   }
 
-  LocalIsolate* isolate_ = __ data() -> isolate()->AsLocalIsolate();
+  Isolate* isolate_ = __ data() -> isolate();
+  LocalIsolate* local_isolate_ = isolate_->AsLocalIsolate();
   JSHeapBroker* broker_ = __ data() -> broker();
-  LocalFactory* factory_ = isolate_->factory();
+  LocalFactory* factory_ = local_isolate_->factory();
 };
 
 #include "src/compiler/turboshaft/undef-assembler-macros.inc"

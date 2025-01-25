@@ -195,6 +195,9 @@
 // ABSL_ATTRIBUTE_NORETURN
 //
 // Tells the compiler that a given function never returns.
+//
+// Deprecated: Prefer the `[[noreturn]]` attribute standardized by C++11 over
+// this macro.
 #if ABSL_HAVE_ATTRIBUTE(noreturn) || (defined(__GNUC__) && !defined(__clang__))
 #define ABSL_ATTRIBUTE_NORETURN __attribute__((noreturn))
 #elif defined(_MSC_VER)
@@ -813,12 +816,41 @@
 //
 // See also the upstream documentation:
 // https://clang.llvm.org/docs/AttributeReference.html#lifetimebound
+// https://learn.microsoft.com/en-us/cpp/code-quality/c26816?view=msvc-170
 #if ABSL_HAVE_CPP_ATTRIBUTE(clang::lifetimebound)
 #define ABSL_ATTRIBUTE_LIFETIME_BOUND [[clang::lifetimebound]]
+#elif ABSL_HAVE_CPP_ATTRIBUTE(msvc::lifetimebound)
+#define ABSL_ATTRIBUTE_LIFETIME_BOUND [[msvc::lifetimebound]]
 #elif ABSL_HAVE_ATTRIBUTE(lifetimebound)
 #define ABSL_ATTRIBUTE_LIFETIME_BOUND __attribute__((lifetimebound))
 #else
 #define ABSL_ATTRIBUTE_LIFETIME_BOUND
+#endif
+
+// ABSL_INTERNAL_ATTRIBUTE_VIEW indicates that a type acts like a view i.e. a
+// raw (non-owning) pointer. This enables diagnoses similar to those enabled by
+// ABSL_ATTRIBUTE_LIFETIME_BOUND.
+//
+// See the following links for details:
+// https://reviews.llvm.org/D64448
+// https://lists.llvm.org/pipermail/cfe-dev/2018-November/060355.html
+#if ABSL_HAVE_CPP_ATTRIBUTE(gsl::Pointer)
+#define ABSL_INTERNAL_ATTRIBUTE_VIEW [[gsl::Pointer]]
+#else
+#define ABSL_INTERNAL_ATTRIBUTE_VIEW
+#endif
+
+// ABSL_INTERNAL_ATTRIBUTE_OWNER indicates that a type acts like a smart
+// (owning) pointer. This enables diagnoses similar to those enabled by
+// ABSL_ATTRIBUTE_LIFETIME_BOUND.
+//
+// See the following links for details:
+// https://reviews.llvm.org/D64448
+// https://lists.llvm.org/pipermail/cfe-dev/2018-November/060355.html
+#if ABSL_HAVE_CPP_ATTRIBUTE(gsl::Owner)
+#define ABSL_INTERNAL_ATTRIBUTE_OWNER [[gsl::Owner]]
+#else
+#define ABSL_INTERNAL_ATTRIBUTE_OWNER
 #endif
 
 // ABSL_ATTRIBUTE_TRIVIAL_ABI

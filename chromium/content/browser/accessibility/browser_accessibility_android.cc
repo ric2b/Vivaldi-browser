@@ -19,7 +19,6 @@
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/public/common/content_client.h"
 #include "skia/ext/skia_utils_base.h"
-#include "third_party/blink/public/strings/grit/blink_accessibility_strings.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/android/accessibility_state.h"
@@ -29,6 +28,7 @@
 #include "ui/accessibility/ax_selection.h"
 #include "ui/accessibility/platform/ax_android_constants.h"
 #include "ui/accessibility/platform/ax_unique_id.h"
+#include "ui/strings/grit/auto_image_annotation_strings.h"
 #include "ui/strings/grit/ax_strings.h"
 
 namespace {
@@ -115,12 +115,13 @@ BrowserAccessibilityAndroid::BrowserAccessibilityAndroid(
     BrowserAccessibilityManager* manager,
     ui::AXNode* node)
     : BrowserAccessibility(manager, node) {
-  g_unique_id_map.Get()[unique_id()] = this;
+  g_unique_id_map.Get()[GetUniqueId()] = this;
 }
 
 BrowserAccessibilityAndroid::~BrowserAccessibilityAndroid() {
-  if (unique_id())
-    g_unique_id_map.Get().erase(unique_id());
+  if (auto id = GetUniqueId()) {
+    g_unique_id_map.Get().erase(id);
+  }
 }
 
 void BrowserAccessibilityAndroid::OnLocationChanged() {
@@ -258,7 +259,7 @@ bool BrowserAccessibilityAndroid::IsEnabled() const {
       return false;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return true;
 }
 
@@ -267,13 +268,11 @@ bool BrowserAccessibilityAndroid::IsExpanded() const {
 }
 
 bool BrowserAccessibilityAndroid::IsFocusable() const {
-  // If it's an iframe element, or the root element of a child frame that isn't
-  // inside a portal, only mark it as focusable if the element has an explicit
-  // name. Otherwise mark it as not focusable to avoid the user landing on empty
-  // container elements in the tree.
+  // If it's an iframe element, only mark it as focusable if the element has an
+  // explicit name. Otherwise mark it as not focusable to avoid the user landing
+  // on empty container elements in the tree.
   if (ui::IsIframe(GetRole()) ||
-      (ui::IsPlatformDocument(GetRole()) && PlatformGetParent() &&
-       PlatformGetParent()->GetRole() != ax::mojom::Role::kPortal)) {
+      (ui::IsPlatformDocument(GetRole()) && PlatformGetParent())) {
     return HasStringAttribute(ax::mojom::StringAttribute::kName);
   }
 
@@ -363,12 +362,6 @@ bool BrowserAccessibilityAndroid::IsInterestingOnAndroid() const {
   if (ui::IsPlatformDocument(GetRole()) &&
       GetSubstringTextContentUTF16(NonEmptyPredicate()).empty())
     return false;
-
-  // The root inside a portal is not interesting.
-  if (ui::IsPlatformDocument(GetRole()) && PlatformGetParent() &&
-      PlatformGetParent()->GetRole() == ax::mojom::Role::kPortal) {
-    return false;
-  }
 
   // Mark as uninteresting if it's hidden, even if it is focusable.
   if (IsInvisibleOrIgnored())
@@ -567,10 +560,23 @@ bool BrowserAccessibilityAndroid::IsLeaf() const {
   if (ui::IsLink(GetRole()))
     return false;
 
-  // For Android only, tab-panels are never leaves. We do this to temporarily
-  // get around the gap for aria-labelledby in the Android API. See b/241526393.
-  if (GetRole() == ax::mojom::Role::kTabPanel) {
+  // For Android only, tab-panels and tab-lists are never leaves. We do this to
+  // temporarily get around the gap for aria-labelledby in the Android API.
+  // See b/241526393.
+  if (GetRole() == ax::mojom::Role::kTabPanel ||
+      GetRole() == ax::mojom::Role::kTabList) {
     return false;
+  }
+
+  // Focusable nodes with name from attribute should never drop children.
+  if (HasState(ax::mojom::State::kFocusable) &&
+      HasIntAttribute(ax::mojom::IntAttribute::kNameFrom) &&
+      GetNameFrom() == ax::mojom::NameFrom::kAttribute) {
+    // We exclude menuItems and comboBoxMenuButtons to prevent double utterance.
+    if (GetRole() != ax::mojom::Role::kMenuItem &&
+        GetRole() != ax::mojom::Role::kComboBoxMenuButton) {
+      return false;
+    }
   }
 
   BrowserAccessibilityManagerAndroid* manager_android =
@@ -629,6 +635,7 @@ bool BrowserAccessibilityAndroid::IsLeafConsideringChildren() const {
 
     if (child->GetRole() == ax::mojom::Role::kTable ||
         child->GetRole() == ax::mojom::Role::kCell ||
+        child->GetRole() == ax::mojom::Role::kGridCell ||
         child->GetRole() == ax::mojom::Role::kRow ||
         child->GetRole() == ax::mojom::Role::kLayoutTable ||
         child->GetRole() == ax::mojom::Role::kLayoutTableCell ||
@@ -737,8 +744,9 @@ std::u16string BrowserAccessibilityAndroid::GetSubstringTextContentUTF16(
         break;
 
       case ax::mojom::ImageAnnotationStatus::kAnnotationSucceeded:
-        text =
-            GetString16Attribute(ax::mojom::StringAttribute::kImageAnnotation);
+        AppendTextToString(
+            GetString16Attribute(ax::mojom::StringAttribute::kImageAnnotation),
+            &text);
         break;
 
       case ax::mojom::ImageAnnotationStatus::kNone:
@@ -1223,9 +1231,6 @@ std::u16string BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ax::mojom::Role::kMenuItemRadio:
       // Default is no special role description.
       return content_client->GetLocalizedString(IDS_AX_ROLE_RADIO);
-    case ax::mojom::Role::kPortal:
-      // Default is no special role description.
-      return content_client->GetLocalizedString(IDS_AX_ROLE_BUTTON);
     case ax::mojom::Role::kVideo:
       // Default is no special role description.
       return content_client->GetLocalizedString(IDS_AX_MEDIA_VIDEO_ELEMENT);
@@ -1296,13 +1301,6 @@ int BrowserAccessibilityAndroid::GetSelectedItemCount() const {
 
 bool BrowserAccessibilityAndroid::CanScrollForward() const {
   if (IsSlider()) {
-    // If it's not a native INPUT element, then increment and decrement
-    // won't work.
-    const std::string& html_tag =
-        GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag);
-    if (html_tag != "input")
-      return false;
-
     float value = GetFloatAttribute(ax::mojom::FloatAttribute::kValueForRange);
     float max = GetFloatAttribute(ax::mojom::FloatAttribute::kMaxValueForRange);
     return value < max;
@@ -1313,13 +1311,6 @@ bool BrowserAccessibilityAndroid::CanScrollForward() const {
 
 bool BrowserAccessibilityAndroid::CanScrollBackward() const {
   if (IsSlider()) {
-    // If it's not a native INPUT element, then increment and decrement
-    // won't work.
-    const std::string& html_tag =
-        GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag);
-    if (html_tag != "input")
-      return false;
-
     float value = GetFloatAttribute(ax::mojom::FloatAttribute::kValueForRange);
     float min = GetFloatAttribute(ax::mojom::FloatAttribute::kMinValueForRange);
     return value > min;
@@ -1447,7 +1438,7 @@ bool BrowserAccessibilityAndroid::Scroll(int direction,
       x = std::clamp(x_initial + page_x, x_min, x_max);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   manager()->SetScrollOffset(*this, gfx::Point(x, y));
@@ -1572,10 +1563,9 @@ int BrowserAccessibilityAndroid::GetEditableTextLength() const {
 }
 
 int BrowserAccessibilityAndroid::AndroidInputType() const {
-  const std::string& html_tag =
-      GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag);
-  if (html_tag != "input")
+  if (!HasStringAttribute(ax::mojom::StringAttribute::kInputType)) {
     return ANDROID_TEXT_INPUTTYPE_TYPE_NULL;
+  }
 
   std::string type;
   if (!node()->GetStringAttribute(ax::mojom::StringAttribute::kInputType,
@@ -1710,7 +1700,7 @@ void BrowserAccessibilityAndroid::GetGranularityBoundaries(
       GetWordBoundaries(starts, ends, offset);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -2020,7 +2010,7 @@ void BrowserAccessibilityAndroid::OnDataChanged() {
 
   auto* manager =
       static_cast<BrowserAccessibilityManagerAndroid*>(this->manager());
-  manager->ClearNodeInfoCacheForGivenId(unique_id());
+  manager->ClearNodeInfoCacheForGivenId(GetUniqueId());
 }
 
 int BrowserAccessibilityAndroid::CountChildrenWithRole(
@@ -2087,7 +2077,7 @@ std::u16string
 BrowserAccessibilityAndroid::GenerateAccessibilityNodeInfoString() const {
   auto* manager =
       static_cast<BrowserAccessibilityManagerAndroid*>(this->manager());
-  return manager->GenerateAccessibilityNodeInfoString(unique_id());
+  return manager->GenerateAccessibilityNodeInfoString(GetUniqueId());
 }
 
 }  // namespace content

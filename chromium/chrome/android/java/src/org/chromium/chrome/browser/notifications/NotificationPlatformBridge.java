@@ -427,8 +427,16 @@ public class NotificationPlatformBridge {
             boolean mutable) {
         Context context = ContextUtils.getApplicationContext();
         Uri intentData = makeIntentData(attributes.notificationId, attributes.origin, actionIndex);
+        boolean useServiceIntent =
+                NotificationConstants.ACTION_PRE_UNSUBSCRIBE.equals(action)
+                        && NotificationIntentInterceptor
+                                .shouldUseServiceIntentForPreUnsubscribeAction();
         Intent intent = new Intent(action, intentData);
-        intent.setClass(context, NotificationServiceImpl.Receiver.class);
+        intent.setClass(
+                context,
+                useServiceIntent
+                        ? NotificationService.class
+                        : NotificationServiceImpl.Receiver.class);
 
         // Make sure to update NotificationJobService.getJobExtrasFromIntent() when changing any
         // of the extras included with the |intent|.
@@ -450,6 +458,15 @@ public class NotificationPlatformBridge {
         // receiver gets a shorter timeout interval before it may be killed, but this is ok because
         // we schedule a job to handle the intent in NotificationService.Receiver.
         intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+
+        if (useServiceIntent) {
+            return PendingIntentProvider.getService(
+                    context,
+                    PENDING_INTENT_REQUEST_CODE,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT,
+                    mutable);
+        }
 
         return PendingIntentProvider.getBroadcast(
                 context,
@@ -990,7 +1007,7 @@ public class NotificationPlatformBridge {
         Intent settingsIntent =
                 settingsLauncher.createSettingsActivityIntent(
                         context,
-                        SingleWebsiteSettings.class.getName(),
+                        SingleWebsiteSettings.class,
                         SingleWebsiteSettings.createFragmentArgsForSite(origin));
         settingsIntent.setData(makeIntentData(notificationId, origin, /* actionIndex= */ -1));
         PendingIntentProvider settingsIntentProvider =
@@ -1261,9 +1278,11 @@ public class NotificationPlatformBridge {
 
         // TODO(crbug.com/41494401): Verify if we can/need to use the correct profile here.
         NotificationSuspender suspender =
-                new NotificationSuspender(ProfileManager.getLastUsedRegularProfile());
+                new NotificationSuspender(
+                        ProfileManager.getLastUsedRegularProfile(),
+                        ContextUtils.getApplicationContext(),
+                        mNotificationManager);
         mOriginsWithProvisionallyRevokedPermissions.add(identifyingAttributes.origin);
-        displayProvisionallyUnsubscribedNotification(identifyingAttributes);
         suspender.storeNotificationResourcesFromOrigins(
                 Collections.singletonList(Uri.parse(identifyingAttributes.origin)),
                 (notificationIdsToCancel) -> {
@@ -1271,6 +1290,7 @@ public class NotificationPlatformBridge {
                             .recordSuspendedNotificationCountOnUnsubscribe(
                                     notificationIdsToCancel.size());
 
+                    displayProvisionallyUnsubscribedNotification(identifyingAttributes);
                     notificationIdsToCancel.remove(identifyingAttributes.notificationId);
                     suspender.cancelNotificationsWithIds(notificationIdsToCancel);
                 });

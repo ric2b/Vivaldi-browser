@@ -76,7 +76,14 @@ class SafeBrowsingQueryManager
         const Result& result,
         safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck
             performed_check) {}
-
+    // Notifies observers that a sync `query` check has completed with `result`
+    // after performing a check of type `performed_check`.
+    virtual void SafeBrowsingSyncQueryFinished(
+        SafeBrowsingQueryManager* manager,
+        const SafeBrowsingQueryManager::Query& query,
+        const SafeBrowsingQueryManager::Result& result,
+        safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck
+            performed_check) {}
     // Called when `manager` is about to be destroyed.
     virtual void SafeBrowsingQueryManagerDestroyed(
         SafeBrowsingQueryManager* manager) {}
@@ -109,7 +116,7 @@ class SafeBrowsingQueryManager
   // class may be constructed on the UI thread but otherwise must only be used
   // and destroyed on the IO thread. If kSafeBrowsingOnUIThread is enabled this
   // is used and destroyed on the UI thread.
-  class UrlCheckerClient : public base::SupportsWeakPtr<UrlCheckerClient> {
+  class UrlCheckerClient final {
    public:
     UrlCheckerClient();
     ~UrlCheckerClient();
@@ -129,27 +136,15 @@ class SafeBrowsingQueryManager
                                 bool show_error_page,
                                 safe_browsing::SafeBrowsingUrlCheckerImpl::
                                     PerformedCheck performed_check)> callback);
+    base::WeakPtr<UrlCheckerClient> AsWeakPtr() {
+      return weak_ptr_factory_.GetWeakPtr();
+    }
 
    private:
     // Called by `url_checker` with the initial result of performing a url
     // check. `url_checker` must be non-null. This is an implementation of
-    // SafeBrowsingUrlCheckerImpl::NativeUrlCheckCallBack. `slow_check_notifier`
-    // is an out-parameter; when a non-null value is passed in, it is set to a
-    // callback that receives the final result of the url check.
+    // SafeBrowsingUrlCheckerImpl::NativeUrlCheckCallBack.
     void OnCheckUrlResult(
-        safe_browsing::SafeBrowsingUrlCheckerImpl* url_checker,
-        safe_browsing::SafeBrowsingUrlCheckerImpl::NativeUrlCheckNotifier*
-            slow_check_notifier,
-        bool proceed,
-        bool showed_interstitial,
-        bool has_post_commit_interstitial_skipped,
-        safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck
-            performed_check);
-
-    // Called by `url_checker` with the final result of performing a url check.
-    // `url_checker` must be non-null. This is an implementation of
-    // SafeBrowsingUrlCheckerImpl::NativeUrlCheckNotifier.
-    void OnCheckComplete(
         safe_browsing::SafeBrowsingUrlCheckerImpl* url_checker,
         bool proceed,
         bool showed_interstitial,
@@ -168,6 +163,7 @@ class SafeBrowsingQueryManager
                            performed_check)>,
                    base::UniquePtrComparator>
         active_url_checkers_;
+    base::WeakPtrFactory<UrlCheckerClient> weak_ptr_factory_{this};
   };
 
   // Used as the completion callback for URL queries executed by

@@ -54,6 +54,7 @@ AttachmentState::AttachmentState(DeviceBase* device,
     mDepthStencilFormat = descriptor->depthStencilFormat;
 
     // TODO(dawn:1710): support MSAA render to single sampled in render bundles.
+    // TODO(dawn:1710): support LoadOp::ExpandResolveTexture in render bundles.
     // TODO(dawn:1704): support PLS in render bundles.
 
     SetContentHash(ComputeContentHash());
@@ -63,12 +64,6 @@ AttachmentState::AttachmentState(DeviceBase* device,
                                  const UnpackedPtr<RenderPipelineDescriptor>& descriptor,
                                  const PipelineLayoutBase* layout)
     : ObjectBase(device), mSampleCount(descriptor->multisample.count) {
-    UnpackedPtr<MultisampleState> unpackedMultisampleState = Unpack(&descriptor->multisample);
-    if (auto* msaaRenderToSingleSampledDesc =
-            unpackedMultisampleState.Get<DawnMultisampleStateRenderToSingleSampled>()) {
-        mIsMSAARenderToSingleSampledEnabled = msaaRenderToSingleSampledDesc->enabled;
-    }
-
     if (descriptor->fragment != nullptr) {
         DAWN_ASSERT(descriptor->fragment->targetCount <= kMaxColorAttachments);
         auto targets = ityp::SpanFromUntyped<ColorAttachmentIndex>(
@@ -79,9 +74,30 @@ AttachmentState::AttachmentState(DeviceBase* device,
             if (format != wgpu::TextureFormat::Undefined) {
                 mColorAttachmentsSet.set(i);
                 mColorFormats[i] = format;
+
+                UnpackedPtr<ColorTargetState> unpackedTarget = Unpack(&target);
+                if (auto* expandResolveState =
+                        unpackedTarget.Get<ColorTargetStateExpandResolveTextureDawn>()) {
+                    mExpandResolveInfo.attachmentsToExpandResolve.set(i,
+                                                                      expandResolveState->enabled);
+                    // The presence of ColorTargetStateExpandResolveTextureDawn implies that
+                    // this color target has a resolve target. Doesn't matter `enabled` is true or
+                    // not.
+                    mExpandResolveInfo.resolveTargetsMask.set(i);
+                }
             }
         }
     }
+    if (!mExpandResolveInfo.attachmentsToExpandResolve.any()) {
+        // If render pipeline doesn't have any color target using ExpandResolveTexture load op then
+        // ignore resolve targets. This is to relax compatibility requirement for common cases
+        // where ExpandResolveTexture is not used.
+        mExpandResolveInfo.resolveTargetsMask.reset();
+    }
+
+    DAWN_ASSERT(IsSubset(mExpandResolveInfo.attachmentsToExpandResolve,
+                         mExpandResolveInfo.resolveTargetsMask));
+
     if (descriptor->depthStencil != nullptr) {
         mDepthStencilFormat = descriptor->depthStencil->format;
     }
@@ -112,7 +128,6 @@ AttachmentState::AttachmentState(DeviceBase* device,
         if (msaaRenderToSingleSampledDesc != nullptr &&
             msaaRenderToSingleSampledDesc->implicitSampleCount > 1) {
             attachmentSampleCount = msaaRenderToSingleSampledDesc->implicitSampleCount;
-            mIsMSAARenderToSingleSampledEnabled = true;
         } else {
             attachmentSampleCount = attachment->GetTexture()->GetSampleCount();
         }
@@ -122,6 +137,11 @@ AttachmentState::AttachmentState(DeviceBase* device,
         } else {
             DAWN_ASSERT(mSampleCount == attachmentSampleCount);
         }
+
+        if (colorAttachment.loadOp == wgpu::LoadOp::ExpandResolveTexture) {
+            mExpandResolveInfo.attachmentsToExpandResolve.set(i);
+        }
+        mExpandResolveInfo.resolveTargetsMask.set(i, colorAttachment.resolveTarget);
     }
 
     // Gather the depth-stencil information.
@@ -134,6 +154,15 @@ AttachmentState::AttachmentState(DeviceBase* device,
             DAWN_ASSERT(mSampleCount == attachment->GetTexture()->GetSampleCount());
         }
     }
+
+    if (!mExpandResolveInfo.attachmentsToExpandResolve.any()) {
+        // If render pass doesn't have any color attachment using ExpandResolveTexture load op then
+        // ignore resolve targets. This is to relax compatibility requirement for common cases
+        // where ExpandResolveTexture is not used.
+        mExpandResolveInfo.resolveTargetsMask.reset();
+    }
+    DAWN_ASSERT(IsSubset(mExpandResolveInfo.attachmentsToExpandResolve,
+                         mExpandResolveInfo.resolveTargetsMask));
 
     // Gather the PLS information.
     if (auto* pls = descriptor.Get<RenderPassPixelLocalStorage>()) {
@@ -163,9 +192,11 @@ AttachmentState::AttachmentState(const AttachmentState& blueprint)
     mColorFormats = blueprint.mColorFormats;
     mDepthStencilFormat = blueprint.mDepthStencilFormat;
     mSampleCount = blueprint.mSampleCount;
-    mIsMSAARenderToSingleSampledEnabled = blueprint.mIsMSAARenderToSingleSampledEnabled;
+    mExpandResolveInfo = blueprint.mExpandResolveInfo;
     mHasPLS = blueprint.mHasPLS;
     mStorageAttachmentSlots = blueprint.mStorageAttachmentSlots;
+    DAWN_ASSERT(IsSubset(mExpandResolveInfo.attachmentsToExpandResolve,
+                         mExpandResolveInfo.resolveTargetsMask));
     SetContentHash(blueprint.GetContentHash());
 }
 
@@ -198,8 +229,13 @@ bool AttachmentState::EqualityFunc::operator()(const AttachmentState* a,
         return false;
     }
 
-    // Both attachment state must either enable MSAA render to single sampled or disable it.
-    if (a->mIsMSAARenderToSingleSampledEnabled != b->mIsMSAARenderToSingleSampledEnabled) {
+    // Both attachment state must have the same `ExpandResolveTexture` load ops.
+    if (a->mExpandResolveInfo.attachmentsToExpandResolve !=
+        b->mExpandResolveInfo.attachmentsToExpandResolve) {
+        return false;
+    }
+
+    if (a->mExpandResolveInfo.resolveTargetsMask != b->mExpandResolveInfo.resolveTargetsMask) {
         return false;
     }
 
@@ -234,8 +270,9 @@ size_t AttachmentState::ComputeContentHash() {
     // Hash sample count
     HashCombine(&hash, mSampleCount);
 
-    // Hash MSAA render to single sampled flag
-    HashCombine(&hash, mIsMSAARenderToSingleSampledEnabled);
+    // Hash expand resolve load op bits
+    HashCombine(&hash, mExpandResolveInfo.attachmentsToExpandResolve);
+    HashCombine(&hash, mExpandResolveInfo.resolveTargetsMask);
 
     // Hash the PLS state
     HashCombine(&hash, mHasPLS);
@@ -268,8 +305,8 @@ uint32_t AttachmentState::GetSampleCount() const {
     return mSampleCount;
 }
 
-bool AttachmentState::IsMSAARenderToSingleSampledEnabled() const {
-    return mIsMSAARenderToSingleSampledEnabled;
+const AttachmentState::ExpandResolveInfo& AttachmentState::GetExpandResolveInfo() const {
+    return mExpandResolveInfo;
 }
 
 bool AttachmentState::HasPixelLocalStorage() const {

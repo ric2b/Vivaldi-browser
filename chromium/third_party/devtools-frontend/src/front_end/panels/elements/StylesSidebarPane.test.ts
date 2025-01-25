@@ -9,13 +9,13 @@ import {
   describeWithEnvironment,
   describeWithLocale,
 } from '../../testing/EnvironmentHelpers.js';
-import {describeWithRealConnection} from '../../testing/RealConnection.js';
+import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import * as InlineEditor from '../../ui/legacy/components/inline_editor/inline_editor.js';
 
 import * as Elements from './elements.js';
 
 describe('StylesSidebarPane', () => {
-  describeWithRealConnection('StylesSidebarPane', () => {
+  describeWithMockConnection('StylesSidebarPane', () => {
     it('unescapes CSS strings', () => {
       assert.strictEqual(
           Elements.StylesSidebarPane.unescapeCssString(
@@ -48,49 +48,11 @@ describe('StylesSidebarPane', () => {
     });
 
     describe('rebuildSectionsForMatchedStyleRulesForTest', () => {
-      it('should add @position-fallback section', async () => {
-        const stylesSidebarPane = Elements.StylesSidebarPane.StylesSidebarPane.instance({forceNew: true});
-        const matchedStyles = await SDK.CSSMatchedStyles.CSSMatchedStyles.create({
-          cssModel: stylesSidebarPane.cssModel() as SDK.CSSModel.CSSModel,
-          node: stylesSidebarPane.node() as SDK.DOMModel.DOMNode,
-          inlinePayload: null,
-          attributesPayload: null,
-          matchedPayload: [],
-          pseudoPayload: [],
-          inheritedPayload: [],
-          inheritedPseudoPayload: [],
-          animationsPayload: [],
-          parentLayoutNodeId: undefined,
-          positionFallbackRules: [{
-            name: {text: '--compass'},
-            tryRules: [{
-              origin: Protocol.CSS.StyleSheetOrigin.Regular,
-              style: {
-                cssProperties: [{name: 'bottom', value: 'anchor(--anchor-name bottom)'}],
-                shorthandEntries: [],
-              },
-            }],
-          }],
-          positionTryRules: [],
-          propertyRules: [],
-          cssPropertyRegistrations: [],
-          fontPaletteValuesRule: undefined,
-        });
-
-        const sectionBlocks =
-            await stylesSidebarPane.rebuildSectionsForMatchedStyleRulesForTest(matchedStyles, new Map(), new Map());
-
-        assert.strictEqual(sectionBlocks.length, 2);
-        assert.strictEqual(sectionBlocks[1].titleElement()?.textContent, '@position-fallback --compass');
-        assert.strictEqual(sectionBlocks[1].sections.length, 1);
-        assert.instanceOf(sectionBlocks[1].sections[0], Elements.StylePropertiesSection.TryRuleSection);
-      });
-
       it('should add @position-try section', async () => {
         const stylesSidebarPane = Elements.StylesSidebarPane.StylesSidebarPane.instance({forceNew: true});
         const matchedStyles = await SDK.CSSMatchedStyles.CSSMatchedStyles.create({
           cssModel: stylesSidebarPane.cssModel() as SDK.CSSModel.CSSModel,
-          node: stylesSidebarPane.node() as SDK.DOMModel.DOMNode,
+          node: sinon.createStubInstance(SDK.DOMModel.DOMNode),
           inlinePayload: null,
           attributesPayload: null,
           matchedPayload: [],
@@ -99,7 +61,6 @@ describe('StylesSidebarPane', () => {
           inheritedPseudoPayload: [],
           animationsPayload: [],
           parentLayoutNodeId: undefined,
-          positionFallbackRules: [],
           positionTryRules: [{
             name: {text: '--try-one'},
             origin: Protocol.CSS.StyleSheetOrigin.Regular,
@@ -107,6 +68,7 @@ describe('StylesSidebarPane', () => {
               cssProperties: [{name: 'bottom', value: 'anchor(--anchor-name bottom)'}],
               shorthandEntries: [],
             },
+            active: false,
           }],
           propertyRules: [],
           cssPropertyRegistrations: [],
@@ -127,7 +89,7 @@ describe('StylesSidebarPane', () => {
       const stylesSidebarPane = Elements.StylesSidebarPane.StylesSidebarPane.instance({forceNew: true});
       const matchedStyles = await SDK.CSSMatchedStyles.CSSMatchedStyles.create({
         cssModel: stylesSidebarPane.cssModel() as SDK.CSSModel.CSSModel,
-        node: stylesSidebarPane.node() as SDK.DOMModel.DOMNode,
+        node: sinon.createStubInstance(SDK.DOMModel.DOMNode),
         inlinePayload: null,
         attributesPayload: null,
         matchedPayload: [],
@@ -136,7 +98,6 @@ describe('StylesSidebarPane', () => {
         inheritedPseudoPayload: [],
         animationsPayload: [],
         parentLayoutNodeId: undefined,
-        positionFallbackRules: [],
         positionTryRules: [],
         propertyRules: [],
         cssPropertyRegistrations: [],

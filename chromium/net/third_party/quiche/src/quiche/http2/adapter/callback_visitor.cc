@@ -1,5 +1,7 @@
 #include "quiche/http2/adapter/callback_visitor.h"
 
+#include <cstring>
+
 #include "absl/strings/escaping.h"
 #include "quiche/http2/adapter/http2_util.h"
 #include "quiche/http2/adapter/nghttp2.h"
@@ -105,6 +107,22 @@ int64_t CallbackVisitor::OnReadyToSend(absl::string_view serialized) {
   } else {
     return kSendError;
   }
+}
+
+Http2VisitorInterface::DataFrameHeaderInfo
+CallbackVisitor::OnReadyToSendDataForStream(Http2StreamId /*stream_id*/,
+                                            size_t /*max_length*/) {
+  QUICHE_LOG(FATAL)
+      << "Not implemented; should not be used with nghttp2 callbacks.";
+  return {};
+}
+
+bool CallbackVisitor::SendDataFrame(Http2StreamId /*stream_id*/,
+                                    absl::string_view /*frame_header*/,
+                                    size_t /*payload_bytes*/) {
+  QUICHE_LOG(FATAL)
+      << "Not implemented; should not be used with nghttp2 callbacks.";
+  return false;
 }
 
 void CallbackVisitor::OnConnectionError(ConnectionError /*error*/) {
@@ -538,6 +556,12 @@ bool CallbackVisitor::OnMetadataEndForStream(Http2StreamId stream_id) {
     return (result == 0);
   }
   return true;
+}
+
+std::pair<int64_t, bool> CallbackVisitor::PackMetadataForStream(
+    Http2StreamId /*stream_id*/, uint8_t* /*dest*/, size_t /*dest_len*/) {
+  QUICHE_LOG(DFATAL) << "Unimplemented.";
+  return {-1, false};
 }
 
 void CallbackVisitor::OnErrorDebug(absl::string_view message) {

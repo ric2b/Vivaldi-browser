@@ -45,6 +45,8 @@ class BASE_EXPORT MessagePumpAndroid : public MessagePump {
   void ScheduleDelayedWork(
       const Delegate::NextWorkInfo& next_work_info) override;
 
+  static void InitializeFeatures();
+
   // Attaches |delegate| to this native MessagePump. |delegate| will from then
   // on be invoked by the native loop to process application tasks.
   virtual void Attach(Delegate* delegate);
@@ -76,7 +78,6 @@ class BASE_EXPORT MessagePumpAndroid : public MessagePump {
 
  private:
   void ScheduleWorkInternal(bool do_idle_work);
-  void DoIdleWork();
 
   // Unlike other platforms, we don't control the message loop as it's
   // controlled by the Android Looper, so we can't run a RunLoop to keep the

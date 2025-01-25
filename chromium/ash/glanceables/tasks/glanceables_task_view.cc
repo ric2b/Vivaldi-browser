@@ -31,12 +31,14 @@
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
+#include "ui/compositor/layer.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/animation/animation_builder.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/button_controller.h"
@@ -47,6 +49,7 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
+#include "ui/views/layout/box_layout_view.h"
 #include "ui/views/layout/flex_layout_view.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -122,19 +125,17 @@ class TaskViewTextField : public SystemTextfield,
   using OnFinishedEditingCallback =
       base::RepeatingCallback<void(const std::u16string& title)>;
 
-  TaskViewTextField(const std::u16string& title,
-                    OnFinishedEditingCallback on_finished_editing)
+  explicit TaskViewTextField(OnFinishedEditingCallback on_finished_editing)
       : SystemTextfield(Type::kMedium),
         SystemTextfieldController(/*textfield=*/this),
         on_finished_editing_(std::move(on_finished_editing)) {
-    SetAccessibleName(
+    GetViewAccessibility().SetName(
         l10n_util::GetStringUTF16(IDS_GLANCEABLES_TASKS_TEXTFIELD_PLACEHOLDER));
     SetBackgroundColor(SK_ColorTRANSPARENT);
     SetController(this);
     SetID(base::to_underlying(GlanceablesViewId::kTaskItemTitleTextField));
     SetPlaceholderText(
         l10n_util::GetStringUTF16(IDS_GLANCEABLES_TASKS_TEXTFIELD_PLACEHOLDER));
-    SetText(title);
     SetFontList(TypographyProvider::Get()->ResolveTypographyToken(
         TypographyToken::kCrosButton2));
     SetActiveStateChangedCallback(base::BindRepeating(
@@ -156,7 +157,7 @@ class TaskViewTextField : public SystemTextfield,
   bool HandleKeyEvent(views::Textfield* sender,
                       const ui::KeyEvent& key_event) override {
     CHECK_EQ(this, sender);
-    if (key_event.type() != ui::ET_KEY_PRESSED) {
+    if (key_event.type() != ui::EventType::kKeyPressed) {
       return false;
     }
 
@@ -216,17 +217,17 @@ class GlanceablesTaskView::CheckButton : public views::ImageButton {
   explicit CheckButton(PressedCallback pressed_callback)
       : views::ImageButton(std::move(pressed_callback)) {
     SetBorder(views::CreateEmptyBorder(gfx::Insets(2)));
-    SetAccessibleRole(ax::mojom::Role::kCheckBox);
+    GetViewAccessibility().SetRole(ax::mojom::Role::kCheckBox);
     UpdateImage();
     SetFlipCanvasOnPaintForRTLUI(/*enable=*/false);
     views::FocusRing::Get(this)->SetColorId(cros_tokens::kCrosSysFocusRing);
+
+    GetViewAccessibility().SetName(l10n_util::GetStringUTF16(
+        IDS_GLANCEABLES_TASKS_TASK_ITEM_MARK_COMPLETED_ACCESSIBLE_NAME));
   }
 
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     views::ImageButton::GetAccessibleNodeData(node_data);
-
-    node_data->SetName(l10n_util::GetStringUTF16(
-        IDS_GLANCEABLES_TASKS_TASK_ITEM_MARK_COMPLETED_ACCESSIBLE_NAME));
 
     const ax::mojom::CheckedState checked_state =
         checked_ ? ax::mojom::CheckedState::kTrue
@@ -264,14 +265,16 @@ class GlanceablesTaskView::TaskTitleButton : public views::LabelButton {
   METADATA_HEADER(TaskTitleButton, views::LabelButton)
 
  public:
-  TaskTitleButton(const std::u16string& title, PressedCallback pressed_callback)
-      : views::LabelButton(std::move(pressed_callback), title) {
+  explicit TaskTitleButton(PressedCallback pressed_callback)
+      : views::LabelButton(std::move(pressed_callback)) {
     SetBorder(nullptr);
     views::FocusRing::Get(this)->SetColorId(cros_tokens::kCrosSysFocusRing);
 
     label()->SetID(base::to_underlying(GlanceablesViewId::kTaskItemTitleLabel));
     label()->SetLineHeight(TypographyProvider::Get()->ResolveLineHeight(
         TypographyToken::kCrosButton2));
+    button_controller()->set_notify_action(
+        views::ButtonController::NotifyAction::kOnPress);
   }
 
   void UpdateLabelForState(bool completed) {
@@ -284,6 +287,13 @@ class GlanceablesTaskView::TaskTitleButton : public views::LabelButton {
             ->ResolveTypographyToken(TypographyToken::kCrosButton2)
             .DeriveWithStyle(completed ? gfx::Font::FontStyle::STRIKE_THROUGH
                                        : gfx::Font::FontStyle::NORMAL));
+  }
+
+  void SetText(const std::u16string& text) override {
+    views::LabelButton::SetText(text);
+    GetViewAccessibility().SetName(
+        text, text.empty() ? ax::mojom::NameFrom::kAttributeExplicitlyEmpty
+                           : ax::mojom::NameFrom::kAttribute);
   }
 };
 
@@ -298,13 +308,20 @@ GlanceablesTaskView::GlanceablesTaskView(
     ShowErrorMessageCallback show_error_message_callback)
     : task_id_(task ? task->id : ""),
       task_title_(task ? base::UTF8ToUTF16(task->title) : u""),
+      origin_surface_type_(task ? task->origin_surface_type
+                                : api::Task::OriginSurfaceType::kRegular),
       mark_as_completed_callback_(std::move(mark_as_completed_callback)),
       save_callback_(std::move(save_callback)),
       edit_in_browser_callback_(std::move(edit_in_browser_callback)),
       show_error_message_callback_(std::move(show_error_message_callback)) {
-  SetAccessibleRole(ax::mojom::Role::kListItem);
+  GetViewAccessibility().SetRole(ax::mojom::Role::kListItem);
   SetCrossAxisAlignment(views::LayoutAlignment::kStart);
   SetOrientation(views::LayoutOrientation::kHorizontal);
+
+  SetPaintToLayer();
+  layer()->SetFillsBoundsOpaquely(false);
+  // TODO(crbug.com/40232718): See View::SetLayoutManagerUseConstrainedSpace
+  SetLayoutManagerUseConstrainedSpace(false);
 
   check_button_ =
       AddChildView(std::make_unique<CheckButton>(base::BindRepeating(
@@ -317,8 +334,11 @@ GlanceablesTaskView::GlanceablesTaskView(
   contents_view_->SetOrientation(views::LayoutOrientation::kVertical);
   contents_view_->SetProperty(
       views::kFlexBehaviorKey,
-      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+      views::FlexSpecification(views::LayoutOrientation::kHorizontal,
+                               views::MinimumFlexSizeRule::kScaleToZero,
                                views::MaximumFlexSizeRule::kUnbounded));
+  // TODO(crbug.com/40232718): See View::SetLayoutManagerUseConstrainedSpace
+  contents_view_->SetLayoutManagerUseConstrainedSpace(false);
 
   tasks_title_view_ =
       contents_view_->AddChildView(std::make_unique<views::FlexLayoutView>());
@@ -370,6 +390,32 @@ GlanceablesTaskView::GlanceablesTaskView(
         CreateSecondRowIcon(kGlanceablesTasksNotesIcon));
   }
 
+  if (origin_surface_type_ != api::Task::OriginSurfaceType::kRegular) {
+    details.push_back(
+        l10n_util::GetStringUTF16(IDS_GLANCEABLES_TASKS_ASSIGNED_TASK_NOTICE));
+
+    const gfx::VectorIcon* icon = nullptr;
+    if (origin_surface_type_ == api::Task::OriginSurfaceType::kDocument) {
+      icon = &kGlanceablesTasksTaskAssignedFromDocumentIcon;
+    } else if (origin_surface_type_ == api::Task::OriginSurfaceType::kSpace) {
+      icon = &kGlanceablesTasksTaskAssignedFromSpaceIcon;
+    }
+
+    if (icon) {
+      origin_surface_type_icon_ =
+          tasks_details_view_->AddChildView(CreateSecondRowIcon(*icon));
+      origin_surface_type_icon_->SetID(
+          base::to_underlying(GlanceablesViewId::kOriginSurfaceTypeIcon));
+    }
+  }
+
+  // If the task view is not associated with a task - e.g. for the view to add
+  // a new task, the edit in browser button will remain visible, and thus does
+  // not require a layer (used to animate the button visibility).
+  if (!task) {
+    AddExtraContentForEditState();
+  }
+
   UpdateTaskTitleViewForState(TaskTitleViewState::kView);
 
   // Use different margins depending on the number of
@@ -394,8 +440,8 @@ GlanceablesTaskView::~GlanceablesTaskView() = default;
 void GlanceablesTaskView::OnViewBlurred(views::View* observed_view) {
   if ((observed_view == edit_in_browser_button_ ||
        observed_view == task_title_textfield_) &&
-      (!edit_in_browser_button_ || !edit_in_browser_button_->HasFocus()) &&
-      (!task_title_textfield_ || !task_title_textfield_->HasFocus())) {
+      !(edit_in_browser_button_ && edit_in_browser_button_->HasFocus()) &&
+      !(task_title_textfield_ && task_title_textfield_->HasFocus())) {
     edit_exit_observer_.RemoveAllObservations();
     // Schedule a task to update task view state to kView. Done asynchronously
     // to let the focus change to complete. State update will remove the blurred
@@ -438,37 +484,102 @@ void GlanceablesTaskView::UpdateTaskTitleViewForState(
     case TaskTitleViewState::kNotInitialized:
       NOTREACHED_NORETURN();
     case TaskTitleViewState::kView:
-      if (contents_view_ && edit_in_browser_button_) {
-        contents_view_->RemoveChildViewT(
-            std::exchange(edit_in_browser_button_, nullptr));
-      }
       task_title_button_ =
           tasks_title_view_->AddChildView(std::make_unique<TaskTitleButton>(
-              task_title_,
               base::BindRepeating(&GlanceablesTaskView::TaskTitleButtonPressed,
                                   base::Unretained(this))));
+      task_title_button_->SetText(task_title_);
       task_title_button_->SetEnabled(!saving_task_changes_);
       task_title_button_->UpdateLabelForState(
           /*completed=*/check_button_->checked());
+
+      if (origin_surface_type_icon_) {
+        origin_surface_type_icon_->SetVisible(true);
+      }
+
+      if (!task_id_.empty()) {
+        AnimateExtraContentForEditStateVisibility(false);
+      }
       break;
     case TaskTitleViewState::kEdit:
       task_title_before_edit_ = task_title_;
-      task_title_textfield_ =
-          tasks_title_view_->AddChildView(std::make_unique<TaskViewTextField>(
-              task_title_,
-              base::BindRepeating(&GlanceablesTaskView::OnFinishedEditing,
-                                  base::Unretained(this))));
+      task_title_textfield_ = tasks_title_view_->AddChildView(
+          std::make_unique<TaskViewTextField>(base::BindRepeating(
+              &GlanceablesTaskView::OnFinishedEditing,
+              state_change_weak_ptr_factory_.GetWeakPtr())));
+      task_title_textfield_->SetText(task_title_);
       GetWidget()->widget_delegate()->SetCanActivate(true);
       task_title_textfield_->RequestFocus();
 
-      edit_in_browser_button_ = contents_view_->AddChildView(
-          std::make_unique<EditInBrowserButton>(edit_in_browser_callback_));
+      if (origin_surface_type_icon_) {
+        origin_surface_type_icon_->SetVisible(false);
+      }
+
+      if (!task_id_.empty()) {
+        AnimateExtraContentForEditStateVisibility(true);
+      }
+
       edit_exit_observer_.AddObservation(task_title_textfield_);
       edit_exit_observer_.AddObservation(edit_in_browser_button_);
       break;
   }
 
   UpdateContentsMargins(state);
+
+  if (!state_change_observer_.is_null()) {
+    state_change_observer_.Run(/*view_expanding=*/state ==
+                               TaskTitleViewState::kEdit);
+  }
+}
+
+void GlanceablesTaskView::AddExtraContentForEditState() {
+  auto extra_content = std::make_unique<views::BoxLayoutView>();
+  extra_content->SetOrientation(views::BoxLayout::Orientation::kVertical);
+  extra_content->SetMainAxisAlignment(
+      views::BoxLayout::MainAxisAlignment::kCenter);
+  extra_content->SetCrossAxisAlignment(
+      views::BoxLayout::CrossAxisAlignment::kStart);
+
+  if (origin_surface_type_ != api::Task::OriginSurfaceType::kRegular) {
+    auto assigned_task_notice = std::make_unique<views::BoxLayoutView>();
+    assigned_task_notice->SetOrientation(
+        views::BoxLayout::Orientation::kHorizontal);
+    assigned_task_notice->SetMainAxisAlignment(
+        views::BoxLayout::MainAxisAlignment::kStart);
+    assigned_task_notice->SetCrossAxisAlignment(
+        views::BoxLayout::CrossAxisAlignment::kCenter);
+    assigned_task_notice->SetProperty(views::kMarginsKey,
+                                      kDetailMarginsInEditState);
+    assigned_task_notice->SetID(
+        base::to_underlying(GlanceablesViewId::kAssignedTaskNotice));
+
+    if (origin_surface_type_icon_) {
+      auto* const icon =
+          assigned_task_notice->AddChildView(std::make_unique<views::ImageView>(
+              origin_surface_type_icon_->GetImageModel()));
+      icon->SetProperty(views::kMarginsKey, kDetailItemsMargin);
+    }
+
+    auto* const assigned_task_notice_label = assigned_task_notice->AddChildView(
+        std::make_unique<views::Label>(l10n_util::GetStringUTF16(
+            IDS_GLANCEABLES_TASKS_ASSIGNED_TASK_NOTICE)));
+    assigned_task_notice_label->SetFontList(
+        TypographyProvider::Get()->ResolveTypographyToken(
+            TypographyToken::kCrosAnnotation1));
+    assigned_task_notice_label->SetLineHeight(
+        TypographyProvider::Get()->ResolveLineHeight(
+            TypographyToken::kCrosAnnotation1));
+    assigned_task_notice_label->SetEnabledColorId(
+        cros_tokens::kCrosSysOnSurfaceVariant);
+
+    extra_content->AddChildView(std::move(assigned_task_notice));
+  }
+
+  edit_in_browser_button_ = extra_content->AddChildView(
+      std::make_unique<EditInBrowserButton>(edit_in_browser_callback_));
+
+  extra_content_for_edit_state_ =
+      contents_view_->AddChildView(std::move(extra_content));
 }
 
 void GlanceablesTaskView::UpdateContentsMargins(TaskTitleViewState state) {
@@ -493,7 +604,56 @@ void GlanceablesTaskView::UpdateContentsMargins(TaskTitleViewState state) {
   }
 }
 
+void GlanceablesTaskView::AnimateExtraContentForEditStateVisibility(
+    bool visible) {
+  if (visible == !!extra_content_for_edit_state_) {
+    return;
+  }
+
+  if (!visible) {
+    animating_extra_content_for_edit_state_layer_ =
+        extra_content_for_edit_state_->RecreateLayer();
+    edit_in_browser_button_ = nullptr;
+    contents_view_->RemoveChildViewT(
+        std::exchange(extra_content_for_edit_state_, nullptr));
+  } else {
+    AddExtraContentForEditState();
+    extra_content_for_edit_state_->SetPaintToLayer();
+    extra_content_for_edit_state_->layer()->SetFillsBoundsOpaquely(false);
+    extra_content_for_edit_state_->layer()->SetOpacity(
+        animating_extra_content_for_edit_state_layer_
+            ? animating_extra_content_for_edit_state_layer_->opacity()
+            : 0.0f);
+    animating_extra_content_for_edit_state_layer_.reset();
+  }
+
+  // Animate the transform back to the identity transform.
+  views::AnimationBuilder()
+      .OnEnded(base::BindOnce(
+          &GlanceablesTaskView::
+              OnExtraContentForEditStateVisibilityAnimationCompleted,
+          weak_ptr_factory_.GetWeakPtr()))
+      .OnAborted(base::BindOnce(
+          &GlanceablesTaskView::
+              OnExtraContentForEditStateVisibilityAnimationCompleted,
+          weak_ptr_factory_.GetWeakPtr()))
+      .Once()
+      .SetOpacity(visible ? extra_content_for_edit_state_->layer()
+                          : animating_extra_content_for_edit_state_layer_.get(),
+                  visible ? 1.0f : 0.5f, gfx::Tween::LINEAR)
+      .SetDuration(base::Milliseconds(visible ? 100 : 50));
+}
+
+void GlanceablesTaskView::
+    OnExtraContentForEditStateVisibilityAnimationCompleted() {
+  animating_extra_content_for_edit_state_layer_.reset();
+}
+
 void GlanceablesTaskView::CheckButtonPressed() {
+  if (saving_task_changes_) {
+    return;
+  }
+
   if (!glanceables_util::IsNetworkConnected()) {
     show_error_message_callback_.Run(
         GlanceablesTasksErrorType::kCantMarkCompleteNoNetwork,
@@ -501,7 +661,10 @@ void GlanceablesTaskView::CheckButtonPressed() {
     return;
   }
 
-  if (saving_task_changes_) {
+  if (task_id_.empty()) {
+    show_error_message_callback_.Run(
+        GlanceablesTasksErrorType::kCantMarkComplete,
+        GlanceablesErrorMessageView::ButtonActionType::kReload);
     return;
   }
 
@@ -544,6 +707,16 @@ void GlanceablesTaskView::OnFinishedEditing(const std::u16string& title) {
     if (task_title_textfield_) {
       task_title_textfield_->SetEnabled(false);
     }
+    if (extra_content_for_edit_state_ &&
+        !extra_content_for_edit_state_->layer()) {
+      extra_content_for_edit_state_->SetPaintToLayer();
+      extra_content_for_edit_state_->layer()->SetFillsBoundsOpaquely(false);
+    }
+    if (task_id_.empty() && edit_in_browser_button_ &&
+        !edit_in_browser_button_->HasFocus()) {
+      AnimateExtraContentForEditStateVisibility(false);
+    }
+
     // Note: result for task addition flow will be recorded in the parent view,
     // which initialized add task flow.
     if (!task_id_.empty()) {
@@ -553,9 +726,6 @@ void GlanceablesTaskView::OnFinishedEditing(const std::u16string& title) {
                        base::UTF16ToUTF8(task_title_),
                        base::BindOnce(&GlanceablesTaskView::OnSaved,
                                       weak_ptr_factory_.GetWeakPtr()));
-    // TODO(b/301253574): introduce "disabled" state for this view to prevent
-    // editing / marking as complete while the task is not fully created yet and
-    // race conditions while editing the same task.
   } else {
     // Note: result for task addition flow will be recorded in the parent view,
     // which initialized add task flow.

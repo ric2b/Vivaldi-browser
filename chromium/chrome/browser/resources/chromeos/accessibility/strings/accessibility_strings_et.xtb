@@ -264,7 +264,6 @@ Chrome'i brauseri menüü avamiseks vajutage klahvikombinatsiooni Alt + F.</tran
 <translation id="2783001728278437613">{COUNT,plural, =1{+#}other{+#}}</translation>
 <translation id="2792200646155001340">Saate ka ühe sõrmega paremalt vasakule pühkida, et eelmise üksuse juurde liikuda. Proovige kohe.</translation>
 <translation id="280499067616661124">ChromeVoxi abiga lehelt otsimine</translation>
-<translation id="2811019999044652585">Ekraani muude osade, näiteks tööriistariba või süsteemisalve juurde liikumiseks vajutage klahve Control ja Edasi. Chromebooki klahv Edasi asub otse klahvi 2 kohal.</translation>
 <translation id="2811204574343810641">Rida</translation>
 <translation id="2816868829355607410">Harjutusala: liikumiskäsud</translation>
 <translation id="2841013758207633010">Aeg</translation>
@@ -520,6 +519,7 @@ Chrome'i brauseri menüü avamiseks vajutage klahvikombinatsiooni Alt + F.</tran
 <translation id="4432457053224379116">Indiaanipunane</translation>
 <translation id="4432896207833262240">Märgitud sisu</translation>
 <translation id="4437615272777527928">Sisestage menüüdest otsimiseks. Tulemustes liikumiseks kasutage üles- ja allanoolt. Teksti sisestusmärgi kohandamiseks ning menüüde vahel liikumiseks kasutage vasak- ja paremnoolt.</translation>
+<translation id="4453530046591759283">Ekraani muude osade, näiteks tööriistariba või süsteemisalve juurde liikumiseks vajutage klahvikombinatsiooni Control + F1. F1 on paoklahvist paremal esimene klahv.</translation>
 <translation id="4457472090507035117">Valige praegune hääl:</translation>
 <translation id="4476183483923481720">uus rida</translation>
 <translation id="4479068155583208887">Telliskivipunane</translation>
@@ -880,6 +880,7 @@ Chrome'i brauseri menüü avamiseks vajutage klahvikombinatsiooni Alt + F.</tran
 <translation id="7091296112653361280">Navajo valge</translation>
 <translation id="7095834689119144465">Tekstis olevate numbrite muutmine</translation>
 <translation id="7096001299300236431">Eelmine meediaüksus</translation>
+<translation id="7096668131290451939">Õpperežiimist väljumiseks vajutage uuesti paoklahvi</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">sõnade kaja</translation>
 <translation id="7137397390322864165">Lõheroosa</translation>

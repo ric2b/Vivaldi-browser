@@ -104,7 +104,7 @@ void PerformanceManagerTabHelperTest::CheckGraphTopology(
   // Check out the graph itself.
   RunInGraph([&process_nodes, num_hosts, grandchild_url](GraphImpl* graph) {
     EXPECT_GE(num_hosts, CountAllRenderProcessNodes(graph));
-    EXPECT_EQ(4u, graph->GetAllFrameNodeImpls().size());
+    EXPECT_EQ(4u, graph->GetAllFrameNodes().size());
 
     // Expect all frame nodes to be current. This fails if our
     // implementation of RenderFrameHostChanged is borked.
@@ -112,8 +112,8 @@ void PerformanceManagerTabHelperTest::CheckGraphTopology(
       EXPECT_TRUE(frame->IsCurrent());
     }
 
-    ASSERT_EQ(1u, graph->GetAllPageNodeImpls().size());
-    auto* page = graph->GetAllPageNodeImpls()[0];
+    ASSERT_EQ(1u, graph->GetAllPageNodes().size());
+    auto* page = graph->GetAllPageNodeImpls().AsVector()[0];
 
     // Extra RPHs can and most definitely do exist.
     auto associated_process_nodes =
@@ -136,8 +136,7 @@ void PerformanceManagerTabHelperTest::CheckGraphTopology(
     for (FrameNodeImpl* child_frame : main_frame->child_frame_nodes()) {
       if (child_frame->GetURL().spec() == kChild1Url) {
         ASSERT_EQ(1u, child_frame->child_frame_nodes().size());
-        auto* grandchild_frame =
-            (*child_frame->child_frame_nodes().begin()).get();
+        auto* grandchild_frame = *child_frame->child_frame_nodes().begin();
         EXPECT_EQ(grandchild_url, grandchild_frame->GetURL().spec());
       } else if (child_frame->GetURL().spec() == kChild2Url) {
         EXPECT_TRUE(child_frame->child_frame_nodes().empty());
@@ -203,8 +202,8 @@ TEST_F(PerformanceManagerTabHelperTest, FrameHierarchyReflectsToGraph) {
 
   RunInGraph([num_hosts](GraphImpl* graph) {
     EXPECT_GE(num_hosts, CountAllRenderProcessNodes(graph));
-    EXPECT_EQ(0u, graph->GetAllFrameNodeImpls().size());
-    ASSERT_EQ(0u, graph->GetAllPageNodeImpls().size());
+    EXPECT_EQ(0u, graph->GetAllFrameNodes().size());
+    ASSERT_EQ(0u, graph->GetAllPageNodes().size());
   });
 }
 
@@ -212,8 +211,8 @@ namespace {
 
 void ExpectPageIsAudible(bool is_audible) {
   RunInGraph([&](GraphImpl* graph) {
-    ASSERT_EQ(1u, graph->GetAllPageNodeImpls().size());
-    auto* page = graph->GetAllPageNodeImpls()[0];
+    ASSERT_EQ(1u, graph->GetAllPageNodes().size());
+    auto* page = graph->GetAllPageNodeImpls().AsVector()[0];
     EXPECT_EQ(is_audible, page->IsAudible());
   });
 }
@@ -222,8 +221,8 @@ void ExpectPageIsAudible(bool is_audible) {
 void ExpectNotificationPermissionStatus(
     std::optional<blink::mojom::PermissionStatus> status) {
   RunInGraph([&](GraphImpl* graph) {
-    ASSERT_EQ(1u, graph->GetAllPageNodeImpls().size());
-    auto* page = graph->GetAllPageNodeImpls()[0];
+    ASSERT_EQ(1u, graph->GetAllPageNodes().size());
+    auto* page = graph->GetAllPageNodeImpls().AsVector()[0];
     EXPECT_EQ(status, page->GetNotificationPermissionStatus());
   });
 }

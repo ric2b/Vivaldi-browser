@@ -44,8 +44,23 @@
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "ui/base/window_open_disposition.h"
 
+#include "app/vivaldi_apptools.h"
+#include "components/panel/panel_id.h"
+
 namespace sessions {
 namespace {
+
+bool IsVivPanel(const sessions::tab_restore::Entry& entry) {
+  #if BUILDFLAG(IS_IOS)
+    return false;
+  #else
+  if (entry.type != sessions::tab_restore::Type::TAB)
+    return false;
+
+  auto &tab = static_cast<const sessions::tab_restore::Tab&>(entry);
+  return vivaldi::ParseVivPanelId(tab.viv_ext_data).has_value();
+  #endif
+}
 
 // Specifies what entries are added.
 enum class AddBehavior {
@@ -453,6 +468,34 @@ void TabRestoreServiceHelper::RemoveEntryById(SessionID id) {
   NotifyEntriesChanged();
 }
 
+int TabRestoreServiceHelper::VivaldiRemoveEntryById(SessionID id) {
+  auto it = GetEntryIteratorById(id);
+  if (it == entries_.end()) {
+    return 0;
+  }
+
+  if ((*it)->type == tab_restore::Type::WINDOW) {
+    // GetEntryIteratorById() will return the window entry regardless if id
+    // refers to a window or a tab inside the window. We want to be able to
+    // delete a single tab in a window so an extra test is required.
+    auto& window = static_cast<Window&>(**it);
+    // Prevent empty window. Removing last tab is the same as removing window.
+    if (window.tabs.size() > 1) {
+      for (auto tab = window.tabs.begin(); tab != window.tabs.end(); ++tab) {
+        if ((*tab)->id == id || (*tab)->original_id == id) {
+          window.tabs.erase(tab, tab + 1);
+          NotifyEntriesChanged();
+          return 1;
+        }
+      }
+    }
+  }
+
+  entries_.erase(it);
+  NotifyEntriesChanged();
+  return 1;
+}
+
 LiveTabContext* TabRestoreServiceHelper::RestoreTabOrGroupFromWindow(
     Window& window,
     SessionID id,
@@ -625,10 +668,19 @@ std::vector<LiveTab*> TabRestoreServiceHelper::RestoreEntryById(
             window.extra_data,
             window.viv_ext_data);
 
+        CHECK(!window.tabs.empty());
+        const int selected_tab_index =
+            window.selected_tab_index >= 0 &&
+                    window.selected_tab_index <
+                        static_cast<int>(window.tabs.size())
+                ? window.selected_tab_index
+                : 0;
+        const SessionID selected_tab_id = window.tabs[selected_tab_index]->id;
+
         for (const auto& tab : window.tabs) {
-          const bool first_tab = window.tabs[0]->id == tab->id;
+          const bool select_tab = tab->id == selected_tab_id;
           LiveTab* restored_tab = context->AddRestoredTab(
-              *tab.get(), context->GetTabCount(), first_tab,
+              *tab.get(), context->GetTabCount(), select_tab,
               tab->viv_page_action_overrides, tab->viv_ext_data);
 
           if (restored_tab) {
@@ -741,6 +793,8 @@ void TabRestoreServiceHelper::AddEntry(std::unique_ptr<Entry> entry,
     auto& window = static_cast<Window&>(*entry.get());
     if (window.tab_groups.empty()) {
       for (auto& tab : window.tabs) {
+        if (IsVivPanel(*tab))
+          continue;
         if (tab->group.has_value() &&
             !window.tab_groups.contains(tab->group.value())) {
           // Creating the mapping here covers the cases where we close a browser
@@ -887,7 +941,7 @@ bool TabRestoreServiceHelper::ValidateEntry(const Entry& entry) {
     case tab_restore::Type::GROUP:
       return ValidateGroup(static_cast<const Group&>(entry));
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -1084,7 +1138,7 @@ bool TabRestoreServiceHelper::FilterEntry(const Entry& entry) {
     case tab_restore::Type::GROUP:
       return IsGroupInteresting(static_cast<const Group&>(entry));
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 

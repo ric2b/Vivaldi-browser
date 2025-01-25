@@ -20,9 +20,9 @@ pub mod serialize;
 pub mod v0;
 pub mod v1;
 
-use lock_adapter::std::RwLock;
+use lock_adapter::stdlib::RwLock;
 use lock_adapter::RwLock as _;
-use np_ffi_core::common::InvalidStackDataStructure;
+use np_ffi_core::common::{CurrentHandleAllocations, InvalidStackDataStructure};
 
 /// Structure for categorized reasons for why a NP C FFI call may
 /// be panicking.
@@ -47,6 +47,10 @@ pub enum PanicReason {
     /// be messing with stack-allocated data structures for this library
     /// in an entirely unexpected way.
     InvalidStackDataStructure = 2,
+    /// The maximum amount of allocations per type is `u32::MAX`, this panic handler is invoked
+    /// with this reason when this is exceeded. Clients should never need more than 4 Billions
+    /// handles and would certainly run into other issues before reaching that point
+    ExceededMaxHandleAllocations = 3,
 }
 
 /// Structure which maintains information about the panic-handler
@@ -141,6 +145,13 @@ pub extern "C" fn np_ffi_global_config_panic_handler(
     panic_handler.set_handler(handler)
 }
 
+/// Checks the current count of all outstanding handle allocations, useful for debugging,
+/// logging, and testing
+#[no_mangle]
+pub extern "C" fn np_ffi_global_config_get_current_allocation_count() -> CurrentHandleAllocations {
+    np_ffi_core::common::global_config_get_current_allocation_count()
+}
+
 /// Sets an override to the number of shards to employ in the NP FFI's
 /// internal handle-maps, which places an upper bound on the number
 /// of writing threads which may make progress at any one time
@@ -158,126 +169,4 @@ pub extern "C" fn np_ffi_global_config_panic_handler(
 #[no_mangle]
 pub extern "C" fn np_ffi_global_config_set_num_shards(num_shards: u8) {
     np_ffi_core::common::global_config_set_num_shards(num_shards)
-}
-
-/// Sets the maximum number of active handles to credential slabs
-/// which may be active at any one time.
-/// Default value: Max value.
-/// Max value: `u32::MAX - 1`.
-///
-/// Useful for bounding the maximum memory used by the client application
-/// on credential slabs in constrained-memory environments.
-///
-/// Setting this value will have no effect if the handle-maps for the
-/// API have already begun being used by the client code, and any
-/// values set will take effect upon the first usage of any API
-/// call utilizing credential slabs.
-#[no_mangle]
-pub extern "C" fn np_ffi_global_config_set_max_num_credential_slabs(max_num_credential_slabs: u32) {
-    np_ffi_core::common::global_config_set_max_num_credential_slabs(max_num_credential_slabs)
-}
-
-/// Sets the maximum number of active handles to credential books
-/// which may be active at any one time.
-/// Default value: Max value.
-/// Max value: `u32::MAX - 1`.
-///
-/// Useful for bounding the maximum memory used by the client application
-/// on credential books in constrained-memory environments.
-///
-/// Setting this value will have no effect if the handle-maps for the
-/// API have already begun being used by the client code, and any
-/// values set will take effect upon the first usage of any API
-/// call utilizing credential books.
-#[no_mangle]
-pub extern "C" fn np_ffi_global_config_set_max_num_credential_books(max_num_credential_books: u32) {
-    np_ffi_core::common::global_config_set_max_num_credential_books(max_num_credential_books)
-}
-
-/// Sets the maximum number of active handles to deserialized v0
-/// advertisements which may be active at any one time.
-///
-/// Useful for bounding the maximum memory used by the client application
-/// on v0 advertisements in constrained-memory environments.
-///
-/// Default value: Max value.
-/// Max value: `u32::MAX - 1`.
-///
-/// Setting this value will have no effect if the handle-maps for the
-/// API have already begun being used by the client code, and any
-/// values set will take effect upon the first usage of any API
-/// call which references or returns a deserialized V0 advertisement.
-#[no_mangle]
-pub extern "C" fn np_ffi_global_config_set_max_num_deserialized_v0_advertisements(
-    max_num_deserialized_v0_advertisements: u32,
-) {
-    np_ffi_core::common::global_config_set_max_num_deserialized_v0_advertisements(
-        max_num_deserialized_v0_advertisements,
-    )
-}
-
-/// Sets the maximum number of active handles to deserialized v1
-/// advertisements which may be active at any one time.
-///
-/// Useful for bounding the maximum memory used by the client application
-/// on v1 advertisements in constrained-memory environments.
-///
-/// Default value: Max value.
-/// Max value: `u32::MAX - 1`.
-///
-/// Setting this value will have no effect if the handle-maps for the
-/// API have already begun being used by the client code, and any
-/// values set will take effect upon the first usage of any API
-/// call which references or returns a deserialized V1 advertisement.
-#[no_mangle]
-pub extern "C" fn np_ffi_global_config_set_max_num_deserialized_v1_advertisements(
-    max_num_deserialized_v1_advertisements: u32,
-) {
-    np_ffi_core::common::global_config_set_max_num_deserialized_v1_advertisements(
-        max_num_deserialized_v1_advertisements,
-    )
-}
-
-/// Sets the maximum number of active handles to v0 advertisement
-/// builders which may be active at any one time.
-///
-/// Useful for bounding the maximum memory used by the client application
-/// on v0 advertisements in constrained-memory environments.
-///
-/// Default value: Max value.
-/// Max value: `u32::MAX - 1`.
-///
-/// Setting this value will have no effect if the handle-maps for the
-/// API have already begun being used by the client code, and any
-/// values set will take effect upon the first usage of any API
-/// call which references or returns a V0 advertisement builder.
-#[no_mangle]
-pub extern "C" fn np_ffi_global_config_set_max_num_v0_advertisement_builders(
-    max_num_v0_advertisement_builders: u32,
-) {
-    np_ffi_core::common::global_config_set_max_num_v0_advertisement_builders(
-        max_num_v0_advertisement_builders,
-    )
-}
-
-/// Sets the maximum number of active handles to v1 advertisement
-/// builders which may be active at any one time.
-///
-/// Useful for bounding the maximum memory used by the client application
-/// on v1 advertisements in constrained-memory environments.
-///
-/// Default value: Max value.
-/// Max value: `u32::MAX - 1`.
-///
-/// Setting this value will have no effect if the handle-maps for the
-/// API have already begun being used by the client code, and any
-/// values set will take effect upon the first usage of any API
-/// call which references or returns a V1 advertisement builder.
-#[no_mangle]
-pub extern "C" fn np_ffi_global_config_set_max_num_v1_advertisement_builders(
-    max_num_v1_advertisement_builders: u32,
-) {
-    np_ffi_core::common::global_config_set_max_num_v1_advertisement_builders(
-        max_num_v1_advertisement_builders,
-    )
 }

@@ -29,6 +29,7 @@
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/text_utils.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_impl.h"
@@ -80,10 +81,8 @@ class TransparentButton : public Button {
     button_controller()->set_notify_action(
         ButtonController::NotifyAction::kOnPress);
 
-    if (features::IsChromeRefresh2023()) {
-      views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
-                                                    GetCornerRadius());
-    }
+    views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
+                                                  GetCornerRadius());
     ConfigureComboboxButtonInkDrop(this);
   }
   TransparentButton(const TransparentButton&) = delete;
@@ -141,9 +140,7 @@ Combobox::Combobox(ui::ComboboxModel* model) {
   SetFocusBehavior(FocusBehavior::ALWAYS);
 #endif
 
-  SetBackgroundColorId(features::IsChromeRefresh2023()
-                           ? ui::kColorComboboxBackground
-                           : ui::kColorTextfieldBackground);
+  SetBackgroundColorId(ui::kColorComboboxBackground);
 
   UpdateBorder();
 
@@ -154,33 +151,28 @@ Combobox::Combobox(ui::ComboboxModel* model) {
       AddChildView(std::make_unique<TransparentButton>(base::BindRepeating(
           &Combobox::ArrowButtonPressed, base::Unretained(this))));
 
-  if (features::IsChromeRefresh2023()) {
-    // TODO(crbug.com/40250124): This setter should be removed and the behavior
-    // made default when ChromeRefresh2023 is finalized.
-    SetEventHighlighting(true);
-    enabled_changed_subscription_ =
-        AddEnabledChangedCallback(base::BindRepeating(
-            [](Combobox* combobox) {
-              combobox->SetBackgroundColorId(
-                  combobox->GetEnabled()
-                      ? ui::kColorComboboxBackground
-                      : ui::kColorComboboxBackgroundDisabled);
-              combobox->UpdateBorder();
-            },
-            base::Unretained(this)));
-  }
+  // TODO(crbug.com/40250124): This setter should be removed and the behavior
+  // made default when ChromeRefresh2023 is finalized.
+  SetEventHighlighting(true);
+  enabled_changed_subscription_ = AddEnabledChangedCallback(base::BindRepeating(
+      [](Combobox* combobox) {
+        combobox->SetBackgroundColorId(
+            combobox->GetEnabled() ? ui::kColorComboboxBackground
+                                   : ui::kColorComboboxBackgroundDisabled);
+        combobox->UpdateBorder();
+      },
+      base::Unretained(this)));
 
   // A layer is applied to make sure that canvas bounds are snapped to pixel
   // boundaries (for the sake of drawing the arrow).
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 
-  if (features::IsChromeRefresh2023()) {
-    views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
-                                                  GetCornerRadius());
-  }
+  views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
+                                                GetCornerRadius());
 
-  SetAccessibilityProperties(ax::mojom::Role::kComboBoxSelect);
+  GetViewAccessibility().SetProperties(ax::mojom::Role::kComboBoxSelect);
+  UpdateExpandedCollapsedAccessibleState();
 }
 
 Combobox::~Combobox() {
@@ -257,8 +249,8 @@ std::u16string Combobox::GetTooltipTextAndAccessibleName() const {
 void Combobox::SetTooltipTextAndAccessibleName(
     const std::u16string& tooltip_text) {
   arrow_button_->SetTooltipText(tooltip_text);
-  if (GetAccessibleName().empty()) {
-    SetAccessibleName(tooltip_text);
+  if (GetViewAccessibility().GetCachedName().empty()) {
+    GetViewAccessibility().SetName(tooltip_text);
   }
 }
 
@@ -388,7 +380,7 @@ bool Combobox::SkipDefaultKeyEventProcessing(const ui::KeyEvent& e) {
 
 bool Combobox::OnKeyPressed(const ui::KeyEvent& e) {
   // TODO(oshima): handle IME.
-  CHECK_EQ(e.type(), ui::ET_KEY_PRESSED);
+  CHECK_EQ(e.type(), ui::EventType::kKeyPressed);
 
   if (!selected_index_.has_value()) {
     CHECK_EQ(model_->GetItemCount(), 0u);
@@ -502,11 +494,6 @@ void Combobox::OnBlur() {
 
 void Combobox::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   View::GetAccessibleNodeData(node_data);
-  if (menu_runner_) {
-    node_data->AddState(ax::mojom::State::kExpanded);
-  } else {
-    node_data->AddState(ax::mojom::State::kCollapsed);
-  }
 
   if (GetEnabled()) {
     node_data->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kOpen);
@@ -540,6 +527,7 @@ void Combobox::OnComboboxModelChanged(ui::ComboboxModel* model) {
 
   if (IsMenuRunning()) {
     menu_runner_.reset();
+    UpdateExpandedCollapsedAccessibleState();
   }
 
   // If the selection is no longer valid (or the model is empty), restore the
@@ -568,23 +556,15 @@ const std::unique_ptr<ui::ComboboxModel>& Combobox::GetOwnedModel() const {
 }
 
 void Combobox::UpdateBorder() {
-  if (features::IsChromeRefresh2023()) {
-    if (!GetEnabled()) {
-      SetBorder(nullptr);
-      return;
-    }
-    SetBorder(CreateThemedRoundedRectBorder(
-        kBorderThickness, GetCornerRadius(),
-        invalid_
-            ? ui::kColorAlertHighSeverity
-            : border_color_id_.value_or(ui::kColorComboboxContainerOutline)));
-  } else {
-    auto border = std::make_unique<FocusableBorder>();
-    border->SetColorId(invalid_ ? ui::kColorAlertHighSeverity
-                                : border_color_id_.value_or(
-                                      ui::kColorFocusableBorderUnfocused));
-    SetBorder(std::move(border));
+  if (!GetEnabled()) {
+    SetBorder(nullptr);
+    return;
   }
+  SetBorder(CreateThemedRoundedRectBorder(
+      kBorderThickness, GetCornerRadius(),
+      invalid_
+          ? ui::kColorAlertHighSeverity
+          : border_color_id_.value_or(ui::kColorComboboxContainerOutline)));
 }
 
 void Combobox::AdjustBoundsForRTLUI(gfx::Rect* rect) const {
@@ -712,7 +692,7 @@ void Combobox::ShowDropDownMenu(ui::MenuSourceType source_type) {
   }
   menu_runner_->RunMenuAt(GetWidget(), nullptr, bounds,
                           MenuAnchorPosition::kTopLeft, source_type);
-  NotifyAccessibilityEvent(ax::mojom::Event::kExpandedChanged, true);
+  UpdateExpandedCollapsedAccessibleState();
 }
 
 void Combobox::OnMenuClosed(Button::ButtonState original_button_state) {
@@ -724,7 +704,7 @@ void Combobox::OnMenuClosed(Button::ButtonState original_button_state) {
   menu_runner_.reset();
   arrow_button_->SetState(original_button_state);
   closed_time_ = base::TimeTicks::Now();
-  NotifyAccessibilityEvent(ax::mojom::Event::kExpandedChanged, true);
+  UpdateExpandedCollapsedAccessibleState();
 }
 
 void Combobox::MenuSelectionAt(size_t index) {
@@ -808,6 +788,14 @@ const gfx::FontList& Combobox::GetForegroundFontList() const {
     return TypographyProvider::Get().GetFont(kContext, *foreground_text_style_);
   }
   return GetFontList();
+}
+
+void Combobox::UpdateExpandedCollapsedAccessibleState() const {
+  if (menu_runner_) {
+    GetViewAccessibility().SetIsExpanded();
+  } else {
+    GetViewAccessibility().SetIsCollapsed();
+  }
 }
 
 BEGIN_METADATA(Combobox)

@@ -97,7 +97,7 @@ if (!use_system_xcode) {
 
 # RBE requires paths relative to source directory. When using system
 # Xcode, this is done by creating symbolic links in root_build_dir.
-if (use_system_xcode && (use_remoteexec || use_siso)) {
+if (use_system_xcode && use_remoteexec) {
   sdk_info_args += [
     "--get_sdk_info",
     "--create_symlink_at",
@@ -111,7 +111,7 @@ sdk_info_args += [ mac_sdk_name ]
 _mac_sdk_result = exec_script(script_name, sdk_info_args, "scope")
 xcode_version = _mac_sdk_result.xcode_version
 xcode_build = _mac_sdk_result.xcode_build
-if (mac_sdk_path == "" && use_system_xcode && (use_remoteexec || use_siso)) {
+if (mac_sdk_path == "" && use_system_xcode && use_remoteexec) {
   mac_sdk_path = _mac_sdk_result.sdk_path
 }
 
@@ -151,3 +151,6 @@ if (use_system_xcode) {
   # TODO(thakis): Do this at the uses of this variable instead.
   mac_bin_path = rebase_path(mac_bin_path, root_build_dir)
 }
+
+_sdk_root = rebase_path(mac_sdk_path, root_build_dir)
+mac_sdk_logs = [ "mac_sdk_path=${_sdk_root}" ]

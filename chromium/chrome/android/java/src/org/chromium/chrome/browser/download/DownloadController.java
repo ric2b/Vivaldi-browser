@@ -43,7 +43,8 @@ public class DownloadController {
      * download. This can be either a POST download or a GET download with authentication.
      */
     @CalledByNative
-    private static void onDownloadCompleted(@Nullable Tab tab, DownloadInfo downloadInfo) {
+    private static void onDownloadCompleted(
+            @Nullable Tab tab, DownloadInfo downloadInfo, boolean isDownloadSafe) {
         MediaStoreHelper.addImageToGalleryOnSDCard(
                 downloadInfo.getFilePath(), downloadInfo.getMimeType());
         if (!PdfUtils.shouldOpenPdfInline()
@@ -142,14 +143,16 @@ public class DownloadController {
         if (!PdfUtils.shouldOpenPdfInline()) {
             return;
         }
-        // TODO(b/338138743): Cancel download and skip loadUrl if there is another navigation before
-        //  pdf download started.
-        LoadUrlParams param = new LoadUrlParams(downloadInfo.getUrl());
+        String downloadUrl = downloadInfo.getUrl().getSpec();
+        String pdfPageUrl = PdfUtils.encodePdfPageUrl(downloadUrl);
+        assert pdfPageUrl != null;
+        LoadUrlParams param = new LoadUrlParams(pdfPageUrl);
+        // Set isPdf param so that other parts of the code can load the pdf native page instead of
+        // starting a download.
         param.setIsPdf(true);
         // If the download url matches the tab’s url, avoid duplicate navigation entries by
         // replacing the current entry.
-        param.setShouldReplaceCurrentEntry(
-                downloadInfo.getUrl().getSpec().equals(tab.getUrl().getSpec()));
+        param.setShouldReplaceCurrentEntry(downloadUrl.equals(tab.getUrl().getSpec()));
         tab.loadUrl(param);
         tab.addObserver(
                 new EmptyTabObserver() {

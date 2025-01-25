@@ -15,6 +15,7 @@
 #include "components/attribution_reporting/trigger_data_matching.mojom-forward.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
 #include "content/common/content_export.h"
+#include "third_party/abseil-cpp/absl/numeric/int128.h"
 
 namespace attribution_reporting {
 class AggregationKeys;
@@ -38,6 +39,8 @@ namespace proto {
 class AttributionReadOnlySourceData;
 }  // namespace proto
 
+class StoredSource;
+
 url::Origin DeserializeOrigin(const std::string& origin);
 
 std::optional<attribution_reporting::mojom::SourceType> DeserializeSourceType(
@@ -51,10 +54,10 @@ void SetReadOnlySourceData(const attribution_reporting::EventReportWindows*,
 
 std::string SerializeReadOnlySourceData(
     const attribution_reporting::TriggerSpecs&,
-    attribution_reporting::MaxEventLevelReports,
     double randomized_response_rate,
     attribution_reporting::mojom::TriggerDataMatching,
-    bool debug_cookie_set);
+    bool debug_cookie_set,
+    absl::uint128 aggregatable_debug_key_piece);
 
 CONTENT_EXPORT std::optional<proto::AttributionReadOnlySourceData>
 DeserializeReadOnlySourceDataAsProto(sql::Statement&, int col);
@@ -67,7 +70,8 @@ std::optional<attribution_reporting::FilterData> DeserializeFilterData(
 
 std::optional<attribution_reporting::TriggerSpecs> DeserializeTriggerSpecs(
     const proto::AttributionReadOnlySourceData&,
-    attribution_reporting::mojom::SourceType);
+    attribution_reporting::mojom::SourceType,
+    attribution_reporting::MaxEventLevelReports);
 
 std::string SerializeAggregationKeys(
     const attribution_reporting::AggregationKeys&);
@@ -83,17 +87,18 @@ std::string SerializeReportMetadata(
 std::string SerializeReportMetadata(
     const AttributionReport::NullAggregatableData&);
 
-[[nodiscard]] bool DeserializeReportMetadata(base::span<const uint8_t>,
-                                             uint32_t& trigger_data,
-                                             int64_t& priority);
+std::optional<int64_t> DeserializeEventLevelPriority(base::span<const uint8_t>);
 
-[[nodiscard]] bool DeserializeReportMetadata(
-    base::span<const uint8_t>,
-    AttributionReport::AggregatableAttributionData&);
+std::optional<AttributionReport::EventLevelData>
+DeserializeEventLevelReportMetadata(base::span<const uint8_t>,
+                                    const StoredSource&);
 
-[[nodiscard]] bool DeserializeReportMetadata(
-    base::span<const uint8_t>,
-    AttributionReport::NullAggregatableData&);
+std::optional<AttributionReport::AggregatableAttributionData>
+DeserializeAggregatableReportMetadata(base::span<const uint8_t>,
+                                      const StoredSource&);
+
+std::optional<AttributionReport::NullAggregatableData>
+    DeserializeNullAggregatableReportMetadata(base::span<const uint8_t>);
 
 }  // namespace content
 

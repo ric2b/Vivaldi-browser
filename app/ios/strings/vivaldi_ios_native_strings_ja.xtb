@@ -8,6 +8,7 @@
 <translation id="1123707809902612118">トラッカーと広告をブロック</translation>
 <translation id="1151972924205500581">パスワードを入力してください</translation>
 <translation id="1166425484559430538">同期データは暗号化されています。データを復号するには、暗号化パスワードを入力してください。</translation>
+<translation id="1173894706177603556">名前を変更</translation>
 <translation id="1181037720776840403">削除</translation>
 <translation id="1182668946911971500">メモバー</translation>
 <translation id="1198271701881992799">まずはここから</translation>
@@ -73,7 +74,7 @@
 <translation id="2391028308389203648">トルコ語 (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">有効化</translation>
 <translation id="2414886740292270097">ダーク</translation>
-<translation id="2434910957904013691">全てを同期</translation>
+<translation id="2434910957904013691">すべてを同期</translation>
 <translation id="2448144008809286557"><ph name="BEGIN_LINK" />ユーザーネーム<ph name="END_LINK" /> か <ph name="BEGIN_LINK" />パスワード<ph name="END_LINK" />をお忘れですか？</translation>
 <translation id="2478478121390627077">選択中のカラー</translation>
 <translation id="2536780277491102902">個別設定</translation>
@@ -148,6 +149,7 @@
 <translation id="3842727926262967527">タブバーとアドレスフィールドを表示する場所を選択してください。</translation>
 <translation id="3845564230651302310">新しいブロッカーの設定を適用中です...</translation>
 <translation id="3858860766373142691">名前</translation>
+<translation id="3861379244432690245">ダイレクトマッチを有効にする</translation>
 <translation id="3866249974567520381">説明</translation>
 <translation id="3872195896030547485">有効なメールアドレスを入力してください。</translation>
 <translation id="3897092660631435901">メニュー</translation>
@@ -173,6 +175,7 @@
 <translation id="4209092469652827314">大</translation>
 <translation id="4219175188138757774">チェコとスロバキア (<ph name="ORIGIN" />)</translation>
 <translation id="4222285809803895512">作成日</translation>
+<translation id="4274598629843497594">表示スピードダイヤルを有効にして、このグループをスタートページに表示します。ブックマークパネルからもグループにアクセスできます。</translation>
 <translation id="4276839458685471670">作成日順</translation>
 <translation id="4277085371281330061">トラッカー
 ブロック数</translation>
@@ -202,6 +205,7 @@
 <translation id="4619615317237390068">他のデバイスからのタブ</translation>
 <translation id="462860218383788109">変更日</translation>
 <translation id="4640946580087069269">メモへコピー</translation>
+<translation id="4643117005422448078">よく閲覧するサイト</translation>
 <translation id="4654578955713250802">広告とトラッカーをブロック</translation>
 <translation id="4655510151391078468">送信したコードと一致しません。
         残り<ph name="ATTEMPTS" />回入力できます。</translation>
@@ -211,6 +215,7 @@
 <translation id="4727698999970341158">アイスランド語 (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">更新</translation>
 <translation id="4739712911308055817">フェッチされていません</translation>
+<translation id="4750394297954878236">候補</translation>
 <translation id="4759399863961855552">並び替え</translation>
 <translation id="4780953868408193639">トラッカー
 ブロック数</translation>
@@ -226,6 +231,7 @@
 <translation id="4943266325467647391">Vivaldi の組み込み機能、広告・トラッカーブロッカーは、マルウェアや広告からユーザーを保護します。</translation>
 <translation id="495421405224926623">利用規約とプライバシーポリシーを読んだ上で、同意します。</translation>
 <translation id="497942794017668482">トラッカーと広告をブロックしています</translation>
+<translation id="4993477362660748586">同期</translation>
 <translation id="5037761343305489956">メモへコピーしました</translation>
 <translation id="504986598654589766">プライベートウィンドウでブラウジングを行うと、検索行為、訪問したサイト、Cookie や一時的なファイルが Vivaldi に保存されません。通信は暗号化あるいは改変されません。</translation>
 <translation id="505774819758747674">アクセントカラーを選択したツールバーのプレビュー</translation>
@@ -236,10 +242,12 @@
 <translation id="5153806174841856652">ログインに失敗しました</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />コードを再送信する<ph name="END_LINK" /></translation>
 <translation id="5191012692655103305">タブと履歴をフェッチしています...</translation>
+<translation id="5221269430020540672">バックグラウンドのタブで画像を開く</translation>
 <translation id="5238642303473095117">データを消去する</translation>
 <translation id="5245732982828228444">メモはここに表示されます</translation>
 <translation id="5249199221558969362">現実にありえる数値を入力してください。</translation>
 <translation id="5271549068863921519">パスワードを保存</translation>
+<translation id="5273620430932404871">ブックマークニックネームマッチングを有効にする</translation>
 <translation id="5290452628447338707">メモがありません</translation>
 <translation id="5317780077021120954">保存</translation>
 <translation id="5349678548463426691">説明順</translation>
@@ -248,7 +256,6 @@
 <translation id="5378841821586202982">ごみ箱</translation>
 <translation id="5398772614898833570">広告ブロック数</translation>
 <translation id="5421638721143596928">認証情報の復号に失敗しました。再度ログインしてください。</translation>
-<translation id="5422086212043657100">スピードダイヤルフォルダーとして使用する</translation>
 <translation id="5439835075346716808">こちらの IP からの登録は一時的にブロックされています。後ほどお試しください。</translation>
 <translation id="5486261815000869482">パスワード確認</translation>
 <translation id="5494016731375030300">最近閉じたタブ</translation>
@@ -260,6 +267,7 @@
 <translation id="5710478562694930157">昇順</translation>
 <translation id="574392208103952083">中</translation>
 <translation id="5787420647064736989">デバイス名</translation>
+<translation id="5801825598531634872">インアクティブ日数</translation>
 <translation id="5822336771053074270">メモを追加</translation>
 <translation id="5823830882692559950">vivaldi.net が認証情報を拒否しました: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">新しいフォルダー</translation>
@@ -277,6 +285,7 @@
 <translation id="6147094071357011481">最近閉じたタブがありません</translation>
 <translation id="6193995664633100765">インド語 (<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">ウェブサイトの外観のオプション</translation>
+<translation id="6257488392933423163">HTML として表示</translation>
 <translation id="6365929278691047681">ドイツ語 (<ph name="ORIGIN" />)</translation>
 <translation id="6406506848690869874">同期</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> 件を選択中</translation>
@@ -285,6 +294,7 @@
 <translation id="6517411226162529295">バックアップ暗号化キー</translation>
 <translation id="6527303717912515753">共有</translation>
 <translation id="6535988230515403205">ポーランド語 (<ph name="ORIGIN" />)</translation>
+<translation id="6566198107563125484">ブックマークマッチングを有効にする</translation>
 <translation id="659351303388691480">ブラウジングデータを消去...</translation>
 <translation id="6602272356389933803">外観とテーマ</translation>
 <translation id="6614744450826097546">広告詳細</translation>
@@ -303,7 +313,6 @@
 <translation id="681368974849482173">アイテムが作成されました</translation>
 <translation id="6830986331692390764">同期データを消去中です。お待ちください。</translation>
 <translation id="6875510405870945573">ブロックする優先レベルを選択してください。</translation>
-<translation id="6885837502028760851">スピードダイヤルフォルダーのみを表示する</translation>
 <translation id="6887143077297974801">同期が開始できませんでした。</translation>
 <translation id="691132463664340655">ブラウザーテーマ</translation>
 <translation id="6937750621455385628">ログインには Vivaldi アカウントが必要です。</translation>
@@ -316,6 +325,7 @@
 <translation id="7006864796794806241">パスワードの復元</translation>
 <translation id="7029809446516969842">パスワード</translation>
 <translation id="7041964446309059643">手動</translation>
+<translation id="7083011465470143310"><ph name="BEGIN_LINK" />パスワード<ph name="END_LINK" />をお忘れですか？</translation>
 <translation id="7110758301321962823">ユーザーネームの復元</translation>
 <translation id="7158507293261405349">新しいグループを追加</translation>
 <translation id="7192066917392691622">降順</translation>
@@ -354,6 +364,7 @@
 <translation id="7732622593814325274">トラッカーブロックソース管理</translation>
 <translation id="7765158879357617694">移動</translation>
 <translation id="7771452384635174008">レイアウト</translation>
+<translation id="7791161131809889864">すべてバックグランドで開く</translation>
 <translation id="7801204999757211519">既にアカウントをお持ちですか？<ph name="BEGIN_LINK" /> ログイン ➔ <ph name="END_LINK" /></translation>
 <translation id="7850070199083838600">新しいグループを作成しますか？</translation>
 <translation id="7914995060146784406">メモを編集</translation>
@@ -365,6 +376,7 @@
 <translation id="8058018971942772071">グループとして使用する</translation>
 <translation id="8066170816074394954">サーバーエラー。</translation>
 <translation id="8076492880354921740">タブ</translation>
+<translation id="8077675488769462025">インアクティブなタブ</translation>
 <translation id="8112996065264879835">送信したコードと一致しません。
         入力回数の上限に達しました。以下の「再送信」オプションを使用して、新しいコードをリクエストしてください。</translation>
 <translation id="8134672010161840864">ピンチ操作で画像を表示範囲を調整し、配置する</translation>
@@ -384,8 +396,9 @@
 <translation id="8329813750766387010">更新しました: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Cookie 同意ポップアップ除去 (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">他のデバイスのタブを表示するには、同期を有効にする必要があります。</translation>
-<translation id="8366175803122817174">全てのメモの URL を開く</translation>
+<translation id="8366175803122817174">すべてのメモの URL を開く</translation>
 <translation id="8384409685584033392">ページ情報</translation>
+<translation id="8395378633507873708">アドレスバー</translation>
 <translation id="839736845446313156">登録</translation>
 <translation id="8414685983518053656">メモ</translation>
 <translation id="8423076545503792640">エラーのためリクエストが失敗しました。後ほどお試しください。</translation>
@@ -402,6 +415,7 @@
 <translation id="8675578805254882416">取得中</translation>
 <translation id="8677007239430848917">下部のプラスアイコンをタップして、最初のメモを追加してください</translation>
 <translation id="8684294196284714094">Vivaldi をデフォルトのブラウザとして設定しますか？</translation>
+<translation id="8733945742171960420">ブラウジングを開始すると、よく閲覧するサイトがここに表示されます。</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> 件のアイテムを削除しました</translation>
 <translation id="8763006697839582351">Vivaldi のプライベートタブで開く</translation>
 <translation id="8765173886020357878">検索候補</translation>
@@ -412,6 +426,7 @@
 <translation id="8855707633300847215">タブバーを表示</translation>
 <translation id="8892354889971902600">最近閉じたタブがここに表示されます。</translation>
 <translation id="89390081013973080">準備万端です！デバイス間で同期するデータを選んでください。</translation>
+<translation id="8964449607824577665">現在の暗号化パスワードがない場合、私たちではあなたのデータを復号化できません。このパスワードをリセットすると、現在 Vivaldi サーバーにある同期データがすべて消去されます。</translation>
 <translation id="8965371804397726192">すべてのデータを同期する</translation>
 <translation id="9028089729841356743">ネットワークエラー。</translation>
 <translation id="9043882097999887291">広告

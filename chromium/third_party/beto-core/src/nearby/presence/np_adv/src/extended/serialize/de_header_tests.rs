@@ -17,7 +17,6 @@
 use super::*;
 use crate::extended::deserialize;
 use core::cmp;
-use rand_ext::rand;
 use rand_ext::rand::{distributions, Rng as _};
 
 #[test]
@@ -69,10 +68,14 @@ fn de_header_special_values() {
 
             assert_eq!(header_len as usize, buf.len());
 
-            let (_, deser) = deserialize::DeHeader::parse(buf.as_slice()).unwrap();
+            let (_, deser) = deserialize::data_element::DeHeader::parse(buf.as_slice()).unwrap();
 
             assert_eq!(
-                deserialize::DeHeader { de_type, contents_len: len, header_bytes: buf },
+                deserialize::data_element::DeHeader {
+                    de_type,
+                    contents_len: len,
+                    header_bytes: buf
+                },
                 deser
             )
         }
@@ -89,10 +92,10 @@ fn de_header_random_roundtrip() {
         let header_len = expected_header_len(hdr);
 
         assert_eq!(header_len as usize, buf.len());
-        let (_, deser) = deserialize::DeHeader::parse(buf.as_slice()).unwrap();
+        let (_, deser) = deserialize::data_element::DeHeader::parse(buf.as_slice()).unwrap();
 
         assert_eq!(
-            deserialize::DeHeader {
+            deserialize::data_element::DeHeader {
                 de_type: hdr.de_type,
                 contents_len: hdr.len,
                 header_bytes: buf

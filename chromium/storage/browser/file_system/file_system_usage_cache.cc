@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "storage/browser/file_system/file_system_usage_cache.h"
 
 #include <stddef.h>
@@ -233,7 +238,7 @@ bool FileSystemUsageCache::Write(const base::FilePath& usage_file_path,
 base::File* FileSystemUsageCache::GetFile(const base::FilePath& file_path) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (is_incognito_) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
   if (cache_files_.size() >= kMaxHandleCacheSize)

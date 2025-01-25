@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_AUTOFILL_PAYMENTS_CHROME_PAYMENTS_AUTOFILL_CLIENT_H_
 
 #include <memory>
+#include <optional>
 
 #include "base/memory/raw_ref.h"
 #include "components/autofill/core/browser/payments/autofill_error_dialog_context.h"
@@ -15,14 +16,30 @@
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_controller_impl.h"
 #include "content/public/browser/web_contents_observer.h"
 
-#if !BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
+#include "components/autofill/core/browser/ui/payments/card_expiration_date_fix_flow_controller_impl.h"
+#include "components/autofill/core/browser/ui/payments/card_name_fix_flow_controller_impl.h"
+#else  // !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/autofill/payments/manage_migration_ui_controller.h"
-#endif  // !BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID)
+
+class GURL;
 
 namespace autofill {
 
+#if BUILDFLAG(IS_ANDROID)
+class AutofillCvcSaveMessageDelegate;
+#endif  // BUILDFLAG(IS_ANDROID)
 class AutofillErrorDialogControllerImpl;
+#if BUILDFLAG(IS_ANDROID)
+class AutofillMessageController;
+#endif
+class AutofillOfferData;
 class AutofillSaveCardBottomSheetBridge;
+class AutofillSaveIbanBottomSheetBridge;
+#if BUILDFLAG(IS_ANDROID)
+class AutofillSnackbarControllerImpl;
+#endif  // BUILDFLAG(IS_ANDROID)
 class CardUnmaskAuthenticationSelectionDialogControllerImpl;
 struct CardUnmaskChallengeOption;
 class CardUnmaskOtpInputDialogControllerImpl;
@@ -30,9 +47,15 @@ class CreditCardCvcAuthenticator;
 class CreditCardOtpAuthenticator;
 class ContentAutofillClient;
 class CreditCardRiskBasedAuthenticator;
+class IbanAccessManager;
+class IbanManager;
+class MerchantPromoCodeManager;
+struct OfferNotificationOptions;
 class OtpUnmaskDelegate;
 enum class OtpUnmaskResult;
+struct VirtualCardEnrollmentFields;
 class VirtualCardEnrollmentManager;
+struct VirtualCardManualFallbackBubbleOptions;
 
 namespace payments {
 
@@ -51,6 +74,9 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
       delete;
   ~ChromePaymentsAutofillClient() override;
 
+  static constexpr base::TimeDelta kSaveCardConfirmationSnackbarDuration =
+      base::Seconds(3);
+
   // RiskDataLoader:
   void LoadRiskData(
       base::OnceCallback<void(const std::string&)> callback) override;
@@ -59,6 +85,14 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
 #if BUILDFLAG(IS_ANDROID)
   AutofillSaveCardBottomSheetBridge*
   GetOrCreateAutofillSaveCardBottomSheetBridge() override;
+  AutofillSaveIbanBottomSheetBridge*
+  GetOrCreateAutofillSaveIbanBottomSheetBridge();
+  void ConfirmAccountNameFixFlow(
+      base::OnceCallback<void(const std::u16string&)> callback) override;
+  void ConfirmExpirationDateFixFlow(
+      const CreditCard& card,
+      base::OnceCallback<void(const std::u16string&, const std::u16string&)>
+          callback) override;
 #else   // !BUILDFLAG(IS_ANDROID)
   void ShowLocalCardMigrationDialog(
       base::OnceClosure show_migration_dialog_closure) override;
@@ -72,11 +106,36 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
       const std::u16string& tip_message,
       const std::vector<MigratableCreditCard>& migratable_credit_cards,
       MigrationDeleteCardCallback delete_local_card_callback) override;
-  void VirtualCardEnrollCompleted(bool is_vcn_enrolled) override;
+  void ShowWebauthnOfferDialog(
+      WebauthnDialogCallback offer_dialog_callback) override;
+  void ShowWebauthnVerifyPendingDialog(
+      WebauthnDialogCallback verify_pending_dialog_callback) override;
+  void UpdateWebauthnOfferDialogWithError() override;
+  bool CloseWebauthnDialog() override;
+  void HideVirtualCardEnrollBubbleAndIconIfVisible() override;
 #endif  // BUILDFLAG(IS_ANDROID)
-  void CreditCardUploadCompleted(bool card_saved) override;
-  bool IsSaveCardPromptVisible() const override;
-  void HideSaveCardPromptPrompt() override;
+  bool HasCreditCardScanFeature() const override;
+  void ScanCreditCard(CreditCardScanCallback callback) override;
+  void ConfirmSaveCreditCardLocally(
+      const CreditCard& card,
+      AutofillClient::SaveCreditCardOptions options,
+      LocalSaveCardPromptCallback callback) override;
+  void ConfirmSaveCreditCardToCloud(
+      const CreditCard& card,
+      const LegalMessageLines& legal_message_lines,
+      AutofillClient::SaveCreditCardOptions options,
+      UploadSaveCardPromptCallback callback) override;
+  void CreditCardUploadCompleted(bool card_saved,
+                                 std::optional<OnConfirmationClosedCallback>
+                                     on_confirmation_closed_callback) override;
+  void HideSaveCardPrompt() override;
+  void ShowVirtualCardEnrollDialog(
+      const VirtualCardEnrollmentFields& virtual_card_enrollment_fields,
+      base::OnceClosure accept_virtual_card_callback,
+      base::OnceClosure decline_virtual_card_callback) override;
+  void VirtualCardEnrollCompleted(bool is_vcn_enrolled) override;
+  void OnVirtualCardDataAvailable(
+      const VirtualCardManualFallbackBubbleOptions& options) override;
   void ConfirmSaveIbanLocally(const Iban& iban,
                               bool should_show_prompt,
                               SaveIbanPromptCallback callback) override;
@@ -107,12 +166,33 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
           confirm_unmask_challenge_option_callback,
       base::OnceClosure cancel_unmasking_closure) override;
   void DismissUnmaskAuthenticatorSelectionDialog(bool server_success) override;
-  void OnUnmaskVerificationResult(
-      AutofillClient::PaymentsRpcResult result) override;
+  void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
   VirtualCardEnrollmentManager* GetVirtualCardEnrollmentManager() override;
   CreditCardCvcAuthenticator& GetCvcAuthenticator() override;
   CreditCardOtpAuthenticator* GetOtpAuthenticator() override;
   CreditCardRiskBasedAuthenticator* GetRiskBasedAuthenticator() override;
+  void ShowMandatoryReauthOptInPrompt(
+      base::OnceClosure accept_mandatory_reauth_callback,
+      base::OnceClosure cancel_mandatory_reauth_callback,
+      base::RepeatingClosure close_mandatory_reauth_callback) override;
+  IbanManager* GetIbanManager() override;
+  IbanAccessManager* GetIbanAccessManager() override;
+  void ShowMandatoryReauthOptInConfirmation() override;
+  void UpdateOfferNotification(
+      const AutofillOfferData& offer,
+      const OfferNotificationOptions& options) override;
+  void DismissOfferNotification() override;
+  void OpenPromoCodeOfferDetailsURL(const GURL& url) override;
+  MerchantPromoCodeManager* GetMerchantPromoCodeManager() override;
+
+#if BUILDFLAG(IS_ANDROID)
+  // The AutofillSnackbarController is used to show a snackbar notification
+  // on Android.
+  AutofillSnackbarControllerImpl& GetAutofillSnackbarController();
+  // The AutofillMessageController is used to show a message notification
+  // on Android.
+  AutofillMessageController& GetAutofillMessageController();
+#endif
 
   AutofillProgressDialogControllerImpl*
   AutofillProgressDialogControllerForTesting() {
@@ -132,12 +212,37 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
   void SetAutofillSaveCardBottomSheetBridgeForTesting(
       std::unique_ptr<AutofillSaveCardBottomSheetBridge>
           autofill_save_card_bottom_sheet_bridge);
+
+  void SetAutofillSnackbarControllerImplForTesting(
+      std::unique_ptr<AutofillSnackbarControllerImpl>
+          autofill_snackbar_controller_impl);
+
+  void SetAutofillMessageControllerForTesting(
+      std::unique_ptr<AutofillMessageController> autofill_message_controller);
 #endif
 
  private:
+  std::u16string GetAccountHolderName() const;
+
 #if BUILDFLAG(IS_ANDROID)
+  std::unique_ptr<AutofillCvcSaveMessageDelegate>
+      autofill_cvc_save_message_delegate_;
+
   std::unique_ptr<AutofillSaveCardBottomSheetBridge>
       autofill_save_card_bottom_sheet_bridge_;
+
+  std::unique_ptr<AutofillSaveIbanBottomSheetBridge>
+      autofill_save_iban_bottom_sheet_bridge_;
+
+  std::unique_ptr<AutofillSnackbarControllerImpl>
+      autofill_snackbar_controller_impl_;
+
+  std::unique_ptr<AutofillMessageController> autofill_message_controller_;
+
+  CardNameFixFlowControllerImpl card_name_fix_flow_controller_;
+
+  CardExpirationDateFixFlowControllerImpl
+      card_expiration_date_fix_flow_controller_;
 #endif
   const raw_ref<ContentAutofillClient> client_;
 
@@ -172,6 +277,8 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
 
   std::unique_ptr<CardUnmaskAuthenticationSelectionDialogControllerImpl>
       card_unmask_authentication_selection_controller_;
+
+  std::unique_ptr<IbanAccessManager> iban_access_manager_;
 };
 
 }  // namespace payments

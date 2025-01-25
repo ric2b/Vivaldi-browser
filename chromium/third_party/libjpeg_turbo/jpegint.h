@@ -4,8 +4,10 @@
  * This file was part of the Independent JPEG Group's software:
  * Copyright (C) 1991-1997, Thomas G. Lane.
  * Modified 1997-2009 by Guido Vollbeding.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
  * libjpeg-turbo Modifications:
- * Copyright (C) 2015-2016, 2019, 2021, D. R. Commander.
+ * Copyright (C) 2015-2017, 2019, 2021-2022, 2024, D. R. Commander.
  * Copyright (C) 2015, Google, Inc.
  * Copyright (C) 2021, Alex Richardson.
  * For conditions of distribution and use, see the accompanying README.ijg
@@ -174,6 +176,9 @@ struct jpeg_decomp_master {
 
   /* Last iMCU row that was successfully decoded */
   JDIMENSION last_good_iMCU_row;
+
+  /* Tail of list of saved markers */
+  jpeg_saved_marker_ptr marker_list_end;
 };
 
 /* Input control module */

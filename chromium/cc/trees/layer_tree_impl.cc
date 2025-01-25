@@ -21,7 +21,9 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/json/json_writer.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/stack_allocated.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
@@ -228,14 +230,24 @@ void LayerTreeImpl::DidUpdateScrollOffset(ElementId id) {
     return;
   }
 
-  // This condition controls whether we'll update the transform node based on a
-  // changed scroll offset. If it's false (e.g. if the scroll node has any main
-  // thread repaint reasons), we can mutate scroll nodes but don't want to
-  // produce any immediate changes in the compositor. Instead we want the scroll
-  // to propagate through Blink in a commit and have Blink update properties,
+  bool can_realize_on_active_tree =
+      scroll_tree.CanRealizeScrollsOnActiveTree(*scroll_node);
+  bool can_realize_on_pending_tree =
+      scroll_tree.CanRealizeScrollsOnPendingTree(*scroll_node);
+  // This bit controls whether we'll update the transform node based on a
+  // changed scroll offset. We have mutated the scroll nodes, but if the scroll
+  // needs additional handling in the pending tree or the main thread, we don't
+  // want to produce any immediate changes in the active tree or any compositor
+  // tree. For example, if the scroll needs main thread, we want the scroll to
+  // propagate through Blink in a commit and have Blink update properties,
   // paint, compositing, etc. Thus, we avoid mutating the transform tree in
-  // this case.
-  if (scroll_tree.CanRealizeScrollsOnCompositor(*scroll_node)) {
+  // these cases.
+  bool can_realize_now = can_realize_on_active_tree;
+  if (!IsActiveTree()) {
+    can_realize_now |= can_realize_on_pending_tree;
+  }
+
+  if (can_realize_now) {
     CHECK_NE(scroll_node->transform_id, kInvalidPropertyNodeId);
     TransformTree& transform_tree = property_trees()->transform_tree_mutable();
     auto* transform_node = transform_tree.Node(scroll_node->transform_id);
@@ -243,11 +255,13 @@ void LayerTreeImpl::DidUpdateScrollOffset(ElementId id) {
         scroll_tree.current_scroll_offset(id)) {
       transform_node->scroll_offset = scroll_tree.current_scroll_offset(id);
       transform_node->needs_local_transform_update = true;
+      transform_node->transform_changed = true;
       transform_tree.set_needs_update(true);
+      property_trees()->set_changed(true);
+      set_needs_update_draw_properties();
     }
-    transform_node->transform_changed = true;
-    property_trees()->set_changed(true);
-    set_needs_update_draw_properties();
+  } else if (can_realize_on_pending_tree) {
+    host_impl_->RequestImplSideInvalidationForRasterInducingScroll(id);
   }
 
   if (IsActiveTree()) {
@@ -391,6 +405,17 @@ void LayerTreeImpl::InvalidateRegionForImages(
       base::StringPrintf("no_images[%zu] no_invalidaton[%zu] invalidated[%zu]",
                          no_images_count, no_invalidation_count,
                          invalidated_count));
+}
+
+void LayerTreeImpl::InvalidateRasterInducingScrolls(
+    const base::flat_set<ElementId>& scrolls_to_invalidate) {
+  if (scrolls_to_invalidate.empty()) {
+    return;
+  }
+  DCHECK(IsSyncTree());
+  for (PictureLayerImpl* picture_layer : picture_layers_) {
+    picture_layer->InvalidateRasterInducingScrolls(scrolls_to_invalidate);
+  }
 }
 
 void LayerTreeImpl::UpdateViewportContainerSizes() {
@@ -634,6 +659,11 @@ void LayerTreeImpl::PullPropertiesFrom(
   property_trees()->scroll_tree_mutable().PushScrollUpdatesFromMainThread(
       unsafe_state.property_trees, this,
       settings().commit_fractional_scroll_deltas);
+  // This must be after scroll updates because the discardable image map may
+  // depend on raster-inducing scroll offsets.
+  for (auto& layer : picture_layers()) {
+    layer->RegenerateDiscardableImageMapIfNeeded();
+  }
 
   PullLayerTreePropertiesFrom(commit_state);
 
@@ -734,6 +764,9 @@ void LayerTreeImpl::PullLayerTreePropertiesFrom(CommitState& commit_state) {
   if (!commit_state.screenshot_destination_token.is_empty()) {
     SetScreenshotDestinationToken(commit_state.screenshot_destination_token);
   }
+
+  set_primary_main_frame_item_sequence_number(
+      commit_state.primary_main_frame_item_sequence_number);
 
   SetLocalSurfaceIdFromParent(commit_state.local_surface_id_from_parent);
 
@@ -837,6 +870,9 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
     target_tree->SetScreenshotDestinationToken(std::move(token));
   }
 
+  target_tree->set_primary_main_frame_item_sequence_number(
+      primary_main_frame_item_sequence_number());
+
   target_tree->pending_page_scale_animation_ =
       std::move(pending_page_scale_animation_);
 
@@ -939,8 +975,12 @@ void LayerTreeImpl::MoveChangeTrackingToLayers() {
   // onto the layers.
   property_trees_.UpdateChangeTracking();
   for (auto* layer : *this) {
-    if (layer->LayerPropertyChangedFromPropertyTrees())
-      layer->NoteLayerPropertyChangedFromPropertyTrees();
+    if (layer->LayerPropertyChanged()) {
+      if (layer->LayerPropertyChangedFromPropertyTrees()) {
+        layer->NoteLayerPropertyChangedFromPropertyTrees();
+      }
+      updated_layers_.insert(layer);
+    }
   }
   EffectTree& effect_tree = property_trees_.effect_tree_mutable();
   for (int id = kContentsRootPropertyNodeId;
@@ -1808,12 +1848,15 @@ void LayerTreeImpl::ClearLayersThatShouldPushProperties() {
 void LayerTreeImpl::RegisterLayer(LayerImpl* layer) {
   DCHECK(!LayerById(layer->id()));
   layer_id_map_[layer->id()] = layer;
+  updated_layers_.insert(layer);
 }
 
 void LayerTreeImpl::UnregisterLayer(LayerImpl* layer) {
   DCHECK(LayerById(layer->id()));
   layers_that_should_push_properties_.erase(layer);
   layer_id_map_.erase(layer->id());
+  updated_layers_.erase(layer);
+  unregistered_layers_.push_back(layer->id());
 }
 
 void LayerTreeImpl::AddLayer(std::unique_ptr<LayerImpl> layer) {
@@ -1978,7 +2021,7 @@ LayerTreeImpl::CreateScrollbarAnimationController(ElementId scroll_element_id,
               thinning_duration, initial_opacity, idle_thickness_scale);
     }
     case LayerTreeSettings::NO_ANIMATOR:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   return nullptr;
@@ -2165,7 +2208,7 @@ void LayerTreeImpl::RegisterPictureLayerImpl(PictureLayerImpl* layer) {
 
 void LayerTreeImpl::UnregisterPictureLayerImpl(PictureLayerImpl* layer) {
   auto it = base::ranges::find(picture_layers_, layer);
-  DCHECK(it != picture_layers_.end());
+  CHECK(it != picture_layers_.end(), base::NotFatalUntil::M130);
   picture_layers_.erase(it);
 
   // Make sure that |picture_layers_with_paint_worklets_| doesn't get left with
@@ -2181,7 +2224,8 @@ void LayerTreeImpl::NotifyLayerHasPaintWorkletsChanged(PictureLayerImpl* layer,
     DCHECK(insert_pair.second);
   } else {
     auto it = picture_layers_with_paint_worklets_.find(layer);
-    DCHECK(it != picture_layers_with_paint_worklets_.end());
+    CHECK(it != picture_layers_with_paint_worklets_.end(),
+          base::NotFatalUntil::M130);
     picture_layers_with_paint_worklets_.erase(it);
   }
 }
@@ -2415,10 +2459,13 @@ static bool PointHitsLayer(const LayerImpl* layer,
 }
 
 struct FindClosestMatchingLayerState {
+  STACK_ALLOCATED();
+
+ public:
   FindClosestMatchingLayerState()
       : closest_match(nullptr),
         closest_distance(-std::numeric_limits<float>::infinity()) {}
-  raw_ptr<LayerImpl> closest_match;
+  LayerImpl* closest_match = nullptr;
   // Note that the positive z-axis points towards the camera, so bigger means
   // closer in this case, counterintuitively.
   float closest_distance;
@@ -2696,7 +2743,7 @@ static void FindClosestMatchingLayerForAttribution(
   // targeted frame so that we can properly attribute the (common) parent ->
   // child frame relationship. This is made possible since we can accurately
   // hit test within layerized subframes, but not for all occluders.
-  if (auto* layer = state->closest_match.get()) {
+  if (auto* layer = state->closest_match) {
     const auto& transform_tree =
         layer->layer_tree_impl()->property_trees()->transform_tree();
     for (const auto* node = transform_tree.Node(layer->transform_tree_index());
@@ -2723,7 +2770,7 @@ ElementId LayerTreeImpl::FindFrameElementIdAtPoint(
   FindClosestMatchingLayerForAttribution(screen_space_point,
                                          layer_list_[0].get(), &state);
 
-  if (const auto* layer = state.closest_match.get()) {
+  if (const auto* layer = state.closest_match) {
     // TODO(crbug.com/40121347): Permit hit testing only if the framed
     // element hit has a simple mask/clip. We don't have enough information
     // about complex masks/clips on the impl-side to do accurate hit testing.
@@ -2863,7 +2910,7 @@ void LayerTreeImpl::UpdateImageDecodingHints(
 }
 
 int LayerTreeImpl::GetMSAASampleCountForRaster(
-    const scoped_refptr<DisplayItemList>& display_list) {
+    const DisplayItemList& display_list) const {
   return host_impl_->GetMSAASampleCountForRaster(display_list);
 }
 
@@ -2905,6 +2952,8 @@ bool LayerTreeImpl::TakeForceSendMetadataRequest() {
 }
 
 void LayerTreeImpl::ResetAllChangeTracking() {
+  updated_layers_.clear();
+  unregistered_layers_.clear();
   layers_that_should_push_properties_.clear();
   // Iterate over all layers, including masks.
   for (auto* layer : *this)
@@ -2956,6 +3005,32 @@ bool LayerTreeImpl::HasViewTransitionSaveRequest() const {
   }
 
   return false;
+}
+
+std::unordered_set<LayerImpl*> LayerTreeImpl::TakeUpdatedLayers() {
+  std::unordered_set<LayerImpl*> layers;
+  layers.swap(updated_layers_);
+  return layers;
+}
+
+std::vector<int> LayerTreeImpl::TakeUnregisteredLayers() {
+  std::vector<int> layers;
+  layers.swap(unregistered_layers_);
+  return layers;
+}
+
+size_t LayerTreeImpl::RemoveLayers(base::span<int> layer_ids) {
+  if (layer_ids.empty() || LayerListIsEmpty()) {
+    return 0;
+  }
+
+  std::unordered_set<int> ids{layer_ids.begin(), layer_ids.end()};
+  const auto removed =
+      std::remove_if(std::next(layer_list_.begin()), layer_list_.end(),
+                     [&ids](auto& layer) { return ids.erase(layer->id()); });
+  const size_t num_removed = layer_list_.end() - removed;
+  layer_list_.erase(removed, layer_list_.end());
+  return num_removed;
 }
 
 bool LayerTreeImpl::IsReadyToActivate() const {

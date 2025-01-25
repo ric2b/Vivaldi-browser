@@ -20,22 +20,21 @@ import {
   switchMap,
 } from '../../third_party/rxjs/rxjs.js';
 import type {CDPSession} from '../api/CDPSession.js';
-import type {ElementHandle} from '../api/ElementHandle.js';
 import {
   Frame,
   throwIfDetached,
   type GoToOptions,
   type WaitForOptions,
 } from '../api/Frame.js';
-import type {WaitForSelectorOptions} from '../api/Page.js';
 import {PageEvent} from '../api/Page.js';
+import {Accessibility} from '../cdp/Accessibility.js';
 import {
   ConsoleMessage,
   type ConsoleMessageLocation,
 } from '../common/ConsoleMessage.js';
 import {TargetCloseError, UnsupportedOperation} from '../common/Errors.js';
 import type {TimeoutSettings} from '../common/TimeoutSettings.js';
-import type {Awaitable, NodeFor} from '../common/types.js';
+import type {Awaitable} from '../common/types.js';
 import {debugError, fromEmitterEvent, timeout} from '../common/util.js';
 import {isErrorLike} from '../util/ErrorLike.js';
 
@@ -73,6 +72,7 @@ export class BidiFrame extends Frame {
 
   override readonly _id: string;
   override readonly client: BidiCdpSession;
+  override readonly accessibility: Accessibility;
 
   private constructor(
     parent: BidiPage | BidiFrame,
@@ -93,6 +93,7 @@ export class BidiFrame extends Frame {
         this
       ),
     };
+    this.accessibility = new Accessibility(this.realms.default);
   }
 
   #initialize(): void {
@@ -454,19 +455,6 @@ export class BidiFrame extends Frame {
 
     this.#exposedFunctions.delete(name);
     await exposedFunction[Symbol.asyncDispose]();
-  }
-
-  override waitForSelector<Selector extends string>(
-    selector: Selector,
-    options?: WaitForSelectorOptions
-  ): Promise<ElementHandle<NodeFor<Selector>> | null> {
-    if (selector.startsWith('aria') && !this.page().browser().cdpSupported) {
-      throw new UnsupportedOperation(
-        'ARIA selector is not supported for BiDi!'
-      );
-    }
-
-    return super.waitForSelector(selector, options);
   }
 
   async createCDPSession(): Promise<CDPSession> {

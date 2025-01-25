@@ -27,6 +27,7 @@
 
 #include "src/tint/lang/core/ir/binary/encode.h"
 
+#include <string>
 #include <utility>
 
 #include "src/tint/lang/core/builtin_fn.h"
@@ -73,6 +74,7 @@
 #include "src/tint/lang/core/type/f16.h"
 #include "src/tint/lang/core/type/f32.h"
 #include "src/tint/lang/core/type/i32.h"
+#include "src/tint/lang/core/type/input_attachment.h"
 #include "src/tint/lang/core/type/matrix.h"
 #include "src/tint/lang/core/type/multisampled_texture.h"
 #include "src/tint/lang/core/type/pointer.h"
@@ -85,7 +87,7 @@
 #include "src/tint/utils/rtti/switch.h"
 
 TINT_BEGIN_DISABLE_PROTOBUF_WARNINGS();
-#include "src/tint/lang/core/ir/binary/ir.pb.h"
+#include "src/tint/utils/protos/ir/ir.pb.h"
 TINT_END_DISABLE_PROTOBUF_WARNINGS();
 
 namespace tint::core::ir::binary {
@@ -109,7 +111,7 @@ struct Encoder {
         }
         Vector<pb::Function*, 8> fns_out;
         for (auto& fn_in : mod_in_.functions) {
-            uint32_t id = static_cast<uint32_t>(fns_out.Length() + 1);
+            uint32_t id = static_cast<uint32_t>(mod_out_.functions().size());
             fns_out.Push(mod_out_.add_functions());
             functions_.Add(fn_in, id);
         }
@@ -140,8 +142,11 @@ struct Encoder {
             fn_out->add_parameters(Value(param_in));
         }
         if (auto ret_loc_in = fn_in->ReturnLocation()) {
-            auto& ret_loc_out = *fn_out->mutable_return_location();
-            Location(ret_loc_out, *ret_loc_in);
+            fn_out->set_return_location(*ret_loc_in);
+        }
+        if (auto ret_interp_in = fn_in->ReturnInterpolation()) {
+            auto& ret_interp_out = *fn_out->mutable_return_interpolation();
+            Interpolation(ret_interp_out, *ret_interp_in);
         }
         if (auto builtin_in = fn_in->ReturnBuiltin()) {
             fn_out->set_return_builtin(BuiltinValue(*builtin_in));
@@ -152,7 +157,7 @@ struct Encoder {
         fn_out->set_block(Block(fn_in->Block()));
     }
 
-    uint32_t Function(const ir::Function* fn_in) { return fn_in ? *functions_.Get(fn_in) : 0; }
+    uint32_t Function(const ir::Function* fn_in) { return *functions_.Get(fn_in); }
 
     pb::PipelineStage PipelineStage(Function::PipelineStage stage) {
         switch (stage) {
@@ -172,12 +177,11 @@ struct Encoder {
     // Blocks
     ////////////////////////////////////////////////////////////////////////////
     uint32_t Block(const ir::Block* block_in) {
-        if (block_in == nullptr) {
-            return 0;
-        }
+        TINT_ASSERT(block_in != nullptr);
+
         return blocks_.GetOrAdd(block_in, [&]() -> uint32_t {
+            auto id = static_cast<uint32_t>(mod_out_.blocks().size());
             auto& block_out = *mod_out_.add_blocks();
-            auto id = static_cast<uint32_t>(blocks_.Count());
             for (auto* inst : *block_in) {
                 Instruction(*block_out.add_instructions(), inst);
             }
@@ -253,7 +257,10 @@ struct Encoder {
 
     void InstructionBitcast(pb::InstructionBitcast&, const ir::Bitcast*) {}
 
-    void InstructionBreakIf(pb::InstructionBreakIf&, const ir::BreakIf*) {}
+    void InstructionBreakIf(pb::InstructionBreakIf& breakif_out, const ir::BreakIf* breakif_in) {
+        auto num_next_iter_values = static_cast<uint32_t>(breakif_in->NextIterValues().Length());
+        breakif_out.set_num_next_iter_values(num_next_iter_values);
+    }
 
     void InstructionBuiltinCall(pb::InstructionBuiltinCall& call_out,
                                 const ir::CoreBuiltinCall* call_in) {
@@ -292,7 +299,7 @@ struct Encoder {
 
     void InstructionLoop(pb::InstructionLoop& loop_out, const ir::Loop* loop_in) {
         if (loop_in->HasInitializer()) {
-            loop_out.set_initalizer(Block(loop_in->Initializer()));
+            loop_out.set_initializer(Block(loop_in->Initializer()));
         }
         loop_out.set_body(Block(loop_in->Body()));
         if (loop_in->HasContinuing()) {
@@ -340,6 +347,9 @@ struct Encoder {
             auto& bp_out = *var_out.mutable_binding_point();
             BindingPoint(bp_out, *bp_in);
         }
+        if (auto iidx_in = var_in->InputAttachmentIndex()) {
+            var_out.set_input_attachment_index(iidx_in.value());
+        }
     }
 
     void InstructionUnreachable(pb::InstructionUnreachable&, const ir::Unreachable*) {}
@@ -348,9 +358,7 @@ struct Encoder {
     // Types
     ////////////////////////////////////////////////////////////////////////////
     uint32_t Type(const core::type::Type* type_in) {
-        if (type_in == nullptr) {
-            return 0;
-        }
+        TINT_ASSERT(type_in != nullptr);
         return types_.GetOrAdd(type_in, [&]() -> uint32_t {
             pb::Type type_out;
             tint::Switch(
@@ -386,10 +394,13 @@ struct Encoder {
                     TypeExternalTexture(*type_out.mutable_external_texture(), t);
                 },
                 [&](const core::type::Sampler* s) { TypeSampler(*type_out.mutable_sampler(), s); },
+                [&](const core::type::InputAttachment* i) {
+                    TypeInputAttachment(*type_out.mutable_input_attachment(), i);
+                },
                 TINT_ICE_ON_NO_MATCH);
 
             mod_out_.mutable_types()->Add(std::move(type_out));
-            return static_cast<uint32_t>(mod_out_.types().size());
+            return static_cast<uint32_t>(mod_out_.types().size() - 1);
         });
     }
 
@@ -486,6 +497,10 @@ struct Encoder {
     }
 
     void TypeExternalTexture(pb::TypeExternalTexture&, const core::type::ExternalTexture*) {}
+    void TypeInputAttachment(pb::TypeInputAttachment& input_attachment_out,
+                             const core::type::InputAttachment* input_attachment_in) {
+        input_attachment_out.set_sub_type(Type(input_attachment_in->type()));
+    }
 
     void TypeSampler(pb::TypeSampler& sampler_out, const core::type::Sampler* sampler_in) {
         sampler_out.set_kind(SamplerKind(sampler_in->kind()));
@@ -538,8 +553,14 @@ struct Encoder {
             BindingPoint(bp_out, *bp_in);
         }
         if (auto location_in = param_in->Location()) {
-            auto& location_out = *param_out.mutable_attributes()->mutable_location();
-            Location(location_out, *location_in);
+            param_out.mutable_attributes()->set_location(*location_in);
+        }
+        if (auto color_in = param_in->Color()) {
+            param_out.mutable_attributes()->set_color(*color_in);
+        }
+        if (auto interpolation_in = param_in->Interpolation()) {
+            auto& interpolation_out = *param_out.mutable_attributes()->mutable_interpolation();
+            Interpolation(interpolation_out, *interpolation_in);
         }
         if (auto builtin_in = param_in->Builtin()) {
             param_out.mutable_attributes()->set_builtin(BuiltinValue(*builtin_in));
@@ -560,9 +581,7 @@ struct Encoder {
     // ConstantValues
     ////////////////////////////////////////////////////////////////////////////
     uint32_t ConstantValue(const core::constant::Value* constant_in) {
-        if (!constant_in) {
-            return 0;
-        }
+        TINT_ASSERT(constant_in != nullptr);
         return constant_values_.GetOrAdd(constant_in, [&] {
             pb::ConstantValue constant_out;
             tint::Switch(
@@ -591,7 +610,7 @@ struct Encoder {
                 TINT_ICE_ON_NO_MATCH);
 
             mod_out_.mutable_constant_values()->Add(std::move(constant_out));
-            return static_cast<uint32_t>(mod_out_.constant_values().size());
+            return static_cast<uint32_t>(mod_out_.constant_values().size() - 1);
         });
     }
 
@@ -613,14 +632,6 @@ struct Encoder {
     ////////////////////////////////////////////////////////////////////////////
     // Attributes
     ////////////////////////////////////////////////////////////////////////////
-    void Location(pb::Location& location_out, const ir::Location& location_in) {
-        if (auto interpolation_in = location_in.interpolation) {
-            auto& interpolation_out = *location_out.mutable_interpolation();
-            Interpolation(interpolation_out, *interpolation_in);
-        }
-        location_out.set_value(location_in.value);
-    }
-
     void Interpolation(pb::Interpolation& interpolation_out,
                        const core::Interpolation& interpolation_in) {
         interpolation_out.set_type(InterpolationType(interpolation_in.type));
@@ -836,6 +847,10 @@ struct Encoder {
                 return pb::InterpolationSampling::centroid;
             case core::InterpolationSampling::kSample:
                 return pb::InterpolationSampling::sample;
+            case core::InterpolationSampling::kFirst:
+                return pb::InterpolationSampling::first;
+            case core::InterpolationSampling::kEither:
+                return pb::InterpolationSampling::either;
             case core::InterpolationSampling::kUndefined:
                 break;
         }
@@ -1124,6 +1139,8 @@ struct Encoder {
                 return pb::BuiltinFn::subgroup_ballot;
             case core::BuiltinFn::kSubgroupBroadcast:
                 return pb::BuiltinFn::subgroup_broadcast;
+            case core::BuiltinFn::kInputAttachmentLoad:
+                return pb::BuiltinFn::input_attachment_load;
             case core::BuiltinFn::kNone:
                 break;
         }
@@ -1133,17 +1150,23 @@ struct Encoder {
 
 }  // namespace
 
-Result<Vector<std::byte, 0>> Encode(const Module& mod_in) {
+std::unique_ptr<pb::Module> EncodeToProto(const Module& mod_in) {
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 
     pb::Module mod_out;
     Encoder{mod_in, mod_out}.Encode();
 
+    return std::make_unique<pb::Module>(mod_out);
+}
+
+Result<Vector<std::byte, 0>> EncodeToBinary(const Module& mod_in) {
+    auto mod_out = EncodeToProto(mod_in);
+
     Vector<std::byte, 0> buffer;
-    size_t len = mod_out.ByteSizeLong();
+    size_t len = mod_out->ByteSizeLong();
     buffer.Resize(len);
     if (len > 0) {
-        if (!mod_out.SerializeToArray(&buffer[0], static_cast<int>(len))) {
+        if (!mod_out->SerializeToArray(&buffer[0], static_cast<int>(len))) {
             return Failure{"failed to serialize protobuf"};
         }
     }

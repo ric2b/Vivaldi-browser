@@ -135,7 +135,7 @@ You can find the exact name of the branch by browsing the
 ```bash
 mkdir release-R76-12239.B
 cd release-R76-12239.B/
-repo init -u <URL> -b <branchname> [-g minilayout] [--reference /path/to/existing/checkout]
+repo init <URL> -b <branchname> [-g minilayout] [--reference /path/to/existing/checkout]
 repo sync
 ```
 
@@ -144,9 +144,8 @@ replace the manifest.git link with the appropriate one).
 
 ```bash
 repo init \
-    -u https://chromium.googlesource.com/chromiumos/manifest.git \
-    -b release-R76-12239.B \
-    --repo-url https://chromium.googlesource.com/external/repo.git
+    https://chromium.googlesource.com/chromiumos/manifest.git \
+    -b release-R76-12239.B
 ```
 
 Next, follow steps in the [developer guide][developer-guide] to
@@ -161,8 +160,7 @@ merge, you can still check out the much smaller buildtools group:
 
 ```bash
 repo init \
-    -u https://chromium.googlesource.com/chromiumos/manifest.git \
-    --repo-url https://chromium.googlesource.com/external/repo.git \
+    https://chromium.googlesource.com/chromiumos/manifest.git \
     -g buildtools
 ```
 

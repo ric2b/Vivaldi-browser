@@ -13,6 +13,8 @@
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "ui/gfx/geometry/size.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
 #include "ui/gfx/gfx_jni_headers/BitmapHelper_jni.h"
 
 using base::android::ConvertUTF8ToJavaString;
@@ -26,17 +28,15 @@ namespace jni_zero {
 // Note: |j_bitmap| is assumed to be non-null, non-empty and of format
 // RGBA_8888.
 template <>
-GFX_EXPORT SkBitmap FromJniType<SkBitmap>(JNIEnv* env,
-                                          const JavaRef<jobject>& j_bitmap) {
+SkBitmap FromJniType<SkBitmap>(JNIEnv* env, const JavaRef<jobject>& j_bitmap) {
   return gfx::CreateSkBitmapFromJavaBitmap(gfx::JavaBitmap(j_bitmap));
 }
 
 // Converts |skbitmap| to a Java-backed bitmap (android.graphics.Bitmap).
 // Note: return nullptr jobject if |skbitmap| is null or empty.
 template <>
-GFX_EXPORT ScopedJavaLocalRef<jobject> ToJniType<SkBitmap>(
-    JNIEnv* env,
-    const SkBitmap& skbitmap) {
+ScopedJavaLocalRef<jobject> ToJniType<SkBitmap>(JNIEnv* env,
+                                                const SkBitmap& skbitmap) {
   if (skbitmap.drawsNothing()) {
     return {};
   }

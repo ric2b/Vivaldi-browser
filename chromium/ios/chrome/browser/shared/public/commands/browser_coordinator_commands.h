@@ -49,6 +49,7 @@ class GURL;
 - (void)showHistoryPanel;
 - (void)showPanel;
 - (void)dismissPanel;
+- (void)setToolbarHidden:(BOOL)hidden;
 
 // Show In App Default Rating Prompt
 - (void)showDefaultReviewPrompt;

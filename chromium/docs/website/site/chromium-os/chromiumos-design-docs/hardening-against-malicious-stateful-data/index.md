@@ -191,9 +191,6 @@ require a few userspace changes. chromeos_startup will be responsible to
 configure symlink traversal to be blocked on the stateful and encrypted stateful
 file systems. We'll need to allow a few exceptions:
 
-*   /var/cache/vpd, /var/cache/echo: These directories contain backwards
-            compatibility symlinks set up by dump_vpd_log. We should ideally
-            clean up consumers of these symlinks and remove the exception.
 *   /var/lib/timezone: This directory contains a symlink to the actual
             time zone file and is maintained by Chrome. This is a low-risk
             exception as this path is generally only sees read-only access by

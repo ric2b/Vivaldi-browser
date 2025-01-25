@@ -5,11 +5,13 @@
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_tab_helper.h"
 
 #import "base/memory/weak_ptr.h"
+#import "base/test/metrics/histogram_tester.h"
 #import "base/test/task_environment.h"
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_item_configuration.h"
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_item_type.h"
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_tab_helper_observer.h"
 #import "ios/chrome/browser/contextual_panel/sample/model/sample_panel_model.h"
+#import "ios/chrome/browser/contextual_panel/utils/contextual_panel_metrics.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "testing/platform_test.h"
@@ -100,10 +102,17 @@ TEST_F(ContextualPanelTabHelperTest, TestObserverIsAlertedOnNavigationStarted) {
 // a web navigation finishes.
 TEST_F(ContextualPanelTabHelperTest,
        TestObserverIsAlertedOnNavigationFinished) {
+  base::HistogramTester tester;
+
   web::FakeNavigationContext context;
   web_state_.OnNavigationFinished(&context);
 
   run_loop_.Run();
 
   EXPECT_EQ(1u, observer_.item_configurations_.size());
+  tester.ExpectUniqueSample(
+      "IOS.ContextualPanel.Model.InfoBlocksWithContentCount", 1, 1);
+  tester.ExpectBucketCount(
+      "IOS.ContextualPanel.Model.Relevance.SamplePanelItem",
+      ModelRelevanceType::High, 1);
 }

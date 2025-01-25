@@ -13,8 +13,9 @@
 
 namespace blink {
 
-ExceptionCode WebCdmExceptionToExceptionCode(
-    WebContentDecryptionModuleException);
+void WebCdmExceptionToPromiseRejection(ScriptPromiseResolverBase*,
+                                       WebContentDecryptionModuleException,
+                                       const String& message);
 
 // This class wraps the promise resolver to simplify creation of
 // ContentDecryptionModuleResult objects. The default implementations of the
@@ -38,7 +39,7 @@ class ContentDecryptionModuleResultPromise
   // ContentDecryptionModuleResult implementation.
   void Complete() override;
   void CompleteWithContentDecryptionModule(
-      WebContentDecryptionModule*) override;
+      std::unique_ptr<WebContentDecryptionModule>) override;
   void CompleteWithSession(
       WebContentDecryptionModuleResult::SessionStatus) override;
   void CompleteWithKeyStatus(
@@ -65,9 +66,6 @@ class ContentDecryptionModuleResultPromise
         std::forward<BlinkType>(value)...);
     resolver_.Clear();
   }
-
-  // Rejects the promise with a DOMException.
-  void Reject(ExceptionCode, const String& error_message);
 
   ExecutionContext* GetExecutionContext() const;
 

@@ -87,7 +87,7 @@ DocumentMarker::MarkerTypeIndex MarkerTypeToMarkerIndex(
       return DocumentMarker::kCustomHighlightMarkerIndex;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return DocumentMarker::kSpellingMarkerIndex;
 }
 
@@ -111,7 +111,7 @@ DocumentMarkerList* CreateListForType(DocumentMarker::MarkerType type) {
       return MakeGarbageCollected<CustomHighlightMarkerListImpl>();
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 
@@ -540,7 +540,7 @@ DocumentMarker* DocumentMarkerController::FirstMarkerAroundPosition(
 
   if (start > end) {
     // TODO(crbug/1114021): Investigate why this might happen.
-    DUMP_WILL_BE_NOTREACHED_NORETURN() << "|start| should be before |end|.";
+    DUMP_WILL_BE_NOTREACHED() << "|start| should be before |end|.";
     return nullptr;
   }
 

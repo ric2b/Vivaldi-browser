@@ -8,8 +8,8 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <set>
-#include <string>
 #include <string_view>
 
 #include "base/compiler_specific.h"
@@ -59,16 +59,16 @@ class COMPONENTS_PREFS_EXPORT SegregatedPrefStore : public PersistentPrefStore {
   base::Value::Dict GetValues() const override;
 
   // WriteablePrefStore implementation
-  void SetValue(const std::string& key,
+  void SetValue(std::string_view key,
                 base::Value value,
                 uint32_t flags) override;
-  void RemoveValue(const std::string& key, uint32_t flags) override;
-  void RemoveValuesByPrefixSilently(const std::string& prefix) override;
+  void RemoveValue(std::string_view key, uint32_t flags) override;
+  void RemoveValuesByPrefixSilently(std::string_view prefix) override;
 
   // PersistentPrefStore implementation
-  bool GetMutableValue(const std::string& key, base::Value** result) override;
-  void ReportValueChanged(const std::string& key, uint32_t flags) override;
-  void SetValueSilently(const std::string& key,
+  bool GetMutableValue(std::string_view key, base::Value** result) override;
+  void ReportValueChanged(std::string_view key, uint32_t flags) override;
+  void SetValueSilently(std::string_view key,
                         base::Value value,
                         uint32_t flags) override;
   bool ReadOnly() const override;
@@ -81,6 +81,7 @@ class COMPONENTS_PREFS_EXPORT SegregatedPrefStore : public PersistentPrefStore {
           base::OnceClosure()) override;
   void SchedulePendingLossyWrites() override;
   void OnStoreDeletionFromDisk() override;
+  bool HasReadErrorDelegate() const override;
 
  protected:
   ~SegregatedPrefStore() override;
@@ -98,7 +99,7 @@ class COMPONENTS_PREFS_EXPORT SegregatedPrefStore : public PersistentPrefStore {
         delete;
 
     // PrefStore::Observer implementation
-    void OnPrefValueChanged(const std::string& key) override;
+    void OnPrefValueChanged(std::string_view key) override;
     void OnInitializationCompleted(bool succeeded) override;
 
     bool initialization_succeeded() const { return initialization_succeeded_; }
@@ -121,8 +122,10 @@ class COMPONENTS_PREFS_EXPORT SegregatedPrefStore : public PersistentPrefStore {
   const scoped_refptr<PersistentPrefStore> selected_pref_store_;
   const PrefNameSet selected_preference_names_;
 
-  std::unique_ptr<PersistentPrefStore::ReadErrorDelegate> read_error_delegate_;
-  base::ObserverList<PrefStore::Observer, true>::Unchecked observers_;
+  // Optional so we can differentiate `nullopt` from `nullptr`.
+  std::optional<std::unique_ptr<PersistentPrefStore::ReadErrorDelegate>>
+      read_error_delegate_;
+  base::ObserverList<PrefStore::Observer, true> observers_;
   UnderlyingPrefStoreObserver default_observer_;
   UnderlyingPrefStoreObserver selected_observer_;
 };

@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/editing/markers/document_marker.h"
 #include "third_party/blink/renderer/core/editing/markers/highlight_pseudo_marker.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
+#include "third_party/blink/renderer/core/layout/inline/inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/inline/text_offset_range.h"
 #include "third_party/blink/renderer/core/layout/selection_state.h"
 #include "third_party/blink/renderer/core/paint/highlight_overlay.h"
@@ -29,7 +30,6 @@ namespace blink {
 class ComputedStyle;
 class FragmentItem;
 class FrameSelection;
-class InlineCursor;
 class LayoutObject;
 class Node;
 class TextDecorationPainter;
@@ -143,8 +143,10 @@ class CORE_EXPORT HighlightPainter {
   enum Phase { kBackground, kForeground };
 
   // Paints backgrounds or foregrounds for markers that are not exposed as CSS
-  // highlight pseudos.
-  void Paint(Phase phase);
+  // highlight pseudos. Note that when text is painted here, that text will have
+  // also been painted by the text fragment painter or one of the CSS-based
+  // methods like PaintHighlightOverlays. This will create antialiasing errors.
+  void PaintNonCssMarkers(Phase phase);
 
   // Indicates the way this painter should be used by the caller, aside from
   // the Paint method, which should always be used.
@@ -220,6 +222,8 @@ class CORE_EXPORT HighlightPainter {
   const PhysicalRect ComputeBackgroundRect(StringView text,
                                            unsigned start_offset,
                                            unsigned end_offset);
+  const PhysicalRect ComputeBackgroundRectForSelection(unsigned start_offset,
+                                                       unsigned end_offset);
   Vector<LayoutSelectionStatus> GetHighlights(const HighlightLayer& layer);
   void FastPaintSpellingGrammarDecorations(const Text& text_node,
                                            const StringView& text,
@@ -249,15 +253,12 @@ class CORE_EXPORT HighlightPainter {
   void PaintDecorationsOnlyLineThrough(const HighlightOverlay::HighlightPart&,
                                        const LineRelativeRect&);
 
-  // Paints text with a highlight color. For composition markers, omit the last
-  // two arguments. For PseudoHighlightMarkers, include both the PseudoId and
-  // PseudoArgument.
-  void PaintDecoratedText(const StringView& text,
-                          const Color& text_color,
-                          unsigned paint_start_offset,
-                          unsigned paint_end_offset,
-                          const PseudoId pseudo = PseudoId::kPseudoIdNone,
-                          const AtomicString& pseudo_argument = g_empty_atom);
+  // Paints originating text and decorations (again) with the given color.
+  // Used for composition markers only.
+  void PaintTextForCompositionMarker(const StringView& text,
+                                     const Color& text_color,
+                                     unsigned paint_start_offset,
+                                     unsigned paint_end_offset);
 
   const TextFragmentPaintInfo& fragment_paint_info_;
 
@@ -271,6 +272,7 @@ class CORE_EXPORT HighlightPainter {
   TextDecorationPainter& decoration_painter_;
   const PaintInfo& paint_info_;
   const InlineCursor& cursor_;
+  InlineCursor root_inline_cursor_;
   const FragmentItem& fragment_item_;
   const PhysicalOffset& box_origin_;
   const ComputedStyle& originating_style_;

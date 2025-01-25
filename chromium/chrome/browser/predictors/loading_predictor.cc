@@ -8,8 +8,10 @@
 #include <vector>
 
 #include "base/metrics/histogram_functions.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/after_startup_task_utils.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/predictors/lcp_critical_path_predictor/lcp_critical_path_predictor_util.h"
 #include "chrome/browser/predictors/lcp_critical_path_predictor/prewarm_http_disk_cache_manager.h"
 #include "chrome/browser/predictors/loading_data_collector.h"
@@ -21,6 +23,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/origin_util.h"
 #include "net/base/network_anonymization_key.h"
+#include "services/network/public/cpp/network_quality_tracker.h"
 #include "services/network/public/cpp/request_destination.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
@@ -40,6 +43,16 @@ BASE_FEATURE(kNoPreconnectToSearchOnWeakSignal,
 BASE_FEATURE(kNoNavigationPreconnectOnWeakSignal,
              "NoNavigationPreconnectOnWeakSignal",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, suppresses LoadingPredictor (https://crbug.com/350519234)
+BASE_FEATURE(kSuppressesLoadingPredictorOnSlowNetwork,
+             "SuppressesLoadingPredictorOnSlowNetwork",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+const base::FeatureParam<base::TimeDelta>
+    kSuppressesLoadingPredictorOnSlowNetworkThreshold{
+        &kSuppressesLoadingPredictorOnSlowNetwork, "slow_network_threshold",
+        base::Milliseconds(208)};
 
 }  // namespace features
 
@@ -157,6 +170,7 @@ LoadingPredictor::~LoadingPredictor() {
 }
 
 bool LoadingPredictor::PrepareForPageLoad(
+    const std::optional<url::Origin>& initiator_origin,
     const GURL& url,
     HintOrigin origin,
     bool preconnectable,
@@ -164,8 +178,26 @@ bool LoadingPredictor::PrepareForPageLoad(
   if (shutdown_)
     return true;
 
+  // Suppresses network activities.
+  static const bool kSuppressesLoadingPredictorOnSlowNetworkIsEnabled =
+      base::FeatureList::IsEnabled(
+          features::kSuppressesLoadingPredictorOnSlowNetwork);
+  static const base::TimeDelta kSlowNetworkThreshold =
+      features::kSuppressesLoadingPredictorOnSlowNetworkThreshold.Get();
+  if (kSuppressesLoadingPredictorOnSlowNetworkIsEnabled && g_browser_process &&
+      g_browser_process->network_quality_tracker()) {
+    const bool is_slow_network =
+        g_browser_process->network_quality_tracker()->GetHttpRTT() >
+        kSlowNetworkThreshold;
+    base::UmaHistogramBoolean("LoadingPredictor.IsSlowNetwork",
+                              is_slow_network);
+    if (is_slow_network) {
+      return true;
+    }
+  }
+
   // Prewarm disk cache before preconnecting network.
-  MaybePrewarmResources(url);
+  MaybePrewarmResources(initiator_origin, url);
 
   MaybeWarmUpServiceWorker(url, profile_);
 
@@ -219,17 +251,32 @@ bool LoadingPredictor::PrepareForPageLoad(
   if (base::FeatureList::IsEnabled(
           blink::features::kLCPPAutoPreconnectLcpOrigin)) {
     std::optional<LcppStat> lcpp_stat =
-        resource_prefetch_predictor()->GetLcppStat(url);
+        resource_prefetch_predictor()->GetLcppStat(initiator_origin, url);
     if (lcpp_stat) {
-      auto network_anonymization_key =
-          net::NetworkAnonymizationKey::CreateSameSite(
-              net::SchemefulSite(url::Origin::Create(url)));
       size_t count = 0;
+      std::vector<PreconnectRequest> additional_preconnects;
+      auto anonymization_key =
+          net::NetworkAnonymizationKey::CreateSameSite(net::SchemefulSite(url));
       for (const GURL& preconnect_origin :
            PredictPreconnectableOrigins(*lcpp_stat)) {
-        prediction.requests.emplace_back(url::Origin::Create(preconnect_origin),
-                                         1, network_anonymization_key);
+        additional_preconnects.emplace_back(
+            url::Origin::Create(preconnect_origin), 1, anonymization_key);
         ++count;
+      }
+
+      if (count) {
+        // The first preconnect record is usually to the url origin itself.
+        // We want to prioritize LCP preconnects just after the page origin
+        // preconnect, to minimize any performance regression. If no new
+        // requests were identified, leave the existing set as-is.
+        if (prediction.requests.empty()) {
+          prediction.requests = std::move(additional_preconnects);
+        } else {
+          prediction.requests.reserve(count + prediction.requests.size());
+          prediction.requests.insert(++prediction.requests.begin(),
+                                     additional_preconnects.begin(),
+                                     additional_preconnects.end());
+        }
       }
       base::UmaHistogramCounts10000("Blink.LCPP.PreconnectPredictionCount",
                                     count);
@@ -245,7 +292,7 @@ bool LoadingPredictor::PrepareForPageLoad(
       features::kLoadingPredictorPrefetchSubresourceType.Get() ==
           features::PrefetchSubresourceType::kAll) {
     std::optional<LcppStat> lcpp_stat =
-        resource_prefetch_predictor()->GetLcppStat(url);
+        resource_prefetch_predictor()->GetLcppStat(initiator_origin, url);
     if (lcpp_stat) {
       auto network_anonymization_key =
           net::NetworkAnonymizationKey::CreateSameSite(
@@ -323,10 +370,12 @@ void LoadingPredictor::Shutdown() {
   shutdown_ = true;
 }
 
-bool LoadingPredictor::OnNavigationStarted(NavigationId navigation_id,
-                                           ukm::SourceId ukm_source_id,
-                                           const GURL& main_frame_url,
-                                           base::TimeTicks creation_time) {
+bool LoadingPredictor::OnNavigationStarted(
+    NavigationId navigation_id,
+    ukm::SourceId ukm_source_id,
+    const std::optional<url::Origin>& initiator_origin,
+    const GURL& main_frame_url,
+    base::TimeTicks creation_time) {
   if (shutdown_)
     return true;
 
@@ -336,7 +385,8 @@ bool LoadingPredictor::OnNavigationStarted(NavigationId navigation_id,
   active_navigations_.emplace(navigation_id,
                               NavigationInfo{main_frame_url, creation_time});
   active_urls_to_navigations_[main_frame_url].insert(navigation_id);
-  return PrepareForPageLoad(main_frame_url, HintOrigin::NAVIGATION);
+  return PrepareForPageLoad(initiator_origin, main_frame_url,
+                            HintOrigin::NAVIGATION);
 }
 
 void LoadingPredictor::OnNavigationFinished(NavigationId navigation_id,
@@ -541,6 +591,7 @@ void LoadingPredictor::PreconnectURLIfAllowed(
 }
 
 void LoadingPredictor::MaybePrewarmResources(
+    const std::optional<url::Origin>& initiator_origin,
     const GURL& top_frame_main_resource_url) {
   if (!base::FeatureList::IsEnabled(
           blink::features::kHttpDiskCachePrewarming)) {
@@ -557,7 +608,8 @@ void LoadingPredictor::MaybePrewarmResources(
   }
 
   std::optional<LcppStat> lcpp_stat =
-      resource_prefetch_predictor()->GetLcppStat(top_frame_main_resource_url);
+      resource_prefetch_predictor()->GetLcppStat(initiator_origin,
+                                                 top_frame_main_resource_url);
 
   if (!lcpp_stat || !IsValidLcppStat(*lcpp_stat)) {
     return;

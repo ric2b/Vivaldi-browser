@@ -13,7 +13,7 @@
 
 namespace openscreen::cast {
 
-using ::cast::channel::CastMessage;
+using proto::CastMessage;
 
 namespace {
 
@@ -40,10 +40,9 @@ ErrorOr<CastMessage> CreateAppAvailabilityResponse(
   availability_response.set_destination_id(sender_id);
   availability_response.set_namespace_(kReceiverNamespace);
   availability_response.set_protocol_version(
-      ::cast::channel::CastMessage_ProtocolVersion_CASTV2_1_0);
+      proto::CastMessage_ProtocolVersion_CASTV2_1_0);
   availability_response.set_payload_utf8(std::move(serialized.value()));
-  availability_response.set_payload_type(
-      ::cast::channel::CastMessage_PayloadType_STRING);
+  availability_response.set_payload_type(proto::CastMessage_PayloadType_STRING);
   return availability_response;
 }
 

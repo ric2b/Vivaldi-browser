@@ -28,7 +28,6 @@ class TimeTicks;
 
 namespace blink {
 
-class ExecutionContext;
 class FetchParameters;
 class ImageResourceInfo;
 class KURL;
@@ -222,12 +221,6 @@ class CORE_EXPORT ImageResourceContent final
   // rather than bytes.
   uint64_t ContentSizeForEntropy() const override;
 
-  // Returns true if the image content is well-compressed (and not full of
-  // extraneous metadata). "well-compressed" is determined by comparing the
-  // image's compression ratio against a specific value that is defined by an
-  // unoptimized image policy on |context|.
-  bool IsAcceptableCompressionRatio(ExecutionContext& context);
-
   void LoadDeferredImage(ResourceFetcher* fetcher);
 
   // Returns whether the resource request has been tagged as an ad.
@@ -252,6 +245,8 @@ class CORE_EXPORT ImageResourceContent final
   bool IsPreloadedWithEarlyHints() const override {
     return is_preloaded_with_early_hints_;
   }
+
+  void SetAllocatedExternalMemory() { allocated_external_memory_ = true; }
 
  private:
   using CanDeferInvalidation = ImageResourceObserver::CanDeferInvalidation;
@@ -278,33 +273,38 @@ class CORE_EXPORT ImageResourceContent final
         : AutoReset(&content->is_add_remove_observer_prohibited_, true) {}
   };
 
+  Member<ImageResourceInfo> info_;
+
+  float device_pixel_ratio_header_value_ = 1.0;
+
+  scoped_refptr<blink::Image> image_;
+
+  base::TimeTicks discovery_time_;
+
+  HeapHashCountedSet<WeakMember<ImageResourceObserver>> observers_;
+  HeapHashCountedSet<WeakMember<ImageResourceObserver>> finished_observers_;
+
+  // Keep one-byte members together to avoid wasting space on padding.
+
   ResourceStatus content_status_ = ResourceStatus::kNotStarted;
 
   // Indicates if this resource's encoded image data can be purged and refetched
   // from disk cache to save memory usage. See crbug/664437.
-  bool is_refetchable_data_from_disk_cache_;
+  bool is_refetchable_data_from_disk_cache_ = true;
 
   mutable bool is_add_remove_observer_prohibited_ = false;
 
   Image::SizeAvailability size_available_ = Image::kSizeUnavailable;
 
-  Member<ImageResourceInfo> info_;
+  bool has_device_pixel_ratio_header_value_ = false;
 
-  float device_pixel_ratio_header_value_;
-  bool has_device_pixel_ratio_header_value_;
+  bool allocated_external_memory_ = false;
 
-  scoped_refptr<blink::Image> image_;
+  bool is_broken_ = false;
 
-  bool is_broken_;
+  bool is_loaded_from_memory_cache_ = false;
 
-  base::TimeTicks discovery_time_;
-
-  bool is_loaded_from_memory_cache_;
-
-  bool is_preloaded_with_early_hints_;
-
-  HeapHashCountedSet<WeakMember<ImageResourceObserver>> observers_;
-  HeapHashCountedSet<WeakMember<ImageResourceObserver>> finished_observers_;
+  bool is_preloaded_with_early_hints_ = false;
 
 #if DCHECK_IS_ON()
   bool is_update_image_being_called_ = false;

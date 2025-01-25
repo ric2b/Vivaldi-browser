@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <xnnpack/common.h>
-#include <xnnpack/config.h>
+#include "xnnpack/common.h"
+#include "xnnpack/hardware-config.h"
 
 
 #if XNN_ARCH_X86
@@ -202,6 +202,54 @@
     } while (0)
 #else
   #define TEST_REQUIRES_X86_AVXVNNI
+#endif
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  #define TEST_REQUIRES_X86_AVX256SKX \
+    do { \
+      const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config(); \
+      if (hardware_config == nullptr || !hardware_config->use_x86_avx256skx) { \
+        GTEST_SKIP(); \
+      } \
+    } while (0)
+#else
+  #define TEST_REQUIRES_X86_AVX256SKX
+#endif
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  #define TEST_REQUIRES_X86_AVX256VNNI \
+    do { \
+      const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config(); \
+      if (hardware_config == nullptr || !hardware_config->use_x86_avx256vnni) { \
+        GTEST_SKIP(); \
+      } \
+    } while (0)
+#else
+  #define TEST_REQUIRES_X86_AVX256VNNI
+#endif
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  #define TEST_REQUIRES_X86_AVX256VNNIGFNI \
+    do { \
+      const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config(); \
+      if (hardware_config == nullptr || !hardware_config->use_x86_avx256vnnigfni) { \
+        GTEST_SKIP(); \
+      } \
+    } while (0)
+#else
+  #define TEST_REQUIRES_X86_AVX256VNNIGFNI
+#endif
+
+#if XNN_ARCH_HEXAGON
+  #define TEST_REQUIRES_HVX \
+    do { \
+      const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config(); \
+      if (hardware_config == nullptr || !hardware_config->use_hvx) { \
+        GTEST_SKIP(); \
+      } \
+    } while (0)
+#else
+  #define TEST_REQUIRES_HVX
 #endif
 
 #if XNN_ARCH_ARM

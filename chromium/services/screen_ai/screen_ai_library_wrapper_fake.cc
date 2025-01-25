@@ -28,10 +28,6 @@ void ScreenAILibraryWrapperFake::SetFileContentFunctions(
 
 void ScreenAILibraryWrapperFake::EnableDebugMode() {}
 
-bool ScreenAILibraryWrapperFake::InitLayoutExtraction() {
-  return true;
-}
-
 bool ScreenAILibraryWrapperFake::InitOCR() {
   return true;
 }
@@ -42,20 +38,12 @@ bool ScreenAILibraryWrapperFake::InitMainContentExtraction() {
 
 std::optional<chrome_screen_ai::VisualAnnotation>
 ScreenAILibraryWrapperFake::PerformOcr(const SkBitmap& image) {
-  // TODO(crbug.com/41489544): Add returning preloaded result.
-  return std::nullopt;
-}
-
-std::optional<chrome_screen_ai::VisualAnnotation>
-ScreenAILibraryWrapperFake::ExtractLayout(const SkBitmap& image) {
-  // TODO(crbug.com/41489544): Add returning preloaded result.
   return std::nullopt;
 }
 
 std::optional<std::vector<int32_t>>
 ScreenAILibraryWrapperFake::ExtractMainContent(
     const std::string& serialized_view_hierarchy) {
-  // TODO(crbug.com/41489544): Add returning preloaded result.
   return std::nullopt;
 }
 

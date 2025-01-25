@@ -67,7 +67,7 @@ TEST_F(VivaldiDataUrlUtilsTest, ParsePath_BadFormat) {
   // In the invalid format checks use the name of one of top directories to
   // ensure that the url is rejected due to bad format, not an unknwon
   // directory.
-  EXPECT_EQ(base::StringPiece(top_dir(PathType::kImage)), "thumbnail");
+  EXPECT_EQ(std::string_view(top_dir(PathType::kImage)), "thumbnail");
 
   // The path cannot be empty.
   type = ParsePath("");
@@ -97,8 +97,8 @@ TEST_F(VivaldiDataUrlUtilsTest, ParsePath_OldFormats) {
 
   // thumbnail and local-image specific checks to ensure that we still support
   // the older forms.
-  EXPECT_EQ(base::StringPiece(top_dir(PathType::kImage)), "thumbnail");
-  EXPECT_EQ(base::StringPiece(top_dir(PathType::kLocalPath)), "local-image");
+  EXPECT_EQ(std::string_view(top_dir(PathType::kImage)), "thumbnail");
+  EXPECT_EQ(std::string_view(top_dir(PathType::kLocalPath)), "local-image");
 
   // Check that parsing of the old thumbnail url format works.
   type = ParsePath("/http://bookmark_thumbnail/id?query", &data);

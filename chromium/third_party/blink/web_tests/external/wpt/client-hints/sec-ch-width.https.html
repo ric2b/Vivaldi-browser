@@ -6,13 +6,19 @@
 <script src="/resources/testharness.js"></script>
 <script src="/resources/testharnessreport.js"></script>
 
-<img src="resources/2x3-svg-scaled-by-sec-ch-width.py" width="50" height="50">
-
 <script>
-  promise_test(async (test) => {
-    const testImage = document.getElementsByTagName('img')[0];
-    await new Promise(resolve => testImage.onload = resolve);
-    assert_equals(testImage.naturalWidth, 100);
-    assert_equals(testImage.naturalHeight, 150);
-  }, 'Sec-CH-Width should be set');
+  setup({explicit_done: true});
+
+  function run() {
+    test(() => {
+      const testImage = document.getElementsByTagName('img')[0];
+      // Spec: sec-ch-width MUST be an integer greater than or equal to 0.
+      const width = Math.ceil(0.10 * innerWidth * devicePixelRatio);
+      assert_equals(testImage.naturalWidth, 2 * width);
+      assert_equals(testImage.naturalHeight, 3 * width);
+    }, 'Sec-CH-Width should be set');
+    done();
+  }
 </script>
+
+<img onload="run()" src="resources/2x3-svg-scaled-by-sec-ch-width.py" sizes="10vw">

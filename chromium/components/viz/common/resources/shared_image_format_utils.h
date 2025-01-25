@@ -14,6 +14,7 @@ namespace gpu {
 class ClientSharedImage;
 class SharedImageFormatToBufferFormatRestrictedUtilsAccessor;
 class SharedImageFormatRestrictedUtilsAccessor;
+class TestSharedImageInterface;
 }  // namespace gpu
 
 namespace cc {
@@ -21,6 +22,7 @@ class PerfContextProvider;
 }
 
 namespace media {
+class VideoFrame;
 class VideoResourceUpdater;
 }
 
@@ -29,7 +31,6 @@ namespace viz {
 class ContextProviderCommandBuffer;
 class TestContextProvider;
 class TestInProcessContextProvider;
-class TestSharedImageInterface;
 
 // Returns the closest SkColorType for a given single planar `format`.
 //
@@ -70,10 +71,9 @@ COMPONENT_EXPORT(VIZ_SHARED_IMAGE_FORMAT)
 gfx::BufferFormat SinglePlaneSharedImageFormatToBufferFormat(
     SharedImageFormat format);
 
-// Returns the SharedImageFormat corresponding to `format`, which must be a
-// single-planar format.
+// Returns the SharedImageFormat corresponding to `buffer_format`.
 COMPONENT_EXPORT(VIZ_SHARED_IMAGE_FORMAT)
-SharedImageFormat GetSinglePlaneSharedImageFormat(gfx::BufferFormat format);
+SharedImageFormat GetSharedImageFormat(gfx::BufferFormat buffer_format);
 
 // Utilities that conceptually belong only on the service side, but are
 // currently used by some clients. Usage is restricted to friended clients.
@@ -107,7 +107,8 @@ class COMPONENT_EXPORT(VIZ_SHARED_IMAGE_FORMAT)
  private:
   friend class gpu::ClientSharedImage;
   friend class gpu::SharedImageFormatToBufferFormatRestrictedUtilsAccessor;
-  friend class TestSharedImageInterface;
+  friend class gpu::TestSharedImageInterface;
+  friend class media::VideoFrame;
 
   // BufferFormat is being transitioned out of SharedImage code (to use
   // SharedImageFormat instead). Refrain from using this function or preferably

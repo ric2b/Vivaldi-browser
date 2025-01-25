@@ -208,7 +208,7 @@ public class PageInfoController
                             displayUrlBuilder.toString(), autocompleteSchemeClassifier);
             if (emphasizeResponse.schemeLength > 0) {
                 displayUrlBuilder.setSpan(
-                        new TextAppearanceSpan(mContext, R.style.TextAppearance_RobotoMediumStyle),
+                        new TextAppearanceSpan(mContext, R.style.TextAppearance_MediumStyle),
                         0,
                         emphasizeResponse.schemeLength,
                         Spannable.SPAN_EXCLUSIVE_INCLUSIVE);
@@ -554,6 +554,11 @@ public class PageInfoController
 
     public PageInfoTrackingProtectionController getTrackingProtectionControllerForTesting() {
         return mTrackingProtectionController;
+    }
+
+    public PageInfoTrackingProtectionLaunchController
+            getTrackingProtectionLaunchControllerForTesting() {
+        return mTrackingProtectionLaunchController;
     }
 
     public boolean isDialogShowingForTesting() {

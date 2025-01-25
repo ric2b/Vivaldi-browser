@@ -57,7 +57,7 @@ std::u16string VivaldiGenerateUniqueFolderName(
   }
 
   NOTREACHED();
-  return folder_name;
+  //return folder_name;
 }
 
 }  // namespace

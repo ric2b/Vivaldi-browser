@@ -23,7 +23,6 @@ import {FocusOutlineManager} from 'chrome://resources/js/focus_outline_manager.j
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {getTrustedScriptURL} from 'chrome://resources/js/static_types.js';
 import type {SkColor} from 'chrome://resources/mojo/skia/public/mojom/skcolor.mojom-webui.js';
-import type {DomIf} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './app.html.js';
@@ -66,7 +65,7 @@ export enum NtpElement {
   MODULE = 7,
   CUSTOMIZE = 8,  // Obsolete
   CUSTOMIZE_BUTTON = 9,
-  CUSTOMIZE_DIALOG = 10,
+  CUSTOMIZE_DIALOG = 10,  // Obsolete
   WALLPAPER_SEARCH_BUTTON = 11,
   MAX_VALUE = WALLPAPER_SEARCH_BUTTON,
 }
@@ -118,7 +117,6 @@ const AppElementBase = HelpBubbleMixin(PolymerElement) as
 
 export interface AppElement {
   $: {
-    customizeDialogIf: DomIf,
     oneGoogleBarClipPath: HTMLElement,
     logo: LogoElement,
   };
@@ -284,11 +282,6 @@ export class AppElement extends AppElementBase {
         value: () => loadTimeData.getBoolean('singleRowShortcutsEnabled'),
       },
 
-      modulesFreShown: {
-        type: Boolean,
-        reflectToAttribute: true,
-      },
-
       middleSlotPromoEnabled_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('middleSlotPromoEnabled'),
@@ -302,13 +295,6 @@ export class AppElement extends AppElementBase {
       modulesRedesignedEnabled_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('modulesRedesignedEnabled'),
-        reflectToAttribute: true,
-      },
-
-      mostVisitedReflowOnOverflowEnabled_: {
-        type: Boolean,
-        value: () =>
-            loadTimeData.getBoolean('mostVisitedReflowOnOverflowEnabled'),
         reflectToAttribute: true,
       },
 
@@ -630,6 +616,9 @@ export class AppElement extends AppElementBase {
     this.registerHelpBubble(
         CUSTOMIZE_CHROME_BUTTON_ELEMENT_ID, '#customizeButton', {fixed: true});
     this.pageHandler_.maybeShowFeaturePromo(IphFeature.kCustomizeChrome);
+    if (this.wallpaperSearchButtonEnabled_) {
+      this.pageHandler_.incrementWallpaperSearchButtonShownCount();
+    }
   }
 
   private onOpenVoiceSearch_() {
@@ -715,15 +704,27 @@ export class AppElement extends AppElementBase {
 
 
   private onThemeLoaded_(theme: Theme) {
-    chrome.metricsPrivate.recordEnumerationValue(
-        'NewTabPage.BackgroundImageSource',
-        (theme.backgroundImage ? theme.backgroundImage.imageSource :
-                                 NtpBackgroundImageSource.kNoImage),
-        NtpBackgroundImageSource.MAX_VALUE + 1);
-
     chrome.metricsPrivate.recordSparseValueWithPersistentHash(
         'NewTabPage.Collections.IdOnLoad',
         theme.backgroundImageCollectionId ?? '');
+
+    if (!theme.backgroundImage || !theme.backgroundImage.imageSource) {
+      chrome.metricsPrivate.recordEnumerationValue(
+          'NewTabPage.BackgroundImageSource', NtpBackgroundImageSource.kNoImage,
+          NtpBackgroundImageSource.MAX_VALUE + 1);
+      return;
+    } else {
+      chrome.metricsPrivate.recordEnumerationValue(
+          'NewTabPage.BackgroundImageSource', theme.backgroundImage.imageSource,
+          NtpBackgroundImageSource.MAX_VALUE + 1);
+    }
+
+    if (theme.backgroundImage.imageSource ===
+            NtpBackgroundImageSource.kWallpaperSearch ||
+        theme.backgroundImage.imageSource ===
+            NtpBackgroundImageSource.kWallpaperSearchInspiration) {
+      this.wallpaperSearchButtonAnimationEnabled_ = false;
+    }
   }
 
   private onPromoAndModulesLoadedChange_() {
@@ -969,9 +970,6 @@ export class AppElement extends AppElementBase {
           return;
         case $$(this, '#customizeButton'):
           recordClick(NtpElement.CUSTOMIZE_BUTTON);
-          return;
-        case $$(this, 'ntp-customize-dialog'):
-          recordClick(NtpElement.CUSTOMIZE_DIALOG);
           return;
         case $$(this, '#wallpaperSearchButton'):
           recordClick(NtpElement.WALLPAPER_SEARCH_BUTTON);

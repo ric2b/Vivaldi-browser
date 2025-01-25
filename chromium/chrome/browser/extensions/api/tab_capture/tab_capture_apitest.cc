@@ -54,11 +54,12 @@ class TabCaptureApiTest : public ExtensionApiTest {
     // Specify smallish window size to make testing of tab capture less CPU
     // intensive.
     command_line->AppendSwitchASCII(::switches::kWindowSize, "300,300");
+    // MSan and GL do not get along so avoid using the GPU with MSan.
     // TODO(crbug.com/40260482): Remove this after fixing feature
     // detection in 0c tab capture path as it'll no longer be needed.
-    if constexpr (!BUILDFLAG(IS_CHROMEOS)) {
-      command_line->AppendSwitch(::switches::kUseGpuInTests);
-    }
+#if !BUILDFLAG(IS_CHROMEOS) && !defined(MEMORY_SANITIZER)
+    command_line->AppendSwitch(::switches::kUseGpuInTests);
+#endif
   }
 
   void AddExtensionToCommandLineAllowlist() {
@@ -92,8 +93,8 @@ class TabCaptureApiPixelTest : public TabCaptureApiTest {
 };
 
 // Tests API behaviors, including info queries, and constraints violations.
-#if BUILDFLAG(IS_MAC)
-// TODO(crbug.com/): Flaky on Mac.
+#if BUILDFLAG(IS_MAC) || defined(MEMORY_SANITIZER)
+// TODO(crbug.com/341487291): Flaky on Mac and MSAN builds.
 #define MAYBE_ApiTests DISABLED_ApiTests
 #else
 #define MAYBE_ApiTests ApiTests
@@ -234,6 +235,9 @@ IN_PROC_BROWSER_TEST_F(TabCaptureApiTest, DISABLED_ActiveTabPermission) {
 #if BUILDFLAG(IS_MAC)
 // TODO(crbug.com/1392776): Flaky on Mac.
 #define MAYBE_FullscreenEvents DISABLED_FullscreenEvents
+#elif defined(MEMORY_SANITIZER)
+// TODO(crbug.com/341641151): Deflake test for MSAN.
+#define MAYBE_FullscreenEvents DISABLED_FullscreenEvents
 #else
 #define MAYBE_FullscreenEvents FullscreenEvents
 #endif  // BUILDFLAG(IS_MAC)
@@ -302,15 +306,27 @@ IN_PROC_BROWSER_TEST_F(TabCaptureApiTest, CaptureInSplitIncognitoMode) {
 
 // Tests that valid constraints allow tab capture to start, while invalid ones
 // do not.
-IN_PROC_BROWSER_TEST_F(TabCaptureApiTest, Constraints) {
+#if BUILDFLAG(IS_LINUX) || defined(MEMORY_SANITIZER)
+// TODO(crbug.com/343116848): Re-enable this test
+#define MAYBE_Constraints DISABLED_Constraints
+#else
+#define MAYBE_Constraints Constraints
+#endif  // BUILDFLAG(IS_MAC)
+IN_PROC_BROWSER_TEST_F(TabCaptureApiTest, MAYBE_Constraints) {
   AddExtensionToCommandLineAllowlist();
   ASSERT_TRUE(RunExtensionTest("tab_capture/constraints",
                                {.extension_url = "constraints.html"}))
       << message_;
 }
 
+#if defined(MEMORY_SANITIZER)
+// TODO(crbug.com/341641151): Deflake test for MSAN.
+#define MAYBE_TabIndicator DISABLED_TabIndicator
+#else
+#define MAYBE_TabIndicator TabIndicator
+#endif  // BUILDFLAG(IS_MAC)
 // Tests that the tab indicator (in the tab strip) is shown during tab capture.
-IN_PROC_BROWSER_TEST_F(TabCaptureApiTest, TabIndicator) {
+IN_PROC_BROWSER_TEST_F(TabCaptureApiTest, MAYBE_TabIndicator) {
   content::WebContents* const contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_THAT(chrome::GetTabAlertStatesForContents(contents),

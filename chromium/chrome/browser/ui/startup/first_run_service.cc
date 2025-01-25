@@ -108,8 +108,8 @@ enum class PolicyEffect {
 
 PolicyEffect ComputeDevicePolicyEffect(Profile& profile) {
   const PrefService* const local_state = g_browser_process->local_state();
-  if (!local_state->GetBoolean(prefs::kPromotionalTabsEnabled)) {
-    // Corresponding policy: PromotionalTabsEnabled=false
+  if (!local_state->GetBoolean(prefs::kPromotionsEnabled)) {
+    // Corresponding policy: PromotionsEnabled=false
     return PolicyEffect::kDisabled;
   }
 
@@ -172,7 +172,6 @@ bool IsFirstRunMarkedFinishedInPrefs() {
 // static
 void FirstRunService::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kFirstRunFinished, false);
-  registry->RegisterStringPref(prefs::kFirstRunStudyGroup, "");
 }
 
 FirstRunService::FirstRunService(Profile& profile,
@@ -345,7 +344,8 @@ void FirstRunService::FinishFirstRun(FinishedReason reason) {
       outcome = ProfileMetrics::ProfileSignedInFlowOutcome::kSkippedByPolicies;
       break;
     case FinishedReason::kForceSignin:
-      NOTREACHED() << "Force Signin policy value is not active on Lacros.";
+      NOTREACHED_IN_MIGRATION()
+          << "Force Signin policy value is not active on Lacros.";
       break;
   }
 

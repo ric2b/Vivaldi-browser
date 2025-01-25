@@ -68,17 +68,17 @@ constexpr size_t kNumInputBuffers = 2;
 // codecs, not just H264).
 constexpr size_t kInputBufferSize = 1920 * 1080 * 3 / 2 / 2 + 128 * 1024;
 
-const fuchsia::sysmem::PixelFormatType kSupportedPixelFormats[] = {
-    fuchsia::sysmem::PixelFormatType::NV12,
-    fuchsia::sysmem::PixelFormatType::I420,
-    fuchsia::sysmem::PixelFormatType::YV12,
+const fuchsia::images2::PixelFormat kSupportedPixelFormats[] = {
+    fuchsia::images2::PixelFormat::NV12,
+    fuchsia::images2::PixelFormat::I420,
+    fuchsia::images2::PixelFormat::YV12,
 };
-const fuchsia::sysmem::ColorSpaceType kSupportedColorSpaces[] = {
-    fuchsia::sysmem::ColorSpaceType::REC601_NTSC,
-    fuchsia::sysmem::ColorSpaceType::REC601_NTSC_FULL_RANGE,
-    fuchsia::sysmem::ColorSpaceType::REC601_PAL,
-    fuchsia::sysmem::ColorSpaceType::REC601_PAL_FULL_RANGE,
-    fuchsia::sysmem::ColorSpaceType::REC709,
+const fuchsia::images2::ColorSpace kSupportedColorSpaces[] = {
+    fuchsia::images2::ColorSpace::REC601_NTSC,
+    fuchsia::images2::ColorSpace::REC601_NTSC_FULL_RANGE,
+    fuchsia::images2::ColorSpace::REC601_PAL,
+    fuchsia::images2::ColorSpace::REC601_PAL_FULL_RANGE,
+    fuchsia::images2::ColorSpace::REC709,
 };
 
 std::optional<gfx::Size> ParseMinBufferSize() {
@@ -120,9 +120,9 @@ class FuchsiaVideoDecoder::OutputMailbox {
       : raster_context_provider_(raster_context_provider),
         size_(size),
         weak_factory_(this) {
-    uint32_t usage = gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
-                     gpu::SHARED_IMAGE_USAGE_SCANOUT |
-                     gpu::SHARED_IMAGE_USAGE_VIDEO_DECODE;
+    gpu::SharedImageUsageSet usage = gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
+                                     gpu::SHARED_IMAGE_USAGE_SCANOUT |
+                                     gpu::SHARED_IMAGE_USAGE_VIDEO_DECODE;
 
     // The GMB is either YUV_420_BIPLANAR (SIF kNV12) or YVU_420 (SIF kYV12).
     auto shared_image_format = viz::MultiPlaneFormat::kNV12;
@@ -171,11 +171,8 @@ class FuchsiaVideoDecoder::OutputMailbox {
     is_used_ = true;
     reuse_callback_ = std::move(reuse_callback);
 
-    scoped_refptr<gpu::ClientSharedImage> shared_images[VideoFrame::kMaxPlanes];
-    shared_images[0] = shared_image_;
-
-    auto frame = VideoFrame::WrapSharedImages(
-        pixel_format, shared_images, create_sync_token_, 0,
+    auto frame = VideoFrame::WrapSharedImage(
+        pixel_format, shared_image_, create_sync_token_, 0,
         base::BindPostTaskToCurrentDefault(base::BindOnce(
             &OutputMailbox::OnFrameDestroyed, base::Unretained(this))),
         coded_size, visible_rect, natural_size, timestamp);
@@ -453,7 +450,7 @@ DecoderStatus FuchsiaVideoDecoder::InitializeSysmemBufferStream(
 }
 
 void FuchsiaVideoDecoder::OnSysmemBufferStreamBufferCollectionToken(
-    fuchsia::sysmem::BufferCollectionTokenPtr token) {
+    fuchsia::sysmem2::BufferCollectionTokenPtr token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(decoder_);
   decoder_->SetInputBufferCollectionToken(std::move(token));
@@ -500,29 +497,24 @@ void FuchsiaVideoDecoder::OnStreamProcessorAllocateOutputBuffers(
                      base::Unretained(this)),
       "gpu");
 
-  fuchsia::sysmem::BufferCollectionConstraints buffer_constraints;
-  buffer_constraints.usage.none = fuchsia::sysmem::noneUsage;
-  buffer_constraints.min_buffer_count_for_camping = kOutputBuffersForCamping;
-  buffer_constraints.min_buffer_count_for_shared_slack =
-      kMaxUsedOutputBuffers - kOutputBuffersForCamping;
+  fuchsia::sysmem2::BufferCollectionConstraints constraints;
+  constraints.mutable_usage()->set_none(fuchsia::sysmem2::NONE_USAGE);
+  constraints.set_min_buffer_count_for_camping(kOutputBuffersForCamping);
+  constraints.set_min_buffer_count_for_shared_slack(kMaxUsedOutputBuffers -
+                                                    kOutputBuffersForCamping);
 
-  buffer_constraints.image_format_constraints_count =
-      std::size(kSupportedPixelFormats);
   for (size_t pixel_format_index = 0;
        pixel_format_index < std::size(kSupportedPixelFormats);
        ++pixel_format_index) {
-    auto& image_format_constraints =
-        buffer_constraints.image_format_constraints[pixel_format_index];
-    image_format_constraints.pixel_format.type =
-        kSupportedPixelFormats[pixel_format_index];
-    image_format_constraints.pixel_format.has_format_modifier = true;
-    image_format_constraints.pixel_format.format_modifier.value =
-        fuchsia::sysmem::FORMAT_MODIFIER_LINEAR;
+    auto& image_constraints =
+        constraints.mutable_image_format_constraints()->emplace_back();
+    image_constraints.set_pixel_format(
+        kSupportedPixelFormats[pixel_format_index]);
+    image_constraints.set_pixel_format_modifier(
+        fuchsia::images2::PixelFormatModifier::LINEAR);
 
-    image_format_constraints.color_spaces_count =
-        std::size(kSupportedColorSpaces);
     for (size_t i = 0; i < std::size(kSupportedColorSpaces); ++i) {
-      image_format_constraints.color_space[i].type = kSupportedColorSpaces[i];
+      image_constraints.mutable_color_spaces()->emplace_back(kSupportedColorSpaces[i]);
     }
   }
 
@@ -531,16 +523,15 @@ void FuchsiaVideoDecoder::OnStreamProcessorAllocateOutputBuffers(
     for (size_t pixel_format_index = 0;
          pixel_format_index < std::size(kSupportedPixelFormats);
          ++pixel_format_index) {
-      auto& image_format_constraints =
-          buffer_constraints.image_format_constraints[pixel_format_index];
-      image_format_constraints.required_max_coded_width =
-          min_buffer_size->width();
-      image_format_constraints.required_max_coded_height =
-          min_buffer_size->height();
+      auto& image_constraints = constraints.mutable_image_format_constraints()->at(
+          pixel_format_index);
+      image_constraints.set_required_max_size(fuchsia::math::SizeU{
+          static_cast<uint32_t>(min_buffer_size->width()),
+          static_cast<uint32_t>(min_buffer_size->height())});
     }
   }
 
-  output_buffer_collection_->Initialize(std::move(buffer_constraints),
+  output_buffer_collection_->Initialize(std::move(constraints),
                                         "ChromiumVideoDecoderOutput");
 }
 
@@ -571,21 +562,23 @@ void FuchsiaVideoDecoder::OnStreamProcessorOutputPacket(
     StreamProcessorHelper::IoPacket output_packet) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  fuchsia::sysmem::PixelFormatType sysmem_pixel_format =
-      output_format_.image_format.pixel_format.type;
+  // We can safely cast from fuchsia.sysmem.PixelFormatType to
+  // fuchsia.images2.PixelFormat.
+  auto sysmem_pixel_format = static_cast<fuchsia::images2::PixelFormat>(
+      fidl::ToUnderlying(output_format_.image_format.pixel_format.type));
 
   VideoPixelFormat pixel_format;
   gfx::BufferFormat buffer_format;
   VkFormat vk_format;
   switch (sysmem_pixel_format) {
-    case fuchsia::sysmem::PixelFormatType::NV12:
+    case fuchsia::images2::PixelFormat::NV12:
       pixel_format = PIXEL_FORMAT_NV12;
       buffer_format = gfx::BufferFormat::YUV_420_BIPLANAR;
       vk_format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
       break;
 
-    case fuchsia::sysmem::PixelFormatType::I420:
-    case fuchsia::sysmem::PixelFormatType::YV12:
+    case fuchsia::images2::PixelFormat::I420:
+    case fuchsia::images2::PixelFormat::YV12:
       pixel_format = PIXEL_FORMAT_I420;
       buffer_format = gfx::BufferFormat::YVU_420;
       vk_format = VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM;
@@ -751,7 +744,7 @@ void FuchsiaVideoDecoder::OnError() {
 }
 
 void FuchsiaVideoDecoder::SetBufferCollectionTokenForGpu(
-    fuchsia::sysmem::BufferCollectionTokenPtr token) {
+    fuchsia::sysmem2::BufferCollectionTokenPtr token) {
   // Register the new collection with the GPU process.
   DCHECK(!output_buffer_collection_handle_);
 

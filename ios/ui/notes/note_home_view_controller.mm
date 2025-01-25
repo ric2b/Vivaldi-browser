@@ -786,7 +786,7 @@ const int kRowsHiddenByNavigationBar = 3;
     return;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 - (void)handleMoveNode:(const vivaldi::NoteNode*)node
@@ -1178,7 +1178,7 @@ const int kRowsHiddenByNavigationBar = 3;
     return nodeItem.noteNode;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 
@@ -1358,7 +1358,7 @@ const int kRowsHiddenByNavigationBar = 3;
     case NotesContextBarBeginSelection:
       // This must never happen, as the leading button is disabled at this
       // point.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case NotesContextBarSingleNoteSelection:
     case NotesContextBarMultipleNoteSelection:
@@ -1374,7 +1374,7 @@ const int kRowsHiddenByNavigationBar = 3;
       break;
     case NotesContextBarNone:
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -1419,7 +1419,7 @@ const int kRowsHiddenByNavigationBar = 3;
     case NotesContextBarBeginSelection:
     case NotesContextBarNone:
       // Center button is disabled in these states.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 

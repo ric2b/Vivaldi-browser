@@ -30,6 +30,8 @@
 
 #include "third_party/blink/public/web/web_node.h"
 
+#include <ostream>
+
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -159,6 +161,10 @@ bool WebNode::IsFocusable() const {
 bool WebNode::IsContentEditable() const {
   private_->GetDocument().UpdateStyleAndLayoutTree();
   return blink::IsEditable(*private_);
+}
+
+WebElement WebNode::RootEditableElement() const {
+  return blink::RootEditableElement(*private_);
 }
 
 bool WebNode::IsInsideFocusableElementOrARIAWidget() const {
@@ -320,6 +326,10 @@ base::ScopedClosureRunner WebNode::AddEventListener(
   listener->AddListener();
   return base::ScopedClosureRunner(WTF::BindOnce(
       &EventListener::RemoveListener, WrapWeakPersistent(listener.Get())));
+}
+
+std::ostream& operator<<(std::ostream& ostream, const WebNode& node) {
+  return ostream << node.ConstUnwrap<Node>();
 }
 
 }  // namespace blink

@@ -29,7 +29,7 @@
 #include <sys/utsname.h>
 #endif
 
-#include "base/vivaldi_user_agent.h"
+#include "components/user_agent/vivaldi_user_agent.h"
 
 namespace content {
 

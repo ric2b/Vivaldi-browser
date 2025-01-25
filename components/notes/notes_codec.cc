@@ -161,7 +161,6 @@ base::Value NotesCodec::EncodeNode(
       break;
     default:
       NOTREACHED();
-      break;
   }
   value.GetDict().Set(kTypeKey, type);
   UpdateChecksum(type);
@@ -242,13 +241,11 @@ bool NotesCodec::DecodeNode(const base::Value& value,
   // Therefore, in that case, |parent| must be non-NULL.
   if (!node && !parent) {
     NOTREACHED();
-    return false;
   }
 
   // It's not valid to have both a node and a specified parent.
   if (node && parent) {
     NOTREACHED();
-    return false;
   }
 
   std::string id_string;
@@ -455,10 +452,10 @@ void NotesCodec::UpdateChecksum(const std::string& str) {
 }
 
 void NotesCodec::UpdateChecksum(const std::u16string& str) {
-  base::StringPiece temp(reinterpret_cast<const char*>(str.data()),
+  std::string_view temp(reinterpret_cast<const char*>(str.data()),
                          str.length() * sizeof(str[0]));
   base::MD5Update(&md5_context_,
-                  base::StringPiece(reinterpret_cast<const char*>(str.data()),
+                  std::string_view(reinterpret_cast<const char*>(str.data()),
                                     str.length() * sizeof(str[0])));
 }
 

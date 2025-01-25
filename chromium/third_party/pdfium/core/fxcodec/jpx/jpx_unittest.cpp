@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include <limits.h>
 #include <stdint.h>
 
@@ -26,7 +21,7 @@ namespace fxcodec {
 static const OPJ_OFF_T kSkipError = static_cast<OPJ_OFF_T>(-1);
 static const OPJ_SIZE_T kReadError = static_cast<OPJ_SIZE_T>(-1);
 
-static const uint8_t stream_data[] = {
+static const uint8_t kStreamData[] = {
     0x00, 0x01, 0x02, 0x03,
     0x84, 0x85, 0x86, 0x87,  // Include some hi-bytes, too.
 };
@@ -42,7 +37,7 @@ TEST(fxcodec, DecodeDataNullDecodeData) {
 }
 
 TEST(fxcodec, DecodeDataNullStream) {
-  DecodeData dd(nullptr, 0);
+  DecodeData dd;
   uint8_t buffer[16];
 
   // Reads of size 0 do nothing but return an error code.
@@ -69,7 +64,7 @@ TEST(fxcodec, DecodeDataNullStream) {
 }
 
 TEST(fxcodec, DecodeDataZeroSize) {
-  DecodeData dd(stream_data, 0);
+  DecodeData dd(pdfium::make_span(kStreamData).first(0u));
   uint8_t buffer[16];
 
   // Reads of size 0 do nothing but return an error code.
@@ -98,7 +93,7 @@ TEST(fxcodec, DecodeDataZeroSize) {
 TEST(fxcodec, DecodeDataReadInBounds) {
   uint8_t buffer[16];
   {
-    DecodeData dd(stream_data, sizeof(stream_data));
+    DecodeData dd(kStreamData);
 
     // Exact sized read in a single call.
     fxcrt::Fill(buffer, 0xbd);
@@ -114,7 +109,7 @@ TEST(fxcodec, DecodeDataReadInBounds) {
     EXPECT_EQ(0xbd, buffer[8]);
   }
   {
-    DecodeData dd(stream_data, sizeof(stream_data));
+    DecodeData dd(kStreamData);
 
     // Simple read.
     fxcrt::Fill(buffer, 0xbd);
@@ -149,7 +144,7 @@ TEST(fxcodec, DecodeDataReadInBounds) {
 TEST(fxcodec, DecodeDataReadBeyondBounds) {
   uint8_t buffer[16];
   {
-    DecodeData dd(stream_data, sizeof(stream_data));
+    DecodeData dd(kStreamData);
 
     // Read beyond bounds in a single step.
     fxcrt::Fill(buffer, 0xbd);
@@ -165,7 +160,7 @@ TEST(fxcodec, DecodeDataReadBeyondBounds) {
     EXPECT_EQ(0xbd, buffer[8]);
   }
   {
-    DecodeData dd(stream_data, sizeof(stream_data));
+    DecodeData dd(kStreamData);
 
     // Read well beyond bounds in a single step.
     fxcrt::Fill(buffer, 0xbd);
@@ -182,7 +177,7 @@ TEST(fxcodec, DecodeDataReadBeyondBounds) {
     EXPECT_EQ(0xbd, buffer[8]);
   }
   {
-    DecodeData dd(stream_data, sizeof(stream_data));
+    DecodeData dd(kStreamData);
 
     // Read of size 6 gets first 6 bytes.
     // rest of buffer intact.
@@ -215,7 +210,7 @@ TEST(fxcodec, DecodeDataReadBeyondBounds) {
 TEST(fxcodec, DecodeDataSkip) {
   uint8_t buffer[16];
   {
-    DecodeData dd(stream_data, sizeof(stream_data));
+    DecodeData dd(kStreamData);
 
     // Skiping within buffer is allowed.
     fxcrt::Fill(buffer, 0xbd);
@@ -244,7 +239,7 @@ TEST(fxcodec, DecodeDataSkip) {
     EXPECT_EQ(0xbd, buffer[0]);
   }
   {
-    DecodeData dd(stream_data, sizeof(stream_data));
+    DecodeData dd(kStreamData);
 
     // Skiping directly to EOS is allowed.
     fxcrt::Fill(buffer, 0xbd);
@@ -255,7 +250,7 @@ TEST(fxcodec, DecodeDataSkip) {
     EXPECT_EQ(0xbd, buffer[0]);
   }
   {
-    DecodeData dd(stream_data, sizeof(stream_data));
+    DecodeData dd(kStreamData);
 
     // Skipping beyond end of stream is allowed and returns full distance.
     fxcrt::Fill(buffer, 0xbd);
@@ -266,7 +261,7 @@ TEST(fxcodec, DecodeDataSkip) {
     EXPECT_EQ(0xbd, buffer[0]);
   }
   {
-    DecodeData dd(stream_data, sizeof(stream_data));
+    DecodeData dd(kStreamData);
 
     // Skipping way beyond EOS is allowd, doesn't wrap, and returns
     // full distance.
@@ -280,7 +275,7 @@ TEST(fxcodec, DecodeDataSkip) {
     EXPECT_EQ(0xbd, buffer[0]);
   }
   {
-    DecodeData dd(stream_data, sizeof(stream_data));
+    DecodeData dd(kStreamData);
 
     // Negative skip within buffer not is allowed, position unchanged.
     fxcrt::Fill(buffer, 0xbd);
@@ -302,7 +297,7 @@ TEST(fxcodec, DecodeDataSkip) {
     EXPECT_EQ(0xbd, buffer[1]);
   }
   {
-    DecodeData dd(stream_data, sizeof(stream_data));
+    DecodeData dd(kStreamData);
 
     // Negative skip way before buffer is not allowed, doesn't wrap
     fxcrt::Fill(buffer, 0xbd);
@@ -316,7 +311,7 @@ TEST(fxcodec, DecodeDataSkip) {
     EXPECT_EQ(0xbd, buffer[1]);
   }
   {
-    DecodeData dd(stream_data, sizeof(stream_data));
+    DecodeData dd(kStreamData);
 
     // Negative skip after EOS isn't alowed, still EOS.
     fxcrt::Fill(buffer, 0xbd);
@@ -331,7 +326,7 @@ TEST(fxcodec, DecodeDataSkip) {
 
 TEST(fxcodec, DecodeDataSeek) {
   uint8_t buffer[16];
-  DecodeData dd(stream_data, sizeof(stream_data));
+  DecodeData dd(kStreamData);
 
   // Seeking within buffer is allowed and read succeeds
   fxcrt::Fill(buffer, 0xbd);
@@ -432,27 +427,30 @@ TEST(fxcodec, YUV420ToRGB) {
         opj_image_data_alloc(v.w * v.h * sizeof(OPJ_INT32)));
     u.data = static_cast<OPJ_INT32*>(
         opj_image_data_alloc(u.w * u.h * sizeof(OPJ_INT32)));
-    FXSYS_memset(y.data, 1, y.w * y.h * sizeof(OPJ_INT32));
-    FXSYS_memset(u.data, 0, u.w * u.h * sizeof(OPJ_INT32));
-    FXSYS_memset(v.data, 0, v.w * v.h * sizeof(OPJ_INT32));
-    img.comps[0] = y;
-    img.comps[1] = u;
-    img.comps[2] = v;
-    CJPX_Decoder::Sycc420ToRgbForTesting(&img);
-    if (testcase.expected) {
-      EXPECT_EQ(img.comps[0].w, img.comps[1].w);
-      EXPECT_EQ(img.comps[0].h, img.comps[1].h);
-      EXPECT_EQ(img.comps[0].w, img.comps[2].w);
-      EXPECT_EQ(img.comps[0].h, img.comps[2].h);
-    } else {
-      EXPECT_NE(img.comps[0].w, img.comps[1].w);
-      EXPECT_NE(img.comps[0].h, img.comps[1].h);
-      EXPECT_NE(img.comps[0].w, img.comps[2].w);
-      EXPECT_NE(img.comps[0].h, img.comps[2].h);
-    }
-    opj_image_data_free(img.comps[0].data);
-    opj_image_data_free(img.comps[1].data);
-    opj_image_data_free(img.comps[2].data);
+
+    UNSAFE_TODO({
+      FXSYS_memset(y.data, 1, y.w * y.h * sizeof(OPJ_INT32));
+      FXSYS_memset(u.data, 0, u.w * u.h * sizeof(OPJ_INT32));
+      FXSYS_memset(v.data, 0, v.w * v.h * sizeof(OPJ_INT32));
+      img.comps[0] = y;
+      img.comps[1] = u;
+      img.comps[2] = v;
+      CJPX_Decoder::Sycc420ToRgbForTesting(&img);
+      if (testcase.expected) {
+        EXPECT_EQ(img.comps[0].w, img.comps[1].w);
+        EXPECT_EQ(img.comps[0].h, img.comps[1].h);
+        EXPECT_EQ(img.comps[0].w, img.comps[2].w);
+        EXPECT_EQ(img.comps[0].h, img.comps[2].h);
+      } else {
+        EXPECT_NE(img.comps[0].w, img.comps[1].w);
+        EXPECT_NE(img.comps[0].h, img.comps[1].h);
+        EXPECT_NE(img.comps[0].w, img.comps[2].w);
+        EXPECT_NE(img.comps[0].h, img.comps[2].h);
+      }
+      opj_image_data_free(img.comps[0].data);
+      opj_image_data_free(img.comps[1].data);
+      opj_image_data_free(img.comps[2].data);
+    });
   }
   FX_Free(img.comps);
 }

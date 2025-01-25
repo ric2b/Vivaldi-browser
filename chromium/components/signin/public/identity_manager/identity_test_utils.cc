@@ -348,7 +348,7 @@ void ClearPrimaryAccount(IdentityManager* identity_manager) {
   // TODO(blundell): If we ever need this functionality on ChromeOS (which seems
   // unlikely), plumb this through to just clear the primary account info
   // synchronously with IdentityManager.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #else
   if (!identity_manager->HasPrimaryAccount(ConsentLevel::kSignin))
     return;
@@ -559,6 +559,26 @@ void SetCookieAccounts(
   cookie_manager->ListAccounts(nullptr, nullptr);
 
   run_loop.Run();
+}
+
+void TriggerListAccount(
+    IdentityManager* identity_manager,
+    network::TestURLLoaderFactory* test_url_loader_factory) {
+  const AccountsInCookieJarInfo& cookie_jar =
+      identity_manager->GetAccountsInCookieJar();
+  // Construct the cookie params with the actual cookies in the cookie jar.
+  std::vector<CookieParamsForTest> cookie_params;
+  for (auto& account : cookie_jar.signed_in_accounts) {
+    cookie_params.emplace_back(account.email, account.gaia_id,
+                               /*signed_out=*/false);
+  }
+  for (auto& account : cookie_jar.signed_out_accounts) {
+    cookie_params.emplace_back(account.email, account.gaia_id,
+                               /*signed_out=*/true);
+  }
+
+  // Trigger the /ListAccount with the current cookie information.
+  SetCookieAccounts(identity_manager, test_url_loader_factory, cookie_params);
 }
 
 AccountInfo WithGeneratedUserInfo(const AccountInfo& base_account_info,

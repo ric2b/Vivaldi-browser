@@ -38,13 +38,17 @@ class BirchItemRemoverTest : public ::testing::Test {
 
 TEST_F(BirchItemRemoverTest, RemoveTab) {
   BirchTabItem item0(u"item0", GURL("https://example.com/0"), base::Time(),
-                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop);
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop,
+                     ui::ImageModel());
   BirchTabItem item1(u"item1", GURL("https://example.com/1"), base::Time(),
-                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop);
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop,
+                     ui::ImageModel());
   BirchTabItem item2(u"item2", GURL("https://example.com/2"), base::Time(),
-                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop);
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop,
+                     ui::ImageModel());
   BirchTabItem item3(u"item3", GURL("https://example.com/3"), base::Time(),
-                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop);
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop,
+                     ui::ImageModel());
   std::vector<BirchTabItem> tab_items = {item0, item1, item2, item3};
 
   // Filter `tab_items` before any items are removed. The list should remain
@@ -59,6 +63,36 @@ TEST_F(BirchItemRemoverTest, RemoveTab) {
   // Check that `item2` is filtered out.
   ASSERT_EQ(3u, tab_items.size());
   EXPECT_EQ(tab_items, std::vector({item0, item1, item3}));
+}
+
+TEST_F(BirchItemRemoverTest, RemoveSelfShareItems) {
+  BirchSelfShareItem item0(u"item0_guid", u"item0_title",
+                           GURL("https://example.com/0"), base::Time(),
+                           u"device_name", ui::ImageModel(), base::DoNothing());
+  BirchSelfShareItem item1(u"item1_guid", u"item1_title",
+                           GURL("https://example.com/1"), base::Time(),
+                           u"device_name", ui::ImageModel(), base::DoNothing());
+  BirchSelfShareItem item2(u"item2_guid", u"item2_title",
+                           GURL("https://example.com/2"), base::Time(),
+                           u"device_name", ui::ImageModel(), base::DoNothing());
+  BirchSelfShareItem item3(u"item3_guid", u"item3_title",
+                           GURL("https://example.com/3"), base::Time(),
+                           u"device_name", ui::ImageModel(), base::DoNothing());
+  std::vector<BirchSelfShareItem> self_share_items = {item0, item1, item2,
+                                                      item3};
+
+  // Filter `self_share_items` before any items are removed. The list should
+  // remain unchanged.
+  item_remover_->FilterRemovedSelfShareItems(&self_share_items);
+  ASSERT_EQ(4u, self_share_items.size());
+
+  // Remove `item2`, and filter it from the list of tabs.
+  item_remover_->RemoveItem(&item2);
+  item_remover_->FilterRemovedSelfShareItems(&self_share_items);
+
+  // Check that `item2` is filtered out.
+  ASSERT_EQ(3u, self_share_items.size());
+  EXPECT_EQ(self_share_items, std::vector({item0, item1, item3}));
 }
 
 TEST_F(BirchItemRemoverTest, RemoveCalendarItem) {

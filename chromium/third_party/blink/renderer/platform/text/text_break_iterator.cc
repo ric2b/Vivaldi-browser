@@ -21,6 +21,11 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/text/text_break_iterator.h"
 
 #include <unicode/uchar.h>
@@ -554,7 +559,7 @@ inline unsigned LazyLineBreakIterator::NextBreakablePosition(
                                    BreakSpaceType::kAfterEverySpace>(pos, str,
                                                                      len);
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return NextBreakablePosition<CharacterType, lineBreakType,
                                BreakSpaceType::kAfterSpaceRun>(pos, str, len);
 }
@@ -599,7 +604,7 @@ unsigned LazyLineBreakIterator::NextBreakablePosition(unsigned pos,
     case LineBreakType::kBreakCharacter:
       return NextBreakablePositionBreakCharacter(pos);
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return NextBreakablePosition<LineBreakType::kNormal>(pos, len);
 }
 
@@ -649,7 +654,7 @@ std::ostream& operator<<(std::ostream& ostream, LineBreakType line_break_type) {
     case LineBreakType::kPhrase:
       return ostream << "Phrase";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ostream << "LineBreakType::" << static_cast<int>(line_break_type);
 }
 
@@ -660,7 +665,7 @@ std::ostream& operator<<(std::ostream& ostream, BreakSpaceType break_space) {
     case BreakSpaceType::kAfterEverySpace:
       return ostream << "kAfterEverySpace";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ostream << "BreakSpaceType::" << static_cast<int>(break_space);
 }
 

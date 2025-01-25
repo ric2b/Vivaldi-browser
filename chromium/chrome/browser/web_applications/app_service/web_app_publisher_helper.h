@@ -16,7 +16,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
-#include "base/strings/string_piece.h"
 #include "base/types/id_type.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -380,6 +379,8 @@ class WebAppPublisherHelper : public WebAppRegistrarObserver,
   // Get the list of identifiers for the app that will be used in policy
   // controls, such as force-installation and pinning. May be empty.
   std::vector<std::string> GetPolicyIds(const WebApp& web_app) const;
+
+  apps::PackageId GetPackageId(const WebApp& web_app) const;
 
 #if BUILDFLAG(IS_CHROMEOS)
   // Updates app visibility.

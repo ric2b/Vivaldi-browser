@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ipc/ipc_message_utils.h"
 
 #include <stddef.h>
@@ -305,7 +310,7 @@ bool ReadValue(const base::Pickle* pickle,
       break;
     }
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 
@@ -427,7 +432,7 @@ bool ParamTraits<double>::Read(const base::Pickle* m,
                                param_type* r) {
   const char *data;
   if (!iter->ReadBytes(&data, sizeof(*r))) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return false;
   }
   memcpy(r, data, sizeof(param_type));
@@ -560,10 +565,10 @@ void ParamTraits<base::FileDescriptor>::Write(base::Pickle* m,
   if (p.auto_close) {
     if (!m->WriteAttachment(
             new internal::PlatformFileAttachment(base::ScopedFD(p.fd))))
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   } else {
     if (!m->WriteAttachment(new internal::PlatformFileAttachment(p.fd)))
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -615,7 +620,7 @@ void ParamTraits<base::ScopedFD>::Write(base::Pickle* m, const param_type& p) {
 
   if (!m->WriteAttachment(new internal::PlatformFileAttachment(
           std::move(const_cast<param_type&>(p))))) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -700,7 +705,7 @@ void ParamTraits<zx::vmo>::Write(base::Pickle* m, const param_type& p) {
 
   if (!m->WriteAttachment(new internal::HandleAttachmentFuchsia(
           std::move(const_cast<param_type&>(p))))) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -745,7 +750,7 @@ void ParamTraits<zx::channel>::Write(base::Pickle* m, const param_type& p) {
 
   if (!m->WriteAttachment(new internal::HandleAttachmentFuchsia(
           std::move(const_cast<param_type&>(p))))) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -1481,7 +1486,7 @@ bool ParamTraits<MSG>::Read(const base::Pickle* m,
     memcpy(r, data, sizeof(MSG));
   } else {
     result = false;
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   return result;

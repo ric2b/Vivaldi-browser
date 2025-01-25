@@ -14,7 +14,6 @@
 
 use crate::{unwrap, PanicReason};
 use np_ffi_core::common::DeallocateResult;
-use np_ffi_core::deserialize::v0::V0Payload;
 use np_ffi_core::deserialize::v0::*;
 use np_ffi_core::deserialize::DecryptMetadataResult;
 use np_ffi_core::utils::FfiEnum;

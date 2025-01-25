@@ -29,6 +29,7 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/label.h"
 
 namespace ash {
@@ -61,7 +62,7 @@ int GetDeviceConnectionStateA11yTextId(
     case DeviceConnectionState::kNotConnected:
       return IDS_BLUETOOTH_A11Y_DEVICE_CONNECTION_STATE_NOT_CONNECTED;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 // Returns the text ID corresponding to the provided |device_type|.
@@ -88,7 +89,7 @@ int GetDeviceTypeA11yTextId(const DeviceType device_type) {
     case DeviceType::kUnknown:
       return IDS_BLUETOOTH_A11Y_DEVICE_TYPE_UNKNOWN;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 // Returns the formatted a11y text describing the battery information of the
@@ -165,7 +166,7 @@ const gfx::VectorIcon& GetDeviceIcon(const DeviceType device_type) {
     case DeviceType::kUnknown:
       return ash::kSystemMenuBluetoothIcon;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 }  // namespace
@@ -259,7 +260,7 @@ void BluetoothDeviceListItemView::UpdateAccessibleName(
     a11y_text = base::StrCat({a11y_text, u" ", battery_text});
   }
 
-  SetAccessibleName(a11y_text);
+  GetViewAccessibility().SetName(a11y_text);
 }
 
 void BluetoothDeviceListItemView::UpdateBatteryInfo(

@@ -153,6 +153,10 @@ bool GetValue(const base::Value& value, ClickEvent* event) {
   if (mouse_button) {
     event->mouse_button = *mouse_button;
   }
+  std::optional<int> double_click = value.GetDict().FindInt("doubleClick");
+  if (double_click) {
+    event->double_click = *double_click;
+  }
   std::optional<int> context = value.GetDict().FindInt("context");
   if (context) {
     event->context = *context;
@@ -228,10 +232,9 @@ bool GetValue(const base::Value& value, KeyDownEvent* event) {
   }
 
   std::optional<int> veid = value.GetDict().FindInt("veid");
-  if (!veid) {
-    return false;
+  if (veid) {
+    event->veid = *veid;
   }
-  event->veid = *veid;
 
   std::optional<int> context = value.GetDict().FindInt("context");
   if (context) {
@@ -281,11 +284,15 @@ struct ParamTuple<T, Ts...> {
 
 template <typename... As>
 bool ParseAndHandle(const base::RepeatingCallback<void(As...)>& handler,
+                    const std::string& method,
                     DispatchCallback callback,
                     const base::Value::List& list) {
   ParamTuple<As...> tuple;
-  if (!tuple.Parse(list, list.begin()))
+  if (!tuple.Parse(list, list.begin())) {
+    LOG(ERROR) << "Failed to parse arguments for " << method
+               << " call: " << list.DebugString();
     return false;
+  }
   tuple.Apply(handler);
   return true;
 }
@@ -293,11 +300,15 @@ bool ParseAndHandle(const base::RepeatingCallback<void(As...)>& handler,
 template <typename... As>
 bool ParseAndHandleWithCallback(
     const base::RepeatingCallback<void(DispatchCallback, As...)>& handler,
+    const std::string& method,
     DispatchCallback callback,
     const base::Value::List& list) {
   ParamTuple<As...> tuple;
-  if (!tuple.Parse(list, list.begin()))
+  if (!tuple.Parse(list, list.begin())) {
+    LOG(ERROR) << "Failed to parse arguments for " << method
+               << " call: " << list.DebugString();
     return false;
+  }
   tuple.Apply(handler, std::move(callback));
   return true;
 }
@@ -329,7 +340,7 @@ class DispatcherImpl : public DevToolsEmbedderMessageDispatcher {
                        Delegate* delegate) {
     handlers_[method] = base::BindRepeating(
         &ParseAndHandle<As...>,
-        base::BindRepeating(handler, base::Unretained(delegate)));
+        base::BindRepeating(handler, base::Unretained(delegate)), method);
   }
 
   template <typename... As>
@@ -339,7 +350,7 @@ class DispatcherImpl : public DevToolsEmbedderMessageDispatcher {
                                    Delegate* delegate) {
     handlers_[method] = base::BindRepeating(
         &ParseAndHandleWithCallback<As...>,
-        base::BindRepeating(handler, base::Unretained(delegate)));
+        base::BindRepeating(handler, base::Unretained(delegate)), method);
   }
 
  private:
@@ -432,6 +443,8 @@ DevToolsEmbedderMessageDispatcher::CreateForDevToolsFrontend(
                      &Delegate::ClearPreferences, delegate);
   d->RegisterHandlerWithCallback("getSyncInformation",
                                  &Delegate::GetSyncInformation, delegate);
+  d->RegisterHandlerWithCallback("getHostConfig", &Delegate::GetHostConfig,
+                                 delegate);
   d->RegisterHandlerWithCallback("reattach",
                                  &Delegate::Reattach, delegate);
   d->RegisterHandler("readyForTest",
@@ -444,13 +457,12 @@ DevToolsEmbedderMessageDispatcher::CreateForDevToolsFrontend(
   d->RegisterHandlerWithCallback("showSurvey", &Delegate::ShowSurvey, delegate);
   d->RegisterHandlerWithCallback("canShowSurvey", &Delegate::CanShowSurvey,
                                  delegate);
-  if (base::FeatureList::IsEnabled(::features::kDevToolsConsoleInsights) ||
-      base::FeatureList::IsEnabled(
-          ::features::kDevToolsConsoleInsightsDogfood)) {
+  if (base::FeatureList::IsEnabled(::features::kDevToolsConsoleInsights)) {
     d->RegisterHandlerWithCallback("doAidaConversation",
                                    &Delegate::DoAidaConversation, delegate);
-    d->RegisterHandler("registerAidaClientEvent",
-                       &Delegate::RegisterAidaClientEvent, delegate);
+    d->RegisterHandlerWithCallback("registerAidaClientEvent",
+                                   &Delegate::RegisterAidaClientEvent,
+                                   delegate);
   }
   return d;
 }

@@ -96,16 +96,14 @@ class VirtualConnectionRouter final : public CastSocket::Client {
                   std::unique_ptr<CastSocket> socket);
   void CloseSocket(int id);
 
-  Error Send(VirtualConnection virtual_conn,
-             ::cast::channel::CastMessage message);
+  Error Send(VirtualConnection virtual_conn, proto::CastMessage message);
 
   Error BroadcastFromLocalPeer(std::string local_id,
-                               ::cast::channel::CastMessage message);
+                               proto::CastMessage message);
 
   // CastSocket::Client overrides.
   void OnError(CastSocket* socket, const Error& error) override;
-  void OnMessage(CastSocket* socket,
-                 ::cast::channel::CastMessage message) override;
+  void OnMessage(CastSocket* socket, proto::CastMessage message) override;
 
  protected:
   friend class ConnectionNamespaceHandler;

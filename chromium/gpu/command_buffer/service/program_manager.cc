@@ -44,7 +44,7 @@ int ShaderTypeToIndex(GLenum shader_type) {
     case GL_FRAGMENT_SHADER:
       return 1;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return 0;
   }
 }
@@ -145,7 +145,7 @@ ShaderVariableBaseType InputOutputTypeToBaseType(bool is_input, GLenum type) {
       DCHECK(is_input);
       return SHADER_VARIABLE_FLOAT;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return SHADER_VARIABLE_UNDEFINED_TYPE;
   }
 }
@@ -195,7 +195,7 @@ GLsizeiptr VertexShaderOutputBaseTypeToSize(GLenum type) {
     case GL_FLOAT_MAT4x3:
       return 48;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return 0;
   }
 }
@@ -372,7 +372,7 @@ Program::UniformInfo::UniformInfo(const std::string& client_name,
       break;
 
     default:
-      NOTREACHED() << "Unhandled UniformInfo type " << type;
+      NOTREACHED_IN_MIGRATION() << "Unhandled UniformInfo type " << type;
       break;
   }
   DCHECK_LT(0, size);
@@ -912,9 +912,10 @@ bool Program::UpdateUniforms() {
 }
 
 void Program::UpdateProgramOutputs() {
-  if (!feature_info().gl_version_info().is_es3_capable ||
-      feature_info().disable_shader_translator())
+  if (!feature_info().gl_version_info().IsAtLeastGLES(3, 0) ||
+      feature_info().disable_shader_translator()) {
     return;
+  }
 
   Shader* fragment_shader =
       shaders_from_last_successful_link_[ShaderTypeToIndex(GL_FRAGMENT_SHADER)]
@@ -1049,47 +1050,6 @@ void Program::ExecuteProgramOutputBindCalls() {
         }
       }
     }
-    return;
-  }
-
-  // Support for EXT_blend_func_extended when used with ES SL 1.00 client
-  // shader.
-
-  if (feature_info().gl_version_info().is_es ||
-      !feature_info().feature_flags().ext_blend_func_extended)
-    return;
-
-  // The underlying context does not support EXT_blend_func_extended
-  // natively, need to emulate it.
-
-  // ES SL 1.00 is the only language which contains GLSL built-ins
-  // that need to be bound to color indices. If clients use other
-  // languages, they also bind the output variables themselves.
-  // Map gl_SecondaryFragColorEXT / gl_SecondaryFragDataEXT of
-  // EXT_blend_func_extended to real color indexes.
-  for (auto const& output_var : fragment_shader->output_variable_list()) {
-    const std::string& name = output_var.mappedName;
-    if (name == "gl_FragColor") {
-      DCHECK_EQ(-1, output_var.location);
-      DCHECK_EQ(false, output_var.isArray());
-      // We leave these unbound by not giving a binding name. The driver will
-      // bind this.
-    } else if (name == "gl_FragData") {
-      DCHECK_EQ(-1, output_var.location);
-      DCHECK_NE(0u, output_var.getOutermostArraySize());
-      // We leave these unbound by not giving a binding name. The driver will
-      // bind this.
-    } else if (name == "gl_SecondaryFragColorEXT") {
-      DCHECK_EQ(-1, output_var.location);
-      DCHECK_EQ(false, output_var.isArray());
-      glBindFragDataLocationIndexed(service_id_, 0, 1,
-                                    "angle_SecondaryFragColor");
-    } else if (name == "gl_SecondaryFragDataEXT") {
-      DCHECK_EQ(-1, output_var.location);
-      DCHECK_NE(0u, output_var.getOutermostArraySize());
-      glBindFragDataLocationIndexed(service_id_, 0, 1,
-                                    "angle_SecondaryFragData");
-    }
   }
 }
 
@@ -1196,7 +1156,7 @@ bool Program::Link(ShaderManager* manager,
 
     ExecuteProgramOutputBindCalls();
 
-    if (cache && gl::g_current_gl_driver->ext.b_GL_ARB_get_program_binary) {
+    if (cache && feature_info().gl_version_info().IsAtLeastGLES(3, 0)) {
       glProgramParameteri(service_id(),
                           PROGRAM_BINARY_RETRIEVABLE_HINT,
                           GL_TRUE);
@@ -2399,7 +2359,7 @@ void ProgramManager::RemoveProgramInfoIfUnused(
         return;
       }
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 

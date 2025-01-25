@@ -87,6 +87,7 @@
 #include "chromeos/ash/components/settings/timezone_settings.h"
 #include "chromeos/ash/components/timezone/timezone_resolver.h"
 #include "components/account_id/account_id.h"
+#include "components/keep_alive_registry/keep_alive_registry.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/language/core/common/locale_util.h"
 #include "components/prefs/pref_service.h"
@@ -235,12 +236,18 @@ void MaybeShutdownLoginDisplayHostWebUI() {
 
 // ShowLoginWizard is split into two parts. This function is sometimes called
 // from TriggerShowLoginWizardFinish() directly, and sometimes from
-// OnLanguageSwitchedCallback()
-// (if locale was updated).
+// OnLanguageSwitchedCallback() (if locale was updated).
 void ShowLoginWizardFinish(
     OobeScreenId first_screen,
     const StartupCustomizationDocument* startup_manifest) {
   TRACE_EVENT0("chromeos", "ShowLoginWizard::ShowLoginWizardFinish");
+  // `ShowLoginWizardFinish` can be called as a result of
+  // `OnLanguageSwitchedCallback` and it can happen that the browser started to
+  // shut down. Return early if this is the case.
+  if (browser_shutdown::IsTryingToQuit() ||
+      KeepAliveRegistry::GetInstance()->IsShuttingDown()) {
+    return;
+  }
 
   if (ShouldShowSigninScreen(first_screen)) {
     // Shutdown WebUI host to replace with the Mojo one.
@@ -618,11 +625,11 @@ WizardController* LoginDisplayHostWebUI::GetWizardController() {
 }
 
 void LoginDisplayHostWebUI::OnStartUserAdding() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void LoginDisplayHostWebUI::CancelUserAdding() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void LoginDisplayHostWebUI::OnStartSignInScreen() {
@@ -926,6 +933,7 @@ void LoginDisplayHostWebUI::InitLoginWindowAndView() {
   }
 
   views::Widget::InitParams params(
+      views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   params.bounds = CalculateScreenBounds(gfx::Size());
   params.show_state = ui::SHOW_STATE_FULLSCREEN;
@@ -1032,7 +1040,7 @@ void LoginDisplayHostWebUI::ShowRemoteActivityNotificationScreen() {
 }
 
 void LoginDisplayHostWebUI::HideOobeDialog(bool saml_page_closed) {
-  DUMP_WILL_BE_NOTREACHED_NORETURN();
+  DUMP_WILL_BE_NOTREACHED();
 }
 
 void LoginDisplayHostWebUI::SetShelfButtonsEnabled(bool enabled) {
@@ -1059,11 +1067,11 @@ void LoginDisplayHostWebUI::ShowEnableConsumerKioskScreen() {
 }
 
 void LoginDisplayHostWebUI::UpdateAddUserButtonStatus() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void LoginDisplayHostWebUI::RequestSystemInfoUpdate() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 bool LoginDisplayHostWebUI::HasUserPods() {
@@ -1071,22 +1079,22 @@ bool LoginDisplayHostWebUI::HasUserPods() {
 }
 
 void LoginDisplayHostWebUI::StartUserRecovery(const AccountId& account_id) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void LoginDisplayHostWebUI::UseAlternativeAuthentication(
     std::unique_ptr<UserContext> user_context,
     bool online_password_mismatch) {
-  DUMP_WILL_BE_NOTREACHED_NORETURN();
+  DUMP_WILL_BE_NOTREACHED();
 }
 
 void LoginDisplayHostWebUI::RunLocalAuthentication(
     std::unique_ptr<UserContext> user_context) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void LoginDisplayHostWebUI::StartBrowserDataMigration() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void LoginDisplayHostWebUI::AddObserver(LoginDisplayHost::Observer* observer) {

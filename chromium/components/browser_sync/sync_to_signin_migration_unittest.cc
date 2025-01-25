@@ -177,7 +177,7 @@ TEST_F(SyncToSigninMigrationTest, SyncStatusPrefsUnset) {
 TEST_F(SyncToSigninMigrationTest, SyncTransport) {
   // There's no Sync consent, but otherwise everything is active (running in
   // transport mode).
-  sync_service_.SetHasSyncConsent(false);
+  sync_service_.SetSignedIn(signin::ConsentLevel::kSignin);
   ASSERT_EQ(sync_service_.GetTransportState(),
             syncer::SyncService::TransportState::ACTIVE);
 
@@ -202,8 +202,7 @@ TEST_F(SyncToSigninMigrationTest, SyncTransport) {
 TEST_F(SyncToSigninMigrationTest, SyncDisabledByPolicy) {
   // The user is signed in and opted in to Sync, but Sync is disabled via
   // enterprise policy.
-  sync_service_.SetDisableReasons(
-      {syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY});
+  sync_service_.SetAllowedByEnterprisePolicy(false);
   ASSERT_EQ(sync_service_.GetTransportState(),
             syncer::SyncService::TransportState::DISABLED);
   ASSERT_TRUE(sync_service_.HasSyncConsent());
@@ -293,7 +292,7 @@ TEST_F(SyncToSigninMigrationTest, SyncPaused) {
 
 TEST_F(SyncToSigninMigrationTest, SyncInitializing) {
   // The user is signed in and opted in to Sync, but Sync is still initializing.
-  sync_service_.SetTransportState(
+  sync_service_.SetMaxTransportState(
       syncer::SyncService::TransportState::INITIALIZING);
   ASSERT_TRUE(sync_service_.HasSyncConsent());
 
@@ -508,10 +507,7 @@ TEST_P(SyncToSigninMigrationMetricsTest, SyncStatusPrefsUnset) {
 
 TEST_P(SyncToSigninMigrationMetricsTest, NotSignedIn) {
   // There's no signed-in user.
-  sync_service_.SetAccountInfo(CoreAccountInfo());
-  sync_service_.SetHasSyncConsent(false);
-  sync_service_.SetTransportState(
-      syncer::SyncService::TransportState::DISABLED);
+  sync_service_.SetSignedOut();
   ASSERT_TRUE(sync_service_.GetActiveDataTypes().empty());
 
   // Save the above state to prefs.
@@ -545,7 +541,7 @@ TEST_P(SyncToSigninMigrationMetricsTest, NotSignedIn) {
 TEST_P(SyncToSigninMigrationMetricsTest, SyncTransport) {
   // There's no Sync consent, but otherwise everything is active (running in
   // transport mode).
-  sync_service_.SetHasSyncConsent(false);
+  sync_service_.SetSignedIn(signin::ConsentLevel::kSignin);
   ASSERT_EQ(sync_service_.GetTransportState(),
             syncer::SyncService::TransportState::ACTIVE);
   ASSERT_TRUE(sync_service_.GetActiveDataTypes().HasAll(
@@ -628,7 +624,7 @@ TEST_P(SyncToSigninMigrationMetricsTest, SyncPaused) {
 }
 
 TEST_P(SyncToSigninMigrationMetricsTest, SyncInitializing) {
-  sync_service_.SetTransportState(
+  sync_service_.SetMaxTransportState(
       syncer::SyncService::TransportState::INITIALIZING);
   ASSERT_TRUE(sync_service_.HasSyncConsent());
   ASSERT_TRUE(sync_service_.GetActiveDataTypes().empty());

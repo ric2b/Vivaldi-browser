@@ -5,15 +5,15 @@
 #import <UIKit/UIKit.h>
 
 #import "base/strings/sys_string_conversions.h"
+#import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
-#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
+#import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_utils_ios.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/features/vivaldi_features.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
-#import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
 #import "ios/chrome/browser/ui/sharing/sharing_params.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
@@ -51,6 +51,8 @@
 
 using bookmarks::BookmarkModel;
 using l10n_util::GetNSString;
+using vivaldi_bookmark_kit::GetSpeeddial;
+using vivaldi_bookmark_kit::SetNodeSpeeddial;
 
 // Namespace
 namespace {
@@ -74,8 +76,6 @@ UIEdgeInsets moreButtonPaddingNoToolbariPad =
 CGSize moreButtonContainerSize = CGSizeMake(26.f, 14.f);
 // Size for the more button
 CGSize moreButtonSize = CGSizeMake(30.f, 30.f);
-// Size for the more button container when new start page is disabled
-CGSize moreButtonContainerSizeOldToolbar = CGSizeMake(30.f, 30.f);
 // Corner radius for more button container
 CGFloat moreButtonContainerRadius = 4.0f;
 // Opacity for background color for more button container
@@ -134,7 +134,7 @@ NSUInteger toolbarVisibleThreshold = 2;
 // The Browser in which bookmarks are presented
 @property(nonatomic, assign) Browser* browser;
 // Bookmarks model that holds all the bookmarks data
-@property (assign,nonatomic) LegacyBookmarkModel* bookmarks;
+@property (assign,nonatomic) BookmarkModel* bookmarks;
 // The user's browser state model used.
 @property(nonatomic, assign) ChromeBrowserState* browserState;
 // The service class that manages the speed dial thumbnail locally such as
@@ -215,7 +215,7 @@ NSUInteger toolbarVisibleThreshold = 2;
 
 #pragma mark - INITIALIZER
 - (instancetype)initWithBrowser:(Browser*)browser
-                  bookmarkModel:(LegacyBookmarkModel*)bookmarkModel {
+                  bookmarkModel:(BookmarkModel*)bookmarkModel {
   self = [super init];
   if (self) {
     _browser = browser;
@@ -305,6 +305,13 @@ NSUInteger toolbarVisibleThreshold = 2;
   return wallpaperImage;
 }
 
+-(void)viewWillAppear:(BOOL)animated {
+  [super viewWillAppear:animated];
+  // Set up more button properties on appear to apply the correct navigation bar
+  // visibility if user comes back from any child view folders.
+  [self setNavigationBarVisibilityAnimated:YES];
+}
+
 -(void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
 
@@ -364,6 +371,7 @@ NSUInteger toolbarVisibleThreshold = 2;
   [self setupSpeedDialView];
   [self setUpCustomizeStartPageButton];
   [self setUpLongPressGesture];
+  [self setUpTapGesture];
 }
 
 - (void)setupSpeedDialBackground {
@@ -425,10 +433,15 @@ NSUInteger toolbarVisibleThreshold = 2;
   _topToolbarViewProvider = toolbarViewProvider;
 
   UIViewController* toolbarViewController =
-      [VivaldiNTPTopToolbarViewProvider makeViewController];
+      [toolbarViewProvider makeViewController];
   toolbarViewController.view.backgroundColor = UIColor.clearColor;
   _topToolbarViewController = toolbarViewController;
   toolbarViewProvider.consumer = self;
+
+  // TODO: (prio@vivaldi.com)
+  // Figure out a way to add the toolbar view controller as child view
+  // controller for this view to silent the warning visible on context menu
+  // present from toolbar.
   [self.topScrollMenuContainer addSubview:toolbarViewController.view];
   [toolbarViewController.view anchorTop:self.topScrollMenuContainer.topAnchor
                               leading:self.topScrollMenuContainer.leadingAnchor
@@ -447,9 +460,7 @@ NSUInteger toolbarVisibleThreshold = 2;
   UIButton *moreButton = [UIButton new];
   _moreButton = moreButton;
 
-  UIImage* moreButtonIcon = IsNewStartPageIsEnabled() ?
-      [UIImage imageNamed:vNTPToolbarMoreIcon] :
-      [UIImage imageNamed:vNTPToolbarSortIcon];
+  UIImage* moreButtonIcon = [UIImage imageNamed:vNTPToolbarMoreIcon];
   [moreButton setImage:moreButtonIcon
               forState:UIControlStateNormal];
   [moreButton setImage:moreButtonIcon
@@ -472,17 +483,16 @@ NSUInteger toolbarVisibleThreshold = 2;
 }
 
 - (void)setUpMoreButtonProperties {
-  BOOL shouldHideToolbar = IsNewStartPageIsEnabled() &&
-      ((![self showSpeedDials] && ![self showFrequentlyVisited]) ||
-       self.speedDialMenuItems.count <= toolbarVisibleThreshold);
-  // Hide toolbar
-  [self.navigationController setNavigationBarHidden:shouldHideToolbar
-                                           animated:NO];
+  // Hide toolbar when there's no speed dial items,
+  // or toolbar items are below threshold.
+  // Consider the top sites when its enabled only.
+  [self setNavigationBarVisibilityAnimated:NO];
+
   // Redraw the more button
   [_moreButton removeFromSuperview];
   [_moreButtonContainer removeFromSuperview];
 
-  if (shouldHideToolbar) {
+  if ([self shouldHideToolbar]) {
     UIEdgeInsets paddingNoToolbar = [VivaldiGlobalHelpers isDeviceTablet] ?
         moreButtonPaddingNoToolbariPad : moreButtonPaddingNoToolbariPhone;
 
@@ -508,16 +518,13 @@ NSUInteger toolbarVisibleThreshold = 2;
     }
 
   } else {
-
-    CGSize moreContainerSize = IsNewStartPageIsEnabled() ?
-        moreButtonContainerSize : moreButtonContainerSizeOldToolbar;
     [self.topScrollMenuContainer addSubview: _moreButtonContainer];
     [_moreButtonContainer anchorTop:nil
                       leading:self.topToolbarViewController.view.trailingAnchor
                        bottom:nil
                      trailing:self.topScrollMenuContainer.trailingAnchor
                       padding:moreButtonPadding
-                         size:moreContainerSize];
+                         size:moreButtonContainerSize];
     [_moreButtonContainer centerYInSuperview];
 
     [self.topScrollMenuContainer addSubview:_moreButton];
@@ -530,25 +537,20 @@ NSUInteger toolbarVisibleThreshold = 2;
 
   // More button tint color
   UIColor* moreTintColor = [UIColor colorNamed:vToolbarButtonColor];
-  if (IsNewStartPageIsEnabled()) {
-    if ([self getWallpaperImage] && shouldHideToolbar) {
-      BOOL shouldUseDarkTint =
-        [VivaldiGlobalHelpers
-            shouldUseDarkTextForImage:[self getWallpaperImage]];
-      moreTintColor = shouldUseDarkTint ?
-          [UIColor colorNamed:vNTPToolbarMoreLightTintColor] :
-          [UIColor colorNamed:vNTPToolbarMoreDarkTintColor];
-      _moreButtonContainer.backgroundColor =
-          shouldUseDarkTint ?
-              [[UIColor blackColor]
-                  colorWithAlphaComponent:moreButtonContainerOpacity] :
-              [[UIColor whiteColor]
-                  colorWithAlphaComponent:moreButtonContainerOpacity];
-      _moreButton.tintColor = moreTintColor;
-    } else {
-      _moreButtonContainer.backgroundColor = UIColor.clearColor;
-      _moreButton.tintColor = moreTintColor;
-    }
+  if ([self getWallpaperImage] && [self shouldHideToolbar]) {
+    BOOL shouldUseDarkTint =
+      [VivaldiGlobalHelpers
+          shouldUseDarkTextForImage:[self getWallpaperImage]];
+    moreTintColor = shouldUseDarkTint ?
+        [UIColor colorNamed:vNTPToolbarMoreLightTintColor] :
+        [UIColor colorNamed:vNTPToolbarMoreDarkTintColor];
+    _moreButtonContainer.backgroundColor =
+        shouldUseDarkTint ?
+            [[UIColor blackColor]
+                colorWithAlphaComponent:moreButtonContainerOpacity] :
+            [[UIColor whiteColor]
+                colorWithAlphaComponent:moreButtonContainerOpacity];
+    _moreButton.tintColor = moreTintColor;
   } else {
     _moreButtonContainer.backgroundColor = UIColor.clearColor;
     _moreButton.tintColor = moreTintColor;
@@ -586,9 +588,12 @@ NSUInteger toolbarVisibleThreshold = 2;
   self.cvTopConstraint = [_collectionView.topAnchor constraintEqualToAnchor:self.view.safeTopAnchor];
   self.cvTopConstraint.active = YES;
 
-  self.collectionView.hidden =
-      IsNewStartPageIsEnabled() && ![self showSpeedDials]
-        && ![self showFrequentlyVisited];
+  if (IsTopSitesEnabled()) {
+    self.collectionView.hidden = ![self showSpeedDials]
+          && (![self showFrequentlyVisited]);
+  } else {
+    self.collectionView.hidden = ![self showSpeedDials];
+  }
 }
 
 - (void)setUpLongPressGesture {
@@ -613,6 +618,21 @@ NSUInteger toolbarVisibleThreshold = 2;
   if (gesture.state == UIGestureRecognizerStateBegan) {
     [self handleCustomizeStartPageButtonTap];
   }
+}
+
+- (void)setUpTapGesture {
+  UITapGestureRecognizer *tapGestureIV =
+      [[UITapGestureRecognizer alloc]
+          initWithTarget:self
+                  action:@selector(handleTapGesture)];
+  tapGestureIV.delegate = self;
+  [self.backgroundImageView addGestureRecognizer:tapGestureIV];
+}
+
+- (void)handleTapGesture {
+  id<OmniboxCommands> omniboxCommandHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), OmniboxCommands);
+  [omniboxCommandHandler cancelOmniboxEdit];
 }
 
 - (void)setUpCustomizeStartPageButton {
@@ -658,18 +678,18 @@ NSUInteger toolbarVisibleThreshold = 2;
         constraintEqualToConstant:customizeButtonHeight]
   ]];
 
-  BOOL hideButton = !IsNewStartPageIsEnabled() ||
-      (!ShouldShowCustomizeStartPageButton() &&
-          ![self showStartPageCustomizeButton]);
+  BOOL hideButton =
+      !ShouldShowCustomizeStartPageButton() &&
+          ![self showStartPageCustomizeButton];
   customizeStartPageButton.hidden = hideButton;
 }
 
 // Returns the context menu actions for toolbar more button action
 - (UIMenu*)contextMenuForToolbarMoreButton {
-  // Add group action button
-  NSString* addGroupActionTitle =
-      GetNSString(IDS_IOS_START_PAGE_ADD_GROUP_TITLE);
-  UIAction* addGroupAction = [UIAction actionWithTitle:addGroupActionTitle
+  // New group action button
+  NSString* newGroupActionTitle =
+      GetNSString(IDS_IOS_START_PAGE_NEW_GROUP_TITLE);
+  UIAction* newGroupAction = [UIAction actionWithTitle:newGroupActionTitle
                                                  image:nil
                                             identifier:nil
                                                handler:^(__kindof UIAction*_Nonnull
@@ -825,28 +845,23 @@ NSUInteger toolbarVisibleThreshold = 2;
     options = UIMenuOptionsDisplayAsPalette;
   }
 
-  if (IsNewStartPageIsEnabled()) {
-    UIMenu* sortingMenu =
-        [UIMenu menuWithTitle:GetNSString(IDS_IOS_START_PAGE_SORTING_TITLE)
-                        image:nil
-                   identifier:nil
-                      options:options
-                     children:@[sortingActionsMenu, sortingOrderMenu]];
+  UIMenu* sortingMenu =
+      [UIMenu menuWithTitle:GetNSString(IDS_IOS_START_PAGE_SORTING_TITLE)
+                      image:nil
+                 identifier:nil
+                    options:options
+                   children:@[sortingActionsMenu, sortingOrderMenu]];
 
-    UIMenu* menu = [UIMenu menuWithTitle:@""
-                                children:@[addGroupAction,
-                                           customizePageAction,
-                                           sortingMenu]];
-    return menu;
-  } else {
-    UIMenu* sortingMenu =
-        [UIMenu menuWithTitle:@""
-                        image:nil
-                   identifier:nil
-                      options:UIMenuOptionsDisplayInline
-                     children:@[sortingActionsMenu, sortingOrderMenu]];
-    return sortingMenu;
+  NSMutableArray* childItems =
+      [[NSMutableArray alloc]
+          initWithArray:@[newGroupAction, customizePageAction]];
+  if ([self showSpeedDials]) {
+    [childItems addObject:sortingMenu];
   }
+
+  UIMenu* menu = [UIMenu menuWithTitle:@""
+                              children:childItems];
+  return menu;
 
 }
 
@@ -1042,6 +1057,30 @@ NSUInteger toolbarVisibleThreshold = 2;
   self.collectionView.pagingEnabled = YES;
 }
 
+- (void)setNavigationBarVisibilityAnimated:(BOOL)animated {
+  [self.navigationController setNavigationBarHidden:[self shouldHideToolbar]
+                                           animated:animated];
+}
+
+/// Returns the navigation bar visibility which contains
+/// the top toolbar, which is not visible if there's
+/// only one group available.
+- (BOOL)shouldHideToolbar {
+  BOOL speedDialsHidden = ![self showSpeedDials];
+  BOOL topSitesHidden = ![self showFrequentlyVisited];
+  BOOL belowThreshold =
+      (self.speedDialMenuItems.count <= toolbarVisibleThreshold);
+
+  BOOL shouldHideToolbar;
+  if (IsTopSitesEnabled()) {
+      shouldHideToolbar =
+          ((speedDialsHidden && topSitesHidden) || belowThreshold);
+  } else {
+      shouldHideToolbar = (speedDialsHidden || belowThreshold);
+  }
+  return shouldHideToolbar;
+}
+
 - (void)showStartPageSettings {
   _startPageSettingsCoordinator =
       [[VivaldiStartPageQuickSettingsCoordinator alloc]
@@ -1122,9 +1161,13 @@ NSUInteger toolbarVisibleThreshold = 2;
 
 - (void)setTopToolbarAndPagesHiddenWithShowFrequentlyVisited:
     (BOOL)showFrequentlyVisited showSpeedDials:(BOOL)showSpeedDials {
-  self.collectionView.hidden = IsNewStartPageIsEnabled() && !showSpeedDials
-      && !showFrequentlyVisited;
-  if (IsNewStartPageIsEnabled() && (showSpeedDials || showFrequentlyVisited)) {
+  if (IsTopSitesEnabled()) {
+    self.collectionView.hidden = !showSpeedDials && !showFrequentlyVisited;
+  } else {
+    self.collectionView.hidden = !showSpeedDials;
+  }
+
+  if (showSpeedDials || (IsTopSitesEnabled() && showFrequentlyVisited)) {
     [self setSelectedMenuItemIndex:0];
     [self scrollToItemWithIndex:self.selectedMenuItemIndex animated:NO];
     __weak __typeof(self) weakSelf = self;
@@ -1141,16 +1184,12 @@ NSUInteger toolbarVisibleThreshold = 2;
 }
 
 - (void)handleCustomizeStartPageButtonTap {
-  if (!IsNewStartPageIsEnabled())
-    return;
-
   if (ShouldShowCustomizeStartPageButton()) {
     SetCustomizeStartPageButtonShown();
   }
   [self showStartPageSettings];
-  _customizeStartPageButton.hidden = !IsNewStartPageIsEnabled() ||
-      (![self showStartPageCustomizeButton] &&
-       !ShouldShowCustomizeStartPageButton());
+  _customizeStartPageButton.hidden = ![self showStartPageCustomizeButton] &&
+       !ShouldShowCustomizeStartPageButton();
 }
 
 - (void)showBlurViewDependentPropertiesWithProgress:(CGFloat)progress {
@@ -1182,13 +1221,7 @@ NSUInteger toolbarVisibleThreshold = 2;
 #pragma mark - COLLECTIONVIEW DATA SOURCE
 - (NSInteger)collectionView:(UICollectionView *)collectionView
      numberOfItemsInSection:(NSInteger)section{
-  if (IsNewStartPageIsEnabled()) {
-    return self.speedDialMenuItems.count;
-  } else {
-    // Return 1 item when speed dial menu items count is empty to show + button
-    // that allows adding folder or item.
-    return self.speedDialMenuItems.count ?: 1;
-  }
+  return self.speedDialMenuItems.count;
 }
 
 - (UICollectionViewCell*)collectionView:(UICollectionView *)collectionView
@@ -1203,77 +1236,50 @@ NSUInteger toolbarVisibleThreshold = 2;
       [[BrowserActionFactory alloc] initWithBrowser:_browser
               scenario:kMenuScenarioHistogramBookmarkEntry];
   [cell configureActionFactory:actionFactory];
-  if (IsNewStartPageIsEnabled()) {
-    BOOL showFrequentlyVisited = [self showFrequentlyVisited];
-    BOOL noSpeedDialItems = self.speedDialFolderItems.count <= 0;
-    BOOL isLastMenuItem = index == (long(self.speedDialMenuItems.count) - 1);
-    BOOL isLastFolderItem = index == long(self.speedDialFolderItems.count);
 
-    // Check if we need to configure an empty cell
-    if ((!showFrequentlyVisited && noSpeedDialItems) ||
-        (showFrequentlyVisited && isLastMenuItem) ||
-        (!showFrequentlyVisited && isLastFolderItem)) {
-      [cell configureWith:@[]
-                   parent:_bookmarkBarItem
-            faviconLoader:self.faviconLoader
-              layoutStyle:[self currentLayoutStyle]
-             layoutColumn:[self currentLayoutColumn]
-             showAddGroup:IsNewStartPageIsEnabled()
-        frequentlyVisited:NO
-        topSitesAvailable:NO
-        verticalSizeClass:self.view.traitCollection.verticalSizeClass];
-    } else {
-      [cell setCurrentPage:index];
-      NSArray *childItems;
+  BOOL showFrequentlyVisited =
+      IsTopSitesEnabled() && [self showFrequentlyVisited];
+  BOOL noSpeedDialItems = self.speedDialFolderItems.count <= 0;
+  BOOL isLastMenuItem = index == (long(self.speedDialMenuItems.count) - 1);
+  BOOL isLastFolderItem = index == long(self.speedDialFolderItems.count);
 
-      // Check if the current index is for the frequently visited items
-      if (showFrequentlyVisited && index == 0) {
-        childItems = [self.speedDialChildItems objectAtIndex:index];
-        [cell configureWith:childItems
-                     parent:_bookmarkBarItem
-              faviconLoader:self.faviconLoader
-                layoutStyle:VivaldiStartPageLayoutStyleSmall
-               layoutColumn:[self currentLayoutColumn]
-               showAddGroup:NO
-          frequentlyVisited:YES
-          topSitesAvailable:self.isTopSitesResultsAvailable
-          verticalSizeClass:self.view.traitCollection.verticalSizeClass];
-      } else {
-        // When frequently visited pages enabled subtract 1 from index to
-        // get correct object from SDFolders array since SDFolders do not
-        // contain the item for top sites.
-        NSInteger adjustedIndex = showFrequentlyVisited ? (index - 1) : index;
-        VivaldiSpeedDialItem *parent =
-            [self.speedDialFolderItems objectAtIndex:adjustedIndex];
-        childItems = [self.speedDialChildItems objectAtIndex:index];
-        [cell configureWith:childItems
-                     parent:parent
-              faviconLoader:self.faviconLoader
-                layoutStyle:[self currentLayoutStyle]
-               layoutColumn:[self currentLayoutColumn]
-               showAddGroup:NO
-          frequentlyVisited:NO
-          topSitesAvailable:NO
-          verticalSizeClass:self.view.traitCollection.verticalSizeClass];
-      }
-    }
+  // Check if we need to configure an empty cell
+  if ((!showFrequentlyVisited && noSpeedDialItems) ||
+      (showFrequentlyVisited && isLastMenuItem) ||
+      (!showFrequentlyVisited && isLastFolderItem)) {
+    [cell configureWith:@[]
+                 parent:_bookmarkBarItem
+          faviconLoader:self.faviconLoader
+            layoutStyle:[self currentLayoutStyle]
+           layoutColumn:[self currentLayoutColumn]
+           showAddGroup:YES
+      frequentlyVisited:NO
+      topSitesAvailable:NO
+      verticalSizeClass:self.view.traitCollection.verticalSizeClass];
   } else {
-    if (self.speedDialFolderItems.count <= 0 ||
-        index == long(self.speedDialFolderItems.count)) {
-      [cell configureWith:@[]
+    [cell setCurrentPage:index];
+    NSArray *childItems;
+
+    // Check if the current index is for the frequently visited items
+    if (showFrequentlyVisited && index == 0) {
+      childItems = [self.speedDialChildItems objectAtIndex:index];
+      [cell configureWith:childItems
                    parent:_bookmarkBarItem
             faviconLoader:self.faviconLoader
-              layoutStyle:[self currentLayoutStyle]
+              layoutStyle:VivaldiStartPageLayoutStyleSmall
              layoutColumn:[self currentLayoutColumn]
-             showAddGroup:IsNewStartPageIsEnabled()
-        frequentlyVisited:NO
-        topSitesAvailable:NO
+             showAddGroup:NO
+        frequentlyVisited:YES
+        topSitesAvailable:self.isTopSitesResultsAvailable
         verticalSizeClass:self.view.traitCollection.verticalSizeClass];
     } else {
-      [cell setCurrentPage: index];
-      VivaldiSpeedDialItem* parent =
-          [self.speedDialFolderItems objectAtIndex:index];
-      NSArray* childItems = [self.speedDialChildItems objectAtIndex:index];
+      // When frequently visited pages enabled subtract 1 from index to
+      // get correct object from SDFolders array since SDFolders do not
+      // contain the item for top sites.
+      NSInteger adjustedIndex = showFrequentlyVisited ? (index - 1) : index;
+      VivaldiSpeedDialItem *parent =
+          [self.speedDialFolderItems objectAtIndex:adjustedIndex];
+      childItems = [self.speedDialChildItems objectAtIndex:index];
       [cell configureWith:childItems
                    parent:parent
             faviconLoader:self.faviconLoader
@@ -1307,8 +1313,9 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
 }
 
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
-  if (IsNewStartPageIsEnabled() && [self getWallpaperImage] &&
-      ([self showSpeedDials] || [self showFrequentlyVisited])) {
+  if ([self getWallpaperImage] &&
+      ([self showSpeedDials] ||
+       (IsTopSitesEnabled() && [self showFrequentlyVisited]))) {
     CGFloat pageWidth = scrollView.frame.size.width;
     CGFloat currentPage = scrollView.contentOffset.x / pageWidth;
     NSInteger numberOfPages = [self.collectionView numberOfItemsInSection:0];
@@ -1353,11 +1360,9 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
     [self setSelectedMenuItemIndex:currentIndexPath.row];
   }
 
-  if (IsNewStartPageIsEnabled()) {
-    if (currentIndexPath &&
-        currentIndexPath.row == long(self.speedDialMenuItems.count)) {
-      [self.topToolbarViewProvider removeSelection];
-    }
+  if (currentIndexPath &&
+      currentIndexPath.row == long(self.speedDialMenuItems.count)) {
+    [self.topToolbarViewProvider removeSelection];
   }
 }
 
@@ -1379,19 +1384,21 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
 
 - (void)refreshNode:(const bookmarks::BookmarkNode*)bookmarkNode {
   NSNumber *bookmarkNodeId = @(bookmarkNode->id());
-  [self notifyUpdateForItemWithID:bookmarkNodeId
-                 captureThumbnail:NO
-                  finishedCapture:NO];
+  if (bookmarkNode->is_url()) {
+    [self notifyUpdateForItemWithID:bookmarkNodeId
+                   captureThumbnail:NO
+                    finishedCapture:NO];
+  } else {
+    // Reload the top toolbar incase any changes happens on the top toolbar
+    // items.
+    if (GetSpeeddial(bookmarkNode)) {
+      [self refreshContents];
+    }
+  }
 }
 
 - (void)refreshMenuItems:(NSArray*)items
                SDFolders:(NSArray*)SDFolders {
-
-  if (!IsNewStartPageIsEnabled()) {
-    // Do not show toolbar when there are no toolbar items
-    [self.navigationController setNavigationBarHidden:items.count <= 0
-                                             animated:NO];
-  }
 
   if (items.count <= 0) {
     [self.speedDialMenuItems removeAllObjects];
@@ -1403,27 +1410,31 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   self.speedDialMenuItems = [[NSMutableArray alloc] initWithArray:items];
   self.speedDialFolderItems = [[NSMutableArray alloc] initWithArray:SDFolders];
 
-  if (IsNewStartPageIsEnabled()) {
-    // If there's no top sites, and only one SD folder available,
-    // scroll to first item.
-    if (![self showFrequentlyVisited] && SDFolders.count == 1) {
+  // If there's no top sites, and only one SD folder available,
+  // or selected index is same as number of (top menu items - 1) scroll to
+  // first item.
+  // Second case can happen if user selected the last item and then removes
+  // that item from either toolbar or delete the folder from panels.
+  if (IsTopSitesEnabled()) {
+    if (![self showFrequentlyVisited] &&
+        (SDFolders.count == 1 ||
+         self.selectedMenuItemIndex == NSInteger(items.count - 1))) {
       [self setSelectedMenuItemIndex:0];
     }
-    if ([self showSpeedDials] || [self showFrequentlyVisited]) {
-      [self.topToolbarViewProvider
-           updateToolbarWithItems:items
-                selectedIndex:self.selectedMenuItemIndex];
-    }
-    [self setUpMoreButtonProperties];
   } else {
-    // If there's only one SD folder available, scroll to first item.
-    if (SDFolders.count == 1) {
+    if (SDFolders.count == 1 ||
+        self.selectedMenuItemIndex == NSInteger(items.count - 1)) {
       [self setSelectedMenuItemIndex:0];
     }
-    [self.topToolbarViewProvider
-        updateToolbarWithItems:items
-            selectedIndex:self.selectedMenuItemIndex];
   }
+
+  if ([self showSpeedDials] ||
+      (IsTopSitesEnabled() && [self showFrequentlyVisited])) {
+    [self.topToolbarViewProvider
+         updateToolbarWithItems:items
+              selectedIndex:self.selectedMenuItemIndex];
+  }
+  [self setUpMoreButtonProperties];
 }
 
 - (void)refreshChildItems:(NSArray*)items
@@ -1462,11 +1473,12 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
 - (void)setSpeedDialsEnabled:(BOOL)enabled {
   [self setTopToolbarAndPagesHiddenWithShowFrequentlyVisited:
       [self showFrequentlyVisited] showSpeedDials:enabled];
+  [self resetMoreButtonContextMenuOptions];
 }
 
 - (void)setShowCustomizeStartPageButtonEnabled:(BOOL)enabled {
-  _customizeStartPageButton.hidden = !IsNewStartPageIsEnabled() ||
-      (!enabled && !ShouldShowCustomizeStartPageButton());
+  _customizeStartPageButton.hidden =
+      !enabled && !ShouldShowCustomizeStartPageButton();
 }
 
 - (void)reloadLayout {
@@ -1481,6 +1493,43 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   [self scrollToItemWithIndex:index animated:YES];
 }
 
+- (void)didTriggerRenameToolbarItem:(VivaldiNTPTopToolbarItem*)toolbarItem {
+  VivaldiSpeedDialItem* itemToRename = [self findObjectById:toolbarItem.id];
+  if (!itemToRename)
+    return;
+
+  VivaldiSpeedDialItem* parentItem =
+      [[VivaldiSpeedDialItem alloc] initWithBookmark:itemToRename.parent];
+  if (!parentItem)
+    return;
+
+  [self presentBookmarkEditorWithItem:itemToRename
+                               parent:parentItem
+                           entryPoint:VivaldiBookmarksEditorEntryPointGroup
+                            isEditing:YES];
+}
+
+- (void)didTriggerRemoveToolbarItem:(VivaldiNTPTopToolbarItem*)toolbarItem {
+  // This action doesn't remove the group from database, rather just removes
+  // from the toolbar, which means set the folder as not a speed dial.
+  VivaldiSpeedDialItem* itemToRemove = [self findObjectById:toolbarItem.id];
+  if (!itemToRemove)
+    return;
+  if (self.bookmarks && itemToRemove.bookmarkNode) {
+    SetNodeSpeeddial(self.bookmarks,
+                     itemToRemove.bookmarkNode, NO);
+  }
+}
+
+- (VivaldiSpeedDialItem*)findObjectById:(NSNumber*)targetId {
+  for (VivaldiSpeedDialItem *item in self.speedDialFolderItems) {
+    if (item.idValue == targetId) {
+      return item;
+    }
+  }
+  return nil;
+}
+
 #pragma mark - VIVALDI_SPEED_DIAL_CONTAINER_DELEGATE
 - (void)didSelectItem:(VivaldiSpeedDialItem*)item
                parent:(VivaldiSpeedDialItem*)parent {
@@ -1490,6 +1539,11 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
     if (self.topScrollMenuContainer.alpha == 1) {
       [self.topScrollMenuContainer setAlpha:0];
     }
+
+    // Make sure navigation bar is not hidden when we navigate down to children
+    // as the back button is required to come back to root.
+    [self.navigationController setNavigationBarHidden:NO
+                                             animated:YES];
 
     VivaldiSpeedDialViewController *controller =
       [VivaldiSpeedDialViewController initWithItem:item
@@ -1560,7 +1614,6 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
     editedNodes.push_back(item.bookmarkNode);
     bookmark_utils_ios::MoveBookmarks(editedNodes,
                                       self.bookmarks,
-                                      self.bookmarks,
                                       parent.parent);
 
   } else {
@@ -1598,10 +1651,8 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
     if (self.bookmarks->loaded() && item.bookmarkNode) {
       std::vector<const bookmarks::BookmarkNode*> nodes;
       nodes.push_back(item.bookmarkNode);
-      const BookmarkNode* trashFolder =
-      _bookmarks->getUnderlyingModel()->trash_node();
+      const BookmarkNode* trashFolder = _bookmarks->trash_node();
       bookmark_utils_ios::MoveBookmarks(nodes,
-                                        self.bookmarks,
                                         self.bookmarks,
                                         trashFolder);
       [_vivaldiThumbnailService removeThumbnailForSDItem:item];
@@ -1676,6 +1727,10 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
                               params:params
                           originView:view];
   [self.sharingCoordinator start];
+}
+
+- (void)didTapOnCollectionViewEmptyArea {
+  [self handleTapGesture];
 }
 
 @end

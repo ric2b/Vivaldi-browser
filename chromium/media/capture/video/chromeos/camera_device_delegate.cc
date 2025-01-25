@@ -56,6 +56,7 @@ constexpr int32_t kColorTemperatureStep = 100;
 constexpr int32_t kMicroToNano = 1000;
 
 constexpr char kIntelPowerMode[] = "intel.vendorCamera.powerMode";
+constexpr char kLibcameraStillCaptureMFNR[] = "org.libcamera.stillCaptureMFNR";
 constexpr uint8_t kIntelPowerModeLowPower = 0;
 constexpr uint8_t kIntelPowerModeHighQuality = 1;
 
@@ -318,6 +319,14 @@ CameraDeviceDelegate::CameraDeviceDelegate(
           ipc_task_runner_,
           base::BindRepeating(&CameraDeviceDelegate::OnCameraEffectsChanged,
                               GetWeakPtr())));
+  auto_framing_state_observer_ =
+      base::SequenceBound<CrosCameraAutoFramingStateObserver>(
+          ui_task_runner,
+          base::BindPostTask(
+              ipc_task_runner_,
+              base::BindRepeating(
+                  &CameraDeviceDelegate::OnAutoFramingStateChanged,
+                  GetWeakPtr())));
 }
 
 CameraDeviceDelegate::~CameraDeviceDelegate() = default;
@@ -684,6 +693,9 @@ void CameraDeviceDelegate::ReconfigureStreams(
 void CameraDeviceDelegate::SetRotation(int rotation) {
   DCHECK(ipc_task_runner_->BelongsToCurrentThread());
   DCHECK(rotation >= 0 && rotation < 360 && rotation % 90 == 0);
+  if (!device_context_) {
+    return;
+  }
   device_context_->SetScreenRotation(rotation);
 }
 
@@ -949,7 +961,8 @@ void CameraDeviceDelegate::OnInitialized(int32_t result) {
       case cros::mojom::CaptureIntent::kVideoRecord:
         return ShouldUseBlobVideoSnapshot();
       default:
-        NOTREACHED() << "Unknown capture intent: " << capture_intent;
+        NOTREACHED_IN_MIGRATION()
+            << "Unknown capture intent: " << capture_intent;
         return false;
     }
   }();
@@ -991,8 +1004,8 @@ void CameraDeviceDelegate::ConfigureStreams(
         usage = cros::mojom::GRALLOC_USAGE_HW_VIDEO_ENCODER;
         break;
       default:
-        NOTREACHED() << "Unrecognized client type: "
-                     << static_cast<int>(param.first);
+        NOTREACHED_IN_MIGRATION()
+            << "Unrecognized client type: " << static_cast<int>(param.first);
     }
     stream->id = static_cast<uint64_t>(stream_type);
     stream->stream_type = cros::mojom::Camera3StreamType::CAMERA3_STREAM_OUTPUT;
@@ -1177,7 +1190,7 @@ void CameraDeviceDelegate::ConstructDefaultRequestSettings(
         request_template,
         base::BindOnce(&CameraDeviceDelegate::
                            OnConstructedDefaultStillCaptureRequestSettings,
-                       GetWeakPtr()));
+                       GetWeakPtr(), request_template));
   } else if (stream_type == StreamType::kPortraitJpegOutput) {
     auto request_template =
         cros::mojom::Camera3RequestTemplate::CAMERA3_TEMPLATE_STILL_CAPTURE;
@@ -1187,7 +1200,8 @@ void CameraDeviceDelegate::ConstructDefaultRequestSettings(
                            OnConstructedDefaultPortraitModeRequestSettings,
                        GetWeakPtr()));
   } else {
-    NOTREACHED() << "No default request settings for stream: " << stream_type;
+    NOTREACHED_IN_MIGRATION()
+        << "No default request settings for stream: " << stream_type;
   }
 }
 
@@ -1236,8 +1250,19 @@ void CameraDeviceDelegate::OnConstructedDefaultPreviewRequestSettings(
 }
 
 void CameraDeviceDelegate::OnConstructedDefaultStillCaptureRequestSettings(
+    cros::mojom::Camera3RequestTemplate requset_template,
     cros::mojom::CameraMetadataPtr settings) {
   DCHECK(ipc_task_runner_->BelongsToCurrentThread());
+
+  if (requset_template ==
+      cros::mojom::Camera3RequestTemplate::CAMERA3_TEMPLATE_STILL_CAPTURE) {
+    const VendorTagInfo* info =
+        camera_hal_delegate_->GetVendorTagInfoByName(kLibcameraStillCaptureMFNR);
+    if (info != nullptr) {
+      auto e = BuildMetadataEntry(info->tag, uint8_t{1});
+      AddOrUpdateMetadataEntry(&settings, std::move(e));
+    }
+  }
 
   while (!take_photo_callbacks_.empty()) {
     auto take_photo_callback = base::BindOnce(
@@ -1389,7 +1414,7 @@ bool CameraDeviceDelegate::SetPointsOfInterest(
       case 270:
         return {1.0 - y, x};
       default:
-        NOTREACHED() << "Invalid orientation";
+        NOTREACHED_IN_MIGRATION() << "Invalid orientation";
     }
     return {x, y};
   }();
@@ -1622,6 +1647,16 @@ void CameraDeviceDelegate::OnCameraEffectsChanged(
     device_context_->OnCaptureConfigurationChanged();
   }
   current_effects_ = std::move(new_effects);
+}
+
+void CameraDeviceDelegate::OnAutoFramingStateChanged(
+    cros::mojom::CameraAutoFramingState state) {
+  DCHECK(ipc_task_runner_->BelongsToCurrentThread());
+
+  if (current_auto_framing_state_ && *current_auto_framing_state_ != state) {
+    device_context_->OnCaptureConfigurationChanged();
+  }
+  current_auto_framing_state_ = state;
 }
 
 void CameraDeviceDelegate::DoGetPhotoState(
@@ -1887,8 +1922,8 @@ void CameraDeviceDelegate::DoGetPhotoState(
     }
   }
 
-  // For background blur part, we only set capabilities and current
-  // configuration setting if the feature flag is enabled.
+  // For background blur and face framing part, we only set capabilities and
+  // current configuration setting if the feature flag is enabled.
   //
   // https://w3c.github.io/mediacapture-extensions/#exposing-mediastreamtrack-source-background-blur-support
   if (ash::features::IsVcWebApiEnabled() && !current_effects_.is_null()) {
@@ -1899,6 +1934,17 @@ void CameraDeviceDelegate::DoGetPhotoState(
     photo_state->background_blur_mode = current_effects_->blur_enabled
                                             ? mojom::BackgroundBlurMode::BLUR
                                             : mojom::BackgroundBlurMode::OFF;
+  }
+  // https://w3c.github.io/mediacapture-extensions/#exposing-mediastreamtrack-source-automatic-face-framing-support
+  if (ash::features::IsVcWebApiEnabled() && current_auto_framing_state_) {
+    photo_state->supported_face_framing_modes = {
+        current_auto_framing_state_ == cros::mojom::CameraAutoFramingState::OFF
+            ? mojom::MeteringMode::NONE
+            : mojom::MeteringMode::SINGLE_SHOT};
+    photo_state->current_face_framing_mode =
+        current_auto_framing_state_ == cros::mojom::CameraAutoFramingState::OFF
+            ? mojom::MeteringMode::NONE
+            : mojom::MeteringMode::SINGLE_SHOT;
   }
 
   std::move(callback).Run(std::move(photo_state));

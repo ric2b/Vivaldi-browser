@@ -26,7 +26,6 @@ class Error(Exception):
       msg = '\n'.join('%d> %s' % (index, l) for l in msg.splitlines())
     super(Error, self).__init__(msg, *args, **kwargs)
 
-
 # TODO: Should fix these warnings.
 # pylint: disable=line-too-long
 
@@ -144,6 +143,33 @@ _GCLIENT_DEPS_SCHEMA = _NodeDictSchema({
             schema.Optional('condition'):
             str,
             schema.Optional('dep_type', default='cipd'):
+            str,
+        }),
+        # GCS content.
+        _NodeDictSchema({
+            'bucket':
+            str,
+            'objects': [
+                _NodeDictSchema({
+                    'object_name':
+                    str,
+                    'sha256sum':
+                    str,
+                    'size_bytes':
+                    int,
+                    'generation':
+                    int,
+                    schema.Optional('output_file'):
+                    str,
+                    # The object will only be processed if the condition
+                    # evaluates to True. This is AND with the parent condition.
+                    schema.Optional('condition'):
+                    str,
+                })
+            ],
+            schema.Optional('condition'):
+            str,
+            schema.Optional('dep_type', default='gcs'):
             str,
         }),
     ),
@@ -459,11 +485,11 @@ def Exec(content, filename='<unknown>', vars_override=None, builtin_vars=None):
 def _StandardizeDeps(deps_dict, vars_dict):
     """"Standardizes the deps_dict.
 
-  For each dependency:
-  - Expands the variable in the dependency name.
-  - Ensures the dependency is a dictionary.
-  - Set's the 'dep_type' to be 'git' by default.
-  """
+    For each dependency:
+    - Expands the variable in the dependency name.
+    - Ensures the dependency is a dictionary.
+    - Set's the 'dep_type' to be 'git' by default.
+    """
     new_deps_dict = {}
     for dep_name, dep_info in deps_dict.items():
         dep_name = dep_name.format(**vars_dict)
@@ -477,10 +503,10 @@ def _StandardizeDeps(deps_dict, vars_dict):
 def _MergeDepsOs(deps_dict, os_deps_dict, os_name):
     """Merges the deps in os_deps_dict into conditional dependencies in deps_dict.
 
-  The dependencies in os_deps_dict are transformed into conditional dependencies
-  using |'checkout_' + os_name|.
-  If the dependency is already present, the URL and revision must coincide.
-  """
+    The dependencies in os_deps_dict are transformed into conditional dependencies
+    using |'checkout_' + os_name|.
+    If the dependency is already present, the URL and revision must coincide.
+    """
     for dep_name, dep_info in os_deps_dict.items():
         # Make this condition very visible, so it's not a silent failure.
         # It's unclear how to support None override in deps_os.
@@ -508,8 +534,8 @@ def _MergeDepsOs(deps_dict, os_deps_dict, os_name):
 def UpdateCondition(info_dict, op, new_condition):
     """Updates info_dict's condition with |new_condition|.
 
-  An absent value is treated as implicitly True.
-  """
+    An absent value is treated as implicitly True.
+    """
     curr_condition = info_dict.get('condition')
     # Easy case: Both are present.
     if curr_condition and new_condition:
@@ -526,23 +552,23 @@ def UpdateCondition(info_dict, op, new_condition):
 def Parse(content, filename, vars_override=None, builtin_vars=None):
     """Parses DEPS strings.
 
-  Executes the Python-like string stored in content, resulting in a Python
-  dictionary specified by the schema above. Supports syntax validation and
-  variable expansion.
+    Executes the Python-like string stored in content, resulting in a Python
+    dictionary specified by the schema above. Supports syntax validation and
+    variable expansion.
 
-  Args:
-    content: str. DEPS file stored as a string.
-    filename: str. The name of the DEPS file, or a string describing the source
-      of the content, e.g. '<string>', '<unknown>'.
-    vars_override: dict, optional. A dictionary with overrides for the variables
-      defined by the DEPS file.
-    builtin_vars: dict, optional. A dictionary with variables that are provided
-      by default.
+    Args:
+        content: str. DEPS file stored as a string.
+        filename: str. The name of the DEPS file, or a string describing the source
+            of the content, e.g. '<string>', '<unknown>'.
+        vars_override: dict, optional. A dictionary with overrides for the variables
+            defined by the DEPS file.
+        builtin_vars: dict, optional. A dictionary with variables that are provided
+            by default.
 
-  Returns:
-    A Python dict with the parsed contents of the DEPS file, as specified by the
-    schema above.
-  """
+    Returns:
+        A Python dict with the parsed contents of the DEPS file, as specified by the
+        schema above.
+    """
     result = Exec(content, filename, vars_override, builtin_vars)
 
     vars_dict = result.get('vars', {})
@@ -784,6 +810,33 @@ def _GetVarName(node):
     return None
 
 
+def SetGCS(gclient_dict, dep_name, new_objects):
+    if not isinstance(gclient_dict, _NodeDict) or gclient_dict.tokens is None:
+        raise ValueError(
+            "Can't use SetGCS for the given gclient dict. It contains no "
+            "formatting information.")
+    tokens = gclient_dict.tokens
+
+    if 'deps' not in gclient_dict or dep_name not in gclient_dict['deps']:
+        raise KeyError("Could not find any dependency called %s." % dep_name)
+
+    node = gclient_dict['deps'][dep_name]
+    objects_node = node.GetNode('objects')
+    if len(objects_node.elts) != len(new_objects):
+        raise ValueError("Number of revision objects must match the current "
+                         "number of objects.")
+
+    # Allow only `keys_to_update` to be updated.
+    keys_to_update = ('object_name', 'sha256sum', 'size_bytes', 'generation')
+    for index, object_node in enumerate(objects_node.elts):
+        for key, value in zip(object_node.keys, object_node.values):
+            if key.s not in keys_to_update:
+                continue
+            _UpdateAstString(tokens, value, new_objects[index][key.s])
+
+    node.SetNode('objects', new_objects, objects_node)
+
+
 def SetCIPD(gclient_dict, dep_name, package_name, new_version):
     if not isinstance(gclient_dict, _NodeDict) or gclient_dict.tokens is None:
         raise ValueError(
@@ -932,4 +985,7 @@ def GetRevision(gclient_dict, dep_name):
         _, _, revision = dep['url'].partition('@')
         return revision or None
 
-    raise ValueError('%s is not a valid git dependency.' % dep_name)
+    if isinstance(gclient_dict, _NodeDict) and 'objects' in dep:
+        return dep['objects']
+
+    raise ValueError('%s is not a valid git or gcs dependency.' % dep_name)

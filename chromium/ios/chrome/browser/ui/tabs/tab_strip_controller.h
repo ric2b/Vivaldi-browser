@@ -59,6 +59,7 @@ class Browser;
 @property(nonatomic, assign) ToolbarType toolbarType;
 @property(nonatomic, assign) BOOL dynamicAccentColorEnabled;
 @property(nonatomic, assign) NSString* customAccentColor;
+@property(nonatomic, assign) BOOL showXButtonForBackgroundTabs;
 - (void)scrollToSelectedTab:(web::WebState*)webState animated:(BOOL)animated;
 // End Vivaldi
 

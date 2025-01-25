@@ -151,7 +151,9 @@ HttpStreamFactory::JobController::JobController(
       net_log_(NetLogWithSource::Make(
           session->net_log(),
           NetLogSourceType::HTTP_STREAM_JOB_CONTROLLER)) {
-  DCHECK(factory);
+  DCHECK(factory_);
+  DCHECK(session_);
+  DCHECK(job_factory_);
   DCHECK(base::EqualsCaseInsensitiveASCII(origin_url_.scheme_piece(),
                                           url::kHttpScheme) ||
          base::EqualsCaseInsensitiveASCII(origin_url_.scheme_piece(),
@@ -170,6 +172,12 @@ HttpStreamFactory::JobController::JobController(
     dict.Set("is_preconnect", is_preconnect_);
     dict.Set("privacy_mode",
              PrivacyModeToDebugString(request_info_.privacy_mode));
+    base::Value::List allowed_bad_certs_list;
+    for (const auto& cert_and_status : allowed_bad_certs_) {
+      allowed_bad_certs_list.Append(
+          cert_and_status.cert->subject().GetDisplayName());
+    }
+    dict.Set("allowed_bad_certs", std::move(allowed_bad_certs_list));
     return dict;
   });
 }
@@ -193,14 +201,13 @@ std::unique_ptr<HttpStreamRequest> HttpStreamFactory::JobController::Start(
     const NetLogWithSource& source_net_log,
     HttpStreamRequest::StreamType stream_type,
     RequestPriority priority) {
-  DCHECK(factory_);
   DCHECK(!request_);
 
   stream_type_ = stream_type;
   priority_ = priority;
 
   auto request = std::make_unique<HttpStreamRequest>(
-      this, delegate, websocket_handshake_stream_create_helper, source_net_log,
+      this, websocket_handshake_stream_create_helper, source_net_log,
       stream_type);
   // Keep a raw pointer but release ownership of HttpStreamRequest instance.
   request_ = request.get();
@@ -373,6 +380,24 @@ void HttpStreamFactory::JobController::OnWebSocketHandshakeStreamReady(
   DCHECK(request_->completed());
   delegate_->OnWebSocketHandshakeStreamReady(used_proxy_info,
                                              std::move(stream));
+}
+
+void HttpStreamFactory::JobController::OnQuicHostResolution(
+    const url::SchemeHostPort& destination,
+    base::TimeTicks dns_resolution_start_time,
+    base::TimeTicks dns_resolution_end_time) {
+  if (!request_) {
+    return;
+  }
+  if (destination != url::SchemeHostPort(origin_url_)) {
+    // Ignores different destination alternative job's DNS resolution time.
+    return;
+  }
+  // QUIC jobs (ALTERNATIVE, DNS_ALPN_H3) are started before the non-QUIC (MAIN)
+  // job. So we set the DNS resolution overrides to use the DNS timing of the
+  // QUIC jobs.
+  request_->SetDnsResolutionTimeOverrides(dns_resolution_start_time,
+                                          dns_resolution_end_time);
 }
 
 void HttpStreamFactory::JobController::OnStreamFailed(Job* job, int status) {
@@ -744,7 +769,7 @@ int HttpStreamFactory::JobController::DoLoop(int rv) {
         rv = DoCreateJobs();
         break;
       default:
-        NOTREACHED() << "bad state";
+        NOTREACHED_IN_MIGRATION() << "bad state";
         break;
     }
   } while (next_state_ != STATE_NONE && rv != ERR_IO_PENDING);
@@ -753,7 +778,6 @@ int HttpStreamFactory::JobController::DoLoop(int rv) {
 
 int HttpStreamFactory::JobController::DoResolveProxy() {
   DCHECK(!proxy_resolve_request_);
-  DCHECK(session_);
 
   next_state_ = STATE_RESOLVE_PROXY_COMPLETE;
 
@@ -1398,7 +1422,6 @@ int HttpStreamFactory::JobController::ReconsiderProxyAfterError(Job* job,
   // ReconsiderProxyAfterError() should only be called when the last job fails.
   DCHECK_EQ(1, GetJobCount());
   DCHECK(!proxy_resolve_request_);
-  DCHECK(session_);
 
   if (!job->should_reconsider_proxy()) {
     return error;

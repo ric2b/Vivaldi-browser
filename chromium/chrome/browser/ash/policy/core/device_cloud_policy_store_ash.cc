@@ -91,10 +91,8 @@ void DeviceCloudPolicyStoreAsh::Store(const em::PolicyFetchResponse& policy) {
       CloudPolicyValidatorBase::TIMESTAMP_VALIDATED,
       CloudPolicyValidatorBase::DM_TOKEN_REQUIRED,
       CloudPolicyValidatorBase::DEVICE_ID_REQUIRED);
-  DeviceCloudPolicyValidator::StartValidation(
-      std::move(validator),
-      base::BindOnce(&DeviceCloudPolicyStoreAsh::OnPolicyToStoreValidated,
-                     weak_factory_.GetWeakPtr()));
+  validator->RunValidation();
+  OnPolicyToStoreValidated(validator.get());
 }
 
 void DeviceCloudPolicyStoreAsh::Load() {
@@ -124,10 +122,8 @@ void DeviceCloudPolicyStoreAsh::InstallInitialPolicy(
   validator->ValidateInitialKey(install_attributes_->GetDomain());
   validator->ValidateDeviceId(install_attributes_->GetDeviceId(),
                               CloudPolicyValidatorBase::DEVICE_ID_REQUIRED);
-  DeviceCloudPolicyValidator::StartValidation(
-      std::move(validator),
-      base::BindOnce(&DeviceCloudPolicyStoreAsh::OnPolicyToStoreValidated,
-                     weak_factory_.GetWeakPtr()));
+  validator->RunValidation();
+  OnPolicyToStoreValidated(validator.get());
 }
 
 void DeviceCloudPolicyStoreAsh::DeviceSettingsUpdated() {
@@ -244,7 +240,7 @@ void DeviceCloudPolicyStoreAsh::UpdateStatusFromService() {
       status_ = STATUS_LOAD_ERROR;
       return;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void DeviceCloudPolicyStoreAsh::CheckDMToken() {

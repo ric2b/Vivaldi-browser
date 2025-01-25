@@ -13,13 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __STDC_FORMAT_MACROS
-#define __STDC_FORMAT_MACROS  // before inttypes.h
-#endif
-#include <inttypes.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>  // abort
 
 #include <cmath>  // std::abs
 #include <memory>
@@ -89,8 +84,8 @@ void RunBenchmark(const char* caption) {
     const double cycles_per_item =
         results[i].ticks / static_cast<double>(results[i].input);
     const double mad = results[i].variability * cycles_per_item;
-    printf("%6" PRIu64 ": %6.3f (+/- %5.3f)\n",
-           static_cast<uint64_t>(results[i].input), cycles_per_item, mad);
+    printf("%6d: %6.3f (+/- %5.3f)\n", static_cast<int>(results[i].input),
+           cycles_per_item, mad);
   }
 }
 
@@ -145,7 +140,7 @@ class BenchmarkDot : public TwoArray {
     sum2 = Add(sum2, sum3);
     sum0 = Add(sum0, sum2);
     // Remember to store the result in `dot_` for verification; see `Verify`.
-    dot_ = GetLane(SumOfLanes(d, sum0));
+    dot_ = ReduceSum(d, sum0);
     // Return the result so that the benchmarking framework can ensure that the
     // computation is not elided by the compiler.
     return static_cast<FuncOutput>(dot_);

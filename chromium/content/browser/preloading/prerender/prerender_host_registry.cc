@@ -320,6 +320,7 @@ PreloadingEligibility ToEligibility(PrerenderFinalStatus status) {
     case PrerenderFinalStatus::kJavaScriptInterfaceAdded:
     case PrerenderFinalStatus::kJavaScriptInterfaceRemoved:
     case PrerenderFinalStatus::kAllPrerenderingCanceled:
+    case PrerenderFinalStatus::kWindowClosed:
       NOTREACHED_NORETURN();
   }
 
@@ -1033,8 +1034,7 @@ bool PrerenderHostRegistry::CancelHostInternal(
   std::unique_ptr<PrerenderHost> prerender_host = std::move(iter->second);
   prerender_host_by_frame_tree_node_id_.erase(iter);
 
-  reason.ReportMetrics(prerender_host->trigger_type(),
-                       prerender_host->embedder_histogram_suffix());
+  reason.ReportMetrics(prerender_host->GetHistogramSuffix());
 
   NotifyCancel(prerender_host->frame_tree_node_id(), reason);
 
@@ -1141,7 +1141,15 @@ int PrerenderHostRegistry::ReserveHostToActivate(
       std::move(prerender_host_by_frame_tree_node_id_[host_id]);
   prerender_host_by_frame_tree_node_id_.erase(host_id);
   CHECK_EQ(host_id, host->frame_tree_node_id());
+  CHECK(host->IsUrlMatch(navigation_request.GetURL()));
 
+  if (host->IsUrlMatch(navigation_request.GetURL()).value() ==
+      PrerenderHost::UrlMatchType::kNoVarySearch) {
+    // Count use of No-Vary-Search header in prerender.
+    GetContentClient()->browser()->LogWebFeatureForCurrentPage(
+        web_contents()->GetPrimaryMainFrame(),
+        blink::mojom::WebFeature::kNoVarySearchPrerender);
+  }
   // Reserve the host for activation.
   CHECK(!reserved_prerender_host_);
   reserved_prerender_host_ = std::move(host);
@@ -1320,6 +1328,7 @@ void PrerenderHostRegistry::BackNavigationLikely(
                                            triggered_primary_page_source_id);
   PreloadingAttempt* attempt = preloading_data->AddPreloadingAttempt(
       predictor, PreloadingType::kPrerender, same_url_matcher,
+      /*planned_max_preloading_type=*/std::nullopt,
       triggered_primary_page_source_id);
 
   if (back_entry->GetMainFrameDocumentSequenceNumber() ==
@@ -1575,7 +1584,6 @@ int PrerenderHostRegistry::FindHostToActivateInternal(
   if (navigation_request.IsInPrerenderedMainFrame())
     return RenderFrameHost::kNoFrameTreeNodeId;
 
-  // TODO(crbug.com/331591646): Add No Vary Search hint functionality.
   // Find an available host for the navigation URL.
   PrerenderHost* host = nullptr;
   for (const auto& [host_id, it_prerender_host] :
@@ -1585,8 +1593,19 @@ int PrerenderHostRegistry::FindHostToActivateInternal(
       break;
     }
   }
-  if (!host)
+  if (!host) {
+    for (const auto& [host_id, it_prerender_host] :
+         prerender_host_by_frame_tree_node_id_) {
+      if (it_prerender_host->IsNoVarySearchHintUrlMatch(
+              navigation_request.GetURL())) {
+        host = it_prerender_host.get();
+        break;
+      }
+    }
+  }
+  if (!host) {
     return RenderFrameHost::kNoFrameTreeNodeId;
+  }
 
   // Disallow activation when the navigation URL has an effective URL like
   // hosted apps and NTP.
@@ -1627,7 +1646,6 @@ int PrerenderHostRegistry::FindHostToActivateInternal(
   {
     PrerenderCancellationReason reason = PrerenderCancellationReason::
         CreateCandidateReasonForActivationParameterMismatch();
-
     // Compare navigation params from activation with the navigation params
     // from the initial prerender navigation. If they don't match, the
     // navigation should not activate the prerendered page.

@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/shell.h"
 #include "ash/system/mahi/mahi_constants.h"
 #include "ash/system/mahi/mahi_panel_drag_controller.h"
 #include "ash/system/mahi/mahi_panel_widget.h"
@@ -30,6 +31,8 @@ bool IsErrorStatus(chromeos::MahiResponseStatus status) {
     case chromeos::MahiResponseStatus::kQuotaLimitHit:
     case chromeos::MahiResponseStatus::kResourceExhausted:
     case chromeos::MahiResponseStatus::kUnknownError:
+    case chromeos::MahiResponseStatus::kRestrictedCountry:
+    case chromeos::MahiResponseStatus::kUnsupportedLanguage:
       return true;
     case chromeos::MahiResponseStatus::kLowQuota:
     case chromeos::MahiResponseStatus::kSuccess:
@@ -51,14 +54,26 @@ MahiUiController::Delegate::~Delegate() = default;
 // MahiUiController ------------------------------------------------------------
 
 MahiUiController::MahiUiController()
-    : drag_controller_(std::make_unique<MahiPanelDragController>(this)) {}
+    : drag_controller_(std::make_unique<MahiPanelDragController>(this)) {
+  // The shell may not be available in tests if using a plain object for the UI
+  // controller, which means the session will not be observed.
+  if (Shell::HasInstance()) {
+    Shell::Get()->session_controller()->AddObserver(this);
+  }
+}
 
 MahiUiController::~MahiUiController() {
+  if (Shell::HasInstance()) {
+    Shell::Get()->session_controller()->RemoveObserver(this);
+  }
+
   if (mahi_panel_widget_) {
     // Immediately close the widget to avoid dangling pointers in tests.
     mahi_panel_widget_->CloseNow();
     mahi_panel_widget_.reset();
   }
+
+  RecordTimesPanelOpenedMetric();
 }
 
 void MahiUiController::AddDelegate(Delegate* delegate) {
@@ -69,16 +84,17 @@ void MahiUiController::RemoveDelegate(Delegate* delegate) {
   delegates_.RemoveObserver(delegate);
 }
 
-void MahiUiController::OpenMahiPanel(int64_t display_id) {
+void MahiUiController::OpenMahiPanel(int64_t display_id,
+                                     gfx::Rect mahi_menu_bounds) {
   // TODO(http://b/339250208): Use DCHECK instead of return early when
   // `IsEnabled()` is false.
   if (!chromeos::MahiManager::Get()->IsEnabled()) {
     return;
   }
 
-  mahi_panel_widget_ =
-      MahiPanelWidget::CreatePanelWidget(display_id, /*ui_controller=*/this);
-  mahi_panel_widget_->Show();
+  mahi_panel_widget_ = MahiPanelWidget::CreateAndShowPanelWidget(
+      display_id, mahi_menu_bounds, /*ui_controller=*/this);
+  times_panel_opened_per_session_++;
 }
 
 void MahiUiController::CloseMahiPanel() {
@@ -135,7 +151,12 @@ void MahiUiController::Retry(VisibilityState origin_state) {
 
 void MahiUiController::SendQuestion(const std::u16string& question,
                                     bool current_panel_content,
-                                    QuestionSource source) {
+                                    QuestionSource source,
+                                    bool update_summary_after_answer_question) {
+  InvalidatePendingRequests();
+
+  update_summary_after_answer_question_ = update_summary_after_answer_question;
+
   base::UmaHistogramEnumeration(
       mahi_constants::kMahiQuestionSourceHistogramName, source);
 
@@ -155,22 +176,39 @@ void MahiUiController::SendQuestion(const std::u16string& question,
 }
 
 void MahiUiController::UpdateSummaryAndOutlines() {
+  InvalidatePendingRequests();
+
   chromeos::MahiManager::Get()->GetSummary(base::BindOnce(
       &MahiUiController::OnSummaryLoaded, weak_ptr_factory_.GetWeakPtr()));
   chromeos::MahiManager::Get()->GetOutlines(base::BindOnce(
       &MahiUiController::OnOutlinesLoaded, weak_ptr_factory_.GetWeakPtr()));
 }
 
+void MahiUiController::OnSessionStateChanged(
+    session_manager::SessionState state) {
+  if (state != session_manager::SessionState::ACTIVE) {
+    RecordTimesPanelOpenedMetric();
+  }
+}
+
+void MahiUiController::RecordTimesPanelOpenedMetric() {
+  if (times_panel_opened_per_session_ > 0) {
+    base::UmaHistogramCounts1000(
+        mahi_constants::kTimesMahiPanelOpenedPerSessionHistogramName,
+        times_panel_opened_per_session_);
+  }
+
+  times_panel_opened_per_session_ = 0;
+}
+
 void MahiUiController::HandleError(const MahiUiError& error) {
   // `chromeos::MahiResponseStatus::kLowQuota` is a warning not an error.
   CHECK_NE(error.status, chromeos::MahiResponseStatus::kLowQuota);
 
-  // The presentation of the inappropriate error during
-  // `State::kQuestionAndAnswer` should be embedded into the Q&A view instead
-  // of a separate view.
+  // The presentation of any error during `State::kQuestionAndAnswer` should be
+  // embedded into the Q&A view instead of a separate view.
   const MahiUiUpdate update(MahiUiUpdateType::kErrorReceived, error);
-  if (error.status == chromeos::MahiResponseStatus::kInappropriate &&
-      error.origin_state == VisibilityState::kQuestionAndAnswer) {
+  if (error.origin_state == VisibilityState::kQuestionAndAnswer) {
     NotifyUiUpdate(update);
     return;
   }
@@ -206,6 +244,7 @@ void MahiUiController::OnAnswerLoaded(std::optional<std::u16string> answer,
   if (IsErrorStatus(status)) {
     HandleError(MahiUiError(
         status, /*origin_state=*/VisibilityState::kQuestionAndAnswer));
+    update_summary_after_answer_question_ = false;
     return;
   }
 
@@ -218,6 +257,12 @@ void MahiUiController::OnAnswerLoaded(std::optional<std::u16string> answer,
   const std::u16string answer_after_process = answer.value_or(std::u16string());
   NotifyUiUpdate(
       MahiUiUpdate(MahiUiUpdateType::kAnswerLoaded, answer_after_process));
+
+  if (update_summary_after_answer_question_) {
+    // TODO(b/345621992): Add test to verify this behavior.
+    UpdateSummaryAndOutlines();
+    update_summary_after_answer_question_ = false;
+  }
 }
 
 void MahiUiController::OnOutlinesLoaded(
@@ -241,6 +286,12 @@ void MahiUiController::OnSummaryLoaded(std::u16string summary_text,
   }
 
   NotifyUiUpdate(MahiUiUpdate(MahiUiUpdateType::kSummaryLoaded, summary_text));
+}
+
+void MahiUiController::InvalidatePendingRequests() {
+  // By invalidating existing weak ptrs, the pending `OnAnswerLoaded`,
+  // `OnOutlinesLoaded` and `OnSummaryLoaded` callbacks are cancelled.
+  weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
 }  // namespace ash

@@ -39,8 +39,8 @@ ValueOrError EvaluateConstantExpression(
       return WasmValue(
           expected == kWasmExternRef || expected == kWasmNullExternRef ||
                   expected == kWasmNullExnRef || expected == kWasmExnRef
-              ? Handle<Object>::cast(isolate->factory()->null_value())
-              : Handle<Object>::cast(isolate->factory()->wasm_null()),
+              ? Cast<Object>(isolate->factory()->null_value())
+              : Cast<Object>(isolate->factory()->wasm_null()),
           ValueType::RefNull(expr.repr()));
     case ConstantExpression::kRefFunc: {
       uint32_t index = expr.index();
@@ -69,7 +69,7 @@ ValueOrError EvaluateConstantExpression(
       // TODO(14616): Rethink this.
       constexpr bool kIsShared = false;
       FunctionBody body(&sig, ref.offset(), start, end, kIsShared);
-      WasmFeatures detected;
+      WasmDetectedFeatures detected;
       const WasmModule* module = trusted_instance_data->module();
       ValueOrError result;
       {
@@ -81,8 +81,8 @@ ValueOrError EvaluateConstantExpression(
         // size.
         WasmFullDecoder<Decoder::FullValidationTag, ConstantExpressionInterface,
                         kConstantExpression>
-            decoder(zone, module, WasmFeatures::All(), &detected, body, module,
-                    isolate, trusted_instance_data,
+            decoder(zone, module, WasmEnabledFeatures::All(), &detected, body,
+                    module, isolate, trusted_instance_data,
                     shared_trusted_instance_data);
 
         decoder.DecodeFunctionBody();

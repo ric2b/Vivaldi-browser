@@ -13,7 +13,6 @@
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_settings_coordinator.h"
-#import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_settings_view_controller.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_prefs.h"
 #import "ios/ui/settings/start_page/wallpaper_settings/wallpaper_settings_swift.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -110,23 +109,20 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
   TableViewModel* model = self.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierStartPageSettings];
 
-  if (IsNewStartPageIsEnabled()) {
+  if (IsTopSitesEnabled()) {
     [model addItem:[self displayFrequentlyVisitedTableItem]
         toSectionWithIdentifier:SectionIdentifierStartPageSettings];
-    [model addItem:[self displaySpeedDialsTableItem]
-        toSectionWithIdentifier:SectionIdentifierStartPageSettings];
   }
+  [model addItem:[self displaySpeedDialsTableItem]
+      toSectionWithIdentifier:SectionIdentifierStartPageSettings];
 
   [model addItem:[self layoutSettingsItem]
       toSectionWithIdentifier:SectionIdentifierStartPageSettings];
   [model addItem:[self wallpaperSettingsItem]
       toSectionWithIdentifier:SectionIdentifierStartPageSettings];
 
-  if (IsNewStartPageIsEnabled()) {
-    [model addItem:[self customizeStartPageTableItem]
-        toSectionWithIdentifier:SectionIdentifierStartPageSettings];
-  }
-
+  [model addItem:[self customizeStartPageTableItem]
+      toSectionWithIdentifier:SectionIdentifierStartPageSettings];
 }
 
 
@@ -188,7 +184,7 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
 #pragma mark - VivaldiStartPageSettingsConsumer
 
 - (void)setPreferenceShowFrequentlyVisitedPages:(BOOL)showFrequentlyVisited {
-  if (!IsNewStartPageIsEnabled()) {
+  if (!IsTopSitesEnabled()) {
     return;
   }
 
@@ -200,10 +196,6 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
 }
 
 - (void)setPreferenceShowSpeedDials:(BOOL)showSpeedDials {
-  if (!IsNewStartPageIsEnabled()) {
-    return;
-  }
-
   self.displaySpeedDials = showSpeedDials;
   if (!_displaySpeedDialsItem)
     return;
@@ -212,10 +204,6 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
 }
 
 - (void)setPreferenceShowCustomizeStartPageButton:(BOOL)showCustomizeButton {
-  if (!IsNewStartPageIsEnabled()) {
-    return;
-  }
-
   self.customizeStartPage = showCustomizeButton;
   if (!_customizeStartPageItem)
     return;
@@ -255,10 +243,8 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
   _customizeStartPageItem = nullptr;
   _settingsAreDismissed = YES;
 
-  if (IsNewStartPageIsEnabled()) {
-    [_layoutSettingsCoordinator stop];
-    _layoutSettingsCoordinator = nil;
-  }
+  [_layoutSettingsCoordinator stop];
+  _layoutSettingsCoordinator = nil;
 }
 
 #pragma mark - Switch Actions
@@ -351,22 +337,11 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
 #pragma mark - Navigation Actions
 
 - (void)showStartPageLayoutSettings {
-  if (IsNewStartPageIsEnabled()) {
-    _layoutSettingsCoordinator =
-        [[VivaldiStartPageLayoutSettingsCoordinator alloc]
-            initWithBaseNavigationController:self.navigationController
-                                     browser:_browser];
-    [_layoutSettingsCoordinator start];
-  } else {
-    VivaldiStartPageLayoutSettingsViewController* controller =
-        [[VivaldiStartPageLayoutSettingsViewController alloc]
-            initWithTitle:
-                l10n_util::GetNSString(IDS_IOS_VIVALDI_START_PAGE_LAYOUT_TITLE)
-                  browser:_browser];
-    controller.navigationItem.largeTitleDisplayMode =
-        UINavigationItemLargeTitleDisplayModeNever;
-    [self.navigationController pushViewController:controller animated:YES];
-  }
+  _layoutSettingsCoordinator =
+      [[VivaldiStartPageLayoutSettingsCoordinator alloc]
+          initWithBaseNavigationController:self.navigationController
+                                   browser:_browser];
+  [_layoutSettingsCoordinator start];
 }
 
 - (void)showWallpaperSettings {

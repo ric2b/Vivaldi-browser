@@ -18,9 +18,9 @@
 #include "chrome/browser/policy/messaging_layer/public/report_client.h"
 #include "chrome/browser/policy/messaging_layer/public/report_client_test_util.h"
 #include "components/account_id/account_id.h"
-#include "components/enterprise/data_controls/dlp_histogram_helper.h"
-#include "components/enterprise/data_controls/dlp_policy_event.pb.h"
-#include "components/enterprise/data_controls/rule.h"
+#include "components/enterprise/data_controls/core/dlp_histogram_helper.h"
+#include "components/enterprise/data_controls/core/dlp_policy_event.pb.h"
+#include "components/enterprise/data_controls/core/rule.h"
 #include "components/reporting/client/mock_report_queue.h"
 #include "components/reporting/encryption/primitives.h"
 #include "components/reporting/storage/test_storage_module.h"
@@ -247,10 +247,6 @@ TEST_F(DlpReportingManagerTest, UserType) {
   const auto* mgs_user = user_manager->AddPublicAccountUser(mgs_account_id);
   AccountId kiosk_account_id = AccountId::FromUserEmail("kiosk@example.com");
   const auto* kiosk_user = user_manager->AddKioskAppUser(kiosk_account_id);
-  AccountId arc_kiosk_account_id =
-      AccountId::FromUserEmail("arc-kiosk@example.com");
-  const auto* arc_kiosk_user =
-      user_manager->AddArcKioskAppUser(arc_kiosk_account_id);
   AccountId web_kiosk_account_id =
       AccountId::FromUserEmail("web-kiosk@example.com");
   const auto* web_kiosk_user =
@@ -266,16 +262,14 @@ TEST_F(DlpReportingManagerTest, UserType) {
                           DlpPolicyEvent_UserType_MANAGED_GUEST, 1u);
   ReportEventAndCheckUser(user_manager, kiosk_account_id, kiosk_user,
                           DlpPolicyEvent_UserType_KIOSK, 2u);
-  ReportEventAndCheckUser(user_manager, arc_kiosk_account_id, arc_kiosk_user,
-                          DlpPolicyEvent_UserType_KIOSK, 3u);
   ReportEventAndCheckUser(user_manager, web_kiosk_account_id, web_kiosk_user,
-                          DlpPolicyEvent_UserType_KIOSK, 4u);
+                          DlpPolicyEvent_UserType_KIOSK, 3u);
   ReportEventAndCheckUser(user_manager, guest_user_id, guest_user,
-                          DlpPolicyEvent_UserType_UNDEFINED_USER_TYPE, 5u);
+                          DlpPolicyEvent_UserType_UNDEFINED_USER_TYPE, 4u);
   ReportEventAndCheckUser(user_manager, child_user_id, child_user,
-                          DlpPolicyEvent_UserType_UNDEFINED_USER_TYPE, 6u,
+                          DlpPolicyEvent_UserType_UNDEFINED_USER_TYPE, 5u,
                           true);
-  EXPECT_EQ(manager_->events_reported(), 7u);
+  EXPECT_EQ(manager_->events_reported(), 6u);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 

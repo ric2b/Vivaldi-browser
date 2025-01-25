@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.media;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.PictureInPictureParams;
 import android.content.pm.PackageManager;
@@ -31,6 +32,7 @@ import org.chromium.chrome.browser.notifications.NotificationIntentInterceptor;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.AndroidTaskUtils;
+import org.chromium.content_public.browser.MediaSession;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.base.WindowAndroid;
@@ -122,6 +124,12 @@ public class FullscreenVideoPictureInPictureController {
                     updateAutoPictureInPictureStatus();
                 }
             };
+
+    /** Do we believe that media is currently playing or not? */
+    private boolean mIsPlaying;
+
+    /** Is media paused because we suspended it when the pip window was stashed? */
+    private boolean mIsSuspendedForStash;
 
     public FullscreenVideoPictureInPictureController(
             Activity activity,
@@ -253,7 +261,38 @@ public class FullscreenVideoPictureInPictureController {
     }
 
     /**
-     * Notify us that Picture in Picture mode has started.  This can be because we requested it in
+     * Called to update whether the pip window is stashed offscreen temporarily. This is not
+     * guaranteed to be called only for changes, since Android doesn't guarantee that. In fact,
+     * Android does call multiple times in practice.
+     *
+     * <p>Also note that, when interacting with the media notification, sometimes Android will
+     * un-stash a pip window without telling us. It'll also often skip telling us about the next
+     * time it's stashed. So, we have to be fairly robust against getting out of sync.
+     *
+     * @param stashed whether the pip window is, or is not, currently stashed offscreen.
+     */
+    public void onStashReported(boolean stashed) {
+        final MediaSession mediaSession = getMediaSession();
+        if (mediaSession == null) {
+            return;
+        }
+
+        // Note that these will do nothing if called multiple times in a row with the same value for
+        // `stashed`.  Also note that `mIsSuspendedForStash` can be reset elsewhere, to help to
+        // account for missed events from Android.
+        if (mIsPlaying && stashed && !mIsSuspendedForStash) {
+            mediaSession.suspend();
+            mIsSuspendedForStash = true;
+        } else if (!mIsPlaying && !stashed && mIsSuspendedForStash) {
+            // Don't resume if we didn't pause it on the transition into stash.  For example, don't
+            // start playing media that was already paused when the user stashed the pip window.
+            mediaSession.resume();
+            mIsSuspendedForStash = false;
+        }
+    }
+
+    /**
+     * Notify us that Picture in Picture mode has started. This can be because we requested it in
      * {@link #attemptPictureInPicture()} or because we auto-entered Picture in Picture.
      */
     public void onEnteredPictureInPictureMode() {
@@ -264,7 +303,10 @@ public class FullscreenVideoPictureInPictureController {
         // Inform the WebContents when we enter and when we leave PiP.
         final WebContents webContents = getWebContents();
         // If we're closing the tab, just stop here.
-        if (webContents == null) return;
+        if (webContents == null) {
+            Log.i(TAG, "Tab is closing, not entering Picture-in-picture");
+            return;
+        }
 
         webContents.setHasPersistentVideo(true);
 
@@ -275,6 +317,7 @@ public class FullscreenVideoPictureInPictureController {
 
         mOnLeavePipCallbacks.add(
                 () -> {
+                    Log.i(TAG, "Running Picture-in-picture exit callbacks");
                     webContents.setHasPersistentVideo(false);
                     getInfoBarContainerForTab(activityTab).setHidden(false);
                 });
@@ -282,6 +325,15 @@ public class FullscreenVideoPictureInPictureController {
         // Setup observers to dismiss the Activity on events that should end PiP.  In auto-enter
         // mode, these might be registered already.
         addObserversIfNeeded();
+    }
+
+    /**
+     * Called when `mActivity` is stopped, to allow us to clean up. A new instance will be created
+     * later, when the activity is restarted.
+     */
+    public void onStop() {
+        // Unconditionally remove listeners, since a new instance will be created onStart.
+        removeObserversIfNeeded();
     }
 
     private static Rect getVideoBounds(WebContents webContents, Activity activity) {
@@ -321,10 +373,11 @@ public class FullscreenVideoPictureInPictureController {
     }
 
     /**
-     * Notify us that the framework has exited from Picture in Picture mode.  Perform any cleanup
-     * required.  It's okay to call this even when we don't believe that we're in PiP mode.
+     * Notify us that the framework has exited from Picture in Picture mode. Perform any cleanup
+     * required. It's okay to call this even when we don't believe that we're in PiP mode.
      */
     public void onFrameworkExitedPictureInPicture() {
+        Log.i(TAG, "Framework exited picture in picture");
         onExitedPictureInPicture(MetricsEndReason.RESUME);
     }
 
@@ -373,6 +426,7 @@ public class FullscreenVideoPictureInPictureController {
                     new FullscreenManager.Observer() {
                         @Override
                         public void onExitFullscreen(Tab tab) {
+                            Log.i(TAG, "Exiting fullscreen");
                             dismissActivityIfNeeded(mActivity, MetricsEndReason.LEFT_FULLSCREEN);
                         }
                     };
@@ -394,7 +448,15 @@ public class FullscreenVideoPictureInPictureController {
         }
     }
 
-    /** Notify Android if it's okay to auto-enter Picture in Picture mode. */
+    /**
+     * Notify Android if it's okay to auto-enter Picture in Picture mode.
+     *
+     * <p>Suppress `PictureInPictureIssue` since it doesn't like that the call to
+     * `SetSourceRectHint()` is conditional even when we call `setAutoEnterEnabled()`. It's correct
+     * as-is, since we don't want the source rect transition when we don't have a proper source
+     * rect. It would end up animating the wrong part of the viewport.
+     */
+    @SuppressLint("PictureInPictureIssue")
     private void updateAutoPictureInPictureStatus() {
         // Do nothing if Android doesn't support auto-enter.
         if (!mListenForAutoEnterability) return;
@@ -452,6 +514,7 @@ public class FullscreenVideoPictureInPictureController {
     private void dismissActivityIfNeeded(Activity activity, @MetricsEndReason int reason) {
         // Something interesting happened -- make sure we've updated our preference for auto-PiP
         // with the framework, if applicable.
+        Log.i(TAG, "Dismiss activity with reason " + reason);
         updateAutoPictureInPictureStatus();
 
         if (!isPipSessionActive()) {
@@ -465,6 +528,7 @@ public class FullscreenVideoPictureInPictureController {
         // `isPipSessionActive()` will be false, or (b) try to close PiP properly.  We also don't
         // try to pro-rate the exit delay; it's short and arbitrary anyway.
         if (SystemClock.elapsedRealtime() - mLastOnEnteredTimeMillis < MIN_EXIT_DELAY_MILLIS) {
+            Log.i(TAG, "Posting deferred callback to dismiss activity.");
             PostTask.postDelayedTask(
                     TaskTraits.UI_USER_BLOCKING,
                     () -> dismissActivityIfNeeded(activity, reason),
@@ -642,6 +706,10 @@ public class FullscreenVideoPictureInPictureController {
             // We have no idea if the effectively fullscreen video started playing, but this will
             // check if we have an active one.
             updateAutoPictureInPictureStatus();
+            mIsPlaying = true;
+            // If we were suspended for stash, forget because something else caused us to start
+            // playing while stashed.  For example, the user might press play in the notification.
+            mIsSuspendedForStash = false;
         }
 
         @Override
@@ -650,10 +718,12 @@ public class FullscreenVideoPictureInPictureController {
             // if it is, note that this won't cause us to exit Picture in Picture mode if we're in
             // it.
             updateAutoPictureInPictureStatus();
+            mIsPlaying = false;
         }
 
         @Override
         public void hasEffectivelyFullscreenVideoChange(boolean isFullscreen) {
+            Log.i(TAG, "Effective video fullscreen change: " + isFullscreen);
             if (isFullscreen) {
                 mUpdateAutoPipRunnable.run();
                 // Also post a delayed handler to update the status again, once things have had some
@@ -682,5 +752,16 @@ public class FullscreenVideoPictureInPictureController {
     /* package */ void assertLibraryLoaderIsInitialized() {
         // Non-null WebContents implies the native library has been loaded.
         assert LibraryLoader.getInstance().isInitialized();
+    }
+
+    /**
+     * Return the {@link MediaSession}, if any, for our WebContents. Used for testing to get around
+     * MediaSession's static getter.
+     */
+    @VisibleForTesting
+    /* package */ @Nullable
+    MediaSession getMediaSession() {
+        // This works if `getWebContents()` is null.
+        return MediaSession.fromWebContents(getWebContents());
     }
 }

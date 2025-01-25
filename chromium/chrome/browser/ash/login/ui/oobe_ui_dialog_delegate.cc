@@ -120,7 +120,7 @@ class OobeWebDialogView : public views::WebDialogView {
 
   bool HandleKeyboardEvent(
       content::WebContents* source,
-      const content::NativeWebKeyboardEvent& event) override {
+      const input::NativeWebKeyboardEvent& event) override {
     return unhandled_keyboard_event_handler_.HandleKeyboardEvent(
         event, GetFocusManager());
   }
@@ -272,6 +272,7 @@ OobeUIDialogDelegate::OobeUIDialogDelegate(
       new OobeWebDialogView(ProfileHelper::GetSigninProfile(), this,
                             std::make_unique<ChromeWebContentsHandler>());
   views::Widget::InitParams params(
+      views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   ash_util::SetupWidgetInitParamsForContainerInPrimary(
       &params, kShellWindowId_LockScreenContainer);

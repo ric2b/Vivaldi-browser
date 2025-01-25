@@ -23,28 +23,60 @@ chromium-metrics-reviews@google.com.
 <histograms>
 
 <variants name="NewBadgeFeature">
+  <variant name="AutofillForUnclassifiedFieldsAvailable"
+      summary="For address and card field-by-field filling; shown in the
+               autofill section of the context menu."/>
   <variant name="Compose"
       summary="For Compose feature; shown in web context menu."/>
   <variant name="ComposeNudge"
+      summary="For Compose feature; shown on autofill popup when there is
+               saved state to resume.."/>
+  <variant name="ComposeProactiveNudge"
       summary="For Compose feature; shown on autofill popup."/>
   <variant name="LensOverlay"
       summary="Lens Overlay entry points in app and web context menus."/>
   <variant name="NewBadgeTestFeature"
       summary="Used for testing purposes only."/>
+  <variant name="PasswordManualFallbackAvailable"
+      summary="For passwords manual fallback; shown in the context menu."/>
+  <variant name="PlusAddressesEnabled"
+      summary="For plus address creation; shown in the autofill popup."/>
+  <variant name="PlusAddressFallbackFromContextMenu"
+      summary="Plus address manual fallback entry point in the context menu."/>
+  <variant name="TabOrganization"
+      summary="Promotion for Organize Tabs in the app menu."/>
 </variants>
 
 <variants name="TutorialID">
   <variant name="" summary="any tutorial"/>
-  <variant name=".CustomizeChromeSidePanel"
+  <variant name="CustomizeChromeSidePanel"
       summary="the tutorial for the customize chrome side panel"/>
-  <variant name=".PasswordManager"
+  <variant name="PasswordManager"
       summary="the tutorial for the password manager"/>
-  <variant name=".SavedTabGroup"
-      summary="the tutorial for the saved tab group"/>
-  <variant name=".SidePanelReadingList"
+  <variant name="SavedTabGroup" summary="the tutorial for the saved tab group"/>
+  <variant name="SidePanelReadingList"
       summary="the tutorial for the side panel reading list"/>
-  <variant name=".TabGroup" summary="the tutorial for tab groups"/>
-  <variant name=".Test" summary="the tutorial used for testing only"/>
+  <variant name="TabGroup" summary="the tutorial for tab groups"/>
+  <variant name="Test" summary="the tutorial used for testing only"/>
+</variants>
+
+<variants name="WhatsNewModule">
+  <variant name="FamilyLink" summary="the module for Family Link"/>
+  <variant name="GeminiSiteSearchShortcut"
+      summary="the module for Gemini Site Search Shortcut"/>
+  <variant name="GenerativeTheming"
+      summary="the module for Generative Theming"/>
+  <variant name="GoogleLens" summary="the module for Google Lens"/>
+  <variant name="HelpMeWrite" summary="the module for Help Me Write"/>
+  <variant name="SafetyCheck" summary="the module for Safety Check"/>
+  <variant name="SaveTabGroups" summary="the module for Saved Tab Groups"/>
+  <variant name="SearchBoxSuggestions"
+      summary="the module for Search Box Suggestions"/>
+  <variant name="SidePanelPinning" summary="the module for Side Panel Pinning"/>
+  <variant name="TabOrganizer" summary="the module for Tab Organizer"/>
+  <variant name="TestModule" summary="the module used for testing only"/>
+  <variant name="TranslationSettings"
+      summary="the module for Translation Settings"/>
 </variants>
 
 <histogram name="Tutorial.TabGroup.EditedTitle" enum="BooleanSuccess"
@@ -59,8 +91,8 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Tutorial{TutorialID}.AbortStep" units="int"
-    expires_after="2024-09-29">
+<histogram name="Tutorial.{TutorialID}.AbortStep" units="int"
+    expires_after="2024-12-08">
   <owner>dpenning@chromium.org</owner>
   <owner>dfried@chromium.org</owner>
   <summary>
@@ -70,8 +102,8 @@ chromium-metrics-reviews@google.com.
   <token key="TutorialID" variants="TutorialID"/>
 </histogram>
 
-<histogram name="Tutorial{TutorialID}.Completion" enum="BooleanSuccess"
-    expires_after="2024-09-15">
+<histogram name="Tutorial.{TutorialID}.Completion" enum="BooleanSuccess"
+    expires_after="2024-11-17">
   <owner>dpenning@chromium.org</owner>
   <owner>dfried@chromium.org</owner>
   <summary>
@@ -81,7 +113,7 @@ chromium-metrics-reviews@google.com.
   <token key="TutorialID" variants="TutorialID"/>
 </histogram>
 
-<histogram name="Tutorial{TutorialID}.IPHLinkClicked" enum="BooleanSuccess"
+<histogram name="Tutorial.{TutorialID}.IPHLinkClicked" enum="BooleanSuccess"
     expires_after="2024-09-15">
   <owner>dpenning@chromium.org</owner>
   <owner>dfried@chromium.org</owner>
@@ -93,7 +125,7 @@ chromium-metrics-reviews@google.com.
   <token key="TutorialID" variants="TutorialID"/>
 </histogram>
 
-<histogram name="Tutorial{TutorialID}.StartedFromWhatsNewPage"
+<histogram name="Tutorial.{TutorialID}.StartedFromWhatsNewPage"
     enum="BooleanSuccess" expires_after="2024-09-20">
   <owner>dpenning@chromium.org</owner>
   <owner>dfried@chromium.org</owner>
@@ -116,8 +148,23 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="UserEducation.MessageNotShown.DesktopReEngagement.NoBrowser"
+    units="tries" expires_after="2024-12-01">
+  <owner>dfried@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <summary>
+    Records when the re-engagement promo is not shown because there is no
+    eligible browser. This is recorded on a new User Education session. The
+    value is the number of times the promo had attempted to show; typical values
+    are low (1-2) as the number of retries is limited.
+  </summary>
+</histogram>
+
 <histogram name="UserEducation.MessageShown.RotatingPromoIndex" units="Index"
     expires_after="2024-09-01">
+  <expired_intentionally>
+    Deprecated. Replaced by UserEducation.RotatingPromoIndex.{IPHFeature}.
+  </expired_intentionally>
   <owner>dfried@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
   <summary>
@@ -129,7 +176,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UserEducation.MessageShown.Subtype" enum="PromoSubtype"
-    expires_after="2024-11-03">
+    expires_after="2025-01-05">
   <owner>mickeyburks@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
   <summary>
@@ -141,7 +188,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UserEducation.MessageShown.Type" enum="PromoType"
-    expires_after="2024-11-03">
+    expires_after="2025-01-05">
   <owner>mickeyburks@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
   <summary>
@@ -179,7 +226,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UserEducation.Session.ActivePeriodDuration.Min.Under1Hour"
-    units="minutes" expires_after="2024-09-21">
+    units="minutes" expires_after="2024-12-08">
   <owner>mickeyburks@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
   <summary>
@@ -203,7 +250,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UserEducation.Session.IdlePeriodDuration.Hr.Under28Days"
-    units="hours" expires_after="2024-09-21">
+    units="hours" expires_after="2024-12-08">
   <owner>mickeyburks@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
   <summary>
@@ -215,7 +262,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UserEducation.Session.IdlePeriodDuration.Min.Under24Hours"
-    units="minutes" expires_after="2024-09-21">
+    units="minutes" expires_after="2024-12-08">
   <owner>mickeyburks@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
   <summary>
@@ -227,7 +274,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UserEducation.Session.LongTermCount" units="count"
-    expires_after="2024-09-21">
+    expires_after="2024-12-08">
   <owner>dfried@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
   <summary>
@@ -238,7 +285,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UserEducation.Session.MonthlyActiveDays" units="count"
-    expires_after="2024-09-21">
+    expires_after="2024-12-24">
   <owner>dfried@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
   <summary>
@@ -250,7 +297,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UserEducation.Session.RecentActiveDays" units="count"
-    expires_after="2024-09-21">
+    expires_after="2024-12-08">
   <owner>dfried@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
   <summary>
@@ -262,7 +309,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UserEducation.Session.RecentActiveWeeks" units="count"
-    expires_after="2024-09-21">
+    expires_after="2024-12-08">
   <owner>dfried@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
   <summary>
@@ -286,13 +333,113 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UserEducation.Session.ShortTermCount" units="count"
-    expires_after="2024-09-21">
+    expires_after="2024-12-08">
   <owner>dfried@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
   <summary>
     When a new User Education session starts, records the number of recent
     sessions in the &quot;short-term&quot; window, which is 7 days. This helps
     us understand how frequently new sessions are triggered.
+  </summary>
+</histogram>
+
+<histogram name="UserEducation.WhatsNew.ExploreMoreExpanded"
+    enum="BooleanYesNo" expires_after="2024-12-03">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <summary>
+    Records when the user expands or collapses the &quot;Explore More&quot;
+    section of the What's New page.
+  </summary>
+</histogram>
+
+<histogram name="UserEducation.WhatsNew.ModuleLinkClicked.{ModuleName}"
+    enum="WhatsNewModulePosition" expires_after="2024-12-03">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <summary>
+    Records that a link or button in the {ModuleName} module on the What's New
+    page was clicked. The value indicates the module's position in its section.
+  </summary>
+  <token key="ModuleName" variants="WhatsNewModule"/>
+</histogram>
+
+<histogram name="UserEducation.WhatsNew.ModuleShown.{ModuleName}"
+    enum="WhatsNewModulePosition" expires_after="2024-12-03">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <summary>
+    Records that the {ModuleName} module on the What's New page was visible to
+    the user. The value indicates the module's position in its section.
+  </summary>
+  <token key="ModuleName" variants="WhatsNewModule"/>
+</histogram>
+
+<histogram name="UserEducation.WhatsNew.ScrollDepth" enum="ScrollDepthQuartile"
+    expires_after="2024-12-03">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <summary>
+    Records when the user scrolls past a quartile threshold of the What's New
+    page.
+  </summary>
+</histogram>
+
+<histogram name="UserEducation.WhatsNew.TimeOnPage" units="ms"
+    expires_after="2024-12-03">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <summary>
+    Records the total amount of time the user spent on the What's New page
+    before navigating away.
+  </summary>
+</histogram>
+
+<histogram name="UserEducation.WhatsNew.TimeToLoadContent" units="ms"
+    expires_after="2024-12-03">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <summary>
+    Records the time it took in milliseconds for the embedded What's New page to
+    load after the WebUI was created.
+  </summary>
+</histogram>
+
+<histogram name="WhatsNew.LoadEvent" enum="WhatsNewLoadEvent"
+    expires_after="2024-12-03">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <summary>
+    Records load events for the What's New page when a load event occurs. This
+    tracks how many times loading remote content is attempted, and whether it
+    succeeds, fails and results in an error page, fails and redirects to the New
+    Tab Page, fails and doesn't open the tab (for preloading), or fails and
+    closes the tab. Load is attempted when the page is first opened or on first
+    startup after updating to a new milestone. Success or failure will occur
+    when the network request completes. Desktop only.
+  </summary>
+</histogram>
+
+<histogram name="WhatsNew.LoadResponseCode"
+    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2024-12-03">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <summary>
+    Records the net error or HTTP response code of the network request for the
+    remote content for the iframe in the What's New page. This request is
+    triggered when the What's New page is opened. Desktop only.
+  </summary>
+</histogram>
+
+<histogram name="WhatsNew.StartupType" enum="WhatsNewStartupType"
+    expires_after="2024-12-03">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <summary>
+    Records whether the What's New page should try to show, whether it is
+    overridden (e.g. by welcome) and whether the user is ineligible (e.g. due to
+    being in incognito mode). Recorded when startup tabs are being determined at
+    initialization. Desktop only.
   </summary>
 </histogram>
 

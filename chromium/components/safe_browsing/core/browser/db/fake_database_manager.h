@@ -5,6 +5,10 @@
 #ifndef COMPONENTS_SAFE_BROWSING_CORE_BROWSER_DB_FAKE_DATABASE_MANAGER_H_
 #define COMPONENTS_SAFE_BROWSING_CORE_BROWSER_DB_FAKE_DATABASE_MANAGER_H_
 
+#include <set>
+#include <string>
+#include <vector>
+
 #include "base/containers/flat_map.h"
 #include "base/task/sequenced_task_runner.h"
 #include "components/safe_browsing/core/browser/db/test_database_manager.h"
@@ -25,11 +29,11 @@ class FakeSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
   void AddDangerousUrlPattern(const GURL& dangerous_url,
                               ThreatPatternType pattern_type);
   void ClearDangerousUrl(const GURL& dangerous_url);
+  void SetHighConfidenceAllowlistMatchResult(const GURL& url,
+                                             bool match_allowlist);
 
   // TestSafeBrowsingDatabaseManager implementation:
   // These are implemented as needed to return stubbed values.
-  bool CanCheckRequestDestination(
-      network::mojom::RequestDestination request_destination) const override;
   bool CheckBrowseUrl(
       const GURL& url,
       const SBThreatTypeSet& threat_types,
@@ -39,6 +43,10 @@ class FakeSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
                         Client* client) override;
   bool CheckExtensionIDs(const std::set<std::string>& extension_ids,
                          Client* client) override;
+  std::optional<HighConfidenceAllowlistCheckLoggingDetails>
+  CheckUrlForHighConfidenceAllowlist(
+      const GURL& url,
+      base::OnceCallback<void(bool)> callback) override;
   bool CheckUrlForSubresourceFilter(const GURL& url, Client* client) override;
   safe_browsing::ThreatSource GetBrowseUrlThreatSource(
       CheckBrowseUrlType check_type) const override;
@@ -57,6 +65,7 @@ class FakeSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
 
   base::flat_map<GURL, SBThreatType> dangerous_urls_;
   base::flat_map<GURL, ThreatPatternType> dangerous_patterns_;
+  base::flat_map<GURL, bool> high_confidence_allowlist_match_urls_;
 };
 
 }  // namespace safe_browsing

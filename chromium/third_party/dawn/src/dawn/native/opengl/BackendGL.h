@@ -30,32 +30,16 @@
 
 #include <vector>
 
-#include "dawn/common/DynamicLib.h"
 #include "dawn/native/BackendConnection.h"
-
-using EGLDisplay = void*;
 
 namespace dawn::native::opengl {
 
-class PhysicalDevice;
 class Backend : public BackendConnection {
   public:
     Backend(InstanceBase* instance, wgpu::BackendType backendType);
 
     std::vector<Ref<PhysicalDeviceBase>> DiscoverPhysicalDevices(
         const UnpackedPtr<RequestAdapterOptions>& options) override;
-    void ClearPhysicalDevices() override;
-    size_t GetPhysicalDeviceCountForTesting() const override;
-
-  private:
-    std::vector<Ref<PhysicalDeviceBase>> DiscoverPhysicalDevicesWithProcs(
-        void* (*getProc)(const char*),
-        EGLDisplay display);
-
-    Ref<PhysicalDevice> mPhysicalDevice = nullptr;
-    void* (*mGetProc)(const char*);
-    EGLDisplay mDisplay;
-    DynamicLib mLibEGL;
 };
 
 }  // namespace dawn::native::opengl

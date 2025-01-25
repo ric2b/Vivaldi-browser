@@ -13,26 +13,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "hwy/contrib/sort/vqsort.h"
+#include "hwy/contrib/sort/vqsort.h"  // VQSort
 
 #undef HWY_TARGET_INCLUDE
 #define HWY_TARGET_INCLUDE "hwy/contrib/sort/vqsort_u16d.cc"
 #include "hwy/foreach_target.h"  // IWYU pragma: keep
 
 // After foreach_target
-#include "hwy/contrib/sort/traits-inl.h"
 #include "hwy/contrib/sort/vqsort-inl.h"
 
 HWY_BEFORE_NAMESPACE();
 namespace hwy {
 namespace HWY_NAMESPACE {
 
-void SortU16Desc(uint16_t* HWY_RESTRICT keys, size_t num,
-                 uint16_t* HWY_RESTRICT buf) {
-  SortTag<uint16_t> d;
-  detail::SharedTraits<detail::TraitsLane<detail::OrderDescending<uint16_t>>>
-      st;
-  Sort(d, st, keys, num, buf);
+void SortU16Desc(uint16_t* HWY_RESTRICT keys, const size_t num) {
+  return VQSortStatic(keys, num, SortDescending());
+}
+
+void PartialSortU16Desc(uint16_t* HWY_RESTRICT keys, const size_t num,
+                        const size_t k) {
+  return VQPartialSortStatic(keys, num, k, SortDescending());
+}
+
+void SelectU16Desc(uint16_t* HWY_RESTRICT keys, const size_t num,
+                   const size_t k) {
+  return VQSelectStatic(keys, num, k, SortDescending());
 }
 
 // NOLINTNEXTLINE(google-readability-namespace-comments)
@@ -44,11 +49,22 @@ HWY_AFTER_NAMESPACE();
 namespace hwy {
 namespace {
 HWY_EXPORT(SortU16Desc);
+HWY_EXPORT(PartialSortU16Desc);
+HWY_EXPORT(SelectU16Desc);
 }  // namespace
 
-void Sorter::operator()(uint16_t* HWY_RESTRICT keys, size_t n,
-                        SortDescending) const {
-  HWY_DYNAMIC_DISPATCH(SortU16Desc)(keys, n, Get<uint16_t>());
+void VQSort(uint16_t* HWY_RESTRICT keys, const size_t n, SortDescending) {
+  HWY_DYNAMIC_DISPATCH(SortU16Desc)(keys, n);
+}
+
+void VQPartialSort(uint16_t* HWY_RESTRICT keys, const size_t n, const size_t k,
+                   SortDescending) {
+  HWY_DYNAMIC_DISPATCH(PartialSortU16Desc)(keys, n, k);
+}
+
+void VQSelect(uint16_t* HWY_RESTRICT keys, const size_t n, const size_t k,
+              SortDescending) {
+  HWY_DYNAMIC_DISPATCH(SelectU16Desc)(keys, n, k);
 }
 
 }  // namespace hwy

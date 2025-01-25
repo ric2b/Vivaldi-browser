@@ -22,6 +22,7 @@ from unittest import mock
 DEPOT_TOOLS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, DEPOT_TOOLS_ROOT)
 
+import subprocess2
 from testing_support import coverage_utils
 from testing_support import git_test_utils
 
@@ -258,7 +259,6 @@ class GitReadOnlyFunctionsTest(git_test_utils.GitRepoReadOnlyTestBase,
         self.repo.run(testfn)
 
     def testStreamWithRetcodeException(self):
-        import subprocess2
         with self.assertRaises(subprocess2.CalledProcessError):
             with self.gc.run_stream_with_retcode('checkout', 'unknown-branch'):
                 pass
@@ -458,7 +458,7 @@ class GitMutableFunctionsTest(git_test_utils.GitRepoReadWriteTestBase,
                          [])
 
         self.repo.git('config', '--add', 'happy.derpies', 'cat')
-        self.gc.scm.GIT._clear_config(self.repo.repo_path)
+        self.gc.scm.GIT.drop_config_cache()
         self.assertEqual(
             self.repo.run(self.gc.get_config_list, 'happy.derpies'),
             ['food', 'cat'])
@@ -482,19 +482,19 @@ class GitMutableFunctionsTest(git_test_utils.GitRepoReadWriteTestBase,
 
         self.repo.git('config', 'depot-tools.upstream', 'catfood')
 
-        self.gc.scm.GIT._clear_config(self.repo.repo_path)
+        self.gc.scm.GIT.drop_config_cache()
         self.assertEqual('catfood', self.repo.run(self.gc.root))
 
         self.repo.git('config', '--add', 'core.fsmonitor', 'true')
-        self.gc.scm.GIT._clear_config(self.repo.repo_path)
+        self.gc.scm.GIT.drop_config_cache()
         self.assertEqual(True, self.repo.run(self.gc.is_fsmonitor_enabled))
 
         self.repo.git('config', '--add', 'core.fsmonitor', 't')
-        self.gc.scm.GIT._clear_config(self.repo.repo_path)
+        self.gc.scm.GIT.drop_config_cache()
         self.assertEqual(False, self.repo.run(self.gc.is_fsmonitor_enabled))
 
         self.repo.git('config', '--add', 'core.fsmonitor', 'false')
-        self.gc.scm.GIT._clear_config(self.repo.repo_path)
+        self.gc.scm.GIT.drop_config_cache()
         self.assertEqual(False, self.repo.run(self.gc.is_fsmonitor_enabled))
 
     def testRoot(self):
@@ -659,7 +659,7 @@ class GitMutableStructuredTest(git_test_utils.GitRepoReadWriteTestBase,
             self.repo.run(self.gc.get_or_create_merge_base, 'branch_L',
                           'branch_K'))
 
-        self.gc.scm.GIT._clear_config(self.repo.repo_path)
+        self.gc.scm.GIT.drop_config_cache()
         self.assertEqual(
             self.repo['B'],
             self.repo.run(self.gc.get_config, 'branch.branch_K.base'))
@@ -680,7 +680,7 @@ class GitMutableStructuredTest(git_test_utils.GitRepoReadWriteTestBase,
         self.repo.run(self.gc.manual_merge_base, 'branch_K', self.repo['I'],
                       'branch_G')
 
-        self.gc.scm.GIT._clear_config(self.repo.repo_path)
+        self.gc.scm.GIT.drop_config_cache()
         self.assertEqual(
             self.repo['I'],
             self.repo.run(self.gc.get_or_create_merge_base, 'branch_K',
@@ -1171,6 +1171,83 @@ class WarnSubmoduleTest(unittest.TestCase):
         self.warn_submodule()
         self.assertFalse('WARNING: You have fsmonitor enabled.' in \
                         sys.stdout.getvalue())
+
+
+@mock.patch('time.sleep')
+@mock.patch('git_common._run_with_stderr')
+class RunWithStderr(GitCommonTestBase):
+
+    def setUp(self):
+        super(RunWithStderr, self).setUp()
+        msg = 'error: could not lock config file .git/config: File exists'
+        self.lock_failure = self.calledProcessError(msg)
+        msg = 'error: wrong number of arguments, should be 2'
+        self.wrong_param = self.calledProcessError(msg)
+
+    def calledProcessError(self, stderr):
+        return subprocess2.CalledProcessError(
+            2,
+            cmd=['a', 'b', 'c'],  # doesn't matter
+            cwd='/',
+            stdout='',
+            stderr=stderr.encode('utf-8'),
+        )
+
+    def runGitCheckout(self, ex, retry_lock):
+        with self.assertRaises(type(ex)):
+            self.gc.run_with_stderr('checkout', 'a', retry_lock=retry_lock)
+
+    def runGitConfig(self, ex, retry_lock):
+        with self.assertRaises(type(ex)):
+            self.gc.run_with_stderr('config', 'set', retry_lock=retry_lock)
+
+    def test_config_with_non_lock_failure(self, run_mock, _):
+        """Tests git-config with a non-lock-failure."""
+        ex = self.wrong_param
+        run_mock.side_effect = ex
+        # retry_lock == True
+        self.runGitConfig(ex, retry_lock=True)
+        self.assertEqual(run_mock.call_count, 1)  # 1 + 0 (retry)
+        # retry_lock == False
+        run_mock.reset_mock()
+        self.runGitConfig(ex, retry_lock=False)
+        self.assertEqual(run_mock.call_count, 1)  # 1 + 0 (retry)
+
+    def test_config_with_lock_failure(self, run_mock, _):
+        """Tests git-config with a lock-failure."""
+        ex = self.lock_failure
+        run_mock.side_effect = ex
+        # retry_lock == True
+        self.runGitConfig(ex, retry_lock=True)
+        self.assertEqual(run_mock.call_count, 6)  # 1 + 5 (retry)
+        # retry_lock == False
+        run_mock.reset_mock()
+        self.runGitConfig(ex, retry_lock=False)
+        self.assertEqual(run_mock.call_count, 1)  # 1 + 0 (retry)
+
+    def test_checkout_with_non_lock_failure(self, run_mock, _):
+        """Tests git-checkout with a non-lock-failure."""
+        ex = self.wrong_param
+        run_mock.side_effect = ex
+        # retry_lock == True
+        self.runGitCheckout(ex, retry_lock=True)
+        self.assertEqual(run_mock.call_count, 1)  # 1 + 0 (retry)
+        # retry_lock == False
+        run_mock.reset_mock()
+        self.runGitCheckout(ex, retry_lock=False)
+        self.assertEqual(run_mock.call_count, 1)  # 1 + 0 (retry)
+
+    def test_checkout_with_lock_failure(self, run_mock, _):
+        """Tests git-checkout with a lock-failure."""
+        ex = self.lock_failure
+        run_mock.side_effect = ex
+        # retry_lock == True
+        self.runGitCheckout(ex, retry_lock=True)
+        self.assertEqual(run_mock.call_count, 1)  # 1 + 0 (retry)
+        # retry_lock == False
+        run_mock.reset_mock()
+        self.runGitCheckout(ex, retry_lock=False)
+        self.assertEqual(run_mock.call_count, 1)  # 1 + 0 (retry)
 
 
 if __name__ == '__main__':

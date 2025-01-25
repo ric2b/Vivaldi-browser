@@ -38,13 +38,17 @@
 // Vivaldi
 - (id)initWithEmptyView:(BOOL)emptyView
              isSelected:(BOOL)isSelected
-   bottomOmniboxEnabled:(BOOL)bottomOmniboxEnabled
-             themeColor:(UIColor*)themeColor
-              tintColor:(UIColor*)tintColor;
+       bottomOmniboxEnabled:(BOOL)bottomOmniboxEnabled
+  showXButtonBackgroundTabs:(BOOL)showXButton
+                 themeColor:(UIColor*)themeColor
+                  tintColor:(UIColor*)tintColor;
 - (void)updateTabViewStyleWithBottomOmniboxEnabled:(BOOL)bottomOmniboxEnabled;
 - (void)updateTabViewStyleWithThemeColor:(UIColor*)themeColor
                                tintColor:(UIColor*)tintColor
-                              isSelected:(BOOL)isSelected;
+                              isSelected:(BOOL)isSelected
+               showXButtonBackgroundTabs:(BOOL)showXButton;
+- (void)updateTabViewWithXButtonVisibleBackgroundTabs:(BOOL)visible
+                                           isSelected:(BOOL)isSelected;
 // End Vivaldi
 
 @end

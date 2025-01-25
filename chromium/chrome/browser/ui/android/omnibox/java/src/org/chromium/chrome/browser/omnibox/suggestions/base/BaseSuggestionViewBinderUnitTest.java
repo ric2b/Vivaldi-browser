@@ -26,9 +26,7 @@ import android.widget.ImageView;
 
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.robolectric.RuntimeEnvironment;
@@ -36,8 +34,6 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.Features;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxDrawableState;
 import org.chromium.chrome.browser.omnibox.suggestions.DropdownCommonProperties;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionCommonProperties;
@@ -46,7 +42,6 @@ import org.chromium.chrome.browser.omnibox.test.R;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.RoundedCornerOutlineProvider;
-import org.chromium.components.omnibox.OmniboxFeatureList;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
@@ -56,7 +51,6 @@ import java.util.List;
 /** Tests for {@link BaseSuggestionViewBinder}. */
 @RunWith(BaseRobolectricTestRunner.class)
 public class BaseSuggestionViewBinderUnitTest {
-    public @Rule TestRule mFeatures = new Features.JUnitProcessor();
 
     private Context mBareContext;
     private Context mContext;
@@ -306,7 +300,7 @@ public class BaseSuggestionViewBinderUnitTest {
 
         Assert.assertEquals(
                 ChromeColors.getSurfaceColor(
-                        mBaseView.getContext(), R.dimen.omnibox_suggestion_bg_elevation_modern),
+                        mBaseView.getContext(), R.dimen.omnibox_suggestion_bg_elevation),
                 ((ColorDrawable) backgroundCaptor.getValue().getDrawable(0)).getColor());
     }
 
@@ -421,29 +415,25 @@ public class BaseSuggestionViewBinderUnitTest {
 
     @Test
     @Config(qualifiers = "ldltr")
-    @EnableFeatures(OmniboxFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE)
-    public void iconStartPadding_smallestMarginsRevamp_ltr() {
+    public void iconStartPadding_ltr() {
         runDecorationIconPaddingTest();
     }
 
     @Test
     @Config(qualifiers = "ldrtl")
-    @EnableFeatures(OmniboxFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE)
-    public void iconStartPadding_smallestMarginsRevamp_rtl() {
+    public void iconStartPadding_rtl() {
         runDecorationIconPaddingTest();
     }
 
     @Test
-    @EnableFeatures(OmniboxFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE)
     @Config(qualifiers = "ldltr-sw600dp")
-    public void iconStartPadding_tabletRevamp_ltr() {
+    public void iconStartPadding_tablet_ltr() {
         runDecorationIconPaddingTest();
     }
 
     @Test
-    @EnableFeatures(OmniboxFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE)
     @Config(qualifiers = "ldrtl-sw600dp")
-    public void iconStartPadding_tabletRevamp_rtl() {
+    public void iconStartPadding_tablet_rtl() {
         runDecorationIconPaddingTest();
     }
 
@@ -494,5 +484,11 @@ public class BaseSuggestionViewBinderUnitTest {
         assertEquals(MarginLayoutParams.WRAP_CONTENT, mIconView.getLayoutParams().width);
         assertEquals(largeEdgeSize, mIconView.getLayoutParams().height);
         assertEquals(largeRoundingRadius, mBaseView.decorationIconOutline.getRadiusForTesting());
+    }
+
+    @Test
+    public void topPadding() {
+        mModel.set(BaseSuggestionViewProperties.TOP_PADDING, 13);
+        assertEquals(13, mBaseView.getPaddingTop());
     }
 }

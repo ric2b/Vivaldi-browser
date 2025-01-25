@@ -5,14 +5,19 @@
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
 
 import {getVcBackgroundTemplates, getWallpaperTemplates} from './constants_generated.js';
-import {isSeaPenTextInputEnabled} from './load_time_booleans.js';
 import {SeaPenTemplateChip, SeaPenTemplateId, SeaPenTemplateOption} from './sea_pen_generated.mojom-webui.js';
 
 export type Query = 'Query';
+export const QUERY: Query = 'Query';
 
 // SeaPen images are identified by a positive integer. For a newly generated
 // thumbnail, this is `SeaPenThumbnail.id`.
 export type SeaPenImageId = number;
+
+export interface SeaPenSamplePrompt {
+  prompt: string;
+  preview: Url;
+}
 
 export interface SeaPenOption {
   // `value` is the actual option value to be sent to the server side.
@@ -38,19 +43,6 @@ export function getSeaPenTemplates(): SeaPenTemplate[] {
   const templates = window.location.origin === 'chrome://personalization' ?
       getWallpaperTemplates() :
       getVcBackgroundTemplates();
-
-  if (isSeaPenTextInputEnabled()) {
-    templates.push({
-      preview: [{
-        url:
-            'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_tile.jpg',
-      }],
-      title: 'Freeform',
-      text: 'Freeform',
-      id: 'Query',
-      options: new Map(),
-    });
-  }
   return templates;
 }
 
@@ -68,3 +60,64 @@ export function parseTemplateText(template: string): string[] {
       })
       .map(entry => entry.trim());
 }
+
+export const SEA_PEN_SUGGESTIONS: string[] = [
+  'blue',
+  'black',
+  'green',
+  'purple',
+  'red',
+  'yellow',
+  'gray',
+  'brown',
+  'white',
+  'teal',
+  'olive',
+  'cerulean',
+  'beige',
+];
+
+export const SEA_PEN_SAMPLES: SeaPenSamplePrompt[] = [
+  {
+    prompt: 'A fluffy golden retreiver puppy with floppy ears',
+    preview: {
+      url:
+          'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_glowscapes.jpg',
+    },
+  },
+  {
+    prompt: 'A time lapse photo of a bioluminescent beach',
+    preview: {
+      url:
+          'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_dreamscapes.jpg',
+    },
+  },
+  {
+    prompt: 'Sand dunes with abstract shadows at dawn',
+    preview: {
+      url:
+          'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_terrain.jpg',
+    },
+  },
+  {
+    prompt: 'A misty green forest of flowering cactus',
+    preview: {
+      url:
+          'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_surreal.jpg',
+    },
+  },
+  {
+    prompt: 'A beige feathergrass stem on a pink background',
+    preview: {
+      url:
+          'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_art.jpg',
+    },
+  },
+  {
+    prompt: 'A cat riding a unicorn off into the sunset',
+    preview: {
+      url:
+          'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_characters.jpg',
+    },
+  },
+];

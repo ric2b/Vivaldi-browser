@@ -20,9 +20,10 @@
 #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
 #include "ui/views/window/dialog_delegate.h"
 
+struct AccountInfo;
 class Browser;
 class GURL;
-struct AccountInfo;
+enum class SyncConfirmationStyle;
 
 namespace content {
 class WebContents;
@@ -56,7 +57,8 @@ class SigninViewControllerDelegateViews
 
   static std::unique_ptr<views::WebView> CreateSyncConfirmationWebView(
       Browser* browser,
-      bool is_signin_intercept = false);
+      SyncConfirmationStyle style,
+      bool is_sync_promo);
 
   static std::unique_ptr<views::WebView> CreateSigninErrorWebView(
       Browser* browser);
@@ -81,7 +83,8 @@ class SigninViewControllerDelegateViews
       bool is_oidc_account,
       bool profile_creation_required_by_policy,
       bool show_link_data_option,
-      signin::SigninChoiceCallback callback);
+      signin::SigninChoiceCallbackVariant process_user_choice_callback,
+      base::OnceClosure done_callback);
 #endif
 
   // views::DialogDelegateView:
@@ -96,9 +99,8 @@ class SigninViewControllerDelegateViews
   // content::WebContentsDelegate:
   bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
                          const content::ContextMenuParams& params) override;
-  bool HandleKeyboardEvent(
-      content::WebContents* source,
-      const content::NativeWebKeyboardEvent& event) override;
+  bool HandleKeyboardEvent(content::WebContents* source,
+                           const input::NativeWebKeyboardEvent& event) override;
   void AddNewContents(content::WebContents* source,
                       std::unique_ptr<content::WebContents> new_contents,
                       const GURL& target_url,

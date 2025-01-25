@@ -632,7 +632,8 @@ bool FeedStream::IsFeedEnabledByDse() {
 
 bool FeedStream::IsWebFeedEnabled() {
   return feed::IsWebFeedEnabledForLocale(delegate_->GetCountry()) &&
-         !delegate_->IsSupervisedAccount();
+         !delegate_->IsSupervisedAccount() &&
+         !base::FeatureList::IsEnabled(kWebFeedKillSwitch);
 }
 
 void FeedStream::EnabledPreferencesChanged() {
@@ -1733,7 +1734,7 @@ ContentOrder FeedStream::GetContentOrder(const StreamType& stream_type) const {
 ContentOrder FeedStream::GetContentOrderFromPrefs(
     const StreamType& stream_type) {
   if (!stream_type.IsWebFeed()) {
-    NOTREACHED()
+    NOTREACHED_IN_MIGRATION()
         << "GetContentOrderFromPrefs is not supported for this stream_type "
         << stream_type;
     return ContentOrder::kUnspecified;

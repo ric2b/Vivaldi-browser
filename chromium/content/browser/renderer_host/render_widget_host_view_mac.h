@@ -47,6 +47,10 @@ class Layer;
 class ScopedPasswordInputEnabler;
 }
 
+namespace input {
+class CursorManager;
+}  // namespace input
+
 @protocol RenderWidgetHostViewMacDelegate;
 
 @class NSAccessibilityRemoteUIElement;
@@ -55,7 +59,6 @@ class ScopedPasswordInputEnabler;
 
 namespace content {
 
-class CursorManager;
 class RenderWidgetHost;
 class RenderWidgetHostViewMac;
 class WebContents;
@@ -134,7 +137,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void Focus() override;
   void UpdateCursor(const ui::Cursor& cursor) override;
   void DisplayCursor(const ui::Cursor& cursor) override;
-  CursorManager* GetCursorManager() override;
+  input::CursorManager* GetCursorManager() override;
   void OnOldViewDidNavigatePreCommit() override;
   void OnNewViewDidNavigatePostCommit() override;
   void DidEnterBackForwardCache() override;
@@ -187,9 +190,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   bool IsKeyboardLocked() override;
   base::flat_map<std::string, std::string> GetKeyboardLayoutMap() override;
   void GestureEventAck(const blink::WebGestureEvent& event,
+                       blink::mojom::InputEventResultSource ack_source,
                        blink::mojom::InputEventResultState ack_result) override;
   void ProcessAckedTouchEvent(
-      const TouchEventWithLatencyInfo& touch,
+      const input::TouchEventWithLatencyInfo& touch,
       blink::mojom::InputEventResultState ack_result) override;
 
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
@@ -218,7 +222,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
 
   bool TransformPointToCoordSpaceForView(
       const gfx::PointF& point,
-      RenderWidgetHostViewInput* target_view,
+      input::RenderWidgetHostViewInput* target_view,
       gfx::PointF* transformed_point) override;
   viz::FrameSinkId GetRootFrameSinkId() override;
   viz::SurfaceId GetCurrentSurfaceId() const override;
@@ -325,10 +329,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   id GetRootBrowserAccessibilityElement() override;
   id GetFocusedBrowserAccessibilityElement() override;
   void SetAccessibilityWindow(NSWindow* window) override;
-  void ForwardKeyboardEvent(const NativeWebKeyboardEvent& key_event,
+  void ForwardKeyboardEvent(const input::NativeWebKeyboardEvent& key_event,
                             const ui::LatencyInfo& latency_info) override;
   void ForwardKeyboardEventWithCommands(
-      const NativeWebKeyboardEvent& key_event,
+      const input::NativeWebKeyboardEvent& key_event,
       const ui::LatencyInfo& latency_info,
       std::vector<blink::mojom::EditCommandPtr> commands) override;
   void RouteOrProcessMouseEvent(const blink::WebMouseEvent& web_event) override;
@@ -627,7 +631,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // AcceleratedWidgetCALayerParamsUpdated).
   SkColor last_frame_root_background_color_ = SK_ColorTRANSPARENT;
 
-  std::unique_ptr<CursorManager> cursor_manager_;
+  std::unique_ptr<input::CursorManager> cursor_manager_;
 
   // Observes macOS's accessibility pointer size user preference changes.
   CursorAccessibilityScaleFactorObserver* __strong cursor_scale_observer_;

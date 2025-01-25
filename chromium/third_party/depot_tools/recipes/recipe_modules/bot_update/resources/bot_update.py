@@ -548,6 +548,15 @@ def get_total_disk_space():
     return (total, free)
 
 
+def disk_usage():
+  total_disk_space, free_disk_space = get_total_disk_space()
+  total_disk_space_gb = int(total_disk_space / (1024 * 1024 * 1024))
+  used_disk_space_gb = int(
+      (total_disk_space - free_disk_space) / (1024 * 1024 * 1024))
+  percent_used = int(used_disk_space_gb * 100 / total_disk_space_gb)
+  return (used_disk_space_gb, total_disk_space_gb, percent_used)
+
+
 def ref_to_remote_ref(ref):
   """Maps refs to equivalent remote ref.
 
@@ -998,14 +1007,7 @@ def prepare(options, git_slns, active):
   # Make sure we tell recipes that we didn't run if the script exits here.
   emit_json(options.output_json, did_run=active)
 
-  total_disk_space, free_disk_space = get_total_disk_space()
-  total_disk_space_gb = int(total_disk_space / (1024 * 1024 * 1024))
-  used_disk_space_gb = int((total_disk_space - free_disk_space)
-                           / (1024 * 1024 * 1024))
-  percent_used = int(used_disk_space_gb * 100 / total_disk_space_gb)
-  step_text = '[%dGB/%dGB used (%d%%)]' % (used_disk_space_gb,
-                                           total_disk_space_gb,
-                                           percent_used)
+  step_text = '[%dGB/%dGB used (%d%%)]' % disk_usage()
   # The first solution is where the primary DEPS file resides.
   first_sln = dir_names[0]
 
@@ -1138,6 +1140,10 @@ def checkout(options, git_slns, specs, revisions, step_text):
 
   # Add git cache age to the output.properties
   properties['git_cache_epoch'] = cache_epoch
+
+  usage = disk_usage()
+  # TODO(ukai): remove cleanup_dir if available disk space is small?
+  step_text = step_text + (' -> [%dGB/%dGB used (%d%%)]' % usage)
 
   # Tell recipes information such as root, got_revision, etc.
   emit_json(options.output_json,

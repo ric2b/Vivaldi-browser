@@ -13,16 +13,13 @@
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_mock_clock_override.h"
 #import "base/test/test_timeouts.h"
-#import "ios/chrome/browser/bookmarks/model/account_bookmark_model_factory.h"
+#import "components/bookmarks/test/bookmark_test_helpers.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
-#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model_test_helpers.h"
-#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
+#import "ios/chrome/browser/sessions/model/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
-#import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
@@ -113,23 +110,15 @@ class TabGridCoordinatorTest : public BlockCleanupTest {
         AuthenticationServiceFactory::GetInstance(),
         AuthenticationServiceFactory::GetDefaultFactory());
     test_cbs_builder.AddTestingFactory(
-        ios::LocalOrSyncableBookmarkModelFactory::GetInstance(),
-        ios::LocalOrSyncableBookmarkModelFactory::GetDefaultFactory());
-    test_cbs_builder.AddTestingFactory(
-        ios::AccountBookmarkModelFactory::GetInstance(),
-        ios::AccountBookmarkModelFactory::GetDefaultFactory());
-    test_cbs_builder.AddTestingFactory(
         ios::BookmarkModelFactory::GetInstance(),
         ios::BookmarkModelFactory::GetDefaultFactory());
     chrome_browser_state_ = test_cbs_builder.Build();
     AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
         chrome_browser_state_.get(),
         std::make_unique<FakeAuthenticationServiceDelegate>());
-    WaitForLegacyBookmarkModelToLoad(
-        ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
-            chrome_browser_state_.get()));
-    WaitForLegacyBookmarkModelToLoad(
-        ios::AccountBookmarkModelFactory::GetForBrowserState(
+
+    bookmarks::test::WaitForBookmarkModelToLoad(
+        ios::BookmarkModelFactory::GetForBrowserState(
             chrome_browser_state_.get()));
 
     browser_ = std::make_unique<TestBrowser>(chrome_browser_state_.get(),
@@ -159,8 +148,6 @@ class TabGridCoordinatorTest : public BlockCleanupTest {
                      initWithWindow:window
          applicationCommandEndpoint:OCMProtocolMock(
                                         @protocol(ApplicationCommands))
-        browsingDataCommandEndpoint:OCMProtocolMock(
-                                        @protocol(BrowsingDataCommands))
                      regularBrowser:browser_.get()
                     inactiveBrowser:browser_->CreateInactiveBrowser()
                    incognitoBrowser:incognito_browser_.get()];

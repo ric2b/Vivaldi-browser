@@ -7,9 +7,9 @@
 #include <string>
 #include <utility>
 
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-blink.h"
 #include "third_party/blink/public/mojom/push_messaging/push_messaging_status.mojom-blink.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
@@ -92,11 +92,13 @@ void PushMessagingClient::DidGetManifest(
     mojom::blink::PushSubscriptionOptionsPtr options,
     bool user_gesture,
     std::unique_ptr<PushSubscriptionCallbacks> callbacks,
+    mojom::blink::ManifestRequestResult result,
     const KURL& manifest_url,
     mojom::blink::ManifestPtr manifest) {
   // Get the application_server_key from the manifest since it wasn't provided
   // by the caller.
-  if (manifest_url.IsEmpty() || manifest == mojom::blink::Manifest::New()) {
+  if (manifest_url.IsEmpty() || manifest == mojom::blink::Manifest::New() ||
+      result != mojom::blink::ManifestRequestResult::kSuccess) {
     DidSubscribe(
         service_worker_registration, std::move(callbacks),
         mojom::blink::PushRegistrationStatus::MANIFEST_EMPTY_OR_MISSING,

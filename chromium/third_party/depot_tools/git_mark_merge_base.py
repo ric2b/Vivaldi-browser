@@ -18,8 +18,14 @@ from subprocess2 import CalledProcessError
 from git_common import remove_merge_base, manual_merge_base, current_branch
 from git_common import get_or_create_merge_base, hash_one, upstream
 
+import gclient_utils
+
 
 def main(argv):
+    if gclient_utils.IsEnvCog():
+        print('mark-merge-base command is not supported in non-git '
+              'environment.', file=sys.stderr)
+        return 1
     parser = argparse.ArgumentParser(
         description=__doc__.strip().splitlines()[0],
         epilog=' '.join(__doc__.strip().splitlines()[1:]))

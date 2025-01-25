@@ -41,7 +41,7 @@ viz_component("shared_image_format") {
     "//ui/gfx/geometry",
   ]
   if (enable_vulkan) {
-    deps += [ "//third_party/vulkan-deps/vulkan-headers/src:vulkan_headers" ]
+    deps += [ "//third_party/vulkan-headers/src:vulkan_headers" ]
   }
 }
 
@@ -125,6 +125,8 @@ viz_component("common") {
   defines = [ "VIZ_COMMON_IMPLEMENTATION" ]
 
   sources = [
+    "color_space_utils.cc",
+    "color_space_utils.h",
     "constants.cc",
     "constants.h",
     "delegated_ink_prediction_configuration.h",
@@ -193,6 +195,8 @@ viz_component("common") {
     "quads/frame_deadline.h",
     "quads/largest_draw_quad.cc",
     "quads/largest_draw_quad.h",
+    "quads/offset_tag.cc",
+    "quads/offset_tag.h",
     "quads/picture_draw_quad.cc",
     "quads/picture_draw_quad.h",
     "quads/quad_list.cc",
@@ -231,6 +235,8 @@ viz_component("common") {
     "resources/returned_resource.h",
     "resources/shared_bitmap.cc",
     "resources/shared_bitmap.h",
+    "resources/shared_bitmap_id.cc",
+    "resources/shared_bitmap_id.h",
     "resources/transferable_resource.cc",
     "resources/transferable_resource.h",
     "skia_helper.cc",
@@ -353,6 +359,7 @@ viz_source_set("unit_tests") {
     "quads/compositor_frame_transition_directive_unittest.cc",
     "quads/compositor_render_pass_unittest.cc",
     "quads/draw_quad_unittest.cc",
+    "quads/offset_tag_unittest.cc",
     "quads/render_pass_io_unittest.cc",
     "resources/resource_sizes_unittest.cc",
     "resources/shared_image_format_unittest.cc",

@@ -69,6 +69,9 @@ message LogicalVolume {
   VolumeGroup volume_group = 1;
   string name = 2;
   string path = 3;
+
+  // Size in MiB, or -1 for error.
+  int64 size = 4;
 }
 
 // Holds a list of LVM logical volumes.

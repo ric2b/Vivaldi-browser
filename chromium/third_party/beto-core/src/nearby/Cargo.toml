@@ -2,6 +2,7 @@
 members = [
     "connections/ukey2/ukey2",
     "connections/ukey2/ukey2_connections",
+    "connections/ukey2/ukey2_connections/fuzz",
     "connections/ukey2/ukey2_c_ffi",
     "connections/ukey2/ukey2_jni",
     "connections/ukey2/ukey2_proto",
@@ -10,11 +11,13 @@ members = [
     "crypto/crypto_provider_rustcrypto",
     "crypto/crypto_provider_stubs",
     "crypto/crypto_provider_test",
+    "crypto/crypto_provider_test/fuzz",
     "crypto/crypto_provider_default",
-    "crypto/rand_core_05_adapter",
     "presence/array_view",
     "presence/ldt",
+    "presence/ldt/fuzz",
     "presence/ldt_np_adv",
+    "presence/ldt_np_adv/fuzz",
     "presence/ldt_np_adv_ffi",
     "presence/ldt_np_jni",
     "presence/ldt_tbc",
@@ -24,15 +27,13 @@ members = [
     "presence/np_ed25519",
     "presence/np_ffi_core",
     "presence/np_hkdf",
+    "presence/np_java_ffi",
     "presence/rand_ext",
     "presence/sink",
     "presence/test_helper",
+    "presence/test_vector_hkdf",
     "presence/xts_aes",
-    "util/lock_adapter",
-    "util/handle_map",
-    "util/pourover",
-    "util/pourover_macro",
-    "util/pourover_macro_core",
+    "presence/xts_aes/fuzz",
 ]
 
 # TODO: remove boringssl once we figure out a better plan for integrating the build system
@@ -41,35 +42,35 @@ exclude = [
 ]
 
 [workspace.lints.rust]
-unsafe_code = "deny"
 missing_docs = "deny"
 trivial_casts = "deny"
 trivial_numeric_casts = "deny"
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
 unused_extern_crates = "deny"
 unused_import_braces = "deny"
 unused_results = "deny"
 
 [workspace.lints.clippy]
-indexing_slicing = "deny"
-unwrap_used = "deny"
-panic = "deny"
 expect_used = "deny"
+indexing_slicing = "deny"
+panic = "deny"
+unwrap_used = "deny"
 
 [workspace.dependencies]
 # local crates
 array_ref = { path = "presence/array_ref" }
 array_view = { path = "presence/array_view" }
 crypto_provider = { path = "crypto/crypto_provider", default-features = false }
-crypto_provider_default = { path = "crypto/crypto_provider_default", default-features=false}
+crypto_provider_default = { path = "crypto/crypto_provider_default", default-features = false }
 crypto_provider_boringssl = { path = "crypto/crypto_provider_boringssl" }
 crypto_provider_rustcrypto = { path = "crypto/crypto_provider_rustcrypto" }
 crypto_provider_stubs = { path = "crypto/crypto_provider_stubs" }
 crypto_provider_test = { path = "crypto/crypto_provider_test" }
-lock_adapter = { path = "util/lock_adapter" }
-handle_map = { path = "util/handle_map" }
-rand_core_05_adapter = { path = "crypto/rand_core_05_adapter" }
 rand_ext = { path = "presence/rand_ext" }
 test_helper = { path = "presence/test_helper" }
+ukey2_connections = { path = "connections/ukey2/ukey2_connections" }
+ukey2_rs = { path = "connections/ukey2/ukey2" }
 ukey2_proto = { path = "connections/ukey2/ukey2_proto" }
 np_hkdf = { path = "presence/np_hkdf" }
 xts_aes = { path = "presence/xts_aes" }
@@ -80,10 +81,17 @@ np_adv = { path = "presence/np_adv" }
 np_adv_dynamic = { path = "presence/np_adv_dynamic" }
 np_ed25519 = { path = "presence/np_ed25519" }
 np_ffi_core = { path = "presence/np_ffi_core", default-features=false }
-pourover = { path = "util/pourover" }
-pourover_macro = { path = "util/pourover_macro" }
-pourover_macro_core = { path = "util/pourover_macro_core" }
+np_java_ffi = { path = "presence/np_java_ffi" }
 sink = { path = "presence/sink" }
+test_vector_hkdf = { path = "presence/test_vector_hkdf" }
+
+# from utils workspace
+derive_fuzztest = { path = "../common/derive_fuzztest" }
+derive_fuzztest_macro = { path = "../common/derive_fuzztest_macro" }
+handle_map = { path = "../common/handle_map" }
+lock_adapter = { path = "../common/lock_adapter" }
+pourover = { path = "../common/pourover" }
+pourover_macro = { path = "../common/pourover_macro" }
 
 # from crates.io
 rand = { version = "0.8.5", default-features = false }
@@ -91,10 +99,12 @@ rand_core = { version = "0.6.4", features = ["getrandom"] }
 rand_pcg = "0.3.1"
 sha2 = { version = "0.10.8", default-features = false }
 aes = "0.8.3"
+arbitrary = "1.3.2"
 cbc = { version = "0.1.2", features = ["block-padding"] }
 ctr = "0.9.2"
 hkdf = "0.12.3"
 hmac = "0.12.1"
+nom = { version = "7.1.3", default-features = false }
 ed25519-dalek = { version = "2.1.0", default-features = false }
 ed25519 = "2.2.3"
 aes-gcm = "0.10.3"
@@ -144,6 +154,11 @@ cbindgen = "0.26.0"
 syn = { version = "2.0", features = ["full"] }
 proc-macro2 = "1.0"
 quote = "1.0"
+itertools = "0.12.1"
+quickcheck = "1.0.3"
+proptest = "1.4.0"
+proptest-arbitrary-interop = { git = "https://github.com/brson/proptest-arbitrary-interop.git", branch = "incorrect-format" }
+libfuzzer-sys = "0.4.7"
 
 [workspace.package]
 version = "0.1.0"
@@ -178,7 +193,7 @@ rust-version = "1.71.0"
 
 [dependencies]
 clap.workspace = true
-cmd-runner = { path = "../cmd-runner" }
+cmd_runner = { path = "../common/cmd_runner" }
 anyhow.workspace = true
 shell-escape = "0.1.5"
 owo-colors.workspace = true
@@ -191,10 +206,10 @@ chrono.workspace = true
 thiserror.workspace = true
 log.workspace = true
 env_logger.workspace = true
-which = "4.4.0"
 file-header = "0.1.2"
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["std"] }
 regex = "1.10.2"
+xshell = "0.2.6"
 
 [dev-dependencies]
 tempfile.workspace = true

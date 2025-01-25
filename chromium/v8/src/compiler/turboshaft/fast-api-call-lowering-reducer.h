@@ -7,6 +7,7 @@
 
 #include "include/v8-fast-api-calls.h"
 #include "src/compiler/fast-api-calls.h"
+#include "src/compiler/globals.h"
 #include "src/compiler/turboshaft/assembler.h"
 #include "src/compiler/turboshaft/copying-phase.h"
 #include "src/compiler/turboshaft/index.h"
@@ -23,8 +24,8 @@ class FastApiCallLoweringReducer : public Next {
  public:
   TURBOSHAFT_REDUCER_BOILERPLATE(FastApiCallLowering)
 
-  OpIndex REDUCE(FastApiCall)(V<FrameState> frame_state, OpIndex data_argument,
-                              V<Context> context,
+  OpIndex REDUCE(FastApiCall)(V<FrameState> frame_state,
+                              V<Object> data_argument, V<Context> context,
                               base::Vector<const OpIndex> arguments,
                               const FastApiCallParameters* parameters) {
     const auto& c_functions = parameters->c_functions;
@@ -86,9 +87,15 @@ class FastApiCallLoweringReducer : public Next {
         // If this check fails, you've probably added new fields to
         // v8::FastApiCallbackOptions, which means you'll need to write code
         // that initializes and reads from them too.
-        static_assert(kSize == sizeof(uintptr_t) * 3);
+        static_assert(kSize == sizeof(uintptr_t) * 4);
         stack_slot = __ StackSlot(kSize, kAlign);
 
+        // isolate
+        __ StoreOffHeap(
+            stack_slot,
+            __ ExternalConstant(ExternalReference::isolate_address()),
+            MemoryRepresentation::UintPtr(),
+            offsetof(v8::FastApiCallbackOptions, isolate));
         // fallback = 0
         __ StoreOffHeap(stack_slot, __ Word32Constant(0),
                         MemoryRepresentation::Int32(),
@@ -111,7 +118,7 @@ class FastApiCallLoweringReducer : public Next {
       const TSCallDescriptor* call_descriptor = TSCallDescriptor::Create(
           Linkage::GetSimplifiedCDescriptor(__ graph_zone(), builder.Build(),
                                             CallDescriptor::kNeedsFrameState),
-          CanThrow::kNo, __ graph_zone());
+          CanThrow::kNo, LazyDeoptOnThrow::kNo, __ graph_zone());
       OpIndex c_call_result = WrapFastCall(call_descriptor, callee, frame_state,
                                            context, base::VectorOf(args));
 
@@ -140,7 +147,8 @@ class FastApiCallLoweringReducer : public Next {
       BIND(trigger_exception);
       __ template CallRuntime<
           typename RuntimeCallDescriptor::PropagateException>(
-          isolate_, frame_state, __ NoContextConstant(), {});
+          isolate_, frame_state, __ NoContextConstant(), LazyDeoptOnThrow::kNo,
+          {});
 
       GOTO(done, FastApiCallOp::kFailureValue, __ TagSmi(0));
     }
@@ -466,6 +474,7 @@ class FastApiCallLoweringReducer : public Next {
 
     // We hard-code int32_t here, because all specializations of
     // FastApiTypedArray have the same size.
+    START_ALLOW_USE_DEPRECATED()
     constexpr int kAlign = alignof(FastApiTypedArray<int32_t>);
     constexpr int kSize = sizeof(FastApiTypedArray<int32_t>);
     static_assert(kAlign == alignof(FastApiTypedArray<double>),
@@ -474,6 +483,7 @@ class FastApiCallLoweringReducer : public Next {
     static_assert(kSize == sizeof(FastApiTypedArray<double>),
                   "Size mismatch between different specializations of "
                   "FastApiTypedArray");
+    END_ALLOW_USE_DEPRECATED()
     static_assert(
         kSize == sizeof(uintptr_t) + sizeof(size_t),
         "The size of "
@@ -581,7 +591,7 @@ class FastApiCallLoweringReducer : public Next {
 
 #ifdef V8_ENABLE_SANDBOX
     OpIndex isolate_ptr =
-        __ ExternalConstant(ExternalReference::isolate_address(isolate_));
+        __ ExternalConstant(ExternalReference::isolate_address());
     MachineSignature::Builder builder(__ graph_zone(), 1, 2);
     builder.AddReturn(MachineType::Uint32());
     builder.AddParam(MachineType::Pointer());
@@ -592,11 +602,11 @@ class FastApiCallLoweringReducer : public Next {
                 allocate_and_initialize_young_external_pointer_table_entry());
     auto call_descriptor =
         Linkage::GetSimplifiedCDescriptor(__ graph_zone(), builder.Build());
-    OpIndex handle =
-        __ Call(allocate_and_initialize_young_external_pointer_table_entry,
-                {isolate_ptr, pointer},
-                TSCallDescriptor::Create(call_descriptor, CanThrow::kNo,
-                                         __ graph_zone()));
+    OpIndex handle = __ Call(
+        allocate_and_initialize_young_external_pointer_table_entry,
+        {isolate_ptr, pointer},
+        TSCallDescriptor::Create(call_descriptor, CanThrow::kNo,
+                                 LazyDeoptOnThrow::kNo, __ graph_zone()));
     __ InitializeField(
         external, AccessBuilder::ForJSExternalObjectPointerHandle(), handle);
 #else
@@ -613,8 +623,8 @@ class FastApiCallLoweringReducer : public Next {
                        V<FrameState> frame_state, V<Context> context,
                        base::Vector<const OpIndex> arguments) {
     // CPU profiler support.
-    OpIndex target_address = __ ExternalConstant(
-        ExternalReference::fast_api_call_target_address(isolate_));
+    OpIndex target_address =
+        __ IsolateField(IsolateFieldId::kFastApiCallTarget);
     __ StoreOffHeap(target_address, __ BitcastHeapObjectToWordPtr(callee),
                     MemoryRepresentation::UintPtr());
 

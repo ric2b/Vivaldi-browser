@@ -150,7 +150,8 @@ SurfaceAnimationManager::SurfaceAnimationManager(
     gpu::SharedImageInterface* shared_image_interface,
     ReservedResourceIdTracker* id_tracker,
     SaveDirectiveCompleteCallback sequence_id_finished_callback)
-    : transferable_resource_tracker_(shared_bitmap_manager, id_tracker) {
+    : transferable_resource_tracker_(shared_bitmap_manager, id_tracker),
+      saved_frame_(directive, shared_image_interface) {
   DCHECK(directive.type() == CompositorFrameTransitionDirective::Type::kSave);
 
   // The SurfaceSavedFrame can dispatch the result asynchronously so use a weak
@@ -159,11 +160,11 @@ SurfaceAnimationManager::SurfaceAnimationManager(
       base::BindOnce(&SurfaceAnimationManager::OnSaveDirectiveProcessed,
                      weak_factory_.GetMutableWeakPtr(),
                      std::move(sequence_id_finished_callback));
-
-  saved_frame_ = std::make_unique<SurfaceSavedFrame>(
-      directive, shared_image_interface, std::move(copy_finished_callback));
-  saved_frame_->RequestCopyOfOutput(surface);
-  empty_resource_ids_ = saved_frame_->GetEmptyResourceIds();
+  saved_frame_.RequestCopyOfOutput(surface, std::move(copy_finished_callback));
+  empty_resource_ids_ = saved_frame_.GetEmptyResourceIds();
+  if (saved_frame_.IsValid() && !directive.maybe_cross_frame_sink()) {
+    ImportTextures();
+  }
 }
 
 SurfaceAnimationManager::~SurfaceAnimationManager() {
@@ -177,6 +178,18 @@ void SurfaceAnimationManager::OnSaveDirectiveProcessed(
     const CompositorFrameTransitionDirective& directive) {
   CHECK_EQ(stage_, Stage::kPendingCopy);
   stage_ = Stage::kWaitingForAnimate;
+
+  // Importing textures must be deferred until the SurfaceAnimationManager is
+  // bound to a frame sink. This is because ref-counting for textures
+  // referenced in a Surface's frame is managed by the frame sink associated
+  // with that Surface. So if this transition is potentially cross frame sink,
+  // we need to defer importing textures until the animate directive. The
+  // frame sink for the transition is finalized to the frame sink using the
+  // animate directive.
+  if (saved_frame_.IsValid() && !directive.maybe_cross_frame_sink()) {
+    ImportTextures();
+  }
+
   std::move(callback).Run(directive);
 }
 
@@ -186,20 +199,21 @@ bool SurfaceAnimationManager::Animate() {
   }
 
   stage_ = Stage::kAnimating;
-
-  DCHECK(!saved_textures_);
-  if (!saved_frame_ || !saved_frame_->IsValid()) {
-    LOG(ERROR) << "Failure in caching shared element snapshots";
-    saved_frame_.reset();
-    return true;
+  if (saved_frame_.IsValid()) {
+    ImportTextures();
   }
+  return true;
+}
+
+void SurfaceAnimationManager::ImportTextures() {
+  CHECK(!saved_textures_);
+  CHECK(saved_frame_.IsValid());
 
   // Import the saved frame, which converts it to a ResourceFrame -- a
   // structure which has transferable resources.
-  saved_textures_.emplace(
-      transferable_resource_tracker_.ImportResources(std::move(saved_frame_)));
+  saved_textures_.emplace(transferable_resource_tracker_.ImportResources(
+      saved_frame_.TakeResult(), saved_frame_.directive()));
   empty_resource_ids_.clear();
-  return true;
 }
 
 void SurfaceAnimationManager::ReceiveFromChild(
@@ -240,19 +254,15 @@ bool SurfaceAnimationManager::FilterSharedElementsWithRenderPassOrResource(
         token_to_animation_manager,
     const DrawQuad& quad,
     CompositorRenderPass& copy_pass) {
-  if (quad.material != DrawQuad::Material::kSharedElement)
+  if (quad.material != DrawQuad::Material::kSharedElement) {
     return false;
+  }
 
   const auto& shared_element_quad = *SharedElementDrawQuad::MaterialCast(&quad);
 
-  // Look up the shared element in live render passes first.
-  auto pass_it = element_id_to_pass->find(shared_element_quad.resource_id);
-  if (pass_it != element_id_to_pass->end()) {
-    ReplaceSharedElementWithRenderPass(&copy_pass, shared_element_quad,
-                                       pass_it->second);
-    return true;
-  }
-
+  // Look up the shared element in textures first. This ordering is important
+  // since there can be situations where we created a texture _and_ we have a
+  // render pass (if we're using BlitRequests).
   auto manager_it = token_to_animation_manager->find(
       shared_element_quad.resource_id.transition_token());
   if (manager_it == token_to_animation_manager->end()) {
@@ -268,8 +278,9 @@ bool SurfaceAnimationManager::FilterSharedElementsWithRenderPassOrResource(
 
     if (texture_it != saved_textures->element_id_to_resource.end()) {
       const auto& transferable_resource = texture_it->second;
-      if (transferable_resource.is_null())
+      if (transferable_resource.is_empty()) {
         return true;
+      }
 
       resource_list->push_back(transferable_resource);
       manager_it->second->RefResources({transferable_resource});
@@ -278,6 +289,14 @@ bool SurfaceAnimationManager::FilterSharedElementsWithRenderPassOrResource(
                                       resource_list->back().id);
       return true;
     }
+  }
+
+  // Look up the shared element in live render passes second.
+  auto pass_it = element_id_to_pass->find(shared_element_quad.resource_id);
+  if (pass_it != element_id_to_pass->end()) {
+    ReplaceSharedElementWithRenderPass(&copy_pass, shared_element_quad,
+                                       pass_it->second);
+    return true;
   }
 
   if (manager_it->second->empty_resource_ids_.count(
@@ -304,7 +323,7 @@ bool SurfaceAnimationManager::FilterSharedElementsWithRenderPassOrResource(
 
   // The DCHECK below is for debugging in dev builds. This can happen in
   // production code because of a compromised renderer.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #endif
 
   return true;
@@ -317,8 +336,9 @@ void SurfaceAnimationManager::ReplaceSharedElementResources(
                          std::unique_ptr<SurfaceAnimationManager>>&
         token_to_animation_manager) {
   const auto& active_frame = surface->GetActiveFrame();
-  if (!active_frame.metadata.has_shared_element_resources)
+  if (!active_frame.metadata.has_shared_element_resources) {
     return;
+  }
 
   CompositorFrame resolved_frame;
   resolved_frame.metadata = active_frame.metadata.Clone();

@@ -18,7 +18,6 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -169,7 +168,8 @@ PasswordReuseLookup::ReputationVerdict GetVerdictToLogFromResponse(
     case LoginReputationClientResponse::VERDICT_TYPE_UNSPECIFIED:
       return PasswordReuseLookup::VERDICT_UNSPECIFIED;
   }
-  NOTREACHED() << "Unexpected response_verdict: " << response_verdict;
+  NOTREACHED_IN_MIGRATION()
+      << "Unexpected response_verdict: " << response_verdict;
   return PasswordReuseLookup::VERDICT_UNSPECIFIED;
 }
 
@@ -603,7 +603,7 @@ void ChromePasswordProtectionService::OnUserAction(
       HandleResetPasswordOnInterstitial(web_contents, action);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 
@@ -908,8 +908,8 @@ void ChromePasswordProtectionService::MaybeLogPasswordReuseLookupEvent(
       break;
     case RequestOutcome::UNKNOWN:
     case RequestOutcome::DEPRECATED_NO_EXTENDED_REPORTING:
-      NOTREACHED() << __FUNCTION__
-                   << ": outcome: " << static_cast<int>(outcome);
+      NOTREACHED_IN_MIGRATION()
+          << __FUNCTION__ << ": outcome: " << static_cast<int>(outcome);
       break;
   }
 }
@@ -1105,11 +1105,10 @@ void ChromePasswordProtectionService::OpenPasswordCheck(
     JNIEnv* env = base::android::AttachCurrentThread();
     const syncer::SyncService* sync_service =
         SyncServiceFactory::GetForProfile(profile_);
-    std::string account = password_manager::sync_util::
-        GetAccountEmailIfSyncFeatureEnabledIncludingPasswords(sync_service);
     bool is_syncing_passwords =
-        password_manager::sync_util::IsSyncFeatureEnabledIncludingPasswords(
-            sync_service);
+        password_manager::sync_util::HasChosenToSyncPasswords(sync_service);
+    std::string account =
+        is_syncing_passwords ? sync_service->GetAccountInfo().email : "";
 
     CredentialFoundInStore credentials_store =
         CheckCredentialsStore(saved_passwords_matching_reused_credentials());
@@ -1187,7 +1186,7 @@ void ChromePasswordProtectionService::HandleUserActionOnPageInfo(
     return;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void ChromePasswordProtectionService::HandleResetPasswordOnInterstitial(
@@ -1428,7 +1427,7 @@ void ChromePasswordProtectionService::UpdateSecurityState(
   // If user already click-through interstitial warning, or if there's already
   // a dangerous security state showing, we'll override it.
   if (ui_manager_->IsUrlAllowlistedOrPendingForWebContents(
-          url_with_empty_path, /*is_subresource=*/false,
+          url_with_empty_path,
           web_contents->GetController().GetLastCommittedEntry(), web_contents,
           /*allowlist_only=*/false, &current_threat_type)) {
     DCHECK_NE(SBThreatType::SB_THREAT_TYPE_UNUSED, current_threat_type);
@@ -1657,7 +1656,7 @@ bool ChromePasswordProtectionService::IsInExcludedCountry() {
   if (!variations_service)
     return false;
   return base::Contains(GetExcludedCountries(),
-                        variations_service->GetStoredPermanentCountry());
+                        variations_service->GetLatestCountry());
 }
 
 PasswordReuseEvent::SyncAccountType
@@ -1703,7 +1702,6 @@ bool ChromePasswordProtectionService::UserClickedThroughSBInterstitial(
   SBThreatType current_threat_type;
   if (!ui_manager_->IsUrlAllowlistedOrPendingForWebContents(
           web_contents->GetLastCommittedURL().GetWithEmptyPath(),
-          /*is_subresource=*/false,
           web_contents->GetController().GetLastCommittedEntry(), web_contents,
           /*allowlist_only=*/true, &current_threat_type)) {
     return false;
@@ -1876,7 +1874,12 @@ void ChromePasswordProtectionService::RemovePhishedSavedPasswordCredential(
 LoginReputationClientRequest::ReferringAppInfo
 ChromePasswordProtectionService::GetReferringAppInfo(
     content::WebContents* web_contents) {
-  return safe_browsing::GetReferringAppInfo(web_contents);
+  ReferringAppInfo info_struct =
+      safe_browsing::GetReferringAppInfo(web_contents);
+  LoginReputationClientRequest::ReferringAppInfo info_proto;
+  info_proto.set_referring_app_source(info_struct.referring_app_source);
+  info_proto.set_referring_app_name(info_struct.referring_app_name);
+  return info_proto;
 }
 #endif
 

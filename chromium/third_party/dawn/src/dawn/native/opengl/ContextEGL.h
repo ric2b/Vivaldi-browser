@@ -28,37 +28,51 @@
 #ifndef SRC_DAWN_NATIVE_OPENGL_CONTEXTEGL_H_
 #define SRC_DAWN_NATIVE_OPENGL_CONTEXTEGL_H_
 
-#include <EGL/egl.h>
-
 #include <memory>
+#include <utility>
 
+#include "dawn/common/NonMovable.h"
+#include "dawn/common/egl_platform.h"
 #include "dawn/native/opengl/DeviceGL.h"
 #include "dawn/native/opengl/EGLFunctions.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn::native::opengl {
 
-class ContextEGL : public Device::Context {
+class DisplayEGL;
+
+class ContextEGL : NonMovable {
   public:
-    static ResultOrError<std::unique_ptr<ContextEGL>> Create(const EGLFunctions& functions,
-                                                             EGLenum api,
-                                                             EGLDisplay display,
+    static ResultOrError<std::unique_ptr<ContextEGL>> Create(Ref<DisplayEGL> display,
+                                                             wgpu::BackendType backend,
+                                                             bool useRobustness,
                                                              bool useANGLETextureSharing);
-    void MakeCurrent() override;
-    EGLDisplay GetEGLDisplay() const override;
-    const EGLFunctions& GetEGL() const override;
-    const EGLExtensionSet& GetExtensions() const override;
-    ~ContextEGL() override;
+
+    explicit ContextEGL(Ref<DisplayEGL> display);
+    ~ContextEGL();
+
+    MaybeError Initialize(wgpu::BackendType backend,
+                          bool useRobustness,
+                          bool useANGLETextureSharing);
+
+    // Make the surface used by all MakeCurrent until the scoper gets out of scope.
+    class ScopedMakeSurfaceCurrent : NonMovable {
+      public:
+        ScopedMakeSurfaceCurrent(ContextEGL* context, EGLSurface surface);
+        ~ScopedMakeSurfaceCurrent();
+
+      private:
+        raw_ptr<ContextEGL> mContext;
+    };
+    [[nodiscard]] ScopedMakeSurfaceCurrent MakeSurfaceCurrentScope(EGLSurface surface);
+
+    void MakeCurrent();
 
   private:
-    ContextEGL(const EGLFunctions& functions,
-               EGLDisplay display,
-               EGLContext context,
-               EGLExtensionSet extensions);
-
-    const EGLFunctions mEgl;
-    EGLDisplay mDisplay;
-    EGLContext mContext;
-    EGLExtensionSet mExtensions;
+    Ref<DisplayEGL> mDisplay;
+    EGLContext mContext = EGL_NO_CONTEXT;
+    EGLSurface mCurrentSurface = EGL_NO_SURFACE;
+    EGLSurface mOffscreenSurface = EGL_NO_SURFACE;
 };
 
 }  // namespace dawn::native::opengl

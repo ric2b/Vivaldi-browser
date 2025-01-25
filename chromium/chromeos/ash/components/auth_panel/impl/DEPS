@@ -1,6 +1,7 @@
 noparent = True
 
 include_rules = [
+  "+ash/auth",
   "+ash/ime",
   "+ash/login/ui",
   "+ash/public/cpp",
@@ -14,6 +15,7 @@ include_rules = [
   "+chromeos/constants",
   "+ui/base",
   "+ui/color",
+  "+ui/chromeos/styles",
   "+ui/gfx",
   "+ui/views",
 ]

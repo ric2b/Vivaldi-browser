@@ -36,6 +36,10 @@ class PrintPreviewCrosBrowserTest : public WebUIMochaBrowserTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
+IN_PROC_BROWSER_TEST_F(PrintPreviewCrosBrowserTest, CapabilitiesManagerTest) {
+  RunTestAtPath("capabilities_manager_test.js");
+}
+
 IN_PROC_BROWSER_TEST_F(PrintPreviewCrosBrowserTest,
                        DestinationDropdownControllerTest) {
   RunTestAtPath("destination_dropdown_controller_test.js");
@@ -90,6 +94,10 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewCrosBrowserTest, PrintPreviewCrosAppTest) {
   RunTestAtPath("print_preview_cros_app_test.js");
 }
 
+IN_PROC_BROWSER_TEST_F(PrintPreviewCrosBrowserTest, PreviewTicketManagerTest) {
+  RunTestAtPath("preview_ticket_manager_test.js");
+}
+
 IN_PROC_BROWSER_TEST_F(PrintPreviewCrosBrowserTest, PrintTicketManagerTest) {
   RunTestAtPath("print_ticket_manager_test.js");
 }
@@ -101,6 +109,10 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewCrosBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(PrintPreviewCrosBrowserTest, SummaryPanelTest) {
   RunTestAtPath("summary_panel_test.js");
+}
+
+IN_PROC_BROWSER_TEST_F(PrintPreviewCrosBrowserTest, ValidationUtilsTest) {
+  RunTestAtPath("validation_utils_test.js");
 }
 
 }  // namespace

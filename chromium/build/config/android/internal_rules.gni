@@ -11,7 +11,6 @@ import("//build/config/compute_inputs_for_analyze.gni")
 import("//build/config/coverage/coverage.gni")
 import("//build/config/python.gni")
 import("//build/config/sanitizers/sanitizers.gni")
-import("//build/toolchain/goma.gni")
 import("//build/toolchain/kythe.gni")
 import("//build/util/generate_wrapper.gni")
 import("//build_overrides/build.gni")
@@ -933,6 +932,15 @@ template("test_runner_script") {
         "--robolectric-runtime-deps-dir",
         "@WrappedPath(${_rebased_robolectric_runtime_deps_dir})",
       ]
+      if (build_with_chromium) {
+        _allowlist = "//testing/android/junit/shadows-allowlist.txt"
+        data += [ _allowlist ]
+        _rebased_allowlist = rebase_path(_allowlist, root_build_dir)
+        executable_args += [
+          "--shadows-allowlist",
+          "@WrappedPath($_rebased_allowlist)",
+        ]
+      }
       if (use_jacoco_coverage) {
         # Set a default coverage output directory (can be overridden by user
         # passing the same flag).
@@ -1137,11 +1145,6 @@ if (enable_java_templates) {
           "--config-path",
           rebase_path(invoker.lint_suppressions_file, root_build_dir),
         ]
-      }
-
-      if (defined(testonly) && testonly) {
-        # Allows us to ignore unnecessary checks when linting test targets.
-        args += [ "--testonly" ]
       }
 
       if (defined(invoker.manifest_package)) {

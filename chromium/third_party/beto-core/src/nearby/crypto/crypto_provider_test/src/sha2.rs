@@ -16,7 +16,6 @@ extern crate alloc;
 extern crate std;
 use crate::prelude::*;
 use crate::CryptoProvider;
-use alloc::vec::Vec;
 use core::{marker::PhantomData, str::FromStr};
 use crypto_provider::sha2::{Sha256, Sha512};
 use hex::FromHex;

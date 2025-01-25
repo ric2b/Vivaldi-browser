@@ -9,7 +9,6 @@
 
 #include "base/check_op.h"
 #include "base/feature_list.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/capture_source_location.h"
@@ -116,7 +115,7 @@ NavigationActivation* NavigationApi::activation() const {
 }
 
 void NavigationApi::setOnnavigate(EventListener* listener) {
-  UseCounter::Count(window_, WebFeature::kAppHistory);
+  UseCounter::Count(window_, WebFeature::kNavigationAPI);
   SetAttributeEventListener(event_type_names::kNavigate, listener);
 }
 
@@ -362,7 +361,7 @@ void NavigationApi::SetEntriesForRestore(
       navigation_type = "replace";
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   activation_->Update(currentEntry(),
@@ -627,23 +626,17 @@ NavigationResult* NavigationApi::traverseTo(ScriptState* script_state,
                                                        key);
   upcoming_traverse_api_method_trackers_.insert(key, api_method_tracker);
   LocalFrame* frame = window_->GetFrame();
-  scheduler::TaskAttributionInfo* task = nullptr;
-  if (frame->IsOutermostMainFrame()) {
+  std::optional<scheduler::TaskAttributionId> soft_navigation_task_id;
+  if (script_state->World().IsMainWorld() && frame->IsOutermostMainFrame()) {
     if (SoftNavigationHeuristics* heuristics =
             SoftNavigationHeuristics::From(*window_)) {
-      heuristics->SameDocumentNavigationStarted();
-      auto* tracker =
-          scheduler::TaskAttributionTracker::From(script_state->GetIsolate());
-      if (tracker && script_state->World().IsMainWorld()) {
-        task = tracker->RunningTask();
-        tracker->AddSameDocumentNavigationTask(task);
-      }
+      soft_navigation_task_id =
+          heuristics->AsyncSameDocumentNavigationStarted();
     }
   }
   frame->GetLocalFrameHostRemote().NavigateToNavigationApiKey(
       key, LocalFrame::HasTransientUserActivation(frame),
-      task ? std::optional<scheduler::TaskAttributionId>(task->Id())
-           : std::nullopt);
+      soft_navigation_task_id);
   return api_method_tracker->GetNavigationResult();
 }
 
@@ -848,24 +841,22 @@ NavigationApi::DispatchResult NavigationApi::DispatchNavigateEvent(
     init->setSourceElement(params->source_element);
   }
 
-  std::optional<SoftNavigationHeuristics::EventScope> soft_navigation_scope;
-  if (params->frame_load_type != WebFrameLoadType::kReplaceCurrentItem &&
-      base::FeatureList::IsEnabled(features::kSoftNavigationDetection)) {
-    if (auto* heuristics = SoftNavigationHeuristics::From(*window_)) {
-      if (init->userInitiated() && !init->downloadRequest() &&
-          init->canIntercept()) {
-        // If these conditions are met, create a SoftNavigationEventScope to
-        // consider this a "user initiated click", and the dispatched event
-        // handlers as potential soft navigation tasks.
-        soft_navigation_scope = heuristics->CreateEventScope(
-            SoftNavigationHeuristics::EventScope::Type::kNavigate,
-            /*is_new_interaction=*/true, script_state);
-      }
-    }
-  }
   auto* navigate_event = NavigateEvent::Create(
       window_, event_type_names::kNavigate, init, controller);
   navigate_event->SetDispatchParams(params);
+
+  std::optional<SoftNavigationHeuristics::EventScope> soft_navigation_scope;
+  if (params->frame_load_type != WebFrameLoadType::kReplaceCurrentItem &&
+      init->userInitiated() && !init->downloadRequest() &&
+      init->canIntercept()) {
+    if (auto* heuristics = SoftNavigationHeuristics::From(*window_)) {
+      // If these conditions are met, create a SoftNavigationEventScope to
+      // consider this a "user initiated click", and the dispatched event
+      // handlers as potential soft navigation tasks.
+      soft_navigation_scope =
+          heuristics->MaybeCreateEventScopeForEvent(*navigate_event);
+    }
+  }
 
   CHECK(!ongoing_navigate_event_);
   ongoing_navigate_event_ = navigate_event;

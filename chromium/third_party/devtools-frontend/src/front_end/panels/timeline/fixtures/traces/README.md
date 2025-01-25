@@ -88,6 +88,11 @@ This is a trace that includes multiple navigations:
 
 Generated from https://github.com/ChromeDevTools/performance-stories/tree/main/user-timings
 
+### user-timings-details
+
+A trace that contains one `performance.mark` and one `performance.measure` call, both of which have
+details. The measure contains the `devtools` property in details.
+
 ### lcp-web-font
 
 Generated from https://github.com/ChromeDevTools/performance-stories/tree/main/lcp-web-font
@@ -168,3 +173,35 @@ Contains a navigation to a page with a `in_body_parser_blocking` request `script
 ### postmessage-initiators
 
 Contains a `postMessage.Handler`, and associating `postMessage.Dispatch` call.
+
+### render-blocking-in-body
+
+Contains the following requests in the document body:
+
+- `frame.html`: an iframe document fetched before the image
+- `style.css`: a stylesheet fetched before the image
+- `script.js?beforeImage`: a script fetched before the image
+- `chrome.jpeg`: a normal image
+- `script.js?afterImage`: a script fetched after the image
+
+### web-dev-modifications
+
+Contains a recording of web-dev with the following modifications:
+
+- One entry with hidden children
+- A child breadcrumb under the total trace window.
+
+### iframe-shift
+
+Generated from the shift-attribution page in https://github.com/GoogleChrome/lighthouse/blob/main/cli/test/fixtures/shift-attribution.html. Contains an iframe and layout shifts.
+
+### primary-page-frame
+
+Created from the speculation-rules demo page (https://speculative-rules.glitch.me/common-fruits.html). Contains a trace that includes the `isInPrimaryPageFrame` flag added to Chromium in crrev.com/c/5595033, which allows the trace engine to more accurately identify the main thread via the primary frame.
+
+### enhanced-traces
+Contains traces with metadata needed to power a rehydrated session for enhanced tracing.
+
+### initiators
+
+Contains a recording with network request's initiator information.

@@ -81,8 +81,9 @@ constexpr uint32_t kMaxKeyboardExtensionVersion = 2;
 constexpr uint32_t kMaxXdgShellVersion = 5;
 constexpr uint32_t kMaxWpPresentationVersion = 1;
 constexpr uint32_t kMaxWpViewporterVersion = 1;
-constexpr uint32_t kMaxTextInputManagerVersion = 1;
-constexpr uint32_t kMaxTextInputExtensionVersion = 13;
+constexpr uint32_t kMaxTextInputManagerV1Version = 1;
+constexpr uint32_t kMaxTextInputManagerV3Version = 1;
+constexpr uint32_t kMaxTextInputExtensionVersion = 14;
 constexpr uint32_t kMaxExplicitSyncVersion = 2;
 constexpr uint32_t kMaxAlphaCompositingVersion = 1;
 constexpr uint32_t kMaxXdgDecorationVersion = 1;
@@ -205,7 +206,7 @@ bool WaylandConnection::Initialize(bool use_threaded_polling) {
   event_queue_.reset(wl_display_create_queue(display()));
   wl_proxy_set_queue(wrapped_display_.get(), event_queue_.get());
 
-  registry_.reset(wl_display_get_registry(display_wrapper()));
+  registry_.reset(GetRegistry());
   if (!registry_) {
     LOG(ERROR) << "Failed to get Wayland registry";
     return false;
@@ -317,10 +318,9 @@ void WaylandConnection::SetCursorBitmap(const std::vector<SkBitmap>& bitmaps,
 }
 
 bool WaylandConnection::IsDragInProgress() const {
-  // |data_drag_controller_| can be null when running on headless weston.
-  return (data_drag_controller_ && data_drag_controller_->IsDragInProgress()) ||
-         (window_drag_controller_ &&
-          window_drag_controller_->IsDragInProgress());
+  // An active drag requires a seat exist.
+  return seat_ && data_device_manager_ &&
+         data_device_manager_->GetDevice()->IsDragInProgress();
 }
 
 bool WaylandConnection::SupportsSetWindowGeometry() const {
@@ -367,7 +367,7 @@ bool WaylandConnection::WlObjectsReady() const {
 }
 
 void WaylandConnection::Flush() {
-  wl_display_flush(display_.get());
+  wl_display_flush(display());
 }
 
 void WaylandConnection::UpdateInputDevices() {
@@ -707,7 +707,7 @@ void WaylandConnection::HandleGlobal(wl_registry* registry,
   } else if (!text_input_manager_v1_ &&
              strcmp(interface, "zwp_text_input_manager_v1") == 0) {
     text_input_manager_v1_ = wl::Bind<zwp_text_input_manager_v1>(
-        registry, name, std::min(version, kMaxTextInputManagerVersion));
+        registry, name, std::min(version, kMaxTextInputManagerV1Version));
     if (!text_input_manager_v1_) {
       LOG(ERROR) << "Failed to bind to zwp_text_input_manager_v1 global";
       return;
@@ -716,6 +716,14 @@ void WaylandConnection::HandleGlobal(wl_registry* registry,
              strcmp(interface, "zcr_text_input_extension_v1") == 0) {
     text_input_extension_v1_ = wl::Bind<zcr_text_input_extension_v1>(
         registry, name, std::min(version, kMaxTextInputExtensionVersion));
+  } else if (!text_input_manager_v3_ &&
+             strcmp(interface, "zwp_text_input_manager_v3") == 0) {
+    text_input_manager_v3_ = wl::Bind<zwp_text_input_manager_v3>(
+        registry, name, std::min(version, kMaxTextInputManagerV3Version));
+    if (!text_input_manager_v3_) {
+      LOG(ERROR) << "Failed to bind to zwp_text_input_manager_v3 global";
+      return;
+    }
   } else if (!xdg_decoration_manager_ &&
              strcmp(interface, "zxdg_decoration_manager_v1") == 0) {
     xdg_decoration_manager_ = wl::Bind<zxdg_decoration_manager_v1>(
@@ -769,6 +777,19 @@ void WaylandConnection::HandleGlobal(wl_registry* registry,
 
   available_globals_.emplace_back(interface, version);
   Flush();
+}
+
+struct wl_callback* WaylandConnection::GetSyncCallback() {
+  return wl_display_sync(display_wrapper());
+}
+
+gl::EGLDisplayPlatform WaylandConnection::GetNativeDisplay() {
+  return gl::EGLDisplayPlatform(
+      reinterpret_cast<EGLNativeDisplayType>(display()));
+}
+
+struct wl_registry* WaylandConnection::GetRegistry() {
+  return wl_display_get_registry(display_wrapper());
 }
 
 }  // namespace ui

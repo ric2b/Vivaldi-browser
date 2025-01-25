@@ -38,17 +38,6 @@ inline constexpr char kSyncInitialSyncFeatureSetupComplete[] =
 inline constexpr char kSyncKeepEverythingSynced[] =
     "sync.keep_everything_synced";
 
-#if BUILDFLAG(IS_IOS)
-// Boolean specifying whether the user has opted in account storage for
-// bookmarks and reading list or not. This pref and the following preferences
-// (kSyncBookmarks, kSyncReadingList) should be both true to enable bookmarks
-// and reading lists for signed-in, non-syncing users only.
-// TODO(crbug.com/40066051): remove the pref when the remaining reference to it,
-// MaybeMigratePrefsForSyncToSigninPart1, is removed.
-inline constexpr char kBookmarksAndReadingListAccountStorageOptIn[] =
-    "sync.bookmarks_and_reading_list_account_storage_opt_in";
-#endif  // BUILDFLAG(IS_IOS)
-
 // Dict specifying the selected types per account for signed-in, non-syncing
 // users only.
 inline constexpr char kSelectedTypesPerAccount[] =
@@ -83,7 +72,6 @@ inline constexpr char kSyncAppsEnabledByOs[] = "sync.apps_enabled_by_os";
 inline constexpr char kSyncApps[] = "sync.apps";
 inline constexpr char kSyncAutofill[] = "sync.autofill";
 inline constexpr char kSyncBookmarks[] = "sync.bookmarks";
-inline constexpr char kSyncCompare[] = "sync.compare";
 inline constexpr char kSyncCookies[] = "sync.cookies";
 inline constexpr char kSyncExtensions[] = "sync.extensions";
 // Note: The pref for history is called "typed_urls" for historic reasons - not
@@ -92,6 +80,7 @@ inline constexpr char kSyncHistory[] = "sync.typed_urls";
 inline constexpr char kSyncPasswords[] = "sync.passwords";
 inline constexpr char kSyncPayments[] = "sync.payments";
 inline constexpr char kSyncPreferences[] = "sync.preferences";
+inline constexpr char kSyncProductComparison[] = "sync.product_comparison";
 inline constexpr char kSyncReadingList[] = "sync.reading_list";
 inline constexpr char kSyncSavedTabGroups[] = "sync.saved_tab_groups";
 inline constexpr char kSyncSharedTabGroupData[] = "sync.shared_tab_group_data";

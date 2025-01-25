@@ -44,12 +44,20 @@ update_target("//content/browser:browser") {
     "//vivaldi/components/content/vivaldi_render_frame_host_impl.cc",
     "//vivaldi/components/content/vivaldi_render_view_host_impl.cc",
     "//vivaldi/components/content/vivaldi_web_contents.cc",
+    "//vivaldi/content/browser/renderer_host/vivaldi_render_widget_host_view_child_frame.cc",
   ]
   if (is_mac) {
     sources += [
       "//vivaldi/content/browser/renderer_host/vivaldi_renderer_host_util.h",
       "//vivaldi/content/browser/renderer_host/vivaldi_renderer_host_util.cc",
     ]
+  }
+  if (is_linux && !is_android) {
+    sources += [
+      "//vivaldi/content/browser/zygote_host/vivaldi_zygote_host_linux_utils.h",
+      "//vivaldi/content/browser/zygote_host/vivaldi_zygote_host_linux_utils.cc",
+    ]
+    deps += [ "//sandbox/linux:sandbox_services" ]
   }
   deps += [
     "//components/viz/service",
@@ -83,53 +91,9 @@ if (vivaldi_build_tests) {
     deps += [ "//vivaldi/components:adverse_adblocking" ]
   }
 
-  update_target("//components/guest_view/browser:test_support") {
-    sources += [
-      "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
-    ]
-  }
-  if (!is_ios) {
-    update_target("//content/test:content_browsertests") {
-      sources += [
-        "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
-      ]
-    }
-
-    update_target("//content/test:content_unittests") {
-      sources += [
-        "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
-      ]
-    }
-  }
-  if (!is_ios && !is_android) {
-    update_target("//content/shell:content_shell") {
-      if (!defined(sources)) {
-        sources = []
-      }
-      sources += [
-        "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
-      ]
-    }
-    if (is_mac && is_debug) {
-      update_target("//content/shell:content_shell_app") {
-        if (!defined(sources)) {
-          sources = []
-        }
-        sources += [
-          "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
-        ]
-      }
-    }
-  }
 }
 
 if (!is_ios && !is_android) {
-  update_target("//headless:headless_non_renderer") {
-    sources += [
-      "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
-    ]
-  }
-
   update_target("//chrome/browser:browser") {
     sources += [
       "//vivaldi/components/crashreport/crashreport_accessor.cc",
@@ -302,7 +266,8 @@ update_target("//components/embedder_support:browser_util"){
   ]
   deps += [
     "//base/version_info:generate_version_info",
-    "//vivaldi/base:edge_version"
+    "//vivaldi/base:edge_version",
+    "//vivaldi/components:user_agent",
   ]
 }
 
@@ -310,11 +275,34 @@ update_target("//third_party/blink/common:common") {
   sources += [ "//vivaldi/components/blink/vivaldi_user_agent_metadata.cc" ]
 }
 
+update_target("//components/input:input") {
+  sources += [
+    "//vivaldi/components/input/vivaldi_render_input_router.cc",
+  ]
+}
+
 if (is_win) {
   update_target("//sandbox/win:sandbox") {
     sources += [
       "//vivaldi/components/sandbox/vivaldi_module_name.cc",
       "//vivaldi/components/sandbox/vivaldi_module_name.h",
+    ]
+  }
+}
+
+if (is_linux && !is_android) {
+  update_target("//sandbox/linux:sandbox_services") {
+    sources += [
+      "//vivaldi/sandbox/linux/services/flatpak_pid_map.cc",
+      "//vivaldi/sandbox/linux/services/flatpak_pid_map.h",
+      "//vivaldi/sandbox/linux/services/flatpak_sandbox.cc",
+      "//vivaldi/sandbox/linux/services/flatpak_sandbox.h"
+    ]
+  }
+
+  update_target("//content/zygote:zygote") {
+    sources += [
+      "//vivaldi/content/zygote/zygote_linux_utils.cc"
     ]
   }
 }

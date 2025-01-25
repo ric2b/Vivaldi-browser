@@ -190,7 +190,7 @@ class TesterForType {
         break;
       default:
         // Add support as needed.
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -1147,10 +1147,9 @@ TEST_P(IndexedHostContentSettingsMapTest, IncognitoDontInheritContentSetting) {
             otr_map->GetContentSetting(
                 host, host, ContentSettingsType::TOP_LEVEL_TPCD_ORIGIN_TRIAL));
 
-  map->SetContentSettingCustomScope(
-      ContentSettingsPattern::FromURLNoWildcard(host),
-      ContentSettingsPattern::FromURLNoWildcard(host),
-      ContentSettingsType::TOP_LEVEL_TPCD_ORIGIN_TRIAL, CONTENT_SETTING_BLOCK);
+  map->SetContentSettingDefaultScope(
+      host, GURL(), ContentSettingsType::TOP_LEVEL_TPCD_ORIGIN_TRIAL,
+      CONTENT_SETTING_BLOCK);
 
   // The setting is not inherited by |otr_map|.
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
@@ -1930,20 +1929,6 @@ TEST_P(IndexedHostContentSettingsMapTest, GetPatternsFromScopingType) {
   EXPECT_EQ(settings[0].secondary_pattern, ContentSettingsPattern::Wildcard());
 
   // Testing cases:
-  //   WebsiteSettingsInfo::REQUESTING_AND_TOP_ORIGIN_SCOPE,
-  host_content_settings_map->SetContentSettingDefaultScope(
-      primary_url, secondary_url, ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS,
-      CONTENT_SETTING_ALLOW);
-
-  settings = host_content_settings_map->GetSettingsForOneType(
-      ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS);
-
-  EXPECT_EQ(settings[0].primary_pattern,
-            ContentSettingsPattern::FromURLNoWildcard(primary_url));
-  EXPECT_EQ(settings[0].secondary_pattern,
-            ContentSettingsPattern::FromURLNoWildcard(secondary_url));
-
-  // Testing cases:
   //   WebsiteSettingsInfo::REQUESTING_ORIGIN_AND_TOP_SCHEMEFUL_SITE_SCOPE,
   host_content_settings_map->SetContentSettingDefaultScope(
       primary_url, secondary_url, ContentSettingsType::TPCD_TRIAL,
@@ -2016,17 +2001,6 @@ TEST_P(IndexedHostContentSettingsMapTest, GetPatternsForContentSettingsType) {
   EXPECT_EQ(patterns.first,
             ContentSettingsPattern::FromURLToSchemefulSitePattern(primary_url));
   EXPECT_EQ(patterns.second, ContentSettingsPattern::Wildcard());
-
-  // Testing cases:
-  //   WebsiteSettingsInfo::REQUESTING_AND_TOP_ORIGIN_SCOPE,
-  patterns = HostContentSettingsMap::GetPatternsForContentSettingsType(
-      primary_url, secondary_url,
-      ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS);
-
-  EXPECT_EQ(patterns.first,
-            ContentSettingsPattern::FromURLNoWildcard(primary_url));
-  EXPECT_EQ(patterns.second,
-            ContentSettingsPattern::FromURLNoWildcard(secondary_url));
 
   // Testing cases:
   //   WebsiteSettingsInfo::REQUESTING_ORIGIN_AND_TOP_SCHEMEFUL_SITE_SCOPE,

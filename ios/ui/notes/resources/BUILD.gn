@@ -33,3 +33,17 @@ imageset("sort_order_icon") {
     "sort_order_icon.imageset/sort_order_icon_dark.pdf",
     ]
 }
+
+imageset("markdown_toggle_on") {
+  sources = [
+    "markdown_toggle_on.imageset/Contents.json",
+    "markdown_toggle_on.imageset/markdown_toggle_on.pdf"
+    ]
+}
+
+imageset("markdown_toggle_off") {
+  sources = [
+    "markdown_toggle_off.imageset/Contents.json",
+    "markdown_toggle_off.imageset/markdown_toggle_off.pdf"
+    ]
+}

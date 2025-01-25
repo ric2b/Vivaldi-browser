@@ -23,7 +23,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/permissions/chip_controller.h"
+#include "chrome/browser/ui/views/permissions/chip/chip_controller.h"
 #include "chrome/browser/ui/views/permissions/permission_prompt_bubble_base_view.h"
 #include "chrome/browser/ui/views/permissions/permission_prompt_chip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
@@ -60,6 +60,7 @@
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/test/ax_event_counter.h"
 #include "ui/views/test/button_test_api.h"
+#include "url/gurl.h"
 
 // To run the pixel tests of this file run: browser_tests
 // --gtest_filter=BrowserUiTest.Invoke --test-launcher-interactive
@@ -128,7 +129,8 @@ class PermissionPromptBubbleBaseViewBrowserTest : public DialogBrowserTest {
     base::RunLoop().RunUntilIdle();
   }
 
-  static GURL GetTestUrl() { return GURL("https://example.com"); }
+  GURL GetTestUrl() { return test_url_; }
+  void SetTestUrl(GURL test_url) { test_url_ = test_url; }
 
   content::RenderFrameHost* GetActiveMainFrame() {
     return browser()
@@ -153,6 +155,7 @@ class PermissionPromptBubbleBaseViewBrowserTest : public DialogBrowserTest {
   }
 
   test::PermissionRequestManagerTestApi& GetTestApi() { return *test_api_; }
+  void SetEmbeddingOrigin(const GURL& origin) { embedding_origin_ = origin; }
 
  private:
   permissions::PermissionRequest* MakeRegisterProtocolHandlerRequest() {
@@ -203,8 +206,7 @@ class PermissionPromptBubbleBaseViewBrowserTest : public DialogBrowserTest {
     // fails. We need a fixed URL, so the Gold image used in the pixel test
     // always matches with the output of the test.
     if (it->type == ContentSettingsType::STORAGE_ACCESS) {
-      test_api_->manager()->set_embedding_origin_for_testing(
-          GURL("https://www.origin.test.com"));
+      test_api_->manager()->set_embedding_origin_for_testing(embedding_origin_);
     }
 
     switch (it->type) {
@@ -252,6 +254,8 @@ class PermissionPromptBubbleBaseViewBrowserTest : public DialogBrowserTest {
 
   base::test::ScopedFeatureList feature_list_;
   std::unique_ptr<test::PermissionRequestManagerTestApi> test_api_;
+  GURL embedding_origin_ = GURL("https://www.origin.test.com");
+  GURL test_url_ = GURL("https://example.com");
 };
 
 // Flaky on Mac: http://crbug.com/1502621
@@ -649,5 +653,71 @@ class PermissionPromptBubbleBaseViewAllowWhileVisitingFirstBrowserTest
 IN_PROC_BROWSER_TEST_F(
     PermissionPromptBubbleBaseViewAllowWhileVisitingFirstBrowserTest,
     InvokeUi_geolocation) {
+  ShowAndVerifyUi();
+}
+
+class LongOriginPermissionPromptBubbleBaseViewBrowserTest
+    : public PermissionPromptBubbleBaseViewBrowserTest {
+ public:
+  void SetUpOnMainThread() override {
+    PermissionPromptBubbleBaseViewBrowserTest::SetUpOnMainThread();
+    SetOrigin(long_origin_);
+    SetTestUrl(long_origin_);
+  }
+
+  void SetOrigin(const GURL& origin) { GetTestApi().SetOrigin(origin); }
+
+  GURL long_origin_ = GURL(
+      "https://"
+      "example.example.example.example.example.example.example.example."
+      "example.example.example.example.example.example.example.example."
+      "example.example.example.example.example.example.example.example."
+      "example.example.example.example.example.example.example.example."
+      "example.example.example.examp");
+};
+
+IN_PROC_BROWSER_TEST_F(LongOriginPermissionPromptBubbleBaseViewBrowserTest,
+                       InvokeUi_geolocation) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(LongOriginPermissionPromptBubbleBaseViewBrowserTest,
+                       InvokeUi_notifications) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(LongOriginPermissionPromptBubbleBaseViewBrowserTest,
+                       InvokeUi_mic) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(LongOriginPermissionPromptBubbleBaseViewBrowserTest,
+                       InvokeUi_camera) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(LongOriginPermissionPromptBubbleBaseViewBrowserTest,
+                       InvokeUi_protocol_handlers) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(LongOriginPermissionPromptBubbleBaseViewBrowserTest,
+                       InvokeUi_midi) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(LongOriginPermissionPromptBubbleBaseViewBrowserTest,
+                       InvokeUi_storage_access) {
+  SetEmbeddingOrigin(long_origin_);
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(LongOriginPermissionPromptBubbleBaseViewBrowserTest,
+                       InvokeUi_downloads) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(LongOriginPermissionPromptBubbleBaseViewBrowserTest,
+                       InvokeUi_multiple) {
   ShowAndVerifyUi();
 }

@@ -112,18 +112,6 @@ cros_events::PickerAction ConvertToCrosEventAction(
       return cros_events::PickerAction::OPEN_DATES_TIMES;
     case PickerCategory::kUnitsMaths:
       return cros_events::PickerAction::OPEN_UNITS_MATHS;
-    case PickerCategory::kUpperCase:
-      return cros_events::PickerAction::TRANSFORM_UPPER_CASE;
-    case PickerCategory::kLowerCase:
-      return cros_events::PickerAction::TRANSFORM_LOWER_CASE;
-    case PickerCategory::kSentenceCase:
-      return cros_events::PickerAction::TRANSFORM_SENTENCE_CASE;
-    case PickerCategory::kTitleCase:
-      return cros_events::PickerAction::TRANSFORM_TITLE_CASE;
-    case PickerCategory::kCapsOn:
-      return cros_events::PickerAction::CAPS_ON;
-    case PickerCategory::kCapsOff:
-      return cros_events::PickerAction::CAPS_OFF;
   }
 }
 
@@ -152,17 +140,8 @@ cros_events::PickerResultSource GetResultSource(
           [](const PickerSearchResult::EmojiData& data) {
             return cros_events::PickerResultSource::EMOJI;
           },
-          [](const PickerSearchResult::SymbolData& data) {
-            return cros_events::PickerResultSource::EMOJI;
-          },
-          [](const PickerSearchResult::EmoticonData& data) {
-            return cros_events::PickerResultSource::EMOJI;
-          },
           [](const PickerSearchResult::ClipboardData& data) {
             return cros_events::PickerResultSource::CLIPBOARD;
-          },
-          [](const PickerSearchResult::GifData& data) {
-            return cros_events::PickerResultSource::TENOR;
           },
           [](const PickerSearchResult::BrowsingHistoryData& data) {
             return cros_events::PickerResultSource::OMNIBOX;
@@ -182,6 +161,15 @@ cros_events::PickerResultSource GetResultSource(
           [](const PickerSearchResult::EditorData& data) -> ReturnType {
             NOTREACHED_NORETURN();
           },
+          [](const PickerSearchResult::NewWindowData& data) -> ReturnType {
+            return cros_events::PickerResultSource::UNKNOWN;
+          },
+          [](const PickerSearchResult::CapsLockData& data) -> ReturnType {
+            return cros_events::PickerResultSource::UNKNOWN;
+          },
+          [](const PickerSearchResult::CaseTransformData& data) -> ReturnType {
+            return cros_events::PickerResultSource::CASE_TRANSFORM;
+          },
       },
       result->data());
 }
@@ -198,13 +186,14 @@ cros_events::PickerResultType GetResultType(
             return cros_events::PickerResultType::TEXT;
           },
           [](const PickerSearchResult::EmojiData& data) {
-            return cros_events::PickerResultType::EMOJI;
-          },
-          [](const PickerSearchResult::SymbolData& data) {
-            return cros_events::PickerResultType::SYMBOL;
-          },
-          [](const PickerSearchResult::EmoticonData& data) {
-            return cros_events::PickerResultType::EMOTICON;
+            switch (data.type) {
+              case PickerSearchResult::EmojiData::Type::kEmoji:
+                return cros_events::PickerResultType::EMOJI;
+              case PickerSearchResult::EmojiData::Type::kSymbol:
+                return cros_events::PickerResultType::SYMBOL;
+              case PickerSearchResult::EmojiData::Type::kEmoticon:
+                return cros_events::PickerResultType::EMOTICON;
+            }
           },
           [](const PickerSearchResult::ClipboardData& data) {
             switch (data.display_format) {
@@ -217,9 +206,6 @@ cros_events::PickerResultType GetResultType(
               case PickerSearchResult::ClipboardData::DisplayFormat::kHtml:
                 return cros_events::PickerResultType::CLIPBOARD_HTML;
             }
-          },
-          [](const PickerSearchResult::GifData& data) {
-            return cros_events::PickerResultType::GIF;
           },
           [](const PickerSearchResult::BrowsingHistoryData& data) {
             return cros_events::PickerResultType::LINK;
@@ -239,6 +225,15 @@ cros_events::PickerResultType GetResultType(
           [](const PickerSearchResult::EditorData& data) -> ReturnType {
             NOTREACHED_NORETURN();
           },
+          [](const PickerSearchResult::NewWindowData& data) -> ReturnType {
+            return cros_events::PickerResultType::UNKNOWN;
+          },
+          [](const PickerSearchResult::CapsLockData& data) -> ReturnType {
+            return cros_events::PickerResultType::UNKNOWN;
+          },
+          [](const PickerSearchResult::CaseTransformData& data) -> ReturnType {
+            return cros_events::PickerResultType::TEXT;
+          },
       },
       result->data());
 }
@@ -257,16 +252,16 @@ void PickerSessionMetrics::SetOutcome(SessionOutcome outcome) {
   }
 }
 
-void PickerSessionMetrics::SetAction(PickerCategory action) {
-  if (!action_.has_value()) {
-    action_ = action;
+void PickerSessionMetrics::SetSelectedCategory(PickerCategory category) {
+  if (!last_category_.has_value()) {
+    last_category_ = category;
   }
 }
 
-void PickerSessionMetrics::SetInsertedResult(PickerSearchResult inserted_result,
+void PickerSessionMetrics::SetSelectedResult(PickerSearchResult selected_result,
                                              int index) {
-  if (!inserted_result_.has_value()) {
-    inserted_result_ = std::move(inserted_result);
+  if (!selected_result_.has_value()) {
+    selected_result_ = std::move(selected_result);
     result_index_ = index;
   }
 }
@@ -290,9 +285,9 @@ void PickerSessionMetrics::OnFinishSession() {
   metrics::structured::StructuredMetricsClient::Record(
       cros_events::Picker_FinishSession()
           .SetOutcome(ConvertToCrosEventSessionOutcome(outcome_))
-          .SetAction(ConvertToCrosEventAction(action_))
-          .SetResultSource(GetResultSource(std::move(inserted_result_)))
-          .SetResultType(GetResultType(std::move(inserted_result_)))
+          .SetAction(ConvertToCrosEventAction(last_category_))
+          .SetResultSource(GetResultSource(std::move(selected_result_)))
+          .SetResultType(GetResultType(std::move(selected_result_)))
           .SetTotalEdits(search_query_total_edits_)
           .SetFinalQuerySize(search_query_length_)
           .SetResultIndex(result_index_));

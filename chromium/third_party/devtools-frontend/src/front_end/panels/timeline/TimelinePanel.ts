@@ -43,11 +43,9 @@ import type * as Protocol from '../../generated/protocol.js';
 import type * as TimelineModel from '../../models/timeline_model/timeline_model.js';
 import * as TraceEngine from '../../models/trace/trace.js';
 import * as Workspace from '../../models/workspace/workspace.js';
-import * as AnnotationsManager from '../../services/annotations_manager/annotations_manager.js';
 import * as TraceBounds from '../../services/trace_bounds/trace_bounds.js';
 import * as Adorners from '../../ui/components/adorners/adorners.js';
 import type * as Buttons from '../../ui/components/buttons/buttons.js';
-import * as PanelFeedback from '../../ui/components/panel_feedback/panel_feedback.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
@@ -55,16 +53,19 @@ import * as MobileThrottling from '../mobile_throttling/mobile_throttling.js';
 
 import {ActiveFilters} from './ActiveFilters.js';
 import {TraceLoadEvent} from './BenchmarkEvents.js';
+import * as TimelineComponents from './components/components.js';
+import * as TimelineInsights from './components/insights/insights.js';
 import {SHOULD_SHOW_EASTER_EGG} from './EasterEgg.js';
 import {Tracker} from './FreshRecording.js';
 import historyToolbarButtonStyles from './historyToolbarButton.css.js';
 import {IsolateSelector} from './IsolateSelector.js';
-import {PerformanceModel} from './PerformanceModel.js';
+import {AnnotationModifiedEvent, ModificationsManager} from './ModificationsManager.js';
 import {cpuprofileJsonGenerator, traceJsonGenerator} from './SaveFileFormatter.js';
 import {NodeNamesUpdated, SourceMapsResolver} from './SourceMapsResolver.js';
 import {type Client, TimelineController} from './TimelineController.js';
 import {TimelineFlameChartView} from './TimelineFlameChartView.js';
 import {TimelineHistoryManager} from './TimelineHistoryManager.js';
+import {TimelineLandingPage} from './TimelineLandingPage.js';
 import {TimelineLoader} from './TimelineLoader.js';
 import {TimelineMiniMap} from './TimelineMiniMap.js';
 import timelinePanelStyles from './timelinePanel.css.js';
@@ -211,33 +212,6 @@ const UIStrings = {
    */
   bufferUsage: 'Buffer usage',
   /**
-   *@description Text for an option to learn more about something
-   */
-  learnmore: 'Learn more',
-  /**
-   *@description Text in Timeline Panel of the Performance panel
-   */
-  wasd: 'WASD',
-  /**
-   *@description Text in Timeline Panel of the Performance panel
-   *@example {record} PH1
-   *@example {Ctrl + R} PH2
-   */
-  clickTheRecordButtonSOrHitSTo: 'Click the record button {PH1} or hit {PH2} to start a new recording.',
-  /**
-   * @description Text in Timeline Panel of the Performance panel
-   * @example {reload button} PH1
-   * @example {Ctrl + R} PH2
-   */
-  clickTheReloadButtonSOrHitSTo: 'Click the reload button {PH1} or hit {PH2} to record the page load.',
-  /**
-   *@description Text in Timeline Panel of the Performance panel
-   *@example {Ctrl + U} PH1
-   *@example {Learn more} PH2
-   */
-  afterRecordingSelectAnAreaOf:
-      'After recording, select an area of interest in the overview by dragging. Then, zoom and pan the timeline with the mousewheel or {PH1} keys. {PH2}',
-  /**
    *@description Text in Timeline Panel of the Performance panel
    */
   loadingProfile: 'Loading profile…',
@@ -270,6 +244,25 @@ const UIStrings = {
    *@example {2.12} PH1
    */
   ssec: '{PH1} sec',
+  /**
+   *
+   * @description Text for exporting basic traces
+   */
+  exportNormalTraces: 'Basic Performance Traces',
+  /**
+   *
+   * @description Text for exporting enhanced traces
+   */
+  exportEnhancedTraces: 'Enhanced Performance Traces',
+  /**
+   *@description Tooltip description for a checkbox that toggles the visibility of data added by extensions of this panel (Performance).
+   */
+  showDataAddedByExtensions: 'Show data added by extensions of the Performance panel',
+  /**
+   Label for a checkbox that toggles the visibility of data added by extensions of this panel (Performance).
+   */
+  performanceExtension: 'Extension data',
+
 };
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/TimelinePanel.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -286,16 +279,17 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
   private readonly toggleRecordAction: UI.ActionRegistration.Action;
   private readonly recordReloadAction: UI.ActionRegistration.Action;
   readonly #historyManager: TimelineHistoryManager;
-  private performanceModel: PerformanceModel|null;
   private disableCaptureJSProfileSetting: Common.Settings.Setting<boolean>;
   private readonly captureLayersAndPicturesSetting: Common.Settings.Setting<boolean>;
   private readonly captureSelectorStatsSetting: Common.Settings.Setting<boolean>;
+  readonly #thirdPartyTracksSetting: Common.Settings.Setting<boolean>;
   private showScreenshotsSetting: Common.Settings.Setting<boolean>;
   private showMemorySetting: Common.Settings.Setting<boolean>;
   private readonly panelToolbar: UI.Toolbar.Toolbar;
   private readonly panelRightToolbar: UI.Toolbar.Toolbar;
   private readonly timelinePane: UI.Widget.VBox;
   readonly #minimapComponent = new TimelineMiniMap();
+  readonly #sideBar = new TimelineComponents.Sidebar.SidebarWidget();
   private readonly statusPaneContainer: HTMLElement;
   private readonly flameChart: TimelineFlameChartView;
   private readonly searchableViewInternal: UI.SearchableView.SearchableView;
@@ -325,12 +319,13 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     this.primaryPageTargetPromiseCallback = res;
   });
 
-  #traceEngineModel: TraceEngine.TraceModel.Model<typeof TraceEngine.Handlers.ModelHandlers>;
+  #traceEngineModel: TraceEngine.TraceModel.Model;
   // Tracks the index of the trace that the user is currently viewing.
   #traceEngineActiveTraceIndex = -1;
   #sourceMapsResolver: SourceMapsResolver|null = null;
   #onSourceMapsNodeNamesResolvedBound = this.#onSourceMapsNodeNamesResolved.bind(this);
   readonly #onChartPlayableStateChangeBound: (event: Common.EventTarget.EventTargetEvent<boolean>) => void;
+
   constructor() {
     super('timeline');
     const adornerContent = document.createElement('span');
@@ -370,7 +365,6 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
 
     this.#historyManager = new TimelineHistoryManager(this.#minimapComponent);
 
-    this.performanceModel = null;
     this.traceLoadStart = null;
 
     this.disableCaptureJSProfileSetting =
@@ -386,11 +380,15 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     this.showScreenshotsSetting =
         Common.Settings.Settings.instance().createSetting('timeline-show-screenshots', isNode ? false : true);
     this.showScreenshotsSetting.setTitle(i18nString(UIStrings.screenshots));
-    this.showScreenshotsSetting.addChangeListener(this.updateOverviewControls, this);
+    this.showScreenshotsSetting.addChangeListener(this.updateMiniMap, this);
 
     this.showMemorySetting = Common.Settings.Settings.instance().createSetting('timeline-show-memory', false);
     this.showMemorySetting.setTitle(i18nString(UIStrings.memory));
     this.showMemorySetting.addChangeListener(this.onModeChanged, this);
+
+    this.#thirdPartyTracksSetting = TimelinePanel.extensionDataVisibilitySetting();
+    this.#thirdPartyTracksSetting.addChangeListener(this.#extensionDataVisibilityChanged, this);
+    this.#thirdPartyTracksSetting.setTitle(i18nString(UIStrings.performanceExtension));
 
     const timelineToolbarContainer = this.element.createChild('div', 'timeline-toolbar-container');
     timelineToolbarContainer.setAttribute('jslog', `${VisualLogging.toolbar()}`);
@@ -402,11 +400,14 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
       this.updateShowSettingsToolbarButton();
     }
     this.timelinePane = new UI.Widget.VBox();
-    this.timelinePane.show(this.element);
     const topPaneElement = this.timelinePane.element.createChild('div', 'hbox');
     topPaneElement.id = 'timeline-overview-panel';
 
     this.#minimapComponent.show(topPaneElement);
+    this.#minimapComponent.addEventListener(
+        PerfUI.TimelineOverviewPane.Events.OpenSidebarButtonClicked,
+        this.#showSidebar.bind(this),
+    );
 
     this.statusPaneContainer = this.timelinePane.element.createChild('div', 'status-pane-container fill');
 
@@ -428,6 +429,29 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     this.flameChart.show(this.searchableViewInternal.element);
     this.flameChart.setSearchableView(this.searchableViewInternal);
     this.searchableViewInternal.hideWidget();
+
+    this.#sideBar.setMainWidget(this.timelinePane);
+    this.#sideBar.show(this.element);
+    this.#sideBar.hideSidebar();
+
+    this.#sideBar.addEventListener(
+        TimelineComponents.Sidebar.WidgetEvents.SidebarCollapseClick,
+        this.#hideSidebar.bind(this),
+    );
+
+    this.#sideBar.contentElement.addEventListener(TimelineInsights.SidebarInsight.InsightDeactivated.eventName, () => {
+      this.#setActiveInsight(null);
+    });
+
+    this.#sideBar.contentElement.addEventListener(TimelineInsights.SidebarInsight.InsightActivated.eventName, event => {
+      const {name, navigationId, createOverlayFn} = event;
+      this.#setActiveInsight({name, navigationId, createOverlayFn});
+    });
+
+    this.#sideBar.contentElement.addEventListener(TimelineComponents.Sidebar.RemoveAnnotation.eventName, event => {
+      const {removedAnnotation} = (event as TimelineComponents.Sidebar.RemoveAnnotation);
+      ModificationsManager.activeManager()?.removeAnnotation(removedAnnotation);
+    });
 
     this.onModeChanged();
     this.populateToolbar();
@@ -465,6 +489,30 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     });
   }
 
+  #showSidebar(): void {
+    if (!Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_SIDEBAR)) {
+      return;
+    }
+    this.#sideBar.showBoth();
+    this.#sideBar.updateContentsOnExpand();
+    this.#sideBar.setResizable(false);
+
+    this.#minimapComponent.hideSidebarFloatingIcon();
+  }
+
+  #hideSidebar(): void {
+    if (!Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_SIDEBAR)) {
+      return;
+    }
+    this.#minimapComponent.showSidebarFloatingIcon();
+    this.#sideBar.hideSidebar();
+  }
+
+  #setActiveInsight(insight: TimelineComponents.Sidebar.ActiveInsight|null): void {
+    this.#sideBar.setActiveInsight(insight);
+    this.flameChart.setActiveInsight(insight);
+  }
+
   static instance(opts: {
     forceNew: boolean|null,
     isNode: boolean,
@@ -479,6 +527,11 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     return timelinePanelInstance;
   }
 
+  static extensionDataVisibilitySetting(): Common.Settings.Setting<boolean> {
+    // Calling this multiple times doesn't recreate the setting.
+    // Instead, after the second call, the cached setting is returned.
+    return Common.Settings.Settings.instance().createSetting('timeline-show-extension-data', true);
+  }
   override searchableView(): UI.SearchableView.SearchableView|null {
     return this.searchableViewInternal;
   }
@@ -496,7 +549,7 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     this.#historyManager.cancelIfShowing();
   }
 
-  loadFromEvents(events: TraceEngine.TracingManager.EventPayload[]): void {
+  loadFromEvents(events: TraceEngine.Types.TraceEvents.TraceEventData[]): void {
     if (this.state !== State.Idle) {
       return;
     }
@@ -533,7 +586,7 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
    * @deprecated
    **/
   getTraceEngineRawTraceEventsForLayoutTests(): readonly TraceEngine.Types.TraceEvents.TraceEventData[] {
-    const data = this.#traceEngineModel.traceEvents(this.#traceEngineActiveTraceIndex);
+    const data = this.#traceEngineModel.rawTraceEvents(this.#traceEngineActiveTraceIndex);
     if (data === null) {
       throw new Error('No trace engine data found.');
     }
@@ -556,12 +609,12 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     }
   }
 
-  private loadFromCpuProfile(profile: Protocol.Profiler.Profile|null, title?: string): void {
+  private loadFromCpuProfile(profile: Protocol.Profiler.Profile|null): void {
     if (this.state !== State.Idle || profile === null) {
       return;
     }
     this.prepareToLoadTimeline();
-    this.loader = TimelineLoader.loadFromCpuProfile(profile, this, title);
+    this.loader = TimelineLoader.loadFromCpuProfile(profile, this);
   }
 
   private setState(state: State): void {
@@ -596,6 +649,28 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.PerfPanelTraceExported);
       void this.saveToFile();
     });
+
+    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_ENHANCED_TRACES)) {
+      this.saveButton.element.addEventListener('contextmenu', event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (event.ctrlKey || event.button === 2) {
+          const contextMenu = new UI.ContextMenu.ContextMenu(event);
+          contextMenu.saveSection().appendItem(i18nString(UIStrings.exportNormalTraces), () => {
+            void this.saveToFile();
+          });
+          contextMenu.saveSection().appendItem(i18nString(UIStrings.exportEnhancedTraces), () => {
+            void this.saveToFile(/* isEnhancedTraces */ true);
+          });
+
+          void contextMenu.show();
+        } else {
+          void this.saveToFile();
+        }
+      });
+    }
+
     this.panelToolbar.appendSeparator();
     this.panelToolbar.appendToolbarItem(this.loadButton);
     this.panelToolbar.appendToolbarItem(this.saveButton);
@@ -639,7 +714,8 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     this.showSettingsPaneSetting =
         Common.Settings.Settings.instance().createSetting('timeline-show-settings-toolbar', false);
     this.showSettingsPaneButton = new UI.Toolbar.ToolbarSettingToggle(
-        this.showSettingsPaneSetting, 'gear', i18nString(UIStrings.captureSettings), 'gear-filled');
+        this.showSettingsPaneSetting, 'gear', i18nString(UIStrings.captureSettings), 'gear-filled',
+        'timeline-settings-toggle');
     SDK.NetworkManager.MultitargetNetworkManager.instance().addEventListener(
         SDK.NetworkManager.MultitargetNetworkManager.Events.ConditionsChanged, this.updateShowSettingsToolbarButton,
         this);
@@ -653,6 +729,8 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
 
     this.settingsPane = new UI.Widget.HBox();
     this.settingsPane.element.classList.add('timeline-settings-pane');
+    this.settingsPane.element.setAttribute(
+        'jslog', `${VisualLogging.pane('timeline-settings-pane').track({resize: true})}`);
     this.settingsPane.show(this.element);
 
     const captureToolbar = new UI.Toolbar.Toolbar('', this.settingsPane.element);
@@ -683,6 +761,12 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     hardwareConcurrencyPane.element.classList.add('flex-auto');
     hardwareConcurrencyPane.show(this.settingsPane.element);
 
+    const thirdPartyToolbar = new UI.Toolbar.Toolbar('', this.settingsPane.element);
+    thirdPartyToolbar.element.classList.add('flex-auto');
+    thirdPartyToolbar.makeVertical();
+    thirdPartyToolbar.appendToolbarItem(
+        this.createSettingCheckbox(this.#thirdPartyTracksSetting, i18nString(UIStrings.showDataAddedByExtensions)));
+
     const {toggle, input, reset, warning} =
         MobileThrottling.ThrottlingManager.throttlingManager().createHardwareConcurrencySelector();
     const concurrencyThrottlingToolbar = new UI.Toolbar.Toolbar('', hardwareConcurrencyPane.element);
@@ -708,16 +792,15 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
   private prepareToLoadTimeline(): void {
     console.assert(this.state === State.Idle);
     this.setState(State.Loading);
-    if (this.performanceModel) {
-      this.performanceModel = null;
-    }
   }
 
   private createFileSelector(): void {
     if (this.fileSelectorElement) {
       this.fileSelectorElement.remove();
     }
-    this.fileSelectorElement = UI.UIUtils.createFileSelectorElement(this.loadFromFile.bind(this));
+    // .gz is far more popular than .gzip, but both are valid.
+    this.fileSelectorElement =
+        UI.UIUtils.createFileSelectorElement(this.loadFromFile.bind(this), '.json,.gz,.gzip,.cpuprofile');
     this.timelinePane.element.appendChild(this.fileSelectorElement);
   }
 
@@ -732,20 +815,18 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     void contextMenu.show();
   }
 
-  async saveToFile(): Promise<void> {
+  async saveToFile(isEnhancedTraces: boolean = false): Promise<void> {
     if (this.state !== State.Idle) {
       return;
     }
-    const performanceModel = this.performanceModel;
-    if (!performanceModel) {
-      return;
-    }
-
-    const traceEvents = this.#traceEngineModel.traceEvents(this.#traceEngineActiveTraceIndex);
+    const traceEvents = this.#traceEngineModel.rawTraceEvents(this.#traceEngineActiveTraceIndex);
     const metadata = this.#traceEngineModel.metadata(this.#traceEngineActiveTraceIndex);
-    // Save annotations into the metadata if annotations experiment is on
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.PERF_PANEL_ANNOTATIONS) && metadata) {
-      metadata.annotations = AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance()?.getAnnotations();
+    // Save modifications into the metadata if modifications experiment is on
+    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_ANNOTATIONS_OVERLAYS) && metadata) {
+      metadata.modifications = ModificationsManager.activeManager()?.toJSON();
+    }
+    if (metadata && isEnhancedTraces) {
+      metadata.enhancedTraceVersion = TraceEngine.Handlers.ModelHandlers.EnhancedTraces.EnhancedTracesVersion;
     }
     if (!traceEvents) {
       return;
@@ -755,6 +836,8 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     let fileName: Platform.DevToolsPath.RawPathString;
     if (metadata?.dataOrigin === TraceEngine.Types.File.DataOrigin.CPUProfile) {
       fileName = `CPU-${traceStart}.cpuprofile` as Platform.DevToolsPath.RawPathString;
+    } else if (metadata && metadata.enhancedTraceVersion) {
+      fileName = `EnhancedTraces-${traceStart}.json` as Platform.DevToolsPath.RawPathString;
     } else {
       fileName = `Trace-${traceStart}.json` as Platform.DevToolsPath.RawPathString;
     }
@@ -800,26 +883,26 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
   }
 
   async showHistory(): Promise<void> {
-    this.#saveAnnotationsForActiveTrace();
     const recordingData = await this.#historyManager.showHistoryDropDown();
+    this.#saveModificationsForActiveTrace();
     if (recordingData && recordingData.traceParseDataIndex !== this.#traceEngineActiveTraceIndex) {
-      this.setModel(null, /* exclusiveFilter= */ null, recordingData.traceParseDataIndex);
+      this.setModel(recordingData.traceParseDataIndex);
     }
   }
 
   navigateHistory(direction: number): boolean {
-    this.#saveAnnotationsForActiveTrace();
+    this.#saveModificationsForActiveTrace();
     const recordingData = this.#historyManager.navigate(direction);
     if (recordingData && recordingData.traceParseDataIndex !== this.#traceEngineActiveTraceIndex) {
-      this.setModel(null, /* exclusiveFilter= */ null, recordingData.traceParseDataIndex);
+      this.setModel(recordingData.traceParseDataIndex);
     }
     return true;
   }
 
-  #saveAnnotationsForActiveTrace(): void {
-    const newAnnotations = AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance()?.getAnnotations();
-    if (newAnnotations) {
-      this.#traceEngineModel.overrideAnnotations(this.#traceEngineActiveTraceIndex, newAnnotations);
+  #saveModificationsForActiveTrace(): void {
+    const newModifications = ModificationsManager.activeManager()?.toJSON();
+    if (newModifications) {
+      this.#traceEngineModel.overrideModifications(this.#traceEngineActiveTraceIndex, newModifications);
     }
   }
 
@@ -846,7 +929,7 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     this.loader = await TimelineLoader.loadFromURL(url, this);
   }
 
-  private updateOverviewControls(): void {
+  private updateMiniMap(): void {
     const traceParsedData = this.#traceEngineModel.traceParsedData(this.#traceEngineActiveTraceIndex);
     const isCpuProfile = this.#traceEngineModel.metadata(this.#traceEngineActiveTraceIndex)?.dataOrigin ===
         TraceEngine.Types.File.DataOrigin.CPUProfile;
@@ -866,9 +949,13 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
 
   private onModeChanged(): void {
     this.flameChart.updateCountersGraphToggle(this.showMemorySetting.get());
-    this.updateOverviewControls();
+    this.updateMiniMap();
     this.doResize();
     this.select(null);
+  }
+
+  #extensionDataVisibilityChanged(): void {
+    this.flameChart.extensionDataVisibilityChanged();
   }
 
   private updateSettingsPaneVisibility(): void {
@@ -876,8 +963,10 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
       return;
     }
     if (this.showSettingsPaneSetting.get()) {
+      this.showSettingsPaneButton.setToggled(true);
       this.settingsPane.showWidget();
     } else {
+      this.showSettingsPaneButton.setToggled(false);
       this.settingsPane.hideWidget();
     }
   }
@@ -1064,7 +1153,7 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
   }
 
   private async startRecording(): Promise<void> {
-    this.#saveAnnotationsForActiveTrace();
+    this.#saveModificationsForActiveTrace();
     console.assert(!this.statusPane, 'Status pane is already opened.');
     this.setState(State.StartPending);
     this.showRecordingStarted();
@@ -1084,7 +1173,6 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     }
     this.setState(State.StopPending);
     if (this.controller) {
-      this.performanceModel = this.controller.getPerformanceModel();
       await this.controller.stopRecording();
       this.setUIControlsEnabled(true);
       await this.controller.dispose();
@@ -1121,7 +1209,6 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
           this.statusPane?.remove();
           await this.loadingComplete(
               /* no collectedEvents */[],
-              /* tracingModel= */ null,
               /* exclusiveFilter= */ null,
               /* isCpuProfile= */ false,
               /* recordingStartTime= */ null,
@@ -1135,7 +1222,6 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     }
 
     this.setState(State.RecordingFailed);
-    this.performanceModel = null;
     this.traceLoadStart = null;
     this.setUIControlsEnabled(true);
     if (this.controller) {
@@ -1151,7 +1237,7 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
   }
 
   private consoleProfileFinished(data: SDK.CPUProfilerModel.ProfileFinishedData): void {
-    this.loadFromCpuProfile(data.cpuProfile, data.title);
+    this.loadFromCpuProfile(data.cpuProfile);
     void UI.InspectorView.InspectorView.instance().showPanel('timeline');
   }
 
@@ -1165,7 +1251,7 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     this.panelRightToolbar.setEnabled(this.state !== State.Loading);
     this.dropTarget.setEnabled(this.state === State.Idle);
     this.loadButton.setEnabled(this.state === State.Idle);
-    this.saveButton.setEnabled(this.state === State.Idle && Boolean(this.performanceModel));
+    this.saveButton.setEnabled(this.state === State.Idle && this.#hasActiveTrace());
   }
 
   async toggleRecording(): Promise<void> {
@@ -1192,8 +1278,12 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     this.clear();
   }
 
+  #hasActiveTrace(): boolean {
+    return this.#traceEngineActiveTraceIndex > -1;
+  }
+
   private onFixMe(): void {
-    if (!this.performanceModel) {
+    if (!this.#hasActiveTrace()) {
       return;
     }
     this.flameChart.fixMe();
@@ -1215,7 +1305,7 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
       this.#sourceMapsResolver.uninstall();
       this.#sourceMapsResolver = null;
     }
-    this.setModel(null);
+    this.setModel(-1);
   }
 
   #applyActiveFilters(
@@ -1232,65 +1322,100 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
     ActiveFilters.instance().setFilters(newActiveFilters);
   }
 
-  applyFilters(
-      _perfModel: PerformanceModel|null,
-      exclusiveFilter: TimelineModel.TimelineModelFilter.TimelineModelFilter|null = null): void {
-    // TODO: this method is maintained purely for a set of layout tests that
-    // use it. Once these tests have been replaced or migrated into DevTools
-    // unit tests, we can remove this applyFilters() method.
-    // http/tests/devtools/a11y-axe-core/performance/performance-pane-a11y-test.js
-    // http/tests/devtools/a11y-axe-core/performance/performance_event_log_a11y_test.js
-    // http/tests/devtools/tracing/category-filter.js
-    // http/tests/devtools/tracing/timeline-js/timeline-open-function-call.js
-    // http/tests/devtools/tracing/timeline-misc/timeline-filtering-self-time.js
-    // http/tests/devtools/tracing/timeline-misc/timeline-filtering.js
-    this.#applyActiveFilters(false, exclusiveFilter);
-  }
-
+  /**
+   * Called when we update the active trace that is being shown to the user.
+   * This is called from {@see loadingComplete} when a trace is
+   * imported/recorded, but it can also be called when the user uses the history
+   * dropdown.
+   *
+   * If you need code to execute whenever the active trace changes, this is the method to use.
+   * If you need code to execute ONLY ON NEW TRACES, then use {@see loadingComplete}
+   */
   setModel(
-      model: PerformanceModel|null, exclusiveFilter: TimelineModel.TimelineModelFilter.TimelineModelFilter|null = null,
-      traceEngineIndex: number = -1): void {
-    this.performanceModel = model;
+      traceEngineIndex: number,
+      exclusiveFilter: TimelineModel.TimelineModelFilter.TimelineModelFilter|null = null,
+      ): void {
+    // Before loading a new trace, update modifications of the previous one
+    this.#saveModificationsForActiveTrace();
+
     this.#traceEngineActiveTraceIndex = traceEngineIndex;
     const traceParsedData = this.#traceEngineModel.traceParsedData(this.#traceEngineActiveTraceIndex);
     const isCpuProfile = this.#traceEngineModel.metadata(this.#traceEngineActiveTraceIndex)?.dataOrigin ===
         TraceEngine.Types.File.DataOrigin.CPUProfile;
-    const annotations = this.#traceEngineModel.metadata(this.#traceEngineActiveTraceIndex)?.annotations;
 
     this.#minimapComponent.reset();
     // Order is important: the bounds must be set before we initiate any UI
-    // rendering.
+    // rendering. This is why we pull this out into its own block.
     if (traceParsedData) {
       TraceBounds.TraceBounds.BoundsManager.instance().resetWithNewBounds(
           traceParsedData.Meta.traceBounds,
       );
-
-      // Since we have a single instance to AnnotationsManager, combine both SyntheticEvent to Node maps
-      const samplesAndRendererEventsEntryToNodeMap =
-          new Map([...traceParsedData.Samples.entryToNode, ...traceParsedData.Renderer.entryToNode]);
-      // If the annotations experiment is on and there are some annotations saved, apply the annotations from the file.
-      // We create AnnotationsManager regardless of the experiment because the EntriesFilterer initiated in the AnnotationsManager
-      // needs to work even if the experiment is off.
-      const traceBounds = TraceBounds.TraceBounds.BoundsManager.instance().state();
-      AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance({
-        entryToNodeMap: samplesAndRendererEventsEntryToNodeMap,
-        wholeTraceBounds: traceBounds?.micro.entireTraceBounds,
-      });
-      if (annotations) {
-        AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance()?.applyAnnotations(annotations);
-      }
-
-      this.#applyActiveFilters(traceParsedData.Meta.traceIsGeneric, exclusiveFilter);
     }
+
+    this.flameChart.setModel(traceParsedData, isCpuProfile);
+    this.flameChart.resizeToPreferredHeights();
+    // Reset the visual selection as we've just swapped to a new trace.
+    this.flameChart.setSelection(null);
+    this.#sideBar.setTraceParsedData(traceParsedData);
+
+    // Hide/show the searchable UI depending on if we have a trace active or not.
+    // Also apply any filters to the data.
     if (traceParsedData) {
       this.searchableViewInternal.showWidget();
+      this.#applyActiveFilters(traceParsedData.Meta.traceIsGeneric, exclusiveFilter);
     } else {
       this.searchableViewInternal.hideWidget();
+    }
+
+    // Set up the modifications manager for the newly active trace.
+    if (traceParsedData) {
+      const currentManager = ModificationsManager.initAndActivateModificationsManager(
+          this.#traceEngineModel, this.#traceEngineActiveTraceIndex);
+      if (!currentManager) {
+        console.error('ModificationsManager could not be created or activated.');
+      }
+
+      // Add ModificationsManager listeners for annotations change to update the Annotation Overlays.
+      currentManager?.addEventListener(AnnotationModifiedEvent.eventName, event => {
+        const {overlay, action} = (event as AnnotationModifiedEvent);
+        if (action === 'Add') {
+          this.flameChart.addOverlay(overlay);
+        } else if (action === 'Remove') {
+          this.flameChart.removeOverlay(overlay);
+        }
+        this.#sideBar.setAnnotationsTabContent(currentManager.getAnnotations());
+      });
+
+      // Create breadcrumbs.
+      if (this.#minimapComponent.breadcrumbsActivated) {
+        this.#minimapComponent.addInitialBreadcrumb();
+      }
+
+      // To calculate the activity we might want to zoom in, we use the top-most main-thread track
+      const topMostMainThreadAppender =
+          this.flameChart.getMainDataProvider().compatibilityTracksAppenderInstance().threadAppenders().at(0);
+      if (topMostMainThreadAppender) {
+        const zoomedInBounds = TraceEngine.Extras.MainThreadActivity.calculateWindow(
+            traceParsedData.Meta.traceBounds, topMostMainThreadAppender.getEntries());
+
+        TraceBounds.TraceBounds.BoundsManager.instance().setTimelineVisibleWindow(zoomedInBounds);
+      }
+    }
+
+    if (!traceParsedData) {
+      // Hide the brick-breaker easter egg
       this.fixMeButtonAdded = false;
       this.panelToolbar.removeToolbarItem(this.fixMeButton);
     }
-    this.flameChart.setModel(traceParsedData, isCpuProfile);
-    this.flameChart.setSelection(null);
+
+    // Add overlays for annotations loaded from the trace file
+    const currModificationManager = ModificationsManager.activeManager();
+    if (currModificationManager) {
+      currModificationManager.getOverlays().forEach(overlay => {
+        this.flameChart.addOverlay(overlay);
+      });
+      this.#sideBar.setAnnotationsTabContent(currModificationManager.getAnnotations());
+    }
 
     // Set up line level profiling with CPU profiles, if we found any.
     PerfUI.LineLevelProfile.Performance.instance().reset();
@@ -1307,35 +1432,15 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
       }
     }
 
-    this.updateOverviewControls();
-    if (this.flameChart) {
-      this.flameChart.resizeToPreferredHeights();
-    }
-
-    // Set the initial zoom and if we are using breadcrumbs, create the initial breadcrum.
-    // We expect traceParsedData to always exist, this check is to keep TS happy.
-    if (traceParsedData) {
-      if (this.#minimapComponent.breadcrumbsActivated) {
-        this.#minimapComponent.addInitialBreadcrumb();
-      }
-
-      // To calculate the activity we might want to zoom in, we find the last
-      // main thread. Or we find the CPU Profile thread, for e.g. Node traces.
-      const mainThreadTypes = [
-        TraceEngine.Handlers.Threads.ThreadType.MAIN_THREAD,
-        TraceEngine.Handlers.Threads.ThreadType.CPU_PROFILE,
-      ];
-      const lastMainThread = TraceEngine.Handlers.Threads.threadsInTrace(traceParsedData)
-                                 .filter(data => mainThreadTypes.includes(data.type))
-                                 .at(-1);
-      if (lastMainThread) {
-        const zoomedInBounds = TraceEngine.Extras.MainThreadActivity.calculateWindow(
-            traceParsedData.Meta.traceBounds, lastMainThread.entries);
-
-        TraceBounds.TraceBounds.BoundsManager.instance().setTimelineVisibleWindow(zoomedInBounds);
-      }
-    }
+    this.updateMiniMap();
     this.updateTimelineControls();
+
+    const traceInsightsData = this.#traceEngineModel.traceInsights(this.#traceEngineActiveTraceIndex);
+    if (traceInsightsData) {
+      this.flameChart.setInsights(traceInsightsData);
+      this.#sideBar.setInsights(traceInsightsData);
+      this.#setActiveInsight(null);
+    }
   }
 
   private recordingStarted(config?: {navigateToUrl: Platform.DevToolsPath.UrlString}): void {
@@ -1374,60 +1479,13 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
 
   private showLandingPage(): void {
     this.updateSettingsPaneVisibility();
+    this.#hideSidebar();
     if (this.landingPage) {
       this.landingPage.show(this.statusPaneContainer);
       return;
     }
 
-    function encloseWithTag(tagName: string, contents: string): HTMLElement {
-      const e = document.createElement(tagName);
-      e.textContent = contents;
-      return e;
-    }
-
-    const learnMoreNode = UI.XLink.XLink.create(
-        'https://developer.chrome.com/docs/devtools/evaluate-performance/', i18nString(UIStrings.learnmore), undefined,
-        undefined, 'learn-more');
-
-    const recordKey = encloseWithTag(
-        'b',
-        UI.ShortcutRegistry.ShortcutRegistry.instance().shortcutsForAction('timeline.toggle-recording')[0].title());
-    const reloadKey = encloseWithTag(
-        'b', UI.ShortcutRegistry.ShortcutRegistry.instance().shortcutsForAction('timeline.record-reload')[0].title());
-    const navigateNode = encloseWithTag('b', i18nString(UIStrings.wasd));
-
-    this.landingPage = new UI.Widget.VBox();
-    this.landingPage.contentElement.classList.add('timeline-landing-page', 'fill');
-    const centered = this.landingPage.contentElement.createChild('div');
-
-    const recordButton = UI.UIUtils.createInlineButton(UI.Toolbar.Toolbar.createActionButton(this.toggleRecordAction));
-    const reloadButton =
-        UI.UIUtils.createInlineButton(UI.Toolbar.Toolbar.createActionButtonForId('timeline.record-reload'));
-
-    centered.createChild('p').appendChild(i18n.i18n.getFormatLocalizedString(
-        str_, UIStrings.clickTheRecordButtonSOrHitSTo, {PH1: recordButton, PH2: recordKey}));
-
-    centered.createChild('p').appendChild(i18n.i18n.getFormatLocalizedString(
-        str_, UIStrings.clickTheReloadButtonSOrHitSTo, {PH1: reloadButton, PH2: reloadKey}));
-
-    centered.createChild('p').appendChild(i18n.i18n.getFormatLocalizedString(
-        str_, UIStrings.afterRecordingSelectAnAreaOf, {PH1: navigateNode, PH2: learnMoreNode}));
-
-    if (isNode) {
-      const previewSection = new PanelFeedback.PanelFeedback.PanelFeedback();
-      previewSection.data = {
-        feedbackUrl: 'https://crbug.com/1354548' as Platform.DevToolsPath.UrlString,
-        quickStartUrl: 'https://goo.gle/js-profiler-deprecation' as Platform.DevToolsPath.UrlString,
-        quickStartLinkText: i18nString(UIStrings.learnmore),
-      };
-      centered.appendChild(previewSection);
-      const feedbackButton = new PanelFeedback.FeedbackButton.FeedbackButton();
-      feedbackButton.data = {
-        feedbackUrl: 'https://crbug.com/1354548' as Platform.DevToolsPath.UrlString,
-      };
-      centered.appendChild(feedbackButton);
-    }
-
+    this.landingPage = new TimelineLandingPage(this.toggleRecordAction, {isNode});
     this.landingPage.show(this.statusPaneContainer);
   }
 
@@ -1483,15 +1541,16 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
   /**
    * This is called with we are done loading a trace from a file, or after we
    * have recorded a fresh trace.
+   *
+   * IMPORTANT: All the code in here should be code that is only required when we have
+   * recorded or loaded a brand new trace. If you need the code to run when the
+   * user switches to an existing trace, please {@see setModel} and put your
+   * code in there.
    **/
   async loadingComplete(
       collectedEvents: TraceEngine.Types.TraceEvents.TraceEventData[],
-      tracingModel: TraceEngine.Legacy.TracingModel|null,
       exclusiveFilter: TimelineModel.TimelineModelFilter.TimelineModelFilter|null = null, isCpuProfile: boolean,
       recordingStartTime: number|null, metadata: TraceEngine.Types.File.MetaData|null): Promise<void> {
-    // Before loading a new trace, update annotations of the previous one
-    this.#saveAnnotationsForActiveTrace();
-
     this.#traceEngineModel.resetProcessor();
     SourceMapsResolver.clearResolvedNodeNames();
 
@@ -1505,56 +1564,52 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
 
     this.setState(State.Idle);
 
-    if (!tracingModel) {
-      this.clear();
+    if (collectedEvents.length === 0) {
+      // 0 collected events indicates probably an invalid file was imported.
+      // If the user does not have any already-loaded traces, then we should
+      // just reset the panel back to the landing page. However if they had a
+      // previous trace imported, we should go to that instead.
+      if (this.#traceEngineModel.size()) {
+        if (this.statusPane) {
+          this.statusPane.remove();
+        }
+        this.setModel(this.#traceEngineModel.lastTraceIndex());
+      } else {
+        this.clear();
+      }
       return;
-    }
-
-    if (!this.performanceModel) {
-      this.performanceModel = new PerformanceModel();
     }
 
     metadata = metadata ?
         metadata :
         await TraceEngine.Extras.Metadata.forNewRecording(isCpuProfile, recordingStartTime ?? undefined);
 
-    const enginePromises: Promise<void>[] = [
-      this.#executeNewTraceEngine(collectedEvents, recordingIsFresh, metadata),
-    ];
-
-    // An experiment added in April 2024 that is ENABLED BY DEFAULT
-    // To aid us in spotting bugs as we turn down and remove usage of the legacy engine.
-    // TODO(crbug.com/40287735): remove this experiment and remove the old engine.
-    const shouldRunOldEngine = Root.Runtime.experiments.isEnabled(
-        Root.Runtime.ExperimentName.TIMELINE_EXECUTE_OLD_ENGINE,
-    );
-    if (shouldRunOldEngine) {
-      enginePromises.push(
-          this.performanceModel.setTracingModel(tracingModel),
-      );
-    }
-
     try {
-      // TODO(crbug.com/40287735): once we don't run the old engine, we don't
-      // need the Promise.all() here with a single promise.
-      await Promise.all(enginePromises);
-
-      // This code path is only executed when a new trace is recorded/imported,
-      // so we know that the active index will be the size of the model because
-      // the newest trace will be automatically set to active.
-      this.#traceEngineActiveTraceIndex = this.#traceEngineModel.size() - 1;
-
-      this.setModel(this.performanceModel, exclusiveFilter, this.#traceEngineActiveTraceIndex);
+      await this.#executeNewTraceEngine(collectedEvents, recordingIsFresh, metadata);
+      this.setModel(this.#traceEngineModel.lastTraceIndex(), exclusiveFilter);
 
       if (this.statusPane) {
         this.statusPane.remove();
       }
       this.statusPane = null;
 
+      // Show the sidebar but only if:
+      // 1. the experiment is enabled
+      // 2. the trace engine has one trace in it (the one we just loaded). This
+      //    is because we only need to show this button for the first time when we
+      //    go from landing page => trace. On subsequent trace loads, we will
+      //    maintain the sidebar state (e.g. if you have it open + record a new
+      //    trace, it will remain open).
+      if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_SIDEBAR) &&
+          this.#traceEngineModel.size() === 1) {
+        this.#minimapComponent.showSidebarFloatingIcon();
+      }
+
       const traceData = this.#traceEngineModel.traceParsedData(this.#traceEngineActiveTraceIndex);
       if (!traceData) {
         throw new Error(`Could not get trace data at index ${this.#traceEngineActiveTraceIndex}`);
       }
+
       if (recordingIsFresh) {
         Tracker.instance().registerFreshRecording(traceData);
       }
@@ -1578,18 +1633,10 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
         startTime: recordingStartTime ?? null,
       });
     } catch (error) {
-      // Try to get the raw events: if we errored during the parsing stage, it
+      // If we errored during the parsing stage, it
       // is useful to get access to the raw events to download the trace. This
       // allows us to debug crashes!
-      // Because we don't know where the error came from, we wrap it in a
-      // try-catch to protect against the tracing model erroring.
-      let rawEvents: TraceEngine.Types.TraceEvents.TraceEventData[]|undefined = undefined;
-      try {
-        rawEvents = tracingModel.allRawEvents() as unknown as TraceEngine.Types.TraceEvents.TraceEventData[];
-      } catch {
-      }
-
-      void this.recordingFailed(error.message, rawEvents);
+      void this.recordingFailed(error.message, collectedEvents);
       console.error(error);
     } finally {
       this.recordTraceLoadMetric();
@@ -1743,7 +1790,7 @@ export class TimelinePanel extends UI.Panel.Panel implements Client, TimelineMod
          --index) {
       const event = events[index];
       const {endTime} = TraceEngine.Helpers.Timing.eventTimingsMilliSeconds(event);
-      if (TraceEngine.Legacy.TracingModel.isTopLevelEvent(event) && endTime < time) {
+      if (TraceEngine.Helpers.Trace.isTopLevelEvent(event) && endTime < time) {
         break;
       }
       if (ActiveFilters.instance().isVisible(event) && endTime >= time) {
@@ -1820,6 +1867,7 @@ export const rowHeight = 18;
 export const headerHeight = 20;
 export interface TimelineModeViewDelegate {
   select(selection: TimelineSelection|null): void;
+  element: Element;
   selectEntryAtTime(events: TraceEngine.Types.TraceEvents.TraceEventData[]|null, time: number): void;
   highlightEvent(event: TraceEngine.Types.TraceEvents.TraceEventData|null): void;
 }

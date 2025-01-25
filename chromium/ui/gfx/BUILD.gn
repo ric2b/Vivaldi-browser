@@ -614,6 +614,7 @@ source_set("memory_buffer_sources") {
     "gpu_fence_handle.h",
     "overlay_priority_hint.h",
     "overlay_transform.h",
+    "overlay_type.h",
     "surface_origin.h",
   ]
 
@@ -688,8 +689,7 @@ source_set("memory_buffer_sources") {
   }
 
   if (enable_vulkan) {
-    public_deps +=
-        [ "//third_party/vulkan-deps/vulkan-headers/src:vulkan_headers" ]
+    public_deps += [ "//third_party/vulkan-headers/src:vulkan_headers" ]
   }
 }
 

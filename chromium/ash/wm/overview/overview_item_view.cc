@@ -6,10 +6,12 @@
 
 #include <memory>
 
+#include "ash/constants/ash_features.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/close_button.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_item.h"
+#include "ash/wm/overview/overview_types.h"
 #include "ash/wm/snap_group/snap_group.h"
 #include "ash/wm/snap_group/snap_group_controller.h"
 #include "ash/wm/window_mini_view_header_view.h"
@@ -25,6 +27,7 @@
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/controls/label.h"
@@ -76,24 +79,31 @@ OverviewItemView::OverviewItemView(
     views::Button::PressedCallback close_callback,
     aura::Window* window,
     bool show_preview)
-    : WindowMiniView(window),
+    : WindowMiniView(window,
+                     /*use_custom_focus_predicate=*/!features::
+                         IsOverviewNewFocusEnabled()),
       overview_item_(overview_item),
       event_handler_delegate_(event_handler_delegate),
       close_button_(header_view()->icon_label_view()->AddChildView(
           std::make_unique<CloseButton>(std::move(close_callback),
                                         CloseButton::Type::kMediumFloating))) {
   CHECK(overview_item_);
-  // This should not be focusable. It's also to avoid accessibility error when
-  // |window->GetTitle()| is empty.
-  SetFocusBehavior(FocusBehavior::NEVER);
+  // Focusable so we can add accelerators to this view.
+  SetFocusBehavior(features::IsOverviewNewFocusEnabled()
+                       ? views::View::FocusBehavior::ALWAYS
+                       : views::View::FocusBehavior::NEVER);
 
   views::InkDrop::Get(close_button_)
       ->SetMode(views::InkDropHost::InkDropMode::ON_NO_GESTURE_HANDLER);
-  close_button_->SetAccessibleName(
+  close_button_->GetViewAccessibility().SetName(
       l10n_util::GetStringUTF16(IDS_APP_ACCNAME_CLOSE));
   close_button_->SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
 
   header_view()->UpdateIconView(window);
+
+  AddAccelerator(ui::Accelerator(ui::VKEY_W, ui::EF_CONTROL_DOWN));
+  AddAccelerator(ui::Accelerator(ui::VKEY_RETURN, 0));
+  AddAccelerator(ui::Accelerator(ui::VKEY_SPACE, 0));
 
   // Call this last as it triggers layout, which relies on some of the other
   // elements existing.
@@ -159,16 +169,16 @@ gfx::Size OverviewItemView::GetPreviewViewSize() const {
   const float aspect_ratio =
       preview_pref_size.width() / preview_pref_size.height();
   gfx::SizeF target_size(GetContentAreaBounds().size());
-  OverviewGridWindowFillMode fill_mode =
-      overview_item_ ? overview_item_->GetWindowDimensionsType()
-                     : OverviewGridWindowFillMode::kNormal;
+  OverviewItemFillMode fill_mode =
+      overview_item_ ? overview_item_->GetOverviewItemFillMode()
+                     : OverviewItemFillMode::kNormal;
   switch (fill_mode) {
-    case OverviewGridWindowFillMode::kNormal:
+    case OverviewItemFillMode::kNormal:
       break;
-    case OverviewGridWindowFillMode::kLetterBoxed:
+    case OverviewItemFillMode::kLetterBoxed:
       target_size.set_height(target_size.width() / aspect_ratio);
       break;
-    case OverviewGridWindowFillMode::kPillarBoxed:
+    case OverviewItemFillMode::kPillarBoxed:
       target_size.set_width(target_size.height() * aspect_ratio);
       break;
   }
@@ -287,8 +297,8 @@ void OverviewItemView::OnGestureEvent(ui::GestureEvent* event) {
 bool OverviewItemView::CanAcceptEvent(const ui::Event& event) {
   bool accept_events = true;
   // Do not process or accept press down events that are on the border.
-  static ui::EventType press_types[] = {ui::ET_GESTURE_TAP_DOWN,
-                                        ui::ET_MOUSE_PRESSED};
+  static ui::EventType press_types[] = {ui::EventType::kGestureTapDown,
+                                        ui::EventType::kMousePressed};
   if (event.IsLocatedEvent() && base::Contains(press_types, event.type())) {
     const gfx::Rect content_bounds = GetContentsBounds();
     if (!content_bounds.Contains(event.AsLocatedEvent()->location()))
@@ -304,15 +314,44 @@ void OverviewItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   // TODO: This doesn't allow |this| to be navigated by ChromeVox, find a way
   // to allow |this| as well as the title and close button.
   node_data->role = ax::mojom::Role::kGenericContainer;
+  const bool is_group_item = [&]() {
+    auto* snap_group_controller = SnapGroupController::Get();
+    return snap_group_controller &&
+           snap_group_controller->GetSnapGroupForGivenWindow(source_window());
+  }();
   node_data->AddStringAttribute(
       ax::mojom::StringAttribute::kDescription,
       l10n_util::GetStringUTF8(
-          IDS_ASH_OVERVIEW_CLOSABLE_HIGHLIGHT_ITEM_A11Y_EXTRA_TIP));
+          is_group_item
+              ? IDS_ASH_SNAP_GROUP_WINDOW_CYCLE_DESCRIPTION
+              : IDS_ASH_OVERVIEW_CLOSABLE_HIGHLIGHT_ITEM_A11Y_EXTRA_TIP));
 }
 
 void OverviewItemView::OnThemeChanged() {
   WindowMiniView::OnThemeChanged();
   UpdateFocusState(is_focused());
+}
+
+bool OverviewItemView::AcceleratorPressed(const ui::Accelerator& accelerator) {
+  if (accelerator.IsCtrlDown() && accelerator.key_code() == ui::VKEY_W) {
+    if (overview_item_) {
+      overview_item_->OnFocusedViewClosed();
+    }
+    return true;
+  }
+
+  if (accelerator.key_code() == ui::VKEY_RETURN ||
+      accelerator.key_code() == ui::VKEY_SPACE) {
+    if (overview_item_) {
+      overview_item_->OnFocusedViewActivated();
+    }
+    return true;
+  }
+  return WindowMiniView::AcceleratorPressed(accelerator);
+}
+
+bool OverviewItemView::CanHandleAccelerators() const {
+  return HasFocus() && WindowMiniView::CanHandleAccelerators();
 }
 
 BEGIN_METADATA(OverviewItemView)

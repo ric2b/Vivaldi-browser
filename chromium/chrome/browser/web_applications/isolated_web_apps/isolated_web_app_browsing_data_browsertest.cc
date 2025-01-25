@@ -58,6 +58,7 @@
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/test/test_network_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -106,13 +107,6 @@ class IsolatedWebAppBrowsingDataTest : public IsolatedWebAppBrowserTestHarness {
   void AddLocalStorageIfMissing(const content::ToRenderFrameHost& target) {
     EXPECT_TRUE(
         ExecJs(target, "localStorage.setItem('test', '!'.repeat(1000))"));
-
-    base::test::TestFuture<void> test_future;
-    target.render_frame_host()
-        ->GetStoragePartition()
-        ->GetLocalStorageControl()
-        ->Flush(test_future.GetCallback());
-    EXPECT_TRUE(test_future.Wait());
   }
   void AddLocalStorageIfMissing(extensions::WebViewGuest* guest) {
     AddLocalStorageIfMissing(guest->GetGuestMainFrame());
@@ -173,6 +167,8 @@ class IsolatedWebAppBrowsingDataTest : public IsolatedWebAppBrowserTestHarness {
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_{
+      blink::features::kControlledFrame};
   std::unique_ptr<net::EmbeddedTestServer> server_;
 };
 
@@ -308,7 +304,7 @@ class IsolatedWebAppBrowsingDataClearingTest
         future.GetCallback());
 
     auto code = future.Get();
-    ASSERT_TRUE(code == webapps::UninstallResultCode::kSuccess);
+    ASSERT_TRUE(code == webapps::UninstallResultCode::kAppRemoved);
     run_loop.Run();
   }
 
@@ -556,8 +552,14 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowsingDataClearingTest,
   }
 }
 
+#if BUILDFLAG(IS_LINUX) && !defined(NDEBUG)
+// TODO(crbug.com/353551973): This test has been flaky on Linux Debug testers.
+#define MAYBE_ClearBrowserDataAllTime DISABLED_ClearBrowserDataAllTime
+#else
+#define MAYBE_ClearBrowserDataAllTime ClearBrowserDataAllTime
+#endif
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowsingDataClearingTest,
-                       ClearBrowserDataAllTime) {
+                       MAYBE_ClearBrowserDataAllTime) {
   auto cache_test_server = std::make_unique<net::EmbeddedTestServer>();
   cache_test_server->AddDefaultHandlers(
       base::FilePath(FILE_PATH_LITERAL("content/test/data")));

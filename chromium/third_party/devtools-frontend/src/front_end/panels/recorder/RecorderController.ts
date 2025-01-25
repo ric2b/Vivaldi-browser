@@ -364,7 +364,7 @@ export class RecorderController extends LitElement {
         settings.networkConditionsSettings = {...step};
         for (const preset
                  of [SDK.NetworkManager.OfflineConditions, SDK.NetworkManager.Slow3GConditions,
-                     SDK.NetworkManager.Fast3GConditions]) {
+                     SDK.NetworkManager.Slow4GConditions, SDK.NetworkManager.Fast4GConditions]) {
           // Using i18nTitleKey as a title here because we only want to compare the parameters of the network conditions.
           if (SDK.NetworkManager.networkConditionsEqual(
                   {...preset, title: preset.i18nTitleKey || ''}, {...step, title: preset.i18nTitleKey || ''})) {
@@ -549,7 +549,7 @@ export class RecorderController extends LitElement {
       switch (event.data?.targetPanel) {
         case Components.RecordingView.TargetPanel.PerformancePanel:
           Timeline.TimelinePanel.TimelinePanel.instance().loadFromEvents(
-              events as TraceEngine.TracingManager.EventPayload[]);
+              events as TraceEngine.Types.TraceEvents.TraceEventData[]);
           break;
       }
     }

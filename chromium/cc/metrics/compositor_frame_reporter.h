@@ -120,6 +120,8 @@ class CC_EXPORT CompositorFrameReporter {
   // earlier in `VizBreakdown`) for traces to record them correctly. The only
   // exception is `kSwapStartToSwapEnd` and its breakdowns as we either record
   // the former or the latter in a trace, but not both.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
   enum class VizBreakdown {
     kSubmitToReceiveCompositorFrame = 0,
     kReceivedCompositorFrameToStartDraw = 1,
@@ -134,7 +136,8 @@ class CC_EXPORT CompositorFrameReporter {
     kLatchToSwapEnd = 7,
 
     kSwapEndToPresentationCompositorFrame = 8,
-    kBreakdownCount
+    kBreakdownCount,
+    kMaxValue = kBreakdownCount
   };
 
   enum class BlinkBreakdown {
@@ -380,8 +383,15 @@ class CC_EXPORT CompositorFrameReporter {
     tick_clock_ = tick_clock;
   }
 
-  void set_has_missing_content(bool has_missing_content) {
-    has_missing_content_ = has_missing_content;
+  void set_checkerboarded_needs_raster(bool checkerboarded_needs_raster) {
+    checkerboarded_needs_raster_ = checkerboarded_needs_raster;
+  }
+  void set_checkerboarded_needs_record(bool checkerboarded_needs_record) {
+    checkerboarded_needs_record_ = checkerboarded_needs_record;
+  }
+
+  void set_top_controls_moved(bool top_controls_moved) {
+    top_controls_moved_ = top_controls_moved;
   }
 
   void SetPartialUpdateDecider(CompositorFrameReporter* decider);
@@ -572,9 +582,13 @@ class CC_EXPORT CompositorFrameReporter {
   const SmoothThread smooth_thread_;
   const int layer_tree_host_id_;
 
-  // Indicates whether the submitted frame had any missing content (i.e. content
-  // with checkerboarding).
-  bool has_missing_content_ = false;
+  // Indicates whether the submitted frame had any missing or incomplete
+  // content (i.e. content with checkerboarding), due to rasterization and
+  // recording, respectively.
+  bool checkerboarded_needs_raster_ = false;
+  bool checkerboarded_needs_record_ = false;
+
+  bool top_controls_moved_ = false;
 
   // Indicates whether the frame is forked (i.e. a PipelineReporter event starts
   // at the same frame sequence as another PipelineReporter).

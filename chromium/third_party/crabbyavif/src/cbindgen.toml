@@ -1,0 +1,64 @@
+language = "C++"
+include_guard = "AVIF_H"
+tab_width = 4
+usize_is_size_t = true
+namespace = "crabbyavif"
+# Some workarounds for cbindgen's potential limitations/bugs:
+# 1) In C++ mode, cbindgen balks on use of "Box" objects without this. This
+#    workaround of aliasing Box to T* comes from
+#    https://github.com/mozilla/cbindgen/blob/f1d5801d3b299fa2e87d176f03b605532f931cb6/tests/rust/box.toml.
+# 2) In C++ mode, cbindgen does not use the struct prefix for structs.  We need
+#    this so that we can have circular struct dependencies that use a pointer.
+#    So forward declare those structs which have a circular dependency.
+after_includes = """
+
+template <typename T>
+using Box = T*;
+namespace crabbyavif {
+struct avifImage;
+struct avifIO;
+}
+"""
+
+[export.rename]
+"ChromaDownsampling" = "avifChromaDownsampling"
+"ChromaSamplePosition" = "avifChromaSamplePosition"
+"ChromaUpsampling" = "avifChromaUpsampling"
+"ColorPrimaries" = "avifColorPrimaries"
+"Format" = "avifRGBFormat"
+"IOStats" = "avifIOStats"
+"ImageTiming" = "avifImageTiming"
+"MatrixCoefficients" = "avifMatrixCoefficients"
+"PixelFormat" = "avifPixelFormat"
+"ProgressiveState" = "avifProgressiveState"
+"Source" = "avifDecoderSource"
+"YuvRange" = "avifRange"
+"TransferCharacteristics" = "avifTransferCharacteristics"
+"AVIF_DIAGNOSTICS_ERROR_BUFFER_SIZE" = "CRABBY_AVIF_DIAGNOSTICS_ERROR_BUFFER_SIZE"
+"AVIF_FALSE" = "CRABBY_AVIF_FALSE"
+"AVIF_PLANE_COUNT_YUV" = "CRABBY_AVIF_PLANE_COUNT_YUV"
+"AVIF_REPETITION_COUNT_INFINITE" = "CRABBY_AVIF_REPETITION_COUNT_INFINITE"
+"AVIF_REPETITION_COUNT_UNKNOWN" = "CRABBY_AVIF_REPETITION_COUNT_UNKNOWN"
+"AVIF_TRUE" = "CRABBY_AVIF_TRUE"
+"DEFAULT_IMAGE_COUNT_LIMIT" = "CRABBY_AVIF_DEFAULT_IMAGE_COUNT_LIMIT"
+"DEFAULT_IMAGE_DIMENSION_LIMIT" = "CRABBY_AVIF_DEFAULT_IMAGE_DIMENSION_LIMIT"
+"DEFAULT_IMAGE_SIZE_LIMIT" = "CRABBY_AVIF_DEFAULT_IMAGE_SIZE_LIMIT"
+"MAX_AV1_LAYER_COUNT" = "CRABBY_AVIF_MAX_AV1_LAYER_COUNT"
+
+[enum]
+rename_variants = "QualifiedScreamingSnakeCase"
+enum_class = false
+
+[export]
+include = [
+  "avifChannelIndex",
+  "avifCodecFlag",
+  "avifCodecFlags",
+  "avifHeaderFormat",
+  "avifPlanesFlag",
+  "avifPlanesFlags",
+  "avifStrictFlag",
+]
+exclude = [
+  "Box"
+]

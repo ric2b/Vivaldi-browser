@@ -73,8 +73,7 @@ void DispatchSetProcessPriority(const ProcessNode* process_node,
 
   // If the PM is already running on the UI thread, improve performance by
   // skipping the thread-hop.
-  if (base::FeatureList::IsEnabled(features::kRunOnMainThread) ||
-      base::FeatureList::IsEnabled(features::kRunOnMainThreadSync)) {
+  if (base::FeatureList::IsEnabled(features::kRunOnMainThreadSync)) {
     SetProcessPriorityOnUIThread(process_node->GetRenderProcessHostProxy(),
                                  foreground);
     return;
@@ -131,6 +130,7 @@ void ProcessPriorityPolicy::OnTakenFromGraph(Graph* graph) {
 
 void ProcessPriorityPolicy::OnProcessNodeAdded(
     const ProcessNode* process_node) {
+  CHECK_NE(process_node->GetPriority(), base::TaskPriority::USER_VISIBLE);
   // Set the initial process priority.
   // TODO(chrisha): Get provisional nodes working so we can make an informed
   // choice in the graph (processes launching ads-to-be, or extensions, or

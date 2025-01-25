@@ -1449,7 +1449,8 @@ class ConvertGatherNdOpDynamic : public OpRewritePattern<TF::GatherNdOp> {
 
     auto dims_attr = GatherDimensionNumbersAttr::get(
         rewriter.getContext(), offset_dims, collapsed_slice_dims,
-        start_index_map, index_vector_dim);
+        /*operandBatchingDims=*/{},
+        /*startIndicesBatchingDims=*/{}, start_index_map, index_vector_dim);
     // TODO(disc): Remove this if-statement once fold and canonicalization is
     // implemented.
     if (params_ty.hasStaticShape() && indices_ty.hasStaticShape()) {
@@ -1956,7 +1957,9 @@ class ConvertMatrixDiagPartV3Op
     auto dims_attr = GatherDimensionNumbersAttr::get(
         rewriter.getContext(),
         /*offsetDims=*/llvm::to_vector<4>(llvm::seq<int64_t>(0, num_dims - 2)),
-        /*collapsedSliceDims=*/collapsed_dims, start_index_map,
+        /*collapsedSliceDims=*/collapsed_dims,
+        /*operandBatchingDims=*/{},
+        /*startIndicesBatchingDims=*/{}, start_index_map,
         /*indexVectorDim=*/0);
     Value gather = rewriter.create<mhlo::GatherOp>(
         loc, op.getInput(), start_indices, dims_attr,
@@ -1991,27 +1994,33 @@ class ConvertMatrixDiagPartV3Op
   }
 };
 
-// Converts TensorFlow EinsumOp to either HLO EinsumOp or UnaryEinsumOp
-// depending on arity of the op.
+// Converts TensorFlow EinsumOp to HLO EinsumOp
 class ConvertEinsumOp : public OpRewritePattern<TF::EinsumOp> {
  public:
   using OpRewritePattern::OpRewritePattern;
 
   LogicalResult matchAndRewrite(TF::EinsumOp op,
                                 PatternRewriter &rewriter) const override {
-    StringAttr equation = op->getAttrOfType<StringAttr>("equation");
+    // Prepend `,` to equation if unary einsum.
+    std::string equation_str = op.getEquation().str();
+    llvm::SmallVector<Value, 2> inputs;
+
+    // Unary einsum prepends `,` to equation and
+    // creates a scalar constant 1.0 for first operand.
     if (op.getN() == 1) {
-      rewriter.replaceOpWithNewOp<UnaryEinsumOp>(
-          op, op.getType(), *op.getInputs().begin(), equation);
-    } else if (op.getN() == 2) {
-      ValueRange inputs = op.getInputs();
-      rewriter.replaceOpWithNewOp<EinsumOp>(op, op.getType(), inputs[0],
-                                            inputs[1], equation);
-    } else {
-      // TensorFlow EinsumOp verifies that the number of operands are at most
-      // two.
-      return failure();
+      equation_str = "," + equation_str;
+      inputs.push_back(rewriter.create<ConstantOp>(
+          op.getLoc(), hlo::getScalarOfType(
+                           mlir::getElementTypeOrSelf(op.getOperand(0)), 1)));
     }
+    // Insert remaining operands into inputs, TF op verifier requires there be
+    // 0 or 1 operands.
+    auto operands = op.getInputs();
+    inputs.insert(inputs.end(), operands.begin(), operands.end());
+    assert(inputs.size() == 2);
+
+    rewriter.replaceOpWithNewOp<EinsumOp>(op, op.getType(), inputs[0],
+                                          inputs[1], equation_str);
     return success();
   }
 };
@@ -2929,62 +2938,6 @@ class ConvertSelectOp : public OpRewritePattern<TF::SelectOp> {
         result_type, cond, op.getThenValue(), op.getElseValue());
     b.create<shape::AssumingYieldOp>(select);
     rewriter.replaceOp(op, {assuming_op.getResult(0)});
-    return success();
-  }
-};
-
-// Converts Sigmoid op to HLO ops computing sigmoid with the following formula:
-//
-//     sigmoid = add(mul(tanh(mul(logits, 0.5)), 0.5), 0.5)
-//
-// Sample result with 2-d f16 inputs with B batches of with N elements each.
-//
-//    // Create an array of 0.5 the shape of the input array.
-//    %half = mhlo.constant dense<5.000000e-01> : tensor<f32>
-//    %half_array = "mhlo.broadcast"(half)
-//                           {broadcast_sizes = dense<2> : tensor<1xi64>}
-//                           : (tensor<f32>) -> tensor<2xf32>
-//
-//    // Compute Tanh of half the logits of the values.
-//    %halved_logits = mhlo.multiply %logits, %half_array : tensor<2xf32>
-//    %tanh = "mhlo.tanh"(%halved_logits) : (tensor<2xf32>) -> tensor<2xf32>
-//
-//    // Have the result of Tanh and add 0.5.
-//    %halved_tanh = mhlo.multiply %tanh, %half : tensor<2xf32>
-//    %sigmoid = mhlo.add %halved_tanh, %half : tensor<2xf32>
-//
-class ConvertSigmoidOp : public RewritePattern {
- public:
-  explicit ConvertSigmoidOp(MLIRContext *context)
-      : RewritePattern(
-            TF::SigmoidOp::getOperationName(), 0, context,
-            {mhlo::ConstantOp::getOperationName(),
-             shape::ShapeOfOp::getOperationName(),
-             shape::ToExtentTensorOp::getOperationName(),
-             mhlo::DynamicBroadcastInDimOp::getOperationName(),
-             mhlo::MulOp::getOperationName(), mhlo::TanhOp::getOperationName(),
-             mhlo::AddOp::getOperationName()}) {}
-
-  LogicalResult matchAndRewrite(Operation *sigmoid_op,
-                                PatternRewriter &rewriter) const override {
-    auto op = cast<TF::SigmoidOp>(sigmoid_op);
-    Location loc = op.getLoc();
-
-    // Create constant half with shape and element type same as the operand.
-    Value operand = op.getOperand();
-    auto operand_ty = mlir::cast<TensorType>(operand.getType());
-    auto scalar_ty =
-        tensorflow::GetTypeFromTFTensorShape({}, operand_ty.getElementType());
-    ElementsAttr attr = mlir::hlo::getSplat(&rewriter, scalar_ty, 0.5);
-    auto scalar_half = rewriter.create<ConstantOp>(loc, attr);
-    auto half = BroadcastToShapeOf(loc, scalar_half, operand, rewriter);
-
-    auto scaled_input = rewriter.create<MulOp>(loc, operand, half);
-    auto tanh_op = rewriter.create<TanhOp>(loc, scaled_input);
-    auto mul_op = rewriter.create<MulOp>(loc, tanh_op, half);
-    auto add_op = rewriter.create<AddOp>(loc, mul_op, half);
-
-    rewriter.replaceOp(op, add_op.getResult());
     return success();
   }
 };
@@ -4429,6 +4382,8 @@ class ConvertTensorScatterOp : public OpRewritePattern<OpTy> {
         llvm::to_vector<4>(
             llvm::seq<int64_t>(updates_rank - window_dims, updates_rank)),
         llvm::to_vector<4>(llvm::seq<int64_t>(0, num_index_dims)),
+        /*inputBatchingDims=*/{},
+        /*scatterIndicesBatchingDims=*/{},
         llvm::to_vector<4>(llvm::seq<int64_t>(0, num_index_dims)),
         indices_rank - 1);
 
@@ -5670,7 +5625,10 @@ class GenericConvertUnsortedSegmentReductionOp : public OpRewritePattern<OpTy> {
     auto dims_attr = ScatterDimensionNumbersAttr::get(
         rewriter.getContext(),
         llvm::to_vector<4>(llvm::seq<int64_t>(segment_ids_rank, data_rank)),
-        inserted_window_dims, scatter_dims_to_operand_dims, index_vector_dim);
+        inserted_window_dims,
+        /*inputBatchingDims=*/{},
+        /*scatterIndicesBatchingDims=*/{}, scatter_dims_to_operand_dims,
+        index_vector_dim);
 
     auto scatter = rewriter.create<ScatterOp>(
         op.getLoc(), op.getType(), ValueRange(Value(broadcasted_init)),
@@ -5892,6 +5850,8 @@ class ConvertRandomShuffleOp : public OpRewritePattern<TF::RandomShuffleOp> {
         rewriter.getContext(),
         /*offsetDims=*/llvm::to_vector<4>(llvm::seq<int64_t>(1, input_rank)),
         /*collapsedSliceDims=*/{0},
+        /*operandBatchingDims=*/{},
+        /*startIndicesBatchingDims=*/{},
         /*startIndexMap=*/{0},
         /*indexVectorDim=*/1);
 
@@ -6811,7 +6771,7 @@ class LowerControlFlowOp : public OpConversionPattern<SrcOpT> {
               UpdateElementTypeTo(original_ty, element_types[block_idx]);
           signature.addInputs(block_idx, {updated_ty});
         }
-        rewriter.applySignatureConversion(&region, signature);
+        rewriter.applySignatureConversion(&region.front(), signature);
       }
     }
 
@@ -6881,7 +6841,6 @@ void PopulateLegalizeTfPatterns(MLIRContext *context,
     ConvertMatrixDiagPartV3Op,
     ConvertRangeOp,
     ConvertSelectOp,
-    ConvertSigmoidOp,
     ConvertShapeOp,
     ConvertSplitOp,
     ConvertSplitVOp,

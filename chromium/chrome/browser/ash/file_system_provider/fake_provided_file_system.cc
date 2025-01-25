@@ -195,6 +195,12 @@ AbortCallback FakeProvidedFileSystem::GetMetadata(
     metadata->thumbnail =
         std::make_unique<std::string>(*entry_it->second->metadata->thumbnail);
   }
+  // Make a copy of the `CloudFileInfo` to pass to the callback.
+  if (fields & ProvidedFileSystemInterface::METADATA_FIELD_CLOUD_FILE_INFO &&
+      entry_it->second->metadata->cloud_file_info.get()) {
+    metadata->cloud_file_info = std::make_unique<CloudFileInfo>(
+        entry_it->second->metadata->cloud_file_info->version_tag);
+  }
 
   return PostAbortableTask(base::BindOnce(
       std::move(callback), std::move(metadata), base::File::FILE_OK));
@@ -493,6 +499,10 @@ AbortCallback FakeProvidedFileSystem::WriteFile(
     if (!entry->write_buffer) {
       // Only update metadata if we are writing contents directly.
       *entry->metadata->size = offset + length;
+      // Update the version when the contents change.
+      if (entry->metadata->cloud_file_info.get()) {
+        entry->metadata->cloud_file_info->version_tag += "1";
+      }
     }
     write_buffer.resize(*entry->metadata->size);
   }
@@ -590,7 +600,7 @@ const ProvidedFileSystemInfo& FakeProvidedFileSystem::GetFileSystemInfo()
 }
 
 OperationRequestManager* FakeProvidedFileSystem::GetRequestManager() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 
@@ -620,13 +630,37 @@ void FakeProvidedFileSystem::Notify(
     std::unique_ptr<ProvidedFileSystemObserver::Changes> changes,
     const std::string& tag,
     storage::AsyncFileUtil::StatusCallback callback) {
-  NOTREACHED();
-  std::move(callback).Run(base::File::FILE_ERROR_SECURITY);
+  // Very simple implementation that unconditionally calls notification
+  // callbacks and notifies observers of the change.
+
+  const WatcherKey key(entry_path, recursive);
+  const auto& watcher_it = watchers_.find(key);
+  if (watcher_it == watchers_.end()) {
+    std::move(callback).Run(base::File::FILE_ERROR_NOT_FOUND);
+    return;
+  }
+
+  const ProvidedFileSystemObserver::Changes& changes_ref = *changes.get();
+
+  // Call all notification callbacks (if any).
+  for (const auto& subscriber_it : watcher_it->second.subscribers) {
+    const storage::WatcherManager::NotificationCallback& notification_callback =
+        subscriber_it.second.notification_callback;
+    if (!notification_callback.is_null()) {
+      notification_callback.Run(change_type);
+    }
+  }
+
+  // Notify all observers.
+  for (auto& observer : observers_) {
+    observer.OnWatcherChanged(file_system_info_, watcher_it->second,
+                              change_type, changes_ref, base::DoNothing());
+  }
 }
 
 void FakeProvidedFileSystem::Configure(
     storage::AsyncFileUtil::StatusCallback callback) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   std::move(callback).Run(base::File::FILE_ERROR_SECURITY);
 }
 
@@ -638,6 +672,10 @@ FakeProvidedFileSystem::GetWeakPtr() {
 std::unique_ptr<ScopedUserInteraction>
 FakeProvidedFileSystem::StartUserInteraction() {
   return nullptr;
+}
+
+base::WeakPtr<FakeProvidedFileSystem> FakeProvidedFileSystem::GetFakeWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 AbortCallback FakeProvidedFileSystem::PostAbortableTask(

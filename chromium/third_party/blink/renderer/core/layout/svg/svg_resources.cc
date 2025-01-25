@@ -80,7 +80,7 @@ gfx::RectF SVGResources::ReferenceBoxForEffects(
       break;
     }
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   if (foreign_object_quirk == ForeignObjectQuirk::kEnabled &&
@@ -354,7 +354,8 @@ void SVGElementResourceClient::UpdateFilterData(
     return;
   const ComputedStyle& style = object.StyleRef();
   FilterEffectBuilder builder(
-      reference_box, 1, style.VisitedDependentColor(GetCSSPropertyColor()),
+      reference_box, std::nullopt, 1,
+      style.VisitedDependentColor(GetCSSPropertyColor()),
       style.UsedColorScheme());
   builder.SetShorthandScale(1 / style.EffectiveZoom());
   const FilterOperations& filter = style.Filter();

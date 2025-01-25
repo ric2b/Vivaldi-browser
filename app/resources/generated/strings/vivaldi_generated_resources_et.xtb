@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Rakenda</translation>
 <translation id="1603914832182249871">(privaatne)</translation>
 <translation id="1627276047960621195">Failideskriptorid</translation>
+<translation id="1654713139320245449">Ühtegi ülekandmise sihtkohta ei leitud. Kas vajad abi?</translation>
 <translation id="166278006618318542">Subjekti avaliku võtme algoritm</translation>
 <translation id="1682548588986054654">Uus privaatne aken</translation>
 <translation id="1708338024780164500">(mitteaktiivne)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Teine programm arvutis on lisanud laienduse, mis võib muuta Vivaldi tööd.</translation>
 <translation id="2443487764245141020">Saitidel võib olla tarvis sinu seadet identifikaatori abil tuvastada</translation>
 <translation id="2445081178310039857">Laienduse juurkaust on nõutav.</translation>
-<translation id="2470702053775288986">Toetamata laiendused on keelatud</translation>
 <translation id="2485422356828889247">Eemalda</translation>
 <translation id="2498539833203011245">Minimeeri</translation>
 <translation id="2509495747794740764">Skaleerimisväärtus peab olema arv 10 ja 200 vahel.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">Üksikasjad</translation>
 <translation id="4345587454538109430">Seadista...</translation>
 <translation id="4348766275249686434">Vigade kogumine</translation>
-<translation id="4363771538994847871">Ühtegi ülekandekohta ei leitud. Kas vajad abi?</translation>
 <translation id="4384652540891215547">Aktiveeri laiendus</translation>
 <translation id="4394049700291259645">Keela</translation>
 <translation id="4409697491990005945">Veerised</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Suund</translation>
 <translation id="7782102568078991263">Google’il rohkem soovitusi pole</translation>
 <translation id="7786889348652477777">&amp;Laadi rakendus uuesti</translation>
-<translation id="7791543448312431591">Lisa</translation>
 <translation id="7800518121066352902">Pööra &amp;vastupäeva</translation>
 <translation id="7814458197256864873">&amp;Kopeeri</translation>
 <translation id="7818135753970109980">Lisati uus teema (<ph name="EXTENSION_NAME" />)</translation>

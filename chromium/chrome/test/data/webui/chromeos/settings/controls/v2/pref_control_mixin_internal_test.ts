@@ -19,8 +19,8 @@ suite('PrefControlMixinInternal', () => {
 
   const fakePrefObject = {
     key: 'foo.bar.baz',
-    type: chrome.settingsPrivate.PrefType.BOOLEAN,
-    value: false,
+    type: chrome.settingsPrivate.PrefType.STRING,
+    value: 'initialValue',
   };
 
   setup(async () => {
@@ -104,10 +104,10 @@ suite('PrefControlMixinInternal', () => {
 
   suite('validatePref()', () => {
     test('pref is not a string', () => {
-      // Simulate a string value instead of a PrefObject. Suppress typechecking
-      // here since there is no typechecking in Polymer HTML data-binding.
-      // @ts-ignore:next-line
-      testElement.pref = 'foobar';
+      // Simulate a string value instead of a PrefObject. Use Object.assign() to
+      // bypass typechecking here since there is no typechecking in Polymer HTML
+      // data-binding.
+      Object.assign(testElement, {pref: 'foobar'});
 
       assertThrows(() => {
         testElement.validatePref();
@@ -120,11 +120,11 @@ suite('PrefControlMixinInternal', () => {
 
       assertThrows(() => {
         testElement.validatePref();
-      }, 'TEST-ELEMENT#exampleID error: Invalid pref type BOOLEAN.');
+      }, 'TEST-ELEMENT#exampleID error: Invalid pref type STRING.');
     });
 
     test('pref type is validated', () => {
-      testElement.validPrefTypes = [chrome.settingsPrivate.PrefType.BOOLEAN];
+      testElement.validPrefTypes = [chrome.settingsPrivate.PrefType.STRING];
       testElement.pref = {...fakePrefObject};
 
       testElement.validatePref();
@@ -149,13 +149,6 @@ suite('PrefControlMixinInternal', () => {
       }, 'updatePrefValueFromUserAction() requires pref to be defined.');
     });
 
-    test('Updates the local pref value', () => {
-      testElement.pref = {...fakePrefObject};
-      const expectedValue = 'newValue9001';
-      testElement.updatePrefValueFromUserAction(expectedValue);
-      assertEquals(expectedValue, testElement.pref.value);
-    });
-
     test('Dispatches a "user-action-setting-pref-change" event', async () => {
       testElement.pref = {...fakePrefObject};
 
@@ -167,6 +160,17 @@ suite('PrefControlMixinInternal', () => {
       const event = await eventPromise;
       assertEquals(fakePrefObject.key, event.detail.prefKey);
       assertEquals(expectedValue, event.detail.value);
+    });
+
+    test('Does not update the pref object value directly', async () => {
+      testElement.pref = {...fakePrefObject};
+      const initialValue = testElement.pref.value;
+
+      const eventPromise =
+          eventToPromise('user-action-setting-pref-change', window);
+      testElement.updatePrefValueFromUserAction('newValue9001');
+      await eventPromise;
+      assertEquals(initialValue, testElement.pref.value);
     });
   });
 });

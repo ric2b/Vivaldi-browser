@@ -20,16 +20,11 @@ inline jclass org_jni_1zero_SampleUniqueAnnotations_clazz(JNIEnv* env) {
 }
 #endif
 
-// Forward declare used conversion functions to avoid a compiler warning that
-// triggers if a conversion specialization exists within the including .cc file.
-namespace jni_zero {
-template<> std::string FromJniType<std::string>(JNIEnv*, const JavaRef<jobject>&);
-}  // namespace jni_zero
 // Java to native functions
 // Forward declaration. To be implemented by the including .cc file.
 static jint JNI_SampleUniqueAnnotations_Bar(JNIEnv* env, jint x, jint y);
 
-JNI_BOUNDARY_EXPORT jint Java_org_jni_1zero_GEN_1JNI_org_1jni_11zero_1SampleUniqueAnnotations_1bar(
+JNI_POSSIBLE_BOUNDARY_EXPORT jint Java_org_jni_1zero_GEN_1JNI_org_1jni_11zero_1SampleUniqueAnnotations_1bar(
     JNIEnv* env,
     jclass jcaller,
     jint x,
@@ -38,11 +33,25 @@ JNI_BOUNDARY_EXPORT jint Java_org_jni_1zero_GEN_1JNI_org_1jni_11zero_1SampleUniq
   return _ret;
 }
 
-JNI_BOUNDARY_EXPORT void Java_org_jni_1zero_GEN_1JNI_org_1jni_11zero_1SampleUniqueAnnotations_1foo(
+// Forward declaration. To be implemented by the including .cc file.
+static void JNI_SampleUniqueAnnotations_Baz(
+    JNIEnv* env,
+    const jni_zero::JavaParamRef<jobject>& handle);
+
+JNI_POSSIBLE_BOUNDARY_EXPORT void Java_org_jni_1zero_GEN_1JNI_org_1jni_11zero_1SampleUniqueAnnotations_1baz(
+    JNIEnv* env,
+    jclass jcaller,
+    jobject handle) {
+  JNI_SampleUniqueAnnotations_Baz(
+      env,
+      jni_zero::JavaParamRef<jobject>(env, handle));
+}
+
+JNI_POSSIBLE_BOUNDARY_EXPORT void Java_org_jni_1zero_GEN_1JNI_org_1jni_11zero_1SampleUniqueAnnotations_1foo(
     JNIEnv* env,
     jclass jcaller,
     jlong nativePtr,
-    jstring arg) {
+    jobject arg) {
   std::string arg_converted = jni_zero::FromJniType<std::string>(
       env,
       jni_zero::JavaParamRef<jobject>(env, arg));
@@ -51,7 +60,7 @@ JNI_BOUNDARY_EXPORT void Java_org_jni_1zero_GEN_1JNI_org_1jni_11zero_1SampleUniq
       arg_converted);
 }
 
-JNI_BOUNDARY_EXPORT void Java_org_jni_1zero_SampleUniqueAnnotations_nativeCallWithQualifiedObject(
+JNI_POSSIBLE_BOUNDARY_EXPORT void Java_org_jni_1zero_SampleUniqueAnnotations_nativeCallWithQualifiedObject(
     JNIEnv* env,
     jobject jcaller,
     jlong nativePtr) {

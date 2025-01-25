@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "content/renderer/pepper/pepper_media_device_manager.h"
 #include <vector>
 
@@ -40,7 +45,7 @@ PP_DeviceType_Dev FromMediaDeviceType(MediaDeviceType type) {
     case MediaDeviceType::kMediaAudioOuput:
       return PP_DEVICETYPE_DEV_AUDIOOUTPUT;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return PP_DEVICETYPE_DEV_INVALID;
   }
 }
@@ -54,7 +59,7 @@ MediaDeviceType ToMediaDeviceType(PP_DeviceType_Dev type) {
     case PP_DEVICETYPE_DEV_AUDIOOUTPUT:
       return MediaDeviceType::kMediaAudioOuput;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return MediaDeviceType::kMediaAudioOuput;
   }
 }
@@ -209,7 +214,7 @@ base::UnguessableToken PepperMediaDeviceManager::GetSessionID(
       return GetMediaStreamDeviceObserver()->GetVideoSessionId(
           blink::WebString::FromUTF8(label));
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return base::UnguessableToken();
   }
 }
@@ -225,7 +230,7 @@ blink::mojom::MediaStreamType PepperMediaDeviceManager::FromPepperDeviceType(
     case PP_DEVICETYPE_DEV_VIDEOCAPTURE:
       return blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return blink::mojom::MediaStreamType::NO_SERVICE;
   }
 }
@@ -279,7 +284,7 @@ blink::mojom::MediaStreamDispatcherHost*
 PepperMediaDeviceManager::GetMediaStreamDispatcherHost() {
   if (!dispatcher_host_) {
     CHECK(render_frame());
-    render_frame()->GetBrowserInterfaceBroker()->GetInterface(
+    render_frame()->GetBrowserInterfaceBroker().GetInterface(
         dispatcher_host_.BindNewPipeAndPassReceiver());
   }
   return dispatcher_host_.get();
@@ -299,7 +304,7 @@ blink::mojom::MediaDevicesDispatcherHost*
 PepperMediaDeviceManager::GetMediaDevicesDispatcher() {
   if (!media_devices_dispatcher_) {
     CHECK(render_frame());
-    render_frame()->GetBrowserInterfaceBroker()->GetInterface(
+    render_frame()->GetBrowserInterfaceBroker().GetInterface(
         media_devices_dispatcher_.BindNewPipeAndPassReceiver());
   }
 

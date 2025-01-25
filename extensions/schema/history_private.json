@@ -12,22 +12,10 @@
     },
     "types": [
       {
-        "id": "HistoryResultSetGrouping",
-        "type": "string",
-        "enum": [ "remove_all_duplicates", "remove_duplicates_per_day", "keep_all_duplicates" ],
-        "description": "Handling of History search results. See: DuplicateHandling enum in history_types.h"
-      },
-      {
         "id": "TransitionType",
         "type": "string",
         "enum": ["link", "typed", "auto_bookmark", "auto_subframe", "manual_subframe", "generated", "auto_toplevel", "form_submit", "reload", "keyword", "keyword_generated"],
         "description": "The transition type for this visit from its referrer."
-      },
-      {
-        "id": "SourceType",
-        "type": "string",
-        "enum": ["synced", "browsed", "extension", "firefox_imported", "ie_imported", "safari_imported", "chromium_imported"],
-        "description": "The transition type for this visit from its referrer as defined in browser/history_types.h."
       },
       {
         "id": "TypedHistoryItem",
@@ -97,7 +85,7 @@
       {
         "id": "HistoryPrivateItem",
         "type": "object",
-        "description": "An object encapsulating one result of a history query.",
+        "description": "An object encapsulating one result of a history query. Properties marked with 'Used for statistics' can be removed if we make a new API function for stats.",
         "properties": {
           "id": {
             "type": "string",
@@ -108,56 +96,25 @@
             "type": "string",
             "description": "The URL navigated to by a user."
           },
-          "protocol": {
-            "type": "string",
-            "description": "The protocol of the page navigated to by a user."
-          },
           "address": {
             "type": "string",
-            "description": "The address of the page navigated to by a user."
+            "description": "Used for statistics. The address of the page navigated to by a user."
           },
           "title": {
             "type": "string",
             "description": "The title of the page when it was last loaded."
           },
-          "lastVisitTime": {
-            "type": "number",
-            "optional": true,
-            "description": "When this page was last loaded, represented in milliseconds since the epoch."
-          },
           "visitTime": {
             "type": "number",
             "description": "When this page was visited, represented in milliseconds since the epoch."
           },
-          "visitCount": {
-            "type": "integer",
-            "description": "The number of times the user has navigated to this page."
-          },
-          "typedCount": {
-            "type": "integer",
-            "optional": true,
-            "description": "The number of times the user has navigated to this page by typing in the address."
-          },
-          "isBookmarked": {
-            "type": "boolean",
-            "description": "States if the URL is bookmarked."
-          },
-          "transition_type": {
+          "transitionType": {
             "$ref": "TransitionType",
-            "description": "The transition type for this visit from its referrer."
+            "description": "Used for statistics. The transition type for this visit from its referrer."
           },
           "dateKey": {
             "type": "string",
             "description": "Date string of the visit. Format: YYYY-MM-DD"
-          },
-          "hour": {
-            "type": "integer",
-            "description": "Hour of day when this url was visited."
-          },
-          "source": {
-            "$ref": "SourceType",
-            "optional": true,
-            "description": "The origin of the link"
           }
         }
       },
@@ -183,34 +140,6 @@
       }
     ],
     "functions": [
-      {
-        "name": "search",
-        "type": "function",
-        "description": "Searches the history for the last visit time of each page matching the query.",
-        "parameters": [
-          {
-            "name": "query",
-            "type": "object",
-            "properties": {
-              "text": {"type": "string", "description": "A free-text query to the history service.  Leave empty to retrieve all pages."},
-              "startTime": {"type": "number", "optional": true, "description": "Limit results to those visited after this date, represented in milliseconds since the epoch. If not specified, this defaults to 24 hours in the past."},
-              "endTime": {"type": "number", "optional": true, "description": "Limit results to those visited before this date, represented in milliseconds since the epoch."},
-              "maxResults": {"type": "integer", "optional": true, "minimum": 0, "description": "The maximum number of results to retrieve.  Defaults to 100."},
-              "resultGrouping": {"$ref": "HistoryResultSetGrouping", "optional": true, "description": "The way the result set should be grouped."}
-            }
-          }
-        ],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-            {
-              "name": "results",
-              "type": "array",
-              "items": { "$ref": "HistoryPrivateItem" }
-            }
-          ]
-        }
-      },
       {
         "name": "deleteVisits",
         "type": "function",

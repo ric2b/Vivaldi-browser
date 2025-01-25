@@ -16,6 +16,7 @@
 #define THIRD_PARTY_NEARBY_SHARING_NEARBY_SHARING_SETTINGS_H_
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -26,11 +27,11 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
-#include "internal/analytics/event_logger.h"
 #include "internal/base/observer_list.h"
 #include "internal/platform/clock.h"
 #include "internal/platform/device_info.h"
 #include "internal/platform/mutex.h"
+#include "internal/platform/timer.h"
 #include "proto/sharing_enums.pb.h"
 #include "sharing/analytics/analytics_recorder.h"
 #include "sharing/common/nearby_share_enums.h"
@@ -136,7 +137,7 @@ class NearbyShareSettings
             }
             break;
           default:
-            LOG(FATAL) << "Invalid tag: " << this->tag;
+            NL_LOG(FATAL) << "Invalid tag: " << this->tag;
             break;
         }
         return result;
@@ -161,11 +162,10 @@ class NearbyShareSettings
       nearby::DeviceInfo& device_info,
       nearby::sharing::api::PreferenceManager& preference_manager,
       NearbyShareLocalDeviceDataManager* local_device_data_manager,
-      nearby::analytics::EventLogger* event_logger = nullptr);
+      analytics::AnalyticsRecorder* analytics_recorder = nullptr);
   ~NearbyShareSettings() override;
 
   // Internal synchronous getters for C++ clients
-  bool GetEnabled() const;
   proto::FastInitiationNotificationState GetFastInitiationNotificationState()
       const;
   bool is_fast_initiation_hardware_supported();
@@ -178,10 +178,6 @@ class NearbyShareSettings
   absl::Time GetLastVisibilityTimestamp() const;
   proto::DeviceVisibility GetLastVisibility() const;
 
-  proto::DeviceVisibility GetFallbackVisibility() const;
-  bool GetIsTemporarilyVisible() const;
-  void SetIsTemporarilyVisible(bool is_temporarily_visible) const;
-  std::vector<std::string> GetAllowedContacts() const;
   bool IsOnboardingComplete() const;
   std::string GetCustomSavePath() const;
 
@@ -191,11 +187,9 @@ class NearbyShareSettings
   // Asynchronous APIs exposed by NearbyShareSettings
   void AddSettingsObserver(Observer* observer);
   void RemoveSettingsObserver(Observer* observer);
-  void GetEnabled(std::function<void(bool)> callback);
   void GetFastInitiationNotificationState(
       std::function<void(proto::FastInitiationNotificationState)> callback);
   void GetIsFastInitiationHardwareSupported(std::function<void(bool)> callback);
-  void SetEnabled(bool enabled);
   void SetFastInitiationNotificationState(
       proto::FastInitiationNotificationState state);
   void IsOnboardingComplete(std::function<void(bool)> callback);
@@ -208,43 +202,39 @@ class NearbyShareSettings
                      std::function<void(DeviceNameValidationResult)> callback);
   void GetDataUsage(std::function<void(proto::DataUsage)> callback);
   void SetDataUsage(proto::DataUsage data_usage);
+  // Returns the fallback visibility if the current visibility is temporary,
+  // otherwise returning |DEVICE_VISIBILITY_UNSPECIFIED|.
+  proto::DeviceVisibility GetFallbackVisibility() const;
   void GetVisibility(std::function<void(proto::DeviceVisibility)> callback);
+  // Sets the visibility for the Nearby Sharing service. If the expiration is
+  // not zero, the visibility will be set temporarily and a fallback will be
+  // set. If the expiration is zero, the visibility will be set permanently.
+  // Note: When transitioning between temporary and permanent everyone mode
+  // visibility, the fallback visibility will not be cleared. However, when the
+  // temporary timer expires, the fallback visibility will be restored and
+  // cleared.
   void SetVisibility(proto::DeviceVisibility visibility,
                      absl::Duration expiration = absl::ZeroDuration()) const;
-  void SetFallbackVisibility(proto::DeviceVisibility visibility) const;
   bool GetIsReceiving();
   void SetIsReceiving(bool is_receiving) const;
   bool GetIsAnalyticsEnabled();
   void SetIsAnalyticsEnabled(bool is_analytics_enabled) const;
-  bool GetIsAllContactsEnabled();
-  void SetIsAllContactsEnabled(bool is_all_contacts_enabled) const;
-
-  void GetAllowedContacts(
-      std::function<void(absl::Span<const std::string>)> callback);
-  void SetAllowedContacts(absl::Span<const std::string> allowed_contacts);
 
   void GetCustomSavePathAsync(
       const std::function<void(absl::string_view)>& callback) const;
   void SetCustomSavePathAsync(absl::string_view save_path,
                               const std::function<void()>& callback);
 
-  bool GetAutoAppStartEnabled() const;
-  void SetAutoAppStartEnabled(bool is_auto_app_start) const;
-
   // NearbyShareLocalDeviceDataManager::Observer:
   void OnLocalDeviceDataChanged(bool did_device_name_change,
                                 bool did_full_name_change,
                                 bool did_icon_url_change) override;
 
-  void SendDesktopNotification(
-      ::location::nearby::proto::sharing::DesktopNotification event) const;
-
-  void SendDesktopTransferEvent(
-      ::location::nearby::proto::sharing::DesktopTransferEventType event) const;
-
   std::string Dump() const;
 
  private:
+  bool GetIsTemporarilyVisible() const;
+  void SetFallbackVisibility(proto::DeviceVisibility visibility) const;
   void OnEnabledPrefChanged();
   void OnFastInitiationNotificationStatePrefChanged();
   void OnDataUsagePrefChanged();
@@ -256,12 +246,6 @@ class NearbyShareSettings
   void OnPreferenceChanged(absl::string_view key);
 
   void NotifyAllObservers(absl::string_view key, Observer::Data value)
-      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-
-  // If the Nearby Share parent feature is toggled on then Fast Initiation
-  // notifications should be re-enabled unless the user explicitly disabled the
-  // notification sub-feature.
-  void ProcessFastInitiationNotificationParentPrefChanged(bool enabled)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   void StartVisibilityTimer(absl::Duration expiration) const
@@ -277,7 +261,7 @@ class NearbyShareSettings
   nearby::sharing::api::PreferenceManager& preference_manager_;
   NearbyShareLocalDeviceDataManager* const local_device_data_manager_;
   // Used to create analytics events.
-  std::unique_ptr<analytics::AnalyticsRecorder> analytics_recorder_;
+  analytics::AnalyticsRecorder* const analytics_recorder_;
 
   std::shared_ptr<bool> is_desctructing_ = nullptr;
   bool is_fast_initiation_hardware_supported_ ABSL_GUARDED_BY(mutex_) = false;

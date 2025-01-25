@@ -69,6 +69,11 @@
     cursor: default;
   }
 
+  :host([aria-disabled='true']) .secondary-text {
+    color: var(--cros-text-color-secondary);
+    text-shadow: none;
+  }
+
   :host(:focus-visible) .item {
     outline: var(--personalization-app-grid-item-outline-width) solid var(--cros-focus-ring-color);
     outline-offset: var(--personalization-app-grid-item-outline-offset);
@@ -181,8 +186,7 @@
     visibility: hidden;
   }
 
-  p.primary-text:last-of-type,
-  ::slotted(p.primary-text:last-of-type) {
+  :host([data-google-photos]) p.primary-text:last-of-type {
     margin-bottom: var(--cros-annotation-2-line-height);
   }
 
@@ -257,12 +261,14 @@
         <template is="dom-if" if="[[isPrimaryTextVisible_(primaryText)]]" restamp>
           <p class="primary-text" title$="[[primaryText]]">[[primaryText]]</p>
         </template>
+      </slot>
+      <slot name="secondaryText">
         <template is="dom-if"
             if="[[isSecondaryTextVisible_(secondaryText)]]"
             restamp>
-          <p class="secondary-text" title$="[[secondaryText]]">
+        <p class="secondary-text" title$="[[secondaryText]]">
             [[secondaryText]]
-          </p>
+        </p>
         </template>
       </slot>
     </div>

@@ -30,7 +30,6 @@
 #include "components/viz/service/frame_sinks/surface_resource_holder_client.h"
 #include "components/viz/service/frame_sinks/video_capture/capturable_frame_sink.h"
 #include "components/viz/service/hit_test/hit_test_aggregator.h"
-#include "components/viz/service/layers/layer_context_impl.h"
 #include "components/viz/service/surfaces/frame_index_constants.h"
 #include "components/viz/service/surfaces/surface_client.h"
 #include "components/viz/service/surfaces/surface_observer.h"
@@ -45,6 +44,7 @@ namespace viz {
 class FrameSinkManagerImpl;
 class LatestLocalSurfaceIdLookupDelegate;
 class LayerContextImpl;
+class RendererSettings;
 class Surface;
 class SurfaceManager;
 
@@ -274,6 +274,9 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
 
   void SetExternalReservedResourceDelegate(ReservedResourceDelegate* delegate);
 
+  // Subscribes or unsubscribes `layer_context_` to subsequent BeginFrames.
+  void SetLayerContextWantsBeginFrames(bool wants_begin_frames);
+
  private:
   friend class CompositorFrameSinkSupportTest;
   friend class DisplayTest;
@@ -348,6 +351,10 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
 
   // Posts a task to invoke DestroySelf() ASAP.
   void ScheduleSelfDestruction();
+
+  // Applies the preferred frame rate, would call ThrottleBeginFrame if the
+  // conditions are met.
+  void ApplyPreferredFrameRate(uint64_t source_id);
 
   void UpdateThreadIdsPostVerification(
       base::flat_set<base::PlatformThreadId> thread_ids,
@@ -564,9 +571,10 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   // Region capture bounds associated with the last surface that was aggregated.
   RegionCaptureBounds current_capture_bounds_;
 
-  // In LayerContext mode only, this is the Viz LayerContext implementation
-  // which owns the backend layer tree for this frame sink.
-  std::unique_ptr<LayerContextImpl> layer_context_impl_;
+  // When VizLayers is enabled, this owns the display tree and forwards its
+  // submitted compositor frames directly to `this`.
+  std::unique_ptr<LayerContextImpl> layer_context_;
+  bool layer_context_wants_begin_frames_ = false;
 
   base::WeakPtrFactory<CompositorFrameSinkSupport> weak_factory_{this};
 };

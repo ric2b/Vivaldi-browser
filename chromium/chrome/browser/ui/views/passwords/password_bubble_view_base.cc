@@ -9,6 +9,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/accessibility/theme_tracking_non_accessible_image_view.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
@@ -26,7 +27,9 @@
 #include "chrome/browser/ui/views/passwords/password_save_update_view.h"
 #include "chrome/browser/ui/views/passwords/post_save_compromised_bubble_view.h"
 #include "chrome/browser/ui/views/passwords/shared_passwords_notification_view.h"
+#include "chrome/browser/ui/views/toolbar/pinned_toolbar_actions_container.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/browser/ui/views/webauthn/passkey_saved_confirmation_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/password_form.h"
@@ -43,6 +46,7 @@
 #include "chrome/browser/ui/views/passwords/biometric_authentication_for_filling_bubble_view.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "ui/vivaldi_browser_window.h"
@@ -125,12 +129,18 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
   // TODO(crbug.com/40218026): In non-DCHECK mode we could fall through here and
   // hard-crash if we requested a bubble and were in the wrong state. In the
   // meantime we will abort if we did not create a bubble.
-  if (!g_manage_passwords_bubble_)
+  if (!g_manage_passwords_bubble_) {
     return;
+  }
 
-  g_manage_passwords_bubble_->SetHighlightedButton(
-      button_provider->GetPageActionIconView(
-          PageActionIconType::kManagePasswords));
+  // If the anchor_view is a button, it will automatically be used as the
+  // highlighted button by BubbleDialogDelegate. If not, we set the page action
+  // icon as the highlighted button here.
+  if (!views::Button::AsButton(anchor_view)) {
+    g_manage_passwords_bubble_->SetHighlightedButton(
+        button_provider->GetPageActionIconView(
+            PageActionIconType::kManagePasswords));
+  }
 
   views::BubbleDialogDelegateView::CreateBubble(g_manage_passwords_bubble_);
 
@@ -198,6 +208,9 @@ PasswordBubbleViewBase* PasswordBubbleViewBase::CreateBubble(
   } else if (model_state ==
              password_manager::ui::PASSWORD_STORE_CHANGED_BUBBLE_STATE) {
     view = new PasswordDefaultStoreChangedView(web_contents, anchor_view);
+  } else if (model_state ==
+             password_manager::ui::PASSKEY_SAVED_CONFIRMATION_STATE) {
+    view = new PasskeySavedConfirmationView(web_contents, anchor_view);
   } else {
     NOTREACHED_NORETURN();
   }
@@ -219,7 +232,9 @@ void PasswordBubbleViewBase::CloseCurrentBubble() {
         g_manage_passwords_bubble_->GetController();
     DCHECK(controller);
     controller->OnBubbleClosing();
-    g_manage_passwords_bubble_->GetWidget()->Close();
+    if (auto* const widget = g_manage_passwords_bubble_->GetWidget()) {
+      widget->Close();
+    }
   }
 }
 
@@ -240,7 +255,9 @@ PasswordBubbleViewBase::PasswordBubbleViewBase(
     content::WebContents* web_contents,
     views::View* anchor_view,
     bool easily_dismissable)
-    : LocationBarBubbleDelegateView(anchor_view, web_contents) {
+    : LocationBarBubbleDelegateView(anchor_view,
+                                    web_contents,
+                                    /*autosize=*/true) {
   SetShowCloseButton(true);
   set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
@@ -248,8 +265,9 @@ PasswordBubbleViewBase::PasswordBubbleViewBase(
 }
 
 PasswordBubbleViewBase::~PasswordBubbleViewBase() {
-  if (g_manage_passwords_bubble_ == this)
+  if (g_manage_passwords_bubble_ == this) {
     g_manage_passwords_bubble_ = nullptr;
+  }
 }
 
 void PasswordBubbleViewBase::SetBubbleHeader(int light_image_id,
@@ -269,6 +287,13 @@ void PasswordBubbleViewBase::SetBubbleHeader(int light_image_id,
         preferred_size.width();
     preferred_size = gfx::ScaleToRoundedSize(preferred_size, scale);
     image_view->SetImageSize(preferred_size);
+    if (vivaldi::IsVivaldiRunning()) {
+      // VB-106584 Vivaldi image overlaps with close button position.
+      // Set border to force close button to be above the image.
+      image_view->SetBorder(
+          views::CreateEmptyBorder(ChromeLayoutProvider::Get()->GetInsetsMetric(
+              views::INSETS_DIALOG_TITLE)));
+    }
   }
   GetBubbleFrameView()->SetHeaderView(std::move(image_view));
 }

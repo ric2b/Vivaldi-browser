@@ -226,9 +226,11 @@ void FakeBaseTabStripController::ToggleSelected(int index) {
 void FakeBaseTabStripController::AddSelectionFromAnchorTo(int index) {
 }
 
-bool FakeBaseTabStripController::BeforeCloseTab(int index,
-                                                CloseTabSource source) {
-  return true;
+void FakeBaseTabStripController::OnCloseTab(
+    int index,
+    CloseTabSource source,
+    base::OnceCallback<void()> callback) {
+  std::move(callback).Run();
 }
 
 void FakeBaseTabStripController::ToggleTabAudioMute(int index) {}
@@ -277,6 +279,10 @@ bool FakeBaseTabStripController::EverHasVisibleBackgroundTabShapes() const {
 }
 
 bool FakeBaseTabStripController::CanDrawStrokes() const {
+  return false;
+}
+
+bool FakeBaseTabStripController::IsFrameButtonsRightAligned() const {
   return false;
 }
 

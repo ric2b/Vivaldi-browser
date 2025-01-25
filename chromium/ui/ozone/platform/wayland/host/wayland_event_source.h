@@ -84,11 +84,6 @@ class WaylandEventSource : public PlatformEventSource,
   // are already bound and properly initialized.
   void StartProcessingEvents();
 
-  // Allow to explicitly reset pointer flags. Required in cases where the
-  // pointer state is modified by a button pressed event, but the respective
-  // button released event is not delivered (e.g: window moving, drag and drop).
-  void ResetPointerFlags();
-
   // Forwards the call to WaylandEventWatcher, which calls
   // wl_display_roundtrip_queue.
   void RoundTripQueue();
@@ -97,7 +92,6 @@ class WaylandEventSource : public PlatformEventSource,
 
   void ResetStateForTesting() override;
 
- protected:
   // WaylandKeyboard::Delegate
   void OnKeyboardFocusChanged(WaylandWindow* window, bool focused) override;
   void OnKeyboardModifiersChanged(int modifiers) override;
@@ -133,9 +127,10 @@ class WaylandEventSource : public PlatformEventSource,
   void OnPointerAxisSourceEvent(uint32_t axis_source) override;
   void OnPointerAxisStopEvent(uint32_t axis,
                               base::TimeTicks timestamp) override;
-  void OnResetPointerFlags() override;
   const gfx::PointF& GetPointerLocation() const override;
   bool IsPointerButtonPressed(EventFlags button) const override;
+  void ReleasePressedPointerButtons(WaylandWindow* window,
+                                    base::TimeTicks timestamp) override;
   void OnPointerStylusToolChanged(EventPointerType pointer_type) override;
   void OnPointerStylusForceChanged(float force) override;
   void OnPointerStylusTiltChanged(const gfx::Vector2dF& tilt) override;

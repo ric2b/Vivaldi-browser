@@ -54,6 +54,7 @@
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/modules/mediastream/media_constraints.h"
 #include "third_party/blink/renderer/modules/peerconnection/adapters/web_rtc_cross_thread_copier.h"
+#include "third_party/blink/renderer/modules/peerconnection/intercepting_network_controller.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_error_util.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection_handler.h"
 #include "third_party/blink/renderer/modules/webrtc/webrtc_audio_device_impl.h"
@@ -82,10 +83,10 @@
 #include "third_party/webrtc/api/enable_media.h"
 #include "third_party/webrtc/api/peer_connection_interface.h"
 #include "third_party/webrtc/api/rtc_event_log/rtc_event_log_factory.h"
+#include "third_party/webrtc/api/transport/goog_cc_factory.h"
 #include "third_party/webrtc/api/video_track_source_proxy_factory.h"
 #include "third_party/webrtc/media/engine/fake_video_codec_factory.h"
 #include "third_party/webrtc/modules/video_coding/codecs/h264/include/h264.h"
-#include "third_party/webrtc/rtc_base/openssl_stream_adapter.h"
 #include "third_party/webrtc/rtc_base/ref_counted_object.h"
 #include "third_party/webrtc/rtc_base/ssl_adapter.h"
 #include "third_party/webrtc_overrides/metronome_source.h"
@@ -383,7 +384,7 @@ class PeerConnectionStaticDeps {
   }
 
   static void InitializeOnThread(
-      rtc::Thread** thread,
+      raw_ptr<rtc::Thread>* thread,
       base::WaitableEvent* event,
       base::RepeatingCallback<void(base::TimeDelta)> latency_callback,
       base::RepeatingCallback<void(base::TimeDelta)> duration_callback) {
@@ -399,9 +400,9 @@ class PeerConnectionStaticDeps {
 
   // PeerConnection threads. signaling_thread_ is created from the "current"
   // (main) chrome thread.
-  rtc::Thread* signaling_thread_ = nullptr;
-  rtc::Thread* worker_thread_ = nullptr;
-  rtc::Thread* network_thread_ = nullptr;
+  raw_ptr<rtc::Thread> signaling_thread_ = nullptr;
+  raw_ptr<rtc::Thread> worker_thread_ = nullptr;
+  raw_ptr<rtc::Thread> network_thread_ = nullptr;
   base::Thread chrome_signaling_thread_;
   base::Thread chrome_worker_thread_;
   std::optional<base::Thread> chrome_network_thread_;
@@ -450,6 +451,25 @@ base::Thread& GetChromeWorkerThread() {
 base::Thread& GetChromeNetworkThread() {
   return StaticDeps().GetChromeNetworkThread();
 }
+
+class InterceptingNetworkControllerFactory
+    : public webrtc::NetworkControllerFactoryInterface {
+ public:
+  InterceptingNetworkControllerFactory() = default;
+
+  std::unique_ptr<webrtc::NetworkControllerInterface> Create(
+      webrtc::NetworkControllerConfig config) override {
+    return std::make_unique<InterceptingNetworkController>(
+        goog_cc_factory_->Create(config));
+  }
+  webrtc::TimeDelta GetProcessInterval() const override {
+    return goog_cc_factory_->GetProcessInterval();
+  }
+
+ private:
+  std::unique_ptr<webrtc::GoogCcNetworkControllerFactory> goog_cc_factory_ =
+      std::make_unique<webrtc::GoogCcNetworkControllerFactory>();
+};
 
 }  // namespace
 
@@ -549,9 +569,12 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
   EnsureWebRtcAudioDeviceImpl();
 
   // Init SSL, which will be needed by PeerConnection.
+  // TODO: https://issues.webrtc.org/issues/339300437 - remove once
+  // BoringSSL no longer requires this after
+  // https://bugs.chromium.org/p/boringssl/issues/detail?id=35
   if (!rtc::InitializeSSL()) {
     LOG(ERROR) << "Failed on InitializeSSL.";
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 
@@ -604,7 +627,9 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
           CrossThreadUnretained(Platform::Current()->GetGpuFactories()),
           Platform::Current()->GetMediaDecoderFactory(),
           CreateMojoVideoEncoderMetricsProviderFactory(DomWindow()->GetFrame()),
-          CrossThreadUnretained(&start_signaling_event)));
+          CrossThreadUnretained(&start_signaling_event),
+          RuntimeEnabledFeatures::RTCRtpTransportEnabled(
+              GetExecutionContext())));
 
   start_signaling_event.Wait();
 
@@ -620,7 +645,8 @@ void PeerConnectionDependencyFactory::InitializeSignalingThread(
     base::WeakPtr<media::DecoderFactory> media_decoder_factory,
     scoped_refptr<media::MojoVideoEncoderMetricsProviderFactory>
         video_encoder_metrics_provider_factory,
-    base::WaitableEvent* event) {
+    base::WaitableEvent* event,
+    bool rtp_transport_feature_enabled) {
   DCHECK(GetChromeSignalingThread().task_runner()->BelongsToCurrentThread());
   DCHECK(GetNetworkThread());
   // The task to initialize `signaling_thread_` was posted to the same thread,
@@ -717,6 +743,12 @@ void PeerConnectionDependencyFactory::InitializeSignalingThread(
   pcf_deps.audio_decoder_factory = blink::CreateWebrtcAudioDecoderFactory();
   pcf_deps.video_encoder_factory = std::move(webrtc_encoder_factory);
   pcf_deps.video_decoder_factory = std::move(webrtc_decoder_factory);
+
+  if (rtp_transport_feature_enabled) {
+    pcf_deps.network_controller_factory =
+        std::make_unique<InterceptingNetworkControllerFactory>();
+  }
+
   // Audio Processing Module (APM) instances are owned and handled by the Blink
   // media stream module.
   DCHECK_EQ(pcf_deps.audio_processing.get(), nullptr);

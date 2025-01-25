@@ -21,6 +21,7 @@ const char kBorealisInstallOverallTimeHistogram[] =
 // Same as Borealis.Install.OverallTime, but with more appropriate bucket sizes.
 const char kBorealisInstallOverallTimeHistogram2[] =
     "Borealis.Install.OverallTime2";
+const char kBorealisLaunchSourceHistogram[] = "Borealis.Launch.Source";
 const char kBorealisShutdownNumAttemptsHistogram[] =
     "Borealis.Shutdown.NumAttempts";
 const char kBorealisShutdownResultHistogram[] = "Borealis.Shutdown.Result";
@@ -33,6 +34,8 @@ const char kBorealisStartupOverallTimeHistogram[] =
 // Same as Borealis.Startup.OverallTime, but with more appropriate bucket sizes.
 const char kBorealisStartupOverallTimeHistogram2[] =
     "Borealis.Startup.OverallTime2";
+const char kBorealisStartupTimeToFirstWindowHistogram[] =
+    "Borealis.Startup.TimeToFirstWindow";
 const char kBorealisUninstallNumAttemptsHistogram[] =
     "Borealis.Uninstall.NumAttempts";
 const char kBorealisUninstallResultHistogram[] = "Borealis.Uninstall.Result";
@@ -55,6 +58,10 @@ void RecordBorealisInstallOverallTimeHistogram(base::TimeDelta install_time) {
   base::UmaHistogramTimes(kBorealisInstallOverallTimeHistogram, install_time);
   base::UmaHistogramLongTimes(kBorealisInstallOverallTimeHistogram2,
                               install_time);
+}
+
+void RecordBorealisLaunchSourceHistogram(BorealisLaunchSource launch_source) {
+  base::UmaHistogramEnumeration(kBorealisLaunchSourceHistogram, launch_source);
 }
 
 void RecordBorealisUninstallNumAttemptsHistogram() {
@@ -80,6 +87,12 @@ void RecordBorealisStartupResultHistogram(
 void RecordBorealisStartupOverallTimeHistogram(base::TimeDelta startup_time) {
   base::UmaHistogramTimes(kBorealisStartupOverallTimeHistogram, startup_time);
   base::UmaHistogramMediumTimes(kBorealisStartupOverallTimeHistogram2,
+                                startup_time);
+}
+
+void RecordBorealisStartupTimeToFirstWindowHistogram(
+    base::TimeDelta startup_time) {
+  base::UmaHistogramMediumTimes(kBorealisStartupTimeToFirstWindowHistogram,
                                 startup_time);
 }
 

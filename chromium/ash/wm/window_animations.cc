@@ -666,7 +666,7 @@ bool AnimateShowWindow(aura::Window* window) {
       AnimateShowWindow_StepEnd(window);
       return true;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 }
@@ -691,7 +691,7 @@ bool AnimateHideWindow(aura::Window* window) {
       AnimateHideWindow_StepEnd(window);
       return true;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 }
@@ -811,7 +811,7 @@ gfx::Rect GetMinimizeAnimationTargetBoundsInScreen(aura::Window* window) {
     case ShelfAlignment::kRight:
       return gfx::Rect(work_area.right(), work_area.y(), 0, 0);
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return gfx::Rect();
 }
 

@@ -9,6 +9,7 @@ import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
+import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -45,18 +46,20 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.BuildInfo;
 import org.chromium.base.CallbackController;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
@@ -87,7 +90,6 @@ import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.user_prefs.UserPrefs;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServerRule;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 
@@ -105,6 +107,7 @@ import java.util.concurrent.TimeoutException;
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @EnableFeatures(ChromeFeatureList.CCT_EPHEMERAL_MODE)
+@Batch(Batch.PER_CLASS)
 public class CustomTabActivityIncognitoTest {
 
     @ParameterAnnotations.ClassParameter
@@ -123,8 +126,6 @@ public class CustomTabActivityIncognitoTest {
     @Rule
     public IncognitoCustomTabActivityTestRule mCustomTabActivityTestRule =
             new IncognitoCustomTabActivityTestRule();
-
-    @Rule public TestRule mProcessor = new Features.InstrumentationProcessor();
 
     @Rule public EmbeddedTestServerRule mEmbeddedTestServerRule = new EmbeddedTestServerRule();
 
@@ -174,12 +175,17 @@ public class CustomTabActivityIncognitoTest {
     }
 
     private static int getIncognitoThemeColor(CustomTabActivity activity) throws Exception {
-        return TestThreadUtils.runOnUiThreadBlocking(
+        return ThreadUtils.runOnUiThreadBlocking(
                 () -> ChromeColors.getDefaultThemeColor(activity, true));
     }
 
+    private static int getThemeColor(CustomTabActivity activity) throws Exception {
+        return ThreadUtils.runOnUiThreadBlocking(
+                () -> ChromeColors.getDefaultThemeColor(activity, false));
+    }
+
     private static int getToolbarColor(CustomTabActivity activity) throws ExecutionException {
-        return TestThreadUtils.runOnUiThreadBlocking(
+        return ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     CustomTabToolbar toolbar = activity.findViewById(R.id.toolbar);
                     return toolbar.getBackground().getColor();
@@ -223,12 +229,21 @@ public class CustomTabActivityIncognitoTest {
                 AppMenuTestSupport.getMenuItemPropertyModel(
                         mCustomTabActivityTestRule.getAppMenuCoordinator(), R.id.info_menu_id));
 
+        if (mEphemeralTab) {
+            assertNotNull(
+                    AppMenuTestSupport.getMenuItemPropertyModel(
+                            mCustomTabActivityTestRule.getAppMenuCoordinator(),
+                            R.id.offline_page_id));
+        }
+
         ModelList iconRowModelList =
                 AppMenuTestSupport.getMenuItemPropertyModel(
                                 mCustomTabActivityTestRule.getAppMenuCoordinator(),
                                 R.id.icon_row_menu_id)
                         .get(AppMenuItemProperties.SUBMENU);
-        assertEquals(4, iconRowModelList.size());
+
+        int expectedTopActionIconsCount = mEphemeralTab ? 5 : 4;
+        assertEquals(expectedTopActionIconsCount, iconRowModelList.size());
     }
 
     private CustomTabActivity launchIncognitoCustomTab(Intent intent) throws InterruptedException {
@@ -237,7 +252,7 @@ public class CustomTabActivityIncognitoTest {
     }
 
     private void assertProfileUsedIsNonPrimary() throws TimeoutException {
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     Profile profile =
                             Profile.fromWebContents(
@@ -246,12 +261,17 @@ public class CustomTabActivityIncognitoTest {
                                             .getCurrentWebContents());
                     assertTrue(profile.isOffTheRecord());
                     assertFalse(profile.isPrimaryOTRProfile());
+                    if (mEphemeralTab) {
+                        assertFalse(profile.isIncognitoBranded());
+                    } else {
+                        assertTrue(profile.isIncognitoBranded());
+                    }
                 });
     }
 
     @Test
     @MediumTest
-    public void launchesIncognitoWhenEnabled() throws Exception {
+    public void launchesInOffTheRecordWhenEnabled() throws Exception {
         Intent intent = createTestCustomTabIntent();
         CustomTabActivity activity = launchIncognitoCustomTab(intent);
         assertTrue(activity.getActivityTab().isIncognito());
@@ -268,10 +288,11 @@ public class CustomTabActivityIncognitoTest {
         if (mEphemeralTab) {
             CustomTabToolbar customTabToolbar =
                     mCustomTabActivityTestRule.getActivity().findViewById(R.id.toolbar);
-            TestThreadUtils.runOnUiThreadBlocking(
+            ThreadUtils.runOnUiThreadBlocking(
                     () -> {
                         Profile profile = customTabToolbar.getToolbarDataProvider().getProfile();
                         assertFalse(profile.isOffTheRecord());
+                        assertFalse(profile.isIncognitoBranded());
                     });
         } else {
             assertTrue(activity.getActivityTab().isIncognito());
@@ -281,33 +302,48 @@ public class CustomTabActivityIncognitoTest {
 
     @Test
     @MediumTest
-    public void toolbarHasIncognitoThemeColor() throws Exception {
+    public void toolbarHasIncognitoThemeColor_ForIncognitoCCT() throws Exception {
         Intent intent = createTestCustomTabIntent();
         CustomTabActivity activity = launchIncognitoCustomTab(intent);
-        assertEquals(getIncognitoThemeColor(activity), getToolbarColor(activity));
+
+        if (mEphemeralTab) {
+            assertEquals(getThemeColor(activity), getToolbarColor(activity));
+        } else {
+            assertEquals(getIncognitoThemeColor(activity), getToolbarColor(activity));
+        }
     }
 
     @Test
     @MediumTest
-    public void toolbarHasIncognitoLogo() throws Exception {
+    public void toolbarHasIncognitoLogo_ForIncognitoCCT() throws Exception {
         Intent intent = createTestCustomTabIntent();
         launchIncognitoCustomTab(intent);
-        onView(withId(R.id.incognito_cct_logo_image_view)).check(matches(isDisplayed()));
+
+        if (mEphemeralTab) {
+            onView(withId(R.id.incognito_cct_logo_image_view)).check(matches(not(isDisplayed())));
+        } else {
+            onView(withId(R.id.incognito_cct_logo_image_view)).check(matches(isDisplayed()));
+        }
     }
 
     @Test
     @MediumTest
-    public void toolbarHasNonPrimaryIncognitoProfile_ForIncognitoCCT() throws Exception {
+    public void toolbarHasNonPrimaryOffTheRecordProfile() throws Exception {
         Intent intent = createTestCustomTabIntent();
         launchIncognitoCustomTab(intent);
 
         CustomTabToolbar customTabToolbar =
                 mCustomTabActivityTestRule.getActivity().findViewById(R.id.toolbar);
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     Profile profile = customTabToolbar.getToolbarDataProvider().getProfile();
                     assertTrue(profile.isOffTheRecord());
                     assertFalse(profile.isPrimaryOTRProfile());
+                    if (mEphemeralTab) {
+                        assertFalse(profile.isIncognitoBranded());
+                    } else {
+                        assertTrue(profile.isIncognitoBranded());
+                    }
                 });
     }
 
@@ -320,20 +356,26 @@ public class CustomTabActivityIncognitoTest {
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
         CustomTabToolbar customTabToolbar =
                 mCustomTabActivityTestRule.getActivity().findViewById(R.id.toolbar);
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     Profile profile = customTabToolbar.getToolbarDataProvider().getProfile();
                     assertFalse(profile.isOffTheRecord());
+                    assertFalse(profile.isIncognitoBranded());
                 });
     }
 
     @Test
     @MediumTest
-    public void ignoresCustomizedToolbarColor() throws Exception {
+    public void ignoresCustomizedToolbarColor_ForIncognitoCCT() throws Exception {
         Intent intent = createTestCustomTabIntent();
         intent.putExtra(CustomTabsIntent.EXTRA_TOOLBAR_COLOR, Color.RED);
         CustomTabActivity activity = launchIncognitoCustomTab(intent);
-        assertEquals(getIncognitoThemeColor(activity), getToolbarColor(activity));
+
+        if (mEphemeralTab) {
+            assertEquals(Color.RED, getToolbarColor(activity));
+        } else {
+            assertEquals(getIncognitoThemeColor(activity), getToolbarColor(activity));
+        }
     }
 
     @Test
@@ -356,15 +398,29 @@ public class CustomTabActivityIncognitoTest {
 
     @Test
     @MediumTest
-    public void openInBrowserMenuItemIsNotVisible() throws Exception {
-        launchAndTestMenuItemIsNotVisible(R.id.open_in_browser_id, "Open in Browser not visible");
+    public void openInBrowserMenuItemIsNotVisible_ForIncognitoCCT() throws Exception {
+        if (mEphemeralTab) {
+            launchAndTestMenuItemIsVisible(R.id.open_in_browser_id, "Open in Browser visible");
+        } else {
+            launchAndTestMenuItemIsNotVisible(
+                    R.id.open_in_browser_id, "Open in Browser not visible");
+        }
     }
 
     @Test
     @MediumTest
-    public void doesNotHaveAddToHomeScreenMenuItem() throws Exception {
-        launchAndTestMenuItemIsNotVisible(
-                R.id.add_to_homescreen_id, "Add to home screen not visible");
+    public void doesNotHaveAddToHomeScreenMenuItem_ForIncognitoCCT() throws Exception {
+        if (mEphemeralTab && !BuildInfo.getInstance().isAutomotive) {
+            launchAndTestMenuItemIsVisible(
+                    ChromeFeatureList.isEnabled(ChromeFeatureList.PWA_UNIVERSAL_INSTALL_UI)
+                            ? R.id.universal_install
+                            : R.id.add_to_homescreen_id,
+                    "Add to home screen is visible");
+        } else {
+            launchAndTestMenuItemIsNotVisible(
+                    R.id.add_to_homescreen_id, "Add to home screen not visible");
+            launchAndTestMenuItemIsNotVisible(R.id.universal_install, "Install not visible");
+        }
     }
 
     @Test
@@ -375,15 +431,24 @@ public class CustomTabActivityIncognitoTest {
 
     @Test
     @MediumTest
-    public void downloadTopIconIsNotVisible() throws Exception {
-        launchAndTestMenuItemIsNotVisible(R.id.offline_page_id, "Download icon not visible");
+    public void downloadTopIconIsNotVisible_ForIncognitoCCT() throws Exception {
+        if (mEphemeralTab) {
+            launchAndTestMenuItemIsVisible(R.id.offline_page_id, "Download icon is visible");
+        } else {
+            launchAndTestMenuItemIsNotVisible(R.id.offline_page_id, "Download icon not visible");
+        }
     }
 
     @Test
     @MediumTest
-    public void shareMenuItemByDefaultIsNotVisibile() throws Exception {
-        launchAndTestMenuItemIsNotVisible(
-                R.id.share_row_menu_id, "Share menu item not visible by default");
+    public void shareMenuItemByDefaultIsNotVisibile_ForIncognitoCCT() throws Exception {
+        if (mEphemeralTab) {
+            launchAndTestMenuItemIsVisible(
+                    R.id.share_row_menu_id, "Share menu item is visible by default");
+        } else {
+            launchAndTestMenuItemIsNotVisible(
+                    R.id.share_row_menu_id, "Share menu item not visible by default");
+        }
     }
 
     @Test
@@ -402,14 +467,14 @@ public class CustomTabActivityIncognitoTest {
 
     @Test
     @MediumTest
-    public void ensureOnlyFourTopIconsAreVisible() throws Exception {
+    public void ensureOnlyFourTopIconsAreVisible_ForIncognitoCCT() throws Exception {
         launchMenuItem();
         testTopActionIconsIsVisible();
     }
 
     @Test
     @MediumTest
-    public void ensureAddCustomMenuItemHasNoEffectForIncognitoTabs() throws Exception {
+    public void ensureAddCustomMenuItemHasNoEffect_ForIncognitoCCT() throws Exception {
         Intent intent = createTestCustomTabIntent();
         CustomTabsIntentTestUtils.addMenuEntriesToIntent(intent, 3, TEST_MENU_TITLE);
         CustomTabActivity activity = launchIncognitoCustomTab(intent);
@@ -418,9 +483,18 @@ public class CustomTabActivityIncognitoTest {
         ModelList menuItemsModelList =
                 AppMenuTestSupport.getMenuModelList(
                         mCustomTabActivityTestRule.getAppMenuCoordinator());
-        // Check the menu items have only 3 items visible including the top icon row menu for
-        // incognito tabs.
-        CustomTabsTestUtils.assertMenuSize(menuItemsModelList, 3);
+
+        if (mEphemeralTab) {
+            // Check that custom menu items are added for ephemeral CCTs.
+            // Automotive is missing the AddToHomeScreen item.
+            CustomTabsTestUtils.assertMenuSize(
+                    menuItemsModelList, BuildInfo.getInstance().isAutomotive ? 5 : 6);
+        } else {
+            // Check the menu items have only 3 items visible including the top icon row menu for
+            // incognito tabs.
+            CustomTabsTestUtils.assertMenuSize(menuItemsModelList, 3);
+        }
+
         assertNotNull(
                 AppMenuTestSupport.getMenuItemPropertyModel(
                         mCustomTabActivityTestRule.getAppMenuCoordinator(), R.id.icon_row_menu_id));
@@ -470,7 +544,7 @@ public class CustomTabActivityIncognitoTest {
 
     @Test
     @MediumTest
-    public void ensureAddCustomTopMenuItemHasNoEffect() throws Exception {
+    public void ensureAddCustomTopMenuItemHasNoEffect_ForIncognitoCCT() throws Exception {
         Bitmap expectedIcon = createVectorDrawableBitmap(R.drawable.ic_credit_card_black, 77, 48);
         Intent intent = createTestCustomTabIntent();
         final PendingIntent pi =
@@ -590,7 +664,7 @@ public class CustomTabActivityIncognitoTest {
         CustomTabActivity customTabActivity = launchIncognitoCustomTab(intent);
         CallbackHelper callbackHelper = new CallbackHelper();
         // Ensure that we did indeed create the re-auth controller.
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     OneshotSupplier<IncognitoReauthController>
                             incognitoReauthControllerOneshotSupplier =
@@ -611,14 +685,14 @@ public class CustomTabActivityIncognitoTest {
     @Test
     @MediumTest
     @EnableFeatures(ChromeFeatureList.INCOGNITO_REAUTHENTICATION_FOR_ANDROID)
-    public void testIncognitoReauthPageShowingForIncognitoCCT() throws Exception {
+    public void testIncognitoReauthPageShowing_ForIncognitoCCT() throws Exception {
         IncognitoReauthManager.setIsIncognitoReauthFeatureAvailableForTesting(true);
         IncognitoReauthSettingUtils.setIsDeviceScreenLockEnabledForTesting(true);
 
         Intent intent = createTestCustomTabIntent();
         CustomTabActivity customTabActivity = launchIncognitoCustomTab(intent);
         CallbackHelper callbackHelper = new CallbackHelper();
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     OneshotSupplier<IncognitoReauthController>
                             incognitoReauthControllerOneshotSupplier =
@@ -635,7 +709,7 @@ public class CustomTabActivityIncognitoTest {
                 });
         callbackHelper.waitForCallback(0);
 
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     UserPrefs.get(ProfileManager.getLastUsedRegularProfile())
                             .setBoolean(Pref.INCOGNITO_REAUTHENTICATION_FOR_ANDROID, true);
@@ -655,9 +729,16 @@ public class CustomTabActivityIncognitoTest {
                             (StartStopWithNativeObserver) incognitoReauthController;
                     observer.onStartWithNative();
 
-                    assertTrue(
-                            "Re-auth screen should be shown.",
-                            incognitoReauthController.isReauthPageShowing());
+                    if (mEphemeralTab) {
+                        assertFalse(
+                                "Re-auth screen should not be shown.",
+                                incognitoReauthController.isReauthPageShowing());
+                    } else {
+                        assertTrue(
+                                "Re-auth screen should be shown.",
+                                incognitoReauthController.isReauthPageShowing());
+                    }
+
                     UserPrefs.get(ProfileManager.getLastUsedRegularProfile())
                             .setBoolean(Pref.INCOGNITO_REAUTHENTICATION_FOR_ANDROID, false);
                 });

@@ -81,10 +81,6 @@ goobuntu$  	repo init -u https://chromium.googlesource.com/chromiumos/manifest.
 ```
 
 ```none
-                    --repo-url https://chromium.googlesource.com/external/repo.git \
-```
-
-```none
                     -g minilayout -b firmware-twinkie-9628.B
 ```
 

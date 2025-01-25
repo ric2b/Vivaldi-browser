@@ -20,6 +20,9 @@
         ],
         "Condition": "tint_build_hlsl_writer"
     },
+    "dxcompiler-for-fuzzer": {
+        "Condition": "tint_build_hlsl_writer"
+    },
     "google-benchmark": {
         "IncludePatterns": [
             "benchmark/benchmark.h"
@@ -89,5 +92,10 @@
             "winsock2.h"
         ],
         "Condition": "tint_build_is_win"
+    },
+    "libprotobuf-mutator": {
+      "IncludePatterns": [
+          "libprotobuf-mutator/**"
+      ]
     }
 }

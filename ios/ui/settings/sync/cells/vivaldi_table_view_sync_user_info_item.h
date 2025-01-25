@@ -11,6 +11,7 @@
 @property(nonatomic, copy) NSString* userName;
 @property(nonatomic, copy) NSString* sessionName;
 @property(nonatomic, copy) UIImage* userAvatar;
+@property(nonatomic, copy) UIImage* supporterBadge;
 
 @end
 
@@ -20,6 +21,7 @@
 @property(nonatomic, readonly, strong) UILabel* sessionNameLabel;
 
 - (void)setUserAvatar:(UIImage*)image;
+- (void)setBadgeImage:(UIImage*)badgeImage;
 
 @end
 

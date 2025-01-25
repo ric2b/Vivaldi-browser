@@ -57,8 +57,6 @@ struct InstanceDescriptor;
 // There are various ways to optimize ProcessEvents/WaitAny:
 // - TODO(crbug.com/dawn/2059) Spontaneously set events as "early-ready" in other places when we see
 //   serials advance, e.g. Submit, or when checking a later wait before an earlier wait.
-// - TODO(crbug.com/dawn/2049) For thread-driven events (async pipeline compilation and Metal queue
-//   events), defer tracking for ProcessEvents until the event is already completed.
 class EventManager final : NonMovable {
   public:
     EventManager();
@@ -88,13 +86,14 @@ class EventManager final : NonMovable {
     size_t mTimedWaitAnyMaxCount = kTimedWaitAnyMaxCountDefault;
     std::atomic<FutureID> mNextFutureID = 1;
 
-    // Only 1 thread is allowed to call ProcessEvents at a time. This lock ensures that.
-    std::mutex mProcessEventLock;
-
     // Freed once the user has dropped their last ref to the Instance, so can't call WaitAny or
     // ProcessEvents anymore. This breaks reference cycles.
     using EventMap = absl::flat_hash_map<FutureID, Ref<TrackedEvent>>;
     MutexProtected<std::optional<EventMap>> mEvents;
+
+    // Records last process event id in order to properly return whether or not there are still
+    // events to process when we have re-entrant callbacks.
+    std::atomic<FutureID> mLastProcessEventID = 0;
 };
 
 struct QueueAndSerial {

@@ -19,7 +19,8 @@ import java.util.concurrent.TimeUnit;
  * following update requirements:
  *
  * <pre>
- * 1. Fast path: Read cached suggestions so Magic Stack can show module quickly.
+ * 1. Fast path: Read suggestions that are cached or quickly generated without network fetching
+ *    (e.g., only uses Local Tabs) so Magic Stack can show module quickly.
  * 2. Slow path: Read up-to-date suggestions that needs time to fetch. This may not fire if (1) fast
  *    path data is already the most recent.
  * 3. Stability: Slow path data may produced unwanted result in some edge cases:
@@ -84,7 +85,7 @@ public class SyncDerivedTabResumptionDataProvider extends TabResumptionDataProvi
         }
 
         if (mStrength == ResultStrength.TENTATIVE && mTentativeSuggestionTime == 0) {
-            mTentativeSuggestionTime = mEntrySource.getCurrentTimeMs();
+            mTentativeSuggestionTime = TabResumptionModuleUtils.getCurrentTimeMs();
         }
         mEntrySource.getSuggestions(
                 (List<SuggestionEntry> suggestions) -> {
@@ -104,7 +105,7 @@ public class SyncDerivedTabResumptionDataProvider extends TabResumptionDataProvi
 
             // Require this to be the first update (for (3a)), and that it's timely (for (3b)).
         } else if (mStrength == ResultStrength.TENTATIVE
-                && mEntrySource.getCurrentTimeMs() - mTentativeSuggestionTime
+                && TabResumptionModuleUtils.getCurrentTimeMs() - mTentativeSuggestionTime
                         < TIMELY_THRESHOLD_MS) {
             mStrength = ResultStrength.STABLE;
             dispatchStatusChangedCallback();

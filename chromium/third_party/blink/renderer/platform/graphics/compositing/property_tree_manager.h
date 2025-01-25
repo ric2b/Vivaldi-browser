@@ -29,6 +29,7 @@ enum class RenderSurfaceReason : uint8_t;
 
 namespace gfx {
 class PointF;
+class Rect;
 class RRectF;
 }
 
@@ -51,6 +52,8 @@ class PropertyTreeManagerClient {
       CompositorElementId& mask_isolation_id,
       CompositorElementId& mask_effect_id) = 0;
   virtual bool NeedsCompositedScrolling(
+      const TransformPaintPropertyNode& scroll_translation) const = 0;
+  virtual bool ShouldForceMainThreadRepaint(
       const TransformPaintPropertyNode& scroll_translation) const = 0;
 };
 
@@ -111,13 +114,14 @@ class PropertyTreeManager {
   // Ensure the compositor scroll and transform nodes for a scroll translation
   // transform node. Returns the id of the scroll node.
   int EnsureCompositorScrollAndTransformNode(
-      const TransformPaintPropertyNode& scroll_offset_translation);
+      const TransformPaintPropertyNode& scroll_translation,
+      const gfx::Rect& scrolling_contents_cull_rect);
 
   // Same as above but marks the scroll nodes as being the viewport.
   int EnsureCompositorInnerScrollAndTransformNode(
-      const TransformPaintPropertyNode& scroll_offset_translation);
+      const TransformPaintPropertyNode& scroll_translation);
   int EnsureCompositorOuterScrollAndTransformNode(
-      const TransformPaintPropertyNode& scroll_offset_translation);
+      const TransformPaintPropertyNode& scroll_translation);
 
   // Ensures a cc::ScrollNode for a scroll translation node.
   // transform_id of the cc::ScrollNode is set to kInvalidPropertyNodeId.
@@ -175,6 +179,8 @@ class PropertyTreeManager {
 
   static uint32_t GetMainThreadScrollingReasons(const cc::LayerTreeHost&,
                                                 const ScrollPaintPropertyNode&);
+  // TODO(crbug.com/40517276): Remove this function after launching
+  // RasterInducingScroll.
   static bool UsesCompositedScrolling(const cc::LayerTreeHost&,
                                       const ScrollPaintPropertyNode&);
 
@@ -319,6 +325,9 @@ class PropertyTreeManager {
                              const TransformPaintPropertyNode&);
 
   void UpdatePixelMovingFilterClipExpanders();
+
+  uint32_t NonCompositedMainThreadScrollingReasons(
+      const TransformPaintPropertyNode& scroll_translation) const;
 
   PropertyTreeManagerClient& client_;
 

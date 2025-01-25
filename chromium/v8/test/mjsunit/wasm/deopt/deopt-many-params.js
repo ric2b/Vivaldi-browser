@@ -5,7 +5,7 @@
 // Flags: --wasm-deopt --allow-natives-syntax --turboshaft-wasm
 // Flags: --experimental-wasm-inlining --liftoff
 // Flags: --turboshaft-wasm-instruction-selection-staged
-// Flags: --wasm-inlining-ignore-call-counts
+// Flags: --wasm-inlining-ignore-call-counts --no-jit-fuzzing
 
 d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
 
@@ -37,9 +37,13 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   assertEquals(expectedSum, wasm.main(...values, wasm.add));
   %WasmTierUpFunction(wasm.main);
   assertEquals(expectedSum, wasm.main(...values, wasm.add));
-  assertTrue(%IsTurboFanFunction(wasm.main));
+  if (%IsolateCountForTesting() == 1) {
+    assertTrue(%IsTurboFanFunction(wasm.main));
+  }
   assertEquals(expectedDiff, wasm.main(...values, wasm.sub));
-  assertFalse(%IsTurboFanFunction(wasm.main));
+  if (%IsolateCountForTesting() == 1) {
+    assertFalse(%IsTurboFanFunction(wasm.main));
+  }
 
 
   function generateCalleeBody(binop) {

@@ -84,7 +84,7 @@ namespace {
 
 // The splash screen should be removed either when this timeout passes or the
 // demo mode launches and enters the full screen, whichever comes first.
-inline constexpr base::TimeDelta kRemoveSplashScreenTimeout = base::Seconds(10);
+inline constexpr base::TimeDelta kRemoveSplashScreenTimeout = base::Seconds(20);
 
 // Global DemoSession instance.
 DemoSession* g_demo_session = nullptr;
@@ -299,7 +299,7 @@ std::string DemoSession::DemoConfigToString(
     case DemoSession::DemoModeConfig::kOfflineDeprecated:
       return "offlineDeprecated";
   }
-  NOTREACHED() << "Unknown demo mode configuration";
+  NOTREACHED_IN_MIGRATION() << "Unknown demo mode configuration";
   return std::string();
 }
 
@@ -318,6 +318,14 @@ DemoSession::DemoModeConfig DemoSession::GetDemoConfig() {
 
   if (g_force_demo_config.has_value())
     return *g_force_demo_config;
+
+  // In test env we may not download components and go through ZTE. Fake online
+  // status.
+  const auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(ash::switches::kDemoModeResourceDirectory) ||
+      command_line->HasSwitch(ash::switches::kDemoModeSwaContentDirectory)) {
+    return DemoModeConfig::kOnline;
+  }
 
   const PrefService* prefs = g_browser_process->local_state();
 

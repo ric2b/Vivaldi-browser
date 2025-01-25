@@ -664,7 +664,7 @@ class CompilationUnit {
   }
 
   // Processes all DIEs for this compilation unit
-  void ProcessDIEs();
+  bool ProcessDIEs();
 
   // Skips the die with attributes specified in ABBREV starting at
   // START, and return the new place to position the stream to.

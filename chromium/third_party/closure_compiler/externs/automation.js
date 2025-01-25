@@ -101,7 +101,6 @@ chrome.automation.EventType = {
   ORIENTATION_CHANGED: 'orientationChanged',
   PARENT_CHANGED: 'parentChanged',
   PLACEHOLDER_CHANGED: 'placeholderChanged',
-  PORTAL_ACTIVATED: 'portalActivated',
   POSITION_IN_SET_CHANGED: 'positionInSetChanged',
   RANGE_VALUE_CHANGED: 'rangeValueChanged',
   RANGE_VALUE_MAX_CHANGED: 'rangeValueMaxChanged',
@@ -241,6 +240,7 @@ chrome.automation.RoleType = {
   GRAPHICS_OBJECT: 'graphicsObject',
   GRAPHICS_SYMBOL: 'graphicsSymbol',
   GRID: 'grid',
+  GRID_CELL: 'gridCell',
   GROUP: 'group',
   HEADER: 'header',
   HEADER_AS_NON_LANDMARK: 'headerAsNonLandmark',
@@ -308,7 +308,7 @@ chrome.automation.RoleType = {
   PDF_ROOT: 'pdfRoot',
   PLUGIN_OBJECT: 'pluginObject',
   POP_UP_BUTTON: 'popUpButton',
-  PORTAL: 'portal',
+  PORTAL_DEPRECATED: 'portalDeprecated',
   PRE_DEPRECATED: 'preDeprecated',
   PROGRESS_INDICATOR: 'progressIndicator',
   RADIO_BUTTON: 'radioButton',
@@ -458,6 +458,7 @@ chrome.automation.NameFromType = {
   CONTENTS: 'contents',
   PLACEHOLDER: 'placeholder',
   POPOVER_ATTRIBUTE: 'popoverAttribute',
+  PROHIBITED: 'prohibited',
   RELATED_ELEMENT: 'relatedElement',
   TITLE: 'title',
   VALUE: 'value',
@@ -1327,6 +1328,13 @@ chrome.automation.AutomationNode.prototype.imageAnnotation;
  * @see https://developer.chrome.com/extensions/automation#type-value
  */
 chrome.automation.AutomationNode.prototype.value;
+
+/**
+ * The HTML id for this element, if this node is an HTML element.
+ * @type {(string|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-htmlId
+ */
+chrome.automation.AutomationNode.prototype.htmlId;
 
 /**
  * The HTML tag for this element, if this node is an HTML element.

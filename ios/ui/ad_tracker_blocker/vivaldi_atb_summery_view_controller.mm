@@ -500,7 +500,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (void)removeWebStateObserver {
-  if (_webState) {
+  if (_webState && _webStateObserverBridge) {
     _webState->RemoveObserver(_webStateObserverBridge.get());
     _webStateObserverBridge.reset();
   }

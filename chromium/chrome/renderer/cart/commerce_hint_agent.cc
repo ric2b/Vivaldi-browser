@@ -6,7 +6,6 @@
 
 #include <string_view>
 
-#include "base/features.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/metrics/field_trial_params.h"
@@ -31,8 +30,8 @@
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "services/metrics/public/cpp/mojo_ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/loader/http_body_element_type.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/web_http_body.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -269,7 +268,7 @@ void RecordCommerceEvent(CommerceEvent event) {
       base::RecordAction(base::UserMetricsAction("Commerce.Purchase"));
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -281,7 +280,7 @@ mojo::Remote<mojom::CommerceHintObserver> GetObserver(
   // Subframes including fenced frames shouldn't be reached here.
   DCHECK(render_frame->IsMainFrame() && !render_frame->IsInFencedFrameTree());
 
-  render_frame->GetBrowserInterfaceBroker()->GetInterface(
+  render_frame->GetBrowserInterfaceBroker().GetInterface(
       observer.BindNewPipeAndPassReceiver());
   return observer;
 }
@@ -996,10 +995,8 @@ void CommerceHintAgent::WillSendRequest(const blink::WebURLRequest& request) {
 
   // The rest of this method is not concerned with data URLs but makes a copy of
   // the URL which can be expensive for large data URLs.
-  // TODO(crbug.com/40224104): Clean up this method to avoid copies once this
-  // optimization has been measured in the field and launches.
-  if (base::FeatureList::IsEnabled(base::features::kOptimizeDataUrls) &&
-      request.Url().ProtocolIs(url::kDataScheme)) {
+  // TODO(crbug.com/40224104): Clean up this method to avoid copies.
+  if (request.Url().ProtocolIs(url::kDataScheme)) {
     return;
   }
 

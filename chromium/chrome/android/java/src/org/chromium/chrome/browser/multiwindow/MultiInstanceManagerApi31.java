@@ -48,6 +48,9 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
+import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeatures;
+import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
+import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncUtils;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
@@ -62,6 +65,7 @@ import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
+import org.chromium.components.tab_group_sync.TabGroupSyncService;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import java.util.ArrayList;
@@ -134,6 +138,7 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
                     (item) -> {
                         RecordUserAction.record("MobileMenuWindowManagerCloseInstance");
                         closeInstance(item.instanceId, item.taskId);
+                        cleanupSyncedTabGroupsIfLastInstance();
                     },
                     () -> openNewWindow("Android.WindowManager.NewWindow"),
                     info.size() < MultiWindowUtils.getMaxInstances(),
@@ -506,15 +511,17 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
         // Remove tasks that do not exist any more from the task map
         ActivityManager activityManager =
                 (ActivityManager) mActivity.getSystemService(Context.ACTIVITY_SERVICE);
-        List<AppTask> allTasks = activityManager.getAppTasks();
-        Set<Integer> validTasks = getAllChromeTasks(allTasks);
+        List<AppTask> appTasks = activityManager.getAppTasks();
+        Set<Integer> appTaskIds = getAllAppTaskIds(appTasks);
         Map<String, Integer> taskMap =
                 ChromeSharedPreferences.getInstance()
                         .readIntsWithPrefix(ChromePreferenceKeys.MULTI_INSTANCE_TASK_MAP);
         List<String> tasksRemoved = new ArrayList<>();
         for (Map.Entry<String, Integer> entry : taskMap.entrySet()) {
-            if (!validTasks.contains(entry.getValue())) {
-                checkInvalidTaskNotInAllTasks(allTasks, entry.getValue());
+            if (!appTaskIds.contains(entry.getValue())) {
+                // TODO (crbug/327054706): Remove this check once we have verified that crash
+                // reports have reduced.
+                checkInvalidTaskNotInAllTasks(appTasks, entry.getValue());
                 tasksRemoved.add(entry.getKey() + " - " + entry.getValue());
                 ChromeSharedPreferences.getInstance().removeKey(entry.getKey());
                 if (ChromeFeatureList.sMultiInstanceApplicationStatusCleanup.isEnabled()
@@ -552,19 +559,17 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
         }
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    @VisibleForTesting
     protected static List<Activity> getAllRunningActivities() {
         return ApplicationStatus.getRunningActivities();
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    protected Set<Integer> getAllChromeTasks(List<AppTask> allTasks) {
+    @VisibleForTesting
+    protected Set<Integer> getAllAppTaskIds(List<AppTask> allTasks) {
         Set<Integer> results = new HashSet<>();
         for (AppTask task : allTasks) {
-            String baseActivity = MultiWindowUtils.getActivityNameFromTask(task);
-            if (!TextUtils.equals(baseActivity, ChromeTabbedActivity.class.getName())) continue;
             ActivityManager.RecentTaskInfo info = AndroidTaskUtils.getTaskInfoFromTask(task);
-            if (info != null) results.add(info.id);
+            if (info != null) results.add(info.taskId);
         }
         return results;
     }
@@ -940,14 +945,13 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
     }
 
     /**
-     * Open a new instance of the ChromeTabbedActivity window and move the
-     * specified tab from existing instance to the new one.
+     * Open a new instance of the ChromeTabbedActivity window and move the specified tab from
+     * existing instance to the new one.
+     *
      * @param tab Tab that is to be moved to a new Chrome instance.
      */
     @Override
     public void moveTabToNewWindow(Tab tab) {
-        if (!TabUiFeatureUtilities.isTabDragEnabled()) return;
-
         // Check if the new Chrome instance can be opened.
         if (MultiWindowUtils.getInstanceCount() < mMaxInstances) {
             moveAndReparentTabToNewWindow(
@@ -973,9 +977,6 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
      */
     @Override
     public void moveTabToWindow(Activity activity, Tab tab, int atIndex) {
-        if (!TabUiFeatureUtilities.isTabDragEnabled()
-                && !TabUiFeatureUtilities.isTabTearingEnabled()) return;
-
         // Get the current instance and move tab there.
         InstanceInfo info = getInstanceInfoFor(activity);
         if (info != null) {
@@ -1030,19 +1031,50 @@ class MultiInstanceManagerApi31 extends MultiInstanceManager implements Activity
      * Close a Chrome window instance only if it contains no open tabs including incognito ones.
      *
      * @param instanceId Instance id of the Chrome window that needs to be closed.
+     * @return {@code true} if the window was closed, {@code false} otherwise.
      */
     @Override
-    public void closeChromeWindowIfEmpty(int instanceId) {
+    public boolean closeChromeWindowIfEmpty(int instanceId) {
         if (canCloseChromeWindow(instanceId)) {
             TabModelSelector selector =
                     TabWindowManagerSingleton.getInstance().getTabModelSelectorById(instanceId);
             // Determine if the drag source Chrome instance window has any tabs including incognito
-            // ones
-            // left so as to close if it is empty.
+            // ones left so as to close if it is empty.
             if (selector.getTotalTabCount() == 0) {
                 Log.i(TAG, "Closing empty Chrome instance as no tabs exist.");
                 closeInstance(instanceId, INVALID_TASK_ID);
+                return true;
             }
         }
+        return false;
+    }
+
+    /**
+     * This method makes a call out to sync to audit all of the tab groups if there is only one
+     * remaining active Chrome instance. This is a workaround to the fact that closing an instance
+     * that does not have an active {@link TabModelSelector} will never notify sync that the tabs it
+     * contained were closed and as such sync will continue to think some inactive instance contains
+     * the tab groups that aren't available in the current activity. If we get down to a single
+     * instance of Chrome we know any data for tab groups not found in the current activity's {@link
+     * TabModelSelector} must be closed and we can remove the sync mapping.
+     */
+    @VisibleForTesting
+    void cleanupSyncedTabGroupsIfLastInstance() {
+        List<InstanceInfo> info = getInstanceInfo();
+        if (info.size() != 1) return;
+
+        TabModelSelector selector =
+                TabWindowManagerSingleton.getInstance()
+                        .getTabModelSelectorById(info.get(0).instanceId);
+        assert selector != null;
+
+        TabGroupModelFilter filter =
+                (TabGroupModelFilter) selector.getTabModelFilterProvider().getTabModelFilter(false);
+
+        Profile profile = filter.getTabModel().getProfile();
+        if (!TabGroupSyncFeatures.isTabGroupSyncEnabled(profile)) return;
+
+        TabGroupSyncService tabGroupSyncService = TabGroupSyncServiceFactory.getForProfile(profile);
+        TabGroupSyncUtils.unmapLocalIdsNotInTabGroupModelFilter(tabGroupSyncService, filter);
     }
 }

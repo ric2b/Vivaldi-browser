@@ -14,6 +14,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/metrics/histogram.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -74,15 +75,6 @@ constexpr char kSaveUIDismissalReasonHistogramName[] =
     "PasswordManager.SaveUIDismissalReason";
 constexpr char kUpdateUIDismissalReasonHistogramName[] =
     "PasswordManager.UpdateUIDismissalReason";
-constexpr char kSaveUpdatePasswordMessageDismissalReason[] =
-    "PasswordManager.SaveUpdateUIDismissalReasonAndroid";
-constexpr char kSavePasswordMessageDismissalReason[] =
-    "PasswordManager.SaveUpdateUIDismissalReasonAndroid.Save";
-constexpr char kUpdatePasswordMessageDismissalReason[] =
-    "PasswordManager.SaveUpdateUIDismissalReasonAndroid.Update";
-constexpr char kConfirmUsernameMessageDismissalReason[] =
-    "PasswordManager.SaveUpdateUIDismissalReasonAndroid."
-    "UpdateWithUsernameConfirmation";
 
 }  // namespace
 
@@ -305,8 +297,7 @@ SaveUpdatePasswordMessageDelegateTest::CreateFormManager(
   ON_CALL(*form_manager, GetURL()).WillByDefault(ReturnRef(password_form_url_));
   ON_CALL(*form_manager, GetBestMatches()).WillByDefault(Return(best_matches));
   ON_CALL(*form_manager, GetFederatedMatches())
-      .WillByDefault(Return(
-          std::vector<raw_ptr<const PasswordForm, VectorExperimental>>{}));
+      .WillByDefault(Return(base::span<const PasswordForm>()));
   ON_CALL(*form_manager, GetMetricsRecorder())
       .WillByDefault(Return(metrics_recorder_.get()));
   ON_CALL(*form_manager, Save())
@@ -1106,18 +1097,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
   histogram_tester.ExpectUniqueSample(
       kUpdateUIDismissalReasonHistogramName,
       password_manager::metrics_util::CLICKED_ACCEPT, 1);
-  histogram_tester.ExpectUniqueSample(
-      kSaveUpdatePasswordMessageDismissalReason,
-      SaveUpdatePasswordMessageDelegate::
-          SaveUpdatePasswordMessageDismissReason::
-              kAcceptInUsernameConfirmDialog,
-      1);
-  histogram_tester.ExpectUniqueSample(
-      kConfirmUsernameMessageDismissalReason,
-      SaveUpdatePasswordMessageDelegate::
-          SaveUpdatePasswordMessageDismissReason::
-              kAcceptInUsernameConfirmDialog,
-      1);
 }
 // Verifies that:
 // 1. Save password dialog is shown after clicking on cog menu item
@@ -1156,16 +1135,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
   histogram_tester.ExpectUniqueSample(
       kSaveUIDismissalReasonHistogramName,
       password_manager::metrics_util::CLICKED_ACCEPT, 1);
-  histogram_tester.ExpectUniqueSample(
-      kSaveUpdatePasswordMessageDismissalReason,
-      SaveUpdatePasswordMessageDelegate::
-          SaveUpdatePasswordMessageDismissReason::kAcceptInDialog,
-      1);
-  histogram_tester.ExpectUniqueSample(
-      kSavePasswordMessageDismissalReason,
-      SaveUpdatePasswordMessageDelegate::
-          SaveUpdatePasswordMessageDismissReason::kAcceptInDialog,
-      1);
 }
 
 // Verifies that the site is blocklisted after clicking on
@@ -1192,16 +1161,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
   histogram_tester.ExpectUniqueSample(
       kSaveUIDismissalReasonHistogramName,
       password_manager::metrics_util::CLICKED_NEVER, 1);
-  histogram_tester.ExpectUniqueSample(
-      kSaveUpdatePasswordMessageDismissalReason,
-      SaveUpdatePasswordMessageDelegate::
-          SaveUpdatePasswordMessageDismissReason::kNeverSave,
-      1);
-  histogram_tester.ExpectUniqueSample(
-      kSavePasswordMessageDismissalReason,
-      SaveUpdatePasswordMessageDelegate::
-          SaveUpdatePasswordMessageDismissReason::kNeverSave,
-      1);
 }
 
 // Verifies that the password migration warning is not shown after selecting
@@ -1263,16 +1222,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
   histogram_tester.ExpectUniqueSample(
       kUpdateUIDismissalReasonHistogramName,
       password_manager::metrics_util::CLICKED_ACCEPT, 1);
-  histogram_tester.ExpectUniqueSample(
-      kSaveUpdatePasswordMessageDismissalReason,
-      SaveUpdatePasswordMessageDelegate::
-          SaveUpdatePasswordMessageDismissReason::kAcceptInDialog,
-      1);
-  histogram_tester.ExpectUniqueSample(
-      kUpdatePasswordMessageDismissalReason,
-      SaveUpdatePasswordMessageDelegate::
-          SaveUpdatePasswordMessageDismissReason::kAcceptInDialog,
-      1);
 }
 
 // Verifies that:
@@ -1305,16 +1254,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
   histogram_tester.ExpectUniqueSample(
       kSaveUIDismissalReasonHistogramName,
       password_manager::metrics_util::CLICKED_CANCEL, 1);
-  histogram_tester.ExpectUniqueSample(
-      kSaveUpdatePasswordMessageDismissalReason,
-      SaveUpdatePasswordMessageDelegate::
-          SaveUpdatePasswordMessageDismissReason::kCancelInDialog,
-      1);
-  histogram_tester.ExpectUniqueSample(
-      kSavePasswordMessageDismissalReason,
-      SaveUpdatePasswordMessageDelegate::
-          SaveUpdatePasswordMessageDismissReason::kCancelInDialog,
-      1);
 }
 
 // Tests that password is saved if device lock UI is shown and device lock is
@@ -1466,9 +1405,9 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_UPDATE_PASSWORD),
             GetMessageWrapper()->GetTitle());
 
-    EXPECT_EQ(GetExpectedUPMMessageDescription(is_update, is_signed_in,
-                                               kAccountEmail16),
-              GetMessageWrapper()->GetDescription());
+  EXPECT_EQ(GetExpectedUPMMessageDescription(is_update, is_signed_in,
+                                             kAccountEmail16),
+            GetMessageWrapper()->GetDescription());
 
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_UPDATE_BUTTON),
             GetMessageWrapper()->GetPrimaryButtonText());
@@ -1490,9 +1429,9 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
   EnqueueMessage(std::move(form_manager), /*user_signed_in=*/is_signed_in,
                  /*update_password=*/is_update);
 
-    EXPECT_EQ(GetExpectedUPMMessageDescription(is_update, is_signed_in,
-                                               kAccountEmail16),
-              GetMessageWrapper()->GetDescription());
+  EXPECT_EQ(GetExpectedUPMMessageDescription(is_update, is_signed_in,
+                                             kAccountEmail16),
+            GetMessageWrapper()->GetDescription());
 
   DismissMessage(messages::DismissReason::UNKNOWN);
 }
@@ -1517,9 +1456,9 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
   EnqueueMessage(std::move(form_manager), /*user_signed_in=*/is_signed_in,
                  /*update_password=*/is_update, account_info);
 
-    EXPECT_EQ(GetExpectedUPMMessageDescription(is_update, is_signed_in,
-                                               kAccountFullName16),
-              GetMessageWrapper()->GetDescription());
+  EXPECT_EQ(GetExpectedUPMMessageDescription(is_update, is_signed_in,
+                                             kAccountFullName16),
+            GetMessageWrapper()->GetDescription());
   DismissMessage(messages::DismissReason::UNKNOWN);
 }
 
@@ -1535,9 +1474,9 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
   EnqueueMessage(std::move(form_manager), /*user_signed_in=*/is_signed_in,
                  /*update_password=*/is_update);
 
-    EXPECT_EQ(GetExpectedUPMMessageDescription(is_update, is_signed_in,
-                                               kAccountEmail16),
-              GetMessageWrapper()->GetDescription());
+  EXPECT_EQ(GetExpectedUPMMessageDescription(is_update, is_signed_in,
+                                             kAccountEmail16),
+            GetMessageWrapper()->GetDescription());
 
   DismissMessage(messages::DismissReason::UNKNOWN);
 }
@@ -1612,8 +1551,21 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
 
   EnqueueMessage(std::move(form_manager), /*user_signed_in=*/is_signed_in,
                  /*update_password=*/is_update, account_info);
-    EXPECT_EQ(GetExpectedUPMMessageDescription(is_update, is_signed_in,
-                                               kAccountFullName16),
-              GetMessageWrapper()->GetDescription());
+  EXPECT_EQ(GetExpectedUPMMessageDescription(is_update, is_signed_in,
+                                             kAccountFullName16),
+            GetMessageWrapper()->GetDescription());
+  DismissMessage(messages::DismissReason::UNKNOWN);
+}
+
+TEST_F(SaveUpdatePasswordMessageDelegateTest, RecordsPromptShownWhenEnqueuing) {
+  base::HistogramTester histogram_tester;
+  SetPendingCredentials(kUsername, kPassword, /*is_account_store=*/true);
+  auto form_manager =
+      CreateFormManager(GURL(kDefaultUrl), empty_best_matches());
+  EnqueueMessage(std::move(form_manager), /*user_signed_in=*/false,
+                 /*update_password=*/false);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.FormSubmissionsVsSavePrompts",
+      password_manager::metrics_util::SaveFlowStep::kSavePromptShown, 1);
   DismissMessage(messages::DismissReason::UNKNOWN);
 }

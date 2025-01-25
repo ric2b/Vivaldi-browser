@@ -14,8 +14,6 @@ import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.text.TextPaint;
 
-import androidx.annotation.VisibleForTesting;
-
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
@@ -38,12 +36,14 @@ public class TabSwitcherDrawable extends TintedDrawable {
     // Tab Count Label
     private int mTabCount;
     private boolean mIncognito;
+    private String mTextRenderedForTesting;
 
     /**
      * Creates a {@link TabSwitcherDrawable}.
+     *
      * @param context A {@link Context} instance.
      * @param brandedColorScheme The {@link BrandedColorScheme} used to tint the drawable.
-     * @return          A {@link TabSwitcherDrawable} instance.
+     * @return A {@link TabSwitcherDrawable} instance.
      */
     public static TabSwitcherDrawable createTabSwitcherDrawable(
             Context context, @BrandedColorScheme int brandedColorScheme) {
@@ -81,6 +81,7 @@ public class TabSwitcherDrawable extends TintedDrawable {
         super.draw(canvas);
 
         String textString = getTabCountString();
+        mTextRenderedForTesting = textString;
         if (!textString.isEmpty()) {
             mTextPaint.getTextBounds(textString, 0, textString.length(), mTextBounds);
 
@@ -98,7 +99,6 @@ public class TabSwitcherDrawable extends TintedDrawable {
     /**
      * @return The current tab count this drawable is displaying.
      */
-    @VisibleForTesting
     public int getTabCount() {
         return mTabCount;
     }
@@ -140,6 +140,10 @@ public class TabSwitcherDrawable extends TintedDrawable {
         updatePaint();
     }
 
+    public String getTextRenderedForTesting() {
+        return mTextRenderedForTesting;
+    }
+
     /** Vivaldi */
     public static TabSwitcherDrawable createTabSwitcherDrawable(Context context) {
         Drawable drawable = ContextCompat.getDrawable(context,
@@ -176,4 +180,5 @@ public class TabSwitcherDrawable extends TintedDrawable {
         drawable.draw(canvas);
         return new TabSwitcherDrawable(context, brandedColorScheme, bitmap);
     }
+    // End Vivaldi
 }

@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Käytä</translation>
 <translation id="1603914832182249871">(yksityinen)</translation>
 <translation id="1627276047960621195">Tiedostokuvaajat</translation>
+<translation id="1654713139320245449">Suoratoistokohteita ei löytynyt. Tarvitsetko apua?</translation>
 <translation id="166278006618318542">Kohteen julkisen avaimen algoritmi</translation>
 <translation id="1682548588986054654">Uusi yksityinen ikkuna</translation>
 <translation id="1708338024780164500">(passiivinen)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Joku muu tietokoneen sovellus lisäsi laajennuksen, joka voi vaikuttaa Vivaldin toimintaan.</translation>
 <translation id="2443487764245141020">Sivustojen on ehkä voitava tunnistaa laite tunnisteella</translation>
 <translation id="2445081178310039857">Laajennuksen juurikansio on pakollinen.</translation>
-<translation id="2470702053775288986">Tukemattomat laajennukset on poistettu käytöstä</translation>
 <translation id="2485422356828889247">Poista asennus</translation>
 <translation id="2498539833203011245">Pienennä</translation>
 <translation id="2509495747794740764">Asteikon on oltava numero väliltä 10–200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Lisätiedot</translation>
 <translation id="4345587454538109430">Määritä…</translation>
 <translation id="4348766275249686434">Kokoa virheet</translation>
-<translation id="4363771538994847871">Välityskohteita ei löytynyt. Tarvitsetko apua?</translation>
 <translation id="4384652540891215547">Aktivoi laajennus</translation>
 <translation id="4394049700291259645">Poista käytöstä</translation>
 <translation id="4409697491990005945">Reunukset</translation>
@@ -390,7 +389,6 @@ Julkinen eksponentti (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bittiä):
 <translation id="7771452384635174008">Asettelu</translation>
 <translation id="7782102568078991263">Ei enää Googlen ehdotuksia</translation>
 <translation id="7786889348652477777">&amp;Lataa sovellus uudelleen</translation>
-<translation id="7791543448312431591">Lisää</translation>
 <translation id="7800518121066352902">Kierrä &amp;vastapäivään</translation>
 <translation id="7814458197256864873">&amp;Kopioi</translation>
 <translation id="7818135753970109980">Uusi teema lisätty (<ph name="EXTENSION_NAME" />)</translation>

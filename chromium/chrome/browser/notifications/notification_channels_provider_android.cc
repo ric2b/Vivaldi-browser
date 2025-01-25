@@ -19,7 +19,6 @@
 #include "base/strings/string_util.h"
 #include "base/time/default_clock.h"
 #include "base/values.h"
-#include "chrome/browser/notifications/jni_headers/NotificationSettingsBridge_jni.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/content_settings_pref_provider.h"
 #include "components/content_settings/core/browser/content_settings_rule.h"
@@ -37,6 +36,9 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/url_constants.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "chrome/browser/notifications/jni_headers/NotificationSettingsBridge_jni.h"
 
 using base::android::AttachCurrentThread;
 using base::android::BuildInfo;
@@ -106,7 +108,7 @@ ContentSetting ChannelStatusToContentSetting(NotificationChannelStatus status) {
     case NotificationChannelStatus::BLOCKED:
       return CONTENT_SETTING_BLOCK;
     case NotificationChannelStatus::UNAVAILABLE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return CONTENT_SETTING_DEFAULT;
 }
@@ -416,7 +418,7 @@ void NotificationChannelsProviderAndroid::UpdateChannelForWebsiteImpl(
     }
     default:
       // We rely on notification settings being one of ALLOW/BLOCK/DEFAULT.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -536,7 +538,7 @@ void NotificationChannelsProviderAndroid::CreateChannelForRule(
       break;
     default:
       // We assume notification preferences are either ALLOW/BLOCK.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }

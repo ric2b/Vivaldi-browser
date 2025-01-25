@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 import type * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
-import * as Root from '../../core/root/root.js';
 import * as TraceEngine from '../../models/trace/trace.js';
 
 import {buildGroupStyle, buildTrackHeader, getFormattedTime} from './AppenderUtils.js';
@@ -12,7 +11,9 @@ import {
   type HighlightedEntryInfo,
   type TrackAppender,
   type TrackAppenderName,
+  VisualLoggingTrackName,
 } from './CompatibilityTracksAppender.js';
+import {ExtensionDataGatherer} from './ExtensionDataGatherer.js';
 import * as Extensions from './extensions/extensions.js';
 import {TimelineFlameChartMarker} from './TimelineFlameChartView.js';
 import {type TimelineMarkerStyle} from './TimelineUIUtils.js';
@@ -52,10 +53,9 @@ export class TimingsTrackAppender implements TrackAppender {
    * appended the track's events.
    */
   appendTrackAtLevel(trackStartLevel: number, expanded?: boolean): number {
-    const extensionMarkers = this.#traceParsedData.ExtensionTraceData.extensionMarkers;
+    const extensionMarkers = ExtensionDataGatherer.instance().getExtensionData().extensionMarkers;
     const pageloadMarkers = this.#traceParsedData.PageLoadMetrics.allMarkerEvents;
-    const extensionMarkersAreEmpty = extensionMarkers.length === 0 ||
-        !Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_EXTENSIONS);
+    const extensionMarkersAreEmpty = extensionMarkers.length === 0;
     const performanceMarks = this.#traceParsedData.UserTimings.performanceMarks.filter(
         m => !TraceEngine.Handlers.ModelHandlers.ExtensionTraceData.extensionDataInTiming(m));
     const performanceMeasures = this.#traceParsedData.UserTimings.performanceMeasures.filter(
@@ -87,8 +87,9 @@ export class TimingsTrackAppender implements TrackAppender {
   #appendTrackHeaderAtLevel(currentLevel: number, expanded?: boolean): void {
     const trackIsCollapsible = this.#traceParsedData.UserTimings.performanceMeasures.length > 0;
     const style = buildGroupStyle({useFirstLineForOverview: true, collapsible: trackIsCollapsible});
-    const group =
-        buildTrackHeader(currentLevel, i18nString(UIStrings.timings), style, /* selectable= */ true, expanded);
+    const group = buildTrackHeader(
+        VisualLoggingTrackName.TIMINGS, currentLevel, i18nString(UIStrings.timings), style, /* selectable= */ true,
+        expanded);
     this.#compatibilityBuilder.registerTrackForGroup(group, this);
   }
 
@@ -104,9 +105,8 @@ export class TimingsTrackAppender implements TrackAppender {
   #appendMarkersAtLevel(currentLevel: number): number {
     let markers: (TraceEngine.Types.Extensions.SyntheticExtensionMarker|TraceEngine.Types.TraceEvents.PageLoadEvent)[] =
         this.#traceParsedData.PageLoadMetrics.allMarkerEvents;
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_EXTENSIONS)) {
-      markers = markers.concat(this.#traceParsedData.ExtensionTraceData.extensionMarkers);
-    }
+    markers = markers.concat(ExtensionDataGatherer.instance().getExtensionData().extensionMarkers)
+                  .sort((m1, m2) => m1.ts - m2.ts);
     if (markers.length === 0) {
       return currentLevel;
     }
@@ -118,6 +118,11 @@ export class TimingsTrackAppender implements TrackAppender {
 
     const minTimeMs = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(this.#traceParsedData.Meta.traceBounds.min);
     const flameChartMarkers = markers.map(marker => {
+      // The timestamp for user timing trace events is set to the
+      // start time passed by the user at the call site of the timing
+      // (based on the UserTiming spec), meaning we can use event.ts
+      // directly.
+      // https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/timing/performance_user_timing.cc;l=236;drc=494419358caf690316f160a1f27d9e771a14c033
       const startTimeMs = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(marker.ts);
       const style = TraceEngine.Types.Extensions.isSyntheticExtensionEntry(marker) ?
           this.markerStyleForExtensionMarker(marker) :
@@ -244,8 +249,8 @@ export class TimingsTrackAppender implements TrackAppender {
    * is hovered in the timeline.
    */
   highlightedEntryInfo(event: TraceEngine.Types.TraceEvents.TraceEventData): HighlightedEntryInfo {
-    const title = TraceEngine.Types.Extensions.isSyntheticExtensionEntry(event) && event.args.hintText ?
-        event.args.hintText :
+    const title = TraceEngine.Types.Extensions.isSyntheticExtensionEntry(event) && event.args.tooltipText ?
+        event.args.tooltipText :
         this.titleForEvent(event);
 
     // If an event is a marker event, rather than show a duration of 0, we can instead show the time that the event happened, which is much more useful. We do this currently for:

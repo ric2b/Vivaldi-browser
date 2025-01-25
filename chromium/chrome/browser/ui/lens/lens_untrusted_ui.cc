@@ -67,6 +67,12 @@ LensUntrustedUI::LensUntrustedUI(content::WebUI* web_ui)
       IDS_LENS_OVERLAY_CURSOR_TOOLTIP_LIVE_PAGE_MESSAGE);
   html_source->AddLocalizedString("translate", IDS_LENS_OVERLAY_TRANSLATE);
   html_source->AddLocalizedString("selectText", IDS_LENS_OVERLAY_SELECT_TEXT);
+  html_source->AddLocalizedString(
+      "networkErrorPageTopLine",
+      IDS_SIDE_PANEL_COMPANION_ERROR_PAGE_FIRST_LINE);
+  html_source->AddLocalizedString(
+      "networkErrorPageBottomLine",
+      IDS_SIDE_PANEL_COMPANION_ERROR_PAGE_SECOND_LINE);
 
   // Add default theme colors.
   const auto& palette = lens::kPaletteColors.at(lens::PaletteId::kFallback);
@@ -101,17 +107,11 @@ LensUntrustedUI::LensUntrustedUI(content::WebUI* web_ui)
               ThemeServiceFactory::GetForProfile(Profile::FromWebUI(web_ui)))));
   html_source->AddBoolean("enableDebuggingMode",
                           lens::features::IsLensOverlayDebuggingEnabled());
-  html_source->AddBoolean(
-      "enablePreciseHighlight",
-      lens::features::IsLensOverlayPreciseHighlightEnabled());
   html_source->AddBoolean("enableShimmer",
                           lens::features::IsLensOverlayShimmerEnabled());
   html_source->AddBoolean(
       "enableShimmerSparkles",
       lens::features::IsLensOverlayShimmerSparklesEnabled());
-  html_source->AddBoolean(
-      "enableSelectionDragging",
-      lens::features::IsLensOverlaySelectionDraggingEnabled());
   html_source->AddInteger("verticalTextMarginPx",
                           lens::features::GetLensOverlayVerticalTextMargin());
   html_source->AddInteger("horizontalTextMarginPx",
@@ -129,6 +129,27 @@ LensUntrustedUI::LensUntrustedUI(content::WebUI* web_ui)
       lens::features::GetLensOverlaySelectTextOverRegionTriggerThreshold());
   html_source->AddBoolean("useShimmerCanvas",
                           lens::features::GetLensOverlayUseShimmerCanvas());
+  html_source->AddDouble(
+      "postSelectionComparisonThreshold",
+      lens::features::GetLensOverlayPostSelectionComparisonThreshold());
+  html_source->AddBoolean("enableErrorPage",
+                          lens::features::GetLensOverlayEnableErrorPage());
+  html_source->AddInteger(
+      "segmentationMaskCornerRadius",
+      lens::features::GetLensOverlaySegmentationMaskCornerRadius());
+  // Two instances of LensUntrustedUI are constructed: one for the main overlay
+  // and one for the side panel. We cannot distinguish them at this time. As a
+  // hack, we try to look up the LensOverlayController, which will only be
+  // available for the main overlay, and use that to set state only used by the
+  // main overlay.
+  // TODO(b/354802414): Split this into 2 separate classes for overlay and
+  // side panel.
+  if (auto* controller =
+          LensOverlayController::GetControllerFromWebViewWebContents(
+              web_ui->GetWebContents())) {
+    html_source->AddDouble("invocationTime",
+                           controller->GetInvocationTimeSinceEpoch());
+  }
 
   // Allow FrameSrc from all Google subdomains as redirects can occur.
   GURL results_side_panel_url =
@@ -163,8 +184,9 @@ LensUntrustedUI::LensUntrustedUI(content::WebUI* web_ui)
       "realboxDefaultIcon",
       "//resources/cr_components/searchbox/icons/google_g.svg");
   html_source->AddBoolean("reportMetrics", false);
-  // TODO(b/337657623): Update when strings are finalized.
   html_source->AddLocalizedString("searchBoxHint",
+                                  IDS_GOOGLE_SEARCH_BOX_EMPTY_HINT_SHORT);
+  html_source->AddLocalizedString("searchBoxHintMultimodal",
                                   IDS_GOOGLE_SEARCH_BOX_EMPTY_HINT_MULTIMODAL);
   html_source->AddBoolean("searchboxInSidePanel", true);
 

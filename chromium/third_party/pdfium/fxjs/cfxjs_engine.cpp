@@ -39,7 +39,7 @@ v8::Global<v8::ObjectTemplate>* g_DefaultGlobalObjectTemplate = nullptr;
 // aligning them on a byte boundary to save space, which would make them
 // incompatible for use as V8 aligned pointers.
 const wchar_t kPerObjectDataTag[] = L"CFXJS_PerObjectData";
-const wchar_t kPerIsolateDataTag[] = L"FXJS_PerIsolateData";
+const wchar_t kPerIsolateDataTag[] = L"CFXJS_PerIsolateData";
 
 void* GetAlignedPointerForPerObjectDataTag() {
   return const_cast<void*>(static_cast<const void*>(kPerObjectDataTag));
@@ -55,40 +55,61 @@ std::pair<int, int> GetLineAndColumnFromError(v8::Local<v8::Message> message,
 
 }  // namespace
 
-class CFXJS_PerObjectData {
- public:
-  ~CFXJS_PerObjectData() = default;
-
-  static void SetNewDataInObject(uint32_t nObjDefnID,
-                                 v8::Local<v8::Object> pObj) {
-    if (pObj->InternalFieldCount() == 2) {
-      pObj->SetAlignedPointerInInternalField(
-          0, GetAlignedPointerForPerObjectDataTag());
-      pObj->SetAlignedPointerInInternalField(
-          1, new CFXJS_PerObjectData(nObjDefnID));
-    }
+// static
+void CFXJS_PerObjectData::SetNewDataInObject(FXJSOBJTYPE eObjType,
+                                             uint32_t nObjDefnID,
+                                             v8::Local<v8::Object> pObj) {
+  if (pObj->InternalFieldCount() == 2) {
+    pObj->SetAlignedPointerInInternalField(
+        0, GetAlignedPointerForPerObjectDataTag());
+    pObj->SetAlignedPointerInInternalField(
+        1, new CFXJS_PerObjectData(eObjType, nObjDefnID));
   }
+}
 
-  static CFXJS_PerObjectData* GetFromObject(v8::Local<v8::Object> pObj) {
-    if (pObj.IsEmpty() || pObj->InternalFieldCount() != 2 ||
-        pObj->GetAlignedPointerFromInternalField(0) !=
-            GetAlignedPointerForPerObjectDataTag()) {
-      return nullptr;
-    }
-    return static_cast<CFXJS_PerObjectData*>(
-        pObj->GetAlignedPointerFromInternalField(1));
+// static
+CFXJS_PerObjectData* CFXJS_PerObjectData::GetFromObject(
+    v8::Local<v8::Object> pObj) {
+  if (pObj.IsEmpty()) {
+    return nullptr;
   }
+  if (HasInternalFields(pObj)) {
+    return ExtractFromObject(pObj);
+  }
+  // `pObj` might be the global object proxy, in which case its prototype
+  // is the global object with the internal fields.
+  v8::Local<v8::Value> proto = pObj->GetPrototype();
+  if (proto.IsEmpty() || !proto->IsObject()) {
+    return nullptr;
+  }
+  pObj = proto.As<v8::Object>();
+  if (!HasInternalFields(pObj)) {
+    return nullptr;
+  }
+  // Double-check that this was really the global object.
+  CFXJS_PerObjectData* result = ExtractFromObject(pObj);
+  return result->m_ObjType == FXJSOBJTYPE_GLOBAL ? result : nullptr;
+}
 
-  uint32_t GetObjDefnID() const { return m_ObjDefnID; }
-  CJS_Object* GetPrivate() { return m_pPrivate.get(); }
-  void SetPrivate(std::unique_ptr<CJS_Object> p) { m_pPrivate = std::move(p); }
+//  static
+bool CFXJS_PerObjectData::HasInternalFields(v8::Local<v8::Object> pObj) {
+  return pObj->InternalFieldCount() == 2 &&
+         pObj->GetAlignedPointerFromInternalField(0) ==
+             GetAlignedPointerForPerObjectDataTag();
+}
 
- private:
-  explicit CFXJS_PerObjectData(uint32_t nObjDefnID) : m_ObjDefnID(nObjDefnID) {}
+//  static
+CFXJS_PerObjectData* CFXJS_PerObjectData::ExtractFromObject(
+    v8::Local<v8::Object> pObj) {
+  return static_cast<CFXJS_PerObjectData*>(
+      pObj->GetAlignedPointerFromInternalField(1));
+}
 
-  const uint32_t m_ObjDefnID;
-  std::unique_ptr<CJS_Object> m_pPrivate;
-};
+CFXJS_PerObjectData::CFXJS_PerObjectData(FXJSOBJTYPE eObjType,
+                                         uint32_t nObjDefnID)
+    : m_ObjType(eObjType), m_ObjDefnID(nObjDefnID) {}
+
+CFXJS_PerObjectData::~CFXJS_PerObjectData() = default;
 
 // Global weak map to save dynamic objects.
 class V8TemplateMapTraits final
@@ -184,7 +205,7 @@ class CFXJS_ObjDefinition {
       fxv8::ThrowExceptionHelper(isolate, "not a dynamic object");
       return;
     }
-    v8::Local<v8::Object> holder = info.Holder();
+    v8::Local<v8::Object> holder = info.This();
     DCHECK_EQ(holder->InternalFieldCount(), 2);
     holder->SetAlignedPointerInInternalField(0, nullptr);
     holder->SetAlignedPointerInInternalField(1, nullptr);
@@ -201,7 +222,7 @@ class CFXJS_ObjDefinition {
   void DefineProperty(v8::Local<v8::String> sPropName,
                       v8::AccessorNameGetterCallback pPropGet,
                       v8::AccessorNameSetterCallback pPropPut) {
-    GetInstanceTemplate()->SetAccessor(sPropName, pPropGet, pPropPut);
+    GetInstanceTemplate()->SetNativeDataProperty(sPropName, pPropGet, pPropPut);
   }
 
   void DefineMethod(v8::Local<v8::String> sMethodName,
@@ -259,7 +280,7 @@ class CFXJS_ObjDefinition {
 
 static v8::Local<v8::ObjectTemplate> GetGlobalObjectTemplate(
     v8::Isolate* pIsolate) {
-  FXJS_PerIsolateData* pIsolateData = FXJS_PerIsolateData::Get(pIsolate);
+  CFXJS_PerIsolateData* pIsolateData = CFXJS_PerIsolateData::Get(pIsolate);
   for (uint32_t i = 1; i <= pIsolateData->CurrentMaxObjDefinitionID(); ++i) {
     CFXJS_ObjDefinition* pObjDef = pIsolateData->ObjDefinitionForID(i);
     if (pObjDef->GetObjType() == FXJSOBJTYPE_GLOBAL)
@@ -285,12 +306,12 @@ void V8TemplateMapTraits::Dispose(v8::Isolate* isolate,
   uint32_t id = CFXJS_Engine::GetObjDefnID(obj);
   if (id == 0)
     return;
-  FXJS_PerIsolateData* pIsolateData = FXJS_PerIsolateData::Get(isolate);
+  CFXJS_PerIsolateData* pIsolateData = CFXJS_PerIsolateData::Get(isolate);
   CFXJS_ObjDefinition* pObjDef = pIsolateData->ObjDefinitionForID(id);
   if (!pObjDef)
     return;
   pObjDef->RunDestructor(obj);
-  CFXJS_Engine::FreeObjectPrivate(obj);
+  CFXJS_Engine::FreePerObjectData(obj);
 }
 
 void V8TemplateMapTraits::DisposeWeak(
@@ -300,7 +321,7 @@ void V8TemplateMapTraits::DisposeWeak(
 
 V8TemplateMapTraits::MapType* V8TemplateMapTraits::MapFromWeakCallbackInfo(
     const v8::WeakCallbackInfo<WeakCallbackDataType>& info) {
-  auto* pIsolateData = FXJS_PerIsolateData::Get(info.GetIsolate());
+  auto* pIsolateData = CFXJS_PerIsolateData::Get(info.GetIsolate());
   V8TemplateMap* pObjsMap = pIsolateData->GetDynamicObjsMap();
   return pObjsMap ? pObjsMap->GetMap() : nullptr;
 }
@@ -344,37 +365,37 @@ size_t FXJS_GlobalIsolateRefCount() {
 }
 
 // static
-void FXJS_PerIsolateData::SetUp(v8::Isolate* pIsolate) {
+void CFXJS_PerIsolateData::SetUp(v8::Isolate* pIsolate) {
   if (!pIsolate->GetData(g_embedderDataSlot))
-    pIsolate->SetData(g_embedderDataSlot, new FXJS_PerIsolateData(pIsolate));
+    pIsolate->SetData(g_embedderDataSlot, new CFXJS_PerIsolateData(pIsolate));
 }
 
 // static
-FXJS_PerIsolateData* FXJS_PerIsolateData::Get(v8::Isolate* pIsolate) {
+CFXJS_PerIsolateData* CFXJS_PerIsolateData::Get(v8::Isolate* pIsolate) {
   auto* result =
-      static_cast<FXJS_PerIsolateData*>(pIsolate->GetData(g_embedderDataSlot));
+      static_cast<CFXJS_PerIsolateData*>(pIsolate->GetData(g_embedderDataSlot));
   CHECK(result->m_Tag == kPerIsolateDataTag);
   return result;
 }
 
-FXJS_PerIsolateData::FXJS_PerIsolateData(v8::Isolate* pIsolate)
+CFXJS_PerIsolateData::CFXJS_PerIsolateData(v8::Isolate* pIsolate)
     : m_Tag(kPerIsolateDataTag),
       m_pDynamicObjsMap(std::make_unique<V8TemplateMap>(pIsolate)) {}
 
-FXJS_PerIsolateData::~FXJS_PerIsolateData() = default;
+CFXJS_PerIsolateData::~CFXJS_PerIsolateData() = default;
 
-uint32_t FXJS_PerIsolateData::CurrentMaxObjDefinitionID() const {
+uint32_t CFXJS_PerIsolateData::CurrentMaxObjDefinitionID() const {
   return fxcrt::CollectionSize<uint32_t>(m_ObjectDefnArray);
 }
 
-CFXJS_ObjDefinition* FXJS_PerIsolateData::ObjDefinitionForID(
+CFXJS_ObjDefinition* CFXJS_PerIsolateData::ObjDefinitionForID(
     uint32_t id) const {
   return id > 0 && id <= CurrentMaxObjDefinitionID()
              ? m_ObjectDefnArray[id - 1].get()
              : nullptr;
 }
 
-uint32_t FXJS_PerIsolateData::AssignIDForObjDefinition(
+uint32_t CFXJS_PerIsolateData::AssignIDForObjDefinition(
     std::unique_ptr<CFXJS_ObjDefinition> pDefn) {
   m_ObjectDefnArray.push_back(std::move(pDefn));
   return CurrentMaxObjDefinitionID();
@@ -393,16 +414,17 @@ uint32_t CFXJS_Engine::GetObjDefnID(v8::Local<v8::Object> pObj) {
 }
 
 // static
-void CFXJS_Engine::SetObjectPrivate(v8::Local<v8::Object> pObj,
-                                    std::unique_ptr<CJS_Object> p) {
+void CFXJS_Engine::SetBinding(v8::Local<v8::Object> pObj,
+                              std::unique_ptr<CFXJS_PerObjectData::Binding> p) {
   CFXJS_PerObjectData* pPerObjectData =
       CFXJS_PerObjectData::GetFromObject(pObj);
-  if (pPerObjectData)
-    pPerObjectData->SetPrivate(std::move(p));
+  if (pPerObjectData) {
+    pPerObjectData->SetBinding(std::move(p));
+  }
 }
 
 // static
-void CFXJS_Engine::FreeObjectPrivate(v8::Local<v8::Object> pObj) {
+void CFXJS_Engine::FreePerObjectData(v8::Local<v8::Object> pObj) {
   CFXJS_PerObjectData* pData = CFXJS_PerObjectData::GetFromObject(pObj);
   pObj->SetAlignedPointerInInternalField(0, nullptr);
   pObj->SetAlignedPointerInInternalField(1, nullptr);
@@ -415,8 +437,8 @@ uint32_t CFXJS_Engine::DefineObj(const char* sObjName,
                                  CFXJS_Engine::Destructor pDestructor) {
   v8::Isolate::Scope isolate_scope(GetIsolate());
   v8::HandleScope handle_scope(GetIsolate());
-  FXJS_PerIsolateData::SetUp(GetIsolate());
-  FXJS_PerIsolateData* pIsolateData = FXJS_PerIsolateData::Get(GetIsolate());
+  CFXJS_PerIsolateData::SetUp(GetIsolate());
+  CFXJS_PerIsolateData* pIsolateData = CFXJS_PerIsolateData::Get(GetIsolate());
   return pIsolateData->AssignIDForObjDefinition(
       std::make_unique<CFXJS_ObjDefinition>(GetIsolate(), sObjName, eObjType,
                                             pConstructor, pDestructor));
@@ -427,7 +449,7 @@ void CFXJS_Engine::DefineObjMethod(uint32_t nObjDefnID,
                                    v8::FunctionCallback pMethodCall) {
   v8::Isolate::Scope isolate_scope(GetIsolate());
   v8::HandleScope handle_scope(GetIsolate());
-  FXJS_PerIsolateData* pIsolateData = FXJS_PerIsolateData::Get(GetIsolate());
+  CFXJS_PerIsolateData* pIsolateData = CFXJS_PerIsolateData::Get(GetIsolate());
   CFXJS_ObjDefinition* pObjDef = pIsolateData->ObjDefinitionForID(nObjDefnID);
   pObjDef->DefineMethod(NewString(sMethodName), pMethodCall);
 }
@@ -438,7 +460,7 @@ void CFXJS_Engine::DefineObjProperty(uint32_t nObjDefnID,
                                      v8::AccessorNameSetterCallback pPropPut) {
   v8::Isolate::Scope isolate_scope(GetIsolate());
   v8::HandleScope handle_scope(GetIsolate());
-  FXJS_PerIsolateData* pIsolateData = FXJS_PerIsolateData::Get(GetIsolate());
+  CFXJS_PerIsolateData* pIsolateData = CFXJS_PerIsolateData::Get(GetIsolate());
   CFXJS_ObjDefinition* pObjDef = pIsolateData->ObjDefinitionForID(nObjDefnID);
   pObjDef->DefineProperty(NewString(sPropName), pPropGet, pPropPut);
 }
@@ -452,7 +474,7 @@ void CFXJS_Engine::DefineObjAllProperties(
     v8::NamedPropertyEnumeratorCallback pPropEnum) {
   v8::Isolate::Scope isolate_scope(GetIsolate());
   v8::HandleScope handle_scope(GetIsolate());
-  FXJS_PerIsolateData* pIsolateData = FXJS_PerIsolateData::Get(GetIsolate());
+  CFXJS_PerIsolateData* pIsolateData = CFXJS_PerIsolateData::Get(GetIsolate());
   CFXJS_ObjDefinition* pObjDef = pIsolateData->ObjDefinitionForID(nObjDefnID);
   pObjDef->DefineAllProperties(pPropQurey, pPropGet, pPropPut, pPropDel,
                                pPropEnum);
@@ -463,7 +485,7 @@ void CFXJS_Engine::DefineObjConst(uint32_t nObjDefnID,
                                   v8::Local<v8::Value> pDefault) {
   v8::Isolate::Scope isolate_scope(GetIsolate());
   v8::HandleScope handle_scope(GetIsolate());
-  FXJS_PerIsolateData* pIsolateData = FXJS_PerIsolateData::Get(GetIsolate());
+  CFXJS_PerIsolateData* pIsolateData = CFXJS_PerIsolateData::Get(GetIsolate());
   CFXJS_ObjDefinition* pObjDef = pIsolateData->ObjDefinitionForID(nObjDefnID);
   pObjDef->DefineConst(sConstName, pDefault);
 }
@@ -499,12 +521,13 @@ void CFXJS_Engine::InitializeEngine() {
 
   // This has to happen before we call GetGlobalObjectTemplate because that
   // method gets the PerIsolateData from GetIsolate().
-  FXJS_PerIsolateData::SetUp(GetIsolate());
+  CFXJS_PerIsolateData::SetUp(GetIsolate());
 
   v8::Local<v8::Context> v8Context = v8::Context::New(
       GetIsolate(), nullptr, GetGlobalObjectTemplate(GetIsolate()));
 
-  // May not have the internal fields when called from tests.
+  // May not have the internal fields when called from tests, so clear these
+  // in case we don't process a FXJSOBJTYPE_GLOBAL below.
   v8::Local<v8::Object> pThisProxy = v8Context->Global();
   if (pThisProxy->InternalFieldCount() == 2) {
     pThisProxy->SetAlignedPointerInInternalField(0, nullptr);
@@ -517,13 +540,13 @@ void CFXJS_Engine::InitializeEngine() {
   }
 
   v8::Context::Scope context_scope(v8Context);
-  FXJS_PerIsolateData* pIsolateData = FXJS_PerIsolateData::Get(GetIsolate());
+  CFXJS_PerIsolateData* pIsolateData = CFXJS_PerIsolateData::Get(GetIsolate());
   uint32_t maxID = pIsolateData->CurrentMaxObjDefinitionID();
   m_StaticObjects.resize(maxID + 1);
   for (uint32_t i = 1; i <= maxID; ++i) {
     CFXJS_ObjDefinition* pObjDef = pIsolateData->ObjDefinitionForID(i);
     if (pObjDef->GetObjType() == FXJSOBJTYPE_GLOBAL) {
-      CFXJS_PerObjectData::SetNewDataInObject(i, pThis);
+      CFXJS_PerObjectData::SetNewDataInObject(FXJSOBJTYPE_GLOBAL, i, pThis);
       pObjDef->RunConstructor(this, pThis, pThisProxy);
     } else if (pObjDef->GetObjType() == FXJSOBJTYPE_STATIC) {
       v8::Local<v8::String> pObjName = NewString(pObjDef->GetObjName());
@@ -534,6 +557,7 @@ void CFXJS_Engine::InitializeEngine() {
       }
     }
   }
+
   m_V8Context.Reset(GetIsolate(), v8Context);
 }
 
@@ -542,7 +566,7 @@ void CFXJS_Engine::ReleaseEngine() {
   v8::HandleScope handle_scope(GetIsolate());
   v8::Local<v8::Context> context = GetV8Context();
   v8::Context::Scope context_scope(context);
-  FXJS_PerIsolateData* pIsolateData = FXJS_PerIsolateData::Get(GetIsolate());
+  CFXJS_PerIsolateData* pIsolateData = CFXJS_PerIsolateData::Get(GetIsolate());
   if (!pIsolateData)
     return;
 
@@ -560,7 +584,7 @@ void CFXJS_Engine::ReleaseEngine() {
     }
     if (!pObj.IsEmpty()) {
       pObjDef->RunDestructor(pObj);
-      FreeObjectPrivate(pObj);
+      FreePerObjectData(pObj);
     }
   }
 
@@ -605,7 +629,7 @@ v8::Local<v8::Object> CFXJS_Engine::NewFXJSBoundObject(uint32_t nObjDefnID,
                                                        FXJSOBJTYPE type) {
   v8::Isolate::Scope isolate_scope(GetIsolate());
   v8::Local<v8::Context> context = GetIsolate()->GetCurrentContext();
-  FXJS_PerIsolateData* pData = FXJS_PerIsolateData::Get(GetIsolate());
+  CFXJS_PerIsolateData* pData = CFXJS_PerIsolateData::Get(GetIsolate());
   if (!pData)
     return v8::Local<v8::Object>();
 
@@ -617,10 +641,10 @@ v8::Local<v8::Object> CFXJS_Engine::NewFXJSBoundObject(uint32_t nObjDefnID,
   if (!pObjDef->GetInstanceTemplate()->NewInstance(context).ToLocal(&obj))
     return v8::Local<v8::Object>();
 
-  CFXJS_PerObjectData::SetNewDataInObject(nObjDefnID, obj);
+  CFXJS_PerObjectData::SetNewDataInObject(type, nObjDefnID, obj);
   pObjDef->RunConstructor(this, obj, obj);
   if (type == FXJSOBJTYPE_DYNAMIC) {
-    auto* pIsolateData = FXJS_PerIsolateData::Get(GetIsolate());
+    auto* pIsolateData = CFXJS_PerIsolateData::Get(GetIsolate());
     V8TemplateMap* pObjsMap = pIsolateData->GetDynamicObjsMap();
     if (pObjsMap)
       pObjsMap->SetAndMakeWeak(obj);
@@ -630,8 +654,9 @@ v8::Local<v8::Object> CFXJS_Engine::NewFXJSBoundObject(uint32_t nObjDefnID,
 
 v8::Local<v8::Object> CFXJS_Engine::GetThisObj() {
   v8::Isolate::Scope isolate_scope(GetIsolate());
-  if (!FXJS_PerIsolateData::Get(GetIsolate()))
+  if (!CFXJS_PerIsolateData::Get(GetIsolate())) {
     return v8::Local<v8::Object>();
+  }
 
   // Return the global object.
   v8::Local<v8::Context> context = GetIsolate()->GetCurrentContext();
@@ -647,35 +672,11 @@ v8::Local<v8::Context> CFXJS_Engine::GetV8Context() {
 }
 
 // static
-CJS_Object* CFXJS_Engine::GetObjectPrivate(v8::Isolate* pIsolate,
-                                           v8::Local<v8::Object> pObj) {
+CFXJS_PerObjectData::Binding* CFXJS_Engine::GetBinding(
+    v8::Isolate* pIsolate,
+    v8::Local<v8::Object> pObj) {
   auto* pData = CFXJS_PerObjectData::GetFromObject(pObj);
-  if (pData)
-    return pData->GetPrivate();
-
-  if (pObj.IsEmpty())
-    return nullptr;
-
-  // It could be a global proxy object, in which case the prototype holds
-  // the actual bound object.
-  v8::Local<v8::Value> val = pObj->GetPrototype();
-  if (!val->IsObject())
-    return nullptr;
-
-  auto* pProtoData = CFXJS_PerObjectData::GetFromObject(val.As<v8::Object>());
-  if (!pProtoData)
-    return nullptr;
-
-  auto* pIsolateData = FXJS_PerIsolateData::Get(pIsolate);
-  if (!pIsolateData)
-    return nullptr;
-
-  CFXJS_ObjDefinition* pObjDef =
-      pIsolateData->ObjDefinitionForID(pProtoData->GetObjDefnID());
-  if (!pObjDef || pObjDef->GetObjType() != FXJSOBJTYPE_GLOBAL)
-    return nullptr;
-
-  return pProtoData->GetPrivate();
+  return pData ? pData->GetBinding() : nullptr;
 }
 
 v8::Local<v8::Array> CFXJS_Engine::GetConstArray(const WideString& name) {

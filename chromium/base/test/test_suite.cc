@@ -44,6 +44,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/test/fuzztest_init_helper.h"
 #include "base/test/gtest_xml_unittest_result_printer.h"
 #include "base/test/gtest_xml_util.h"
 #include "base/test/icu_test_util.h"
@@ -58,7 +59,7 @@
 #include "base/time/time.h"
 #include "base/tracing_buildflags.h"
 #include "build/build_config.h"
-#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/buildflags.h"
 #include "partition_alloc/tagging.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -664,6 +665,7 @@ void TestSuite::InitializeFromCommandLine(int* argc, char** argv) {
   CommandLine::ForCurrentProcess()->AppendSwitch("--disable-vivaldi");
   testing::InitGoogleTest(argc, argv);
   testing::InitGoogleMock(argc, argv);
+  MaybeInitFuzztest(*argc, argv);
 
 #if BUILDFLAG(IS_IOS)
   InitIOSArgs(*argc, argv);

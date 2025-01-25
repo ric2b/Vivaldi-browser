@@ -1001,7 +1001,8 @@ LegacyProcessLauncherImpl::LegacyProcessLauncherImpl() = default;
 LegacyProcessLauncherImpl::~LegacyProcessLauncherImpl() = default;
 
 STDMETHODIMP LegacyProcessLauncherImpl::LaunchCmdLine(const WCHAR* cmd_line) {
-  return LaunchCmdLineEx(cmd_line, nullptr, nullptr, nullptr);
+  LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
+  return E_NOTIMPL;
 }
 
 STDMETHODIMP LegacyProcessLauncherImpl::LaunchBrowser(DWORD browser_type,
@@ -1059,15 +1060,13 @@ STDMETHODIMP LegacyProcessLauncherImpl::LaunchCmdElevated(
   return S_OK;
 }
 
-// Launches a process at medium integrity. The `server_proc_id`, `proc_handle`,
-// and `stdout_handle` provided by the caller are not populated on return, so
-// the caller will not be able to monitor the progress. See crbug.com/1523813.
 STDMETHODIMP LegacyProcessLauncherImpl::LaunchCmdLineEx(
     const WCHAR* cmd_line,
     DWORD* /*server_proc_id*/,
     ULONG_PTR* /*proc_handle*/,
     ULONG_PTR* /*stdout_handle*/) {
-  return RunDeElevatedCmdLine(cmd_line);
+  LOG(ERROR) << "Reached unimplemented COM method: " << __func__;
+  return E_NOTIMPL;
 }
 
 LegacyAppCommandWebImpl::LegacyAppCommandWebImpl()
@@ -1233,13 +1232,17 @@ void LegacyAppCommandWebImpl::SendPing(UpdaterScope scope,
 }
 
 PolicyStatusImpl::PolicyStatusImpl()
-    : IDispatchImpl<IPolicyStatus3, IPolicyStatus2, IPolicyStatus>(
-          {IID_MAP_ENTRY_USER(IPolicyStatus3),
-           IID_MAP_ENTRY_USER(IPolicyStatus2),
-           IID_MAP_ENTRY_USER(IPolicyStatus)},
-          {IID_MAP_ENTRY_SYSTEM(IPolicyStatus3),
-           IID_MAP_ENTRY_SYSTEM(IPolicyStatus2),
-           IID_MAP_ENTRY_SYSTEM(IPolicyStatus)}),
+    : IDispatchImpl<IPolicyStatus4,
+                    IPolicyStatus3,
+                    IPolicyStatus2,
+                    IPolicyStatus>({IID_MAP_ENTRY_USER(IPolicyStatus4),
+                                    IID_MAP_ENTRY_USER(IPolicyStatus3),
+                                    IID_MAP_ENTRY_USER(IPolicyStatus2),
+                                    IID_MAP_ENTRY_USER(IPolicyStatus)},
+                                   {IID_MAP_ENTRY_SYSTEM(IPolicyStatus4),
+                                    IID_MAP_ENTRY_SYSTEM(IPolicyStatus3),
+                                    IID_MAP_ENTRY_SYSTEM(IPolicyStatus2),
+                                    IID_MAP_ENTRY_SYSTEM(IPolicyStatus)}),
       policy_service_(GetAppServerWinInstance()->config()->GetPolicyService()) {
 }
 PolicyStatusImpl::~PolicyStatusImpl() = default;
@@ -1663,6 +1666,16 @@ STDMETHODIMP PolicyStatusImpl::get_forceInstallApps(
   auto policy_status =
       PolicyStatusResult<std::vector<std::string>>::Get(base::BindRepeating(
           &PolicyService::GetForceInstallApps, policy_service_));
+  return policy_status.has_value()
+             ? PolicyStatusValueImpl::Create(*policy_status, value)
+             : E_FAIL;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_cloudPolicyOverridesPlatformPolicy(
+    IPolicyStatusValue** value) {
+  CHECK(value);
+  auto policy_status = PolicyStatusResult<bool>::Get(base::BindRepeating(
+      &PolicyService::CloudPolicyOverridesPlatformPolicy, policy_service_));
   return policy_status.has_value()
              ? PolicyStatusValueImpl::Create(*policy_status, value)
              : E_FAIL;

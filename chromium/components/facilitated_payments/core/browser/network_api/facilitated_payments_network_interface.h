@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "components/autofill/core/browser/autofill_client.h"
+#include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/payments/payments_network_interface_base.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
@@ -24,6 +24,10 @@ namespace payments::facilitated {
 class FacilitatedPaymentsInitiatePaymentRequestDetails;
 class FacilitatedPaymentsInitiatePaymentResponseDetails;
 
+// Billable service number is defined in Payments server to distinguish
+// different requests.
+inline constexpr int kFacilitatedPaymentsBillableServiceNumber = 70154;
+
 // Issues Payments RPCs and manages responses and failure conditions for
 // Facilitated Payments. Only one request may be active at a time. Initiating a
 // new request will cancel a pending request.
@@ -31,7 +35,7 @@ class FacilitatedPaymentsNetworkInterface
     : public autofill::payments::PaymentsNetworkInterfaceBase {
  public:
   using InitiatePaymentResponseCallback = base::OnceCallback<void(
-      autofill::AutofillClient::PaymentsRpcResult,
+      autofill::payments::PaymentsAutofillClient::PaymentsRpcResult,
       std::unique_ptr<FacilitatedPaymentsInitiatePaymentResponseDetails>)>;
 
   FacilitatedPaymentsNetworkInterface(

@@ -56,7 +56,7 @@ WebNavigationType WebPerformanceMetricsForReporting::GetNavigationType() const {
     case PerformanceNavigation::kTypeReserved:
       return kWebNavigationTypeOther;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return kWebNavigationTypeOther;
 }
 
@@ -245,11 +245,6 @@ double WebPerformanceMetricsForReporting::
       .InSecondsF();
 }
 
-std::optional<base::TimeTicks>
-WebPerformanceMetricsForReporting::LastPortalActivatedPaint() const {
-  return private_->timingForReporting()->LastPortalActivatedPaint();
-}
-
 std::optional<base::TimeDelta>
 WebPerformanceMetricsForReporting::PrerenderActivationStart() const {
   return private_->timingForReporting()->PrerenderActivationStart();
@@ -268,6 +263,17 @@ WebPerformanceMetricsForReporting::UserTimingMarkFullyVisible() const {
 std::optional<base::TimeDelta>
 WebPerformanceMetricsForReporting::UserTimingMarkInteractive() const {
   return private_->timingForReporting()->UserTimingMarkInteractive();
+}
+
+std::optional<std::tuple<std::string, base::TimeDelta>>
+WebPerformanceMetricsForReporting::CustomUserTimingMark() const {
+  auto mark = private_->timingForReporting()->CustomUserTimingMark();
+  if (!mark) {
+    return std::nullopt;
+  }
+  const auto [name, start_time] = mark.value();
+
+  return std::make_tuple(name.Utf8(), start_time);
 }
 
 WebPerformanceMetricsForReporting::WebPerformanceMetricsForReporting(

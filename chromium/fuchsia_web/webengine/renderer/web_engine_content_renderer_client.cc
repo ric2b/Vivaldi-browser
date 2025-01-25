@@ -28,7 +28,7 @@
 #include "services/network/public/cpp/features.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/url_loader_throttle_provider.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_view.h"
@@ -304,11 +304,10 @@ WebEngineContentRendererClient::GetBaseRendererFactory(
     media::MediaLog* media_log,
     media::DecoderFactory* decoder_factory,
     base::RepeatingCallback<media::GpuVideoAcceleratorFactories*()>
-        get_gpu_factories_cb) {
-  auto* interface_broker = render_frame->GetBrowserInterfaceBroker();
-
+        get_gpu_factories_cb,
+    int element_id) {
   mojo::Remote<mojom::WebEngineMediaResourceProvider> media_resource_provider;
-  interface_broker->GetInterface(
+  render_frame->GetBrowserInterfaceBroker().GetInterface(
       media_resource_provider.BindNewPipeAndPassReceiver());
 
   bool use_audio_consumer = false;

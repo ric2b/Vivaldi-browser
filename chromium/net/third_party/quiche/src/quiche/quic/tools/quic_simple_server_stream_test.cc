@@ -7,7 +7,9 @@
 #include <list>
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/base/macros.h"
 #include "absl/memory/memory.h"
@@ -73,7 +75,7 @@ class TestStream : public QuicSimpleServerStream {
               (override));
 
   size_t WriteHeaders(
-      spdy::Http2HeaderBlock header_block, bool fin,
+      quiche::HttpHeaderBlock header_block, bool fin,
       quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
       /*ack_listener*/) override {
     if (header_block[":status"] == "103") {
@@ -88,7 +90,7 @@ class TestStream : public QuicSimpleServerStream {
   void DoSendResponse() { SendResponse(); }
   void DoSendErrorResponse() { QuicSimpleServerStream::SendErrorResponse(); }
 
-  spdy::Http2HeaderBlock* mutable_headers() { return &request_headers_; }
+  quiche::HttpHeaderBlock* mutable_headers() { return &request_headers_; }
   void set_body(std::string body) { body_ = std::move(body); }
   const std::string& body() const { return body_; }
   int content_length() const { return content_length_; }
@@ -202,7 +204,7 @@ class MockQuicSimpleServerSession : public QuicSimpleServerSession {
     return QuicConsumedData(write_length, state != NO_FIN);
   }
 
-  spdy::Http2HeaderBlock original_request_headers_;
+  quiche::HttpHeaderBlock original_request_headers_;
 };
 
 class QuicSimpleServerStreamTest : public QuicTestWithParam<ParsedQuicVersion> {
@@ -280,7 +282,7 @@ class QuicSimpleServerStreamTest : public QuicTestWithParam<ParsedQuicVersion> {
   }
 
   quic::simulator::Simulator simulator_;
-  spdy::Http2HeaderBlock response_headers_;
+  quiche::HttpHeaderBlock response_headers_;
   MockQuicConnectionHelper helper_;
   StrictMock<MockQuicConnection>* connection_;
   StrictMock<MockQuicSessionVisitor> session_owner_;
@@ -397,7 +399,7 @@ TEST_P(QuicSimpleServerStreamTest, TestFramingExtraData) {
 
 TEST_P(QuicSimpleServerStreamTest, SendResponseWithIllegalResponseStatus) {
   // Send an illegal response with response status not supported by HTTP/2.
-  spdy::Http2HeaderBlock* request_headers = stream_->mutable_headers();
+  quiche::HttpHeaderBlock* request_headers = stream_->mutable_headers();
   (*request_headers)[":path"] = "/bar";
   (*request_headers)[":authority"] = "www.google.com";
   (*request_headers)[":method"] = "GET";
@@ -428,7 +430,7 @@ TEST_P(QuicSimpleServerStreamTest, SendResponseWithIllegalResponseStatus) {
 
 TEST_P(QuicSimpleServerStreamTest, SendResponseWithIllegalResponseStatus2) {
   // Send an illegal response with response status not supported by HTTP/2.
-  spdy::Http2HeaderBlock* request_headers = stream_->mutable_headers();
+  quiche::HttpHeaderBlock* request_headers = stream_->mutable_headers();
   (*request_headers)[":path"] = "/bar";
   (*request_headers)[":authority"] = "www.google.com";
   (*request_headers)[":method"] = "GET";
@@ -460,7 +462,7 @@ TEST_P(QuicSimpleServerStreamTest, SendResponseWithIllegalResponseStatus2) {
 
 TEST_P(QuicSimpleServerStreamTest, SendResponseWithValidHeaders) {
   // Add a request and response with valid headers.
-  spdy::Http2HeaderBlock* request_headers = stream_->mutable_headers();
+  quiche::HttpHeaderBlock* request_headers = stream_->mutable_headers();
   (*request_headers)[":path"] = "/bar";
   (*request_headers)[":authority"] = "www.google.com";
   (*request_headers)[":method"] = "GET";
@@ -494,18 +496,18 @@ TEST_P(QuicSimpleServerStreamTest, SendResponseWithEarlyHints) {
   std::string body = "Yummm";
 
   // Add a request and response with early hints.
-  spdy::Http2HeaderBlock* request_headers = stream_->mutable_headers();
+  quiche::HttpHeaderBlock* request_headers = stream_->mutable_headers();
   (*request_headers)[":path"] = request_path;
   (*request_headers)[":authority"] = host;
   (*request_headers)[":method"] = "GET";
 
   quiche::QuicheBuffer header = HttpEncoder::SerializeDataFrameHeader(
       body.length(), quiche::SimpleBufferAllocator::Get());
-  std::vector<spdy::Http2HeaderBlock> early_hints;
+  std::vector<quiche::HttpHeaderBlock> early_hints;
   // Add two Early Hints.
   const size_t kNumEarlyHintsResponses = 2;
   for (size_t i = 0; i < kNumEarlyHintsResponses; ++i) {
-    spdy::Http2HeaderBlock hints;
+    quiche::HttpHeaderBlock hints;
     hints["link"] = "</image.png>; rel=preload; as=image";
     early_hints.push_back(std::move(hints));
   }
@@ -543,7 +545,7 @@ class AlarmTestDelegate : public QuicAlarm::DelegateWithoutContext {
 
 TEST_P(QuicSimpleServerStreamTest, SendResponseWithDelay) {
   // Add a request and response with valid headers.
-  spdy::Http2HeaderBlock* request_headers = stream_->mutable_headers();
+  quiche::HttpHeaderBlock* request_headers = stream_->mutable_headers();
   std::string host = "www.google.com";
   std::string path = "/bar";
   (*request_headers)[":path"] = path;
@@ -603,7 +605,7 @@ TEST_P(QuicSimpleServerStreamTest, TestSendErrorResponse) {
 }
 
 TEST_P(QuicSimpleServerStreamTest, InvalidMultipleContentLength) {
-  spdy::Http2HeaderBlock request_headers;
+  quiche::HttpHeaderBlock request_headers;
   // \000 is a way to write the null byte when followed by a literal digit.
   header_list_.OnHeader("content-length", absl::string_view("11\00012", 5));
 
@@ -624,7 +626,7 @@ TEST_P(QuicSimpleServerStreamTest, InvalidMultipleContentLength) {
 }
 
 TEST_P(QuicSimpleServerStreamTest, InvalidLeadingNullContentLength) {
-  spdy::Http2HeaderBlock request_headers;
+  quiche::HttpHeaderBlock request_headers;
   // \000 is a way to write the null byte when followed by a literal digit.
   header_list_.OnHeader("content-length", absl::string_view("\00012", 3));
 
@@ -645,7 +647,7 @@ TEST_P(QuicSimpleServerStreamTest, InvalidLeadingNullContentLength) {
 }
 
 TEST_P(QuicSimpleServerStreamTest, InvalidMultipleContentLengthII) {
-  spdy::Http2HeaderBlock request_headers;
+  quiche::HttpHeaderBlock request_headers;
   // \000 is a way to write the null byte when followed by a literal digit.
   header_list_.OnHeader("content-length", absl::string_view("11\00011", 5));
 
@@ -753,11 +755,11 @@ class TestQuicSimpleServerBackend : public QuicSimpleServerBackend {
   }
   bool IsBackendInitialized() const override { return true; }
   MOCK_METHOD(void, FetchResponseFromBackend,
-              (const spdy::Http2HeaderBlock&, const std::string&,
+              (const quiche::HttpHeaderBlock&, const std::string&,
                RequestHandler*),
               (override));
   MOCK_METHOD(void, HandleConnectHeaders,
-              (const spdy::Http2HeaderBlock&, RequestHandler*), (override));
+              (const quiche::HttpHeaderBlock&, RequestHandler*), (override));
   MOCK_METHOD(void, HandleConnectData,
               (absl::string_view, bool, RequestHandler*), (override));
   void CloseBackendResponseStream(
@@ -780,7 +782,7 @@ TEST_P(QuicSimpleServerStreamTest, ConnectSendsIntermediateResponses) {
   ReplaceBackend(std::move(test_backend));
 
   constexpr absl::string_view kRequestBody = "\x11\x11";
-  spdy::Http2HeaderBlock response_headers;
+  quiche::HttpHeaderBlock response_headers;
   response_headers[":status"] = "200";
   QuicBackendResponse headers_response;
   headers_response.set_headers(response_headers.Clone());

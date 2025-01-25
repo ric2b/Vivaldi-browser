@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as SDK from '../core/sdk/sdk.js';
+import * as SDK from '../core/sdk/sdk.js';
 
 const base64Digits = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -132,24 +132,31 @@ export function encodeSourceMap(textMap: string[], sourceRoot?: string): SDK.Sou
 export class OriginalScopeBuilder {
   #encodedScope = '';
   #lastLine = 0;
+  #lastKind = 0;
 
-  start(line: number, column: number, kind: SDK.SourceMapScopes.ScopeKind, name?: number, variables?: number[]): this {
+  readonly #names: string[];
+
+  /** The 'names' field of the SourceMap. The builder will modify it. */
+  constructor(names: string[]) {
+    this.#names = names;
+  }
+
+  start(line: number, column: number, kind: string, name?: string, variables?: string[]): this {
     if (this.#encodedScope !== '') {
       this.#encodedScope += ',';
     }
 
     const lineDiff = line - this.#lastLine;
     this.#lastLine = line;
-    const flags = (name !== undefined ? 0x1 : 0x0) | (variables !== undefined ? 0x2 : 0x0);
+    const flags = (name !== undefined ? 0x1 : 0x0);
 
     this.#encodedScope += encodeVlqList([lineDiff, column, this.#encodeKind(kind), flags]);
 
     if (name !== undefined) {
-      this.#encodedScope += encodeVlq(name);
+      this.#encodedScope += encodeVlq(this.#nameIdx(name));
     }
     if (variables !== undefined) {
-      this.#encodedScope += encodeVlq(variables.length);
-      this.#encodedScope += encodeVlqList(variables);
+      this.#encodedScope += encodeVlqList(variables.map(variable => this.#nameIdx(variable)));
     }
 
     return this;
@@ -174,16 +181,170 @@ export class OriginalScopeBuilder {
     return result;
   }
 
-  #encodeKind(kind: SDK.SourceMapScopes.ScopeKind): number {
-    switch (kind) {
-      case 'global':
-        return 0x01;
-      case 'function':
-        return 0x02;
-      case 'class':
-        return 0x03;
-      case 'block':
-        return 0x04;
+  #encodeKind(kind: string): number {
+    const kindIdx = this.#nameIdx(kind);
+    const encodedIdx = kindIdx - this.#lastKind;
+    this.#lastKind = kindIdx;
+    return encodedIdx;
+  }
+
+  #nameIdx(name: string): number {
+    let idx = this.#names.indexOf(name);
+    if (idx < 0) {
+      idx = this.#names.length;
+      this.#names.push(name);
     }
+    return idx;
+  }
+}
+
+export class GeneratedRangeBuilder {
+  #encodedRange = '';
+  #state = {
+    line: 0,
+    column: 0,
+    defSourceIdx: 0,
+    defScopeIdx: 0,
+    callsiteSourceIdx: 0,
+    callsiteLine: 0,
+    callsiteColumn: 0,
+  };
+
+  readonly #names: string[];
+
+  /** The 'names' field of the SourceMap. The builder will modify it. */
+  constructor(names: string[]) {
+    this.#names = names;
+  }
+
+  start(line: number, column: number, options?: {
+    isScope?: boolean,
+    definition?: {sourceIdx: number, scopeIdx: number},
+    callsite?: {sourceIdx: number, line: number, column: number},
+    bindings?: (string|undefined|{line: number, column: number, name: string|undefined}[])[],
+  }): this {
+    this.#emitLineSeparator(line);
+    this.#emitItemSepratorIfRequired();
+
+    const emittedColumn = column - (this.#state.line === line ? this.#state.column : 0);
+    this.#encodedRange += encodeVlq(emittedColumn);
+
+    this.#state.line = line;
+    this.#state.column = column;
+
+    let flags = 0;
+    if (options?.definition) {
+      flags |= SDK.SourceMapScopes.EncodedGeneratedRangeFlag.HasDefinition;
+    }
+    if (options?.callsite) {
+      flags |= SDK.SourceMapScopes.EncodedGeneratedRangeFlag.HasCallsite;
+    }
+    if (options?.isScope) {
+      flags |= SDK.SourceMapScopes.EncodedGeneratedRangeFlag.IsScope;
+    }
+    this.#encodedRange += encodeVlq(flags);
+
+    if (options?.definition) {
+      const {sourceIdx, scopeIdx} = options.definition;
+      this.#encodedRange += encodeVlq(sourceIdx - this.#state.defSourceIdx);
+
+      const emittedScopeIdx = scopeIdx - (this.#state.defSourceIdx === sourceIdx ? this.#state.defScopeIdx : 0);
+      this.#encodedRange += encodeVlq(emittedScopeIdx);
+
+      this.#state.defSourceIdx = sourceIdx;
+      this.#state.defScopeIdx = scopeIdx;
+    }
+
+    if (options?.callsite) {
+      const {sourceIdx, line, column} = options.callsite;
+      this.#encodedRange += encodeVlq(sourceIdx - this.#state.callsiteSourceIdx);
+
+      const emittedLine = line - (this.#state.callsiteSourceIdx === sourceIdx ? this.#state.callsiteLine : 0);
+      this.#encodedRange += encodeVlq(emittedLine);
+
+      const emittedColumn = column - (this.#state.callsiteLine === line ? this.#state.callsiteColumn : 0);
+      this.#encodedRange += encodeVlq(emittedColumn);
+
+      this.#state.callsiteSourceIdx = sourceIdx;
+      this.#state.callsiteLine = line;
+      this.#state.callsiteColumn = column;
+    }
+
+    for (const bindings of options?.bindings ?? []) {
+      if (bindings === undefined || typeof bindings === 'string') {
+        this.#encodedRange += encodeVlq(this.#nameIdx(bindings));
+        continue;
+      }
+
+      this.#encodedRange += encodeVlq(-bindings.length);
+      this.#encodedRange += encodeVlq(this.#nameIdx(bindings[0].name));
+      if (bindings[0].line !== line || bindings[0].column !== column) {
+        throw new Error('First binding line/column must match the range start line/column');
+      }
+
+      for (let i = 1; i < bindings.length; ++i) {
+        const {line, column, name} = bindings[i];
+        const emittedLine = line - bindings[i - 1].line;
+        const emittedColumn = column - (line === bindings[i - 1].line ? bindings[i - 1].column : 0);
+        this.#encodedRange += encodeVlq(emittedLine);
+        this.#encodedRange += encodeVlq(emittedColumn);
+        this.#encodedRange += encodeVlq(this.#nameIdx(name));
+      }
+    }
+
+    return this;
+  }
+
+  end(line: number, column: number): this {
+    this.#emitLineSeparator(line);
+    this.#emitItemSepratorIfRequired();
+
+    const emittedColumn = column - (this.#state.line === line ? this.#state.column : 0);
+    this.#encodedRange += encodeVlq(emittedColumn);
+
+    this.#state.line = line;
+    this.#state.column = column;
+
+    return this;
+  }
+
+  #emitLineSeparator(line: number): void {
+    for (let i = this.#state.line; i < line; ++i) {
+      this.#encodedRange += ';';
+    }
+  }
+
+  #emitItemSepratorIfRequired(): void {
+    if (this.#encodedRange !== '' && this.#encodedRange[this.#encodedRange.length - 1] !== ';') {
+      this.#encodedRange += ',';
+    }
+  }
+
+  #nameIdx(name?: string): number {
+    if (name === undefined) {
+      return -1;
+    }
+
+    let idx = this.#names.indexOf(name);
+    if (idx < 0) {
+      idx = this.#names.length;
+      this.#names.push(name);
+    }
+    return idx;
+  }
+
+  build(): string {
+    const result = this.#encodedRange;
+    this.#state = {
+      line: 0,
+      column: 0,
+      defSourceIdx: 0,
+      defScopeIdx: 0,
+      callsiteSourceIdx: 0,
+      callsiteLine: 0,
+      callsiteColumn: 0,
+    };
+    this.#encodedRange = '';
+    return result;
   }
 }

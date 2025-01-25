@@ -27,8 +27,6 @@
 
 #include "src/tint/lang/core/ir/transform/builtin_polyfill.h"
 
-#include <utility>
-
 #include "src/tint/lang/core/ir/builder.h"
 #include "src/tint/lang/core/ir/module.h"
 #include "src/tint/lang/core/ir/validator.h"
@@ -40,6 +38,12 @@ using namespace tint::core::number_suffixes;  // NOLINT
 namespace tint::core::ir::transform {
 
 namespace {
+
+/// Constant value used to polyfill the radians() builtin.
+static constexpr double kDegToRad = 0.017453292519943295474;
+
+/// Constant value used to polyfill the degrees() builtin.
+static constexpr double kRadToDeg = 57.295779513082322865;
 
 /// PIMPL state for the transform.
 struct State {
@@ -81,6 +85,11 @@ struct State {
                             worklist.Push(builtin);
                         }
                         break;
+                    case core::BuiltinFn::kDegrees:
+                        if (config.degrees) {
+                            worklist.Push(builtin);
+                        }
+                        break;
                     case core::BuiltinFn::kExtractBits:
                         if (config.extract_bits != BuiltinPolyfillLevel::kNone) {
                             worklist.Push(builtin);
@@ -98,6 +107,11 @@ struct State {
                         break;
                     case core::BuiltinFn::kInsertBits:
                         if (config.insert_bits != BuiltinPolyfillLevel::kNone) {
+                            worklist.Push(builtin);
+                        }
+                        break;
+                    case core::BuiltinFn::kRadians:
+                        if (config.radians) {
                             worklist.Push(builtin);
                         }
                         break;
@@ -157,6 +171,9 @@ struct State {
                 case core::BuiltinFn::kCountTrailingZeros:
                     CountTrailingZeros(builtin);
                     break;
+                case core::BuiltinFn::kDegrees:
+                    Degrees(builtin);
+                    break;
                 case core::BuiltinFn::kExtractBits:
                     ExtractBits(builtin);
                     break;
@@ -168,6 +185,9 @@ struct State {
                     break;
                 case core::BuiltinFn::kInsertBits:
                     InsertBits(builtin);
+                    break;
+                case core::BuiltinFn::kRadians:
+                    Radians(builtin);
                     break;
                 case core::BuiltinFn::kSaturate:
                     Saturate(builtin);
@@ -205,31 +225,6 @@ struct State {
         }
     }
 
-    /// Return a type with element type @p type that has the same number of vector components as
-    /// @p match. If @p match is scalar just return @p type.
-    /// @param el_ty the type to extend
-    /// @param match the type to match the component count of
-    /// @returns a type with the same number of vector components as @p match
-    const core::type::Type* MatchWidth(const core::type::Type* el_ty,
-                                       const core::type::Type* match) {
-        if (auto* vec = match->As<core::type::Vector>()) {
-            return ty.vec(el_ty, vec->Width());
-        }
-        return el_ty;
-    }
-
-    /// Return a constant that has the same number of vector components as @p match, each with the
-    /// value @p element. If @p match is scalar just return @p element.
-    /// @param element the value to extend
-    /// @param match the type to match the component count of
-    /// @returns a value with the same number of vector components as @p match
-    ir::Constant* MatchWidth(ir::Constant* element, const core::type::Type* match) {
-        if (auto* vec = match->As<core::type::Vector>()) {
-            return b.Splat(MatchWidth(element->Type(), match), element, vec->Width());
-        }
-        return element;
-    }
-
     /// Polyfill a `clamp()` builtin call for integers.
     /// @param call the builtin call instruction
     void ClampInt(ir::CoreBuiltinCall* call) {
@@ -250,11 +245,11 @@ struct State {
     void CountLeadingZeros(ir::CoreBuiltinCall* call) {
         auto* input = call->Args()[0];
         auto* result_ty = input->Type();
-        auto* uint_ty = MatchWidth(ty.u32(), result_ty);
-        auto* bool_ty = MatchWidth(ty.bool_(), result_ty);
+        auto* uint_ty = ty.match_width(ty.u32(), result_ty);
+        auto* bool_ty = ty.match_width(ty.bool_(), result_ty);
 
         // Make an u32 constant with the same component count as result_ty.
-        auto V = [&](uint32_t u) { return MatchWidth(b.Constant(u32(u)), result_ty); };
+        auto V = [&](uint32_t u) { return b.MatchWidth(u32(u), result_ty); };
 
         b.InsertBefore(call, [&] {
             // %x = %input;
@@ -312,11 +307,11 @@ struct State {
     void CountTrailingZeros(ir::CoreBuiltinCall* call) {
         auto* input = call->Args()[0];
         auto* result_ty = input->Type();
-        auto* uint_ty = MatchWidth(ty.u32(), result_ty);
-        auto* bool_ty = MatchWidth(ty.bool_(), result_ty);
+        auto* uint_ty = ty.match_width(ty.u32(), result_ty);
+        auto* bool_ty = ty.match_width(ty.bool_(), result_ty);
 
         // Make an u32 constant with the same component count as result_ty.
-        auto V = [&](uint32_t u) { return MatchWidth(b.Constant(u32(u)), result_ty); };
+        auto V = [&](uint32_t u) { return b.MatchWidth(u32(u), result_ty); };
 
         b.InsertBefore(call, [&] {
             // %x = %input;
@@ -367,6 +362,24 @@ struct State {
         call->Destroy();
     }
 
+    /// Polyfill an `degrees()` builtin call.
+    /// @param call the builtin call instruction
+    void Degrees(ir::CoreBuiltinCall* call) {
+        auto* arg = call->Args()[0];
+        auto* type = arg->Type()->DeepestElement();
+        ir::Value* value = nullptr;
+        if (type->Is<core::type::F16>()) {
+            value = b.Constant(f16(kRadToDeg));
+        } else if (type->Is<core::type::F32>()) {
+            value = b.Constant(f32(kRadToDeg));
+        }
+        b.InsertBefore(call, [&] {
+            auto* mul = b.Multiply(arg->Type(), arg, value);
+            mul->SetResults(Vector{call->DetachResult()});
+        });
+        call->Destroy();
+    }
+
     /// Polyfill an `extractBits()` builtin call.
     /// @param call the builtin call instruction
     void ExtractBits(ir::CoreBuiltinCall* call) {
@@ -400,11 +413,11 @@ struct State {
     void FirstLeadingBit(ir::CoreBuiltinCall* call) {
         auto* input = call->Args()[0];
         auto* result_ty = input->Type();
-        auto* uint_ty = MatchWidth(ty.u32(), result_ty);
-        auto* bool_ty = MatchWidth(ty.bool_(), result_ty);
+        auto* uint_ty = ty.match_width(ty.u32(), result_ty);
+        auto* bool_ty = ty.match_width(ty.bool_(), result_ty);
 
         // Make an u32 constant with the same component count as result_ty.
-        auto V = [&](uint32_t u) { return MatchWidth(b.Constant(u32(u)), result_ty); };
+        auto V = [&](uint32_t u) { return b.MatchWidth(u32(u), result_ty); };
 
         b.InsertBefore(call, [&] {
             // %x = %input;
@@ -462,11 +475,11 @@ struct State {
     void FirstTrailingBit(ir::CoreBuiltinCall* call) {
         auto* input = call->Args()[0];
         auto* result_ty = input->Type();
-        auto* uint_ty = MatchWidth(ty.u32(), result_ty);
-        auto* bool_ty = MatchWidth(ty.bool_(), result_ty);
+        auto* uint_ty = ty.match_width(ty.u32(), result_ty);
+        auto* bool_ty = ty.match_width(ty.bool_(), result_ty);
 
         // Make an u32 constant with the same component count as result_ty.
-        auto V = [&](uint32_t u) { return MatchWidth(b.Constant(u32(u)), result_ty); };
+        auto V = [&](uint32_t u) { return b.MatchWidth(u32(u), result_ty); };
 
         b.InsertBefore(call, [&] {
             // %x = %input;
@@ -543,6 +556,24 @@ struct State {
         }
     }
 
+    /// Polyfill an `radians()` builtin call.
+    /// @param call the builtin call instruction
+    void Radians(ir::CoreBuiltinCall* call) {
+        auto* arg = call->Args()[0];
+        auto* type = arg->Type()->DeepestElement();
+        ir::Value* value = nullptr;
+        if (type->Is<core::type::F16>()) {
+            value = b.Constant(f16(kDegToRad));
+        } else if (type->Is<core::type::F32>()) {
+            value = b.Constant(f32(kDegToRad));
+        }
+        b.InsertBefore(call, [&] {
+            auto* mul = b.Multiply(arg->Type(), arg, value);
+            mul->SetResults(Vector{call->DetachResult()});
+        });
+        call->Destroy();
+    }
+
     /// Polyfill a `saturate()` builtin call.
     /// @param call the builtin call instruction
     void Saturate(ir::CoreBuiltinCall* call) {
@@ -551,11 +582,11 @@ struct State {
         ir::Constant* zero = nullptr;
         ir::Constant* one = nullptr;
         if (type->DeepestElement()->Is<core::type::F32>()) {
-            zero = MatchWidth(b.Constant(0_f), type);
-            one = MatchWidth(b.Constant(1_f), type);
+            zero = b.MatchWidth(0_f, type);
+            one = b.MatchWidth(1_f, type);
         } else if (type->DeepestElement()->Is<core::type::F16>()) {
-            zero = MatchWidth(b.Constant(0_h), type);
-            one = MatchWidth(b.Constant(1_h), type);
+            zero = b.MatchWidth(0_h, type);
+            one = b.MatchWidth(1_h, type);
         }
         auto* clamp = b.CallWithResult(call->DetachResult(), core::BuiltinFn::kClamp,
                                        Vector{call->Args()[0], zero, one});
@@ -575,13 +606,12 @@ struct State {
         auto* sampler = call->Args()[1];
         auto* coords = call->Args()[2];
         b.InsertBefore(call, [&] {
-            auto* vec2f = ty.vec2<f32>();
-            auto* dims = b.Call(ty.vec2<u32>(), core::BuiltinFn::kTextureDimensions, texture);
-            auto* fdims = b.Convert(vec2f, dims);
-            auto* half_texel = b.Divide(vec2f, b.Splat(vec2f, 0.5_f, 2), fdims);
-            auto* one_minus_half_texel = b.Subtract(vec2f, b.Splat(vec2f, 1_f, 2), half_texel);
-            auto* clamped =
-                b.Call(vec2f, core::BuiltinFn::kClamp, coords, half_texel, one_minus_half_texel);
+            auto* dims = b.Call<vec2<u32>>(core::BuiltinFn::kTextureDimensions, texture);
+            auto* fdims = b.Convert<vec2<f32>>(dims);
+            auto* half_texel = b.Divide<vec2<f32>>(b.Splat<vec2<f32>>(0.5_f), fdims);
+            auto* one_minus_half_texel = b.Subtract<vec2<f32>>(b.Splat<vec2<f32>>(1_f), half_texel);
+            auto* clamped = b.Call<vec2<f32>>(core::BuiltinFn::kClamp, coords, half_texel,
+                                              one_minus_half_texel);
             b.CallWithResult(call->DetachResult(), core::BuiltinFn::kTextureSampleLevel, texture,
                              sampler, clamped, 0_f);
         });

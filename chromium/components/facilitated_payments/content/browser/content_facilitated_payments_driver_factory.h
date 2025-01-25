@@ -50,6 +50,8 @@ class ContentFacilitatedPaymentsDriverFactory
   void DOMContentLoaded(content::RenderFrameHost* render_frame_host) override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
+  void OnTextCopiedToClipboard(content::RenderFrameHost* render_frame_host,
+                               const std::u16string& copied_text) override;
 
   // Gets or creates a dedicated `ContentFacilitatedPaymentsDriver` for the
   // `render_frame_host`. Drivers are only created for the outermost main frame.
@@ -63,7 +65,7 @@ class ContentFacilitatedPaymentsDriverFactory
       driver_map_;
 
   // Owner.
-  raw_ref<FacilitatedPaymentsClient> client_;
+  const raw_ref<FacilitatedPaymentsClient> client_;
 
   // The optimization guide decider to help determine whether the current main
   // frame URL is eligible for facilitated payments.

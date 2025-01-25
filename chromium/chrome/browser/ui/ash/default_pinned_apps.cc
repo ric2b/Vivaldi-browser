@@ -14,10 +14,6 @@
 #include "content/public/browser/browser_context.h"
 #include "extensions/common/constants.h"
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#include "chrome/browser/resources/preinstalled_web_apps/internal/container.h"
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
-
 namespace {
 
 bool ShouldAddHelpApp(content::BrowserContext* browser_context) {
@@ -29,13 +25,9 @@ bool ShouldAddHelpApp(content::BrowserContext* browser_context) {
 std::vector<StaticAppId> GetDefaultPinnedApps(
     content::BrowserContext* browser_context) {
   std::vector<StaticAppId> app_ids{
-      extension_misc::kGmailAppId,
       web_app::kGmailAppId,
 
       web_app::kGoogleCalendarAppId,
-
-      // TODO(b/207576430): Once Files SWA is fully launched, remove this entry.
-      extension_misc::kFilesManagerAppId,
 
       file_manager::kFileManagerSwaAppId,
 
@@ -45,7 +37,6 @@ std::vector<StaticAppId> GetDefaultPinnedApps(
 
       arc::kPlayStoreAppId,
 
-      extension_misc::kYoutubeAppId,
       web_app::kYoutubeAppId,
 
       arc::kGooglePhotosAppId,

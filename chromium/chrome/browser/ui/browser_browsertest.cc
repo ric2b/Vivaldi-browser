@@ -291,8 +291,11 @@ class RenderViewSizeObserver : public content::WebContentsObserver {
   }
 
   // Enlarge WebContentsView by |wcv_resize_insets_| while the navigation entry
-  // is pending.
-  void DidStartNavigation(
+  // is pending. Since the new render process may not be created when the
+  // navigation starts if the feature DeferSpeculativeRFHCreation is enabled,
+  // resize the window when the navigation is ready to commit. Otherwise we will
+  // change the size of the original window.
+  void ReadyToCommitNavigation(
       content::NavigationHandle* navigation_handle) override {
     Resize();
   }
@@ -386,7 +389,7 @@ class BrowserTest : public extensions::ExtensionBrowserTest,
       if (extension->name() == "App Test")
         return extension.get();
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
 
@@ -485,7 +488,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, CaptivePortalWindowTitle) {
   NavigateParams captive_portal_params(browser(), url,
                                        ui::PAGE_TRANSITION_TYPED);
   captive_portal_params.disposition = WindowOpenDisposition::NEW_POPUP;
-  captive_portal_params.is_captive_portal_popup = true;
+  captive_portal_params.captive_portal_window_type =
+      captive_portal::CaptivePortalWindowType::kPopup;
   ui_test_utils::NavigateToURL(&captive_portal_params);
   std::u16string captive_portal_window_title =
       chrome::FindBrowserWithTab(
@@ -2700,7 +2704,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, TestNavEntryCommittedUserAction) {
   base::UserActionTester user_action_tester;
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("chrome://newtab")));
   EXPECT_EQ(user_action_tester.GetActionCount("NavEntryCommitted"), 1);
-  EXPECT_EQ(user_action_tester.GetActionCount("NavEntryCommitted.SRP"), 0);
 }
 
 namespace {
@@ -2722,23 +2725,6 @@ void SetTestDefaultSearchProvider(TemplateURLService* service,
 }
 
 }  // namespace
-
-IN_PROC_BROWSER_TEST_F(BrowserTest, TestNavEntryCommittedSRPUserAction) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  TemplateURLService* service =
-      TemplateURLServiceFactory::GetForProfile(browser()->profile());
-  SetTestDefaultSearchProvider(
-      service,
-      embedded_test_server()->GetURL("a.test", "/title1.html?q={searchTerms}"));
-
-  const GURL srp_url =
-      service->GenerateSearchURLForDefaultSearchProvider(u"testing");
-
-  base::UserActionTester user_action_tester;
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), srp_url));
-  EXPECT_EQ(user_action_tester.GetActionCount("NavEntryCommitted"), 1);
-  EXPECT_EQ(user_action_tester.GetActionCount("NavEntryCommitted.SRP"), 1);
-}
 
 IN_PROC_BROWSER_TEST_F(BrowserTest,
                        TestNavEntryCommittedUserActionOnlyRecordedForTabs) {
@@ -2766,7 +2752,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest,
   observer.Wait();
 
   EXPECT_EQ(user_action_tester.GetActionCount("NavEntryCommitted"), 0);
-  EXPECT_EQ(user_action_tester.GetActionCount("NavEntryCommitted.SRP"), 0);
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserTest, TestTabCountMetrics) {

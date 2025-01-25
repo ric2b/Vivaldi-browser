@@ -70,6 +70,11 @@ bool immediate_close_for_tests = false;
 // Delay closing window to allow it to shrink and fade out.
 constexpr int kCloseWindowDelayInMilliseconds = 150;
 
+void ClearWindowProperties(aura::Window* window) {
+  window->ClearProperty(chromeos::kIsShowingInOverviewKey);
+  window->ClearProperty(kHideInOverviewKey);
+}
+
 // Layer animation observer that is attached to a clip and/or rounded corners
 // animation. We need this for the exit animation, where we want to animate
 // properties but the overview session has been destroyed. We want to use this
@@ -152,7 +157,7 @@ ScopedOverviewTransformWindow::ScopedOverviewTransformWindow(
       (new RasterScaleLayerObserver(window_, window_->layer(), window_))
           ->Lock());
 
-  type_ = GetWindowDimensionsType(window->bounds().size());
+  fill_mode_ = GetOverviewItemFillModeForWindow(window);
 
   std::vector<raw_ptr<aura::Window, VectorExperimental>>
       transient_children_to_hide;
@@ -160,16 +165,20 @@ ScopedOverviewTransformWindow::ScopedOverviewTransformWindow(
     event_targeting_blocker_map_[transient] =
         std::make_unique<aura::ScopedWindowEventTargetingBlocker>(transient);
 
-    transient->SetProperty(chromeos::kIsShowingInOverviewKey, true);
-
-    // Add this as |aura::WindowObserver| for observing |kHideInOverviewKey|
-    // property changes.
-    window_observations_.AddObservation(transient);
+    if (window_util::AsBubbleDialogDelegate(transient)) {
+      transient->SetProperty(kHideInOverviewKey, true);
+    } else {
+      transient->SetProperty(chromeos::kIsShowingInOverviewKey, true);
+      // Add this as `aura::WindowObserver` for observing `kHideInOverviewKey`
+      // property changes.
+      window_observations_.AddObservation(transient);
+    }
 
     // Hide transient children which have been specified to be hidden in
     // overview mode.
-    if (transient != window && transient->GetProperty(kHideInOverviewKey))
+    if (transient != window && transient->GetProperty(kHideInOverviewKey)) {
       transient_children_to_hide.push_back(transient);
+    }
   }
 
   if (!transient_children_to_hide.empty())
@@ -197,7 +206,7 @@ ScopedOverviewTransformWindow::ScopedOverviewTransformWindow(
           if (window == window->parent()->children()[i])
             return i;
         }
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return 0u;
       };
 
@@ -225,7 +234,7 @@ ScopedOverviewTransformWindow::~ScopedOverviewTransformWindow() {
   }
 
   for (auto* transient : GetTransientTreeIterator(window_)) {
-    transient->ClearProperty(chromeos::kIsShowingInOverviewKey);
+    ClearWindowProperties(transient);
     DCHECK(event_targeting_blocker_map_.contains(transient));
     event_targeting_blocker_map_.erase(transient);
   }
@@ -241,18 +250,6 @@ float ScopedOverviewTransformWindow::GetItemScale(int source_height,
                                                   int title_height) {
   return std::min(2.0f, static_cast<float>(target_height - title_height) /
                             (source_height - top_view_inset));
-}
-
-// static
-OverviewGridWindowFillMode
-ScopedOverviewTransformWindow::GetWindowDimensionsType(const gfx::Size& size) {
-  if (size.width() > size.height() * kExtremeWindowRatioThreshold)
-    return OverviewGridWindowFillMode::kLetterBoxed;
-
-  if (size.height() > size.width() * kExtremeWindowRatioThreshold)
-    return OverviewGridWindowFillMode::kPillarBoxed;
-
-  return OverviewGridWindowFillMode::kNormal;
 }
 
 void ScopedOverviewTransformWindow::RestoreWindow(bool reset_transform,
@@ -419,13 +416,13 @@ gfx::RectF ScopedOverviewTransformWindow::ShrinkRectToFitPreservingAspectRatio(
   gfx::RectF new_bounds(bounds.x() + horizontal_offset,
                         bounds.y() + vertical_offset, width, height);
 
-  switch (type()) {
-    case OverviewGridWindowFillMode::kLetterBoxed:
-    case OverviewGridWindowFillMode::kPillarBoxed: {
+  switch (fill_mode_) {
+    case OverviewItemFillMode::kLetterBoxed:
+    case OverviewItemFillMode::kPillarBoxed: {
       // Attempt to scale |rect| to fit |bounds|. Maintain the aspect ratio of
       // |rect|. Letter boxed windows' width will match |bounds|'s width and
       // pillar boxed windows' height will match |bounds|'s height.
-      const bool is_pillar = type() == OverviewGridWindowFillMode::kPillarBoxed;
+      const bool is_pillar = fill_mode_ == OverviewItemFillMode::kPillarBoxed;
       const gfx::Rect window_bounds =
           ::wm::GetTransientRoot(window_)->GetBoundsInScreen();
       const float window_ratio =
@@ -520,8 +517,8 @@ void ScopedOverviewTransformWindow::EnsureVisible() {
   original_opacity_ = 1.f;
 }
 
-void ScopedOverviewTransformWindow::UpdateWindowDimensionsType() {
-  type_ = GetWindowDimensionsType(window_->bounds().size());
+void ScopedOverviewTransformWindow::UpdateOverviewItemFillMode() {
+  fill_mode_ = GetOverviewItemFillModeForWindow(window_);
 }
 
 void ScopedOverviewTransformWindow::UpdateRoundedCorners(bool show) {
@@ -612,7 +609,7 @@ void ScopedOverviewTransformWindow::OnTransientChildWindowRemoved(
   if (parent != window_ && !::wm::HasTransientAncestor(parent, window_))
     return;
 
-  transient_child->ClearProperty(chromeos::kIsShowingInOverviewKey);
+  ClearWindowProperties(transient_child);
   DCHECK(event_targeting_blocker_map_.contains(transient_child));
   event_targeting_blocker_map_.erase(transient_child);
 
@@ -687,8 +684,7 @@ void ScopedOverviewTransformWindow::SetImmediateCloseForTests(bool immediate) {
 }
 
 void ScopedOverviewTransformWindow::CloseWidget() {
-  aura::Window* parent_window = wm::GetTransientRoot(window_);
-  if (parent_window) {
+  if (aura::Window* parent_window = wm::GetTransientRoot(window_)) {
     window_util::CloseWidgetForWindow(parent_window);
   }
 }

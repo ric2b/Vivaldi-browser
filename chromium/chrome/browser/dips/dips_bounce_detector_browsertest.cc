@@ -428,16 +428,14 @@ class DIPSBounceDetectorBrowserTest
     enabled_features_.push_back(
         {network::features::kSkipTpcdMitigationsForAds,
          {{"SkipTpcdMitigationsForAdsHeuristics", "true"}}});
+    // TODO(crbug.com/40248833): Use HTTPS URLs in tests to avoid having to
+    // disable this feature.
+    disabled_features_.push_back(features::kHttpsUpgrades);
   }
 
   void SetUp() override {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        enabled_features_,
-        /*disabled_features=*/{
-            // TODO(crbug.com/40248833): Use HTTPS URLs in tests to avoid having
-            // to disable this feature.
-            features::kHttpsUpgrades,
-        });
+    scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features_,
+                                                       disabled_features_);
     PlatformBrowserTest::SetUp();
   }
 
@@ -569,6 +567,7 @@ class DIPSBounceDetectorBrowserTest
       base::FilePath(FILE_PATH_LITERAL("chrome/test/data"));
 
   std::vector<base::test::FeatureRefAndParams> enabled_features_;
+  std::vector<base::test::FeatureRef> disabled_features_;
   raw_ptr<DIPSWebContentsObserver, AcrossTasksDanglingUntriaged>
       web_contents_observer_ = nullptr;
 
@@ -1960,16 +1959,15 @@ class RedirectHeuristicGrantTest
           {"TpcdRedirectHeuristicRequireABAFlow", require_aba_flow_string},
           {"TpcdRedirectHeuristicRequireCurrentInteraction",
            require_current_interaction_string}}});
+
+    // TODO(crbug.com/40248833): Use HTTPS URLs in tests to avoid having to
+    // disable this feature.
+    disabled_features_.push_back(features::kHttpsUpgrades);
   }
 
   void SetUp() override {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        enabled_features_,
-        /*disabled_features=*/{
-            // TODO(crbug.com/40248833): Use HTTPS URLs in tests to avoid having
-            // to disable this feature.
-            features::kHttpsUpgrades,
-        });
+    scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features_,
+                                                       disabled_features_);
     RedirectHeuristicBrowserTest::SetUp();
   }
 
@@ -1991,6 +1989,7 @@ class RedirectHeuristicGrantTest
 
   base::test::ScopedFeatureList scoped_feature_list_;
   std::vector<base::test::FeatureRefAndParams> enabled_features_;
+  std::vector<base::test::FeatureRef> disabled_features_;
 };
 
 IN_PROC_BROWSER_TEST_P(RedirectHeuristicGrantTest,
@@ -2032,14 +2031,14 @@ IN_PROC_BROWSER_TEST_P(RedirectHeuristicGrantTest,
 
   // Expect some cookie grants on `first_party_url` based on flags and criteria.
   EXPECT_EQ(cookie_settings->GetCookieSetting(
-                aba_current_interaction_url, first_party_url,
-                net::CookieSettingOverrides(), nullptr),
+                aba_current_interaction_url, net::SiteForCookies(),
+                first_party_url, net::CookieSettingOverrides(), nullptr),
             GetParam().write_redirect_grants ? CONTENT_SETTING_ALLOW
                                              : CONTENT_SETTING_BLOCK);
-  EXPECT_EQ(
-      cookie_settings->GetCookieSetting(no_interaction_url, first_party_url,
-                                        net::CookieSettingOverrides(), nullptr),
-      CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(cookie_settings->GetCookieSetting(
+                no_interaction_url, net::SiteForCookies(), first_party_url,
+                net::CookieSettingOverrides(), nullptr),
+            CONTENT_SETTING_BLOCK);
 }
 
 IN_PROC_BROWSER_TEST_P(
@@ -2085,15 +2084,15 @@ IN_PROC_BROWSER_TEST_P(
 
   // Expect some cookie grants on `first_party_url` based on flags and criteria.
   EXPECT_EQ(cookie_settings->GetCookieSetting(
-                aba_past_interaction_url, first_party_url,
-                net::CookieSettingOverrides(), nullptr),
+                aba_past_interaction_url, net::SiteForCookies(),
+                first_party_url, net::CookieSettingOverrides(), nullptr),
             (GetParam().write_redirect_grants &&
              !GetParam().require_current_interaction)
                 ? CONTENT_SETTING_ALLOW
                 : CONTENT_SETTING_BLOCK);
   EXPECT_EQ(cookie_settings->GetCookieSetting(
-                no_aba_current_interaction_url, first_party_url,
-                net::CookieSettingOverrides(), nullptr),
+                no_aba_current_interaction_url, net::SiteForCookies(),
+                first_party_url, net::CookieSettingOverrides(), nullptr),
             (GetParam().write_redirect_grants && !GetParam().require_aba_flow)
                 ? CONTENT_SETTING_ALLOW
                 : CONTENT_SETTING_BLOCK);
@@ -2853,10 +2852,6 @@ class DIPSBounceTriggerBrowserTest : public DIPSBounceDetectorBrowserTest {
         prefs::kCookieControlsMode,
         static_cast<int>(
             content_settings::CookieControlsMode::kBlockThirdParty));
-
-    // Ensure prepopulation terminates before the test starts.
-    DIPSService::Get(GetActiveWebContents()->GetBrowserContext())
-        ->WaitForInitCompleteForTesting();
   }
 };
 
@@ -3101,9 +3096,10 @@ class DIPSPrivacySandboxApiInteractionTest : public PlatformBrowserTest {
   DIPSPrivacySandboxApiInteractionTest()
       : embedded_https_test_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
     std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
 
     enabled_features.emplace_back(features::kPrivacySandboxAdsAPIsOverride);
-    scoped_feature_list_.InitWithFeatures(enabled_features, {});
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
   void SetUpOnMainThread() override {
@@ -3118,10 +3114,6 @@ class DIPSPrivacySandboxApiInteractionTest : public PlatformBrowserTest {
     embedded_https_test_server_.SetSSLConfig(
         net::EmbeddedTestServer::CERT_TEST_NAMES);
     ASSERT_TRUE(embedded_https_test_server_.Start());
-    // If we accidentally visit any sites before DIPS DB prepopulation
-    // completes, the prepopulation task will insert an interaction for any
-    // sites we visit. Wait for prepopulation to complete to avoid flakes.
-    GetDipsService(GetActiveWebContents())->WaitForInitCompleteForTesting();
     chrome_test_utils::GetProfile(this)->GetPrefs()->SetInteger(
         prefs::kCookieControlsMode,
         static_cast<int>(

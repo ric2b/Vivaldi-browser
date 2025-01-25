@@ -59,7 +59,9 @@ class WebUIBubbleDialogViewTest : public ChromeViewsTestBase,
     ChromeViewsTestBase::SetUp();
     profile_ = std::make_unique<TestingProfile>();
 
-    anchor_widget_ = CreateTestWidget(Widget::InitParams::TYPE_WINDOW);
+    anchor_widget_ =
+        CreateTestWidget(Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
+                         Widget::InitParams::TYPE_WINDOW);
     anchor_widget_->Show();
     contents_wrapper_ = std::make_unique<TestWebUIContentsWrapper>(
         profile_.get(), /*supports_draggable_regions=*/GetParam());
@@ -141,7 +143,9 @@ TEST_P(WebUIBubbleDialogViewTest, CloseUIClearsContentsWrapper) {
 
 TEST_P(WebUIBubbleDialogViewTest, GetAnchorRectWithProvidedAnchorRect) {
   UniqueWidgetPtr anchor_widget = std::make_unique<Widget>();
-  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  Widget::InitParams params =
+      CreateParams(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+                   Widget::InitParams::TYPE_WINDOW);
   anchor_widget->Init(std::move(params));
   auto profile = std::make_unique<TestingProfile>();
   auto contents_wrapper =
@@ -160,7 +164,9 @@ TEST_P(WebUIBubbleDialogViewTest, GetAnchorRectWithProvidedAnchorRect) {
 
 TEST_P(WebUIBubbleDialogViewTest, DestroyingContentsWrapperDoesNotSegfault) {
   UniqueWidgetPtr anchor_widget = std::make_unique<Widget>();
-  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  Widget::InitParams params =
+      CreateParams(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+                   Widget::InitParams::TYPE_WINDOW);
   anchor_widget->Init(std::move(params));
   auto profile = std::make_unique<TestingProfile>();
   auto contents_wrapper =

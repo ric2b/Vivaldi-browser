@@ -165,12 +165,12 @@ def main(args):
 //   Generator: {generator}
 
 
+#include <cstddef>
+
 #include <gtest/gtest.h>
-
-#include <xnnpack/common.h>
-#include <xnnpack/isa-checks.h>
-
-#include <xnnpack/{packb}.h>
+#include "xnnpack/common.h"
+#include "xnnpack/isa-checks.h"
+#include "xnnpack/{packb}.h"
 #include "packb-microkernel-tester.h"
 """.format(specification=options.spec, generator=sys.argv[0], packb=("packb" if is_packb else "zerob"))
 

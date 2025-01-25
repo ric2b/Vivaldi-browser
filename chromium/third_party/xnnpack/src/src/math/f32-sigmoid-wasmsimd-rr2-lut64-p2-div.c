@@ -5,11 +5,10 @@
 
 #include <assert.h>
 #include <stddef.h>
-
 #include <wasm_simd128.h>
 
-#include <xnnpack/common.h>
-#include <xnnpack/math-stubs.h>
+#include "xnnpack/common.h"
+#include "xnnpack/math-stubs.h"
 
 
 // Table of exp2(k / 64) values decremented (as integer) by (k << 17), k = 0..63

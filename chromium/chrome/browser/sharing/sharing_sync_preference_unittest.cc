@@ -9,9 +9,9 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/sharing/fake_device_info.h"
-#include "chrome/browser/sharing/proto/sharing_message.pb.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/sharing_message/proto/sharing_message.pb.h"
 #include "components/sync/protocol/device_info_specifics.pb.h"
 #include "components/sync_device_info/device_info.h"
 #include "components/sync_device_info/fake_device_info_sync_service.h"
@@ -51,6 +51,7 @@ class SharingSyncPreferenceTest : public testing::Test {
         {kDeviceVapidFcmToken, kDeviceVapidP256dh, kDeviceVapidAuthToken},
         {kDeviceSenderIdFcmToken, kDeviceSenderIdP256dh,
          kDeviceSenderIdAuthToken},
+        /*chime_representative_target_id=*/std::string(),
         std::set<sync_pb::SharingSpecificFields::EnabledFeatures>{
             sync_pb::SharingSpecificFields::CLICK_TO_CALL_V2});
   }

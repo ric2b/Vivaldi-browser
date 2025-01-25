@@ -1799,6 +1799,12 @@ void FragmentPaintPropertyTreeBuilder::
       state.compositor_element_id = CompositorElementIdFromUniqueObjectId(
           object_.UniqueId(),
           CompositorElementIdNamespace::kViewTransitionSubframeRoot);
+      if (const auto& layer =
+              ViewTransitionUtils::GetTransition(object_.GetDocument())
+                  ->GetSubframeSnapshotLayer()) {
+        state.view_transition_element_resource_id =
+            layer->ViewTransitionResourceId();
+      }
 
       auto change_type = properties_->UpdateViewTransitionSubframeRootEffect(
           *context_.current_effect, std::move(state), {});
@@ -2131,6 +2137,10 @@ void FragmentPaintPropertyTreeBuilder::UpdateClipPathClip() {
   if (NeedsPaintPropertyUpdate()) {
     DCHECK(!clip_path_bounding_box_.has_value());
     if (NeedsClipPathClipOrMask(object_)) {
+      // Recalc the composited clip path paint status, which depends on whether
+      // we are in a block fragmentation
+      ClipPathClipper::ResolveClipPathStatus(
+          object_, context_.current.is_in_block_fragmentation);
       clip_path_bounding_box_ =
           ClipPathClipper::LocalClipPathBoundingBox(object_);
       if (clip_path_bounding_box_) {
@@ -2143,8 +2153,8 @@ void FragmentPaintPropertyTreeBuilder::UpdateClipPathClip() {
                 ? gfx::Vector2dF(context_.current.paint_offset)
                 : gfx::Vector2dF();
         clip_path_bounding_box_->Offset(paint_offset);
-        if (std::optional<Path> path = ClipPathClipper::PathBasedClip(
-                object_, context_.current.is_in_block_fragmentation)) {
+        if (std::optional<Path> path =
+                ClipPathClipper::PathBasedClip(object_)) {
           path->Translate(paint_offset);
           std::optional<FloatRoundedRect> rrect;
           // TODO(crbug.com/337191311): The optimization breaks view-transition
@@ -3010,7 +3020,7 @@ void FragmentPaintPropertyTreeBuilder::UpdatePaintOffset() {
         break;
       }
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -3482,6 +3492,10 @@ void PaintPropertyTreeBuilder::UpdatePaintingLayer() {
   if (object_.HasLayer() &&
       To<LayoutBoxModelObject>(object_).HasSelfPaintingLayer()) {
     context_.painting_layer = To<LayoutBoxModelObject>(object_).Layer();
+  } else if (object_.IsInlineRubyText()) {
+    // Physical fragments and fragment items for ruby-text boxes are not
+    // managed by inline parents.
+    context_.painting_layer = object_.PaintingLayer();
   }
   DCHECK(context_.painting_layer == object_.PaintingLayer());
 }

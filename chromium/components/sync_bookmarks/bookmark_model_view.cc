@@ -241,6 +241,7 @@ void BookmarkModelViewUsingAccountNodes::EnsurePermanentNodesExist() {
   CHECK(bookmark_bar_node());
   CHECK(other_node());
   CHECK(mobile_node());
+  CHECK(!vivaldi::IsVivaldiRunning() || trash_node());
 }
 
 void BookmarkModelViewUsingAccountNodes::RemoveAllSyncableNodes() {

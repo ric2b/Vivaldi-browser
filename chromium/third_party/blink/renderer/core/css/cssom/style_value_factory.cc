@@ -305,13 +305,11 @@ CSSStyleValueVector StyleValueFactory::FromString(
   DCHECK_EQ(property_id == CSSPropertyID::kVariable,
             !custom_property_name.IsNull());
   CSSTokenizer tokenizer(css_text);
-  const auto tokens = tokenizer.TokenizeToEOF();
-  const CSSParserTokenRange range(tokens);
-
+  CSSParserTokenStream stream(tokenizer);
   HeapVector<CSSPropertyValue, 64> parsed_properties;
   if (property_id != CSSPropertyID::kVariable &&
       CSSPropertyParser::ParseValue(
-          property_id, /*allow_important_annotation=*/false, {range, css_text},
+          property_id, /*allow_important_annotation=*/false, stream,
           parser_context, parsed_properties, StyleRule::RuleType::kStyle)) {
     if (parsed_properties.size() == 1) {
       const auto result = StyleValueFactory::CssValueToStyleValueVector(
@@ -332,10 +330,14 @@ CSSStyleValueVector StyleValueFactory::FromString(
     return result;
   }
 
+  CSSTokenizer tokenizer2(css_text);
+  const auto tokens = tokenizer2.TokenizeToEOF();
+  const CSSParserTokenRange range(tokens);
+
   if ((property_id == CSSPropertyID::kVariable && !tokens.empty()) ||
       CSSVariableParser::ContainsValidVariableReferences(
           range, parser_context->GetExecutionContext())) {
-    const auto variable_data = CSSVariableData::Create(
+    const auto* variable_data = CSSVariableData::Create(
         {range, StringView(css_text)}, false /* is_animation_tainted */,
         false /* needs variable resolution */);
     CSSStyleValueVector values;

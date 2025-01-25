@@ -13,32 +13,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "hwy/contrib/sort/vqsort.h"
+#include "hwy/contrib/sort/vqsort.h"  // VQSort
 
 #undef HWY_TARGET_INCLUDE
 #define HWY_TARGET_INCLUDE "hwy/contrib/sort/vqsort_128d.cc"
 #include "hwy/foreach_target.h"  // IWYU pragma: keep
 
 // After foreach_target
-#include "hwy/contrib/sort/traits128-inl.h"
 #include "hwy/contrib/sort/vqsort-inl.h"
 
 HWY_BEFORE_NAMESPACE();
 namespace hwy {
 namespace HWY_NAMESPACE {
 
-void Sort128Desc(uint64_t* HWY_RESTRICT keys, size_t num,
-                 uint64_t* HWY_RESTRICT buf) {
-#if VQSORT_ENABLED
-  SortTag<uint64_t> d;
-  detail::SharedTraits<detail::Traits128<detail::OrderDescending128>> st;
-  Sort(d, st, keys, num, buf);
-#else
-  (void) keys;
-  (void) num;
-  (void) buf;
-  HWY_ASSERT(0);
-#endif
+void Sort128Desc(uint128_t* HWY_RESTRICT keys, const size_t num) {
+  return VQSortStatic(keys, num, SortDescending());
+}
+
+void PartialSort128Desc(uint128_t* HWY_RESTRICT keys, const size_t num,
+                        const size_t k) {
+  return VQPartialSortStatic(keys, num, k, SortDescending());
+}
+
+void Select128Desc(uint128_t* HWY_RESTRICT keys, const size_t num,
+                   const size_t k) {
+  return VQSelectStatic(keys, num, k, SortDescending());
 }
 
 // NOLINTNEXTLINE(google-readability-namespace-comments)
@@ -50,12 +49,22 @@ HWY_AFTER_NAMESPACE();
 namespace hwy {
 namespace {
 HWY_EXPORT(Sort128Desc);
+HWY_EXPORT(PartialSort128Desc);
+HWY_EXPORT(Select128Desc);
 }  // namespace
 
-void Sorter::operator()(uint128_t* HWY_RESTRICT keys, size_t n,
-                        SortDescending) const {
-  HWY_DYNAMIC_DISPATCH(Sort128Desc)
-  (reinterpret_cast<uint64_t*>(keys), n * 2, Get<uint64_t>());
+void VQSort(uint128_t* HWY_RESTRICT keys, const size_t n, SortDescending) {
+  HWY_DYNAMIC_DISPATCH(Sort128Desc)(keys, n);
+}
+
+void VQPartialSort(uint128_t* HWY_RESTRICT keys, const size_t n, const size_t k,
+                   SortDescending) {
+  HWY_DYNAMIC_DISPATCH(PartialSort128Desc)(keys, k, n);
+}
+
+void VQSelect(uint128_t* HWY_RESTRICT keys, const size_t n, const size_t k,
+              SortDescending) {
+  HWY_DYNAMIC_DISPATCH(Select128Desc)(keys, k, n);
 }
 
 }  // namespace hwy

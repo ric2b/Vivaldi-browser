@@ -9,11 +9,9 @@
 
 
 #include <gtest/gtest.h>
-
-#include <xnnpack/common.h>
-#include <xnnpack/isa-checks.h>
-
-#include <xnnpack/vscaleextexp.h>
+#include "xnnpack/common.h"
+#include "xnnpack/isa-checks.h"
+#include "xnnpack/vscaleextexp.h"
 #include "vscaleextexp-microkernel-tester.h"
 
 

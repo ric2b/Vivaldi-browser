@@ -65,7 +65,6 @@ class ShortcutRegistryCache;
 class ShortcutRemovalDialog;
 class StandaloneBrowserApps;
 class UninstallDialog;
-class BrowserShortcutsCrosapiPublisher;
 
 struct PromiseApp;
 using PromiseAppPtr = std::unique_ptr<PromiseApp>;
@@ -103,7 +102,6 @@ class AppServiceProxyAsh : public AppServiceProxyBase,
   apps::BrowserAppInstanceRegistry* BrowserAppInstanceRegistry();
 
   apps::StandaloneBrowserApps* StandaloneBrowserApps();
-  apps::BrowserShortcutsCrosapiPublisher* BrowserShortcutsCrosapiPublisher();
 
   // Registers `crosapi_subscriber_`.
   void RegisterCrosApiSubScriber(SubscriberCrosapi* subscriber);
@@ -142,8 +140,10 @@ class AppServiceProxyAsh : public AppServiceProxyBase,
   // as false directly and removes the paused app icon effect.
   void UnpauseApps(const std::set<std::string>& app_ids);
 
-  // Mark apps as blocked by local settings.
-  void BlockApps(const std::set<std::string>& app_ids);
+  // Mark apps as blocked by local settings. Show local block dialog if
+  // `show_block_dialog` is true.
+  void BlockApps(const std::set<std::string>& app_ids,
+                 bool show_block_dialog = false);
 
   // Remove the local settings block adedd by `BlockApps`.
   void UnblockApps(const std::set<std::string>& app_ids);
@@ -332,6 +332,8 @@ class AppServiceProxyAsh : public AppServiceProxyBase,
   static void CreateBlockDialog(const std::string& app_name,
                                 const gfx::ImageSkia& image,
                                 Profile* profile);
+
+  static void CreateLocalBlockDialog(const std::string& app_name);
 
   static void CreatePauseDialog(apps::AppType app_type,
                                 const std::string& app_name,

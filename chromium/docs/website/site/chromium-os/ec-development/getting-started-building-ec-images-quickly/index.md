@@ -35,9 +35,8 @@ steps to setup a minimal development environment to build EC images from the
 Chromium OS chroot:
 
 1.  Create a folder for your chroot (ex. *mkdir cros-src; cd cros-src*)
-2.  Run *repo init -u
-            https://chromium.googlesource.com/chromiumos/manifest.git --repo-url
-            https://chromium.googlesource.com/external/repo.git -g minilayout*
+2.  Run *repo init https://chromium.googlesource.com/chromiumos/manifest.git
+            -g minilayout*
 3.  Edit .repo/manifest.xml, and add *groups="minilayout"* to the
             platform/ec project, so the line becomes *&lt;project
             path="src/platform/ec" name="chromiumos/platform/ec"

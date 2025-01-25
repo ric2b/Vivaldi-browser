@@ -27,6 +27,7 @@
 
 #include "src/tint/lang/core/constant/eval_test.h"
 
+#include "src/tint/lang/wgsl/builtin_fn.h"
 #include "src/tint/utils/result/result.h"
 
 #if TINT_BUILD_WGSL_READER
@@ -1399,7 +1400,8 @@ std::vector<Case> ShiftRightCases() {
 
     // Test shift right by bit width or more
     if constexpr (IsAbstract<T>) {
-        // For abstract int, no error, result is 0
+        // For abstract int, no error, result is replaced with all msb (-1 for negative, 0 for
+        // non-negative)
         ConcatInto(  //
             r, std::vector<Case>{
                    C(T{0}, u32{B::NumBits}, T{0}),
@@ -1408,6 +1410,8 @@ std::vector<Case> ShiftRightCases() {
                    C(T{42}, u32{B::NumBits}, T{0}),
                    C(T{42}, u32{B::NumBits + 1}, T{0}),
                    C(T{42}, u32{B::NumBits + 1000}, T{0}),
+                   C(T{-42}, u32{B::NumBits + 1}, T{-1}),
+                   C(T{-42}, u32{B::NumBits + 1000}, T{-1}),
                });
     } else {
         // For concretes, error
@@ -2420,9 +2424,10 @@ TEST_F(ConstEvalTest, ShortCircuit_And_RHSVarDecl) {
     WrapInFunction(Decl(Var("b", Expr(false))), binary);
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
-    EXPECT_EQ(Sem().Get(binary)->Stage(), core::EvaluationStage::kRuntime);
+    ASSERT_EQ(Sem().Get(binary)->Stage(), core::EvaluationStage::kConstant);
+    EXPECT_EQ(Sem().Get(binary)->ConstantValue()->ValueAs<bool>(), false);
     EXPECT_EQ(Sem().GetVal(binary->lhs)->Stage(), core::EvaluationStage::kConstant);
-    EXPECT_EQ(Sem().GetVal(binary->rhs)->Stage(), core::EvaluationStage::kRuntime);
+    EXPECT_EQ(Sem().GetVal(binary->rhs)->Stage(), core::EvaluationStage::kNotEvaluated);
 }
 
 TEST_F(ConstEvalTest, ShortCircuit_Or_RHSVarDecl) {
@@ -2434,9 +2439,40 @@ TEST_F(ConstEvalTest, ShortCircuit_Or_RHSVarDecl) {
     WrapInFunction(Decl(Var("b", Expr(false))), binary);
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
-    EXPECT_EQ(Sem().Get(binary)->Stage(), core::EvaluationStage::kRuntime);
+    ASSERT_EQ(Sem().Get(binary)->Stage(), core::EvaluationStage::kConstant);
+    EXPECT_EQ(Sem().Get(binary)->ConstantValue()->ValueAs<bool>(), true);
     EXPECT_EQ(Sem().GetVal(binary->lhs)->Stage(), core::EvaluationStage::kConstant);
-    EXPECT_EQ(Sem().GetVal(binary->rhs)->Stage(), core::EvaluationStage::kRuntime);
+    EXPECT_EQ(Sem().GetVal(binary->rhs)->Stage(), core::EvaluationStage::kNotEvaluated);
+}
+
+TEST_F(ConstEvalTest, ShortCircuit_And_RHSRuntimeBuiltin) {
+    // fn f() {
+    //   var b = false;
+    //   let result = false && any(b);
+    // }
+    auto* binary = LogicalAnd(false, Call(wgsl::BuiltinFn::kAny, "b"));
+    WrapInFunction(Decl(Var("b", Expr(false))), binary);
+
+    EXPECT_TRUE(r()->Resolve()) << r()->error();
+    ASSERT_EQ(Sem().Get(binary)->Stage(), core::EvaluationStage::kConstant);
+    EXPECT_EQ(Sem().Get(binary)->ConstantValue()->ValueAs<bool>(), false);
+    EXPECT_EQ(Sem().GetVal(binary->lhs)->Stage(), core::EvaluationStage::kConstant);
+    EXPECT_EQ(Sem().GetVal(binary->rhs)->Stage(), core::EvaluationStage::kNotEvaluated);
+}
+
+TEST_F(ConstEvalTest, ShortCircuit_Or_RHSRuntimeBuiltin) {
+    // fn f() {
+    //   var b = false;
+    //   let result = true || any(b);
+    // }
+    auto* binary = LogicalOr(true, Call(wgsl::BuiltinFn::kAny, "b"));
+    WrapInFunction(Decl(Var("b", Expr(false))), binary);
+
+    EXPECT_TRUE(r()->Resolve()) << r()->error();
+    ASSERT_EQ(Sem().Get(binary)->Stage(), core::EvaluationStage::kConstant);
+    EXPECT_EQ(Sem().Get(binary)->ConstantValue()->ValueAs<bool>(), true);
+    EXPECT_EQ(Sem().GetVal(binary->lhs)->Stage(), core::EvaluationStage::kConstant);
+    EXPECT_EQ(Sem().GetVal(binary->rhs)->Stage(), core::EvaluationStage::kNotEvaluated);
 }
 
 ////////////////////////////////////////////////

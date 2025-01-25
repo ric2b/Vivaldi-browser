@@ -121,8 +121,8 @@ def ReadTargets(log, show_all):
     # targets.
     if not header:
         return []
-    assert header == "# ninja log v5\n", ("unrecognized ninja log version %r" %
-                                          header)
+    assert header in ("# ninja log v5\n", "# ninja log v6\n"), (
+        "unrecognized ninja log version %r" % header)
     targets_dict = {}
     last_end_seen = 0.0
     for line in log:

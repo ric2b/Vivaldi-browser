@@ -30,15 +30,34 @@
 #include <iostream>
 
 #include "src/tint/cmd/fuzz/ir/fuzz.h"
-#include "src/tint/lang/core/ir/disassembly.h"
+#include "src/tint/lang/core/ir/disassembler.h"
 #include "src/tint/lang/wgsl/reader/program_to_ir/program_to_ir.h"
 #include "src/tint/lang/wgsl/writer/ir_to_program/ir_to_program.h"
 #include "src/tint/lang/wgsl/writer/raise/raise.h"
 #include "src/tint/lang/wgsl/writer/writer.h"
+#include "src/tint/utils/text/string.h"
 
 namespace tint::wgsl {
 
+bool CanRun(core::ir::Module& ir) {
+    // IRToProgram cannot handle constants whose types are builtin structures, since it would have
+    // to reverse-engineer the builtin function call that would produce the right output.
+    for (auto* c : ir.constant_values) {
+        if (auto* str = c->Type()->As<core::type::Struct>()) {
+            // TODO(350778507): Consider using a struct flag for builtin structures instead.
+            if (tint::HasPrefix(str->Name().NameView(), "__")) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 void IRRoundtripFuzzer(core::ir::Module& ir) {
+    if (!CanRun(ir)) {
+        return;
+    }
+
     if (auto res = tint::wgsl::writer::Raise(ir); res != Success) {
         TINT_ICE() << res.Failure();
     }
@@ -47,9 +66,9 @@ void IRRoundtripFuzzer(core::ir::Module& ir) {
     program_options.allowed_features = AllowedFeatures::Everything();
     auto dst = tint::wgsl::writer::IRToProgram(ir, program_options);
     if (!dst.IsValid()) {
-        std::cerr << "IR:\n" << core::ir::Disassemble(ir).Plain() << std::endl;
+        std::cerr << "IR:\n" << core::ir::Disassembler(ir).Plain() << "\n";
         if (auto result = tint::wgsl::writer::Generate(dst, {}); result == Success) {
-            std::cerr << "WGSL:\n" << result->wgsl << std::endl << std::endl;
+            std::cerr << "WGSL:\n" << result->wgsl << "\n\n";
         }
         TINT_ICE() << dst.Diagnostics();
     }

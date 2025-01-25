@@ -42,6 +42,8 @@ class AutofillProfile : public AutofillDataModel {
  public:
   // Describes where the profile is stored and how it is synced.
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.autofill
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
   enum class Source {
     // Not synced at all or synced through the `AutofillProfileSyncBridge`. This
     // corresponds to profiles that local to Autofill only.
@@ -56,22 +58,15 @@ class AutofillProfile : public AutofillDataModel {
   // list of profile labels. Note that the call to generate labels can specify a
   // custom set of fields, in which case such set would be used instead of this
   // one.
-  // TODO(b/40285811): Change this into a FieldTypeSet once the priority is not
-  // decided by the order of these entries anymore.
-  static constexpr FieldType kDefaultDistinguishingFieldsForLabels[] = {
-      NAME_FULL,
-      ADDRESS_HOME_LINE1,
-      ADDRESS_HOME_LINE2,
-      ADDRESS_HOME_DEPENDENT_LOCALITY,
-      ADDRESS_HOME_CITY,
-      ADDRESS_HOME_STATE,
-      ADDRESS_HOME_ZIP,
-      ADDRESS_HOME_SORTING_CODE,
-      ADDRESS_HOME_COUNTRY,
-      EMAIL_ADDRESS,
-      PHONE_HOME_WHOLE_NUMBER,
-      COMPANY_NAME,
-  };
+  // TODO(crbug.com/40285811): Change this into a FieldTypeSet once the priority
+  // is not decided by the order of these entries anymore.
+  static constexpr auto kDefaultDistinguishingFieldsForLabels =
+      std::to_array<FieldType>(
+          {NAME_FULL, ADDRESS_HOME_LINE1, ADDRESS_HOME_LINE2,
+           ADDRESS_HOME_DEPENDENT_LOCALITY, ADDRESS_HOME_CITY,
+           ADDRESS_HOME_STATE, ADDRESS_HOME_ZIP, ADDRESS_HOME_SORTING_CODE,
+           ADDRESS_HOME_COUNTRY, EMAIL_ADDRESS, PHONE_HOME_WHOLE_NUMBER,
+           COMPANY_NAME});
 
   // The values used to represent Autofill in the `initial_creator_id()` and
   // `last_modifier_id()`.
@@ -222,7 +217,7 @@ class AutofillProfile : public AutofillDataModel {
   // from it minus those in `excluded_fields`. Otherwise, the label fields are
   // drawn from a default set. Each label includes at least
   // `minimal_fields_shown` fields, if possible.
-  // TODO(b/40285811): Make `suggested_fields` non-optional.
+  // TODO(crbug.com/40285811): Make `suggested_fields` non-optional.
   static void CreateInferredLabels(
       const std::vector<raw_ptr<const AutofillProfile, VectorExperimental>>&
           profiles,
@@ -231,7 +226,8 @@ class AutofillProfile : public AutofillDataModel {
       FieldTypeSet excluded_fields,
       size_t minimal_fields_shown,
       const std::string& app_locale,
-      std::vector<std::u16string>* labels);
+      std::vector<std::u16string>* labels,
+      bool use_improved_labels_order = false);
 
   // Builds inferred label from the first |num_fields_to_include| non-empty
   // fields in |label_fields|. Uses as many fields as possible if there are not
@@ -316,6 +312,8 @@ class AutofillProfile : public AutofillDataModel {
   // Returns the type that should be used to fill a field given `field_type`.
   // It is possible that this type is not necessarily `field_type`, if it does
   // not yield a value for filling.
+  // TODO(crbug.com/40264633): Pass and return a `FieldType` instead of
+  // `AutofillType`.
   AutofillType GetFillingType(AutofillType field_type) const;
 
  private:
@@ -340,7 +338,7 @@ class AutofillProfile : public AutofillDataModel {
       const std::vector<raw_ptr<const AutofillProfile, VectorExperimental>>&
           profiles,
       const std::list<size_t>& indices,
-      const std::vector<FieldType>& fields,
+      const std::vector<FieldType>& field_types,
       size_t num_fields_to_include,
       const std::string& app_locale,
       std::vector<std::u16string>* labels);
@@ -352,8 +350,8 @@ class AutofillProfile : public AutofillDataModel {
     return {&name_, &email_, &company_, &phone_number_, &address_};
   }
 
-  const FormGroup* FormGroupForType(const AutofillType& type) const;
-  FormGroup* MutableFormGroupForType(const AutofillType& type);
+  const FormGroup* FormGroupForType(FieldType type) const;
+  FormGroup* MutableFormGroupForType(FieldType type);
 
   // Same as operator==, but ignores differences in GUID.
   bool EqualsSansGuid(const AutofillProfile& profile) const;

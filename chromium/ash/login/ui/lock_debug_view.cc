@@ -10,6 +10,7 @@
 #include <optional>
 #include <utility>
 
+#include "ash/auth/views/auth_input_row_view.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/curtain/remote_maintenance_curtain_view.h"
 #include "ash/curtain/security_curtain_controller.h"
@@ -406,7 +407,8 @@ class LockDebugView::DebugDataDispatcherTransformer
   }
 
   // Activates AuthPanel for the user at |user_index|.
-  void AuthPanelRequestForUserIndex(size_t user_index) {
+  void AuthPanelRequestForUserIndex(size_t user_index,
+                                    bool use_legacy_authpanel) {
     if (auth_panel_debug_widget_) {
       LOG(ERROR) << "AuthPanelDebugWidget still exists.";
       return;
@@ -423,7 +425,8 @@ class LockDebugView::DebugDataDispatcherTransformer
     DCHECK(user_index >= 0 && user_index < debug_users_.size());
     UserMetadata* debug_user = &debug_users_[user_index];
     const AccountId account_id = debug_user->account_id;
-    delegate->SetContentsView(std::make_unique<AuthPanelDebugView>(account_id));
+    delegate->SetContentsView(
+        std::make_unique<AuthPanelDebugView>(account_id, use_legacy_authpanel));
 
     auth_panel_debug_widget_ = views::DialogDelegate::CreateDialogWidget(
         std::move(delegate),
@@ -892,6 +895,12 @@ LockDebugView::LockDebugView(mojom::TrayActionState initial_note_action_state,
                                 base::Unretained(this), -1),
             change_users_container);
 
+  auto* login_ui_components_container = add_horizontal_container();
+  AddButton("Show AuthInputRowView",
+            base::BindRepeating(&LockDebugView::AuthInputRowView,
+                                base::Unretained(this)),
+            login_ui_components_container);
+
   auto* toggle_container = add_horizontal_container();
   AddButton("Blur", base::BindRepeating([]() {
               auto* const wallpaper_controller =
@@ -1072,6 +1081,50 @@ void LockDebugView::ToggleAuthButtonPressed() {
       ->set_force_fail_auth_for_debug_overlay(force_fail_auth_);
 }
 
+void LockDebugView::AuthInputRowView() {
+  if (auth_input_row_debug_widget_) {
+    LOG(ERROR) << "AuthInputRowWidget still exists.";
+    return;
+  }
+  auto delegate = std::make_unique<views::DialogDelegate>();
+  delegate->SetButtons(ui::DIALOG_BUTTON_NONE);
+  delegate->SetModalType(ui::MODAL_TYPE_SYSTEM);
+  delegate->SetOwnedByWidget(true);
+  delegate->SetCloseCallback(base::BindOnce(
+      &LockDebugView::OnAuthInputRowDebugWidgetClose, base::Unretained(this)));
+
+  auto container_view = std::make_unique<views::View>();
+
+  auto* layout =
+      container_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kVertical));
+  layout->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::kCenter);
+  layout->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kCenter);
+
+  container_view->SetPreferredSize(gfx::Size({500, 400}));
+
+  container_view->SetBackground(views::CreateThemedRoundedRectBackground(
+      cros_tokens::kCrosSysSystemBaseElevated, 0));
+
+  container_view->AddChildView(std::make_unique<ash::AuthInputRowView>(
+      ash::AuthInputRowView::AuthType::kPassword));
+
+  delegate->SetContentsView(std::move(container_view));
+
+  auth_input_row_debug_widget_ = views::DialogDelegate::CreateDialogWidget(
+      std::move(delegate),
+      /*context=*/nullptr,
+      /*parent=*/
+      Shell::GetPrimaryRootWindow()->GetChildById(
+          kShellWindowId_LockSystemModalContainer));
+  auth_input_row_debug_widget_->Show();
+}
+
+void LockDebugView::OnAuthInputRowDebugWidgetClose() {
+  auth_input_row_debug_widget_ = nullptr;
+}
+
 void LockDebugView::AddKioskAppButtonPressed() {
   debug_data_dispatcher_->AddKioskApp(
       Shelf::ForWindow(GetWidget()->GetNativeWindow())->shelf_widget());
@@ -1187,7 +1240,7 @@ void LockDebugView::CycleAuthErrorMessage() {
           DebugLoginDetachableBaseModel::kNullBaseId);
       return;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -1286,10 +1339,18 @@ void LockDebugView::UpdatePerUserActionContainer() {
                             base::Unretained(debug_data_dispatcher_.get()), i),
         row);
 
+    AddButton("Show legacy AuthPanel",
+              base::BindRepeating(
+                  &DebugDataDispatcherTransformer::AuthPanelRequestForUserIndex,
+                  base::Unretained(debug_data_dispatcher_.get()), i,
+                  /*use_legacy_authpanel=*/true),
+              row);
+
     AddButton("Show AuthPanel",
               base::BindRepeating(
                   &DebugDataDispatcherTransformer::AuthPanelRequestForUserIndex,
-                  base::Unretained(debug_data_dispatcher_.get()), i),
+                  base::Unretained(debug_data_dispatcher_.get()), i,
+                  /*use_legacy_authpanel=*/false),
               row);
 
     AddButton("Show local authentication request",

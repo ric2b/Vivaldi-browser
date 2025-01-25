@@ -76,6 +76,9 @@ class CONTENT_EXPORT ZygoteHostImpl : public ZygoteHost {
   base::Lock zygote_pids_lock_;
   // This is a set of PIDs representing all the running zygotes.
   std::set<pid_t> zygote_pids_;
+
+  // Vivaldi: Flatpak support.
+  bool vivaldi_use_flatpak_sandbox_;
 };
 
 }  // namespace content

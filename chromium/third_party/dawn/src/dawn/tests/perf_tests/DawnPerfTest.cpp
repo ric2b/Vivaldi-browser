@@ -69,15 +69,10 @@ void DumpTraceEventsToJSONFile(
 
         uint64_t microseconds = static_cast<uint64_t>(traceEvent.timestamp * 1000.0 * 1000.0);
 
-        outFile << ", { "
-                << "\"name\": \"" << traceEvent.name << "\", "
-                << "\"cat\": \"" << category << "\", "
-                << "\"ph\": \"" << traceEvent.phase << "\", "
-                << "\"id\": " << traceEvent.id << ", "
-                << "\"tid\": " << traceEvent.threadId << ", "
-                << "\"ts\": " << microseconds << ", "
-                << "\"pid\": \"Dawn\""
-                << " }";
+        outFile << ", { " << "\"name\": \"" << traceEvent.name << "\", " << "\"cat\": \""
+                << category << "\", " << "\"ph\": \"" << traceEvent.phase << "\", "
+                << "\"id\": " << traceEvent.id << ", " << "\"tid\": " << traceEvent.threadId << ", "
+                << "\"ts\": " << microseconds << ", " << "\"pid\": \"Dawn\"" << " }";
     }
     outFile.close();
 }
@@ -163,8 +158,7 @@ void DawnPerfTestEnvironment::TearDown() {
 
         std::ofstream outFile;
         outFile.open(mTraceFile, std::ios_base::app);
-        outFile << "]}";
-        outFile << std::endl;
+        outFile << "]}\n";
         outFile.close();
     }
 
@@ -271,11 +265,8 @@ void DawnPerfTestBase::DoRunLoop(double maxRunTime) {
 
         submittedIterations++;
         mTest->queue.OnSubmittedWorkDone(
-            [](WGPUQueueWorkDoneStatus, void* userdata) {
-                uint64_t* counter = static_cast<uint64_t*>(userdata);
-                (*counter)++;
-            },
-            &finishedIterations);
+            wgpu::CallbackMode::AllowProcessEvents,
+            [&finishedIterations](wgpu::QueueWorkDoneStatus) { finishedIterations++; });
 
         if (mRunning) {
             ++mNumStepsPerformed;

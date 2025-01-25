@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Применить</translation>
 <translation id="1603914832182249871">(Приватный)</translation>
 <translation id="1627276047960621195">Дескрипторы файлов</translation>
+<translation id="1654713139320245449">Нет устройств для трансляции. Нужна помощь?</translation>
 <translation id="166278006618318542">Алгоритм открытого ключа субъекта</translation>
 <translation id="1682548588986054654">Новое приватное окно</translation>
 <translation id="1708338024780164500">(Неактивно)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Одна из программ на вашем компьютере установила расширение, которое может влиять на работу Vivaldi.</translation>
 <translation id="2443487764245141020">Возможно, сайтам потребуется распознавать ваше устройство с помощью идентификатора</translation>
 <translation id="2445081178310039857">Требуется корневой каталог расширения.</translation>
-<translation id="2470702053775288986">Неподдерживаемые расширения отключены</translation>
 <translation id="2485422356828889247">Удалить</translation>
 <translation id="2498539833203011245">Свернуть</translation>
 <translation id="2509495747794740764">Укажите значение от 10 до 200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Подробнее</translation>
 <translation id="4345587454538109430">Настройка...</translation>
 <translation id="4348766275249686434">Отслеживать ошибки</translation>
-<translation id="4363771538994847871">Нет устройств для трансляции. Нужна помощь?</translation>
 <translation id="4384652540891215547">Активировать расширение</translation>
 <translation id="4394049700291259645">Отключить</translation>
 <translation id="4409697491990005945">Поля</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Раскладка</translation>
 <translation id="7782102568078991263">Подсказок от Google больше нет</translation>
 <translation id="7786889348652477777">&amp;Перезагрузить приложение</translation>
-<translation id="7791543448312431591">Добавить</translation>
 <translation id="7800518121066352902">Повернуть п&amp;ротив часовой стрелки</translation>
 <translation id="7814458197256864873">&amp;Копировать</translation>
 <translation id="7818135753970109980">Добавлена новая тема (<ph name="EXTENSION_NAME" />)</translation>

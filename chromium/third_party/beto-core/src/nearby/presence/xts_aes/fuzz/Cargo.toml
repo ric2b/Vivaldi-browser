@@ -9,27 +9,17 @@ edition = "2018"
 cargo-fuzz = true
 
 [dependencies]
-libfuzzer-sys = "0.4"
-arbitrary = { version = "1.1.7", features = ["derive"] }
+arbitrary = { workspace = true, features = ["derive"] }
+crypto_provider.workspace = true
+crypto_provider_rustcrypto.workspace = true
+derive_fuzztest.workspace = true
+ldt_tbc.workspace = true
+xts_aes.workspace = true
 
-[dependencies.xts_aes]
-path = ".."
-
-[dependencies.crypto_provider]
-path = "../../../crypto/crypto_provider"
-
-[dependencies.crypto_provider_rustcrypto]
-path = "../../../crypto/crypto_provider_rustcrypto"
-
-[dependencies.ldt_tbc]
-path = "../../../presence/ldt_tbc"
-
-# Prevent this from interfering with workspaces
-[workspace]
-members = ["."]
+[target.'cfg(fuzzing)'.dependencies]
+libfuzzer-sys.workspace = true
 
 [[bin]]
-name = "xts-roundtrip"
-path = "fuzz_targets/xts_roundtrip.rs"
-test = false
+name = "xts_roundtrip"
+path = "src/bin/xts_roundtrip.rs"
 doc = false

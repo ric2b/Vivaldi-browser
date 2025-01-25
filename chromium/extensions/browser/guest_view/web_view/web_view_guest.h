@@ -220,7 +220,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
                          const content::ContextMenuParams& params) final;
   bool HandleKeyboardEvent(content::WebContents* source,
-                           const content::NativeWebKeyboardEvent& event) final;
+                           const input::NativeWebKeyboardEvent& event) final;
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) final;
   void RendererResponsive(content::WebContents* source,
@@ -331,7 +331,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   void NewGuestWebViewCallback(const content::OpenURLParams& params,
                                std::unique_ptr<GuestViewBase> guest);
 
-  bool HandleKeyboardShortcuts(const content::NativeWebKeyboardEvent& event);
+  bool HandleKeyboardShortcuts(const input::NativeWebKeyboardEvent& event);
 
   void ApplyAttributes(const base::Value::Dict& params);
 
@@ -343,7 +343,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
       WebContentsCreatedCallback callback,
       std::optional<content::StoragePartitionConfig> storage_partition_config);
 
-  bool IsBackForwardCacheSupported() override;
+  bool IsBackForwardCacheSupported(content::WebContents& web_contents) override;
 
   // Vivaldi
   void RegisterProtocolHandler(content::RenderFrameHost* requesting_frame,

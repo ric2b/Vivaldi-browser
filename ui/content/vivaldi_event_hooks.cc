@@ -21,7 +21,7 @@ void VivaldiEventHooks::InitInstance(VivaldiEventHooks& instance) {
 
 // static
 bool VivaldiEventHooks::HandleMouseEvent(
-    content::RenderWidgetHostViewInput* root_view,
+    input::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& event) {
   if (!instance_)
     return false;
@@ -30,7 +30,7 @@ bool VivaldiEventHooks::HandleMouseEvent(
 
 // static
 bool VivaldiEventHooks::HandleWheelEvent(
-    content::RenderWidgetHostViewInput* root_view,
+    input::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseWheelEvent& event,
     const ui::LatencyInfo& latency) {
   if (!instance_)
@@ -40,7 +40,7 @@ bool VivaldiEventHooks::HandleWheelEvent(
 
 // static
 bool VivaldiEventHooks::HandleWheelEventAfterChild(
-    content::RenderWidgetHostViewInput* root_view,
+    input::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseWheelEvent& event) {
   if (!instance_)
     return false;
@@ -50,7 +50,7 @@ bool VivaldiEventHooks::HandleWheelEventAfterChild(
 // static
 bool VivaldiEventHooks::HandleKeyboardEvent(
     content::RenderWidgetHostImpl* widget_host,
-    const content::NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   if (!instance_)
     return false;
   return instance_->DoHandleKeyboardEvent(widget_host, event);

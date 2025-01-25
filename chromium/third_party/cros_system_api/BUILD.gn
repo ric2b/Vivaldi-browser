@@ -64,6 +64,7 @@ group("all") {
     ":system_api-privacy_screen-protos",
     ":system_api-private_computing-protos",
     ":system_api-protos",
+    ":system_api-regmon-protos",
     ":system_api-resource_manager-goprotos",
     ":system_api-resource_manager-protos",
     ":system_api-rmad-protos",
@@ -122,7 +123,6 @@ install_dbus_client_headers("install_dbus_headers") {
     "cros-disks",
     "cryptohome",
     "debugd",
-    "discod",
     "dlcservice",
     "fbpreprocessor",
     "kerberos",
@@ -934,6 +934,14 @@ proto_library("system_api-fbpreprocessor-protos") {
   proto_in_dir = "dbus/fbpreprocessor"
   proto_out_dir = "include/fbpreprocessor/proto_bindings"
   sources = [ "${proto_in_dir}/fbpreprocessor.proto" ]
+  standalone = true
+  install_package = true
+}
+
+proto_library("system_api-regmon-protos") {
+  proto_in_dir = "dbus/regmon"
+  proto_out_dir = "include/regmon/proto_bindings"
+  sources = [ "${proto_in_dir}/regmon_service.proto" ]
   standalone = true
   install_package = true
 }

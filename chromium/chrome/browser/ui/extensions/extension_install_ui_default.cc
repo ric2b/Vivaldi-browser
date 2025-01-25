@@ -111,7 +111,7 @@ void OpenAppInstalledUIImpl(const std::string& app_id, Profile* profile) {
 #if BUILDFLAG(IS_CHROMEOS)
   // chrome://apps/ is not available on ChromeOS.
   // Toast is shown for Ash and Lacros.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #else
   Profile* current_profile = profile->GetOriginalProfile();
   Browser* browser = FindOrCreateVisibleBrowser(current_profile);
@@ -157,7 +157,7 @@ void ExtensionInstallUIDefault::OnInstallSuccess(
   if (!profile_) {
     // TODO(zelidrag): Figure out what exact conditions cause crash
     // http://crbug.com/159437 and write browser test to cover it.
-    DUMP_WILL_BE_NOTREACHED_NORETURN();
+    DUMP_WILL_BE_NOTREACHED();
     return;
   }
 

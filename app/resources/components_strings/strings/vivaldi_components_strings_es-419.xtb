@@ -15,7 +15,6 @@
 <translation id="1728677426644403582">Estás viendo el código de fuente de una página web</translation>
 <translation id="1734878702283171397">Intenta contactar con el administrador del sistema.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Trate de ejecutar diagnósticos de Red de Windows<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">Este sitio contiene programas dañinos</translation>
 <translation id="1974060860693918893">Avanzada</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Comprobar el proxy y el firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emitida para: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -40,7 +39,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Ejecutando Diagnóstico de conectividad<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Se ha restablecido la conexión.</translation>
 <translation id="2826760142808435982">La conexión se encriptó y autenticó con <ph name="CIPHER" />, y utiliza <ph name="KX" /> como el mecanismo de intercambio de claves.</translation>
-<translation id="2856444702002559011">Es posible que algunos atacantes intenten robar tu información de <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (p. ej., contraseñas, mensajes o tarjetas de crédito). <ph name="BEGIN_LEARN_MORE_LINK" />Más información<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Se detectó un cambio de red.</translation>
 <translation id="2948083400971632585">En la página de ajustes se puede desactivar el uso de los proxys configurados.</translation>
 <translation id="2991571918955627853">No puedes visitar <ph name="SITE" /> ahora porque el sitio web usa HSTS. Los ataques y errores de red suelen ser temporales, por lo que es posible que esta página funcione más tarde.</translation>
@@ -87,7 +85,6 @@
 <translation id="4265872034478892965">Permitido por tu administrador</translation>
 <translation id="4305666528087210886">No se pudo acceder a tu archivo</translation>
 <translation id="4312866146174492540">Bloquear (predeterminado)</translation>
-<translation id="4356973930735388585">Es posible que los atacantes que se encuentren en este sitio intenten instalar programas peligrosos en tu equipo con el fin de robarte información o borrarla (p. ej., fotos, contraseñas, mensajes y tarjetas de crédito).</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> no aceptó tu certificado de acceso o es posible que no se haya proporcionado.</translation>
 <translation id="4506599922270137252">Contactar con el administrador del sistema</translation>
@@ -138,7 +135,6 @@
 <translation id="6305205051461490394">No se puede acceder a <ph name="URL" />.</translation>
 <translation id="6321917430147971392">Revisa la configuración de su DNS</translation>
 <translation id="6328639280570009161">Intenta inhabilitar la predicción de red</translation>
-<translation id="6328786501058569169">Este sitio es engañoso</translation>
 <translation id="6348220984832452017">Variaciones activas</translation>
 <translation id="6358450015545214790">¿Qué significa esto?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> rechazó la conexión.</translation>
@@ -151,7 +147,6 @@
 <translation id="6890956352250146925">Opciones para cookies y datos de sitios</translation>
 <translation id="6897140037006041989">User agent</translation>
 <translation id="7053983685419859001">Bloquear</translation>
-<translation id="7079718277001814089">Este sitio contiene programas malintencionados</translation>
 <translation id="7096937462164235847">No se verificó la identidad de este sitio web.</translation>
 <translation id="7108819624672055576">Permitido por una extensión</translation>
 <translation id="7111012039238467737">(Válido)</translation>
@@ -167,7 +162,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> no puede procesar esta solicitud en este momento.</translation>
 <translation id="7662298039739062396">Configuración controlada por una extensión</translation>
 <translation id="7663736086183791259">Certificado <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Es posible que los atacantes de este sitio intenten engañarte para que instales programas que pueden afectar tu experiencia de navegación (p. ej., podrían cambiar la página principal o mostrar más anuncios en los sitios que visitas).</translation>
 <translation id="7714464543167945231">Certificado</translation>
 <translation id="7716147886133743102">Bloqueado por tu administrador</translation>
 <translation id="7716424297397655342">No se puede cargar este sitio desde la caché</translation>
@@ -176,7 +170,6 @@
 <translation id="7834399512844817676"><ph name="SITE" /> suele utilizar la encriptación para proteger tu información. Cuando Vivaldi intentó conectarse a <ph name="SITE" />, el sitio web devolvió credenciales incorrectas y poco comunes. Es posible que un atacante quiera suplantar a <ph name="SITE" /> o que una pantalla de acceso Wi-Fi haya interrumpido la conexión. Tu información permanece segura porque Vivaldi detuvo la conexión antes de que se intercambiaran datos.</translation>
 <translation id="7878562273885520351">Tu contraseña puede ser descubierta</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
-<translation id="8025119109950072390">Es posible que los atacantes de este sitio te engañen para que hagas algo peligroso, como instalar software o divulgar información personal (p. ej., contraseñas, números de teléfono o tarjetas de crédito).</translation>
 <translation id="8037357227543935929">Preguntar (predeterminado)</translation>
 <translation id="8041940743680923270">Usar configuración global predeterminada (Preguntar)</translation>
 <translation id="808894953321890993">Cambiar la contraseña</translation>

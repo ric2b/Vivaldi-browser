@@ -17,6 +17,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/not_fatal_until.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
@@ -95,7 +96,7 @@ GCMClient::Result ToGCMClientResult(MCSClient::MessageSendStatus status) {
       return GCMClient::NETWORK_ERROR;
     case MCSClient::SENT:
     case MCSClient::SEND_STATUS_COUNT:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   return GCMClientImpl::UNKNOWN_ERROR;
@@ -170,7 +171,7 @@ int ConstructGCMVersion(const std::string& chrome_version) {
   // Major Chrome version is passed as GCM version.
   size_t pos = chrome_version.find('.');
   if (pos == std::string::npos) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return 0;
   }
 
@@ -920,7 +921,8 @@ void GCMClientImpl::Register(
       InstanceIDTokenInfo::FromRegistrationInfo(registration_info.get());
   if (instance_id_token_info) {
     auto instance_id_iter = instance_id_data_.find(registration_info->app_id);
-    DCHECK(instance_id_iter != instance_id_data_.end());
+    CHECK(instance_id_iter != instance_id_data_.end(),
+          base::NotFatalUntil::M130);
 
     request_handler = std::make_unique<InstanceIDGetTokenRequestHandler>(
         instance_id_iter->second.first,
@@ -1059,7 +1061,7 @@ void GCMClientImpl::Unregister(
     if (instance_id_iter == instance_id_data_.end()) {
       // This should not be reached since we should not delete tokens when
       // an InstanceID has not been created yet.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
     }
 
@@ -1209,7 +1211,7 @@ std::string GCMClientImpl::GetStateString() const {
     case GCMClientImpl::READY:
       return "READY";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -1283,7 +1285,8 @@ void GCMClientImpl::OnMessageReceivedFromMCS(const gcm::MCSMessage& message) {
       HandleIncomingMessage(message);
       return;
     default:
-      NOTREACHED() << "Message with unexpected tag received by GCMClient";
+      NOTREACHED_IN_MIGRATION()
+          << "Message with unexpected tag received by GCMClient";
       return;
   }
 }

@@ -23,6 +23,7 @@
 #include "components/sync/model/model_type_controller_delegate.h"
 #include "components/sync/model/sync_error.h"
 #include "components/sync/service/configure_context.h"
+#include "components/sync/service/model_type_local_data_batch_uploader.h"
 
 namespace syncer {
 
@@ -33,7 +34,7 @@ class SyncError;
 
 // ModelTypeController are responsible for managing the state of a single data
 // type. They are not thread safe and should only be used on the UI thread.
-class ModelTypeController : public base::SupportsWeakPtr<ModelTypeController> {
+class ModelTypeController {
  public:
   // TODO(crbug.com/41461370): Should MODEL_LOADED be renamed to
   // MODEL_READY_TO_CONNECT?
@@ -67,10 +68,15 @@ class ModelTypeController : public base::SupportsWeakPtr<ModelTypeController> {
   // `delegate_for_transport_mode` may be null.
   // THIS IS NOT SUPPORTED for new data types. When introducing a new data type,
   // you must consider how it should work in transport mode.
+  // For types having both "local" and "account" storages, `batch_uploader`
+  // can be passed and will be exposed via GetModelTypeLocalDataBatchUploader()
+  // to allow moving local data to the account.
   ModelTypeController(
       ModelType type,
       std::unique_ptr<ModelTypeControllerDelegate> delegate_for_full_sync_mode,
-      std::unique_ptr<ModelTypeControllerDelegate> delegate_for_transport_mode);
+      std::unique_ptr<ModelTypeControllerDelegate> delegate_for_transport_mode,
+      std::unique_ptr<ModelTypeLocalDataBatchUploader> batch_uploader =
+          nullptr);
 
   ModelTypeController(const ModelTypeController&) = delete;
   ModelTypeController& operator=(const ModelTypeController&) = delete;
@@ -125,6 +131,12 @@ class ModelTypeController : public base::SupportsWeakPtr<ModelTypeController> {
   };
   virtual PreconditionState GetPreconditionState() const;
 
+  // Returns whether this data type has any unsynced changes, i.e. any local
+  // changes that are waiting to be committed.
+  // May be invoked at any time; if the model isn't loaded yet or is in an error
+  // state, this should typically return "false".
+  virtual void HasUnsyncedData(base::OnceCallback<void(bool)> callback);
+
   // Returns a Value::List representing all nodes for this data type through
   // |callback| on this thread. Can only be called if state() != NOT_RUNNING.
   // Used for populating nodes in Sync Node Browser of chrome://sync-internals.
@@ -139,6 +151,9 @@ class ModelTypeController : public base::SupportsWeakPtr<ModelTypeController> {
   // histograms. May do nothing if state() is NOT_RUNNING or FAILED.
   virtual void RecordMemoryUsageAndCountsHistograms();
 
+  // Returns the uploader passed on construction. Virtual for testing.
+  virtual ModelTypeLocalDataBatchUploader* GetModelTypeLocalDataBatchUploader();
+
   // Reports model type error to simulate the error reported by the bridge.
   virtual void ReportBridgeErrorForTest();
 
@@ -146,7 +161,9 @@ class ModelTypeController : public base::SupportsWeakPtr<ModelTypeController> {
 
  protected:
   // Subclasses that use this constructor must call InitModelTypeController().
-  explicit ModelTypeController(ModelType type);
+  explicit ModelTypeController(ModelType type,
+                               std::unique_ptr<ModelTypeLocalDataBatchUploader>
+                                   batch_uploader = nullptr);
 
   // |delegate_for_transport_mode| may be null if the type does not run in
   // transport mode.
@@ -172,6 +189,9 @@ class ModelTypeController : public base::SupportsWeakPtr<ModelTypeController> {
   // The type this object is responsible for controlling.
   const ModelType type_;
 
+  // Null if the ModelType does not support batch upload.
+  const std::unique_ptr<ModelTypeLocalDataBatchUploader> batch_uploader_;
+
   // Used to check that functions are called on the correct sequence.
   base::SequenceChecker sequence_checker_;
 
@@ -195,12 +215,16 @@ class ModelTypeController : public base::SupportsWeakPtr<ModelTypeController> {
   // We use a vector because it's allowed to call Stop() multiple times (i.e.
   // while STOPPING).
   std::vector<StopCallback> model_stop_callbacks_;
-  SyncStopMetadataFate model_stop_metadata_fate_;
+  SyncStopMetadataFate model_stop_metadata_fate_ = KEEP_METADATA;
 
   // Controller receives |activation_response_| from
   // ClientTagBasedModelTypeProcessor callback and must temporarily own it until
   // Connect is called.
   std::unique_ptr<DataTypeActivationResponse> activation_response_;
+
+  // This factory must only be used to bind weak pointers to non-virtual member
+  // functions that don't call any virtual ones.
+  base::WeakPtrFactory<ModelTypeController> weak_ptr_factory_{this};
 };
 
 }  // namespace syncer

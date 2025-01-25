@@ -549,13 +549,17 @@ ParsedPermissionsPolicy PermissionsPolicyParser::ParseHeader(
     PolicyParserMessageBuffer& feature_policy_logger,
     PolicyParserMessageBuffer& permissions_policy_logger,
     ExecutionContext* execution_context) {
+  bool is_isolated_context =
+      execution_context && execution_context->IsIsolatedContext();
   ParsedPermissionsPolicy permissions_policy =
       ParsingContext(permissions_policy_logger, origin, nullptr,
-                     GetDefaultFeatureNameMap(), execution_context)
+                     GetDefaultFeatureNameMap(is_isolated_context),
+                     execution_context)
           .ParsePermissionsPolicy(permissions_policy_header);
   ParsedPermissionsPolicy feature_policy =
       ParsingContext(feature_policy_logger, origin, nullptr,
-                     GetDefaultFeatureNameMap(), execution_context)
+                     GetDefaultFeatureNameMap(is_isolated_context),
+                     execution_context)
           .ParseFeaturePolicy(feature_policy_header);
 
   FeatureObserver observer;
@@ -572,7 +576,9 @@ ParsedPermissionsPolicy PermissionsPolicyParser::ParseHeader(
       permissions_policy.push_back(policy_declaration);
     } else {
       overlap_features.push_back(
-          GetNameForFeature(policy_declaration.feature).Ascii().c_str());
+          GetNameForFeature(policy_declaration.feature, is_isolated_context)
+              .Ascii()
+              .c_str());
     }
   }
 
@@ -597,8 +603,11 @@ ParsedPermissionsPolicy PermissionsPolicyParser::ParseAttribute(
     scoped_refptr<const SecurityOrigin> src_origin,
     PolicyParserMessageBuffer& logger,
     ExecutionContext* execution_context) {
+  bool is_isolated_context =
+      execution_context && execution_context->IsIsolatedContext();
   return ParsingContext(logger, self_origin, src_origin,
-                        GetDefaultFeatureNameMap(), execution_context)
+                        GetDefaultFeatureNameMap(is_isolated_context),
+                        execution_context)
       .ParseFeaturePolicy(policy);
 }
 
@@ -607,8 +616,11 @@ ParsedPermissionsPolicy PermissionsPolicyParser::ParsePolicyFromNode(
     scoped_refptr<const SecurityOrigin> origin,
     PolicyParserMessageBuffer& logger,
     ExecutionContext* execution_context) {
+  bool is_isolated_context =
+      execution_context && execution_context->IsIsolatedContext();
   return ParsingContext(logger, origin, /*src_origin=*/nullptr,
-                        GetDefaultFeatureNameMap(), execution_context)
+                        GetDefaultFeatureNameMap(is_isolated_context),
+                        execution_context)
       .ParsePolicyFromNode(policy);
 }
 
@@ -697,7 +709,9 @@ void AllowFeatureEverywhere(mojom::blink::PermissionsPolicyFeature feature,
 
 const Vector<String> GetAvailableFeatures(ExecutionContext* execution_context) {
   Vector<String> available_features;
-  for (const auto& feature : GetDefaultFeatureNameMap()) {
+  bool is_isolated_context =
+      execution_context && execution_context->IsIsolatedContext();
+  for (const auto& feature : GetDefaultFeatureNameMap(is_isolated_context)) {
     if (!DisabledByOriginTrial(feature.key, execution_context) &&
         !IsFeatureForMeasurementOnly(feature.value)) {
       available_features.push_back(feature.key);
@@ -706,9 +720,9 @@ const Vector<String> GetAvailableFeatures(ExecutionContext* execution_context) {
   return available_features;
 }
 
-const String& GetNameForFeature(
-    mojom::blink::PermissionsPolicyFeature feature) {
-  for (const auto& entry : GetDefaultFeatureNameMap()) {
+const String GetNameForFeature(mojom::blink::PermissionsPolicyFeature feature,
+                               bool is_isolated_context) {
+  for (const auto& entry : GetDefaultFeatureNameMap(is_isolated_context)) {
     if (entry.value == feature) {
       return entry.key;
     }

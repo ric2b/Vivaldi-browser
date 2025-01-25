@@ -433,13 +433,11 @@ message OmniboxEventProto {
     // |is_keyword_suggestion|.
     optional bool is_keyword_suggestion = 9;
 
-    // Signals for machine learning scoring.
+    // Signals for machine learning scoring (logged by client code)
     // See details: http://shortn/_B21YgmkLs9.
-    // Currently, this message is only populated for URL suggestions
-    // (excluding Navsuggest and Document URLs) and only when there is a click
-    // on a URL suggestion.
-    // Only recorded on desktop platforms (Windows, Mac, Linux, ChromeOS).
-    // Next tag: 26
+    //
+    // Currently, this message is populated for both URL and Search suggestions
+    // and only when there is a click on an Omnibox suggestion.
     message ScoringSignals {
       // Number of times the URL was navigated to using the Omnibox for this
       // profile on this device, and all other devices syncing with this
@@ -551,10 +549,17 @@ message OmniboxEventProto {
       // This signal contains the raw score received from the Suggest service
       // ("google:suggestrelevance") and does not reflect any client-side
       // adjustments (unlike the value of the `relevance` field above).
-      // As such, this signal will only be set for server-provided Search
-      // suggestions and will remain unset for all other types of suggestions
-      // (including server-provided URL suggestions).
+      // As such, this signal will take on the following values:
+      //   - Non-zero: Search suggestion with `relevance_from_server` set to
+      //               `true`
+      //   - Zero:     Search suggestion with `relevance_from_server` set to
+      //               `false` OR non-Search suggestion (obtained from any
+      //               source)
       optional int32 search_suggest_relevance = 25;
+      // Moved to OmniboxScoringSignals proto in cl/651828883:
+      optional bool is_search_suggest_entity = 26 [deprecated = true];
+      // Moved to OmniboxScoringSignals proto in cl/651828883:
+      optional bool is_verbatim = 27 [deprecated = true];
     }
     optional ScoringSignals scoring_signals = 10;
   }

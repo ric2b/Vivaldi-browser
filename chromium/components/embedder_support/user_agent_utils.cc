@@ -91,7 +91,7 @@ int GetPreRS5UniversalApiContractVersion() {
   }
   // The list above should account for all Windows versions prior to
   // RS5.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0;
 }
 
@@ -541,7 +541,11 @@ blink::UserAgentMetadata GetUserAgentMetadata(const PrefService* pref_service,
 void SetDesktopUserAgentOverride(content::WebContents* web_contents,
                                  const blink::UserAgentMetadata& metadata,
                                  bool override_in_new_tabs) {
+  #if !defined(OEM_MERCEDES_BUILD)
   const char kLinuxInfoStr[] = "X11; Linux x86_64";
+  #else
+  const char kLinuxInfoStr[] = "X11; Linux x86_64; Mercedes-Benz";
+  #endif
 
   blink::UserAgentOverride spoofed_ua;
   spoofed_ua.ua_string_override = content::BuildUserAgentFromOSAndProduct(

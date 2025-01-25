@@ -64,9 +64,7 @@ void FakeUdpSocket::ProcessConfigurationMethod(std::queue<Error>* errors) {
   }
 }
 
-void FakeUdpSocket::SendMessage(const void* data,
-                                size_t length,
-                                const IPEndpoint& dest) {
+void FakeUdpSocket::SendMessage(ByteView data, const IPEndpoint& dest) {
   OSP_CHECK(send_errors_.size()) << "No SendMessage responses queued.";
   Error error = send_errors_.front();
   send_errors_.pop();

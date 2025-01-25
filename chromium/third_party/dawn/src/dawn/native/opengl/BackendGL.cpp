@@ -27,16 +27,28 @@
 
 #include "dawn/native/opengl/BackendGL.h"
 
+#include <memory>
 #include <string>
+#include <utility>
 
 #include "dawn/native/ChainUtils.h"
 #include "dawn/native/Instance.h"
 #include "dawn/native/OpenGLBackend.h"
+#include "dawn/native/opengl/DisplayEGL.h"
 #include "dawn/native/opengl/PhysicalDeviceGL.h"
 
 namespace dawn::native::opengl {
 
-// Implementation of the OpenGL backend's BackendConnection
+namespace {
+#if DAWN_PLATFORM_IS(WINDOWS)
+const char* kEGLLib = "libEGL.dll";
+#elif DAWN_PLATFORM_IS(MACOS)
+const char* kEGLLib = "libEGL.dylib";
+#else
+const char* kEGLLib = "libEGL.so";
+#endif
+
+}  // anonymous namespace
 
 Backend::Backend(InstanceBase* instance, wgpu::BackendType backendType)
     : BackendConnection(instance, backendType) {}
@@ -48,73 +60,50 @@ std::vector<Ref<PhysicalDeviceBase>> Backend::DiscoverPhysicalDevices(
     }
     if (!options->compatibilityMode) {
         // Return an empty vector since GL physical devices can only support compatibility mode.
-        return std::vector<Ref<PhysicalDeviceBase>>{};
-    }
-
-    void* (*getProc)(const char* name) = nullptr;
-    EGLDisplay display = EGL_NO_DISPLAY;
-
-    if (auto* glGetProcOptions = options.Get<RequestAdapterOptionsGetGLProc>()) {
-        getProc = glGetProcOptions->getProc;
-        display = glGetProcOptions->display;
-    }
-
-    if (getProc == nullptr) {
-        // getProc not passed. Try to load it from libEGL.
-
-#if DAWN_PLATFORM_IS(WINDOWS)
-        const char* eglLib = "libEGL.dll";
-#elif DAWN_PLATFORM_IS(MACOS)
-        const char* eglLib = "libEGL.dylib";
-#else
-        const char* eglLib = "libEGL.so";
-#endif
-        std::string err;
-        if (!mLibEGL.Valid() && !mLibEGL.Open(eglLib, &err)) {
-            GetInstance()->ConsumedErrorAndWarnOnce(
-                DAWN_VALIDATION_ERROR("Failed to load %s: %s", eglLib, err.c_str()));
-            return {};
-        }
-
-        getProc = reinterpret_cast<void* (*)(const char*)>(mLibEGL.GetProc("eglGetProcAddress"));
-        if (!getProc) {
-            GetInstance()->ConsumedErrorAndWarnOnce(
-                DAWN_VALIDATION_ERROR("eglGetProcAddress return nullptr"));
-            return {};
-        }
-    }
-
-    return DiscoverPhysicalDevicesWithProcs(getProc, display);
-}
-
-std::vector<Ref<PhysicalDeviceBase>> Backend::DiscoverPhysicalDevicesWithProcs(
-    void* (*getProc)(const char*),
-    EGLDisplay display) {
-    // TODO(cwallez@chromium.org): For now only create a single OpenGL physicalDevice because don't
-    // know how to handle MakeCurrent.
-    if (mPhysicalDevice != nullptr && (mGetProc != getProc || mDisplay != display)) {
-        GetInstance()->ConsumedErrorAndWarnOnce(
-            DAWN_VALIDATION_ERROR("The OpenGL backend can only create a single physicalDevice."));
         return {};
     }
-    if (mPhysicalDevice == nullptr) {
-        if (GetInstance()->ConsumedErrorAndWarnOnce(
-                PhysicalDevice::Create(GetInstance(), GetType(), getProc, display),
-                &mPhysicalDevice)) {
-            return {};
+
+    std::vector<Ref<PhysicalDeviceBase>> devices;
+
+    // A helper function performing checks on the display we're trying to use, and adding the
+    // physical device from it to the list returned by the discovery.
+    auto AppendNewDeviceFrom = [&](ResultOrError<Ref<DisplayEGL>> maybeDisplay) -> MaybeError {
+        Ref<DisplayEGL> display;
+        DAWN_TRY_ASSIGN(display, std::move(maybeDisplay));
+
+        if (!display->egl.HasExt(EGLExt::CreateContextRobustness)) {
+            return DAWN_VALIDATION_ERROR("EGL_EXT_create_context_robustness is required.");
         }
-        mGetProc = getProc;
-        mDisplay = display;
+        if (!display->egl.HasExt(EGLExt::FenceSync) && !display->egl.HasExt(EGLExt::ReusableSync)) {
+            return DAWN_INTERNAL_ERROR(
+                "EGL_KHR_fence_sync or EGL_KHR_reusable_sync must be supported");
+        }
+
+        Ref<PhysicalDevice> device;
+        DAWN_TRY_ASSIGN(device, PhysicalDevice::Create(GetType(), std::move(display)));
+        devices.push_back(device);
+
+        return {};
+    };
+
+    // A helper function used to give more context before printing the EGL loading error.
+    auto SwallowDiscoveryError = [&](MaybeError maybeError) {
+        if (maybeError.IsError()) {
+            std::unique_ptr<ErrorData> error = maybeError.AcquireError();
+            error->AppendContext("trying to discover a %s adapter.", GetType());
+            GetInstance()->ConsumedErrorAndWarnOnce(std::move(error));
+        }
+    };
+
+    if (auto* glGetProcOptions = options.Get<RequestAdapterOptionsGetGLProc>()) {
+        SwallowDiscoveryError(AppendNewDeviceFrom(DisplayEGL::CreateFromProcAndDisplay(
+            GetType(), glGetProcOptions->getProc, glGetProcOptions->display)));
+    } else {
+        SwallowDiscoveryError(
+            AppendNewDeviceFrom(DisplayEGL::CreateFromDynamicLoading(GetType(), kEGLLib)));
     }
-    return {mPhysicalDevice};
-}
 
-void Backend::ClearPhysicalDevices() {
-    mPhysicalDevice = nullptr;
-}
-
-size_t Backend::GetPhysicalDeviceCountForTesting() const {
-    return mPhysicalDevice != nullptr ? 1 : 0;
+    return devices;
 }
 
 BackendConnection* Connect(InstanceBase* instance, wgpu::BackendType backendType) {

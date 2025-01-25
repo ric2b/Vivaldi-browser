@@ -10,6 +10,8 @@ import subcommand
 
 from git_common import freeze, thaw
 
+import gclient_utils
+
 
 def CMDfreeze(parser, args):
     """Freeze a branch's changes, excluding unstaged gitlinks changes."""
@@ -24,6 +26,10 @@ def CMDthaw(parser, args):
 
 
 def main(args):
+    if gclient_utils.IsEnvCog():
+        print(f'{args[0]} command is not supported in non-git environment.',
+              file=sys.stderr)
+        return 1
     dispatcher = subcommand.CommandDispatcher(__name__)
     ret = dispatcher.execute(optparse.OptionParser(), args)
     if ret:

@@ -322,7 +322,7 @@ ScriptPromise<AudioBuffer> BaseAudioContext::decodeAudioData(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "Cannot decode audio data: The document is no longer active.");
-    return ScriptPromise<AudioBuffer>();
+    return EmptyPromise();
   }
 
   v8::Isolate* isolate = script_state->GetIsolate();
@@ -371,7 +371,7 @@ ScriptPromise<AudioBuffer> BaseAudioContext::decodeAudioData(
     error_callback->InvokeAndReportException(this, dom_exception);
   }
 
-  return ScriptPromise<AudioBuffer>();
+  return EmptyPromise();
 }
 
 void BaseAudioContext::HandleDecodeAudioData(
@@ -645,7 +645,7 @@ PeriodicWave* BaseAudioContext::GetPeriodicWave(int type) {
       }
       return periodic_wave_triangle_.Get();
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return nullptr;
   }
 }
@@ -661,7 +661,7 @@ String BaseAudioContext::state() const {
     case kClosed:
       return "closed";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return "";
 }
 

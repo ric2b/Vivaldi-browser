@@ -35,8 +35,7 @@ enum class ActivationPosition {
 // Navigation throttle responsible for activating subresource filtering on page
 // loads that match the downloaded Adverse Ad blocking list
 class VivaldiSubresourceFilterAdblockingThrottle
-    : public content::NavigationThrottle,
-      public base::SupportsWeakPtr<VivaldiSubresourceFilterAdblockingThrottle> {
+    : public content::NavigationThrottle {
  public:
   VivaldiSubresourceFilterAdblockingThrottle(content::NavigationHandle* handle);
   ~VivaldiSubresourceFilterAdblockingThrottle() override;

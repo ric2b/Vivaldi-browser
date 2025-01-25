@@ -13,8 +13,10 @@
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "build/buildflag.h"
+#include "components/crash/core/common/crash_key.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/service/feature_info.h"
+#include "gpu/ipc/common/vulkan_ycbcr_info.h"
 #include "ui/gl/gl_version_info.h"
 
 namespace gpu {
@@ -474,14 +476,28 @@ wgpu::TextureFormat ToDawnFormat(viz::SharedImageFormat format) {
   } else if (format == viz::LegacyMultiPlaneFormat::kNV12 ||
              format == viz::MultiPlaneFormat::kNV12) {
     return wgpu::TextureFormat::R8BG8Biplanar420Unorm;
-  } else if (format == viz::LegacyMultiPlaneFormat::kP010 ||
-             format == viz::MultiPlaneFormat::kP010) {
-    return wgpu::TextureFormat::R10X6BG10X6Biplanar420Unorm;
+  } else if (format == viz::MultiPlaneFormat::kNV16) {
+    return wgpu::TextureFormat::R8BG8Biplanar422Unorm;
+  } else if (format == viz::MultiPlaneFormat::kNV24) {
+    return wgpu::TextureFormat::R8BG8Biplanar444Unorm;
   } else if (format == viz::LegacyMultiPlaneFormat::kNV12A ||
              format == viz::MultiPlaneFormat::kNV12A) {
     return wgpu::TextureFormat::R8BG8A8Triplanar420Unorm;
+  } else if (format == viz::LegacyMultiPlaneFormat::kP010 ||
+             format == viz::MultiPlaneFormat::kP010) {
+    return wgpu::TextureFormat::R10X6BG10X6Biplanar420Unorm;
+  } else if (format == viz::MultiPlaneFormat::kP210) {
+    return wgpu::TextureFormat::R10X6BG10X6Biplanar422Unorm;
+  } else if (format == viz::MultiPlaneFormat::kP410) {
+    return wgpu::TextureFormat::R10X6BG10X6Biplanar444Unorm;
   }
-  NOTREACHED() << "Unsupported format: " << format.ToString();
+
+  // Unknown format: crash, surfacing the format.
+  static crash_reporter::CrashKeyString<256> crash_key(
+      "SIFServiceUtils ToDawnFormat error");
+  crash_reporter::ScopedCrashKeyString crash_key_scope(&crash_key,
+                                                       format.ToString());
+  NOTREACHED_IN_MIGRATION() << "Unsupported format: " << format.ToString();
   return wgpu::TextureFormat::Undefined;
 }
 
@@ -489,12 +505,6 @@ wgpu::TextureFormat ToDawnTextureViewFormat(viz::SharedImageFormat format,
                                             int plane_index) {
   // The multi plane formats create a separate image per plane and return the
   // single planar equivalents.
-  // TODO(crbug.com/40269645): The above reasoning does not hold unilaterally
-  // on Android, and this function will need more information to determine the
-  // correct operation to take on that platform.
-#if BUILDFLAG(IS_ANDROID)
-  CHECK(format.is_single_plane() && !format.IsLegacyMultiplanar());
-#endif
   if (format.is_multi_plane()) {
     int num_channels = format.NumChannelsInPlane(plane_index);
     switch (format.channel_format()) {
@@ -555,8 +565,6 @@ wgpu::TextureUsage SupportedDawnTextureUsage(
            wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst;
   }
 
-  // TODO(crbug.com/40270683): Use read/write intent instead of format to get
-  // correct usages.
   if (!is_yuv_plane) {
     return usage | wgpu::TextureUsage::RenderAttachment |
            wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst;
@@ -606,6 +614,8 @@ skgpu::graphite::TextureInfo GraphiteBackendTextureInfo(
 #if BUILDFLAG(SKIA_USE_METAL)
     return GraphiteMetalTextureInfo(format, plane_index, is_yuv_plane,
                                     mipmapped);
+#else
+  NOTREACHED_NORETURN();
 #endif
   } else {
     CHECK_EQ(gr_context_type, GrContextType::kGraphiteDawn);
@@ -614,27 +624,36 @@ skgpu::graphite::TextureInfo GraphiteBackendTextureInfo(
         format, readonly, is_yuv_plane, plane_index,
         /*array_slice=*/0, mipmapped, scanout_dcomp_surface,
         supports_multiplanar_rendering, supports_multiplanar_copy);
+#else
+  NOTREACHED_NORETURN();
 #endif
   }
-  NOTREACHED_NORETURN();
 }
 
 skgpu::graphite::TextureInfo GraphitePromiseTextureInfo(
     GrContextType gr_context_type,
     viz::SharedImageFormat format,
+    std::optional<VulkanYCbCrInfo> ycbcr_info,
     int plane_index,
     bool mipmapped) {
   if (gr_context_type == GrContextType::kGraphiteMetal) {
 #if BUILDFLAG(SKIA_USE_METAL)
     return GraphiteMetalTextureInfo(format, plane_index,
                                     /*is_yuv_plane=*/false, mipmapped);
+#else
+  NOTREACHED_NORETURN();
 #endif
   } else {
     CHECK_EQ(gr_context_type, GrContextType::kGraphiteDawn);
 #if BUILDFLAG(SKIA_USE_DAWN)
     skgpu::graphite::DawnTextureInfo dawn_texture_info;
-    wgpu::TextureFormat wgpu_view_format =
-        gpu::ToDawnTextureViewFormat(format, plane_index);
+
+    wgpu::TextureFormat wgpu_view_format;
+    if (ycbcr_info) {
+      wgpu_view_format = wgpu::TextureFormat::External;
+    } else {
+      wgpu_view_format = gpu::ToDawnTextureViewFormat(format, plane_index);
+    }
     if (wgpu_view_format == wgpu::TextureFormat::Undefined) {
       return dawn_texture_info;
     }
@@ -654,10 +673,35 @@ skgpu::graphite::TextureInfo GraphitePromiseTextureInfo(
     dawn_texture_info.fUsage = wgpu::TextureUsage::TextureBinding;
     dawn_texture_info.fMipmapped =
         mipmapped ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo;
+
+#if BUILDFLAG(ENABLE_VULKAN)
+    if (ycbcr_info) {
+      // Populate the YCbCr info of the DawnTextureInfo from the Chromium info.
+      wgpu::YCbCrVkDescriptor ycbcr_desc = {};
+      ycbcr_desc.vkFormat = ycbcr_info->image_format;
+      ycbcr_desc.vkYCbCrModel = ycbcr_info->suggested_ycbcr_model;
+      ycbcr_desc.vkYCbCrRange = ycbcr_info->suggested_ycbcr_range;
+      ycbcr_desc.vkXChromaOffset = ycbcr_info->suggested_xchroma_offset;
+      ycbcr_desc.vkYChromaOffset = ycbcr_info->suggested_ychroma_offset;
+      ycbcr_desc.vkChromaFilter =
+          ycbcr_info->format_features &
+                  VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT
+              ? wgpu::FilterMode::Linear
+              : wgpu::FilterMode::Nearest;
+      ycbcr_desc.externalFormat = ycbcr_info->external_format;
+
+      // NOTE: Chromium does not use this feature.
+      ycbcr_desc.forceExplicitReconstruction = false;
+
+      dawn_texture_info.fYcbcrVkDescriptor = ycbcr_desc;
+    }
+#endif
+
     return dawn_texture_info;
+#else
+  NOTREACHED_NORETURN();
 #endif
   }
-  NOTREACHED_NORETURN();
 }
 
 #if BUILDFLAG(SKIA_USE_DAWN)

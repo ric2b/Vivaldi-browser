@@ -14,6 +14,7 @@
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/retain_ptr.h"
 #include "core/fxcrt/span.h"
+#include "core/fxcrt/span_util.h"
 #include "core/fxge/dib/fx_dib.h"
 
 #if defined(PDF_USE_SKIA)
@@ -36,8 +37,10 @@ class CFX_DIBBase : public Retainable {
 #if BUILDFLAG(IS_APPLE)
   // Matches Apple's kCGBitmapByteOrder32Little in fx_quartz_device.cpp.
   static constexpr FXDIB_Format kPlatformRGBFormat = FXDIB_Format::kRgb32;
+  using kPlatformRGBStruct = FX_BGRA_STRUCT<uint8_t>;
 #else   // BUILDFLAG(IS_APPLE)
   static constexpr FXDIB_Format kPlatformRGBFormat = FXDIB_Format::kRgb;
+  using kPlatformRGBStruct = FX_BGR_STRUCT<uint8_t>;
 #endif  // BUILDFLAG(IS_APPLE)
 
   static constexpr uint32_t kPaletteSize = 256;
@@ -50,18 +53,23 @@ class CFX_DIBBase : public Retainable {
   virtual RetainPtr<const CFX_DIBitmap> RealizeIfNeeded() const;
 #endif
 
-  int GetWidth() const { return m_Width; }
-  int GetHeight() const { return m_Height; }
-  uint32_t GetPitch() const { return m_Pitch; }
+  template <typename T>
+  pdfium::span<const T> GetScanlineAs(int line) const {
+    return fxcrt::reinterpret_span<const T>(GetScanline(line));
+  }
 
-  FXDIB_Format GetFormat() const { return m_Format; }
-  int GetBPP() const { return GetBppFromFormat(m_Format); }
-  bool IsMaskFormat() const { return GetIsMaskFromFormat(m_Format); }
-  bool IsAlphaFormat() const { return m_Format == FXDIB_Format::kArgb; }
+  int GetWidth() const { return width_; }
+  int GetHeight() const { return height_; }
+  uint32_t GetPitch() const { return pitch_; }
+
+  FXDIB_Format GetFormat() const { return format_; }
+  int GetBPP() const { return GetBppFromFormat(GetFormat()); }
+  bool IsMaskFormat() const { return GetIsMaskFromFormat(GetFormat()); }
+  bool IsAlphaFormat() const { return GetFormat() == FXDIB_Format::kArgb; }
   bool IsOpaqueImage() const { return !IsMaskFormat() && !IsAlphaFormat(); }
 
-  bool HasPalette() const { return !m_palette.empty(); }
-  pdfium::span<const uint32_t> GetPaletteSpan() const { return m_palette; }
+  bool HasPalette() const { return !palette_.empty(); }
+  pdfium::span<const uint32_t> GetPaletteSpan() const { return palette_; }
   size_t GetRequiredPaletteSize() const;
   uint32_t GetPaletteArgb(int index) const;
   void SetPaletteArgb(int index, uint32_t color);
@@ -103,6 +111,9 @@ class CFX_DIBBase : public Retainable {
   // This may share the underlying pixels, in which case, this DIB should not be
   // modified during the lifetime of the `SkImage`.
   virtual sk_sp<SkImage> RealizeSkImage() const;
+
+  // Whether alpha is premultiplied (if `IsAlphaFormat()`).
+  virtual bool IsPremultiplied() const;
 #endif  // defined(PDF_USE_SKIA)
 
  protected:
@@ -120,20 +131,22 @@ class CFX_DIBBase : public Retainable {
       int src_left,
       int src_top);
 
-#if defined(PDF_USE_SKIA)
-  // Whether alpha is premultiplied (if `IsAlphaFormat()`).
-  virtual bool IsPremultiplied() const;
-#endif  // defined(PDF_USE_SKIA)
-
   RetainPtr<CFX_DIBitmap> ClipToInternal(const FX_RECT* pClip) const;
   void BuildPalette();
   int FindPalette(uint32_t color) const;
 
-  FXDIB_Format m_Format = FXDIB_Format::kInvalid;
-  int m_Width = 0;
-  int m_Height = 0;
-  uint32_t m_Pitch = 0;
-  DataVector<uint32_t> m_palette;
+  void SetFormat(FXDIB_Format format) { format_ = format; }
+  void SetWidth(int width) { width_ = width; }
+  void SetHeight(int height) { height_ = height; }
+  void SetPitch(uint32_t pitch) { pitch_ = pitch; }
+
+  DataVector<uint32_t> palette_;
+
+ private:
+  FXDIB_Format format_ = FXDIB_Format::kInvalid;
+  int width_ = 0;
+  int height_ = 0;
+  uint32_t pitch_ = 0;
 };
 
 #endif  // CORE_FXGE_DIB_CFX_DIBBASE_H_

@@ -270,7 +270,7 @@ void DefaultState::HandleWorkspaceEvents(WindowState* window_state,
       return;
     }
     default:
-      NOTREACHED() << "Unknown event:" << event->type();
+      NOTREACHED_IN_MIGRATION() << "Unknown event:" << event->type();
   }
 }
 
@@ -344,7 +344,7 @@ void DefaultState::HandleCompoundEvents(WindowState* window_state,
       CycleSnap(window_state, event->type());
       return;
     default:
-      NOTREACHED() << "Unknown event:" << event->type();
+      NOTREACHED_IN_MIGRATION() << "Unknown event:" << event->type();
       break;
   }
 }
@@ -358,7 +358,7 @@ void DefaultState::HandleBoundsEvents(WindowState* window_state,
       SetBounds(window_state, set_bounds_event);
     } break;
     default:
-      NOTREACHED() << "Unknown event:" << event->type();
+      NOTREACHED_IN_MIGRATION() << "Unknown event:" << event->type();
       break;
   }
 }
@@ -387,7 +387,8 @@ void DefaultState::HandleTransitionEvents(WindowState* window_state,
     return;
   }
 
-  if (type == WM_EVENT_SNAP_PRIMARY || type == WM_EVENT_SNAP_SECONDARY) {
+  if ((type == WM_EVENT_SNAP_PRIMARY || type == WM_EVENT_SNAP_SECONDARY) &&
+      window_state->CanSnap()) {
     HandleWindowSnapping(window_state, type,
                          event->AsSnapEvent()->snap_action_source());
   }

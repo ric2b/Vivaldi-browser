@@ -21,7 +21,7 @@
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/net/model/crurl.h"
-#import "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
+#import "ios/chrome/browser/sessions/model/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/all_web_state_list_observation_registrar.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
@@ -72,7 +72,6 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
     // These errors effectively amount to disabled sync or effectively paused.
     case syncer::SyncService::UserActionableError::kSignInNeedsUpdate:
     case syncer::SyncService::UserActionableError::kNeedsPassphrase:
-    case syncer::SyncService::UserActionableError::kGenericUnrecoverableError:
     case syncer::SyncService::UserActionableError::
         kNeedsTrustedVaultKeyForEverything:
       return true;
@@ -122,8 +121,6 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
   TabGridPage _lastActivePage;
   // Whether this screen is selected in the TabGrid.
   BOOL _selectedGrid;
-  // The mode of the TabGrid.
-  TabGridMode _currentMode;
   // Feature engagement tracker for notifying promo events.
   feature_engagement::Tracker* _engagementTracker;
 }
@@ -139,6 +136,8 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
 @property(nonatomic, assign) FaviconLoader* faviconLoader;
 @property(nonatomic, assign) syncer::SyncService* syncService;
 @property(nonatomic, assign) BrowserList* browserList;
+// The mode of the TabGrid.
+@property(nonatomic, assign) TabGridMode currentMode;
 
 // Vivaldi
 @property(nonatomic, strong) VivaldiAccountSyncManager* syncManager;
@@ -248,6 +247,17 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
 
 - (void)configureConsumer {
   [self refreshSessionsView];
+}
+
+#pragma mark - Accessors
+
+- (void)setCurrentMode:(TabGridMode)currentMode {
+  if (_currentMode == currentMode) {
+    return;
+  }
+  _currentMode = currentMode;
+  [self configureToolbarsButtons];
+  [self.gridConsumer setPageMode:currentMode];
 }
 
 #pragma mark - SyncedSessionsObserver
@@ -409,7 +419,7 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
 
   TabGridToolbarsConfiguration* toolbarsConfiguration =
       [[TabGridToolbarsConfiguration alloc] initWithPage:TabGridPageRemoteTabs];
-  toolbarsConfiguration.mode = _currentMode;
+  toolbarsConfiguration.mode = self.currentMode;
   toolbarsConfiguration.doneButton = tabsInOtherGrid;
   toolbarsConfiguration.searchButton = YES;
   [self.toolbarsMutator setToolbarConfiguration:toolbarsConfiguration];
@@ -439,14 +449,12 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
 
     [self configureToolbarsButtons];
   }
-  // TODO(crbug.com/40273478): Implement.
 }
 
 - (void)switchToMode:(TabGridMode)mode {
   CHECK(mode == TabGridModeNormal || mode == TabGridModeSearch)
       << "remote tabs should only support normal and search modes.";
-  _currentMode = mode;
-  [self configureToolbarsButtons];
+  self.currentMode = mode;
 }
 
 #pragma mark - TabGridToolbarsGridDelegate
@@ -468,13 +476,13 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
 }
 
 - (void)searchButtonTapped:(id)sender {
-  [self.gridConsumer setPageMode:TabGridModeSearch];
   base::RecordAction(base::UserMetricsAction("MobileTabGridSearchTabs"));
+  self.currentMode = TabGridModeSearch;
 }
 
 - (void)cancelSearchButtonTapped:(id)sender {
   base::RecordAction(base::UserMetricsAction("MobileTabGridCancelSearchTabs"));
-  [self.gridConsumer setPageMode:TabGridModeNormal];
+  self.currentMode = TabGridModeNormal;
 }
 
 - (void)closeSelectedTabs:(id)sender {

@@ -90,22 +90,22 @@ bool CFFL_RadioButton::IsDataChanged(const CPDFSDK_PageView* pPageView) {
 }
 
 void CFFL_RadioButton::SaveData(const CPDFSDK_PageView* pPageView) {
-  CPWL_RadioButton* pWnd = GetPWLRadioButton(pPageView);
-  if (!pWnd)
-    return;
-
-  bool bNewChecked = pWnd->IsChecked();
-  ObservedPtr<CPDFSDK_Widget> observed_widget(m_pWidget);
   ObservedPtr<CFFL_RadioButton> observed_this(this);
-  m_pWidget->SetCheck(bNewChecked);
-  if (!observed_widget)
+  CPWL_RadioButton* pWnd = observed_this->GetPWLRadioButton(pPageView);
+  if (!pWnd) {
     return;
-
-  m_pWidget->UpdateField();
-  if (!observed_widget || !observed_this)
+  }
+  bool bNewChecked = pWnd->IsChecked();
+  ObservedPtr<CPDFSDK_Widget> observed_widget(observed_this->m_pWidget);
+  observed_widget->SetCheck(bNewChecked);
+  if (!observed_widget) {
     return;
-
-  SetChangeMark();
+  }
+  observed_widget->UpdateField();
+  if (!observed_widget || !observed_this) {
+    return;
+  }
+  observed_this->SetChangeMark();
 }
 
 CPWL_RadioButton* CFFL_RadioButton::GetPWLRadioButton(

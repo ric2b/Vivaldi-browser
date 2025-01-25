@@ -4,16 +4,12 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "xfa/fgas/font/cfgas_fontmgr.h"
 
 #include <stdint.h>
 
 #include <algorithm>
+#include <array>
 #include <iterator>
 #include <memory>
 #include <type_traits>
@@ -30,11 +26,10 @@
 #include "core/fxcrt/fx_codepage.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
-#include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/span.h"
-#include "core/fxcrt/span_util.h"
+#include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_font.h"
 #include "core/fxge/cfx_fontmapper.h"
 #include "core/fxge/cfx_fontmgr.h"
@@ -193,10 +188,12 @@ int32_t CALLBACK GdiFontEnumProc(ENUMLOGFONTEX* lpelfe,
   static_assert(std::is_aggregate_v<decltype(font)>);
   font.uCharSet = FX_GetCharsetFromInt(lf.lfCharSet);
   font.dwFontStyles = GetGdiFontStyles(lf);
-  FXSYS_wcsncpy(font.wsFontFace, (const wchar_t*)lf.lfFaceName, 31);
-  font.wsFontFace[31] = 0;
-  FXSYS_memcpy(&font.FontSignature, &lpntme->ntmFontSig,
-               sizeof(lpntme->ntmFontSig));
+  UNSAFE_TODO({
+    FXSYS_wcsncpy(font.wsFontFace, (const wchar_t*)lf.lfFaceName, 31);
+    font.wsFontFace[31] = 0;
+    FXSYS_memcpy(&font.FontSignature, &lpntme->ntmFontSig,
+                 sizeof(lpntme->ntmFontSig));
+  });
   reinterpret_cast<std::deque<FX_FONTDESCRIPTOR>*>(lParam)->push_back(font);
   return 1;
 }
@@ -214,8 +211,10 @@ std::deque<FX_FONTDESCRIPTOR> EnumGdiFonts(const wchar_t* pwsFaceName,
   static_assert(std::is_aggregate_v<decltype(lfFind)>);
   lfFind.lfCharSet = DEFAULT_CHARSET;
   if (pwsFaceName) {
-    FXSYS_wcsncpy(lfFind.lfFaceName, pwsFaceName, 31);
-    lfFind.lfFaceName[31] = 0;
+    UNSAFE_TODO({
+      FXSYS_wcsncpy(lfFind.lfFaceName, pwsFaceName, 31);
+      lfFind.lfFaceName[31] = 0;
+    });
   }
   HDC hDC = ::GetDC(nullptr);
   EnumFontFamiliesExW(hDC, (LPLOGFONTW)&lfFind, (FONTENUMPROCW)GdiFontEnumProc,
@@ -310,75 +309,77 @@ const FX_FONTDESCRIPTOR* CFGAS_FontMgr::FindFont(const wchar_t* pszFontFamily,
 
 namespace {
 
-const FX_CodePage kCodePages[] = {FX_CodePage::kMSWin_WesternEuropean,
-                                  FX_CodePage::kMSWin_EasternEuropean,
-                                  FX_CodePage::kMSWin_Cyrillic,
-                                  FX_CodePage::kMSWin_Greek,
-                                  FX_CodePage::kMSWin_Turkish,
-                                  FX_CodePage::kMSWin_Hebrew,
-                                  FX_CodePage::kMSWin_Arabic,
-                                  FX_CodePage::kMSWin_Baltic,
-                                  FX_CodePage::kMSWin_Vietnamese,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kMSDOS_Thai,
-                                  FX_CodePage::kShiftJIS,
-                                  FX_CodePage::kChineseSimplified,
-                                  FX_CodePage::kHangul,
-                                  FX_CodePage::kChineseTraditional,
-                                  FX_CodePage::kJohab,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kDefANSI,
-                                  FX_CodePage::kMSDOS_Greek2,
-                                  FX_CodePage::kMSDOS_Russian,
-                                  FX_CodePage::kMSDOS_Norwegian,
-                                  FX_CodePage::kMSDOS_Arabic,
-                                  FX_CodePage::kMSDOS_FrenchCanadian,
-                                  FX_CodePage::kMSDOS_Hebrew,
-                                  FX_CodePage::kMSDOS_Icelandic,
-                                  FX_CodePage::kMSDOS_Portuguese,
-                                  FX_CodePage::kMSDOS_Turkish,
-                                  FX_CodePage::kMSDOS_Cyrillic,
-                                  FX_CodePage::kMSDOS_EasternEuropean,
-                                  FX_CodePage::kMSDOS_Baltic,
-                                  FX_CodePage::kMSDOS_Greek1,
-                                  FX_CodePage::kArabic_ASMO708,
-                                  FX_CodePage::kMSDOS_WesternEuropean,
-                                  FX_CodePage::kMSDOS_US};
+constexpr auto kCodePages =
+    fxcrt::ToArray<const FX_CodePage>({FX_CodePage::kMSWin_WesternEuropean,
+                                       FX_CodePage::kMSWin_EasternEuropean,
+                                       FX_CodePage::kMSWin_Cyrillic,
+                                       FX_CodePage::kMSWin_Greek,
+                                       FX_CodePage::kMSWin_Turkish,
+                                       FX_CodePage::kMSWin_Hebrew,
+                                       FX_CodePage::kMSWin_Arabic,
+                                       FX_CodePage::kMSWin_Baltic,
+                                       FX_CodePage::kMSWin_Vietnamese,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kMSDOS_Thai,
+                                       FX_CodePage::kShiftJIS,
+                                       FX_CodePage::kChineseSimplified,
+                                       FX_CodePage::kHangul,
+                                       FX_CodePage::kChineseTraditional,
+                                       FX_CodePage::kJohab,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kDefANSI,
+                                       FX_CodePage::kMSDOS_Greek2,
+                                       FX_CodePage::kMSDOS_Russian,
+                                       FX_CodePage::kMSDOS_Norwegian,
+                                       FX_CodePage::kMSDOS_Arabic,
+                                       FX_CodePage::kMSDOS_FrenchCanadian,
+                                       FX_CodePage::kMSDOS_Hebrew,
+                                       FX_CodePage::kMSDOS_Icelandic,
+                                       FX_CodePage::kMSDOS_Portuguese,
+                                       FX_CodePage::kMSDOS_Turkish,
+                                       FX_CodePage::kMSDOS_Cyrillic,
+                                       FX_CodePage::kMSDOS_EasternEuropean,
+                                       FX_CodePage::kMSDOS_Baltic,
+                                       FX_CodePage::kMSDOS_Greek1,
+                                       FX_CodePage::kArabic_ASMO708,
+                                       FX_CodePage::kMSDOS_WesternEuropean,
+                                       FX_CodePage::kMSDOS_US});
 
 uint16_t FX_GetCodePageBit(FX_CodePage wCodePage) {
-  for (size_t i = 0; i < std::size(kCodePages); ++i) {
-    if (kCodePages[i] == wCodePage)
+  for (size_t i = 0; i < kCodePages.size(); ++i) {
+    if (kCodePages[i] == wCodePage) {
       return static_cast<uint16_t>(i);
+    }
   }
   return static_cast<uint16_t>(-1);
 }
@@ -521,7 +522,7 @@ RetainPtr<CFX_Face> LoadFace(
   // https://bugs.chromium.org/p/pdfium/issues/detail?id=690
   FXFT_StreamRec* ftStream =
       static_cast<FXFT_StreamRec*>(ft_scalloc(sizeof(FXFT_StreamRec), 1));
-  FXSYS_memset(ftStream, 0, sizeof(FXFT_StreamRec));
+  UNSAFE_TODO(FXSYS_memset(ftStream, 0, sizeof(FXFT_StreamRec)));
   ftStream->base = nullptr;
   ftStream->descriptor.pointer = static_cast<void*>(pFontStream.Get());
   ftStream->pos = 0;
@@ -746,20 +747,18 @@ void CFGAS_FontMgr::RegisterFace(RetainPtr<CFX_Face> pFace,
   // pdfium::span.
   std::optional<std::array<uint32_t, 4>> unicode_range =
       pFace->GetOs2UnicodeRange();
-  auto usb_span = pdfium::make_span(pFont->m_dwUsb);
   if (unicode_range.has_value()) {
-    fxcrt::spancpy(usb_span, pdfium::make_span(unicode_range.value()));
+    fxcrt::Copy(unicode_range.value(), pFont->m_dwUsb);
   } else {
-    fxcrt::spanclr(usb_span);
+    fxcrt::Fill(pFont->m_dwUsb, 0);
   }
 
   std::optional<std::array<uint32_t, 2>> code_page_range =
       pFace->GetOs2CodePageRange();
-  auto csb_span = pdfium::make_span(pFont->m_dwCsb);
   if (code_page_range.has_value()) {
-    fxcrt::spancpy(csb_span, pdfium::make_span(code_page_range.value()));
+    fxcrt::Copy(code_page_range.value(), pFont->m_dwCsb);
   } else {
-    fxcrt::spanclr(csb_span);
+    fxcrt::Fill(pFont->m_dwCsb, 0);
   }
 
   static constexpr uint32_t kNameTag =

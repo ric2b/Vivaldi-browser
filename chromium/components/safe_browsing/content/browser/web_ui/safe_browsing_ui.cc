@@ -544,10 +544,10 @@ ReferrerChainProvider* WebUIInfoSingleton::GetReferrerChainProvider(
 }
 
 #if BUILDFLAG(IS_ANDROID)
-LoginReputationClientRequest::ReferringAppInfo
-WebUIInfoSingleton::GetReferringAppInfo(content::WebContents* web_contents) {
+ReferringAppInfo WebUIInfoSingleton::GetReferringAppInfo(
+    content::WebContents* web_contents) {
   return sb_service_ ? sb_service_->GetReferringAppInfo(web_contents)
-                     : LoginReputationClientRequest::ReferringAppInfo();
+                     : ReferringAppInfo{};
 }
 #endif
 
@@ -802,6 +802,8 @@ std::string SerializeClientSideDetectionType(ClientSideDetectionType csd_type) {
       return "KEYBOARD_LOCK_REQUESTED";
     case ClientSideDetectionType::POINTER_LOCK_REQUESTED:
       return "POINTER_LOCK_REQUESTED";
+    case ClientSideDetectionType::VIBRATION_API:
+      return "VIBRATION_API";
   }
   return "UNKNOWN_ENUM_SPECIFIED";
 }
@@ -817,6 +819,18 @@ base::Value::Dict SerializeImageFeatureEmbedding(
            image_feature_embedding.embedding_model_version());
   dict.Set("embedding_value", std::move(embedding_values));
   return dict;
+}
+
+std::string SerializeReportType(ClientPhishingRequest::ReportType report_type) {
+  switch (report_type) {
+    case ClientPhishingRequest::REPORT_TYPE_UNSPECIFIED:
+      return "REPORT_TYPE_UNSPECIFIED";
+    case ClientPhishingRequest::FULL_REPORT:
+      return "FULL_REPORT";
+    case ClientPhishingRequest::SAMPLE_REPORT:
+      return "SAMPLE_REPORT";
+  }
+  return "UNKNOWN_ENUM_SPECIFIED";
 }
 
 base::Value::Dict SerializeChromeUserPopulation(
@@ -1087,36 +1101,6 @@ std::string SerializeClientDownloadRequest(const ClientDownloadRequest& cdr) {
   if (!cdr.access_token().empty())
     dict.Set("access_token", cdr.access_token());
 
-  if (cdr.has_document_summary()) {
-    base::Value::Dict dict_document_summary;
-    auto document_summary = cdr.document_summary();
-    if (document_summary.has_metadata()) {
-      base::Value::Dict dict_document_metadata;
-      dict_document_metadata.Set("contains_macros",
-                                 document_summary.metadata().contains_macros());
-      dict_document_summary.Set("metadata", std::move(dict_document_metadata));
-    }
-
-    if (document_summary.has_processing_info()) {
-      base::Value::Dict dict_document_processing_info;
-      auto processing_info = document_summary.processing_info();
-      if (processing_info.has_maldoca_error_type()) {
-        dict_document_processing_info.Set("maldoca_error_type",
-                                          processing_info.maldoca_error_type());
-      }
-      if (!processing_info.maldoca_error_message().empty()) {
-        dict_document_processing_info.Set(
-            "maldoca_error_message", processing_info.maldoca_error_message());
-      }
-      dict_document_processing_info.Set(
-          "processing_successful", processing_info.processing_successful());
-      dict_document_summary.Set("processing_info",
-                                std::move(dict_document_processing_info));
-    }
-
-    dict.Set("document_summary", std::move(dict_document_summary));
-  }
-
   if (cdr.has_archive_summary()) {
     base::Value::Dict dict_archive_summary;
     auto archive_summary = cdr.archive_summary();
@@ -1268,6 +1252,9 @@ std::string SerializeClientPhishingRequest(
     dict.Set(
         "client_side_detection_type",
         SerializeClientSideDetectionType(cpr.client_side_detection_type()));
+  }
+  if (cpr.has_report_type()) {
+    dict.Set("report_type", SerializeReportType(cpr.report_type()));
   }
 
   if (cpr.has_image_feature_embedding()) {
@@ -1458,13 +1445,17 @@ base::Value::Dict SerializeSafeBrowsingClientProperties(
       break;
     case ClientSafeBrowsingReportRequest::PVER3_NATIVE:
     case ClientSafeBrowsingReportRequest::FLYWHEEL:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       url_api_type = "";
       break;
   }
   client_properties_dict.Set("url_api_type", url_api_type);
   client_properties_dict.Set("is_async_check",
                              client_properties.is_async_check());
+  if (client_properties.has_app_verification_enabled()) {
+    client_properties_dict.Set("app_verification_enabled",
+                               client_properties.app_verification_enabled());
+  }
   return client_properties_dict;
 }
 
@@ -1681,7 +1672,7 @@ std::string SerializeCSBRR(const ClientSafeBrowsingReportRequest& report) {
       case ClientSafeBrowsingReportRequest::URL_CLIENT_SIDE_MALWARE:
       case ClientSafeBrowsingReportRequest::HASH_PREFIX_REAL_TIME_EXPERIMENT:
         // Deprecated!
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         report_type = "";
         break;
     }
@@ -2260,29 +2251,38 @@ base::Value::Dict SerializeUrlDisplayExperiment(
   return d;
 }
 
+std::string SerializeReferringAppSource(
+    LoginReputationClientRequest::ReferringAppInfo::ReferringAppSource source) {
+  switch (source) {
+    case LoginReputationClientRequest::ReferringAppInfo::
+        REFERRING_APP_SOURCE_UNSPECIFIED:
+      return "REFERRING_APP_SOURCE_UNSPECIFIED";
+    case LoginReputationClientRequest::ReferringAppInfo::KNOWN_APP_ID:
+      return "KNOWN_APP_ID";
+    case LoginReputationClientRequest::ReferringAppInfo::UNKNOWN_APP_ID:
+      return "UNKNOWN_APP_ID";
+    case LoginReputationClientRequest::ReferringAppInfo::ACTIVITY_REFERRER:
+      return "ACTIVITY_REFERRER";
+  }
+}
+
+#if BUILDFLAG(IS_ANDROID)
+base::Value::Dict SerializeReferringAppInfo(const ReferringAppInfo& info) {
+  base::Value::Dict dict;
+  dict.Set("referring_app_source",
+           SerializeReferringAppSource(info.referring_app_source));
+  dict.Set("referring_app_info", info.referring_app_name);
+  dict.Set("target_url", info.target_url.spec());
+  return dict;
+}
+#endif
+
 base::Value::Dict SerializeReferringAppInfo(
     const LoginReputationClientRequest::ReferringAppInfo& info) {
   base::Value::Dict dict;
-
-  std::string source;
-  switch (info.referring_app_source()) {
-    case LoginReputationClientRequest::ReferringAppInfo::
-        REFERRING_APP_SOURCE_UNSPECIFIED:
-      source = "REFERRING_APP_SOURCE_UNSPECIFIED";
-      break;
-    case LoginReputationClientRequest::ReferringAppInfo::KNOWN_APP_ID:
-      source = "KNOWN_APP_ID";
-      break;
-    case LoginReputationClientRequest::ReferringAppInfo::UNKNOWN_APP_ID:
-      source = "UNKNOWN_APP_ID";
-      break;
-    case LoginReputationClientRequest::ReferringAppInfo::ACTIVITY_REFERRER:
-      source = "ACTIVITY_REFERRER";
-      break;
-  }
-  dict.Set("referring_app_source", source);
+  dict.Set("referring_app_source",
+           SerializeReferringAppSource(info.referring_app_source()));
   dict.Set("referring_app_info", info.referring_app_name());
-
   return dict;
 }
 
@@ -2299,7 +2299,7 @@ base::Value::Dict SerializeCsdDebuggingMetadata(
     switch (debugging_metadata.preclassification_check_result()) {
       case safe_browsing::PreClassificationCheckResult::
           OBSOLETE_NO_CLASSIFY_PROXY_FETCH:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         preclassification_check_result =
             "NOT_REACHED_OBSOLETE_NO_CLASSIFY_PROXY_FETCH";
         break;
@@ -2338,7 +2338,7 @@ base::Value::Dict SerializeCsdDebuggingMetadata(
         break;
       case safe_browsing::PreClassificationCheckResult::
           DEPRECATED_NO_CLASSIFY_NOT_HTTP_URL:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         preclassification_check_result =
             "NOT_REACHED_DEPRECATED_NO_CLASSIFY_NOT_HTTP_URL";
         break;
@@ -2367,12 +2367,12 @@ base::Value::Dict SerializeCsdDebuggingMetadata(
         break;
       case safe_browsing::PreClassificationCheckResult::
           OBSOLETE_NO_CLASSIFY_NOT_ALLOWED_BY_POLICY:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         preclassification_check_result =
             "NOT_REACHED_OBSOLETE_NO_CLASSIFY_NOT_ALLOWED_BY_POLICY";
         break;
       case safe_browsing::NO_CLASSIFY_MAX:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         preclassification_check_result = "NOT_REACHED_NO_CLASSIFY_MAX";
         break;
     }
@@ -2558,6 +2558,9 @@ std::string SerializeURTLookupPing(const URTLookupRequest& ping) {
                    SerializeChromeUserPopulation(request.population()));
   request_dict.Set("scoped_oauth_token", ping.token);
   request_dict.Set("dm_token", request.dm_token());
+  request_dict.Set("profile_dm_token", request.profile_dm_token());
+  request_dict.Set("browser_dm_token", request.browser_dm_token());
+  request_dict.Set("email", request.email());
 
   std::string lookupType;
   switch (request.lookup_type()) {
@@ -2599,9 +2602,6 @@ std::string SerializeURTLookupPing(const URTLookupRequest& ping) {
     case RTLookupRequest::OS_TYPE_CHROME_OS:
       os = "CHROME_OS";
       break;
-    case RTLookupRequest::OS_TYPE_FUCHSIA:
-      os = "FUCHSIA";
-      break;
   }
   request_dict.Set("os", os);
 
@@ -2627,6 +2627,10 @@ std::string SerializeURTLookupResponse(const RTLookupResponse& response) {
     threat_info_list.Append(SerializeRTThreatInfo(threat_info));
   }
   response_dict.Set("threat_infos", std::move(threat_info_list));
+
+  response_dict.Set(
+      "client_side_detection_type",
+      SerializeClientSideDetectionType(response.client_side_detection_type()));
 
   base::Value::List url_categories_list;
   for (const std::string& url_category : response.url_categories()) {
@@ -2797,6 +2801,7 @@ std::string SerializeContentAnalysisRequest(
   request_dict.Set(per_profile_request ? "profile_token" : "device_token",
                    request.device_token());
   request_dict.Set("fcm_notification_token", request.fcm_notification_token());
+  request_dict.Set("blocking", request.blocking());
   switch (request.analysis_connector()) {
     case enterprise_connectors::ANALYSIS_CONNECTOR_UNSPECIFIED:
       request_dict.Set("analysis_connector", "UNSPECIFIED");
@@ -2856,7 +2861,11 @@ std::string SerializeContentAnalysisRequest(
       request_data.Set("csd", csd_base64);
     }
     request_data.Set("content_type", request.request_data().content_type());
-    request_dict.Set("tab_url", request.request_data().tab_url());
+    request_data.Set("tab_url", request.request_data().tab_url());
+    request_data.Set("source", request.request_data().source());
+    request_data.Set("destination", request.request_data().destination());
+    request_data.Set("email", request.request_data().email());
+
     request_dict.Set("request_data", std::move(request_data));
   }
 
@@ -3570,7 +3579,7 @@ void SafeBrowsingUIHandler::GetReferrerChain(const base::Value::List& args) {
 #if BUILDFLAG(IS_ANDROID)
 void SafeBrowsingUIHandler::GetReferringAppInfo(const base::Value::List& args) {
   base::Value::Dict referring_app_value;
-  LoginReputationClientRequest::ReferringAppInfo info =
+  ReferringAppInfo info =
       WebUIInfoSingleton::GetInstance()->GetReferringAppInfo(
           web_ui()->GetWebContents());
   referring_app_value = SerializeReferringAppInfo(info);

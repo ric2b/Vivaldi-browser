@@ -78,7 +78,7 @@ std::string GetAlarmTimerActionParamValue(AlarmTimerAction action) {
     case AlarmTimerAction::kResumeTimer:
       return kResumeTimer;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -115,7 +115,7 @@ std::string GetDeepLinkParamKey(DeepLinkParam param) {
     case DeepLinkParam::kVeId:
       return kVeIdParamKey;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -403,7 +403,6 @@ std::optional<GURL> GetAssistantUrl(
       break;
     default:
       NOTREACHED();
-      return std::nullopt;
   }
 
   const auto& id = GetDeepLinkParam(params, DeepLinkParam::kId);
@@ -467,11 +466,11 @@ std::optional<GURL> GetWebUrl(
     case DeepLinkType::kQuery:
     case DeepLinkType::kScreenshot:
     case DeepLinkType::kTaskManager:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return std::nullopt;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::nullopt;
 }
 

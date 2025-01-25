@@ -17,12 +17,12 @@
 #import "components/strings/grit/components_strings.h"
 #import "components/sync/service/sync_service.h"
 #import "ios/chrome/browser/autofill/model/personal_data_manager_factory.h"
+#import "ios/chrome/browser/autofill/ui_bundled/autofill_credit_card_util.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
-#import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/quick_delete_commands.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
@@ -35,6 +35,7 @@
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_credit_card_edit_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_credit_card_table_view_controller.h"
+#import "ios/chrome/browser/ui/settings/autofill/autofill_profile_edit_coordinator.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_profile_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_coordinator.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_table_view_controller.h"
@@ -86,8 +87,6 @@ void ConfigureHandlers(id<SettingsRootViewControlling> controller,
   controller.applicationHandler =
       HandlerForProtocol(dispatcher, ApplicationCommands);
   controller.browserHandler = HandlerForProtocol(dispatcher, BrowserCommands);
-  controller.browsingDataHandler =
-      HandlerForProtocol(dispatcher, BrowsingDataCommands);
   controller.settingsHandler = HandlerForProtocol(dispatcher, SettingsCommands);
   controller.snackbarHandler = HandlerForProtocol(dispatcher, SnackbarCommands);
 }
@@ -97,6 +96,7 @@ void ConfigureHandlers(id<SettingsRootViewControlling> controller,
 NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
 
 @interface SettingsNavigationController () <
+    AutofillProfileEditCoordinatorDelegate,
     ClearBrowsingDataCoordinatorDelegate,
     GoogleServicesSettingsCoordinatorDelegate,
     ManageSyncSettingsCoordinatorDelegate,
@@ -131,6 +131,10 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
 // Password details coordinator.
 @property(nonatomic, strong)
     PasswordDetailsCoordinator* passwordDetailsCoordinator;
+
+// Autofill profile edit coordinator.
+@property(nonatomic, strong)
+    AutofillProfileEditCoordinator* autofillProfileEditCoordinator;
 
 // TODO(crbug.com/335387869): Delete this coordinator when Quick Delete is fully
 // launched. The coordinator for the clear browsing data screen.
@@ -190,9 +194,11 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
 + (instancetype)
     mainSettingsControllerForBrowser:(Browser*)browser
                             delegate:(id<SettingsNavigationControllerDelegate>)
-                                         delegate {
-  SettingsTableViewController* controller =
-      [[SettingsTableViewController alloc] initWithBrowser:browser];
+                                         delegate
+            hasDefaultBrowserBlueDot:(BOOL)hasDefaultBrowserBlueDot {
+  SettingsTableViewController* controller = [[SettingsTableViewController alloc]
+               initWithBrowser:browser
+      hasDefaultBrowserBlueDot:hasDefaultBrowserBlueDot];
   SettingsNavigationController* navigationController =
       [[SettingsNavigationController alloc]
           initWithRootViewController:controller
@@ -359,6 +365,7 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
                                        delegate
                              credential:
                                  (password_manager::CredentialUIEntry)credential
+                             inEditMode:(BOOL)editMode
                        showCancelButton:(BOOL)showCancelButton {
   SettingsNavigationController* navigationController =
       [[SettingsNavigationController alloc]
@@ -366,6 +373,7 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
                              browser:browser
                             delegate:delegate];
   [navigationController showPasswordDetailsForCredential:credential
+                                              inEditMode:editMode
                                         showCancelButton:showCancelButton];
 
   return navigationController;
@@ -420,6 +428,25 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
 }
 
 + (instancetype)
+    addressDetailsControllerForBrowser:(Browser*)browser
+                              delegate:
+                                  (id<SettingsNavigationControllerDelegate>)
+                                      delegate
+                               address:(const autofill::AutofillProfile*)address
+                            inEditMode:(BOOL)editMode
+                 offerMigrateToAccount:(BOOL)offerMigrateToAccount {
+  SettingsNavigationController* navigationController =
+      [[SettingsNavigationController alloc]
+          initWithRootViewController:nil
+                             browser:browser
+                            delegate:delegate];
+  [navigationController showAddressDetails:address
+                                inEditMode:editMode
+                     offerMigrateToAccount:offerMigrateToAccount];
+  return navigationController;
+}
+
++ (instancetype)
     autofillProfileControllerForBrowser:(Browser*)browser
                                delegate:
                                    (id<SettingsNavigationControllerDelegate>)
@@ -466,8 +493,9 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
                                       delegate:
                                           (id<SettingsNavigationControllerDelegate>)
                                               delegate
-                                    creditCard:(const autofill::CreditCard*)
-                                                   creditCard {
+                                    creditCard:
+                                        (const autofill::CreditCard*)creditCard
+                                    inEditMode:(BOOL)editMode {
   ChromeBrowserState* browserState =
       browser->GetBrowserState()->GetOriginalChromeBrowserState();
   autofill::PersonalDataManager* personalDataManager =
@@ -478,6 +506,14 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
       [[AutofillCreditCardEditTableViewController alloc]
            initWithCreditCard:*creditCard
           personalDataManager:personalDataManager];
+  if (editMode) {
+    // If `creditCard` needs to be edited from the Payments web page, then a
+    // command to open the Payments URL in a new tab should be dispatched. A
+    // SettingsNavigationController shouldn't be created in this case.
+    CHECK(
+        ![AutofillCreditCardUtil shouldEditCardFromPaymentsWebPage:creditCard]);
+    [controller editButtonPressed];
+  }
 
   SettingsNavigationController* navigationController =
       [[SettingsNavigationController alloc]
@@ -641,6 +677,14 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
 
 #pragma mark - Public
 
+- (UIBarButtonItem*)cancelButton {
+  UIBarButtonItem* item = [[UIBarButtonItem alloc]
+      initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
+                           target:self
+                           action:@selector(closeSettings)];
+  return item;
+}
+
 - (UIBarButtonItem*)doneButton {
   if (self.presentingViewController == nil) {
     // This can be called while being dismissed. In that case, return nil. See
@@ -677,6 +721,7 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   [self stopPrivacySettingsCoordinator];
   [self stopInactiveTabSettingsCoordinator];
   [self stopPasswordDetailsCoordinator];
+  [self stopAutofillProfileEditCoordinator];
   [self stopNotificationsCoordinator];
 
   // Reset the delegate to prevent any queued transitions from attempting to
@@ -710,16 +755,6 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
 }
 
 #pragma mark - Private
-
-// Creates an autoreleased "Cancel" button that cancels the settings when
-// tapped.
-- (UIBarButtonItem*)cancelButton {
-  UIBarButtonItem* cancelButton = [[UIBarButtonItem alloc]
-      initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
-                           target:self
-                           action:@selector(closeSettings)];
-  return cancelButton;
-}
 
 // Pushes a GoogleServicesSettingsViewController on this settings navigation
 // controller. Does nothing id the top view controller is already of type
@@ -855,6 +890,7 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
 
 - (void)showPasswordDetailsForCredential:
             (password_manager::CredentialUIEntry)credential
+                              inEditMode:(BOOL)editMode
                         showCancelButton:(BOOL)showCancelButton {
   // TODO(crbug.com/40067451): Switch back to DCHECK if the number of reports is
   // low.
@@ -867,6 +903,7 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
                                            BuildReauthenticationModule()
                                context:DetailsContext::kOutsideSettings];
   self.passwordDetailsCoordinator.delegate = self;
+  self.passwordDetailsCoordinator.openInEditMode = editMode;
   self.passwordDetailsCoordinator.showCancelButton = showCancelButton;
   [self.passwordDetailsCoordinator start];
 }
@@ -910,6 +947,13 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   [self.passwordDetailsCoordinator stop];
   self.passwordDetailsCoordinator.delegate = nil;
   self.passwordDetailsCoordinator = nil;
+}
+
+// Stops the underlying AutofillProfileEditCoordinator.
+- (void)stopAutofillProfileEditCoordinator {
+  [self.autofillProfileEditCoordinator stop];
+  self.autofillProfileEditCoordinator.delegate = nil;
+  self.autofillProfileEditCoordinator = nil;
 }
 
 // Stops the underlying NotificationsCoordinator.
@@ -973,6 +1017,14 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
 
 - (void)passwordDetailsCancelButtonWasTapped {
   [self closeSettings];
+}
+
+#pragma mark - AutofillProfileEditCoordinatorDelegate
+
+- (void)autofillProfileEditCoordinatorTableViewControllerDidFinish:
+    (AutofillProfileEditCoordinator*)coordinator {
+  DCHECK_EQ(self.autofillProfileEditCoordinator, coordinator);
+  [self stopAutofillProfileEditCoordinator];
 }
 
 #pragma mark - ClearBrowsingDataCoordinatorDelegate
@@ -1145,6 +1197,19 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   [self showSavedPasswordsAndShowCancelButton:showCancelButton];
 }
 
+- (void)showAddressDetails:(const autofill::AutofillProfile*)address
+                inEditMode:(BOOL)editMode
+     offerMigrateToAccount:(BOOL)offerMigrateToAccount {
+  self.autofillProfileEditCoordinator = [[AutofillProfileEditCoordinator alloc]
+      initWithBaseNavigationController:self
+                               browser:self.browser
+                               profile:*address
+                migrateToAccountButton:offerMigrateToAccount];
+  self.autofillProfileEditCoordinator.delegate = self;
+  self.autofillProfileEditCoordinator.openInEditMode = editMode;
+  [self.autofillProfileEditCoordinator start];
+}
+
 // TODO(crbug.com/41352590) : Do not pass `baseViewController` through
 // dispatcher.
 - (void)showProfileSettingsFromViewController:
@@ -1163,7 +1228,8 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   [self pushViewController:controller animated:YES];
 }
 
-- (void)showCreditCardDetails:(const autofill::CreditCard*)creditCard {
+- (void)showCreditCardDetails:(const autofill::CreditCard*)creditCard
+                   inEditMode:(BOOL)editMode {
   ChromeBrowserState* browserState =
       self.browser->GetBrowserState()->GetOriginalChromeBrowserState();
   autofill::PersonalDataManager* personalDataManager =
@@ -1173,6 +1239,13 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
       [[AutofillCreditCardEditTableViewController alloc]
            initWithCreditCard:*creditCard
           personalDataManager:personalDataManager];
+  if (editMode) {
+    // If `creditCard` needs to be edited from the Payments web page, then a
+    // command to open the Payments URL in a new tab should be dispatched.
+    CHECK(
+        ![AutofillCreditCardUtil shouldEditCardFromPaymentsWebPage:creditCard]);
+    [controller editButtonPressed];
+  }
   ConfigureHandlers(controller, _browser->GetCommandDispatcher());
   [self pushViewController:controller animated:YES];
 }
@@ -1212,6 +1285,11 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
 
 - (void)showSafeBrowsingSettings {
   [self showSafeBrowsing];
+}
+
+- (void)showSafeBrowsingSettingsFromPromoInteraction {
+  [self showSafeBrowsing];
+  self.privacySafeBrowsingCoordinator.openedFromPromoInteraction = YES;
 }
 
 - (void)showPasswordSearchPage {

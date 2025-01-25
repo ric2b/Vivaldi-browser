@@ -19,7 +19,7 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/side_panel/side_panel_entry_id.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_entry_id.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_util.h"
@@ -62,8 +62,7 @@ constexpr char kExtensionsWebStoreUrl[] =
     "https://chromewebstore.google.com/category/extensions";
 constexpr char kGoogleChromeAiUrl[] =
     "https://www.google.com/chrome/ai-innovations";
-constexpr char kGoogleChromePrivacyUrl[] =
-    "https://www.google.com/chrome/privacy-on-the-web/";
+constexpr char kGoogleChromeSafetyUrl[] = "https://www.google.com/chrome/#safe";
 constexpr char kGooglePasswordsUrl[] = "https://passwords.google";
 constexpr char kThemesWebStoreUrl[] =
     "https://chromewebstore.google.com/category/themes";
@@ -72,8 +71,8 @@ constexpr char kThemesWebStoreUrl[] =
 Browser* ContextToBrowser(ui::ElementContext ctx) {
   Browser* const browser = chrome::FindBrowserWithUiElementContext(ctx);
   if (!browser) {
-    NOTREACHED() << "Promo attempted to open a side panel but the "
-                    "browser context was invalid.";
+    NOTREACHED_IN_MIGRATION() << "Promo attempted to open a side panel but the "
+                                 "browser context was invalid.";
   }
   return browser;
 }
@@ -93,8 +92,9 @@ content::WebContents* NavigateToPage(Browser* browser, const GURL& url) {
   navigate_params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   Navigate(&navigate_params);
   if (!navigate_params.navigated_or_inserted_contents) {
-    NOTREACHED() << "Promo attempted to open a page, but did not receive a "
-                    "navigation handle.";
+    NOTREACHED_IN_MIGRATION()
+        << "Promo attempted to open a page, but did not receive a "
+           "navigation handle.";
   }
   return navigate_params.navigated_or_inserted_contents;
 }
@@ -251,15 +251,17 @@ FeaturePromoSpecification CreateLowUsagePromoSpecification(Profile* profile) {
                                 IDS_REENGAGEMENT_PROMO_LEARN_HOW_ACTION,
                                 GURL(kBrowserToolsUrl)),
 
+#if !BUILDFLAG(IS_CHROMEOS)
       // 7.
       CreateNavigatePromo(IDS_REENGAGEMENT_PROMO_NEW_FEATURES,
                           IDS_REENGAGEMENT_PROMO_VIEW_WHATS_NEW_ACTION,
                           GURL(chrome::kChromeUIWhatsNewURL)),
+#endif
 
       // 9.
       CreateNavigatePromo(IDS_REENGAGEMENT_PROMO_SAFETY,
                           IDS_REENGAGEMENT_PROMO_VIEW_SAFETY_FEATURES_ACTION,
-                          GURL(kGoogleChromePrivacyUrl)),
+                          GURL(kGoogleChromeSafetyUrl)),
 
       // 2.
       CreateSidePanelPromo(IDS_REENGAGEMENT_PROMO_CUSTOMIZE_COLOR,
@@ -267,10 +269,12 @@ FeaturePromoSpecification CreateLowUsagePromoSpecification(Profile* profile) {
                            SidePanelEntryId::kCustomizeChrome,
                            google_is_default_search_provider),
 
+#if !BUILDFLAG(IS_CHROMEOS)
       // 10.
       CreateNavigatePromo(IDS_REENGAGEMENT_PROMO_LATEST_TECHNOLOGY,
                           IDS_REENGAGEMENT_PROMO_VIEW_WHATS_NEW_ACTION,
                           GURL(chrome::kChromeUIWhatsNewURL)),
+#endif
 
       // 6.
       show_ai_promos

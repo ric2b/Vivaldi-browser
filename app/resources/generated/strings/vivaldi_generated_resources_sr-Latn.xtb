@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Primeni</translation>
 <translation id="1603914832182249871">(Privatno)</translation>
 <translation id="1627276047960621195">Deskriptori datoteka</translation>
+<translation id="1654713139320245449">Nije pronađeno nijedno odredište za prebacivanje. Potrebna vam je pomoć?</translation>
 <translation id="166278006618318542">Algoritam javnog ključa subjekta</translation>
 <translation id="1682548588986054654">Novi privatni prozor</translation>
 <translation id="1708338024780164500">(Neaktivno)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Drugi program na računaru je dodao proširenje koje može da promeni način na koji Vivaldi funkcioniše.</translation>
 <translation id="2443487764245141020">Sajtovi će možda morati i da prepoznaju vaš uređaj pomoću identifikatora</translation>
 <translation id="2445081178310039857">Osnovni direktorijum proširenja je obavezan.</translation>
-<translation id="2470702053775288986">Nepodržana proširenja su onemogućena</translation>
 <translation id="2485422356828889247">Deinstaliraj</translation>
 <translation id="2498539833203011245">Umanji</translation>
 <translation id="2509495747794740764">Iznos promene veličine mora da bude broj između 10 i 200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Detalji</translation>
 <translation id="4345587454538109430">Konfiguriši...</translation>
 <translation id="4348766275249686434">Prikupi greške</translation>
-<translation id="4363771538994847871">Nema pronađenih odredišta za prebacivanje. Da li vam treba pomoć?</translation>
 <translation id="4384652540891215547">Aktiviranje proširenja</translation>
 <translation id="4394049700291259645">Onemogući</translation>
 <translation id="4409697491990005945">Margine</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Raspored</translation>
 <translation id="7782102568078991263">Nema više predloga sa Google-a</translation>
 <translation id="7786889348652477777">&amp;Ponovo učitaj aplikaciju</translation>
-<translation id="7791543448312431591">Dodaj</translation>
 <translation id="7800518121066352902">Okreni u s&amp;meru suprotnom od kazaljke na satu</translation>
 <translation id="7814458197256864873">&amp;Kopiraj</translation>
 <translation id="7818135753970109980">Nova tema je dodata (<ph name="EXTENSION_NAME" />)</translation>

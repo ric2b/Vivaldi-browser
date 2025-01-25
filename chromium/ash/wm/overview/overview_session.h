@@ -17,11 +17,13 @@
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/overview/overview_types.h"
 #include "ash/wm/overview/scoped_overview_hide_windows.h"
+#include "ash/wm/snap_group/snap_group_observer.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_drag_indicators.h"
 #include "ash/wm/splitview/split_view_observer.h"
 #include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
@@ -59,6 +61,7 @@ class OverviewWindowDragController;
 class SavedDeskDialogController;
 class SavedDeskPresenter;
 class ScopedFloatContainerStacker;
+class WindowOcclusionCalculator;
 
 // The Overview shows a grid of all of your windows, allowing to select
 // one by clicking or tapping on it.
@@ -67,7 +70,8 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
                                    public ui::EventHandler,
                                    public ShellObserver,
                                    public SplitViewObserver,
-                                   public DesksController::Observer {
+                                   public DesksController::Observer,
+                                   public SnapGroupObserver {
  public:
   explicit OverviewSession(OverviewDelegate* delegate);
 
@@ -77,8 +81,10 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   ~OverviewSession() override;
 
   // Initialize with the windows that can be selected.
-  void Init(const aura::Window::Windows& windows,
-            const aura::Window::Windows& hide_windows);
+  void Init(
+      const aura::Window::Windows& windows,
+      const aura::Window::Windows& hide_windows,
+      base::WeakPtr<WindowOcclusionCalculator> window_occlusion_calculator);
 
   // Perform cleanup that cannot be done in the destructor.
   void Shutdown();
@@ -235,10 +241,9 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
 
   // Called when windows are being activated/deactivated during
   // overview mode.
-  void OnWindowActivating(
-      ::wm::ActivationChangeObserver::ActivationReason reason,
-      aura::Window* gained_active,
-      aura::Window* lost_active);
+  void OnWindowActivating(wm::ActivationChangeObserver::ActivationReason reason,
+                          aura::Window* gained_active,
+                          aura::Window* lost_active);
 
   // Returns true when either the `SavedDeskLibraryView` or
   // `SavedDeskDialog` is the window that is losing activation.
@@ -359,7 +364,15 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
                                SplitViewController::State state) override;
   void OnSplitViewDividerPositionChanged() override;
 
+  // SnapGroupObserver:
+  void OnSnapGroupRemoving(SnapGroup* snap_group,
+                           SnapGroupExitPoint exit_pint) override;
+
   OverviewDelegate* delegate() { return delegate_; }
+
+  views::Widget* overview_focus_widget() {
+    return overview_focus_widget_.get();
+  }
 
   bool ignore_activations() const { return ignore_activations_; }
   void set_ignore_activations(bool ignore_activations) {
@@ -398,6 +411,7 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   }
 
   OverviewFocusCyclerOld* focus_cycler_old() { return focus_cycler_old_.get(); }
+  OverviewFocusCycler* focus_cycler() { return focus_cycler_.get(); }
 
   SavedDeskPresenter* saved_desk_presenter() {
     return saved_desk_presenter_.get();

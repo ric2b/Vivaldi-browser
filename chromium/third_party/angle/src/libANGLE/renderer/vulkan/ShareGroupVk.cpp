@@ -160,6 +160,8 @@ void ShareGroupVk::onDestroy(const egl::Display *display)
     DisplayVk *displayVk   = vk::GetImpl(display);
     vk::Renderer *renderer = displayVk->getRenderer();
 
+    mRefCountedEventsGarbageRecycler.destroy(renderer);
+
     for (std::unique_ptr<vk::BufferPool> &pool : mDefaultBufferPools)
     {
         if (pool)
@@ -219,8 +221,8 @@ angle::Result ShareGroupVk::scheduleMonolithicPipelineCreationTask(
     const vk::RenderPass *compatibleRenderPass = nullptr;
     // Pull in a compatible RenderPass to be used by the task.  This is done at the last minute,
     // just before the task is scheduled, to minimize the time this reference to the render pass
-    // cache is held.  If the render pass cache needs to be cleared, the main thread will wait for
-    // the job to complete.
+    // cache is held.  If the render pass cache needs to be cleared, the main thread will wait
+    // for the job to complete.
     ANGLE_TRY(contextVk->getCompatibleRenderPass(taskOut->getTask()->getRenderPassDesc(),
                                                  &compatibleRenderPass));
     taskOut->setRenderPass(compatibleRenderPass);

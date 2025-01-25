@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
 
 #include <algorithm>
@@ -328,7 +333,7 @@ void MediaStreamVideoSource::Restart(
 
 void MediaStreamVideoSource::RestartSourceImpl(
     const media::VideoCaptureFormat& new_format) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void MediaStreamVideoSource::OnRestartDone(bool did_restart) {

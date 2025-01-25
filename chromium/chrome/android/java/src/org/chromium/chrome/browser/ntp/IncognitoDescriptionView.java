@@ -139,8 +139,11 @@ public class IncognitoDescriptionView extends LinearLayout {
     }
 
     public void formatTrackingProtectionText(Context context, View layout) {
-        TextView view = (TextView) layout.findViewById(R.id.tracking_protection_description_two);
-        if (view == null) return;
+        TextView view = layout.findViewById(R.id.tracking_protection_description_two);
+        if (view == null) {
+            adjustCookieControlsCard();
+            return;
+        }
 
         String text =
                 context.getResources()
@@ -181,7 +184,8 @@ public class IncognitoDescriptionView extends LinearLayout {
      */
     private void populateBulletpoints(@IdRes int element, @StringRes int content) {
         if (BuildConfig.IS_VIVALDI) return; // Vivaldi Ref VAB-9323
-        TextView view = (TextView) findViewById(element);
+
+        TextView view = findViewById(element);
         SpannableString spannedText = getSpannedBulletText(getContext(), content);
         view.setText(spannedText);
     }
@@ -359,7 +363,7 @@ public class IncognitoDescriptionView extends LinearLayout {
             sizeDp = mHeightDp <= 480 ? 72 : 120;
         }
 
-        ImageView icon = (ImageView) findViewById(R.id.new_tab_incognito_icon);
+        ImageView icon = findViewById(R.id.new_tab_incognito_icon);
         icon.getLayoutParams().width = dpToPx(getContext(), sizeDp);
         icon.getLayoutParams().height = dpToPx(getContext(), sizeDp);
     }

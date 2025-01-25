@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "services/network/p2p/socket_tcp.h"
 
 #include <stddef.h>
@@ -363,7 +368,7 @@ bool P2PSocketTcpBase::SendPacket(base::span<const uint8_t> data,
   // Renderer should use this socket only to send data to |remote_address_|.
   if (data.size() > kMaximumPacketSize ||
       !(packet_info.destination == remote_address_.ip_address)) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     OnError();
     return false;
   }
@@ -410,9 +415,10 @@ void P2PSocketTcpBase::SetOption(P2PSocketOption option, int32_t value) {
       socket_->SetSendBufferSize(value);
       break;
     case P2P_SOCKET_OPT_DSCP:
-      return;  // For TCP sockets DSCP setting is not available.
+    case P2P_SOCKET_OPT_RECV_ECN:
+      return;  // For TCP sockets DSCP, ECN setting is not available.
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
   }
 }
@@ -442,7 +448,7 @@ bool P2PSocketTcp::ProcessInput(base::span<const uint8_t> input,
   if (input.size() < kPacketHeaderSize)
     return true;
 
-  uint32_t packet_size = base::numerics::U16FromBigEndian(input.first<2u>());
+  uint32_t packet_size = base::U16FromBigEndian(input.first<2u>());
   if (input.size() < packet_size + kPacketHeaderSize)
     return true;
 
@@ -522,7 +528,7 @@ void P2PSocketStunTcp::DoSend(const net::IPEndPoint& to,
   // Each packet is expected to have header (STUN/TURN ChannelData), where
   // header contains message type and and length of message.
   if (data.size() < kPacketHeaderSize + kPacketLengthOffset) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     OnError();
     return;
   }
@@ -532,7 +538,7 @@ void P2PSocketStunTcp::DoSend(const net::IPEndPoint& to,
 
   // Accepts only complete STUN/TURN packets.
   if (data.size() != expected_len) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     OnError();
     return;
   }
@@ -569,10 +575,10 @@ int P2PSocketStunTcp::GetExpectedPacketSize(base::span<const uint8_t> data,
                                             int* pad_bytes) {
   DCHECK_LE(static_cast<size_t>(kTurnChannelDataHeaderSize), data.size());
   // Get packet type (STUN or TURN).
-  uint16_t msg_type = base::numerics::U16FromBigEndian(data.subspan<0u, 2u>());
+  uint16_t msg_type = base::U16FromBigEndian(data.subspan<0u, 2u>());
   // Both stun and turn had length at offset 2.
-  int packet_size = int{base::numerics::U16FromBigEndian(
-      data.subspan<kPacketLengthOffset, 2u>())};
+  int packet_size =
+      int{base::U16FromBigEndian(data.subspan<kPacketLengthOffset, 2u>())};
 
   *pad_bytes = 0;
   // Add heder length to packet length.

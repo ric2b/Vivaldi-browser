@@ -48,8 +48,8 @@ import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderState;
 import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderUtils.DesktopWindowHeuristicResult;
 import org.chromium.chrome.browser.ui.desktop_windowing.DesktopWindowStateProvider;
-import org.chromium.components.browser_ui.widget.InsetObserver;
-import org.chromium.components.browser_ui.widget.InsetsRectProvider;
+import org.chromium.ui.InsetObserver;
+import org.chromium.ui.InsetsRectProvider;
 import org.chromium.ui.base.TestActivity;
 
 import java.util.List;
@@ -388,15 +388,13 @@ public class AppHeaderCoordinatorUnitTest {
         assertEquals(
                 "Background is dark. Expecting APPEARANCE_LIGHT_CAPTION_BARS not set.",
                 0,
-                insetController.getSystemBarsAppearance()
-                        & AppHeaderCoordinator.APPEARANCE_LIGHT_CAPTION_BARS);
+                insetController.getSystemBarsAppearance() & (1 << 8));
 
         mAppHeaderCoordinator.updateForegroundColor(Color.WHITE);
         assertEquals(
                 "Background is light. Expecting APPEARANCE_LIGHT_CAPTION_BARS set.",
-                AppHeaderCoordinator.APPEARANCE_LIGHT_CAPTION_BARS,
-                insetController.getSystemBarsAppearance()
-                        & AppHeaderCoordinator.APPEARANCE_LIGHT_CAPTION_BARS);
+                (1 << 8),
+                insetController.getSystemBarsAppearance() & (1 << 8));
     }
 
     private void initAppHeaderCoordinator() {

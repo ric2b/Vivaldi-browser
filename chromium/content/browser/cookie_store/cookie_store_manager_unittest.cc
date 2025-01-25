@@ -365,6 +365,7 @@ class CookieStoreManagerTest
 
   bool IsFullCookieAccessAllowed(
       content::BrowserContext* browser_context,
+      content::WebContents* web_contents,
       const GURL& url,
       const blink::StorageKey& storage_key) override {
     if (net::SchemefulSite(url) == storage_key.top_level_site()) {

@@ -26,7 +26,7 @@ class VivaldiUIEvents : public VivaldiEventHooks {
   static void SendKeyboardShortcutEvent(
       SessionID::id_type window_id,
       content::BrowserContext* browser_context,
-      const content::NativeWebKeyboardEvent& event,
+      const input::NativeWebKeyboardEvent& event,
       bool is_auto_repeat);
 
   // Helper for sending simple mouse change states. To be used by JS to detect
@@ -77,19 +77,19 @@ class VivaldiUIEvents : public VivaldiEventHooks {
     bool eat_next_right_mouseup = false;
   };
 
-  bool CheckMouseMove(content::RenderWidgetHostViewInput* root_view,
+  bool CheckMouseMove(input::RenderWidgetHostViewInput* root_view,
                       const blink::WebMouseEvent& mouse_event);
-  bool CheckRockerGesture(content::RenderWidgetHostViewInput* root_view,
+  bool CheckRockerGesture(input::RenderWidgetHostViewInput* root_view,
                           const blink::WebMouseEvent& mouse_event);
-  bool CheckMouseGesture(content::RenderWidgetHostViewInput* root_view,
+  bool CheckMouseGesture(input::RenderWidgetHostViewInput* root_view,
                          const blink::WebMouseEvent& mouse_event);
-  void CheckWebviewClick(content::RenderWidgetHostViewInput* root_view,
+  void CheckWebviewClick(input::RenderWidgetHostViewInput* root_view,
                          const blink::WebMouseEvent& mouse_event);
-  bool CheckBackForward(content::RenderWidgetHostViewInput* root_view,
+  bool CheckBackForward(input::RenderWidgetHostViewInput* root_view,
                         const blink::WebMouseEvent& mouse_event);
   bool HandleMouseGestureMove(const blink::WebMouseEvent& mouse_event);
 
-  void StartMouseGestureDetection(content::RenderWidgetHostViewInput* root_view,
+  void StartMouseGestureDetection(input::RenderWidgetHostViewInput* root_view,
                                   const blink::WebMouseEvent& mouse_event,
                                   bool with_alt);
   bool FinishMouseOrWheelGesture(bool with_alt);
@@ -98,17 +98,17 @@ class VivaldiUIEvents : public VivaldiEventHooks {
 
   bool DoHandleKeyboardEvent(
       content::RenderWidgetHostImpl* widget_host,
-      const content::NativeWebKeyboardEvent& event) override;
+      const input::NativeWebKeyboardEvent& event) override;
 
-  bool DoHandleMouseEvent(content::RenderWidgetHostViewInput* root_view,
+  bool DoHandleMouseEvent(input::RenderWidgetHostViewInput* root_view,
                           const blink::WebMouseEvent& event) override;
 
-  bool DoHandleWheelEvent(content::RenderWidgetHostViewInput* root_view,
+  bool DoHandleWheelEvent(input::RenderWidgetHostViewInput* root_view,
                           const blink::WebMouseWheelEvent& event,
                           const ui::LatencyInfo& latency) override;
 
   bool DoHandleWheelEventAfterChild(
-      content::RenderWidgetHostViewInput* root_view,
+      input::RenderWidgetHostViewInput* root_view,
       const blink::WebMouseWheelEvent& event) override;
 
   bool DoHandleDragEnd(content::WebContents* web_contents,

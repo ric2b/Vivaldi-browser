@@ -29,7 +29,7 @@
 #include "pdf/paint_manager.h"
 #include "pdf/pdf_accessibility_action_handler.h"
 #include "pdf/pdf_accessibility_image_fetcher.h"
-#include "pdf/pdf_engine.h"
+#include "pdf/pdfium/pdfium_engine_client.h"
 #include "pdf/pdfium/pdfium_form_filler.h"
 #include "pdf/post_message_receiver.h"
 #include "pdf/preview_mode_client.h"
@@ -47,6 +47,10 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "v8/include/v8.h"
+
+#if BUILDFLAG(ENABLE_PDF_INK2)
+#include "pdf/pdf_ink_module.h"
+#endif
 
 namespace blink {
 class WebAssociatedURLLoader;
@@ -77,11 +81,7 @@ class PDFiumEngine;
 class PdfAccessibilityDataHandler;
 class Thumbnail;
 
-#if BUILDFLAG(ENABLE_PDF_INK2)
-class InkModule;
-#endif
-
-class PdfViewWebPlugin final : public PDFEngine::Client,
+class PdfViewWebPlugin final : public PDFiumEngineClient,
                                public blink::WebPlugin,
                                public pdf::mojom::PdfListener,
                                public UrlLoader::Client,
@@ -89,6 +89,9 @@ class PdfViewWebPlugin final : public PDFEngine::Client,
                                public PaintManager::Client,
                                public PdfAccessibilityActionHandler,
                                public PdfAccessibilityImageFetcher,
+#if BUILDFLAG(ENABLE_PDF_INK2)
+                               public PdfInkModule::Client,
+#endif
                                public PreviewModeClient::Client {
  public:
   // Do not save files larger than 100 MB. This cap should be kept in sync with
@@ -117,7 +120,7 @@ class PdfViewWebPlugin final : public PDFEngine::Client,
 
     // Creates a new `PDFiumEngine`.
     virtual std::unique_ptr<PDFiumEngine> CreateEngine(
-        PDFEngine::Client* client,
+        PDFiumEngineClient* client,
         PDFiumFormFiller::ScriptOption script_option);
 
     // Passes the plugin container to the client. This is first called in
@@ -231,7 +234,8 @@ class PdfViewWebPlugin final : public PDFEngine::Client,
     CreateAccessibilityDataHandler(
         PdfAccessibilityActionHandler* action_handler,
         PdfAccessibilityImageFetcher* image_fetcher,
-        blink::WebPluginContainer* plugin_container);
+        blink::WebPluginContainer* plugin_container,
+        bool print_preview);
   };
 
   PdfViewWebPlugin(std::unique_ptr<Client> client,
@@ -302,7 +306,7 @@ class PdfViewWebPlugin final : public PDFEngine::Client,
       int relative_cursor_pos) override;
   void ImeFinishComposingTextForPlugin(bool keep_selection) override;
 
-  // PDFEngine::Client:
+  // PDFiumEngineClient:
   void ProposeDocumentLayout(const DocumentLayout& layout) override;
   void Invalidate(const gfx::Rect& rect) override;
   void DidScroll(const gfx::Vector2d& offset) override;
@@ -348,7 +352,7 @@ class PdfViewWebPlugin final : public PDFEngine::Client,
   void DocumentLoadFailed() override;
   void DocumentHasUnsupportedFeature(const std::string& feature) override;
   void DocumentLoadProgress(uint32_t available, uint32_t doc_size) override;
-  void FormFieldFocusChange(PDFEngine::FocusFieldType type) override;
+  void FormFieldFocusChange(PDFiumEngineClient::FocusFieldType type) override;
   bool IsPrintPreview() const override;
   SkColor GetBackgroundColor() const override;
   void SelectionChanged(const gfx::Rect& left, const gfx::Rect& right) override;
@@ -396,6 +400,17 @@ class PdfViewWebPlugin final : public PDFEngine::Client,
   // PdfAccessibilityImageFetcher:
   SkBitmap GetImageForOcr(int32_t page_index,
                           int32_t page_object_index) override;
+
+#if BUILDFLAG(ENABLE_PDF_INK2)
+  // PdfInkModule:
+  PageOrientation GetOrientation() const override;
+  gfx::Rect GetPageContentsRect(int index) override;
+  gfx::Vector2dF GetViewportOriginOffset() override;
+  float GetZoom() const override;
+  bool IsPageVisible(int index) override;
+  void StrokeFinished() override;
+  int VisiblePageIndexFromPoint(const gfx::PointF& point) override;
+#endif
 
   // PreviewModeClient::Client:
   void PreviewDocumentLoadComplete() override;
@@ -641,7 +656,7 @@ class PdfViewWebPlugin final : public PDFEngine::Client,
 
 #if BUILDFLAG(ENABLE_PDF_INK2)
   // Null if `features::kPdfInk2` is not enabled.
-  std::unique_ptr<InkModule> const ink_module_;
+  std::unique_ptr<PdfInkModule> const ink_module_;
 #endif
 
   std::unique_ptr<PDFiumEngine> engine_;

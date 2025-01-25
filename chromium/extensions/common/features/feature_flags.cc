@@ -20,12 +20,13 @@ namespace {
 // kill switches for extension features. Note any such feature flags must
 // generally be removed once the API has been stable for a few releases.
 const base::Feature* kFeatureFlags[] = {
+    &extensions_features::kApiActionOpenPopup,
     &extensions_features::kApiContentSettingsClipboard,
     &extensions_features::kApiEnterpriseKioskInput,
-    &extensions_features::kApiReadingList,
+    &extensions_features::kApiPermissionsSiteAccessRequests,
     &extensions_features::kApiUserScriptsMultipleWorlds,
     &extensions_features::kApiOdfsConfigPrivate,
-    &extensions_features::kNewWebstoreDomain,
+    &extensions_features::kExtensionIconVariants,
     &extensions_features::kTelemetryExtensionPendingApprovalApi,
 };
 

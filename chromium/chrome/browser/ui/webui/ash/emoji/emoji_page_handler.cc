@@ -8,6 +8,7 @@
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/system/toast_data.h"
 #include "ash/public/cpp/system/toast_manager.h"
+#include "base/json/values_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
@@ -15,12 +16,12 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_event.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/ash/emoji/emoji_ui.h"
 #include "chrome/browser/ui/webui/ash/emoji/seal_utils.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/emoji/emoji_search.h"
 #include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/storage_partition.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/ime/ash/ime_bridge.h"
@@ -29,7 +30,12 @@
 
 namespace ash {
 
+namespace {
+
 constexpr char kEmojiPickerToastId[] = "emoji_picker_toast";
+constexpr char kPrefsHistoryTextFieldName[] = "text";
+constexpr char kPrefsHistoryTimestampFieldName[] = "timestamp";
+constexpr char kPrefsPreferredVariantsFieldName[] = "preferred_variants";
 
 // Keep in sync with entry in enums.xml.
 enum class EmojiVariantType {
@@ -104,6 +110,22 @@ void CopyGifToClipboard(const GURL& gif_to_copy) {
       kEmojiPickerToastId, ToastCatalogName::kCopyGifToClipboardAction,
       l10n_util::GetStringUTF16(IDS_ASH_EMOJI_PICKER_COPY_GIF_TO_CLIPBOARD)));
 }
+
+std::string ConvertCategoryToPrefString(
+    emoji_picker::mojom::Category category) {
+  switch (category) {
+    case emoji_picker::mojom::Category::kEmojis:
+      return "emoji";
+    case emoji_picker::mojom::Category::kSymbols:
+      return "symbol";
+    case emoji_picker::mojom::Category::kEmoticons:
+      return "emoticon";
+    case emoji_picker::mojom::Category::kGifs:
+      return "gif";
+  }
+}
+
+}  // namespace
 
 // Used to insert a gif / emoji after WebUI handler is destroyed, before
 // self-constructing.
@@ -251,21 +273,20 @@ EmojiPageHandler::EmojiPageHandler(
       incognito_mode_(incognito_mode),
       no_text_field_(no_text_field),
       initial_category_(initial_category),
-      initial_query_(initial_query) {
-  Profile* profile = Profile::FromWebUI(web_ui);
-
+      initial_query_(initial_query),
+      profile_(Profile::FromWebUI(web_ui)) {
   // There are two conditions to control the GIF support:
   //   1. Feature flag is turned on.
   //   2. For managed users, the policy is turned on.
   gif_support_enabled_ =
       base::FeatureList::IsEnabled(features::kImeSystemEmojiPickerGIFSupport) &&
-      (profile->GetPrefs()->IsManagedPreference(
+      (profile_->GetPrefs()->IsManagedPreference(
            prefs::kEmojiPickerGifSupportEnabled)
-           ? profile->GetPrefs()->GetBoolean(
+           ? profile_->GetPrefs()->GetBoolean(
                  prefs::kEmojiPickerGifSupportEnabled)
            : true);
 
-  url_loader_factory_ = profile->GetDefaultStoragePartition()
+  url_loader_factory_ = profile_->GetDefaultStoragePartition()
                             ->GetURLLoaderFactoryForBrowserProcess();
 }
 
@@ -416,6 +437,65 @@ void EmojiPageHandler::GetInitialCategory(GetInitialCategoryCallback callback) {
 
 void EmojiPageHandler::GetInitialQuery(GetInitialQueryCallback callback) {
   std::move(callback).Run(initial_query_);
+}
+
+void EmojiPageHandler::UpdateHistoryInPrefs(
+    emoji_picker::mojom::Category category,
+    std::vector<emoji_picker::mojom::HistoryItemPtr> history) {
+  base::Value::List history_value;
+  for (const auto& item : history) {
+    history_value.Append(base::Value::Dict()
+                             .Set(kPrefsHistoryTextFieldName, item->emoji)
+                             .Set(kPrefsHistoryTimestampFieldName,
+                                  base::TimeToValue(item->timestamp)));
+  }
+  ScopedDictPrefUpdate update(profile_->GetPrefs(), prefs::kEmojiPickerHistory);
+  update->Set(ConvertCategoryToPrefString(category), std::move(history_value));
+}
+
+void EmojiPageHandler::UpdatePreferredVariantsInPrefs(
+    std::vector<emoji_picker::mojom::EmojiVariantPtr> preferred_variants) {
+  base::Value::Dict value;
+  for (const auto& variant : preferred_variants) {
+    value.Set(variant->base, variant->variant);
+  }
+  ScopedDictPrefUpdate update(profile_->GetPrefs(),
+                              prefs::kEmojiPickerPreferences);
+  update->Set(kPrefsPreferredVariantsFieldName, std::move(value));
+}
+
+void EmojiPageHandler::GetHistoryFromPrefs(
+    emoji_picker::mojom::Category category,
+    GetHistoryFromPrefsCallback callback) {
+  if (profile_ == nullptr || profile_->GetPrefs() == nullptr) {
+    std::move(callback).Run({});
+    return;
+  }
+  const base::Value::List* history =
+      profile_->GetPrefs()
+          ->GetDict(prefs::kEmojiPickerHistory)
+          .FindList(ConvertCategoryToPrefString(category));
+  if (history == nullptr) {
+    std::move(callback).Run({});
+    return;
+  }
+  std::vector<emoji_picker::mojom::HistoryItemPtr> results;
+  for (const auto& it : *history) {
+    const base::Value::Dict* value_dict = it.GetIfDict();
+    if (value_dict == nullptr) {
+      continue;
+    }
+    const std::string* text =
+        value_dict->FindString(kPrefsHistoryTextFieldName);
+    std::optional<base::Time> timestamp =
+        base::ValueToTime(value_dict->Find(kPrefsHistoryTimestampFieldName));
+
+    if (text != nullptr) {
+      results.push_back(emoji_picker::mojom::HistoryItem::New(
+          *text, timestamp.has_value() ? *timestamp : base::Time::UnixEpoch()));
+    }
+  }
+  std::move(callback).Run(std::move(results));
 }
 
 }  // namespace ash

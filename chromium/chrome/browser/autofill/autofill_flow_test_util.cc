@@ -137,16 +137,10 @@ struct ShowAutofillSuggestionsParams {
       p.execution_target.value_or(test->GetWebContents());
   content::RenderFrameHost* rfh = execution_target.render_frame_host();
   content::RenderWidgetHostView* view = rfh->GetView();
-  content::RenderWidgetHost* widget = view->GetRenderWidgetHost();
 
   auto ArrowDown = [&](std::list<ObservedUiEvents> exp) {
-    constexpr auto kDown = ui::DomKey::ARROW_DOWN;
-    if (base::Contains(exp, ObservedUiEvents::kSuggestionsShown)) {
-      return test->SendKeyToPageAndWait(kDown, std::move(exp), p.timeout);
-    } else {
-      return test->SendKeyToPopupAndWait(kDown, std::move(exp), widget,
-                                         p.timeout);
-    }
+    return test->SendKeyToPageAndWait(ui::DomKey::ARROW_DOWN, std::move(exp),
+                                      p.timeout);
   };
   auto Backspace = [&]() {
     return test->SendKeyToPageAndWait(ui::DomKey::BACKSPACE, {}, p.timeout);
@@ -162,8 +156,7 @@ struct ShowAutofillSuggestionsParams {
   };
   auto Click = [&](std::list<ObservedUiEvents> exp) {
     gfx::Point point = view->TransformPointToRootCoordSpace(GetCenter(e, rfh));
-    test->test_delegate()->SetExpectations(
-        {ObservedUiEvents::kSuggestionsShown}, p.timeout);
+    test->test_delegate()->SetExpectations(std::move(exp), p.timeout);
     content::SimulateMouseClickAt(test->GetWebContents(), 0,
                                   blink::WebMouseEvent::Button::kLeft, point);
     return test->test_delegate()->Wait();
@@ -210,22 +203,9 @@ struct ShowAutofillSuggestionsParams {
         return AssertionFailure()
                << m << "Field " << *e << " must be focused. ";
       }
-      if (!ShouldAutoselectFirstSuggestionOnArrowDown()) {
-        if (AssertionResult b = ArrowDown({kSuggest}); !b) {
-          m << "Cannot trigger suggestions by first arrow: " << b.message();
-          continue;
-        }
-        if (AssertionResult b =
-                has_preview ? ArrowDown({kPreview}) : ArrowDown({});
-            !b) {
-          m << "Cannot select first suggestion by second arrow: "
-            << b.message();
-          continue;
-        }
-      } else if (AssertionResult b = has_preview
-                                         ? ArrowDown({kPreview, kSuggest})
-                                         : ArrowDown({kSuggest});
-                 !b) {
+      if (AssertionResult b = has_preview ? ArrowDown({kPreview, kSuggest})
+                                          : ArrowDown({kSuggest});
+          !b) {
         m << "Cannot trigger and select first suggestion by arrow: "
           << b.message();
         continue;
@@ -266,6 +246,7 @@ struct AutofillSuggestionParams {
   int num_profile_suggestions = 1;
   int current_index = 0;
   int target_index = 0;
+  bool expect_previews = true;
   base::TimeDelta timeout = kAutofillFlowDefaultTimeout;
   std::optional<content::ToRenderFrameHost> execution_target = {};
 };
@@ -290,7 +271,7 @@ struct AutofillSuggestionParams {
   };
 
   for (int i = p.current_index + 1; i <= p.target_index; ++i) {
-    bool has_preview = i < p.num_profile_suggestions;
+    bool has_preview = i < p.num_profile_suggestions && p.expect_previews;
     if (!(has_preview ? ArrowDown({kPreview}) : ArrowDown({}))) {
       return AssertionFailure()
              << __func__ << "(): Couldn't go to " << i << "th suggestion with"
@@ -397,6 +378,7 @@ struct AutofillSuggestionParams {
         {.num_profile_suggestions = p.num_profile_suggestions,
          .current_index = p.show_method.selects_first_suggestion() ? 0 : -1,
          .target_index = p.target_index,
+         .expect_previews = p.expect_previews,
          .timeout = p.timeout,
          .execution_target = execution_target});
     if (!a) {
@@ -413,6 +395,7 @@ struct AutofillSuggestionParams {
         {.num_profile_suggestions = p.num_profile_suggestions,
          .current_index = p.target_index,
          .target_index = p.target_index,
+         .expect_previews = p.expect_previews,
          .timeout = p.timeout,
          .execution_target = execution_target});
     if (!a) {

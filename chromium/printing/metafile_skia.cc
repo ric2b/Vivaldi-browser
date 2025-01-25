@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "printing/metafile_skia.h"
 
 #include <algorithm>
@@ -16,6 +21,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
+#include "base/not_fatal_until.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
@@ -289,19 +295,19 @@ unsigned int MetafileSkia::GetPageCount() const {
 }
 
 printing::NativeDrawingContext MetafileSkia::context() const {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 
 #if BUILDFLAG(IS_WIN)
 bool MetafileSkia::Playback(printing::NativeDrawingContext hdc,
                             const RECT* rect) const {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
 bool MetafileSkia::SafePlayback(printing::NativeDrawingContext hdc) const {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -455,7 +461,7 @@ void MetafileSkia::CustomDataToSkPictureCallback(SkCanvas* canvas,
     return;
 
   auto it = data_->subframe_pics.find(content_id);
-  DCHECK(it != data_->subframe_pics.end());
+  CHECK(it != data_->subframe_pics.end(), base::NotFatalUntil::M130);
 
   // Found the picture, draw it on canvas.
   sk_sp<SkPicture> pic = it->second;

@@ -12,9 +12,9 @@
 #include "bench/bgemm.h"
 #include "bench/packw-benchmark.h"
 #include "bench/utils.h"
-
-#include <xnnpack/common.h>
-#include <xnnpack/packw.h>
+#include "xnnpack/common.h"
+#include "xnnpack/hardware-config.h"
+#include "xnnpack/packw.h"
 
 
 static void x8_packw_gemm_goi_ukernel_x2__scalar_int_u2(benchmark::State& state, const char* net) {

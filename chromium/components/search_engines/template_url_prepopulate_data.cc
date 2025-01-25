@@ -8,13 +8,12 @@
 #include <random>
 #include <vector>
 
-#include "base/check_deref.h"
 #include "base/check_is_test.h"
 #include "base/containers/contains.h"
 #include "base/containers/to_vector.h"
-#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/not_fatal_until.h"
 #include "base/rand_util.h"
 #include "base/ranges/algorithm.h"
 #include "build/build_config.h"
@@ -28,7 +27,6 @@
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_data_util.h"
-#include "components/search_engines/template_url_service.h"
 #include "components/version_info/version_info.h"
 
 #include "app/vivaldi_apptools.h"
@@ -108,16 +106,16 @@ GetPrepopulatedEnginesForEeaRegionCountries(int country_id,
 std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedTemplateURLData(
     int country_id,
     PrefService* prefs,
-    std::string application_locale,
-    size_t* default_search_provider_index,
-    SearchType search_type) {
+    std::string application_locale) {
   std::vector<std::unique_ptr<TemplateURLData>> t_urls;
 
-  if (search_engines::IsEeaChoiceCountry(country_id) && !vivaldi::IsVivaldiRunning() &&
+  if (!prefs) {
+    // Possible only in tests.
+    // TODO(crbug.com/40287734): Update tests and remove associated branches.
+    CHECK_IS_TEST();
+  } else if (search_engines::IsEeaChoiceCountry(country_id) && !vivaldi::IsVivaldiRunning() &&
       search_engines::IsChoiceScreenFlagEnabled(
           search_engines::ChoicePromo::kAny)) {
-    CHECK(prefs);
-
     if (search_engines::HasSearchEngineCountryListOverride()) {
       auto country_override =
           absl::get<search_engines::SearchEngineCountryListOverride>(
@@ -134,7 +132,7 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedTemplateURLData(
   }
 
   std::vector<EngineAndTier> engines =
-      GetPrepopulationSetFromCountryID(country_id, application_locale, default_search_provider_index, search_type);
+      GetPrepopulationSetFromCountryID(country_id, application_locale);
   for (const EngineAndTier& engine : engines) {
     if (engine.tier == SearchEngineTier::kTopEngines) {
       t_urls.push_back(
@@ -189,6 +187,35 @@ std::vector<std::unique_ptr<TemplateURLData>> GetOverriddenTemplateURLData(
   return t_urls;
 }
 
+std::unique_ptr<TemplateURLData> FindPrepopulatedEngineInternal(
+    PrefService* prefs,
+    search_engines::SearchEngineChoiceService* search_engine_choice_service,
+    int prepopulated_id,
+    bool use_first_as_fallback) {
+  // This could be more efficient. We load all URLs but keep only one.
+  std::vector<std::unique_ptr<TemplateURLData>> prepopulated_engines =
+      TemplateURLPrepopulateData::GetPrepopulatedEngines(
+          prefs, search_engine_choice_service);
+  if (prepopulated_engines.empty()) {
+    // Not expected to be a real possibility, branch to be removed when this is
+    // verified.
+    NOTREACHED(base::NotFatalUntil::M132);
+    return nullptr;
+  }
+
+  for (auto& engine : prepopulated_engines) {
+    if (engine->prepopulate_id == prepopulated_id) {
+      return std::move(engine);
+    }
+  }
+
+  if (use_first_as_fallback) {
+    return std::move(prepopulated_engines[0]);
+  }
+
+  return nullptr;
+}
+
 }  // namespace
 
 // Global functions -----------------------------------------------------------
@@ -203,8 +230,6 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
       prefs::kDefaultSearchProviderChoiceScreenShuffleMilestone, 0);
   registry->RegisterBooleanPref(
       prefs::kDefaultSearchProviderKeywordsUseExtendedList, false);
-  registry->RegisterBooleanPref(prefs::kDefaultSearchProviderChoicePending,
-                                false);
 }
 
 int GetDataVersion(PrefService* prefs) {
@@ -216,73 +241,36 @@ int GetDataVersion(PrefService* prefs) {
 
 std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedEngines(
     PrefService* prefs,
-    search_engines::SearchEngineChoiceService* search_engine_choice_service,
-    size_t* default_search_provider_index,
-    SearchType search_type,
-    bool include_current_default,
-    TemplateURLService* template_url_service,
-    bool* was_current_default_inserted) {
+    search_engines::SearchEngineChoiceService* search_engine_choice_service) {
   // If there is a set of search engines in the preferences file, it overrides
   // the built-in set.
-  bool default_from_data = false;
   std::vector<std::unique_ptr<TemplateURLData>> t_urls =
       GetOverriddenTemplateURLData(prefs);
-  if (t_urls.empty()) {
-    default_from_data = vivaldi::IsVivaldiRunning();
-    // `search_engine_choice_service` (and `prefs`) can be null in tests.
-    // TODO(b/318801987): Make sure `prefs` and `search_engine_choice_service`
-    //                    are always not null.
-    int country_id = search_engine_choice_service
-                         ? search_engine_choice_service->GetCountryId()
-                         : country_codes::GetCurrentCountryID();
-    t_urls = GetPrepopulatedTemplateURLData(country_id, prefs, GetLangFromPrefs(prefs), default_search_provider_index, search_type);
+  if (!t_urls.empty()) {
+    return t_urls;
+  }
 
-    if (include_current_default && template_url_service) {
-      CHECK(search_engines::IsChoiceScreenFlagEnabled(
-          search_engines::ChoicePromo::kAny));
-      // This would add the current default search engine to the top of the
-      // returned list if it's not already there.
-      const TemplateURL* default_search_engine =
-          template_url_service->GetDefaultSearchProvider();
-      bool inserted_default = false;
-      if (default_search_engine &&
-          !base::Contains(t_urls, default_search_engine->prepopulate_id(),
-                          [](const std::unique_ptr<TemplateURLData>& engine) {
-                            return engine->prepopulate_id;
-                          })) {
-        t_urls.insert(t_urls.begin(), std::make_unique<TemplateURLData>(
-                                          default_search_engine->data()));
-        inserted_default = true;
-      }
-      if (was_current_default_inserted != nullptr) {
-        *was_current_default_inserted = inserted_default;
-      }
-      // TODO(b/325015554): Pull this higher in the stack, where recording some
-      // histograms would be more expected.
-      search_engines::RecordIsDefaultProviderAddedToChoices(inserted_default);
-    }
+  int country_id;
+  if (search_engine_choice_service) {
+    country_id = search_engine_choice_service->GetCountryId();
+  } else {
+    // `search_engine_choice_service` (and `prefs`) can be null in tests.
+    // TODO(crbug.com/40287734): Make sure `prefs` and
+    // `search_engine_choice_service` are always not null.
+    CHECK_IS_TEST();
+    country_id = country_codes::GetCurrentCountryID();
   }
-  if (default_search_provider_index && !default_from_data) {
-    const auto itr = base::ranges::find(
-        t_urls, SearchEnginesManager::GetInstance()->GetGoogleEngine()->id,
-        &TemplateURLData::prepopulate_id);
-    *default_search_provider_index =
-        itr == t_urls.end() ? 0 : std::distance(t_urls.begin(), itr);
-  }
-  return t_urls;
+
+  return GetPrepopulatedTemplateURLData(country_id, prefs, GetLangFromPrefs(prefs));
 }
 
 std::unique_ptr<TemplateURLData> GetPrepopulatedEngine(
     PrefService* prefs,
     search_engines::SearchEngineChoiceService* search_engine_choice_service,
     int prepopulated_id) {
-  auto engines = TemplateURLPrepopulateData::GetPrepopulatedEngines(
-      prefs, search_engine_choice_service, nullptr);
-  for (auto& engine : engines) {
-    if (engine->prepopulate_id == prepopulated_id)
-      return std::move(engine);
-  }
-  return nullptr;
+  return FindPrepopulatedEngineInternal(prefs, search_engine_choice_service,
+                                        prepopulated_id,
+                                        /*use_first_as_fallback=*/false);
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -297,7 +285,7 @@ std::vector<std::unique_ptr<TemplateURLData>> GetLocalPrepopulatedEngines(
     return std::vector<std::unique_ptr<TemplateURLData>>();
   }
 
-  return GetPrepopulatedTemplateURLData(country_id, &prefs, application_locale, nullptr, SearchType::kMain);
+  return GetPrepopulatedTemplateURLData(country_id, &prefs, application_locale);
 }
 
 #endif
@@ -323,7 +311,7 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedEngineFromFullList(
   // the full list that share a same prepopulated id.
   const int country = search_engine_choice_service->GetCountryId();
   for (const EngineAndTier& engine_and_tier :
-       GetPrepopulationSetFromCountryID(country,GetLangFromPrefs(prefs), nullptr, SearchType::kMain)) {
+       GetPrepopulationSetFromCountryID(country,GetLangFromPrefs(prefs))) {
     if (engine_and_tier.search_engine->id == prepopulated_id) {
       return TemplateURLDataFromPrepopulatedEngine(
           *engine_and_tier.search_engine);
@@ -352,18 +340,17 @@ void ClearPrepopulatedEnginesInPrefs(PrefService* prefs) {
   prefs->ClearPref(prefs::kSearchProviderOverridesVersion);
 }
 
-std::unique_ptr<TemplateURLData> GetPrepopulatedDefaultSearch(
+std::unique_ptr<TemplateURLData> GetPrepopulatedFallbackSearch(
     PrefService* prefs,
     search_engines::SearchEngineChoiceService* search_engine_choice_service, SearchType search_type) {
-  size_t default_search_index;
-  // This could be more efficient.  We load all URLs but keep only the default.
-  std::vector<std::unique_ptr<TemplateURLData>> loaded_urls =
-      GetPrepopulatedEngines(prefs, search_engine_choice_service,
-                             &default_search_index, search_type);
-
-  return (default_search_index < loaded_urls.size())
-             ? std::move(loaded_urls[default_search_index])
-             : nullptr;
+  if (vivaldi::IsVivaldiRunning()) {
+    return TemplateURLDataFromPrepopulatedEngine(
+        *GetFallbackEngine(country_codes::GetCurrentCountryID(),
+                           GetLangFromPrefs(prefs), search_type));
+  }
+  return FindPrepopulatedEngineInternal(prefs, search_engine_choice_service,
+                                        google.id,
+                                        /*use_first_as_fallback=*/true);
 }
 
 std::vector<const PrepopulatedEngine*> GetAllPrepopulatedEngines() {

@@ -97,33 +97,6 @@ policy::CloudPolicyStore* GetStoreForUser(const user_manager::User* user) {
   return policy_manager->core()->store();
 }
 
-class UserImageChangeWaiter : public user_manager::UserManager::Observer {
- public:
-  UserImageChangeWaiter() {}
-
-  UserImageChangeWaiter(const UserImageChangeWaiter&) = delete;
-  UserImageChangeWaiter& operator=(const UserImageChangeWaiter&) = delete;
-
-  ~UserImageChangeWaiter() override {}
-
-  void Wait() {
-    user_manager::UserManager::Get()->AddObserver(this);
-    run_loop_ = std::make_unique<base::RunLoop>();
-    run_loop_->Run();
-    user_manager::UserManager::Get()->RemoveObserver(this);
-  }
-
-  // user_manager::UserManager::Observer:
-  void OnUserImageChanged(const user_manager::User& user) override {
-    if (run_loop_) {
-      run_loop_->Quit();
-    }
-  }
-
- private:
-  std::unique_ptr<base::RunLoop> run_loop_;
-};
-
 }  // namespace
 
 class UserImageManagerTestBase : public LoginManagerTest,
@@ -351,8 +324,8 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveAndLoadUserImage) {
       user_manager::UserManager::Get()->FindUser(test_account_id1_);
   ASSERT_TRUE(user);
   // Wait for image load.
-  if (user->image_index() == user_manager::User::USER_IMAGE_INVALID) {
-    UserImageChangeWaiter().Wait();
+  if (user->image_index() == user_manager::UserImage::Type::kInvalid) {
+    test::UserImageChangeWaiter().Wait();
   }
   // Check image dimensions. Images can't be compared since JPEG is lossy.
   const gfx::ImageSkia& saved_image = default_user_image::GetStubDefaultImage();
@@ -374,7 +347,6 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserDefaultImageIndex) {
   user_image_manager->SaveUserDefaultImageIndex(
       default_user_image::kFirstDefaultImageIndex);
 
-  EXPECT_TRUE(user->HasDefaultImage());
   EXPECT_EQ(default_user_image::kFirstDefaultImageIndex, user->image_index());
   ExpectUserImageInfo(test_account_id1_,
                       default_user_image::kFirstDefaultImageIndex,
@@ -403,11 +375,10 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserImage) {
       custom_image, user_manager::UserImage::FORMAT_JPEG));
   run_loop_->Run();
 
-  EXPECT_FALSE(user->HasDefaultImage());
-  EXPECT_EQ(user_manager::User::USER_IMAGE_EXTERNAL, user->image_index());
+  EXPECT_EQ(user_manager::UserImage::Type::kExternal, user->image_index());
   EXPECT_TRUE(test::AreImagesEqual(custom_image, user->GetImage()));
   ExpectUserImageInfo(test_account_id1_,
-                      user_manager::User::USER_IMAGE_EXTERNAL,
+                      user_manager::UserImage::Type::kExternal,
                       GetUserImagePath(test_account_id1_, "jpg"));
 
   const gfx::ImageSkia saved_image =
@@ -439,11 +410,10 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserImageFromFile) {
   user_image_manager->SaveUserImageFromFile(custom_image_path);
   run_loop_->Run();
 
-  EXPECT_FALSE(user->HasDefaultImage());
-  EXPECT_EQ(user_manager::User::USER_IMAGE_EXTERNAL, user->image_index());
+  EXPECT_EQ(user_manager::UserImage::Type::kExternal, user->image_index());
   EXPECT_TRUE(test::AreImagesEqual(custom_image, user->GetImage()));
   ExpectUserImageInfo(test_account_id1_,
-                      user_manager::User::USER_IMAGE_EXTERNAL,
+                      user_manager::UserImage::Type::kExternal,
                       GetUserImagePath(test_account_id1_, "jpg"));
 
   const gfx::ImageSkia saved_image =
@@ -469,7 +439,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserImageFromFile) {
 
   EXPECT_TRUE(test::AreImagesEqual(transparent_image, user->GetImage()));
   ExpectUserImageInfo(test_account_id1_,
-                      user_manager::User::USER_IMAGE_EXTERNAL,
+                      user_manager::UserImage::Type::kExternal,
                       GetUserImagePath(test_account_id1_, "png"));
 
   const gfx::ImageSkia new_saved_image =
@@ -508,10 +478,10 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserImageFromProfileImage) {
   const gfx::ImageSkia& profile_image =
       user_image_manager->DownloadedProfileImage();
 
-  EXPECT_FALSE(user->HasDefaultImage());
-  EXPECT_EQ(user_manager::User::USER_IMAGE_PROFILE, user->image_index());
+  EXPECT_EQ(user_manager::UserImage::Type::kProfile, user->image_index());
   EXPECT_TRUE(test::AreImagesEqual(profile_image, user->GetImage()));
-  ExpectUserImageInfo(test_account_id1_, user_manager::User::USER_IMAGE_PROFILE,
+  ExpectUserImageInfo(test_account_id1_,
+                      user_manager::UserImage::Type::kProfile,
                       GetUserImagePath(test_account_id1_, "jpg"));
 
   const gfx::ImageSkia saved_image =
@@ -647,11 +617,10 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, SetAndClear) {
   store->Load();
   run_loop_->Run();
 
-  EXPECT_FALSE(user->HasDefaultImage());
-  EXPECT_EQ(user_manager::User::USER_IMAGE_EXTERNAL, user->image_index());
+  EXPECT_EQ(user_manager::UserImage::Type::kExternal, user->image_index());
   EXPECT_TRUE(test::AreImagesEqual(policy_image_, user->GetImage()));
   ExpectUserImageInfo(enterprise_account_id_,
-                      user_manager::User::USER_IMAGE_EXTERNAL,
+                      user_manager::UserImage::Type::kExternal,
                       GetUserImagePath(enterprise_account_id_, "jpg"));
 
   gfx::ImageSkia saved_image =
@@ -678,7 +647,6 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, SetAndClear) {
   base::RunLoop().RunUntilIdle();
 
   const int default_image_index = user->image_index();
-  EXPECT_TRUE(user->HasDefaultImage());
   EXPECT_TRUE(default_user_image::IsValidIndex(default_image_index));
   EXPECT_TRUE(default_user_image::IsInCurrentImageSet(default_image_index));
   ExpectUserImageInfo(enterprise_account_id_, default_image_index,
@@ -697,7 +665,6 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, SetAndClear) {
       UserImageManagerRegistry::Get()->GetManager(enterprise_account_id_);
   user_image_manager->SaveUserDefaultImageIndex(user_image_index);
 
-  EXPECT_TRUE(user->HasDefaultImage());
   EXPECT_EQ(user_image_index, user->image_index());
   ExpectUserImageInfo(enterprise_account_id_, user_image_index,
                       base::FilePath());
@@ -726,7 +693,6 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, PolicyOverridesUser) {
   user_image_manager->SaveUserDefaultImageIndex(
       default_user_image::kFirstDefaultImageIndex);
 
-  EXPECT_TRUE(user->HasDefaultImage());
   EXPECT_EQ(default_user_image::kFirstDefaultImageIndex, user->image_index());
   ExpectUserImageInfo(enterprise_account_id_,
                       default_user_image::kFirstDefaultImageIndex,
@@ -743,11 +709,10 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, PolicyOverridesUser) {
   store->Load();
   run_loop_->Run();
 
-  EXPECT_FALSE(user->HasDefaultImage());
-  EXPECT_EQ(user_manager::User::USER_IMAGE_EXTERNAL, user->image_index());
+  EXPECT_EQ(user_manager::UserImage::Type::kExternal, user->image_index());
   EXPECT_TRUE(test::AreImagesEqual(policy_image_, user->GetImage()));
   ExpectUserImageInfo(enterprise_account_id_,
-                      user_manager::User::USER_IMAGE_EXTERNAL,
+                      user_manager::UserImage::Type::kExternal,
                       GetUserImagePath(enterprise_account_id_, "jpg"));
 
   gfx::ImageSkia saved_image =
@@ -784,11 +749,10 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, UserDoesNotOverridePolicy) {
   store->Load();
   run_loop_->Run();
 
-  EXPECT_FALSE(user->HasDefaultImage());
-  EXPECT_EQ(user_manager::User::USER_IMAGE_EXTERNAL, user->image_index());
+  EXPECT_EQ(user_manager::UserImage::Type::kExternal, user->image_index());
   EXPECT_TRUE(test::AreImagesEqual(policy_image_, user->GetImage()));
   ExpectUserImageInfo(enterprise_account_id_,
-                      user_manager::User::USER_IMAGE_EXTERNAL,
+                      user_manager::UserImage::Type::kExternal,
                       GetUserImagePath(enterprise_account_id_, "jpg"));
 
   gfx::ImageSkia saved_image =
@@ -806,11 +770,10 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerPolicyTest, UserDoesNotOverridePolicy) {
   user_image_manager->SaveUserDefaultImageIndex(
       default_user_image::kFirstDefaultImageIndex);
 
-  EXPECT_FALSE(user->HasDefaultImage());
-  EXPECT_EQ(user_manager::User::USER_IMAGE_EXTERNAL, user->image_index());
+  EXPECT_EQ(user_manager::UserImage::Type::kExternal, user->image_index());
   EXPECT_TRUE(test::AreImagesEqual(policy_image_, user->GetImage()));
   ExpectUserImageInfo(enterprise_account_id_,
-                      user_manager::User::USER_IMAGE_EXTERNAL,
+                      user_manager::UserImage::Type::kExternal,
                       GetUserImagePath(enterprise_account_id_, "jpg"));
 
   saved_image =

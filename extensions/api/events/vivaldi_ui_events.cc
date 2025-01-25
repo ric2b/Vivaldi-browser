@@ -11,6 +11,8 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "components/input/native_web_keyboard_event.h"
+#include "components/input/render_widget_host_view_input.h"
 #include "components/prefs/pref_service.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
@@ -18,7 +20,6 @@
 #include "content/browser/renderer_host/render_widget_host_view_base.h"  // nogncheck
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/input/native_web_keyboard_event.h"
 #include "extensions/schema/tabs_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_gen_prefs.h"
@@ -56,7 +57,7 @@ bool ShouldPreventWindowGestures(VivaldiBrowserWindow* window) {
 }
 
 VivaldiBrowserWindow* FindMouseEventWindowFromView(
-    content::RenderWidgetHostViewInput* root_view,
+    input::RenderWidgetHostViewInput* root_view,
     bool ignore_native_children = false) {
   if (!root_view->GetViewRenderInputRouter()) {
     return nullptr;
@@ -142,7 +143,7 @@ VivaldiUIEvents::VivaldiUIEvents() = default;
 VivaldiUIEvents::~VivaldiUIEvents() = default;
 
 void VivaldiUIEvents::StartMouseGestureDetection(
-    content::RenderWidgetHostViewInput* root_view,
+    input::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& mouse_event,
     bool with_alt) {
   DCHECK(!mouse_gestures_);
@@ -283,7 +284,7 @@ bool VivaldiUIEvents::FinishMouseOrWheelGesture(bool with_alt) {
 }
 
 bool VivaldiUIEvents::CheckMouseMove(
-    content::RenderWidgetHostViewInput* root_view,
+    input::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& mouse_event) {
   DCHECK_EQ(mouse_event.GetType(), blink::WebInputEvent::Type::kMouseMove);
   bool eat_event = false;
@@ -320,7 +321,7 @@ bool VivaldiUIEvents::CheckMouseMove(
 }
 
 bool VivaldiUIEvents::CheckMouseGesture(
-    content::RenderWidgetHostViewInput* root_view,
+    input::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& mouse_event) {
   using blink::WebInputEvent;
   using blink::WebMouseEvent;
@@ -344,7 +345,7 @@ bool VivaldiUIEvents::CheckMouseGesture(
 }
 
 bool VivaldiUIEvents::CheckRockerGesture(
-    content::RenderWidgetHostViewInput* root_view,
+    input::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& mouse_event) {
   using blink::WebInputEvent;
   using blink::WebMouseEvent;
@@ -427,7 +428,7 @@ bool VivaldiUIEvents::CheckRockerGesture(
 // filter out clicks outside the webviews in the handler for the extension event
 // using document.elementFromPoint().
 void VivaldiUIEvents::CheckWebviewClick(
-    content::RenderWidgetHostViewInput* root_view,
+    input::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& mouse_event) {
   using blink::WebInputEvent;
   using Button = blink::WebPointerProperties::Button;
@@ -470,7 +471,7 @@ void VivaldiUIEvents::CheckWebviewClick(
 }
 
 bool VivaldiUIEvents::CheckBackForward(
-    content::RenderWidgetHostViewInput* root_view,
+    input::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& event) {
   using Button = blink::WebPointerProperties::Button;
 
@@ -506,7 +507,7 @@ bool VivaldiUIEvents::CheckBackForward(
 
 bool VivaldiUIEvents::DoHandleKeyboardEvent(
     content::RenderWidgetHostImpl* widget_host,
-    const content::NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   bool down = false;
   bool after_gesture = false;
   if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown) {
@@ -545,7 +546,7 @@ bool VivaldiUIEvents::DoHandleKeyboardEvent(
 }
 
 bool VivaldiUIEvents::DoHandleMouseEvent(
-    content::RenderWidgetHostViewInput* root_view,
+    input::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& event) {
   // Check if the view has pointer-lock enabled. This should take precedence so
   // that the webpage mouse events do not trigger Vivaldi mouse actions by
@@ -573,7 +574,7 @@ bool VivaldiUIEvents::DoHandleMouseEvent(
 }
 
 bool VivaldiUIEvents::DoHandleWheelEvent(
-    content::RenderWidgetHostViewInput* root_view,
+    input::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseWheelEvent& wheel_event,
     const ui::LatencyInfo& latency) {
   using blink::WebInputEvent;
@@ -622,7 +623,7 @@ bool VivaldiUIEvents::DoHandleWheelEvent(
 }
 
 bool VivaldiUIEvents::DoHandleWheelEventAfterChild(
-    content::RenderWidgetHostViewInput* root_view,
+    input::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseWheelEvent& event) {
   using blink::WebInputEvent;
   using blink::WebMouseWheelEvent;
@@ -703,7 +704,7 @@ bool VivaldiUIEvents::DoHandleDragEnd(content::WebContents* web_contents,
 void VivaldiUIEvents::SendKeyboardShortcutEvent(
     SessionID::id_type window_id,
     content::BrowserContext* browser_context,
-    const content::NativeWebKeyboardEvent& event,
+    const input::NativeWebKeyboardEvent& event,
     bool is_auto_repeat) {
   // We don't allow AltGr keyboard shortcuts
   if (event.GetModifiers() & blink::WebInputEvent::kAltGrKey)

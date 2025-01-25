@@ -8,14 +8,14 @@ void tint_zero_workgroup_memory(uint local_idx) {
   GroupMemoryBarrierWithGroupSync();
 }
 
-RWByteAddressBuffer prevent_dce : register(u0, space2);
+RWByteAddressBuffer prevent_dce : register(u0);
 
-void atomicOr_5e3d61() {
+uint atomicOr_5e3d61() {
   uint arg_1 = 1u;
   uint atomic_result_1 = 0u;
   InterlockedOr(arg_0, arg_1, atomic_result_1);
   uint res = atomic_result_1;
-  prevent_dce.Store(0u, asuint(res));
+  return res;
 }
 
 struct tint_symbol_1 {
@@ -24,7 +24,7 @@ struct tint_symbol_1 {
 
 void compute_main_inner(uint local_invocation_index) {
   tint_zero_workgroup_memory(local_invocation_index);
-  atomicOr_5e3d61();
+  prevent_dce.Store(0u, asuint(atomicOr_5e3d61()));
 }
 
 [numthreads(1, 1, 1)]

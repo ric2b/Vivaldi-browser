@@ -12,11 +12,13 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
+#include "base/time/time.h"
 #include "chrome/browser/ip_protection/ip_protection_config_http.h"
 #include "chrome/browser/ip_protection/ip_protection_switches.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/channel_info.h"
 #include "components/ip_protection/ip_protection_config_provider_helper.h"
+#include "components/ip_protection/ip_protection_proxy_config_fetcher.h"
 #include "components/prefs/pref_service.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/privacy_sandbox/tracking_protection_prefs.h"
@@ -35,6 +37,16 @@
 #include "net/third_party/quiche/src/quiche/blind_sign_auth/blind_sign_auth.h"
 #include "net/third_party/quiche/src/quiche/blind_sign_auth/proto/blind_sign_auth_options.pb.h"
 #include "net/third_party/quiche/src/quiche/blind_sign_auth/proto/spend_token_data.pb.h"
+
+namespace {
+// TODO(crbug.com/40216037): Once `google_apis::GetAPIKey()` handles this
+// logic we can remove this helper.
+std::string GetAPIKey() {
+  return chrome::GetChannel() == version_info::Channel::STABLE
+             ? google_apis::GetAPIKey()
+             : google_apis::GetNonStableAPIKey();
+}
+}  // namespace
 
 IpProtectionConfigProvider::IpProtectionConfigProvider(
     signin::IdentityManager* identity_manager,
@@ -62,11 +74,12 @@ void IpProtectionConfigProvider::SetUp() {
     ip_protection_config_http_ =
         std::make_unique<IpProtectionConfigHttp>(url_loader_factory_.get());
   }
-  if (!ip_protection_proxy_config_retriever_) {
-    ip_protection_proxy_config_retriever_ =
-        std::make_unique<IpProtectionProxyConfigRetriever>(
+  if (!ip_protection_proxy_config_fetcher_) {
+    ip_protection_proxy_config_fetcher_ =
+        std::make_unique<ip_protection::IpProtectionProxyConfigFetcher>(
             url_loader_factory_.get(),
-            IpProtectionConfigProviderHelper::kChromeIpBlinding, GetAPIKey());
+            ip_protection::IpProtectionConfigProviderHelper::kChromeIpBlinding,
+            GetAPIKey());
   }
   if (!bsa_) {
     if (!blind_sign_auth_) {
@@ -80,23 +93,18 @@ void IpProtectionConfigProvider::SetUp() {
   }
 }
 
-std::string IpProtectionConfigProvider::GetAPIKey() {
-  return chrome::GetChannel() == version_info::Channel::STABLE
-             ? google_apis::GetAPIKey()
-             : google_apis::GetNonStableAPIKey();
-}
-
 void IpProtectionConfigProvider::SetUpForTesting(
-    std::unique_ptr<IpProtectionProxyConfigRetriever>
+    std::unique_ptr<ip_protection::IpProtectionProxyConfigRetriever>
         ip_protection_proxy_config_retriever,
     std::unique_ptr<IpProtectionConfigHttp> ip_protection_config_http,
     quiche::BlindSignAuthInterface* bsa) {
   // Carefully destroy any existing values in the correct order.
-  ip_protection_proxy_config_retriever_ = nullptr;
+  ip_protection_proxy_config_fetcher_ = nullptr;
   ip_protection_config_http_ = nullptr;
   url_loader_factory_ = nullptr;
-  ip_protection_proxy_config_retriever_ =
-      std::move(ip_protection_proxy_config_retriever);
+  ip_protection_proxy_config_fetcher_ =
+      std::make_unique<ip_protection::IpProtectionProxyConfigFetcher>(
+          std::move(ip_protection_proxy_config_retriever));
   ip_protection_config_http_ = std::move(ip_protection_config_http);
 
   bsa_ = nullptr;
@@ -174,18 +182,26 @@ void IpProtectionConfigProvider::GetProxyList(GetProxyListCallback callback) {
   // plan changes, though, we should implement a way for these requests to stop
   // being made.
   if (!IsIpProtectionEnabled()) {
-    std::move(callback).Run(std::nullopt);
+    std::move(callback).Run(std::nullopt, nullptr);
+    return;
+  }
+
+  // If we are not able to call `GetProxyConfig` yet, return early.
+  if (ip_protection_proxy_config_fetcher_->GetNoGetProxyConfigUntilTime() >
+      base::Time::Now()) {
+    std::move(callback).Run(std::nullopt, nullptr);
     return;
   }
 
   // This feature flag is false by default.
   if (!net::features::kIpPrivacyIncludeOAuthTokenInGetProxyConfig.Get()) {
-    CallGetProxyConfig(std::move(callback), std::nullopt);
+    ip_protection_proxy_config_fetcher_->CallGetProxyConfig(std::move(callback),
+                                                            std::nullopt);
     return;
   }
 
   if (!CanRequestOAuthToken()) {
-    std::move(callback).Run(std::nullopt);
+    std::move(callback).Run(std::nullopt, nullptr);
     return;
   }
   auto request_token_callback =
@@ -275,36 +291,11 @@ void IpProtectionConfigProvider::OnRequestOAuthTokenCompletedForGetProxyConfig(
   if (error.state() != GoogleServiceAuthError::NONE) {
     VLOG(2) << "IPATP::OnRequestOAuthTokenCompletedForGetProxyConfig failed: "
             << static_cast<int>(error.state());
-    std::move(callback).Run(std::nullopt);
+    std::move(callback).Run(std::nullopt, nullptr);
     return;
   }
-
-  CallGetProxyConfig(std::move(callback), access_token_info.token);
-}
-
-void IpProtectionConfigProvider::CallGetProxyConfig(
-    GetProxyListCallback callback,
-    std::optional<std::string> oauth_token) {
-  ip_protection_proxy_config_retriever_->GetProxyConfig(
-      oauth_token,
-      base::BindOnce(&IpProtectionConfigProvider::OnGetProxyConfigCompleted,
-                     base::Unretained(this), std::move(callback)));
-}
-
-void IpProtectionConfigProvider::OnGetProxyConfigCompleted(
-    GetProxyListCallback callback,
-    base::expected<ip_protection::GetProxyConfigResponse, std::string>
-        response) {
-  if (!response.has_value()) {
-    VLOG(2) << "IPATP::GetProxyList failed: " << response.error();
-    std::move(callback).Run(std::nullopt);
-    return;
-  }
-
-  std::vector<net::ProxyChain> proxy_list =
-      IpProtectionConfigProviderHelper::GetProxyListFromProxyConfigResponse(
-          response.value());
-  std::move(callback).Run(std::move(proxy_list));
+  ip_protection_proxy_config_fetcher_->CallGetProxyConfig(
+      std::move(callback), access_token_info.token);
 }
 
 void IpProtectionConfigProvider::FetchBlindSignedToken(
@@ -371,9 +362,9 @@ void IpProtectionConfigProvider::OnFetchBlindSignedTokenCompleted(
 
   std::vector<network::mojom::BlindSignedAuthTokenPtr> bsa_tokens;
   for (const quiche::BlindSignToken& token : tokens.value()) {
-    network::mojom::BlindSignedAuthTokenPtr converted_token =
+    network::mojom::BlindSignedAuthTokenPtr converted_token = ip_protection::
         IpProtectionConfigProviderHelper::CreateBlindSignedAuthToken(token);
-    if (converted_token->token.empty()) {
+    if (converted_token.is_null() || converted_token->token.empty()) {
       TryGetAuthTokensComplete(
           std::nullopt, std::move(callback),
           IpProtectionTryGetAuthTokensResult::kFailedBSAOther);
@@ -441,24 +432,26 @@ std::optional<base::TimeDelta> IpProtectionConfigProvider::CalculateBackoff(
       // capabilities check, if this capability/eligibility is something that
       // can change and be detected via callbacks to an overridden
       // `IdentityManager::Observer::OnExtendedAccountInfoUpdated()` method,
-      // then update this failure so that we wait indefinitely as well (like the
-      // cases above).
+      // then update this failure so that we wait indefinitely as well (like
+      // the cases above).
     case IpProtectionTryGetAuthTokensResult::kFailedBSA403:
       // Eligibility, whether determined locally or on the server, is unlikely
       // to change quickly.
-      backoff = IpProtectionConfigProviderHelper::kNotEligibleBackoff;
+      backoff =
+          ip_protection::IpProtectionConfigProviderHelper::kNotEligibleBackoff;
       break;
     case IpProtectionTryGetAuthTokensResult::kFailedOAuthTokenTransient:
     case IpProtectionTryGetAuthTokensResult::kFailedBSAOther:
       // Transient failure to fetch an OAuth token, or some other error from
       // BSA that is probably transient.
-      backoff = IpProtectionConfigProviderHelper::kTransientBackoff;
+      backoff =
+          ip_protection::IpProtectionConfigProviderHelper::kTransientBackoff;
       exponential = true;
       break;
     case IpProtectionTryGetAuthTokensResult::kFailedBSA400:
     case IpProtectionTryGetAuthTokensResult::kFailedBSA401:
       // Both 400 and 401 suggest a bug, so do not retry aggressively.
-      backoff = IpProtectionConfigProviderHelper::kBugBackoff;
+      backoff = ip_protection::IpProtectionConfigProviderHelper::kBugBackoff;
       exponential = true;
       break;
     case IpProtectionTryGetAuthTokensResult::kFailedOAuthTokenDeprecated:
@@ -471,8 +464,8 @@ std::optional<base::TimeDelta> IpProtectionConfigProvider::CalculateBackoff(
   //  - Concurrent calls to `TryGetAuthTokens` from two network contexts are
   //  made and both fail in the same way
   //
-  //  - A new incognito window is opened (the new network context won't know to
-  //  backoff until after the first request)
+  //  - A new incognito window is opened (the new network context won't know
+  //  to backoff until after the first request)
   //
   //  - The network service restarts (the new network context(s) won't know to
   //  backoff until after the first request(s))
@@ -516,9 +509,9 @@ void IpProtectionConfigProvider::Shutdown() {
   tracking_protection_settings_ = nullptr;
   pref_service_ = nullptr;
   profile_ = nullptr;
-  // If we are shutting down, we can't process messages anymore because we rely
-  // on having `identity_manager_` to get the OAuth token. Thus, just reset the
-  // receiver set.
+  // If we are shutting down, we can't process messages anymore because we
+  // rely on having `identity_manager_` to get the OAuth token. Thus, just
+  // reset the receiver set.
   receivers_.Clear();
   bsa_ = nullptr;
 }
@@ -564,15 +557,15 @@ void IpProtectionConfigProvider::OnPrimaryAccountChanged(
           << static_cast<int>(signin_event_type);
   switch (signin_event_type) {
     case signin::PrimaryAccountChangeEvent::Type::kSet: {
-      // Account information is now available, so resume making requests for the
-      // OAuth token.
+      // Account information is now available, so resume making requests for
+      // the OAuth token.
       ClearOAuthTokenProblemBackoff();
       break;
     }
     case signin::PrimaryAccountChangeEvent::Type::kCleared:
       last_try_get_auth_tokens_backoff_ = base::TimeDelta::Max();
-      // No need to tell the Network Service - it will find out the next time it
-      // calls `TryGetAuthTokens()`.
+      // No need to tell the Network Service - it will find out the next time
+      // it calls `TryGetAuthTokens()`.
       break;
     case signin::PrimaryAccountChangeEvent::Type::kNone:
       break;
@@ -585,10 +578,10 @@ void IpProtectionConfigProvider::OnErrorStateOfRefreshTokenUpdatedForAccount(
     signin_metrics::SourceForRefreshTokenOperation token_operation_source) {
   VLOG(2) << "IPATP::OnErrorStateOfRefreshTokenUpdatedForAccount: "
           << error.ToString();
-  // Workspace user accounts can have account credential expirations that cause
-  // persistent OAuth token errors until the user logs in to Chrome again. To
-  // handle this, watch for these error events and treat them the same way we do
-  // login/logout events.
+  // Workspace user accounts can have account credential expirations that
+  // cause persistent OAuth token errors until the user logs in to Chrome
+  // again. To handle this, watch for these error events and treat them the
+  // same way we do login/logout events.
   if (error.state() == GoogleServiceAuthError::State::NONE) {
     ClearOAuthTokenProblemBackoff();
     return;
@@ -621,8 +614,8 @@ bool IpProtectionConfigProvider::IsIpProtectionEnabled() {
   }
 
   // If the user's enterprise has a policy for IP, use this regardless of user
-  // UX feature status. Enterprises should have the ability to enable or disable
-  // IPP even when users do not have UX access to the feature.
+  // UX feature status. Enterprises should have the ability to enable or
+  // disable IPP even when users do not have UX access to the feature.
   if (pref_service_->IsManagedPreference(prefs::kIpProtectionEnabled)) {
     return pref_service_->GetBoolean(prefs::kIpProtectionEnabled);
   }

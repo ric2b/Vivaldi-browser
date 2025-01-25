@@ -13,6 +13,7 @@
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/trace_event/trace_event.h"
 
@@ -63,7 +64,7 @@ CheckerImagingDecision GetAnimationDecision(const PaintImage& image) {
       return CheckerImagingDecision::kCanChecker;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return CheckerImagingDecision::kCanChecker;
 }
 
@@ -75,7 +76,7 @@ CheckerImagingDecision GetLoadDecision(const PaintImage& image) {
       return CheckerImagingDecision::kVetoedPartiallyLoadedImage;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return CheckerImagingDecision::kCanChecker;
 }
 
@@ -215,7 +216,7 @@ void CheckerImageTracker::ClearTracker(bool can_clear_decode_policy_tracking) {
     // re-decode and checker images that were pending invalidation.
     for (auto image_id : images_pending_invalidation_) {
       auto it = image_async_decode_state_.find(image_id);
-      DCHECK(it != image_async_decode_state_.end());
+      CHECK(it != image_async_decode_state_.end(), base::NotFatalUntil::M130);
       DCHECK_EQ(it->second.policy, DecodePolicy::SYNC);
       it->second.policy = DecodePolicy::ASYNC;
     }
@@ -253,6 +254,7 @@ void CheckerImageTracker::DidFinishImageDecode(
   // would have also requested an invalidation, so we can just schedule the next
   // decode here.
   if (it->second.policy == DecodePolicy::SYNC) {
+    // Expensive DCHECK without immediate dereference.
     DCHECK(decoding_mode_map_.find(image_id) != decoding_mode_map_.end());
     DCHECK_EQ(decoding_mode_map_[image_id], PaintImage::DecodingMode::kSync);
 
@@ -407,7 +409,7 @@ void CheckerImageTracker::ScheduleNextImageDecode() {
     // needed.
     PaintImage::Id image_id = candidate.stable_id();
     auto it = image_async_decode_state_.find(image_id);
-    DCHECK(it != image_async_decode_state_.end());
+    CHECK(it != image_async_decode_state_.end(), base::NotFatalUntil::M130);
     if (it->second.policy != DecodePolicy::ASYNC)
       continue;
 

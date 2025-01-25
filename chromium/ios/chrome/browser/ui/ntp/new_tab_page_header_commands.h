@@ -17,7 +17,10 @@
 - (void)fakeboxTapped;
 
 // Informs the receiver that the identity disc was tapped.
-- (void)identityDiscWasTapped;
+- (void)identityDiscWasTapped:(UIView*)identityDisc;
+
+// Informs the receiver that the customization menu entrypoint was tapped.
+- (void)customizationMenuWasTapped:(UIView*)customizationMenu;
 
 @end
 

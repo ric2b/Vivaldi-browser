@@ -9,10 +9,8 @@
 
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/application_delegate/startup_information.h"
-#import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
 
 @class AppState;
-@protocol BrowsingDataCommands;
 @protocol BrowserProviderInterface;
 @class MetricsMediator;
 
@@ -22,8 +20,7 @@
 //
 // By design, it has no public API of its own. Anything interacting with
 // MainController should be doing so through a specific protocol.
-@interface MainController
-    : NSObject <StartupInformation, BrowsingDataCommands, AppStateObserver>
+@interface MainController : NSObject <StartupInformation, AppStateObserver>
 
 // Contains information about the application state, for example whether the
 // safe mode is activated.
@@ -38,7 +35,7 @@
 // this is `nil`.
 // TODO(crbug.com/40266840) Remove this public property.
 @property(nonatomic, readonly) id<BrowserProviderInterface>
-    browserProviderInterface;
+    browserProviderInterfaceDoNotUse;
 
 @end
 

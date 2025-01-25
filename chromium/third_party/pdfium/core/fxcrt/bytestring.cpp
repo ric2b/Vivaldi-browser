@@ -51,7 +51,7 @@ ByteString ByteString::FormatInteger(int i) {
 // static
 ByteString ByteString::FormatFloat(float f) {
   char buf[32];
-  return ByteString(buf, FloatToString(f, buf));
+  return UNSAFE_TODO(ByteString(buf, FloatToString(f, buf)));
 }
 
 // static
@@ -91,7 +91,6 @@ ByteString ByteString::Format(const char* pFormat, ...) {
   return ret;
 }
 
-// TODO(tsepez): should be UNSAFE_BUFFER_USAGE.
 ByteString::ByteString(const char* pStr, size_t nLen) {
   if (nLen) {
     // SAFETY: caller ensures `pStr` points to at least `nLen` chars.

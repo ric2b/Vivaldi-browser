@@ -4,6 +4,9 @@
 
 #include "ash/picker/picker_clipboard_provider.h"
 
+#include <string>
+#include <string_view>
+
 #include "ash/clipboard/clipboard_history_item.h"
 #include "ash/public/cpp/clipboard_history_controller.h"
 #include "base/i18n/case_conversion.h"
@@ -11,6 +14,9 @@
 
 namespace ash {
 namespace {
+
+constexpr base::TimeDelta kRecencyThreshold = base::Seconds(60);
+
 std::optional<PickerSearchResult::ClipboardData::DisplayFormat>
 GetDisplayFormat(crosapi::mojom::ClipboardHistoryDisplayFormat format) {
   switch (format) {
@@ -27,7 +33,7 @@ GetDisplayFormat(crosapi::mojom::ClipboardHistoryDisplayFormat format) {
   }
 }
 
-bool MatchQuery(const ClipboardHistoryItem& item, const std::u16string& query) {
+bool MatchQuery(const ClipboardHistoryItem& item, std::u16string_view query) {
   if (query.empty()) {
     return true;
   }
@@ -48,27 +54,23 @@ PickerClipboardProvider::PickerClipboardProvider(base::Clock* clock)
 PickerClipboardProvider::~PickerClipboardProvider() = default;
 
 void PickerClipboardProvider::FetchResults(OnFetchResultsCallback callback,
-                                           const std::u16string& query,
-                                           base::TimeDelta recency) {
+                                           std::u16string_view query) {
   ash::ClipboardHistoryController* clipboard_history_controller =
       ash::ClipboardHistoryController::Get();
   if (clipboard_history_controller) {
-    clipboard_history_controller->GetHistoryValues(base::BindOnce(
-        &PickerClipboardProvider::OnFetchHistory,
-        weak_ptr_factory_.GetWeakPtr(), std::move(callback), query, recency));
+    clipboard_history_controller->GetHistoryValues(
+        base::BindOnce(&PickerClipboardProvider::OnFetchHistory,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback),
+                       std::u16string(query)));
   }
 }
 
 void PickerClipboardProvider::OnFetchHistory(
     OnFetchResultsCallback callback,
-    const std::u16string& query,
-    base::TimeDelta recency,
+    std::u16string query,
     std::vector<ClipboardHistoryItem> items) {
   std::vector<PickerSearchResult> results;
   for (const auto& item : items) {
-    if ((clock_->Now() - item.time_copied()) > recency) {
-      continue;
-    }
     if (!MatchQuery(item, query)) {
       continue;
     }
@@ -76,8 +78,8 @@ void PickerClipboardProvider::OnFetchHistory(
             display_format = GetDisplayFormat(item.display_format());
         display_format.has_value()) {
       results.push_back(PickerSearchResult::Clipboard(
-          item.id(), *display_format, item.display_text(),
-          item.display_image()));
+          item.id(), *display_format, item.display_text(), item.display_image(),
+          (clock_->Now() - item.time_copied()) < kRecencyThreshold));
     }
   }
   std::move(callback).Run(std::move(results));

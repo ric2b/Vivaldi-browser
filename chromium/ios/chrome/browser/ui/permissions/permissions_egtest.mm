@@ -9,11 +9,12 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
+#import "components/signin/internal/identity_manager/account_capabilities_constants.h"
+#import "ios/chrome/browser/badges/ui_bundled/badge_constants.h"
 #import "ios/chrome/browser/overlays/model/public/web_content_area/alert_constants.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui_test_util.h"
-#import "ios/chrome/browser/ui/badges/badge_constants.h"
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_constants.h"
 #import "ios/chrome/browser/ui/infobars/infobar_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/ui/infobars/modals/infobar_modal_constants.h"
@@ -195,6 +196,11 @@ void TapDoneButtonOnInfobarModal() {
 // notification and then toggle camera permission through the infobar modal
 // through pressing the "Edit" button on the banner.
 - (void)testAllowAndBlockCameraPermission {
+  // TODO(crbug.com/342245057): Camera access is broken in the simulator on iOS
+  // 17.5.
+  if (@available(iOS 17.5, *)) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 17.5.");
+  }
   GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
   [ChromeEarlGrey
       loadURL:self.testServer->GetURL("/permissions/camera_only.html")];
@@ -273,7 +279,11 @@ void TapDoneButtonOnInfobarModal() {
 // could see a banner notification and then toggle the permissions through both
 // the infobar modal and the location bar badge.
 - (void)testAllowAndBlockCameraAndMicrophonePermissions {
-  // TODO(crbug.com/40921852): Failing on iOS17.
+  // TODO(crbug.com/342245057): Camera access is broken in the simulator on iOS
+  // 17.5.
+  if (@available(iOS 17.5, *)) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 17.5.");
+  }
   GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
   [ChromeEarlGrey loadURL:self.testServer->GetURL(
                               "/permissions/camera_and_microphone.html")];
@@ -370,6 +380,11 @@ void TapDoneButtonOnInfobarModal() {
 // Tests that permissions infobar banner, modal and badge works the same way in
 // incognito by toggling camera access.
 - (void)testTogglePermissionsInIncognito {
+  // TODO(crbug.com/342245057): Camera access is broken in the simulator on iOS
+  // 17.5.
+  if (@available(iOS 17.5, *)) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 17.5.");
+  }
   GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
   [ChromeEarlGrey openNewIncognitoTab];
   [ChromeEarlGrey
@@ -545,6 +560,11 @@ void TapDoneButtonOnInfobarModal() {
 
 // Tests that permissions are reset after reload.
 - (void)testPermissionsAfterReload {
+  // TODO(crbug.com/342245057): Camera access is broken in the simulator on iOS
+  // 17.5.
+  if (@available(iOS 17.5, *)) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 17.5.");
+  }
   GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
   // Opens a page that requests camera permission.
   [ChromeEarlGrey
@@ -642,8 +662,10 @@ void TapDoneButtonOnInfobarModal() {
              forContentSettingsType:ContentSettingsType::MEDIASTREAM_MIC];
 
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity];
-  [SigninEarlGrey setIsSubjectToParentalControls:YES forIdentity:fakeIdentity];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity
+                 withCapabilities:@{
+                   @(kIsSubjectToParentalControlsCapabilityName) : @YES,
+                 }];
 
   [SigninEarlGrey signinWithFakeIdentity:fakeIdentity];
 

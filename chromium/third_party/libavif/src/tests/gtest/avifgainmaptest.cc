@@ -25,7 +25,6 @@ const char* data_path = nullptr;
 
 void CheckGainMapMetadataMatches(const avifGainMapMetadata& lhs,
                                  const avifGainMapMetadata& rhs) {
-  EXPECT_EQ(lhs.backwardDirection, rhs.backwardDirection);
   EXPECT_EQ(lhs.baseHdrHeadroomN, rhs.baseHdrHeadroomN);
   EXPECT_EQ(lhs.baseHdrHeadroomD, rhs.baseHdrHeadroomD);
   EXPECT_EQ(lhs.alternateHdrHeadroomN, rhs.alternateHdrHeadroomN);
@@ -47,12 +46,15 @@ void CheckGainMapMetadataMatches(const avifGainMapMetadata& lhs,
 
 avifGainMapMetadata GetTestGainMapMetadata(bool base_rendition_is_hdr) {
   avifGainMapMetadata metadata = {};
-  metadata.backwardDirection = base_rendition_is_hdr;
   metadata.useBaseColorSpace = true;
   metadata.baseHdrHeadroomN = 0;
   metadata.baseHdrHeadroomD = 1;
   metadata.alternateHdrHeadroomN = 6;
   metadata.alternateHdrHeadroomD = 2;
+  if (base_rendition_is_hdr) {
+    std::swap(metadata.baseHdrHeadroomN, metadata.alternateHdrHeadroomN);
+    std::swap(metadata.baseHdrHeadroomD, metadata.alternateHdrHeadroomD);
+  }
   for (int c = 0; c < 3; ++c) {
     metadata.baseOffsetN[c] = 10 * c;
     metadata.baseOffsetD[c] = 1000;
@@ -119,6 +121,7 @@ ImagePtr CreateTestImageWithGainMap(bool base_rendition_is_hdr) {
 
 TEST(GainMapTest, EncodeDecodeBaseImageSdr) {
   ImagePtr image = CreateTestImageWithGainMap(/*base_rendition_is_hdr=*/false);
+  ASSERT_NE(image, nullptr);
 
   EncoderPtr encoder(avifEncoderCreate());
   ASSERT_NE(encoder, nullptr);
@@ -181,6 +184,7 @@ TEST(GainMapTest, EncodeDecodeBaseImageSdr) {
 
 TEST(GainMapTest, EncodeDecodeBaseImageHdr) {
   ImagePtr image = CreateTestImageWithGainMap(/*base_rendition_is_hdr=*/true);
+  ASSERT_NE(image, nullptr);
 
   EncoderPtr encoder(avifEncoderCreate());
   ASSERT_NE(encoder, nullptr);
@@ -230,8 +234,50 @@ TEST(GainMapTest, EncodeDecodeBaseImageHdr) {
   //      .write(reinterpret_cast<char*>(encoded.data), encoded.size);
 }
 
+TEST(GainMapTest, EncodeDecodeOrientedNotEqual) {
+  ImagePtr image = CreateTestImageWithGainMap(/*base_rendition_is_hdr=*/false);
+  ASSERT_NE(image, nullptr);
+  image->gainMap->image->transformFlags = AVIF_TRANSFORM_IMIR;
+  // The gain map should have no transformative property. Expect a failure.
+  EncoderPtr encoder(avifEncoderCreate());
+  ASSERT_NE(encoder, nullptr);
+  testutil::AvifRwData encoded;
+  ASSERT_EQ(avifEncoderWrite(encoder.get(), image.get(), &encoded),
+            AVIF_RESULT_ENCODE_GAIN_MAP_FAILED);
+}
+
+TEST(GainMapTest, EncodeDecodeOriented) {
+  ImagePtr image = CreateTestImageWithGainMap(/*base_rendition_is_hdr=*/false);
+  ASSERT_NE(image, nullptr);
+  image->transformFlags = AVIF_TRANSFORM_IROT | AVIF_TRANSFORM_IMIR;
+  image->irot.angle = 1;
+  image->imir.axis = 0;
+
+  EncoderPtr encoder(avifEncoderCreate());
+  ASSERT_NE(encoder, nullptr);
+  testutil::AvifRwData encoded;
+  ASSERT_EQ(avifEncoderWrite(encoder.get(), image.get(), &encoded),
+            AVIF_RESULT_OK);
+
+  DecoderPtr decoder(avifDecoderCreate());
+  ASSERT_NE(decoder, nullptr);
+  decoder->enableDecodingGainMap = AVIF_TRUE;
+  decoder->enableParsingGainMapMetadata = AVIF_TRUE;
+  ASSERT_EQ(avifDecoderSetIOMemory(decoder.get(), encoded.data, encoded.size),
+            AVIF_RESULT_OK);
+  ASSERT_EQ(avifDecoderParse(decoder.get()), AVIF_RESULT_OK);
+
+  // Verify that the transformative properties were kept.
+  EXPECT_EQ(decoder->image->transformFlags, image->transformFlags);
+  EXPECT_EQ(decoder->image->irot.angle, image->irot.angle);
+  EXPECT_EQ(decoder->image->imir.axis, image->imir.axis);
+  EXPECT_EQ(decoder->image->gainMap->image->transformFlags,
+            AVIF_TRANSFORM_NONE);
+}
+
 TEST(GainMapTest, EncodeDecodeMetadataSameDenominator) {
   ImagePtr image = CreateTestImageWithGainMap(/*base_rendition_is_hdr=*/true);
+  ASSERT_NE(image, nullptr);
 
   const uint32_t kDenominator = 1000;
   image->gainMap->metadata.baseHdrHeadroomD = kDenominator;
@@ -269,6 +315,7 @@ TEST(GainMapTest, EncodeDecodeMetadataSameDenominator) {
 
 TEST(GainMapTest, EncodeDecodeMetadataAllChannelsIdentical) {
   ImagePtr image = CreateTestImageWithGainMap(/*base_rendition_is_hdr=*/true);
+  ASSERT_NE(image, nullptr);
 
   for (int c = 0; c < 3; ++c) {
     image->gainMap->metadata.baseOffsetN[c] = 1;
@@ -729,7 +776,9 @@ TEST(GainMapTest, NoGainMap) {
   EXPECT_EQ(decoded->gainMap, nullptr);
 }
 
-TEST(GainMapTest, DecodeGainMapGrid) {
+// TODO(https://github.com/AOMediaCodec/libavif/issues/2261): Regenerate test
+// files.
+TEST(GainMapTest, DISABLED_DecodeGainMapGrid) {
   const std::string path =
       std::string(data_path) + "color_grid_gainmap_different_grid.avif";
   DecoderPtr decoder(avifDecoderCreate());
@@ -769,7 +818,9 @@ TEST(GainMapTest, DecodeGainMapGrid) {
       << avifResultToString(result) << " " << decoder->diag.error;
 }
 
-TEST(GainMapTest, DecodeColorGridGainMapNoGrid) {
+// TODO(https://github.com/AOMediaCodec/libavif/issues/2261): Regenerate test
+// files.
+TEST(GainMapTest, DISABLED_DecodeColorGridGainMapNoGrid) {
   const std::string path =
       std::string(data_path) + "color_grid_alpha_grid_gainmap_nogrid.avif";
   ImagePtr decoded(avifImageCreateEmpty());
@@ -793,7 +844,9 @@ TEST(GainMapTest, DecodeColorGridGainMapNoGrid) {
   EXPECT_EQ(decoded->gainMap->metadata.alternateHdrHeadroomD, 2u);
 }
 
-TEST(GainMapTest, DecodeColorNoGridGainMapGrid) {
+// TODO(https://github.com/AOMediaCodec/libavif/issues/2261): Regenerate test
+// files.
+TEST(GainMapTest, DISABLED_DecodeColorNoGridGainMapGrid) {
   const std::string path =
       std::string(data_path) + "color_nogrid_alpha_nogrid_gainmap_grid.avif";
   ImagePtr decoded(avifImageCreateEmpty());
@@ -839,7 +892,6 @@ TEST(GainMapTest, ConvertMetadata) {
   metadata_double.alternateOffset[1] = 0.0;
   metadata_double.baseHdrHeadroom = 1.0;
   metadata_double.alternateHdrHeadroom = 10.0;
-  metadata_double.backwardDirection = AVIF_TRUE;
 
   // Convert to avifGainMapMetadata.
   avifGainMapMetadata metadata = {};
@@ -864,7 +916,6 @@ TEST(GainMapTest, ConvertMetadata) {
   EXPECT_FRACTION_NEAR(metadata.alternateHdrHeadroomN,
                        metadata.alternateHdrHeadroomD,
                        metadata_double.alternateHdrHeadroom);
-  EXPECT_EQ(metadata.backwardDirection, metadata_double.backwardDirection);
 
   // Convert back to avifGainMapMetadataDouble.
   avifGainMapMetadataDouble metadata_double2 = {};
@@ -888,8 +939,6 @@ TEST(GainMapTest, ConvertMetadata) {
               kEpsilon);
   EXPECT_NEAR(metadata_double2.alternateHdrHeadroom,
               metadata_double.alternateHdrHeadroom, kEpsilon);
-  EXPECT_EQ(metadata_double2.backwardDirection,
-            metadata_double.backwardDirection);
 }
 
 TEST(GainMapTest, ConvertMetadataToFractionInvalid) {
@@ -910,7 +959,6 @@ TEST(GainMapTest, ConvertMetadataToDoubleInvalid) {
 static void SwapBaseAndAlternate(const avifImage& new_alternate,
                                  avifGainMap& gain_map) {
   avifGainMapMetadata& metadata = gain_map.metadata;
-  metadata.backwardDirection = !metadata.backwardDirection;
   metadata.useBaseColorSpace = !metadata.useBaseColorSpace;
   std::swap(metadata.baseHdrHeadroomN, metadata.alternateHdrHeadroomN);
   std::swap(metadata.baseHdrHeadroomD, metadata.alternateHdrHeadroomD);

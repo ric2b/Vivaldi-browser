@@ -1072,7 +1072,6 @@ std::ostream& operator<<(std::ostream& out,
 
   PRINT_IF_NOT_DEFAULT(arc)
   PRINT_IF_NOT_DEFAULT(browser)
-  PRINT_IF_NOT_DEFAULT(files_experimental)
   PRINT_IF_NOT_DEFAULT(generic_documents_provider)
   PRINT_IF_NOT_DEFAULT(mount_volumes)
   PRINT_IF_NOT_DEFAULT(native_smb)
@@ -1157,15 +1156,18 @@ class LocalTestVolume : public TestVolume {
             << "Failed to create a symlink: " << target_path.value();
         break;
       case AddEntriesMessage::TEAM_DRIVE:
-        NOTREACHED() << "Can't create a team drive in a local volume: "
-                     << target_path.value();
+        NOTREACHED_IN_MIGRATION()
+            << "Can't create a team drive in a local volume: "
+            << target_path.value();
         break;
       case AddEntriesMessage::COMPUTER:
-        NOTREACHED() << "Can't create a computer in a local volume: "
-                     << target_path.value();
+        NOTREACHED_IN_MIGRATION()
+            << "Can't create a computer in a local volume: "
+            << target_path.value();
         break;
       default:
-        NOTREACHED() << "Unsupported entry type for: " << target_path.value();
+        NOTREACHED_IN_MIGRATION()
+            << "Unsupported entry type for: " << target_path.value();
     }
 
     ASSERT_TRUE(UpdateModifiedTime(entry, target_path));
@@ -2194,7 +2196,7 @@ class MockGuestOsMountProvider : public guest_os::GuestOsMountProvider {
     } else if (vm_type == "unknown") {
       vm_type_ = guest_os::VmType::UNKNOWN;
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       vm_type_ = guest_os::VmType::UNKNOWN;
     }
   }
@@ -2308,7 +2310,7 @@ void FileManagerBrowserTestBase::DevToolsAgentHostCrashed(
   if (devtools_agent_.find(host) == devtools_agent_.end()) {
     return;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void FileManagerBrowserTestBase::SetUp() {
@@ -2362,12 +2364,6 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
 
   // Make sure to run the ARC storage UI toast tests.
   enabled_features.push_back(arc::kUsbStorageUIFeature);
-
-  if (options.files_experimental) {
-    enabled_features.push_back(ash::features::kFilesAppExperimental);
-  } else {
-    disabled_features.push_back(ash::features::kFilesAppExperimental);
-  }
 
   if (options.enable_conflict_dialog) {
     enabled_features.push_back(ash::features::kFilesConflictDialog);
@@ -2465,6 +2461,14 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
     disabled_features.push_back(ash::features::kGoogleOneOfferFilesBanner);
   }
 
+  if (options.disable_google_one_offer_files_banner) {
+    enabled_features.push_back(
+        ash::features::kDisableGoogleOneOfferFilesBanner);
+  } else {
+    disabled_features.push_back(
+        ash::features::kDisableGoogleOneOfferFilesBanner);
+  }
+
   if (options.enable_drive_bulk_pinning) {
     enabled_features.push_back(ash::features::kDriveFsBulkPinning);
     enabled_features.push_back(
@@ -2495,8 +2499,10 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
 
   if (options.enable_skyvault) {
     enabled_features.push_back(features::kSkyVault);
+    enabled_features.push_back(features::kSkyVaultV2);
   } else {
     disabled_features.push_back(features::kSkyVault);
+    disabled_features.push_back(features::kSkyVaultV2);
   }
 
   // This is destroyed in |TearDown()|. We cannot initialize this in the
@@ -2881,14 +2887,6 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     return;
   }
 
-  if (name == "isFilesAppExperimental") {
-    // Return whether the flag Files Experimental is enabled.
-    *output = base::FeatureList::IsEnabled(ash::features::kFilesAppExperimental)
-                  ? "true"
-                  : "false";
-    return;
-  }
-
   if (name == "isInGuestMode") {
     // Obtain if the test runs in guest or incognito mode.
     LOG(INFO) << GetTestCaseName() << " is in " << options.guest_mode
@@ -3112,7 +3110,7 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
       }
     }
     // Fail the test if the chrome-untrusted:// frame wasn't found.
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 
@@ -3486,11 +3484,27 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     return;
   }
 
-  if (name == "setupSkyVault") {
-    profile()->GetPrefs()->SetString(prefs::kFilesAppDefaultLocation,
-                                     download_dir_util::kLocationGoogleDrive);
+  if (name == "setLocalFilesEnabled") {
+    std::optional<bool> enabled = value.FindBool("enabled");
+    ASSERT_TRUE(enabled.has_value());
     g_browser_process->local_state()->SetBoolean(prefs::kLocalUserFilesAllowed,
-                                                 false);
+                                                 enabled.value());
+    return;
+  }
+
+  if (name == "skipSkyVaultMigration") {
+    file_manager::VolumeManager* volume_manager = VolumeManager::Get(profile());
+    volume_manager->OnMigrationSucceededForTesting();
+    return;
+  }
+
+  if (name == "setDefaultLocation") {
+    const std::string* defaultLocation = value.FindString("defaultLocation");
+    ASSERT_TRUE(defaultLocation &&
+                (*defaultLocation == download_dir_util::kLocationGoogleDrive ||
+                 *defaultLocation == download_dir_util::kLocationOneDrive));
+    profile()->GetPrefs()->SetString(prefs::kFilesAppDefaultLocation,
+                                     *defaultLocation);
     return;
   }
 
@@ -3655,7 +3669,8 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     } else if (*status == "connected") {
       SetDriveConnectionStatusForTesting(ConnectionStatus::kConnected);
     } else {
-      NOTREACHED() << "Unknown status (" << *status << ") provided";
+      NOTREACHED_IN_MIGRATION()
+          << "Unknown status (" << *status << ") provided";
     }
 
     auto* const service =
@@ -3702,7 +3717,8 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
   }
 
   if (name == "dispatchNativeMediaKey") {
-    ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_MEDIA_PLAY_PAUSE, 0);
+    ui::KeyEvent key_event(ui::EventType::kKeyPressed,
+                           ui::VKEY_MEDIA_PLAY_PAUSE, 0);
     ASSERT_TRUE(PostKeyEvent(&key_event));
     *output = "mediaKeyDispatched";
     return;
@@ -3713,7 +3729,7 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     bool shift = value.FindBool("shift").value_or(false);
 
     int flag = shift ? ui::EF_SHIFT_DOWN : 0;
-    ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_TAB, flag);
+    ui::KeyEvent key_event(ui::EventType::kKeyPressed, ui::VKEY_TAB, flag);
     ASSERT_TRUE(PostKeyEvent(&key_event));
     *output = "tabKeyDispatched";
     return;
@@ -3829,11 +3845,6 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
 
   if (name == "isMirrorSyncEnabled") {
     *output = options.enable_mirrorsync ? "true" : "false";
-    return;
-  }
-
-  if (name == "isFilesExperimentalEnabled") {
-    *output = options.files_experimental ? "true" : "false";
     return;
   }
 

@@ -35,26 +35,11 @@
 #include "ui/views/style/platform_style.h"
 #include "ui/views/test/button_test_api.h"
 #include "ui/views/view.h"
-#include "ui/views/view_observer.h"
 #include "ui/views/view_utils.h"
 
 #if BUILDFLAG(IS_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
 #endif
-
-class ExtensionsMenuTestUtil::MenuViewObserver : public views::ViewObserver {
- public:
-  explicit MenuViewObserver(ExtensionsMenuView** menu_view_ptr)
-      : menu_view_ptr_(menu_view_ptr) {}
-  ~MenuViewObserver() override = default;
-
- private:
-  void OnViewIsDeleting(views::View* observed_view) override {
-    *menu_view_ptr_ = nullptr;
-  }
-
-  const raw_ptr<ExtensionsMenuView*> menu_view_ptr_;
-};
 
 // A view wrapper class that owns the ExtensionsToolbarContainer.
 // This is used when we don't have a "real" browser window, because the
@@ -115,9 +100,7 @@ ExtensionsMenuTestUtil::ExtensionsMenuTestUtil(Browser* browser,
     menu_view_ = views::AsViewClass<ExtensionsMenuView>(
         bubble_dialog->GetContentsView());
 
-    menu_view_observer_ = std::make_unique<MenuViewObserver>(&menu_view_);
-    static_cast<views::View*>(menu_view_)
-        ->AddObserver(menu_view_observer_.get());
+    menu_view_->View::AddObserver(this);
   }
 
   if (is_real_window) {
@@ -132,6 +115,11 @@ ExtensionsMenuTestUtil::~ExtensionsMenuTestUtil() {
 
   // Close the menu if when we own the menu view.
   menu_view_->GetWidget()->CloseNow();
+}
+
+void ExtensionsMenuTestUtil::OnViewIsDeleting(views::View* observed_view) {
+  CHECK_EQ(observed_view, menu_view_);
+  menu_view_ = nullptr;
 }
 
 int ExtensionsMenuTestUtil::NumberOfBrowserActions() {
@@ -149,6 +137,14 @@ void ExtensionsMenuTestUtil::InspectPopup(const extensions::ExtensionId& id) {
   view_controller->InspectPopup();
 }
 
+void ExtensionsMenuTestUtil::TriggerPopupForAPI(
+    const extensions::ExtensionId& id) {
+  auto* view_controller = static_cast<ExtensionActionViewController*>(
+      extensions_container_->GetActionForId(id));
+  DCHECK(view_controller);
+  view_controller->TriggerPopupForAPI();
+}
+
 gfx::Image ExtensionsMenuTestUtil::GetIcon(const extensions::ExtensionId& id) {
   ExtensionMenuItemView* view = GetMenuItemViewForId(id);
   DCHECK(view);
@@ -162,7 +158,7 @@ void ExtensionsMenuTestUtil::Press(const extensions::ExtensionId& id) {
   ExtensionsMenuButton* primary_button =
       view->primary_action_button_for_testing();
 
-  ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+  ui::MouseEvent event(ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
                        ui::EventTimeForNow(), 0, 0);
   views::test::ButtonTestApi(primary_button).NotifyClick(event);
 }

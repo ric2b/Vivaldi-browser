@@ -15,18 +15,26 @@
 
 // Target-specific helper functions for use by *_test.cc.
 
-#include <stdint.h>
+#include <stdio.h>
+#include <string.h>  // memset
 
+// IWYU pragma: begin_exports
+#include "hwy/aligned_allocator.h"
 #include "hwy/base.h"
+#include "hwy/detect_targets.h"
+#include "hwy/per_target.h"
+#include "hwy/targets.h"
 #include "hwy/tests/hwy_gtest.h"
 #include "hwy/tests/test_util.h"
+// IWYU pragma: end_exports
 
 // After test_util (also includes highway.h)
 #include "hwy/print-inl.h"
 
 // Per-target include guard
-#if defined(HIGHWAY_HWY_TESTS_TEST_UTIL_INL_H_) == \
-    defined(HWY_TARGET_TOGGLE)
+// clang-format off
+#if defined(HIGHWAY_HWY_TESTS_TEST_UTIL_INL_H_) == defined(HWY_TARGET_TOGGLE)  // NOLINT
+// clang-format on
 #ifdef HIGHWAY_HWY_TESTS_TEST_UTIL_INL_H_
 #undef HIGHWAY_HWY_TESTS_TEST_UTIL_INL_H_
 #else
@@ -37,14 +45,83 @@ HWY_BEFORE_NAMESPACE();
 namespace hwy {
 namespace HWY_NAMESPACE {
 
-// Compare expected vector to vector.
-// HWY_INLINE works around a Clang SVE compiler bug where all but the first
-// 128 bits (the NEON register) of actual are zero.
-template <class D, typename T = TFromD<D>, class V = Vec<D>>
-HWY_INLINE void AssertVecEqual(D d, const T* expected, VecArg<V> actual,
+// Like Iota, but avoids wrapping around to negative integers.
+template <class D, HWY_IF_FLOAT_D(D)>
+HWY_INLINE Vec<D> PositiveIota(D d) {
+  return Iota(d, 1);
+}
+template <class D, HWY_IF_NOT_FLOAT_NOR_SPECIAL_D(D)>
+HWY_INLINE Vec<D> PositiveIota(D d) {
+  const auto vi = Iota(d, 1);
+  return Max(And(vi, Set(d, LimitsMax<TFromD<D>>())),
+             Set(d, static_cast<TFromD<D>>(1)));
+}
+
+// Same as Iota, but supports bf16. This is possibly too expensive for general
+// use, but fine for tests.
+template <class D, typename First, HWY_IF_NOT_SPECIAL_FLOAT_D(D)>
+VFromD<D> IotaForSpecial(D d, First first) {
+  return Iota(d, first);
+}
+#if HWY_HAVE_FLOAT16
+template <class D, typename First, HWY_IF_F16_D(D), HWY_IF_LANES_GT_D(D, 1)>
+VFromD<D> IotaForSpecial(D d, First first) {
+  return Iota(d, first);
+}
+#else   // !HWY_HAVE_FLOAT16
+template <class D, typename First, HWY_IF_F16_D(D), HWY_IF_LANES_GT_D(D, 1),
+          HWY_IF_POW2_GT_D(D, -1)>
+VFromD<D> IotaForSpecial(D d, First first) {
+  const Repartition<float, D> df;
+  const size_t NW = Lanes(d) / 2;
+  const Half<D> dh;
+  const float first2 = static_cast<float>(first) + static_cast<float>(NW);
+  return Combine(d, DemoteTo(dh, Iota(df, first2)),
+                 DemoteTo(dh, Iota(df, first)));
+  // TODO(janwas): enable when supported for f16
+  // return OrderedDemote2To(d, Iota(df, first), Iota(df, first + NW));
+}
+// For partial vectors, a single f32 vector is enough, and the prior overload
+// might not be able to Repartition.
+template <class D, typename First, HWY_IF_F16_D(D), HWY_IF_LANES_GT_D(D, 1),
+          HWY_IF_POW2_LE_D(D, -1)>
+VFromD<D> IotaForSpecial(D d, First first) {
+  const Rebind<float, D> df;
+  return DemoteTo(d, Iota(df, first));
+}
+#endif  // HWY_HAVE_FLOAT16
+template <class D, typename First, HWY_IF_BF16_D(D), HWY_IF_LANES_GT_D(D, 1),
+          HWY_IF_POW2_GT_D(D, -1)>
+VFromD<D> IotaForSpecial(D d, First first) {
+  const Repartition<float, D> df;
+  const float first1 = ConvertScalarTo<float>(first);
+  const float first2 = first1 + static_cast<float>(Lanes(d) / 2);
+  return OrderedDemote2To(d, Iota(df, first1), Iota(df, first2));
+}
+// For partial vectors, a single f32 vector is enough, and the prior overload
+// might not be able to Repartition.
+template <class D, typename First, HWY_IF_BF16_D(D), HWY_IF_LANES_GT_D(D, 1),
+          HWY_IF_POW2_LE_D(D, -1)>
+VFromD<D> IotaForSpecial(D d, First first) {
+  const Rebind<float, D> df;
+  return DemoteTo(d, Iota(df, first));
+}
+// OrderedDemote2To does not work for single lanes, so special-case that.
+template <class D, typename First, HWY_IF_SPECIAL_FLOAT_D(D),
+          HWY_IF_LANES_D(D, 1)>
+VFromD<D> IotaForSpecial(D d, First first) {
+  const Rebind<float, D> df;
+  return DemoteTo(d, Set(df, static_cast<float>(first)));
+}
+
+// Compare expected array to vector.
+// TODO(b/287462770): inline to work around incorrect SVE codegen.
+template <class D, typename T = TFromD<D>>
+HWY_INLINE void AssertVecEqual(D d, const T* expected, Vec<D> actual,
                                const char* filename, const int line) {
   const size_t N = Lanes(d);
   auto actual_lanes = AllocateAligned<T>(N);
+  HWY_ASSERT(actual_lanes);
   Store(actual, d, actual_lanes.get());
 
   const auto info = hwy::detail::MakeTypeInfo<T>();
@@ -53,15 +130,22 @@ HWY_INLINE void AssertVecEqual(D d, const T* expected, VecArg<V> actual,
                                 target_name, filename, line);
 }
 
-// Compare expected lanes to vector.
-// HWY_INLINE works around a Clang SVE compiler bug where all but the first
-// 128 bits (the NEON register) of actual are zero.
-template <class D, typename T = TFromD<D>, class V = Vec<D>>
-HWY_INLINE void AssertVecEqual(D d, VecArg<V> expected, VecArg<V> actual,
+// Compare expected vector to vector.
+// TODO(b/287462770): inline to work around incorrect SVE codegen.
+template <class D, typename T = TFromD<D>>
+HWY_INLINE void AssertVecEqual(D d, Vec<D> expected, Vec<D> actual,
                                const char* filename, int line) {
-  auto expected_lanes = AllocateAligned<T>(Lanes(d));
+  const size_t N = Lanes(d);
+  auto expected_lanes = AllocateAligned<T>(N);
+  auto actual_lanes = AllocateAligned<T>(N);
+  HWY_ASSERT(expected_lanes && actual_lanes);
   Store(expected, d, expected_lanes.get());
-  AssertVecEqual(d, expected_lanes.get(), actual, filename, line);
+  Store(actual, d, actual_lanes.get());
+
+  const auto info = hwy::detail::MakeTypeInfo<T>();
+  const char* target_name = hwy::TargetName(HWY_TARGET);
+  hwy::detail::AssertArrayEqual(info, expected_lanes.get(), actual_lanes.get(),
+                                N, target_name, filename, line);
 }
 
 // Only checks the valid mask elements (those whose index < Lanes(d)).
@@ -87,6 +171,7 @@ HWY_NOINLINE void AssertMaskEqual(D d, VecArg<Mask<D>> a, VecArg<Mask<D>> b,
   const size_t N8 = Lanes(d8);
   auto bits_a = AllocateAligned<uint8_t>(HWY_MAX(size_t{8}, N8));
   auto bits_b = AllocateAligned<uint8_t>(size_t{HWY_MAX(8, N8)});
+  HWY_ASSERT(bits_a && bits_b);
   memset(bits_a.get(), 0, N8);
   memset(bits_b.get(), 0, N8);
   const size_t num_bytes_a = StoreMaskBits(d, a, bits_a.get());
@@ -128,18 +213,8 @@ HWY_INLINE Mask<D> MaskTrue(const D d) {
   return FirstN(d, Lanes(d));
 }
 
-// Defined in rvv-inl.h for slightly better codegen.
-#if HWY_TARGET != HWY_RVV
-
-template <class D>
-HWY_INLINE Mask<D> MaskFalse(const D d) {
-  // Signed comparisons are cheaper on x86.
-  const RebindToSigned<D> di;
-  const Vec<decltype(di)> zero = Zero(di);
-  return RebindMask(d, Lt(zero, zero));
-}
-
-#endif  // HWY_TARGET != HWY_RVV
+// MaskFalse is now implemented in x86_128-inl.h on AVX3, arm_sve-inl.h on SVE,
+// rvv-inl.h on RVV, and generic_ops-inl.h on all other targets
 
 #ifndef HWY_ASSERT_EQ
 
@@ -204,32 +279,55 @@ constexpr int MinPow2() {
   return HWY_MAX(-3, -static_cast<int>(CeilLog2(16 / sizeof(T))));
 }
 
-// Iterates kPow2 upward through +3.
-template <typename T, int kPow2, int kAddPow2, class Test>
-struct ForeachShiftR {
-  static void Do(size_t min_lanes) {
-    const ScalableTag<T, kPow2 + kAddPow2> d;
+constexpr int MaxPow2() {
+#if HWY_TARGET == HWY_RVV
+  // Only RVV allows multiple vector registers.
+  return 3;  // LMUL=8
+#else
+  // For all other platforms, we cannot exceed a full vector.
+  return 0;
+#endif
+}
 
-    // Precondition: [kPow2, 3] + kAddPow2 is a valid fraction of the minimum
-    // vector size, so we always have enough lanes, except ForGEVectors.
+// Iterates kPow2 up to and including kMaxPow2. Below we specialize for
+// valid=false to stop the iteration. The ForeachPow2Trim enables shorter
+// argument lists, but use ForeachPow2 when you want to specify the actual min.
+template <typename T, int kPow2, int kMaxPow2, bool valid, class Test>
+struct ForeachPow2 {
+  static void Do(size_t min_lanes) {
+    const ScalableTag<T, kPow2> d;
+
+    static_assert(MinPow2<T>() <= kPow2 && kPow2 <= MaxPow2(), "");
     if (Lanes(d) >= min_lanes) {
       Test()(T(), d);
     } else {
       fprintf(stderr, "%d lanes < %d: T=%d pow=%d\n",
               static_cast<int>(Lanes(d)), static_cast<int>(min_lanes),
-              static_cast<int>(sizeof(T)), kPow2 + kAddPow2);
+              static_cast<int>(sizeof(T)), kPow2);
       HWY_ASSERT(min_lanes != 1);
     }
 
-    ForeachShiftR<T, kPow2 + 1, kAddPow2, Test>::Do(min_lanes);
+    ForeachPow2<T, kPow2 + 1, kMaxPow2, (kPow2 + 1) <= kMaxPow2, Test>::Do(
+        min_lanes);
   }
 };
 
-// Base case to stop the recursion.
-template <typename T, int kAddPow2, class Test>
-struct ForeachShiftR<T, 4, kAddPow2, Test> {
+// Base case to stop the iteration.
+template <typename T, int kPow2, int kMaxPow2, class Test>
+struct ForeachPow2<T, kPow2, kMaxPow2, /*valid=*/false, Test> {
   static void Do(size_t) {}
 };
+
+// Iterates kPow2 over [MinPow2<T>() + kAddMin, MaxPow2() - kSubMax].
+// This is a wrapper that shortens argument lists, allowing users to skip the
+// MinPow2 and MaxPow2. Nonzero kAddMin implies a minimum LMUL, and nonzero
+// kSubMax reduces the maximum LMUL (e.g. for type promotions, where the result
+// is larger, thus the input cannot already use the maximum LMUL).
+template <typename T, int kAddMin, int kSubMax, class Test>
+using ForeachPow2Trim =
+    ForeachPow2<T, MinPow2<T>() + kAddMin, MaxPow2() - kSubMax,
+                MinPow2<T>() + kAddMin <= MaxPow2() - kSubMax, Test>;
+
 #else
 // ForeachCappedR already handled all possible sizes.
 #endif  // HWY_HAVE_SCALABLE
@@ -269,11 +367,10 @@ class ForMaxPow2 {
         1, Lanes(ScalableTag<T>()));
 
 #if HWY_TARGET == HWY_RVV
-    // For each [MinPow2, 1]; counter is [MinPow2 + 2, 3].
-    detail::ForeachShiftR<T, detail::MinPow2<T>() + 2, -2, Test>::Do(1);
+    // To get LMUL=2 (kPow2=1), 2 is what we subtract from MaxPow2()=3.
+    detail::ForeachPow2Trim<T, 0, 2, Test>::Do(1);
 #elif HWY_HAVE_SCALABLE
-    // For each [MinPow2, 0]; counter is [MinPow2, 3].
-    detail::ForeachShiftR<T, detail::MinPow2<T>() + 3, -3, Test>::Do(1);
+    detail::ForeachPow2Trim<T, 0, 0, Test>::Do(1);
 #endif
 #endif  // HWY_TARGET == HWY_SCALAR
   }
@@ -303,15 +400,11 @@ class ForExtendableVectors {
 #if HWY_TARGET == HWY_SCALAR
     // not supported
 #else
-    detail::ForeachCappedR<T, (kMaxCapped >> kPow2), size_t{1} << kPow2, Test,
-                           -kPow2>::Do(1, max_lanes);
-#if HWY_TARGET == HWY_RVV
-    // For each [MinPow2, 3 - kPow2]; counter is [MinPow2 + kPow2, 3].
-    detail::ForeachShiftR<T, detail::MinPow2<T>() + kPow2, -kPow2, Test>::Do(1);
-#elif HWY_HAVE_SCALABLE
-    // For each [MinPow2, 0 - kPow2]; counter is [MinPow2 + kPow2 + 3, 3].
-    detail::ForeachShiftR<T, detail::MinPow2<T>() + kPow2 + 3, -kPow2 - 3,
-                          Test>::Do(1);
+    constexpr size_t kMul = kMaxCapped >> kPow2;
+    constexpr size_t kMinArg = size_t{1} << kPow2;
+    detail::ForeachCappedR<T, kMul, kMinArg, Test, -kPow2>::Do(1, max_lanes);
+#if HWY_HAVE_SCALABLE
+    detail::ForeachPow2Trim<T, 0, kPow2, Test>::Do(1);
 #endif
 #endif  // HWY_SCALAR
   }
@@ -343,18 +436,11 @@ class ForShrinkableVectors {
     (void)max_lanes;
 #if HWY_TARGET == HWY_SCALAR
     // not supported
+#elif HWY_HAVE_SCALABLE
+    detail::ForeachPow2Trim<T, kPow2, 0, Test>::Do(kMinLanes);
 #else
     detail::ForeachCappedR<T, (kMaxCapped >> kPow2), kMinLanes, Test>::Do(
         kMinLanes, max_lanes);
-#if HWY_TARGET == HWY_RVV
-    // For each [MinPow2 + kPow2, 3]; counter is [MinPow2 + kPow2, 3].
-    detail::ForeachShiftR<T, detail::MinPow2<T>() + kPow2, 0, Test>::Do(
-        kMinLanes);
-#elif HWY_HAVE_SCALABLE
-    // For each [MinPow2 + kPow2, 0]; counter is [MinPow2 + kPow2 + 3, 3].
-    detail::ForeachShiftR<T, HWY_MIN(3, detail::MinPow2<T>() + kPow2 + 3), -3,
-                          Test>::Do(kMinLanes);
-#endif
 #endif  // HWY_TARGET == HWY_SCALAR
   }
 };
@@ -385,20 +471,14 @@ class ForGEVectors {
 #else
     detail::ForeachCappedR<T, HWY_LANES(T) / kMinLanes, kMinLanes, Test>::Do(
         kMinLanes, max_lanes);
-#if HWY_TARGET == HWY_RVV
-    // Can be 0 (handled below) if kMinBits > 64.
-    constexpr size_t kRatio = 128 / kMinBits;
-    constexpr int kMinPow2 =
-        kRatio == 0 ? 0 : -static_cast<int>(CeilLog2(kRatio));
-    // For each [kMinPow2, 3]; counter is [kMinPow2, 3].
-    detail::ForeachShiftR<T, kMinPow2, 0, Test>::Do(kMinLanes);
-#elif HWY_HAVE_SCALABLE
+#if HWY_HAVE_SCALABLE
     // Can be 0 (handled below) if kMinBits > 128.
     constexpr size_t kRatio = 128 / kMinBits;
     constexpr int kMinPow2 =
         kRatio == 0 ? 0 : -static_cast<int>(CeilLog2(kRatio));
-    // For each [kMinPow2, 0]; counter is [kMinPow2 + 3, 3].
-    detail::ForeachShiftR<T, kMinPow2 + 3, -3, Test>::Do(kMinLanes);
+    constexpr bool kValid = kMinPow2 <= detail::MaxPow2();
+    detail::ForeachPow2<T, kMinPow2, detail::MaxPow2(), kValid, Test>::Do(
+        kMinLanes);
 #endif
 #endif  // HWY_TARGET == HWY_SCALAR
   }
@@ -426,33 +506,29 @@ class ForPromoteVectors {
     constexpr size_t kFactor = size_t{1} << kPow2;
     static_assert(kFactor >= 2 && kFactor * sizeof(T) <= sizeof(uint64_t), "");
     constexpr size_t kMaxCapped = HWY_LANES(T);
-    constexpr size_t kMinLanes = kFactor;
     // Skip CappedTag that are already full vectors.
     const size_t max_lanes = Lanes(ScalableTag<T>()) >> kPow2;
     (void)kMaxCapped;
-    (void)kMinLanes;
     (void)max_lanes;
 #if HWY_TARGET == HWY_SCALAR
     detail::ForeachCappedR<T, 1, 1, Test>::Do(1, 1);
 #else
-    // TODO(janwas): call Extendable if kMinLanes check not required?
-    detail::ForeachCappedR<T, (kMaxCapped >> kPow2), 1, Test, -kPow2>::Do(
-        kMinLanes, max_lanes);
-#if HWY_TARGET == HWY_RVV
-    // For each [MinPow2, 3 - kPow2]; counter is [MinPow2 + kPow2, 3].
-    detail::ForeachShiftR<T, detail::MinPow2<T>() + kPow2, -kPow2, Test>::Do(
-        kMinLanes);
-#elif HWY_HAVE_SCALABLE
-    // For each [MinPow2, 0 - kPow2]; counter is [MinPow2 + kPow2 + 3, 3].
-    detail::ForeachShiftR<T, detail::MinPow2<T>() + kPow2 + 3, -kPow2 - 3,
-                          Test>::Do(kMinLanes);
+    using DLargestFrom = CappedTag<T, (kMaxCapped >> kPow2) * kFactor, -kPow2>;
+    static_assert(HWY_MAX_LANES_D(DLargestFrom) <= (kMaxCapped >> kPow2),
+                  "HWY_MAX_LANES_D(DLargestFrom) must be less than or equal to "
+                  "(kMaxCapped >> kPow2)");
+    detail::ForeachCappedR<T, (kMaxCapped >> kPow2), kFactor, Test, -kPow2>::Do(
+        1, max_lanes);
+#if HWY_HAVE_SCALABLE
+    detail::ForeachPow2Trim<T, 0, kPow2, Test>::Do(1);
 #endif
 #endif  // HWY_SCALAR
   }
 };
 
 // Calls Test for all N than can be demoted (not the same as Shrinkable because
-// HWY_SCALAR has one lane).
+// HWY_SCALAR has one lane and as a one-lane vector with a lane size of at least
+// 2 bytes can always be demoted to a vector with a smaller lane type).
 template <class Test, int kPow2 = 1>
 class ForDemoteVectors {
   mutable bool called_ = false;
@@ -467,31 +543,34 @@ class ForDemoteVectors {
   template <typename T>
   void operator()(T /*unused*/) const {
     called_ = true;
-    constexpr size_t kMinLanes = size_t{1} << kPow2;
-    constexpr size_t kMaxCapped = HWY_LANES(T);
-    // For shrinking, an upper limit is unnecessary.
-    constexpr size_t max_lanes = kMaxCapped;
 
-    (void)kMinLanes;
-    (void)max_lanes;
-    (void)max_lanes;
-#if HWY_TARGET == HWY_SCALAR
-    detail::ForeachCappedR<T, 1, 1, Test>::Do(1, 1);
+#if HWY_HAVE_SCALABLE
+    // kMinTVecPow2 is the smallest Pow2 for a vector with lane type T that is
+    // supported by detail::ForeachPow2Trim
+    constexpr int kMinTVecPow2 = detail::MinPow2<T>();
+
+    // detail::MinPow2<T>() + kMinPow2Adj is the smallest Pow2 for a vector with
+    // lane type T that can be demoted to a vector with a lane size of
+    // (sizeof(T) >> kPow2)
+    constexpr int kMinPow2Adj = HWY_MAX(-3 - kMinTVecPow2 + kPow2, 0);
+
+    detail::ForeachPow2Trim<T, kMinPow2Adj, 0, Test>::Do(1);
+
+    // On targets with scalable vectors, detail::ForeachCappedR below only
+    // needs to be executed for vectors that have less than
+    // Lanes(ScalableTag<T>()) as full vectors were already checked by the
+    // detail::ForeachPow2Trim above.
+    constexpr size_t kMaxCapped = HWY_LANES(T) >> 1;
+    const size_t max_lanes = Lanes(ScalableTag<T>()) >> 1;
 #else
-    detail::ForeachCappedR<T, (kMaxCapped >> kPow2), kMinLanes, Test>::Do(
-        kMinLanes, max_lanes);
-
-// TODO(janwas): call Extendable if kMinLanes check not required?
-#if HWY_TARGET == HWY_RVV
-    // For each [MinPow2 + kPow2, 3]; counter is [MinPow2 + kPow2, 3].
-    detail::ForeachShiftR<T, detail::MinPow2<T>() + kPow2, 0, Test>::Do(
-        kMinLanes);
-#elif HWY_HAVE_SCALABLE
-    // For each [MinPow2 + kPow2, 0]; counter is [MinPow2 + kPow2 + 3, 3].
-    detail::ForeachShiftR<T, detail::MinPow2<T>() + kPow2 + 3, -3, Test>::Do(
-        kMinLanes);
+    // On targets where HWY_HAVE_SCALABLE is 0, any vector with HWY_LANES(T)
+    // or fewer lanes can always be demoted to a vector with a smaller lane
+    // type.
+    constexpr size_t kMaxCapped = HWY_LANES(T);
+    const size_t max_lanes = kMaxCapped;
 #endif
-#endif  // HWY_TARGET == HWY_SCALAR
+
+    detail::ForeachCappedR<T, kMaxCapped, 1, Test>::Do(1, max_lanes);
   }
 };
 
@@ -520,14 +599,8 @@ class ForHalfVectors {
         kMinLanes, kMaxCapped);
 
 // TODO(janwas): call Extendable if kMinLanes check not required?
-#if HWY_TARGET == HWY_RVV
-    // For each [MinPow2 + kPow2, 3]; counter is [MinPow2 + kPow2, 3].
-    detail::ForeachShiftR<T, detail::MinPow2<T>() + kPow2, 0, Test>::Do(
-        kMinLanes);
-#elif HWY_HAVE_SCALABLE
-    // For each [MinPow2 + kPow2, 0]; counter is [MinPow2 + kPow2 + 3, 3].
-    detail::ForeachShiftR<T, detail::MinPow2<T>() + kPow2 + 3, -3, Test>::Do(
-        kMinLanes);
+#if HWY_HAVE_SCALABLE
+    detail::ForeachPow2Trim<T, kPow2, 0, Test>::Do(kMinLanes);
 #endif
 #endif  // HWY_TARGET == HWY_SCALAR
   }
@@ -558,6 +631,42 @@ class ForPartialVectors {
   }
 };
 
+// ForPartialFixedOrFullScalableVectors calls Test for each D where
+// MaxLanes(D()) == MaxLanes(DFromV<VFromD<D>>())
+#if HWY_HAVE_SCALABLE
+template <class Test>
+class ForPartialFixedOrFullScalableVectors {
+  mutable bool called_ = false;
+
+ public:
+  ~ForPartialFixedOrFullScalableVectors() {
+    if (!called_) {
+      HWY_ABORT("Test is incorrect, ensure operator() is called");
+    }
+  }
+
+  template <typename T>
+  void operator()(T /*t*/) const {
+    called_ = true;
+#if HWY_TARGET == HWY_RVV
+    constexpr int kMinPow2 = -3 + static_cast<int>(CeilLog2(sizeof(T)));
+    constexpr int kMaxPow2 = 3;
+#else
+    constexpr int kMinPow2 = 0;
+    constexpr int kMaxPow2 = 0;
+#endif
+    detail::ForeachPow2<T, kMinPow2, kMaxPow2, true, Test>::Do(1);
+  }
+};
+#elif HWY_TARGET_IS_SVE
+template <class Test>
+using ForPartialFixedOrFullScalableVectors =
+    ForGEVectors<HWY_MAX_BYTES * 8, Test>;
+#else
+template <class Test>
+using ForPartialFixedOrFullScalableVectors = ForPartialVectors<Test>;
+#endif
+
 // Type lists to shorten call sites:
 
 template <class Func>
@@ -587,17 +696,83 @@ void ForIntegerTypes(const Func& func) {
 }
 
 template <class Func>
-void ForFloatTypes(const Func& func) {
-  func(float());
+void ForFloat16Types(const Func& func) {
+#if HWY_HAVE_FLOAT16
+  func(float16_t());
+#else
+  (void)func;
+#endif
+}
+
+template <class Func>
+void ForFloat64Types(const Func& func) {
 #if HWY_HAVE_FLOAT64
   func(double());
+#else
+  (void)func;
 #endif
+}
+
+// `#if HWY_HAVE_FLOAT*` is sufficient for tests using static dispatch. In
+// sort_test we also use dynamic dispatch, so there we call the For*Dynamic
+// functions which also check hwy::HaveFloat*.
+template <class Func>
+void ForFloat16TypesDynamic(const Func& func) {
+#if HWY_HAVE_FLOAT16
+  if (hwy::HaveFloat16()) {
+    func(float16_t());
+  }
+#else
+  (void)func;
+#endif
+}
+
+template <class Func>
+void ForFloat64TypesDynamic(const Func& func) {
+#if HWY_HAVE_FLOAT64
+  if (hwy::HaveFloat64()) {
+    func(double());
+  }
+#else
+  (void)func;
+#endif
+}
+
+template <class Func>
+void ForFloat3264Types(const Func& func) {
+  func(float());
+  ForFloat64Types(func);
+}
+
+template <class Func>
+void ForFloatTypes(const Func& func) {
+  ForFloat16Types(func);
+  ForFloat3264Types(func);
+}
+
+template <class Func>
+void ForFloatTypesDynamic(const Func& func) {
+  ForFloat16TypesDynamic(func);
+  func(float());
+  ForFloat64TypesDynamic(func);
 }
 
 template <class Func>
 void ForAllTypes(const Func& func) {
   ForIntegerTypes(func);
   ForFloatTypes(func);
+}
+
+// For ops that are also unconditionally available for bfloat16_t/float16_t.
+template <class Func>
+void ForSpecialTypes(const Func& func) {
+  func(float16_t());
+  func(bfloat16_t());
+}
+template <class Func>
+void ForAllTypesAndSpecial(const Func& func) {
+  ForAllTypes(func);
+  ForSpecialTypes(func);
 }
 
 template <class Func>
@@ -615,9 +790,7 @@ void ForUI16(const Func& func) {
 template <class Func>
 void ForUIF16(const Func& func) {
   ForUI16(func);
-#if HWY_HAVE_FLOAT16
-  func(float16_t());
-#endif
+  ForFloat16Types(func);
 }
 
 template <class Func>
@@ -643,9 +816,7 @@ void ForUI64(const Func& func) {
 template <class Func>
 void ForUIF64(const Func& func) {
   ForUI64(func);
-#if HWY_HAVE_FLOAT64
-  func(double());
-#endif
+  ForFloat64Types(func);
 }
 
 template <class Func>
@@ -658,6 +829,27 @@ template <class Func>
 void ForUIF3264(const Func& func) {
   ForUIF32(func);
   ForUIF64(func);
+}
+
+template <class Func>
+void ForU816(const Func& func) {
+  func(uint8_t());
+  func(uint16_t());
+}
+
+template <class Func>
+void ForI816(const Func& func) {
+  func(int8_t());
+  func(int16_t());
+}
+
+template <class Func>
+void ForU163264(const Func& func) {
+  func(uint16_t());
+  func(uint32_t());
+#if HWY_HAVE_INTEGER64
+  func(uint64_t());
+#endif
 }
 
 template <class Func>
@@ -675,12 +867,14 @@ void ForUIF163264(const Func& func) {
 // For tests that involve loops, adjust the trip count so that emulated tests
 // finish quickly (but always at least 2 iterations to ensure some diversity).
 constexpr size_t AdjustedReps(size_t max_reps) {
-#if HWY_ARCH_RVV
+#if HWY_ARCH_RISCV
   return HWY_MAX(max_reps / 32, 2);
 #elif HWY_IS_DEBUG_BUILD
   return HWY_MAX(max_reps / 8, 2);
 #elif HWY_ARCH_ARM
   return HWY_MAX(max_reps / 4, 2);
+#elif HWY_COMPILER_MSVC
+  return HWY_MAX(max_reps / 2, 2);
 #else
   return HWY_MAX(max_reps, 2);
 #endif
@@ -689,7 +883,7 @@ constexpr size_t AdjustedReps(size_t max_reps) {
 // Same as above, but the loop trip count will be 1 << max_pow2.
 constexpr size_t AdjustedLog2Reps(size_t max_pow2) {
   // If "negative" (unsigned wraparound), use original.
-#if HWY_ARCH_RVV
+#if HWY_ARCH_RISCV
   return HWY_MIN(max_pow2 - 4, max_pow2);
 #elif HWY_IS_DEBUG_BUILD
   return HWY_MIN(max_pow2 - 1, max_pow2);

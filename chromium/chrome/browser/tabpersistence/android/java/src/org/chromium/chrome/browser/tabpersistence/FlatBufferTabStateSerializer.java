@@ -10,6 +10,7 @@ import androidx.annotation.VisibleForTesting;
 
 import com.google.flatbuffers.FlatBufferBuilder;
 
+import org.chromium.base.Log;
 import org.chromium.base.Token;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.tab.TabLaunchType;
@@ -27,6 +28,7 @@ import java.nio.ByteBuffer;
 
 /** {@link TabStateSerializer} backed by a FlatBuffer */
 public class FlatBufferTabStateSerializer implements TabStateSerializer {
+    private static final String TAG = "FBTSS";
     private static final String NULL_OPENER_APP_ID = " ";
     private static final long NO_TAB_GROUP_ID = 0L;
 
@@ -54,25 +56,18 @@ public class FlatBufferTabStateSerializer implements TabStateSerializer {
         /** FlatBuffer deserialization failed because of an index out of bounds exception. */
         int FAILURE_INDEX_OUT_OF_BOUNDS_EXCEPTION = 2;
 
-        int NUM_ENTRIES = 3;
+        /** FlatBuffer deserialization failed because of an illegal argument exception. */
+        int FAILURE_ILLEGAL_ARGUMENT_EXCEPTION = 3;
+
+        int NUM_ENTRIES = 4;
     }
 
     @Override
-    public ByteBuffer serialize(TabState state) {
+    public ByteBuffer serialize(TabState state, byte[] contentsStateBytes) {
         FlatBufferBuilder fbb = new FlatBufferBuilder();
-        ByteBuffer byteBuffer =
-                state.contentsState.buffer() != null
-                        ? state.contentsState.buffer().asReadOnlyBuffer()
-                        : null;
-        if (byteBuffer != null) {
-            byteBuffer.rewind();
-        }
         int webContentsState =
                 TabStateFlatBufferV1.createWebContentsStateBytesVector(
-                        fbb,
-                        byteBuffer == null
-                                ? ByteBuffer.allocate(0).put(new byte[] {})
-                                : byteBuffer);
+                        fbb, ByteBuffer.wrap(contentsStateBytes));
         int openerAppId =
                 fbb.createString(
                         state.openerAppId == null ? NULL_OPENER_APP_ID : state.openerAppId);
@@ -148,11 +143,17 @@ public class FlatBufferTabStateSerializer implements TabStateSerializer {
                     "Tabs.TabState.FlatBufferDeserializeResult",
                     TabStateFlatBufferDeserializeResult.FAILURE_INDEX_OUT_OF_BOUNDS_EXCEPTION,
                     TabStateFlatBufferDeserializeResult.NUM_ENTRIES);
+        } catch (IllegalArgumentException e) {
+            RecordHistogram.recordEnumeratedHistogram(
+                    "Tabs.TabState.FlatBufferDeserializeResult",
+                    TabStateFlatBufferDeserializeResult.FAILURE_ILLEGAL_ARGUMENT_EXCEPTION,
+                    TabStateFlatBufferDeserializeResult.NUM_ENTRIES);
         } catch (Exception e) {
             RecordHistogram.recordEnumeratedHistogram(
                     "Tabs.TabState.FlatBufferDeserializeResult",
                     TabStateFlatBufferDeserializeResult.FAILURE_UNKNOWN_REASON,
                     TabStateFlatBufferDeserializeResult.NUM_ENTRIES);
+            Log.e(TAG, "Error deserializing tabState FlatBuffer", e);
             assert false : e.getMessage();
         }
         return null;

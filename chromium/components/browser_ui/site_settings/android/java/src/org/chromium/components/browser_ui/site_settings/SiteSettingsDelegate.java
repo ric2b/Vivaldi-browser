@@ -190,11 +190,6 @@ public interface SiteSettingsDelegate {
     void onDestroyView();
 
     /**
-     * @return whether the Tracking Protection offboarding notice should be shown in the Settings.
-     */
-    boolean shouldShowSettingsOffboardingNotice();
-
-    /**
      * Builds a browsing data model for BrowserContext if not already built and runs the callback.
      *
      * @param callback Callback runs with the BrowsingDataModel object when the model is built.
@@ -205,4 +200,17 @@ public interface SiteSettingsDelegate {
      * @return whether the Privacy Sandbox Rws UI should be shown in the Settings.
      */
     boolean shouldShowPrivacySandboxRwsUi();
+
+    /**
+     * @return whether the Safety Hub is enabled.
+     */
+    boolean isSafetyHubEnabled();
+
+    /**
+     * @return whether the unused site permission autorevocation is enabled.
+     */
+    boolean isPermissionAutorevocationEnabled();
+
+    /** Enable/Disable unused site permission autorevocation. */
+    void setPermissionAutorevocationEnabled(boolean isEnabled);
 }

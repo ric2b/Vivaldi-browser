@@ -150,7 +150,7 @@ class AppUninstall : public App {
 
 int AppUninstall::Initialize() {
   setup_lock_ =
-      ScopedLock::Create(kSetupMutex, updater_scope(), kWaitForSetupLock);
+      CreateScopedLock(kSetupMutex, updater_scope(), kWaitForSetupLock);
   global_prefs_ = CreateGlobalPrefs(updater_scope());
   if (global_prefs_) {
     config_ = base::MakeRefCounted<Configurator>(global_prefs_,
@@ -241,7 +241,7 @@ void AppUninstall::FirstTaskRun() {
     return;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 scoped_refptr<App> MakeAppUninstall() {

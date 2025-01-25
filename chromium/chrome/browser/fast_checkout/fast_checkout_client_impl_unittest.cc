@@ -66,8 +66,8 @@ using ::testing::Pointee;
 using ::testing::Return;
 using ::testing::SaveArg;
 using ::testing::UnorderedElementsAre;
-using ::ukm::builders::Autofill_FastCheckoutFormStatus;
-using ::ukm::builders::Autofill_FastCheckoutRunOutcome;
+using ::ukm::builders::FastCheckout_FormStatus;
+using ::ukm::builders::FastCheckout_RunOutcome;
 
 namespace {
 
@@ -109,9 +109,12 @@ std::unique_ptr<KeyedService> BuildTestPersonalDataManager(
     content::BrowserContext* context) {
   auto personal_data_manager =
       std::make_unique<autofill::TestPersonalDataManager>();
-  personal_data_manager->SetAutofillProfileEnabled(true);
-  personal_data_manager->SetAutofillPaymentMethodsEnabled(true);
-  personal_data_manager->SetAutofillWalletImportEnabled(true);
+  personal_data_manager->test_address_data_manager().SetAutofillProfileEnabled(
+      true);
+  personal_data_manager->test_payments_data_manager()
+      .SetAutofillPaymentMethodsEnabled(true);
+  personal_data_manager->test_payments_data_manager()
+      .SetAutofillWalletImportEnabled(true);
   personal_data_manager->address_data_manager().AddProfile(kProfile1);
   personal_data_manager->address_data_manager().AddProfile(kProfile2);
   // Add incomplete autofill profile, should not be shown on the sheet.
@@ -133,7 +136,7 @@ class MockFastCheckoutController : public FastCheckoutController {
 
   MOCK_METHOD(void,
               Show,
-              (const std::vector<AutofillProfile*>& autofill_profiles,
+              (const std::vector<const AutofillProfile*>& autofill_profiles,
                const std::vector<CreditCard*>& credit_cards),
               (override));
   MOCK_METHOD(void,
@@ -250,6 +253,7 @@ class MockFastCheckoutAccessibilityService
   MOCK_METHOD(void, Announce, (const std::u16string&), (override));
 };
 
+// TODO(crbug.com/348576043) : Tests are failing on android-arm64-tests builder.
 class DISABLED_FastCheckoutClientImplTest
     : public ChromeRenderViewHostTestHarness {
  public:
@@ -266,7 +270,7 @@ class DISABLED_FastCheckoutClientImplTest
         base::BindRepeating(&BuildTestPersonalDataManager));
     FastCheckoutCapabilitiesFetcherFactory::GetInstance()
         ->SetTestingSubclassFactoryAndUse(
-            profile(), base::BindRepeating([](content::BrowserContext*) {
+            profile(), base::BindOnce([](content::BrowserContext*) {
               return std::make_unique<
                   NiceMock<MockFastCheckoutCapabilitiesFetcher>>();
             }));
@@ -311,7 +315,7 @@ class DISABLED_FastCheckoutClientImplTest
 
   autofill::TestPersonalDataManager* personal_data_manager() {
     return static_cast<autofill::TestPersonalDataManager*>(
-        autofill::PersonalDataManagerFactory::GetForProfile(profile()));
+        autofill::PersonalDataManagerFactory::GetForBrowserContext(profile()));
   }
 
   FastCheckoutClientImpl* fast_checkout_client() { return test_client_.get(); }
@@ -342,7 +346,7 @@ class DISABLED_FastCheckoutClientImplTest
   ukm::TestAutoSetUkmRecorder ukm_recorder_;
 
   // Sets up test data, calls `TryToStart(..)` and `OnOptionsSelected(..)`.
-  std::tuple<autofill::AutofillProfile*, autofill::CreditCard*>
+  std::tuple<const autofill::AutofillProfile*, autofill::CreditCard*>
   StartRunAndSelectOptions(
       const base::flat_set<autofill::FormSignature>& forms_to_fill,
       bool local_card = false) {
@@ -361,7 +365,8 @@ class DISABLED_FastCheckoutClientImplTest
       personal_data_manager()->payments_data_manager().AddCreditCard(
           *credit_card_unique_ptr);
     } else {
-      personal_data_manager()->AddServerCreditCard(*credit_card_unique_ptr);
+      personal_data_manager()->test_payments_data_manager().AddServerCreditCard(
+          *credit_card_unique_ptr);
     }
 
     MockFastCheckoutCapabilitiesFetcher* fetcher =
@@ -420,10 +425,10 @@ class DISABLED_FastCheckoutClientImplTest
   }
 
   void ExpectRunOutcomeUkm(FastCheckoutRunOutcome run_outcome) {
-    auto ukm_entries = ukm_recorder_.GetEntries(
-        Autofill_FastCheckoutRunOutcome::kEntryName,
-        {Autofill_FastCheckoutRunOutcome::kRunOutcomeName,
-         Autofill_FastCheckoutRunOutcome::kRunIdName});
+    auto ukm_entries =
+        ukm_recorder_.GetEntries(FastCheckout_RunOutcome::kEntryName,
+                                 {FastCheckout_RunOutcome::kRunOutcomeName,
+                                  FastCheckout_RunOutcome::kRunIdName});
     EXPECT_EQ(ukm_entries.size(), 1UL);
     EXPECT_EQ(ukm_entries[0].metrics.at("RunOutcome"),
               static_cast<long>(run_outcome));
@@ -594,7 +599,7 @@ TEST_F(DISABLED_FastCheckoutClientImplTest,
   EXPECT_TRUE(fast_checkout_client()->IsRunning());
 
   // User removes all the profiles.
-  personal_data_manager()->ClearProfiles();
+  personal_data_manager()->test_address_data_manager().ClearProfiles();
   // User adds an incomplete profile only.
   personal_data_manager()->address_data_manager().AddProfile(
       autofill::test::GetIncompleteProfile1());
@@ -883,12 +888,12 @@ TEST_F(DISABLED_FastCheckoutClientImplTest,
             FastCheckoutUIState::kWasShown);
   EXPECT_FALSE(fast_checkout_client()->IsNotShownYet());
   ExpectRunOutcomeUkm(FastCheckoutRunOutcome::kSuccess);
-  auto ukm_entries = ukm_recorder_.GetEntries(
-      Autofill_FastCheckoutFormStatus::kEntryName,
-      {Autofill_FastCheckoutFormStatus::kRunIdName,
-       Autofill_FastCheckoutFormStatus::kFilledName,
-       Autofill_FastCheckoutFormStatus::kFormSignatureName,
-       Autofill_FastCheckoutFormStatus::kFormTypesName});
+  auto ukm_entries =
+      ukm_recorder_.GetEntries(FastCheckout_FormStatus::kEntryName,
+                               {FastCheckout_FormStatus::kRunIdName,
+                                FastCheckout_FormStatus::kFilledName,
+                                FastCheckout_FormStatus::kFormSignatureName,
+                                FastCheckout_FormStatus::kFormTypesName});
   EXPECT_EQ(ukm_entries.size(), 2UL);
   base::flat_set<ukm::TestAutoSetUkmRecorder::HumanReadableUkmMetrics> metrics;
   metrics.emplace(ukm_entries[0].metrics);
@@ -897,18 +902,18 @@ TEST_F(DISABLED_FastCheckoutClientImplTest,
       metrics,
       UnorderedElementsAre(
           UnorderedElementsAre(
-              Pair(Autofill_FastCheckoutFormStatus::kRunIdName, run_id),
-              Pair(Autofill_FastCheckoutFormStatus::kFilledName, 1),
-              Pair(Autofill_FastCheckoutFormStatus::kFormSignatureName,
+              Pair(FastCheckout_FormStatus::kRunIdName, run_id),
+              Pair(FastCheckout_FormStatus::kFilledName, 1),
+              Pair(FastCheckout_FormStatus::kFormSignatureName,
                    autofill::HashFormSignature(address_form->form_signature())),
-              Pair(Autofill_FastCheckoutFormStatus::kFormTypesName, 3)),
+              Pair(FastCheckout_FormStatus::kFormTypesName, 2)),
           UnorderedElementsAre(
-              Pair(Autofill_FastCheckoutFormStatus::kRunIdName, run_id),
-              Pair(Autofill_FastCheckoutFormStatus::kFilledName, 1),
-              Pair(Autofill_FastCheckoutFormStatus::kFormSignatureName,
+              Pair(FastCheckout_FormStatus::kRunIdName, run_id),
+              Pair(FastCheckout_FormStatus::kFilledName, 1),
+              Pair(FastCheckout_FormStatus::kFormSignatureName,
                    autofill::HashFormSignature(
                        credit_card_form->form_signature())),
-              Pair(Autofill_FastCheckoutFormStatus::kFormTypesName, 5))));
+              Pair(FastCheckout_FormStatus::kFormTypesName, 4))));
 }
 
 TEST_F(DISABLED_FastCheckoutClientImplTest,
@@ -1047,21 +1052,6 @@ TEST_F(DISABLED_FastCheckoutClientImplTest,
                                    fast_checkout_client()->run_id_));
   fast_checkout_client()->OnFullCardRequestSucceeded(*full_card_request,
                                                      *credit_card, cvc);
-  EXPECT_FALSE(fast_checkout_client()->IsNotShownYet());
-}
-
-TEST_F(DISABLED_FastCheckoutClientImplTest, OnFullCardRequestFailed_StopsRun) {
-  autofill::FormStructure* credit_card_form =
-      AddFormToAutofillManagerCache(SetUpCreditCardForm());
-  auto card_type = autofill::CreditCard::RecordType::kFullServerCard;
-  auto failure_type =
-      autofill::payments::FullCardRequest::FailureType::GENERIC_FAILURE;
-  StartRunAndSelectOptions({credit_card_form->form_signature()});
-
-  EXPECT_TRUE(fast_checkout_client()->IsRunning());
-  fast_checkout_client()->OnFullCardRequestFailed(card_type, failure_type);
-  EXPECT_FALSE(fast_checkout_client()->IsRunning());
-  ExpectRunOutcomeUkm(FastCheckoutRunOutcome::kCvcPopupError);
   EXPECT_FALSE(fast_checkout_client()->IsNotShownYet());
 }
 

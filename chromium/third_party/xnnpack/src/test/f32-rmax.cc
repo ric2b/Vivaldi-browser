@@ -9,12 +9,10 @@
 
 
 #include <gtest/gtest.h>
-
-#include <xnnpack/common.h>
-#include <xnnpack/isa-checks.h>
-
-#include <xnnpack/microparams-init.h>
-#include <xnnpack/reduce.h>
+#include "xnnpack/common.h"
+#include "xnnpack/isa-checks.h"
+#include "xnnpack/microparams-init.h"
+#include "xnnpack/reduce.h"
 #include "reduce-microkernel-tester.h"
 
 
@@ -1382,6 +1380,28 @@ TEST(F32_RMAX__SCALAR_U4_ACC4, batch_gt_4) {
     ReduceMicrokernelTester()
       .batch_size(1 * xnn_init_hardware_config()->vlenb / sizeof(float))
       .Test(xnn_f32_rmax_ukernel__rvv_u1v, ReduceMicrokernelTester::OpType::Max);
+  }
+
+  TEST(F32_RMAX__RVV_U1V, batch_div_1v) {
+    TEST_REQUIRES_RISCV_VECTOR;
+    for (size_t batch_size = 2 * xnn_init_hardware_config()->vlenb / sizeof(float);
+                batch_size < 10 * xnn_init_hardware_config()->vlenb / sizeof(float);
+                batch_size += 1 * xnn_init_hardware_config()->vlenb / sizeof(float)) {
+      ReduceMicrokernelTester()
+        .batch_size(batch_size)
+        .Test(xnn_f32_rmax_ukernel__rvv_u1v, ReduceMicrokernelTester::OpType::Max);
+    }
+  }
+
+  TEST(F32_RMAX__RVV_U1V, batch_lt_1v) {
+    TEST_REQUIRES_RISCV_VECTOR;
+    for (size_t batch_size = 1;
+                batch_size < 1 * xnn_init_hardware_config()->vlenb / sizeof(float);
+                batch_size++) {
+      ReduceMicrokernelTester()
+        .batch_size(batch_size)
+        .Test(xnn_f32_rmax_ukernel__rvv_u1v, ReduceMicrokernelTester::OpType::Max);
+    }
   }
 
   TEST(F32_RMAX__RVV_U1V, batch_gt_1v) {

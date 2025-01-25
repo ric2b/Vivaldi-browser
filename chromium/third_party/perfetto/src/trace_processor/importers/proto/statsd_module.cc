@@ -23,7 +23,8 @@
 #include "src/trace_processor/importers/common/machine_tracker.h"
 #include "src/trace_processor/importers/common/slice_tracker.h"
 #include "src/trace_processor/importers/common/track_tracker.h"
-#include "src/trace_processor/importers/proto/packet_sequence_state.h"
+#include "src/trace_processor/importers/proto/args_parser.h"
+#include "src/trace_processor/importers/proto/packet_sequence_state_generation.h"
 #include "src/trace_processor/sorter/trace_sorter.h"
 #include "src/trace_processor/storage/stats.h"
 #include "src/trace_processor/storage/trace_storage.h"
@@ -36,111 +37,6 @@ namespace trace_processor {
 namespace {
 
 constexpr const char* kAtomProtoName = ".android.os.statsd.Atom";
-
-using BoundInserter = ArgsTracker::BoundInserter;
-
-class InserterDelegate : public util::ProtoToArgsParser::Delegate {
- public:
-  InserterDelegate(BoundInserter& inserter, TraceStorage& storage)
-      : inserter_(inserter), storage_(storage) {}
-  ~InserterDelegate() override = default;
-
-  using Key = util::ProtoToArgsParser::Key;
-
-  void AddInteger(const Key& key, int64_t value) override {
-    StringId flat_key_id =
-        storage_.InternString(base::StringView(key.flat_key));
-    StringId key_id = storage_.InternString(base::StringView(key.key));
-    Variadic variadic_val = Variadic::Integer(value);
-    inserter_.AddArg(flat_key_id, key_id, variadic_val);
-  }
-
-  void AddUnsignedInteger(const Key& key, uint64_t value) override {
-    StringId flat_key_id =
-        storage_.InternString(base::StringView(key.flat_key));
-    StringId key_id = storage_.InternString(base::StringView(key.key));
-    Variadic variadic_val = Variadic::UnsignedInteger(value);
-    inserter_.AddArg(flat_key_id, key_id, variadic_val);
-  }
-
-  void AddString(const Key& key, const protozero::ConstChars& value) override {
-    StringId flat_key_id =
-        storage_.InternString(base::StringView(key.flat_key));
-    StringId key_id = storage_.InternString(base::StringView(key.key));
-    Variadic variadic_val = Variadic::String(storage_.InternString(value));
-    inserter_.AddArg(flat_key_id, key_id, variadic_val);
-  }
-
-  void AddString(const Key& key, const std::string& value) override {
-    StringId flat_key_id =
-        storage_.InternString(base::StringView(key.flat_key));
-    StringId key_id = storage_.InternString(base::StringView(key.key));
-    Variadic variadic_val =
-        Variadic::String(storage_.InternString(base::StringView(value)));
-    inserter_.AddArg(flat_key_id, key_id, variadic_val);
-  }
-
-  void AddDouble(const Key& key, double value) override {
-    StringId flat_key_id =
-        storage_.InternString(base::StringView(key.flat_key));
-    StringId key_id = storage_.InternString(base::StringView(key.key));
-    Variadic variadic_val = Variadic::Real(value);
-    inserter_.AddArg(flat_key_id, key_id, variadic_val);
-  }
-
-  void AddPointer(const Key& key, const void* value) override {
-    StringId flat_key_id =
-        storage_.InternString(base::StringView(key.flat_key));
-    StringId key_id = storage_.InternString(base::StringView(key.key));
-    Variadic variadic_val =
-        Variadic::Pointer(reinterpret_cast<uintptr_t>(value));
-    inserter_.AddArg(flat_key_id, key_id, variadic_val);
-  }
-
-  void AddBoolean(const Key& key, bool value) override {
-    StringId flat_key_id =
-        storage_.InternString(base::StringView(key.flat_key));
-    StringId key_id = storage_.InternString(base::StringView(key.key));
-    Variadic variadic_val = Variadic::Boolean(value);
-    inserter_.AddArg(flat_key_id, key_id, variadic_val);
-  }
-
-  bool AddJson(const Key&, const protozero::ConstChars&) override {
-    PERFETTO_FATAL("Unexpected JSON value when parsing statsd data");
-  }
-
-  void AddNull(const Key& key) override {
-    StringId flat_key_id =
-        storage_.InternString(base::StringView(key.flat_key));
-    StringId key_id = storage_.InternString(base::StringView(key.key));
-    Variadic variadic_val = Variadic::Null();
-    inserter_.AddArg(flat_key_id, key_id, variadic_val);
-  }
-
-  size_t GetArrayEntryIndex(const std::string& array_key) override {
-    base::ignore_result(array_key);
-    return 0;
-  }
-
-  size_t IncrementArrayEntryIndex(const std::string& array_key) override {
-    base::ignore_result(array_key);
-    return 0;
-  }
-
-  PacketSequenceStateGeneration* seq_state() override { return nullptr; }
-
- protected:
-  InternedMessageView* GetInternedMessageView(uint32_t field_id,
-                                              uint64_t iid) override {
-    base::ignore_result(field_id);
-    base::ignore_result(iid);
-    return nullptr;
-  }
-
- private:
-  BoundInserter& inserter_;
-  TraceStorage& storage_;
-};
 
 // If we don't know about the atom format put whatever details we
 // can. This has the following restrictions:
@@ -216,11 +112,12 @@ StatsdModule::StatsdModule(TraceProcessorContext* context)
 
 StatsdModule::~StatsdModule() = default;
 
-ModuleResult StatsdModule::TokenizePacket(const TracePacket::Decoder& decoder,
-                                          TraceBlobView* /*packet*/,
-                                          int64_t packet_timestamp,
-                                          PacketSequenceState* state,
-                                          uint32_t field_id) {
+ModuleResult StatsdModule::TokenizePacket(
+    const TracePacket::Decoder& decoder,
+    TraceBlobView* /*packet*/,
+    int64_t packet_timestamp,
+    RefPtr<PacketSequenceStateGeneration> state,
+    uint32_t field_id) {
   if (field_id != TracePacket::kStatsdAtomFieldNumber) {
     return ModuleResult::Ignored();
   }
@@ -246,9 +143,9 @@ ModuleResult StatsdModule::TokenizePacket(const TracePacket::Decoder& decoder,
     std::vector<uint8_t> vec = forged.SerializeAsArray();
     TraceBlob blob = TraceBlob::CopyFrom(vec.data(), vec.size());
 
-    context_->sorter->PushTracePacket(
-        atom_timestamp, state->current_generation(),
-        TraceBlobView(std::move(blob)), context_->machine_id());
+    context_->sorter->PushTracePacket(atom_timestamp, state,
+                                      TraceBlobView(std::move(blob)),
+                                      context_->machine_id());
   }
 
   return ModuleResult::Handled();
@@ -295,7 +192,7 @@ void StatsdModule::ParseAtom(int64_t ts, protozero::ConstBytes nested_bytes) {
   }
   SliceId slice = opt_slice.value();
   auto inserter = context_->args_tracker->AddArgsTo(slice);
-  InserterDelegate delegate(inserter, *context_->storage.get());
+  ArgsParser delegate(ts, inserter, *context_->storage.get());
 
   const auto& fields = pool_.descriptor()->fields();
   const auto& field_it = fields.find(nested_field_id);

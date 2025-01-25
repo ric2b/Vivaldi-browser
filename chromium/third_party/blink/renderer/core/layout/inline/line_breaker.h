@@ -31,6 +31,7 @@ class LineInfo;
 class ResolvedTextLayoutAttributesIterator;
 class ShapingLineBreaker;
 struct AnnotationBreakTokenData;
+struct RubyBreakTokenData;
 
 // The line breaker needs to know which mode its in to properly handle floats.
 enum class LineBreakerMode { kContent, kMinContent, kMaxContent };
@@ -222,7 +223,16 @@ class CORE_EXPORT LineBreaker {
   void ComputeMinMaxContentSizeForBlockChild(const InlineItem&,
                                              InlineItemResult*);
   // Returns false if we can't handle the current InlineItem as a ruby.
-  bool HandleRuby(LineInfo* line_info);
+  // NOINLINE prevents a compiler for Android 64bit from inlining
+  // HandleRuby() twice.
+  //
+  // `retry_size` - If this is not kIndefiniteSize, the function tries to break
+  //   the ruby column so that its inline-size is less than `retry_size`.
+  NOINLINE bool HandleRuby(LineInfo* line_info,
+                           LayoutUnit retry_size = kIndefiniteSize);
+  bool IsMonolithicRuby(
+      const LineInfo& base_line,
+      const HeapVector<LineInfo, 1>& annotation_line_list) const;
   // `mode`: Must be kMaxContent or kContent.
   // `limit`: Must be non-negative or kIndefiniteSize, which means no auto-wrap.
   LineInfo CreateSubLineInfo(InlineItemTextIndex start,
@@ -236,8 +246,10 @@ class CORE_EXPORT LineBreaker {
       const HeapVector<LineInfo, 1>& annotation_line_list,
       const Vector<AnnotationBreakTokenData, 1>& annotation_data_list,
       LayoutUnit ruby_size,
+      bool is_continuation,
       LineInfo& line_info);
-  bool CanBreakAfterRubyColumn(const InlineItemResult& column_result) const;
+  bool CanBreakAfterRubyColumn(const InlineItemResult& column_result,
+                               wtf_size_t column_end_item_index) const;
 
   bool CanBreakAfterAtomicInline(const InlineItem& item) const;
   bool CanBreakAfter(const InlineItem& item) const;
@@ -262,7 +274,8 @@ class CORE_EXPORT LineBreaker {
   void HandleCloseTag(const InlineItem&, LineInfo*);
 
   bool HandleOverflowIfNeeded(LineInfo*);
-  void HandleOverflow(LineInfo*);
+  // NOINLINE prevents a compiler for Android 64bit from code size bloat.
+  NOINLINE void HandleOverflow(LineInfo*);
   void RetryAfterOverflow(LineInfo*, InlineItemResults*);
   void RewindOverflow(unsigned new_end, LineInfo*);
   void Rewind(unsigned new_end, LineInfo*);
@@ -288,7 +301,10 @@ class CORE_EXPORT LineBreaker {
   LayoutUnit RemainingAvailableWidth() const {
     return AvailableWidthToFit() - position_;
   }
-  bool CanFitOnLine() const { return position_ <= AvailableWidthToFit(); }
+  bool CanFitOnLine() const {
+    return (parent_breaker_ && !auto_wrap_) ||
+           position_ <= AvailableWidthToFit();
+  }
   void UpdateAvailableWidth();
 
   // True if the current line is hyphenated.
@@ -407,6 +423,9 @@ class CORE_EXPORT LineBreaker {
   const ConstraintSpace& constraint_space_;
   ExclusionSpace* exclusion_space_;
   const InlineBreakToken* break_token_;
+  // This is set by the constructor, or set after filling a LineInfo.
+  // BreakLine consumes it.
+  const RubyBreakTokenData* ruby_break_token_ = nullptr;
   const ColumnSpannerPath* column_spanner_path_;
   const ComputedStyle* current_style_ = nullptr;
 

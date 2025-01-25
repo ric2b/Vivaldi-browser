@@ -25,11 +25,22 @@ void ValidateSpirvMessage(spv_message_level_t level,
 {
     WARN() << "Level" << level << ": " << message;
 }
+
+spv_target_env GetEnv(const Blob &blob)
+{
+    switch (blob[kHeaderIndexVersion])
+    {
+        case kVersion_1_4:
+            return SPV_ENV_VULKAN_1_1_SPIRV_1_4;
+        default:
+            return SPV_ENV_VULKAN_1_1;
+    }
+}
 }  // anonymous namespace
 
 bool Validate(const Blob &blob)
 {
-    spvtools::SpirvTools spirvTools(SPV_ENV_VULKAN_1_1);
+    spvtools::SpirvTools spirvTools(GetEnv(blob));
 
     spvtools::ValidatorOptions options;
     options.SetFriendlyNames(false);
@@ -49,9 +60,11 @@ bool Validate(const Blob &blob)
 
 void Print(const Blob &blob)
 {
-    spvtools::SpirvTools spirvTools(SPV_ENV_VULKAN_1_1);
+    spvtools::SpirvTools spirvTools(GetEnv(blob));
     std::string readableSpirv;
-    spirvTools.Disassemble(blob, &readableSpirv, 0);
+    spirvTools.Disassemble(blob, &readableSpirv,
+                           SPV_BINARY_TO_TEXT_OPTION_COMMENT | SPV_BINARY_TO_TEXT_OPTION_INDENT |
+                               SPV_BINARY_TO_TEXT_OPTION_NESTED_INDENT);
     INFO() << "Dissembly SPIRV: " << readableSpirv.c_str();
 }
 #else   // ANGLE_ENABLE_ASSERTS

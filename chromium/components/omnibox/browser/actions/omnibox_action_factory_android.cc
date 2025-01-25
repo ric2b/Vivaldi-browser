@@ -10,9 +10,11 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/lazy_instance.h"
-#include "components/omnibox/browser/jni_headers/OmniboxActionFactory_jni.h"
 #include "omnibox_action.h"
 #include "url/android/gurl_android.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "components/omnibox/browser/jni_headers/OmniboxActionFactory_jni.h"
 
 namespace {
 
@@ -58,6 +60,18 @@ base::android::ScopedJavaGlobalRef<jobject> BuildOmniboxActionInSuggest(
           base::android::ConvertUTF16ToJavaString(env, accessibility_hint),
           action_type,
           base::android::ConvertUTF8ToJavaString(env, action_uri)));
+}
+
+base::android::ScopedJavaGlobalRef<jobject> BuildOmniboxAnswerAction(
+    JNIEnv* env,
+    intptr_t instance,
+    const std::u16string& hint,
+    const std::u16string& accessibility_hint) {
+  return base::android::ScopedJavaGlobalRef<jobject>(
+      Java_OmniboxActionFactory_buildOmniboxAnswerAction(
+          env, g_java_factory.Get(), instance,
+          base::android::ConvertUTF16ToJavaString(env, hint),
+          base::android::ConvertUTF16ToJavaString(env, accessibility_hint)));
 }
 
 // Convert a vector of OmniboxActions to Java counterpart.

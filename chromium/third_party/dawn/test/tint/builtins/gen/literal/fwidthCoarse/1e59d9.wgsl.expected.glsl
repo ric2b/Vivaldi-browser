@@ -7,13 +7,13 @@ layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   uint pad;
 } prevent_dce;
 
-void fwidthCoarse_1e59d9() {
+vec3 fwidthCoarse_1e59d9() {
   vec3 res = fwidth(vec3(1.0f));
-  prevent_dce.inner = res;
+  return res;
 }
 
 void fragment_main() {
-  fwidthCoarse_1e59d9();
+  prevent_dce.inner = fwidthCoarse_1e59d9();
 }
 
 void main() {

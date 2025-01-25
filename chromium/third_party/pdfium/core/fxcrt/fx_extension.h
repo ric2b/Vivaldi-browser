@@ -13,6 +13,8 @@
 #include <wctype.h>
 
 #include "build/build_config.h"
+#include "core/fxcrt/compiler_specific.h"
+#include "core/fxcrt/widestring.h"
 
 #if defined(USE_SYSTEM_ICUUC)
 #include <unicode/uchar.h>
@@ -24,8 +26,11 @@
 
 #define FX_IsOdd(a) ((a)&1)
 
-float FXSYS_wcstof(const wchar_t* pwsStr, size_t nLength, size_t* pUsedLen);
-wchar_t* FXSYS_wcsncpy(wchar_t* dstStr, const wchar_t* srcStr, size_t count);
+float FXSYS_wcstof(WideStringView pwsStr, size_t* pUsedLen);
+
+UNSAFE_BUFFER_USAGE wchar_t* FXSYS_wcsncpy(wchar_t* dstStr,
+                                           const wchar_t* srcStr,
+                                           size_t count);
 
 inline bool FXSYS_iswlower(int32_t c) {
   return u_islower(c);

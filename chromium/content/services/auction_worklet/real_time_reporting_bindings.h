@@ -12,7 +12,7 @@
 #include "content/common/content_export.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
 #include "content/services/auction_worklet/context_recycler.h"
-#include "content/services/auction_worklet/public/mojom/real_time_reporting.mojom-forward.h"
+#include "content/services/auction_worklet/public/mojom/real_time_reporting.mojom.h"
 #include "v8/include/v8-forward.h"
 
 namespace auction_worklet {
@@ -41,15 +41,13 @@ class CONTENT_EXPORT RealTimeReportingBindings : public Bindings {
   }
 
  private:
-  static void ContributeToRealTimeHistogram(
-      const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void ContributeOnWorkletLatency(
+  static void ContributeToHistogram(
       const v8::FunctionCallbackInfo<v8::Value>& args);
 
   const raw_ptr<AuctionV8Helper> v8_helper_;
   const raw_ptr<AuctionV8Logger> v8_logger_;
 
-  // Contributions from calling Real Time Reporting APIs.
+  // Contributions from calling Real Time Reporting API.
   std::vector<auction_worklet::mojom::RealTimeReportingContributionPtr>
       real_time_reporting_contributions_;
 };

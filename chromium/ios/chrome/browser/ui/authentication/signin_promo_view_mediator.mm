@@ -125,6 +125,9 @@ bool IsSupportedAccessPoint(signin_metrics::AccessPoint access_point) {
     case signin_metrics::AccessPoint::
         ACCESS_POINT_OIDC_REDIRECTION_INTERCEPTION:
     case signin_metrics::AccessPoint::ACCESS_POINT_WEBAUTHN_MODAL_DIALOG:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN_WITH_SYNC_PROMO:
+    case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return false;
   }
@@ -218,9 +221,12 @@ void RecordImpressionsTilSigninButtonsHistogramForAccessPoint(
     case signin_metrics::AccessPoint::
         ACCESS_POINT_OIDC_REDIRECTION_INTERCEPTION:
     case signin_metrics::AccessPoint::ACCESS_POINT_WEBAUTHN_MODAL_DIALOG:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN_WITH_SYNC_PROMO:
+    case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
-      NOTREACHED() << "Unexpected value for access point "
-                   << static_cast<int>(access_point);
+      NOTREACHED_IN_MIGRATION() << "Unexpected value for access point "
+                                << static_cast<int>(access_point);
       break;
   }
 }
@@ -313,9 +319,12 @@ void RecordImpressionsTilDismissHistogramForAccessPoint(
     case signin_metrics::AccessPoint::
         ACCESS_POINT_OIDC_REDIRECTION_INTERCEPTION:
     case signin_metrics::AccessPoint::ACCESS_POINT_WEBAUTHN_MODAL_DIALOG:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN_WITH_SYNC_PROMO:
+    case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
-      NOTREACHED() << "Unexpected value for access point "
-                   << static_cast<int>(access_point);
+      NOTREACHED_IN_MIGRATION() << "Unexpected value for access point "
+                                << static_cast<int>(access_point);
       break;
   }
 }
@@ -408,9 +417,12 @@ void RecordImpressionsTilXButtonHistogramForAccessPoint(
     case signin_metrics::AccessPoint::
         ACCESS_POINT_OIDC_REDIRECTION_INTERCEPTION:
     case signin_metrics::AccessPoint::ACCESS_POINT_WEBAUTHN_MODAL_DIALOG:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN_WITH_SYNC_PROMO:
+    case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
-      NOTREACHED() << "Unexpected value for access point "
-                   << static_cast<int>(access_point);
+      NOTREACHED_IN_MIGRATION() << "Unexpected value for access point "
+                                << static_cast<int>(access_point);
       break;
   }
 }
@@ -492,6 +504,9 @@ const char* DisplayedCountPreferenceKey(
     case signin_metrics::AccessPoint::
         ACCESS_POINT_OIDC_REDIRECTION_INTERCEPTION:
     case signin_metrics::AccessPoint::ACCESS_POINT_WEBAUTHN_MODAL_DIALOG:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN_WITH_SYNC_PROMO:
+    case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return nullptr;
   }
@@ -574,6 +589,9 @@ const char* AlreadySeenSigninViewPreferenceKey(
     case signin_metrics::AccessPoint::
         ACCESS_POINT_OIDC_REDIRECTION_INTERCEPTION:
     case signin_metrics::AccessPoint::ACCESS_POINT_WEBAUTHN_MODAL_DIALOG:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN_WITH_SYNC_PROMO:
+    case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return nullptr;
   }
@@ -1202,7 +1220,8 @@ id<SystemIdentity> GetDisplayedIdentity(
                        promoAction:promoAction];
       return;
     case SigninPromoAction::kReviewAccountSettings:
-      NOTREACHED() << "This action is only valid for a signed in account.";
+      NOTREACHED_IN_MIGRATION()
+          << "This action is only valid for a signed in account.";
       return;
   }
 }
@@ -1269,11 +1288,13 @@ id<SystemIdentity> GetDisplayedIdentity(
                                        PROMO_ACTION_NOT_DEFAULT];
       return;
     case SigninPromoAction::kReviewAccountSettings:
-      NOTREACHED() << "This action is only valid for a signed in account.";
+      NOTREACHED_IN_MIGRATION()
+          << "This action is only valid for a signed in account.";
       return;
     case SigninPromoAction::kSigninWithNoDefaultIdentity:
-      NOTREACHED() << "The user should not be able to explicitly select "
-                      "\"other account\".";
+      NOTREACHED_IN_MIGRATION()
+          << "The user should not be able to explicitly select "
+             "\"other account\".";
       return;
   }
 }

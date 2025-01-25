@@ -7,6 +7,7 @@
 #include <cmath>
 
 #include "base/bits.h"
+#include "base/containers/heap_array.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/notreached.h"
@@ -15,6 +16,13 @@
 #include "media/base/timestamp_constants.h"
 
 namespace media {
+
+AudioBuffer::ExternalMemory::ExternalMemory() = default;
+AudioBuffer::ExternalMemory::ExternalMemory(base::span<uint8_t> span)
+    : span_(span) {}
+AudioBuffer::ExternalMemory::~ExternalMemory() = default;
+AudioBuffer::ExternalMemory::ExternalMemory(const ExternalMemory&) = default;
+AudioBuffer::ExternalMemory::ExternalMemory(ExternalMemory&&) = default;
 
 namespace {
 
@@ -40,14 +48,14 @@ void CopyConvertFromInterleaved(
 class SelfOwnedMemory : public AudioBuffer::ExternalMemory {
  public:
   explicit SelfOwnedMemory(size_t size)
-      : memory_(std::make_unique<uint8_t[]>(size)) {
-    span_ = {memory_.get(), size};
+      : heap_array_(base::HeapArray<uint8_t>::Uninit(size)) {
+    span_ = heap_array_.as_span();
   }
   SelfOwnedMemory(SelfOwnedMemory&&) = default;
   ~SelfOwnedMemory() override = default;
 
  private:
-  std::unique_ptr<uint8_t[]> memory_;
+  base::HeapArray<uint8_t> heap_array_;
 };
 
 }  // namespace
@@ -575,7 +583,8 @@ void AudioBuffer::ReadFrames(int frames_to_copy,
         reinterpret_cast<const int32_t*>(source_data), dest_frame_offset,
         frames_to_copy);
   } else {
-    NOTREACHED() << "Unsupported audio sample type: " << sample_format_;
+    NOTREACHED_IN_MIGRATION()
+        << "Unsupported audio sample type: " << sample_format_;
   }
 }
 
@@ -654,7 +663,7 @@ void AudioBuffer::TrimRange(int start, int end) {
       case kSampleFormatDtsxP2:
       case kSampleFormatIECDts:
       case kSampleFormatDtse:
-        NOTREACHED() << "Invalid sample format!";
+        NOTREACHED_IN_MIGRATION() << "Invalid sample format!";
     }
   } else {
     CHECK_EQ(frames_to_copy, 0);

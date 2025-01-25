@@ -94,6 +94,9 @@ const exampleLog = new HAR.HARFormat.HARLog({
         bodySize: -1,
         _transferSize: 2903,
         _error: null,
+        _fetchedViaServiceWorker: true,
+        _responseCacheStorageCacheName: 'v1',
+        _serviceWorkerResponseSource: 'cache-storage',
       },
       serverIPAddress: '127.0.0.1',
       startedDateTime: '2020-12-14T17:35:53.241Z',
@@ -107,6 +110,10 @@ const exampleLog = new HAR.HARFormat.HARLog({
         wait: 510.48699999354034,
         receive: 0.7249999907799065,
         _blocked_queueing: 0.5090000340715051,
+        _workerStart: 30,
+        _workerReady: 2,
+        _workerFetchStart: 10,
+        _workerRespondWithSettled: 300,
       },
     },
     {
@@ -245,5 +252,38 @@ describe('HAR Importer', () => {
   it('Creates documents for entries with a pageref', () => {
     const pageLoadRequest = requests[1];
     assert.isTrue(pageLoadRequest.resourceType().isDocument());
+  });
+
+  it('Parses service worker info in entries', () => {
+    const parsedRequest = requests[0];
+    assert.strictEqual(parsedRequest.fetchedViaServiceWorker, true);
+    assert.strictEqual(parsedRequest.getResponseCacheStorageCacheName(), 'v1');
+    assert.strictEqual(parsedRequest.serviceWorkerResponseSource(), 'cache-storage');
+  });
+
+  it('Parses the request timings', () => {
+    const parsedRequest = requests[0];
+    const timing = parsedRequest.timing;
+    assert.deepEqual(timing, {
+      connectEnd: -1,
+      connectStart: -1,
+      dnsEnd: -1,
+      dnsStart: -1,
+      proxyEnd: -1,
+      proxyStart: -1,
+      pushEnd: 0,
+      pushStart: 0,
+      receiveHeadersEnd: 511.11399999354035,
+      receiveHeadersStart: 0.627,
+      requestTime: 1607967353.241509,
+      sendEnd: 0.627,
+      sendStart: 0.249,
+      sslEnd: -1,
+      sslStart: -1,
+      workerReady: 2,
+      workerFetchStart: 10,
+      workerRespondWithSettled: 300,
+      workerStart: 30,
+    });
   });
 });

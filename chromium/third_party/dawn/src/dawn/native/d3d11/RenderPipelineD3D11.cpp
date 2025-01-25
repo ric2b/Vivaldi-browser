@@ -412,7 +412,7 @@ MaybeError RenderPipeline::InitializeDepthStencilState() {
         state->depthWriteEnabled ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
     depthStencilDesc.DepthFunc = ToD3D11ComparisonFunc(state->depthCompare);
 
-    depthStencilDesc.StencilEnable = StencilTestEnabled(state) ? TRUE : FALSE;
+    depthStencilDesc.StencilEnable = UsesStencil() ? TRUE : FALSE;
     depthStencilDesc.StencilReadMask = static_cast<UINT8>(state->stencilReadMask);
     depthStencilDesc.StencilWriteMask = static_cast<UINT8>(state->stencilWriteMask);
 
@@ -475,11 +475,11 @@ MaybeError RenderPipeline::InitializeShaders() {
         mUsesInstanceIndex = compiledShader[SingleShaderStage::Vertex].usesInstanceIndex;
     }
 
-    std::optional<tint::PixelLocalOptions> pixelLocalOptions;
+    std::optional<tint::hlsl::writer::PixelLocalOptions> pixelLocalOptions;
     if (GetStageMask() & wgpu::ShaderStage::Fragment) {
-        pixelLocalOptions = tint::PixelLocalOptions();
+        pixelLocalOptions = tint::hlsl::writer::PixelLocalOptions();
         // HLSL SM5.0 doesn't support groups, so we set group index to 0.
-        pixelLocalOptions->pixel_local_group_index = 0;
+        pixelLocalOptions->group_index = 0;
 
         if (GetAttachmentState()->HasPixelLocalStorage()) {
             const std::vector<wgpu::TextureFormat>& storageAttachmentSlots =
@@ -503,15 +503,15 @@ MaybeError RenderPipeline::InitializeShaders() {
                     case wgpu::TextureFormat::Undefined:
                     case wgpu::TextureFormat::R32Uint:
                         pixelLocalOptions->attachment_formats[i] =
-                            tint::PixelLocalOptions::TexelFormat::kR32Uint;
+                            tint::hlsl::writer::PixelLocalOptions::TexelFormat::kR32Uint;
                         break;
                     case wgpu::TextureFormat::R32Sint:
                         pixelLocalOptions->attachment_formats[i] =
-                            tint::PixelLocalOptions::TexelFormat::kR32Sint;
+                            tint::hlsl::writer::PixelLocalOptions::TexelFormat::kR32Sint;
                         break;
                     case wgpu::TextureFormat::R32Float:
                         pixelLocalOptions->attachment_formats[i] =
-                            tint::PixelLocalOptions::TexelFormat::kR32Float;
+                            tint::hlsl::writer::PixelLocalOptions::TexelFormat::kR32Float;
                         break;
                     default:
                         DAWN_UNREACHABLE();

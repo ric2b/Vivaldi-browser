@@ -1,6 +1,8 @@
 #include "quiche/http2/adapter/test_utils.h"
 
 #include <optional>
+#include <string>
+#include <utility>
 
 #include "quiche/common/platform/api/quiche_test.h"
 #include "quiche/spdy/core/spdy_framer.h"
@@ -44,7 +46,7 @@ TEST(EqualsFrames, SingleFrameWithoutLength) {
   EXPECT_THAT(framer.SerializeFrame(goaway),
               EqualsFrames({{spdy::SpdyFrameType::GOAWAY, std::nullopt}}));
 
-  spdy::Http2HeaderBlock block;
+  quiche::HttpHeaderBlock block;
   block[":method"] = "GET";
   block[":path"] = "/example";
   block[":authority"] = "example.com";
@@ -62,7 +64,7 @@ TEST(EqualsFrames, MultipleFrames) {
   spdy::SpdyRstStreamIR rst_stream{7, spdy::ERROR_CODE_REFUSED_STREAM};
   spdy::SpdyGoAwayIR goaway{13, spdy::ERROR_CODE_ENHANCE_YOUR_CALM,
                             "Consider taking some deep breaths."};
-  spdy::Http2HeaderBlock block;
+  quiche::HttpHeaderBlock block;
   block[":method"] = "GET";
   block[":path"] = "/example";
   block[":authority"] = "example.com";

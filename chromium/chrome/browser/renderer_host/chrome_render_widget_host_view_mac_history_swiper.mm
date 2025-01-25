@@ -9,8 +9,6 @@
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "ui/events/blink/did_overscroll_params.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace {
 
 // The horizontal distance required to cause the browser to perform a history
@@ -205,13 +203,6 @@ BOOL forceMagicMouse = NO;
 - (void)beginGestureWithEvent:(NSEvent*)event {
   _inGesture = YES;
 
-  if (vivaldi::IsVivaldiRunning()) {
-    _firstScrollUnconsumed = NO;
-    // Added with Ch61 because rendererHandledWheelEvent is not called anymore.
-    _waitingForFirstGestureScroll = YES;
-    _recognitionState = history_swiper::kPending;
-  }
-
   // Reset state pertaining to Magic Mouse swipe gestures.
   _mouseScrollDelta = NSZeroSize;
 }
@@ -243,13 +234,6 @@ BOOL forceMagicMouse = NO;
 
 - (void)updateGestureCurrentPointFromEvent:(NSEvent*)event {
   NSPoint averagePosition = [self averagePositionInEvent:event];
-
-  // Workaround for frameless window. In framed mode the pointCount
-  // is always > 0 and the code depends on that.
-  if (vivaldi::IsVivaldiRunning() &&
-      averagePosition.x + averagePosition.y == 0) {
-   return;
- }
 
   // If the start point is valid, then so is the current point.
   if (_gestureStartPointValid) {
@@ -557,31 +541,11 @@ BOOL forceMagicMouse = NO;
                       if (ended || isComplete) {
                         [historyOverlay dismiss];
                         historyOverlay = nil;
-                        if (vivaldi::IsVivaldiRunning()) {
-                          forceMagicMouse = NO;
-                          self->_firstScrollUnconsumed = NO;
-                        }
                       }
                     }];
 }
 
 - (BOOL)handleScrollWheelEvent:(NSEvent*)theEvent {
-  // NOTE(espen@vivaldi.com). NSEventTypeBeginGesture and NSEventTypeEndGesture
-  // are not automatically called by cocoa after 10.11 but the history swiping
-  // relies on these events. The workaround is to test for the phase in
-  // scrollwheel events. Only magic mouse will set NSEventPhaseBegan and
-  // NSEventPhaseEnd.
-  if (vivaldi::IsVivaldiRunning()) {
-    if (theEvent.type == NSEventTypeScrollWheel) {
-      if (theEvent.phase == NSEventPhaseBegan) {
-        [self beginGestureWithEvent:theEvent];
-      }
-      else if (theEvent.phase == NSEventPhaseEnded) {
-        [self endGestureWithEvent:theEvent];
-      }
-    }
-  }
-
   // The only events that this class consumes have type NSEventPhaseChanged.
   // This simultaneously weeds our regular mouse wheel scroll events, and
   // gesture events with incorrect phase.
@@ -614,15 +578,10 @@ BOOL forceMagicMouse = NO;
     return NO;
   }
 
-  // NOTE(espen@vivaldi.com): From ch74 logic has changed when handling
-  // onOverscrolled. We do not (and never had) receive onOverscrolled and after
-  // testing I can not see we need it. See chromium issue 906765
-  if (!vivaldi::IsVivaldiRunning()) {
   // History swiping should be prevented if the renderer hasn't triggered it.
   if (!_overscrollTriggeredByRenderer) {
     return NO;
   }
-  } // End vivaldi
 
   // Magic mouse and touchpad swipe events are identical except magic mouse
   // events do not generate NSTouch callbacks. Since we rely on NSTouch

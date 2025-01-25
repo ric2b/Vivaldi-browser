@@ -38,7 +38,7 @@ namespace dawn::native::d3d {
 PhysicalDevice::PhysicalDevice(Backend* backend,
                                ComPtr<IDXGIAdapter4> hardwareAdapter,
                                wgpu::BackendType backendType)
-    : PhysicalDeviceBase(backend->GetInstance(), backendType),
+    : PhysicalDeviceBase(backendType),
       mHardwareAdapter(std::move(hardwareAdapter)),
       mBackend(backend) {}
 
@@ -53,15 +53,16 @@ Backend* PhysicalDevice::GetBackend() const {
 }
 
 ResultOrError<PhysicalDeviceSurfaceCapabilities> PhysicalDevice::GetSurfaceCapabilities(
+    InstanceBase*,
     const Surface*) const {
     PhysicalDeviceSurfaceCapabilities capabilities;
 
-    // Formats
+    capabilities.usages = wgpu::TextureUsage::RenderAttachment |
+                          wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::CopySrc |
+                          wgpu::TextureUsage::CopyDst;
 
     // This is the only supported format in native mode (see crbug.com/dawn/160).
     capabilities.formats.push_back(wgpu::TextureFormat::BGRA8Unorm);
-
-    // Present Modes
 
     capabilities.presentModes = {
         wgpu::PresentMode::Fifo,
@@ -69,12 +70,9 @@ ResultOrError<PhysicalDeviceSurfaceCapabilities> PhysicalDevice::GetSurfaceCapab
         wgpu::PresentMode::Mailbox,
     };
 
-    // Alpha Modes
-
     capabilities.alphaModes = {
         wgpu::CompositeAlphaMode::Opaque,
         wgpu::CompositeAlphaMode::Premultiplied,
-        wgpu::CompositeAlphaMode::Auto,
     };
 
     return capabilities;

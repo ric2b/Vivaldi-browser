@@ -140,8 +140,9 @@ CodeCachePolicy GetCodeCachePolicy(ExecutionContext* context,
   // Count the hint usage regardless of its value.
   context->CountUse(mojom::WebFeature::kCacheStorageCodeCacheHint);
 
-  if (header_value.LowerASCII() == "none")
+  if (EqualIgnoringASCIICase(header_value, "none")) {
     return CodeCachePolicy::kNone;
+  }
 
   return CodeCachePolicy::kAuto;
 }
@@ -620,8 +621,7 @@ class Cache::CodeCacheHandleCallbackForPut final
       base::span<const uint8_t> serialized_data =
           cached_metadata->SerializedData();
       auto side_data_blob_data = std::make_unique<BlobData>();
-      side_data_blob_data->AppendBytes(serialized_data.data(),
-                                       serialized_data.size());
+      side_data_blob_data->AppendBytes(serialized_data);
 
       batch_operation->response->side_data_blob_for_cache_put =
           BlobDataHandle::Create(std::move(side_data_blob_data),
@@ -703,7 +703,7 @@ ScriptPromise<Response> Cache::match(ScriptState* script_state,
       request_object = Request::Create(script_state, request->GetAsUSVString(),
                                        exception_state);
       if (exception_state.HadException())
-        return ScriptPromise<Response>();
+        return EmptyPromise();
       break;
   }
   return MatchImpl(script_state, request_object, options, exception_state);
@@ -751,7 +751,7 @@ ScriptPromise<IDLUndefined> Cache::add(ScriptState* script_state,
       requests.push_back(Request::Create(
           script_state, request->GetAsUSVString(), exception_state));
       if (exception_state.HadException())
-        return ScriptPromise<IDLUndefined>();
+        return EmptyPromise();
       break;
   }
   return AddAllImpl(script_state, "Cache.add()", requests, exception_state);
@@ -771,7 +771,7 @@ ScriptPromise<IDLUndefined> Cache::addAll(
         request_objects.push_back(Request::Create(
             script_state, request->GetAsUSVString(), exception_state));
         if (exception_state.HadException())
-          return ScriptPromise<IDLUndefined>();
+          return EmptyPromise();
         break;
     }
   }
@@ -793,7 +793,7 @@ ScriptPromise<IDLBoolean> Cache::Delete(ScriptState* script_state,
       request_object = Request::Create(script_state, request->GetAsUSVString(),
                                        exception_state);
       if (exception_state.HadException())
-        return ScriptPromise<IDLBoolean>();
+        return EmptyPromise();
       break;
   }
   return DeleteImpl(script_state, request_object, options, exception_state);
@@ -816,13 +816,13 @@ ScriptPromise<IDLUndefined> Cache::put(ScriptState* script_state,
       request = Request::Create(script_state, request_info->GetAsUSVString(),
                                 exception_state);
       if (exception_state.HadException())
-        return ScriptPromise<IDLUndefined>();
+        return EmptyPromise();
       break;
   }
 
   ValidateRequestForPut(request, exception_state);
   if (exception_state.HadException())
-    return ScriptPromise<IDLUndefined>();
+    return EmptyPromise();
 
   auto* barrier_callback = MakeGarbageCollected<BarrierCallbackForPutResponse>(
       script_state, this, "Cache.put()",
@@ -873,14 +873,19 @@ Cache::Cache(GlobalFetch::ScopedFetcher* fetcher,
              CacheStorageBlobClientList* blob_client_list,
              mojo::PendingAssociatedRemote<mojom::blink::CacheStorageCache>
                  cache_pending_remote,
-             scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-    : scoped_fetcher_(fetcher), blob_client_list_(blob_client_list) {
-  cache_remote_.Bind(std::move(cache_pending_remote), std::move(task_runner));
+             ExecutionContext* execution_context,
+             TaskType task_type)
+    : scoped_fetcher_(fetcher),
+      blob_client_list_(blob_client_list),
+      cache_remote_(execution_context) {
+  cache_remote_.Bind(std::move(cache_pending_remote),
+                     execution_context->GetTaskRunner(task_type));
 }
 
 void Cache::Trace(Visitor* visitor) const {
   visitor->Trace(scoped_fetcher_);
   visitor->Trace(blob_client_list_);
+  visitor->Trace(cache_remote_);
   ScriptWrappable::Trace(visitor);
 }
 
@@ -1070,7 +1075,7 @@ ScriptPromise<IDLUndefined> Cache::AddAllImpl(
   for (wtf_size_t i = 0; i < request_list.size(); ++i) {
     ValidateRequestForPut(request_list[i], exception_state);
     if (exception_state.HadException())
-      return ScriptPromise<IDLUndefined>();
+      return EmptyPromise();
   }
 
   auto* barrier_callback = MakeGarbageCollected<BarrierCallbackForPutResponse>(

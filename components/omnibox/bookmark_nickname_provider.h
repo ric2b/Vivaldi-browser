@@ -22,7 +22,7 @@
 class AutocompleteProviderClient;
 
 namespace bookmarks {
-class CoreBookmarkModel;
+class BookmarkModel;
 struct TitledUrlMatch;
 }  // namespace bookmarks
 
@@ -55,7 +55,7 @@ class BookmarkNicknameProvider : public AutocompleteProvider {
       const bookmarks::TitledUrlMatch& match) const;
 
   const raw_ptr<AutocompleteProviderClient> client_;
-  const raw_ptr<bookmarks::CoreBookmarkModel> bookmark_model_;
+  const raw_ptr<bookmarks::BookmarkModel> bookmark_model_;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BOOKMARK_NICKNAME_PROVIDER_H_

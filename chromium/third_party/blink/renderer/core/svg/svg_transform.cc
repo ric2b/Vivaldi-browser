@@ -18,6 +18,11 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/svg/svg_transform.h"
 
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
@@ -47,7 +52,7 @@ SVGTransform* SVGTransform::Clone() const {
 
 SVGPropertyBase* SVGTransform::CloneForAnimation(const String&) const {
   // SVGTransform is never animated.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 
@@ -135,7 +140,7 @@ const char* TransformTypePrefixForParsing(SVGTransformType type) {
     case SVGTransformType::kSkewy:
       return "skewY(";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return "";
 }
 
@@ -220,7 +225,7 @@ String SVGTransform::ValueAsString() const {
 
 void SVGTransform::Add(const SVGPropertyBase*, const SVGElement*) {
   // SVGTransform is not animated by itself.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void SVGTransform::CalculateAnimatedValue(const SMILAnimationEffectParameters&,
@@ -231,13 +236,13 @@ void SVGTransform::CalculateAnimatedValue(const SMILAnimationEffectParameters&,
                                           const SVGPropertyBase*,
                                           const SVGElement*) {
   // SVGTransform is not animated by itself.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 float SVGTransform::CalculateDistance(const SVGPropertyBase*,
                                       const SVGElement*) const {
   // SVGTransform is not animated by itself.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 
   return -1;
 }

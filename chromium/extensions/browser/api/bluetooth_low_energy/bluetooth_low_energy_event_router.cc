@@ -250,11 +250,11 @@ DeviceConnectErrorCodeToStatus(BluetoothDevice::ConnectErrorCode error_code) {
     case device::BluetoothDevice::ConnectErrorCode::ERROR_WAKELOCK:
       return extensions::BluetoothLowEnergyEventRouter::kStatusErrorWakelock;
     case BluetoothDevice::NUM_CONNECT_ERROR_CODES:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return extensions::BluetoothLowEnergyEventRouter::
           kStatusErrorInvalidArguments;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return extensions::BluetoothLowEnergyEventRouter::kStatusErrorFailed;
 }
 

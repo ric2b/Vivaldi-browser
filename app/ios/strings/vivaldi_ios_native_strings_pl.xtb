@@ -8,6 +8,7 @@
 <translation id="1123707809902612118">Blokuj trackery i reklamy</translation>
 <translation id="1151972924205500581">Hasło jest wymagane</translation>
 <translation id="1166425484559430538">Twoje dane są zaszyfrowane. By uzyskać dostęp, wprowadź swoje hasło szyfrowania.</translation>
+<translation id="1173894706177603556">Zmień nazwę</translation>
 <translation id="1181037720776840403">Usuń</translation>
 <translation id="1182668946911971500">Pasek notatek</translation>
 <translation id="1198271701881992799">Zaczynajmy</translation>
@@ -148,6 +149,7 @@ reklama</translation>
 <translation id="3842727926262967527">Wybierz położenie paska kart i adresu.</translation>
 <translation id="3845564230651302310">Stosowanie nowych ustawień blokowania...</translation>
 <translation id="3858860766373142691">Nazwa</translation>
+<translation id="3861379244432690245">Włącz Direct Match</translation>
 <translation id="3866249974567520381">Opis</translation>
 <translation id="3872195896030547485">Wprowadź prawidłowy adres e-mail.</translation>
 <translation id="3897092660631435901">Menu</translation>
@@ -173,6 +175,7 @@ reklama</translation>
 <translation id="4209092469652827314">Duży</translation>
 <translation id="4219175188138757774">Czeska i słowacka (<ph name="ORIGIN" />)</translation>
 <translation id="4222285809803895512">Data utworzenia</translation>
+<translation id="4274598629843497594">Włącz opcję „Pokazuj elementy szybkiego wybierania”, aby ta grupa była widoczna na stronie startowej. Nadal będziesz mieć dostęp do tej grupy poprzez panele zakładek.</translation>
 <translation id="4276839458685471670">Wg daty utworzenia</translation>
 <translation id="4277085371281330061">Zablokowanych
 trackerów</translation>
@@ -202,6 +205,7 @@ trackerów</translation>
 <translation id="4619615317237390068">Karty z innych urządzeń</translation>
 <translation id="462860218383788109">Data edycji</translation>
 <translation id="4640946580087069269">Kopiuj do notatki</translation>
+<translation id="4643117005422448078">Najczęściej odwiedzane strony</translation>
 <translation id="4654578955713250802">Blokowanie reklam i trackerów</translation>
 <translation id="4655510151391078468">Ten kod nie pasuje do tego, który Ci wysłaliśmy.
          Liczba pozostałych prób: <ph name="ATTEMPTS" />.</translation>
@@ -211,6 +215,7 @@ trackerów</translation>
 <translation id="4727698999970341158">Islandzka (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">Aktualizuj</translation>
 <translation id="4739712911308055817">Nie pobrano</translation>
+<translation id="4750394297954878236">Sugestie</translation>
 <translation id="4759399863961855552">Kolejność sortowania</translation>
 <translation id="4780953868408193639">Zablokowany
 tracker</translation>
@@ -226,6 +231,7 @@ tracker</translation>
 <translation id="4943266325467647391">Wbudowane w przeglądarkę Vivaldi blokowanie trackerów i reklam chroni Cię przed złośliwym oprogramowaniem i natarczywymi reklamami.</translation>
 <translation id="495421405224926623">Przeczytałem i akceptuję warunki użytkowania i politykę prywatności</translation>
 <translation id="497942794017668482">Blokowanie trackerów i reklam</translation>
+<translation id="4993477362660748586">Synchronizacja</translation>
 <translation id="5037761343305489956">Skopiowano do notatki</translation>
 <translation id="504986598654589766">Przeglądanie w karcie prywatnej oznacza, że wyszukiwania, odwiedzone strony, ciasteczka i pliki tymczasowe nie będą przechowywane przez Vivaldi. Nie szyfruje to ani nie modyfikuje twojego połączenia.</translation>
 <translation id="505774819758747674">Podgląd paska narzędzi z wybranym kolorem akcentu</translation>
@@ -236,10 +242,12 @@ tracker</translation>
 <translation id="5153806174841856652">Logowanie nie powiodło się</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Wyślij kod ponownie<ph name="END_LINK" /></translation>
 <translation id="5191012692655103305">Pobieranie kart i historii...</translation>
+<translation id="5221269430020540672">Otwórz obraz w karcie w tle</translation>
 <translation id="5238642303473095117">Usuń dane</translation>
 <translation id="5245732982828228444">Tutaj znajdziesz swoje notatki</translation>
 <translation id="5249199221558969362">Podaj realistyczny wiek.</translation>
 <translation id="5271549068863921519">Zapisz hasło</translation>
+<translation id="5273620430932404871">Włącz dopasowanie skrótów zakładek</translation>
 <translation id="5290452628447338707">Brak notatek</translation>
 <translation id="5317780077021120954">Zapisz</translation>
 <translation id="5349678548463426691">Wg opisu</translation>
@@ -248,7 +256,6 @@ tracker</translation>
 <translation id="5378841821586202982">Kosz</translation>
 <translation id="5398772614898833570">Zablokowanych reklam</translation>
 <translation id="5421638721143596928">Nie udało się odszyfrować twoich danych logowania. Zaloguj się ponownie.</translation>
-<translation id="5422086212043657100">Użyj jako folder szybkiego wybierania</translation>
 <translation id="5439835075346716808">Rejestracja z tego adresu IP została tymczasowo zablokowana. Spróbuj ponownie później.</translation>
 <translation id="5486261815000869482">Potwierdź hasło</translation>
 <translation id="5494016731375030300">Ostatnio zamknięte karty</translation>
@@ -260,6 +267,7 @@ tracker</translation>
 <translation id="5710478562694930157">Rosnąco</translation>
 <translation id="574392208103952083">Średni</translation>
 <translation id="5787420647064736989">Nazwa urządzenia</translation>
+<translation id="5801825598531634872">Nieaktywne po upływie dni</translation>
 <translation id="5822336771053074270">Dodaj notatkę</translation>
 <translation id="5823830882692559950">Twoje dane logowania zostały odrzucone przez Vivaldi.net: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">Nowy folder</translation>
@@ -277,6 +285,7 @@ tracker</translation>
 <translation id="6147094071357011481">Ostatnio zamknięte karty są niedostępne</translation>
 <translation id="6193995664633100765">Indyjska (<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">Opcje wyglądu stron internetowych</translation>
+<translation id="6257488392933423163">Wyświetl jako HTML</translation>
 <translation id="6365929278691047681">Niemiecka (<ph name="ORIGIN" />)</translation>
 <translation id="6406506848690869874">Synchronizacja</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> zaznaczonych</translation>
@@ -285,6 +294,7 @@ tracker</translation>
 <translation id="6517411226162529295">Zapasowy klucz szyfrowania</translation>
 <translation id="6527303717912515753">Udostępnij</translation>
 <translation id="6535988230515403205">Polska (<ph name="ORIGIN" />)</translation>
+<translation id="6566198107563125484">Włącz dopasowanie zakładek</translation>
 <translation id="659351303388691480">Wyczyść dane przeglądania...</translation>
 <translation id="6602272356389933803">Wygląd i motyw</translation>
 <translation id="6614744450826097546">Szczegóły reklam</translation>
@@ -303,7 +313,6 @@ tracker</translation>
 <translation id="681368974849482173">Notatka została utworzona</translation>
 <translation id="6830986331692390764">Czyszczenie danych synchronizacji. Proszę czekać.</translation>
 <translation id="6875510405870945573">Wybierz preferowany poziom blokowania.</translation>
-<translation id="6885837502028760851">Pokazuj tylko foldery szybkiego wybierania</translation>
 <translation id="6887143077297974801">Uruchomienie synchronizacji nie powiodło się.</translation>
 <translation id="691132463664340655">Motyw przeglądarki</translation>
 <translation id="6937750621455385628">Aby się zalogować, musisz użyć konta Vivaldi.</translation>
@@ -316,6 +325,7 @@ tracker</translation>
 <translation id="7006864796794806241">Odzyskaj hasło</translation>
 <translation id="7029809446516969842">Hasła</translation>
 <translation id="7041964446309059643">Ręcznie</translation>
+<translation id="7083011465470143310">Zapomniałeś <ph name="BEGIN_LINK" />hasła<ph name="END_LINK" />?</translation>
 <translation id="7110758301321962823">Odzyskaj nazwę użytkownika</translation>
 <translation id="7158507293261405349">Dodaj nową grupę</translation>
 <translation id="7192066917392691622">Malejąco</translation>
@@ -354,6 +364,7 @@ tracker</translation>
 <translation id="7732622593814325274">Zarządzaj źródłami blokowania trackerów</translation>
 <translation id="7765158879357617694">Przenieś</translation>
 <translation id="7771452384635174008">Układ</translation>
+<translation id="7791161131809889864">Otwórz wszystkie w tle</translation>
 <translation id="7801204999757211519">Masz już konto? <ph name="BEGIN_LINK" />Zaloguj się ➔<ph name="END_LINK" /></translation>
 <translation id="7850070199083838600">Utworzyć nową grupę?</translation>
 <translation id="7914995060146784406">Edytuj notatkę</translation>
@@ -365,6 +376,7 @@ tracker</translation>
 <translation id="8058018971942772071">Użyj jako grupy</translation>
 <translation id="8066170816074394954">Błąd serwera.</translation>
 <translation id="8076492880354921740">Karty</translation>
+<translation id="8077675488769462025">Nieaktywne karty</translation>
 <translation id="8112996065264879835">Ten kod nie pasuje do tego, który Ci wysłaliśmy.
          Osiągnąłeś maksymalny limit błędnych prób. Poproś o nowy kod, korzystając z opcji „Wyślij ponownie” poniżej.</translation>
 <translation id="8134672010161840864">Przybliż, aby przyciąć i skadrować obraz</translation>
@@ -386,6 +398,7 @@ tracker</translation>
 <translation id="8359194106448244241">Aby zobaczyć karty z innych urządzeń, musisz włączyć synchronizację.</translation>
 <translation id="8366175803122817174">Otwórz wszystkie linki z notatek</translation>
 <translation id="8384409685584033392">Informacje o stronie</translation>
+<translation id="8395378633507873708">Pasek adresu</translation>
 <translation id="839736845446313156">Zarejestruj się</translation>
 <translation id="8414685983518053656">Notatki</translation>
 <translation id="8423076545503792640">Żądanie nie powiodło się z powodu błędu. Spróbuj ponownie później.</translation>
@@ -402,6 +415,7 @@ tracker</translation>
 <translation id="8675578805254882416">Pobieranie</translation>
 <translation id="8677007239430848917">Dodaj swoją pierwszą notatkę przy użyciu ikony plusa poniżej</translation>
 <translation id="8684294196284714094">Gotowy, aby ustawić Vivaldi jako domyślną przeglądarkę?</translation>
+<translation id="8733945742171960420">Gdy tylko rozpoczniesz przeglądanie sieci, najczęściej odwiedzane przez Ciebie strony będą tutaj wyświetlane.</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> notatek zostało usuniętych</translation>
 <translation id="8763006697839582351">Otwórz w trybie prywatnym Vivaldi</translation>
 <translation id="8765173886020357878">Sugestie wyszukiwania</translation>
@@ -412,6 +426,7 @@ tracker</translation>
 <translation id="8855707633300847215">Pokazuj pasek kart</translation>
 <translation id="8892354889971902600">Tutaj pojawią się karty, które ostatnio zostały zamknięte.</translation>
 <translation id="89390081013973080">Wszystko gotowe! Czas zdecydować, jakie dane będą synchronizowane pomiędzy Twoimi urządzeniami.</translation>
+<translation id="8964449607824577665">Bez Twojego aktualnego hasła szyfrowania nie będziemy w stanie odszyfrować Twoich danych. Zresetowanie tego hasła wymaga usunięcia wszystkich istniejących danych synchronizacji na serwerach Vivaldi.</translation>
 <translation id="8965371804397726192">Rozpocznij synchronizację wszystkich danych</translation>
 <translation id="9028089729841356743">Błąd sieci.</translation>
 <translation id="9043882097999887291">Zablokowanych

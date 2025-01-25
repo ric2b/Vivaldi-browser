@@ -260,11 +260,6 @@ DropData* WebContentsViewMac::GetDropData() const {
   return [drag_dest_ currentDropData];
 }
 
-void WebContentsViewMac::TransferDragSecurityInfo(WebContentsView* view) {
-  WebContentsViewMac* view_mac = static_cast<WebContentsViewMac*>(view);
-  [drag_dest_ setDragSecurityInfo:[view_mac->drag_dest_ dragSecurityInfo]];
-}
-
 void WebContentsViewMac::UpdateDragOperation(ui::mojom::DragOperation operation,
                                              bool document_is_handling_drag) {
   [drag_dest_ setCurrentOperation:operation
@@ -536,6 +531,7 @@ bool WebContentsViewMac::PerformDragOperation(DraggingInfoPtr dragging_info,
 bool WebContentsViewMac::DragPromisedFileTo(const base::FilePath& file_path,
                                             const DropData& drop_data,
                                             const GURL& download_url,
+                                            const url::Origin& source_origin,
                                             base::FilePath* out_file_path) {
   *out_file_path = file_path;
   // This is called by -namesOfPromisedFilesDroppedAtDestination, which is
@@ -554,7 +550,7 @@ bool WebContentsViewMac::DragPromisedFileTo(const base::FilePath& file_path,
         *out_file_path, std::move(file), download_url,
         content::Referrer(dragowner_webcontents_->GetLastCommittedURL(),
                           drop_data.referrer_policy),
-        dragowner_webcontents_->GetEncoding(), dragowner_webcontents_);
+        dragowner_webcontents_->GetEncoding(), source_origin, dragowner_webcontents_);
 
     DragDownloadFile* downloader = drag_file_downloader.get();
     // The finalizer will take care of closing and deletion.
@@ -631,9 +627,11 @@ void WebContentsViewMac::DragPromisedFileTo(
     const base::FilePath& file_path,
     const DropData& drop_data,
     const GURL& download_url,
+    const url::Origin& source_origin,
     DragPromisedFileToCallback callback) {
   base::FilePath actual_file_path;
-  DragPromisedFileTo(file_path, drop_data, download_url, &actual_file_path);
+  DragPromisedFileTo(file_path, drop_data, download_url, source_origin,
+                     &actual_file_path);
   std::move(callback).Run(actual_file_path);
 }
 

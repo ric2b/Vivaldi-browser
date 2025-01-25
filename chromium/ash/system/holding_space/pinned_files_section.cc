@@ -34,6 +34,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/button.h"
@@ -71,15 +72,6 @@ views::Builder<views::ImageView> CreateGSuiteIcon(const gfx::VectorIcon& icon) {
 bool ShouldShowPlaceholder(PrefService* prefs) {
   if (features::IsHoldingSpacePredictabilityEnabled() ||
       features::IsHoldingSpaceSuggestionsEnabled()) {
-    return true;
-  }
-
-  // If the model is empty and the holding space wallpaper nudge is enabled,
-  // then we need to show the placeholder so that there is something when the
-  // user clicks the force-shown tray.
-  if (features::IsHoldingSpaceWallpaperNudgeEnabled() &&
-      HoldingSpaceController::Get()->model() &&
-      HoldingSpaceController::Get()->model()->items().empty()) {
     return true;
   }
 
@@ -142,7 +134,7 @@ class FilesAppChip : public views::Button {
   }
 
   void Init() {
-    SetAccessibleName(l10n_util::GetStringUTF16(
+    GetViewAccessibility().SetName(l10n_util::GetStringUTF16(
         IDS_ASH_HOLDING_SPACE_PINNED_FILES_APP_CHIP_TEXT));
     SetID(kHoldingSpaceFilesAppChipId);
 

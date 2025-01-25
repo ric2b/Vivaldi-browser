@@ -36,20 +36,19 @@ class SyncTransportDataPrefs;
 
 // The only real implementation of the SyncEngine. See that interface's
 // definition for documentation of public methods.
+// Lives on the UI thread, and handles task-posting to SyncEngineBackend on
+// the sync sequence as necessary.
 class SyncEngineImpl : public SyncEngine,
                        public InvalidationsListener,
                        public FCMRegistrationTokenObserver {
  public:
-  using Status = SyncStatus;
-
   // |sync_invalidations_service| must not be null.
   SyncEngineImpl(const std::string& name,
                  SyncInvalidationsService* sync_invalidations_service,
                  std::unique_ptr<ActiveDevicesProvider> active_devices_provider,
                  std::unique_ptr<SyncTransportDataPrefs> prefs,
                  const base::FilePath& sync_data_folder,
-                 scoped_refptr<base::SequencedTaskRunner> sync_task_runner,
-                 const base::RepeatingClosure& sync_transport_data_cleared_cb);
+                 scoped_refptr<base::SequencedTaskRunner> sync_task_runner);
 
   SyncEngineImpl(const SyncEngineImpl&) = delete;
   SyncEngineImpl& operator=(const SyncEngineImpl&) = delete;
@@ -81,7 +80,7 @@ class SyncEngineImpl : public SyncEngine,
   void ConnectDataType(ModelType type,
                        std::unique_ptr<DataTypeActivationResponse>) override;
   void DisconnectDataType(ModelType type) override;
-  const Status& GetDetailedStatus() const override;
+  const SyncStatus& GetDetailedStatus() const override;
   void GetTypesWithUnsyncedData(
       base::OnceCallback<void(ModelTypeSet)> cb) const override;
   void HasUnsyncedItemsForTest(
@@ -132,7 +131,7 @@ class SyncEngineImpl : public SyncEngine,
   void HandleInitializationFailureOnFrontendLoop();
 
   // Called from SyncEngineBackend::OnSyncCycleCompleted to handle updating
-  // frontend thread components.
+  // frontend sequence components.
   void HandleSyncCycleCompletedOnFrontendLoop(
       const SyncCycleSnapshot& snapshot);
 
@@ -156,10 +155,6 @@ class SyncEngineImpl : public SyncEngine,
   // Sets the last synced time to the current time.
   void UpdateLastSyncedTime();
 
-  // Helper function that clears SyncTransportDataPrefs and also notifies
-  // upper layers via |sync_transport_data_cleared_cb_|.
-  void ClearLocalTransportDataAndNotify();
-
   // Updates the current state of standalone invalidations. Note that the
   // invalidations can be handled even if the invalidation service is not fully
   // initialized yet (e.g. while processing the incoming queue of messages
@@ -177,24 +172,28 @@ class SyncEngineImpl : public SyncEngine,
 
   const std::unique_ptr<SyncTransportDataPrefs> prefs_;
 
-  const base::RepeatingClosure sync_transport_data_cleared_cb_;
+  // The cache GUID and birthday are stored in prefs, but also cached in memory.
+  // This is because in some cases (when an account gets removed from the
+  // device), the prefs can get cleared before the SyncEngine is destroyed.
+  std::string cached_cache_guid_;
+  std::string cached_birthday_;
+
+  raw_ptr<SyncInvalidationsService> sync_invalidations_service_ = nullptr;
 
   // Our backend, which communicates directly to the syncapi. Use refptr instead
-  // of WeakHandle because |backend_| is created on UI loop but released on
-  // sync loop.
+  // of WeakHandle because |backend_| is created on the UI thread but released
+  // on the sync sequence.
   scoped_refptr<SyncEngineBackend> backend_;
-
-  // A handle referencing the main interface for sync data types. This
-  // object is owned because in production code it is a proxy object.
-  std::unique_ptr<ModelTypeConnector> model_type_connector_;
-
-  bool initialized_ = false;
 
   // The host which we serve (and are owned by). Set in Initialize() and nulled
   // out in StopSyncingForShutdown().
   raw_ptr<SyncEngineHost> host_ = nullptr;
 
-  raw_ptr<SyncInvalidationsService> sync_invalidations_service_ = nullptr;
+  bool initialized_ = false;
+
+  // A handle referencing the main interface for sync data types. This
+  // object is owned because in production code it is a proxy object.
+  std::unique_ptr<ModelTypeConnector> model_type_connector_;
 
   ModelTypeSet last_enabled_types_;
 
@@ -211,7 +210,8 @@ class SyncEngineImpl : public SyncEngine,
   // re-enabling.
   bool invalidations_enabled_reported_ = false;
 
-  // Checks that we're on the same thread this was constructed on (UI thread).
+  // Checks that we're on the same sequence this was constructed on (UI
+  // sequence).
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<SyncEngineImpl> weak_ptr_factory_{this};

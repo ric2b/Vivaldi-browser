@@ -61,6 +61,7 @@ cc_library(
         "//internal/platform/implementation:comm",
         "//proto/mediums:web_rtc_signaling_frames_cc_proto",
         # TODO: Support WebRTC
+        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
@@ -129,9 +130,11 @@ cc_test(
         "//connections/implementation/mediums/ble_v2",
         "//internal/flags:nearby_flags",
         "//internal/platform:base",
+        "//internal/platform:cancellation_flag",
         "//internal/platform:comm",
         "//internal/platform:test_util",
         "//internal/platform:types",
+        "//internal/platform/implementation:types",
         "//internal/platform/implementation/g3",  # build_cleaner: keep
         "@com_github_protobuf_matchers//protobuf-matchers",
         "@com_google_absl//absl/strings",

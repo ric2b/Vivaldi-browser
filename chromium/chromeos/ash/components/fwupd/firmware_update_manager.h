@@ -14,7 +14,6 @@
 #include "base/containers/flat_set.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
-#include "base/files/scoped_file.h"
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -66,7 +65,7 @@ enum class MethodResult {
   // DEPRECATED: kInstallFailed = 1,
   kFailedToCreateUpdateDirectory = 2,
   // DEPRECATED: kInvalidDestinationFile = 3,
-  kInvalidFileDescriptor = 4,
+  kInvalidFile = 4,
   kFailedToDownloadToFile = 5,
   kFailedToCreatePatchFile = 6,
   kEmptyPatchFile = 7,
@@ -217,11 +216,11 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_FWUPD) FirmwareUpdateManager
                     const base::FilePath& filepath,
                     MethodCallback callback);
 
-  // Callback handler after fetching the file descriptor.
-  void OnGetFileDescriptor(const std::string& device_id,
-                           FirmwareInstallOptions options,
-                           MethodCallback callback,
-                           base::ScopedFD file_descriptor);
+  // Callback handler after fetching the file.
+  void OnGetFile(const std::string& device_id,
+                 FirmwareInstallOptions options,
+                 MethodCallback callback,
+                 base::File file);
 
   // Query the fwupd DBus client to install an update for a certain device.
   void InstallUpdate(const std::string& device_id,
@@ -263,59 +262,40 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_FWUPD) FirmwareUpdateManager
   // RequestUpdates()
   void MaybeRefreshRemote(bool refresh_allowed);
 
-  using DownloadCompleteCallback = base::OnceCallback<
-      void(const base::FilePath&, MethodCallback, base::File)>;
+  using DownloadCompleteCallback =
+      base::OnceCallback<void(base::FilePath, base::File)>;
 
   // Refresh LVFS remote metadata by downloading the required files and calling
   // UpdateMetadata dbus function.
   void RefreshRemote();
 
-  void OnUpdateMetadataResponse(const base::FilePath& checksum_filepath,
-                                const base::FilePath& firmware_filepath,
-                                MethodCallback callback,
-                                FwupdDbusResult result);
-
-  void CreateTempFileAndDownload(const base::FilePath& cache_path,
-                                 const std::string& filename,
-                                 const std::string& download_filename,
-                                 DownloadCompleteCallback on_download_callback,
-                                 MethodCallback callback,
+  void CreateTempFileAndDownload(base::FilePath local_file,
+                                 std::string download_filename,
+                                 DownloadCompleteCallback callback,
                                  bool create_dir_success);
 
-  void DownloadLvfsMirrorFile(const base::FilePath& cache_path,
-                              std::string filename,
-                              const base::FilePath& download_filepath,
-                              DownloadCompleteCallback on_download_callback,
-                              MethodCallback callback,
+  void DownloadLvfsMirrorFile(std::string filename,
+                              base::FilePath download_filepath,
+                              DownloadCompleteCallback callback,
                               bool write_file_success);
-
-  void OnGetChecksumFile(const base::FilePath& cache_path,
-                         const base::FilePath& checksum_filepath,
-                         MethodCallback callback,
-                         base::File checksum_file);
-
-  void GetFirmwareFilename(const base::FilePath& checksum_filepath,
-                           base::File checksum_file,
-                           MethodCallback completion_callback,
-                           std::string file_contents);
-
-  void TriggerDownloadOfFirmwareFile(const base::FilePath& checksum_filepath,
-                                     base::File checksum_file,
-                                     MethodCallback callback,
-                                     std::string firmware_filename);
-
-  // Call UpdateMetadata dbus api using the given 2 files.
-  void UpdateMetadata(const base::FilePath& checksum_filepath,
-                      const base::File checksum_file,
-                      const base::FilePath& firmware_filepath,
-                      MethodCallback callback,
-                      base::File firmware_file);
 
   void GetFileDescriptor(
       std::unique_ptr<network::SimpleURLLoader> simple_loader,
-      DownloadCompleteCallback on_download_callback,
-      MethodCallback callback,
+      DownloadCompleteCallback callback,
       base::FilePath download_path);
+
+  void OnGetChecksumFile(base::FilePath checksum_filepath,
+                         base::File checksum_file);
+
+  void GetFirmwareFilename(std::string file_contents);
+
+  void TriggerDownloadOfFirmwareFile(std::string firmware_filename);
+
+  // Call UpdateMetadata dbus api using `checksum_file_` and `firmware_file`.
+  void UpdateMetadata(base::FilePath firmware_filepath,
+                      base::File firmware_file);
+
+  void OnUpdateMetadataResponse(FwupdDbusResult result);
 
   // RefreshRemoteComplete will be called exactly once with a result when an
   // attempt to refresh lvfs remote succeeds or fails for any reason.
@@ -352,9 +332,6 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_FWUPD) FirmwareUpdateManager
   void RecordUpdateMetrics();
 
   int GetNumCriticalUpdates();
-
-  // Determines if RefreshRemote is necassary.
-  bool RefreshRemoteAllowed(FirmwareUpdateManager::Source source);
 
   // Gets /tmp directory path to store downloaded files.
   const base::FilePath GetCacheDirPath();
@@ -393,6 +370,13 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_FWUPD) FirmwareUpdateManager
 
   // Whether or not fetching updates in inflight.
   bool is_fetching_updates_ = false;
+
+  // Checksum and firmware paths and File objects are held temporarily during
+  // download, and are used for cleanup which must be done on task_runner_.
+  base::FilePath checksum_filepath_;
+  base::FilePath firmware_filepath_;
+  base::File checksum_file_;
+  base::File firmware_file_;
 
   // Used only for testing to force notification to appear.
   bool should_show_notification_for_test_ = false;

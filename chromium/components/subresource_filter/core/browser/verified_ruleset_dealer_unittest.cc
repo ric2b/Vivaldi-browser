@@ -7,12 +7,14 @@
 #include <memory>
 #include <vector>
 
+#include "base/check.h"
 #include "base/files/file.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/hash/hash.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_simple_task_runner.h"
+#include "components/subresource_filter/core/common/constants.h"
 #include "components/subresource_filter/core/common/memory_mapped_ruleset.h"
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -77,17 +79,17 @@ std::vector<uint8_t> ReadRulesetContents(const MemoryMappedRuleset* ruleset) {
 }
 
 std::vector<uint8_t> ReadFileContent(base::File* file) {
-  DCHECK(file);
-  DCHECK(file->IsValid());
+  CHECK(file);
+  CHECK(file->IsValid());
 
   const int64_t file_length = file->GetLength();
-  DCHECK_LE(0, file_length);
+  CHECK_LE(0, file_length);
 
   std::vector<uint8_t> file_content(static_cast<size_t>(file_length), 0);
   const int read_res =
       file->Read(0, reinterpret_cast<char*>(&(file_content[0])),
                  static_cast<int>(file_length));
-  DCHECK_EQ(read_res, file_length);
+  CHECK_EQ(read_res, file_length);
 
   return file_content;
 }
@@ -113,7 +115,8 @@ class SubresourceFilterVerifiedRulesetDealerTest : public ::testing::Test {
  protected:
   void SetUp() override {
     rulesets_.CreateRulesets(true /* many_rules */);
-    ruleset_dealer_ = std::make_unique<VerifiedRulesetDealer>();
+    ruleset_dealer_ =
+        std::make_unique<VerifiedRulesetDealer>(kSafeBrowsingRulesetConfig);
   }
 
   void TearDown() override {
@@ -459,7 +462,8 @@ TEST_F(SubresourceFilterVerifiedRulesetDealerHandleTest,
   TestVerifiedRulesetDealerClient after_warm_up;
 
   std::unique_ptr<VerifiedRulesetDealer::Handle> dealer_handle(
-      new VerifiedRulesetDealer::Handle(task_runner()));
+      new VerifiedRulesetDealer::Handle(task_runner(),
+                                        kSafeBrowsingRulesetConfig));
   dealer_handle->GetDealerAsync(before_set_ruleset.GetCallback());
   dealer_handle->TryOpenAndSetRulesetFile(rulesets().indexed_1().path,
                                           /*expected_checksum=*/0,
@@ -481,7 +485,8 @@ TEST_F(SubresourceFilterVerifiedRulesetDealerHandleTest, RulesetFileIsUpdated) {
   TestVerifiedRulesetDealerClient read_ruleset_2;
 
   std::unique_ptr<VerifiedRulesetDealer::Handle> dealer_handle(
-      new VerifiedRulesetDealer::Handle(task_runner()));
+      new VerifiedRulesetDealer::Handle(task_runner(),
+                                        kSafeBrowsingRulesetConfig));
 
   dealer_handle->TryOpenAndSetRulesetFile(
       rulesets().indexed_1().path, /*expected_checksum=*/0, base::DoNothing());
@@ -509,8 +514,8 @@ TEST_F(SubresourceFilterVerifiedRulesetDealerHandleTest,
   TestVerifiedRulesetDealerClient after_set_ruleset_2;
   TestVerifiedRulesetDealerClient read_ruleset_2;
 
-  auto dealer_handle =
-      std::make_unique<VerifiedRulesetDealer::Handle>(task_runner());
+  auto dealer_handle = std::make_unique<VerifiedRulesetDealer::Handle>(
+      task_runner(), kSafeBrowsingRulesetConfig);
 
   dealer_handle->TryOpenAndSetRulesetFile(
       rulesets().indexed_1().path, /*expected_checksum=*/0, base::DoNothing());
@@ -593,8 +598,8 @@ class SubresourceFilterVerifiedRulesetHandleTest : public ::testing::Test {
   void SetUp() override {
     rulesets_.CreateRulesets(true /* many_rules */);
     task_runner_ = new base::TestSimpleTaskRunner;
-    dealer_handle_ =
-        std::make_unique<VerifiedRulesetDealer::Handle>(task_runner_);
+    dealer_handle_ = std::make_unique<VerifiedRulesetDealer::Handle>(
+        task_runner_, kSafeBrowsingRulesetConfig);
   }
 
   void TearDown() override {

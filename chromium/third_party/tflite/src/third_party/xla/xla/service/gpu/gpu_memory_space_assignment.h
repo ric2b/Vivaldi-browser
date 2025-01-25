@@ -18,17 +18,18 @@ limitations under the License.
 
 #include <cstdint>
 
+#include "absl/status/status.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/service/buffer_assignment.h"
 #include "xla/service/hlo_alias_analysis.h"
 #include "xla/service/hlo_ordering.h"
 #include "xla/service/hlo_value.h"
-#include "xla/status.h"
 
 namespace xla {
 namespace gpu {
 
 inline constexpr int64_t kCollectiveMemorySpaceColor = 1;
+inline constexpr int64_t kTempBufferMemorySpaceColor = 2;
 
 // Set memory space to kCollectiveMemorySpaceColor for all allocations used by
 // all-reduce, all-gather, and reduce-scatter. This memory space maps to
@@ -64,7 +65,7 @@ inline BufferAssigner::Colorer CollectiveColorer() {
         value->set_color(0);
       }
     }
-    return OkStatus();
+    return absl::OkStatus();
   };
 }
 

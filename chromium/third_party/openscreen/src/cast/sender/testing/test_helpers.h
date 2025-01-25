@@ -10,28 +10,25 @@
 
 #include "cast/sender/channel/message_util.h"
 
-namespace cast {
-namespace channel {
-class CastMessage;
-}  // namespace channel
-}  // namespace cast
-
 namespace openscreen::cast {
+namespace proto {
+class CastMessage;
+}
 
-void VerifyAppAvailabilityRequest(const ::cast::channel::CastMessage& message,
+void VerifyAppAvailabilityRequest(const proto::CastMessage& message,
                                   const std::string& expected_app_id,
                                   int* request_id_out,
                                   std::string* sender_id_out);
-void VerifyAppAvailabilityRequest(const ::cast::channel::CastMessage& message,
+void VerifyAppAvailabilityRequest(const proto::CastMessage& message,
                                   std::string* app_id_out,
                                   int* request_id_out,
                                   std::string* sender_id_out);
 
-::cast::channel::CastMessage CreateAppAvailableResponseChecked(
+proto::CastMessage CreateAppAvailableResponseChecked(
     int request_id,
     const std::string& sender_id,
     const std::string& app_id);
-::cast::channel::CastMessage CreateAppUnavailableResponseChecked(
+proto::CastMessage CreateAppUnavailableResponseChecked(
     int request_id,
     const std::string& sender_id,
     const std::string& app_id);

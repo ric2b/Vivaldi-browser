@@ -32,6 +32,7 @@
 #include "components/performance_manager/public/features.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/web_contents.h"
 #include "url/origin.h"
 
 namespace performance_manager {
@@ -210,17 +211,10 @@ std::unique_ptr<PerformanceManagerImpl> PerformanceManagerImpl::Create(
   std::unique_ptr<PerformanceManagerImpl> instance =
       base::WrapUnique(new PerformanceManagerImpl());
 
-  if (base::FeatureList::IsEnabled(features::kRunOnMainThread)) {
-    // Invoke `OnStartImpl()` synchronously instead of via a posted task, so
-    // that any call to `CallOnGraphImpl()` that follows can access
-    // `g_performance_manager->ui_task_runner_`.
-    instance->OnStartImpl(std::move(on_start));
-  } else {
-    GetTaskRunner()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&PerformanceManagerImpl::OnStartImpl,
-                       base::Unretained(instance.get()), std::move(on_start)));
-  }
+  GetTaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&PerformanceManagerImpl::OnStartImpl,
+                     base::Unretained(instance.get()), std::move(on_start)));
 
   return instance;
 }
@@ -242,27 +236,26 @@ std::unique_ptr<FrameNodeImpl> PerformanceManagerImpl::CreateFrameNode(
     int render_frame_id,
     const blink::LocalFrameToken& frame_token,
     content::BrowsingInstanceId browsing_instance_id,
-    content::SiteInstanceId site_instance_id,
+    content::SiteInstanceGroupId site_instance_group_id,
     bool is_current,
     FrameNodeCreationCallback creation_callback) {
   return CreateNodeImpl<FrameNodeImpl>(
       std::move(creation_callback), process_node, page_node, parent_frame_node,
       outer_document_for_fenced_frame, render_frame_id, frame_token,
-      browsing_instance_id, site_instance_id, is_current);
+      browsing_instance_id, site_instance_group_id, is_current);
 }
 
 // static
 std::unique_ptr<PageNodeImpl> PerformanceManagerImpl::CreatePageNode(
-    const WebContentsProxy& contents_proxy,
+    base::WeakPtr<content::WebContents> web_contents,
     const std::string& browser_context_id,
     const GURL& visible_url,
     PagePropertyFlags initial_property_flags,
-    base::TimeTicks visibility_change_time,
-    PageNode::PageState page_state) {
-  return CreateNodeImpl<PageNodeImpl>(base::OnceCallback<void(PageNodeImpl*)>(),
-                                      contents_proxy, browser_context_id,
-                                      visible_url, initial_property_flags,
-                                      visibility_change_time, page_state);
+    base::TimeTicks visibility_change_time) {
+  return CreateNodeImpl<PageNodeImpl>(
+      base::OnceCallback<void(PageNodeImpl*)>(), std::move(web_contents),
+      browser_context_id, visible_url, initial_property_flags,
+      visibility_change_time);
 }
 
 // static
@@ -348,30 +341,11 @@ void PerformanceManagerImpl::SetOnDestroyedCallbackForTesting(
 
 PerformanceManagerImpl::PerformanceManagerImpl() {
   DETACH_FROM_SEQUENCE(sequence_checker_);
-  if (base::FeatureList::IsEnabled(features::kRunOnMainThread)) {
-    ui_task_runner_ = GetUITaskRunner();
-  }
 }
 
 // static
 scoped_refptr<base::SequencedTaskRunner>
 PerformanceManagerImpl::GetTaskRunner() {
-  if (base::FeatureList::IsEnabled(features::kRunOnMainThread)) {
-    CHECK(!base::FeatureList::IsEnabled(features::kRunOnMainThreadSync));
-    // Used the cached runner, if available. This prevents doing repeated
-    // lookups.
-    if (g_performance_manager)
-      return g_performance_manager->ui_task_runner_;
-    // Our semantics are that this always returns a valid task runner as long
-    // as there is a task environment alive. We can't cache this in a local
-    // static variable because it will become invalid across test boundaries.
-    // Note that this doesn't result in a new task runner being created; it
-    // simply causes a table lookup to find the existing task runner with the
-    // appropriate type, which will be the same task runner that was cached by
-    // |g_performance_manager| while it was alive.
-    return GetUITaskRunner();
-  }
-
   if (base::FeatureList::IsEnabled(features::kRunOnMainThreadSync)) {
     return TaskRunnerWithSynchronousRunOnUIThread::GetInstance();
   }
@@ -452,7 +426,7 @@ void PerformanceManagerImpl::BatchDeleteNodesImpl(
   base::flat_set<ProcessNodeImpl*> process_nodes;
 
   for (const auto& node : *nodes) {
-    switch (node->type()) {
+    switch (node->GetNodeType()) {
       case PageNodeImpl::Type(): {
         auto* page_node = PageNodeImpl::FromNodeBase(node.get());
 
@@ -479,10 +453,8 @@ void PerformanceManagerImpl::BatchDeleteNodesImpl(
         graph->RemoveNode(worker_node);
         break;
       }
-      case SystemNodeImpl::Type():
-      case NodeTypeEnum::kInvalidType:
-      default: {
-        NOTREACHED();
+      case SystemNodeImpl::Type(): {
+        NOTREACHED_IN_MIGRATION();
         break;
       }
     }

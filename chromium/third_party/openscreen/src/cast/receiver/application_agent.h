@@ -111,7 +111,7 @@ class ApplicationAgent final
   // CastMessageHandler overrides.
   void OnMessage(VirtualConnectionRouter* router,
                  CastSocket* socket,
-                 ::cast::channel::CastMessage message) final;
+                 proto::CastMessage message) final;
 
   // ConnectionNamespaceHandler::VirtualConnectionPolicy overrides.
   bool IsConnectionAllowed(const VirtualConnection& virtual_conn) const final;

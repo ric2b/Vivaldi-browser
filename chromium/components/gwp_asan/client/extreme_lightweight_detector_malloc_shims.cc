@@ -6,6 +6,7 @@
 
 #include <atomic>
 
+#include "base/compiler_specific.h"
 #include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/trace_event/malloc_dump_provider.h"
@@ -137,6 +138,10 @@ inline bool Quarantine(void* object) {
     return false;
   }
 
+  // This function is going to zap the memory region allocated for `object`,
+  // but it can be cold in cache. So, prefetches it to avoid stall.
+  PA_PREFETCH_FOR_WRITE(object);
+
   if (UNLIKELY(!partition_alloc::IsManagedByPartitionAlloc(
           reinterpret_cast<uintptr_t>(object)))) {
     return false;
@@ -162,7 +167,8 @@ inline bool Quarantine(void* object) {
   ExtremeLightweightDetectorUtil::Zap(object, usable_size);
 
   uintptr_t slot_start = root->ObjectToSlotStart(object);
-  lightweight_quarantine_branch->Quarantine(object, slot_span, slot_start);
+  lightweight_quarantine_branch->Quarantine(object, slot_span, slot_start,
+                                            usable_size);
 
   return true;
 }
@@ -173,7 +179,7 @@ void FreeFn(const AllocatorDispatch* self, void* address, void* context) {
       return;
     }
   }
-  self->next->free_function(self->next, address, context);
+  MUSTTAIL return self->next->free_function(self->next, address, context);
 }
 
 void FreeDefiniteSizeFn(const AllocatorDispatch* self,
@@ -185,7 +191,8 @@ void FreeDefiniteSizeFn(const AllocatorDispatch* self,
       return;
     }
   }
-  self->next->free_definite_size_function(self->next, address, size, context);
+  MUSTTAIL return self->next->free_definite_size_function(self->next, address,
+                                                          size, context);
 }
 
 AllocatorDispatch allocator_dispatch = {
@@ -196,6 +203,7 @@ AllocatorDispatch allocator_dispatch = {
     // realloc doesn't always deallocate memory, so the Extreme LUD doesn't
     // support realloc.
     nullptr,  // realloc_function
+    nullptr,  // realloc_unchecked_function
     FreeFn,   // free_function
     nullptr,  // get_size_estimate_function
     nullptr,  // good_size_function
@@ -209,8 +217,10 @@ AllocatorDispatch allocator_dispatch = {
     // try_free_default (at least for now).
     nullptr,  // try_free_default_function
     nullptr,  // aligned_malloc_function
+    nullptr,  // aligned_malloc_unchecked_function
     // The same reason with realloc_function.
     nullptr,  // aligned_realloc_function
+    nullptr,  // aligned_realloc_unchecked_function
     // As of 2024 Jan, only _aligned_free on Windows calls this function. The
     // function is rarely used, so the Extreme LUD doesn't support this for now.
     nullptr,  // aligned_free_function

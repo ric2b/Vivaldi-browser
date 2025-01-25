@@ -39,6 +39,8 @@ const char kVivaldiTabFlag[] = "flag";
 const char kVivaldiTabStackId[] = "group";
 const char kVivaldiTabStackTitles[] = "groupTitles";
 const char kVivaldiWorkspace[] = "workspaceId";
+const char kVivaldiFixedTitle[] = "fixedTitle";
+const char kVivaldiFixedGroupTitle[] = "fixedGroupTitle";
 
 #define TAB_QUARANTNE 0x01
 
@@ -266,7 +268,7 @@ base::FilePath MakePath(BrowserContext* browser_context, std::string seed,
   }
 
   NOTREACHED();
-  return base::FilePath();
+  //return base::FilePath();
 }
 
 int CopySessionFile(BrowserContext* browser_context,
@@ -645,26 +647,10 @@ int SetNodeState(BrowserContext* browser_context, const base::FilePath& file,
   }
   node->SetWorkspaces(workspaces.Clone());
 
-  // Update group names (tab stack names).
-  if (is_new) {
-    // When creating a new session it is always from the current live set of
-    // tabs so we can read data from prefs.
-    node->SetGroupNames(
-        std::move(profile->GetPrefs()->GetDict(
-            vivaldiprefs::kTabsStackingNameMap)).Clone());
-  } else {
-    // We can change group names in a saved session (saved in extdata) so read
-    // entries from extdata for existing sessions.
-    base::Value::Dict all_groups_names;
-    for (auto it=content.windows.begin(); it!=content.windows.end(); ++it) {
-      std::unique_ptr<base::Value::Dict> group_names(
-          sessions::GetTabStackTitles(it->second.get()));
-      if (group_names) {
-        all_groups_names.Merge(group_names->Clone());
-      }
-    }
-    node->SetGroupNames(std::move(all_groups_names));
-  }
+  // With VB-23686 we save tab and tab stack titles to tab ext data in JS. So
+  // we no longer save to the separate group member here.
+  base::Value::Dict all_groups_names;
+  node->SetGroupNames(std::move(all_groups_names));
 
   return kNoError;
 }
@@ -1457,50 +1443,52 @@ std::string GetTabStackId(const SessionTab* tab) {
   return value;
 }
 
-int SetTabStackTitle(BrowserContext* browser_context,
-                     base::FilePath path,
-                     int32_t tab_id,
-                     std::string title) {
+bool GetFixedTabTitles(const sessions::SessionTab* tab,
+                       std::string& title, std::string& groupTitle) {
+  base::JSONParserOptions options = base::JSON_PARSE_RFC;
+  std::optional<base::Value> json =
+     base::JSONReader::Read(tab->viv_ext_data, options);
+  if (json && json->is_dict()) {
+    std::string* s = json->GetDict().FindString(kVivaldiFixedTitle);
+    if (s) {
+      title = *s;
+    }
+    s = json->GetDict().FindString(kVivaldiFixedGroupTitle);
+    if (s) {
+      groupTitle = *s;
+    }
+    return true;
+  }
+  return false;
+}
+
+int SetTabTitle(BrowserContext* browser_context,
+                base::FilePath path,
+                int32_t tab_id,
+                std::string title) {
   // Load content
   SessionContent content;
   GetContent(path, content);
 
-  // Find group and window
-  std::string group;
-  SessionWindow* window = nullptr;
+  SessionTab* tab = nullptr;
   for (auto tit = content.tabs.begin(); tit != content.tabs.end(); ++tit) {
     if (tit->second->tab_id.id() == tab_id) {
-      group = sessions::GetTabStackId(tit->second.get());
-      for (auto wit = content.windows.begin(); wit != content.windows.end();
-           ++wit) {
-        if (wit->second->window_id == tit->second->window_id) {
-          window = wit->second.get();
-          break;
-        }
-      }
+      tab = tit->second.get();
+      break;
     }
   }
-  if (!window || group.empty()) {
+  if (!tab) {
     return kErrorNoContent;
   }
 
-  // Save data to window ext data.
+  // Save data to tab ext data.
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
   std::optional<base::Value> json =
-    base::JSONReader::Read(window->viv_ext_data, options);
+    base::JSONReader::Read(tab->viv_ext_data, options);
   if (json && json->is_dict()) {
-    base::Value::Dict* titles = json->GetIfDict()->FindDict(
-      kVivaldiTabStackTitles);
-    if (titles) {
-      titles->Set(group, title);
-      json->GetIfDict()->Set(kVivaldiTabStackTitles, std::move(*titles));
-    } else {
-      base::Value::Dict dict;
-      dict.Set(group, title);
-      json->GetIfDict()->Set(kVivaldiTabStackTitles, std::move(dict));
-    }
+    json->GetDict().Set(kVivaldiFixedTitle, title);
     base::JSONWriter::Write(base::ValueView(json.value()),
-      &window->viv_ext_data);
+      &tab->viv_ext_data);
   }
 
   // Build a command set.
@@ -1524,6 +1512,57 @@ int SetTabStackTitle(BrowserContext* browser_context,
   return kNoError;
 }
 
+int SetTabStackTitle(BrowserContext* browser_context,
+                     base::FilePath path,
+                     std::vector<int32_t> tab_ids,
+                     std::string title) {
+  // Load content
+  SessionContent content;
+  GetContent(path, content);
+
+  bool has_match = false;
+  for (auto id: tab_ids) {
+    for (auto tit = content.tabs.begin(); tit != content.tabs.end(); ++tit) {
+      if (tit->second->tab_id.id() == id) {
+        has_match = true;
+        SessionTab* tab = tit->second.get();
+        base::JSONParserOptions options = base::JSON_PARSE_RFC;
+          std::optional<base::Value> json =
+        base::JSONReader::Read(tab->viv_ext_data, options);
+        if (json && json->is_dict()) {
+          json->GetDict().Set(kVivaldiFixedGroupTitle, title);
+          base::JSONWriter::Write(base::ValueView(json.value()),
+            &tab->viv_ext_data);
+        }
+        break;
+      }
+    }
+  }
+
+  if (!has_match) {
+    return kErrorNoContent;
+  }
+
+  // Build a command set.
+  std::vector<std::unique_ptr<sessions::SessionWindow>> windows;
+  std::vector<std::unique_ptr<sessions::SessionTab>> tabs;
+  for (auto it=content.windows.begin(); it!=content.windows.end(); ++it) {
+    windows.push_back(std::move(it->second));
+  }
+  for (auto it = content.tabs.begin(); it != content.tabs.end(); ++it) {
+    tabs.push_back(std::move(it->second));
+  }
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  ::vivaldi::VivaldiSessionService service(profile);
+  bool has_commands = service.SetCommands(windows, tabs) > 0;
+  if (has_commands) {
+    if (!service.Save(path)) {
+      return kErrorWriting;
+    }
+  }
+
+  return kNoError;
+}
 
 std::unique_ptr<base::Value::Dict> GetTabStackTitles(
     const SessionWindow* window) {

@@ -9,15 +9,14 @@
 #include <utility>
 
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
-#include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/webui/top_chrome/top_chrome_web_ui_controller.h"
-#include "chrome/browser/ui/webui/top_chrome/webui_contents_preload_manager.h"
+#include "chrome/browser/ui/webui/top_chrome/top_chrome_webui_config.h"
 #include "chrome/browser/ui/webui_name_variants.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/referrer.h"
 #include "third_party/blink/public/mojom/page/draggable_region.mojom.h"
 #include "ui/base/models/menu_model.h"
@@ -46,7 +45,7 @@ class WebUIContentsWrapper : public content::WebContentsDelegate,
                                        const gfx::Size& new_size) {}
     virtual bool HandleKeyboardEvent(
         content::WebContents* source,
-        const content::NativeWebKeyboardEvent& event);
+        const input::NativeWebKeyboardEvent& event);
     virtual bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
                                    const content::ContextMenuParams& params);
     virtual void RequestMediaAccessPermission(
@@ -83,10 +82,9 @@ class WebUIContentsWrapper : public content::WebContentsDelegate,
                              const gfx::Size& new_size) override;
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       content::WebContents* source,
-      const content::NativeWebKeyboardEvent& event) override;
-  bool HandleKeyboardEvent(
-      content::WebContents* source,
-      const content::NativeWebKeyboardEvent& event) override;
+      const input::NativeWebKeyboardEvent& event) override;
+  bool HandleKeyboardEvent(content::WebContents* source,
+                           const input::NativeWebKeyboardEvent& event) override;
   bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
                          const content::ContextMenuParams& params) override;
   std::unique_ptr<content::EyeDropper> OpenEyeDropper(
@@ -147,9 +145,6 @@ class WebUIContentsWrapper : public content::WebContentsDelegate,
   // If true will allow the wrapped WebContents to automatically resize its
   // RenderWidgetHostView and send back updates to `Host` for the new size.
   const bool webui_resizes_host_;
-  // Captures the content size when `webui_resizes_host` is true. This
-  // size is passed to Host::ResizeDueToAutoResize() host when the host is set.
-  gfx::Size contents_requested_size_;
 
   bool is_ready_to_show_ = false;
   // If true will cause the ESC key to close the UI during pre-handling.
@@ -178,19 +173,19 @@ class WebUIContentsWrapperT : public WebUIContentsWrapper {
   WebUIContentsWrapperT(const GURL& webui_url,
                         content::BrowserContext* browser_context,
                         int task_manager_string_id,
-                        bool webui_resizes_host = true,
                         bool esc_closes_ui = true,
                         bool supports_draggable_regions = false)
-      : WebUIContentsWrapper(webui_url,
-                             browser_context,
-                             task_manager_string_id,
-                             webui_resizes_host,
-                             esc_closes_ui,
-                             supports_draggable_regions,
-                             T::GetWebUIName()),
+      : WebUIContentsWrapper(
+            webui_url,
+            browser_context,
+            task_manager_string_id,
+            TopChromeWebUIConfig::From(browser_context, webui_url)
+                ->ShouldAutoResizeHost(),
+            esc_closes_ui,
+            supports_draggable_regions,
+            T::GetWebUIName()),
         webui_url_(webui_url) {
-    static_assert(
-        views_metrics::IsValidWebUINameVariant("." + T::GetWebUIName()));
+    static_assert(views_metrics::IsValidWebUIName("." + T::GetWebUIName()));
     if (is_ready_to_show()) {
       CHECK(GetWebUIController());
       GetWebUIController()->set_embedder(weak_ptr_factory_.GetWeakPtr());

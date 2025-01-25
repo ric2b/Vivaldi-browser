@@ -55,6 +55,7 @@ Checks: "-*,\
           -cppcoreguidelines-init-variables,\
           -cppcoreguidelines-interfaces-global-init,\
           -cppcoreguidelines-macro-usage,\
+          -cppcoreguidelines-missing-std-forward,\
           -cppcoreguidelines-narrowing-conversions,\
           -cppcoreguidelines-no-malloc,\
           -cppcoreguidelines-non-private-member-variables-in-classes,\
@@ -83,6 +84,8 @@ Checks: "-*,\
           -google-runtime-int,\
           -google-upgrade-googletest-case,\
           misc-*,\
+          -misc-const-correctness,\
+          -misc-include-cleaner,\
           -misc-misplaced-const,\
           -misc-new-delete-overloads,\
           -misc-non-private-member-variables-in-classes,\
@@ -162,3 +165,7 @@ Checks: "-*,\
           -readability-uppercase-literal-suffix,\
           -readability-use-anyofallof
           "
+
+CheckOptions:
+  - key: cppcoreguidelines-avoid-do-while.IgnoreMacros
+    value: true

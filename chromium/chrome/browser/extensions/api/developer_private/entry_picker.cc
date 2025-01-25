@@ -47,13 +47,11 @@ EntryPicker::EntryPicker(EntryPickerClient* client,
       content::GetUIThreadTaskRunner({})->PostTask(
           FROM_HERE,
           base::BindOnce(&EntryPicker::FileSelected, base::Unretained(this),
-                         FileToBePickedForTest().value(), 1,  // IN-TEST
-                         static_cast<void*>(nullptr)));
+                         FileToBePickedForTest().value(), 1));  // IN-TEST
     } else {
       content::GetUIThreadTaskRunner({})->PostTask(
-          FROM_HERE,
-          base::BindOnce(&EntryPicker::FileSelectionCanceled,
-                         base::Unretained(this), static_cast<void*>(nullptr)));
+          FROM_HERE, base::BindOnce(&EntryPicker::FileSelectionCanceled,
+                                    base::Unretained(this)));
     }
     return;
   }
@@ -65,14 +63,9 @@ EntryPicker::EntryPicker(EntryPickerClient* client,
       platform_util::GetTopLevel(web_contents->GetNativeView()) :
       nullptr;
 
-  select_file_dialog_->SelectFile(picker_type,
-                                  select_title,
-                                  last_directory,
-                                  &info,
-                                  file_type_index,
-                                  base::FilePath::StringType(),
-                                  owning_window,
-                                  nullptr);
+  select_file_dialog_->SelectFile(picker_type, select_title, last_directory,
+                                  &info, file_type_index,
+                                  base::FilePath::StringType(), owning_window);
 }
 
 EntryPicker::~EntryPicker() {
@@ -81,14 +74,12 @@ EntryPicker::~EntryPicker() {
   }
 }
 
-void EntryPicker::FileSelected(const ui::SelectedFileInfo& file,
-                               int index,
-                               void* params) {
+void EntryPicker::FileSelected(const ui::SelectedFileInfo& file, int index) {
   client_->FileSelected(file.path());
   delete this;
 }
 
-void EntryPicker::FileSelectionCanceled(void* params) {
+void EntryPicker::FileSelectionCanceled() {
   client_->FileSelectionCanceled();
   delete this;
 }

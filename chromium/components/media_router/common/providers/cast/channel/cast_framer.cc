@@ -36,14 +36,14 @@ void MessageFramer::MessageHeader::SetMessageSize(size_t size) {
 // if bit-for-bit compatible.
 void MessageFramer::MessageHeader::PrependToString(std::string* str) {
   std::array<uint8_t, sizeof(message_size)> bytes =
-      base::numerics::U32ToBigEndian(message_size);
+      base::U32ToBigEndian(message_size);
   str->insert(str->begin(), bytes.begin(), bytes.end());
 }
 
 void MessageFramer::MessageHeader::Deserialize(base::span<const uint8_t> data,
                                                MessageHeader* header) {
-  header->message_size = base::numerics::U32FromBigEndian(
-      data.first<sizeof(header->message_size)>());
+  header->message_size =
+      base::U32FromBigEndian(data.first<sizeof(header->message_size)>());
 }
 
 // static
@@ -95,7 +95,7 @@ size_t MessageFramer::BytesRequested() {
       VLOG(2) << "Bytes needed for body: " << bytes_left;
       return bytes_left;
     default:
-      NOTREACHED() << "Unhandled packet element type.";
+      NOTREACHED_IN_MIGRATION() << "Unhandled packet element type.";
       return 0;
   }
 }
@@ -134,9 +134,9 @@ std::unique_ptr<CastMessage> MessageFramer::Ingest(size_t num_bytes,
     case BODY:
       if (BytesRequested() == 0) {
         std::unique_ptr<CastMessage> parsed_message(new CastMessage);
-        if (!parsed_message->ParseFromArray(
-                input_buffer_->StartOfBuffer() + sizeof(MessageHeader),
-                body_size_)) {
+        base::span<const uint8_t> data = input_buffer_->everything().subspan(
+            sizeof(MessageHeader), body_size_);
+        if (!parsed_message->ParseFromArray(data.data(), data.size())) {
           VLOG(1) << "Error parsing packet body.";
           *error = ChannelError::INVALID_MESSAGE;
           error_ = true;
@@ -148,7 +148,7 @@ std::unique_ptr<CastMessage> MessageFramer::Ingest(size_t num_bytes,
       }
       break;
     default:
-      NOTREACHED() << "Unhandled packet element type.";
+      NOTREACHED_IN_MIGRATION() << "Unhandled packet element type.";
       return nullptr;
   }
 

@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/password_manager/core/browser/features/password_manager_features_util.h"
-
 #include <algorithm>
 
 #include "base/containers/flat_set.h"
@@ -12,6 +10,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/values.h"
 #include "components/password_manager/core/browser/features/password_features.h"
+#include "components/password_manager/core/browser/features/password_manager_features_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/public/base/gaia_id_hash.h"
@@ -218,12 +217,9 @@ void OptInToAccountStorage(PrefService* pref_service,
 
   // Since opting out using toggle in settings explicitly sets the default store
   // to kProfileStore, opt in needs to explicitly set it to kAccountStore.
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::kButterOnDesktopFollowup)) {
-    ScopedAccountStorageSettingsUpdate(pref_service,
-                                       GaiaIdHash::FromGaiaId(gaia_id))
-        .SetDefaultStore(PasswordForm::Store::kAccountStore);
-  }
+  ScopedAccountStorageSettingsUpdate(pref_service,
+                                     GaiaIdHash::FromGaiaId(gaia_id))
+      .SetDefaultStore(PasswordForm::Store::kAccountStore);
 
   // Record the total number of (now) opted-in accounts.
   base::UmaHistogramExactLinear(
@@ -235,8 +231,6 @@ void OptOutOfAccountStorage(PrefService* pref_service,
                             syncer::SyncService* sync_service) {
   CHECK(pref_service);
   CHECK(sync_service);
-  CHECK(base::FeatureList::IsEnabled(
-      password_manager::features::kButterOnDesktopFollowup));
 
   std::string gaia_id = sync_service->GetAccountInfo().gaia;
   if (gaia_id.empty()) {

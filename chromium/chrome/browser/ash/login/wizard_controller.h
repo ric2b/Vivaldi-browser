@@ -29,6 +29,7 @@
 #include "chrome/browser/ash/login/screens/add_child_screen.h"
 #include "chrome/browser/ash/login/screens/ai_intro_screen.h"
 #include "chrome/browser/ash/login/screens/assistant_optin_flow_screen.h"
+#include "chrome/browser/ash/login/screens/categories_selection_screen.h"
 #include "chrome/browser/ash/login/screens/choobe_screen.h"
 #include "chrome/browser/ash/login/screens/consolidated_consent_screen.h"
 #include "chrome/browser/ash/login/screens/consumer_update_screen.h"
@@ -43,6 +44,7 @@
 #include "chrome/browser/ash/login/screens/fingerprint_setup_screen.h"
 #include "chrome/browser/ash/login/screens/gaia_info_screen.h"
 #include "chrome/browser/ash/login/screens/gaia_screen.h"
+#include "chrome/browser/ash/login/screens/gemini_intro_screen.h"
 #include "chrome/browser/ash/login/screens/gesture_navigation_screen.h"
 #include "chrome/browser/ash/login/screens/guest_tos_screen.h"
 #include "chrome/browser/ash/login/screens/hardware_data_collection_screen.h"
@@ -61,8 +63,6 @@
 #include "chrome/browser/ash/login/screens/osauth/cryptohome_recovery_setup_screen.h"
 #include "chrome/browser/ash/login/screens/osauth/enter_old_password_screen.h"
 #include "chrome/browser/ash/login/screens/osauth/factor_setup_success_screen.h"
-#include "chrome/browser/ash/login/screens/osauth/gaia_password_changed_screen.h"
-#include "chrome/browser/ash/login/screens/osauth/gaia_password_changed_screen_legacy.h"
 #include "chrome/browser/ash/login/screens/osauth/local_data_loss_warning_screen.h"
 #include "chrome/browser/ash/login/screens/osauth/local_password_setup_screen.h"
 #include "chrome/browser/ash/login/screens/osauth/osauth_error_screen.h"
@@ -70,6 +70,7 @@
 #include "chrome/browser/ash/login/screens/osauth/recovery_eligibility_screen.h"
 #include "chrome/browser/ash/login/screens/packaged_license_screen.h"
 #include "chrome/browser/ash/login/screens/parental_handoff_screen.h"
+#include "chrome/browser/ash/login/screens/personalized_recommend_apps_screen.h"
 #include "chrome/browser/ash/login/screens/pin_setup_screen.h"
 #include "chrome/browser/ash/login/screens/quick_start_screen.h"
 #include "chrome/browser/ash/login/screens/recommend_apps_screen.h"
@@ -81,12 +82,10 @@
 #include "chrome/browser/ash/login/screens/terms_of_service_screen.h"
 #include "chrome/browser/ash/login/screens/theme_selection_screen.h"
 #include "chrome/browser/ash/login/screens/touchpad_scroll_screen.h"
-#include "chrome/browser/ash/login/screens/tuna_screen.h"
 #include "chrome/browser/ash/login/screens/update_screen.h"
 #include "chrome/browser/ash/login/screens/user_allowlist_check_screen.h"
 #include "chrome/browser/ash/login/screens/user_creation_screen.h"
 #include "chrome/browser/ash/login/screens/welcome_screen.h"
-#include "chrome/browser/ash/policy/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_config.h"
 #include "chrome/browser/ui/webui/ash/login/online_authentication_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/oobe_ui.h"
@@ -94,6 +93,10 @@
 #include "components/account_id/account_id.h"
 
 class PrefService;
+
+namespace policy {
+class AutoEnrollmentController;
+}  // namespace policy
 
 namespace ash {
 
@@ -310,7 +313,7 @@ class WizardController : public OobeUI::Observer {
   void ShowRemoteActivityNotificationScreen();
   void ShowAppDownloadingScreen();
   void ShowAiIntroScreen();
-  void ShowTunaScreen();
+  void ShowGeminiIntroScreen();
   void ShowWrongHWIDScreen();
   void ShowAutoEnrollmentCheckScreen();
   void ShowHIDDetectionScreen();
@@ -339,8 +342,6 @@ class WizardController : public OobeUI::Observer {
   void ShowChoobeScreen();
   void ShowTouchpadScrollScreen();
   void ShowDisplaySizeScreen();
-  // TODO(b/315829727): remove now unused codepath.
-  void ShowGaiaPasswordChangedScreen(std::unique_ptr<UserContext> user_context);
   void ShowDrivePinningScreen();
   void ShowGaiaInfoScreen();
   void ShowAddChildScreen();
@@ -352,6 +353,8 @@ class WizardController : public OobeUI::Observer {
   void ShowEnterOldPasswordScreen();
   void ShowLocalDataLossWarningScreen();
   void ShowFactorSetupSuccessScreen();
+  void ShowCategoriesSelectionScreen();
+  void ShowPersonalizedRecomendAppsScreen();
 
   // Shows images login screen.
   void ShowLoginScreen();
@@ -425,7 +428,7 @@ class WizardController : public OobeUI::Observer {
   void OnRemoteActivityNotificationScreenExit();
   void OnAppDownloadingScreenExit();
   void OnAiIntroScreenExit(AiIntroScreen::Result result);
-  void OnTunaScreenExit(TunaScreen::Result result);
+  void OnGeminiIntroScreenExit(GeminiIntroScreen::Result result);
   void OnAssistantOptInFlowScreenExit(AssistantOptInFlowScreen::Result result);
   void OnMultiDeviceSetupScreenExit(MultiDeviceSetupScreen::Result result);
   void OnGestureNavigationScreenExit(GestureNavigationScreen::Result result);
@@ -439,9 +442,6 @@ class WizardController : public OobeUI::Observer {
   void OnFamilyLinkNoticeScreenExit(FamilyLinkNoticeScreen::Result result);
   void OnOnlineAuthenticationScreenExit(OnlineAuthenticationScreen::Result);
   void OnUserAllowlistCheckScreenExit(UserAllowlistCheckScreen::Result);
-  void OnPasswordChangeLegacyScreenExit(
-      GaiaPasswordChangedScreenLegacy::Result result);
-  void OnPasswordChangeScreenExit(GaiaPasswordChangedScreen::Result result);
   void OnSignInFatalErrorScreenExit();
   void OnEduCoexistenceLoginScreenExit(
       EduCoexistenceLoginScreen::Result result);
@@ -468,6 +468,10 @@ class WizardController : public OobeUI::Observer {
       ApplyOnlinePasswordScreen::Result result);
   void OnOSAuthErrorScreenExit(OSAuthErrorScreen::Result result);
   void OnFactorSetupSuccessScreenExit(FactorSetupSuccessScreen::Result result);
+  void OnCategoriesSelectionScreenExit(
+      CategoriesSelectionScreen::Result result);
+  void OnPersonalizedRecomendAppsScreenExit(
+      PersonalizedRecommendAppsScreen::Result result);
   // Callback invoked once it has been determined whether the device is disabled
   // or not.
   void OnDeviceDisabledChecked(bool device_disabled);

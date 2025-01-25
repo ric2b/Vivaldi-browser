@@ -97,6 +97,7 @@ ChildProcessLauncher::ChildProcessLauncher(
     const mojo::ProcessErrorCallback& process_error_callback,
     std::unique_ptr<ChildProcessLauncherFileData> file_data,
     base::UnsafeSharedMemoryRegion histogram_memory_region,
+    base::ReadOnlySharedMemoryRegion tracing_config_memory_region,
     bool terminate_on_shutdown)
     : client_(client),
       starting_(true),
@@ -121,7 +122,8 @@ ChildProcessLauncher::ChildProcessLauncher(
       client_->CanUseWarmUpConnection(),
 #endif
       std::move(mojo_invitation), process_error_callback, std::move(file_data),
-      std::move(histogram_memory_region));
+      std::move(histogram_memory_region),
+      std::move(tracing_config_memory_region));
   helper_->StartLaunchOnClientThread();
 }
 
@@ -270,22 +272,24 @@ ChildProcessLauncher::Client* ChildProcessLauncher::ReplaceClientForTest(
 }
 
 bool RenderProcessPriority::is_background() const {
+#if !BUILDFLAG(IS_ANDROID)
+  if (foreground_override) {
+    return !foreground_override.value();
+  }
+#endif
   return !visible && !has_media_stream && !boost_for_pending_views &&
-         !has_foreground_service_worker;
+         !has_foreground_service_worker && !boost_for_loading;
+}
+
+base::Process::Priority RenderProcessPriority::GetProcessPriority() const {
+  return is_background() ? base::Process::Priority::kBestEffort
+                         : base::Process::Priority::kUserBlocking;
 }
 
 bool RenderProcessPriority::operator==(
-    const RenderProcessPriority& other) const {
-  return visible == other.visible &&
-         has_media_stream == other.has_media_stream &&
-         has_foreground_service_worker == other.has_foreground_service_worker &&
-         frame_depth == other.frame_depth &&
-         intersects_viewport == other.intersects_viewport &&
-         boost_for_pending_views == other.boost_for_pending_views
-#if BUILDFLAG(IS_ANDROID)
-         && importance == other.importance
-#endif
-      ;
-}
+    const RenderProcessPriority& other) const = default;
+
+bool RenderProcessPriority::operator!=(
+    const RenderProcessPriority& other) const = default;
 
 }  // namespace content

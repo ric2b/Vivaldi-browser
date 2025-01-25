@@ -27,8 +27,8 @@
 #include "content/browser/aggregation_service/report_scheduler_timer.h"
 #include "content/browser/attribution_reporting/attribution_manager.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
-#include "content/browser/attribution_reporting/attribution_report_sender.h"
 #include "content/browser/attribution_reporting/attribution_reporting.mojom-forward.h"
+#include "content/browser/attribution_reporting/process_aggregatable_debug_report_result.mojom-forward.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/privacy_sandbox_attestations_observer.h"
 #include "content/public/browser/storage_partition.h"
@@ -43,6 +43,7 @@ class FilePath;
 class Time;
 class TimeDelta;
 class UpdateableSequencedTaskRunner;
+class ValueView;
 }  // namespace base
 
 namespace storage {
@@ -55,20 +56,24 @@ class Origin;
 
 namespace content {
 
+class AggregatableDebugReport;
 class AggregatableReport;
 class AggregatableReportRequest;
 class AttributionCookieChecker;
 class AttributionDataHostManager;
 class AttributionDebugReport;
 class AttributionOsLevelManager;
-class AttributionStorage;
-class AttributionStorageDelegate;
+class AttributionReportSender;
+class AttributionResolver;
+class AttributionResolverDelegate;
 class CreateReportResult;
 class StoragePartitionImpl;
 class StoreSourceResult;
 
 struct GlobalRenderFrameHostId;
 struct OsRegistration;
+struct ProcessAggregatableDebugReportResult;
+struct SendAggregatableDebugReportResult;
 struct SendResult;
 
 // UI thread class that manages the lifetime of the underlying attribution
@@ -104,12 +109,12 @@ class CONTENT_EXPORT AttributionManagerImpl
       const base::FilePath& user_data_directory,
       size_t max_pending_events,
       scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy,
-      std::unique_ptr<AttributionStorageDelegate> storage_delegate,
+      std::unique_ptr<AttributionResolverDelegate> resolver_delegate,
       std::unique_ptr<AttributionCookieChecker> cookie_checker,
       std::unique_ptr<AttributionReportSender> report_sender,
       std::unique_ptr<AttributionOsLevelManager> os_level_manager,
       StoragePartitionImpl* storage_partition,
-      scoped_refptr<base::UpdateableSequencedTaskRunner> storage_task_runner);
+      scoped_refptr<base::UpdateableSequencedTaskRunner> resolver_task_runner);
 
   AttributionManagerImpl(
       StoragePartitionImpl* storage_partition,
@@ -163,7 +168,10 @@ class CONTENT_EXPORT AttributionManagerImpl
  private:
   friend class AttributionManagerImplTest;
 
-  using ReportSentCallback = AttributionReportSender::ReportSentCallback;
+  class ReportScheduler;
+
+  using ReportSentCallback =
+      base::OnceCallback<void(const AttributionReport&, SendResult)>;
   using SourceOrTrigger = absl::variant<StorableSource, AttributionTrigger>;
 
   struct SourceOrTriggerRFH;
@@ -175,11 +183,12 @@ class CONTENT_EXPORT AttributionManagerImpl
       const base::FilePath& user_data_directory,
       size_t max_pending_events,
       scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy,
-      std::unique_ptr<AttributionStorageDelegate> storage_delegate,
+      std::unique_ptr<AttributionResolverDelegate> resolver_delegate,
       std::unique_ptr<AttributionCookieChecker> cookie_checker,
       std::unique_ptr<AttributionReportSender> report_sender,
       std::unique_ptr<AttributionOsLevelManager> os_level_manager,
-      scoped_refptr<base::UpdateableSequencedTaskRunner> storage_task_runner);
+      scoped_refptr<base::UpdateableSequencedTaskRunner> resolver_task_runner,
+      bool debug_mode);
 
   void MaybeEnqueueEvent(SourceOrTriggerRFH);
   void PrepareNextEvent();
@@ -199,6 +208,9 @@ class CONTENT_EXPORT AttributionManagerImpl
   void PrepareToSendReport(AttributionReport report,
                            bool is_debug_report,
                            ReportSentCallback callback);
+  void SendReport(AttributionReport report,
+                  bool is_debug_report,
+                  ReportSentCallback callback);
   void OnReportSent(base::OnceClosure done,
                     const AttributionReport&,
                     SendResult info);
@@ -247,6 +259,19 @@ class CONTENT_EXPORT AttributionManagerImpl
 
   void MaybeSendVerboseDebugReports(const OsRegistration&);
 
+  void MaybeSendAggregatableDebugReport(const StoreSourceResult& result);
+  void MaybeSendAggregatableDebugReport(const CreateReportResult& result);
+  void OnAggregatableDebugReportProcessed(ProcessAggregatableDebugReportResult);
+  void OnAggregatableDebugReportAssembled(ProcessAggregatableDebugReportResult,
+                                          AggregatableReportRequest,
+                                          std::optional<AggregatableReport>,
+                                          AggregationService::AssemblyStatus);
+  void NotifyAggregatableDebugReportSent(
+      const AggregatableDebugReport&,
+      base::ValueView report_body,
+      attribution_reporting::mojom::ProcessAggregatableDebugReportResult,
+      SendAggregatableDebugReportResult);
+
   void AddPendingAggregatableReportTiming(const AttributionReport&);
   void RecordPendingAggregatableReportsTimings();
 
@@ -282,17 +307,17 @@ class CONTENT_EXPORT AttributionManagerImpl
   // growth with adversarial input.
   size_t max_pending_events_;
 
-  // The task runner for all attribution reporting storage operations.
+  // The task runner for all operations on the resolver.
   // Updateable to allow for priority to be temporarily increased to
   // `USER_VISIBLE` when a user-visible storage task is queued or running.
   // Otherwise `BEST_EFFORT` is used.
-  scoped_refptr<base::UpdateableSequencedTaskRunner> storage_task_runner_;
+  scoped_refptr<base::UpdateableSequencedTaskRunner> resolver_task_runner_;
 
   // How many user-visible storage tasks are queued or running currently,
   // i.e. have been posted but the reply has not been run.
   int num_pending_user_visible_tasks_ = 0;
 
-  base::SequenceBound<AttributionStorage> attribution_storage_;
+  base::SequenceBound<AttributionResolver> attribution_resolver_;
 
   std::unique_ptr<ReportSchedulerTimer> scheduler_timer_;
 
@@ -329,6 +354,10 @@ class CONTENT_EXPORT AttributionManagerImpl
   // Timer to record the time elapsed since the construction. Used to measure
   // the delay due to privacy sandbox attestations loading.
   base::ElapsedTimer time_since_construction_;
+
+  // Technically redundant with fields in the `AttributionResolverDelegate` but
+  // duplicated here to avoid an async call to retrieve them.
+  bool debug_mode_ = false;
 
   base::WeakPtrFactory<AttributionManagerImpl> weak_factory_{this};
 };

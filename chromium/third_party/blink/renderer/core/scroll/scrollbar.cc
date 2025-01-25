@@ -112,8 +112,10 @@ void Scrollbar::SetFrameRect(const gfx::Rect& frame_rect) {
   if (frame_rect == frame_rect_)
     return;
 
+  if (!UsesNinePatchTrackAndCanSkipRepaint(frame_rect)) {
+    SetNeedsPaintInvalidation(kAllParts);
+  }
   frame_rect_ = frame_rect;
-  SetNeedsPaintInvalidation(kAllParts);
   if (scrollable_area_)
     scrollable_area_->ScrollbarFrameRectChanged();
 }
@@ -181,6 +183,11 @@ void Scrollbar::SetProportion(int visible_size, int total_size) {
 
   visible_size_ = visible_size;
   total_size_ = total_size;
+
+  if (UsesNinePatchTrackAndCanSkipRepaint(frame_rect_)) {
+    SetNeedsPaintInvalidation(kThumbPart);
+    return;
+  }
 
   SetNeedsPaintInvalidation(kAllParts);
 }
@@ -746,6 +753,25 @@ bool Scrollbar::IsOverlayScrollbar() const {
 bool Scrollbar::IsFluentOverlayScrollbarMinimalMode() const {
   return theme_.UsesFluentOverlayScrollbars() && hovered_part_ == kNoPart &&
          pressed_part_ != kThumbPart;
+}
+
+bool Scrollbar::UsesNinePatchTrackAndCanSkipRepaint(
+    const gfx::Rect& new_frame_rect) const {
+  if (!theme_.UsesNinePatchTrackAndButtonsResource()) {
+    return false;
+  }
+  // If the scrollbar's thickness is being changed, then a new bitmap needs to
+  // be generated to paint the scrollbar arrows appropriately.
+  if ((Orientation() == kHorizontalScrollbar &&
+       new_frame_rect.height() != frame_rect_.height()) ||
+      (Orientation() == kVerticalScrollbar &&
+       new_frame_rect.width() != frame_rect_.width())) {
+    return false;
+  }
+  gfx::Size track_canvas_size =
+      GetTheme().NinePatchTrackAndButtonsCanvasSize(*this);
+  return track_canvas_size.height() < new_frame_rect.height() ||
+         track_canvas_size.width() < new_frame_rect.width();
 }
 
 bool Scrollbar::ShouldParticipateInHitTesting() {

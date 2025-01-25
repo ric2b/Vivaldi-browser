@@ -173,8 +173,6 @@ using vivaldi::IsVivaldiRunning;
       startDispatchingToTarget:self
                    forProtocol:@protocol(FakeboxFocuser)];
 
-  PrefService* originalPrefs =
-      browser->GetBrowserState()->GetOriginalChromeBrowserState()->GetPrefs();
   segmentation_platform::DeviceSwitcherResultDispatcher* deviceSwitcherResult =
       nullptr;
   if (!browser->GetBrowserState()->IsOffTheRecord()) {
@@ -187,7 +185,12 @@ using vivaldi::IsVivaldiRunning;
                isIncognito:browser->GetBrowserState()->IsOffTheRecord()];
   self.toolbarMediator.delegate = self;
   self.toolbarMediator.deviceSwitcherResultDispatcher = deviceSwitcherResult;
+
+  // Vivaldi
+  PrefService* originalPrefs =
+      browser->GetBrowserState()->GetOriginalChromeBrowserState()->GetPrefs();
   self.toolbarMediator.originalPrefService = originalPrefs;
+  // End Vivaldi
 
   self.locationBarCoordinator =
       [[LocationBarCoordinator alloc] initWithBrowser:browser];
@@ -277,7 +280,6 @@ using vivaldi::IsVivaldiRunning;
   [self.toolbarMediator disconnect];
   self.toolbarMediator.omniboxConsumer = nil;
   self.toolbarMediator.delegate = nil;
-  self.toolbarMediator.originalPrefService = nullptr;
   self.toolbarMediator.deviceSwitcherResultDispatcher = nullptr;
   self.toolbarMediator = nil;
 
@@ -911,6 +913,8 @@ using vivaldi::IsVivaldiRunning;
 
   AdaptiveToolbarCoordinator* adaptiveToolbarCoordinator =
       [self coordinatorWithToolbarType:toolbarType];
+  if (![self activeWebState])
+    return;
   [adaptiveToolbarCoordinator updateConsumerForWebState:[self activeWebState]];
 }
 
@@ -1020,8 +1024,15 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark - LocationBarSteadyViewConsumer
 
 - (void)updateLocationText:(NSString*)text clipTail:(BOOL)clipTail {
+  // No op.
+}
+
+- (void)updateLocationText:(NSString*)text
+                    domain:(NSString*)domain
+                  showFull:(BOOL)showFull {
   [self.steadyViewConsumer updateLocationText:text
-                                     clipTail:clipTail];
+                                       domain:domain
+                                     showFull:showFull];
   [self updateVivaldiShieldState];
 }
 

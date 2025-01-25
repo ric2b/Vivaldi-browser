@@ -117,11 +117,11 @@ const char* GetSnapshotFileName(const V8SnapshotFileType file_type) {
 #if BUILDFLAG(USE_V8_CONTEXT_SNAPSHOT)
       return kV8ContextSnapshotFileName;
 #else
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return nullptr;
 #endif
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 
@@ -258,12 +258,6 @@ void SetFlags(IsolateHolder::ScriptMode mode,
   SetV8FlagsIfOverridden(features::kV8PerContextMarkingWorklist,
                          "--stress-per-context-marking-worklist",
                          "--no-stress-per-context-marking-worklist");
-  SetV8FlagsIfOverridden(
-      features::kV8ProfileGuidedOptimization,
-      "--profile-guided-optimization "
-      "--profile-guided-optimization-for-empty-feedback-vector",
-      "--noprofile-guided-optimization "
-      "--noprofile-guided-optimization-for-empty-feedback-vector");
   SetV8FlagsIfOverridden(features::kV8FlushEmbeddedBlobICache,
                          "--experimental-flush-embedded-blob-icache",
                          "--no-experimental-flush-embedded-blob-icache");
@@ -296,6 +290,10 @@ void SetFlags(IsolateHolder::ScriptMode mode,
                          "--cppheap-optimize-sweep-for-mutator",
                          "--no-cppheap-optimize-sweep-for-mutator");
   SetV8FlagsIfOverridden(features::kV8MinorMS, "--minor-ms", "--no-minor-ms");
+  if (base::FeatureList::IsEnabled(features::kV8ScavengerHigherCapacity)) {
+    SetV8FlagsFormatted("--scavenger-max-new-space-capacity-mb=%i",
+                        features::kV8ScavengerMaxCapacity.Get());
+  }
   SetV8FlagsIfOverridden(features::kV8Sparkplug, "--sparkplug",
                          "--no-sparkplug");
   SetV8FlagsIfOverridden(features::kV8Turbofan, "--turbofan", "--no-turbofan");
@@ -319,9 +317,22 @@ void SetFlags(IsolateHolder::ScriptMode mode,
                          "--no-write-protect-code-memory");
   SetV8FlagsIfOverridden(features::kV8SlowHistograms, "--slow-histograms",
                          "--no-slow-histograms");
+  SetV8FlagsIfOverridden(features::kV8SideStepTransitions,
+                         "--clone_object_sidestep_transitions",
+                         "--noclone_object_sidestep_transitions");
   SetV8FlagsIfOverridden(features::kV8SingleThreadedGCInBackground,
                          "--single-threaded-gc-in-background",
                          "--no-single-threaded-gc-in-background");
+  SetV8FlagsIfOverridden(features::kV8SingleThreadedGCInBackgroundParallelPause,
+                         "--parallel-pause-for-gc-in-background",
+                         "--no-parallel-pause-for-gc-in-background");
+  SetV8FlagsIfOverridden(
+      features::kV8SingleThreadedGCInBackgroundNoIncrementalMarking,
+      "--no-incremental-marking-for-gc-in-background",
+      "--incremental-marking-for-gc-in-background");
+  SetV8FlagsIfOverridden(features::kV8DecommitPooledPages,
+                         "--decommit-pooled-pages",
+                         "--no-decommit-pooled-pages");
 
   if (base::FeatureList::IsEnabled(features::kV8ConcurrentSparkplug)) {
     if (int max_threads = features::kV8ConcurrentSparkplugMaxThreads.Get()) {
@@ -397,6 +408,18 @@ void SetFlags(IsolateHolder::ScriptMode mode,
                          "--intel-jcc-erratum-mitigation",
                          "--no-intel-jcc-erratum-mitigation");
 
+  SetV8FlagsIfOverridden(features::kV8UpdateLimitAfterLoading,
+                         "--update-allocation-limits-after-loading",
+                         "--no-update-allocation-limits-after-loading");
+
+  SetV8FlagsIfOverridden(features::kV8UseLibmTrigFunctions,
+                         "--use-libm-trig-functions",
+                         "--no-use-libm-trig-functions");
+
+  SetV8FlagsIfOverridden(features::kV8UseOriginalMessageForStackTrace,
+                         "--use-original-message-for-stack-trace",
+                         "--no-use-original-message-for-stack-trace");
+
   // JavaScript language features.
   SetV8FlagsIfOverridden(features::kJavaScriptIteratorHelpers,
                          "--harmony-iterator-helpers",
@@ -404,9 +427,6 @@ void SetFlags(IsolateHolder::ScriptMode mode,
   SetV8FlagsIfOverridden(features::kJavaScriptPromiseWithResolvers,
                          "--js-promise-withresolvers",
                          "--no-js-promise-withresolvers");
-  SetV8FlagsIfOverridden(features::kJavaScriptArrayFromAsync,
-                         "--harmony-array-from-async",
-                         "--no-harmony-array-from-async");
   SetV8FlagsIfOverridden(features::kJavaScriptRegExpModifiers,
                          "--js-regexp-modifiers", "--no-js-regexp-modifiers");
   SetV8FlagsIfOverridden(features::kJavaScriptImportAttributes,
@@ -417,30 +437,24 @@ void SetFlags(IsolateHolder::ScriptMode mode,
   SetV8FlagsIfOverridden(features::kJavaScriptRegExpDuplicateNamedGroups,
                          "--js-regexp-duplicate-named-groups",
                          "--no-js-duplicate-named-groups");
+  SetV8FlagsIfOverridden(features::kJavaScriptPromiseTry, "--js-promise-try",
+                         "--no-js-promise-try");
 
   if (IsolateHolder::kStrictMode == mode) {
     SetV8Flags("--use_strict");
   }
-
-  SetV8FlagsIfOverridden(features::kV8UseLibmTrigFunctions,
-                         "--use-libm-trig-functions",
-                         "--no-use-libm-trig-functions");
-
-  SetV8FlagsIfOverridden(features::kV8UseOriginalMessageForStackTrace,
-                         "--use-original-message-for-stack-trace",
-                         "--no-use-original-message-for-stack-trace");
 
   SetV8FlagsIfOverridden(features::kJavaScriptCompileHintsMagic,
                          "--compile-hints-magic", "--no-compile-hints-magic");
 
   // WebAssembly features.
 
-  SetV8FlagsIfOverridden(features::kWebAssemblyTailCall,
-                         "--experimental-wasm-return-call",
-                         "--no-experimental-wasm-return-call");
   SetV8FlagsIfOverridden(features::kWebAssemblyInlining,
                          "--experimental-wasm-inlining",
                          "--no-experimental-wasm-inlining");
+  SetV8FlagsIfOverridden(features::kWebAssemblyInliningCallIndirect,
+                         "--wasm-inlining-call-indirect",
+                         "--no-wasm-inlining-call-indirect");
   SetV8FlagsIfOverridden(features::kWebAssemblyLiftoffCodeFlushing,
                          "--flush-liftoff-code", "--no-flush-liftoff-code");
   SetV8FlagsIfOverridden(features::kWebAssemblyGenericWrapper,

@@ -35,6 +35,12 @@
 // and accessibility trait UIAccessibilityTraitButton.
 + (id<GREYMatcher>)buttonWithAccessibilityLabelID:(int)messageID;
 
+// Matcher for element with accessibility label corresponding to `messageID`,
+// `number` for the plural rule and accessibility trait
+// UIAccessibilityTraitButton.
++ (id<GREYMatcher>)buttonWithAccessibilityLabelID:(int)messageID
+                                  numberForPlural:(int)number;
+
 // Matcher for element with foreground color corresponding to `colorName`
 // and accessibility trait UIAccessibilityTraitButton.
 + (id<GREYMatcher>)buttonWithForegroundColor:(NSString*)colorName;
@@ -144,9 +150,6 @@
 
 // Returns matcher for `text` being the inline autocomplete text in the omnibox.
 + (id<GREYMatcher>)omniboxContainingAutocompleteText:(NSString*)text;
-
-// Returns matcher for omniboxAutocomplete label in the omnibox.
-+ (id<GREYMatcher>)omniboxAutocompleteLabel;
 
 // Returns matcher for `text` being a substring of the text in the location
 // view.
@@ -328,10 +331,6 @@
 // screen.
 + (id<GREYMatcher>)inactiveTabsSettingsButton;
 
-// Returns matcher for the Tab Pickup Settings button on the Tabs Settings
-// screen.
-+ (id<GREYMatcher>)tabPickupSettingsButton;
-
 // Returns matcher for the Tabs Settings button on the main Settings screen.
 + (id<GREYMatcher>)tabsSettingsButton;
 
@@ -483,6 +482,9 @@
 // Returns a matcher for "Open In..." button.
 + (id<GREYMatcher>)openInButton;
 
+// Returns a matcher for "Open" button.
++ (id<GREYMatcher>)openPDFButton;
+
 // Returns the GREYMatcher for the cell at `index` in the tab grid.
 + (id<GREYMatcher>)tabGridCellAtIndex:(unsigned int)index;
 
@@ -562,6 +564,10 @@
 // Returns the GREYMatcher for the button to close the cell at `index` in the
 // tab grid.
 + (id<GREYMatcher>)tabGridCloseButtonForCellAtIndex:(unsigned int)index;
+
+// Returns the GREYMatcher for the button to close the tab group cell at `index`
+// in the tab grid.
++ (id<GREYMatcher>)tabGridCloseButtonForGroupCellAtIndex:(unsigned int)index;
 
 // Returns a matcher for the password settings collection view.
 + (id<GREYMatcher>)settingsPasswordMatcher;

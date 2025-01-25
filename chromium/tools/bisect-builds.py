@@ -14,7 +14,6 @@ it will ask you whether it is good or bad before continuing the search.
 
 import base64
 import bisect
-import http.client
 import importlib
 import json
 import optparse
@@ -105,6 +104,8 @@ GITHASH_TO_SVN_URL = {
 
 VERSION_INFO_URL = ('https://chromiumdash.appspot.com/fetch_version?version=%s')
 
+MILESTONES_URL = ('https://chromiumdash.appspot.com/fetch_milestones')
+
 # Search pattern to be matched in the JSON output from
 # CHROMIUM_GITHASH_TO_SVN_URL to get the chromium revision (svn revision).
 CHROMIUM_SEARCH_PATTERN_OLD = (
@@ -143,6 +144,18 @@ PATH_CONTEXT = {
             'listing_platform_dir': 'arm_64/',
             'archive_name': None,
             'archive_extract_dir': 'android-arm64'
+        },
+        'android-x86': {
+            'binary_name': None,
+            'listing_platform_dir': 'x86/',
+            'archive_name': None,
+            'archive_extract_dir': 'android-x86'
+        },
+        'android-x64': {
+            'binary_name': None,
+            'listing_platform_dir': 'x86_64/',
+            'archive_name': None,
+            'archive_extract_dir': 'android-x64'
         },
         'linux64': {
             'binary_name': 'chrome',
@@ -208,6 +221,7 @@ PATH_CONTEXT = {
         },
         'android-arm64': {
             'binary_name': None,
+            # See for why not high_end: https://crbug.com/350944660#comment7
             'listing_platform_dir': 'android_arm64-builder-perf/',
             'archive_name': 'full-build-linux.zip',
             'archive_extract_dir': 'full-build-linux'
@@ -258,6 +272,18 @@ PATH_CONTEXT = {
         }
     },
     'snapshot': {
+        'android-arm': {
+            'binary_name': None,
+            'listing_platform_dir': 'Android/',
+            'archive_name': 'chrome-android.zip',
+            'archive_extract_dir': 'chrome-android'
+        },
+        'android-arm64': {
+            'binary_name': None,
+            'listing_platform_dir': 'Android_Arm64/',
+            'archive_name': 'chrome-android.zip',
+            'archive_extract_dir': 'chrome-android'
+        },
         'linux64': {
             'binary_name': 'chrome',
             'listing_platform_dir': 'Linux_x64/',
@@ -309,6 +335,12 @@ PATH_CONTEXT = {
             'listing_platform_dir': 'Win_x64/',
             'archive_name': 'chrome-win32.zip',
             'archive_extract_dir': 'chrome-win32'
+        },
+        'win-arm64': {
+            'binary_name': 'chrome.exe',
+            'listing_platform_dir': 'Win_Arm64/',
+            'archive_name': 'chrome-win.zip',
+            'archive_extract_dir': 'chrome-win'
         },
         'lacros64': {
             'binary_name': 'chrome',
@@ -383,6 +415,16 @@ OFFICIAL_BACKUP_BUILDS = {
     }
 }
 
+PLATFORM_ARCH_TO_ARCHIVE_MAPPING = {
+    ('linux', 'x64'): 'linux64',
+    ('mac', 'x64'): 'mac64',
+    ('mac', 'x86'): 'mac',
+    ('mac', 'arm'): 'mac-arm',
+    ('win', 'x64'): 'win64',
+    ('win', 'x86'): 'win',
+    ('win', 'arm'): 'win-arm64',
+}
+
 # Set only during initialization.
 is_verbose = False
 
@@ -394,6 +436,8 @@ class BisectException(Exception):
 
 
 def RunGsutilCommand(args, can_fail=False, verbose=False):
+  if not GSUTILS_PATH:
+    raise BisectException('gsutils is not found in path.')
   if is_verbose:
     print('Running gsutil command: ' +
           str([sys.executable, GSUTILS_PATH] + args))
@@ -1049,9 +1093,9 @@ def FetchRevision(context, rev, filename, quit_event=None, progress_event=None):
                     displayed.
   """
   def ReportHook(blocknum, blocksize, totalsize):
-    if quit_event and quit_event.isSet():
+    if quit_event and quit_event.is_set():
       raise RuntimeError('Aborting download of revision %s' % str(rev))
-    if progress_event and progress_event.isSet():
+    if progress_event and progress_event.is_set():
       size = blocknum * blocksize
       if totalsize == -1:  # Total size not known.
         progress = 'Received %d bytes' % size
@@ -1068,24 +1112,28 @@ def FetchRevision(context, rev, filename, quit_event=None, progress_event=None):
       gsutil_download(download_url, filename)
     else:
       urllib.request.urlretrieve(download_url, filename, ReportHook)
-      if progress_event and progress_event.isSet():
+      if progress_event and progress_event.is_set():
         print()
   except RuntimeError:
     pass
 
 
-def GetAndroidApkFilename(context):
+def _GetMappingFromAndroidApk(context, apk):
   sdk = context.device.build_version_sdk
-  if 'webview' in context.apk:
-    return WEBVIEW_APK_FILENAMES[context.apk]
+  if 'webview' in apk.lower():
+    return WEBVIEW_APK_FILENAMES
   # Need these logic to bisect very old build. Release binaries are stored
   # forever and occasionally there are requests to bisect issues introduced
   # in very old versions.
   elif sdk < version_codes.LOLLIPOP:
-    return CHROME_APK_FILENAMES[context.apk]
+    return CHROME_APK_FILENAMES
   elif sdk < version_codes.NOUGAT:
-    return CHROME_MODERN_APK_FILENAMES[context.apk]
-  return MONOCHROME_APK_FILENAMES[context.apk]
+    return CHROME_MODERN_APK_FILENAMES
+  return MONOCHROME_APK_FILENAMES
+
+
+def GetAndroidApkFilename(context):
+  return _GetMappingFromAndroidApk(context, context.apk)[context.apk]
 
 
 def RunRevisionForAndroid(context, revision, zip_file):
@@ -1095,7 +1143,7 @@ def RunRevisionForAndroid(context, revision, zip_file):
   # For non-release, we download a zip file first, then un-zip the file
   # to a temporary folder and locate the apk file.
   if context.is_release:
-    InstallonAndroid(context.device, zip_file)
+    InstallOnAndroid(context.device, zip_file)
     LaunchOnAndroid(context.device, context.apk)
     return (0, sys.stdout, sys.stderr)
 
@@ -1108,11 +1156,23 @@ def RunRevisionForAndroid(context, revision, zip_file):
     if not os.path.exists(apk_path):
       print('%s does not exist.' % apk_path)
       if os.path.exists(apk_dir):
-        print('Are you using the correct apk? The list of available apks:')
+        print('\nAre you passing the correct --apk flag? Some older revisions '
+              'do not build all apk types.')
+        print(f'The list of available --apk options for {revision=}:')
         apk_files = [f for f in os.listdir(apk_dir) if f.endswith('.apk')]
-        print(apk_files)
+        not_available = []
+        for apk_file in apk_files:
+          mapping = _GetMappingFromAndroidApk(context, apk_file)
+          for apk_opt, apk_name in mapping.items():
+            if apk_file == apk_name:
+              print(f'- {apk_file}, use this by passing --apk={apk_opt}')
+              break
+          else:
+            not_available.append(apk_file)
+        print('\nThese filenames do not map to any configured APK variants: '
+              f'{not_available}')
       exit(1)
-    InstallonAndroid(context.device, apk_path)
+    InstallOnAndroid(context.device, apk_path)
     LaunchOnAndroid(context.device, context.apk)
   finally:
     try:
@@ -1155,7 +1215,7 @@ def InstallRevisionForLacros(context, zip_file):
 def RunRevision(context, revision, zip_file, profile, num_runs, command, args):
   """Given a zipped revision, unzip it and run the test."""
   print('Trying revision %s...' % str(revision))
-  if context.platform in ['android-arm', 'android-arm64']:
+  if context.platform.startswith('android-'):
     return RunRevisionForAndroid(context, revision, zip_file)
 
   if context.platform in ['lacros64', 'lacros-arm32', 'lacros-arm64']:
@@ -1227,7 +1287,6 @@ def RunRevision(context, revision, zip_file, profile, num_runs, command, args):
               context.GetLaunchPath(revision))).replace('%s',
                                                         ' '.join(testargs)))
 
-  results = []
   if is_verbose:
     print(('Running ' + str(runcommand)))
 
@@ -1467,6 +1526,8 @@ def Bisect(context,
       min_str, max_str = 'bad', 'good'
     else:
       min_str, max_str = 'good', 'bad'
+    print('You have about %d more steps left.' %
+          ((maxrev - minrev).bit_length() - 1))
     print('Bisecting range [%s (%s), %s (%s)].' %
           (revlist[minrev], min_str, revlist[maxrev], max_str))
 
@@ -1708,6 +1769,30 @@ def GetRevisionFromVersion(version):
   return None
 
 
+def GetRevisionFromMilestone(milestone):
+  """Get revision (e.g. 782793) from milestone such as 85."""
+  response = urllib.request.urlopen(MILESTONES_URL)
+  milestones = json.loads(response.read())
+  for m in milestones:
+    if m['milestone'] == milestone:
+      return m['chromium_main_branch_position']
+  return None
+
+
+def GetRevision(revision):
+  """Get revision from either milestone M85, full version 85.0.4183.0,
+     or a commit position.
+  """
+  if type(revision) == type(0):
+    return revision
+  if IsVersionNumber(revision):
+    return GetRevisionFromVersion(revision)
+  elif revision[:1].upper() == 'M' and revision[1:].isdigit():
+    return GetRevisionFromMilestone(int(revision[1:]))
+  # By default, we assume it's a commit position.
+  return int(revision)
+
+
 def CheckDepotToolsInPath():
   delimiter = ';' if sys.platform.startswith('win') else ':'
   path_list = os.environ['PATH'].split(delimiter)
@@ -1719,6 +1804,7 @@ def CheckDepotToolsInPath():
 
 def SetupEnvironment(options):
   global is_verbose
+  global GSUTILS_PATH
 
   # Release and Official builds bisect requires "gsutil" inorder to
   # List and Download binaries.
@@ -1730,13 +1816,12 @@ def SetupEnvironment(options):
         'Follow the instructions in this document '
         'http://dev.chromium.org/developers/how-tos/install-depot-tools '
         'to install depot_tools and then try again.')
-
-  global GSUTILS_PATH
-  GSUTILS_PATH = os.path.join(gsutil_path, 'gsutil.py')
+  elif gsutil_path:
+    GSUTILS_PATH = os.path.join(gsutil_path, 'gsutil.py')
 
   # Catapult repo is required for Android bisect,
   # Update Catapult repo if it exists otherwise checkout repo.
-  if options.archive in ['android-arm', 'android-arm64']:
+  if options.archive.startswith('android-'):
     SetupAndroidEnvironment()
 
   # Set up verbose logging if requested.
@@ -1802,7 +1887,7 @@ def InitializeAndroidDevice(device_id, apk, chrome_flags):
   return device
 
 
-def InstallonAndroid(device, apk_path):
+def InstallOnAndroid(device, apk_path):
   """Installs the chromium build on a given device."""
   print('Installing %s on android device...' % apk_path)
   device.Install(apk_path)
@@ -1847,11 +1932,8 @@ Tip: add "-- --no-first-run" to bypass the first run prompts.
 
   parser = optparse.OptionParser(usage=usage)
   # Strangely, the default help output doesn't include the choice list.
-  choices = [
-      'android-arm', 'android-arm64', 'mac', 'mac64', 'mac-arm', 'win',
-      'win-clang', 'win64', 'win64-clang', 'linux64', 'linux-arm', 'chromeos',
-      'lacros64', 'lacros-arm32', 'lacros-arm64'
-  ]
+  choices = sorted(
+      set(arch for build in PATH_CONTEXT for arch in PATH_CONTEXT[build]))
   parser.add_option('-a',
                     '--archive',
                     choices=choices,
@@ -1968,12 +2050,32 @@ Tip: add "-- --no-first-run" to bypass the first run prompts.
   return parser
 
 
+def _DetectArchive():
+  """Detect the buildbot archive to use based on local environment."""
+  os_name = None
+  plat = sys.platform
+  if plat.startswith('linux'):
+    os_name = 'linux'
+  elif plat in ('win32', 'cygwin'):
+    os_name = 'win'
+  elif plat == 'darwin':
+    os_name = 'mac'
+
+  arch = None
+  machine = platform.machine().lower()
+  if machine.startswith(('arm', 'aarch')):
+    arch = 'arm'
+  elif machine in ('amd64', 'x86_64'):
+    arch = 'x64'
+  elif machine in ('i386', 'i686', 'i86pc', 'x86'):
+    arch = 'x86'
+
+  return PLATFORM_ARCH_TO_ARCHIVE_MAPPING.get((os_name, arch), None)
+
+
 def ParseCommandLine(args=None):
   """Parses the command line for bisect options."""
-  official_choices = [
-      'android-arm', 'android-arm64', 'linux64', 'mac', 'mac-arm', 'win64',
-      'lacros64', 'lacros-arm32', 'lacros-arm64'
-  ]
+  official_choices = list(PATH_CONTEXT['official'].keys())
   parser = _CreateCommandLineParser()
   opts, args = parser.parse_args(args)
 
@@ -1981,11 +2083,16 @@ def ParseCommandLine(args=None):
     UpdateScript()
 
   if opts.archive is None:
-    print('Error: Missing required parameter: --archive')
-    parser.print_help()
-    sys.exit(1)
+    archive = _DetectArchive()
+    if archive:
+      print('The buildbot archive (-a/--archive) detected as:', archive)
+      opts.archive = archive
+    else:
+      print('Error: Missing required parameter: --archive')
+      parser.print_help()
+      sys.exit(1)
 
-  if opts.signed and opts.archive not in ['android-arm', 'android-arm64']:
+  if opts.signed and not opts.archive.startswith('android-'):
     print('Signed bisection is only supported for Android platform.')
     exit(1)
 
@@ -2031,13 +2138,17 @@ def UpdateScript():
 def main():
   opts, args = ParseCommandLine()
 
-  if not opts.bad:
-    print('Please specify a bad version.')
-    return 1
-
   if not opts.good:
     print('Please specify a good version.')
     return 1
+
+  if opts.release_builds:
+    if not opts.bad:
+      print('Please specify a bad version.')
+      return 1
+    if not IsVersionNumber(opts.good) or not IsVersionNumber(opts.bad):
+      print('For release, you can only use chrome version to bisect.')
+      return 1
 
   try:
     SetupEnvironment(opts)
@@ -2046,7 +2157,7 @@ def main():
     sys.exit(1)
 
   device = None
-  if opts.archive in ['android-arm', 'android-arm64']:
+  if opts.archive.startswith('android-'):
     device = InitializeAndroidDevice(opts.device_id, opts.apk, args)
     if not device:
       raise BisectException('Failed to initialize device.')
@@ -2063,18 +2174,24 @@ def main():
   context = PathContext(opts, device)
 
   if context.is_release:
-    if not IsVersionNumber(opts.good):
-      print('For release, you can only use chrome version to bisect.')
-      return 1
+    if opts.archive.startswith('android-'):
+      # Channel builds have _ in their names, e.g. chrome_canary or chrome_beta.
+      # Non-channel builds don't, e.g. chrome or chromium. Make this a warning
+      # instead of an error since older archives might have non-channel builds.
+      if '_' not in context.apk:
+        print('WARNING: Android release typically only uploads channel builds, '
+              f'so you will often see "Found 0 builds" with --apk={context.apk}'
+              '. Switch to using --apk=chrome_stable or one of the other '
+              'channels if you see `RuntimeError: We don\'t have enough builds '
+              'to bisect. revlist: []`.\n')
   else:
     # For official and snapshot, we convert good and bad to commit position
     # as int.
-    if IsVersionNumber(opts.good):
-      context.good_revision = GetRevisionFromVersion(opts.good)
-      context.bad_revision = GetRevisionFromVersion(opts.bad)
-    else:
-      context.good_revision = int(context.good_revision)
-      context.bad_revision = int(context.bad_revision)
+    if not opts.bad:
+      context.bad_revision = GetChromiumRevision(context,
+                                                 context.GetLastChangeURL())
+    context.good_revision = GetRevision(context.good_revision)
+    context.bad_revision = GetRevision(context.bad_revision)
 
   context.deploy_chrome_path = deploy_chrome_path
 

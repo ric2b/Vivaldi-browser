@@ -481,8 +481,12 @@ bool SearchEnginesManager::LoadFromString(const std::string& json,
                                           bool check_sha) {
   DCHECK(!initialized_);
   if (check_sha && !vivaldi::VerifyJsonSignature(json)) {
-    SetError("invalid signature");
-    return false;
+    if (vivaldi::IsDebuggingSearchEngines()) {
+      VLOG(1) << "Ignoring invalid signature due to debug mode.";
+    } else {
+      SetError("invalid signature");
+      return false;
+    }
   }
 
   if (ParseEnginesFile(json)) {

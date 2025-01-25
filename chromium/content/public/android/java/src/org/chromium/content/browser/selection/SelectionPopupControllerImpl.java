@@ -21,7 +21,6 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.view.textclassifier.SelectionEvent;
 import android.view.textclassifier.TextClassifier;
 
@@ -150,12 +149,11 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
                 SelectionPopupControllerImpl::new;
     }
 
-    @IntDef({SelectionMenuType.ACTION_MODE, SelectionMenuType.PASTE, SelectionMenuType.DROPDOWN})
+    @IntDef({SelectionMenuType.ACTION_MODE, SelectionMenuType.DROPDOWN})
     @Retention(RetentionPolicy.SOURCE)
     public @interface SelectionMenuType {
         int ACTION_MODE = 0;
-        int PASTE = 1;
-        int DROPDOWN = 2;
+        int DROPDOWN = 1;
     }
 
     private final Handler mHandler;
@@ -178,7 +176,6 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     // Can be null temporarily when switching between WindowAndroid.
     @Nullable private View mView;
     private ActionMode mActionMode;
-    private ActionMode mPasteActionMode;
 
     // Supplier of whether action bar is showing now.
     private final ObservableSupplierImpl<Boolean> mIsActionBarShowingSupplier =
@@ -213,8 +210,6 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     // dismiss the old menu so that it won't be preserved and redrawn at a new anchor.
     private boolean mIsProcessingSelectAll;
 
-    // Lazily created paste popup menu, triggered either via long press in an
-    // editable region or from tapping the insertion handle.
     private boolean mWasPastePopupShowingOnInsertionDragStart;
 
     // Dropdown menu delegate that handles showing a dropdown style text selection menu.
@@ -406,7 +401,6 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         // Cleans up action mode before switching to a new container view.
         if (isActionModeValid()) finishActionMode();
         mUnselectAllOnDismiss = true;
-        destroyPastePopup();
 
         if (containerView != null) containerView.setClickable(true);
         mView = containerView;
@@ -517,7 +511,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         if (shouldUseDropdownMenu()) {
             return SelectionMenuType.DROPDOWN;
         }
-        return hasSelection() ? SelectionMenuType.ACTION_MODE : SelectionMenuType.PASTE;
+        return SelectionMenuType.ACTION_MODE;
     }
 
     @VisibleForTesting
@@ -553,7 +547,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         mLastSelectedText = selectionText;
         mLastSelectionOffset = selectionStartOffset;
         mCanSelectAll = canSelectAll;
-        mHasSelection = selectionText.length() != 0;
+        setHasSelection(!selectionText.isEmpty());
         mIsPasswordType = isPasswordType;
         mCanEditRichly = canRichlyEdit;
         mMenuSourceType = sourceType;
@@ -607,9 +601,6 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             case SelectionMenuType.ACTION_MODE:
                 showActionModeOrClearOnFailure();
                 break;
-            case SelectionMenuType.PASTE:
-                createAndShowPastePopup();
-                break;
             case SelectionMenuType.DROPDOWN:
                 createAndShowDropdownMenu();
                 break;
@@ -619,13 +610,12 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     /**
      * Show (activate) android action mode by starting it.
      *
-     * <p>Action mode in floating mode is tried first, and then falls back to
-     * a normal one.
-     * <p> If the action mode cannot be created the selection is cleared.
+     * <p>Action mode in floating mode is tried first, and then falls back to a normal one.
+     *
+     * <p>If the action mode cannot be created the selection is cleared.
      */
     public void showActionModeOrClearOnFailure() {
         if (!isActionModeSupported()
-                || !hasSelection()
                 || mView == null
                 || getMenuType() != SelectionMenuType.ACTION_MODE) {
             return;
@@ -659,7 +649,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         setActionMode(actionMode);
         mUnselectAllOnDismiss = true;
 
-        if (!isActionModeValid()) clearSelection();
+        if (!isActionModeValid() && hasSelection()) clearSelection();
     }
 
     void dismissTextHandles() {
@@ -671,54 +661,6 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     private void showContextMenuAtTouchHandle(int left, int bottom) {
         if (mWebContents.getRenderWidgetHostView() != null) {
             mWebContents.getRenderWidgetHostView().showContextMenuAtTouchHandle(left, bottom);
-        }
-    }
-
-    @VisibleForTesting
-    protected void createAndShowPastePopup() {
-        if (mView == null
-                || mView.getParent() == null
-                || mView.getVisibility() != View.VISIBLE
-                || getMenuType() != SelectionMenuType.PASTE) {
-            return;
-        }
-
-        // Dismiss the dropdown menu if showing.
-        destroyDropdownMenu();
-        setTextHandlesHiddenForDropdownMenu(false);
-
-        destroyPastePopup();
-
-        showPastePopup();
-    }
-
-    private void showPastePopup() {
-        Context windowContext = mWindowAndroid.getContext().get();
-        if (windowContext == null) return;
-
-        try {
-            if (mPasteActionMode != null) {
-                mPasteActionMode.invalidateContentRect();
-                return;
-            }
-
-            ActionMode actionMode =
-                    mView.startActionMode(
-                            new PasteActionModeCallback(
-                                    mView,
-                                    windowContext,
-                                    this,
-                                    mSelectionActionMenuDelegate,
-                                    getSelectionRectRelativeToContainingView()),
-                            ActionMode.TYPE_FLOATING);
-            if (actionMode != null) {
-                // crbug.com/651706
-                LGEmailActionModeWorkaroundImpl.runIfNecessary(windowContext, actionMode);
-
-                assert actionMode.getType() == ActionMode.TYPE_FLOATING;
-                mPasteActionMode = actionMode;
-            }
-        } catch (WindowManager.BadTokenException e) {
         }
     }
 
@@ -736,14 +678,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     private MVCListAdapter.ModelList getDropdownItems() {
         MVCListAdapter.ModelList items = new MVCListAdapter.ModelList();
         if (mDropdownMenuDelegate != null) {
-            SortedSet<SelectionMenuGroup> allItemGroups;
-            if (hasSelection()) {
-                allItemGroups = getSelectionMenuItems();
-            } else {
-                allItemGroups =
-                        getNonSelectionMenuItems(
-                                mContext, this, mSelectionActionMenuDelegate);
-            }
+            SortedSet<SelectionMenuGroup> allItemGroups = getMenuItems();
 
             int groupIndex = 0;
             for (SelectionMenuGroup group : allItemGroups) {
@@ -809,7 +744,6 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
         // Dismiss any action menu if showing.
         destroyActionModeAndKeepSelection();
-        destroyPastePopup();
 
         // Dismiss any previous menu if showing.
         destroyDropdownMenu();
@@ -837,14 +771,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     // HideablePopup implementation
     @Override
     public void hide() {
-        destroyPastePopup();
-    }
-
-    public void destroyPastePopup() {
-        if (isPastePopupShowing()) {
-            mPasteActionMode.finish();
-            mPasteActionMode = null;
-        }
+        destroySelectActionMode();
     }
 
     private void destroyDropdownMenu() {
@@ -853,9 +780,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         }
     }
 
-    @VisibleForTesting
-    public boolean isPastePopupShowing() {
-        return mPasteActionMode != null;
+    public boolean isPasteActionModeValid() {
+        return isActionModeValid() && !hasSelection();
     }
 
     // Composition methods for android.view.ActionMode
@@ -870,7 +796,6 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
         if (isActionModeValid()) {
             mActionMode.finish();
-
             // Should be nulled out in case #onDestroyActionMode() is not invoked in response.
             setActionMode(null);
         }
@@ -882,9 +807,6 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         switch (type) {
             case SelectionMenuType.ACTION_MODE:
                 finishActionMode();
-                break;
-            case SelectionMenuType.PASTE:
-                destroyPastePopup();
                 break;
             case SelectionMenuType.DROPDOWN:
                 destroyDropdownMenu();
@@ -933,7 +855,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         mWindowAndroid = newWindowAndroid;
         mContext = mWebContents.getContext();
         mMagnifierAnimator = null;
-        destroyPastePopup();
+        destroySelectActionMode();
     }
 
     @Override
@@ -1018,11 +940,13 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
     @Override
     public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
+        SortedSet<SelectionMenuGroup> menuItems = getMenuItems();
+
         SelectActionMenuHelper.removeAllAddedGroupsFromMenu(menu);
         mCustomActionMenuItemClickListeners.clear();
         initializeActionMenu(
                 mContext,
-                getSelectionMenuItems(),
+                menuItems,
                 menu,
                 mCustomActionMenuItemClickListeners,
                 item -> {
@@ -1034,7 +958,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     }
 
     @VisibleForTesting
-    public SortedSet<SelectionMenuGroup> getSelectionMenuItems() {
+    public SortedSet<SelectionMenuGroup> getMenuItems() {
         TextProcessingIntentHandler textProcessingIntentHandler =
                 isSelectActionModeAllowed(MENU_ITEM_PROCESS_TEXT) ? this::processText : null;
 
@@ -1043,20 +967,20 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
                 || !mSelectionMenuCachedResult.canReuseResult(
                         mClassificationResult,
                         isSelectionPassword(),
-                        isFocusedNodeEditable(),
+                        !isFocusedNodeEditable(),
                         getSelectedText())) {
             mSelectionMenuCachedResult =
                     new SelectionMenuCachedResult(
                             mClassificationResult,
                             isSelectionPassword(),
-                            isFocusedNodeEditable(),
+                            !isFocusedNodeEditable(),
                             getSelectedText(),
-                            SelectActionMenuHelper.getSelectionMenuItems(
+                            SelectActionMenuHelper.getMenuItems(
                                     this,
                                     mContext,
                                     mClassificationResult,
                                     isSelectionPassword(),
-                                    isFocusedNodeEditable(),
+                                    !isFocusedNodeEditable(),
                                     getSelectedText(),
                                     textProcessingIntentHandler,
                                     mSelectionActionMenuDelegate));
@@ -1064,14 +988,6 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
         // Return the cached menu items for this selection.
         return mSelectionMenuCachedResult.getResult();
-    }
-
-    static SortedSet<SelectionMenuGroup> getNonSelectionMenuItems(
-            @Nullable Context context,
-            SelectActionMenuDelegate delegate,
-            @Nullable SelectionActionMenuDelegate selectionActionMenuDelegate) {
-        return SelectActionMenuHelper.getNonSelectionMenuItems(
-                context, delegate, selectionActionMenuDelegate);
     }
 
     /**
@@ -1238,17 +1154,19 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         assert mView != null;
         if (!isActionModeValid()) return true;
 
+        int itemId = item.getItemId();
         // Check to see if this menu item has a custom click listener to handle it.
         View.OnClickListener customMenuItemClickListener =
                 mCustomActionMenuItemClickListeners.get(item);
         if (customMenuItemClickListener != null) {
             customMenuItemClickListener.onClick(mView);
+            if (isPasteActionModeValid()) mode.finish();
         } else {
-            handleMenuItemClick(item.getItemId());
+            handleMenuItemClick(itemId);
         }
 
-        // We don't dismiss the action menu for select all.
-        if (item.getItemId() != R.id.select_action_menu_select_all) {
+        // We don't dismiss the action menu for select all action.
+        if (itemId != R.id.select_action_menu_select_all) {
             mode.finish();
         }
         return true;
@@ -1284,9 +1202,11 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             copy();
         } else if (id == R.id.select_action_menu_paste) {
             paste();
+            if (isPasteActionModeValid()) dismissTextHandles();
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 && id == R.id.select_action_menu_paste_as_plain_text) {
             pasteAsPlainText();
+            if (isPasteActionModeValid()) dismissTextHandles();
         } else if (id == R.id.select_action_menu_share) {
             share();
         } else if (id == R.id.select_action_menu_web_search) {
@@ -1640,7 +1560,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             case SelectionEventType.SELECTION_HANDLES_CLEARED:
                 mLastSelectedText = "";
                 mLastSelectionOffset = 0;
-                mHasSelection = false;
+                setHasSelection(false);
                 mUnselectAllOnDismiss = false;
                 mSelectionRect.setEmpty();
                 if (mSelectionClient != null) mSelectionClient.cancelAllRequests();
@@ -1678,10 +1598,10 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
             case SelectionEventType.INSERTION_HANDLE_MOVED:
                 mSelectionRect.set(left, top, right, bottom);
-                if (!getGestureListenerManager().isScrollInProgress() && isPastePopupShowing()) {
-                    showPastePopup();
+                if (!getGestureListenerManager().isScrollInProgress() && isPasteActionModeValid()) {
+                    showActionModeOrClearOnFailure();
                 } else {
-                    destroyPastePopup();
+                    destroySelectActionMode();
                 }
                 if (mIsInHandleDragging) {
                     performHapticFeedback();
@@ -1690,7 +1610,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
             case SelectionEventType.INSERTION_HANDLE_TAPPED:
                 if (mWasPastePopupShowingOnInsertionDragStart) {
-                    destroyPastePopup();
+                    destroySelectActionMode();
                 } else {
                     showContextMenuAtTouchHandle(mSelectionRect.left, mSelectionRect.bottom);
                 }
@@ -1698,14 +1618,14 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
                 break;
 
             case SelectionEventType.INSERTION_HANDLE_CLEARED:
-                destroyPastePopup();
+                if (isPasteActionModeValid()) destroySelectActionMode();
                 mIsInsertionForTesting = false;
                 if (!hasSelection()) mSelectionRect.setEmpty();
                 break;
 
             case SelectionEventType.INSERTION_HANDLE_DRAG_STARTED:
-                mWasPastePopupShowingOnInsertionDragStart = isPastePopupShowing();
-                destroyPastePopup();
+                mWasPastePopupShowingOnInsertionDragStart = isPasteActionModeValid();
+                hidePopupsAndPreserveSelection();
                 mIsInHandleDragging = true;
                 break;
 
@@ -1801,7 +1721,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         if (mWebContents == null || !isActionModeSupported()) return;
         mWebContents.collapseSelection();
         mClassificationResult = null;
-        mHasSelection = false;
+        setHasSelection(false);
     }
 
     private PopupController getPopupController() {
@@ -1935,12 +1855,17 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     }
 
     public void updateSelectionState(boolean editable, boolean isPassword) {
-        if (!editable) destroyPastePopup();
+        if (!editable && isPasteActionModeValid()) destroySelectActionMode();
         if (editable != isFocusedNodeEditable() || isPassword != isSelectionPassword()) {
             mEditable = editable;
             mIsPasswordType = isPassword;
             if (isActionModeValid()) mActionMode.invalidate();
         }
+    }
+
+    private void setHasSelection(boolean hasSelection) {
+        mHasSelection = hasSelection;
+        mIsActionBarShowingSupplier.set(isSelectActionBarShowing());
     }
 
     @Override
@@ -2018,7 +1943,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
     @Override
     public boolean isSelectActionBarShowing() {
-        return isActionModeValid();
+        return isActionModeValid() && hasSelection();
     }
 
     @Override

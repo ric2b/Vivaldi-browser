@@ -95,7 +95,7 @@ class TabSlotController {
   virtual void ToggleTabGroupCollapsedState(
       const tab_groups::TabGroupId group,
       ToggleTabGroupCollapsedStateOrigin origin =
-          ToggleTabGroupCollapsedStateOrigin::kImplicitAction) = 0;
+          ToggleTabGroupCollapsedStateOrigin::kMenuAction) = 0;
 
   // Notify this controller of a tab group editor bubble opening/closing.
   virtual void NotifyTabGroupEditorBubbleOpened() = 0;
@@ -121,6 +121,9 @@ class TabSlotController {
 
   // Returns true if any tab or one of its children has focus.
   virtual bool IsFocusInTabs() const = 0;
+
+  // Returns true if The tab should have a compacted leading edge.
+  virtual bool ShouldCompactLeadingEdge() const = 0;
 
   // Potentially starts a drag for the specified Tab.
   virtual void MaybeStartDrag(
@@ -230,6 +233,13 @@ class TabSlotController {
   virtual void ShiftGroupRight(const tab_groups::TabGroupId& group) = 0;
 
   virtual const Browser* GetBrowser() const = 0;
+
+  // Returns the current width of inactive tabs. An individual inactive tab may
+  // differ from this width slightly due to rounding.
+  virtual int GetInactiveTabWidth() const = 0;
+
+  // See BrowserNonClientFrameView::IsFrameCondensed().
+  virtual bool IsFrameCondensed() const = 0;
 
  protected:
   virtual ~TabSlotController() = default;

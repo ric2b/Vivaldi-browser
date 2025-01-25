@@ -19,18 +19,18 @@
 namespace openscreen::osp {
 
 // This method asks the singleton NetworkServiceManager
-// to create a new protocol connection for the given endpoint.
+// to create a new protocol connection for the given instance.
 // Typically, the same QuicConnection and ServiceConnectionDelegate
 // are reused (see QuicProtocolConnection::FromExisting) for the new
 // ProtocolConnection instance.
-std::unique_ptr<ProtocolConnection> GetProtocolConnection(uint64_t endpoint_id);
+std::unique_ptr<ProtocolConnection> GetProtocolConnection(uint64_t instance_id);
 
 // These methods retrieve the server and client demuxers, respectively. These
 // are retrieved from the protocol connection server and client. The lifetime of
 // the demuxers themselves are not well defined: currently they are created in
 // the demo component for the ListenerDemo and PublisherDemo methods.
-MessageDemuxer* GetServerDemuxer();
-MessageDemuxer* GetClientDemuxer();
+MessageDemuxer& GetServerDemuxer();
+MessageDemuxer& GetClientDemuxer();
 
 class PresentationID {
  public:

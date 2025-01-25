@@ -8,14 +8,14 @@
 
 #pragma once
 
-#include <stdint.h>
-#include <stddef.h>
 #include <assert.h>
 #include <math.h>
+#include <stddef.h>
+#include <stdint.h>
 
-#include <xnnpack/common.h>
-#include <xnnpack/math.h>
-#include <xnnpack/microparams.h>
+#include "xnnpack/common.h"
+#include "xnnpack/math.h"
+#include "xnnpack/microparams.h"
 
 
 typedef int8_t (*xnn_qs8_requantize_fn)(

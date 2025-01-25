@@ -104,6 +104,7 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
 
       // Multi-use strings defined in extensions_strings.grdp.
       {"remove", IDS_EXTENSIONS_REMOVE},
+      {"moreOptions", IDS_EXTENSIONS_MORE_OPTIONS},
 
       // Add extension-specific strings.
       {"title", IDS_MANAGE_EXTENSIONS_SETTING_WINDOWS_TITLE},
@@ -337,15 +338,29 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
       {"mv2DeprecationPanelTitle", IDS_EXTENSIONS_MV2_DEPRECATION_PANEL_TITLE},
       {"mv2DeprecationPanelDismissButton",
        IDS_EXTENSIONS_MV2_DEPRECATION_PANEL_DISMISS_BUTTON},
+      {"mv2DeprecationPanelExtensionActionMenuLabel",
+       IDS_EXTENSIONS_MV2_DEPRECATION_PANEL_ACTION_MENU_BUTTON_LABEL},
       {"mv2DeprecationPanelFindAlternativeButton",
        IDS_EXTENSIONS_MV2_DEPRECATION_PANEL_FIND_ALTERNATIVE_BUTTON},
+      {"mv2DeprecationPanelFindAlternativeButtonAccLabel",
+       IDS_EXTENSIONS_MV2_DEPRECATION_PANEL_FIND_ALTERNATIVE_BUTTON_ACC_LABEL},
+      {"mv2DeprecationPanelRemoveButtonAccLabel",
+       IDS_EXTENSIONS_MV2_DEPRECATION_PANEL_REMOVE_BUTTON_ACC_LABEL},
       {"mv2DeprecationPanelKeepForNowButton",
        IDS_EXTENSIONS_MV2_DEPRECATION_PANEL_KEEP_FOR_NOW_BUTTON},
       {"mv2DeprecationPanelRemoveExtensionButton", IDS_EXTENSIONS_UNINSTALL},
+      {"mv2DeprecationMessageDisabledHeader",
+       IDS_EXTENSIONS_MV2_DEPRECATION_MESSAGE_DISABLED_HEADER},
+      {"mv2DeprecationMessageDisabledSubtitle",
+       IDS_EXTENSIONS_MV2_DEPRECATION_MESSAGE_DISABLED_SUBTITLE},
+      {"mv2DeprecationMessageRemoveButton",
+       IDS_EXTENSIONS_MV2_DEPRECATION_MESSAGE_REMOVE_BUTTON},
       {"mv2DeprecationMessageWarningHeader",
        IDS_EXTENSIONS_MV2_DEPRECATION_MESSAGE_WARNING_HEADER},
       {"mv2DeprecationMessageWarningSubtitle",
        IDS_EXTENSIONS_MV2_DEPRECATION_MESSAGE_WARNING_SUBTITLE},
+      {"mv2DeprecationUnsupportedExtensionOffText",
+       IDS_EXTENSIONS_MV2_DEPRECATION_UNSUPPORTED_EXTENSION_OFF_TEXT},
       {"shortcutNotSet", IDS_EXTENSIONS_SHORTCUT_NOT_SET},
       {"shortcutScopeGlobal", IDS_EXTENSIONS_SHORTCUT_SCOPE_GLOBAL},
       {"shortcutScopeLabel", IDS_EXTENSIONS_SHORTCUT_SCOPE_LABEL},
@@ -457,13 +472,14 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
   source->AddBoolean("safetyHubShowReviewPanel",
                      base::FeatureList::IsEnabled(features::kSafetyHub));
 
+  // MV2 deprecation.
   auto* mv2_experiment_manager = ManifestV2ExperimentManager::Get(profile);
-  source->AddBoolean("MV2DeprecationPanelEnabled",
-                     mv2_experiment_manager->GetCurrentExperimentStage() ==
-                         MV2ExperimentStage::kWarning);
+  MV2ExperimentStage experiment_stage =
+      mv2_experiment_manager->GetCurrentExperimentStage();
+  source->AddInteger("MV2ExperimentStage", static_cast<int>(experiment_stage));
   source->AddBoolean(
-      "MV2DeprecationPanelDismissed",
-      mv2_experiment_manager->DidUserAcknowledgeWarningGlobally());
+      "MV2DeprecationNoticeDismissed",
+      mv2_experiment_manager->DidUserAcknowledgeNoticeGlobally());
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   source->AddString(
@@ -544,6 +560,12 @@ ExtensionsUI::ExtensionsUI(content::WebUI* web_ui)
   plural_string_handler->AddLocalizedString(
       "mv2DeprecationPanelWarningSubtitle",
       IDS_EXTENSIONS_MV2_DEPRECATION_PANEL_WARNING_SUBTITLE);
+  plural_string_handler->AddLocalizedString(
+      "mv2DeprecationPanelDisabledHeader",
+      IDS_EXTENSIONS_MV2_DEPRECATION_PANEL_DISABLED_HEADER);
+  plural_string_handler->AddLocalizedString(
+      "mv2DeprecationPanelDisabledSubtitle",
+      IDS_EXTENSIONS_MV2_DEPRECATION_PANEL_DISABLED_SUBTITLE);
   web_ui->AddMessageHandler(std::move(plural_string_handler));
 }
 

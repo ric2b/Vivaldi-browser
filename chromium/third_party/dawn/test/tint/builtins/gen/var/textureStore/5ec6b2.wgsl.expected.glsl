@@ -1,30 +1,8 @@
 #version 310 es
-
-layout(r32f) uniform highp image3D arg_0;
-void textureStore_5ec6b2() {
-  uvec3 arg_1 = uvec3(1u);
-  vec4 arg_2 = vec4(1.0f);
-  imageStore(arg_0, ivec3(arg_1), arg_2);
-}
-
-vec4 vertex_main() {
-  textureStore_5ec6b2();
-  return vec4(0.0f);
-}
-
-void main() {
-  gl_PointSize = 1.0;
-  vec4 inner_result = vertex_main();
-  gl_Position = inner_result;
-  gl_Position.y = -(gl_Position.y);
-  gl_Position.z = ((2.0f * gl_Position.z) - gl_Position.w);
-  return;
-}
-#version 310 es
 precision highp float;
 precision highp int;
 
-layout(r32f) uniform highp image3D arg_0;
+layout(binding = 0, r32f) uniform highp image3D arg_0;
 void textureStore_5ec6b2() {
   uvec3 arg_1 = uvec3(1u);
   vec4 arg_2 = vec4(1.0f);
@@ -41,7 +19,7 @@ void main() {
 }
 #version 310 es
 
-layout(r32f) uniform highp image3D arg_0;
+layout(binding = 0, r32f) uniform highp image3D arg_0;
 void textureStore_5ec6b2() {
   uvec3 arg_1 = uvec3(1u);
   vec4 arg_2 = vec4(1.0f);

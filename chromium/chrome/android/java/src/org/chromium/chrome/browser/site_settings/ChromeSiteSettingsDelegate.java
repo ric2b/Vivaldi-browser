@@ -31,7 +31,6 @@ import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxBridge;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxSnackbarController;
-import org.chromium.chrome.browser.privacy_sandbox.TrackingProtectionBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.quick_delete.QuickDeleteController;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
@@ -169,7 +168,7 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
 
     @Override
     public boolean isIncognitoModeEnabled() {
-        return IncognitoUtils.isIncognitoModeEnabled();
+        return IncognitoUtils.isIncognitoModeEnabled(mProfile);
     }
 
     @Override
@@ -368,13 +367,6 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     }
 
     @Override
-    public boolean shouldShowSettingsOffboardingNotice() {
-        return ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.TRACKING_PROTECTION_SETTINGS_PAGE_ROLLBACK_NOTICE)
-                && new TrackingProtectionBridge(mProfile).isOffboarded();
-    }
-
-    @Override
     public boolean shouldShowPrivacySandboxRwsUi() {
         return ChromeFeatureList.isEnabled(
                 ChromeFeatureList.PRIVACY_SANDBOX_RELATED_WEBSITE_SETS_UI);
@@ -388,5 +380,21 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
                     mBrowsingDataModel = model;
                     callback.onResult(mBrowsingDataModel);
                 });
+    }
+
+    @Override
+    public boolean isSafetyHubEnabled() {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.SAFETY_HUB);
+    }
+
+    @Override
+    public boolean isPermissionAutorevocationEnabled() {
+        return UserPrefs.get(mProfile).getBoolean(Pref.UNUSED_SITE_PERMISSIONS_REVOCATION_ENABLED);
+    }
+
+    @Override
+    public void setPermissionAutorevocationEnabled(boolean isEnabled) {
+        UserPrefs.get(mProfile)
+                .setBoolean(Pref.UNUSED_SITE_PERMISSIONS_REVOCATION_ENABLED, isEnabled);
     }
 }

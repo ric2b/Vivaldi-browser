@@ -411,20 +411,20 @@ const AXObject* AXPosition::ChildAfterTreePosition() const {
 int AXPosition::ChildIndex() const {
   if (!IsTextPosition())
     return text_offset_or_child_index_;
-  DUMP_WILL_BE_NOTREACHED_NORETURN() << *this << " should be a tree position.";
+  DUMP_WILL_BE_NOTREACHED() << *this << " should be a tree position.";
   return 0;
 }
 
 int AXPosition::TextOffset() const {
   if (IsTextPosition())
     return text_offset_or_child_index_;
-  NOTREACHED() << *this << " should be a text position.";
+  NOTREACHED_IN_MIGRATION() << *this << " should be a text position.";
   return 0;
 }
 
 int AXPosition::MaxTextOffset() const {
   if (!IsTextPosition()) {
-    NOTREACHED() << *this << " should be a text position.";
+    NOTREACHED_IN_MIGRATION() << *this << " should be a text position.";
     return 0;
   }
 
@@ -480,7 +480,7 @@ int AXPosition::MaxTextOffset() const {
 
 TextAffinity AXPosition::Affinity() const {
   if (!IsTextPosition()) {
-    NOTREACHED() << *this << " should be a text position.";
+    NOTREACHED_IN_MIGRATION() << *this << " should be a text position.";
     return TextAffinity::kDownstream;
   }
 
@@ -1114,8 +1114,9 @@ bool operator==(const AXPosition& a, const AXPosition& b) {
     return a.TextOffset() == b.TextOffset() && a.Affinity() == b.Affinity();
   if (!a.IsTextPosition() && !b.IsTextPosition())
     return a.ChildIndex() == b.ChildIndex();
-  NOTREACHED() << "AXPosition objects having the same container object should "
-                  "have the same type.";
+  NOTREACHED_IN_MIGRATION()
+      << "AXPosition objects having the same container object should "
+         "have the same type.";
   return false;
 }
 
@@ -1135,7 +1136,7 @@ bool operator<(const AXPosition& a, const AXPosition& b) {
       return a.TextOffset() < b.TextOffset();
     if (!a.IsTextPosition() && !b.IsTextPosition())
       return a.ChildIndex() < b.ChildIndex();
-    NOTREACHED()
+    NOTREACHED_IN_MIGRATION()
         << "AXPosition objects having the same container object should "
            "have the same type.";
     return false;
@@ -1176,7 +1177,7 @@ bool operator>(const AXPosition& a, const AXPosition& b) {
       return a.TextOffset() > b.TextOffset();
     if (!a.IsTextPosition() && !b.IsTextPosition())
       return a.ChildIndex() > b.ChildIndex();
-    NOTREACHED()
+    NOTREACHED_IN_MIGRATION()
         << "AXPosition objects having the same container object should "
            "have the same type.";
     return false;

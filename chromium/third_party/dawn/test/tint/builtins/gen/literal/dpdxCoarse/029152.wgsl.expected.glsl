@@ -6,13 +6,13 @@ layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   float inner;
 } prevent_dce;
 
-void dpdxCoarse_029152() {
+float dpdxCoarse_029152() {
   float res = dFdx(1.0f);
-  prevent_dce.inner = res;
+  return res;
 }
 
 void fragment_main() {
-  dpdxCoarse_029152();
+  prevent_dce.inner = dpdxCoarse_029152();
 }
 
 void main() {

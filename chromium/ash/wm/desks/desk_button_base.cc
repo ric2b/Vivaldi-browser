@@ -4,11 +4,13 @@
 
 #include "ash/wm/desks/desk_button_base.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/wm/desks/desk_bar_view_base.h"
 #include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/wm_constants.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/highlight_path_generator.h"
@@ -41,7 +43,7 @@ DeskButtonBase::DeskButtonBase(const std::u16string& text,
 
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
 
-  SetAccessibleName(text);
+  GetViewAccessibility().SetName(text);
   SetTooltipText(text);
 
   // Create an empty border, otherwise in `LabelButton` a default border with
@@ -53,7 +55,8 @@ DeskButtonBase::DeskButtonBase(const std::u16string& text,
   views::FocusRing* focus_ring = views::FocusRing::Get(this);
   focus_ring->SetOutsetFocusRingDisabled(true);
   focus_ring->SetColorId(ui::kColorAshFocusRing);
-  if (bar_view_->type() == DeskBarViewBase::Type::kOverview) {
+  if (bar_view_->type() == DeskBarViewBase::Type::kOverview &&
+      !features::IsOverviewNewFocusEnabled()) {
     focus_ring->SetHasFocusPredicate(
         base::BindRepeating([](const views::View* view) {
           const auto* v = views::AsViewClass<DeskButtonBase>(view);

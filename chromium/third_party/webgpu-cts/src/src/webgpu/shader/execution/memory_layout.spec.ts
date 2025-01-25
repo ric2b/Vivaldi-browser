@@ -1013,13 +1013,11 @@ fn main() {
       ]),
       usage
     );
-    t.trackForCleanup(in_buffer);
 
     const out_buffer = t.makeBufferWithContents(
       new Uint32Array([...iterRange(1, x => 0)]),
       GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
     );
-    t.trackForCleanup(out_buffer);
 
     const pipeline = t.device.createComputePipeline({
       layout: 'auto',
@@ -1130,13 +1128,11 @@ fn main() {
       new Uint32Array([42]),
       GPUBufferUsage.COPY_SRC | GPUBufferUsage.STORAGE
     );
-    t.trackForCleanup(in_buffer);
 
     const out_buffer = t.makeBufferWithContents(
       new Uint32Array([...iterRange(128, x => 0)]),
       GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
     );
-    t.trackForCleanup(out_buffer);
 
     const pipeline = t.device.createComputePipeline({
       layout: 'auto',

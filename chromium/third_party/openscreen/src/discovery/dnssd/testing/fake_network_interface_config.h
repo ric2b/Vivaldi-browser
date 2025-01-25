@@ -8,17 +8,15 @@
 #include <utility>
 
 #include "discovery/dnssd/impl/network_interface_config.h"
-#include "gmock/gmock.h"
 
 namespace openscreen::discovery {
 
 class FakeNetworkInterfaceConfig : public NetworkInterfaceConfig {
  public:
-  FakeNetworkInterfaceConfig() = default;
-
-  void set_network_interface(NetworkInterfaceIndex network_interface) {
-    network_interface_ = network_interface;
-  }
+  FakeNetworkInterfaceConfig()
+      : NetworkInterfaceConfig(kInvalidNetworkInterfaceIndex,
+                               IPAddress::kAnyV4(),
+                               IPAddress::kAnyV6()) {}
 
   void set_address_v4(IPAddress address) { address_v4_ = std::move(address); }
 

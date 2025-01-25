@@ -134,6 +134,11 @@ bool SessionServiceBase::ShouldTrackVivaldiBrowser(Browser* browser) {
     return false;
   }
 
+  // This is needed because the session system stores and updated the
+  // BrowserFrame bounds on display change.
+  if (browser->is_type_picture_in_picture()) {
+    return true;
+  }
 
   if (browser->window() && static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
       VivaldiBrowserWindow::WindowType::NORMAL) {
@@ -231,21 +236,21 @@ bool VivaldiSessionService::AppendCommandsToFile(
                                     sizeof(total_size));
     if (wrote != sizeof(total_size)) {
       NOTREACHED() << "error writing";
-      return false;
+      //return false;
     }
     id_type command_id = i->id();
     wrote = file->WriteAtCurrentPos(reinterpret_cast<char*>(&command_id),
                                     sizeof(command_id));
     if (wrote != sizeof(command_id)) {
       NOTREACHED() << "error writing";
-      return false;
+      //return false;
     }
     if (content_size > 0) {
       wrote = file->WriteAtCurrentPos(reinterpret_cast<char*>(i->contents()),
                                       content_size);
       if (wrote != content_size) {
         NOTREACHED() << "error writing";
-        return false;
+        //return false;
       }
     }
   }
@@ -751,6 +756,7 @@ content::WebContents* VivaldiSessionService::RestoreTab(
       group, false,  // select
       tab.pinned, base::TimeTicks(), session_storage_namespace.get(),
       tab.user_agent_override, tab.extra_data, true /* from_session_restore */,
+      true /* is_active_browser */,
       tab.viv_page_action_overrides, tab.viv_ext_data);
   // Regression check: check that the tab didn't start loading right away. The
   // focused tab will be loaded by Browser, and TabLoader will load the rest.
@@ -789,7 +795,7 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
         ->GetDOMStorageContext()
         ->StartScavengingUnusedSessionStorage();
     NOTREACHED();
-    return nullptr;
+    //return nullptr;
   }
   // After the for loop this contains the last TABBED_BROWSER. Is null if no
   // tabbed browsers exist.

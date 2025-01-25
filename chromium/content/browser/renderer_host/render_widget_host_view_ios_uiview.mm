@@ -6,8 +6,8 @@
 
 #include "base/apple/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "components/input/web_input_event_builders_ios.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
-#include "content/common/input/web_input_event_builders_ios.h"
 
 static void* kObservingContext = &kObservingContext;
 
@@ -190,7 +190,7 @@ static void* kObservingContext = &kObservingContext;
     }
   }
   for (UITouch* touch in touches) {
-    blink::WebTouchEvent webTouchEvent = content::WebTouchEventBuilder::Build(
+    blink::WebTouchEvent webTouchEvent = input::WebTouchEventBuilder::Build(
         blink::WebInputEvent::Type::kTouchStart, touch, event, self,
         _viewOffsetDuringTouchSequence);
     if (!_viewOffsetDuringTouchSequence) {
@@ -205,7 +205,7 @@ static void* kObservingContext = &kObservingContext;
 - (void)touchesEnded:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event {
   CHECK(_view);
   for (UITouch* touch in touches) {
-    _view->OnTouchEvent(content::WebTouchEventBuilder::Build(
+    _view->OnTouchEvent(input::WebTouchEventBuilder::Build(
         blink::WebInputEvent::Type::kTouchEnd, touch, event, self,
         _viewOffsetDuringTouchSequence));
   }
@@ -217,7 +217,7 @@ static void* kObservingContext = &kObservingContext;
 - (void)touchesMoved:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event {
   CHECK(_view);
   for (UITouch* touch in touches) {
-    _view->OnTouchEvent(content::WebTouchEventBuilder::Build(
+    _view->OnTouchEvent(input::WebTouchEventBuilder::Build(
         blink::WebInputEvent::Type::kTouchMove, touch, event, self,
         _viewOffsetDuringTouchSequence));
   }
@@ -226,7 +226,7 @@ static void* kObservingContext = &kObservingContext;
 - (void)touchesCancelled:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event {
   CHECK(_view);
   for (UITouch* touch in touches) {
-    _view->OnTouchEvent(content::WebTouchEventBuilder::Build(
+    _view->OnTouchEvent(input::WebTouchEventBuilder::Build(
         blink::WebInputEvent::Type::kTouchCancel, touch, event, self,
         _viewOffsetDuringTouchSequence));
   }
@@ -537,7 +537,7 @@ static void* kObservingContext = &kObservingContext;
 - (BOOL)textInteractionGesture:(BEGestureType)gestureType
             shouldBeginAtPoint:(CGPoint)point {
   // Check if point is really selectable here.
-  return YES;
+  return NO;
 }
 
 - (void)selectWordForReplacement {

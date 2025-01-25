@@ -24,7 +24,6 @@
 <translation id="241082044617551207">مكوّن إضافي غير محدّد</translation>
 <translation id="2439110203301358333">‏أضاف برنامج آخر بجهاز الكمبيوتر إضافة قد تؤدي إلى تغيير طريقة عمل Vivaldi.</translation>
 <translation id="2445081178310039857">دليل الجذر للإضافة مطلوب.</translation>
-<translation id="2470702053775288986">تم تعطيل الإضافات غير المدعومة</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">إعادة تمكين</translation>
 <translation id="2850541429955027218">إضافة مظهر</translation>
@@ -92,7 +91,6 @@
 <translation id="7629827748548208700">علامة التبويب: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">المتلقي: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7704305437604973648">المهمة</translation>
-<translation id="7791543448312431591">إضافة</translation>
 <translation id="7818135753970109980">تمت إضافة مظهر جديد (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="786073089922909430">الخدمة: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">الأداة: <ph name="UTILITY_TYPE" /></translation>

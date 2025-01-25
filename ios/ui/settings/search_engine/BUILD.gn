@@ -2,10 +2,30 @@
 
 source_set("vivaldi_search_engine_settings") {
   sources = [
+    "vivaldi_search_engine_settings_consumer.h",
+    "vivaldi_search_engine_settings_coordinator.h",
+    "vivaldi_search_engine_settings_coordinator.mm",
+    "vivaldi_search_engine_settings_mediator.h",
+    "vivaldi_search_engine_settings_mediator.mm",
+    "vivaldi_search_engine_settings_prefs.h",
+    "vivaldi_search_engine_settings_prefs.mm",
     "vivaldi_search_engine_settings_view_controller.h",
     "vivaldi_search_engine_settings_view_controller.mm",
   ]
+
   deps = [
     "//base",
+    "//ui/base",
+    "//components/prefs",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/browser/shared/model/browser_state",
+    "//ios/chrome/browser/shared/model/prefs",
+    "//ios/chrome/browser/shared/model/prefs:pref_names",
+    "//ios/chrome/browser/shared/model/utils",
+  ]
+
+  frameworks = [
+    "UIKit.framework"
   ]
 }

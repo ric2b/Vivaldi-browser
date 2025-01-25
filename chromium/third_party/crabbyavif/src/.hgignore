@@ -1,0 +1,17 @@
+/.DS_Store
+/Cargo.lock
+/c_api_tests/build
+/c_build
+/external/av1-avif
+/external/googletest
+/external/libavif
+/match_stats.csv
+/out_comparison.txt
+/sys/dav1d-sys/dav1d
+/sys/dav1d-sys/dav1d.rs
+/sys/libgav1-sys/libgav1
+/sys/libgav1-sys/src/libgav1.rs
+/sys/libyuv-sys/libyuv
+/sys/libyuv-sys/src/libyuv.rs
+/sys/ndk-sys/src/bindings.rs
+/target

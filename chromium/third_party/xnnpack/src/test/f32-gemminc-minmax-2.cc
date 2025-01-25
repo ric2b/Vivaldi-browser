@@ -15,18 +15,18 @@
 #include <string>
 #include <vector>
 
-#include <xnnpack/allocator.h>
-#include <xnnpack/common.h>
-#include <xnnpack/gemm.h>
-#include <xnnpack/igemm.h>
-#include <xnnpack/isa-checks.h>
-#include <xnnpack/microparams-init.h>
-#include <xnnpack/pack.h>
-#include <xnnpack/ppmm.h>
-#include <xnnpack/requantization.h>
-
-#include "gemm-microkernel-tester.h"
 #include <gtest/gtest.h>
+#include "xnnpack/allocator.h"
+#include "xnnpack/common.h"
+#include "xnnpack/gemm.h"
+#include "xnnpack/igemm.h"
+#include "xnnpack/isa-checks.h"
+#include "xnnpack/microparams-init.h"
+#include "xnnpack/pack.h"
+#include "xnnpack/packw.h"
+#include "xnnpack/ppmm.h"
+#include "xnnpack/requantization.h"
+#include "gemm-microkernel-tester.h"
 
 namespace {
 
@@ -41,87 +41,90 @@ std::vector<GemmTestParams> CreateTests1(
   std::string akbs = std::to_string(adj_k_block);
   std::string nrs = std::to_string(nr);
 
+  const GemmMicrokernelTester tester = GemmMicrokernelTester()
+      .mr(mr).nr(nr).kr(kr).sr(sr);
+
   std::vector<GemmTestParams> gemm_tests;
   gemm_tests.reserve(42);
 
   gemm_tests.push_back(GemmTestParams(
       "k_eq_" + kbs,
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).k(k_block)
+      tester.clone()
+          .m(mr).n(nr).k(k_block)
       , test_func, isa_check));
   gemm_tests.push_back(GemmTestParams(
       "strided_cn",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).k(k_block)
+      tester.clone()
+          .m(mr).n(nr).k(k_block)
           .cn_stride(NextPrime(nr + 1))
     , test_func, isa_check));
   if (!is_igemm) {
     gemm_tests.push_back(GemmTestParams(
         "k_eq_" + kbs + "_strided_a",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).k(k_block)
+        tester.clone()
+            .m(mr).n(nr).k(k_block)
             .a_stride(NextPrime(k_block + 1))
         , test_func, isa_check));
   }
   gemm_tests.push_back(GemmTestParams(
       "k_eq_" + kbs + "_subtile",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).k(k_block).iterations(1)
+      tester.clone()
+          .k(k_block).iterations(1)
       , test_func, isa_check)
       .loop_n(1, nr)
       .loop_m(1, mr));
   gemm_tests.push_back(GemmTestParams(
       "k_eq_" + kbs + "_subtile_m",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).n(nr).k(k_block).iterations(1)
+      tester.clone()
+          .n(nr).k(k_block).iterations(1)
       , test_func, isa_check)
       .loop_m(1, mr));
   gemm_tests.push_back(GemmTestParams(
       "k_eq_" + kbs + "_subtile_n",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).k(k_block).iterations(1)
+      tester.clone()
+          .m(mr).k(k_block).iterations(1)
       , test_func, isa_check)
       .loop_n(1, nr));
   gemm_tests.push_back(GemmTestParams(
       "k_eq_" + kb2s,
-      GemmMicrokernelTester()
-        .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).k(k_block * 2)
+      tester.clone()
+        .m(mr).n(nr).k(k_block * 2)
     , test_func, isa_check));
   if (!is_igemm) {
     gemm_tests.push_back(GemmTestParams(
         "k_eq_" + kb2s + "_strided_a",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).k(k_block * 2)
+        tester.clone()
+            .m(mr).n(nr).k(k_block * 2)
             .a_stride(NextPrime(k_block * 2 + 1))
         , test_func, isa_check));
   }
   gemm_tests.push_back(GemmTestParams(
       "k_eq_" + kb2s + "_subtile",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).k(k_block * 2).iterations(1)
+      tester.clone()
+          .k(k_block * 2).iterations(1)
       , test_func, isa_check)
       .loop_n(1, nr)
       .loop_m(1, mr));
   if (k_block > 1) {
     gemm_tests.push_back(GemmTestParams(
         "k_lt_" + akbs,
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr)
+        tester.clone()
+            .m(mr).n(nr)
         , test_func, isa_check)
         .loop_k(1, adj_k_block - 1));
     if (!is_igemm) {
       gemm_tests.push_back(GemmTestParams(
           "k_lt_" + akbs + "_strided_a",
-          GemmMicrokernelTester()
-              .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr)
+          tester.clone()
+              .m(mr).n(nr)
               .a_stride(NextPrime(adj_k_block + 1))
           , test_func, isa_check)
           .loop_k(1, adj_k_block - 1));
     }
     gemm_tests.push_back(GemmTestParams(
         "k_lt_" + akbs + "_subtile",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).iterations(1)
+        tester.clone()
+            .iterations(1)
         , test_func, isa_check)
         .loop_k(1, adj_k_block - 1)
         .loop_n(1, nr)
@@ -129,23 +132,23 @@ std::vector<GemmTestParams> CreateTests1(
   }
   gemm_tests.push_back(GemmTestParams(
       "k_gt_" + akbs,
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr)
+      tester.clone()
+          .m(mr).n(nr)
       , test_func, isa_check)
       .loop_k(adj_k_block + 1, adj_k_block * 2 - 1, k_block));
   if (is_igemm) {
     gemm_tests.push_back(GemmTestParams(
         "k_gt_" + akbs + "_strided_a",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr)
+        tester.clone()
+            .m(mr).n(nr)
             .a_stride(NextPrime(adj_k_block * 2 + 1))
       , test_func, isa_check)
       .loop_k(adj_k_block + 1, adj_k_block * 2 - 1, k_block));
   }
   gemm_tests.push_back(GemmTestParams(
       "k_gt_" + akbs + "_subtile",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).iterations(1)
+      tester.clone()
+          .iterations(1)
       , test_func, isa_check)
       .loop_k(adj_k_block + 1, adj_k_block * 2 - 1, k_block)
       .loop_n(1, nr)
@@ -153,23 +156,23 @@ std::vector<GemmTestParams> CreateTests1(
   if (k_block > 1) {
     gemm_tests.push_back(GemmTestParams(
         "k_div_" + kbs,
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr)
+        tester.clone()
+            .m(mr).n(nr)
         , test_func, isa_check)
         .loop_k(adj_k_block + k_block, k_block * 5, k_block));
     if (is_igemm) {
       gemm_tests.push_back(GemmTestParams(
           "k_div_" + kbs + "_strided_a",
-          GemmMicrokernelTester()
-              .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr)
+          tester.clone()
+              .m(mr).n(nr)
               .a_stride(NextPrime(k_block * 3 + 1))
           , test_func, isa_check)
           .loop_k(adj_k_block + k_block, k_block * 3, k_block));
     }
     gemm_tests.push_back(GemmTestParams(
         "k_div_" + kbs + "_subtile",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).iterations(1)
+        tester.clone()
+            .iterations(1)
         , test_func, isa_check)
         .loop_k(adj_k_block + k_block, k_block * 5, k_block)
         .loop_n(1, nr)
@@ -177,15 +180,15 @@ std::vector<GemmTestParams> CreateTests1(
   }
   gemm_tests.push_back(GemmTestParams(
       "n_gt_" + nrs,
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr)
+      tester.clone()
+          .m(mr)
       , test_func, isa_check)
       .loop_n(nr + 1, nr * 2 - 1)
       .loop_k(1, k_block * 3, k_block + 1));
   gemm_tests.push_back(GemmTestParams(
       "n_gt_" + nrs + "_strided_cn",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr)
+      tester.clone()
+          .m(mr)
           .cn_stride(NextPrime(nr + 1))
       , test_func, isa_check)
       .loop_n(nr + 1, nr * 2 - 1)
@@ -193,8 +196,8 @@ std::vector<GemmTestParams> CreateTests1(
   if (!is_igemm) {
     gemm_tests.push_back(GemmTestParams(
         "n_gt_" + nrs + "_strided_a",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr)
+        tester.clone()
+            .m(mr)
             .a_stride(NextPrime(k_block * 3 + 1))
         , test_func, isa_check)
         .loop_n(nr + 1, nr * 2 - 1)
@@ -202,23 +205,23 @@ std::vector<GemmTestParams> CreateTests1(
   }
   gemm_tests.push_back(GemmTestParams(
       "n_gt_" + nrs + "_subtile",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).iterations(1)
+      tester.clone()
+          .iterations(1)
       , test_func, isa_check)
       .loop_n(nr + 1, nr * 2 - 1)
       .loop_k(1, k_block * 3, k_block + 1)
       .loop_m(1, mr));
   gemm_tests.push_back(GemmTestParams(
       "n_div_" + nrs,
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr)
+      tester.clone()
+          .m(mr)
       , test_func, isa_check)
       .loop_n(nr * 2, nr * 3, nr)
       .loop_k(1, k_block * 3, k_block + 1));
   gemm_tests.push_back(GemmTestParams(
       "n_div_" + nrs + "_strided_cn",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr)
+      tester.clone()
+          .m(mr)
           .cn_stride(NextPrime(nr + 1))
       , test_func, isa_check)
       .loop_n(nr * 2, nr * 3, nr)
@@ -226,8 +229,8 @@ std::vector<GemmTestParams> CreateTests1(
   if (!is_igemm) {
     gemm_tests.push_back(GemmTestParams(
         "n_div_" + nrs + "_strided_a",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr)
+        tester.clone()
+            .m(mr)
             .a_stride(NextPrime(k_block * 3 + 1))
         , test_func, isa_check)
         .loop_n(nr * 2, nr * 3, nr)
@@ -235,8 +238,8 @@ std::vector<GemmTestParams> CreateTests1(
   }
   gemm_tests.push_back(GemmTestParams(
       "n_div_" + nrs + "_subtile",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).iterations(1)
+      tester.clone()
+          .iterations(1)
       , test_func, isa_check)
       .loop_n(nr * 2, nr * 3, nr)
       .loop_k(1, k_block * 3, k_block + 1)
@@ -244,36 +247,36 @@ std::vector<GemmTestParams> CreateTests1(
   if (is_igemm) {
     gemm_tests.push_back(GemmTestParams(
         "small_kernel",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).ks(3)
+        tester.clone()
+            .m(mr).n(nr).ks(3)
         , test_func, isa_check)
         .loop_k(1, k_block * 3, k_block + 1));
     gemm_tests.push_back(GemmTestParams(
         "small_kernel_subtile",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).ks(3).iterations(1)
+        tester.clone()
+            .ks(3).iterations(1)
         , test_func, isa_check)
         .loop_k(1, k_block * 3, k_block + 1)
         .loop_n(1, nr)
         .loop_m(1, mr));
     gemm_tests.push_back(GemmTestParams(
         "n_gt_" + nrs + "_small_kernel",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).ks(3)
+        tester.clone()
+            .m(mr).ks(3)
         , test_func, isa_check)
         .loop_n(nr + 1, nr * 2 - 1)
         .loop_k(1, k_block * 3, k_block + 1));
     gemm_tests.push_back(GemmTestParams(
         "n_div_" + nrs + "_small_kernel",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).ks(3)
+        tester.clone()
+            .m(mr).ks(3)
         , test_func, isa_check)
         .loop_n(nr * 2, nr * 3, nr)
         .loop_k(1, k_block * 3, k_block + 1));
   }
   gemm_tests.push_back(GemmTestParams(
       "strided_cm_subtile",
-      GemmMicrokernelTester()
+      tester.clone()
           .mr(mr).nr(nr).kr(kr).sr(sr)
           .cm_stride(NextPrime(nr + 1))
           .iterations(1)
@@ -284,15 +287,15 @@ std::vector<GemmTestParams> CreateTests1(
   if (is_igemm) {
     gemm_tests.push_back(GemmTestParams(
         "a_offset",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).ks(3)
+        tester.clone()
+            .m(mr).n(nr).ks(3)
             .a_offset(NextPrime(mr * k_block * 3 + 1))
         , test_func, isa_check)
         .loop_k(1, k_block * 3, k_block + 1));
     gemm_tests.push_back(GemmTestParams(
         "zero",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).ks(3)
+        tester.clone()
+            .m(mr).n(nr).ks(3)
             .a_offset(NextPrime(mr * k_block * 3 + 1))
         , test_func, isa_check)
         .loop_k(1, k_block * 3, k_block + 1)
@@ -300,18 +303,18 @@ std::vector<GemmTestParams> CreateTests1(
   }
   gemm_tests.push_back(GemmTestParams(
       "qmin",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).k(k_block).qmin(128)
+      tester.clone()
+          .m(mr).n(nr).k(k_block).qmin(128)
       , test_func, isa_check));
   gemm_tests.push_back(GemmTestParams(
       "qmax",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).k(k_block).qmax(128)
+      tester.clone()
+          .m(mr).n(nr).k(k_block).qmax(128)
       , test_func, isa_check));
   gemm_tests.push_back(GemmTestParams(
       "strided_cm",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).k(k_block)
+      tester.clone()
+          .m(mr).n(nr).k(k_block)
           .cm_stride(NextPrime(nr + 1))
       , test_func, isa_check));
 
@@ -329,67 +332,70 @@ std::vector<GemmTestParams> CreateTests2(
   std::string akbs = std::to_string(adj_k_block);
   std::string nrs = std::to_string(nr);
 
+  const GemmMicrokernelTester tester = GemmMicrokernelTester()
+      .mr(mr).nr(nr).kr(kr).sr(sr);
+
   std::vector<GemmTestParams> gemm_tests;
   gemm_tests.reserve(42);
 
   gemm_tests.push_back(GemmTestParams(
       "k_eq_" + kbs,
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).k(k_block)
+      tester.clone()
+          .m(mr).n(nr).k(k_block)
       , test_func, isa_check));
   gemm_tests.push_back(GemmTestParams(
       "strided_cn",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).k(k_block)
+      tester.clone()
+          .m(mr).n(nr).k(k_block)
           .cn_stride(NextPrime(nr + 1))
     , test_func, isa_check));
   if (!is_igemm) {
     gemm_tests.push_back(GemmTestParams(
         "k_eq_" + kbs + "_strided_a",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).k(k_block)
+        tester.clone()
+            .m(mr).n(nr).k(k_block)
             .a_stride(NextPrime(k_block + 1))
         , test_func, isa_check));
   }
   gemm_tests.push_back(GemmTestParams(
       "k_eq_" + kbs + "_subtile",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).k(k_block).iterations(1)
+      tester.clone()
+          .k(k_block).iterations(1)
       , test_func, isa_check)
       .loop_n(1, nr)
       .loop_m(1, mr));
   gemm_tests.push_back(GemmTestParams(
       "k_eq_" + kbs + "_subtile_m",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).n(nr).k(k_block).iterations(1)
+      tester.clone()
+          .n(nr).k(k_block).iterations(1)
       , test_func, isa_check)
       .loop_m(1, mr));
   gemm_tests.push_back(GemmTestParams(
       "k_eq_" + kbs + "_subtile_n",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).k(k_block).iterations(1)
+      tester.clone()
+          .m(mr).k(k_block).iterations(1)
       , test_func, isa_check)
       .loop_n(1, nr));
   if (k_block > 1) {
     gemm_tests.push_back(GemmTestParams(
         "k_lt_" + akbs,
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr)
+        tester.clone()
+            .m(mr).n(nr)
         , test_func, isa_check)
         .loop_k(1, adj_k_block - 1));
     if (!is_igemm) {
       gemm_tests.push_back(GemmTestParams(
           "k_lt_" + akbs + "_strided_a",
-          GemmMicrokernelTester()
-              .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr)
+          tester.clone()
+              .m(mr).n(nr)
               .a_stride(NextPrime(adj_k_block + 1))
           , test_func, isa_check)
           .loop_k(1, adj_k_block - 1));
     }
     gemm_tests.push_back(GemmTestParams(
         "k_lt_" + akbs + "_subtile",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).iterations(1)
+        tester.clone()
+            .iterations(1)
         , test_func, isa_check)
         .loop_k(1, adj_k_block - 1)
         .loop_n(1, nr)
@@ -397,23 +403,23 @@ std::vector<GemmTestParams> CreateTests2(
   }
   gemm_tests.push_back(GemmTestParams(
       "k_gt_" + akbs,
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr)
+      tester.clone()
+          .m(mr).n(nr)
       , test_func, isa_check)
       .loop_k(adj_k_block + 1, adj_k_block * 2 - 1, k_block));
   if (is_igemm) {
     gemm_tests.push_back(GemmTestParams(
         "k_gt_" + akbs + "_strided_a",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr)
+        tester.clone()
+            .m(mr).n(nr)
             .a_stride(NextPrime(adj_k_block * 2 + 1))
       , test_func, isa_check)
       .loop_k(adj_k_block + 1, adj_k_block * 2 - 1, k_block));
   }
   gemm_tests.push_back(GemmTestParams(
       "k_gt_" + akbs + "_subtile",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).iterations(1)
+      tester.clone()
+          .iterations(1)
       , test_func, isa_check)
       .loop_k(adj_k_block + 1, adj_k_block * 2 - 1, k_block)
       .loop_n(1, nr)
@@ -421,23 +427,23 @@ std::vector<GemmTestParams> CreateTests2(
   if (k_block > 1) {
     gemm_tests.push_back(GemmTestParams(
         "k_div_" + kbs,
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr)
+        tester.clone()
+            .m(mr).n(nr)
         , test_func, isa_check)
         .loop_k(adj_k_block + k_block, k_block * 5, k_block));
     if (is_igemm) {
       gemm_tests.push_back(GemmTestParams(
           "k_div_" + kbs + "_strided_a",
-          GemmMicrokernelTester()
-              .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr)
+          tester.clone()
+              .m(mr).n(nr)
               .a_stride(NextPrime(k_block * 3 + 1))
           , test_func, isa_check)
           .loop_k(adj_k_block + k_block, k_block * 3, k_block));
     }
     gemm_tests.push_back(GemmTestParams(
         "k_div_" + kbs + "_subtile",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).iterations(1)
+        tester.clone()
+            .iterations(1)
         , test_func, isa_check)
         .loop_k(adj_k_block + k_block, k_block * 5, k_block)
         .loop_n(1, nr)
@@ -445,15 +451,15 @@ std::vector<GemmTestParams> CreateTests2(
   }
   gemm_tests.push_back(GemmTestParams(
       "n_gt_" + nrs,
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr)
+      tester.clone()
+          .m(mr)
       , test_func, isa_check)
       .loop_n(nr + 1, nr * 2 - 1)
       .loop_k(1, k_block * 3, k_block + 1));
   gemm_tests.push_back(GemmTestParams(
       "n_gt_" + nrs + "_strided_cn",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr)
+      tester.clone()
+          .m(mr)
           .cn_stride(NextPrime(nr + 1))
       , test_func, isa_check)
       .loop_n(nr + 1, nr * 2 - 1)
@@ -461,8 +467,8 @@ std::vector<GemmTestParams> CreateTests2(
   if (!is_igemm) {
     gemm_tests.push_back(GemmTestParams(
         "n_gt_" + nrs + "_strided_a",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr)
+        tester.clone()
+            .m(mr)
             .a_stride(NextPrime(k_block * 3 + 1))
         , test_func, isa_check)
         .loop_n(nr + 1, nr * 2 - 1)
@@ -470,23 +476,23 @@ std::vector<GemmTestParams> CreateTests2(
   }
   gemm_tests.push_back(GemmTestParams(
       "n_gt_" + nrs + "_subtile",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).iterations(1)
+      tester.clone()
+          .iterations(1)
       , test_func, isa_check)
       .loop_n(nr + 1, nr * 2 - 1)
       .loop_k(1, k_block * 3, k_block + 1)
       .loop_m(1, mr));
   gemm_tests.push_back(GemmTestParams(
       "n_div_" + nrs,
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr)
+      tester.clone()
+          .m(mr)
       , test_func, isa_check)
       .loop_n(nr * 2, nr * 3, nr)
       .loop_k(1, k_block * 3, k_block + 1));
   gemm_tests.push_back(GemmTestParams(
       "n_div_" + nrs + "_strided_cn",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr)
+      tester.clone()
+          .m(mr)
           .cn_stride(NextPrime(nr + 1))
       , test_func, isa_check)
       .loop_n(nr * 2, nr * 3, nr)
@@ -494,8 +500,8 @@ std::vector<GemmTestParams> CreateTests2(
   if (!is_igemm) {
     gemm_tests.push_back(GemmTestParams(
         "n_div_" + nrs + "_strided_a",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr)
+        tester.clone()
+            .m(mr)
             .a_stride(NextPrime(k_block * 3 + 1))
         , test_func, isa_check)
         .loop_n(nr * 2, nr * 3, nr)
@@ -503,8 +509,8 @@ std::vector<GemmTestParams> CreateTests2(
   }
   gemm_tests.push_back(GemmTestParams(
       "n_div_" + nrs + "_subtile",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).iterations(1)
+      tester.clone()
+          .iterations(1)
       , test_func, isa_check)
       .loop_n(nr * 2, nr * 3, nr)
       .loop_k(1, k_block * 3, k_block + 1)
@@ -512,36 +518,36 @@ std::vector<GemmTestParams> CreateTests2(
   if (is_igemm) {
     gemm_tests.push_back(GemmTestParams(
         "small_kernel",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).ks(3)
+        tester.clone()
+            .m(mr).n(nr).ks(3)
         , test_func, isa_check)
         .loop_k(1, k_block * 3, k_block + 1));
     gemm_tests.push_back(GemmTestParams(
         "small_kernel_subtile",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).ks(3).iterations(1)
+        tester.clone()
+            .ks(3).iterations(1)
         , test_func, isa_check)
         .loop_k(1, k_block * 3, k_block + 1)
         .loop_n(1, nr)
         .loop_m(1, mr));
     gemm_tests.push_back(GemmTestParams(
         "n_gt_" + nrs + "_small_kernel",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).ks(3)
+        tester.clone()
+            .m(mr).ks(3)
         , test_func, isa_check)
         .loop_n(nr + 1, nr * 2 - 1)
         .loop_k(1, k_block * 3, k_block + 1));
     gemm_tests.push_back(GemmTestParams(
         "n_div_" + nrs + "_small_kernel",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).ks(3)
+        tester.clone()
+            .m(mr).ks(3)
         , test_func, isa_check)
         .loop_n(nr * 2, nr * 3, nr)
         .loop_k(1, k_block * 3, k_block + 1));
   }
   gemm_tests.push_back(GemmTestParams(
       "strided_cm_subtile",
-      GemmMicrokernelTester()
+      tester.clone()
           .mr(mr).nr(nr).kr(kr).sr(sr)
           .cm_stride(NextPrime(nr + 1))
           .iterations(1)
@@ -552,15 +558,15 @@ std::vector<GemmTestParams> CreateTests2(
   if (is_igemm) {
     gemm_tests.push_back(GemmTestParams(
         "a_offset",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).ks(3)
+        tester.clone()
+            .m(mr).n(nr).ks(3)
             .a_offset(NextPrime(mr * k_block * 3 + 1))
         , test_func, isa_check)
         .loop_k(1, k_block * 3, k_block + 1));
     gemm_tests.push_back(GemmTestParams(
         "zero",
-        GemmMicrokernelTester()
-            .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).ks(3)
+        tester.clone()
+            .m(mr).n(nr).ks(3)
             .a_offset(NextPrime(mr * k_block * 3 + 1))
         , test_func, isa_check)
         .loop_k(1, k_block * 3, k_block + 1)
@@ -568,18 +574,18 @@ std::vector<GemmTestParams> CreateTests2(
   }
   gemm_tests.push_back(GemmTestParams(
       "qmin",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).k(k_block).qmin(128)
+      tester.clone()
+          .m(mr).n(nr).k(k_block).qmin(128)
       , test_func, isa_check));
   gemm_tests.push_back(GemmTestParams(
       "qmax",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).k(k_block).qmax(128)
+      tester.clone()
+          .m(mr).n(nr).k(k_block).qmax(128)
       , test_func, isa_check));
   gemm_tests.push_back(GemmTestParams(
       "strided_cm",
-      GemmMicrokernelTester()
-          .mr(mr).nr(nr).kr(kr).sr(sr).m(mr).n(nr).k(k_block)
+      tester.clone()
+          .m(mr).n(nr).k(k_block)
           .cm_stride(NextPrime(nr + 1))
       , test_func, isa_check));
 
@@ -608,10 +614,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
 
-
-#if XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_1X8__ASM_AARCH64_NEONFMA_CORTEX_A75_PRFM, GemmTest,
       testing::ValuesIn(CreateTests1(
@@ -630,10 +633,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
 
-
-#if XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_1X12__ASM_AARCH64_NEONFMA_CORTEX_A53, GemmTest,
       testing::ValuesIn(CreateTests1(
@@ -652,10 +652,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
 
-
-#if XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8__ASM_AARCH64_NEONFMA_CORTEX_A53, GemmTest,
       testing::ValuesIn(CreateTests1(
@@ -674,10 +671,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
 
-
-#if XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8__ASM_AARCH64_NEONFMA_CORTEX_A75_PRFM, GemmTest,
       testing::ValuesIn(CreateTests1(
@@ -696,10 +690,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
 
-
-#if XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8__ASM_AARCH64_NEONFMA_LD64, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -718,10 +709,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
 
-
-#if XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8__ASM_AARCH64_NEONFMA_LD128, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -740,10 +728,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
 
-
-#if XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X12__ASM_AARCH64_NEONFMA_CORTEX_A53, GemmTest,
       testing::ValuesIn(CreateTests1(
@@ -762,10 +747,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
 
-
-#if XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_6X8__ASM_AARCH64_NEONFMA_CORTEX_A55, GemmTest,
       testing::ValuesIn(CreateTests1(
@@ -784,10 +766,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
 
-
-#if XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_6X8__ASM_AARCH64_NEONFMA_CORTEX_A75, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -806,10 +785,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
 
-
-#if XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_6X8__ASM_AARCH64_NEONFMA_LD64, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -828,10 +804,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
 
-
-#if XNN_ARCH_ARM64 && XNN_ENABLE_ASSEMBLY
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_6X8__ASM_AARCH64_NEONFMA_LD128, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -894,10 +867,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
 
-
-#if XNN_ARCH_ARM || XNN_ARCH_ARM64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_1X8__NEONFMA_DUP_LD64, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -916,10 +886,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
 
-
-#if XNN_ARCH_ARM || XNN_ARCH_ARM64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_1X8S4__NEONFMA, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -982,10 +949,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
 
-
-#if XNN_ARCH_ARM || XNN_ARCH_ARM64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8__NEON_DUP_LD128, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1004,10 +968,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
 
-
-#if XNN_ARCH_ARM || XNN_ARCH_ARM64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8__NEON_LANE_LD64, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1026,10 +987,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
 
-
-#if XNN_ARCH_ARM || XNN_ARCH_ARM64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8__NEON_LANE_LD128, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1136,10 +1094,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
 
-
-#if XNN_ARCH_ARM || XNN_ARCH_ARM64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_6X8__NEONFMA_DUP_LD64, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1158,10 +1113,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
 
-
-#if XNN_ARCH_ARM || XNN_ARCH_ARM64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_6X8S4__NEON, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1180,10 +1132,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
 
-
-#if XNN_ARCH_ARM || XNN_ARCH_ARM64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_6X8S4__NEONFMA, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1202,10 +1151,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
 
-
-#if XNN_ARCH_ARM || XNN_ARCH_ARM64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_8X8S4__NEON, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1224,10 +1170,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
 
-
-#if XNN_ARCH_ARM || XNN_ARCH_ARM64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_8X8S4__NEONFMA, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1268,10 +1211,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_3X8__SSE_DUP, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1290,10 +1230,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_3X8__SSE_LOAD1, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1312,10 +1249,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8__SSE_LOAD1, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1334,10 +1268,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8S4__SSE, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1356,10 +1287,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_5X8__SSE_DUP, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1378,10 +1306,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_5X8__SSE_LOAD1, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1400,10 +1325,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_5X8S4__SSE, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1422,10 +1344,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_3X16__AVX_BROADCAST, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1444,10 +1363,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8__AVX_BROADCAST, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1466,10 +1382,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_7X8__AVX_BROADCAST, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1488,10 +1401,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_1X8__FMA3_BROADCAST, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1510,10 +1420,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_1X16__FMA3_BROADCAST, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1532,10 +1439,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_3X16__FMA3_BROADCAST, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1554,10 +1458,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8__FMA3_BROADCAST, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1576,10 +1477,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_5X8__FMA3_BROADCAST, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1598,10 +1496,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_1X16__AVX512F_BROADCAST, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1620,10 +1515,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_6X16__AVX512F_BROADCAST, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1642,10 +1534,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_7X16__AVX512F_BROADCAST, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1664,10 +1553,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
-
-#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_8X16__AVX512F_BROADCAST, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1705,10 +1591,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_1X8__WASMSIMD_ARM_SPLAT, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1724,10 +1607,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_1X8__WASMSIMD_X86_SPLAT, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1743,10 +1623,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_3X8__WASMSIMD_ARM_LOADSPLAT, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1762,10 +1639,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_3X8S4__WASMSIMD_ARM, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1781,10 +1655,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_3X8S4__WASMSIMD_X86, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1800,10 +1671,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8__WASMSIMD_ARM_LOADSPLAT, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1819,10 +1687,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_5X8__WASMSIMD_X86_LOADSPLAT, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1838,10 +1703,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_6X8__WASMSIMD_ARM_LOADSPLAT, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1857,10 +1719,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_6X8__WASMSIMD_ARM_SPLAT, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1876,10 +1735,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_6X8__WASMSIMD_X86_SPLAT, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1895,10 +1751,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_6X8S4__WASMSIMD_ARM, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1914,10 +1767,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_6X8S4__WASMSIMD_X86, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1952,10 +1802,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_3X8__WASMRELAXEDSIMD_LOADSPLAT, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1971,10 +1818,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_3X8__WASMRELAXEDSIMD_SPLAT, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -1990,10 +1834,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_3X8S4__WASMRELAXEDSIMD_FMA, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -2009,10 +1850,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8__WASMRELAXEDSIMD_LOADSPLAT, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -2028,10 +1866,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8__WASMRELAXEDSIMD_SPLAT, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -2047,10 +1882,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X8S4__WASMRELAXEDSIMD_FMA, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -2066,10 +1898,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_5X8__WASMRELAXEDSIMD_LOADSPLAT, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -2085,10 +1914,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_6X8__WASMRELAXEDSIMD_LOADSPLAT, GemmTest,
       testing::ValuesIn(CreateTests2(
@@ -2123,10 +1949,7 @@ std::vector<GemmTestParams> CreateTests2(
       [](const testing::TestParamInfo<GemmTest::ParamType>& info) {
         return info.param.test_name;
       });
-#endif  // XNN_ARCH_WASM || XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_ARCH_WASM || XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   INSTANTIATE_TEST_SUITE_P(
       F32_GEMMINC_MINMAX_4X4__WASM, GemmTest,
       testing::ValuesIn(CreateTests2(

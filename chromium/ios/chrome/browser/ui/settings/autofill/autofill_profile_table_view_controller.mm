@@ -179,13 +179,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
     return;
 
   TableViewModel* model = self.tableViewModel;
-  const std::vector<autofill::AutofillProfile*> autofillProfiles =
+  const std::vector<const autofill::AutofillProfile*> autofillProfiles =
       _personalDataManager->address_data_manager().GetProfilesForSettings();
   if (!autofillProfiles.empty()) {
     [model addSectionWithIdentifier:SectionIdentifierProfiles];
     [model setHeader:[self profileSectionHeader]
         forSectionWithIdentifier:SectionIdentifierProfiles];
-    for (autofill::AutofillProfile* autofillProfile : autofillProfiles) {
+    for (const autofill::AutofillProfile* autofillProfile : autofillProfiles) {
       DCHECK(autofillProfile);
       [model addItem:[self itemForProfile:*autofillProfile]
           toSectionWithIdentifier:SectionIdentifierProfiles];
@@ -753,7 +753,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (void)showAddressProfileDetailsPageForProfile:
-            (autofill::AutofillProfile*)profile
+            (const autofill::AutofillProfile*)profile
                      withMigrateToAccountButton:(BOOL)migrateToAccountButton {
   self.autofillProfileEditCoordinator = [[AutofillProfileEditCoordinator alloc]
       initWithBaseNavigationController:self.navigationController
@@ -769,7 +769,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // icon.
 - (BOOL)shouldShowCloudOffIconForProfile:
     (const autofill::AutofillProfile&)profile {
-  return IsEligibleForMigrationToAccount(*_personalDataManager, profile) &&
+  return IsEligibleForMigrationToAccount(
+             _personalDataManager->address_data_manager(), profile) &&
          self.userEmail != nil;
 }
 

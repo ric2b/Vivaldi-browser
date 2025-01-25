@@ -217,8 +217,8 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
     InitState(const InitState& other);
     InitState& operator=(const InitState& other);
 
-    std::string extensions = "GL_EXT_framebuffer_object";
-    std::string gl_version = "2.1";
+    std::string extensions;
+    std::string gl_version = "OpenGL ES 3.0";
     bool has_alpha = false;
     bool has_depth = false;
     bool has_stencil = false;
@@ -298,10 +298,14 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
   void DoBindBuffer(GLenum target, GLuint client_id, GLuint service_id);
   void DoBindFramebuffer(GLenum target, GLuint client_id, GLuint service_id);
   void DoBindRenderbuffer(GLenum target, GLuint client_id, GLuint service_id);
+  void SetupExpectationsForInternalFormatSampleCountsHelper(
+      GLenum target,
+      GLenum internal_format,
+      GLint expected_num_sample_counts,
+      GLint expected_sample0);
   void DoRenderbufferStorageMultisampleCHROMIUM(GLenum target,
                                                 GLsizei samples,
                                                 GLenum internal_format,
-                                                GLenum gl_format,
                                                 GLsizei width,
                                                 GLsizei height,
                                                 bool expect_bind);
@@ -380,9 +384,11 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
                         GLsizei width,
                         GLsizei height,
                         GLint border);
-  void DoRenderbufferStorage(
-      GLenum target, GLenum internal_format, GLenum actual_format,
-      GLsizei width, GLsizei height, GLenum error);
+  void DoRenderbufferStorage(GLenum target,
+                             GLenum internal_format,
+                             GLsizei width,
+                             GLsizei height,
+                             GLenum error);
   void DoFramebufferRenderbuffer(
       GLenum target,
       GLenum attachment,
@@ -513,12 +519,6 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
       bool stencil_enabled);
 
   void SetupExpectationsForApplyingDefaultDirtyState();
-
-  void AddExpectationsForSimulatedAttrib0WithError(
-      GLsizei num_vertices, GLuint buffer_id, GLenum error);
-
-  void AddExpectationsForSimulatedAttrib0(
-      GLsizei num_vertices, GLuint buffer_id);
 
   void AddExpectationsForGenVertexArraysOES();
   void AddExpectationsForDeleteVertexArraysOES();

@@ -266,6 +266,10 @@ diff --git a/ffoo b/foo
         with self.assertRaises(presubmit_support.PresubmitFailure):
             presubmit_support._parse_unified_diff(diff)
 
+    def test_diffs_to_change_files_with_empty_diff(self):
+        res = presubmit_support._diffs_to_change_files({'file': ''})
+        self.assertEqual(res, [('M', 'file')])
+
 
 if __name__ == "__main__":
     unittest.main()

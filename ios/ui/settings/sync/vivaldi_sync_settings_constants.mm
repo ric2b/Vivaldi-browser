@@ -20,6 +20,11 @@ NSString* const kShowPasswordIcon = @"eye";
 NSString* const kHidePasswordIcon = @"eye.slash";
 NSString* const kVivaldiIcon = @"blue_vivaldi_icon";
 
+// Vivaldi supporter Badge icon
+NSString* const kVivaldiSupporterBadge = @"supporter";
+NSString* const kVivaldiPatronBadge = @"patron";
+NSString* const kVivaldiAdvocateBadge = @"advocate";
+
 // Vivaldi.net account creation validation
 const int vUserMinimumValidAge = 16;
 const int vUserMaximumValidAge = 150;

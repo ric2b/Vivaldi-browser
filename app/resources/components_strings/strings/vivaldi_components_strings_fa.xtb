@@ -16,7 +16,6 @@
 <translation id="1728677426644403582">درحال مشاهده منبع یک صفحه وب هستید</translation>
 <translation id="1734878702283171397">با سرپرست سیستم تماس بگیرید.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />از عیب‌یابی شبکه‌ی ویندوز استفاده کنید<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">این سایت حاوی برنامه‌های مضر است</translation>
 <translation id="1974060860693918893">پیشرفته</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />بررسی پروکسی و دیوار آتش<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">صادر شده برای: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -42,7 +41,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />راه‌اندازی عیب‌یابی اتصال<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">اتصال مجدداً برقرار شد.</translation>
 <translation id="2826760142808435982">اتصال با استفاده از <ph name="CIPHER" /> رمزگذاری و راستی‌آزمایی شده است و از <ph name="KX" /> به عنوان مکانیسم تبادل کلید استفاده می‌کند.</translation>
-<translation id="2856444702002559011">شاید مهاجم‌ها در تلاش باشند اطلاعات شما (مانند رمزهای عبور، پیام‌ها یا کارت‌های اعتباری) را از <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> سرقت کنند. <ph name="BEGIN_LEARN_MORE_LINK" />بیشتر بدانید<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">تغییر شبکه تشخیص داده شد.</translation>
 <translation id="2948083400971632585">می‌توانید تمام پروکسی‌های تنظیم شده بر روی اتصالات را از طریق صفحه‌ی تنظیمات غیرفعال کنید.</translation>
 <translation id="2991571918955627853">‏درحال‌حاضر نمی‌توانید از <ph name="SITE" /> دیدن کنید، زیرا این وب‌سایت از HSTS استفاده می‌کند. خطاهای شبکه و حمله‌ها معمولاً موقتی هستند، بنابراین احتمالاً این صفحه بعداً کار خواهد کرد.</translation>
@@ -92,7 +90,6 @@
 <translation id="4265872034478892965">توسط مدیر مجاز شده است</translation>
 <translation id="4305666528087210886">دسترسی به فایل شما ممکن نیست</translation>
 <translation id="4312866146174492540">مسدود کردن (پیش‌فرض)</translation>
-<translation id="4356973930735388585">مهاجم‌ها در این سایت ممکن است تلاش کنند برنامه‌های خطرناکی در رایانه شما نصب کنند که اطلاعات شما (مانند عکس‌ها، رمزهای عبور، پیام‌ها و کارت‌های اعتباری) را به سرقت می‌برند یا حذف می‌کنند.</translation>
 <translation id="4408413947728134509"><ph name="NUM_COOKIES" /> کوکی</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> گواهی ورود به سیستمتان را نپذیرفت یا ممکن است گواهی‌ای ارائه نشده باشد.</translation>
 <translation id="4506599922270137252">تماس با سرپرست سیستم</translation>
@@ -144,7 +141,6 @@
 <translation id="6305205051461490394">دسترسی به <ph name="URL" /> امکان‌پذیر نیست.</translation>
 <translation id="6321917430147971392">‏تنظیمات DNS خودتان را بررسی کنید</translation>
 <translation id="6328639280570009161">غیرفعال کردن پیش‌بینی شبکه را امتحان کنید</translation>
-<translation id="6328786501058569169">این سایت گول‌زننده است</translation>
 <translation id="6348220984832452017">تغییرات فعال</translation>
 <translation id="6358450015545214790">معنی این‌ها چیست؟</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> از اتصال خودداری کرد.</translation>
@@ -158,7 +154,6 @@
 <translation id="6897140037006041989">نماینده کاربر</translation>
 <translation id="6957624206566198865">باز کردن صفحه در زبانه‌ی خصوصی جدید</translation>
 <translation id="7053983685419859001">مسدود کردن</translation>
-<translation id="7079718277001814089">این سایت حاوی بدافزار است</translation>
 <translation id="7096937462164235847">هویت این وب‌سایت تأیید نشده است.</translation>
 <translation id="7108819624672055576">توسط یک افزونه مجاز شده است</translation>
 <translation id="7111012039238467737">(معتبر)</translation>
@@ -175,7 +170,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> درحال حاضر نمی‌تواند این درخواست را انجام دهد.</translation>
 <translation id="7662298039739062396">تنظیمات توسط یک افزونه کنترل می‌شود</translation>
 <translation id="7663736086183791259">گواهی <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">مهاجمان در این سایت ممکن است تلاش کنند شما را با نصب برنامه‌هایی که به تجربه مرور شما آسیب می‌رساند، فریب دهند (مثلاً با تغییر دادن صفحه اصلی شما یا با نشان دادن آگهی‌های بیش از حد در سایت‌هایی که بازدید می‌کنید).</translation>
 <translation id="7714464543167945231">گواهی</translation>
 <translation id="7716147886133743102">توسط مدیرتان مسدود شده است</translation>
 <translation id="7716424297397655342">این سایت نمی‌تواند از حافظه پنهان بار شود</translation>
@@ -185,7 +179,6 @@
 <translation id="7878562273885520351">ممکن است رمز عبورتان درمعرض خطر باشد</translation>
 <translation id="7951415247503192394">(۳۲ بیت)</translation>
 <translation id="7953236668995583915">برای اعمال تنظیمات جدید در این سایت، این صفحه را دوباره بارگذاری کنید</translation>
-<translation id="8025119109950072390">مهاجمان در این سایت ممکن است شما را فریب دهند که کارهای خطرناکی مثل نصب نرم‌افزار یا ارائه اطلاعات شخصی‌تان (مثلاً رمزهای عبور، شماره تلفن‌ها یا کارت‌های اعتباری) انجام دهید.</translation>
 <translation id="8037357227543935929">درخواست (پیش‌فرض)</translation>
 <translation id="8041940743680923270">استفاده از پیش‌فرض سراسری (سؤال شود)</translation>
 <translation id="808894953321890993">تغییر رمز عبور</translation>

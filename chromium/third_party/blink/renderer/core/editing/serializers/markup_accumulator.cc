@@ -165,7 +165,7 @@ void MarkupAccumulator::AppendStartMarkup(const Node& node) {
       formatter_.AppendText(markup_, To<Text>(node));
       break;
     case Node::kElementNode:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case Node::kAttributeNode:
       // Only XMLSerializer can pass an Attr.  So, |documentIsHTML| flag is
@@ -598,13 +598,11 @@ std::pair<ShadowRoot*, HTMLTemplateElement*> MarkupAccumulator::GetShadowTree(
     template_element->SetBooleanAttribute(
         html_names::kShadowrootdelegatesfocusAttr, true);
   }
-  if (shadow_root->serializable() &&
-      RuntimeEnabledFeatures::DeclarativeShadowDOMSerializableEnabled()) {
+  if (shadow_root->serializable()) {
     template_element->SetBooleanAttribute(
         html_names::kShadowrootserializableAttr, true);
   }
-  if (shadow_root->clonable() &&
-      RuntimeEnabledFeatures::ShadowRootClonableEnabled()) {
+  if (shadow_root->clonable()) {
     template_element->SetBooleanAttribute(html_names::kShadowrootclonableAttr,
                                           true);
   }

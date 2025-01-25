@@ -16,7 +16,6 @@
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/browser/ui/webui/welcome/helpers.h"
-#include "chrome/browser/ui/webui/whats_new/whats_new_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -27,7 +26,6 @@
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/search/ntp_features.h"
-#include "components/user_notes/user_notes_features.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/url_data_source.h"
@@ -36,7 +34,6 @@
 #include "media/base/media_switches.h"
 #include "printing/buildflags/buildflags.h"
 #include "third_party/abseil-cpp/absl/strings/ascii.h"
-#include "ui/accessibility/accessibility_features.h"
 #include "ui/base/ui_base_features.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -50,6 +47,10 @@
 #include "components/prefs/pref_service.h"
 #else
 #include "components/signin/public/base/signin_switches.h"
+#endif
+
+#if !BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/ui/webui/whats_new/whats_new_util.h"
 #endif
 
 namespace {
@@ -184,14 +185,15 @@ class ChromeURLDataManagerWebUITrustedTypesTest
  public:
   ChromeURLDataManagerWebUITrustedTypesTest() {
     std::vector<base::test::FeatureRef> enabled_features;
-    enabled_features.push_back(whats_new::kForceEnabled);
     enabled_features.push_back(history_clusters::kSidePanelJourneys);
     enabled_features.push_back(features::kSupportTool);
     enabled_features.push_back(ntp_features::kCustomizeChromeWallpaperSearch);
     enabled_features.push_back(
         optimization_guide::features::kOptimizationGuideModelExecution);
-    enabled_features.push_back(features::kReadAnything);
-    enabled_features.push_back(user_notes::kUserNotes);
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+    enabled_features.push_back(whats_new::kForceEnabled);
+#endif
 
 #if !BUILDFLAG(IS_CHROMEOS)
     if (GetParam() == std::string_view("chrome://welcome")) {
@@ -389,13 +391,15 @@ static constexpr const char* const kChromeUrls[] = {
     "chrome://ukm",
     "chrome://usb-internals",
     "chrome://user-actions",
-    "chrome://user-notes-side-panel.top-chrome",
     "chrome://version",
     "chrome://web-app-internals",
     "chrome://webrtc-internals",
     "chrome://webrtc-logs",
     "chrome://webui-gallery",
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
     "chrome://whats-new",
+#endif
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     "chrome://cast-feedback",
@@ -502,7 +506,7 @@ static constexpr const char* const kChromeUrls[] = {
     "chrome://conflicts",
 #endif
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-    "chrome://signin-dice-web-intercept/?debug",
+    "chrome://signin-dice-web-intercept.top-chrome/?debug",
     // Note: Disabled because a DCHECK fires when directly visiting the URL.
     // "chrome://signin-reauth",
 #endif

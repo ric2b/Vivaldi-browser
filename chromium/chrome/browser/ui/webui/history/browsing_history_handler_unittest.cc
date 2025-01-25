@@ -123,12 +123,15 @@ class BrowsingHistoryHandlerTest : public ChromeRenderViewHostTestHarness {
 
   TestingProfile::TestingFactories GetTestingFactories() const override {
     return {
-        {SyncServiceFactory::GetInstance(),
-         base::BindRepeating(&BuildTestSyncService)},
-        {WebHistoryServiceFactory::GetInstance(),
-         base::BindRepeating(&BuildFakeWebHistoryService)},
-        {BookmarkModelFactory::GetInstance(),
-         BookmarkModelFactory::GetDefaultFactory()},
+        TestingProfile::TestingFactory{
+            SyncServiceFactory::GetInstance(),
+            base::BindRepeating(&BuildTestSyncService)},
+        TestingProfile::TestingFactory{
+            WebHistoryServiceFactory::GetInstance(),
+            base::BindRepeating(&BuildFakeWebHistoryService)},
+        TestingProfile::TestingFactory{
+            BookmarkModelFactory::GetInstance(),
+            BookmarkModelFactory::GetDefaultFactory()},
     };
   }
 
@@ -181,8 +184,8 @@ TEST_F(BrowsingHistoryHandlerTest, ObservingWebHistoryDeletions) {
   // BrowsingHistoryHandler is informed about WebHistoryService history
   // deletions.
   {
-    sync_service()->SetTransportState(
-        syncer::SyncService::TransportState::ACTIVE);
+    ASSERT_EQ(sync_service()->GetTransportState(),
+              syncer::SyncService::TransportState::ACTIVE);
     BrowsingHistoryHandlerWithWebUIForTesting handler(web_ui());
     handler.RegisterMessages();
     handler.StartQueryHistory();
@@ -205,12 +208,12 @@ TEST_F(BrowsingHistoryHandlerTest, ObservingWebHistoryDeletions) {
   // BrowsingHistoryHandler will be informed about WebHistoryService deletions
   // even if history sync is activated later.
   {
-    sync_service()->SetTransportState(
+    sync_service()->SetMaxTransportState(
         syncer::SyncService::TransportState::INITIALIZING);
     BrowsingHistoryHandlerWithWebUIForTesting handler(web_ui());
     handler.RegisterMessages();
     handler.StartQueryHistory();
-    sync_service()->SetTransportState(
+    sync_service()->SetMaxTransportState(
         syncer::SyncService::TransportState::ACTIVE);
     sync_service()->FireStateChanged();
 
@@ -236,8 +239,8 @@ TEST_F(BrowsingHistoryHandlerTest, ObservingWebHistoryDeletions) {
   // BrowsingHistoryHandler does not fire historyDeleted while a web history
   // delete request is happening.
   {
-    sync_service()->SetTransportState(
-        syncer::SyncService::TransportState::ACTIVE);
+    ASSERT_EQ(sync_service()->GetTransportState(),
+              syncer::SyncService::TransportState::ACTIVE);
     BrowsingHistoryHandlerWithWebUIForTesting handler(web_ui());
     handler.RegisterMessages();
     handler.StartQueryHistory();
@@ -274,7 +277,7 @@ TEST_F(BrowsingHistoryHandlerTest, ObservingWebHistoryDeletions) {
   // deletions. The WebHistoryService object still exists (because it's a
   // BrowserContextKeyedService), but is not visible to BrowsingHistoryHandler.
   {
-    sync_service()->SetTransportState(
+    sync_service()->SetMaxTransportState(
         syncer::SyncService::TransportState::INITIALIZING);
     BrowsingHistoryHandlerWithWebUIForTesting handler(web_ui());
     handler.RegisterMessages();

@@ -6,11 +6,12 @@
 
 #include <sstream>
 
+#include "base/containers/span.h"
 #include "base/functional/callback.h"
 #include "base/test/bind.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_font_face_descriptors.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_arraybuffer_arraybufferview_string.h"
 #include "third_party/blink/renderer/core/css/css_default_style_sheets.h"
@@ -73,7 +74,7 @@ void ToSimpleLayoutTree(std::ostream& ostream,
 }  // namespace
 
 PageTestBase::MockClipboardHostProvider::MockClipboardHostProvider(
-    blink::BrowserInterfaceBrokerProxy& interface_broker) {
+    const blink::BrowserInterfaceBrokerProxy& interface_broker) {
   Install(interface_broker);
 }
 
@@ -87,7 +88,7 @@ PageTestBase::MockClipboardHostProvider::~MockClipboardHostProvider() {
 }
 
 void PageTestBase::MockClipboardHostProvider::Install(
-    blink::BrowserInterfaceBrokerProxy& interface_broker) {
+    const blink::BrowserInterfaceBrokerProxy& interface_broker) {
   interface_broker_ = &interface_broker;
   interface_broker_->SetBinderForTesting(
       blink::mojom::blink::ClipboardHost::Name_,
@@ -229,10 +230,11 @@ void PageTestBase::LoadFontFromFile(LocalFrame& frame,
                                     String font_path,
                                     const AtomicString& family_name) {
   Document& document = *frame.DomWindow()->document();
-  scoped_refptr<SharedBuffer> shared_buffer = test::ReadFromFile(font_path);
+  std::optional<Vector<char>> data = test::ReadFromFile(font_path);
+  ASSERT_TRUE(data);
   auto* buffer =
       MakeGarbageCollected<V8UnionArrayBufferOrArrayBufferViewOrString>(
-          DOMArrayBuffer::Create(shared_buffer));
+          DOMArrayBuffer::Create(base::as_byte_span(*data)));
   FontFace* ahem = FontFace::Create(frame.DomWindow(), family_name, buffer,
                                     FontFaceDescriptors::Create());
 
@@ -280,8 +282,7 @@ void PageTestBase::InsertStyleElement(const std::string& style_rules) {
 
 void PageTestBase::NavigateTo(const KURL& url,
                               const WTF::HashMap<String, String>& headers) {
-  auto params = WebNavigationParams::CreateWithHTMLBufferForTesting(
-      SharedBuffer::Create(), url);
+  auto params = WebNavigationParams::CreateWithEmptyHTMLForTesting(url);
 
   for (const auto& header : headers)
     params->response.SetHttpHeaderField(header.key, header.value);

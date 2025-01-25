@@ -30,20 +30,31 @@ SavedTabGroup::SavedTabGroup(
     std::optional<size_t> position,
     std::optional<base::Uuid> saved_guid,
     std::optional<LocalTabGroupID> local_group_id,
+    std::optional<std::string> creator_cache_guid,
+    std::optional<std::string> last_updater_cache_guid,
+    bool created_before_syncing_tab_groups,
     std::optional<base::Time> creation_time_windows_epoch_micros,
     std::optional<base::Time> update_time_windows_epoch_micros)
-    : saved_guid_(saved_guid.value_or(base::Uuid::GenerateRandomV4())),
+    : saved_guid_(
+          std::move(saved_guid).value_or(base::Uuid::GenerateRandomV4())),
       local_group_id_(local_group_id),
       title_(title),
       color_(color),
       saved_tabs_(urls),
       position_(position),
+      creator_cache_guid_(std::move(creator_cache_guid)),
+      last_updater_cache_guid_(std::move(last_updater_cache_guid)),
+      created_before_syncing_tab_groups_(created_before_syncing_tab_groups),
       creation_time_windows_epoch_micros_(
           creation_time_windows_epoch_micros.value_or(base::Time::Now())),
       update_time_windows_epoch_micros_(
           update_time_windows_epoch_micros.value_or(base::Time::Now())) {}
 
 SavedTabGroup::SavedTabGroup(const SavedTabGroup& other) = default;
+SavedTabGroup& SavedTabGroup::operator=(const SavedTabGroup& other) = default;
+
+SavedTabGroup::SavedTabGroup(SavedTabGroup&& other) = default;
+SavedTabGroup& SavedTabGroup::operator=(SavedTabGroup&& other) = default;
 
 SavedTabGroup::~SavedTabGroup() = default;
 
@@ -126,13 +137,36 @@ SavedTabGroup& SavedTabGroup::SetColor(tab_groups::TabGroupColorId color) {
 SavedTabGroup& SavedTabGroup::SetLocalGroupId(
     std::optional<LocalTabGroupID> tab_group_id) {
   local_group_id_ = tab_group_id;
-  SetUpdateTimeWindowsEpochMicros(base::Time::Now());
+  return *this;
+}
+
+SavedTabGroup& SavedTabGroup::SetCreatorCacheGuid(
+    std::optional<std::string> new_cache_guid) {
+  creator_cache_guid_ = new_cache_guid;
+  return *this;
+}
+
+SavedTabGroup& SavedTabGroup::SetLastUpdaterCacheGuid(
+    std::optional<std::string> cache_guid) {
+  last_updater_cache_guid_ = cache_guid;
+  return *this;
+}
+
+SavedTabGroup& SavedTabGroup::SetCreatedBeforeSyncingTabGroups(
+    bool created_before_syncing_tab_groups) {
+  created_before_syncing_tab_groups_ = created_before_syncing_tab_groups;
   return *this;
 }
 
 SavedTabGroup& SavedTabGroup::SetUpdateTimeWindowsEpochMicros(
     base::Time update_time_windows_epoch_micros) {
   update_time_windows_epoch_micros_ = update_time_windows_epoch_micros;
+  return *this;
+}
+
+SavedTabGroup& SavedTabGroup::SetLastUserInteractionTime(
+    base::Time last_user_interaction_time) {
+  last_user_interaction_time_ = last_user_interaction_time;
   return *this;
 }
 
@@ -150,6 +184,13 @@ SavedTabGroup& SavedTabGroup::SetPinned(bool pinned) {
     position_ = std::nullopt;
     SetUpdateTimeWindowsEpochMicros(base::Time::Now());
   }
+  return *this;
+}
+
+SavedTabGroup& SavedTabGroup::SetCollaborationId(
+    std::optional<std::string> collaboration_id) {
+  collaboration_id_ = std::move(collaboration_id);
+  SetUpdateTimeWindowsEpochMicros(base::Time::Now());
   return *this;
 }
 
@@ -289,160 +330,45 @@ void SavedTabGroup::UpdateTabPositionsImpl() {
   SetUpdateTimeWindowsEpochMicros(base::Time::Now());
 }
 
-bool SavedTabGroup::ShouldMergeGroup(
-    const sync_pb::SavedTabGroupSpecifics& sync_specific) const {
-  bool sync_update_is_latest =
-      sync_specific.update_time_windows_epoch_micros() >=
-      update_time_windows_epoch_micros()
-          .ToDeltaSinceWindowsEpoch()
-          .InMicroseconds();
-  // TODO(dljames): crbug/1371953 - Investigate if we should consider the
-  // creation time.
-  return sync_update_is_latest;
-}
-
-std::unique_ptr<sync_pb::SavedTabGroupSpecifics> SavedTabGroup::MergeGroup(
-    const sync_pb::SavedTabGroupSpecifics& sync_specific) {
-  if (ShouldMergeGroup(sync_specific)) {
-    SetTitle(base::UTF8ToUTF16(sync_specific.group().title()));
-    SetColor(SyncColorToTabGroupColor(sync_specific.group().color()));
-    if (IsTabGroupsSaveUIUpdateEnabled()) {
-      if (sync_specific.group().has_pinned_position()) {
-        SetPosition(sync_specific.group().pinned_position());
-      } else {
-        SetPinned(false);
-      }
-    } else {
-      SetPosition(sync_specific.group().position());
-    }
-    SetUpdateTimeWindowsEpochMicros(base::Time::FromDeltaSinceWindowsEpoch(
-        base::Microseconds(sync_specific.update_time_windows_epoch_micros())));
+bool SavedTabGroup::RemoteGroupHasMoreRecentUpdates(
+    base::Time remote_group_update_time) const {
+  if (AlwaysAcceptServerDataInModel()) {
+    return true;
   }
 
-  return ToSpecifics();
+  // TODO(crbug.com/40870787): Investigate if we should consider the creation
+  // time.
+  return remote_group_update_time >= update_time_windows_epoch_micros();
 }
 
-// static
-SavedTabGroup SavedTabGroup::FromSpecifics(
-    const sync_pb::SavedTabGroupSpecifics& specific) {
-  const tab_groups::TabGroupColorId color =
-      SyncColorToTabGroupColor(specific.group().color());
-  const std::u16string& title = base::UTF8ToUTF16(specific.group().title());
-  // In v1 we always set tab group position even if the proto is not set, which
-  // gives a default position of 0. In v2 we leave the position unset if the
-  // proto is not set for unpinned tab groups.
-  std::optional<size_t> position;
-  if (IsTabGroupsSaveUIUpdateEnabled()) {
-    position = specific.group().has_pinned_position()
-                   ? std::optional<size_t>(specific.group().pinned_position())
-                   : std::nullopt;
-  } else {
-    position = std::optional<size_t>(specific.group().position());
+void SavedTabGroup::MergeRemoteGroupMetadata(
+    const std::u16string& title,
+    TabGroupColorId color,
+    std::optional<size_t> position,
+    std::optional<std::string> creator_cache_guid,
+    std::optional<std::string> last_updater_cache_guid,
+    base::Time update_time) {
+  if (!RemoteGroupHasMoreRecentUpdates(update_time)) {
+    return;
   }
 
-  const base::Uuid guid = base::Uuid::ParseLowercase(specific.guid());
-  const base::Time creation_time = base::Time::FromDeltaSinceWindowsEpoch(
-      base::Microseconds(specific.creation_time_windows_epoch_micros()));
-  const base::Time update_time = base::Time::FromDeltaSinceWindowsEpoch(
-      base::Microseconds(specific.update_time_windows_epoch_micros()));
-  SavedTabGroup group = SavedTabGroup(title, color, {}, position, guid,
-                                      std::nullopt, creation_time);
-  group.SetUpdateTimeWindowsEpochMicros(update_time);
-
-  return group;
-}
-
-std::unique_ptr<sync_pb::SavedTabGroupSpecifics> SavedTabGroup::ToSpecifics()
-    const {
-  std::unique_ptr<sync_pb::SavedTabGroupSpecifics> pb_specific =
-      std::make_unique<sync_pb::SavedTabGroupSpecifics>();
-  pb_specific->set_guid(saved_guid().AsLowercaseString());
-  pb_specific->set_creation_time_windows_epoch_micros(
-      creation_time_windows_epoch_micros()
-          .ToDeltaSinceWindowsEpoch()
-          .InMicroseconds());
-  pb_specific->set_update_time_windows_epoch_micros(
-      update_time_windows_epoch_micros()
-          .ToDeltaSinceWindowsEpoch()
-          .InMicroseconds());
-
-  sync_pb::SavedTabGroup* pb_group = pb_specific->mutable_group();
-  pb_group->set_color(TabGroupColorToSyncColor(color()));
-  pb_group->set_title(base::UTF16ToUTF8(title()));
-
-  if (position().has_value()) {
-    if (IsTabGroupsSaveUIUpdateEnabled()) {
-      pb_group->set_pinned_position(position().value());
-    } else {
-      pb_group->set_position(position().value());
-    }
+  SetTitle(title);
+  SetColor(color);
+  if (position.has_value()) {
+    SetPosition(position.value());
+  } else if (IsTabGroupsSaveUIUpdateEnabled()) {
+    SetPinned(false);
   }
-  // Note: When adding a new syncable field, also update IsSyncEquivalent().
 
-  return pb_specific;
+  SetCreatorCacheGuid(creator_cache_guid);
+  SetLastUpdaterCacheGuid(last_updater_cache_guid);
+
+  SetUpdateTimeWindowsEpochMicros(update_time);
 }
 
 bool SavedTabGroup::IsSyncEquivalent(const SavedTabGroup& other) const {
   return saved_guid() == other.saved_guid() && color() == other.color() &&
          title() == other.title() && position() == other.position();
-}
-
-// static
-tab_groups::TabGroupColorId SavedTabGroup::SyncColorToTabGroupColor(
-    const sync_pb::SavedTabGroup::SavedTabGroupColor color) {
-  switch (color) {
-    case sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_GREY:
-      return tab_groups::TabGroupColorId::kGrey;
-    case sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_BLUE:
-      return tab_groups::TabGroupColorId::kBlue;
-    case sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_RED:
-      return tab_groups::TabGroupColorId::kRed;
-    case sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_YELLOW:
-      return tab_groups::TabGroupColorId::kYellow;
-    case sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_GREEN:
-      return tab_groups::TabGroupColorId::kGreen;
-    case sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_PINK:
-      return tab_groups::TabGroupColorId::kPink;
-    case sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_PURPLE:
-      return tab_groups::TabGroupColorId::kPurple;
-    case sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_CYAN:
-      return tab_groups::TabGroupColorId::kCyan;
-    case sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_ORANGE:
-      return tab_groups::TabGroupColorId::kOrange;
-    case sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_UNSPECIFIED:
-      return tab_groups::TabGroupColorId::kGrey;
-  }
-}
-
-// static
-sync_pb::SavedTabGroup_SavedTabGroupColor
-SavedTabGroup::TabGroupColorToSyncColor(
-    const tab_groups::TabGroupColorId color) {
-  switch (color) {
-    case tab_groups::TabGroupColorId::kGrey:
-      return sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_GREY;
-    case tab_groups::TabGroupColorId::kBlue:
-      return sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_BLUE;
-    case tab_groups::TabGroupColorId::kRed:
-      return sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_RED;
-    case tab_groups::TabGroupColorId::kYellow:
-      return sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_YELLOW;
-    case tab_groups::TabGroupColorId::kGreen:
-      return sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_GREEN;
-    case tab_groups::TabGroupColorId::kPink:
-      return sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_PINK;
-    case tab_groups::TabGroupColorId::kPurple:
-      return sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_PURPLE;
-    case tab_groups::TabGroupColorId::kCyan:
-      return sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_CYAN;
-    case tab_groups::TabGroupColorId::kOrange:
-      return sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_ORANGE;
-    case tab_groups::TabGroupColorId::kNumEntries:
-      NOTREACHED() << "kNumEntries is not a supported color enum.";
-      return sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_GREY;
-  }
-
-  NOTREACHED() << "No known conversion for the supplied color.";
 }
 
 void SavedTabGroup::RemoveTabImpl(const base::Uuid& saved_tab_guid) {

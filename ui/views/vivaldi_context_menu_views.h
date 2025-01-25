@@ -42,9 +42,11 @@ namespace vivaldi {
 class VivaldiContextMenuViews : public VivaldiContextMenu {
  public:
   ~VivaldiContextMenuViews() override;
-  VivaldiContextMenuViews(content::WebContents* web_contents,
-                          ui::SimpleMenuModel* menu_model,
-                          const gfx::Rect& rect, VivaldiRenderViewContextMenu* context_menu);
+  VivaldiContextMenuViews(
+      content::WebContents* web_contents,
+      ui::SimpleMenuModel* menu_model,
+      const gfx::Rect& rect,
+      VivaldiRenderViewContextMenu* render_view_context_menu);
   VivaldiContextMenuViews(const VivaldiContextMenuViews&) = delete;
   VivaldiContextMenuViews& operator=(const VivaldiContextMenuViews&) = delete;
 
@@ -54,6 +56,7 @@ class VivaldiContextMenuViews : public VivaldiContextMenu {
   void SetIcon(const gfx::Image& icon, int id) override;
   void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) override;
   bool HasDarkTextColor() override;
+  bool IsViews() override { return true; }
 
  private:
   void RunMenuAt(views::Widget* parent,
@@ -65,7 +68,7 @@ class VivaldiContextMenuViews : public VivaldiContextMenu {
   raw_ptr<ui::SimpleMenuModel> menu_model_ = nullptr;
   raw_ptr<views::MenuItemView> menu_view_ = nullptr;  // owned by toolkit_delegate_
   gfx::Rect rect_;
-  const raw_ptr<VivaldiRenderViewContextMenu> context_menu_;
+  const raw_ptr<VivaldiRenderViewContextMenu> render_view_context_menu_;
 };
 
 }  // namespace vivaldi

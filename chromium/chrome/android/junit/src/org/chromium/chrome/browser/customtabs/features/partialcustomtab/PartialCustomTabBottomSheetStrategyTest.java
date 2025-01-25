@@ -46,7 +46,6 @@ import android.view.WindowMetrics;
 
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 import org.robolectric.annotation.Config;
@@ -57,7 +56,6 @@ import org.robolectric.shadows.ShadowLooper;
 import org.chromium.base.BaseSwitches;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.chrome.R;
@@ -83,7 +81,6 @@ import java.util.concurrent.TimeUnit;
 })
 @LooperMode(Mode.PAUSED)
 public class PartialCustomTabBottomSheetStrategyTest {
-    @Rule public TestRule mFeaturesProcessorRule = new Features.JUnitProcessor();
     @Rule public final PartialCustomTabTestRule mPCCTTestRule = new PartialCustomTabTestRule();
 
     private static final int INITIAL_HEIGHT = DEVICE_HEIGHT / 2 - NAVBAR_HEIGHT;
@@ -457,22 +454,10 @@ public class PartialCustomTabBottomSheetStrategyTest {
         assertEquals(2, mPCCTTestRule.mAttributeResults.size());
         assertTabIsAtInitialPos(mPCCTTestRule.getWindowAttributes());
 
-        HandleStrategy handleStrategy = strategy.createHandleStrategyForTesting();
-        final boolean[] closed = {false};
-        handleStrategy.setCloseClickHandler(v -> closed[0] = true);
-
-        dragTab(handleStrategy, INITIAL_HEIGHT, DEVICE_HEIGHT - 400);
-        assertTrue("Close click handler should be called.", closed[0]);
-        closed[0] = false;
-
-        // Another call to handleCloseAnimation should be no-op, guarded by the state check
-        // at the beginning of the method. This happens when a tab gets closed via CCT UI
-        // i.e. button tap/swipe - first by a direct call from CustomTabToolbar, secondly
-        // through BaseCustomTabActivity#handleFinishAndClose. Closing with back button/gesture,
-        // on the other hand, triggers only a single call through BaseCustomTabActivity.
         final boolean[] finishRunnable = {false};
         strategy.handleCloseAnimation(() -> finishRunnable[0] = true);
-        assertFalse("Close click handler should not be called again.", closed[0]);
+        HandleStrategy handleStrategy = strategy.createHandleStrategyForTesting();
+        dragTab(handleStrategy, INITIAL_HEIGHT, DEVICE_HEIGHT - 400);
         assertTrue("FinnishRunnable should be called.", finishRunnable[0]);
     }
 
@@ -734,22 +719,6 @@ public class PartialCustomTabBottomSheetStrategyTest {
 
         // Try to drag down and check that it returns to the initial height.
         assertTabIsAtInitialPos(dragTab(handleStrategy, 1500, 1550, 1600));
-    }
-
-    @Test
-    public void moveDownToDismissFixedHeight() {
-        PartialCustomTabBottomSheetStrategy strategy = createPcctAtHeight(500, true);
-        mPCCTTestRule.verifyWindowFlagsSet();
-
-        assertEquals(2, mPCCTTestRule.mAttributeResults.size());
-        assertTabIsAtInitialPos(mPCCTTestRule.getWindowAttributes());
-
-        HandleStrategy handleStrategy = strategy.createHandleStrategyForTesting();
-        final boolean[] closed = {false};
-        handleStrategy.setCloseClickHandler(v -> closed[0] = true);
-
-        dragTab(handleStrategy, INITIAL_HEIGHT, DEVICE_HEIGHT - 400);
-        assertTrue("Close click handler should be called.", closed[0]);
     }
 
     @Test

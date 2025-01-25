@@ -10,6 +10,7 @@
 
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/app_list/app_list_model_provider.h"
+#include "ash/app_list/apps_collections_controller.h"
 #include "ash/app_list/model/app_list_folder_item.h"
 #include "ash/app_list/model/app_list_item.h"
 #include "ash/app_list/model/app_list_item_list.h"
@@ -22,6 +23,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/strings/strcat.h"
 #include "base/types/cxx23_to_underlying.h"
 #include "ui/compositor/compositor.h"
@@ -159,23 +161,23 @@ void AppListRecordPageSwitcherSourceByEventType(ui::EventType type) {
   AppListPageSwitcherSource source;
 
   switch (type) {
-    case ui::ET_MOUSEWHEEL:
+    case ui::EventType::kMousewheel:
       source = kMouseWheelScroll;
       break;
-    case ui::ET_SCROLL:
+    case ui::EventType::kScroll:
       source = kMousePadScroll;
       break;
-    case ui::ET_GESTURE_SCROLL_END:
+    case ui::EventType::kGestureScrollEnd:
       source = kSwipeAppGrid;
       break;
-    case ui::ET_SCROLL_FLING_START:
+    case ui::EventType::kScrollFlingStart:
       source = kFlingAppGrid;
       break;
-    case ui::ET_MOUSE_RELEASED:
+    case ui::EventType::kMouseReleased:
       source = kMouseDrag;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
   }
   RecordPageSwitcherSource(source);
@@ -212,7 +214,7 @@ std::string GetAppListOpenMethod(AppListShowSource source) {
     case AppListShowSource::kWelcomeTour:
       return "Others";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void RecordAppListUserJourneyTime(AppListShowSource source,
@@ -271,12 +273,9 @@ void RecordAppListByCollectionLaunched(AppCollection collection,
                              ? AppEntity::kThirdPartyApp
                              : AppEntity::kDefaultApp;
 
-  const std::string experimental_arm =
-      app_list_features::IsAppsCollectionsEnabledCounterfactually()
-          ? ".Counterfactual"
-          : ".Enabled";
   const std::string apps_collections_state =
-      app_list_features::IsAppsCollectionsEnabled() ? experimental_arm : "";
+      ash::AppsCollectionsController::Get()
+          ->GetUserExperimentalArmAsHistogramSuffix();
   const std::string app_list_page =
       is_apps_collections_page ? "AppsCollectionsPage" : "AppsPage";
 
@@ -428,6 +427,7 @@ bool IsCommandIdAnAppLaunch(int command_id_number) {
     case CommandId::REORDER_BY_NAME_REVERSE_ALPHABETICAL:
     case CommandId::REORDER_BY_COLOR:
     case CommandId::SHUTDOWN_GUEST_OS:
+    case CommandId::SHUTDOWN_BRUSCHETTA_OS:
     case CommandId::EXTENSIONS_CONTEXT_CUSTOM_FIRST:
     case CommandId::EXTENSIONS_CONTEXT_CUSTOM_LAST:
     case CommandId::COMMAND_ID_COUNT:
@@ -446,10 +446,10 @@ bool IsCommandIdAnAppLaunch(int command_id_number) {
     case CommandId::DEPRECATED_LAUNCH_TYPE_FULLSCREEN:
     case CommandId::DEPRECATED_USE_LAUNCH_TYPE_PINNED:
     case CommandId::DEPRECATED_USE_LAUNCH_TYPE_FULLSCREEN:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 

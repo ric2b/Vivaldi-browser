@@ -74,6 +74,8 @@ source_set("notes") {
     "//vivaldi/ios/sync:file_sync",
     "//vivaldi/ios/sync:sync_notes",
     "//vivaldi/ios/ui/notes/cells",
+    "//vivaldi/ios/ui/notes/resources:markdown_toggle_on",
+    "//vivaldi/ios/ui/notes/resources:markdown_toggle_off"
   ]
 
   frameworks = [ "UIKit.framework" ]

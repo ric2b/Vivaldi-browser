@@ -54,7 +54,7 @@ std::unique_ptr<AddressData> CreateAddressData(
   address_data->address_line = base::SplitString(
       base::UTF16ToUTF8(
           get_info.Run(AutofillType(ADDRESS_HOME_STREET_ADDRESS))),
-      "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+      "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   return address_data;
 }
 
@@ -89,7 +89,7 @@ FieldType TypeForField(AddressField address_field) {
     case ::i18n::addressinput::RECIPIENT:
       return NAME_FULL;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return UNKNOWN_TYPE;
 }
 

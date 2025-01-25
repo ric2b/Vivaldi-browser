@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,10 +8,12 @@
 
 namespace blink {
 
-// Allows Encoded Transforms to be enabled on a per-Transceiver basis within
-// PeerConnections created without the encodedInsertableStreams parameter.
-BASE_FEATURE(kWebRtcEncodedTransformsPerStreamCreation,
-             "WebRtcEncodedTransformsPerStreamCreation",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+// When performing Encoded Transform in-process transfer optimization, set the
+// encoded_audio_transformer_'s transform callback to directly call the new
+// underlying source rather than bouncing via the RTCRtpSender or
+// RTCRtpReceiver.
+BASE_FEATURE(kWebRtcEncodedTransformDirectCallback,
+             "WebRtcEncodedTransformDirectCallback",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace blink

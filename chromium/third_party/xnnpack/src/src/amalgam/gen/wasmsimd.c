@@ -2,45 +2,52 @@
 //
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
+//
+// Auto-generated file. Do not edit!
+//   Generator: tools/update-microkernels.py -a
 
 #include <assert.h>
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
+#ifndef M_LN2
+#define M_LN2 0.69314718055994531
+#endif  // M_LN2
 
 #include <wasm_simd128.h>
 
-#include <xnnpack/argmaxpool.h>
-#include <xnnpack/avgpool.h>
-#include <xnnpack/common.h>
-#include <xnnpack/conv.h>
-#include <xnnpack/dwconv.h>
-#include <xnnpack/fill.h>
-#include <xnnpack/gavgpool.h>
-#include <xnnpack/gemm.h>
-#include <xnnpack/ibilinear.h>
-#include <xnnpack/igemm.h>
-#include <xnnpack/intrinsics-polyfill.h>
-#include <xnnpack/lut.h>
-#include <xnnpack/math-stubs.h>
-#include <xnnpack/math.h>
-#include <xnnpack/maxpool.h>
-#include <xnnpack/microparams.h>
-#include <xnnpack/packw.h>
-#include <xnnpack/pad.h>
-#include <xnnpack/pavgpool.h>
-#include <xnnpack/prelu.h>
-#include <xnnpack/raddstoreexpminusmax.h>
-#include <xnnpack/reduce.h>
-#include <xnnpack/spmm.h>
-#include <xnnpack/transpose.h>
-#include <xnnpack/unaligned.h>
-#include <xnnpack/unpool.h>
-#include <xnnpack/vbinary.h>
-#include <xnnpack/vcvt.h>
-#include <xnnpack/vmulcaddc.h>
-#include <xnnpack/vunary.h>
-#include <xnnpack/zip.h>
+#include "xnnpack/argmaxpool.h"
+#include "xnnpack/avgpool.h"
+#include "xnnpack/common.h"
+#include "xnnpack/conv.h"
+#include "xnnpack/dwconv.h"
+#include "xnnpack/fill.h"
+#include "xnnpack/gavgpool.h"
+#include "xnnpack/gemm.h"
+#include "xnnpack/ibilinear.h"
+#include "xnnpack/igemm.h"
+#include "xnnpack/intrinsics-polyfill.h"
+#include "xnnpack/lut.h"
+#include "xnnpack/math-stubs.h"
+#include "xnnpack/math.h"
+#include "xnnpack/maxpool.h"
+#include "xnnpack/microparams.h"
+#include "xnnpack/packw.h"
+#include "xnnpack/pad.h"
+#include "xnnpack/pavgpool.h"
+#include "xnnpack/prelu.h"
+#include "xnnpack/raddstoreexpminusmax.h"
+#include "xnnpack/reduce.h"
+#include "xnnpack/simd/f32-wasmsimd.h"
+#include "xnnpack/spmm.h"
+#include "xnnpack/transpose.h"
+#include "xnnpack/unaligned.h"
+#include "xnnpack/unpool.h"
+#include "xnnpack/vbinary.h"
+#include "xnnpack/vcvt.h"
+#include "xnnpack/vmulcaddc.h"
+#include "xnnpack/vunary.h"
+#include "xnnpack/zip.h"
 
 
 void xnn_f16_f32_vcvt_ukernel__wasmsimd_int16_u16(
@@ -22387,6 +22394,226 @@ void xnn_f32_raddstoreexpminusmax_ukernel__wasmsimd_rr2_p5_u16_acc2(
   *sum = vsum;
 }
 
+void xnn_f32_rdsum_ukernel_7p7x__wasmsimd_c16(
+    size_t rows,
+    size_t channels,
+    const float* input,
+    size_t input_stride,
+    const float* zero,
+    float* output,
+    const union xnn_f32_scale_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(rows != 0);
+  assert(channels != 0);
+  assert(input != NULL);
+  assert(output != NULL);
+
+  const v128_t vscale = wasm_v128_load32_splat(&params->scalar.scale);
+
+  size_t input_increment = 7 * input_stride;
+  for (; channels >= 16; channels -= 16) {
+    const float* i0 = input;
+    const float* i1 = (const float*) ((uintptr_t) input + 1 * input_stride);
+    const float* i2 = (const float*) ((uintptr_t) input + 2 * input_stride);
+    const float* i3 = (const float*) ((uintptr_t) input + 3 * input_stride);
+    const float* i4 = (const float*) ((uintptr_t) input + 4 * input_stride);
+    const float* i5 = (const float*) ((uintptr_t) input + 5 * input_stride);
+    const float* i6 = (const float*) ((uintptr_t) input + 6 * input_stride);
+
+    v128_t vacc0 = wasm_i32x4_const_splat(0.f);
+    v128_t vacc1 = wasm_i32x4_const_splat(0.f);
+    v128_t vacc2 = wasm_i32x4_const_splat(0.f);
+    v128_t vacc3 = wasm_i32x4_const_splat(0.f);
+
+    for (int r = rows; r > 0; r -= 7) {
+      if XNN_UNPREDICTABLE(r < 2) {
+        i1 = zero;
+      }
+      if XNN_UNPREDICTABLE(r <= 2) {
+        i2 = zero;
+      }
+      if XNN_UNPREDICTABLE(r < 4) {
+        i3 = zero;
+      }
+      if XNN_UNPREDICTABLE(r <= 4) {
+        i4 = zero;
+      }
+      if XNN_UNPREDICTABLE(r < 6) {
+        i5 = zero;
+      }
+      if XNN_UNPREDICTABLE(r <= 6) {
+        i6 = zero;
+      }
+      v128_t vin0;
+      v128_t vin1;
+      v128_t vin2;
+      v128_t vin3;
+      vin0 = wasm_v128_load(&i0[0]);
+      vin1 = wasm_v128_load(&i0[4]);
+      vin2 = wasm_v128_load(&i0[8]);
+      vin3 = wasm_v128_load(&i0[12]);
+      vacc0 = wasm_f32x4_add(vin0, vacc0);
+      vacc1 = wasm_f32x4_add(vin1, vacc1);
+      vacc2 = wasm_f32x4_add(vin2, vacc2);
+      vacc3 = wasm_f32x4_add(vin3, vacc3);
+      vin0 = wasm_v128_load(&i1[0]);
+      vin1 = wasm_v128_load(&i1[4]);
+      vin2 = wasm_v128_load(&i1[8]);
+      vin3 = wasm_v128_load(&i1[12]);
+      vacc0 = wasm_f32x4_add(vin0, vacc0);
+      vacc1 = wasm_f32x4_add(vin1, vacc1);
+      vacc2 = wasm_f32x4_add(vin2, vacc2);
+      vacc3 = wasm_f32x4_add(vin3, vacc3);
+      vin0 = wasm_v128_load(&i2[0]);
+      vin1 = wasm_v128_load(&i2[4]);
+      vin2 = wasm_v128_load(&i2[8]);
+      vin3 = wasm_v128_load(&i2[12]);
+      vacc0 = wasm_f32x4_add(vin0, vacc0);
+      vacc1 = wasm_f32x4_add(vin1, vacc1);
+      vacc2 = wasm_f32x4_add(vin2, vacc2);
+      vacc3 = wasm_f32x4_add(vin3, vacc3);
+      vin0 = wasm_v128_load(&i3[0]);
+      vin1 = wasm_v128_load(&i3[4]);
+      vin2 = wasm_v128_load(&i3[8]);
+      vin3 = wasm_v128_load(&i3[12]);
+      vacc0 = wasm_f32x4_add(vin0, vacc0);
+      vacc1 = wasm_f32x4_add(vin1, vacc1);
+      vacc2 = wasm_f32x4_add(vin2, vacc2);
+      vacc3 = wasm_f32x4_add(vin3, vacc3);
+      vin0 = wasm_v128_load(&i4[0]);
+      vin1 = wasm_v128_load(&i4[4]);
+      vin2 = wasm_v128_load(&i4[8]);
+      vin3 = wasm_v128_load(&i4[12]);
+      vacc0 = wasm_f32x4_add(vin0, vacc0);
+      vacc1 = wasm_f32x4_add(vin1, vacc1);
+      vacc2 = wasm_f32x4_add(vin2, vacc2);
+      vacc3 = wasm_f32x4_add(vin3, vacc3);
+      vin0 = wasm_v128_load(&i5[0]);
+      vin1 = wasm_v128_load(&i5[4]);
+      vin2 = wasm_v128_load(&i5[8]);
+      vin3 = wasm_v128_load(&i5[12]);
+      vacc0 = wasm_f32x4_add(vin0, vacc0);
+      vacc1 = wasm_f32x4_add(vin1, vacc1);
+      vacc2 = wasm_f32x4_add(vin2, vacc2);
+      vacc3 = wasm_f32x4_add(vin3, vacc3);
+      vin0 = wasm_v128_load(&i6[0]);
+      vin1 = wasm_v128_load(&i6[4]);
+      vin2 = wasm_v128_load(&i6[8]);
+      vin3 = wasm_v128_load(&i6[12]);
+      vacc0 = wasm_f32x4_add(vin0, vacc0);
+      vacc1 = wasm_f32x4_add(vin1, vacc1);
+      vacc2 = wasm_f32x4_add(vin2, vacc2);
+      vacc3 = wasm_f32x4_add(vin3, vacc3);
+      i0 = (const float*) ((uintptr_t) i0 + input_increment);
+      i1 = (const float*) ((uintptr_t) i1 + input_increment);
+      i2 = (const float*) ((uintptr_t) i2 + input_increment);
+      i3 = (const float*) ((uintptr_t) i3 + input_increment);
+      i4 = (const float*) ((uintptr_t) i4 + input_increment);
+      i5 = (const float*) ((uintptr_t) i5 + input_increment);
+      i6 = (const float*) ((uintptr_t) i6 + input_increment);
+    }
+    vacc0 = wasm_f32x4_mul(vacc0, vscale);
+    vacc1 = wasm_f32x4_mul(vacc1, vscale);
+    vacc2 = wasm_f32x4_mul(vacc2, vscale);
+    vacc3 = wasm_f32x4_mul(vacc3, vscale);
+
+    const float* o = output;
+    v128_t vo0 = wasm_v128_load(o); o += 4;
+    v128_t vo1 = wasm_v128_load(o); o += 4;
+    v128_t vo2 = wasm_v128_load(o); o += 4;
+    v128_t vo3 = wasm_v128_load(o); o += 4;
+    vacc0 = wasm_f32x4_add(vo0, vacc0);
+    vacc1 = wasm_f32x4_add(vo1, vacc1);
+    vacc2 = wasm_f32x4_add(vo2, vacc2);
+    vacc3 = wasm_f32x4_add(vo3, vacc3);
+    wasm_v128_store(output, vacc0); output += 4;
+    wasm_v128_store(output, vacc1); output += 4;
+    wasm_v128_store(output, vacc2); output += 4;
+    wasm_v128_store(output, vacc3); output += 4;
+
+    input = (const float*) ((uintptr_t) input + 16 * sizeof(float));
+  }
+  if (channels != 0) {
+    input_increment = 7 * input_stride;
+    const float* i0 = input;
+    const float* i1 = (const float*) ((uintptr_t) input + 1 * input_stride);
+    const float* i2 = (const float*) ((uintptr_t) input + 2 * input_stride);
+    const float* i3 = (const float*) ((uintptr_t) input + 3 * input_stride);
+    const float* i4 = (const float*) ((uintptr_t) input + 4 * input_stride);
+    const float* i5 = (const float*) ((uintptr_t) input + 5 * input_stride);
+    const float* i6 = (const float*) ((uintptr_t) input + 6 * input_stride);
+    v128_t vacc[4];
+    vacc[0] = wasm_i32x4_const_splat(0.f);
+    vacc[1] = wasm_i32x4_const_splat(0.f);
+    vacc[2] = wasm_i32x4_const_splat(0.f);
+    vacc[3] = wasm_i32x4_const_splat(0.f);
+
+    const size_t num_chunks = round_up_po2(channels, 4) >> 2;
+    for (int r = rows; r > 0; r -= 7) {
+      if XNN_UNPREDICTABLE(r < 2) {
+        i1 = zero;
+      }
+      if XNN_UNPREDICTABLE(r <= 2) {
+        i2 = zero;
+      }
+      if XNN_UNPREDICTABLE(r < 4) {
+        i3 = zero;
+      }
+      if XNN_UNPREDICTABLE(r <= 4) {
+        i4 = zero;
+      }
+      if XNN_UNPREDICTABLE(r < 6) {
+        i5 = zero;
+      }
+      if XNN_UNPREDICTABLE(r <= 6) {
+        i6 = zero;
+      }
+      for (int i = 0; i < num_chunks; ++i) {
+        vacc[i] = wasm_f32x4_add(wasm_v128_load(&i0[i*4]), vacc[i]);
+        vacc[i] = wasm_f32x4_add(wasm_v128_load(&i1[i*4]), vacc[i]);
+        vacc[i] = wasm_f32x4_add(wasm_v128_load(&i2[i*4]), vacc[i]);
+        vacc[i] = wasm_f32x4_add(wasm_v128_load(&i3[i*4]), vacc[i]);
+        vacc[i] = wasm_f32x4_add(wasm_v128_load(&i4[i*4]), vacc[i]);
+        vacc[i] = wasm_f32x4_add(wasm_v128_load(&i5[i*4]), vacc[i]);
+        vacc[i] = wasm_f32x4_add(wasm_v128_load(&i6[i*4]), vacc[i]);
+      }
+      i0 = (const float*) ((uintptr_t) i0 + input_increment);
+      i1 = (const float*) ((uintptr_t) i1 + input_increment);
+      i2 = (const float*) ((uintptr_t) i2 + input_increment);
+      i3 = (const float*) ((uintptr_t) i3 + input_increment);
+      i4 = (const float*) ((uintptr_t) i4 + input_increment);
+      i5 = (const float*) ((uintptr_t) i5 + input_increment);
+      i6 = (const float*) ((uintptr_t) i6 + input_increment);
+    }
+    for (int i = 0; i < num_chunks; ++i) {
+      vacc[i] = wasm_f32x4_mul(vacc[i], vscale);
+    }
+
+    v128_t vo[4];
+    const float* o = output;
+    for (int i = 0; i < channels >> 2; ++i) {
+      vo[i] = wasm_v128_load(o); o += 4;
+    }
+    for (int i = 0; i < channels >> 2; ++i) {
+      vacc[i] = wasm_f32x4_add(vo[i], vacc[i]);
+    }
+    for (int i = 0; i < channels >> 2; ++i) {
+      wasm_v128_store(output, vacc[i]); output += 4;
+    }
+    const size_t pos = channels / 4;
+    v128_t vout = vacc[pos];
+    if (channels & 2) {
+      v128_t vo = wasm_f32x4_make(output[0], output[1], 0.f, 0.f);
+      wasm_v128_store64_lane(output, wasm_f32x4_add(vo, vout), 0);
+      vout = wasm_v64x2_shuffle(vout, vout, 1, 1);
+      output += 2;
+    }
+    if (channels & 1) {
+      *output += wasm_f32x4_extract_lane(vout, 0);
+    }
+  }
+}
+
 void xnn_f32_rmax_ukernel__wasmsimd_pminmax_u16_acc4(
     size_t batch,
     const float* input,
@@ -27883,146 +28110,6 @@ void xnn_f32_vtanh_ukernel__wasmsimd_expm1minus_rr1_p6h5ts_div_nabs_pmax_u16(
 
     vy = wasm_v128_xor(vy, vinvsignx);
 
-    if (batch & (2 * sizeof(float))) {
-      wasm_v128_store64_lane(output, vy, 0);
-      vy = wasm_v64x2_shuffle(vy, vy, 1, 1);
-      output += 2;
-    }
-    if (batch & (1 * sizeof(float))) {
-      wasm_v128_store32_lane(output, vy, 0);
-    }
-  }
-}
-
-void xnn_f32_vabs_ukernel__wasmsimd_u8(
-    size_t batch,
-    const float* input,
-    float* output,
-    const union xnn_f32_abs_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
-{
-  assert(batch != 0);
-  assert(batch % sizeof(float) == 0);
-  assert(input != NULL);
-  assert(output != NULL);
-
-  const v128_t vnonsign_mask = wasm_v128_load64_splat(&params->wasmsimd.nonsign_mask);
-  for (; batch >= 8 * sizeof(float); batch -= 8 * sizeof(float)) {
-    const v128_t vx0123 = wasm_v128_load(input);
-    const v128_t vx4567 = wasm_v128_load(input + 4);
-    input += 8;
-
-    const v128_t vy0123 = wasm_v128_and(vx0123, vnonsign_mask);
-    const v128_t vy4567 = wasm_v128_and(vx4567, vnonsign_mask);
-
-    wasm_v128_store(output, vy0123);
-    wasm_v128_store(output + 4, vy4567);
-    output += 8;
-  }
-  for (; batch >= 4 * sizeof(float); batch -= 4 * sizeof(float)) {
-    const v128_t vx = wasm_v128_load(input);
-    input += 4;
-
-    const v128_t vy = wasm_v128_and(vx, vnonsign_mask);
-
-    wasm_v128_store(output, vy);
-    output += 4;
-  }
-  if XNN_UNLIKELY(batch != 0) {
-    const v128_t vx = wasm_v128_load(input);
-    v128_t vy = wasm_v128_and(vx, vnonsign_mask);
-    if (batch & (2 * sizeof(float))) {
-      wasm_v128_store64_lane(output, vy, 0);
-      vy = wasm_v64x2_shuffle(vy, vy, 1, 1);
-      output += 2;
-    }
-    if (batch & (1 * sizeof(float))) {
-      wasm_v128_store32_lane(output, vy, 0);
-    }
-  }
-}
-
-void xnn_f32_vneg_ukernel__wasmsimd_u8(
-    size_t batch,
-    const float* input,
-    float* output,
-    const union xnn_f32_neg_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
-{
-  assert(batch != 0);
-  assert(batch % sizeof(float) == 0);
-  assert(input != NULL);
-  assert(output != NULL);
-
-  const v128_t vsign_mask = wasm_v128_load64_splat(&params->wasmsimd.sign_mask);
-  for (; batch >= 8 * sizeof(float); batch -= 8 * sizeof(float)) {
-    const v128_t vx0123 = wasm_v128_load(input);
-    const v128_t vx4567 = wasm_v128_load(input + 4);
-    input += 8;
-
-    const v128_t vy0123 = wasm_v128_xor(vx0123, vsign_mask);
-    const v128_t vy4567 = wasm_v128_xor(vx4567, vsign_mask);
-
-    wasm_v128_store(output, vy0123);
-    wasm_v128_store(output + 4, vy4567);
-    output += 8;
-  }
-  for (; batch >= 4 * sizeof(float); batch -= 4 * sizeof(float)) {
-    const v128_t vx = wasm_v128_load(input);
-    input += 4;
-
-    const v128_t vy = wasm_v128_xor(vx, vsign_mask);
-
-    wasm_v128_store(output, vy);
-    output += 4;
-  }
-  if XNN_UNLIKELY(batch != 0) {
-    const v128_t vx = wasm_v128_load(input);
-    v128_t vy = wasm_v128_xor(vx, vsign_mask);
-    if (batch & (2 * sizeof(float))) {
-      wasm_v128_store64_lane(output, vy, 0);
-      vy = wasm_v64x2_shuffle(vy, vy, 1, 1);
-      output += 2;
-    }
-    if (batch & (1 * sizeof(float))) {
-      wasm_v128_store32_lane(output, vy, 0);
-    }
-  }
-}
-
-void xnn_f32_vsqr_ukernel__wasmsimd_u8(
-    size_t batch,
-    const float* input,
-    float* output,
-    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
-{
-  assert(batch != 0);
-  assert(batch % sizeof(float) == 0);
-  assert(input != NULL);
-  assert(output != NULL);
-
-  for (; batch >= 8 * sizeof(float); batch -= 8 * sizeof(float)) {
-    const v128_t vx0123 = wasm_v128_load(input);
-    const v128_t vx4567 = wasm_v128_load(input + 4);
-    input += 8;
-
-    const v128_t vy0123 = wasm_f32x4_mul(vx0123, vx0123);
-    const v128_t vy4567 = wasm_f32x4_mul(vx4567, vx4567);
-
-    wasm_v128_store(output, vy0123);
-    wasm_v128_store(output + 4, vy4567);
-    output += 8;
-  }
-  for (; batch >= 4 * sizeof(float); batch -= 4 * sizeof(float)) {
-    const v128_t vx = wasm_v128_load(input);
-    input += 4;
-
-    const v128_t vy = wasm_f32x4_mul(vx, vx);
-
-    wasm_v128_store(output, vy);
-    output += 4;
-  }
-  if XNN_UNLIKELY(batch != 0) {
-    const v128_t vx = wasm_v128_load(input);
-    v128_t vy = wasm_f32x4_mul(vx, vx);
     if (batch & (2 * sizeof(float))) {
       wasm_v128_store64_lane(output, vy, 0);
       vy = wasm_v64x2_shuffle(vy, vy, 1, 1);
@@ -40001,4 +40088,705 @@ void xnn_xx_pad_ukernel_p16__wasmsimd_u16(
     input = (const void*) ((uintptr_t) input + input_increment);
     output = (void*) ((uintptr_t) output + output_increment);
   } while (--rows != 0);
+}
+
+void xnn_f32_vabs_ukernel__wasmsimd_u8(
+    size_t batch,
+    const float* input,
+    float* output,
+    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(batch % sizeof(float) == 0);
+  assert(input != NULL);
+  assert(output != NULL);
+  assert(xnn_simd_size_f32 == 4);
+
+  for (; batch >= 8 * sizeof(float); batch -= 8 * sizeof(float)) {
+    const xnn_simd_f32_t vx0 = xnn_loadu_f32(input);
+    const xnn_simd_f32_t vx1 = xnn_loadu_f32(input + 1 * xnn_simd_size_f32);
+    input += 2 * xnn_simd_size_f32;
+
+    const xnn_simd_f32_t vy0 = xnn_abs_f32(vx0);
+    const xnn_simd_f32_t vy1 = xnn_abs_f32(vx1);
+
+    xnn_storeu_f32(output, vy0);
+    xnn_storeu_f32(output + 1 * xnn_simd_size_f32, vy1);
+    output += 2 * xnn_simd_size_f32;
+  }
+
+  for (; batch >= xnn_simd_bytes_f32; batch -= xnn_simd_bytes_f32) {
+    const xnn_simd_f32_t vx = xnn_loadu_f32(input);
+    input += xnn_simd_size_f32;
+
+    const xnn_simd_f32_t vy = xnn_abs_f32(vx);
+
+    xnn_storeu_f32(output, vy);
+    output += xnn_simd_size_f32;
+  }
+
+  if XNN_UNLIKELY(batch != 0) {
+    const xnn_simd_f32_t vx =
+        xnn_load_tail_f32(input, batch >> XNN_LOG2_SIZEOF_FLOAT);
+
+    const xnn_simd_f32_t vy = xnn_abs_f32(vx);
+
+    xnn_store_tail_f32(output, vy, batch >> XNN_LOG2_SIZEOF_FLOAT);
+  }
+}
+
+void xnn_f32_vcopysign_ukernel__wasmsimd_u16(
+    size_t batch,
+    const float* mag,
+    const float* sign,
+    float* output,
+    const union xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(batch % sizeof(float) == 0);
+  assert(mag != NULL);
+  assert(sign != NULL);
+  assert(output != NULL);
+  assert(xnn_simd_size_f32 == 4);
+
+  XNN_SIMD_CONST_F32(vsign_mask, -0.f);
+
+  for (; batch >= 16 * sizeof(float); batch -= 16 * sizeof(float)) {
+    xnn_simd_f32_t vsign_0 = xnn_loadu_f32(sign);
+    xnn_simd_f32_t vsign_1 = xnn_loadu_f32(sign + 1 * xnn_simd_size_f32);
+    xnn_simd_f32_t vsign_2 = xnn_loadu_f32(sign + 2 * xnn_simd_size_f32);
+    xnn_simd_f32_t vsign_3 = xnn_loadu_f32(sign + 3 * xnn_simd_size_f32);
+    sign += 16;
+
+    vsign_0 = xnn_and_f32(vsign_0, vsign_mask);
+    vsign_1 = xnn_and_f32(vsign_1, vsign_mask);
+    vsign_2 = xnn_and_f32(vsign_2, vsign_mask);
+    vsign_3 = xnn_and_f32(vsign_3, vsign_mask);
+
+    xnn_simd_f32_t vmag_0 = xnn_abs_f32(xnn_loadu_f32(mag));
+    xnn_simd_f32_t vmag_1 = xnn_abs_f32(xnn_loadu_f32(mag + 1 * xnn_simd_size_f32));
+    xnn_simd_f32_t vmag_2 = xnn_abs_f32(xnn_loadu_f32(mag + 2 * xnn_simd_size_f32));
+    xnn_simd_f32_t vmag_3 = xnn_abs_f32(xnn_loadu_f32(mag + 3 * xnn_simd_size_f32));
+    mag += 16;
+
+    xnn_simd_f32_t vy_0 = xnn_or_f32(vsign_0, vmag_0);
+    xnn_simd_f32_t vy_1 = xnn_or_f32(vsign_1, vmag_1);
+    xnn_simd_f32_t vy_2 = xnn_or_f32(vsign_2, vmag_2);
+    xnn_simd_f32_t vy_3 = xnn_or_f32(vsign_3, vmag_3);
+
+    xnn_storeu_f32(output, vy_0);
+    xnn_storeu_f32(output + 1 * xnn_simd_size_f32, vy_1);
+    xnn_storeu_f32(output + 2 * xnn_simd_size_f32, vy_2);
+    xnn_storeu_f32(output + 3 * xnn_simd_size_f32, vy_3);
+    output += 16;
+  }
+  for (; batch >= xnn_simd_bytes_f32; batch -= xnn_simd_bytes_f32) {
+    xnn_simd_f32_t vsign = xnn_loadu_f32(sign);
+    sign += xnn_simd_size_f32;
+
+    vsign = xnn_and_f32(vsign, vsign_mask);
+
+    xnn_simd_f32_t vmag = xnn_abs_f32(xnn_loadu_f32(mag));
+    mag += xnn_simd_size_f32;
+
+    xnn_simd_f32_t vy = xnn_or_f32(vsign, vmag);
+
+    xnn_storeu_f32(output, vy);
+    output += xnn_simd_size_f32;
+  }
+  if XNN_UNLIKELY(batch != 0) {
+    xnn_simd_f32_t vsign = xnn_load_tail_f32(sign, batch >> XNN_LOG2_SIZEOF_FLOAT);
+    vsign = xnn_and_f32(vsign, vsign_mask);
+
+    xnn_simd_f32_t vmag = xnn_abs_f32(xnn_load_tail_f32(mag, batch >> XNN_LOG2_SIZEOF_FLOAT));
+
+    xnn_simd_f32_t vy = xnn_or_f32(vsign, vmag);
+
+    xnn_store_tail_f32(output, vy, batch >> XNN_LOG2_SIZEOF_FLOAT);
+  }
+}
+
+void xnn_f32_vcopysignc_ukernel__wasmsimd_u16(
+    size_t batch,
+    const float* mag,
+    const float* sign,
+    float* output,
+    const union xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(batch % sizeof(float) == 0);
+  assert(mag != NULL);
+  assert(sign != NULL);
+  assert(output != NULL);
+  assert(xnn_simd_size_f32 == 4);
+
+  XNN_SIMD_CONST_F32(vsign_mask, -0.f);
+  xnn_simd_f32_t vsign = xnn_set1_f32(*sign);
+  vsign = xnn_and_f32(vsign, vsign_mask);
+
+  for (; batch >= 16 * sizeof(float); batch -= 16 * sizeof(float)) {
+
+    xnn_simd_f32_t vmag_0 = xnn_abs_f32(xnn_loadu_f32(mag));
+    xnn_simd_f32_t vmag_1 = xnn_abs_f32(xnn_loadu_f32(mag + 1 * xnn_simd_size_f32));
+    xnn_simd_f32_t vmag_2 = xnn_abs_f32(xnn_loadu_f32(mag + 2 * xnn_simd_size_f32));
+    xnn_simd_f32_t vmag_3 = xnn_abs_f32(xnn_loadu_f32(mag + 3 * xnn_simd_size_f32));
+    mag += 16;
+
+    xnn_simd_f32_t vy_0 = xnn_or_f32(vsign, vmag_0);
+    xnn_simd_f32_t vy_1 = xnn_or_f32(vsign, vmag_1);
+    xnn_simd_f32_t vy_2 = xnn_or_f32(vsign, vmag_2);
+    xnn_simd_f32_t vy_3 = xnn_or_f32(vsign, vmag_3);
+
+    xnn_storeu_f32(output, vy_0);
+    xnn_storeu_f32(output + 1 * xnn_simd_size_f32, vy_1);
+    xnn_storeu_f32(output + 2 * xnn_simd_size_f32, vy_2);
+    xnn_storeu_f32(output + 3 * xnn_simd_size_f32, vy_3);
+    output += 16;
+  }
+  for (; batch >= xnn_simd_bytes_f32; batch -= xnn_simd_bytes_f32) {
+    xnn_simd_f32_t vmag = xnn_abs_f32(xnn_loadu_f32(mag));
+    mag += xnn_simd_size_f32;
+
+    xnn_simd_f32_t vy = xnn_or_f32(vsign, vmag);
+
+    xnn_storeu_f32(output, vy);
+    output += xnn_simd_size_f32;
+  }
+  if XNN_UNLIKELY(batch != 0) {
+    xnn_simd_f32_t vmag = xnn_abs_f32(xnn_load_tail_f32(mag, batch >> XNN_LOG2_SIZEOF_FLOAT));
+
+    xnn_simd_f32_t vy = xnn_or_f32(vsign, vmag);
+
+    xnn_store_tail_f32(output, vy, batch >> XNN_LOG2_SIZEOF_FLOAT);
+  }
+}
+
+void xnn_f32_vgelu_ukernel__wasmsimd_rational_12_10_div_u12(
+    size_t batch,
+    const float* input,
+    float* output,
+    const union xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(batch % sizeof(float) == 0);
+  assert(input != NULL);
+  assert(output != NULL);
+  assert(xnn_simd_size_f32 == 4);
+
+  // Cap the inputs to this value as `erf(x/sqrt(2))` will always be `+/-1.0f`
+  // beyond this point. This value is chosen as the first floating point
+  // number as of which the interpolation returns +/-1.0f.
+  #if XNN_SIMD_HAS_NATIVE_FMA || (XNN_ARCH_RISCV && XNN_ENABLE_RISCV_VECTOR)
+    XNN_SIMD_CONST_F32(vmax_abs_x, 5.1638283730e+00f);
+  #else
+    XNN_SIMD_CONST_F32(vmax_abs_x, 5.1158981323e+00f);
+  #endif  // XNN_SIMD_HAS_NATIVE_FMA
+
+  // The monomial coefficients of the numerator polynomial (odd).
+  XNN_SIMD_CONST_F32(valpha_1, 7.9788452387e-01f);
+  XNN_SIMD_CONST_F32(valpha_3, 6.6972173750e-02f);
+  XNN_SIMD_CONST_F32(valpha_5, 9.3065137044e-03f);
+  XNN_SIMD_CONST_F32(valpha_7, 3.2973114867e-04f);
+  XNN_SIMD_CONST_F32(valpha_9, 1.2609783880e-05f);
+  XNN_SIMD_CONST_F32(valpha_11, 4.5835321316e-08f);
+
+  // The monomial coefficients of the denominator polynomial (even).
+  // XNN_SIMD_CONST_F32(vbeta_0, 1.0f);
+  XNN_SIMD_CONST_F32(vbeta_2, 2.5060352683e-01f);
+  XNN_SIMD_CONST_F32(vbeta_4, 2.8431978077e-02f);
+  XNN_SIMD_CONST_F32(vbeta_6, 1.8622842617e-03f);
+  XNN_SIMD_CONST_F32(vbeta_8, 7.2267655923e-05f);
+  XNN_SIMD_CONST_F32(vbeta_10, 1.1988805682e-06f);
+
+  XNN_SIMD_CONST_F32(vone, 1.0f);
+  XNN_SIMD_CONST_F32(vhalf, 0.5f);
+
+  for (; batch >= 12 * sizeof(float); batch -= 12 * sizeof(float)) {
+    const xnn_simd_f32_t vx_orig_0 = xnn_loadu_f32(input);
+    const xnn_simd_f32_t vx_orig_1 = xnn_loadu_f32(input + 1 * xnn_simd_size_f32);
+    const xnn_simd_f32_t vx_orig_2 = xnn_loadu_f32(input + 2 * xnn_simd_size_f32);
+    input += 12;
+
+    // Clamp the inputs to the interpolation range.
+    xnn_simd_f32_t vx_0 = xnn_min_f32(vmax_abs_x, vx_orig_0);
+    xnn_simd_f32_t vx_1 = xnn_min_f32(vmax_abs_x, vx_orig_1);
+    xnn_simd_f32_t vx_2 = xnn_min_f32(vmax_abs_x, vx_orig_2);
+    vx_0 = xnn_max_f32(xnn_neg_f32(vmax_abs_x), vx_0);
+    vx_1 = xnn_max_f32(xnn_neg_f32(vmax_abs_x), vx_1);
+    vx_2 = xnn_max_f32(xnn_neg_f32(vmax_abs_x), vx_2);
+
+    // Since the polynomials are odd/even, we need x^2.
+    const xnn_simd_f32_t vx2_0 = xnn_mul_f32(vx_0, vx_0);
+    const xnn_simd_f32_t vx2_1 = xnn_mul_f32(vx_1, vx_1);
+    const xnn_simd_f32_t vx2_2 = xnn_mul_f32(vx_2, vx_2);
+
+    // Evaluate the numerator polynomial p.
+    xnn_simd_f32_t vp_0 = xnn_fmadd_f32(vx2_0, valpha_11, valpha_9);
+    xnn_simd_f32_t vp_1 = xnn_fmadd_f32(vx2_1, valpha_11, valpha_9);
+    xnn_simd_f32_t vp_2 = xnn_fmadd_f32(vx2_2, valpha_11, valpha_9);
+    vp_0 = xnn_fmadd_f32(vx2_0, vp_0, valpha_7);
+    vp_1 = xnn_fmadd_f32(vx2_1, vp_1, valpha_7);
+    vp_2 = xnn_fmadd_f32(vx2_2, vp_2, valpha_7);
+    vp_0 = xnn_fmadd_f32(vx2_0, vp_0, valpha_5);
+    vp_1 = xnn_fmadd_f32(vx2_1, vp_1, valpha_5);
+    vp_2 = xnn_fmadd_f32(vx2_2, vp_2, valpha_5);
+    vp_0 = xnn_fmadd_f32(vx2_0, vp_0, valpha_3);
+    vp_1 = xnn_fmadd_f32(vx2_1, vp_1, valpha_3);
+    vp_2 = xnn_fmadd_f32(vx2_2, vp_2, valpha_3);
+    vp_0 = xnn_fmadd_f32(vx2_0, vp_0, valpha_1);
+    vp_1 = xnn_fmadd_f32(vx2_1, vp_1, valpha_1);
+    vp_2 = xnn_fmadd_f32(vx2_2, vp_2, valpha_1);
+    vp_0 = xnn_mul_f32(vx_0, vp_0);
+    vp_1 = xnn_mul_f32(vx_1, vp_1);
+    vp_2 = xnn_mul_f32(vx_2, vp_2);
+
+    // Evaluate the denominator polynomial q.
+    xnn_simd_f32_t vq_0 = xnn_fmadd_f32(vx2_0, vbeta_10, vbeta_8);
+    xnn_simd_f32_t vq_1 = xnn_fmadd_f32(vx2_1, vbeta_10, vbeta_8);
+    xnn_simd_f32_t vq_2 = xnn_fmadd_f32(vx2_2, vbeta_10, vbeta_8);
+    vq_0 = xnn_fmadd_f32(vx2_0, vq_0, vbeta_6);
+    vq_1 = xnn_fmadd_f32(vx2_1, vq_1, vbeta_6);
+    vq_2 = xnn_fmadd_f32(vx2_2, vq_2, vbeta_6);
+    vq_0 = xnn_fmadd_f32(vx2_0, vq_0, vbeta_4);
+    vq_1 = xnn_fmadd_f32(vx2_1, vq_1, vbeta_4);
+    vq_2 = xnn_fmadd_f32(vx2_2, vq_2, vbeta_4);
+    vq_0 = xnn_fmadd_f32(vx2_0, vq_0, vbeta_2);
+    vq_1 = xnn_fmadd_f32(vx2_1, vq_1, vbeta_2);
+    vq_2 = xnn_fmadd_f32(vx2_2, vq_2, vbeta_2);
+    vq_0 = xnn_fmadd_f32(vx2_0, vq_0, vone);
+    vq_1 = xnn_fmadd_f32(vx2_1, vq_1, vone);
+    vq_2 = xnn_fmadd_f32(vx2_2, vq_2, vone);
+
+    // Divide the numerator by the denominator.
+    const xnn_simd_f32_t verf_0 = xnn_div_f32(vp_0, vq_0);
+    const xnn_simd_f32_t verf_1 = xnn_div_f32(vp_1, vq_1);
+    const xnn_simd_f32_t verf_2 = xnn_div_f32(vp_2, vq_2);
+
+    // Add one to the rational interpolant, and multiply by 0.5 times the
+    // original input.
+    const xnn_simd_f32_t vy_0 = xnn_mul_f32(xnn_mul_f32(vx_orig_0, vhalf),
+                                        xnn_add_f32(verf_0, vone));
+    const xnn_simd_f32_t vy_1 = xnn_mul_f32(xnn_mul_f32(vx_orig_1, vhalf),
+                                        xnn_add_f32(verf_1, vone));
+    const xnn_simd_f32_t vy_2 = xnn_mul_f32(xnn_mul_f32(vx_orig_2, vhalf),
+                                        xnn_add_f32(verf_2, vone));
+
+    xnn_storeu_f32(output, vy_0);
+    xnn_storeu_f32(output + 1 * xnn_simd_size_f32, vy_1);
+    xnn_storeu_f32(output + 2 * xnn_simd_size_f32, vy_2);
+    output += 12;
+  }
+  for (; batch >= xnn_simd_bytes_f32; batch -= xnn_simd_bytes_f32) {
+    const xnn_simd_f32_t vx_orig = xnn_loadu_f32(input);
+    input += xnn_simd_size_f32;
+
+    // Clamp the inputs to the interpolation range.
+    xnn_simd_f32_t vx = xnn_min_f32(vmax_abs_x, vx_orig);
+    vx = xnn_max_f32(xnn_neg_f32(vmax_abs_x), vx);
+
+    // Since the polynomials are odd/even, we need x^2.
+    const xnn_simd_f32_t vx2 = xnn_mul_f32(vx, vx);
+
+    // Evaluate the numerator polynomial p.
+    xnn_simd_f32_t vp = xnn_fmadd_f32(vx2, valpha_11, valpha_9);
+    vp = xnn_fmadd_f32(vx2, vp, valpha_7);
+    vp = xnn_fmadd_f32(vx2, vp, valpha_5);
+    vp = xnn_fmadd_f32(vx2, vp, valpha_3);
+    vp = xnn_fmadd_f32(vx2, vp, valpha_1);
+    vp = xnn_mul_f32(vx, vp);
+
+    // Evaluate the denominator polynomial q.
+    xnn_simd_f32_t vq = xnn_fmadd_f32(vx2, vbeta_10, vbeta_8);
+    vq = xnn_fmadd_f32(vx2, vq, vbeta_6);
+    vq = xnn_fmadd_f32(vx2, vq, vbeta_4);
+    vq = xnn_fmadd_f32(vx2, vq, vbeta_2);
+    vq = xnn_fmadd_f32(vx2, vq, vone);
+
+    // Divide the numerator by the denominator and add one
+    const xnn_simd_f32_t verf =  xnn_div_f32(vp, vq);
+
+    // Add one to the rational interpolant, and multiply by 0.5 times the
+    // original input.
+    const xnn_simd_f32_t vy = xnn_mul_f32(xnn_mul_f32(vx_orig, vhalf),
+                                          xnn_add_f32(verf, vone));
+
+    xnn_storeu_f32(output, vy);
+    output += xnn_simd_size_f32;
+  }
+  if XNN_UNLIKELY(batch != 0) {
+    xnn_simd_f32_t vx_orig = xnn_load_tail_f32(input, batch >> XNN_LOG2_SIZEOF_FLOAT);
+
+  // See above for comments.
+  xnn_simd_f32_t vx = xnn_min_f32(vmax_abs_x, vx_orig);
+  vx = xnn_max_f32(xnn_neg_f32(vmax_abs_x), vx);
+  const xnn_simd_f32_t vx2 = xnn_mul_f32(vx, vx);
+  xnn_simd_f32_t vp = xnn_fmadd_f32(vx2, valpha_11, valpha_9);
+  vp = xnn_fmadd_f32(vx2, vp, valpha_7);
+  vp = xnn_fmadd_f32(vx2, vp, valpha_5);
+  vp = xnn_fmadd_f32(vx2, vp, valpha_3);
+  vp = xnn_fmadd_f32(vx2, vp, valpha_1);
+  vp = xnn_mul_f32(vx, vp);
+  xnn_simd_f32_t vq = xnn_fmadd_f32(vx2, vbeta_10, vbeta_8);
+  vq = xnn_fmadd_f32(vx2, vq, vbeta_6);
+  vq = xnn_fmadd_f32(vx2, vq, vbeta_4);
+  vq = xnn_fmadd_f32(vx2, vq, vbeta_2);
+  vq = xnn_fmadd_f32(vx2, vq, vone);
+  const xnn_simd_f32_t verf =  xnn_div_f32(vp, vq);
+  const xnn_simd_f32_t vy = xnn_mul_f32(xnn_mul_f32(vx_orig, vhalf),
+                                        xnn_add_f32(verf, vone));
+
+    xnn_store_tail_f32(output, vy, batch >> XNN_LOG2_SIZEOF_FLOAT);
+  }
+}
+
+static XNN_INLINE xnn_simd_f32_t xnn_signed_getexp_f32(xnn_simd_f32_t a) {
+  // The bits of IEE754 single-precision floating-point format are:
+  //
+  //   s | e e e e e e e e | m m m m m m m m m m m m m m m m m m m m m m m
+  //
+  // We start by masking out the sign and exponent and shifting it 8 bits to the
+  // right arithmetically, i.e. extending by the leftmost sign bit:
+  //
+  //   s | s s s s s s s s | e e e e e e e e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+  //
+  // These bits are then `or`-ed with `256.0f`, which has a biased exponent of
+  // `135` and all mantissa bit set to zero. This is equivalent to adding the
+  // biased integer exponent to `256.0`:
+  //
+  //   0 | 1 0 0 0 0 1 1 1 | e e e e e e e e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+  //
+  // We can re-extract the exponent as a `float` value by subtracting `256.0`
+  // plus the exponent bias `127.0`, i.e. `383.0`.
+  //
+  // Note that if the sign bit is `1`, we end up with the floating point bits:
+  //
+  //   1 | 1 1 1 1 1 1 1 1 | e e e e e e e e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+  //
+  // Which is `-NaN` if the exponent is non-zero, and `-Inf` if the exponent is
+  // zero (e.g. the input was `0.0f` or denormal).
+
+  // Some useful constants.
+  XNN_SIMD_CONST_F32(sign_mask, -0.0f);
+  XNN_SIMD_CONST_U32(sign_and_exp_mask, 0xff800000);
+  XNN_SIMD_CONST_F32(bias_256, 256.0f);
+  XNN_SIMD_CONST_F32(bias_383, 383.0f);
+
+  // If `a` is `0.0f`, flip its sign bit so that we return `-Inf`.
+  a = xnn_or_f32(xnn_and_f32(xnn_cmpeq_f32(a, xnn_zero_f32()), sign_mask), a);
+
+  // Extract the exponent and shift the exponent to the most significant bits of
+  // the mantissa.
+  const xnn_simd_f32_t exp =
+      xnn_sra_f32(xnn_and_f32(a, sign_and_exp_mask), 8);
+
+  // Add the shifted exponent to `256.0f` by copying its bits to the mantissa,
+  // then subtract out `383.0f`, i.e. the original `256.0f` plus the `127`
+  // exponent bias, resulting in the unbiased exponent.
+  return xnn_sub_f32(xnn_or_f32(bias_256, exp), bias_383);
+}
+
+void xnn_f32_vlog_ukernel__wasmsimd_rational_3_3_div_u8(
+    size_t batch,
+    const float* input,
+    float* output,
+    const union xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(batch % sizeof(float) == 0);
+  assert(input != NULL);
+  assert(output != NULL);
+  assert(xnn_simd_size_f32 == 4);
+
+  // Some useful constants.
+  XNN_SIMD_CONST_F32(vone, 1.0f);
+  XNN_SIMD_CONST_F32(vln2, M_LN2);
+  XNN_SIMD_CONST_U32(vmantissa_bits_mask, 0x007FFFFFUL);
+
+  // Note that these two values are not _exactly_ `(float)M_SQRT2` and
+  // `(float)M_SQRT1_2`, but are instead chosen such that their product is
+  // exactly `1.0f` when evaluated in `float` precision.
+  XNN_SIMD_CONST_F32(vsqrt2, 1.4142134190e+00);
+  XNN_SIMD_CONST_F32(vsqrt1_2, 7.0710688829e-01);
+
+  // The monomial coefficients of the numerator polynomial.
+  // XNN_SIMD_CONST_F32(valpha_0, 0.0f);
+  // XNN_SIMD_CONST_F32(valpha_1, 1.0f);
+  // XNN_SIMD_CONST_F32(valpha_2, 1.0f);
+  XNN_SIMD_CONST_F32(valpha_3, 1.824996918440e-01);
+
+  // The monomial coefficients of the denominator polynomial.
+  // XNN_SIMD_CONST_F32(vbeta_0, 1.0f);
+  XNN_SIMD_CONST_F32(vbeta_1, 1.5f);
+  XNN_SIMD_CONST_F32(vbeta_2, 0.599170029163);
+  XNN_SIMD_CONST_F32(vbeta_3, 0.049584995955);
+
+
+  for (; batch >= 8 * sizeof(float); batch -= 8 * sizeof(float)) {
+    xnn_simd_f32_t vx_0 = xnn_loadu_f32(input);
+    xnn_simd_f32_t vx_1 = xnn_loadu_f32(input + 1 * xnn_simd_size_f32);
+    input += 8;
+
+    // Scale `x` with `sqrt(2)` so that the exponent is rounded up.
+    vx_0 = xnn_mul_f32(vx_0, vsqrt2);
+    vx_1 = xnn_mul_f32(vx_1, vsqrt2);
+
+    // Extract the exponent.
+    const xnn_simd_f32_t vexp_0 = xnn_signed_getexp_f32(vx_0);
+    const xnn_simd_f32_t vexp_1 = xnn_signed_getexp_f32(vx_1);
+
+    // Normalize `x` to an exponent of zero.
+    vx_0 = xnn_or_f32(xnn_and_f32(vx_0, vmantissa_bits_mask), vone);
+    vx_1 = xnn_or_f32(xnn_and_f32(vx_1, vmantissa_bits_mask), vone);
+
+    // Scale `x` back with `1/sqrt(2)` to move its range from `[1.0, 2.0)` to
+    // `[sqrt(1/2), sqrt(2))`, and further subtract `1.0` so that it is around
+    // zero, i.e. `[sqrt(1/2) - 1, sqrt(2) - 1)`, or `[−0.29289, 0.4142136)`.
+    vx_0 = xnn_sub_f32(xnn_mul_f32(vx_0, vsqrt1_2), vone);
+    vx_1 = xnn_sub_f32(xnn_mul_f32(vx_1, vsqrt1_2), vone);
+
+    // In the following, we use a 3/2-degree rational polynomial to
+    // approximate the (shifted) `log(x + 1)` on the (shifted) interval
+    // `[sqrt(1/2) - 1, sqrt(2) - 1)`. The shifted interval is chosen so that
+    // `f(0) = 0`.
+
+    // Evaluate the numerator polynomial p.
+    xnn_simd_f32_t vp_0 = xnn_fmadd_f32(vx_0, valpha_3, vone);
+    xnn_simd_f32_t vp_1 = xnn_fmadd_f32(vx_1, valpha_3, vone);
+    vp_0 = xnn_fmadd_f32(vx_0, vp_0, vone);
+    vp_1 = xnn_fmadd_f32(vx_1, vp_1, vone);
+    vp_0 = xnn_mul_f32(vx_0, vp_0);
+    vp_1 = xnn_mul_f32(vx_1, vp_1);
+
+    // Evaluate the denominator polynomial q.
+    xnn_simd_f32_t vq_0 = xnn_fmadd_f32(vx_0, vbeta_3, vbeta_2);
+    xnn_simd_f32_t vq_1 = xnn_fmadd_f32(vx_1, vbeta_3, vbeta_2);
+    vq_0 = xnn_fmadd_f32(vx_0, vq_0, vbeta_1);
+    vq_1 = xnn_fmadd_f32(vx_1, vq_1, vbeta_1);
+    vq_0 = xnn_fmadd_f32(vx_0, vq_0, vone);
+    vq_1 = xnn_fmadd_f32(vx_1, vq_1, vone);
+
+    // Divide the numerator by the denominator.
+    xnn_simd_f32_t vy_0 = xnn_div_f32(vp_0, vq_0);
+    xnn_simd_f32_t vy_1 = xnn_div_f32(vp_1, vq_1);
+
+    // Put it all together, i.e. `log(x) = `log(2)*exp + y`.
+    vy_0 = xnn_fmadd_f32(vexp_0, vln2, vy_0);
+    vy_1 = xnn_fmadd_f32(vexp_1, vln2, vy_1);
+
+    xnn_storeu_f32(output, vy_0);
+    xnn_storeu_f32(output + 1 * xnn_simd_size_f32, vy_1);
+    output += 8;
+  }
+  for (; batch >= xnn_simd_bytes_f32; batch -= xnn_simd_bytes_f32) {
+    xnn_simd_f32_t vx = xnn_loadu_f32(input);
+    input += xnn_simd_size_f32;
+
+    // Scale `x` with `sqrt(2)` so that the exponent is rounded up.
+    vx = xnn_mul_f32(vx, vsqrt2);
+
+    // Extract the exponent.
+    const xnn_simd_f32_t vexp = xnn_signed_getexp_f32(vx);
+
+    // Normalize `x` to an exponent of zero.
+    vx = xnn_or_f32(xnn_and_f32(vx, vmantissa_bits_mask), vone);
+
+    // Scale `x` back with `1/sqrt(2)` to move its range from `[1.0, 2.0)` to
+    // `[sqrt(1/2), sqrt(2))`, and further subtract `1.0` so that it is around
+    // zero, i.e. `[sqrt(1/2) - 1, sqrt(2) - 1)`, or `[−0.29289, 0.4142136)`.
+    vx = xnn_sub_f32(xnn_mul_f32(vx, vsqrt1_2), vone);
+
+    // In the following, we use a 3/2-degree rational polynomial to
+    // approximate the (shifted) `log(x + 1)` on the (shifted) interval
+    // `[sqrt(1/2) - 1, sqrt(2) - 1)`. The shifted interval is chosen so that
+    // `f(0) = 0`.
+
+    // Evaluate the numerator polynomial p.
+    xnn_simd_f32_t vp = xnn_fmadd_f32(vx, valpha_3, vone);
+    vp = xnn_fmadd_f32(vx, vp, vone);
+    vp = xnn_mul_f32(vx, vp);
+
+    // Evaluate the denominator polynomial q.
+    xnn_simd_f32_t vq = xnn_fmadd_f32(vx, vbeta_3, vbeta_2);
+    vq = xnn_fmadd_f32(vx, vq, vbeta_1);
+    vq = xnn_fmadd_f32(vx, vq, vone);
+
+    // Divide the numerator by the denominator.
+    xnn_simd_f32_t vy =  xnn_div_f32(vp, vq);
+
+    // Put it all together, i.e. `log(x) = `log(2)*exp + y`.
+    vy = xnn_fmadd_f32(vexp, vln2, vy);
+
+    xnn_storeu_f32(output, vy);
+    output += xnn_simd_size_f32;
+  }
+  if XNN_UNLIKELY(batch != 0) {
+    xnn_simd_f32_t vx = xnn_load_tail_f32(input, batch >> XNN_LOG2_SIZEOF_FLOAT);
+
+    // See the loop above for comments.
+    vx = xnn_mul_f32(vx, vsqrt2);
+    const xnn_simd_f32_t vexp = xnn_signed_getexp_f32(vx);
+    vx = xnn_or_f32(xnn_and_f32(vx, vmantissa_bits_mask), vone);
+    vx = xnn_sub_f32(xnn_mul_f32(vx, vsqrt1_2), vone);
+    xnn_simd_f32_t vp = xnn_fmadd_f32(vx, valpha_3, vone);
+    vp = xnn_fmadd_f32(vx, vp, vone);
+    vp = xnn_mul_f32(vx, vp);
+    xnn_simd_f32_t vq = xnn_fmadd_f32(vx, vbeta_3, vbeta_2);
+    vq = xnn_fmadd_f32(vx, vq, vbeta_1);
+    vq = xnn_fmadd_f32(vx, vq, vone);
+    xnn_simd_f32_t vy =  xnn_div_f32(vp, vq);
+    vy = xnn_fmadd_f32(vexp, vln2, vy);
+
+    xnn_store_tail_f32(output, vy, batch >> XNN_LOG2_SIZEOF_FLOAT);
+  }
+}
+
+void xnn_f32_vneg_ukernel__wasmsimd_u8(
+    size_t batch,
+    const float* input,
+    float* output,
+    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(batch % sizeof(float) == 0);
+  assert(input != NULL);
+  assert(output != NULL);
+  assert(xnn_simd_size_f32 == 4);
+
+  for (; batch >= 8 * sizeof(float); batch -= 8 * sizeof(float)) {
+    const xnn_simd_f32_t vx0 = xnn_loadu_f32(input);
+    const xnn_simd_f32_t vx1 = xnn_loadu_f32(input + 1 * xnn_simd_size_f32);
+    input += 2 * xnn_simd_size_f32;
+
+    const xnn_simd_f32_t vy0 = xnn_neg_f32(vx0);
+    const xnn_simd_f32_t vy1 = xnn_neg_f32(vx1);
+
+    xnn_storeu_f32(output, vy0);
+    xnn_storeu_f32(output + 1 * xnn_simd_size_f32, vy1);
+    output += 2 * xnn_simd_size_f32;
+  }
+
+  for (; batch >= xnn_simd_bytes_f32; batch -= xnn_simd_bytes_f32) {
+    const xnn_simd_f32_t vx = xnn_loadu_f32(input);
+    input += xnn_simd_size_f32;
+
+    const xnn_simd_f32_t vy = xnn_neg_f32(vx);
+
+    xnn_storeu_f32(output, vy);
+    output += xnn_simd_size_f32;
+  }
+
+  if XNN_UNLIKELY(batch != 0) {
+    const xnn_simd_f32_t vx =
+        xnn_load_tail_f32(input, batch >> XNN_LOG2_SIZEOF_FLOAT);
+
+    const xnn_simd_f32_t vy = xnn_neg_f32(vx);
+
+    xnn_store_tail_f32(output, vy, batch >> XNN_LOG2_SIZEOF_FLOAT);
+  }
+}
+
+void xnn_f32_vrcopysignc_ukernel__wasmsimd_u16(
+    size_t batch,
+    const float* sign,
+    const float* mag,
+    float* output,
+    const union xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(batch % sizeof(float) == 0);
+  assert(sign != NULL);
+  assert(mag != NULL);
+  assert(output != NULL);
+  assert(xnn_simd_size_f32 == 4);
+
+  XNN_SIMD_CONST_F32(vsign_mask, -0.f);
+  xnn_simd_f32_t vmag = xnn_abs_f32(xnn_set1_f32(*mag));
+
+  for (; batch >= 16 * sizeof(float); batch -= 16 * sizeof(float)) {
+    xnn_simd_f32_t vsign_0 = xnn_loadu_f32(sign);
+    xnn_simd_f32_t vsign_1 = xnn_loadu_f32(sign + 1 * xnn_simd_size_f32);
+    xnn_simd_f32_t vsign_2 = xnn_loadu_f32(sign + 2 * xnn_simd_size_f32);
+    xnn_simd_f32_t vsign_3 = xnn_loadu_f32(sign + 3 * xnn_simd_size_f32);
+    sign += 16;
+
+    vsign_0 = xnn_and_f32(vsign_0, vsign_mask);
+    vsign_1 = xnn_and_f32(vsign_1, vsign_mask);
+    vsign_2 = xnn_and_f32(vsign_2, vsign_mask);
+    vsign_3 = xnn_and_f32(vsign_3, vsign_mask);
+
+    xnn_simd_f32_t vy_0 = xnn_or_f32(vsign_0, vmag);
+    xnn_simd_f32_t vy_1 = xnn_or_f32(vsign_1, vmag);
+    xnn_simd_f32_t vy_2 = xnn_or_f32(vsign_2, vmag);
+    xnn_simd_f32_t vy_3 = xnn_or_f32(vsign_3, vmag);
+
+    xnn_storeu_f32(output, vy_0);
+    xnn_storeu_f32(output + 1 * xnn_simd_size_f32, vy_1);
+    xnn_storeu_f32(output + 2 * xnn_simd_size_f32, vy_2);
+    xnn_storeu_f32(output + 3 * xnn_simd_size_f32, vy_3);
+    output += 16;
+  }
+  for (; batch >= xnn_simd_bytes_f32; batch -= xnn_simd_bytes_f32) {
+    xnn_simd_f32_t vsign = xnn_loadu_f32(sign);
+    sign += xnn_simd_size_f32;
+
+    vsign = xnn_and_f32(vsign, vsign_mask);
+
+    xnn_simd_f32_t vy = xnn_or_f32(vsign, vmag);
+
+    xnn_storeu_f32(output, vy);
+    output += xnn_simd_size_f32;
+  }
+  if XNN_UNLIKELY(batch != 0) {
+    xnn_simd_f32_t vsign = xnn_load_tail_f32(sign, batch >> XNN_LOG2_SIZEOF_FLOAT);
+    vsign = xnn_and_f32(vsign, vsign_mask);
+
+    xnn_simd_f32_t vy = xnn_or_f32(vsign, vmag);
+
+    xnn_store_tail_f32(output, vy, batch >> XNN_LOG2_SIZEOF_FLOAT);
+  }
+}
+
+void xnn_f32_vsqr_ukernel__wasmsimd_u8(
+    size_t batch,
+    const float* input,
+    float* output,
+    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(batch % sizeof(float) == 0);
+  assert(input != NULL);
+  assert(output != NULL);
+  assert(xnn_simd_size_f32 == 4);
+
+  for (; batch >= 8 * sizeof(float); batch -= 8 * sizeof(float)) {
+    const xnn_simd_f32_t vx0 = xnn_loadu_f32(input);
+    const xnn_simd_f32_t vx1 = xnn_loadu_f32(input + 1 * xnn_simd_size_f32);
+    input += 2 * xnn_simd_size_f32;
+
+    const xnn_simd_f32_t vy0 = xnn_mul_f32(vx0, vx0);
+    const xnn_simd_f32_t vy1 = xnn_mul_f32(vx1, vx1);
+
+    xnn_storeu_f32(output, vy0);
+    xnn_storeu_f32(output + 1 * xnn_simd_size_f32, vy1);
+    output += 2 * xnn_simd_size_f32;
+  }
+
+  for (; batch >= xnn_simd_bytes_f32; batch -= xnn_simd_bytes_f32) {
+    const xnn_simd_f32_t vx = xnn_loadu_f32(input);
+    input += xnn_simd_size_f32;
+
+    const xnn_simd_f32_t vy = xnn_mul_f32(vx, vx);
+
+    xnn_storeu_f32(output, vy);
+    output += xnn_simd_size_f32;
+  }
+
+  if XNN_UNLIKELY(batch != 0) {
+    const xnn_simd_f32_t vx =
+        xnn_load_tail_f32(input, batch >> XNN_LOG2_SIZEOF_FLOAT);
+
+    const xnn_simd_f32_t vy = xnn_mul_f32(vx, vx);
+
+    xnn_store_tail_f32(output, vy, batch >> XNN_LOG2_SIZEOF_FLOAT);
+  }
 }

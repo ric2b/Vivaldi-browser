@@ -247,7 +247,7 @@ std::string GetPermissionRequestString(RequestTypeForUma type) {
     case RequestTypeForUma::PERMISSION_FLASH:
     case RequestTypeForUma::PERMISSION_FILE_HANDLING:
     case RequestTypeForUma::NUM:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
   }
 }
@@ -719,6 +719,8 @@ const char PermissionUmaUtil::kPermissionsPromptDeniedGesture[] =
     "Permissions.Prompt.Denied.Gesture";
 const char PermissionUmaUtil::kPermissionsPromptDeniedNoGesture[] =
     "Permissions.Prompt.Denied.NoGesture";
+const char PermissionUmaUtil::kPermissionsPromptDismissed[] =
+    "Permissions.Prompt.Dismissed";
 const char PermissionUmaUtil::kPermissionsExperimentalUsagePrefix[] =
     "Permissions.Experimental.Usage.";
 const char PermissionUmaUtil::kPermissionsActionPrefix[] =
@@ -781,8 +783,15 @@ void PermissionUmaUtil::RecordDismissalType(
     const std::vector<ContentSettingsType>& content_settings_types,
     PermissionPromptDisposition ui_disposition,
     DismissalType dismissalType) {
-  RequestTypeForUma type = GetUmaValueForRequestType(
-      ContentSettingsTypeToRequestType(content_settings_types[0]));
+  std::optional<RequestType> request_type =
+      ContentSettingsTypeToRequestTypeIfExists(content_settings_types[0]);
+  if (!request_type.has_value()) {
+    base::UmaHistogramEnumeration(
+        "Permissions.Prompt.Dismissed.InvalidContentSetting",
+        content_settings_types[0]);
+    return;
+  }
+  RequestTypeForUma type = GetUmaValueForRequestType(request_type.value());
 
   if (content_settings_types.size() > 1) {
     type = RequestTypeForUma::MULTIPLE_AUDIO_AND_VIDEO_CAPTURE;
@@ -929,7 +938,7 @@ void PermissionUmaUtil::RecordPermissionPromptAttempt(
       break;
     }
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   std::string histogram_name =
@@ -985,7 +994,7 @@ void PermissionUmaUtil::PermissionPromptResolved(
       RecordPromptDecided(requests, /*accepted=*/true, /*is_one_time*/ true);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   std::string action_string = GetPermissionActionString(permission_action);
@@ -1400,9 +1409,9 @@ void PermissionUmaUtil::RecordPermissionAction(
     // The user is not prompted for these permissions, thus there is no
     // permission action recorded for them.
     default:
-      NOTREACHED() << "PERMISSION "
-                   << PermissionUtil::GetPermissionString(permission)
-                   << " not accounted for";
+      NOTREACHED_IN_MIGRATION()
+          << "PERMISSION " << PermissionUtil::GetPermissionString(permission)
+          << " not accounted for";
   }
 }
 
@@ -1554,9 +1563,9 @@ void PermissionUmaUtil::RecordPageInfoDialogAccessType(
 std::string PermissionUmaUtil::GetOneTimePermissionEventHistogram(
     ContentSettingsType type) {
   // `FILE_SYSTEM_WRITE_GUARD` is not part of `OneTimePermission`,
-  // (i.e. `CanPermissionBeAllowedOnce()`), but it uses its background expiry
+  // (i.e. `DoesSupportTemporaryGrants()`), but it uses its background expiry
   // flow. As a result, allow logging for this event.
-  DCHECK(permissions::PermissionUtil::CanPermissionBeAllowedOnce(type) ||
+  DCHECK(permissions::PermissionUtil::DoesSupportTemporaryGrants(type) ||
          type == ContentSettingsType::FILE_SYSTEM_WRITE_GUARD);
 
   std::string permission_type = GetPermissionRequestString(
@@ -1642,7 +1651,7 @@ void PermissionUmaUtil::RecordPageInfoPermissionChange(
       base::UmaHistogramEnumeration(histogram_name,
                                     PermissionChangeAction::RESET_FROM_DENIED);
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   } else if (setting_before == ContentSetting::CONTENT_SETTING_ALLOW) {
     if (setting_after == ContentSetting::CONTENT_SETTING_BLOCK) {
@@ -1656,7 +1665,7 @@ void PermissionUmaUtil::RecordPageInfoPermissionChange(
       base::UmaHistogramEnumeration(
           histogram_name, PermissionChangeAction::REMEMBER_CHECKBOX_TOGGLED);
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
 }
@@ -1676,9 +1685,9 @@ std::string PermissionUmaUtil::GetPermissionActionString(
     case PermissionAction::GRANTED_ONCE:
       return "AcceptedOnce";
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -1718,7 +1727,7 @@ std::string PermissionUmaUtil::GetPromptDispositionString(
       return "MacOsPrompt";
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -1738,7 +1747,7 @@ std::string PermissionUmaUtil::GetPromptDispositionReasonString(
       return "UserPreferenceInSettings";
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -1863,7 +1872,7 @@ void PermissionUmaUtil::RecordElementAnchoredBubbleOsMetrics(
       screen_type = "OS_SYSTEM_SETTINGS";
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   base::UmaHistogramEnumeration(
@@ -1883,8 +1892,14 @@ void PermissionUmaUtil::RecordElementAnchoredBubbleOsMetrics(
       case OsScreenAction::DISMISSED_SCRIM:
         screen_action = "DismissScrim";
         break;
+      case OsScreenAction::OS_PROMPT_DENIED:
+        screen_action = "OsPromptDenied";
+        break;
+      case OsScreenAction::OS_PROMPT_ALLOWED:
+        screen_action = "OsPromptAllowed";
+        break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
 
     base::UmaHistogramLongTimes("Permissions.Prompt." +
@@ -1973,7 +1988,7 @@ void PermissionUmaUtil::RecordPermissionRegrantForUnusedSites(
       source_ui_string = "Settings";
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   base::UmaHistogramExactLinear(
       "Settings.SafetyCheck.UnusedSitePermissionsRegrantDays" +

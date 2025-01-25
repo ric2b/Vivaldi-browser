@@ -12,6 +12,8 @@ enum struct SignedResourceUrl {
 
 bool VerifyJsonSignature(const std::string& json);
 std::string GetSignedResourceUrl(SignedResourceUrl url_id);
+bool IsDebuggingSearchEngines();
+bool UsesCustomSearchEnginesUrl();
 }
 
 #endif // COMPONENTS_SIGNATURE_VIVALDI_SIGNATURE_H_

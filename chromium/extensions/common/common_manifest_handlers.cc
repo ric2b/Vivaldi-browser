@@ -15,6 +15,7 @@
 #include "extensions/common/api/printer_provider/usb_printer_manifest_handler.h"
 #include "extensions/common/api/sockets/sockets_manifest_handler.h"
 #include "extensions/common/manifest_handler.h"
+#include "extensions/common/manifest_handler_registry.h"
 #include "extensions/common/manifest_handlers/app_display_info.h"
 #include "extensions/common/manifest_handlers/automation.h"
 #include "extensions/common/manifest_handlers/background_info.h"
@@ -26,6 +27,7 @@
 #include "extensions/common/manifest_handlers/extension_action_handler.h"
 #include "extensions/common/manifest_handlers/externally_connectable.h"
 #include "extensions/common/manifest_handlers/file_handler_info.h"
+#include "extensions/common/manifest_handlers/icon_variants_handler.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/manifest_handlers/incognito_info.h"
 #include "extensions/common/manifest_handlers/kiosk_mode_info.h"
@@ -76,6 +78,7 @@ void RegisterCommonManifestHandlers() {
   registry->RegisterHandler(std::make_unique<FileHandlersParser>());
   registry->RegisterHandler(std::make_unique<HomepageURLHandler>());
   registry->RegisterHandler(std::make_unique<IconsHandler>());
+  registry->RegisterHandler(std::make_unique<IconVariantsHandler>());
   registry->RegisterHandler(std::make_unique<IncognitoHandler>());
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   registry->RegisterHandler(std::make_unique<InputComponentsHandler>());

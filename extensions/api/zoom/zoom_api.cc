@@ -42,7 +42,7 @@ void SetUIZoomByWebContent(double zoom_level,
 void DefaultZoomChanged(content::BrowserContext* browser_context) {
   Profile* profile = Profile::FromBrowserContext(browser_context);
   double zoom_level = profile->GetZoomLevelPrefs()->GetDefaultZoomLevelPref();
-  double zoom_factor = blink::PageZoomLevelToZoomFactor(zoom_level);
+  double zoom_factor = blink::ZoomLevelToZoomFactor(zoom_level);
   ::vivaldi::BroadcastEvent(
       vivaldi::zoom::OnDefaultZoomChanged::kEventName,
       vivaldi::zoom::OnDefaultZoomChanged::Create(zoom_factor),
@@ -129,7 +129,7 @@ void ZoomAPI::OnZoomControllerDestroyed(
 
 void ZoomAPI::OnZoomChanged(
     const zoom::ZoomController::ZoomChangedEventData& data) {
-  double zoom_factor = blink::PageZoomLevelToZoomFactor(data.new_zoom_level);
+  double zoom_factor = blink::ZoomLevelToZoomFactor(data.new_zoom_level);
   ::vivaldi::BroadcastEvent(vivaldi::zoom::OnUIZoomChanged::kEventName,
                             vivaldi::zoom::OnUIZoomChanged::Create(zoom_factor),
                             data.web_contents->GetBrowserContext());
@@ -142,7 +142,7 @@ ExtensionFunction::ResponseAction ZoomSetVivaldiUIZoomFunction::Run() {
   std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  double zoom_level = blink::PageZoomFactorToZoomLevel(params->zoom_factor);
+  double zoom_level = blink::ZoomFactorToZoomLevel(params->zoom_factor);
   for (Browser* browser : *BrowserList::GetInstance()) {
     // Avoid crash if we have a non-Vivaldi window open (such as devtools for
     // our UI).
@@ -173,7 +173,7 @@ ExtensionFunction::ResponseAction ZoomGetVivaldiUIZoomFunction::Run() {
   DCHECK(zoom_controller);
 
   double zoom_Level = zoom_controller->GetZoomLevel();
-  double zoom_factor = blink::PageZoomLevelToZoomFactor(zoom_Level);
+  double zoom_factor = blink::ZoomLevelToZoomFactor(zoom_Level);
 
   return RespondNow(ArgumentList(Results::Create(zoom_factor)));
 }
@@ -189,7 +189,7 @@ ExtensionFunction::ResponseAction ZoomSetDefaultZoomFunction::Run() {
   if (profile->IsOffTheRecord()) {
     profile = profile->GetOriginalProfile();
   }
-  double zoom_factor = blink::PageZoomFactorToZoomLevel(params->zoom_factor);
+  double zoom_factor = blink::ZoomFactorToZoomLevel(params->zoom_factor);
 
   content::StoragePartition* partition = profile->GetDefaultStoragePartition();
 
@@ -208,7 +208,7 @@ ExtensionFunction::ResponseAction ZoomGetDefaultZoomFunction::Run() {
     profile = profile->GetOriginalProfile();
   }
   double zoom_level = profile->GetDefaultZoomLevelForProfile();
-  double zoom_factor = blink::PageZoomLevelToZoomFactor(zoom_level);
+  double zoom_factor = blink::ZoomLevelToZoomFactor(zoom_level);
 
   return RespondNow(ArgumentList(Results::Create(zoom_factor)));
 }

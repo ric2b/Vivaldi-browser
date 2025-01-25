@@ -44,8 +44,8 @@
 #include "media/gpu/gpu_video_encode_accelerator_helpers.h"
 #include "media/gpu/macros.h"
 #include "media/gpu/v4l2/v4l2_utils.h"
-#include "media/video/h264_level_limits.h"
-#include "media/video/h264_parser.h"
+#include "media/parsers/h264_level_limits.h"
+#include "media/parsers/h264_parser.h"
 
 namespace {
 const uint8_t kH264StartCode[] = {0, 0, 0, 1};
@@ -1470,7 +1470,7 @@ bool V4L2VideoEncodeAccelerator::EnqueueInputRecord(
       break;
     }
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       SetErrorState({EncoderStatus::Codes::kEncoderIllegalState,
                      base::StrCat({"Unknown input memory type: ",
                                    base::NumberToString(static_cast<int>(
@@ -1885,8 +1885,8 @@ bool V4L2VideoEncodeAccelerator::InitControls(const Config& config) {
       InitControlsVP8(config);
       break;
     default:
-      NOTREACHED() << "Unsupported codec "
-                   << FourccToString(output_format_fourcc_);
+      NOTREACHED_IN_MIGRATION()
+          << "Unsupported codec " << FourccToString(output_format_fourcc_);
       return false;
   }
 

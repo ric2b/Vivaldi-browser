@@ -92,6 +92,23 @@ class ProcessNodeImpl;
 class WorkerNodeImpl;
 }  // namespace performance_manager
 
+// TODO(crbug.com/40485134): This is a hack to prevent new uses of
+// SupportsWeakPtr. The remaining uses are troublesome to fix, so we declare
+// these classes as friends so they have access to the constructor.
+namespace gl {
+class GLContext;
+class GLSurface;
+}  // namespace gl
+
+namespace ui {
+class MenuModel;
+class TextInputClient;
+}  // namespace ui
+
+namespace views {
+class WidgetDelegate;
+}  // namespace views
+
 namespace base {
 
 namespace sequence_manager::internal {
@@ -466,16 +483,23 @@ class WeakPtrFactory : public internal::WeakPtrFactoryBase {
   }
 };
 
+// TODO(crbug.com/40485134): This is a hack to prevent new uses of
+// SupportsWeakPtr. The remaining uses are troublesome to fix, so we declare
+// these classes as friends so they have access to the constructor. This
+// class is used in the unit tests.
+namespace weak_ptr_unittest {
+struct Target;
+}
+
 // A class may extend from SupportsWeakPtr to let others take weak pointers to
 // it. This avoids the class itself implementing boilerplate to dispense weak
 // pointers.  However, since SupportsWeakPtr's destructor won't invalidate
-// weak pointers to the class until after the derived class' members have been
+// weak pointers to the class until after the derived class's members have been
 // destroyed, its use can lead to subtle use-after-destroy issues.
+// This class cannot be used in new code. See crbug.com/40485134.
 template <class T>
 class SupportsWeakPtr : public internal::SupportsWeakPtrBase {
  public:
-  SupportsWeakPtr() = default;
-
   SupportsWeakPtr(const SupportsWeakPtr&) = delete;
   SupportsWeakPtr& operator=(const SupportsWeakPtr&) = delete;
 
@@ -487,6 +511,19 @@ class SupportsWeakPtr : public internal::SupportsWeakPtrBase {
   ~SupportsWeakPtr() = default;
 
  private:
+  friend struct MultiplyDerivedProducer;
+  friend struct Producer;
+  friend struct weak_ptr_unittest::Target;
+  friend class gl::GLContext;
+  friend class gl::GLSurface;
+  friend class ui::MenuModel;
+  friend class ui::TextInputClient;
+  friend class views::WidgetDelegate;
+
+  // The constructor is private so only the declared friends can construct
+  // instances.
+  SupportsWeakPtr() = default;
+
   internal::WeakReferenceOwner weak_reference_owner_;
 };
 

@@ -14,6 +14,14 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/group_tab_info.h"
 #import "ios/web/public/web_state.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/settings/vivaldi_settings_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 const CGFloat kFaviconSize = 16;
 }
@@ -47,6 +55,10 @@ const CGFloat kFaviconSize = 16;
                            scale:UIImageSymbolScaleMedium];
 
   if (IsUrlNtp(webState->GetVisibleURL())) {
+
+    if (IsVivaldiRunning())
+      return [UIImage imageNamed:vToolbarMenu]; // End Vivaldi
+
     return CustomSymbolWithConfiguration(kChromeProductSymbol, configuration);
   }
 
@@ -60,6 +72,9 @@ const CGFloat kFaviconSize = 16;
       return favicon.ToUIImage();
     }
   }
+
+  if (IsVivaldiRunning())
+    return [UIImage imageNamed:vNTPSDFallbackFavicon]; // End Vivaldi
 
   // Return the default favicon.
   return DefaultSymbolWithConfiguration(kGlobeAmericasSymbol, configuration);

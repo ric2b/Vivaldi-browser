@@ -9,10 +9,10 @@
 #include <deque>
 
 #include "absl/strings/string_view.h"
+#include "quiche/http2/hpack/hpack_entry.h"
+#include "quiche/http2/hpack/hpack_header_table.h"
 #include "quiche/quic/platform/api/quic_export.h"
 #include "quiche/common/quiche_circular_deque.h"
-#include "quiche/spdy/core/hpack/hpack_entry.h"
-#include "quiche/spdy/core/hpack/hpack_header_table.h"
 
 namespace quic {
 
@@ -246,7 +246,22 @@ class QUICHE_EXPORT QpackEncoderHeaderTable
     : public QpackHeaderTableBase<QpackEncoderDynamicTable> {
  public:
   // Result of header table lookup.
-  enum class MatchType { kNameAndValue, kName, kNoMatch };
+  enum class MatchType {
+    kNameAndValue,  // Returned entry matches name and value.
+    kName,          // Returned entry matches name only.
+    kNoMatch        // No matching entry found.
+  };
+
+  // Return type of FindHeaderField() and FindHeaderName(), describing the
+  // nature of the match, and the location and index of the matching entry.
+  // The value of `is_static` and `index` is undefined if
+  // `match_type == MatchType::kNoMatch`.
+  struct MatchResult {
+    MatchType match_type;
+    bool is_static;
+    // `index` is zero-based for both static and dynamic table entries.
+    uint64_t index;
+  };
 
   QpackEncoderHeaderTable();
   ~QpackEncoderHeaderTable() override = default;
@@ -254,11 +269,20 @@ class QUICHE_EXPORT QpackEncoderHeaderTable
   uint64_t InsertEntry(absl::string_view name,
                        absl::string_view value) override;
 
-  // Returns the absolute index of an entry with matching name and value if such
-  // exists, otherwise one with matching name is such exists.  |index| is zero
-  // based for both the static and the dynamic table.
-  MatchType FindHeaderField(absl::string_view name, absl::string_view value,
-                            bool* is_static, uint64_t* index) const;
+  // FindHeaderField() and FindHeaderName() both prefer static table entries to
+  // dynamic ones. They both prefer lower index entries within the static table,
+  // and higher index (more recent) entries within the dynamic table.
+
+  // Returns `kNameAndValue` and an entry with matching name and value if such
+  // exists.
+  // Otherwise, returns `kName` and an entry with matching name is such exists.
+  // Otherwise, returns `kNoMatch`.
+  MatchResult FindHeaderField(absl::string_view name,
+                              absl::string_view value) const;
+
+  // Returns `kName` and an entry with matching name is such exists.
+  // Otherwise, returns `kNoMatch`.
+  MatchResult FindHeaderName(absl::string_view name) const;
 
   // Returns the size of the largest entry that could be inserted into the
   // dynamic table without evicting entry |index|.  |index| might be larger than
@@ -267,7 +291,7 @@ class QUICHE_EXPORT QpackEncoderHeaderTable
   uint64_t MaxInsertSizeWithoutEvictingGivenEntry(uint64_t index) const;
 
   // Returns the draining index described at
-  // https://quicwg.org/base-drafts/draft-ietf-quic-qpack.html#avoiding-blocked-insertions.
+  // https://rfc-editor.org/rfc/rfc9204.html#section-2.1.1.1.
   // Entries with an index larger than or equal to the draining index take up
   // approximately |1.0 - draining_fraction| of dynamic table capacity.  The
   // remaining capacity is taken up by draining entries and unused space.

@@ -73,7 +73,7 @@ namespace detail {
 
 #ifdef DEBUG
 bool Clobbers(Register target, Register reg) { return target == reg; }
-bool Clobbers(Register target, Handle<Object> handle) { return false; }
+bool Clobbers(Register target, DirectHandle<Object> handle) { return false; }
 bool Clobbers(Register target, Tagged<Smi> smi) { return false; }
 bool Clobbers(Register target, Tagged<TaggedIndex> index) { return false; }
 bool Clobbers(Register target, int32_t imm) { return false; }
@@ -85,7 +85,7 @@ bool Clobbers(Register target, interpreter::RegisterList list) { return false; }
 // match.
 bool MachineTypeMatches(MachineType type, Register reg) { return true; }
 bool MachineTypeMatches(MachineType type, MemOperand reg) { return true; }
-bool MachineTypeMatches(MachineType type, Handle<HeapObject> handle) {
+bool MachineTypeMatches(MachineType type, DirectHandle<HeapObject> handle) {
   return type.IsTagged() && !type.IsTaggedSigned();
 }
 bool MachineTypeMatches(MachineType type, Tagged<Smi> handle) {
@@ -258,7 +258,7 @@ const int kAverageBytecodeToInstructionRatio = 5;
 const int kAverageBytecodeToInstructionRatio = 7;
 #endif
 std::unique_ptr<AssemblerBuffer> AllocateBuffer(
-    Handle<BytecodeArray> bytecodes) {
+    DirectHandle<BytecodeArray> bytecodes) {
   int estimated_size;
   {
     DisallowHeapAllocation no_gc;
@@ -383,7 +383,7 @@ void BaselineCompiler::StoreRegisterPair(int operand_index, Register val0,
 }
 template <typename Type>
 Handle<Type> BaselineCompiler::Constant(int operand_index) {
-  return Handle<Type>::cast(
+  return Cast<Type>(
       iterator().GetConstantForIndexOperand(operand_index, local_isolate_));
 }
 Tagged<Smi> BaselineCompiler::ConstantSmi(int operand_index) {
@@ -469,29 +469,6 @@ void BaselineCompiler::PreVisitSingleBytecode() {
       EnsureLabel(iterator().GetJumpTargetOffset(),
                   MarkAsIndirectJumpTarget::kYes);
       break;
-
-    // TODO(leszeks): Update the max_call_args as part of the main bytecode
-    // visit loop, by patching the value passed to the prologue.
-    case interpreter::Bytecode::kCallProperty:
-    case interpreter::Bytecode::kCallAnyReceiver:
-    case interpreter::Bytecode::kCallWithSpread:
-    case interpreter::Bytecode::kConstruct:
-    case interpreter::Bytecode::kConstructWithSpread:
-      return UpdateMaxCallArgs(
-          iterator().GetRegisterListOperand(1).register_count());
-    case interpreter::Bytecode::kCallUndefinedReceiver:
-      return UpdateMaxCallArgs(
-          iterator().GetRegisterListOperand(1).register_count() + 1);
-    case interpreter::Bytecode::kCallProperty0:
-    case interpreter::Bytecode::kCallUndefinedReceiver0:
-      return UpdateMaxCallArgs(1);
-    case interpreter::Bytecode::kCallProperty1:
-    case interpreter::Bytecode::kCallUndefinedReceiver1:
-      return UpdateMaxCallArgs(2);
-    case interpreter::Bytecode::kCallProperty2:
-    case interpreter::Bytecode::kCallUndefinedReceiver2:
-      return UpdateMaxCallArgs(3);
-
     default:
       break;
   }
@@ -1191,7 +1168,8 @@ void BaselineCompiler::VisitLogicalNot() {
 }
 
 void BaselineCompiler::VisitTypeOf() {
-  CallBuiltin<Builtin::kTypeof>(kInterpreterAccumulatorRegister);
+  CallBuiltin<Builtin::kTypeof_Baseline>(kInterpreterAccumulatorRegister,
+                                         Index(0));
 }
 
 void BaselineCompiler::VisitDeletePropertyStrict() {
@@ -1520,8 +1498,8 @@ void BaselineCompiler::VisitConstructWithSpread() {
       RegisterOperand(0),          // kFunction
       new_target,                  // kNewTarget
       arg_count,                   // kActualArgumentsCount
-      Index(3),                    // kSlot
       spread_register,             // kSpread
+      IndexAsTagged(3),            // kSlot
       RootIndex::kUndefinedValue,  // kReceiver
       args);
 }
@@ -1536,7 +1514,7 @@ void BaselineCompiler::VisitConstructForwardAllArgs() {
   CallBuiltin<Builtin::kConstructForwardAllArgs_Baseline>(
       RegisterOperand(0),  // kFunction
       new_target,          // kNewTarget
-      Index(1));           // kSlot
+      IndexAsTagged(1));   // kSlot
 }
 
 void BaselineCompiler::VisitTestEqual() {

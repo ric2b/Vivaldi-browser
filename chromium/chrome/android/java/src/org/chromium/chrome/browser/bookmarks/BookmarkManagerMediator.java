@@ -10,8 +10,10 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.text.TextUtils;
 
+import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.RecyclerView.OnScrollListener;
@@ -32,9 +34,7 @@ import org.chromium.chrome.browser.bookmarks.BookmarkUiState.BookmarkUiMode;
 import org.chromium.chrome.browser.bookmarks.ImprovedBookmarkRow.Location;
 import org.chromium.chrome.browser.bookmarks.ImprovedBookmarkRowProperties.ImageVisibility;
 import org.chromium.chrome.browser.commerce.ShoppingFeatures;
-import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksReader;
-import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.native_page.BasicNativePage;
@@ -54,7 +54,6 @@ import org.chromium.components.commerce.core.CommerceSubscription;
 import org.chromium.components.commerce.core.ShoppingService;
 import org.chromium.components.commerce.core.SubscriptionsObserver;
 import org.chromium.components.favicon.LargeIconBridge;
-import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.power_bookmarks.PowerBookmarkMeta;
 import org.chromium.components.power_bookmarks.PowerBookmarkType;
 import org.chromium.ui.accessibility.AccessibilityState;
@@ -76,13 +75,15 @@ import java.util.function.Predicate;
 // Vivaldi
 import android.graphics.Rect;
 import android.view.View;
+import android.widget.FrameLayout;
 import java.util.Collections;
 import java.util.Comparator;
-import org.chromium.chrome.browser.ChromeApplicationImpl;
-import org.vivaldi.browser.bookmarks.VivaldiBookmarksPageObserver;
 
-// Vivaldi
-import static org.chromium.chrome.browser.bookmarks.BookmarkUtils.getIfBookmarkOrderIsSame;
+import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+import org.vivaldi.browser.bookmarks.VivaldiBookmarksPageObserver;
+import org.vivaldi.browser.panels.PanelUtils;
 
 
 /** Responsible for BookmarkManager business logic. */
@@ -99,6 +100,7 @@ class BookmarkManagerMediator
 
     /** Vivaldi **/
     public static final String PREF_BOOKMARKS_SORT_ORDER = "bookmarks_sort_order";
+    public static final String PREF_BOOKMARKS_SORT_ASC_DESC = "bookmarks_sort_ascending_descending";
 
     enum SortOrder {
         MANUAL(0),
@@ -128,7 +130,32 @@ class BookmarkManagerMediator
         }
     }
 
+    enum SortAscOrDesc {
+        ASCENDING(0),
+        DESCENDING(1),
+        NONE(2);
+        static SortAscOrDesc forNumber(int value) {
+            switch (value) {
+                case 0:
+                    return ASCENDING;
+                case 1:
+                    return DESCENDING;
+                case 2:
+                default:
+                    return NONE;
+            }
+        }
+        private final int value;
+        SortAscOrDesc(int value) {
+            this.value = value;
+        }
+        int getNumber() {
+            return this.value;
+        }
+    }
+
     SortOrder mSortOrder;
+    SortAscOrDesc mSortAscOrDesc;
     // End Vivaldi
 
     /** Keeps track of whether drag is enabled / active for bookmark lists. */
@@ -273,50 +300,27 @@ class BookmarkManagerMediator
 
                     mDragReorderableRecyclerViewAdapter.enableDrag();
 
-		            // Vivaldi
-		            mCurrentFolder = folder;
+                    // Vivaldi
+                    mCurrentFolder = folder;
 
-		            if (ChromeApplicationImpl.isVivaldi() &&
-		                    !folder.equals(mBookmarkModel.getRootFolderId())) {
-		                if (folder.getType() == BookmarkType.READING_LIST) {
-		                    setBookmarks(
-		                            mBookmarkQueryHandler.buildBookmarkListForParent(getCurrentFolderId()));
-		                    mDragReorderableRecyclerViewAdapter.notifyDataSetChanged();
-		                } else {
-		                    setBookmarks(sortBookmarkList(
-		                            mBookmarkQueryHandler.buildBookmarkListForParent(mCurrentFolder),
-		                            getSortOrder()));
-		                }
-		            } else
-                    setBookmarks(
-                            mBookmarkQueryHandler.buildBookmarkListForParent(
-                                    getCurrentFolderId(), mCurrentPowerFilter));
-                    updateEmptyViewText();
+                    if (ChromeApplicationImpl.isVivaldi() &&
+                            !folder.equals(mBookmarkModel.getRootFolderId())) {
+                        if (folder.getType() == BookmarkType.READING_LIST) {
+                            setBookmarks(mBookmarkQueryHandler.buildBookmarkListForParent(
+                                    getCurrentFolderId()));
+                            mDragReorderableRecyclerViewAdapter.notifyDataSetChanged();
+                        } else {
+                            setBookmarks(sortBookmarkList(
+                                    mBookmarkQueryHandler.buildBookmarkListForParent(
+                                            mCurrentFolder),
+                                    getSortOrder(), getSortAscendingDescending()));
+                        }
+                    } else
+                        setBookmarks(
+                                mBookmarkQueryHandler.buildBookmarkListForParent(
+                                        getCurrentFolderId(), mCurrentPowerFilter));
                     setSearchTextAndUpdateButtonVisibility("");
                     clearSearchBoxFocus();
-                }
-
-                private void updateEmptyViewText() {
-                    assert getCurrentFolderId() != null;
-                    if (getCurrentFolderId().getType() == BookmarkType.READING_LIST) {
-                        TrackerFactory.getTrackerForProfile(mProfile)
-                                .notifyEvent(EventConstants.READ_LATER_BOOKMARK_FOLDER_OPENED);
-                        getSelectableListLayout()
-                                .setEmptyStateImageRes(
-                                        R.drawable.reading_list_empty_state_illustration);
-                        getSelectableListLayout()
-                                .setEmptyStateViewText(
-                                        R.string.reading_list_manager_empty_state,
-                                        R.string.reading_list_manager_save_page_to_read_later);
-                    } else {
-                        getSelectableListLayout()
-                                .setEmptyStateImageRes(
-                                        R.drawable.bookmark_empty_state_illustration);
-                        getSelectableListLayout()
-                                .setEmptyStateViewText(
-                                        R.string.bookmark_manager_empty_state,
-                                        R.string.bookmark_manager_back_to_page_by_adding_bookmark);
-                    }
                 }
             };
 
@@ -842,7 +846,6 @@ class BookmarkManagerMediator
     @Override
     public void openSearchUi() {
         onSearchTextChangeCallback("");
-        mSelectableListLayout.onStartSearch(R.string.bookmark_no_result);
     }
 
     @Override
@@ -890,8 +893,6 @@ class BookmarkManagerMediator
     // Actual interface implemented in BookmarkManager(Coordinator).
 
     void onEndSearch() {
-        mSelectableListLayout.onEndSearch();
-
         // Pop the search state off the stack.
         mStateStack.pop();
 
@@ -1094,6 +1095,12 @@ class BookmarkManagerMediator
 
         for (BookmarkListEntry bookmarkListEntry : bookmarkListEntryList) {
             updateOrAdd(index++, buildBookmarkListItem(bookmarkListEntry));
+        }
+
+        // Only show the empty state if there's only a searchbox.
+        boolean listIsEmpty = index == 1;
+        if (listIsEmpty) {
+            updateOrAdd(index++, buildEmptyStateListItem());
         }
 
         if (mModelList.size() == 0 && index == 0) {
@@ -1345,6 +1352,38 @@ class BookmarkManagerMediator
         return new ListItem(ViewType.SEARCH_BOX, propertyModel);
     }
 
+    private ListItem buildEmptyStateListItem() {
+        BookmarkId currentParent = getCurrentFolderId();
+
+        @StringRes int titleRes = R.string.bookmark_manager_empty_state;
+        @StringRes int subtitleRes = R.string.bookmark_manager_back_to_page_by_adding_bookmark;
+        @DrawableRes int imageRes = R.drawable.bookmark_empty_state_illustration;
+
+        if (ChromeApplicationImpl.isVivaldi()) {
+            imageRes = R.drawable.bookmarks_empty_state;
+        } // End Vivaldi
+
+        // The currentParent will be null when searching. In this case, fallback to the regular
+        // bookmarks empty state.
+        if (currentParent != null && currentParent.getType() == BookmarkType.READING_LIST) {
+            titleRes = R.string.reading_list_manager_empty_state;
+            subtitleRes = R.string.reading_list_manager_save_page_to_read_later;
+            // Vivaldi
+            if (!ChromeApplicationImpl.isVivaldi()) // End Vivaldi
+            imageRes = R.drawable.reading_list_empty_state_illustration;
+        }
+
+        PropertyModel model =
+                new PropertyModel.Builder(BookmarkManagerEmptyStateProperties.ALL_KEYS)
+                        .with(BookmarkManagerEmptyStateProperties.EMPTY_STATE_TITLE_RES, titleRes)
+                        .with(
+                                BookmarkManagerEmptyStateProperties.EMPTY_STATE_DESCRIPTION_RES,
+                                subtitleRes)
+                        .with(BookmarkManagerEmptyStateProperties.EMPTY_STATE_IMAGE_RES, imageRes)
+                        .build();
+        return new ListItem(ViewType.EMPTY_STATE, model);
+    }
+
     private ListItem buildBookmarkListItem(BookmarkListEntry bookmarkListEntry) {
         if (bookmarkListEntry.getViewType() == ViewType.IMPROVED_BOOKMARK_COMPACT
                 || bookmarkListEntry.getViewType() == ViewType.IMPROVED_BOOKMARK_VISUAL) {
@@ -1579,6 +1618,9 @@ class BookmarkManagerMediator
             openFolder(id);
         } else {
             openBookmark(id);
+            if (ChromeApplicationImpl.isVivaldi()) {
+                PanelUtils.closePanel(mContext);
+            } // End Vivaldi
         }
     }
 
@@ -1770,66 +1812,85 @@ class BookmarkManagerMediator
         mBookmarksPageObserver = null;
     }
 
-    @Override
-    public void setSortOrder(boolean force) {
-        setSortOrder(getSortOrder(), false);
-    }
-
-    @Override
-    public void setSortOrder(SortOrder sortOrder, boolean force) {
-        if (sortOrder == mSortOrder && !force) {
-            return;
-        }
-        List <BookmarkListEntry> entries =
-                mBookmarkQueryHandler.buildBookmarkListForParent(mCurrentFolder);
-        if (sortOrder != SortOrder.MANUAL) {
-            Collections.sort(entries, new Comparator<BookmarkListEntry>() {
-                @Override
-                public int compare(BookmarkListEntry entry, BookmarkListEntry t1) {
-                    if (entry.getBookmarkItem().isFolder() !=
-                        t1.getBookmarkItem().isFolder())
-                        return entry.getBookmarkItem().isFolder() ? -1 : 1;
-                    switch (sortOrder) {
-                        case TITLE:
-                            return entry.getBookmarkItem().getTitle()
-                                    .compareTo(t1.getBookmarkItem().getTitle());
-                        case ADDRESS:
-                            return entry.getBookmarkItem().getUrl().getSpec()
-                                    .compareTo(t1.getBookmarkItem().getUrl().getSpec());
-                        case NICK:
-                            if (entry.getBookmarkItem().getNickName().isEmpty()) return 1;
-                            else if (t1.getBookmarkItem().getNickName().isEmpty()) return -1;
-                            return entry.getBookmarkItem().getNickName()
-                                    .compareToIgnoreCase(t1.getBookmarkItem().getNickName());
-                        case DESCRIPTION:
-                            if (entry.getBookmarkItem().getDescription().isEmpty()) return 1;
-                            else if (t1.getBookmarkItem().getDescription().isEmpty()) return -1;
-                            return entry.getBookmarkItem().getDescription()
-                                    .compareToIgnoreCase(t1.getBookmarkItem().getDescription());
-                        case DATE:
-                            return Long.compare(entry.getBookmarkItem().getCreated(),
-                                    t1.getBookmarkItem().getCreated());
-                        default:
-                            return 0;
-                    }
-                }
-            });
-            if (sortOrder == mSortOrder && getIfBookmarkOrderIsSame(
-                    entries, mModelList)) { // Vivaldi Ref. VAB-9189
-                Collections.reverse(entries);
+    Comparator<BookmarkListEntry> mBookmarkListComparator = new Comparator<>() {
+        @Override
+        public int compare(BookmarkListEntry entry, BookmarkListEntry t1) {
+            if (entry.getBookmarkItem().isFolder() != t1.getBookmarkItem().isFolder())
+                return entry.getBookmarkItem().isFolder() ? -1 : 1;
+            switch (mSortOrder) {
+                case TITLE:
+                    return entry.getBookmarkItem().getTitle().compareTo(
+                            t1.getBookmarkItem().getTitle());
+                case ADDRESS:
+                    return entry.getBookmarkItem().getUrl().getSpec().compareTo(
+                            t1.getBookmarkItem().getUrl().getSpec());
+                case NICK:
+                    if (entry.getBookmarkItem().getNickName().isEmpty())
+                        return 1;
+                    else if (t1.getBookmarkItem().getNickName().isEmpty())
+                        return -1;
+                    return entry.getBookmarkItem().getNickName().compareToIgnoreCase(
+                            t1.getBookmarkItem().getNickName());
+                case DESCRIPTION:
+                    if (entry.getBookmarkItem().getDescription().isEmpty())
+                        return 1;
+                    else if (t1.getBookmarkItem().getDescription().isEmpty())
+                        return -1;
+                    return entry.getBookmarkItem().getDescription().compareToIgnoreCase(
+                            t1.getBookmarkItem().getDescription());
+                case DATE:
+                    return Long.compare(entry.getBookmarkItem().getCreated(),
+                            t1.getBookmarkItem().getCreated());
+                default:
+                    return 0;
             }
-            setBookmarks(entries/*, true*/);
-            mDragReorderableRecyclerViewAdapter.disableDrag();
-
-        } else {
-            setBookmarks(
-                    mBookmarkQueryHandler.buildBookmarkListForParent(mCurrentFolder));
-            mDragReorderableRecyclerViewAdapter.enableDrag();
-
         }
+    };
+
+    /**
+     * Sets bookmarks items list in sortOrder given by param
+     * If called with same sortOrder, switches from ascending to descending
+     * or vice versa
+     * @param sortOrder
+     */
+    @Override
+    public void setSortOrder(SortOrder sortOrder) {
+        SortAscOrDesc sortAscOrDesc;
+        // If same sort order, switch ascending/descending
+        if (sortOrder == SortOrder.MANUAL) {
+            sortAscOrDesc = SortAscOrDesc.NONE;
+        } else if (sortOrder == mSortOrder) {
+            if (mSortAscOrDesc == SortAscOrDesc.ASCENDING)
+                sortAscOrDesc = SortAscOrDesc.DESCENDING;
+            else
+                sortAscOrDesc = SortAscOrDesc.ASCENDING;
+        } else {
+            sortAscOrDesc = SortAscOrDesc.ASCENDING;
+        }
+
+        List<BookmarkListEntry> entries =
+                mBookmarkQueryHandler.buildBookmarkListForParent(mCurrentFolder);
+
         mSortOrder = sortOrder;
+        if (sortOrder != SortOrder.MANUAL) {
+            if (sortAscOrDesc == SortAscOrDesc.DESCENDING) {
+                Collections.sort(entries, mBookmarkListComparator.reversed());
+                mSortAscOrDesc = SortAscOrDesc.DESCENDING;
+            } else {
+                Collections.sort(entries, mBookmarkListComparator);
+                mSortAscOrDesc = SortAscOrDesc.ASCENDING;
+            }
+            setBookmarks(entries /*, true*/);
+            mDragReorderableRecyclerViewAdapter.disableDrag();
+        } else {
+            setBookmarks(mBookmarkQueryHandler.buildBookmarkListForParent(mCurrentFolder));
+            mDragReorderableRecyclerViewAdapter.enableDrag();
+            mSortAscOrDesc = SortAscOrDesc.NONE;
+        }
         ChromeSharedPreferences.getInstance().writeString(
                 PREF_BOOKMARKS_SORT_ORDER, mSortOrder.name());
+        ChromeSharedPreferences.getInstance().writeString(
+                PREF_BOOKMARKS_SORT_ASC_DESC, mSortAscOrDesc.name());
     }
 
     @Override
@@ -1838,51 +1899,30 @@ class BookmarkManagerMediator
                 PREF_BOOKMARKS_SORT_ORDER, SortOrder.MANUAL.name()));
     }
 
+    @Override
+    public SortAscOrDesc getSortAscendingDescending() {
+       return SortAscOrDesc.valueOf(ChromeSharedPreferences.getInstance().readString(
+               PREF_BOOKMARKS_SORT_ASC_DESC, SortAscOrDesc.ASCENDING.name()));
+    }
+
     /**
-     * Sort incoming bookmark entry list according to @param sortOrder
+     * Sort incoming bookmark entry list according to @param sortOrder and sortAscOrDesc
      * @param entries
      * @param sortOrder
+     * @param sortAscOrDesc - ascending or descending or none (if manual)
      * @return
      */
-    private List<BookmarkListEntry> sortBookmarkList(List<BookmarkListEntry> entries,
-                                                     SortOrder sortOrder) {
-        if (sortOrder != SortOrder.MANUAL) {
-            Collections.sort(entries, new Comparator<BookmarkListEntry>() {
-                @Override
-                public int compare(BookmarkListEntry entry, BookmarkListEntry t1) {
-                    if (entry == null || entry.getBookmarkItem() == null)
-                        return 1;
-                    if (t1 == null  || t1.getBookmarkItem() == null)
-                        return -1;
-                    if (entry.getBookmarkItem().isFolder() !=
-                            t1.getBookmarkItem().isFolder())
-                        return entry.getBookmarkItem().isFolder() ? -1 : 1;
-                    switch (sortOrder) {
-                        case TITLE:
-                            return entry.getBookmarkItem().getTitle()
-                                    .compareTo(t1.getBookmarkItem().getTitle());
-                        case ADDRESS:
-                            return entry.getBookmarkItem().getUrl().getSpec()
-                                    .compareTo(t1.getBookmarkItem().getUrl().getSpec());
-                        case NICK:
-                            if (entry.getBookmarkItem().getNickName().isEmpty()) return 1;
-                            else if (t1.getBookmarkItem().getNickName().isEmpty()) return -1;
-                            return entry.getBookmarkItem().getNickName()
-                                    .compareToIgnoreCase(t1.getBookmarkItem().getNickName());
-                        case DESCRIPTION:
-                            if (entry.getBookmarkItem().getDescription().isEmpty()) return 1;
-                            else if (t1.getBookmarkItem().getDescription().isEmpty()) return -1;
-                            return entry.getBookmarkItem().getDescription()
-                                    .compareToIgnoreCase(t1.getBookmarkItem().getDescription());
-                        case DATE:
-                            return Long.compare(entry.getBookmarkItem().getCreated(),
-                                    t1.getBookmarkItem().getCreated());
-                        default:
-                            return 0;
-                    }
-                }
-            });
-        }
-        return entries;
+    private List<BookmarkListEntry> sortBookmarkList(
+            List<BookmarkListEntry> entries, SortOrder sortOrder, SortAscOrDesc sortAscOrDesc) {
+       if (sortOrder != SortOrder.MANUAL) {
+            mSortOrder = sortOrder;
+            mSortAscOrDesc = sortAscOrDesc;
+           if (mSortAscOrDesc == SortAscOrDesc.DESCENDING) {
+               Collections.sort(entries, mBookmarkListComparator.reversed());
+           } else {
+               Collections.sort(entries, mBookmarkListComparator);
+           }
+       }
+       return entries;
     }
 }

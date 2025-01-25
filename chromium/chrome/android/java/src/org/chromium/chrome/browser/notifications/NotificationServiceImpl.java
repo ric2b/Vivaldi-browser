@@ -16,6 +16,7 @@ import android.os.SystemClock;
 
 import androidx.annotation.RequiresApi;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
@@ -147,8 +148,8 @@ public class NotificationServiceImpl extends NotificationService.Impl {
     }
 
     /**
-     * Called when a Notification has been interacted with by the user. If we can verify that
-     * the Intent has a notification Id, start Chrome (if needed) on the UI thread.
+     * Called when a Notification has been interacted with by the user. If we can verify that the
+     * Intent has a notification Id, start Chrome (if needed) on the UI thread.
      *
      * @param intent The intent containing the specific information.
      */
@@ -156,6 +157,12 @@ public class NotificationServiceImpl extends NotificationService.Impl {
     public void onHandleIntent(final Intent intent) {
         if (!intent.hasExtra(NotificationConstants.EXTRA_NOTIFICATION_ID)
                 || !intent.hasExtra(NotificationConstants.EXTRA_NOTIFICATION_INFO_ORIGIN)) {
+            return;
+        }
+
+        if (NotificationConstants.ACTION_PRE_UNSUBSCRIBE.equals(intent.getAction())) {
+            Receiver receiver = new Receiver();
+            receiver.onReceive(ContextUtils.getApplicationContext(), intent);
             return;
         }
 

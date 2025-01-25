@@ -88,7 +88,7 @@ void AccessibilityProvider::TrackView(AshWebView* view) {
   CHECK(child_view);
   auto* webview = static_cast<views::WebView*>(child_view);
   webview->set_lock_child_ax_tree_id_override(true);
-  webview->GetViewAccessibility().OverrideChildTreeID(
+  webview->GetViewAccessibility().SetChildTreeID(
       tree_source_->ax_tree_id());
   auto* window_ptr =
       webview->web_contents()->GetRenderWidgetHostView()->GetNativeView();
@@ -141,7 +141,7 @@ void AccessibilityProvider::HandleAccessibilityEventReceived(
     case ax::android::mojom::AccessibilityFilterType::OFF:
       break;
     case ax::android::mojom::AccessibilityFilterType::INVALID_ENUM_VALUE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }

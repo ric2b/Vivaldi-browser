@@ -9,17 +9,24 @@
 
 #include "ash/ash_element_identifiers.h"
 #include "ash/picker/metrics/picker_performance_metrics.h"
+#include "ash/picker/views/picker_focus_indicator.h"
 #include "ash/picker/views/picker_key_event_handler.h"
+#include "ash/picker/views/picker_search_bar_textfield.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_id.h"
+#include "ash/style/icon_button.h"
+#include "ash/style/style_util.h"
 #include "ash/style/typography.h"
 #include "base/functional/bind.h"
 #include "base/time/time.h"
-#include "build/branding_buildflags.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
+#include "ui/color/color_provider.h"
 #include "ui/compositor/compositor.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/border.h"
@@ -27,122 +34,82 @@
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
-#include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/layout_manager.h"
 #include "ui/views/metadata/view_factory.h"
 #include "ui/views/vector_icons.h"
+#include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#include "chromeos/ash/resources/internal/strings/grit/ash_internal_strings.h"
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 namespace ash {
 namespace {
 
-constexpr auto kSearchFieldBorderInsets = gfx::Insets::VH(0, 16);
 constexpr auto kSearchFieldVerticalPadding = gfx::Insets::VH(6, 0);
-constexpr auto kClearButtonHorizontalMargin = gfx::Insets::VH(0, 8);
-constexpr int kClearButtonSizeDip = 20;
-
-// TODO: b/331285414 - Finalize the search field placeholder text.
-std::u16string GetSearchFieldPlaceholderText() {
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  return l10n_util::GetStringUTF16(IDS_PICKER_SEARCH_FIELD_PLACEHOLDER_TEXT);
-#else
-  return l10n_util::GetStringUTF16(
-      IDS_PICKER_ZERO_STATE_SEARCH_FIELD_PLACEHOLDER_TEXT);
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
-}
-
-class ClearSearchFieldImageButton : public views::ImageButton {
-  METADATA_HEADER(ClearSearchFieldImageButton, views::ImageButton)
-
- public:
-  ClearSearchFieldImageButton() {
-    views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::ON);
-    SetHasInkDropActionOnClick(true);
-    views::InkDrop::UseInkDropForFloodFillRipple(views::InkDrop::Get(this),
-                                                 /*highlight_on_hover=*/true);
-
-    SetPreferredSize(gfx::Size(kClearButtonSizeDip, kClearButtonSizeDip));
-    SetImageHorizontalAlignment(ALIGN_CENTER);
-    SetImageVerticalAlignment(ALIGN_MIDDLE);
-    SetImageModel(views::ImageButton::STATE_NORMAL,
-                  ui::ImageModel::FromVectorIcon(views::kIcCloseIcon,
-                                                 kColorAshButtonIconColor,
-                                                 kClearButtonSizeDip));
-
-    views::InstallCircleHighlightPathGenerator(this);
-  }
-  ClearSearchFieldImageButton(const ClearSearchFieldImageButton&) = delete;
-  ClearSearchFieldImageButton& operator=(const ClearSearchFieldImageButton&) =
-      delete;
-
-  ~ClearSearchFieldImageButton() override {}
-};
-
-BEGIN_METADATA(ClearSearchFieldImageButton)
-END_METADATA
-
-BEGIN_VIEW_BUILDER(ASH_EXPORT, ClearSearchFieldImageButton, views::ImageButton)
-END_VIEW_BUILDER
+constexpr auto kButtonHorizontalMargin = gfx::Insets::VH(0, 8);
+// The default horizontal margin for the textfield when surrounding icon buttons
+// are not visible.
+constexpr int kDefaultTextfieldHorizontalMargin = 16;
+// Margins around the textfield focus indicator bar.
+constexpr auto kTextfieldFocusIndicatorMargins = gfx::Insets::VH(6, 0);
 
 }  // namespace
-}  // namespace ash
-
-DEFINE_VIEW_BUILDER(ASH_EXPORT, ash::ClearSearchFieldImageButton)
-
-namespace ash {
 
 PickerSearchFieldView::PickerSearchFieldView(
     SearchCallback search_callback,
+    BackCallback back_callback,
     PickerKeyEventHandler* key_event_handler,
     PickerPerformanceMetrics* performance_metrics)
     : search_callback_(std::move(search_callback)),
       key_event_handler_(key_event_handler),
       performance_metrics_(performance_metrics) {
-  SetLayoutManager(std::make_unique<views::FlexLayout>())
-      ->SetOrientation(views::LayoutOrientation::kHorizontal);
-
   views::Builder<PickerSearchFieldView>(this)
+      .SetOrientation(views::LayoutOrientation::kHorizontal)
+      .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
       .SetProperty(views::kMarginsKey, kSearchFieldVerticalPadding)
-      .AddChild(
-          views::Builder<views::Textfield>()
+      .AddChildren(
+          views::Builder<views::ImageButton>(
+              std::make_unique<IconButton>(
+                  std::move(back_callback), IconButton::Type::kSmallFloating,
+                  &vector_icons::kArrowBackIcon,
+                  IDS_PICKER_SEARCH_FIELD_BACK_BUTTON_TOOLTIP_TEXT))
+              .CopyAddressTo(&back_button_)
+              .SetProperty(views::kMarginsKey, kButtonHorizontalMargin)
+              .SetVisible(false),
+          views::Builder<PickerSearchBarTextfield>(
+              std::make_unique<PickerSearchBarTextfield>(this))
               .CopyAddressTo(&textfield_)
               .SetProperty(views::kElementIdentifierKey,
                            kPickerSearchFieldTextfieldElementId)
               .SetController(this)
-              .SetBorder(views::CreateEmptyBorder(kSearchFieldBorderInsets))
               .SetBackgroundColor(SK_ColorTRANSPARENT)
               .SetFontList(TypographyProvider::Get()->ResolveTypographyToken(
                   TypographyToken::kCrosBody2))
-              .SetPlaceholderText(GetSearchFieldPlaceholderText())
-              .SetProperty(views::kFlexBehaviorKey,
-                           views::FlexSpecification(
-                               views::MinimumFlexSizeRule::kScaleToZero,
-                               views::MaximumFlexSizeRule::kUnbounded))
-              // TODO(b/309706053): Replace this once the strings are finalized.
-              .SetAccessibleName(u"placeholder"))
-      .AddChild(
-          views::Builder<ClearSearchFieldImageButton>()
-              .CopyAddressTo(&clear_button_)
-              // `base::Unretained` is safe here since the search field is owned
-              // by this class.
-              .SetCallback(base::BindRepeating(
-                  &PickerSearchFieldView::ClearButtonPressed,
-                  base::Unretained(this)))
-              .SetProperty(views::kFlexBehaviorKey,
-                           views::FlexSpecification(
-                               views::MinimumFlexSizeRule::kPreferred,
-                               views::MaximumFlexSizeRule::kPreferred))
-              .SetProperty(views::kMarginsKey, kClearButtonHorizontalMargin)
-              .SetVisible(false)
-              // TODO(b/309706053): Replace this once the strings are finalized.
-              .SetAccessibleName(u"placeholder"))
+              .SetProperty(views::kBoxLayoutFlexKey,
+                           views::BoxLayoutFlexSpecification().WithWeight(1)))
+      .AddChild(views::Builder<views::ImageButton>(
+                    std::make_unique<IconButton>(
+                        // `base::Unretained` is safe here since the search
+                        // field is owned by this class.
+                        base::BindRepeating(
+                            &PickerSearchFieldView::ClearButtonPressed,
+                            base::Unretained(this)),
+                        IconButton::Type::kSmallFloating, &views::kIcCloseIcon,
+                        IDS_PICKER_SEARCH_FIELD_CLEAR_BUTTON_TOOLTIP_TEXT))
+                    .CopyAddressTo(&clear_button_)
+                    .SetProperty(views::kMarginsKey, kButtonHorizontalMargin)
+                    .SetVisible(false))
       .BuildChildren();
+
+  StyleUtil::SetUpInkDropForButton(back_button_, gfx::Insets(),
+                                   /*highlight_on_hover=*/true,
+                                   /*highlight_on_focus=*/true);
+  StyleUtil::SetUpInkDropForButton(clear_button_, gfx::Insets(),
+                                   /*highlight_on_hover=*/true,
+                                   /*highlight_on_focus=*/true);
+
+  UpdateTextfieldBorder();
 }
 
 PickerSearchFieldView::~PickerSearchFieldView() = default;
@@ -159,6 +126,17 @@ void PickerSearchFieldView::RemovedFromWidget() {
   GetFocusManager()->RemoveFocusChangeListener(this);
 }
 
+void PickerSearchFieldView::OnPaint(gfx::Canvas* canvas) {
+  views::View::OnPaint(canvas);
+
+  if (should_show_focus_indicator_) {
+    PaintPickerFocusIndicator(
+        canvas, gfx::Point(0, kTextfieldFocusIndicatorMargins.top()),
+        height() - kTextfieldFocusIndicatorMargins.height(),
+        GetColorProvider()->GetColor(cros_tokens::kCrosSysFocusRing));
+  }
+}
+
 void PickerSearchFieldView::ContentsChanged(
     views::Textfield* sender,
     const std::u16string& new_contents) {
@@ -166,6 +144,7 @@ void PickerSearchFieldView::ContentsChanged(
 
   // Show the clear button only when the query is not empty.
   clear_button_->SetVisible(!new_contents.empty());
+  UpdateTextfieldBorder();
 
   search_callback_.Run(new_contents);
 }
@@ -185,9 +164,13 @@ void PickerSearchFieldView::OnDidChangeFocus(View* focused_before,
   }
 }
 
+const std::u16string& PickerSearchFieldView::GetPlaceholderText() const {
+  return textfield_->GetPlaceholderText();
+}
+
 void PickerSearchFieldView::SetPlaceholderText(
-    std::u16string_view new_placeholder_text) {
-  textfield_->SetPlaceholderText(std::u16string(new_placeholder_text));
+    const std::u16string& new_placeholder_text) {
+  textfield_->SetPlaceholderText(new_placeholder_text);
 }
 
 void PickerSearchFieldView::SetTextfieldActiveDescendant(views::View* view) {
@@ -209,9 +192,29 @@ void PickerSearchFieldView::SetQueryText(std::u16string text) {
   textfield_->SetText(std::move(text));
 }
 
+void PickerSearchFieldView::SetBackButtonVisible(bool visible) {
+  back_button_->SetVisible(visible);
+  UpdateTextfieldBorder();
+}
+
+void PickerSearchFieldView::SetShouldShowFocusIndicator(
+    bool should_show_focus_indicator) {
+  if (should_show_focus_indicator_ == should_show_focus_indicator) {
+    return;
+  }
+  should_show_focus_indicator_ = should_show_focus_indicator;
+  SchedulePaint();
+}
+
 void PickerSearchFieldView::ClearButtonPressed() {
   textfield_->SetText(u"");
   ContentsChanged(textfield_, u"");
+}
+
+void PickerSearchFieldView::UpdateTextfieldBorder() {
+  textfield_->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(
+      0, back_button_->GetVisible() ? 0 : kDefaultTextfieldHorizontalMargin, 0,
+      clear_button_->GetVisible() ? 0 : kDefaultTextfieldHorizontalMargin)));
 }
 
 BEGIN_METADATA(PickerSearchFieldView)

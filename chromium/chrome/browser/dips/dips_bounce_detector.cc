@@ -673,15 +673,6 @@ void RedirectChainDetector::OnSiteDataAccessed(
 
 void RedirectChainDetector::OnStatefulBounceDetected() {}
 
-bool HasCHIPS(const net::CookieList& cookie_list) {
-  for (const auto& cookie : cookie_list) {
-    if (cookie.IsPartitioned()) {
-      return true;
-    }
-  }
-  return false;
-}
-
 void RedirectChainDetector::OnCookiesAccessed(
     content::RenderFrameHost* render_frame_host,
     const content::CookieAccessDetails& details) {
@@ -708,7 +699,7 @@ void RedirectChainDetector::OnCookiesAccessed(
   if (!fpu.has_value()) {
     return;
   }
-  if (!HasCHIPS(details.cookie_list) &&
+  if (!HasCHIPS(details.cookie_access_result_list) &&
       !IsSameSiteForDIPS(fpu.value(), details.url)) {
     return;
   }
@@ -749,7 +740,7 @@ void RedirectChainDetector::OnCookiesAccessed(
       return;
     }
 
-    if (!HasCHIPS(details.cookie_list) &&
+    if (!HasCHIPS(details.cookie_access_result_list) &&
         !IsSameSiteForDIPS(fpu.value(), details.url)) {
       return;
     }

@@ -85,6 +85,9 @@
 <translation id="3943857333388298514">붙여넣기</translation>
 <translation id="4005270918754737597">이 버전 건너뛰기</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi에서 보안 키스토어를 잠금 해제할 수 없습니다. 키스토어가 없으면 저장된로그인, 보안 쿠키 및 동기화, 메일 캘린더와 같은 일부 기능들을 사용할 수 없게 됩니다.
+
+    나간 후에 키스토어를 잠금 해제하거나 문제 해결을 시도해주세요. 정말로 데이터를 잃고 계속하시겠어요?</translation>
 <translation id="4074744496918018786">새 사생활 보호 창에서 이미지 열기</translation>
 <translation id="410351446219883937">자동 재생</translation>
 <translation id="4281844954008187215">이용 약관</translation>
@@ -175,6 +178,7 @@
 <translation id="8669345741879513971">괴물 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">백그라운드 portal-document 검사하기</translation>
+<translation id="875142999698251063">나가기</translation>
 <translation id="8768970203213061953">경관 14</translation>
 <translation id="8773635261052182196">더이상 알림을 보지 않습니다. Vivaldi 설정에서 다시 활성화할 수 있습니다.</translation>
 <translation id="8774017153185436870">사이트에서 자동으로 영상을 재생할 수도 있음</translation>

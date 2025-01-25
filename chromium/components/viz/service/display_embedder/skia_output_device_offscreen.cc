@@ -43,13 +43,13 @@ SkiaOutputDeviceOffscreen::SkiaOutputDeviceOffscreen(
   // necessary.
   // TODO(crbug.com/40141277): use the right color types base on GPU
   // capabilities.
-  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::RGBA_8888)] =
+  capabilities_.sk_color_type_map[SinglePlaneFormat::kRGBA_8888] =
       kRGBA_8888_SkColorType;
-  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::RGBX_8888)] =
+  capabilities_.sk_color_type_map[SinglePlaneFormat::kRGBX_8888] =
       kRGBA_8888_SkColorType;
-  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::BGRA_8888)] =
+  capabilities_.sk_color_type_map[SinglePlaneFormat::kBGRA_8888] =
       kBGRA_8888_SkColorType;
-  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::BGRX_8888)] =
+  capabilities_.sk_color_type_map[SinglePlaneFormat::kBGRX_8888] =
       kBGRA_8888_SkColorType;
 }
 
@@ -57,17 +57,13 @@ SkiaOutputDeviceOffscreen::~SkiaOutputDeviceOffscreen() {
   DiscardBackbuffer();
 }
 
-bool SkiaOutputDeviceOffscreen::Reshape(const SkImageInfo& image_info,
-                                        const gfx::ColorSpace& color_space,
-                                        int sample_count,
-                                        float device_scale_factor,
-                                        gfx::OverlayTransform transform) {
-  DCHECK_EQ(transform, gfx::OVERLAY_TRANSFORM_NONE);
+bool SkiaOutputDeviceOffscreen::Reshape(const ReshapeParams& params) {
+  DCHECK_EQ(params.transform, gfx::OVERLAY_TRANSFORM_NONE);
   DiscardBackbuffer();
-  size_ = gfx::SkISizeToSize(image_info.dimensions());
-  sk_color_type_ = image_info.colorType();
-  sk_color_space_ = image_info.refColorSpace();
-  sample_count_ = sample_count;
+  size_ = params.GfxSize();
+  sk_color_type_ = params.image_info.colorType();
+  sk_color_space_ = params.image_info.refColorSpace();
+  sample_count_ = params.sample_count;
   EnsureBackbuffer();
   return true;
 }
@@ -102,7 +98,7 @@ void SkiaOutputDeviceOffscreen::EnsureBackbuffer() {
     // the textureType mismatch.
     backend_format = GrBackendFormats::MakeGL(
         GrBackendFormats::AsGLFormatEnum(backend_format),
-        gpu::GetMacOSSpecificTextureTargetForCurrentGLImplementation());
+        gpu::GetTextureTargetForIOSurfaces());
 #endif
     DCHECK(backend_format.isValid())
         << "GrBackendFormat is invalid for color_type: " << sk_color_type_;

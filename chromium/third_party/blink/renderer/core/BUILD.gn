@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
+import("//build/config/arm.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/dcheck_always_on.gni")
 import("//build/config/python.gni")
@@ -59,6 +60,7 @@ import("//third_party/blink/renderer/core/paint/build.gni")
 import("//third_party/blink/renderer/core/permissions_policy/build.gni")
 import("//third_party/blink/renderer/core/preferences/build.gni")
 import("//third_party/blink/renderer/core/resize_observer/build.gni")
+import("//third_party/blink/renderer/core/scheduler/build.gni")
 import(
     "//third_party/blink/renderer/core/scheduler_integration_tests/build.gni")
 import("//third_party/blink/renderer/core/script/build.gni")
@@ -98,6 +100,18 @@ declare_args() {
   # Set to true to enable the clang layout plugin that help you to follow the
   # layout-related restrictions during compilation.
   use_layout_plugin = true
+
+  # Use vectorization for fast path HTML parser.
+  enable_vectorized_html_scanning = false
+
+  # Since with currently use -msse3 (not -mssse3), there is no pshufb
+  # instruction, so the generated code on x86 is less optimal and we enable
+  # vectorization only for NEON.
+  if (current_cpu == "arm" || current_cpu == "arm64") {
+    if (arm_use_neon) {
+      enable_vectorized_html_scanning = true
+    }
+  }
 }
 
 # Config for code that builds as part of core.
@@ -296,6 +310,7 @@ component("core") {
       rebase_path(blink_core_sources_resize_observer, "", "resize_observer")
   sources +=
       rebase_path(blink_core_sources_speculation_rules, "", "speculation_rules")
+  sources += rebase_path(blink_core_sources_scheduler, "", "scheduler")
   sources += rebase_path(blink_core_sources_script, "", "script")
   sources += rebase_path(blink_core_sources_scroll, "", "scroll")
   sources += rebase_path(blink_core_sources_shadow_realm, "", "shadow_realm")
@@ -426,6 +441,8 @@ blink_core_sources("core_hot") {
   sources += rebase_path(blink_core_hot_sources_layout, "", "layout")
   sources += rebase_path(blink_core_hot_sources_css, "", "css")
 
+  defines = []
+
   # TODO(ajwong) this is of mirror
   # https://source.chromium.org/chromium/chromium/src/+/master:third_party/blink/renderer/core/core.gni;l=26
   # to undo the configs which is fragile. Find a better way.
@@ -443,6 +460,7 @@ blink_core_sources("core_hot") {
   }
 
   deps = [
+    ":buildflags",
     "//build:chromeos_buildflags",
     "//components/miracle_parameter/common",
     "//services/metrics/public/cpp:ukm_builders",
@@ -453,6 +471,11 @@ blink_core_sources("core_hot") {
     "//third_party/blink/renderer/core/exported",
     "//third_party/blink/renderer/core/probe:probe",
   ]
+
+  if (enable_vectorized_html_scanning) {
+    deps += [ "//third_party/highway:libhwy" ]
+    defines += [ "BLINK_ENABLE_VECTORIZED_HTML_SCANNING=1" ]
+  }
 
   allow_circular_includes_from = [
     "//third_party/blink/renderer/core/animation",
@@ -698,7 +721,6 @@ css_properties("make_core_generated_computed_style_base") {
   script = "../build/scripts/core/style/make_computed_style_base.py"
   in_files = [
     "style/computed_style_extra_fields.json5",
-    "style/computed_style_diff_functions.json5",
     "css/css_value_keywords.json5",
     "css/css_properties_ranking.json5",
     "css/css_group_config.json5",
@@ -1411,6 +1433,7 @@ source_set("unit_tests") {
       rebase_path(blink_core_tests_permissions_policy, "", "permissions_policy")
   sources +=
       rebase_path(blink_core_tests_resize_observer, "", "resize_observer")
+  sources += rebase_path(blink_core_tests_scheduler, "", "scheduler")
   sources += rebase_path(blink_core_tests_scheduler_integration_tests,
                          "",
                          "scheduler_integration_tests")

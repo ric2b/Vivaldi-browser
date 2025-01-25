@@ -280,7 +280,7 @@ static const std::vector<tabs_private::TabAlertState> ConvertTabAlertState(
         break;
       default:
         NOTREACHED() << "Unknown TabAlertState Status:" << (int)status;
-        break;
+        //break;
     }
   }
 
@@ -1296,7 +1296,7 @@ ExtensionFunction::ResponseAction TabsPrivateScrollPageFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::optional<::vivaldi::mojom::ScrollType> scroll_type;
-  static const std::pair<base::StringPiece, ::vivaldi::mojom::ScrollType>
+  static const std::pair<std::string_view, ::vivaldi::mojom::ScrollType>
       scroll_type_names[] = {
           {"up", ::vivaldi::mojom::ScrollType::kUp},
           {"down", ::vivaldi::mojom::ScrollType::kDown},

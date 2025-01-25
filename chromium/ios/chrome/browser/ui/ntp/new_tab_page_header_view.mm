@@ -16,6 +16,7 @@
 #import "ios/chrome/browser/shared/ui/elements/extended_touch_target_button.h"
 #import "ios/chrome/browser/shared/ui/util/dynamic_type_util.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/start_surface/ui_bundled/start_surface_features.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/lens/lens_availability.h"
@@ -25,7 +26,6 @@
 #import "ios/chrome/browser/ui/omnibox/omnibox_container_view.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
-#import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_factory.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
@@ -241,7 +241,7 @@ CGFloat Interpolate(CGFloat from, CGFloat to, CGFloat percent) {
   // Sets the layout constraints for size of Identity Disc and toolbar.
   self.identityDiscView.translatesAutoresizingMaskIntoConstraints = NO;
   CGFloat dimension =
-      ntp_home::kIdentityAvatarDimension + 2 * ntp_home::kIdentityAvatarMargin;
+      ntp_home::kIdentityAvatarDimension + 2 * ntp_home::kHeaderIconMargin;
   [NSLayoutConstraint activateConstraints:@[
     [self.identityDiscView.heightAnchor constraintEqualToConstant:dimension],
     [self.identityDiscView.widthAnchor constraintEqualToConstant:dimension],
@@ -252,6 +252,30 @@ CGFloat Interpolate(CGFloat from, CGFloat to, CGFloat percent) {
         constraintEqualToAnchor:self.toolBarView.topAnchor
                        constant:ntp_home::kIdentityAvatarPadding],
   ]];
+}
+
+- (void)setCustomizationMenuView:(UIView*)customizationMenuView {
+  if (_customizationMenuView) {
+    [_customizationMenuView removeFromSuperview];
+  }
+
+  customizationMenuView.translatesAutoresizingMaskIntoConstraints = NO;
+
+  [self.toolBarView addSubview:customizationMenuView];
+  [NSLayoutConstraint activateConstraints:@[
+    [customizationMenuView.centerYAnchor
+        constraintEqualToAnchor:self.toolBarView.centerYAnchor],
+    [customizationMenuView.heightAnchor
+        constraintEqualToConstant:ntp_home::kCustomizationMenuButtonDimension],
+    [customizationMenuView.widthAnchor
+        constraintEqualToAnchor:customizationMenuView.heightAnchor],
+    [customizationMenuView.leadingAnchor
+        constraintEqualToAnchor:self.safeAreaLayoutGuide.leadingAnchor
+                       constant:(ntp_home::kIdentityAvatarPadding +
+                                 ntp_home::kHeaderIconMargin)],
+  ]];
+
+  _customizationMenuView = customizationMenuView;
 }
 
 - (void)addViewsToSearchField:(UIView*)searchField {
@@ -272,7 +296,6 @@ CGFloat Interpolate(CGFloat from, CGFloat to, CGFloat percent) {
                                         textColor:color
                                     textFieldTint:color
                                          iconTint:color];
-  omnibox.textField.placeholderTextColor = color;
   omnibox.textField.placeholder =
       l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT);
   [omnibox.textField setText:@""];
@@ -633,6 +656,18 @@ CGFloat Interpolate(CGFloat from, CGFloat to, CGFloat percent) {
                          [UIColor colorWithWhite:0 alpha:alpha];
                    }
                    completion:nil];
+}
+
+- (void)hideFakeboxButtons {
+  self.separator.alpha = 0;
+  self.voiceSearchButton.alpha = 0;
+  self.lensButton.alpha = 0;
+}
+
+- (void)showFakeboxButtons {
+  self.separator.alpha = 1;
+  self.voiceSearchButton.alpha = 1;
+  self.lensButton.alpha = 1;
 }
 
 #pragma mark - UITraitEnvironment

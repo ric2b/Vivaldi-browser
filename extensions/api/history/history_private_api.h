@@ -74,20 +74,6 @@ class HistoryPrivateAPI : public BrowserContextKeyedAPI,
   std::unique_ptr<HistoryPrivateEventRouter> history_event_router_;
 };
 
-class HistoryPrivateSearchFunction : public HistoryFunctionWithCallback {
- public:
-  DECLARE_EXTENSION_FUNCTION("historyPrivate.search", HISTORYPRIVATE_SEARCH)
-
- private:
-  ~HistoryPrivateSearchFunction() override {}
-
-  // HistoryFunctionWithCallback:
-  ExtensionFunction::ResponseAction Run() override;
-
-  // Callback for the history function to provide results.
-  void SearchComplete(history::QueryResults results);
-};
-
 class HistoryPrivateDeleteVisitsFunction : public HistoryFunctionWithCallback {
  public:
   DECLARE_EXTENSION_FUNCTION("historyPrivate.deleteVisits",

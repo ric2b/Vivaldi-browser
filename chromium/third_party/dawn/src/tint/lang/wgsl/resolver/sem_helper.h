@@ -31,8 +31,6 @@
 #include <string>
 
 #include "src/tint/lang/core/builtin_value.h"
-#include "src/tint/lang/core/interpolation_sampling.h"
-#include "src/tint/lang/core/interpolation_type.h"
 #include "src/tint/lang/wgsl/program/program_builder.h"
 #include "src/tint/lang/wgsl/resolver/dependency_graph.h"
 #include "src/tint/lang/wgsl/sem/builtin_enum_expression.h"
@@ -154,21 +152,6 @@ class SemHelper {
 
     /// @param expr the semantic node
     /// @returns nullptr if @p expr is nullptr, or @p expr cast to
-    /// sem::BuiltinEnumExpression<core::BuiltinValue> if the cast is successful, otherwise an
-    /// error diagnostic is raised.
-    sem::BuiltinEnumExpression<core::BuiltinValue>* AsBuiltinValue(sem::Expression* expr) const {
-        if (TINT_LIKELY(expr)) {
-            auto* enum_expr = expr->As<sem::BuiltinEnumExpression<core::BuiltinValue>>();
-            if (TINT_LIKELY(enum_expr)) {
-                return enum_expr;
-            }
-            ErrorUnexpectedExprKind(expr, "builtin value", core::kBuiltinValueStrings);
-        }
-        return nullptr;
-    }
-
-    /// @param expr the semantic node
-    /// @returns nullptr if @p expr is nullptr, or @p expr cast to
     /// sem::BuiltinEnumExpression<core::type::TexelFormat> if the cast is successful, otherwise an
     /// error diagnostic is raised.
     sem::BuiltinEnumExpression<core::TexelFormat>* AsTexelFormat(sem::Expression* expr) const {
@@ -223,39 +206,6 @@ class SemHelper {
         return core::Access::kUndefined;
     }
 
-    /// @param expr the semantic node
-    /// @returns nullptr if @p expr is nullptr, or @p expr cast to
-    /// sem::BuiltinEnumExpression<core::InterpolationSampling> if the cast is successful,
-    /// otherwise an error diagnostic is raised.
-    sem::BuiltinEnumExpression<core::InterpolationSampling>* AsInterpolationSampling(
-        sem::Expression* expr) const {
-        if (TINT_LIKELY(expr)) {
-            auto* enum_expr = expr->As<sem::BuiltinEnumExpression<core::InterpolationSampling>>();
-            if (TINT_LIKELY(enum_expr)) {
-                return enum_expr;
-            }
-            ErrorUnexpectedExprKind(expr, "interpolation sampling",
-                                    core::kInterpolationSamplingStrings);
-        }
-        return nullptr;
-    }
-
-    /// @param expr the semantic node
-    /// @returns nullptr if @p expr is nullptr, or @p expr cast to
-    /// sem::BuiltinEnumExpression<core::InterpolationType> if the cast is successful, otherwise
-    /// an error diagnostic is raised.
-    sem::BuiltinEnumExpression<core::InterpolationType>* AsInterpolationType(
-        sem::Expression* expr) const {
-        if (TINT_LIKELY(expr)) {
-            auto* enum_expr = expr->As<sem::BuiltinEnumExpression<core::InterpolationType>>();
-            if (TINT_LIKELY(enum_expr)) {
-                return enum_expr;
-            }
-            ErrorUnexpectedExprKind(expr, "interpolation type", core::kInterpolationTypeStrings);
-        }
-        return nullptr;
-    }
-
     /// @returns the resolved type of the ast::Expression @p expr
     /// @param expr the expression
     core::type::Type* TypeOf(const ast::Expression* expr) const;
@@ -272,6 +222,14 @@ class SemHelper {
     /// sem::ValueExpression, but the expression evaluated to something different.
     /// @param expr the expression
     void ErrorExpectedValueExpr(const sem::Expression* expr) const;
+
+    /// Raises an error diagnostic that the identifier @p got was not of the kind @p wanted.
+    /// @param ident the identifier
+    /// @param wanted the expected identifier kind
+    /// @param suggestions suggested valid identifiers
+    void ErrorUnexpectedIdent(const ast::Identifier* ident,
+                              std::string_view wanted,
+                              tint::Slice<const std::string_view> suggestions = Empty) const;
 
     /// Raises an error diagnostic that the expression @p got was not of the kind @p wanted.
     /// @param expr the expression

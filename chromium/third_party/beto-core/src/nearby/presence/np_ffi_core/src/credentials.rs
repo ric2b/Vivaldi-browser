@@ -15,33 +15,30 @@
 
 use crate::common::*;
 use crate::utils::{FfiEnum, LocksLongerThan};
-use crypto_provider::ed25519::InvalidPublicKeyBytes;
+use crypto_provider::{ed25519, CryptoProvider};
 use crypto_provider_default::CryptoProviderImpl;
-use handle_map::{
-    declare_handle_map, HandleLike, HandleMapDimensions, HandleMapFullError,
-    HandleMapTryAllocateError,
-};
+use handle_map::{declare_handle_map, HandleLike, HandleMapFullError, HandleMapTryAllocateError};
+use np_adv::extended;
 use std::sync::Arc;
+
+type Ed25519ProviderImpl = <CryptoProviderImpl as CryptoProvider>::Ed25519;
 
 /// Cryptographic information about a particular V0 discovery credential
 /// necessary to match and decrypt encrypted V0 advertisements.
 #[repr(C)]
 pub struct V0DiscoveryCredential {
     key_seed: [u8; 32],
-    legacy_metadata_key_hmac: [u8; 32],
+    identity_token_hmac: [u8; 32],
 }
 
 impl V0DiscoveryCredential {
     /// Constructs a new V0 discovery credential with the given 32-byte key-seed
     /// and the given 32-byte HMAC for the (14-byte) legacy metadata key.
-    pub fn new(key_seed: [u8; 32], legacy_metadata_key_hmac: [u8; 32]) -> Self {
-        Self { key_seed, legacy_metadata_key_hmac }
+    pub fn new(key_seed: [u8; 32], identity_token_hmac: [u8; 32]) -> Self {
+        Self { key_seed, identity_token_hmac }
     }
     fn into_internal(self) -> np_adv::credential::v0::V0DiscoveryCredential {
-        np_adv::credential::v0::V0DiscoveryCredential::new(
-            self.key_seed,
-            self.legacy_metadata_key_hmac,
-        )
+        np_adv::credential::v0::V0DiscoveryCredential::new(self.key_seed, self.identity_token_hmac)
     }
 }
 
@@ -50,8 +47,9 @@ impl V0DiscoveryCredential {
 #[repr(C)]
 pub struct V1DiscoveryCredential {
     key_seed: [u8; 32],
-    expected_unsigned_metadata_key_hmac: [u8; 32],
-    expected_signed_metadata_key_hmac: [u8; 32],
+    expected_mic_short_salt_identity_token_hmac: [u8; 32],
+    expected_mic_extended_salt_identity_token_hmac: [u8; 32],
+    expected_signature_identity_token_hmac: [u8; 32],
     pub_key: [u8; 32],
 }
 
@@ -61,26 +59,30 @@ impl V1DiscoveryCredential {
     /// the metadata key, and the given public key for signature verification.
     pub fn new(
         key_seed: [u8; 32],
-        expected_unsigned_metadata_key_hmac: [u8; 32],
-        expected_signed_metadata_key_hmac: [u8; 32],
+        expected_mic_short_salt_identity_token_hmac: [u8; 32],
+        expected_mic_extended_salt_identity_token_hmac: [u8; 32],
+        expected_signature_identity_token_hmac: [u8; 32],
         pub_key: [u8; 32],
     ) -> Self {
         Self {
             key_seed,
-            expected_unsigned_metadata_key_hmac,
-            expected_signed_metadata_key_hmac,
+            expected_mic_short_salt_identity_token_hmac,
+            expected_mic_extended_salt_identity_token_hmac,
+            expected_signature_identity_token_hmac,
             pub_key,
         }
     }
     fn into_internal(
         self,
-    ) -> Result<np_adv::credential::v1::V1DiscoveryCredential, InvalidPublicKeyBytes> {
-        np_adv::credential::v1::V1DiscoveryCredential::new::<CryptoProviderImpl>(
+    ) -> Result<np_adv::credential::v1::V1DiscoveryCredential, ed25519::InvalidPublicKeyBytes> {
+        let public_key = ed25519::PublicKey::from_bytes::<Ed25519ProviderImpl>(self.pub_key)?;
+        Ok(np_adv::credential::v1::V1DiscoveryCredential::new(
             self.key_seed,
-            self.expected_unsigned_metadata_key_hmac,
-            self.expected_signed_metadata_key_hmac,
-            self.pub_key,
-        )
+            self.expected_mic_short_salt_identity_token_hmac,
+            self.expected_mic_extended_salt_identity_token_hmac,
+            self.expected_signature_identity_token_hmac,
+            public_key,
+        ))
     }
 }
 
@@ -107,8 +109,11 @@ impl MatchedCredential {
     /// (some arbitrary `u32` identifier) and encrypted metadata bytes,
     /// copied from the given slice.
     pub fn new(cred_id: u32, encrypted_metadata_bytes: &[u8]) -> Self {
-        let encrypted_metadata_bytes = encrypted_metadata_bytes.to_vec().into_boxed_slice();
-        let encrypted_metadata_bytes = Arc::from(encrypted_metadata_bytes);
+        Self::from_arc_bytes(cred_id, encrypted_metadata_bytes.to_vec().into())
+    }
+    /// Constructs a new matched credential from the given match-id
+    /// (some arbitrary `u32` identifier) and encrypted metadata bytes.
+    pub fn from_arc_bytes(cred_id: u32, encrypted_metadata_bytes: Arc<[u8]>) -> Self {
         Self { cred_id, encrypted_metadata_bytes }
     }
     /// Gets the pre-specified numerical identifier for this matched-credential.
@@ -125,7 +130,7 @@ impl PartialEq<MatchedCredential> for MatchedCredential {
 
 impl Eq for MatchedCredential {}
 
-impl np_adv::credential::MatchedCredential for MatchedCredential {
+impl np_adv::credential::matched::MatchedCredential for MatchedCredential {
     type EncryptedMetadata = Arc<[u8]>;
     type EncryptedMetadataFetchError = core::convert::Infallible;
     fn fetch_encrypted_metadata(&self) -> Result<Arc<[u8]>, core::convert::Infallible> {
@@ -155,9 +160,10 @@ impl CredentialSlabInternals {
         discovery_credential: V0DiscoveryCredential,
         match_data: MatchedCredential,
     ) {
-        let discovery_credential = discovery_credential.into_internal();
-        let matchable_credential =
-            np_adv::credential::MatchableCredential { discovery_credential, match_data };
+        let matchable_credential = np_adv::credential::MatchableCredential {
+            discovery_credential: discovery_credential.into_internal(),
+            match_data,
+        };
         self.v0_creds.push(matchable_credential);
     }
     /// Adds the given V1 discovery credential with the given
@@ -167,10 +173,10 @@ impl CredentialSlabInternals {
         &mut self,
         discovery_credential: V1DiscoveryCredential,
         match_data: MatchedCredential,
-    ) -> Result<(), InvalidPublicKeyBytes> {
-        discovery_credential.into_internal().map(|discovery_credential| {
+    ) -> Result<(), ed25519::InvalidPublicKeyBytes> {
+        discovery_credential.into_internal().map(|dc| {
             let matchable_credential =
-                np_adv::credential::MatchableCredential { discovery_credential, match_data };
+                np_adv::credential::MatchableCredential { discovery_credential: dc, match_data };
             self.v1_creds.push(matchable_credential);
         })
     }
@@ -232,23 +238,16 @@ pub struct CredentialSlab {
     handle_id: u64,
 }
 
-fn get_credential_slab_handle_map_dimensions() -> HandleMapDimensions {
-    HandleMapDimensions {
-        num_shards: global_num_shards(),
-        max_active_handles: global_max_num_credential_slabs(),
-    }
-}
-
 declare_handle_map!(
     credential_slab,
-    super::get_credential_slab_handle_map_dimensions(),
+    crate::common::default_handle_map_dimensions(),
     super::CredentialSlab,
     super::CredentialSlabInternals
 );
 
 impl CredentialSlab {
-    /// Adds the given V0 discovery credential with some associated
-    /// match-data to this credential slab.
+    /// Adds the given V0 discovery credential with some associated match-data to this credential
+    /// slab. This uses the handle but does not transfer ownership of it.
     pub fn add_v0(
         &self,
         discovery_credential: V0DiscoveryCredential,
@@ -262,8 +261,8 @@ impl CredentialSlab {
             Err(_) => AddV0CredentialToSlabResult::InvalidHandle,
         }
     }
-    /// Adds the given V1 discovery credential with some associated
-    /// match-data to this credential slab.
+    /// Adds the given V1 discovery credential with some associated match-data to this credential
+    /// slab. This uses the handle but does not transfer ownership of it.
     pub fn add_v1(
         &self,
         discovery_credential: V1DiscoveryCredential,
@@ -279,7 +278,8 @@ impl CredentialSlab {
     }
 }
 
-/// Allocates a new credential-slab, returning a handle to the created object
+/// Allocates a new credential-slab, returning a handle to the created object. The caller is given
+/// ownership of the created handle.
 pub fn create_credential_slab() -> CreateCredentialSlabResult {
     CredentialSlab::allocate(CredentialSlabInternals::new).into()
 }
@@ -313,13 +313,6 @@ impl CredentialBookInternals {
     }
 }
 
-fn get_credential_book_handle_map_dimensions() -> HandleMapDimensions {
-    HandleMapDimensions {
-        num_shards: global_num_shards(),
-        max_active_handles: global_max_num_credential_books(),
-    }
-}
-
 /// A `#[repr(C)]` handle to a value of type `CredentialBookInternals`
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -329,7 +322,7 @@ pub struct CredentialBook {
 
 declare_handle_map!(
     credential_book,
-    super::get_credential_book_handle_map_dimensions(),
+    crate::common::default_handle_map_dimensions(),
     super::CredentialBook,
     super::CredentialBookInternals
 );
@@ -359,7 +352,10 @@ pub enum CreateCredentialBookResult {
 
 impl LocksLongerThan<CredentialSlab> for CredentialBook {}
 
-/// Allocates a new credential-book, returning a handle to the created object
+/// Allocates a new credential-book, returning a handle to the created object. This takes ownership
+/// of the `credential_slab` handle except in the case where `NoSpaceLeft` is the error returned.
+/// In that case the caller will retain ownership of the slab handle. The caller is given ownership
+/// of the returned credential book handle if present.
 pub fn create_credential_book_from_slab(
     credential_slab: CredentialSlab,
 ) -> CreateCredentialBookResult {
@@ -399,12 +395,14 @@ impl CreateCredentialBookResult {
     declare_enum_cast! {into_success, Success, CredentialBook}
 }
 
-/// Deallocates a credential-book by its handle
+/// Deallocates a credential-book by its handle. This takes ownership of the credential book
+/// handle.
 pub fn deallocate_credential_book(credential_book: CredentialBook) -> DeallocateResult {
     credential_book.deallocate().map(|_| ()).into()
 }
 
-/// Deallocates a credential-slab by its handle
+/// Deallocates a credential-slab by its handle. This takes ownership of the credential slab
+/// handle.
 pub fn deallocate_credential_slab(credential_slab: CredentialSlab) -> DeallocateResult {
     credential_slab.deallocate().map(|_| ()).into()
 }
@@ -414,7 +412,7 @@ pub fn deallocate_credential_slab(credential_slab: CredentialSlab) -> Deallocate
 #[repr(C)]
 pub struct V0BroadcastCredential {
     key_seed: [u8; 32],
-    metadata_key: [u8; 14],
+    identity_token: [u8; 14],
 }
 
 impl V0BroadcastCredential {
@@ -425,15 +423,13 @@ impl V0BroadcastCredential {
     /// of the raw bytes of sensitive cryptographic info over FFI,
     /// foreign-lang code around how this information is maintained
     /// deserves close scrutiny.
-    pub fn new(key_seed: [u8; 32], metadata_key: [u8; 14]) -> Self {
-        Self { key_seed, metadata_key }
+    pub fn new(key_seed: [u8; 32], identity_token: ldt_np_adv::V0IdentityToken) -> Self {
+        Self { key_seed, identity_token: identity_token.bytes() }
     }
-    pub(crate) fn into_internal(
-        self,
-    ) -> np_adv::credential::SimpleBroadcastCryptoMaterial<np_adv::credential::v0::V0> {
-        np_adv::credential::SimpleBroadcastCryptoMaterial::new(
+    pub(crate) fn into_internal(self) -> np_adv::credential::v0::V0BroadcastCredential {
+        np_adv::credential::v0::V0BroadcastCredential::new(
             self.key_seed,
-            np_adv::legacy::ShortMetadataKey(self.metadata_key),
+            self.identity_token.into(),
         )
     }
 }
@@ -443,7 +439,7 @@ impl V0BroadcastCredential {
 #[repr(C)]
 pub struct V1BroadcastCredential {
     key_seed: [u8; 32],
-    metadata_key: [u8; 16],
+    identity_token: [u8; 16],
     private_key: [u8; 32],
 }
 
@@ -457,16 +453,18 @@ impl V1BroadcastCredential {
     /// sensitive cryptographic info) over FFI, foreign-lang
     /// code around how this information is maintained
     /// deserves close scrutiny.
-    pub const fn new(key_seed: [u8; 32], metadata_key: [u8; 16], private_key: [u8; 32]) -> Self {
-        Self { key_seed, metadata_key, private_key }
+    pub const fn new(
+        key_seed: [u8; 32],
+        identity_token: extended::V1IdentityToken,
+        private_key: [u8; 32],
+    ) -> Self {
+        Self { key_seed, identity_token: identity_token.into_bytes(), private_key }
     }
-    pub(crate) fn into_internal(
-        self,
-    ) -> np_adv::credential::v1::SimpleSignedBroadcastCryptoMaterial {
+    pub(crate) fn into_internal(self) -> np_adv::credential::v1::V1BroadcastCredential {
         let permit = crypto_provider::ed25519::RawPrivateKeyPermit::default();
-        np_adv::credential::v1::SimpleSignedBroadcastCryptoMaterial::new(
+        np_adv::credential::v1::V1BroadcastCredential::new(
             self.key_seed,
-            np_adv::MetadataKey(self.metadata_key),
+            self.identity_token.into(),
             crypto_provider::ed25519::PrivateKey::from_raw_private_key(self.private_key, &permit),
         )
     }

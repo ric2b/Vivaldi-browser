@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/webcodecs/audio_decoder.h"
 
 #include "base/metrics/histogram_functions.h"
@@ -118,7 +123,7 @@ ScriptPromise<AudioDecoderSupport> AudioDecoder::isConfigSupported(
 
   if (!audio_type) {
     exception_state.ThrowTypeError(js_error_message);
-    return ScriptPromise<AudioDecoderSupport>();
+    return EmptyPromise();
   }
 
   AudioDecoderSupport* support = AudioDecoderSupport::Create();
@@ -204,7 +209,7 @@ AudioDecoder::MakeMediaAudioDecoderConfig(const ConfigType& config,
       IsValidAudioDecoderConfig(config, js_error_message);
   if (!audio_type) {
     // Checked by IsValidConfig().
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return std::nullopt;
   }
   if (audio_type->codec == media::AudioCodec::kUnknown) {

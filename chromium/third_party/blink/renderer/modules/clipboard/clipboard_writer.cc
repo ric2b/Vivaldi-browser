@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/clipboard/clipboard_writer.h"
 
 #include "base/task/single_thread_task_runner.h"
@@ -296,7 +301,7 @@ ClipboardWriter* ClipboardWriter::Create(SystemClipboard* system_clipboard,
     return MakeGarbageCollected<ClipboardSvgWriter>(system_clipboard, promise);
   }
 
-  NOTREACHED()
+  NOTREACHED_IN_MIGRATION()
       << "IsValidType() and Create() have inconsistent implementations.";
   return nullptr;
 }

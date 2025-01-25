@@ -61,6 +61,9 @@ class TestOmniboxClient final : public testing::NiceMock<OmniboxClient> {
               (const GURL& page_url,
                FaviconFetchedCallback on_favicon_fetched));
   MOCK_METHOD(void,
+              ShowFeedbackPage,
+              (const std::u16string& input_text, const GURL& destination_url));
+  MOCK_METHOD(void,
               OnAutocompleteAccept,
               (const GURL& destination_url,
                TemplateURLRef::PostContent* post_content,
@@ -74,7 +77,7 @@ class TestOmniboxClient final : public testing::NiceMock<OmniboxClient> {
                const AutocompleteMatch& match,
                const AutocompleteMatch& alternative_nav_match,
                IDNA2008DeviationCharacter deviation_char_in_hostname));
-  MOCK_METHOD(bookmarks::CoreBookmarkModel*, GetBookmarkModel, ());
+  MOCK_METHOD(bookmarks::BookmarkModel*, GetBookmarkModel, ());
   MOCK_METHOD(PrefService*, GetPrefs, ());
 
   base::WeakPtr<OmniboxClient> AsWeakPtr() override;

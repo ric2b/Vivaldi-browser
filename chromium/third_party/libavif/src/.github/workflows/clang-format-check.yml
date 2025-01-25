@@ -1,5 +1,5 @@
 name: CI Format Check
-on: [push]
+on: [push, pull_request]
 
 permissions:
   contents: read
@@ -13,7 +13,7 @@ jobs:
   clang-format-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4.1.4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       - uses: RafikFarhad/clang-format-github-action@873e2c426db342189305bc04213fe55cb701fd91 # v4
         with:
           style: file

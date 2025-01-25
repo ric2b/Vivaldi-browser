@@ -11,7 +11,7 @@ class Profile;
 
 class PageActionsServiceAndroid : public page_actions::Service::Observer {
  public:
-  PageActionsServiceAndroid(JNIEnv* env, jobject obj);
+  PageActionsServiceAndroid(JNIEnv* env, const base::android::JavaRef<jobject>& obj);
   PageActionsServiceAndroid(const PageActionsServiceAndroid& other) = delete;
   PageActionsServiceAndroid& operator=(const PageActionsServiceAndroid& other) =
       delete;

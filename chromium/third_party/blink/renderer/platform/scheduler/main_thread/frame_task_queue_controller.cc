@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_task_queue_controller.h"
 
 #include <memory>
@@ -10,6 +15,7 @@
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/functional/callback.h"
+#include "base/not_fatal_until.h"
 #include "base/trace_event/traced_value.h"
 #include "third_party/blink/renderer/platform/scheduler/common/tracing_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_scheduler_impl.h"
@@ -45,7 +51,7 @@ FrameTaskQueueController::GetTaskQueue(
   if (!task_queues_.Contains(queue_traits.Key()))
     CreateTaskQueue(queue_traits);
   auto it = task_queues_.find(queue_traits.Key());
-  DCHECK(it != task_queues_.end());
+  CHECK(it != task_queues_.end(), base::NotFatalUntil::M130);
   return it->value;
 }
 

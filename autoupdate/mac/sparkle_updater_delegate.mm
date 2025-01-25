@@ -105,20 +105,29 @@ NSURL* rel_notes_url_;
   if (error.code == SUDownloadError ||
       error.code == SUAppcastError ||
       error.code == SUNoUpdateError) {
-    // Don't report these errors to the UI,
+    // Don't report these errors to the UI, instead send updateFinished
+    // notification:
     // SUDownloadError - will try again when internet connection is restored
     // SUAppcastError - will try again when internet connection is restored
     // SUNoUpdateError - No update was found, no need to report that to the UI
+    extensions::AutoUpdateAPI::SendUpdateFinished();
     return;
   }
 
-  if (error && [error localizedDescription] && [error localizedFailureReason]) {
-    desc = [[error localizedDescription] UTF8String];
-    reason = [[error localizedFailureReason] UTF8String];
-    LOG(INFO) << desc + "\n" + reason;
-  }
+  desc = [[error localizedDescription] UTF8String];
+  reason = [error localizedFailureReason]
+               ? [[error localizedFailureReason] UTF8String]
+               : "";
 
   extensions::AutoUpdateAPI::SendDidAbortWithError(desc, reason);
+}
+
+- (void)updater:(nonnull SPUUpdater*)updater
+    didFinishUpdateCycleForUpdateCheck:(SPUUpdateCheck)updateCheck
+                                 error:(nullable NSError*)error {
+  if (!error || error.code == SUNoUpdateError ||
+      error.code == SUInstallationCanceledError)
+    extensions::AutoUpdateAPI::SendUpdateFinished();
 }
 
 - (NSString *)feedURLStringForUpdater:(SPUUpdater *)updater {

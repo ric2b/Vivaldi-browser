@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Uygula</translation>
 <translation id="1603914832182249871">(Gizli Mod)</translation>
 <translation id="1627276047960621195">Dosya Açıklayıcıları</translation>
+<translation id="1654713139320245449">Yayınlama hedefi bulunamadı. Yardıma mı ihtiyacınız var?</translation>
 <translation id="166278006618318542">Konu Ortak Anahtar Algoritması</translation>
 <translation id="1682548588986054654">Yeni Gizli Pencere</translation>
 <translation id="1708338024780164500">(Pasif)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Bilgisayarınızdaki başka bir program, Vivaldi'nin çalışma şeklini değiştirebilecek bir eklenti ekledi.</translation>
 <translation id="2443487764245141020">Sitelerin bir tanımlayıcı kullanarak da cihazınızı tanımlaması gerekebilir</translation>
 <translation id="2445081178310039857">Eklenti kök dizini gerekiyor.</translation>
-<translation id="2470702053775288986">Desteklenmeyen eklentiler devre dışı bırakıldı</translation>
 <translation id="2485422356828889247">Kaldır</translation>
 <translation id="2498539833203011245">Küçült</translation>
 <translation id="2509495747794740764">Ölçek değeri, 10 ve 200 arasında bir sayı olmalı.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Ayrıntılar</translation>
 <translation id="4345587454538109430">Yapılandır...</translation>
 <translation id="4348766275249686434">Hataları topla</translation>
-<translation id="4363771538994847871">Hiç Yayınlama hedefi bulunamadı. Yardıma ihtiyacınız var mı?</translation>
 <translation id="4384652540891215547">Eklentiyi etkinleştir</translation>
 <translation id="4394049700291259645">Devre dışı bırak</translation>
 <translation id="4409697491990005945">Kenar Boşlukları</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Düzen</translation>
 <translation id="7782102568078991263">Google'dan başka öneri yok</translation>
 <translation id="7786889348652477777">&amp;Uygulamayı Yeniden Yükle</translation>
-<translation id="7791543448312431591">Ekle</translation>
 <translation id="7800518121066352902">&amp;Saat Yönünün Tersine Döndür</translation>
 <translation id="7814458197256864873">&amp;Kopyala</translation>
 <translation id="7818135753970109980">Yeni tema eklendi (<ph name="EXTENSION_NAME" />)</translation>

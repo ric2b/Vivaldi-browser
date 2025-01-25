@@ -8,7 +8,7 @@
     const mdoc = await navigator.identity.get({
       digital: {
         providers: [{
-          protocol: "urn:openid.net:oid4vp",
+          protocol: "openid4vp",
           request: JSON.stringify({
             presentation_definition: {
               id: "mDL-request-demo",
@@ -51,6 +51,8 @@
 </script>
 
 <body>
+  <button id="request_age_only_button" onclick="requestAgeOnly()">Request Age Only</button>
+  <button id="request_age_and_name_button" onclick="requestAgeAndName()">Request Age and Name</button>
   <textarea id="log"></textarea>
 </body>
 

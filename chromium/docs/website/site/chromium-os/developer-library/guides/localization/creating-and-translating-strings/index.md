@@ -119,7 +119,7 @@ to extract the translation using the tokens defined in the .grd(p) files.
 ...
 
 button1->SetTooltipText(l10n_util::GetStringUTF16(IDS_YOUR_STRING_TOKEN));
-button2->SetAccessibleName(l10n_util::GetStringFUTF16(
+button2->GetViewAccessibility().SetName(l10n_util::GetStringFUTF16(
     IDS_SETUP_DEVICE, ui::GetChromeOSDeviceName()));
 ```
 

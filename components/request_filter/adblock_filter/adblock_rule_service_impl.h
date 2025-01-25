@@ -14,16 +14,16 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/ad_blocker/adblock_known_sources_handler_impl.h"
-#include "components/ad_blocker/adblock_types.h"
 #include "components/ad_blocker/adblock_resources.h"
 #include "components/ad_blocker/adblock_rule_manager_impl.h"
 #include "components/ad_blocker/adblock_rule_service_storage.h"
 #include "components/ad_blocker/adblock_rule_source_handler.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/request_filter/adblock_filter/adblock_content_injection_provider.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_manager.h"
-#include "components/request_filter/adblock_filter/blocked_urls_reporter.h"
+#include "components/request_filter/adblock_filter/adblock_tab_handler.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -62,7 +62,7 @@ class RuleServiceImpl : public RuleServiceContent,
   IndexBuildResult GetRulesIndexBuildResult(RuleGroup group) override;
   RuleManager* GetRuleManager() override;
   KnownRuleSourcesHandler* GetKnownSourcesHandler() override;
-  BlockedUrlsReporter* GetBlockerUrlsReporter() override;
+  TabHandler* GetTabHandler() override;
   void InitializeCosmeticFilter(CosmeticFilter* filter) override;
 
   // Implementing KeyedService
@@ -84,8 +84,7 @@ class RuleServiceImpl : public RuleServiceContent,
   RuleSourceHandler::RulesCompiler rules_compiler_;
   std::string locale_;
 
-  std::array<std::optional<RulesIndexManager>, kRuleGroupCount>
-      index_managers_;
+  std::array<std::optional<RulesIndexManager>, kRuleGroupCount> index_managers_;
 
   // We can't have one injection manager per rule group, because they all use
   // the same resources and we only want to provide one copy of the static
@@ -97,7 +96,7 @@ class RuleServiceImpl : public RuleServiceContent,
   std::array<AdBlockRequestFilter*, kRuleGroupCount> request_filters_ = {
       nullptr, nullptr};
 
-  std::optional<BlockedUrlsReporter> blocked_urls_reporter_;
+  std::optional<TabHandler> tab_handler_;
   std::optional<RuleServiceStorage> state_store_;
   std::optional<Resources> resources_;
 

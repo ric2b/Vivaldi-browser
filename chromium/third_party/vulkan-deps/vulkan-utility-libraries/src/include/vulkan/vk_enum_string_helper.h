@@ -1748,6 +1748,12 @@ static inline const char* string_VkStructureType(VkStructureType input_value) {
             return "VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR";
         case VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR:
             return "VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ANTI_LAG_FEATURES_AMD:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ANTI_LAG_FEATURES_AMD";
+        case VK_STRUCTURE_TYPE_ANTI_LAG_DATA_AMD:
+            return "VK_STRUCTURE_TYPE_ANTI_LAG_DATA_AMD";
+        case VK_STRUCTURE_TYPE_ANTI_LAG_PRESENTATION_INFO_AMD:
+            return "VK_STRUCTURE_TYPE_ANTI_LAG_PRESENTATION_INFO_AMD";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT:
@@ -1910,10 +1916,30 @@ static inline const char* string_VkStructureType(VkStructureType input_value) {
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_POOL_OVERALLOCATION_FEATURES_NV";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAW_ACCESS_CHAINS_FEATURES_NV:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAW_ACCESS_CHAINS_FEATURES_NV";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_FEATURES_KHR:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_FEATURES_KHR";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_PROPERTIES_KHR:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_PROPERTIES_KHR";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_PROPERTIES_LIST_KHR:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_PROPERTIES_LIST_KHR";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_PROPERTIES_KHR:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_PROPERTIES_KHR";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_VULKAN_PROPERTIES_KHR:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_VULKAN_PROPERTIES_KHR";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT16_VECTOR_FEATURES_NV:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT16_VECTOR_FEATURES_NV";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_REPLICATED_COMPOSITES_FEATURES_EXT:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_REPLICATED_COMPOSITES_FEATURES_EXT";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_FEATURES_MESA:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_FEATURES_MESA";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_PROPERTIES_MESA:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_PROPERTIES_MESA";
+        case VK_STRUCTURE_TYPE_IMAGE_ALIGNMENT_CONTROL_CREATE_INFO_MESA:
+            return "VK_STRUCTURE_TYPE_IMAGE_ALIGNMENT_CONTROL_CREATE_INFO_MESA";
         default:
             return "Unhandled VkStructureType";
     }
@@ -2100,6 +2126,8 @@ static inline const char* string_VkObjectType(VkObjectType input_value) {
 }
 static inline const char* string_VkVendorId(VkVendorId input_value) {
     switch (input_value) {
+        case VK_VENDOR_ID_KHRONOS:
+            return "VK_VENDOR_ID_KHRONOS";
         case VK_VENDOR_ID_VIV:
             return "VK_VENDOR_ID_VIV";
         case VK_VENDOR_ID_VSI:
@@ -3398,8 +3426,8 @@ static inline const char* string_VkSubpassContents(VkSubpassContents input_value
             return "VK_SUBPASS_CONTENTS_INLINE";
         case VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS:
             return "VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS";
-        case VK_SUBPASS_CONTENTS_INLINE_AND_SECONDARY_COMMAND_BUFFERS_EXT:
-            return "VK_SUBPASS_CONTENTS_INLINE_AND_SECONDARY_COMMAND_BUFFERS_EXT";
+        case VK_SUBPASS_CONTENTS_INLINE_AND_SECONDARY_COMMAND_BUFFERS_KHR:
+            return "VK_SUBPASS_CONTENTS_INLINE_AND_SECONDARY_COMMAND_BUFFERS_KHR";
         default:
             return "Unhandled VkSubpassContents";
     }
@@ -3522,8 +3550,10 @@ static inline const char* string_VkDriverId(VkDriverId input_value) {
             return "VK_DRIVER_ID_MESA_NVK";
         case VK_DRIVER_ID_IMAGINATION_OPEN_SOURCE_MESA:
             return "VK_DRIVER_ID_IMAGINATION_OPEN_SOURCE_MESA";
-        case VK_DRIVER_ID_MESA_AGXV:
-            return "VK_DRIVER_ID_MESA_AGXV";
+        case VK_DRIVER_ID_MESA_HONEYKRISP:
+            return "VK_DRIVER_ID_MESA_HONEYKRISP";
+        case VK_DRIVER_ID_RESERVED_27:
+            return "VK_DRIVER_ID_RESERVED_27";
         default:
             return "Unhandled VkDriverId";
     }
@@ -3820,6 +3850,22 @@ static inline const char* string_VkTimeDomainKHR(VkTimeDomainKHR input_value) {
             return "VK_TIME_DOMAIN_QUERY_PERFORMANCE_COUNTER_KHR";
         default:
             return "Unhandled VkTimeDomainKHR";
+    }
+}
+static inline const char* string_VkPhysicalDeviceLayeredApiKHR(VkPhysicalDeviceLayeredApiKHR input_value) {
+    switch (input_value) {
+        case VK_PHYSICAL_DEVICE_LAYERED_API_VULKAN_KHR:
+            return "VK_PHYSICAL_DEVICE_LAYERED_API_VULKAN_KHR";
+        case VK_PHYSICAL_DEVICE_LAYERED_API_D3D12_KHR:
+            return "VK_PHYSICAL_DEVICE_LAYERED_API_D3D12_KHR";
+        case VK_PHYSICAL_DEVICE_LAYERED_API_METAL_KHR:
+            return "VK_PHYSICAL_DEVICE_LAYERED_API_METAL_KHR";
+        case VK_PHYSICAL_DEVICE_LAYERED_API_OPENGL_KHR:
+            return "VK_PHYSICAL_DEVICE_LAYERED_API_OPENGL_KHR";
+        case VK_PHYSICAL_DEVICE_LAYERED_API_OPENGLES_KHR:
+            return "VK_PHYSICAL_DEVICE_LAYERED_API_OPENGLES_KHR";
+        default:
+            return "Unhandled VkPhysicalDeviceLayeredApiKHR";
     }
 }
 static inline const char* string_VkDebugReportObjectTypeEXT(VkDebugReportObjectTypeEXT input_value) {
@@ -4640,6 +4686,28 @@ static inline const char* string_VkOpticalFlowSessionBindingPointNV(VkOpticalFlo
             return "VK_OPTICAL_FLOW_SESSION_BINDING_POINT_GLOBAL_FLOW_NV";
         default:
             return "Unhandled VkOpticalFlowSessionBindingPointNV";
+    }
+}
+static inline const char* string_VkAntiLagModeAMD(VkAntiLagModeAMD input_value) {
+    switch (input_value) {
+        case VK_ANTI_LAG_MODE_DRIVER_CONTROL_AMD:
+            return "VK_ANTI_LAG_MODE_DRIVER_CONTROL_AMD";
+        case VK_ANTI_LAG_MODE_ON_AMD:
+            return "VK_ANTI_LAG_MODE_ON_AMD";
+        case VK_ANTI_LAG_MODE_OFF_AMD:
+            return "VK_ANTI_LAG_MODE_OFF_AMD";
+        default:
+            return "Unhandled VkAntiLagModeAMD";
+    }
+}
+static inline const char* string_VkAntiLagStageAMD(VkAntiLagStageAMD input_value) {
+    switch (input_value) {
+        case VK_ANTI_LAG_STAGE_INPUT_AMD:
+            return "VK_ANTI_LAG_STAGE_INPUT_AMD";
+        case VK_ANTI_LAG_STAGE_PRESENT_AMD:
+            return "VK_ANTI_LAG_STAGE_PRESENT_AMD";
+        default:
+            return "Unhandled VkAntiLagStageAMD";
     }
 }
 static inline const char* string_VkShaderCodeTypeEXT(VkShaderCodeTypeEXT input_value) {
@@ -7164,10 +7232,10 @@ static inline const char* string_VkRenderingFlagBits(VkRenderingFlagBits input_v
             return "VK_RENDERING_SUSPENDING_BIT";
         case VK_RENDERING_RESUMING_BIT:
             return "VK_RENDERING_RESUMING_BIT";
-        case VK_RENDERING_CONTENTS_INLINE_BIT_EXT:
-            return "VK_RENDERING_CONTENTS_INLINE_BIT_EXT";
         case VK_RENDERING_ENABLE_LEGACY_DITHERING_BIT_EXT:
             return "VK_RENDERING_ENABLE_LEGACY_DITHERING_BIT_EXT";
+        case VK_RENDERING_CONTENTS_INLINE_BIT_KHR:
+            return "VK_RENDERING_CONTENTS_INLINE_BIT_KHR";
         default:
             return "Unhandled VkRenderingFlagBits";
     }

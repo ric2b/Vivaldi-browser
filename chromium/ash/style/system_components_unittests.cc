@@ -56,12 +56,11 @@ std::unique_ptr<views::Widget> CreateSystemDialogWidget(
   dialog_view->SetModalType(modal_type);
 
   // Create a dialog widget.
-  views::Widget::InitParams dialog_params;
-  dialog_params.type = views::Widget::InitParams::TYPE_WINDOW_FRAMELESS;
+  views::Widget::InitParams dialog_params(
+      views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
+      views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   dialog_params.bounds = gfx::Rect(dialog_view->GetPreferredSize());
   dialog_params.delegate = dialog_view.release();
-  dialog_params.ownership =
-      views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   dialog_params.parent = parent_window;
   auto dialog_widget =
       std::make_unique<views::Widget>(std::move(dialog_params));
@@ -90,6 +89,7 @@ class WidgetWithSystemUIComponentView : public views::WidgetDelegateView {
 std::unique_ptr<views::Widget> CreateWidgetWithComponent(
     std::unique_ptr<views::View> component) {
   return AshTestBase::CreateTestWidget(
+      views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
       new WidgetWithSystemUIComponentView(std::move(component)));
 }
 
@@ -343,7 +343,8 @@ class SystemDialogSizeTest
     } else {
       UpdateDisplay("1280x720");
       host_widget_ =
-          CreateTestWidget(nullptr, desks_util::GetActiveDeskContainerId(),
+          CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
+                           nullptr, desks_util::GetActiveDeskContainerId(),
                            gfx::Rect(host_size), /*show=*/true);
     }
 

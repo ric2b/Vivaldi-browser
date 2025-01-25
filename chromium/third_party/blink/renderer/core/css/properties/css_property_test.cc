@@ -65,12 +65,17 @@ class ModeCheckingAnchorEvaluator : public AnchorEvaluator {
 class CSSPropertyTest : public PageTestBase {
  public:
   const CSSValue* Parse(String name, String value) {
-    auto* set = css_test_helpers::ParseDeclarationBlock(name + ":" + value);
+    const CSSPropertyValueSet* set =
+        css_test_helpers::ParseDeclarationBlock(name + ":" + value);
     DCHECK(set);
     if (set->PropertyCount() != 1) {
       return nullptr;
     }
     return &set->PropertyAt(0).Value();
+  }
+
+  const CSSPropertyValueSet* ParseShorthand(String name, String value) {
+    return css_test_helpers::ParseDeclarationBlock(name + ":" + value);
   }
 
   String ComputedValue(String property_str,
@@ -185,17 +190,15 @@ TEST_F(CSSPropertyTest, Surrogates) {
   // the test.
   const CSSProperty& inline_size = GetCSSPropertyInlineSize();
   const CSSProperty& writing_mode = GetCSSPropertyWebkitWritingMode();
-  EXPECT_EQ(&GetCSSPropertyWidth(),
-            inline_size.SurrogateFor(TextDirection::kLtr,
-                                     WritingMode::kHorizontalTb));
-  EXPECT_EQ(
-      &GetCSSPropertyHeight(),
-      inline_size.SurrogateFor(TextDirection::kLtr, WritingMode::kVerticalRl));
+  const WritingDirectionMode kHorizontalLtr = {WritingMode::kHorizontalTb,
+                                               TextDirection::kLtr};
+  EXPECT_EQ(&GetCSSPropertyWidth(), inline_size.SurrogateFor(kHorizontalLtr));
+  EXPECT_EQ(&GetCSSPropertyHeight(),
+            inline_size.SurrogateFor(
+                {WritingMode::kVerticalRl, TextDirection::kLtr}));
   EXPECT_EQ(&GetCSSPropertyWritingMode(),
-            writing_mode.SurrogateFor(TextDirection::kLtr,
-                                      WritingMode::kHorizontalTb));
-  EXPECT_FALSE(GetCSSPropertyWidth().SurrogateFor(TextDirection::kLtr,
-                                                  WritingMode::kHorizontalTb));
+            writing_mode.SurrogateFor(kHorizontalLtr));
+  EXPECT_FALSE(GetCSSPropertyWidth().SurrogateFor(kHorizontalLtr));
 }
 
 TEST_F(CSSPropertyTest, PairsWithIdenticalValues) {
@@ -446,6 +449,42 @@ TEST_F(CSSPropertyTest, AnchorModeSize) {
             ComputedValue("max-width", "anchor-size(width, 0px)", context));
   EXPECT_EQ("1px",
             ComputedValue("max-height", "anchor-size(width, 0px)", context));
+}
+
+TEST_F(CSSPropertyTest, PositionTryFallbacksAlternativeEnabled) {
+  ScopedCSSPositionTryFallbacksForTest fallbacks_enabled(true);
+  ScopedCSSPositionTryOptionsForTest options_enabled(true);
+  const CSSPropertyValueSet* declarations =
+      ParseShorthand("position-try", "most-width flip-block");
+  ASSERT_TRUE(declarations);
+  ASSERT_EQ(declarations->PropertyCount(), 2u);
+  EXPECT_EQ(declarations->PropertyAt(0).Id(), CSSPropertyID::kPositionTryOrder);
+  EXPECT_EQ(declarations->PropertyAt(1).Id(),
+            CSSPropertyID::kPositionTryFallbacks);
+}
+
+TEST_F(CSSPropertyTest, PositionTryFallbacksAlternativeDisabled) {
+  ScopedCSSPositionTryFallbacksForTest fallbacks_enabled(false);
+  ScopedCSSPositionTryOptionsForTest options_enabled(true);
+  const CSSPropertyValueSet* declarations =
+      ParseShorthand("position-try", "most-width flip-block");
+  ASSERT_TRUE(declarations);
+  ASSERT_EQ(declarations->PropertyCount(), 2u);
+  EXPECT_EQ(declarations->PropertyAt(0).Id(), CSSPropertyID::kPositionTryOrder);
+  EXPECT_EQ(declarations->PropertyAt(1).Id(),
+            CSSPropertyID::kPositionTryOptions);
+}
+
+TEST_F(CSSPropertyTest, PositionTryOptionsDisabled) {
+  ScopedCSSPositionTryFallbacksForTest fallbacks_enabled(true);
+  ScopedCSSPositionTryOptionsForTest options_enabled(false);
+  const CSSPropertyValueSet* declarations =
+      ParseShorthand("position-try", "most-width flip-block");
+  ASSERT_TRUE(declarations);
+  ASSERT_EQ(declarations->PropertyCount(), 2u);
+  EXPECT_EQ(declarations->PropertyAt(0).Id(), CSSPropertyID::kPositionTryOrder);
+  EXPECT_EQ(declarations->PropertyAt(1).Id(),
+            CSSPropertyID::kPositionTryFallbacks);
 }
 
 }  // namespace blink

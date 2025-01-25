@@ -33,11 +33,14 @@ import type * as Platform from '../../core/platform/platform.js';
 
 import {type ContentDataOrError} from './ContentData.js';
 import {type StreamingContentDataOrError} from './StreamingContentData.js';
+import {type WasmDisassembly} from './WasmDisassembly.js';
 
 export interface ContentProvider {
   contentURL(): Platform.DevToolsPath.UrlString;
   contentType(): Common.ResourceType.ResourceType;
+  /** @deprecated Prefer {@link requestContentData} instead */
   requestContent(): Promise<DeferredContent>;
+  requestContentData(): Promise<ContentDataOrError>;
   searchInContent(query: string, caseSensitive: boolean, isRegex: boolean): Promise<SearchMatch[]>;
 }
 
@@ -71,7 +74,7 @@ export type DeferredContent = {
 }|{
   content: '',
   isEncoded: false,
-  wasmDisassemblyInfo: Common.WasmDisassembly.WasmDisassembly,
+  wasmDisassemblyInfo: WasmDisassembly,
 }|{
   content: null,
   error: string,
@@ -89,11 +92,3 @@ export interface StreamingContentProvider extends ContentProvider {
 export const isStreamingContentProvider = function(provider: ContentProvider): provider is StreamingContentProvider {
   return 'requestStreamingContent' in provider;
 };
-
-/**
- * Temporary interface to migrate ContentProvider#requestContent to return
- * {@link ContentData} instead of a DefferedContent.
- */
-export interface SafeContentProvider extends ContentProvider {
-  requestContentData(): Promise<ContentDataOrError>;
-}

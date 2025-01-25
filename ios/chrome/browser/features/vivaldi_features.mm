@@ -4,18 +4,13 @@
 
 #import "app/vivaldi_version_info.h"
 
-BASE_FEATURE(kNewStartPage,
-             "kNewStartPage",
-#if (BUILD_VERSION(VIVALDI_RELEASE) == RELEASE_TYPE_ID_vivaldi_snapshot \
-    || BUILD_VERSION(VIVALDI_RELEASE) == RELEASE_TYPE_ID_vivaldi_sopranos)
-             base::FEATURE_ENABLED_BY_DEFAULT
-#else
+BASE_FEATURE(kShowTopSites,
+             "kShowTopSites",
              base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 
-bool IsNewStartPageIsEnabled() {
-  return base::FeatureList::IsEnabled(kNewStartPage);
+bool IsTopSitesEnabled() {
+  return base::FeatureList::IsEnabled(kShowTopSites);
 }
 
 BASE_FEATURE(kViewMarkdownAsHTML,

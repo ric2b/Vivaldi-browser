@@ -160,6 +160,8 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   bool ShouldCreateVisibilityController() const override;
   DesktopNativeCursorManager* GetSingletonDesktopNativeCursorManager() override;
   void SetBoundsInDIP(const gfx::Rect& bounds) override;
+  void SetAllowScreenshots(bool allow) override;
+  bool AreScreenshotsAllowed() override;
 
   // Overridden from aura::WindowTreeHost:
   ui::EventSource* GetEventSource() override;
@@ -275,6 +277,9 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   // Called whenever the HWND resizes or moves, to see if the nearest HMONITOR
   // has changed, and, if so, inform the aura::WindowTreeHost.
   void CheckForMonitorChange();
+
+  // Returns `bounds`, clamped to the minimum/maximum widget size constraints.
+  gfx::Rect AdjustedContentBounds(const gfx::Rect& bounds);
 
   // Accessor for DesktopNativeWidgetAura::content_window().
   aura::Window* content_window();

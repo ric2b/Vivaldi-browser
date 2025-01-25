@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Aplica</translation>
 <translation id="1603914832182249871">(Incògnit)</translation>
 <translation id="1627276047960621195">Descriptors dels fitxers</translation>
+<translation id="1654713139320245449">No s'han trobat destinacions d'emissió. Necessites ajuda?</translation>
 <translation id="166278006618318542">Algoritme de clau pública del subjecte</translation>
 <translation id="1682548588986054654">Nova finestra privada</translation>
 <translation id="1708338024780164500">(Inactiva)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Un altre programa del dispositiu ha afegit una complement que pot canviar el funcionament de Vivaldi.</translation>
 <translation id="2443487764245141020">És possible que els llocs web també hagin de reconèixer el teu dispositiu mitjançant un identificador</translation>
 <translation id="2445081178310039857">El directori arrel del complement és obligatori.</translation>
-<translation id="2470702053775288986">Complements no compatibles desactivades</translation>
 <translation id="2485422356828889247">Desinstal·la</translation>
 <translation id="2498539833203011245">Minimitza</translation>
 <translation id="2509495747794740764">El valor de l'escala ha d'estar entre 10 i 200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Detalls</translation>
 <translation id="4345587454538109430">Configura...</translation>
 <translation id="4348766275249686434">Recopila errors</translation>
-<translation id="4363771538994847871">No s'ha trobat cap destinació per emetre. Necessites ajuda?</translation>
 <translation id="4384652540891215547">Activa el complement</translation>
 <translation id="4394049700291259645">Desactiva</translation>
 <translation id="4409697491990005945">Marges</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Disposició</translation>
 <translation id="7782102568078991263">Cap suggeriment més de Google</translation>
 <translation id="7786889348652477777">&amp;Torna a carregar l'aplicació</translation>
-<translation id="7791543448312431591">Afegeix</translation>
 <translation id="7800518121066352902">Gira en el sentit c&amp;ontrari a les agulles del rellotge</translation>
 <translation id="7814458197256864873">&amp;Copia</translation>
 <translation id="7818135753970109980">S'ha afegit un tema nou (<ph name="EXTENSION_NAME" />)</translation>

@@ -21,10 +21,12 @@
 #include "base/unguessable_token.h"
 #include "components/paint_preview/browser/paint_preview_base_service.h"
 #include "components/paint_preview/player/android/convert_to_java_bitmap.h"
-#include "components/paint_preview/player/android/jni_headers/PlayerCompositorDelegateImpl_jni.h"
 #include "components/services/paint_preview_compositor/public/mojom/paint_preview_compositor.mojom.h"
 #include "ui/gfx/geometry/rect.h"
 #include "url/gurl.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "components/paint_preview/player/android/jni_headers/PlayerCompositorDelegateImpl_jni.h"
 
 using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
@@ -302,13 +304,13 @@ ScopedJavaLocalRef<jstring> PlayerCompositorDelegateAndroid::OnClick(
     jint j_x,
     jint j_y) {
   if (!frame_guid.has_value()) {
-    return base::android::ConvertUTF8ToJavaString(env, "");
+    return jni_zero::g_empty_string.AsLocalRef(env);
   }
   auto res = PlayerCompositorDelegate::OnClick(
       frame_guid.value(),
       gfx::Rect(static_cast<int>(j_x), static_cast<int>(j_y), 1U, 1U));
   if (res.empty())
-    return base::android::ConvertUTF8ToJavaString(env, "");
+    return jni_zero::g_empty_string.AsLocalRef(env);
 
   base::UmaHistogramBoolean("Browser.PaintPreview.Player.LinkClicked", true);
   // TODO(crbug.com/40122441): Resolve cases where there are multiple links.

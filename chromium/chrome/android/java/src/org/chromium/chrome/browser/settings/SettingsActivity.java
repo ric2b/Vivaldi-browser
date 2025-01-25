@@ -43,10 +43,9 @@ import org.chromium.chrome.browser.accessibility.settings.ChromeAccessibilitySet
 import org.chromium.chrome.browser.autofill.options.AutofillOptionsCoordinator;
 import org.chromium.chrome.browser.autofill.options.AutofillOptionsFragment;
 import org.chromium.chrome.browser.autofill.settings.AutofillCreditCardEditor;
-import org.chromium.chrome.browser.autofill.settings.AutofillIbanEditor;
+import org.chromium.chrome.browser.autofill.settings.AutofillLocalIbanEditor;
 import org.chromium.chrome.browser.back_press.BackPressHelper;
 import org.chromium.chrome.browser.back_press.SecondaryActivityBackPressUma.SecondaryActivity;
-import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragment;
 import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragmentBasic;
 import org.chromium.chrome.browser.feedback.FragmentHelpAndFeedbackLauncher;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
@@ -61,9 +60,9 @@ import org.chromium.chrome.browser.password_check.PasswordCheckFragmentView;
 import org.chromium.chrome.browser.password_entry_edit.CredentialEditUiFactory;
 import org.chromium.chrome.browser.password_entry_edit.CredentialEntryFragmentViewBase;
 import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
+import org.chromium.chrome.browser.password_manager.PasswordStoreBridge;
 import org.chromium.chrome.browser.password_manager.settings.PasswordSettings;
 import org.chromium.chrome.browser.privacy_guide.PrivacyGuideFragment;
-import org.chromium.chrome.browser.privacy_sandbox.ChromeIpProtectionDelegate;
 import org.chromium.chrome.browser.privacy_sandbox.ChromeTrackingProtectionDelegate;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxSettingsBaseFragment;
 import org.chromium.chrome.browser.privacy_sandbox.TopicsManageFragment;
@@ -75,9 +74,11 @@ import org.chromium.chrome.browser.safety_check.SafetyCheckBridge;
 import org.chromium.chrome.browser.safety_check.SafetyCheckCoordinator;
 import org.chromium.chrome.browser.safety_check.SafetyCheckSettingsFragment;
 import org.chromium.chrome.browser.safety_check.SafetyCheckUpdatesDelegateImpl;
+import org.chromium.chrome.browser.safety_hub.SafetyHubBaseFragment;
 import org.chromium.chrome.browser.safety_hub.SafetyHubFragment;
 import org.chromium.chrome.browser.safety_hub.SafetyHubModuleDelegateImpl;
 import org.chromium.chrome.browser.search_engines.settings.SearchEngineSettings;
+import org.chromium.chrome.browser.signin.SigninAndHistorySyncActivityLauncherImpl;
 import org.chromium.chrome.browser.signin.SyncConsentActivityLauncherImpl;
 import org.chromium.chrome.browser.site_settings.ChromeSiteSettingsDelegate;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
@@ -105,6 +106,7 @@ import org.chromium.components.browser_ui.widget.displaystyle.ViewResizer;
 import org.chromium.components.browser_ui.widget.displaystyle.ViewResizerUtil;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.components.privacy_sandbox.FingerprintingProtectionSettingsFragment;
 import org.chromium.components.privacy_sandbox.IpProtectionSettingsFragment;
 import org.chromium.components.privacy_sandbox.TrackingProtectionSettings;
 import org.chromium.components.user_prefs.UserPrefs;
@@ -115,7 +117,20 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
 
 // Vivaldi
+import android.view.WindowManager;
+import androidx.appcompat.widget.SearchView;
+import androidx.preference.PreferenceScreen;
+
+import java.util.ArrayList;
+
+import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
+import org.chromium.chrome.browser.password_manager.PasswordManagerLauncher;
+
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.vivaldi.browser.preferences.PreferenceSearchManager;
+import org.chromium.chrome.browser.night_mode.NightModeMetrics;
+import org.chromium.chrome.browser.night_mode.settings.ThemeSettingsFragment;
 
 /**
  * The Chrome settings activity.
@@ -163,6 +178,12 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
 
     // This is only used on automotive.
     private @Nullable MissingDeviceLockLauncher mMissingDeviceLockLauncher;
+
+    private PreferenceSearchManager mPreferenceSearchManager;
+    private SearchView mSearchView;
+
+    // Vivaldi - make possible to scroll down search results (ref. VAB-8621)
+    private final int MINIMUM_SEARCH_LENGTH = 2;
 
     @SuppressLint("InlinedApi")
     @Override
@@ -217,6 +238,11 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
 
         setStatusBarColor();
         initBottomSheet();
+
+        mSnackbarManager = new SnackbarManager(this, findViewById(android.R.id.content), null);
+
+        // Vivaldi (VAB-8621)
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
 
     @Override
@@ -361,11 +387,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
     @Override
     public void onAttachedToWindow() {
         super.onAttachedToWindow();
-        ViewGroup contentView = findViewById(android.R.id.content);
-        mSnackbarManager = new SnackbarManager(this, contentView, null);
-
         Fragment fragment = getMainFragment();
-
         if (fragment instanceof BaseSiteSettingsFragment) {
             ChromeSiteSettingsDelegate delegate =
                     (ChromeSiteSettingsDelegate)
@@ -376,9 +398,6 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
             ((PrivacySandboxSettingsBaseFragment) fragment)
                     .setSnackbarManager(getSnackbarManager());
         }
-        if (fragment instanceof ClearBrowsingDataFragment) {
-            ((ClearBrowsingDataFragment) fragment).setSnackbarManager(mSnackbarManager);
-        }
         if (fragment instanceof AccountManagementFragment) {
             ((AccountManagementFragment) fragment).setSnackbarManager(mSnackbarManager);
         }
@@ -388,6 +407,14 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
         if (fragment instanceof ManageSyncSettings) {
             ((ManageSyncSettings) fragment).setSnackbarManager(mSnackbarManager);
         }
+        if (fragment instanceof SafetyHubBaseFragment) {
+            ((SafetyHubBaseFragment) fragment).setSnackbarManager(mSnackbarManager);
+        }
+
+        // Vivaldi (VAB-8621)
+        if (fragment instanceof PreferenceFragmentCompat)
+            mPreferenceSearchManager = new PreferenceSearchManager(this);
+
         initBackPressHandler();
     }
 
@@ -461,6 +488,90 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
         help.setIcon(
                 TraceEventVectorDrawableCompat.create(
                         getResources(), R.drawable.ic_help_and_feedback, getTheme()));
+        //Vivaldi
+        if (BuildConfig.IS_VIVALDI && getMainFragment() instanceof PreferenceFragmentCompat) {
+            menu.clear();
+            MenuItem search =
+                    menu.add(Menu.NONE,
+                            R.id.settings_id_search,
+                            Menu.CATEGORY_SECONDARY,
+                            R.string.menu_help);
+            search.setIcon(
+                    TraceEventVectorDrawableCompat.create(
+                            getResources(), R.drawable.settings_ic_search, getTheme()));
+            search.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+            mSearchView = new SearchView(this);
+            search.setActionView(mSearchView);
+            mSearchView.setMaxWidth(Integer.MAX_VALUE);
+            mSearchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+                @Override
+                public boolean onQueryTextSubmit(String s) {
+                    ArrayList<Preference> searchResult =
+                            mPreferenceSearchManager.searchForPreference(s);
+
+                    PreferenceScreen searchResultScreen =
+                            ((PreferenceFragmentCompat)getMainFragment())
+                                    .getPreferenceManager()
+                                    .getPreferenceScreen();
+                    searchResultScreen.removeAll();
+                    for (Preference preference : searchResult) {
+                        searchResultScreen.addPreference(preference);
+                    }
+                    return false;
+                }
+
+
+
+                @Override
+                public boolean onQueryTextChange(String s) {
+                    if (s.length() >= MINIMUM_SEARCH_LENGTH) {
+                        ArrayList<Preference> searchResult =
+                                mPreferenceSearchManager.searchForPreference(s);
+
+                        PreferenceScreen searchResultScreen =
+                                ((PreferenceFragmentCompat)getMainFragment())
+                                        .getPreferenceManager()
+                                        .getPreferenceScreen();
+                        searchResultScreen.removeAll();
+                        for (Preference preference : searchResult) {
+                            if (preference.getParent() != null)
+                                preference.getParent().removePreference(preference);
+
+                            if (preference instanceof ProfileDependentSetting) {
+                                ((ProfileDependentSetting) preference).setProfile(mProfile);
+                            }
+                            if (preference.getKey().equals("passwords")) {
+                                preference.setOnPreferenceClickListener(pref -> {
+                                    PasswordManagerLauncher.showPasswordSettings(
+                                            mSearchView.getContext(),
+                                            mProfile,
+                                            ManagePasswordsReferrer.CHROME_SETTINGS,
+                                            getModalDialogManagerSupplier(),
+                                            /* managePasskeys= */ false);
+                                    return true;
+                                });
+                            }
+                            if (preference.getKey().equals("ui_theme")) {
+                                preference.getExtras()
+                                            .putInt(
+                                                    ThemeSettingsFragment.KEY_THEME_SETTINGS_ENTRY,
+                                                    NightModeMetrics.ThemeSettingsEntry.SETTINGS);
+                            }
+                            searchResultScreen.addPreference(preference);
+                        }
+                    }
+                    return false;
+                }
+            });
+
+            mSearchView.setOnCloseListener(new SearchView.OnCloseListener() {
+                @Override
+                public boolean onClose() {
+                    rebuildMainPrefs();
+                    return false;
+                }
+            });
+        }
         return super.onCreateOptionsMenu(menu);
     }
 
@@ -555,13 +666,16 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
         if (fragment instanceof SafetyCheckSettingsFragment) {
             SafetyCheckCoordinator.create(
                     (SafetyCheckSettingsFragment) fragment,
+                    mProfile,
                     new SafetyCheckUpdatesDelegateImpl(),
                     new SafetyCheckBridge(mProfile),
                     mSettingsLauncher,
+                    SigninAndHistorySyncActivityLauncherImpl.get(),
                     SyncConsentActivityLauncherImpl.get(),
                     getModalDialogManagerSupplier(),
                     SyncServiceFactory.getForProfile(mProfile),
                     UserPrefs.get(mProfile),
+                    new PasswordStoreBridge(mProfile),
                     PasswordManagerHelper.getForProfile(mProfile));
         }
         if (fragment instanceof PasswordCheckFragmentView) {
@@ -665,20 +779,33 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
         if (fragment instanceof IpProtectionSettingsFragment) {
             IpProtectionSettingsFragment ipProtectionSettingsFragment =
                     ((IpProtectionSettingsFragment) fragment);
-            ipProtectionSettingsFragment.setIProtectionDelegate(
-                    new ChromeIpProtectionDelegate(mProfile));
+            ipProtectionSettingsFragment.setTrackingProtectionDelegate(
+                    new ChromeTrackingProtectionDelegate(mProfile));
             ipProtectionSettingsFragment.setCustomTabIntentHelper(
                     LaunchIntentDispatcher::createCustomTabActivityIntent);
         }
-        if (fragment instanceof AutofillIbanEditor) {
-            ((AutofillIbanEditor) fragment)
+        if (fragment
+                instanceof FingerprintingProtectionSettingsFragment fpProtectionSettingsFragment) {
+            fpProtectionSettingsFragment.setTrackingProtectionDelegate(
+                    new ChromeTrackingProtectionDelegate(mProfile));
+            fpProtectionSettingsFragment.setCustomTabIntentHelper(
+                    LaunchIntentDispatcher::createCustomTabActivityIntent);
+        }
+        if (fragment instanceof AutofillLocalIbanEditor) {
+            ((AutofillLocalIbanEditor) fragment)
                     .setModalDialogManagerSupplier(getModalDialogManagerSupplier());
         }
-        if (fragment instanceof SafetyHubFragment) {
-            ((SafetyHubFragment) fragment)
-                    .setDelegate(
-                            new SafetyHubModuleDelegateImpl(
-                                    mProfile, getModalDialogManagerSupplier()));
+        if (fragment instanceof SafetyHubFragment safetyHubFragment) {
+            safetyHubFragment.setDelegate(
+                    new SafetyHubModuleDelegateImpl(
+                            mProfile,
+                            getModalDialogManagerSupplier(),
+                            SigninAndHistorySyncActivityLauncherImpl.get(),
+                            SyncConsentActivityLauncherImpl.get()));
+            // TODO(crbug.com/40751023): Create a shared interface for fragments that need access to
+            // LaunchIntentDispatcher::createCustomTabActivityIntent.
+            safetyHubFragment.setCustomTabIntentHelper(
+                    LaunchIntentDispatcher::createCustomTabActivityIntent);
         }
     }
 
@@ -751,5 +878,19 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
             // Invalidate decorations to reset.
             recyclerView.invalidateItemDecorations();
         }
+    }
+
+    // Vivaldi (VAB-8621)
+    @SuppressLint("RestrictedApi")
+    private void rebuildMainPrefs() {
+        String initialFragment = MainSettings.class.getName();
+        Fragment fragment = Fragment.instantiate(this, initialFragment, null);
+        getSupportFragmentManager()
+                .beginTransaction()
+                .replace(R.id.content, fragment)
+                // Set width constraints after commit is done, since recycler view is not
+                // accessible before transaction completes.
+                .runOnCommit(this::configureWideDisplayStyle)
+                .commit();
     }
 }

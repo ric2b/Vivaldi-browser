@@ -1,11 +1,11 @@
-fn dpdxCoarse_029152() {
-  var res : f32 = dpdxCoarse(1.0f);
-  prevent_dce = res;
-}
+@group(0) @binding(0) var<storage, read_write> prevent_dce : f32;
 
-@group(2) @binding(0) var<storage, read_write> prevent_dce : f32;
+fn dpdxCoarse_029152() -> f32 {
+  var res : f32 = dpdxCoarse(1.0f);
+  return res;
+}
 
 @fragment
 fn fragment_main() {
-  dpdxCoarse_029152();
+  prevent_dce = dpdxCoarse_029152();
 }

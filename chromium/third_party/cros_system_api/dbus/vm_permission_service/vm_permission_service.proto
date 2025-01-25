@@ -14,6 +14,7 @@ message RegisterVmRequest {
     CROSTINI_VM = 0;
     PLUGIN_VM = 1;
     BOREALIS = 2;
+    BRUSCHETTA = 3;
   };
 
   // Name of the VM being registered with permission service.

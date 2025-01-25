@@ -40,15 +40,21 @@ static std::unique_ptr<syncer::DeviceInfo> CreateFakeDeviceInfo(
       /*full_hardware_class=*/std::string(),
       /*last_updated_timestamp=*/base::Time::Now(),
       syncer::DeviceInfoUtil::GetPulseInterval(),
-      /*send_tab_to_self_receiving_enabled=*/false,
+      /*send_tab_to_self_receiving_enabled=*/
+      false,
+      /*send_tab_to_self_receiving_type=*/
+      sync_pb::
+          SyncEnums_SendTabReceivingType_SEND_TAB_RECEIVING_TYPE_CHROME_OR_UNSPECIFIED,
       syncer::DeviceInfo::SharingInfo(
           {"vapid_fcm_token", "vapid_p256dh", "vapid_auth_secret"},
           {"sender_id_fcm_token", "sender_id_p256dh", "sender_id_auth_secret"},
+          "chime_representative_target_id",
           std::set<sync_pb::SharingSpecificFields::EnabledFeatures>{
               sync_pb::SharingSpecificFields::CLICK_TO_CALL_V2}),
       /*paask_info=*/std::nullopt,
       /*fcm_registration_token=*/std::string(),
-      /*interested_data_types=*/syncer::ModelTypeSet());
+      /*interested_data_types=*/syncer::ModelTypeSet(),
+      /*floating_workspace_last_signin_timestamp=*/std::nullopt);
 }
 
 }  // namespace

@@ -26,6 +26,7 @@
 #include "net/reporting/reporting_policy.h"
 #include "net/reporting/reporting_report.h"
 #include "net/reporting/reporting_service.h"
+#include "net/reporting/reporting_target_type.h"
 #include "net/reporting/reporting_test_util.h"
 #include "net/test/test_with_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -60,9 +61,15 @@ class ReportingServiceTest : public ::testing::TestWithParam<bool>,
   const NetworkAnonymizationKey kNak2_ =
       NetworkAnonymizationKey::CreateSameSite(SchemefulSite(kOrigin2_));
   const ReportingEndpointGroupKey kGroupKey_ =
-      ReportingEndpointGroupKey(kNak_, kOrigin_, kGroup_);
+      ReportingEndpointGroupKey(kNak_,
+                                kOrigin_,
+                                kGroup_,
+                                ReportingTargetType::kDeveloper);
   const ReportingEndpointGroupKey kGroupKey2_ =
-      ReportingEndpointGroupKey(kNak2_, kOrigin2_, kGroup_);
+      ReportingEndpointGroupKey(kNak2_,
+                                kOrigin2_,
+                                kGroup_,
+                                ReportingTargetType::kDeveloper);
   const IsolationInfo kIsolationInfo_ =
       IsolationInfo::Create(IsolationInfo::RequestType::kOther,
                             kOrigin_,
@@ -71,12 +78,18 @@ class ReportingServiceTest : public ::testing::TestWithParam<bool>,
 
   ReportingServiceTest() {
     feature_list_.InitAndEnableFeature(
-        features::kPartitionNelAndReportingByNetworkIsolationKey);
+        features::kPartitionConnectionsByNetworkIsolationKey);
     Init();
   }
 
   // Initializes, or re-initializes, |service_| and its dependencies.
   void Init() {
+    // Must destroy old service, if there is one, before destroying old store.
+    // Need to clear `context_` first, since it points to an object owned by the
+    // service.
+    context_ = nullptr;
+    service_.reset();
+
     if (GetParam()) {
       store_ = std::make_unique<MockPersistentReportingStore>();
     } else {
@@ -115,7 +128,8 @@ class ReportingServiceTest : public ::testing::TestWithParam<bool>,
 
 TEST_P(ReportingServiceTest, QueueReport) {
   service()->QueueReport(kUrl_, kReportingSource_, kNak_, kUserAgent_, kGroup_,
-                         kType_, base::Value::Dict(), 0);
+                         kType_, base::Value::Dict(), 0,
+                         ReportingTargetType::kDeveloper);
   FinishLoading(true /* load_success */);
 
   std::vector<raw_ptr<const ReportingReport, VectorExperimental>> reports;
@@ -126,13 +140,32 @@ TEST_P(ReportingServiceTest, QueueReport) {
   EXPECT_EQ(kUserAgent_, reports[0]->user_agent);
   EXPECT_EQ(kGroup_, reports[0]->group);
   EXPECT_EQ(kType_, reports[0]->type);
+  EXPECT_EQ(ReportingTargetType::kDeveloper, reports[0]->target_type);
+}
+
+TEST_P(ReportingServiceTest, QueueEnterpriseReport) {
+  service()->QueueReport(kUrl_, kReportingSource_, kNak_, kUserAgent_, kGroup_,
+                         kType_, base::Value::Dict(), 0,
+                         ReportingTargetType::kEnterprise);
+  FinishLoading(true /* load_success */);
+
+  std::vector<raw_ptr<const ReportingReport, VectorExperimental>> reports;
+  context()->cache()->GetReports(&reports);
+  ASSERT_EQ(1u, reports.size());
+  EXPECT_EQ(kUrl_, reports[0]->url);
+  EXPECT_EQ(kNak_, reports[0]->network_anonymization_key);
+  EXPECT_EQ(kUserAgent_, reports[0]->user_agent);
+  EXPECT_EQ(kGroup_, reports[0]->group);
+  EXPECT_EQ(kType_, reports[0]->type);
+  EXPECT_EQ(ReportingTargetType::kEnterprise, reports[0]->target_type);
 }
 
 TEST_P(ReportingServiceTest, QueueReportSanitizeUrl) {
   // Same as kUrl_ but with username, password, and fragment.
   GURL url = GURL("https://username:password@origin/path#fragment");
   service()->QueueReport(url, kReportingSource_, kNak_, kUserAgent_, kGroup_,
-                         kType_, base::Value::Dict(), 0);
+                         kType_, base::Value::Dict(), 0,
+                         ReportingTargetType::kDeveloper);
   FinishLoading(true /* load_success */);
 
   std::vector<raw_ptr<const ReportingReport, VectorExperimental>> reports;
@@ -150,7 +183,8 @@ TEST_P(ReportingServiceTest, DontQueueReportInvalidUrl) {
   // This does not trigger an attempt to load from the store because the url
   // is immediately rejected as invalid.
   service()->QueueReport(url, kReportingSource_, kNak_, kUserAgent_, kGroup_,
-                         kType_, base::Value::Dict(), 0);
+                         kType_, base::Value::Dict(), 0,
+                         ReportingTargetType::kDeveloper);
 
   std::vector<raw_ptr<const ReportingReport, VectorExperimental>> reports;
   context()->cache()->GetReports(&reports);
@@ -160,13 +194,14 @@ TEST_P(ReportingServiceTest, DontQueueReportInvalidUrl) {
 TEST_P(ReportingServiceTest, QueueReportNetworkIsolationKeyDisabled) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndDisableFeature(
-      features::kPartitionNelAndReportingByNetworkIsolationKey);
+      features::kPartitionConnectionsByNetworkIsolationKey);
 
   // Re-create the store, so it reads the new feature value.
   Init();
 
   service()->QueueReport(kUrl_, kReportingSource_, kNak_, kUserAgent_, kGroup_,
-                         kType_, base::Value::Dict(), 0);
+                         kType_, base::Value::Dict(), 0,
+                         ReportingTargetType::kDeveloper);
   FinishLoading(true /* load_success */);
 
   std::vector<raw_ptr<const ReportingReport, VectorExperimental>> reports;
@@ -196,7 +231,9 @@ TEST_P(ReportingServiceTest, ProcessReportToHeader) {
 
   EXPECT_EQ(1u, context()->cache()->GetEndpointCount());
   EXPECT_TRUE(context()->cache()->GetEndpointForTesting(
-      ReportingEndpointGroupKey(kNak_, kOrigin_, kGroup_), kEndpoint_));
+      ReportingEndpointGroupKey(kNak_, kOrigin_, kGroup_,
+                                ReportingTargetType::kDeveloper),
+      kEndpoint_));
 }
 
 TEST_P(ReportingServiceTest, ProcessReportingEndpointsHeader) {
@@ -225,7 +262,7 @@ TEST_P(ReportingServiceTest,
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       {net::features::kDocumentReporting},
-      {features::kPartitionNelAndReportingByNetworkIsolationKey});
+      {features::kPartitionConnectionsByNetworkIsolationKey});
 
   // Re-create the store, so it reads the new feature value.
   Init();
@@ -259,7 +296,8 @@ TEST_P(ReportingServiceTest, SendReportsAndRemoveSource) {
                                            kIsolationInfo_, *parsed_header);
   // This report should be sent immediately, starting the delivery agent timer.
   service()->QueueReport(kUrl_, kReportingSource_, kNak_, kUserAgent_, kGroup_,
-                         kType_, base::Value::Dict(), 0);
+                         kType_, base::Value::Dict(), 0,
+                         ReportingTargetType::kDeveloper);
 
   FinishLoading(true /* load_success */);
 
@@ -303,7 +341,8 @@ TEST_P(ReportingServiceTest,
                                            kIsolationInfo_, *parsed_header);
   // This report should be sent immediately, starting the delivery agent timer.
   service()->QueueReport(kUrl_, kReportingSource_, kNak_, kUserAgent_, kGroup_,
-                         kType_, base::Value::Dict(), 0);
+                         kType_, base::Value::Dict(), 0,
+                         ReportingTargetType::kDeveloper);
 
   FinishLoading(true /* load_success */);
 
@@ -317,7 +356,8 @@ TEST_P(ReportingServiceTest,
 
   // Queue another report, which should remain queued.
   service()->QueueReport(kUrl_, kReportingSource_, kNak_, kUserAgent_, kGroup_,
-                         kType_, base::Value::Dict(), 0);
+                         kType_, base::Value::Dict(), 0,
+                         ReportingTargetType::kDeveloper);
   EXPECT_EQ(1u, context()->cache()->GetReportCountWithStatusForTesting(
                     ReportingReport::Status::QUEUED));
   EXPECT_EQ(1u, context()->cache()->GetReportCountWithStatusForTesting(
@@ -403,7 +443,7 @@ TEST_P(ReportingServiceTest, ProcessReportToHeader_TooDeep) {
 TEST_P(ReportingServiceTest, ProcessReportToHeaderNetworkIsolationKeyDisabled) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndDisableFeature(
-      features::kPartitionNelAndReportingByNetworkIsolationKey);
+      features::kPartitionConnectionsByNetworkIsolationKey);
 
   // Re-create the store, so it reads the new feature value.
   Init();
@@ -420,9 +460,12 @@ TEST_P(ReportingServiceTest, ProcessReportToHeaderNetworkIsolationKeyDisabled) {
 
   EXPECT_EQ(1u, context()->cache()->GetEndpointCount());
   EXPECT_FALSE(context()->cache()->GetEndpointForTesting(
-      ReportingEndpointGroupKey(kNak_, kOrigin_, kGroup_), kEndpoint_));
+      ReportingEndpointGroupKey(kNak_, kOrigin_, kGroup_,
+                                ReportingTargetType::kDeveloper),
+      kEndpoint_));
   EXPECT_TRUE(context()->cache()->GetEndpointForTesting(
-      ReportingEndpointGroupKey(NetworkAnonymizationKey(), kOrigin_, kGroup_),
+      ReportingEndpointGroupKey(NetworkAnonymizationKey(), kOrigin_, kGroup_,
+                                ReportingTargetType::kDeveloper),
       kEndpoint_));
 }
 
@@ -473,7 +516,8 @@ TEST_P(ReportingServiceTest, WriteToStore) {
               testing::UnorderedElementsAreArray(expected_commands));
 
   service()->QueueReport(kUrl_, kReportingSource_, kNak_, kUserAgent_, kGroup_,
-                         kType_, base::Value::Dict(), 0);
+                         kType_, base::Value::Dict(), 0,
+                         ReportingTargetType::kDeveloper);
   expected_commands.emplace_back(
       CommandType::UPDATE_REPORTING_ENDPOINT_GROUP_ACCESS_TIME, kGroupKey_);
   EXPECT_THAT(store()->GetAllCommands(),
@@ -535,7 +579,8 @@ TEST_P(ReportingServiceTest, WaitUntilLoadFinishesBeforeWritingToStore) {
               testing::UnorderedElementsAreArray(expected_commands));
 
   service()->QueueReport(kUrl_, kReportingSource_, kNak_, kUserAgent_, kGroup_,
-                         kType_, base::Value::Dict(), 0);
+                         kType_, base::Value::Dict(), 0,
+                         ReportingTargetType::kDeveloper);
   EXPECT_THAT(store()->GetAllCommands(),
               testing::UnorderedElementsAreArray(expected_commands));
 

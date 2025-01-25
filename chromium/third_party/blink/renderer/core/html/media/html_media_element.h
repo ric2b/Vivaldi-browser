@@ -414,8 +414,9 @@ class CORE_EXPORT HTMLMediaElement
   // reason while in picture in picture mode.
   LocalFrame* LocalFrameForPlayer();
 
-  bool IsValidInvokeAction(HTMLElement& invoker, InvokeAction action) override;
-  bool HandleInvokeInternal(HTMLElement& invoker, InvokeAction action) override;
+  bool IsValidCommand(HTMLElement& invoker, CommandEventType command) override;
+  bool HandleCommandInternal(HTMLElement& invoker,
+                             CommandEventType command) override;
 
  protected:
   // Assert the correct order of the children in shadow dom when DCHECK is on.
@@ -457,6 +458,9 @@ class CORE_EXPORT HTMLMediaElement
   virtual void OnWebMediaPlayerCleared() {}
 
   void UpdateLayoutObject();
+
+  virtual void RecordVideoOcclusionState(
+      std::string_view occlusion_state) const {}
 
  private:
   // Friend class for testing.
@@ -541,6 +545,8 @@ class CORE_EXPORT HTMLMediaElement
   void OnFirstFrame(base::TimeTicks frame_time,
                     size_t bytes_to_first_frame) override {}
 
+  int GetElementId() override { return GetDomNodeId(); }
+
   void SetCcLayer(cc::Layer*) final;
   WebMediaPlayer::TrackId AddAudioTrack(const WebString&,
                                         WebMediaPlayerClient::AudioTrackKind,
@@ -554,7 +560,7 @@ class CORE_EXPORT HTMLMediaElement
                                         const WebString&,
                                         bool) final;
   void RemoveVideoTrack(WebMediaPlayer::TrackId) final;
-  void MediaSourceOpened(WebMediaSource*) final;
+  void MediaSourceOpened(std::unique_ptr<WebMediaSource>) final;
   void RemotePlaybackCompatibilityChanged(const WebURL&,
                                           bool is_compatible) final;
   bool HasSelectedVideoTrack() final;
@@ -608,6 +614,8 @@ class CORE_EXPORT HTMLMediaElement
   void SetAudioSinkId(const String&) override;
   void SuspendForFrameClosed() override;
   void RequestMediaRemoting() override {}
+  void RequestVisibility(
+      RequestVisibilityCallback request_visibility_cb) override {}
 
   void LoadTimerFired(TimerBase*);
   void ProgressEventTimerFired();
@@ -621,8 +629,7 @@ class CORE_EXPORT HTMLMediaElement
   void FinishSeek();
   void AddPlayedRange(double start, double end);
 
-  // FIXME: Rename to scheduleNamedEvent for clarity.
-  void ScheduleEvent(const AtomicString& event_name);
+  void ScheduleNamedEvent(const AtomicString& event_name);
 
   // loading
   void InvokeLoadAlgorithm();

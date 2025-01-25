@@ -16,6 +16,7 @@
 
 package com.google.security.cryptauth.lib.securegcm.ukey2;
 
+import com.google.security.cryptauth.lib.securegcm.ukey2.D2DHandshakeContext.NextProtocol;
 import com.google.security.cryptauth.lib.securegcm.ukey2.D2DHandshakeContext.Role;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
@@ -43,15 +44,19 @@ public class Ukey2Benchmark {
     D2DConnectionContextV1 connContext;
     D2DConnectionContextV1 serverConnContext;
 
-    @Param({"10", "1024"})
+    @Param({"10", "512", "1024"})
     int sizeKibs;
+
+    @Param NextProtocol nextProtocol;
 
     byte[] inputBytes;
 
     @Setup
     public void setup() throws Exception {
-      D2DHandshakeContext initiatorContext = new D2DHandshakeContext(Role.INITIATOR);
-      D2DHandshakeContext serverContext = new D2DHandshakeContext(Role.RESPONDER);
+      D2DHandshakeContext initiatorContext =
+          new D2DHandshakeContext(Role.INITIATOR, new NextProtocol[] {nextProtocol});
+      D2DHandshakeContext serverContext =
+          new D2DHandshakeContext(Role.RESPONDER, new NextProtocol[] {nextProtocol});
       serverContext.parseHandshakeMessage(initiatorContext.getNextHandshakeMessage());
       initiatorContext.parseHandshakeMessage(serverContext.getNextHandshakeMessage());
       serverContext.parseHandshakeMessage(initiatorContext.getNextHandshakeMessage());

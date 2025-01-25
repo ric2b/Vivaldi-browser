@@ -25,6 +25,7 @@ limitations under the License.
 #include <vector>
 
 #include "absl/container/inlined_vector.h"
+#include "absl/status/status.h"
 #include "absl/types/span.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
@@ -33,8 +34,8 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/hlo/ir/hlo_sharding.h"
 #include "xla/service/call_graph.h"
+#include "xla/service/dot_as_convolution_util.h"
 #include "xla/shape.h"
-#include "xla/statusor.h"
 #include "xla/util.h"
 
 namespace xla {
@@ -68,9 +69,12 @@ bool MergeSharding(const HloSharding& to_merge, HloSharding* dst,
                    bool may_combine_partial_sharding);
 
 // Merges `to_merge` into `dst` only if they are compatible, and the merged
-// sharding has >= minimum_tiles tiles. Returns if merging happened.
+// sharding has >= `minimum_tiles` tiles. Returns if merging happened.
 bool MergeShardingIfCompatible(const HloSharding& to_merge,
                                int64_t minimum_tiles, HloSharding* dst);
+
+// Same as above, but with `minimum_tiles` = `dst->NumTiles() + 1`.
+bool MergeShardingIfCompatible(const HloSharding& to_merge, HloSharding* dst);
 
 // Find a reasonable common sharding for a list of shardings. The reasonable
 // sharding should incur little(the least) amount of total resharding cost when
@@ -352,6 +356,14 @@ GetGatherScatterIndexPassthroughOutputOrUpdateDims(
     const int64_t output_or_update_rank,
     absl::Span<const int64_t> offset_or_window_dims);
 
+// Infer output sharding on index parallel dimensions for gather/scatter from
+// gather operand/indices or scatter operands/indices/updates.
+HloSharding InferGatherScatterParallelShardingFromOperandSharding(
+    const HloSharding& operand_sharding, const Shape& operand_shape,
+    const Shape& shape,
+    absl::Span<const int64_t> output_aligned_operand_parallel_dims,
+    absl::Span<const int64_t> output_parallel_dims);
+
 // Returns the parallel dimensions of the data operand of a gather/scatter with
 // the order of the parallel dimensions matching that of the parallel dimensions
 // of the indices.
@@ -373,6 +385,7 @@ struct GroupedSharding {
         sharding(std::move(grouped_sharding)),
         subgroup_manual(subgroup_manual) {}
   std::string ToString() const;
+  // TODO(b/316622399): Migrate this to be a TileAssignment.
   std::vector<std::vector<int64_t>> device_groups;
   DimensionVector group_dims;
   DimensionVector group_dim_sizes;
@@ -486,6 +499,45 @@ Shape TileShape(const HloSharding& sharding, const Shape& shape);
 // Returns the tiled shape.
 // REQUIRES: !sharding.IsTuple()
 Shape TileLeafShape(const HloSharding& sharding, const Shape& shape);
+
+// Canonicalizes entry_computation_layout by calling
+// module->layout_canonicalization_callback(), which gives canonicalized
+// argument and result layouts based on current module. Currently used by PJRT
+// that assigns layouts based on runtime shapes. Refer to
+// DetermineArgumentLayoutsFromCompileOptions() in
+// tensorflow/compiler/xla/pjrt/utils.h.
+absl::Status CanonicalizeLayoutAfterShardingPropagation(
+    HloModule* module, bool update_output_layout,
+    bool update_parameters_layout);
+
+// Returns true iff the specified hlo or sharding has a spatially partitioned
+// sharding (tiled or replicated) that can be propagated by sharding
+// propagation.
+bool IsSpatiallyPartitioned(const HloSharding& sharding);
+
+// Similar to above but takes a instruction as an input.
+inline bool IsSpatiallyPartitioned(const HloInstruction* hlo) {
+  return hlo->has_sharding() && IsSpatiallyPartitioned(hlo->sharding());
+}
+
+// Implementation for returning a improved sharding from another sharding.
+std::optional<HloSharding> ReturnImprovedShardingImpl(
+    HloSharding from, const HloSharding* to_improved,
+    const Shape& to_improved_shape, bool may_combine_partial_sharding,
+    bool allow_aggressive_resharding = false);
+
+// Infers the sharding of the operand of a dot operation.
+//
+// If `operand_index` is 0, the sharding of the LHS is inferred. If it is 1,
+// the sharding of the RHS is inferred.
+//
+// If `consider_other_operand` is true, the sharding of the other operand is
+// considered. `may_combine_partial_sharding` is used when considering other
+// operand.
+HloSharding InferDotOperandSharding(
+    const HloInstruction* dot, int64_t operand_index,
+    const dot_as_convolution_util::DotConvolutionDimsInfo& dnums,
+    bool consider_other_operand, bool may_combine_partial_sharding);
 
 }  // namespace hlo_sharding_util
 }  // namespace xla

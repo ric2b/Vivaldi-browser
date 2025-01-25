@@ -12,9 +12,9 @@
 #import "base/strings/string_number_conversions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/prefs/pref_service.h"
-#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
 #import "ios/chrome/browser/shared/coordinator/default_browser_promo/non_modal_default_browser_promo_scheduler_scene_agent.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/url/url_util.h"
 #import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
 #import "ios/chrome/browser/shared/public/commands/qr_generation_commands.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -54,7 +54,7 @@
 
 @property(nonatomic, assign) PrefService* prefService;
 
-@property(nonatomic, assign) bookmarks::CoreBookmarkModel* bookmarkModel;
+@property(nonatomic, assign) bookmarks::BookmarkModel* bookmarkModel;
 
 @property(nonatomic, weak) UIViewController* baseViewController;
 
@@ -74,7 +74,7 @@
                bookmarksHandler:(id<BookmarksCommands>)bookmarksHandler
             qrGenerationHandler:(id<QRGenerationCommands>)qrGenerationHandler
                     prefService:(PrefService*)prefService
-                  bookmarkModel:(bookmarks::CoreBookmarkModel*)bookmarkModel
+                  bookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel
              baseViewController:(UIViewController*)baseViewController
                 navigationAgent:(WebNavigationBrowserAgent*)navigationAgent
         readingListBrowserAgent:
@@ -165,6 +165,11 @@
                       handler:self.handler
               navigationAgent:self.navigationAgent];
     [applicationActivities addObject:requestActivity];
+  } else if (UrlIsDownloadedFile(data.shareURL) ||
+             UrlIsExternalFileReference(data.shareURL)) {
+    FindInPageActivity* findInPageActivity =
+        [[FindInPageActivity alloc] initWithData:data handler:self.handler];
+    [applicationActivities addObject:findInPageActivity];
   }
 
   if (self.prefService->GetBoolean(prefs::kPrintingEnabled)) {

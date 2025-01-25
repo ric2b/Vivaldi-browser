@@ -68,12 +68,13 @@ TEST_F(QueueSubmitValidationTest, SubmitWithMappedBuffer) {
     }
 
     // Map the buffer, submitting when the buffer is mapped should fail
-    buffer.MapAsync(wgpu::MapMode::Write, 0, kBufferSize, nullptr, nullptr);
+    buffer.MapAsync(wgpu::MapMode::Write, 0, kBufferSize, wgpu::CallbackMode::AllowProcessEvents,
+                    [](wgpu::MapAsyncStatus, const char*) {});
 
     // Try submitting before the callback is fired.
     ASSERT_DEVICE_ERROR(queue.Submit(1, &commands));
 
-    WaitForAllOperations(device);
+    WaitForAllOperations();
 
     {
         wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
@@ -132,7 +133,8 @@ TEST_F(QueueSubmitValidationTest, CommandBufferSubmittedFailed) {
     wgpu::Queue queue = device.GetQueue();
 
     // Map the source buffer to force a failure
-    buffer.MapAsync(wgpu::MapMode::Write, 0, kBufferSize, nullptr, nullptr);
+    buffer.MapAsync(wgpu::MapMode::Write, 0, kBufferSize, wgpu::CallbackMode::AllowProcessEvents,
+                    [](wgpu::MapAsyncStatus, const char*) {});
 
     // Submitting a command buffer with a mapped buffer should fail
     ASSERT_DEVICE_ERROR(queue.Submit(1, &commands));
@@ -152,42 +154,19 @@ TEST_F(QueueSubmitValidationTest, SubmitInBufferMapCallback) {
     descriptor.usage = wgpu::BufferUsage::MapWrite;
     wgpu::Buffer buffer = device.CreateBuffer(&descriptor);
 
-    struct CallbackData {
-        wgpu::Device device;
-        wgpu::Buffer buffer;
-    } callbackData = {device, buffer};
+    buffer.MapAsync(wgpu::MapMode::Write, 0, descriptor.size,
+                    wgpu::CallbackMode::AllowProcessEvents,
+                    [buffer, queue = device.GetQueue()](wgpu::MapAsyncStatus, const char*) {
+                        buffer.Unmap();
+                        queue.Submit(0, nullptr);
+                    });
 
-    const auto callback = [](WGPUBufferMapAsyncStatus status, void* userdata) {
-        CallbackData* data = reinterpret_cast<CallbackData*>(userdata);
-
-        data->buffer.Unmap();
-
-        wgpu::Queue queue = data->device.GetQueue();
-        queue.Submit(0, nullptr);
-    };
-
-    buffer.MapAsync(wgpu::MapMode::Write, 0, descriptor.size, callback, &callbackData);
-
-    WaitForAllOperations(device);
+    WaitForAllOperations();
 }
 
 // Test that submitting in a render pipeline creation callback doesn't cause re-entrance
 // problems.
 TEST_F(QueueSubmitValidationTest, SubmitInCreateRenderPipelineAsyncCallback) {
-    struct CallbackData {
-        wgpu::Device device;
-    } callbackData = {device};
-
-    const auto callback = [](WGPUCreatePipelineAsyncStatus status, WGPURenderPipeline pipeline,
-                             char const* message, void* userdata) {
-        CallbackData* data = reinterpret_cast<CallbackData*>(userdata);
-
-        wgpuRenderPipelineRelease(pipeline);
-
-        wgpu::Queue queue = data->device.GetQueue();
-        queue.Submit(0, nullptr);
-    };
-
     wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
             @vertex fn main() -> @builtin(position) vec4f {
                 return vec4f(0.0, 0.0, 0.0, 1.0);
@@ -201,35 +180,33 @@ TEST_F(QueueSubmitValidationTest, SubmitInCreateRenderPipelineAsyncCallback) {
     utils::ComboRenderPipelineDescriptor descriptor;
     descriptor.vertex.module = vsModule;
     descriptor.cFragment.module = fsModule;
-    device.CreateRenderPipelineAsync(&descriptor, callback, &callbackData);
+    device.CreateRenderPipelineAsync(
+        &descriptor, wgpu::CallbackMode::AllowProcessEvents,
+        [device = this->device](wgpu::CreatePipelineAsyncStatus, wgpu::RenderPipeline pipeline,
+                                char const*) {
+            pipeline = nullptr;
+            device.GetQueue().Submit(0, nullptr);
+        });
 
-    WaitForAllOperations(device);
+    WaitForAllOperations();
 }
 
 // Test that submitting in a compute pipeline creation callback doesn't cause re-entrance
 // problems.
 TEST_F(QueueSubmitValidationTest, SubmitInCreateComputePipelineAsyncCallback) {
-    struct CallbackData {
-        wgpu::Device device;
-    } callbackData = {device};
-
-    const auto callback = [](WGPUCreatePipelineAsyncStatus status, WGPUComputePipeline pipeline,
-                             char const* message, void* userdata) {
-        CallbackData* data = reinterpret_cast<CallbackData*>(userdata);
-
-        wgpuComputePipelineRelease(pipeline);
-
-        wgpu::Queue queue = data->device.GetQueue();
-        queue.Submit(0, nullptr);
-    };
-
     wgpu::ComputePipelineDescriptor descriptor;
     descriptor.compute.module = utils::CreateShaderModule(device, R"(
             @compute @workgroup_size(1) fn main() {
             })");
-    device.CreateComputePipelineAsync(&descriptor, callback, &callbackData);
+    device.CreateComputePipelineAsync(
+        &descriptor, wgpu::CallbackMode::AllowProcessEvents,
+        [device = this->device](wgpu::CreatePipelineAsyncStatus, wgpu::ComputePipeline pipeline,
+                                char const*) {
+            pipeline = nullptr;
+            device.GetQueue().Submit(0, nullptr);
+        });
 
-    WaitForAllOperations(device);
+    WaitForAllOperations();
 }
 
 // Test that buffers in unused compute pass bindgroups are still checked for in

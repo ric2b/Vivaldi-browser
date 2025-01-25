@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "xfa/fgas/crt/cfgas_decimal.h"
 
 #include <math.h>
@@ -18,6 +13,7 @@
 #include <utility>
 
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_extension.h"
 
 #define FXMATH_DECIMAL_SCALELIMIT 0x1c
@@ -41,10 +37,12 @@ inline uint8_t decimal_helper_div10(uint64_t& phi,
 
 inline uint8_t decimal_helper_div10_any(uint64_t nums[], uint8_t numcount) {
   uint8_t retVal = 0;
-  for (int i = numcount - 1; i > 0; i--) {
-    nums[i - 1] += FXMATH_DECIMAL_LSHIFT32BIT(nums[i] % 0xA);
-    nums[i] /= 0xA;
-  }
+  UNSAFE_TODO({
+    for (int i = numcount - 1; i > 0; i--) {
+      nums[i - 1] += FXMATH_DECIMAL_LSHIFT32BIT(nums[i] % 0xA);
+      nums[i] /= 0xA;
+    }
+  });
   if (numcount) {
     retVal = nums[0] % 0xA;
     nums[0] /= 0xA;
@@ -62,10 +60,12 @@ inline void decimal_helper_mul10(uint64_t& phi, uint64_t& pmid, uint64_t& plo) {
 
 inline void decimal_helper_mul10_any(uint64_t nums[], uint8_t numcount) {
   nums[0] *= 0xA;
-  for (int i = 1; i < numcount; i++) {
-    nums[i] = nums[i] * 0xA + FXMATH_DECIMAL_RSHIFT32BIT(nums[i - 1]);
-    nums[i - 1] = (uint32_t)nums[i - 1];
-  }
+  UNSAFE_TODO({
+    for (int i = 1; i < numcount; i++) {
+      nums[i] = nums[i] * 0xA + FXMATH_DECIMAL_RSHIFT32BIT(nums[i - 1]);
+      nums[i - 1] = (uint32_t)nums[i - 1];
+    }
+  });
 }
 
 inline void decimal_helper_normalize(uint64_t& phi,
@@ -80,14 +80,16 @@ inline void decimal_helper_normalize(uint64_t& phi,
 }
 
 inline void decimal_helper_normalize_any(uint64_t nums[], uint8_t len) {
-  for (int i = len - 2; i > 0; i--) {
-    nums[i + 1] += FXMATH_DECIMAL_RSHIFT32BIT(nums[i]);
-    nums[i] = (uint32_t)nums[i];
-  }
-  for (int i = 0; i < len - 1; i++) {
-    nums[i + 1] += FXMATH_DECIMAL_RSHIFT32BIT(nums[i]);
-    nums[i] = (uint32_t)nums[i];
-  }
+  UNSAFE_TODO({
+    for (int i = len - 2; i > 0; i--) {
+      nums[i + 1] += FXMATH_DECIMAL_RSHIFT32BIT(nums[i]);
+      nums[i] = (uint32_t)nums[i];
+    }
+    for (int i = 0; i < len - 1; i++) {
+      nums[i + 1] += FXMATH_DECIMAL_RSHIFT32BIT(nums[i]);
+      nums[i] = (uint32_t)nums[i];
+    }
+  });
 }
 
 inline int8_t decimal_helper_raw_compare_any(uint64_t a[],
@@ -95,29 +97,38 @@ inline int8_t decimal_helper_raw_compare_any(uint64_t a[],
                                              uint64_t b[],
                                              uint8_t bl) {
   int8_t retVal = 0;
-  for (int i = std::max(al - 1, bl - 1); i >= 0; i--) {
-    uint64_t l = (i >= al ? 0 : a[i]), r = (i >= bl ? 0 : b[i]);
-    retVal += (l > r ? 1 : (l < r ? -1 : 0));
-    if (retVal)
-      return retVal;
-  }
+  UNSAFE_TODO({
+    for (int i = std::max(al - 1, bl - 1); i >= 0; i--) {
+      uint64_t l = (i >= al ? 0 : a[i]), r = (i >= bl ? 0 : b[i]);
+      retVal += (l > r ? 1 : (l < r ? -1 : 0));
+      if (retVal) {
+        return retVal;
+      }
+    }
+  });
   return retVal;
 }
 
 inline void decimal_helper_dec_any(uint64_t a[], uint8_t al) {
-  for (int i = 0; i < al; i++) {
-    if (a[i]--)
-      return;
-  }
+  UNSAFE_TODO({
+    for (int i = 0; i < al; i++) {
+      if (a[i]--) {
+        return;
+      }
+    }
+  });
 }
 
 inline void decimal_helper_inc_any(uint64_t a[], uint8_t al) {
-  for (int i = 0; i < al; i++) {
-    a[i]++;
-    if ((uint32_t)a[i] == a[i])
-      return;
-    a[i] = 0;
-  }
+  UNSAFE_TODO({
+    for (int i = 0; i < al; i++) {
+      a[i]++;
+      if ((uint32_t)a[i] == a[i]) {
+        return;
+      }
+      a[i] = 0;
+    }
+  });
 }
 
 inline void decimal_helper_raw_mul(uint64_t a[],
@@ -127,22 +138,26 @@ inline void decimal_helper_raw_mul(uint64_t a[],
                                    uint64_t c[],
                                    uint8_t cl) {
   DCHECK(al + bl <= cl);
-  for (int i = 0; i < cl; i++)
-    c[i] = 0;
-
-  for (int i = 0; i < al; i++) {
-    for (int j = 0; j < bl; j++) {
-      uint64_t m = (uint64_t)a[i] * b[j];
-      c[i + j] += (uint32_t)m;
-      c[i + j + 1] += FXMATH_DECIMAL_RSHIFT32BIT(m);
+  UNSAFE_TODO({
+    for (int i = 0; i < cl; i++) {
+      c[i] = 0;
     }
-  }
-  for (int i = 0; i < cl - 1; i++) {
-    c[i + 1] += FXMATH_DECIMAL_RSHIFT32BIT(c[i]);
-    c[i] = (uint32_t)c[i];
-  }
-  for (int i = 0; i < cl; i++)
-    c[i] = (uint32_t)c[i];
+
+    for (int i = 0; i < al; i++) {
+      for (int j = 0; j < bl; j++) {
+        uint64_t m = (uint64_t)a[i] * b[j];
+        c[i + j] += (uint32_t)m;
+        c[i + j + 1] += FXMATH_DECIMAL_RSHIFT32BIT(m);
+      }
+    }
+    for (int i = 0; i < cl - 1; i++) {
+      c[i + 1] += FXMATH_DECIMAL_RSHIFT32BIT(c[i]);
+      c[i] = (uint32_t)c[i];
+    }
+    for (int i = 0; i < cl; i++) {
+      c[i] = (uint32_t)c[i];
+    }
+  });
 }
 
 inline void decimal_helper_raw_div(uint64_t a[],
@@ -151,56 +166,69 @@ inline void decimal_helper_raw_div(uint64_t a[],
                                    uint8_t bl,
                                    uint64_t c[],
                                    uint8_t cl) {
-  for (int i = 0; i < cl; i++)
-    c[i] = 0;
-
-  uint64_t left[16] = {0};
-  uint64_t right[16] = {0};
-  left[0] = 0;
-  for (int i = 0; i < al; i++)
-    right[i] = a[i];
-
-  uint64_t tmp[16];
-  while (decimal_helper_raw_compare_any(left, al, right, al) <= 0) {
-    uint64_t cur[16];
-    for (int i = 0; i < al; i++)
-      cur[i] = left[i] + right[i];
-
-    for (int i = al - 1; i >= 0; i--) {
-      if (i)
-        cur[i - 1] += FXMATH_DECIMAL_LSHIFT32BIT(cur[i] % 2);
-      cur[i] /= 2;
+  UNSAFE_TODO({
+    for (int i = 0; i < cl; i++) {
+      c[i] = 0;
     }
 
-    decimal_helper_raw_mul(cur, al, b, bl, tmp, 16);
-    switch (decimal_helper_raw_compare_any(tmp, 16, a, al)) {
-      case -1:
-        for (int i = 0; i < 16; i++)
-          left[i] = cur[i];
-
-        left[0]++;
-        decimal_helper_normalize_any(left, al);
-        break;
-      case 1:
-        for (int i = 0; i < 16; i++)
-          right[i] = cur[i];
-        decimal_helper_dec_any(right, al);
-        break;
-      case 0:
-        for (int i = 0; i < std::min(al, cl); i++)
-          c[i] = cur[i];
-        return;
+    uint64_t left[16] = {0};
+    uint64_t right[16] = {0};
+    left[0] = 0;
+    for (int i = 0; i < al; i++) {
+      right[i] = a[i];
     }
-  }
-  for (int i = 0; i < std::min(al, cl); i++)
-    c[i] = left[i];
+
+    uint64_t tmp[16];
+    while (decimal_helper_raw_compare_any(left, al, right, al) <= 0) {
+      uint64_t cur[16];
+      for (int i = 0; i < al; i++) {
+        cur[i] = left[i] + right[i];
+      }
+
+      for (int i = al - 1; i >= 0; i--) {
+        if (i) {
+          cur[i - 1] += FXMATH_DECIMAL_LSHIFT32BIT(cur[i] % 2);
+        }
+        cur[i] /= 2;
+      }
+
+      decimal_helper_raw_mul(cur, al, b, bl, tmp, 16);
+      switch (decimal_helper_raw_compare_any(tmp, 16, a, al)) {
+        case -1:
+          for (int i = 0; i < 16; i++) {
+            left[i] = cur[i];
+          }
+
+          left[0]++;
+          decimal_helper_normalize_any(left, al);
+          break;
+        case 1:
+          for (int i = 0; i < 16; i++) {
+            right[i] = cur[i];
+          }
+          decimal_helper_dec_any(right, al);
+          break;
+        case 0:
+          for (int i = 0; i < std::min(al, cl); i++) {
+            c[i] = cur[i];
+          }
+          return;
+      }
+    }
+    for (int i = 0; i < std::min(al, cl); i++) {
+      c[i] = left[i];
+    }
+  });
 }
 
 inline bool decimal_helper_outofrange(uint64_t a[], uint8_t al, uint8_t goal) {
-  for (int i = goal; i < al; i++) {
-    if (a[i])
-      return true;
-  }
+  UNSAFE_TODO({
+    for (int i = goal; i < al; i++) {
+      if (a[i]) {
+        return true;
+      }
+    }
+  });
   return false;
 }
 
@@ -297,34 +325,36 @@ CFGAS_Decimal::CFGAS_Decimal(float val, uint8_t scale) {
   m_uScale = scale;
 }
 
-CFGAS_Decimal::CFGAS_Decimal(WideStringView strObj) {
-  const wchar_t* str = strObj.unterminated_c_str();
-  const wchar_t* strBound = str + strObj.GetLength();
+CFGAS_Decimal::CFGAS_Decimal(WideStringView str) {
   bool pointmet = false;
   bool negmet = false;
   uint8_t scale = 0;
-  while (str != strBound && *str == ' ')
-    str++;
-  if (str != strBound && *str == '-') {
-    negmet = true;
-    str++;
-  } else if (str != strBound && *str == '+') {
-    str++;
+  // Note: Rely on WideStringView::Front() => NUL on empty strings.
+  while (str.Front() == ' ') {
+    str = str.Substr(1);
   }
-
-  while (str != strBound && (FXSYS_IsDecimalDigit(*str) || *str == '.') &&
-         scale < FXMATH_DECIMAL_SCALELIMIT) {
-    if (*str == '.') {
-      if (!pointmet)
-        pointmet = true;
-    } else {
-      m_uHi = m_uHi * 0xA + FXMATH_DECIMAL_RSHIFT32BIT((uint64_t)m_uMid * 0xA);
-      m_uMid = m_uMid * 0xA + FXMATH_DECIMAL_RSHIFT32BIT((uint64_t)m_uLo * 0xA);
-      m_uLo = m_uLo * 0xA + (*str - '0');
-      if (pointmet)
-        scale++;
+  if (str.Front() == '-') {
+    negmet = true;
+    str = str.Substr(1);
+  } else if (str.Front() == '+') {
+    str = str.Substr(1);
+  }
+  while (scale < FXMATH_DECIMAL_SCALELIMIT) {
+    if (str.Front() == '.') {
+      pointmet = true;
+      str = str.Substr(1);
+      continue;
     }
-    str++;
+    if (!FXSYS_IsDecimalDigit(static_cast<wchar_t>(str.Front()))) {
+      break;
+    }
+    m_uHi = m_uHi * 0xA + FXMATH_DECIMAL_RSHIFT32BIT((uint64_t)m_uMid * 0xA);
+    m_uMid = m_uMid * 0xA + FXMATH_DECIMAL_RSHIFT32BIT((uint64_t)m_uLo * 0xA);
+    m_uLo = m_uLo * 0xA + (str.Front() - '0');
+    if (pointmet) {
+      scale++;
+    }
+    str = str.Substr(1);
   }
   m_bNeg = negmet && IsNotZero();
   m_uScale = scale;

@@ -32,102 +32,37 @@ cmake_minimum_required(VERSION 3.13)
 #   in case any of the generator files changes. We should also remove the CACHE "" FORCE stuff to
 #   override options in third_party dependencies.
 # - When upgrading to CMake 3.20 we can take advantage of the GENERATED property being global in
-#   DawnGenerator. We should also use the path utilities in install_if_enabled.
+#   DawnGenerator. We should also use the path utilities in dawn_install_target.
 
 project(
     Dawn
     DESCRIPTION "Dawn, a WebGPU implementation"
     LANGUAGES C CXX
     HOMEPAGE_URL "https://dawn.googlesource.com/dawn"
+    VERSION 0.0.0
 )
 enable_testing()
+
+list(INSERT CMAKE_MODULE_PATH 0 "${Dawn_SOURCE_DIR}/src/cmake")
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_DEBUG_POSTFIX "")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-if ("${CMAKE_BUILD_TYPE}" STREQUAL "")
-  message(STATUS "No build type selected, default to Debug")
-  set(CMAKE_BUILD_TYPE "Debug")
-endif()
+include(DawnSetIfNotDefined)
 
-set(DAWN_BUILD_GEN_DIR "${Dawn_BINARY_DIR}/gen")
-set(DAWN_GENERATOR_DIR "${Dawn_SOURCE_DIR}/generator")
-set(DAWN_SRC_DIR "${Dawn_SOURCE_DIR}/src")
-set(DAWN_INCLUDE_DIR "${Dawn_SOURCE_DIR}/include")
-set(DAWN_TEMPLATE_DIR "${DAWN_GENERATOR_DIR}/templates")
+set(DAWN_BUILD_GEN_DIR "${Dawn_BINARY_DIR}/gen" CACHE PATH "Directory that contains generated source files")
+set(DAWN_GENERATOR_DIR "${Dawn_SOURCE_DIR}/generator" CACHE PATH "Directory that contains scripts to generate sources and headers")
+set(DAWN_SRC_DIR "${Dawn_SOURCE_DIR}/src" CACHE PATH "Directory that contains source files for dawn")
+set(DAWN_INCLUDE_DIR "${Dawn_SOURCE_DIR}/include" CACHE PATH "Directory that contains public headers for dawn")
+set(DAWN_TEMPLATE_DIR "${DAWN_GENERATOR_DIR}/templates" CACHE PATH "Directory that contains templates for generators")
 
 ################################################################################
 # Configuration options
 ################################################################################
-
-# option_if_not_defined(name description default)
-# Behaves like:
-#   option(name description default)
-# If a variable is not already defined with the given name, otherwise the
-# function does nothing.
-# Simplifies customization by projects that use Dawn as a dependency.
-function (option_if_not_defined name description default)
-    if(NOT DEFINED ${name})
-        option(${name} ${description} ${default})
-    endif()
-endfunction()
-
-# set_if_not_defined(name value description)
-# Behaves like:
-#   set(${name} ${value} CACHE STRING ${description})
-# If a variable is not already defined with the given name, otherwise the
-# function does nothing.
-# Simplifies customization by projects that use Dawn as a dependency.
-function (set_if_not_defined name value description)
-    if(NOT DEFINED ${name})
-        set(${name} ${value} CACHE STRING ${description})
-    endif()
-endfunction()
-
-function (install_if_enabled target)
-    if(NOT DAWN_ENABLE_INSTALL)
-        return()
-    endif()
-
-    install(TARGETS ${target}
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    )
-
-    get_target_property(targetHeaders ${target} INTERFACE_SOURCES)
-    if (NOT targetHeaders)
-        return()
-    endif()
-
-    foreach(headerFile ${targetHeaders})
-        # Starting from CMake 3.20 there is the cmake_path command that could simplify this code.
-        # Compute the install subdirectory for the header by stripping out the path to
-        # the include / gen/include directory...
-        string(FIND "${headerFile}" "${DAWN_INCLUDE_DIR}" foundIndex)
-        if (foundIndex EQUAL 0)
-            string(LENGTH "${DAWN_INCLUDE_DIR}/" lengthToRemove)
-        endif()
-        string(FIND "${headerFile}" "${DAWN_BUILD_GEN_DIR}/include/" foundIndex)
-        if (foundIndex EQUAL 0)
-            string(LENGTH "${DAWN_BUILD_GEN_DIR}/include/" lengthToRemove)
-        endif()
-        string(SUBSTRING "${headerFile}" "${lengthToRemove}" -1 headerRelDir)
-
-        # ... then remove everything after the last /
-        string(FIND "${headerRelDir}" "/" foundIndex REVERSE)
-        string(SUBSTRING "${headerRelDir}" 0 ${foundIndex} headerRelDir)
-
-        install(FILES "${headerFile}" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${headerRelDir})
-    endforeach()
-endfunction()
-
-
 # Default values for the backend-enabling options
 set(ENABLE_D3D11 OFF)
 set(ENABLE_D3D12 OFF)
@@ -135,6 +70,7 @@ set(ENABLE_METAL OFF)
 set(ENABLE_OPENGLES OFF)
 set(ENABLE_DESKTOP_GL OFF)
 set(ENABLE_VULKAN OFF)
+set(ENABLE_SPIRV_VALIDATION OFF)
 set(USE_WAYLAND OFF)
 set(USE_X11 OFF)
 set(USE_WINDOWS_UI OFF)
@@ -144,24 +80,29 @@ if (WIN32)
     set(ENABLE_D3D11 ON)
     set(USE_WINDOWS_UI ON)
     set(ENABLE_D3D12 ON)
-    if (NOT WINDOWS_STORE)
-        # Enable Vulkan in win32 compilation only
-        # since UWP only supports d3d
-        set(ENABLE_VULKAN ON)
-    endif()
+  if (NOT WINDOWS_STORE)
+    # Enable Vulkan in win32 compilation only
+    # since UWP only supports d3d
+    set(ENABLE_VULKAN ON)
+    set(ENABLE_SPIRV_VALIDATION ON)
+  endif()
 elseif(APPLE)
-    set(ENABLE_METAL ON)
-    if(CMAKE_SYSTEM_NAME MATCHES "Darwin" OR CMAKE_SYSTEM_NAME MATCHES "MacOS")
-      set(TARGET_MACOS ON)
-    endif()
+  set(ENABLE_METAL ON)
+  if(CMAKE_SYSTEM_NAME MATCHES "Darwin" OR CMAKE_SYSTEM_NAME MATCHES "MacOS")
+    set(TARGET_MACOS ON)
+  endif()
 elseif(ANDROID)
-    set(ENABLE_VULKAN ON)
-    set(ENABLE_OPENGLES ON)
+  set(ENABLE_VULKAN ON)
+  set(ENABLE_OPENGLES ON)
+  # Disable SPIR-V validation on Android because it adds a significant amount
+  # to the binary size, and Tint's output should be well-formed.
+  set(ENABLE_SPIRV_VALIDATION OFF)
 elseif(UNIX)
-    set(ENABLE_OPENGLES ON)
-    set(ENABLE_DESKTOP_GL ON)
-    set(ENABLE_VULKAN ON)
-    set(USE_X11 ON)
+  set(ENABLE_OPENGLES ON)
+  set(ENABLE_DESKTOP_GL ON)
+  set(ENABLE_VULKAN ON)
+  set(ENABLE_SPIRV_VALIDATION ON)
+  set(USE_X11 ON)
 endif()
 
 # GLFW is not supported in UWP
@@ -176,38 +117,40 @@ if (DAWN_SUPPORTS_GLFW_FOR_WINDOWING)
     set(BUILD_SAMPLES ON)
 endif()
 
-option_if_not_defined(DAWN_ENABLE_ASAN "Enable address sanitizer" OFF)
-option_if_not_defined(DAWN_ENABLE_INSTALL "Enable install step for Dawn libraries" OFF)
-option_if_not_defined(DAWN_ENABLE_TSAN "Enable thread sanitizer" OFF)
-option_if_not_defined(DAWN_ENABLE_MSAN "Enable memory sanitizer" OFF)
-option_if_not_defined(DAWN_ENABLE_UBSAN "Enable undefined behaviour sanitizer" OFF)
+option(DAWN_ENABLE_ASAN "Enable address sanitizer" OFF)
+option(DAWN_ENABLE_INSTALL "Enable install step for Dawn libraries" OFF)
+option(DAWN_ENABLE_TSAN "Enable thread sanitizer" OFF)
+option(DAWN_ENABLE_MSAN "Enable memory sanitizer" OFF)
+option(DAWN_ENABLE_UBSAN "Enable undefined behaviour sanitizer" OFF)
 
-option_if_not_defined(DAWN_ENABLE_D3D11 "Enable compilation of the D3D11 backend" ${ENABLE_D3D11})
-option_if_not_defined(DAWN_ENABLE_D3D12 "Enable compilation of the D3D12 backend" ${ENABLE_D3D12})
-option_if_not_defined(DAWN_ENABLE_METAL "Enable compilation of the Metal backend" ${ENABLE_METAL})
-option_if_not_defined(DAWN_ENABLE_NULL "Enable compilation of the Null backend" ON)
-option_if_not_defined(DAWN_ENABLE_DESKTOP_GL "Enable compilation of the OpenGL backend" ${ENABLE_DESKTOP_GL})
-option_if_not_defined(DAWN_ENABLE_OPENGLES "Enable compilation of the OpenGL ES backend" ${ENABLE_OPENGLES})
-option_if_not_defined(DAWN_ENABLE_VULKAN "Enable compilation of the Vulkan backend" ${ENABLE_VULKAN})
+option(DAWN_ENABLE_D3D11 "Enable compilation of the D3D11 backend" ${ENABLE_D3D11})
+option(DAWN_ENABLE_D3D12 "Enable compilation of the D3D12 backend" ${ENABLE_D3D12})
+option(DAWN_ENABLE_METAL "Enable compilation of the Metal backend" ${ENABLE_METAL})
+option(DAWN_ENABLE_NULL "Enable compilation of the Null backend" ON)
+option(DAWN_ENABLE_DESKTOP_GL "Enable compilation of the OpenGL backend" ${ENABLE_DESKTOP_GL})
+option(DAWN_ENABLE_OPENGLES "Enable compilation of the OpenGL ES backend" ${ENABLE_OPENGLES})
+option(DAWN_ENABLE_VULKAN "Enable compilation of the Vulkan backend" ${ENABLE_VULKAN})
+option(DAWN_ENABLE_SPIRV_VALIDATION "Enable validation of SPIR-V" ${ENABLE_SPIRV_VALIDATION})
 
-option_if_not_defined(DAWN_ALWAYS_ASSERT "Enable assertions on all build types" OFF)
-option_if_not_defined(DAWN_USE_WAYLAND "Enable support for Wayland surface" ${USE_WAYLAND})
-option_if_not_defined(DAWN_USE_X11 "Enable support for X11 surface" ${USE_X11})
-option_if_not_defined(DAWN_USE_GLFW "Enable compilation of the GLFW windowing utils" ${DAWN_SUPPORTS_GLFW_FOR_WINDOWING})
-option_if_not_defined(DAWN_USE_WINDOWS_UI "Enable support for Windows UI surface" ${USE_WINDOWS_UI})
-option_if_not_defined(DAWN_USE_BUILT_DXC "Enable building and using DXC by the D3D12 backend" OFF)
-option_if_not_defined(DAWN_DXC_DISABLE_ASSERTS_DEBUG "Disable asserts in DXC in debug builds" OFF)
-option_if_not_defined(DAWN_TARGET_MACOS "Manually link Apple core frameworks" ${TARGET_MACOS})
+option(DAWN_ALWAYS_ASSERT "Enable assertions on all build types" OFF)
+option(DAWN_USE_WAYLAND "Enable support for Wayland surface" ${USE_WAYLAND})
+option(DAWN_USE_X11 "Enable support for X11 surface" ${USE_X11})
+option(DAWN_USE_GLFW "Enable compilation of the GLFW windowing utils" ${DAWN_SUPPORTS_GLFW_FOR_WINDOWING})
+option(DAWN_USE_WINDOWS_UI "Enable support for Windows UI surface" ${USE_WINDOWS_UI})
+option(DAWN_USE_BUILT_DXC "Enable building and using DXC by the D3D12 backend" OFF)
+option(DAWN_DXC_DISABLE_ASSERTS_DEBUG "Disable asserts in DXC in debug builds" OFF)
+option(DAWN_TARGET_MACOS "Manually link Apple core frameworks" ${TARGET_MACOS})
 
-option_if_not_defined(DAWN_BUILD_SAMPLES "Enables building Dawn's samples" ${BUILD_SAMPLES})
-option_if_not_defined(DAWN_BUILD_NODE_BINDINGS "Enables building Dawn's NodeJS bindings" OFF)
-option_if_not_defined(DAWN_ENABLE_SWIFTSHADER "Enables building Swiftshader as part of the build and Vulkan adapter discovery" OFF)
-option_if_not_defined(DAWN_BUILD_BENCHMARKS "Build Dawn benchmarks" OFF)
+option(DAWN_BUILD_SAMPLES "Enables building Dawn's samples" ${BUILD_SAMPLES})
+option(DAWN_BUILD_NODE_BINDINGS "Enables building Dawn's NodeJS bindings" OFF)
+option(DAWN_ENABLE_SWIFTSHADER "Enables building Swiftshader as part of the build and Vulkan adapter discovery" OFF)
+option(DAWN_BUILD_BENCHMARKS "Build Dawn benchmarks" OFF)
+option(DAWN_BUILD_PROTOBUF "Build the protobuf dependencies" OFF)
 
-option_if_not_defined(DAWN_WERROR "Build with -Werror (or equivalent)" OFF)
-option_if_not_defined(DAWN_ENABLE_PIC "Build with Position-Independent-Code enabled" OFF)
+option(DAWN_WERROR "Build with -Werror (or equivalent)" OFF)
+option(DAWN_ENABLE_PIC "Build with Position-Independent-Code enabled" OFF)
 
-option_if_not_defined(DAWN_EMIT_COVERAGE "Emit code coverage information" OFF)
+option(DAWN_EMIT_COVERAGE "Emit code coverage information" OFF)
 set_if_not_defined(LLVM_SOURCE_DIR "${Dawn_LLVM_SOURCE_DIR}" "Directory to an LLVM source checkout. Required to build turbo-cov")
 
 if (DAWN_ENABLE_OPENGLES OR DAWN_ENABLE_DESKTOP_GL)
@@ -216,44 +159,46 @@ else()
   set(TINT_DEFAULT_GLSL OFF)
 endif()
 
-option_if_not_defined(TINT_ENABLE_INSTALL "Enable install step for Tint libraries" OFF)
-option_if_not_defined(TINT_BUILD_CMD_TOOLS "Build the Tint command line tools" ON)
+option(TINT_ENABLE_INSTALL "Enable install step for Tint libraries" OFF)
+option(TINT_BUILD_CMD_TOOLS "Build the Tint command line tools" ON)
 
-if (NOT DAWN_USE_GLFW AND (TINT_BUILD_CMD_TOOLS OR DAWN_BUILD_SAMPLES))
+if (NOT DAWN_USE_GLFW AND DAWN_BUILD_SAMPLES)
   message(SEND_ERROR "Dawn samples require GLFW")
 endif()
 
-option_if_not_defined(TINT_BUILD_SPV_READER "Build the SPIR-V input reader" ${DAWN_ENABLE_VULKAN})
-option_if_not_defined(TINT_BUILD_WGSL_READER "Build the WGSL input reader" ON)
-option_if_not_defined(TINT_BUILD_GLSL_WRITER "Build the GLSL output writer" ${TINT_DEFAULT_GLSL})
-option_if_not_defined(TINT_BUILD_GLSL_VALIDATOR "Build the GLSL output validator" ON)
-option_if_not_defined(TINT_BUILD_HLSL_WRITER "Build the HLSL output writer" ${DAWN_ENABLE_D3D12})
-option_if_not_defined(TINT_BUILD_MSL_WRITER "Build the MSL output writer" ${DAWN_ENABLE_METAL})
-option_if_not_defined(TINT_BUILD_SPV_WRITER "Build the SPIR-V output writer" ${DAWN_ENABLE_VULKAN})
-option_if_not_defined(TINT_BUILD_WGSL_WRITER "Build the WGSL output writer" ON)
+option(TINT_BUILD_SPV_READER "Build the SPIR-V input reader" ${DAWN_ENABLE_VULKAN})
+option(TINT_BUILD_WGSL_READER "Build the WGSL input reader" ON)
+option(TINT_BUILD_GLSL_WRITER "Build the GLSL output writer" ${TINT_DEFAULT_GLSL})
+option(TINT_BUILD_GLSL_VALIDATOR "Build the GLSL output validator" ON)
+option(TINT_BUILD_HLSL_WRITER "Build the HLSL output writer" ${DAWN_ENABLE_D3D12})
+option(TINT_BUILD_MSL_WRITER "Build the MSL output writer" ${DAWN_ENABLE_METAL})
+option(TINT_BUILD_SPV_WRITER "Build the SPIR-V output writer" ${DAWN_ENABLE_VULKAN})
+option(TINT_BUILD_WGSL_WRITER "Build the WGSL output writer" ON)
 
-option_if_not_defined(TINT_BUILD_SYNTAX_TREE_WRITER "Build the syntax tree writer" OFF)
+option(TINT_BUILD_SYNTAX_TREE_WRITER "Build the syntax tree writer" OFF)
 
-option_if_not_defined(TINT_BUILD_FUZZERS "Build fuzzers" OFF)
-option_if_not_defined(TINT_BUILD_AST_FUZZER "Build AST fuzzer" OFF)
-option_if_not_defined(TINT_BUILD_REGEX_FUZZER "Build regex fuzzer" OFF)
-option_if_not_defined(TINT_BUILD_BENCHMARKS "Build Tint benchmarks" OFF)
-option_if_not_defined(TINT_BUILD_TESTS "Build tests" ON)
-option_if_not_defined(TINT_BUILD_AS_OTHER_OS "Override OS detection to force building of *_other.cc files" OFF)
+if (DAWN_BUILD_PROTOBUF AND TARGET libprotobuf)
+  set(TINT_DEFAULT_BUILD_IR_BINARY ON)
+else()
+  set(TINT_DEFAULT_BUILD_IR_BINARY OFF)
+endif()
 
-option_if_not_defined(TINT_BUILD_TINTD "Build the WGSL language server" OFF)
+option(TINT_BUILD_IR_BINARY "Build IR binary format support" ${TINT_DEFAULT_BUILD_IR_BINARY})
+option(TINT_BUILD_FUZZERS "Build fuzzers" OFF)
+option(TINT_BUILD_IR_FUZZER "Build IR fuzzer" OFF)
+option(TINT_BUILD_BENCHMARKS "Build Tint benchmarks" OFF)
+option(TINT_BUILD_TESTS "Build tests" ON)
+option(TINT_BUILD_AS_OTHER_OS "Override OS detection to force building of *_other.cc files" OFF)
+
+option(TINT_BUILD_TINTD "Build the WGSL language server" OFF)
 
 set_if_not_defined(TINT_EXTERNAL_BENCHMARK_CORPUS_DIR "" "Directory that holds a corpus of external shaders to benchmark.")
 
-option_if_not_defined(TINT_ENABLE_BREAK_IN_DEBUGGER "Enable tint::debugger::Break()" OFF)
-option_if_not_defined(TINT_CHECK_CHROMIUM_STYLE "Check for [chromium-style] issues during build" OFF)
-option_if_not_defined(TINT_RANDOMIZE_HASHES "Randomize the hash seed value to detect non-deterministic output" OFF)
-
-# Recommended setting for compability with future abseil releases.
-set(ABSL_PROPAGATE_CXX_STD ON)
+option(TINT_ENABLE_BREAK_IN_DEBUGGER "Enable tint::debugger::Break()" OFF)
+option(TINT_CHECK_CHROMIUM_STYLE "Check for [chromium-style] issues during build" OFF)
+option(TINT_RANDOMIZE_HASHES "Randomize the hash seed value to detect non-deterministic output" OFF)
 
 set_if_not_defined(DAWN_THIRD_PARTY_DIR "${Dawn_SOURCE_DIR}/third_party" "Directory in which to find third-party dependencies.")
-set_if_not_defined(DAWN_VULKAN_DEPS_DIR "${DAWN_THIRD_PARTY_DIR}/vulkan-deps" "Directory in which to find vulkan-deps")
 
 set_if_not_defined(DAWN_ABSEIL_DIR "${DAWN_THIRD_PARTY_DIR}/abseil-cpp" "Directory in which to find Abseil")
 set_if_not_defined(DAWN_GLFW_DIR "${DAWN_THIRD_PARTY_DIR}/glfw" "Directory in which to find GLFW")
@@ -262,11 +207,13 @@ set_if_not_defined(DAWN_MARKUPSAFE_DIR "${DAWN_THIRD_PARTY_DIR}/markupsafe" "Dir
 set_if_not_defined(DAWN_KHRONOS_DIR "${DAWN_THIRD_PARTY_DIR}/khronos" "Directory in which to find Khronos GL headers")
 set_if_not_defined(DAWN_SWIFTSHADER_DIR "${DAWN_THIRD_PARTY_DIR}/swiftshader" "Directory in which to find swiftshader")
 set_if_not_defined(DAWN_PROTOBUF_DIR "${DAWN_THIRD_PARTY_DIR}/protobuf" "Directory in which to find protobuf")
+set_if_not_defined(DAWN_LPM_DIR "${DAWN_THIRD_PARTY_DIR}/libprotobuf-mutator/src" "Directory in which to find libprotobuf")
 
-set_if_not_defined(DAWN_SPIRV_TOOLS_DIR "${DAWN_VULKAN_DEPS_DIR}/spirv-tools/src" "Directory in which to find SPIRV-Tools")
-set_if_not_defined(DAWN_SPIRV_HEADERS_DIR "${DAWN_VULKAN_DEPS_DIR}/spirv-headers/src" "Directory in which to find SPIRV-Headers")
-set_if_not_defined(DAWN_VULKAN_HEADERS_DIR "${DAWN_VULKAN_DEPS_DIR}/vulkan-headers/src" "Directory in which to find Vulkan-Headers")
-set_if_not_defined(DAWN_VULKAN_UTILITY_LIBRARIES_DIR "${DAWN_VULKAN_DEPS_DIR}/vulkan-utility-libraries/src" "Directory in which to find Vulkan-Utility-Libraries")
+set_if_not_defined(DAWN_SPIRV_TOOLS_DIR "${DAWN_THIRD_PARTY_DIR}/spirv-tools/src" "Directory in which to find SPIRV-Tools")
+set_if_not_defined(DAWN_SPIRV_HEADERS_DIR "${DAWN_THIRD_PARTY_DIR}/spirv-headers/src" "Directory in which to find SPIRV-Headers")
+set_if_not_defined(DAWN_GLSLANG_DIR "${DAWN_THIRD_PARTY_DIR}/glslang/src" "Directory in which to find GLSLang")
+set_if_not_defined(DAWN_VULKAN_HEADERS_DIR "${DAWN_THIRD_PARTY_DIR}/vulkan-headers/src" "Directory in which to find Vulkan-Headers")
+set_if_not_defined(DAWN_VULKAN_UTILITY_LIBRARIES_DIR "${DAWN_THIRD_PARTY_DIR}/vulkan-utility-libraries/src" "Directory in which to find Vulkan-Utility-Libraries")
 
 # Dependencies for DAWN_BUILD_NODE_BINDINGS
 set_if_not_defined(NODE_ADDON_API_DIR "${DAWN_THIRD_PARTY_DIR}/node-addon-api" "Directory in which to find node-addon-api")
@@ -274,7 +221,9 @@ set_if_not_defined(NODE_API_HEADERS_DIR "${DAWN_THIRD_PARTY_DIR}/node-api-header
 set_if_not_defined(WEBGPU_IDL_PATH "${DAWN_THIRD_PARTY_DIR}/gpuweb/webgpu.idl" "Path to the webgpu.idl definition file")
 set_if_not_defined(GO_EXECUTABLE "go" "Golang executable for running the IDL generator")
 
-option_if_not_defined(DAWN_FETCH_DEPENDENCIES "Use fetch_dawn_dependencies.py as an alternative to using depot_tools" OFF)
+option(DAWN_FETCH_DEPENDENCIES "Use fetch_dawn_dependencies.py as an alternative to using depot_tools" OFF)
+
+option(DAWN_BUILD_MONOLITHIC_LIBRARY "Bundle all dawn components into a single shared library." ON)
 
 # Much of the backend code is shared among desktop OpenGL and OpenGL ES
 if (${DAWN_ENABLE_DESKTOP_GL} OR ${DAWN_ENABLE_OPENGLES})
@@ -285,41 +234,33 @@ if(DAWN_ENABLE_PIC)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
-if (${TINT_BUILD_AST_FUZZER})
-  message(STATUS "TINT_BUILD_AST_FUZZER is ON - setting
-      TINT_BUILD_FUZZERS
-      TINT_BUILD_WGSL_READER
-      TINT_BUILD_WGSL_WRITER
-      TINT_BUILD_SPV_WRITER
-      TINT_BUILD_MSL_WRITER
-      TINT_BUILD_GLSL_WRITER
-      TINT_BUILD_HLSL_WRITER to ON")
-  set(TINT_BUILD_FUZZERS ON CACHE BOOL "Build tint fuzzers" FORCE)
-  set(TINT_BUILD_WGSL_READER ON CACHE BOOL "Build WGSL reader" FORCE)
-  set(TINT_BUILD_WGSL_WRITER ON CACHE BOOL "Build WGSL writer" FORCE)
-  set(TINT_BUILD_SPV_WRITER ON CACHE BOOL "Build SPIR-V writer" FORCE)
-  set(TINT_BUILD_MSL_WRITER ON CACHE BOOL "Build MSL writer" FORCE)
-  set(TINT_BUILD_GLSL_WRITER ON CACHE BOOL "Build GLSL writer" FORCE)
-  set(TINT_BUILD_HLSL_WRITER ON CACHE BOOL "Build HLSL writer" FORCE)
-endif()
+# Defines `CMAKE_INSTALL_*DIR` variables
+include(GNUInstallDirs)
+# The public config contains only the include paths for the Dawn headers.
+add_library(dawn_public_config INTERFACE)
+target_include_directories(dawn_public_config INTERFACE
+    "$<BUILD_INTERFACE:${DAWN_INCLUDE_DIR}>"
+    "$<BUILD_INTERFACE:${DAWN_BUILD_GEN_DIR}/include>"
+    "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
+)
 
-if (${TINT_BUILD_REGEX_FUZZER})
-  message(STATUS "TINT_BUILD_REGEX_FUZZER is ON - setting
-      TINT_BUILD_FUZZERS
-      TINT_BUILD_WGSL_READER
-      TINT_BUILD_WGSL_WRITER
-      TINT_BUILD_SPV_WRITER
-      TINT_BUILD_MSL_WRITER
-      TINT_BUILD_GLSL_WRITER
-      TINT_BUILD_HLSL_WRITER to ON")
-      set(TINT_BUILD_FUZZERS ON CACHE BOOL "Build tint fuzzers" FORCE)
-      set(TINT_BUILD_WGSL_READER ON CACHE BOOL "Build WGSL reader" FORCE)
-      set(TINT_BUILD_WGSL_WRITER ON CACHE BOOL "Build WGSL writer" FORCE)
-      set(TINT_BUILD_SPV_WRITER ON CACHE BOOL "Build SPIR-V writer" FORCE)
-      set(TINT_BUILD_MSL_WRITER ON CACHE BOOL "Build MSL writer" FORCE)
-      set(TINT_BUILD_GLSL_WRITER ON CACHE BOOL "Build GLSL writer" FORCE)
-      set(TINT_BUILD_HLSL_WRITER ON CACHE BOOL "Build HLSL writer" FORCE)
-endif()
+# The internal config contains additional path but includes the dawn_public_config include paths
+add_library(dawn_internal_config INTERFACE)
+target_include_directories(dawn_internal_config INTERFACE
+    "${DAWN_SRC_DIR}"
+    "${DAWN_BUILD_GEN_DIR}/src"
+)
+target_link_libraries(dawn_internal_config INTERFACE dawn_public_config)
+
+################################################################################
+# Include utility CMake modules
+################################################################################
+include(DawnCompilerChecks)
+include(DawnCompilerExtraFlags)
+include(DawnCompilerPlatformFlags)
+include(DawnCompilerWarningFlags)
+include(DawnInitializeBuildType)
+include(DawnLibrary)
 
 message(STATUS "Dawn build D3D11 backend: ${DAWN_ENABLE_D3D11}")
 message(STATUS "Dawn build D3D12 backend: ${DAWN_ENABLE_D3D12}")
@@ -328,6 +269,8 @@ message(STATUS "Dawn build Vulkan backend: ${DAWN_ENABLE_VULKAN}")
 message(STATUS "Dawn build OpenGL backend: ${DAWN_ENABLE_DESKTOP_GL}")
 message(STATUS "Dawn build OpenGL ES backend: ${DAWN_ENABLE_OPENGLES}")
 message(STATUS "Dawn build Null backend: ${DAWN_ENABLE_NULL}")
+
+message(STATUS "Dawn enable SPIR-V validation: ${DAWN_ENABLE_SPIRV_VALIDATION}")
 
 message(STATUS "Dawn build with asserts in all configurations: ${DAWN_ALWAYS_ASSERT}")
 message(STATUS "Dawn build Wayland support: ${DAWN_USE_WAYLAND}")
@@ -360,13 +303,14 @@ message(STATUS "Tint build SPIR-V writer: ${TINT_BUILD_SPV_WRITER}")
 message(STATUS "Tint build WGSL writer: ${TINT_BUILD_WGSL_WRITER}")
 message(STATUS "Tint build Syntax Tree writer: ${TINT_BUILD_SYNTAX_TREE_WRITER}")
 message(STATUS "Tint build fuzzers: ${TINT_BUILD_FUZZERS}")
-message(STATUS "Tint build AST fuzzer: ${TINT_BUILD_AST_FUZZER}")
-message(STATUS "Tint build regex fuzzer: ${TINT_BUILD_REGEX_FUZZER}")
+message(STATUS "Tint build IR binary: ${TINT_BUILD_IR_BINARY}")
+message(STATUS "Tint build IR fuzzer: ${TINT_BUILD_IR_FUZZER}")
 message(STATUS "Tint build benchmarks: ${TINT_BUILD_BENCHMARKS}")
 message(STATUS "Tint build tests: ${TINT_BUILD_TESTS}")
 message(STATUS "Tint build checking [chromium-style]: ${TINT_CHECK_CHROMIUM_STYLE}")
 message(STATUS "Tint external benchmark corpus dir: ${TINT_EXTERNAL_BENCHMARK_CORPUS_DIR}")
 
+set(IS_ASAN ${DAWN_ENABLE_ASAN})
 
 if (NOT ${TINT_LIB_FUZZING_ENGINE_LINK_OPTIONS} STREQUAL "")
   message(STATUS "Using provided LIB_FUZZING_ENGINE options: ${TINT_LIB_FUZZING_ENGINE_LINK_OPTIONS}")
@@ -375,90 +319,11 @@ endif()
 find_package(Python3 REQUIRED)
 message(STATUS "Dawn: using python at ${Python3_EXECUTABLE}")
 
-################################################################################
-# common_compile_options - sets compiler and linker options common for dawn and
-# tint on the given target
-################################################################################
-function(common_compile_options TARGET)
-  if (COMPILER_IS_LIKE_GNU)
-    target_compile_options(${TARGET} PRIVATE
-      -fno-exceptions
-      -fno-rtti
-
-      -Wno-deprecated-builtins
-      -Wno-unknown-warning-option
-      -Wno-switch-default
-    )
-    if (${DAWN_WERROR})
-        target_compile_options(${TARGET} PRIVATE -Werror)
-    endif()
-
-    set(SANITIZER_OPTIONS "")
-    if (${DAWN_ENABLE_MSAN})
-      list(APPEND SANITIZER_OPTIONS "-fsanitize=memory")
-    endif()
-    if (${DAWN_ENABLE_ASAN})
-      list(APPEND SANITIZER_OPTIONS "-fsanitize=address")
-    endif()
-    if (${DAWN_ENABLE_TSAN})
-      list(APPEND SANITIZER_OPTIONS "-fsanitize=thread")
-    endif()
-    if (${DAWN_ENABLE_UBSAN})
-      list(APPEND SANITIZER_OPTIONS "-fsanitize=undefined" "-fsanitize=float-divide-by-zero")
-    endif()
-    if (SANITIZER_OPTIONS)
-      target_compile_options(${TARGET} PUBLIC ${SANITIZER_OPTIONS})
-      target_link_options(${TARGET} PUBLIC ${SANITIZER_OPTIONS})
-    endif()
-  endif(COMPILER_IS_LIKE_GNU)
-
-  if(MSVC)
-      target_compile_options(${TARGET} PUBLIC /utf-8)
-  endif()
-
-  if (DAWN_EMIT_COVERAGE)
-    target_compile_definitions(${TARGET} PRIVATE "DAWN_EMIT_COVERAGE")
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-        target_compile_options(${TARGET} PRIVATE "--coverage")
-        target_link_options(${TARGET} PRIVATE "gcov")
-    elseif(COMPILER_IS_CLANG OR COMPILER_IS_CLANG_CL)
-        target_compile_options(${TARGET} PRIVATE "-fprofile-instr-generate" "-fcoverage-mapping")
-        target_link_options(${TARGET} PRIVATE "-fprofile-instr-generate" "-fcoverage-mapping")
-    else()
-        message(FATAL_ERROR "Coverage generation not supported for the ${CMAKE_CXX_COMPILER_ID} toolchain")
-    endif()
-  endif(DAWN_EMIT_COVERAGE)
-endfunction()
-
-if (${DAWN_ENABLE_TSAN})
-  add_compile_options(-stdlib=libc++)
-  add_link_options(-stdlib=libc++)
-endif()
-
-################################################################################
-# Dawn's public and internal "configs"
-################################################################################
-
 set(IS_DEBUG_BUILD 0)
 string(TOUPPER "${CMAKE_BUILD_TYPE}" build_type)
 if ((NOT ${build_type} STREQUAL "RELEASE") AND (NOT ${build_type} STREQUAL "RELWITHDEBINFO"))
   set(IS_DEBUG_BUILD 1)
 endif()
-
-# The public config contains only the include paths for the Dawn headers.
-add_library(dawn_public_config INTERFACE)
-target_include_directories(dawn_public_config INTERFACE
-    "${DAWN_INCLUDE_DIR}"
-    "${DAWN_BUILD_GEN_DIR}/include"
-)
-
-# The internal config conatins additional path but includes the dawn_public_config include paths
-add_library(dawn_internal_config INTERFACE)
-target_include_directories(dawn_internal_config INTERFACE
-    "${DAWN_SRC_DIR}"
-    "${DAWN_BUILD_GEN_DIR}/src"
-)
-target_link_libraries(dawn_internal_config INTERFACE dawn_public_config)
 
 # Compile definitions for the internal config
 if (DAWN_ALWAYS_ASSERT OR IS_DEBUG_BUILD)
@@ -501,8 +366,6 @@ if (WIN32)
     target_compile_definitions(dawn_internal_config INTERFACE "NOMINMAX" "WIN32_LEAN_AND_MEAN")
 endif()
 
-set(CMAKE_CXX_STANDARD "17")
-
 ################################################################################
 # Tint
 ################################################################################
@@ -513,45 +376,11 @@ set(TINT_ROOT_SOURCE_DIR   ${PROJECT_SOURCE_DIR})
 set(TINT_SPIRV_HEADERS_DIR ${DAWN_SPIRV_HEADERS_DIR})
 set(TINT_SPIRV_TOOLS_DIR   ${DAWN_SPIRV_TOOLS_DIR})
 
-# CMake < 3.15 sets /W3 in CMAKE_CXX_FLAGS. Remove it if it's there.
-# See https://gitlab.kitware.com/cmake/cmake/-/issues/18317
-if (MSVC)
-  if (CMAKE_CXX_FLAGS MATCHES "/W3")
-    string(REPLACE "/W3" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  endif()
-endif()
-
-if (${TINT_CHECK_CHROMIUM_STYLE})
-   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -add-plugin -Xclang find-bad-constructs")
-endif()
-
-if((CMAKE_CXX_COMPILER_ID STREQUAL "Clang") AND (CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC"))
-  set(COMPILER_IS_CLANG_CL TRUE)
-endif()
-
-if((CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang") OR
-    ((CMAKE_CXX_COMPILER_ID STREQUAL "Clang") AND
-     (NOT COMPILER_IS_CLANG_CL)))
-  set(COMPILER_IS_CLANG TRUE)
-endif()
-
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  set(COMPILER_IS_GNU TRUE)
-endif()
-
-if((CMAKE_CXX_COMPILER_ID STREQUAL "GNU") OR COMPILER_IS_CLANG)
-  set(COMPILER_IS_LIKE_GNU TRUE)
-endif()
-
-# Enable msbuild multiprocessor builds
-if (MSVC AND NOT COMPILER_IS_CLANG_CL)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
-endif()
 
 ################################################################################
 # Run on all subdirectories
 ################################################################################
-if (EXISTS "${DAWN_PROTOBUF_DIR}/cmake")
+if (DAWN_BUILD_PROTOBUF AND EXISTS "${DAWN_PROTOBUF_DIR}/cmake")
   if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang") AND WIN32)
     set(protobuf_HAVE_BUILTIN_ATOMICS 1)
   endif()
@@ -568,8 +397,11 @@ set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
 set(BUILD_SHARED_LIBS 0)
 add_subdirectory(src/tint)
 set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED})
-add_subdirectory(generator)
-add_subdirectory(src/dawn)
+
+if (DAWN_ENABLE_D3D11 OR DAWN_ENABLE_D3D12 OR DAWN_ENABLE_METAL OR DAWN_ENABLE_NULL OR DAWN_ENABLE_DESKTOP_GL OR DAWN_ENABLE_OPENGLES OR DAWN_ENABLE_VULKAN)
+    add_subdirectory(generator)
+    add_subdirectory(src/dawn)
+endif()
 
 ################################################################################
 # Samples
@@ -602,3 +434,32 @@ if (DAWN_EMIT_COVERAGE)
     COMMENT "Generating tint coverage data"
     VERBATIM)
 endif()
+
+if (DAWN_BUILD_MONOLITHIC_LIBRARY AND DAWN_ENABLE_INSTALL)
+  # This series of functions add the necessary information so that other CMake projects
+  # can use Dawn, be it from a build directory, a local install or when packaged.
+  install(EXPORT DawnTargets
+    FILE DawnTargets.cmake
+    NAMESPACE dawn::
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/Dawn")
+  export(EXPORT DawnTargets
+    FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/DawnTargets.cmake"
+      NAMESPACE dawn::
+  )
+  # Create a ConfigVersion.cmake file:
+  include(CMakePackageConfigHelpers)
+  write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/DawnConfigVersion.cmake"
+    COMPATIBILITY AnyNewerVersion)
+  # Configure config file
+  configure_package_config_file("${CMAKE_CURRENT_LIST_DIR}/src/cmake/DawnConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/DawnConfig.cmake"
+    INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/Dawn"
+  )
+  # Install the fully generated config and configVersion files
+  install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/DawnConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/DawnConfigVersion.cmake"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/Dawn"
+  )
+endif ()

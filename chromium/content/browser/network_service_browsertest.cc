@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/base_paths.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -543,7 +548,7 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceBrowserTest, FactoryOverride) {
     }
     void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
         override {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
 
     bool has_received_preflight() const { return has_received_preflight_; }

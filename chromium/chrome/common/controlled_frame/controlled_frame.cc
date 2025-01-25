@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/containers/contains.h"
+#include "base/containers/span.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/initialize_extensions_client.h"
 #include "components/version_info/version_info.h"
@@ -14,6 +15,7 @@
 #include "extensions/common/features/feature.h"
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/mojom/context_type.mojom.h"
+#include "third_party/blink/public/common/features.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "base/command_line.h"
@@ -29,6 +31,15 @@ bool IsRunningInKioskMode() {
 }
 }  // namespace
 #endif
+
+base::span<const char* const> GetControlledFrameFeatureList() {
+  static constexpr const char* feature_list[] = {
+      "controlledFrameInternal", "chromeWebViewInternal", "guestViewInternal",
+      "vivaldi",
+      "webRequestInternal",      "webViewInternal",
+  };
+  return base::make_span(feature_list);
+}
 
 namespace controlled_frame {
 
@@ -61,7 +72,10 @@ bool AvailabilityCheck(const std::string& api_full_name,
                        int context_id,
                        bool check_developer_mode,
                        const extensions::ContextData& context_data) {
-  if (!base::FeatureList::IsEnabled(features::kControlledFrame)) {
+  // Verify that the kControlledFrame blink::features flag is enabled. It's a
+  // kill switch, so it should be enabled by default and only present so if
+  // needed we can use Finch to disable Controlled Frame.
+  if (!base::FeatureList::IsEnabled(blink::features::kControlledFrame)) {
     return false;
   }
 

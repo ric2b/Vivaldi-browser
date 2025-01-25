@@ -568,7 +568,7 @@ void BaselineAssembler::EmitReturn(MacroAssembler* masm) {
   Register scratch = scope.AcquireScratch();
 
   Register actual_params_size = scratch;
-  // Compute the size of the actual parameters + receiver (in bytes).
+  // Compute the size of the actual parameters + receiver.
   __ masm()->movq(actual_params_size,
                   MemOperand(rbp, StandardFrameConstants::kArgCOffset));
 
@@ -581,9 +581,7 @@ void BaselineAssembler::EmitReturn(MacroAssembler* masm) {
   __ masm()->LeaveFrame(StackFrame::BASELINE);
 
   // Drop receiver + arguments.
-  __ masm()->DropArguments(params_size, scratch,
-                           MacroAssembler::kCountIsInteger,
-                           MacroAssembler::kCountIncludesReceiver);
+  __ masm()->DropArguments(params_size, scratch);
   __ masm()->Ret();
 }
 

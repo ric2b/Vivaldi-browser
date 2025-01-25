@@ -264,7 +264,6 @@
 <translation id="2783001728278437613">{COUNT,plural, =1{+#}other{+#}}</translation>
 <translation id="2792200646155001340">អ្នកក៏អាចអូស​ម្រាមដៃមួយ​ពីស្ដាំទៅឆ្វេងបាន​ផងដែរ ដើម្បីទៅកាន់​ធាតុមុន។ សាកល្បង​ឥឡូវ​នេះ។</translation>
 <translation id="280499067616661124">ទំព័រស្វែងរកក្នុង ChromeVox</translation>
-<translation id="2811019999044652585">ដើម្បីរំលងទៅផ្នែកផ្សេងទៀតនៃអេក្រង់ ដូចជា៖ របារឧបករណ៍ ឬទម្រប្រព័ន្ធ សូមចុច Control+Forward ។ នៅលើ Chromebook គ្រាប់ចុច Forward គឺស្ថិតនៅចំពីលើគ្រាប់ចុចលេខ 2 ។</translation>
 <translation id="2811204574343810641">ជួរដេក</translation>
 <translation id="2816868829355607410">កន្លែង​អនុវត្ត៖ គ្រាប់ចុច​បញ្ជាឱ្យ​រំលង</translation>
 <translation id="2841013758207633010">ពេលវេលា</translation>
@@ -520,6 +519,7 @@
 <translation id="4432457053224379116">ឈាមជ្រូក​ចាស់</translation>
 <translation id="4432896207833262240">ខ្លឹមសារ​ដែលបានសម្គាល់</translation>
 <translation id="4437615272777527928">វាយបញ្ចូល ដើម្បីស្វែងរកម៉ឺនុយ។ ប្រើ​ព្រួញ​ឡើងលើ និង​ចុះក្រោម ដើម្បី​រុករកលទ្ធផល។ ប្រើព្រួញទៅឆ្វេង និងទៅស្ដាំ ដើម្បីកែតម្រូវទស្សន៍ទ្រនិច​អក្សរ និងដើម្បីផ្លាស់ទីរវាងម៉ឺនុយនានា។</translation>
+<translation id="4453530046591759283">ដើម្បីរំលងទៅផ្នែកផ្សេងទៀតនៃអេក្រង់ ដូចជារបារឧបករណ៍ ឬរបារម៉ឺនុយ សូមចុច Control+F1។ F1 គឺជាគ្រាប់ចុចដំបូងនៅខាងស្តាំនៃគ្រាប់ចុច escape។</translation>
 <translation id="4457472090507035117">ជ្រើសរើស​សំឡេង​បច្ចុប្បន្ន៖</translation>
 <translation id="4476183483923481720">បន្ទាត់ថ្មី</translation>
 <translation id="4479068155583208887">ឈាមជ្រូក</translation>
@@ -880,6 +880,7 @@
 <translation id="7091296112653361280">លឿងស្រគាំ</translation>
 <translation id="7095834689119144465">កែប្រែលេខតែប៉ុណ្ណោះ</translation>
 <translation id="7096001299300236431">កំសាន្តពីមុន</translation>
+<translation id="7096668131290451939">ចុច escape ម្ដងទៀត ដើម្បីចាកចេញពីមុខងាររៀន</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">បន្លឺសម្លេងពាក្យ</translation>
 <translation id="7137397390322864165">ក្រហម​ប្រឿង</translation>

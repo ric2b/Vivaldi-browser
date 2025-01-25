@@ -44,6 +44,7 @@
 #include "menus/main_menu_service_factory.h"
 #include "sessions/index_service_factory.h"
 #include "sync/invalidation/vivaldi_invalidation_service_factory.h"
+#include "sync/note_sync_service_factory.h"
 #include "translate_history/th_service_factory.h"
 #include "ui/lazy_load_service_factory.h"
 #include "ui/window_registry_service_factory.h"
@@ -316,4 +317,39 @@ void VivaldiBrowserMainExtraParts::PostDestroyThreads() {
   // as there is an ENV variable manipulation code inside
   extensions::AutoUpdateAPI::HandleRestartPreconditions();
 #endif  // ENABLE_EXTENSIONS
+}
+
+VivaldiBrowserMainExtraPartsSmall::~VivaldiBrowserMainExtraPartsSmall() =
+    default;
+
+void VivaldiBrowserMainExtraPartsSmall::
+    EnsureBrowserContextKeyedServiceFactoriesBuilt() {
+  CHECK(!vivaldi::IsVivaldiRunning() || !vivaldi::ForcedVivaldiRunning());
+
+  // Need to initialize this because it is used in ChromeSyncClient.
+  vivaldi::NoteSyncServiceFactory::GetInstance();
+  // VivaldiInitProfile
+  page_actions::ServiceFactory::GetInstance();
+  adblock_filter::RuleServiceFactory::GetInstance();
+  vivaldi::RequestFilterManagerFactory::GetInstance();
+}
+
+void VivaldiBrowserMainExtraPartsSmall::PostEarlyInitialization() {}
+void VivaldiBrowserMainExtraPartsSmall::PreProfileInit() {
+  EnsureBrowserContextKeyedServiceFactoriesBuilt();
+}
+
+void VivaldiBrowserMainExtraPartsSmall::PostProfileInit(
+    Profile* profile,
+    bool is_initial_profile) {}
+
+void VivaldiBrowserMainExtraPartsSmall::PreMainMessageLoopRun() {}
+void VivaldiBrowserMainExtraPartsSmall::PostMainMessageLoopRun() {}
+
+void VivaldiBrowserMainExtraPartsSmall::PostDestroyThreads() {}
+
+// static
+std::unique_ptr<VivaldiBrowserMainExtraPartsSmall>
+VivaldiBrowserMainExtraPartsSmall::Create() {
+  return std::make_unique<VivaldiBrowserMainExtraPartsSmall>();
 }

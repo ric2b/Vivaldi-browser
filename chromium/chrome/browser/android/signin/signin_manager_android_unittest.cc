@@ -24,6 +24,8 @@
 #include "chrome/browser/password_manager/profile_password_store_factory.h"
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/test/base/scoped_testing_local_state.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
@@ -81,18 +83,21 @@ class SigninManagerAndroidTest : public ::testing::Test {
   void SetUp() override {
     TestingProfile::Builder profile_builder;
     profile_builder.AddTestingFactories(
-        {{BookmarkModelFactory::GetInstance(),
-          BookmarkModelFactory::GetDefaultFactory()},
-         {ProfilePasswordStoreFactory::GetInstance(),
-          base::BindRepeating(&password_manager::BuildPasswordStore<
-                              content::BrowserContext,
-                              password_manager::TestPasswordStore>)},
-         {AccountPasswordStoreFactory::GetInstance(),
-          base::BindRepeating(
-              &password_manager::BuildPasswordStoreWithArgs<
-                  content::BrowserContext, password_manager::TestPasswordStore,
-                  password_manager::IsAccountStore>,
-              password_manager::IsAccountStore(true))}});
+        {TestingProfile::TestingFactory{
+             BookmarkModelFactory::GetInstance(),
+             BookmarkModelFactory::GetDefaultFactory()},
+         TestingProfile::TestingFactory{
+             ProfilePasswordStoreFactory::GetInstance(),
+             base::BindRepeating(&password_manager::BuildPasswordStore<
+                                 content::BrowserContext,
+                                 password_manager::TestPasswordStore>)},
+         TestingProfile::TestingFactory{
+             AccountPasswordStoreFactory::GetInstance(),
+             base::BindRepeating(&password_manager::BuildPasswordStoreWithArgs<
+                                     content::BrowserContext,
+                                     password_manager::TestPasswordStore,
+                                     password_manager::IsAccountStore>,
+                                 password_manager::IsAccountStore(true))}});
     profile_ = profile_builder.Build();
 
     background_tracing_manager_ =
@@ -152,6 +157,7 @@ class SigninManagerAndroidTest : public ::testing::Test {
 
  private:
   content::BrowserTaskEnvironment task_environment_;
+  ScopedTestingLocalState local_state_{TestingBrowserProcess::GetGlobal()};
   std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<content::BackgroundTracingManager>
       background_tracing_manager_;

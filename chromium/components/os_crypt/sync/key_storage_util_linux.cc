@@ -41,6 +41,9 @@ SelectedLinuxBackend SelectBackend(const std::string& type,
     return SelectedLinuxBackend::GNOME_LIBSECRET;
   if (type == "basic")
     return SelectedLinuxBackend::BASIC_TEXT;
+  // Vivaldi: When specified on cmdline (no autodetection) use xd desktop portal Secret
+  if (type == "xdg-desktop-portal")
+    return SelectedLinuxBackend::XDG_DESKTOP_PORTAL;
 
   // Ignore the backends if requested to.
   if (!use_backend)

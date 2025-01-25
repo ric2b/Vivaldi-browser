@@ -60,6 +60,10 @@ swift_source_set("vivaldi_bookmarks_editor_swift") {
     "vivaldi_bookmarks_editor_view.swift",
   ]
 
+  deps = [
+    "//vivaldi/ios/ui/helpers:helpers_swift",
+  ]
+
   frameworks = [
     "UIKit.framework",
     "SwiftUI.framework",

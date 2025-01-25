@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/metrics/histogram_functions.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/chromeos/mahi/mahi_web_contents_manager.h"
 #include "chrome/browser/ui/chromeos/read_write_cards/read_write_cards_ui_controller.h"
 #include "chrome/browser/ui/views/mahi/mahi_condensed_menu_view.h"
@@ -15,38 +16,43 @@
 #include "chrome/browser/ui/views/mahi/mahi_menu_view.h"
 #include "chromeos/components/mahi/public/cpp/mahi_manager.h"
 #include "chromeos/components/mahi/public/cpp/mahi_switches.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "ui/views/view_utils.h"
 
 namespace chromeos::mahi {
 
 MahiMenuController::MahiMenuController(
     ReadWriteCardsUiController& read_write_cards_ui_controller)
-    : read_write_cards_ui_controller_(read_write_cards_ui_controller) {}
+    : read_write_cards_ui_controller_(read_write_cards_ui_controller) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // MahiMediaAppEventsProxy is initialized only in ash chrome.
+  CHECK(chromeos::MahiMediaAppEventsProxy::Get());
+  chromeos::MahiMediaAppEventsProxy::Get()->AddObserver(this);
+#endif
+}
 
-MahiMenuController::~MahiMenuController() = default;
+MahiMenuController::~MahiMenuController() {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  CHECK(chromeos::MahiMediaAppEventsProxy::Get());
+  chromeos::MahiMediaAppEventsProxy::Get()->RemoveObserver(this);
+#endif
+}
 
 void MahiMenuController::OnContextMenuShown(Profile* profile) {}
 
 void MahiMenuController::OnTextAvailable(const gfx::Rect& anchor_bounds,
                                          const std::string& selected_text,
                                          const std::string& surrounding_text) {
-  if (!chromeos::MahiManager::Get()->IsSupportedWithCorrectFeatureKey() ||
+  if (!chromeos::features::IsMahiEnabled() ||
       !::mahi::MahiWebContentsManager::Get()->GetPrefValue()) {
     return;
   }
 
-  bool page_distillable =
-      ::mahi::MahiWebContentsManager::Get()->IsFocusedPageDistillable();
-
-  // Records metric of whether the page is distillable when Mahi menu is
-  // requested to show.
-  base::UmaHistogramBoolean(kMahiContextMenuDistillableHistogram,
-                            page_distillable);
-
   // Only shows mahi menu for distillable pages or when the switch
   // `kUseFakeMahiManager` is enabled.
-  if (!page_distillable && !base::CommandLine::ForCurrentProcess()->HasSwitch(
-                               chromeos::switches::kUseFakeMahiManager)) {
+  if (!::mahi::MahiWebContentsManager::Get()->IsFocusedPageDistillable() &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          chromeos::switches::kUseFakeMahiManager)) {
     return;
   }
 
@@ -77,6 +83,38 @@ void MahiMenuController::OnDismiss(bool is_other_command_executed) {
   }
 
   read_write_cards_ui_controller_->RemoveMahiUi();
+}
+
+void MahiMenuController::OnPdfContextMenuShown(const gfx::Rect& anchor) {
+  if (!chromeos::features::IsMahiEnabled() ||
+      !::mahi::MahiWebContentsManager::Get()->GetPrefValue()) {
+    return;
+  }
+
+  menu_widget_ =
+      MahiMenuView::CreateWidget(anchor, MahiMenuView::Surface::kMediaApp);
+  menu_widget_->ShowInactive();
+}
+
+void MahiMenuController::OnPdfContextMenuHide() {
+  OnDismiss(false);
+}
+
+bool MahiMenuController::IsFocusedPageDistillable() {
+  if (is_distillable_for_testing_.has_value()) {
+    return is_distillable_for_testing_.value();
+  }
+
+  return ::mahi::MahiWebContentsManager::Get()->IsFocusedPageDistillable() ||
+         base::CommandLine::ForCurrentProcess()->HasSwitch(
+             chromeos::switches::kUseFakeMahiManager);
+}
+
+void MahiMenuController::RecordPageDistillable() {
+  // Records metric of whether the page is distillable when Mahi menu is
+  // requested to show.
+  base::UmaHistogramBoolean(kMahiContextMenuDistillableHistogram,
+                            IsFocusedPageDistillable());
 }
 
 base::WeakPtr<MahiMenuController> MahiMenuController::GetWeakPtr() {

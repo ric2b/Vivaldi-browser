@@ -36,6 +36,11 @@ bool IsFooterSuggestionType(SuggestionType type);
 bool IsFooterItem(const std::vector<Suggestion>& suggestions,
                   size_t line_number);
 
+// Returns `true` if the popup should remain open with a suggestion of `type`
+// as the first suggestion (e.g. after deleting a suggestion). This is true for
+// all non-footer suggestions and false for most footer suggestions.
+bool IsStandaloneSuggestionType(SuggestionType type);
+
 // Returns the RenderFrameHost` corresponding to an
 // `AutofillSuggestionDelegate`.
 content::RenderFrameHost* GetRenderFrameHost(
@@ -48,10 +53,11 @@ bool IsAncestorOf(content::RenderFrameHost* ancestor,
 // Returns whether the pointer is locked in `web_contents`.
 bool IsPointerLocked(content::WebContents* web_contents);
 
-// Informs the IPH trackers about an accepted suggestion if the suggestion had
-// relevance for IPH.
-void NotifyIphAboutAcceptedSuggestion(content::BrowserContext* browser_context,
-                                      const Suggestion& suggestion);
+// Informs the user education trackers about an accepted suggestion if the
+// suggestion had relevance for in-product-help or for "new" badges.
+void NotifyUserEducationAboutAcceptedSuggestion(
+    content::BrowserContext* browser_context,
+    const Suggestion& suggestion);
 
 std::vector<Suggestion> UpdateSuggestionsFromDataList(
     base::span<const SelectOption> options,

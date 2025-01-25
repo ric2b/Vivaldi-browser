@@ -345,7 +345,7 @@ MailboxToSurfaceBridgeImpl::CreateSharedImage(
     gfx::BufferFormat buffer_format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
-    uint32_t usage,
+    gpu::SharedImageUsageSet usage,
     gpu::SyncToken& sync_token) {
   TRACE_EVENT0("gpu", __FUNCTION__);
   DCHECK(IsConnected());
@@ -360,7 +360,7 @@ MailboxToSurfaceBridgeImpl::CreateSharedImage(
       std::move(buffer_handle));
   CHECK(client_shared_image);
   sync_token = sii->GenVerifiedSyncToken();
-  DCHECK(client_shared_image->GetTextureTarget(buffer_format) == GL_TEXTURE_2D);
+  DCHECK(client_shared_image->GetTextureTarget() == GL_TEXTURE_2D);
   return client_shared_image;
 }
 

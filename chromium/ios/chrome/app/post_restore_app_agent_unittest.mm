@@ -44,11 +44,10 @@ class PostRestoreAppAgentTest : public PlatformTest {
   explicit PostRestoreAppAgentTest() { CreateAppAgent(); }
 
   void CreateAppAgent() {
-    app_agent_ =
-        [[PostRestoreAppAgent alloc] initWithPromosManager:CreatePromosManager()
-                                     authenticationService:CreateAuthService()
-                                           identityManager:GetIdentityManager()
-                                                localState:local_state_.Get()];
+    app_agent_ = [[PostRestoreAppAgent alloc]
+        initWithPromosManager:CreatePromosManager()
+        authenticationService:CreateAuthService()
+              identityManager:GetIdentityManager()];
     mockAppState_ = OCMClassMock([AppState class]);
     [app_agent_ setAppState:mockAppState_];
   }
@@ -63,7 +62,7 @@ class PostRestoreAppAgentTest : public PlatformTest {
     TestChromeBrowserState::Builder builder;
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
-        base::BindRepeating(AuthenticationServiceFactory::GetDefaultFactory()));
+        AuthenticationServiceFactory::GetDefaultFactory());
     browser_state_ = builder.Build();
     AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
         browser_state_.get(),

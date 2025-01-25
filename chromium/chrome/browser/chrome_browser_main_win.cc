@@ -50,7 +50,6 @@
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/enterprise/platform_auth/platform_auth_policy_observer.h"
 #include "chrome/browser/first_run/first_run.h"
-#include "chrome/browser/os_crypt/app_bound_encryption_metrics_win.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
 #include "chrome/browser/shell_integration_win.h"
@@ -104,6 +103,12 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
+#include "sandbox/policy/switches.h"
+#include "sandbox/win/src/sandbox.h"
+#include "sandbox/win/src/sandbox_factory.h"
+#include "services/device/public/cpp/device_features.h"
+#include "services/device/public/cpp/geolocation/geolocation_system_permission_manager.h"
+#include "services/device/public/cpp/geolocation/system_geolocation_source_win.h"
 #include "ui/accessibility/platform/ax_platform.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_win.h"
@@ -386,6 +391,39 @@ void MigratePinnedTaskBarShortcutsIfNeeded() {
     }
   }
 }
+
+void MaybeBlockDynamicCodeForBrowserProcess() {
+  // This mitigation is not enabled if running in single-process mode or the GPU
+  // is in-process. It is also not enabled if the sandbox is disabled.
+  const char* const kUnsupportedSwitches[] = {
+      switches::kSingleProcess, switches::kInProcessGPU,
+      sandbox::policy::switches::kNoSandbox};
+
+  for (const auto* unsupported_switch : kUnsupportedSwitches) {
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(unsupported_switch)) {
+      return;
+    }
+  }
+
+  bool block_dynamic_code =
+      base::FeatureList::IsEnabled(features::kBrowserDynamicCodeDisabled);
+
+  PrefService* local_state = g_browser_process->local_state();
+  // Policy intentionally takes precedence over the feature.
+  if (local_state->IsManagedPreference(prefs::kDynamicCodeSettings) &&
+      local_state->GetInteger(prefs::kDynamicCodeSettings) ==
+          /*EnabledForBrowser=*/1) {
+    block_dynamic_code = true;
+  }
+
+  if (block_dynamic_code) {
+    // This must happen when Chrome is still in single-threaded mode, in
+    // particular, before the launcher thread has been created.
+    sandbox::SandboxFactory::GetBrokerServices()
+        ->RatchetDownSecurityMitigations(
+            sandbox::MITIGATION_DYNAMIC_CODE_DISABLE_WITH_OPT_OUT);
+  }
+}
 // This error message is not localized because we failed to load the
 // localization data files.
 const char kMissingLocaleDataTitle[] = "Missing File Error";
@@ -523,6 +561,12 @@ void ChromeBrowserMainPartsWin::PostMainMessageLoopRun() {
   ChromeBrowserMainParts::PostMainMessageLoopRun();
 }
 
+void ChromeBrowserMainPartsWin::PostEarlyInitialization() {
+  MaybeBlockDynamicCodeForBrowserProcess();
+
+  ChromeBrowserMainParts::PostEarlyInitialization();
+}
+
 void ChromeBrowserMainPartsWin::ShowMissingLocaleMessageBox() {
   ui::MessageBox(NULL, base::ASCIIToWide(kMissingLocaleDataMessage),
                  base::ASCIIToWide(kMissingLocaleDataTitle),
@@ -542,6 +586,12 @@ void ChromeBrowserMainPartsWin::PreProfileInit() {
   if (local_state)
     platform_auth_policy_observer_ =
         std::make_unique<PlatformAuthPolicyObserver>(local_state);
+
+  if (base::FeatureList::IsEnabled(features::kWinSystemLocationPermission)) {
+    device::GeolocationSystemPermissionManager::SetInstance(
+        device::SystemGeolocationSourceWin::
+            CreateGeolocationSystemPermissionManager());
+  }
 }
 
 void ChromeBrowserMainPartsWin::PostProfileInit(Profile* profile,
@@ -577,16 +627,6 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
     did_run_updater_.emplace();
   }
 #endif
-
-  if (base::FeatureList::IsEnabled(features::kAppBoundEncryptionMetrics)) {
-    // Only record full metrics if the App-Bound provider is not registered. The
-    // App-Bound provider records these itself, and only one place should record
-    // them to accurately reflect the final production environment.
-    os_crypt::MeasureAppBoundEncryptionStatus(
-        g_browser_process->local_state(),
-        /*record_full_metrics=*/!base::FeatureList::IsEnabled(
-            features::kRegisterAppBoundEncryptionProvider));
-  }
 
   // Record Processor Metrics. This is very low priority, hence posting as
   // BEST_EFFORT to start after Chrome startup has completed.
@@ -631,6 +671,14 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
           RemoveAppCompatEntries(current_exe);
         }
       }));
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  // os_update_handler is a separate process, so mirror the status of the
+  // feature to the local state on its behalf.
+  g_browser_process->local_state()->SetBoolean(
+      prefs::kOsUpdateHandlerEnabled,
+      base::FeatureList::IsEnabled(features::kRegisterOsUpdateHandlerWin));
+#endif  // GOOGLE_CHROME_BRANDING
 
   base::ImportantFileWriterCleaner::GetInstance().Start();
 }
@@ -781,7 +829,7 @@ std::wstring TranslationDelegate::GetLocalizedString(int installer_string_id) {
     DO_STRING_MAPPING
 #undef HANDLE_STRING
   default:
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
   if (resource_id)
     return base::UTF16ToWide(l10n_util::GetStringUTF16(resource_id));
@@ -865,10 +913,6 @@ void ChromeBrowserMainPartsWin::OnModuleEvent(
       }
     }
   }
-  // Since OnModuleEvent can be invoked from any thread, the above trace event's
-  // END might be the last event on this thread, emit an empty event to force
-  // the END to be flushed. TODO(crbug.com/40657156): Remove this once fixed.
-  PERFETTO_INTERNAL_ADD_EMPTY_EVENT();
 }
 
 // Helper function for initializing the module database subsystem and populating

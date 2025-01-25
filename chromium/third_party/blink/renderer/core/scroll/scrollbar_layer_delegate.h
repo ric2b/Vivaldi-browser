@@ -8,6 +8,7 @@
 #include "cc/input/scrollbar.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
+#include "third_party/skia/include/core/SkColor.h"
 
 namespace blink {
 
@@ -27,8 +28,8 @@ class CORE_EXPORT ScrollbarLayerDelegate : public cc::Scrollbar {
   bool IsLeftSideVerticalScrollbar() const override;
   bool HasThumb() const override;
   bool IsSolidColor() const override;
-  SkColor4f GetSolidColor() const override;
   bool IsOverlay() const override;
+  bool IsRunningWebTest() const override;
   bool IsFluentOverlayScrollbarMinimalMode() const override;
   bool SupportsDragSnapBack() const override;
   bool JumpOnTrackClick() const override;
@@ -48,10 +49,16 @@ class CORE_EXPORT ScrollbarLayerDelegate : public cc::Scrollbar {
   void PaintPart(cc::PaintCanvas* canvas,
                  cc::ScrollbarPart part,
                  const gfx::Rect& rect) override;
+  void ClearThumbNeedsRepaint() override;
+  SkColor4f ThumbColor() const override;
 
   bool UsesNinePatchThumbResource() const override;
   gfx::Size NinePatchThumbCanvasSize() const override;
   gfx::Rect NinePatchThumbAperture() const override;
+  bool UsesSolidColorThumb() const override;
+  bool UsesNinePatchTrackAndButtonsResource() const override;
+  gfx::Size NinePatchTrackAndButtonsCanvasSize() const override;
+  gfx::Rect NinePatchTrackAndButtonsAperture() const override;
   gfx::Rect ShrinkMainThreadedMinimalModeThumbRect(
       gfx::Rect& rect) const override;
 

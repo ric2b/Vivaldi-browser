@@ -1,7 +1,6 @@
-SKIP: FAILED
-
 #include <metal_stdlib>
 using namespace metal;
+
 template<typename T, size_t N>
 struct tint_array {
   const constant T& operator[](size_t i) const constant { return elements[i]; }
@@ -14,24 +13,17 @@ struct tint_array {
   T elements[N];
 };
 
-
 int foo() {
   return 1;
 }
+
 fragment void tint_symbol() {
   tint_array<float, 4> arr = tint_array<float, 4>{};
   {
-    thread float* const a = arr[foo()];
+    thread float* const a = (&arr[foo()]);
     while(true) {
-      float const x = a;
+      float const x = (*a);
       break;
     }
   }
 }
-program_source:22:25: error: cannot initialize a variable of type 'float *const' with an lvalue of type 'float'
-    thread float* const a = arr[foo()];
-                        ^   ~~~~~~~~~~
-program_source:24:19: error: cannot initialize a variable of type 'const float' with an lvalue of type 'float *const'
-      float const x = a;
-                  ^   ~
-

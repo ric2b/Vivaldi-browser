@@ -254,10 +254,9 @@ void ValidateCopySplit(const TextureSpec& textureSpec,
 }
 
 std::ostream& operator<<(std::ostream& os, const TextureSpec& textureSpec) {
-    os << "TextureSpec("
-       << "[(" << textureSpec.x << ", " << textureSpec.y << ", " << textureSpec.z << "), ("
-       << textureSpec.width << ", " << textureSpec.height << ", " << textureSpec.depthOrArrayLayers
-       << ")], " << textureSpec.texelBlockSizeInBytes << ")";
+    os << "TextureSpec(" << "[(" << textureSpec.x << ", " << textureSpec.y << ", " << textureSpec.z
+       << "), (" << textureSpec.width << ", " << textureSpec.height << ", "
+       << textureSpec.depthOrArrayLayers << ")], " << textureSpec.texelBlockSizeInBytes << ")";
     return os;
 }
 
@@ -268,16 +267,15 @@ std::ostream& operator<<(std::ostream& os, const BufferSpec& bufferSpec) {
 }
 
 std::ostream& operator<<(std::ostream& os, const TextureCopySubresource& copySplit) {
-    os << "CopySplit" << std::endl;
+    os << "CopySplit\n";
     for (uint32_t i = 0; i < copySplit.count; ++i) {
         const auto& copy = copySplit.copies[i];
         os << "  " << i << ": Texture at (" << copy.textureOffset.x << ", " << copy.textureOffset.y
            << ", " << copy.textureOffset.z << "), size (" << copy.copySize.width << ", "
-           << copy.copySize.height << ", " << copy.copySize.depthOrArrayLayers << ")" << std::endl;
+           << copy.copySize.height << ", " << copy.copySize.depthOrArrayLayers << ")\n";
         os << "  " << i << ": Buffer at (" << copy.bufferOffset.x << ", " << copy.bufferOffset.y
            << ", " << copy.bufferOffset.z << "), footprint (" << copy.bufferSize.width << ", "
-           << copy.bufferSize.height << ", " << copy.bufferSize.depthOrArrayLayers << ")"
-           << std::endl;
+           << copy.bufferSize.height << ", " << copy.bufferSize.depthOrArrayLayers << ")\n";
     }
     return os;
 }
@@ -418,9 +416,8 @@ class CopySplitTest : public testing::TestWithParam<wgpu::TextureDimension> {
 
         if (HasFatalFailure()) {
             std::ostringstream message;
-            message << "Failed generating splits: " << textureSpec << ", " << bufferSpec
-                    << std::endl
-                    << dimension << " " << copySplit << std::endl;
+            message << "Failed generating splits: " << textureSpec << ", " << bufferSpec << "\n"
+                    << dimension << " " << copySplit << "\n";
             FAIL() << message.str();
         }
     }

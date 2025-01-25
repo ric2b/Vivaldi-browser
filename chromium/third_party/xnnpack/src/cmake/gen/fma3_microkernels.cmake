@@ -180,82 +180,21 @@ SET(ALL_FMA3_MICROKERNEL_SRCS
   src/f32-qc8w-gemm/gen/f32-qc8w-gemm-6x16-minmax-fma3-broadcast.c
   src/f32-qc8w-gemm/gen/f32-qc8w-gemm-7x16-minmax-fma3-broadcast.c
   src/f32-qc8w-gemm/gen/f32-qc8w-gemm-8x16-minmax-fma3-broadcast.c
+  src/f32-vgelu/gen/f32-vgelu-fma3-rational-12-10-div.c
   src/f32-vhswish/gen/f32-vhswish-fma3-u8.c
   src/f32-vhswish/gen/f32-vhswish-fma3-u16.c
+  src/f32-vlog/gen/f32-vlog-fma3-rational-3-3-div.c
+  src/f32-vlog/gen/f32-vlog-fma3-rational-3-3-nr.c
   src/f32-vrsqrt/gen/f32-vrsqrt-fma3-rsqrt-u8.c
   src/f32-vrsqrt/gen/f32-vrsqrt-fma3-rsqrt-u16.c
   src/f32-vrsqrt/gen/f32-vrsqrt-fma3-rsqrt-u32.c
   src/f32-vsqrt/gen/f32-vsqrt-fma3-rsqrt-u8.c
   src/f32-vsqrt/gen/f32-vsqrt-fma3-rsqrt-u16.c
   src/f32-vsqrt/gen/f32-vsqrt-fma3-rsqrt-u32.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-div-u8.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-div-u16.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-div-u24.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-div-u32.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-div-u40.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-div-u48.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-div-u56.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-div-u64.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-div-u72.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-div-u80.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-nr1adj-u8.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-nr1adj-u16.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-nr1adj-u24.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-nr1adj-u32.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-nr1adj-u40.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-nr1adj-u48.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-nr1adj-u56.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-nr1adj-u64.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-nr1adj-u72.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut4-p4h3ts-perm-nr1adj-u80.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut8-p4h3ts-div-u8.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut8-p4h3ts-div-u16.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut8-p4h3ts-div-u24.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut8-p4h3ts-div-u32.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut8-p4h3ts-nr1adj-u8.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut8-p4h3ts-nr1adj-u16.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut8-p4h3ts-nr1adj-u24.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-lut8-p4h3ts-nr1adj-u32.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-div-u8.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-div-u16.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-div-u24.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-div-u32.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-div-u40.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-div-u48.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-div-u56.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-div-u64.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-div-u72.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-div-u80.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1-u8.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1-u16.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1-u24.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1-u32.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1-u40.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1-u48.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1-u56.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1-u64.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1-u72.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1-u80.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1adj-u8.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1adj-u16.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1adj-u24.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1adj-u32.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1adj-u40.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1adj-u48.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1adj-u56.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1adj-u64.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1adj-u72.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-expm1minus-rr1-p6h5ts-nr1adj-u80.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-rational-9-6-div-u8.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-rational-9-6-div-u16.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-rational-9-6-div-u24.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-rational-9-6-div-u32.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-rational-9-6-nr-u8.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-rational-9-6-nr-u16.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-rational-9-6-nr-u24.c
-  src/f32-vtanh/gen/f32-vtanh-fma3-rational-9-6-nr-u32.c
-  src/math/f32-sqrt-fma3-nr1fma1adj.c
+  src/f32-vtanh/gen/f32-vtanh-fma3-rational-9-6-div.c
+  src/f32-vtanh/gen/f32-vtanh-fma3-rational-9-6-nr.c
   src/math/f32-sqrt-fma3-nr1fma.c
+  src/math/f32-sqrt-fma3-nr1fma1adj.c
   src/math/f32-sqrt-fma3-nr2fma.c
   src/math/gen/f16-tanh-fma3-expm1minus-rr1-p3h2ts-div.c
   src/math/gen/f16-tanh-fma3-expm1minus-rr1-p3h2ts-rcp.c

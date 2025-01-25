@@ -21,6 +21,7 @@
 #import "components/prefs/pref_service.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/autofill/model/personal_data_manager_factory.h"
+#import "ios/chrome/browser/autofill/ui_bundled/scoped_autofill_payment_reauth_module_override.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
@@ -34,7 +35,6 @@
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/autofill/scoped_autofill_payment_reauth_module_override.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_add_credit_card_coordinator.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_add_credit_card_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_credit_card_edit_table_view_controller.h"
@@ -51,6 +51,8 @@
 #import "ui/base/l10n/l10n_util.h"
 
 namespace {
+
+constexpr base::TimeDelta kUpdatePrefDelay = base::Seconds(0.3);
 
 enum SectionIdentifier : NSInteger {
   SectionIdentifierAutofillCardSwitch = kSectionIdentifierEnumZero,
@@ -507,8 +509,20 @@ using autofill::autofill_metrics::MandatoryReauthOptInOrOutSource;
   [self setSwitchItemOn:[switchView isOn]
                itemType:ItemTypeAutofillCardSwitch
       sectionIdentifier:SectionIdentifierAutofillCardSwitch];
-  [self setAutofillCreditCardEnabled:[switchView isOn]];
-  self.addButtonInToolbar.enabled = [self isAutofillCreditCardEnabled];
+
+  // Delay updating the pref when VoiceOver is running to prevent a temporary
+  // focus shift due to simultaneous UI updates, see crbug.com/326923292.
+  if (UIAccessibilityIsVoiceOverRunning()) {
+    __weak __typeof(self) weakSelf = self;
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, base::BindOnce(^{
+          [weakSelf
+              updateAutofillCreditCardPrefAndToolbarForState:[switchView isOn]];
+        }),
+        kUpdatePrefDelay);
+  } else {
+    [self updateAutofillCreditCardPrefAndToolbarForState:[switchView isOn]];
+  }
 }
 
 - (void)mandatoryReauthSwitchChanged:(UISwitch*)switchView {
@@ -854,6 +868,13 @@ using autofill::autofill_metrics::MandatoryReauthOptInOrOutSource;
   LogMandatoryReauthOptInOrOutUpdateEvent(
       MandatoryReauthOptInOrOutSource::kSettingsPage,
       /*opt_in=*/!mandatoryReauthEnabled, flow_event);
+}
+
+// Updates the Autofill Credit Card pref and the view controller's toolbar
+// according to the provided `enabled` state.
+- (void)updateAutofillCreditCardPrefAndToolbarForState:(BOOL)enabled {
+  [self setAutofillCreditCardEnabled:enabled];
+  self.addButtonInToolbar.enabled = [self isAutofillCreditCardEnabled];
 }
 
 #pragma mark - AutofillAddCreditCardCoordinatorDelegate

@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "base/check_op.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/lazy_instance.h"
@@ -41,10 +42,12 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/base/clipboard/clipboard_metrics.h"
+#include "ui/base/clipboard/clipboard_monitor.h"
 #include "ui/base/clipboard/clipboard_util.h"
 #include "ui/base/clipboard/clipboard_util_win.h"
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size.h"
@@ -85,7 +88,7 @@ class ScopedClipboard {
     const int kMaxAttemptsToOpenClipboard = 5;
 
     if (opened_) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
     }
 
@@ -127,7 +130,7 @@ class ScopedClipboard {
       ::CloseClipboard();
       opened_ = false;
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -304,11 +307,17 @@ bool ClipboardWin::IsFormatAvailable(
 
 void ClipboardWin::Clear(ClipboardBuffer buffer) {
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
-  ScopedClipboard clipboard;
-  if (!clipboard.Acquire(GetClipboardWindow()))
-    return;
+  {
+    ScopedClipboard clipboard;
+    if (!clipboard.Acquire(GetClipboardWindow())) {
+      return;
+    }
 
-  ::EmptyClipboard();
+    ::EmptyClipboard();
+  }
+  // This call must happen after `clipboard`'s destructor so that observers are
+  // notified after the seqno has changed.
+  ClipboardMonitor::GetInstance()->NotifyClipboardDataChanged();
 }
 
 std::vector<std::u16string> ClipboardWin::GetStandardFormats(
@@ -347,17 +356,17 @@ void ClipboardWin::ReadAvailableTypes(
 
   // Read the custom type only if it's present on the clipboard.
   // See crbug.com/1477344 for details.
-  if (!IsFormatAvailable(ClipboardFormatType::WebCustomDataType(), buffer,
+  if (!IsFormatAvailable(ClipboardFormatType::DataTransferCustomType(), buffer,
                          data_dst)) {
     return;
   }
-  // Acquire the clipboard to read WebCustomDataType types.
+  // Acquire the clipboard to read DataTransferCustomType types.
   ScopedClipboard clipboard;
   if (!clipboard.Acquire(GetClipboardWindow()))
     return;
 
   HANDLE hdata = ::GetClipboardData(
-      ClipboardFormatType::WebCustomDataType().ToFormatEtc().cfFormat);
+      ClipboardFormatType::DataTransferCustomType().ToFormatEtc().cfFormat);
   if (!hdata)
     return;
 
@@ -373,7 +382,7 @@ void ClipboardWin::ReadText(ClipboardBuffer buffer,
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
   RecordRead(ClipboardFormatMetric::kText);
   if (!result) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 
@@ -402,7 +411,7 @@ void ClipboardWin::ReadAsciiText(ClipboardBuffer buffer,
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
   RecordRead(ClipboardFormatMetric::kText);
   if (!result) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 
@@ -493,9 +502,12 @@ void ClipboardWin::ReadSvg(ClipboardBuffer buffer,
 
   std::string data;
   ReadData(ClipboardFormatType::SvgType(), data_dst, &data);
-  result->assign(reinterpret_cast<const char16_t*>(data.data()),
-                 data.size() / sizeof(char16_t));
-
+  if (base::FeatureList::IsEnabled(features::kUseUtf8EncodingForSvgImage)) {
+    *result = base::UTF8ToUTF16(data);
+  } else {
+    result->assign(reinterpret_cast<const char16_t*>(data.data()),
+                   data.size() / sizeof(char16_t));
+  }
   TrimAfterNull(result);
 }
 
@@ -534,10 +546,11 @@ void ClipboardWin::ReadPng(ClipboardBuffer buffer,
 
 // |data_dst| is not used. It's only passed to be consistent with other
 // platforms.
-void ClipboardWin::ReadCustomData(ClipboardBuffer buffer,
-                                  const std::u16string& type,
-                                  const DataTransferEndpoint* data_dst,
-                                  std::u16string* result) const {
+void ClipboardWin::ReadDataTransferCustomData(
+    ClipboardBuffer buffer,
+    const std::u16string& type,
+    const DataTransferEndpoint* data_dst,
+    std::u16string* result) const {
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
   RecordRead(ClipboardFormatMetric::kCustomData);
 
@@ -547,7 +560,7 @@ void ClipboardWin::ReadCustomData(ClipboardBuffer buffer,
     return;
 
   HANDLE hdata = ::GetClipboardData(
-      ClipboardFormatType::WebCustomDataType().ToFormatEtc().cfFormat);
+      ClipboardFormatType::DataTransferCustomType().ToFormatEtc().cfFormat);
   if (!hdata)
     return;
 
@@ -667,7 +680,7 @@ void ClipboardWin::ReadData(const ClipboardFormatType& format,
                             std::string* result) const {
   RecordRead(ClipboardFormatMetric::kData);
   if (!result) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 
@@ -690,32 +703,39 @@ void ClipboardWin::WritePortableAndPlatformRepresentations(
     std::vector<Clipboard::PlatformRepresentation> platform_representations,
     std::unique_ptr<DataTransferEndpoint> data_src,
     uint32_t privacy_types) {
-  ScopedClipboard clipboard;
-  if (!clipboard.Acquire(GetClipboardWindow()))
-    return;
-  ::EmptyClipboard();
-
-  DispatchPlatformRepresentations(std::move(platform_representations));
-  for (const auto& object : objects)
-    DispatchPortableRepresentation(object.second);
-
-  if (data_src && data_src->IsUrlType()) {
-    HGLOBAL glob = CreateGlobalData(data_src->GetURL()->spec());
-    WriteToClipboard(ClipboardFormatType::InternalSourceUrlType(), glob);
-  }
-  // Write privacy data if there is any.
-  // On Windows, there is no special format to conceal passwords, but
-  // don't save it in the history or cloud clipboard for privacy reasons.
-  if (privacy_types & Clipboard::PrivacyTypes::kNoDisplay) {
-    WriteConfidentialDataForPassword();
-  } else {
-    if (privacy_types & Clipboard::PrivacyTypes::kNoLocalClipboardHistory) {
-      WriteClipboardHistory();
+  {
+    ScopedClipboard clipboard;
+    if (!clipboard.Acquire(GetClipboardWindow())) {
+      return;
     }
-    if (privacy_types & Clipboard::PrivacyTypes::kNoCloudClipboard) {
-      WriteUploadCloudClipboard();
+    ::EmptyClipboard();
+
+    DispatchPlatformRepresentations(std::move(platform_representations));
+    for (const auto& object : objects) {
+      DispatchPortableRepresentation(object.second);
+    }
+
+    if (data_src && data_src->IsUrlType()) {
+      HGLOBAL glob = CreateGlobalData(data_src->GetURL()->spec());
+      WriteToClipboard(ClipboardFormatType::InternalSourceUrlType(), glob);
+    }
+    // Write privacy data if there is any.
+    // On Windows, there is no special format to conceal passwords, but
+    // don't save it in the history or cloud clipboard for privacy reasons.
+    if (privacy_types & Clipboard::PrivacyTypes::kNoDisplay) {
+      WriteConfidentialDataForPassword();
+    } else {
+      if (privacy_types & Clipboard::PrivacyTypes::kNoLocalClipboardHistory) {
+        WriteClipboardHistory();
+      }
+      if (privacy_types & Clipboard::PrivacyTypes::kNoCloudClipboard) {
+        WriteUploadCloudClipboard();
+      }
     }
   }
+  // This call must happen after `clipboard`'s destructor so that observers are
+  // notified after the seqno has changed.
+  ClipboardMonitor::GetInstance()->NotifyClipboardDataChanged();
 }
 
 void ClipboardWin::WriteText(std::string_view text) {
@@ -736,7 +756,12 @@ void ClipboardWin::WriteHTML(std::string_view markup,
 }
 
 void ClipboardWin::WriteSvg(std::string_view markup) {
-  HGLOBAL glob = CreateGlobalData(base::UTF8ToUTF16(markup));
+  HGLOBAL glob;
+  if (base::FeatureList::IsEnabled(features::kUseUtf8EncodingForSvgImage)) {
+    glob = CreateGlobalData(std::string(markup));
+  } else {
+    glob = CreateGlobalData(base::UTF8ToUTF16(markup));
+  }
 
   WriteToClipboard(ClipboardFormatType::SvgType(), glob);
 }
@@ -919,7 +944,7 @@ SkBitmap ClipboardWin::ReadBitmapInternal(ClipboardBuffer buffer) const {
     case 24:
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   const void* bitmap_bits = reinterpret_cast<const char*>(bitmap) +
                             bitmap->bmiHeader.biSize +

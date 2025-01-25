@@ -49,8 +49,6 @@ bool IsUserTypeAllowed(const user_manager::User& user) {
       return base::FeatureList::IsEnabled(features::kWebKioskEnableLacros);
     case user_manager::UserType::kKioskApp:
       return base::FeatureList::IsEnabled(features::kChromeKioskEnableLacros);
-    case user_manager::UserType::kArcKioskApp:
-      return false;
   }
 }
 
@@ -116,7 +114,8 @@ bool IsEnabledInternal(const user_manager::User* user,
     case LacrosAvailability::kUserChoice:
       break;
     case LacrosAvailability::kLacrosDisallowed:
-      NOTREACHED();  // Guarded by IsLacrosAllowedInternal, called before.
+      NOTREACHED_IN_MIGRATION();  // Guarded by IsLacrosAllowedInternal, called
+                                  // before.
       return false;
     case LacrosAvailability::kLacrosOnly:
       return true;

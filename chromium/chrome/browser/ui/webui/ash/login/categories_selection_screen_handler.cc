@@ -38,4 +38,13 @@ void CategoriesSelectionScreenHandler::SetCategoriesData(
   CallExternalAPI("setCategoriesData", std::move(categories));
 }
 
+void CategoriesSelectionScreenHandler::SetOverviewStep() {
+  CallExternalAPI("setOverviewStep");
+}
+
+base::WeakPtr<CategoriesSelectionScreenView>
+CategoriesSelectionScreenHandler::AsWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
 }  // namespace ash

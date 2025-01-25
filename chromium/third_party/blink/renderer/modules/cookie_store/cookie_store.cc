@@ -298,6 +298,10 @@ ScriptPromise<IDLSequence<CookieListItem>> CookieStore::getAll(
          WTF::BindOnce(&CookieStore::GetAllForUrlToGetAllResult,
                        WrapPersistent(resolver)),
          exception_state);
+  if (exception_state.HadException()) {
+    resolver->Detach();
+    return EmptyPromise();
+  }
   return promise;
 }
 
@@ -330,6 +334,10 @@ ScriptPromise<IDLNullable<CookieListItem>> CookieStore::get(
          WTF::BindOnce(&CookieStore::GetAllForUrlToGetResult,
                        WrapPersistent(resolver)),
          exception_state);
+  if (exception_state.HadException()) {
+    resolver->Detach();
+    return EmptyPromise();
+  }
   return promise;
 }
 
@@ -462,7 +470,8 @@ void CookieStore::DoRead(ScriptState* script_state,
     }
   }
   backend_->GetAllForUrl(cookie_url, default_site_for_cookies_,
-                         default_top_frame_origin_, context->HasStorageAccess(),
+                         default_top_frame_origin_,
+                         context->GetStorageAccessApiStatus(),
                          std::move(backend_options), is_ad_tagged,
                          /*force_disable_third_party_cookies=*/false,
                          std::move(backend_result_converter));
@@ -521,7 +530,7 @@ ScriptPromise<IDLUndefined> CookieStore::DoWrite(
   if (!context->GetSecurityOrigin()->CanAccessCookies()) {
     exception_state.ThrowSecurityError(
         "Access to the CookieStore API is denied in this context.");
-    return ScriptPromise<IDLUndefined>();
+    return EmptyPromise();
   }
 
   net::CookieInclusionStatus status;
@@ -530,7 +539,7 @@ ScriptPromise<IDLUndefined> CookieStore::DoWrite(
 
   if (!canonical_cookie) {
     DCHECK(exception_state.HadException());
-    return ScriptPromise<IDLUndefined>();
+    return EmptyPromise();
   }
   // Since a canonical cookie exists, the status should have no exclusion
   // reasons associated with it.
@@ -539,7 +548,7 @@ ScriptPromise<IDLUndefined> CookieStore::DoWrite(
   if (!backend_) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "CookieStore backend went away");
-    return ScriptPromise<IDLUndefined>();
+    return EmptyPromise();
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
@@ -547,7 +556,7 @@ ScriptPromise<IDLUndefined> CookieStore::DoWrite(
   backend_->SetCanonicalCookie(
       *std::move(canonical_cookie), default_cookie_url_,
       default_site_for_cookies_, default_top_frame_origin_,
-      context->HasStorageAccess(), status,
+      context->GetStorageAccessApiStatus(), status,
       WTF::BindOnce(&CookieStore::OnSetCanonicalCookieResult,
                     WrapPersistent(resolver)));
   return resolver->Promise();
@@ -575,7 +584,7 @@ void CookieStore::StartObserving() {
       GetExecutionContext()->GetTaskRunner(TaskType::kDOMManipulation);
   backend_->AddChangeListener(
       default_cookie_url_, default_site_for_cookies_, default_top_frame_origin_,
-      GetExecutionContext()->HasStorageAccess(),
+      GetExecutionContext()->GetStorageAccessApiStatus(),
       change_listener_receiver_.BindNewPipeAndPassRemote(task_runner), {});
 }
 

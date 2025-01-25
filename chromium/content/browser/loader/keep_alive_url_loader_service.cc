@@ -174,7 +174,6 @@ class KeepAliveURLLoaderService::KeepAliveURLLoaderFactoriesBase {
                   resource_request.url,
                   resource_request.attribution_reporting_src_token,
                   resource_request.devtools_request_id,
-                  resource_request.attribution_reporting_runtime_features,
                   context->attribution_context.value())
             : nullptr);
     // Adds a new loader receiver to the set held by `this`, binding the pending
@@ -525,6 +524,8 @@ void KeepAliveURLLoaderService::Shutdown() {
   // Only fetch_later_loader_factories_ needs shutdown notification to handle
   // its non-started loaders.
   fetch_later_loader_factories_->Shutdown();
+  // Notifies fetch keepalive loader factories for it to log debugging metrics.
+  url_loader_factories_->Shutdown();
 }
 
 size_t KeepAliveURLLoaderService::NumLoadersForTesting() const {

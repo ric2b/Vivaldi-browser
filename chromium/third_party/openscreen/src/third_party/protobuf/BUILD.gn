@@ -35,6 +35,9 @@ config("protobuf_warnings") {
       "-Wno-deprecated-declarations",
       "-Wno-unused-const-variable",
     ]
+  } else {
+    # NOTE: This can be removed after rolling to a newer version of protobuf.
+    cflags_cc += [ "-Wno-deprecated-enum-enum-conversion" ]
   }
 }
 

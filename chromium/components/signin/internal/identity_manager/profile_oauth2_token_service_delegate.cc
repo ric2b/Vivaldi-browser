@@ -70,10 +70,6 @@ std::string SourceToString(SourceForRefreshTokenOperation source) {
     case SourceForRefreshTokenOperation::
         kAccountReconcilor_RevokeTokensNotInCookies:
       return "AccountReconcilor::RevokeTokensNotInCookies";
-    case SourceForRefreshTokenOperation::
-        kDiceResponseHandler_PasswordPromoSignin:
-      return "DiceResponseHandler::Signin from sign in promo after password "
-             "save";
   }
 }
 
@@ -190,6 +186,9 @@ void ProfileOAuth2TokenServiceDelegate::FireRefreshTokenRevoked(
   ScopedBatchChange batch(this);
   for (auto& observer : observer_list_)
     observer.OnRefreshTokenRevoked(account_id);
+
+  CHECK(on_refresh_token_revoked_notified_callback_);
+  on_refresh_token_revoked_notified_callback_.Run(account_id);
 }
 
 void ProfileOAuth2TokenServiceDelegate::FireRefreshTokensLoaded() {
@@ -254,7 +253,7 @@ void ProfileOAuth2TokenServiceDelegate::ExtractCredentials(
 void ProfileOAuth2TokenServiceDelegate::ExtractCredentialsInternal(
     ProfileOAuth2TokenService* to_service,
     const CoreAccountId& account_id) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void ProfileOAuth2TokenServiceDelegate::RevokeAllCredentials(
@@ -291,7 +290,7 @@ void ProfileOAuth2TokenServiceDelegate::UpdateCredentials(
   );
 }
 
-bool ProfileOAuth2TokenServiceDelegate::FixRequestErrorIfPossible() {
+bool ProfileOAuth2TokenServiceDelegate::FixAccountErrorIfPossible() {
   return false;
 }
 
@@ -369,8 +368,9 @@ GoogleServiceAuthError ProfileOAuth2TokenServiceDelegate::BackOffError() const {
 
 void ProfileOAuth2TokenServiceDelegate::ResetBackOffEntry() {
   if (!backoff_entry_) {
-    NOTREACHED() << "Should be called only if `use_backoff` was true in the "
-                    "constructor.";
+    NOTREACHED_IN_MIGRATION()
+        << "Should be called only if `use_backoff` was true in the "
+           "constructor.";
     return;
   }
   backoff_entry_->Reset();
@@ -386,4 +386,11 @@ void ProfileOAuth2TokenServiceDelegate::
     SetRefreshTokenRevokedFromSourceCallback(
         RefreshTokenRevokedFromSourceCallback callback) {
   on_refresh_token_revoked_callback_ = callback;
+}
+
+void ProfileOAuth2TokenServiceDelegate::SetOnRefreshTokenRevokedNotified(
+    base::RepeatingCallback<void(const CoreAccountId&)> callback) {
+  CHECK(callback);
+  CHECK(!on_refresh_token_revoked_notified_callback_);
+  on_refresh_token_revoked_notified_callback_ = std::move(callback);
 }

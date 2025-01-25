@@ -48,7 +48,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BooleanSupplier;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -65,8 +64,8 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
     private final boolean mShowDownload;
     private final boolean mIsOpenedByChrome;
     private final boolean mIsIncognito;
+    private final boolean mIsAuthView;
     private final boolean mIsStartIconMenu;
-    private final BooleanSupplier mIsPageInsightsHubEnabled;
 
     private final List<String> mMenuEntries;
     private final Map<String, Integer> mTitleToItemIdMap = new HashMap<String, Integer>();
@@ -95,8 +94,8 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
             boolean showStar,
             boolean showDownload,
             boolean isIncognito,
+            boolean isAuthView,
             boolean isStartIconMenu,
-            BooleanSupplier isPageInsightsHubEnabled,
             Supplier<ReadAloudController> readAloudControllerSupplier,
             boolean hasClientPackage) {
         super(
@@ -114,11 +113,12 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
         mUiType = uiType;
         mMenuEntries = menuEntries;
         mIsOpenedByChrome = isOpenedByChrome;
+
         // Vivaldi
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
             mShowShare = false;
         else
-        mShowShare = showShare;
+        mShowShare = showShare && !isAuthView;
         mShowStar = showStar;
         // Vivaldi
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
@@ -126,8 +126,8 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
         else
         mShowDownload = showDownload;
         mIsIncognito = isIncognito;
+        mIsAuthView = isAuthView;
         mIsStartIconMenu = isStartIconMenu;
-        mIsPageInsightsHubEnabled = isPageInsightsHubEnabled;
         mHasClientPackage = hasClientPackage;
         // Vivaldi
         if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
@@ -169,19 +169,22 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
             loadingStateChanged(currentTab.isLoading());
 
             MenuItem shareItem = menu.findItem(R.id.share_row_menu_id);
-            shareItem.setVisible(mShowShare);
-            shareItem.setEnabled(mShowShare);
-            if (mShowShare) {
+            // TODO(crbug.com/337363657): Show Share for pdf native pages once supported.
+            boolean isPdfPage = currentTab.isNativePage() && currentTab.getNativePage().isPdf();
+            boolean showShareExceptForPdf = mShowShare && !isPdfPage;
+            shareItem.setVisible(showShareExceptForPdf);
+            shareItem.setEnabled(showShareExceptForPdf);
+            if (showShareExceptForPdf) {
                 updateDirectShareMenuItem(menu.findItem(R.id.direct_share_menu_id));
             }
 
-            boolean openInChromeItemVisible = true;
-            boolean bookmarkItemVisible = mShowStar;
-            boolean downloadItemVisible = mShowDownload;
-            boolean addToHomeScreenVisible = true;
+            boolean openInChromeItemVisible = !mIsAuthView;
+            boolean bookmarkItemVisible = mShowStar && !mIsAuthView;
+            boolean downloadItemVisible = mShowDownload && !mIsAuthView;
+            boolean addToHomeScreenVisible = !mIsAuthView;
             boolean requestDesktopSiteVisible = true;
             boolean tryAddingReadAloud = ReadAloudFeatures.isEnabledForOverflowMenuInCCT();
-            boolean historyItemVisible = true;
+            boolean historyItemVisible = !mIsAuthView;
             if (!HistoryManager.isAppSpecificHistoryEnabled() || !mHasClientPackage) {
                 historyItemVisible = false;
             }
@@ -306,10 +309,6 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                 openInChromeItem.setVisible(false);
             }
 
-            if (mIsPageInsightsHubEnabled.getAsBoolean()) {
-                menu.findItem(R.id.page_insights_id).setVisible(true);
-            }
-
             // Add custom menu items.
             for (int i = 0; i < mMenuEntries.size(); i++) {
                 MenuItem item = menu.add(0, i, 1, mMenuEntries.get(i));
@@ -409,7 +408,6 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
         return mIsStartIconMenu;
     }
 
-    @VisibleForTesting
     void setHasClientPackageForTesting(boolean hasClientPackage) {
         mHasClientPackage = hasClientPackage;
     }

@@ -608,24 +608,11 @@ void HTMLCanvasElement::DidDraw(const SkIRect& rect) {
   }
 
   canvas_is_clear_ = false;
-  const bool is_rendering_context2d = IsRenderingContext2D();
-  if (is_rendering_context2d && context_->ShouldAntialias()) {
-    gfx::RectF inflated_rect(gfx::SkIRectToRect(rect));
-    inflated_rect.Outset(1);
-    dirty_rect_.Union(inflated_rect);
-  } else {
-    dirty_rect_.Union(gfx::RectF(gfx::SkIRectToRect(rect)));
-  }
+  dirty_rect_.Union(gfx::Rect(gfx::SkIRectToRect(rect)));
 }
 
 void HTMLCanvasElement::PreFinalizeFrame() {
   RecordCanvasSizeToUMA();
-
-  // PreFinalizeFrame indicates the end of a script task that may have rendered
-  // into the canvas, now is a good time to unlock cache entries.
-  auto* resource_provider = ResourceProvider();
-  if (resource_provider)
-    resource_provider->ReleaseLockedImages();
 
   // Low-latency 2d canvases produce their frames after the resource gets single
   // buffered.
@@ -643,9 +630,9 @@ void HTMLCanvasElement::PostFinalizeFrame(FlushReason reason) {
     const base::TimeTicks start_time = base::TimeTicks::Now();
     if (scoped_refptr<CanvasResource> canvas_resource =
             ResourceProvider()->ProduceCanvasResource(reason)) {
-      const gfx::RectF src_rect((gfx::SizeF(Size())));
+      const gfx::Rect src_rect(Size());
       dirty_rect_.Intersect(src_rect);
-      const gfx::Rect int_dirty = gfx::ToEnclosingRect(dirty_rect_);
+      const gfx::Rect int_dirty = dirty_rect_;
       const SkIRect damage_rect = SkIRect::MakeXYWH(
           int_dirty.x(), int_dirty.y(), int_dirty.width(), int_dirty.height());
       const bool needs_vertical_flip = !canvas_resource->IsOriginTopLeft();
@@ -653,7 +640,7 @@ void HTMLCanvasElement::PostFinalizeFrame(FlushReason reason) {
                                        damage_rect, needs_vertical_flip,
                                        IsOpaque());
     }
-    dirty_rect_ = gfx::RectF();
+    dirty_rect_ = gfx::Rect();
   }
 
   // If the canvas is visible, notifying listeners is taken care of in
@@ -707,13 +694,13 @@ void HTMLCanvasElement::DoDeferredPaintInvalidation() {
   }
 
   if (IsRenderingContext2D()) {
-    gfx::RectF src_rect(0, 0, Size().width(), Size().height());
+    gfx::Rect src_rect(Size());
     dirty_rect_.Intersect(src_rect);
 
     gfx::RectF invalidation_rect;
     if (layout_box) {
-      gfx::RectF mapped_dirty_rect =
-          gfx::MapRect(dirty_rect_, src_rect, content_rect);
+      gfx::RectF mapped_dirty_rect = gfx::MapRect(
+          gfx::RectF(dirty_rect_), gfx::RectF(src_rect), content_rect);
       if (context_->IsComposited()) {
         // Composited 2D canvases need the dirty rect to be expressed relative
         // to the content box, as opposed to the layout box.
@@ -721,7 +708,7 @@ void HTMLCanvasElement::DoDeferredPaintInvalidation() {
       }
       invalidation_rect = mapped_dirty_rect;
     } else {
-      invalidation_rect = dirty_rect_;
+      invalidation_rect = gfx::RectF(dirty_rect_);
     }
 
     if (dirty_rect_.IsEmpty())
@@ -743,16 +730,14 @@ void HTMLCanvasElement::DoDeferredPaintInvalidation() {
     layout_box->SetShouldDoFullPaintInvalidation();
   }
 
-  dirty_rect_ = gfx::RectF();
+  dirty_rect_ = gfx::Rect();
 }
 
 void HTMLCanvasElement::Reset() {
   if (ignore_reset_)
     return;
 
-  dirty_rect_ = gfx::RectF();
-
-  bool had_resource_provider = HasResourceProvider();
+  dirty_rect_ = gfx::Rect();
 
   unsigned w = 0;
   AtomicString value = FastGetAttribute(html_names::kWidthAttr);
@@ -778,7 +763,8 @@ void HTMLCanvasElement::Reset() {
 
   // If the size of an existing buffer matches, we can just clear it instead of
   // reallocating.  This optimization is only done for 2D canvases for now.
-  if (had_resource_provider && old_size == new_size && IsRenderingContext2D()) {
+  if (ResourceProvider() != nullptr && old_size == new_size &&
+      IsRenderingContext2D()) {
     if (!canvas_is_clear_) {
       canvas_is_clear_ = true;
       context_->ClearRect(0, 0, width(), height());
@@ -985,7 +971,8 @@ void HTMLCanvasElement::Paint(GraphicsContext& context,
 void HTMLCanvasElement::PaintInternal(GraphicsContext& context,
                                       const PhysicalRect& r) {
   context_->PaintRenderingResultsToCanvas(kFrontBuffer);
-  if (HasResourceProvider()) {
+  CanvasResourceProvider* provider = ResourceProvider();
+  if (provider != nullptr) {
     // For 2D Canvas, there are two ways of render Canvas for printing:
     // display list or image snapshot. Display list allows better PDF printing
     // and we prefer this method.
@@ -1001,13 +988,7 @@ void HTMLCanvasElement::PaintInternal(GraphicsContext& context,
     // web test printing/manual/canvas2d-vector-text.html
     // That test should be run manually against CLs that touch this code.
     if (IsPrinting() && IsRenderingContext2D() && canvas2d_bridge_) {
-      canvas2d_bridge_->FlushRecording(FlushReason::kPrinting);
-      CanvasResourceProvider* provider = ResourceProvider();
-      // The provider must be checked after calling `FlushRecording` in case
-      // the playback crashed the context.
-      if (provider == nullptr) {
-        return;
-      }
+      FlushRecording(FlushReason::kPrinting);
       // `FlushRecording` might be a no-op if a flush already happened before.
       // Fortunately, the last flush recording was kept by the provider.
       const std::optional<cc::PaintRecord>& last_recording =
@@ -1183,7 +1164,7 @@ String HTMLCanvasElement::ToDataURLInternal(
                                   scaled_time_int);
     } else {
       // Currently we only support three encoding types.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
     IdentifiabilityReportWithDigest(IdentifiabilityBenignStringToken(data_url));
     return data_url;
@@ -1496,7 +1477,7 @@ void HTMLCanvasElement::DiscardResourceProvider() {
   canvas2d_bridge_.reset();
   ResetLayer();
   CanvasResourceHost::DiscardResourceProvider();
-  dirty_rect_ = gfx::RectF();
+  dirty_rect_ = gfx::Rect();
 }
 
 void HTMLCanvasElement::UpdateSuspendOffscreenCanvasAnimation() {
@@ -1572,16 +1553,32 @@ void HTMLCanvasElement::RemovedFrom(ContainerNode& insertion_point) {
 }
 
 void HTMLCanvasElement::WillDrawImageTo2DContext(CanvasImageSource* source) {
-  if (SharedGpuContext::AllowSoftwareToAcceleratedCanvasUpgrade() &&
-      source->IsAccelerated() && (GetRasterMode() == RasterMode::kCPU) &&
-      ShouldAccelerate()) {
-    SetPreferred2DRasterMode(RasterModeHint::kPreferGPU);
-    std::unique_ptr<Canvas2DLayerBridge> surface = Create2DLayerBridge();
-    if (surface) {
-      ReplaceExisting2dLayerBridge(std::move(surface));
+  // If the source is GPU-accelerated, and the canvas is not, but could be...
+  if (source->IsAccelerated() && ShouldAccelerate() &&
+      GetRasterMode() == RasterMode::kCPU) {
+    // Recreate the canvas in GPU raster mode, and update its contents.
+    if (RecreateCanvasInGPURasterMode()) {
       SetNeedsCompositingUpdate();
     }
   }
+}
+
+bool HTMLCanvasElement::EnableAcceleration() {
+  return GetRasterMode() == RasterMode::kCPU ? RecreateCanvasInGPURasterMode()
+                                             : true;
+}
+
+bool HTMLCanvasElement::RecreateCanvasInGPURasterMode() {
+  if (!SharedGpuContext::AllowSoftwareToAcceleratedCanvasUpgrade()) {
+    return false;
+  }
+  SetPreferred2DRasterMode(RasterModeHint::kPreferGPU);
+  std::unique_ptr<Canvas2DLayerBridge> surface = Create2DLayerBridge();
+  if (!surface) {
+    return false;
+  }
+  ReplaceExisting2dLayerBridge(std::move(surface));
+  return true;
 }
 
 scoped_refptr<Image> HTMLCanvasElement::GetSourceImageForCanvas(
@@ -1689,7 +1686,7 @@ ScriptPromise<ImageBitmap> HTMLCanvasElement::CreateImageBitmap(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "`createImageBitmap()` cannot be called with open layers.");
-    return ScriptPromise<ImageBitmap>();
+    return EmptyPromise();
   }
   return ImageBitmapSource::FulfillImageBitmap(
       script_state, MakeGarbageCollected<ImageBitmap>(this, crop_rect, options),
@@ -1934,15 +1931,6 @@ bool HTMLCanvasElement::IsHibernating() const {
 
 bool HTMLCanvasElement::IsAccelerated() const {
   return GetRasterMode() == RasterMode::kGPU;
-}
-
-// Temporary plumbing
-void HTMLCanvasElement::FlushRecording(FlushReason reason) {
-  if (canvas2d_bridge_) {
-    canvas2d_bridge_->FlushRecording(reason);
-  } else {
-    CanvasResourceHost::FlushRecording(reason);
-  }
 }
 
 }  // namespace blink

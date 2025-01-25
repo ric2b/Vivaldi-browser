@@ -20,6 +20,7 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_test_utils.h"
 #include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/form_data_test_api.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "content/public/renderer/render_frame.h"
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
@@ -68,7 +69,7 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
 
   SubmissionSource submission_source() const { return submission_source_; }
 
-  const FormFieldData* select_control_changed() const {
+  const FormData* select_control_changed() const {
     return select_control_changed_.get();
   }
 
@@ -86,29 +87,29 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
   }
 
   void CaretMovedInFormField(const FormData& form,
-                             const FormFieldData& field,
+                             FieldRendererId field_id,
                              const gfx::Rect& caret_bounds) override {}
 
   void TextFieldDidChange(const FormData& form,
-                          const FormFieldData& field,
+                          FieldRendererId field_id,
                           base::TimeTicks timestamp) override {}
 
   void TextFieldDidScroll(const FormData& form,
-                          const FormFieldData& field) override {}
+                          FieldRendererId field_id) override {}
 
   void SelectControlDidChange(const FormData& form,
-                              const FormFieldData& field) override {
-    select_control_changed_ = std::make_unique<FormFieldData>(field);
+                              FieldRendererId field_id) override {
+    select_control_changed_ = std::make_unique<FormData>(form);
   }
 
   void JavaScriptChangedAutofilledValue(const FormData& form,
-                                        const FormFieldData& field,
+                                        FieldRendererId field_id,
                                         const std::u16string& old_value,
                                         bool formatting_only) override {}
 
   void AskForValuesToFill(
       const FormData& form,
-      const FormFieldData& field,
+      FieldRendererId field_id,
       const gfx::Rect& caret_bounds,
       AutofillSuggestionTriggerSource trigger_source) override {}
 
@@ -120,7 +121,7 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
   }
 
   void FocusOnFormField(const FormData& form,
-                        const FormFieldData& field) override {}
+                        FieldRendererId field_id) override {}
 
   void DidFillAutofillFormData(const FormData& form,
                                base::TimeTicks timestamp) override {}
@@ -144,7 +145,7 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
 
   SubmissionSource submission_source_;
 
-  std::unique_ptr<FormFieldData> select_control_changed_;
+  std::unique_ptr<FormData> select_control_changed_;
 
   mojo::AssociatedReceiverSet<mojom::AutofillDriver> receivers_;
 };
@@ -162,10 +163,10 @@ void VerifyReceivedRendererMessages(
 
   // The tuple also includes a timestamp, which is ignored.
   const FormData& submitted_form = *(fake_driver.form_submitted());
-  ASSERT_LE(2U, submitted_form.fields.size());
-  EXPECT_EQ(u"fname", submitted_form.fields[0].name());
-  EXPECT_EQ(base::UTF8ToUTF16(fname), submitted_form.fields[0].value());
-  EXPECT_EQ(u"lname", submitted_form.fields[1].name());
+  ASSERT_LE(2U, submitted_form.fields().size());
+  EXPECT_EQ(u"fname", submitted_form.fields()[0].name());
+  EXPECT_EQ(base::UTF8ToUTF16(fname), submitted_form.fields()[0].value());
+  EXPECT_EQ(u"lname", submitted_form.fields()[1].name());
   EXPECT_EQ(expect_known_success, fake_driver.known_success());
   EXPECT_EQ(expect_submission_source,
             mojo::ConvertTo<SubmissionSource>(fake_driver.submission_source()));
@@ -180,9 +181,9 @@ void VerifyReceivedAddressRendererMessages(
 
   // The tuple also includes a timestamp, which is ignored.
   const FormData& submitted_form = *(fake_driver.form_submitted());
-  ASSERT_LE(1U, submitted_form.fields.size());
-  EXPECT_EQ(u"address", submitted_form.fields[0].name());
-  EXPECT_EQ(base::UTF8ToUTF16(address), submitted_form.fields[0].value());
+  ASSERT_LE(1U, submitted_form.fields().size());
+  EXPECT_EQ(u"address", submitted_form.fields()[0].name());
+  EXPECT_EQ(base::UTF8ToUTF16(address), submitted_form.fields()[0].value());
   EXPECT_EQ(expect_known_success, fake_driver.known_success());
   EXPECT_EQ(expect_submission_source,
             mojo::ConvertTo<SubmissionSource>(fake_driver.submission_source()));
@@ -199,10 +200,10 @@ void VerifyNoSubmitMessagesReceived(
 // TODO(crbug.com/41495779): Update.
 FormData CreateAutofillFormData(blink::WebLocalFrame* main_frame) {
   FormData data;
-  data.name = u"name";
-  data.url = GURL("http://example.com/");
-  data.action = GURL("http://example.com/blade.php");
-  data.renderer_id = test::MakeFormRendererId();  // Default value.
+  data.set_name(u"name");
+  data.set_url(GURL("http://example.com/"));
+  data.set_action(GURL("http://example.com/blade.php"));
+  data.set_renderer_id(test::MakeFormRendererId());  // Default value.
 
   WebDocument document = main_frame->GetDocument();
   WebFormControlElement fname_element =
@@ -217,14 +218,14 @@ FormData CreateAutofillFormData(blink::WebLocalFrame* main_frame) {
   field_data.set_value(u"John");
   field_data.set_is_autofilled(true);
   field_data.set_renderer_id(form_util::GetFieldRendererId(fname_element));
-  data.fields.push_back(field_data);
+  test_api(data).Append(field_data);
 
-  if (!lname_element.IsNull()) {
+  if (lname_element) {
     field_data.set_name(u"lname");
     field_data.set_value(u"Smith");
     field_data.set_is_autofilled(true);
     field_data.set_renderer_id(form_util::GetFieldRendererId(lname_element));
-    data.fields.push_back(field_data);
+    test_api(data).Append(field_data);
   }
 
   return data;
@@ -234,7 +235,7 @@ std::vector<FormFieldData::FillData> GetFieldsForFilling(
     const std::vector<FormData>& forms) {
   std::vector<FormFieldData::FillData> fields;
   for (const FormData& form : forms) {
-    for (const FormFieldData& field : form.fields) {
+    for (const FormFieldData& field : form.fields()) {
       fields.emplace_back(field);
     }
   }
@@ -279,7 +280,7 @@ class FormAutocompleteTest : public ChromeRenderViewTest {
   void SimulateUserInput(const blink::WebString& id, const std::string& value) {
     WebDocument document = GetMainFrame()->GetDocument();
     WebElement element = document.GetElementById(id);
-    ASSERT_FALSE(element.IsNull());
+    ASSERT_TRUE(element);
     WebInputElement fname_element = element.To<WebInputElement>();
     SimulateUserInputChangeForElement(&fname_element, value);
   }
@@ -296,7 +297,7 @@ class FormAutocompleteTest : public ChromeRenderViewTest {
         document.GetElementById(WebString::FromUTF8("fname"))
             .To<WebFormControlElement>();
 
-    ASSERT_FALSE(fname_element.IsNull());
+    ASSERT_TRUE(fname_element);
     // This call is necessary to setup the autofill agent appropriate for the
     // user selection; simulates the menu actually popping up.
     SimulateElementClick(fname_element);
@@ -313,42 +314,42 @@ class FormAutocompleteTest : public ChromeRenderViewTest {
     WebFormControlElement fname_element =
         document.GetElementById(WebString::FromUTF8("fname"))
             .To<WebFormControlElement>();
-    ASSERT_FALSE(fname_element.IsNull());
+    ASSERT_TRUE(fname_element);
     WebFormControlElement mname_element =
         document.GetElementById(WebString::FromUTF8("mname"))
             .To<WebFormControlElement>();
-    ASSERT_FALSE(mname_element.IsNull());
+    ASSERT_TRUE(mname_element);
     WebFormControlElement lname_element =
         document.GetElementById(WebString::FromUTF8("lname"))
             .To<WebFormControlElement>();
-    ASSERT_FALSE(lname_element.IsNull());
+    ASSERT_TRUE(lname_element);
 
     // TODO(crbug.com/41495779): Update.
     FormData form;
-    form.name = u"name";
-    form.url = GURL("http://example.com/");
-    form.action = GURL("http://example.com/blade.php");
-    form.renderer_id = test::MakeFormRendererId();  // Default value.
+    form.set_name(u"name");
+    form.set_url(GURL("http://example.com/"));
+    form.set_action(GURL("http://example.com/blade.php"));
+    form.set_renderer_id(test::MakeFormRendererId());  // Default value.
 
     FormFieldData field;
     field.set_name(u"fname");
     field.set_value(u"John");
     field.set_is_autofilled(true);
     field.set_renderer_id(form_util::GetFieldRendererId(fname_element));
-    form.fields.push_back(field);
+    test_api(form).Append(field);
 
     field.set_name(u"lname");
     field.set_value(u"Smith");
     field.set_is_autofilled(true);
     field.set_renderer_id(form_util::GetFieldRendererId(lname_element));
-    form.fields.push_back(field);
+    test_api(form).Append(field);
 
     // Additional non-autofillable field.
     field.set_name(u"mname");
     field.set_value(u"James");
     field.set_is_autofilled(false);
     field.set_renderer_id(form_util::GetFieldRendererId(mname_element));
-    form.fields.push_back(field);
+    test_api(form).Append(field);
 
     // This call is necessary to setup the autofill agent appropriate for the
     // user selection; simulates the menu actually popping up.
@@ -553,7 +554,7 @@ TEST_F(FormAutocompleteTest, AcceptDataListSuggestion) {
 
   for (const auto& c : cases) {
     WebElement element = document.GetElementById(WebString::FromUTF8(c.id));
-    ASSERT_FALSE(element.IsNull());
+    ASSERT_TRUE(element);
     WebInputElement input_element = element.To<WebInputElement>();
     SimulateElementClick(input_element);
 
@@ -619,7 +620,7 @@ TEST_F(FormAutocompleteTestFocus,
   // Simulate user input so that the form is "remembered".
   WebDocument document = GetMainFrame()->GetDocument();
   WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
-  ASSERT_FALSE(element.IsNull());
+  ASSERT_TRUE(element);
   WebInputElement fname_element = element.To<WebInputElement>();
   SimulateUserInputChangeForElement(&fname_element, std::string("Rick"));
 
@@ -649,7 +650,7 @@ TEST_F(FormAutocompleteTestFocus,
   // Simulate user input so that the form is "remembered".
   WebDocument document = GetMainFrame()->GetDocument();
   WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
-  ASSERT_FALSE(element.IsNull());
+  ASSERT_TRUE(element);
   WebInputElement fname_element = element.To<WebInputElement>();
   SimulateUserInputChangeForElement(&fname_element, std::string("Rick"));
 
@@ -683,7 +684,7 @@ TEST_F(FormAutocompleteTestFocus,
   // Simulate user input in the first form so that the form is "remembered".
   WebDocument document = GetMainFrame()->GetDocument();
   WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
-  ASSERT_FALSE(element.IsNull());
+  ASSERT_TRUE(element);
   WebInputElement fname_element = element.To<WebInputElement>();
   SimulateUserInputChangeForElement(&fname_element, std::string("Rick"));
 
@@ -693,7 +694,7 @@ TEST_F(FormAutocompleteTestFocus,
   // message is sent for the first form.
   document = GetMainFrame()->GetDocument();
   element = document.GetElementById(WebString::FromUTF8("fname2"));
-  ASSERT_FALSE(element.IsNull());
+  ASSERT_TRUE(element);
   fname_element = element.To<WebInputElement>();
   SimulateUserInputChangeForElement(&fname_element, std::string("John"));
 
@@ -725,10 +726,11 @@ TEST_F(FormAutocompleteTest, SelectControlChanged) {
           *reinterpret_cast<blink::WebFormControlElement*>(&element));
   base::RunLoop().RunUntilIdle();
 
-  const FormFieldData* field = fake_driver_.select_control_changed();
-  ASSERT_TRUE(field);
-  EXPECT_EQ(u"color", field->name());
-  EXPECT_EQ(u"blue", field->value());
+  const FormData* form = fake_driver_.select_control_changed();
+  ASSERT_TRUE(form);
+  ASSERT_EQ(form->fields().size(), 1u);
+  EXPECT_EQ(u"color", form->fields()[0].name());
+  EXPECT_EQ(u"blue", form->fields()[0].value());
 }
 
 // Parameterized test for submission detection. The parameter dictates whether
@@ -1085,7 +1087,7 @@ TEST_P(FormAutocompleteSubmissionTest, DynamicAutoCompleteOffFormSubmit) {
 
   WebElement element =
       GetMainFrame()->GetDocument().GetElementById(blink::WebString("myForm"));
-  ASSERT_FALSE(element.IsNull());
+  ASSERT_TRUE(element);
   blink::WebFormElement form = element.To<blink::WebFormElement>();
   EXPECT_TRUE(form.AutoComplete());
 

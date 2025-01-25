@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/mediarecorder/media_recorder_handler.h"
 
 #include <algorithm>
@@ -41,6 +46,7 @@
 #include "third_party/blink/renderer/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/media_capabilities/web_media_capabilities_info.h"
 #include "third_party/blink/renderer/platform/media_capabilities/web_media_configuration.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
@@ -92,7 +98,7 @@ VideoTrackRecorder::CodecId CodecIdFromMediaVideoCodec(media::VideoCodec id) {
     default:
       return VideoTrackRecorder::CodecId::kLast;
   }
-  NOTREACHED() << "Unsupported video codec";
+  NOTREACHED_IN_MIGRATION() << "Unsupported video codec";
   return VideoTrackRecorder::CodecId::kLast;
 }
 
@@ -111,7 +117,7 @@ media::VideoCodec MediaVideoCodecFromCodecId(VideoTrackRecorder::CodecId id) {
     case VideoTrackRecorder::CodecId::kLast:
       return media::VideoCodec::kUnknown;
   }
-  NOTREACHED() << "Unsupported video codec";
+  NOTREACHED_IN_MIGRATION() << "Unsupported video codec";
   return media::VideoCodec::kUnknown;
 }
 
@@ -126,7 +132,7 @@ media::AudioCodec CodecIdToMediaAudioCodec(AudioTrackRecorder::CodecId id) {
     case AudioTrackRecorder::CodecId::kLast:
       return media::AudioCodec::kUnknown;
   }
-  NOTREACHED() << "Unsupported audio codec";
+  NOTREACHED_IN_MIGRATION() << "Unsupported audio codec";
   return media::AudioCodec::kUnknown;
 }
 
@@ -221,7 +227,6 @@ bool IsMp4MuxerRequired(const String& type) {
   if (!base::FeatureList::IsEnabled(kMediaRecorderEnableMp4Muxer)) {
     return false;
   }
-
   return IsAllowedMp4Type(type);
 }
 
@@ -280,6 +285,7 @@ bool MediaRecorderHandler::CanSupportMimeType(const String& type,
         "mp4a.40.2",
 #endif
         "vp9",
+        "av01",
         "opus",
     };
     static const char* const kAudioCodecsForMp4[] = {
@@ -317,12 +323,14 @@ bool MediaRecorderHandler::CanSupportMimeType(const String& type,
                     });
 
     if (!match && mp4_mime_type && video) {
-      // `avc1` is a special case for video, it allows `avc1.<profile>.<level>`.
+      // It supports full qualified string for `avc1` and `av01` codecs, e.g.
+      //  `avc1.<profile>.<level>`, `av01.<profile>.<level>.<color depth>.*`.
       auto parsed_result =
           media::ParseVideoCodecString(type.Ascii(), codec_string.Ascii(),
                                        /*allow_ambiguous_matches=*/false);
       match =
-          parsed_result && (parsed_result->codec == media::VideoCodec::kH264);
+          parsed_result && (parsed_result->codec == media::VideoCodec::kH264 ||
+                            parsed_result->codec == media::VideoCodec::kAV1);
     }
 
     if (!match) {
@@ -432,8 +440,6 @@ bool MediaRecorderHandler::Start(int timeslice,
   media_stream_->AddObserver(this);
   is_media_stream_observer_ = true;
 
-  invalidated_ = false;
-
   timeslice_ = base::Milliseconds(timeslice);
   slice_origin_timestamp_ = base::TimeTicks::Now();
 
@@ -487,8 +493,10 @@ bool MediaRecorderHandler::Start(int timeslice,
   if (timeslice > 0) {
     optional_timeslice = timeslice_;
   }
-  auto write_callback = WTF::BindRepeating(&MediaRecorderHandler::WriteData,
-                                           WrapWeakPersistent(this));
+
+  auto write_callback =
+      WTF::BindRepeating(&MediaRecorderHandler::WriteData,
+                         WrapPersistent(weak_factory_.GetWeakCell()));
   if (use_mp4_muxer) {
     muxer = std::make_unique<media::Mp4Muxer>(
         audio_codec, use_video_tracks, use_audio_tracks,
@@ -534,12 +542,13 @@ bool MediaRecorderHandler::Start(int timeslice,
     if (passthrough_enabled_ && use_encoded_source_output) {
       video_recorders_.emplace_back(
           std::make_unique<VideoTrackRecorderPassthrough>(
-              main_thread_task_runner_, video_tracks_[0], this,
-              key_frame_config_));
+              main_thread_task_runner_, video_tracks_[0],
+              weak_video_factory_.GetWeakCell(), key_frame_config_));
     } else {
       video_recorders_.emplace_back(std::make_unique<VideoTrackRecorderImpl>(
           main_thread_task_runner_, video_codec_profile_, video_tracks_[0],
-          this, video_bits_per_second_, key_frame_config_));
+          weak_video_factory_.GetWeakCell(), video_bits_per_second_,
+          key_frame_config_));
     }
   }
 
@@ -554,8 +563,9 @@ bool MediaRecorderHandler::Start(int timeslice,
     UpdateTrackLiveAndEnabled(*audio_tracks_[0], /*is_video=*/false);
 
     audio_recorders_.emplace_back(std::make_unique<AudioTrackRecorder>(
-        main_thread_task_runner_, audio_codec_id_, audio_tracks_[0], this,
-        audio_bits_per_second_, audio_bitrate_mode_));
+        main_thread_task_runner_, audio_codec_id_, audio_tracks_[0],
+        weak_audio_factory_.GetWeakCell(), audio_bits_per_second_,
+        audio_bitrate_mode_));
   }
 
   recording_ = true;
@@ -577,7 +587,9 @@ void MediaRecorderHandler::Stop() {
 
   // Ensure any stored data inside the muxer is flushed out before invalidation.
   muxer_adapter_ = nullptr;
-  invalidated_ = true;
+  weak_audio_factory_.Invalidate();
+  weak_video_factory_.Invalidate();
+  weak_factory_.Invalidate();
 
   recording_ = false;
   timeslice_ = base::Milliseconds(0);
@@ -793,9 +805,6 @@ void MediaRecorderHandler::OnEncodedVideo(
     bool is_key_frame) {
   DCHECK(IsMainThread());
 
-  if (invalidated_)
-    return;
-
   if (encoded_data.empty() && encoded_alpha.empty()) {
     // An encoder drops a frame. This can happen with VideoToolBox encoder as
     // there is no way to disallow the frame dropping with it.
@@ -908,8 +917,6 @@ void MediaRecorderHandler::OnEncodedAudio(
     base::TimeTicks timestamp) {
   DCHECK(IsMainThread());
 
-  if (invalidated_)
-    return;
   if (!muxer_adapter_) {
     return;
   }
@@ -937,13 +944,11 @@ MediaRecorderHandler::CreateVideoEncoderMetricsProvider() {
 void MediaRecorderHandler::WriteData(std::string_view data) {
   DCHECK(IsMainThread());
   DVLOG(3) << __func__ << " " << data.length() << "B";
-  if (invalidated_)
-    return;
 
   const base::TimeTicks now = base::TimeTicks::Now();
   // Non-buffered mode does not need to check timestamps.
   if (timeslice_.is_zero()) {
-    recorder_->WriteData(data.data(), data.length(), /*last_in_slice=*/true,
+    recorder_->WriteData(base::as_byte_span(data), /*last_in_slice=*/true,
                          (now - base::TimeTicks::UnixEpoch()).InMillisecondsF(),
                          /*error_event=*/nullptr);
     return;
@@ -953,7 +958,7 @@ void MediaRecorderHandler::WriteData(std::string_view data) {
   DVLOG_IF(1, last_in_slice) << "Slice finished @ " << now;
   if (last_in_slice)
     slice_origin_timestamp_ = now;
-  recorder_->WriteData(data.data(), data.length(), last_in_slice,
+  recorder_->WriteData(base::as_byte_span(data), last_in_slice,
                        (now - base::TimeTicks::UnixEpoch()).InMillisecondsF(),
                        /*error_event=*/nullptr);
 }
@@ -1028,6 +1033,9 @@ void MediaRecorderHandler::Trace(Visitor* visitor) const {
   visitor->Trace(video_tracks_);
   visitor->Trace(audio_tracks_);
   visitor->Trace(recorder_);
+  visitor->Trace(weak_audio_factory_);
+  visitor->Trace(weak_video_factory_);
+  visitor->Trace(weak_factory_);
 }
 
 void MediaRecorderHandler::OnVideoEncodingError() {

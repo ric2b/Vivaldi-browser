@@ -10,7 +10,6 @@
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sharing/features.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -25,6 +24,7 @@
 #include "chrome/browser/ui/views/sharing_hub/sharing_hub_bubble_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/qr_code_generator/bitmap_generator.h"
+#include "components/sharing_message/features.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/download_request_utils.h"
@@ -253,7 +253,7 @@ void QRCodeGeneratorBubble::Init() {
 
   // Text box to edit URL
   auto textfield_url = std::make_unique<views::Textfield>();
-  textfield_url->SetAccessibleName(l10n_util::GetStringUTF16(
+  textfield_url->GetViewAccessibility().SetName(l10n_util::GetStringUTF16(
       IDS_BROWSER_SHARING_QR_CODE_DIALOG_URL_TEXTFIELD_ACCESSIBLE_NAME));
   textfield_url->SetText(base::UTF8ToUTF16(url_.spec()));
   textfield_url->set_controller(this);

@@ -19,7 +19,6 @@
 #import "base/time/time.h"
 #import "components/autofill/core/browser/data_model/credit_card.h"
 #import "components/breadcrumbs/core/breadcrumbs_status.h"
-#import "components/enterprise/idle/idle_features.h"
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/tracker.h"
 #import "components/infobars/core/infobar_manager.h"
@@ -45,6 +44,10 @@
 #import "ios/chrome/app/chrome_overlay_window.h"
 #import "ios/chrome/app/deferred_initialization_runner.h"
 #import "ios/chrome/app/tests_hook.h"
+#import "ios/chrome/browser/app_store_rating/ui_bundled/app_store_rating_scene_agent.h"
+#import "ios/chrome/browser/app_store_rating/ui_bundled/features.h"
+#import "ios/chrome/browser/appearance/ui_bundled/appearance_customization.h"
+#import "ios/chrome/browser/browser_view/ui_bundled/browser_view_controller.h"
 #import "ios/chrome/browser/browsing_data/model/browsing_data_remove_mask.h"
 #import "ios/chrome/browser/browsing_data/model/browsing_data_remover.h"
 #import "ios/chrome/browser/browsing_data/model/browsing_data_remover_factory.h"
@@ -52,6 +55,7 @@
 #import "ios/chrome/browser/crash_report/model/crash_keys_helper.h"
 #import "ios/chrome/browser/crash_report/model/crash_loop_detection_util.h"
 #import "ios/chrome/browser/crash_report/model/crash_report_helper.h"
+#import "ios/chrome/browser/credential_provider_promo/ui_bundled/credential_provider_promo_scene_agent.h"
 #import "ios/chrome/browser/default_browser/model/default_browser_interest_signals.h"
 #import "ios/chrome/browser/default_browser/model/promo_source.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
@@ -77,9 +81,9 @@
 #import "ios/chrome/browser/promos_manager/model/promos_manager_factory.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_browser_agent.h"
 #import "ios/chrome/browser/screenshot/model/screenshot_delegate.h"
-#import "ios/chrome/browser/sessions/session_restoration_service.h"
-#import "ios/chrome/browser/sessions/session_restoration_service_factory.h"
-#import "ios/chrome/browser/sessions/session_saving_scene_agent.h"
+#import "ios/chrome/browser/sessions/model/session_restoration_service.h"
+#import "ios/chrome/browser/sessions/model/session_restoration_service_factory.h"
+#import "ios/chrome/browser/sessions/model/session_saving_scene_agent.h"
 #import "ios/chrome/browser/shared/coordinator/default_browser_promo/non_modal_default_browser_promo_scheduler_scene_agent.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_scene_agent.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_ui_provider.h"
@@ -89,6 +93,7 @@
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state_manager.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/url/url_util.h"
@@ -100,7 +105,6 @@
 #import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
-#import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/help_commands.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
@@ -109,10 +113,10 @@
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/policy_change_commands.h"
 #import "ios/chrome/browser/shared/public/commands/qr_scanner_commands.h"
-#import "ios/chrome/browser/shared/public/commands/quick_delete_commands.h"
 #import "ios/chrome/browser/shared/public/commands/show_signin_command.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/shared/ui/util/top_view_controller.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
@@ -124,17 +128,15 @@
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/signin/model/system_identity_manager.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
+#import "ios/chrome/browser/start_surface/ui_bundled/start_surface_features.h"
+#import "ios/chrome/browser/start_surface/ui_bundled/start_surface_recent_tab_browser_agent.h"
+#import "ios/chrome/browser/start_surface/ui_bundled/start_surface_scene_agent.h"
+#import "ios/chrome/browser/start_surface/ui_bundled/start_surface_util.h"
 #import "ios/chrome/browser/tab_insertion/model/tab_insertion_browser_agent.h"
-#import "ios/chrome/browser/ui/app_store_rating/app_store_rating_scene_agent.h"
-#import "ios/chrome/browser/ui/app_store_rating/features.h"
-#import "ios/chrome/browser/ui/appearance/appearance_customization.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_utils.h"
 #import "ios/chrome/browser/ui/authentication/signin_notification_infobar_delegate.h"
-#import "ios/chrome/browser/ui/browser_view/browser_view_controller.h"
-#import "ios/chrome/browser/ui/credential_provider_promo/credential_provider_promo_scene_agent.h"
 #import "ios/chrome/browser/ui/first_run/omnibox_position/promo/omnibox_position_choice_scene_agent.h"
-#import "ios/chrome/browser/ui/first_run/orientation_limiting_navigation_controller.h"
 #import "ios/chrome/browser/ui/history/history_coordinator.h"
 #import "ios/chrome/browser/ui/history/history_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/incognito_interstitial/incognito_interstitial_coordinator.h"
@@ -160,10 +162,6 @@
 #import "ios/chrome/browser/ui/settings/password/passwords_mediator.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/chrome/browser/ui/settings/utils/password_utils.h"
-#import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
-#import "ios/chrome/browser/ui/start_surface/start_surface_recent_tab_browser_agent.h"
-#import "ios/chrome/browser/ui/start_surface/start_surface_scene_agent.h"
-#import "ios/chrome/browser/ui/start_surface/start_surface_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_coordinator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_utils.h"
@@ -194,13 +192,16 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/settings/appearance/vivaldi_appearance_settings_prefs.h"
 #import "ios/ui/settings/appearance/vivaldi_appearance_settings_swift.h"
+#import "prefs/vivaldi_pref_names.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using l10n_util::GetNSString;
+using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 namespace {
@@ -463,6 +464,16 @@ void OnListFamilyMembersResponse(
 // The state of the scene controlled by this object.
 @property(nonatomic, weak, readonly) SceneState* sceneState;
 
+// Vivaldi
+// YES if user closes all tabs from tab switcher.
+@property(nonatomic, assign) BOOL willCloseAllTabs;
+// YES when NTP opened from user action, such as open from tab switcher, tab bar
+// or other places from the app.
+// No when NTP opened from external actions such as when NTP injected on browser
+// activation.
+@property(nonatomic, assign) BOOL willOpenNTPFromUserAction;
+// End Vivaldi
+
 @end
 
 @implementation SceneController
@@ -503,18 +514,12 @@ void OnListFamilyMembersResponse(
 
 #pragma mark - Setters and getters
 
-- (id<BrowsingDataCommands>)browsingDataCommandsHandler {
-  return HandlerForProtocol(self.sceneState.appState.appCommandDispatcher,
-                            BrowsingDataCommands);
-}
-
 - (TabGridCoordinator*)mainCoordinator {
   if (!_mainCoordinator) {
     // Lazily create the main coordinator.
     TabGridCoordinator* tabGridCoordinator = [[TabGridCoordinator alloc]
                      initWithWindow:self.sceneState.window
          applicationCommandEndpoint:self
-        browsingDataCommandEndpoint:self.browsingDataCommandsHandler
                      regularBrowser:self.mainInterface.browser
                     inactiveBrowser:self.mainInterface.inactiveBrowser
                    incognitoBrowser:self.incognitoInterface.browser];
@@ -547,12 +552,15 @@ void OnListFamilyMembersResponse(
   if (parameters.openedViaFirstPartyScheme) {
     [[NonModalDefaultBrowserPromoSchedulerSceneAgent
         agentFromScene:self.sceneState] logUserEnteredAppViaFirstPartyScheme];
-    [self notifyFETAppOpenedViaFirstParty];
   }
 
-  ChromeBrowserState* browserState =
-      self.sceneState.browserProviderInterface.mainBrowserProvider.browser
-          ->GetBrowserState();
+  Browser* mainBrowser =
+      self.sceneState.browserProviderInterface.mainBrowserProvider.browser;
+  if (!mainBrowser) {
+    return;
+  }
+
+  ChromeBrowserState* browserState = mainBrowser->GetBrowserState();
   if (!browserState) {
     return;
   }
@@ -807,6 +815,38 @@ void OnListFamilyMembersResponse(
 
 #pragma mark - private
 
+// Creates, if needed, and presents saved passwords settings. Assumes all modal
+// dialods are dismissed and `baseViewController` is available to present.
+- (void)showSavedPasswordsSettingsAfterModalDismissFromViewController:
+            (UIViewController*)baseViewController
+                                                     showCancelButton:
+                                                         (BOOL)
+                                                             showCancelButton {
+  if (!baseViewController) {
+    // TODO(crbug.com/41352590): Don't pass base view controller through
+    // dispatched command.
+    baseViewController = self.currentInterface.viewController;
+  }
+  DCHECK(!self.signinCoordinator)
+      << "self.signinCoordinator: "
+      << base::SysNSStringToUTF8([self.signinCoordinator description]);
+
+  if (self.settingsNavigationController) {
+    [self.settingsNavigationController
+        showSavedPasswordsSettingsFromViewController:baseViewController
+                                    showCancelButton:showCancelButton];
+    return;
+  }
+  Browser* browser = self.mainInterface.browser;
+  self.settingsNavigationController = [SettingsNavigationController
+      savePasswordsControllerForBrowser:browser
+                               delegate:self
+                       showCancelButton:showCancelButton];
+  [baseViewController presentViewController:self.settingsNavigationController
+                                   animated:YES
+                                 completion:nil];
+}
+
 // Creates a `SettingsNavigationController` (if it doesn't already exist) and
 // `PasswordCheckupCoordinator` for `referrer`, then starts the
 // `PasswordCheckupCoordinator`.
@@ -906,6 +946,15 @@ void OnListFamilyMembersResponse(
         [self shouldOpenNTPTabOnActivationOfBrowser:self.currentInterface
                                                         .browser]) {
       DCHECK(!self.activatingBrowser);
+
+      // Note:(prio@vivaldi.com) - When -shouldOpenNTPTabOnActivationOfBrowser
+      // returns YES, its an automatic tabs created under certain
+      // conditions, and not a tab opened from user action.
+      // In that case we won't focus the omnibox since that is not a good UX.
+      if (IsVivaldiRunning()) {
+        self.willOpenNTPFromUserAction = NO;
+      } // End Vivaldi
+
       [self beginActivatingBrowser:self.mainInterface.browser focusOmnibox:NO];
 
       OpenNewTabCommand* command = [OpenNewTabCommand commandWithIncognito:NO];
@@ -995,13 +1044,15 @@ void OnListFamilyMembersResponse(
 
   // TODO(b/326184192): startUpChromeUI should use the browser state associated
   // to the scene.
-  ChromeBrowserState* browserState = sceneState.appState.mainBrowserState;
-  self.browserViewWrangler = [[BrowserViewWrangler alloc]
-      initWithBrowserState:browserState
-                sceneState:sceneState
-       applicationEndpoint:self
-          settingsEndpoint:self
-      browsingDataEndpoint:self.browsingDataCommandsHandler];
+  ChromeBrowserState* browserState =
+      GetApplicationContext()
+          ->GetChromeBrowserStateManager()
+          ->GetLastUsedBrowserStateDeprecatedDoNotUse();
+  self.browserViewWrangler =
+      [[BrowserViewWrangler alloc] initWithBrowserState:browserState
+                                             sceneState:sceneState
+                                    applicationEndpoint:self
+                                       settingsEndpoint:self];
 
   // Create and start the BVC.
   [self.browserViewWrangler createMainCoordinatorAndInterface];
@@ -1053,21 +1104,18 @@ void OnListFamilyMembersResponse(
                               userPolicyManager:userPolicyManager]];
   }
 
-  if (base::FeatureList::IsEnabled(enterprise_idle::kIdleTimeout)) {
-    enterprise_idle::IdleService* idleService =
-        enterprise_idle::IdleServiceFactory::GetForBrowserState(
-            mainBrowser->GetBrowserState());
-    id<SnackbarCommands> snackbarCommandsHandler =
-        static_cast<id<SnackbarCommands>>(mainCommandDispatcher);
+  enterprise_idle::IdleService* idleService =
+      enterprise_idle::IdleServiceFactory::GetForBrowserState(
+          mainBrowser->GetBrowserState());
+  id<SnackbarCommands> snackbarCommandsHandler =
+      static_cast<id<SnackbarCommands>>(mainCommandDispatcher);
 
-    [sceneState
-        addAgent:[[IdleTimeoutPolicySceneAgent alloc]
-                        initWithSceneUIProvider:self
-                     applicationCommandsHandler:applicationCommandsHandler
-                        snackbarCommandsHandler:snackbarCommandsHandler
-                                    idleService:idleService
-                                    mainBrowser:mainBrowser]];
-  }
+  [sceneState addAgent:[[IdleTimeoutPolicySceneAgent alloc]
+                              initWithSceneUIProvider:self
+                           applicationCommandsHandler:applicationCommandsHandler
+                              snackbarCommandsHandler:snackbarCommandsHandler
+                                          idleService:idleService
+                                          mainBrowser:mainBrowser]];
 
   // Now that the main browser's command dispatcher is created and the newly
   // started UI coordinators have registered with it, inject it into the
@@ -1121,6 +1169,12 @@ void OnListFamilyMembersResponse(
   if (vivaldi::IsVivaldiRunning()) {
     [VivaldiAppearanceSettingPrefs setPrefService:browserState->GetPrefs()];
     [VivaldiBrowserThemeManager.shared applyTheme];
+
+    // Set willOpenNTPFromUserAction to YES by default as this property is set
+    // to NO when new tabs opened from external actions.
+    self.willOpenNTPFromUserAction = YES;
+    // Start observing all tabs close notification.
+    [self observeAllTabsCloseNotification];
   } // End Vivaldi
 
 }
@@ -1215,6 +1269,14 @@ void OnListFamilyMembersResponse(
   // the current webState.
   if (self.sceneState.appState.postCrashAction ==
       PostCrashAction::kShowNTPWithReturnToTab) {
+
+    // Note:(prio@vivaldi.com) - Its an automatic tabs created after restoring
+    // from crash event, and not a tab opened from user action.
+    // In that case we won't focus the omnibox since that is not a good UX.
+    if (IsVivaldiRunning()) {
+      self.willOpenNTPFromUserAction = NO;
+    } // End Vivaldi
+
     InjectNTP(browser);
   }
 
@@ -1251,6 +1313,15 @@ void OnListFamilyMembersResponse(
   // If this web state list should have an NTP created when it activates, then
   // create that tab.
   if ([self shouldOpenNTPTabOnActivationOfBrowser:browser]) {
+
+    // Note:(prio@vivaldi.com) - When -shouldOpenNTPTabOnActivationOfBrowser
+    // returns YES, its an automatic tabs created under certain
+    // conditions, and not a tab opened from user action.
+    // In that case we won't focus the omnibox since that is not a good UX.
+    if (IsVivaldiRunning()) {
+      self.willOpenNTPFromUserAction = NO;
+    } // End Vivaldi
+
     OpenNewTabCommand* command = [OpenNewTabCommand
         commandWithIncognito:self.currentInterface.incognito];
     command.userInitiated = NO;
@@ -1258,24 +1329,6 @@ void OnListFamilyMembersResponse(
     id<ApplicationCommands> applicationHandler = HandlerForProtocol(
         currentBrowser->GetCommandDispatcher(), ApplicationCommands);
     [applicationHandler openURLInNewTab:command];
-  }
-}
-
-// Notifies the Feature Engagement Tracker that an eligibility criterion has
-// been met for the default browser blue dot promo.
-- (void)notifyFETAppOpenedViaFirstParty {
-  ChromeBrowserState* browserState =
-      self.sceneState.browserProviderInterface.mainBrowserProvider.browser
-          ->GetBrowserState();
-  if (!browserState || browserState->IsOffTheRecord()) {
-    return;
-  }
-
-  if (HasRecentFirstPartyIntentLaunchesAndRecordsCurrentLaunch()) {
-    feature_engagement::Tracker* tracker =
-        feature_engagement::TrackerFactory::GetForBrowserState(browserState);
-
-    tracker->NotifyEvent(feature_engagement::events::kBlueDotPromoCriterionMet);
   }
 }
 
@@ -1398,7 +1451,7 @@ void OnListFamilyMembersResponse(
           ? l10n_util::GetNSString(IDS_IOS_SNACKBAR_MESSAGE_INCOGNITO_FORCED)
           : l10n_util::GetNSString(IDS_IOS_SNACKBAR_MESSAGE_INCOGNITO_DISABLED);
 
-  MDCSnackbarMessage* message = [MDCSnackbarMessage messageWithText:text];
+  MDCSnackbarMessage* message = CreateSnackbarMessage(text);
   message.action = action;
 
   [handler showSnackbarMessage:message
@@ -1423,9 +1476,11 @@ void OnListFamilyMembersResponse(
   ChromeBrowserState* browserState = self.currentInterface.browserState;
   BrowserList* browserList =
       BrowserListFactory::GetForBrowserState(browserState);
-  const std::set<Browser*>& browsers = self.currentInterface.incognito
-                                           ? browserList->AllIncognitoBrowsers()
-                                           : browserList->AllRegularBrowsers();
+  const BrowserList::BrowserType browser_types =
+      self.currentInterface.incognito
+          ? BrowserList::BrowserType::kIncognito
+          : BrowserList::BrowserType::kRegularAndInactive;
+  std::set<Browser*> browsers = browserList->BrowsersOfType(browser_types);
 
   BrowserAndIndex tabInfo = FindBrowserAndIndex(tabID, browsers);
 
@@ -1883,7 +1938,7 @@ using UserFeedbackDataCallback =
                                                     promoAction:
                                                         command.promoAction];
       break;
-    case AuthenticationOperation::kSigninAndSyncReauth:
+    case AuthenticationOperation::kResignin:
       self.signinCoordinator = [SigninCoordinator
           signinAndSyncReauthCoordinatorWithBaseViewController:
               baseViewController
@@ -2045,6 +2100,29 @@ using UserFeedbackDataCallback =
 }
 
 - (void)showSettingsFromViewController:(UIViewController*)baseViewController {
+  BOOL hasDefaultBrowserBlueDot = NO;
+
+  Browser* browser = self.mainInterface.browser;
+  if (browser) {
+    feature_engagement::Tracker* tracker =
+        feature_engagement::TrackerFactory::GetForBrowserState(
+            browser->GetBrowserState());
+    if (tracker) {
+      hasDefaultBrowserBlueDot =
+          ShouldTriggerDefaultBrowserHighlightFeature(tracker);
+    }
+  }
+
+  if (hasDefaultBrowserBlueDot) {
+    RecordDefaultBrowserBlueDotFirstDisplay();
+  }
+
+  [self showSettingsFromViewController:baseViewController
+              hasDefaultBrowserBlueDot:hasDefaultBrowserBlueDot];
+}
+
+- (void)showSettingsFromViewController:(UIViewController*)baseViewController
+              hasDefaultBrowserBlueDot:(BOOL)hasDefaultBrowserBlueDot {
   if (!baseViewController) {
     baseViewController = self.currentInterface.viewController;
   }
@@ -2066,9 +2144,10 @@ using UserFeedbackDataCallback =
 
   Browser* browser = self.mainInterface.browser;
 
-  self.settingsNavigationController =
-      [SettingsNavigationController mainSettingsControllerForBrowser:browser
-                                                            delegate:self];
+  self.settingsNavigationController = [SettingsNavigationController
+      mainSettingsControllerForBrowser:browser
+                              delegate:self
+              hasDefaultBrowserBlueDot:hasDefaultBrowserBlueDot];
   [baseViewController presentViewController:self.settingsNavigationController
                                    animated:YES
                                  completion:nil];
@@ -2100,16 +2179,20 @@ using UserFeedbackDataCallback =
 }
 
 - (void)prepareToPresentModal:(ProceduralBlock)completion {
+  __weak __typeof(self) weakSelf = self;
+  ProceduralBlock ensureNTP = ^{
+    [weakSelf ensureNTP];
+    completion();
+  };
   if (self.mainCoordinator.isTabGridActive ||
       (self.currentInterface.incognito && ![self isIncognitoForced])) {
-    __weak __typeof(self) weakSelf = self;
     [self closePresentedViews:YES
                    completion:^{
-                     [weakSelf openNonIncognitoTab:completion];
+                     [weakSelf openNonIncognitoTab:ensureNTP];
                    }];
     return;
   }
-  [self dismissModalDialogsWithCompletion:completion];
+  [self dismissModalDialogsWithCompletion:ensureNTP];
 }
 
 // Returns YES if the current Tab is available to present a view controller.
@@ -2152,7 +2235,7 @@ using UserFeedbackDataCallback =
   }
 
   if (self.currentInterface.incognito) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
   if (self.settingsNavigationController) {
@@ -2254,29 +2337,15 @@ using UserFeedbackDataCallback =
 - (void)showSavedPasswordsSettingsFromViewController:
             (UIViewController*)baseViewController
                                     showCancelButton:(BOOL)showCancelButton {
-  if (!baseViewController) {
-    // TODO(crbug.com/41352590): Don't pass base view controller through
-    // dispatched command.
-    baseViewController = self.currentInterface.viewController;
-  }
-  DCHECK(!self.signinCoordinator)
-      << "self.signinCoordinator: "
-      << base::SysNSStringToUTF8([self.signinCoordinator description]);
-  [self dismissModalDialogsWithCompletion:nil];
-  if (self.settingsNavigationController) {
-    [self.settingsNavigationController
-        showSavedPasswordsSettingsFromViewController:baseViewController
-                                    showCancelButton:showCancelButton];
-    return;
-  }
-  Browser* browser = self.mainInterface.browser;
-  self.settingsNavigationController = [SettingsNavigationController
-      savePasswordsControllerForBrowser:browser
-                               delegate:self
-                       showCancelButton:showCancelButton];
-  [baseViewController presentViewController:self.settingsNavigationController
-                                   animated:YES
-                                 completion:nil];
+  // Wait for dismiss to complete before trying to present a new view.
+  __weak SceneController* weakSelf = self;
+  [self dismissModalDialogsWithCompletion:^{
+    [weakSelf
+        showSavedPasswordsSettingsAfterModalDismissFromViewController:
+            baseViewController
+                                                     showCancelButton:
+                                                         showCancelButton];
+  }];
 }
 
 // Shows the Password Checkup page for `referrer`.
@@ -2293,11 +2362,13 @@ using UserFeedbackDataCallback =
 
 - (void)showPasswordDetailsForCredential:
             (password_manager::CredentialUIEntry)credential
+                              inEditMode:(BOOL)editMode
                         showCancelButton:(BOOL)showCancelButton {
   UIViewController* baseViewController = self.currentInterface.viewController;
   if (self.settingsNavigationController) {
     [self.settingsNavigationController
         showPasswordDetailsForCredential:credential
+                              inEditMode:editMode
                         showCancelButton:showCancelButton];
     return;
   }
@@ -2306,6 +2377,7 @@ using UserFeedbackDataCallback =
       passwordDetailsControllerForBrowser:browser
                                  delegate:self
                                credential:credential
+                               inEditMode:editMode
                          showCancelButton:showCancelButton];
   [baseViewController presentViewController:self.settingsNavigationController
                                    animated:YES
@@ -2325,6 +2397,29 @@ using UserFeedbackDataCallback =
   [self.passwordCheckupCoordinator
       showPasswordIssuesWithWarningType:warningType];
 
+  [baseViewController presentViewController:self.settingsNavigationController
+                                   animated:YES
+                                 completion:nil];
+}
+
+- (void)showAddressDetails:(const autofill::AutofillProfile*)address
+                inEditMode:(BOOL)editMode
+     offerMigrateToAccount:(BOOL)offerMigrateToAccount {
+  UIViewController* baseViewController = self.currentInterface.viewController;
+  if (self.settingsNavigationController) {
+    [self.settingsNavigationController
+           showAddressDetails:address
+                   inEditMode:editMode
+        offerMigrateToAccount:offerMigrateToAccount];
+    return;
+  }
+  Browser* browser = self.mainInterface.browser;
+  self.settingsNavigationController = [SettingsNavigationController
+      addressDetailsControllerForBrowser:browser
+                                delegate:self
+                                 address:address
+                              inEditMode:editMode
+                   offerMigrateToAccount:offerMigrateToAccount];
   [baseViewController presentViewController:self.settingsNavigationController
                                    animated:YES
                                  completion:nil];
@@ -2371,17 +2466,20 @@ using UserFeedbackDataCallback =
                  completion:nil];
 }
 
-- (void)showCreditCardDetails:(const autofill::CreditCard*)creditCard {
+- (void)showCreditCardDetails:(const autofill::CreditCard*)creditCard
+                   inEditMode:(BOOL)editMode {
   UIViewController* baseViewController = self.currentInterface.viewController;
   if (self.settingsNavigationController) {
-    [self.settingsNavigationController showCreditCardDetails:creditCard];
+    [self.settingsNavigationController showCreditCardDetails:creditCard
+                                                  inEditMode:editMode];
     return;
   }
   Browser* browser = self.mainInterface.browser;
   self.settingsNavigationController = [SettingsNavigationController
       autofillCreditCardEditControllerForBrowser:browser
                                         delegate:self
-                                      creditCard:creditCard];
+                                      creditCard:creditCard
+                                      inEditMode:editMode];
   [baseViewController presentViewController:self.settingsNavigationController
                                    animated:YES
                                  completion:nil];
@@ -2413,16 +2511,7 @@ using UserFeedbackDataCallback =
 }
 
 - (void)showClearBrowsingDataSettings {
-  // TODO(crbug.com/335387869): When removing the flag, the clients of
-  // SettingsCommands.showClearBrowsingDataSettings should call
-  // QuickDeleteCommands.showPageInfo directly.
-  if (IsIosQuickDeleteEnabled()) {
-    id<QuickDeleteCommands> quickDeleteHandler = HandlerForProtocol(
-        self.currentInterface.browser->GetCommandDispatcher(),
-        QuickDeleteCommands);
-    [quickDeleteHandler showQuickDelete];
-    return;
-  }
+  CHECK(!IsIosQuickDeleteEnabled());
 
   UIViewController* baseViewController = self.currentInterface.viewController;
   if (self.settingsNavigationController) {
@@ -2489,6 +2578,12 @@ using UserFeedbackDataCallback =
   [baseViewController presentViewController:self.settingsNavigationController
                                    animated:YES
                                  completion:nil];
+}
+
+- (void)showSafeBrowsingSettingsFromPromoInteraction {
+  DCHECK(self.settingsNavigationController);
+  [self.settingsNavigationController
+          showSafeBrowsingSettingsFromPromoInteraction];
 }
 
 - (void)showPasswordSearchPage {
@@ -3619,7 +3714,7 @@ using UserFeedbackDataCallback =
     }
     case AuthenticationService::ServiceStatus::SigninDisabledByInternal:
     case AuthenticationService::ServiceStatus::SigninDisabledByUser: {
-      DUMP_WILL_BE_NOTREACHED_NORETURN()
+      DUMP_WILL_BE_NOTREACHED()
           << "Status service: " << static_cast<int>(statusService);
       break;
     }
@@ -3704,6 +3799,11 @@ using UserFeedbackDataCallback =
       // Do nothing when a WebState is replaced.
       break;
     case WebStateListChange::Type::kInsert:
+
+      if (IsVivaldiRunning()) {
+        [self handleNTPInsertEventWithChange:change];
+      } // End Vivaldi
+
       // Do nothing when a WebState is inserted.
       break;
     case WebStateListChange::Type::kGroupCreate:
@@ -3785,6 +3885,19 @@ using UserFeedbackDataCallback =
   }
 }
 
+// Ensures that a non-incognito NTP tab is open. If incognito is forced, then
+// it will ensure an incognito NTP tab is open.
+- (void)ensureNTP {
+  // If the tab does not exist, open a new tab.
+  UrlLoadParams params = UrlLoadParams::InCurrentTab(GURL(kChromeUINewTabURL));
+  ApplicationMode mode = self.currentInterface.incognito
+                             ? ApplicationMode::INCOGNITO
+                             : ApplicationMode::NORMAL;
+  [self openOrReuseTabInMode:mode
+           withUrlLoadParams:params
+         tabOpenedCompletion:nil];
+}
+
 #pragma mark - IncognitoInterstitialCoordinatorDelegate
 
 - (void)shouldStopIncognitoInterstitial:
@@ -3843,11 +3956,17 @@ using UserFeedbackDataCallback =
   // Nothing to do here. The next user action (like clicking on an existing
   // regular tab or creating a new incognito tab from the settings menu) will
   // take care of the logic to mode switch.
+
+  if (IsVivaldiRunning()) {
+    [self handleClosingLastTabForIncognito:YES];
+  } else {
   if (self.mainCoordinator.isTabGridActive ||
       !self.currentInterface.incognito) {
     return;
   }
   [self showTabSwitcher];
+  } // End Vivaldi
+
 }
 
 // Called when the last regular tab was closed.
@@ -3858,11 +3977,17 @@ using UserFeedbackDataCallback =
   // closure of tabs from the main tab model when the main tab model is not
   // current.
   // Nothing to do here.
+
+  if (IsVivaldiRunning()) {
+    [self handleClosingLastTabForIncognito:NO];
+  } else {
   if (self.mainCoordinator.isTabGridActive || self.currentInterface.incognito) {
     return;
   }
 
   [self showTabSwitcher];
+  } // End Vivaldi
+
 }
 
 // Clears incognito data that is specific to iOS and won't be cleared by
@@ -3875,13 +4000,15 @@ using UserFeedbackDataCallback =
       self.sceneState.browserProviderInterface.mainBrowserProvider.browser
           ->GetBrowserState()
           ->GetOffTheRecordChromeBrowserState();
-  [self.browsingDataCommandsHandler
-      removeBrowsingDataForBrowserState:otrBrowserState
-                             timePeriod:browsing_data::TimePeriod::ALL_TIME
-                             removeMask:BrowsingDataRemoveMask::REMOVE_ALL
-                        completionBlock:^{
-                          [self activateBVCAndMakeCurrentBVCPrimary];
-                        }];
+
+  __weak SceneController* weakSelf = self;
+  BrowsingDataRemover* browsingDataRemover =
+      BrowsingDataRemoverFactory::GetForBrowserState(otrBrowserState);
+  browsingDataRemover->Remove(browsing_data::TimePeriod::ALL_TIME,
+                              BrowsingDataRemoveMask::REMOVE_ALL,
+                              base::BindOnce(^{
+                                [weakSelf activateBVCAndMakeCurrentBVCPrimary];
+                              }));
 }
 
 - (void)activateBVCAndMakeCurrentBVCPrimary {
@@ -4018,7 +4145,8 @@ using UserFeedbackDataCallback =
 
   BrowserList* browserList =
       BrowserListFactory::GetForBrowserState(otrBrowserState);
-  for (Browser* browser : browserList->AllIncognitoBrowsers()) {
+  for (Browser* browser :
+       browserList->BrowsersOfType(BrowserList::BrowserType::kIncognito)) {
     WebStateList* webStateList = browser->GetWebStateList();
     if (!webStateList->empty()) {
       return NO;
@@ -4151,6 +4279,22 @@ using UserFeedbackDataCallback =
 
 #pragma mark - Vivaldi
 
+- (void)observeAllTabsCloseNotification {
+  [[NSNotificationCenter defaultCenter]
+      removeObserver:self
+                name:vTabGridWillCloseAllTabsNotification
+              object: nil];
+  [[NSNotificationCenter defaultCenter]
+      addObserver:self
+         selector:@selector(handleAllTabsWillCloseNotification)
+             name:vTabGridWillCloseAllTabsNotification
+           object:nil];
+}
+
+- (void)handleAllTabsWillCloseNotification {
+  self.willCloseAllTabs = YES;
+}
+
 - (void)showVivaldiSyncWithCreateAccountFlow:(BOOL)showCreateAccountFlow {
   [[DeferredInitializationRunner sharedInstance]
       runBlockIfNecessary:kPrefObserverInit];
@@ -4175,6 +4319,125 @@ using UserFeedbackDataCallback =
 - (void)didSelectRegisterFromEmptyStateView {
   [self showVivaldiSyncWithCreateAccountFlow:YES];
 }
+
+#pragma mark - WebStateListObserving (Vivaldi)
+
+- (void)willChangeWebStateList:(WebStateList*)webStateList
+                        change:(const WebStateListChangeDetach&)detachChange
+                        status:(const WebStateListStatus&)status {
+
+  if (![self openNTPOnClosingLastTab])
+    return;
+
+  if (webStateList->IsBatchInProgress()) {
+    return;
+  }
+
+  // NTP should be opened when openNTPOnClosingLastTab is YES, and the last
+  // tab is closed by user action. When webStateList contains only one tab
+  // left at the time of triggering this method, it means that tab is about to
+  // be detached.
+  if (!detachChange.group() &&
+      detachChange.is_closing() &&
+      detachChange.is_user_action() &&
+      webStateList->count() <= 1) {
+    // Set the tab grid hidden to avoid potential UI glitch in between closing
+    // last tab, and opening new tab, where the tab grid is visible for a split
+    // second.
+    [self.mainCoordinator setTabGridHidden:YES];
+    id<BrowserCoordinatorCommands> handler =
+          HandlerForProtocol(
+                self.currentInterface.browser->GetCommandDispatcher(),
+                BrowserCoordinatorCommands);
+    // Set the toolbar hidden to avoid potential UI glitch in between closing
+    // last tab, and opening new tab, where the toolbar is visible for a split
+    // second.
+    [handler setToolbarHidden:YES];
+  }
+}
+
+#pragma mark - Helper
+- (BOOL)openNTPOnClosingLastTab {
+  PrefService* prefs = self.currentInterface.browserState->GetPrefs();
+  return prefs->GetBoolean(
+      vivaldiprefs::kVivaldiOpenNTPOnClosingLastTabEnabled);
+}
+
+- (BOOL)focusOmniboxOnNTP {
+  PrefService* prefs = self.currentInterface.browserState->GetPrefs();
+  return prefs->GetBoolean(vivaldiprefs::kVivaldiFocusOmniboxOnNTPEnabled);
+}
+
+// When focusOmniboxOnNTP and NTP is opened from user action only then focus
+// the omnibox on NTP open.
+- (void)handleNTPInsertEventWithChange:(const WebStateListChange&)change {
+  if ([self focusOmniboxOnNTP] && self.willOpenNTPFromUserAction) {
+    const WebStateListChangeInsert& insertChange =
+        change.As<WebStateListChangeInsert>();
+    NewTabPageTabHelper* NTPTabHelper =
+        NewTabPageTabHelper::FromWebState(insertChange.inserted_web_state());
+    if (NTPTabHelper->IsActive()) {
+      [self focusOmnibox];
+    }
+  }
+
+  // Reset this to YES when initial value is NO, which means an external actions
+  // triggred an NTP.
+  if (!self.willOpenNTPFromUserAction)
+    self.willOpenNTPFromUserAction = YES;
+}
+
+- (void)openNTPOnClosingLastTabForIncognito:(BOOL)isIncognito {
+
+  UrlLoadParams paramsToLoad =
+      UrlLoadParams::InCurrentTab(GURL(kChromeUINewTabURL));
+  paramsToLoad.in_incognito = isIncognito;
+
+  TabInsertion::Params tabInsertionParams;
+  tabInsertionParams.should_skip_new_tab_animation = true;
+
+  WrangledBrowser* targetInterface = isIncognito
+      ? self.incognitoInterface
+      : self.mainInterface;
+
+  dispatch_async(dispatch_get_main_queue(), ^{
+    TabInsertionBrowserAgent::FromBrowser(
+        targetInterface.browser)->InsertWebState(
+              paramsToLoad.web_params, tabInsertionParams);
+    [self beginActivatingBrowser:targetInterface.browser
+                    focusOmnibox:[self focusOmniboxOnNTP]];
+    // Show tab grid once NTP is activated and BVC is visible.
+    [self.mainCoordinator setTabGridHidden:NO];
+
+    id<BrowserCoordinatorCommands> handler =
+        HandlerForProtocol(
+            self.currentInterface.browser->GetCommandDispatcher(),
+            BrowserCoordinatorCommands);
+    // Show toolbar once BVC is visible and and omnibox is focused.
+    [handler setToolbarHidden:NO];
+  });
+  self.willCloseAllTabs = NO;
+}
+
+// When argument is passed NO its triggeres a new regular NTP given that
+// -openNTPOnClosingLastTab returns YES, and -willCloseAllTabs returns NO.
+// We open NTP only when last tab is closed from tab switcher or tab bar.
+// When user closes all tabs from tab switcher, we show tab switcher as we
+// assume that's what user wants if they close all tabs.
+- (void)handleClosingLastTabForIncognito:(BOOL)isIncognito {
+
+  if ([self openNTPOnClosingLastTab] && !self.willCloseAllTabs) {
+    [self openNTPOnClosingLastTabForIncognito:isIncognito];
+    return;
+  }
+
+  self.willCloseAllTabs = NO;
+
+  if (!self.mainCoordinator.isTabGridActive) {
+    [self showTabSwitcher];
+  }
+}
+
 // End Vivaldi
 
 @end

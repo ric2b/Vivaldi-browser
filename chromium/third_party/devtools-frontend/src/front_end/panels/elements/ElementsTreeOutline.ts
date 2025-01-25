@@ -1418,9 +1418,6 @@ export class ElementsTreeOutline extends
     if (node.isIframe()) {
       return true;
     }
-    if (node.isPortal()) {
-      return true;
-    }
     if (node.contentDocument()) {
       return true;
     }
@@ -1781,7 +1778,7 @@ export class ShortcutTreeElement extends UI.TreeOutline.TreeElement {
     const name = config.name;
     const adornerContent = document.createElement('span');
     const linkIcon = new IconButton.Icon.Icon();
-    linkIcon.data = {iconName: 'select-element', color: 'var(--icon-default)', width: '14px', height: '14px'};
+    linkIcon.name = 'select-element';
     const slotText = document.createElement('span');
     slotText.textContent = name;
     adornerContent.append(linkIcon);

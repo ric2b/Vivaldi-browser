@@ -244,7 +244,8 @@ def _resultdb(
         enable = None,
         has_native_resultdb_integration = None,
         result_format = None,
-        result_file = None):
+        result_file = None,
+        inv_extended_properties_dir = None):
     """Define the ResultDB integration to be used for a test.
 
     Args:
@@ -265,12 +266,14 @@ def _resultdb(
         has_native_resultdb_integration = has_native_resultdb_integration,
         result_format = result_format,
         result_file = result_file,
+        inv_extended_properties_dir = inv_extended_properties_dir,
     )
 
 def _skylab(
         *,
         cros_board = "",
         cros_img = "",
+        cros_build_target = "",
         use_lkgm = False,
         cros_model = None,
         autotest_name = None,
@@ -279,11 +282,14 @@ def _skylab(
         public_builder = None,
         public_builder_bucket = None,
         shards = None,
+        run_cft = False,
         args = []):
     """Define a Skylab test target.
 
     Args:
-        cros_board: The CrOS build target name, e.g. "eve", "kevin".
+        cros_board: The CrOS DUT board name, e.g. "eve", "kevin".
+        cros_build_target: The CrOS build target name, e.g. "eve-arc-t".
+            If unspecified, the build target equals to cros_board will be used.
         cros_img: ChromeOS image version to be deployed to DUT.
             Must be empty when use_lkgm is true.
             For example, "brya-release/R118-15604.42.0"
@@ -303,10 +309,12 @@ def _skylab(
         public_builder_bucket: Optional luci bucket. See public_builder
             above.
         shards: The number of shards used to run the test.
+        run_cft: Whether enabled CFT mode for chromium tests on Skylab.
         args: The list of test arguments to be added to test CLI.
     """
     return struct(
         cros_board = cros_board,
+        cros_build_target = cros_build_target,
         cros_img = cros_img,
         use_lkgm = use_lkgm,
         cros_model = cros_model,
@@ -316,6 +324,7 @@ def _skylab(
         public_builder = public_builder,
         public_builder_bucket = public_builder_bucket,
         shards = shards,
+        run_cft = run_cft,
         args = args,
     )
 
@@ -1237,6 +1246,8 @@ def _generate_mixin_values(formatter, mixin, generate_skylab_container = False):
             formatter.open_scope("'skylab': {")
         if skylab.cros_board:
             formatter.add_line("'cros_board': '{}',".format(skylab.cros_board))
+        if skylab.cros_build_target:
+            formatter.add_line("'cros_build_target': '{}',".format(skylab.cros_build_target))
         if skylab.cros_model:
             formatter.add_line("'cros_model': '{}',".format(skylab.cros_model))
         if skylab.cros_img:
@@ -1255,6 +1266,8 @@ def _generate_mixin_values(formatter, mixin, generate_skylab_container = False):
             formatter.add_line("'public_builder_bucket': '{}',".format(skylab.public_builder_bucket))
         if skylab.shards:
             formatter.add_line("'shards': {},".format(skylab.shards))
+        if skylab.run_cft:
+            formatter.add_line("'run_cft': {},".format(skylab.run_cft))
         if skylab.args:
             formatter.add_line("'args': {},".format(skylab.args))
         if generate_skylab_container:
@@ -1271,6 +1284,8 @@ def _generate_mixin_values(formatter, mixin, generate_skylab_container = False):
             formatter.add_line("'result_format': '{}',".format(resultdb.result_format))
         if resultdb.result_file != None:
             formatter.add_line("'result_file': '{}',".format(resultdb.result_file))
+        if resultdb.inv_extended_properties_dir != None:
+            formatter.add_line("'inv_extended_properties_dir': '{}',".format(resultdb.inv_extended_properties_dir))
         formatter.close_scope("},")
 
     if "use_isolated_scripts_api" in mixin:

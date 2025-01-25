@@ -34,6 +34,7 @@ limitations under the License.
 #include "absl/types/span.h"
 #include "mlir/IR/Operation.h"  // from @llvm-project
 #include "xla/executable_run_options.h"
+#include "xla/ffi/execution_context.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/service/buffer_assignment.h"
 #include "xla/service/global_device_id.h"
@@ -164,6 +165,7 @@ class Thunk {
     kTriangularSolve,
     kWhile,
     kFusedMHA,
+    kFusedMHABackward,
     kWaitForStreams,
     kCuDnn
   };
@@ -182,14 +184,10 @@ class Thunk {
   };
 
   struct ThunkInfo {
-    explicit ThunkInfo(mlir::Operation* op) : op(op) {}
-    static ThunkInfo WithProfileAnnotation(mlir::Operation* op);
+    ThunkInfo() = default;  // Disable implicit constructors.
     static ThunkInfo WithProfileAnnotation(const HloInstruction* instr);
 
     std::string profile_annotation;
-    // TODO(b/304613751): This is only needed by the LMHLO. Remove this when
-    // LMHLO is removed from the runtime pipeline.
-    mlir::Operation* op;
 
     ExecutionStreamId execution_stream_id = kDefaultExecutionStreamId;
   };
@@ -327,6 +325,9 @@ class Thunk {
 
     // Collective cliques acquired based on resource requests.
     CollectiveCliques* collective_cliques = nullptr;
+
+    // XLA FFI execution context.
+    const ffi::ExecutionContext* ffi_execution_context = nullptr;
   };
 
   //===--------------------------------------------------------------------===//
@@ -376,8 +377,13 @@ class Thunk {
     SendDeviceMemoryFunction* send_device_memory_function;
     RecvDeviceMemoryFunction* recv_device_memory_function;
 
+    // XLA FFI execution context.
+    const ffi::ExecutionContext* ffi_execution_context;
+
     // Additional compute streams on which thunks launch operations.
     ExecutionStreamIdMap additional_compute_streams;
+
+    bool mock_collectives = false;
 
    private:
     friend class CommandBufferThunk;
@@ -390,7 +396,9 @@ class Thunk {
                   se::Stream* host_to_device_stream,
                   SendDeviceMemoryFunction* send_device_memory_function,
                   RecvDeviceMemoryFunction* recv_device_memory_function,
-                  ExecutionStreamIdMap additional_compute_streams = {});
+                  const ffi::ExecutionContext* ffi_execution_context,
+                  ExecutionStreamIdMap additional_compute_streams = {},
+                  bool mock_collectives = false);
   };
 
   //===--------------------------------------------------------------------===//
@@ -401,20 +409,14 @@ class Thunk {
   Thunk(Kind kind, ThunkInfo thunk_info)
       : kind_(kind),
         profile_annotation_(thunk_info.profile_annotation),
-        op_(thunk_info.op),
         execution_stream_id_(thunk_info.execution_stream_id) {}
   virtual ~Thunk() = default;
   Thunk(const Thunk&) = delete;
   Thunk& operator=(const Thunk&) = delete;
 
-  virtual std::string ToStringExtra(int indent) const { return ""; }
+  virtual std::string ToString(int indent) const { return ""; }
   Kind kind() const { return kind_; }
   std::string_view profile_annotation() const { return profile_annotation_; }
-
-  // Only valid during compilation, i.e., lowering thunks to kernel-launch
-  // related XLA runtime custom calls). nullptr at runtime. MLIR codegen will
-  // cease the practice of lowering thunks to XLA runtime custom calls.
-  mlir::Operation* op() { return op_; }
 
   // Prepares thunk for execution.
   //
@@ -443,30 +445,27 @@ class Thunk {
   // Precondition: Initialize(initialize_params) has been called.
   virtual absl::Status ExecuteOnStream(const ExecuteParams& params) = 0;
 
-  // Clears metadata that is only valid during compile time.
-  virtual void ClearCompileTimeInfo() { op_ = nullptr; }
-
   static absl::string_view KindToString(Thunk::Kind kind);
 
   ExecutionStreamId execution_stream_id() const { return execution_stream_id_; }
+  void set_execution_stream_id(ExecutionStreamId execution_stream_id) {
+    execution_stream_id_ = execution_stream_id;
+  }
 
   static absl::StatusOr<se::Stream*> GetStreamForExecution(
       ExecutionStreamId stream_id, const ExecuteParams& params);
 
+  // Returns `true` if this thunk requires inter-GPU communication.
+  bool IsCollective() const;
+
  private:
   Kind kind_;
   std::string profile_annotation_;
-  mlir::Operation* op_;
   ExecutionStreamId execution_stream_id_;
 };
 
 // A sequence of thunks.
-class ThunkSequence : public std::vector<std::unique_ptr<Thunk>> {
- public:
-  std::string ToString(int indent = 0,
-                       std::function<std::string(const Thunk*)>
-                           get_thunk_annotation = nullptr) const;
-};
+using ThunkSequence = std::vector<std::unique_ptr<Thunk>>;
 
 std::ostream& operator<<(std::ostream& os, Thunk::Kind kind);
 

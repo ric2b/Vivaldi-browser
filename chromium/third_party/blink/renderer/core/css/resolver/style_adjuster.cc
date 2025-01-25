@@ -80,6 +80,7 @@
 #include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/layout_text_combine.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/layout/list/list_marker.h"
@@ -116,7 +117,7 @@ TouchAction AdjustTouchActionForElement(TouchAction touch_action,
                                         Element* element) {
   Element* document_element = element->GetDocument().documentElement();
   bool scrolls_overflow = builder.ScrollsOverflow();
-  if (element && element == element->GetDocument().FirstBodyElement()) {
+  if (element == element->GetDocument().FirstBodyElement()) {
     // Body scrolls overflow if html root overflow is not visible or the
     // propagation of overflow is stopped by containment.
     if (parent_style.IsOverflowVisibleAlongBothAxes()) {
@@ -126,8 +127,8 @@ TouchAction AdjustTouchActionForElement(TouchAction touch_action,
       }
     }
   }
-  bool is_child_document = element && element == document_element &&
-                           element->GetDocument().LocalOwner();
+  bool is_child_document =
+      element == document_element && element->GetDocument().LocalOwner();
   if (scrolls_overflow || is_child_document) {
     return touch_action | TouchAction::kPan |
            TouchAction::kInternalPanXScrolls |
@@ -226,10 +227,10 @@ static EDisplay EquivalentBlockDisplay(EDisplay display) {
     case EDisplay::kRubyText:
       return EDisplay::kBlock;
     case EDisplay::kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return display;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return EDisplay::kBlock;
 }
 
@@ -283,10 +284,10 @@ static EDisplay EquivalentInlineDisplay(EDisplay display) {
       return display;
 
     case EDisplay::kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return display;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return EDisplay::kBlock;
 }
 
@@ -410,7 +411,8 @@ static void AdjustStyleForMarker(ComputedStyleBuilder& builder,
     return;
   }
 
-  if (parent_style.MarkerShouldBeInside(parent_element)) {
+  if (parent_style.MarkerShouldBeInside(parent_element,
+                                        builder.GetDisplayStyle())) {
     Document& document = parent_element.GetDocument();
     auto margins =
         ListMarker::InlineMarginsForInside(document, builder, parent_style);
@@ -640,10 +642,31 @@ static void AdjustStyleForDisplay(ComputedStyleBuilder& builder,
   // We need to avoid to inlinify children of a <fieldset>, which creates a
   // dedicated LayoutObject and it assumes only block children.
   if (layout_parent_style.InlinifiesChildren() &&
-      !builder.HasOutOfFlowPosition() && !builder.IsFloating() &&
+      !builder.HasOutOfFlowPosition() &&
       !(element && IsA<HTMLFieldSetElement>(element->parentNode()))) {
-    builder.SetIsInInlinifyingDisplay();
-    builder.SetDisplay(EquivalentInlineDisplay(builder.Display()));
+    if (RuntimeEnabledFeatures::RubyLineBreakableEnabled() &&
+        builder.IsFloating()) {
+      builder.SetFloating(EFloat::kNone);
+      if (document) {
+        document->AddConsoleMessage(
+            MakeGarbageCollected<ConsoleMessage>(
+                ConsoleMessage::Source::kRendering,
+                ConsoleMessage::Level::kInfo,
+                "`float` property is not supported correctly inside an element "
+                "with `display: ruby` or `display: ruby-text`."),
+            true);
+      }
+    }
+    if (!builder.IsFloating()) {
+      builder.SetIsInInlinifyingDisplay();
+      builder.SetDisplay(EquivalentInlineDisplay(builder.Display()));
+    }
+  }
+
+  // TODO(332396355): Remove temporary blockifing of ::scroll-marker pseudo
+  // elements.
+  if (builder.StyleType() == kPseudoIdScrollMarker) {
+    builder.SetDisplay(EquivalentBlockDisplay(builder.Display()));
   }
 
   if (builder.Display() == EDisplay::kBlock) {
@@ -718,7 +741,12 @@ void StyleAdjuster::AdjustEffectiveTouchAction(
     bool is_svg_root) {
   TouchAction inherited_action = parent_style.EffectiveTouchAction();
 
-  bool is_replaced_canvas = element && IsA<HTMLCanvasElement>(element) &&
+  if (!element) {
+    builder.SetEffectiveTouchAction(TouchAction::kAuto & inherited_action);
+    return;
+  }
+
+  bool is_replaced_canvas = IsA<HTMLCanvasElement>(element) &&
                             element->GetExecutionContext() &&
                             element->GetExecutionContext()->CanExecuteScripts(
                                 kNotAboutToExecuteScript);
@@ -728,7 +756,7 @@ void StyleAdjuster::AdjustEffectiveTouchAction(
         IsA<HTMLImageElement>(element) || is_replaced_canvas);
   bool is_table_row_or_column = builder.IsDisplayTableRowOrColumnType();
   bool is_layout_object_needed =
-      element && element->LayoutObjectIsNeeded(builder.GetDisplayStyle());
+      element->LayoutObjectIsNeeded(builder.GetDisplayStyle());
 
   TouchAction element_touch_action = TouchAction::kAuto;
   // Touch actions are only supported by elements that support both the CSS
@@ -750,11 +778,6 @@ void StyleAdjuster::AdjustEffectiveTouchAction(
     if ((element_touch_action & TouchAction::kPan) != TouchAction::kNone) {
       element_touch_action |= TouchAction::kInternalNotWritable;
     }
-  }
-
-  if (!element) {
-    builder.SetEffectiveTouchAction(element_touch_action & inherited_action);
-    return;
   }
 
   bool is_child_document = element == element->GetDocument().documentElement();

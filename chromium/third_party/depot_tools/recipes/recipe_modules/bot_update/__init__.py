@@ -25,6 +25,7 @@ DEPS = [
 ]
 
 from recipe_engine.recipe_api import Property
+from recipe_engine.config import ConfigGroup, Single
 
 PROPERTIES = {
     # Gerrit patches will have all properties about them prefixed with patch_.
@@ -34,6 +35,7 @@ PROPERTIES = {
     Property(
         help='Properties specific to bot_update module.',
         param_name='properties',
+        kind=ConfigGroup(stale_process_duration_override=Single(int)),
         default={},
     ),
 }

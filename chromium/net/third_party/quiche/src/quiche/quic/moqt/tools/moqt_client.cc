@@ -22,8 +22,8 @@
 #include "quiche/quic/tools/quic_default_client.h"
 #include "quiche/quic/tools/quic_event_loop_tools.h"
 #include "quiche/quic/tools/quic_name_lookup.h"
+#include "quiche/common/http/http_header_block.h"
 #include "quiche/common/platform/api/quiche_logging.h"
-#include "quiche/spdy/core/http2_header_block.h"
 
 namespace moqt {
 
@@ -75,7 +75,7 @@ absl::Status MoqtClient::ConnectInner(std::string path,
   }
   spdy_client_.set_store_response(true);
 
-  spdy::Http2HeaderBlock headers;
+  quiche::HttpHeaderBlock headers;
   headers[":scheme"] = "https";
   headers[":authority"] = spdy_client_.server_id().host();
   headers[":path"] = path;
@@ -89,7 +89,7 @@ absl::Status MoqtClient::ConnectInner(std::string path,
   }
 
   MoqtSessionParameters parameters;
-  parameters.version = MoqtVersion::kDraft03;
+  parameters.version = MoqtVersion::kDraft05;
   parameters.perspective = quic::Perspective::IS_CLIENT,
   parameters.using_webtrans = true;
   parameters.path = "";

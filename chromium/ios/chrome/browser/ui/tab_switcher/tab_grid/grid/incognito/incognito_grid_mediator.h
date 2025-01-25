@@ -11,6 +11,10 @@
 @class IncognitoReauthSceneAgent;
 @protocol TabGroupsCommands;
 
+namespace signin {
+class IdentityManager;
+}
+
 // Mediates between model layer and incognito grid UI layer.
 @interface IncognitoGridMediator : BaseGridMediator
 
@@ -18,8 +22,11 @@
 @property(nonatomic, weak) id<IncognitoGridMediatorDelegate> incognitoDelegate;
 // The reauth scene agent to handle the button enabled state.
 @property(nonatomic, weak) IncognitoReauthSceneAgent* reauthSceneAgent;
-// The command handler for groups.
-@property(nonatomic, weak) id<TabGroupsCommands> tabGroupsHandler;
+
+// Initializes the capabilities observer to determine supervision status, as
+// incognito mode is disabled for supervised users.
+- (void)initializeSupervisedUserCapabilitiesObserver:
+    (signin::IdentityManager*)identityManager;
 
 @end
 

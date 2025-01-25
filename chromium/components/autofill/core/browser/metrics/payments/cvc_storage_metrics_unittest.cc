@@ -34,7 +34,7 @@ class CvcStorageMetricsTest : public AutofillMetricsBaseTest,
 
     // Add a masked server card.
     card_ = test::WithCvc(test::GetMaskedServerCard());
-    personal_data().AddServerCreditCard(card_);
+    personal_data().test_payments_data_manager().AddServerCreditCard(card_);
   }
 
   void TearDown() override { TearDownHelper(); }
@@ -53,7 +53,8 @@ TEST_F(CvcStorageMetricsTest, LogShownMetrics) {
       true);
 
   // Simulate activating the autofill popup for the credit card field.
-  autofill_manager().OnAskForValuesToFillTest(form(), form().fields.front());
+  autofill_manager().OnAskForValuesToFillTest(
+      form(), form().fields().front().global_id());
   DidShowAutofillSuggestions(form(), /*field_index=*/0,
                              SuggestionType::kCreditCardEntry);
   EXPECT_THAT(
@@ -64,7 +65,8 @@ TEST_F(CvcStorageMetricsTest, LogShownMetrics) {
           base::Bucket(FORM_EVENT_SUGGESTION_FOR_CARD_WITH_CVC_SHOWN_ONCE, 1)));
 
   // Show the popup again.
-  autofill_manager().OnAskForValuesToFillTest(form(), form().fields.front());
+  autofill_manager().OnAskForValuesToFillTest(
+      form(), form().fields().front().global_id());
   DidShowAutofillSuggestions(form(), /*field_index=*/0,
                              SuggestionType::kCreditCardEntry);
   EXPECT_THAT(
@@ -85,11 +87,12 @@ TEST_F(CvcStorageMetricsTest, LogSelectedMetrics) {
       true);
 
   // Simulate selecting the suggestion with CVC.
-  autofill_manager().OnAskForValuesToFillTest(form(), form().fields.back());
-  DidShowAutofillSuggestions(form(), /*field_index=*/form().fields.size() - 1,
+  autofill_manager().OnAskForValuesToFillTest(
+      form(), form().fields().back().global_id());
+  DidShowAutofillSuggestions(form(), /*field_index=*/form().fields().size() - 1,
                              SuggestionType::kCreditCardEntry);
   autofill_manager().AuthenticateThenFillCreditCardForm(
-      form(), form().fields.back(),
+      form(), form().fields().back(),
       *personal_data().payments_data_manager().GetCreditCardByInstrumentId(
           card().instrument_id()),
       {.trigger_source = AutofillTriggerSource::kPopup});
@@ -104,7 +107,7 @@ TEST_F(CvcStorageMetricsTest, LogSelectedMetrics) {
 
   // Simulate selecting the suggestion again.
   autofill_manager().AuthenticateThenFillCreditCardForm(
-      form(), form().fields.front(),
+      form(), form().fields().front(),
       *personal_data().payments_data_manager().GetCreditCardByInstrumentId(
           card().instrument_id()),
       {.trigger_source = AutofillTriggerSource::kPopup});
@@ -129,7 +132,7 @@ TEST_F(CvcStorageMetricsTest, LogFilledMetrics) {
 
   // Simulate filling the suggestion with CVC.
   autofill_manager().AuthenticateThenFillCreditCardForm(
-      form(), form().fields.front(),
+      form(), form().fields().front(),
       *personal_data().payments_data_manager().GetCreditCardByInstrumentId(
           card().instrument_id()),
       {.trigger_source = AutofillTriggerSource::kPopup});
@@ -146,7 +149,7 @@ TEST_F(CvcStorageMetricsTest, LogFilledMetrics) {
 
   // Fill the suggestion again.
   autofill_manager().AuthenticateThenFillCreditCardForm(
-      form(), form().fields.front(),
+      form(), form().fields().front(),
       *personal_data().payments_data_manager().GetCreditCardByInstrumentId(
           card().instrument_id()),
       {.trigger_source = AutofillTriggerSource::kPopup});
@@ -171,9 +174,10 @@ TEST_F(CvcStorageMetricsTest, LogSubmitMetrics) {
       true);
 
   // Simulate filling and then submitting the card with CVC.
-  autofill_manager().OnAskForValuesToFillTest(form(), form().fields.front());
+  autofill_manager().OnAskForValuesToFillTest(
+      form(), form().fields().front().global_id());
   autofill_manager().AuthenticateThenFillCreditCardForm(
-      form(), form().fields.front(),
+      form(), form().fields().front(),
       *personal_data().payments_data_manager().GetCreditCardByInstrumentId(
           card().instrument_id()),
       {.trigger_source = AutofillTriggerSource::kPopup});

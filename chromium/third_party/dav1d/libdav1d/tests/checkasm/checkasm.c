@@ -54,6 +54,9 @@
 #include <mach/mach_time.h>
 #endif
 #endif
+#if CONFIG_MACOS_KPERF
+#include <dlfcn.h>
+#endif
 
 #define COLOR_RED    31
 #define COLOR_GREEN  32
@@ -113,6 +116,7 @@ static const struct {
     { "LASX",               "lasx",      DAV1D_LOONGARCH_CPU_FLAG_LASX },
 #elif ARCH_PPC64LE
     { "VSX",                "vsx",       DAV1D_PPC_CPU_FLAG_VSX },
+    { "PWR9",               "pwr9",      DAV1D_PPC_CPU_FLAG_PWR9 },
 #elif ARCH_RISCV
     { "RVV",                "rvv",       DAV1D_RISCV_CPU_FLAG_V },
 #endif
@@ -165,7 +169,7 @@ static struct {
     unsigned seed;
     CheckasmRunMode run_mode;
     int verbose;
-    volatile sig_atomic_t catch_signals;
+    volatile sig_atomic_t sig; // SIG_ATOMIC_MAX = signal handling enabled
     int suffix_length;
     int max_function_name_length;
 #if ARCH_X86_64
@@ -205,6 +209,82 @@ int xor128_rand(void) {
 
     return w >> 1;
 }
+
+#if CONFIG_MACOS_KPERF
+
+static int (*kpc_get_thread_counters)(int, unsigned int, void *);
+
+#define CFGWORD_EL0A64EN_MASK (0x20000)
+
+#define CPMU_CORE_CYCLE 0x02
+
+#define KPC_CLASS_FIXED_MASK        (1 << 0)
+#define KPC_CLASS_CONFIGURABLE_MASK (1 << 1)
+
+#define COUNTERS_COUNT 10
+#define CONFIG_COUNT 8
+#define KPC_MASK (KPC_CLASS_CONFIGURABLE_MASK | KPC_CLASS_FIXED_MASK)
+
+static int kperf_init(void) {
+    uint64_t config[COUNTERS_COUNT] = { 0 };
+
+    void *kperf = dlopen("/System/Library/PrivateFrameworks/kperf.framework/kperf", RTLD_LAZY);
+    if (!kperf) {
+        fprintf(stderr, "checkasm: Unable to load kperf: %s\n", dlerror());
+        return 1;
+    }
+
+    int (*kpc_force_all_ctrs_set)(int) = dlsym(kperf, "kpc_force_all_ctrs_set");
+    int (*kpc_set_counting)(uint32_t) = dlsym(kperf, "kpc_set_counting");
+    int (*kpc_set_thread_counting)(uint32_t) = dlsym(kperf, "kpc_set_thread_counting");
+    int (*kpc_set_config)(uint32_t, void *) = dlsym(kperf, "kpc_set_config");
+    uint32_t (*kpc_get_counter_count)(uint32_t) = dlsym(kperf, "kpc_get_counter_count");
+    uint32_t (*kpc_get_config_count)(uint32_t) = dlsym(kperf, "kpc_get_config_count");
+    kpc_get_thread_counters = dlsym(kperf, "kpc_get_thread_counters");
+
+    if (!kpc_get_thread_counters) {
+        fprintf(stderr, "checkasm: Unable to load kpc_get_thread_counters\n");
+        return 1;
+    }
+
+    if (!kpc_get_counter_count || kpc_get_counter_count(KPC_MASK) != COUNTERS_COUNT) {
+        fprintf(stderr, "checkasm: Unxpected kpc_get_counter_count\n");
+        return 1;
+    }
+    if (!kpc_get_config_count || kpc_get_config_count(KPC_MASK) != CONFIG_COUNT) {
+        fprintf(stderr, "checkasm: Unxpected kpc_get_config_count\n");
+        return 1;
+    }
+
+    config[0] = CPMU_CORE_CYCLE | CFGWORD_EL0A64EN_MASK;
+
+    if (!kpc_set_config || kpc_set_config(KPC_MASK, config)) {
+        fprintf(stderr, "checkasm: The kperf API needs to be run as root\n");
+        return 1;
+    }
+    if (!kpc_force_all_ctrs_set || kpc_force_all_ctrs_set(1)) {
+        fprintf(stderr, "checkasm: kpc_force_all_ctrs_set failed\n");
+        return 1;
+    }
+    if (!kpc_set_counting || kpc_set_counting(KPC_MASK)) {
+        fprintf(stderr, "checkasm: kpc_set_counting failed\n");
+        return 1;
+    }
+    if (!kpc_set_counting || kpc_set_thread_counting(KPC_MASK)) {
+        fprintf(stderr, "checkasm: kpc_set_thread_counting failed\n");
+        return 1;
+    }
+    return 0;
+}
+
+uint64_t checkasm_kperf_cycles(void) {
+    uint64_t counters[COUNTERS_COUNT];
+    if (kpc_get_thread_counters(0, COUNTERS_COUNT, counters))
+        return -1;
+
+    return counters[0];
+}
+#endif
 
 static int is_negative(const intfloat u) {
     return u.i >> 31;
@@ -463,34 +543,33 @@ checkasm_context checkasm_context_buf;
 #ifdef _WIN32
 #if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
 static LONG NTAPI signal_handler(EXCEPTION_POINTERS *const e) {
-    if (!state.catch_signals)
-        return EXCEPTION_CONTINUE_SEARCH;
-
-    int s;
-    switch (e->ExceptionRecord->ExceptionCode) {
-    case EXCEPTION_FLT_DIVIDE_BY_ZERO:
-    case EXCEPTION_INT_DIVIDE_BY_ZERO:
-        s = SIGFPE;
-        break;
-    case EXCEPTION_ILLEGAL_INSTRUCTION:
-    case EXCEPTION_PRIV_INSTRUCTION:
-        s = SIGILL;
-        break;
-    case EXCEPTION_ACCESS_VIOLATION:
-    case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
-    case EXCEPTION_DATATYPE_MISALIGNMENT:
-    case EXCEPTION_STACK_OVERFLOW:
-        s = SIGSEGV;
-        break;
-    case EXCEPTION_IN_PAGE_ERROR:
-        s = SIGBUS;
-        break;
-    default:
-        return EXCEPTION_CONTINUE_SEARCH;
+    if (state.sig == SIG_ATOMIC_MAX) {
+        int s;
+        switch (e->ExceptionRecord->ExceptionCode) {
+        case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+        case EXCEPTION_INT_DIVIDE_BY_ZERO:
+            s = SIGFPE;
+            break;
+        case EXCEPTION_ILLEGAL_INSTRUCTION:
+        case EXCEPTION_PRIV_INSTRUCTION:
+            s = SIGILL;
+            break;
+        case EXCEPTION_ACCESS_VIOLATION:
+        case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
+        case EXCEPTION_DATATYPE_MISALIGNMENT:
+        case EXCEPTION_STACK_OVERFLOW:
+            s = SIGSEGV;
+            break;
+        case EXCEPTION_IN_PAGE_ERROR:
+            s = SIGBUS;
+            break;
+        default:
+            return EXCEPTION_CONTINUE_SEARCH;
+        }
+        state.sig = s;
+        checkasm_load_context();
     }
-    state.catch_signals = 0;
-    checkasm_load_context(s);
-    return EXCEPTION_CONTINUE_EXECUTION; /* never reached, but shuts up gcc */
+    return EXCEPTION_CONTINUE_SEARCH;
 }
 #endif
 #else
@@ -502,10 +581,10 @@ static const struct sigaction signal_handler_act = {
 };
 
 static void signal_handler(const int s) {
-    if (state.catch_signals) {
-        state.catch_signals = 0;
+    if (state.sig == SIG_ATOMIC_MAX) {
+        state.sig = s;
         sigaction(s, &signal_handler_act, NULL);
-        checkasm_load_context(s);
+        checkasm_load_context();
     }
 }
 #endif
@@ -714,6 +793,10 @@ int main(int argc, char *argv[]) {
 
 #ifdef readtime
     if (state.run_mode == RUN_BENCHMARK) {
+#if CONFIG_MACOS_KPERF
+        if (kperf_init())
+            return 1;
+#endif
         if (!checkasm_save_context()) {
             checkasm_set_signal_handler_state(1);
             readtime();
@@ -934,17 +1017,15 @@ void checkasm_report(const char *const name, ...) {
 }
 
 void checkasm_set_signal_handler_state(const int enabled) {
-    state.catch_signals = enabled;
+    state.sig = enabled ? SIG_ATOMIC_MAX : 0;
 }
 
-int checkasm_handle_signal(const int s) {
-    if (s) {
-        checkasm_fail_func(s == SIGFPE ? "fatal arithmetic error" :
-                           s == SIGILL ? "illegal instruction" :
-                           s == SIGBUS ? "bus error" :
-                                         "segmentation fault");
-    }
-    return s;
+void checkasm_handle_signal(void) {
+    const int s = state.sig;
+    checkasm_fail_func(s == SIGFPE ? "fatal arithmetic error" :
+                       s == SIGILL ? "illegal instruction" :
+                       s == SIGBUS ? "bus error" :
+                                     "segmentation fault");
 }
 
 static int check_err(const char *const file, const int line,

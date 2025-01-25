@@ -12,6 +12,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/updater/test/integration_tests_impl.h"
+#include "chrome/updater/test/test_scope.h"
 #include "chrome/updater/update_service.h"
 
 class GURL;
@@ -20,6 +21,10 @@ namespace base {
 class FilePath;
 class Version;
 }  // namespace base
+
+namespace updater {
+struct RegistrationRequest;
+}  // namespace updater
 
 namespace updater::test {
 
@@ -95,7 +100,7 @@ class IntegrationTestCommands
   virtual void InstallApp(const std::string& app_id,
                           const base::Version& version) const = 0;
   virtual void ExpectNoCrashes() const = 0;
-  virtual void CopyLog() const = 0;
+  virtual void CopyLog(const std::string& infix) const = 0;
   virtual void SetupFakeUpdaterHigherVersion() const = 0;
   virtual void SetupFakeUpdaterLowerVersion() const = 0;
   virtual void SetupRealUpdaterLowerVersion() const = 0;
@@ -108,6 +113,8 @@ class IntegrationTestCommands
   virtual void ExpectNotRegistered(const std::string& app_id) const = 0;
   virtual void ExpectAppTag(const std::string& app_id,
                             const std::string& tag) const = 0;
+  virtual void SetAppTag(const std::string& app_id,
+                         const std::string& tag) const = 0;
   virtual void ExpectAppVersion(const std::string& app_id,
                                 const base::Version& version) const = 0;
   virtual void RunWake(int exit_code) const = 0;
@@ -116,6 +123,7 @@ class IntegrationTestCommands
   virtual void RunCrashMe() const = 0;
   virtual void RunServer(int exit_code, bool internal) const = 0;
 
+  virtual void RegisterApp(const RegistrationRequest& registration) const = 0;
   virtual void CheckForUpdate(const std::string& app_id) const = 0;
   virtual void Update(const std::string& app_id,
                       const std::string& install_data_index) const = 0;
@@ -127,7 +135,6 @@ class IntegrationTestCommands
   virtual void DeleteFile(const base::FilePath& path) const = 0;
   virtual void PrintLog() const = 0;
   virtual base::FilePath GetDifferentUserPath() const = 0;
-  [[nodiscard]] virtual bool WaitForUpdaterExit() const = 0;
 #if BUILDFLAG(IS_WIN)
   virtual void ExpectInterfacesRegistered() const = 0;
   virtual void ExpectMarshalInterfaceSucceeds() const = 0;
@@ -189,10 +196,11 @@ class IntegrationTestCommands
 
 scoped_refptr<IntegrationTestCommands> CreateIntegrationTestCommands();
 
-scoped_refptr<IntegrationTestCommands> CreateIntegrationTestCommandsUser();
+scoped_refptr<IntegrationTestCommands> CreateIntegrationTestCommandsUser(
+    UpdaterScope scope = GetUpdaterScopeForTesting());
 
-scoped_refptr<IntegrationTestCommands> CreateIntegrationTestCommandsSystem();
+scoped_refptr<IntegrationTestCommands> CreateIntegrationTestCommandsSystem(
+    UpdaterScope scope = GetUpdaterScopeForTesting());
 
 }  // namespace updater::test
-
 #endif  // CHROME_UPDATER_TEST_INTEGRATION_TEST_COMMANDS_H_

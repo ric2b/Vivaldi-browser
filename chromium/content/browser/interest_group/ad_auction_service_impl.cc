@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "content/browser/interest_group/ad_auction_service_impl.h"
 
 #include <map>
@@ -18,6 +23,7 @@
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/not_fatal_until.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
@@ -27,7 +33,6 @@
 #include "base/types/expected.h"
 #include "base/uuid.h"
 #include "components/aggregation_service/aggregation_coordinator_utils.h"
-#include "components/aggregation_service/features.h"
 #include "content/browser/attribution_reporting/attribution_manager.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/fenced_frame/fenced_frame_reporter.h"
@@ -158,6 +163,19 @@ bool ShouldWarnAboutPermissionPolicyDefault(
   return ShouldWarnAboutPermissionPolicyDefault(*parent, feature);
 }
 
+void RecordBaDataConstructionResultMetric(size_t data_size,
+                                          base::TimeTicks start_time) {
+  // Request sizes only increase by factors of two so we only need to sample
+  // the powers of two. The maximum of 1 GB size is much larger than it should
+  // ever be.
+  base::UmaHistogramCustomCounts(/*name=*/"Ads.InterestGroup.BaDataSize2",
+                                 /*sample=*/data_size, /*min=*/1,
+                                 /*exclusive_max=*/1 << 30, /*buckets=*/30);
+
+  base::UmaHistogramTimes(/*name=*/"Ads.InterestGroup.BaDataConstructionTime2",
+                          /*sample=*/base::TimeTicks::Now() - start_time);
+}
+
 }  // namespace
 
 AdAuctionServiceImpl::BiddingAndAuctionDataConstructionState::
@@ -196,19 +214,33 @@ void AdAuctionServiceImpl::JoinInterestGroup(
   bool report_result_only = !IsInterestGroupAPIAllowed(
       ContentBrowserClient::InterestGroupApiOperation::kJoin, group.owner);
 
+  // If the group is allowed, we also do a permissions/attestation check on
+  // trusted bidding signals URL, in case it's 3rd party.
+  if (!report_result_only && group.trusted_bidding_signals_url.has_value() &&
+      base::FeatureList::IsEnabled(
+          blink::features::kFledgePermitCrossOriginTrustedSignals)) {
+    url::Origin trusted_bidding_signals_origin =
+        url::Origin::Create(group.trusted_bidding_signals_url.value());
+    if (!trusted_bidding_signals_origin.IsSameOriginWith(group.owner) &&
+        !IsInterestGroupAPIAllowed(
+            ContentBrowserClient::InterestGroupApiOperation::kJoin,
+            trusted_bidding_signals_origin)) {
+      report_result_only = true;
+      render_frame_host().AddMessageToConsole(
+          blink::mojom::ConsoleMessageLevel::kWarning,
+          base::StringPrintf(
+              "joinAdInterestGroup of interest group with owner '%s' blocked "
+              "because it lacks attestation of cross-origin trusted signals "
+              "origin '%s' or that origin is disallowed by user preferences",
+              group.owner.Serialize().c_str(),
+              trusted_bidding_signals_origin.Serialize().c_str()));
+    }
+  }
+
   blink::InterestGroup updated_group = group;
   base::Time max_expiry = base::Time::Now() + kMaxExpiry;
   if (updated_group.expiry > max_expiry) {
     updated_group.expiry = max_expiry;
-  }
-
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kPrivateAggregationApiMultipleCloudProviders) ||
-      !base::FeatureList::IsEnabled(
-          aggregation_service::kAggregationServiceMultipleCloudProviders)) {
-    // Override with the default if a non-default coordinator is specified when
-    // the feature is disabled.
-    updated_group.aggregation_coordinator_origin = std::nullopt;
   }
 
   if (updated_group.aggregation_coordinator_origin &&
@@ -592,17 +624,20 @@ void AdAuctionServiceImpl::GetInterestGroupAdAuctionData(
     }
   }
 
-  // If the interest group API is not allowed for this origin do nothing.
-  if (!IsInterestGroupAPIAllowed(
-          ContentBrowserClient::InterestGroupApiOperation::kSell, seller)) {
-    std::move(callback).Run({}, {}, "API not allowed for this origin");
-    return;
-  }
-
   if (!IsPermissionPolicyEnabledAndWarnIfNeeded(
           blink::mojom::PermissionsPolicyFeature::kRunAdAuction,
           "getInterestGroupAdAuctionData")) {
     ReportBadMessageAndDeleteThis("Unexpected request");
+    return;
+  }
+
+  // If the interest group API is not allowed for this origin do nothing.
+  bool api_allowed = IsInterestGroupAPIAllowed(
+      ContentBrowserClient::InterestGroupApiOperation::kSell, seller);
+  base::UmaHistogramBoolean(
+      "Ads.InterestGroup.ServerAuction.Request.APIAllowed", api_allowed);
+  if (!api_allowed) {
+    std::move(callback).Run({}, {}, "API not allowed for this origin");
     return;
   }
 
@@ -876,7 +911,7 @@ void AdAuctionServiceImpl::OnAuctionComplete(
   // auction, which `reporter` can reuse once started. Fine to delete after
   // starting the reporter.
   auto auction_it = auctions_.find(auction);
-  DCHECK(auction_it != auctions_.end());
+  CHECK(auction_it != auctions_.end(), base::NotFatalUntil::M130);
   std::unique_ptr<AuctionRunner> owned_auction = std::move(auction_it->second);
   auctions_.erase(auction_it);
 
@@ -1050,7 +1085,13 @@ void AdAuctionServiceImpl::MaybeLogPrivateAggregationFeatures(
 void AdAuctionServiceImpl::ReturnEmptyGetInterestGroupAdAuctionDataCallback(
     const std::string msg) {
   if (!ba_data_callbacks_.empty()) {
-    std::move(ba_data_callbacks_.front().callback).Run({}, {}, msg);
+    BiddingAndAuctionDataConstructionState& state = ba_data_callbacks_.front();
+
+    if (msg.empty()) {
+      RecordBaDataConstructionResultMetric(/*data_size=*/0, state.start_time);
+    }
+
+    std::move(state.callback).Run({}, {}, msg);
     ba_data_callbacks_.pop();
   }
   if (!ba_data_callbacks_.empty()) {
@@ -1190,17 +1231,10 @@ void AdAuctionServiceImpl::OnGotAuctionDataAndKey(base::Uuid request_id) {
   std::memcpy(&buf.data()[start_offset], data.data(), data.size());
 
   std::move(state.callback).Run(std::move(buf), state.request_id, "");
+
+  RecordBaDataConstructionResultMetric(data.size(), state.start_time);
+
   ba_data_callbacks_.pop();
-
-  // Request sizes only increase by factors of two so we only need to sample
-  // the powers of two. The maximum of 1 GB size is much larger than it should
-  // ever be.
-  base::UmaHistogramCustomCounts(/*name=*/"Ads.InterestGroup.BaDataSize",
-                                 /*sample=*/data.size(), /*min=*/1,
-                                 /*exclusive_max=*/1 << 30, /*buckets=*/30);
-  base::UmaHistogramTimes(/*name=*/"Ads.InterestGroup.BaDataConstructionTime",
-                          /*sample=*/base::TimeTicks::Now() - state.start_time);
-
   if (!ba_data_callbacks_.empty()) {
     LoadAuctionDataAndKeyForNextQueuedRequest();
   }

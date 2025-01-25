@@ -22,7 +22,6 @@
 
 #if !BUILDFLAG(IS_CHROMEOS)
 #include "base/feature_list.h"
-#include "components/ml/webnn/features.mojom-features.h"
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
 namespace viz {
@@ -55,14 +54,6 @@ void GpuClient::Add(mojo::PendingReceiver<mojom::Gpu> receiver) {
 void GpuClient::OnError(ErrorReason reason) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   ClearCallback();
-  if (gpu_receivers_.empty() && delegate_) {
-    if (auto* gpu_memory_buffer_manager =
-            delegate_->GetGpuMemoryBufferManager()) {
-      gpu_memory_buffer_manager->DestroyAllGpuMemoryBufferForClient(client_id_);
-    }
-  }
-  if (reason == ErrorReason::kConnectionLost && connection_error_handler_)
-    std::move(connection_error_handler_).Run(this);
 }
 
 void GpuClient::PreEstablishGpuChannel() {
@@ -111,11 +102,6 @@ void GpuClient::RemoveDiskCacheHandles() {
 
   if (GpuHostImpl* gpu_host = delegate_->EnsureGpuHost())
     gpu_host->RemoveChannelDiskCacheHandles(client_id_);
-}
-
-void GpuClient::SetConnectionErrorHandler(
-    ConnectionErrorHandlerClosure connection_error_handler) {
-  connection_error_handler_ = std::move(connection_error_handler);
 }
 
 base::WeakPtr<GpuClient> GpuClient::GetWeakPtr() {

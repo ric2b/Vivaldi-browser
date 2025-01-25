@@ -101,6 +101,7 @@ constexpr char kOsName[] = "fake-os-name";
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 constexpr char kIdToken[] = "id_token";
+constexpr char kOidcState[] = "fake-oidc-state";
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || \
@@ -433,6 +434,13 @@ em::DeviceManagementResponse GetRobotAuthCodeFetchResponse() {
   api_response->set_auth_code(kRobotAuthCode);
 
   return robot_auth_code_fetch_response;
+}
+
+em::DeviceManagementResponse GetFmRegistrationTokenUploadResponse() {
+  em::DeviceManagementResponse fm_registration_token_upload_response;
+  fm_registration_token_upload_response
+      .mutable_fm_registration_token_upload_response();
+  return fm_registration_token_upload_response;
 }
 
 em::DeviceManagementResponse GetEmptyResponse() {
@@ -913,6 +921,51 @@ TEST_F(CloudPolicyClientTest, RegistrationWithOidcAndPolicyFetch) {
             job_type_);
   EXPECT_EQ(job_request_.SerializePartialAsString(),
             GetRegistrationRequest().SerializePartialAsString());
+  EXPECT_EQ(auth_data_, DMAuth::FromOidcResponse(kIdToken));
+  EXPECT_THAT(query_params_,
+              Not(Contains(Pair(dm_protocol::kParamOAuthToken, kOAuthToken))));
+  EXPECT_TRUE(client_->is_registered());
+  EXPECT_FALSE(client_->GetPolicyFor(policy_type_, std::string()));
+  EXPECT_EQ(base::Seconds(0), timeout_);
+  EXPECT_EQ(DM_STATUS_SUCCESS, client_->last_dm_status());
+
+  ExpectAndCaptureJob(policy_response);
+  EXPECT_CALL(observer_, OnPolicyFetched);
+  client_->FetchPolicy(kReason);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(DeviceManagementService::JobConfiguration::TYPE_POLICY_FETCH,
+            job_type_);
+  EXPECT_EQ(auth_data_, DMAuth::FromDMToken(kDMToken));
+  EXPECT_EQ(job_request_.SerializePartialAsString(),
+            GetPolicyRequest().SerializePartialAsString());
+  EXPECT_EQ(DM_STATUS_SUCCESS, client_->last_dm_status());
+  CheckPolicyResponse(policy_response);
+}
+
+TEST_F(CloudPolicyClientTest, RegistrationWithOidcAndPolicyFetchWithOidcState) {
+  const em::DeviceManagementResponse policy_response = GetPolicyResponse();
+  em::DeviceManagementRequest registration_request = GetRegistrationRequest();
+  registration_request.mutable_register_request()
+      ->set_oidc_profile_enrollment_state(kOidcState);
+  ExpectAndCaptureJob(GetRegistrationResponse());
+  EXPECT_CALL(observer_, OnRegistrationStateChanged);
+  EXPECT_CALL(device_dmtoken_callback_observer_,
+              OnDeviceDMTokenRequested(
+                  /*user_affiliation_ids=*/std::vector<std::string>()))
+      .WillOnce(Return(kDeviceDMToken));
+
+  CloudPolicyClient::RegistrationParameters register_parameters(
+      em::DeviceRegisterRequest::USER,
+      em::DeviceRegisterRequest::FLAVOR_USER_REGISTRATION);
+  register_parameters.oidc_state = kOidcState;
+
+  client_->RegisterWithOidcResponse(register_parameters, kOAuthToken, kIdToken,
+                                    std::string() /* no client_id*/);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(DeviceManagementService::JobConfiguration::TYPE_OIDC_REGISTRATION,
+            job_type_);
+  EXPECT_EQ(job_request_.SerializePartialAsString(),
+            registration_request.SerializePartialAsString());
   EXPECT_EQ(auth_data_, DMAuth::FromOidcResponse(kIdToken));
   EXPECT_THAT(query_params_,
               Not(Contains(Pair(dm_protocol::kParamOAuthToken, kOAuthToken))));
@@ -3035,6 +3088,39 @@ TEST_F(CloudPolicyClientTest,
   EXPECT_EQ(DeviceManagementService::JobConfiguration::TYPE_POLICY_FETCH,
             job_type_);
   EXPECT_EQ(auth_data_, DMAuth::FromDMToken(kDMToken));
+}
+
+TEST_F(CloudPolicyClientTest, UploadFmRegistrationTokenRequest) {
+  RegisterClient();
+
+  em::FmRegistrationTokenUploadRequest request;
+  request.set_token("fake token");
+  request.set_protocol_version(101);
+  request.set_token_type(em::FmRegistrationTokenUploadRequest::USER);
+  request.set_expiration_timestamp_ms(
+      (base::Time::Now() + base::Minutes(5)).InMillisecondsSinceUnixEpoch());
+
+  em::DeviceManagementRequest expected_request;
+  expected_request.mutable_fm_registration_token_upload_request()->CopyFrom(
+      request);
+
+  ExpectAndCaptureJob(GetFmRegistrationTokenUploadResponse());
+  EXPECT_CALL(result_callback_observer_,
+              OnCallbackComplete(CloudPolicyClient::Result(DM_STATUS_SUCCESS)))
+      .Times(1);
+  CloudPolicyClient::ResultCallback callback =
+      base::BindOnce(&MockResultCallbackObserver::OnCallbackComplete,
+                     base::Unretained(&result_callback_observer_));
+
+  client_->UploadFmRegistrationToken(std::move(request), std::move(callback));
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(DeviceManagementService::JobConfiguration::
+                TYPE_UPLOAD_FM_REGISTRATION_TOKEN,
+            job_type_);
+  EXPECT_EQ(job_request_.SerializePartialAsString(),
+            expected_request.SerializePartialAsString());
+  EXPECT_EQ(DM_STATUS_SUCCESS, client_->last_dm_status());
 }
 
 struct MockClientCertProvisioningRequestCallbackObserver {

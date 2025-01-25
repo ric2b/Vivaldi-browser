@@ -185,30 +185,56 @@ PhysicalRect AdjustTextRectForEmHeight(const PhysicalRect& rect,
           PhysicalSize(new_line_height, rect.size.height)};
 }
 
+AnnotationOverhang GetOverhang(
+    LayoutUnit ruby_size,
+    const LineInfo& base_line,
+    const HeapVector<LineInfo, 1> annotation_line_list) {
+  DCHECK(RuntimeEnabledFeatures::RubyLineBreakableEnabled());
+  AnnotationOverhang overhang;
+  ERubyAlign ruby_align = base_line.LineStyle().RubyAlign();
+  switch (ruby_align) {
+    case ERubyAlign::kSpaceBetween:
+      return overhang;
+    case ERubyAlign::kStart:
+    case ERubyAlign::kSpaceAround:
+    case ERubyAlign::kCenter:
+      break;
+  }
+  LayoutUnit half_width_of_annotation_font;
+  for (const auto& annotation_line : annotation_line_list) {
+    if (annotation_line.Width() == ruby_size) {
+      half_width_of_annotation_font =
+          LayoutUnit(annotation_line.LineStyle().FontSize() / 2);
+      break;
+    }
+  }
+  if (half_width_of_annotation_font == LayoutUnit()) {
+    return overhang;
+  }
+  LayoutUnit space = ruby_size - base_line.Width();
+  if (space <= LayoutUnit()) {
+    return overhang;
+  }
+  if (ruby_align == ERubyAlign::kStart) {
+    overhang.end = std::min(space, half_width_of_annotation_font);
+    return overhang;
+  }
+  std::optional<LayoutUnit> inset = ComputeRubyBaseInset(space, base_line);
+  if (!inset) {
+    return overhang;
+  }
+  overhang.start = std::min(*inset, half_width_of_annotation_font);
+  overhang.end = overhang.start;
+  return overhang;
+}
+
 AnnotationOverhang GetOverhang(const InlineItemResult& item) {
   AnnotationOverhang overhang;
   if (item.IsRubyColumn()) {
     DCHECK(RuntimeEnabledFeatures::RubyLineBreakableEnabled());
     const InlineItemResultRubyColumn& column = *item.ruby_column;
-    LayoutUnit half_width_of_annotation_font;
-    for (const auto& annotation_line : column.annotation_line_list) {
-      if (annotation_line.Width() == item.inline_size) {
-        half_width_of_annotation_font =
-            LayoutUnit(annotation_line.LineStyle().FontSize() / 2);
-        break;
-      }
-    }
-    if (half_width_of_annotation_font == LayoutUnit()) {
-      return overhang;
-    }
-    std::optional<LayoutUnit> inset = ComputeRubyBaseInset(
-        item.inline_size - column.base_line.Width(), column.base_line);
-    if (!inset) {
-      return overhang;
-    }
-    overhang.start = std::min(*inset, half_width_of_annotation_font);
-    overhang.end = overhang.start;
-    return overhang;
+    return GetOverhang(item.inline_size, column.base_line,
+                       column.annotation_line_list);
   }
 
   if (!item.layout_result)
@@ -272,18 +298,21 @@ AnnotationOverhang GetOverhang(const InlineItemResult& item) {
 }
 
 bool CanApplyStartOverhang(const LineInfo& line_info,
+                           wtf_size_t ruby_index,
+                           const ComputedStyle& ruby_style,
                            LayoutUnit& start_overhang) {
   if (start_overhang <= LayoutUnit())
     return false;
   const InlineItemResults& items = line_info.Results();
-  // Requires at least the current item and the previous item.
-  if (items.size() < 2)
+  // Requires at least the ruby item and the previous item.
+  if (ruby_index < 1) {
     return false;
+  }
   // Find a previous item other than kOpenTag/kCloseTag.
   // Searching items in the logical order doesn't work well with bidi
   // reordering. However, it's difficult to compute overhang after bidi
   // reordering because it affects line breaking.
-  wtf_size_t previous_index = items.size() - 2;
+  wtf_size_t previous_index = ruby_index - 1;
   while ((items[previous_index].item->Type() == InlineItem::kOpenTag ||
           items[previous_index].item->Type() == InlineItem::kCloseTag) &&
          previous_index > 0) {
@@ -293,10 +322,9 @@ bool CanApplyStartOverhang(const LineInfo& line_info,
   if (previous_item.item->Type() != InlineItem::kText) {
     return false;
   }
-  const InlineItem& current_item = *items.back().item;
-  if (previous_item.item->Style()->FontSize() >
-      current_item.Style()->FontSize())
+  if (previous_item.item->Style()->FontSize() > ruby_style.FontSize()) {
     return false;
+  }
   start_overhang = std::min(start_overhang, previous_item.inline_size);
   return true;
 }
@@ -390,16 +418,35 @@ std::pair<LayoutUnit, LayoutUnit> ApplyRubyAlign(LayoutUnit available_line_size,
   if (space <= LayoutUnit()) {
     return {LayoutUnit(), LayoutUnit()};
   }
+
+  ERubyAlign ruby_align = line_info.LineStyle().RubyAlign();
   ETextAlign text_align = line_info.TextAlign();
-  // Handle `space-around`.
+  switch (ruby_align) {
+    case ERubyAlign::kSpaceAround:
+      // We respect to the text-align value as ever if ruby-align is the
+      // initial value.
+      break;
+    case ERubyAlign::kSpaceBetween:
+      on_start_edge = true;
+      on_end_edge = true;
+      text_align = ETextAlign::kJustify;
+      break;
+    case ERubyAlign::kStart:
+      return IsLtr(line_info.BaseDirection())
+                 ? std::make_pair(LayoutUnit(), space)
+                 : std::make_pair(space, LayoutUnit());
+    case ERubyAlign::kCenter:
+      return {space / 2, space / 2};
+  }
+
+  // Handle `space-around` and `space-between`.
   if (text_align == ETextAlign::kJustify) {
-    JustificationTarget target = JustificationTarget::kNormal;
-    if (line_info.IsRubyBase()) {
-      target = JustificationTarget::kRubyBase;
+    JustificationTarget target;
+    if (on_start_edge && on_end_edge) {
       // Switch to `space-between` if this needs to align both edges.
-      if (on_start_edge && on_end_edge) {
-        target = JustificationTarget::kNormal;
-      }
+      target = JustificationTarget::kNormal;
+    } else if (line_info.IsRubyBase()) {
+      target = JustificationTarget::kRubyBase;
     } else {
       DCHECK(line_info.IsRubyText());
       target = JustificationTarget::kRubyText;
@@ -447,7 +494,7 @@ std::pair<LayoutUnit, LayoutUnit> ApplyRubyAlign(LayoutUnit available_line_size,
     case ETextAlign::kStart:
     case ETextAlign::kEnd:
     case ETextAlign::kJustify:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   return {LayoutUnit(), LayoutUnit()};
@@ -595,11 +642,12 @@ PhysicalRect ComputeRubyEmHeightBox(const PhysicalFragment& fragment,
     case PhysicalFragment::kFragmentBox:
       return ComputeRubyEmHeightBox(To<PhysicalBoxFragment>(fragment));
     case PhysicalFragment::kFragmentLineBox:
-      NOTREACHED() << "You must call LineBoxFragment::ComputeRubyEmHeightBox "
-                      "explicitly.";
+      NOTREACHED_IN_MIGRATION()
+          << "You must call LineBoxFragment::ComputeRubyEmHeightBox "
+             "explicitly.";
       break;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return {{}, fragment.Size()};
 }
 
@@ -611,7 +659,7 @@ void AdjustRubyEmHeightBoxForPropagation(const PhysicalFragment& fragment,
     return;
   }
   if (UNLIKELY(fragment.IsLayoutObjectDestroyedOrMoved())) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 
@@ -677,7 +725,7 @@ void AddRubyEmHeightBoxForInlineChild(const PhysicalFragment& child,
     const FragmentItem* item = descendants.CurrentItem();
     DCHECK(item);
     if (UNLIKELY(item->IsLayoutObjectDestroyedOrMoved())) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       descendants.MoveToNextSkippingChildren();
       continue;
     }
@@ -949,7 +997,7 @@ PhysicalRect ComputeRubyEmHeightBox(const PhysicalBoxFragment& box_fragment) {
   // TODO(kojii): It might be that |ComputeAnnotationOverflow| should move to
   // scrollable overflow recalc, but it is to be thought out.
   if (UNLIKELY(box_fragment.IsLayoutObjectDestroyedOrMoved())) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return PhysicalRect();
   }
   const LayoutObject* layout_object = box_fragment.GetLayoutObject();
@@ -976,7 +1024,7 @@ PhysicalRect ComputeRubyEmHeightBox(const PhysicalBoxFragment& box_fragment) {
     }
     return overflow;
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
   return PhysicalRect({}, box_fragment.Size());
 }
@@ -1002,8 +1050,9 @@ void UpdateRubyColumnInlinePositions(
         inline_offset = inline_size;
       }
     } else {
-      NOTREACHED() << " LogicalLineItems::size()=" << line_items.size()
-                   << " LogicalRubyColumn::start_index=" << start_index;
+      NOTREACHED_IN_MIGRATION()
+          << " LogicalLineItems::size()=" << line_items.size()
+          << " LogicalRubyColumn::start_index=" << start_index;
     }
     // TODO(crbug.com/324111880): Handle overhang.
     column->annotation_items->MoveInInlineDirection(inline_offset);
@@ -1145,11 +1194,14 @@ RubyBlockPositionCalculator& RubyBlockPositionCalculator::PlaceLines(
       em_height = line_box_metrics;
     }
     LayoutUnit offset = em_height.descent;
-    for (auto it = base_iterator; it != ruby_lines_.begin(); --it) {
-      RubyLine& ruby_line = **std::prev(it);
-      FontHeight metrics = ruby_line.UpdateMetrics();
+    auto lines_before_base =
+        base::span(ruby_lines_)
+            .first(base::checked_cast<size_t>(
+                std::distance(ruby_lines_.begin(), base_iterator)));
+    for (auto& ruby_line : base::Reversed(lines_before_base)) {
+      FontHeight metrics = ruby_line->UpdateMetrics();
       offset += metrics.ascent;
-      ruby_line.MoveInBlockDirection(offset);
+      ruby_line->MoveInBlockDirection(offset);
       offset += metrics.descent;
     }
     annotation_metrics_.descent = offset;
@@ -1166,11 +1218,13 @@ RubyBlockPositionCalculator& RubyBlockPositionCalculator::PlaceLines(
       em_height = line_box_metrics;
     }
     LayoutUnit offset = -em_height.ascent;
-    for (auto it = std::next(base_iterator); it != ruby_lines_.end(); ++it) {
-      RubyLine& ruby_line = **it;
-      FontHeight metrics = ruby_line.UpdateMetrics();
+    for (auto& ruby_line :
+         base::span(ruby_lines_)
+             .last(base::checked_cast<size_t>(
+                 std::distance(base_iterator, ruby_lines_.end()) - 1))) {
+      FontHeight metrics = ruby_line->UpdateMetrics();
       offset -= metrics.descent;
-      ruby_line.MoveInBlockDirection(offset);
+      ruby_line->MoveInBlockDirection(offset);
       offset -= metrics.ascent;
     }
     annotation_metrics_.ascent = -offset;
@@ -1224,6 +1278,7 @@ void RubyBlockPositionCalculator::RubyLine::Append(
 void RubyBlockPositionCalculator::RubyLine::MaybeRecordBaseIndexes(
     const LogicalRubyColumn& logical_column) {
   if (IsFirstOverLevel() || IsFirstUnderLevel()) {
+    base_index_list_.reserve(base_index_list_.size() + logical_column.size);
     for (wtf_size_t item_index = logical_column.start_index;
          item_index < logical_column.EndIndex(); ++item_index) {
       base_index_list_.push_back(item_index);
@@ -1235,7 +1290,16 @@ FontHeight RubyBlockPositionCalculator::RubyLine::UpdateMetrics() {
   DCHECK(metrics_.IsEmpty());
   metrics_ = FontHeight();
   for (auto& column : column_list_) {
-    metrics_.Unite(ComputeLogicalLineEmHeight(*column->annotation_items));
+    const auto margins = column->state_stack.AnnotationBoxBlockAxisMargins();
+    if (!margins.has_value()) {
+      metrics_.Unite(ComputeLogicalLineEmHeight(*column->annotation_items));
+    } else {
+      DCHECK_GT(column->annotation_items->size(), 0u);
+      const LogicalLineItem& item = (*column->annotation_items)[0];
+      DCHECK(item.IsPlaceholder());
+      metrics_.Unite({-item.BlockOffset() + margins->first,
+                      item.BlockEndOffset() + margins->second});
+    }
   }
   return metrics_;
 }

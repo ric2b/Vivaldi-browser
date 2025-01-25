@@ -391,12 +391,13 @@ using l10n_util::GetNSString;
   if (IsVivaldiRunning())
     image = [UIImage imageNamed:vMenuClose]; // End Vivaldi
 
-  UIAction* action =
-      [self actionWithTitle:l10n_util::GetNSString(
-                                IDS_IOS_CONTENT_CONTEXT_CLOSEALLTABS)
-                      image:image
-                       type:MenuActionType::CloseAllTabs
-                      block:block];
+  int titleID = IsTabGroupSyncEnabled()
+                    ? IDS_IOS_CONTENT_CONTEXT_CLOSEALLTABSANDGROUPS
+                    : IDS_IOS_CONTENT_CONTEXT_CLOSEALLTABS;
+  UIAction* action = [self actionWithTitle:l10n_util::GetNSString(titleID)
+                                     image:image
+                                      type:MenuActionType::CloseAllTabs
+                                     block:block];
   action.attributes = UIMenuElementAttributesDestructive;
   return action;
 }
@@ -654,6 +655,21 @@ using l10n_util::GetNSString;
                       image:image
                        type:MenuActionType::DeleteTabGroup
                       block:block];
+  action.attributes = UIMenuElementAttributesDestructive;
+  return action;
+}
+
+- (UIAction*)actionToCloseTabGroupWithBlock:(ProceduralBlock)block {
+  CHECK(IsTabGroupInGridEnabled());
+  CHECK(IsTabGroupSyncEnabled());
+
+  UIImage* image =
+      DefaultSymbolWithPointSize(kXMarkSymbol, kSymbolActionPointSize);
+  UIAction* action = [self
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_CLOSEGROUP)
+                image:image
+                 type:MenuActionType::CloseTabGroup
+                block:block];
   action.attributes = UIMenuElementAttributesDestructive;
   return action;
 }

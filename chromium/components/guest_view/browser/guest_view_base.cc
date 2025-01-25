@@ -231,10 +231,6 @@ void GuestViewBase::InitWithWebContents(const base::Value::Dict& create_params,
   // ZoomController::DidFinishNavigation has completed.
   zoom::ZoomController::CreateForWebContents(guest_web_contents);
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  AttachWebContentsObservers(guest_web_contents);
-#endif
-
   WebContentsObserver::Observe(guest_web_contents);
 
   // NOTE(david@vivaldi.com): In Vivaldi we need to use the
@@ -675,7 +671,7 @@ void GuestViewBase::ContentsZoomChange(bool zoom_in) {
 
 bool GuestViewBase::HandleKeyboardEvent(
     WebContents* source,
-    const content::NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   if (!attached() || !embedder_web_contents()->GetDelegate())
     return false;
 
@@ -776,8 +772,8 @@ void GuestViewBase::OnZoomChanged(
     // The embedder's zoom level has changed.
     auto* guest_zoom_controller =
         zoom::ZoomController::FromWebContents(web_contents());
-    if (blink::PageZoomValuesEqual(data.new_zoom_level,
-                                   guest_zoom_controller->GetZoomLevel())) {
+    if (blink::ZoomValuesEqual(data.new_zoom_level,
+                               guest_zoom_controller->GetZoomLevel())) {
       return;
     }
     // When the embedder's zoom level doesn't match the guest's, then update the
@@ -894,7 +890,7 @@ double GuestViewBase::GetEmbedderZoomFactor() const {
   if (!embedder_web_contents())
     return 1.0;
 
-  return blink::PageZoomLevelToZoomFactor(
+  return blink::ZoomLevelToZoomFactor(
       zoom::ZoomController::GetZoomLevelForWebContents(
           embedder_web_contents()));
 }

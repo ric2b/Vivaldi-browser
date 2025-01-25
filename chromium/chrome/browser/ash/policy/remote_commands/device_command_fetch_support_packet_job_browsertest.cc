@@ -246,7 +246,7 @@ class DeviceCommandFetchSupportPacketBrowserTestParameterized
         ASSERT_NO_FATAL_FAILURE(LaunchMGS());
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -323,9 +323,7 @@ class DeviceCommandFetchSupportPacketBrowserTestManualKioskSession
     : public DeviceCommandFetchSupportPacketBrowserTestBase<
           ash::KioskBaseTest> {
  protected:
-  DeviceCommandFetchSupportPacketBrowserTestManualKioskSession() {
-    set_use_consumer_kiosk_mode(false);
-  }
+  DeviceCommandFetchSupportPacketBrowserTestManualKioskSession() = default;
 
   void SetLogUploadEnabledPolicy(bool enabled) {
     em::ChromeDeviceSettingsProto& proto(

@@ -23,6 +23,7 @@
 #include "chrome/browser/ui/translate/partial_translate_bubble_model.h"
 #include "chrome/common/buildflags.h"
 #include "components/user_education/common/feature_promo_controller.h"
+#include "components/user_education/common/new_badge_controller.h"
 #include "ui/base/interaction/element_identifier.h"
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -139,9 +140,8 @@ class TestBrowserWindow : public BrowserWindow {
   void FocusWebContentsPane() override {}
   void ShowAppMenu() override {}
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
-      const content::NativeWebKeyboardEvent& event) override;
-  bool HandleKeyboardEvent(
-      const content::NativeWebKeyboardEvent& event) override;
+      const input::NativeWebKeyboardEvent& event) override;
+  bool HandleKeyboardEvent(const input::NativeWebKeyboardEvent& event) override;
   bool IsBookmarkBarVisible() const override;
   bool IsBookmarkBarAnimating() const override;
   bool IsTabStripEditable() const override;
@@ -156,6 +156,7 @@ class TestBrowserWindow : public BrowserWindow {
                                    SharingDialogData data) override;
   void ShowUpdateChromeDialog() override {}
   void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) override {}
+  void ShowBubbleFromManagementToolbarButton() override {}
   qrcode_generator::QRCodeGeneratorBubbleView* ShowQRCodeGeneratorBubble(
       content::WebContents* contents,
       const GURL& url,
@@ -202,6 +203,7 @@ class TestBrowserWindow : public BrowserWindow {
       base::OnceCallback<void(bool)> confirmed_callback) override {}
   bool IsDownloadShelfVisible() const override;
   DownloadShelf* GetDownloadShelf() override;
+  views::View* GetTopContainer() override;
   DownloadBubbleUIController* GetDownloadBubbleUIController() override;
   void ConfirmBrowserCloseWithPendingDownloads(
       int download_count,
@@ -259,7 +261,8 @@ class TestBrowserWindow : public BrowserWindow {
       const base::Feature& iph_feature) override;
   void NotifyFeatureEngagementEvent(const char* event_name) override;
   void NotifyPromoFeatureUsed(const base::Feature& feature) override;
-  bool MaybeShowNewBadgeFor(const base::Feature& new_badge_feature) override;
+  user_education::DisplayNewBadge MaybeShowNewBadgeFor(
+      const base::Feature& new_badge_feature) override;
 
   // Sets the controller returned by GetFeaturePromoController().
   // Deletes the existing one, if any.
@@ -330,7 +333,7 @@ class TestBrowserWindow : public BrowserWindow {
 // destroyed.
 class TestBrowserWindowOwner : public BrowserListObserver {
  public:
-  explicit TestBrowserWindowOwner(TestBrowserWindow* window);
+  explicit TestBrowserWindowOwner(std::unique_ptr<TestBrowserWindow> window);
   TestBrowserWindowOwner(const TestBrowserWindowOwner&) = delete;
   TestBrowserWindowOwner& operator=(const TestBrowserWindowOwner&) = delete;
   ~TestBrowserWindowOwner() override;

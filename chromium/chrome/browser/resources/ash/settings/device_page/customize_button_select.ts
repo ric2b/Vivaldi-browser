@@ -23,7 +23,7 @@ import {DropdownMenuOptionList} from '../controls/settings_dropdown_menu.js';
 
 import {CustomizeButtonDropdownItemElement, DropdownItemSelectEvent, DropdownMenuOption} from './customize_button_dropdown_item.js';
 import {getTemplate} from './customize_button_select.html.js';
-import {ActionChoice, ButtonRemapping, KeyEvent, RemappingAction, StaticShortcutAction} from './input_device_settings_types.js';
+import {ActionChoice, ButtonRemapping, KeyEvent, MetaKey, RemappingAction, StaticShortcutAction} from './input_device_settings_types.js';
 
 export interface CustomizeButtonSelectElement {
   $: {
@@ -173,9 +173,7 @@ export class CustomizeButtonSelectElement extends
         value: undefined,
       },
 
-      hasLauncherButton: {
-        type: Boolean,
-      },
+      metaKey: Object,
     };
   }
 
@@ -192,7 +190,7 @@ export class CustomizeButtonSelectElement extends
   remappingIndex: number;
   actionList: ActionChoice[];
   selectedValue: string;
-  hasLauncherButton: boolean;
+  metaKey: MetaKey = MetaKey.kSearch;
   private isInitialized_: boolean;
   private shouldShowDropdownMenu_: boolean;
   private label_: string;
@@ -460,15 +458,18 @@ export class CustomizeButtonSelectElement extends
 
   private getIconIdForKey_(key: string): string|null {
     if (key === META_KEY || key === LWIN_KEY) {
-      return 'shortcut-input-keys:launcher';
+      // TODO(b/346638451): Update the icon for LauncherRefresh when the asset
+      // is finalized.
+      return this.metaKey === MetaKey.kSearch ? 'shortcut-input-keys:search' :
+                                                'shortcut-input-keys:launcher';
     }
     const iconName = KeyToIconNameMap[key];
     return iconName ? `shortcut-input-keys:${iconName}` : null;
   }
 
   private getAriaLabelForIcon(key: string): string {
-    const ariaLabelStringId = ShortcutInputKeyElement.getAriaLabelStringId(
-        key, this.hasLauncherButton);
+    const ariaLabelStringId =
+        ShortcutInputKeyElement.getAriaLabelStringId(key, this.metaKey);
 
     return this.i18n(ariaLabelStringId);
   }

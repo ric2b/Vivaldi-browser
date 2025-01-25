@@ -72,7 +72,8 @@ swift_source_set("vivaldi_appearance_settings_swift") {
   deps = [
     "//base",
     "//ui/base",
-    "//ios/chrome/app/strings"
+    "//ios/chrome/app/strings",
+    "//vivaldi/ios/ui/helpers:helpers_swift",
   ]
 
   frameworks = [

@@ -7,18 +7,18 @@ import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js'
 import type {CrIconButtonElement} from '//resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import {flush} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import type {LanguageMenuElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
-import {PLAY_PREVIEW_EVENT, VoicePackStatus} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import {ToolbarEvent, VoiceClientSideStatusCode} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import type {VoiceSelectionMenuElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {assertEquals, assertFalse, assertStringContains, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 
-import {stubAnimationFrame} from './common.js';
+import {createSpeechSynthesisVoice, stubAnimationFrame} from './common.js';
 
 function stringToHtmlTestId(s: string): string {
   return s.replace(/\s/g, '-').replace(/[()]/g, '');
 }
 
 suite('VoiceSelectionMenu', () => {
-  let voiceSelectionMenu: VoiceSelectionMenuElement|null;
+  let voiceSelectionMenu: VoiceSelectionMenuElement;
   let availableVoices: SpeechSynthesisVoice[];
   let myClickEvent: MouseEvent;
 
@@ -27,28 +27,23 @@ suite('VoiceSelectionMenu', () => {
 
   // If no param for enabledLangs is provided, it auto populates it with the
   // langs of the voices
-  const setAvailableVoices = (enabledLangs: string[]|undefined = undefined) => {
-    // Bypass Typescript compiler to allow us to set a private readonly
-    // property
-    // @ts-ignore
+  function setAvailableVoices(enabledLangs?: string[]) {
     voiceSelectionMenu.availableVoices = availableVoices;
     if (enabledLangs === undefined) {
-      // @ts-ignore
-      voiceSelectionMenu.enabledLanguagesInPref =
+      voiceSelectionMenu.enabledLangs =
           [...new Set(availableVoices.map(({lang}) => lang))];
     } else {
-      // @ts-ignore
-      voiceSelectionMenu.enabledLanguagesInPref = enabledLangs;
+      voiceSelectionMenu.enabledLangs = enabledLangs;
     }
     flush();
-  };
+  }
 
-  const getDropdownItemForVoice = (voice: SpeechSynthesisVoice) => {
-    return voiceSelectionMenu!.$.voiceSelectionMenu.get()
+  function getDropdownItemForVoice(voice: SpeechSynthesisVoice) {
+    return voiceSelectionMenu.$.voiceSelectionMenu.get()
         .querySelector<HTMLButtonElement>(`[data-test-id="${
             stringToHtmlTestId(voice.name)}"].dropdown-voice-selection-button`)!
         ;
-  };
+  }
 
   setup(() => {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
@@ -62,7 +57,6 @@ suite('VoiceSelectionMenu', () => {
     document.body.appendChild(dots);
     myClickEvent = {target: dots} as unknown as MouseEvent;
 
-    // @ts-ignore
     voiceSelectionMenu.voicePackInstallStatus = {};
 
     flush();
@@ -71,7 +65,7 @@ suite('VoiceSelectionMenu', () => {
   suite('with one voice', () => {
     setup(() => {
       availableVoices =
-          [{name: 'test voice 1', lang: 'lang'} as SpeechSynthesisVoice];
+          [createSpeechSynthesisVoice({name: 'test voice 1', lang: 'lang'})];
       setAvailableVoices();
     });
 
@@ -99,17 +93,20 @@ suite('VoiceSelectionMenu', () => {
           voiceSelectionMenu!.$.voiceSelectionMenu.get()
               .querySelector<HTMLButtonElement>('.language-menu-button');
       button!.click();
-      const languageMenuElement: LanguageMenuElement =
-          voiceSelectionMenu!.$.languageMenu.get();
-      assertTrue(isPositionedOnPage(languageMenuElement.$.languageMenu));
       flush();
+
+      const languageMenuElement =
+          voiceSelectionMenu!.shadowRoot!.querySelector<LanguageMenuElement>(
+              '#languageMenu');
+      assertTrue(!!languageMenuElement);
+      assertTrue(isPositionedOnPage(languageMenuElement));
     });
 
     suite('when availableVoices updates', () => {
       setup(() => {
         availableVoices = [
-          {name: 'test voice 1', lang: 'lang'} as SpeechSynthesisVoice,
-          {name: 'test voice 2', lang: 'lang'} as SpeechSynthesisVoice,
+          createSpeechSynthesisVoice({name: 'test voice 1', lang: 'lang'}),
+          createSpeechSynthesisVoice({name: 'test voice 2', lang: 'lang'}),
         ];
         setAvailableVoices();
       });
@@ -125,12 +122,12 @@ suite('VoiceSelectionMenu', () => {
                     voiceSelectionButtonSelector);
 
         assertEquals(
-            getDropdownItemForVoice(availableVoices[0]!).textContent!.trim(),
-            availableVoices[0]!.name);
+            availableVoices[0]!.name,
+            getDropdownItemForVoice(availableVoices[0]!).textContent!.trim());
         assertEquals(
-            getDropdownItemForVoice(availableVoices[1]!).textContent!.trim(),
-            availableVoices[1]!.name);
-        assertEquals(dropdownItems.length, 2);
+            availableVoices[1]!.name,
+            getDropdownItemForVoice(availableVoices[1]!).textContent!.trim());
+        assertEquals(2, dropdownItems.length);
         assertTrue(
             isPositionedOnPage(getDropdownItemForVoice(availableVoices[0]!)));
         assertTrue(
@@ -147,24 +144,21 @@ suite('VoiceSelectionMenu', () => {
       // We need an additional call to voiceSelectionMenu.get() in these
       // tests to ensure the menu has been rendered.
       voiceSelectionMenu!.$.voiceSelectionMenu.get();
-      selectedVoice = {name: 'test voice 3', lang: 'en-US'} as
-          SpeechSynthesisVoice;
-      previewVoice = {name: 'test voice 1', lang: 'en-US'} as
-          SpeechSynthesisVoice;
+      selectedVoice =
+          createSpeechSynthesisVoice({name: 'test voice 3', lang: 'en-US'});
+      previewVoice =
+          createSpeechSynthesisVoice({name: 'test voice 1', lang: 'en-US'});
 
       availableVoices = [
-        {name: 'test voice 0', lang: 'en-US'} as SpeechSynthesisVoice,
+        createSpeechSynthesisVoice({name: 'test voice 0', lang: 'en-US'}),
         previewVoice,
-        {name: 'test voice 2', lang: 'it-IT'} as SpeechSynthesisVoice,
+        createSpeechSynthesisVoice({name: 'test voice 2', lang: 'it-IT'}),
         selectedVoice,
       ];
       setAvailableVoices();
     });
 
     test('it shows a checkmark for the selected voice', () => {
-      // Bypass Typescript compiler to allow us to set a private readonly
-      // property
-      // @ts-ignore
       voiceSelectionMenu.selectedVoice = selectedVoice;
       flush();
 
@@ -182,40 +176,38 @@ suite('VoiceSelectionMenu', () => {
       const menu = voiceSelectionMenu!.$.voiceSelectionMenu.get();
       const groupTitles =
           menu.querySelectorAll<HTMLElement>('.lang-group-title');
-      assertEquals(groupTitles.length, 2);
+      assertEquals(2, groupTitles.length);
 
       const firstVoice = groupTitles.item(0)!.nextElementSibling!;
       const secondVoice = firstVoice.nextElementSibling!;
       const thirdVoice = secondVoice.nextElementSibling!;
       const italianVoice = groupTitles.item(1)!.nextElementSibling!;
-      assertEquals(firstVoice.textContent!.trim(), 'test voice 0');
-      assertEquals(secondVoice.textContent!.trim(), 'test voice 1');
-      assertEquals(thirdVoice.textContent!.trim(), 'test voice 3');
-      assertEquals(italianVoice.textContent!.trim(), 'test voice 2');
+      assertEquals('test voice 0', firstVoice.textContent!.trim());
+      assertEquals('test voice 1', secondVoice.textContent!.trim());
+      assertEquals('test voice 3', thirdVoice.textContent!.trim());
+      assertEquals('test voice 2', italianVoice.textContent!.trim());
     });
 
-    suite('with some disabled languages', () => {
-      test('it only shows enabled languages', () => {
-        setAvailableVoices(['it-it']);
+    test('it only shows enabled languages with some disabled languages', () => {
+      setAvailableVoices(['it-it']);
 
-        const menu = voiceSelectionMenu!.$.voiceSelectionMenu.get();
-        const groupTitles =
-            menu.querySelectorAll<HTMLElement>('.lang-group-title');
-        assertEquals(groupTitles.length, 1);
+      const menu = voiceSelectionMenu!.$.voiceSelectionMenu.get();
+      const groupTitles =
+          menu.querySelectorAll<HTMLElement>('.lang-group-title');
+      assertEquals(1, groupTitles.length);
 
-        const italianVoice = groupTitles.item(0)!.nextElementSibling!;
-        assertEquals(italianVoice.textContent!.trim(), 'test voice 2');
-      });
+      const italianVoice = groupTitles.item(0)!.nextElementSibling!;
+      assertEquals('test voice 2', italianVoice.textContent!.trim());
     });
 
     suite('with Natural voices also available', () => {
       setup(() => {
         availableVoices = [
           previewVoice,
-          {name: 'Google US English 1 (Natural)', lang: 'en-US'} as
-              SpeechSynthesisVoice,
-          {name: 'Google US English 2 (Natural)', lang: 'en-US'} as
-              SpeechSynthesisVoice,
+          createSpeechSynthesisVoice(
+              {name: 'Google US English 1 (Natural)', lang: 'en-US'}),
+          createSpeechSynthesisVoice(
+              {name: 'Google US English 2 (Natural)', lang: 'en-US'}),
           selectedVoice,
         ];
         setAvailableVoices();
@@ -226,104 +218,83 @@ suite('VoiceSelectionMenu', () => {
             voiceSelectionMenu!.$.voiceSelectionMenu.get().querySelectorAll(
                 '.voice-name');
 
-        assertEquals(usEnglishDropdownItems.length, 4);
+        assertEquals(4, usEnglishDropdownItems.length);
         assertEquals(
-            usEnglishDropdownItems.item(0).textContent!.trim(),
-            'Google US English 1 (Natural)');
+            'Google US English 1 (Natural)',
+            usEnglishDropdownItems.item(0).textContent!.trim());
         assertEquals(
-            usEnglishDropdownItems.item(1).textContent!.trim(),
-            'Google US English 2 (Natural)');
+            'Google US English 2 (Natural)',
+            usEnglishDropdownItems.item(1).textContent!.trim());
         assertEquals(
-            usEnglishDropdownItems.item(2).textContent!.trim(), 'test voice 1');
+            'test voice 1', usEnglishDropdownItems.item(2).textContent!.trim());
         assertEquals(
-            usEnglishDropdownItems.item(3).textContent!.trim(), 'test voice 3');
+            'test voice 3', usEnglishDropdownItems.item(3).textContent!.trim());
       });
     });
 
-    suite('with display names for locales', () => {
-      let groupTitles: NodeListOf<HTMLElement>;
+    test('with display names for locales', () => {
+      voiceSelectionMenu.localeToDisplayName = {
+        'en-us': 'English (United States)',
+      };
+      flush();
+      const groupTitles =
+          voiceSelectionMenu!.$.voiceSelectionMenu.get()
+              .querySelectorAll<HTMLElement>('.lang-group-title');
 
-      setup(() => {
-        // Bypass Typescript compiler to allow us to set a private readonly
-        // property
-        // @ts-ignore
-        voiceSelectionMenu.localeToDisplayName = {
-          'en-US': 'English (United States)',
-        };
-        flush();
-        groupTitles = voiceSelectionMenu!.$.voiceSelectionMenu.get()
-                          .querySelectorAll<HTMLElement>('.lang-group-title');
-      });
-
-      test('it displays the display name', () => {
-        assertEquals(
-            groupTitles.item(0)!.textContent!.trim(),
-            'English (United States)');
-      });
-
-      test('it defaults to the locale when there is no display name', () => {
-        assertEquals(groupTitles.item(1)!.textContent!.trim(), 'it-IT');
-      });
+      assertEquals(
+          'English (United States)', groupTitles.item(0)!.textContent!.trim());
+      assertEquals('it-it', groupTitles.item(1)!.textContent!.trim());
     });
 
-    suite('when voices have duplicate names', () => {
-      setup(() => {
-        availableVoices = [
-          {name: 'English', lang: 'en-US'} as SpeechSynthesisVoice,
-          {name: 'English', lang: 'en-US'} as SpeechSynthesisVoice,
-          {name: 'English', lang: 'en-UK'} as SpeechSynthesisVoice,
-        ];
-        setAvailableVoices();
-      });
+    test(
+        'when voices have duplicate names languages are grouped correctly',
+        () => {
+          availableVoices = [
+            createSpeechSynthesisVoice({name: 'English', lang: 'en-US'}),
+            createSpeechSynthesisVoice({name: 'English', lang: 'en-US'}),
+            createSpeechSynthesisVoice({name: 'English', lang: 'en-UK'}),
+          ];
+          setAvailableVoices();
 
-      test('it groups the duplicate languages correctly', () => {
-        const menu = voiceSelectionMenu!.$.voiceSelectionMenu.get();
-        const groupTitles =
-            menu.querySelectorAll<HTMLElement>('.lang-group-title');
-        const voiceNames = menu.querySelectorAll<HTMLElement>('.voice-name');
+          const menu = voiceSelectionMenu!.$.voiceSelectionMenu.get();
+          const groupTitles =
+              menu.querySelectorAll<HTMLElement>('.lang-group-title');
+          const voiceNames = menu.querySelectorAll<HTMLElement>('.voice-name');
 
-        assertEquals(groupTitles.length, 2);
-        assertEquals(groupTitles.item(0)!.textContent!.trim(), 'en-US');
-        assertEquals(groupTitles.item(1)!.textContent!.trim(), 'en-UK');
-        assertEquals(voiceNames.length, 3);
-        assertEquals(voiceNames.item(0)!.textContent!.trim(), 'English');
-        assertEquals(voiceNames.item(1)!.textContent!.trim(), 'English');
-        assertEquals(voiceNames.item(2)!.textContent!.trim(), 'English');
-      });
-    });
+          assertEquals(2, groupTitles.length);
+          assertEquals('en-us', groupTitles.item(0)!.textContent!.trim());
+          assertEquals('en-uk', groupTitles.item(1)!.textContent!.trim());
+          assertEquals(3, voiceNames.length);
+          assertEquals('English', voiceNames.item(0)!.textContent!.trim());
+          assertEquals('English', voiceNames.item(1)!.textContent!.trim());
+          assertEquals('English', voiceNames.item(2)!.textContent!.trim());
+        });
 
-    suite('when preview button is clicked', () => {
+    test('when preview button is clicked it emits play preview event', () => {
       let clickEmitted: boolean;
 
-      setup(() => {
-        clickEmitted = false;
-        document.addEventListener(
-            PLAY_PREVIEW_EVENT, () => clickEmitted = true);
+      clickEmitted = false;
+      document.addEventListener(
+          ToolbarEvent.PLAY_PREVIEW, () => clickEmitted = true);
 
-        // Display dropdown menu
-        voiceSelectionMenu!.onVoiceSelectionMenuClick(myClickEvent);
-        flush();
-      });
+      // Display dropdown menu
+      voiceSelectionMenu!.onVoiceSelectionMenuClick(myClickEvent);
+      flush();
+      const previewButton =
+          getDropdownItemForVoice(availableVoices[0]!)
+              .querySelector<CrIconButtonElement>('#preview-icon')!;
 
-      test('it emits play preview event', () => {
-        const previewButton =
-            getDropdownItemForVoice(availableVoices[0]!)
-                .querySelector<CrIconButtonElement>('#preview-icon')!;
+      previewButton!.click();
+      flush();
 
-        previewButton!.click();
-        flush();
-        assertTrue(clickEmitted);
-      });
+      assertTrue(clickEmitted);
     });
 
     suite('when preview starts playing', () => {
       setup(() => {
         // Display dropdown menu
-        voiceSelectionMenu!.onVoiceSelectionMenuClick(myClickEvent);
+        voiceSelectionMenu.onVoiceSelectionMenuClick(myClickEvent);
 
-        // Bypass Typescript compiler to allow us to set a private readonly
-        // property
-        // @ts-ignore
         voiceSelectionMenu.previewVoicePlaying = previewVoice;
         flush();
       });
@@ -340,62 +311,57 @@ suite('VoiceSelectionMenu', () => {
         // The play icon should flip to stop for the voice being previewed
         assertTrue(isPositionedOnPage(playIconOfPreviewVoice));
         assertEquals(
-            playIconOfPreviewVoice.ironIcon, 'read-anything-20:stop-circle');
+            'read-anything-20:stop-circle', playIconOfPreviewVoice.ironIcon);
         assertStringContains(
             playIconOfPreviewVoice.title.toLowerCase(), 'stop');
         assertStringContains(
             playIconOfPreviewVoice.ariaLabel!.toLowerCase(), 'stop');
         // The play icon should remain unchanged for the other buttons
         assertTrue(isPositionedOnPage(playIconVoice0));
-        assertEquals(playIconVoice0.ironIcon, 'read-anything-20:play-circle');
+        assertEquals('read-anything-20:play-circle', playIconVoice0.ironIcon);
         assertStringContains(playIconVoice0.title.toLowerCase(), 'play');
         assertStringContains(
             playIconVoice0.ariaLabel!.toLowerCase(), 'preview voice for');
       });
 
-      suite('when preview finishes playing', () => {
-        setup(() => {
-          // Bypass Typescript compiler to allow us to set a private readonly
-          // property
-          // @ts-ignore
-          voiceSelectionMenu.previewVoicePlaying = null;
-          flush();
-        });
+      test(
+          'when preview finishes playing it flips the button back to play icon',
+          () => {
+            voiceSelectionMenu.previewVoicePlaying = null;
+            flush();
 
-        test('it flips the preview button back to play icon', () => {
-          stubAnimationFrame();
-          const playIconVoice0 =
-              getDropdownItemForVoice(availableVoices[0]!)
-                  .querySelector<CrIconButtonElement>('#preview-icon')!;
-          const playIconOfPreviewVoice =
-              getDropdownItemForVoice(availableVoices[1]!)
-                  .querySelector<CrIconButtonElement>('#preview-icon')!;
+            stubAnimationFrame();
+            const playIconVoice0 =
+                getDropdownItemForVoice(availableVoices[0]!)
+                    .querySelector<CrIconButtonElement>('#preview-icon')!;
+            const playIconOfPreviewVoice =
+                getDropdownItemForVoice(availableVoices[1]!)
+                    .querySelector<CrIconButtonElement>('#preview-icon')!;
 
-          // All icons should be play icons because no preview is
-          // playing
-          assertTrue(isPositionedOnPage(playIconOfPreviewVoice));
-          assertTrue(isPositionedOnPage(playIconVoice0));
-          assertEquals(
-              playIconOfPreviewVoice.ironIcon, 'read-anything-20:play-circle');
-          assertEquals(playIconVoice0.ironIcon, 'read-anything-20:play-circle');
-          assertStringContains(
-              playIconOfPreviewVoice.title.toLowerCase(), 'play');
-          assertStringContains(playIconVoice0.title.toLowerCase(), 'play');
-          assertStringContains(
-              playIconOfPreviewVoice.ariaLabel!.toLowerCase(),
-              'preview voice for');
-          assertStringContains(
-              playIconVoice0.ariaLabel!.toLowerCase(), 'preview voice for');
-        });
-      });
+            // All icons should be play icons because no preview is
+            // playing
+            assertTrue(isPositionedOnPage(playIconOfPreviewVoice));
+            assertTrue(isPositionedOnPage(playIconVoice0));
+            assertEquals(
+                'read-anything-20:play-circle',
+                playIconOfPreviewVoice.ironIcon);
+            assertEquals(
+                'read-anything-20:play-circle', playIconVoice0.ironIcon);
+            assertStringContains(
+                playIconOfPreviewVoice.title.toLowerCase(), 'play');
+            assertStringContains(playIconVoice0.title.toLowerCase(), 'play');
+            assertStringContains(
+                playIconOfPreviewVoice.ariaLabel!.toLowerCase(),
+                'preview voice for');
+            assertStringContains(
+                playIconVoice0.ariaLabel!.toLowerCase(), 'preview voice for');
+          });
     });
   });
 
   suite('with installing voices', () => {
-    function setVoiceStatus(lang: string, status: VoicePackStatus) {
-      // @ts-ignore
+    function setVoiceStatus(lang: string, status: VoiceClientSideStatusCode) {
       voiceSelectionMenu.voicePackInstallStatus = {
-        // @ts-ignore
         ...voiceSelectionMenu.voicePackInstallStatus,
         [lang]: status,
       };
@@ -403,11 +369,11 @@ suite('VoiceSelectionMenu', () => {
     }
 
     function startDownload(lang: string) {
-      setVoiceStatus(lang, VoicePackStatus.INSTALLING);
+      setVoiceStatus(lang, VoiceClientSideStatusCode.SENT_INSTALL_REQUEST);
     }
 
     function finishDownload(lang: string) {
-      setVoiceStatus(lang, VoicePackStatus.DOWNLOADED);
+      setVoiceStatus(lang, VoiceClientSideStatusCode.AVAILABLE);
     }
 
     function getDownloadMessages(): HTMLElement[] {
@@ -422,12 +388,12 @@ suite('VoiceSelectionMenu', () => {
     });
 
     test('no downloading messages by default', () => {
-      assertEquals(getDownloadMessages().length, 0);
+      assertEquals(0, getDownloadMessages().length);
     });
 
     test('no downloading messages with invalid language', () => {
       startDownload('simlish');
-      assertEquals(getDownloadMessages().length, 0);
+      assertEquals(0, getDownloadMessages().length);
     });
 
     suite('with one language', () => {
@@ -440,14 +406,14 @@ suite('VoiceSelectionMenu', () => {
       test('shows downloading message while installing', () => {
         const msgs = getDownloadMessages();
 
-        assertEquals(msgs.length, 1);
+        assertEquals(1, msgs.length);
         assertStringContains(
             msgs[0]!.textContent!.trim(), 'Downloading Français voices');
       });
 
       test('hides downloading message when done', () => {
         finishDownload(lang);
-        assertEquals(getDownloadMessages().length, 0);
+        assertEquals(0, getDownloadMessages().length);
       });
     });
 
@@ -467,7 +433,7 @@ suite('VoiceSelectionMenu', () => {
       test('shows downloading messages while installing', () => {
         const msgs = getDownloadMessages();
 
-        assertEquals(msgs.length, 4);
+        assertEquals(4, msgs.length);
         assertStringContains(
             msgs[0]!.textContent!.trim(),
             'Downloading English (United States) voices');
@@ -483,16 +449,16 @@ suite('VoiceSelectionMenu', () => {
 
       test('hides downloading messages when done', () => {
         finishDownload(lang1);
-        assertEquals(getDownloadMessages().length, 3);
+        assertEquals(3, getDownloadMessages().length);
 
         finishDownload(lang2);
-        assertEquals(getDownloadMessages().length, 2);
+        assertEquals(2, getDownloadMessages().length);
 
         finishDownload(lang3);
-        assertEquals(getDownloadMessages().length, 1);
+        assertEquals(1, getDownloadMessages().length);
 
         finishDownload(lang4);
-        assertEquals(getDownloadMessages().length, 0);
+        assertEquals(0, getDownloadMessages().length);
       });
     });
   });

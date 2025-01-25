@@ -26,6 +26,12 @@ build_webui("build") {
     "sync_confirmation/sync_confirmation.html",
     "sync_confirmation/sync_disabled_confirmation.html",
     "sync_confirmation/sync_loading_confirmation.html",
+    "managed_user_profile_notice/images/enrollment_failure.svg",
+    "managed_user_profile_notice/images/enrollment_success.svg",
+    "managed_user_profile_notice/images/enrollment_timeout.svg",
+    "managed_user_profile_notice/images/enrollment_failure_dark.svg",
+    "managed_user_profile_notice/images/enrollment_success_dark.svg",
+    "managed_user_profile_notice/images/enrollment_timeout_dark.svg",
   ]
   if (!is_chromeos_ash) {
     static_files += [
@@ -55,6 +61,8 @@ build_webui("build") {
     web_component_files += [
       "managed_user_profile_notice/legacy_managed_user_profile_notice_app.ts",
       "managed_user_profile_notice/managed_user_profile_notice_app.ts",
+      "managed_user_profile_notice/managed_user_profile_notice_disclosure.ts",
+      "managed_user_profile_notice/managed_user_profile_notice_state.ts",
       "profile_customization/profile_customization_app.ts",
       "signin_email_confirmation/signin_email_confirmation_app.ts",
       "signin_error/signin_error_app.ts",

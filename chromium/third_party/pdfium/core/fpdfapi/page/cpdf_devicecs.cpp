@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fpdfapi/page/cpdf_devicecs.h"
 
 #include <algorithm>
@@ -20,6 +15,7 @@
 #include "core/fpdfapi/parser/cpdf_string.h"
 #include "core/fxcodec/fx_codec.h"
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/notreached.h"
 #include "core/fxge/dib/cfx_cmyk_to_srgb.h"
 
@@ -47,36 +43,36 @@ uint32_t CPDF_DeviceCS::v_Load(CPDF_Document* pDoc,
   NOTREACHED_NORETURN();
 }
 
-bool CPDF_DeviceCS::GetRGB(pdfium::span<const float> pBuf,
-                           float* R,
-                           float* G,
-                           float* B) const {
+std::optional<FX_RGB_STRUCT<float>> CPDF_DeviceCS::GetRGB(
+    pdfium::span<const float> pBuf) const {
   switch (GetFamily()) {
-    case Family::kDeviceGray:
-      *R = NormalizeChannel(pBuf[0]);
-      *G = *R;
-      *B = *R;
-      return true;
-    case Family::kDeviceRGB:
-      *R = NormalizeChannel(pBuf[0]);
-      *G = NormalizeChannel(pBuf[1]);
-      *B = NormalizeChannel(pBuf[2]);
-      return true;
-    case Family::kDeviceCMYK:
+    case Family::kDeviceGray: {
+      const float pix = NormalizeChannel(pBuf.front());
+      return FX_RGB_STRUCT<float>{pix, pix, pix};
+    }
+    case Family::kDeviceRGB: {
+      const auto& rgb =
+          fxcrt::reinterpret_span<const FX_RGB_STRUCT<float>>(pBuf).front();
+      return FX_RGB_STRUCT<float>{
+          NormalizeChannel(rgb.red),
+          NormalizeChannel(rgb.green),
+          NormalizeChannel(rgb.blue),
+      };
+    }
+    case Family::kDeviceCMYK: {
+      const auto& cmyk =
+          fxcrt::reinterpret_span<const FX_CMYK_STRUCT<float>>(pBuf).front();
       if (IsStdConversionEnabled()) {
-        float k = pBuf[3];
-        *R = 1.0f - std::min(1.0f, pBuf[0] + k);
-        *G = 1.0f - std::min(1.0f, pBuf[1] + k);
-        *B = 1.0f - std::min(1.0f, pBuf[2] + k);
-      } else {
-        FX_RGB<float> rgb = AdobeCMYK_to_sRGB(
-            NormalizeChannel(pBuf[0]), NormalizeChannel(pBuf[1]),
-            NormalizeChannel(pBuf[2]), NormalizeChannel(pBuf[3]));
-        *R = rgb.red;
-        *G = rgb.green;
-        *B = rgb.blue;
+        return FX_RGB_STRUCT<float>{
+            1.0f - std::min(1.0f, cmyk.cyan + cmyk.key),
+            1.0f - std::min(1.0f, cmyk.magenta + cmyk.key),
+            1.0f - std::min(1.0f, cmyk.yellow + cmyk.key),
+        };
       }
-      return true;
+      return AdobeCMYK_to_sRGB(
+          NormalizeChannel(cmyk.cyan), NormalizeChannel(cmyk.magenta),
+          NormalizeChannel(cmyk.yellow), NormalizeChannel(cmyk.key));
+    }
     default:
       NOTREACHED_NORETURN();
   }
@@ -88,69 +84,61 @@ void CPDF_DeviceCS::TranslateImageLine(pdfium::span<uint8_t> dest_span,
                                        int image_width,
                                        int image_height,
                                        bool bTransMask) const {
-  uint8_t* pDestBuf = dest_span.data();
-  const uint8_t* pSrcBuf = src_span.data();
+  auto rgb_out = fxcrt::reinterpret_span<FX_RGB_STRUCT<uint8_t>>(dest_span);
   switch (GetFamily()) {
     case Family::kDeviceGray:
-      CHECK(!bTransMask);  // Only applies to CMYK colorspaces.
-
-      for (int i = 0; i < pixels; i++) {
-        // Compiler can not conclude that src/dest don't overlap, avoid
-        // duplicate loads.
-        const uint8_t pix = pSrcBuf[i];
-        *pDestBuf++ = pix;
-        *pDestBuf++ = pix;
-        *pDestBuf++ = pix;
+      CHECK(!bTransMask);  // bTransMask only allowed for CMYK colorspaces.
+      // Compiler can't conclude src/dest don't overlap, avoid interleaved
+      // loads and stores by not using an auto& reference here.
+      for (const auto pix : src_span.first(pixels)) {
+        rgb_out.front().red = pix;
+        rgb_out.front().green = pix;
+        rgb_out.front().blue = pix;
+        rgb_out = rgb_out.subspan(1);
       }
       break;
     case Family::kDeviceRGB:
-      CHECK(!bTransMask);  // Only applies to CMYK colorspaces.
-
-      fxcodec::ReverseRGB(pDestBuf, pSrcBuf, pixels);
+      CHECK(!bTransMask);  // bTransMask only allowed for CMYK colorspaces.
+      fxcodec::ReverseRGB(dest_span, src_span, pixels);
       break;
-    case Family::kDeviceCMYK:
+    case Family::kDeviceCMYK: {
+      auto cmyk_in =
+          fxcrt::reinterpret_span<const FX_CMYK_STRUCT<uint8_t>>(src_span);
       if (bTransMask) {
-        for (int i = 0; i < pixels; i++) {
-          // Compiler can't conclude src/dest don't overlap, avoid interleaved
-          // loads and stores.
-          const uint8_t s0 = pSrcBuf[0];
-          const uint8_t s1 = pSrcBuf[1];
-          const uint8_t s2 = pSrcBuf[2];
-          const int k = 255 - pSrcBuf[3];
-          pDestBuf[0] = ((255 - s0) * k) / 255;
-          pDestBuf[1] = ((255 - s1) * k) / 255;
-          pDestBuf[2] = ((255 - s2) * k) / 255;
-          pDestBuf += 3;
-          pSrcBuf += 4;
+        // Compiler can't conclude src/dest don't overlap, avoid interleaved
+        // loads and stores by not using an auto& reference here.
+        for (const auto cmyk : cmyk_in.first(pixels)) {
+          const int k = 255 - cmyk.key;
+          rgb_out.front().red = ((255 - cmyk.cyan) * k) / 255;
+          rgb_out.front().green = ((255 - cmyk.magenta) * k) / 255;
+          rgb_out.front().blue = ((255 - cmyk.yellow) * k) / 255;
+          rgb_out = rgb_out.subspan(1);
         }
-      } else {
-        if (IsStdConversionEnabled()) {
-          for (int i = 0; i < pixels; i++) {
-            // Compiler can't conclude src/dest don't overlap, avoid
-            // interleaved loads and stores.
-            const uint8_t s0 = pSrcBuf[0];
-            const uint8_t s1 = pSrcBuf[1];
-            const uint8_t s2 = pSrcBuf[2];
-            const uint8_t k = pSrcBuf[3];
-            pDestBuf[2] = 255 - std::min(255, s0 + k);
-            pDestBuf[1] = 255 - std::min(255, s1 + k);
-            pDestBuf[0] = 255 - std::min(255, s2 + k);
-            pSrcBuf += 4;
-            pDestBuf += 3;
-          }
-        } else {
-          for (int i = 0; i < pixels; i++) {
-            FX_RGB<uint8_t> rgb = AdobeCMYK_to_sRGB1(pSrcBuf[0], pSrcBuf[1],
-                                                     pSrcBuf[2], pSrcBuf[3]);
-            pDestBuf[0] = rgb.blue;
-            pDestBuf[1] = rgb.green;
-            pDestBuf[2] = rgb.red;
-            pSrcBuf += 4;
-            pDestBuf += 3;
-          }
+        break;
+      }
+      if (IsStdConversionEnabled()) {
+        // Compiler can't conclude src/dest don't overlap, avoid interleaved
+        // loads and stores by not using am auto& reference here,
+        for (const auto cmyk : cmyk_in.first(pixels)) {
+          const uint8_t k = cmyk.key;
+          rgb_out.front().blue = 255 - std::min(255, cmyk.cyan + k);
+          rgb_out.front().green = 255 - std::min(255, cmyk.magenta + k);
+          rgb_out.front().red = 255 - std::min(255, cmyk.yellow + k);
+          rgb_out = rgb_out.subspan(1);
         }
+        break;
+      }
+      for (const auto& cmyk : cmyk_in.first(pixels)) {
+        // TODO(tsepez): maybe this is a FX_BGR_STRUCT in reality?
+        FX_RGB_STRUCT<uint8_t> rgb =
+            AdobeCMYK_to_sRGB1(cmyk.cyan, cmyk.magenta, cmyk.yellow, cmyk.key);
+        rgb_out.front().red = rgb.blue;
+        rgb_out.front().green = rgb.green;
+        rgb_out.front().blue = rgb.red;
+        rgb_out = rgb_out.subspan(1);
       }
       break;
+    }
     default:
       NOTREACHED_NORETURN();
   }

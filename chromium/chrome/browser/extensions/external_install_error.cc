@@ -174,12 +174,12 @@ bool ExternalInstallMenuAlert::HasBubbleView() {
 }
 
 bool ExternalInstallMenuAlert::HasShownBubbleView() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return true;
 }
 
 void ExternalInstallMenuAlert::ShowBubbleView(Browser* browser) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 GlobalErrorBubbleViewBase* ExternalInstallMenuAlert::GetBubbleView() {
@@ -339,7 +339,7 @@ void ExternalInstallError::OnInstallPromptDone(
     case ExtensionInstallPrompt::Result::ACCEPTED_WITH_WITHHELD_PERMISSIONS:
       // TODO(crbug.com/40636075): Handle `ACCEPTED_WITH_WITHHELD_PERMISSIONS`
       // when it is supported for external installs.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case ExtensionInstallPrompt::Result::USER_CANCELED:
       if (extension) {

@@ -8,31 +8,32 @@
 #include <stdint.h>
 
 #include <memory>
-#include <string>
+#include <optional>  // for optional, nullopt
 #include <string_view>
 
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_sub_manager.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_install_params.h"
-#include "chrome/browser/web_applications/web_app_sync_bridge.h"
-#include "components/prefs/pref_service.h"
+#include "components/web_package/signed_web_bundles/signed_web_bundle_signature_stack_entry.h"
 #include "components/webapps/common/web_app_id.h"
-#include "content/public/browser/service_worker_context.h"
-#include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
 class Browser;
+class PrefService;
 class Profile;
 
 namespace content {
 class StoragePartition;
 class WebContents;
+enum class ServiceWorkerCapability;
 }  // namespace content
 
 namespace web_app {
 
 class WebApp;
+class WebAppSyncBridge;
+struct WebAppInstallInfo;
 
 namespace test {
 
@@ -87,6 +88,9 @@ void SynchronizeOsIntegration(
     Profile* profile,
     const webapps::AppId& app_id,
     std::optional<SynchronizeOsOptions> options = std::nullopt);
+
+// Creates a few well-formed integrity block signatures.
+std::vector<web_package::SignedWebBundleSignatureInfo> CreateSignatures();
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 class ScopedSkipMainProfileCheck {

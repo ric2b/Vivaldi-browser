@@ -28,24 +28,22 @@
 #include "protobuf-matchers/protocol-buffer-matchers.h"
 #include "gtest/gtest.h"
 #include "absl/time/time.h"
+#include "internal/platform/task_runner.h"
 #include "internal/test/fake_clock.h"
-#include "internal/test/fake_device_info.h"
+#include "internal/test/fake_task_runner.h"
 #include "proto/sharing_enums.pb.h"
 #include "sharing/certificates/fake_nearby_share_certificate_manager.h"
 #include "sharing/certificates/nearby_share_decrypted_public_certificate.h"
 #include "sharing/certificates/test_util.h"
 #include "sharing/fake_nearby_connection.h"
 #include "sharing/incoming_frames_reader.h"
-#include "sharing/internal/public/context.h"
 #include "sharing/internal/public/logging.h"
-#include "sharing/internal/test/fake_context.h"
 #include "sharing/nearby_connection.h"
 #include "sharing/nearby_sharing_decoder.h"
 #include "sharing/nearby_sharing_decoder_impl.h"
 #include "sharing/proto/enums.pb.h"
 #include "sharing/proto/rpc_resources.pb.h"
 #include "sharing/proto/wire_format.pb.h"
-#include "sharing/share_target.h"
 
 namespace nearby {
 namespace sharing {
@@ -117,22 +115,18 @@ std::list<PairedKeyResultFrame> GeneratePairedKeyResultFrame() {
   return result;
 }
 
-struct VisibilityChange {
-  DeviceVisibility visibility;
-  DeviceVisibility last_visibility;
-};
-
-std::list<VisibilityChange> GenerateVisibilityChanges() {
+std::list<PairedKeyVerificationRunner::VisibilityHistory>
+GenerateVisibilityHistory() {
   constexpr DeviceVisibility kValidVisibilities[] = {
       DeviceVisibility::DEVICE_VISIBILITY_ALL_CONTACTS,
       DeviceVisibility::DEVICE_VISIBILITY_SELF_SHARE,
       DeviceVisibility::DEVICE_VISIBILITY_EVERYONE,
       DeviceVisibility::DEVICE_VISIBILITY_HIDDEN,
   };
-  std::list<VisibilityChange> result;
+  std::list<PairedKeyVerificationRunner::VisibilityHistory> result;
   for (DeviceVisibility visibility : kValidVisibilities) {
     for (DeviceVisibility last_visibility : kValidVisibilities) {
-      result.push_back({visibility, last_visibility});
+      result.push_back({visibility, last_visibility, absl::UnixEpoch()});
     }
   }
   return result;
@@ -142,9 +136,10 @@ const absl::Duration kTimeout = absl::Seconds(1);
 
 class MockIncomingFramesReader : public IncomingFramesReader {
  public:
-  MockIncomingFramesReader(Context* context, NearbySharingDecoder* decoder,
+  MockIncomingFramesReader(TaskRunner& service_thread,
+                           const NearbySharingDecoder& decoder,
                            NearbyConnection* connection)
-      : IncomingFramesReader(context, decoder, connection) {}
+      : IncomingFramesReader(service_thread, decoder, connection) {}
 
   MOCK_METHOD(void, ReadFrame,
               (std::function<void(std::optional<V1Frame>)> callback),
@@ -191,17 +186,15 @@ class PairedKeyVerificationRunnerTest : public testing::Test {
   };
 
   PairedKeyVerificationRunnerTest()
-      : frames_reader_(&context_, &decoder_, &connection_) {}
+      : frames_reader_(fake_task_runner_, decoder_, &connection_) {}
 
   void SetUp() override {
     GetFakeClock()->FastForward(absl::Minutes(15));
-    share_target_.is_incoming = true;
   }
 
   void RunVerification(
-      bool is_incoming,
-      bool use_valid_public_certificate, DeviceVisibility visibility,
-      DeviceVisibility last_visibility, absl::Time last_visibility_time,
+      bool is_incoming, bool use_valid_public_certificate,
+      const PairedKeyVerificationRunner::VisibilityHistory& visibility_history,
       PairedKeyVerificationRunner::PairedKeyVerificationResult expected_result,
       OSType expected_os_type = OSType::UNKNOWN_OS_TYPE) {
     std::optional<NearbyShareDecryptedPublicCertificate> public_certificate =
@@ -211,10 +204,9 @@ class PairedKeyVerificationRunnerTest : public testing::Test {
             : std::nullopt;
 
     auto runner = std::make_shared<PairedKeyVerificationRunner>(
-        context_.GetClock(), fake_device_info_, share_target_.id, is_incoming,
-        visibility, last_visibility, last_visibility_time, GetAuthToken(),
-        &connection_, std::move(public_certificate), &certificate_manager_,
-        &frames_reader_, kTimeout);
+        &fake_clock_, OSType::WINDOWS, is_incoming, visibility_history,
+        GetAuthToken(), &connection_, std::move(public_certificate),
+        &certificate_manager_, &frames_reader_, kTimeout);
 
     runner->Run(
         [&, expected_result, expected_os_type](
@@ -329,14 +321,11 @@ class PairedKeyVerificationRunnerTest : public testing::Test {
     EXPECT_EQ(status, frame.v1().paired_key_result().status());
   }
 
-  FakeClock* GetFakeClock() { return context_.fake_clock(); }
-
- protected:
-  ShareTarget share_target_;
+  FakeClock* GetFakeClock() { return &fake_clock_; }
 
  private:
-  FakeDeviceInfo fake_device_info_;
-  FakeContext context_;
+  FakeClock fake_clock_;
+  FakeTaskRunner fake_task_runner_ {&fake_clock_, 1};
   FakeNearbyConnection connection_;
   NearbySharingDecoderImpl decoder_;
   testing::NiceMock<MockIncomingFramesReader> frames_reader_;
@@ -350,11 +339,11 @@ TEST_F(PairedKeyVerificationRunnerTest,
   SetUpPairedKeyResultFrame(ReturnFrameType::kValid);
 
   RunVerification(
-      share_target_.is_incoming,
+      true,
       /*use_valid_public_certificate=*/false,
-      DeviceVisibility::DEVICE_VISIBILITY_ALL_CONTACTS,
-      DeviceVisibility::DEVICE_VISIBILITY_ALL_CONTACTS,
-      GetFakeClock()->Now(),
+      {.visibility = DeviceVisibility::DEVICE_VISIBILITY_ALL_CONTACTS,
+       .last_visibility = DeviceVisibility::DEVICE_VISIBILITY_ALL_CONTACTS,
+       .last_visibility_time = GetFakeClock()->Now()},
       /*expected_result=*/
       PairedKeyVerificationResult::kUnable);
 
@@ -370,11 +359,11 @@ TEST_F(PairedKeyVerificationRunnerTest,
   SetUpPairedKeyResultFrame(ReturnFrameType::kNull);
 
   RunVerification(
-      share_target_.is_incoming,
+      true,
       /*use_valid_public_certificate=*/true,
-      DeviceVisibility::DEVICE_VISIBILITY_ALL_CONTACTS,
-      DeviceVisibility::DEVICE_VISIBILITY_ALL_CONTACTS,
-      GetFakeClock()->Now(),
+      {.visibility = DeviceVisibility::DEVICE_VISIBILITY_ALL_CONTACTS,
+       .last_visibility = DeviceVisibility::DEVICE_VISIBILITY_ALL_CONTACTS,
+       .last_visibility_time = GetFakeClock()->Now()},
       /*expected_result=*/
       PairedKeyVerificationResult::kFail);
 
@@ -413,7 +402,8 @@ struct TestParameters {
 };
 
 using KeyVerificationTestParam =
-    std::tuple<TestParameters, PairedKeyResultFrame, VisibilityChange>;
+    std::tuple<TestParameters, PairedKeyResultFrame,
+               PairedKeyVerificationRunner::VisibilityHistory>;
 
 class ParameterisedPairedKeyVerificationRunnerTest
     : public PairedKeyVerificationRunnerTest,
@@ -423,7 +413,8 @@ TEST_P(ParameterisedPairedKeyVerificationRunnerTest,
        ValidEncryptionFrame_ValidResultFrame) {
   const TestParameters& params = std::get<0>(GetParam());
   PairedKeyResultFrame result_frame = std::get<1>(GetParam());
-  VisibilityChange visibility_changes = std::get<2>(GetParam());
+  PairedKeyVerificationRunner::VisibilityHistory visibility_history =
+      std::get<2>(GetParam());
   PairedKeyVerificationRunner::PairedKeyVerificationResult expected_result =
       Merge(params.result, result_frame.status());
 
@@ -435,9 +426,9 @@ TEST_P(ParameterisedPairedKeyVerificationRunnerTest,
                 << ", result=" << (int)params.result
                 << ", expected_result=" << (int)expected_result
                 << ", result_frame=" << (int)result_frame.status()
-                << ", visibility=" << (int)visibility_changes.visibility
+                << ", visibility=" << (int)visibility_history.visibility
                 << ", last_visibility="
-                << (int)visibility_changes.last_visibility;
+                << (int)visibility_history.last_visibility;
 
   SetUpPairedKeyEncryptionFrame(params.encryption_frame_type);
   bool encryption_frame_timeout =
@@ -454,13 +445,13 @@ TEST_P(ParameterisedPairedKeyVerificationRunnerTest,
 
   // If our visibility has no certificates, then downgrade expected result to
   // kUnable if it is not expected to fail.
-  if ((visibility_changes.visibility ==
+  if ((visibility_history.visibility ==
            DeviceVisibility::DEVICE_VISIBILITY_EVERYONE ||
-       visibility_changes.visibility ==
+       visibility_history.visibility ==
            DeviceVisibility::DEVICE_VISIBILITY_HIDDEN) &&
-      (visibility_changes.last_visibility ==
+      (visibility_history.last_visibility ==
            DeviceVisibility::DEVICE_VISIBILITY_EVERYONE ||
-       visibility_changes.last_visibility ==
+       visibility_history.last_visibility ==
            DeviceVisibility::DEVICE_VISIBILITY_HIDDEN)) {
     if (expected_result ==
         PairedKeyVerificationRunner::PairedKeyVerificationResult::kSuccess) {
@@ -468,11 +459,11 @@ TEST_P(ParameterisedPairedKeyVerificationRunnerTest,
           PairedKeyVerificationRunner::PairedKeyVerificationResult::kUnable;
     }
   }
+  visibility_history.last_visibility_time = GetFakeClock()->Now();
   RunVerification(
       /*is_incoming=*/params.is_incoming,
       /*use_valid_public_certificate=*/params.has_valid_certificate,
-      visibility_changes.visibility, visibility_changes.last_visibility,
-      GetFakeClock()->Now(), expected_result,
+      visibility_history, expected_result,
       result_frame.has_os_type() && !encryption_frame_timeout
           ? result_frame.os_type()
           : OSType::UNKNOWN_OS_TYPE);
@@ -510,7 +501,7 @@ INSTANTIATE_TEST_SUITE_P(
     /*no prefix*/, ParameterisedPairedKeyVerificationRunnerTest,
     testing::Combine(testing::ValuesIn(kParameters),
                      testing::ValuesIn(GeneratePairedKeyResultFrame()),
-                     testing::ValuesIn(GenerateVisibilityChanges())));
+                     testing::ValuesIn(GenerateVisibilityHistory())));
 
 }  // namespace
 }  // namespace sharing

@@ -18,7 +18,6 @@
 #include "base/json/json_reader.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/raw_ptr_exclusion.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/strings/escape.h"
@@ -115,7 +114,6 @@
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "components/security_interstitials/core/pref_names.h"
 #include "components/security_state/core/security_state.h"
-#include "components/ssl_errors/error_classification.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/variations/variations_params_manager.h"
@@ -199,6 +197,13 @@
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/browser/extensions/chrome_test_extension_loader.h"
+#include "extensions/browser/background_script_executor.h"
+#include "extensions/common/extension.h"
+#include "extensions/test/test_extension_dir.h"
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(USE_NSS_CERTS)
 #include "chrome/browser/certificate_manager_model.h"
@@ -546,7 +551,7 @@ class SSLUITestBase : public InProcessBrowserTest,
       default: {
         // Other values in the enum are not used by these tests, and don't
         // have a Javascript equivalent that can be called here.
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
       }
     }
     ASSERT_TRUE(content::ExecJs(tab, javascript));
@@ -1927,6 +1932,82 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestServiceWorkerRequestsUseClientCertStore) {
       content::EvalJs(web_contents,
                       content::JsReplace("doFetchInWorker($1);", target_url)));
 }
+
+// Tests that if an extension service worker requests a resource where a
+// client cert is optional (not required) and there are no client certs, the
+// request will continue without a certificate (as opposed to abort).
+#if BUILDFLAG(ENABLE_EXTENSIONS) && !BUILDFLAG(IS_ANDROID)
+IN_PROC_BROWSER_TEST_F(
+    SSLUITest,
+    TestExtensionServiceWorkerCanContinueWithoutACertificate) {
+  // Make the browser use the ClientCertStoreStub instead of the regular one.
+  ProfileNetworkContextServiceFactory::GetForContext(browser()->profile())
+      ->set_client_cert_store_factory_for_testing(
+          base::BindRepeating(&CreateEmptyCertStore));
+
+  // Set up an HTTPS server with optional client certs.
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  {
+    net::SSLServerConfig ssl_config;
+    ssl_config.client_cert_type =
+        net::SSLServerConfig::ClientCertType::OPTIONAL_CLIENT_CERT;
+    https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_TEST_NAMES,
+                              ssl_config);
+  }
+  https_server.ServeFilesFromSourceDirectory("chrome/test/data");
+  ASSERT_TRUE(https_server.Start());
+
+  // Load a test extension that will try to fetch the cross-origin resource.
+  static constexpr char kManifest[] =
+      R"({
+           "name": "Fetching Extension",
+           "manifest_version": 2,
+           "version": "0.1",
+           "background": {"service_worker": "background.js"}
+         })";
+  static constexpr char kBackgroundJs[] =
+      R"(async function doFetchAndReply(url) {
+           try {
+             let response = await fetch(url);
+             result = await response.text();
+           } catch (e) {
+             result = `Fetch error: ${e.toString()}`;
+           }
+
+           chrome.test.sendScriptResult(result);
+         })";
+
+  extensions::TestExtensionDir test_dir;
+  test_dir.WriteManifest(kManifest);
+  test_dir.WriteFile(FILE_PATH_LITERAL("background.js"), kBackgroundJs);
+
+  Profile* const profile = browser()->profile();
+  extensions::ChromeTestExtensionLoader extension_loader(profile);
+  scoped_refptr<const extensions::Extension> extension =
+      extension_loader.LoadExtension(test_dir.UnpackedPath());
+  ASSERT_TRUE(extension);
+
+  // Path to the cross-origin resource to fetch.
+  // Note: This domain name matches one in
+  // //net/data/ssl/certificates/test_names.pem.
+  GURL target_url =
+      https_server.GetURL("b.test", "/ssl/service_worker_fetch/target.txt");
+
+  // Try to fetch the resource from the extension. We have no client certs
+  // (we're using an empty cert store), so no certificates will be selected.
+  // Even so, the fetch should succeed. It continues without a certificate, and
+  // the certificate is optional.
+  base::Value fetch_result =
+      extensions::BackgroundScriptExecutor::ExecuteScript(
+          profile, extension->id(),
+          base::StringPrintf("doFetchAndReply('%s');",
+                             target_url.spec().c_str()),
+          extensions::BackgroundScriptExecutor::ResultCapture::
+              kSendScriptResult);
+
+  EXPECT_EQ(fetch_result, "text content\n");
+}
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 IN_PROC_BROWSER_TEST_F(SSLUITest, TestClientAuthSigningFails) {
   // Make the browser use the ClientCertStoreStub instead of the regular one.
@@ -5661,6 +5742,13 @@ class SSLUITestCustomCACerts : public SSLUITestNoCert {
               profile_2_cert_db_->GetPublicSlot().get());
   }
 
+  void TearDownOnMainThread() override {
+    profile_1_cert_db_ = nullptr;
+    profile_2_cert_db_ = nullptr;
+    profile_1_ = nullptr;
+    profile_2_ = nullptr;
+  }
+
  protected:
   void ImportCACertAsTrusted(const std::string& cert_file_name,
                              net::NSSCertDatabase* cert_db) {
@@ -5678,19 +5766,15 @@ class SSLUITestCustomCACerts : public SSLUITestNoCert {
   }
 
   // The first profile.
-  raw_ptr<Profile, DanglingUntriaged> profile_1_;
+  raw_ptr<Profile> profile_1_;
   // The second profile.
-  raw_ptr<Profile, DanglingUntriaged> profile_2_;
+  raw_ptr<Profile> profile_2_;
 
   // The NSSCertDatabase for |profile_1_|.
-  // This field is not a raw_ptr<> because it was filtered by the rewriter
-  // for: #addr-of
-  RAW_PTR_EXCLUSION net::NSSCertDatabase* profile_1_cert_db_;
+  raw_ptr<net::NSSCertDatabase> profile_1_cert_db_;
 
   // The NSSCertDatabase for |profile_2_|.
-  // This field is not a raw_ptr<> because it was filtered by the rewriter
-  // for: #addr-of
-  RAW_PTR_EXCLUSION net::NSSCertDatabase* profile_2_cert_db_;
+  raw_ptr<net::NSSCertDatabase> profile_2_cert_db_;
 
   // Policy provider for |profile_2_|. Overrides any other policy providers.
   testing::NiceMock<policy::MockConfigurationPolicyProvider>
@@ -5698,7 +5782,7 @@ class SSLUITestCustomCACerts : public SSLUITestNoCert {
 
  private:
   void DidGetCertDatabase(base::RunLoop* loop,
-                          net::NSSCertDatabase** out_cert_db,
+                          raw_ptr<net::NSSCertDatabase>* out_cert_db,
                           net::NSSCertDatabase* cert_db) {
     *out_cert_db = cert_db;
     loop->Quit();

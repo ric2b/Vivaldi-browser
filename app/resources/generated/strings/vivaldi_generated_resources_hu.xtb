@@ -86,7 +86,6 @@
 <translation id="2439110203301358333">A számítógépen lévő egyik program olyan bővítményt adott hozzá, amely módosíthatja a Vivaldi működését.</translation>
 <translation id="2443487764245141020">A webhelyeknek is fel kell ismerniük, hogy eszközöd azonosítót használ</translation>
 <translation id="2445081178310039857">A bővítmény gyökérkönyvtárát kötelező megadni.</translation>
-<translation id="2470702053775288986">Nem támogatott kiterjesztések kikapcsolva</translation>
 <translation id="2485422356828889247">Eltávolítás</translation>
 <translation id="2498539833203011245">Kis méret</translation>
 <translation id="2509495747794740764">Az átméretezési értéknek 10 és 200 közötti számnak kell lennie.</translation>
@@ -206,7 +205,6 @@
 <translation id="431076611119798497">&amp;Részletek</translation>
 <translation id="4345587454538109430">Beállítás...</translation>
 <translation id="4348766275249686434">Hibák gyűjtése</translation>
-<translation id="4363771538994847871">Nem található átküldési cél. Segítségre van szükséged?</translation>
 <translation id="4384652540891215547">Bővítmény aktiválása</translation>
 <translation id="4394049700291259645">Kikapcsolás</translation>
 <translation id="4409697491990005945">Margók</translation>
@@ -390,7 +388,6 @@
 <translation id="7771452384635174008">Elrendezés</translation>
 <translation id="7782102568078991263">Nincs több javaslat a Google-tól</translation>
 <translation id="7786889348652477777">Alkalmazás új&amp;ratöltése</translation>
-<translation id="7791543448312431591">Hozzáadás</translation>
 <translation id="7800518121066352902">Forgatás &amp;balra</translation>
 <translation id="7814458197256864873">&amp;Másolás</translation>
 <translation id="7818135753970109980">Új téma hozzáadva (<ph name="EXTENSION_NAME" />)</translation>

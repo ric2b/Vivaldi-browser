@@ -11,6 +11,7 @@ import android.util.FloatProperty;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutView;
+import org.chromium.ui.MotionEventUtils;
 
 /**
  * {@link CompositorButton} keeps track of state for buttons that are rendered in the compositor.
@@ -30,20 +31,6 @@ public class CompositorButton extends StripLayoutView {
                 @Override
                 public Float get(CompositorButton object) {
                     return object.getOpacity();
-                }
-            };
-
-    /** A property for animations to use for changing the drawX of the button. */
-    public static final FloatProperty<CompositorButton> DRAW_X =
-            new FloatProperty<CompositorButton>("drawX") {
-                @Override
-                public void setValue(CompositorButton object, float value) {
-                    object.setDrawX(value);
-                }
-
-                @Override
-                public Float get(CompositorButton object) {
-                    return object.getDrawX();
                 }
             };
 
@@ -319,10 +306,12 @@ public class CompositorButton extends StripLayoutView {
      * @param x The x offset of the event.
      * @param y The y offset of the event.
      * @param fromMouse Whether the event originates from a mouse.
-     * @return Whether or not the close button was selected.
+     * @param buttons State of all buttons that were pressed when onDown was invoked.
+     * @return Whether or not the button was hit.
      */
-    public boolean onDown(float x, float y, boolean fromMouse) {
-        if (checkClickedOrHovered(x, y)) {
+    public boolean onDown(float x, float y, boolean fromMouse, int buttons) {
+        if (checkClickedOrHovered(x, y)
+                && MotionEventUtils.isTouchOrPrimaryButton(fromMouse, buttons)) {
             setPressed(true, fromMouse);
             return true;
         }
@@ -330,12 +319,15 @@ public class CompositorButton extends StripLayoutView {
     }
 
     /**
-     * @param x     The x offset of the event.
-     * @param y     The y offset of the event.
-     * @return      If the button was clicked or not.
+     * @param x The x offset of the event.
+     * @param y The y offset of the event.
+     * @param fromMouse Whether the event originates from a mouse.
+     * @param buttons State of all buttons that were pressed when onDown was invoked.
+     * @return Whether or not the button was clicked.
      */
-    public boolean click(float x, float y) {
-        if (checkClickedOrHovered(x, y)) {
+    public boolean click(float x, float y, boolean fromMouse, int buttons) {
+        if (checkClickedOrHovered(x, y)
+                && MotionEventUtils.isTouchOrPrimaryButton(fromMouse, buttons)) {
             setPressed(false, false);
             return true;
         }

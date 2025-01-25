@@ -17,6 +17,7 @@
 #include "src/handles/maybe-handles.h"
 #include "src/heap/factory-base.h"
 #include "src/heap/heap.h"
+#include "src/objects/feedback-cell.h"
 // TODO(leszeks): Remove this by forward declaring JSRegExp::Flags.
 #include "src/objects/js-regexp.h"
 
@@ -50,7 +51,9 @@ class FunctionTemplateInfo;
 class Isolate;
 class JSArrayBufferView;
 class JSDataView;
-class JSDisposableStack;
+class JSDisposableStackBase;
+class JSSyncDisposableStack;
+class JSAsyncDisposableStack;
 class JSGeneratorObject;
 class JSMap;
 class JSMapIterator;
@@ -90,6 +93,7 @@ enum Suspend : int;
 enum Promise : int;
 class ValueType;
 using FunctionSig = Signature<ValueType>;
+class StackMemory;
 }  // namespace wasm
 #endif
 
@@ -432,8 +436,9 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   Handle<AccessorInfo> NewAccessorInfo();
 
   Handle<ErrorStackData> NewErrorStackData(
-      DirectHandle<Object> call_site_infos_or_formatted_stack,
-      DirectHandle<Object> limit_or_stack_frame_infos);
+      DirectHandle<UnionOf<JSAny, FixedArray>>
+          call_site_infos_or_formatted_stack,
+      DirectHandle<UnionOf<Smi, FixedArray>> limit_or_stack_frame_infos);
 
   Handle<Script> CloneScript(DirectHandle<Script> script,
                              DirectHandle<String> source);
@@ -442,11 +447,12 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   Handle<BreakPoint> NewBreakPoint(int id, DirectHandle<String> condition);
 
   Handle<CallSiteInfo> NewCallSiteInfo(
-      DirectHandle<Object> receiver_or_instance, DirectHandle<Object> function,
+      DirectHandle<JSAny> receiver_or_instance,
+      DirectHandle<UnionOf<Smi, JSFunction>> function,
       DirectHandle<HeapObject> code_object, int code_offset_or_source_position,
       int flags, DirectHandle<FixedArray> parameters);
   Handle<StackFrameInfo> NewStackFrameInfo(
-      DirectHandle<HeapObject> shared_or_script,
+      DirectHandle<UnionOf<SharedFunctionInfo, Script>> shared_or_script,
       int bytecode_offset_or_source_position,
       DirectHandle<String> function_name, bool is_constructor);
 
@@ -465,6 +471,8 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   Handle<Foreign> NewForeign(
       Address addr, AllocationType allocation_type = AllocationType::kYoung);
 
+  Handle<TrustedForeign> NewTrustedForeign(Address addr);
+
   Handle<Cell> NewCell(Tagged<Smi> value);
   Handle<Cell> NewCell();
 
@@ -476,9 +484,10 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       AllocationType allocation = AllocationType::kOld);
   Handle<PropertyCell> NewProtector();
 
-  Handle<FeedbackCell> NewNoClosuresCell(DirectHandle<HeapObject> value);
-  Handle<FeedbackCell> NewOneClosureCell(DirectHandle<HeapObject> value);
-  Handle<FeedbackCell> NewManyClosuresCell(DirectHandle<HeapObject> value);
+  Handle<FeedbackCell> NewNoClosuresCell();
+  Handle<FeedbackCell> NewOneClosureCell(
+      DirectHandle<ClosureFeedbackCellArray> value);
+  Handle<FeedbackCell> NewManyClosuresCell();
 
   Handle<TransitionArray> NewTransitionArray(int number_of_transitions,
                                              int slack = 0);
@@ -711,45 +720,50 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       DirectHandle<NativeContext> creation_context,
       DirectHandle<Object> target);
 
-  Handle<JSDisposableStack> NewJSDisposableStack();
+  Handle<JSDisposableStackBase> NewJSDisposableStackBase();
+  Handle<JSSyncDisposableStack> NewJSSyncDisposableStack(DirectHandle<Map> map);
+  Handle<JSAsyncDisposableStack> NewJSAsyncDisposableStack(
+      DirectHandle<Map> map);
 
 #if V8_ENABLE_WEBASSEMBLY
   Handle<WasmTypeInfo> NewWasmTypeInfo(
       Address type_address, Handle<Map> opt_parent,
-      DirectHandle<WasmInstanceObject> opt_instance, uint32_t type_index);
+      DirectHandle<WasmTrustedInstanceData> opt_instance, uint32_t type_index);
   Handle<WasmInternalFunction> NewWasmInternalFunction(
-      DirectHandle<ExposedTrustedObject> ref, int function_index);
+      DirectHandle<TrustedObject> ref, int function_index,
+      uintptr_t signature_hash);
   Handle<WasmFuncRef> NewWasmFuncRef(
       DirectHandle<WasmInternalFunction> internal_function,
       DirectHandle<Map> rtt);
   Handle<WasmCapiFunctionData> NewWasmCapiFunctionData(
       Address call_target, DirectHandle<Foreign> embedder_data,
       DirectHandle<Code> wrapper_code, DirectHandle<Map> rtt,
-      DirectHandle<PodArray<wasm::ValueType>> serialized_sig);
+      DirectHandle<PodArray<wasm::ValueType>> serialized_sig,
+      uintptr_t signature_hash);
   Handle<WasmExportedFunctionData> NewWasmExportedFunctionData(
       DirectHandle<Code> export_wrapper,
-      DirectHandle<WasmInstanceObject> instance_object,
+      DirectHandle<WasmTrustedInstanceData> instance_data,
       DirectHandle<WasmFuncRef> func_ref,
       DirectHandle<WasmInternalFunction> internal_function,
       const wasm::FunctionSig* sig, uint32_t canonical_type_index,
       int wrapper_budget, wasm::Promise promise);
   Handle<WasmApiFunctionRef> NewWasmApiFunctionRef(
       DirectHandle<HeapObject> callable, wasm::Suspend suspend,
-      DirectHandle<HeapObject> instance,
+      MaybeDirectHandle<WasmTrustedInstanceData> instance_data,
       DirectHandle<PodArray<wasm::ValueType>> serialized_sig);
   Handle<WasmApiFunctionRef> NewWasmApiFunctionRef(
       DirectHandle<WasmApiFunctionRef> ref);
 
   Handle<WasmFastApiCallData> NewWasmFastApiCallData(
-      DirectHandle<HeapObject> signature);
+      DirectHandle<HeapObject> signature, DirectHandle<Object> callback_data);
 
   // {opt_call_target} is kNullAddress for JavaScript functions, and
   // non-null for exported Wasm functions.
   Handle<WasmJSFunctionData> NewWasmJSFunctionData(
-      DirectHandle<JSReceiver> callable,
+      uint32_t canonical_sig_index, DirectHandle<JSReceiver> callable,
       DirectHandle<PodArray<wasm::ValueType>> serialized_sig,
       DirectHandle<Code> wrapper_code, DirectHandle<Map> rtt,
-      wasm::Suspend suspend, wasm::Promise promise);
+      wasm::Suspend suspend, wasm::Promise promise, uintptr_t signature_hash);
   Handle<WasmResumeData> NewWasmResumeData(
       DirectHandle<WasmSuspenderObject> suspender, wasm::OnResume on_resume);
   Handle<WasmStruct> NewWasmStruct(const wasm::StructType* type,
@@ -772,8 +786,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       uint32_t segment_index, uint32_t start_offset, uint32_t length,
       DirectHandle<Map> map);
   Handle<WasmContinuationObject> NewWasmContinuationObject(
-      Address jmpbuf, DirectHandle<Foreign> managed_stack,
-      DirectHandle<HeapObject> parent,
+      Address jmpbuf, wasm::StackMemory* stack, DirectHandle<HeapObject> parent,
       AllocationType allocation = AllocationType::kYoung);
 
   Handle<SharedFunctionInfo> NewSharedFunctionInfoForWasmExportedFunction(
@@ -832,7 +845,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
 
   // Allocates a bound function.
   MaybeHandle<JSBoundFunction> NewJSBoundFunction(
-      DirectHandle<JSReceiver> target_function, DirectHandle<Object> bound_this,
+      DirectHandle<JSReceiver> target_function, DirectHandle<JSAny> bound_this,
       base::Vector<Handle<Object>> bound_args, Handle<HeapObject> prototype);
 
   // Allocates a Harmony proxy.
@@ -941,7 +954,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       FunctionKind kind = FunctionKind::kNormalFunction);
 
   Handle<InterpreterData> NewInterpreterData(
-      Handle<BytecodeArray> bytecode_array, Handle<Code> code);
+      DirectHandle<BytecodeArray> bytecode_array, DirectHandle<Code> code);
 
   static bool IsFunctionModeWithPrototype(FunctionMode function_mode) {
     return (function_mode & kWithPrototypeBits) != 0;
@@ -1035,7 +1048,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       DirectHandle<FunctionTemplateInfo> constructor, bool do_not_cache);
 
   Handle<DictionaryTemplateInfo> NewDictionaryTemplateInfo(
-      Handle<FixedArray> property_names);
+      DirectHandle<FixedArray> property_names);
 
   // Helper class for creating JSFunction objects.
   class V8_EXPORT_PRIVATE JSFunctionBuilder final {

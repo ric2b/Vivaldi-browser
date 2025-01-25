@@ -22,7 +22,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupColorUtils;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilterObserver;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupTitleUtils;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 
@@ -35,8 +34,6 @@ import java.util.Locale;
  * and shows a undo snackbar.
  */
 public class UndoGroupSnackbarController implements SnackbarManager.SnackbarController {
-    private static final int INVALID_COLOR_ID = -1;
-
     private final Context mContext;
     private final TabModelSelector mTabModelSelector;
     private final SnackbarManager mSnackbarManager;
@@ -224,10 +221,10 @@ public class UndoGroupSnackbarController implements SnackbarManager.SnackbarCont
             int rootId = info.tabOriginalRootId;
             if (info.tab.getRootId() == rootId) continue;
 
-            TabGroupTitleUtils.deleteTabGroupTitle(rootId);
+            filter.deleteTabGroupTitle(rootId);
 
             if (ChromeFeatureList.sTabGroupParityAndroid.isEnabled()) {
-                TabGroupColorUtils.deleteTabGroupColor(rootId);
+                filter.deleteTabGroupColor(rootId);
             }
             if (ChromeFeatureList.sTabStripGroupCollapse.isEnabled()) {
                 filter.deleteTabGroupCollapsed(rootId);
@@ -238,7 +235,7 @@ public class UndoGroupSnackbarController implements SnackbarManager.SnackbarCont
     private void undo(List<TabUndoInfo> data) {
         assert data.size() != 0;
 
-        TabGroupModelFilter tabGroupModelFilter =
+        TabGroupModelFilter filter =
                 (TabGroupModelFilter)
                         mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter();
         TabUndoInfo firstInfo = data.get(0);
@@ -250,7 +247,7 @@ public class UndoGroupSnackbarController implements SnackbarManager.SnackbarCont
         // the group title for that rootID on undo since the destination group never had a group
         // title to begin with, and the merging tabs still have the original group title stored.
         if (firstInfo.destinationGroupTitle == null) {
-            TabGroupTitleUtils.deleteTabGroupTitle(firstRootId);
+            filter.deleteTabGroupTitle(firstRootId);
         }
 
         if (ChromeFeatureList.sTabGroupParityAndroid.isEnabled()) {
@@ -259,8 +256,8 @@ public class UndoGroupSnackbarController implements SnackbarManager.SnackbarCont
             // merge, delete that color id on undo. This check deletes the group color for that
             // destination rootID, as all tabs still currently share that ID before the undo
             // operation is performed.
-            if (firstInfo.destinationGroupColorId == INVALID_COLOR_ID) {
-                TabGroupColorUtils.deleteTabGroupColor(firstRootId);
+            if (firstInfo.destinationGroupColorId == TabGroupColorUtils.INVALID_COLOR_ID) {
+                filter.deleteTabGroupColor(firstRootId);
             }
         }
 
@@ -268,13 +265,13 @@ public class UndoGroupSnackbarController implements SnackbarManager.SnackbarCont
         // need to restore that state.
         if (ChromeFeatureList.sTabStripGroupCollapse.isEnabled()) {
             if (firstInfo.destinationGroupTitleCollapsed) {
-                tabGroupModelFilter.setTabGroupCollapsed(firstRootId, true);
+                filter.setTabGroupCollapsed(firstRootId, true);
             }
         }
 
         for (int i = data.size() - 1; i >= 0; i--) {
             TabUndoInfo info = data.get(i);
-            tabGroupModelFilter.undoGroupedTab(
+            filter.undoGroupedTab(
                     info.tab,
                     info.tabOriginalIndex,
                     info.tabOriginalRootId,

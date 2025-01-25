@@ -93,13 +93,8 @@ class PLATFORM_EXPORT RTCVideoEncoder : public webrtc::VideoEncoder {
  private:
   class Impl;
 
-  bool IsCodecInitializationPending() const;
   int32_t InitializeEncoder(
       const media::VideoEncodeAccelerator::Config& vea_config);
-  void PreInitializeEncoder(
-      const std::vector<media::VideoEncodeAccelerator::Config::SpatialLayer>&
-          spatial_layers,
-      media::VideoPixelFormat pixel_format);
   void UpdateEncoderInfo(
       media::VideoEncoderInfo encoder_info,
       std::vector<webrtc::VideoFrameBuffer::Type> preferred_pixel_formats);
@@ -109,7 +104,12 @@ class PLATFORM_EXPORT RTCVideoEncoder : public webrtc::VideoEncoder {
   bool CodecSettingsUsableForFrameSizeChange(
       const webrtc::VideoCodec& codec_settings) const;
 
-  int32_t DrainEncoderAndUpdateFrameSize(const gfx::Size& frame_size);
+  int32_t DrainEncoderAndUpdateFrameSize(
+      const gfx::Size& input_visible_size,
+      const webrtc::VideoEncoder::RateControlParameters& params,
+      const media::SVCInterLayerPredMode& inter_layer_pred,
+      const std::vector<media::VideoEncodeAccelerator::Config::SpatialLayer>&
+          spatial_layers);
 
   const media::VideoCodecProfile profile_;
 
@@ -139,16 +139,6 @@ class PLATFORM_EXPORT RTCVideoEncoder : public webrtc::VideoEncoder {
   SEQUENCE_CHECKER(webrtc_sequence_checker_);
 
   bool has_error_ GUARDED_BY_CONTEXT(webrtc_sequence_checker_){false};
-
-  // If this has value, the value is VideoEncodeAccelerator::Config to be used
-  // in up-coming Initialize().
-  std::optional<media::VideoEncodeAccelerator::Config> vea_config_
-      GUARDED_BY_CONTEXT(webrtc_sequence_checker_);
-  // This has a value if SetRates() is called between InitEncode() and the first
-  // Encode(). The stored value is used for SetRates() after the encoder
-  // initialization with |vea_config_|.
-  std::optional<webrtc::VideoEncoder::RateControlParameters>
-      pending_rate_params_ GUARDED_BY_CONTEXT(webrtc_sequence_checker_);
 
   // Execute in SetError(). This can be valid only in testing.
   WTF::CrossThreadOnceClosure error_callback_for_testing_;

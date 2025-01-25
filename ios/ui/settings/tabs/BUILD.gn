@@ -36,14 +36,16 @@ swift_source_set("vivaldi_tab_settings_swift") {
   bridge_header = "vivaldi_tab_settings_swift_bridge.h"
   sources = [
     "vivaldi_tab_settings_constants.swift",
-    "vivaldi_tab_settings_view.swift",
+    "vivaldi_tab_settings_state.swift",
     "vivaldi_tab_settings_view_provider.swift",
+    "vivaldi_tab_settings_view.swift",
   ]
 
   deps = [
     "//base",
     "//ui/base",
-    "//ios/chrome/app/strings"
+    "//ios/chrome/app/strings",
+    "//vivaldi/ios/ui/helpers:helpers_swift",
   ]
 
   frameworks = [

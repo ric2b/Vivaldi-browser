@@ -16,18 +16,14 @@
 #include "shared_test_util.h"
 
 // needed for running directly against the C API (ie: bypassing the C++ wrapper)
+#include "benchmark/benchmark.h"
 #include "np_cpp_ffi_functions.h"
 #include "np_cpp_ffi_types.h"
 
-#include "benchmark/benchmark.h"
-
 nearby_protocol::CredentialBook CreateEmptyCredBook() {
-  auto cred_slab = nearby_protocol::CredentialSlab::TryCreate();
-  assert(cred_slab.ok());
-  auto cred_book =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(cred_slab.value());
-  assert(cred_book.ok());
-  return std::move(*cred_book);
+  nearby_protocol::CredentialSlab cred_slab;
+  nearby_protocol::CredentialBook cred_book(cred_slab);
+  return std::move(cred_book);
 }
 
 void V0Plaintext(benchmark::State &state) {
@@ -65,19 +61,16 @@ BENCHMARK(V1Plaintext)
     ->Unit(benchmark::kMicrosecond);
 
 class V0Encrypted : public benchmark::Fixture {
-public:
+ public:
   std::optional<nearby_protocol::CredentialBook> cred_book_;
   void SetUp(const ::benchmark::State &state) override {
     // populate credential book
     auto num_creds = state.range(0);
 
-    auto slab = nearby_protocol::CredentialSlab::TryCreate();
-    assert(slab.ok());
-
+    nearby_protocol::CredentialSlab slab;
     for (int i = 1; i < num_creds; i++) {
       auto credential = GenerateRandomCredentialV0();
-      auto result = slab->AddV0Credential(credential);
-      assert(result.ok());
+      slab.AddV0Credential(credential);
     }
 
     // now at the end of the list add the matching credential
@@ -86,13 +79,11 @@ public:
     std::array<uint8_t, 32> key_seed = {};
     std::fill_n(key_seed.begin(), 32, 0x11);
     nearby_protocol::V0MatchableCredential v0_cred(
-        key_seed, V0AdvLegacyMetadataKeyHmac, match_data);
-    auto add_result = slab->AddV0Credential(v0_cred);
-    assert(add_result.ok());
+        key_seed, V0AdvLegacyIdentityTokenHmac, match_data);
+    slab.AddV0Credential(v0_cred);
 
-    auto cred_book = nearby_protocol::CredentialBook::TryCreateFromSlab(*slab);
-    assert(cred_book.ok());
-    cred_book_ = std::move(*cred_book);
+    nearby_protocol::CredentialBook cred_book(slab);
+    cred_book_ = std::move(cred_book);
   }
   void TearDown(const ::benchmark::State &state) override {}
 };
@@ -119,29 +110,27 @@ BENCHMARK_REGISTER_F(V0Encrypted, SingleMatchingCredential)
     ->Unit(benchmark::kMicrosecond);
 
 class V1SigEncryptedSingleSection : public benchmark::Fixture {
-public:
+ public:
   std::optional<nearby_protocol::CredentialBook> cred_book_;
   void SetUp(const ::benchmark::State &state) override {
     // populate credential book
     auto num_creds = state.range(0);
-    auto slab = nearby_protocol::CredentialSlab::TryCreate();
-    assert(slab.ok());
+    nearby_protocol::CredentialSlab slab;
     for (int i = 1; i < num_creds; i++) {
       auto credential = GenerateRandomCredentialV1();
-      auto result = slab->AddV1Credential(credential);
+      auto result = slab.AddV1Credential(credential);
       assert(result.ok());
     }
     // now at the end of the list add the matching credential
     nearby_protocol::MatchedCredentialData match_data(123,
                                                       V1AdvEncryptedMetadata);
     nearby_protocol::V1MatchableCredential v1_cred(
-        V1AdvKeySeed, V1AdvExpectedUnsignedMetadataKeyHmac,
-        V1AdvExpectedSignedMetadataKeyHmac, V1AdvPublicKey, match_data);
-    auto add_result = slab->AddV1Credential(v1_cred);
+        V1AdvKeySeed, V1AdvExpectedMicExtendedSaltIdentityTokenHmac,
+        V1AdvExpectedSignatureIdentityTokenHmac, V1AdvPublicKey, match_data);
+    auto add_result = slab.AddV1Credential(v1_cred);
     assert(add_result.ok());
-    auto cred_book = nearby_protocol::CredentialBook::TryCreateFromSlab(*slab);
-    assert(cred_book.ok());
-    cred_book_ = std::move(*cred_book);
+    nearby_protocol::CredentialBook cred_book(slab);
+    cred_book_ = std::move(cred_book);
   }
   void TearDown(const ::benchmark::State &state) override {}
 };
@@ -187,7 +176,7 @@ V1CredentialData GenerateData() {
 }
 
 class LoadCredentialBook : public benchmark::Fixture {
-public:
+ public:
   std::vector<V1CredentialData> creds_;
   // generate all the data in setup so the time for generation is not included
   // in the measurement
@@ -204,19 +193,17 @@ public:
 BENCHMARK_DEFINE_F(LoadCredentialBook, SingleMatchingCredential)
 (benchmark::State &state) {
   for ([[maybe_unused]] auto _ : state) {
-    auto slab = nearby_protocol::CredentialSlab::TryCreate();
-    assert(slab.ok());
+    nearby_protocol::CredentialSlab slab;
     for (auto cred : creds_) {
       nearby_protocol::MatchedCredentialData m(cred.cred_id,
                                                cred.encrypted_metadata_bytes);
       nearby_protocol::V1MatchableCredential v1_cred(
           cred.key_seed, cred.expected_unsigned_metadata_key_hmac,
           cred.expected_signed_metadata_key_hmac, cred.pub_key, m);
-      auto result = slab->AddV1Credential(v1_cred);
+      auto result = slab.AddV1Credential(v1_cred);
       assert(result.ok());
     }
-    auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(*slab);
-    assert(book.ok());
+    nearby_protocol::CredentialBook book(slab);
     benchmark::DoNotOptimize(book);
   }
 }

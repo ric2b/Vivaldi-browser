@@ -303,6 +303,12 @@ const kTests = {
     pass: false,
     is_f16: false,
   },
+
+  must_use: {
+    src: `atan2(1, 2);`,
+    pass: false,
+    is_f16: false,
+  },
 };
 
 g.test('parameters')

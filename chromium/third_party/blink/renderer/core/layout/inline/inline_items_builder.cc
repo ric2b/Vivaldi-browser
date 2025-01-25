@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/layout/inline/inline_items_builder.h"
 
 #include <type_traits>
@@ -23,6 +28,32 @@
 
 namespace blink {
 class HTMLAreaElement;
+
+template <typename MappingBuilder>
+InlineItemsBuilderTemplate<MappingBuilder>::InlineItemsBuilderTemplate(
+    LayoutBlockFlow* block_flow,
+    HeapVector<InlineItem>* items,
+    const String& previous_text_content,
+    const SvgTextChunkOffsets* chunk_offsets)
+    : block_flow_(block_flow),
+      items_(items),
+      text_chunk_offsets_(chunk_offsets),
+      is_text_combine_(block_flow_->IsLayoutTextCombine()) {
+  if (!RuntimeEnabledFeatures::RecollectInlinesReserveCapacityEnabled()) {
+    return;
+  }
+  const LayoutObject* child = block_flow->FirstChild();
+  if (!previous_text_content.IsNull() && child && child->NextSibling()) {
+    // 10 avoids reallocations in many cases of Speedometer3.
+    constexpr wtf_size_t kAdditionalSize = 10;
+    wtf_size_t capacity = previous_text_content.length() + kAdditionalSize;
+    if (previous_text_content.Is8Bit()) {
+      text_.ReserveCapacity(capacity);
+    } else {
+      text_.Reserve16BitCapacity(capacity);
+    }
+  }
+}
 
 // Returns true if items builder is used for other than offset mapping.
 template <typename MappingBuilder>
@@ -194,6 +225,10 @@ InlineItem* LastItemToCollapseWith(HeapVector<InlineItem>* items) {
     }
   }
   return nullptr;
+}
+
+inline bool IsNonOrc16BitCharacter(UChar ch) {
+  return ch >= 0x100 && ch != kObjectReplacementCharacter;
 }
 
 }  // anonymous namespace
@@ -389,7 +424,7 @@ bool InlineItemsBuilderTemplate<MappingBuilder>::AppendTextReusing(
           RestoreTrailingCollapsibleSpace(last_item);
           return false;
         case InlineItem::kOpaqueToCollapsing:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
     } else if (last_item->EndCollapseType() == InlineItem::kCollapsed) {
@@ -454,6 +489,8 @@ bool InlineItemsBuilderTemplate<MappingBuilder>::AppendTextReusing(
     }
 
     unsigned start = text_.length();
+    has_non_orc_16bit_ =
+        has_non_orc_16bit_ || original_data.HasNonOrc16BitCharacters();
     text_.Append(original_string, item.StartOffset(), item.Length());
 
     // If the item's position within the container remains unchanged the item
@@ -498,7 +535,7 @@ template <>
 bool InlineItemsBuilderTemplate<OffsetMappingBuilder>::AppendTextReusing(
     const InlineNodeData&,
     LayoutText*) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -528,8 +565,7 @@ void InlineItemsBuilderTemplate<MappingBuilder>::AppendText(
     return;
   }
 
-  if (!RuntimeEnabledFeatures::OffsetMappingUnitVariableEnabled() ||
-      !layout_text->HasVariableLengthTransform()) {
+  if (!layout_text->HasVariableLengthTransform()) {
     AppendText(TransformedString(layout_text->TransformedText()), *layout_text);
     return;
   }
@@ -643,6 +679,7 @@ template <typename MappingBuilder>
 void InlineItemsBuilderTemplate<MappingBuilder>::AppendTransformedString(
     const TransformedString& transformed,
     const LayoutText& layout_text) {
+  has_non_orc_16bit_ = has_non_orc_16bit_ || !transformed.View().Is8Bit();
   text_.Append(transformed.View());
   if (!transformed.HasLengthMap()) {
     mapping_builder_.AppendIdentityMapping(transformed.View().length());
@@ -1159,6 +1196,7 @@ InlineItem& InlineItemsBuilderTemplate<MappingBuilder>::Append(
     LayoutObject* layout_object) {
   DCHECK_NE(character, kSpaceCharacter);
 
+  has_non_orc_16bit_ = has_non_orc_16bit_ || IsNonOrc16BitCharacter(character);
   text_.Append(character);
   mapping_builder_.AppendIdentityMapping(1);
   unsigned end_offset = text_.length();
@@ -1219,29 +1257,13 @@ void InlineItemsBuilderTemplate<MappingBuilder>::AppendBlockInInline(
 template <typename MappingBuilder>
 void InlineItemsBuilderTemplate<MappingBuilder>::AppendFloating(
     LayoutObject* layout_object) {
-  if (ruby_text_nesting_level_ == 0) {
-    AppendOpaque(InlineItem::kFloating, kObjectReplacementCharacter,
-                 layout_object);
-  } else {
-    // It's hard for LineBreaker to handle floats in <ruby> correctly. So we
-    // append kFloating items after closing a ruby column.
-    pending_floats_in_ruby_.push_back(layout_object);
-  }
+  AppendOpaque(InlineItem::kFloating, kObjectReplacementCharacter,
+               layout_object);
   has_floats_ = true;
   // Floats/exclusions require computing line heights, which is currently
   // skipped during the bisect. See `ParagraphLineBreaker`.
   is_bisect_line_break_disabled_ = true;
   // `ScoreLineBreaker` supports "simple" floats. See`LineWidths`.
-}
-
-template <typename MappingBuilder>
-void InlineItemsBuilderTemplate<MappingBuilder>::FlushPendingFloatsInRuby() {
-  DCHECK_EQ(ruby_text_nesting_level_, 0u);
-  for (auto& layout_object : pending_floats_in_ruby_) {
-    AppendOpaque(InlineItem::kFloating, kObjectReplacementCharacter,
-                 layout_object);
-  }
-  pending_floats_in_ruby_.clear();
 }
 
 template <typename MappingBuilder>
@@ -1256,6 +1278,7 @@ InlineItem& InlineItemsBuilderTemplate<MappingBuilder>::AppendOpaque(
     InlineItem::InlineItemType type,
     UChar character,
     LayoutObject* layout_object) {
+  has_non_orc_16bit_ = has_non_orc_16bit_ || IsNonOrc16BitCharacter(character);
   text_.Append(character);
   mapping_builder_.AppendIdentityMapping(1);
   unsigned end_offset = text_.length();
@@ -1472,6 +1495,7 @@ void InlineItemsBuilderTemplate<MappingBuilder>::EnterInline(
   has_ruby_ = has_ruby_ || node->IsInlineRubyText();
   if (node->IsInlineRubyText()) {
     ++ruby_text_nesting_level_;
+    typename MappingBuilder::SourceNodeScope scope(&mapping_builder_, nullptr);
     if (!node->Parent()->IsInlineRuby()) {
       // This creates a ruby column with a placeholder-only ruby-base.
       AppendOpaque(InlineItem::kOpenRubyColumn,
@@ -1498,6 +1522,7 @@ void InlineItemsBuilderTemplate<MappingBuilder>::EnterInline(
     }
   }
 
+  typename MappingBuilder::SourceNodeScope scope(&mapping_builder_, nullptr);
   if (node->IsInlineRuby()) {
     AppendOpaque(InlineItem::kOpenRubyColumn,
                  IsLtr(style->Direction()) ? kLeftToRightIsolateCharacter
@@ -1531,12 +1556,23 @@ void InlineItemsBuilderTemplate<MappingBuilder>::ExitInline(
     if (kDisableForcedBreakInRubyColumn) {
       --ruby_text_nesting_level_;
     }
-    AppendOpaque(InlineItem::kCloseRubyColumn, kPopDirectionalIsolateCharacter,
-                 node);
-    if (ruby_text_nesting_level_ == 0) {
-      FlushPendingFloatsInRuby();
+    typename MappingBuilder::SourceNodeScope scope(&mapping_builder_, nullptr);
+    wtf_size_t size = items_->size();
+    if (size >= 3 &&
+        items_->at(size - 3).Type() == InlineItem::kCloseRubyColumn &&
+        items_->at(size - 2).Type() == InlineItem::kOpenRubyColumn &&
+        items_->at(size - 1).Type() == InlineItem::kRubyLinePlaceholder) {
+      // Remove the last kOpenRubyColumn and kRubyLinePlaceholder.
+      text_.Resize(items_->at(size - 2).StartOffset());
+      items_->Shrink(size - 2);
+      // kOpenRubyColumn called AppendIdentityMapping(1).
+      mapping_builder_.RevertIdentityMapping1();
+    } else {
+      AppendOpaque(InlineItem::kCloseRubyColumn,
+                   kPopDirectionalIsolateCharacter, node);
     }
   } else if (node->IsInlineRubyText()) {
+    typename MappingBuilder::SourceNodeScope scope(&mapping_builder_, nullptr);
     AppendOpaque(InlineItem::kRubyLinePlaceholder, node);
   }
 
@@ -1583,12 +1619,13 @@ void InlineItemsBuilderTemplate<MappingBuilder>::ExitInline(
 
   if (node->IsInlineRubyText()) {
     --ruby_text_nesting_level_;
+    typename MappingBuilder::SourceNodeScope scope(&mapping_builder_, nullptr);
     if (node->Parent()->IsInlineRuby()) {
       LayoutObject* ruby_container = node->Parent();
       AppendOpaque(InlineItem::kCloseRubyColumn,
                    kPopDirectionalIsolateCharacter, ruby_container);
       // This produces almost-empty ruby-columns if </ruby> follows.
-      // LineBreaker should ignore such ruby-columns.
+      // The beginning part of this function removes such ruby-columns.
       AppendOpaque(InlineItem::kOpenRubyColumn,
                    IsLtr(node->Parent()->Style()->Direction())
                        ? kLeftToRightIsolateCharacter
@@ -1598,9 +1635,6 @@ void InlineItemsBuilderTemplate<MappingBuilder>::ExitInline(
     } else {
       AppendOpaque(InlineItem::kCloseRubyColumn,
                    kPopDirectionalIsolateCharacter, nullptr);
-      if (ruby_text_nesting_level_ == 0) {
-        FlushPendingFloatsInRuby();
-      }
     }
   }
 
@@ -1619,13 +1653,19 @@ template <typename MappingBuilder>
 void InlineItemsBuilderTemplate<MappingBuilder>::DidFinishCollectInlines(
     InlineNodeData* data) {
   data->text_content = ToString();
+  if (!RuntimeEnabledFeatures::
+          LayoutSegmentationFastPathForObjectReplacementEnabled()) {
+    has_non_orc_16bit_ = !data->text_content.Is8Bit();
+  }
+  data->has_non_orc_16bit_ = has_non_orc_16bit_;
 
   // Set |is_bidi_enabled_| for all UTF-16 strings for now, because at this
   // point the string may or may not contain RTL characters.
   // |SegmentText()| will analyze the text and reset |is_bidi_enabled_| if it
   // doesn't contain any RTL characters.
   data->is_bidi_enabled_ =
-      HasBidiControls() || Character::MaybeBidiRtl(data->text_content);
+      HasBidiControls() ||
+      (has_non_orc_16bit_ && Character::MaybeBidiRtl(data->text_content));
   data->has_floats_ = has_floats_;
   data->has_initial_letter_box_ = has_initial_letter_box_;
   data->has_ruby_ = has_ruby_;

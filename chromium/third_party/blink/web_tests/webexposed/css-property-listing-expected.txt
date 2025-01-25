@@ -50,6 +50,7 @@ All changes to this list should go through Blink's feature review process: http:
     alignment-baseline
     all
     anchor-name
+    anchor-scope
     animation-composition
     animation-delay
     animation-direction
@@ -119,6 +120,7 @@ All changes to this list should go through Blink's feature review process: http:
     border-top-style
     border-top-width
     bottom
+    box-decoration-break
     box-shadow
     box-sizing
     break-after
@@ -193,6 +195,7 @@ All changes to this list should go through Blink's feature review process: http:
     font-variant-alternates
     font-variant-caps
     font-variant-east-asian
+    font-variant-emoji
     font-variant-ligatures
     font-variant-numeric
     font-variant-position
@@ -222,6 +225,7 @@ All changes to this list should go through Blink's feature review process: http:
     inset-block-start
     inset-inline-end
     inset-inline-start
+    interpolate-size
     isolation
     justify-content
     justify-items
@@ -230,6 +234,7 @@ All changes to this list should go through Blink's feature review process: http:
     letter-spacing
     lighting-color
     line-break
+    line-clamp
     line-height
     list-style-image
     list-style-position
@@ -310,16 +315,17 @@ All changes to this list should go through Blink's feature review process: http:
     popover-show-delay
     position
     position-anchor
-    position-try-options
+    position-try-fallbacks
     position-try-order
     position-visibility
     quotes
     r
-    reading-order-items
+    reading-flow
     resize
     right
     rotate
     row-gap
+    ruby-align
     ruby-position
     rx
     ry
@@ -333,6 +339,7 @@ All changes to this list should go through Blink's feature review process: http:
     scroll-margin-left
     scroll-margin-right
     scroll-margin-top
+    scroll-marker-group
     scroll-padding-block-end
     scroll-padding-block-start
     scroll-padding-bottom
@@ -623,6 +630,7 @@ All changes to this list should go through Blink's feature review process: http:
         font-variant-alternates
         font-variant-caps
         font-variant-east-asian
+        font-variant-emoji
         font-variant-ligatures
         font-variant-numeric
         font-variant-position
@@ -637,6 +645,7 @@ All changes to this list should go through Blink's feature review process: http:
         font-variant-alternates
         font-variant-caps
         font-variant-east-asian
+        font-variant-emoji
         font-variant-ligatures
         font-variant-numeric
         font-variant-position
@@ -751,7 +760,7 @@ All changes to this list should go through Blink's feature review process: http:
         align-self
         justify-self
     position-try
-        position-try-options
+        position-try-fallbacks
         position-try-order
     scroll-margin
         scroll-margin-bottom

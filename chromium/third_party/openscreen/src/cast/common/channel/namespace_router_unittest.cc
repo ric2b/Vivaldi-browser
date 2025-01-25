@@ -17,7 +17,7 @@
 namespace openscreen::cast {
 namespace {
 
-using ::cast::channel::CastMessage;
+using proto::CastMessage;
 using ::testing::_;
 using ::testing::Invoke;
 

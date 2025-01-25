@@ -135,7 +135,7 @@ void ClipboardIOS::ReadAvailableTypes(
   *types = GetStandardFormats(buffer, data_dst);
 
   NSData* data = GetDataWithTypeFromPasteboard(
-      GetPasteboard(), (NSString*)kUTTypeChromiumWebCustomData);
+      GetPasteboard(), (NSString*)kUTTypeChromiumDataTransferCustomData);
   if (data) {
     ReadCustomDataTypes(
         base::span(reinterpret_cast<const uint8_t*>([data bytes]),
@@ -262,16 +262,17 @@ void ClipboardIOS::ReadPng(ClipboardBuffer buffer,
 
 // |data_dst| is not used. It's only passed to be consistent with other
 // platforms.
-void ClipboardIOS::ReadCustomData(ClipboardBuffer buffer,
-                                  const std::u16string& type,
-                                  const DataTransferEndpoint* data_dst,
-                                  std::u16string* result) const {
+void ClipboardIOS::ReadDataTransferCustomData(
+    ClipboardBuffer buffer,
+    const std::u16string& type,
+    const DataTransferEndpoint* data_dst,
+    std::u16string* result) const {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
   RecordRead(ClipboardFormatMetric::kCustomData);
 
   NSData* data = GetDataWithTypeFromPasteboard(
-      GetPasteboard(), (NSString*)kUTTypeChromiumWebCustomData);
+      GetPasteboard(), (NSString*)kUTTypeChromiumDataTransferCustomData);
   if (data) {
     if (std::optional<std::u16string> maybe_result = ReadCustomDataForType(
             base::span(reinterpret_cast<const uint8_t*>([data bytes]),
@@ -451,7 +452,7 @@ void ClipboardIOS::WriteBitmap(const SkBitmap& bitmap) {
   UIImage* image =
       skia::SkBitmapToUIImageWithColorSpace(bitmap, 1.0f, color_space.get());
   if (!image) {
-    NOTREACHED() << "SkBitmapToUIImageWithColorSpace failed";
+    NOTREACHED_IN_MIGRATION() << "SkBitmapToUIImageWithColorSpace failed";
     return;
   }
 

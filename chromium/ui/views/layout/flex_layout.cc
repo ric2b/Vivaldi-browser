@@ -16,6 +16,7 @@
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/ranges/algorithm.h"
@@ -182,7 +183,7 @@ int FlexLayout::ChildViewSpacing::GetTrailingInset() const {
 
 int FlexLayout::ChildViewSpacing::GetLeadingSpace(size_t view_index) const {
   auto it = leading_spacings_.find(view_index);
-  DCHECK(it != leading_spacings_.end());
+  CHECK(it != leading_spacings_.end(), base::NotFatalUntil::M130);
   return it->second;
 }
 
@@ -778,14 +779,6 @@ void FlexLayout::UpdateLayoutFromChildren(
                                data.interior_margin.cross_trailing(), 0));
   data.total_size = NormalizedSize(0, min_cross_size);
 
-  // For cases with a non-zero cross-axis bound, the objective is to fit the
-  // layout into that precise size, not to determine what size we need.
-  bool force_cross_size = false;
-  if (bounds.cross().is_bounded() && bounds.cross() > 0) {
-    data.total_size.SetToMax(0, bounds.cross().value());
-    force_cross_size = true;
-  }
-
   std::vector<Inset1D> cross_spacings(data.num_children());
   for (size_t i = 0; i < data.num_children(); ++i) {
     FlexChildData& flex_child = data.child_data[i];
@@ -794,8 +787,7 @@ void FlexLayout::UpdateLayoutFromChildren(
 
     // Update the cross-axis margins and if necessary, the size.
     cross_spacings[i] = GetCrossAxisMargins(data, i);
-    if (!force_cross_size &&
-        (is_visible || flex_child.preferred_size.main() == 0)) {
+    if (is_visible || flex_child.preferred_size.main() == 0) {
       data.total_size.SetToMax(
           0, cross_spacings[i].size() + flex_child.current_size.cross());
     }
@@ -821,9 +813,17 @@ void FlexLayout::UpdateLayoutFromChildren(
   // Add the end margin.
   data.total_size.Enlarge(child_spacing.GetTrailingInset(), 0);
 
+  // We only need to consider the cross axis size when aligning. But we
+  // should not let it affect total_size. Because this will affect the preferred
+  // size of the host view.
+  SizeBound cross_axis_size =
+      bounds.cross().is_bounded() && bounds.cross().value() > 0
+          ? bounds.cross()
+          : data.total_size.cross();
+
   // Calculate cross-axis positioning based on the cross margins and size that
   // were calculated above.
-  const Span cross_span(0, data.total_size.cross());
+  const Span cross_span(0, cross_axis_size.value());
   for (size_t i = 0; i < data.num_children(); ++i) {
     FlexChildData& flex_child = data.child_data[i];
     flex_child.actual_bounds.set_size_cross(flex_child.current_size.cross());

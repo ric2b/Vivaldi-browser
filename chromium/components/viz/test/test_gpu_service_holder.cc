@@ -294,7 +294,7 @@ void TestGpuServiceHolder::InitializeOnGpuThread(
       LOG(FATAL) << "Failed to create and initialize Vulkan implementation.";
     }
 #else
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
 #endif
   }
 
@@ -307,10 +307,6 @@ void TestGpuServiceHolder::InitializeOnGpuThread(
       /*needs_more_info=*/nullptr);
   gpu_feature_info.status_values[gpu::GPU_FEATURE_TYPE_GPU_TILE_RASTERIZATION] =
       gpu::kGpuFeatureStatusEnabled;
-
-#if BUILDFLAG(IS_MAC)
-  gpu::SetMacOSSpecificTextureTargetFromCurrentGLImplementation();
-#endif  // BUILDFLAG(IS_MAC)
 
   GpuServiceImpl::InitParams init_params;
   init_params.io_runner = io_thread_.task_runner();

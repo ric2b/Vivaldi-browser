@@ -15,18 +15,16 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/geo/phone_number_i18n.h"
 #include "components/autofill/core/browser/geo/state_names.h"
 #include "components/autofill/core/common/autofill_regex_constants.h"
 #include "components/autofill/core/common/autofill_regexes.h"
+#include "components/autofill/core/common/credit_card_network_identifiers.h"
 #include "components/strings/grit/components_strings.h"
 
 namespace autofill {
 
-bool IsValidCreditCardExpirationDate(int year,
-                                     int month,
-                                     const base::Time& now) {
+bool IsValidCreditCardExpirationDate(int year, int month, base::Time now) {
   if (month < 1 || month > 12)
     return false;
 
@@ -36,77 +34,10 @@ bool IsValidCreditCardExpirationDate(int year,
          (year == now_exploded.year && month >= now_exploded.month);
 }
 
-bool IsValidCreditCardExpirationYear(int year, const base::Time& now) {
+bool IsValidCreditCardExpirationYear(int year, base::Time now) {
   base::Time::Exploded now_exploded;
   now.LocalExplode(&now_exploded);
   return year >= now_exploded.year;
-}
-
-// Credit card validation logic is duplicated in
-// components/feedback/redaction_tool/validation.cc. Any changes here must
-// be copied there.
-// TODO(b/281812289) Deduplicate the logic and let the autofill component
-// depend on the code in //components/feedback/redaction_tool/.
-bool IsValidCreditCardNumber(const std::u16string& text) {
-  const std::u16string number = CreditCard::StripSeparators(text);
-  return HasCorrectLength(number) && PassesLuhnCheck(number);
-}
-
-bool HasCorrectLength(const std::u16string& number) {
-  // Credit card numbers are at most 19 digits in length, 12 digits seems to
-  // be a fairly safe lower-bound [1].  Specific card issuers have more rigidly
-  // defined sizes.
-  // (Last updated: May 29, 2017)
-  // [1] https://en.wikipedia.org/wiki/Payment_card_number.
-  // CardEditor.isCardNumberLengthMaxium() needs to be kept in sync.
-  const char* const type = CreditCard::GetCardNetwork(number);
-  if (type == kAmericanExpressCard && number.size() != 15)
-    return false;
-  if (type == kDinersCard && number.size() != 14)
-    return false;
-  if (type == kDiscoverCard && number.size() != 16)
-    return false;
-  if (type == kEloCard && number.size() != 16)
-    return false;
-  if (type == kJCBCard && number.size() != 16)
-    return false;
-  if (type == kMasterCard && number.size() != 16)
-    return false;
-  if (type == kMirCard && number.size() != 16)
-    return false;
-  if (type == kTroyCard && number.size() != 16)
-    return false;
-  if (type == kUnionPay && (number.size() < 16 || number.size() > 19))
-    return false;
-  if (type == kVisaCard && number.size() != 13 && number.size() != 16 &&
-      number.size() != 19)
-    return false;
-  if (type == kGenericCard && (number.size() < 12 || number.size() > 19))
-    return false;
-
-  return true;
-}
-
-bool PassesLuhnCheck(const std::u16string& number) {
-  // Use the Luhn formula [3] to validate the number.
-  // [3] http://en.wikipedia.org/wiki/Luhn_algorithm
-  int sum = 0;
-  bool odd = false;
-  for (char c : base::Reversed(number)) {
-    if (!base::IsAsciiDigit(c))
-      return false;
-
-    int digit = c - '0';
-    if (odd) {
-      digit *= 2;
-      sum += digit / 10 + digit % 10;
-    } else {
-      sum += digit;
-    }
-    odd = !odd;
-  }
-
-  return (sum % 10) == 0;
 }
 
 bool IsValidCreditCardSecurityCode(const std::u16string& code,

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/sharing/sharing_message_sender.h"
 
+#include "base/not_fatal_until.h"
 #include "base/trace_event/trace_event.h"
 #include "base/uuid.h"
 #include "chrome/browser/sharing/sharing_constants.h"
@@ -24,11 +25,11 @@ SharingMessageSender::~SharingMessageSender() = default;
 base::OnceClosure SharingMessageSender::SendMessageToDevice(
     const SharingTargetDeviceInfo& device,
     base::TimeDelta response_timeout,
-    chrome_browser_sharing::SharingMessage message,
+    components_sharing_message::SharingMessage message,
     DelegateType delegate_type,
     ResponseCallback callback) {
   DCHECK(message.payload_case() !=
-         chrome_browser_sharing::SharingMessage::kAckMessage);
+         components_sharing_message::SharingMessage::kAckMessage);
 
   int trace_id = GenerateSharingTraceId();
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
@@ -38,7 +39,7 @@ base::OnceClosure SharingMessageSender::SendMessageToDevice(
           SharingPayloadCaseToMessageType(message.payload_case())));
 
   std::string message_guid = base::Uuid::GenerateRandomV4().AsLowercaseString();
-  chrome_browser_sharing::MessageType message_type =
+  components_sharing_message::MessageType message_type =
       SharingPayloadCaseToMessageType(message.payload_case());
 
   auto [it, inserted] = message_metadata_.insert_or_assign(
@@ -100,7 +101,7 @@ void SharingMessageSender::OnMessageSent(const std::string& message_guid,
                                          std::optional<std::string> message_id,
                                          SharingChannelType channel_type) {
   auto metadata_iter = message_metadata_.find(message_guid);
-  DCHECK(metadata_iter != message_metadata_.end());
+  CHECK(metadata_iter != message_metadata_.end(), base::NotFatalUntil::M130);
   TRACE_EVENT_NESTABLE_ASYNC_END1(
       "sharing", "Sharing.DoSendMessage",
       TRACE_ID_LOCAL(metadata_iter->second.trace_id), "result",
@@ -125,7 +126,7 @@ void SharingMessageSender::OnMessageSent(const std::string& message_guid,
 
 void SharingMessageSender::OnAckReceived(
     const std::string& message_id,
-    std::unique_ptr<chrome_browser_sharing::ResponseMessage> response) {
+    std::unique_ptr<components_sharing_message::ResponseMessage> response) {
   TRACE_EVENT0("sharing", "SharingMessageSender::OnAckReceived");
   auto guid_iter = message_guids_.find(message_id);
   if (guid_iter == message_guids_.end()) {
@@ -138,7 +139,7 @@ void SharingMessageSender::OnAckReceived(
   message_guids_.erase(guid_iter);
 
   auto metadata_iter = message_metadata_.find(message_guid);
-  DCHECK(metadata_iter != message_metadata_.end());
+  CHECK(metadata_iter != message_metadata_.end(), base::NotFatalUntil::M130);
 
   InvokeSendMessageCallback(message_guid, SharingSendMessageResult::kSuccessful,
                             std::move(response));
@@ -155,7 +156,7 @@ void SharingMessageSender::RegisterSendDelegate(
 
 SharingFCMSender* SharingMessageSender::GetFCMSenderForTesting() const {
   auto delegate_iter = send_delegates_.find(DelegateType::kFCM);
-  DCHECK(delegate_iter != send_delegates_.end());
+  CHECK(delegate_iter != send_delegates_.end(), base::NotFatalUntil::M130);
   DCHECK(delegate_iter->second);
   return static_cast<SharingFCMSender*>(delegate_iter->second.get());
 }
@@ -163,7 +164,7 @@ SharingFCMSender* SharingMessageSender::GetFCMSenderForTesting() const {
 void SharingMessageSender::InvokeSendMessageCallback(
     const std::string& message_guid,
     SharingSendMessageResult result,
-    std::unique_ptr<chrome_browser_sharing::ResponseMessage> response) {
+    std::unique_ptr<components_sharing_message::ResponseMessage> response) {
   auto iter = message_metadata_.find(message_guid);
   if (iter == message_metadata_.end() || !iter->second.callback)
     return;
@@ -183,7 +184,7 @@ void SharingMessageSender::InvokeSendMessageCallback(
 SharingMessageSender::SentMessageMetadata::SentMessageMetadata(
     ResponseCallback callback,
     base::TimeTicks timestamp,
-    chrome_browser_sharing::MessageType type,
+    components_sharing_message::MessageType type,
     SharingDevicePlatform receiver_device_platform,
     int trace_id,
     SharingChannelType channel_type,

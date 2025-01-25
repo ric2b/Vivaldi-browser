@@ -53,6 +53,7 @@ class ErrorSharedBufferMemory : public SharedBufferMemoryBase {
         DAWN_UNREACHABLE();
     }
     ResultOrError<FenceAndSignalValue> EndAccessImpl(BufferBase* buffer,
+                                                     ExecutionSerial lastUsageSerial,
                                                      UnpackedPtr<EndAccessState>& state) override {
         DAWN_UNREACHABLE();
     }
@@ -85,15 +86,17 @@ ObjectType SharedBufferMemoryBase::GetType() const {
     return ObjectType::SharedBufferMemory;
 }
 
-void SharedBufferMemoryBase::APIGetProperties(SharedBufferMemoryProperties* properties) const {
+wgpu::Status SharedBufferMemoryBase::APIGetProperties(
+    SharedBufferMemoryProperties* properties) const {
     properties->usage = mProperties.usage;
     properties->size = mProperties.size;
 
     UnpackedPtr<SharedBufferMemoryProperties> unpacked;
     if (GetDevice()->ConsumedError(ValidateAndUnpack(properties), &unpacked,
                                    "calling %s.GetProperties", this)) {
-        return;
+        return wgpu::Status::Error;
     }
+    return wgpu::Status::Success;
 }
 
 BufferBase* SharedBufferMemoryBase::APICreateBuffer(const BufferDescriptor* descriptor) {
@@ -143,7 +146,7 @@ ResultOrError<Ref<BufferBase>> SharedBufferMemoryBase::CreateBuffer(
     Ref<BufferBase> buffer;
     DAWN_TRY_ASSIGN(buffer, CreateBufferImpl(descriptor));
     // Access is not allowed until BeginAccess has been called.
-    buffer->SetHasAccess(false);
+    buffer->OnEndAccess();
     return buffer;
 }
 

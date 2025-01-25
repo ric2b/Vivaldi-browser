@@ -207,9 +207,25 @@ public interface Tab extends TabLifecycle {
     boolean isThemingAllowed();
 
     /**
+     * TODO(crbug.com/350654700): clean up usages and remove isIncognito.
+     *
      * @return {@code true} if the Tab is in incognito mode.
+     * @deprecated Use {@link #isIncognitoBranded()} or {@link #isOffTheRecord()}.
      */
+    @Deprecated
     boolean isIncognito();
+
+    /**
+     * @return {@code true} if the Tab is in an off-the-record profile.
+     * @see {@link Profile#isOffTheRecord()}
+     */
+    boolean isOffTheRecord();
+
+    /**
+     * @return {@code true} if the Tab is in Incognito branded profile.
+     * @see {@link Profile#isIncognitoBranded()}
+     */
+    boolean isIncognitoBranded();
 
     /**
      * @return Whether the {@link Tab} is currently showing an error page.
@@ -392,6 +408,17 @@ public interface Tab extends TabLifecycle {
 
     /** Update the title for the current page if changed. */
     void updateTitle();
+
+    /**
+     * @return True if the back forward transition is in progress, including web page and native
+     *     page transitions.
+     */
+    boolean isDisplayingBackForwardAnimation();
+
+    /**
+     * @return True if we have a WebContents that's navigated to a trusted origin of a TWA.
+     */
+    boolean isTrustedWebActivity();
 
     /** Vivaldi: This is will exchange the webcontents. */
     public void changeWebContents(

@@ -5,9 +5,11 @@
 
 #import <UIKit/UIKit.h>
 
-@class VivaldiSpeedDialItem;
+#import "components/bookmarks/browser/bookmark_model.h"
 
-class LegacyBookmarkModel;
+using bookmarks::BookmarkModel;
+
+@class VivaldiSpeedDialItem;
 
 // Class responsible for storing, updating and returning speed dial thumbnails.
 @interface VivaldiThumbnailService: NSObject
@@ -19,7 +21,7 @@ class LegacyBookmarkModel;
                        snapshot:(UIImage*)snapshot
                         replace:(BOOL)replace
                     isMigrating:(BOOL)isMigrating
-                      bookmarks:(LegacyBookmarkModel*)bookmarks;
+                      bookmarks:(BookmarkModel*)bookmarks;
 /// Removes the thumbnail from either legacy or new directory if any.
 - (void)removeThumbnailForSDItem:(VivaldiSpeedDialItem*)item;
 /// Removes the thumbnail from legacy directory. Should be triggered

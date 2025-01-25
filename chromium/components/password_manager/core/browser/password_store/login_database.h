@@ -14,7 +14,9 @@
 #include "base/functional/callback_helpers.h"
 #include "base/pickle.h"
 #include "build/build_config.h"
+#include "components/os_crypt/async/common/encryptor.h"
 #include "components/password_manager/core/browser/password_form.h"
+#include "components/password_manager/core/browser/password_store/encrypt_decrypt_intrface.h"
 #include "components/password_manager/core/browser/password_store/insecure_credentials_table.h"
 #include "components/password_manager/core/browser/password_store/password_notes_table.h"
 #include "components/password_manager/core/browser/password_store/password_store.h"
@@ -46,7 +48,7 @@ extern const int kCompatibleVersionNumber;
 // Interface to the database storage of login information, intended as a helper
 // for PasswordStore on platforms that need internal storage of some or all of
 // the login information.
-class LoginDatabase {
+class LoginDatabase : public EncryptDecryptInterface {
  public:
   struct LoginDatabaseEmptinessState {
     // True if the login database has 0 passwords stored.
@@ -63,6 +65,8 @@ class LoginDatabase {
 
   using IsEmptyCallback =
       base::RepeatingCallback<void(LoginDatabaseEmptinessState)>;
+  using ClearingUndecryptablePasswordsCallback =
+      base::RepeatingCallback<void(bool)>;
 
   LoginDatabase(const base::FilePath& db_path, IsAccountStore is_account_store);
   LoginDatabase(const LoginDatabase&) = delete;
@@ -79,7 +83,7 @@ class LoginDatabase {
 
   // Actually creates/opens the database. If false is returned, no other method
   // should be called.
-  virtual bool Init();
+  virtual bool Init(std::unique_ptr<os_crypt_async::Encryptor> encryptor);
 
   // Reports metrics regarding inaccessible passwords and bubble usages to UMA.
   void ReportMetrics();
@@ -195,6 +199,22 @@ class LoginDatabase {
   // adding/removing entries, regardless of success.
   void SetIsEmptyCb(IsEmptyCallback is_empty_cb);
 
+  // `clearing_undecryptable_passwords`is called to signal whether user
+  // interacted with the kClearUndecryptablePasswords experiment. It is needed
+  // to ensure that experiment groups stay balaced. This method will be deleted
+  // after a successful rollout.
+  void SetClearingUndecryptablePasswordsCb(
+      ClearingUndecryptablePasswordsCallback clearing_undecryptable_passwords);
+
+  void SetIsDeletingUndecryptableLoginsDisabledByPolicy(bool is_disabled) {
+    is_deleting_undecryptable_logins_disabled_by_policy_ = is_disabled;
+  }
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+  void SetIsUserDataDirPolicySet(bool is_set) {
+    is_user_data_dir_policy_set_ = is_set;
+  }
+#endif
+
   StatisticsTable& stats_table() { return stats_table_; }
   InsecureCredentialsTable& insecure_credentials_table() {
     return insecure_credentials_table_;
@@ -205,37 +225,27 @@ class LoginDatabase {
     return password_sync_metadata_store_;
   }
 
-  // Result values for encryption/decryption actions.
-  enum EncryptionResult {
-    // Success.
-    ENCRYPTION_RESULT_SUCCESS,
-    // Failure for a specific item (e.g., the encrypted value was manually
-    // moved from another machine, and can't be decrypted on this machine).
-    // This is presumed to be a permanent failure.
-    ENCRYPTION_RESULT_ITEM_FAILURE,
-    // A service-level failure (e.g., on a platform using a keyring, the keyring
-    // is temporarily unavailable).
-    // This is presumed to be a temporary failure.
-    ENCRYPTION_RESULT_SERVICE_FAILURE,
-  };
+  // After `were_undecryptable_logins_deleted_` is used by the
+  // `PasswordSyncBridge` it should be cleared to avoid unnecessary sync calls.
+  void clear_were_undecryptable_logins_deleted() {
+    were_undecryptable_logins_deleted_ = false;
+  }
 
-  // Encrypts plain_text, setting the value of cipher_text and returning true if
-  // successful, or returning false and leaving cipher_text unchanged if
-  // encryption fails (e.g., if the underlying OS encryption system is
-  // temporarily unavailable).
-  [[nodiscard]] static EncryptionResult EncryptedString(
-      const std::u16string& plain_text,
-      std::string* cipher_text);
-
-  // Decrypts cipher_text, setting the value of plain_text and returning true if
-  // successful, or returning false and leaving plain_text unchanged if
-  // decryption fails (e.g., if the underlying OS encryption system is
-  // temporarily unavailable).
-  [[nodiscard]] static EncryptionResult DecryptedString(
-      const std::string& cipher_text,
-      std::u16string* plain_text);
+  // Returns whether there were undecryptable logins present in the login db and
+  // if they were successfully removed.
+  std::optional<bool> were_undecryptable_logins_deleted() const {
+    return were_undecryptable_logins_deleted_;
+  }
 
  private:
+  // EncryptDecryptInterface implementation.
+  [[nodiscard]] EncryptionResult EncryptedString(
+      const std::u16string& plain_text,
+      std::string* cipher_text) const override;
+  [[nodiscard]] EncryptionResult DecryptedString(
+      const std::string& cipher_text,
+      std::u16string* plain_text) const override;
+
   struct PrimaryKeyAndPassword;
   class SyncMetadataStore : public PasswordStoreSync::MetadataStore {
    public:
@@ -372,6 +382,9 @@ class LoginDatabase {
   const base::FilePath db_path_;
   const IsAccountStore is_account_store_;
   IsEmptyCallback is_empty_cb_ = base::NullCallback();
+  // TODO(b/40286735): Remove after this feature is launched.
+  ClearingUndecryptablePasswordsCallback clearing_undecryptable_passwords_ =
+      base::NullCallback();
 
   mutable sql::Database db_;
   sql::MetaTable meta_table_;
@@ -379,6 +392,11 @@ class LoginDatabase {
   InsecureCredentialsTable insecure_credentials_table_;
   PasswordNotesTable password_notes_table_;
   SyncMetadataStore password_sync_metadata_store_{&db_};
+  std::unique_ptr<os_crypt_async::Encryptor> encryptor_;
+
+  std::optional<bool> were_undecryptable_logins_deleted_;
+  bool is_user_data_dir_policy_set_ = false;
+  bool is_deleting_undecryptable_logins_disabled_by_policy_ = false;
 
   // These cached strings are used to build SQL statements.
   std::string add_statement_;

@@ -31,6 +31,11 @@
 #include "sandbox/policy/sandbox.h"
 #endif
 
+// Vivaldi: Flatpak support related.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#include "sandbox/policy/linux/sandbox_linux.h"
+#endif
+
 namespace {
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -58,12 +63,18 @@ static void SetSandboxStatusData(content::WebUIDataSource* source) {
 
   // Require either the setuid or namespace sandbox for our first-layer sandbox.
   bool good_layer1 = (status & sandbox::policy::SandboxLinux::kSUID ||
+                      // Vivaldi: Flatpak support.
+                      status & sandbox::policy::SandboxLinux::kFlatpak ||
                       status & sandbox::policy::SandboxLinux::kUserNS) &&
                      status & sandbox::policy::SandboxLinux::kPIDNS &&
                      status & sandbox::policy::SandboxLinux::kNetNS;
   // A second-layer sandbox is also required to be adequately sandboxed.
   bool good_layer2 = status & sandbox::policy::SandboxLinux::kSeccompBPF;
   source->AddBoolean("sandboxGood", good_layer1 && good_layer2);
+
+  // Vivaldi: Flatpak support:
+  source->AddBoolean("flatpak",
+                     status & sandbox::policy::SandboxLinux::kFlatpak);
 }
 #endif
 

@@ -108,7 +108,6 @@ class ConsoleCapturingChromeClient : public EmptyChromeClient {
 
 TEST(SpeculationRulesHeaderTest, NoMetricsWithoutHeader) {
   test::TaskEnvironment task_environment;
-  ScopedSpeculationRulesFetchFromHeaderForTest enable_fetch_from_header(true);
   base::HistogramTester histogram_tester;
   auto* chrome_client = MakeGarbageCollected<ConsoleCapturingChromeClient>();
   DummyPageHolder page_holder(/*initial_view_size=*/{}, chrome_client);
@@ -130,7 +129,6 @@ TEST(SpeculationRulesHeaderTest, NoMetricsWithoutHeader) {
 
 TEST(SpeculationRulesHeaderTest, UnparseableHeader) {
   test::TaskEnvironment task_environment;
-  ScopedSpeculationRulesFetchFromHeaderForTest enable_fetch_from_header(true);
   base::HistogramTester histogram_tester;
   auto* chrome_client = MakeGarbageCollected<ConsoleCapturingChromeClient>();
   DummyPageHolder page_holder(/*initial_view_size=*/{}, chrome_client);
@@ -156,7 +154,6 @@ TEST(SpeculationRulesHeaderTest, UnparseableHeader) {
 
 TEST(SpeculationRulesHeaderTest, EmptyHeader) {
   test::TaskEnvironment task_environment;
-  ScopedSpeculationRulesFetchFromHeaderForTest enable_fetch_from_header(true);
   base::HistogramTester histogram_tester;
   DummyPageHolder page_holder;
 
@@ -178,7 +175,6 @@ TEST(SpeculationRulesHeaderTest, EmptyHeader) {
 
 TEST(SpeculationRulesHeaderTest, InvalidItem) {
   test::TaskEnvironment task_environment;
-  ScopedSpeculationRulesFetchFromHeaderForTest enable_fetch_from_header(true);
   base::HistogramTester histogram_tester;
   auto* chrome_client = MakeGarbageCollected<ConsoleCapturingChromeClient>();
   DummyPageHolder page_holder(/*initial_view_size=*/{}, chrome_client);
@@ -206,7 +202,6 @@ TEST(SpeculationRulesHeaderTest, InvalidItem) {
 
 TEST(SpeculationRulesHeaderTest, ValidURL) {
   test::TaskEnvironment task_environment;
-  ScopedSpeculationRulesFetchFromHeaderForTest enable_fetch_from_header(true);
   base::HistogramTester histogram_tester;
   auto* chrome_client = MakeGarbageCollected<ConsoleCapturingChromeClient>();
   DummyPageHolder page_holder(/*initial_view_size=*/{}, chrome_client);
@@ -236,9 +231,6 @@ TEST(SpeculationRulesHeaderTest, ValidURL) {
 
 TEST(SpeculationRulesHeaderTest, InvalidNvsHintError) {
   test::TaskEnvironment task_environment;
-  ScopedSpeculationRulesFetchFromHeaderForTest enable_fetch_from_header(true);
-  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
-      true};
   base::HistogramTester histogram_tester;
   auto* chrome_client = MakeGarbageCollected<ConsoleCapturingChromeClient>();
   DummyPageHolder page_holder(/*initial_view_size=*/{}, chrome_client);
@@ -272,9 +264,6 @@ TEST(SpeculationRulesHeaderTest, InvalidNvsHintError) {
 
 TEST(SpeculationRulesHeaderTest, InvalidNvsHintWarning) {
   test::TaskEnvironment task_environment;
-  ScopedSpeculationRulesFetchFromHeaderForTest enable_fetch_from_header(true);
-  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
-      true};
   base::HistogramTester histogram_tester;
   auto* chrome_client = MakeGarbageCollected<ConsoleCapturingChromeClient>();
   DummyPageHolder page_holder(/*initial_view_size=*/{}, chrome_client);
@@ -307,7 +296,6 @@ TEST(SpeculationRulesHeaderTest, InvalidNvsHintWarning) {
 
 TEST(SpeculationRulesHeaderTest, UsesResponseURLAsBaseURL) {
   test::TaskEnvironment task_environment;
-  ScopedSpeculationRulesFetchFromHeaderForTest enable_fetch_from_header(true);
   base::HistogramTester histogram_tester;
   auto* chrome_client = MakeGarbageCollected<ConsoleCapturingChromeClient>();
   DummyPageHolder page_holder(/*initial_view_size=*/{}, chrome_client);
@@ -346,7 +334,6 @@ TEST(SpeculationRulesHeaderTest, UsesResponseURLAsBaseURL) {
 
 TEST(SpeculationRulesHeaderTest, InvalidStatusCode) {
   test::TaskEnvironment task_environment;
-  ScopedSpeculationRulesFetchFromHeaderForTest enable_fetch_from_header(true);
   base::HistogramTester histogram_tester;
   auto* chrome_client = MakeGarbageCollected<ConsoleCapturingChromeClient>();
   DummyPageHolder page_holder(/*initial_view_size=*/{}, chrome_client);
@@ -381,7 +368,6 @@ TEST(SpeculationRulesHeaderTest, InvalidStatusCode) {
 
 TEST(SpeculationRulesHeaderTest, NetError) {
   test::TaskEnvironment task_environment;
-  ScopedSpeculationRulesFetchFromHeaderForTest enable_fetch_from_header(true);
   base::HistogramTester histogram_tester;
   auto* chrome_client = MakeGarbageCollected<ConsoleCapturingChromeClient>();
   DummyPageHolder page_holder(/*initial_view_size=*/{}, chrome_client);

@@ -76,6 +76,10 @@
                       parent:(VivaldiSpeedDialItem*)parent
                     fromView:(UIView*)view;
 
+/// Trigerred when empty area of the speed dial view is tapped.
+/// i.e. not an item or folder.
+- (void)didTapOnCollectionViewEmptyArea;
+
 @end
 
 #endif  // IOS_UI_NTP_VIVALDI_SPEED_DIAL_CONTAINER_DELEGATE_H_

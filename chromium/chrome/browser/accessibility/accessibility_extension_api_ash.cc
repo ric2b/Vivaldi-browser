@@ -100,9 +100,41 @@ ash::DictationBubbleHintType ConvertDictationHintType(
     case accessibility_private::DictationBubbleHintType::kCopy:
       return ash::DictationBubbleHintType::kCopy;
     case accessibility_private::DictationBubbleHintType::kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return ash::DictationBubbleHintType::kTrySaying;
   }
+}
+
+void DispatchAccessibilityFocusChangedEvent(
+    extensions::events::HistogramValue histogram_value,
+    extensions::api::accessibility_private::ScreenRect bounds) {
+  std::unique_ptr<extensions::Event> event;
+
+  if (histogram_value ==
+      extensions::events::ACCESSIBILITY_PRIVATE_ON_CHROMEVOX_FOCUS_CHANGED) {
+    auto event_args =
+        extensions::api::accessibility_private::OnChromeVoxFocusChanged::Create(
+            bounds);
+    event = std::make_unique<extensions::Event>(
+        histogram_value,
+        extensions::api::accessibility_private::OnChromeVoxFocusChanged::
+            kEventName,
+        std::move(event_args));
+  } else if (histogram_value ==
+             extensions::events::
+                 ACCESSIBILITY_PRIVATE_ON_SELECT_TO_SPEAK_FOCUS_CHANGED) {
+    auto event_args = extensions::api::accessibility_private::
+        OnSelectToSpeakFocusChanged::Create(bounds);
+    event = std::make_unique<extensions::Event>(
+        histogram_value,
+        extensions::api::accessibility_private::OnSelectToSpeakFocusChanged::
+            kEventName,
+        std::move(event_args));
+  }
+
+  extensions::EventRouter::Get(AccessibilityManager::Get()->profile())
+      ->DispatchEventWithLazyListener(
+          extension_misc::kAccessibilityCommonExtensionId, std::move(event));
 }
 
 }  // namespace
@@ -432,7 +464,7 @@ AccessibilityPrivatePerformAcceleratorActionFunction::Run() {
       accelerator_action = ash::AcceleratorAction::kFocusNextPane;
       break;
     case accessibility_private::AcceleratorAction::kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return RespondNow(Error("Invalid accelerator action."));
   }
 
@@ -469,8 +501,8 @@ AccessibilityPrivateSendSyntheticKeyEventFunction::Run() {
   ui::KeyEvent synthetic_key_event(
       key_data->type ==
               accessibility_private::SyntheticKeyboardEventType::kKeyup
-          ? ui::ET_KEY_RELEASED
-          : ui::ET_KEY_PRESSED,
+          ? ui::EventType::kKeyReleased
+          : ui::EventType::kKeyPressed,
       keyboard_code, ui::UsLayoutKeyboardCodeToDomCode(keyboard_code),
       modifiers);
 
@@ -500,32 +532,32 @@ AccessibilityPrivateSendSyntheticMouseEventFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
   accessibility_private::SyntheticMouseEvent* mouse_data = &params->mouse_event;
 
-  ui::EventType type = ui::ET_UNKNOWN;
+  ui::EventType type = ui::EventType::kUnknown;
   switch (mouse_data->type) {
     case accessibility_private::SyntheticMouseEventType::kPress:
-      type = ui::ET_MOUSE_PRESSED;
+      type = ui::EventType::kMousePressed;
       break;
     case accessibility_private::SyntheticMouseEventType::kRelease:
-      type = ui::ET_MOUSE_RELEASED;
+      type = ui::EventType::kMouseReleased;
       break;
     case accessibility_private::SyntheticMouseEventType::kDrag:
-      type = ui::ET_MOUSE_DRAGGED;
+      type = ui::EventType::kMouseDragged;
       break;
     case accessibility_private::SyntheticMouseEventType::kMove:
-      type = ui::ET_MOUSE_MOVED;
+      type = ui::EventType::kMouseMoved;
       break;
     case accessibility_private::SyntheticMouseEventType::kEnter:
-      type = ui::ET_MOUSE_ENTERED;
+      type = ui::EventType::kMouseEntered;
       break;
     case accessibility_private::SyntheticMouseEventType::kExit:
-      type = ui::ET_MOUSE_EXITED;
+      type = ui::EventType::kMouseExited;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   int flags = 0;
-  if (type != ui::ET_MOUSE_MOVED) {
+  if (type != ui::EventType::kMouseMoved) {
     switch (mouse_data->mouse_button) {
       case accessibility_private::SyntheticMouseEventButton::kLeft:
         flags |= ui::EF_LEFT_MOUSE_BUTTON;
@@ -638,7 +670,7 @@ AccessibilityPrivateSetFocusRingsFunction::Run() {
         focus_ring->type = ash::FocusRingType::GLOW;
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
 
     if (focus_ring_info.stacking_order !=
@@ -655,7 +687,7 @@ AccessibilityPrivateSetFocusRingsFunction::Run() {
               ash::FocusRingStackingOrder::BELOW_ACCESSIBILITY_BUBBLES;
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
       }
     }
 
@@ -703,35 +735,62 @@ AccessibilityPrivateSetHighlightsFunction::Run() {
   return RespondNow(NoArguments());
 }
 
+// TODO(b/347953090): Investigate a generic SetAccessibilityFocusFunction to
+// share code for extensibility.
+ExtensionFunction::ResponseAction
+AccessibilityPrivateSetChromeVoxFocusFunction::Run() {
+  std::optional<accessibility_private::SetChromeVoxFocus::Params> params(
+      accessibility_private::SetChromeVoxFocus::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  if (!features::IsAccessibilityMagnifierFollowsChromeVoxEnabled()) {
+    return RespondNow(NoArguments());
+  }
+
+  if (!ash::AccessibilityController::Get()->fullscreen_magnifier().enabled() &&
+      !ash::AccessibilityController::Get()->docked_magnifier().enabled()) {
+    return RespondNow(NoArguments());
+  }
+
+  // Ship this event to AccessibilityCommon for docked or fullscreen
+  // magnifier.
+  extensions::api::accessibility_private::ScreenRect bounds;
+  bounds.left = params->bounds.left;
+  bounds.top = params->bounds.top;
+  bounds.width = params->bounds.width;
+  bounds.height = params->bounds.height;
+  DispatchAccessibilityFocusChangedEvent(
+      extensions::events::ACCESSIBILITY_PRIVATE_ON_CHROMEVOX_FOCUS_CHANGED,
+      std::move(bounds));
+
+  return RespondNow(NoArguments());
+}
+
 ExtensionFunction::ResponseAction
 AccessibilityPrivateSetSelectToSpeakFocusFunction::Run() {
   std::optional<accessibility_private::SetSelectToSpeakFocus::Params> params(
       accessibility_private::SetSelectToSpeakFocus::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  if (features::IsAccessibilityMagnifierFollowsStsEnabled() &&
-      (ash::AccessibilityController::Get()->fullscreen_magnifier().enabled() ||
-       ash::AccessibilityController::Get()->docked_magnifier().enabled())) {
-    // Ship this event to AccessibilityCommon for docked or fullscreen
-    // magnifier.
-    auto bounds =
-        std::make_unique<extensions::api::accessibility_private::ScreenRect>();
-    bounds->left = params->bounds.left;
-    bounds->top = params->bounds.top;
-    bounds->width = params->bounds.width;
-    bounds->height = params->bounds.height;
-    auto event_args = extensions::api::accessibility_private::
-        OnSelectToSpeakFocusChanged::Create(params->bounds);
-    auto event = std::make_unique<extensions::Event>(
-        extensions::events::
-            ACCESSIBILITY_PRIVATE_ON_SELECT_TO_SPEAK_FOCUS_CHANGED,
-        extensions::api::accessibility_private::OnSelectToSpeakFocusChanged::
-            kEventName,
-        std::move(event_args));
-    extensions::EventRouter::Get(AccessibilityManager::Get()->profile())
-        ->DispatchEventWithLazyListener(
-            extension_misc::kAccessibilityCommonExtensionId, std::move(event));
+  if (!features::IsAccessibilityMagnifierFollowsStsEnabled()) {
+    return RespondNow(NoArguments());
   }
+
+  if (!ash::AccessibilityController::Get()->fullscreen_magnifier().enabled() &&
+      !ash::AccessibilityController::Get()->docked_magnifier().enabled()) {
+    return RespondNow(NoArguments());
+  }
+
+  // Ship this event to AccessibilityCommon for docked or fullscreen
+  // magnifier.
+  extensions::api::accessibility_private::ScreenRect bounds;
+  bounds.left = params->bounds.left;
+  bounds.top = params->bounds.top;
+  bounds.width = params->bounds.width;
+  bounds.height = params->bounds.height;
+  DispatchAccessibilityFocusChangedEvent(
+      extensions::events::ACCESSIBILITY_PRIVATE_ON_CHROMEVOX_FOCUS_CHANGED,
+      std::move(bounds));
 
   return RespondNow(NoArguments());
 }
@@ -891,11 +950,12 @@ AccessibilityPrivateShowConfirmationDialogFunction::Run() {
 
   std::u16string title = base::UTF8ToUTF16(params->title);
   std::u16string description = base::UTF8ToUTF16(params->description);
+  std::u16string confirm = l10n_util::GetStringUTF16(IDS_APP_CONTINUE);
   std::u16string cancel_name =
       params->cancel_name ? base::UTF8ToUTF16(params->cancel_name.value())
                           : l10n_util::GetStringUTF16(IDS_APP_CANCEL);
   ash::AccessibilityController::Get()->ShowConfirmationDialog(
-      title, description, cancel_name,
+      title, description, confirm, cancel_name,
       base::BindOnce(
           &AccessibilityPrivateShowConfirmationDialogFunction::OnDialogResult,
           this, /* confirmed */ true),
@@ -931,7 +991,7 @@ AccessibilityPrivateToggleDictationFunction::Run() {
              extension_misc::kAccessibilityCommonExtensionId) {
     source = ash::DictationToggleSource::kAccessibilityCommon;
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   ash::AccessibilityController::Get()->ToggleDictationFromSource(source);
@@ -963,7 +1023,7 @@ AccessibilityPrivateUpdateDictationBubbleFunction::Run() {
       icon = ash::DictationBubbleIconType::kMacroFail;
       break;
     case accessibility_private::DictationBubbleIconType::kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 

@@ -331,7 +331,7 @@ void RestoreBrowserControlsState(RenderFrameHostImpl* cached_rfh) {
     cached_rfh->GetPage().UpdateBrowserControlsState(
         cc::BrowserControlsState::kBoth, cc::BrowserControlsState::kHidden,
         // Do not animate as we want this to happen "instantaneously"
-        false);
+        false, std::nullopt);
   }
 }
 
@@ -966,16 +966,6 @@ void BackForwardCacheImpl::NotRestoredReasonBuilder::
     PopulateStickyReasonsForDocument(
         BackForwardCacheCanStoreDocumentResult& result,
         RenderFrameHostImpl* rfh) {
-  if (!blink::features::IsAllowBFCacheWhenClosedMediaStreamTrackEnabled()) {
-    // `kWasGrantedMediaAccess` is no longer a BFCache blocker when the flag is
-    // enabled. With https://crbug.com/1502395, frames with only "live" Media
-    // Stream Track will be blocked from BFCache.
-    if (rfh->was_granted_media_access()) {
-      result.No(
-          BackForwardCacheMetrics::NotRestoredReason::kWasGrantedMediaAccess);
-    }
-  }
-
   if (rfh->IsBackForwardCacheDisabled() && !ShouldIgnoreBlocklists()) {
     result.NoDueToDisableForRenderFrameHostCalled(
         rfh->back_forward_cache_disabled_reasons());
@@ -1320,10 +1310,13 @@ std::unique_ptr<BackForwardCacheImpl::Entry> BackForwardCacheImpl::RestoreEntry(
 }
 
 void BackForwardCacheImpl::Flush() {
+  Flush(NotRestoredReason::kCacheFlushed);
+}
+
+void BackForwardCacheImpl::Flush(NotRestoredReason reason) {
   TRACE_EVENT0("navigation", "BackForwardCache::Flush");
   for (std::unique_ptr<Entry>& entry : entries_) {
-    entry->render_frame_host()->EvictFromBackForwardCacheWithReason(
-        BackForwardCacheMetrics::NotRestoredReason::kCacheFlushed);
+    entry->render_frame_host()->EvictFromBackForwardCacheWithReason(reason);
   }
 }
 

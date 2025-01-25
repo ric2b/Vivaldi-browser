@@ -8,6 +8,7 @@
 
 #include "compiler/translator/tree_ops/RewriteStructSamplers.h"
 
+#include "common/hash_containers.h"
 #include "compiler/translator/ImmutableStringBuilder.h"
 #include "compiler/translator/SymbolTable.h"
 #include "compiler/translator/tree_util/IntermNode_util.h"
@@ -624,7 +625,7 @@ class RewriteStructSamplersTraverser final : public TIntermTraverser
         // TODO: Use a temp name instead of generating a name as currently done.  There is no
         // guarantee that these generated names cannot clash.  Create a mapping from the previous
         // name to the name assigned to the temp variable so ShaderVariable::mappedName can be
-        // updated post-transformation.  http://anglebug.com/4301
+        // updated post-transformation.  http://anglebug.com/42262930
         ASSERT(mExtractedSamplers.find(newName) == mExtractedSamplers.end());
         mExtractedSamplers[newName] = newVariable;
     }

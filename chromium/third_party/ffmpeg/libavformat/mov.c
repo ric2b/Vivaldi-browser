@@ -84,6 +84,7 @@ typedef struct MOVParseTableEntry {
 
 static int mov_read_default(MOVContext *c, AVIOContext *pb, MOVAtom atom);
 static int mov_read_mfra(MOVContext *c, AVIOContext *f);
+static void mov_free_stream_context(AVFormatContext *s, AVStream *st);
 static int64_t add_ctts_entry(MOVCtts** ctts_data, unsigned int* ctts_count, unsigned int* allocated_size,
                               int count, int duration);
 
@@ -7942,8 +7943,10 @@ cleanup:
 static int mov_read_SA3D(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     AVStream *st;
-    int i, version, type;
+    AVChannelLayout ch_layout = { 0 };
+    int ret, i, version, type;
     int ambisonic_order, channel_order, normalization, channel_count;
+    int ambi_channels, non_diegetic_channels;
 
     if (c->fc->nb_streams < 1)
         return 0;
@@ -7962,11 +7965,12 @@ static int mov_read_SA3D(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     }
 
     type = avio_r8(pb);
-    if (type) {
+    if (type & 0x7f) {
         av_log(c->fc, AV_LOG_WARNING,
-               "Unsupported ambisonic type %d\n", type);
+               "Unsupported ambisonic type %d\n", type & 0x7f);
         return 0;
     }
+    non_diegetic_channels = (type >> 7) * 2; // head_locked_stereo
 
     ambisonic_order = avio_rb32(pb);
 
@@ -7985,24 +7989,43 @@ static int mov_read_SA3D(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     }
 
     channel_count = avio_rb32(pb);
-    if (ambisonic_order < 0 || channel_count != (ambisonic_order + 1LL) * (ambisonic_order + 1LL)) {
+    if (ambisonic_order < 0 || ambisonic_order > 31 ||
+        channel_count != ((ambisonic_order + 1LL) * (ambisonic_order + 1LL) +
+                           non_diegetic_channels)) {
         av_log(c->fc, AV_LOG_ERROR,
                "Invalid number of channels (%d / %d)\n",
                channel_count, ambisonic_order);
         return 0;
     }
+    ambi_channels = channel_count - non_diegetic_channels;
+
+    ret = av_channel_layout_custom_init(&ch_layout, channel_count);
+    if (ret < 0)
+        return 0;
 
     for (i = 0; i < channel_count; i++) {
-        if (i != avio_rb32(pb)) {
-            av_log(c->fc, AV_LOG_WARNING,
-                   "Ambisonic channel reordering is not supported\n");
+        unsigned channel = avio_rb32(pb);
+
+        if (channel >= channel_count) {
+            av_log(c->fc, AV_LOG_ERROR, "Invalid channel index (%d / %d)\n",
+                   channel, ambisonic_order);
+            av_channel_layout_uninit(&ch_layout);
             return 0;
         }
+        if (channel >= ambi_channels)
+            ch_layout.u.map[i].id = channel - ambi_channels;
+        else
+            ch_layout.u.map[i].id = AV_CHAN_AMBISONIC_BASE + channel;
+    }
+
+    ret = av_channel_layout_retype(&ch_layout, 0, AV_CHANNEL_LAYOUT_RETYPE_FLAG_CANONICAL);
+    if (ret < 0) {
+        av_channel_layout_uninit(&ch_layout);
+        return 0;
     }
 
     av_channel_layout_uninit(&st->codecpar->ch_layout);
-    st->codecpar->ch_layout.order = AV_CHANNEL_ORDER_AMBISONIC;
-    st->codecpar->ch_layout.nb_channels = channel_count;
+    st->codecpar->ch_layout = ch_layout;
 
     return 0;
 }
@@ -8154,8 +8177,9 @@ static int mov_read_infe(MOVContext *c, AVIOContext *pb, MOVAtom atom, int idx)
     size -= 4;
 
     if (version < 2) {
-        av_log(c->fc, AV_LOG_ERROR, "infe: version < 2 not supported\n");
-        return AVERROR_PATCHWELCOME;
+        avpriv_report_missing_feature(c->fc, "infe version < 2");
+        avio_skip(pb, size);
+        return 1;
     }
 
     item_id = version > 2 ? avio_rb32(pb) : avio_rb16(pb);
@@ -8198,7 +8222,7 @@ static int mov_read_iinf(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     HEIFItem *heif_item;
     int entry_count;
-    int version, ret;
+    int version, got_stream = 0, ret, i;
 
     if (c->found_iinf) {
         av_log(c->fc, AV_LOG_WARNING, "Duplicate iinf box found\n");
@@ -8218,18 +8242,33 @@ static int mov_read_iinf(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                sizeof(*c->heif_item) * (entry_count - c->nb_heif_item));
     c->nb_heif_item = FFMAX(c->nb_heif_item, entry_count);
 
-    for (int i = 0; i < entry_count; i++) {
+    for (i = 0; i < entry_count; i++) {
         MOVAtom infe;
 
         infe.size = avio_rb32(pb) - 8;
         infe.type = avio_rl32(pb);
         ret = mov_read_infe(c, pb, infe, i);
         if (ret < 0)
-            return ret;
+            goto fail;
+        if (!ret)
+            got_stream = 1;
     }
 
-    c->found_iinf = 1;
+    c->found_iinf = got_stream;
     return 0;
+fail:
+    for (; i >= 0; i--) {
+        HEIFItem *item = &c->heif_item[i];
+
+        av_freep(&item->name);
+        if (!item->st)
+            continue;
+
+        mov_free_stream_context(c->fc, item->st);
+        ff_remove_stream(c->fc, item->st);
+        item->st = NULL;
+    }
+    return ret;
 }
 
 static int mov_read_iref_dimg(MOVContext *c, AVIOContext *pb, int version)
@@ -9455,7 +9494,8 @@ static int mov_parse_tiles(AVFormatContext *s)
                 break;
             }
 
-            if (k == grid->nb_tiles) {
+            if (k == mov->nb_heif_item) {
+                av_assert0(loop);
                 av_log(s, AV_LOG_WARNING, "HEIF item id %d referenced by grid id %d doesn't "
                                           "exist\n",
                        tile_id, grid->item->item_id);
@@ -9525,14 +9565,15 @@ static int mov_read_header(AVFormatContext *s)
             av_log(s, AV_LOG_ERROR, "error reading header\n");
             return err;
         }
-    } while ((pb->seekable & AVIO_SEEKABLE_NORMAL) && !mov->found_moov && !mov->found_iloc && !mov->moov_retry++);
-    if (!mov->found_moov && !mov->found_iloc) {
+    } while ((pb->seekable & AVIO_SEEKABLE_NORMAL) &&
+             !mov->found_moov && (!mov->found_iloc || !mov->found_iinf) && !mov->moov_retry++);
+    if (!mov->found_moov && !mov->found_iloc && !mov->found_iinf) {
         av_log(s, AV_LOG_ERROR, "moov atom not found\n");
         return AVERROR_INVALIDDATA;
     }
     av_log(mov->fc, AV_LOG_TRACE, "on_parse_exit_offset=%"PRId64"\n", avio_tell(pb));
 
-    if (mov->found_iloc) {
+    if (mov->found_iloc && mov->found_iinf) {
         for (i = 0; i < mov->nb_heif_item; i++) {
             HEIFItem *item = &mov->heif_item[i];
             MOVStreamContext *sc;
@@ -9574,6 +9615,10 @@ static int mov_read_header(AVFormatContext *s)
                 return err;
         }
     }
+    // prevent iloc and iinf boxes from being parsed while reading packets.
+    // this is needed because an iinf box may have been parsed but ignored
+    // for having old infe boxes which create no streams.
+    mov->found_iloc = mov->found_iinf = 1;
 
     if (pb->seekable & AVIO_SEEKABLE_NORMAL) {
         if (mov->nb_chapter_tracks > 0 && !mov->ignore_chapters)
@@ -9639,25 +9684,7 @@ static int mov_read_header(AVFormatContext *s)
         }
     }
 
-    if (mov->trex_data) {
-        for (i = 0; i < s->nb_streams; i++) {
-            AVStream *st = s->streams[i];
-            MOVStreamContext *sc = st->priv_data;
-            if (st->duration > 0) {
-                /* Akin to sc->data_size * 8 * sc->time_scale / st->duration but accounting for overflows. */
-                st->codecpar->bit_rate = av_rescale(sc->data_size, ((int64_t) sc->time_scale) * 8, st->duration);
-                if (st->codecpar->bit_rate == INT64_MIN) {
-                    av_log(s, AV_LOG_WARNING, "Overflow during bit rate calculation %"PRId64" * 8 * %d\n",
-                           sc->data_size, sc->time_scale);
-                    st->codecpar->bit_rate = 0;
-                    if (s->error_recognition & AV_EF_EXPLODE)
-                        return AVERROR_INVALIDDATA;
-                }
-            }
-        }
-    }
-
-    if (mov->use_mfra_for > 0) {
+    if (mov->trex_data || mov->use_mfra_for > 0) {
         for (i = 0; i < s->nb_streams; i++) {
             AVStream *st = s->streams[i];
             MOVStreamContext *sc = st->priv_data;
@@ -10195,7 +10222,7 @@ static int64_t mov_get_skip_samples(AVStream *st, int sample)
     /* compute skip samples according to stream start_pad, seek ts and first ts */
     off = av_rescale_q(av_sat_sub64(ts, first_ts), st->time_base,
                        (AVRational){1, st->codecpar->sample_rate});
-    return FFMAX(sc->start_pad - off, 0);
+    return FFMAX(av_sat_sub64(sc->start_pad, off), 0);
 }
 
 static int mov_read_seek(AVFormatContext *s, int stream_index, int64_t sample_time, int flags)

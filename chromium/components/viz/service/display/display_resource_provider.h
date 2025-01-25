@@ -14,9 +14,10 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
-#include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
+#include "base/memory/stack_allocated.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_id.h"
@@ -87,9 +88,6 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
   const gfx::Size GetResourceBackedSize(ResourceId id) const;
 
   bool IsResourceSoftwareBacked(ResourceId id) const;
-  // Return the BufferFormat of the underlying buffer that can be used for
-  // scanout.
-  gfx::BufferFormat GetBufferFormat(ResourceId id) const;
   // Return the SharedImageFormat of the underlying buffer that can be used for
   // scanout.
   SharedImageFormat GetSharedImageFormat(ResourceId id) const;
@@ -154,14 +152,18 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
    private:
     void Reset();
 
-    raw_ptr<DisplayResourceProvider> resource_provider_ = nullptr;
+    // RAW_PTR_EXCLUSION: Performance reasons (based on analysis of MotionMark).
+    RAW_PTR_EXCLUSION DisplayResourceProvider* resource_provider_ = nullptr;
     ResourceId resource_id_ = kInvalidResourceId;
-    raw_ptr<ChildResource> resource_ = nullptr;
+    // RAW_PTR_EXCLUSION: Performance reasons (based on analysis of MotionMark).
+    RAW_PTR_EXCLUSION ChildResource* resource_ = nullptr;
   };
 
   // All resources that are returned to children while an instance of this
   // class exists will be stored and returned when the instance is destroyed.
   class VIZ_SERVICE_EXPORT ScopedBatchReturnResources {
+    STACK_ALLOCATED();
+
    public:
     explicit ScopedBatchReturnResources(
         DisplayResourceProvider* resource_provider,
@@ -169,7 +171,7 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
     ~ScopedBatchReturnResources();
 
    private:
-    const raw_ptr<DisplayResourceProvider> resource_provider_;
+    DisplayResourceProvider* const resource_provider_ = nullptr;
     const bool was_access_to_gpu_thread_allowed_;
   };
 
@@ -354,7 +356,7 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
   void SetBatchReturnResources(bool aggregate);
   void TryFlushBatchedResources();
 
-  THREAD_CHECKER(thread_checker_);
+  SEQUENCE_CHECKER(sequence_checker_);
   const Mode mode_;
 
   ResourceMap resources_;

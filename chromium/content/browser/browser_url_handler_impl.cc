@@ -2,10 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "content/browser/browser_url_handler_impl.h"
 
 #include <stddef.h>
 
+#include "base/not_fatal_until.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "content/browser/renderer_host/debug_urls.h"
@@ -180,7 +186,7 @@ bool BrowserURLHandlerImpl::ReverseURLRewrite(
 void BrowserURLHandlerImpl::RemoveHandlerForTesting(URLHandler handler) {
   const auto it =
       base::ranges::find(url_handlers_, handler, &HandlerPair::first);
-  DCHECK(url_handlers_.end() != it);
+  CHECK(url_handlers_.end() != it, base::NotFatalUntil::M130);
   url_handlers_.erase(it);
 }
 

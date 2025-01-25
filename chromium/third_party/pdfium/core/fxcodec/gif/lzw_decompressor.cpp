@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fxcodec/gif/lzw_decompressor.h"
 
 #include <algorithm>
@@ -16,7 +11,9 @@
 #include <type_traits>
 #include <utility>
 
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/ptr_util.h"
 #include "core/fxcrt/stl_util.h"
 
@@ -43,48 +40,47 @@ LZWDecompressor::LZWDecompressor(uint8_t color_exp, uint8_t code_exp)
 
 LZWDecompressor::~LZWDecompressor() = default;
 
-void LZWDecompressor::SetSource(const uint8_t* src_buf, uint32_t src_size) {
-  next_in_ = src_buf;
-  avail_in_ = src_size;
-}
-
 LZWDecompressor::Status LZWDecompressor::Decode(uint8_t* dest_buf,
                                                 uint32_t* dest_size) {
-  if (!next_in_ || !dest_buf || !dest_size)
+  if (!dest_buf || !dest_size) {
     return Status::kError;
+  }
 
-  if (avail_in_ == 0)
+  if (avail_input_.empty()) {
     return Status::kUnfinished;
+  }
 
   if (*dest_size == 0)
     return Status::kInsufficientDestSize;
 
-  uint32_t i = 0;
+  FX_SAFE_UINT32 i = 0;
   if (decompressed_next_ != 0) {
-    uint32_t extracted_size = ExtractData(dest_buf, *dest_size);
+    size_t extracted_size =
+        ExtractData(UNSAFE_TODO(pdfium::make_span(dest_buf, *dest_size)));
     if (decompressed_next_ != 0)
       return Status::kInsufficientDestSize;
 
-    dest_buf += extracted_size;
+    UNSAFE_TODO(dest_buf += extracted_size);
     i += extracted_size;
   }
 
-  while (i <= *dest_size && (avail_in_ > 0 || bits_left_ >= code_size_cur_)) {
+  while (i.ValueOrDie() <= *dest_size &&
+         (!avail_input_.empty() || bits_left_ >= code_size_cur_)) {
     if (code_size_cur_ > GIF_MAX_LZW_EXP)
       return Status::kError;
 
-    if (avail_in_ > 0) {
+    if (!avail_input_.empty()) {
       if (bits_left_ > 31)
         return Status::kError;
 
-      FX_SAFE_UINT32 safe_code = *next_in_++;
+      FX_SAFE_UINT32 safe_code = avail_input_.front();
       safe_code <<= bits_left_;
       safe_code |= code_store_;
       if (!safe_code.IsValid())
         return Status::kError;
 
       code_store_ = safe_code.ValueOrDie();
-      --avail_in_;
+      avail_input_ = avail_input_.subspan(1u);
       bits_left_ += 8;
     }
 
@@ -98,7 +94,7 @@ LZWDecompressor::Status LZWDecompressor::Decode(uint8_t* dest_buf,
         continue;
       }
       if (code == code_end_) {
-        *dest_size = i;
+        *dest_size = i.ValueOrDie();
         return Status::kSuccess;
       }
 
@@ -124,19 +120,20 @@ LZWDecompressor::Status LZWDecompressor::Decode(uint8_t* dest_buf,
       }
 
       code_old_ = code;
-      uint32_t extracted_size = ExtractData(dest_buf, *dest_size - i);
-      if (decompressed_next_ != 0)
+      size_t extracted_size = ExtractData(UNSAFE_TODO(
+          pdfium::make_span(dest_buf, (*dest_size - i).ValueOrDie())));
+      if (decompressed_next_ != 0) {
         return Status::kInsufficientDestSize;
-
-      dest_buf += extracted_size;
+      }
+      UNSAFE_TODO(dest_buf += extracted_size);
       i += extracted_size;
     }
   }
 
-  if (avail_in_ != 0)
+  if (!avail_input_.empty()) {
     return Status::kError;
-
-  *dest_size = i;
+  }
+  *dest_size = i.ValueOrDie();
   return Status::kUnfinished;
 }
 
@@ -186,15 +183,14 @@ bool LZWDecompressor::DecodeString(uint16_t code) {
   return true;
 }
 
-uint32_t LZWDecompressor::ExtractData(uint8_t* dest_buf, uint32_t dest_size) {
-  if (dest_size == 0)
+size_t LZWDecompressor::ExtractData(pdfium::span<uint8_t> dest_span) {
+  if (dest_span.empty()) {
     return 0;
-
-  uint32_t copy_size = dest_size <= decompressed_next_
-                           ? dest_size
-                           : static_cast<uint32_t>(decompressed_next_);
-  std::reverse_copy(decompressed_.data() + decompressed_next_ - copy_size,
-                    decompressed_.data() + decompressed_next_, dest_buf);
+  }
+  size_t copy_size = std::min(dest_span.size(), decompressed_next_);
+  UNSAFE_TODO(std::reverse_copy(
+      decompressed_.data() + decompressed_next_ - copy_size,
+      decompressed_.data() + decompressed_next_, dest_span.data()));
   decompressed_next_ -= copy_size;
   return copy_size;
 }

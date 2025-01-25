@@ -11,6 +11,8 @@
 #import "base/time/time.h"
 #import "components/favicon/core/large_icon_service.h"
 #import "components/omnibox/common/omnibox_features.h"
+#import "ios/chrome/browser/favicon/ui_bundled/favicon_attributes_provider.h"
+#import "ios/chrome/browser/favicon/ui_bundled/favicon_attributes_with_payload.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/elements/self_sizing_table_view.h"
@@ -19,8 +21,6 @@
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_layout_util.h"
-#import "ios/chrome/browser/ui/favicon/favicon_attributes_provider.h"
-#import "ios/chrome/browser/ui/favicon/favicon_attributes_with_payload.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_constants.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/omnibox/popup/autocomplete_suggestion.h"
@@ -29,8 +29,9 @@
 #import "ios/chrome/browser/ui/omnibox/popup/content_providing.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_accessibility_identifier_constants.h"
 #import "ios/chrome/browser/ui/omnibox/popup/popup_match_preview_delegate.h"
-#import "ios/chrome/browser/ui/omnibox/popup/row/omnibox_popup_row_cell.h"
-#import "ios/chrome/browser/ui/omnibox/popup/row/omnibox_popup_row_cell_experimental.h"
+#import "ios/chrome/browser/ui/omnibox/popup/row/actions/omnibox_popup_actions_row_content_configuration.h"
+#import "ios/chrome/browser/ui/omnibox/popup/row/actions/omnibox_popup_actions_row_delegate.h"
+#import "ios/chrome/browser/ui/omnibox/popup/row/actions/suggest_action.h"
 #import "ios/chrome/browser/ui/omnibox/popup/row/omnibox_popup_row_content_configuration.h"
 #import "ios/chrome/browser/ui/omnibox/popup/row/omnibox_popup_row_delegate.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
@@ -59,9 +60,6 @@ const CGFloat kMinTileFaviconSize = 32.0f;
 /// Maximum size of the fetched favicon for tiles.
 const CGFloat kMaxTileFaviconSize = 48.0f;
 
-// Default offset to align the suggestions with the omnibox leading image.
-const CGFloat kDefaultSuggestionLeadingOffset = -10.0f;
-
 /// Bottom padding for table view headers.
 const CGFloat kHeaderPaddingBottom = 10.0f;
 /// Leading and trailing padding for table view headers.
@@ -69,16 +67,10 @@ const CGFloat kHeaderPadding = 2.0f;
 /// Top padding for table view headers.
 const CGFloat kHeaderTopPadding = 16.0f;
 
-/// Returns whether the keyboard is dismissed when scrolling suggestions.
-BOOL ShouldDismissKeyboardOnScroll() {
-  return ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET ||
-         base::FeatureList::IsEnabled(kEnableSuggestionsScrollingOnIPad);
-}
-
 }  // namespace
 
-@interface OmniboxPopupViewController () <OmniboxPopupCarouselCellDelegate,
-                                          OmniboxPopupRowCellDelegate,
+@interface OmniboxPopupViewController () <OmniboxPopupActionsRowDelegate,
+                                          OmniboxPopupCarouselCellDelegate,
                                           OmniboxPopupRowDelegate,
                                           UITableViewDataSource,
                                           UITableViewDelegate>
@@ -159,15 +151,6 @@ BOOL ShouldDismissKeyboardOnScroll() {
     _visibleSuggestionCount = 0;
     _cachedContentHeight = 0;
     NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
-    if (!ShouldDismissKeyboardOnScroll()) {
-      // The iPad keyboard can cover some of the rows of the scroll view. The
-      // scroll view's content inset may need to be updated when the keyboard is
-      // displayed.
-      [defaultCenter addObserver:self
-                        selector:@selector(keyboardDidShow:)
-                            name:UIKeyboardDidShowNotification
-                          object:nil];
-    }
     // Listen to keyboard frame change event to detect keyboard frame changes
     // (ex: when changing input method) to update the estimated number of
     // visible suggestions.
@@ -207,7 +190,7 @@ BOOL ShouldDismissKeyboardOnScroll() {
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
   [self updateBackgroundColor];
-  if (IsIpadPopoutOmniboxEnabled()) {
+  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
     [self.delegate autocompleteResultConsumerDidChangeTraitCollection:self];
   }
 }
@@ -280,18 +263,8 @@ BOOL ShouldDismissKeyboardOnScroll() {
   }
   self.tableView.contentInsetAdjustmentBehavior =
       UIScrollViewContentInsetAdjustmentAutomatic;
-  if (base::FeatureList::IsEnabled(kOmniboxSuggestionsRTLImprovements) &&
-      ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET &&
-      !IsIpadPopoutOmniboxEnabled()) {
-    /// The popup view in multitasking displays suggestion icons outside of the
-    /// safe area (too close to the leading edge). This is ok because the entire
-    /// rows act as touch targets.
-    self.viewRespectsSystemMinimumLayoutMargins = NO;
-    self.tableView.contentInsetAdjustmentBehavior =
-        UIScrollViewContentInsetAdjustmentNever;
-  }
 
-  if (IsIpadPopoutOmniboxEnabled()) {
+  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
     self.tableView.tableFooterView =
         [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, FLT_MIN)];
     [self.tableView
@@ -311,16 +284,10 @@ BOOL ShouldDismissKeyboardOnScroll() {
   self.tableView.rowHeight = UITableViewAutomaticDimension;
   self.tableView.estimatedRowHeight = kOmniboxPopupCellMinimumHeight;
 
-  if (base::FeatureList::IsEnabled(kOmniboxPopupRowContentConfiguration)) {
-    [self.tableView registerClass:[UITableViewCell class]
-           forCellReuseIdentifier:OmniboxPopupRowCellReuseIdentifier];
-  } else if (base::FeatureList::IsEnabled(kOmniboxSuggestionsRTLImprovements)) {
-    [self.tableView registerClass:[OmniboxPopupRowCellExperimental class]
-           forCellReuseIdentifier:OmniboxPopupRowCellReuseIdentifier];
-  } else {
-    [self.tableView registerClass:[OmniboxPopupRowCell class]
-           forCellReuseIdentifier:OmniboxPopupRowCellReuseIdentifier];
-  }
+  [self.tableView registerClass:[UITableViewCell class]
+         forCellReuseIdentifier:OmniboxPopupRowCellReuseIdentifier];
+  [self.tableView registerClass:[UITableViewCell class]
+         forCellReuseIdentifier:OmniboxPopupActionsRowCellReuseIdentifier];
   [self.tableView registerClass:[UITableViewHeaderFooterView class]
       forHeaderFooterViewReuseIdentifier:NSStringFromClass(
                                              [UITableViewHeaderFooterView
@@ -345,15 +312,6 @@ BOOL ShouldDismissKeyboardOnScroll() {
   [super viewWillDisappear:animated];
   UMA_HISTOGRAM_MEDIUM_TIMES("MobileOmnibox.PopupOpenDuration",
                              base::TimeTicks::Now() - self.viewAppearanceTime);
-}
-
-- (void)viewDidLayoutSubviews {
-  [super viewDidLayoutSubviews];
-  if (!ShouldDismissKeyboardOnScroll() &&
-      self.tableView.visibleSize.height != self.cachedContentHeight) {
-    self.cachedContentHeight = self.tableView.visibleSize.height;
-    [self updateContentInsetForKeyboard];
-  }
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size
@@ -381,21 +339,10 @@ BOOL ShouldDismissKeyboardOnScroll() {
     return;
   }
 
-  CGRect omniboxFrame = self.omniboxGuide.layoutFrame;
-  CGFloat leftMargin =
-      (IsRegularXRegularSizeClass(self) && !IsIpadPopoutOmniboxEnabled())
-          ? omniboxFrame.origin.x
-          : 0;
-  CGFloat rightMargin =
-      (IsRegularXRegularSizeClass(self) && !IsIpadPopoutOmniboxEnabled())
-          ? self.view.bounds.size.width - omniboxFrame.origin.x -
-                omniboxFrame.size.width
-          : 0;
-
   // Adjust the carousel to be aligned with the omnibox textfield.
   UIEdgeInsets margins = self.carouselCell.layoutMargins;
   self.carouselCell.layoutMargins =
-      UIEdgeInsetsMake(margins.top, leftMargin, margins.bottom, rightMargin);
+      UIEdgeInsetsMake(margins.top, 0, margins.bottom, 0);
 
   // Update the headers padding.
   for (NSInteger i = 0; i < self.tableView.numberOfSections; ++i) {
@@ -404,28 +351,12 @@ BOOL ShouldDismissKeyboardOnScroll() {
     [headerView setNeedsUpdateConfiguration];
   }
 
-  if (base::FeatureList::IsEnabled(kOmniboxPopupRowContentConfiguration)) {
-    // Update the configuration to realign the text to the omnibox.
-    for (UITableViewCell* cell in self.tableView.visibleCells) {
-      if ([cell.contentConfiguration
-              isKindOfClass:OmniboxPopupRowContentConfiguration.class]) {
-        [cell setNeedsUpdateConfiguration];
-      }
+  // Update cells' configuration to realign the text to the omnibox.
+  for (UITableViewCell* cell in self.tableView.visibleCells) {
+    if ([cell.contentConfiguration
+            isKindOfClass:OmniboxPopupRowContentConfiguration.class]) {
+      [cell setNeedsUpdateConfiguration];
     }
-  }
-
-  if (!base::FeatureList::IsEnabled(kOmniboxPopupRowContentConfiguration) &&
-      base::FeatureList::IsEnabled(kOmniboxSuggestionsRTLImprovements) &&
-      ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET &&
-      !IsIpadPopoutOmniboxEnabled()) {
-    CGFloat leadingPadding = kDefaultSuggestionLeadingOffset;
-
-    if (IsRegularXRegularSizeClass(self)) {
-      leadingPadding += CGRectGetMinX(omniboxFrame);
-    }
-
-    self.tableView.directionalLayoutMargins =
-        NSDirectionalEdgeInsetsMake(0, leadingPadding, kBottomPadding, 0);
   }
 }
 
@@ -485,6 +416,21 @@ BOOL ShouldDismissKeyboardOnScroll() {
 #pragma mark - OmniboxKeyboardDelegate
 
 - (BOOL)canPerformKeyboardAction:(OmniboxKeyboardAction)keyboardAction {
+  UITableViewCell* cell =
+      [self.tableView cellForRowAtIndexPath:self.highlightedIndexPath];
+
+  BOOL isActionsRowCell = [cell.contentConfiguration
+      isKindOfClass:OmniboxPopupActionsRowContentConfiguration.class];
+
+  if (isActionsRowCell) {
+    OmniboxPopupActionsRowContentConfiguration* configuration =
+        base::apple::ObjCCastStrict<OmniboxPopupActionsRowContentConfiguration>(
+            cell.contentConfiguration);
+    if ([configuration canPerformKeyboardAction:keyboardAction]) {
+      return YES;
+    }
+  }
+
   switch (keyboardAction) {
     case OmniboxKeyboardActionUpArrow:
     case OmniboxKeyboardActionDownArrow:
@@ -500,6 +446,24 @@ BOOL ShouldDismissKeyboardOnScroll() {
 
 - (void)performKeyboardAction:(OmniboxKeyboardAction)keyboardAction {
   DCHECK([self canPerformKeyboardAction:keyboardAction]);
+
+  UITableViewCell* cell =
+      [self.tableView cellForRowAtIndexPath:self.highlightedIndexPath];
+
+  BOOL isActionsRowCell = [cell.contentConfiguration
+      isKindOfClass:OmniboxPopupActionsRowContentConfiguration.class];
+
+  if (isActionsRowCell) {
+    OmniboxPopupActionsRowContentConfiguration* configuration =
+        base::apple::ObjCCastStrict<OmniboxPopupActionsRowContentConfiguration>(
+            cell.contentConfiguration);
+    if ([configuration canPerformKeyboardAction:keyboardAction]) {
+      [configuration performKeyboardAction:keyboardAction];
+      cell.contentConfiguration = configuration;
+      return;
+    }
+  }
+
   switch (keyboardAction) {
     case OmniboxKeyboardActionUpArrow:
       [self highlightPreviousSuggestion];
@@ -654,18 +618,6 @@ BOOL ShouldDismissKeyboardOnScroll() {
   [self.matchPreviewDelegate setPreviewSuggestion:suggestion isFirstUpdate:NO];
 }
 
-#pragma mark - OmniboxPopupRowCellDelegate
-
-- (void)trailingButtonTappedForCell:(OmniboxPopupRowCell*)cell {
-  NSIndexPath* indexPath = [self.tableView indexPathForCell:cell];
-  id<AutocompleteSuggestion> suggestion =
-      [self suggestionAtIndexPath:indexPath];
-  DCHECK(suggestion);
-  [self.delegate autocompleteResultConsumer:self
-           didTapTrailingButtonOnSuggestion:suggestion
-                                      inRow:indexPath.row];
-}
-
 #pragma mark - OmniboxPopupRowDelegate
 
 - (void)omniboxPopupRowWithConfiguration:
@@ -696,12 +648,45 @@ BOOL ShouldDismissKeyboardOnScroll() {
   cell.accessibilityCustomActions = configuration.accessibilityCustomActions;
 }
 
+#pragma mark - OmniboxPopupActionsRowDelegate
+
+- (void)omniboxPopupRowActionSelectedWithConfiguration:
+            (OmniboxPopupActionsRowContentConfiguration*)configuration
+                                                action:(SuggestAction*)action {
+  id<AutocompleteSuggestion> suggestion =
+      [self suggestionAtIndexPath:configuration.indexPath];
+
+  CHECK(suggestion == configuration.suggestion);
+
+  [self.delegate autocompleteResultConsumer:self
+                  didSelectSuggestionAction:action
+                                 suggestion:suggestion
+                                      inRow:configuration.indexPath.row];
+}
+
 #pragma mark - OmniboxReturnDelegate
 
 - (void)omniboxReturnPressed:(id)sender {
   if (self.highlightedIndexPath) {
     id<AutocompleteSuggestion> suggestion =
         [self suggestionAtIndexPath:self.highlightedIndexPath];
+
+    UITableViewCell* cell =
+        [self.tableView cellForRowAtIndexPath:self.highlightedIndexPath];
+    BOOL isActionsRowCell = [cell.contentConfiguration
+        isKindOfClass:OmniboxPopupActionsRowContentConfiguration.class];
+
+    if (isActionsRowCell) {
+      OmniboxPopupActionsRowContentConfiguration* config =
+          base::apple::ObjCCastStrict<
+              OmniboxPopupActionsRowContentConfiguration>(
+              cell.contentConfiguration);
+      if (config.highlightedActionIndex != NSNotFound) {
+        [config omniboxReturnPressed:sender];
+        return;
+      }
+    }
+
     if (suggestion) {
       NSInteger absoluteRow =
           [self absoluteRowIndexForIndexPath:self.highlightedIndexPath];
@@ -719,17 +704,8 @@ BOOL ShouldDismissKeyboardOnScroll() {
 - (void)tableView:(UITableView*)tableView
       willDisplayCell:(UITableViewCell*)cell
     forRowAtIndexPath:(NSIndexPath*)indexPath {
-  if ([cell isKindOfClass:[OmniboxPopupRowCell class]] ||
-      [cell isKindOfClass:[OmniboxPopupRowCellExperimental class]]) {
-    OmniboxPopupRowCell* rowCell = id(cell);
-    // This has to be set here because the cell's content view has its
-    // semantic content attribute reset before the cell is displayed (and before
-    // this method is called).
-    rowCell.omniboxSemanticContentAttribute = self.semanticContentAttribute;
-    rowCell.accessibilityIdentifier = [OmniboxPopupAccessibilityIdentifierHelper
-        accessibilityIdentifierForRowAtIndexPath:indexPath];
-  } else if ([cell.contentConfiguration
-                 isKindOfClass:OmniboxPopupRowContentConfiguration.class]) {
+  if ([cell.contentConfiguration
+          isKindOfClass:OmniboxPopupRowContentConfiguration.class]) {
     cell.accessibilityIdentifier = [OmniboxPopupAccessibilityIdentifierHelper
         accessibilityIdentifierForRowAtIndexPath:indexPath];
   }
@@ -800,10 +776,10 @@ BOOL ShouldDismissKeyboardOnScroll() {
       initWithFrame:CGRectMake(0, 0, tableView.bounds.size.width,
                                2 / tableView.window.screen.scale)];
 
-  hairline.backgroundColor =
-      [UIColor colorNamed:IsIpadPopoutOmniboxEnabled()
-                              ? kOmniboxPopoutSuggestionRowSeparatorColor
-                              : kOmniboxSuggestionRowSeparatorColor];
+  hairline.backgroundColor = [UIColor
+      colorNamed:ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET
+                     ? kOmniboxPopoutSuggestionRowSeparatorColor
+                     : kOmniboxSuggestionRowSeparatorColor];
   [footer addSubview:hairline];
   hairline.autoresizingMask = UIViewAutoresizingFlexibleWidth;
 
@@ -918,6 +894,27 @@ BOOL ShouldDismissKeyboardOnScroll() {
   return header;
 }
 
+- (void)tableView:(UITableView*)tableView
+    didEndDisplayingCell:(UITableViewCell*)cell
+       forRowAtIndexPath:(NSIndexPath*)indexPath {
+  // Action in suggest buttons respond to touch-up events which could be
+  // triggered after the cell was removed (see b/350911243).
+  // Remove the delegate from a cell when it is no longer visible, ensuring that
+  // actions are not dispatched for stale cells.
+  BOOL isActionsRowCell = [cell.contentConfiguration
+      isKindOfClass:OmniboxPopupActionsRowContentConfiguration.class];
+
+  if (!isActionsRowCell) {
+    return;
+  }
+
+  OmniboxPopupActionsRowContentConfiguration* configuration =
+      base::apple::ObjCCastStrict<OmniboxPopupActionsRowContentConfiguration>(
+          cell.contentConfiguration);
+
+  configuration.delegate = nil;
+}
+
 /// Customize the appearance of table view cells.
 - (UITableViewCell*)tableView:(UITableView*)tableView
         cellForRowAtIndexPath:(NSIndexPath*)indexPath {
@@ -929,13 +926,26 @@ BOOL ShouldDismissKeyboardOnScroll() {
       id<AutocompleteSuggestion> suggestion =
           self.currentResult[indexPath.section].suggestions[indexPath.row];
 
-      if (base::FeatureList::IsEnabled(kOmniboxPopupRowContentConfiguration)) {
-        UITableViewCell* cell = [self.tableView
-            dequeueReusableCellWithIdentifier:OmniboxPopupRowCellReuseIdentifier
-                                 forIndexPath:indexPath];
+        UITableViewCell* cell;
+        OmniboxPopupRowContentConfiguration* configuration;
 
-        OmniboxPopupRowContentConfiguration* configuration =
-            [OmniboxPopupRowContentConfiguration cellConfiguration];
+        if (base::FeatureList::IsEnabled(kOmniboxActionsInSuggest) &&
+            suggestion.actionsInSuggest.count > 0) {
+          cell = [self.tableView dequeueReusableCellWithIdentifier:
+                                     OmniboxPopupActionsRowCellReuseIdentifier
+                                                      forIndexPath:indexPath];
+          configuration =
+              [OmniboxPopupActionsRowContentConfiguration cellConfiguration];
+        } else {
+          cell = [self.tableView dequeueReusableCellWithIdentifier:
+                                     OmniboxPopupRowCellReuseIdentifier
+                                                      forIndexPath:indexPath];
+          configuration =
+              [OmniboxPopupRowContentConfiguration cellConfiguration];
+        }
+
+        DCHECK(cell);
+        DCHECK(configuration);
         configuration.suggestion = suggestion;
         configuration.delegate = self;
         configuration.indexPath = indexPath;
@@ -943,7 +953,6 @@ BOOL ShouldDismissKeyboardOnScroll() {
             (NSUInteger)indexPath.row <
             self.currentResult[indexPath.section].suggestions.count - 1;
         configuration.semanticContentAttribute = self.semanticContentAttribute;
-        configuration.omniboxLayoutGuide = self.omniboxGuide;
         configuration.faviconRetriever = self.faviconRetriever;
         configuration.imageRetriever = self.imageRetriever;
 
@@ -956,26 +965,6 @@ BOOL ShouldDismissKeyboardOnScroll() {
         // End Vivaldi
 
         return cell;
-      } else {
-        OmniboxPopupRowCell* cell = [self.tableView
-            dequeueReusableCellWithIdentifier:OmniboxPopupRowCellReuseIdentifier
-                                 forIndexPath:indexPath];
-        cell.faviconRetriever = self.faviconRetriever;
-        cell.imageRetriever = self.imageRetriever;
-        [cell setupWithAutocompleteSuggestion:suggestion
-                                    incognito:self.incognito];
-        cell.showsSeparator =
-            (NSUInteger)indexPath.row <
-            self.currentResult[indexPath.section].suggestions.count - 1;
-        cell.delegate = self;
-        cell.layoutGuideCenter = self.layoutGuideCenter;
-
-        // Vivaldi
-        [self updateTableViewCellForReverseState:cell];
-        // End Vivaldi
-
-        return cell;
-      }
     }
     case SuggestionGroupDisplayStyleCarousel: {
       NSArray<CarouselItem*>* carouselItems = [self
@@ -1054,32 +1043,10 @@ BOOL ShouldDismissKeyboardOnScroll() {
   }
 }
 
-/// Adjust the inset on the table view to allow user to scroll to suggestions
-/// below the keyboard.
-- (void)updateContentInsetForKeyboard {
-  // Disable content inset update when scrolling dismisses the keyboard.
-  if (ShouldDismissKeyboardOnScroll() ||
-      self.tableView.contentSize.height <= 0) {
-    return;
-  }
-  UIWindow* currentWindow = self.tableView.window;
-  CGRect absoluteRect =
-      [self.tableView convertRect:self.tableView.bounds
-                toCoordinateSpace:currentWindow.coordinateSpace];
-  CGFloat windowHeight = CGRectGetHeight(currentWindow.bounds);
-  CGFloat bottomInset = windowHeight - self.tableView.visibleSize.height -
-                        self.keyboardHeight - absoluteRect.origin.y -
-                        kBottomPadding - kTopPadding;
-  bottomInset = MAX(kBottomPadding, -bottomInset);
-  self.tableView.contentInset =
-      UIEdgeInsetsMake(kTopPadding, 0, bottomInset, 0);
-  self.tableView.scrollIndicatorInsets = self.tableView.contentInset;
-}
-
 /// Updates the color of the background based on the incognito-ness and the size
 /// class.
 - (void)updateBackgroundColor {
-  if (IsIpadPopoutOmniboxEnabled()) {
+  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
     self.view.backgroundColor = [UIColor colorNamed:kPrimaryBackgroundColor];
     return;
   }
@@ -1093,31 +1060,9 @@ BOOL ShouldDismissKeyboardOnScroll() {
   if (IsVivaldiRunning())
     self.view.backgroundColor = configuration.backgroundColor;
   else {
-  if (IsRegularXRegularSizeClass(self)) {
-    self.view.backgroundColor = configuration.backgroundColor;
-  } else {
-    self.view.backgroundColor = [UIColor clearColor];
-  }
+  self.view.backgroundColor = [UIColor clearColor];
   } // End Vivaldi
 
-}
-
-#pragma mark Action for append UIButton
-
-- (void)setSemanticContentAttribute:
-    (UISemanticContentAttribute)semanticContentAttribute {
-  _semanticContentAttribute = semanticContentAttribute;
-  // If there are any visible cells, update them right away.
-  for (UITableViewCell* cell in self.tableView.visibleCells) {
-    if ([cell isKindOfClass:[OmniboxPopupRowCell class]] ||
-        [cell isKindOfClass:[OmniboxPopupRowCellExperimental class]]) {
-      OmniboxPopupRowCell* rowCell = (id)cell;
-      // This has to be set here because the cell's content view has its
-      // semantic content attribute reset before the cell is displayed (and
-      // before this method is called).
-      rowCell.omniboxSemanticContentAttribute = self.semanticContentAttribute;
-    }
-  }
 }
 
 #pragma mark - UIScrollViewDelegate
@@ -1139,14 +1084,6 @@ BOOL ShouldDismissKeyboardOnScroll() {
 }
 
 #pragma mark - Keyboard events
-
-/// Handles `UIKeyboardDidShowNotification`, only active when
-/// `ShouldDismissKeyboardOnScroll` is false.
-- (void)keyboardDidShow:(NSNotification*)notification {
-  self.keyboardHeight =
-      [KeyboardObserverHelper keyboardHeightInWindow:self.tableView.window];
-  [self updateContentInsetForKeyboard];
-}
 
 - (void)keyboardDidChangeFrame:(NSNotification*)notification {
   CGFloat keyboardHeight =
@@ -1304,7 +1241,7 @@ BOOL ShouldDismissKeyboardOnScroll() {
 // the original data source. Less error prone.
 - (void)updateTableViewForReverseState {
   if (self.shouldReverseSearchResults) {
-    self.tableView.transform = CGAffineTransformMakeRotation(M_PI);
+    self.tableView.transform = CGAffineTransformMakeScale(1, -1);
     self.tableView.contentInsetAdjustmentBehavior =
         UIScrollViewContentInsetAdjustmentNever;
   } else {
@@ -1316,9 +1253,47 @@ BOOL ShouldDismissKeyboardOnScroll() {
 
 - (void)updateTableViewCellForReverseState:(UITableViewCell*)cell {
   if (self.shouldReverseSearchResults) {
-    cell.transform = CGAffineTransformMakeRotation(M_PI);
+    cell.contentView.transform = CGAffineTransformMakeScale(1, -1);
   } else {
-    cell.transform = CGAffineTransformIdentity;
+    cell.contentView.transform = CGAffineTransformIdentity;
+  }
+}
+
+- (void)tableView:(UITableView *)tableView
+      willBeginEditingRowAtIndexPath:(NSIndexPath*)indexPath {
+  if (!_shouldReverseSearchResults)
+    return;
+
+  // Note: (prio@vivaldi.com) - Important to read.
+  // This is a "workaround" to flip the 'Delete' button on swiping the row
+  // for the case when bottom omnibox and reverse search suggestions enabled.
+  // Reason is we flip the Y-axis of the TableView and Cell Content view but
+  // that doesn't affect the cell swipe actions. So, we have to visually flip
+  // the actions too.
+  // It depends on the implementation details of the TableView, and far from
+  // the proper solution. But, it works and requires less chromium patch to
+  // actually reverse the data source, and manage correct TableView row
+  // selection and scrolling etc.
+  // This can break if Apple changes the implementation details of used property
+  // below.
+  for (UIView *subview in tableView.subviews) {
+    if ([NSStringFromClass([subview class])
+            isEqualToString:@"_UITableViewCellSwipeContainerView"]) {
+      for (UIView *swipeContainerSubview in subview.subviews) {
+        if ([NSStringFromClass([swipeContainerSubview class])
+              isEqualToString:@"UISwipeActionPullView"]) {
+          for (UIView *swipeSubview in swipeContainerSubview.subviews) {
+            if ([swipeSubview isKindOfClass:[UIButton class]]) {
+              UIButton *button = (UIButton *)swipeSubview;
+              CGAffineTransform rotate =
+                  CGAffineTransformRotate(button.transform, M_PI);
+              CGAffineTransform translate = CGAffineTransformMakeScale(-1, 1);
+              button.transform = CGAffineTransformConcat(translate, rotate);
+            }
+          }
+        }
+      }
+    }
   }
 }
 

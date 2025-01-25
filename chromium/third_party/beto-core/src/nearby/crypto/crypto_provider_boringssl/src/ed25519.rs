@@ -14,7 +14,7 @@
 
 use crypto_provider::ed25519::{
     InvalidPublicKeyBytes, RawPrivateKey, RawPrivateKeyPermit, RawPublicKey, RawSignature,
-    Signature as _, SignatureError,
+    SignatureError, SignatureImpl,
 };
 
 pub struct Ed25519;
@@ -27,7 +27,7 @@ impl crypto_provider::ed25519::Ed25519Provider for Ed25519 {
 
 pub struct KeyPair(bssl_crypto::ed25519::PrivateKey);
 
-impl crypto_provider::ed25519::KeyPair for KeyPair {
+impl crypto_provider::ed25519::KeyPairImpl for KeyPair {
     type PublicKey = PublicKey;
     type Signature = Signature;
 
@@ -51,14 +51,14 @@ impl crypto_provider::ed25519::KeyPair for KeyPair {
         Self(bssl_crypto::ed25519::PrivateKey::generate())
     }
 
-    fn public(&self) -> Self::PublicKey {
+    fn public_key(&self) -> Self::PublicKey {
         PublicKey(self.0.to_public())
     }
 }
 
 pub struct Signature(bssl_crypto::ed25519::Signature);
 
-impl crypto_provider::ed25519::Signature for Signature {
+impl crypto_provider::ed25519::SignatureImpl for Signature {
     fn from_bytes(bytes: &RawSignature) -> Self {
         Self(bssl_crypto::ed25519::Signature::from(*bytes))
     }
@@ -70,7 +70,7 @@ impl crypto_provider::ed25519::Signature for Signature {
 
 pub struct PublicKey(bssl_crypto::ed25519::PublicKey);
 
-impl crypto_provider::ed25519::PublicKey for PublicKey {
+impl crypto_provider::ed25519::PublicKeyImpl for PublicKey {
     type Signature = Signature;
 
     fn from_bytes(bytes: &RawPublicKey) -> Result<Self, InvalidPublicKeyBytes>

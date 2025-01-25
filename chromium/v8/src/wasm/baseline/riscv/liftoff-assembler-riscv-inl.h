@@ -5,10 +5,11 @@
 #ifndef V8_WASM_BASELINE_RISCV_LIFTOFF_ASSEMBLER_RISCV_INL_H_
 #define V8_WASM_BASELINE_RISCV_LIFTOFF_ASSEMBLER_RISCV_INL_H_
 
-#include "src/heap/mutable-page.h"
+#include "src/heap/mutable-page-metadata.h"
 #include "src/wasm/baseline/liftoff-assembler.h"
 #include "src/wasm/baseline/parallel-move-inl.h"
 #include "src/wasm/object-access.h"
+#include "src/wasm/wasm-linkage.h"
 #include "src/wasm/wasm-objects.h"
 
 namespace v8::internal::wasm {
@@ -1470,6 +1471,7 @@ void LiftoffAssembler::emit_i32x4_dot_i8x16_i7x16_add_s(LiftoffRegister dst,
                                                         LiftoffRegister lhs,
                                                         LiftoffRegister rhs,
                                                         LiftoffRegister acc) {
+  DCHECK_NE(dst, acc);
   VU.set(kScratchReg, E8, m1);
   VRegister intermediate = kSimd128ScratchReg3;
   VRegister kSimd128ScratchReg4 =
@@ -2145,16 +2147,20 @@ void LiftoffAssembler::emit_s128_set_if_nan(Register dst, LiftoffRegister src,
                                             Register tmp_gp,
                                             LiftoffRegister tmp_s128,
                                             ValueKind lane_kind) {
-  DoubleRegister tmp_fp = tmp_s128.fp();
-  vfredmax_vs(kSimd128ScratchReg, src.fp().toV(), src.fp().toV());
-  vfmv_fs(tmp_fp, kSimd128ScratchReg);
+  ASM_CODE_COMMENT(this);
   if (lane_kind == kF32) {
-    feq_s(kScratchReg, tmp_fp, tmp_fp);  // scratch <- !IsNan(tmp_fp)
+    VU.set(kScratchReg, E32, m1);
+    vmfeq_vv(kSimd128ScratchReg, src.fp().toV(),
+             src.fp().toV());  // scratch <- !IsNan(tmp_fp)
   } else {
+    VU.set(kScratchReg, E64, m1);
     DCHECK_EQ(lane_kind, kF64);
-    feq_d(kScratchReg, tmp_fp, tmp_fp);  // scratch <- !IsNan(tmp_fp)
+    vmfeq_vv(kSimd128ScratchReg, src.fp().toV(),
+             src.fp().toV());  // scratch <- !IsNan(tmp_fp)
   }
+  vmv_xs(kScratchReg, kSimd128ScratchReg);
   not_(kScratchReg, kScratchReg);
+  andi(kScratchReg, kScratchReg, int32_t(lane_kind == kF32 ? 0xF : 0x3));
   Sw(kScratchReg, MemOperand(dst));
 }
 
@@ -2339,16 +2345,19 @@ void LiftoffAssembler::emit_set_if_nan(Register dst, FPURegister src,
     DCHECK_EQ(kind, kF64);
     feq_d(scratch, src, src);  // rd <- !isNan(src)
   }
-  not_(scratch, scratch);
+  seqz(scratch, scratch);
   Sw(scratch, MemOperand(dst));
 }
 
 void LiftoffAssembler::CallFrameSetupStub(int declared_function_index) {
-  // TODO(jkummerow): Enable this check when we have C++20.
-  // static_assert(std::find(std::begin(wasm::kGpParamRegisters),
-  //                         std::end(wasm::kGpParamRegisters),
-  //                         kLiftoffFrameSetupFunctionReg) ==
-  //                         std::end(wasm::kGpParamRegisters));
+// The standard library used by gcc tryjobs does not consider `std::find` to be
+// `constexpr`, so wrap it in a `#ifdef __clang__` block.
+#ifdef __clang__
+  static_assert(std::find(std::begin(wasm::kGpParamRegisters),
+                          std::end(wasm::kGpParamRegisters),
+                          kLiftoffFrameSetupFunctionReg) ==
+                std::end(wasm::kGpParamRegisters));
+#endif
 
   // On MIPS64, we must push at least {ra} before calling the stub, otherwise
   // it would get clobbered with no possibility to recover it. So just set

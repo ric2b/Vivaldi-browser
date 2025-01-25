@@ -102,6 +102,9 @@ const char kProxyBypassList[] = "proxy-bypass-list";
 // affects HTTP and HTTPS requests.
 const char kProxyServer[] = "proxy-server";
 
+// Forces each navigation to use a new BrowsingInstance.
+const char kForceNewBrowsingInstance[] = "force-new-browsing-instance";
+
 // A string used to override the default user agent with a custom one.
 const char kUserAgent[] = "user-agent";
 
@@ -109,6 +112,9 @@ const char kUserAgent[] = "user-agent";
 // is added, the session will no longer be Incognito, unless Incognito mode is
 // forced with --incognito switch.
 const char kUserDataDir[] = "user-data-dir";
+
+// Prints version information and quits.
+const char kVersion[] = "version";
 
 // Sets the initial window size. Provided as string in the format "800,600".
 const char kWindowSize[] = "window-size";

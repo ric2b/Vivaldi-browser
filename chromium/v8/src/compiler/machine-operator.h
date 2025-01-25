@@ -1177,6 +1177,10 @@ class V8_EXPORT_PRIVATE MachineOperatorBuilder final
   const Operator* I8x32RelaxedLaneSelect();
   const Operator* I32x8DotI8x32I7x32AddS();
   const Operator* I16x16DotI8x32I7x32S();
+  const Operator* F32x8RelaxedMin();
+  const Operator* F32x8RelaxedMax();
+  const Operator* F64x4RelaxedMin();
+  const Operator* F64x4RelaxedMax();
 
   const Operator* LoadTransform(MemoryAccessKind kind,
                                 LoadTransformation transform);
@@ -1228,7 +1232,7 @@ class V8_EXPORT_PRIVATE MachineOperatorBuilder final
   const Operator* LoadParentFramePointer();
 #if V8_ENABLE_WEBASSEMBLY
   const Operator* LoadStackPointer();
-  const Operator* SetStackPointer(wasm::FPRelativeScope fp_scope);
+  const Operator* SetStackPointer();
 #endif
 
   // Compares: stack_pointer [- offset] > value. The offset is optionally

@@ -102,6 +102,7 @@ Attribute convertAttr(Attribute stablehloAttr) {
           stablehloAttr)) {
     return mhlo::GatherDimensionNumbersAttr::get(
         attr.getContext(), attr.getOffsetDims(), attr.getCollapsedSliceDims(),
+        attr.getOperandBatchingDims(), attr.getStartIndicesBatchingDims(),
         attr.getStartIndexMap(), attr.getIndexVectorDim());
   }
   if (auto attr =
@@ -124,8 +125,9 @@ Attribute convertAttr(Attribute stablehloAttr) {
           stablehloAttr)) {
     return mhlo::ScatterDimensionNumbersAttr::get(
         attr.getContext(), attr.getUpdateWindowDims(),
-        attr.getInsertedWindowDims(), attr.getScatterDimsToOperandDims(),
-        attr.getIndexVectorDim());
+        attr.getInsertedWindowDims(), attr.getInputBatchingDims(),
+        attr.getScatterIndicesBatchingDims(),
+        attr.getScatterDimsToOperandDims(), attr.getIndexVectorDim());
   }
   if (auto attr = mlir::dyn_cast<stablehlo::TransposeAttr>(stablehloAttr)) {
     RETURN_CONVERTED_ENUM_ATTR(Transpose);
@@ -229,7 +231,7 @@ LogicalResult rewriteCustomCallAsMhloOp(stablehlo::CustomCallOp stablehloOp,
            name == "mhlo.version";
   };
   if (!llvm::all_of(stablehloOp->getAttrs(), isSupportedAttrName) ||
-      !stablehloOp.getBackendConfig().empty()) {
+      !stablehloOp.hasEmptyBackendConfig()) {
     return failure();
   }
 
@@ -292,8 +294,8 @@ LogicalResult fixupMhloBackendConfig(stablehlo::CustomCallOp stablehloOp,
                                      mhlo::CustomCallOp hloOp) {
   auto stablehloBackendConfig = stablehloOp->getAttr("mhlo.backend_config");
   if (stablehloBackendConfig) {
-    if (auto oldHloBackendConfig =
-            mlir::dyn_cast_or_null<StringAttr>(hloOp.getBackendConfigAttr())) {
+    if (auto oldHloBackendConfig = mlir::dyn_cast<StringAttr>(
+            stablehloOp.getBackendConfigOrDefault())) {
       if (!oldHloBackendConfig.empty()) return failure();
     } else {
       return failure();
@@ -385,6 +387,20 @@ class StablehloToHloOpConverter : public OpConversionPattern<StablehloOpTy> {
 
     rewriter.replaceOp(stablehloOp, hloOp);
     return success();
+  }
+};
+
+// Deprecated ops.
+template <>
+class StablehloToHloOpConverter<stablehlo::UnaryEinsumOp>
+    : public OpConversionPattern<UnaryEinsumOp> {
+ public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult matchAndRewrite(stablehlo::UnaryEinsumOp stablehloOp,
+                                typename stablehlo::UnaryEinsumOp::Adaptor,
+                                ConversionPatternRewriter&) const final {
+    return stablehloOp.emitError(
+        "UnaryEinsumOp is deprecated and not supported in MHLO");
   }
 };
 

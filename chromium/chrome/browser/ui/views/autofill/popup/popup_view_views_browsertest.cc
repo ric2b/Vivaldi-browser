@@ -6,22 +6,26 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/buildflag.h"
+#include "chrome/browser/ui/autofill/autofill_popup_view.h"
 #include "chrome/browser/ui/autofill/mock_autofill_popup_controller.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_pixel_test.h"
-#include "chrome/browser/ui/views/autofill/popup/popup_search_bar_view.h"
+#include "chrome/browser/ui/views/autofill/popup/popup_row_view.h"
+#include "chrome/browser/ui/views/autofill/popup/popup_view_utils.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_view_views_test_api.h"
-#include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/base/ui_test_utils.h"
 #include "components/autofill/core/browser/filling_product.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/browser/ui/suggestion_type.h"
 #include "components/autofill/core/common/aliases.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/strings/grit/components_strings.h"
+#include "content/public/test/browser_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -108,7 +112,7 @@ std::vector<Suggestion> CreateAutofillProfileSuggestions() {
   suggestions.emplace_back(SuggestionType::kSeparator);
 
   Suggestion settings(l10n_util::GetStringUTF16(IDS_AUTOFILL_MANAGE_ADDRESSES));
-  settings.type = SuggestionType::kAutofillOptions;
+  settings.type = SuggestionType::kManageAddress;
   settings.icon = Suggestion::Icon::kSettings;
   suggestions.push_back(std::move(settings));
 
@@ -127,29 +131,77 @@ std::vector<Suggestion> CreateCreditCardSuggestions() {
 
   Suggestion settings(
       l10n_util::GetStringUTF16(IDS_AUTOFILL_MANAGE_PAYMENT_METHODS));
-  settings.type = SuggestionType::kAutofillOptions;
+  settings.type = SuggestionType::kManageCreditCard;
   settings.icon = Suggestion::Icon::kSettings;
   suggestions.push_back(std::move(settings));
 
   return suggestions;
 }
 
-std::vector<Suggestion> CreatePasswordSuggestions() {
+std::vector<Suggestion> CreatePasswordSuggestions(bool is_deactivated = false) {
   std::vector<Suggestion> suggestions;
   suggestions.emplace_back(u"Title suggestion", SuggestionType::kTitle);
+  suggestions.back().apply_deactivated_style = is_deactivated;
 
   suggestions.emplace_back(u"Password main text",
                            SuggestionType::kPasswordEntry);
-  suggestions.back().additional_label = u"example.username@gmail.com";
+  suggestions.back().labels = {
+      {Suggestion::Text(u"example.username@gmail.com")}};
   suggestions.back().icon = Suggestion::Icon::kGlobe;
+  suggestions.back().apply_deactivated_style = is_deactivated;
 
   suggestions.emplace_back(autofill::SuggestionType::kSeparator);
 
-  suggestions.emplace_back(u"Manage passwords",
-                           SuggestionType::kAllSavedPasswordsEntry);
+  suggestions.emplace_back(
+      l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_MANAGE_PASSWORDS),
+      SuggestionType::kAllSavedPasswordsEntry);
+  suggestions.back().icon = Suggestion::Icon::kSettings;
+  suggestions.back().trailing_icon = Suggestion::Icon::kGooglePasswordManager;
+  suggestions.back().apply_deactivated_style = is_deactivated;
+
+  return suggestions;
+}
+
+std::vector<Suggestion> CreateWebAuthnSuggestions(bool is_deactivated = false) {
+  std::vector<Suggestion> suggestions;
+  suggestions.push_back(Suggestion(
+      "cool passkey",
+      {{Suggestion::Text(
+          l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_USE_GENERIC_DEVICE))}},
+      Suggestion::Icon::kGlobe, SuggestionType::kWebauthnCredential));
+  suggestions.back().apply_deactivated_style = is_deactivated;
+
+  suggestions.push_back(Suggestion(
+      "coolest passkey",
+      {{Suggestion::Text(l10n_util::GetStringUTF16(
+          IDS_PASSWORD_MANAGER_PASSKEY_FROM_GOOGLE_PASSWORD_MANAGER))}},
+      Suggestion::Icon::kGlobe, SuggestionType::kWebauthnCredential));
+  suggestions.back().apply_deactivated_style = is_deactivated;
+
+  suggestions.emplace_back(
+      l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_USE_DIFFERENT_PASSKEY),
+      SuggestionType::kWebauthnSignInWithAnotherDevice);
+  suggestions.back().apply_deactivated_style = is_deactivated;
+  suggestions.emplace_back(
+      l10n_util::GetStringUTF16(
+          IDS_PASSWORD_MANAGER_MANAGE_PASSWORDS_AND_PASSKEYS),
+      SuggestionType::kAllSavedPasswordsEntry);
+  suggestions.back().apply_deactivated_style = is_deactivated;
   suggestions.back().icon = Suggestion::Icon::kSettings;
   suggestions.back().trailing_icon = Suggestion::Icon::kGooglePasswordManager;
 
+  return suggestions;
+}
+
+std::vector<Suggestion> CreatePasswordAndWebAuthnSuggestions(
+    bool is_deactivated = false) {
+  std::vector<Suggestion> suggestions =
+      CreatePasswordSuggestions(is_deactivated);
+  suggestions.pop_back();
+  std::vector<Suggestion> webauthn_suggestions =
+      CreateWebAuthnSuggestions(is_deactivated);
+  suggestions.insert(suggestions.end(), webauthn_suggestions.begin(),
+                     webauthn_suggestions.end());
   return suggestions;
 }
 
@@ -173,7 +225,7 @@ class PopupViewViewsBrowsertestBase
       EXPECT_CALL(controller(), ViewDestroyed);
     }
 
-    search_bar_config_ = {};
+    search_bar_config_ = std::nullopt;
     popup_has_parent_ = false;
     popup_parent_.reset();
     PopupPixelTest::TearDownOnMainThread();
@@ -199,9 +251,10 @@ class PopupViewViewsBrowsertestBase
   }
 
   void ShowAndVerifyUi(bool popup_has_parent = false,
-                       PopupViewSearchBarConfig search_bar_config = {}) {
+                       std::optional<AutofillPopupView::SearchBarConfig>
+                           search_bar_config = std::nullopt) {
     popup_has_parent_ = popup_has_parent;
-    search_bar_config_ = search_bar_config;
+    search_bar_config_ = std::move(search_bar_config);
     PopupPixelTest::ShowAndVerifyUi();
   }
 
@@ -222,7 +275,7 @@ class PopupViewViewsBrowsertestBase
 
   // Controls whether the view is created as a sub-popup (i.e. having a parent).
   bool popup_has_parent_ = false;
-  PopupViewSearchBarConfig search_bar_config_;
+  std::optional<AutofillPopupView::SearchBarConfig> search_bar_config_;
   std::unique_ptr<PopupViewViews> popup_parent_;
 };
 
@@ -309,6 +362,19 @@ IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest, InvokeUi_Passwords) {
 }
 
 IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
+                       InvokeUi_Passwords_And_WebAuthn) {
+  PrepareSuggestions(CreatePasswordAndWebAuthnSuggestions());
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
+                       InvokeUi_Passwords_And_WebAuthn_Deactivated) {
+  PrepareSuggestions(
+      CreatePasswordAndWebAuthnSuggestions(/*is_deactivated=*/true));
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
                        InvokeUi_CreditCard_MultipleLabels) {
   Suggestion suggestion1(
       "Visa",
@@ -332,8 +398,8 @@ IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
   std::vector<Suggestion> suggestions;
   Suggestion entry1(u"User1");
   entry1.main_text.is_primary = Suggestion::Text::IsPrimary(true);
-  entry1.additional_label =
-      std::u16string(10, gfx::RenderText::kPasswordReplacementChar);
+  entry1.labels = {{Suggestion::Text(
+      std::u16string(10, gfx::RenderText::kPasswordReplacementChar))}};
   entry1.type = SuggestionType::kAccountStoragePasswordEntry;
   entry1.icon = Suggestion::Icon::kGlobe;
   entry1.trailing_icon = Suggestion::Icon::kGoogle;
@@ -342,8 +408,8 @@ IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
   // A profile store entry.
   Suggestion entry2(u"User2");
   entry2.main_text.is_primary = Suggestion::Text::IsPrimary(true);
-  entry2.additional_label =
-      std::u16string(6, gfx::RenderText::kPasswordReplacementChar);
+  entry2.labels = {{Suggestion::Text(
+      std::u16string(6, gfx::RenderText::kPasswordReplacementChar))}};
   entry2.type = SuggestionType::kPasswordEntry;
   entry2.icon = Suggestion::Icon::kGlobe;
   entry2.trailing_icon = Suggestion::Icon::kNoIcon;
@@ -376,7 +442,7 @@ IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
                        NoScrollingForNonExcessiveHeightRootPopup) {
   controller().set_suggestions(
       {SuggestionType::kAddressEntry, SuggestionType::kAddressEntry,
-       SuggestionType::kSeparator, SuggestionType::kAutofillOptions});
+       SuggestionType::kSeparator, SuggestionType::kManageAddress});
   ShowAndVerifyUi(/*popup_has_parent=*/false);
 }
 
@@ -384,7 +450,7 @@ IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
                        NoScrollingForNonExcessiveHeightNonRootPopup) {
   controller().set_suggestions(
       {SuggestionType::kAddressEntry, SuggestionType::kAddressEntry,
-       SuggestionType::kSeparator, SuggestionType::kAutofillOptions});
+       SuggestionType::kSeparator, SuggestionType::kManageAddress});
   ShowAndVerifyUi(/*popup_has_parent=*/true);
 }
 
@@ -400,7 +466,7 @@ IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
   // Create many suggestions that don't fit the height and activate scrolling.
   std::vector<SuggestionType> suggestions(20, SuggestionType::kAddressEntry);
   suggestions.push_back(SuggestionType::kSeparator);
-  suggestions.push_back(SuggestionType::kAutofillOptions);
+  suggestions.push_back(SuggestionType::kManageAddress);
   controller().set_suggestions(std::move(suggestions));
   ShowAndVerifyUi();
 }
@@ -418,7 +484,7 @@ IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
   // Create many suggestions that don't fit the height and activate scrolling.
   std::vector<SuggestionType> suggestions(20, SuggestionType::kAddressEntry);
   suggestions.push_back(SuggestionType::kSeparator);
-  suggestions.push_back(SuggestionType::kAutofillOptions);
+  suggestions.push_back(SuggestionType::kManageAddress);
   controller().set_suggestions(std::move(suggestions));
   ShowAndVerifyUi(/*popup_has_parent=*/true);
 }
@@ -427,20 +493,20 @@ IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest, SearchBarViewProvided) {
   controller().set_suggestions({SuggestionType::kAddressEntry});
   ShowAndVerifyUi(
       /*popup_has_parent=*/false,
-      PopupViewSearchBarConfig{.enabled = true, .placeholder = u"Search"});
+      AutofillPopupView::SearchBarConfig{.placeholder = u"Search",
+                                         .no_results_message = u""});
 }
 
 IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
                        SearchBarViewNoSuggestionsFound) {
   // This set imitates empty search result, it contains footer suggestions only.
   controller().set_suggestions(
-      {SuggestionType::kSeparator, SuggestionType::kAutofillOptions});
+      {SuggestionType::kSeparator, SuggestionType::kManageAddress});
   ON_CALL(controller(), HasFilteredOutSuggestions).WillByDefault(Return(true));
   ShowAndVerifyUi(
       /*popup_has_parent=*/false,
-      PopupViewSearchBarConfig{.enabled = true,
-                               .placeholder = u"Search",
-                               .no_results_message = u"No suggestions"});
+      AutofillPopupView::SearchBarConfig{
+          .placeholder = u"Search", .no_results_message = u"No suggestions"});
 }
 
 INSTANTIATE_TEST_SUITE_P(All,

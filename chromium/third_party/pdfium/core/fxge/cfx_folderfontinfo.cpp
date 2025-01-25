@@ -4,13 +4,9 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fxge/cfx_folderfontinfo.h"
 
+#include <array>
 #include <iterator>
 #include <limits>
 #include <utility>
@@ -18,22 +14,26 @@
 #include "build/build_config.h"
 #include "core/fxcrt/byteorder.h"
 #include "core/fxcrt/check_op.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/containers/contains.h"
+#include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/fx_codepage.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_folder.h"
-#include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/fx_system.h"
+#include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_fontmapper.h"
 #include "core/fxge/fx_font.h"
 
 namespace {
 
-const struct {
+struct FontSubst {
   const char* m_pName;
   const char* m_pSubstName;
-} Base14Substs[] = {
+};
+
+constexpr auto kBase14Substs = fxcrt::ToArray<const FontSubst>({
     {"Courier", "Courier New"},
     {"Courier-Bold", "Courier New Bold"},
     {"Courier-BoldOblique", "Courier New Bold Italic"},
@@ -46,7 +46,7 @@ const struct {
     {"Times-Bold", "Times New Roman Bold"},
     {"Times-BoldItalic", "Times New Roman Bold Italic"},
     {"Times-Italic", "Times New Roman Italic"},
-};
+});
 
 // Used with std::unique_ptr to automatically call fclose().
 struct FxFileCloser {
@@ -92,20 +92,22 @@ ByteString LoadTableFromTT(FILE* pFile,
                            uint32_t nTables,
                            uint32_t tag,
                            FX_FILESIZE fileSize) {
-  for (uint32_t i = 0; i < nTables; i++) {
-    // TODO(tsepez): use actual span.
-    auto p = pdfium::make_span(pTables + i * 16, 16u);
-    if (fxcrt::GetUInt32MSBFirst(p) == tag) {
-      uint32_t offset = fxcrt::GetUInt32MSBFirst(p.subspan(8));
-      uint32_t size = fxcrt::GetUInt32MSBFirst(p.subspan(12));
-      if (offset > std::numeric_limits<uint32_t>::max() - size ||
-          static_cast<FX_FILESIZE>(offset + size) > fileSize ||
-          fseek(pFile, offset, SEEK_SET) < 0) {
-        return ByteString();
+  UNSAFE_TODO({
+    for (uint32_t i = 0; i < nTables; i++) {
+      // TODO(tsepez): use actual span.
+      auto p = pdfium::make_span(pTables + i * 16, 16u);
+      if (fxcrt::GetUInt32MSBFirst(p) == tag) {
+        uint32_t offset = fxcrt::GetUInt32MSBFirst(p.subspan(8));
+        uint32_t size = fxcrt::GetUInt32MSBFirst(p.subspan(12));
+        if (offset > std::numeric_limits<uint32_t>::max() - size ||
+            static_cast<FX_FILESIZE>(offset + size) > fileSize ||
+            fseek(pFile, offset, SEEK_SET) < 0) {
+          return ByteString();
+        }
+        return ReadStringFromFile(pFile, size);
       }
-      return ReadStringFromFile(pFile, size);
     }
-  }
+  });
   return ByteString();
 }
 
@@ -187,30 +189,33 @@ void CFX_FolderFontInfo::ScanFile(const ByteString& path) {
   uint8_t buffer[16];
   fseek(pFile.get(), 0, SEEK_SET);
 
-  size_t readCnt = fread(buffer, 12, 1, pFile.get());
-  if (readCnt != 1)
+  size_t items_read = fread(buffer, /*size=*/12, /*nmemb=*/1, pFile.get());
+  if (items_read != 1) {
     return;
-
-  if (fxcrt::GetUInt32MSBFirst(buffer) != kTableTTCF) {
+  }
+  uint32_t magic =
+      fxcrt::GetUInt32MSBFirst(pdfium::make_span(buffer).first<4u>());
+  if (magic != kTableTTCF) {
     ReportFace(path, pFile.get(), filesize, 0);
     return;
   }
 
   uint32_t nFaces =
-      fxcrt::GetUInt32MSBFirst(pdfium::make_span(buffer).subspan(8));
+      fxcrt::GetUInt32MSBFirst(pdfium::make_span(buffer).subspan<8u>());
   FX_SAFE_SIZE_T safe_face_bytes = nFaces;
   safe_face_bytes *= 4;
   if (!safe_face_bytes.IsValid())
     return;
 
-  const size_t face_bytes = safe_face_bytes.ValueOrDie();
-  std::unique_ptr<uint8_t, FxFreeDeleter> offsets(
-      FX_Alloc(uint8_t, face_bytes));
-  readCnt = fread(offsets.get(), 1, face_bytes, pFile.get());
-  if (readCnt != face_bytes)
+  auto offsets =
+      FixedSizeDataVector<uint8_t>::Uninit(safe_face_bytes.ValueOrDie());
+  pdfium::span<uint8_t> offsets_span = offsets.span();
+  items_read = fread(offsets_span.data(), /*size=*/1,
+                     /*nmemb=*/offsets_span.size(), pFile.get());
+  if (items_read != offsets_span.size()) {
     return;
+  }
 
-  auto offsets_span = pdfium::make_span(offsets.get(), face_bytes);
   for (uint32_t i = 0; i < nFaces; i++) {
     ReportFace(path, pFile.get(), filesize,
                fxcrt::GetUInt32MSBFirst(offsets_span.subspan(i * 4)));
@@ -226,7 +231,7 @@ void CFX_FolderFontInfo::ReportFace(const ByteString& path,
     return;
 
   uint32_t nTables =
-      fxcrt::GetUInt16MSBFirst(pdfium::as_byte_span(buffer).subspan(4));
+      fxcrt::GetUInt16MSBFirst(pdfium::as_byte_span(buffer).subspan<4, 2>());
   ByteString tables = ReadStringFromFile(pFile, nTables * 16);
   if (tables.IsEmpty())
     return;
@@ -293,9 +298,11 @@ void CFX_FolderFontInfo::ReportFace(const ByteString& path,
 }
 
 void* CFX_FolderFontInfo::GetSubstFont(const ByteString& face) {
-  for (size_t iBaseFont = 0; iBaseFont < std::size(Base14Substs); iBaseFont++) {
-    if (face == Base14Substs[iBaseFont].m_pName)
-      return GetFont(Base14Substs[iBaseFont].m_pSubstName);
+  for (size_t iBaseFont = 0; iBaseFont < std::size(kBase14Substs);
+       iBaseFont++) {
+    if (face == kBase14Substs[iBaseFont].m_pName) {
+      return GetFont(kBase14Substs[iBaseFont].m_pSubstName);
+    }
   }
   return nullptr;
 }

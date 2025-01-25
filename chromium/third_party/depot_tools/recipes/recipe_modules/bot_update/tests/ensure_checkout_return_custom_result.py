@@ -45,12 +45,6 @@ def RunSteps(api, expected_checkout_dir, expected_source_root_name,
   else:
     api.assertions.assertIsNone(result.patch_root)
 
-  api.assertions.assertEqual(result.properties, result.presentation.properties)
-  api.assertions.assertEqual(result.manifest,
-                             result.json.output.get('manifest', {}))
-  api.assertions.assertEqual(result.fixed_revisions,
-                             result.json.output.get('fixed_revisions', {}))
-
 
 def GenTests(api):
   yield api.test(

@@ -385,7 +385,7 @@ void HTMLElementStack::InsertAbove(HTMLStackItem* item,
     item->GetElement()->BeginParsingChildren();
     return;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 HTMLStackItem* HTMLElementStack::OneBelowTop() const {
@@ -453,7 +453,8 @@ bool InScopeCommon(HTMLStackItem* top, html_names::HTMLTag tag) {
     if (isMarker(item))
       return false;
   }
-  NOTREACHED();  // <html> is always on the stack and is a scope marker.
+  NOTREACHED_IN_MIGRATION();  // <html> is always on the stack and is a scope
+                              // marker.
   return false;
 }
 
@@ -464,7 +465,8 @@ bool HTMLElementStack::HasNumberedHeaderElementInScope() const {
     if (IsScopeMarker(item))
       return false;
   }
-  NOTREACHED();  // <html> is always on the stack and is a scope marker.
+  NOTREACHED_IN_MIGRATION();  // <html> is always on the stack and is a scope
+                              // marker.
   return false;
 }
 
@@ -475,7 +477,8 @@ bool HTMLElementStack::InScope(Element* target_element) const {
     if (IsScopeMarker(item))
       return false;
   }
-  NOTREACHED();  // <html> is always on the stack and is a scope marker.
+  NOTREACHED_IN_MIGRATION();  // <html> is always on the stack and is a scope
+                              // marker.
   return false;
 }
 
@@ -496,7 +499,15 @@ bool HTMLElementStack::InButtonScope(html_names::HTMLTag tag) const {
 }
 
 bool HTMLElementStack::InSelectScope(html_names::HTMLTag tag) const {
-  return InScopeCommon<IsSelectScopeMarker>(top_.Get(), tag);
+  // IsSelectScopeMarker has rigid checks about having <option>s or
+  // <optgroup>s between the top and the <select> which don't hold
+  // true anymore when permitting other tags when SelectParserRelaxation is
+  // enabled.
+  if (RuntimeEnabledFeatures::SelectParserRelaxationEnabled()) {
+    return InScopeCommon<IsScopeMarker>(top_.Get(), tag);
+  } else {
+    return InScopeCommon<IsSelectScopeMarker>(top_.Get(), tag);
+  }
 }
 
 bool HTMLElementStack::HasTemplateInHTMLScope() const {
@@ -579,7 +590,7 @@ void HTMLElementStack::RemoveNonTopCommon(Element* element) {
       return;
     }
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 HTMLStackItem* HTMLElementStack::FurthestBlockForFormattingElement(
@@ -593,7 +604,7 @@ HTMLStackItem* HTMLElementStack::FurthestBlockForFormattingElement(
       furthest_block = item;
     }
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 
@@ -615,7 +626,7 @@ void HTMLElementStack::Replace(HTMLStackItem* old_item,
     previous_item = item;
   }
   // This should only be called with items in the stack.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void HTMLElementStack::Trace(Visitor* visitor) const {

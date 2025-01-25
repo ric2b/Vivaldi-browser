@@ -3,26 +3,29 @@
 // found in the LICENSE file.
 
 import 'chrome://customize-chrome-side-panel.top-chrome/shared/sp_heading.js';
+import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 
-import type {CrToggleElement} from '//resources/cr_elements/cr_toggle/cr_toggle.js';
 import type {SpHeadingElement} from 'chrome://customize-chrome-side-panel.top-chrome/shared/sp_heading.js';
+import {WebUiListenerMixinLit} from 'chrome://resources/cr_elements/web_ui_listener_mixin_lit.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
-import type {CustomizeToolbarHandlerInterface} from '../customize_toolbar.mojom-webui.js';
+import type {Action, Category, CustomizeToolbarHandlerInterface} from '../customize_toolbar.mojom-webui.js';
 
 import {CustomizeToolbarApiProxy} from './customize_toolbar_api_proxy.js';
 import {getCss} from './toolbar.css.js';
 import {getHtml} from './toolbar.html.js';
 
+const ToolbarElementBase = WebUiListenerMixinLit(CrLitElement);
+
 export interface ToolbarElement {
   $: {
     heading: SpHeadingElement,
-    actionToggle: CrToggleElement,
-    actionLabel: HTMLHeadingElement,
+    pinningSelectionCard: HTMLDivElement,
   };
 }
 
-export class ToolbarElement extends CrLitElement {
+export class ToolbarElement extends ToolbarElementBase {
   static get is() {
     return 'customize-chrome-toolbar';
   }
@@ -35,23 +38,26 @@ export class ToolbarElement extends CrLitElement {
     return getHtml.bind(this)();
   }
 
+  static override get properties() {
+    return {
+      actions_: {type: Array},
+      categories_: {type: Array},
+      resetToDefaultDisabled_: {type: Boolean},
+    };
+  }
+
   private handler_: CustomizeToolbarHandlerInterface;
   private listenerIds_: number[] = [];
 
-  private actionId_: number = -1;
+  protected actions_: Action[] = [];
+  protected categories_: Category[] = [];
+  protected resetToDefaultDisabled_: boolean = true;
 
   constructor() {
     super();
     this.handler_ = CustomizeToolbarApiProxy.getInstance().handler;
 
-    this.handler_.listActions().then(({actions}) => {
-      this.actionId_ = actions[0]!.id;
-      this.$.actionLabel.innerText = actions[0]!.displayName;
-
-      this.handler_.getActionPinned(this.actionId_).then(({pinned}) => {
-        this.$.actionToggle.checked = pinned;
-      });
-    });
+    this.populateUi_();
   }
 
   override connectedCallback() {
@@ -60,6 +66,8 @@ export class ToolbarElement extends CrLitElement {
         CustomizeToolbarApiProxy.getInstance().callbackRouter;
     this.listenerIds_.push(callbackRouter.setActionPinned.addListener(
         this.setActionPinned_.bind(this)));
+
+    this.addWebUiListener('theme-changed', this.populateUi_.bind(this));
   }
 
   override disconnectedCallback() {
@@ -78,16 +86,45 @@ export class ToolbarElement extends CrLitElement {
     this.fire('back-click');
   }
 
-  protected onActionToggle_(event: CustomEvent<boolean>) {
-    this.handler_.pinAction(this.actionId_, event.detail);
+  protected onResetToDefaultClicked_() {
+    this.handler_.resetToDefault();
+  }
+
+  protected getActionToggleHandler_(actionId: number) {
+    return (event: CustomEvent<boolean>) =>
+               this.handler_.pinAction(actionId, event.detail);
   }
 
   private setActionPinned_(actionId: number, pinned: boolean) {
-    if (actionId !== this.actionId_) {
-      return;
-    }
+    this.actions_ = this.actions_.map((action) => {
+      if (action.id === actionId) {
+        action.pinned = pinned;
+      }
 
-    this.$.actionToggle.checked = pinned;
+      return action;
+    });
+
+    this.updateResetToDefaultDisabled();
+  }
+
+  private populateUi_() {
+    this.handler_.listActions().then(({actions}) => {
+      this.actions_ = actions;
+      assert(this.actions_.every(
+          action => action.iconUrl.url.startsWith('data:')));
+    });
+
+    this.handler_.listCategories().then(({categories}) => {
+      this.categories_ = categories;
+    });
+
+    this.updateResetToDefaultDisabled();
+  }
+
+  private updateResetToDefaultDisabled() {
+    this.handler_.getIsCustomized().then(({customized}) => {
+      this.resetToDefaultDisabled_ = !customized;
+    });
   }
 }
 

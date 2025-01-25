@@ -14,13 +14,17 @@ limitations under the License.
 ==============================================================================*/
 #include "xla/service/gpu/fusions/loop.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
+#include <tuple>
 #include <utility>
 #include <vector>
 
+#include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/numeric/bits.h"
+#include "absl/status/status.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"
 #include "mlir/IR/MLIRContext.h"  // from @llvm-project
@@ -42,7 +46,7 @@ limitations under the License.
 #include "xla/service/llvm_ir/ir_array.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
-#include "xla/status.h"
+#include "xla/util.h"
 #include "tsl/platform/macros.h"
 #include "tsl/platform/statusor.h"
 
@@ -150,6 +154,11 @@ std::pair<bool /*enabled*/, int> RowVectorizationEnabled(
 
 LaunchDimensionsConfig ComputeLoopFusionConfig(
     const HloFusionAnalysis& analysis) {
+  return ComputeLoopFusionConfig(analysis, GetElementShape(analysis));
+}
+
+LaunchDimensionsConfig ComputeLoopFusionConfig(
+    const HloFusionAnalysis& analysis, const Shape& element_shape) {
   int unroll_factor = 1;
   // Unrolling is good to read large inputs with small elements
   // due to vector loads, but increases the register pressure when one
@@ -157,7 +166,6 @@ LaunchDimensionsConfig ComputeLoopFusionConfig(
   // Therefore for fusions with small outputs prefer to use one thread
   // per output element = no unroll.
   // Call 'small' fusions that use less threads than the GPU has.
-  const auto& element_shape = GetElementShape(analysis);
   int64_t num_elements = ShapeUtil::ElementsIn(element_shape);
   int64_t n_threads_max = analysis.device_info().threads_per_core_limit() *
                           analysis.device_info().core_count();
@@ -247,7 +255,7 @@ std::optional<IndexingMap> LoopFusion::ComputeThreadIdToInputIndexing(
   CHECK_EQ(output_to_input_indexing_set.size(), 1);
   IndexingMap thread_id_to_input_indexing_map = ComposeIndexingMaps(
       *thread_id_to_output_indexing, *output_to_input_indexing_set.begin());
-  thread_id_to_input_indexing_map.Simplify(GetIndexingMapForInstruction);
+  thread_id_to_input_indexing_map.Simplify();
   return thread_id_to_input_indexing_map;
 }
 

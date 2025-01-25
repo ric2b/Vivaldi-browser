@@ -132,7 +132,8 @@ ContainerQueryParser::ContainerQueryParser(const CSSParserContext& context)
                           MediaQueryParser::SyntaxLevel::kLevel4) {}
 
 const MediaQueryExpNode* ContainerQueryParser::ParseCondition(String value) {
-  auto [tokens, raw_offsets] = CSSTokenizer(value).TokenizeToEOFWithOffsets();
+  CSSTokenizer tokenizer(value);
+  auto [tokens, raw_offsets] = tokenizer.TokenizeToEOFWithOffsets();
   CSSParserTokenRange range(tokens);
   CSSParserTokenOffsets offsets(tokens, std::move(raw_offsets), value);
   return ParseCondition(range, offsets);
@@ -195,7 +196,7 @@ const MediaQueryExpNode* ContainerQueryParser::ConsumeQueryInParens(
              range.Peek().GetType() == kFunctionToken &&
              range.Peek().FunctionId() == CSSValueID::kScrollState) {
     // scroll-state(stuck: [ none | top | left | right | bottom | inset-* ] )
-    // scroll-state(snapped: [ none | block | inline ] )
+    // scroll-state(snapped: [ none | block | inline | x | y ] )
     CSSParserTokenRange block = range.ConsumeBlock();
     block.ConsumeWhitespace();
     range.ConsumeWhitespace();

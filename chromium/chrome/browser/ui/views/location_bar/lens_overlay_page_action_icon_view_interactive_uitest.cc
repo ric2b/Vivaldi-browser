@@ -12,22 +12,21 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/lens/lens_features.h"
+#include "components/omnibox/browser/omnibox_prefs.h"
 #include "content/public/test/browser_test.h"
 #include "ui/views/interaction/element_tracker_views.h"
 #include "url/url_constants.h"
 
 namespace {
 
-class LensOverlayPageActionIconViewTest : public InProcessBrowserTest {
+class LensOverlayPageActionIconViewTestBase : public InProcessBrowserTest {
  public:
-  LensOverlayPageActionIconViewTest() {
-    scoped_feature_list_.InitWithFeatures({lens::features::kLensOverlay}, {});
-  }
-  LensOverlayPageActionIconViewTest(const LensOverlayPageActionIconViewTest&) =
-      delete;
-  LensOverlayPageActionIconViewTest& operator=(
-      const LensOverlayPageActionIconViewTest&) = delete;
-  ~LensOverlayPageActionIconViewTest() override = default;
+  LensOverlayPageActionIconViewTestBase() = default;
+  LensOverlayPageActionIconViewTestBase(
+      const LensOverlayPageActionIconViewTestBase&) = delete;
+  LensOverlayPageActionIconViewTestBase& operator=(
+      const LensOverlayPageActionIconViewTestBase&) = delete;
+  ~LensOverlayPageActionIconViewTestBase() override = default;
 
   LensOverlayPageActionIconView* lens_overlay_icon_view() {
     views::View* const icon_view =
@@ -46,8 +45,25 @@ class LensOverlayPageActionIconViewTest : public InProcessBrowserTest {
         browser_view->toolbar()->location_bar());
   }
 
- private:
+ protected:
   base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+class LensOverlayPageActionIconViewTest
+    : public LensOverlayPageActionIconViewTestBase {
+ public:
+  LensOverlayPageActionIconViewTest() {
+    scoped_feature_list_.InitWithFeatures({lens::features::kLensOverlay}, {});
+  }
+};
+
+class LensOverlayPageActionIconViewTestOmniboxEntryPointDisabled
+    : public LensOverlayPageActionIconViewTestBase {
+ public:
+  LensOverlayPageActionIconViewTestOmniboxEntryPointDisabled() {
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        lens::features::kLensOverlay, {{"omnibox-entry-point", "false"}});
+  }
 };
 
 IN_PROC_BROWSER_TEST_F(LensOverlayPageActionIconViewTest,
@@ -71,6 +87,31 @@ IN_PROC_BROWSER_TEST_F(LensOverlayPageActionIconViewTest,
   EXPECT_TRUE(icon_view->GetVisible());
 }
 
+IN_PROC_BROWSER_TEST_F(LensOverlayPageActionIconViewTest,
+                       DoesNotShowWhenSettingDisabled) {
+  // Disable the setting.
+  browser()->profile()->GetPrefs()->SetBoolean(omnibox::kShowGoogleLensShortcut,
+                                               false);
+
+  // Navigate to a non-NTP page.
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL)));
+
+  LensOverlayPageActionIconView* icon_view = lens_overlay_icon_view();
+  views::FocusManager* focus_manager = icon_view->GetFocusManager();
+  focus_manager->ClearFocus();
+  EXPECT_FALSE(focus_manager->GetFocusedView());
+  EXPECT_FALSE(icon_view->GetVisible());
+
+  // The icon should remain hidden despite focus in the location bar.
+  base::RunLoop run_loop;
+  icon_view->set_update_callback_for_testing(run_loop.QuitClosure());
+  location_bar()->FocusLocation(false);
+  EXPECT_TRUE(focus_manager->GetFocusedView());
+  run_loop.Run();
+  EXPECT_FALSE(icon_view->GetVisible());
+}
+
 IN_PROC_BROWSER_TEST_F(LensOverlayPageActionIconViewTest, DoesNotShowOnNTP) {
   // Navigate to the NTP.
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
@@ -89,6 +130,52 @@ IN_PROC_BROWSER_TEST_F(LensOverlayPageActionIconViewTest, DoesNotShowOnNTP) {
   EXPECT_TRUE(focus_manager->GetFocusedView());
   run_loop.Run();
   EXPECT_FALSE(icon_view->GetVisible());
+}
+
+IN_PROC_BROWSER_TEST_F(
+    LensOverlayPageActionIconViewTestOmniboxEntryPointDisabled,
+    DoesNotExistWhenOmniboxFeatureParamDisabled) {
+  // Navigate to a non-NTP page.
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL)));
+
+  LensOverlayPageActionIconView* icon_view = lens_overlay_icon_view();
+  EXPECT_EQ(nullptr, icon_view);
+}
+
+IN_PROC_BROWSER_TEST_F(LensOverlayPageActionIconViewTest,
+                       RespectsShowShortcutPreference) {
+  // Ensure the shortcut pref starts enabled.
+  browser()->profile()->GetPrefs()->SetBoolean(omnibox::kShowGoogleLensShortcut,
+                                               true);
+
+  // Navigate to a non-NTP page.
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL)));
+
+  LensOverlayPageActionIconView* icon_view = lens_overlay_icon_view();
+  views::FocusManager* focus_manager = icon_view->GetFocusManager();
+  focus_manager->ClearFocus();
+  EXPECT_FALSE(focus_manager->GetFocusedView());
+  EXPECT_FALSE(icon_view->GetVisible());
+
+  // Focus in the location bar should show the icon.
+  base::RunLoop run_loop;
+  icon_view->set_update_callback_for_testing(run_loop.QuitClosure());
+  location_bar()->FocusLocation(false);
+  EXPECT_TRUE(focus_manager->GetFocusedView());
+  run_loop.Run();
+  EXPECT_TRUE(icon_view->GetVisible());
+
+  // Disable the preference, the entrypoint should immediately disappear.
+  browser()->profile()->GetPrefs()->SetBoolean(omnibox::kShowGoogleLensShortcut,
+                                               false);
+  EXPECT_FALSE(icon_view->GetVisible());
+
+  // Re-enable the preference, the entrypoint should immediately become visible.
+  browser()->profile()->GetPrefs()->SetBoolean(omnibox::kShowGoogleLensShortcut,
+                                               true);
+  EXPECT_TRUE(icon_view->GetVisible());
 }
 
 }  // namespace

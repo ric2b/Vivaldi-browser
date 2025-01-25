@@ -25,6 +25,7 @@ limitations under the License.
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_computation.h"
@@ -33,7 +34,6 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/map_util.h"
 #include "xla/shape_util.h"
-#include "xla/statusor.h"
 #include "xla/xla_data.pb.h"
 
 namespace xla {
@@ -399,7 +399,7 @@ bool HloReplicationAnalysis::ComputeHloReplicationOnComputation(
   return changed;
 }
 
-Status HloReplicationAnalysis::ComputeHloReplication() {
+absl::Status HloReplicationAnalysis::ComputeHloReplication() {
   // Add entry parameters to the above sets according to user annotation.
   // Replicated modules read from `parameter_replicated_at_leaf_buffers` whereas
   // SPMD partitioned modules read from HloSharding attributes.
@@ -410,10 +410,10 @@ Status HloReplicationAnalysis::ComputeHloReplication() {
                                          HloReplication::UniqueOnAllDevices());
     const auto& replication = param->parameter_replicated_at_leaf_buffers();
     int leaf_index = 0;
-    Status status = ShapeUtil::ForEachSubshapeWithStatus(
+    absl::Status status = ShapeUtil::ForEachSubshapeWithStatus(
         param->shape(), [&](const Shape& subshape, const ShapeIndex& index) {
           if (!ShapeUtil::IsLeafIndex(param->shape(), index)) {
-            return OkStatus();
+            return absl::OkStatus();
           }
           if (cross_partition_spmd_ && param->has_sharding()) {
             // In cross-partition spmd mode, set parameter replication status
@@ -442,14 +442,14 @@ Status HloReplicationAnalysis::ComputeHloReplication() {
             }
             ++leaf_index;
           }
-          return OkStatus();
+          return absl::OkStatus();
         });
     TF_RETURN_IF_ERROR(status);
     hlo_replication_[param] = std::move(shape_tree);
   }
   ComputeHloReplicationOnComputation(entry,
                                      /*mark_everything_not_replicated=*/false);
-  return OkStatus();
+  return absl::OkStatus();
 }
 
 bool HloReplicationAnalysis::HloInstructionIsReplicatedAt(

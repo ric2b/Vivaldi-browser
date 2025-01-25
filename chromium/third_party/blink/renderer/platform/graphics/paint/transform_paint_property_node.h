@@ -17,7 +17,6 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_property_node.h"
 #include "third_party/blink/renderer/platform/graphics/paint/scroll_paint_property_node.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/transform.h"
@@ -235,6 +234,11 @@ class PLATFORM_EXPORT TransformPaintPropertyNode final
   // scrolls with respect to.
   const TransformPaintPropertyNode& NearestScrollTranslationNode() const {
     return GetTransformCache().nearest_scroll_translation();
+  }
+  // Similar to the above, but excludes this node.
+  const TransformPaintPropertyNode* ParentScrollTranslationNode() const {
+    const auto* parent = UnaliasedParent();
+    return parent ? &parent->NearestScrollTranslationNode() : nullptr;
   }
 
   // This is different from NearestScrollTranslationNode in that for a

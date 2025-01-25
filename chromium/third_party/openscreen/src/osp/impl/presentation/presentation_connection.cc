@@ -46,13 +46,13 @@ void Connection::OnConnecting() {
 
 void Connection::OnConnected(
     uint64_t connection_id,
-    uint64_t endpoint_id,
+    uint64_t instance_id,
     std::unique_ptr<ProtocolConnection> protocol_connection) {
   if (state_ != State::kConnecting) {
     return;
   }
   connection_id_ = connection_id;
-  endpoint_id_ = endpoint_id;
+  instance_id_ = instance_id;
   protocol_connection_ = std::move(protocol_connection);
   state_ = State::kConnected;
   delegate_->OnConnected();
@@ -141,14 +141,14 @@ void Connection::Terminate(TerminationSource source, TerminationReason reason) {
   parent_delegate_->OnPresentationTerminated(presentation_.id, source, reason);
 }
 
-ConnectionManager::ConnectionManager(MessageDemuxer* demuxer) {
-  message_watch_ = demuxer->SetDefaultMessageTypeWatch(
+ConnectionManager::ConnectionManager(MessageDemuxer& demuxer) {
+  message_watch_ = demuxer.SetDefaultMessageTypeWatch(
       msgs::Type::kPresentationConnectionMessage, this);
 
-  close_request_watch_ = demuxer->SetDefaultMessageTypeWatch(
+  close_request_watch_ = demuxer.SetDefaultMessageTypeWatch(
       msgs::Type::kPresentationConnectionCloseRequest, this);
 
-  close_event_watch_ = demuxer->SetDefaultMessageTypeWatch(
+  close_event_watch_ = demuxer.SetDefaultMessageTypeWatch(
       msgs::Type::kPresentationConnectionCloseEvent, this);
 }
 
@@ -170,7 +170,7 @@ void ConnectionManager::RemoveConnection(Connection* connection) {
 // TODO(jophba): refine the RegisterWatch/OnStreamMessage API. We
 // should add a layer between the message logic and the parse/dispatch
 // logic, and remove the CBOR information from ConnectionManager.
-ErrorOr<size_t> ConnectionManager::OnStreamMessage(uint64_t endpoint_id,
+ErrorOr<size_t> ConnectionManager::OnStreamMessage(uint64_t instance_id,
                                                    uint64_t connection_id,
                                                    msgs::Type message_type,
                                                    const uint8_t* buffer,
@@ -231,7 +231,7 @@ ErrorOr<size_t> ConnectionManager::OnStreamMessage(uint64_t endpoint_id,
       std::unique_ptr<ProtocolConnection> protocol_connection =
           NetworkServiceManager::Get()
               ->GetProtocolConnectionServer()
-              ->CreateProtocolConnection(endpoint_id);
+              ->CreateProtocolConnection(instance_id);
       if (protocol_connection) {
         protocol_connection->WriteMessage(
             response, &msgs::EncodePresentationConnectionCloseResponse);

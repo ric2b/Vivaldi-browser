@@ -36,6 +36,10 @@ COMPONENT_EXPORT(GOOGLE_APIS) extern const char kIpProtectionAuthScope[];
 COMPONENT_EXPORT(GOOGLE_APIS) extern const char kParentApprovalOAuth2Scope[];
 COMPONENT_EXPORT(GOOGLE_APIS) extern const char kPeopleApiReadOnlyOAuth2Scope[];
 COMPONENT_EXPORT(GOOGLE_APIS)
+extern const char kPeopleApiReadWriteOAuth2Scope[];
+COMPONENT_EXPORT(GOOGLE_APIS)
+extern const char kProfileLanguageReadOnlyOAuth2Scope[];
+COMPONENT_EXPORT(GOOGLE_APIS)
 extern const char kProgrammaticChallengeOAuth2Scope[];
 COMPONENT_EXPORT(GOOGLE_APIS) extern const char kAccountsReauthOAuth2Scope[];
 COMPONENT_EXPORT(GOOGLE_APIS) extern const char kAuditRecordingOAuth2Scope[];
@@ -82,6 +86,10 @@ extern const char kCloudSearchQueryOAuth2Scope[];
 // https://developers.google.com/identity/protocols/oauth2/scopes#tasks
 COMPONENT_EXPORT(GOOGLE_APIS) extern const char kTasksReadOnlyOAuth2Scope[];
 COMPONENT_EXPORT(GOOGLE_APIS) extern const char kTasksOAuth2Scope[];
+
+// OAuth 2 scope for YouTube Music API.
+// https://developers.google.com/youtube/mediaconnect/guides/authentication#identify-access-scopes
+COMPONENT_EXPORT(GOOGLE_APIS) extern const char kYouTubeMusicOAuth2Scope[];
 
 // OAuth 2 scopes for Google Classroom API.
 // https://developers.google.com/identity/protocols/oauth2/scopes#classroom

@@ -50,7 +50,7 @@ def RunHooks():
 
 if args.clobber_out:
   import shutil
-  for build_dir in ["out", "relayproxy"]:
+  for build_dir in ["out"]:
     out_dir = os.path.join(SRC,build_dir)
     if os.access(out_dir, os.R_OK):
       start_time = datetime.datetime.now()

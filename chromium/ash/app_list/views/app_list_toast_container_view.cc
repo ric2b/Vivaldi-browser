@@ -49,7 +49,7 @@ const gfx::VectorIcon* GetToastIconForOrder(AppListSortOrder order) {
       return &kSortColorIcon;
     case AppListSortOrder::kCustom:
     case AppListSortOrder::kAlphabeticalEphemeralAppFirst:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return nullptr;
   }
 }
@@ -217,9 +217,10 @@ void AppListToastContainerView::CreateTutorialNudgeView() {
       .SetIconBackground(true);
 
   toast_view_ = AddChildView(toast_view_builder.Build());
-  toast_view_->SetAccessibleRole(ax::mojom::Role::kRegion);
-  toast_view_->toast_button()->SetAccessibleName(l10n_util::GetStringUTF16(
-      IDS_ASH_LAUNCHER_APPS_COLLECTIONS_NUDGE_DISMISS_BUTTON_SPOKEN_TEXT));
+  toast_view_->GetViewAccessibility().SetRole(ax::mojom::Role::kRegion);
+  toast_view_->toast_button()->GetViewAccessibility().SetName(
+      l10n_util::GetStringUTF16(
+          IDS_ASH_LAUNCHER_APPS_COLLECTIONS_NUDGE_DISMISS_BUTTON_SPOKEN_TEXT));
   if (available_width_) {
     toast_view_->SetAvailableWidth(*available_width_);
   }
@@ -455,7 +456,7 @@ std::u16string AppListToastContainerView::CalculateToastTextFromOrder(
           IDS_ASH_LAUNCHER_UNDO_SORT_TOAST_FOR_COLOR_SORT);
     case AppListSortOrder::kCustom:
     case AppListSortOrder::kAlphabeticalEphemeralAppFirst:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return u"";
   }
 }
@@ -472,7 +473,7 @@ std::u16string AppListToastContainerView::GetA11yTextOnUndoButtonFromOrder(
           IDS_ASH_LAUNCHER_UNDO_COLOR_SORT_TOAST_SPOKEN_TEXT);
     case AppListSortOrder::kCustom:
     case AppListSortOrder::kAlphabeticalEphemeralAppFirst:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return u"";
   }
 }

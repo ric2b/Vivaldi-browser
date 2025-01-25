@@ -35,7 +35,9 @@
         "properties": {
           "info": {"type": "string", "nodoc": true},
           "deviceName": {"type": "string", "description": "The name of the foreign device."},
-          "sessions": {"type": "array", "items": {"$ref": "Session"}, "description": "A list of open window sessions for the foreign device, sorted from most recently to least recently modified session."}
+          "sessions": {"type": "array", "items": {"$ref": "Session"}, "description": "A list of open window sessions for the foreign device, sorted from most recently to least recently modified session."},
+          "vivExtData": { "type": "string", "optional": true, "description": "Vivaldi ext data" },
+          "deviceType": { "type": "string", "optional": true, "description": "Device type" }
         }
       }
     ],

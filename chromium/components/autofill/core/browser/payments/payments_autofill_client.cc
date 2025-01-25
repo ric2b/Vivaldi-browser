@@ -4,13 +4,17 @@
 
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 
+#include <optional>
+
 #include "base/functional/callback.h"
 #include "components/autofill/core/browser/autofill_progress_dialog_type.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/merchant_promo_code_manager.h"
 #include "components/autofill/core/browser/payments/autofill_error_dialog_context.h"
 #include "components/autofill/core/browser/payments/card_unmask_challenge_option.h"
 #include "components/autofill/core/browser/payments/card_unmask_delegate.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_manager.h"
+#include "components/autofill/core/browser/ui/payments/bubble_show_options.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_options.h"
 
 namespace autofill::payments {
@@ -38,16 +42,64 @@ void PaymentsAutofillClient::ShowLocalCardMigrationResults(
     const std::vector<MigratableCreditCard>& migratable_credit_cards,
     MigrationDeleteCardCallback delete_local_card_callback) {}
 
-void PaymentsAutofillClient::VirtualCardEnrollCompleted(bool is_vcn_enrolled) {}
-#endif  // BUILDFLAG(IS_ANDROID)
+void PaymentsAutofillClient::ShowWebauthnOfferDialog(
+    WebauthnDialogCallback offer_dialog_callback) {}
 
-void PaymentsAutofillClient::CreditCardUploadCompleted(bool card_saved) {}
+void PaymentsAutofillClient::ShowWebauthnVerifyPendingDialog(
+    WebauthnDialogCallback verify_pending_dialog_callback) {}
 
-bool PaymentsAutofillClient::IsSaveCardPromptVisible() const {
+void PaymentsAutofillClient::UpdateWebauthnOfferDialogWithError() {}
+
+bool PaymentsAutofillClient::CloseWebauthnDialog() {
   return false;
 }
 
-void PaymentsAutofillClient::HideSaveCardPromptPrompt() {}
+void PaymentsAutofillClient::HideVirtualCardEnrollBubbleAndIconIfVisible() {}
+#endif  // BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+void PaymentsAutofillClient::ConfirmAccountNameFixFlow(
+    base::OnceCallback<void(const std::u16string&)> callback) {}
+
+void PaymentsAutofillClient::ConfirmExpirationDateFixFlow(
+    const CreditCard& card,
+    base::OnceCallback<void(const std::u16string&, const std::u16string&)>
+        callback) {}
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+
+bool PaymentsAutofillClient::HasCreditCardScanFeature() const {
+  return false;
+}
+
+void PaymentsAutofillClient::ScanCreditCard(CreditCardScanCallback callback) {}
+
+void PaymentsAutofillClient::ConfirmSaveCreditCardLocally(
+    const CreditCard& card,
+    AutofillClient::SaveCreditCardOptions options,
+    LocalSaveCardPromptCallback callback) {}
+
+void PaymentsAutofillClient::ConfirmSaveCreditCardToCloud(
+    const CreditCard& card,
+    const LegalMessageLines& legal_message_lines,
+    AutofillClient::SaveCreditCardOptions options,
+    UploadSaveCardPromptCallback callback) {}
+
+void PaymentsAutofillClient::CreditCardUploadCompleted(
+    bool card_saved,
+    std::optional<OnConfirmationClosedCallback>
+        on_confirmation_closed_callback) {}
+
+void PaymentsAutofillClient::HideSaveCardPrompt() {}
+
+void PaymentsAutofillClient::ShowVirtualCardEnrollDialog(
+    const VirtualCardEnrollmentFields& virtual_card_enrollment_fields,
+    base::OnceClosure accept_virtual_card_callback,
+    base::OnceClosure decline_virtual_card_callback) {}
+
+void PaymentsAutofillClient::VirtualCardEnrollCompleted(bool is_vcn_enrolled) {}
+
+void PaymentsAutofillClient::OnVirtualCardDataAvailable(
+    const VirtualCardManualFallbackBubbleOptions& options) {}
 
 void PaymentsAutofillClient::ConfirmSaveIbanLocally(
     const Iban& iban,
@@ -102,7 +154,7 @@ void PaymentsAutofillClient::ShowUnmaskPrompt(
     base::WeakPtr<CardUnmaskDelegate> delegate) {}
 
 void PaymentsAutofillClient::OnUnmaskVerificationResult(
-    AutofillClient::PaymentsRpcResult result) {}
+    PaymentsRpcResult result) {}
 
 VirtualCardEnrollmentManager*
 PaymentsAutofillClient::GetVirtualCardEnrollmentManager() {
@@ -117,5 +169,33 @@ CreditCardRiskBasedAuthenticator*
 PaymentsAutofillClient::GetRiskBasedAuthenticator() {
   return nullptr;
 }
+
+void PaymentsAutofillClient::ShowMandatoryReauthOptInPrompt(
+    base::OnceClosure accept_mandatory_reauth_callback,
+    base::OnceClosure cancel_mandatory_reauth_callback,
+    base::RepeatingClosure close_mandatory_reauth_callback) {}
+
+IbanManager* PaymentsAutofillClient::GetIbanManager() {
+  return nullptr;
+}
+
+IbanAccessManager* PaymentsAutofillClient::GetIbanAccessManager() {
+  return nullptr;
+}
+
+MerchantPromoCodeManager*
+PaymentsAutofillClient::GetMerchantPromoCodeManager() {
+  return nullptr;
+}
+
+void PaymentsAutofillClient::ShowMandatoryReauthOptInConfirmation() {}
+
+void PaymentsAutofillClient::UpdateOfferNotification(
+    const AutofillOfferData& offer,
+    const OfferNotificationOptions& options) {}
+
+void PaymentsAutofillClient::DismissOfferNotification() {}
+
+void PaymentsAutofillClient::OpenPromoCodeOfferDetailsURL(const GURL& url) {}
 
 }  // namespace autofill::payments

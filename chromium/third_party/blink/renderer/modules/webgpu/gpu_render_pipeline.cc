@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_pipeline.h"
 
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
@@ -57,6 +62,21 @@ wgpu::BlendState AsDawnType(const GPUBlendState* webgpu_desc) {
   };
 
   return dawn_desc;
+}
+
+bool ValidateBlendComponent(GPUDevice* device,
+                            const GPUBlendComponent* webgpu_desc,
+                            ExceptionState& exception_state) {
+  DCHECK(webgpu_desc);
+
+  return device->ValidateBlendFactor(
+             webgpu_desc->getSrcFactorOr(
+                 V8GPUBlendFactor(V8GPUBlendFactor::Enum::kOne)),
+             exception_state) &&
+         device->ValidateBlendFactor(
+             webgpu_desc->getDstFactorOr(
+                 V8GPUBlendFactor(V8GPUBlendFactor::Enum::kZero)),
+             exception_state);
 }
 
 }  // anonymous namespace
@@ -126,17 +146,22 @@ void GPUPrimitiveStateAsWGPUPrimitiveState(
   dawn_state->dawn_desc.frontFace = AsDawnEnum(webgpu_desc->frontFace());
   dawn_state->dawn_desc.cullMode = AsDawnEnum(webgpu_desc->cullMode());
 
+#ifdef WGPU_BREAKING_CHANGE_DEPTH_CLIP_CONTROL
+  dawn_state->dawn_desc.unclippedDepth = webgpu_desc->unclippedDepth();
+#else
   if (webgpu_desc->unclippedDepth()) {
     auto* depth_clip_control = &dawn_state->depth_clip_control;
     depth_clip_control->unclippedDepth = webgpu_desc->unclippedDepth();
     dawn_state->dawn_desc.nextInChain = depth_clip_control;
   }
+#endif
 }
 
 void GPUDepthStencilStateAsWGPUDepthStencilState(
     GPUDevice* device,
     const GPUDepthStencilState* webgpu_desc,
     OwnedDepthStencilState* dawn_state,
+    wgpu::PrimitiveTopology topology,
     ExceptionState& exception_state) {
   DCHECK(webgpu_desc);
   DCHECK(dawn_state);
@@ -173,6 +198,31 @@ void GPUDepthStencilStateAsWGPUDepthStencilState(
   dawn_state->dawn_desc.depthBiasSlopeScale =
       webgpu_desc->depthBiasSlopeScale();
   dawn_state->dawn_desc.depthBiasClamp = webgpu_desc->depthBiasClamp();
+
+  // Setting depth bias for points or lines will be a validation error soon.
+  // TODO(crbug.com/352567424): Remove after deprecation period.
+  switch (topology) {
+    case wgpu::PrimitiveTopology::PointList:
+    case wgpu::PrimitiveTopology::LineList:
+    case wgpu::PrimitiveTopology::LineStrip:
+      if (dawn_state->dawn_desc.depthBias != 0 ||
+          dawn_state->dawn_desc.depthBiasSlopeScale != 0 ||
+          dawn_state->dawn_desc.depthBiasClamp != 0) {
+        // Warn about upcoming validation error and force the values to zero
+        // for now so that validation passes in Dawn.
+        device->AddConsoleWarning(
+            "Setting depthBias, depthBiasSlopeScale, or depthBiasClamp for "
+            "pipelines that use a line or point topology has no effect, "
+            "and will soon be a validation error.");
+
+        dawn_state->dawn_desc.depthBias = 0;
+        dawn_state->dawn_desc.depthBiasSlopeScale = 0.0f;
+        dawn_state->dawn_desc.depthBiasClamp = 0.0f;
+      }
+      break;
+    default:
+      break;
+  }
 }
 
 wgpu::MultisampleState AsDawnType(const GPUMultisampleState* webgpu_desc) {
@@ -310,6 +360,14 @@ void GPUFragmentStateAsWGPUFragmentState(GPUDevice* device,
         device->AddConsoleWarning(String::Format(
             kGPUBlendComponentPartiallySpecifiedMessage, i, "alpha"));
       }
+
+      if (!ValidateBlendComponent(device, blend_state->color(),
+                                  exception_state) ||
+          !ValidateBlendComponent(device, blend_state->alpha(),
+                                  exception_state)) {
+        return;
+      }
+
       dawn_fragment->blend_states[i] = AsDawnType(blend_state);
       dawn_fragment->targets[i].blend = &dawn_fragment->blend_states[i];
     }
@@ -351,7 +409,7 @@ void ConvertToDawnType(v8::Isolate* isolate,
   if (webgpu_desc->hasDepthStencil()) {
     GPUDepthStencilStateAsWGPUDepthStencilState(
         device, webgpu_desc->depthStencil(), &dawn_desc_info->depth_stencil,
-        exception_state);
+        dawn_desc_info->dawn_desc.primitive.topology, exception_state);
     dawn_desc_info->dawn_desc.depthStencil =
         &dawn_desc_info->depth_stencil.dawn_desc;
   }

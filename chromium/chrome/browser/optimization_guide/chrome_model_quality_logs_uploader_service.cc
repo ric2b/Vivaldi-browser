@@ -21,6 +21,7 @@
 #include "components/optimization_guide/core/optimization_guide_util.h"
 #include "components/optimization_guide/proto/model_execution.pb.h"
 #include "components/prefs/pref_service.h"
+#include "components/variations/service/variations_service.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 
@@ -83,21 +84,32 @@ bool ChromeModelQualityLogsUploaderService::CanUploadLogs(
     return false;
   }
 
-  // Don't upload logs if logging is disabled by enterprise policy.
-  if (model_execution_feature_controller_ &&
-      !model_execution_feature_controller_
-           ->ShouldFeatureBeCurrentlyAllowedForLogging(feature)) {
-    RecordUploadStatusHistogram(
-        feature, ModelQualityLogsUploadStatus::kDisabledDueToEnterprisePolicy);
-    return false;
+  if (model_execution_feature_controller_) {
+    // Don't upload logs if the feature is not enabled for the user.
+    if (!model_execution_feature_controller_
+             ->ShouldFeatureBeCurrentlyEnabledForUser(feature)) {
+      RecordUploadStatusHistogram(
+          feature, ModelQualityLogsUploadStatus::kFeatureNotEnabledForUser);
+      return false;
+    }
+
+    // Don't upload logs if logging is disabled by enterprise policy.
+    if (!model_execution_feature_controller_
+             ->ShouldFeatureBeCurrentlyAllowedForLogging(feature)) {
+      RecordUploadStatusHistogram(
+          feature,
+          ModelQualityLogsUploadStatus::kDisabledDueToEnterprisePolicy);
+      return false;
+    }
   }
 
   return true;
 }
 
-void ChromeModelQualityLogsUploaderService::SetSystemProfileProto(
+void ChromeModelQualityLogsUploaderService::SetSystemMetadata(
     proto::LoggingMetadata* logging_metadata) {
-  CHECK(logging_metadata) << "Logging metadata provided is null\n";
+  CHECK(logging_metadata);
+
   // Set system profile proto before uploading. Try to use persistent system
   // profile. If that is not available, then use the core system profile (Note
   // this lacks field trial information).
@@ -109,6 +121,16 @@ void ChromeModelQualityLogsUploaderService::SetSystemProfileProto(
         chrome::IsExtendedStableChannel(),
         g_browser_process->GetApplicationLocale(), metrics::GetAppPackageName(),
         logging_metadata->mutable_system_profile());
+  }
+  // Remove identifiers for privacy reasons.
+  logging_metadata->mutable_system_profile()->clear_client_uuid();
+  logging_metadata->mutable_system_profile()->mutable_cloned_install_info()
+      ->clear_cloned_from_client_id();
+
+  auto* variations_service = g_browser_process->variations_service();
+  if (variations_service) {
+    logging_metadata->set_is_likely_dogfood_client(
+        variations_service->IsLikelyDogfoodClient());
   }
 }
 

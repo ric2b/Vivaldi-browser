@@ -44,7 +44,9 @@ enum class DismissReason {
   DISMISSED_BY_FEATURE = 9,
 
   // Insert new values before this line.
-  COUNT
+  COUNT,
+
+  kMaxValue = COUNT,
 };
 
 // "Urgent" means the user should take actions ASAP, such as responding to
@@ -127,6 +129,9 @@ enum class MessageIdentifier {
   PROMPT_HATS_MICROPHONE_CUSTOM_INVITATION = 46,
   PROMPT_HATS_MICROPHONE_GENERIC_INVITATION = 47,
   PERMISSION_BLOCKED = 48,
+  SAVE_CARD_FAILURE = 49,
+  VIRTUAL_CARD_ENROLL_FAILURE = 50,
+  PROMPT_HATS_QUICK_DELETE = 51,
   // Insert new values before this line.
   COUNT
 };

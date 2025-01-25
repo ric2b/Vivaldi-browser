@@ -21,7 +21,7 @@ use ldt_tbc::TweakableBlockCipherDecrypter;
 use ldt_tbc::TweakableBlockCipherEncrypter;
 use ldt_tbc::TweakableBlockCipherKey;
 use std::{collections::hash_map, fs, io, io::BufRead as _};
-use xts_aes::{self, XtsAes128Key, XtsAes256Key, XtsDecrypter, XtsEncrypter, XtsKey};
+use xts_aes::{XtsAes128Key, XtsAes256Key, XtsDecrypter, XtsEncrypter, XtsKey};
 
 #[test]
 fn nist_test_vectors_data_unit_seq_128() -> Result<(), anyhow::Error> {

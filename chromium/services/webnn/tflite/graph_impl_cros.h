@@ -8,6 +8,7 @@
 #include "components/ml/mojom/web_platform_model.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom.h"
+#include "services/webnn/webnn_context_impl.h"
 #include "services/webnn/webnn_graph_impl.h"
 
 namespace webnn::tflite {
@@ -16,13 +17,15 @@ class ContextImplCrOS;
 
 // GraphImplCrOS inherits from WebNNGraphImpl to represent a TFLite graph
 // implementation on ChromeOS platform. It is mainly responsible for building a
-// TFLite flatbuffer model from mojom::GraphInfo via tflite::GraphBuilder, then
-// initializing and executing the graph with ML Service.
+// TFLite flatbuffer model from mojom::GraphInfo via tflite::GraphBuilderTflite,
+// then initializing and executing the graph with ML Service.
 class GraphImplCrOS final : public WebNNGraphImpl {
  public:
-  static void CreateAndBuild(ContextImplCrOS* context_impl,
-                             mojom::GraphInfoPtr graph_info,
-                             mojom::WebNNContext::CreateGraphCallback callback);
+  static void CreateAndBuild(
+      ContextImplCrOS* context_impl,
+      mojom::GraphInfoPtr graph_info,
+      ComputeResourceInfo compute_resource_info,
+      WebNNContextImpl::CreateGraphImplCallback callback);
 
   GraphImplCrOS(const GraphImplCrOS&) = delete;
   GraphImplCrOS& operator=(const GraphImplCrOS&) = delete;
@@ -30,6 +33,7 @@ class GraphImplCrOS final : public WebNNGraphImpl {
 
  private:
   GraphImplCrOS(
+      ContextImplCrOS* context_impl,
       ComputeResourceInfo compute_resource_info,
       mojo::PendingRemote<ml::model_loader::mojom::Model> pending_remote);
 

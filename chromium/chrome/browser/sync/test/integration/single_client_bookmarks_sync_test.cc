@@ -225,10 +225,7 @@ class SingleClientBookmarksSyncTestWithEnabledReuploadPreexistingBookmarks
 
 class SingleClientBookmarksThrottlingSyncTest : public SyncTest {
  public:
-  SingleClientBookmarksThrottlingSyncTest() : SyncTest(SINGLE_CLIENT) {
-    features_override_.InitAndDisableFeature(
-        syncer::kSyncPollImmediatelyOnEveryStartup);
-  }
+  SingleClientBookmarksThrottlingSyncTest() : SyncTest(SINGLE_CLIENT) {}
 
   void SetUpInProcessBrowserTestFixture() override {
     SyncTest::SetUpInProcessBrowserTestFixture();
@@ -266,7 +263,6 @@ class SingleClientBookmarksThrottlingSyncTest : public SyncTest {
   }
 
  private:
-  base::test::ScopedFeatureList features_override_;
   base::CallbackListSubscription create_services_subscription_;
 };
 
@@ -2357,7 +2353,7 @@ class SingleClientBookmarksWithAccountStorageSyncTest
 
  private:
   base::test::ScopedFeatureList features_override_{
-      syncer::kEnableBookmarkFoldersForAccountStorage};
+      syncer::kSyncEnableBookmarksInTransportMode};
 };
 
 IN_PROC_BROWSER_TEST_F(SingleClientBookmarksWithAccountStorageSyncTest,

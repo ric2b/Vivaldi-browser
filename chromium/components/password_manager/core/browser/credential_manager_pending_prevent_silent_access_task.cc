@@ -34,7 +34,7 @@ void CredentialManagerPendingPreventSilentAccessTask::OnGetPasswordStoreResults(
   // This class overrides OnGetPasswordStoreResultsFrom() (the version of this
   // method that also receives the originating store), so the store-less version
   // never gets called.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void CredentialManagerPendingPreventSilentAccessTask::
@@ -42,7 +42,8 @@ void CredentialManagerPendingPreventSilentAccessTask::
         PasswordStoreInterface* store,
         std::vector<std::unique_ptr<PasswordForm>> results) {
   for (const auto& form : results) {
-    if (form->match_type == PasswordForm::MatchType::kGrouped) {
+    if (form->match_type == PasswordForm::MatchType::kGrouped ||
+        form->blocked_by_user) {
       continue;
     }
     if (!form->skip_zero_click) {
@@ -51,8 +52,9 @@ void CredentialManagerPendingPreventSilentAccessTask::
     }
   }
   pending_requests_--;
-  if (!pending_requests_)
+  if (!pending_requests_) {
     delegate_->DoneRequiringUserMediation();
+  }
 }
 
 }  // namespace password_manager

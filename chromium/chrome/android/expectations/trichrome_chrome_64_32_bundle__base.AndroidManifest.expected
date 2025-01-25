@@ -2,8 +2,8 @@
 <manifest
     xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.chromium.chrome.stable"
-    platformBuildVersionCode="34"
-    platformBuildVersionName="14"
+    platformBuildVersionCode="35"
+    platformBuildVersionName="15"
     android:isolatedSplits="true"
     android:versionCode="OFFSET=33"
     android:versionName="#.#.#.#">
@@ -77,7 +77,7 @@
   <uses-permission-sdk-23 android:name="android.permission.SCENE_UNDERSTANDING"/>
   <uses-permission-sdk-23 android:name="android.permission.USE_BIOMETRIC"/>
   <uses-permission-sdk-23 android:name="android.permission.USE_FINGERPRINT"/>
-  <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34"/>
+  <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="35"/>
   <application
       android:name="org.chromium.chrome.browser.base.SplitChromeApplication"
       android:allowAudioPlaybackCapture="false"
@@ -132,6 +132,12 @@
         android:grantUriPermissions="true">
       <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths"/>
     </provider>  # DIFF-ANCHOR: b73a881a
+    <provider  # DIFF-ANCHOR: 43f90318
+        android:name="org.chromium.chrome.browser.pdf.PdfContentProvider"
+        android:authorities="$PACKAGE.PdfContentProvider"
+        android:exported="false"
+        android:grantUriPermissions="true">
+    </provider>  # DIFF-ANCHOR: 43f90318
     <provider  # DIFF-ANCHOR: f1c2d7e1
         android:name="org.chromium.chrome.browser.provider.ChromeBrowserProvider"
         android:authorities="$PACKAGE.ChromeBrowserProvider;$PACKAGE.browser;$PACKAGE"

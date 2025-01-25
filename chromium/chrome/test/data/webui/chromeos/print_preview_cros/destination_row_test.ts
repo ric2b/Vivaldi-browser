@@ -7,11 +7,13 @@ import 'chrome://os-print/js/destination_row_controller.js';
 import {PDF_DESTINATION} from 'chrome://os-print/js/data/destination_constants.js';
 import {DestinationRowElement} from 'chrome://os-print/js/destination_row.js';
 import {DestinationRowController} from 'chrome://os-print/js/destination_row_controller.js';
-import {Destination, PrinterType} from 'chrome://os-print/js/utils/print_preview_cros_app_types.js';
+import {Destination} from 'chrome://os-print/js/utils/print_preview_cros_app_types.js';
 import {strictQuery} from 'chrome://resources/ash/common/typescript_utils/strict_query.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {assertEquals, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 import {isVisible} from 'chrome://webui-test/test_util.js';
+
+import {createTestDestination, resetDataManagersAndProviders} from './test_utils.js';
 
 suite('DestinationRow', () => {
   let element: DestinationRowElement;
@@ -20,6 +22,7 @@ suite('DestinationRow', () => {
   setup(() => {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
+    resetDataManagersAndProviders();
     element = document.createElement(DestinationRowElement.is) as
         DestinationRowElement;
     element.destination = PDF_DESTINATION;
@@ -31,6 +34,7 @@ suite('DestinationRow', () => {
 
   teardown(() => {
     element.remove();
+    resetDataManagersAndProviders();
   });
 
   function getTextContent(selector: string): string {
@@ -62,13 +66,7 @@ suite('DestinationRow', () => {
         'PDF display name should be shown');
 
     // Change destination to verify UI matches updated destination.
-    const destination: Destination = {
-      id: 'fake-destination-id',
-      displayName: 'Fake Destination',
-      printerType: PrinterType.LOCAL_PRINTER,
-      printerManuallySelected: false,
-      printerStatusReason: null,
-    };
+    const destination: Destination = createTestDestination();
     element.destination = destination;
 
     assertEquals(

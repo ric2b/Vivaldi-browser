@@ -18,7 +18,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/intent_picker_tab_helper.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
-#include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
@@ -108,10 +107,7 @@ AppBannerManagerDesktop::ParamsToPerformInstallableWebAppCheck() {
   InstallableParams params;
   params.valid_primary_icon = true;
   params.fetch_screenshots = true;
-  params.installable_criteria =
-      base::FeatureList::IsEnabled(features::kUniversalInstallManifest)
-          ? InstallableCriteria::kImplicitManifestFieldsHTML
-          : InstallableCriteria::kValidManifestWithIcons;
+  params.installable_criteria = InstallableCriteria::kValidManifestWithIcons;
   return params;
 }
 
@@ -222,7 +218,7 @@ void AppBannerManagerDesktop::ShowBannerUi(WebappInstallSource install_source,
                               weak_factory_.GetWeakPtr()));
 }
 
-void AppBannerManagerDesktop::OnWebAppInstalled(
+void AppBannerManagerDesktop::OnWebAppInstalledWithOsHooks(
     const webapps::AppId& installed_app_id) {
   if (!validated_url()) {
     return;

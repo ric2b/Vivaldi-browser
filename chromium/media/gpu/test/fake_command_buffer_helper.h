@@ -41,7 +41,6 @@ class FakeCommandBufferHelper : public CommandBufferHelper {
 
 #if !BUILDFLAG(IS_ANDROID)
   // CommandBufferHelper implementation.
-  gl::GLContext* GetGLContext() override;
   gpu::SharedImageStub* GetSharedImageStub() override;
 #if BUILDFLAG(IS_WIN)
   gpu::DXGISharedHandleManager* GetDXGISharedHandleManager() override;
@@ -54,7 +53,6 @@ class FakeCommandBufferHelper : public CommandBufferHelper {
   std::unique_ptr<gpu::SharedImageRepresentationFactoryRef> Register(
       std::unique_ptr<gpu::SharedImageBacking> backing) override;
   void AddWillDestroyStubCB(WillDestroyStubCB callback) override;
-  bool SupportsTextureRectangle() const override;
 #endif
 
  private:

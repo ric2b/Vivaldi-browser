@@ -15,7 +15,7 @@
 #include "cc/input/hit_test_opaqueness.h"
 #include "cc/input/layer_selection_bound.h"
 #include "cc/paint/element_id.h"
-#include "third_party/blink/renderer/platform/geometry/layout_point.h"
+#include "third_party/blink/renderer/platform/geometry/infinite_int_rect.h"
 #include "third_party/blink/renderer/platform/graphics/paint/display_item.h"
 #include "third_party/blink/renderer/platform/graphics/paint/display_item_list.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_artifact.h"
@@ -137,8 +137,9 @@ class PLATFORM_EXPORT PaintController
       const DisplayItemClient&,
       DisplayItem::Type,
       const TransformPaintPropertyNode* scroll_translation,
-      const gfx::Rect&,
-      cc::HitTestOpaqueness);
+      const gfx::Rect& scroll_hit_test_rect,
+      cc::HitTestOpaqueness,
+      const gfx::Rect& scrolling_contents_cull_rect = InfiniteIntRect());
 
   void RecordSelection(std::optional<PaintedSelectionBound> start,
                        std::optional<PaintedSelectionBound> end,
@@ -267,6 +268,8 @@ class PLATFORM_EXPORT PaintController
 
 #if DCHECK_IS_ON()
   void ShowCompactDebugData() const;
+  String DebugDataAsString(
+      DisplayItemList::JsonOption = DisplayItemList::kDefault) const;
   void ShowDebugData() const;
   void ShowDebugDataWithPaintRecords() const;
 #endif
@@ -381,7 +384,7 @@ class PLATFORM_EXPORT PaintController
   ALWAYS_INLINE bool IsCheckingUnderInvalidation() const;
 
 #if DCHECK_IS_ON()
-  void ShowDebugDataInternal(DisplayItemList::JsonFlags) const;
+  void ShowDebugDataInternal(DisplayItemList::JsonOption) const;
 #endif
 
   void SetBenchmarkMode(PaintBenchmarkMode);

@@ -2,6 +2,8 @@
 build/
 buildtools/
 clang-format
+osp/impl/quic/certificates/agent_certificate.crt
+osp/impl/quic/certificates/private_key.key
 tools/clang/scripts/update.py
 *sysroot
 *.profraw

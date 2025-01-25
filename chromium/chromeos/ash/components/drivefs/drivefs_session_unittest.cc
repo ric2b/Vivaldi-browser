@@ -192,7 +192,7 @@ class MockDriveFsConnection : public DriveFsConnection,
 
  private:
   mojom::DriveFs* GetForwardingInterface() override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
 
@@ -257,6 +257,7 @@ class DriveFsSessionForTest : public DriveFsSession {
   void OnMirrorSyncingStatusUpdate(mojom::SyncingStatusPtr status) override {}
   void OnNotificationReceived(
       mojom::DriveFsNotificationPtr notification) override {}
+  void OnMirrorSyncError(mojom::MirrorSyncErrorListPtr error_list) override {}
 };
 
 class DriveFsSessionTest : public ::testing::Test,

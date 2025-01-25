@@ -20,6 +20,7 @@
 namespace viz {
 
 OutputSurface::Capabilities::Capabilities() = default;
+OutputSurface::Capabilities::~Capabilities() = default;
 OutputSurface::Capabilities::Capabilities(const Capabilities& capabilities) =
     default;
 OutputSurface::Capabilities& OutputSurface::Capabilities::operator=(
@@ -64,9 +65,11 @@ void OutputSurface::SetNeedsSwapSizeNotifications(
   DCHECK(!needs_swap_size_notifications);
 }
 
+#if BUILDFLAG(IS_ANDROID)
 base::ScopedClosureRunner OutputSurface::GetCacheBackBufferCb() {
   return base::ScopedClosureRunner();
 }
+#endif
 
 gpu::Mailbox OutputSurface::GetOverlayMailbox() const {
   return gpu::Mailbox();
@@ -75,7 +78,7 @@ gpu::Mailbox OutputSurface::GetOverlayMailbox() const {
 void OutputSurface::InitDelegatedInkPointRendererReceiver(
     mojo::PendingReceiver<gfx::mojom::DelegatedInkPointRenderer>
         pending_receiver) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 }  // namespace viz

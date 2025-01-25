@@ -448,7 +448,7 @@ void PushMessagingBrowserTestBase::SubscribeSuccessfully(
           out_token));
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -534,8 +534,10 @@ void PushMessagingBrowserTestBase::EndpointToToken(const std::string& endpoint,
                                                    bool standard_protocol,
                                                    std::string* out_token) {
   size_t last_slash = endpoint.rfind('/');
+  ASSERT_NE(last_slash, std::string::npos);
 
-  ASSERT_EQ(kPushMessagingGcmEndpoint, endpoint.substr(0, last_slash + 1));
+  ASSERT_EQ(features::kPushMessagingGcmEndpointUrl.Get(),
+            endpoint.substr(0, last_slash + 1));
 
   ASSERT_LT(last_slash + 1, endpoint.length());  // Token must not be empty.
 
@@ -2882,11 +2884,6 @@ IN_PROC_BROWSER_TEST_F(PushSubscriptionChangeEventTest,
   EXPECT_EQ(old_endpoint.spec(), RunScript("resultQueue.pop()"));
   // Compare new subscription
   EXPECT_EQ(new_endpoint.spec(), RunScript("resultQueue.pop()"));
-
-  // Check that we record this case in UMA.
-  histogram_tester_.ExpectUniqueSample(
-      "PushMessaging.PushSubscriptionChangeStatus",
-      blink::mojom::PushEventStatus::SUCCESS, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PushSubscriptionChangeEventTest,
@@ -2923,11 +2920,6 @@ IN_PROC_BROWSER_TEST_F(PushSubscriptionChangeEventTest,
   // |new_subscription| is null
   EXPECT_EQ(old_subscription->endpoint.spec(), RunScript("resultQueue.pop()"));
   EXPECT_EQ("null", RunScript("resultQueue.pop()"));
-
-  // Check that we record this case in UMA.
-  histogram_tester_.ExpectUniqueSample(
-      "PushMessaging.PushSubscriptionChangeStatus",
-      blink::mojom::PushEventStatus::SUCCESS, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PushSubscriptionChangeEventTest, OnInvalidation) {
@@ -2966,9 +2958,4 @@ IN_PROC_BROWSER_TEST_F(PushSubscriptionChangeEventTest, OnInvalidation) {
   // Expect `pushsubscriptionchange` event that is not null
   EXPECT_NE("null", RunScript("resultQueue.pop()"));
   EXPECT_NE("null", RunScript("resultQueue.pop()"));
-
-  // Check that we record this case in UMA.
-  histogram_tester_.ExpectUniqueSample(
-      "PushMessaging.PushSubscriptionChangeStatus",
-      blink::mojom::PushEventStatus::SUCCESS, 1);
 }

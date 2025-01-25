@@ -14,14 +14,16 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys.h"
-#include "chromeos/ash/components/dbus/attestation/attestation_ca.pb.h"
-#include "chromeos/ash/components/dbus/attestation/interface.pb.h"
 #include "chromeos/ash/components/dbus/constants/attestation_constants.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "net/cert/x509_certificate.h"
 
 class PrefRegistrySimple;
 class Profile;
+
+namespace attestation {
+enum VerifiedAccessFlow : int;
+}  // namespace attestation
 
 namespace ash {
 
@@ -151,6 +153,7 @@ const char kCertProfileRenewalPeroidSec[] = "renewal_period_seconds";
 const char kCertProfilePolicyVersionKey[] = "policy_version";
 const char kCertProfileProtocolVersion[] = "protocol_version";
 const char kCertProfileIsVaEnabledKey[] = "enable_remote_attestation_check";
+const char kCertProfileKeyType[] = "key_algorithm";
 
 // The version of the certificate provisioning protocol between ChromeOS client
 // and device management server.
@@ -258,6 +261,18 @@ platform_keys::PlatformKeysService* GetPlatformKeysService(CertScope scope,
 platform_keys::KeyPermissionsManager* GetKeyPermissionsManager(
     CertScope scope,
     Profile* profile);
+
+// Generates a random unique identifier for a certificate provisioning process.
+// It is used to receive invalidations (to wake up waiting workers) and for
+// consistent logging with the server-side code (see "cppId" in the logs).
+std::string GenerateCertProvisioningId();
+
+// Creates an invalidation listener type based the cert provisioning process id
+// (see `GenerateCertProvisioningId()`). The type is a string that is
+// constructed both server- and client-side and is used to deliver FCM
+// invalidations from the server-side.
+std::string MakeInvalidationListenerType(
+    const std::string& cert_prov_process_id);
 
 }  // namespace cert_provisioning
 }  // namespace ash

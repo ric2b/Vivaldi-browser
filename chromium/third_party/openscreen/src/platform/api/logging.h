@@ -35,7 +35,7 @@ enum class LogLevel {
 
 // Returns true if |level| is at or above the level where the embedder will
 // record/emit log entries from the code in |file|.
-bool IsLoggingOn(LogLevel level, const char* file);
+bool IsLoggingOn(LogLevel level, const std::string_view file);
 
 // Record a log entry, consisting of its logging level, location and message.
 // The embedder may filter-out entries according to its own policy, but this

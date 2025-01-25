@@ -39,26 +39,30 @@ class FakeSystemIdentityManager final : public SystemIdentityManager {
       SystemIdentityManager* manager);
 
   // Adds `identity` to the available idendities.
-  // Does nothing if the identity is already in the manager.
+  // DCHECK failure will be triggered if the identity was already added.
   void AddIdentity(id<SystemIdentity> identity);
 
   // Adds `identity` to the available idendities without setting up
   // capabilities.
+  // DCHECK failure will be triggered if the identity was already added.
   void AddIdentityWithUnknownCapabilities(id<SystemIdentity> identity);
 
-  // Adds fake identities given their names. Ignore the identities that are
-  // already added.
-  void AddIdentities(NSArray<NSString*>* names);
-
-  // Adds fake managed identities given their names.
-  void AddManagedIdentities(NSArray<NSString*>* names);
+  // Adds `identity` and set the capabilities before firing the list changed
+  // notification.
+  // DCHECK failure will be triggered if the identity was already added.
+  void AddIdentityWithCapabilities(
+      id<SystemIdentity> identity,
+      NSDictionary<NSString*, NSNumber*>* capabilities);
 
   // Simulates `identity` removed from another application.
   void ForgetIdentityFromOtherApplication(id<SystemIdentity> identity);
 
   // Returns a test object that enables changes to capability state.
-  AccountCapabilitiesTestMutator* GetCapabilitiesMutator(
+  AccountCapabilitiesTestMutator* GetPendingCapabilitiesMutator(
       id<SystemIdentity> identity);
+
+  // Returns the list of account capabilities associated with the identity.
+  AccountCapabilities GetVisibleCapabilities(id<SystemIdentity> identity);
 
   // Simulates reloading the identities from the keychain.
   void FireSystemIdentityReloaded();
@@ -68,6 +72,9 @@ class FakeSystemIdentityManager final : public SystemIdentityManager {
 
   // Waits until all asynchronous callbacks have been completed.
   void WaitForServiceCallbacksToComplete();
+
+  // Returns YES if the identity was already added.
+  bool ContainsIdentity(id<SystemIdentity> identity);
 
   // Simulates a failure next time the access token for `identity` would be
   // fetched and return the error that would be sent to the observers. The
@@ -90,17 +97,11 @@ class FakeSystemIdentityManager final : public SystemIdentityManager {
       NSSet<UISceneSession*>* scene_sessions) final;
   void DismissDialogs() final;
   DismissViewCallback PresentAccountDetailsController(
-      id<SystemIdentity> identity,
-      UIViewController* view_controller,
-      bool animated) final;
+      PresentDialogConfiguration configuration) final;
   DismissViewCallback PresentWebAndAppSettingDetailsController(
-      id<SystemIdentity> identity,
-      UIViewController* view_controller,
-      bool animated) final;
+      PresentDialogConfiguration configuration) final;
   DismissViewCallback PresentLinkedServicesSettingsDetailsController(
-      id<SystemIdentity> identity,
-      UIViewController* view_controller,
-      bool animated) final;
+      PresentDialogConfiguration configuration) final;
   id<SystemIdentityInteractionManager> CreateInteractionManager() final;
   void IterateOverIdentities(IdentityIteratorCallback callback) final;
   void ForgetIdentity(id<SystemIdentity> identity,
@@ -121,6 +122,7 @@ class FakeSystemIdentityManager final : public SystemIdentityManager {
                          const std::set<std::string>& names,
                          FetchCapabilitiesCallback callback) final;
   bool HandleMDMNotification(id<SystemIdentity> identity,
+                             NSArray<id<SystemIdentity>>* active_identities,
                              id<RefreshAccessTokenError> error,
                              HandleMDMCallback callback) final;
   bool IsMDMError(id<SystemIdentity> identity, NSError* error) final;

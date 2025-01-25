@@ -93,7 +93,7 @@ class DummyImageProvider : public ImageProvider {
   ~DummyImageProvider() override = default;
   ImageProvider::ScopedResult GetRasterContent(
       const DrawImage& draw_image) override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return ScopedResult();
   }
 };
@@ -140,6 +140,10 @@ HeadsUpDisplayLayerImpl::HeadsUpDisplayLayerImpl(
 
 HeadsUpDisplayLayerImpl::~HeadsUpDisplayLayerImpl() {
   ReleaseResources();
+}
+
+mojom::LayerType HeadsUpDisplayLayerImpl::GetLayerType() const {
+  return mojom::LayerType::kHeadsUpDisplay;
 }
 
 std::unique_ptr<LayerImpl> HeadsUpDisplayLayerImpl::CreateLayerImpl(
@@ -314,8 +318,8 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
       backing->shared_image_interface = sii;
       backing->overlay_candidate = raster_caps.tile_overlay_candidate;
 
-      uint32_t flags = gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
-                       gpu::SHARED_IMAGE_USAGE_RASTER_WRITE;
+      gpu::SharedImageUsageSet flags = gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
+                                       gpu::SHARED_IMAGE_USAGE_RASTER_WRITE;
       if (raster_caps.use_gpu_rasterization) {
         flags |= gpu::SHARED_IMAGE_USAGE_OOP_RASTERIZATION;
       }
@@ -410,10 +414,10 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
       DummyImageProvider image_provider;
       size_t max_op_size_limit =
           gpu::raster::RasterInterface::kDefaultMaxOpSizeHint;
-      ri->RasterCHROMIUM(display_item_list.get(), &image_provider, size,
-                         gfx::Rect(size), gfx::Rect(size), post_translate,
-                         post_scale, /*requires_clear=*/false,
-                         &max_op_size_limit);
+      ri->RasterCHROMIUM(
+          display_item_list.get(), &image_provider, size, gfx::Rect(size),
+          gfx::Rect(size), post_translate, post_scale, /*requires_clear=*/false,
+          /*raster_inducing_scroll_offsets=*/nullptr, &max_op_size_limit);
       ri->EndRasterCHROMIUM();
     } else {
       // If not using |gpu_raster| but using gpu compositing, DrawHudContents()
@@ -436,8 +440,7 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
       SkPixmap pixmap;
       staging_surface_->peekPixels(&pixmap);
 
-      uint32_t texture_target =
-          backing->shared_image->GetTextureTarget(gfx::BufferUsage::SCANOUT);
+      uint32_t texture_target = backing->shared_image->GetTextureTarget();
       ri->WritePixels(backing->shared_image->mailbox(), /*dst_x_offset=*/0,
                       /*dst_y_offset=*/0, texture_target, pixmap);
     }
@@ -1316,10 +1319,6 @@ SkRect HeadsUpDisplayLayerImpl::DrawSmoothnessMetrics(PaintCanvas* canvas,
                                  "95th Percentile DF", percentile_smoothness);
 
   return area;
-}
-
-const char* HeadsUpDisplayLayerImpl::LayerTypeAsString() const {
-  return "cc::HeadsUpDisplayLayerImpl";
 }
 
 void HeadsUpDisplayLayerImpl::AsValueInto(

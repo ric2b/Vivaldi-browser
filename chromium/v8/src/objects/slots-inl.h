@@ -16,6 +16,7 @@
 #include "src/objects/objects.h"
 #include "src/objects/slots.h"
 #include "src/objects/tagged.h"
+#include "src/sandbox/cppheap-pointer-inl.h"
 #include "src/sandbox/external-pointer-inl.h"
 #include "src/sandbox/indirect-pointer-inl.h"
 #include "src/sandbox/isolate-inl.h"
@@ -63,9 +64,9 @@ void FullObjectSlot::store_map(Tagged<Map> map) const {
 
 Tagged<Map> FullObjectSlot::load_map() const {
 #ifdef V8_MAP_PACKING
-  return Map::unchecked_cast(Tagged<Object>(MapWord::Unpack(*location())));
+  return UncheckedCast<Map>(Tagged<Object>(MapWord::Unpack(*location())));
 #else
-  return Map::unchecked_cast(Tagged<Object>(*location()));
+  return UncheckedCast<Map>(Tagged<Object>(*location()));
 #endif
 }
 
@@ -168,7 +169,7 @@ void FullMaybeObjectSlot::Release_CompareAndSwap(
 //
 
 Tagged<HeapObjectReference> FullHeapObjectSlot::operator*() const {
-  return Tagged<HeapObjectReference>::cast(Tagged<MaybeObject>(*location()));
+  return Cast<HeapObjectReference>(Tagged<MaybeObject>(*location()));
 }
 
 Tagged<HeapObjectReference> FullHeapObjectSlot::load(
@@ -183,7 +184,7 @@ void FullHeapObjectSlot::store(Tagged<HeapObjectReference> value) const {
 Tagged<HeapObject> FullHeapObjectSlot::ToHeapObject() const {
   TData value = *location();
   DCHECK(HAS_STRONG_HEAP_OBJECT_TAG(value));
-  return HeapObject::cast(Tagged<Object>(value));
+  return Cast<HeapObject>(Tagged<Object>(value));
 }
 
 void FullHeapObjectSlot::StoreHeapObject(Tagged<HeapObject> value) const {
@@ -301,26 +302,23 @@ void CppHeapPointerSlot::Release_StoreHandle(
 }
 #endif  // V8_COMPRESS_POINTERS
 
-Address CppHeapPointerSlot::try_load(
-    IsolateForPointerCompression isolate) const {
+Address CppHeapPointerSlot::try_load(IsolateForPointerCompression isolate,
+                                     CppHeapPointerTagRange tag_range) const {
 #ifdef V8_COMPRESS_POINTERS
-  const ExternalPointerTable& table = isolate.GetCppHeapPointerTable();
+  const CppHeapPointerTable& table = isolate.GetCppHeapPointerTable();
   CppHeapPointerHandle handle = Relaxed_LoadHandle();
-  if (handle == kNullCppHeapPointerHandle) {
-    return kNullAddress;
-  }
-  return table.Get(handle, tag_);
+  return table.Get(handle, tag_range);
 #else   // !V8_COMPRESS_POINTERS
   return static_cast<Address>(base::AsAtomicPointer::Relaxed_Load(location()));
 #endif  // !V8_COMPRESS_POINTERS
 }
 
 void CppHeapPointerSlot::store(IsolateForPointerCompression isolate,
-                               Address value) const {
+                               Address value, CppHeapPointerTag tag) const {
 #ifdef V8_COMPRESS_POINTERS
-  ExternalPointerTable& table = isolate.GetCppHeapPointerTable();
+  CppHeapPointerTable& table = isolate.GetCppHeapPointerTable();
   CppHeapPointerHandle handle = Relaxed_LoadHandle();
-  table.Set(handle, value, tag_);
+  table.Set(handle, value, tag);
 #else   // !V8_COMPRESS_POINTERS
   base::AsAtomicPointer::Relaxed_Store(location(), value);
 #endif  // !V8_COMPRESS_POINTERS

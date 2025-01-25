@@ -14,10 +14,11 @@
 #include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_driver.h"
+#include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/metrics/form_events/credit_card_form_event_logger.h"
 #include "components/autofill/core/browser/payments/credit_card_cvc_authenticator.h"
@@ -35,7 +36,7 @@
 
 namespace autofill {
 
-class BrowserAutofillManager;
+class AutofillClient;
 enum class WebauthnDialogCallbackType;
 
 // Flow type denotes which card unmask authentication method was used.
@@ -103,9 +104,7 @@ class CreditCardAccessManager
   using OtpAuthenticationResponse =
       CreditCardOtpAuthenticator::OtpAuthenticationResponse;
 
-  CreditCardAccessManager(AutofillDriver* driver,
-                          AutofillClient* client,
-                          PersonalDataManager* personal_data_manager,
+  CreditCardAccessManager(AutofillManager* manager,
                           autofill_metrics::CreditCardFormEventLogger*
                               credit_card_form_event_logger);
 
@@ -176,14 +175,33 @@ class CreditCardAccessManager
       const CreditCardRiskBasedAuthenticator::RiskBasedAuthenticationResponse&
           response) override;
   void OnVirtualCardRiskBasedAuthenticationResponseReceived(
-      AutofillClient::PaymentsRpcResult result,
+      payments::PaymentsAutofillClient::PaymentsRpcResult result,
       const payments::PaymentsNetworkInterface::UnmaskResponseDetails&
           response_details) override;
 
  private:
   friend class CreditCardAccessManagerTestApi;
 
-  // Returns whether or not unmasked card cache is empty. Exposed for testing.
+  AutofillClient& autofill_client() { return manager_->client(); }
+
+  payments::PaymentsAutofillClient& payments_autofill_client() {
+    return *autofill_client().GetPaymentsAutofillClient();
+  }
+
+  PersonalDataManager& personal_data_manager() {
+    return *autofill_client().GetPersonalDataManager();
+  }
+
+  PaymentsDataManager& payments_data_manager() {
+    return personal_data_manager().payments_data_manager();
+  }
+
+  base::WeakPtr<CreditCardAccessManager> GetWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
+
+  // Returns whether or not unmasked card cache is empty. Exposed for
+  // testing.
   bool UnmaskedCardCacheIsEmpty();
 
   // Invoked from CreditCardFidoAuthenticator::IsUserVerifiable().
@@ -201,7 +219,7 @@ class CreditCardAccessManager
   // Sets |unmask_details_|. May be ignored if response is too late and user is
   // not opted-in for FIDO auth, or if user does not select a card.
   void OnDidGetUnmaskDetails(
-      AutofillClient::PaymentsRpcResult result,
+      payments::PaymentsAutofillClient::PaymentsRpcResult result,
       payments::PaymentsNetworkInterface::UnmaskDetails& unmask_details);
 
   // Determines what type of authentication is required. `fido_auth_enabled`
@@ -290,8 +308,8 @@ class CreditCardAccessManager
   // Helper function to fetch virtual cards.
   void FetchVirtualCard();
 
-  // Helper function to fetch local or full server cards.
-  void FetchLocalOrFullServerCard();
+  // Helper function to fetch local cards.
+  void FetchLocalCard();
 
   // Checks if Mandatory Re-auth is needed after the card has been returned. If
   // needed, starts the device authentication flow before filling the form.
@@ -374,16 +392,8 @@ class CreditCardAccessManager
   // OnCvcAuthenticationComplete() to be executed.
   bool is_authentication_in_progress_ = false;
 
-  // The associated autofill driver. Weak reference.
-  const raw_ptr<AutofillDriver> driver_;
-
-  // The associated autofill client. Weak reference.
-  const raw_ptr<AutofillClient> client_;
-
-  // The personal data manager, used to save and load personal data to/from the
-  // web database.
-  // Weak reference.
-  const raw_ptr<PersonalDataManager> personal_data_manager_;
+  // The owning AutofillManager.
+  const raw_ref<AutofillManager> manager_;
 
   // For logging metrics.
   const raw_ptr<autofill_metrics::CreditCardFormEventLogger> form_event_logger_;

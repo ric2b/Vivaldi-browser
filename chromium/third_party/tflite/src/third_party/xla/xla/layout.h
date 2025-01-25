@@ -47,6 +47,7 @@ class Tile {
     return Tile(tile_proto.dimensions());
   }
   TileProto ToProto() const;
+  void SetProto(TileProto& tile_proto) const;
 
   bool operator==(const Tile& other) const {
     return dimensions() == other.dimensions();
@@ -109,6 +110,7 @@ class SplitConfig {
                        split_config_proto.split_indices());
   }
   SplitConfigProto ToProto() const;
+  void SetProto(SplitConfigProto& split_config_proto) const;
 
   bool operator==(const SplitConfig& other) const {
     return dimension() == other.dimension() &&
@@ -160,6 +162,9 @@ class Layout {
   // Constructs a dense layout with the given minor-to-major order.
   explicit Layout(absl::Span<const int64_t> minor_to_major);
 
+  explicit Layout(absl::Span<const int64_t> minor_to_major,
+                  absl::Span<const Tile> tiles, int64_t element_size_in_bits);
+
   // Constructs a dense tiled layout with the given minor-to-major order, dim
   // level types, and tiles.
   explicit Layout(absl::Span<const int64_t> minor_to_major,
@@ -183,6 +188,8 @@ class Layout {
 
   // Returns a LayoutProto representation of the Layout.
   LayoutProto ToProto() const;
+  // Sets a LayoutProto to the representation of the Layout.
+  void SetProto(LayoutProto& proto) const;
 
   // Prints a human-readable string that represents this layout.
   void Print(Printer* printer) const;

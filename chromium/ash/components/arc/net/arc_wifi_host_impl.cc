@@ -5,15 +5,18 @@
 #include "ash/components/arc/net/arc_wifi_host_impl.h"
 
 #include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
+#include "ash/components/arc/net/arc_net_utils.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "base/memory/singleton.h"
 #include "chromeos/ash/components/network/network_event_log.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/network_type_pattern.h"
+#include "chromeos/ash/components/network/onc/network_onc_utils.h"
 #include "chromeos/ash/components/network/technology_state_controller.h"
 
 namespace {
+constexpr int kGetScanResultsListLimit = 100;
 
 ash::NetworkStateHandler* GetStateHandler() {
   return ash::NetworkHandler::Get()->network_state_handler();
@@ -114,6 +117,60 @@ void ArcWifiHostImpl::SetWifiEnabledState(
       ash::NetworkTypePattern::WiFi(), is_enabled,
       ash::network_handler::ErrorCallback());
   std::move(callback).Run(true);
+}
+
+void ArcWifiHostImpl::StartScan() {
+  GetStateHandler()->RequestScan(ash::NetworkTypePattern::WiFi());
+}
+
+void ArcWifiHostImpl::ScanCompleted(const ash::DeviceState* /*unused*/) {
+  auto* arc_wifi_instance = ARC_GET_INSTANCE_FOR_METHOD(
+      arc_bridge_service_->arc_wifi(), ScanCompleted);
+  if (!arc_wifi_instance) {
+    return;
+  }
+
+  arc_wifi_instance->ScanCompleted();
+}
+
+void ArcWifiHostImpl::GetScanResults(GetScanResultsCallback callback) {
+  ash::NetworkTypePattern network_pattern =
+      ash::onc::NetworkTypePatternFromOncType(onc::network_type::kWiFi);
+
+  ash::NetworkStateHandler::NetworkStateList network_states;
+  GetStateHandler()->GetNetworkListByType(
+      network_pattern, /*configured_only=*/false, /*visible_only=*/true,
+      kGetScanResultsListLimit, &network_states);
+
+  std::move(callback).Run(net_utils::TranslateScanResults(network_states));
+}
+
+void ArcWifiHostImpl::OnConnectionReady() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  if (ash::NetworkHandler::IsInitialized()) {
+    GetStateHandler()->AddObserver(this, FROM_HERE);
+  }
+}
+
+void ArcWifiHostImpl::OnConnectionClosed() {
+  GetStateHandler()->RemoveObserver(this, FROM_HERE);
+}
+
+void ArcWifiHostImpl::OnShuttingDown() {
+  GetStateHandler()->RemoveObserver(this, FROM_HERE);
+}
+
+void ArcWifiHostImpl::DeviceListChanged() {
+  auto* arc_wifi_instance = ARC_GET_INSTANCE_FOR_METHOD(
+      arc_bridge_service_->arc_wifi(), WifiEnabledStateChanged);
+  if (!arc_wifi_instance) {
+    return;
+  }
+
+  bool is_enabled =
+      GetStateHandler()->IsTechnologyEnabled(ash::NetworkTypePattern::WiFi());
+  arc_wifi_instance->WifiEnabledStateChanged(is_enabled);
 }
 
 }  // namespace arc

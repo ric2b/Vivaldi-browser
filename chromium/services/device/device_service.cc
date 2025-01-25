@@ -175,6 +175,12 @@ void DeviceService::OverridePressureManagerBinderForTesting(
   internal::GetPressureManagerBinderOverride() = std::move(binder);
 }
 
+// static
+void DeviceService::OverrideTimeZoneMonitorBinderForTesting(
+    TimeZoneMonitorBinder binder) {
+  internal::GetTimeZoneMonitorBinderOverride() = std::move(binder);
+}
+
 void DeviceService::BindBatteryMonitor(
     mojo::PendingReceiver<mojom::BatteryMonitor> receiver) {
 #if BUILDFLAG(IS_ANDROID)
@@ -337,12 +343,18 @@ void DeviceService::BindSerialPortManager(
   serial_port_manager_.AsyncCall(&SerialPortManagerImpl::Bind, FROM_HERE)
       .WithArgs(std::move(receiver));
 #else   // defined(IS_SERIAL_ENABLED_PLATFORM)
-  NOTREACHED() << "Serial devices not supported on this platform.";
+  NOTREACHED_IN_MIGRATION() << "Serial devices not supported on this platform.";
 #endif  // defined(IS_SERIAL_ENABLED_PLATFORM)
 }
 
 void DeviceService::BindTimeZoneMonitor(
     mojo::PendingReceiver<mojom::TimeZoneMonitor> receiver) {
+  const auto& binder_override = internal::GetTimeZoneMonitorBinderOverride();
+  if (binder_override) {
+    binder_override.Run(std::move(receiver));
+    return;
+  }
+
   if (!time_zone_monitor_)
     time_zone_monitor_ = TimeZoneMonitor::Create(file_task_runner_);
   time_zone_monitor_->Bind(std::move(receiver));

@@ -371,6 +371,16 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
   // DocumentUserData for more details).
   virtual void DidFinishNavigation(NavigationHandle* navigation_handle) {}
 
+  // Called when the NavigationHandleTiming associated with `navigation_handle`
+  // has been updated, which can be triggered by any of these events:
+  // - The URLLoader for the network request had started (if the navigation
+  //   needs a URLLoader)
+  // - A network response has been received (including redirect responses)
+  // - The navigation got blocked, and will commit an error page.
+  // - The Commit IPC has been sent
+  virtual void DidUpdateNavigationHandleTiming(
+      NavigationHandle* navigation_handle) {}
+
   // Called after the WebContents completes the previewed page activation steps.
   // `activation_time` is the time the activation happened.
   virtual void DidActivatePreviewedPage(base::TimeTicks activation_time) {}
@@ -672,13 +682,6 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
                                         RenderFrameHost* render_frame_host,
                                         bool is_full_page) {}
 
-  // Notifies that an |inner_web_contents| instance has been detached from this
-  // WebContents. InnerWebContentsAttached() will already have been called for
-  // the |inner_web_contents|. By the time this is called the
-  // |inner_web_contents| will have been removed from the WebContents tree, but
-  // will still be alive and is safe to observe.
-  virtual void InnerWebContentsDetached(WebContents* inner_web_contents) {}
-
   // Invoked when WebContents::Clone() was used to clone a WebContents.
   virtual void DidCloneToNewWebContents(WebContents* old_web_contents,
                                         WebContents* new_web_contents) {}
@@ -851,6 +854,16 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
 
   // Invoked when a paste event occurs.
   virtual void OnPaste() {}
+
+  // Called when `copied_text` was copied to the clipboard from a given
+  // `render_frame_host` within this WebContents. Use this observer instead of
+  // ui::ClipboardObserver if you care about the source RenderFrameHost where
+  // the copy operation took place.
+  // Note: If clipboard copy events for other types of data are later needed by
+  // other WebContentsObservers, it'd be okay to generalize this method to
+  // support content::ClipboardPasteData directly.
+  virtual void OnTextCopiedToClipboard(RenderFrameHost* render_frame_host,
+                                       const std::u16string& copied_text) {}
 
   // Invoked if an IPC message is coming from a specific RenderFrameHost.
   virtual bool OnMessageReceived(const IPC::Message& message,

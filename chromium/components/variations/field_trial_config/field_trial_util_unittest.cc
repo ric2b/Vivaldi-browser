@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO: crbug.com/352691908 - Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/variations/field_trial_config/field_trial_util.h"
 
 #include <map>
@@ -11,6 +16,7 @@
 
 #include "base/command_line.h"
 #include "base/containers/span.h"
+#include "base/memory/raw_span.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/utf_string_conversions.h"
@@ -57,17 +63,17 @@ class ExperimentBuilder {
   }
 
   const char* name = nullptr;
-  base::span<const Study::Platform> platforms = {};
-  base::span<const Study::FormFactor> form_factors = {};
+  base::raw_span<const Study::Platform> platforms = {};
+  base::raw_span<const Study::FormFactor> form_factors = {};
   std::optional<bool> is_low_end_device = std::nullopt;
   const char* min_os_version = nullptr;
-  base::span<const FieldTrialTestingExperimentParams> params = {};
-  base::span<const char*> enable_features = {};
-  base::span<const char*> disable_features = {};
+  base::raw_span<const FieldTrialTestingExperimentParams> params = {};
+  base::raw_span<const char*> enable_features = {};
+  base::raw_span<const char*> disable_features = {};
   const char* forcing_flag = nullptr;
-  base::span<const OverrideUIString> override_ui_string = {};
-  base::span<const char*> hardware_classes = {};
-  base::span<const char*> exclude_hardware_classes = {};
+  base::raw_span<const OverrideUIString> override_ui_string = {};
+  base::raw_span<const char*> hardware_classes = {};
+  base::raw_span<const char*> exclude_hardware_classes = {};
 };
 
 class TestOverrideStringCallback {

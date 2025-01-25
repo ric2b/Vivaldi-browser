@@ -17,21 +17,23 @@ guides, and codelabs that will help kickstart your Chromium development career.
 
 Similar to internal Google development, Chromium development follows style
 guides whose goal is largely to document and manage the "dos and don'ts" of
-authoring code within Chromium. These style guides can be found at
-go/chromium-style (Chromium-specific) and go/cstyle (Google C++).
+authoring code within Chromium. These are the
+[Chromium C++ style guide](https://chromium.googlesource.com/chromium/src/+/HEAD/styleguide/styleguide.md)
+and [Google C++ style guide](https://google.github.io/styleguide/cppguide.html).
 
 ## Codelabs
 
 Chromium has a C++ 101 codelab that will help introduce developers to C++
 development with Chromium, and includes coverage of threads, task runners,
-callbacks, Mojo, and more! This codelab can be found at go/chromium-codelabs.
+callbacks, Mojo, and more! This codelab can be found at
+[codelabs/](https://source.chromium.org/chromium/chromium/src/+/main:codelabs/).
 
 ## Tips of the week
 
 While the C++ "Tips of the Week" occasionally reference concepts specific to
 internal Google C++ development, the vast majority of these articles are
-excellent resources on general C++ development best practices. These articles
-can be found at go/totw.
+excellent resources on general C++ development best practices. Many of these
+are [available publicly](https://abseil.io/tips/).
 
 ## Chromium code directories
 
@@ -82,7 +84,7 @@ See also talk
 
 ### Default cases
 
-[Google C++ Style Guide](http://go/cstyle#Switch_Statements) says if not
+[Google C++ Style Guide](https://google.github.io/styleguide/cppguide.html#Switch_Statements) says if not
 conditional on an `enum class`, switch statements should always have a default
 case. If the default case should never execute, treat this as an error (see
 [Defensive and Offensive Coding](#defensive-and-offensive-coding) below).

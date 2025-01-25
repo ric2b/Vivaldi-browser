@@ -74,7 +74,7 @@ static angle::Result ValidateStateHelperGetIntegerv(const gl::Context *context,
     {
         WARN() << localName << " (" << localValue << ") != " << driverName << " (" << queryValue
                << ")";
-        // Re-add ASSERT: http://anglebug.com/3900
+        // Re-add ASSERT: http://anglebug.com/42262547
         // ASSERT(false);
     }
 
@@ -96,7 +96,7 @@ static angle::Result ValidateStateHelperGetVertexAttribiv(const gl::Context *con
     {
         WARN() << localName << "[" << index << "] (" << localValue << ") != " << driverName << "["
                << index << "] (" << queryValue << ")";
-        // Re-add ASSERT: http://anglebug.com/3900
+        // Re-add ASSERT: http://anglebug.com/42262547
         // ASSERT(false);
     }
 
@@ -489,6 +489,15 @@ angle::Result VertexArrayGL::streamAttributes(
                     // The workaround is only for latest Mac Intel so glMapBufferRange should be
                     // supported
                     ASSERT(CanMapBufferForRead(functions));
+                    // Validate if there is OOB access of the input buffer.
+                    angle::CheckedNumeric<GLint64> inputRequiredSize;
+                    inputRequiredSize = copySize;
+                    inputRequiredSize += static_cast<unsigned int>(binding.getOffset());
+                    ANGLE_CHECK(GetImplAs<ContextGL>(context),
+                                inputRequiredSize.IsValid() && inputRequiredSize.ValueOrDie() <=
+                                                                   bindingBufferPointer->getSize(),
+                                "Failed to map buffer range of the attribute buffer.",
+                                GL_OUT_OF_MEMORY);
                     uint8_t *inputBufferPointer = MapBufferRangeWithFallback(
                         functions, GL_ARRAY_BUFFER, binding.getOffset(), copySize, GL_MAP_READ_BIT);
                     ASSERT(inputBufferPointer);
@@ -1061,7 +1070,7 @@ angle::Result VertexArrayGL::validateState(const gl::Context *context) const
     {
         WARN() << "mNativeState->attributes.size() (" << mNativeState->attributes.size()
                << ") > GL_MAX_VERTEX_ATTRIBS (" << queryValue << ")";
-        // Re-add ASSERT: http://anglebug.com/3900
+        // Re-add ASSERT: http://anglebug.com/42262547
         // ASSERT(false);
     }
 

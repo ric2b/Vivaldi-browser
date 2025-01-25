@@ -10,6 +10,7 @@
 #include <optional>
 
 #include "base/task/single_thread_task_runner.h"
+#include "base/types/optional_ref.h"
 #include "build/build_config.h"
 #include "cc/input/browser_controls_state.h"
 #include "cc/trees/paint_holding_reason.h"
@@ -47,8 +48,7 @@ class WidgetBase;
 class PLATFORM_EXPORT WidgetInputHandlerManager final
     : public base::RefCountedThreadSafe<WidgetInputHandlerManager>,
       public InputHandlerProxyClient,
-      public MainThreadEventQueueClient,
-      public base::SupportsWeakPtr<WidgetInputHandlerManager> {
+      public MainThreadEventQueueClient {
   // Used in UMA metrics reporting. Do not re-order, and rename the metric if
   // additional states are required.
   enum class InitialInputTiming {
@@ -173,9 +173,12 @@ class PLATFORM_EXPORT WidgetInputHandlerManager final
 
   void ClearClient();
 
-  void UpdateBrowserControlsState(cc::BrowserControlsState constraints,
-                                  cc::BrowserControlsState current,
-                                  bool animate);
+  void UpdateBrowserControlsState(
+      cc::BrowserControlsState constraints,
+      cc::BrowserControlsState current,
+      bool animate,
+      base::optional_ref<const cc::BrowserControlsOffsetTagsInfo>
+          offset_tags_info);
 
   MainThreadEventQueue* input_event_queue() { return input_event_queue_.get(); }
 
@@ -187,6 +190,10 @@ class PLATFORM_EXPORT WidgetInputHandlerManager final
   // queues such that the queues are emptied. Invokes the passed closure when
   // both main and compositor thread queues have been processed.
   void FlushEventQueuesForTesting(base::OnceClosure done_callback);
+
+  base::WeakPtr<WidgetInputHandlerManager> AsWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
 
  protected:
   friend class base::RefCountedThreadSafe<WidgetInputHandlerManager>;
@@ -295,6 +302,10 @@ class PLATFORM_EXPORT WidgetInputHandlerManager final
   void RecordEventMetricsForPaintTiming(
       std::optional<base::TimeTicks> first_paint_time);
 
+  // Start `first_paint_max_delay_timer_` if not started already.  This runs on
+  // the main thread.
+  void StartFirstPaintMaxDelayTimer();
+
   // Helpers for FlushEventQueuesForTesting.
   void FlushCompositorQueueForTesting();
   void FlushMainThreadQueueForTesting(base::OnceClosure done);
@@ -318,12 +329,12 @@ class PLATFORM_EXPORT WidgetInputHandlerManager final
   mojo::SharedRemote<mojom::blink::WidgetInputHandlerHost> host_;
 
   // Any thread can access these variables.
-  scoped_refptr<MainThreadEventQueue> input_event_queue_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner>
       compositor_thread_default_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner>
       compositor_thread_input_blocking_task_runner_;
+  scoped_refptr<MainThreadEventQueue> input_event_queue_;
 
   // The touch action that InputHandlerProxy has asked us to allow. This should
   // only be accessed on the compositor thread!
@@ -403,6 +414,10 @@ class PLATFORM_EXPORT WidgetInputHandlerManager final
   // thread.
   std::unique_ptr<base::OneShotTimer> first_paint_max_delay_timer_;
 
+  // Tracks whether `RecordEventMetricsForPaintTiming` has already recorded the
+  // UMA related to first paint.
+  bool recorded_event_metric_for_paint_timing_ = false;
+
   unsigned dropped_pointer_down_ = 0;
 
 #if BUILDFLAG(IS_ANDROID)
@@ -413,6 +428,8 @@ class PLATFORM_EXPORT WidgetInputHandlerManager final
   // Whether to use ScrollPredictor to resample scroll events. This is false for
   // web_tests to ensure that scroll deltas are not timing-dependent.
   const bool allow_scroll_resampling_ = true;
+
+  base::WeakPtrFactory<WidgetInputHandlerManager> weak_ptr_factory_{this};
 };
 
 }  // namespace blink

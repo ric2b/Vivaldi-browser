@@ -11,6 +11,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "google_apis/gaia/gaia_auth_util.h"
@@ -42,6 +43,8 @@ const char kTestDeviceId[] = "test_device_id";
 const char kTestVersion[] = "test_version";
 const char kTestChannel[] = "test_channel";
 const char kTestAssertion[] = "test_assertion";
+
+constexpr char kAssertionSentinel[] = "DBSC_CHALLENGE_IF_REQUIRED";
 
 class MockOAuth2AccessTokenConsumer : public OAuth2AccessTokenConsumer {
  public:
@@ -79,7 +82,11 @@ class MockOAuth2MintTokenFlow : public OAuth2MintTokenFlow {
   void SimulateMintTokenSuccess(const std::string& access_token,
                                 const std::set<std::string>& granted_scopes,
                                 int time_to_live) {
-    delegate_->OnMintTokenSuccess(access_token, granted_scopes, time_to_live);
+    MintTokenResult result;
+    result.access_token = access_token;
+    result.granted_scopes = granted_scopes;
+    result.time_to_live = base::Seconds(time_to_live);
+    delegate_->OnMintTokenSuccess(result);
   }
   void SimulateMintTokenFailure(const GoogleServiceAuthError& error) {
     delegate_->OnMintTokenFailure(error);
@@ -190,7 +197,8 @@ TEST_F(OAuth2MintAccessTokenFetcherAdapterTest, Params) {
   expected_params.enable_granular_permissions = false;
   expected_params.mode = OAuth2MintTokenFlow::MODE_MINT_TOKEN_NO_FORCE;
   expected_params.scopes = {kTestScope};
-  expected_params.bound_oauth_token = std::string();
+  expected_params.bound_oauth_token = gaia::CreateBoundOAuthToken(
+      kTestUserGaiaId, kTestRefreshToken, kAssertionSentinel);
   EXPECT_THAT(mock_flow()->params(), ParamsEq(expected_params));
 }
 
@@ -222,6 +230,22 @@ TEST_F(OAuth2MintAccessTokenFetcherAdapterTest, Success) {
                                         kTimeToLive.InSeconds());
 }
 
+TEST_F(OAuth2MintAccessTokenFetcherAdapterTest, SuccessWithEncryption) {
+  const std::string kTestEncryptedToken = "test_encrypted_token";
+  auto fetcher = CreateFetcher();
+  base::MockCallback<OAuth2MintAccessTokenFetcherAdapter::TokenDecryptor>
+      mock_decryptor;
+  fetcher->SetTokenDecryptor(mock_decryptor.Get());
+  EXPECT_CALL(mock_decryptor, Run(kTestEncryptedToken))
+      .WillOnce(testing::Return(kTestAccessToken));
+  fetcher->Start(kTestClientId, kTestClientSecret, {kTestScope});
+  base::TimeDelta kTimeToLive = base::Hours(4);
+  EXPECT_CALL(*mock_consumer(), OnGetTokenSuccess(HasAccessTokenWithTtl(
+                                    kTestAccessToken, kTimeToLive)));
+  mock_flow()->SimulateMintTokenSuccess(kTestEncryptedToken, {kTestScope},
+                                        kTimeToLive.InSeconds());
+}
+
 TEST_F(OAuth2MintAccessTokenFetcherAdapterTest, Failure) {
   auto fetcher = CreateFetcher();
   fetcher->Start(kTestClientId, kTestClientSecret, {kTestScope});
@@ -231,6 +255,24 @@ TEST_F(OAuth2MintAccessTokenFetcherAdapterTest, Failure) {
               CREDENTIALS_REJECTED_BY_SERVER);
   EXPECT_CALL(*mock_consumer(), OnGetTokenFailure(error));
   mock_flow()->SimulateMintTokenFailure(error);
+}
+
+TEST_F(OAuth2MintAccessTokenFetcherAdapterTest, DecryptionFailure) {
+  const std::string kTestEncryptedToken = "test_encrypted_token";
+  auto fetcher = CreateFetcher();
+  base::MockCallback<OAuth2MintAccessTokenFetcherAdapter::TokenDecryptor>
+      mock_decryptor;
+  fetcher->SetTokenDecryptor(mock_decryptor.Get());
+  EXPECT_CALL(mock_decryptor, Run(kTestEncryptedToken))
+      .WillOnce(testing::Return(std::string()));
+  fetcher->Start(kTestClientId, kTestClientSecret, {kTestScope});
+  base::TimeDelta kTimeToLive = base::Hours(4);
+  EXPECT_CALL(
+      *mock_consumer(),
+      OnGetTokenFailure(GoogleServiceAuthError::FromUnexpectedServiceResponse(
+          "Failed to decrypt token")));
+  mock_flow()->SimulateMintTokenSuccess(kTestEncryptedToken, {kTestScope},
+                                        kTimeToLive.InSeconds());
 }
 
 TEST_F(OAuth2MintAccessTokenFetcherAdapterTest, UnexpectedConsentResult) {

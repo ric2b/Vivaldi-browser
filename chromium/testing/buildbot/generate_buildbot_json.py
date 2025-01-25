@@ -101,9 +101,6 @@ class SkylabGPUTelemetryTestGenerator(GPUTelemetryTestGenerator):
 
 
 class GTestGenerator(BaseGenerator):
-  def __init__(self, bb_gen):
-    super(GTestGenerator, self).__init__(bb_gen)
-
   def generate(self, waterfall, tester_name, tester_config, input_tests):
     # The relative ordering of some of the tests is important to
     # minimize differences compared to the handwritten JSON files, since
@@ -127,9 +124,6 @@ class GTestGenerator(BaseGenerator):
 
 
 class IsolatedScriptTestGenerator(BaseGenerator):
-  def __init__(self, bb_gen):
-    super(IsolatedScriptTestGenerator, self).__init__(bb_gen)
-
   def generate(self, waterfall, tester_name, tester_config, input_tests):
     isolated_scripts = []
     for test_name, test_config in sorted(input_tests.items()):
@@ -147,9 +141,6 @@ class IsolatedScriptTestGenerator(BaseGenerator):
 
 
 class ScriptGenerator(BaseGenerator):
-  def __init__(self, bb_gen):
-    super(ScriptGenerator, self).__init__(bb_gen)
-
   def generate(self, waterfall, tester_name, tester_config, input_tests):
     scripts = []
     for test_name, test_config in sorted(input_tests.items()):
@@ -161,9 +152,6 @@ class ScriptGenerator(BaseGenerator):
 
 
 class JUnitGenerator(BaseGenerator):
-  def __init__(self, bb_gen):
-    super(JUnitGenerator, self).__init__(bb_gen)
-
   def generate(self, waterfall, tester_name, tester_config, input_tests):
     scripts = []
     for test_name, test_config in sorted(input_tests.items()):
@@ -175,9 +163,6 @@ class JUnitGenerator(BaseGenerator):
 
 
 class SkylabGenerator(BaseGenerator):
-  def __init__(self, bb_gen):
-    super(SkylabGenerator, self).__init__(bb_gen)
-
   def generate(self, waterfall, tester_name, tester_config, input_tests):
     scripts = []
     for test_name, test_config in sorted(input_tests.items()):
@@ -873,6 +858,20 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
     if 'dut_pool' in result or 'cros_dut_pool' in tester_config:
       result['dut_pool'] = tester_config.get('cros_dut_pool') or result.get(
           'dut_pool')
+    if 'run_cft' in result or 'run_cft' in tester_config:
+      result['run_cft'] = tester_config.get('run_cft') or result.get('run_cft')
+    if 'cros_build_target' in result or 'cros_build_target' in tester_config:
+      result['cros_build_target'] = tester_config.get(
+          'cros_build_target') or result.get('cros_build_target')
+
+    # Skylab tests enable the shard-level-retry by default.
+    if ('shard_level_retries_on_ctp' in result
+        or 'shard_level_retries_on_ctp' in tester_config):
+      result['shard_level_retries_on_ctp'] = (
+          tester_config.get('shard_level_retries_on_ctp')
+          or result.get('shard_level_retries_on_ctp'))
+    elif result.get('experiment_percentage') != 100:
+      result['shard_level_retries_on_ctp'] = 1
 
     result = self.apply_common_transformations(waterfall,
                                                tester_name,

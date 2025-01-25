@@ -1,4 +1,6 @@
-These design principles make it easier to write, debug, and maintain code in //chrome/browser.
+These design principles make it easier to write, debug, and maintain desktop
+code in //chrome/browser. Most, but not all code in //chrome/browser is desktop
+code. Some code is used on Android.
 
 ## Caveats:
 * These are recommendations, not requirements.
@@ -8,22 +10,27 @@ These design principles make it easier to write, debug, and maintain code in //c
   existing features to be refactored, except as need arises.
 
 ## Structure, modularity:
-* Features should be modular with no dependency cycles.
-    * This is a provisional design principle. We are currently investigating
-      feasibility. TODO: canonical example
+* Features should be modular.
     * For most features, all business logic should live in some combination of
       //chrome/browser/<feature>, //chrome/browser/ui/<feature> or
       //component/<feature>.
     * WebUI resources are the only exception. They will continue to live in
       //chrome/browser/resources/<feature> alongside standalone BUILD.gn files.
     * This directory should have a standalone BUILD.gn and OWNERs file.
+    * All files in the directory should belong to targets in the BUILD.gn.
+        * Do NOT add to `//chrome/browser/BUILD.gn:browser` or
+          `//chrome/browser/ui/BUILD.gn:ui`.
+    * Circular dependencies are allowed (for legacy reasons) but discouraged.
+        * Circular dependencies onto `//chrome/browser/BUILD.gn:browser` or
+          `//chrome/browser/ui/BUILD.gn:ui` are often necessary when
+          modularizing existing features without committing to a large refactor.
     * This directory may have its own namespace.
-    * This directory should have a public/ subdirectory to enforce further
-      encapsulation.
+    * The BUILD.gn should use public/sources separation.
         * The main reason for this is to guard against future, unexpected usage
           of parts of the code that were intended to be private. This makes it
           difficult to change implementation details in the future.
-        * The BUILD.gn should use public/sources separation.
+        * This directory may have a public/ subdirectory to enforce further
+          encapsulation.
     * Corollary: There are several global functions that facilitate dependency
       inversion. It will not be possible to call them from modularized features
       (no dependency cycles), and their usage in non-modularized features is
@@ -31,6 +38,19 @@ These design principles make it easier to write, debug, and maintain code in //c
         * `chrome::FindBrowserWithTab` (and everything in browser_finder.h)
         * `GetBrowserViewForNativeWindow`  (via browser_view.h)
         * `FindBrowserWindowWithWebContents` (via browser_window.h)
+    * Rationale: Modularity enforces the creation of API surfaces and explicit
+      dependencies. This has several positive externalities:
+        * Separation of interface from implementation prevents unnecessarly
+          tight coupling between features. This in turn reduces spooky action at
+          a distance, where seemingly innocuous changes break a distant,
+          supposedly unrelated feature.
+        * Explicit listing of circular dependencies exposes the likely fragile
+          areas of code.
+        * Alongside the later guidance of global functions must be pure,
+          modularity adds the requirement that test-code perform dependency
+          injection. This eliminates a common bug where test behavior diverges
+          from production behavior, and logic is added to production code to
+          work around test-only behaviors.
 
 * Features should have a core controller with precise lifetime semantics. The
   core controller for most desktop features should be owned and instantiated by
@@ -54,7 +74,37 @@ These design principles make it easier to write, debug, and maintain code in //c
     * `BrowserWindowFeatures` (member of `Browser`)
         * example: omnibox, security chip, bookmarks bar, side panel
     * `BrowserContextKeyedServiceFactory` (functionally a member of `Profile`)
-    * `GlobalFeatures` (member of `BrowserProcess`)
+        * Override `ServiceIsCreatedWithBrowserContext` to return `true`. This
+          guarantees precise lifetime semantics.
+        * Lazy instantiation is an anti-pattern.
+            * Production code is started via `content::ContentMain()`. Test
+              harnesses use a test-suite dependent start-point, e.g.
+              `base::LaunchUnitTests`. Tests typically instantiate a subset of
+              the lazily-instantiated factories instantiated by production code,
+              at a different time, with a different order. This results in
+              different, sometimes broken behavior in tests. This is typically
+              papered over by modifying the production logic to include
+              otherwise unnecessary conditionals, typically early-exits.
+              Overriding `ServiceIsCreatedWithBrowserContext` guarantees
+              identical behavior between test and production code.
+        * Use `TestingProfile::Builder::AddTestingFactory` to stub or fake
+          services.
+        * Separating the .h and .cc file into different build targets is
+          allowed.
+            * BrowserContextKeyedServiceFactory combines 3 pieces of
+              functionality:
+                * A getter to receive a service based on an instance of
+                  `Profile`.
+                * A mechanism to establishing dependencies.
+                * A way to glue together //chrome layer logic with //components
+                  layer logic.
+                * The latter two pieces of functionality are implemented in the
+                  .cc file and typically result in dependencies on other parts
+                  of //chrome. The first piece of functionality is implemented
+                  in the .h file and does not necessarily introduce a dependency
+                  on //chrome, since the returned service can be defined in
+                  //components.
+    * `GlobalDesktopFeatures` (member of `BrowserProcess`)
     * The core controller should not be a `NoDestructor` singleton.
 * Global functions should not access non-global state.
     * Pure functions do not access global state and are allowed. e.g. `base::UTF8ToWide()`
@@ -63,6 +113,12 @@ These design principles make it easier to write, debug, and maintain code in //c
       `BASE_FEATURE(kFooFeature,...)`
     * Global functions that access non-global state are disallowed. e.g.
       static methods on `BrowserList`.
+* No distinction between `//chrome/browser/BUILD.gn` and
+  `//chrome/browser/ui/BUILD.gn`
+    * There is plenty of UI code outside of the `ui` subdirectory, and plenty of
+      non-UI code inside of the `ui` subdirectory. Currently the two BUILD files
+      allow circular includes. We will continue to treat these directories and
+      BUILD files as interchangeable.
 
 ## UI
 * Features should use WebUI and Views toolkit, which are x-platform.
@@ -75,7 +131,19 @@ These design principles make it easier to write, debug, and maintain code in //c
     * For simple features that do not require data persistence, we only require
       separation of controller from view.
     * TODO: work with UI/toolkit team to come up with appropriate examples.
-* Avoid subclassing Views/Widgets.
+* Views:
+    * For simple configuration changes, prefer to use existing setter methods
+      and builder syntax.
+    * Feel free to create custom view subclasses to encapsulate logic or
+      override methods where doing so helps implement layout as the composition
+      of smaller standard layouts, or similar. Don't try to jam the kitchen sink
+      into a single giant view.
+    * However, avoid subclassing existing concrete view subclasses, e.g. to add
+      or tweak existing behavior. This risks violating the Google style guidance
+      on multiple inheritance and makes maintenance challenging. In particular
+      do not do this with core controls, as the behaviors of common controls
+      should not vary across the product.
+* Avoid subclassing Widgets.
 * Avoid self-owned objects/classes for views or controllers.
 
 ## General
@@ -92,7 +160,7 @@ These design principles make it easier to write, debug, and maintain code in //c
   configuration, not C preprocessor conditionals e.g. `#if
   BUILDFLAG(FEATURE_FOO)`.
     * We ship a single product (Chrome) to multiple platforms. The purpose of
-      proprocessor conditionals is:
+      preprocessor conditionals is:
         * (1) to allow platform-agnostic code to reference platform-specific
           code.
             * e.g. `#if BUILDFLAG(OS_WIN)`
@@ -143,8 +211,25 @@ if (result.cached) {
 * Avoid re-entrancy. Control flow should remain as localized as possible.
 Bad (unnecessary delegation, re-entrancy)
 ```cpp
+class CarFactory {
+  std::unique_ptr<Car> CreateCar() {
+    if (!CanCreateCar()) {
+      return nullptr;
+    }
+    if (FactoryIsBusy() && !delegate->ShouldShowCarIfFactoryIsBusy()) {
+      return nullptr;
+    }
+    return std::make_unique<Car>();
+  }
+
+  bool CanCreateCar();
+  bool FactoryIsBusy();
+
+  Delegate* delegate_ = nullptr;
+};
+
 class CarSalesPerson : public Delegate {
-  // Can return nullptr, in which case no car is shown
+  // Can return nullptr, in which case no car is shown.
   std::unique_ptr<Car> ShowCar() {
     return car_factory_->CreateCar();
   }
@@ -153,29 +238,28 @@ class CarSalesPerson : public Delegate {
   // Whether the car should be shown, even if the factory is busy.
   bool ShouldShowCarIfFactoryIsBusy() override;
 
-  CarFactory* car_factory_;
-};
-
-class CarFactory {
-  std::unique_ptr<Car> CreateCar() {
-    if (!CanCreateCar())
-      return nullptr;
-    if (FactoryIsBusy() && !delegate->ShouldShowCarIfFactoryIsBusy())
-      return nullptr;
-    return std::make_unique<Car>();
-  }
-
-  bool CanCreateCar();
-  bool FactoryIsBusy();
-
-  Delegate* delegate_;
+  CarFactory* car_factory_ = nullptr;
 };
 ```
 
 Good, version 1: Remove delegation. Pass all relevant state to CarFactory so that CreateCar() does not depend on non-local state.
 ```cpp
+class CarFactory {
+  std::unique_ptr<Car> CreateCar(bool show_even_if_factory_is_busy) {
+    if (!CanCreateCar()) {
+      return nullptr;
+    }
+    if (FactoryIsBusy() && !show_even_if_factory_is_busy) {
+      return nullptr;
+    }
+    return std::make_unique<Car>();
+  }
+  bool CanCreateCar();
+  bool FactoryIsBusy();
+};
+
 class CarSalesPerson {
-  // Can return nullptr, in which case no car is shown
+  // Can return nullptr, in which case no car is shown.
   std::unique_ptr<Car> ShowCar() {
     return car_factory_->CreateCar(ShouldShowCarIfFactoryIsBusy());
   }
@@ -183,45 +267,129 @@ class CarSalesPerson {
   // Whether the car should be shown, even if the factory is busy.
   bool ShouldShowCarIfFactoryIsBusy();
 
-  CarFactory* car_factory_;
-};
-
-class CarFactory {
-  std::unique_ptr<Car> CreateCar(bool show_even_if_factory_is_busy) {
-    if (!CanCreateCar())
-      return nullptr;
-    if (FactoryIsBusy() && !show_even_if_factory_is_busy)
-      return nullptr;
-    return std::make_unique<Car>();
-  }
-  bool CanCreateCar();
-  bool FactoryIsBusy();
+  CarFactory* car_factory_ = nullptr;
 };
 ```
 
-Good, version 2: Remove delegation. CreateCar always create a car (fewer conditionals). State only flows from CarFactory to CarSalesPerson (and never backwards).
+Good, version 2: Remove delegation. CreateCar always creates a car (fewer conditionals). State only flows from CarFactory to CarSalesPerson (and never backwards).
 ```cpp
+class CarFactory {
+  bool CanCreateCar();
+  bool FactoryIsBusy();
+  // Never returns nullptr.
+  std::unique_ptr<Car> CreateCar();
+};
+
 class CarSalesPerson {
   // Can return nullptr, in which case no car is shown
   std::unique_ptr<Car> ShowCar() {
-    if (!car_factory_->CanCreateCar())
+    if (!car_factory_->CanCreateCar()) {
       return nullptr;
-    if (car_factory_->FactoryIsBusy() && !ShouldShowCarIfFactoryIsBusy())
+    }
+    if (car_factory_->FactoryIsBusy() && !ShouldShowCarIfFactoryIsBusy()) {
       return nullptr;
+    }
     return car_factory_->CreateCar();
   }
 
   // Whether the car should be shown, even if the factory is busy.
   bool ShouldShowCarIfFactoryIsBusy();
-  CarFactory* car_factory_;
-};
-
-class CarFactory {
-  bool CanCreateCar();
-  bool FactoryIsBusy();
-  // never returns nullptr.
-  std::unique_ptr<Car> CreateCar();
+  CarFactory* car_factory_ = nullptr;
 };
 ```
 
+* Circular dependencies are a symptom of problematic design.
 
+Bad. FeatureShowcase depends on FeatureA. FeatureA depends on FeatureB.
+FeatureB depends on FeatureShowcase. The root problem is that the design for
+FeatureShowcase uses both a pull and a push model for control flow.
+```cpp
+// Shows an icon per feature. Needs to know whether each icon is visible.
+class FeatureShowcase {
+  FeatureShowcase() {
+    // Checks whether A should be visible, and if so, shows A.
+    if (FeatureA::IsVisible())
+      ShowFeatureA();
+  }
+
+  // Called to make B visible.
+  void ShowFeatureB();
+
+};
+
+class FeatureA {
+  // Feature A depends on feature B.
+  FeatureA(FeatureB* b);
+
+  static bool IsVisible();
+};
+
+class FeatureB {
+  FeatureB(FeatureShowcase* showcase) {
+    if (IsVisible())
+      showcase->ShowFeatureB();
+  }
+  static bool IsVisible();
+};
+```
+
+Good, version 1. FeatureShowcase uses a pull model for control flow.
+FeatureShowcase depends on FeatureA and FeatureB. FeatureA depends on FeatureB.
+There is no circular dependency.
+```cpp
+// Shows an icon per feature. Needs to know whether each icon is visible.
+class FeatureShowcase {
+  FeatureShowcase() {
+    if (FeatureA::IsVisible())
+      ShowFeatureA();
+    if (FeatureB::IsVisible())
+      ShowFeatureB();
+  }
+};
+
+class FeatureA {
+  // Feature A depends on feature B.
+  FeatureA(FeatureB* b);
+
+  static bool IsVisible();
+};
+
+class FeatureB {
+  FeatureB();
+  static bool IsVisible();
+};
+```
+
+Good, version 2. FeatureShowcase uses a push model for control flow. FeatureA
+and FeatureB both depend on FeatureShowcase. There is no circular dependency.
+```cpp
+// Shows an icon per feature. Needs to know whether each icon is visible.
+class FeatureShowcase {
+  FeatureShowcase();
+
+  // Called to make A visible.
+  void ShowFeatureA();
+
+  // Called to make B visible.
+  void ShowFeatureB();
+};
+
+class FeatureA {
+  // Feature A depends on feature B.
+  FeatureA(FeatureB* b, FeatureShowcase* showcase) {
+    if (IsVisible())
+        showcase->ShowFeatureA();
+  }
+
+  static bool IsVisible();
+};
+
+class FeatureB {
+  FeatureB(FeatureShowcase* showcase) {
+    if (IsVisible())
+        showcase->ShowFeatureB();
+  }
+
+  static bool IsVisible();
+};
+```

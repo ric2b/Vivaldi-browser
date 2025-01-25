@@ -34,6 +34,7 @@ class IdentityUserInfo;
 class PublicKeyCredentialCreationOptions;
 class PublicKeyCredentialDescriptor;
 class PublicKeyCredentialParameters;
+class PublicKeyCredentialReportOptions;
 class PublicKeyCredentialRequestOptions;
 class PublicKeyCredentialRpEntity;
 class PublicKeyCredentialUserEntity;
@@ -222,8 +223,9 @@ struct TypeConverter<blink::mojom::blink::IdentityProviderConfigPtr,
 };
 
 template <>
-struct TypeConverter<blink::mojom::blink::IdentityProviderRequestOptionsPtr,
-                     blink::IdentityProviderRequestOptions> {
+struct MODULES_EXPORT
+    TypeConverter<blink::mojom::blink::IdentityProviderRequestOptionsPtr,
+                  blink::IdentityProviderRequestOptions> {
   static blink::mojom::blink::IdentityProviderRequestOptionsPtr Convert(
       const blink::IdentityProviderRequestOptions&);
 };
@@ -291,6 +293,14 @@ struct TypeConverter<
 template <>
 struct TypeConverter<Vector<blink::mojom::blink::Hint>, Vector<String>> {
   static Vector<blink::mojom::blink::Hint> Convert(const Vector<String>&);
+};
+
+template <>
+struct MODULES_EXPORT
+    TypeConverter<blink::mojom::blink::PublicKeyCredentialReportOptionsPtr,
+                  blink::PublicKeyCredentialReportOptions> {
+  static blink::mojom::blink::PublicKeyCredentialReportOptionsPtr Convert(
+      const blink::PublicKeyCredentialReportOptions&);
 };
 
 }  // namespace mojo

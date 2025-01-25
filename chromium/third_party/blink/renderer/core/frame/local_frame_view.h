@@ -53,11 +53,11 @@
 #include "third_party/blink/renderer/platform/graphics/paint_invalidation_reason.h"
 #include "third_party/blink/renderer/platform/graphics/subtree_paint_property_update_reason.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_linked_hash_set.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace cc {
@@ -102,6 +102,7 @@ class LocalFrame;
 class MobileFriendlinessChecker;
 class Page;
 class PaginationState;
+class PaintArtifact;
 class PaintArtifactCompositor;
 class PaintController;
 class PaintLayer;
@@ -149,6 +150,9 @@ class CORE_EXPORT LocalFrameView final
     // These are called when the lifecycle updates start/finish.
     virtual void WillStartLifecycleUpdate(const LocalFrameView&) {}
     virtual void DidFinishLifecycleUpdate(const LocalFrameView&) {}
+
+    // Called after the layout lifecycle phase.
+    virtual void DidFinishLayout() {}
   };
 
   explicit LocalFrameView(LocalFrame&);
@@ -266,7 +270,7 @@ class CORE_EXPORT LocalFrameView final
 
   void Dispose() override;
   void PropagateFrameRects() override;
-  void ZoomChanged(float zoom_factor) override;
+  void ZoomFactorChanged(float zoom_factor) override;
   void InvalidateAllCustomScrollbarsOnActiveChanged();
 
   void UsesOverlayScrollbarsChanged();
@@ -530,6 +534,7 @@ class CORE_EXPORT LocalFrameView final
   gfx::Rect ViewportToFrame(const gfx::Rect&) const;
   gfx::Rect FrameToViewport(const gfx::Rect&) const;
   gfx::Point FrameToViewport(const gfx::Point&) const;
+  gfx::PointF FrameToViewport(const gfx::PointF&) const;
   gfx::Point ViewportToFrame(const gfx::Point&) const;
   gfx::PointF ViewportToFrame(const gfx::PointF&) const;
   PhysicalOffset ViewportToFrame(const PhysicalOffset&) const;
@@ -596,6 +601,10 @@ class CORE_EXPORT LocalFrameView final
   // Get the PaintRecord based on the cached paint artifact generated during
   // the last paint in lifecycle update.
   cc::PaintRecord GetPaintRecord(const gfx::Rect* cull_rect = nullptr) const;
+
+  // Get the PaintArtifact that was cached during the last paint lifecycle
+  // update.
+  const PaintArtifact* GetPaintArtifact() const;
 
   void Show() override;
   void Hide() override;
@@ -989,12 +998,13 @@ class CORE_EXPORT LocalFrameView final
 
   bool UpdateViewportIntersectionsForSubtree(
       unsigned parent_flags,
-      std::optional<base::TimeTicks>& monotonic_time) override;
+      ComputeIntersectionsContext&) override;
   void DeliverSynchronousIntersectionObservations();
 
   bool RunScrollSnapshotClientSteps();
   bool ShouldDeferLayoutSnap() const;
 
+  bool UpdateLastSuccessfulPositionFallbacks();
   bool NotifyResizeObservers();
   bool RunResizeObserverSteps(DocumentLifecycle::LifecycleState target_state);
   void ClearResizeObserverLimit();
@@ -1010,9 +1020,8 @@ class CORE_EXPORT LocalFrameView final
   bool RunPostLayoutIntersectionObserverSteps();
   // This is a recursive helper for determining intersection observations which
   // need to happen in post-layout.
-  void ComputePostLayoutIntersections(
-      unsigned parent_flags,
-      std::optional<base::TimeTicks>& monotonic_time);
+  void ComputePostLayoutIntersections(unsigned parent_flags,
+                                      ComputeIntersectionsContext&);
 
   // Returns true if the root object was laid out. Returns false if the layout
   // was prevented (e.g. by ancestor display-lock) or not needed.
@@ -1045,7 +1054,7 @@ class CORE_EXPORT LocalFrameView final
 
   void UpdateCanCompositeBackgroundAttachmentFixed();
 
-  void EnqueueSnapChangingFromImplIfNecessary();
+  void EnqueueScrollSnapChangingFromImplIfNecessary();
 
   typedef HeapHashSet<Member<LayoutEmbeddedObject>> EmbeddedObjectSet;
   EmbeddedObjectSet part_update_set_;

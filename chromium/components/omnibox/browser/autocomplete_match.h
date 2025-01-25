@@ -29,6 +29,8 @@
 #include "components/search_engines/template_url.h"
 #include "components/url_formatter/url_formatter.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "third_party/metrics_proto/omnibox_scoring_signals.pb.h"
+#include "third_party/omnibox_proto/answer_type.pb.h"
 #include "third_party/omnibox_proto/groups.pb.h"
 #include "third_party/omnibox_proto/navigational_intent.pb.h"
 #include "third_party/omnibox_proto/rich_answer_template.pb.h"
@@ -64,7 +66,7 @@ const char kACMatchPropertyContentsStartIndex[] = "match contents start index";
 // scoring non-default match.
 const char kACMatchPropertyScoreBoostedFrom[] = "score_boosted_from";
 
-// RichAutocompletionParams ---------------------------------------------------
+// Util structs/enums ----------------------------------------------------------
 
 // `RichAutocompletionParams` is a cache for the params used by
 // `TryRichAutocompletion()`. `TryRichAutocompletion()` is called about 80 times
@@ -88,6 +90,29 @@ struct RichAutocompletionParams {
   bool autocomplete_prefer_urls_over_prefixes;
 };
 
+enum class IphType {
+  kNone,
+  // '@gemini' promo; shown in zero state.
+  kGemini,
+  // Featured search promo; shown in zero state.
+  kFeaturedEnterpriseSearch,
+  // Embeddings' setting promo when embeddings are disabled; shown in '@history'
+  // scope.
+  kHistoryEmbeddingsSettingsPromo,
+  // Disclaimer when embeddings are enabled; shown in '@history' scope.
+  kHistoryEmbeddingsDisclaimer,
+  // '@history' promo when embeddings are disabled; shown in zero state.
+  kHistoryScopePromo,
+  // '@history' promo when embeddings are enabled; shown in zero state.
+  kHistoryEmbeddingsScopePromo,
+};
+
+enum class FeedbackType {
+  kNone,
+  kThumbsUp,
+  kThumbsDown,
+};
+
 // AutocompleteMatch ----------------------------------------------------------
 
 // A single result line with classified spans.  The autocomplete popup displays
@@ -98,8 +123,7 @@ struct RichAutocompletionParams {
 // example, a search result may say "Search for asdf" as the description, but
 // "asdf" should appear in the box.
 struct AutocompleteMatch {
-  using ScoringSignals =
-      ::metrics::OmniboxEventProto::Suggestion::ScoringSignals;
+  using ScoringSignals = ::metrics::OmniboxScoringSignals;
 
   // Autocomplete matches contain strings that are classified according to a
   // separate vector of styles.  This vector associates flags with particular
@@ -265,14 +289,8 @@ struct AutocompleteMatch {
 #endif
 
 #if (!BUILDFLAG(IS_ANDROID) || BUILDFLAG(ENABLE_VR)) && !BUILDFLAG(IS_IOS)
-  // TODO(b/327497146) Migrate SuggestionAnswer::AnswerType to
-  // omnibox::RichAnswerTemplate::AnswerType and remove function.
   // Converts SuggestionAnswer::AnswerType to an answer vector icon.
-  static const gfx::VectorIcon& AnswerTypeToAnswerIconDeprecated(int type);
-
-  // Converts omnibox::RichAnswerTemplate::AnswerType to an answer vector icon.
-  static const gfx::VectorIcon& AnswerTypeToAnswerIcon(
-      omnibox::RichAnswerTemplate::AnswerType type);
+  static const gfx::VectorIcon& AnswerTypeToAnswerIcon(int type);
 
   // Gets the vector icon identifier for the icon to be shown for this match. If
   // `is_bookmark` is true, returns a bookmark icon rather than what the type
@@ -517,8 +535,12 @@ struct AutocompleteMatch {
   void RecordAdditionalInfo(const std::string& property, base::Time value);
 
   // Returns the value recorded for |property| in the |additional_info|
-  // dictionary.  Returns the empty string if no such value exists.
-  std::string GetAdditionalInfo(const std::string& property) const;
+  // dictionary. Returns the empty string if no such value exists. This is for
+  // debugging in chrome://omnibox only. It should only be called by
+  // `OmniboxPageHandler` and tests. For match info that's used for
+  // non-debugging, use class fields. Unfortunately, There are existing
+  // non-debug callsites; those should be cleaned up, not added to.
+  std::string GetAdditionalInfoForDebugging(const std::string& property) const;
 
   // Returns the provider type selected from this match, which is by default
   // taken from the match `provider` type but may be a (pseudo-)provider
@@ -569,6 +591,9 @@ struct AutocompleteMatch {
   // Unlike FilterOmniboxActions(), this method specifically targets
   // ActionsInSuggest.
   void FilterAndSortActionsInSuggest();
+
+  // Remove all Answer Actions.
+  void RemoveAnswerActions();
 
   // Returns whether the autocompletion is trivial enough that we consider it
   // an autocompletion for which the omnibox autocompletion code did not add
@@ -669,7 +694,7 @@ struct AutocompleteMatch {
   // no provider (or memory of the user's selection).
   raw_ptr<AutocompleteProvider> provider = nullptr;
 
-  // The relevance of this match. See table in autocomplete.h for scores
+  // The relevance of this match. See table in autocomplete_provider.h for scores
   // returned by various providers. This is used to rank matches among all
   // responding providers, so different providers must be carefully tuned to
   // supply matches with appropriate relevance.
@@ -806,6 +831,9 @@ struct AutocompleteMatch {
 
   std::optional<omnibox::RichAnswerTemplate> answer_template;
 
+  // AnswerType for answer verticals, including rich answers.
+  omnibox::AnswerType answer_type{omnibox::ANSWER_TYPE_UNSPECIFIED};
+
   // The transition type to use when the user opens this match.  By default,
   // this is TYPED.  Providers whose matches do not look like URLs should set
   // it to GENERATED.
@@ -871,6 +899,11 @@ struct AutocompleteMatch {
   // Set in matches originating from keyword results.
   bool from_keyword = false;
 
+  // Vivaldi
+  // Matched nickname for the autocomplete result.
+  std::u16string nickname;
+  // End Vivaldi
+
   // The visible actions relevant to this match.
   std::vector<scoped_refptr<OmniboxAction>> actions;
 
@@ -916,6 +949,12 @@ struct AutocompleteMatch {
   // Signals for ML scoring.
   std::optional<ScoringSignals> scoring_signals;
 
+  // A flag that's set during the de-duplication process in order to forcibly
+  // exclude this match from ML scoring (e.g. this match is ML-eligible, but one
+  // of the matches in `duplicate_matches` is not). Furthermore, when this flag
+  // is set, ML scoring signals will NOT be logged for this particular match.
+  bool force_skip_ml_scoring = false;
+
   // A flag to mark whether this would've been excluded from the "original" list
   // of matches. Traditionally, providers limit the number of suggestions they
   // provide to the top N most relevant matches. When ML scoring is enabled,
@@ -931,6 +970,18 @@ struct AutocompleteMatch {
   //   launches. In the meantime, shortcut grouping won't work for users in the
   //   grouping experiments.
   bool shortcut_boosted = false;
+
+  // E.g. the gemini IPH match shown at the bottom of the popup.
+  IphType iph_type = IphType::kNone;
+
+  // IPH matches aren't clickable like other matches, but may have a next-action
+  // or learn-more type of link. This link is always appended to the end of
+  // their contents/description text.
+  std::u16string iph_link_text;
+  GURL iph_link_url;
+
+  // The user feedback on the match.
+  FeedbackType feedback_type = FeedbackType::kNone;
 
   // So users of AutocompleteMatch can use the same ellipsis that it uses.
   static const char16_t kEllipsis[];
@@ -972,14 +1023,14 @@ typedef std::vector<ACMatchClassification> ACMatchClassifications;
 typedef std::vector<AutocompleteMatch> ACMatches;
 
 // Can be used as the key for grouping AutocompleteMatches in a map based on a
-// std::pair of fields. This can be generalized to a std::tuple if ever needed.
+// std::tuple of fields.
 // The accompanying hash function makes the key usable in an std::unordered_map.
-template <typename S, typename T>
-using ACMatchKey = std::pair<S, T>;
+template <typename... Args>
+using ACMatchKey = std::tuple<Args...>;
 
-template <typename S, typename T>
+template <typename... Args>
 struct ACMatchKeyHash {
-  size_t operator()(const ACMatchKey<S, T>& key) const;
+  size_t operator()(const ACMatchKey<Args...>& key) const;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_MATCH_H_

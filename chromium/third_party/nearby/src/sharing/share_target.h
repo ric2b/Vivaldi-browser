@@ -16,17 +16,11 @@
 #define THIRD_PARTY_NEARBY_SHARING_SHARE_TARGET_H_
 
 #include <cstdint>
-#include <memory>
 #include <optional>
 #include <string>
-#include <vector>
 
 #include "internal/network/url.h"
-#include "sharing/attachment.h"
 #include "sharing/common/nearby_share_enums.h"
-#include "sharing/file_attachment.h"
-#include "sharing/text_attachment.h"
-#include "sharing/wifi_credentials_attachment.h"
 
 namespace nearby {
 namespace sharing {
@@ -37,9 +31,7 @@ struct ShareTarget {
   ShareTarget();
   ShareTarget(
       std::string device_name, ::nearby::network::Url image_url,
-      ShareTargetType type, std::vector<TextAttachment> text_attachments,
-      std::vector<FileAttachment> file_attachments,
-      std::vector<WifiCredentialsAttachment> wifi_credentials_attachments,
+      ShareTargetType type,
       bool is_incoming, std::optional<std::string> full_name, bool is_known,
       std::optional<std::string> device_id, bool for_self_share);
   ShareTarget(const ShareTarget&);
@@ -48,10 +40,6 @@ struct ShareTarget {
   ShareTarget& operator=(ShareTarget&&);
   ~ShareTarget();
 
-  bool has_attachments() const;
-  std::vector<int64_t> GetAttachmentIds() const;
-  std::vector<std::unique_ptr<Attachment>> GetAttachments() const;
-  int64_t GetTotalAttachmentsSize() const;
   std::string ToString() const;
 
   int64_t id;
@@ -59,9 +47,6 @@ struct ShareTarget {
   // Uri that points to an image of the ShareTarget, if one exists.
   std::optional<::nearby::network::Url> image_url;
   ShareTargetType type = ShareTargetType::kUnknown;
-  std::vector<TextAttachment> text_attachments;
-  std::vector<FileAttachment> file_attachments;
-  std::vector<WifiCredentialsAttachment> wifi_credentials_attachments;
   bool is_incoming = false;
   std::optional<std::string> full_name;
   // True if the local device has the PublicCertificate this target is
@@ -70,6 +55,8 @@ struct ShareTarget {
   std::optional<std::string> device_id;
   // True if the remote device is also owned by the current user.
   bool for_self_share = false;
+  // Vendor ID of the target. This can change over the lifetime of the target.
+  uint8_t vendor_id = 0;
 };
 
 }  // namespace sharing

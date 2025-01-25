@@ -5,6 +5,7 @@
 #include "src/heap/scavenger.h"
 
 #include <atomic>
+#include <optional>
 
 #include "src/common/globals.h"
 #include "src/handles/global-handles.h"
@@ -15,12 +16,12 @@
 #include "src/heap/gc-tracer.h"
 #include "src/heap/heap-inl.h"
 #include "src/heap/heap.h"
-#include "src/heap/large-page-inl.h"
+#include "src/heap/large-page-metadata-inl.h"
 #include "src/heap/mark-compact-inl.h"
 #include "src/heap/mark-compact.h"
 #include "src/heap/memory-chunk-layout.h"
-#include "src/heap/mutable-page-inl.h"
-#include "src/heap/mutable-page.h"
+#include "src/heap/mutable-page-metadata-inl.h"
+#include "src/heap/mutable-page-metadata.h"
 #include "src/heap/objects-visiting-inl.h"
 #include "src/heap/pretenuring-handler.h"
 #include "src/heap/remembered-set-inl.h"
@@ -73,7 +74,7 @@ class IterateAndScavengePromotedObjectsVisitor final : public ObjectVisitor {
     if (ObjectInYoungGeneration(*key)) {
       // We cannot check the map here, as it might be a large object.
       scavenger_->RememberPromotedEphemeron(
-          EphemeronHashTable::unchecked_cast(obj), entry);
+          UncheckedCast<EphemeronHashTable>(obj), entry);
     } else {
       VisitPointer(obj, key);
     }
@@ -199,7 +200,7 @@ class IterateAndScavengePromotedObjectsVisitor final : public ObjectVisitor {
 namespace {
 
 V8_INLINE bool IsUnscavengedHeapObject(Heap* heap, Tagged<Object> object) {
-  return Heap::InFromPage(object) && !HeapObject::cast(object)
+  return Heap::InFromPage(object) && !Cast<HeapObject>(object)
                                           ->map_word(kRelaxedLoad)
                                           .IsForwardingAddress();
 }
@@ -291,7 +292,7 @@ void ScavengerCollector::JobTask::ProcessItems(JobDelegate* delegate,
 void ScavengerCollector::JobTask::ConcurrentScavengePages(
     Scavenger* scavenger) {
   while (remaining_memory_chunks_.load(std::memory_order_relaxed) > 0) {
-    base::Optional<size_t> index = generator_.GetNext();
+    std::optional<size_t> index = generator_.GetNext();
     if (!index) return;
     for (size_t i = *index; i < memory_chunks_.size(); ++i) {
       auto& work_item = memory_chunks_[i];
@@ -334,7 +335,7 @@ class GlobalHandlesWeakRootsUpdatingVisitor final : public RootVisitor {
     // Smis.
     if (!Heap::InYoungGeneration(object)) return;
 
-    Tagged<HeapObject> heap_object = HeapObject::cast(object);
+    Tagged<HeapObject> heap_object = Cast<HeapObject>(object);
     // TODO(chromium:1336158): Turn the following CHECKs into DCHECKs after
     // flushing out potential issues.
     CHECK(Heap::InFromPage(heap_object));
@@ -365,6 +366,15 @@ class V8_NODISCARD ScopedFullHeapCrashKey {
 
 void ScavengerCollector::CollectGarbage() {
   ScopedFullHeapCrashKey collect_full_heap_dump_if_crash(isolate_);
+
+  auto* new_space = SemiSpaceNewSpace::From(heap_->new_space());
+  new_space->GarbageCollectionPrologue();
+  new_space->EvacuatePrologue();
+
+  // We also flip the young generation large object space. All large objects
+  // will be in the from space.
+  heap_->new_lo_space()->Flip();
+  heap_->new_lo_space()->ResetPendingObject();
 
   DCHECK(!heap_->allocator()->new_space_allocator()->IsLabValid());
 
@@ -496,10 +506,6 @@ void ScavengerCollector::CollectGarbage() {
         &Heap::UpdateYoungReferenceInExternalStringTableEntry);
 
     heap_->incremental_marking()->UpdateMarkingWorklistAfterScavenge();
-
-    if (V8_UNLIKELY(v8_flags.track_retaining_path)) {
-      heap_->UpdateRetainersAfterScavenge();
-    }
 
     if (V8_UNLIKELY(v8_flags.always_use_string_forwarding_table)) {
       isolate_->string_forwarding_table()->UpdateAfterYoungEvacuation();
@@ -723,7 +729,7 @@ void Scavenger::IterateAndScavengePromotedObject(Tagged<HeapObject> target,
 
   if (IsJSArrayBufferMap(map)) {
     DCHECK(!MemoryChunk::FromHeapObject(target)->IsLargePage());
-    JSArrayBuffer::cast(target)->YoungMarkExtensionPromoted();
+    Cast<JSArrayBuffer>(target)->YoungMarkExtensionPromoted();
   }
 }
 
@@ -989,7 +995,7 @@ void RootScavengeVisitor::ScavengePointer(FullObjectSlot p) {
   DCHECK(!HasWeakHeapObjectTag(object));
   DCHECK(!MapWord::IsPacked(object.ptr()));
   if (Heap::InYoungGeneration(object)) {
-    scavenger_->ScavengeObject(FullHeapObjectSlot(p), HeapObject::cast(object));
+    scavenger_->ScavengeObject(FullHeapObjectSlot(p), Cast<HeapObject>(object));
   }
 }
 

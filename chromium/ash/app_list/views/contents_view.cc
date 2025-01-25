@@ -312,7 +312,7 @@ void ContentsView::ShowEmbeddedAssistantUI(bool show) {
   // kPeeking and layout the suggestion chips.
   if (next_page == GetPageIndexForState(AppListState::kStateApps)) {
     GetSearchBoxView()->ClearSearch();
-    GetSearchBoxView()->SetSearchBoxActive(false, ui::ET_UNKNOWN);
+    GetSearchBoxView()->SetSearchBoxActive(false, ui::EventType::kUnknown);
     apps_container_view_->DeprecatedLayoutImmediately();
   }
 }
@@ -472,7 +472,7 @@ bool ContentsView::Back() {
       break;
     case AppListState::kStateStart_DEPRECATED:
     case AppListState::kInvalidState:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   return true;

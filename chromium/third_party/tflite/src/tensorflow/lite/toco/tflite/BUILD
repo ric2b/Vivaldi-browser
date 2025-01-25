@@ -2,6 +2,7 @@ load(
     "//tensorflow:tensorflow.bzl",
     "tf_cc_test",
 )
+load("//tensorflow:tensorflow.default.bzl", "get_compatible_with_portable")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
@@ -19,16 +20,17 @@ cc_library(
         "operator.h",
         "simple_operator.h",
     ],
+    compatible_with = get_compatible_with_portable(),
     visibility = [
         "//tensorflow/lite/toco:__subpackages__",
     ],
     deps = [
         ":types",
+        "//tensorflow/compiler/mlir/lite/delegates/flex:allowlisted_flex_ops_lib",
         "//tensorflow/core:framework",
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/lite/c:c_api_types",
         "//tensorflow/lite/core/c:common",
-        "//tensorflow/lite/delegates/flex:allowlisted_flex_ops_lib",
         "//tensorflow/lite/schema:schema_fbs",
         "//tensorflow/lite/toco:graph_transformations",
         "//tensorflow/lite/toco:model",
@@ -70,6 +72,7 @@ cc_library(
     hdrs = [
         "types.h",
     ],
+    compatible_with = get_compatible_with_portable(),
     deps = [
         "//tensorflow/lite:string_util",
         "//tensorflow/lite/schema:schema_fbs",
@@ -104,16 +107,17 @@ cc_library(
     hdrs = [
         "export.h",
     ],
+    compatible_with = get_compatible_with_portable(),
     visibility = ["//visibility:public"],
     deps = [
         ":operator",
         ":types",
+        "//tensorflow/compiler/mlir/lite/schema:schema_conversion_utils",
         "//tensorflow/core:lib_proto_parsing",
         "//tensorflow/core/platform:status",
         "//tensorflow/lite:schema_fbs_version",
         "//tensorflow/lite:util",
         "//tensorflow/lite/c:c_api_types",
-        "//tensorflow/lite/schema:schema_conversion_utils",
         "//tensorflow/lite/schema:schema_fbs",
         "//tensorflow/lite/toco:model",
         "//tensorflow/lite/toco:toco_port",
@@ -135,11 +139,11 @@ tf_cc_test(
         ":export",
         ":operator",
         ":types",
+        "//tensorflow/compiler/mlir/lite/schema:schema_utils",
         "//tensorflow/core:lib_proto_parsing",
         "//tensorflow/core:ops",
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/lite/schema:schema_fbs",
-        "//tensorflow/lite/schema:schema_utils",
         "//tensorflow/lite/toco:model",
         "@com_google_absl//absl/log",
         "@com_google_googletest//:gtest_main",
@@ -156,15 +160,16 @@ cc_library(
     hdrs = [
         "import.h",
     ],
+    compatible_with = get_compatible_with_portable(),
     visibility = ["//visibility:public"],
     deps = [
         ":operator",
         ":types",
+        "//tensorflow/compiler/mlir/lite/schema:schema_utils",
         "//tensorflow/lite:framework",
         "//tensorflow/lite/core:framework",
         "//tensorflow/lite/core/tools:verifier",
         "//tensorflow/lite/schema:schema_fbs",
-        "//tensorflow/lite/schema:schema_utils",
         "//tensorflow/lite/toco:model",
         "//tensorflow/lite/toco:model_flags_proto_cc",
         "//tensorflow/lite/toco:tooling_util",
@@ -184,9 +189,9 @@ tf_cc_test(
     ],
     deps = [
         ":import",
+        "//tensorflow/compiler/mlir/lite/schema:schema_conversion_utils",
         "//tensorflow/core:ops",
         "//tensorflow/lite:schema_fbs_version",
-        "//tensorflow/lite/schema:schema_conversion_utils",
         "//tensorflow/lite/schema:schema_fbs",
         "//tensorflow/lite/toco:model",
         "//tensorflow/lite/toco:model_flags_proto_cc",

@@ -10,6 +10,8 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_strip/ui/tab_strip_group_stroke_view.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 
 namespace {
 
@@ -31,13 +33,13 @@ constexpr double kTitleContainerFadeAnimationSeconds = 0.25;
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
   if (self) {
-    self.isAccessibilityElement = YES;
     _titleContainer = [self createTitleContainer];
     [self.contentView addSubview:_titleContainer];
     _groupStrokeView = [[TabStripGroupStrokeView alloc] init];
     [self addSubview:_groupStrokeView];
     [self setupConstraints];
     [self updateGroupStroke];
+    [self updateAccessibilityValue];
   }
   return self;
 }
@@ -57,6 +59,10 @@ constexpr double kTitleContainerFadeAnimationSeconds = 0.25;
 
 - (void)prepareForReuse {
   [super prepareForReuse];
+  _titleContainer.accessibilityValue = nil;
+  _titleContainer.accessibilityLabel = nil;
+  _titleLabel.text = nil;
+  self.delegate = nil;
   self.titleContainerBackgroundColor = nil;
   self.collapsed = NO;
 }
@@ -82,7 +88,7 @@ constexpr double kTitleContainerFadeAnimationSeconds = 0.25;
 
 - (void)setTitle:(NSString*)title {
   [super setTitle:title];
-  self.accessibilityLabel = title;
+  _titleContainer.accessibilityLabel = title;
   _titleLabel.text = [title copy];
 }
 
@@ -91,7 +97,13 @@ constexpr double kTitleContainerFadeAnimationSeconds = 0.25;
   _titleContainer.backgroundColor = color;
 }
 
+- (void)setTitleTextColor:(UIColor*)titleTextColor {
+  _titleTextColor = titleTextColor;
+  _titleLabel.textColor = titleTextColor;
+}
+
 - (void)setGroupStrokeColor:(UIColor*)color {
+  [super setGroupStrokeColor:color];
   if ([_groupStrokeView.backgroundColor isEqual:color]) {
     return;
   }
@@ -114,6 +126,7 @@ constexpr double kTitleContainerFadeAnimationSeconds = 0.25;
         }),
         base::Seconds(kCollapseUpdateGroupStrokeDelaySeconds));
   }
+  [self updateAccessibilityValue];
 }
 
 - (void)setIntersectsLeftEdge:(BOOL)intersectsLeftEdge {
@@ -150,11 +163,28 @@ constexpr double kTitleContainerFadeAnimationSeconds = 0.25;
   UIView* titleContainer = [[UIView alloc] init];
   titleContainer.translatesAutoresizingMaskIntoConstraints = NO;
   titleContainer.layer.masksToBounds = YES;
+  titleContainer.isAccessibilityElement = YES;
   titleContainer.layer.cornerRadius =
       TabStripGroupItemConstants.titleContainerHorizontalPadding;
   _titleLabel = [self createTitleLabel];
   [titleContainer addSubview:_titleLabel];
   return titleContainer;
+}
+
+#pragma mark - UIAccessibility
+
+- (NSArray*)accessibilityCustomActions {
+  int stringID = self.collapsed ? IDS_IOS_TAB_STRIP_TAB_GROUP_EXPAND
+                                : IDS_IOS_TAB_STRIP_TAB_GROUP_COLLAPSE;
+  return @[ [[UIAccessibilityCustomAction alloc]
+      initWithName:l10n_util::GetNSString(stringID)
+            target:self
+          selector:@selector(collapseOrExpandTapped:)] ];
+}
+
+// Selector registered to expand or collapse tab group.
+- (void)collapseOrExpandTapped:(id)sender {
+  [self.delegate collapseOrExpandTappedForCell:self];
 }
 
 #pragma mark - Private
@@ -284,6 +314,14 @@ constexpr double kTitleContainerFadeAnimationSeconds = 0.25;
                    animations:^{
                      titleContainer.alpha = titleContainerAlpha;
                    }];
+}
+
+- (void)updateAccessibilityValue {
+  // Use the accessibility Value as there is a pause when using the
+  // accessibility hint.
+  _titleContainer.accessibilityValue = l10n_util::GetNSString(
+      self.collapsed ? IDS_IOS_TAB_STRIP_GROUP_CELL_COLLAPSED_VOICE_OVER_VALUE
+                     : IDS_IOS_TAB_STRIP_GROUP_CELL_EXPANDED_VOICE_OVER_VALUE);
 }
 
 @end

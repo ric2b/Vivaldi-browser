@@ -324,43 +324,6 @@ message GetVaultPropertiesReply {
   VaultEncryptionType encryption_type = 3;
 }
 
-// Output parameters for EvictDeviceKey()
-message EvictDeviceKeyReply {
-  // Indicates an error if |error| is not empty.
-  CryptohomeErrorCode error = 1;
-
-  // Indicate an error if this field exists.
-  // This field is replacing the |error| field above, for more information on
-  // which field to use and the process on the migration, see comment in
-  // CryptohomeErrorInfo.
-  CryptohomeErrorInfo error_info = 2;
-}
-
-// Input parameters to EvictDeviceKey()
-// Currently key eviction operates on all actively mounted user
-// cryptohomes.
-message EvictDeviceKeyRequest {
-  // Unique ID associated with the current suspend request, attached
-  // to EvictedKeyRestored signal when RestoreDeviceKey completes,
-  // correlated to a unique suspend request id.
-  int64 eviction_id = 1;
-}
-
-message RestoreDeviceKeyRequest {
-  // The id of a running AuthSession, which also identifies the user whose
-  // encrypted device is restored.
-  bytes auth_session_id = 1;
-}
-
-message RestoreDeviceKeyReply {
-  // Indicates an error if |error| is not empty.
-  CryptohomeErrorCode error = 1;
-  // This field is replacing the |error| field above, for more information on
-  // which field to use and the process on the migration, see comment in
-  // CryptohomeErrorInfo.
-  CryptohomeErrorInfo error_info = 2;
-}
-
 // Input parameters to Unmount()
 // Currently we only support unmounting all mounted cryptohomes but in the
 // future we may implement per-user unmount, at which point we can extend this
@@ -541,12 +504,12 @@ message StartAuthSessionRequest {
 
 message StatusInfo {
   // This field will be used for factor lockout time. Once an auth factor is
-  // locked out, this field will show the time the factor is locked out for in
-  // milliseconds. If the auth factor is not locked, this field will be set to
-  // zero. If the auth factor is locked out permanently (i.e. until it is
-  // unlocked via a separate credential) this will be set to the maximum uint64
-  // value. |time_available_in| would be indicated in terms of a wall clock
-  // timer, and it will not be affected by sleep.
+  // locked out, this field will show the time the factor is locked out for.
+  // If the auth factor is not locked, this field will be set to zero.
+  // If the auth factor is locked out permanently (i.e. until it is unlocked
+  // via a separate credential) this will be set to the maximum uint64 value.
+  // |time_available_in| would be indicated in terms of a wall clock timer,
+  // and it will not be affected by sleep. Time unit is millisecond.
   uint64 time_available_in = 1;
   // This field will be used for remaining time until the factor is expired.
   // Once an auth factor is expired it needs to be unlocked via a separate
@@ -555,7 +518,7 @@ message StatusInfo {
   // If the auth factor won't expire, this will be set to the maximum uint64
   // value, and will not decrement through time.
   // This field would be indicated in terms of a wall clock time, and keeps
-  // counting through sleep.
+  // counting through sleep. Time unit is millisecond.
   uint64 time_expiring_in = 2;
 }
 
@@ -811,6 +774,20 @@ message GetArcDiskFeaturesRequest {}
 message GetArcDiskFeaturesReply {
   // Set to true if Quota feature is supported for ARC Disk/Storage.
   bool quota_supported = 1;
+}
+
+// Input parameters for SetUserDataStorageWriteEnabled().
+message SetUserDataStorageWriteEnabledRequest {
+  // The owner of the home directory that we are going to set access rights to.
+  cryptohome.AccountIdentifier account_id = 1;
+  // Whether write access to MyFiles should be enabled or not.
+  bool enabled = 2;
+}
+
+// Output parameters for SetUserDataStorageWriteEnabled().
+message SetUserDataStorageWriteEnabledReply {
+  CryptohomeErrorCode error = 1;
+  CryptohomeErrorInfo error_info = 2;
 }
 
 // ------------------------- PKCS#11 Interface -------------------------
@@ -1411,45 +1388,6 @@ message GetAuthFactorExtendedInfoReply {
   oneof extended_info {
     RecoveryExtendedInfoReply recovery_info_reply = 4;
   }
-}
-
-// GetRecoveryRequestRequest is built when a user is trying to get the
-// recovery payload for CryptohomeRecoveryAuthFactor for a user. When the call
-// is made, AuthSession is in an unauthenticated state. After the operation the
-// AuthSession would still be in an unauthenticated state.
-message GetRecoveryRequestRequest {
-  enum UserType {
-    UNKNOWN = 0;
-    GAIA_ID = 1;
-  }
-
-  // This id would be used to associate the AuthFactor to an AuthSession.
-  bytes auth_session_id = 1;
-  // Label to identify the existing cryptohome recovery AuthFactor.
-  string auth_factor_label = 2;
-
-  UserType requestor_user_id_type = 3;
-  // Format of `requestor_user_id` is determined by `requestor_user_id_type`
-  // enum. For GAIA_ID it's number string obfuscated Gaia id.
-  string requestor_user_id = 4;
-  // Access token with reauth scope.
-  string gaia_access_token = 5;
-  // A short-lived token, it's validity will be verified by the Recovery
-  // Service.
-  string gaia_reauth_proof_token = 6;
-  // Serialized cryptohome.cryptorecovery.CryptoRecoveryEpochResponse.
-  // An epoch response received from Recovery Mediator service containing epoch
-  // beacon value for Cryptohome recovery flow.
-  bytes epoch_response = 7;
-}
-
-message GetRecoveryRequestReply {
-  CryptohomeErrorCode error = 1;
-  CryptohomeErrorInfo error_info = 2;
-
-  // Serialized cryptohome.cryptorecovery.CryptoRecoveryRpcRequest, to be sent
-  // to the recovery server.
-  bytes recovery_request = 3;
 }
 
 // CreateVaultKeysetRequest is built when a user is trying to create a

@@ -441,6 +441,7 @@ av_cold void ff_codec_close(AVCodecContext *avctx)
         av_frame_free(&avci->recon_frame);
 
         ff_refstruct_unref(&avci->pool);
+        ff_refstruct_pool_uninit(&avci->progress_frame_pool);
 
         ff_hwaccel_uninit(avctx);
 
@@ -461,6 +462,8 @@ av_cold void ff_codec_close(AVCodecContext *avctx)
         av_freep(&avctx->coded_side_data[i].data);
     av_freep(&avctx->coded_side_data);
     avctx->nb_coded_side_data = 0;
+    av_frame_side_data_free(&avctx->decoded_side_data,
+                            &avctx->nb_decoded_side_data);
 
     av_buffer_unref(&avctx->hw_frames_ctx);
     av_buffer_unref(&avctx->hw_device_ctx);

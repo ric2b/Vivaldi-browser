@@ -55,6 +55,8 @@ source_set("model") {
     "signin_client_factory.h",
     "signin_error_controller_factory.cc",
     "signin_error_controller_factory.h",
+    "signin_metrics_service_factory.cc",
+    "signin_metrics_service_factory.h",
   ]
   deps = [
     ":capabilities_types",
@@ -69,6 +71,7 @@ source_set("model") {
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
     "//components/metrics",
+    "//components/policy/core/common:common_constants",
     "//components/pref_registry",
     "//components/prefs",
     "//components/signin/core/browser",
@@ -80,6 +83,7 @@ source_set("model") {
     "//google_apis",
     "//ios/chrome/app:tests_hook",
     "//ios/chrome/browser/bookmarks/model:model_utils",
+    "//ios/chrome/browser/browser_state/model:constants",
     "//ios/chrome/browser/content_settings/model",
     "//ios/chrome/browser/crash_report/model",
     "//ios/chrome/browser/policy/model:policy_util",
@@ -89,13 +93,9 @@ source_set("model") {
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/public/commands",
+    "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/shared/public/features:system_flags",
     "//ios/chrome/browser/shared/ui/util",
-
-    # TODO(crbug.com/325587123): This should depend on
-    # //ios/chrome/browser/sync/model but doing so creates a circular
-    # dependency.
-    "//ios/chrome/browser/ui/authentication/signin:signin_headers",
     "//ios/chrome/browser/web/model",
     "//ios/chrome/browser/web_state_list/model",
     "//ios/chrome/browser/webdata_services/model",
@@ -110,6 +110,11 @@ source_set("model") {
     "//ios/web/common:web_view_creation_util",
     "//net",
     "//url",
+
+    # TODO(crbug.com/325587123): This should depend on
+    # //ios/chrome/browser/sync/model but doing so creates a circular
+    # dependency.
+    "//ios/chrome/browser/ui/authentication/signin:signin_headers",
   ]
   public_deps = [
     ":constants",
@@ -123,12 +128,15 @@ source_set("signin_util") {
     "signin_util.mm",
   ]
   deps = [
+    ":capabilities_types",
     ":constants",
     ":signin_util_internal",
     ":system_identity",
+    ":system_identity_manager",
     "//base",
     "//components/prefs",
     "//components/signin/public/identity_manager",
+    "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/public/features:system_flags",
     "//ios/public/provider/chrome/browser/signin:signin_error_api",
@@ -232,7 +240,11 @@ source_set("fake_account_details_view_controller") {
     "fake_account_details_view_controller.h",
     "fake_account_details_view_controller.mm",
   ]
-  deps = [ ":system_identity" ]
+  deps = [
+    ":system_identity",
+    "//base",
+    "//ios/chrome/browser/signin/model:test_constants",
+  ]
   frameworks = [ "UIKit.framework" ]
 }
 
@@ -352,6 +364,7 @@ source_set("unit_tests") {
     ":system_identity_manager",
     ":test_support",
     "//base",
+    "//components/policy/core/common:common_constants",
     "//components/pref_registry",
     "//components/prefs",
     "//components/prefs:test_support",
@@ -375,6 +388,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/public/commands",
+    "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/shared/public/features:system_flags",
     "//ios/chrome/browser/sync/model",
     "//ios/chrome/browser/sync/model:test_support",

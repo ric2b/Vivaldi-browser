@@ -214,7 +214,7 @@ bool SyncServiceCrypto::IsPassphraseRequired() const {
       return true;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -258,7 +258,7 @@ void SyncServiceCrypto::SetEncryptionPassphrase(const std::string& passphrase) {
       // TODO(crbug.com/40904402): this is currently reachable on iOS due to
       // discrepancy in UI code. Fix iOS implementation and avoid using more
       // strict checks here until this is done.
-      DUMP_WILL_BE_NOTREACHED_NORETURN()
+      DUMP_WILL_BE_NOTREACHED()
           << "Can not set explicit passphrase when decryption is needed.";
       return;
   }
@@ -352,7 +352,7 @@ bool SyncServiceCrypto::IsTrustedVaultKeyRequiredStateKnown() const {
     case RequiredUserAction::kTrustedVaultRecoverabilityDegraded:
       return true;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -363,7 +363,8 @@ std::optional<PassphraseType> SyncServiceCrypto::GetPassphraseType() const {
 
 void SyncServiceCrypto::SetSyncEngine(const CoreAccountInfo& account_info,
                                       SyncEngine* engine) {
-  DCHECK(engine);
+  CHECK(engine);
+  CHECK(!state_.engine);
   state_.account_info = account_info;
   state_.engine = engine;
 
@@ -394,7 +395,7 @@ void SyncServiceCrypto::SetSyncEngine(const CoreAccountInfo& account_info,
     case RequiredUserAction::kTrustedVaultRecoverabilityDegraded:
       // Neither keys nor the recoverability state are fetched during engine
       // initialization.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -434,7 +435,7 @@ bool SyncServiceCrypto::HasCryptoError() const {
       return true;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 

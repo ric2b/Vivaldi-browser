@@ -8,9 +8,8 @@
 #include <string>
 
 #include <gtest/gtest.h>
-
-#include <xnnpack.h>
-#include <xnnpack/cache.h>
+#include "xnnpack.h"
+#include "xnnpack/cache.h"
 
 static void* cache_end(const xnn_code_cache* cache) {
   return reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(cache->cache.code.start) + cache->cache.code.size);

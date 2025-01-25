@@ -85,6 +85,9 @@
 <translation id="3943857333388298514">Lim inn</translation>
 <translation id="4005270918754737597">Hopp over denne versjonen</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi kunne ikke låse opp ditt sikre nøkkellager. Uten nøkkellageret vil du miste lagrede innlogginger og sikre infokapsler, og noen funksjoner som Sync, E-post, og Kalender vil slutte å virke.
+
+    Avslutt nå, lås opp eller reparer nøkkellageret ditt, og prøv igjen. Vil du virkelig fortsette, men miste data?</translation>
 <translation id="4074744496918018786">Åpne bilde i privatvindu</translation>
 <translation id="410351446219883937">Automatisk avspilling</translation>
 <translation id="4281844954008187215">Vilkår for bruk</translation>
@@ -175,6 +178,7 @@
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Inspiser portaldokument</translation>
+<translation id="875142999698251063">Avslutt nå</translation>
 <translation id="8768970203213061953">Landskap 14</translation>
 <translation id="8773635261052182196">Du får ikke lenger se disse meldingene. Du kan aktivere dem igjen fra Vivaldi innstillinger.</translation>
 <translation id="8774017153185436870">Nettsteder vil kanskje spille av video automatisk</translation>

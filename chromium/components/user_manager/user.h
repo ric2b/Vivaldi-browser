@@ -63,19 +63,6 @@ class USER_MANAGER_EXPORT User {
     OAUTH2_TOKEN_STATUS_VALID = 4,
   } OAuthTokenStatus;
 
-  // TODO(jasontt): Explore adding a new value for image taken from camera.
-  // These special values are used instead of actual default image indices.
-  typedef enum {
-    USER_IMAGE_INVALID = -3,
-
-    // Returned as |image_index| when user profile image is used as user image.
-    USER_IMAGE_PROFILE = -2,
-
-    // Returned as |image_index| when user-selected file or photo is used as
-    // user image.
-    USER_IMAGE_EXTERNAL = -1,
-  } UserImageType;
-
   // Returns true if user type has gaia account.
   static bool TypeHasGaiaAccount(UserType user_type);
 
@@ -146,9 +133,6 @@ class USER_MANAGER_EXPORT User {
   // returns false as fallback.
   bool CanLock() const;
 
-  // Whether the user has a default image.
-  bool HasDefaultImage() const;
-
   int image_index() const { return image_index_; }
   bool has_image_bytes() const { return user_image_->has_image_bytes(); }
   // Returns bytes representation of static user image for WebUI.
@@ -208,7 +192,7 @@ class USER_MANAGER_EXPORT User {
 
   static User* CreateRegularUserForTesting(const AccountId& account_id) {
     User* user = CreateRegularUser(account_id, UserType::kRegular);
-    user->SetImage(std::unique_ptr<UserImage>(new UserImage), 0);
+    user->SetImage(std::make_unique<UserImage>(), 0);
     return user;
   }
 
@@ -234,7 +218,6 @@ class USER_MANAGER_EXPORT User {
                                  const UserType user_type);
   static User* CreateGuestUser(const AccountId& guest_account_id);
   static User* CreateKioskAppUser(const AccountId& kiosk_app_account_id);
-  static User* CreateArcKioskAppUser(const AccountId& arc_kiosk_account_id);
   static User* CreateWebKioskAppUser(const AccountId& web_kiosk_account_id);
   static User* CreatePublicAccountUser(const AccountId& account_id,
                                        bool is_using_saml = false);
@@ -251,7 +234,7 @@ class USER_MANAGER_EXPORT User {
   void SetImageURL(const GURL& image_url);
 
   // Sets a stub image until the next |SetImage| call. |image_index| may be
-  // one of |USER_IMAGE_EXTERNAL| or |USER_IMAGE_PROFILE|.
+  // one of |UserImage::Type::kExternal| or |UserImage::Type::kProfile|.
   // If |is_loading| is |true|, that means user image is being loaded from file.
   void SetStubImage(std::unique_ptr<UserImage> stub_user_image,
                     int image_index,
@@ -319,9 +302,9 @@ class USER_MANAGER_EXPORT User {
   // Used to identify homedir mount point.
   std::string username_hash_;
 
-  // Either index of a default image for the user, |USER_IMAGE_EXTERNAL| or
-  // |USER_IMAGE_PROFILE|.
-  int image_index_ = USER_IMAGE_INVALID;
+  // Either index of a default image for the user, |UserImage::Type::kExternal|
+  // or |UserImage::Type::kProfile|.
+  int image_index_ = UserImage::Type::kInvalid;
 
   // True if current user image is a stub set by a |SetStubImage| call.
   bool image_is_stub_ = false;

@@ -171,6 +171,10 @@ def main():
     parser.add_option('-b',
                       '--bucket',
                       help='Google Storage bucket to upload to.')
+    parser.add_option('-p',
+                      '--prefix',
+                      help='Prefix that goes before object-name (i.e. in '
+                      'between bucket and object name).')
     parser.add_option('-o',
                       '--object-name',
                       help='Optional object name of uploaded tar file. '
@@ -213,6 +217,10 @@ def main():
     # Enumerate our inputs.
     input_filenames = get_targets(args, parser, options.use_null_terminator)
 
+    # Allow uploading the entire directory
+    if len(input_filenames) == 1 and input_filenames[0] in ('.', './'):
+        input_filenames = next(os.walk('.'))[1]
+
     if len(input_filenames) > 1 or (len(input_filenames) == 1
                                     and os.path.isdir(input_filenames[0])):
         if not validate_archive_dirs(input_filenames):
@@ -228,6 +236,9 @@ def main():
     object_name = options.object_name
     if not object_name:
         object_name = get_sha256sum(file)
+
+    if options.prefix:
+        object_name = f'{options.prefix}/{object_name}'
 
     # Make sure we can find a working instance of gsutil.
     if os.path.exists(GSUTIL_DEFAULT_PATH):
@@ -251,7 +262,9 @@ def main():
         gsutil.check_call('version')
         return gsutil.call('config')
 
-    base_url = 'gs://%s' % options.bucket
+    assert '/' not in options.bucket, "Slashes not allowed in bucket name"
+
+    base_url = f'gs://{options.bucket}'
 
     generation = upload_to_google_storage(file, base_url, object_name, gsutil,
                                           options.force, options.gzip,

@@ -11,9 +11,9 @@
 #include "base/task/single_thread_task_runner.h"
 #include "media/mojo/mojom/media_player.mojom-blink.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/media/display_type.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -355,6 +355,21 @@ PictureInPictureControllerImpl::GetDocumentPictureInPictureWindow() const {
   return document_picture_in_picture_window_;
 }
 
+LocalDOMWindow*
+PictureInPictureControllerImpl::GetDocumentPictureInPictureOwner() const {
+  return document_picture_in_picture_owner_;
+}
+
+void PictureInPictureControllerImpl::SetDocumentPictureInPictureOwner(
+    LocalDOMWindow* owner) {
+  CHECK(owner);
+
+  document_picture_in_picture_owner_ = owner;
+  document_pip_context_observer_ =
+      MakeGarbageCollected<DocumentPictureInPictureObserver>(this);
+  document_pip_context_observer_->SetContextLifecycleNotifier(owner);
+}
+
 void PictureInPictureControllerImpl::CreateDocumentPictureInPictureWindow(
     ScriptState* script_state,
     LocalDOMWindow& opener,
@@ -372,6 +387,8 @@ void PictureInPictureControllerImpl::CreateDocumentPictureInPictureWindow(
   web_options.width = options->width();
   web_options.height = options->height();
   web_options.disallow_return_to_opener = options->disallowReturnToOpener();
+  web_options.prefer_initial_window_placement =
+      options->preferInitialWindowPlacement();
 
   // If either width or height is specified, then both must be specified.
   if (web_options.width > 0 && web_options.height == 0) {
@@ -440,6 +457,11 @@ void PictureInPictureControllerImpl::CreateDocumentPictureInPictureWindow(
 
   document_picture_in_picture_window_ = local_dom_window;
 
+  // Give the pip document's PictureInPictureControllerImpl a pointer to our
+  // window as its owner/opener.
+  From(*pip_document)
+      .SetDocumentPictureInPictureOwner(GetSupplementable()->domWindow());
+
   // There should not be an unresolved ScriptPromiseResolverBase at this point.
   // Leaving one unresolved and letting it get garbage collected will crash the
   // renderer.
@@ -487,6 +509,21 @@ void PictureInPictureControllerImpl::DocumentPictureInPictureObserver::Trace(
 
 void PictureInPictureControllerImpl::
     OnDocumentPictureInPictureContextDestroyed() {
+  // If we have an owner, then we are contained in a picture-in-picture window
+  // and our owner's context has been destroyed.
+  if (document_picture_in_picture_owner_) {
+    CHECK(!document_picture_in_picture_window_);
+    OnDocumentPictureInPictureOwnerWindowContextDestroyed();
+    return;
+  }
+
+  // Otherwise, our owned picture-in-picture window's context has been
+  // destroyed.
+  OnOwnedDocumentPictureInPictureWindowContextDestroyed();
+}
+
+void PictureInPictureControllerImpl::
+    OnOwnedDocumentPictureInPictureWindowContextDestroyed() {
   // The document PIP window has been destroyed, so the opener is no longer
   // associated with it.  Allow throttling again.
   SetMayThrottleIfUndrawnFrames(true);
@@ -500,6 +537,11 @@ void PictureInPictureControllerImpl::
     open_document_pip_resolver_->Reject();
     open_document_pip_resolver_ = nullptr;
   }
+}
+
+void PictureInPictureControllerImpl::
+    OnDocumentPictureInPictureOwnerWindowContextDestroyed() {
+  document_picture_in_picture_owner_ = nullptr;
 }
 #endif  // !BUILDFLAG(TARGET_OS_IS_ANDROID)
 
@@ -553,6 +595,7 @@ void PictureInPictureControllerImpl::SetMayThrottleIfUndrawnFrames(
 void PictureInPictureControllerImpl::Trace(Visitor* visitor) const {
 #if !BUILDFLAG(TARGET_OS_IS_ANDROID)
   visitor->Trace(document_picture_in_picture_window_);
+  visitor->Trace(document_picture_in_picture_owner_);
   visitor->Trace(document_pip_context_observer_);
   visitor->Trace(open_document_pip_resolver_);
 #endif  // !BUILDFLAG(TARGET_OS_IS_ANDROID)

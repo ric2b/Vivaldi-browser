@@ -9,6 +9,7 @@ Update manually maintained dependencies from Chromium.
 
 import argparse
 import enum
+import json
 import os
 import shutil
 import subprocess
@@ -19,7 +20,7 @@ def node_path(options):
     try:
         old_sys_path = sys.path[:]
         sys.path.append(
-            os.path.join(options.chromium_dir, 'third_party', 'node'))
+            os.path.join(options.devtools_dir, 'third_party', 'node'))
         import node
     finally:
         sys.path = old_sys_path
@@ -74,6 +75,11 @@ def parse_options(cli_args):
                         action="store_true",
                         default=False,
                         help='If set it syncs nodejs.')
+    parser.add_argument(
+        '--output',
+        default=None,
+        help=
+        'If set it outputs information about the roll in the specified file.')
     parser.add_argument('chromium_dir', help='path to chromium/src directory')
     parser.add_argument('devtools_dir',
                         help='path to devtools/devtools-frontend directory')
@@ -103,16 +109,8 @@ def get_hook_action(options, hook_name, project_dir):
 
 
 def sync_node(options):
-    """Executes the nodejs sync hook from Chromium DEPS file."""
-    action = get_hook_action(options, 'node_linux64', options.chromium_dir)
-    gclient_context = os.path.join(options.chromium_dir, '..')
-    subprocess.check_call(action, cwd=gclient_context)
-
-
-def sync_clang_format(options):
-    """Executes the clang_format sync hook from Devtools DEPS file."""
-    action = get_hook_action(options, 'clang_format_linux',
-                             options.devtools_dir)
+    """Executes the nodejs sync hook from Devtools DEPS file."""
+    action = get_hook_action(options, 'node_linux64', options.devtools_dir)
     subprocess.check_call(action, cwd=options.devtools_dir)
 
 
@@ -126,9 +124,8 @@ def copy_files(options):
 
 
 def generate_signatures(options):
-    print(
-        'generating JavaScript native functions signatures from .idl and typescript definitions'
-    )
+    print('generating JavaScript native functions signatures from .idl '
+          'and typescript definitions')
     subprocess.check_call([
         node_path(options),
         os.path.join(options.devtools_dir, 'scripts', 'javascript_natives',
@@ -178,16 +175,42 @@ def run_eslint(options):
                           cwd=options.devtools_dir)
 
 
+def update_deps_revision(options):
+    print('updating DEPS revision')
+    old_revision = subprocess.check_output(
+        ['gclient', 'getdep', '--var=chromium_browser_protocol_revision'],
+        cwd=options.devtools_dir,
+        text=True).strip()
+    new_revision = subprocess.check_output(
+        ['git', 'log', '-1', '--pretty=format:%H'],
+        cwd=options.chromium_dir,
+        text=True).strip()
+    subprocess.check_call(
+        [
+            'gclient', 'setdep',
+            f'--var=chromium_browser_protocol_revision={new_revision}'
+        ],
+        cwd=options.devtools_dir,
+    )
+    if options.output:
+        with open(options.output, 'w', encoding='utf-8') as f:
+            json.dump(
+                {
+                    'old_revision': old_revision,
+                    'new_revision': new_revision
+                }, f)
+
+
 if __name__ == '__main__':
     OPTIONS = parse_options(sys.argv[1:])
     if OPTIONS.ref == ReferenceMode.Tot:
         update(OPTIONS)
     if OPTIONS.update_node:
         sync_node(OPTIONS)
-        sync_clang_format(OPTIONS)
     copy_files(OPTIONS)
     generate_signatures(OPTIONS)
     generate_dom_pinned_properties(OPTIONS)
     generate_protocol_resources(OPTIONS)
     run_git_cl_format(OPTIONS)
     run_eslint(OPTIONS)
+    update_deps_revision(OPTIONS)

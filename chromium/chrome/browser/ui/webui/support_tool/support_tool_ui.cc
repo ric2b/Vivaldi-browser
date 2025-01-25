@@ -156,11 +156,9 @@ class SupportToolMessageHandler : public content::WebUIMessageHandler,
   void HandleGenerateSupportToken(const base::Value::List& args);
 
   // SelectFileDialog::Listener implementation.
-  void FileSelected(const ui::SelectedFileInfo& file,
-                    int index,
-                    void* params) override;
+  void FileSelected(const ui::SelectedFileInfo& file, int index) override;
 
-  void FileSelectionCanceled(void* params) override;
+  void FileSelectionCanceled() override;
 
  private:
   base::Value::List GetAccountsList();
@@ -412,8 +410,7 @@ void SupportToolMessageHandler::HandleStartDataExport(
 }
 
 void SupportToolMessageHandler::FileSelected(const ui::SelectedFileInfo& file,
-                                             int index,
-                                             void* params) {
+                                             int index) {
   base::UmaHistogramEnumeration(
       kSupportToolWebUIActionHistogram,
       SupportToolWebUIActionType::kCreateSupportPacket);
@@ -428,7 +425,7 @@ void SupportToolMessageHandler::FileSelected(const ui::SelectedFileInfo& file,
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
-void SupportToolMessageHandler::FileSelectionCanceled(void* params) {
+void SupportToolMessageHandler::FileSelectionCanceled() {
   selected_pii_to_keep_.clear();
   select_file_dialog_.reset();
 }
@@ -602,8 +599,6 @@ base::Value::Dict SupportToolUI::GetLocalizedStrings() {
       l10n_util::GetStringUTF16(IDS_SUPPORT_TOOL_DONT_INCLUDE_EMAIL));
   localized_strings.Set("selectAll",
                         l10n_util::GetStringUTF16(IDS_SUPPORT_TOOL_SELECT_ALL));
-  localized_strings.Set(
-      "selectNone", l10n_util::GetStringUTF16(IDS_SUPPORT_TOOL_SELECT_NONE));
   return localized_strings;
 }
 

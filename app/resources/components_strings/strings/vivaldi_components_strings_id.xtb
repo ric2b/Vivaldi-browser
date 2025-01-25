@@ -16,7 +16,6 @@
 <translation id="1728677426644403582">Anda melihat sumber halaman web</translation>
 <translation id="1734878702283171397">Coba hubungi admin sistem.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Mencoba menjalankan Diagnostik Jaringan Windows<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">Situs ini berisi program yang berbahaya</translation>
 <translation id="1974060860693918893">Tingkat Lanjut</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Memeriksa proxy dan firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Diterbitkan untuk: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -42,7 +41,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Menjalankan Diagnostik Konektivitas<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Sambungan diatur ulang.</translation>
 <translation id="2826760142808435982">Sambungan dienkripsi dan diautentikasi menggunakan <ph name="CIPHER" /> dan menggunakan <ph name="KX" /> sebagai mekanisme pertukaran kunci.</translation>
-<translation id="2856444702002559011">Penyerang mungkin berusaha mencuri informasi Anda dari <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (misalnya, sandi, pesan, atau kartu kredit). <ph name="BEGIN_LEARN_MORE_LINK" />Pelajari lebih lanjut<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Perubahan jaringan terdeteksi.</translation>
 <translation id="2948083400971632585">Anda bisa mematikan proksi apapun yang diatur untuk suatu koneksi dari halaman pengaturan.</translation>
 <translation id="2991571918955627853">Anda tidak dapat mengunjungi <ph name="SITE" /> sekarang karena situs menggunakan HSTS. Galat jaringan dan serangan biasanya bersifat sementara, sehingga halaman ini mungkin akan berfungsi nanti.</translation>
@@ -69,6 +67,7 @@
 <translation id="3566021033012934673">Koneksi Anda tidak pribadi</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Sembunyikan semua detail</translation>
+<translation id="3614001939154393113">Penyerang mungkin mencoba mencuri informasi Anda dari <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (misalnya, sandi, pesan, atau kartu kredit). <ph name="BEGIN_LEARN_MORE_LINK" />Pelajari lebih lanjut peringatan ini<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3630155396527302611">Jika sudah tercantum sebagai program yang di izinkan untuk mengakses jaringan,
       coba hapus dari daftar dan tambahkan lagi.</translation>
 <translation id="3658742229777143148">Revisi</translation>
@@ -92,7 +91,6 @@
 <translation id="4265872034478892965">Diizinkan oleh administrator</translation>
 <translation id="4305666528087210886">Berkas Anda tidak dapat diakses</translation>
 <translation id="4312866146174492540">Blokir (standar)</translation>
-<translation id="4356973930735388585">Penyerang di situs ini mungkin berusaha memasang program berbahaya di komputer Anda yang dapat mencuri atau menghapus informasi Anda (misalnya, foto, sandi, pesan, dan kartu kredit).</translation>
 <translation id="4408413947728134509">Kuki <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> tidak menerima sertifikat masuk anda, atau sertifikat masuk mungkin tidak tersedia.</translation>
 <translation id="4506599922270137252">Menghubungi admin sistem</translation>
@@ -144,7 +142,6 @@
 <translation id="6305205051461490394"><ph name="URL" /> tidak dapat dijangkau.</translation>
 <translation id="6321917430147971392">Periksa semua pengaturan DNS anda</translation>
 <translation id="6328639280570009161">Coba matikan prediksi jaringan</translation>
-<translation id="6328786501058569169">Situs ini bersifat menipu</translation>
 <translation id="6348220984832452017">Variasi Aktif</translation>
 <translation id="6358450015545214790">Apa maksudnya?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> menolak untuk tersambung.</translation>
@@ -158,7 +155,6 @@
 <translation id="6897140037006041989">Agen Pengguna</translation>
 <translation id="6957624206566198865">Buka halaman di tab Pribadi baru</translation>
 <translation id="7053983685419859001">Blokir</translation>
-<translation id="7079718277001814089">Situs ini berisi malware</translation>
 <translation id="7096937462164235847">Identitas situs ini tidak terverifikasi.</translation>
 <translation id="7108819624672055576">Diizinkan oleh ekstensi</translation>
 <translation id="7111012039238467737">(Valid)</translation>
@@ -166,6 +162,7 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> tidak mematuhi semua standar keamanan.</translation>
 <translation id="7219179957768738017">Koneksi menggunakan <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Tampilkan notifikasi</translation>
+<translation id="7227747683324411744">Penyerang di situs yang Anda coba kunjungi dapat mengelabui Anda agar menginstal software berbahaya yang memengaruhi cara Anda menjelajah — misalnya, dengan mengubah halaman beranda atau menampilkan iklan tambahan di situs yang Anda kunjungi.</translation>
 <translation id="7353601530677266744">Baris Perintah</translation>
 <translation id="7364115444476960850">Halaman yang ingin Anda akses diblokir oleh <ph name="BLOCKER_NAME" /> Vivaldi</translation>
 <translation id="7419106976560586862">Jalur Profil</translation>
@@ -173,9 +170,9 @@
 <translation id="7518003948725431193">Tidak ada halaman web yang ditemukan untuk alamat web: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Halaman web ini membutuhkan data yang anda masukkan sebelumnya agar dapat ditampilkan dengan benar. Anda dapat mengirimkan data ini lagi, namun anda akan mengulangi tindakan apapun yang sebelumnya dilakukan oleh halaman ini.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> saat ini tidak dapat menangani permintaan ini.</translation>
+<translation id="7605377493722372900">Penyerang di situs yang Anda coba kunjungi dapat menginstal software berbahaya yang mencuri atau menghapus hal-hal seperti sandi, foto, pesan, atau nomor kartu kredit Anda.</translation>
 <translation id="7662298039739062396">Pengaturan yang dikontrol oleh ekstensi</translation>
 <translation id="7663736086183791259">Sertifikat <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Penyerang di situs ini mungkin berusaha mengelabui Anda agar memasang program yang dapat membahayakan pengalaman menjelajah Anda (misalnya dengan mengubah beranda Anda atau menayangkan iklan ekstra pada situs yang dikunjungi).</translation>
 <translation id="7714464543167945231">Sertifikat</translation>
 <translation id="7716147886133743102">Diblokir oleh administrator</translation>
 <translation id="7716424297397655342">Situs ini tidak dapat dimuat dari singgahan</translation>
@@ -185,7 +182,6 @@
 <translation id="7878562273885520351">Sandi Anda mungkin bocor</translation>
 <translation id="7951415247503192394">(32 bit)</translation>
 <translation id="7953236668995583915">Muat ulang halaman ini untuk menerapkan pengaturan yang diperbarui di situs ini</translation>
-<translation id="8025119109950072390">Penyerang di situs ini dapat mengelabui Anda agar melakukan hal yang berbahaya seperti memasang software atau mengungkap informasi pribadi Anda (misalnya sandi, nomor telepon, atau kartu kredit).</translation>
 <translation id="8037357227543935929">Tanyakan (standar)</translation>
 <translation id="8041940743680923270">Gunakan standar global (Tanyakan)</translation>
 <translation id="808894953321890993">Ubah sandi</translation>
@@ -200,6 +196,7 @@
 <translation id="8288807391153049143">Tampilkan sertifikat</translation>
 <translation id="8289355894181816810">Hubungi administrator jaringan anda jika anda tidak yakin dengan maksud ini.</translation>
 <translation id="8332188693563227489">Akses ke <ph name="HOST_NAME" /> ditolak</translation>
+<translation id="8422228580902424274">Penyerang di situs yang Anda coba kunjungi dapat mengelabui Anda agar menginstal software atau mengungkapkan hal-hal seperti sandi, nomor telepon, atau nomor kartu kredit Anda.</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> membutuhkan terlalu banyak waktu untuk merespon.</translation>
 <translation id="8503813439785031346">Nama Pengguna</translation>
 <translation id="8703575177326907206">Sambungan ke <ph name="DOMAIN" /> tidak dienkripsi.</translation>

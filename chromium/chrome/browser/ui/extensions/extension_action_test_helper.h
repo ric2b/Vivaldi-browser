@@ -45,22 +45,25 @@ class ExtensionActionTestHelper {
   // Returns true if there is an action for the given `id`.
   virtual bool HasAction(const extensions::ExtensionId& id) = 0;
 
+  // Simulates a user click on the action button for the given `id`.
+  virtual void Press(const extensions::ExtensionId& id) = 0;
+
   // Inspects the extension popup for the action with the given `id`.
   virtual void InspectPopup(const extensions::ExtensionId& id) = 0;
+
+  // Trigger an extension popup as a result of API.
+  virtual void TriggerPopupForAPI(const extensions::ExtensionId& id) = 0;
 
   // Returns icon for the action for the given `id`.
   virtual gfx::Image GetIcon(const extensions::ExtensionId& id) = 0;
 
-  // Simulates a user click on the action button for the given `id`.
-  virtual void Press(const extensions::ExtensionId& id) = 0;
-
   virtual gfx::NativeView GetPopupNativeView() = 0;
 
   // Spins a RunLoop until the NativeWindow hosting |GetPopupNativeView()| is
-  // reported as active by the OS. Returns true if successful. This method is
-  // strange: it's not overridden by subclasses, and instead the implementation
-  // is selected at compile-time depending on the windowing system in use.
-  bool WaitForPopup();
+  // reported as active by the OS. This method is strange: it's not overridden
+  // by subclasses, and instead the implementation is selected at compile-time
+  // depending on the windowing system in use.
+  void WaitForPopup();
 
   // Returns whether a browser action popup is being shown currently.
   virtual bool HasPopup() = 0;

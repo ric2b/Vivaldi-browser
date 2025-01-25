@@ -90,7 +90,8 @@ message StartArcMiniInstanceRequest {
   optional bool arc_generate_pai = 11 [default = false];
 
   // Enables use of new notifications ui.
-  optional bool enable_notifications_refresh = 13 [default = false];
+  optional bool enable_notifications_refresh = 13
+      [default = false, deprecated = true];
 
   // Option to enable TTS caching
   optional bool enable_tts_caching = 14 [default = false];
@@ -123,7 +124,11 @@ message StartArcMiniInstanceRequest {
   // Flag that indicates whether user is already signed into ARC.
   optional bool arc_signed_in = 22 [default = false];
 
-  // Next ID to use: 23
+  // Flag that would enable ARC Attestation, and would make ARC
+  // RemotelyProvisionedComponentDevice visible to Keystore.
+  optional bool enable_arc_attestation = 23 [default = false];
+
+  // Next ID to use: 24
 }
 
 // ARC upgrade options sent from Chrome to session manager. This message is used

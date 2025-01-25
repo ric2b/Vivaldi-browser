@@ -69,7 +69,10 @@ class SyncServiceFactoryTest : public testing::Test {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     app_list::AppListSyncableServiceFactory::SetUseInTesting(false);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-    base::ThreadPoolInstance::Get()->FlushForTesting();
+    // There may tasks in flight referencing fields owned by the test fixture.
+    // Make sure they are flushed now to prevent memory safety errors, e.g.
+    // use-after-destruction errors.
+    task_environment_.RunUntilIdle();
   }
 
  protected:
@@ -78,7 +81,7 @@ class SyncServiceFactoryTest : public testing::Test {
 
   // Returns the collection of default datatypes.
   syncer::ModelTypeSet DefaultDatatypes() {
-    static_assert(52 + 1 /* notes */ == syncer::GetNumModelTypes(),
+    static_assert(53 + 1 /* notes */ == syncer::GetNumModelTypes(),
                   "When adding a new type, you probably want to add it here as "
                   "well (assuming it is already enabled). Check similar "
                   "function in "
@@ -126,6 +129,9 @@ class SyncServiceFactoryTest : public testing::Test {
     if (arc::IsArcAllowedForProfile(profile())) {
       datatypes.Put(syncer::ARC_PACKAGE);
     }
+    if (ash::features::IsFloatingSsoAllowed()) {
+      datatypes.Put(syncer::COOKIES);
+    }
     datatypes.Put(syncer::OS_PREFERENCES);
     datatypes.Put(syncer::OS_PRIORITY_PREFERENCES);
     datatypes.Put(syncer::PRINTERS);
@@ -151,8 +157,8 @@ class SyncServiceFactoryTest : public testing::Test {
     datatypes.Put(syncer::AUTOFILL_WALLET_METADATA);
     datatypes.Put(syncer::AUTOFILL_WALLET_OFFER);
     datatypes.Put(syncer::BOOKMARKS);
-    if (base::FeatureList::IsEnabled(commerce::kProductSpecificationsSync)) {
-      datatypes.Put(syncer::COMPARE);
+    if (base::FeatureList::IsEnabled(commerce::kProductSpecifications)) {
+      datatypes.Put(syncer::PRODUCT_COMPARISON);
     }
     datatypes.Put(syncer::CONTACT_INFO);
     datatypes.Put(syncer::DEVICE_INFO);
@@ -183,9 +189,10 @@ class SyncServiceFactoryTest : public testing::Test {
     if (base::FeatureList::IsEnabled(syncer::kSyncPlusAddress)) {
       datatypes.Put(syncer::PLUS_ADDRESS);
     }
+    if (base::FeatureList::IsEnabled(syncer::kSyncPlusAddressSetting)) {
+      datatypes.Put(syncer::PLUS_ADDRESS_SETTING);
+    }
 
-    // TODO(b/318391357) add `syncer::COOKIES` (under IS_CHROMEOS) after adding
-    // a corresponding controller.
     return datatypes;
   }
 

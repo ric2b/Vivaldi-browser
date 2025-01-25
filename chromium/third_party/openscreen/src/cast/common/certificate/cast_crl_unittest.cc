@@ -16,12 +16,6 @@
 
 namespace openscreen::cast {
 
-// TODO(crbug.com/openscreen/90): Remove these after Chromium is migrated to
-// openscreen::cast
-using DeviceCertTestSuite = ::cast::certificate::DeviceCertTestSuite;
-using VerificationResult = ::cast::certificate::VerificationResult;
-using DeviceCertTest = ::cast::certificate::DeviceCertTest;
-
 namespace {
 
 // Indicates the expected result of test step's verification.
@@ -96,7 +90,7 @@ const std::string& GetSpecificTestDataPath() {
   return data_path;
 }
 
-bool RunTest(const DeviceCertTest& test_case) {
+bool RunTest(const proto::DeviceCertTest& test_case) {
   std::unique_ptr<TrustStore> crl_trust_store;
   std::unique_ptr<TrustStore> cast_trust_store;
   if (test_case.use_test_trust_anchors()) {
@@ -127,14 +121,14 @@ bool RunTest(const DeviceCertTest& test_case) {
 
   std::string crl_bundle = test_case.crl_bundle();
   switch (test_case.expected_result()) {
-    case ::cast::certificate::PATH_VERIFICATION_FAILED:
+    case proto::PATH_VERIFICATION_FAILED:
       return TestVerifyCertificate(kResultFail, der_cert_path,
                                    cert_verification_time,
                                    cast_trust_store.get());
-    case ::cast::certificate::CRL_VERIFICATION_FAILED:
+    case proto::CRL_VERIFICATION_FAILED:
       return TestVerifyCRL(kResultFail, crl_bundle, crl_verification_time,
                            crl_trust_store.get());
-    case ::cast::certificate::REVOCATION_CHECK_FAILED_WITHOUT_CRL:
+    case proto::REVOCATION_CHECK_FAILED_WITHOUT_CRL:
       return TestVerifyCertificate(kResultSuccess, der_cert_path,
                                    cert_verification_time,
                                    cast_trust_store.get()) &&
@@ -144,9 +138,8 @@ bool RunTest(const DeviceCertTest& test_case) {
                  Error::Code::kErrCrlInvalid, der_cert_path, crl_bundle,
                  crl_verification_time, cert_verification_time, true,
                  cast_trust_store.get(), crl_trust_store.get());
-    case ::cast::certificate::
-        CRL_EXPIRED_AFTER_INITIAL_VERIFICATION:  // fallthrough
-    case ::cast::certificate::REVOCATION_CHECK_FAILED:
+    case proto::CRL_EXPIRED_AFTER_INITIAL_VERIFICATION:  // fallthrough
+    case proto::REVOCATION_CHECK_FAILED:
       return TestVerifyCertificate(kResultSuccess, der_cert_path,
                                    cert_verification_time,
                                    cast_trust_store.get()) &&
@@ -156,7 +149,7 @@ bool RunTest(const DeviceCertTest& test_case) {
                  Error::Code::kErrCertsRevoked, der_cert_path, crl_bundle,
                  crl_verification_time, cert_verification_time, true,
                  cast_trust_store.get(), crl_trust_store.get());
-    case ::cast::certificate::SUCCESS:
+    case proto::SUCCESS:
       return (crl_bundle.empty() ||
               TestVerifyCRL(kResultSuccess, crl_bundle, crl_verification_time,
                             crl_trust_store.get())) &&
@@ -167,7 +160,7 @@ bool RunTest(const DeviceCertTest& test_case) {
                                   crl_verification_time, cert_verification_time,
                                   !crl_bundle.empty(), cast_trust_store.get(),
                                   crl_trust_store.get());
-    case ::cast::certificate::UNSPECIFIED:
+    case proto::UNKNOWN:
       return false;
   }
   return false;
@@ -180,7 +173,7 @@ bool RunTest(const DeviceCertTest& test_case) {
 void RunTestSuite(const std::string& test_suite_file_name) {
   std::string testsuite_raw = ReadEntireFileToString(test_suite_file_name);
   ASSERT_FALSE(testsuite_raw.empty());
-  DeviceCertTestSuite test_suite;
+  proto::DeviceCertTestSuite test_suite;
   ASSERT_TRUE(test_suite.ParseFromString(testsuite_raw));
   int successes = 0;
 

@@ -33,6 +33,8 @@ class COMPONENT_EXPORT(DBUS_AUDIO) FakeCrasAudioClient
 
   void SetNoiseCancellationSupported(bool noise_cancellation_supported);
   uint32_t GetNoiseCancellationEnabledCount();
+  void SetStyleTransferSupported(bool style_transfer_supported);
+  bool GetStyleTransferEnabled();
   void SetHfpMicSrSupported(bool hfp_mic_sr_supported);
   uint32_t GetHfpMicSrEnabled();
 
@@ -68,6 +70,9 @@ class COMPONENT_EXPORT(DBUS_AUDIO) FakeCrasAudioClient
   void SetNoiseCancellationEnabled(bool noise_cancellation_on) override;
   void GetNoiseCancellationSupported(
       chromeos::DBusMethodCallback<bool> callback) override;
+  void SetStyleTransferEnabled(bool style_transfer_on) override;
+  void GetStyleTransferSupported(
+      chromeos::DBusMethodCallback<bool> callback) override;
   void SetActiveOutputNode(uint64_t node_id) override;
   void SetActiveInputNode(uint64_t node_id) override;
   void SetHotwordModel(uint64_t node_id,
@@ -76,6 +81,10 @@ class COMPONENT_EXPORT(DBUS_AUDIO) FakeCrasAudioClient
   void SetFixA2dpPacketSize(bool enabled) override;
   void SetFlossEnabled(bool enabled) override;
   void SetSpeakOnMuteDetection(bool enabled) override;
+  void SetEwmaPowerReportEnabled(bool enabled) override;
+  void SetSidetoneEnabled(bool enabled) override;
+  void GetSidetoneSupported(
+      chromeos::DBusMethodCallback<bool> callback) override;
   void AddActiveInputNode(uint64_t node_id) override;
   void RemoveActiveInputNode(uint64_t node_id) override;
   void AddActiveOutputNode(uint64_t node_id) override;
@@ -171,6 +180,8 @@ class COMPONENT_EXPORT(DBUS_AUDIO) FakeCrasAudioClient
     return noise_cancellation_enabled_;
   }
 
+  bool style_transfer_enabled() const { return style_transfer_enabled_; }
+
   bool speak_on_mute_detection_enabled() const {
     return speak_on_mute_detection_enabled_;
   }
@@ -194,11 +205,16 @@ class COMPONENT_EXPORT(DBUS_AUDIO) FakeCrasAudioClient
   bool send_volume_change_events_synchronous_ = true;
   bool enable_gain_change_events_ = true;
   bool noise_cancellation_supported_ = false;
+  bool style_transfer_supported_ = false;
   uint32_t battery_level_ = 0;
   uint32_t noise_cancellation_enabled_counter_ = 0;
   int32_t number_non_chrome_output_streams_ = 0;
   bool noise_cancellation_enabled_ = false;
+  bool style_transfer_enabled_ = false;
   bool speak_on_mute_detection_enabled_ = false;
+  bool ewma_power_report_enabled_ = false;
+  bool sidetone_enabled_ = false;
+  bool sidetone_supported_ = false;
   bool force_respect_ui_gains_enabled_ = false;
   bool hfp_mic_sr_enabled_ = false;
   bool hfp_mic_sr_supported_ = false;

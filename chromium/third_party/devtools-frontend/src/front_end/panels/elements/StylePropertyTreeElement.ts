@@ -28,17 +28,16 @@ import * as ElementsComponents from './components/components.js';
 import {cssRuleValidatorsMap, type Hint} from './CSSRuleValidator.js';
 import {ElementsPanel} from './ElementsPanel.js';
 import {
-  type AngleMatch,
+  type AnchorFunctionMatch,
+  AnchorFunctionMatcher,
+  AngleMatch,
   AngleMatcher,
-  ASTUtils,
   type BezierMatch,
   BezierMatcher,
-  BottomUpTreeMatching,
   ColorMatch,
   ColorMatcher,
   ColorMixMatch,
   ColorMixMatcher,
-  type CSSControlMap,
   type FontMatch,
   FontMatcher,
   type GridTemplateMatch,
@@ -47,17 +46,17 @@ import {
   LengthMatcher,
   type LightDarkColorMatch,
   LightDarkColorMatcher,
+  type LinearGradientMatch,
+  LinearGradientMatcher,
   type LinkableNameMatch,
   LinkableNameMatcher,
   LinkableNameProperties,
-  type Match,
+  type PositionAnchorMatch,
+  PositionAnchorMatcher,
   type ShadowMatch,
   ShadowMatcher,
   ShadowType,
-  tokenizeDeclaration,
-  VariableMatch,
-  VariableMatcher,
-} from './PropertyParser.js';
+} from './PropertyMatchers.js';
 import {type MatchRenderer, Renderer, RenderingContext, StringRenderer, URLRenderer} from './PropertyRenderer.js';
 import {StyleEditorWidget} from './StyleEditorWidget.js';
 import {type StylePropertiesSection} from './StylePropertiesSection.js';
@@ -68,6 +67,7 @@ import {
   StylesSidebarPane,
 } from './StylesSidebarPane.js';
 
+const ASTUtils = SDK.CSSPropertyParser.ASTUtils;
 const FlexboxEditor = ElementsComponents.StylePropertyEditor.FlexboxEditor;
 const GridEditor = ElementsComponents.StylePropertyEditor.GridEditor;
 
@@ -151,7 +151,7 @@ interface StylePropertyTreeElementParams {
   newProperty: boolean;
 }
 
-export class VariableRenderer implements MatchRenderer<VariableMatch> {
+export class VariableRenderer implements MatchRenderer<SDK.CSSPropertyParser.VariableMatch> {
   readonly #treeElement: StylePropertyTreeElement;
   readonly #style: SDK.CSSStyleDeclaration.CSSStyleDeclaration;
   constructor(treeElement: StylePropertyTreeElement, style: SDK.CSSStyleDeclaration.CSSStyleDeclaration) {
@@ -159,35 +159,34 @@ export class VariableRenderer implements MatchRenderer<VariableMatch> {
     this.#style = style;
   }
 
-  matcher(): VariableMatcher {
-    return new VariableMatcher(this.computedText.bind(this));
+  matcher(): SDK.CSSPropertyParser.VariableMatcher {
+    return new SDK.CSSPropertyParser.VariableMatcher(this.computedText.bind(this));
   }
 
-  resolveVariable(match: VariableMatch): SDK.CSSMatchedStyles.CSSVariableValue|null {
+  resolveVariable(match: SDK.CSSPropertyParser.VariableMatch): SDK.CSSMatchedStyles.CSSVariableValue|null {
     return this.#matchedStyles.computeCSSVariable(this.#style, match.name);
   }
 
-  fallbackValue(match: VariableMatch, matching: BottomUpTreeMatching): string|null {
-    if (match.fallback.length === 0 || match.fallback.some(node => matching.hasUnresolvedVars(node))) {
+  fallbackValue(match: SDK.CSSPropertyParser.VariableMatch): string|null {
+    if (match.fallback.length === 0 ||
+        match.matching.hasUnresolvedVarsRange(match.fallback[0], match.fallback[match.fallback.length - 1])) {
       return null;
     }
-    return match.fallback.map(node => matching.getComputedText(node)).join(' ');
+    return match.matching.getComputedTextRange(match.fallback[0], match.fallback[match.fallback.length - 1]);
   }
 
-  computedText(match: VariableMatch, matching: BottomUpTreeMatching): string|null {
-    return this.resolveVariable(
-                   match,
-                   )
-               ?.value ??
-        this.fallbackValue(match, matching);
+  // clang-format off
+  computedText(match: SDK.CSSPropertyParser.VariableMatch): string|null {
+    return this.resolveVariable(match)?.value ?? this.fallbackValue(match);
   }
+  // clang-format on
 
-  render(match: VariableMatch, context: RenderingContext): Node[] {
+  render(match: SDK.CSSPropertyParser.VariableMatch, context: RenderingContext): Node[] {
     const renderedFallback = match.fallback.length > 0 ? Renderer.render(match.fallback, context) : undefined;
 
     const {declaration, value: variableValue} = this.resolveVariable(match) ?? {};
     const fromFallback = !variableValue;
-    const computedValue = variableValue ?? this.fallbackValue(match, context.matchedResult);
+    const computedValue = variableValue ?? this.fallbackValue(match);
 
     const varSwatch = new InlineEditor.LinkSwatch.CSSVarSwatch();
     varSwatch.data = {
@@ -218,12 +217,21 @@ export class VariableRenderer implements MatchRenderer<VariableMatch> {
       });
     }
 
-    if (!computedValue || !Common.Color.parse(computedValue)) {
+    const color = computedValue && Common.Color.parse(computedValue);
+    if (!color) {
       return [varSwatch];
     }
 
-    const colorSwatch = new ColorRenderer(this.#treeElement).renderColorSwatch(computedValue, varSwatch);
+    const colorSwatch = new ColorRenderer(this.#treeElement).renderColorSwatch(color, varSwatch);
     context.addControl('color', colorSwatch);
+
+    if (fromFallback) {
+      renderedFallback?.cssControls.get('color')?.forEach(
+          innerSwatch => innerSwatch.addEventListener(InlineEditor.ColorSwatch.ColorChangedEvent.eventName, ev => {
+            colorSwatch.setColor(ev.data.color);
+          }));
+    }
+
     return [colorSwatch];
   }
 
@@ -250,6 +258,32 @@ export class VariableRenderer implements MatchRenderer<VariableMatch> {
   }
 }
 
+export class LinearGradientRenderer implements MatchRenderer<LinearGradientMatch> {
+  matcher(): SDK.CSSPropertyParser.Matcher<LinearGradientMatch> {
+    return new LinearGradientMatcher();
+  }
+  render(match: LinearGradientMatch, context: RenderingContext): Node[] {
+    const children = ASTUtils.children(match.node);
+    const {nodes, cssControls} = Renderer.render(children, context);
+    const angles = cssControls.get('angle');
+    const angle = angles?.length === 1 ? angles[0] : null;
+
+    if (angle instanceof InlineEditor.CSSAngle.CSSAngle) {
+      angle.updateProperty(context.matchedResult.getComputedText(match.node));
+      const args = ASTUtils.callArgs(match.node);
+      const angleNode = args[0]?.find(node => context.matchedResult.getMatch(node) instanceof AngleMatch);
+      const angleMatch = angleNode && context.matchedResult.getMatch(angleNode);
+      if (angleMatch) {
+        angle.addEventListener(InlineEditor.InlineEditorUtils.ValueChangedEvent.eventName, ev => {
+          angle.updateProperty(
+              context.matchedResult.getComputedText(match.node, new Map([[angleMatch, ev.data.value]])));
+        });
+      }
+    }
+    return nodes;
+  }
+}
+
 export class ColorRenderer implements MatchRenderer<ColorMatch> {
   constructor(private readonly treeElement: StylePropertyTreeElement) {
   }
@@ -259,7 +293,7 @@ export class ColorRenderer implements MatchRenderer<ColorMatch> {
   }
 
   #getValueChild(match: ColorMatch, context: RenderingContext):
-      {valueChild: HTMLSpanElement, cssControls?: CSSControlMap} {
+      {valueChild: HTMLSpanElement, cssControls?: SDK.CSSPropertyParser.CSSControlMap} {
     const valueChild = document.createElement('span');
     if (match.node.name === 'ColorLiteral' ||
         (match.node.name === 'ValueName' && Common.Color.Nicknames.has(match.text))) {
@@ -272,14 +306,31 @@ export class ColorRenderer implements MatchRenderer<ColorMatch> {
 
   render(match: ColorMatch, context: RenderingContext): Node[] {
     const {valueChild, cssControls} = this.#getValueChild(match, context);
-    const swatch = this.renderColorSwatch(context.matchedResult.getComputedText(match.node), valueChild);
+    let colorText = context.matchedResult.getComputedText(match.node);
+    // Evaluate relative color values
+    if (match.node.name === 'CallExpression' && colorText.match(/^[^)]*\(\W*from\W+/) &&
+        !context.matchedResult.hasUnresolvedVars(match.node) && CSS.supports('color', colorText)) {
+      const fakeSpan = document.body.appendChild(document.createElement('span'));
+      fakeSpan.style.backgroundColor = colorText;
+      colorText = window.getComputedStyle(fakeSpan).backgroundColor?.toString() || colorText;
+      fakeSpan.remove();
+    }
+
+    // Now try render a color swatch if the result is parsable.
+    const color = Common.Color.parse(colorText);
+    if (!color) {
+      return [document.createTextNode(colorText)];
+    }
+    const swatch = this.renderColorSwatch(color, valueChild);
     context.addControl('color', swatch);
 
+    // For hsl/hwb colors, hook up the angle swatch for the hue.
     if (cssControls && match.node.name === 'CallExpression' &&
         context.ast.text(match.node.getChild('Callee')).match(/^(hsla?|hwba?)/)) {
-      const angles = cssControls.get('angle');
-      if (angles?.length === 1 && angles[0] instanceof InlineEditor.CSSAngle.CSSAngle) {
-        angles[0].addEventListener(InlineEditor.InlineEditorUtils.ValueChangedEvent.eventName, ev => {
+      const [angle] = cssControls.get('angle') ?? [];
+      if (angle instanceof InlineEditor.CSSAngle.CSSAngle) {
+        angle.updateProperty(swatch.getColor()?.asString() ?? '');
+        angle.addEventListener(InlineEditor.InlineEditorUtils.ValueChangedEvent.eventName, ev => {
           const hue = Common.Color.parseHueNumeric(ev.data.value);
           const color = swatch.getColor();
           if (!hue || !color) {
@@ -290,33 +341,33 @@ export class ColorRenderer implements MatchRenderer<ColorMatch> {
           } else if (color.is(Common.Color.Format.HWB) || color.is(Common.Color.Format.HWBA)) {
             swatch.renderColor(new Common.Color.HWB(hue, color.w, color.b, color.alpha));
           }
+          angle.updateProperty(swatch.getColor()?.asString() ?? '');
         });
       }
     }
     return [swatch];
   }
 
-  renderColorSwatch(text: string, valueChild?: Node): InlineEditor.ColorSwatch.ColorSwatch {
+  renderColorSwatch(color: Common.Color.Color|undefined, valueChild?: Node): InlineEditor.ColorSwatch.ColorSwatch {
     const editable = this.treeElement.editable();
     const shiftClickMessage = i18nString(UIStrings.shiftClickToChangeColorFormat);
     const tooltip = editable ? i18nString(UIStrings.openColorPickerS, {PH1: shiftClickMessage}) : '';
 
-    const swatch = new InlineEditor.ColorSwatch.ColorSwatch();
+    const swatch = new InlineEditor.ColorSwatch.ColorSwatch(tooltip);
     swatch.setReadonly(!editable);
-    swatch.renderColor(text, editable, tooltip);
+    if (color) {
+      swatch.renderColor(color);
+    }
 
     if (!valueChild) {
       valueChild = swatch.createChild('span');
-      const color = swatch.getColor();
-      valueChild.textContent =
-          color ? (color.getAuthoredText() ?? color.asString(swatch.getFormat() ?? undefined)) : text;
+      if (color) {
+        valueChild.textContent = color.getAuthoredText() ?? color.asString();
+      }
     }
     swatch.appendChild(valueChild);
 
-    const onColorChanged = (event: InlineEditor.ColorSwatch.ColorChangedEvent): void => {
-      const {data} = event;
-      swatch.firstElementChild && swatch.firstElementChild.remove();
-      swatch.createChild('span').textContent = data.text;
+    const onColorChanged = (): void => {
       void this.treeElement.applyStyleText(this.treeElement.renderedPropertyText(), false);
     };
 
@@ -329,20 +380,10 @@ export class ColorRenderer implements MatchRenderer<ColorMatch> {
       const swatchIcon =
           new ColorSwatchPopoverIcon(this.treeElement, this.treeElement.parentPane().swatchPopoverHelper(), swatch);
       swatchIcon.addEventListener(ColorSwatchPopoverIconEvents.ColorChanged, ev => {
-        // TODO(crbug.com/1402233): Is it really okay to dispatch an event from `Swatch` here?
-        // This needs consideration as current structure feels a bit different:
-        // There are: ColorSwatch, ColorSwatchPopoverIcon, and Spectrum
-        // * Our entry into the Spectrum is `ColorSwatch` and `ColorSwatch` is able to
-        // update the color too. (its format at least, don't know the difference)
-        // * ColorSwatchPopoverIcon is a helper to show/hide the Spectrum popover
-        // * Spectrum is the color picker
-        //
-        // My idea is: merge `ColorSwatch` and `ColorSwatchPopoverIcon`
-        // and emit `ColorChanged` event whenever color is changed.
-        // Until then, this is a hack to kind of emulate the behavior described above
-        // `swatch` is dispatching its own ColorChangedEvent with the changed
-        // color text whenever the color changes.
-        swatch.dispatchEvent(new InlineEditor.ColorSwatch.ColorChangedEvent(ev.data));
+        const color = Common.Color.parse(ev.data);
+        if (color) {
+          swatch.setColorText(color);
+        }
       });
       void this.#addColorContrastInfo(swatchIcon);
     }
@@ -378,27 +419,41 @@ export class LightDarkColorRenderer implements MatchRenderer<LightDarkColorMatch
     content.appendChild(document.createTextNode(', '));
     const dark = content.appendChild(document.createElement('span'));
     content.appendChild(document.createTextNode(')'));
-    Renderer.renderInto(match.light, context, light);
-    Renderer.renderInto(match.dark, context, dark);
+    const {cssControls: lightControls} = Renderer.renderInto(match.light, context, light);
+    const {cssControls: darkControls} = Renderer.renderInto(match.dark, context, dark);
 
     if (context.matchedResult.hasUnresolvedVars(match.node)) {
       return [content];
     }
 
-    const colorSwatch = new ColorRenderer(this.#treeElement).renderColorSwatch(match.text, content);
+    const color = Common.Color.parse(
+        context.matchedResult.getComputedTextRange(match.light[0], match.light[match.light.length - 1]));
+    if (!color) {
+      return [content];
+    }
+
+    // Pass an undefined color here to insert a placeholder swatch that will be filled in from the async
+    // applyColorScheme below.
+    const colorSwatch = new ColorRenderer(this.#treeElement).renderColorSwatch(undefined, content);
     context.addControl('color', colorSwatch);
-    void this.applyColorScheme(match, context, colorSwatch, light, dark);
+    void this.applyColorScheme(match, context, colorSwatch, light, dark, lightControls, darkControls);
 
     return [colorSwatch];
   }
 
   async applyColorScheme(
       match: LightDarkColorMatch, context: RenderingContext, colorSwatch: InlineEditor.ColorSwatch.ColorSwatch,
-      light: HTMLSpanElement, dark: HTMLSpanElement): Promise<void> {
+      light: HTMLSpanElement, dark: HTMLSpanElement, lightControls: SDK.CSSPropertyParser.CSSControlMap,
+      darkControls: SDK.CSSPropertyParser.CSSControlMap): Promise<void> {
     const activeColor = await this.#activeColor(match);
     if (!activeColor) {
       return;
     }
+
+    const activeColorSwatches = (activeColor === match.light ? lightControls : darkControls).get('color');
+    activeColorSwatches?.forEach(
+        swatch => swatch.addEventListener(
+            InlineEditor.ColorSwatch.ColorChangedEvent.eventName, ev => colorSwatch.setColor(ev.data.color)));
     const inactiveColor = (activeColor === match.light) ? dark : light;
     const colorText = context.matchedResult.getComputedTextRange(activeColor[0], activeColor[activeColor.length - 1]);
     const color = colorText && Common.Color.parse(colorText);
@@ -448,7 +503,9 @@ export class ColorMixRenderer implements MatchRenderer<ColorMixMatch> {
       if (node instanceof InlineEditor.ColorMixSwatch.ColorMixSwatch ||
           node instanceof InlineEditor.ColorSwatch.ColorSwatch) {
         if (node instanceof InlineEditor.ColorSwatch.ColorSwatch) {
-          node.addEventListener(InlineEditor.ColorSwatch.ColorChangedEvent.eventName, ev => onChange(ev.data.text));
+          node.addEventListener(
+              InlineEditor.ColorSwatch.ColorChangedEvent.eventName,
+              ev => onChange(ev.data.color.getAuthoredText() ?? ev.data.color.asString()));
         } else {
           node.addEventListener(InlineEditor.ColorMixSwatch.Events.ColorChanged, ev => onChange(ev.data.text));
         }
@@ -532,12 +589,7 @@ export class AngleRenderer implements MatchRenderer<AngleMatch> {
     cssAngle.setAttribute('jslog', `${VisualLogging.showStyleEditor().track({click: true}).context('css-angle')}`);
     const valueElement = document.createElement('span');
     valueElement.textContent = angleText;
-    const computedPropertyValue = this.#treeElement.matchedStyles().computeValue(
-                                      this.#treeElement.property.ownerStyle, this.#treeElement.property.value) ||
-        '';
     cssAngle.data = {
-      propertyName: this.#treeElement.property.name,
-      propertyValue: computedPropertyValue,
       angleText,
       containingPane:
           (this.#treeElement.parentPane().element.enclosingNodeOrSelfWithClass('style-panes-wrapper') as HTMLElement),
@@ -567,10 +619,6 @@ export class AngleRenderer implements MatchRenderer<AngleMatch> {
     cssAngle.addEventListener('valuechanged', async ({data}) => {
       valueElement.textContent = data.value;
       await this.#treeElement.applyStyleText(this.#treeElement.renderedPropertyText(), false);
-      const computedPropertyValue = this.#treeElement.matchedStyles().computeValue(
-                                        this.#treeElement.property.ownerStyle, this.#treeElement.property.value) ||
-          '';
-      cssAngle.updateProperty(this.#treeElement.property.name, computedPropertyValue);
     });
     cssAngle.addEventListener('unitchanged', ({data}) => {
       valueElement.textContent = data.value;
@@ -608,14 +656,6 @@ export class LinkableNameRenderer implements MatchRenderer<LinkableNameMatch> {
           metric: null,
           ruleBlock: '@font-palette-values',
           isDefined: this.#treeElement.matchedStyles().fontPaletteValuesRule()?.name().text === match.text,
-        };
-      case LinkableNameProperties.PositionFallback:
-        return {
-          jslogContext: 'css-position-fallback',
-          metric: Host.UserMetrics.SwatchType.PositionFallbackLink,
-          ruleBlock: '@position-fallback',
-          isDefined: Boolean(
-              this.#treeElement.matchedStyles().positionFallbackRules().find(pf => pf.name().text === match.text)),
         };
       case LinkableNameProperties.PositionTry:
       case LinkableNameProperties.PositionTryOptions:
@@ -865,7 +905,7 @@ export class ShadowRenderer implements MatchRenderer<ShadowMatch> {
     const queue: {
       value: CodeMirror.SyntaxNode,
       source: CodeMirror.SyntaxNode,
-      match: Match|undefined,
+      match: SDK.CSSPropertyParser.Match|undefined,
       expansionContext: RenderingContext|null,
     }[] =
         shadow.map(
@@ -887,14 +927,15 @@ export class ShadowRenderer implements MatchRenderer<ShadowMatch> {
           return null;
         }
         properties.push({value, source, length, propertyType, expansionContext});
-      } else if (match instanceof VariableMatch) {
+      } else if (match instanceof SDK.CSSPropertyParser.VariableMatch) {
         // This doesn't come from any computed text, so we can rely on context here
         const computedValue = context.matchedResult.getComputedText(value);
-        const computedValueAst = tokenizeDeclaration('--property', computedValue);
+        const computedValueAst = SDK.CSSPropertyParser.tokenizeDeclaration('--property', computedValue);
         if (!computedValueAst) {
           return null;
         }
-        const matches = BottomUpTreeMatching.walkExcludingSuccessors(computedValueAst, [new ColorMatcher()]);
+        const matches =
+            SDK.CSSPropertyParser.BottomUpTreeMatching.walkExcludingSuccessors(computedValueAst, [new ColorMatcher()]);
         if (matches.hasUnresolvedVars(matches.ast.tree)) {
           return null;
         }
@@ -1052,6 +1093,104 @@ export class LengthRenderer implements MatchRenderer<LengthMatch> {
 
   matcher(): LengthMatcher {
     return new LengthMatcher();
+  }
+}
+
+async function decorateAnchorForAnchorLink(container: HTMLElement, treeElement: StylePropertyTreeElement, options: {
+  identifier?: string, needsSpace: boolean,
+}): Promise<void> {
+  const anchorNode = await treeElement.node()?.getAnchorBySpecifier(options.identifier) ?? undefined;
+  const link = new ElementsComponents.AnchorFunctionLinkSwatch.AnchorFunctionLinkSwatch({
+    identifier: options.identifier,
+    anchorNode: anchorNode,
+    needsSpace: options.needsSpace,
+    onLinkActivate: () => {
+      if (!anchorNode) {
+        return;
+      }
+
+      void Common.Revealer.reveal(anchorNode, false);
+    },
+    onMouseEnter: () => {
+      anchorNode?.highlight();
+    },
+    onMouseLeave: () => {
+      SDK.OverlayModel.OverlayModel.hideDOMNodeHighlight();
+    },
+  });
+
+  container.removeChildren();
+  container.appendChild(link);
+}
+
+export class AnchorFunctionRenderer implements MatchRenderer<AnchorFunctionMatch> {
+  #treeElement: StylePropertyTreeElement;
+  constructor(treeElement: StylePropertyTreeElement) {
+    this.#treeElement = treeElement;
+  }
+
+  anchorDecoratedForTest(): void {
+  }
+
+  async #decorateAnchor(container: HTMLElement, identifier?: string): Promise<void> {
+    await decorateAnchorForAnchorLink(container, this.#treeElement, {
+      identifier,
+      needsSpace: true,
+    });
+    this.anchorDecoratedForTest();
+  }
+
+  render(match: AnchorFunctionMatch, context: RenderingContext): Node[] {
+    const content = document.createElement('span');
+    content.appendChild(document.createTextNode(`${match.functionName}(`));
+
+    const firstArgText = match.matching.ast.text(match.args[0]);
+    const hasDashedIdentifier = firstArgText.startsWith('--');
+    const linkContainer = document.createElement('span');
+    if (hasDashedIdentifier) {
+      linkContainer.textContent = `${firstArgText} `;
+    }
+    content.appendChild(linkContainer);
+
+    const remainingArgsContainer = content.appendChild(document.createElement('span'));
+    if (hasDashedIdentifier) {
+      Renderer.renderInto(match.args.slice(1), context, remainingArgsContainer);
+    } else {
+      Renderer.renderInto(match.args, context, remainingArgsContainer);
+    }
+
+    void this.#decorateAnchor(linkContainer, hasDashedIdentifier ? firstArgText : undefined);
+    content.appendChild(document.createTextNode(')'));
+    return [content];
+  }
+
+  matcher(): AnchorFunctionMatcher {
+    return new AnchorFunctionMatcher();
+  }
+}
+
+export class PositionAnchorRenderer implements MatchRenderer<PositionAnchorMatch> {
+  #treeElement: StylePropertyTreeElement;
+
+  constructor(treeElement: StylePropertyTreeElement) {
+    this.#treeElement = treeElement;
+  }
+
+  anchorDecoratedForTest(): void {
+  }
+
+  render(match: PositionAnchorMatch): Node[] {
+    const content = document.createElement('span');
+    content.appendChild(document.createTextNode(match.text));
+    void decorateAnchorForAnchorLink(content, this.#treeElement, {
+      identifier: match.text,
+      needsSpace: false,
+    }).then(() => this.anchorDecoratedForTest());
+    return [content];
+  }
+
+  matcher(): PositionAnchorMatcher {
+    return new PositionAnchorMatcher();
   }
 }
 
@@ -1375,8 +1514,34 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
     });
   }
 
+  // Resolves a CSS expression to its computed value with `var()` calls updated.
+  // Still returns the string even when a `var()` call is not resolved.
+  #computeCSSExpression(style: SDK.CSSStyleDeclaration.CSSStyleDeclaration, text: string): string|null {
+    const ast = SDK.CSSPropertyParser.tokenizeDeclaration('--unused', text);
+    if (!ast) {
+      return null;
+    }
+
+    const matching: SDK.CSSPropertyParser.BottomUpTreeMatching = SDK.CSSPropertyParser.BottomUpTreeMatching.walk(
+        ast, [new SDK.CSSPropertyParser.VariableMatcher((match: SDK.CSSPropertyParser.VariableMatch) => {
+          const variableValue = this.matchedStylesInternal.computeCSSVariable(style, match.name)?.value;
+          if (variableValue !== undefined) {
+            return variableValue;
+          }
+
+          if (match.fallback.length === 0 ||
+              match.matching.hasUnresolvedVarsRange(match.fallback[0], match.fallback[match.fallback.length - 1])) {
+            return null;
+          }
+          return match.matching.getComputedTextRange(match.fallback[0], match.fallback[match.fallback.length - 1]);
+        })]);
+
+    const decl = SDK.CSSPropertyParser.ASTUtils.siblings(SDK.CSSPropertyParser.ASTUtils.declValue(matching.ast.tree));
+    return matching.getComputedTextRange(decl[0], decl[decl.length - 1]);
+  }
+
   updateTitleIfComputedValueChanged(): void {
-    const computedValue = this.matchedStylesInternal.computeValue(this.property.ownerStyle, this.property.value);
+    const computedValue = this.#computeCSSExpression(this.property.ownerStyle, this.property.value);
     if (computedValue === this.lastComputedValue) {
       return;
     }
@@ -1385,7 +1550,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
   }
 
   updateTitle(): void {
-    this.lastComputedValue = this.matchedStylesInternal.computeValue(this.property.ownerStyle, this.property.value);
+    this.lastComputedValue = this.#computeCSSExpression(this.property.ownerStyle, this.property.value);
     this.innerUpdateTitle();
   }
 
@@ -1396,7 +1561,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
       this.expandElement.setAttribute('jslog', `${VisualLogging.expand().track({click: true})}`);
     }
 
-    const renderers: MatchRenderer<Match>[] = this.property.parsedOk ?
+    const renderers: MatchRenderer<SDK.CSSPropertyParser.Match>[] = this.property.parsedOk ?
         [
           new VariableRenderer(this, this.style),
           new ColorRenderer(this),
@@ -1410,6 +1575,9 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
           new FontRenderer(this),
           new LightDarkColorRenderer(this),
           new GridTemplateRenderer(),
+          new LinearGradientRenderer(),
+          new AnchorFunctionRenderer(this),
+          new PositionAnchorRenderer(this),
         ] :
         [];
 
@@ -1509,7 +1677,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
 
     if (this.property.parsedOk && this.parent && this.parent.root) {
       const enabledCheckboxElement = document.createElement('input');
-      enabledCheckboxElement.className = 'enabled-button';
+      enabledCheckboxElement.classList.add('enabled-button', 'small');
       enabledCheckboxElement.type = 'checkbox';
       enabledCheckboxElement.checked = !this.property.disabled;
       enabledCheckboxElement.setAttribute('jslog', `${VisualLogging.toggle().track({click: true})}`);

@@ -15,6 +15,8 @@ constexpr char kLvmdServiceName[] = "org.chromium.Lvmd";
 
 constexpr char kErrorInternal[] = "org.chromium.Lvmd.INTERNAL";
 
+constexpr int kErrorSize = -1;
+
 }  // namespace lvmd
 
 #endif  // SYSTEM_API_DBUS_LVMD_DBUS_CONSTANTS_H_

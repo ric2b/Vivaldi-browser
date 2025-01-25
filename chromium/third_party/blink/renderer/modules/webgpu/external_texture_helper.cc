@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/webgpu/external_texture_helper.h"
 
 #include "media/base/video_frame.h"
@@ -37,7 +42,21 @@ wgpu::ExternalTextureRotation FromVideoRotation(media::VideoRotation rotation) {
     case media::VIDEO_ROTATION_270:
       return wgpu::ExternalTextureRotation::Rotate270Degrees;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
+}
+
+// TODO(crbug.com/40227105): Support HDR color space and color range in
+// generated wgsl shader to enable all color space for zero-copy path.
+bool DstColorSpaceSupportedByZeroCopy(
+    PredefinedColorSpace dst_predefined_color_space) {
+  switch (dst_predefined_color_space) {
+    case PredefinedColorSpace::kSRGB:
+    case PredefinedColorSpace::kP3:
+      return true;
+    default:
+      break;
+  }
+  return false;
 }
 }  // namespace
 
@@ -193,11 +212,13 @@ ExternalTextureSource GetExternalTextureSourceFromVideoFrame(
 
 ExternalTexture CreateExternalTexture(
     GPUDevice* device,
-    gfx::ColorSpace src_color_space,
-    gfx::ColorSpace dst_color_space,
+    PredefinedColorSpace dst_predefined_color_space,
     scoped_refptr<media::VideoFrame> media_video_frame,
     media::PaintCanvasVideoRenderer* video_renderer) {
   DCHECK(media_video_frame);
+  gfx::ColorSpace src_color_space = media_video_frame->ColorSpace();
+  gfx::ColorSpace dst_color_space =
+      PredefinedColorSpaceToGfxColorSpace(dst_predefined_color_space);
 
   // It should be very rare that a frame didn't get a valid colorspace through
   // the guessing process:
@@ -245,7 +266,9 @@ ExternalTexture CreateExternalTexture(
       (media_video_frame->HasTextures() &&
        (media_video_frame->format() == media::PIXEL_FORMAT_NV12) &&
        device_support_zero_copy &&
-       media_video_frame->metadata().is_webgpu_compatible);
+       media_video_frame->metadata().is_webgpu_compatible &&
+       DstColorSpaceSupportedByZeroCopy(dst_predefined_color_space));
+
   TRACE_EVENT_INSTANT2(TRACE_DISABLED_BY_DEFAULT("webgpu"),
                        "CreateExternalTexture", TRACE_EVENT_SCOPE_THREAD,
                        "zero_copy", !!zero_copy, "video_frame",
@@ -367,9 +390,8 @@ ExternalTexture CreateExternalTexture(
     // We don't need to specify a sync token since both CanvasResourceProvider
     // and PaintCanvasVideoRenderer use the SharedGpuContext.
     gpu::MailboxHolder dst_mailbox(
-        resource_provider->GetBackingMailboxForOverwrite(
-            MailboxSyncMode::kUnverifiedSyncToken),
-        gpu::SyncToken(), resource_provider->GetBackingTextureTarget());
+        resource_provider->GetBackingMailboxForOverwrite(), gpu::SyncToken(),
+        resource_provider->GetBackingTextureTarget());
 
     // The returned sync token is from the SharedGpuContext - it's ok to drop it
     // here since WebGPUMailboxTexture::FromCanvasResource will generate a new

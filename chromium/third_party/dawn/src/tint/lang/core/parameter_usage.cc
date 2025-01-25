@@ -46,6 +46,8 @@ std::string_view ToString(ParameterUsage usage) {
             return "array_index";
         case ParameterUsage::kBias:
             return "bias";
+        case ParameterUsage::kCompareValue:
+            return "compare_value";
         case ParameterUsage::kComponent:
             return "component";
         case ParameterUsage::kCoords:
@@ -54,16 +56,32 @@ std::string_view ToString(ParameterUsage usage) {
             return "ddx";
         case ParameterUsage::kDdy:
             return "ddy";
+        case ParameterUsage::kDepth:
+            return "depth";
         case ParameterUsage::kDepthRef:
             return "depth_ref";
+        case ParameterUsage::kElements:
+            return "elements";
+        case ParameterUsage::kHeight:
+            return "height";
+        case ParameterUsage::kInputAttachment:
+            return "input_attachment";
         case ParameterUsage::kLevel:
             return "level";
+        case ParameterUsage::kLocation:
+            return "location";
+        case ParameterUsage::kNumLevels:
+            return "num_levels";
         case ParameterUsage::kOffset:
             return "offset";
+        case ParameterUsage::kOriginalValue:
+            return "original_value";
         case ParameterUsage::kSampleIndex:
             return "sample_index";
         case ParameterUsage::kSampler:
             return "sampler";
+        case ParameterUsage::kSamples:
+            return "samples";
         case ParameterUsage::kSourceLaneIndex:
             return "sourceLaneIndex";
         case ParameterUsage::kTexture:
@@ -72,6 +90,8 @@ std::string_view ToString(ParameterUsage usage) {
             return "value";
         case ParameterUsage::kW:
             return "w";
+        case ParameterUsage::kWidth:
+            return "width";
         case ParameterUsage::kX:
             return "x";
         case ParameterUsage::kXy:

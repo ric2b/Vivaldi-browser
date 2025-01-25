@@ -4,6 +4,12 @@
 
 #include "components/power_bookmarks/storage/power_bookmark_sync_bridge.h"
 
+#include <memory>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "components/power_bookmarks/common/power.h"
 #include "components/power_bookmarks/storage/power_bookmark_sync_metadata_database.h"
 #include "components/sync/base/deletion_origin.h"
@@ -17,8 +23,8 @@
 namespace power_bookmarks {
 
 namespace {
-void WritePowersToSyncData(const std::vector<std::unique_ptr<Power>>& powers,
-                           PowerBookmarkSyncBridge::DataCallback callback) {
+std::unique_ptr<syncer::DataBatch> ConvertPowersToSyncData(
+    const std::vector<std::unique_ptr<Power>>& powers) {
   auto batch = std::make_unique<syncer::MutableDataBatch>();
   for (const auto& power : powers) {
     std::string guid = power->guid_string();
@@ -28,7 +34,7 @@ void WritePowersToSyncData(const std::vector<std::unique_ptr<Power>>& powers,
         entity_data->specifics.mutable_power_bookmark());
     batch->Put(guid, std::move(entity_data));
   }
-  std::move(callback).Run(std::move(batch));
+  return batch;
 }
 }  // namespace
 
@@ -82,14 +88,14 @@ std::string PowerBookmarkSyncBridge::GetClientTag(
   return GetStorageKey(entity_data);
 }
 
-void PowerBookmarkSyncBridge::GetData(StorageKeyList storage_keys,
-                                      DataCallback callback) {
-  WritePowersToSyncData(delegate_->GetPowersForGUIDs(storage_keys),
-                        std::move(callback));
+std::unique_ptr<syncer::DataBatch> PowerBookmarkSyncBridge::GetDataForCommit(
+    StorageKeyList storage_keys) {
+  return ConvertPowersToSyncData(delegate_->GetPowersForGUIDs(storage_keys));
 }
 
-void PowerBookmarkSyncBridge::GetAllDataForDebugging(DataCallback callback) {
-  WritePowersToSyncData(delegate_->GetAllPowers(), std::move(callback));
+std::unique_ptr<syncer::DataBatch>
+PowerBookmarkSyncBridge::GetAllDataForDebugging() {
+  return ConvertPowersToSyncData(delegate_->GetAllPowers());
 }
 
 void PowerBookmarkSyncBridge::SendPowerToSync(const Power& power) {

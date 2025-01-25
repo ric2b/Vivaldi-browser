@@ -33,7 +33,9 @@ class FakeQuicConnectionFactoryBridge {
                          const IPEndpoint& endpoint);
   void RunTasks(bool is_client);
   ErrorOr<std::unique_ptr<QuicConnection>> Connect(
-      const IPEndpoint& endpoint,
+      const IPEndpoint& local_endpoint,
+      const IPEndpoint& remote_endpoint,
+      const std::string& instance_name,
       QuicConnection::Delegate* connection_delegate);
 
  private:
@@ -46,7 +48,6 @@ class FakeQuicConnectionFactoryBridge {
   IPEndpoint receiver_endpoint_;
   bool client_idle_ = true;
   bool server_idle_ = true;
-  uint64_t next_connection_id_ = 0;
   bool connections_pending_ = true;
   ConnectionPair connections_ = {};
   QuicConnectionFactoryServer::ServerDelegate* delegate_ = nullptr;
@@ -68,8 +69,9 @@ class FakeClientQuicConnectionFactory final
   ErrorOr<std::unique_ptr<QuicConnection>> Connect(
       const IPEndpoint& local_endpoint,
       const IPEndpoint& remote_endpoint,
-      const std::string& fingerprint,
+      const ConnectData& connect_data,
       QuicConnection::Delegate* connection_delegate) override;
+  void OnConnectionClosed(QuicConnection* connection) override;
 
   bool idle() const { return idle_; }
 
@@ -95,6 +97,7 @@ class FakeServerQuicConnectionFactory final
   // QuicConnectionFactoryServer overrides.
   void SetServerDelegate(ServerDelegate* delegate,
                          const std::vector<IPEndpoint>& endpoints) override;
+  void OnConnectionClosed(QuicConnection* connection) override;
 
   bool idle() const { return idle_; }
 

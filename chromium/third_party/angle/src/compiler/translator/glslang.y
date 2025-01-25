@@ -881,8 +881,10 @@ storage_qualifier
         $$ = new TStorageQualifierWrapper(EvqCentroid, @1);
     }
     | PATCH {
-        if (context->getShaderVersion() < 320 &&
-            !context->checkCanUseExtension(@1, TExtension::EXT_tessellation_shader))
+        constexpr std::array<TExtension, 2u> extensions{ { TExtension::OES_tessellation_shader,
+                                                           TExtension::EXT_tessellation_shader } };
+        if (context->getShaderVersion() < 320
+        && !context->checkCanUseOneOfExtensions(@1, extensions))
         {
             context->error(@1, "unsupported storage qualifier", "patch");
         }
@@ -1453,6 +1455,8 @@ type_specifier_nonarray
     | TYPE_NAME {
         // This is for user defined type names. The lexical phase looked up the type.
         const TStructure *structure = static_cast<const TStructure*>($1.symbol);
+        // Temporary check until VK and Metal backends support type name like gl_DepthRangeParameters.
+        context->checkIsNotReserved(@1, ImmutableString($1.string));
         $$.initializeStruct(structure, false, @1);
     }
     ;
@@ -1598,7 +1602,7 @@ selection_rest_statement
 // Note that we've diverged from the spec grammar here a bit for the sake of simplicity.
 // We're reusing compound_statement_with_scope instead of having separate rules for switch.
 switch_statement
-    : SWITCH LEFT_PAREN expression RIGHT_PAREN { context->incrSwitchNestingLevel(); } compound_statement_with_scope {
+    : SWITCH LEFT_PAREN expression RIGHT_PAREN { context->incrSwitchNestingLevel(@1); } compound_statement_with_scope {
         $$ = context->addSwitch($3, $6, @1);
         context->decrSwitchNestingLevel();
     }

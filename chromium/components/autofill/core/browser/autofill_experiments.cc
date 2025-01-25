@@ -23,6 +23,7 @@
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/metrics/payments/credit_card_save_metrics.h"
 #include "components/autofill/core/browser/payments/payments_util.h"
+#include "components/autofill/core/browser/payments_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/common/autofill_features.h"
@@ -86,7 +87,6 @@ const char* const kAutofillUpstreamLaunchedCountries[] = {
 
 bool IsCreditCardUploadEnabled(
     const syncer::SyncService* sync_service,
-    const std::string& user_email,
     const std::string& user_country,
     AutofillMetrics::PaymentsSigninState signin_state_for_metrics,
     LogManager* log_manager) {
@@ -165,15 +165,6 @@ bool IsCreditCardUploadEnabled(
     return false;
   }
 
-  // Check that the user's account email address is known.
-  if (user_email.empty()) {
-    autofill_metrics::LogCardUploadEnabledMetric(
-        autofill_metrics::CardUploadEnabled::kEmailEmpty,
-        signin_state_for_metrics);
-    LogCardUploadDisabled(log_manager, "USER_EMAIL_EMPTY");
-    return false;
-  }
-
   if (base::FeatureList::IsEnabled(features::kAutofillUpstream)) {
     // Feature flag is enabled, so continue regardless of the country. This is
     // required for the ability to continue to launch to more countries as
@@ -208,27 +199,25 @@ bool IsCreditCardMigrationEnabled(PersonalDataManager* personal_data_manager,
                                   syncer::SyncService* sync_service,
                                   bool is_test_mode,
                                   LogManager* log_manager) {
+  PaymentsDataManager& payments_data_manager =
+      personal_data_manager->payments_data_manager();
   // If |is_test_mode| is set, assume we are in a browsertest and
   // credit card upload should be enabled by default to fix flaky
   // local card migration browsertests.
   if (!is_test_mode &&
-      !IsCreditCardUploadEnabled(sync_service,
-                                 personal_data_manager->payments_data_manager()
-                                     .GetAccountInfoForPaymentsServer()
-                                     .email,
-                                 personal_data_manager->payments_data_manager()
-                                     .GetCountryCodeForExperimentGroup(),
-                                 personal_data_manager->payments_data_manager()
-                                     .GetPaymentsSigninStateForMetrics(),
-                                 log_manager)) {
+      !IsCreditCardUploadEnabled(
+          sync_service,
+          payments_data_manager.GetCountryCodeForExperimentGroup(),
+          payments_data_manager.GetPaymentsSigninStateForMetrics(),
+          log_manager)) {
     return false;
   }
 
-  if (!payments::HasGooglePaymentsAccount(personal_data_manager))
+  if (!payments::HasGooglePaymentsAccount(&payments_data_manager)) {
     return false;
+  }
 
-  return personal_data_manager->payments_data_manager()
-      .IsPaymentsDownloadActive();
+  return payments_data_manager.IsPaymentsDownloadActive();
 }
 
 bool IsInAutofillSuggestionsDisabledExperiment() {

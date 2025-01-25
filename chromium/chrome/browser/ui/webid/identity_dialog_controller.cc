@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/strings/string_piece.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/webid/account_selection_view.h"
 #include "chrome/browser/webid/identity_provider_permission_request.h"
@@ -19,17 +18,18 @@ IdentityDialogController::IdentityDialogController(
 
 IdentityDialogController::~IdentityDialogController() = default;
 
-int IdentityDialogController::GetBrandIconMinimumSize() {
-  return AccountSelectionView::GetBrandIconMinimumSize();
+int IdentityDialogController::GetBrandIconMinimumSize(
+    blink::mojom::RpMode rp_mode) {
+  return AccountSelectionView::GetBrandIconMinimumSize(rp_mode);
 }
 
-int IdentityDialogController::GetBrandIconIdealSize() {
-  return AccountSelectionView::GetBrandIconIdealSize();
+int IdentityDialogController::GetBrandIconIdealSize(
+    blink::mojom::RpMode rp_mode) {
+  return AccountSelectionView::GetBrandIconIdealSize(rp_mode);
 }
 
-void IdentityDialogController::ShowAccountsDialog(
-    const std::string& top_frame_for_display,
-    const std::optional<std::string>& iframe_for_display,
+bool IdentityDialogController::ShowAccountsDialog(
+    const std::string& rp_for_display,
     const std::vector<content::IdentityProviderData>& identity_provider_data,
     content::IdentityRequestAccount::SignInMode sign_in_mode,
     blink::mojom::RpMode rp_mode,
@@ -45,14 +45,12 @@ void IdentityDialogController::ShowAccountsDialog(
   rp_mode_ = rp_mode;
   if (!account_view_)
     account_view_ = AccountSelectionView::Create(this);
-  account_view_->Show(top_frame_for_display, iframe_for_display,
-                      identity_provider_data, sign_in_mode, rp_mode,
-                      new_account_idp);
+  return account_view_->Show(rp_for_display, identity_provider_data,
+                             sign_in_mode, rp_mode, new_account_idp);
 }
 
-void IdentityDialogController::ShowFailureDialog(
-    const std::string& top_frame_for_display,
-    const std::optional<std::string>& iframe_for_display,
+bool IdentityDialogController::ShowFailureDialog(
+    const std::string& rp_for_display,
     const std::string& idp_for_display,
     blink::mojom::RpContext rp_context,
     blink::mojom::RpMode rp_mode,
@@ -68,14 +66,12 @@ void IdentityDialogController::ShowFailureDialog(
   //   TODO: If the failure dialog is already being shown, notify user that
   //   sign-in attempt failed.
 
-  account_view_->ShowFailureDialog(top_frame_for_display, iframe_for_display,
-                                   idp_for_display, rp_context, rp_mode,
-                                   idp_metadata);
+  return account_view_->ShowFailureDialog(rp_for_display, idp_for_display,
+                                          rp_context, rp_mode, idp_metadata);
 }
 
-void IdentityDialogController::ShowErrorDialog(
-    const std::string& top_frame_for_display,
-    const std::optional<std::string>& iframe_for_display,
+bool IdentityDialogController::ShowErrorDialog(
+    const std::string& rp_for_display,
     const std::string& idp_for_display,
     blink::mojom::RpContext rp_context,
     blink::mojom::RpMode rp_mode,
@@ -89,13 +85,13 @@ void IdentityDialogController::ShowErrorDialog(
     account_view_ = AccountSelectionView::Create(this);
   }
 
-  account_view_->ShowErrorDialog(top_frame_for_display, iframe_for_display,
-                                 idp_for_display, rp_context, rp_mode,
-                                 idp_metadata, error);
+  return account_view_->ShowErrorDialog(rp_for_display, idp_for_display,
+                                        rp_context, rp_mode, idp_metadata,
+                                        error);
 }
 
-void IdentityDialogController::ShowLoadingDialog(
-    const std::string& top_frame_for_display,
+bool IdentityDialogController::ShowLoadingDialog(
+    const std::string& rp_for_display,
     const std::string& idp_for_display,
     blink::mojom::RpContext rp_context,
     blink::mojom::RpMode rp_mode,
@@ -105,8 +101,8 @@ void IdentityDialogController::ShowLoadingDialog(
     account_view_ = AccountSelectionView::Create(this);
   }
 
-  account_view_->ShowLoadingDialog(top_frame_for_display, idp_for_display,
-                                   rp_context, rp_mode);
+  return account_view_->ShowLoadingDialog(rp_for_display, idp_for_display,
+                                          rp_context, rp_mode);
 }
 
 void IdentityDialogController::OnLoginToIdP(const GURL& idp_config_url,
@@ -179,13 +175,14 @@ void IdentityDialogController::ShowUrl(LinkType type, const GURL& url) {
 
 content::WebContents* IdentityDialogController::ShowModalDialog(
     const GURL& url,
+    blink::mojom::RpMode rp_mode,
     DismissCallback dismiss_callback) {
   on_dismiss_ = std::move(dismiss_callback);
   if (!account_view_) {
     account_view_ = AccountSelectionView::Create(this);
   }
 
-  return account_view_->ShowModalDialog(url);
+  return account_view_->ShowModalDialog(url, rp_mode);
 }
 
 void IdentityDialogController::CloseModalDialog() {
@@ -198,6 +195,18 @@ void IdentityDialogController::CloseModalDialog() {
 #endif  // BUILDFLAG(IS_ANDROID)
   CHECK(account_view_);
   account_view_->CloseModalDialog();
+}
+
+content::WebContents* IdentityDialogController::GetRpWebContents() {
+#if BUILDFLAG(IS_ANDROID)
+  // On Android, this method is invoked on the modal dialog controller,
+  // which means we may need to initialize the |account_view|.
+  if (!account_view_) {
+    account_view_ = AccountSelectionView::Create(this);
+  }
+#endif  // BUILDFLAG(IS_ANDROID)
+  CHECK(account_view_);
+  return account_view_->GetRpWebContents();
 }
 
 void IdentityDialogController::RequestIdPRegistrationPermision(

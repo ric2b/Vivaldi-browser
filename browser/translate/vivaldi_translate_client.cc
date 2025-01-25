@@ -234,7 +234,7 @@ TranslateStep ToVivaldiTranslateStep(translate::TranslateStep step) {
       return TranslateStep::kTranslateError;
     default:
       NOTREACHED();
-      return TranslateStep::kIdle;
+      //return TranslateStep::kIdle;
   }
 }
 
@@ -264,7 +264,7 @@ TranslateError ToVivaldiTranslateError(translate::TranslateErrors error) {
       return TranslateError::kScriptLoadError;
     default:
       NOTREACHED();
-      return TranslateError::kNone;
+      //return TranslateError::kNone;
   }
 }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
@@ -358,7 +358,11 @@ void VivaldiTranslateClient::ManualTranslateWhenReady() {
     manual_translate_on_ready_ = true;
   } else {
     translate::TranslateManager* manager = GetTranslateManager();
+#if BUILDFLAG(IS_ANDROID)
+    manager->ShowTranslateUI(true, true);
+#else
     manager->ShowTranslateUI(true);
+#endif
   }
 }
 #endif

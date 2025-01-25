@@ -12,7 +12,7 @@ constexpr char kRegmonServicePath[] = "/org/chromium/Regmond";
 constexpr char kRegmonServiceName[] = "org.chromium.Regmond";
 
 // Methods exported by regmond.
-constexpr char kTestPing[] = "TestPing";
+constexpr char kRecordPolicyViolation[] = "RecordPolicyViolation";
 
 }  // namespace regmon
 

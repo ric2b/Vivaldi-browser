@@ -13,6 +13,7 @@
 #include "ash/glanceables/glanceables_metrics.h"
 #include "ash/glanceables/tasks/glanceables_tasks_combobox_model.h"
 #include "ash/public/cpp/session/session_controller.h"
+#include "ash/system/unified/glanceable_tray_bubble_view.h"
 #include "base/check.h"
 #include "base/functional/callback_helpers.h"
 #include "base/time/time.h"
@@ -39,15 +40,20 @@ void GlanceablesController::RegisterUserProfilePrefs(
   default_integrations.Append(prefs::kGoogleCalendarIntegrationName);
   default_integrations.Append(prefs::kGoogleClassroomIntegrationName);
   default_integrations.Append(prefs::kGoogleTasksIntegrationName);
+  default_integrations.Append(prefs::kChromeSyncIntegrationName);
+  default_integrations.Append(prefs::kGoogleDriveIntegrationName);
+  default_integrations.Append(prefs::kWeatherIntegrationName);
   registry->RegisterListPref(prefs::kContextualGoogleIntegrationsConfiguration,
                              std::move(default_integrations));
 
+  GlanceableTrayBubbleView::RegisterUserProfilePrefs(registry);
   GlanceablesClassroomStudentView::RegisterUserProfilePrefs(registry);
   GlanceablesTasksComboboxModel::RegisterUserProfilePrefs(registry);
 }
 
 // static
 void GlanceablesController::ClearUserStatePrefs(PrefService* prefs) {
+  GlanceableTrayBubbleView::ClearUserStatePrefs(prefs);
   GlanceablesClassroomStudentView::ClearUserStatePrefs(prefs);
   GlanceablesTasksComboboxModel::ClearUserStatePrefs(prefs);
 }

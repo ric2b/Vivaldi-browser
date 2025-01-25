@@ -175,6 +175,24 @@ void RulesIndexManager::OnRuleSourceDeleted(uint32_t source_id,
   RebuildIndex();
 }
 
+void RulesIndexManager::OnExceptionListStateChanged(RuleGroup group) {
+  if (group != group_)
+    return;
+
+  if (rules_index_)
+    rules_index_->InvalidateActivationCache();
+}
+
+void RulesIndexManager::OnExceptionListChanged(
+    RuleGroup group,
+    RuleManager::ExceptionsList list) {
+  if (group != group_)
+    return;
+
+  if (rules_index_)
+    rules_index_->InvalidateActivationCache();
+}
+
 void RulesIndexManager::ReadRules(const ActiveRuleSource& rule_source) {
   if (rule_source.last_fetch_result == FetchResult::kFileUnsupported) {
     // We know there is no valid rules here. No point in trying.

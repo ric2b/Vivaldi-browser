@@ -17,7 +17,6 @@
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
-#import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
@@ -91,12 +90,12 @@ using signin_metrics::PromoAction;
       AuthenticationService::ServiceStatus::SigninForcedByPolicy;
   self.viewController = viewController;
   self.mediator = [[GoogleServicesSettingsMediator alloc]
-      initWithUserPrefService:self.browser->GetBrowserState()->GetPrefs()
+      initWithIdentityManager:IdentityManagerFactory::GetForBrowserState(
+                                  self.browser->GetBrowserState())
+              userPrefService:self.browser->GetBrowserState()->GetPrefs()
              localPrefService:GetApplicationContext()->GetLocalState()];
   self.mediator.consumer = viewController;
   self.mediator.authService = self.authService;
-  self.mediator.identityManager = IdentityManagerFactory::GetForBrowserState(
-      self.browser->GetBrowserState());
   self.mediator.commandHandler = self;
   viewController.modelDelegate = self.mediator;
   viewController.serviceDelegate = self.mediator;
@@ -106,8 +105,6 @@ using signin_metrics::PromoAction;
       HandlerForProtocol(dispatcher, ApplicationCommands);
   viewController.browserHandler =
       HandlerForProtocol(dispatcher, BrowserCommands);
-  viewController.browsingDataHandler =
-      HandlerForProtocol(dispatcher, BrowsingDataCommands);
   viewController.settingsHandler =
       HandlerForProtocol(dispatcher, SettingsCommands);
   viewController.snackbarHandler =
@@ -160,6 +157,7 @@ using signin_metrics::PromoAction;
   BOOL isSyncConsentGiven =
       syncService &&
       syncService->GetUserSettings()->IsInitialSyncFeatureSetupComplete();
+  BOOL shouldClearDataOnSignOut = self.authService->ShouldClearDataOnSignOut();
 
   self.signOutCoordinator = [[ActionSheetCoordinator alloc]
       initWithBaseViewController:self.viewController
@@ -168,6 +166,7 @@ using signin_metrics::PromoAction;
                          message:nil
                             rect:targetRect
                             view:self.viewController.view];
+
   // Because setting `title` to nil automatically forces the title-style text on
   // `message` in the UIAlertController, the attributed message below
   // specifically denotes the font style to apply.
@@ -175,6 +174,16 @@ using signin_metrics::PromoAction;
     self.signOutCoordinator.attributedMessage = [[NSAttributedString alloc]
         initWithString:l10n_util::GetNSString(
                            IDS_IOS_SIGNOUT_DIALOG_MESSAGE_WITH_SYNC)
+            attributes:@{
+              NSFontAttributeName :
+                  [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline]
+            }];
+    [self.signOutCoordinator updateAttributedText];
+  } else if (shouldClearDataOnSignOut) {
+    self.signOutCoordinator.attributedMessage = [[NSAttributedString alloc]
+        initWithString:
+            l10n_util::GetNSString(
+                IDS_IOS_SIGNOUT_AND_DISALLOW_SIGNIN_CLEARS_DATA_MESSAGE_WITH_MANAGED_ACCOUNT)
             attributes:@{
               NSFontAttributeName :
                   [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline]

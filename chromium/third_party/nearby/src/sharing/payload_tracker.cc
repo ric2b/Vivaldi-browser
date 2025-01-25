@@ -25,13 +25,12 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
-#include "sharing/attachment_info.h"
+#include "internal/platform/clock.h"
+#include "sharing/attachment_container.h"
 #include "sharing/constants.h"
 #include "sharing/file_attachment.h"
-#include "sharing/internal/public/context.h"
 #include "sharing/internal/public/logging.h"
 #include "sharing/nearby_connections_types.h"
-#include "sharing/share_target.h"
 #include "sharing/text_attachment.h"
 #include "sharing/transfer_metadata.h"
 #include "sharing/transfer_metadata_builder.h"
@@ -41,18 +40,19 @@ namespace nearby {
 namespace sharing {
 
 PayloadTracker::PayloadTracker(
-    Context* context, const ShareTarget& share_target,
-    const absl::flat_hash_map<int64_t, AttachmentInfo>& attachment_info_map,
+    Clock* clock, int64_t share_target_id,
+    const AttachmentContainer& container,
+    const absl::flat_hash_map<int64_t, int64_t>& attachment_payload_map,
     std::function<void(int64_t, TransferMetadata)> update_callback)
-    : context_(context),
-      share_target_id_(share_target.id),
+    : clock_(clock),
+      share_target_id_(share_target_id),
       update_callback_(std::move(update_callback)) {
   total_transfer_size_ = 0;
   confirmed_transfer_size_ = 0;
 
-  for (const auto& file : share_target.file_attachments) {
-    auto it = attachment_info_map.find(file.id());
-    if (it == attachment_info_map.end() || !it->second.payload_id) {
+  for (const auto& file : container.GetFileAttachments()) {
+    auto it = attachment_payload_map.find(file.id());
+    if (it == attachment_payload_map.end()) {
       NL_LOG(WARNING)
           << __func__
           << ": Failed to retrieve payload for file attachment id - "
@@ -60,15 +60,14 @@ PayloadTracker::PayloadTracker(
       continue;
     }
 
-    payload_state_.emplace(*it->second.payload_id,
-                           State(file.id(), file.size()));
+    payload_state_.emplace(it->second, State(file.id(), file.size()));
     ++num_file_attachments_;
     total_transfer_size_ += file.size();
   }
 
-  for (const auto& text : share_target.text_attachments) {
-    auto it = attachment_info_map.find(text.id());
-    if (it == attachment_info_map.end() || !it->second.payload_id) {
+  for (const auto& text : container.GetTextAttachments()) {
+    auto it = attachment_payload_map.find(text.id());
+    if (it == attachment_payload_map.end()) {
       NL_LOG(WARNING)
           << __func__
           << ": Failed to retrieve payload for text attachment id - "
@@ -76,16 +75,15 @@ PayloadTracker::PayloadTracker(
       continue;
     }
 
-    payload_state_.emplace(*it->second.payload_id,
-                           State(text.id(), text.size()));
+    payload_state_.emplace(it->second, State(text.id(), text.size()));
     ++num_text_attachments_;
     total_transfer_size_ += text.size();
   }
 
   for (const auto& wifi_credentials :
-       share_target.wifi_credentials_attachments) {
-    auto it = attachment_info_map.find(wifi_credentials.id());
-    if (it == attachment_info_map.end() || !it->second.payload_id) {
+       container.GetWifiCredentialsAttachments()) {
+    auto it = attachment_payload_map.find(wifi_credentials.id());
+    if (it == attachment_payload_map.end()) {
       NL_LOG(WARNING) << __func__
                       << ": Failed to retrieve payload for WiFi credentials "
                          "attachment id - "
@@ -94,8 +92,7 @@ PayloadTracker::PayloadTracker(
     }
 
     payload_state_.emplace(
-        *it->second.payload_id,
-        State(wifi_credentials.id(), wifi_credentials.size()));
+        it->second, State(wifi_credentials.id(), wifi_credentials.size()));
     ++num_wifi_credentials_attachments_;
     total_transfer_size_ += wifi_credentials.size();
   }
@@ -188,7 +185,7 @@ void PayloadTracker::OnTransferUpdate(const State& state) {
 
   double percent = CalculateProgressPercent(state);
   int current_progress = static_cast<int>(percent);
-  absl::Time current_time = context_->GetClock()->Now();
+  absl::Time current_time = clock_->Now();
   uint64_t current_transferred_size = GetTotalTransferred(state);
 
   if (current_progress == last_update_progress_ &&

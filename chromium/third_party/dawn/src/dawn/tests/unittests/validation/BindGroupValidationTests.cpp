@@ -96,12 +96,8 @@ class BindGroupValidationTest : public ValidationTest {
         return desc;
     }
 
-    WGPUDevice CreateTestDevice(native::Adapter dawnAdapter,
-                                wgpu::DeviceDescriptor descriptor) override {
-        wgpu::FeatureName requiredFeatures[1] = {wgpu::FeatureName::Depth32FloatStencil8};
-        descriptor.requiredFeatures = requiredFeatures;
-        descriptor.requiredFeatureCount = 1;
-        return dawnAdapter.CreateDevice(&descriptor);
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
+        return {wgpu::FeatureName::Depth32FloatStencil8};
     }
 
     void DoTextureSampleTypeTest(bool success,
@@ -158,7 +154,7 @@ TEST_F(BindGroupValidationTest, NextInChainNullptr) {
 
     // Check that nextInChain != nullptr is an error.
     wgpu::ChainedStruct chainedDescriptor;
-    chainedDescriptor.sType = wgpu::SType::Invalid;
+    chainedDescriptor.sType = wgpu::SType(0u);
     descriptor.nextInChain = &chainedDescriptor;
     ASSERT_DEVICE_ERROR(device.CreateBindGroup(&descriptor));
 }
@@ -630,12 +626,8 @@ TEST_F(BindGroupValidationTest, TextureSampleType) {
 
 class BindGroupValidationTest_Float32Filterable : public BindGroupValidationTest {
   protected:
-    WGPUDevice CreateTestDevice(dawn::native::Adapter dawnAdapter,
-                                wgpu::DeviceDescriptor descriptor) override {
-        wgpu::FeatureName requiredFeatures[1] = {wgpu::FeatureName::Float32Filterable};
-        descriptor.requiredFeatures = requiredFeatures;
-        descriptor.requiredFeatureCount = 1;
-        return dawnAdapter.CreateDevice(&descriptor);
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
+        return {wgpu::FeatureName::Float32Filterable};
     }
 };
 
@@ -1770,12 +1762,8 @@ TEST_F(BindGroupLayoutValidationTest, StaticSamplerNotSupportedWithoutFeatureEna
 }
 
 class BindGroupLayoutWithStaticSamplersValidationTest : public BindGroupLayoutValidationTest {
-    WGPUDevice CreateTestDevice(native::Adapter dawnAdapter,
-                                wgpu::DeviceDescriptor descriptor) override {
-        wgpu::FeatureName requiredFeatures[1] = {wgpu::FeatureName::StaticSamplers};
-        descriptor.requiredFeatures = requiredFeatures;
-        descriptor.requiredFeatureCount = 1;
-        return dawnAdapter.CreateDevice(&descriptor);
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
+        return {wgpu::FeatureName::StaticSamplers};
     }
 };
 
@@ -1986,12 +1974,8 @@ constexpr uint32_t kBindingSize = 8;
 
 class SetBindGroupValidationTest : public ValidationTest {
   public:
-    WGPUDevice CreateTestDevice(native::Adapter dawnAdapter,
-                                wgpu::DeviceDescriptor descriptor) override {
-        wgpu::FeatureName requiredFeatures[1] = {wgpu::FeatureName::StaticSamplers};
-        descriptor.requiredFeatures = requiredFeatures;
-        descriptor.requiredFeatureCount = 1;
-        return dawnAdapter.CreateDevice(&descriptor);
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
+        return {wgpu::FeatureName::StaticSamplers};
     }
 
     void SetUp() override {
@@ -2479,7 +2463,7 @@ TEST_F(SetBindGroupValidationTest, BindGroupSlotBoundary) {
 
     PlaceholderRenderPass renderPass(device);
 
-    auto TestIndex = [=](wgpu::BindGroup bg, uint32_t i, bool valid) {
+    auto TestIndex = [this, renderPass](wgpu::BindGroup bg, uint32_t i, bool valid) {
         {
             wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
             wgpu::ComputePassEncoder cp = encoder.BeginComputePass();
@@ -2535,7 +2519,7 @@ TEST_F(SetBindGroupValidationTest, BindGroupSlotBoundary) {
 
 // Test that dynamic offset count must be zero when unsetting a bindgroup.
 TEST_F(SetBindGroupValidationTest, UnsetWithDynamicOffsetIsInvalid) {
-    auto TestDynamicOffsetCount = [=](uint32_t count, uint32_t* offsets, bool valid) {
+    auto TestDynamicOffsetCount = [this](uint32_t count, uint32_t* offsets, bool valid) {
         {
             wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
             wgpu::ComputePassEncoder cp = encoder.BeginComputePass();

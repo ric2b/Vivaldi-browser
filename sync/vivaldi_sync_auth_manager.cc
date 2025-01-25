@@ -122,7 +122,7 @@ void VivaldiSyncAuthManager::ConnectionStatusChanged(
       break;
     case syncer::CONNECTION_NOT_ATTEMPTED:
       // The connection status should never change to "not attempted".
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }

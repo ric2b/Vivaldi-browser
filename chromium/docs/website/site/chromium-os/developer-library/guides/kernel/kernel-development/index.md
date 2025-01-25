@@ -1244,7 +1244,7 @@ First, add Linus's tree as a remote to the chromium-os kernel tree (assuming the
 
 ```bash
 cd ~/chromiumos/src/third_party/kernel/<version>
-git remote add linus git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+git remote add upstream git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
 git remote update
 ```
 
@@ -1256,7 +1256,7 @@ recently to a particular path (`--oneline` shows short-form upstream hashes and
 the brief commit message):
 
 ```bash
-git log --oneline linus/master /path/of/interest
+git log --oneline upstream/master /path/of/interest
 ```
 
 We can view that juicy commit using its upstream hash:

@@ -125,7 +125,7 @@ blink::mojom::WebBluetoothResult TranslateGATTErrorAndRecord(
                                  UMAGATTOperationOutcome::kNotSupported);
       return blink::mojom::WebBluetoothResult::GATT_NOT_SUPPORTED;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return blink::mojom::WebBluetoothResult::GATT_UNTRANSLATED_ERROR_CODE;
 }
 
@@ -278,10 +278,10 @@ WebBluetoothServiceImpl::TranslateConnectErrorAndRecord(
       RecordConnectGATTOutcome(UMAConnectGATTOutcome::WAKELOCK);
       return blink::mojom::WebBluetoothResult::CONNECT_WAKELOCK;
     case BluetoothDevice::NUM_CONNECT_ERROR_CODES:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return blink::mojom::WebBluetoothResult::CONNECT_UNKNOWN_FAILURE;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return blink::mojom::WebBluetoothResult::CONNECT_UNKNOWN_FAILURE;
 }
 
@@ -312,7 +312,7 @@ struct CacheQueryResult {
     switch (outcome) {
       case CacheQueryOutcome::SUCCESS:
       case CacheQueryOutcome::BAD_RENDERER:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return blink::mojom::WebBluetoothResult::DEVICE_NO_LONGER_IN_RANGE;
       case CacheQueryOutcome::NO_DEVICE:
         return blink::mojom::WebBluetoothResult::DEVICE_NO_LONGER_IN_RANGE;
@@ -324,7 +324,7 @@ struct CacheQueryResult {
       case CacheQueryOutcome::NO_DESCRIPTOR:
         return blink::mojom::WebBluetoothResult::DESCRIPTOR_NO_LONGER_EXISTS;
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return blink::mojom::WebBluetoothResult::DEVICE_NO_LONGER_IN_RANGE;
   }
 
@@ -513,7 +513,7 @@ void WebBluetoothServiceImpl::OnBluetoothScanningPromptEvent(
   } else if (event == BluetoothScanningPrompt::Event::kCanceled) {
     result = blink::mojom::WebBluetoothResult::PROMPT_CANCELED;
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   client->RunCallback(std::move(result));
@@ -531,7 +531,7 @@ void WebBluetoothServiceImpl::OnBluetoothScanningPromptEvent(
   } else if (event == BluetoothScanningPrompt::Event::kCanceled) {
     scanning_clients_.pop_back();
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -2509,7 +2509,7 @@ void WebBluetoothServiceImpl::PromptForBluetoothPairing(
                                      std::move(callback), pairing_kind, pin);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       std::move(callback).Run(BluetoothDelegate::PairPromptResult(
           BluetoothDelegate::PairPromptStatus::kCancelled));
       break;

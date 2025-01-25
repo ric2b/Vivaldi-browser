@@ -12,8 +12,8 @@ title: CRLSets
 Chromium's certificate revocation behaviour.)
 
 CRLSets ([background](https://www.imperialviolet.org/2012/02/05/crlsets.html))
-are primarily a means by which Chrome can quickly block certificates in
-emergency situations. As a secondary function they can also contain some number
+are the primary means by which Chrome quickly blocks certificates in
+emergency situations. As a secondary function, they can also contain some number
 of non-emergency revocations. These latter revocations are obtained by crawling
 CRLs published by CAs.
 
@@ -25,10 +25,11 @@ The Chromium source code that implements CRLSets is, of course,
 [public](https://chromium.googlesource.com/chromium/src/+/HEAD/net/cert/crl_set.cc).
 But the process by which they are generated is not.
 
-We maintain an internal list of crawled CRLs which are intended to cover
-intermediate revocations. The CRLs from that set go to make up the published
-CRLSet. CRLs on the list are fetched infrequently (at most once every few hours)
-and verified against the correct signing certificate for that CRL.
+We crawl CRLs disclosed to CCADB and (for intermediates) those discovered via
+Certificate Transparency.  CRLs on the list are fetched infrequently (at most
+once every few hours) and verified against the correct signing certificate for
+that CRL. A subset of the certificates identified as revoked on these CRLs are
+included in the current CRLSet.
 
 The current CRLSet can be fetched and dumped out using the code at
 <https://github.com/agl/crlset-tools>.

@@ -46,7 +46,8 @@ TEST(BookmarkLoadDetailsTest, AddAccountPermanentNodes) {
   details.AddAccountPermanentNodes(
       BookmarkPermanentNode::CreateBookmarkBar(/*id=*/100),
       BookmarkPermanentNode::CreateOtherBookmarks(/*id=*/200),
-      BookmarkPermanentNode::CreateMobileBookmarks(/*id=*/300));
+      BookmarkPermanentNode::CreateMobileBookmarks(/*id=*/300),
+      BookmarkPermanentNode::CreateTrashFolder(/*id=*/400));
 
   EXPECT_NE(nullptr, details.account_bb_node());
   EXPECT_NE(nullptr, details.account_other_folder_node());
@@ -121,7 +122,8 @@ TEST(BookmarkLoadDetailsTest, CreateIndicesWithAccountNodes) {
   details.AddAccountPermanentNodes(
       BookmarkPermanentNode::CreateBookmarkBar(/*id=*/100),
       BookmarkPermanentNode::CreateOtherBookmarks(/*id=*/200),
-      BookmarkPermanentNode::CreateMobileBookmarks(/*id=*/300));
+      BookmarkPermanentNode::CreateMobileBookmarks(/*id=*/300),
+      BookmarkPermanentNode::CreateTrashFolder(/*id=*/400));
 
   ASSERT_NE(nullptr, details.bb_node());
   ASSERT_NE(nullptr, details.other_folder_node());

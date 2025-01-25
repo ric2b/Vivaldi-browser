@@ -299,9 +299,11 @@ void FrameTranslationBuilder::BeginWasmInlinedIntoJSFrame(
 }
 
 void FrameTranslationBuilder::BeginLiftoffFrame(BytecodeOffset bailout_id,
-                                                unsigned height) {
+                                                unsigned height,
+                                                uint32_t wasm_function_index) {
   auto opcode = TranslationOpcode::LIFTOFF_FRAME;
-  Add(opcode, SignedOperand(bailout_id.ToInt()), SignedOperand(height));
+  Add(opcode, SignedOperand(bailout_id.ToInt()), SignedOperand(height),
+      SignedOperand(wasm_function_index));
 }
 #endif  // V8_ENABLE_WEBASSEMBLY
 
@@ -436,6 +438,12 @@ void FrameTranslationBuilder::StoreHoleyDoubleRegister(DoubleRegister reg) {
   Add(opcode, SmallUnsignedOperand(static_cast<uint8_t>(reg.code())));
 }
 
+void FrameTranslationBuilder::StoreSimd128Register(Simd128Register reg) {
+  static_assert(DoubleRegister::kNumRegisters - 1 <= base::kDataMask);
+  auto opcode = TranslationOpcode::SIMD128_REGISTER;
+  Add(opcode, SmallUnsignedOperand(static_cast<uint8_t>(reg.code())));
+}
+
 void FrameTranslationBuilder::StoreStackSlot(int index) {
   auto opcode = TranslationOpcode::TAGGED_STACK_SLOT;
   Add(opcode, SignedOperand(index));
@@ -478,6 +486,11 @@ void FrameTranslationBuilder::StoreFloatStackSlot(int index) {
 
 void FrameTranslationBuilder::StoreDoubleStackSlot(int index) {
   auto opcode = TranslationOpcode::DOUBLE_STACK_SLOT;
+  Add(opcode, SignedOperand(index));
+}
+
+void FrameTranslationBuilder::StoreSimd128StackSlot(int index) {
+  auto opcode = TranslationOpcode::SIMD128_STACK_SLOT;
   Add(opcode, SignedOperand(index));
 }
 

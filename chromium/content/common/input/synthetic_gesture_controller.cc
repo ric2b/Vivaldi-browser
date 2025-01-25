@@ -55,13 +55,6 @@ void SyntheticGestureController::EnsureRendererInitialized(
       content::mojom::GestureSourceType::kDefaultInput, std::move(wrapper));
 }
 
-void SyntheticGestureController::UpdateSyntheticGestureTarget(
-    std::unique_ptr<SyntheticGestureTarget> gesture_target,
-    Delegate* delegate) {
-  gesture_target_ = std::move(gesture_target);
-  delegate_ = delegate;
-}
-
 bool SyntheticGestureController::IsHiddenAndNeedsVisible() const {
   CHECK(!pending_gesture_queue_.IsEmpty());
 
@@ -145,7 +138,7 @@ void SyntheticGestureController::StartOrUpdateTimer() {
       event_interval_ = vsync_interval * 2.0f;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 

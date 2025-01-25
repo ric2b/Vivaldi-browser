@@ -118,6 +118,9 @@ std::vector<std::string_view> CopyRelativeStringViews(const std::vector<std::str
                                                       const std::string_view& dst_view) {
     std::vector<std::string_view> out(src_list.size());
     for (size_t i = 0; i < src_list.size(); i++) {
+        if (src_list[i].empty()) {
+            continue;
+        }
         auto offset = static_cast<size_t>(&src_list[i].front() - &src_view.front());
         auto count = src_list[i].length();
         out[i] = dst_view.substr(offset, count);
@@ -151,7 +154,7 @@ std::string ToString(const Source& source) {
         }
 
         if (source.file) {
-            out << std::endl << std::endl;
+            out << "\n\n";
 
             auto repeat = [&](char c, size_t n) {
                 while (n--) {
@@ -163,9 +166,7 @@ std::string ToString(const Source& source) {
                 if (line < source.file->content.lines.size() + 1) {
                     auto len = source.file->content.lines[line - 1].size();
 
-                    out << source.file->content.lines[line - 1];
-
-                    out << std::endl;
+                    out << source.file->content.lines[line - 1] << "\n";
 
                     if (line == rng.begin.line && line == rng.end.line) {
                         // Single line
@@ -183,7 +184,7 @@ std::string ToString(const Source& source) {
                         repeat('^', len);
                     }
 
-                    out << std::endl;
+                    out << "\n";
                 }
             }
         }

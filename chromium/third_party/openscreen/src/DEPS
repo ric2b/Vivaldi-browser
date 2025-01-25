@@ -53,9 +53,6 @@ vars = {
   # but parity with DEPS file is expected.
   'SUBMODULE_MIGRATION': 'True',
 
-  # The path of the sysroots.json file.
-  'sysroots_json_path': 'build/linux/sysroot_scripts/sysroots.json',
-
   # This can be overridden, e.g. with custom_vars, to build clang from HEAD
   # instead of downloading the prebuilt pinned revision.
   'llvm_force_head_revision': False,
@@ -76,7 +73,7 @@ deps = {
   # https://chromium.googlesource.com/chromium/src/buildtools/+/refs/heads/main
   'build': {
     'url': Var('chromium_git') + '/chromium/src/build' +
-      '@' + '01e3c73f58ca209014103abf934cc33be5f863d6',
+      '@' + '007a74bf79d5c749f6c217f743999ffdcea4cbec',
     'condition': 'not build_with_chromium',
   },
 
@@ -172,13 +169,13 @@ deps = {
   # To roll forward, use quiche_revision from chromium/src/DEPS.
   'third_party/quiche/src': {
     'url': Var('quiche_git') + '/quiche.git' +
-      '@' + 'acbdda4e4aa43e72a19aa72115b71e8eba57babb',  # 2024-04-08
+      '@' + '64cdc52a285d82dfd8756e0e30d15c2d08df6081',  # 2024-04-08
     'condition': 'not build_with_chromium',
   },
 
-  'third_party/instrumented_libraries': {
-    'url': Var('chromium_git') + '/chromium/src/third_party/instrumented_libraries.git' +
-      '@' + '0011c28c8d35fc5093bb29631d05428932cd1206',
+  'third_party/instrumented_libs': {
+    'url': Var('chromium_git') + '/chromium/third_party/instrumented_libraries.git' +
+      '@' + 'bb6dbcf2df7a9beb34c3773ef4df161800e3aed9',
     'condition': 'not build_with_chromium',
   },
 
@@ -259,184 +256,15 @@ hooks = [
     'action': ['python3', 'tools/clang/scripts/update.py',
                '--package=coverage_tools'],
   },
-  {
-    'name': 'clang_format_linux64',
-    'pattern': '.',
-    'action': [ 'download_from_google_storage.py', '--no_resume', '--no_auth',
-                '--bucket', 'chromium-clang-format',
-                '-s', 'buildtools/linux64/clang-format.sha1' ],
-    'condition': 'host_os == "linux" and not build_with_chromium',
-  },
-  {
-    'name': 'clang_format_mac_x64',
-    'pattern': '.',
-    'action': [ 'download_from_google_storage.py', '--no_resume', '--no_auth',
-                '--bucket', 'chromium-clang-format',
-                '-s', 'buildtools/mac/clang-format.x64.sha1' ],
-    'condition': 'host_os == "mac" and host_cpu == "x64" and not build_with_chromium',
-  },
-  {
-    'name': 'clang_format_mac_arm64',
-    'pattern': '.',
-    'action': [ 'download_from_google_storage.py', '--no_resume', '--no_auth',
-                '--bucket', 'chromium-clang-format',
-                '-s', 'buildtools/mac/clang-format.arm64.sha1' ],
-    'condition': 'host_os == "mac" and host_cpu == "arm64" and not build_with_chromium',
-  },
-  {
-    'name': 'clang_format_win',
-    'pattern': '.',
-    'action': [ 'download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-clang-format',
-                '-s', 'buildtools/win/clang-format.exe.sha1',
-    ],
-    'condition': 'host_os == "win" and not build_with_chromium',
-  },
-  {
-    'name': 'msan_chained_origins_focal',
-    'pattern': '.',
-    'condition': 'checkout_instrumented_libraries and not build_with_chromium',
-    'action': [
-                'download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-instrumented-libraries',
-                '-s', 'third_party/instrumented_libraries/binaries/msan-chained-origins-focal.tgz.sha1',
-              ],
-  },
-  {
-    'name': 'msan_no_origins_focal',
-    'pattern': '.',
-    'condition': 'checkout_instrumented_libraries and not build_with_chromium',
-    'action': [
-                'download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-instrumented-libraries',
-                '-s', 'third_party/instrumented_libraries/binaries/msan-no-origins-focal.tgz.sha1',
-              ],
-  },
- {
-    'name': 'sysroot_arm',
-    'pattern': '.',
-    'condition': 'checkout_linux and checkout_arm and not build_with_chromium',
-    'action': ['python3', 'build/linux/sysroot_scripts/install-sysroot.py',
-               '--sysroots-json-path=' + Var('sysroots_json_path'),
-               '--arch=arm'],
-  },
-  {
-    'name': 'sysroot_arm64',
-    'pattern': '.',
-    'condition': 'not build_with_chromium and checkout_linux and checkout_arm64',
-    'action': ['python3', 'build/linux/sysroot_scripts/install-sysroot.py',
-               '--sysroots-json-path=' + Var('sysroots_json_path'),
-               '--arch=arm64'],
-  },
-  {
-    'name': 'sysroot_x86',
-    'pattern': '.',
-    'condition': 'not build_with_chromium and checkout_linux and (checkout_x86 or checkout_x64)',
-    'action': ['python3', 'build/linux/sysroot_scripts/install-sysroot.py',
-               '--sysroots-json-path=' + Var('sysroots_json_path'),
-               '--arch=x86'],
-  },
-  {
-    'name': 'sysroot_mips',
-    'pattern': '.',
-    'condition': 'not build_with_chromium and checkout_linux and checkout_mips',
-    'action': ['python3', 'build/linux/sysroot_scripts/install-sysroot.py',
-               '--sysroots-json-path=' + Var('sysroots_json_path'),
-               '--arch=mips'],
-  },
-  {
-    'name': 'sysroot_mips64',
-    'pattern': '.',
-    'condition': 'not build_with_chromium and checkout_linux and checkout_mips64',
-    'action': ['python3', 'build/linux/sysroot_scripts/install-sysroot.py',
-               '--sysroots-json-path=' + Var('sysroots_json_path'),
-               '--arch=mips64el'],
-  },
-  {
-    'name': 'sysroot_x64',
-    'pattern': '.',
-    'condition': 'not build_with_chromium and checkout_linux and checkout_x64',
-    'action': ['python3', 'build/linux/sysroot_scripts/install-sysroot.py',
-               '--sysroots-json-path=' + Var('sysroots_json_path'),
-               '--arch=x64'],
-  },
-  {
-    # Case-insensitivity for the Win SDK. Must run before win_toolchain below.
-    'name': 'ciopfs_linux',
-    'pattern': '.',
-    'condition': 'not build_with_chromium and checkout_win and host_os == "linux"',
-    'action': [ 'python3',
-                'third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-browser-clang/ciopfs',
-                '-s', 'build/ciopfs.sha1',
-    ]
-  },
-  {
-    # Update the Windows toolchain if necessary.  Must run before 'clang' below.
-    'name': 'win_toolchain',
-    'pattern': '.',
-    'condition': 'not build_with_chromium and checkout_win',
-    'action': ['python3', 'build/vs_toolchain.py', 'update', '--force'],
-  },
-  {
-    # Update the Mac toolchain if necessary.
-    'name': 'mac_toolchain',
-    'pattern': '.',
-    'condition': 'not build_with_chromium and (checkout_mac or checkout_ios)',
-    'action': ['python3', 'build/mac_toolchain.py'],
-  },
-  {
-    # Update the prebuilt clang toolchain.
-    # Note: On Win, this should run after win_toolchain, as it may use it.
-    'name': 'clang',
-    'pattern': '.',
-    'condition': 'not build_with_chromium and not llvm_force_head_revision',
-    'action': ['python3', 'tools/clang/scripts/update.py'],
-  },
-  {
-    # Build the clang toolchain from tip-of-tree.
-    # Note: On Win, this should run after win_toolchain, as it may use it.
-    'name': 'clang_tot',
-    'pattern': '.',
-    'condition': 'not build_with_chromium and llvm_force_head_revision',
-    'action': ['python3', 'tools/clang/scripts/build.py',
-               '--llvm-force-head-revision'
-               ],
-  },
-  {
-    # This is also supposed to support the same set of platforms as 'clang'
-    # above. LLVM ToT support isn't provided at the moment.
-    'name': 'clang_tidy',
-    'pattern': '.',
-    'condition': 'not build_with_chromium and checkout_clang_tidy',
-    'action': ['python3', 'tools/clang/scripts/update.py',
-               '--package=clang-tidy'],
-  },
-  {
-    # This is also supposed to support the same set of platforms as 'clang'
-    # above. LLVM ToT support isn't provided at the moment.
-    'name': 'clangd',
-    'pattern': '.',
-    'condition': 'not build_with_chromium and checkout_clangd',
-    'action': ['python3', 'tools/clang/scripts/update.py',
-               '--package=clangd'],
-  },
-  {
-    # Update LASTCHANGE.
-    'name': 'lastchange',
-    'pattern': '.',
-    'condition': 'not build_with_chromium',
-    'action': ['python3', 'build/util/lastchange.py',
-               '-o', 'build/util/LASTCHANGE'],
-  },
+]
+
+# This exists to allow Google Cloud Storage blobs in these DEPS to be fetched.
+# Do not add any additional recursedeps entries without consulting
+# mfoltz@chromium.org!
+recursedeps = [
+  'build',
+  'buildtools',
+  'third_party/instrumented_libs',
 ]
 
 include_rules = [
@@ -477,7 +305,10 @@ include_rules = [
   '-third_party/boringssl',
 
   # Test framework includes.
-  "-third_party/googletest",
-  "+gtest",
-  "+gmock",
+  '-third_party/googletest',
+  '+gtest',
+  '+gmock',
+
+  # Can use generic Chromium buildflags.
+  '+build/build_config.h',
 ]

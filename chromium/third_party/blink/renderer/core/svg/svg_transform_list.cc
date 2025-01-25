@@ -21,6 +21,11 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/svg/svg_transform_list.h"
 
 #include "third_party/blink/renderer/core/css/css_function_value.h"
@@ -172,7 +177,7 @@ SVGTransformData TransformDataFromValues(SVGTransformType type,
     case SVGTransformType::kMatrix:
       return MatrixTransformValue(arguments);
     case SVGTransformType::kUnknown:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return ScaleTransformValue(1, 1);
   }
 }
@@ -232,7 +237,7 @@ CSSValueID MapTransformFunction(const SVGTransform& transform) {
       return CSSValueID::kSkewY;
     case SVGTransformType::kUnknown:
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return CSSValueID::kInvalid;
 }
@@ -286,7 +291,7 @@ CSSValue* CreateTransformCSSValue(const SVGTransform& transform) {
           transform.Matrix().F(), CSSPrimitiveValue::UnitType::kUserUnits));
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return transform_value;
 }

@@ -1,0 +1,38 @@
+# Copyright 2024 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/asset_catalog.gni")
+
+group("imagesets") {
+  deps = [
+    ":supporter",
+    ":patron",
+    ":advocate",
+  ]
+}
+
+imageset("supporter") {
+  sources = [
+    "supporter.imageset/Contents.json",
+    "supporter.imageset/supporter.png",
+    "supporter.imageset/supporter@2x.png",
+    "supporter.imageset/supporter@3x.png"
+  ]
+}
+
+imageset("patron") {
+  sources = [
+    "patron.imageset/Contents.json",
+    "patron.imageset/patron.png",
+    "patron.imageset/patron@2x.png",
+    "patron.imageset/patron@3x.png"
+  ]
+}
+
+imageset("advocate") {
+  sources = [
+    "advocate.imageset/Contents.json",
+    "advocate.imageset/advocate.png",
+    "advocate.imageset/advocate@2x.png",
+    "advocate.imageset/advocate@3x.png"
+  ]
+}

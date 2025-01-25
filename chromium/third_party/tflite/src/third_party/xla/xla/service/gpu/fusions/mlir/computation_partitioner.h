@@ -30,6 +30,7 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/service/gpu/fusions/fusion_emitter.h"
 #include "xla/service/gpu/hlo_fusion_analysis.h"
+#include "xla/service/gpu/model/indexing_map.h"
 
 namespace xla {
 namespace gpu {
@@ -56,7 +57,7 @@ struct EpilogueSpecification {
 
   // Indexing maps for each root output. All maps must have the same number of
   // input dimensions.
-  std::vector<mlir::AffineMap> root_indexing;
+  std::vector<IndexingMap> root_indexing;
 };
 
 // Partitions an HLO computation into subgraphs so that all users of a node have
@@ -107,7 +108,7 @@ class PartitionedComputation {
     std::vector<int64_t> index_ranges;
 
     // Maps from raw indices to root indices.
-    std::vector<mlir::AffineMap> root_indexing;
+    std::vector<IndexingMap> root_indexing;
 
     // For values that are function arguments (not function calls), stores
     // the mapping from value to the starting argument index. The arguments
@@ -117,7 +118,7 @@ class PartitionedComputation {
     // The sum of the arity of the injected values.
     int num_injected_values = 0;
 
-    std::string ToString() const;
+    std::string ToString(int indentation = 0) const;
 
     // Creates a subgraph for the given heroes' epilogue. The heroes values will
     // be injected into the subgraph.
@@ -137,7 +138,7 @@ class PartitionedComputation {
     return *instructions_to_subgraphs_.at(instr);
   }
 
-  std::string ToString() const;
+  std::string ToString(int indentation = 0) const;
 
  private:
   const HloComputation* computation_;

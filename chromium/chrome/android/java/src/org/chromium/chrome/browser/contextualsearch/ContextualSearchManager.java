@@ -32,9 +32,9 @@ import org.chromium.cc.input.BrowserControlsState;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
-import org.chromium.chrome.browser.compositor.bottombar.OverlayContentDelegate;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelContentDelegate;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelStateProvider;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.RelatedSearchesControl;
@@ -42,7 +42,6 @@ import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchInternalStateController.InternalState;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchSelectionController.SelectionType;
 import org.chromium.chrome.browser.contextualsearch.ResolvedSearchTerm.CardTag;
-import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
@@ -133,9 +132,6 @@ public class ContextualSearchManager
 
     private final ObserverList<ContextualSearchObserver> mObservers =
             new ObserverList<ContextualSearchObserver>();
-
-    private final ObserverList<ContextualSearchSelectionObserver> mSelectionObservers =
-            new ObserverList<ContextualSearchSelectionObserver>();
 
     private final Activity mActivity;
     private final Profile mProfile;
@@ -348,7 +344,7 @@ public class ContextualSearchManager
      * @param compositorViewHolder The {@link CompositorViewHolder} for the current activity.
      * @param toolbarHeightDp The height of the toolbar in dp.
      * @param toolbarManager The manager of the toolbar, used to query toolbar state.
-     * @param activityType The type of the current activity.
+     * @param canPromoteToNewTab Whether the Conextual search panel can be promoted to a new tab.
      * @param intentRequestTracker The {@link IntentRequestTracker} of the current activity.
      */
     public void initialize(
@@ -358,7 +354,7 @@ public class ContextualSearchManager
             @NonNull CompositorViewHolder compositorViewHolder,
             float toolbarHeightDp,
             @NonNull ToolbarManager toolbarManager,
-            @ActivityType int activityType,
+            boolean canPromoteToNewTab,
             @NonNull IntentRequestTracker intentRequestTracker) {
         mNativeContextualSearchManagerPtr = ContextualSearchManagerJni.get().init(this, mProfile);
 
@@ -378,7 +374,7 @@ public class ContextualSearchManager
                         compositorViewHolder,
                         toolbarHeightDp,
                         toolbarManager,
-                        activityType,
+                        canPromoteToNewTab,
                         mTabSupplier,
                         mEdgeToEdgeControllerSupplier);
         panel.setManagementDelegate(this);
@@ -1092,11 +1088,6 @@ public class ContextualSearchManager
         int startOffset = mContext.getSelectionStartOffset();
         int endOffset = mContext.getSelectionEndOffset();
 
-        ContextualSearchSelection sel =
-                new ContextualSearchSelection(
-                        mContext.getEncoding(), surroundingText, startOffset, endOffset);
-        notifyInternalObservers(sel);
-
         GSAContextDisplaySelection selection =
                 new GSAContextDisplaySelection(
                         mContext.getEncoding(), surroundingText, startOffset, endOffset);
@@ -1104,20 +1095,8 @@ public class ContextualSearchManager
     }
 
     /**
-     * Notifies all internal Contextual Search observers that a search has occurred. This API is for
-     * internal, Chromium-only observers that don't share the selection data with any servers and
-     * only process it locally.
-     *
-     * @param selectionContext The selection and context that triggered the search.
-     */
-    private void notifyInternalObservers(ContextualSearchSelection selectionContext) {
-        for (ContextualSearchSelectionObserver observer : mSelectionObservers) {
-            observer.onSelectionChanged(selectionContext);
-        }
-    }
-
-    /**
      * Notifies all Contextual Search observers that a search has occurred.
+     *
      * @param selectionContext The selection and context that triggered the search.
      */
     private void notifyShowContextualSearch(GSAContextDisplaySelection selectionContext) {
@@ -1135,35 +1114,21 @@ public class ContextualSearchManager
         }
     }
 
-    /**
-     * @param observer An observer to notify when the user performs a contextual search.
-     */
-    public void addObserver(ContextualSearchSelectionObserver observer) {
-        mSelectionObservers.addObserver(observer);
-    }
-
-    /**
-     * @param observer An observer to no longer notify when the user performs a contextual search.
-     */
-    public void removeObserver(ContextualSearchSelectionObserver observer) {
-        mSelectionObservers.removeObserver(observer);
-    }
-
     // ============================================================================================
-    // OverlayContentDelegate
+    // OverlayPanelContentDelegate
     // ============================================================================================
 
     @Override
-    public OverlayContentDelegate getOverlayContentDelegate() {
-        return new SearchOverlayContentDelegate();
+    public OverlayPanelContentDelegate getOverlayPanelContentDelegate() {
+        return new SearchOverlayPanelContentDelegate();
     }
 
-    /** Implementation of OverlayContentDelegate. Made public for testing purposes. */
-    public class SearchOverlayContentDelegate extends OverlayContentDelegate {
+    /** Implementation of OverlayPanelContentDelegate. Made public for testing purposes. */
+    public class SearchOverlayPanelContentDelegate extends OverlayPanelContentDelegate {
         // Note: New navigation or changes to the WebContents are not advised in this class since
         // the WebContents is being observed and navigation is already being performed.
 
-        public SearchOverlayContentDelegate() {}
+        public SearchOverlayPanelContentDelegate() {}
 
         @Override
         public void onMainFrameLoadStarted(String url, boolean isExternalUrl) {

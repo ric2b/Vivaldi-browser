@@ -12,7 +12,7 @@ namespace autofill::payments {
 
 namespace {
 const char kGetIbanUploadDetailsRequestPath[] =
-    "payments/apis/chromepaymentsservice/getdetailsforiban";
+    "payments/apis/chromepaymentsservice/getdetailsforcreatepaymentinstrument";
 }  // namespace
 
 GetIbanUploadDetailsRequest::GetIbanUploadDetailsRequest(
@@ -21,8 +21,9 @@ GetIbanUploadDetailsRequest::GetIbanUploadDetailsRequest(
     int64_t billing_customer_number,
     int billable_service_number,
     const std::string& country_code,
-    base::OnceCallback<void(AutofillClient::PaymentsRpcResult,
-                            const std::u16string&,
+    base::OnceCallback<void(PaymentsAutofillClient::PaymentsRpcResult,
+                            const std::u16string& validation_regex,
+                            const std::u16string& context_token,
                             std::unique_ptr<base::Value::Dict>)> callback)
     : full_sync_enabled_(full_sync_enabled),
       app_locale_(app_locale),
@@ -63,6 +64,14 @@ std::string GetIbanUploadDetailsRequest::GetRequestContent() {
 
 void GetIbanUploadDetailsRequest::ParseResponse(
     const base::Value::Dict& response) {
+  if (const base::Value::Dict* iban_details =
+          response.FindDict("iban_details")) {
+    if (const std::string* validation_regex =
+            iban_details->FindString("validation_regex")) {
+      validation_regex_ = base::UTF8ToUTF16(*validation_regex);
+    }
+  }
+
   if (const std::string* context_token = response.FindString("context_token")) {
     context_token_ = base::UTF8ToUTF16(*context_token);
   }
@@ -75,12 +84,14 @@ void GetIbanUploadDetailsRequest::ParseResponse(
 }
 
 bool GetIbanUploadDetailsRequest::IsResponseComplete() {
-  return !context_token_.empty() && legal_message_;
+  return !validation_regex_.empty() && !context_token_.empty() &&
+         legal_message_;
 }
 
 void GetIbanUploadDetailsRequest::RespondToDelegate(
-    AutofillClient::PaymentsRpcResult result) {
-  std::move(callback_).Run(result, context_token_, std::move(legal_message_));
+    PaymentsAutofillClient::PaymentsRpcResult result) {
+  std::move(callback_).Run(result, validation_regex_, context_token_,
+                           std::move(legal_message_));
 }
 
 }  // namespace autofill::payments

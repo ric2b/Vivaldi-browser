@@ -179,7 +179,7 @@ class RenderWidgetHostViewBrowserTest : public ContentBrowserTest {
   static void GiveItSomeTime() {
     base::RunLoop run_loop;
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), base::Milliseconds(250));
+        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
     run_loop.Run();
   }
 
@@ -1338,7 +1338,7 @@ class CompositingRenderWidgetHostViewBrowserTestTabCapture
         default:
           LOG(ERROR)
               << "Invalid readback response value: " << readback_result_;
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
       }
       // clang-format on
     } while (readback_result_ != READBACK_SUCCESS &&
@@ -1584,7 +1584,8 @@ class RenderWidgetHostViewPresentationFeedbackBrowserTest
     const base::TimeTicks start_time = base::TimeTicks::Now();
     // The full action_timeout is excessively long when expecting nothing to be
     // logged.
-    while (base::TimeTicks::Now() - start_time < base::Seconds(1)) {
+    const base::TimeDelta kTimeout = TestTimeouts::action_timeout() / 10;
+    while (base::TimeTicks::Now() - start_time < kTimeout) {
       GiveItSomeTime();
       ASSERT_TRUE(
           histogram_tester_.GetAllSamples("Browser.Tabs.TabSwitchResult3")
@@ -1630,8 +1631,14 @@ class RenderWidgetHostViewPresentationFeedbackBrowserTest
   base::HistogramTester histogram_tester_;
 };
 
+// TODO(crbug.com/353234554): Flaky on linux-lacros-tester-rel.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_Show DISABLED_Show
+#else
+#define MAYBE_Show Show
+#endif
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewPresentationFeedbackBrowserTest,
-                       Show) {
+                       MAYBE_Show) {
   CreateVisibleTimeRequest();
   GetRenderWidgetHostView()->ShowWithVisibility(PageVisibilityState::kVisible);
   ExpectPresentationFeedback(TabSwitchResult::kSuccess);
@@ -1657,8 +1664,14 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewPresentationFeedbackBrowserTest,
   ExpectNoPresentationFeedback();
 }
 
+// TODO(crbug.com/353234554): Flaky on linux-lacros-tester-rel.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_ShowWhileCapturing DISABLED_ShowWhileCapturing
+#else
+#define MAYBE_ShowWhileCapturing ShowWhileCapturing
+#endif
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewPresentationFeedbackBrowserTest,
-                       ShowWhileCapturing) {
+                       MAYBE_ShowWhileCapturing) {
   // Frame is captured and then becomes visible.
   CreateVisibleTimeRequest();
   GetRenderWidgetHostView()->ShowWithVisibility(
@@ -2099,6 +2112,10 @@ IN_PROC_BROWSER_TEST_P(
   // view from the native view tree. Thus the number of ViewAndroids is two
   // instead of three, when the old main frame and the OOPIF are BFCached. See
   // `WebContentsViewAndroid::RenderViewHostChanged()`.
+  // If the DeferSpeculativeRFHCreation feature is enabled, the RWHV won't be
+  // created when the navigation starts so only one native view will be left.
+  // For some reason the android view for the first speculative RFH is not
+  // removed when the response arrives (a new speculiatve RFH will be created).
   //
   // TODO(crbug.com/40285569): The number of `ui::ViewAndroid`s should be
   // one, regardless of BFCache.

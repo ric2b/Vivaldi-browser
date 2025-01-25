@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -25,28 +26,45 @@
 #include "absl/base/thread_annotations.h"
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/strings/string_view.h"
 #include "absl/time/time.h"
+#include "connections/advertising_options.h"
+#include "connections/connection_options.h"
+#include "connections/discovery_options.h"
+#include "connections/implementation/analytics/packet_meta_data.h"
 #include "connections/implementation/bwu_manager.h"
 #include "connections/implementation/client_proxy.h"
 #include "connections/implementation/encryption_runner.h"
+#include "connections/implementation/endpoint_channel.h"
 #include "connections/implementation/endpoint_channel_manager.h"
 #include "connections/implementation/endpoint_manager.h"
 #include "connections/implementation/mediums/mediums.h"
+#include "connections/implementation/mediums/webrtc_peer_id.h"
 #include "connections/implementation/pcp.h"
 #include "connections/implementation/pcp_handler.h"
 #include "connections/listeners.h"
 #include "connections/medium_selector.h"
+#include "connections/out_of_band_connection_metadata.h"
+#include "connections/params.h"
 #include "connections/status.h"
+#include "connections/strategy.h"
 #include "connections/v3/connection_listening_options.h"
 #include "connections/v3/listeners.h"
 #include "internal/interop/authentication_status.h"
+#include "internal/interop/device.h"
+#include "internal/interop/device_provider.h"
 #include "internal/platform/atomic_boolean.h"
+#include "internal/platform/ble_v2.h"
+#include "internal/platform/bluetooth_adapter.h"
 #include "internal/platform/byte_array.h"
 #include "internal/platform/cancelable_alarm.h"
 #include "internal/platform/connection_info.h"
 #include "internal/platform/count_down_latch.h"
+#include "internal/platform/exception.h"
 #include "internal/platform/future.h"
-#include "internal/platform/prng.h"
+#include "internal/platform/mutex.h"
+#include "internal/platform/nsd_service_info.h"
+#include "internal/platform/runnable.h"
 #include "internal/platform/scheduled_executor.h"
 #include "internal/platform/single_thread_executor.h"
 
@@ -441,7 +459,10 @@ class BasePcpHandler : public PcpHandler,
     // Only (possibly) vector for incoming connections.
     std::vector<location::nearby::proto::connections::Medium> supported_mediums;
 
-    // Keep track of a channel before we pass it to EndpointChannelManager.
+    // Keep track of a channel before we pass it to EndpointChannelManager. This
+    // is owned until the call to OnEncryptionSuccessRunnableV3 or
+    // OnEncryptionSuccessRunnable when ownership is transferred to the
+    // EndpointManager.
     std::unique_ptr<EndpointChannel> channel;
 
     // Crypto context; initially empty; established first thing after channel
@@ -454,6 +475,9 @@ class BasePcpHandler : public PcpHandler,
 
     // Used in AnalyticsRecorder for devices connection tracking.
     std::string connection_token;
+
+    // The medium that the connection was established on.
+    location::nearby::proto::connections::Medium medium;
   };
 
   // @EncryptionRunnerThread
@@ -600,6 +624,13 @@ class BasePcpHandler : public PcpHandler,
   // rotate endpoint id when the advertising options is "low power" (3P) or
   // "disable Bluetooth classic" (1P).
   bool ShouldEnterHighVisibilityMode(
+      const AdvertisingOptions& advertising_options);
+
+  // Below cases should enter stable endpoint id mode:
+  // 1. When use stable endpoint id returns true.
+  // 2. When low power returns false.
+  // 3. Other cases return true.
+  bool ShouldEnterStableEndpointIdMode(
       const AdvertisingOptions& advertising_options);
 
   // Returns the intersection of supported mediums based on the mediums reported

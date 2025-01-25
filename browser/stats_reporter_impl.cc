@@ -757,7 +757,7 @@ void StatsReporterImpl::DoReporting(FileHolder os_profile_reporting_data_file,
 
   std::optional<base::Value> os_profile_reporting_data_json;
   if (!os_profile_reporting_data.empty()) {
-    base::StringPiece fixed_os_profile_reporting_data(
+    std::string_view fixed_os_profile_reporting_data(
         os_profile_reporting_data);
     os_profile_reporting_data_json =
         base::JSONReader::Read(fixed_os_profile_reporting_data);
@@ -767,7 +767,7 @@ void StatsReporterImpl::DoReporting(FileHolder os_profile_reporting_data_file,
       // There was a bug where the file would not be truncated before overwrite,
       // causing some data to be potentially left over after the last brace.
       size_t last_brace = fixed_os_profile_reporting_data.rfind('}');
-      if (last_brace == base::StringPiece::npos)
+      if (last_brace == std::string_view::npos)
         break;
 
       fixed_os_profile_reporting_data =

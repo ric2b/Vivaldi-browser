@@ -46,7 +46,7 @@ namespace {
 /// PIMPL state for the transform.
 struct State {
     /// The external texture options.
-    const ExternalTextureOptions& options;
+    const tint::transform::multiplanar::BindingsMap& multiplanar_map;
 
     /// The IR module.
     Module& ir;
@@ -122,8 +122,8 @@ struct State {
     Result<SuccessType> ReplaceVar(Var* old_var) {
         auto name = ir.NameOf(old_var);
         auto bp = old_var->BindingPoint();
-        auto itr = options.bindings_map.find(bp.value());
-        if (TINT_UNLIKELY(itr == options.bindings_map.end())) {
+        auto itr = multiplanar_map.find(bp.value());
+        if (TINT_UNLIKELY(itr == multiplanar_map.end())) {
             std::stringstream err;
             err << "ExternalTextureOptions missing binding entry for " << bp.value();
             return Failure{err.str()};
@@ -228,8 +228,14 @@ struct State {
                 },
                 [&](CoreBuiltinCall* call) {
                     if (call->Func() == core::BuiltinFn::kTextureDimensions) {
-                        // Use the first plane for the `textureDimensions()` call.
-                        call->SetOperand(use.operand_index, plane_0);
+                        // Use params.visibleSize + vec2u(1, 1) instead of the textureDimensions.
+                        b.InsertBefore(call, [&] {
+                            auto* visible_size = b.Access<vec2<u32>>(params, 12_u);
+                            auto* vec2u_1_1 = b.Splat<vec2<u32>>(1_u);
+                            auto* dimensions = b.Add<vec2<u32>>(visible_size, vec2u_1_1);
+                            dimensions->SetResults(Vector{call->DetachResult()});
+                        });
+                        call->Destroy();
                     } else if (call->Func() == core::BuiltinFn::kTextureLoad) {
                         // Convert the coordinates to unsigned integers if necessary.
                         auto* coords = call->Args()[1];
@@ -304,13 +310,13 @@ struct State {
                            {sym.Register("gammaDecodeParams"), GammaTransferParams()},
                            {sym.Register("gammaEncodeParams"), GammaTransferParams()},
                            {sym.Register("gamutConversionMatrix"), ty.mat3x3<f32>()},
-                           {sym.Register("coordTransformationMatrix"), ty.mat3x2<f32>()},
-                           {sym.Register("loadTransformationMatrix"), ty.mat3x2<f32>()},
+                           {sym.Register("sampleTransform"), ty.mat3x2<f32>()},
+                           {sym.Register("loadTransform"), ty.mat3x2<f32>()},
                            {sym.Register("samplePlane0RectMin"), ty.vec2<f32>()},
                            {sym.Register("samplePlane0RectMax"), ty.vec2<f32>()},
                            {sym.Register("samplePlane1RectMin"), ty.vec2<f32>()},
                            {sym.Register("samplePlane1RectMax"), ty.vec2<f32>()},
-                           {sym.Register("displayVisibleRectMax"), ty.vec2<u32>()},
+                           {sym.Register("visibleSize"), ty.vec2<u32>()},
                            {sym.Register("plane1CoordFactor"), ty.vec2<f32>()}});
         }
         return external_texture_params_struct;
@@ -375,9 +381,9 @@ struct State {
         //                             plane1 : texture_2d<f32>,
         //                             coords : vec2<u32>,
         //                             params : ExternalTextureParams) ->vec4f {
-        //     let clampedCoords = min(coords, params.displayVisibleRectMax);
+        //     let clampedCoords = min(coords, params.visibleSize);
         //     let plane0_clamped = vec2<u32>(
-        //         round(params.loadTransformationMatrix * vec3<f32>(vec2<f32>(clampedCoords), 1)));
+        //         round(params.loadTransform * vec3<f32>(vec2<f32>(clampedCoords), 1)));
         //     var color : vec4<f32>;
         //     if ((params.numPlanes == 1)) {
         //         color = textureLoad(plane0, plane0_clamped, 0).rgba;
@@ -410,11 +416,10 @@ struct State {
             auto* yuv_to_rgb_conversion_only = b.Access(ty.u32(), params, 1_u);
             auto* yuv_to_rgb_conversion = b.Access(ty.mat3x4<f32>(), params, 2_u);
             auto* load_transform_matrix = b.Access(ty.mat3x2<f32>(), params, 7_u);
-            auto* display_visible_rect_max = b.Access(ty.vec2<u32>(), params, 12_u);
+            auto* visible_size = b.Access(ty.vec2<u32>(), params, 12_u);
             auto* plane1_coord_factor = b.Access(ty.vec2<f32>(), params, 13_u);
 
-            auto* clamped_coords =
-                b.Call(vec2u, core::BuiltinFn::kMin, coords, display_visible_rect_max);
+            auto* clamped_coords = b.Call(vec2u, core::BuiltinFn::kMin, coords, visible_size);
             auto* clamped_coords_f = b.Convert(vec2f, clamped_coords);
             auto* modified_coords =
                 b.Multiply(vec2f, load_transform_matrix, b.Construct(vec3f, clamped_coords_f, 1_f));
@@ -493,7 +498,7 @@ struct State {
         //                          smp    : sampler,
         //                          coord  : vec2f,
         //                          params : ExternalTextureParams) ->vec4f {
-        //     let modifiedCoords = (params.coordTransformationMatrix * vec3<f32>(coord, 1));
+        //     let modifiedCoords = (params.sampleTransform * vec3<f32>(coord, 1));
         //     let plane0_clamped =
         //         clamp(modifiedCoords, params.samplePlane0RectMin, params.samplePlane0RectMax);
         //     var color : vec4<f32>;
@@ -602,13 +607,15 @@ struct State {
 
 }  // namespace
 
-Result<SuccessType> MultiplanarExternalTexture(Module& ir, const ExternalTextureOptions& options) {
+Result<SuccessType> MultiplanarExternalTexture(
+    Module& ir,
+    const tint::transform::multiplanar::BindingsMap& multiplanar_map) {
     auto result = ValidateAndDumpIfNeeded(ir, "MultiplanarExternalTexture transform");
     if (result != Success) {
         return result;
     }
 
-    return State{options, ir}.Process();
+    return State{multiplanar_map, ir}.Process();
 }
 
 }  // namespace tint::core::ir::transform

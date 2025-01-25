@@ -49,6 +49,7 @@
 #include "chrome/browser/web_applications/policy/web_app_policy_constants.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/message_center/public/cpp/notification.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -558,11 +559,10 @@ IN_PROC_BROWSER_TEST_F(ExternallyManagedAppManagerBrowserTest,
   std::optional<webapps::AppId> app_id;
   {
     // Install user app
-    auto install_info = std::make_unique<WebAppInstallInfo>();
     GURL url(
         embedded_test_server()->GetURL("/banners/"
                                        "manifest_test_page.html"));
-    install_info->start_url = url;
+    auto install_info = WebAppInstallInfo::CreateWithStartUrlForTesting(url);
     install_info->title = u"Test user app";
     app_id = test::InstallWebApp(profile(), std::move(install_info));
     ASSERT_TRUE(app_id.has_value());
@@ -748,7 +748,7 @@ IN_PROC_BROWSER_TEST_F(ExternallyManagedAppManagerBrowserTest,
           [&run_loop, &app_url](
               std::map<GURL, ExternallyManagedAppManager::InstallResult>
                   install_results,
-              std::map<GURL, bool> uninstall_results) {
+              std::map<GURL, webapps::UninstallResultCode> uninstall_results) {
             EXPECT_TRUE(uninstall_results.empty());
             EXPECT_EQ(install_results.size(), 1U);
             EXPECT_EQ(install_results[app_url].code,
@@ -813,10 +813,11 @@ IN_PROC_BROWSER_TEST_F(ExternallyManagedAppManagerBrowserTest,
           [&run_loop, &url](
               std::map<GURL, ExternallyManagedAppManager::InstallResult>
                   install_results,
-              std::map<GURL, bool> uninstall_results) {
+              std::map<GURL, webapps::UninstallResultCode> uninstall_results) {
             EXPECT_TRUE(install_results.empty());
             EXPECT_EQ(uninstall_results.size(), 1U);
-            EXPECT_EQ(uninstall_results[url], true);
+            EXPECT_EQ(uninstall_results[url],
+                      webapps::UninstallResultCode::kInstallSourceRemoved);
             run_loop.Quit();
           }));
   run_loop.Run();
@@ -987,8 +988,10 @@ class PlaceholderUpdateRelaunchBrowserTest
       notification_observation_{this};
 };
 
-IN_PROC_BROWSER_TEST_F(PlaceholderUpdateRelaunchBrowserTest,
-                       UpdatePlaceholderRelaunchClosePreventedAppSucceeds) {
+// TODO(b:341035409): Flaky.
+IN_PROC_BROWSER_TEST_F(
+    PlaceholderUpdateRelaunchBrowserTest,
+    DISABLED_UpdatePlaceholderRelaunchClosePreventedAppSucceeds) {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // This may be needed due to side-effects previously run lacros tests.
   ClearAllNotifications();

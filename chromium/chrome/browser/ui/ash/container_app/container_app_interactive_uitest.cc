@@ -27,13 +27,15 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/test_future.h"
+#include "base/types/expected.h"
 #include "chrome/browser/ash/app_list/app_list_client_impl.h"
 #include "chrome/browser/ash/app_restore/full_restore_app_launch_handler.h"
 #include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/ash/login/test/guest_session_mixin.h"
 #include "chrome/browser/ash/login/test/logged_in_user_mixin.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
-#include "chrome/browser/resources/preinstalled_web_apps/internal/container.h"
+#include "chrome/browser/chromeos/echo/echo_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -41,6 +43,7 @@
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+#include "chrome/browser/web_applications/preinstalled_web_apps/container.h"
 #include "chrome/browser/web_applications/preinstalled_web_apps/preinstalled_web_apps.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app_id_constants.h"
@@ -247,7 +250,8 @@ class ContainerAppInteractiveUiTestBase
   GURL GetContainerAppLaunchUrl() const {
     GURL::Replacements components;
     components.SetQueryStr(*container_app_install_info_->launch_query_params);
-    return container_app_install_info_->start_url.ReplaceComponents(components);
+    return container_app_install_info_->start_url().ReplaceComponents(
+        components);
   }
 
   // Returns the expected title for the container app.
@@ -318,10 +322,20 @@ class ContainerAppInteractiveUiTestBase
         web_app::WebAppProvider::GetForTest(profile));
     AppListClientImpl::GetInstance()->UpdateProfile();
 
+    // Fetch `device_info` from echo.
+    base::test::TestFuture<
+        base::expected</*oobe_timestamp*/ std::string, /*error=*/std::string>>
+        oobe_timestamp_or_error;
+    chromeos::echo_util::GetOobeTimestamp(
+        oobe_timestamp_or_error.GetCallback());
+    ASSERT_TRUE(oobe_timestamp_or_error.Wait());
+    ASSERT_TRUE(oobe_timestamp_or_error.Get().has_value());
+    web_app::DeviceInfo device_info;
+    device_info.oobe_timestamp = oobe_timestamp_or_error.Get().value();
+
     // Cache install info for the container app.
     container_app_install_info_ =
-        web_app::GetConfigForContainer(/*device_info=*/std::nullopt)
-            .app_info_factory.Run();
+        web_app::GetConfigForContainer(device_info).app_info_factory.Run();
   }
 
  private:

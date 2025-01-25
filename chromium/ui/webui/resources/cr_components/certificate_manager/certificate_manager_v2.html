@@ -1,75 +1,245 @@
-<style include="cr-shared-style">
-  cr-tabs {
-    --cr-tabs-font-size: inherit;
-    --cr-tabs-height: 40px;
-    margin-bottom: 24px;
-  }
-
-  #crsCerts {
-    padding-inline-end: var(--cr-section-padding);
-    padding-inline-start: var(--cr-section-indent-padding);
-  }
-
-  .cert-row {
+<style include="cr-page-host-style cr-shared-style cr-nav-menu-item-style">
+  :host {
     display: flex;
+    flex-direction: column;
+    height: 100%;
   }
 
-  .certs-export-button {
-    margin-left: auto;
+  .card {
+    background-color: var(--cr-card-background-color);
+    border-radius: var(--cr-card-border-radius);
+    box-shadow: var(--cr-card-shadow);
   }
+
+  h2, h3 {
+    font-weight: 400;
+  }
+
+  #importOsCerts {
+    margin-inline-start: auto;
+  }
+
+  .enterprise-icon {
+    padding-inline-start: 5px;
+  }
+
+  #main {
+    flex: 1;
+  }
+
+  cr-menu-selector {
+    box-sizing: border-box;
+    display: block;
+    height: 100%;
+    overflow: auto;
+    padding-top: 8px;
+    width: 250px;
+  }
+
+  #container {
+    display: flex;
+    align-items: flex-start;
+    overflow: auto;
+    z-index: 1;
+  }
+
+  .toolbar-shadow {
+    box-shadow: 0 5px 6px -3px rgba(0, 0, 0, .4);
+    /* Needs to be higher than #container's z-index to appear above
+     * scrollbars. */
+    z-index: 2;
+  }
+
+  #adminCertsSection,
+  #platformCertsSection {
+    box-shadow: var(--cr-card-shadow);
+    padding: 0 40px;
+  }
+
+  .cr-centered-card-container {
+    padding-bottom: 20px;
+  }
+
+  #sidebar {
+    position: sticky;
+    top: 0;
+  }
+
 </style>
 
-<cr-tabs id="tabs" tab-names="[[tabNames_]]" selected="{{selectedTabIndex_}}">
-</cr-tabs>
-<iron-pages selected="[[selectedTabIndex_]]">
+<cr-toolbar id="toolbar"
+    page-name="[[i18n('certificateManagerV2Title')]]"
+    show-search="[[showSearch_]]" always-show-logo>
+</cr-toolbar>
+<div id="container">
+  <div id="sidebar" role="navigation">
+    <cr-menu-selector id="menu" selectable="a" attr-for-selected="path"
+        selected-attribute="selected"
+        selected="[[getSelectedTopLevelPage_(selectedPage_)]]"
+        on-iron-select="onMenuItemSelect_">
+      <a id="localMenuItem" role="menuitem" class="cr-nav-menu-item"
+          path="localcerts" href="/localcerts" on-click="onMenuItemClick_">
+        [[i18n('certificateManagerV2LocalCerts')]]
+      </a>
+      <a id="clientMenuItem" role="menuitem" class="cr-nav-menu-item"
+          path="clientcerts" href="/clientcerts" on-click="onMenuItemClick_">
+        [[i18n('certificateManagerV2ClientCerts')]]
+      </a>
+      <a id="crsMenuItem" role="menuitem" class="cr-nav-menu-item"
+          path="crscerts" href="/crscerts" on-click="onMenuItemClick_">
+        [[i18n('certificateManagerV2CRSCerts')]]
+      </a>
+    </cr-menu-selector>
+  </div>
 
-  <div>Client Certificates
-    <if expr="is_win or is_macosx">
-      <div id="provisioned-client-certs">
-        From your administrator
-        <template is="dom-repeat" items="[[provisionedClientCerts_]]">
-          <div class="cr-row cr-padded-text cert-row">
-            [[item.displayName]] - [[item.sha256hashHex]]
+  <!-- TODO(crbug.com/40928765): migrate off of iron-pages. See:
+    https://chromium.googlesource.com/chromium/src/+/HEAD/docs/webui_using_lit.md#polymer-iron_paper-elements-alternatives -->
+  <iron-pages id="main" attr-for-selected="path" fallback-selection="localcerts"
+      selected="[[selectedPage_]]">
+
+    <div id="clientCertSection" class="cr-centered-card-container" path="clientcerts">
+      <h2>[[i18n('certificateManagerV2ClientCerts')]]</h2>
+      [[i18n("certificateManagerV2ClientCertsDescription")]]
+
+      <if expr="is_win or is_macosx or is_linux">
+        <certificate-list-v2
+            id="provisionedClientCerts"
+            cert-source="[[certificateSourceEnum_.kProvisionedClientCert]]"
+            header-text="[[i18n('certificateManagerV2ClientCertsFromAdmin')]]"
+            hide-export
+            on-hash-copied="onHashCopied_">
+        </certificate-list-v2>
+      </if>
+      <if expr="is_chromeos">
+        <certificate-list-v2
+            id="extensionsClientCerts"
+            cert-source="[[certificateSourceEnum_.kExtensionsClientCert]]"
+            header-text="[[i18n('certificateManagerV2ClientCertsFromExtension')]]"
+            hide-export
+            on-hash-copied="onHashCopied_">
+        </certificate-list-v2>
+      </if>
+
+      <h3>[[i18n("certificateManagerV2Platform")]]</h3>
+      <!-- TODO(crbug.com/40928765): platform client certs list should be on a
+        sub-page -->
+      <certificate-list-v2
+          id="platformClientCerts"
+          cert-source="[[certificateSourceEnum_.kPlatformClientCert]]"
+          header-text="[[i18n('certificateManagerV2ClientCertsFromPlatform')]]"
+          show-import="[[showClientCertImport_]]"
+          hide-export
+          on-import-result="onImportResult_"
+          on-hash-copied="onHashCopied_">
+      </certificate-list-v2>
+      <if expr="is_win or is_macosx">
+        <cr-link-row external id="manageOsImportedClientCerts"
+            label="[[i18n('certificateManagerV2PlatformCertsManageLink')]]"
+            on-click="onManageCertsExternal_">
+        </cr-link-row>
+      </if>
+    </div>
+
+    <div id="localCertSection" class="cr-centered-card-container" path="localcerts">
+      <h2>[[i18n('certificateManagerV2LocalCerts')]]</h2>
+      [[i18n("certificateManagerV2LocalCertsDescription")]]
+
+      <!-- TODO(crbug.com/40928765): Allow user modifications of trust settings
+        here when allowed by enterprise.  -->
+      <h3>[[i18n("certificateManagerV2Platform")]]</h3>
+      <div class="card">
+        <div class="cr-row">
+          <div class="cr-padded-text">
+            <div>
+              [[i18n("certificateManagerV2PlatformCertsToggleLabel")]]
+            </div>
+            <div id="numSystemCerts" class="cr-secondary-text"
+                hidden="[[!importOsCertsEnabled_]]">
+              [[numSystemCertsString_]]
+            </div>
           </div>
-        </template>
-      </div>
-    </if>
+          <cr-toggle id="importOsCerts"
+              aria-label="Toggle operating system certificate imports"
+              checked="[[importOsCertsEnabled_]]" disabled>
+          </cr-toggle>
 
-    <div id="platform-client-certs">
-      Client certificates from platform
-      <template is="dom-repeat" items="[[platformClientCerts_]]">
-        <div class="cr-row cr-padded-text cert-row">
-          [[item.displayName]] - [[item.sha256hashHex]]
+          <cr-icon id="importOsCertsManagedIcon" icon="cr:domain"
+              class="enterprise-icon" hidden="[[!importOsCertsEnabledManaged_]]">
+          </cr-icon>
+        </div>
+
+        <cr-link-row id="viewOsImportedCerts"
+            label="[[i18n('certificateManagerV2PlatformCertsViewLink')]]"
+            on-click="onPlatformCertsLinkRowClick_"
+            hidden="[[!importOsCertsEnabled_]]">
+        </cr-link-row>
+        <if expr="is_win or is_macosx">
+          <cr-link-row external id="manageOsImportedCerts"
+              label="[[i18n('certificateManagerV2PlatformCertsManageLink')]]"
+              on-click="onManageCertsExternal_"
+              hidden="[[!importOsCertsEnabled_]]">
+          </cr-link-row>
+        </if>
+      </div>
+
+      <template is="dom-if" if="[[showCustomSection_(certManagementMetadata_)]]">
+        <div id="customCertsSection">
+          <h3>[[i18n("certificateManagerV2CustomCertsTitle")]]</h3>
+          <cr-link-row id="adminCertsInstalledLinkRow"
+              class="card"
+              label="[[i18n('certificateManagerV2AdminCertsTitle')]]"
+              sub-label="[[numPolicyCertsString_]]"
+              on-click="onAdminCertsInstalledLinkRowClick_">
+         </cr-link-row>
         </div>
       </template>
     </div>
-  </div>
 
-  <div>Local Certificates</div>
+    <!-- Chrome Root Store section -->
+    <div id="crsCertSection" class="cr-centered-card-container" path="crscerts">
+      <h2>[[i18n('certificateManagerV2CRSCerts')]]</h2>
+      [[i18n("certificateManagerV2CRSCertsDescription")]]
+      <a href="[[crsLearnMoreUrl_]]" target="_blank">
+        [[i18n("certificateManagerV2CRSLearnMoreLink")]]
+      </a>
 
-  <div>
-    <cr-expand-button class="cr-row first"
-        expanded="{{crsTrustedCertsOpened_}}">
-      <div class="cert-row">
-        Trusted Certificates
-        <cr-button class="action-button certs-export-button"
-            id="exportCRS" on-click="onExportCrs_">
-          Export
-        </cr-button>
-      </div>
-    </cr-expand-button>
-    <cr-collapse id="crsCerts" opened="[[crsTrustedCertsOpened_]]">
-      <template is="dom-repeat" items="[[crsCertificates_]]">
-        <certificate-entry-v2 display-name="[[item.displayName]]"
-            sha256hash-hex="[[item.sha256hashHex]]"
-            on-hash-copied="onValueCopied_">
-        </certificate-entry-v2>
-      </template>
-    </cr-collapse>
-  </div>
+      <certificate-list-v2
+          id="crsCerts"
+          cert-source="[[certificateSourceEnum_.kChromeRootStore]]"
+          header-text="[[i18n('certificateManagerV2TrustedCertsList')]]"
+          on-hash-copied="onHashCopied_">
+      </certificate-list-v2>
+    </div>
 
-</iron-pages>
+    <certificate-subpage-v2 id="adminCertsSection" path="admincerts"
+        class="cr-centered-card-container"
+        on-hash-copied="onHashCopied_" on-navigate-back="onNavigateBack_"
+        subpage-title="[[i18n('certificateManagerV2AdminCertsTitle')]]"
+        subpage-cert-lists="[[enterpriseSubpageLists_]]">
+    </certificate-subpage-v2>
+
+    <certificate-subpage-v2 id="platformCertsSection" path="platformcerts"
+        class="cr-centered-card-container"
+        on-hash-copied="onHashCopied_" on-navigate-back="onNavigateBack_"
+        subpage-title="[[i18n('certificateManagerV2PlatformCertsTitle')]]"
+        subpage-cert-lists="[[platformSubpageLists_]]">
+    </certificate-subpage-v2>
+  </iron-pages>
+</div>
 
 <cr-toast id="toast" duration="5000">
   <span id="toast-message">[[toastMessage_]]</span>
 </cr-toast>
+
+<cr-dialog id="dialog">
+  <div slot="title">[[dialogTitle_]]</div>
+  <div slot="body">
+    [[dialogBody_]]
+  </div>
+  <div slot="button-container">
+    <!-- TODO(crbug.com/40928765): localize -->
+    <cr-button class="action-button" on-click="onDialogClickOk_">
+      Ok
+    </cr-button>
+  </div>
+</cr-dialog>

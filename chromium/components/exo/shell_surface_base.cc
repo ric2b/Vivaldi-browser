@@ -79,12 +79,6 @@
 namespace exo {
 namespace {
 
-bool IsRadiiUniform(const gfx::RoundedCornersF& radii) {
-  return radii.upper_left() == radii.upper_right() &&
-         radii.lower_left() == radii.lower_right() &&
-         radii.upper_left() == radii.lower_left();
-}
-
 // The accelerator keys used to close ShellSurfaces.
 const struct {
   ui::KeyboardCode keycode;
@@ -182,34 +176,15 @@ class CustomFrameView : public ash::NonClientFrameViewAsh {
           window_radii.value_or(shadow_radii.value_or(gfx::RoundedCornersF()));
 
       // TODO(crbug.com/40256581): Support variable window radii.
-      DCHECK(IsRadiiUniform(radii));
       corner_radius = radii.upper_left();
-    }
-
-    // TODO(b/302034956): Use `ApplyRoundedCornersToSurfaceTree()` to round pip
-    // window as well.
-    // Round a pip window. Pip windows are rounded by applying rounded corner
-    // to host window using ui::Layer API.
-    // When un-pipped (window state changed from pip), we must undo the
-    // rounded corners of the host_window.
-    const int pip_corner_radius =
-        window_state->IsPip() ? chromeos::kPipRoundedCornerRadius : 0;
-    const gfx::RoundedCornersF pip_radii(pip_corner_radius);
-
-    ui::Layer* layer = shell_surface_->host_window()->layer();
-    if (layer->rounded_corner_radii() != pip_radii) {
-      layer->SetRoundedCornerRadius(pip_radii);
-      layer->SetIsFastRoundedCorner(/*enable=*/!pip_radii.IsEmpty());
     }
 
     // Various window decorations are rounded using `kWindowCornerRadiusKey`
     // property.
     window->SetProperty(aura::client::kWindowCornerRadiusKey, corner_radius);
 
-    // If we have a pip window, ignore `window_radii`. If window_radii is null,
-    // skip rounding the window.
-    if (window_state->IsPip() ||
-        !chromeos::features::IsRoundedWindowsEnabled() || !window_radii) {
+    // If window_radii is null, skip rounding the window.
+    if (!window_radii) {
       return;
     }
 
@@ -665,7 +640,11 @@ void ShellSurfaceBase::SetApplicationId(const char* application_id) {
     ui::PropertyHandler& property_handler = *widget_->GetNativeWindow();
     WMHelper::GetInstance()->PopulateAppProperties(params, property_handler);
   }
-
+  if (application_id_) {
+    GetViewAccessibility().SetChildTreeNodeAppId(*application_id_);
+  } else {
+    GetViewAccessibility().RemoveChildTreeNodeAppId();
+  }
   this->NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged,
                                  /* send_native_event */ false);
 }
@@ -842,7 +821,7 @@ void ShellSurfaceBase::UpdateTopInset() {
 }
 
 void ShellSurfaceBase::SetChildAxTreeId(ui::AXTreeID child_ax_tree_id) {
-  GetViewAccessibility().OverrideChildTreeID(child_ax_tree_id);
+  GetViewAccessibility().SetChildTreeID(child_ax_tree_id);
   this->NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged, false);
 }
 
@@ -1089,9 +1068,10 @@ void ShellSurfaceBase::AddOverlay(OverlayParams&& overlay_params) {
   overlay_overlaps_frame_ = overlay_params.overlaps_frame;
   overlay_can_resize_ = std::move(overlay_params.can_resize);
 
-  views::Widget::InitParams params(views::Widget::InitParams::TYPE_CONTROL);
+  views::Widget::InitParams params(
+      views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
+      views::Widget::InitParams::TYPE_CONTROL);
   params.parent = widget_->GetNativeWindow();
-  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   if (overlay_params.translucent)
     params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
 
@@ -1580,10 +1560,6 @@ gfx::Size ShellSurfaceBase::GetMaximumSize() const {
 
 void ShellSurfaceBase::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kClient;
-  if (application_id_) {
-    node_data->AddStringAttribute(
-        ax::mojom::StringAttribute::kChildTreeNodeAppId, *application_id_);
-  }
 }
 
 views::FocusTraversable* ShellSurfaceBase::GetFocusTraversable() {
@@ -1758,13 +1734,13 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
   if (system_modal_)
     SetModalType(ui::MODAL_TYPE_SYSTEM);
 
-  views::Widget::InitParams params;
+  views::Widget::InitParams params(
+      views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET);
   params.type = (emulate_x11_override_redirect || is_menu_)
                     ? views::Widget::InitParams::TYPE_MENU
                     : (is_popup_ ? views::Widget::InitParams::TYPE_POPUP
                                  : views::Widget::InitParams::TYPE_WINDOW);
 
-  params.ownership = views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET;
   params.delegate = this;
   params.shadow_type = views::Widget::InitParams::ShadowType::kNone;
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
@@ -2178,11 +2154,9 @@ void ShellSurfaceBase::UpdateShadowRoundedCorners() {
     // TODO(crbug.com/40256581): Revisit once all the clients have migrated.
     shadow_radii = shadow_corners_radii_dp_.value_or(
         window_corners_radii_dp_.value_or(gfx::RoundedCornersF()));
-
-    // TODO(crbug.com/40256581): Support shadow with variable radius corners.
-    DCHECK(IsRadiiUniform(shadow_radii));
   }
 
+  // TODO(crbug.com/40256581): Support shadow with variable radius corners.
   shadow->SetRoundedCornerRadius(shadow_radii.upper_left());
 }
 

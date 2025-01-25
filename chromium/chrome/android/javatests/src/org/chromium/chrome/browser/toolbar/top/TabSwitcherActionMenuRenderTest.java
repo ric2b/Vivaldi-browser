@@ -17,16 +17,20 @@ import androidx.test.filters.MediumTest;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.listmenu.ListMenuButton;
 import org.chromium.ui.test.util.BlankUiTestActivityTestCase;
 import org.chromium.ui.test.util.NightModeTestUtils;
@@ -49,11 +53,20 @@ public class TabSwitcherActionMenuRenderTest extends BlankUiTestActivityTestCase
                     .setBugComponent(ChromeRenderTestRule.Component.UI_BROWSER_MOBILE_TAB_SWITCHER)
                     .build();
 
+    @Mock private Profile mProfile;
+
     private View mView;
 
     public TabSwitcherActionMenuRenderTest(boolean nightModeEnabled) {
         NightModeTestUtils.setUpNightModeForBlankUiTestActivity(nightModeEnabled);
         mRenderTestRule.setNightModeEnabled(nightModeEnabled);
+    }
+
+    @Override
+    public void setUpTest() throws Exception {
+        MockitoAnnotations.initMocks(this);
+        ProfileManager.setLastUsedProfileForTesting(mProfile);
+        super.setUpTest();
     }
 
     @Override
@@ -81,11 +94,11 @@ public class TabSwitcherActionMenuRenderTest extends BlankUiTestActivityTestCase
     }
 
     private void showMenu() {
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     Activity activity = getActivity();
                     TabSwitcherActionMenuCoordinator coordinator =
-                            new TabSwitcherActionMenuCoordinator();
+                            new TabSwitcherActionMenuCoordinator(mProfile);
 
                     coordinator.displayMenu(
                             activity,

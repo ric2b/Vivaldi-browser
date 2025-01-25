@@ -4,20 +4,34 @@
 
 #include "third_party/blink/renderer/modules/ml/ml_context.h"
 
-#include "base/functional/callback_helpers.h"
-#include "base/notreached.h"
-#include "components/ml/webnn/features.mojom-blink.h"
+#include "base/numerics/checked_math.h"
+#include "services/webnn/public/cpp/context_properties.h"
+#include "services/webnn/public/cpp/supported_data_types.h"
+#include "services/webnn/public/cpp/webnn_errors.h"
+#include "services/webnn/public/mojom/webnn_buffer.mojom-blink.h"
+#include "services/webnn/public/mojom/webnn_context_provider.mojom-blink.h"
+#include "services/webnn/public/mojom/webnn_graph.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_arg_min_max_support_limits.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_concat_support_limits.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_context_lost_info.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_context_options.h"
-#include "third_party/blink/renderer/core/dom/dom_exception.h"
-#include "third_party/blink/renderer/core/typed_arrays/array_buffer/array_buffer_contents.h"
-#include "third_party/blink/renderer/modules/ml/buildflags.h"
-#include "third_party/blink/renderer/modules/ml/ml.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_device_preference.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_device_type.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_gather_support_limits.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_model_format.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_op_support_limits.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_operand_data_type.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_power_preference.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_support_limits.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_where_support_limits.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/modules/ml/ml_trace.h"
-#include "third_party/blink/renderer/modules/ml/webnn/ml_buffer_mojo.h"
-#include "third_party/blink/renderer/modules/ml/webnn/ml_error_mojo.h"
-#include "third_party/blink/renderer/modules/ml/webnn/ml_graph_mojo.h"
+#include "third_party/blink/renderer/modules/ml/webnn/ml_buffer.h"
+#include "third_party/blink/renderer/modules/ml/webnn/ml_graph.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 
@@ -25,84 +39,47 @@ namespace blink {
 
 namespace {
 
-webnn::mojom::blink::CreateContextOptions::Device ConvertBlinkDeviceTypeToMojo(
-    const V8MLDeviceType& device_type_blink) {
-  switch (device_type_blink.AsEnum()) {
-    case V8MLDeviceType::Enum::kCpu:
-      return webnn::mojom::blink::CreateContextOptions::Device::kCpu;
-    case V8MLDeviceType::Enum::kGpu:
-      return webnn::mojom::blink::CreateContextOptions::Device::kGpu;
-    case V8MLDeviceType::Enum::kNpu:
-      return webnn::mojom::blink::CreateContextOptions::Device::kNpu;
+MLSupportLimits* SupportedDataTypesToSupportLimits(
+    const webnn::SupportedDataTypes& supported_data_types) {
+  MLSupportLimits* support_limits = MLSupportLimits::Create();
+  Vector<String> data_types;
+  for (auto data_type : supported_data_types) {
+    data_types.push_back(webnn::DataTypeToString(data_type));
   }
-}
 
-webnn::mojom::blink::CreateContextOptions::PowerPreference
-ConvertBlinkPowerPreferenceToMojo(
-    const V8MLPowerPreference& power_preference_blink) {
-  switch (power_preference_blink.AsEnum()) {
-    case V8MLPowerPreference::Enum::kAuto:
-      return webnn::mojom::blink::CreateContextOptions::PowerPreference::
-          kDefault;
-    case V8MLPowerPreference::Enum::kLowPower:
-      return webnn::mojom::blink::CreateContextOptions::PowerPreference::
-          kLowPower;
-    case V8MLPowerPreference::Enum::kHighPerformance:
-      return webnn::mojom::blink::CreateContextOptions::PowerPreference::
-          kHighPerformance;
-  }
+  support_limits->setDataTypes(data_types);
+  return support_limits;
 }
 
 }  // namespace
 
-// static
-void MLContext::ValidateAndCreate(ScriptPromiseResolver<MLContext>* resolver,
-                                  MLContextOptions* options,
-                                  ML* ml) {
-  ScopedMLTrace scoped_trace("MLContext::ValidateAndCreate");
-  auto* context = MakeGarbageCollected<MLContext>(
-      options->devicePreference(), options->deviceType(),
-      options->powerPreference(), options->modelFormat(), options->numThreads(),
-      ml);
-
-#if BUILDFLAG(BUILD_WEBNN_WITH_XNNPACK)
-  if (options->deviceType() == V8MLDeviceType::Enum::kCpu) {
-    resolver->Resolve(context);
-  }
-#endif
-
-  if (base::FeatureList::IsEnabled(
-          webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
-    auto options_mojo = webnn::mojom::blink::CreateContextOptions::New(
-        ConvertBlinkDeviceTypeToMojo(options->deviceType()),
-        ConvertBlinkPowerPreferenceToMojo(options->powerPreference()),
-        options->numThreads());
-
-    ml->RecordPendingResolver(resolver);
-    ml->CreateWebNNContext(
-        std::move(options_mojo),
-        WTF::BindOnce(&MLContext::OnCreateWebNNContext, WrapPersistent(context),
-                      std::move(scoped_trace), WrapPersistent(resolver)));
-    return;
-  }
-
-  // TODO: crbug.com/325612086 - Remove this fallback.
-  resolver->Resolve(context);
-}
-
-MLContext::MLContext(const V8MLDevicePreference device_preference,
-                     const V8MLDeviceType device_type,
-                     const V8MLPowerPreference power_preference,
-                     const V8MLModelFormat model_format,
-                     const unsigned int num_threads,
-                     ML* ml)
+MLContext::MLContext(
+    ExecutionContext* execution_context,
+    const V8MLDevicePreference device_preference,
+    const V8MLDeviceType device_type,
+    const V8MLPowerPreference power_preference,
+    const V8MLModelFormat model_format,
+    const unsigned int num_threads,
+    webnn::mojom::blink::CreateContextSuccessPtr create_context_success)
     : device_preference_(device_preference),
       device_type_(device_type),
       power_preference_(power_preference),
       model_format_(model_format),
       num_threads_(num_threads),
-      ml_(ml),
-      remote_context_(ml->GetExecutionContext()) {}
+      lost_property_(MakeGarbageCollected<LostProperty>(execution_context)),
+      context_remote_(execution_context),
+      context_client_receiver_(this, execution_context),
+      properties_(std::move(create_context_success->context_properties)),
+      webnn_handle_(std::move(create_context_success->context_handle)) {
+  context_remote_.Bind(
+      std::move(create_context_success->context_remote),
+      execution_context->GetTaskRunner(TaskType::kMachineLearning));
+  context_client_receiver_.Bind(
+      std::move(create_context_success->context_client_receiver),
+      execution_context->GetTaskRunner(TaskType::kMachineLearning));
+  context_client_receiver_.set_disconnect_handler(
+      WTF::BindOnce(&MLContext::OnDisconnected, WrapWeakPersistent(this)));
+}
 
 MLContext::~MLContext() = default;
 
@@ -126,25 +103,16 @@ unsigned int MLContext::GetNumThreads() const {
   return num_threads_;
 }
 
-void MLContext::LogConsoleWarning(const String& message) {
-  auto* execution_context = ml_->GetExecutionContext();
-  if (!execution_context) {
-    return;
-  }
-  execution_context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-      mojom::blink::ConsoleMessageSource::kJavaScript,
-      mojom::blink::ConsoleMessageLevel::kWarning, message));
-}
-
-ML* MLContext::GetML() {
-  return ml_.Get();
-}
-
 void MLContext::Trace(Visitor* visitor) const {
-  visitor->Trace(ml_);
-  visitor->Trace(remote_context_);
+  visitor->Trace(lost_property_);
+  visitor->Trace(context_remote_);
+  visitor->Trace(context_client_receiver_);
 
   ScriptWrappable::Trace(visitor);
+}
+
+ScriptPromise<MLContextLostInfo> MLContext::lost(ScriptState* script_state) {
+  return lost_property_->Promise(script_state->World());
 }
 
 ScriptPromise<MLComputeResult> MLContext::compute(
@@ -157,102 +125,124 @@ ScriptPromise<MLComputeResult> MLContext::compute(
   if (!script_state->ContextIsValid()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Invalid script state");
-    return ScriptPromise<MLComputeResult>();
+    return EmptyPromise();
   }
-
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<MLComputeResult>>(
-      script_state, exception_state.GetContext());
-  auto promise = resolver->Promise();
 
   if (graph->Context() != this) {
-    resolver->RejectWithTypeError("The graph isn't built within this context.");
-  } else {
-    graph->Compute(std::move(scoped_trace), inputs, outputs, resolver,
-                   exception_state);
+    exception_state.ThrowTypeError(
+        "The graph isn't built within this context.");
+    return EmptyPromise();
   }
 
-  return promise;
+  return graph->Compute(std::move(scoped_trace), inputs, outputs, script_state,
+                        exception_state);
 }
 
 void MLContext::CreateWebNNGraph(
     webnn::mojom::blink::GraphInfoPtr graph_info,
     webnn::mojom::blink::WebNNContext::CreateGraphCallback callback) {
-  if (!remote_context_.is_bound()) {
+  if (!context_remote_.is_bound()) {
     std::move(callback).Run(webnn::mojom::blink::CreateGraphResult::NewError(
         webnn::mojom::blink::Error::New(
             webnn::mojom::blink::Error::Code::kUnknownError,
-            "Invalid script state.")));
+            "Context is lost.")));
     return;
   }
 
-  remote_context_->CreateGraph(std::move(graph_info),
+  context_remote_->CreateGraph(std::move(graph_info),
                                WTF::BindOnce(std::move(callback)));
 }
 
-void MLContext::OnCreateWebNNContext(
-    ScopedMLTrace scoped_trace,
-    ScriptPromiseResolver<MLContext>* resolver,
-    webnn::mojom::blink::CreateContextResultPtr result) {
-  base::ScopedClosureRunner runner(WTF::BindOnce(
-      [](MLContext* context, ScriptPromiseResolver<MLContext>* resolver) {
-        context->ml_->RemovePendingResolver(resolver);
-      },
-      WrapPersistent(this), WrapPersistent(resolver)));
-  ScriptState* script_state = resolver->GetScriptState();
-  if (!script_state) {
-    return;
-  }
+void MLContext::OnLost(const String& message) {
+  context_remote_.reset();
+  context_client_receiver_.reset();
 
-  if (result->is_error()) {
-    const auto& create_context_error = result->get_error();
-    resolver->RejectWithDOMException(
-        ConvertWebNNErrorCodeToDOMExceptionCode(create_context_error->code),
-        create_context_error->message);
-    return;
-  }
+  CHECK_EQ(lost_property_->GetState(), LostProperty::kPending);
+  auto* context_lost_info = MLContextLostInfo::Create();
+  context_lost_info->setMessage(message);
+  lost_property_->Resolve(context_lost_info);
+}
 
-  remote_context_.Bind(std::move(result->get_context_remote()),
-                       ExecutionContext::From(script_state)
-                           ->GetTaskRunner(TaskType::kMiscPlatformAPI));
-
-  resolver->Resolve(this);
+void MLContext::OnDisconnected() {
+  OnLost("WebNN context is lost due to connection error.");
 }
 
 void MLContext::CreateWebNNBuffer(
     mojo::PendingAssociatedReceiver<webnn::mojom::blink::WebNNBuffer> receiver,
     webnn::mojom::blink::BufferInfoPtr buffer_info,
     const base::UnguessableToken& buffer_handle) {
-  // Remote context gets automatically unbound when the execution context
-  // destructs.
-  if (!remote_context_.is_bound()) {
-    return;
-  }
-
+  CHECK(context_remote_.is_bound());
   // Use `WebNNContext` to create `WebNNBuffer` message pipe.
-  remote_context_->CreateBuffer(std::move(receiver), std::move(buffer_info),
+  context_remote_->CreateBuffer(std::move(receiver), std::move(buffer_info),
                                 buffer_handle);
+}
+
+const MLOpSupportLimits* MLContext::opSupportLimits(ScriptState* script_state) {
+  MLOpSupportLimits* op_support_limits = MLOpSupportLimits::Create();
+  op_support_limits->setInput(
+      SupportedDataTypesToSupportLimits(properties_.data_type_limits.input));
+  op_support_limits->setConstant(
+      SupportedDataTypesToSupportLimits(properties_.data_type_limits.constant));
+  op_support_limits->setOutput(
+      SupportedDataTypesToSupportLimits(properties_.data_type_limits.output()));
+
+  MLArgMinMaxSupportLimits* argmin = MLArgMinMaxSupportLimits::Create();
+  argmin->setInput(SupportedDataTypesToSupportLimits(
+      properties_.data_type_limits.arg_min_max_input));
+  argmin->setOutput(SupportedDataTypesToSupportLimits(
+      properties_.data_type_limits.arg_min_max_output));
+  op_support_limits->setArgMin(argmin);
+  MLArgMinMaxSupportLimits* argmax = MLArgMinMaxSupportLimits::Create();
+  argmax->setInput(SupportedDataTypesToSupportLimits(
+      properties_.data_type_limits.arg_min_max_input));
+  argmax->setOutput(SupportedDataTypesToSupportLimits(
+      properties_.data_type_limits.arg_min_max_output));
+  op_support_limits->setArgMax(argmax);
+
+  MLConcatSupportLimits* concat = MLConcatSupportLimits::Create();
+  concat->setInputs(SupportedDataTypesToSupportLimits(
+      properties_.data_type_limits.concat_inputs));
+  op_support_limits->setConcat(concat);
+
+  MLGatherSupportLimits* gather = MLGatherSupportLimits::Create();
+  gather->setInput(SupportedDataTypesToSupportLimits(
+      properties_.data_type_limits.gather_input));
+  gather->setIndices(SupportedDataTypesToSupportLimits(
+      properties_.data_type_limits.gather_indices));
+  op_support_limits->setGather(gather);
+
+  MLWhereSupportLimits* where = MLWhereSupportLimits::Create();
+  where->setCondition(SupportedDataTypesToSupportLimits(
+      properties_.data_type_limits.where_condition));
+  where->setTrueValue(SupportedDataTypesToSupportLimits(
+      properties_.data_type_limits.where_true_value));
+  where->setFalseValue(SupportedDataTypesToSupportLimits(
+      properties_.data_type_limits.where_false_value));
+  op_support_limits->setWhere(where);
+
+  return op_support_limits;
 }
 
 MLBuffer* MLContext::createBuffer(ScriptState* script_state,
                                   const MLBufferDescriptor* descriptor,
                                   ExceptionState& exception_state) {
   ScopedMLTrace scoped_trace("MLContext::createBuffer");
+  // Remote context gets automatically unbound when the execution context
+  // destructs.
+  if (!context_remote_.is_bound()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "Context is lost.");
+    return nullptr;
+  }
   if (!script_state->ContextIsValid()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Invalid script state");
     return nullptr;
   }
 
-  if (base::FeatureList::IsEnabled(
-          webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
-    return MLBufferMojo::Create(std::move(scoped_trace), script_state, this,
-                                descriptor, exception_state);
-  }
-
-  // TODO: crbug.com/325612086 - Remove this fallback.
-  exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
-                                    "Not implemented");
-  return nullptr;
+  return MLBuffer::Create(std::move(scoped_trace),
+                          ExecutionContext::From(script_state), this,
+                          descriptor, exception_state);
 }
 
 void MLContext::writeBuffer(
@@ -310,27 +300,20 @@ ScriptPromise<DOMArrayBuffer> MLContext::readBuffer(
   if (!script_state->ContextIsValid()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Invalid script state");
-    return ScriptPromise<DOMArrayBuffer>();
+    return EmptyPromise();
   }
 
   if (src_buffer->context() != this) {
     exception_state.ThrowTypeError(
         "The source buffer wasn't created with this context.");
-    return ScriptPromise<DOMArrayBuffer>();
+    return EmptyPromise();
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<DOMArrayBuffer>>(
       script_state, exception_state.GetContext());
   auto promise = resolver->Promise();
 
-  if (device_type_ == V8MLDeviceType::Enum::kGpu) {
-    src_buffer->ReadBufferImpl(resolver);
-    return promise;
-  }
-
-  resolver->RejectWithDOMException(DOMExceptionCode::kNotSupportedError,
-                                   "Not implemented");
-
+  src_buffer->ReadBufferImpl(resolver);
   return promise;
 }
 
@@ -389,7 +372,7 @@ void MLContext::WriteWebNNBuffer(ScriptState* script_state,
     write_byte_size = src_element_count.value() * src_data_type_size_bytes;
   }
 
-  if (write_byte_size > dst_buffer->size()) {
+  if (write_byte_size > dst_buffer->PackedByteLength()) {
     exception_state.ThrowTypeError(
         "Number of bytes to write is too large: write size exceeded buffer "
         "size.");
@@ -409,16 +392,10 @@ void MLContext::WriteWebNNBuffer(ScriptState* script_state,
     return;
   }
 
-  if (device_type_ == V8MLDeviceType::Enum::kGpu) {
-    dst_buffer->WriteBufferImpl(
-        src_data.subspan(checked_src_byte_offset.ValueOrDie(),
-                         checked_write_byte_size.ValueOrDie()),
-        exception_state);
-    return;
-  }
-
-  exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
-                                    "Not implemented");
+  dst_buffer->WriteBufferImpl(
+      src_data.subspan(checked_src_byte_offset.ValueOrDie(),
+                       checked_write_byte_size.ValueOrDie()),
+      exception_state);
 }
 
 void MLContext::dispatch(ScriptState* script_state,
@@ -439,13 +416,8 @@ void MLContext::dispatch(ScriptState* script_state,
     return;
   }
 
-  if (device_type_ == V8MLDeviceType::Enum::kGpu) {
-    return graph->Dispatch(std::move(scoped_trace), inputs, outputs,
-                           exception_state);
-  }
-
-  exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
-                                    "Not implemented");
+  return graph->Dispatch(std::move(scoped_trace), inputs, outputs,
+                         exception_state);
 }
 
 }  // namespace blink

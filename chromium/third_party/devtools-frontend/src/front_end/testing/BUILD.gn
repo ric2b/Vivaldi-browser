@@ -9,6 +9,7 @@ ts_library("testing") {
 
   sources = [
     "ConsoleHelpers.ts",
+    "ContextMenuHelpers.ts",
     "Cookies.ts",
     "DOMHelpers.ts",
     "DataGridHelpers.ts",
@@ -66,7 +67,6 @@ ts_library("testing") {
     "../models/text_utils:bundle",
     "../models/timeline_model:bundle",
     "../models/trace:bundle",
-    "../models/trace:bundle",
     "../models/workspace:bundle",
     "../panels/elements:meta",
     "../panels/sensors:meta",
@@ -80,5 +80,6 @@ ts_library("testing") {
     "../ui/legacy/components/perf_ui:bundle",
     "../ui/legacy/theme_support:bundle",
     "../ui/lit-html:bundle",
+    "../ui/visual_logging:testing",
   ]
 }

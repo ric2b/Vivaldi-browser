@@ -51,6 +51,18 @@
 - name: xnn_f32_rsum_ukernel__avx512f_u64_acc4
   init: xnn_init_f32_scale_scalar_params
 
+# Hexagon HVX
+- name: xnn_f32_rsum_ukernel__hvx_u32
+  init: xnn_init_f32_scale_scalar_params
+- name: xnn_f32_rsum_ukernel__hvx_u64_acc2
+  init: xnn_init_f32_scale_scalar_params
+- name: xnn_f32_rsum_ukernel__hvx_u96_acc3
+  init: xnn_init_f32_scale_scalar_params
+- name: xnn_f32_rsum_ukernel__hvx_u128_acc2
+  init: xnn_init_f32_scale_scalar_params
+- name: xnn_f32_rsum_ukernel__hvx_u128_acc4
+  init: xnn_init_f32_scale_scalar_params
+
 # Wasm SIMD
 - name: xnn_f32_rsum_ukernel__wasmsimd_u4
   init: xnn_init_f32_scale_scalar_params
@@ -61,6 +73,10 @@
 - name: xnn_f32_rsum_ukernel__wasmsimd_u16_acc2
   init: xnn_init_f32_scale_scalar_params
 - name: xnn_f32_rsum_ukernel__wasmsimd_u16_acc4
+  init: xnn_init_f32_scale_scalar_params
+
+# RISC-V Vector
+- name: xnn_f32_rsum_ukernel__rvv_u1v
   init: xnn_init_f32_scale_scalar_params
 
 # Scalar

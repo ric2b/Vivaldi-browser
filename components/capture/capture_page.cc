@@ -162,7 +162,8 @@ class PaintPreviewCaptureState {
         capture_handle_(
             web_contents->IncrementCapturerCount(gfx::Size(),
                                                  /*stay_hidden=*/true,
-                                                 /*stay_awake=*/true)) {
+                                                 /*stay_awake=*/true,
+                                                 /*is_activity=*/false)) {
     DCHECK(result_callback_);
     timeout_timer_.Start(
         FROM_HERE, kMaxWaitForCapture,

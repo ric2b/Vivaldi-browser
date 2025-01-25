@@ -106,6 +106,11 @@ class NearbyConnectionsManager {
 
     virtual ~BandwidthUpgradeListener() = default;
 
+    // Called for the first time the medium is set for the associated
+    // `endpoint_id`.
+    virtual void OnInitialMedium(const std::string& endpoint_id,
+                                 const Medium medium) = 0;
+
     // Called for each successful bandwidth upgrade for the associated
     // `endpoint_id`.
     virtual void OnBandwidthUpgrade(const std::string& endpoint_id,
@@ -147,6 +152,15 @@ class NearbyConnectionsManager {
 
   // Stops discovery through Nearby Connections.
   virtual void StopDiscovery() = 0;
+
+  // Inject a bluetooth endpoint into a Nearby Connections discovery session
+  // for the provided `service_id`.
+  virtual void InjectBluetoothEndpoint(
+      const std::string& service_id,
+      const std::string& endpoint_id,
+      const std::vector<uint8_t> endpoint_info,
+      const std::vector<uint8_t> remote_bluetooth_mac_address,
+      ConnectionsCallback callback) = 0;
 
   // Connects to remote |endpoint_id| through Nearby Connections.
   virtual void Connect(

@@ -11,13 +11,18 @@ which branch.
 import argparse
 import sys
 
-import gclient_utils
 from git_common import current_branch, branches, upstream, run, hash_one
+
+import gclient_utils
 import metrics
 
 
 @metrics.collector.collect_metrics('git nav-downstream')
 def main(args):
+    if gclient_utils.IsEnvCog():
+        print('nav-downstream command is not supported in non-git environment.',
+              file=sys.stderr)
+        return 1
     parser = argparse.ArgumentParser()
     parser.add_argument('--pick',
                         help=('The number to pick if this command would '

@@ -351,7 +351,6 @@ TEST_F(SessionControllerImplTest, GetLoginStateForActiveSession) {
       {user_manager::UserType::kPublicAccount, LoginStatus::PUBLIC},
       {user_manager::UserType::kKioskApp, LoginStatus::KIOSK_APP},
       {user_manager::UserType::kChild, LoginStatus::CHILD},
-      {user_manager::UserType::kArcKioskApp, LoginStatus::KIOSK_APP},
       {user_manager::UserType::kWebKioskApp, LoginStatus::KIOSK_APP}
   };
 
@@ -1007,7 +1006,8 @@ using SessionControllerImplUnblockTest = NoSessionAshTestBase;
 
 TEST_F(SessionControllerImplUnblockTest, ActiveWindowAfterUnblocking) {
   EXPECT_TRUE(Shell::Get()->session_controller()->IsUserSessionBlocked());
-  auto widget = CreateTestWidget();
+  auto widget =
+      CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
   // |widget| should not be active as it is blocked by SessionControllerImpl.
   EXPECT_FALSE(widget->IsActive());
   SimulateUserLogin("user@test.com");

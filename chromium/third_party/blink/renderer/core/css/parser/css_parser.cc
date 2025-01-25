@@ -52,10 +52,9 @@ base::span<CSSSelector> CSSParser::ParseSelector(
     const String& selector,
     HeapVector<CSSSelector>& arena) {
   CSSTokenizer tokenizer(selector);
-  const auto tokens = tokenizer.TokenizeToEOF();
+  CSSParserTokenStream stream(tokenizer);
   return CSSSelectorParser::ParseSelector(
-      CSSParserTokenRange(tokens), context, nesting_type,
-      parent_rule_for_nesting, is_within_scope,
+      stream, context, nesting_type, parent_rule_for_nesting, is_within_scope,
       /* semicolon_aborts_nested_selector */ false, style_sheet_contents,
       arena);
 }
@@ -68,6 +67,14 @@ CSSSelectorList* CSSParser::ParsePageSelector(
   const auto tokens = tokenizer.TokenizeToEOF();
   return CSSParserImpl::ParsePageSelector(CSSParserTokenRange(tokens),
                                           style_sheet_contents, context);
+}
+
+StyleRuleBase* CSSParser::ParseMarginRule(const CSSParserContext* context,
+                                          StyleSheetContents* style_sheet,
+                                          const String& rule) {
+  return CSSParserImpl::ParseRule(rule, context, CSSNestingType::kNone,
+                                  /*parent_rule_for_nesting=*/nullptr,
+                                  style_sheet, CSSParserImpl::kPageMarginRules);
 }
 
 StyleRuleBase* CSSParser::ParseRule(const CSSParserContext* context,
@@ -179,9 +186,9 @@ MutableCSSPropertyValueSet::SetResult CSSParser::ParseValue(
   if (parser_mode == kHTMLStandardMode && property.IsProperty() &&
       !property.IsShorthand()) {
     CSSTokenizer tokenizer(string);
-    const auto tokens = tokenizer.TokenizeToEOF();
+    CSSParserTokenStream stream(tokenizer);
     value =
-        CSSPropertyParser::ParseSingleValue(resolved_property, tokens, context);
+        CSSPropertyParser::ParseSingleValue(resolved_property, stream, context);
     if (value != nullptr) {
       return declaration->SetLonghandProperty(CSSPropertyValue(
           CSSPropertyName(resolved_property), *value, important));
@@ -244,9 +251,8 @@ const CSSValue* CSSParser::ParseSingleValue(CSSPropertyID property_id,
     return value;
   }
   CSSTokenizer tokenizer(string);
-  const auto tokens = tokenizer.TokenizeToEOF();
-  return CSSPropertyParser::ParseSingleValue(
-      property_id, CSSParserTokenRange(tokens), context);
+  CSSParserTokenStream stream(tokenizer);
+  return CSSPropertyParser::ParseSingleValue(property_id, stream, context);
 }
 
 ImmutableCSSPropertyValueSet* CSSParser::ParseInlineStyleDeclaration(

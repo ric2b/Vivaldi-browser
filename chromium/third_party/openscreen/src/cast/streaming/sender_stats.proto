@@ -1,0 +1,150 @@
+// Copyright 2024 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+//
+// This file is based on the structs defined in  statistics.h.
+// This file must be updated whenever statistics.h is updated.
+
+syntax = "proto2";
+
+package openscreen.cast;
+
+option optimize_for = LITE_RUNTIME;
+option java_multiple_files = true;
+
+message SimpleHistogramBucket {
+  // To create N+2 buckets where N = (max - min) / width:
+  // Underflow bucket: < min
+  // Bucket 0: [min, min + width - 1]
+  // Bucket 1: [min + width, min + 2 * width - 1]
+  // ...
+  // Bucket N-1: [max - width, max - 1]
+  // Overflow bucket: >= max
+  optional int64 min = 1;
+  optional int64 max = 2;
+  optional int32 count = 3;
+}
+
+message SimpleHistogram {
+  // |min| must be less than |max|.
+  // |width| must divide |max - min| evenly.
+  repeated SimpleHistogramBucket buckets = 1;
+}
+
+message SenderStatistic {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+
+    // Frame enqueuing rate.
+    ENQUEUE_FPS = 1;
+
+    // Average capture latency in milliseconds.
+    AVG_CAPTURE_LATENCY_MS = 2;
+
+    // Average encode duration in milliseconds.
+    AVG_ENCODE_TIME_MS = 3;
+
+    // Duration from when a frame is encoded to when the packet is first
+    // sent.
+    AVG_QUEUEING_LATENCY_MS = 4;
+
+    // Duration from when a packet is transmitted to when it is received.
+    // This measures latency from sender to receiver.
+    AVG_NETWORK_LATENCY_MS = 5;
+
+    // Duration from when a frame is encoded to when the packet is first
+    // received.
+    AVG_PACKET_LATENCY_MS = 6;
+
+    // Average latency between frame encoded and the moment when the frame
+    // is fully received.
+    AVG_FRAME_LATENCY_MS = 7;
+
+    // Duration from when a frame is captured to when it should be played out.
+    AVG_END_TO_END_LATENCY_MS = 8;
+
+    // Encode bitrate in kbps.
+    ENCODE_RATE_KBPS = 9;
+
+    // Packet transmission bitrate in kbps.
+    PACKET_TRANSMISSION_RATE_KBPS = 10;
+
+    // Duration in milliseconds since the estimated last time the receiver sent
+    // a response.
+    TIME_SINCE_LAST_RECEIVER_RESPONSE_MS = 11;
+
+    // Number of frames captured.
+    NUM_FRAMES_CAPTURED = 12;
+
+    // Number of frames dropped by encoder.
+    NUM_FRAMES_DROPPED_BY_ENCODER = 13;
+
+    // Number of late frames.
+    NUM_LATE_FRAMES = 14;
+
+    // Number of packets that were sent.
+    NUM_PACKETS_SENT = 15;
+
+    // Number of packets that were received by receiver.
+    NUM_PACKETS_RECEIVED = 16;
+
+    // Unix time in milliseconds of first event since reset.
+    FIRST_EVENT_TIME_MS = 17;
+
+    // Unix time in milliseconds of last event since reset.
+    LAST_EVENT_TIME_MS = 18;
+  }
+  optional double value = 1;
+  optional Type type = 2;
+}
+
+message SenderHistogram {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+
+    // Histogram representing the capture latency (in milliseconds).
+    CAPTURE_LATENCY_MS = 1;
+
+    // Histogram representing the encode time (in milliseconds).
+    ENCODE_TIME_MS = 2;
+
+    // Histogram representing the queueing latency (in milliseconds).
+    QUEUEING_LATENCY_MS = 3;
+
+    // Histogram representing the network latency (in milliseconds).
+    NETWORK_LATENCY_MS = 4;
+
+    // Histogram representing the packet latency (in milliseconds).
+    PACKET_LATENCY_MS = 5;
+
+    // Histogram representing the end to end latency (in milliseconds).
+    END_TO_END_LATENCY_MS = 6;
+
+    // Histogram representing how late frames are (in milliseconds).
+    FRAME_LATENESS_MS = 7;
+  }
+  optional SimpleHistogram histogram = 1;
+  optional Type type = 2;
+}
+
+message SenderStats {
+  // The current audio statistics.
+  repeated SenderStatistic audio_statistics = 1;
+
+  // The current audio histograms.
+  repeated SenderHistogram audio_histograms = 2;
+
+  // The current video statistics.
+  repeated SenderStatistic video_statistics = 3;
+
+  // The current video histograms.
+  repeated SenderHistogram video_histograms = 4;
+}
+
+message RtpTimeDelta {
+  optional int64 ticks = 1;
+}
+
+message RtpTimeTicks {
+  optional int64 ticks = 1;
+}

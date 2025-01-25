@@ -117,9 +117,15 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   bool ContainsAsmModule();
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+  // Read/write the raw 'flags' field. This uses relaxed atomic loads/stores
+  // because the flags are read by background compile threads and updated by the
+  // main thread.
+  inline uint32_t flags() const;
+  inline void set_flags(uint32_t new_flags);
+
   // [compilation_type]: how the the script was compiled. Encoded in the
   // 'flags' field.
-  inline CompilationType compilation_type();
+  inline CompilationType compilation_type() const;
   inline void set_compilation_type(CompilationType type);
 
   inline bool produce_compile_hints() const;
@@ -159,26 +165,29 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   inline bool IsMaybeUnfinalized(Isolate* isolate) const;
 
   Tagged<Object> GetNameOrSourceURL();
-  static Handle<String> GetScriptHash(Isolate* isolate, Handle<Script> script,
+  static Handle<String> GetScriptHash(Isolate* isolate,
+                                      DirectHandle<Script> script,
                                       bool forceForInspector);
 
   // Retrieve source position from where eval was called.
-  static int GetEvalPosition(Isolate* isolate, Handle<Script> script);
+  static int GetEvalPosition(Isolate* isolate, DirectHandle<Script> script);
 
   // Initialize line_ends array with source code positions of line ends if
   // it doesn't exist yet.
-  static inline void InitLineEnds(Isolate* isolate, Handle<Script> script);
-  static inline void InitLineEnds(LocalIsolate* isolate, Handle<Script> script);
+  static inline void InitLineEnds(Isolate* isolate,
+                                  DirectHandle<Script> script);
+  static inline void InitLineEnds(LocalIsolate* isolate,
+                                  DirectHandle<Script> script);
 
   // Obtain line ends as a vector, without modifying the script object
   V8_EXPORT_PRIVATE static String::LineEndsVector GetLineEnds(
-      Isolate* isolate, Handle<Script> script);
+      Isolate* isolate, DirectHandle<Script> script);
 
   inline bool has_line_ends() const;
 
   // Will initialize the line ends if required.
-  static void SetSource(Isolate* isolate, Handle<Script> script,
-                        Handle<String> source);
+  static void SetSource(Isolate* isolate, DirectHandle<Script> script,
+                        DirectHandle<String> source);
 
   bool inline CanHaveLineEnds() const;
 
@@ -202,7 +211,7 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   // initializes the line ends array, avoiding expensive recomputations.
   // The non-static version is not allocating and safe for unhandlified
   // callsites.
-  static bool GetPositionInfo(Handle<Script> script, int position,
+  static bool GetPositionInfo(DirectHandle<Script> script, int position,
                               PositionInfo* info,
                               OffsetFlag offset_flag = OffsetFlag::kWithOffset);
   static bool GetLineColumnWithLineEnds(
@@ -238,7 +247,7 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   // that matches the function literal. Return empty handle if not found.
   template <typename IsolateT>
   static MaybeHandle<SharedFunctionInfo> FindSharedFunctionInfo(
-      Handle<Script> script, IsolateT* isolate,
+      DirectHandle<Script> script, IsolateT* isolate,
       FunctionLiteral* function_literal);
 
   // Iterate over all script objects on the heap.
@@ -280,7 +289,7 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   template <typename IsolateT>
   EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE)
   static void V8_PRESERVE_MOST
-      InitLineEndsInternal(IsolateT* isolate, Handle<Script> script);
+      InitLineEndsInternal(IsolateT* isolate, DirectHandle<Script> script);
 };
 
 }  // namespace internal

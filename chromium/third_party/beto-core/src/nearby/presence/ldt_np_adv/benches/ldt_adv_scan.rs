@@ -36,7 +36,7 @@ fn ldt_adv_scan<C: CryptoProvider>(c: &mut Criterion) {
             let payload_len = rng.gen_range(crypto_provider::aes::BLOCK_SIZE..=LDT_XTS_AES_MAX_LEN);
             let payload = random_vec(&mut rng, payload_len);
 
-            let salt = LegacySalt::from(rng.gen::<[u8; 2]>());
+            let salt = V0Salt::from(rng.gen::<[u8; 2]>());
             #[allow(clippy::unit_arg)]
             b.iter(|| {
                 let ciphers = build_ciphers(&configs);
@@ -48,7 +48,7 @@ fn ldt_adv_scan<C: CryptoProvider>(c: &mut Criterion) {
             let payload_len = rng.gen_range(crypto_provider::aes::BLOCK_SIZE..=LDT_XTS_AES_MAX_LEN);
             let payload = random_vec(&mut rng, payload_len);
 
-            let salt = LegacySalt::from(rng.gen::<[u8; 2]>());
+            let salt = V0Salt::from(rng.gen::<[u8; 2]>());
             let ciphers = build_ciphers(&configs);
             #[allow(clippy::unit_arg)]
             b.iter(|| black_box(find_matching_item::<C>(&ciphers, salt, &payload)));
@@ -60,11 +60,11 @@ criterion_group!(benches, ldt_adv_scan::<CryptoProviderImpl>);
 criterion_main!(benches);
 
 fn find_matching_item<C: CryptoProvider>(
-    ciphers: &[LdtNpAdvDecrypterXtsAes128<C>],
-    salt: LegacySalt,
+    ciphers: &[AuthenticatedNpLdtDecryptCipher<C>],
+    salt: V0Salt,
     payload: &[u8],
 ) {
-    let padder = salt_padder::<16, C>(salt);
+    let padder = salt_padder::<C>(salt);
     let _ = ciphers
         .iter()
         .enumerate()
@@ -75,12 +75,12 @@ fn find_matching_item<C: CryptoProvider>(
                 .ok()
         })
         .next()
-        .map(|(index, buffer)| MatchResult { matching_index: index, buffer });
+        .map(|(index, (token, plaintext))| MatchResult { matching_index: index, token, plaintext });
 }
 
 fn build_ciphers<C: CryptoProvider>(
     configs: &[CipherConfig<C>],
-) -> Vec<LdtNpAdvDecrypterXtsAes128<C>> {
+) -> Vec<AuthenticatedNpLdtDecryptCipher<C>> {
     configs
         .iter()
         .map(|config| {
@@ -99,8 +99,10 @@ struct CipherConfig<C: CryptoProvider> {
 pub struct MatchResult<const O: usize> {
     /// The index of the batch item that matched
     matching_index: usize,
-    /// The buffer holding the plaintext
-    buffer: ArrayView<u8, O>,
+    /// The matched identity token
+    token: V0IdentityToken,
+    /// The buffer holding the remaining plaintext
+    plaintext: ArrayView<u8, O>,
 }
 
 fn random_configs<C: CryptoProvider, R: rand::Rng>(

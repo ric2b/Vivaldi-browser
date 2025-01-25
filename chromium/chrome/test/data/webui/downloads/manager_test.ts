@@ -120,10 +120,10 @@ suite('manager tests', function() {
     flush();
     const item = manager.shadowRoot!.querySelector('downloads-item')!;
 
-    item.getMoreActionsButton().click();
-    const removeButton = item.shadowRoot!.querySelector<HTMLElement>('#remove');
-    assertTrue(!!removeButton);
-    removeButton.click();
+    const quickRemoveButton =
+        item.shadowRoot!.querySelector<HTMLElement>('#quick-remove');
+    assertTrue(!!quickRemoveButton);
+    quickRemoveButton.click();
     await testBrowserProxy.handler.whenCalled('remove');
     flush();
     const list = manager.shadowRoot!.querySelector('iron-list')!;
@@ -240,6 +240,10 @@ suite('manager tests', function() {
   test(
       'bypass warning confirmation dialog shown on save-dangerous-click',
       async () => {
+        document.body.innerHTML = window.trustedTypes!.emptyHTML;
+        loadTimeData.overrideValues({dangerousDownloadInterstitial: false});
+        manager = document.createElement('downloads-manager');
+        document.body.appendChild(manager);
         callbackRouterRemote.insertItems(0, [
           createDownload({
             id: 'itemId',
@@ -261,7 +265,7 @@ suite('manager tests', function() {
         await callbackRouterRemote.$.flushForTesting();
         flush();
         const recordOpenId = await testBrowserProxy.handler.whenCalled(
-            'recordOpenBypassWarningPrompt');
+            'recordOpenBypassWarningDialog');
         assertEquals('itemId', recordOpenId);
         const dialog = manager.shadowRoot!.querySelector(
             'download-bypass-warning-confirmation-dialog');
@@ -273,7 +277,7 @@ suite('manager tests', function() {
         await callbackRouterRemote.$.flushForTesting();
         flush();
         const saveDangerousId = await testBrowserProxy.handler.whenCalled(
-            'saveDangerousFromPromptRequiringGesture');
+            'saveDangerousFromDialogRequiringGesture');
         assertEquals('itemId', saveDangerousId);
         assertFalse(dialog.$.dialog.open);
       });
@@ -300,7 +304,7 @@ suite('manager tests', function() {
     await callbackRouterRemote.$.flushForTesting();
     flush();
     const recordOpenId = await testBrowserProxy.handler.whenCalled(
-        'recordOpenBypassWarningPrompt');
+        'recordOpenBypassWarningDialog');
     assertEquals('itemId', recordOpenId);
     const dialog = manager.shadowRoot!.querySelector(
         'download-bypass-warning-confirmation-dialog');
@@ -312,7 +316,7 @@ suite('manager tests', function() {
     await callbackRouterRemote.$.flushForTesting();
     flush();
     const recordCancelId = await testBrowserProxy.handler.whenCalled(
-        'recordCancelBypassWarningPrompt');
+        'recordCancelBypassWarningDialog');
     assertEquals('itemId', recordCancelId);
     assertFalse(dialog.$.dialog.open);
   });
@@ -347,6 +351,121 @@ suite('manager tests', function() {
         await callbackRouterRemote.$.flushForTesting();
         flush();
         assertFalse(isVisible(dialog));
+      });
+
+  test(
+      'interstitial shown when dangerousDownloadInterstitial enabled',
+      async () => {
+        document.body.innerHTML = window.trustedTypes!.emptyHTML;
+        loadTimeData.overrideValues({dangerousDownloadInterstitial: true});
+        manager = document.createElement('downloads-manager');
+        document.body.appendChild(manager);
+        callbackRouterRemote.insertItems(0, [
+          createDownload({
+            id: 'itemId',
+            state: State.kDangerous,
+            isDangerous: true,
+            dangerType: DangerType.kDangerousUrl,
+          }),
+        ]);
+        await callbackRouterRemote.$.flushForTesting();
+        flush();
+        const saveDangerousButton =
+            manager.shadowRoot!.querySelector('downloads-item')!.shadowRoot!
+                .querySelector('cr-action-menu')!.querySelector<HTMLElement>(
+                    '#save-dangerous');
+        assertTrue(!!saveDangerousButton);
+        saveDangerousButton.click();
+        flush();
+        const recordOpenId = await testBrowserProxy.handler.whenCalled(
+            'recordOpenBypassWarningInterstitial');
+        assertEquals('itemId', recordOpenId);
+        const interstitial = manager.shadowRoot!.querySelector(
+            'downloads-dangerous-download-interstitial');
+        assertTrue(!!interstitial);
+        assertTrue(interstitial.$.dialog.open);
+
+        const surveyResponse = 'kNoResponse';
+        interstitial.$.dialog.close(surveyResponse);
+        interstitial.dispatchEvent(new CustomEvent('close', {
+          bubbles: true,
+          composed: true,
+        }));
+        const saveDangerousId = await testBrowserProxy.handler.whenCalled(
+            'saveDangerousFromInterstitialNeedGesture');
+        assertEquals(surveyResponse, interstitial.$.dialog.returnValue);
+        assertEquals('itemId', saveDangerousId);
+        assertFalse(interstitial.$.dialog.open);
+      });
+
+  test('dangerousDownloadInterstitial records cancellation', async () => {
+    callbackRouterRemote.insertItems(0, [
+      createDownload({
+        id: 'itemId',
+        state: State.kDangerous,
+        isDangerous: true,
+        dangerType: DangerType.kDangerousUrl,
+      }),
+    ]);
+    await callbackRouterRemote.$.flushForTesting();
+    flush();
+    const saveDangerousButton =
+        manager.shadowRoot!.querySelector('downloads-item')!.shadowRoot!
+            .querySelector('cr-action-menu')!.querySelector<HTMLElement>(
+                '#save-dangerous');
+    assertTrue(!!saveDangerousButton);
+    saveDangerousButton.click();
+    flush();
+    const recordOpenId = await testBrowserProxy.handler.whenCalled(
+        'recordOpenBypassWarningInterstitial');
+    assertEquals('itemId', recordOpenId);
+    const interstitial = manager.shadowRoot!.querySelector(
+        'downloads-dangerous-download-interstitial');
+    assertTrue(!!interstitial);
+    assertTrue(interstitial.$.dialog.open);
+
+    interstitial.$.dialog.close();
+    interstitial.dispatchEvent(new CustomEvent('cancel', {
+      bubbles: true,
+      composed: true,
+    }));
+    const recordCancelId = await testBrowserProxy.handler.whenCalled(
+        'recordCancelBypassWarningInterstitial');
+    assertEquals('itemId', recordCancelId);
+    assertFalse(interstitial.$.dialog.open);
+  });
+
+  test(
+      'bypass warning confirmation interstitial closed when file removed',
+      async () => {
+        callbackRouterRemote.insertItems(0, [
+          createDownload({
+            id: 'itemId',
+            state: State.kDangerous,
+            isDangerous: true,
+            dangerType: DangerType.kDangerousUrl,
+          }),
+        ]);
+        await callbackRouterRemote.$.flushForTesting();
+        flush();
+        const item = manager.shadowRoot!.querySelector('downloads-item');
+        assertTrue(!!item);
+        const saveDangerousButton =
+            manager.shadowRoot!.querySelector('downloads-item')!.shadowRoot!
+                .querySelector('cr-action-menu')!.querySelector<HTMLElement>(
+                    '#save-dangerous');
+        assertTrue(!!saveDangerousButton);
+        saveDangerousButton.click();
+        flush();
+        const interstitial = manager.shadowRoot!.querySelector(
+            'downloads-dangerous-download-interstitial');
+        assertTrue(!!interstitial);
+        assertTrue(interstitial.$.dialog.open);
+        // Remove the file and check that the interstitial is hidden.
+        callbackRouterRemote.removeItem(0);
+        await callbackRouterRemote.$.flushForTesting();
+        flush();
+        assertFalse(isVisible(interstitial));
       });
 
   // <if expr="_google_chrome">

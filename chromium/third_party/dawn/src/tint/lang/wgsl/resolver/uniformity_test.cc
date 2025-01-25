@@ -514,7 +514,11 @@ struct BuiltinEntry {
 class ComputeBuiltin : public UniformityAnalysisTestBase,
                        public ::testing::TestWithParam<BuiltinEntry> {};
 TEST_P(ComputeBuiltin, AsParam) {
-    std::string src = R"(
+    std::string src = std::string((GetParam().name == "subgroup_size")
+                                      ? R"(enable chromium_experimental_subgroups;
+)"
+                                      : "") +
+                      R"(
 @compute @workgroup_size(64)
 fn main(@builtin()" + GetParam().name +
                       R"() b : )" + GetParam().type + R"() {
@@ -545,7 +549,11 @@ test:4:16 note: builtin 'b' of 'main' may be non-uniform
 }
 
 TEST_P(ComputeBuiltin, InStruct) {
-    std::string src = R"(
+    std::string src = std::string((GetParam().name == "subgroup_size")
+                                      ? R"(enable chromium_experimental_subgroups;
+)"
+                                      : "") +
+                      R"(
 struct S {
   @builtin()" + GetParam().name +
                       R"() b : )" + GetParam().type + R"(
@@ -585,7 +593,8 @@ INSTANTIATE_TEST_SUITE_P(UniformityAnalysisTest,
                                            BuiltinEntry{"local_invocation_index", "u32", false},
                                            BuiltinEntry{"global_invocation_id", "vec3<u32>", false},
                                            BuiltinEntry{"workgroup_id", "vec3<u32>", true},
-                                           BuiltinEntry{"num_workgroups", "vec3<u32>", true}),
+                                           BuiltinEntry{"num_workgroups", "vec3<u32>", true},
+                                           BuiltinEntry{"subgroup_size", "u32", true}),
                          [](const ::testing::TestParamInfo<ComputeBuiltin::ParamType>& p) {
                              return p.param.name;
                          });
@@ -9086,8 +9095,7 @@ class UniformityAnalysisDiagnosticFilterTest
 TEST_P(UniformityAnalysisDiagnosticFilterTest, Directive) {
     auto& param = GetParam();
     StringStream ss;
-    ss << "diagnostic(" << param << ", derivative_uniformity);"
-       << R"(
+    ss << "diagnostic(" << param << ", derivative_uniformity);" << R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 @group(0) @binding(1) var t : texture_2d<f32>;
 @group(0) @binding(2) var s : sampler;
@@ -9117,9 +9125,8 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnFunction) {
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 @group(0) @binding(1) var t : texture_2d<f32>;
 @group(0) @binding(2) var s : sampler;
-)"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       <<
+)" << "@diagnostic("
+       << param << ", derivative_uniformity)" <<
         R"(fn foo() {
   if (non_uniform == 42) {
     let color = textureSample(t, s, vec2(0, 0));
@@ -9146,8 +9153,7 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnBlock) {
 @group(0) @binding(2) var s : sampler;
 fn foo() {
   if (non_uniform == 42))"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"({
+       << "@diagnostic(" << param << ", derivative_uniformity)" << R"({
     let color = textureSample(t, s, vec2(0, 0));
   }
 }
@@ -9169,8 +9175,8 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnForStatement_CallInIni
     ss << R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 fn foo() {
-  )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
+  )" << "@diagnostic("
+       << param << ", derivative_uniformity)"
        << R"(for (var b = (non_uniform == 42 && dpdx(1.0) > 0.0); false;) {
   }
 }
@@ -9192,9 +9198,8 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnForStatement_CallInCon
     ss << R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 fn foo() {
-  )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"(for (; non_uniform == 42 && dpdx(1.0) > 0.0;) {
+  )" << "@diagnostic("
+       << param << ", derivative_uniformity)" << R"(for (; non_uniform == 42 && dpdx(1.0) > 0.0;) {
   }
 }
 )";
@@ -9215,8 +9220,8 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnForStatement_CallInInc
     ss << R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 fn foo() {
-  )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
+  )" << "@diagnostic("
+       << param << ", derivative_uniformity)"
        << R"(for (var b = false; false; b = (non_uniform == 42 && dpdx(1.0) > 0.0)) {
   }
 }
@@ -9240,9 +9245,8 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnForStatement_CallInBod
 @group(0) @binding(1) var t : texture_2d<f32>;
 @group(0) @binding(2) var s : sampler;
 fn foo() {
-  )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"(for (; non_uniform == 42;) {
+  )" << "@diagnostic("
+       << param << ", derivative_uniformity)" << R"(for (; non_uniform == 42;) {
     let color = textureSample(t, s, vec2(0, 0));
   }
 }
@@ -9264,9 +9268,8 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnIfStatement_CallInCond
     ss << R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 fn foo() {
-  )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"(if (non_uniform == 42 && dpdx(1.0) > 0.0) {
+  )" << "@diagnostic("
+       << param << ", derivative_uniformity)" << R"(if (non_uniform == 42 && dpdx(1.0) > 0.0) {
   }
 }
 )";
@@ -9289,9 +9292,8 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnIfStatement_CallInBody
 @group(0) @binding(1) var t : texture_2d<f32>;
 @group(0) @binding(2) var s : sampler;
 fn foo() {
-  )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"(if (non_uniform == 42) {
+  )" << "@diagnostic("
+       << param << ", derivative_uniformity)" << R"(if (non_uniform == 42) {
     let color = textureSample(t, s, vec2(0, 0));
   }
 }
@@ -9315,9 +9317,8 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnIfStatement_CallInElse
 @group(0) @binding(1) var t : texture_2d<f32>;
 @group(0) @binding(2) var s : sampler;
 fn foo() {
-  )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"(if (non_uniform == 42) {
+  )" << "@diagnostic("
+       << param << ", derivative_uniformity)" << R"(if (non_uniform == 42) {
   } else {
     let color = textureSample(t, s, vec2(0, 0));
   }
@@ -9340,9 +9341,8 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnLoopStatement_CallInBo
     ss << R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 fn foo() {
-  )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"(loop {
+  )" << "@diagnostic("
+       << param << ", derivative_uniformity)" << R"(loop {
     _ = dpdx(1.0);
     continuing {
       break if non_uniform == 0;
@@ -9367,9 +9367,8 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnLoopStatement_CallInCo
     ss << R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 fn foo() {
-  )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"(loop {
+  )" << "@diagnostic("
+       << param << ", derivative_uniformity)" << R"(loop {
     continuing {
       _ = dpdx(1.0);
       break if non_uniform == 0;
@@ -9395,8 +9394,7 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnLoopBody_CallInBody) {
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 fn foo() {
   loop )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"( {
+       << "@diagnostic(" << param << ", derivative_uniformity)" << R"( {
     _ = dpdx(1.0);
     continuing {
       break if non_uniform == 0;
@@ -9422,8 +9420,7 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnLoopBody_CallInContinu
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 fn foo() {
   loop )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"( {
+       << "@diagnostic(" << param << ", derivative_uniformity)" << R"( {
     continuing {
       _ = dpdx(1.0);
       break if non_uniform == 0;
@@ -9450,8 +9447,7 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnLoopContinuing_CallInC
 fn foo() {
   loop {
     continuing )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"( {
+       << "@diagnostic(" << param << ", derivative_uniformity)" << R"( {
       _ = dpdx(1.0);
       break if non_uniform == 0;
     }
@@ -9475,8 +9471,8 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnSwitchStatement_CallIn
     ss << R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 fn foo() {
-  )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
+  )" << "@diagnostic("
+       << param << ", derivative_uniformity)"
        << R"(switch (i32(non_uniform == 42 && dpdx(1.0) > 0.0)) {
     default {}
   }
@@ -9501,9 +9497,8 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnSwitchStatement_CallIn
 @group(0) @binding(1) var t : texture_2d<f32>;
 @group(0) @binding(2) var s : sampler;
 fn foo() {
-  )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"(switch (non_uniform) {
+  )" << "@diagnostic("
+       << param << ", derivative_uniformity)" << R"(switch (non_uniform) {
     default {
       let color = textureSample(t, s, vec2(0, 0));
     }
@@ -9530,8 +9525,7 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnSwitchBody_CallInBody)
 @group(0) @binding(2) var s : sampler;
 fn foo() {
   switch (non_uniform))"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"( {
+       << "@diagnostic(" << param << ", derivative_uniformity)" << R"( {
     default {
       let color = textureSample(t, s, vec2(0, 0));
     }
@@ -9555,9 +9549,8 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnWhileStatement_CallInC
     ss << R"(
 @group(0) @binding(0) var<storage, read_write> non_uniform : i32;
 fn foo() {
-  )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"(while (non_uniform == 42 && dpdx(1.0) > 0.0) {
+  )" << "@diagnostic("
+       << param << ", derivative_uniformity)" << R"(while (non_uniform == 42 && dpdx(1.0) > 0.0) {
   }
 }
 )";
@@ -9580,9 +9573,8 @@ TEST_P(UniformityAnalysisDiagnosticFilterTest, AttributeOnWhileStatement_CallInB
 @group(0) @binding(1) var t : texture_2d<f32>;
 @group(0) @binding(2) var s : sampler;
 fn foo() {
-  )"
-       << "@diagnostic(" << param << ", derivative_uniformity)"
-       << R"(while (non_uniform == 42) {
+  )" << "@diagnostic("
+       << param << ", derivative_uniformity)" << R"(while (non_uniform == 42) {
     let color = textureSample(t, s, vec2(0, 0));
   }
 }

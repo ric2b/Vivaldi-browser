@@ -153,14 +153,17 @@ class WireTest : public testing::Test {
     testing::MockCallback<WGPUDeviceLostCallbackNew> deviceLostCallback;
     testing::MockCallback<WGPUErrorCallback> uncapturedErrorCallback;
 
-    WGPUInstance instance;
+    wgpu::Instance instance;
     WGPUInstance apiInstance;
     wgpu::Adapter adapter;
     WGPUAdapter apiAdapter;
-    WGPUDevice device;
+    wgpu::Device device;
     WGPUDevice apiDevice;
-    WGPUQueue queue;
+    wgpu::Queue queue;
     WGPUQueue apiQueue;
+
+    WGPUDevice cDevice;
+    WGPUQueue cQueue;
 
     dawn::wire::WireServer* GetWireServer();
     dawn::wire::WireClient* GetWireClient();

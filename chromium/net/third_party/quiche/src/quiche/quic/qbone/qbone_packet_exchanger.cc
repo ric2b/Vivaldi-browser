@@ -4,7 +4,11 @@
 
 #include "quiche/quic/qbone/qbone_packet_exchanger.h"
 
+#include <memory>
+#include <string>
 #include <utility>
+
+#include "absl/status/status.h"
 
 namespace quic {
 
@@ -25,6 +29,13 @@ bool QbonePacketExchanger::ReadAndDeliverPacket(
 
 void QbonePacketExchanger::WritePacketToNetwork(const char* packet,
                                                 size_t size) {
+  if (visitor_) {
+    absl::Status status = visitor_->OnWrite(packet);
+    if (!status.ok()) {
+      QUIC_LOG_EVERY_N_SEC(ERROR, 60) << status;
+    }
+  }
+
   bool blocked = false;
   std::string error;
   if (packet_queue_.empty() && !write_blocked_) {

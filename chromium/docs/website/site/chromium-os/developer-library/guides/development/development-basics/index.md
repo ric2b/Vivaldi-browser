@@ -68,16 +68,8 @@ The Chromium project, and by extension the ChromiumOS project, follow the
 [Google C++ style guide], with the [Chromium C++ style guide] layered on top to
 provide additional guidelines and clarify ambiguities.
 
-The [Modern C++ use in Chromium] document lists which of the many new features
-introduced in the C++11, 14, and 17 standard are allowed. ChromiumOS follows the
-list except:
-
-1. std::optional. It is banned on Chromium due to its undefined
-   behavior when a std::nullopt is dereferenced. However, ChromiumOS C++ is
-   hardened and will crash in such cases. Use std::optional instead of
-   absl::optional.
-2. C++20. Chromium does not allow C++20 features at all. ChromiumOS
-   supports C++20 and developers may use C++20 features.
+The [Modern C++ use in Chromium] document lists which new C++ features are
+allowed. ChromiumOS follows the list.
 
 New C++ programs should go into new directories in the [platform2 repository],
 which is checked out to `src/platform2`.

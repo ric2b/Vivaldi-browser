@@ -41,7 +41,8 @@ void FakeQuicConnectionFactoryBridge::OnOutgoingStream(
 
   if (remote_connection) {
     remote_connection->delegate().OnIncomingStream(
-        remote_connection->id(), remote_connection->MakeIncomingStream());
+        remote_connection->instance_id(),
+        remote_connection->MakeIncomingStream());
   }
 }
 
@@ -63,10 +64,8 @@ void FakeQuicConnectionFactoryBridge::RunTasks(bool is_client) {
 
   if (connections_pending_) {
     *idle_flag = false;
-    connections_.receiver->delegate().OnCryptoHandshakeComplete(
-        connections_.receiver->id());
-    connections_.controller->delegate().OnCryptoHandshakeComplete(
-        connections_.controller->id());
+    connections_.receiver->OnCryptoHandshakeComplete();
+    connections_.controller->OnCryptoHandshakeComplete();
     connections_pending_ = false;
     return;
   }
@@ -133,21 +132,23 @@ void FakeQuicConnectionFactoryBridge::RunTasks(bool is_client) {
 
 ErrorOr<std::unique_ptr<QuicConnection>>
 FakeQuicConnectionFactoryBridge::Connect(
-    const IPEndpoint& endpoint,
+    const IPEndpoint& local_endpoint,
+    const IPEndpoint& remote_endpoint,
+    const std::string& instance_name,
     QuicConnection::Delegate* connection_delegate) {
-  if (endpoint != receiver_endpoint_) {
+  if (local_endpoint != controller_endpoint_ ||
+      remote_endpoint != receiver_endpoint_) {
     return Error::Code::kParameterInvalid;
   }
 
   OSP_CHECK(!connections_.controller);
   OSP_CHECK(!connections_.receiver);
   auto controller_connection = std::make_unique<FakeQuicConnection>(
-      *this, std::to_string(next_connection_id_++), *connection_delegate);
+      instance_name, *this, *connection_delegate);
   connections_.controller = controller_connection.get();
 
   auto receiver_connection = std::make_unique<FakeQuicConnection>(
-      *this, std::to_string(next_connection_id_++),
-      *delegate_->NextConnectionDelegate(controller_endpoint_));
+      local_endpoint.ToString(), *this, delegate_->GetConnectionDelegate());
   connections_.receiver = receiver_connection.get();
   delegate_->OnIncomingConnection(std::move(receiver_connection));
   return ErrorOr<std::unique_ptr<QuicConnection>>(
@@ -164,10 +165,16 @@ ErrorOr<std::unique_ptr<QuicConnection>>
 FakeClientQuicConnectionFactory::Connect(
     const IPEndpoint& local_endpoint,
     const IPEndpoint& remote_endpoint,
-    const std::string& fingerprint,
+    const ConnectData& connect_data,
     QuicConnection::Delegate* connection_delegate) {
-  return bridge_->Connect(remote_endpoint, connection_delegate);
+  return bridge_->Connect(local_endpoint, remote_endpoint,
+                          connect_data.instance_name, connection_delegate);
 }
+
+// No need to deal with this, because we don't maintain QuicConnection list
+// in test.
+void FakeClientQuicConnectionFactory::OnConnectionClosed(
+    QuicConnection* connection) {}
 
 void FakeClientQuicConnectionFactory::OnError(UdpSocket* socket,
                                               const Error& error) {
@@ -201,6 +208,11 @@ void FakeServerQuicConnectionFactory::SetServerDelegate(
   bridge_->SetServerDelegate(delegate,
                              endpoints.empty() ? IPEndpoint{} : endpoints[0]);
 }
+
+// No need to deal with this, because we don't maintain QuicConnection list
+// in test.
+void FakeServerQuicConnectionFactory::OnConnectionClosed(
+    QuicConnection* connection) {}
 
 void FakeServerQuicConnectionFactory::OnError(UdpSocket* socket,
                                               const Error& error) {

@@ -28,6 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/json/json_values.h"
 
 #include <algorithm>
@@ -225,7 +230,7 @@ std::unique_ptr<JSONValue> JSONBasicValue::Clone() const {
     case kTypeBoolean:
       return std::make_unique<JSONBasicValue>(bool_value_);
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return nullptr;
 }

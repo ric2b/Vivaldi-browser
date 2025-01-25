@@ -130,15 +130,6 @@ bool SanitizedFieldIsEmpty(const std::u16string& value) {
   return base::ContainsOnlyChars(value, *formatting);
 }
 
-bool ShouldAutoselectFirstSuggestionOnArrowDown() {
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS)
-  return true;
-#else
-  return false;
-#endif
-}
-
 bool IsFillable(FocusedFieldType focused_field_type) {
   switch (focused_field_type) {
     case FocusedFieldType::kFillableTextArea:
@@ -173,7 +164,7 @@ SubmissionIndicatorEvent ToSubmissionIndicatorEvent(SubmissionSource source) {
       return SubmissionIndicatorEvent::DOM_MUTATION_AFTER_AUTOFILL;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return SubmissionIndicatorEvent::NONE;
 }
 
@@ -209,6 +200,12 @@ bool IsPasswordsAutofillManuallyTriggered(
     AutofillSuggestionTriggerSource trigger_source) {
   return trigger_source ==
          AutofillSuggestionTriggerSource::kManualFallbackPasswords;
+}
+
+bool IsPlusAddressesManuallyTriggered(
+    AutofillSuggestionTriggerSource trigger_source) {
+  return trigger_source ==
+         AutofillSuggestionTriggerSource::kManualFallbackPlusAddresses;
 }
 
 }  // namespace autofill

@@ -24,6 +24,8 @@ enum class SelectedLinuxBackend {
   KWALLET,
   KWALLET5,
   KWALLET6,
+  // Vivaldi: Support for xdg-desktop-portal
+  XDG_DESKTOP_PORTAL
 };
 
 // Decide which backend to target. |type| is checked first. If it does not

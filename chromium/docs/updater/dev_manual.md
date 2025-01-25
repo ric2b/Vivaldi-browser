@@ -121,7 +121,7 @@ Example:
  TODO(crbug.com/40841197): Document how to remote into bots for debugging.
 
 ### Updating the Checked-In Version of the Updater
-An older version of the updater is checked in under `//third_party/updater`.
+An older version of the updater is checked in under `//third_party/updater/*/cipd`.
 This version of the updater is used in some integration tests. The updater is
 pulled from
 [CIPD](https://chrome-infra-packages.appspot.com/p/chromium/third_party/updater)
@@ -199,8 +199,6 @@ To get started on Reclient, and for more information on how to use it, see
 or [Google-internal documentation](go/building-chrome), if you are a Google
 employee.
 
-Goma can't be used anymore as of March, 2024.
-
 #### More release-like builds
 
 Chromium projects build in debug mode by default. Release builds (also called
@@ -274,14 +272,14 @@ We can quickly get OS-specific coverage result with the local changes:
 
 * macOS/Linux
 ```
-gn gen out/coverage --args="use_clang_coverage=true is_component_build=false is_chrome_branded=true is_debug=true use_debug_fission=true use_goma=true symbol_level=2"
+gn gen out/coverage --args="use_clang_coverage=true is_component_build=false is_chrome_branded=true is_debug=true use_debug_fission=true use_remoteexec=true symbol_level=2"
 
 vpython3 tools/code_coverage/coverage.py  updater_tests -b out/coverage -o out/report -c 'out/coverage/updater_tests' -f chrome/updater
 ```
 
 * Windows
 ```
-gn gen out\coverage --args="use_clang_coverage=true is_component_build=false is_chrome_branded=true is_debug=true use_debug_fission=true use_goma=true symbol_level=2"
+gn gen out\coverage --args="use_clang_coverage=true is_component_build=false is_chrome_branded=true is_debug=true use_debug_fission=true use_remoteexec=true symbol_level=2"
 
 vpython3 tools\code_coverage\coverage.py updater_tests -b out\coverage -o out\report -c out\coverage\updater_tests.exe  -f chrome/updater
 ```
@@ -431,16 +429,18 @@ in chrome/updater/win/ui/resources/create_metainstaller_string_rc.py.
 ```
 * Add tests for the new string in the UI if applicable.
 * Capture a screenshot of the UI with the new string.
-* Save the screenshot as chrome\app\chromium_strings_grd\IDS_NO_NETWORK_PRESENT_ERROR.png and chrome\app\google_chrome_strings_grd\IDS_NO_NETWORK_PRESENT_ERROR.png.
+* Save the screenshot as chrome\app\chromium_strings_grd\IDS_NO_NETWORK_PRESENT_ERROR.png
+and chrome\app\google_chrome_strings_grd\IDS_NO_NETWORK_PRESENT_ERROR.png.
 * Run `python3 tools/translation/upload_screenshots.py`
-* This will generate chrome\app\chromium_strings_grd\IDS_NO_NETWORK_PRESENT_ERROR.png.sha1.
-* Add this file to your CL. Do not add the actual image to your CL.
-* Upload the image to the crbug and delete it from your local enlistment.
-
-If tools/translation/upload_screenshots.py encounters the following error:
+* This will generate chrome\app\chromium_strings_grd\IDS_NO_NETWORK_PRESENT_ERROR.png.sha1
+and chrome\app\google_chrome_strings_grd\IDS_NO_NETWORK_PRESENT_ERROR.png.sha1.
+* Add these `.sha1` files to your CL. Do not add the actual `.png` images to
+your CL.
+* Once the images are successfully uploaded via `upload_screenshots.py`, delete
+them from your local enlistment. However, if `upload_screenshots.py` encounters
+the following error:
 `ServiceException: 401 Anonymous caller does not have storage.objects.list access to the Google Cloud Storage bucket. Permission 'storage.objects.list' denied on resource (or it may not exist).`
-
-see crbug.com/1491876 for a resolution or workaround.
+see crbug.com/1491876 for a resolution or workaround to upload the images.
 
 ## Troubleshooting
 
@@ -457,8 +457,6 @@ see crbug.com/1491876 for a resolution or workaround.
 * **Dependencies are a fast-moving target.** Remember to run `gclient sync -D`
   after every pull from `origin/main` _and_ every branch change. If you aren't
   sure whether you ran it, just run it, it's fast if you don't need it.
-* **Is the Goma client ready?** If your build is failing quickly with a
-  bunch of errors related to Goma, run `goma_ctl ensure_start` and try again.
 * **Symbols too big?** If your build is failing during linking, check your
   `gn args` to verify that `symbol_level=1` (or `0`) is present. If it's not,
   you're running into a known issue where the default symbol level, `2`,

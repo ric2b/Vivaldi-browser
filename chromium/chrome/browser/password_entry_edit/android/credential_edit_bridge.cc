@@ -12,13 +12,15 @@
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/memory/ptr_util.h"
-#include "chrome/browser/password_entry_edit/android/internal/jni/CredentialEditBridge_jni.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/affiliations/core/browser/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
 #include "components/url_formatter/url_formatter.h"
 #include "ui/base/l10n/l10n_util.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "chrome/browser/password_entry_edit/android/internal/jni/CredentialEditBridge_jni.h"
 
 std::unique_ptr<CredentialEditBridge> CredentialEditBridge::MaybeCreate(
     const password_manager::CredentialUIEntry credential,
@@ -59,7 +61,7 @@ CredentialEditBridge::CredentialEditBridge(
   Java_CredentialEditBridge_initAndLaunchUi(
       base::android::AttachCurrentThread(), java_bridge_,
       reinterpret_cast<intptr_t>(this), context, settings_launcher,
-      credential.blocked_by_user, !credential.federation_origin.opaque());
+      credential.blocked_by_user, credential.federation_origin.IsValid());
 }
 
 CredentialEditBridge::~CredentialEditBridge() {
@@ -133,7 +135,7 @@ std::u16string CredentialEditBridge::GetDisplayURLOrAppName() {
 }
 
 std::u16string CredentialEditBridge::GetDisplayFederationOrigin() {
-  return !credential_.federation_origin.opaque()
+  return credential_.federation_origin.IsValid()
              ? url_formatter::FormatUrl(
                    credential_.federation_origin.GetURL(),
                    url_formatter::kFormatUrlOmitDefaults |

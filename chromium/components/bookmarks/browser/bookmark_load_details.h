@@ -113,7 +113,8 @@ class BookmarkLoadDetails {
   void AddAccountPermanentNodes(
       std::unique_ptr<BookmarkPermanentNode> account_bb_node,
       std::unique_ptr<BookmarkPermanentNode> account_other_folder_node,
-      std::unique_ptr<BookmarkPermanentNode> account_mobile_folder_node);
+      std::unique_ptr<BookmarkPermanentNode> account_mobile_folder_node,
+      std::unique_ptr<BookmarkPermanentNode> account_trash_folder_node);
 
   // Assigns node IDs for local-or-syncable permanent nodes if not previously
   // assigned/decoded.
@@ -136,6 +137,9 @@ class BookmarkLoadDetails {
   const BookmarkNode* RootNodeForTest() const;
 
   BookmarkPermanentNode* trash_folder_node() { return trash_folder_node_; }
+  BookmarkPermanentNode* account_trash_folder_node() {
+    return account_trash_folder_node_;
+  }
 
  private:
   // Adds node to the various indices, recursing through all children as well.
@@ -164,7 +168,8 @@ class BookmarkLoadDetails {
   std::string account_sync_metadata_str_;
   base::TimeTicks load_start_;
 
-  raw_ptr<BookmarkPermanentNode, DanglingUntriaged> trash_folder_node_ = nullptr;
+  raw_ptr<BookmarkPermanentNode> trash_folder_node_ = nullptr;
+  raw_ptr<BookmarkPermanentNode> account_trash_folder_node_;
 };
 
 }  // namespace bookmarks

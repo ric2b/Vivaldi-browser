@@ -85,15 +85,16 @@ class BrowserNonClientFrameViewBrowserTest
   // longer be hosted apps when BMO ships.
   void InstallAndLaunchBookmarkApp(std::optional<GURL> app_url = std::nullopt) {
     blink::mojom::Manifest manifest;
+    manifest.manifest_url = embedded_test_server()->GetURL("/manifest");
     manifest.start_url = app_url.value_or(GetAppURL());
     manifest.scope = manifest.start_url.GetWithoutFilename();
     manifest.has_theme_color = true;
     manifest.theme_color = app_theme_color_;
 
-    auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
-    GURL manifest_url = embedded_test_server()->GetURL("/manifest");
-    web_app::UpdateWebAppInfoFromManifest(manifest, manifest_url,
-                                          web_app_info.get());
+    auto web_app_info =
+        web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(
+            manifest.start_url);
+    web_app::UpdateWebAppInfoFromManifest(manifest, web_app_info.get());
 
     webapps::AppId app_id =
         web_app::test::InstallWebApp(profile(), std::move(web_app_info));

@@ -290,6 +290,19 @@ public class ApiCompatibilityUtils {
     }
 
     /**
+     * Sets the mode {@link ActivityOptions#MODE_BACKGROUND_ACTIVITY_START_ALLOWED} to the given
+     * {@link ActivityOptions}. The options can be used to create {@link PendingIntent}.
+     *
+     * @param options {@ActivityOptions} to set the required mode to.
+     */
+    public static void setCreatorActivityOptionsBackgroundActivityStartMode(
+            @NonNull ActivityOptions options) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return;
+        options.setPendingIntentCreatorBackgroundActivityStartMode(
+                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+    }
+
+    /**
      * Sets the bottom handwriting bounds offset of the given view to 0. See
      * https://crbug.com/1427112
      *
@@ -340,7 +353,7 @@ public class ApiCompatibilityUtils {
         } catch (Exception e) {
             // If fallback logic is ever needed, refer to:
             // https://chromium-review.googlesource.com/c/chromium/src/+/905563/1
-            throw new RuntimeException(e);
+            throw JavaUtils.throwUnchecked(e);
         }
     }
 

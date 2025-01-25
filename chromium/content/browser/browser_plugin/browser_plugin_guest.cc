@@ -104,7 +104,7 @@ RenderFrameHostImpl* BrowserPluginGuest::GetProspectiveOuterDocument() {
       // the webview being unattached would be destroyed, but not the
       // webcontents.
     // The guest delegate may only be null during some destruction scenarios.
-    CHECK(web_contents()->IsBeingDestroyed());
+    CHECK(!web_contents() || web_contents()->IsBeingDestroyed());
     }  // !vivaldi::IsVivaldiRunning()
     return nullptr;
   }

@@ -1,5 +1,3 @@
-
-
 typedef CwiseUnaryOp<internal::scalar_abs_op<Scalar>, const Derived> AbsReturnType;
 typedef CwiseUnaryOp<internal::scalar_arg_op<Scalar>, const Derived> ArgReturnType;
 typedef CwiseUnaryOp<internal::scalar_carg_op<Scalar>, const Derived> CArgReturnType;
@@ -41,6 +39,7 @@ typedef CwiseUnaryOp<internal::scalar_trunc_op<Scalar>, const Derived> TruncRetu
 typedef CwiseUnaryOp<internal::scalar_isnan_op<Scalar>, const Derived> IsNaNReturnType;
 typedef CwiseUnaryOp<internal::scalar_isinf_op<Scalar>, const Derived> IsInfReturnType;
 typedef CwiseUnaryOp<internal::scalar_isfinite_op<Scalar>, const Derived> IsFiniteReturnType;
+typedef CwiseUnaryOp<internal::scalar_isfinite_op<Scalar, true>, const Derived> IsFiniteTypedReturnType;
 
 /** \returns an expression of the coefficient-wise absolute value of \c *this
  *
@@ -417,6 +416,9 @@ EIGEN_DEVICE_FUNC inline const IsInfReturnType isInf() const { return IsInfRetur
  * \sa isnan(), isinf()
  */
 EIGEN_DEVICE_FUNC inline const IsFiniteReturnType isFinite() const { return IsFiniteReturnType(derived()); }
+EIGEN_DEVICE_FUNC inline const IsFiniteTypedReturnType isFiniteTyped() const {
+  return IsFiniteTypedReturnType(derived());
+}
 
 /** \returns an expression of the coefficient-wise ! operator of *this
  *

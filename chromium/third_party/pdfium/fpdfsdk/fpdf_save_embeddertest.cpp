@@ -2,11 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
+#include <array>
 #include <string>
 
 #include "core/fxcrt/fx_string.h"
@@ -98,9 +94,46 @@ TEST_F(FPDFSaveEmbedderTest, SaveCopiedDoc) {
   UnloadPage(page);
 }
 
+TEST_F(FPDFSaveEmbedderTest, Bug42271133) {
+  ASSERT_TRUE(OpenDocument("bug_42271133.pdf"));
+  FPDF_PAGE page = LoadPage(0);
+  ASSERT_TRUE(page);
+
+  // Arbitrarily remove the first page object.
+  auto text_object = FPDFPage_GetObject(page, 0);
+  ASSERT_TRUE(text_object);
+  ASSERT_TRUE(FPDFPage_RemoveObject(page, text_object));
+  FPDFPageObj_Destroy(text_object);
+
+  // Regenerate dirty stream and save the document.
+  ASSERT_TRUE(FPDFPage_GenerateContent(page));
+  UnloadPage(page);
+  ASSERT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
+
+  // Reload saved document.
+  ASSERT_TRUE(OpenSavedDocument());
+  FPDF_PAGE saved_page = LoadSavedPage(0);
+  ASSERT_TRUE(saved_page);
+
+  // Assert path fill color is not changed to black.
+  auto path_obj = FPDFPage_GetObject(saved_page, 0);
+  ASSERT_TRUE(path_obj);
+  unsigned int r;
+  unsigned int g;
+  unsigned int b;
+  unsigned int a;
+  ASSERT_TRUE(FPDFPageObj_GetFillColor(path_obj, &r, &g, &b, &a));
+  EXPECT_EQ(180u, r);
+  EXPECT_EQ(180u, g);
+  EXPECT_EQ(180u, b);
+
+  CloseSavedPage(saved_page);
+  CloseSavedDocument();
+}
+
 TEST_F(FPDFSaveEmbedderTest, SaveLinearizedDoc) {
   const int kPageCount = 3;
-  std::string original_md5[kPageCount];
+  std::array<std::string, kPageCount> original_md5;
 
   ASSERT_TRUE(OpenDocument("linearized.pdf"));
   for (int i = 0; i < kPageCount; ++i) {
@@ -176,14 +209,14 @@ TEST_F(FPDFSaveEmbedderTest, SaveXFADoc) {
 }
 #endif  // PDF_ENABLE_XFA
 
-TEST_F(FPDFSaveEmbedderTest, BUG_342) {
+TEST_F(FPDFSaveEmbedderTest, Bug342) {
   ASSERT_TRUE(OpenDocument("hello_world.pdf"));
   EXPECT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
   EXPECT_THAT(GetString(), HasSubstr("0000000000 65535 f\r\n"));
   EXPECT_THAT(GetString(), Not(HasSubstr("0000000000 65536 f\r\n")));
 }
 
-TEST_F(FPDFSaveEmbedderTest, BUG_905142) {
+TEST_F(FPDFSaveEmbedderTest, Bug905142) {
   ASSERT_TRUE(OpenDocument("bug_905142.pdf"));
   EXPECT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
   EXPECT_THAT(GetString(), HasSubstr("/Length 0"));

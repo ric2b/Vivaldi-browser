@@ -28,6 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/inspector/inspector_network_agent.h"
 
 #include <memory>
@@ -155,7 +160,7 @@ bool LoadsFromCacheOnly(const ResourceRequest& request) {
     case mojom::FetchCacheMode::kUnspecifiedForceCacheMiss:
       return true;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -174,10 +179,10 @@ SerializeCTPolicyCompliance(net::ct::CTPolicyCompliance ct_compliance) {
         CT_POLICY_COMPLIANCE_DETAILS_NOT_AVAILABLE:
       return protocol::Network::CertificateTransparencyComplianceEnum::Unknown;
     case net::ct::CTPolicyCompliance::CT_POLICY_COUNT:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       // Fallthrough to default.
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return protocol::Network::CertificateTransparencyComplianceEnum::Unknown;
 }
 
@@ -198,7 +203,7 @@ class InspectorFileReaderLoaderClient final
   InspectorFileReaderLoaderClient(
       scoped_refptr<BlobDataHandle> blob,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      base::OnceCallback<void(scoped_refptr<SharedBuffer>)> callback)
+      base::OnceCallback<void(std::optional<SegmentedBuffer>)> callback)
       : blob_(std::move(blob)),
         callback_(std::move(callback)),
         loader_(MakeGarbageCollected<FileReaderLoader>(this,
@@ -213,7 +218,6 @@ class InspectorFileReaderLoaderClient final
   ~InspectorFileReaderLoaderClient() override = default;
 
   void Start() {
-    raw_data_ = SharedBuffer::Create();
     loader_->Start(blob_);
   }
 
@@ -221,17 +225,16 @@ class InspectorFileReaderLoaderClient final
     return FileErrorCode::kOK;
   }
 
-  FileErrorCode DidReceiveData(const char* data,
-                               unsigned data_length) override {
-    if (!data_length)
-      return FileErrorCode::kOK;
-    raw_data_->Append(data, data_length);
+  FileErrorCode DidReceiveData(base::span<const uint8_t> data) override {
+    if (!data.empty()) {
+      raw_data_.Append(data);
+    }
     return FileErrorCode::kOK;
   }
 
-  void DidFinishLoading() override { Done(raw_data_); }
+  void DidFinishLoading() override { Done(std::move(raw_data_)); }
 
-  void DidFail(FileErrorCode) override { Done(nullptr); }
+  void DidFail(FileErrorCode) override { Done(std::nullopt); }
 
   void Trace(Visitor* visitor) const override {
     FileReaderClient::Trace(visitor);
@@ -239,8 +242,8 @@ class InspectorFileReaderLoaderClient final
   }
 
  private:
-  void Done(scoped_refptr<SharedBuffer> output) {
-    std::move(callback_).Run(output);
+  void Done(std::optional<SegmentedBuffer> output) {
+    std::move(callback_).Run(std::move(output));
     keep_alive_.Clear();
     loader_ = nullptr;
   }
@@ -248,9 +251,9 @@ class InspectorFileReaderLoaderClient final
   scoped_refptr<BlobDataHandle> blob_;
   String mime_type_;
   String text_encoding_name_;
-  base::OnceCallback<void(scoped_refptr<SharedBuffer>)> callback_;
+  base::OnceCallback<void(std::optional<SegmentedBuffer>)> callback_;
   Member<FileReaderLoader> loader_;
-  scoped_refptr<SharedBuffer> raw_data_;
+  SegmentedBuffer raw_data_;
   SelfKeepAlive<InspectorFileReaderLoaderClient> keep_alive_;
 };
 
@@ -258,7 +261,7 @@ static void ResponseBodyFileReaderLoaderDone(
     const String& mime_type,
     const String& text_encoding_name,
     std::unique_ptr<GetResponseBodyCallback> callback,
-    scoped_refptr<SharedBuffer> raw_data) {
+    std::optional<SegmentedBuffer> raw_data) {
   if (!raw_data) {
     callback->sendFailure(
         protocol::Response::ServerError("Couldn't read BLOB"));
@@ -266,8 +269,9 @@ static void ResponseBodyFileReaderLoaderDone(
   }
   String result;
   bool base64_encoded;
-  if (InspectorPageAgent::SharedBufferContent(
-          raw_data, mime_type, text_encoding_name, &result, &base64_encoded)) {
+  if (InspectorPageAgent::SegmentedBufferContent(&*raw_data, mime_type,
+                                                 text_encoding_name, &result,
+                                                 &base64_encoded)) {
     callback->sendSuccess(result, base64_encoded);
   } else {
     callback->sendFailure(
@@ -324,10 +328,11 @@ class InspectorPostBodyParser
   }
 
   void BlobReadCallback(String* destination,
-                        scoped_refptr<SharedBuffer> raw_data) {
+                        std::optional<SegmentedBuffer> raw_data) {
     if (raw_data) {
-      *destination = String::FromUTF8WithLatin1Fallback(raw_data->Data(),
-                                                        raw_data->size());
+      Vector<char> flattened_data = std::move(*raw_data).CopyAs<Vector<char>>();
+      *destination = String::FromUTF8WithLatin1Fallback(flattened_data.data(),
+                                                        flattened_data.size());
     } else {
       error_ = true;
     }
@@ -386,7 +391,7 @@ String ResourcePriorityJSON(ResourceLoadPriority priority) {
     case ResourceLoadPriority::kUnresolved:
       break;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return protocol::Network::ResourcePriorityEnum::Medium;
 }
 
@@ -419,17 +424,25 @@ String BuildBlockedReason(ResourceRequestBlockedReason reason) {
         kCorpNotSameOriginAfterDefaultedToSameOriginByCoep:
       return protocol::Network::BlockedReasonEnum::
           CorpNotSameOriginAfterDefaultedToSameOriginByCoep;
+    case blink::ResourceRequestBlockedReason::
+        kCorpNotSameOriginAfterDefaultedToSameOriginByDip:
+      return protocol::Network::BlockedReasonEnum::
+          CorpNotSameOriginAfterDefaultedToSameOriginByDip;
+    case blink::ResourceRequestBlockedReason::
+        kCorpNotSameOriginAfterDefaultedToSameOriginByCoepAndDip:
+      return protocol::Network::BlockedReasonEnum::
+          CorpNotSameOriginAfterDefaultedToSameOriginByCoepAndDip;
     case blink::ResourceRequestBlockedReason::kCorpNotSameSite:
       return protocol::Network::BlockedReasonEnum::CorpNotSameSite;
     case ResourceRequestBlockedReason::kConversionRequest:
       // This is actually never reached, as the conversion request
       // is marked as successful and no blocking reason is reported.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return protocol::Network::BlockedReasonEnum::Other;
     case blink::ResourceRequestBlockedReason::kSupervisedUserUrlBlocked:
       return protocol::Network::BlockedReasonEnum::Other;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return protocol::Network::BlockedReasonEnum::Other;
 }
 
@@ -756,7 +769,7 @@ SourceTypeEnum SourceTypeFromString(const String& type) {
   if (type == ContentEncodingEnum::Zstd) {
     return SourceTypeEnum::TYPE_ZSTD;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return SourceTypeEnum::TYPE_UNKNOWN;
 }
 
@@ -1097,13 +1110,34 @@ BuildObjectForResourceResponse(const ResourceResponse& response,
       router_info->setMatchedSourceType(BuildServiceWorkerRouterSourceType(
           *response.GetServiceWorkerRouterInfo()->MatchedSourceType()));
     }
+
+    if (response.GetServiceWorkerRouterInfo()->ActualSourceType()) {
+      router_info->setActualSourceType(BuildServiceWorkerRouterSourceType(
+          *response.GetServiceWorkerRouterInfo()->ActualSourceType()));
+    }
     response_object->setServiceWorkerRouterInfo(std::move(router_info));
   }
 
   response_object->setFromPrefetchCache(response.WasInPrefetchCache());
-  if (response.GetResourceLoadTiming())
-    response_object->setTiming(
-        BuildObjectForTiming(*response.GetResourceLoadTiming()));
+  if (auto* resource_load_timing = response.GetResourceLoadTiming()) {
+    auto load_timing = BuildObjectForTiming(*resource_load_timing);
+
+    if (RuntimeEnabledFeatures::ServiceWorkerStaticRouterTimingInfoEnabled()) {
+      if (!resource_load_timing->WorkerRouterEvaluationStart().is_null()) {
+        load_timing->setWorkerRouterEvaluationStart(
+            resource_load_timing->CalculateMillisecondDelta(
+                resource_load_timing->WorkerRouterEvaluationStart()));
+      }
+
+      if (!resource_load_timing->WorkerCacheLokupStart().is_null()) {
+        load_timing->setWorkerCacheLookupStart(
+            resource_load_timing->CalculateMillisecondDelta(
+                resource_load_timing->WorkerCacheLokupStart()));
+      }
+    }
+
+    response_object->setTiming(std::move(load_timing));
+  }
 
   const net::IPEndPoint& remote_ip_endpoint = response.RemoteIPEndpoint();
   if (remote_ip_endpoint.address().IsValid()) {
@@ -1373,7 +1407,7 @@ void InspectorNetworkAgent::PrepareRequest(DocumentLoader* loader,
       // for this request to assure the request will be allowed.
       // TODO: Should we store the referrer header somewhere other than
       // |extra_request_headers_|?
-      if (header_name.LowerASCII() == http_names::kReferer.LowerASCII()) {
+      if (EqualIgnoringASCIICase(header_name, http_names::kReferer)) {
         request.SetReferrerString(value);
         request.SetReferrerPolicy(network::mojom::ReferrerPolicy::kAlways);
       } else {
@@ -1551,7 +1585,7 @@ protocol::Response InspectorNetworkAgent::streamResourceContent(
 
   streaming_request_ids_.insert(request_id);
 
-  SharedBuffer* data = resource_data->Data();
+  const std::optional<SegmentedBuffer>& data = resource_data->Data();
   if (data) {
     *buffered_data =
         protocol::Binary::fromVector(data->CopyAs<Vector<uint8_t>>());

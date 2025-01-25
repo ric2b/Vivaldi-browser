@@ -20,7 +20,7 @@ This page provides developer-related information for Chrome devices. These are
 systems that *shipped from the factory* with Google ChromeOS on them. For
 details about Google ChromeOS and how it differs from ChromiumOS, see the
 [note in the FAQ about Google Chrome
-OS](http://www.chromium.org/chromium-os/chromium-os-faq#TOC-What-s-the-difference-between-Chrom).
+OS](https://www.chromium.org/chromium-os/developer-library/reference/development/chromium-os-faq/#whats-the-difference-between-chromiumos-and-google-chromeos).
 ChromeOS devices typically require special setup in order to be used for
 ChromiumOS development.
 
@@ -3930,5 +3930,36 @@ such as the auto update until date, first release, and more.
     <td>Clamshell</td>
     <td>Yes</td>
     <td>Yes</td>
+ </tr>
+   <tr>
+    <td>2024-03-15</td>
+    <td>HP</td>
+    <td><a href="https://www.hp.com/us-en/shop/pdp/hp-chromebook-14a-nf0050nr">HP Chromebook PLUS laptop14 inch-14a-nf0050nr (CX5403)</a></td>
+    <td>Yahiko</td>
+    <td>Nissa</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.1</td>
+    <td>x86_64</td>
+    <td>Alderlake-N</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
   </tr>
+  <tr>
+    <td>2024-04-16</td>
+    <td>Acer</td>
+    <td><a href="https://www.acer.com/us-en/chromebooks/acer-chromebook-plus-spin-cp714-1h-cp714-1hn">Acer Chromebook Plus Spin 714 (CP714-1H/CP714-1HN),Acer Chromebook Plus Enterprise Spin 714 (CPE794-1N)</a></td>
+    <td>Karis</td>
+    <td>Rex</td>
+    <td>Rex</td>
+    <td>x86_64</td>
+    <td>6.1</td>
+    <td>x86_64</td>
+    <td>Meteor Lake</td>
+    <td>Convertible</td>
+    <td></td>
+    <td></td>
+ </tr>
+
 </table>

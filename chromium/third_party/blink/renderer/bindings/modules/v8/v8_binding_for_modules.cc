@@ -23,6 +23,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/bindings/modules/v8/v8_binding_for_modules.h"
 
 #include "third_party/blink/public/common/indexeddb/indexeddb_key.h"
@@ -57,7 +62,6 @@
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
-#include "third_party/blink/renderer/platform/wtf/shared_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -98,7 +102,9 @@ static std::unique_ptr<IDBKey> CreateIDBKeyFromSimpleValue(
     }
     const char* start = static_cast<const char*>(buffer->Data());
     size_t length = buffer->ByteLength();
-    return IDBKey::CreateBinary(SharedBuffer::Create(start, length));
+    return IDBKey::CreateBinary(
+        base::MakeRefCounted<base::RefCountedData<Vector<char>>>(
+            Vector<char>(base::span(start, length))));
   }
 
   if (value->IsArrayBufferView()) {
@@ -114,7 +120,9 @@ static std::unique_ptr<IDBKey> CreateIDBKeyFromSimpleValue(
     }
     const char* start = static_cast<const char*>(view->BaseAddress());
     size_t length = view->byteLength();
-    return IDBKey::CreateBinary(SharedBuffer::Create(start, length));
+    return IDBKey::CreateBinary(
+        base::MakeRefCounted<base::RefCountedData<Vector<char>>>(
+            Vector<char>(base::span(start, length))));
   }
 
   return IDBKey::CreateInvalid();
@@ -451,8 +459,9 @@ std::unique_ptr<IDBKey> CreateIDBKeyFromValueAndKeyPaths(
 v8::Local<v8::Value> DeserializeIDBValueData(v8::Isolate* isolate,
                                              const IDBValue* value) {
   DCHECK(isolate->InContext());
-  if (!value || value->IsNull())
+  if (!value) {
     return v8::Null(isolate);
+  }
 
   scoped_refptr<SerializedScriptValue> serialized_value =
       value->CreateSerializedValue();
@@ -483,8 +492,9 @@ v8::Local<v8::Value> DeserializeIDBValue(ScriptState* script_state,
                                          const IDBValue* value) {
   v8::Isolate* isolate = script_state->GetIsolate();
   DCHECK(isolate->InContext());
-  if (!value || value->IsNull())
+  if (!value) {
     return v8::Null(isolate);
+  }
 
   v8::Local<v8::Value> v8_value = DeserializeIDBValueData(isolate, value);
   if (value->PrimaryKey()) {
@@ -557,7 +567,7 @@ bool InjectV8KeyIntoV8Value(v8::Isolate* isolate,
   // The conbination of a key generator and an empty key path is forbidden by
   // spec.
   if (!key_path_elements.size()) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return false;
   }
 

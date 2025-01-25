@@ -2,9 +2,9 @@
 
 #include <map>
 #include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
-#include "chrome/browser/ui/side_panel/side_panel_ui.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
 
-class VivaldiBrowserWindow;
+class Browser;
 class Profile;
 
 namespace vivaldi {
@@ -12,12 +12,12 @@ namespace vivaldi {
 class SidePanelCoordinator : public SidePanelUI,
                              public extensions::SidePanelService::Observer {
  public:
-  SidePanelCoordinator(VivaldiBrowserWindow*);
+  SidePanelCoordinator(Browser*);
 
   ~SidePanelCoordinator() override;
 
   void Show(
-      std::optional<SidePanelEntryId> entry_id = std::nullopt,
+      SidePanelEntryId entry_id,
       std::optional<SidePanelOpenTrigger> open_trigger = std::nullopt) override;
 
   void Show(
@@ -25,8 +25,6 @@ class SidePanelCoordinator : public SidePanelUI,
       std::optional<SidePanelOpenTrigger> open_trigger = std::nullopt) override;
 
   void Close() override;
-
-  void Toggle() override;
 
   void Toggle(SidePanelEntryKey key,
               SidePanelOpenTrigger open_trigger) override;
@@ -51,10 +49,12 @@ class SidePanelCoordinator : public SidePanelUI,
 
   void DisableAnimationsForTesting() override {}
 
+  void SetNoDelaysForTesting(bool no_delays_for_testing) override {}
+
  private:
   Profile * GetProfile();
 
-  VivaldiBrowserWindow* browser_window_;
+  Browser* browser_;
 };
 
 }  // namespace vivaldi

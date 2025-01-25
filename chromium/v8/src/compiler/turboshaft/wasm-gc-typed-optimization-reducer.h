@@ -71,6 +71,7 @@ class WasmGCTypeAnalyzer {
   void ProcessParameter(const ParameterOp& parameter);
   void ProcessStructGet(const StructGetOp& struct_get);
   void ProcessStructSet(const StructSetOp& struct_set);
+  void ProcessArrayGet(const ArrayGetOp& array_get);
   void ProcessArrayLength(const ArrayLengthOp& array_length);
   void ProcessGlobalGet(const GlobalGetOp& global_get);
   void ProcessRefFunc(const WasmRefFuncOp& ref_func);
@@ -166,7 +167,7 @@ class WasmGCTypedOptimizationReducer : public Next {
                                                               cast_op.object()),
                                                           type)
                                               : __ Word32Constant(0);
-        __ TrapIfNot(non_trapping_condition, {}, TrapId::kTrapIllegalCast);
+        __ TrapIfNot(non_trapping_condition, TrapId::kTrapIllegalCast);
         if (!to_nullable) {
           __ Unreachable();
         }
@@ -270,8 +271,8 @@ class WasmGCTypedOptimizationReducer : public Next {
     return __ MapToNewGraph(type_annotation.value());
   }
 
-  OpIndex REDUCE_INPUT_GRAPH(StructGet)(OpIndex op_idx,
-                                        const StructGetOp& struct_get) {
+  V<Any> REDUCE_INPUT_GRAPH(StructGet)(V<Any> op_idx,
+                                       const StructGetOp& struct_get) {
     LABEL_BLOCK(no_change) {
       return Next::ReduceInputGraphStructGet(op_idx, struct_get);
     }
@@ -288,7 +289,7 @@ class WasmGCTypedOptimizationReducer : public Next {
     goto no_change;
   }
 
-  OpIndex REDUCE_INPUT_GRAPH(StructSet)(OpIndex op_idx,
+  V<None> REDUCE_INPUT_GRAPH(StructSet)(V<None> op_idx,
                                         const StructSetOp& struct_set) {
     LABEL_BLOCK(no_change) {
       return Next::ReduceInputGraphStructSet(op_idx, struct_set);

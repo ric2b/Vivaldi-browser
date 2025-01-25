@@ -61,6 +61,7 @@
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom.h"
+#include "third_party/blink/public/mojom/page/prerender_page_param.mojom.h"
 #include "third_party/blink/public/mojom/page/widget.mojom.h"
 #include "third_party/blink/public/mojom/widget/platform_widget.mojom.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -609,6 +610,12 @@ void PrintHeaderAndFooter(cc::PaintCanvas* canvas,
   blink::WebPrintParams webkit_params(page_size);
   webkit_params.printer_dpi = GetDPI(params);
 
+  // Avoid fragmentation. Everything (header + footer) should fit on one
+  // page. Anything that partially overflows the page should be clipped rather
+  // than pushed to a next page that is never to be seen. This may happen for
+  // custom headers and (especially) footers.
+  webkit_params.use_paginated_layout = false;
+
   RecordDebugEvent(DebugEvent::kPrintBegin1);
   frame.PrintBegin(webkit_params, blink::WebNode());
   frame.PrintPage(0, canvas);
@@ -656,8 +663,8 @@ class HeaderAndFooterContext {
       const blink::WebLocalFrame& source_frame) {
     auto* view = blink::WebView::Create(
         /*client=*/nullptr,
-        /*is_hidden=*/false, /*is_prerendering=*/false,
-        /*is_inside_portal=*/false,
+        /*is_hidden=*/false,
+        /*prerender_param=*/nullptr,
         /*fenced_frame_mode=*/std::nullopt,
         /*compositing_enabled=*/false, /*widgets_never_composited=*/false,
         /*opener=*/nullptr, mojo::NullAssociatedReceiver(),
@@ -672,8 +679,8 @@ class HeaderAndFooterContext {
 
   blink::WebLocalFrame* CreateFrame() {
     return blink::WebLocalFrame::CreateMainFrame(
-        web_view_, &frame_client_, nullptr, blink::LocalFrameToken(),
-        blink::DocumentToken(), nullptr);
+        web_view_, &frame_client_, nullptr, mojo::NullRemote(),
+        blink::LocalFrameToken(), blink::DocumentToken(), nullptr);
   }
 
   void InitWebView() {
@@ -932,8 +939,7 @@ void PrepareFrameAndViewForPrint::CopySelection(
   blink::WebView* web_view = blink::WebView::Create(
       /*client=*/this,
       /*is_hidden=*/false,
-      /*is_prerendering=*/false,
-      /*is_inside_portal=*/false,
+      /*prerender_param=*/nullptr,
       /*fenced_frame_mode=*/std::nullopt,
       /*compositing_enabled=*/false,
       /*widgets_never_composited=*/false,
@@ -945,8 +951,8 @@ void PrepareFrameAndViewForPrint::CopySelection(
       /*color_provider_colors=*/nullptr);
   blink::WebView::ApplyWebPreferences(prefs, web_view);
   blink::WebLocalFrame* main_frame = blink::WebLocalFrame::CreateMainFrame(
-      web_view, this, nullptr, blink::LocalFrameToken(), blink::DocumentToken(),
-      nullptr);
+      web_view, this, nullptr, mojo::NullRemote(), blink::LocalFrameToken(),
+      blink::DocumentToken(), nullptr);
   frame_.Reset(main_frame);
   mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
   mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
@@ -1255,15 +1261,34 @@ void PrintRenderFrameHelper::BindPrintRenderFrameReceiver(
 }
 
 void PrintRenderFrameHelper::PrintRequestedPages() {
+  PrintRequestedPagesInternal(/*already_notified_frame=*/false);
+}
+
+void PrintRenderFrameHelper::PrintRequestedPagesInternal(
+    bool already_notified_frame) {
   ScopedIPC scoped_ipc(weak_ptr_factory_.GetWeakPtr());
-  if (ipc_nesting_level_ > kAllowedIpcDepthForPrint)
+  if (ipc_nesting_level_ > kAllowedIpcDepthForPrint) {
     return;
+  }
 
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
-  frame->DispatchBeforePrintEvent(/*print_client=*/nullptr);
-  // Don't print if the RenderFrame is gone.
-  if (render_frame_gone_)
-    return;
+
+  if (!already_notified_frame) {
+    frame->DispatchBeforePrintEvent(/*print_client=*/nullptr);
+    // Don't print if the RenderFrame is gone.
+    if (render_frame_gone_) {
+      return;
+    }
+
+    is_loading_ = frame->WillPrintSoon();
+    if (is_loading_) {
+      on_stop_loading_closure_ = base::BindOnce(
+          &PrintRenderFrameHelper::PrintRequestedPagesInternal,
+          weak_ptr_factory_.GetWeakPtr(), /*already_notified_frame=*/true);
+      SetupOnStopLoadingTimeout();
+      return;
+    }
+  }
 
   // If we are printing a frame with an internal PDF plugin element, find the
   // plugin node and print that instead.
@@ -1357,7 +1382,7 @@ void PrintRenderFrameHelper::PrintForSystemDialog() {
 
   blink::WebLocalFrame* frame = print_preview_context_.source_frame();
   if (!frame) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 
@@ -1519,9 +1544,9 @@ void PrintRenderFrameHelper::PrintFrameContent(
   canvas->SetPrintingMetafile(&metafile);
 
   // This subframe doesn't need to fit to the page size, thus we are not using
-  // printing layout for it. It just prints with the specified size.
+  // paginated layout for it. It just prints with the specified size.
   blink::WebPrintParams web_print_params(gfx::SizeF(area_size),
-                                         /*use_printing_layout=*/false);
+                                         /*use_paginated_layout=*/false);
 
   // Printing embedded pdf plugin has been broken since pdf plugin viewer was
   // moved out-of-process
@@ -2523,6 +2548,15 @@ void PrintRenderFrameHelper::PrintPageInternal(
   DCHECK(ret);
 }
 
+void PrintRenderFrameHelper::SetupOnStopLoadingTimeout() {
+  static constexpr base::TimeDelta kLoadEventTimeout = base::Seconds(2);
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&PrintRenderFrameHelper::DidFinishLoadForPrinting,
+                     weak_ptr_factory_.GetWeakPtr()),
+      kLoadEventTimeout);
+}
+
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 void PrintRenderFrameHelper::ShowScriptedPrintPreview() {
   if (is_scripted_preview_delayed_) {
@@ -2530,19 +2564,6 @@ void PrintRenderFrameHelper::ShowScriptedPrintPreview() {
     GetPrintManagerHost()->ShowScriptedPrintPreview(
         print_preview_context_.IsModifiable());
   }
-}
-
-void PrintRenderFrameHelper::WaitForLoad(PrintPreviewRequestType type) {
-  static constexpr base::TimeDelta kLoadEventTimeout = base::Seconds(2);
-
-  on_stop_loading_closure_ =
-      base::BindOnce(&PrintRenderFrameHelper::RequestPrintPreview,
-                     weak_ptr_factory_.GetWeakPtr(), type, true);
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&PrintRenderFrameHelper::DidFinishLoadForPrinting,
-                     weak_ptr_factory_.GetWeakPtr()),
-      kLoadEventTimeout);
 }
 
 void PrintRenderFrameHelper::RequestPrintPreview(PrintPreviewRequestType type,
@@ -2555,6 +2576,19 @@ void PrintRenderFrameHelper::RequestPrintPreview(PrintPreviewRequestType type,
     }
 
     is_loading_ = print_preview_context_.source_frame()->WillPrintSoon();
+    if (is_loading_) {
+      // Wait for DidStopLoading, for two reasons:
+      // * To give the document time to finish loading any pending resources
+      //   that are desired for printing.
+      // * Plugins may not know the correct `is_modifiable` value until they
+      //   are fully loaded, which occurs when DidStopLoading() is called.
+      //   Defer showing the preview until then.
+      on_stop_loading_closure_ =
+          base::BindOnce(&PrintRenderFrameHelper::RequestPrintPreview,
+                         weak_ptr_factory_.GetWeakPtr(), type, true);
+      SetupOnStopLoadingTimeout();
+      return;
+    }
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -2578,16 +2612,6 @@ void PrintRenderFrameHelper::RequestPrintPreview(PrintPreviewRequestType type,
       //    loaded.
       RecordDebugEvent(DebugEvent::kRequestPrintPreviewScripted);
       is_scripted_preview_delayed_ = true;
-      if (is_loading_) {
-        // Wait for DidStopLoading, for two reasons:
-        // * To give the document time to finish loading any pending resources
-        ///  that are desired for printing.
-        // * Plugins may not know the correct|is_modifiable| value until they
-        //   are fully loaded, which occurs when DidStopLoading() is called.
-        //   Defer showing the preview until then.
-        WaitForLoad(type);
-        return;
-      }
       base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(&PrintRenderFrameHelper::ShowScriptedPrintPreview,
@@ -2618,12 +2642,6 @@ void PrintRenderFrameHelper::RequestPrintPreview(PrintPreviewRequestType type,
     case PrintPreviewRequestType::kUserInitiatedEntireFrame: {
       RecordDebugEvent(
           DebugEvent::kRequestPrintPreviewUserInitiatedEntireFrame);
-      // See comment under PRINT_PREVIEW_SCRIPTED.
-      if (is_loading_) {
-        WaitForLoad(type);
-        return;
-      }
-
       break;
     }
     case PrintPreviewRequestType::kUserInitiatedSelection: {
@@ -2636,12 +2654,6 @@ void PrintRenderFrameHelper::RequestPrintPreview(PrintPreviewRequestType type,
     case PrintPreviewRequestType::kUserInitiatedContextNode: {
       RecordDebugEvent(
           DebugEvent::kRequestPrintPreviewUserInitiatedContextNode);
-      // See comment under PRINT_PREVIEW_SCRIPTED.
-      if (is_loading_) {
-        WaitForLoad(type);
-        return;
-      }
-
       params->webnode_only = true;
       break;
     }
@@ -2835,7 +2847,7 @@ void PrintRenderFrameHelper::PrintPreviewContext::FinalizePrintReadyDocument() {
     metafile_->FinishDocument();
 
   if (print_ready_metafile_page_count_ <= 0) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 

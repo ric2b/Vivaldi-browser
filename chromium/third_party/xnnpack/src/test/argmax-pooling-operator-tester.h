@@ -5,10 +5,6 @@
 
 #pragma once
 
-#include <xnnpack.h>
-#include <xnnpack/aligned-allocator.h>
-#include <xnnpack/common.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -19,9 +15,12 @@
 #include <random>
 #include <vector>
 
-#include "pthreadpool.h"
-#include "replicable_random_device.h"
 #include <gtest/gtest.h>
+#include "xnnpack.h"
+#include "xnnpack/aligned-allocator.h"
+#include "xnnpack/common.h"
+#include "replicable_random_device.h"
+#include "pthreadpool.h"
 
 class ArgmaxPoolingOperatorTester {
  public:

@@ -91,7 +91,12 @@
 // The view containing the location label, and (sometimes) the site into button
 // view.
 @property(nonatomic, strong) UIView* locationContainerView;
+// Boolean to determine if the full address should be shown.
+@property(nonatomic, assign) BOOL showFullAddress;
 
+- (void)updateLocationText:(NSString*)text
+                    domain:(NSString*)domain
+                  showFull:(BOOL)showFull;
 - (void)fadeSteadyViewContentsWithAlpha:(CGFloat)alpha;
 - (void)setLeadingButtonEnabled:(BOOL)enabled;
 // End Vivaldi

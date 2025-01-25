@@ -11,6 +11,7 @@
 #include "chrome/browser/first_party_sets/first_party_sets_policy_service_factory.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service_impl.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_settings_factory.h"
+#include "chrome/browser/privacy_sandbox/tracking_protection_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tpcd/experiment/eligibility_service_factory.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
@@ -59,6 +60,7 @@ PrivacySandboxService* PrivacySandboxServiceFactory::GetForProfile(
       GetInstance()->GetServiceForBrowserContext(profile, true));
 }
 
+// LINT.IfChange(PrivacySandboxService)
 PrivacySandboxServiceFactory::PrivacySandboxServiceFactory()
     : ProfileKeyedServiceFactory(
           "PrivacySandboxService",
@@ -69,11 +71,15 @@ PrivacySandboxServiceFactory::PrivacySandboxServiceFactory()
               // TODO(crbug.com/40257657): Check if this service is needed in
               // Guest mode.
               .WithGuest(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/41488885): Check if this service is needed for
+              // Ash Internals.
+              .WithAshInternals(ProfileSelection::kOwnInstance)
               .Build()) {
   DependsOn(PrivacySandboxSettingsFactory::GetInstance());
   DependsOn(CookieSettingsFactory::GetInstance());
   DependsOn(HostContentSettingsMapFactory::GetInstance());
   DependsOn(browsing_topics::BrowsingTopicsServiceFactory::GetInstance());
+  DependsOn(TrackingProtectionSettingsFactory::GetInstance());
 #if !BUILDFLAG(IS_ANDROID)
   DependsOn(TrustSafetySentimentServiceFactory::GetInstance());
 #endif
@@ -85,6 +91,7 @@ PrivacySandboxServiceFactory::PrivacySandboxServiceFactory()
   // eligibility.
   DependsOn(tpcd::experiment::EligibilityServiceFactory::GetInstance());
 }
+// LINT.ThenChange(/chrome/browser/privacy_sandbox/privacy_sandbox_notice_service_factory.cc:PrivacySandboxNoticeService)
 
 std::unique_ptr<KeyedService>
 PrivacySandboxServiceFactory::BuildServiceInstanceForBrowserContext(
@@ -96,6 +103,7 @@ PrivacySandboxServiceFactory::BuildServiceInstanceForBrowserContext(
   Profile* profile = Profile::FromBrowserContext(context);
   return std::make_unique<PrivacySandboxServiceImpl>(
       PrivacySandboxSettingsFactory::GetForProfile(profile),
+      TrackingProtectionSettingsFactory::GetForProfile(profile),
       CookieSettingsFactory::GetForProfile(profile), profile->GetPrefs(),
       profile->GetDefaultStoragePartition()->GetInterestGroupManager(),
       GetProfileType(profile),

@@ -111,10 +111,8 @@ In this flow, the [VM] is named `termina` and the container is `penguin`.
 
 ## Quickstart
 
-*** aside
-See the [official Set up Linux on your Chromebook
+NOTE: See the [official Set up Linux on your Chromebook
 documentation](https://support.google.com/chromebook/answer/9145439) too.
-***
 
 Here's a quick run down of how to get started.
 
@@ -122,7 +120,7 @@ Here's a quick run down of how to get started.
     *   All devices launched in 2019 or later will support Crostini.
     *   See the [Device Support] section for more details.
 *   Make sure your device is up to date.
-    *   Check for a [system updates] and reboot if needed.
+    *   Check for [system updates] and reboot if needed.
     *   You do **not** need to put the device into developer mode.
 *   Enable support.
     *   Open ChromeOS Settings
@@ -130,9 +128,9 @@ Here's a quick run down of how to get started.
             and then click the cog icon.
         *   Alternatively, press the Search/Launcher key and search for the
             Settings app.
-    *   Scroll down and click "Advanced", then find the "Linux development
-        environment" section under the "Developers" heading. After installation,
-        Crostini-related settings can also be found here.
+    *   Scroll down to "About ChromeOS", then find the "Developers" section at
+        the bottom of the page, and click "Set up" for the "Linux development
+        environment"
     *   Turn it on!
 *   Profit!
 
@@ -153,6 +151,7 @@ forwarding is enabled.
 or [X] (compatibility via [Sommelier] and [XWayland]).
 * Accelerated Graphics.
 * Sound output and microphone capture.
+* Access to certain USB devices
 * Bidirectional file sharing with the host OS.
 * And more!
 
@@ -160,8 +159,7 @@ or [X] (compatibility via [Sommelier] and [XWayland]).
 
 There are still many features we're working on fleshing out.
 
-* Peripheral access ([USB](https://crbug.com/831850), Bluetooth,
-[Camera](https://crbug.com/907701)/etc...).
+* Peripheral access (Bluetooth, [Camera](https://crbug.com/907701)/etc...).
 * [IMEs](https://crbug.com/826614).
 
 There are more things we're thinking about, but we're being very
@@ -293,15 +291,16 @@ support Crostini. Any device which is [still receiving updates][AUE] currently
 supports Crostini. There are no plans to backport support to devices which are
 no longer receiving updates.
 
-Enterprise admins have the [ability](#managed) to disable Crostini access for
-devices which otherwise support it.
+Enterprise admins have the [ability](#can-i-disable-these-features) to disable
+Crostini access for devices which otherwise support it.
 
 ## Glossary
 
 *   **[9s]**: Server for the [9p] file system protocol.
-*   **ARC++** (Android Runtime for Chrome \[plus plus\]): The current method for
-    booting Android in a container under ChromeOS.
-*   **ARCVM** (Android Runtime for Chrome in a VM): The latest method for
+*   **ARC++** (Android Runtime for Chrome \[plus plus\]): The old method for
+    booting Android in a container under ChromeOS, it's been mostly replaced by
+    ARCVM.
+*   **ARCVM** (Android Runtime for Chrome in a VM): The current method for
     booting Android under ChromeOS. Unlike ARC++, ARCVM runs Android inside
     [crosvm].
 *   **[Cicerone]**: ChromeOS daemon that communicates with containers.
@@ -389,9 +388,19 @@ See also the next few questions.
 
 ### Can I run my own VM/kernel?
 
-Currently, no, you can only boot [Termina] which uses our custom Linux kernel
-and configs.
-Stay tuned!
+Yes, we expose the `vmc` command via `crosh` (open search drawer -> `crosh`).
+
+With this command, we expose some developer features, including the option to
+boot a custom VM or [Termina] with your own kernel/initrd files.
+
+`vmc start --kernel $KERNEL --initrd $INITRD termina`
+
+where `$KERNEL` and `$INITRD` should be replaced with your own custom files. The
+`vmc` command looks for those files in `MyFiles/Downloads`.
+
+Once [Termina] has been booted with your own custom kernel, you can even start
+containers inside it and verify for yourself they are running your kernel with
+the `uname -a` command.
 
 ### Can I run a different Linux distro?
 
@@ -456,13 +465,13 @@ memory-backed tmpfs), but most people aren't interested in those.
 ### Is FUSE supported?
 
 Yes! Note that unprivileged containers can't set up loopback mounts (see the
-[next question](#loop-mount)), so your FUSE driver of choice can't require a
-block device.
+[next question](#can-i-use-loop-devices)), so your FUSE driver of choice can't
+require a block device.
 
 ### Can I use loop devices?
 
 Currently, no.
-See the [previous question about mounting filesystems](#fs-mount).
+See the [previous question about mounting filesystems](#can-i-mount-filesystems).
 
 Specifically, we're referring to `losetup` and `mount -o loop` which use
 `/dev/loop-control` and nodes like `/dev/loop0` via the `loop` kernel module.
@@ -617,21 +626,16 @@ therein, but the UI and Files app integration may not work correctly.
 No, [Terminal] is not supported in [child accounts].
 We don't have plans to make this available to such accounts.
 
-If you're unfamiliar with [child accounts], check out the general
-[child accounts documentation][child accounts] for more details.
-
 ### Are my VMs/containers/data synced/backed up?
 
 Currently, no, nothing is synced or backed up.
 You're responsible for any data going into the containers.
 
-We hope to improve this situation greatly.
-
 ### How can I backup a VM?
 
-The Crostini container can be backed up and restored via [ChromeOS Settings].
+The Crostini container can be backed up and restored via ChromeOS Settings.
 Manually created containers and VMs can be backed up with standard [LXC]
-commands and [`vmc export`](#disk-images) respectively.
+commands and [`vmc export`](#extracting-disk-images) respectively.
 
 ### Can I access the VM/container files directly (e.g. via the Files app)?
 
@@ -657,8 +661,8 @@ across distros.
 So the time might appear to be wrong at a glance in those environments, or stale
 if the `TZ` environment variable is used.
 
-See https://crbug.com/829934 for some extended technical details.
-It's more complicated than you might think!
+See [this bug](https://g-issues.chromium.org/issues/40570539) some extended
+technical details.  It's more complicated than you might think!
 
 ### What copy & paste, and drag & drop formats are supported?
 
@@ -783,13 +787,13 @@ Yes!
 
 ### Is audio capture (e.g. microphone) supported?
 
-[Yes](https://crbug.com/932268)! There is a toggle in [ChromeOS Settings] to
+[Yes](https://crbug.com/932268)! There is a toggle in ChromeOS Settings to
 enable this.
 
 ### Can I access hardware (e.g. USB/Bluetooth/serial)?
 
 USB support for some devices, including Android devices and serial devices, is
-available via [ChromeOS Settings]. Direct Bluetooth access is not available but
+available via ChromeOS Settings. Direct Bluetooth access is not available but
 you could use the Web Bluetooth API with a web server running in Crostini.
 
 ### Can I run graphical applications?
@@ -849,10 +853,8 @@ This isn't to say a synergy-like solution will never happen in ChromeOS
 (e.g. something like [CRD](https://support.google.com/chrome/answer/1649523)),
 just that the solution won't be synergy or any other tool in a container.
 
-*** aside
-You can run synergy, and probably get it to convey input events for the single
-window that it's running under, but that's as close as you'll get.
-***
+NOTE: You can run synergy, and probably get it to convey input events for the
+single window that it's running under, but that's as close as you'll get.
 
 ### Can I run Windows programs?
 
@@ -862,9 +864,13 @@ support.
 
 ### Can I run Steam?
 
-Sure, give [Steam] a shot.
-Just remember that without accelerated graphics or sound, it's probably not
-going to be too much fun.
+Some Chromebooks now already support [Steam] separately. If your device is one of
+them, it's recommended you run [Steam] without Crostini, just follow the
+instructions on [this
+page](https://support.google.com/chromebook/answer/14220699?).
+
+Alternatively, if you want to run it inside Crostini, you can just install it
+normally like any other Linux app following the instructions on Valve's website.
 
 ### Can I run macOS programs?
 
@@ -900,26 +906,7 @@ and [crosvm] itself is heavily sandboxed.
 
 For more details, see the [Security] section in this doc.
 
-### Don't Android apps (ARC++) run in a container and not a VM?
-
-While Android apps currently run in a container, eligible devices are migrating
-to running inside a VM.
-
-For ARC++ container, we try to isolate them quite a bit (using [namespaces],
-[seccomp], [alt syscall], [SELinux], etc...), but at the end of the day, they
-have direct access to many syscalls and kernel interfaces, so a bug in there is
-reachable via code compiled with Android's NDK.
-
-### If Android apps are in a container, why can't users run code too?
-
-We don't usually accept a low security bar in one place as a valid reason to
-lower the security bar everywhere.
-Instead, we want to constantly raise the security bar for all code.
-
-For example, devices that support Android 11+ are being migrated from ARC++ in
-a container to ARCVM.
-
-### Are Android apps (ARC++) going away?
+### Are Android apps (ARCVM) going away?
 
 There are no plans to merge the two projects.
 We share/re-use a lot of the Chrome bridge code though, so it's not like we're
@@ -982,7 +969,7 @@ Note: The default [Crostini] [VM] is named `termina`.
 Administrators can control access to containers/[VM]s via the management
 console, so enterprise/education organizations that want to limit this can.
 If Crostini access is disallowed, Crostini's "Turn On" button in
-[ChromeOS Settings] will be greyed out.
+ChromeOS Settings will be greyed out.
 
 ### Why the name Crostini?
 
@@ -1008,13 +995,13 @@ It's not that [crouton] is bad, it's simply a completely different model.
 [dev channel]: https://support.google.com/chromebook/answer/1086915
 [device list]: http://dev.chromium.org/chromium-os/developer-information-for-chrome-os-devices
 [feedback-report]: https://support.google.com/chromebook/answer/2982029
-[known-bugs]: https://bugs.chromium.org/p/chromium/issues/list?can=1&q=component:OS>Systems>Containers%20OR%20component:UI>Shell>Containers
-[new-bug]: https://bugs.chromium.org/p/chromium/issues/entry?comment=Chrome%20version%3A%20(copy%20from%20chrome%3A%2F%2Fversion)%0AOS%3A%20Chrome%0A%0ARepro%20steps%3A%0A1.%20%0A2.%20%0A3.%20%0A%0AExpected%3A%20%0AActual%3A%20&status=Untriaged&labels=Pri-2%2COS-Chrome%2CType-Bug&components=UI>Shell>Containers
+[known-bugs]: https://issuetracker.google.com/issues?q=componentid:960622
+[new-bug]: https://issuetracker.google.com/issues/new?component=960622&template=1758622
 [system updates]: https://support.google.com/chromebook/answer/177889
 
 [chromium-os-dev]: https://groups.google.com/a/chromium.org/forum/#!forum/chromium-os-dev
 
-[Security]: #Security
+[Security]: #security
 
 [9p]: http://man.cat-v.org/plan_9/5/intro
 [9s]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/vm_tools/9s/
@@ -1022,17 +1009,16 @@ It's not that [crouton] is bad, it's simply a completely different model.
 [Android Studio]: https://developer.android.com/topic/arc/studio
 [AUE]: https://support.google.com/chromebook/answer/9367166
 [child accounts]: https://support.google.com/families/answer/7680868
-[ChromeOS Settings]: #OSSettings
 [Cicerone]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/vm_tools/cicerone/
 [component]: https://chromium.googlesource.com/chromium/src/+/lkgr/components/component_updater/README.md
 [Concierge]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/vm_tools/concierge/
 [cros-container-guest-tools]: https://chromium.googlesource.com/chromiumos/containers/cros-container-guest-tools/
 [crosh]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/crosh/
 [Crostini]: #Crostini
-[crosvm]: https://chromium.googlesource.com/chromiumos/platform/crosvm/
+[crosvm]: https://crosvm.dev/book/
 [crouton]: https://github.com/dnschneid/crouton
 [Debian]: https://www.debian.org/
-[Device Support]: #supported
+[Device Support]: #device-support
 [dm-verity]: https://gitlab.com/cryptsetup/cryptsetup/wikis/DMVerity
 [DPI]: https://en.wikipedia.org/wiki/Dots_per_inch#Computer_monitor_DPI_standards
 [Exo]: https://chromium.googlesource.com/chromium/src/+/HEAD/components/exo/README.md
@@ -1050,7 +1036,7 @@ It's not that [crouton] is bad, it's simply a completely different model.
 [QEMU]: https://www.qemu.org/
 [RTF]: https://en.wikipedia.org/wiki/Rich_Text_Format
 [seccomp]: https://en.wikipedia.org/wiki/Seccomp
-[Secure Shell]: https://chrome.google.com/webstore/detail/pnhechapfaindjhompbnflcldabbghjo
+[Secure Shell]: https://chromewebstore.google.com/detail/secure-shell/iodihamcpbpeioajjeobimgagajmlibd
 [SELinux]: https://en.wikipedia.org/wiki/Security-Enhanced_Linux
 [Seneschal]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/vm_tools/seneschal/
 [Sommelier]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/vm_tools/sommelier/

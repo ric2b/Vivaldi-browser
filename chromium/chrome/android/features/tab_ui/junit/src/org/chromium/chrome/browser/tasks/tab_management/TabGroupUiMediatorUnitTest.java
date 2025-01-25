@@ -117,6 +117,13 @@ public class TabGroupUiMediatorUnitTest {
     @Captor ArgumentCaptor<TabObserver> mTabObserverCaptor;
     @Captor ArgumentCaptor<Callback<Boolean>> mOmniboxFocusObserverCaptor;
 
+    private final ObservableSupplierImpl<Boolean> mHandleBackPressChangedSupplier =
+            new ObservableSupplierImpl<>();
+    private final ObservableSupplierImpl<Boolean> mTabGridDialogBackPressSupplier =
+            new ObservableSupplierImpl<>();
+    private final ObservableSupplierImpl<Boolean> mTabGridDialogShowingOrAnimationSupplier =
+            new ObservableSupplierImpl<>();
+
     private Tab mTab1;
     private Tab mTab2;
     private Tab mTab3;
@@ -129,8 +136,6 @@ public class TabGroupUiMediatorUnitTest {
     private OneshotSupplierImpl<LayoutStateProvider> mLayoutStateProviderSupplier =
             new OneshotSupplierImpl<>();
     private LazyOneshotSupplier<TabGridDialogMediator.DialogController> mDialogControllerSupplier;
-    private final ObservableSupplierImpl<Boolean> mTabGridDialogBackPressSupplier =
-            new ObservableSupplierImpl<>();
 
     private Tab prepareTab(int tabId, int rootId) {
         Tab tab = TabUiUnitTestUtils.prepareTab(tabId, rootId);
@@ -180,10 +185,14 @@ public class TabGroupUiMediatorUnitTest {
         doReturn(mTabGridDialogBackPressSupplier)
                 .when(mTabGridDialogController)
                 .getHandleBackPressChangedSupplier();
+        doReturn(mTabGridDialogShowingOrAnimationSupplier)
+                .when(mTabGridDialogController)
+                .getShowingOrAnimationSupplier();
         mTabGroupUiMediator =
                 new TabGroupUiMediator(
                         mContext,
                         mVisibilityController,
+                        mHandleBackPressChangedSupplier,
                         mResetHandler,
                         mModel,
                         mTabModelSelector,
@@ -338,6 +347,25 @@ public class TabGroupUiMediatorUnitTest {
 
         listener.onClick(mView);
 
+        verify(mResetHandler).resetGridWithListOfTabs(mTabGroup2);
+    }
+
+    @Test
+    public void onClickLeftButton_TabGroup_ShowingOrAnimation() {
+        initAndAssertProperties(mTab2);
+        mDialogControllerSupplier.get();
+        mTabGridDialogShowingOrAnimationSupplier.set(true);
+
+        View.OnClickListener listener =
+                mModel.get(TabGroupUiProperties.LEFT_BUTTON_ON_CLICK_LISTENER);
+        assertThat(listener, instanceOf(View.OnClickListener.class));
+
+        listener.onClick(mView);
+        verify(mResetHandler, never()).resetGridWithListOfTabs(any());
+
+        mTabGridDialogShowingOrAnimationSupplier.set(false);
+
+        listener.onClick(mView);
         verify(mResetHandler).resetGridWithListOfTabs(mTabGroup2);
     }
 
@@ -798,22 +826,13 @@ public class TabGroupUiMediatorUnitTest {
 
     @Test
     public void tabClosureUndone_UiNotVisible_ShowingTabSwitcherMode() {
-        tabClosureUndone_UiNotVisible_ShowingOverviewModeImpl(LayoutType.TAB_SWITCHER);
-    }
-
-    @Test
-    public void tabClosureUndone_UiNotVisible_ShowingStartSurface() {
-        tabClosureUndone_UiNotVisible_ShowingOverviewModeImpl(LayoutType.START_SURFACE);
-    }
-
-    private void tabClosureUndone_UiNotVisible_ShowingOverviewModeImpl(@LayoutType int layoutType) {
         // Assume mTab1 is selected.
         initAndAssertProperties(mTab1);
         // OverviewMode is hiding by default.
         assertThat(mTabGroupUiMediator.getIsShowingOverViewModeForTesting(), equalTo(false));
 
         // Simulate the overview mode is showing, which hides the strip.
-        mLayoutStateObserverCaptor.getValue().onStartedShowing(layoutType);
+        mLayoutStateObserverCaptor.getValue().onStartedShowing(LayoutType.TAB_SWITCHER);
         assertThat(mTabGroupUiMediator.getIsShowingOverViewModeForTesting(), equalTo(true));
         mVisibilityControllerInOrder.verify(mVisibilityController).setBottomControlsVisible(false);
 
@@ -829,72 +848,36 @@ public class TabGroupUiMediatorUnitTest {
 
     @Test
     public void overViewStartedShowing() {
-        overViewStartedShowingImpl(LayoutType.TAB_SWITCHER);
-    }
-
-    @Test
-    public void overViewStartedShowing_StartSurface() {
-        overViewStartedShowingImpl(LayoutType.START_SURFACE);
-    }
-
-    private void overViewStartedShowingImpl(@LayoutType int layoutType) {
         initAndAssertProperties(mTab1);
 
-        mLayoutStateObserverCaptor.getValue().onStartedShowing(layoutType);
+        mLayoutStateObserverCaptor.getValue().onStartedShowing(LayoutType.TAB_SWITCHER);
 
         verifyResetStrip(false, null);
     }
 
     @Test
     public void overViewFinishedHiding_NoCurrentTab() {
-        overViewFinishedHiding_NoCurrentTab(LayoutType.TAB_SWITCHER);
-    }
-
-    @Test
-    public void overViewFinishedHiding_NoCurrentTab_StartSurface() {
-        overViewFinishedHiding_NoCurrentTab(LayoutType.START_SURFACE);
-    }
-
-    private void overViewFinishedHiding_NoCurrentTab(@LayoutType int layoutType) {
         initAndAssertProperties(null);
 
-        mLayoutStateObserverCaptor.getValue().onFinishedHiding(layoutType);
+        mLayoutStateObserverCaptor.getValue().onFinishedHiding(LayoutType.TAB_SWITCHER);
 
         verifyNeverReset();
     }
 
     @Test
     public void overViewFinishedHiding_CurrentTabSingle() {
-        overViewFinishedHiding_CurrentTabSingleImpl(LayoutType.TAB_SWITCHER);
-    }
-
-    @Test
-    public void overViewFinishedHiding_CurrentTabSingle_StartSurface() {
-        overViewFinishedHiding_CurrentTabSingleImpl(LayoutType.START_SURFACE);
-    }
-
-    private void overViewFinishedHiding_CurrentTabSingleImpl(@LayoutType int layoutType) {
         initAndAssertProperties(mTab1);
 
-        mLayoutStateObserverCaptor.getValue().onFinishedHiding(layoutType);
+        mLayoutStateObserverCaptor.getValue().onFinishedHiding(LayoutType.TAB_SWITCHER);
 
         verifyResetStrip(false, null);
     }
 
     @Test
     public void overViewFinishedHiding_CurrentTabInGroup() {
-        overViewFinishedHiding_CurrentTabInGroupImpl(LayoutType.TAB_SWITCHER);
-    }
-
-    @Test
-    public void overViewFinishedHiding_CurrentTabInGroup_StartSurface() {
-        overViewFinishedHiding_CurrentTabInGroupImpl(LayoutType.START_SURFACE);
-    }
-
-    public void overViewFinishedHiding_CurrentTabInGroupImpl(@LayoutType int layoutType) {
         initAndAssertProperties(mTab2);
 
-        mLayoutStateObserverCaptor.getValue().onFinishedHiding(layoutType);
+        mLayoutStateObserverCaptor.getValue().onFinishedHiding(LayoutType.TAB_SWITCHER);
 
         verifyResetStrip(true, mTabGroup2);
     }

@@ -61,6 +61,14 @@ public interface Pane extends BackPressHandler {
     @NonNull
     ObservableSupplier<DisplayButtonData> getReferenceButtonDataSupplier();
 
+    /** Returns whether to show the hairline for the pane. */
+    @NonNull
+    ObservableSupplier<Boolean> getHairlineVisibilitySupplier();
+
+    /** Returns an optional listener for animation progress. */
+    @Nullable
+    HubLayoutAnimationListener getHubLayoutAnimationListener();
+
     /**
      * Create a {@link HubLayoutAnimatorProvider} to use when showing the {@link HubLayout} if this
      * pane is focused.

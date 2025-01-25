@@ -84,14 +84,9 @@ testing_support/google_appengine
 *~
 *.swp
 
-# Ignore the monitoring config. It is unique for each user.
+# Ignore win/mac monitoring config. It is unique for each depot_tools checkout.
 /metrics.cfg
-
-# Ignore the ninjalog upload config.
-/ninjalog.cfg
-
-# Ignore reclient metrics upload config.
-/reclient_metrics.cfg
+/build_telemetry.cfg
 
 # Ignore git traces produced by git push on git-cl upload.
 /traces

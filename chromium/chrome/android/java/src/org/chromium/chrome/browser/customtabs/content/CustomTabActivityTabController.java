@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.customtabs.content;
 
+import static org.chromium.chrome.browser.content.WebContentsFactory.DEFAULT_NETWORK_HANDLE;
 import static org.chromium.chrome.browser.dependency_injection.ChromeCommonQualifiers.SAVED_INSTANCE_SUPPLIER;
 
 import android.content.Intent;
@@ -45,7 +46,6 @@ import org.chromium.chrome.browser.customtabs.FirstMeaningfulPaintObserver;
 import org.chromium.chrome.browser.customtabs.PageLoadMetricsObserver;
 import org.chromium.chrome.browser.customtabs.ReparentingTaskProvider;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.InflationObserver;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -255,9 +255,9 @@ public class CustomTabActivityTabController implements InflationObserver {
         if (mSavedInstanceStateSupplier.get() == null && mConnection.hasWarmUpBeenFinished()) {
             mTabModelInitializer.initializeTabModels();
 
-            // Hidden tabs shouldn't be used in incognito, since they are always created with
-            // regular profile.
-            if (mIntentDataProvider.isIncognito()) {
+            // Hidden tabs shouldn't be used in incognito/ephemeral CCT, since they are always
+            // created with regular profile.
+            if (mIntentDataProvider.isOffTheRecord()) {
                 mTabProvider.setInitialTab(createTab(), TabCreationMode.EARLY);
                 return;
             }
@@ -285,7 +285,7 @@ public class CustomTabActivityTabController implements InflationObserver {
         TabModelOrchestrator tabModelOrchestrator = mTabFactory.getTabModelOrchestrator();
         TabModelSelectorBase tabModelSelector = tabModelOrchestrator.getTabModelSelector();
 
-        TabModel tabModel = tabModelSelector.getModel(mIntentDataProvider.isIncognito());
+        TabModel tabModel = tabModelSelector.getModel(mIntentDataProvider.isOffTheRecord());
         tabModel.addObserver(mTabObserverRegistrar);
 
         finalizeCreatingTab(tabModelOrchestrator, tabModel);
@@ -387,9 +387,9 @@ public class CustomTabActivityTabController implements InflationObserver {
         WarmupManager warmupManager = WarmupManager.getInstance();
         Profile profile =
                 ProfileProvider.getOrCreateProfile(
-                        mProfileProviderSupplier.get(), mIntentDataProvider.isIncognito());
+                        mProfileProviderSupplier.get(), mIntentDataProvider.isOffTheRecord());
         Tab tab = null;
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_PREWARM_TAB)
+        if (WarmupManager.getInstance().isCCTPrewarmTabFeatureEnabled(true)
                 && warmupManager.hasSpareTab(profile)) {
             tab = warmupManager.takeSpareTab(profile, TabLaunchType.FROM_EXTERNAL_APP);
             TabAssociatedApp.from(tab)
@@ -437,24 +437,33 @@ public class CustomTabActivityTabController implements InflationObserver {
             return webContents;
         }
 
-        webContents =
-                mWarmupManager.takeSpareWebContents(
-                        mIntentDataProvider.isIncognito(), /* initiallyHidden= */ false);
-        if (webContents != null) {
-            recordWebContentsStateOnLaunch(WebContentsState.SPARE_WEBCONTENTS);
-            return webContents;
+        // Check if any available network handle specified via customTabsIntent before creating
+        // web contents, and we only use the spare web contents if the provided network is the
+        // default one.
+        // TODO: this check can be removed once the spare web contents can be created with a
+        // particular network handle as well, e.g. via {@link CustomTabsSession#mayLaunchUrl}.
+        long networkHandle = mIntentDataProvider.getNetworkHandle();
+        if (networkHandle == DEFAULT_NETWORK_HANDLE) {
+            webContents =
+                    mWarmupManager.takeSpareWebContents(
+                            mIntentDataProvider.isOffTheRecord(), /* initiallyHidden= */ false);
+            if (webContents != null) {
+                recordWebContentsStateOnLaunch(WebContentsState.SPARE_WEBCONTENTS);
+                return webContents;
+            }
         }
 
         recordWebContentsStateOnLaunch(WebContentsState.NO_WEBCONTENTS);
         return mWebContentsFactory.createWebContentsWithWarmRenderer(
                 ProfileProvider.getOrCreateProfile(
-                        mProfileProviderSupplier.get(), mIntentDataProvider.isIncognito()),
-                false);
+                        mProfileProviderSupplier.get(), mIntentDataProvider.isOffTheRecord()),
+                /* initiallyHidden= */ false,
+                networkHandle);
     }
 
     private @Nullable WebContents takeAsyncWebContents() {
-        // Async WebContents are not supported for Incognito CCT.
-        if (mIntentDataProvider.isIncognito()) return null;
+        // Async WebContents are not supported for Incognito/Ephemeral CCT.
+        if (mIntentDataProvider.isOffTheRecord()) return null;
         int assignedTabId = IntentHandler.getTabId(mIntent);
         AsyncTabParams asyncParams = mAsyncTabParamsManager.get().remove(assignedTabId);
         if (asyncParams == null) return null;
@@ -468,7 +477,7 @@ public class CustomTabActivityTabController implements InflationObserver {
             tab.getView().requestFocus();
         }
 
-        if (!tab.isIncognito()) {
+        if (!tab.isOffTheRecord()) {
             TabObserver observer =
                     new EmptyTabObserver() {
                         @Override
@@ -497,6 +506,7 @@ public class CustomTabActivityTabController implements InflationObserver {
         // be generated in the middle of tab initialization.
         mTabObserverRegistrar.addObserversForTab(tab);
         prepareTabBackground(tab);
+        mCustomTabObserver.get().setLongPressLinkSelectText(tab, mIntentDataProvider.isAuthView());
     }
 
     public void registerTabObserver(TabObserver observer) {

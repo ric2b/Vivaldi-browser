@@ -15,6 +15,65 @@ It's an open list, so
 if you're interested in updates, discussion, or feisty rants related to Chromium
 security.
 
+## Q2 2024
+
+# Chrome Security **2024 Q2** Update
+
+
+Greetings,
+
+This is what the Chrome Security team have been doing in the second quarter of 2024.
+
+[Real-time phishing protection](https://blog.google/products/chrome/google-chrome-safe-browsing-real-time/) for Safe Browsing is now rolling out on Android (Desktop and iOS landed last quarter), bringing >25% more phishing protection. We’ve switched desktop users to [asynchronous checks](https://security.googleblog.com/2024/03/blog-post.html), which removes any performance impact of these real-time checks while retaining the protective value.
+
+In extension safety, we published a [blog](https://security.googleblog.com/2024/06/staying-safe-with-chrome-extensions.html) detailing our efforts and what users can do to stay safe. Additionally, we added several more triggers in Chrome that will flag unwanted or unexpected extensions for the user in the Safety Check.
+
+In the cookie theft space, we launched auto-deep scanning of suspicious downloads for ESB users, and expanded the encrypted-archive scanning as an option for standard-SB users.
+
+We fully launched post-quantum TLS key exchange on Chrome Desktop platforms, and it is now used in 19-26% of all forward-secret HTTPS connections. We also added a device policy to disable it on the login screen for managed ChromeOS devices. We [blogged](https://blog.chromium.org/2024/05/advancing-our-amazing-bet-on-asymmetric.html) about some of the challenges in deploying post-quantum cryptography, and explained our strategy of focusing on agility.
+
+We’ve added support for certificate revocations due to key compromise to CRLSet, and enabled enforcement. Any certificate revoked with the key compromise reason code should now be blocked by Chrome clients within 24-48 hours. This approach should work for day-to-day revocation, but will not work for mass revocation events, due to a limit on the max size of a CRLSet.
+
+The Chrome Root Program announced the distrust of two CAs—[e-commerce Monitoring GmbH](https://groups.google.com/a/ccadb.org/g/public/c/wRs-zec8w7k) and [Entrust](https://security.googleblog.com/2023/11/qualified-certificates-with-qualified.html)—for compliance failures. Both distrusts used a new gradual approach to distrust, where certificates logged to a Certificate Transparency log prior to a well defined enforcement date continue to be trusted until expiry. 
+
+Within the CA/Browser Forum, the Chrome Root Program contributed to [Ballot SC-75](https://github.com/cabforum/servercert/pull/518) (passed), which focused on linting. This ballot was partially motivated by “[Moving Forward, Together](https://www.chromium.org/Home/chromium-security/root-ca-policy/moving-forward-together/)" and the wide-spread certificate mis-issuance detected by our team in the Spring. We also continued pushing forward with [Ballot SC-67](https://github.com/cabforum/servercert/pull/517) (moving to vote on approximately 7/15), which is focused on strengthening security practices via multi-perspective domain validation.  At CA/Browser Forum Face-to-Face, we [presented](https://drive.google.com/file/d/1ZwYXcr3Wzjkgh8iPKPFuCLfwfJBD0dbf/view) our expectations around incident response.
+
+The Chrome Security Architecture team reached an exciting milestone in Q2, enabling [isolated sandboxed frames](https://crbug.com/510122) by default! This adds a process boundary between origins and untrustworthy content they host, and it required solving numerous challenges with srcdoc URLs, data URLs, base URLs, and other corner cases. We also shipped [RenderDocument](https://crbug.com/936696) for all subframes, ensuring that a new RenderFrameHost is consistently used for each new subframe document. We added several new security enforcements against compromised renderer processes as well, including opaque origin checks and expanding the new CanCommitURL checks to Android WebView. To prepare for future experiments, we made progress on [Origin Isolation](https://crbug.com/40259221) and [SiteInstanceGroup](https://crbug.com/1447896) modes. Finally, we expanded our [memory-safe browser kernel model](https://docs.google.com/document/d/1f9OOpmKPV1A7J7i78xBePVmaM2N6IcVI8025qUDLY_A/edit?usp=sharing) in Rust to simulate documents, navigations, and session history.
+
+On Windows, the platform security team has continued work on [app-bound encryption](https://issues.chromium.org/issues/40227925) support for cookies. The first stages of this project are being rolled out through the release channels now. Work has also begun on expanding this protection to other secrets.
+
+The ACG mitigation for the browser process on Windows, which was previously only behind a feature flag, was promoted to a new [enterprise policy](https://chromeenterprise.google/policies/#DynamicCodeSettings), and we encourage folks to try it out and report any incompatibilities.
+
+On macOS, we are continuing to refine our approach to ad-hoc PWA signing. We have a new solution which we believe ought to interoperate well with all sorts of deployed host security software, and are now finalizing enterprise policies and other deployment requirements before we ship this.
+
+We have brought the Skia font manager to our PDF reader, allowing us to strengthen the PDF sandbox, and we have made changes in several areas of Chromium to enable compiler protection against unsafe buffer uses. We have also continued our long-term architectural work to port ANGLE to target Dawn, which is partly complete but unlikely to be finished this year.
+
+The Offensive Security team discovered and reported [two](https://crbug.com/339458177) high-severity [bugs](https://crbug.com/340822365) in Chrome.
+
+Spanification, one of our Safe Coding projects, made significant progress in Q2. We have updated almost all APIs in `//base` and `//net` so they can take buffers as `span`s. Thanks to our infrastructure work in Q1, we can roll out the `-Wunsafe-buffers` warning incrementally across the codebase, and as of the end of Q2 Chrome has files comprising **1.5 million** lines of non-test code that are protected by that warning and are therefore less likely to have out-of-bounds access bugs introduced in the future. Our process and docs are mature enough we're ready for early-adopter teams to start Spanifying their code; to that end, we made a [formal announcement](https://groups.google.com/a/chromium.org/g/chromium-dev/c/iEy69ygz-rs) to `chromium-dev` about the project and its goals.
+
+As for [MiraclePtr](https://docs.google.com/document/d/1pnnOAIz_DMWDI4oIOFoMAqLnf_MZ2GsrJNb_dbQ3ZBg/edit), we are at a stage to start the roll out to the renderer process. And as part of that work we have been especially focused on investigating the performance overhead of MiraclePtr. We now have bots and a dashboard to monitor the overhead over time so as not to introduce raw_ptr into performance hot spots.
+
+Earlier this year the Chrome Security team stood up [automation](https://ci.chromium.org/ui/p/chromium/builders/ci/linux-codeql-generator) to build a CodeQL database for Chrome once a day. This quarter we started engaging more proactively with GitHub to identify and drive fixes in CodeQL's C++ extractor (e.g. [this issue](https://github.com/github/codeql/issues/16853)) that have led to incomplete CodeQL databases.
+
+Early this quarter we launched the [V8 Sandbox VRP](https://g.co/chrome/vrp/#v8-sandbox-bypass-rewards) alongside a [technical blog post about the sandbox](https://v8.dev/blog/sandbox). While the V8 sandbox is still in development and not yet considered a security boundary, the VRP inclusion is an important step towards that goal. In May we then also [presented about the sandbox at OffensiveCon](https://www.youtube.com/watch?v=5otAw81AHQ0) in Berlin. On the CFI-side, we investigated an approach for [forward-edge CFI based on memory protection keys](https://chromium-review.googlesource.com/c/v8/v8/+/5572947) which appears promising as it has very low performance overhead. We are now aiming to use it to achieve forward-edge CFI for both JavaScript- and WebAssembly calls. Finally, helped by events such as Pwn2Own or the [V8CTF](https://github.com/google/security-research/blob/master/v8ctf/rules.md) (our exploit bounty program), we [collected some statistics](https://docs.google.com/document/d/1njn2dd5_6PB7oZGTmkmoihYnVcJEgRwEFxhHnGoptLk/edit?usp=sharing) about the types of bugs being exploited in V8.
+
+The Chrome Fuzzing team continues work on two fronts: writing novel fuzzers and maintaining the tools and infrastructure used by Chromium engineers to write and run fuzzers.
+
+We landed [truly automated](https://crrev.com/c/5490095) IPC fuzzing, which found a [bug](https://crbug.com/348794705), though a couple infra bugs remain. We are experimenting with [integration](https://chromium-review.googlesource.com/c/chromium/src/+/5605371) of Chrome and Fuzzilli and an accessibility tree based [UI fuzzer](https://chromium-review.googlesource.com/c/chromium/src/+/5526486). We also considered an experiment to unblock coverage-guided fuzzers using AI/LLMs.
+
+On the infrastructure side, we have been working to diversify and expand our fuzzing fleet with newer devices. We are investing in aligning our fleet management with the rest of chrome test infrastructure to reduce operational toil and allow us to grow the fleet further next year.
+
+After months of behind the scenes work and integration, the Chrome VRP, in conjunction with Google VRP,  [launched the new payments integration with Bugcrowd](https://bughunters.google.com/blog/6483936851394560/announcing-bugcrowd-as-a-new-bughunters-google-com-payment-option), resulting in a more flexible option for reward payments for all VRPs across Google, [including Chrome VRP](https://chromium.googlesource.com/chromium/src/+/main/docs/security/vrp-faq.md#when-will-i-receive-my-reward). 
+
+The Chrome VRP has also been working on forthcoming updates to the Chrome VRP reward structure as well as working on plans for upcoming VRP events, including the BugSWAT events in Las Vegas in August (in conjunction with Black Hat USA, Def Con, and Google’s 0x0G event) and as part of the annual ESCAL8 event in October in Málaga, Spain.
+
+Until next time,
+
+Adrian
+
+On behalf of Chrome Security
+
 ## Q1 2024
 
 

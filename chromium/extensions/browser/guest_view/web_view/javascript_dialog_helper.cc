@@ -32,7 +32,7 @@ std::string JavaScriptDialogTypeToString(
     case content::JAVASCRIPT_DIALOG_TYPE_PROMPT:
       return "prompt";
     default:
-      NOTREACHED() << "Unknown JavaScript Message Type.";
+      NOTREACHED_IN_MIGRATION() << "Unknown JavaScript Message Type.";
       return "unknown";
   }
 }
@@ -106,6 +106,16 @@ bool JavaScriptDialogHelper::HandleJavaScriptDialog(
 
 void JavaScriptDialogHelper::CancelDialogs(content::WebContents* web_contents,
                                            bool reset_state) {
+  if (vivaldi::IsVivaldiRunning()) {
+    // VB-104649 Call full implementation to cancel dialog
+    content::JavaScriptDialogManager* tab_dialog_manager =
+        javascript_dialogs::TabModalDialogManager::FromWebContents(
+            web_contents);
+    if (tab_dialog_manager) {
+      tab_dialog_manager->CancelDialogs(web_contents, reset_state);
+      return;
+    }
+  }
 // Calling the callback will resume the renderer.
   if (dialog_callback_) {
     std::move(dialog_callback_).Run(false, std::u16string());

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/cert/x509_certificate.h"
 
 #include <stdint.h>
@@ -577,13 +582,9 @@ TEST(X509CertificateTest, ExtractSPKIFromDERCert) {
 
   std::string_view spkiBytes;
   EXPECT_TRUE(asn1::ExtractSPKIFromDERCert(
-      x509_util::CryptoBufferAsStringPiece(cert->cert_buffer()), &spkiBytes));
-
-  uint8_t hash[base::kSHA1Length];
-  base::SHA1HashBytes(reinterpret_cast<const uint8_t*>(spkiBytes.data()),
-                      spkiBytes.size(), hash);
-
-  EXPECT_EQ(0, memcmp(hash, kNistSPKIHash, sizeof(hash)));
+      base::as_string_view(cert->cert_span()), &spkiBytes));
+  base::SHA1Digest hash = base::SHA1Hash(base::as_byte_span(spkiBytes));
+  EXPECT_EQ(base::span(hash), base::as_byte_span(kNistSPKIHash));
 }
 
 TEST(X509CertificateTest, HasCanSignHttpExchangesDraftExtension) {

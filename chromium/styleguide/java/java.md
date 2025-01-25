@@ -39,14 +39,34 @@ try (var ignored = StrictModeContext.allowDiskWrites()) {
 
 ### Exceptions
 
-We discourage overly broad catches via `Throwable`, `Exception`, or
-`RuntimeException`, except when dealing with `RemoteException` or similar
-system APIs.
+A quick primer:
+
+* `Throwable`: Base class for all exceptions
+  * `Error`: Base class for exceptions which are meant to crash the app.
+  * `Exception`: Base class for exceptions that make sense the `catch`.
+    * `RuntimeException`: Base class for exceptions that do not need to be
+       declared as `throws` ("unchecked exceptions").
+
+#### Broad Catch Handlers {#broad-catches}
+
+Use catch statements that do not catch exceptions they are not meant to.
+ * There is rarely a valid reason to `catch (Throwable t)`, since that
+   includes the (generally unrecoverable) `Error` types.
+
+Use `catch (Exception e)` when working with OS APIs that might throw
+(assuming the program can recover from them).
  * There have been many cases of crashes caused by `IllegalStateException` /
    `IllegalArgumentException` / `SecurityException` being thrown where only
-   `RemoteException` was being caught. In these cases, use
-   `catch (RemoteException | RuntimeException e)`.
- * For all broad catch expressions, add a comment to explain why.
+   `RemoteException` was being caught. Unless catch handlers will differ
+   based on exception type, just catch `Exception`.
+
+Do not use `catch (RuntimeException e)`.
+ * It is useful to extend `RuntimeException` to make unchecked exception
+   types, but the type does not make much sense in `catch` clauses, as
+   there are not times when you'd want to catch all unchecked exceptions,
+   but not also want to catch all checked exceptions.
+
+#### Exception Messages {#exception-messages}
 
 Avoid adding messages to exceptions that do not aid in debugging. For example:
 
@@ -62,6 +82,31 @@ try {
     throw new RuntimeException(String.format("Failed to parse %s", fileName), e);
 }
 ```
+
+#### Wrapping with RuntimeException {#throw-unchecked}
+
+It is common to wrap a checked exception with a RuntimeException for cases
+where a checked exception is not recoverable, or not possible. In order to
+reduce the number of stack trace "caused by" clauses, and to save on binary
+size, use [`JavaUtils.throwUnchecked()`] instead.
+
+```java
+try {
+    somethingThatThrowsIOException();
+} catch (IOException e) {
+    // Bad - RuntimeException adds no context and creates longer stack traces.
+    throw new RuntimeException(e);
+    // Good - Original exception is preserved.
+    throw JavaUtils.throwUnchecked(e);
+}
+```
+
+*** note
+Do not use `throwUnchecked()` when the exception may want to be caught.
+***
+
+
+[`JavaUtils.throwUnchecked()`]: https://source.chromium.org/search?q=symbol:JavaUtils.throwUnchecked
 
 ### Asserts
 
@@ -345,11 +390,13 @@ In summary:
 * Use real dependencies when feasible and fast. Use Mockito’s `@Mock` most
   of the time, but write fakes for frequently used dependencies.
 
-* Do not use Robolectric Shadows for Chromium code. Instead, use
-  `setForTesting()` methods so that it is clear that test hooks exist.
-  * When `setForTesting()` methods alter global state, use
-    [`ResettersForTesting.register()`] to ensure that the state is reset
-    between tests. Omit resetting them via `@After` methods.
+* Do not use Robolectric Shadows for Chromium code.
+  * Shadows make code harder to refactor.
+  * Prefer to refactor code to make it more testable.
+  * When you really need to use a test double for a static method, add a
+    `setFooForTesting() [...]` method to make the test contract explicit.
+    * Use [`ResettersForTesting.register()`] from within `ForTesting()`
+      methods to ensure that state is reset between tests.
 
 * Use Robolectric when possible (when tests do not require native). Other
   times, use on-device tests with one of the following annotations:

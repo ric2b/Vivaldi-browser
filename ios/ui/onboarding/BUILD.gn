@@ -54,6 +54,7 @@ swift_source_set("vivaldi_onboarding_swift") {
     "//vivaldi/ios/ui/settings/sync:vivaldi_sync_settings",
     "//vivaldi/ios/ui/settings/tabs:vivaldi_tab_settings",
     "//vivaldi/ios/ui/common:vivaldi_common",
+    "//vivaldi/ios/ui/helpers:helpers_swift",
   ]
 
   frameworks = [

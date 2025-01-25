@@ -802,7 +802,7 @@ TEST_F(CopyOrMoveIsCrossFileSystemTest, SameVolumeNotDownloads) {
 
 TEST_F(CopyOrMoveIsCrossFileSystemTest, MyFilesToMyFiles) {
   // Downloads is intentionally misspelled in these 2 test cases. These paths
-  // should be interpreted as regular "My files" paths.
+  // should be interpreted as regular MyFiles paths.
   base::FilePath source_path = downloads_volume_path_.Append("a.txt");
   base::FilePath destination_path =
       downloads_volume_path_.Append("Download/a.txt");
@@ -817,21 +817,21 @@ TEST_F(CopyOrMoveIsCrossFileSystemTest, MyFileToDownloads) {
   base::FilePath source_path = downloads_volume_path_.Append("a.txt");
   base::FilePath destination_path =
       downloads_volume_path_.Append("Downloads/b/a.txt");
-  ASSERT_TRUE(IsCrossFileSystem(source_path, destination_path));
+  ASSERT_FALSE(IsCrossFileSystem(source_path, destination_path));
 
   source_path = downloads_volume_path_.Append("a/b.txt");
   destination_path = downloads_volume_path_.Append("Downloads");
-  ASSERT_TRUE(IsCrossFileSystem(source_path, destination_path));
+  ASSERT_FALSE(IsCrossFileSystem(source_path, destination_path));
 }
 
 TEST_F(CopyOrMoveIsCrossFileSystemTest, DownloadsToMyFiles) {
   base::FilePath source_path = downloads_volume_path_.Append("Downloads/a.txt");
   base::FilePath destination_path = downloads_volume_path_.Append("b/a.txt");
-  ASSERT_TRUE(IsCrossFileSystem(source_path, destination_path));
+  ASSERT_FALSE(IsCrossFileSystem(source_path, destination_path));
 
   source_path = downloads_volume_path_.Append("Downloads/a/b.txt");
   destination_path = downloads_volume_path_;
-  ASSERT_TRUE(IsCrossFileSystem(source_path, destination_path));
+  ASSERT_FALSE(IsCrossFileSystem(source_path, destination_path));
 }
 
 TEST_F(CopyOrMoveIsCrossFileSystemTest, DownloadsToDownloads) {

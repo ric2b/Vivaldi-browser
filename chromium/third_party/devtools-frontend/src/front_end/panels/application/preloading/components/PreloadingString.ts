@@ -363,21 +363,21 @@ const UIStrings = {
    */
   prerenderFinalStatusActivationUrlHasEffectiveUrl:
       'The prerender was not used because during activation time, navigation has an effective URL that is different from its normal URL. (For example, the New Tab Page, or hosted apps.)',
-  // TODO(nhiroki): Please provide meaningful description.
   /**
    * Description text for PrenderFinalStatus::kJavaScriptInterfaceAdded.
    */
-  prerenderFinalStatusJavaScriptInterfaceAdded: 'Unknown',
-  // TODO(nhiroki): Please provide meaningful description.
+  prerenderFinalStatusJavaScriptInterfaceAdded:
+      'The prerendered page was unloaded because a new JavaScript interface has been injected by WebView.addJavascriptInterface().',
   /**
    * Description text for PrenderFinalStatus::kJavaScriptInterfaceRemoved.
    */
-  prerenderFinalStatusJavaScriptInterfaceRemoved: 'Unknown',
-  // TODO(nhiroki): Please provide meaningful description.
+  prerenderFinalStatusJavaScriptInterfaceRemoved:
+      'The prerendered page was unloaded because a JavaScript interface has been removed by WebView.removeJavascriptInterface().',
   /**
    * Description text for PrenderFinalStatus::kAllPrerenderingCanceled.
    */
-  prerenderFinalStatusAllPrerenderingCanceled: 'Unknown',
+  prerenderFinalStatusAllPrerenderingCanceled:
+      'All prerendered pages were unloaded by the browser for some reason (For example, WebViewCompat.addWebMessageListener() was called during prerendering.)',
 
   /**
    *@description Text in grid and details: Preloading attempt is not yet triggered.
@@ -687,6 +687,9 @@ export function prerenderFailureReason(attempt: SDK.PreloadingModel.PrerenderAtt
       return i18nString(UIStrings.prerenderFinalStatusJavaScriptInterfaceRemoved);
     case Protocol.Preload.PrerenderFinalStatus.AllPrerenderingCanceled:
       return i18nString(UIStrings.prerenderFinalStatusAllPrerenderingCanceled);
+    case Protocol.Preload.PrerenderFinalStatus.WindowClosed:
+      // TODO(crbug.com/350870118): Add message for this.
+      return '';
     default:
       // Note that we use switch and exhaustiveness check to prevent to
       // forget updating these strings, but allow to handle unknown

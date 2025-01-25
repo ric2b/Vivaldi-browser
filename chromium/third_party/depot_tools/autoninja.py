@@ -14,6 +14,7 @@ does handle import statements, but it can't handle conditional setting of build
 settings.
 """
 
+import logging
 import json
 import multiprocessing
 import os
@@ -30,15 +31,18 @@ import warnings
 import google.auth
 from google.auth.transport.requests import AuthorizedSession
 
-import autosiso
+import build_telemetry
+import gn_helper
 import ninja
-import ninja_reclient
+import ninjalog_uploader
+import reclient_helper
 import siso
 
 if sys.platform in ["darwin", "linux"]:
     import resource
 
-SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+_SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+_NINJALOG_UPLOADER = os.path.join(_SCRIPT_DIR, "ninjalog_uploader.py")
 
 # See [1] and [2] for the painful details of this next section, which handles
 # escaping command lines so that they can be copied and pasted into a cmd
@@ -132,7 +136,7 @@ def _is_google_corp_machine_using_external_account():
     if not _is_google_corp_machine():
         return False
 
-    with shelve.open(os.path.join(SCRIPT_DIR, ".autoninja")) as db:
+    with shelve.open(os.path.join(_SCRIPT_DIR, ".autoninja")) as db:
         last_false = db.get("last_false")
         now = time.time()
         if last_false is not None and now < last_false + 12 * 60 * 60:
@@ -182,31 +186,12 @@ def _print_cmd(cmd):
     print(*[shell_quoter(arg) for arg in cmd], file=sys.stderr)
 
 
-def _gn_lines(output_dir, path):
-    """
-    Generator function that returns args.gn lines one at a time, following
-    import directives as needed.
-    """
-    import_re = re.compile(r'\s*import\("(.*)"\)')
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            match = import_re.match(line)
-            if match:
-                raw_import_path = match.groups()[0]
-                if raw_import_path[:2] == "//":
-                    import_path = os.path.normpath(
-                        os.path.join(output_dir, "..", "..",
-                                     raw_import_path[2:]))
-                else:
-                    import_path = os.path.normpath(
-                        os.path.join(os.path.dirname(path), raw_import_path))
-                for import_line in _gn_lines(output_dir, import_path):
-                    yield import_line
-            else:
-                yield line
-
-
-def main(args):
+def main(args, should_collect_logs=False):
+    # if user doesn't set PYTHONPYCACHEPREFIX and PYTHONDONTWRITEBYTECODE
+    # set PYTHONDONTWRITEBYTECODE=1 not to create many *.pyc in workspace
+    # and keep workspace clean.
+    if not os.environ.get("PYTHONPYCACHEPREFIX"):
+        os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
     # The -t tools are incompatible with -j
     t_specified = False
     j_specified = False
@@ -221,8 +206,7 @@ def main(args):
     # separated by spaces. When this case is detected we need to do argument
     # splitting ourselves. This means that arguments containing actual spaces
     # are not supported by autoninja, but that is not a real limitation.
-    if (sys.platform.startswith("win") and len(args) == 2
-            and input_args[1].count(" ") > 0):
+    if sys.platform.startswith("win") and len(args) == 2:
         input_args = args[:1] + args[1].split()
 
     # Ninja uses getopt_long, which allow to intermix non-option arguments.
@@ -249,13 +233,14 @@ def main(args):
             print(file=sys.stderr)
 
     use_remoteexec = False
+    use_reclient = None
     use_siso = False
 
     # Attempt to auto-detect remote build acceleration. We support gn-based
     # builds, where we look for args.gn in the build tree, and cmake-based
     # builds where we look for rules.ninja.
-    if os.path.exists(os.path.join(output_dir, "args.gn")):
-        for line in _gn_lines(output_dir, os.path.join(output_dir, "args.gn")):
+    if gn_helper.exists(output_dir):
+        for k, v in gn_helper.args(output_dir):
             # use_remoteexec will activate build acceleration.
             #
             # This test can match multi-argument lines. Examples of this
@@ -263,17 +248,17 @@ def main(args):
             # use_remoteexec=false# use_remoteexec=true This comment is ignored
             #
             # Anything after a comment is not consider a valid argument.
-            line_without_comment = line.split("#")[0]
-            if re.search(
-                    r"(^|\s)(use_remoteexec)\s*=\s*true($|\s)",
-                    line_without_comment,
-            ):
+            if k == "use_remoteexec" and v == "true":
                 use_remoteexec = True
                 continue
-            if re.search(r"(^|\s)(use_siso)\s*=\s*true($|\s)",
-                         line_without_comment):
+            if k == "use_siso" and v == "true":
                 use_siso = True
                 continue
+            if k == "use_reclient" and v == "false":
+                use_reclient = False
+                continue
+        if use_reclient is None:
+            use_reclient = use_remoteexec
 
         if use_remoteexec:
             if _is_google_corp_machine_using_external_account():
@@ -289,7 +274,7 @@ def main(args):
 
         siso_marker = os.path.join(output_dir, ".siso_deps")
         if use_siso:
-            # autosiso generates a .ninja_log file so the mere existence of a
+            # siso generates a .ninja_log file so the mere existence of a
             # .ninja_log file doesn't imply that a ninja build was done. However
             # if there is a .ninja_log but no .siso_deps then that implies a
             # ninja build.
@@ -302,7 +287,17 @@ def main(args):
                 )
                 return 1
             if use_remoteexec:
-                return autosiso.main(["autosiso"] + input_args[1:])
+                if use_reclient:
+                    return reclient_helper.run_siso(
+                        [
+                            'siso',
+                            'ninja',
+                            # Do not authenticate when using Reproxy.
+                            '-project=',
+                            '-reapi_instance=',
+                        ] + input_args[1:],
+                        should_collect_logs)
+                return siso.main(["siso", "ninja"] + input_args[1:])
             return siso.main(["siso", "ninja", "--offline"] + input_args[1:])
 
         if os.path.exists(siso_marker):
@@ -354,16 +349,7 @@ def main(args):
             fileno_limit, hard_limit = resource.getrlimit(
                 resource.RLIMIT_NOFILE)
 
-    # Call ninja.py so that it can find ninja binary installed by DEPS or one in
-    # PATH.
-    ninja_path = os.path.join(SCRIPT_DIR, "ninja.py")
-    # If using remoteexec, use ninja_reclient.py which wraps ninja.py with
-    # starting and stopping reproxy.
-    if use_remoteexec:
-        ninja_path = os.path.join(SCRIPT_DIR, "ninja_reclient.py")
-
-    args = [sys.executable, ninja_path]
-
+    args = ['ninja']
     num_cores = multiprocessing.cpu_count()
     if not j_specified and not t_specified:
         if not offline and use_remoteexec:
@@ -412,13 +398,32 @@ def main(args):
         # are being used.
         _print_cmd(args)
 
-    if use_remoteexec:
-        return ninja_reclient.main(args[1:])
-    return ninja.main(args[1:])
+    if use_reclient:
+        return reclient_helper.run_ninja(args, should_collect_logs)
+    return ninja.main(args)
+
+
+def _upload_ninjalog(args):
+    # Run upload script without wait.
+    creationflags = 0
+    if platform.system() == "Windows":
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+    subprocess.Popen(
+        [sys.executable, _NINJALOG_UPLOADER, "--cmdline"] + args[1:],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=creationflags,
+    )
 
 
 if __name__ == "__main__":
+    # Check the log collection opt-in/opt-out status, and display notice if necessary.
+    _should_collect_logs = build_telemetry.enabled()
     try:
-        sys.exit(main(sys.argv))
+        exit_code = main(sys.argv, _should_collect_logs)
     except KeyboardInterrupt:
-        sys.exit(1)
+        exit_code = 1
+    finally:
+        if _should_collect_logs:
+            _upload_ninjalog(sys.argv)
+    sys.exit(exit_code)

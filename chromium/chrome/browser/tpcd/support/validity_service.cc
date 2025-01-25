@@ -171,8 +171,8 @@ void ValidityService::OnCookiesAccessedImpl(
   // Check for an existing trial setting applicable to the pair.
   ThirdPartyCookieAllowMechanism allow_mechanism =
       cookie_settings->GetThirdPartyCookieAllowMechanism(
-          details.url, details.first_party_url,
-          details.cookie_setting_overrides);
+          details.url, net::SiteForCookies::FromUrl(details.first_party_url),
+          details.first_party_url, details.cookie_setting_overrides);
   std::optional<ContentSettingsType> setting_type =
       GetTrialContentSettingsType(allow_mechanism);
 
@@ -228,8 +228,9 @@ void ValidityService::CheckTrialStatusOnUiThread(
 
       break;
     default:
-      NOTREACHED() << "ContentSettingsType::" << trial_settings_type
-                   << " is not associated with a 3PCD trial.";
+      NOTREACHED_IN_MIGRATION()
+          << "ContentSettingsType::" << trial_settings_type
+          << " is not associated with a 3PCD trial.";
       return;
   }
 
@@ -261,8 +262,9 @@ bool ValidityService::CheckTrialContentSetting(
                                               trial_settings_type,
                                               info) == CONTENT_SETTING_ALLOW);
     default:
-      NOTREACHED() << "ContentSettingsType::" << trial_settings_type
-                   << " is not associated with a 3PCD trial.";
+      NOTREACHED_IN_MIGRATION()
+          << "ContentSettingsType::" << trial_settings_type
+          << " is not associated with a 3PCD trial.";
       return false;
   }
 }

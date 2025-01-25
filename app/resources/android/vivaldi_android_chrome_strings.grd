@@ -270,6 +270,9 @@ Touch to Search is a feature that is only available when Google is set as the de
       <message name="IDS_PRELOAD_PAGES_EXTENDED_PRELOADING_BULLET_THREE" desc="Third bullet point under the Preload Pages extended preloading mode. Informs the user about what the extended preloading setting does.">
         When a site asks to privately preload links on their page, Vivaldi encrypts and preloads pages through Google servers without cookies. This hides your identity from the preloaded site.
       </message>
+      <message name="IDS_PASSWORD_MANAGER_SETTINGS_TITLE" desc="Title for the settings menu item leading to the Password Manager UI surface. This allows users to e.g. manage their saved passwords, toggle saving and auto-sign-in on/off, etc. [CHAR_LIMIT=32]">
+        Password Manager
+      </message>
     </messages>
   </release>
 </grit>

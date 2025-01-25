@@ -189,6 +189,13 @@ Response PermissionDescriptorToPermissionType(
     *permission_type = PermissionType::KEYBOARD_LOCK;
   } else if (name == "pointer-lock") {
     *permission_type = PermissionType::POINTER_LOCK;
+  } else if (name == "fullscreen") {
+    if (!descriptor->GetAllowWithoutGesture(false)) {
+      // There is no PermissionType for fullscreen with user gesture.
+      return Response::InvalidParams(
+          "Fullscreen Permission only supports allowWithoutGesture:true");
+    }
+    *permission_type = PermissionType::AUTOMATIC_FULLSCREEN;
   } else {
     return Response::InvalidParams("Invalid PermissionDescriptor name: " +
                                    name);
@@ -578,7 +585,7 @@ void BrowserHandler::OnDownloadUpdated(download::DownloadItem* item) {
       state = Browser::DownloadProgress::StateEnum::Canceled;
       break;
     case download::DownloadItem::MAX_DOWNLOAD_STATE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   frontend_->DownloadProgress(item->GetGuid(), item->GetTotalBytes(),
                               item->GetReceivedBytes(), state);

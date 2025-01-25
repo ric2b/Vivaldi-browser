@@ -64,6 +64,7 @@ partial interface Navigator {
 [SecureContext]
 partial interface Navigator {
   Promise<(USVString or FencedFrameConfig)?> runAdAuction(AuctionAdConfig config);
+  readonly attribute boolean deprecatedRunAdAuctionEnforcesKAnonymity;
 };
 
 dictionary AuctionAdConfig {
@@ -85,6 +86,7 @@ dictionary AuctionAdConfig {
   unsigned long long reportingTimeout;
   USVString sellerCurrency;
   Promise<record<USVString, USVString>> perBuyerCurrencies;
+  record<USVString, unsigned short> perBuyerMultiBidLimits;
   record<USVString, unsigned short> perBuyerGroupLimits;
   record<USVString, unsigned short> perBuyerExperimentGroupIds;
   record<USVString, record<USVString, double>> perBuyerPrioritySignals;
@@ -96,6 +98,11 @@ dictionary AuctionAdConfig {
   sequence<AuctionAdConfig> componentAuctions = [];
   AbortSignal? signal;
   Promise<boolean> resolveToConfig;
+};
+
+[SecureContext]
+partial interface Navigator {
+  boolean canLoadAdAuctionFencedFrame();
 };
 
 [SecureContext]
@@ -125,7 +132,7 @@ interface InterestGroupBiddingAndScoringScriptRunnerGlobalScope : InterestGroupS
          InterestGroupBiddingScriptRunnerGlobalScope)]
 interface InterestGroupBiddingScriptRunnerGlobalScope
         : InterestGroupBiddingAndScoringScriptRunnerGlobalScope {
-  boolean setBid(optional GenerateBidOutput generateBidOutput = {});
+  boolean setBid(optional (GenerateBidOutput or sequence<GenerateBidOutput>) oneOrManyBids = []);
   undefined setPriority(double priority);
   undefined setPrioritySignalsOverride(DOMString key, optional double? priority);
 };
@@ -145,6 +152,8 @@ dictionary GenerateBidOutput {
   double adCost;
   unrestricted double modelingSignals;
   boolean allowComponentAuction = false;
+  unsigned long targetNumAdComponents;
+  unsigned long numMandatoryAdComponents = 0;
 };
 
 [Exposed=InterestGroupScoringScriptRunnerGlobalScope,
@@ -199,7 +208,9 @@ dictionary BiddingBrowserSignals {
   required long bidCount;
   required long recency;
   required long adComponentsLimit;
+  required unsigned short multiBidLimit;
 
+  record<DOMString, DOMString> requestedSize;
   USVString topLevelSeller;
   sequence<PreviousWin> prevWinsMs;
   object wasmHelper;
@@ -214,6 +225,7 @@ dictionary ScoringBrowserSignals {
   required unsigned long biddingDurationMsec;
   required DOMString bidCurrency;
 
+  record<DOMString, DOMString> renderSize;
   unsigned long dataVersion;
   sequence<USVString> adComponents;
   boolean forDebuggingOnlyInCooldownOrLockout = false;

@@ -8,6 +8,7 @@
 
 #include <math.h>
 
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/notreached.h"
 
@@ -43,11 +44,10 @@ void CXFA_Measurement::SetString(WideStringView wsMeasure) {
   }
 
   size_t nUsedLen = 0;
-  float fValue = FXSYS_wcstof(wsMeasure.unterminated_c_str(),
-                              wsMeasure.GetLength(), &nUsedLen);
-  if (!isfinite(fValue))
+  float fValue = FXSYS_wcstof(wsMeasure, &nUsedLen);
+  if (!isfinite(fValue)) {
     fValue = 0.0f;
-
+  }
   Set(fValue, GetUnitFromString(wsMeasure.Substr(nUsedLen)));
 }
 

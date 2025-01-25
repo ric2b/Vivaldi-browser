@@ -72,6 +72,7 @@
 #include "browser/startup_vivaldi_browser.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "browser/vivaldi_webcontents_util.h"
+#include "components/guest_view/browser/guest_view_base.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/guest_view/vivaldi_web_view_constants.h"
 #include "extensions/helper/vivaldi_init_helpers.h"
@@ -102,6 +103,7 @@ using vivaldi::IsVivaldiRunning;
 namespace extensions {
 
 namespace {
+
 
 // local function copied from web_view_guest.cc
 /*
@@ -163,7 +165,7 @@ std::string WindowOpenDispositionToString(
       return "off_the_record";
     default:
       NOTREACHED() << "Unknown Window Open Disposition";
-      return "ignore";
+      //return "ignore";
   }
 }
 
@@ -199,7 +201,7 @@ static std::string SSLStateToString(SecurityStateTabHelper* helper) {
       break;
   }
   NOTREACHED() << "Unknown SecurityLevel";
-  return "unknown";
+  //return "unknown";
 }
 
 static std::string ContentSettingsTypeToString(
@@ -260,7 +262,13 @@ bool IsPanelId(const std::string &name) {
 
   return false;
 }
+
+void AttachWebContentsObservers(content::WebContents* contents) {
+  extensions::WebNavigationTabObserver::CreateForWebContents(contents);
+  ::vivaldi::InitHelpers(contents);
+}
 }  // namespace
+
 
 #if defined(USE_AURA)
 std::unique_ptr<WebViewGuest::CursorHider> WebViewGuest::CursorHider::Create(
@@ -539,7 +547,7 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
   if (!browser || !browser->window()) {
     if (windowId) {
       NOTREACHED();
-      return;
+      //return;
     }
     // Find a suitable window.
     browser = chrome::FindTabbedBrowser(
@@ -547,7 +555,7 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
         true);
     if (!browser || !browser->window()) {
       NOTREACHED();
-      return;
+      //return;
     }
   }
 
@@ -762,7 +770,7 @@ content::WebContentsDelegate* WebViewGuest::GetDevToolsConnector() {
 
 content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
     content::WebContents* source,
-    const content::NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   DCHECK(source == web_contents());
   // We need override this at an early stage since |KeyboardEventManager| will
   // block the delegate(WebViewGuest::HandleKeyboardEvent) if the page does
@@ -1115,6 +1123,8 @@ void WebViewGuest::VivaldiCreateWebContents(
       new_contents->GetPrimaryMainFrame()->GetProcess()->GetID(),
       url::Origin::Create(GetOwnerSiteURL()));
 
+  AttachWebContentsObservers(new_contents.get());
+
   std::move(webcontentents_created_callback)
       .Run(std::move(owned_this), std::move(new_contents));
 }
@@ -1222,17 +1232,3 @@ void WebViewGuest::RegisterProtocolHandler(
 }
 
 }  // namespace extensions
-
-////////////////////////////////////////////////////////////////////////////////
-// Bridge helpers to allow usage of component code in the browser.
-////////////////////////////////////////////////////////////////////////////////
-namespace guest_view {
-
-// declared in src/components/guest_view/browser/guest_view_base.h
-void AttachWebContentsObservers(content::WebContents* contents) {
-  if (vivaldi::IsVivaldiRunning()) {
-    extensions::WebNavigationTabObserver::CreateForWebContents(contents);
-    vivaldi::InitHelpers(contents);
-  }
-}
-}  // namespace guest_view

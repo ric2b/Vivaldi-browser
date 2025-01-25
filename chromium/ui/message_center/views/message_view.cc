@@ -12,7 +12,6 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
-#include "ui/base/ui_base_features.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
@@ -28,6 +27,7 @@
 #include "ui/message_center/views/notification_background_painter.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
@@ -77,10 +77,7 @@ MessageView::MessageView(const Notification& notification)
       timestamp_(notification.timestamp()),
       slide_out_controller_(this, this) {
   SetNotifyEnterExitOnChild(true);
-
-  if (features::IsNotificationGesturesUpdateEnabled()) {
-    slide_out_controller_.set_trackpad_gestures_enabled(true);
-  }
+  slide_out_controller_.set_trackpad_gestures_enabled(true);
   SetFocusBehavior(FocusBehavior::ALWAYS);
   views::FocusRing::Install(this);
   views::FocusRing::Get(this)->SetOutsetFocusRingDisabled(true);
@@ -141,7 +138,7 @@ std::u16string MessageView::CreateAccessibleName(
 
 void MessageView::UpdateWithNotification(const Notification& notification) {
   pinned_ = notification.pinned();
-  SetAccessibleName(CreateAccessibleName(notification));
+  GetViewAccessibility().SetName(CreateAccessibleName(notification));
   slide_out_controller_.set_slide_mode(CalculateSlideMode());
 }
 
@@ -225,11 +222,11 @@ void MessageView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
       ax::mojom::StringAttribute::kRoleDescription,
       l10n_util::GetStringUTF8(IDS_MESSAGE_NOTIFICATION_ACCESSIBLE_NAME));
 
-  if (GetAccessibleName().empty()) {
+  if (GetViewAccessibility().GetCachedName().empty()) {
     node_data->SetNameFrom(ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
   }
 
-  node_data->SetNameChecked(GetAccessibleName());
+  node_data->SetNameChecked(GetViewAccessibility().GetCachedName());
 }
 
 bool MessageView::OnMousePressed(const ui::MouseEvent& event) {
@@ -304,7 +301,7 @@ void MessageView::OnBlur() {
 }
 
 void MessageView::OnGestureEvent(ui::GestureEvent* event) {
-  if (event->type() == ui::ET_GESTURE_TAP) {
+  if (event->type() == ui::EventType::kGestureTap) {
     MessageCenter::Get()->ClickOnNotification(notification_id_);
     event->SetHandled();
     return;
@@ -412,8 +409,7 @@ void MessageView::OnSlideOut() {
   }
 
   auto* message_center = MessageCenter::Get();
-  if (features::IsNotificationGesturesUpdateEnabled() &&
-      message_center->FindPopupNotificationById(notification_id_copy)) {
+  if (message_center->FindPopupNotificationById(notification_id_copy)) {
     message_center->MarkSinglePopupAsShown(notification_id_copy,
                                            /*mark_notification_as_read=*/true);
     return;
@@ -445,7 +441,7 @@ views::SlideOutController::SlideMode MessageView::CalculateSlideMode() const {
       return views::SlideOutController::SlideMode::kFull;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return views::SlideOutController::SlideMode::kFull;
 }
 

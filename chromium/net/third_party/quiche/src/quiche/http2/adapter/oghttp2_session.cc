@@ -1,8 +1,12 @@
 #include "quiche/http2/adapter/oghttp2_session.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
+#include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -24,6 +28,7 @@ namespace adapter {
 namespace {
 
 using ConnectionError = Http2VisitorInterface::ConnectionError;
+using DataFrameHeaderInfo = Http2VisitorInterface::DataFrameHeaderInfo;
 using SpdyFramerError = Http2DecoderAdapter::SpdyFramerError;
 
 using ::spdy::SpdySettingsIR;
@@ -526,8 +531,8 @@ OgHttp2Session::ProcessBytesImpl(absl::string_view bytes) {
 int OgHttp2Session::Consume(Http2StreamId stream_id, size_t num_bytes) {
   auto it = stream_map_.find(stream_id);
   if (it == stream_map_.end()) {
-    QUICHE_LOG(ERROR) << "Stream " << stream_id << " not found when consuming "
-                      << num_bytes << " bytes";
+    QUICHE_VLOG(1) << "Stream " << stream_id << " not found when consuming "
+                   << num_bytes << " bytes";
   } else {
     it->second.window_manager.MarkDataFlushed(num_bytes);
   }
@@ -683,10 +688,12 @@ int OgHttp2Session::SubmitResponseInternal(
     QUICHE_LOG(ERROR) << "Unable to find stream " << stream_id;
     return -501;  // NGHTTP2_ERR_INVALID_ARGUMENT
   }
-  QUICHE_DCHECK_EQ(end_stream, data_source == nullptr);
-  if (!end_stream) {
+  if (data_source != nullptr) {
     // Add data source to stream state
     iter->second.outbound_body = std::move(data_source);
+    write_scheduler_.MarkStreamReady(stream_id, false);
+  } else if (!end_stream) {
+    iter->second.check_visitor_for_body = true;
     write_scheduler_.MarkStreamReady(stream_id, false);
   }
   SendHeaders(stream_id, ToHeaderBlock(headers), end_stream);
@@ -870,9 +877,11 @@ OgHttp2Session::SendResult OgHttp2Session::WriteForStream(
                 static_cast<int32_t>(max_frame_payload_)});
   while (connection_can_write == SendResult::SEND_OK && available_window > 0 &&
          IsReadyToWriteData(state)) {
-    DataFrameInfo info = GetDataFrameInfo(stream_id, available_window, state);
+    DataFrameHeaderInfo info =
+        GetDataFrameInfo(stream_id, available_window, state);
     QUICHE_VLOG(2) << "WriteForStream | length: " << info.payload_length
                    << " end_data: " << info.end_data
+                   << " end_stream: " << info.end_stream
                    << " trailers: " << state.trailers.get();
     if (info.payload_length == 0 && !info.end_data &&
         state.trailers == nullptr) {
@@ -888,9 +897,9 @@ OgHttp2Session::SendResult OgHttp2Session::WriteForStream(
       // No more work on the stream; it has been closed.
       break;
     }
-    if (info.payload_length > 0 || info.send_fin) {
+    if (info.payload_length > 0 || info.end_stream) {
       spdy::SpdyDataIR data(stream_id);
-      data.set_fin(info.send_fin);
+      data.set_fin(info.end_stream);
       data.SetDataShallow(info.payload_length);
       spdy::SpdySerializedFrame header =
           spdy::SpdyFramer::SerializeDataFrameHeaderWithPaddingLengthField(
@@ -907,13 +916,13 @@ OgHttp2Session::SendResult OgHttp2Session::WriteForStream(
       state.send_window -= info.payload_length;
       available_window = std::min({connection_send_window_, state.send_window,
                                    static_cast<int32_t>(max_frame_payload_)});
-      if (info.send_fin) {
+      if (info.end_stream) {
         state.half_closed_local = true;
         MaybeFinWithRstStream(it);
       }
       const bool ok =
           AfterFrameSent(/* DATA */ 0, stream_id, info.payload_length,
-                         info.send_fin ? END_STREAM_FLAG : 0x0, 0);
+                         info.end_stream ? END_STREAM_FLAG : 0x0, 0);
       if (!ok) {
         LatchErrorAndNotify(Http2ErrorCode::INTERNAL_ERROR,
                             ConnectionError::kSendError);
@@ -930,7 +939,7 @@ OgHttp2Session::SendResult OgHttp2Session::WriteForStream(
       // send, it's okay to send the trailers.
       if (state.trailers != nullptr) {
         auto block_ptr = std::move(state.trailers);
-        if (info.send_fin) {
+        if (info.end_stream) {
           QUICHE_LOG(ERROR) << "Sent fin; can't send trailers.";
 
           // TODO(birenroy,diannahu): Consider queuing a RST_STREAM
@@ -985,6 +994,30 @@ void OgHttp2Session::SerializeMetadata(Http2StreamId stream_id,
   }
 }
 
+void OgHttp2Session::SerializeMetadata(Http2StreamId stream_id) {
+  const uint32_t max_payload_size =
+      std::min(kMaxAllowedMetadataFrameSize, max_frame_payload_);
+  auto payload_buffer = std::make_unique<uint8_t[]>(max_payload_size);
+
+  while (true) {
+    auto [written, end_metadata] = visitor_.PackMetadataForStream(
+        stream_id, payload_buffer.get(), max_payload_size);
+    if (written < 0) {
+      // Unable to pack any metadata.
+      return;
+    }
+    QUICHE_DCHECK_LE(static_cast<size_t>(written), max_payload_size);
+    auto payload = absl::string_view(
+        reinterpret_cast<const char*>(payload_buffer.get()), written);
+    EnqueueFrame(std::make_unique<spdy::SpdyUnknownIR>(
+        stream_id, kMetadataFrameType, end_metadata ? kMetadataEndFlag : 0u,
+        std::string(payload)));
+    if (end_metadata) {
+      return;
+    }
+  }
+}
+
 int32_t OgHttp2Session::SubmitRequest(
     absl::Span<const Header> headers,
     std::unique_ptr<DataFrameSource> data_source, bool end_stream,
@@ -1023,11 +1056,9 @@ int OgHttp2Session::SubmitTrailer(Http2StreamId stream_id,
     // Enqueue trailers immediately.
     SendTrailers(stream_id, ToHeaderBlock(trailers));
   } else {
-    QUICHE_LOG_IF(ERROR, state.outbound_body->send_fin())
-        << "DataFrameSource will send fin, preventing trailers!";
     // Save trailers so they can be written once data is done.
     state.trailers =
-        std::make_unique<spdy::Http2HeaderBlock>(ToHeaderBlock(trailers));
+        std::make_unique<quiche::HttpHeaderBlock>(ToHeaderBlock(trailers));
     trailers_ready_.insert(stream_id);
   }
   return 0;
@@ -1036,6 +1067,10 @@ int OgHttp2Session::SubmitTrailer(Http2StreamId stream_id,
 void OgHttp2Session::SubmitMetadata(Http2StreamId stream_id,
                                     std::unique_ptr<MetadataSource> source) {
   SerializeMetadata(stream_id, std::move(source));
+}
+
+void OgHttp2Session::SubmitMetadata(Http2StreamId stream_id) {
+  SerializeMetadata(stream_id);
 }
 
 void OgHttp2Session::SubmitSettings(absl::Span<const Http2Setting> settings) {
@@ -1109,16 +1144,6 @@ void OgHttp2Session::OnDataFrameHeader(spdy::SpdyStreamId stream_id,
         stream_id, spdy::ERROR_CODE_PROTOCOL_ERROR));
     return;
   }
-
-  // Validate against the content-length if it exists.
-  if (iter->second.remaining_content_length.has_value()) {
-    if (length > *iter->second.remaining_content_length) {
-      HandleContentLengthError(stream_id);
-      iter->second.remaining_content_length.reset();
-    } else {
-      *iter->second.remaining_content_length -= length;
-    }
-  }
 }
 
 void OgHttp2Session::OnStreamFrameData(spdy::SpdyStreamId stream_id,
@@ -1126,7 +1151,20 @@ void OgHttp2Session::OnStreamFrameData(spdy::SpdyStreamId stream_id,
   // Count the data against flow control, even if the stream is unknown.
   MarkDataBuffered(stream_id, len);
 
-  if (!stream_map_.contains(stream_id) || streams_reset_.contains(stream_id)) {
+  auto iter = stream_map_.find(stream_id);
+  if (iter == stream_map_.end()) {
+    return;
+  }
+  // Validate against the content-length if it exists.
+  if (iter->second.remaining_content_length.has_value()) {
+    if (len > *iter->second.remaining_content_length) {
+      HandleContentLengthError(stream_id);
+      iter->second.remaining_content_length.reset();
+    } else {
+      *iter->second.remaining_content_length -= len;
+    }
+  }
+  if (streams_reset_.contains(stream_id)) {
     // If the stream was unknown due to a protocol error, the visitor was
     // informed in OnDataFrameHeader().
     return;
@@ -1756,7 +1794,7 @@ void OgHttp2Session::SendWindowUpdate(Http2StreamId stream_id,
 }
 
 void OgHttp2Session::SendHeaders(Http2StreamId stream_id,
-                                 spdy::Http2HeaderBlock headers,
+                                 quiche::HttpHeaderBlock headers,
                                  bool end_stream) {
   auto frame =
       std::make_unique<spdy::SpdyHeadersIR>(stream_id, std::move(headers));
@@ -1765,7 +1803,7 @@ void OgHttp2Session::SendHeaders(Http2StreamId stream_id,
 }
 
 void OgHttp2Session::SendTrailers(Http2StreamId stream_id,
-                                  spdy::Http2HeaderBlock trailers) {
+                                  quiche::HttpHeaderBlock trailers) {
   auto frame =
       std::make_unique<spdy::SpdyHeadersIR>(stream_id, std::move(trailers));
   frame->set_fin(true);
@@ -1815,7 +1853,7 @@ OgHttp2Session::StreamStateMap::iterator OgHttp2Session::CreateStream(
 }
 
 void OgHttp2Session::StartRequest(Http2StreamId stream_id,
-                                  spdy::Http2HeaderBlock headers,
+                                  quiche::HttpHeaderBlock headers,
                                   std::unique_ptr<DataFrameSource> data_source,
                                   void* user_data, bool end_stream) {
   if (received_goaway_) {
@@ -1825,9 +1863,11 @@ void OgHttp2Session::StartRequest(Http2StreamId stream_id,
   }
 
   auto iter = CreateStream(stream_id);
-  QUICHE_DCHECK_EQ(end_stream, data_source == nullptr);
-  if (!end_stream) {
+  if (data_source != nullptr) {
     iter->second.outbound_body = std::move(data_source);
+    write_scheduler_.MarkStreamReady(stream_id, false);
+  } else if (!end_stream) {
+    iter->second.check_visitor_for_body = true;
     write_scheduler_.MarkStreamReady(stream_id, false);
   }
   iter->second.user_data = user_data;
@@ -2060,33 +2100,50 @@ void OgHttp2Session::UpdateStreamReceiveWindowSizes(uint32_t new_value) {
 }
 
 bool OgHttp2Session::HasMoreData(const StreamState& stream_state) const {
-  return stream_state.outbound_body != nullptr;
+  return stream_state.outbound_body != nullptr ||
+         stream_state.check_visitor_for_body;
 }
 
 bool OgHttp2Session::IsReadyToWriteData(const StreamState& stream_state) const {
-  return stream_state.outbound_body != nullptr && !stream_state.data_deferred;
+  return HasMoreData(stream_state) && !stream_state.data_deferred;
 }
 
 void OgHttp2Session::AbandonData(StreamState& stream_state) {
   stream_state.outbound_body = nullptr;
+  stream_state.check_visitor_for_body = false;
 }
 
-OgHttp2Session::DataFrameInfo OgHttp2Session::GetDataFrameInfo(
-    Http2StreamId /*stream_id*/, size_t flow_control_available,
+OgHttp2Session::DataFrameHeaderInfo OgHttp2Session::GetDataFrameInfo(
+    Http2StreamId stream_id, size_t flow_control_available,
     StreamState& stream_state) {
-  DataFrameInfo info;
-  std::tie(info.payload_length, info.end_data) =
-      stream_state.outbound_body->SelectPayloadLength(flow_control_available);
-  info.send_fin =
-      info.end_data ? stream_state.outbound_body->send_fin() : false;
-  return info;
+  if (stream_state.outbound_body != nullptr) {
+    DataFrameHeaderInfo info;
+    std::tie(info.payload_length, info.end_data) =
+        stream_state.outbound_body->SelectPayloadLength(flow_control_available);
+    info.end_stream =
+        info.end_data ? stream_state.outbound_body->send_fin() : false;
+    return info;
+  } else if (stream_state.check_visitor_for_body) {
+    DataFrameHeaderInfo info =
+        visitor_.OnReadyToSendDataForStream(stream_id, flow_control_available);
+    info.end_data = info.end_data || info.end_stream;
+    return info;
+  }
+  QUICHE_LOG(DFATAL) << "GetDataFrameInfo for stream " << stream_id
+                     << " but no body available!";
+  return {/*payload_length=*/0, /*end_data=*/true, /*end_stream=*/true};
 }
 
-bool OgHttp2Session::SendDataFrame(Http2StreamId /*stream_id*/,
+bool OgHttp2Session::SendDataFrame(Http2StreamId stream_id,
                                    absl::string_view frame_header,
                                    size_t payload_length,
                                    StreamState& stream_state) {
-  return stream_state.outbound_body->Send(frame_header, payload_length);
+  if (stream_state.outbound_body != nullptr) {
+    return stream_state.outbound_body->Send(frame_header, payload_length);
+  } else {
+    QUICHE_DCHECK(stream_state.check_visitor_for_body);
+    return visitor_.SendDataFrame(stream_id, frame_header, payload_length);
+  }
 }
 
 }  // namespace adapter

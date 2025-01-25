@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {DynamicColorElement, getThemeProvider, GooglePhotosAlbumsElement, GooglePhotosCollectionElement, GooglePhotosSharedAlbumDialogElement, PersonalizationRouterElement, PersonalizationThemeElement, SeaPenFeedbackElement, SeaPenImagesElement, SeaPenPaths, SeaPenRecentWallpapersElement, SeaPenRouterElement, SeaPenTemplateQueryElement, setTransitionsEnabled, WallpaperCollectionsElement, WallpaperGridItemElement, WallpaperImagesElement} from 'chrome://personalization/js/personalization_app.js';
+import {DynamicColorElement, getThemeProvider, GooglePhotosAlbumsElement, GooglePhotosCollectionElement, GooglePhotosSharedAlbumDialogElement, PersonalizationRouterElement, PersonalizationThemeElement, SeaPenFeedbackElement, SeaPenFreeformElement, SeaPenImagesElement, SeaPenInputQueryElement, SeaPenPaths, SeaPenRecentWallpapersElement, SeaPenRouterElement, SeaPenSamplesElement, SeaPenTemplateQueryElement, setTransitionsEnabled, WallpaperCollectionsElement, WallpaperGridItemElement, WallpaperImagesElement} from 'chrome://personalization/js/personalization_app.js';
 import {CrButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
 import {CrDialogElement} from 'chrome://resources/ash/common/cr_elements/cr_dialog/cr_dialog.js';
 import {CrIconButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_icon_button/cr_icon_button.js';
+import {CrInputElement} from 'chrome://resources/ash/common/cr_elements/cr_input/cr_input.js';
 import {SeaPenTemplateId} from 'chrome://resources/ash/common/sea_pen/sea_pen_generated.mojom-webui.js';
 import {assertInstanceof} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
@@ -598,7 +599,7 @@ suite('sea pen', () => {
   });
 
   teardown(() => {
-    loadTimeData.overrideValues({isSeaPenUINextEnabled: false});
+    loadTimeData.overrideValues({isSeaPenTextInputEnabled: false});
   });
 
   suite('feedback', async () => {
@@ -752,7 +753,7 @@ suite('sea pen', () => {
               .trim();
 
       // Goes back to sea pen root page.
-      seaPenRouter.goToRoute(SeaPenPaths.ROOT);
+      seaPenRouter.goToRoute(SeaPenPaths.TEMPLATES);
 
       {
         // Verifies the image is set properly.
@@ -880,8 +881,52 @@ suite('sea pen', () => {
     }
   });
 
-  test('create more recent image', async () => {
-    loadTimeData.overrideValues({isSeaPenUINextEnabled: true});
+  test('observer sets new image id', async () => {
+    const seaPenRouter = await getSeaPenRouter();
+    const seaPenTemplateQuery = await getSeaPenTemplateQuery(6);
+    {
+      // Creates images.
+      assertTrue(!!seaPenTemplateQuery, 'Characters template should show up');
+      seaPenTemplateQuery.shadowRoot?.getElementById('inspire')!.click();
+    }
+
+    const seaPenImages = await waitUntil(
+        () => seaPenRouter.shadowRoot?.querySelector<SeaPenImagesElement>(
+            'sea-pen-images'),
+        'waiting for sea-pen-images');
+
+    {
+      // Selects an image.
+      const thumbnailsToClick = await waitUntil(
+          () => Array.from(seaPenImages!.shadowRoot!.querySelectorAll<
+                           WallpaperGridItemElement>(
+              `wallpaper-grid-item[aria-disabled='false'][data-sea-pen-image]`)),
+          'waiting for thumbnails load');
+      assertTrue(!!thumbnailsToClick, 'thumbnails should show up');
+
+      thumbnailsToClick[0]!.click();
+      assertTrue(
+          thumbnailsToClick[0]?.getAttribute('aria-selected') === 'true',
+          'thumbnail should be selected');
+    }
+
+    {
+      // Wait for the observer to update the app.
+      const store = seaPenImages.getStore();
+      assertTrue(store.data.loading.currentSelected);
+      assertEquals(null, store.data.currentSelected);
+
+      const newCurrentSelected = await waitUntil(
+          () => store.data.currentSelected,
+          'failed waiting for SeaPen currentSelected');
+      assertEquals(
+          1, newCurrentSelected,
+          'current selected set to clicked thumbnail id');
+    }
+  });
+
+  test('create more template generated recent image', async () => {
+    loadTimeData.overrideValues({isSeaPenTextInputEnabled: true});
     const seaPenRouter = await getSeaPenRouter();
     const recentImages = await waitUntil(
         () => seaPenRouter.shadowRoot
@@ -938,7 +983,95 @@ suite('sea pen', () => {
         () => seaPenRouter.shadowRoot?.querySelector<SeaPenImagesElement>(
             'sea-pen-images'),
         'waiting for sea-pen-images');
-    assertTrue(!!seaPenImages, 'template query element exists');
+    assertTrue(!!seaPenImages, 'Sea Pen images element exists');
+  });
+
+  test('create more free text generated recent image', async () => {
+    loadTimeData.overrideValues({isSeaPenTextInputEnabled: true});
+    const seaPenRouter = await getSeaPenRouter();
+    const recentImages = await waitUntil(
+        () => seaPenRouter.shadowRoot
+                  ?.querySelector<SeaPenRecentWallpapersElement>(
+                      'sea-pen-recent-wallpapers'),
+        'waiting for sea-pen-recent-wallpapers');
+    assertTrue(!!recentImages, 'recent images should exist');
+
+    const images =
+        Array.from(recentImages.shadowRoot!.querySelectorAll<HTMLElement>(
+            `.recent-image-container:not([hidden])`));
+    assertTrue(images.length > 0, 'there should be at least 1 recent image');
+
+    const targetRecentImage = images.find(
+        (image) => (image as HTMLElement)
+                       .querySelector('.menu-icon-button')
+                       ?.ariaDescription === 'test free text query');
+    assertTrue(!!targetRecentImage, 'target recent image should be available');
+
+    const menuButton = await waitUntil(
+        () => (targetRecentImage as HTMLElement)
+                  .querySelector<CrIconButtonElement>('.menu-icon-button'),
+        'wait for menu button');
+    assertTrue(!!menuButton, 'menu button should be available');
+    menuButton!.click();
+
+    const createMoreButton = await waitUntil(
+        () => (targetRecentImage as HTMLElement)
+                  .querySelector<HTMLButtonElement>('.create-more-option'),
+        'wait for create more button');
+    assertTrue(!!createMoreButton, 'create more button exists');
+    createMoreButton!.click();
+
+    const seaPenInputQuery = await waitUntil(
+        () => seaPenRouter.shadowRoot?.querySelector<SeaPenInputQueryElement>(
+            'sea-pen-input-query'),
+        'waiting for sea-pen-input-query');
+    assertTrue(!!seaPenInputQuery, 'input query element exists');
+
+    const inputPrompt = seaPenInputQuery.shadowRoot
+                            ?.querySelector<CrInputElement>('#queryInput')
+                            ?.value;
+    assertEquals(
+        'test free text query', inputPrompt,
+        'the free text prompt should match');
+
+    assertTrue(
+        window.location.href.endsWith(SeaPenPaths.FREEFORM),
+        'routed to Freeform page');
+
+    const seaPenFreeform = await waitUntil(
+        () => seaPenRouter.shadowRoot?.querySelector<SeaPenFreeformElement>(
+            'sea-pen-freeform'),
+        'waiting for sea-pen-freeform');
+
+    const seaPenImages = await waitUntil(
+        () => seaPenFreeform.shadowRoot?.querySelector<SeaPenImagesElement>(
+            'sea-pen-images'),
+        'waiting for sea-pen-images');
+    assertTrue(!!seaPenImages, 'Sea Pen images element exists');
+  });
+
+  test('click sample prompt', async () => {
+    loadTimeData.overrideValues({isSeaPenTextInputEnabled: true});
+    const seaPenRouter = await getSeaPenRouter();
+    const freeformElement =
+        seaPenRouter!.shadowRoot!.querySelector(SeaPenFreeformElement.is);
+    const samplesElement =
+        freeformElement?.shadowRoot?.querySelector(SeaPenSamplesElement.is);
+    const sampleList = samplesElement?.shadowRoot?.querySelectorAll(
+        `${WallpaperGridItemElement.is}:not([hidden])`);
+    const selectedSample = sampleList?.[0] as HTMLElement;
+    const selectedText = selectedSample?.textContent;
+
+    const inputQueryElement =
+        seaPenRouter.shadowRoot!.querySelector(SeaPenInputQueryElement.is);
+    const input = inputQueryElement?.shadowRoot?.querySelector<CrInputElement>(
+        '#queryInput');
+
+    selectedSample?.click();
+
+    await waitUntil(
+        () => input?.innerText === selectedText,
+        'failed to insert sample prompt into text input');
   });
 
   test('delete recent image', async () => {

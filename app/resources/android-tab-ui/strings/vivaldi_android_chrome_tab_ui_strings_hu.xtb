@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hu">
+<translation id="2947471979790858922">A privát lapokon végzett tevékenységeid eltávolításra kerülnek erről az eszközről</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {A bezárt lapokat a Nemrég megnyitott lapok alatt találod, a Vivaldi főmenün belül. A privát lapod nem lesz elérhető.}
+        other {A bezárt lapokat a Nemrég megnyitott lapok alatt találod, a Vivaldi főmenün belül. A(z) # privát lapod nem lesz elérhető.}}</translation>
 <translation id="4871187110787939393">Minden privát lap bezárása?</translation>
 </translationbundle>

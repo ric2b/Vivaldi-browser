@@ -11,6 +11,7 @@
 #import <vector>
 
 #import "base/json/values_util.h"
+#import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_feature_list.h"
 #import "base/test/simple_test_clock.h"
 #import "base/values.h"
@@ -415,46 +416,6 @@ TEST_F(PromosManagerImplTest, SortsPromosPreferCertainTypes) {
   // with pending state, before the less recently shown promo (Test).
   EXPECT_EQ(sorted[2], promos_manager::Promo::DefaultBrowser);
   EXPECT_EQ(sorted[3], promos_manager::Promo::Test);
-}
-
-// Tests `SortPromos` sorts `DockingPromo` promos before others.
-TEST_F(PromosManagerImplTest, SortsPromosPreferDockingPromoType) {
-  CreatePromosManager();
-
-  const std::map<promos_manager::Promo, PromoContext> active_promos = {
-      {promos_manager::Promo::Test, PromoContext{false}},
-      {promos_manager::Promo::AllTabsDefaultBrowser, PromoContext{true}},
-      {promos_manager::Promo::DockingPromo, PromoContext{false}},
-  };
-
-  std::vector<promos_manager::Promo> sorted =
-      promos_manager_->SortPromos(active_promos);
-  EXPECT_EQ(sorted.size(), (size_t)3);
-  // tied for the type.
-  EXPECT_TRUE(sorted[0] == promos_manager::Promo::DockingPromo);
-  // with pending state, before the less recently shown promo (Test).
-  EXPECT_EQ(sorted[1], promos_manager::Promo::AllTabsDefaultBrowser);
-  EXPECT_EQ(sorted[2], promos_manager::Promo::Test);
-}
-
-// Tests `SortPromos` sorts `DockingPromoRemindMeLater` promos before others.
-TEST_F(PromosManagerImplTest, SortsPromosPreferDockingPromoRemindMeLaterType) {
-  CreatePromosManager();
-
-  const std::map<promos_manager::Promo, PromoContext> active_promos = {
-      {promos_manager::Promo::Test, PromoContext{false}},
-      {promos_manager::Promo::AllTabsDefaultBrowser, PromoContext{true}},
-      {promos_manager::Promo::DockingPromoRemindMeLater, PromoContext{false}},
-  };
-
-  std::vector<promos_manager::Promo> sorted =
-      promos_manager_->SortPromos(active_promos);
-  EXPECT_EQ(sorted.size(), (size_t)3);
-  // tied for the type.
-  EXPECT_TRUE(sorted[0] == promos_manager::Promo::DockingPromoRemindMeLater);
-  // with pending state, before the less recently shown promo (Test).
-  EXPECT_EQ(sorted[1], promos_manager::Promo::AllTabsDefaultBrowser);
-  EXPECT_EQ(sorted[2], promos_manager::Promo::Test);
 }
 
 // Tests `SortPromos` sorts promos with pending state before others without.
@@ -1171,6 +1132,7 @@ TEST_F(PromosManagerImplTest,
 // and takes precedence over other active promos.
 TEST_F(PromosManagerImplTest, NextPromoForDisplayReturnsPendingPromo) {
   base::test::ScopedFeatureList feature_list;
+  base::HistogramTester histogram_tester;
 
   CreatePromosManager();
 
@@ -1195,6 +1157,8 @@ TEST_F(PromosManagerImplTest, NextPromoForDisplayReturnsPendingPromo) {
   // Mock the FET tracker to allow all promos.
   EXPECT_CALL(mock_tracker_, ShouldTriggerHelpUI(testing::_))
       .WillRepeatedly(testing::Return(true));
+  EXPECT_CALL(mock_tracker_, WouldTriggerHelpUI(testing::_))
+      .WillRepeatedly(testing::Return(true));
 
   // Advance to so that the CredentialProviderExtension becomes active.
   test_clock_.Advance(kTimeDelta1Day + kTimeDelta1Hour);
@@ -1203,6 +1167,8 @@ TEST_F(PromosManagerImplTest, NextPromoForDisplayReturnsPendingPromo) {
       promos_manager_->NextPromoForDisplay();
   ASSERT_TRUE(promo.has_value());
   EXPECT_EQ(promo.value(), promos_manager::Promo::CredentialProviderExtension);
+  histogram_tester.ExpectUniqueSample(
+      "IOS.PromosManager.EligiblePromosInQueueCount", 2, 1);
 }
 
 // Tests `NextPromoForDisplay` returns an active promo whose type has the
@@ -1211,6 +1177,7 @@ TEST_F(PromosManagerImplTest, NextPromoForDisplayReturnsPendingPromo) {
 TEST_F(PromosManagerImplTest,
        NextPromoForDisplayReturnsActivePromoOfPrioritizedType) {
   base::test::ScopedFeatureList feature_list;
+  base::HistogramTester histogram_tester;
 
   CreatePromosManager();
 
@@ -1232,6 +1199,8 @@ TEST_F(PromosManagerImplTest,
   // Mock the FET tracker to allow all promos.
   EXPECT_CALL(mock_tracker_, ShouldTriggerHelpUI(testing::_))
       .WillRepeatedly(testing::Return(true));
+  EXPECT_CALL(mock_tracker_, WouldTriggerHelpUI(testing::_))
+      .WillRepeatedly(testing::Return(true));
 
   // Advance to so that the CredentialProviderExtension becomes active.
   test_clock_.Advance(kTimeDelta1Day + kTimeDelta1Hour);
@@ -1241,11 +1210,14 @@ TEST_F(PromosManagerImplTest,
 
   ASSERT_TRUE(promo.has_value());
   EXPECT_EQ(promo.value(), promos_manager::Promo::PostRestoreSignInFullscreen);
+  histogram_tester.ExpectUniqueSample(
+      "IOS.PromosManager.EligiblePromosInQueueCount", 2, 1);
 }
 
 // Tests `NextPromoForDisplay` returns empty when non of the pending promos can
 // become active.
 TEST_F(PromosManagerImplTest, NextPromoForDisplayReturnsEmpty) {
+  base::HistogramTester histogram_tester;
   CreatePromosManager();
 
   promos_manager_->single_display_active_promos_ = {};
@@ -1262,4 +1234,6 @@ TEST_F(PromosManagerImplTest, NextPromoForDisplayReturnsEmpty) {
       promos_manager_->NextPromoForDisplay();
 
   EXPECT_FALSE(promo.has_value());
+  histogram_tester.ExpectTotalCount(
+      "IOS.PromosManager.EligiblePromosInQueueCount", 0);
 }

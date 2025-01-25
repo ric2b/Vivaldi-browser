@@ -35,6 +35,7 @@ const char kVersionTag[] = "Version:";
 const char kRewritePrefix[] = "abp-resource:";
 
 enum class OptionType {
+  kAll,
   kThirdParty,
   kMatchCase,
   kDomain,
@@ -42,30 +43,56 @@ enum class OptionType {
   kHost,  // Vivaldi-specific, allows us to handle DDG filter.
   kRewrite,
   kRedirect,
+  kRedirectRule,
+  kImportant,
 };
 
-constexpr auto kOptionMap =
-    base::MakeFixedFlatMap<std::string_view, OptionType>(
-        {{"third-party", OptionType::kThirdParty},
-         {"match-case", OptionType::kMatchCase},
-         {"domain", OptionType::kDomain},
-         {"host", OptionType::kHost},
-         {"csp", OptionType::kCSP},
-         {"rewrite", OptionType::kRewrite},
-         {"redirect", OptionType::kRedirect}});
-
-struct ActivationTypeDetails {
-  int type;
-  bool allow_only;
+struct OptionDefinition {
+  OptionType type;
+  bool invert = false;
+  bool allow_invert = false;
+  enum { kRequired, kRequiredForModify, kForbidden } value = kForbidden;
 };
+
+constexpr auto kOptionMap = base::MakeFixedFlatMap<std::string_view,
+                                                   OptionDefinition>(
+    {{"all", {.type = OptionType::kAll}},
+     {"third-party", {.type = OptionType::kThirdParty, .allow_invert = true}},
+     {"3p", {.type = OptionType::kThirdParty, .allow_invert = true}},
+     {"first-party",
+      {.type = OptionType::kThirdParty, .invert = true, .allow_invert = true}},
+     {"1p",
+      {.type = OptionType::kThirdParty, .invert = true, .allow_invert = true}},
+     {"match-case", {.type = OptionType::kMatchCase}},
+     {"domain",
+      {.type = OptionType::kDomain, .value = OptionDefinition::kRequired}},
+     {"from",
+      {.type = OptionType::kDomain, .value = OptionDefinition::kRequired}},
+     {"host",
+      {.type = OptionType::kHost, .value = OptionDefinition::kRequired}},
+     {"csp",
+      {.type = OptionType::kCSP,
+       .value = OptionDefinition::kRequiredForModify}},
+     {"rewrite",
+      {.type = OptionType::kRewrite, .value = OptionDefinition::kRequired}},
+     {"redirect",
+      {.type = OptionType::kRedirect,
+       .value = OptionDefinition::kRequiredForModify}},
+     {"redirect-rule",
+      {.type = OptionType::kRedirectRule,
+       .value = OptionDefinition::kRequiredForModify}},
+     {"important", {.type = OptionType::kImportant}}});
 
 constexpr auto kActivationStringMap =
-    base::MakeFixedFlatMap<std::string_view, ActivationTypeDetails>(
-        {{"popup", {RequestFilterRule::kPopup, false}},
-         {"document", {RequestFilterRule::kDocument, false}},
-         {"elemhide", {RequestFilterRule::kElementHide, true}},
-         {"generichide", {RequestFilterRule::kGenericHide, true}},
-         {"genericblock", {RequestFilterRule::kGenericBlock, true}}});
+    base::MakeFixedFlatMap<std::string_view, int>(
+        {{"popup", RequestFilterRule::kPopup},
+         {"document", RequestFilterRule::kDocument},
+         {"doc", RequestFilterRule::kDocument},
+         {"elemhide", RequestFilterRule::kElementHide},
+         {"ehide", RequestFilterRule::kElementHide},
+         {"generichide", RequestFilterRule::kGenericHide},
+         {"ghide", RequestFilterRule::kGenericHide},
+         {"genericblock", RequestFilterRule::kGenericBlock}});
 
 constexpr auto kAbpMainSnippetNames = base::MakeFixedFlatSet<std::string_view>({
 #include "vivaldi/components/ad_blocker/abp_snippets_lists/main.inc"
@@ -114,11 +141,8 @@ RuleParser::Result RuleParser::Parse(std::string_view rule_string) {
     return kComment;
   }
 
-  if (rule_string[0] == '#' && base::IsAsciiWhitespace(rule_string[1])) {
-    return kComment;
-  }
-
-  if (rule_string.starts_with("####")) {
+  if (rule_string == "#" || rule_string.starts_with("# ") ||
+      rule_string.starts_with("####")) {
     return kComment;
   }
 
@@ -167,7 +191,7 @@ RuleParser::Result RuleParser::Parse(std::string_view rule_string) {
   }
 
   RequestFilterRule rule;
-  Result result = ParseRequestFilterRule(rule_string, &rule);
+  Result result = ParseRequestFilterRule(rule_string, rule);
   if (result != kRequestFilterRule)
     return result;
 
@@ -394,9 +418,9 @@ bool RuleParser::ParseScriptletInjectionRule(
 
 RuleParser::Result RuleParser::ParseRequestFilterRule(
     std::string_view rule_string,
-    RequestFilterRule* rule) {
+    RequestFilterRule& rule) {
   if (base::StartsWith(rule_string, "@@")) {
-    rule->is_allow_rule = true;
+    rule.decision = RequestFilterRule::kPass;
     rule_string.remove_prefix(2);
   }
 
@@ -430,9 +454,9 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
       pattern.length() > 1) {
     pattern.remove_prefix(1);
     pattern.remove_suffix(1);
-    rule->pattern_type = RequestFilterRule::kRegex;
-    rule->pattern = std::string(pattern);
-    rule->ngram_search_string = BuildNgramSearchString(pattern);
+    rule.pattern_type = RequestFilterRule::kRegex;
+    rule.pattern = std::string(pattern);
+    rule.ngram_search_string = BuildNgramSearchString(pattern);
     return kRequestFilterRule;
   }
 
@@ -448,17 +472,17 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
       return kUnsupported;
 
     process_hostname = true;
-    rule->anchor_type.set(RequestFilterRule::kAnchorHost);
+    rule.anchor_type.set(RequestFilterRule::kAnchorHost);
   } else if (base::StartsWith(pattern, "|")) {
-    rule->anchor_type.set(RequestFilterRule::kAnchorStart);
+    rule.anchor_type.set(RequestFilterRule::kAnchorStart);
     pattern.remove_prefix(1);
   }
 
   if (base::StartsWith(pattern, "*")) {
     // Starting with a wildcard makes anchoring at the start meaningless
     pattern.remove_prefix(1);
-    rule->anchor_type.reset(RequestFilterRule::kAnchorHost);
-    rule->anchor_type.reset(RequestFilterRule::kAnchorStart);
+    rule.anchor_type.reset(RequestFilterRule::kAnchorHost);
+    rule.anchor_type.reset(RequestFilterRule::kAnchorStart);
 
     // Only try to find a hostname in hostname anchored patterns if the
     // pattern starts with *. or without a wildcard.
@@ -474,18 +498,18 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
 
   if (base::EndsWith(pattern, "|")) {
     pattern.remove_suffix(1);
-    rule->anchor_type.set(RequestFilterRule::kAnchorEnd);
+    rule.anchor_type.set(RequestFilterRule::kAnchorEnd);
   }
 
   // We had a pattern of the form "|*|", which is equivalent to "*"
   if (pattern.empty()) {
-    rule->anchor_type.reset(RequestFilterRule::kAnchorEnd);
+    rule.anchor_type.reset(RequestFilterRule::kAnchorEnd);
   }
 
   if (base::EndsWith(pattern, "*")) {
     // Ending with a wildcard makes anchoring at the end meaningless
     pattern.remove_suffix(1);
-    rule->anchor_type.reset(RequestFilterRule::kAnchorEnd);
+    rule.anchor_type.reset(RequestFilterRule::kAnchorEnd);
     maybe_pure_host = false;
   }
 
@@ -495,17 +519,17 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
   }
 
   if (pattern.find_first_of("*") != std::string_view::npos) {
-    rule->pattern_type = RequestFilterRule::kWildcarded;
+    rule.pattern_type = RequestFilterRule::kWildcarded;
   }
 
   if (!process_hostname) {
-    if (!rule->is_case_sensitive) {
-      rule->pattern =
+    if (!rule.is_case_sensitive) {
+      rule.pattern =
           base::UTF16ToUTF8(base::i18n::FoldCase(base::UTF8ToUTF16(pattern)));
     } else {
-      rule->ngram_search_string =
+      rule.ngram_search_string =
           base::UTF16ToUTF8(base::i18n::FoldCase(base::UTF8ToUTF16(pattern)));
-      rule->pattern = std::string(pattern);
+      rule.pattern = std::string(pattern);
     }
     return kRequestFilterRule;
   }
@@ -542,9 +566,9 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
     // This pattern is equivalent to a plain host check;
     if (!validation_url.has_port() && maybe_pure_host) {
       // This would basically be a block everything rule. Ignore it.
-      if (!rule->host.empty())
+      if (rule.host)
         return kError;
-      rule->host = validation_url.host();
+      rule.host = validation_url.host();
     }
     canonicalized_pattern += validation_url.host();
     if (validation_url.has_port()) {
@@ -558,12 +582,12 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
     canonicalized_pattern += std::string(pattern.substr(authority_end));
   }
 
-  if (!rule->is_case_sensitive) {
-    rule->pattern = base::UTF16ToUTF8(
+  if (!rule.is_case_sensitive) {
+    rule.pattern = base::UTF16ToUTF8(
         base::i18n::FoldCase(base::UTF8ToUTF16(canonicalized_pattern)));
   } else {
-    rule->pattern = canonicalized_pattern;
-    rule->ngram_search_string =
+    rule.pattern = canonicalized_pattern;
+    rule.ngram_search_string =
         base::UTF16ToUTF8(base::i18n::FoldCase(base::UTF8ToUTF16(pattern)));
   }
 
@@ -663,7 +687,7 @@ std::optional<RuleParser::Result> RuleParser::ParseHostsFileOrNakedHost(
 
 RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
     std::string_view options,
-    RequestFilterRule* rule) {
+    RequestFilterRule& rule) {
   if (!options.empty()) {
     DCHECK_EQ('$', options[0]);
     options.remove_prefix(1);
@@ -675,17 +699,32 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
   std::bitset<RequestFilterRule::kActivationCount> activations_unset;
   for (std::string_view option : base::SplitStringPiece(
            options, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
+    // Any option that's a run of underscores is a noop.
+    if (base::StartsWith(option, "_")) {
+      if (option.find_first_not_of("_") != std::string_view::npos) {
+        return kUnsupported;
+      }
+      continue;
+    }
+
     bool invert = false;
-    if (base::StartsWith(option, "~", base::CompareCase::SENSITIVE)) {
+    if (base::StartsWith(option, "~")) {
       option.remove_prefix(1);
       invert = true;
     }
 
     size_t option_name_end = option.find('=');
     std::string_view option_name = option.substr(0, option_name_end);
+    std::optional<std::string_view> option_value;
+    if (option_name_end != std::string::npos) {
+      option_value = option.substr(option_name_end + 1);
+    }
 
     auto type_option = kTypeStringMap.find(option_name);
     if (type_option != kTypeStringMap.end()) {
+      if (option_value) {
+        return kError;
+      }
       if (invert)
         types_unset.set(type_option->second);
       else
@@ -695,12 +734,13 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
 
     auto activation_option = kActivationStringMap.find(option_name);
     if (activation_option != kActivationStringMap.end()) {
-      if (activation_option->second.allow_only && !rule->is_allow_rule)
+      if (option_value) {
         return kError;
+      }
       if (invert)
-        activations_unset.set(activation_option->second.type);
+        activations_unset.set(activation_option->second);
       else
-        activations_set.set(activation_option->second.type);
+        activations_set.set(activation_option->second);
       continue;
     }
 
@@ -708,78 +748,105 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
     if (other_option == kOptionMap.end())
       return kUnsupported;
 
-    OptionType option_type = other_option->second;
-
-    if (option_type == OptionType::kThirdParty) {
-      rule->party.set(invert ? RequestFilterRule::kFirstParty
-                             : RequestFilterRule::kThirdParty);
-      continue;
+    OptionDefinition option_definition = other_option->second;
+    if (!option_definition.allow_invert && invert) {
+      return kError;
+    }
+    if (option_definition.invert) {
+      invert = !invert;
     }
 
-    if (invert) {
+    if (option_definition.value == OptionDefinition::kForbidden &&
+        option_value) {
+      return kError;
+    }
+    if (option_definition.value == OptionDefinition::kRequired &&
+        !option_value) {
+      return kError;
+    }
+    if (option_definition.value == OptionDefinition::kRequiredForModify &&
+        rule.decision != RequestFilterRule::kPass && !option_value) {
       return kError;
     }
 
-    if (option_type == OptionType::kMatchCase) {
-      rule->is_case_sensitive = true;
-      continue;
-    }
-
-    if (option_type == OptionType::kCSP)
-      rule->is_csp_rule = true;
-
-    if (option_name_end == std::string_view::npos) {
-      if (rule->is_csp_rule && rule->is_allow_rule) {
-        // Allow CSP rules without a value for CSP are legal.
-        continue;
-      }
-      return kError;
-    }
-
-    std::string_view option_value = option.substr(option_name_end + 1);
+    OptionType option_type = option_definition.type;
 
     switch (option_type) {
+      case OptionType::kAll:
+        types_set.set();
+        activations_set.set(RequestFilterRule::kPopup);
+        if (rule.decision != RequestFilterRule::kPass) {
+          activations_set.set(RequestFilterRule::kDocument);
+        }
+        break;
+
+      case OptionType::kThirdParty:
+        rule.party.set(invert ? RequestFilterRule::kFirstParty
+                              : RequestFilterRule::kThirdParty);
+        break;
+
+      case OptionType::kImportant:
+        if (rule.decision == RequestFilterRule::kPass) {
+          return kError;
+        }
+        rule.decision = RequestFilterRule::kModifyImportant;
+        break;
+
+      case OptionType::kMatchCase:
+        rule.is_case_sensitive = true;
+        break;
+
       case OptionType::kDomain:
-        if (!ParseDomains(option_value, "|", &rule->included_domains,
-                          &rule->excluded_domains))
+        if (!ParseDomains(*option_value, "|", &rule.included_domains,
+                          &rule.excluded_domains))
           return Result::kError;
         break;
 
       case OptionType::kRewrite:
-        if (!rule->redirect.empty())
+        CHECK(option_value);
+        if (!base::StartsWith(*option_value, kRewritePrefix))
           return kError;
-        if (!base::StartsWith(option_value, kRewritePrefix))
+        option_value->remove_prefix(std::size(kRewritePrefix) - 1);
+        if (!SetModifier(rule, RequestFilterRule::kRedirect, option_value)) {
           return kError;
-        option_value.remove_prefix(std::size(kRewritePrefix) - 1);
-        rule->redirect = std::string(option_value);
+        }
         break;
 
+      case OptionType::kRedirectRule:
+        rule.modify_block = false;
+        [[fallthrough]];
       case OptionType::kRedirect:
-        if (!rule->redirect.empty())
+        if (!option_value) {
+          CHECK(rule.decision == RequestFilterRule::kPass);
+          // uBlock makes all redirect allow rules affect only redirect.
+          rule.modify_block = false;
+        }
+        if (!SetModifier(rule, RequestFilterRule::kRedirect, option_value)) {
           return kError;
-        rule->redirect = std::string(option_value);
+        }
         break;
 
       case OptionType::kCSP:
-        for (auto csp :
-             base::SplitStringPiece(option_value, ";", base::TRIM_WHITESPACE,
-                                    base::SPLIT_WANT_NONEMPTY)) {
-          if (base::StartsWith(csp, "base-uri") ||
-              base::StartsWith(csp, "referrer") ||
-              base::StartsWith(csp, "report") ||
-              base::StartsWith(csp, "upgrade-insecure-requests"))
-            return kError;
+        if (option_value) {
+          for (auto csp :
+               base::SplitStringPiece(*option_value, ";", base::TRIM_WHITESPACE,
+                                      base::SPLIT_WANT_NONEMPTY)) {
+            if (base::StartsWith(csp, "report"))
+              return kError;
+          }
         }
-        rule->csp = std::string(option_value);
+        if (!SetModifier(rule, RequestFilterRule::kCsp, option_value)) {
+          return kError;
+        }
         break;
 
       case OptionType::kHost: {
-        if (!rule->host.empty())
+        if (rule.host)
           return kError;
 
-        if (option_value.find_first_of("/?") != std::string_view::npos)
+        if (option_value->find_first_of("/?") != std::string_view::npos)
           return kError;
-        std::string host_str(option_value);
+        std::string host_str(*option_value);
 
         // This should result in a valid URL with only a host part.
         GURL validation_url(std::string("https://") + host_str);
@@ -787,38 +854,52 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
             validation_url.has_username())
           return kError;
 
-        rule->host = host_str;
+        rule.host = host_str;
         break;
       }
 
       default:
         // Was already handled
         NOTREACHED();
-        break;
     }
   }
 
-  rule->activation_types = activations_set & ~activations_unset;
+  // Enabling WebSocket explicitly for redirect rules is an error, because we
+  // cannot redirect WebSocket requests. We allow it to be turned on implicity
+  // further down however, because having the bit set on won't have any effect.
+  if (rule.modifier == RequestFilterRule::kRedirect &&
+      (rule.resource_types.test(RequestFilterRule::kWebSocket))) {
+    return kError;
+  }
+
+  rule.activation_types = activations_set & ~activations_unset;
   if (types_unset.any()) {
-    rule->resource_types = ~types_unset | types_set;
+    rule.resource_types = ~types_unset | types_set;
   } else if (types_set.any()) {
-    rule->resource_types = types_set;
+    rule.resource_types = types_set;
   } else if (activations_set.none() && activations_unset.none() &&
-             !rule->is_csp_rule) {
+             rule.modifier != RequestFilterRule::kCsp) {
     // Rules with activation types and csp rules don't create regular
     // filtering rules by default. Any other rules without a resource type
     // should match all resources.
-    rule->resource_types.set();
+    rule.resource_types.set();
   }
 
-  if (rule->resource_types.none() && rule->activation_types.none() &&
-      !rule->is_csp_rule) {
+  if (rule.resource_types.none() && rule.activation_types.none() &&
+      rule.modifier != RequestFilterRule::kCsp) {
     // This rule wouldn't match anything.
     return kError;
   }
 
-  if (rule->party.none())
-    rule->party.set();
+  if (rule.resource_types.none()) {
+    if (rule.modifier == RequestFilterRule::kRedirect) {
+      return kError;
+    }
+    rule.modify_block = false;
+  }
+
+  if (rule.party.none())
+    rule.party.set();
 
   return kRequestFilterRule;
 }
@@ -887,6 +968,21 @@ bool RuleParser::ParseDomains(std::string_view domain_string,
       excluded_domains->push_back(validation_url.host());
     else
       included_domains->push_back(validation_url.host());
+  }
+  return true;
+}
+
+bool RuleParser::SetModifier(RequestFilterRule& rule,
+                             RequestFilterRule::ModifierType type,
+                             std::optional<std::string_view> value) {
+  CHECK(type != RequestFilterRule::kNoModifier);
+  if (rule.modifier != RequestFilterRule::kNoModifier) {
+    return false;
+  }
+
+  rule.modifier = type;
+  if (value) {
+    rule.modifier_value = *value;
   }
   return true;
 }

@@ -41,9 +41,14 @@ bool IsProductSpecificationsAllowedForEnterprise(PrefService* prefs) {
 }
 
 bool IsProductSpecificationsEnabled(AccountChecker* account_checker) {
-  return IsRegionLockedFeatureEnabled(
-             kProductSpecifications, kProductSpecificationsRegionLaunched,
-             account_checker->GetCountry(), account_checker->GetLocale()) &&
+  // TODO(352761768): Reintroduce the "region launched" version of the flag
+  //                  with a supplementary kill switch flag so that it's
+  //                  possible turn the whole feature off using one flag
+  //                  while also supporting our "staggered" rollout.
+  return base::FeatureList::IsEnabled(kProductSpecifications) &&
+         IsEnabledForCountryAndLocale(kProductSpecifications,
+                                      account_checker->GetCountry(),
+                                      account_checker->GetLocale()) &&
          IsProductSpecificationsAllowedForEnterprise(
              account_checker->GetPrefs()) &&
          account_checker->IsSignedIn();

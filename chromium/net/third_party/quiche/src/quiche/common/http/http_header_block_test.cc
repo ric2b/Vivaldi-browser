@@ -5,10 +5,11 @@
 #include "quiche/common/http/http_header_block.h"
 
 #include <memory>
+#include <string>
 #include <utility>
 
+#include "quiche/http2/test_tools/spdy_test_utils.h"
 #include "quiche/common/platform/api/quiche_test.h"
-#include "quiche/spdy/test_tools/spdy_test_utils.h"
 
 using ::testing::ElementsAre;
 

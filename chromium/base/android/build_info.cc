@@ -9,11 +9,13 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/base_jni/BuildInfo_jni.h"
 #include "base/check_op.h"
 #include "base/memory/singleton.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "base/base_jni/BuildInfo_jni.h"
 
 namespace base {
 namespace android {
@@ -87,7 +89,8 @@ BuildInfo::BuildInfo(const std::vector<std::string>& params)
       codename_(StrDupParam(params, 29)),
       vulkan_deqp_level_(GetIntParam(params, 30)),
       is_foldable_(GetIntParam(params, 31)),
-      soc_manufacturer_(StrDupParam(params, 32)) {}
+      soc_manufacturer_(StrDupParam(params, 32)),
+      is_debug_app_(GetIntParam(params, 33)) {}
 
 // static
 BuildInfo* BuildInfo::GetInstance() {

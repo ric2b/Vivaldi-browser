@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "I79c24561057282ac13192f59bcd990052630bd71",
+  "upstream_commit_id": "Iec753a7e4fc984fe032cf0519d201d92af2b2c70",
 
   # The path of the sysroots.json file.
   # This is used by vendor builds like Electron.
@@ -82,6 +82,7 @@ hooks = [
       '--x64', Var("checkout_x64_str"),
       '--arm', Var("checkout_arm_str"),
       '--arm64', Var("checkout_arm64_str"),
+      '--ios', Var("checkout_ios_str"),
     ],
   },
   {
@@ -90,6 +91,26 @@ hooks = [
     'pattern': '.',
     'action': [
       'python3', "-u", 'scripts/general_submodules.py',
+    ],
+  },
+  {
+    # Force checkout chromium again on main to recover from CIPD deleting two androidx files
+    # when moving from v126 to 128
+    'name': 'checkout_chromium_again',
+    'pattern': '.',
+    'condition': 'checkout_android',
+    'action': [
+      'git', "-C", "chromium", "checkout", "-f", "--",
+      "third_party/androidx/",
+    ],
+  },
+  {
+    # Delete chromium/third_party/node/node_modules.tar.gz so that a new copy is downloaded
+    # when moving back to v126 from 128
+    'name': 'delete_node-modules_tar_gx',
+    'pattern': '.',
+    'action': [
+      'rm', "-f", "chromium/third_party/node/node_modules.tar.gz",
     ],
   },
   {
@@ -117,34 +138,11 @@ hooks = [
     # Note: On Win, this should run after win_toolchain, as it may use it.
     'name': 'clang',
     'pattern': '.',
-    'action': ['python3', "-u", 'chromium/tools/clang/scripts/update.py'],
-  },
-  {
-    # Update prebuilt Rust toolchain.
-    'name': 'rust-toolchain',
-    'pattern': '.',
-    'action': ['python3', "-u", 'chromium/tools/rust/update_rust.py'],
-  },
-  {
-    # Update the prebuilt clang toolchain.
-    # Note: On Win, this should run after win_toolchain, as it may use it.
-    'name': 'clang',
-    'pattern': '.',
     'condition': 'checkout_reclient and (checkout_win or checkout_mac)',
     'action': ['python3', "-u", 'chromium/tools/clang/scripts/update.py',
                   "--host-os", "linux",
                   "--output-dir",
                   "chromium/third_party/llvm-build/Release+Asserts_linux"],
-  },
-  {
-    # Should run after the clang hook. Used on mac, as well as for orderfile
-    # generation and size tooling on Android. Used by
-    # dump-static-initializers.py on linux.
-    'name': 'objdump',
-    'pattern': '.',
-    'condition': 'checkout_linux or checkout_mac  or checkout_android and host_os != "mac"',
-    'action': ['python3', 'chromium/tools/clang/scripts/update.py',
-               '--package=objdump'],
   },
   {
     # Update LASTCHANGE.
@@ -217,57 +215,6 @@ hooks = [
                 '-o', 'chromium/tools/clang/dsymutil/bin/dsymutil',
     ],
   },
-  # Pull clang-format binaries using checked-in hashes.
-  {
-    'name': 'clang_format_win',
-    'pattern': '.',
-    'condition': 'host_os == "win"',
-    'action': [ 'python3', "-u",
-                'chromium/third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-clang-format',
-                '-s', 'chromium/buildtools/win/clang-format.exe.sha1'
-    ],
-  },
-  {
-    'name': 'clang_format_mac_x64',
-    'pattern': '.',
-    'condition': 'host_os == "mac" and host_cpu == "x64"',
-    'action': [ 'python3',
-                'chromium/third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-clang-format',
-                '-s', 'chromium/buildtools/mac/clang-format.x64.sha1',
-                '-o', 'chromium/buildtools/mac/clang-format',
-    ],
-  },
- {
-    'name': 'clang_format_mac_arm64',
-    'pattern': '.',
-    'condition': 'host_os == "mac" and host_cpu == "arm64"',
-    'action': [ 'python3',
-                'chromium/third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-clang-format',
-                '-s', 'chromium/buildtools/mac/clang-format.arm64.sha1',
-                '-o', 'chromium/buildtools/mac/clang-format',
-    ],
-  },
-  {
-    'name': 'clang_format_linux',
-    'pattern': '.',
-    'condition': 'host_os == "linux"',
-    'action': [ 'python3', "-u",
-                'chromium/third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-clang-format',
-                '-s', 'chromium/buildtools/linux64/clang-format.sha1'
-    ],
-  },
   # Pull rc binaries using checked-in hashes.
   {
     'name': 'rc_win',
@@ -314,19 +261,6 @@ hooks = [
                '--quiet',
                '--bucket', 'chromium-webrtc-resources',
                '-d', 'chromium/third_party/opus/tests/resources'],
-  },
-  # Pull down NPM dependencies for WebUI toolchain.
-  {
-    'name': 'webui_node_modules',
-    'pattern': '.',
-    'action': [ 'python3', "-u",
-                'chromium/third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--extract',
-                '--no_auth',
-                '--bucket', 'chromium-nodejs',
-                '-s', 'chromium/third_party/node/node_modules.tar.gz.sha1',
-    ],
   },
   {
     'name': 'Fetch Android AFDO profile',
@@ -461,8 +395,6 @@ hooks = [
                 'download',
                 '--depot-tools',
                 'chromium/third_party/depot_tools',
-                "--force",
-                '--quiet',
     ],
   },
   #{ # Vivaldi don't do libc++ roll and reverts; disabling

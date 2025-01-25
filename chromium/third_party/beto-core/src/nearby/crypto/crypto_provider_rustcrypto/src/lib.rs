@@ -56,7 +56,7 @@ cfg_if! {
     }
 }
 
-/// The the RustCrypto backed struct which implements CryptoProvider
+/// The RustCrypto backed struct which implements CryptoProvider
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct RustCryptoImpl<R: CryptoRng + SeedableRng + RngCore> {
     _marker: PhantomData<R>,

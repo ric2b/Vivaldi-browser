@@ -14,7 +14,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "base/check.h"
-#include "base/containers/contains.h"
+#include "base/containers/fixed_flat_set.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
@@ -23,6 +23,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/syslog_logging.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/types/expected.h"
 #include "base/values.h"
 #include "chrome/browser/ash/ownership/owner_settings_service_ash.h"
 #include "chrome/browser/ash/policy/core/device_policy_decoder.h"
@@ -56,7 +57,7 @@ namespace ash {
 namespace {
 
 // List of settings handled by the DeviceSettingsProvider.
-const char* const kKnownSettings[] = {
+constexpr auto kKnownSettings = base::MakeFixedFlatSet<std::string_view>({
     kAccountsPrefAllowGuest,
     kAccountsPrefAllowNewUser,
     kAccountsPrefFamilyLinkAccountsAllowed,
@@ -185,7 +186,7 @@ const char* const kKnownSettings[] = {
     kVirtualMachinesAllowed,
     kDeviceReportXDREvents,
     kDeviceReportNetworkEvents,
-};
+});
 
 constexpr char InvalidCombinationsOfAllowedUsersPoliciesHistogram[] =
     "Login.InvalidCombinationsOfAllowedUsersPolicies";
@@ -199,11 +200,11 @@ void SetJsonDeviceSetting(const std::string& setting_name,
                           const std::string& policy_name,
                           const std::string& json_string,
                           PrefValueMap* pref_value_map) {
-  std::string error;
-  std::optional<base::Value> decoded_json =
-      policy::DecodeJsonStringAndNormalize(json_string, policy_name, &error);
-  if (decoded_json.has_value()) {
-    pref_value_map->SetValue(setting_name, std::move(decoded_json.value()));
+  auto decoding_result =
+      policy::DecodeJsonStringAndNormalize(json_string, policy_name);
+  if (decoding_result.has_value()) {
+    pref_value_map->SetValue(setting_name,
+                             std::move(decoding_result->decoded_json));
   }
 }
 
@@ -428,22 +429,6 @@ void DecodeLoginPolicies(const em::ChromeDeviceSettingsProto& policy,
       if (entry.kiosk_app().has_update_url()) {
         entry_dict.Set(kAccountsPrefDeviceLocalAccountsKeyKioskAppUpdateURL,
                        entry.kiosk_app().update_url());
-      }
-      if (entry.android_kiosk_app().has_package_name()) {
-        entry_dict.Set(kAccountsPrefDeviceLocalAccountsKeyArcKioskPackage,
-                       entry.android_kiosk_app().package_name());
-      }
-      if (entry.android_kiosk_app().has_class_name()) {
-        entry_dict.Set(kAccountsPrefDeviceLocalAccountsKeyArcKioskClass,
-                       entry.android_kiosk_app().class_name());
-      }
-      if (entry.android_kiosk_app().has_action()) {
-        entry_dict.Set(kAccountsPrefDeviceLocalAccountsKeyArcKioskAction,
-                       entry.android_kiosk_app().action());
-      }
-      if (entry.android_kiosk_app().has_display_name()) {
-        entry_dict.Set(kAccountsPrefDeviceLocalAccountsKeyArcKioskDisplayName,
-                       entry.android_kiosk_app().display_name());
       }
       if (entry.web_kiosk_app().has_url()) {
         entry_dict.Set(kAccountsPrefDeviceLocalAccountsKeyWebKioskUrl,
@@ -1393,7 +1378,7 @@ DeviceSettingsProvider::~DeviceSettingsProvider() {
 
 // static
 bool DeviceSettingsProvider::IsDeviceSetting(std::string_view name) {
-  return base::Contains(kKnownSettings, name);
+  return kKnownSettings.contains(name);
 }
 
 // static
@@ -1424,7 +1409,7 @@ void DeviceSettingsProvider::DoSet(const std::string& path,
   }
 
   if (!IsDeviceSetting(path)) {
-    NOTREACHED() << "Try to set unhandled cros setting " << path;
+    NOTREACHED_IN_MIGRATION() << "Try to set unhandled cros setting " << path;
     return;
   }
 
@@ -1632,7 +1617,7 @@ const base::Value* DeviceSettingsProvider::Get(std::string_view path) const {
     if (values_cache_.GetValue(path, &value))
       return value;
   } else {
-    NOTREACHED() << "Trying to get non cros setting.";
+    NOTREACHED_IN_MIGRATION() << "Trying to get non cros setting.";
   }
 
   return nullptr;

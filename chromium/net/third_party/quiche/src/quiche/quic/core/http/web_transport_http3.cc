@@ -7,6 +7,9 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 
 #include "absl/strings/string_view.h"
@@ -161,7 +164,8 @@ void WebTransportHttp3::CloseSessionWithFinOnlyForTests() {
   connect_stream_->WriteOrBufferBody("", /*fin=*/true);
 }
 
-void WebTransportHttp3::HeadersReceived(const spdy::Http2HeaderBlock& headers) {
+void WebTransportHttp3::HeadersReceived(
+    const quiche::HttpHeaderBlock& headers) {
   if (session_->perspective() == Perspective::IS_CLIENT) {
     int status_code;
     if (!QuicSpdyStream::ParseHeaderStatusCode(headers, &status_code)) {
@@ -312,7 +316,7 @@ WebTransportHttp3UnidirectionalStream::WebTransportHttp3UnidirectionalStream(
     PendingStream* pending, QuicSpdySession* session)
     : QuicStream(pending, session, /*is_static=*/false),
       session_(session),
-      adapter_(session, this, sequencer()),
+      adapter_(session, this, sequencer(), std::nullopt),
       needs_to_send_preamble_(false) {
   sequencer()->set_level_triggered(true);
 }
@@ -321,7 +325,7 @@ WebTransportHttp3UnidirectionalStream::WebTransportHttp3UnidirectionalStream(
     QuicStreamId id, QuicSpdySession* session, WebTransportSessionId session_id)
     : QuicStream(id, session, /*is_static=*/false, WRITE_UNIDIRECTIONAL),
       session_(session),
-      adapter_(session, this, sequencer()),
+      adapter_(session, this, sequencer(), session_id),
       session_id_(session_id),
       needs_to_send_preamble_(true) {}
 
@@ -372,6 +376,7 @@ bool WebTransportHttp3UnidirectionalStream::ReadSessionId() {
   }
   sequencer()->MarkConsumed(session_id_length);
   session_id_ = session_id;
+  adapter_.SetSessionId(session_id);
   session_->AssociateIncomingWebTransportStreamWithSession(session_id, id());
   return true;
 }

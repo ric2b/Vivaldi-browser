@@ -56,7 +56,7 @@ std::optional<int> CastPlatformClient::RequestAppAvailability(
   int socket_id = entry->second;
 
   int request_id = GetNextRequestId();
-  ErrorOr<::cast::channel::CastMessage> message =
+  ErrorOr<proto::CastMessage> message =
       CreateAppAvailabilityRequest(sender_id_, request_id, app_id);
   OSP_CHECK(message);
 
@@ -118,9 +118,8 @@ void CastPlatformClient::CancelRequest(int request_id) {
 
 void CastPlatformClient::OnMessage(VirtualConnectionRouter* router,
                                    CastSocket* socket,
-                                   ::cast::channel::CastMessage message) {
-  if (message.payload_type() !=
-          ::cast::channel::CastMessage_PayloadType_STRING ||
+                                   proto::CastMessage message) {
+  if (message.payload_type() != proto::CastMessage_PayloadType_STRING ||
       message.namespace_() != kReceiverNamespace ||
       message.source_id() != kPlatformReceiverId) {
     return;

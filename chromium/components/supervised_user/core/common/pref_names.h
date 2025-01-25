@@ -94,6 +94,7 @@ inline constexpr char kSupervisedUserApprovedExtensions[] =
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 // The supervised user ID.
+// TODO(b/342097235): this pref is being deprecated.
 inline constexpr char kSupervisedUserId[] = "profile.managed_user_id";
 
 // Maps host names to whether the host is manually allowed or blocked.
@@ -153,6 +154,12 @@ inline constexpr char kLocallyParentApprovedExtensionsMigrationState[] =
 inline constexpr char kSupervisedUserLocallyParentApprovedExtensions[] =
     "profile.managed.locally_parent_approved_extensions";
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
+// A string pref that stores the family member role of the primary account
+// as per kids_management::FamilyRole or
+// `supervised_user::kDefaultEmptyFamilyMemberRole` if not in a Family group.
+inline constexpr char kFamilyLinkUserMemberRole[] =
+    "profile.family_member_role";
 
 }  // namespace prefs
 

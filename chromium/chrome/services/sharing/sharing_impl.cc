@@ -185,6 +185,37 @@ void SharingImpl::InitializeNearbySharedRemotes(NearbyDependenciesPtr deps) {
                        weak_ptr_factory_.GetWeakPtr(),
                        MojoDependencyName::kTcpSocketFactory),
         base::SequencedTaskRunner::GetCurrentDefault());
+
+    if (deps->wifilan_dependencies->mdns_manager) {
+      nearby_shared_remotes_->mdns_manager.Bind(
+          std::move(deps->wifilan_dependencies->mdns_manager), io_task_runner_);
+      nearby_shared_remotes_->mdns_manager.set_disconnect_handler(
+          base::BindOnce(&SharingImpl::OnDisconnect,
+                         weak_ptr_factory_.GetWeakPtr(),
+                         MojoDependencyName::kMdnsManager),
+          base::SequencedTaskRunner::GetCurrentDefault());
+    }
+  }
+
+  if (deps->wifidirect_dependencies) {
+    nearby_shared_remotes_->wifi_direct_firewall_hole_factory.Bind(
+        std::move(deps->wifidirect_dependencies->firewall_hole_factory),
+        io_task_runner_);
+    nearby_shared_remotes_->wifi_direct_firewall_hole_factory
+        .set_disconnect_handler(
+            base::BindOnce(&SharingImpl::OnDisconnect,
+                           weak_ptr_factory_.GetWeakPtr(),
+                           MojoDependencyName::kFirewallHoleFactory),
+            base::SequencedTaskRunner::GetCurrentDefault());
+
+    nearby_shared_remotes_->wifi_direct_manager.Bind(
+        std::move(deps->wifidirect_dependencies->wifi_direct_manager),
+        io_task_runner_);
+    nearby_shared_remotes_->wifi_direct_manager.set_disconnect_handler(
+        base::BindOnce(&SharingImpl::OnDisconnect,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       MojoDependencyName::kWifiDirectManager),
+        base::SequencedTaskRunner::GetCurrentDefault());
   }
 }
 
@@ -217,6 +248,10 @@ std::string SharingImpl::GetMojoDependencyName(
       return "Quick Start Decoder";
     case MojoDependencyName::kNearbyPresenceCredentialStorage:
       return "Nearby Presence Credential Storage";
+    case MojoDependencyName::kWifiDirectManager:
+      return "WiFi Direct Manager";
+    case MojoDependencyName::kMdnsManager:
+      return "mDNS Manager";
   }
 }
 

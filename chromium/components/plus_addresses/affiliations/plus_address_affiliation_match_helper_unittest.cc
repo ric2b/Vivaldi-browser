@@ -8,6 +8,7 @@
 #include "base/test/gmock_move_support.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/task_environment.h"
 #include "components/affiliations/core/browser/affiliation_service.h"
 #include "components/affiliations/core/browser/affiliation_utils.h"
 #include "components/affiliations/core/browser/mock_affiliation_service.h"
@@ -16,30 +17,38 @@
 #include "components/plus_addresses/plus_address_service.h"
 #include "components/plus_addresses/plus_address_test_utils.h"
 #include "components/plus_addresses/plus_address_types.h"
+#include "components/plus_addresses/settings/fake_plus_address_setting_service.h"
+#include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace plus_addresses {
+
 namespace {
+
 using ::affiliations::FacetURI;
 using ::affiliations::MockAffiliationService;
 using ::base::test::RunOnceCallback;
+using ::testing::NiceMock;
 using ::testing::UnorderedElementsAreArray;
 
 constexpr const char kAffiliatedAndroidApp[] =
     "android://"
     "5Z0D_o6B8BqileZyWhXmqO_wkO8uO0etCEXvMn5tUzEqkWUgfTSjMcTM7eMMTY_"
     "FGJC9RlpRNt_8Qp5tgDocXw==@com.bambuna.podcastaddict/";
+
 }  // namespace
 
 class PlusAddressAffiliationMatchHelperTest : public testing::Test {
  public:
   PlusAddressAffiliationMatchHelperTest() {
     plus_address_service_ = std::make_unique<PlusAddressService>(
-        /*identity_manager=*/nullptr,
-        /*pref_service=*/nullptr,
-        std::make_unique<testing::NiceMock<MockPlusAddressHttpClient>>(),
-        /*webdata_service=*/nullptr);
+        identity_test_env_.identity_manager(), &setting_service_,
+        std::make_unique<NiceMock<MockPlusAddressHttpClient>>(),
+        /*webdata_service=*/nullptr,
+        /*affiliation_service=*/mock_affiliation_service(),
+        /*feature_enabled_for_profile_check=*/
+        base::BindRepeating(&base::FeatureList::IsEnabled));
 
     match_helper_ = std::make_unique<PlusAddressAffiliationMatchHelper>(
         plus_address_service(), mock_affiliation_service());
@@ -63,8 +72,7 @@ class PlusAddressAffiliationMatchHelperTest : public testing::Test {
   void SaveProfiles(const std::vector<PlusProfile>& profiles) {
     std::vector<PlusAddressDataChange> changes;
     for (const PlusProfile& profile : profiles) {
-      changes.push_back(
-          PlusAddressDataChange(PlusAddressDataChange::Type::kAdd, profile));
+      changes.emplace_back(PlusAddressDataChange::Type::kAdd, profile);
     }
     plus_address_service()->OnWebDataChangedBySync(changes);
   }
@@ -82,10 +90,13 @@ class PlusAddressAffiliationMatchHelperTest : public testing::Test {
   }
 
  private:
+  base::test::ScopedFeatureList features_{features::kPlusAddressAffiliations};
+  base::test::TaskEnvironment task_environment_;
+  signin::IdentityTestEnvironment identity_test_env_;
+  FakePlusAddressSettingService setting_service_;
   testing::StrictMock<MockAffiliationService> mock_affiliation_service_;
   std::unique_ptr<PlusAddressService> plus_address_service_;
   std::unique_ptr<PlusAddressAffiliationMatchHelper> match_helper_;
-  base::test::ScopedFeatureList features_{features::kPlusAddressAffiliations};
 };
 
 // Verifies that PSL extensions are cached within the match helper and a single
@@ -216,8 +227,7 @@ TEST_F(PlusAddressAffiliationMatchHelperTest, GroupedMatchesTest) {
       {profile1, android_profile, group_profile}));
 }
 
-// Verifies that elements in both group and PSL matches matches are returned
-// only once.
+// Verifies that elements in both group and PSL matches are returned only once.
 TEST_F(PlusAddressAffiliationMatchHelperTest,
        GroupedAndPSLMatchesIntersectTest) {
   PlusProfile profile1 = test::CreatePlusProfileWithFacet(

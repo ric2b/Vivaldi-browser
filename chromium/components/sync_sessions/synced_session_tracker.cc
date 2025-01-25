@@ -727,6 +727,10 @@ void UpdateTrackerWithSpecifics(const sync_pb::SessionSpecifics& specifics,
     // Load (or create) the SyncedSession object for this client.
     const sync_pb::SessionHeader& header = specifics.header();
 
+    if (header.has_vivaldi_specific()) {
+      session->SetExtData(header.vivaldi_specific());
+    }
+
     // Reset the tab/window tracking for this session (must do this before
     // we start calling PutWindowInSession and PutTabInWindow so that all
     // unused tabs/windows get cleared by the CleanupSession(...) call).

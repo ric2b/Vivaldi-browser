@@ -304,7 +304,7 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // De-dupe credit card to suggest. Full server cards are preferred over their
   // local duplicates, and local cards are preferred over their masked server
   // card duplicate.
-  // TODO(b/326408802): Move to suggestion generator?
+  // TODO(crbug.com/326408802): Move to suggestion generator?
   static void DedupeCreditCardToSuggest(
       std::list<CreditCard*>* cards_to_suggest);
 
@@ -419,7 +419,7 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // Returns true if the user pref to store CVC is enabled.
   virtual bool IsPaymentCvcStorageEnabled();
 
-  // TODO(b/322170538): Remove.
+  // TODO(crbug.com/322170538): Remove.
   scoped_refptr<AutofillWebDataService> GetLocalDatabase();
   scoped_refptr<AutofillWebDataService> GetServerDatabase();
   bool IsUsingAccountStorageForServerDataForTest();
@@ -439,6 +439,8 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // purposes. The value is calculated once and cached, so it will only update
   // when Chrome is restarted.
   const std::string& GetCountryCodeForExperimentGroup() const;
+
+  const std::string& app_locale() const { return app_locale_; }
 
   // Returns if there are any pending queries to the web database.
   bool HasPendingPaymentQueries() const;
@@ -464,6 +466,9 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // Add the credit-card-linked benefit to local cache for tests. This does
   // not affect data in the real database.
   void AddCreditCardBenefitForTest(CreditCardBenefit benefit);
+
+  // Returns the value of the FacilitatedPaymentsPix user pref.
+  bool IsFacilitatedPaymentsPixUserPrefEnabled() const;
 
  protected:
   friend class PaymentsDataManagerTestApi;

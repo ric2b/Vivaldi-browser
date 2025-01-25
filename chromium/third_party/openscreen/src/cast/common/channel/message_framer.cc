@@ -25,8 +25,7 @@ static constexpr size_t kMaxBodySize = 65536;
 
 }  // namespace
 
-ErrorOr<std::vector<uint8_t>> Serialize(
-    const ::cast::channel::CastMessage& message) {
+ErrorOr<std::vector<uint8_t>> Serialize(const proto::CastMessage& message) {
   const size_t message_size = message.ByteSizeLong();
   if (message_size > kMaxBodySize || message_size == 0) {
     return Error::Code::kCastV2InvalidMessage;

@@ -105,7 +105,7 @@ void ApplicationAgent::OnError(ReceiverSocketFactory* factory,
 
 void ApplicationAgent::OnMessage(VirtualConnectionRouter* router,
                                  CastSocket* socket,
-                                 ::cast::channel::CastMessage message) {
+                                 proto::CastMessage message) {
   if (message_port_.GetSocketId() == ToCastSocketId(socket) &&
       !message_port_.source_id().empty() &&
       message_port_.source_id() == message.destination_id()) {

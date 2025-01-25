@@ -31,19 +31,10 @@ namespace blink {
 
 namespace {
 
-// Removing headers won't work if we intend to remove the headers for the new
-// requests because all previous headers will be merge into the new header if
-// there is no overrides in the new header.
-// Remove Accept-Language header from `modified_headers` before we merge
-// incoming new headers. This helps us avoid inheriting headers which need to be
-// removed in the new requests.
 void RemoveModifiedHeadersBeforeMerge(
     net::HttpRequestHeaders* modified_headers) {
-  if (base::FeatureList::IsEnabled(
-          network::features::kReduceAcceptLanguageOriginTrial)) {
-    DCHECK(modified_headers);
-    modified_headers->RemoveHeader(net::HttpRequestHeaders::kAcceptLanguage);
-  }
+  DCHECK(modified_headers);
+  modified_headers->RemoveHeader(net::HttpRequestHeaders::kAcceptLanguage);
 }
 
 // Merges |removed_headers_B| into |removed_headers_A|.
@@ -78,7 +69,7 @@ void CheckThrottleWillNotCauseCorsPreflight(
     if (!base::Contains(initial_headers, header.key) &&
         !network::cors::IsCorsSafelistedHeader(header.key, header.value)) {
       bool is_cors_exempt = cors_exempt_header_flat_set.count(header.key);
-      NOTREACHED()
+      NOTREACHED_IN_MIGRATION()
           << "Throttle added cors unsafe header " << header.key
           << (is_cors_exempt
                   ? " . Header is cors exempt so should have "
@@ -92,7 +83,7 @@ void CheckThrottleWillNotCauseCorsPreflight(
   for (auto& header : cors_exempt_headers.GetHeaderVector()) {
     if (cors_exempt_header_flat_set.count(header.key) == 0 &&
         !base::Contains(initial_cors_exempt_headers, header.key)) {
-      NOTREACHED()
+      NOTREACHED_IN_MIGRATION()
           << "Throttle added cors exempt header " << header.key
           << " but it wasn't configured as cors exempt by the browser. See "
              "content::StoragePartitionImpl::InitNetworkContext() and "
@@ -473,8 +464,9 @@ void ThrottlingURLLoader::Start(
                "changing the URL.";
         if (original_url_.SchemeIsHTTPOrHTTPS() &&
             !url_request->url.SchemeIsHTTPOrHTTPS()) {
-          NOTREACHED() << "A URLLoaderThrottle can't redirect from http(s) to "
-                       << "a non http(s) scheme.";
+          NOTREACHED_IN_MIGRATION()
+              << "A URLLoaderThrottle can't redirect from http(s) to "
+              << "a non http(s) scheme.";
         } else {
           throttle_will_start_redirect_url_ = url_request->url;
         }
@@ -660,8 +652,12 @@ void ThrottlingURLLoader::OnReceiveResponse(
     for (auto& entry : throttles_) {
       auto* throttle = entry.throttle.get();
       base::Time start = base::Time::Now();
+      auto weak_ptr = weak_factory_.GetWeakPtr();
       throttle->BeforeWillProcessResponse(response_url_, *response_head,
                                           &has_pending_restart);
+      if (!weak_ptr) {
+        return;
+      }
       RecordExecutionTimeHistogram("BeforeWillProcessResponse", start);
       if (!HandleThrottleResult(throttle)) {
         return;
@@ -681,8 +677,12 @@ void ThrottlingURLLoader::OnReceiveResponse(
       auto* throttle = entry.throttle.get();
       bool throttle_deferred = false;
       base::Time start = base::Time::Now();
+      auto weak_ptr = weak_factory_.GetWeakPtr();
       throttle->WillProcessResponse(response_url_, response_head.get(),
                                     &throttle_deferred);
+      if (!weak_ptr) {
+        return;
+      }
       RecordExecutionTimeHistogram(GetStageNameForHistogram(DEFERRED_RESPONSE),
                                    start);
       if (!HandleThrottleResult(throttle, throttle_deferred, &deferred))
@@ -852,7 +852,11 @@ void ThrottlingURLLoader::OnComplete(
     for (auto& entry : throttles_) {
       auto* throttle = entry.throttle.get();
       base::Time start = base::Time::Now();
+      auto weak_ptr = weak_factory_.GetWeakPtr();
       throttle->WillOnCompleteWithError(status);
+      if (!weak_ptr) {
+        return;
+      }
       RecordExecutionTimeHistogram("WillOnCompleteWithError", start);
       if (!HandleThrottleResult(throttle)) {
         return;
@@ -934,7 +938,7 @@ void ThrottlingURLLoader::Resume() {
       break;
     }
     case DEFERRED_NONE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -1023,7 +1027,7 @@ const char* ThrottlingURLLoader::GetStageNameForHistogram(DeferredStage stage) {
     case DEFERRED_RESPONSE:
       return "WillProcessResponse";
     case DEFERRED_NONE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
   }
 }

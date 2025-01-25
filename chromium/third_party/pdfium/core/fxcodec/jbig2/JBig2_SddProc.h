@@ -9,8 +9,8 @@
 
 #include <stdint.h>
 
+#include <array>
 #include <memory>
-#include <vector>
 
 #include "core/fxcodec/jbig2/JBig2_ArithDecoder.h"
 #include "core/fxcrt/span.h"
@@ -29,13 +29,13 @@ class CJBig2_SDDProc {
 
   std::unique_ptr<CJBig2_SymbolDict> DecodeArith(
       CJBig2_ArithDecoder* pArithDecoder,
-      std::vector<JBig2ArithCtx>* gbContext,
-      std::vector<JBig2ArithCtx>* grContext);
+      pdfium::span<JBig2ArithCtx> gbContexts,
+      pdfium::span<JBig2ArithCtx> grContexts);
 
   std::unique_ptr<CJBig2_SymbolDict> DecodeHuffman(
       CJBig2_BitStream* pStream,
-      std::vector<JBig2ArithCtx>* gbContext,
-      std::vector<JBig2ArithCtx>* grContext);
+      pdfium::span<JBig2ArithCtx> gbContexts,
+      pdfium::span<JBig2ArithCtx> grContexts);
 
   bool SDHUFF;
   bool SDREFAGG;
@@ -49,8 +49,8 @@ class CJBig2_SDDProc {
   UnownedPtr<const CJBig2_HuffmanTable> SDHUFFDW;
   UnownedPtr<const CJBig2_HuffmanTable> SDHUFFBMSIZE;
   UnownedPtr<const CJBig2_HuffmanTable> SDHUFFAGGINST;
-  int8_t SDAT[8];
-  int8_t SDRAT[4];
+  std::array<int8_t, 8> SDAT;
+  std::array<int8_t, 4> SDRAT;
 
  private:
   // Reads from `SDINSYMS` if `i` is in-bounds. Otherwise, reduce `i` by

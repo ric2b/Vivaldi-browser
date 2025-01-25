@@ -48,7 +48,7 @@ extern "C" {
 #define AVIF_API
 #endif // defined(AVIF_DLL)
 
-#if defined(AVIF_ENABLE_NODISCARD) || (defined(__cplusplus) && __cplusplus >= 201700L) || \
+#if defined(AVIF_ENABLE_NODISCARD) || (defined(__cplusplus) && __cplusplus >= 201703L) || \
     (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L)
 #define AVIF_NODISCARD [[nodiscard]]
 #else
@@ -72,8 +72,8 @@ extern "C" {
 // downstream projects to do greater-than preprocessor checks on AVIF_VERSION
 // to leverage in-development code without breaking their stable builds.
 #define AVIF_VERSION_MAJOR 1
-#define AVIF_VERSION_MINOR 0
-#define AVIF_VERSION_PATCH 4
+#define AVIF_VERSION_MINOR 1
+#define AVIF_VERSION_PATCH 0
 #define AVIF_VERSION_DEVEL 1
 #define AVIF_VERSION \
     ((AVIF_VERSION_MAJOR * 1000000) + (AVIF_VERSION_MINOR * 10000) + (AVIF_VERSION_PATCH * 100) + AVIF_VERSION_DEVEL)
@@ -210,9 +210,9 @@ typedef enum avifHeaderFormat
 {
     // AVIF file with an "avif" brand, a MetaBox and all its required boxes for maximum compatibility.
     AVIF_HEADER_FULL,
-#if defined(AVIF_ENABLE_EXPERIMENTAL_MINI)
-    // AVIF file with an "mif3" brand and a MinimizedImageBox to reduce the encoded file size.
-    // This is based on the m64572 "Condensed image item" MPEG proposal for HEIF.
+#if defined(AVIF_ENABLE_EXPERIMENTAL_METAV1)
+    // AVIF file with a "mif3" brand and a MetaBox with version 1 to reduce the encoded file size.
+    // This is based on the w23988 "Low-overhead image file format" MPEG proposal for HEIF.
     // WARNING: Experimental feature. Produces files that are incompatible with older decoders.
     AVIF_HEADER_REDUCED,
 #endif
@@ -306,8 +306,13 @@ typedef enum avifChromaSamplePosition
 
 typedef enum avifRange
 {
-    AVIF_RANGE_LIMITED = 0,
-    AVIF_RANGE_FULL = 1
+    // avifRange is only applicable to YUV planes. RGB and alpha planes are always full range.
+    AVIF_RANGE_LIMITED = 0, /**<- Y  [16..235],  UV  [16..240]  (bit depth 8) */
+                            /**<- Y  [64..940],  UV  [64..960]  (bit depth 10) */
+                            /**<- Y [256..3760], UV [256..3840] (bit depth 12) */
+    AVIF_RANGE_FULL = 1     /**<- [0..255]  (bit depth 8) */
+                            /**<- [0..1023] (bit depth 10) */
+                            /**<- [0..4095] (bit depth 12) */
 } avifRange;
 
 // ---------------------------------------------------------------------------
@@ -625,16 +630,13 @@ typedef struct avifGainMapMetadata
     //
     // If 'H' is the display's current log2-encoded HDR capacity (HDR to SDR ratio),
     // then the weight 'w' to apply the gain map is computed as follows:
-    // f = clamp((H - hdrCapacityMin) /
-    //           (hdrCapacityMax - hdrCapacityMin), 0, 1);
-    // w = backwardDirection ? f * -1 : f;
+    // f = clamp((H - baseHdrHeadroom) /
+    //           (alternateHdrHeadroom - baseHdrHeadroom), 0, 1);
+    // w = sign(alternateHdrHeadroom - baseHdrHeadroom) * f
     uint32_t baseHdrHeadroomN;
     uint32_t baseHdrHeadroomD;
     uint32_t alternateHdrHeadroomN;
     uint32_t alternateHdrHeadroomD;
-
-    // True if the gain map should be applied in reverse, see weight formula above.
-    avifBool backwardDirection;
 
     // True if tone mapping should be performed in the color space of the
     // base image. If false, the color space of the alternate image should
@@ -681,7 +683,7 @@ typedef struct avifGainMap
 
 // Allocates a gain map. Returns NULL if a memory allocation failed.
 // The 'image' field is NULL by default and must be allocated separately.
-AVIF_API avifGainMap * avifGainMapCreate();
+AVIF_API avifGainMap * avifGainMapCreate(void);
 // Frees a gain map, including the 'image' field if non NULL.
 AVIF_API void avifGainMapDestroy(avifGainMap * gainMap);
 
@@ -697,7 +699,6 @@ typedef struct avifGainMapMetadataDouble
     double alternateOffset[3];
     double baseHdrHeadroom;
     double alternateHdrHeadroom;
-    avifBool backwardDirection;
     avifBool useBaseColorSpace;
 } avifGainMapMetadataDouble;
 
@@ -794,6 +795,7 @@ typedef struct avifImage
     //
     // To encode any of these boxes, set the values in the associated box, then enable the flag in
     // transformFlags. On decode, only honor the values in boxes with the associated transform flag set.
+    // These also apply to gainMap->image, if any.
     avifTransformFlags transformFlags;
     avifPixelAspectRatioBox pasp;
     avifCleanApertureBox clap;
@@ -811,6 +813,7 @@ typedef struct avifImage
 #if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
     // Gain map image and metadata. NULL if no gain map is present.
     // Owned by the avifImage and gets freed when calling avifImageDestroy().
+    // gainMap->image->transformFlags is always AVIF_TRANSFORM_NONE.
     avifGainMap * gainMap;
 #endif
 } avifImage;
@@ -1284,12 +1287,14 @@ typedef struct avifDecoder
     // Internals used by the decoder
     struct avifDecoderData * data;
 
-    // Version 1.0.0 ends here. Add any new members after this line.
+    // Version 1.0.0 ends here.
 
     // This is true when avifDecoderParse() detects an image sequence track in the image. If this is true, the image can be
     // decoded either as an animated image sequence or as a still image (the primary image item) by setting avifDecoderSetSource
     // to the appropriate source.
     avifBool imageSequenceTrackPresent;
+
+    // Version 1.1.0 ends here. Add any new members after this line.
 
 #if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
     // This is true when avifDecoderParse() detects a gain map.
@@ -1487,10 +1492,12 @@ typedef struct avifEncoder
     struct avifEncoderData * data;
     struct avifCodecSpecificOptions * csOptions;
 
-    // Version 1.0.0 ends here. Add any new members after this line.
+    // Version 1.0.0 ends here.
 
     // Defaults to AVIF_HEADER_FULL
     avifHeaderFormat headerFormat;
+
+    // Version 1.1.0 ends here. Add any new members after this line.
 
 #if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
     int qualityGainMap; // changeable encoder setting

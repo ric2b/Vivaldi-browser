@@ -8,6 +8,7 @@
 <translation id="1123707809902612118">拦截跟踪器和广告</translation>
 <translation id="1151972924205500581">需要密码</translation>
 <translation id="1166425484559430538">您的同步数据已加密。请提供密钥以解密。</translation>
+<translation id="1173894706177603556">重命名</translation>
 <translation id="1181037720776840403">删除</translation>
 <translation id="1182668946911971500">笔记栏</translation>
 <translation id="1198271701881992799">让我们开始吧</translation>
@@ -148,6 +149,7 @@
 <translation id="3842727926262967527">选择您希望放置标签栏和地址字段的位置。</translation>
 <translation id="3845564230651302310">正在应用新的拦截器设置...</translation>
 <translation id="3858860766373142691">名称</translation>
+<translation id="3861379244432690245">启用直接匹配</translation>
 <translation id="3866249974567520381">描述</translation>
 <translation id="3872195896030547485">请输入有效的邮件地址。</translation>
 <translation id="3897092660631435901">菜单</translation>
@@ -173,6 +175,7 @@
 <translation id="4209092469652827314">大</translation>
 <translation id="4219175188138757774">捷克和斯洛伐克 (<ph name="ORIGIN" />)</translation>
 <translation id="4222285809803895512">创建日期</translation>
+<translation id="4274598629843497594">启用显示快速拨号以使该组在起始页上可见。 您仍然可以通过书签面板访问该组。</translation>
 <translation id="4276839458685471670">按创建时间</translation>
 <translation id="4277085371281330061">个已拦截的
 跟踪器</translation>
@@ -202,6 +205,7 @@
 <translation id="4619615317237390068">来自其他设备的标签页</translation>
 <translation id="462860218383788109">编辑日期</translation>
 <translation id="4640946580087069269">复制到笔记</translation>
+<translation id="4643117005422448078">常用站点</translation>
 <translation id="4654578955713250802">拦截广告和跟踪器</translation>
 <translation id="4655510151391078468">此代码与我们发送的代码不符。
         您还可重试 <ph name="ATTEMPTS" /> 次。</translation>
@@ -211,6 +215,7 @@
 <translation id="4727698999970341158">冰岛语 (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">更新</translation>
 <translation id="4739712911308055817">尚未获取</translation>
+<translation id="4750394297954878236">建议</translation>
 <translation id="4759399863961855552">排序顺序</translation>
 <translation id="4780953868408193639">个已拦截的
 跟踪器</translation>
@@ -226,6 +231,7 @@
 <translation id="4943266325467647391">Vivaldi 的内置跟踪拦截器和广告拦截器可保护您免受恶意软件和广告的侵害。</translation>
 <translation id="495421405224926623">我已阅读并同意使用条款和隐私政策</translation>
 <translation id="497942794017668482">正在拦截跟踪器和广告</translation>
+<translation id="4993477362660748586">同步</translation>
 <translation id="5037761343305489956">已复制到笔记</translation>
 <translation id="504986598654589766">在隐身标签中浏览时，您的搜索记录、访问记录、cookies 和临时文件不会被 Vivaldi 保存。所有连接也不会被加密或者修改。</translation>
 <translation id="505774819758747674">使用选定的强调色预览工具栏</translation>
@@ -236,10 +242,12 @@
 <translation id="5153806174841856652">登录失败</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />重新发送<ph name="END_LINK" /></translation>
 <translation id="5191012692655103305">获取标签和历史记录...</translation>
+<translation id="5221269430020540672">后台标签页打开图像</translation>
 <translation id="5238642303473095117">删除数据</translation>
 <translation id="5245732982828228444">你会在这里找到你的笔记</translation>
 <translation id="5249199221558969362">请输入真实年龄。</translation>
 <translation id="5271549068863921519">保存密码</translation>
+<translation id="5273620430932404871">启用书签简称匹配</translation>
 <translation id="5290452628447338707">无笔记</translation>
 <translation id="5317780077021120954">保存</translation>
 <translation id="5349678548463426691">按描述</translation>
@@ -248,7 +256,6 @@
 <translation id="5378841821586202982">回收站文件夹</translation>
 <translation id="5398772614898833570">条广告已屏蔽</translation>
 <translation id="5421638721143596928">解密凭证失败，请重新登录。</translation>
-<translation id="5422086212043657100">用作快拨文件夹</translation>
 <translation id="5439835075346716808">已暂时封禁由该 IP 发起的注册，请稍后重试。</translation>
 <translation id="5486261815000869482">确认密码</translation>
 <translation id="5494016731375030300">最近关闭的标签页</translation>
@@ -258,8 +265,9 @@
          <ph name="BEGIN_LINK" />了解详情<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">列表</translation>
 <translation id="5710478562694930157">升序</translation>
-<translation id="574392208103952083">中等</translation>
+<translation id="574392208103952083">中</translation>
 <translation id="5787420647064736989">设备名称</translation>
+<translation id="5801825598531634872">数日后变为非活动</translation>
 <translation id="5822336771053074270">添加笔记</translation>
 <translation id="5823830882692559950">Vivaldi.net 已拒绝您的凭证： <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">新文件夹</translation>
@@ -277,6 +285,7 @@
 <translation id="6147094071357011481">最近关闭的标签页不可用</translation>
 <translation id="6193995664633100765">印地语 (<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">网站外观选项</translation>
+<translation id="6257488392933423163">以HTML格式查看</translation>
 <translation id="6365929278691047681">德语 (<ph name="ORIGIN" />)</translation>
 <translation id="6406506848690869874">同步</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> 个已选择</translation>
@@ -285,6 +294,7 @@
 <translation id="6517411226162529295">后备密钥</translation>
 <translation id="6527303717912515753">分享</translation>
 <translation id="6535988230515403205">波兰语 (<ph name="ORIGIN" />)</translation>
+<translation id="6566198107563125484">启用书签匹配</translation>
 <translation id="659351303388691480">清除浏览数据...</translation>
 <translation id="6602272356389933803">外观与主题</translation>
 <translation id="6614744450826097546">广告详情</translation>
@@ -303,7 +313,6 @@
 <translation id="681368974849482173">已创建笔记</translation>
 <translation id="6830986331692390764">正在清除同步数据，请稍候。</translation>
 <translation id="6875510405870945573">选择您的首选拦截级别。</translation>
-<translation id="6885837502028760851">仅显示快速拨号文件夹</translation>
 <translation id="6887143077297974801">同步启动失败。</translation>
 <translation id="691132463664340655">浏览器主题</translation>
 <translation id="6937750621455385628">您必须使用 Vivaldi 账号登录。</translation>
@@ -316,6 +325,7 @@
 <translation id="7006864796794806241">找回密码</translation>
 <translation id="7029809446516969842">密码</translation>
 <translation id="7041964446309059643">手动</translation>
+<translation id="7083011465470143310">忘记 <ph name="BEGIN_LINK" />密码<ph name="END_LINK" />？</translation>
 <translation id="7110758301321962823">找回用户名</translation>
 <translation id="7158507293261405349">添加新组</translation>
 <translation id="7192066917392691622">降序</translation>
@@ -354,6 +364,7 @@
 <translation id="7732622593814325274">管理跟踪器拦截规则</translation>
 <translation id="7765158879357617694">移动</translation>
 <translation id="7771452384635174008">布局</translation>
+<translation id="7791161131809889864">后台打开全部</translation>
 <translation id="7801204999757211519">已有账号了？<ph name="BEGIN_LINK" />登录 ➔<ph name="END_LINK" /></translation>
 <translation id="7850070199083838600">创建新组吗？</translation>
 <translation id="7914995060146784406">编辑笔记</translation>
@@ -365,6 +376,7 @@
 <translation id="8058018971942772071">作为组使用</translation>
 <translation id="8066170816074394954">服务器错误。</translation>
 <translation id="8076492880354921740">标签</translation>
+<translation id="8077675488769462025">非活动标签页</translation>
 <translation id="8112996065264879835">此代码与我们发送的代码不符。
         您已达到最多错误尝试次数限制。请使用下方的“重新发送”选项申请新代码。</translation>
 <translation id="8134672010161840864">捏合以裁剪和定位图像</translation>
@@ -386,6 +398,7 @@
 <translation id="8359194106448244241">要查看其他设备上的标签页，需要启用同步。</translation>
 <translation id="8366175803122817174">打开所有笔记</translation>
 <translation id="8384409685584033392">页面信息</translation>
+<translation id="8395378633507873708">地址栏</translation>
 <translation id="839736845446313156">注册</translation>
 <translation id="8414685983518053656">笔记</translation>
 <translation id="8423076545503792640">发生错误导致请求失败。请您稍后重试。</translation>
@@ -402,6 +415,7 @@
 <translation id="8675578805254882416">正在获取</translation>
 <translation id="8677007239430848917">点击下面的 + 号添加您的第一条笔记</translation>
 <translation id="8684294196284714094">准备好将 Vivaldi 设置为默认浏览器了吗？</translation>
+<translation id="8733945742171960420">一旦您开始浏览，您的热门网站就会显示在这里。</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> 个项目已删除</translation>
 <translation id="8763006697839582351">以Vivaldi隐身模式打开</translation>
 <translation id="8765173886020357878">搜索建议</translation>
@@ -412,6 +426,7 @@
 <translation id="8855707633300847215">显示标签栏</translation>
 <translation id="8892354889971902600">您最近关闭的标签页会出现在这里。</translation>
 <translation id="89390081013973080">完成了！现在确定您希望在设备之间同步的数据。</translation>
+<translation id="8964449607824577665">如果没有您当前的加密密码，我们将无法解密您的数据。重置此密码需要删除 Vivaldi 服务器上的全部已同步数据。</translation>
 <translation id="8965371804397726192">开始同步所有数据</translation>
 <translation id="9028089729841356743">网络错误。</translation>
 <translation id="9043882097999887291">广告

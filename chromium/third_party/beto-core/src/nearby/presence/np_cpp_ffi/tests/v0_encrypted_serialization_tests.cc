@@ -39,12 +39,8 @@ TEST_F(NpCppTest, V0PrivateIdentitySerializationSimpleCase) {
   std::array<uint8_t, 2> salt = {};
   std::fill_n(salt.begin(), 2, 0x22);
 
-  auto identity_type = nearby_protocol::EncryptedIdentityType::Private;
-
-  auto adv_builder =
-      nearby_protocol::V0AdvertisementBuilder::TryCreateEncrypted(
-          broadcast_cred, identity_type, salt)
-          .value();
+  auto adv_builder = nearby_protocol::V0AdvertisementBuilder::CreateEncrypted(
+      broadcast_cred, salt);
 
   auto tx_power = nearby_protocol::TxPower::TryBuildFromI8(3).value();
   auto de = nearby_protocol::V0DataElement(tx_power);

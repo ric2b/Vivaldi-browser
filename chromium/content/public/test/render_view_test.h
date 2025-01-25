@@ -16,7 +16,7 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_io_thread.h"
 #include "build/build_config.h"
-#include "content/public/common/input/native_web_keyboard_event.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "content/public/common/main_function_params.h"
 #include "content/public/test/mock_policy_container_host.h"
 #include "content/public/test/mock_render_thread.h"
@@ -139,7 +139,7 @@ class RenderViewTest : public testing::Test {
   void GoForward(const GURL& url, const blink::PageState& state);
 
   // Sends one native key event over IPC.
-  void SendNativeKeyEvent(const NativeWebKeyboardEvent& key_event);
+  void SendNativeKeyEvent(const input::NativeWebKeyboardEvent& key_event);
 
   // Send a raw keyboard event to the renderer.
   void SendWebKeyboardEvent(const blink::WebKeyboardEvent& key_event);

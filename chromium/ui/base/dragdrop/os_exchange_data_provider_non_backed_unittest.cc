@@ -9,7 +9,6 @@
 
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/chromeos_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -46,7 +45,7 @@ TEST(OSExchangeDataProviderNonBackedTest, CloneTest) {
                            std::string(kFileContents));
   original.SetHtml(kHtml, GURL(kBaseUrl));
   original.MarkRendererTaintedFromOrigin(url::Origin());
-  GURL url("www.example.com");
+  GURL url("https://www.example.com");
   original.SetSource(std::make_unique<DataTransferEndpoint>(url));
 
   std::unique_ptr<OSExchangeDataProvider> copy = original.Clone();

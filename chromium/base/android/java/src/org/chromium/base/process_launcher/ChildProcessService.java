@@ -28,6 +28,7 @@ import org.chromium.base.BaseSwitches;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.EarlyTraceEvent;
+import org.chromium.base.JavaUtils;
 import org.chromium.base.Log;
 import org.chromium.base.MemoryPressureLevel;
 import org.chromium.base.ThreadUtils;
@@ -156,7 +157,10 @@ public class ChildProcessService {
 
                 @Override
                 public void setupConnection(
-                        Bundle args, IParentProcess parentProcess, List<IBinder> callbacks)
+                        Bundle args,
+                        IParentProcess parentProcess,
+                        List<IBinder> callbacks,
+                        IBinder binderBox)
                         throws RemoteException {
                     assert mServiceBound;
                     synchronized (mBinderLock) {
@@ -188,7 +192,7 @@ public class ChildProcessService {
                     parentProcess.finishSetupConnection(
                             pid, zygotePid, startupTimeMillis, relroBundle);
                     mParentProcess = parentProcess;
-                    processConnectionBundle(args, callbacks);
+                    processConnectionBundle(args, callbacks, binderBox);
                 }
 
                 @Override
@@ -332,7 +336,7 @@ public class ChildProcessService {
             } catch (RemoteException re) {
                 Log.e(TAG, "Failed to call reportExceptionInInit.", re);
             }
-            throw new RuntimeException(e);
+            JavaUtils.throwUnchecked(e);
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -399,7 +403,8 @@ public class ChildProcessService {
         sZygoteStartupTimeMillis = zygoteStartupTimeMillis;
     }
 
-    private void processConnectionBundle(Bundle bundle, List<IBinder> clientInterfaces) {
+    private void processConnectionBundle(
+            Bundle bundle, List<IBinder> clientInterfaces, IBinder binderBox) {
         // Required to unparcel FileDescriptorInfo.
         ClassLoader classLoader = getApplicationContext().getClassLoader();
         bundle.setClassLoader(classLoader);
@@ -419,7 +424,7 @@ public class ChildProcessService {
                 mFdInfos = new FileDescriptorInfo[fdInfosAsParcelable.length];
                 System.arraycopy(fdInfosAsParcelable, 0, mFdInfos, 0, fdInfosAsParcelable.length);
             }
-            mDelegate.onConnectionSetup(bundle, clientInterfaces);
+            mDelegate.onConnectionSetup(bundle, clientInterfaces, binderBox);
             mMainThread.notifyAll();
         }
     }

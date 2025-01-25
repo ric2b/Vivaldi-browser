@@ -2,15 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "public/fpdf_sysfontinfo.h"
 
+#include <string>
 #include <vector>
 
+#include "build/build_config.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "testing/embedder_test.h"
 #include "testing/embedder_test_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -125,7 +123,7 @@ class FPDFSysFontInfoEmbedderTest : public EmbedderTest {
 
 }  // namespace
 
-TEST_F(FPDFUnavailableSysFontInfoEmbedderTest, Bug_972518) {
+TEST_F(FPDFUnavailableSysFontInfoEmbedderTest, Bug972518) {
   ASSERT_TRUE(OpenDocument("bug_972518.pdf"));
   ASSERT_EQ(1, FPDF_GetPageCount(document()));
 
@@ -166,7 +164,8 @@ TEST_F(FPDFSysFontInfoEmbedderTest, DefaultTTFMap) {
   // Stop at either end mark.
   while (cfmap->charset != -1 && cfmap->fontname) {
     charsets.push_back(cfmap->charset);
-    ++cfmap;
+    // SAFETY: requires FPDF_GetDefaultTTFMap() to provide a sentinel.
+    UNSAFE_BUFFERS(++cfmap);
   }
 
   // Confirm end marks only occur as a pair.
@@ -174,4 +173,43 @@ TEST_F(FPDFSysFontInfoEmbedderTest, DefaultTTFMap) {
   EXPECT_EQ(cfmap->fontname, nullptr);
 
   EXPECT_THAT(charsets, testing::UnorderedElementsAreArray(kExpectedCharsets));
+}
+
+TEST_F(FPDFSysFontInfoEmbedderTest, DefaultTTFMapCountAndEntries) {
+  static constexpr int kExpectedCharsets[] = {
+      FXFONT_ANSI_CHARSET,
+      FXFONT_GB2312_CHARSET,
+      FXFONT_CHINESEBIG5_CHARSET,
+      FXFONT_SHIFTJIS_CHARSET,
+      FXFONT_HANGEUL_CHARSET,
+      FXFONT_CYRILLIC_CHARSET,
+      FXFONT_EASTERNEUROPEAN_CHARSET,
+      FXFONT_ARABIC_CHARSET,
+  };
+  static const std::string kExpectedFontNames[] = {
+      "Helvetica", "SimSun", "MingLiU", "MS Gothic", "Batang", "Arial",
+#if BUILDFLAG(IS_WIN)
+      "Tahoma",
+#else
+      "Arial",
+#endif
+      "Arial",
+  };
+  std::vector<int> charsets;
+  std::vector<const char*> font_names;
+
+  const size_t count = FPDF_GetDefaultTTFMapCount();
+  for (size_t i = 0; i < count; ++i) {
+    const FPDF_CharsetFontMap* entry = FPDF_GetDefaultTTFMapEntry(i);
+    ASSERT_TRUE(entry);
+    charsets.push_back(entry->charset);
+    font_names.push_back(entry->fontname);
+  }
+
+  EXPECT_THAT(charsets, testing::ElementsAreArray(kExpectedCharsets));
+  EXPECT_THAT(font_names, testing::ElementsAreArray(kExpectedFontNames));
+
+  // Test out of bound indices.
+  EXPECT_FALSE(FPDF_GetDefaultTTFMapEntry(count));
+  EXPECT_FALSE(FPDF_GetDefaultTTFMapEntry(9999));
 }

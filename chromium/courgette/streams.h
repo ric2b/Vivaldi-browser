@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 // Streams classes.
 //
 // These memory-resident streams are used for serializing data into a sequential
@@ -17,11 +22,12 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>  // for FILE*
+
 #include <string>
 
+#include "base/memory/raw_ptr.h"
 #include "courgette/memory_allocator.h"
 #include "courgette/region.h"
-
 
 namespace courgette {
 
@@ -115,9 +121,12 @@ class SourceStream {
   bool Skip(size_t byte_count);
 
  private:
-  const uint8_t* start_;    // Points to start of buffer.
-  const uint8_t* end_;      // Points to first location after buffer.
-  const uint8_t* current_;  // Points into buffer at current read location.
+  raw_ptr<const uint8_t, AllowPtrArithmetic | DanglingUntriaged>
+      start_;  // Points to start of buffer.
+  raw_ptr<const uint8_t, AllowPtrArithmetic | DanglingUntriaged>
+      end_;  // Points to first location after buffer.
+  raw_ptr<const uint8_t, AllowPtrArithmetic | DanglingUntriaged>
+      current_;  // Points into buffer at current read location.
 };
 
 // A SinkStream accumulates writes into a buffer that it owns.  The stream is

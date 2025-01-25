@@ -44,7 +44,7 @@ then
   echo Cloning asciidoc
   rm -rf asciidoc
   git clone --branch $BRANCH https://github.com/asciidoc-py/asciidoc-py asciidoc
-  (cd asciidoc/asciidoc && ln -s asciidoc.py asciidoc)
+  (cd asciidoc/asciidoc && ln -s asciidoc.py asciidoc && chmod ug+x asciidoc.py)
 fi
 echo Asciidoc up to date at $ASCIIDOC_HASH \($BRANCH\)
 
@@ -85,7 +85,7 @@ EOF
     shopt -s extglob
     echo H
     echo 35
-    for x in "$(echo !(git-*|_*).txt)"
+    for x in "$(echo !\(git-*|_*\).txt)"
     do
       echo i
       echo MAN7_TXT += $x

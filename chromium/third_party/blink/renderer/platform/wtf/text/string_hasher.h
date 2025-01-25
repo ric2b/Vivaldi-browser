@@ -19,6 +19,11 @@
  *
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_WTF_TEXT_STRING_HASHER_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_WTF_TEXT_STRING_HASHER_H_
 
@@ -36,9 +41,6 @@ namespace WTF {
 
 // LChar data is interpreted as Latin-1-encoded (zero extended to 16 bits).
 
-// NOTE: The hash computation here must stay in sync with
-// build/scripts/hasher.py.
-
 // Golden ratio. Arbitrary start value to avoid mapping all zeros to a hash
 // value of zero.
 static const unsigned kStringHashingStartValue = 0x9E3779B9U;
@@ -50,23 +52,20 @@ class StringHasher {
   static const unsigned kFlagCount =
       8;  // Save 8 bits for StringImpl to use as flags.
 
-  StringHasher()
-      : hash_(kStringHashingStartValue),
-        has_pending_character_(false),
-        pending_character_(0) {}
+  constexpr StringHasher() = default;
 
   // The hasher hashes two characters at a time, and thus an "aligned" hasher is
   // one where an even number of characters have been added. Callers that
   // always add characters two at a time can use the "assuming aligned"
   // functions.
-  void AddCharactersAssumingAligned(UChar a, UChar b) {
+  constexpr void AddCharactersAssumingAligned(UChar a, UChar b) {
     DCHECK(!has_pending_character_);
     hash_ += a;
     hash_ = (hash_ << 16) ^ ((b << 11) ^ hash_);
     hash_ += hash_ >> 11;
   }
 
-  void AddCharacter(UChar character) {
+  constexpr void AddCharacter(UChar character) {
     if (has_pending_character_) {
       has_pending_character_ = false;
       AddCharactersAssumingAligned(pending_character_, character);
@@ -95,22 +94,26 @@ class StringHasher {
 
   template <typename T, UChar Converter(T)>
   void AddCharactersAssumingAligned(const T* data, unsigned length) {
-    AddCharactersAssumingAligned_internal<T, Converter>(reinterpret_cast<const unsigned char*>(data),length);
+    AddCharactersAssumingAligned_internal<T, Converter>(
+        reinterpret_cast<const unsigned char*>(data), length);
   }
 
   template <typename T>
   void AddCharactersAssumingAligned(const T* data, unsigned length) {
-    AddCharactersAssumingAligned_internal<T>(reinterpret_cast<const unsigned char*>(data),length);
+    AddCharactersAssumingAligned_internal<T>(
+        reinterpret_cast<const unsigned char*>(data), length);
   }
 
   template <typename T, UChar Converter(T)>
   void AddCharacters(const T* data, unsigned length) {
-    AddCharacters_internal<T, Converter>(reinterpret_cast<const unsigned char*>(data),length);
+    AddCharacters_internal<T, Converter>(
+        reinterpret_cast<const unsigned char*>(data), length);
   }
 
   template <typename T>
   void AddCharacters(const T* data, unsigned length) {
-    AddCharacters_internal<T>(reinterpret_cast<const unsigned char*>(data),length);
+    AddCharacters_internal<T>(reinterpret_cast<const unsigned char*>(data),
+                              length);
   }
 
   unsigned HashWithTop8BitsMasked() const {
@@ -130,7 +133,7 @@ class StringHasher {
     return result;
   }
 
-  unsigned GetHash() const {
+  constexpr unsigned GetHash() const {
     unsigned result = AvalancheBits();
 
     // This avoids ever returning a hash code of 0, since that is used to
@@ -145,12 +148,14 @@ class StringHasher {
 
   template <typename T, UChar Converter(T)>
   static unsigned ComputeHashAndMaskTop8Bits(const T* data, unsigned length) {
-    return ComputeHashAndMaskTop8Bits_internal<T, Converter>(reinterpret_cast<const unsigned char*>(data), length);
+    return ComputeHashAndMaskTop8Bits_internal<T, Converter>(
+        reinterpret_cast<const unsigned char*>(data), length);
   }
 
   template <typename T>
   static unsigned ComputeHashAndMaskTop8Bits(const T* data, unsigned length) {
-    return ComputeHashAndMaskTop8Bits_internal<T>(reinterpret_cast<const unsigned char*>(data), length);
+    return ComputeHashAndMaskTop8Bits_internal<T>(
+        reinterpret_cast<const unsigned char*>(data), length);
   }
 
   template <typename T, UChar Converter(T)>
@@ -166,13 +171,11 @@ class StringHasher {
   }
 
   static unsigned HashMemory(const void* data, unsigned length) {
-    // FIXME: Why does this function use the version of the hash that drops the
-    // top 8 bits?  We want that for all string hashing so we can use those
-    // bits in StringImpl and hash strings consistently, but I don't see why
-    // we'd want that for general memory hashing.
     DCHECK(!(length % 2));
-    return ComputeHashAndMaskTop8Bits_internal<UChar>(static_cast<const unsigned char*>(data),
-                                             length / sizeof(UChar));
+    StringHasher hasher;
+    hasher.AddCharactersAssumingAligned(static_cast<const UChar*>(data),
+                                        length / 2);
+    return hasher.GetHash();
   }
 
   template <size_t length>
@@ -188,7 +191,8 @@ class StringHasher {
   static UChar DefaultConverter(LChar character) { return character; }
 
   template <typename T, UChar Converter(T)>
-  void AddCharactersAssumingAligned_internal(const unsigned char* data, unsigned length) {
+  void AddCharactersAssumingAligned_internal(const unsigned char* data,
+                                             unsigned length) {
     DCHECK(!has_pending_character_);
 
     static_assert(std::is_trivial_v<T> && std::is_standard_layout_v<T>,
@@ -198,9 +202,10 @@ class StringHasher {
 
     while (length--) {
       T data_converted[2];
-      std::memcpy(data_converted, data, sizeof(T)*2);
-      AddCharactersAssumingAligned(Converter(data_converted[0]), Converter(data_converted[1]));
-      data += sizeof(T)*2;
+      std::memcpy(data_converted, data, sizeof(T) * 2);
+      AddCharactersAssumingAligned(Converter(data_converted[0]),
+                                   Converter(data_converted[1]));
+      data += sizeof(T) * 2;
     }
 
     if (remainder) {
@@ -211,7 +216,8 @@ class StringHasher {
   }
 
   template <typename T>
-  void AddCharactersAssumingAligned_internal(const unsigned char* data, unsigned length) {
+  void AddCharactersAssumingAligned_internal(const unsigned char* data,
+                                             unsigned length) {
     AddCharactersAssumingAligned_internal<T, DefaultConverter>(data, length);
   }
 
@@ -224,7 +230,8 @@ class StringHasher {
       has_pending_character_ = false;
       T data_converted;
       std::memcpy(&data_converted, data, sizeof(T));
-      AddCharactersAssumingAligned(pending_character_, Converter(data_converted));
+      AddCharactersAssumingAligned(pending_character_,
+                                   Converter(data_converted));
       data += sizeof(T);
       --length;
     }
@@ -237,18 +244,21 @@ class StringHasher {
   }
 
   template <typename T, UChar Converter(T)>
-  static unsigned ComputeHashAndMaskTop8Bits_internal(const unsigned char* data, unsigned length) {
+  static unsigned ComputeHashAndMaskTop8Bits_internal(const unsigned char* data,
+                                                      unsigned length) {
     StringHasher hasher;
     hasher.AddCharactersAssumingAligned_internal<T, Converter>(data, length);
     return hasher.HashWithTop8BitsMasked();
   }
 
   template <typename T>
-  static unsigned ComputeHashAndMaskTop8Bits_internal(const unsigned char* data, unsigned length) {
-    return ComputeHashAndMaskTop8Bits_internal<T, DefaultConverter>(data, length);
+  static unsigned ComputeHashAndMaskTop8Bits_internal(const unsigned char* data,
+                                                      unsigned length) {
+    return ComputeHashAndMaskTop8Bits_internal<T, DefaultConverter>(data,
+                                                                    length);
   }
 
-  unsigned AvalancheBits() const {
+  constexpr unsigned AvalancheBits() const {
     unsigned result = hash_;
 
     // Handle end case.
@@ -268,9 +278,9 @@ class StringHasher {
     return result;
   }
 
-  unsigned hash_;
-  bool has_pending_character_;
-  UChar pending_character_;
+  unsigned hash_ = kStringHashingStartValue;
+  bool has_pending_character_ = false;
+  UChar pending_character_ = 0;
 };
 
 }  // namespace WTF

@@ -17,6 +17,8 @@ limitations under the License.
 
 #include <deque>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_module.h"
@@ -25,9 +27,7 @@ limitations under the License.
 #include "xla/service/hlo_liveness_analysis.h"
 #include "xla/service/tuple_simplifier.h"
 #include "xla/service/while_loop_simplifier.h"
-#include "xla/status.h"
 #include "xla/status_macros.h"
-#include "xla/statusor.h"
 #include "xla/types.h"
 #include "xla/util.h"
 #include "tsl/platform/errors.h"

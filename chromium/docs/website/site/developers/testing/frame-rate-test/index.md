@@ -94,9 +94,9 @@ To debug the test outside of the test harness, open test.html and type
 `__start('stationary')` in the javascript console. Once the test runs, type
 __calc_results() to see the measured frame rate.
 
-Content additions require codereview, using the standard [contributing
-code](/developers/contributing-code) process. Consider nduca@chromium.org and
-junov@chromium.org as reviewers.
+Content additions require codereview, using the standard
+[contributing code](https://chromium.googlesource.com/chromium/src/+/main/docs/contributing.md)
+process. Consider nduca@chromium.org and junov@chromium.org as reviewers.
 
 ## Results
 

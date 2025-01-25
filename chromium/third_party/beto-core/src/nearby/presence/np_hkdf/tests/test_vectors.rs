@@ -17,12 +17,11 @@
 use anyhow::anyhow;
 use crypto_provider::aes::AesKey;
 use crypto_provider_default::CryptoProviderImpl;
-use np_hkdf::{v1_salt::V1Salt, *};
-use rand::Rng as _;
-use rand_ext::seeded_rng;
+use np_hkdf::{v1_salt::ExtendedV1Salt, *};
 use serde_json::json;
 use std::{fs, io::Read as _};
 use test_helper::extract_key_array;
+use test_vector_hkdf::TestVectorHkdf;
 
 #[test]
 fn hkdf_test_vectors() -> Result<(), anyhow::Error> {
@@ -42,76 +41,97 @@ fn hkdf_test_vectors() -> Result<(), anyhow::Error> {
             let key_seed = extract_key_array::<32>(group, "key_seed");
             let hkdf = NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
             assert_eq!(
-                extract_key_array::<64>(group, "legacy_ldt_key"),
-                hkdf.legacy_ldt_key().as_concatenated()
+                extract_key_array::<64>(group, "v0_ldt_key"),
+                hkdf.v0_ldt_key().as_concatenated()
             );
             assert_eq!(
-                &extract_key_array::<32>(group, "legacy_metadata_key_hmac_key"),
-                hkdf.legacy_metadata_key_hmac_key().as_bytes()
+                &extract_key_array::<32>(group, "v0_identity_token_hmac_key"),
+                hkdf.v0_identity_token_hmac_key().as_bytes()
             );
             assert_eq!(
-                extract_key_array::<12>(group, "legacy_metadata_nonce"),
-                hkdf.legacy_metadata_nonce()
+                extract_key_array::<12>(group, "v0_metadata_nonce"),
+                hkdf.v0_metadata_nonce()
             );
             assert_eq!(
-                extract_key_array::<12>(group, "extended_metadata_nonce"),
-                hkdf.extended_metadata_nonce()
+                extract_key_array::<12>(group, "v1_metadata_nonce"),
+                hkdf.v1_metadata_nonce()
             );
             assert_eq!(
-                &extract_key_array::<32>(group, "extended_unsigned_metadata_key_hmac_key"),
-                hkdf.extended_unsigned_metadata_key_hmac_key().as_bytes()
+                &extract_key_array::<32>(group, "v1_mic_short_salt_identity_token_hmac_key"),
+                hkdf.v1_mic_short_salt_keys().identity_token_hmac_key().as_bytes()
             );
             assert_eq!(
-                extract_key_array::<16>(group, "extended_unsigned_section_aes_key"),
-                *UnsignedSectionKeys::aes_key(&hkdf).as_array()
+                extract_key_array::<16>(group, "v1_mic_short_salt_aes_key"),
+                *hkdf.v1_mic_short_salt_keys().aes_key().as_array()
             );
             assert_eq!(
-                &extract_key_array::<32>(group, "extended_unsigned_section_mic_hmac_key"),
-                UnsignedSectionKeys::hmac_key(&hkdf).as_bytes()
+                &extract_key_array::<32>(group, "v1_mic_short_salt_mic_hmac_key"),
+                hkdf.v1_mic_short_salt_keys().mic_hmac_key().as_bytes()
             );
             assert_eq!(
-                &extract_key_array::<32>(group, "extended_signed_metadata_key_hmac_key"),
-                hkdf.extended_signed_metadata_key_hmac_key().as_bytes()
+                &extract_key_array::<32>(group, "v1_mic_extended_salt_identity_token_hmac_key"),
+                hkdf.v1_mic_extended_salt_keys().identity_token_hmac_key().as_bytes()
             );
             assert_eq!(
-                extract_key_array::<16>(group, "extended_signed_section_aes_key"),
-                *hkdf.extended_signed_section_aes_key().as_array()
+                extract_key_array::<16>(group, "v1_mic_extended_salt_aes_key"),
+                *hkdf.v1_mic_extended_salt_keys().aes_key().as_array()
+            );
+            assert_eq!(
+                &extract_key_array::<32>(group, "v1_mic_extended_salt_mic_hmac_key"),
+                hkdf.v1_mic_extended_salt_keys().mic_hmac_key().as_bytes()
+            );
+            assert_eq!(
+                &extract_key_array::<32>(group, "v1_signature_identity_token_hmac_key"),
+                hkdf.v1_signature_keys().identity_token_hmac_key().as_bytes()
+            );
+            assert_eq!(
+                extract_key_array::<16>(group, "v1_signature_section_aes_key"),
+                *hkdf.v1_signature_keys().aes_key().as_array()
             );
         }
 
         {
-            let group = &tc["legacy_adv_salt_hkdf"];
+            let group = &tc["v0_adv_salt_hkdf"];
             let ikm = extract_key_array::<2>(group, "adv_salt");
             assert_eq!(
                 extract_key_array::<16>(group, "expanded_salt"),
-                legacy_ldt_expanded_salt::<16, CryptoProviderImpl>(&ikm)
+                v0_ldt_expanded_salt::<CryptoProviderImpl>(&ikm)
             )
         }
 
         {
-            let group = &tc["legacy_metadata_key_hkdf"];
-            let ikm = extract_key_array::<14>(group, "legacy_metadata_key");
+            let group = &tc["v0_identity_token_hkdf"];
+            let ikm = extract_key_array::<14>(group, "v0_identity_token");
             assert_eq!(
                 extract_key_array::<16>(group, "expanded_key"),
-                legacy_metadata_expanded_key::<CryptoProviderImpl>(&ikm)
+                v0_metadata_expanded_key::<CryptoProviderImpl>(&ikm)
             )
         }
 
         {
-            let group = &tc["extended_section_salt_hkdf"];
-            let ikm = extract_key_array::<16>(group, "section_salt");
-            let salt = V1Salt::<CryptoProviderImpl>::from(ikm);
+            let group = &tc["v1_section_extended_salt_hkdf"];
+            let ikm = extract_key_array::<16>(group, "section_extended_salt");
+            let salt = ExtendedV1Salt::from(ikm);
             assert_eq!(
-                extract_key_array::<16>(group, "derived_salt_first_section_no_de"),
-                salt.derive(None).unwrap(),
+                extract_key_array::<16>(group, "derived_salt_nonce"),
+                salt.derive::<16, CryptoProviderImpl>(None).unwrap(),
             );
             assert_eq!(
-                extract_key_array::<16>(group, "derived_salt_first_section_first_de"),
-                salt.derive(Some(0.into())).unwrap(),
+                extract_key_array::<16>(group, "derived_salt_first_de"),
+                salt.derive::<16, CryptoProviderImpl>(Some(0.into())).unwrap(),
             );
             assert_eq!(
-                extract_key_array::<16>(group, "derived_salt_first_section_third_de"),
-                salt.derive(Some(2.into())).unwrap(),
+                extract_key_array::<16>(group, "derived_salt_third_de"),
+                salt.derive::<16, CryptoProviderImpl>(Some(2.into())).unwrap(),
+            );
+        }
+
+        {
+            let group = &tc["v1_mic_section_short_salt_hkdf"];
+            let ikm = extract_key_array::<2>(group, "section_short_salt");
+            assert_eq!(
+                extract_key_array::<12>(group, "short_salt_nonce"),
+                extended_mic_section_short_salt_nonce::<CryptoProviderImpl>(ikm),
             );
         }
     }
@@ -121,53 +141,70 @@ fn hkdf_test_vectors() -> Result<(), anyhow::Error> {
 
 // disable unless you want to print out a new set of test vectors
 #[ignore]
+#[allow(clippy::panic)]
 #[test]
 fn gen_test_vectors() {
-    let mut rng = seeded_rng();
-
     let mut array = Vec::<serde_json::Value>::new();
 
-    for _ in 0..100 {
-        let key_seed: [u8; 32] = rng.gen();
-        let legacy_adv_salt: [u8; 2] = rng.gen();
-        let legacy_metadata_key: [u8; 14] = rng.gen();
-        let adv_salt_bytes: [u8; 16] = rng.gen();
-        let extended_adv_salt = V1Salt::<CryptoProviderImpl>::from(adv_salt_bytes);
+    for i in 0_u32..100 {
+        // build "random" things in a repeatable way so future changes don't
+        // rebuild unrelated things, with some /dev/random thrown in for good measure
+        let test_vector_seed_hkdf = TestVectorHkdf::<CryptoProviderImpl>::new(
+            "NP HKDF test vectors pb4qoNqM9aL/ezSC2FU5EQzu8JJoJ25B+rLqbU5kVN8",
+            &i.to_be_bytes(),
+        );
+
+        let key_seed: [u8; 32] = test_vector_seed_hkdf.derive_array("key seed");
+        let v0_adv_salt: [u8; 2] = test_vector_seed_hkdf.derive_array("legacy adv salt");
+        let v0_identity_token: [u8; 14] = test_vector_seed_hkdf.derive_array("v0 identity token");
+        let extended_salt_bytes: [u8; 16] =
+            test_vector_seed_hkdf.derive_array("v1 section extended salt");
+        let v1_mic_short_salt: [u8; 2] =
+            test_vector_seed_hkdf.derive_array("v1 mic section short salt");
+        let v1_extended_salt = ExtendedV1Salt::from(extended_salt_bytes);
 
         let key_seed_hkdf = NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
         array
             .push(json!({
                 "key_seed_hkdf": {
                     "key_seed": hex::encode_upper(key_seed),
-                    "legacy_ldt_key": hex::encode_upper(key_seed_hkdf.legacy_ldt_key().as_concatenated()),
-                    "legacy_metadata_key_hmac_key":
-                        hex::encode_upper(key_seed_hkdf.legacy_metadata_key_hmac_key().as_bytes()),
-                    "legacy_metadata_nonce": hex::encode_upper(key_seed_hkdf.legacy_metadata_nonce()),
-                    "extended_metadata_nonce": hex::encode_upper(key_seed_hkdf.extended_metadata_nonce()),
-                    "extended_unsigned_metadata_key_hmac_key": hex::encode_upper(key_seed_hkdf.extended_unsigned_metadata_key_hmac_key().as_bytes()),
-                    "extended_unsigned_section_aes_key": hex::encode_upper(UnsignedSectionKeys::<CryptoProviderImpl>::aes_key(&key_seed_hkdf).as_array()),
-                    "extended_unsigned_section_mic_hmac_key": hex::encode_upper(UnsignedSectionKeys::<CryptoProviderImpl>::hmac_key(&key_seed_hkdf).as_bytes()),
-                    "extended_signed_metadata_key_hmac_key": hex::encode_upper(key_seed_hkdf.extended_signed_metadata_key_hmac_key().as_bytes()),
-                    "extended_signed_section_aes_key": hex::encode_upper(key_seed_hkdf.extended_signed_section_aes_key().as_array()),
+                    "v0_ldt_key": hex::encode_upper(key_seed_hkdf.v0_ldt_key().as_concatenated()),
+                    "v0_identity_token_hmac_key":
+                        hex::encode_upper(key_seed_hkdf.v0_identity_token_hmac_key().as_bytes()),
+                    "v0_metadata_nonce": hex::encode_upper(key_seed_hkdf.v0_metadata_nonce()),
+                    "v1_metadata_nonce": hex::encode_upper(key_seed_hkdf.v1_metadata_nonce()),
+                    "v1_mic_short_salt_identity_token_hmac_key": hex::encode_upper(key_seed_hkdf.v1_mic_short_salt_keys().identity_token_hmac_key().as_bytes()),
+                    "v1_mic_short_salt_aes_key": hex::encode_upper(key_seed_hkdf.v1_mic_short_salt_keys().aes_key().as_array()),
+                    "v1_mic_short_salt_mic_hmac_key": hex::encode_upper(key_seed_hkdf.v1_mic_short_salt_keys().mic_hmac_key().as_bytes()),
+                    "v1_mic_extended_salt_identity_token_hmac_key": hex::encode_upper(key_seed_hkdf.v1_mic_extended_salt_keys().identity_token_hmac_key().as_bytes()),
+                    "v1_mic_extended_salt_aes_key": hex::encode_upper(key_seed_hkdf.v1_mic_extended_salt_keys().aes_key().as_array()),
+                    "v1_mic_extended_salt_mic_hmac_key": hex::encode_upper(key_seed_hkdf.v1_mic_extended_salt_keys().mic_hmac_key().as_bytes()),
+                    "v1_signature_identity_token_hmac_key": hex::encode_upper(key_seed_hkdf.v1_signature_keys().identity_token_hmac_key().as_bytes()),
+                    "v1_signature_section_aes_key": hex::encode_upper(key_seed_hkdf.v1_signature_keys().aes_key().as_array()),
                 },
-                "legacy_adv_salt_hkdf": {
-                    "adv_salt": hex::encode_upper(legacy_adv_salt),
-                    "expanded_salt": hex::encode_upper(legacy_ldt_expanded_salt::<16, CryptoProviderImpl>(&legacy_adv_salt))
+                "v0_adv_salt_hkdf": {
+                    "adv_salt": hex::encode_upper(v0_adv_salt),
+                    "expanded_salt": hex::encode_upper(v0_ldt_expanded_salt::<CryptoProviderImpl>(&v0_adv_salt))
                 },
-                "legacy_metadata_key_hkdf": {
-                    "legacy_metadata_key": hex::encode_upper(legacy_metadata_key),
+                "v0_identity_token_hkdf": {
+                    "v0_identity_token": hex::encode_upper(v0_identity_token),
                     "expanded_key":
-                        hex::encode_upper(legacy_metadata_expanded_key::<CryptoProviderImpl>(&legacy_metadata_key))
+                        hex::encode_upper(v0_metadata_expanded_key::<CryptoProviderImpl>(&v0_identity_token))
                 },
-                "extended_section_salt_hkdf": {
-                    "section_salt": hex::encode_upper(adv_salt_bytes),
+                "v1_section_extended_salt_hkdf": {
+                    "section_extended_salt": hex::encode_upper(v1_extended_salt.bytes()),
                     // 0-based offsets -> 1-based indexing
-                    "derived_salt_first_section_no_de": hex::encode_upper(extended_adv_salt.derive::<16>(None).unwrap()),
-                    "derived_salt_first_section_first_de": hex::encode_upper(extended_adv_salt.derive::<16>(Some(0.into())).unwrap()),
-                    "derived_salt_first_section_third_de": hex::encode_upper(extended_adv_salt.derive::<16>(Some(2.into())).unwrap()),
+                    "derived_salt_nonce": hex::encode_upper(v1_extended_salt.derive::<16, CryptoProviderImpl>(None).unwrap()),
+                    "derived_salt_first_de": hex::encode_upper(v1_extended_salt.derive::<16, CryptoProviderImpl>(Some(0.into())).unwrap()),
+                    "derived_salt_third_de": hex::encode_upper(v1_extended_salt.derive::<16, CryptoProviderImpl>(Some(2.into())).unwrap()),
+                },
+                "v1_mic_section_short_salt_hkdf": {
+                    "section_short_salt": hex::encode_upper(v1_mic_short_salt),
+                    "short_salt_nonce": hex::encode_upper(extended_mic_section_short_salt_nonce::<CryptoProviderImpl>(v1_mic_short_salt)),
                 }
             }));
     }
 
     println!("{}", serde_json::ser::to_string_pretty(&array).unwrap());
+    panic!("Don't leave this test enabled. Meanwhile, enjoy the text output above.");
 }

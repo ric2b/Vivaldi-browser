@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fxcodec/jbig2/JBig2_SddProc.h"
 
 #include <stddef.h>
@@ -34,8 +29,8 @@ CJBig2_SDDProc::~CJBig2_SDDProc() = default;
 
 std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeArith(
     CJBig2_ArithDecoder* pArithDecoder,
-    std::vector<JBig2ArithCtx>* gbContext,
-    std::vector<JBig2ArithCtx>* grContext) {
+    pdfium::span<JBig2ArithCtx> gbContexts,
+    pdfium::span<JBig2ArithCtx> grContexts) {
   auto IADH = std::make_unique<CJBig2_ArithIntDecoder>();
   auto IADW = std::make_unique<CJBig2_ArithIntDecoder>();
   auto IAAI = std::make_unique<CJBig2_ArithIntDecoder>();
@@ -100,7 +95,7 @@ std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeArith(
         pGRD->GBAT[5] = SDAT[5];
         pGRD->GBAT[6] = SDAT[6];
         pGRD->GBAT[7] = SDAT[7];
-        BS = pGRD->DecodeArith(pArithDecoder, gbContext->data());
+        BS = pGRD->DecodeArith(pArithDecoder, gbContexts);
         if (!BS)
           return nullptr;
       } else {
@@ -132,7 +127,8 @@ std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeArith(
           pDecoder->SBSYMCODELEN = SBSYMCODELEN;
           std::vector<CJBig2_Image*> SBSYMS;  // Pointers are not owned
           SBSYMS.resize(pDecoder->SBNUMSYMS);
-          std::copy(SDINSYMS, SDINSYMS + SDNUMINSYMS, SBSYMS.begin());
+          std::copy(SDINSYMS, UNSAFE_TODO(SDINSYMS + SDNUMINSYMS),
+                    SBSYMS.begin());
           for (size_t i = 0; i < NSYMSDECODED; ++i)
             SBSYMS[i + SDNUMINSYMS] = SDNEWSYMS[i].get();
           pDecoder->SBSYMS = SBSYMS.data();
@@ -165,7 +161,7 @@ std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeArith(
           ids.IARDX = IARDX.get();
           ids.IARDY = IARDY.get();
           ids.IAID = IAID.get();
-          BS = pDecoder->DecodeArith(pArithDecoder, grContext->data(), &ids);
+          BS = pDecoder->DecodeArith(pArithDecoder, grContexts, &ids);
           if (!BS)
             return nullptr;
         } else if (REFAGGNINST == 1) {
@@ -196,7 +192,7 @@ std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeArith(
           pGRRD->GRAT[1] = SDRAT[1];
           pGRRD->GRAT[2] = SDRAT[2];
           pGRRD->GRAT[3] = SDRAT[3];
-          BS = pGRRD->Decode(pArithDecoder, grContext->data());
+          BS = pGRRD->Decode(pArithDecoder, grContexts);
           if (!BS)
             return nullptr;
         }
@@ -236,8 +232,9 @@ std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeArith(
     if (!EXFLAGS[i] || j >= SDNUMEXSYMS)
       continue;
     if (i < SDNUMINSYMS) {
-      pDict->AddImage(SDINSYMS[i] ? std::make_unique<CJBig2_Image>(*SDINSYMS[i])
-                                  : nullptr);
+      pDict->AddImage(
+          UNSAFE_TODO(SDINSYMS[i] ? std::make_unique<CJBig2_Image>(*SDINSYMS[i])
+                                  : nullptr));
     } else {
       pDict->AddImage(std::move(SDNEWSYMS[i - SDNUMINSYMS]));
     }
@@ -248,10 +245,9 @@ std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeArith(
 
 std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeHuffman(
     CJBig2_BitStream* pStream,
-    std::vector<JBig2ArithCtx>* gbContext,
-    std::vector<JBig2ArithCtx>* grContext) {
+    pdfium::span<JBig2ArithCtx> gbContexts,
+    pdfium::span<JBig2ArithCtx> grContexts) {
   auto pHuffmanDecoder = std::make_unique<CJBig2_HuffmanDecoder>(pStream);
-
   std::vector<std::unique_ptr<CJBig2_Image>> SDNEWSYMS(SDNUMNEWSYMS);
   std::vector<uint32_t> SDNEWSYMWIDTHS;
   if (SDREFAGG == 0)
@@ -326,7 +322,8 @@ std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeHuffman(
           pDecoder->SBSYMCODES = std::move(SBSYMCODES);
           std::vector<CJBig2_Image*> SBSYMS;  // Pointers are not owned
           SBSYMS.resize(pDecoder->SBNUMSYMS);
-          std::copy(SDINSYMS, SDINSYMS + SDNUMINSYMS, SBSYMS.begin());
+          std::copy(SDINSYMS, UNSAFE_TODO(SDINSYMS + SDNUMINSYMS),
+                    SBSYMS.begin());
           for (size_t i = 0; i < NSYMSDECODED; ++i)
             SBSYMS[i + SDNUMINSYMS] = SDNEWSYMS[i].get();
           pDecoder->SBSYMS = SBSYMS.data();
@@ -348,7 +345,7 @@ std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeHuffman(
           pDecoder->SBRAT[1] = SDRAT[1];
           pDecoder->SBRAT[2] = SDRAT[2];
           pDecoder->SBRAT[3] = SDRAT[3];
-          BS = pDecoder->DecodeHuffman(pStream, grContext->data());
+          BS = pDecoder->DecodeHuffman(pStream, grContexts);
           if (!BS)
             return nullptr;
 
@@ -404,12 +401,12 @@ std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeHuffman(
           pGRRD->GRAT[2] = SDRAT[2];
           pGRRD->GRAT[3] = SDRAT[3];
           auto pArithDecoder = std::make_unique<CJBig2_ArithDecoder>(pStream);
-          BS = pGRRD->Decode(pArithDecoder.get(), grContext->data());
+          BS = pGRRD->Decode(pArithDecoder.get(), grContexts);
           if (!BS)
             return nullptr;
 
           pStream->alignByte();
-          pStream->offset(2);
+          pStream->addOffset(2);
           if ((uint32_t)nVal != (pStream->getOffset() - nTmp))
             return nullptr;
         }
@@ -442,9 +439,9 @@ std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeHuffman(
 
         BHC = std::make_unique<CJBig2_Image>(TOTWIDTH, HCHEIGHT);
         for (uint32_t i = 0; i < HCHEIGHT; ++i) {
-          FXSYS_memcpy(BHC->data() + i * BHC->stride(), pStream->getPointer(),
-                       stride);
-          pStream->offset(stride);
+          UNSAFE_TODO(FXSYS_memcpy(BHC->data() + i * BHC->stride(),
+                                   pStream->getPointer(), stride));
+          pStream->addOffset(stride);
         }
       } else {
         auto pGRD = std::make_unique<CJBig2_GRDProc>();
@@ -498,8 +495,9 @@ std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeHuffman(
     if (!EXFLAGS[i] || j >= SDNUMEXSYMS)
       continue;
     if (i < SDNUMINSYMS) {
-      pDict->AddImage(SDINSYMS[i] ? std::make_unique<CJBig2_Image>(*SDINSYMS[i])
-                                  : nullptr);
+      pDict->AddImage(
+          UNSAFE_TODO(SDINSYMS[i] ? std::make_unique<CJBig2_Image>(*SDINSYMS[i])
+                                  : nullptr));
     } else {
       pDict->AddImage(std::move(SDNEWSYMS[i - SDNUMINSYMS]));
     }
@@ -511,5 +509,6 @@ std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeHuffman(
 CJBig2_Image* CJBig2_SDDProc::GetImage(
     uint32_t i,
     pdfium::span<const std::unique_ptr<CJBig2_Image>> new_syms) const {
-  return i < SDNUMINSYMS ? SDINSYMS[i] : new_syms[i - SDNUMINSYMS].get();
+  return i < SDNUMINSYMS ? UNSAFE_TODO(SDINSYMS[i])
+                         : new_syms[i - SDNUMINSYMS].get();
 }

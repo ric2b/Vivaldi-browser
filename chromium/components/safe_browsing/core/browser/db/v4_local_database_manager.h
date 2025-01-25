@@ -9,7 +9,10 @@
 // and database that holds the downloaded updates.
 
 #include <memory>
+#include <set>
+#include <string>
 #include <unordered_set>
+#include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
@@ -23,7 +26,6 @@
 #include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/core/browser/db/v4_update_protocol_manager.h"
 #include "components/safe_browsing/core/common/proto/webui.pb.h"
-#include "services/network/public/mojom/fetch_api.mojom.h"
 #include "url/gurl.h"
 
 namespace safe_browsing {
@@ -64,8 +66,6 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   //
 
   void CancelCheck(Client* client) override;
-  bool CanCheckRequestDestination(
-      network::mojom::RequestDestination request_destination) const override;
   bool CanCheckUrl(const GURL& url) const override;
   bool CheckBrowseUrl(
       const GURL& url,
@@ -82,9 +82,9 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   bool CheckExtensionIDs(const std::set<FullHashStr>& extension_ids,
                          Client* client) override;
   bool CheckResourceUrl(const GURL& url, Client* client) override;
-  void CheckUrlForHighConfidenceAllowlist(
+  std::optional<HighConfidenceAllowlistCheckLoggingDetails>
+  CheckUrlForHighConfidenceAllowlist(
       const GURL& url,
-      const std::string& metric_variation,
       base::OnceCallback<void(bool)> callback) override;
   bool CheckUrlForSubresourceFilter(const GURL& url, Client* client) override;
   void MatchDownloadAllowlistUrl(
@@ -93,7 +93,6 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   safe_browsing::ThreatSource GetBrowseUrlThreatSource(
       CheckBrowseUrlType check_type) const override;
   safe_browsing::ThreatSource GetNonBrowseUrlThreatSource() const override;
-  bool IsDownloadProtectionEnabled() const override;
 
   void StartOnSBThread(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
@@ -172,8 +171,15 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
 
     ~PendingCheck();
 
+    // Abandon this check by nulling out the `client` pointer and thus
+    // guaranteeing this check will not henceforth produce a response.
+    void Abandon();
+
     // The SafeBrowsing client that's waiting for the safe/unsafe verdict.
-    raw_ptr<Client, AcrossTasksDanglingUntriaged> client;
+    // This is required to be non-null if a `client_callback_type` other than
+    // CHECK_OTHER (for synchronous checks) is expected. Upon Abandon()'ment,
+    // this is set to null.
+    raw_ptr<Client> client;
 
     // Determines which funtion from the |client| needs to be called once we
     // know whether the URL in |url| is safe or unsafe.
@@ -239,10 +245,13 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   typedef std::unordered_set<raw_ptr<PendingCheck, CtnExperimental>>
       PendingChecks;
 
-  // Called when all the stores managed by the database have been read from
-  // disk after startup and the database is ready for checking resource
-  // reputation.
+  // Called when all the stores managed by the database have been read
+  // from disk after startup and the database is ready for checking
+  // resource reputation. `start_time` represents when we started
+  // initializing the database. It is provided when this is bound as a
+  // callback, so we can measure end-to-end initialization time.
   void DatabaseReadyForChecks(
+      base::Time start_time,
       std::unique_ptr<V4Database, base::OnTaskRunnerDeleter> v4_database);
 
   // Called when all the stores managed by the database have been verified for
@@ -357,13 +366,16 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   void DropQueuedAndPendingChecks();
 
   // Calls the appropriate method on the |client| object, based on the contents
-  // of |pending_check|.
+  // of |pending_check|. May only be invoked once on a given check. May not be
+  // invoked on an Abandon()'ed check.
   void RespondToClient(std::unique_ptr<PendingCheck> pending_check);
 
   // Callers should generally use |RespondToClient| instead, which will clean up
   // the |pending_check|. Callers should use this function when they don't own
   // the |pending_check|. Like |RespondToClient|, this calls the appropriate
   // method on the |client| object, based on the contents of |pending_check|.
+  // May only be invoked once on a given check, and resets the `client` pointer.
+  // May not be invoked on an Abandon()'ed check.
   void RespondToClientWithoutPendingCheckCleanup(PendingCheck* pending_check);
 
   // Instantiates and initializes |v4_database_| on the task runner. Sets up the

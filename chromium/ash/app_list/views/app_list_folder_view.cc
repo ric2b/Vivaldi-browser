@@ -710,6 +710,7 @@ AppListFolderView::AppListFolderView(AppListFolderController* folder_controller,
                                      views::LayerRegion::kBelow);
 
   AppListModelProvider::Get()->AddObserver(this);
+  UpdateExpandedCollapsedAccessibleState();
 }
 
 void AppListFolderView::CreateScrollableAppsGrid(bool tablet_mode) {
@@ -826,11 +827,14 @@ void AppListFolderView::ScheduleShowHideAnimation(bool show,
   folder_visibility_animations_.clear();
 
   shown_ = show;
+  UpdateExpandedCollapsedAccessibleState();
   if (show) {
-    GetViewAccessibility().SetName(folder_item_view_->GetAccessibleName(),
-                                   ax::mojom::NameFrom::kAttribute);
+    // TODO(crbug.com/325137417): Investigate whether this line is necessary. It
+    // probably isn't.
+    GetViewAccessibility().SetName(
+        folder_item_view_->GetViewAccessibility().GetCachedName(),
+        ax::mojom::NameFrom::kAttribute);
   }
-  NotifyAccessibilityEvent(ax::mojom::Event::kStateChanged, true);
 
   // Animate the background corner radius, opacity and bounds.
   folder_visibility_animations_.push_back(
@@ -1010,6 +1014,14 @@ void AppListFolderView::OnHideAnimationDone(bool hide_for_reparent) {
     std::move(animation_done_test_callback_).Run();
 }
 
+void AppListFolderView::UpdateExpandedCollapsedAccessibleState() const {
+  if (shown_) {
+    GetViewAccessibility().SetIsExpanded();
+  } else {
+    GetViewAccessibility().SetIsCollapsed();
+  }
+}
+
 void AppListFolderView::UpdatePreferredBounds() {
   if (!folder_item_view_)
     return;
@@ -1112,9 +1124,9 @@ void AppListFolderView::OnScrollEvent(ui::ScrollEvent* event) {
 }
 
 void AppListFolderView::OnMouseEvent(ui::MouseEvent* event) {
-  if (event->type() == ui::ET_MOUSEWHEEL) {
+  if (event->type() == ui::EventType::kMousewheel) {
     items_grid_view_->HandleScrollFromParentView(
-        event->AsMouseWheelEvent()->offset(), ui::ET_MOUSEWHEEL);
+        event->AsMouseWheelEvent()->offset(), ui::EventType::kMousewheel);
     event->SetHandled();
   }
 }
@@ -1273,20 +1285,15 @@ void AppListFolderView::HandleKeyboardReparent(AppListItemView* reparented_view,
 
 void AppListFolderView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kGenericContainer;
-
-  if (shown_) {
-    node_data->AddState(ax::mojom::State::kExpanded);
-  } else {
-    node_data->AddState(ax::mojom::State::kCollapsed);
-  }
 }
 
 void AppListFolderView::OnGestureEvent(ui::GestureEvent* event) {
   // Capture scroll events so they don't bubble up to the apps container, where
   // they may cause the root apps grid view to scroll, or get translated into
   // apps grid view drag.
-  if (event->type() == ui::ET_GESTURE_SCROLL_BEGIN)
+  if (event->type() == ui::EventType::kGestureScrollBegin) {
     event->SetHandled();
+  }
 }
 
 void AppListFolderView::SetItemName(AppListFolderItem* item,

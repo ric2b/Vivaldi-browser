@@ -23,7 +23,7 @@ namespace autofill {
 class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
  public:
   PersonalDataManagerAndroid(JNIEnv* env,
-                             jobject obj,
+                             const jni_zero::JavaRef<jobject>& obj,
                              PersonalDataManager* personal_data_manager,
                              PrefService* prefs);
 
@@ -327,12 +327,12 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jbank_account);
 
- private:
-  ~PersonalDataManagerAndroid() override;
-
   // Create an object of Java BankAccount from native BankAccount.
   static base::android::ScopedJavaLocalRef<jobject>
   CreateJavaBankAccountFromNative(JNIEnv* env, const BankAccount& bank_account);
+
+ private:
+  ~PersonalDataManagerAndroid() override;
 
   // Create an object of native BankAccount from Java BankAccount.
   static BankAccount CreateNativeBankAccountFromJava(
@@ -342,7 +342,7 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
   // Returns the GUIDs of the |profiles| passed as parameter.
   base::android::ScopedJavaLocalRef<jobjectArray> GetProfileGUIDs(
       JNIEnv* env,
-      const std::vector<AutofillProfile*>& profiles);
+      const std::vector<const AutofillProfile*>& profiles);
 
   // Returns the GUIDs of the |credit_cards| passed as parameter.
   base::android::ScopedJavaLocalRef<jobjectArray> GetCreditCardGUIDs(
@@ -362,7 +362,7 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
       bool include_name_in_label,
       bool include_organization_in_label,
       bool include_country_in_label,
-      std::vector<AutofillProfile*> profiles);
+      std::vector<const AutofillProfile*> profiles);
 
   // Pointer to the java counterpart.
   JavaObjectWeakGlobalRef weak_java_obj_;

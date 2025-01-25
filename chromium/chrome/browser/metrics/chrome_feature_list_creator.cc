@@ -96,9 +96,6 @@ GetSwitchDependentFeatureOverrides(const base::CommandLine& command_line) {
        std::cref(safe_browsing::kDownloadTailoredWarnings),
        base::FeatureList::OVERRIDE_ENABLE_FEATURE},
       {switches::kEnableDownloadWarningImprovements,
-       std::cref(safe_browsing::kImprovedDownloadPageWarnings),
-       base::FeatureList::OVERRIDE_ENABLE_FEATURE},
-      {switches::kEnableDownloadWarningImprovements,
        std::cref(safe_browsing::kEncryptedArchivesMetadata),
        base::FeatureList::OVERRIDE_ENABLE_FEATURE},
       {switches::kEnableDownloadWarningImprovements,
@@ -107,14 +104,13 @@ GetSwitchDependentFeatureOverrides(const base::CommandLine& command_line) {
       {switches::kEnableDownloadWarningImprovements,
        std::cref(safe_browsing::kDownloadReportWithoutUserDecision),
        base::FeatureList::OVERRIDE_ENABLE_FEATURE},
+      {switches::kEnableDownloadWarningImprovements,
+       std::cref(safe_browsing::kDangerousDownloadInterstitial),
+       base::FeatureList::OVERRIDE_ENABLE_FEATURE},
 
       // Override for --privacy-sandbox-ads-apis.
       {switches::kEnablePrivacySandboxAdsApis,
        std::cref(privacy_sandbox::kOverridePrivacySandboxSettingsLocalTesting),
-       base::FeatureList::OVERRIDE_ENABLE_FEATURE},
-      // Enable FedCM to test behavior for third-party cookie phaseout.
-      {network::switches::kTestThirdPartyCookiePhaseout,
-       std::cref(features::kFedCmWithoutThirdPartyCookies),
        base::FeatureList::OVERRIDE_ENABLE_FEATURE},
       // Enable 3PCD tracking protection UI.
       {network::switches::kTestThirdPartyCookiePhaseout,

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/nqe/observation_buffer.h"
 
 #include <float.h>
@@ -45,7 +50,8 @@ ObservationBuffer::ObservationBuffer(const ObservationBuffer& other)
 
 ObservationBuffer::~ObservationBuffer() = default;
 
-void ObservationBuffer::AddObservation(const Observation& observation) {
+std::optional<Observation> ObservationBuffer::AddObservation(
+    const Observation& observation) {
   DCHECK_LE(observations_.size(), params_->observation_buffer_size());
 
   // Observations must be in the non-decreasing order of the timestamps.
@@ -56,12 +62,16 @@ void ObservationBuffer::AddObservation(const Observation& observation) {
          (observation.signal_strength() >= 0 &&
           observation.signal_strength() <= 4));
 
+  std::optional<Observation> evicted_observation;
   // Evict the oldest element if the buffer is already full.
-  if (observations_.size() == params_->observation_buffer_size())
+  if (observations_.size() == params_->observation_buffer_size()) {
+    evicted_observation = observations_.front();
     observations_.pop_front();
+  }
 
   observations_.push_back(observation);
   DCHECK_LE(observations_.size(), params_->observation_buffer_size());
+  return evicted_observation;
 }
 
 std::optional<int32_t> ObservationBuffer::GetPercentile(

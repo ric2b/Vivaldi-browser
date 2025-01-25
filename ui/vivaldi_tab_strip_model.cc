@@ -9,10 +9,37 @@ bool TabStripModel::IsVivPanel(int index) const {
   return GetTabAtIndex(index)->is_viv_panel();
 }
 
-int TabStripModel::ConstrainVivaldiIndex(int index, bool is_viv_panel) const {
+int TabStripModel::ConstrainVivaldiMoveIndex(int index,
+                                             bool is_viv_panel) const {
   CHECK(index >= 0);
   if (is_viv_panel) {
-    // Always put the panels at the end.
+    // We avoid of moving the panels. However, if it happens we
+    // should always place the panel at the end of the tab-strip. Since we are
+    // MOVING, the last possible index remains count() - 1.
+    return std::max(count() - 1, 0);
+  }
+
+  // Find the first panel.
+  for (int i = 0; i < count(); ++i) {
+    if (IsVivPanel(i)) {
+      // The tab can't be placed among the panels. Also, since by the move
+      // operation the number of the tabs remains unchanged, the last possible
+      // index for the "non-panel" tab is the index of the last panel - 1.
+      return std::min(index, std::max(i - 1, 0));
+    }
+  }
+
+  return index;
+}
+
+int TabStripModel::ConstrainVivaldiInsertionIndex(int index,
+                                                  bool is_viv_panel) const {
+  CHECK(index >= 0);
+  if (is_viv_panel) {
+    // Always place the panel at the end of the tab-strip.
+    // By adding a new tab we increase the number of tabs by 1, so the highest
+    // possible target index is equal to the current number of the tabs =
+    // count().
     return count();
   }
 

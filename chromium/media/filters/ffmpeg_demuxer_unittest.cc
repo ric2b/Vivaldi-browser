@@ -504,8 +504,9 @@ TEST_F(FFmpegDemuxerTest, Initialize_Multitrack_Disabled) {
   CreateDemuxer("multitrack-disabled.mp4");
   InitializeDemuxer();
 
-  std::vector<DemuxerStream*> streams = demuxer_->GetAllStreams();
-  EXPECT_EQ(1u, streams.size());
+  ASSERT_EQ(2u, media_tracks_->tracks().size());
+  EXPECT_FALSE(media_tracks_->tracks()[0]->enabled());
+  EXPECT_TRUE(media_tracks_->tracks()[1]->enabled());
 }
 
 TEST_F(FFmpegDemuxerTest, Initialize_Track_Disabled) {
@@ -515,8 +516,8 @@ TEST_F(FFmpegDemuxerTest, Initialize_Track_Disabled) {
   InitializeDemuxer();
 
   // The track enabled flag should be ignored when all tracks are disabled.
-  std::vector<DemuxerStream*> streams = demuxer_->GetAllStreams();
-  EXPECT_EQ(1u, streams.size());
+  ASSERT_EQ(1u, media_tracks_->tracks().size());
+  EXPECT_TRUE(media_tracks_->tracks()[0]->enabled());
 }
 #endif
 
@@ -785,26 +786,6 @@ TEST_F(FFmpegDemuxerTest, Read_AudioNegativeStartTimeAndOpusDiscard_Sync) {
 }
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
-
-#if BUILDFLAG(IS_CHROMEOS)
-TEST_F(FFmpegDemuxerTest, TestAudioNegativeTimestamps) {
-  base::test::ScopedFeatureList scoped_enable(kCrOSLegacyMediaFormats);
-
-  // Note: This test will _crash_ the browser if negative timestamp
-  // values are skipped, since this file is heavily truncated to avoid
-  // copyright issue. If the negative timestamp packets are dropped, the
-  // demuxer will continue to read off the end of the stream.
-  CreateDemuxer("negative-audio-timestamps.avi");
-  InitializeDemuxer();
-
-  DemuxerStream* audio = GetStream(DemuxerStream::AUDIO);
-  Read(audio, FROM_HERE, 104, 0, true);
-  Read(audio, FROM_HERE, 104, 25873, true);
-  Read(audio, FROM_HERE, 104, 51746, true);
-  Read(audio, FROM_HERE, 104, 77619, true);
-  Read(audio, FROM_HERE, 104, 103492, true);
-}
-#endif  // BUILDFLAG(IS_CHROMEOS)
 
 // Similar to the test above, but using an opus clip plus h264 b-frames to
 // ensure we don't apply chained ogg workarounds to other content.
@@ -1377,6 +1358,9 @@ TEST_F(FFmpegDemuxerTest, HEVC_in_MP4_container) {
 TEST_F(FFmpegDemuxerTest, Read_AC3_Audio) {
   CreateDemuxer("bear-ac3-only-frag.mp4");
 #if BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
+  AudioType ac3{AudioCodec::kAC3, AudioCodecProfile::kUnknown, false};
+  UpdateDefaultSupportedAudioTypes({ac3});
+
   InitializeDemuxer();
 
   // Attempt a read from the audio stream and run the message loop until done.
@@ -1393,6 +1377,9 @@ TEST_F(FFmpegDemuxerTest, Read_AC3_Audio) {
 TEST_F(FFmpegDemuxerTest, Read_EAC3_Audio) {
   CreateDemuxer("bear-eac3-only-frag.mp4");
 #if BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
+  AudioType eac3{AudioCodec::kEAC3, AudioCodecProfile::kUnknown, false};
+  UpdateDefaultSupportedAudioTypes({eac3});
+
   InitializeDemuxer();
 
   // Attempt a read from the audio stream and run the message loop until done.

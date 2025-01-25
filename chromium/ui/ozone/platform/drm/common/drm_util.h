@@ -20,8 +20,10 @@
 #include "ui/display/display_features.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_snapshot.h"
+#include "ui/display/util/edid_parser.h"
 #include "ui/ozone/platform/drm/common/drm_wrapper.h"
 #include "ui/ozone/platform/drm/common/scoped_drm_types.h"
+#include "ui/ozone/platform/drm/common/tile_property.h"
 
 typedef struct _drmModeModeInfo drmModeModeInfo;
 
@@ -30,6 +32,8 @@ class DisplayMode;
 }  // namespace display
 
 namespace ui {
+class HardwareDisplayControllerInfo;
+
 // TODO(b/193019614): clean |kMaxDrmCount|'s and |kMaxDrmConnectors|'s
 // assignment up once EDID-based ID migration is complete and the flag is
 // removed.
@@ -86,46 +90,17 @@ constexpr std::
                               {"Disabled-locked", display::kDisabledLocked},
                               {"Enabled-locked", display::kEnabledLocked}}};
 
-// Representation of the information required to initialize and configure a
-// native display. |index| is the position of the connection and will be
-// used to generate a unique identifier for the display.
-class HardwareDisplayControllerInfo {
- public:
-  HardwareDisplayControllerInfo(ScopedDrmConnectorPtr connector,
-                                ScopedDrmCrtcPtr crtc,
-                                uint8_t index);
-
-  HardwareDisplayControllerInfo(const HardwareDisplayControllerInfo&) = delete;
-  HardwareDisplayControllerInfo& operator=(
-      const HardwareDisplayControllerInfo&) = delete;
-
-  ~HardwareDisplayControllerInfo();
-
-  drmModeConnector* connector() const { return connector_.get(); }
-  drmModeCrtc* crtc() const { return crtc_.get(); }
-  uint8_t index() const { return index_; }
-
-  ScopedDrmConnectorPtr ReleaseConnector() { return std::move(connector_); }
-
- private:
-  ScopedDrmConnectorPtr connector_;
-  ScopedDrmCrtcPtr crtc_;
-  uint8_t index_;
-};
-
-using HardwareDisplayControllerInfoList =
-    std::vector<std::unique_ptr<HardwareDisplayControllerInfo>>;
-
 // Looks-up and parses the native display configurations returning all available
 // displays and CRTCs that weren't picked as best CRTC for each connector.
 // TODO(markyacoub): Create unit tests that tests the different bits and pieces
 // that this function goes through.
-std::pair<HardwareDisplayControllerInfoList, std::vector<uint32_t>>
+std::pair<std::vector<std::unique_ptr<HardwareDisplayControllerInfo>>,
+          std::vector<uint32_t>>
 GetDisplayInfosAndInvalidCrtcs(const DrmWrapper& drm);
 
 // Returns the display infos parsed in |GetDisplayInfosAndInvalidCrtcs|
-HardwareDisplayControllerInfoList GetAvailableDisplayControllerInfos(
-    const DrmWrapper& drm);
+std::vector<std::unique_ptr<HardwareDisplayControllerInfo>>
+GetAvailableDisplayControllerInfos(const DrmWrapper& drm);
 
 // Returns a bitmask of possible CRTCs for at least one encoder in
 // |encoder_ids|. The index in the bitmask corresponds to drm_crtc_index().
@@ -193,6 +168,9 @@ uint64_t GetEnumValueForName(const DrmWrapper& drm,
 
 std::vector<uint64_t> ParsePathBlob(const drmModePropertyBlobRes& path_blob);
 
+std::optional<TileProperty> ParseTileBlob(
+    const drmModePropertyBlobRes& tile_blob);
+
 // Whether or not |drm| supports supplying modifiers for AddFramebuffer2.
 bool IsAddfb2ModifierCapable(const DrmWrapper& drm);
 
@@ -225,8 +203,9 @@ uint64_t GetDrmValueForInternalType(const InternalType& internal_state,
       return property.enums[i].value;
   }
 
-  NOTREACHED() << "Failed to extract DRM value for property '" << property.name
-               << "' and enum '" << drm_enum << "'";
+  NOTREACHED_IN_MIGRATION()
+      << "Failed to extract DRM value for property '" << property.name
+      << "' and enum '" << drm_enum << "'";
   return std::numeric_limits<uint64_t>::max();
 }
 
@@ -254,8 +233,9 @@ const InternalType* GetDrmPropertyCurrentValueAsInternalType(
     }
   }
 
-  NOTREACHED() << "Failed to extract internal value for DRM property '"
-               << property.name << "'";
+  NOTREACHED_IN_MIGRATION()
+      << "Failed to extract internal value for DRM property '" << property.name
+      << "'";
   return nullptr;
 }
 
@@ -293,6 +273,15 @@ std::optional<std::string> GetDrmDriverNameFromPath(
 // system. Uses DMI information to determine what the system is.
 std::vector<const char*> GetPreferredDrmDrivers();
 
+// Given |display_infos|, where each HardwareDisplayControllerInfo can represent
+// a regular display or a tile, consolidate all tiles belonging to the same
+// display into one HardwareDisplayControllerInfo. All non-tile
+// HardwareDisplayControllerInfo will not be altered.
+void ConsolidateTiledDisplayInfo(
+    std::vector<std::unique_ptr<HardwareDisplayControllerInfo>>& display_infos);
+
+// Get the total tile-composited size of a tiled display.
+gfx::Size GetTotalTileDisplaySize(const TileProperty& tile_property);
 }  // namespace ui
 
 #endif  // UI_OZONE_PLATFORM_DRM_COMMON_DRM_UTIL_H_

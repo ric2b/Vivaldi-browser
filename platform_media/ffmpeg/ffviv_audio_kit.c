@@ -84,7 +84,7 @@ int ffviv_check_adts_header(AVCodecContext* avctx,
 
   init_get_bits8(&gbc, data, AV_AAC_ADTS_HEADER_SIZE);
   status = ff_adts_header_parse(&gbc, &converter->header);
-  if (status == AAC_AC3_PARSE_ERROR_SYNC) {
+  if (status == AAC_PARSE_ERROR_SYNC) {
     // ff_adts_header_parse() did not detect ADTS header. So this is raw AAC.
     status = 0;
     goto cleanup;

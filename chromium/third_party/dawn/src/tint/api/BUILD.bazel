@@ -46,7 +46,6 @@ cc_library(
   ],
   deps = [
     "//src/tint/api/common",
-    "//src/tint/api/options",
     "//src/tint/lang/core",
     "//src/tint/lang/core/constant",
     "//src/tint/lang/core/ir",
@@ -54,6 +53,7 @@ cc_library(
     "//src/tint/lang/hlsl/writer/common",
     "//src/tint/lang/wgsl",
     "//src/tint/lang/wgsl/ast",
+    "//src/tint/lang/wgsl/ast/transform",
     "//src/tint/lang/wgsl/common",
     "//src/tint/lang/wgsl/features",
     "//src/tint/lang/wgsl/program",

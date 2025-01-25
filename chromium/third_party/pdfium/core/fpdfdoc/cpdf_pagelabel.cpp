@@ -4,126 +4,136 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fpdfdoc/cpdf_pagelabel.h"
 
+#include <array>
 #include <utility>
 
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfapi/parser/cpdf_document.h"
 #include "core/fpdfapi/parser/fpdf_parser_decode.h"
 #include "core/fpdfdoc/cpdf_numbertree.h"
+#include "core/fxcrt/stl_util.h"
 
 namespace {
 
 WideString MakeRoman(int num) {
-  const int kArabic[] = {1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1};
-  const WideStringView kRoman[] = {L"m",  L"cm", L"d",  L"cd", L"c",
-                                   L"xc", L"l",  L"xl", L"x",  L"ix",
-                                   L"v",  L"iv", L"i"};
-  const int kMaxNum = 1000000;
+  constexpr auto kArabic = fxcrt::ToArray<const int>(
+      {1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1});
+  const auto kRoman = fxcrt::ToArray<const WideStringView>(
+      {L"m", L"cm", L"d", L"cd", L"c", L"xc", L"l", L"xl", L"x", L"ix", L"v",
+       L"iv", L"i"});
+  constexpr int kMaxNum = 1000000;
 
   num %= kMaxNum;
   int i = 0;
-  WideString wsRomanNumber;
+  WideString result;
+  result.Reserve(10);  // Should cover most use cases.
   while (num > 0) {
     while (num >= kArabic[i]) {
-      num = num - kArabic[i];
-      wsRomanNumber += kRoman[i];
+      num -= kArabic[i];
+      result += kRoman[i];
     }
-    i = i + 1;
+    ++i;
   }
-  return wsRomanNumber;
+  return result;
 }
 
 WideString MakeLetters(int num) {
-  if (num == 0)
+  if (num == 0) {
     return WideString();
+  }
 
-  WideString wsLetters;
-  const int nMaxCount = 1000;
-  const int nLetterCount = 26;
+  constexpr int kMaxCount = 1000;
+  constexpr int kLetterCount = 26;
+
   --num;
+  const int count = (num / kLetterCount + 1) % kMaxCount;
+  const wchar_t ch = L'a' + num % kLetterCount;
 
-  int count = num / nLetterCount + 1;
-  count %= nMaxCount;
-  wchar_t ch = L'a' + num % nLetterCount;
-  for (int i = 0; i < count; i++)
-    wsLetters += ch;
-  return wsLetters;
+  WideString result;
+  {
+    auto result_span = result.GetBuffer(count);
+    fxcrt::Fill(result_span, ch);
+    result.ReleaseBuffer(count);
+  }
+  return result;
 }
 
-WideString GetLabelNumPortion(int num, const ByteString& bsStyle) {
-  if (bsStyle.IsEmpty())
+WideString GetLabelNumPortion(int num, const ByteString& style) {
+  if (style.IsEmpty()) {
     return WideString();
-  if (bsStyle == "D")
+  }
+  if (style == "D") {
     return WideString::FormatInteger(num);
-  if (bsStyle == "R") {
-    WideString wsNumPortion = MakeRoman(num);
-    wsNumPortion.MakeUpper();
-    return wsNumPortion;
   }
-  if (bsStyle == "r")
+  if (style == "R") {
+    WideString result = MakeRoman(num);
+    result.MakeUpper();
+    return result;
+  }
+  if (style == "r") {
     return MakeRoman(num);
-  if (bsStyle == "A") {
-    WideString wsNumPortion = MakeLetters(num);
-    wsNumPortion.MakeUpper();
-    return wsNumPortion;
   }
-  if (bsStyle == "a")
+  if (style == "A") {
+    WideString result = MakeLetters(num);
+    result.MakeUpper();
+    return result;
+  }
+  if (style == "a") {
     return MakeLetters(num);
+  }
   return WideString();
 }
 
 }  // namespace
 
-CPDF_PageLabel::CPDF_PageLabel(CPDF_Document* pDocument)
-    : m_pDocument(pDocument) {}
+CPDF_PageLabel::CPDF_PageLabel(CPDF_Document* doc) : doc_(doc) {}
 
 CPDF_PageLabel::~CPDF_PageLabel() = default;
 
-std::optional<WideString> CPDF_PageLabel::GetLabel(int nPage) const {
-  if (!m_pDocument)
+std::optional<WideString> CPDF_PageLabel::GetLabel(int page_index) const {
+  if (!doc_) {
     return std::nullopt;
-
-  if (nPage < 0 || nPage >= m_pDocument->GetPageCount())
-    return std::nullopt;
-
-  const CPDF_Dictionary* pPDFRoot = m_pDocument->GetRoot();
-  if (!pPDFRoot)
-    return std::nullopt;
-
-  RetainPtr<const CPDF_Dictionary> pLabels = pPDFRoot->GetDictFor("PageLabels");
-  if (!pLabels)
-    return std::nullopt;
-
-  CPDF_NumberTree numberTree(std::move(pLabels));
-  RetainPtr<const CPDF_Object> pValue;
-  int n = nPage;
-  while (n >= 0) {
-    pValue = numberTree.LookupValue(n);
-    if (pValue)
-      break;
-    n--;
   }
 
-  if (pValue) {
-    pValue = pValue->GetDirect();
-    if (const CPDF_Dictionary* pLabel = pValue->AsDictionary()) {
-      WideString label;
-      if (pLabel->KeyExist("P"))
-        label += pLabel->GetUnicodeTextFor("P");
-
-      ByteString bsNumberingStyle = pLabel->GetByteStringFor("S", ByteString());
-      int nLabelNum = nPage - n + pLabel->GetIntegerFor("St", 1);
-      WideString wsNumPortion = GetLabelNumPortion(nLabelNum, bsNumberingStyle);
-      label += wsNumPortion;
-      return label;
-    }
+  if (page_index < 0 || page_index >= doc_->GetPageCount()) {
+    return std::nullopt;
   }
-  return WideString::FormatInteger(nPage + 1);
+
+  const CPDF_Dictionary* root_dict = doc_->GetRoot();
+  if (!root_dict) {
+    return std::nullopt;
+  }
+
+  RetainPtr<const CPDF_Dictionary> labels_dict =
+      root_dict->GetDictFor("PageLabels");
+  if (!labels_dict) {
+    return std::nullopt;
+  }
+
+  CPDF_NumberTree number_tree(std::move(labels_dict));
+  RetainPtr<const CPDF_Object> label_value;
+  std::optional<CPDF_NumberTree::KeyValue> lower_bound =
+      number_tree.GetLowerBound(page_index);
+  if (lower_bound.has_value()) {
+    label_value = lower_bound.value().value;
+  }
+
+  const CPDF_Dictionary* label_dict =
+      label_value ? label_value->GetDirect()->AsDictionary() : nullptr;
+  if (!label_dict) {
+    return WideString::FormatInteger(page_index + 1);
+  }
+
+  WideString label;
+  if (label_dict->KeyExist("P")) {
+    label = label_dict->GetUnicodeTextFor("P");
+  }
+
+  ByteString style = label_dict->GetByteStringFor("S", ByteString());
+  int label_number =
+      page_index - lower_bound.value().key + label_dict->GetIntegerFor("St", 1);
+  label += GetLabelNumPortion(label_number, style);
+  return label;
 }

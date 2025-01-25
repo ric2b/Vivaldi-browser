@@ -1,7 +1,6 @@
-SKIP: FAILED
-
 #include <metal_stdlib>
 using namespace metal;
+
 template<typename T, size_t N>
 struct tint_array {
   const constant T& operator[](size_t i) const constant { return elements[i]; }
@@ -18,11 +17,12 @@ struct S {
   int m;
 };
 
-thread tint_array<S, 4> A = {};
-fragment void f() {
-  A[0] = S{.m=1};
-}
-program_source:19:25: error: program scope variable must reside in constant address space
-thread tint_array<S, 4> A = {};
-                        ^
+struct tint_module_vars_struct {
+  thread tint_array<S, 4>* A;
+};
 
+fragment void f() {
+  thread tint_array<S, 4> A = {};
+  tint_module_vars_struct const tint_module_vars = tint_module_vars_struct{.A=(&A)};
+  (*tint_module_vars.A)[0] = S{.m=1};
+}

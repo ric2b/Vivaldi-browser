@@ -33,6 +33,12 @@ struct RubyBreakTokenData : GarbageCollected<RubyBreakTokenData> {
   const wtf_size_t ruby_base_end_item_index;
   const Vector<AnnotationBreakTokenData, 1> annotation_data;
 
+  RubyBreakTokenData(wtf_size_t open_column_index,
+                     wtf_size_t base_end_index,
+                     const Vector<AnnotationBreakTokenData, 1>& annotations)
+      : open_column_item_index(open_column_index),
+        ruby_base_end_item_index(base_end_index),
+        annotation_data(annotations) {}
   void Trace(Visitor*) const {}
 };
 
@@ -78,6 +84,7 @@ class CORE_EXPORT InlineBreakToken final : public BreakToken {
   const InlineItemTextIndex& Start() const { return start_; }
   wtf_size_t StartItemIndex() const { return start_.item_index; }
   wtf_size_t StartTextOffset() const { return start_.text_offset; }
+  static bool IsStartEqual(const InlineBreakToken*, const InlineBreakToken*);
 
   bool UseFirstLineStyle() const {
     return flags_ & kUseFirstLineStyle;
@@ -136,6 +143,14 @@ class CORE_EXPORT InlineBreakToken final : public BreakToken {
   // This is an array of one item if |kHasRareData|, or zero.
   RareData rare_data_[];
 };
+
+inline bool InlineBreakToken::IsStartEqual(const InlineBreakToken* lhs,
+                                           const InlineBreakToken* rhs) {
+  if (!lhs) {
+    return !rhs;
+  }
+  return rhs && lhs->Start() == rhs->Start();
+}
 
 template <>
 struct DowncastTraits<InlineBreakToken> {

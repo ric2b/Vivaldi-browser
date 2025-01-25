@@ -2,14 +2,21 @@
 #include <vector>
 #include <optional>
 
+#include "base/base64.h"
+#include "base/logging.h"
+#include "base/version_info/version_info.h"
+#include "chromium/base/command_line.h"
 #include "crypto/sha2.h"
 #include "crypto/signature_verifier.h"
-#include "base/base64.h"
 
+#include "app/vivaldi_version_info.h"
 #include "components/signature/vivaldi_signature.h"
 
 namespace vivaldi {
 namespace {
+
+static constexpr const char * kDebuggingSearchEngines = "debug-search-engines";
+static constexpr const char * kSearchEnginesUrl = "search-engines-url";
 
 #include "vivaldi_key.inc"
 
@@ -32,9 +39,26 @@ std::optional<std::vector<uint8_t>> ParseSignature(std::string_view& json) {
   return decoded;
 }
 
+std::string GetSearchEnginesTemplate() {
+  if (!version_info::IsOfficialBuild()) {
+    base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+    if (command_line->HasSwitch(kSearchEnginesUrl)) {
+      return command_line->GetSwitchValueASCII(kSearchEnginesUrl);
+    }
+    return kSignedResourceSearchEnginesSopranos;
+  }
+  if (ReleaseKind() <= Release::kSnapshot) {
+    return kSignedResourceSearchEnginesSnapshot;
+  }
+  return kSignedResourceSearchEngines;
+}
 }  // namespace
 
 bool VerifyJsonSignature(const std::string& json) {
+  if (IsDebuggingSearchEngines()) {
+    return true;
+  }
+
   std::string_view json_view = json;
   auto signature = ParseSignature(json_view);
   if (!signature) {
@@ -59,7 +83,6 @@ bool VerifyJsonSignature(const std::string& json) {
   if (!verifier.VerifyFinal()) {
     return false;
   }
-
   return true;
 }
 
@@ -67,7 +90,7 @@ std::string GetSignedResourceUrl(vivaldi::SignedResourceUrl url_id) {
   std::string url_template;
   switch (url_id) {
     case SignedResourceUrl::kSearchEnginesUrl:
-      url_template = kSignedResourceSearchEngines;
+      url_template = GetSearchEnginesTemplate();
       break;
     case SignedResourceUrl::kDirectMatchUrl:
       url_template = kSignedResourceDirectMatch;
@@ -82,4 +105,39 @@ std::string GetSignedResourceUrl(vivaldi::SignedResourceUrl url_id) {
   url_template.replace(pos, 2, kECDSAPublicKeyCreationTime);
   return url_template;
 }
+
+bool UsesCustomSearchEnginesUrl() {
+  if (version_info::IsOfficialBuild()) {
+    return false;
+  }
+
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  return command_line->HasSwitch(kSearchEnginesUrl);
+}
+
+bool IsDebuggingSearchEngines() {
+  static std::optional<bool> result;
+
+  if (result) {
+    return *result;
+  }
+
+  result = false;
+
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(kDebuggingSearchEngines)) {
+    return false;
+  }
+
+  if (version_info::IsOfficialBuild()) {
+    VLOG(1) << "Option not supported";
+    return false;
+  }
+
+  VLOG(1) << "Debugging search engines.";
+
+  result = true;
+  return true;
+}
+
 }  // namespace vivaldi

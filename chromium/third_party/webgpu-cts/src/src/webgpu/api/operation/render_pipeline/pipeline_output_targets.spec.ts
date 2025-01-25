@@ -79,7 +79,7 @@ g.test('color,attachments')
         : attachmentsFloatWriteValues;
 
     const renderTargets = range(attachmentCount, () =>
-      t.device.createTexture({
+      t.createTextureTracked({
         format,
         size: { width: 1, height: 1, depthOrArrayLayers: 1 },
         usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,
@@ -170,7 +170,7 @@ g.test('color,component_count')
     // extra channels are discarded
     const values = [0, 1, 0, 1];
 
-    const renderTarget = t.device.createTexture({
+    const renderTarget = t.createTextureTracked({
       format,
       size: { width: 1, height: 1, depthOrArrayLayers: 1 },
       usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,
@@ -381,7 +381,7 @@ The attachment has a load value of [1, 0, 0, 1]
     const componentCount = output.length;
     const info = kTextureFormatInfo[format];
 
-    const renderTarget = t.device.createTexture({
+    const renderTarget = t.createTextureTracked({
       format,
       size: { width: 1, height: 1, depthOrArrayLayers: 1 },
       usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,

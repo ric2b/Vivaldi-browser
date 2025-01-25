@@ -4,7 +4,9 @@
 
 #import "ios/chrome/browser/ui/first_run/default_browser/default_browser_screen_view_controller.h"
 
+#import "base/feature_list.h"
 #import "ios/chrome/browser/first_run/model/first_run_metrics.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/elements/instruction_view.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/first_run/first_run_constants.h"
@@ -20,15 +22,20 @@
 - (void)viewDidLoad {
   self.view.accessibilityIdentifier =
       first_run::kFirstRunDefaultBrowserScreenAccessibilityIdentifier;
+  self.bannerSize = BannerImageSizeType::kStandard;
 #if BUILDFLAG(IOS_USE_BRANDED_SYMBOLS)
   self.bannerName = kChromeDefaultBrowserScreenBannerImage;
 #else
   self.bannerName = kChromiumDefaultBrowserScreenBannerImage;
 #endif
-  self.titleText =
-      l10n_util::GetNSString(IDS_IOS_FIRST_RUN_DEFAULT_BROWSER_SCREEN_TITLE);
-  self.subtitleText =
-      l10n_util::GetNSString(IDS_IOS_FIRST_RUN_DEFAULT_BROWSER_SCREEN_SUBTITLE);
+  self.titleText = l10n_util::GetNSString(
+      UseIPadTailoredStringForDefaultBrowserPromo()
+          ? IDS_IOS_FIRST_RUN_DEFAULT_BROWSER_SCREEN_TITLE_IPAD
+          : IDS_IOS_FIRST_RUN_DEFAULT_BROWSER_SCREEN_TITLE);
+  self.subtitleText = l10n_util::GetNSString(
+      UseIPadTailoredStringForDefaultBrowserPromo()
+          ? IDS_IOS_FIRST_RUN_DEFAULT_BROWSER_SCREEN_SUBTITLE_IPAD
+          : IDS_IOS_FIRST_RUN_DEFAULT_BROWSER_SCREEN_SUBTITLE);
 
   self.primaryActionString = l10n_util::GetNSString(
       IDS_IOS_FIRST_RUN_DEFAULT_BROWSER_SCREEN_PRIMARY_ACTION);

@@ -29,7 +29,7 @@
 <translation id="3571177741182643350">წაუკითხავი სტატიები - ხელმისაწვდომია ქსელის გარეშეც:</translation>
 <translation id="3602290021589620013">მინიატურა</translation>
 <translation id="3700829948786686853">მოგესალმებათ Vivaldi</translation>
-<translation id="3719826155360621982">Homepage</translation>
+<translation id="3719826155360621982">საწყისი გვერდი</translation>
 <translation id="385051799172605136">უკან</translation>
 <translation id="399014816462153200">წაკითხული სტატიები:</translation>
 <translation id="4121750346708795461">ამ აპლიკაციის გამოყენებით თქვენ ეთანხმებით Vivaldi-ის <ph name="BEGIN_LINK1" />საბოლოო მომხმარებლის სალიცენზიო შეთანხმებას<ph name="END_LINK1" /> და <ph name="BEGIN_LINK2" />კონფიდენციალობის პოლიტიკას<ph name="END_LINK2" />.</translation>
@@ -69,9 +69,9 @@
 <translation id="7481312909269577407">გადაგზავნა</translation>
 <translation id="7968014550143838305">დაემატა საკითხავ სიას</translation>
 <translation id="804786196054284061">მომხმარებლის სალიცენზიო შეთანხმება</translation>
-<translation id="8127542551745560481">მთავარი გვერდის რედაქტირება</translation>
+<translation id="8127542551745560481">საწყისი გვერდის ჩასწორება</translation>
 <translation id="8560602726703398413">თქვენი საკითხავი სია სანიშნეებშია</translation>
-<translation id="85991616550051997">მთავარ გვერდზე გადასვლა</translation>
+<translation id="85991616550051997">საწყის გვერდზე გადასვლა</translation>
 <translation id="8820817407110198400">სანიშნეები</translation>
 <translation id="9063523880881406963">საიტის სრული ვერსიის მოთხოვნის გამორთვა</translation>
 <translation id="9080642952018487277">ინკოგნიტო რეჟიმში გადასვლა</translation>

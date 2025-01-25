@@ -30,6 +30,8 @@ constexpr char kHatsSurveyTriggerAutofillAddressUserPerception[] =
     "autofill-address-users-perception";
 constexpr char kHatsSurveyTriggerAutofillCreditCardUserPerception[] =
     "autofill-credit-card-users-perception";
+constexpr char kHatsSurveyTriggerAutofillPasswordUserPerception[] =
+    "autofill-password-users-perception";
 constexpr char kHatsSurveyTriggerAutofillCard[] = "autofill-card";
 constexpr char kHatsSurveyTriggerAutofillPassword[] = "autofill-password";
 constexpr char kHatsSurveyTriggerDownloadWarningBubbleBypass[] =
@@ -100,6 +102,10 @@ constexpr char kHatsSurveyTriggerTrustSafetyV2PasswordProtectionUI[] =
     "ts-v2-password-protection-ui";
 constexpr char kHatsSurveyTriggerTrustSafetyV2SafetyCheck[] =
     "ts-v2-safety-check";
+constexpr char kHatsSurveyTriggerTrustSafetyV2SafetyHubNotification[] =
+    "ts-v2-safety-hub-notification";
+constexpr char kHatsSurveyTriggerTrustSafetyV2SafetyHubInteraction[] =
+    "ts-v2-safety-hub-interaction";
 constexpr char kHatsSurveyTriggerTrustSafetyV2TrustedSurface[] =
     "ts-v2-trusted-surface";
 constexpr char kHatsSurveyTriggerTrustSafetyV2PrivacyGuide[] =
@@ -117,6 +123,7 @@ constexpr char kHatsSurveyTriggerTrustSafetyV2SafeBrowsingInterstitial[] =
 constexpr char kHatsSurveyTriggerWallpaperSearch[] = "wallpaper-search";
 #else   // BUILDFLAG(IS_ANDROID)
 constexpr char kHatsSurveyTriggerAndroidStartupSurvey[] = "startup_survey";
+constexpr char kHatsSurveyTriggerQuickDelete[] = "quick_delete_survey";
 #endif  // #if !BUILDFLAG(IS_ANDROID)
 
 constexpr char kHatsSurveyTriggerTesting[] = "testing";
@@ -163,7 +170,9 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
           permissions::kPermissionsPromptSurveyReleaseChannelKey,
           permissions::kPermissionsPromptSurveyDisplayTimeKey,
           permissions::kPermissionPromptSurveyOneTimePromptsDecidedBucketKey,
-          permissions::kPermissionPromptSurveyUrlKey});
+          permissions::kPermissionPromptSurveyUrlKey,
+          permissions::kPermissionPromptSurveyPepcPromptPositionKey,
+          permissions::kPermissionPromptSurveyInitialPermissionStatusKey});
 
 #if !BUILDFLAG(IS_ANDROID)
   // Dev tools surveys.
@@ -322,6 +331,31 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
       &features::kTrustSafetySentimentSurveyV2,
       kHatsSurveyTriggerTrustSafetyV2SafetyCheck,
       features::kTrustSafetySentimentSurveyV2SafetyCheckTriggerId.Get());
+  std::vector<std::string> sh_psd_fields{
+      "User visited Safety Hub page",
+      "User clicked Safety Hub notification",
+      "User interacted with Safety Hub",
+      "Is notification module extensions",
+      "Is notification module notification permissions",
+      "Is notification module passwords",
+      "Is notification module revoked permissions",
+      "Is notification module safe browsing",
+      "Global state is safe",
+      "Global state is info",
+      "Global state is warning",
+      "Global state is weak"};
+  survey_configs.emplace_back(
+      &features::kTrustSafetySentimentSurveyV2,
+      kHatsSurveyTriggerTrustSafetyV2SafetyHubInteraction,
+      features::kTrustSafetySentimentSurveyV2SafetyHubInteractionTriggerId
+          .Get(),
+      sh_psd_fields);
+  survey_configs.emplace_back(
+      &features::kTrustSafetySentimentSurveyV2,
+      kHatsSurveyTriggerTrustSafetyV2SafetyHubNotification,
+      features::kTrustSafetySentimentSurveyV2SafetyHubNotificationTriggerId
+          .Get(),
+      sh_psd_fields);
   survey_configs.emplace_back(
       &features::kTrustSafetySentimentSurveyV2,
       kHatsSurveyTriggerTrustSafetyV2TrustedSurface,
@@ -402,7 +436,11 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
           "Manually filled to an unknown type", "Total corrected",
           "Total filled", "Total unfilled", "Total manually filled",
           "Total number of fields"});
-
+  survey_configs.emplace_back(
+      &password_manager::features::kAutofillPasswordUserPerceptionSurvey,
+      kHatsSurveyTriggerAutofillPasswordUserPerception, std::nullopt,
+      std::vector<std::string>{},
+      std::vector<std::string>{"Filling assistance"});
   survey_configs.emplace_back(&features::kAutofillAddressSurvey,
                               kHatsSurveyTriggerAutofillAddress);
   survey_configs.emplace_back(&features::kAutofillCardSurvey,
@@ -418,7 +456,7 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
   // What's New survey.
   survey_configs.emplace_back(
       &features::kHappinessTrackingSurveysForDesktopWhatsNew,
-      kHatsSurveyTriggerWhatsNew);
+      kHatsSurveyTriggerWhatsNew, "SYLcvnoRH0ugnJ3q1cK0RAHYFycs");
 
   // Performance Controls surveys.
   survey_configs.emplace_back(
@@ -513,6 +551,11 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
 #else
   survey_configs.emplace_back(&chrome::android::kChromeSurveyNextAndroid,
                               kHatsSurveyTriggerAndroidStartupSurvey);
+
+  survey_configs.emplace_back(
+      &chrome::android::kQuickDeleteAndroidSurvey,
+      kHatsSurveyTriggerQuickDelete,
+      chrome::android::kQuickDeleteAndroidSurveyTriggerId.Get());
 
 #endif  // #if !BUILDFLAG(IS_ANDROID)
 

@@ -22,6 +22,7 @@ limitations under the License.
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/types/span.h"
 #include "tensorflow/compiler/jit/variable_info.h"
@@ -42,9 +43,7 @@ limitations under the License.
 #include "xla/shape.h"
 #include "xla/shape_tree.h"
 #include "xla/shape_util.h"
-#include "xla/status.h"
 #include "xla/status_macros.h"
-#include "xla/statusor.h"
 #include "xla/stream_executor/device_memory.h"
 #include "xla/stream_executor/device_memory_allocator.h"
 #include "xla/stream_executor/event.h"
@@ -739,9 +738,8 @@ Status TPUExecuteOp::DoWork(OpKernelContext* context) {
         });
   }
 
-  auto definition_event = std::make_shared<se::Event>(stream->parent());
-  TF_RET_CHECK(definition_event->Init())
-      << "TPU definition event initialization failed";
+  TF_ASSIGN_OR_RETURN(std::shared_ptr<se::Event> definition_event,
+                      stream->parent()->CreateEvent());
 
   trace_me_init.Stop();
 

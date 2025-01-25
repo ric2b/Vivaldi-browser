@@ -5,6 +5,11 @@ version <next>:
 - Raw Captions with Time (RCWT) closed caption demuxer
 - LC3/LC3plus decoding/encoding using external library liblc3
 - ffmpeg CLI filtergraph chaining
+- LC3/LC3plus demuxer and muxer
+- pad_vaapi, drawbox_vaapi filters
+- vf_scale supports secondary ref input and framesync options
+- vf_scale2ref deprecated
+- qsv_params option added for QSV encoders
 
 
 version 7.0:

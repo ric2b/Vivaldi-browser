@@ -135,32 +135,32 @@ LayoutUnit FlexItem::FlowAwareMarginEnd() const {
 }
 
 LayoutUnit FlexItem::FlowAwareMarginBefore() const {
-  switch (algorithm_->GetTransformedWritingMode()) {
-    case TransformedWritingMode::kTopToBottomWritingMode:
+  switch (algorithm_->GetPhysicalDirection()) {
+    case PhysicalDirection::kDown:
       return physical_margins_.top;
-    case TransformedWritingMode::kBottomToTopWritingMode:
+    case PhysicalDirection::kUp:
       return physical_margins_.bottom;
-    case TransformedWritingMode::kLeftToRightWritingMode:
+    case PhysicalDirection::kRight:
       return physical_margins_.left;
-    case TransformedWritingMode::kRightToLeftWritingMode:
+    case PhysicalDirection::kLeft:
       return physical_margins_.right;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return LayoutUnit();
 }
 
 LayoutUnit FlexItem::FlowAwareMarginAfter() const {
-  switch (algorithm_->GetTransformedWritingMode()) {
-    case TransformedWritingMode::kTopToBottomWritingMode:
+  switch (algorithm_->GetPhysicalDirection()) {
+    case PhysicalDirection::kDown:
       return physical_margins_.bottom;
-    case TransformedWritingMode::kBottomToTopWritingMode:
+    case PhysicalDirection::kUp:
       return physical_margins_.top;
-    case TransformedWritingMode::kLeftToRightWritingMode:
+    case PhysicalDirection::kRight:
       return physical_margins_.right;
-    case TransformedWritingMode::kRightToLeftWritingMode:
+    case PhysicalDirection::kLeft:
       return physical_margins_.left;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return LayoutUnit();
 }
 
@@ -318,7 +318,7 @@ LayoutUnit FlexItem::AlignmentOffset(LayoutUnit available_free_space,
     case ItemPosition::kAuto:
     case ItemPosition::kNormal:
     case ItemPosition::kAnchorCenter:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case ItemPosition::kSelfStart:
     case ItemPosition::kSelfEnd:
@@ -326,9 +326,10 @@ LayoutUnit FlexItem::AlignmentOffset(LayoutUnit available_free_space,
     case ItemPosition::kEnd:
     case ItemPosition::kLeft:
     case ItemPosition::kRight:
-      NOTREACHED() << static_cast<int>(position)
-                   << " AlignmentForChild should have transformed this "
-                      "position value to something we handle below.";
+      NOTREACHED_IN_MIGRATION()
+          << static_cast<int>(position)
+          << " AlignmentForChild should have transformed this "
+             "position value to something we handle below.";
       break;
     case ItemPosition::kStretch:
       // Actual stretching must be handled by the caller. Since wrap-reverse
@@ -780,13 +781,10 @@ bool FlexibleBoxAlgorithm::ShouldApplyMinSizeAutoForChild(
   bool main_axis_is_childs_block_axis =
       IsHorizontalFlow() != child.StyleRef().IsHorizontalWritingMode();
   bool intrinsic_in_childs_block_axis =
-      main_axis_is_childs_block_axis &&
-      (min.IsMinContent() || min.IsMaxContent() || min.IsMinIntrinsic() ||
-       min.IsFitContent());
-  // TODO(https://crbug.com/313072): This needs some work to support
-  // calc-size(auto, ...).
-  if (!min.IsAuto() && !intrinsic_in_childs_block_axis)
+      main_axis_is_childs_block_axis && min.HasContentOrIntrinsic();
+  if (!min.HasAuto() && !intrinsic_in_childs_block_axis) {
     return false;
+  }
 
   // webkit-box treats min-size: auto as 0.
   if (StyleRef().IsDeprecatedWebkitBox())
@@ -929,42 +927,12 @@ void FlexibleBoxAlgorithm::FlipForWrapReverse(
   }
 }
 
-TransformedWritingMode FlexibleBoxAlgorithm::GetTransformedWritingMode() const {
-  return GetTransformedWritingMode(*style_);
-}
-
-// static
-TransformedWritingMode FlexibleBoxAlgorithm::GetTransformedWritingMode(
-    const ComputedStyle& style) {
-  WritingMode mode = style.GetWritingMode();
-  if (!style.ResolvedIsColumnFlexDirection()) {
-    static_assert(
-        static_cast<TransformedWritingMode>(WritingMode::kHorizontalTb) ==
-                TransformedWritingMode::kTopToBottomWritingMode &&
-            static_cast<TransformedWritingMode>(WritingMode::kVerticalLr) ==
-                TransformedWritingMode::kLeftToRightWritingMode &&
-            static_cast<TransformedWritingMode>(WritingMode::kVerticalRl) ==
-                TransformedWritingMode::kRightToLeftWritingMode,
-        "WritingMode and TransformedWritingMode must match values.");
-    return static_cast<TransformedWritingMode>(mode);
+PhysicalDirection FlexibleBoxAlgorithm::GetPhysicalDirection() const {
+  WritingDirectionMode mode = style_->GetWritingDirection();
+  if (!style_->ResolvedIsColumnFlexDirection()) {
+    return mode.BlockEnd();
   }
-
-  switch (mode) {
-    case WritingMode::kHorizontalTb:
-      return style.IsLeftToRightDirection()
-                 ? TransformedWritingMode::kLeftToRightWritingMode
-                 : TransformedWritingMode::kRightToLeftWritingMode;
-    case WritingMode::kVerticalLr:
-    case WritingMode::kVerticalRl:
-      return style.IsLeftToRightDirection()
-                 ? TransformedWritingMode::kTopToBottomWritingMode
-                 : TransformedWritingMode::kBottomToTopWritingMode;
-    // TODO(layout-dev): Sideways-lr and sideways-rl are not yet supported.
-    default:
-      break;
-  }
-  NOTREACHED();
-  return TransformedWritingMode::kTopToBottomWritingMode;
+  return mode.InlineEnd();
 }
 
 // static

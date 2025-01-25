@@ -29,6 +29,7 @@ chromium-metrics-reviews@google.com.
   <variant name="FindInPage"/>
   <variant name="Omnibox"/>
   <variant name="Toolbar"/>
+  <variant name="Unknown"/>
 </variants>
 
 <histogram name="Lens.ImageClassification.ClassificationTime.EarlyTerminatedMs"
@@ -87,6 +88,43 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram
+    name="Lens.Overlay.ByInvocationSource.{InvocationSource}.InvocationResultedInSearch"
+    enum="Boolean" expires_after="2025-05-06">
+  <owner>jdonnelly@chromium.org</owner>
+  <owner>lens-chrome@google.com</owner>
+  <summary>
+    Recorded once when the Lens Overlay feature is dismissed, sliced by
+    invocation source. Indicates whether or not a search was performed at any
+    point since the overlay was invoked.
+  </summary>
+</histogram>
+
+<histogram
+    name="Lens.Overlay.ByInvocationSource.{InvocationSource}.SessionDuration"
+    units="ms" expires_after="2025-05-06">
+  <owner>jdonnelly@chromium.org</owner>
+  <owner>lens-chrome@google.com</owner>
+  <summary>
+    Recorded once when the Lens Overlay feature is dismissed, sliced by
+    invocation source. Measures the elapsed time between when the overlay was
+    invoked and when it was dismissed.
+  </summary>
+</histogram>
+
+<histogram
+    name="Lens.Overlay.ByInvocationSource.{InvocationSource}.TimeToFirstInteraction"
+    units="ms" expires_after="2025-05-06">
+  <owner>jdonnelly@chromium.org</owner>
+  <owner>lens-chrome@google.com</owner>
+  <summary>
+    Recorded once when the user first interacts with the overlay, sliced by
+    invocation source. Measures the elapsed time between when the overlay was
+    invoked and when the user first interacts with the overlay. Nothing is
+    logged when the user enters through the image context menu.
+  </summary>
+</histogram>
+
 <histogram name="Lens.Overlay.Dismissed" enum="LensOverlayDismissalSource"
     expires_after="2025-05-06">
   <owner>jdonnelly@chromium.org</owner>
@@ -96,6 +134,16 @@ chromium-metrics-reviews@google.com.
     UI entry point used or the event that triggered the dimissal. In general, it
     should not be possible to attempt to dismiss the feature if the overlay is
     not currently showing but if this happens, nothing will be recorded.
+  </summary>
+</histogram>
+
+<histogram name="Lens.Overlay.InvocationResultedInSearch" enum="Boolean"
+    expires_after="2025-05-06">
+  <owner>jdonnelly@chromium.org</owner>
+  <owner>lens-chrome@google.com</owner>
+  <summary>
+    Recorded once when the Lens Overlay feature is dismissed. Indicates whether
+    or not a search was performed at any point since the overlay was invoked.
   </summary>
 </histogram>
 
@@ -117,6 +165,24 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram
+    name="Lens.Overlay.Overlay.ByInvocationSource.{InvocationSource}.UserAction"
+    enum="LensOverlayUserAction" expires_after="2025-05-06">
+  <owner>jdonnelly@chromium.org</owner>
+  <owner>mercerd@google.com</owner>
+  <summary>
+    Recorded each time the user interacts with the Lens Overlay, enumerated by
+    those actions and sliced by invocation source.
+
+    Before M128, region selection included both tap and region selection and the
+    region selection metric was emitted whenever the user tapped or dragged a
+    new selection on the overlay. M128+ clients distinguish the two selection
+    types and the tap and region selection metrics are emitted when the user
+    taps and drags a new selection respectively.
+  </summary>
+  <token key="InvocationSource" variants="InvocationSources"/>
+</histogram>
+
 <histogram name="Lens.Overlay.Overlay.UserAction" enum="LensOverlayUserAction"
     expires_after="2025-05-06">
   <owner>jdonnelly@chromium.org</owner>
@@ -124,6 +190,12 @@ chromium-metrics-reviews@google.com.
   <summary>
     Recorded each time the user interacts with the Lens Overlay, enumerated by
     those actions.
+
+    Before M128, region selection included both tap and region selection and the
+    region selection metric was emitted whenever the user tapped or dragged a
+    new selection on the overlay. M128+ clients distinguish the two selection
+    types and the tap and region selection metrics are emitted when the user
+    taps and drags a new selection respectively.
   </summary>
 </histogram>
 
@@ -174,12 +246,44 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Lens.Overlay.SessionDuration" units="ms"
+    expires_after="2025-05-06">
+  <owner>jdonnelly@chromium.org</owner>
+  <owner>lens-chrome@google.com</owner>
+  <summary>
+    Recorded once when the Lens Overlay feature is dismissed. Measures the
+    elapsed time between when the overlay was invoked and when it was dismissed.
+  </summary>
+</histogram>
+
 <histogram name="Lens.Overlay.Shown" enum="BooleanEnabled" expires_after="M135">
   <owner>erikchen@chromium.org</owner>
   <owner>mercerd@google.com</owner>
   <summary>
     Recorded once when the lens overlay UI is shown. This UMA histogram is used
     to track feature usage and retention, and thus should never expire.
+  </summary>
+</histogram>
+
+<histogram name="Lens.Overlay.TimeToFirstInteraction" units="ms"
+    expires_after="2025-05-06">
+  <owner>jdonnelly@chromium.org</owner>
+  <owner>lens-chrome@google.com</owner>
+  <summary>
+    Recorded once when the user first interacts with the overlay. Measures the
+    elapsed time between when the overlay was invoked and when the user first
+    interacts with the overlay. Nothing is logged when the user enters through
+    the image context menu.
+  </summary>
+</histogram>
+
+<histogram name="Lens.Overlay.TimeToWebUIReady" units="ms"
+    expires_after="2025-05-06">
+  <owner>jdonnelly@chromium.org</owner>
+  <owner>lens-chrome@google.com</owner>
+  <summary>
+    Recorded once when the Lens Overlay WebUI is ready. Measures the elapsed
+    time between when the overlay was invoked and when its WebUI was ready.
   </summary>
 </histogram>
 

@@ -55,7 +55,7 @@ const char kSpeeddialKey[] = "speeddial";
 const char kThumbnailKey[] = "thumbnail";
 const char kTitleKey[] = "title";
 
-bool IsValidBookmarkName(bool folder, base::StringPiece name) {
+bool IsValidBookmarkName(bool folder, std::string_view name) {
   if (name.empty())
     return false;
 
@@ -91,7 +91,7 @@ bool ParsePartnerDatabaseDetailsList(
     base::Value::List& list,
     std::vector<PartnerDetails>& details_list) {
   for (size_t i = 0; i < list.size(); ++i) {
-    auto error = [&](base::StringPiece message) -> bool {
+    auto error = [&](std::string_view message) -> bool {
       LOG(ERROR) << "Partner database JSON error: bad format of "
                  << (is_folder ? kFoldersKey : kBookmarksKey) << "[" << i
                  << "] - " << message;
@@ -204,7 +204,7 @@ class PartnerDatabase {
 
   static std::unique_ptr<PartnerDatabase> Read();
 
-  const PartnerDetails* FindDetailsByName(base::StringPiece name) const {
+  const PartnerDetails* FindDetailsByName(std::string_view name) const {
     auto i = name_index_.find(name);
     if (i == name_index_.end())
       return nullptr;
@@ -238,7 +238,7 @@ class PartnerDatabase {
   std::vector<PartnerDetails> details_list_;
 
   // Map partner details name to its details.
-  base::flat_map<base::StringPiece, const PartnerDetails*> name_index_;
+  base::flat_map<std::string_view, const PartnerDetails*> name_index_;
 
   // Map locale-independent uuid or uuid2 to its details.
   base::flat_map<base::Uuid, const PartnerDetails*> uuid_index_;
@@ -273,7 +273,7 @@ std::unique_ptr<PartnerDatabase> PartnerDatabase::Read() {
 
 bool PartnerDatabase::ParseJson(base::Value root_value,
                                 base::Value partners_locale_value) {
-  auto error = [](base::StringPiece message) -> bool {
+  auto error = [](std::string_view message) -> bool {
     LOG(ERROR) << "Partner database JSON error: " << message;
     return false;
   };
@@ -298,7 +298,7 @@ bool PartnerDatabase::ParseJson(base::Value root_value,
 
   // Establish the index now that we no longer mutate details and check
   // for unique values.
-  std::vector<std::pair<base::StringPiece, const PartnerDetails*>> names;
+  std::vector<std::pair<std::string_view, const PartnerDetails*>> names;
   names.reserve(details_list_.size());
   std::vector<std::pair<base::Uuid, const PartnerDetails*>> uuids;
   uuids.reserve(details_list_.size() * 2);
@@ -309,7 +309,8 @@ bool PartnerDatabase::ParseJson(base::Value root_value,
       uuids.emplace_back(details.uuid2, &details);
     }
   }
-  name_index_ = base::flat_map<base::StringPiece, const PartnerDetails*>(
+  name_index_ =
+      base::flat_map<std::string_view, const PartnerDetails*>(
       std::move(names));
   if (name_index_.size() != details_list_.size())
     return error("duplicated names");
@@ -373,7 +374,7 @@ bool PartnerDatabase::ParseJson(base::Value root_value,
 
 }  // namespace
 
-const PartnerDetails* FindDetailsByName(base::StringPiece name) {
+const PartnerDetails* FindDetailsByName(std::string_view name) {
   if (!g_partner_db)
     return nullptr;
   return g_partner_db->FindDetailsByName(name);

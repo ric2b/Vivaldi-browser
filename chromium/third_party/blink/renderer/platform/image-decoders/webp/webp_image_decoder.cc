@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/image-decoders/webp/webp_image_decoder.h"
 
 #include <string.h>
@@ -447,7 +452,7 @@ gfx::Size WEBPImageDecoder::DecodedYUVSize(cc::YUVIndex index) const {
     case cc::YUVIndex::kV:
       return gfx::Size((Size().width() + 1) / 2, (Size().height() + 1) / 2);
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return gfx::Size(0, 0);
 }
 
@@ -459,7 +464,7 @@ wtf_size_t WEBPImageDecoder::DecodedYUVWidthBytes(cc::YUVIndex index) const {
     case cc::YUVIndex::kV:
       return base::checked_cast<wtf_size_t>((Size().width() + 1) / 2);
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0;
 }
 

@@ -437,6 +437,32 @@ BitVector BitVector::FromSortedIndexVector(
   return {words, counts, size};
 }
 
+BitVector BitVector::FromUnsortedIndexVector(
+    const std::vector<uint32_t>& indices) {
+  // The rest of the algorithm depends on |indices| being non empty.
+  if (indices.empty()) {
+    return {};
+  }
+
+  std::vector<uint64_t> words;
+  uint32_t max_idx = 0;
+  for (const uint32_t i : indices) {
+    auto word_idx = static_cast<uint32_t>(i / kBitsInWord);
+    max_idx = std::max(max_idx, i);
+    if (word_idx >= words.size()) {
+      words.resize(word_idx + 1);
+    }
+    auto in_word_idx = static_cast<uint32_t>(i % kBitsInWord);
+    BitVector::BitWord(&words[word_idx]).Set(in_word_idx);
+  }
+
+  auto block_count = BlockCount(max_idx + 1);
+  words.resize(block_count * Block::kWords);
+  std::vector<uint32_t> counts(block_count);
+  UpdateCounts(words, counts);
+  return {words, counts, max_idx + 1};
+}
+
 BitVector BitVector::IntersectRange(uint32_t range_start,
                                     uint32_t range_end) const {
   // We should skip all bits until the index of first set bit bigger than
@@ -475,11 +501,14 @@ std::vector<uint32_t> BitVector::GetSetBitIndices() const {
   if (set_bits == 0) {
     return {};
   }
-  std::vector<uint32_t> res;
-  res.reserve(set_bits);
+  std::vector<uint32_t> res(set_bits);
+
+  // After measuring we discovered that not doing `push_back` creates a tangible
+  // performance improvement due to compiler unrolling the inner loop.
+  uint32_t res_idx = 0;
   for (uint32_t i = 0; i < size_; i += BitWord::kBits) {
     for (uint64_t word = words_[i / BitWord::kBits]; word; word &= word - 1) {
-      res.push_back(i + Tzcnt(word));
+      res[res_idx++] = i + Tzcnt(word);
     }
   }
   return res;

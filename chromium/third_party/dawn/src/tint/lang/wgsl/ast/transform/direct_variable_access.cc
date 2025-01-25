@@ -539,7 +539,7 @@ struct DirectVariableAccess::State {
 
             // The dynamic index needs to be hoisted (if it hasn't been already).
             auto fn = FnInfoFor(idx->Stmt()->Function());
-            fn->hoisted_exprs.GetOrAdd(idx, [=] {
+            fn->hoisted_exprs.GetOrAdd(idx, [this, idx] {
                 // Create a name for the new 'let'
                 auto name = b.Symbols().New("ptr_index_save");
                 // Insert a new 'let' just above the dynamic index statement.
@@ -834,9 +834,9 @@ struct DirectVariableAccess::State {
                     if (auto incoming_shape = variant_sig.Get(param)) {
                         auto& symbols = *variant.ptr_param_symbols.Get(param);
                         if (symbols.base_ptr.IsValid()) {
-                            auto base_ptr_ty =
-                                b.ty.ptr(incoming_shape->root.address_space,
-                                         CreateASTTypeFor(ctx, incoming_shape->root.type));
+                            auto base_ptr_ty = b.ty.ptr(
+                                incoming_shape->root.address_space,
+                                CreateASTTypeFor(ctx, incoming_shape->root.type->UnwrapPtrOrRef()));
                             params.Push(b.Param(symbols.base_ptr, base_ptr_ty));
                         }
                         if (symbols.indices.IsValid()) {

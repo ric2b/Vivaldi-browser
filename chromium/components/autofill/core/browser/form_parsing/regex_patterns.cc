@@ -38,8 +38,6 @@ base::span<const MatchPatternRef> GetMatchPatterns(
       return it->second[1];
     case PatternSource::kExperimental:
       return it->second[2];
-    case PatternSource::kNextGen:
-      return it->second[3];
   }
 #else
   switch (pattern_source) {
@@ -47,7 +45,7 @@ base::span<const MatchPatternRef> GetMatchPatterns(
       return it->second[0];
   }
 #endif
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return {};
 }
 

@@ -39,7 +39,8 @@ class ChooserDialogViewTest : public ChromeViewsTestBase {
 #if BUILDFLAG(IS_MAC)
     // We need a native view parent for the dialog to avoid a DCHECK
     // on Mac.
-    parent_widget_ = CreateTestWidget();
+    parent_widget_ =
+        CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
     parent = parent_widget_->GetNativeView();
 #endif
     widget_ = views::DialogDelegate::CreateDialogWidget(dialog_, GetContext(),
@@ -126,7 +127,7 @@ TEST_F(ChooserDialogViewTest, CancelButtonFocusedWhenReScanIsPressed) {
 
   // Click the re-scan button.
   const gfx::Point point(10, 10);
-  const ui::MouseEvent event(ui::ET_MOUSE_PRESSED, point, point,
+  const ui::MouseEvent event(ui::EventType::kMousePressed, point, point,
                              ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
                              ui::EF_LEFT_MOUSE_BUTTON);
   re_scan_button()->OnMousePressed(event);

@@ -370,6 +370,7 @@ export class SoftContextMenu {
 
   private menuItemMouseUp(event: Event): void {
     this.triggerAction((event.target as HTMLElement), event);
+    void VisualLogging.logClick(event.target as HTMLElement, event);
     event.consume();
   }
 
@@ -555,6 +556,7 @@ export class SoftContextMenu {
         // The custom element will handle the event, so return early and do not consume it.
         return;
       }
+      VisualLogging.logClick(this.highlightedMenuItemElement, keyboardEvent);
       this.triggerAction(this.highlightedMenuItemElement, keyboardEvent);
       if (detailsForElement.subItems && this.subMenu) {
         this.subMenu.highlightNext();

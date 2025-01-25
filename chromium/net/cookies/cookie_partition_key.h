@@ -14,7 +14,6 @@
 #include "net/base/net_export.h"
 #include "net/base/network_isolation_key.h"
 #include "net/base/schemeful_site.h"
-#include "net/cookies/site_for_cookies.h"
 #include "url/gurl.h"
 
 #if !BUILDFLAG(CRONET_BUILD)
@@ -23,6 +22,8 @@
 
 namespace net {
 
+class SiteForCookies;
+
 class NET_EXPORT CookiePartitionKey {
  public:
   class NET_EXPORT SerializedCookiePartitionKey {
@@ -30,14 +31,16 @@ class NET_EXPORT CookiePartitionKey {
     const std::string& TopLevelSite() const;
     bool has_cross_site_ancestor() const;
 
-   private:
-    friend class CookiePartitionKey;
+    std::string GetDebugString() const;
+
     // This constructor does not check if the values being serialized are valid.
     // The caller of this function must ensure that only valid values are passed
     // to this method.
-    explicit SerializedCookiePartitionKey(const std::string& site,
-                                          bool has_cross_site_ancestor);
+    SerializedCookiePartitionKey(base::PassKey<CookiePartitionKey> key,
+                                 const std::string& site,
+                                 bool has_cross_site_ancestor);
 
+   private:
     std::string top_level_site_;
     bool has_cross_site_ancestor_;
   };
@@ -99,8 +102,8 @@ class NET_EXPORT CookiePartitionKey {
   // is the url of the context running the code.
   static std::optional<CookiePartitionKey> FromNetworkIsolationKey(
       const NetworkIsolationKey& network_isolation_key,
-      SiteForCookies site_for_cookies,
-      SchemefulSite request_site,
+      const SiteForCookies& site_for_cookies,
+      const SchemefulSite& request_site,
       bool main_frame_navigation);
 
   // Create a new CookiePartitionKey from the site of an existing

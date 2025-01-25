@@ -45,7 +45,7 @@ RECIPE_NAME = "chromium_website"
 
 lucicfg.check_version("1.30.9", "Please update depot_tools")
 
-_LINUX_OS = "Ubuntu-18.04"
+_LINUX_OS = "Ubuntu-22.04"
 
 # Use LUCI Scheduler BBv2 names and add Scheduler realms configs.
 lucicfg.enable_experiment("crbug.com/1182002")

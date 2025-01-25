@@ -24,7 +24,9 @@ static jlong JNI_VivaldiSyncService_Init(
   return reinterpret_cast<intptr_t>(vivaldi_account_manager_android);
 }
 
-VivaldiSyncServiceAndroid::VivaldiSyncServiceAndroid(JNIEnv* env, jobject obj)
+VivaldiSyncServiceAndroid::VivaldiSyncServiceAndroid(
+    JNIEnv* env,
+    const base::android::JavaRef<jobject>& obj)
     : weak_java_ref_(env, obj) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   DCHECK(profile);
@@ -67,8 +69,7 @@ jboolean VivaldiSyncServiceAndroid::HasServerError(JNIEnv* env) {
          syncer::CONNECTION_SERVER_ERROR;
 }
 
-jboolean VivaldiSyncServiceAndroid::IsSetupInProgress(
-    JNIEnv* env) {
+jboolean VivaldiSyncServiceAndroid::IsSetupInProgress(JNIEnv* env) {
   return sync_service_->IsSetupInProgress();
 }
 
@@ -83,6 +84,10 @@ jboolean VivaldiSyncServiceAndroid::RestoreEncryptionToken(
     const base::android::JavaParamRef<jstring>& token) {
   return sync_service_->ui_helper()->RestoreEncryptionToken(
       base::android::ConvertJavaStringToUTF8(env, token));
+}
+
+jboolean VivaldiSyncServiceAndroid::CanSyncFeatureStart(JNIEnv* env) {
+  return sync_service_->CanSyncFeatureStart();
 }
 
 void VivaldiSyncServiceAndroid::SendCycleData() {

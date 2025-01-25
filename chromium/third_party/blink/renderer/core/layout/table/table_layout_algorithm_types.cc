@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/layout/table/table_layout_algorithm_types.h"
 
 #include "third_party/blink/renderer/core/layout/block_node.h"
@@ -322,7 +327,7 @@ TableGroupedChildren::TableGroupedChildren(const BlockNode& table)
             bodies.push_back(block_child);
           break;
         default:
-          NOTREACHED() << "unexpected table child";
+          NOTREACHED_IN_MIGRATION() << "unexpected table child";
       }
     }
   }
@@ -370,7 +375,7 @@ TableGroupedChildrenIterator& TableGroupedChildrenIterator::operator++() {
     case kEnd:
       break;
     case kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   return *this;
@@ -392,7 +397,7 @@ TableGroupedChildrenIterator& TableGroupedChildrenIterator::operator--() {
       AdvanceBackwardToNonEmptySection();
       break;
     case kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   return *this;
@@ -408,7 +413,7 @@ BlockNode TableGroupedChildrenIterator::operator*() const {
       return body_vector_->at(position_);
     case kEnd:
     case kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return BlockNode(nullptr);
   }
 }
@@ -450,7 +455,7 @@ void TableGroupedChildrenIterator::AdvanceForwardToNonEmptySection() {
       current_section_ = kEnd;
       break;
     case kEnd:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -458,7 +463,7 @@ void TableGroupedChildrenIterator::AdvanceForwardToNonEmptySection() {
 void TableGroupedChildrenIterator::AdvanceBackwardToNonEmptySection() {
   switch (current_section_) {
     case kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case kHead:
       current_section_ = kNone;

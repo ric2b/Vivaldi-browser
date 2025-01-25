@@ -5,6 +5,7 @@
 import * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
+import * as Root from '../../../../core/root/root.js';
 import * as Coordinator from '../../../components/render_coordinator/render_coordinator.js';
 import * as UI from '../../legacy.js';
 
@@ -18,6 +19,10 @@ export interface ChartViewportDelegate {
   updateRangeSelection(startTime: number, endTime: number): void;
   setSize(width: number, height: number): void;
   update(): void;
+}
+
+export interface Config {
+  enableCursorElement: boolean;
 }
 
 export class ChartViewport extends UI.Widget.VBox {
@@ -52,8 +57,14 @@ export class ChartViewport extends UI.Widget.VBox {
   private isUpdateScheduled?: boolean;
   private cancelWindowTimesAnimation?: (() => void)|null;
 
-  constructor(delegate: ChartViewportDelegate) {
+  #config: Config;
+
+  #usingNewOverlayForTimeRange =
+      Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_ANNOTATIONS_OVERLAYS);
+
+  constructor(delegate: ChartViewportDelegate, config: Config) {
     super();
+    this.#config = config;
     this.registerRequiredCSS(chartViewPortStyles);
 
     this.delegate = delegate;
@@ -82,6 +93,9 @@ export class ChartViewport extends UI.Widget.VBox {
     this.selectedTimeSpanLabel = this.selectionOverlay.createChild('div', 'time-span');
 
     this.cursorElement = this.contentElement.createChild('div', 'chart-cursor-element hidden');
+    if (this.#usingNewOverlayForTimeRange) {
+      this.cursorElement.classList.add('using-new-overlays');
+    }
 
     this.reset();
 
@@ -239,11 +253,13 @@ export class ChartViewport extends UI.Widget.VBox {
     this.isDraggingInternal = true;
     this.selectionOffsetShiftX = event.offsetX - event.pageX;
     this.selectionStartX = event.offsetX;
-    const style = this.selectionOverlay.style;
-    style.left = this.selectionStartX + 'px';
-    style.width = '1px';
-    this.selectedTimeSpanLabel.textContent = '';
-    this.selectionOverlay.classList.remove('hidden');
+    if (!this.#usingNewOverlayForTimeRange) {
+      const style = this.selectionOverlay.style;
+      style.left = this.selectionStartX + 'px';
+      style.width = '1px';
+      this.selectedTimeSpanLabel.textContent = '';
+      this.selectionOverlay.classList.remove('hidden');
+    }
     return true;
   }
 
@@ -258,6 +274,11 @@ export class ChartViewport extends UI.Widget.VBox {
     this.rangeSelectionEnd = null;
   }
 
+  /**
+   * @param startTime - the start time of the selection in MilliSeconds
+   * @param endTime - the end time of the selection in MilliSeconds
+   * TODO(crbug.com/346312365): update the type definitions in ChartViewport.ts
+   */
   setRangeSelection(startTime: number, endTime: number): void {
     if (!this.rangeSelectionEnabled) {
       return;
@@ -286,6 +307,10 @@ export class ChartViewport extends UI.Widget.VBox {
   }
 
   private updateRangeSelectionOverlay(): void {
+    if (this.#usingNewOverlayForTimeRange) {
+      return;
+    }
+
     const rangeSelectionStart = this.rangeSelectionStart || 0;
     const rangeSelectionEnd = this.rangeSelectionEnd || 0;
     const margin = 100;
@@ -313,7 +338,7 @@ export class ChartViewport extends UI.Widget.VBox {
   private updateCursorPosition(e: Event): void {
     const mouseEvent = (e as MouseEvent);
     this.lastMouseOffsetX = mouseEvent.offsetX;
-    const shouldShowCursor = mouseEvent.shiftKey && !mouseEvent.metaKey;
+    const shouldShowCursor = this.#config.enableCursorElement && mouseEvent.shiftKey && !mouseEvent.metaKey;
     this.showCursor(shouldShowCursor);
     if (shouldShowCursor) {
       this.cursorElement.style.left = mouseEvent.offsetX + 'px';

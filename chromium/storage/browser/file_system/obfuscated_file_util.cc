@@ -103,7 +103,7 @@ void UpdateUsage(FileSystemOperationContext* context,
 void TouchDirectory(SandboxDirectoryDatabase* db, FileId dir_id) {
   DCHECK(db);
   if (!db->UpdateModificationTime(dir_id, base::Time::Now()))
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
 }
 
 enum IsolatedOriginStatus {
@@ -290,7 +290,7 @@ class ObfuscatedStorageKeyEnumerator
     if (current_.path.empty())
       return false;
     if (type_string.empty()) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
     }
     base::FilePath path =
@@ -682,17 +682,12 @@ base::File::Error ObfuscatedFileUtil::CopyOrMoveFile(
   if (error != base::File::FILE_OK)
     return error;
 
-  if (overwrite) {
-    context->change_observers()->Notify(&FileChangeObserver::OnModifyFile,
-                                        dest_url);
-  } else {
+  if (copy) {
     context->change_observers()->Notify(&FileChangeObserver::OnCreateFileFrom,
                                         dest_url, src_url);
-  }
-
-  if (!copy) {
-    context->change_observers()->Notify(&FileChangeObserver::OnRemoveFile,
-                                        src_url);
+  } else {
+    context->change_observers()->Notify(&FileChangeObserver::OnMoveFileFrom,
+                                        dest_url, src_url);
     TouchDirectory(db, src_file_info.parent_id);
   }
 
@@ -810,7 +805,7 @@ base::File::Error ObfuscatedFileUtil::DeleteFile(
       -UsageForPath(file_info.name.size()) - platform_file_info.size;
   AllocateQuota(context, growth);
   if (!db->RemoveFileInfo(file_id)) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return base::File::FILE_ERROR_FAILED;
   }
   UpdateUsage(context, url, growth);

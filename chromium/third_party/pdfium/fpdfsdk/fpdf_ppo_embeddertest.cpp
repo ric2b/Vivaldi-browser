@@ -2,11 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
+#include <array>
 #include <iterator>
 #include <memory>
 #include <string>
@@ -48,26 +44,29 @@ constexpr int kRectanglesMultiPagesPageCount = 2;
 
 const char* RectanglesMultiPagesExpectedChecksum(int page_index) {
   if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
-    static constexpr const char* kChecksums[kRectanglesMultiPagesPageCount] = {
-        "07606a12487bd0c28a88f23fa00fc313", "94ea6e1eef220833a3ec14d6a1c612b0"};
+    static constexpr std::array<const char*, kRectanglesMultiPagesPageCount>
+        kChecksums = {{"07606a12487bd0c28a88f23fa00fc313",
+                       "94ea6e1eef220833a3ec14d6a1c612b0"}};
     return kChecksums[page_index];
   }
-  static constexpr const char* kChecksums[kRectanglesMultiPagesPageCount] = {
-      "72d0d7a19a2f40e010ca6a1133b33e1e", "fb18142190d770cfbc329d2b071aee4d"};
+  static constexpr std::array<const char*, kRectanglesMultiPagesPageCount>
+      kChecksums = {{"72d0d7a19a2f40e010ca6a1133b33e1e",
+                     "fb18142190d770cfbc329d2b071aee4d"}};
   return kChecksums[page_index];
 }
 
 const char* Bug750568PageHash(int page_index) {
   constexpr int kBug750568PageCount = 4;
   if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
-    static constexpr const char* kChecksums[kBug750568PageCount] = {
-        "eaa139e944eafb43d31e8742a0e158de", "226485e9d4fa6a67dfe0a88723f12060",
-        "c5601a3492ae5dcc5dd25140fc463bfe", "1f60055b54de4fac8a59c65e90da156e"};
+    static constexpr std::array<const char*, kBug750568PageCount> kChecksums = {
+        {"eaa139e944eafb43d31e8742a0e158de", "226485e9d4fa6a67dfe0a88723f12060",
+         "c5601a3492ae5dcc5dd25140fc463bfe",
+         "1f60055b54de4fac8a59c65e90da156e"}};
     return kChecksums[page_index];
   }
-  static constexpr const char* kChecksums[kBug750568PageCount] = {
-      "64ad08132a1c5a166768298c8a578f57", "83b83e2f6bc80707d0a917c7634140b9",
-      "913cd3723a451e4e46fbc2c05702d1ee", "81fb7cfd4860f855eb468f73dfeb6d60"};
+  static constexpr std::array<const char*, kBug750568PageCount> kChecksums = {
+      {"64ad08132a1c5a166768298c8a578f57", "83b83e2f6bc80707d0a917c7634140b9",
+       "913cd3723a451e4e46fbc2c05702d1ee", "81fb7cfd4860f855eb468f73dfeb6d60"}};
   return kChecksums[page_index];
 }
 
@@ -231,8 +230,8 @@ TEST_F(FPDFPPOEmbedderTest, ImportPageToXObject) {
   constexpr int kExpectedPageCount = 2;
   ASSERT_TRUE(OpenSavedDocument());
 
-  FPDF_PAGE saved_pages[kExpectedPageCount];
-  FPDF_PAGEOBJECT xobjects[kExpectedPageCount];
+  std::array<FPDF_PAGE, kExpectedPageCount> saved_pages;
+  std::array<FPDF_PAGEOBJECT, kExpectedPageCount> xobjects;
   for (int i = 0; i < kExpectedPageCount; ++i) {
     saved_pages[i] = LoadSavedPage(i);
     ASSERT_TRUE(saved_pages[i]);
@@ -249,31 +248,32 @@ TEST_F(FPDFPPOEmbedderTest, ImportPageToXObject) {
     }
   }
 
-  for (int i = 0; i < kExpectedPageCount; ++i) {
-    float left;
-    float bottom;
-    float right;
-    float top;
-    ASSERT_TRUE(
-        FPDFPageObj_GetBounds(xobjects[i], &left, &bottom, &right, &top));
-    EXPECT_FLOAT_EQ(-1.0f, left);
-    EXPECT_FLOAT_EQ(-1.0f, bottom);
-    EXPECT_FLOAT_EQ(201.0f, right);
-    EXPECT_FLOAT_EQ(301.0f, top);
-  }
+    for (int i = 0; i < kExpectedPageCount; ++i) {
+      float left;
+      float bottom;
+      float right;
+      float top;
+      ASSERT_TRUE(
+          FPDFPageObj_GetBounds(xobjects[i], &left, &bottom, &right, &top));
+      EXPECT_FLOAT_EQ(-1.0f, left);
+      EXPECT_FLOAT_EQ(-1.0f, bottom);
+      EXPECT_FLOAT_EQ(201.0f, right);
+      EXPECT_FLOAT_EQ(301.0f, top);
+    }
 
-  // Peek at object internals to make sure the two XObjects use the same stream.
-  EXPECT_NE(xobjects[0], xobjects[1]);
-  CPDF_PageObject* obj1 = CPDFPageObjectFromFPDFPageObject(xobjects[0]);
-  ASSERT_TRUE(obj1->AsForm());
-  ASSERT_TRUE(obj1->AsForm()->form());
-  ASSERT_TRUE(obj1->AsForm()->form()->GetStream());
-  CPDF_PageObject* obj2 = CPDFPageObjectFromFPDFPageObject(xobjects[1]);
-  ASSERT_TRUE(obj2->AsForm());
-  ASSERT_TRUE(obj2->AsForm()->form());
-  ASSERT_TRUE(obj2->AsForm()->form()->GetStream());
-  EXPECT_EQ(obj1->AsForm()->form()->GetStream(),
-            obj2->AsForm()->form()->GetStream());
+    // Peek at object internals to make sure the two XObjects use the same
+    // stream.
+    EXPECT_NE(xobjects[0], xobjects[1]);
+    CPDF_PageObject* obj1 = CPDFPageObjectFromFPDFPageObject(xobjects[0]);
+    ASSERT_TRUE(obj1->AsForm());
+    ASSERT_TRUE(obj1->AsForm()->form());
+    ASSERT_TRUE(obj1->AsForm()->form()->GetStream());
+    CPDF_PageObject* obj2 = CPDFPageObjectFromFPDFPageObject(xobjects[1]);
+    ASSERT_TRUE(obj2->AsForm());
+    ASSERT_TRUE(obj2->AsForm()->form());
+    ASSERT_TRUE(obj2->AsForm()->form()->GetStream());
+    EXPECT_EQ(obj1->AsForm()->form()->GetStream(),
+              obj2->AsForm()->form()->GetStream());
 
   for (FPDF_PAGE saved_page : saved_pages)
     CloseSavedPage(saved_page);
@@ -352,14 +352,14 @@ TEST_F(FPDFPPOEmbedderTest, XObjectNullParams) {
   EXPECT_FALSE(FPDF_NewFormObjectFromXObject(nullptr));
 }
 
-TEST_F(FPDFPPOEmbedderTest, BUG_925981) {
+TEST_F(FPDFPPOEmbedderTest, Bug925981) {
   ASSERT_TRUE(OpenDocument("bug_925981.pdf"));
   ScopedFPDFDocument output_doc_2up(
       FPDF_ImportNPagesToOne(document(), 612, 792, 2, 1));
   EXPECT_EQ(1, FPDF_GetPageCount(output_doc_2up.get()));
 }
 
-TEST_F(FPDFPPOEmbedderTest, BUG_1229106) {
+TEST_F(FPDFPPOEmbedderTest, Bug1229106) {
   static constexpr int kPageCount = 4;
   static constexpr int kTwoUpPageCount = 2;
   static const char kRectsChecksum[] = "140d629b3c96a07ced2e3e408ea85a1d";
@@ -567,7 +567,7 @@ TEST_F(FPDFPPOEmbedderTest, GoodRanges) {
   UnloadPage(page);
 }
 
-TEST_F(FPDFPPOEmbedderTest, BUG_664284) {
+TEST_F(FPDFPPOEmbedderTest, Bug664284) {
   ASSERT_TRUE(OpenDocument("bug_664284.pdf"));
 
   FPDF_PAGE page = LoadPage(0);
@@ -583,7 +583,7 @@ TEST_F(FPDFPPOEmbedderTest, BUG_664284) {
   UnloadPage(page);
 }
 
-TEST_F(FPDFPPOEmbedderTest, BUG_750568) {
+TEST_F(FPDFPPOEmbedderTest, Bug750568) {
   ASSERT_TRUE(OpenDocument("bug_750568.pdf"));
   ASSERT_EQ(4, FPDF_GetPageCount(document()));
 

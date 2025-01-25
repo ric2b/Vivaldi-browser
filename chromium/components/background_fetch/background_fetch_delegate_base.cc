@@ -10,6 +10,7 @@
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
@@ -201,7 +202,7 @@ JobDetails* BackgroundFetchDelegateBase::GetJobDetails(
   auto job_details_iter = job_details_map_.find(job_id);
   if (job_details_iter == job_details_map_.end()) {
     if (!allow_null)
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
 
     return nullptr;
   }
@@ -281,7 +282,8 @@ void BackgroundFetchDelegateBase::OnDownloadStarted(
 
   // Update the upload progress.
   auto it = job_details->current_fetch_guids.find(download_guid);
-  DCHECK(it != job_details->current_fetch_guids.end());
+  CHECK(it != job_details->current_fetch_guids.end(),
+        base::NotFatalUntil::M130);
   job_details->fetch_description->uploaded_bytes += it->second.body_size_bytes;
 }
 
@@ -394,12 +396,12 @@ void BackgroundFetchDelegateBase::OnDownloadReceived(
       break;
     case StartResult::BACKOFF:
       // TODO(delphick): try again later?
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case StartResult::UNEXPECTED_CLIENT:
       // This really should never happen since we're supplying the
       // DownloadClient.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case StartResult::CLIENT_CANCELLED:
       // TODO(delphick): do we need to do anything here, since we will have
@@ -407,10 +409,10 @@ void BackgroundFetchDelegateBase::OnDownloadReceived(
       break;
     case StartResult::INTERNAL_ERROR:
       // TODO(delphick): We need to handle this gracefully.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case StartResult::COUNT:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }

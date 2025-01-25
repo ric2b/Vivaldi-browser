@@ -7,7 +7,7 @@ import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js'
 import {BrowserProxy} from '//resources/cr_components/color_change_listener/browser_proxy.js';
 import type {CrIconButtonElement} from '//resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import {flush} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {FONT_EVENT} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import {ToolbarEvent} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import type {ReadAnythingToolbarElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 
@@ -31,7 +31,7 @@ suite('FontMenu', () => {
     chrome.readingMode = readingMode as unknown as typeof chrome.readingMode;
     chrome.readingMode.supportedFonts = [];
     fontEmitted = '';
-    document.addEventListener(FONT_EVENT, event => {
+    document.addEventListener(ToolbarEvent.FONT, event => {
       fontEmitted = (event as CustomEvent).detail.fontName;
     });
   });
@@ -48,8 +48,8 @@ suite('FontMenu', () => {
 
   function assertFontsEqual(actual: string, expected: string): void {
     assertEquals(
-        actual.trim().toLowerCase().replaceAll('"', ''),
-        expected.trim().toLowerCase().replaceAll('"', ''));
+        expected.trim().toLowerCase().replaceAll('"', ''),
+        actual.trim().toLowerCase().replaceAll('"', ''));
   }
 
   suite('with read aloud', () => {
@@ -80,7 +80,7 @@ suite('FontMenu', () => {
       assertEquals(fontMenuOptions.length, 4);
 
       updateFonts(['font 1']);
-      assertEquals(fontMenuOptions.length, 1);
+      assertEquals(1, fontMenuOptions.length);
 
       // initial-count in the dom-repeat for the fonts menu limits the
       // size of the font menu, so adding more than 8 fonts is difficult to
@@ -96,7 +96,7 @@ suite('FontMenu', () => {
         'font 7',
         'font 8',
       ]);
-      assertEquals(fontMenuOptions.length, 8);
+      assertEquals(8, fontMenuOptions.length);
     });
 
     test('uses the first font if font not available', () => {
@@ -113,10 +113,10 @@ suite('FontMenu', () => {
       const hiddenCheckMarks =
           toolbar.$.fontMenu.get().querySelectorAll<HTMLElement>(
               '.check-mark-hidden-true');
-      assertEquals(checkMarks.length, 1);
-      assertEquals(hiddenCheckMarks.length, 2);
-      assertEquals(chrome.readingMode.fontName, fonts[0]);
-      assertEquals(toolbar.style.fontFamily, fonts[0]);
+      assertEquals(1, checkMarks.length);
+      assertEquals(2, hiddenCheckMarks.length);
+      assertEquals(fonts[0], chrome.readingMode.fontName);
+      assertEquals(fonts[0], toolbar.style.fontFamily);
     });
 
     test('each font option is styled with the font that it is', () => {
@@ -200,9 +200,9 @@ suite('FontMenu', () => {
       // Update the fonts to exclude the previously chosen font
       updateFonts(fonts);
 
-      assertEquals(fontSelect!.selectedIndex, 0);
-      assertEquals(chrome.readingMode.fontName, fonts[0]);
-      assertEquals(toolbar.style.fontFamily, fonts[0]);
+      assertEquals(0, fontSelect!.selectedIndex);
+      assertEquals(fonts[0], chrome.readingMode.fontName);
+      assertEquals(fonts[0], toolbar.style.fontFamily);
     });
 
     suite('on font option clicked', () => {

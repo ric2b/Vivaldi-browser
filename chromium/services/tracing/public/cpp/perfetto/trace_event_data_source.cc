@@ -19,6 +19,7 @@
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/memory/stack_allocated.h"
 #include "base/no_destructor.h"
 #include "base/process/current_process.h"
 #include "base/sequence_checker.h"
@@ -82,6 +83,8 @@ static_assert(
 // Helper class used to ensure no tasks are posted while
 // TraceEventDataSource::lock_ is held.
 class SCOPED_LOCKABLE AutoLockWithDeferredTaskPosting {
+  STACK_ALLOCATED();
+
  public:
   explicit AutoLockWithDeferredTaskPosting(base::Lock& lock)
       EXCLUSIVE_LOCK_FUNCTION(lock)
@@ -585,7 +588,7 @@ void TraceEventDataSource::SetupStartupTracing(
     PerfettoProducer* producer,
     const base::trace_event::TraceConfig& trace_config,
     bool privacy_filtering_enabled) {
-  NOTREACHED() << "This is not expected to run in SDK build.";
+  NOTREACHED_IN_MIGRATION() << "This is not expected to run in SDK build.";
 
   {
     AutoLockWithDeferredTaskPosting lock(lock_);
@@ -739,7 +742,7 @@ void TraceEventDataSource::StartTracingImpl(
 void TraceEventDataSource::StartTracingInternal(
     PerfettoProducer* producer,
     const perfetto::DataSourceConfig& data_source_config) {
-  NOTREACHED() << "This is not expected to run in SDK build.";
+  NOTREACHED_IN_MIGRATION() << "This is not expected to run in SDK build.";
 
   DCHECK_CALLED_ON_VALID_SEQUENCE(perfetto_sequence_checker_);
   auto trace_config =
@@ -800,7 +803,7 @@ void TraceEventDataSource::StartTracingInternal(
 void TraceEventDataSource::StopTracingImpl(
     base::OnceClosure stop_complete_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(perfetto_sequence_checker_);
-  NOTREACHED() << "This is not expected to run in SDK build.";
+  NOTREACHED_IN_MIGRATION() << "This is not expected to run in SDK build.";
 
   CustomEventRecorder::GetInstance()->OnTracingStopped(base::OnceClosure());
 
@@ -892,7 +895,7 @@ void TraceEventDataSource::Flush(
 }
 
 void TraceEventDataSource::ClearIncrementalState() {
-  NOTREACHED() << "This is not expected to run in SDK build.";
+  NOTREACHED_IN_MIGRATION() << "This is not expected to run in SDK build.";
 
   TrackEventThreadLocalEventSink::ClearIncrementalState();
   EmitRecurringUpdates();

@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "ukey2_ffi.h"
-
 #include <string>
 
 #include "gtest/gtest.h"
+#include "ukey2_ffi.h"
 
+namespace rust {
 namespace {
 
-void RunHandshake(Ukey2Handshake initiator_handle, Ukey2Handshake responder_handle) {
+void RunHandshake(Ukey2Handshake initiator_handle,
+                  Ukey2Handshake responder_handle) {
   ParseResult parse_result = responder_handle.ParseHandshakeMessage(
       initiator_handle.GetNextHandshakeMessage());
   ASSERT_TRUE(parse_result.success);
@@ -87,3 +88,4 @@ TEST(Ukey2RustTest, TestSaveRestoreSession) {
 }
 
 }  // namespace
+}  // namespace rust

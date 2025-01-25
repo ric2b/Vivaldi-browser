@@ -36,6 +36,11 @@ PaintRecord RecordPaintCanvas::ReleaseAsRecord() {
   return buffer_.ReleaseAsRecord();
 }
 
+void RecordPaintCanvas::DisableLineDrawingAsPaths() {
+  maybe_draw_lines_as_paths_ = false;
+  draw_path_count_ = draw_line_count_ = 0;
+}
+
 template <typename T, typename... Args>
 void RecordPaintCanvas::push(Args&&... args) {
 #if DCHECK_IS_ON()
@@ -198,22 +203,22 @@ void RecordPaintCanvas::clipPathInternal(const SkPath& path,
 }
 
 SkImageInfo RecordPaintCanvas::imageInfo() const {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return SkImageInfo();
 }
 
 bool RecordPaintCanvas::getLocalClipBounds(SkRect* bounds) const {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
 bool RecordPaintCanvas::getDeviceClipBounds(SkIRect* bounds) const {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
 SkM44 RecordPaintCanvas::getLocalToDevice() const {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return SkM44();
 }
 
@@ -230,13 +235,21 @@ void RecordPaintCanvas::drawLine(SkScalar x0,
                                  SkScalar x1,
                                  SkScalar y1,
                                  const PaintFlags& flags) {
-  if (draw_line_count_ != std::numeric_limits<uint32_t>::max()) {
+  if (maybe_draw_lines_as_paths_ &&
+      draw_line_count_ != std::numeric_limits<uint32_t>::max()) {
     ++draw_line_count_;
     // If a bunch of paths have been drawn, only switch to drawing lines
     // after a number of lines have been drawn.
     if (draw_line_count_ > 4) {
       draw_path_count_ = 0;
     }
+  }
+  // TODO(crbug.com/5524058): investigate if it makes sense to add support for
+  // draw_path_count > 4 to the lite op.
+  if (draw_path_count_ <= 4 && AreLiteOpsEnabled() &&
+      flags.CanConvertToCorePaintFlags()) {
+    push<DrawLineLiteOp>(x0, y0, x1, y1, flags.ToCorePaintFlags());
+    return;
   }
   // Render lines as paths if there have been a number of drawPaths() recently.
   // See description in header for more details.
@@ -247,6 +260,11 @@ void RecordPaintCanvas::drawArc(const SkRect& oval,
                                 SkScalar start_angle_degrees,
                                 SkScalar sweep_angle_degrees,
                                 const PaintFlags& flags) {
+  if (AreLiteOpsEnabled() && flags.CanConvertToCorePaintFlags()) {
+    push<DrawArcLiteOp>(oval, start_angle_degrees, sweep_angle_degrees,
+                        flags.ToCorePaintFlags());
+    return;
+  }
   push<DrawArcOp>(oval, start_angle_degrees, sweep_angle_degrees, flags);
 }
 
@@ -297,7 +315,8 @@ void RecordPaintCanvas::drawRoundRect(const SkRect& rect,
 void RecordPaintCanvas::drawPath(const SkPath& path,
                                  const PaintFlags& flags,
                                  UsePaintCache use_paint_cache) {
-  if (draw_path_count_ != std::numeric_limits<uint32_t>::max()) {
+  if (maybe_draw_lines_as_paths_ &&
+      draw_path_count_ != std::numeric_limits<uint32_t>::max()) {
     ++draw_path_count_;
     if (draw_path_count_ > 4) {
       draw_line_count_ = 0;

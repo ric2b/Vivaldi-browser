@@ -40,6 +40,8 @@ update_target("//chrome/browser:browser") {
   }
   if (is_mac) {
     sources += [
+      "//vivaldi/browser/mac/mac_utils.h",
+      "//vivaldi/browser/mac/mac_utils.mm",
       "//vivaldi/browser/mac/vivaldi_main_menu_builder.h",
       "//vivaldi/browser/mac/vivaldi_main_menu_builder.mm",
       "//vivaldi/browser/shell_integration/vivaldi_shell_integration_mac.mm",

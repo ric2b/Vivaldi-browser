@@ -6,32 +6,28 @@
 #define OSP_PUBLIC_PROTOCOL_CONNECTION_CLIENT_H_
 
 #include <memory>
-#include <ostream>
 #include <string>
 
-#include "osp/public/endpoint_request_ids.h"
-#include "osp/public/message_demuxer.h"
-#include "osp/public/protocol_connection.h"
+#include "osp/public/protocol_connection_endpoint.h"
 #include "osp/public/service_listener.h"
-#include "platform/base/error.h"
-#include "platform/base/ip_address.h"
-#include "platform/base/macros.h"
 
 namespace openscreen::osp {
 
 // Embedder's view of the network service that initiates OSP connections to OSP
 // receivers.
-//
-// NOTE: This API closely resembles that for the ProtocolConnectionServer; the
-// client currently lacks Suspend(). Consider factoring out a common
-// ProtocolConnectionEndpoint when the two APIs are finalized.
-class ProtocolConnectionClient : public ServiceListener::Observer {
+class ProtocolConnectionClient : public ProtocolConnectionEndpoint,
+                                 public ServiceListener::Observer {
  public:
-  enum class State { kStopped = 0, kStarting, kRunning, kStopping };
-
   class ConnectionRequestCallback {
    public:
-    virtual ~ConnectionRequestCallback() = default;
+    ConnectionRequestCallback();
+    ConnectionRequestCallback(const ConnectionRequestCallback&) = delete;
+    ConnectionRequestCallback& operator=(const ConnectionRequestCallback&) =
+        delete;
+    ConnectionRequestCallback(ConnectionRequestCallback&&) noexcept = delete;
+    ConnectionRequestCallback& operator=(ConnectionRequestCallback&&) noexcept =
+        delete;
+    virtual ~ConnectionRequestCallback();
 
     // Called when a new connection was created between 5-tuples.
     virtual void OnConnectionOpened(
@@ -40,14 +36,19 @@ class ProtocolConnectionClient : public ServiceListener::Observer {
     virtual void OnConnectionFailed(uint64_t request_id) = 0;
   };
 
-  class ConnectRequest {
+  class ConnectRequest final {
    public:
     ConnectRequest();
     ConnectRequest(ProtocolConnectionClient* parent, uint64_t request_id);
-    ConnectRequest(ConnectRequest&& other) noexcept;
+    ConnectRequest(const ConnectRequest&) = delete;
+    ConnectRequest& operator=(const ConnectRequest&) = delete;
+    ConnectRequest(ConnectRequest&&) noexcept;
+    ConnectRequest& operator=(ConnectRequest&&) noexcept;
     ~ConnectRequest();
-    ConnectRequest& operator=(ConnectRequest&& other) noexcept;
 
+    // This returns true for a valid and in progress ConnectRequest.
+    // MarkComplete is called and this returns false when the request
+    // completes.
     explicit operator bool() const { return request_id_; }
 
     uint64_t request_id() const { return request_id_; }
@@ -58,64 +59,30 @@ class ProtocolConnectionClient : public ServiceListener::Observer {
 
    private:
     ProtocolConnectionClient* parent_ = nullptr;
+    // The `request_id_` of a valid ConnectRequest should be greater than 0.
     uint64_t request_id_ = 0;
   };
 
-  virtual ~ProtocolConnectionClient();
+  ProtocolConnectionClient();
+  ProtocolConnectionClient(const ProtocolConnectionClient&) = delete;
+  ProtocolConnectionClient& operator=(const ProtocolConnectionClient&) = delete;
+  ProtocolConnectionClient(ProtocolConnectionClient&&) noexcept = delete;
+  ProtocolConnectionClient& operator=(ProtocolConnectionClient&&) noexcept =
+      delete;
+  ~ProtocolConnectionClient() override;
 
-  // Starts the client using the config object.
-  // Returns true if state() == kStopped and the service will be started,
-  // false otherwise.
-  virtual bool Start() = 0;
-
-  // NOTE: Currently we do not support Suspend()/Resume() for the connection
-  // client.  Add those if we can define behavior for the OSP protocol and QUIC
-  // for those operations.
-  // See: https://github.com/webscreens/openscreenprotocol/issues/108
-
-  // Stops listening and cancels any search in progress.
-  // Returns true if state() != (kStopped|kStopping).
-  virtual bool Stop() = 0;
-
-  // Open a new connection to |endpoint|.  This may succeed synchronously if
-  // there are already connections open to |endpoint|, otherwise it will be
-  // asynchronous.
-  virtual ConnectRequest Connect(const IPEndpoint& endpoint,
-                                 ConnectionRequestCallback* request) = 0;
-
-  // Synchronously open a new connection to an endpoint identified by
-  // |endpoint_id|.  Returns nullptr if it can't be completed synchronously
-  // (e.g. there are no existing open connections to that endpoint).
-  virtual std::unique_ptr<ProtocolConnection> CreateProtocolConnection(
-      uint64_t endpoint_id) = 0;
-
-  MessageDemuxer* message_demuxer() const { return &demuxer_; }
-
-  EndpointRequestIds* endpoint_request_ids() { return &endpoint_request_ids_; }
-
-  // Returns the current state of the listener.
-  State state() const { return state_; }
-
-  // Returns the last error reported by this client.
-  const Error& last_error() const { return last_error_; }
+  // Open a new connection to `instance_name`.  This may succeed synchronously
+  // if there are already connections open to `instance_name`, otherwise it will
+  // be asynchronous. Returns true if succeed synchronously or asynchronously,
+  // false otherwise. `request` is overwritten with the result of a successful
+  // connection attempt.
+  virtual bool Connect(std::string_view instance_name,
+                       ConnectRequest& request,
+                       ConnectionRequestCallback* request_callback) = 0;
 
  protected:
-  ProtocolConnectionClient(MessageDemuxer& demuxer,
-                           ProtocolConnectionServiceObserver& observer);
-
   virtual void CancelConnectRequest(uint64_t request_id) = 0;
-
-  State state_ = State::kStopped;
-  Error last_error_;
-  MessageDemuxer& demuxer_;
-  EndpointRequestIds endpoint_request_ids_;
-  ProtocolConnectionServiceObserver& observer_;
-
-  OSP_DISALLOW_COPY_AND_ASSIGN(ProtocolConnectionClient);
 };
-
-std::ostream& operator<<(std::ostream& os,
-                         ProtocolConnectionClient::State state);
 
 }  // namespace openscreen::osp
 

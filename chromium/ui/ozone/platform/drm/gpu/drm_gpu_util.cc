@@ -14,6 +14,7 @@
 #include "ui/display/types/display_color_management.h"
 #include "ui/display/types/gamma_ramp_rgb_entry.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
+#include "ui/ozone/platform/drm/common/hardware_display_controller_info.h"
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane_manager.h"
 
@@ -229,7 +230,7 @@ bool ParseLutBlob(const void* data, size_t size, display::GammaCurve& result) {
 ScopedDrmColorCtmPtr CreateCTMBlob(const skcms_Matrix3x3& color_matrix,
                                    bool negative_values_broken) {
   ScopedDrmColorCtmPtr ctm(
-      static_cast<drm_color_ctm*>(malloc(sizeof(drm_color_ctm))));
+      static_cast<drm_color_ctm*>(drmMalloc(sizeof(drm_color_ctm))));
   for (size_t i = 0; i < 9; ++i) {
     float value = color_matrix.vals[i / 3][i % 3];
     if (value < 0) {
@@ -245,6 +246,7 @@ ScopedDrmColorCtmPtr CreateCTMBlob(const skcms_Matrix3x3& color_matrix,
           static_cast<uint64_t>(value * kCtmValueScale) & kCtmValueMask;
     }
   }
+
   return ctm;
 }
 
@@ -280,8 +282,8 @@ ScopedDrmModeRectPtr CreateDCBlob(const gfx::Rect& rect) {
   return dmg_rect;
 }
 
-HardwareDisplayControllerInfoList GetDisplayInfosAndUpdateCrtcs(
-    DrmWrapper& drm) {
+std::vector<std::unique_ptr<HardwareDisplayControllerInfo>>
+GetDisplayInfosAndUpdateCrtcs(DrmWrapper& drm) {
   auto [displays, invalid_crtcs] = GetDisplayInfosAndInvalidCrtcs(drm);
   // Disable invalid CRTCs to allow the preferred CRTCs to be enabled later
   // instead.

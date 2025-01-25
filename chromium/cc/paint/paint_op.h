@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <cmath>
 #include <iosfwd>
 #include <limits>
 #include <memory>
@@ -43,6 +44,7 @@
 #include "third_party/skia/include/core/SkRect.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkScalar.h"
+#include "ui/gfx/display_color_spaces.h"
 #include "ui/gfx/geometry/rect.h"
 
 class SkImage;
@@ -86,12 +88,14 @@ enum class PaintOpType : uint8_t {
   kConcat,
   kCustomData,
   kDrawArc,
+  kDrawArcLite,
   kDrawColor,
   kDrawDRRect,
   kDrawImage,
   kDrawImageRect,
   kDrawIRect,
   kDrawLine,
+  kDrawLineLite,
   kDrawOval,
   kDrawPath,
   kDrawRecord,
@@ -203,6 +207,9 @@ class CC_PAINT_EXPORT PaintOp {
   // generated images.
   static bool OpHasDiscardableImages(const PaintOp& op);
 
+  // Gets the maximum content color usage of all images in this PaintOp.
+  gfx::ContentColorUsage GetContentColorUsage() const;
+
   // Returns true if the given op type has PaintFlags.
   static bool TypeHasFlags(PaintOpType type);
 
@@ -217,8 +224,16 @@ class CC_PAINT_EXPORT PaintOp {
   // by the flags for kSaveLayerAlpha to preserving LCD text.
   bool HasEffectsPreventingLCDTextForSaveLayerAlpha() const { return false; }
 
-  bool HasDiscardableImages() const { return false; }
-  bool HasDiscardableImagesFromFlags() const { return false; }
+  // If `content_color_usage` is not null, the functions should update
+  // `*content_color_usage` to be
+  // max(*content_color_usage, max_content_color_usage_of_this_op).
+  bool HasDiscardableImages(gfx::ContentColorUsage* content_color_usage) const {
+    return false;
+  }
+  bool HasDiscardableImagesFromFlags(
+      gfx::ContentColorUsage* content_color_usage) const {
+    return false;
+  }
 
   // Returns the number of bytes used by this op in referenced sub records
   // and display lists.  This doesn't count other objects like paths or blobs.
@@ -283,7 +298,8 @@ class CC_PAINT_EXPORT PaintOpWithFlags : public PaintOp {
 
   int CountSlowPathsFromFlags() const { return flags.getPathEffect() ? 1 : 0; }
   bool HasNonAAPaint() const { return !flags.isAntiAlias(); }
-  bool HasDiscardableImagesFromFlags() const;
+  bool HasDiscardableImagesFromFlags(
+      gfx::ContentColorUsage* content_color_usage) const;
 
   void RasterWithFlags(SkCanvas* canvas,
                        const PaintFlags* flags,
@@ -496,7 +512,7 @@ class CC_PAINT_EXPORT DrawImageOp final : public PaintOpWithFlags {
            std::isfinite(scale_adjustment.height());
   }
   bool EqualsForTesting(const DrawImageOp& other) const;
-  bool HasDiscardableImages() const;
+  bool HasDiscardableImages(gfx::ContentColorUsage* content_color_usage) const;
   bool HasNonAAPaint() const { return false; }
   HAS_SERIALIZATION_FUNCTIONS();
 
@@ -538,7 +554,7 @@ class CC_PAINT_EXPORT DrawImageRectOp final : public PaintOpWithFlags {
            std::isfinite(scale_adjustment.height());
   }
   bool EqualsForTesting(const DrawImageRectOp& other) const;
-  bool HasDiscardableImages() const;
+  bool HasDiscardableImages(gfx::ContentColorUsage* content_color_usage) const;
   HAS_SERIALIZATION_FUNCTIONS();
 
   PaintImage image;
@@ -615,6 +631,75 @@ class CC_PAINT_EXPORT DrawLineOp final : public PaintOpWithFlags {
   DrawLineOp() : PaintOpWithFlags(kType) {}
 };
 
+// TODO(crbug.com/340122178): figure out a better way to unify types.
+class CC_PAINT_EXPORT DrawLineLiteOp final : public PaintOp {
+ public:
+  static constexpr PaintOpType kType = PaintOpType::kDrawLineLite;
+  static constexpr bool kIsDrawOp = true;
+  DrawLineLiteOp(SkScalar x0,
+                 SkScalar y0,
+                 SkScalar x1,
+                 SkScalar y1,
+                 const CorePaintFlags& core_paint_flags)
+      : PaintOp(kType),
+        x0(x0),
+        y0(y0),
+        x1(x1),
+        y1(y1),
+        core_paint_flags(core_paint_flags) {}
+  static void Raster(const DrawLineLiteOp* op,
+                     SkCanvas* canvas,
+                     const PlaybackParams& params);
+  bool IsValid() const { return core_paint_flags.IsValid(); }
+  bool EqualsForTesting(const DrawLineLiteOp& other) const;
+  HAS_SERIALIZATION_FUNCTIONS();
+
+  int CountSlowPaths() const { return 0; }
+
+  SkScalar x0;
+  SkScalar y0;
+  SkScalar x1;
+  SkScalar y1;
+  CorePaintFlags core_paint_flags;
+
+ private:
+  DrawLineLiteOp() : PaintOp(kType) {}
+};
+
+// TODO(crbug.com/340122178): figure out a better way to unify types.
+class CC_PAINT_EXPORT DrawArcLiteOp final : public PaintOp {
+ public:
+  static constexpr PaintOpType kType = PaintOpType::kDrawArcLite;
+  static constexpr bool kIsDrawOp = true;
+  DrawArcLiteOp(const SkRect& oval,
+                SkScalar start_angle_degrees,
+                SkScalar sweep_angle_degrees,
+                const CorePaintFlags& core_paint_flags)
+      : PaintOp(kType),
+        oval(oval),
+        start_angle_degrees(start_angle_degrees),
+        sweep_angle_degrees(sweep_angle_degrees),
+        core_paint_flags(core_paint_flags) {}
+  static void Raster(const DrawArcLiteOp* op,
+                     SkCanvas* canvas,
+                     const PlaybackParams& params);
+  bool IsValid() const {
+    return core_paint_flags.IsValid() && oval.isFinite() &&
+           std::isfinite(start_angle_degrees) &&
+           std::isfinite(sweep_angle_degrees);
+  }
+  bool EqualsForTesting(const DrawArcLiteOp& other) const;
+  HAS_SERIALIZATION_FUNCTIONS();
+
+  SkRect oval;
+  SkScalar start_angle_degrees;
+  SkScalar sweep_angle_degrees;
+  CorePaintFlags core_paint_flags;
+
+ private:
+  DrawArcLiteOp() : PaintOp(kType) {}
+};
+
 class CC_PAINT_EXPORT DrawArcOp final : public PaintOpWithFlags {
  public:
   static constexpr PaintOpType kType = PaintOpType::kDrawArc;
@@ -633,7 +718,11 @@ class CC_PAINT_EXPORT DrawArcOp final : public PaintOpWithFlags {
                               const PlaybackParams& params);
   // Actual implementation for rastering.
   void RasterWithFlagsImpl(const PaintFlags* flags, SkCanvas* canvas) const;
-  bool IsValid() const { return flags.IsValid(); }
+  bool IsValid() const {
+    return flags.IsValid() && oval.isFinite() &&
+           std::isfinite(start_angle_degrees) &&
+           std::isfinite(sweep_angle_degrees);
+  }
   bool EqualsForTesting(const DrawArcOp& other) const;
   HAS_SERIALIZATION_FUNCTIONS();
 
@@ -655,10 +744,7 @@ class CC_PAINT_EXPORT DrawOvalOp final : public PaintOpWithFlags {
                               const PaintFlags* flags,
                               SkCanvas* canvas,
                               const PlaybackParams& params);
-  bool IsValid() const {
-    // Reproduce SkRRect::isValid without converting.
-    return flags.IsValid() && oval.isFinite() && oval.isSorted();
-  }
+  bool IsValid() const { return flags.IsValid() && oval.isFinite(); }
   bool EqualsForTesting(const DrawOvalOp& other) const;
   HAS_SERIALIZATION_FUNCTIONS();
 
@@ -714,7 +800,7 @@ class CC_PAINT_EXPORT DrawRecordOp final : public PaintOp {
   bool EqualsForTesting(const DrawRecordOp& other) const;
   size_t AdditionalBytesUsed() const;
   size_t AdditionalOpCount() const;
-  bool HasDiscardableImages() const;
+  bool HasDiscardableImages(gfx::ContentColorUsage* content_color_usage) const;
   int CountSlowPaths() const;
   bool HasNonAAPaint() const;
   bool HasDrawTextOps() const;
@@ -787,8 +873,7 @@ class CC_PAINT_EXPORT DrawScrollingContentsOp final : public PaintOp {
   static constexpr PaintOpType kType = PaintOpType::kDrawScrollingContents;
   static constexpr bool kIsDrawOp = true;
   DrawScrollingContentsOp(ElementId scroll_element_id,
-                          scoped_refptr<DisplayItemList> display_item_list,
-                          gfx::PointF main_scroll_offset);
+                          scoped_refptr<DisplayItemList> display_item_list);
   ~DrawScrollingContentsOp();
   static void Raster(const DrawScrollingContentsOp* op,
                      SkCanvas* canvas,
@@ -797,7 +882,7 @@ class CC_PAINT_EXPORT DrawScrollingContentsOp final : public PaintOp {
   bool EqualsForTesting(const DrawScrollingContentsOp& other) const;
   size_t AdditionalBytesUsed() const;
   size_t AdditionalOpCount() const;
-  bool HasDiscardableImages() const;
+  bool HasDiscardableImages(gfx::ContentColorUsage* content_color_usage) const;
   int CountSlowPaths() const;
   bool HasNonAAPaint() const;
   bool HasDrawTextOps() const;
@@ -806,12 +891,8 @@ class CC_PAINT_EXPORT DrawScrollingContentsOp final : public PaintOp {
   bool HasEffectsPreventingLCDTextForSaveLayerAlpha() const;
   HAS_SERIALIZATION_FUNCTIONS();
 
-  gfx::PointF GetScrollOffset(const PlaybackParams& params) const;
-
   ElementId scroll_element_id;
   scoped_refptr<DisplayItemList> display_item_list;
-  // The scroll offset from the main thread.
-  gfx::PointF main_scroll_offset;
 };
 
 class CC_PAINT_EXPORT DrawVerticesOp final : public PaintOpWithFlags {
@@ -867,7 +948,7 @@ class CC_PAINT_EXPORT DrawSkottieOp final : public PaintOp {
            t <= 1.f;
   }
   bool EqualsForTesting(const DrawSkottieOp& other) const;
-  bool HasDiscardableImages() const;
+  bool HasDiscardableImages(gfx::ContentColorUsage* content_color_usage) const;
   HAS_SERIALIZATION_FUNCTIONS();
 
   scoped_refptr<SkottieWrapper> skottie;
@@ -1073,7 +1154,7 @@ class CC_PAINT_EXPORT SaveLayerFiltersOp final : public PaintOpWithFlags {
                               const PaintFlags* flags,
                               SkCanvas* canvas,
                               const PlaybackParams& params);
-  bool IsValid() const { return true; }
+  bool IsValid() const { return flags.IsValid(); }
   bool EqualsForTesting(const SaveLayerFiltersOp& other) const;
   bool HasSaveLayerOps() const { return true; }
   HAS_SERIALIZATION_FUNCTIONS();
@@ -1178,6 +1259,8 @@ inline constexpr size_t kLargestPaintOpAlignedSize =
 // the //cc:test_support target. Depend on that to use this in your unit test.
 // This should not be used in production code.
 void PrintTo(const PaintOp& rect, std::ostream* os);
+
+CC_PAINT_EXPORT bool AreLiteOpsEnabled();
 
 }  // namespace cc
 

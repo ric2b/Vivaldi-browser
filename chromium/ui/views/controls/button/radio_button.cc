@@ -29,7 +29,6 @@ namespace views {
 
 namespace {
 constexpr int kFocusRingRadius = 16;
-constexpr int kRadioButtonIconDipSize = 16;
 constexpr int kRadioButtonIconDipSizeCr2023 = 20;
 }  // namespace
 
@@ -37,13 +36,14 @@ RadioButton::RadioButton(const std::u16string& label, int group_id)
     : Checkbox(label) {
   SetGroup(group_id);
   views::FocusRing::Get(this)->SetOutsetFocusRingDisabled(true);
+
+  GetViewAccessibility().SetRole(ax::mojom::Role::kRadioButton);
 }
 
 RadioButton::~RadioButton() = default;
 
 void RadioButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   Checkbox::GetAccessibleNodeData(node_data);
-  node_data->role = ax::mojom::Role::kRadioButton;
 }
 
 View* RadioButton::GetSelectedViewForGroup(int group) {
@@ -133,10 +133,7 @@ const gfx::VectorIcon& RadioButton::GetVectorIcon() const {
 }
 
 gfx::ImageSkia RadioButton::GetImage(ButtonState for_state) const {
-  return gfx::CreateVectorIcon(GetVectorIcon(),
-                               features::IsChromeRefresh2023()
-                                   ? kRadioButtonIconDipSizeCr2023
-                                   : kRadioButtonIconDipSize,
+  return gfx::CreateVectorIcon(GetVectorIcon(), kRadioButtonIconDipSizeCr2023,
                                GetIconImageColor(GetIconState(for_state)));
 }
 

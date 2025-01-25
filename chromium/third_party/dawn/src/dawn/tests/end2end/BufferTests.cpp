@@ -31,17 +31,26 @@
 #include <limits>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "dawn/tests/DawnTest.h"
+#include "dawn/tests/MockCallback.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
+#include "dawn/utils/TestUtils.h"
 #include "dawn/utils/WGPUHelpers.h"
 #include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn {
 namespace {
 
+using testing::_;
+using testing::MockCppCallback;
+
+using MockMapAsyncCallback = MockCppCallback<void (*)(wgpu::MapAsyncStatus, const char*)>;
+
 using FutureCallbackMode = std::optional<wgpu::CallbackMode>;
+
 DAWN_TEST_PARAM_STRUCT(BufferMappingTestParams, FutureCallbackMode);
 
 class BufferMappingTests : public DawnTestWithParams<BufferMappingTestParams> {
@@ -60,26 +69,26 @@ class BufferMappingTests : public DawnTestWithParams<BufferMappingTestParams> {
                          size_t size,
                          wgpu::BufferMapCallback cb = nullptr,
                          void* ud = nullptr) {
-        struct Userdata {
-            wgpu::BufferMapCallback cb;
-            raw_ptr<void> ud;
-            bool done = false;
-        };
-        Userdata userdata = Userdata{cb, ud};
-        auto callback = [](WGPUBufferMapAsyncStatus status, void* rawUserdata) {
-            auto* userdata = static_cast<Userdata*>(rawUserdata);
-            userdata->done = true;
-            ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
-            auto cb = userdata->cb;
-            auto ud = userdata->ud;
-            if (cb) {
-                cb(status, ud);
-            }
-        };
-
         // Legacy MapAsync
         if (!GetParam().mFutureCallbackMode) {
-            buffer.MapAsync(mode, offset, size, callback, &userdata);
+            struct Userdata {
+                wgpu::BufferMapCallback cb;
+                raw_ptr<void> ud;
+                bool done = false;
+            };
+            Userdata userdata = Userdata{cb, ud};
+            auto callback = [](WGPUBufferMapAsyncStatus status, void* rawUserdata) {
+                auto* userdata = static_cast<Userdata*>(rawUserdata);
+                userdata->done = true;
+                ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
+                auto cb = userdata->cb;
+                auto ud = userdata->ud;
+                if (cb) {
+                    cb(status, ud);
+                }
+            };
+
+            EXPECT_DEPRECATION_WARNING(buffer.MapAsync(mode, offset, size, callback, &userdata));
             while (!userdata.done) {
                 // Flush wire and call instance process events.
                 WaitABit();
@@ -87,19 +96,27 @@ class BufferMappingTests : public DawnTestWithParams<BufferMappingTestParams> {
             return;
         }
 
-        wgpu::Future future = buffer.MapAsync(
-            mode, offset, size, {nullptr, *GetParam().mFutureCallbackMode, callback, &userdata});
+        bool done = false;
+        wgpu::Future future =
+            buffer.MapAsync(mode, offset, size, *GetParam().mFutureCallbackMode,
+                            [cb, ud, &done](wgpu::MapAsyncStatus status, const char*) {
+                                done = true;
+                                ASSERT_EQ(wgpu::MapAsyncStatus::Success, status);
+                                if (cb) {
+                                    cb(WGPUBufferMapAsyncStatus_Success, ud);
+                                }
+                            });
         switch (*GetParam().mFutureCallbackMode) {
             case wgpu::CallbackMode::WaitAnyOnly: {
                 wgpu::FutureWaitInfo waitInfo = {future};
                 GetInstance().WaitAny(1, &waitInfo, UINT64_MAX);
                 ASSERT_TRUE(waitInfo.completed);
-                ASSERT_TRUE(userdata.done);
+                ASSERT_TRUE(done);
                 break;
             }
             case wgpu::CallbackMode::AllowProcessEvents:
             case wgpu::CallbackMode::AllowSpontaneous:
-                while (!userdata.done) {
+                while (!done) {
                     // Flush wire and call instance process events.
                     WaitABit();
                 }
@@ -448,13 +465,13 @@ TEST_P(BufferMappingTests, MapWrite_ManySimultaneous) {
     if (!GetParam().mFutureCallbackMode) {
         // Map all the buffers.
         for (uint32_t i = 0; i < kBuffers; ++i) {
-            buffers[i].MapAsync(
+            EXPECT_DEPRECATION_WARNING(buffers[i].MapAsync(
                 wgpu::MapMode::Write, 0, descriptor.size,
                 [](WGPUBufferMapAsyncStatus status, void* userdata) {
                     ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
                     (*static_cast<uint32_t*>(userdata))++;
                 },
-                &mapCompletedCount);
+                &mapCompletedCount));
         }
 
         // Wait for all mappings to complete
@@ -464,14 +481,12 @@ TEST_P(BufferMappingTests, MapWrite_ManySimultaneous) {
     } else {
         std::array<wgpu::Future, kBuffers> futures;
         for (uint32_t i = 0; i < kBuffers; ++i) {
-            futures[i] =
-                buffers[i].MapAsync(wgpu::MapMode::Write, 0, descriptor.size,
-                                    {nullptr, *GetParam().mFutureCallbackMode,
-                                     [](WGPUBufferMapAsyncStatus status, void* userdata) {
-                                         ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
-                                         (*static_cast<uint32_t*>(userdata))++;
-                                     },
-                                     &mapCompletedCount});
+            futures[i] = buffers[i].MapAsync(
+                wgpu::MapMode::Write, 0, descriptor.size, *GetParam().mFutureCallbackMode,
+                [&mapCompletedCount](wgpu::MapAsyncStatus status, const char*) {
+                    ASSERT_EQ(wgpu::MapAsyncStatus::Success, status);
+                    mapCompletedCount++;
+                });
         }
 
         switch (*GetParam().mFutureCallbackMode) {
@@ -521,78 +536,78 @@ TEST_P(BufferMappingTests, OffsetNotUpdatedOnError) {
     wgpu::Buffer buffer = CreateMapReadBuffer(sizeof(data));
     queue.WriteBuffer(buffer, 0, data, sizeof(data));
 
-    bool done1 = false;
-    bool done2 = false;
-    auto cb1 = [](WGPUBufferMapAsyncStatus status, void* userdata) {
-        ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
-        *static_cast<bool*>(userdata) = true;
-    };
-    // Calling MapAsync another time, will reject the callback with error status
-    // and mMapOffset is not updated because the buffer is already being mapped and it doesn't allow
-    // multiple MapAsync requests.
-    auto cb2 = [](WGPUBufferMapAsyncStatus status, void* userdata) {
-        ASSERT_EQ(WGPUBufferMapAsyncStatus_MappingAlreadyPending, status);
-        *static_cast<bool*>(userdata) = true;
-    };
-    // Calling MapAsync when the buffer is already mapped (as opposed to pending mapping) will cause
-    // a validation error.
-    auto cb2Mapped = [](WGPUBufferMapAsyncStatus status, void* userdata) {
-        ASSERT_EQ(WGPUBufferMapAsyncStatus_ValidationError, status);
-        *static_cast<bool*>(userdata) = true;
-    };
-
     // Legacy MapAsync
     if (!GetParam().mFutureCallbackMode) {
+        bool done1 = false;
+        bool done2 = false;
+        auto cb1 = [](WGPUBufferMapAsyncStatus status, void* userdata) {
+            ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
+            *static_cast<bool*>(userdata) = true;
+        };
+        // Calling MapAsync another time, will reject the callback with error status
+        // and mMapOffset is not updated because the buffer is already being mapped and it doesn't
+        // allow multiple MapAsync requests.
+        auto cb2 = [](WGPUBufferMapAsyncStatus status, void* userdata) {
+            ASSERT_EQ(WGPUBufferMapAsyncStatus_MappingAlreadyPending, status);
+            *static_cast<bool*>(userdata) = true;
+        };
+        // Calling MapAsync when the buffer is already mapped (as opposed to pending mapping) will
+        // cause a validation error.
+        auto cb2Mapped = [](WGPUBufferMapAsyncStatus status, void* userdata) {
+            ASSERT_EQ(WGPUBufferMapAsyncStatus_ValidationError, status);
+            *static_cast<bool*>(userdata) = true;
+        };
+
         // Map the buffer but do not wait on the result yet.
-        buffer.MapAsync(wgpu::MapMode::Read, 8, 4, cb1, &done1);
+        EXPECT_DEPRECATION_WARNING(buffer.MapAsync(wgpu::MapMode::Read, 8, 4, cb1, &done1));
 
         // Call MapAsync another time, the callback will be rejected with error status
         // and mMapOffset is not updated because the buffer is already being mapped and it doesn't
         // allow multiple MapAsync requests.
         if (buffer.GetMapState() == wgpu::BufferMapState::Mapped) {
-            ASSERT_DEVICE_ERROR(buffer.MapAsync(wgpu::MapMode::Read, 0, 4, cb2Mapped, &done2));
+            ASSERT_DEVICE_ERROR(EXPECT_DEPRECATION_WARNING(
+                buffer.MapAsync(wgpu::MapMode::Read, 0, 4, cb2Mapped, &done2)));
         } else {
-            buffer.MapAsync(wgpu::MapMode::Read, 0, 4, cb2, &done2);
+            EXPECT_DEPRECATION_WARNING(buffer.MapAsync(wgpu::MapMode::Read, 0, 4, cb2, &done2));
         }
 
         while (!done1 || !done2) {
             WaitABit();
         }
     } else {
+        MockMapAsyncCallback cb1;
+        MockMapAsyncCallback cb2;
+        EXPECT_CALL(cb1, Call(wgpu::MapAsyncStatus::Success, _)).Times(1);
+        EXPECT_CALL(cb2, Call(wgpu::MapAsyncStatus::Error, _)).Times(1);
+
         // Map the buffer but do not wait on the result yet.
-        wgpu::Future f1 = buffer.MapAsync(wgpu::MapMode::Read, 8, 4,
-                                          {nullptr, *GetParam().mFutureCallbackMode, cb1, &done1});
+        wgpu::FutureWaitInfo f1 = {buffer.MapAsync(
+            wgpu::MapMode::Read, 8, 4, *GetParam().mFutureCallbackMode, cb1.Callback())};
 
         // Call MapAsync another time, the callback will be rejected with error status
         // and mMapOffset is not updated because the buffer is already being mapped and it doesn't
         // allow multiple MapAsync requests.
-        wgpu::Future f2;
-        if (buffer.GetMapState() == wgpu::BufferMapState::Mapped) {
-            ASSERT_DEVICE_ERROR(f2 = buffer.MapAsync(
-                                    wgpu::MapMode::Read, 0, 4,
-                                    {nullptr, *GetParam().mFutureCallbackMode, cb2Mapped, &done2}));
+        wgpu::FutureWaitInfo f2;
+        if (!UsesWire()) {
+            ASSERT_DEVICE_ERROR(
+                f2 = {buffer.MapAsync(wgpu::MapMode::Read, 0, 4, *GetParam().mFutureCallbackMode,
+                                      cb2.Callback())});
         } else {
-            f2 = buffer.MapAsync(wgpu::MapMode::Read, 0, 4,
-                                 {nullptr, *GetParam().mFutureCallbackMode, cb2, &done2});
+            f2 = {buffer.MapAsync(wgpu::MapMode::Read, 0, 4, *GetParam().mFutureCallbackMode,
+                                  cb2.Callback())};
         }
 
         switch (*GetParam().mFutureCallbackMode) {
             case wgpu::CallbackMode::WaitAnyOnly: {
-                wgpu::FutureWaitInfo waitInfo[] = {{f1}, {f2}};
-                GetInstance().WaitAny(2, waitInfo, UINT64_MAX);
-
-                if (!waitInfo[0].completed) {
-                    GetInstance().WaitAny(1, &waitInfo[0], UINT64_MAX);
-                } else if (!waitInfo[1].completed) {
-                    GetInstance().WaitAny(1, &waitInfo[1], UINT64_MAX);
-                }
+                ASSERT_EQ(GetInstance().WaitAny(1, &f1, UINT64_MAX), wgpu::WaitStatus::Success);
+                ASSERT_EQ(GetInstance().WaitAny(1, &f2, UINT64_MAX), wgpu::WaitStatus::Success);
+                EXPECT_TRUE(f1.completed);
+                EXPECT_TRUE(f2.completed);
                 break;
             }
             case wgpu::CallbackMode::AllowProcessEvents:
             case wgpu::CallbackMode::AllowSpontaneous:
-                while (!done1 || !done2) {
-                    WaitABit();
-                }
+                WaitForAllOperations();
                 break;
         }
     }
@@ -708,11 +723,19 @@ class BufferMappingCallbackTests : public BufferMappingTests {
                             wgpu::BufferMapCallback callback,
                             void* userdata) {
         if (!GetParam().mFutureCallbackMode) {
-            buffer.MapAsync(mapMode, offset, size, callback, userdata);
+            EXPECT_DEPRECATION_WARNING(buffer.MapAsync(mapMode, offset, size, callback, userdata));
             return {0};
         } else {
-            return buffer.MapAsync(mapMode, offset, size,
-                                   {nullptr, *GetParam().mFutureCallbackMode, callback, userdata});
+            return buffer.MapAsync(mapMode, offset, size, *GetParam().mFutureCallbackMode,
+                                   [callback, userdata](wgpu::MapAsyncStatus status, const char*) {
+                                       // Note that technically this cast should eventually be
+                                       // removed once we update all tests to use the new callback
+                                       // status. This currently works only because this is only
+                                       // used for success cases which cast to the same underlying
+                                       // value.
+                                       ASSERT_EQ(status, wgpu::MapAsyncStatus::Success);
+                                       callback(WGPUBufferMapAsyncStatus_Success, userdata);
+                                   });
         }
     }
 
@@ -720,11 +743,14 @@ class BufferMappingCallbackTests : public BufferMappingTests {
                                        wgpu::QueueWorkDoneCallback callback,
                                        void* userdata) {
         if (!GetParam().mFutureCallbackMode) {
-            queueObj.OnSubmittedWorkDone(callback, userdata);
+            EXPECT_DEPRECATION_WARNING(queueObj.OnSubmittedWorkDone(callback, userdata));
             return {0};
         } else {
             return queueObj.OnSubmittedWorkDone(
-                {nullptr, *GetParam().mFutureCallbackMode, callback, userdata});
+                *GetParam().mFutureCallbackMode,
+                [callback, userdata](wgpu::QueueWorkDoneStatus status) {
+                    callback(static_cast<WGPUQueueWorkDoneStatus>(status), userdata);
+                });
         }
     }
 
@@ -925,7 +951,11 @@ class BufferMappedAtCreationTests : public DawnTest {
 
     const void* MapAsyncAndWait(const wgpu::Buffer& buffer, wgpu::MapMode mode, size_t size) {
         bool done = false;
-        buffer.MapAsync(mode, 0, size, MapCallback, &done);
+        buffer.MapAsync(mode, 0, size, wgpu::CallbackMode::AllowProcessEvents,
+                        [&done](wgpu::MapAsyncStatus status, const char*) {
+                            EXPECT_EQ(wgpu::MapAsyncStatus::Success, status);
+                            done = true;
+                        });
 
         while (!done) {
             WaitABit();
@@ -1053,13 +1083,11 @@ TEST_P(BufferMappedAtCreationTests, CreateThenMapSuccess) {
     EXPECT_BUFFER_U32_EQ(myData, buffer, 0);
 
     bool done = false;
-    buffer.MapAsync(
-        wgpu::MapMode::Write, 0, 4,
-        [](WGPUBufferMapAsyncStatus status, void* userdata) {
-            ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
-            *static_cast<bool*>(userdata) = true;
-        },
-        &done);
+    buffer.MapAsync(wgpu::MapMode::Write, 0, 4, wgpu::CallbackMode::AllowProcessEvents,
+                    [&done](wgpu::MapAsyncStatus status, const char*) {
+                        EXPECT_EQ(wgpu::MapAsyncStatus::Success, status);
+                        done = true;
+                    });
 
     while (!done) {
         WaitABit();
@@ -1076,13 +1104,11 @@ TEST_P(BufferMappedAtCreationTests, CreateThenMapBeforeUnmapFailure) {
 
     ASSERT_DEVICE_ERROR([&] {
         bool done = false;
-        buffer.MapAsync(
-            wgpu::MapMode::Write, 0, 4,
-            [](WGPUBufferMapAsyncStatus status, void* userdata) {
-                ASSERT_EQ(WGPUBufferMapAsyncStatus_ValidationError, status);
-                *static_cast<bool*>(userdata) = true;
-            },
-            &done);
+        buffer.MapAsync(wgpu::MapMode::Write, 0, 4, wgpu::CallbackMode::AllowProcessEvents,
+                        [&done](wgpu::MapAsyncStatus status, const char*) {
+                            EXPECT_EQ(wgpu::MapAsyncStatus::Error, status);
+                            done = true;
+                        });
 
         while (!done) {
             WaitABit();
@@ -1182,9 +1208,12 @@ TEST_P(BufferTests, ZeroSizedBuffer) {
 
 // Test that creating a very large buffers fails gracefully.
 TEST_P(BufferTests, CreateBufferOOM) {
+    // TODO(crbug.com/346377856): fails on ANGLE/D3D11, but is likely a Dawn/GL bug that only
+    // repros on Windows for some reason
+    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES() && IsANGLED3D11());
+
     // TODO(http://crbug.com/dawn/749): Missing support.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGL());
-    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
     DAWN_TEST_UNSUPPORTED_IF(IsAsan());
     DAWN_TEST_UNSUPPORTED_IF(IsTsan());
 
@@ -1209,9 +1238,12 @@ TEST_P(BufferTests, BufferMappedAtCreationOOM) {
     // doesn't see the previous catchall try-catch.
     DAWN_SUPPRESS_TEST_IF(DAWN_PLATFORM_IS(MACOS) && DAWN_PLATFORM_IS(ARM64));
 
+    // TODO(crbug.com/346377856): fails on ANGLE/D3D11, but is likely a Dawn/GL bug that only
+    // repros on Windows for some reason
+    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES() && IsANGLED3D11());
+
     // TODO(http://crbug.com/dawn/749): Missing support.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGL());
-    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
     DAWN_TEST_UNSUPPORTED_IF(IsAsan());
     DAWN_TEST_UNSUPPORTED_IF(IsTsan());
 
@@ -1276,9 +1308,12 @@ TEST_P(BufferTests, BufferMappedAtCreationOOM) {
 
 // Test that mapping an OOM buffer fails gracefully
 TEST_P(BufferTests, CreateBufferOOMMapAsync) {
+    // TODO(crbug.com/346377856): fails on ANGLE/D3D11, but is likely a Dawn/GL bug that only
+    // repros on Windows for some reason
+    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES() && IsANGLED3D11());
+
     // TODO(http://crbug.com/dawn/749): Missing support.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGL());
-    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
     DAWN_TEST_UNSUPPORTED_IF(IsAsan());
     DAWN_TEST_UNSUPPORTED_IF(IsTsan());
 
@@ -1287,13 +1322,12 @@ TEST_P(BufferTests, CreateBufferOOMMapAsync) {
         ASSERT_DEVICE_ERROR(buffer = device.CreateBuffer(&descriptor));
 
         bool done = false;
-        ASSERT_DEVICE_ERROR(buffer.MapAsync(
-            wgpu::MapMode::Write, 0, 4,
-            [](WGPUBufferMapAsyncStatus status, void* userdata) {
-                EXPECT_EQ(status, WGPUBufferMapAsyncStatus_ValidationError);
-                *static_cast<bool*>(userdata) = true;
-            },
-            &done));
+        ASSERT_DEVICE_ERROR(buffer.MapAsync(wgpu::MapMode::Write, 0, 4,
+                                            wgpu::CallbackMode::AllowProcessEvents,
+                                            [&done](wgpu::MapAsyncStatus status, const char*) {
+                                                EXPECT_EQ(wgpu::MapAsyncStatus::Error, status);
+                                                done = true;
+                                            }));
 
         while (!done) {
             WaitABit();
@@ -1353,13 +1387,13 @@ DAWN_INSTANTIATE_TEST(BufferNoSuballocationTests,
                       OpenGLESBackend({"disable_resource_suballocation"}),
                       VulkanBackend({"disable_resource_suballocation"}));
 
-class BufferMapExtendedUsagesTests : public BufferMappingTests {
+class BufferMapExtendedUsagesTests : public DawnTest {
   protected:
     void SetUp() override {
-        BufferMappingTests::SetUp();
+        DawnTest::SetUp();
 
         DAWN_TEST_UNSUPPORTED_IF(UsesWire());
-        // Skip all tests if the BufferMapExtendedUsages feature is not supported.
+        // Skip all tests if the required feature is not supported.
         DAWN_TEST_UNSUPPORTED_IF(!SupportsFeatures({wgpu::FeatureName::BufferMapExtendedUsages}));
     }
 
@@ -1371,7 +1405,47 @@ class BufferMapExtendedUsagesTests : public BufferMappingTests {
         return requiredFeatures;
     }
 
-    wgpu::RenderPipeline CreateRenderPipelineForTest(bool colorFromUniformBuffer) {
+    void MapAsyncAndWait(const wgpu::Buffer& buffer,
+                         wgpu::MapMode mode,
+                         size_t offset,
+                         size_t size) {
+        wgpu::Future future = buffer.MapAsync(mode, offset, size, wgpu::CallbackMode::WaitAnyOnly,
+                                              [](wgpu::MapAsyncStatus status, const char*) {
+                                                  ASSERT_EQ(wgpu::MapAsyncStatus::Success, status);
+                                              });
+        wgpu::FutureWaitInfo waitInfo = {future};
+        GetInstance().WaitAny(1, &waitInfo, UINT64_MAX);
+        ASSERT_TRUE(waitInfo.completed);
+    }
+
+    wgpu::Buffer CreateBufferFromData(const void* data, uint64_t size, wgpu::BufferUsage usage) {
+        if (!(usage & wgpu::BufferUsage::MapWrite)) {
+            return utils::CreateBufferFromData(device, data, size, usage);
+        }
+
+        wgpu::BufferDescriptor descriptor;
+        descriptor.size = size;
+        descriptor.usage = usage;
+
+        wgpu::Buffer buffer = device.CreateBuffer(&descriptor);
+
+        MapAsyncAndWait(buffer, wgpu::MapMode::Write, 0, size);
+        memcpy(buffer.GetMappedRange(), data, size);
+        buffer.Unmap();
+
+        return buffer;
+    }
+
+    enum class ColorSrc {
+        UniformBuffer,
+        VertexBuffer,
+        StorageBuffer,
+    };
+
+    wgpu::RenderPipeline CreateRenderPipelineForTest(
+        ColorSrc colorSource,
+        wgpu::VertexStepMode vertexBufferStepMode = wgpu::VertexStepMode::Vertex,
+        wgpu::VertexFormat vertexBufferFormat = wgpu::VertexFormat::Unorm8x4) {
         utils::ComboRenderPipelineDescriptor pipelineDescriptor;
 
         std::ostringstream vs;
@@ -1387,38 +1461,57 @@ class BufferMapExtendedUsagesTests : public BufferMappingTests {
                 vec2f(-1.0,  3.0));
         )";
 
-        if (colorFromUniformBuffer) {
-            // Color is from uniform buffer.
-            vs << R"(
-            struct Uniforms {
-                color : vec4f,
-            }
-            @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+        switch (colorSource) {
+            case ColorSrc::UniformBuffer:
+                // Color is from uniform buffer.
+                vs << R"(
+                struct Uniforms {
+                    color : vec4f,
+                }
+                @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
-            @vertex
-            fn main(@builtin(vertex_index) vertexIndex : u32) -> VertexOut {
-                var output : VertexOut;
-                output.position = vec4f(vertexPos[vertexIndex % 3], 0.0, 1.0);
-                output.color = uniforms.color;
-                return output;
-            })";
-        } else {
-            // Color is from vertex buffer.
-            vs << R"(
-            @vertex
-            fn main(@location(0) vertexColor : vec4f,
-                    @builtin(vertex_index) vertexIndex : u32) -> VertexOut {
-                var output : VertexOut;
-                output.position = vec4f(vertexPos[vertexIndex % 3], 0.0, 1.0);
-                output.color = vertexColor;
-                return output;
-            })";
+                @vertex
+                fn main(@builtin(vertex_index) vertexIndex : u32) -> VertexOut {
+                    var output : VertexOut;
+                    output.position = vec4f(vertexPos[vertexIndex % 3], 0.0, 1.0);
+                    output.color = uniforms.color;
+                    return output;
+                })";
+                break;
+            case ColorSrc::VertexBuffer:
+                // Color is from vertex buffer.
+                vs << R"(
+                @vertex
+                fn main(@location(0) vertexColor : vec4f,
+                        @builtin(vertex_index) vertexIndex : u32) -> VertexOut {
+                    var output : VertexOut;
+                    output.position = vec4f(vertexPos[vertexIndex % 3], 0.0, 1.0);
+                    output.color = vertexColor;
+                    return output;
+                })";
 
-            pipelineDescriptor.vertex.bufferCount = 1;
-            pipelineDescriptor.cBuffers[0].arrayStride = 4;
-            pipelineDescriptor.cBuffers[0].attributeCount = 1;
-            pipelineDescriptor.cBuffers[0].stepMode = wgpu::VertexStepMode::Vertex;
-            pipelineDescriptor.cAttributes[0].format = wgpu::VertexFormat::Unorm8x4;
+                pipelineDescriptor.vertex.bufferCount = 1;
+                pipelineDescriptor.cBuffers[0].arrayStride =
+                    utils::VertexFormatSize(vertexBufferFormat);
+                pipelineDescriptor.cBuffers[0].attributeCount = 1;
+                pipelineDescriptor.cBuffers[0].stepMode = vertexBufferStepMode;
+                pipelineDescriptor.cAttributes[0].format = vertexBufferFormat;
+                break;
+            case ColorSrc::StorageBuffer:
+                vs << R"(
+                struct Uniforms {
+                    color : vec4f,
+                }
+                @binding(0) @group(0) var<storage, read> ssbo : Uniforms;
+
+                @vertex
+                fn main(@builtin(vertex_index) vertexIndex : u32) -> VertexOut {
+                    var output : VertexOut;
+                    output.position = vec4f(vertexPos[vertexIndex % 3], 0.0, 1.0);
+                    output.color = ssbo.color;
+                    return output;
+                })";
+                break;
         }
         constexpr char fs[] = R"(
             @fragment
@@ -1440,8 +1533,10 @@ class BufferMapExtendedUsagesTests : public BufferMappingTests {
                                           wgpu::RenderPipeline pipeline,
                                           wgpu::Buffer vertexBuffer,
                                           wgpu::Buffer indexBuffer,
-                                          wgpu::BindGroup uniformsBindGroup) {
-        wgpu::CommandEncoder commandEncoder = device.CreateCommandEncoder();
+                                          wgpu::BindGroup uniformsBindGroup,
+                                          wgpu::CommandEncoder existingEncoder = nullptr) {
+        wgpu::CommandEncoder commandEncoder =
+            existingEncoder ? std::move(existingEncoder) : device.CreateCommandEncoder();
         wgpu::RenderPassEncoder renderPassEncoder = commandEncoder.BeginRenderPass(&renderPass);
         renderPassEncoder.SetPipeline(pipeline);
         if (uniformsBindGroup) {
@@ -1463,7 +1558,9 @@ class BufferMapExtendedUsagesTests : public BufferMappingTests {
         queue.Submit(1, &commands);
     }
 
-    static constexpr wgpu::BufferUsage kNonMapUsages[] = {
+    void MixMapWriteAndGPUWriteBufferThenDraw(ColorSrc colorSrc);
+
+    static constexpr wgpu::BufferUsage kMapExtendedUsages[] = {
         wgpu::BufferUsage::CopySrc,  wgpu::BufferUsage::CopyDst,      wgpu::BufferUsage::Index,
         wgpu::BufferUsage::Vertex,   wgpu::BufferUsage::Uniform,      wgpu::BufferUsage::Storage,
         wgpu::BufferUsage::Indirect, wgpu::BufferUsage::QueryResolve,
@@ -1475,7 +1572,7 @@ TEST_P(BufferMapExtendedUsagesTests, MapReadWithAnyUsage) {
     wgpu::BufferDescriptor descriptor;
     descriptor.size = 4;
 
-    for (const auto otherUsage : kNonMapUsages) {
+    for (const auto otherUsage : kMapExtendedUsages) {
         descriptor.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst | otherUsage;
         wgpu::Buffer buffer = device.CreateBuffer(&descriptor);
 
@@ -1495,7 +1592,7 @@ TEST_P(BufferMapExtendedUsagesTests, MapWriteWithAnyUsage) {
     wgpu::BufferDescriptor descriptor;
     descriptor.size = 4;
 
-    for (const auto otherUsage : kNonMapUsages) {
+    for (const auto otherUsage : kMapExtendedUsages) {
         descriptor.usage = wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::CopySrc | otherUsage;
         wgpu::Buffer buffer = device.CreateBuffer(&descriptor);
 
@@ -1517,11 +1614,10 @@ TEST_P(BufferMapExtendedUsagesTests, MapWriteVertexBufferAndDraw) {
                                     utils::RGBA8::kGreen};
 
     // Create buffer with initial red color data.
-    wgpu::Buffer vertexBuffer = utils::CreateBufferFromData(
-        device, kReds, sizeof(kReds), wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::Vertex);
+    wgpu::Buffer vertexBuffer = CreateBufferFromData(
+        kReds, sizeof(kReds), wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::Vertex);
 
-    wgpu::RenderPipeline renderPipeline =
-        CreateRenderPipelineForTest(/*colorFromUniformBuffer=*/false);
+    wgpu::RenderPipeline renderPipeline = CreateRenderPipelineForTest(ColorSrc::VertexBuffer);
 
     auto redRenderPass = utils::CreateBasicRenderPass(device, 1, 1);
     auto greenRenderPass = utils::CreateBasicRenderPass(device, 1, 1);
@@ -1553,14 +1649,12 @@ TEST_P(BufferMapExtendedUsagesTests, MapWriteIndexBufferAndDraw) {
     const uint16_t kRedIndices[] = {0, 1, 2, 0};
     const uint16_t kGreenIndices[] = {3, 4, 5, 3};
 
-    wgpu::Buffer vertexBuffer = utils::CreateBufferFromData(
-        device, kVertexColors, sizeof(kVertexColors), wgpu::BufferUsage::Vertex);
-    wgpu::Buffer indexBuffer =
-        utils::CreateBufferFromData(device, kRedIndices, sizeof(kRedIndices),
-                                    wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::Index);
+    wgpu::Buffer vertexBuffer =
+        CreateBufferFromData(kVertexColors, sizeof(kVertexColors), wgpu::BufferUsage::Vertex);
+    wgpu::Buffer indexBuffer = CreateBufferFromData(
+        kRedIndices, sizeof(kRedIndices), wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::Index);
 
-    wgpu::RenderPipeline renderPipeline =
-        CreateRenderPipelineForTest(/*colorFromUniformBuffer=*/false);
+    wgpu::RenderPipeline renderPipeline = CreateRenderPipelineForTest(ColorSrc::VertexBuffer);
 
     auto redRenderPass = utils::CreateBasicRenderPass(device, 1, 1);
     auto greenRenderPass = utils::CreateBasicRenderPass(device, 1, 1);
@@ -1582,17 +1676,97 @@ TEST_P(BufferMapExtendedUsagesTests, MapWriteIndexBufferAndDraw) {
     EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kGreen, greenRenderPass.color, 0, 0);
 }
 
+// Test that mapping an occlusion QueryResolve buffer then draw with the buffer then mapping again
+// works.
+TEST_P(BufferMapExtendedUsagesTests, MapWriteQueryBufferThenDrawThenMapWrite) {
+    constexpr uint64_t kExpectedVal2 = 1;
+    constexpr uint64_t kExpectedVal3 = 2;
+    constexpr size_t kQueryResolveBufferSize = 3 * sizeof(uint64_t);
+    const utils::RGBA8 kReds[] = {utils::RGBA8::kRed, utils::RGBA8::kRed, utils::RGBA8::kRed};
+
+    // Create buffer with initial red color data.
+    wgpu::Buffer vertexBuffer =
+        CreateBufferFromData(kReds, sizeof(kReds), wgpu::BufferUsage::Vertex);
+
+    wgpu::RenderPipeline renderPipeline = CreateRenderPipelineForTest(ColorSrc::VertexBuffer);
+
+    // Create Occlusion Query Set
+    wgpu::QuerySet querySet;
+    {
+        wgpu::QuerySetDescriptor descriptor;
+        descriptor.count = 1;
+        descriptor.type = wgpu::QueryType::Occlusion;
+        querySet = device.CreateQuerySet(&descriptor);
+    }
+
+    // Create QueryResolve buffer with 2nd expected value written to 2nd uint64_t element.
+    wgpu::Buffer queryBuffer;
+    {
+        constexpr uint64_t kInitialData[] = {0, kExpectedVal2, 0};
+        queryBuffer =
+            CreateBufferFromData(kInitialData, sizeof(kInitialData),
+                                 wgpu::BufferUsage::QueryResolve | wgpu::BufferUsage::MapWrite |
+                                     wgpu::BufferUsage::CopySrc);
+    }
+
+    // Draw with occlusion query resolved to 1st uint64_t element.
+    {
+        auto renderPass = utils::CreateBasicRenderPass(device, 1, 1);
+        renderPass.renderPassInfo.occlusionQuerySet = querySet;
+        wgpu::CommandEncoder commandEncoder = device.CreateCommandEncoder();
+        wgpu::RenderPassEncoder renderPassEncoder =
+            commandEncoder.BeginRenderPass(&renderPass.renderPassInfo);
+        renderPassEncoder.SetPipeline(renderPipeline);
+        renderPassEncoder.SetVertexBuffer(0, vertexBuffer);
+        renderPassEncoder.BeginOcclusionQuery(0);
+        renderPassEncoder.Draw(3);
+        renderPassEncoder.EndOcclusionQuery();
+        renderPassEncoder.End();
+
+        commandEncoder.ResolveQuerySet(querySet, 0, 1, queryBuffer, 0);
+
+        wgpu::CommandBuffer commands = commandEncoder.Finish();
+        queue.Submit(1, &commands);
+    }
+
+    // Map write to 3rd uint64_t element
+    {
+        constexpr size_t k3rdElemOffset = 2 * sizeof(uint64_t);
+        MapAsyncAndWait(queryBuffer, wgpu::MapMode::Write, 0, kQueryResolveBufferSize);
+        ASSERT_NE(nullptr, queryBuffer.GetMappedRange());
+        memcpy(queryBuffer.GetMappedRange(k3rdElemOffset), &kExpectedVal3, sizeof(kExpectedVal3));
+        queryBuffer.Unmap();
+    }
+
+    class NonZeroExpectation : public detail::Expectation {
+      public:
+        testing::AssertionResult Check(const void* data, size_t size) override {
+            DAWN_ASSERT(size % sizeof(uint64_t) == 0);
+            const uint64_t* actual = static_cast<const uint64_t*>(data);
+
+            if (actual[0] == 0) {
+                return testing::AssertionFailure() << "Expected data[0] to be non-zero.\n";
+            }
+
+            return testing::AssertionSuccess();
+        }
+    };
+
+    EXPECT_BUFFER(queryBuffer, 0, sizeof(uint64_t), new NonZeroExpectation());
+    EXPECT_BUFFER_U64_EQ(kExpectedVal2, queryBuffer, sizeof(uint64_t));
+    EXPECT_BUFFER_U64_EQ(kExpectedVal3, queryBuffer, 2 * sizeof(uint64_t));
+}
+
 // Test that mapping a uniform buffer, modifying the data then draw with the buffer works.
 TEST_P(BufferMapExtendedUsagesTests, MapWriteUniformBufferAndDraw) {
     const float kRed[] = {1.0f, 0.0f, 0.0f, 1.0f};
     const float kGreen[] = {0.0f, 1.0f, 0.0f, 1.0f};
 
     // Create buffer with initial red color data.
-    wgpu::Buffer uniformBuffer = utils::CreateBufferFromData(
-        device, &kRed, sizeof(kRed), wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::Uniform);
+    wgpu::Buffer uniformBuffer = CreateBufferFromData(
+        &kRed, sizeof(kRed), wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::Uniform);
 
-    wgpu::RenderPipeline renderPipeline =
-        CreateRenderPipelineForTest(/*colorFromUniformBuffer=*/true);
+    wgpu::RenderPipeline renderPipeline = CreateRenderPipelineForTest(ColorSrc::UniformBuffer);
     wgpu::BindGroup uniformsBindGroup = utils::MakeBindGroup(
         device, renderPipeline.GetBindGroupLayout(0), {{0, uniformBuffer, 0, sizeof(kRed)}});
 
@@ -1608,6 +1782,39 @@ TEST_P(BufferMapExtendedUsagesTests, MapWriteUniformBufferAndDraw) {
     ASSERT_NE(nullptr, uniformBuffer.GetMappedRange());
     memcpy(uniformBuffer.GetMappedRange(), &kGreen, sizeof(kGreen));
     uniformBuffer.Unmap();
+
+    EncodeAndSubmitRenderPassForTest(greenRenderPass.renderPassInfo, renderPipeline, nullptr,
+                                     nullptr, uniformsBindGroup);
+
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kRed, redRenderPass.color, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kGreen, greenRenderPass.color, 0, 0);
+}
+
+// Test that mapping a storage buffer, modifying the data then draw with the buffer works.
+TEST_P(BufferMapExtendedUsagesTests, MapWriteStorageBufferAndDraw) {
+    const float kRed[] = {1.0f, 0.0f, 0.0f, 1.0f};
+    const float kGreen[] = {0.0f, 1.0f, 0.0f, 1.0f};
+
+    // Create buffer with initial red color data.
+    wgpu::Buffer storageBuffer = CreateBufferFromData(
+        &kRed, sizeof(kRed), wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::Storage);
+
+    wgpu::RenderPipeline renderPipeline = CreateRenderPipelineForTest(ColorSrc::StorageBuffer);
+    wgpu::BindGroup uniformsBindGroup = utils::MakeBindGroup(
+        device, renderPipeline.GetBindGroupLayout(0), {{0, storageBuffer, 0, sizeof(kRed)}});
+
+    auto redRenderPass = utils::CreateBasicRenderPass(device, 1, 1);
+    auto greenRenderPass = utils::CreateBasicRenderPass(device, 1, 1);
+
+    // First render pass: draw with red color uniform buffer.
+    EncodeAndSubmitRenderPassForTest(redRenderPass.renderPassInfo, renderPipeline, nullptr, nullptr,
+                                     uniformsBindGroup);
+
+    // Second render pass: draw with green color uniform buffer.
+    MapAsyncAndWait(storageBuffer, wgpu::MapMode::Write, 0, sizeof(kGreen));
+    ASSERT_NE(nullptr, storageBuffer.GetMappedRange());
+    memcpy(storageBuffer.GetMappedRange(), &kGreen, sizeof(kGreen));
+    storageBuffer.Unmap();
 
     EncodeAndSubmitRenderPassForTest(greenRenderPass.renderPassInfo, renderPipeline, nullptr,
                                      nullptr, uniformsBindGroup);
@@ -1680,10 +1887,215 @@ TEST_P(BufferMapExtendedUsagesTests, MapWriteThenGPUWriteStorageBufferThenMapRea
     ssbo.Unmap();
 }
 
-DAWN_INSTANTIATE_TEST_P(BufferMapExtendedUsagesTests,
-                        {D3D11Backend(), D3D12Backend(), MetalBackend(), OpenGLBackend(),
-                         OpenGLESBackend(), VulkanBackend()},
-                        {std::nullopt});
+// Test the follow scenario:
+// - map write a buffer
+// - modifying it on GPU.
+// - map write it again.
+// - draw using the buffer.
+void BufferMapExtendedUsagesTests::MixMapWriteAndGPUWriteBufferThenDraw(ColorSrc colorSrc) {
+    const float kRed[] = {1.0f, 0.0f, 0.0f, 1.0f};
+    const float kFinalColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
+    constexpr size_t kSize = sizeof(kFinalColor);
+
+    // Create buffer with initial red color data.
+    wgpu::Buffer ssbo;
+    {
+        wgpu::BufferUsage usage =
+            wgpu::BufferUsage::Storage | wgpu::BufferUsage::MapRead | wgpu::BufferUsage::MapWrite;
+
+        switch (colorSrc) {
+            case ColorSrc::UniformBuffer:
+                usage |= wgpu::BufferUsage::Uniform;
+                break;
+            case ColorSrc::VertexBuffer:
+                usage |= wgpu::BufferUsage::Vertex;
+                break;
+            case ColorSrc::StorageBuffer:
+                // already include
+                break;
+        }
+        ssbo = CreateBufferFromData(&kRed, kSize, usage);
+    }
+
+    // Compute pipeline
+    wgpu::ComputePipeline pipeline;
+    {
+        wgpu::ComputePipelineDescriptor csDesc;
+        csDesc.compute.module = utils::CreateShaderModule(device, R"(
+            @group(0) @binding(0) var<storage, read_write> ssbo : vec4f;
+            @compute @workgroup_size(1) fn main() {
+                ssbo.g = 1.0;
+            })");
+
+        pipeline = device.CreateComputePipeline(&csDesc);
+    }
+
+    // Modify the buffer's green channel in compute shader.
+    {
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
+
+        ASSERT_NE(nullptr, pipeline.Get());
+        wgpu::BindGroup ssboWritebindGroup =
+            utils::MakeBindGroup(device, pipeline.GetBindGroupLayout(0),
+                                 {
+                                     {0, ssbo, 0, kSize},
+                                 });
+        pass.SetBindGroup(0, ssboWritebindGroup);
+        pass.SetPipeline(pipeline);
+        pass.DispatchWorkgroups(1);
+        pass.End();
+
+        wgpu::CommandBuffer commands = encoder.Finish();
+
+        queue.Submit(1, &commands);
+    }
+
+    // MapWrite and modify the buffer's blue channel
+    {
+        const float kOne = 1.0f;
+        constexpr size_t kBlueChannelOffset = 2 * sizeof(float);
+        MapAsyncAndWait(ssbo, wgpu::MapMode::Write, 0, kSize);
+        ASSERT_NE(nullptr, ssbo.GetMappedRange());
+        memcpy(ssbo.GetMappedRange(kBlueChannelOffset), &kOne, sizeof(kOne));
+        ssbo.Unmap();
+    }
+
+    // Draw using the color from the buffer.
+    {
+        // Render pipeline
+        wgpu::RenderPipeline renderPipeline = CreateRenderPipelineForTest(
+            colorSrc, wgpu::VertexStepMode::Instance, wgpu::VertexFormat::Float32x4);
+
+        wgpu::Buffer vertexBuffer;
+        wgpu::BindGroup ssboReadBindGroup;
+        switch (colorSrc) {
+            case ColorSrc::VertexBuffer:
+                vertexBuffer = ssbo;
+                break;
+            case ColorSrc::UniformBuffer:
+            case ColorSrc::StorageBuffer:
+                ssboReadBindGroup = utils::MakeBindGroup(
+                    device, renderPipeline.GetBindGroupLayout(0), {{0, ssbo, 0, kSize}});
+                break;
+        }
+
+        auto finalRenderPass = utils::CreateBasicRenderPass(device, 1, 1);
+        EncodeAndSubmitRenderPassForTest(finalRenderPass.renderPassInfo, renderPipeline,
+                                         vertexBuffer, nullptr, ssboReadBindGroup);
+
+        EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kWhite, finalRenderPass.color, 0, 0);
+    }
+
+    // Read the final value.
+    MapAsyncAndWait(ssbo, wgpu::MapMode::Read, 0, kSize);
+    CheckMapping(ssbo.GetConstMappedRange(0, kSize), &kFinalColor, kSize);
+    ssbo.Unmap();
+}
+
+TEST_P(BufferMapExtendedUsagesTests, MixMapWriteAndGPUWriteVertexBufferThenDraw) {
+    MixMapWriteAndGPUWriteBufferThenDraw(ColorSrc::VertexBuffer);
+}
+
+TEST_P(BufferMapExtendedUsagesTests, MixMapWriteAndGPUWriteUniformBufferThenDraw) {
+    MixMapWriteAndGPUWriteBufferThenDraw(ColorSrc::UniformBuffer);
+}
+
+TEST_P(BufferMapExtendedUsagesTests, MixMapWriteAndGPUWriteStorageBufferThenDraw) {
+    MixMapWriteAndGPUWriteBufferThenDraw(ColorSrc::StorageBuffer);
+}
+
+// Test the follow scenario:
+// - map write a storage buffer
+// - modifying it on GPU.
+// - copy another buffer to the storage buffer.
+// - draw using the storage buffer.
+TEST_P(BufferMapExtendedUsagesTests,
+       MapWriteThenGPUWriteStorageBufferThenCopyFromAnotherBufferThenDraw) {
+    const float kRed[] = {1.0f, 0.0f, 0.0f, 1.0f};
+    const float kBlue[] = {0.0f, 0.0f, 1.0f, 1.0f};
+    const float kFinalColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
+    constexpr size_t kSize = sizeof(kFinalColor);
+
+    // Create buffer with initial red color data.
+    wgpu::Buffer ssbo;
+    {
+        wgpu::BufferDescriptor descriptor;
+        descriptor.size = kSize;
+
+        descriptor.usage =
+            wgpu::BufferUsage::Storage | wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::CopyDst;
+        ssbo = device.CreateBuffer(&descriptor);
+
+        MapAsyncAndWait(ssbo, wgpu::MapMode::Write, 0, kSize);
+        ASSERT_NE(nullptr, ssbo.GetMappedRange());
+        memcpy(ssbo.GetMappedRange(), &kRed, kSize);
+        ssbo.Unmap();
+    }
+    // Create buffer with blue color data.
+    wgpu::Buffer blueBuffer =
+        utils::CreateBufferFromData(device, &kBlue, sizeof(kBlue), wgpu::BufferUsage::CopySrc);
+
+    // Compute pipeline
+    wgpu::ComputePipeline pipeline;
+    {
+        wgpu::ComputePipelineDescriptor csDesc;
+        csDesc.compute.module = utils::CreateShaderModule(device, R"(
+            @group(0) @binding(0) var<storage, read_write> ssbo : vec4f;
+            @compute @workgroup_size(1) fn main() {
+                ssbo.g = 1.0;
+            })");
+
+        pipeline = device.CreateComputePipeline(&csDesc);
+    }
+
+    // Modify the buffer's green channel in compute shader.
+
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    {
+        wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
+
+        ASSERT_NE(nullptr, pipeline.Get());
+        wgpu::BindGroup ssboWritebindGroup =
+            utils::MakeBindGroup(device, pipeline.GetBindGroupLayout(0),
+                                 {
+                                     {0, ssbo, 0, kSize},
+                                 });
+        pass.SetBindGroup(0, ssboWritebindGroup);
+        pass.SetPipeline(pipeline);
+        pass.DispatchWorkgroups(1);
+        pass.End();
+    }
+
+    // Modify the buffer's blue channel with CopyB2B
+    {
+        constexpr size_t kBlueChannelOffset = 2 * sizeof(float);
+        encoder.CopyBufferToBuffer(blueBuffer, kBlueChannelOffset, ssbo, kBlueChannelOffset,
+                                   sizeof(float));
+    }
+
+    // Draw using the color from the buffer.
+    {
+        // Render pipeline
+        wgpu::RenderPipeline renderPipeline = CreateRenderPipelineForTest(ColorSrc::StorageBuffer);
+        wgpu::BindGroup ssboReadBindGroup = utils::MakeBindGroup(
+            device, renderPipeline.GetBindGroupLayout(0), {{0, ssbo, 0, kSize}});
+
+        auto finalRenderPass = utils::CreateBasicRenderPass(device, 1, 1);
+        EncodeAndSubmitRenderPassForTest(finalRenderPass.renderPassInfo, renderPipeline, nullptr,
+                                         nullptr, ssboReadBindGroup, std::move(encoder));
+
+        EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kWhite, finalRenderPass.color, 0, 0);
+    }
+}
+
+DAWN_INSTANTIATE_TEST(BufferMapExtendedUsagesTests,
+                      D3D11Backend(),
+                      D3D12Backend(),
+                      MetalBackend(),
+                      OpenGLBackend(),
+                      OpenGLESBackend(),
+                      VulkanBackend());
 
 }  // anonymous namespace
 }  // namespace dawn

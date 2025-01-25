@@ -9,7 +9,9 @@
 #include "base/base64.h"
 #include "base/functional/callback.h"
 #include "base/location.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
+#include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
 #include "components/password_manager/core/browser/passkey_credential.h"
 #include "components/password_manager/core/browser/password_ui_utils.h"
@@ -34,6 +36,12 @@ using device::AuthenticatorType;
 // `passkey_selected_callback_` at least 300ms to avoid the flicker.
 // TODO(crbug.com/332619045): Move this to a UI layer.
 constexpr base::TimeDelta kFlickerDuration = base::Milliseconds(300);
+
+bool IsGpmPasskeyAuthenticatorType(AuthenticatorType type) {
+  return type == AuthenticatorType::kEnclave ||
+         type == AuthenticatorType::kChromeOSPasskeys;
+}
+
 #endif  // !BUILDFLAG(IS_ANDROID)
 }  // namespace
 
@@ -84,14 +92,21 @@ void ChromeWebAuthnCredentialsDelegate::SelectPasskey(
     std::move(callback).Run();
     return;
   }
+  if (passkey_selected_callback_) {
+    // The user tapped on another passkey while the enclave was loading. Ignore
+    // the tap.
+    // TODO(crbug.com/344950143): Disable the rows that are not supposed to be
+    // clicked.
+    return;
+  }
   passkey_selected_callback_ = std::move(callback);
   authenticator_observation_.Observe(authenticator_delegate->dialog_model());
   AuthenticatorType credential_source =
       authenticator_delegate->dialog_controller()->OnAccountPreselected(
           *selected_credential_id);
-  // If the credential is not from the enclave authenticator, we do not need to
+  // If the credential is not from a GPM authenticator, we do not need to
   // observe the model anymore.
-  if (credential_source != AuthenticatorType::kEnclave) {
+  if (!IsGpmPasskeyAuthenticatorType(credential_source)) {
     authenticator_observation_.Reset();
     std::move(passkey_selected_callback_).Run();
   }
@@ -108,13 +123,21 @@ ChromeWebAuthnCredentialsDelegate::AsWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
+bool ChromeWebAuthnCredentialsDelegate::HasPendingPasskeySelection() {
+#if BUILDFLAG(IS_ANDROID)
+  return false;
+#else
+  return !passkey_selected_callback_.is_null();
+#endif  // BUILDFLAG(IS_ANDROID)
+}
+
 #if !BUILDFLAG(IS_ANDROID)
 void ChromeWebAuthnCredentialsDelegate::OnStepTransition() {
   AuthenticatorRequestDialogModel* model =
       authenticator_observation_.GetSource();
   CHECK(model) << "The model just stepped but not registered as source.";
   if (!passkey_selected_callback_ || !model->preselected_cred.has_value() ||
-      model->preselected_cred.value().source != AuthenticatorType::kEnclave) {
+      !IsGpmPasskeyAuthenticatorType(model->preselected_cred.value().source)) {
     return;
   }
   // Do not dismiss the autofill popup when the AuthenticatorRequestDialogModel
@@ -134,7 +157,9 @@ bool ChromeWebAuthnCredentialsDelegate::OfferPasskeysFromAnotherDeviceOption()
 
 void ChromeWebAuthnCredentialsDelegate::RetrievePasskeys(
     base::OnceClosure callback) {
+  passkey_retrieval_timer_ = std::make_unique<base::ElapsedTimer>();
   if (passkeys_.has_value()) {
+    RecordPasskeyRetrievalDelay();
     // Entries were already populated from the WebAuthn request.
     std::move(callback).Run();
     return;
@@ -149,6 +174,7 @@ void ChromeWebAuthnCredentialsDelegate::OnCredentialsReceived(
   passkeys_ = std::move(credentials);
   offer_passkey_from_another_device_ = offer_passkey_from_another_device;
   if (retrieve_passkeys_callback_) {
+    RecordPasskeyRetrievalDelay();
     std::move(retrieve_passkeys_callback_).Run();
   }
 }
@@ -186,3 +212,11 @@ void ChromeWebAuthnCredentialsDelegate::SetAndroidHybridAvailable(
   android_hybrid_available_ = available;
 }
 #endif
+
+void ChromeWebAuthnCredentialsDelegate::RecordPasskeyRetrievalDelay() {
+  if (passkey_retrieval_timer_) {
+    base::UmaHistogramTimes("PasswordManager.PasskeyRetrievalWaitDuration",
+                            passkey_retrieval_timer_->Elapsed());
+    passkey_retrieval_timer_.reset();
+  }
+}

@@ -386,8 +386,12 @@ following members:
      The string should be drawn from a small set of constant values, to minimize
      entropy and the ability for the client to be fingerprinted. Default: "".
  *   `installsource`: A string describing the immediate cause of this request.
-     Known values include: "" (a normal background update) and "ondemand" (a
-     foreground, user-initiated update). Default: "".
+     Default: "". Known values include:
+      *  "" (a normal background update),
+      *  "ondemand" (a foreground, user-initiated update),
+      *  "taggedmi" (a tagged metainstaller was run),
+      *  "offline" (an offline installer was run),
+      *  "policy" (an install was triggered by group policy),
      The string should be drawn from a small set of constant values, to minimize
      entropy and the ability for the client to be fingerprinted.
  *   `ismachine`: "0" if the application is installed for the user specifically
@@ -860,9 +864,10 @@ attmpted as part of this update session. All events have the following members:
      *   0: No category / unknown.
      *   1: Errors acquiring the download.
      *   2: Errors during CRX unpacking.
-     *   3: Errors during installation.
+     *   3: Update client errors during installation.
      *   4: Errors within the update service itself.
      *   5: Error during update check.
+     *   7: Application installer errors during installation.
  *   `errorcode`: The error code (if any) of the operation. Default: 0. The
      meaning of an error code may depend on the error category. 0 always means
      "no error" (success).

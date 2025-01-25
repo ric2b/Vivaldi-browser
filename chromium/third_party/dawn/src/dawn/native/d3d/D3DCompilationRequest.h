@@ -30,9 +30,7 @@
 
 #include <d3dcompiler.h>
 
-#include <string>
-#include <unordered_map>
-#include <vector>
+#include <string_view>
 
 #include "dawn/native/CacheRequest.h"
 #include "dawn/native/Serializable.h"
@@ -57,8 +55,6 @@ namespace dawn::native::d3d {
 
 enum class Compiler { FXC, DXC };
 
-using AccessControl = std::unordered_map<tint::BindingPoint, tint::core::Access>;
-
 using InterStageShaderVariablesMask = std::bitset<tint::hlsl::writer::kMaxInterStageLocations>;
 
 #define HLSL_COMPILATION_REQUEST_MEMBERS(X)                                                      \
@@ -81,6 +77,7 @@ using InterStageShaderVariablesMask = std::bitset<tint::hlsl::writer::kMaxInterS
     X(LimitsForCompilationRequest, limits)                                                       \
     X(bool, disableSymbolRenaming)                                                               \
     X(bool, dumpShaders)                                                                         \
+    X(bool, useTintIR)                                                                           \
     X(std::optional<uint32_t>, maxSubgroupSizeForFullSubgroups)
 
 #define D3D_BYTECODE_COMPILATION_REQUEST_MEMBERS(X) \

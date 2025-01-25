@@ -25,58 +25,104 @@ mod tests;
 
 use array_view::ArrayView;
 use core::fmt;
-use crypto_provider::{aes::BLOCK_SIZE, CryptoProvider};
-use ldt::{LdtDecryptCipher, LdtEncryptCipher, LdtError, Mix, Padder, Swap, XorPadder};
-use ldt_tbc::TweakableBlockCipher;
-use np_hkdf::{legacy_ldt_expanded_salt, NpHmacSha256Key, NpKeySeedHkdf};
+use core::ops;
+use crypto_provider::{aes::BLOCK_SIZE, CryptoProvider, CryptoRng, FromCryptoRng};
+use ldt::{LdtCipher, LdtDecryptCipher, LdtEncryptCipher, LdtError, Swap, XorPadder};
+use np_hkdf::{v0_ldt_expanded_salt, NpHmacSha256Key, NpKeySeedHkdf};
 use xts_aes::XtsAes128;
 
 /// Max LDT-XTS-AES data size: `(2 * AES block size) - 1`
 pub const LDT_XTS_AES_MAX_LEN: usize = 31;
 
-/// Legacy (v0) format uses a 14-byte metadata key
-pub const NP_LEGACY_METADATA_KEY_LEN: usize = 14;
+/// V0 format uses a 14-byte identity token
+pub const V0_IDENTITY_TOKEN_LEN: usize = 14;
 
-/// The salt included in an NP advertisement.
+/// Max payload size once identity token prefix has been removed
+pub const NP_LDT_MAX_EFFECTIVE_PAYLOAD_LEN: usize = LDT_XTS_AES_MAX_LEN - V0_IDENTITY_TOKEN_LEN;
+
+/// Length of a V0 advertisement salt
+pub const V0_SALT_LEN: usize = 2;
+
+/// The salt included in a V0 NP advertisement.
 /// LDT does not use an IV but can instead incorporate the 2 byte, regularly rotated,
 /// salt from the advertisement payload and XOR it with the padded tweak data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LegacySalt {
+pub struct V0Salt {
     /// Salt bytes extracted from the incoming NP advertisement
-    bytes: [u8; 2],
+    bytes: [u8; V0_SALT_LEN],
 }
 
-impl LegacySalt {
+impl V0Salt {
     /// Returns the salt as a byte array.
-    pub fn bytes(&self) -> &[u8; 2] {
-        &self.bytes
+    pub fn bytes(&self) -> [u8; V0_SALT_LEN] {
+        self.bytes
     }
 }
 
-impl From<[u8; 2]> for LegacySalt {
-    fn from(arr: [u8; 2]) -> Self {
+impl From<[u8; V0_SALT_LEN]> for V0Salt {
+    fn from(arr: [u8; V0_SALT_LEN]) -> Self {
         Self { bytes: arr }
     }
 }
 
-/// [LdtEncryptCipher] parameterized for XTS-AES-128 with the [Swap] mix function.
-pub type LdtEncrypterXtsAes128<C> = LdtEncryptCipher<{ BLOCK_SIZE }, XtsAes128<C>, Swap>;
+/// "Short" 14-byte identity token type employed for V0
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct V0IdentityToken([u8; V0_IDENTITY_TOKEN_LEN]);
 
-/// A Nearby Presence specific LDT decrypter which verifies the hmac tag of the given payload
-/// parameterized for XTS-AES-128 with the [Swap] mix function.
-pub type LdtNpAdvDecrypterXtsAes128<C> =
-    LdtNpAdvDecrypter<{ BLOCK_SIZE }, LDT_XTS_AES_MAX_LEN, XtsAes128<C>, Swap, C>;
+impl V0IdentityToken {
+    /// Constructs a V0 identity token from raw bytes.
+    pub const fn new(value: [u8; V0_IDENTITY_TOKEN_LEN]) -> Self {
+        Self(value)
+    }
+    /// Returns the underlying bytes
+    pub fn bytes(&self) -> [u8; V0_IDENTITY_TOKEN_LEN] {
+        self.0
+    }
+
+    /// Returns the token bytes as a slice
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl From<[u8; V0_IDENTITY_TOKEN_LEN]> for V0IdentityToken {
+    fn from(value: [u8; V0_IDENTITY_TOKEN_LEN]) -> Self {
+        Self(value)
+    }
+}
+
+impl AsRef<[u8]> for V0IdentityToken {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl FromCryptoRng for V0IdentityToken {
+    fn new_random<R: CryptoRng>(rng: &mut R) -> Self {
+        Self(rng.gen())
+    }
+}
+
+/// [LdtEncryptCipher] parameterized for XTS-AES-128 with the [Swap] mix function.
+pub type NpLdtEncryptCipher<C> = LdtEncryptCipher<{ BLOCK_SIZE }, XtsAes128<C>, Swap>;
+
+/// [LdtDecryptCipher] parameterized for XTS-AES-128 with the [Swap] mix function.
+type NpLdtDecryptCipher<C> = LdtDecryptCipher<{ BLOCK_SIZE }, XtsAes128<C>, Swap>;
+
+/// Range of valid NP LDT message lengths for encryption/decryption, in a convenient form that
+/// doesn't need a CryptoProvider parameter.
+pub const VALID_INPUT_LEN: ops::Range<usize> = BLOCK_SIZE..BLOCK_SIZE * 2;
 
 /// Build a Nearby Presence specific LDT XTS-AES-128 decrypter from a provided [NpKeySeedHkdf] and
 /// metadata_key_hmac, with the [Swap] mix function
 pub fn build_np_adv_decrypter_from_key_seed<C: CryptoProvider>(
     key_seed: &NpKeySeedHkdf<C>,
-    metadata_key_tag: [u8; 32],
-) -> LdtNpAdvDecrypterXtsAes128<C> {
+    identity_token_hmac: [u8; 32],
+) -> AuthenticatedNpLdtDecryptCipher<C> {
     build_np_adv_decrypter(
-        &key_seed.legacy_ldt_key(),
-        metadata_key_tag,
-        key_seed.legacy_metadata_key_hmac_key(),
+        &key_seed.v0_ldt_key(),
+        identity_token_hmac,
+        key_seed.v0_identity_token_hmac_key(),
     )
 }
 
@@ -84,28 +130,25 @@ pub fn build_np_adv_decrypter_from_key_seed<C: CryptoProvider>(
 /// with the [Swap] mix function
 pub fn build_np_adv_decrypter<C: CryptoProvider>(
     ldt_key: &ldt::LdtKey<xts_aes::XtsAes128Key>,
-    metadata_key_tag: [u8; 32],
-    metadata_key_hmac_key: NpHmacSha256Key<C>,
-) -> LdtNpAdvDecrypterXtsAes128<C> {
-    LdtNpAdvDecrypter {
-        ldt_decrypter: LdtXtsAes128Decrypter::<C>::new(ldt_key),
-        metadata_key_tag,
-        metadata_key_hmac_key,
+    identity_token_hmac: [u8; 32],
+    identity_token_hmac_key: NpHmacSha256Key,
+) -> AuthenticatedNpLdtDecryptCipher<C> {
+    AuthenticatedNpLdtDecryptCipher {
+        ldt_decrypter: NpLdtDecryptCipher::<C>::new(ldt_key),
+        metadata_key_tag: identity_token_hmac,
+        metadata_key_hmac_key: identity_token_hmac_key,
     }
 }
-
-// [LdtDecryptCipher] parameterized for XTS-AES-128 with the [Swap] mix function.
-type LdtXtsAes128Decrypter<C> = LdtDecryptCipher<{ BLOCK_SIZE }, XtsAes128<C>, Swap>;
 
 /// Decrypts and validates a NP legacy format advertisement encrypted with LDT.
 ///
 /// A NP legacy advertisement will always be in the format of:
 ///
-/// Header (1 byte) | Identity DE header (1 byte) | Salt (2 bytes) | Identity (14 bytes) | repeated
+/// Header (1 byte) | Salt (2 bytes) | Identity token (14 bytes) | repeated
 /// { DE header | DE payload }
 ///
 /// Example:
-/// Header (1 byte) | Identity DE header (1 byte) | Salt (2 bytes) | Identity (14 bytes) |
+/// Header (1 byte) | Salt (2 bytes) | Identity token (14 bytes) |
 /// Tx power DE header (1 byte) | Tx power (1 byte) | Action DE header(1 byte) | action (1-3 bytes)
 ///
 /// The ciphertext bytes will always start with the Identity through the end of the
@@ -117,70 +160,61 @@ type LdtXtsAes128Decrypter<C> = LdtDecryptCipher<{ BLOCK_SIZE }, XtsAes128<C>, S
 /// `O` is the max output size (must be 2 * B - 1).
 /// `T` is the tweakable block cipher used by LDT.
 /// `M` is the mix function used by LDT.
-pub struct LdtNpAdvDecrypter<
-    const B: usize,
-    const O: usize,
-    T: TweakableBlockCipher<B>,
-    M: Mix,
-    C: CryptoProvider,
-> {
-    ldt_decrypter: LdtDecryptCipher<B, T, M>,
+pub struct AuthenticatedNpLdtDecryptCipher<C: CryptoProvider> {
+    ldt_decrypter: LdtDecryptCipher<BLOCK_SIZE, XtsAes128<C>, Swap>,
     metadata_key_tag: [u8; 32],
-    metadata_key_hmac_key: NpHmacSha256Key<C>,
+    metadata_key_hmac_key: NpHmacSha256Key,
 }
 
-impl<const B: usize, const O: usize, T, M, C> LdtNpAdvDecrypter<B, O, T, M, C>
-where
-    T: TweakableBlockCipher<B>,
-    M: Mix,
-    C: CryptoProvider,
-{
+impl<C: CryptoProvider> AuthenticatedNpLdtDecryptCipher<C> {
     /// Decrypt an advertisement payload using the provided padder.
     ///
-    /// If the plaintext's metadata key matches this item's MAC, return the plaintext, otherwise `None`.
+    /// If the plaintext's identity token matches this decrypter's MAC, returns the verified identity
+    /// token and the remaining plaintext (the bytes after the identity token).
     ///
     /// NOTE: because LDT acts as a PRP over the entire message, tampering with any bit scrambles
     /// the whole message, so we can leverage the MAC on just the metadata key to ensure integrity
     /// for the whole message.
     ///
     /// # Errors
-    /// - If `payload` has a length outside of `[B, B * 2)`.
+    /// - If `payload` has a length outside `[BLOCK_SIZE, BLOCK_SIZE * 2)`.
     /// - If the decrypted plaintext fails its HMAC validation
-    pub fn decrypt_and_verify<P: Padder<B, T>>(
+    #[allow(clippy::expect_used, clippy::indexing_slicing)]
+    pub fn decrypt_and_verify(
         &self,
         payload: &[u8],
-        padder: &P,
-    ) -> Result<ArrayView<u8, O>, LdtAdvDecryptError> {
-        assert_eq!(B * 2 - 1, O); // should be compiled away
-
-        // have to check length before passing to LDT to ensure copying into the buffer is safe
-        if payload.len() < B || payload.len() > O {
-            return Err(LdtAdvDecryptError::InvalidLength(payload.len()));
-        }
-
+        padder: &XorPadder<BLOCK_SIZE>,
+    ) -> Result<
+        (V0IdentityToken, ArrayView<u8, NP_LDT_MAX_EFFECTIVE_PAYLOAD_LEN>),
+        LdtAdvDecryptError,
+    > {
         // we copy to avoid exposing plaintext that hasn't been validated w/ hmac
-        let mut buffer = [0_u8; O];
-        buffer[..payload.len()].copy_from_slice(payload);
+        let mut buffer = [0_u8; LDT_XTS_AES_MAX_LEN];
+        let populated_buffer = buffer
+            .get_mut(..payload.len())
+            .ok_or(LdtAdvDecryptError::InvalidLength(payload.len()))?;
+        populated_buffer.copy_from_slice(payload);
 
-        #[allow(clippy::expect_used)]
-        self.ldt_decrypter
-            .decrypt(&mut buffer[..payload.len()], padder)
-            .map_err(|e| match e {
-                LdtError::InvalidLength(l) => LdtAdvDecryptError::InvalidLength(l),
-            })
-            .and_then(|_| {
-                self.metadata_key_hmac_key
-                    .verify_hmac(&buffer[..NP_LEGACY_METADATA_KEY_LEN], self.metadata_key_tag)
-                    .map_err(|_| LdtAdvDecryptError::MacMismatch)
-                    .map(|_| {
-                        ArrayView::try_from_array(buffer, payload.len())
-                            .expect("this will never be hit because the length is validated above")
-                    })
-            })
+        self.ldt_decrypter.decrypt(populated_buffer, padder).map_err(|e| match e {
+            LdtError::InvalidLength(l) => LdtAdvDecryptError::InvalidLength(l),
+        })?;
+        // slice is safe since input is a valid LDT-XTS-AES len
+        let identity_token = &populated_buffer[..V0_IDENTITY_TOKEN_LEN];
+        self.metadata_key_hmac_key
+            .verify_hmac::<C>(identity_token, self.metadata_key_tag)
+            .map_err(|_| LdtAdvDecryptError::MacMismatch)?;
+
+        let token_arr: [u8; V0_IDENTITY_TOKEN_LEN] =
+            identity_token.try_into().expect("Length verified above");
+        Ok((
+            token_arr.into(),
+            ArrayView::try_from_slice(&buffer[V0_IDENTITY_TOKEN_LEN..payload.len()])
+                .expect("Buffer len less token len is the max output len"),
+        ))
     }
 }
 
-/// Errors that can occur during [LdtNpAdvDecrypter::decrypt_and_verify].
+/// Errors that can occur during [AuthenticatedNpLdtDecryptCipher::decrypt_and_verify].
 #[derive(Debug, PartialEq, Eq)]
 pub enum LdtAdvDecryptError {
     /// The ciphertext data was an invalid length.
@@ -199,9 +233,8 @@ impl fmt::Display for LdtAdvDecryptError {
         }
     }
 }
+
 /// Build a XorPadder by HKDFing the NP advertisement salt
-pub fn salt_padder<const B: usize, C: CryptoProvider>(salt: LegacySalt) -> XorPadder<{ B }> {
-    // Assuming that the tweak size == the block size here, which it is for XTS.
-    // If that's ever not true, yet another generic parameter will address that.
-    XorPadder::from(legacy_ldt_expanded_salt::<B, C>(&salt.bytes))
+pub fn salt_padder<C: CryptoProvider>(salt: V0Salt) -> XorPadder<BLOCK_SIZE> {
+    XorPadder::from(v0_ldt_expanded_salt::<C>(&salt.bytes))
 }

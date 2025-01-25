@@ -547,12 +547,6 @@ causes them to be invalidated.
             as needed during X server startup. They’re removed on the first boot
             after any update; this happens in src/install-completed.conf in
             src/platform/installer.
-*   The VPD cache - this collection of files is created by dump_vpd_logs
-            during basic services startup; see the sources under
-            src/platform/vpd for more details. The cached data comes from
-            read-only firmware and never needs to be invalidated. However, after
-            powerwash, the read-only firmware must be re-read, and this can be
-            expensive on some platforms.
 
 ### Measuring Performance
 
@@ -835,13 +829,13 @@ command if the system application fails at startup.
 
 Pattern your job after this:
 
-> `start on started system-services`
+```
+start on started system-services
 
-> ` script`
-
-> ` # … initialization commands ...`
-
-> ` end script`
+script
+# … initialization commands
+end script
+```
 
 #### Simple daemon
 
@@ -850,19 +844,17 @@ daemon stores working data in a directory under /var/lib.
 
 Pattern your job after this:
 
-> `start on started system-services`
+```
+start on started system-services
+stop on stopping system-services
+respawn
 
-> ` stop on stopping system-services`
+pre-start script
+mkdir -p /var/lib/my-daemon
+end script
 
-> ` respawn`
-
-> ` pre-start script`
-
-> ` mkdir -p /var/lib/my-daemon`
-
-> ` end script`
-
-> ` exec my-daemon`
+exec my-daemon
+```
 
 Many daemons require expect fork or expect daemon in addition to respawn.
 Consult your friendly neighborhood Upstart guru for advice.
@@ -876,13 +868,13 @@ to connecting to the failed unit in order to repair or debug it.
 
 Pattern your job after this:
 
-> `start on started failsafe`
+```
+start on started failsafe
+stop on stopping failsafe
+respawn
 
-> `stop on stopping failsafe`
-
-> `respawn`
-
-> `exec my-important-administrative-daemon`
+exec my-important-administrative-daemon
+```
 
 #### Service Required by the System Application
 
@@ -893,10 +885,13 @@ it’s ready.
 
 Pattern your job after this:
 
-> `start on started boot-services`
-> `stop on stopping boot-services`
-> `respawn`
-> `exec my-important-daemon`
+```
+start on started boot-services
+stop on stopping boot-services
+respawn
+
+exec my-important-daemon
+```
 
 #### Initialization That Blocks Chrome Startup
 
@@ -905,15 +900,14 @@ other services have a dependency.
 
 Pattern your job after this:
 
-> `start on starting ui`
+```
+start on starting ui
+task
 
-> `task`
-
-> `script`
-
-> ` # perform your important initialization here`
-
-> `end script`
+script
+# perform your important initialization here
+end script
+```
 
 #### File System Initialization Required by Multiple Services
 
@@ -923,15 +917,14 @@ resource is created before any service depending on started boot-services.
 
 Pattern your job after this:
 
-> start on starting boot-services
+```
+start on starting boot-services
+task
 
-> `task`
-
-> `script`
-
-> ` create-my-important-resource`
-
-> `end script`
+script
+create-my-important-resource
+end script
+```
 
 ## FAQ
 

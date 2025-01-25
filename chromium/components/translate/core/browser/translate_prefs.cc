@@ -64,30 +64,6 @@ bool ContainsSameBaseLanguage(const std::vector<std::string>& list,
   return false;
 }
 
-// Removes from the language list any language that isn't supported as an
-// Accept-Language (it's not in kAcceptLanguageList) if and only if there
-// aren't any other languages from the same family in the list that are
-// supported.
-void PurgeUnsupportedLanguagesInLanguageFamily(std::string_view language,
-                                               std::vector<std::string>* list) {
-  std::string_view base_language = language::ExtractBaseLanguage(language);
-  for (const auto& lang : *list) {
-    // This method only operates on languages in the same family as |language|.
-    if (base_language != language::ExtractBaseLanguage(lang))
-      continue;
-    // If at least one of these same-family languages in |list| is supported by
-    // Accept-Languages, then that means that none of the languages in this
-    // family should be purged.
-    if (language::AcceptLanguagesService::CanBeAcceptLanguage(lang))
-      return;
-  }
-
-  // Purge all languages in the same family as |language|.
-  std::erase_if(*list, [base_language](const std::string& lang) {
-    return base_language == language::ExtractBaseLanguage(lang);
-  });
-}
-
 // Merge old always-translate languages from the deprecated pref to the new
 // version. Because of crbug/1291356, it's possible that on iOS the client
 // started using the new pref without properly migrating and clearing the old
@@ -390,8 +366,6 @@ void TranslatePrefs::RemoveFromLanguageList(std::string_view input_language) {
   if (it != user_selected_languages.end()) {
 
     user_selected_languages.erase(it);
-    PurgeUnsupportedLanguagesInLanguageFamily(chrome_language,
-                                              &user_selected_languages);
     language_prefs_->SetUserSelectedLanguagesList(user_selected_languages);
 
     // We should unblock the language if this was the last one from the same
@@ -484,7 +458,7 @@ void TranslatePrefs::RearrangeLanguage(
       return;
 
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return;
   }
 
@@ -531,14 +505,9 @@ void TranslatePrefs::GetLanguageInfoList(
         std::move(code);
   }
 
-  // Get the sorted list of translatable languages.
-  std::vector<std::string> translate_languages;
-  translate::TranslateDownloadManager::GetSupportedLanguages(
-      translate_allowed, &translate_languages);
-  // |translate_languages| should already be sorted alphabetically for fast
-  // searching.
-  DCHECK(
-      std::is_sorted(translate_languages.begin(), translate_languages.end()));
+  if (translate_allowed) {
+    translate::TranslateDownloadManager::RequestLanguageList();
+  }
 
   // Build the language list from the language map.
   for (auto& entry : language_map) {
@@ -555,15 +524,13 @@ void TranslatePrefs::GetLanguageInfoList(
     language.native_display_name =
         base::UTF16ToUTF8(adjusted_native_display_name);
 
-    std::string supports_translate_code = language.code;
-
     // Extract the base language: if the base language can be translated, then
     // even the regional one should be marked as such.
-    language::ToTranslateLanguageSynonym(&supports_translate_code);
+    std::string translate_code = language.code;
+    language::ToTranslateLanguageSynonym(&translate_code);
     language.supports_translate =
-        std::binary_search(translate_languages.begin(),
-                           translate_languages.end(), supports_translate_code);
-
+        translate::TranslateDownloadManager::IsSupportedLanguage(
+            translate_code);
     language_list->push_back(std::move(language));
   }
 }

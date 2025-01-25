@@ -351,7 +351,7 @@ EventResultCB CalendarBackend::UpdateRecurrenceException(
     result.success = false;
     result.message = "Could not find recurrence exception row in DB";
     NOTREACHED() << "Could not find recurrence exception row in DB";
-    return result;
+    //return result;
   }
 }
 
@@ -422,7 +422,7 @@ NotificationResult CalendarBackend::UpdateNotification(
     result.success = false;
     result.message = "Could not find notification  row in DB";
     NOTREACHED() << "Could not find notification row in DB";
-    return result;
+    //return result;
   }
 }
 
@@ -488,7 +488,7 @@ InviteResult CalendarBackend::UpdateInvite(calendar::UpdateInviteRow row) {
     result.success = false;
     result.message = "Could not find invite row in DB";
     NOTREACHED() << "Could not find invite row in DB";
-    return result;
+    //return result;
   }
 }
 
@@ -662,7 +662,7 @@ EventResultCB CalendarBackend::UpdateEvent(EventID event_id,
     result.success = false;
     result.message = "Could not find event row in DB";
     NOTREACHED() << "Could not find event row in DB";
-    return result;
+    //return result;
   }
 }
 
@@ -710,7 +710,7 @@ bool CalendarBackend::UpdateEventType(EventTypeID event_type_id,
     return result;
   }
   NOTREACHED() << "Could not find event type row in DB";
-  return false;
+  //return false;
 }
 
 bool CalendarBackend::DeleteEventType(EventTypeID event_type_id) {
@@ -873,7 +873,7 @@ bool CalendarBackend::UpdateCalendar(CalendarID calendar_id,
     return result;
   } else {
     NOTREACHED() << "Could not find calendar row in DB";
-    return false;
+    //return false;
   }
 }
 

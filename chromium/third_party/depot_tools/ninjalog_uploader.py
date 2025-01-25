@@ -18,58 +18,41 @@ See also the privacy review. http://eldar/assessments/656778450
 
 import argparse
 import gzip
+import http
 import io
 import json
 import logging
 import multiprocessing
 import os
+import pathlib
 import platform
 import subprocess
 import sys
 import time
 import urllib.request
 
+import build_telemetry
+
 # These build configs affect build performance.
 ALLOWLISTED_CONFIGS = (
+    "android_static_analysis",
+    "blink_symbol_level",
+    "disable_android_lint",
+    "enable_nacl",
+    "host_cpu",
+    "host_os",
+    "incremental_install",
+    "is_component_build",
+    "is_debug",
+    "is_java_debug",
     "symbol_level",
-    "use_goma",
+    "target_cpu",
+    "target_os",
+    "treat_warnings_as_errors",
+    "use_errorprone_java_compiler",
     "use_remoteexec",
     "use_siso",
-    "is_debug",
-    "is_component_build",
-    "enable_nacl",
-    "host_os",
-    "host_cpu",
-    "target_os",
-    "target_cpu",
-    "blink_symbol_level",
-    "is_java_debug",
-    "treat_warnings_as_errors",
-    "disable_android_lint",
-    "use_errorprone_java_compiler",
-    "incremental_install",
-    "android_static_analysis",
 )
-
-
-def IsGoogler():
-    """Check whether this user is Googler or not."""
-    p = subprocess.run(
-        "cipd auth-info",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        shell=True,
-    )
-    if p.returncode != 0:
-        return False
-    lines = p.stdout.splitlines()
-    if len(lines) == 0:
-        return False
-    l = lines[0]
-    # |l| will be like 'Logged in as <user>@google.com.' for googler using
-    # reclient.
-    return l.startswith("Logged in as ") and l.endswith("@google.com.")
 
 
 def ParseGNArgs(gn_args):
@@ -145,8 +128,6 @@ def GetMetadata(cmdline, ninjalog):
 
     Returned metadata has schema defined in
     https://cs.chromium.org?q="type+Metadata+struct+%7B"+file:%5Einfra/go/src/infra/appengine/chromium_build_stats/ninjalog/
-
-    TODO(tikuta): Collect GOMA_* env var.
     """
 
     build_dir = os.path.dirname(ninjalog)
@@ -203,6 +184,43 @@ def GetNinjalog(cmdline):
     return os.path.join(ninjalog_dir, ".ninja_log")
 
 
+def UploadNinjaLog(ninjalog, server, cmdline):
+    output = io.BytesIO()
+
+    with open(ninjalog) as f:
+        with gzip.GzipFile(fileobj=output, mode="wb") as g:
+            g.write(f.read().encode())
+            g.write(b"# end of ninja log\n")
+
+            metadata = GetMetadata(cmdline, ninjalog)
+            logging.info("send metadata: %s", json.dumps(metadata))
+            g.write(json.dumps(metadata).encode())
+
+    status = None
+    err_msg = ""
+    try:
+        resp = urllib.request.urlopen(
+            urllib.request.Request(
+                "https://" + server + "/upload_ninja_log/",
+                data=output.getvalue(),
+                headers={"Content-Encoding": "gzip"},
+            ))
+        status = resp.status
+        logging.info("response header: %s", resp.headers)
+        logging.info("response content: %s", resp.read())
+    except urllib.error.HTTPError as e:
+        status = e.status
+        err_msg = e.msg
+
+    if status != http.HTTPStatus.OK:
+        logging.warning(
+            "unexpected status code for response: status: %s, msg: %s", status,
+            err_msg)
+        return 1
+
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -229,45 +247,32 @@ def main():
         # Disable logging.
         logging.disable(logging.CRITICAL)
 
-    if not IsGoogler():
-        return 0
+    cfg = build_telemetry.load_config()
+    if not cfg.is_googler:
+        logging.warning("Not Googler. Only Googlers can upload ninjalog.")
+        return 1
 
     ninjalog = args.ninjalog or GetNinjalog(args.cmdline)
     if not os.path.isfile(ninjalog):
         logging.warning("ninjalog is not found in %s", ninjalog)
         return 1
 
-    # We assume that each ninja invocation interval takes at least 2 seconds.
-    # This is not to have duplicate entry in server when current build is no-op.
-    if os.stat(ninjalog).st_mtime < time.time() - 2:
-        logging.info("ninjalog is not updated recently %s", ninjalog)
+    # To avoid uploading duplicated ninjalog entries,
+    # record the mtime of ninjalog that is uploaded.
+    # If the recorded timestamp is older than the mtime of ninjalog,
+    # itt needs to be uploaded.
+    ninjalog_mtime = os.stat(ninjalog).st_mtime
+    last_upload_file = pathlib.Path(ninjalog + '.last_upload')
+    if last_upload_file.exists() and ninjalog_mtime <= last_upload_file.stat(
+    ).st_mtime:
+        logging.info("ninjalog is already uploaded.")
         return 0
 
-    output = io.BytesIO()
+    exit_code = UploadNinjaLog(ninjalog, args.server, args.cmdline)
+    if exit_code == 0:
+        last_upload_file.touch()
+    return exit_code
 
-    with open(ninjalog) as f:
-        with gzip.GzipFile(fileobj=output, mode="wb") as g:
-            g.write(f.read().encode())
-            g.write(b"# end of ninja log\n")
-
-            metadata = GetMetadata(args.cmdline, ninjalog)
-            logging.info("send metadata: %s", json.dumps(metadata))
-            g.write(json.dumps(metadata).encode())
-
-    resp = urllib.request.urlopen(
-        urllib.request.Request(
-            "https://" + args.server + "/upload_ninja_log/",
-            data=output.getvalue(),
-            headers={"Content-Encoding": "gzip"},
-        ))
-
-    if resp.status != 200:
-        logging.warning("unexpected status code for response: %s", resp.status)
-        return 1
-
-    logging.info("response header: %s", resp.headers)
-    logging.info("response content: %s", resp.read())
-    return 0
 
 
 if __name__ == "__main__":

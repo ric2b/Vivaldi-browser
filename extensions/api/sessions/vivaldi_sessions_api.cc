@@ -261,6 +261,9 @@ void MakeAPIContentModel(content::BrowserContext* browser_context,
   for (auto wit = content.windows.begin();
        wit != content.windows.end();
        ++wit) {
+    // Tab stack titles are no longer saved to window ext data with VB-23686.
+    // We read them should the file be an older version and apply content to
+    // the tab elements below.
     std::unique_ptr<base::Value::Dict> tab_stacks(
         sessions::GetTabStackTitles(wit->second.get()));
 
@@ -291,12 +294,17 @@ void MakeAPIContentModel(content::BrowserContext* browser_context,
         tab.pinned = tit->second->pinned;
         tab.quarantine = sessions::IsTabQuarantined(tit->second.get());
         tab.group = sessions::GetTabStackId(tit->second.get());
+        // Stack name. Files before VB-23686 saved relevant entries in window
+        // ext data while files after hold data in tab ext data.
         if (tab_stacks && !tab_stacks->empty()) {
           std::string* stack_name = tab_stacks->FindString(tab.group);
           if (stack_name) {
-            tab.group_name = *stack_name;
+            tab.fixed_group_name = *stack_name;
           }
         }
+        // Read from title from tab ext data.
+        sessions::GetFixedTabTitles(tit->second.get(), tab.fixed_name,
+            tab.fixed_group_name);
 
         std::optional<double> id = GetTabWorkspaceId(
             tit->second->viv_ext_data);
@@ -717,7 +725,7 @@ ExtensionFunction::ResponseAction SessionsPrivateModifyContentFunction::Run() {
       }
     }
   } else if (params->commands.title.has_value() &&
-             params->commands.ids.size() == 1) {
+             params->commands.ids.size() >= 1) {
     switch(params->commands.type) {
       case vivaldi::sessions_private::ContentType::kWorkspace: {
         // Workspace titles are stored in the the session index file.
@@ -749,6 +757,12 @@ ExtensionFunction::ResponseAction SessionsPrivateModifyContentFunction::Run() {
       }
       case vivaldi::sessions_private::ContentType::kGroup : {
         int error_code = sessions::SetTabStackTitle(browser_context(),
+          path, ids, params->commands.title.value());
+        changed = error_code == sessions::kNoError;
+        break;
+      }
+      case vivaldi::sessions_private::ContentType::kTab : {
+        int error_code = sessions::SetTabTitle(browser_context(),
           path, ids[0], params->commands.title.value());
         changed = error_code == sessions::kNoError;
         break;

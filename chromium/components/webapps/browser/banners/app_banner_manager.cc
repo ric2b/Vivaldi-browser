@@ -84,8 +84,7 @@ int gTimeDeltaInDaysForTesting = 0;
 InstallableParams ParamsToGetManifest() {
   InstallableParams params;
   params.check_eligibility = true;
-  params.fetch_metadata =
-      base::FeatureList::IsEnabled(features::kUniversalInstallManifest);
+  params.fetch_metadata = true;
   return params;
 }
 
@@ -152,7 +151,7 @@ class NullStatusReporter : public AppBannerManager::StatusReporter {
 
   WebappInstallSource GetInstallSource(content::WebContents* web_contents,
                                        InstallTrigger trigger) override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return WebappInstallSource::COUNT;
   }
 };
@@ -315,8 +314,6 @@ AppBannerManager::AppBannerManager(content::WebContents* web_contents)
       SiteEngagementObserver(site_engagement::SiteEngagementService::Get(
           web_contents->GetBrowserContext())),
       manager_(InstallableManager::FromWebContents(web_contents)),
-      manifest_(blink::mojom::Manifest::New()),
-      web_page_metadata_(mojom::WebPageMetadata::New()),
       status_reporter_(std::make_unique<NullStatusReporter>()) {
   DCHECK(manager_);
 
@@ -402,14 +399,13 @@ void AppBannerManager::OnDidGetManifest(const InstallableData& data) {
   }
   UpdateState(State::ACTIVE);
 
-  if (!data.errors.empty()) {
+  // An empty manifest indicates some kind of unrecoverable error occurred.
+  if (blink::IsEmptyManifest(*data.manifest)) {
+    CHECK(!data.errors.empty());
     Stop(data.GetFirstError());
     return;
   }
-  // An empty manifest means there was a network error or a parsing error, and
-  // that case is caught in the InstallableDataFetcher and an error is produced
-  // & caught above.
-  CHECK(!blink::IsEmptyManifest(*data.manifest));
+
   CHECK(data.manifest->id.is_valid());
   web_app_data_.emplace(data.manifest->id, data.manifest->Clone(),
                         data.web_page_metadata->Clone(), *(data.manifest_url));

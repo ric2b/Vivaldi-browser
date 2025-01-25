@@ -56,18 +56,18 @@ TEST_F(MlirConcatenateFusionTest, ThreadIdIndexing) {
   MlirConcatenateFusion fusion(analysis);
 
   constexpr auto kIndexing = R"(
-    (th_x, th_y, th_z, bl_x, bl_y, bl_z)[chunk_id, unroll_id] -> (
-    (th_x + bl_x * 128) mod 400)
+    (th_x, th_y, th_z, bl_x, bl_y, bl_z)[chunk_id, unroll_id] ->
+      (bl_x * 128 + th_x)
     domain:
-    th_x in [0, 127]
-    th_y in [0, 0]
-    th_z in [0, 0]
-    bl_x in [0, 3]
-    bl_y in [0, 0]
-    bl_z in [0, 0]
-    chunk_id in [0, 0]
-    unroll_id in [0, 0]
-    th_x + bl_x * 128 in [0, 399]
+    th_x in [0, 128)
+    th_y in [0, 1)
+    th_z in [0, 1)
+    bl_x in [0, 4)
+    bl_y in [0, 1)
+    bl_z in [0, 1)
+    chunk_id in [0, 1)
+    unroll_id in [0, 1)
+    bl_x * 128 + th_x in [0, 400)
   )";
   auto thread_id_to_output_indexing_0 = fusion.ComputeThreadIdToInputIndexing(
       /*root_index=*/0, /*hero_operand_index=*/0, &mlir_context_);
@@ -102,10 +102,9 @@ TEST_F(MlirConcatenateFusionTest, StandAloneConcatenate) {
     }
   )";
   TF_ASSERT_OK(EmitAndCheckIR(kHloString, R"(
-    // CHECK-DAG: #[[MAP_1:.*]] = affine_map<()[s0, s1] -> (s0 + s1 * 128)>
-    // CHECK-DAG: #[[MAP_2:.*]] = affine_map<()[s0, s1] -> ((s0 + s1 * 128) mod 400)>
-    // CHECK-DAG: #[[MAP_3:.*]] = affine_map<()[s0, s1] -> ((s0 + s1 * 128) mod 400 + 200)>
-    // CHECK-DAG: #[[MAP_4:.*]] = affine_map<()[s0, s1] -> ((s0 + s1 * 128) mod 400 + 600)>
+    // CHECK-DAG: #[[MAP_1:.*]] = affine_map<(d0, d1) -> (d1 * 128 + d0)>
+    // CHECK-DAG: #[[MAP_2:.*]] = affine_map<(d0, d1) -> (d1 * 128 + d0 + 200)>
+    // CHECK-DAG: #[[MAP_3:.*]] = affine_map<(d0, d1) -> (d1 * 128 + d0 + 600)>
 
     // CHECK-LABEL: fused_computation
     // CHECK-SAME:    %[[ARG_0:[a-zA-Z0-9]*]]: {{[^,]*}},
@@ -116,19 +115,19 @@ TEST_F(MlirConcatenateFusionTest, StandAloneConcatenate) {
     // CHECK: %[[THREAD_ID:.*]] = gpu.thread_id x
     // CHECK: %[[BLOCK_ID:.*]] = gpu.block_id x
 
-    // CHECK: %[[INPUT_INDEX_1:.*]] = affine.apply #[[MAP_2]]()[%[[THREAD_ID]], %[[BLOCK_ID]]]
+    // CHECK: %[[INPUT_INDEX_1:.*]] = xla_gpu.apply_indexing #[[MAP_1]]
     // CHECK: %[[IF_1:.*]] = scf.if
     // CHECK:   %[[VAL_1:.*]] = xla_gpu.pure_call @fused_computation_param0
     // CHECK:   %[[INSERTED_1:.*]] = tensor.insert %[[VAL_1:.*]] into %[[OUTPUT]][%[[INPUT_INDEX_1]]]
 
     // CHECK: %[[IF_2:.*]] = scf.if
     // CHECK:   %[[VAL_2:.*]] = xla_gpu.pure_call @fused_computation_param1
-    // CHECK:   %[[OUTPUT_INDEX_2:.*]] = affine.apply #[[MAP_3]]()[%[[THREAD_ID]], %[[BLOCK_ID]]]
+    // CHECK:   %[[OUTPUT_INDEX_2:.*]] = xla_gpu.apply_indexing #[[MAP_2]]
     // CHECK:   %[[INSERTED_2:.*]] = tensor.insert %[[VAL_2:.*]] into {{.*}}[%[[OUTPUT_INDEX_2]]]
 
     // CHECK: %[[IF_3:.*]] = scf.if
     // CHECK:   %[[VAL_3:.*]] = xla_gpu.pure_call @fused_computation_param2
-    // CHECK:   %[[OUTPUT_INDEX_3:.*]] = affine.apply #[[MAP_4]]()[%[[THREAD_ID]], %[[BLOCK_ID]]]
+    // CHECK:   %[[OUTPUT_INDEX_3:.*]] = xla_gpu.apply_indexing #[[MAP_3]]
     // CHECK:   %[[INSERTED_3:.*]] = tensor.insert %[[VAL_3:.*]] into {{.*}}[%[[OUTPUT_INDEX_3]]]
   )"));
   EXPECT_TRUE(RunAndCompareNoHloPasses(kHloString, ErrorSpec{1e-3}));
@@ -153,7 +152,7 @@ TEST_F(MlirConcatenateFusionTest, PrologueEpilogue) {
     }
   )";
   TF_ASSERT_OK(EmitAndCheckIR(kHloString, R"(
-    // CHECK: #[[MAP:.*]] = affine_map<()[s0] -> (s0 + 64)>
+    // CHECK: #[[MAP:.*]] = affine_map<(d0) -> (d0 + 64)>
 
     // CHECK-LABEL: fused_computation
     // CHECK-DAG: %[[C_63:.*]] = arith.constant 63
@@ -167,15 +166,11 @@ TEST_F(MlirConcatenateFusionTest, PrologueEpilogue) {
     // CHECK:   scf.yield %[[INSERTED_1]]
 
     // CHECK: %[[VAL_2_1:.*]] = xla_gpu.pure_call @fused_computation_exp({{.*}}, %[[THREAD_ID]])
-    // CHECK: %[[INDEX_2:.*]] = affine.apply #[[MAP]]()[%[[THREAD_ID]]]
+    // CHECK: %[[INDEX_2:.*]] = xla_gpu.apply_indexing #[[MAP]](%[[THREAD_ID]]
     // CHECK: %[[VAL_2_2:.*]] = xla_gpu.pure_call @fused_computation__epilogue__neg({{.*}}, %[[INDEX_2]], %[[VAL_2_1]])
     // CHECK: %[[INSERTED_2:.*]] = tensor.insert %[[VAL_2_2:.*]] into {{.*}}[%[[INDEX_2]]]
 
     // CHECK: return %[[INSERTED_2]]
-
-    // CHECK: func.func private @fused_computation_log
-    // CHECK: func.func private @fused_computation_exp
-    // CHECK: func.func private @fused_computation_neg
   )"));
   EXPECT_TRUE(RunAndCompareNoHloPasses(kHloString, ErrorSpec{1e-3}));
 }

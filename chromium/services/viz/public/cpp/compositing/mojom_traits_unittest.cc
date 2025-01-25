@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -13,6 +18,7 @@
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/compositor_render_pass.h"
 #include "components/viz/common/quads/debug_border_draw_quad.h"
+#include "components/viz/common/quads/offset_tag.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/common/resources/returned_resource.h"
@@ -41,6 +47,7 @@
 #include "services/viz/public/cpp/compositing/filter_operations_mojom_traits.h"
 #include "services/viz/public/cpp/compositing/frame_sink_id_mojom_traits.h"
 #include "services/viz/public/cpp/compositing/local_surface_id_mojom_traits.h"
+#include "services/viz/public/cpp/compositing/offset_tag_mojom_traits.h"
 #include "services/viz/public/cpp/compositing/returned_resource_mojom_traits.h"
 #include "services/viz/public/cpp/compositing/selection_mojom_traits.h"
 #include "services/viz/public/cpp/compositing/shared_quad_state_mojom_traits.h"
@@ -64,6 +71,7 @@
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkString.h"
 #include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
+#include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/hdr_metadata.h"
 #include "ui/gfx/mojom/buffer_types_mojom_traits.h"
 #include "ui/gfx/mojom/color_space_mojom_traits.h"
@@ -168,7 +176,7 @@ void ExpectEqual(const cc::FilterOperation& input,
       break;
     }
     case cc::FilterOperation::ALPHA_THRESHOLD:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case cc::FilterOperation::OFFSET:
       EXPECT_EQ(input.offset(), output.offset());
@@ -365,8 +373,7 @@ TEST_F(StructTraitsTest, CopyOutputRequest_TextureRequest) {
 
   output->SendResult(std::make_unique<CopyOutputTextureResult>(
       result_format, result_rect,
-      CopyOutputResult::TextureResult(mailbox, sync_token,
-                                      gfx::ColorSpace::CreateSRGB()),
+      CopyOutputResult::TextureResult(mailbox, gfx::ColorSpace::CreateSRGB()),
       std::move(release_callbacks)));
 
   // Wait for the result to be delivered to the other side: The
@@ -606,7 +613,7 @@ TEST_F(StructTraitsTest, CompositorFrameTransitionDirective) {
   frame.metadata.transition_directives.push_back(
       CompositorFrameTransitionDirective::CreateSave(
           transition_token, /*maybe_cross_frame_sink=*/true, sequence_id,
-          {element}));
+          {element}, {}));
 
   // This ensures de-serialization succeeds if all passes are present.
   CompositorFrame output;
@@ -626,11 +633,30 @@ TEST_F(StructTraitsTest, CompositorFrameTransitionDirective) {
   frame.metadata.transition_directives.push_back(
       CompositorFrameTransitionDirective::CreateSave(
           transition_token, /*maybe_cross_frame_sink=*/true, sequence_id,
-          {element}));
+          {element}, {}));
 
   // This ensures de-serialization fails if a pass is missing.
   ASSERT_FALSE(mojo::test::SerializeAndDeserialize<mojom::CompositorFrame>(
       frame, output));
+}
+
+TEST_F(StructTraitsTest, ViewTransitionElementResourceId) {
+  ViewTransitionElementResourceId empty_id;
+  ASSERT_FALSE(empty_id.IsValid());
+  ViewTransitionElementResourceId empty_output_id;
+  ASSERT_TRUE(
+      mojo::test::SerializeAndDeserialize<
+          mojom::ViewTransitionElementResourceId>(empty_id, empty_output_id));
+  ASSERT_FALSE(empty_output_id.IsValid());
+
+  ViewTransitionElementResourceId valid_id(blink::ViewTransitionToken(), 2u);
+  ASSERT_TRUE(valid_id.IsValid());
+  ViewTransitionElementResourceId valid_output_id;
+  ASSERT_TRUE(
+      mojo::test::SerializeAndDeserialize<
+          mojom::ViewTransitionElementResourceId>(valid_id, valid_output_id));
+  ASSERT_TRUE(valid_output_id.IsValid());
+  ASSERT_EQ(valid_output_id, valid_id);
 }
 
 TEST_F(StructTraitsTest, SurfaceInfo) {
@@ -683,7 +709,6 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   const float page_scale_factor = 1337.5f;
   const gfx::SizeF scrollable_viewport_size(1337.7f, 1234.5f);
   const bool may_contain_video = true;
-  const bool is_resourceless_software_draw_with_scroll_or_animation = true;
   const SkColor4f root_background_color = {0.0f, 0.02f, 0.224f, 0.0f};
   ui::LatencyInfo latency_info;
   latency_info.set_trace_id(5);
@@ -709,8 +734,6 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   input.page_scale_factor = page_scale_factor;
   input.scrollable_viewport_size = scrollable_viewport_size;
   input.may_contain_video = may_contain_video;
-  input.is_resourceless_software_draw_with_scroll_or_animation =
-      is_resourceless_software_draw_with_scroll_or_animation;
   input.root_background_color = root_background_color;
   input.latency_info = latency_infos;
   input.referenced_surfaces = referenced_surfaces;
@@ -730,8 +753,6 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   EXPECT_EQ(page_scale_factor, output.page_scale_factor);
   EXPECT_EQ(scrollable_viewport_size, output.scrollable_viewport_size);
   EXPECT_EQ(may_contain_video, output.may_contain_video);
-  EXPECT_EQ(is_resourceless_software_draw_with_scroll_or_animation,
-            output.is_resourceless_software_draw_with_scroll_or_animation);
   EXPECT_EQ(root_background_color, output.root_background_color);
   EXPECT_EQ(latency_infos.size(), output.latency_info.size());
   EXPECT_TRUE(output.latency_info[0].FindLatency(
@@ -749,6 +770,43 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
             output.begin_frame_ack.frame_id.sequence_number);
   EXPECT_EQ(min_page_scale_factor, output.min_page_scale_factor);
   EXPECT_EQ(*output.top_controls_visible_height, top_controls_visible_height);
+}
+
+TEST_F(StructTraitsTest, CompositorFrameMetadataBadOffsetTagDefinition) {
+  CompositorFrameMetadata input;
+  input.device_scale_factor = 1.0f;
+  input.frame_token = 1u;
+  input.begin_frame_ack.frame_id.sequence_number = 1u;
+
+  {
+    // Verify metadata serialization/deserialization is initially successful.
+    CompositorFrameMetadata output;
+    bool result =
+        mojo::test::SerializeAndDeserialize<mojom::CompositorFrameMetadata>(
+            input, output);
+    EXPECT_TRUE(result);
+  }
+
+  SurfaceId surface_id(
+      FrameSinkId(1337, 1234),
+      LocalSurfaceId(0xfbadbeef, base::UnguessableToken::Create()));
+
+  OffsetTagDefinition offset_tag_def;
+  offset_tag_def.tag = OffsetTag(base::Token(1, 1));
+  offset_tag_def.provider = SurfaceRange(surface_id);
+  offset_tag_def.constraints.min_offset = {-20.4f, -89.3f};
+  offset_tag_def.constraints.max_offset = {60.4f, 489.3f};
+
+  input.offset_tag_definitions.push_back((offset_tag_def));
+  {
+    // There is no corresponding Surfacerange entry in `referenced_surfaces` so
+    // this should fail deserialization.
+    CompositorFrameMetadata output;
+    bool result =
+        mojo::test::SerializeAndDeserialize<mojom::CompositorFrameMetadata>(
+            input, output);
+    EXPECT_FALSE(result);
+  }
 }
 
 TEST_F(StructTraitsTest, RenderPass) {
@@ -1183,6 +1241,44 @@ TEST_F(StructTraitsTest, SurfaceId) {
   EXPECT_EQ(local_surface_id, output.local_surface_id());
 }
 
+TEST_F(StructTraitsTest, OffsetTag) {
+  constexpr OffsetTag input(base::Token(1, 1));
+  OffsetTag output;
+
+  mojo::test::SerializeAndDeserialize<mojom::OffsetTag>(input, output);
+  EXPECT_EQ(input, output);
+}
+
+TEST_F(StructTraitsTest, OffsetTagValue) {
+  constexpr OffsetTag kTag(base::Token(1, 1));
+  OffsetTagValue input = {kTag, {5.0f, 7.7f}};
+  OffsetTagValue output;
+
+  mojo::test::SerializeAndDeserialize<mojom::OffsetTagValue>(input, output);
+  EXPECT_EQ(input.tag, output.tag);
+  EXPECT_EQ(input.offset, output.offset);
+}
+
+TEST_F(StructTraitsTest, OffsetTagDefinition) {
+  SurfaceId surface_id(
+      FrameSinkId(1337, 1234),
+      LocalSurfaceId(0xfbadbeef, base::UnguessableToken::Create()));
+
+  OffsetTagDefinition input;
+  input.tag = OffsetTag(base::Token(1, 1));
+  input.provider = SurfaceRange(surface_id);
+  input.constraints.min_offset = {-20.4f, -89.3f};
+  input.constraints.max_offset = {60.4f, 489.3f};
+
+  OffsetTagDefinition output;
+  mojo::test::SerializeAndDeserialize<mojom::OffsetTagDefinition>(input,
+                                                                  output);
+  EXPECT_EQ(input.tag, output.tag);
+  EXPECT_EQ(input.provider, output.provider);
+  EXPECT_EQ(input.constraints.min_offset, output.constraints.min_offset);
+  EXPECT_EQ(input.constraints.max_offset, output.constraints.max_offset);
+}
+
 TEST_F(StructTraitsTest, TransferableResource) {
   const ResourceId id(1337);
   const SharedImageFormat format = SinglePlaneFormat::kALPHA_8;
@@ -1415,8 +1511,7 @@ TEST_F(StructTraitsTest, CopyOutputResult_Texture) {
   std::unique_ptr<CopyOutputResult> input =
       std::make_unique<CopyOutputTextureResult>(
           CopyOutputResult::Format::RGBA, result_rect,
-          CopyOutputResult::TextureResult(mailbox, sync_token,
-                                          result_color_space),
+          CopyOutputResult::TextureResult(mailbox, result_color_space),
           std::move(release_callbacks));
 
   std::unique_ptr<CopyOutputResult> output;
@@ -1428,9 +1523,7 @@ TEST_F(StructTraitsTest, CopyOutputResult_Texture) {
             CopyOutputResult::Destination::kNativeTextures);
   EXPECT_EQ(output->rect(), result_rect);
   ASSERT_NE(output->GetTextureResult(), nullptr);
-  EXPECT_EQ(output->GetTextureResult()->mailbox_holders[0].mailbox, mailbox);
-  EXPECT_EQ(output->GetTextureResult()->mailbox_holders[0].sync_token,
-            sync_token);
+  EXPECT_EQ(output->GetTextureResult()->mailbox, mailbox);
   EXPECT_EQ(output->GetTextureResult()->color_space, result_color_space);
 
   CopyOutputResult::ReleaseCallbacks out_callbacks =

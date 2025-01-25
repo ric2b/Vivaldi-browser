@@ -23,7 +23,6 @@
 #include <memory>
 #include <optional>
 #include <ostream>
-#include <set>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -296,7 +295,8 @@ void NearbyShareCertificateManagerImpl::CertificateDownloadContext::
                    const absl::StatusOr<ListPublicCertificatesResponse>&
                        response) mutable {
         if (!response.ok()) {
-          NL_LOG(ERROR) << __func__ << ": Failed to download certificates.";
+          NL_LOG(WARNING) << __func__ << ": Failed to download certificates: "
+                          << response.status();
           std::move(download_failure_callback_)();
           return;
         }
@@ -504,7 +504,6 @@ void NearbyShareCertificateManagerImpl::UpdatePrivateCertificateInStorage(
 }
 
 void NearbyShareCertificateManagerImpl::OnContactsDownloaded(
-    const std::set<std::string>& allowed_contact_ids,
     const std::vector<nearby::sharing::proto::ContactRecord>& contacts,
     uint32_t num_unreachable_contacts_filtered_out) {
   NL_LOG(INFO) << __func__ << ": Contacts downloaded.";

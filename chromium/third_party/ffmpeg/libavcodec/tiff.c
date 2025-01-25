@@ -2267,8 +2267,10 @@ again:
             group_size = s->width * channels;
 
             tmpbuf = av_malloc(ssize);
-            if (!tmpbuf)
+            if (!tmpbuf) {
+                av_free(five_planes);
                 return AVERROR(ENOMEM);
+            }
 
             if (s->avctx->pix_fmt == AV_PIX_FMT_RGBF32LE ||
                 s->avctx->pix_fmt == AV_PIX_FMT_RGBAF32LE) {
@@ -2381,7 +2383,6 @@ again:
         }
     }
 
-    p->flags |= AV_FRAME_FLAG_KEY;
     *got_frame = 1;
 
     return avpkt->size;

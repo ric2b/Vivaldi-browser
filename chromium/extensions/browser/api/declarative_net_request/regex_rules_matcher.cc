@@ -8,6 +8,7 @@
 
 #include "base/containers/contains.h"
 #include "base/logging.h"
+#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
@@ -72,7 +73,7 @@ bool ActionTypeAllowsMultipleActions(flat::ActionType action_type) {
     case flat::ActionType_modify_headers:
       return true;
     case flat::ActionType_count:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return true;
 }
@@ -237,7 +238,7 @@ RegexRulesMatcher::MatchHelper::GetPotentialMatches(
   std::vector<RegexRuleInfo> potential_matches;
   for (int re2_id : potential_re2_ids) {
     auto it = re2_id_to_rules_map_.find(re2_id);
-    DCHECK(it != re2_id_to_rules_map_.end());
+    CHECK(it != re2_id_to_rules_map_.end(), base::NotFatalUntil::M130);
 
     const flat::RegexRule* rule = it->second;
     if (!DoesRuleMetadataMatchRequest(*rule->url_rule(), params)) {
@@ -350,7 +351,7 @@ std::optional<RequestAction> RegexRulesMatcher::CreateActionFromInfo(
       return CreateAllowAllRequestsAction(params, rule);
     case flat::ActionType_modify_headers:
     case flat::ActionType_count:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 
@@ -403,7 +404,7 @@ const RegexRulesMatcher::MatchHelper& RegexRulesMatcher::GetMatcherForStage(
       return headers_received_matcher_;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return before_request_matcher_;
 }
 

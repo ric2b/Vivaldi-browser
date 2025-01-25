@@ -36,18 +36,18 @@ class ResourceReader {
   // directory and resource. `resource_directory`, when not empty, should not
   // start or end with a slash. All errors are logged.
   static std::optional<base::Value> ReadJSON(
-      base::StringPiece resource_directory,
-      base::StringPiece resource_name);
+      std::string_view resource_directory,
+      std::string_view resource_name);
 
-  static gfx::Image ReadPngImage(base::StringPiece resource_url);
+  static gfx::Image ReadPngImage(std::string_view resource_url);
 
   bool IsValid() const { return mapped_file_.IsValid(); }
 
   const uint8_t* data() const { return mapped_file_.data(); }
   size_t size() const { return mapped_file_.length(); }
 
-  base::StringPiece as_string_view() const {
-    return base::StringPiece(reinterpret_cast<const char*>(data()), size());
+  std::string_view as_string_view() const {
+    return std::string_view(reinterpret_cast<const char*>(data()), size());
   }
 
   // Parse the asset as JSON.

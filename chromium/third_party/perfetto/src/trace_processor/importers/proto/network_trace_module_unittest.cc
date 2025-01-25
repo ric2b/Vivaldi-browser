@@ -20,10 +20,11 @@
 #include "src/trace_processor/importers/common/args_translation_table.h"
 #include "src/trace_processor/importers/common/async_track_set_tracker.h"
 #include "src/trace_processor/importers/common/global_args_tracker.h"
+#include "src/trace_processor/importers/common/process_track_translation_table.h"
 #include "src/trace_processor/importers/common/slice_tracker.h"
 #include "src/trace_processor/importers/common/slice_translation_table.h"
 #include "src/trace_processor/importers/common/track_tracker.h"
-#include "src/trace_processor/importers/proto/proto_trace_parser.h"
+#include "src/trace_processor/importers/proto/proto_trace_parser_impl.h"
 #include "src/trace_processor/importers/proto/proto_trace_reader.h"
 #include "src/trace_processor/sorter/trace_sorter.h"
 #include "src/trace_processor/types/trace_processor_context.h"
@@ -45,21 +46,24 @@ class NetworkTraceModuleTest : public testing::Test {
     context_.args_tracker.reset(new ArgsTracker(&context_));
     context_.global_args_tracker.reset(new GlobalArgsTracker(storage_));
     context_.slice_translation_table.reset(new SliceTranslationTable(storage_));
+    context_.process_track_translation_table.reset(
+        new ProcessTrackTranslationTable(storage_));
     context_.args_translation_table.reset(new ArgsTranslationTable(storage_));
     context_.async_track_set_tracker.reset(new AsyncTrackSetTracker(&context_));
-    context_.sorter.reset(new TraceSorter(
-        &context_, std::make_unique<ProtoTraceParser>(&context_),
-        TraceSorter::SortingMode::kFullSort));
+    context_.proto_trace_parser.reset(new ProtoTraceParserImpl(&context_));
+    context_.sorter.reset(
+        new TraceSorter(&context_, TraceSorter::SortingMode::kFullSort));
   }
 
   util::Status TokenizeAndParse() {
-    context_.chunk_reader.reset(new ProtoTraceReader(&context_));
+    context_.chunk_readers.push_back(
+        std::make_unique<ProtoTraceReader>(&context_));
 
     trace_->Finalize();
     std::vector<uint8_t> v = trace_.SerializeAsArray();
     trace_.Reset();
 
-    auto status = context_.chunk_reader->Parse(
+    auto status = context_.chunk_readers.back()->Parse(
         TraceBlobView(TraceBlob::CopyFrom(v.data(), v.size())));
     context_.sorter->ExtractEventsForced();
     context_.slice_tracker->FlushPendingSlices();
@@ -177,8 +181,8 @@ TEST_F(NetworkTraceModuleTest, TokenizeAndParseAggregateBundle) {
   EXPECT_EQ(slices.ts()[0], 123);
   EXPECT_EQ(slices.dur()[0], 10);
 
-  EXPECT_TRUE(HasArg(1u, "packet_length", Variadic::UnsignedInteger(172)));
-  EXPECT_TRUE(HasArg(1u, "packet_count", Variadic::UnsignedInteger(2)));
+  EXPECT_TRUE(HasArg(1u, "packet_length", Variadic::Integer(172)));
+  EXPECT_TRUE(HasArg(1u, "packet_count", Variadic::Integer(2)));
 }
 
 }  // namespace

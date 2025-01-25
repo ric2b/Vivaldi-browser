@@ -34,6 +34,7 @@
 #include "src/tint/lang/core/type/atomic.h"
 #include "src/tint/lang/core/type/builtin_structs.h"
 #include "src/tint/lang/core/type/depth_texture.h"
+#include "src/tint/lang/core/type/input_attachment.h"
 #include "src/tint/lang/core/type/multisampled_texture.h"
 #include "src/tint/lang/core/type/sampled_texture.h"
 #include "src/tint/lang/core/type/storage_texture.h"
@@ -1466,7 +1467,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureSample_2D_Offset) {
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.vec4<f32>(), core::BuiltinFn::kTextureSample, t, s, coords,
-                              b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -1506,7 +1507,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureSample_2DArray_Offset) {
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.vec4<f32>(), core::BuiltinFn::kTextureSample, t, s, coords,
-                              array_idx, b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              array_idx, b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -1588,7 +1589,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureSampleBias_2D_Offset) {
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.vec4<f32>(), core::BuiltinFn::kTextureSampleBias, t, s, coords,
-                              bias, b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              bias, b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -1629,7 +1630,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureSampleBias_2DArray_Offset) {
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.vec4<f32>(), core::BuiltinFn::kTextureSampleBias, t, s, coords,
-                              array_idx, bias, b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              array_idx, bias, b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -1710,7 +1711,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureSampleCompare_2D_Offset) {
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.f32(), core::BuiltinFn::kTextureSampleCompare, t, s, coords, dref,
-                              b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -1751,7 +1752,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureSampleCompare_2DArray_Offset) {
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.f32(), core::BuiltinFn::kTextureSampleCompare, t, s, coords,
-                              array_idx, bias, b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              array_idx, bias, b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -1833,7 +1834,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureSampleCompareLevel_2D_Offset) {
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.f32(), core::BuiltinFn::kTextureSampleCompareLevel, t, s, coords,
-                              dref, b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              dref, b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -1874,7 +1875,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureSampleCompareLevel_2DArray_Offset
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.f32(), core::BuiltinFn::kTextureSampleCompareLevel, t, s, coords,
-                              array_idx, bias, b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              array_idx, bias, b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -1958,7 +1959,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureSampleGrad_2D_Offset) {
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.vec4<f32>(), core::BuiltinFn::kTextureSampleGrad, t, s, coords,
-                              ddx, ddy, b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              ddx, ddy, b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -2000,7 +2001,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureSampleGrad_2DArray_Offset) {
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.vec4<f32>(), core::BuiltinFn::kTextureSampleGrad, t, s, coords,
-                              array_idx, ddx, ddy, b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              array_idx, ddx, ddy, b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -2082,7 +2083,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureSampleLevel_2D_Offset) {
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.vec4<f32>(), core::BuiltinFn::kTextureSampleLevel, t, s, coords,
-                              lod, b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              lod, b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -2123,7 +2124,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureSampleLevel_2DArray_Offset) {
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.vec4<f32>(), core::BuiltinFn::kTextureSampleLevel, t, s, coords,
-                              array_idx, lod, b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              array_idx, lod, b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -2205,7 +2206,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureGather_2D_Offset) {
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.vec4<f32>(), core::BuiltinFn::kTextureGather, component, t, s,
-                              coords, b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              coords, b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -2246,7 +2247,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureGather_2DArray_Offset) {
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.vec4<f32>(), core::BuiltinFn::kTextureGather, component, t, s,
-                              coords, array_idx, b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              coords, array_idx, b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -2366,7 +2367,7 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, TextureGatherCompare_Depth2D_Offset) {
 
     b.Append(func->Block(), [&] {
         auto* result = b.Call(ty.vec4<f32>(), core::BuiltinFn::kTextureGatherCompare, t, s, coords,
-                              depth, b.Splat(ty.vec2<i32>(), 1_i, 2));
+                              depth, b.Splat<vec2<i32>>(1_i));
         b.Return(func, result);
     });
 
@@ -2948,6 +2949,40 @@ TEST_F(SpirvWriter_BuiltinPolyfillTest, QuantizeToF16_Vector) {
     %10:f32 = quantizeToF16 %9
     %11:vec4<f32> = construct %4, %6, %8, %10
     ret %11
+  }
+}
+)";
+
+    Run(BuiltinPolyfill);
+
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(SpirvWriter_BuiltinPolyfillTest, InputAttachmentLoad) {
+    auto* t = b.FunctionParam("t", ty.Get<core::type::InputAttachment>(ty.f32()));
+    auto* func = b.Function("foo", ty.vec4<f32>());
+    func->SetParams({t});
+
+    b.Append(func->Block(), [&] {
+        auto* result = b.Call(ty.vec4<f32>(), core::BuiltinFn::kInputAttachmentLoad, t);
+        b.Return(func, result);
+    });
+
+    auto* src = R"(
+%foo = func(%t:input_attachment<f32>):vec4<f32> {
+  $B1: {
+    %3:vec4<f32> = inputAttachmentLoad %t
+    ret %3
+  }
+}
+)";
+    EXPECT_EQ(src, str());
+
+    auto* expect = R"(
+%foo = func(%t:input_attachment<f32>):vec4<f32> {
+  $B1: {
+    %3:vec4<f32> = spirv.image_read %t, vec2<i32>(0i)
+    ret %3
   }
 }
 )";

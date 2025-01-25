@@ -38,12 +38,14 @@ class SplitClTest(unittest.TestCase):
         # One directory
         self.assertEqual(
             split_cl.FormatDescriptionOrComment(description, ["foo"]),
-            "Converted use of X to Y in /foo.")
+            "Converted use of X to Y in foo.",
+        )
 
         # Many directories
         self.assertEqual(
             split_cl.FormatDescriptionOrComment(description, ["foo", "bar"]),
-            "Converted use of X to Y in ['/foo', '/bar'].")
+            "Converted use of X to Y in ['foo', 'bar'].",
+        )
 
     def GetDirectoryBaseName(self, file_path):
         return os.path.basename(os.path.dirname(file_path))

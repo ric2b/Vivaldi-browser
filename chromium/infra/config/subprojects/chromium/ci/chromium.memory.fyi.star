@@ -4,7 +4,7 @@
 """Definitions of builders in the chromium.memory.fyi builder group."""
 
 load("//lib/builder_config.star", "builder_config")
-load("//lib/builders.star", "cpu", "os", "reclient")
+load("//lib/builders.star", "cpu", "os", "siso")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
@@ -19,60 +19,15 @@ ci.defaults.set(
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
     health_spec = health_spec.DEFAULT,
     priority = ci.DEFAULT_FYI_PRIORITY,
-    reclient_instance = reclient.instance.DEFAULT_TRUSTED,
-    reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CI,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
     shadow_service_account = ci.DEFAULT_SHADOW_SERVICE_ACCOUNT,
     siso_enabled = True,
-    siso_remote_jobs = reclient.jobs.LOW_JOBS_FOR_CI,
+    siso_project = siso.project.DEFAULT_TRUSTED,
+    siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CI,
 )
 
 consoles.console_view(
     name = "chromium.memory.fyi",
-)
-
-# TODO(crbug.com/40267022): Remove this builder after burning down failures
-# found when we now post-process stdout.
-ci.builder(
-    name = "linux-exp-msan-fyi-rel",
-    schedule = "with 6h interval",
-    triggered_by = [],
-    builder_spec = builder_config.builder_spec(
-        gclient_config = builder_config.gclient_config(
-            config = "chromium",
-            apply_configs = [
-            ],
-        ),
-        chromium_config = builder_config.chromium_config(
-            config = "chromium_msan",
-            apply_configs = ["mb"],
-            build_config = builder_config.build_config.RELEASE,
-            target_bits = 64,
-            target_platform = builder_config.target_platform.LINUX,
-        ),
-    ),
-    gn_args = gn_args.config(
-        configs = [
-            "msan",
-            "fail_on_san_warnings",
-            "release_builder",
-            "reclient",
-        ],
-    ),
-    builderless = 1,
-    # At this time, MSan is only compatibly with Focal. See
-    # //docs/linux/instrumented_libraries.md.
-    os = os.LINUX_FOCAL,
-    ssd = True,
-    console_view_entry = consoles.console_view_entry(
-        category = "experimental|linux",
-        short_name = "msan",
-    ),
-    execution_timeout = 6 * time.hour,
-    health_spec = modified_default({
-        "Low Value": blank_low_value_thresholds,
-    }),
-    reclient_jobs = reclient.jobs.DEFAULT,
 )
 
 # TODO(crbug.com/40248746): Remove this builder after burning down failures
@@ -97,7 +52,9 @@ ci.builder(
         configs = [
             "ubsan_no_recover",
             "release_builder",
-            "reclient",
+            "remoteexec",
+            "linux",
+            "x64",
         ],
     ),
     builderless = 1,
@@ -109,7 +66,7 @@ ci.builder(
     health_spec = modified_default({
         "Low Value": blank_low_value_thresholds,
     }),
-    reclient_jobs = reclient.jobs.DEFAULT,
+    siso_remote_jobs = siso.remote_jobs.DEFAULT,
 )
 
 # TODO(crbug.com/40223516): Remove this builder after burning down failures
@@ -138,7 +95,8 @@ ci.builder(
             "lsan",
             "dcheck_always_on",
             "release_builder",
-            "reclient",
+            "remoteexec",
+            "mac",
             "x64",
         ],
     ),
@@ -154,7 +112,7 @@ ci.builder(
     health_spec = modified_default({
         "Low Value": blank_low_value_thresholds,
     }),
-    reclient_jobs = reclient.jobs.DEFAULT,
+    siso_remote_jobs = siso.remote_jobs.DEFAULT,
 )
 
 ci.builder(
@@ -180,7 +138,9 @@ ci.builder(
             "ubsan_no_recover",
             "dcheck_always_on",
             "release_builder",
-            "reclient",
+            "remoteexec",
+            "mac",
+            "x64",
         ],
     ),
     builderless = 1,
@@ -194,5 +154,5 @@ ci.builder(
     health_spec = modified_default({
         "Low Value": blank_low_value_thresholds,
     }),
-    reclient_jobs = reclient.jobs.DEFAULT,
+    siso_remote_jobs = siso.remote_jobs.DEFAULT,
 )

@@ -5,8 +5,6 @@
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 
 #include "base/containers/adapters.h"
-#include "third_party/blink/renderer/platform/geometry/layout_rect.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -533,8 +531,8 @@ bool GeometryMapper::MightOverlapForCompositing(
           const TransformPaintPropertyNode* scroll_translation,
           gfx::RectF& rect, PropertyTreeState& state) {
         for (; scroll_translation != &scroll_translation_lca;
-             scroll_translation = &scroll_translation->UnaliasedParent()
-                                       ->NearestScrollTranslationNode()) {
+             scroll_translation =
+                 scroll_translation->ParentScrollTranslationNode()) {
           MapVisualRectAboveScrollForCompositingOverlap(*scroll_translation,
                                                         rect, state);
         }

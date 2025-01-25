@@ -6,6 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
+#include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/navigation_transitions/navigation_entry_screenshot.h"
 #include "content/browser/renderer_host/navigation_transitions/navigation_entry_screenshot_manager.h"
 #include "content/public/browser/browser_thread.h"
@@ -45,15 +46,56 @@ NavigationEntryScreenshotCache::NavigationEntryScreenshotCache(
 
 NavigationEntryScreenshotCache::~NavigationEntryScreenshotCache() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  Purge();
+  PurgeInternal(/*for_memory_pressure=*/false);
 }
 
 void NavigationEntryScreenshotCache::SetScreenshot(
-    NavigationEntry* entry,
-    std::unique_ptr<NavigationEntryScreenshot> screenshot) {
+    base::WeakPtr<NavigationRequest> navigation_request,
+    std::unique_ptr<NavigationEntryScreenshot> screenshot,
+    bool is_copied_from_embedder) {
+  if (!navigation_request) {
+    SetScreenshotInternal(std::move(screenshot), is_copied_from_embedder);
+    return;
+  }
+
+  const int64_t navigation_id = navigation_request->GetNavigationId();
+  CHECK(!pending_screenshots_.contains(navigation_id));
+  PendingScreenshot pending_screenshot(std::move(screenshot),
+                                       is_copied_from_embedder);
+  pending_screenshots_[navigation_id] = std::move(pending_screenshot);
+}
+
+void NavigationEntryScreenshotCache::OnNavigationFinished(
+    const NavigationRequest& navigation_request) {
+  auto it = pending_screenshots_.find(navigation_request.GetNavigationId());
+  if (it == pending_screenshots_.end()) {
+    return;
+  }
+
+  if (!navigation_request.HasCommitted()) {
+    pending_screenshots_.erase(it);
+    return;
+  }
+
+  SetScreenshotInternal(std::move(it->second.screenshot),
+                        it->second.is_copied_from_embedder);
+  pending_screenshots_.erase(it);
+}
+
+void NavigationEntryScreenshotCache::SetScreenshotInternal(
+    std::unique_ptr<NavigationEntryScreenshot> screenshot,
+    bool is_copied_from_embedder) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  // We must be caching screenshot for a valid entry.
-  CHECK(entry);
+
+  NavigationEntryImpl* entry =
+      nav_controller_->GetEntryWithUniqueID(screenshot->navigation_entry_id());
+  if (!entry) {
+    // The entry was deleted by the time we received the bitmap from the GPU.
+    // This can happen by clearing the session history, or when the
+    // `NavigationEntry` was replaced or deleted, etc.
+    return;
+  }
+
   // A navigation entry without a screenshot will be removed from the cache
   // first (thus not tracked). Impossible to overwrite for a cached entry.
   CHECK(!entry->GetUserData(NavigationEntryScreenshot::kUserDataKey));
@@ -64,6 +106,12 @@ void NavigationEntryScreenshotCache::SetScreenshot(
   const size_t size = screenshot->SizeInBytes();
   entry->SetUserData(NavigationEntryScreenshot::kUserDataKey,
                      std::move(screenshot));
+  entry->navigation_transition_data().set_is_copied_from_embedder(
+      is_copied_from_embedder);
+  entry->navigation_transition_data()
+      .SetSameDocumentNavigationEntryScreenshotToken(std::nullopt);
+  entry->navigation_transition_data().set_cache_hit_or_miss_reason(
+      NavigationTransitionData::CacheHitOrMissReason::kCacheHit);
   cached_screenshots_.insert(entry->GetUniqueID());
   manager_->OnScreenshotCached(this, size);
 
@@ -86,6 +134,9 @@ NavigationEntryScreenshotCache::RemoveScreenshot(
   cached_screenshots_.erase(it);
   auto screenshot = RemoveScreenshotFromEntry(navigation_entry);
   manager_->OnScreenshotRemoved(this, screenshot->SizeInBytes());
+  static_cast<NavigationEntryImpl*>(navigation_entry)
+      ->navigation_transition_data()
+      .set_cache_hit_or_miss_reason(std::nullopt);
   return screenshot;
 }
 
@@ -161,11 +212,20 @@ void NavigationEntryScreenshotCache::EvictScreenshotsUntilUnderBudgetOrEmpty() {
       CHECK_LE(evicted_screenshot->SizeInBytes(),
                manager_->GetCurrentCacheSize());
       manager_->OnScreenshotRemoved(this, evicted_screenshot->SizeInBytes());
+
+      candidate_entry->navigation_transition_data()
+          .set_cache_hit_or_miss_reason(
+              NavigationTransitionData::CacheHitOrMissReason::
+                  kCacheMissEvicted);
     }
   }
 }
 
-void NavigationEntryScreenshotCache::Purge() {
+void NavigationEntryScreenshotCache::PurgeForMemoryPressure() {
+  PurgeInternal(/*for_memory_pressure=*/true);
+}
+
+void NavigationEntryScreenshotCache::PurgeInternal(bool for_memory_pressure) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   auto it = cached_screenshots_.begin();
   while (!IsEmpty()) {
@@ -175,6 +235,18 @@ void NavigationEntryScreenshotCache::Purge() {
     cached_screenshots_.erase(it);
     CHECK_LE(purged->SizeInBytes(), manager_->GetCurrentCacheSize());
     manager_->OnScreenshotRemoved(this, purged->SizeInBytes());
+
+    if (for_memory_pressure) {
+      evicted_entry->navigation_transition_data().set_cache_hit_or_miss_reason(
+          NavigationTransitionData::CacheHitOrMissReason::
+              kCacheMissPurgedMemoryPressure);
+    } else {
+      // Resetting the UMA enum since at this point `this` is getting destroyed
+      // by the destructor which invalidates the enum value.
+      evicted_entry->navigation_transition_data().set_cache_hit_or_miss_reason(
+          std::nullopt);
+    }
+
     it = cached_screenshots_.begin();
   }
 }
@@ -188,5 +260,20 @@ void NavigationEntryScreenshotCache::SetNewScreenshotCachedCallbackForTesting(
   CHECK(!new_screenshot_cached_callback_);
   new_screenshot_cached_callback_ = std::move(callback);
 }
+
+NavigationEntryScreenshotCache::PendingScreenshot::PendingScreenshot() =
+    default;
+NavigationEntryScreenshotCache::PendingScreenshot::PendingScreenshot(
+    std::unique_ptr<NavigationEntryScreenshot> screenshot,
+    bool is_copied_from_embedder)
+    : screenshot(std::move(screenshot)),
+      is_copied_from_embedder(is_copied_from_embedder) {}
+NavigationEntryScreenshotCache::PendingScreenshot::~PendingScreenshot() =
+    default;
+NavigationEntryScreenshotCache::PendingScreenshot::PendingScreenshot(
+    PendingScreenshot&& other) = default;
+NavigationEntryScreenshotCache::PendingScreenshot&
+NavigationEntryScreenshotCache::PendingScreenshot::operator=(
+    PendingScreenshot&& other) = default;
 
 }  // namespace content

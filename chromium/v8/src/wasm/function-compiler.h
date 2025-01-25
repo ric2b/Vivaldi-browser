@@ -82,7 +82,7 @@ struct WasmCompilationResult {
   base::OwnedVector<uint8_t> protected_instructions_data;
   base::OwnedVector<uint8_t> deopt_data;
   std::unique_ptr<AssumptionsJournal> assumptions;
-  std::unique_ptr<LiftoffFrameDescriptionsForDeopt> liftoff_frame_descriptions;
+  std::unique_ptr<LiftoffFrameDescriptionForDeopt> liftoff_frame_descriptions;
   int func_index = kAnonymousFuncIndex;
   ExecutionTier result_tier = ExecutionTier::kNone;
   Kind kind = kFunction;
@@ -100,21 +100,20 @@ class V8_EXPORT_PRIVATE WasmCompilationUnit final {
 
   WasmCompilationResult ExecuteCompilation(CompilationEnv*,
                                            const WireBytesStorage*, Counters*,
-                                           WasmFeatures* detected);
+                                           WasmDetectedFeatures* detected);
 
   ExecutionTier tier() const { return tier_; }
   ForDebugging for_debugging() const { return for_debugging_; }
   int func_index() const { return func_index_; }
 
   static void CompileWasmFunction(Counters*, NativeModule*,
-                                  WasmFeatures* detected, const WasmFunction*,
-                                  ExecutionTier);
+                                  WasmDetectedFeatures* detected,
+                                  const WasmFunction*, ExecutionTier);
 
  private:
-  WasmCompilationResult ExecuteFunctionCompilation(CompilationEnv*,
-                                                   const WireBytesStorage*,
-                                                   Counters*,
-                                                   WasmFeatures* detected);
+  WasmCompilationResult ExecuteFunctionCompilation(
+      CompilationEnv*, const WireBytesStorage*, Counters*,
+      WasmDetectedFeatures* detected);
 
   WasmCompilationResult ExecuteImportWrapperCompilation(CompilationEnv*);
 
@@ -132,8 +131,8 @@ class V8_EXPORT_PRIVATE JSToWasmWrapperCompilationUnit final {
  public:
   JSToWasmWrapperCompilationUnit(Isolate* isolate, const FunctionSig* sig,
                                  uint32_t canonical_sig_index,
-                                 const wasm::WasmModule* module, bool is_import,
-                                 WasmFeatures enabled_features);
+                                 const wasm::WasmModule* module,
+                                 WasmEnabledFeatures enabled_features);
   ~JSToWasmWrapperCompilationUnit();
 
   // Allow move construction and assignment, for putting units in a std::vector.
@@ -147,7 +146,6 @@ class V8_EXPORT_PRIVATE JSToWasmWrapperCompilationUnit final {
   void Execute();
   Handle<Code> Finalize();
 
-  bool is_import() const { return is_import_; }
   const FunctionSig* sig() const { return sig_; }
   uint32_t canonical_sig_index() const { return canonical_sig_index_; }
 
@@ -155,8 +153,7 @@ class V8_EXPORT_PRIVATE JSToWasmWrapperCompilationUnit final {
   static Handle<Code> CompileJSToWasmWrapper(Isolate* isolate,
                                              const FunctionSig* sig,
                                              uint32_t canonical_sig_index,
-                                             const WasmModule* module,
-                                             bool is_import);
+                                             const WasmModule* module);
 
  private:
   // Wrapper compilation is bound to an isolate. Concurrent accesses to the
@@ -164,7 +161,6 @@ class V8_EXPORT_PRIVATE JSToWasmWrapperCompilationUnit final {
   // should only access immutable information (like the root table). The isolate
   // is guaranteed to be alive when this unit executes.
   Isolate* isolate_;
-  bool is_import_;
   const FunctionSig* sig_;
   uint32_t canonical_sig_index_;
   std::unique_ptr<OptimizedCompilationJob> job_;
@@ -173,7 +169,7 @@ class V8_EXPORT_PRIVATE JSToWasmWrapperCompilationUnit final {
 inline bool CanUseGenericJsToWasmWrapper(const WasmModule* module,
                                          const FunctionSig* sig) {
 #if (V8_TARGET_ARCH_X64 || V8_TARGET_ARCH_ARM64 || V8_TARGET_ARCH_IA32 || \
-     V8_TARGET_ARCH_ARM)
+     V8_TARGET_ARCH_ARM || V8_TARGET_ARCH_S390X || V8_TARGET_ARCH_PPC64)
   // We don't use the generic wrapper for asm.js, because it creates invalid
   // stack traces.
   return !is_asmjs_module(module) && v8_flags.wasm_generic_wrapper &&

@@ -68,6 +68,9 @@
 #include "chromeos/ash/components/assistant/buildflags.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
+// Vivaldi: Flatpak support.
+#include "sandbox/linux/services/flatpak_sandbox.h"
+
 namespace sandbox {
 namespace policy {
 
@@ -236,6 +239,10 @@ void SandboxLinux::PreinitializeSandbox() {
   const int yama_status = Yama::GetStatus();
   yama_is_enforcing_ = (yama_status & Yama::STATUS_PRESENT) &&
                        (yama_status & Yama::STATUS_ENFORCING);
+
+  flatpak_sandbox_level_ =
+      vivaldi::sandbox::FlatpakSandbox::GetInstance()->GetSandboxLevel();
+
   pre_initialized_ = true;
 }
 
@@ -274,6 +281,10 @@ int SandboxLinux::GetStatus() {
         sandbox_status_flags_ |= kPIDNS;
       if (NamespaceSandbox::InNewNetNamespace())
         sandbox_status_flags_ |= kNetNS;
+    } else if (flatpak_sandbox_level_ ==
+               vivaldi::sandbox::FlatpakSandbox::SandboxLevel::kRestricted) {
+      // Flatpak sandboxes always use new namespaces.
+      sandbox_status_flags_ |= kFlatpak | kPIDNS | kNetNS;
     }
 
     // We report whether the sandbox will be activated when renderers, workers

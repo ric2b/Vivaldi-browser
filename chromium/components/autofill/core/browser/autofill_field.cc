@@ -63,7 +63,9 @@ static constexpr auto kAutofillHeuristicsVsHtmlOverrides =
          {ADDRESS_HOME_DEPENDENT_LOCALITY, HtmlFieldType::kAddressLine3},
          {ADDRESS_HOME_OVERFLOW_AND_LANDMARK, HtmlFieldType::kAddressLine2},
          {ADDRESS_HOME_OVERFLOW, HtmlFieldType::kAddressLine2},
-         {ADDRESS_HOME_OVERFLOW, HtmlFieldType::kAddressLine3}});
+         {ADDRESS_HOME_OVERFLOW, HtmlFieldType::kAddressLine3},
+         {ADDRESS_HOME_HOUSE_NUMBER, HtmlFieldType::kStreetAddress},
+         {ADDRESS_HOME_STREET_NAME, HtmlFieldType::kStreetAddress}});
 
 // This list includes pairs (heuristic_type, server_type) that express which
 // heuristics predictions should be prioritized over server predictions. The
@@ -234,7 +236,7 @@ bool AutofillField::server_type_prediction_is_override() const {
 void AutofillField::set_heuristic_type(HeuristicSource s, FieldType type) {
   if (type < 0 || type > MAX_VALID_FIELD_TYPE ||
       type == FIELD_WITH_DEFAULT_VALUE) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     // This case should not be reachable; but since this has potential
     // implications on data uploaded to the server, better safe than sorry.
     type = UNKNOWN_TYPE;

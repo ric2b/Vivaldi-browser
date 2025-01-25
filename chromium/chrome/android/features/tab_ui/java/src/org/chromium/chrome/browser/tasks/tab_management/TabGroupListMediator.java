@@ -4,27 +4,17 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.ALL_KEYS;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.ASYNC_FAVICON_BOTTOM_LEFT;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.ASYNC_FAVICON_BOTTOM_RIGHT;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.ASYNC_FAVICON_TOP_LEFT;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.ASYNC_FAVICON_TOP_RIGHT;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.COLOR_INDEX;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.CREATION_MILLIS;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.PLUS_COUNT;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.TITLE_DATA;
-
 import android.graphics.drawable.Drawable;
 
 import androidx.annotation.IntDef;
-import androidx.core.util.Pair;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.Token;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.bookmarks.PendingRunnable;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.PaneId;
 import org.chromium.chrome.browser.hub.PaneManager;
 import org.chromium.chrome.browser.tab.Tab;
@@ -33,7 +23,8 @@ import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.ConfirmationResult;
-import org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.AsyncDrawable;
+import org.chromium.components.sync.ModelType;
+import org.chromium.components.sync.SyncService;
 import org.chromium.components.tab_group_sync.LocalTabGroupId;
 import org.chromium.components.tab_group_sync.SavedTabGroup;
 import org.chromium.components.tab_group_sync.SavedTabGroupTab;
@@ -43,7 +34,6 @@ import org.chromium.components.tab_group_sync.TriggerSource;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
-import org.chromium.ui.modelutil.PropertyModel.WritableObjectPropertyKey;
 import org.chromium.url.GURL;
 
 import java.lang.annotation.Retention;
@@ -74,20 +64,15 @@ public class TabGroupListMediator {
         int HIDDEN = 3;
     }
 
-    private static final WritableObjectPropertyKey[] FAVICON_ORDER = {
-        ASYNC_FAVICON_TOP_LEFT,
-        ASYNC_FAVICON_TOP_RIGHT,
-        ASYNC_FAVICON_BOTTOM_LEFT,
-        ASYNC_FAVICON_BOTTOM_RIGHT
-    };
-
     private final ModelList mModelList;
+    private final PropertyModel mPropertyModel;
     private final TabGroupModelFilter mFilter;
     private final BiConsumer<GURL, Callback<Drawable>> mFaviconResolver;
-    private final TabGroupSyncService mSyncService;
+    private final @Nullable TabGroupSyncService mTabGroupSyncService;
     private final PaneManager mPaneManager;
     private final TabGroupUiActionHandler mTabGroupUiActionHandler;
     private final ActionConfirmationManager mActionConfirmationManager;
+    private final SyncService mSyncService;
     private final CallbackController mCallbackController = new CallbackController();
     private final PendingRunnable mPendingRefresh =
             new PendingRunnable(
@@ -108,7 +93,7 @@ public class TabGroupListMediator {
                 }
             };
 
-    private final TabGroupSyncService.Observer mSyncObserver =
+    private final TabGroupSyncService.Observer mTabGroupSyncObserver =
             new Observer() {
                 @Override
                 public void onInitialized() {
@@ -136,40 +121,64 @@ public class TabGroupListMediator {
                 }
             };
 
+    private final SyncService.SyncStateChangedListener mSyncStateChangeListener =
+            new SyncService.SyncStateChangedListener() {
+                @Override
+                public void syncStateChanged() {
+                    boolean enabled =
+                            mSyncService.getActiveDataTypes().contains(ModelType.SAVED_TAB_GROUP);
+                    mPropertyModel.set(TabGroupListProperties.SYNC_ENABLED, enabled);
+                }
+            };
+
     /**
      * @param modelList Side effect is adding items to this list.
+     * @param propertyModel Properties for the empty state.
      * @param filter Used to read current tab groups.
      * @param faviconResolver Used to fetch favicon images for some tabs.
-     * @param syncService Used to fetch synced copy of tab groups.
+     * @param tabGroupSyncService Used to fetch synced copy of tab groups.
      * @param paneManager Used switch panes to show details of a group.
      * @param tabGroupUiActionHandler Used to open hidden tab groups.
      * @param actionConfirmationManager Used to show confirmation dialogs.
+     * @param syncService Used to query active sync types.
      */
     public TabGroupListMediator(
             ModelList modelList,
+            PropertyModel propertyModel,
             TabGroupModelFilter filter,
             BiConsumer<GURL, Callback<Drawable>> faviconResolver,
-            TabGroupSyncService syncService,
+            @Nullable TabGroupSyncService tabGroupSyncService,
             PaneManager paneManager,
             TabGroupUiActionHandler tabGroupUiActionHandler,
-            ActionConfirmationManager actionConfirmationManager) {
+            ActionConfirmationManager actionConfirmationManager,
+            SyncService syncService) {
         mModelList = modelList;
+        mPropertyModel = propertyModel;
         mFilter = filter;
         mFaviconResolver = faviconResolver;
-        mSyncService = syncService;
+        mTabGroupSyncService = tabGroupSyncService;
         mPaneManager = paneManager;
         mTabGroupUiActionHandler = tabGroupUiActionHandler;
         mActionConfirmationManager = actionConfirmationManager;
+        mSyncService = syncService;
 
         mFilter.addObserver(mTabModelObserver);
-        mSyncService.addObserver(mSyncObserver);
+        if (mTabGroupSyncService != null) {
+            mTabGroupSyncService.addObserver(mTabGroupSyncObserver);
+        }
+        mSyncService.addSyncStateChangedListener(mSyncStateChangeListener);
+
         repopulateModelList();
+        mSyncStateChangeListener.syncStateChanged();
     }
 
     /** Clean up observers used by this class. */
     public void destroy() {
         mFilter.removeObserver(mTabModelObserver);
-        mSyncService.removeObserver(mSyncObserver);
+        if (mTabGroupSyncService != null) {
+            mTabGroupSyncService.removeObserver(mTabGroupSyncObserver);
+        }
+        mSyncService.removeSyncStateChangedListener(mSyncStateChangeListener);
         mCallbackController.destroy();
     }
 
@@ -195,71 +204,53 @@ public class TabGroupListMediator {
         return isFullyClosing ? TabGroupState.IN_CURRENT_CLOSING : TabGroupState.IN_CURRENT;
     }
 
-    private List<Pair<SavedTabGroup, Integer>> getSortedGroupAndStateList() {
-        List<Pair<SavedTabGroup, Integer>> groupAndStateList = new ArrayList<>();
-        for (String syncGroupId : mSyncService.getAllGroupIds()) {
-            SavedTabGroup savedTabGroup = mSyncService.getGroup(syncGroupId);
-            @TabGroupState int state = getState(savedTabGroup);
+    private List<SavedTabGroup> getSortedGroupList() {
+        List<SavedTabGroup> groupList = new ArrayList<>();
+        if (mTabGroupSyncService == null) return groupList;
+
+        for (String syncGroupId : mTabGroupSyncService.getAllGroupIds()) {
+            SavedTabGroup savedTabGroup = mTabGroupSyncService.getGroup(syncGroupId);
+            assert !savedTabGroup.savedTabs.isEmpty();
+
             // To simplify interactions, do not include any groups currently open in other windows.
-            if (state != TabGroupState.IN_ANOTHER) {
-                groupAndStateList.add(new Pair<>(savedTabGroup, state));
+            if (getState(savedTabGroup) != TabGroupState.IN_ANOTHER) {
+                groupList.add(savedTabGroup);
             }
         }
-        groupAndStateList.sort(
-                (a, b) -> Long.compare(b.first.creationTimeMs, a.first.creationTimeMs));
-        return groupAndStateList;
+        groupList.sort((a, b) -> Long.compare(b.creationTimeMs, a.creationTimeMs));
+        return groupList;
     }
 
     private void repopulateModelList() {
         mModelList.clear();
-        for (Pair<SavedTabGroup, Integer> groupAndState : getSortedGroupAndStateList()) {
-            SavedTabGroup savedTabGroup = groupAndState.first;
-            @TabGroupState int state = groupAndState.second;
+        for (SavedTabGroup savedTabGroup : getSortedGroupList()) {
+            PropertyModel model =
+                    TabGroupRowMediator.buildModel(
+                            savedTabGroup,
+                            mFaviconResolver,
+                            () -> openGroup(savedTabGroup),
+                            () -> processDeleteGroup(savedTabGroup));
 
-            PropertyModel.Builder builder = new PropertyModel.Builder(ALL_KEYS);
-            int numberOfTabs = savedTabGroup.savedTabs.size();
-            int numberOfCorners = FAVICON_ORDER.length;
-            int standardCorners = numberOfCorners - 1;
-            for (int i = 0; i < standardCorners; i++) {
-                if (numberOfTabs > i) {
-                    builder.with(
-                            FAVICON_ORDER[i], buildAsyncDrawable(savedTabGroup.savedTabs.get(i)));
-                } else {
-                    break;
-                }
-            }
-            if (numberOfTabs == numberOfCorners) {
-                builder.with(
-                        FAVICON_ORDER[standardCorners],
-                        buildAsyncDrawable(savedTabGroup.savedTabs.get(standardCorners)));
-            } else if (numberOfTabs > numberOfCorners) {
-                builder.with(PLUS_COUNT, numberOfTabs - standardCorners);
-            }
-
-            if (ChromeFeatureList.sTabGroupParityAndroid.isEnabled()) {
-                builder.with(COLOR_INDEX, savedTabGroup.color);
-            }
-
-            String userTitle = savedTabGroup.title;
-            Pair<String, Integer> titleData = new Pair<>(userTitle, numberOfTabs);
-            builder.with(TITLE_DATA, titleData);
-
-            builder.with(CREATION_MILLIS, savedTabGroup.creationTimeMs);
-
-            builder.with(
-                    TabGroupRowProperties.OPEN_RUNNABLE, () -> openGroup(savedTabGroup, state));
-            builder.with(
-                    TabGroupRowProperties.DELETE_RUNNABLE,
-                    () -> processDeleteGroup(savedTabGroup, state));
-
-            PropertyModel propertyModel = builder.build();
-            ListItem listItem = new ListItem(0, propertyModel);
+            ListItem listItem = new ListItem(0, model);
             mModelList.add(listItem);
         }
+
+        boolean empty = mModelList.size() <= 0;
+        mPropertyModel.set(TabGroupListProperties.EMPTY_STATE_VISIBLE, empty);
     }
 
-    private void openGroup(SavedTabGroup savedTabGroup, @TabGroupState int state) {
-        state = updateStateForOpenGroup(savedTabGroup, state);
+    private void openGroup(SavedTabGroup savedTabGroup) {
+        @TabGroupState int state = getState(savedTabGroup);
+        if (state == TabGroupState.IN_ANOTHER) {
+            return;
+        }
+
+        if (state == TabGroupState.HIDDEN) {
+            RecordUserAction.record("SyncedTabGroup.OpenNewLocal");
+        } else {
+            RecordUserAction.record("SyncedTabGroup.OpenExistingLocal");
+        }
+
         if (state == TabGroupState.IN_CURRENT_CLOSING) {
             for (SavedTabGroupTab savedTab : savedTabGroup.savedTabs) {
                 if (savedTab.localId != null) {
@@ -269,7 +260,7 @@ public class TabGroupListMediator {
         } else if (state == TabGroupState.HIDDEN) {
             String syncId = savedTabGroup.syncId;
             mTabGroupUiActionHandler.openTabGroup(syncId);
-            savedTabGroup = mSyncService.getGroup(syncId);
+            savedTabGroup = mTabGroupSyncService.getGroup(syncId);
             assert savedTabGroup.localId != null;
         }
 
@@ -282,33 +273,27 @@ public class TabGroupListMediator {
         assert success;
     }
 
-    private @TabGroupState int updateStateForOpenGroup(
-            SavedTabGroup savedTabGroup, @TabGroupState int previousState) {
-        if (previousState != TabGroupState.IN_CURRENT_CLOSING) return previousState;
-
-        // It is possible to "race" with the undo snackbar when IN_CURRENT_CLOSING is happening
-        // since refreshing this UI is a posted task. Fall back to HIDDEN if there are no tabs
-        // available to cancel the closure of.
-        TabList tabList = mFilter.getTabModel().getComprehensiveModel();
-        for (int i = 0; i < tabList.getCount(); i++) {
-            Tab tab = tabList.getTabAt(i);
-            if (tab.isClosing() && savedTabGroup.localId.tabGroupId.equals(tab.getTabGroupId())) {
-                return TabGroupState.IN_CURRENT_CLOSING;
-            }
-        }
-        return TabGroupState.HIDDEN;
-    }
-
-    private void processDeleteGroup(SavedTabGroup savedTabGroup, @TabGroupState int state) {
+    private void processDeleteGroup(SavedTabGroup savedTabGroup) {
         mActionConfirmationManager.processDeleteGroupAttempt(
                 (@ConfirmationResult Integer result) -> {
                     if (result != ConfirmationResult.CONFIRMATION_NEGATIVE) {
-                        deleteGroup(savedTabGroup, state);
+                        deleteGroup(savedTabGroup);
                     }
                 });
     }
 
-    private void deleteGroup(SavedTabGroup savedTabGroup, @TabGroupState int state) {
+    private void deleteGroup(SavedTabGroup savedTabGroup) {
+        @TabGroupState int state = getState(savedTabGroup);
+        if (state == TabGroupState.IN_ANOTHER) {
+            return;
+        }
+
+        if (state == TabGroupState.HIDDEN) {
+            RecordUserAction.record("SyncedTabGroup.DeleteWithoutLocal");
+        } else {
+            RecordUserAction.record("SyncedTabGroup.DeleteWithLocal");
+        }
+
         if (state == TabGroupState.IN_CURRENT_CLOSING) {
             for (SavedTabGroupTab savedTab : savedTabGroup.savedTabs) {
                 if (savedTab.localId != null) {
@@ -317,19 +302,14 @@ public class TabGroupListMediator {
             }
             // Because the pending closure might have been hiding or part of a closure containing
             // more tabs we need to forcibly remove the group.
-            mSyncService.removeGroup(savedTabGroup.syncId);
+            mTabGroupSyncService.removeGroup(savedTabGroup.syncId);
         } else if (state == TabGroupState.IN_CURRENT) {
             int rootId = mFilter.getRootIdFromStableId(savedTabGroup.localId.tabGroupId);
             List<Tab> tabsToClose = mFilter.getRelatedTabListForRootId(rootId);
             mFilter.closeMultipleTabs(
                     tabsToClose, /* canUndo= */ false, /* hideTabGroups= */ false);
         } else {
-            assert state == TabGroupState.HIDDEN;
-            mSyncService.removeGroup(savedTabGroup.syncId);
+            mTabGroupSyncService.removeGroup(savedTabGroup.syncId);
         }
-    }
-
-    private AsyncDrawable buildAsyncDrawable(SavedTabGroupTab tab) {
-        return (Callback<Drawable> callback) -> mFaviconResolver.accept(tab.url, callback);
     }
 }

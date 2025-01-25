@@ -4,10 +4,10 @@
 """Generic presubmit checks that can be reused by other presubmit checks."""
 
 import datetime
+import functools
 import io as _io
 import os as _os
 import time
-import zoneinfo
 
 import metadata.discover
 import metadata.validate
@@ -906,7 +906,7 @@ def CheckChromiumDependencyMetadata(input_api, output_api, file_filter=None):
 
 _IGNORE_FREEZE_FOOTER = 'Ignore-Freeze'
 
-_FREEZE_TZ = zoneinfo.ZoneInfo("America/Los_Angeles")
+_FREEZE_TZ = datetime.timezone(-datetime.timedelta(hours=8), 'PST')
 _FREEZE_START = datetime.datetime(2023, 12, 15, 0, 0, tzinfo=_FREEZE_TZ)
 _FREEZE_END = datetime.datetime(2024, 1, 2, 0, 0, tzinfo=_FREEZE_TZ)
 
@@ -1766,10 +1766,16 @@ def PanProjectChecks(input_api,
                 input_api, output_api))
 
     if global_checks:
+        results.extend(
+            input_api.canned_checks.CheckNoNewGitFilesAddedInDependencies(
+                input_api, output_api))
         if input_api.change.scm == 'git':
             snapshot("checking for commit objects in tree")
             results.extend(
                 input_api.canned_checks.CheckForCommitObjects(
+                    input_api, output_api))
+            results.extend(
+                input_api.canned_checks.CheckForRecursedeps(
                     input_api, output_api))
 
     snapshot("done")
@@ -2101,6 +2107,79 @@ def CheckForCommitObjects(input_api, output_api):
     return []
 
 
+def CheckForRecursedeps(input_api, output_api):
+    """Checks that DEPS entries in recursedeps exist in deps."""
+    # Run only if DEPS has been modified.
+    if all(f.LocalPath() != 'DEPS' for f in input_api.AffectedFiles()):
+        return []
+    # Get DEPS file.
+    deps_file = input_api.os_path.join(input_api.PresubmitLocalPath(), 'DEPS')
+    if not input_api.os_path.isfile(deps_file):
+        # No DEPS file, carry on!
+        return []
+
+    with open(deps_file) as f:
+        deps_content = f.read()
+    deps = _ParseDeps(deps_content)
+
+    if 'recursedeps' not in deps:
+        # No recursedeps entry, carry on!
+        return []
+
+    existing_deps = deps.get('deps', {})
+
+    errors = []
+    for check_dep in deps['recursedeps']:
+        if check_dep not in existing_deps:
+            errors.append(
+                output_api.PresubmitError(
+                    f'Found recuredep entry {check_dep} but it is not found '
+                    'in\n deps itself. Remove it from recurcedeps or add '
+                    'deps entry.'))
+    return errors
+
+
+def _readDeps(input_api):
+    """Read DEPS file from the checkout disk. Extracted for testability."""
+    deps_file = input_api.os_path.join(input_api.PresubmitLocalPath(), 'DEPS')
+    with open(deps_file) as f:
+        return f.read()
+
+
+def CheckNoNewGitFilesAddedInDependencies(input_api, output_api):
+    """Check if there are Git files in any DEPS dependencies. Error is returned
+    if there are."""
+    try:
+        deps = _ParseDeps(_readDeps(input_api))
+    except FileNotFoundError:
+        # If there's no DEPS file, there is nothing to check.
+        return []
+
+    dependency_paths = set()
+    for path, dep in deps.get('deps', {}).items():
+        if 'condition' in dep and 'non_git_source' in dep['condition']:
+            # TODO(crbug.com/40738689): Remove src/ prefix
+            dependency_paths.add(path[4:])  # 4 == len('src/')
+
+    errors = []
+    for file in input_api.AffectedFiles(include_deletes=False):
+        path = file.LocalPath()
+        # We are checking path, and all paths below up to root. E.g. if path is
+        # a/b/c, we start with path == "a/b/c", followed by "a/b" and "a".
+        while path:
+            if path in dependency_paths:
+                errors.append(
+                    output_api.PresubmitError(
+                        'You cannot place files tracked by Git inside a '
+                        'first-party DEPS dependency (deps).\n'
+                        f'Dependency: {path}\n'
+                        f'File: {file.LocalPath()}'))
+            path = _os.path.dirname(path)
+
+    return errors
+
+
+@functools.lru_cache(maxsize=None)
 def _ParseDeps(contents):
     """Simple helper for parsing DEPS files."""
 

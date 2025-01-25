@@ -93,9 +93,6 @@ class TestWallpaperController : public ash::WallpaperController {
 
   // ash::WallpaperController:
   void SetClient(ash::WallpaperControllerClient* client) override;
-  ash::WallpaperDragDropDelegate* GetDragDropDelegate() override;
-  void SetDragDropDelegate(
-      std::unique_ptr<ash::WallpaperDragDropDelegate> delegate) override;
   void SetDriveFsDelegate(
       std::unique_ptr<ash::WallpaperDriveFsDelegate> drivefs_delegate) override;
   void Init(const base::FilePath& user_data,
@@ -183,12 +180,15 @@ class TestWallpaperController : public ash::WallpaperController {
   bool IsWallpaperControlledByPolicy(
       const AccountId& account_id) const override;
   std::optional<ash::WallpaperInfo> GetActiveUserWallpaperInfo() const override;
+  std::optional<ash::WallpaperInfo> GetWallpaperInfoForAccountId(
+      const AccountId& account_id) const override;
   void SetDailyRefreshCollectionId(const AccountId& account_id,
                                    const std::string& collection_id) override;
   std::string GetDailyRefreshCollectionId(
       const AccountId& account_id) const override;
   void UpdateDailyRefreshWallpaper(RefreshWallpaperCallback callback) override;
   void SyncLocalAndRemotePrefs(const AccountId& account_id) override;
+  const AccountId& CurrentAccountId() const override;
 
  private:
   bool was_client_set_ = false;

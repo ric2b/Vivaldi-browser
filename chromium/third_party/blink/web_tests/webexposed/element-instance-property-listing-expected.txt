@@ -40,6 +40,7 @@ namespace http://www.w3.org/1999/xhtml
     property ariaChecked
     property ariaColCount
     property ariaColIndex
+    property ariaColIndexText
     property ariaColSpan
     property ariaControlsElements
     property ariaCurrent
@@ -73,6 +74,7 @@ namespace http://www.w3.org/1999/xhtml
     property ariaRoleDescription
     property ariaRowCount
     property ariaRowIndex
+    property ariaRowIndexText
     property ariaRowSpan
     property ariaSelected
     property ariaSetSize
@@ -111,6 +113,7 @@ namespace http://www.w3.org/1999/xhtml
     property computedStyleMap
     property contains
     property contentEditable
+    property currentCSSZoom
     property dataset
     property dir
     property dispatchEvent
@@ -260,6 +263,8 @@ namespace http://www.w3.org/1999/xhtml
     property onresize
     property onscroll
     property onscrollend
+    property onscrollsnapchange
+    property onscrollsnapchanging
     property onsearch
     property onsecuritypolicyviolation
     property onseeked
@@ -268,8 +273,6 @@ namespace http://www.w3.org/1999/xhtml
     property onselectionchange
     property onselectstart
     property onslotchange
-    property onsnapchanged
-    property onsnapchanging
     property onstalled
     property onsubmit
     property onsuspend
@@ -506,6 +509,8 @@ html element br
     property clear
 html element button
     property checkValidity
+    property command
+    property commandForElement
     property disabled
     property form
     property formAction
@@ -515,8 +520,6 @@ html element button
     property formTarget
     property interestAction
     property interestTargetElement
-    property invokeAction
-    property invokeTargetElement
     property labels
     property name
     property popoverTargetAction
@@ -756,6 +759,8 @@ html element input
     property autocomplete
     property checkValidity
     property checked
+    property command
+    property commandForElement
     property defaultChecked
     property defaultValue
     property dirName
@@ -772,8 +777,6 @@ html element input
     property indeterminate
     property interestAction
     property interestTargetElement
-    property invokeAction
-    property invokeTargetElement
     property labels
     property list
     property max
@@ -959,8 +962,11 @@ html element param
     property value
     property valueType
 html element permission
+    property invalidReason
+    property isValid
     property ondismiss
     property onresolve
+    property onvalidationstatuschange
     property type
 html element picture
 html element plaintext
@@ -1334,6 +1340,7 @@ namespace http://www.w3.org/2000/svg
     property ariaChecked
     property ariaColCount
     property ariaColIndex
+    property ariaColIndexText
     property ariaColSpan
     property ariaControlsElements
     property ariaCurrent
@@ -1367,6 +1374,7 @@ namespace http://www.w3.org/2000/svg
     property ariaRoleDescription
     property ariaRowCount
     property ariaRowIndex
+    property ariaRowIndexText
     property ariaRowSpan
     property ariaSelected
     property ariaSetSize
@@ -1401,6 +1409,7 @@ namespace http://www.w3.org/2000/svg
     property computedRole
     property computedStyleMap
     property contains
+    property currentCSSZoom
     property dataset
     property dispatchEvent
     property elementTiming
@@ -1534,6 +1543,8 @@ namespace http://www.w3.org/2000/svg
     property onresize
     property onscroll
     property onscrollend
+    property onscrollsnapchange
+    property onscrollsnapchanging
     property onsearch
     property onsecuritypolicyviolation
     property onseeked
@@ -1542,8 +1553,6 @@ namespace http://www.w3.org/2000/svg
     property onselectionchange
     property onselectstart
     property onslotchange
-    property onsnapchanged
-    property onsnapchanging
     property onstalled
     property onsubmit
     property onsuspend

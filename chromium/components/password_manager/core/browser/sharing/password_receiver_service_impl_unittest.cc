@@ -149,18 +149,8 @@ class PasswordReceiverServiceImplTest : public testing::TestWithParam<bool> {
 
   void SetUp() override {
     testing::Test::SetUp();
-    // Set the user to be syncing passwords
-    CoreAccountInfo account;
-    account.email = "user@account.com";
-    account.gaia = "user";
-    account.account_id = CoreAccountId::FromGaiaId(account.gaia);
-    sync_service().SetAccountInfo(account);
-    sync_service().SetHasSyncConsent(true);
-    sync_service().SetTransportState(
-        syncer::SyncService::TransportState::ACTIVE);
-    sync_service().SetDisableReasons({});
-    sync_service().GetUserSettings()->SetSelectedType(
-        syncer::UserSelectableType::kPasswords, true);
+    // Set the user to be syncing passwords.
+    sync_service_.SetSignedIn(signin::ConsentLevel::kSync);
   }
 
   void TearDown() override {
@@ -184,19 +174,19 @@ class PasswordReceiverServiceImplTest : public testing::TestWithParam<bool> {
   // the invitation.
   std::string GetInvitationOrigin(
       const sync_pb::IncomingPasswordSharingInvitationSpecifics& invitation) {
-      return invitation.client_only_unencrypted_data()
-          .password_group_data()
-          .element_data(0)
-          .origin();
+    return invitation.client_only_unencrypted_data()
+        .password_group_data()
+        .element_data(0)
+        .origin();
   }
 
   // Sets ths `password_value` in the `invitation`.
   void SetPasswordValueInInvitation(
       const std::u16string& password_value,
       sync_pb::IncomingPasswordSharingInvitationSpecifics& invitation) {
-      invitation.mutable_client_only_unencrypted_data()
-          ->mutable_password_group_data()
-          ->set_password_value(base::UTF16ToUTF8(password_value));
+    invitation.mutable_client_only_unencrypted_data()
+        ->mutable_password_group_data()
+        ->set_password_value(base::UTF16ToUTF8(password_value));
   }
 
   PasswordReceiverService* password_receiver_service() {
@@ -373,7 +363,7 @@ TEST_P(PasswordReceiverServiceImplTest,
   // matter).
   base::test::ScopedFeatureList feature_list(
       syncer::kEnablePasswordsAccountStorageForNonSyncingUsers);
-  sync_service().SetHasSyncConsent(false);
+  sync_service().SetSignedIn(signin::ConsentLevel::kSignin);
 #if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
   pref_service().registry()->RegisterDictionaryPref(
       password_manager::prefs::kAccountStoragePerAccountSettings);
@@ -403,7 +393,7 @@ TEST_P(PasswordReceiverServiceImplTest,
   ASSERT_TRUE(account_password_store().stored_passwords().empty());
 
   // Setup a signed-in user that opted-out from using the account store:
-  sync_service().SetHasSyncConsent(false);
+  sync_service().SetSignedIn(signin::ConsentLevel::kSignin);
 #if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
   pref_service().registry()->RegisterDictionaryPref(
       password_manager::prefs::kAccountStoragePerAccountSettings);

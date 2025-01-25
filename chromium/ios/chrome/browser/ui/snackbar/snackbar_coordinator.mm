@@ -10,12 +10,9 @@
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
+#import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/public/provider/chrome/browser/material/material_branding_api.h"
-
-BASE_FEATURE(kSnackbarUseLegacyDismissalBehavior,
-             "SnackbarUseLegacyDismissalBehavior",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Allow access to `usesLegacyDismissalBehavior` since the autoroller to update
 // the header is broken.
@@ -87,12 +84,8 @@ BASE_FEATURE(kSnackbarUseLegacyDismissalBehavior,
 
 - (void)showSnackbarMessage:(MDCSnackbarMessage*)message
                bottomOffset:(CGFloat)offset {
-  // TODO:(crbug.com/333567367) Clean up the killswitch.
-  if (base::FeatureList::IsEnabled(kSnackbarUseLegacyDismissalBehavior)) {
-    if ([message
-            respondsToSelector:@selector(setUsesLegacyDismissalBehavior:)]) {
-      message.usesLegacyDismissalBehavior = YES;
-    }
+  if ([message respondsToSelector:@selector(setUsesLegacyDismissalBehavior:)]) {
+    message.usesLegacyDismissalBehavior = YES;
   }
 
   [[MDCSnackbarManager defaultManager]
@@ -105,13 +98,14 @@ BASE_FEATURE(kSnackbarUseLegacyDismissalBehavior,
                      buttonText:(NSString*)buttonText
                   messageAction:(void (^)(void))messageAction
                completionAction:(void (^)(BOOL))completionAction {
-  MDCSnackbarMessageAction* action = [[MDCSnackbarMessageAction alloc] init];
-  action.handler = messageAction;
-  action.title = buttonText;
-  action.accessibilityLabel = buttonText;
-  MDCSnackbarMessage* message =
-      [MDCSnackbarMessage messageWithText:messageText];
-  message.action = action;
+  MDCSnackbarMessage* message = CreateSnackbarMessage(messageText);
+  if (buttonText) {
+    MDCSnackbarMessageAction* action = [[MDCSnackbarMessageAction alloc] init];
+    action.handler = messageAction;
+    action.title = buttonText;
+    action.accessibilityLabel = buttonText;
+    message.action = action;
+  }
   message.completionHandler = completionAction;
 
   [self showSnackbarMessage:message];

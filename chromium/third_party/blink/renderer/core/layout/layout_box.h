@@ -20,6 +20,11 @@
  *
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_BOX_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_BOX_H_
 
@@ -211,10 +216,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     NOT_DESTROYED();
     return false;
   }
-
-  // Returns true if this LayoutBox has a scroll paint property node and the
-  // node is currently composited in cc.
-  bool UsesCompositedScrolling() const;
 
   // Use this with caution! No type checking is done!
   LayoutBox* FirstChildBox() const;
@@ -447,39 +448,10 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
                                                 : ContentWidth();
   }
 
-  bool ShouldUseAutoIntrinsicSize() const;
   // CSS intrinsic sizing getters.
   // https://drafts.csswg.org/css-sizing-4/#intrinsic-size-override
-  // Physical:
-  bool HasOverrideIntrinsicContentWidth() const;
-  bool HasOverrideIntrinsicContentHeight() const;
-  LayoutUnit OverrideIntrinsicContentWidth() const;
-  LayoutUnit OverrideIntrinsicContentHeight() const;
-  // Logical:
-  bool HasOverrideIntrinsicContentLogicalWidth() const {
-    NOT_DESTROYED();
-    return StyleRef().IsHorizontalWritingMode()
-               ? HasOverrideIntrinsicContentWidth()
-               : HasOverrideIntrinsicContentHeight();
-  }
-  bool HasOverrideIntrinsicContentLogicalHeight() const {
-    NOT_DESTROYED();
-    return StyleRef().IsHorizontalWritingMode()
-               ? HasOverrideIntrinsicContentHeight()
-               : HasOverrideIntrinsicContentWidth();
-  }
-  LayoutUnit OverrideIntrinsicContentLogicalWidth() const {
-    NOT_DESTROYED();
-    return StyleRef().IsHorizontalWritingMode()
-               ? OverrideIntrinsicContentWidth()
-               : OverrideIntrinsicContentHeight();
-  }
-  LayoutUnit OverrideIntrinsicContentLogicalHeight() const {
-    NOT_DESTROYED();
-    return StyleRef().IsHorizontalWritingMode()
-               ? OverrideIntrinsicContentHeight()
-               : OverrideIntrinsicContentWidth();
-  }
+  LayoutUnit OverrideIntrinsicContentInlineSize() const;
+  LayoutUnit OverrideIntrinsicContentBlockSize() const;
 
   // Returns element-native intrinsic size. Returns kIndefiniteSize if no such
   // size.
@@ -708,6 +680,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       using pointer = PhysicalBoxFragment*;
       using reference = PhysicalBoxFragment&;
 
+      constexpr Iterator() = default;
       explicit Iterator(const LayoutResultList::const_iterator& iterator)
           : iterator_(iterator) {}
 
@@ -781,8 +754,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   LayoutUnit ContainingBlockLogicalHeightForRelPositioned() const;
 
   LayoutUnit ContainingBlockLogicalWidthForContent() const override;
-
-  bool AutoWidthShouldFitContent() const;
 
   // Block flows subclass availableWidth/Height to handle multi column layout
   // (shrinking the width/height available to children when laying out.)
@@ -914,15 +885,13 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   bool IsCustomItem() const;
 
-  // TODO(1229581): Rename this function.
-  bool IsFlexItemIncludingNG() const {
+  bool IsFlexItem() const {
     NOT_DESTROYED();
     return !IsInline() && !IsOutOfFlowPositioned() && Parent() &&
            Parent()->IsFlexibleBox();
   }
 
-  // TODO(1229581): Rename this function.
-  bool IsGridItemIncludingNG() const {
+  bool IsGridItem() const {
     NOT_DESTROYED();
     return Parent() && Parent()->IsLayoutGrid();
   }
@@ -982,12 +951,12 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return ScrollableOverflowIsSet();
   }
 
-  // Returns true if reading order should be used on this LayoutBox's content.
-  // https://drafts.csswg.org/css-display-4/#reading-order-items
-  bool IsReadingOrderContainer() const;
-  // Returns the Element children corresponding to this LayoutBox's layout
-  // children, sorted in reading order if IsReadingOrderContainer().
-  HeapVector<Member<Element>> ReadingOrderElements() const;
+  // Returns true if reading flow should be used on this LayoutBox's content.
+  // https://drafts.csswg.org/css-display-4/#reading-flow
+  bool IsReadingFlowContainer() const;
+  // Returns the elements corresponding to this LayoutBox's layout children,
+  // sorted in reading flow if IsReadingFlowContainer().
+  const HeapVector<Member<Element>>& ReadingFlowElements() const;
 
   // See README.md for an explanation of scroll origin.
   gfx::Vector2d OriginAdjustmentForScrollbars() const;
@@ -1043,7 +1012,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   virtual LayoutBox* CreateAnonymousBoxWithSameTypeAs(
       const LayoutObject*) const {
     NOT_DESTROYED();
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
 
@@ -1156,7 +1125,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   MinMaxSizesResult CachedIndefiniteIntrinsicLogicalWidths() const {
     NOT_DESTROYED();
     DCHECK(!IntrinsicLogicalWidthsDirty());
-    DCHECK(!IntrinsicLogicalWidthsChildDependsOnBlockConstraints());
     return {intrinsic_logical_widths_,
             IntrinsicLogicalWidthsDependsOnBlockConstraints()};
   }
@@ -1186,21 +1154,17 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   // Sets the min/max sizes for this box.
   void SetIntrinsicLogicalWidths(LayoutUnit initial_block_size,
-                                 bool depends_on_block_constraints,
-                                 bool child_depends_on_block_constraints,
-                                 const MinMaxSizes& sizes) {
+                                 const MinMaxSizesResult& result) {
     NOT_DESTROYED();
     // Write to the "indefinite" cache slot if:
     //  - If the initial block-size is indefinite.
     //  - If we don't have any children which depend on the initial block-size
     //    (it can change and we wouldn't give a different answer).
     if (initial_block_size == kIndefiniteSize ||
-        !child_depends_on_block_constraints) {
-      intrinsic_logical_widths_ = sizes;
+        !result.depends_on_block_constraints) {
+      intrinsic_logical_widths_ = result.sizes;
       SetIntrinsicLogicalWidthsDependsOnBlockConstraints(
-          depends_on_block_constraints);
-      SetIntrinsicLogicalWidthsChildDependsOnBlockConstraints(
-          child_depends_on_block_constraints);
+          result.depends_on_block_constraints);
       SetIndefiniteIntrinsicLogicalWidthsDirty(false);
     } else {
       if (!min_max_sizes_cache_) {
@@ -1208,8 +1172,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       } else if (DefiniteIntrinsicLogicalWidthsDirty()) {
         min_max_sizes_cache_->Clear();
       }
-      min_max_sizes_cache_->Add(sizes, initial_block_size,
-                                depends_on_block_constraints);
+      min_max_sizes_cache_->Add(result.sizes, initial_block_size,
+                                result.depends_on_block_constraints);
       SetDefiniteIntrinsicLogicalWidthsDirty(false);
     }
     ClearIntrinsicLogicalWidthsDirty();
@@ -1271,10 +1235,17 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // https://drafts.csswg.org/css-anchor-position-1/#ref-for-valdef-anchor-implicit
   const LayoutObject* AcceptableImplicitAnchor() const;
 
-  const Vector<NonOverflowingScrollRange>* NonOverflowingScrollRanges() const;
+  const HeapVector<NonOverflowingScrollRange>* NonOverflowingScrollRanges()
+      const;
 
   const BoxStrut& OutOfFlowInsetsForGetComputedStyle() const;
 
+  const HeapHashSet<Member<Element>>* DisplayLocksAffectedByAnchors() const;
+  void NotifyContainingDisplayLocksForAnchorPositioning(
+      const HeapHashSet<Member<Element>>*
+          past_display_locks_affected_by_anchors,
+      const HeapHashSet<Member<Element>>* display_locks_affected_by_anchors)
+      const;
   bool NeedsAnchorPositionScrollAdjustmentInX() const;
   bool NeedsAnchorPositionScrollAdjustmentInY() const;
 

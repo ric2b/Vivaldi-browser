@@ -7,7 +7,7 @@ load("//lib/args.star", "args")
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
 load("//lib/builder_health_indicators.star", "health_spec")
-load("//lib/builders.star", "cpu", "os", "reclient", "sheriff_rotations")
+load("//lib/builders.star", "cpu", "gardener_rotations", "os", "siso")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
@@ -16,19 +16,21 @@ load("//lib/xcode.star", "xcode")
 ci.defaults.set(
     executable = ci.DEFAULT_EXECUTABLE,
     builder_group = "chromium.mac",
+    builder_config_settings = builder_config.ci_settings(
+        retry_failed_shards = True,
+    ),
     pool = ci.DEFAULT_POOL,
     os = os.MAC_DEFAULT,
-    sheriff_rotations = sheriff_rotations.CHROMIUM,
+    gardener_rotations = gardener_rotations.CHROMIUM,
     tree_closing = True,
     main_console_view = "main",
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
     health_spec = health_spec.DEFAULT,
-    reclient_instance = reclient.instance.DEFAULT_TRUSTED,
-    reclient_jobs = reclient.jobs.DEFAULT,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
     shadow_service_account = ci.DEFAULT_SHADOW_SERVICE_ACCOUNT,
     siso_enabled = True,
-    siso_remote_jobs = reclient.jobs.DEFAULT,
+    siso_project = siso.project.DEFAULT_TRUSTED,
+    siso_remote_jobs = siso.remote_jobs.DEFAULT,
     thin_tester_cores = 8,
 )
 
@@ -58,7 +60,7 @@ consoles.console_view(
 )
 
 def ios_builder(*, name, **kwargs):
-    kwargs.setdefault("sheriff_rotations", sheriff_rotations.IOS)
+    kwargs.setdefault("gardener_rotations", gardener_rotations.IOS)
     kwargs.setdefault("xcode", xcode.xcode_default)
     return ci.builder(name = name, **kwargs)
 
@@ -91,9 +93,10 @@ ci.builder(
         configs = [
             "gpu_tests",
             "release_builder",
-            "reclient",
+            "remoteexec",
             "minimal_symbols",
             "x64",
+            "mac",
         ],
     ),
     cpu = cpu.ARM64,
@@ -103,8 +106,8 @@ ci.builder(
     ),
     cq_mirrors_console_view = "mirrors",
     contact_team_email = "bling-engprod@google.com",
-    reclient_instance = reclient.instance.DEFAULT_TRUSTED,
-    reclient_jobs = reclient.jobs.DEFAULT,
+    siso_project = siso.project.DEFAULT_TRUSTED,
+    siso_remote_jobs = siso.remote_jobs.DEFAULT,
 )
 
 ci.builder(
@@ -130,8 +133,9 @@ ci.builder(
         configs = [
             "gpu_tests",
             "debug_builder",
-            "reclient",
+            "remoteexec",
             "x64",
+            "mac",
         ],
     ),
     os = os.MAC_ANY,
@@ -168,7 +172,8 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
+            "mac",
             "arm64",
         ],
     ),
@@ -201,7 +206,8 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "debug_builder",
-            "reclient",
+            "remoteexec",
+            "mac",
             "arm64",
         ],
     ),
@@ -242,8 +248,9 @@ ci.builder(
             "arm64",
             "gpu_tests",
             "release_builder",
-            "reclient",
+            "remoteexec",
             "minimal_symbols",
+            "mac",
         ],
     ),
     os = os.MAC_DEFAULT,
@@ -274,13 +281,14 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
+            "mac",
             "x64",
         ],
     ),
     os = os.MAC_DEFAULT,
     cpu = cpu.ARM64,
-    sheriff_rotations = args.ignore_default(None),
+    gardener_rotations = args.ignore_default(None),
     tree_closing = False,
     console_view_entry = consoles.console_view_entry(
         category = "release",
@@ -393,8 +401,6 @@ ci.thin_tester(
             target_platform = builder_config.target_platform.MAC,
         ),
     ),
-    # TODO(crbug.com/336530603): Add to rotation when it's stable.
-    sheriff_rotations = args.ignore_default(None),
     tree_closing = False,
     console_view_entry = consoles.console_view_entry(
         category = "release|arm64",
@@ -450,9 +456,6 @@ ci.thin_tester(
             target_platform = builder_config.target_platform.MAC,
         ),
     ),
-    builder_config_settings = builder_config.ci_settings(
-        retry_failed_shards = True,
-    ),
     console_view_entry = consoles.console_view_entry(
         category = "mac",
         short_name = "11",
@@ -478,9 +481,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-    ),
-    builder_config_settings = builder_config.ci_settings(
-        retry_failed_shards = True,
     ),
     console_view_entry = consoles.console_view_entry(
         category = "mac",
@@ -536,7 +536,7 @@ ci.thin_tester(
         ),
         build_gs_bucket = "chromium-mac-archive",
     ),
-    sheriff_rotations = args.ignore_default(None),
+    gardener_rotations = args.ignore_default(None),
     console_view_entry = consoles.console_view_entry(
         category = "debug",
         short_name = "14",
@@ -566,7 +566,7 @@ ci.thin_tester(
         ),
     ),
     # TODO(crbug.com/336530603): Add to rotation when it's stable.
-    sheriff_rotations = args.ignore_default(None),
+    gardener_rotations = args.ignore_default(None),
     console_view_entry = consoles.console_view_entry(
         category = "mac",
         short_name = "14",
@@ -598,7 +598,7 @@ ios_builder(
         configs = [
             "compile_only",
             "debug_static_builder",
-            "reclient",
+            "remoteexec",
             "ios_catalyst",
             "x64",
             "asan",
@@ -642,7 +642,7 @@ ios_builder(
             "ios_google_cert",
             "ios_disable_code_signing",
             "release_builder",
-            "reclient",
+            "remoteexec",
         ],
     ),
     cpu = cpu.ARM64,
@@ -685,7 +685,7 @@ ios_builder(
     gn_args = gn_args.config(
         configs = [
             "debug_static_builder",
-            "reclient",
+            "remoteexec",
             "ios_simulator",
             "x64",
             "xctest",
@@ -732,7 +732,7 @@ ios_builder(
     gn_args = gn_args.config(
         configs = [
             "debug_static_builder",
-            "reclient",
+            "remoteexec",
             "ios_simulator",
             "x64",
             "xctest",
@@ -775,7 +775,7 @@ ios_builder(
     gn_args = gn_args.config(
         configs = [
             "debug_static_builder",
-            "reclient",
+            "remoteexec",
             "ios_simulator",
             "x64",
             "xctest",

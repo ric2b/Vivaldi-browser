@@ -6,30 +6,29 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <math.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <xnnpack.h>
-#include <xnnpack/allocator.h>
-#include <xnnpack/cache.h>
-#include <xnnpack/common.h>
-#include <xnnpack/compute.h>
-#include <xnnpack/config.h>
-#include <xnnpack/log.h>
-#include <xnnpack/math.h>
-#include <xnnpack/microfnptr.h>
-#include <xnnpack/microkernel-type.h>
-#include <xnnpack/operator-type.h>
-#include <xnnpack/operator-utils.h>
-#include <xnnpack/operator.h>
-#include <xnnpack/pack.h>
-#include <xnnpack/params.h>
-
-#include "pthreadpool.h"
 #include <fp16/fp16.h>
+#include "xnnpack.h"
+#include "xnnpack/allocator.h"
+#include "xnnpack/cache.h"
+#include "xnnpack/common.h"
+#include "xnnpack/compute.h"
+#include "xnnpack/config-types.h"
+#include "xnnpack/config.h"
+#include "xnnpack/log.h"
+#include "xnnpack/math.h"
+#include "xnnpack/microfnptr.h"
+#include "xnnpack/microkernel-type.h"
+#include "xnnpack/operator-type.h"
+#include "xnnpack/operator-utils.h"
+#include "xnnpack/operator.h"
+#include "xnnpack/pack.h"
+#include "xnnpack/params.h"
+#include "pthreadpool.h"
 
 static enum xnn_status create_spmm_path(
     const uint32_t kernel_height,
@@ -1011,9 +1010,7 @@ static enum xnn_status reshape_convolution2d_nchw(
 
   const size_t input_batch_stride = (input_height * input_width * convolution_op->input_pixel_stride) << log2_input_element_size;
   const size_t output_batch_stride = (output_height * output_width * convolution_op->output_pixel_stride) << log2_output_element_size;
-  #if !XNN_TEST_MODE
-    const size_t num_threads = pthreadpool_get_threads_count(threadpool);
-  #endif
+  const size_t num_threads = pthreadpool_get_threads_count(threadpool);
   switch (convolution_op->ukernel.type) {
     case xnn_microkernel_type_spmm:
     {
@@ -1057,18 +1054,14 @@ static enum xnn_status reshape_convolution2d_nchw(
       memcpy(&convolution_op->context.spmm.params, params, sizeof(convolution_op->context.spmm.params));
 
       const size_t mr = convolution_op->ukernel.spmm.mr;
-      #if XNN_TEST_MODE
-        const size_t mc = mr;
-      #else
-        size_t mc = input_size;
-        if (num_threads > 1) {
-          const size_t target_tiles_per_thread = 5;
-          const size_t max_mc = divide_round_up(input_size, num_threads * target_tiles_per_thread);
-          if (max_mc < mc) {
-            mc = min(mc, divide_round_up(mc, max_mc * mr) * mr);
-          }
+      size_t mc = input_size;
+      if (num_threads > 1) {
+        const size_t target_tiles_per_thread = 5;
+        const size_t max_mc = divide_round_up(input_size, num_threads * target_tiles_per_thread);
+        if (max_mc < mc) {
+          mc = min(mc, divide_round_up(mc, max_mc * mr) * mr);
         }
-      #endif
+      }
       convolution_op->compute[0].type = xnn_parallelization_type_2d_tile_1d;
       convolution_op->compute[0].task_2d_tile_1d = (pthreadpool_task_2d_tile_1d_t) xnn_compute_spmm;
       convolution_op->compute[0].range[0] = batch_size;
@@ -1108,19 +1101,15 @@ static enum xnn_status reshape_convolution2d_nchw(
       memcpy(&convolution_op->context.conv2d.params, params, sizeof(convolution_op->context.conv2d.params));
 
       const size_t output_height_tile = convolution_op->ukernel.conv2d.output_height_tile;
-      #if XNN_TEST_MODE
-        size_t output_height_slice = output_height_tile;
-      #else
-        size_t output_height_slice = output_height;
-        if (num_threads > 1) {
-          const size_t target_tiles_per_thread = 5;
-          const size_t max_output_height_slice = divide_round_up(output_height, num_threads * target_tiles_per_thread);
-          if (max_output_height_slice < output_height_slice) {
-            output_height_slice = min(output_height_slice,
-              divide_round_up(output_height_slice, max_output_height_slice * output_height_tile) * output_height_tile);
-          }
+      size_t output_height_slice = output_height;
+      if (num_threads > 1) {
+        const size_t target_tiles_per_thread = 5;
+        const size_t max_output_height_slice = divide_round_up(output_height, num_threads * target_tiles_per_thread);
+        if (max_output_height_slice < output_height_slice) {
+          output_height_slice = min(output_height_slice,
+            divide_round_up(output_height_slice, max_output_height_slice * output_height_tile) * output_height_tile);
         }
-      #endif
+      }
       convolution_op->compute[0].type = xnn_parallelization_type_2d_tile_1d;
       convolution_op->compute[0].task_2d_tile_1d = (pthreadpool_task_2d_tile_1d_t) xnn_compute_conv2d_hwc2chw;
       convolution_op->compute[0].range[0] = batch_size;

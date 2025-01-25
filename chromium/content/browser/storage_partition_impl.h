@@ -215,6 +215,7 @@ class CONTENT_EXPORT StoragePartitionImpl
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   CdmStorageDataModel* GetCdmStorageDataModel() override;
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
+  void DeleteStaleSessionOnlyCookiesAfterDelay() override;
 
   void SetProtoDatabaseProvider(
       std::unique_ptr<leveldb_proto::ProtoDatabaseProvider> proto_db_provider)
@@ -260,6 +261,12 @@ class CONTENT_EXPORT StoragePartitionImpl
   void SetNetworkContextForTesting(
       mojo::PendingRemote<network::mojom::NetworkContext>
           network_context_remote) override;
+  void OverrideDeleteStaleSessionOnlyCookiesDelayForTesting(
+      const base::TimeDelta& delay) override;
+
+  // TODO(crbug.com/352651664): Consider merging to
+  // `FlushNetworkInterfaceForTesting()` if possible.
+  void FlushNetworkInterfaceOnIOThreadForTesting();
 
   base::WeakPtr<StoragePartitionImpl> GetWeakPtr();
   BackgroundFetchContext* GetBackgroundFetchContext();
@@ -350,7 +357,7 @@ class CONTENT_EXPORT StoragePartitionImpl
       network::mojom::IPAddressSpace ip_address_space) override;
   void OnAuthRequired(
       const std::optional<base::UnguessableToken>& window_id,
-      uint32_t request_id,
+      int32_t request_id,
       const GURL& url,
       bool first_auth_attempt,
       const net::AuthChallengeInfo& auth_info,
@@ -384,7 +391,8 @@ class CONTENT_EXPORT StoragePartitionImpl
     return shared_storage_header_observer_.get();
   }
 
-  scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter() {
+  scoped_refptr<ReconnectableURLLoaderFactoryForIOThread>
+  url_loader_factory_getter() {
     return url_loader_factory_getter_;
   }
 
@@ -405,6 +413,7 @@ class CONTENT_EXPORT StoragePartitionImpl
       const storage::BucketLocator& bucket_locator,
       mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
           client_state_checker_remote,
+      const base::UnguessableToken& client_token,
       mojo::PendingReceiver<blink::mojom::IDBFactory> receiver);
 
   // Called by each renderer process to bind its global DomStorage interface.
@@ -515,7 +524,6 @@ class CONTENT_EXPORT StoragePartitionImpl
  private:
   class DataDeletionHelper;
   class QuotaManagedDataDeletionHelper;
-  class URLLoaderFactoryForBrowserProcess;
   class ServiceWorkerCookieAccessObserver;
   class ServiceWorkerTrustTokenAccessObserver;
   class ServiceWorkerSharedDictionaryAccessObserver;
@@ -528,7 +536,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   friend class ServiceWorkerRegistrationTest;
   friend class ServiceWorkerUpdateJobTest;
   friend class StoragePartitionImplMap;
-  friend class URLLoaderFactoryForBrowserProcess;
   FRIEND_TEST_ALL_PREFIXES(StoragePartitionShaderClearTest, ClearShaderCache);
   FRIEND_TEST_ALL_PREFIXES(StoragePartitionImplTest,
                            RemoveQuotaManagedDataForeverBoth);
@@ -685,14 +692,16 @@ class CONTENT_EXPORT StoragePartitionImpl
 
   bool is_in_memory() { return config_.in_memory(); }
 
-  network::mojom::URLLoaderFactory*
-  GetURLLoaderFactoryForBrowserProcessInternal();
+  void CreateURLLoaderFactoryForBrowserProcessInternal(
+      mojo::PendingRemote<network::mojom::URLLoaderFactory>* out_factory);
 
   std::optional<blink::StorageKey> CalculateStorageKey(
       const url::Origin& origin,
       const base::UnguessableToken* nonce);
 
   GlobalRenderFrameHostId GetRenderFrameHostIdFromNetworkContext();
+
+  void DeleteStaleSessionOnlyCookiesAfterDelayCallback();
 
   void VivaldiUpdateBlobUrlRegistryWithFallback(storage::BlobUrlRegistry* fallback);
 
@@ -713,7 +722,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   bool initialized_ = false;
 
   mojo::Remote<storage::mojom::Partition> remote_partition_;
-  scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter_;
+  scoped_refptr<ReconnectableURLLoaderFactoryForIOThread>
+      url_loader_factory_getter_;
   scoped_refptr<QuotaContext> quota_context_;
   scoped_refptr<storage::QuotaManager> quota_manager_;
   scoped_refptr<storage::FileSystemContext> filesystem_context_;
@@ -801,7 +811,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   mojo::Receiver<network::mojom::NetworkContextClient>
       network_context_client_receiver_{this};
 
-  scoped_refptr<URLLoaderFactoryForBrowserProcess>
+  // Always valid/non-null after `Initialize()`.
+  scoped_refptr<ReconnectableURLLoaderFactory>
       shared_url_loader_factory_for_browser_process_;
 
   mojo::Remote<cert_verifier::mojom::CertVerifierServiceUpdater>
@@ -811,9 +822,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   // See the method comment for
   // StoragePartition::GetURLLoaderFactoryForBrowserProcess() for
   // more details
-  mojo::Remote<network::mojom::URLLoaderFactory>
-      url_loader_factory_for_browser_process_;
-  bool is_test_url_loader_factory_for_browser_process_ = false;
   mojo::Remote<network::mojom::CookieManager>
       cookie_manager_for_browser_process_;
 
@@ -895,6 +903,11 @@ class CONTENT_EXPORT StoragePartitionImpl
   // restoring the network revocation states of fenced frames when there is a
   // `NetworkService` crash.
   std::set<base::UnguessableToken> network_revocation_nonces_;
+
+  // We need to delay deleting stale session cookies until after the cookie db
+  // has initialized, otherwise we will bypass lazy loading and block.
+  // See crbug.com/40285083 for more info.
+  base::TimeDelta delete_stale_session_only_cookies_delay_{base::Minutes(1)};
 
   base::WeakPtrFactory<StoragePartitionImpl> weak_factory_{this};
 };

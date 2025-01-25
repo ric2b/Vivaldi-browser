@@ -7,13 +7,13 @@
 const fast_c_api = new d8.test.FastCAPI();
 
 function f() {
-  return fast_c_api.add_all_sequence(false, 0);
+  return fast_c_api.add_all_sequence(false, {});
 }
 
 %PrepareFunctionForOptimization(f);
 assertThrows(() => f(), Error,
-             "This method expects an array as a second argument.");
+             "This method expects an array as a first argument.");
 
 %OptimizeFunctionOnNextCall(f);
 assertThrows(() => f(), Error,
-             "This method expects an array as a second argument.");
+             "This method expects an array as a first argument.");

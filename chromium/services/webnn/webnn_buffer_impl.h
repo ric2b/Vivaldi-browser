@@ -9,6 +9,7 @@
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "services/webnn/public/cpp/operand_descriptor.h"
 #include "services/webnn/public/mojom/webnn_buffer.mojom.h"
 #include "services/webnn/webnn_object_impl.h"
 
@@ -16,6 +17,8 @@ namespace webnn {
 
 class WebNNContextImpl;
 
+// GPU process implementation of the MLBuffer interface exposed to script.
+// Owned by the WebNNContextImpl which created it.
 class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNBufferImpl
     : public mojom::WebNNBuffer,
       public WebNNObjectImpl {
@@ -23,15 +26,22 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNBufferImpl
   explicit WebNNBufferImpl(
       mojo::PendingAssociatedReceiver<mojom::WebNNBuffer> receiver,
       WebNNContextImpl* context,
-      uint64_t size,
+      mojom::BufferInfoPtr buffer_info,
       const base::UnguessableToken& buffer_handle);
   ~WebNNBufferImpl() override;
 
   WebNNBufferImpl(const WebNNBufferImpl&) = delete;
   WebNNBufferImpl& operator=(const WebNNBufferImpl&) = delete;
 
-  // TODO(crbug.com/40278771): prefer using `size_t` over `uint64_t`.
-  uint64_t size() const { return size_; }
+  OperandDataType data_type() const { return descriptor_.data_type(); }
+  const std::vector<uint32_t>& shape() const { return descriptor_.shape(); }
+
+  size_t PackedByteLength() const { return descriptor_.PackedByteLength(); }
+  size_t NumberOfElements() const { return descriptor_.NumberOfElements(); }
+
+  base::WeakPtr<const WebNNBufferImpl> GetWeakPtr() const {
+    return weak_factory_.GetWeakPtr();
+  }
 
  protected:
   // This method will be called by `ReadBuffer()` after the read info is
@@ -60,9 +70,11 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNBufferImpl
   //  the buffer gets implicitly destroyed upon garbage collection.
   void OnDisconnect();
 
-  const uint64_t size_;
+  const OperandDescriptor descriptor_;
 
   mojo::AssociatedReceiver<mojom::WebNNBuffer> receiver_;
+
+  base::WeakPtrFactory<WebNNBufferImpl> weak_factory_{this};
 };
 
 }  // namespace webnn

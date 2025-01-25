@@ -150,7 +150,21 @@ BASE_FEATURE(kOzoneBubblesUsePlatformWidgets,
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 );
+
+// Controls whether support for Wayland's per-surface scaling is enabled.
+BASE_FEATURE(kWaylandPerSurfaceScale,
+             "WaylandPerSurfaceScale",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_OZONE)
+
+#if BUILDFLAG(IS_LINUX)
+// If this feature is enabled, users not specify --ozone-platform-hint switch
+// will get --ozone-platform-hint=auto treatment. https://crbug.com/40250220.
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+BASE_FEATURE(kOverrideDefaultOzonePlatformHintToAuto,
+             "OverrideDefaultOzonePlatformHintToAuto",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_LINUX)
 
 // Update of the virtual keyboard settings UI as described in
 // https://crbug.com/876901.
@@ -254,6 +268,16 @@ BASE_FEATURE(kExperimentalFlingAnimation,
 #endif
 );
 
+#if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kClipboardFiles,
+             "ClipboardFiles",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kDragDropFiles,
+             "DragDropFiles",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_ANDROID)
+
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN)
 // Cached in Java as well, make sure defaults are updated together.
 BASE_FEATURE(kElasticOverscroll,
@@ -346,12 +370,8 @@ BASE_FEATURE(kEyeDropper,
 #endif
 );
 
-const char kEyeDropperNotSupported[] = "eye-dropper-not-supported";
-
 bool IsEyeDropperEnabled() {
-  return base::FeatureList::IsEnabled(features::kEyeDropper) &&
-         !base::CommandLine::ForCurrentProcess()->HasSwitch(
-             kEyeDropperNotSupported);
+  return base::FeatureList::IsEnabled(features::kEyeDropper);
 }
 
 // Used to enable keyboard accessible tooltips in in-page content
@@ -366,17 +386,6 @@ bool IsKeyboardAccessibleTooltipEnabled() {
   static const bool keyboard_accessible_tooltip_enabled =
       base::FeatureList::IsEnabled(features::kKeyboardAccessibleTooltip);
   return keyboard_accessible_tooltip_enabled;
-}
-
-// Enables trackpad gestures to dismiss notifications. Also, updates gestures to
-// only dismiss notifications when swiping towards the notification center.
-// TODO(https://b/288337080): Remove this flag once the feature is ready.
-BASE_FEATURE(kNotificationGesturesUpdate,
-             "NotificationGesturesUpdate",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsNotificationGesturesUpdateEnabled() {
-  return base::FeatureList::IsEnabled(kNotificationGesturesUpdate);
 }
 
 BASE_FEATURE(kSynchronousPageFlipTesting,
@@ -502,24 +511,6 @@ bool IsLacrosColorManagementEnabled() {
   return base::FeatureList::IsEnabled(kLacrosColorManagement);
 }
 
-BASE_FEATURE(kChromeRefresh2023,
-             "ChromeRefresh2023",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kChromeRefreshSecondary2023,
-             "ChromeRefreshSecondary2023",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsChromeRefresh2023() {
-  return base::FeatureList::IsEnabled(kChromeRefresh2023) ||
-         base::FeatureList::IsEnabled(kChromeRefreshSecondary2023);
-}
-
-bool IsChromeWebuiRefresh2023() {
-  return IsChromeRefresh2023() &&
-         base::FeatureList::IsEnabled(kChromeRefreshSecondary2023);
-}
-
 BASE_FEATURE(kBubbleMetricsApi,
              "BubbleMetricsApi",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -541,4 +532,18 @@ BASE_FEATURE(kUseGammaContrastRegistrySettings,
 BASE_FEATURE(kBubbleFrameViewTitleIsHeading,
              "BubbleFrameViewTitleIsHeading",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableGestureBeginEndTypes,
+             "EnableGestureBeginEndTypes",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kUseUtf8EncodingForSvgImage,
+             "UseUtf8EncodingForSvgImage",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// If enabled, fullscreen window state is updated asynchronously.
+BASE_FEATURE(kAsyncFullscreenWindowState,
+             "AsyncFullscreenWindowState",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 }  // namespace features

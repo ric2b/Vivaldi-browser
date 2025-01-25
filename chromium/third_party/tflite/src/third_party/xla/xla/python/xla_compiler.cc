@@ -23,11 +23,14 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "absl/base/thread_annotations.h"
+#include "absl/container/inlined_vector.h"
 #include "absl/hash/hash.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
+#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
@@ -77,12 +80,14 @@ limitations under the License.
 #include "xla/service/tuple_simplifier.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
-#include "xla/statusor.h"
 #include "xla/util.h"
 #include "xla/xla.pb.h"
 #include "xla/xla_data.pb.h"
 #include "tsl/lib/strings/proto_serialization.h"
+#include "tsl/platform/env.h"
+#include "tsl/platform/errors.h"
 #include "tsl/platform/logging.h"
+#include "tsl/platform/statusor.h"
 
 namespace nanobind {
 namespace detail {
@@ -291,30 +296,82 @@ absl::StatusOr<HloSharding> IotaTileHelper(
                    subgroup_types);
 }
 
-// Registers a 'fn_capsule' as a custom call target.
-// 'fn_capsule' must be a void* pointer encapsulated in a PyCapsule object.
-// 'platform' is an XLA platform name, e.g., "Host" or "CUDA".
+// Registers a 'fn' as a custom call target.
+//
+// `fn` must be a custom call implementation function pointer (XLA_FFI_Handler*
+// when implemented as FFI handler) encapsulated in a PyCapsule object or a
+// a dictionary of function pointers (also encapsulated in a PyCapsule).
+//
+// See XLA_FFI_ExecutionStage documentation for more details about the
+// custom execution stages.
 absl::Status PyRegisterCustomCallTarget(const std::string& fn_name,
-                                        nb::capsule capsule,
+                                        nb::object fn,
                                         const std::string& platform,
-                                        int api_version) {
-  switch (api_version) {
-    case 0:
-      CustomCallTargetRegistry::Global()->Register(
-          fn_name, static_cast<void*>(capsule.data()), platform);
-      return absl::OkStatus();
-    case 1:
-      ffi::Ffi::RegisterStaticHandler(xla::ffi::GetXlaFfiApi(), fn_name,
-                                      platform,
-                                      reinterpret_cast<XLA_FFI_Handler*>(
-                                          static_cast<void*>(capsule.data())));
-      return absl::OkStatus();
-    default:
-      return absl::UnimplementedError(absl::StrFormat(
-          "API version %d is not supported by RegisterCustomCallTarget. "
-          "Supported versions are 0 and 1.",
-          api_version));
+                                        int api_version,
+                                        XLA_FFI_Handler_Traits traits) {
+  // Register legacy custom call target (untyped void* API).
+  if (api_version == 0) {
+    if (traits != 0) {
+      return absl::InvalidArgumentError(
+          "Custom call target registration with traits is not supported for "
+          "api_version=0");
+    }
+
+    nb::capsule capsule;
+    if (!nb::try_cast<nb::capsule>(fn, capsule)) {
+      return absl::InvalidArgumentError(
+          "Custom call target registration with api_version=0 requires a "
+          "PyCapsule fn object");
+    }
+
+    CustomCallTargetRegistry::Global()->Register(
+        fn_name, static_cast<void*>(capsule.data()), platform);
+    return absl::OkStatus();
   }
+
+  // Register XLA FFI handler (typed API with explicit function signatures).
+  if (api_version == 1) {
+    nb::capsule capsule;
+    if (nb::try_cast<nb::capsule>(fn, capsule)) {
+      return ffi::TakeStatus(ffi::Ffi::RegisterStaticHandler(
+          xla::ffi::GetXlaFfiApi(), fn_name, platform,
+          reinterpret_cast<XLA_FFI_Handler*>(
+              static_cast<void*>(capsule.data()))));
+    }
+
+    nb::dict bundle;
+    if (nb::try_cast<nb::dict>(fn, bundle)) {
+      auto handler = [&](const char* name) -> absl::StatusOr<XLA_FFI_Handler*> {
+        if (!bundle.contains(name)) return nullptr;
+
+        nb::capsule capsule;
+        if (!nb::try_cast<nb::capsule>(bundle[name], capsule)) {
+          return absl::InvalidArgumentError(
+              "Custom call target registration with api_version=1 requires a "
+              "PyCapsule fn object for all dict keys");
+        }
+
+        return reinterpret_cast<XLA_FFI_Handler*>(capsule.data());
+      };
+
+      XLA_FFI_Handler_Bundle bundle;
+      TF_ASSIGN_OR_RETURN(bundle.instantiate, handler("instantiate"));
+      TF_ASSIGN_OR_RETURN(bundle.prepare, handler("prepare"));
+      TF_ASSIGN_OR_RETURN(bundle.initialize, handler("initialize"));
+      TF_ASSIGN_OR_RETURN(bundle.execute, handler("execute"));
+
+      return ffi::TakeStatus(ffi::Ffi::RegisterStaticHandler(
+          xla::ffi::GetXlaFfiApi(), fn_name, platform, bundle, traits));
+    }
+
+    return absl::InvalidArgumentError(
+        "Unsupported custom call target type for api_version=1");
+  }
+
+  return absl::UnimplementedError(absl::StrFormat(
+      "API version %d is not supported by RegisterCustomCallTarget. "
+      "Supported versions are 0 and 1.",
+      api_version));
 }
 
 template <typename T, typename Container>
@@ -345,12 +402,37 @@ void BuildXlaCompilerSubmodule(nb::module_& m) {
   // Shapes
   nb::class_<Layout> layout_class(m, "Layout");
   layout_class.def(nb::init<absl::Span<const int64_t>>())
+      .def("__init__",
+           [](Layout* self, nb::sequence minor_to_major, nb::sequence tiling,
+              int64_t element_size_in_bits) {
+             std::vector<Tile> xla_tiles;
+             xla_tiles.reserve(nb::len(tiling.ptr()));
+             for (auto tile : tiling) {
+               xla_tiles.push_back(Tile(
+                   SequenceToVector<int64_t>(nb::cast<nb::sequence>(tile))));
+             }
+             std::vector<int64_t> xla_minor_to_major =
+                 SequenceToVector<int64_t>(minor_to_major);
+             new (self)
+                 Layout(xla_minor_to_major, xla_tiles, element_size_in_bits);
+           })
       .def("minor_to_major",
            [](Layout layout) { return SpanToNbTuple(layout.minor_to_major()); })
+      .def("element_size_in_bits", &Layout::element_size_in_bits)
+      .def("tiling",
+           [](Layout layout) {
+             std::vector<nb::tuple> result;
+             result.reserve(layout.tiles().size());
+             for (auto& t : layout.tiles()) {
+               result.push_back(SpanToNbTuple(t.dimensions()));
+             }
+             return result;
+           })
       .def("__eq__", [](const Layout& layout,
                         const Layout& other) { return layout == other; })
       .def("__ne__", [](const Layout& layout,
                         const Layout& other) { return layout != other; })
+      .def("__str__", &Layout::ToString)
       .def("__hash__",
            [](const Layout& layout) { return absl::HashOf(layout); })
       .def("to_string", &Layout::ToString)
@@ -617,24 +699,24 @@ void BuildXlaCompilerSubmodule(nb::module_& m) {
    public:
     ComputationWrapper(const HloComputation* comp,
                        const std::shared_ptr<HloModule> module)
-        : comp{comp}, module{module} {}
-    absl::string_view name() const { return comp->name(); }
+        : comp_(comp), module_(module) {}
+    absl::string_view name() const { return comp_->name(); }
     void render_html(const std::string& filename) {
       std::string html = xla::ValueOrThrow(RenderGraph(
-          *comp, /*label=*/"", comp->parent()->config().debug_options(),
+          *comp_, /*label=*/"", comp_->parent()->config().debug_options(),
           RenderedGraphFormat::kHtml, HloRenderOptions()));
       xla::ThrowIfError(tsl::WriteStringToFile(
           tsl::Env::Default(), absl::StrCat(filename, ".html"), html));
     }
 
    private:
-    const HloComputation* comp;
+    const HloComputation* comp_;
     // The module owns the computations: if its destructor is called, the
     // computations are freed. To prevent that from happening in cases where the
     // module Python object goes out of scope and gets garbage collected before
     // the computations, we keep a shared_ptr to the module that originated the
     // computation.
-    const std::shared_ptr<HloModule> module;
+    const std::shared_ptr<HloModule> module_;
   };
 
   nb::class_<ComputationWrapper> hlo_computation_class(m, "HloComputation");
@@ -813,7 +895,7 @@ void BuildXlaCompilerSubmodule(nb::module_& m) {
            xla::ValueOrThrowWrapper(
                [](const DeviceAssignment& da) -> absl::StatusOr<nb::bytes> {
                  DeviceAssignmentProto proto;
-                 TF_RETURN_IF_ERROR(da.Serialize(&proto));
+                 da.Serialize(&proto);
                  std::string result;
                  if (!tsl::SerializeToStringDeterministic(proto, &result)) {
                    return Unknown(
@@ -922,18 +1004,18 @@ void BuildXlaCompilerSubmodule(nb::module_& m) {
   // Custom-call targets.
   m.def(
       "register_custom_call_target",
-      [](nb::object fn_name_py, nb::capsule capsule,
-         const std::string& platform, const int api_version) {
+      [](nb::object fn_name_py, nb::object fn, const std::string& platform,
+         int api_version, XLA_FFI_Handler_Traits traits) {
         std::string fn_name;
         if (!nb::try_cast<std::string>(fn_name_py, fn_name)) {
           nb::bytes bytes = nb::cast<nb::bytes>(fn_name_py);
           fn_name = std::string(bytes.c_str(), bytes.size());
         }
         xla::ThrowIfError(PyRegisterCustomCallTarget(
-            fn_name, std::move(capsule), platform, api_version));
+            fn_name, std::move(fn), platform, api_version, traits));
       },
-      nb::arg("fn_name"), nb::arg("capsule"), nb::arg("platform"),
-      nb::arg("api_version") = 0);
+      nb::arg("fn_name"), nb::arg("fn"), nb::arg("platform"),
+      nb::arg("api_version") = 0, nb::arg("traits") = 0);
 
   m.def(
       "custom_call_targets",
@@ -946,8 +1028,17 @@ void BuildXlaCompilerSubmodule(nb::module_& m) {
 
         for (const auto& [name, registration] :
              ffi::StaticRegisteredHandlers(platform)) {
-          targets[nb::str(name.data(), name.size())] =
-              nb::capsule(reinterpret_cast<void*>(registration.handler));
+          nb::dict bundle;
+          auto export_handler = [&](std::string_view name, XLA_FFI_Handler* h) {
+            if (h != nullptr) {
+              bundle[nb::str(name.data(), name.size())] =
+                  nb::capsule(reinterpret_cast<void*>(h));
+            }
+          };
+          export_handler("prepare", registration.bundle.prepare);
+          export_handler("initialize", registration.bundle.initialize);
+          export_handler("execute", registration.bundle.execute);
+          targets[nb::str(name.data(), name.size())] = std::move(bundle);
         }
         return targets;
       },

@@ -85,9 +85,6 @@
 #include "net/cert/internal/trust_store_chrome.h"
 #endif
 
-// TODO(crbug.com/41276779): Add tests that only certificates with
-// serverAuth are accepted.
-
 using net::test::IsError;
 using net::test::IsOk;
 
@@ -245,9 +242,6 @@ scoped_refptr<CertVerifyProc> CreateCertVerifyProc(
 // The set of all CertVerifyProcTypes that tests should be parameterized on.
 // This needs to be kept in sync with CertVerifyProc::CreateSystemVerifyProc()
 // and the platforms where CreateSslSystemTrustStore() is not a dummy store.
-// TODO(crbug.com/41276779): Enable CERT_VERIFY_PROC_BUILTIN everywhere. Right
-// now this is gated on having CertVerifyProcBuiltin understand the roots added
-// via TestRootCerts.
 constexpr CertVerifyProcType kAllCertVerifiers[] = {
 #if BUILDFLAG(IS_ANDROID)
     CERT_VERIFY_PROC_ANDROID,
@@ -1809,6 +1803,36 @@ TEST_P(CertVerifyProcInternalTest, AdditionalIntermediates) {
   EXPECT_TRUE(x509_util::CryptoBufferEqual(
       verify_result.verified_cert->intermediate_buffers().front().get(),
       intermediate_cert->cert_buffer()));
+  EXPECT_FALSE(verify_result.is_issued_by_additional_trust_anchor);
+}
+
+TEST_P(CertVerifyProcInternalTest, AdditionalIntermediateDuplicatesRoot) {
+  if (!VerifyProcTypeIsBuiltin()) {
+    LOG(INFO) << "Skipping this test in this platform.";
+    return;
+  }
+
+  auto [leaf, intermediate, root] = CertBuilder::CreateSimpleChain3();
+  scoped_refptr<X509Certificate> leaf_cert = leaf->GetX509Certificate();
+  scoped_refptr<X509Certificate> intermediate_cert =
+      intermediate->GetX509Certificate();
+  scoped_refptr<X509Certificate> root_cert = root->GetX509Certificate();
+  constexpr char kHostname[] = "www.example.com";
+
+  // The root is trusted through ScopedTestRoot, not through
+  // additional_trust_anchors.
+  ScopedTestRoot trust_root(root_cert);
+  // In addition to the intermediate cert, the root cert is also configured as
+  // an additional *untrusted* certificate, which is harmless. This shouldn't
+  // cause the result to be considered as is_issued_by_additional_trust_anchor.
+  SetUpWithAdditionalCerts(
+      {}, {root->GetX509Certificate(), intermediate->GetX509Certificate()});
+  CertVerifyResult verify_result;
+  int error = Verify(leaf_cert.get(), kHostname, /*flags=*/0, &verify_result);
+  EXPECT_THAT(error, IsOk());
+  ASSERT_TRUE(verify_result.verified_cert);
+  EXPECT_EQ(verify_result.verified_cert->intermediate_buffers().size(), 2U);
+  EXPECT_FALSE(verify_result.is_issued_by_additional_trust_anchor);
 }
 
 TEST_P(CertVerifyProcInternalTest, AdditionalTrustAnchorDuplicateIntermediate) {
@@ -1829,12 +1853,19 @@ TEST_P(CertVerifyProcInternalTest, AdditionalTrustAnchorDuplicateIntermediate) {
   intermediates.push_back(intermediate->GetX509Certificate());
   trust_anchors.push_back(root->GetX509Certificate());
   SetUpWithAdditionalCerts(trust_anchors, intermediates);
-  EXPECT_THAT(Verify(leaf->GetX509Certificate().get(), kHostname), IsOk());
+  CertVerifyResult verify_result;
+  EXPECT_THAT(Verify(leaf->GetX509Certificate().get(), kHostname,
+                     /*flags=*/0, &verify_result),
+              IsOk());
+  EXPECT_TRUE(verify_result.is_issued_by_additional_trust_anchor);
 
   // Leaf should still verify after root is also in intermediates list.
   intermediates.push_back(root->GetX509Certificate());
   SetUpWithAdditionalCerts(trust_anchors, intermediates);
-  EXPECT_THAT(Verify(leaf->GetX509Certificate().get(), kHostname), IsOk());
+  EXPECT_THAT(Verify(leaf->GetX509Certificate().get(), kHostname,
+                     /*flags=*/0, &verify_result),
+              IsOk());
+  EXPECT_TRUE(verify_result.is_issued_by_additional_trust_anchor);
 }
 
 // Tests that certificates issued by user-supplied roots are not flagged as

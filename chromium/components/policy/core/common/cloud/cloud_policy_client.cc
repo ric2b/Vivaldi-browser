@@ -14,7 +14,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
@@ -197,7 +196,7 @@ TranslatePolicyValidationResultSeverity(
     case ValueValidationIssue::Severity::kError:
       return issue::VALUE_VALIDATION_ISSUE_SEVERITY_ERROR;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return issue::VALUE_VALIDATION_ISSUE_SEVERITY_UNSPECIFIED;
 }
 
@@ -544,7 +543,8 @@ void CloudPolicyClient::OnRegisterWithCertificateRequestSigned(
   if (!success) {
     const em::DeviceManagementResponse response;
     OnRegisterCompleted(
-        DMServerJobResult{nullptr, 0, DM_STATUS_CANNOT_SIGN_REQUEST, response});
+        DMServerJobResult{/* job */ nullptr, 0, DM_STATUS_CANNOT_SIGN_REQUEST,
+                          /* http response code */ 0, response});
     return;
   }
 
@@ -1153,6 +1153,49 @@ void CloudPolicyClient::ClientCertProvisioningRequest(
   request_jobs_.push_back(service_->CreateJob(std::move(config)));
 }
 
+void CloudPolicyClient::UploadFmRegistrationToken(
+    enterprise_management::FmRegistrationTokenUploadRequest request,
+    ResultCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (!is_registered()) {
+    std::move(callback).Run(CloudPolicyClient::Result(NotRegistered()));
+    return;
+  }
+
+  auto params = DMServerJobConfiguration::CreateParams::WithClient(
+      DeviceManagementService::JobConfiguration::
+          TYPE_UPLOAD_FM_REGISTRATION_TOKEN,
+      this);
+  params.auth_data = DMAuth::FromDMToken(dm_token_);
+  params.callback =
+      base::BindOnce(&CloudPolicyClient::OnUploadFmRegistrationTokenResponse,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback));
+
+  std::unique_ptr<RegistrationJobConfiguration> config =
+      std::make_unique<RegistrationJobConfiguration>(std::move(params));
+
+  *config->request()->mutable_fm_registration_token_upload_request() =
+      std::move(request);
+
+  unique_request_job_ = service_->CreateJob(std::move(config));
+}
+
+void CloudPolicyClient::OnUploadFmRegistrationTokenResponse(
+    ResultCallback callback,
+    DMServerJobResult result) {
+  last_dm_status_ = result.dm_status;
+  if (result.dm_status != DM_STATUS_SUCCESS) {
+    NotifyClientError();
+  } else if (result.dm_status == DM_STATUS_SUCCESS &&
+             !result.response.has_fm_registration_token_upload_response()) {
+    LOG_POLICY(WARNING, REMOTE_COMMANDS)
+        << "Empty fm registration token upload response.";
+    result.dm_status = DM_STATUS_RESPONSE_DECODING_ERROR;
+  }
+  std::move(callback).Run(CloudPolicyClient::Result(result.dm_status));
+}
+
 void CloudPolicyClient::UpdateServiceAccount(const std::string& account_email) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -1566,7 +1609,7 @@ void CloudPolicyClient::RemoveJob(const DeviceManagementService::Job* job) {
   }
   // This job was already deleted from our list, somehow. This shouldn't
   // happen since deleting the job should cancel the callback.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void CloudPolicyClient::OnReportUploadCompleted(ResultCallback callback,
@@ -1711,6 +1754,9 @@ void CloudPolicyClient::CreateDeviceRegisterRequest(
   if (params.demo_mode_dimensions.has_value()) {
     *request->mutable_demo_mode_dimensions() =
         params.demo_mode_dimensions.value();
+  }
+  if (!params.oidc_state.empty()) {
+    request->set_oidc_profile_enrollment_state(params.oidc_state);
   }
 }
 

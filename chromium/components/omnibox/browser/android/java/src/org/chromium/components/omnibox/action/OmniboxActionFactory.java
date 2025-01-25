@@ -46,6 +46,18 @@ public interface OmniboxActionFactory {
             /* EntityInfoProto.ActionInfo.ActionType */ int actionType,
             @NonNull String actionUri);
 
+    /**
+     * Construct a new OmniboxAnswerAction.
+     *
+     * @param nativeInstance Pointer to native instance of the object.
+     * @param hint Text that should be displayed in the associated action chip.
+     * @param accessibilityHint Text for screen reader to read when focusing action chip
+     */
+    @CalledByNative
+    @NonNull
+    OmniboxAction buildOmniboxAnswerAction(
+            long nativeInstance, @NonNull String hint, @NonNull String accessibilityHint);
+
     @NativeMethods
     public interface Natives {
         /** Pass the OmniboxActionFactory instance to C++. */

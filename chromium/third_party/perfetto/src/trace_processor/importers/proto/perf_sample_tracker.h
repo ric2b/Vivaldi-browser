@@ -19,9 +19,11 @@
 
 #include <stdint.h>
 
+#include <cstdint>
 #include <unordered_map>
 
 #include "src/trace_processor/storage/trace_storage.h"
+#include "src/trace_processor/tables/profiler_tables_py.h"
 
 namespace perfetto {
 namespace protos {
@@ -35,10 +37,11 @@ class TraceProcessorContext;
 class PerfSampleTracker {
  public:
   struct SamplingStreamInfo {
-    uint32_t perf_session_id = 0;
+    tables::PerfSessionTable::Id perf_session_id;
     TrackId timebase_track_id = kInvalidTrackId;
 
-    SamplingStreamInfo(uint32_t _perf_session_id, TrackId _timebase_track_id)
+    SamplingStreamInfo(tables::PerfSessionTable::Id _perf_session_id,
+                       TrackId _timebase_track_id)
         : perf_session_id(_perf_session_id),
           timebase_track_id(_timebase_track_id) {}
   };
@@ -60,15 +63,16 @@ class PerfSampleTracker {
   };
 
   struct SequenceState {
-    uint32_t perf_session_id = 0;
+    tables::PerfSessionTable::Id perf_session_id;
     std::unordered_map<uint32_t, CpuSequenceState> per_cpu;
 
-    SequenceState(uint32_t _perf_session_id)
+    explicit SequenceState(tables::PerfSessionTable::Id _perf_session_id)
         : perf_session_id(_perf_session_id) {}
   };
 
+  tables::PerfSessionTable::Id CreatePerfSession();
+
   std::unordered_map<uint32_t, SequenceState> seq_state_;
-  uint32_t next_perf_session_id_ = 0;
 
   TraceProcessorContext* const context_;
 };

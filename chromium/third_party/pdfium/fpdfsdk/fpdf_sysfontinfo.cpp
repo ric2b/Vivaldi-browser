@@ -9,6 +9,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <utility>
 
 #include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_codepage.h"
@@ -124,10 +125,11 @@ class CFX_ExternalFontInfo final : public SystemFontInfoIface {
     unsigned long size = m_pInfo->GetFaceName(m_pInfo, hFont, nullptr, 0);
     if (size == 0)
       return false;
-    char* buffer = FX_Alloc(char, size);
-    size = m_pInfo->GetFaceName(m_pInfo, hFont, buffer, size);
-    *name = ByteString(buffer, size);
-    FX_Free(buffer);
+    ByteString result;
+    auto result_span = result.GetBuffer(size);
+    size = m_pInfo->GetFaceName(m_pInfo, hFont, result_span.data(), size);
+    result.ReleaseBuffer(size);
+    *name = std::move(result);
     return true;
   }
 
@@ -176,7 +178,21 @@ FPDF_SetSystemFontInfo(FPDF_SYSFONTINFO* pFontInfoExt) {
 }
 
 FPDF_EXPORT const FPDF_CharsetFontMap* FPDF_CALLCONV FPDF_GetDefaultTTFMap() {
-  return reinterpret_cast<const FPDF_CharsetFontMap*>(CFX_Font::kDefaultTTFMap);
+  return reinterpret_cast<const FPDF_CharsetFontMap*>(
+      CFX_Font::GetDefaultTTFMapSpan().data());
+}
+
+FPDF_EXPORT size_t FPDF_CALLCONV FPDF_GetDefaultTTFMapCount() {
+  return CFX_Font::GetDefaultTTFMapSpan().size();
+}
+
+FPDF_EXPORT const FPDF_CharsetFontMap* FPDF_CALLCONV
+FPDF_GetDefaultTTFMapEntry(size_t index) {
+  pdfium::span<const CFX_Font::CharsetFontMap> entries =
+      CFX_Font::GetDefaultTTFMapSpan();
+  return index < entries.size()
+             ? reinterpret_cast<const FPDF_CharsetFontMap*>(&entries[index])
+             : nullptr;
 }
 
 struct FPDF_SYSFONTINFO_DEFAULT final : public FPDF_SYSFONTINFO {

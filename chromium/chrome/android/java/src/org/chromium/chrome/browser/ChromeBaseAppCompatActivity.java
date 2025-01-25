@@ -13,6 +13,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.os.Build;
+import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.view.MenuItem;
 import android.view.View;
@@ -37,6 +38,7 @@ import org.chromium.base.BuildInfo;
 import org.chromium.base.BundleUtils;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.cached_flags.BooleanCachedFieldTrialParameter;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
@@ -73,11 +75,12 @@ import androidx.fragment.app.FragmentActivity;
 
 import org.chromium.base.Log;
 import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.oem_extensions.CarDataProvider;
+import org.vivaldi.browser.oem_extensions.inapp_dd.OemInAppDistractionDialog;
 import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoDistractionDialog;
 import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions;
 import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions.DriverDistractionObserver;
-import org.vivaldi.browser.oem_extensions.mahindra.OemMahindraDistractionDialog;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
@@ -125,6 +128,13 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         int NONE = -1;
     }
 
+    public static final String DEFAULT_FONT_FAMILY_TESTING_PARAM = "dev_testing";
+    public static final BooleanCachedFieldTrialParameter DEFAULT_FONT_FAMILY_TESTING =
+            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.ANDROID_GOOGLE_SANS_TEXT,
+                    DEFAULT_FONT_FAMILY_TESTING_PARAM,
+                    false);
+
     private final ObservableSupplierImpl<ModalDialogManager> mModalDialogManagerSupplier =
             new ObservableSupplierImpl<>();
     private NightModeStateProvider mNightModeStateProvider;
@@ -149,7 +159,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
 
     private FragmentActivity mFragmentActivity;
 
-    private OemMahindraDistractionDialog mMahindraDistractionDialog;
+    private OemInAppDistractionDialog mInAppDistractionDialog;
     private CarDataProvider.Observer mCarDataObserver;
 
     @Override
@@ -210,8 +220,10 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
 
         initializeNightModeStateProvider();
         mNightModeStateProvider.addObserver(this);
-        super.onCreate(savedInstanceState);
+
+        // onCreate may initialize some views, need to apply themes before that can happen.
         applyThemeOverlays();
+        super.onCreate(savedInstanceState);
 
         // Activity level locale overrides must be done in onCreate.
         GlobalAppLocaleController.getInstance().maybeOverrideContextConfig(this);
@@ -231,6 +243,8 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
             } else {
                 enableDriverDistractionHandlingMM();
             }
+        } else if (VivaldiUtils.inAppDriverDistractionHandlingEnabled()) {
+            enableInAppDriverDistractionHandling();
         }
     }
 
@@ -379,7 +393,12 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     /** Apply theme overlay to this activity class. */
     @CallSuper
     protected void applyThemeOverlays() {
+        // Note that if you're adding new overlays here, it's quite likely they're needed
+        // in org.chromium.chrome.browser.WarmupManager#applyContextOverrides for Custom Tabs
+        // UI that's pre-inflated using a themed application context as part of CCT warmup.
+        if (!BuildConfig.IS_VIVALDI) { // Vivaldi VAB-9114
         DynamicColors.applyToActivityIfAvailable(this);
+        }
 
         DeferredStartupHandler.getInstance()
                 .addDeferredTask(
@@ -407,6 +426,16 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
             int elegantTextHeightOverlay = R.style.ThemeOverlay_BrowserUI_ElegantTextHeight;
             getTheme().applyStyle(elegantTextHeightOverlay, true);
             mThemeResIds.add(elegantTextHeightOverlay);
+        }
+
+        if (Build.VERSION.SDK_INT >= VERSION_CODES.TIRAMISU
+                && ChromeFeatureList.sAndroidGoogleSansText.isEnabled()) {
+            int defaultFontFamilyOverlay =
+                    DEFAULT_FONT_FAMILY_TESTING.getValue()
+                            ? R.style.ThemeOverlay_BrowserUI_DevTestingDefaultFontFamilyThemeOverlay
+                            : R.style.ThemeOverlay_BrowserUI_DefaultFontFamilyThemeOverlay;
+            getTheme().applyStyle(defaultFontFamilyOverlay, true);
+            mThemeResIds.add(defaultFontFamilyOverlay);
         }
     }
 
@@ -532,7 +561,8 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
 
         if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
             resetDriverDistraction();
-        } else if (BuildConfig.IS_OEM_MAHINDRA_BUILD) {
+        } else if (BuildConfig.IS_OEM_MAHINDRA_BUILD ||
+                VivaldiUtils.inAppDriverDistractionHandlingEnabled()) {
             if (mCarDataObserver != null)
                 CarDataProvider.getInstance().addObserver(mCarDataObserver);
         }
@@ -684,7 +714,8 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
                     .removeDriverDistractionObserver(mDriverDistractionObserver);
             OemLynkcoExtensions.getInstance().disableDriverDistraction();
             OemLynkcoExtensions.getInstance().disableShutdownManager();
-        } else if(BuildConfig.IS_OEM_MAHINDRA_BUILD) {
+        } else if(BuildConfig.IS_OEM_MAHINDRA_BUILD ||
+                VivaldiUtils.inAppDriverDistractionHandlingEnabled()) {
             if (mCarDataObserver != null) {
                 CarDataProvider.getInstance().removeObserver(mCarDataObserver);
             }
@@ -698,8 +729,8 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         assert mFragmentActivity != null;
         assert mCarDataObserver == null;
 
-        mMahindraDistractionDialog = new OemMahindraDistractionDialog();
-        mMahindraDistractionDialog.initDialog();
+        mInAppDistractionDialog = new OemInAppDistractionDialog();
+        mInAppDistractionDialog.initDialog();
 
         mCarDataObserver = new CarDataProvider.Observer() {
             @Override
@@ -707,14 +738,46 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
                 Log.d(TAG, "onAboveSpeedLimit: " + isAboveSpeedLimit);
                 if (isAboveSpeedLimit == mDriverDistracted) return;
                 mDriverDistracted = isAboveSpeedLimit;
-                if (mMahindraDistractionDialog == null) return;
+                if (mInAppDistractionDialog == null) return;
                 if (isAboveSpeedLimit) {
                     Log.d(TAG, "onAboveSpeedLimit: show DD dialog");
-                    mMahindraDistractionDialog
+                    mInAppDistractionDialog
                             .show(mFragmentActivity.getSupportFragmentManager(), null);
                 } else {
                     Log.d(TAG, "onAboveSpeedLimit: dismiss DD dialog");
-                    mMahindraDistractionDialog.dismissAllowingStateLoss();
+                    mInAppDistractionDialog.dismissAllowingStateLoss();
+                }
+            }
+        };
+    }
+
+    /**
+     * Vivaldi OEM in-app driver distraction handling initialization
+     */
+    private void enableInAppDriverDistractionHandling() {
+        Log.d(TAG, "enableInAppDriverDistractionHandling");
+        assert BuildConfig.IS_OEM_AUTOMOTIVE_BUILD;
+        assert mFragmentActivity != null;
+        assert mCarDataObserver == null;
+        assert mInAppDistractionDialog == null;
+
+        mInAppDistractionDialog = new OemInAppDistractionDialog();
+        mInAppDistractionDialog.initDialog();
+
+        mCarDataObserver = new CarDataProvider.Observer() {
+            @Override
+            public void onDriverDistracted(boolean isDistracted) {
+                Log.d(TAG, "onDriverDistracted: " + isDistracted);
+                if (isDistracted == mDriverDistracted) return;
+                mDriverDistracted = isDistracted;
+                if (mInAppDistractionDialog == null) return;
+                if (isDistracted) {
+                    Log.d(TAG, "onDriverDistracted: show DD dialog");
+                    mInAppDistractionDialog
+                            .show(mFragmentActivity.getSupportFragmentManager(), null);
+                } else {
+                    Log.d(TAG, "onDriverDistracted: dismiss DD dialog");
+                    mInAppDistractionDialog.dismissAllowingStateLoss();
                 }
             }
         };

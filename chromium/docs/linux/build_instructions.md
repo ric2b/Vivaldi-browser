@@ -12,7 +12,7 @@ Are you a Google employee? See
 
 ## System requirements
 
-* A 64-bit Intel machine with at least 8GB of RAM. More than 16GB is highly
+* An x86-64 machine with at least 8GB of RAM. More than 16GB is highly
     recommended. If your machine has an SSD, it is recommended to have
     \>=32GB/>=16GB of swap for machines with 8GB/16GB of RAM respectively.
 * At least 100GB of free disk space. It does not have to be on the same drive;
@@ -218,26 +218,17 @@ Then, add the following GN args to your `args.gn`:
 
 ```
 use_remoteexec = true
-rbe_cfg_dir = "../../buildtools/reclient_cfgs/linux"
+reclient_cfg_dir = "../../buildtools/reclient_cfgs/linux"
 ```
+
+*** note
+If you are building an older version of Chrome with reclient you will need to
+use `rbe_cfg_dir = "../../buildtools/reclient_cfgs_linux"`
+***
 
 That's it. Remember to always use `autoninja` for building Chromium as described
 below, which handles the startup and shutdown of the reproxy daemon process
 that's required during the build, instead of directly invoking `ninja`.
-
-#### Use Goma (deprecated)
-
-*** note
-**Warning:** Goma is deprecated and Chromium will [remove support for building
-with Goma by end of January 2024](https://groups.google.com/a/chromium.org/g/chromium-dev/c/rajt7THxIng/m/ZoDB54wQBAAJ).
-***
-
-Please use the above instructions for reclient instead. If you have any issues
-migrating to reclient, please reach out to chromium-dev@chromium.org so that we
-can address them before the shutdown.
-
-If you need to refer to the older instructions for using Goma, you can still
-find them here: [Goma for Chromium contributors](https://chromium.googlesource.com/infra/goma/client/+/HEAD/doc/early-access-guide.md).
 
 #### Disable NaCl
 
@@ -265,7 +256,7 @@ can improve build speeds by setting the GN arg `v8_symbol_level=0`.
 
 [Icecc](https://github.com/icecc/icecream) is the distributed compiler with a
 central scheduler to share build load. Currently, many external contributors use
-it. e.g. Intel, Opera, Samsung (this is not useful if you're using Goma).
+it. e.g. Intel, Opera, Samsung (this is not useful if you're using Reclient).
 
 In order to use `icecc`, set the following GN args:
 
@@ -284,7 +275,7 @@ See [related bug](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=808181).
 #### ccache
 
 You can use [ccache](https://ccache.dev) to speed up local builds (again,
-this is not useful if you're using Goma).
+this is not useful if you're using Reclient).
 
 Increase your ccache hit rate by setting `CCACHE_BASEDIR` to a parent directory
 that the working directories all have in common (e.g.,
@@ -385,10 +376,12 @@ add this to your .bashrc / .bash_profile.
 
 ```shell
 if [[ -z "${DISPLAY}" ]]; then
-  export DISPLAY=:$(
-    find /tmp/.X11-unix -maxdepth 1 -mindepth 1 -name 'X*' |
-      grep -o '[0-9]\+$' | head -n 1
-  )
+  # In reality, Chrome Remote Desktop starts with 20 and increases until it
+  # finds an available ID [1]. So this isn't guaranteed to always work, but
+  # should work on the vast majoriy of cases.
+  #
+  # [1] https://source.chromium.org/chromium/chromium/src/+/main:remoting/host/linux/linux_me2me_host.py;l=112;drc=464a632e21bcec76c743930d4db8556613e21fd8
+  export DISPLAY=:20
 fi
 ```
 
@@ -730,16 +723,20 @@ RUN apt-get update && \
 ENV PATH="/depot_tools:${PATH}"
 
 # Configure git for safe.directory
-RUN git config --global --add safe.directory /depot_tools
+RUN git config --global --add safe.directory /depot_tools && \
+    git config --global --add safe.directory /chromium/src
 
-# Set the working directory to the existing Chromium source directory
-WORKDIR /chromium/src # Default directory, can be just /chromium
+# Set the working directory to the existing Chromium source directory.
+# This can be either "/chromium/src" or "/chromium".
+WORKDIR /chromium/src
 
 # Expose any necessary ports (if needed)
 # EXPOSE 8080
-
 RUN useradd -u 1000 chrom-d
-USER chrom-d # Create normal user with name "chrom-d". Optional and you can use root but not advised.
+
+# Create normal user with name "chrom-d". Optional and you can use root but
+# not advised.
+USER chrom-d
 
 # Start Chromium Builder "chrom-d" (modify this command as needed)
 # CMD ["autoninja -C out/Default chrome"]
@@ -769,13 +766,18 @@ $ docker run --rm \ # close instance upon exit
 4. Install dependencies:
 
 ```shell
-# ./build/install-build-deps.sh # `#` here means run as root which is done in previous step.
+./build/install-build-deps.sh
 ```
 
-5. Save container image with tag-id name `dpv1.0`. Run this on the machine, not in container
+5. [Run hooks](#run-the-hooks) (On docker or machine if you installed depot_tools on machine)
+
+6. Exit container
+
+7. Save container image with tag-id name `dpv1.0`. Run this on the machine, not in container
 
 ```shell
-$ docker ps # Get docker running instances, copy the id you get
+# Get docker running instances, copy the id you get
+$ docker ps
 # Save/tag running docker container with name "chrom-b" with "dpv1.0"
 # You can choose any tag name you want but propagate name accordingly
 # You will need to create new tags when working on different parts of
@@ -785,9 +787,6 @@ $ docker commit <ID from above step> chrom-b:dpv1.0
 $ docker image rmi chrom-b:latest && docker image prune \
   && docker container prune && docker builder prune
 ```
-
-1. [Run hooks](#run-the-hooks). (On docker or machine if you installed depot_tools on machine)
-2. Exit container.
 
 #### Run container
 

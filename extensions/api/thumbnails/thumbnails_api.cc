@@ -526,7 +526,10 @@ ThumbnailsCaptureBookmarkFunction::ThumbnailsCaptureBookmarkFunction() =
     default;
 
 ThumbnailsCaptureBookmarkFunction::~ThumbnailsCaptureBookmarkFunction() {
-  Profile::FromBrowserContext(browser_context())->RemoveObserver(this);
+  auto *profile = Profile::FromBrowserContext(browser_context());
+  if (profile) {
+    profile->RemoveObserver(this);
+  }
 }
 
 void ThumbnailsCaptureBookmarkFunction::OnProfileWillBeDestroyed(Profile* profile) {

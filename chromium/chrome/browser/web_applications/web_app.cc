@@ -15,6 +15,7 @@
 #include "base/check_is_test.h"
 #include "base/check_op.h"
 #include "base/containers/flat_tree.h"
+#include "base/containers/to_value_list.h"
 #include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/numerics/clamped_math.h"
@@ -88,15 +89,6 @@ std::string ApiApprovalStateToString(ApiApprovalState state) {
       return "kAllowed";
     case ApiApprovalState::kDisallowed:
       return "kDisallowed";
-  }
-}
-
-std::string OsIntegrationStateToString(OsIntegrationState state) {
-  switch (state) {
-    case OsIntegrationState::kEnabled:
-      return "kEnabled";
-    case OsIntegrationState::kDisabled:
-      return "kDisabled";
   }
 }
 
@@ -427,7 +419,7 @@ WebAppManagement::Type WebApp::GetHighestPrioritySource() const {
     }
   }
 
-  NOTREACHED();
+  DUMP_WILL_BE_NOTREACHED();
   return WebAppManagement::kMaxValue;
 }
 
@@ -456,8 +448,18 @@ void WebApp::SetStartUrl(const GURL& start_url) {
 }
 
 void WebApp::SetScope(const GURL& scope) {
-  DCHECK(scope.is_empty() || scope.is_valid());
-  scope_ = scope;
+  // TODO(crbug.com/339718933): Remove this after shortcut apps are fully
+  // removed.
+  if (scope.is_empty()) {
+    scope_ = scope;
+    return;
+  }
+  CHECK(scope.is_valid());
+  // Ensure that the scope can never include queries or fragments, as per spec.
+  GURL::Replacements scope_replacements;
+  scope_replacements.ClearRef();
+  scope_replacements.ClearQuery();
+  scope_ = scope.ReplaceComponents(scope_replacements);
 }
 
 void WebApp::SetThemeColor(std::optional<SkColor> theme_color) {
@@ -499,8 +501,8 @@ void WebApp::SetWebAppChromeOsData(
   chromeos_data_ = std::move(chromeos_data);
 }
 
-void WebApp::SetIsLocallyInstalled(bool is_locally_installed) {
-  is_locally_installed_ = is_locally_installed;
+void WebApp::SetInstallState(proto::InstallState install_state) {
+  install_state_ = install_state;
 }
 
 void WebApp::SetIsFromSyncAndPendingInstallation(
@@ -541,10 +543,6 @@ void WebApp::SetFileHandlers(apps::FileHandlers file_handlers) {
 
 void WebApp::SetFileHandlerApprovalState(ApiApprovalState approval_state) {
   file_handler_approval_state_ = approval_state;
-}
-
-void WebApp::SetFileHandlerOsIntegrationState(OsIntegrationState state) {
-  file_handler_os_integration_state_ = state;
 }
 
 void WebApp::SetShareTarget(std::optional<apps::ShareTarget> share_target) {
@@ -619,10 +617,6 @@ void WebApp::SetManifestUpdateTime(const base::Time& time) {
 
 void WebApp::SetRunOnOsLoginMode(RunOnOsLoginMode mode) {
   run_on_os_login_mode_ = mode;
-}
-
-void WebApp::SetRunOnOsLoginOsIntegrationState(RunOnOsLoginMode state) {
-  run_on_os_login_os_integration_state_ = state;
 }
 
 void WebApp::SetSyncProto(sync_pb::WebAppSpecifics sync_proto) {
@@ -852,7 +846,8 @@ WebApp::ExternalManagementConfig::~ExternalManagementConfig() = default;
 
 WebApp::ExternalManagementConfig::ExternalManagementConfig(
     const ExternalManagementConfig& external_management_config) = default;
-
+WebApp::ExternalManagementConfig& WebApp::ExternalManagementConfig::operator=(
+    const ExternalManagementConfig& external_management_config) = default;
 WebApp::ExternalManagementConfig& WebApp::ExternalManagementConfig::operator=(
     ExternalManagementConfig&& external_management_config) = default;
 
@@ -879,10 +874,12 @@ WebApp::IsolationData::IsolationData(
     IsolatedWebAppStorageLocation location,
     base::Version version,
     const std::set<std::string>& controlled_frame_partitions,
-    const std::optional<PendingUpdateInfo>& pending_update_info)
+    const std::optional<PendingUpdateInfo>& pending_update_info,
+    std::optional<IsolatedWebAppIntegrityBlockData> integrity_block_data)
     : location(std::move(location)),
       version(std::move(version)),
-      controlled_frame_partitions(controlled_frame_partitions) {
+      controlled_frame_partitions(controlled_frame_partitions),
+      integrity_block_data(std::move(integrity_block_data)) {
   SetPendingUpdateInfo(pending_update_info);
 }
 WebApp::IsolationData::~IsolationData() = default;
@@ -894,35 +891,31 @@ WebApp::IsolationData& WebApp::IsolationData::operator=(
     WebApp::IsolationData&&) = default;
 
 bool WebApp::IsolationData::operator==(
-    const WebApp::IsolationData& other) const {
-  return location == other.location && version == other.version &&
-         controlled_frame_partitions == other.controlled_frame_partitions &&
-         pending_update_info_ == other.pending_update_info_;
-}
+    const WebApp::IsolationData& other) const = default;
 bool WebApp::IsolationData::operator!=(
-    const WebApp::IsolationData& other) const {
-  return !(*this == other);
-}
+    const WebApp::IsolationData& other) const = default;
 
 base::Value WebApp::IsolationData::AsDebugValue() const {
-  auto value = base::Value::Dict()
-                   .Set("isolated_web_app_location", location.ToDebugValue())
-                   .Set("version", version.GetString());
-  base::Value::List* partitions =
-      value.EnsureList("controlled_frame_partitions (on-disk)");
-  for (const std::string& partition : controlled_frame_partitions) {
-    partitions->Append(partition);
-  }
-
-  value.Set("pending_update_info", OptionalAsDebugValue(pending_update_info_));
-
-  return base::Value(std::move(value));
+  return base::Value(
+      base::Value::Dict()
+          .Set("isolated_web_app_location", location.ToDebugValue())
+          .Set("version", version.GetString())
+          .Set("controlled_frame_partitions (on-disk)",
+               base::ToValueList(controlled_frame_partitions))
+          .Set("pending_update_info",
+               OptionalAsDebugValue(pending_update_info_))
+          .Set("integrity_block_data",
+               OptionalAsDebugValue(integrity_block_data)));
 }
 
 WebApp::IsolationData::PendingUpdateInfo::PendingUpdateInfo(
     IsolatedWebAppStorageLocation location,
-    base::Version version)
-    : location(std::move(location)), version(std::move(version)) {}
+    base::Version version,
+    std::optional<IsolatedWebAppIntegrityBlockData> integrity_block_data)
+    : location(std::move(location)),
+      version(std::move(version)),
+      integrity_block_data(std::move(integrity_block_data)) {}
+
 WebApp::IsolationData::PendingUpdateInfo::~PendingUpdateInfo() = default;
 
 WebApp::IsolationData::PendingUpdateInfo::PendingUpdateInfo(
@@ -932,10 +925,12 @@ WebApp::IsolationData::PendingUpdateInfo::operator=(const PendingUpdateInfo&) =
     default;
 
 base::Value WebApp::IsolationData::PendingUpdateInfo::AsDebugValue() const {
-  auto value = base::Value::Dict()
-                   .Set("isolated_web_app_location", location.ToDebugValue())
-                   .Set("version", version.GetString());
-  return base::Value(std::move(value));
+  return base::Value(
+      base::Value::Dict()
+          .Set("isolated_web_app_location", location.ToDebugValue())
+          .Set("version", version.GetString())
+          .Set("integrity_block_data",
+               OptionalAsDebugValue(integrity_block_data)));
 }
 
 void WebApp::IsolationData::SetPendingUpdateInfo(
@@ -977,7 +972,7 @@ bool WebApp::operator==(const WebApp& other) const {
         app.display_mode_,
         app.display_mode_override_,
         app.chromeos_data_,
-        app.is_locally_installed_,
+        app.install_state_,
         app.is_from_sync_and_pending_installation_,
         app.is_uninstalling_,
         app.manifest_icons_,
@@ -1002,7 +997,6 @@ bool WebApp::operator==(const WebApp& other) const {
         app.first_install_time_,
         app.manifest_update_time_,
         app.run_on_os_login_mode_,
-        app.run_on_os_login_os_integration_state_,
         app.sync_proto_,
         app.capture_links_,
         app.manifest_url_,
@@ -1011,7 +1005,6 @@ bool WebApp::operator==(const WebApp& other) const {
         app.client_data_.system_web_app_data,
 #endif
         app.file_handler_approval_state_,
-        app.file_handler_os_integration_state_,
         app.window_controls_overlay_enabled_,
         app.launch_handler_,
         app.parent_app_id_,
@@ -1108,9 +1101,6 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
   root.Set("file_handler_approval_state",
            ApiApprovalStateToString(file_handler_approval_state_));
 
-  root.Set("file_handler_os_integration_state",
-           OsIntegrationStateToString(file_handler_os_integration_state_));
-
   root.Set("file_handlers", ConvertDebugValueList(file_handlers_));
 
   root.Set("manifest_icons", ConvertDebugValueList(manifest_icons_));
@@ -1133,7 +1123,7 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
   root.Set("is_from_sync_and_pending_installation",
            is_from_sync_and_pending_installation_);
 
-  root.Set("is_locally_installed", is_locally_installed_);
+  root.Set("install_state", base::ToString(install_state_));
 
   root.Set("is_uninstalling", is_uninstalling_);
 
@@ -1189,8 +1179,6 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
   root.Set("protocol_handlers", ConvertDebugValueList(protocol_handlers_));
 
   root.Set("run_on_os_login_mode", base::ToString(run_on_os_login_mode_));
-  root.Set("run_on_os_login_os_integration_state",
-           OptionalToStringValue(run_on_os_login_os_integration_state_));
 
   root.Set("scope", base::ToString(scope_));
 

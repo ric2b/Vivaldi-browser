@@ -19,7 +19,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
-#include "base/strings/string_piece.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
@@ -453,7 +452,8 @@ TEST_F(BatterySaverControllerTest, Allowed) {
   local_state()->RemoveManagedPref(prefs::kPowerBatterySaver);
 
   // If the experiment is off, Battery Saver is not allowed.
-  scoped_feature_list_.reset();
+  scoped_feature_list_->Reset();
+  scoped_feature_list_->InitAndDisableFeature(features::kBatterySaver);
   EXPECT_FALSE(IsBatterySaverAllowed());
 }
 
@@ -674,6 +674,8 @@ class BatterySaverControllerInitTest : public testing::Test {
     proto.set_external_power(
         power_manager::PowerSupplyProperties_ExternalPower_DISCONNECTED);
     proto.set_battery_percent(battery_percent);
+    proto.set_is_calculating_battery_time(false);
+    proto.set_battery_time_to_empty_sec(3600.0);
     power_manager_client_->UpdatePowerProperties(proto);
     base::RunLoop().RunUntilIdle();
   }
@@ -714,6 +716,7 @@ TEST_F(BatterySaverControllerInitTest, RestoreState) {
 
 // Test that Battery Saver is disabled when charging when shut down.
 TEST_F(BatterySaverControllerInitTest, DisableAfterChargingWhenOff) {
+  base::HistogramTester ht;
   const int battery_percent = 80;
   local_state_.SetBoolean(prefs::kPowerBatterySaver, true);
   local_state_.SetInteger(prefs::kPowerBatterySaverPercent, battery_percent);
@@ -730,6 +733,9 @@ TEST_F(BatterySaverControllerInitTest, DisableAfterChargingWhenOff) {
 
   EXPECT_FALSE(power_manager_client_->battery_saver_mode_enabled());
   EXPECT_FALSE(PowerStatus::Get()->IsBatterySaverActive());
+
+  ExpectDisabledMetrics(ht, 1);
+  ExpectChargingDisabledMetrics(ht, 1);
 }
 
 // Test that Battery Saver remains on after charging when shut down if the

@@ -272,8 +272,11 @@
   "core/sdk/DebuggerModel.ts | withBlock": {
     "message": "Sehemu ya msimbo ya With"
   },
+  "core/sdk/NetworkManager.ts | fast4G": {
+    "message": "Mtandao wa 4G wenye kasi ya juu"
+  },
   "core/sdk/NetworkManager.ts | fastG": {
-    "message": "Mtandao wa 3G wenye kasi ya juu"
+    "message": "Mtandao wa 4G wenye kasi ya chini"
   },
   "core/sdk/NetworkManager.ts | noContentForPreflight": {
     "message": "Hakuna maudhui ya ombi hili la ukaguzi yaliyopatikana"
@@ -300,7 +303,7 @@
     "message": "Imemaliza kupakia {PH1}: {PH2} \"{PH3}\"."
   },
   "core/sdk/NetworkManager.ts | slowG": {
-    "message": "Mtandao wa 3G wenye kasi ya chini"
+    "message": "3G"
   },
   "core/sdk/NetworkRequest.ts | anUnknownErrorWasEncounteredWhenTrying": {
     "message": "Tumekumbana na hitilafu isiyojulikana wakati wa kujaribu kuhifadhi kidakuzi hiki."
@@ -1178,6 +1181,9 @@
   "generated/Deprecation.ts | GeolocationInsecureOriginDeprecatedNotRemoved": {
     "message": "getCurrentPosition() na watchPosition() zimeacha kuendesha huduma kwenye vyanzo visivyo salama. Ili utumie kipengele hiki, unaweza kuamua kubadilisha matumizi yako kwenda chanzo salama kama vile HTTPS. Angalia https://goo.gle/chrome-insecure-origins kwa maelezo zaidi."
   },
+  "generated/Deprecation.ts | GetInnerHTML": {
+    "message": "Kipengele cha getInnerHTML() kimeacha kutumika na kitaondolewa kwenye kivinjari hiki hivi karibuni. Badala yake, tafadhali tumia getHTML()."
+  },
   "generated/Deprecation.ts | GetUserMediaInsecureOrigin": {
     "message": "getUserMedia() havifanyi kazi tena kwenye vyanzo visivyo salama. Ili utumie kipengele hiki, unaweza kuamua kubadilisha matumizi yako kwenda chanzo salama kama vile HTTPS. Angalia https://goo.gle/chrome-insecure-origins kwa maelezo zaidi."
   },
@@ -1291,12 +1297,6 @@
   },
   "generated/Deprecation.ts | WebSQL": {
     "message": "SQL ya Wavuti imeacha kuendesha huduma. Tafadhali tumia API ya SQLite WebAssembly au Hifadhidata Iliyonakiliwa katika Faharasa"
-  },
-  "generated/Deprecation.ts | WindowPlacementPermissionDescriptorUsed": {
-    "message": "window-placement wa kielezi cha ruhusa umeacha kuendesha huduma. Badala yake tumia window-management. Ili upate usaidizi zaidi, angalia https://bit.ly/window-placement-rename."
-  },
-  "generated/Deprecation.ts | WindowPlacementPermissionPolicyParsed": {
-    "message": "window-placement wa sera ya ruhusa umeacha kuendesha huduma. Badala yake tumia window-management. Ili upate usaidizi zaidi, angalia https://bit.ly/window-placement-rename."
   },
   "generated/Deprecation.ts | XHRJSONEncodingDetection": {
     "message": "UTF-16 haitumiwi na njia ya response json kwenye XMLHttpRequest"
@@ -1433,6 +1433,12 @@
   "models/issues_manager/CookieIssue.ts | anInsecure": {
     "message": "usio salama"
   },
+  "models/issues_manager/CookieIssue.ts | consoleTpcdErrorMessage": {
+    "message": "Kidakuzi cha mshirika mwingine kimezuiwa kwenye Chrome kama sehemu ya Mazingira ya faragha."
+  },
+  "models/issues_manager/CookieIssue.ts | consoleTpcdWarningMessage": {
+    "message": "Kidakuzi cha mshirika mwingine kitazuiwa kwenye matoleo ya baadaye ya Chrome kama sehemu ya Mazingira ya faragha."
+  },
   "models/issues_manager/CookieIssue.ts | fileCrosSiteRedirectBug": {
     "message": "Ripoti hitilafu"
   },
@@ -1526,6 +1532,9 @@
   "models/issues_manager/SharedArrayBufferIssue.ts | enablingSharedArrayBuffer": {
     "message": "Inawasha SharedArrayBuffer"
   },
+  "models/issues_manager/SharedDictionaryIssue.ts | compressionDictionaryTransport": {
+    "message": "Uhamishaji wa Kamusi ya Mbano"
+  },
   "models/logs/NetworkLog.ts | anonymous": {
     "message": "<haijulikani>"
   },
@@ -1583,9 +1592,6 @@
   "models/persistence/IsolatedFileSystem.ts | linkedToS": {
     "message": "Imeunganishwa kwenye {PH1}"
   },
-  "models/persistence/IsolatedFileSystem.ts | unknownErrorReadingFileS": {
-    "message": "Hitilafu isiyojulikana imetokea wakati wa kusoma faili: {PH1}"
-  },
   "models/persistence/IsolatedFileSystemManager.ts | unableToAddFilesystemS": {
     "message": "Imeshindwa kuweka mfumo wa faili: {PH1}"
   },
@@ -1606,6 +1612,9 @@
   },
   "models/persistence/PersistenceActions.ts | saveImage": {
     "message": "Hifadhi picha"
+  },
+  "models/persistence/PersistenceActions.ts | saveWasmFailed": {
+    "message": "Imeshindwa kuhifadhi sehemu ya WASM kwenye diski. Kuna uwezekano kuwa sehemu ya WASM ni kubwa zaidi."
   },
   "models/persistence/PersistenceActions.ts | showOverrides": {
     "message": "Onyesha ubatilishaji wote"
@@ -2189,12 +2198,6 @@
   "panels/application/AppManifestView.ts | customizePwaTitleBar": {
     "message": "Weka mapendeleo katika uwekeleaji wa vidhibiti vya dirisha la jina la upau wa programu yako ya wavuti ya kisasa (PWA)"
   },
-  "panels/application/AppManifestView.ts | darkBackgroundColor": {
-    "message": "Rangi nyeusi ya mandharinyuma"
-  },
-  "panels/application/AppManifestView.ts | darkThemeColor": {
-    "message": "Rangi ya mandhari meusi"
-  },
   "panels/application/AppManifestView.ts | description": {
     "message": "Maelezo"
   },
@@ -2648,6 +2651,9 @@
   "panels/application/IndexedDBViews.ts | expandRecursively": {
     "message": "Panua kwa Urudiaji"
   },
+  "panels/application/IndexedDBViews.ts | filterByKey": {
+    "message": "Chuja kulingana na ufunguo (onyesha funguo kubwa au sawa na)"
+  },
   "panels/application/IndexedDBViews.ts | idb": {
     "message": "IDB"
   },
@@ -2790,7 +2796,7 @@
     "message": "Futa Vipengee Ulivyochagua"
   },
   "panels/application/ServiceWorkerCacheViews.ts | filterByPath": {
-    "message": "Chuja kulingana na Njia"
+    "message": "Chuja kulingana na njia"
   },
   "panels/application/ServiceWorkerCacheViews.ts | headers": {
     "message": "Vichwa"
@@ -2850,7 +2856,7 @@
     "message": "angazia"
   },
   "panels/application/ServiceWorkersView.ts | inspect": {
-    "message": "kagua"
+    "message": "Kagua"
   },
   "panels/application/ServiceWorkersView.ts | networkRequests": {
     "message": "Maombi ya mtandao"
@@ -2859,10 +2865,10 @@
     "message": "Ukurasa ukipakiwa upya, lazimisha service worker isasishe, na uiwezeshe"
   },
   "panels/application/ServiceWorkersView.ts | periodicSync": {
-    "message": "Usawazishaji wa Mara kwa Mara"
+    "message": "Usawazishaji wa mara kwa mara"
   },
   "panels/application/ServiceWorkersView.ts | periodicSyncTag": {
-    "message": "Lebo ya Usawazishaji wa Mara kwa Mara"
+    "message": "Lebo ya usawazishaji wa mara kwa mara"
   },
   "panels/application/ServiceWorkersView.ts | pushData": {
     "message": "Data ya arifa za programu"
@@ -2907,13 +2913,13 @@
     "message": "Chanzo"
   },
   "panels/application/ServiceWorkersView.ts | startString": {
-    "message": "anza"
+    "message": "Anza"
   },
   "panels/application/ServiceWorkersView.ts | status": {
     "message": "Hali"
   },
   "panels/application/ServiceWorkersView.ts | stopString": {
-    "message": "komesha"
+    "message": "Simamisha"
   },
   "panels/application/ServiceWorkersView.ts | syncString": {
     "message": "Sawazisha"
@@ -3107,15 +3113,6 @@
   "panels/application/application-meta.ts | stopRecordingEvents": {
     "message": "Acha kurekodi matukio"
   },
-  "panels/application/components/BackForwardCacheStrings.ts | BroadcastChannelOnMessage": {
-    "message": "Usiobainishwa"
-  },
-  "panels/application/components/BackForwardCacheStrings.ts | CookieFlushed": {
-    "message": "Usiobainishwa"
-  },
-  "panels/application/components/BackForwardCacheStrings.ts | HTTPAuthRequired": {
-    "message": "Usiobainishwa"
-  },
   "panels/application/components/BackForwardCacheStrings.ts | HTTPMethodNotGET": {
     "message": "Kurasa zilizopakiwa kupitia Ombi la KULETA data ndizo tu zinazoweza kuwekwa kwenye kipengele cha kuakibisha ukurasa kamili."
   },
@@ -3124,18 +3121,6 @@
   },
   "panels/application/components/BackForwardCacheStrings.ts | JavaScriptExecution": {
     "message": "Chrome ilitambua jaribio la kutekeleza JavaScript katika akiba."
-  },
-  "panels/application/components/BackForwardCacheStrings.ts | LiveMediaStreamTrack": {
-    "message": "Usiobainishwa"
-  },
-  "panels/application/components/BackForwardCacheStrings.ts | ParserAborted": {
-    "message": "Usiobainishwa"
-  },
-  "panels/application/components/BackForwardCacheStrings.ts | SmartCard": {
-    "message": "Usiobainishwa"
-  },
-  "panels/application/components/BackForwardCacheStrings.ts | UnloadHandler": {
-    "message": "Usiobainishwa"
   },
   "panels/application/components/BackForwardCacheStrings.ts | appBanner": {
     "message": "Kurasa zilizoomba AppBanner haziwezi kuwekwa kwenye kipengele cha kuakibisha ukurasa kamili kwa sasa."
@@ -4262,6 +4247,9 @@
   "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusActivationUrlHasEffectiveUrl": {
     "message": "Utekelezaji wa mapema haukufanyika kwa sababu wakati wa kuruhusu, usogezaji una URL inayofanya kazi ambayo ni tofauti na URL yake ya kawaida. (Kwa mfano, Ukurasa Mpya wa Kichupo au programu zinazopangishwa.)"
   },
+  "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusAllPrerenderingCanceled": {
+    "message": "Kurasa zote zilizotekelezwa mapema ziliondolewa na kivinjari kwa sababu fulani (Kwa mfano, WebViewCompat.addWebMessageListener() zilishughulikiwa wakati wa utekelezaji wa mapema.)"
+  },
   "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusAudioOutputDeviceRequested": {
     "message": "Ukurasa uliotekelezwa mapema umeomba kipengele cha kutoa sauti, ambacho hakitumiki kwa sasa."
   },
@@ -4300,6 +4288,12 @@
   },
   "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusInvalidSchemeRedirect": {
     "message": "Usogezaji wa utekelezaji wa mapema haukufaulu kwa sababu umeelekezwa kwenye URL ambayo utaratibu wake haukuwa wa http: au https:."
+  },
+  "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusJavaScriptInterfaceAdded": {
+    "message": "Ukurasa uliotekelezwa mapema uliondolewa kwa sababu kiolesura kipya cha JavaScript kimewekwa na WebView.addJavascriptInterface()."
+  },
+  "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusJavaScriptInterfaceRemoved": {
+    "message": "Ukurasa uliotekelezwa mapema uliondolewa kwa sababu kiolesura cha JavaScript kimeondolewa na WebView.removeJavascriptInterface()."
   },
   "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusLoginAuthRequested": {
     "message": "Usogezaji wa utekelezaji wa mapema ulihitaji uthibitishaji wa HTTP, ambao hautumiki kwa sasa."
@@ -5258,6 +5252,9 @@
   "panels/coverage/CoverageView.ts | css": {
     "message": "CSS"
   },
+  "panels/coverage/CoverageView.ts | filterByUrl": {
+    "message": "Chuja kulingana na URL"
+  },
   "panels/coverage/CoverageView.ts | filterCoverageByType": {
     "message": "Utekelezaji wa vichujio kulingana na aina"
   },
@@ -5501,6 +5498,9 @@
   "panels/developer_resources/DeveloperResourcesView.ts | enableLoadingThroughTarget": {
     "message": "Pakia kupitia tovuti"
   },
+  "panels/developer_resources/DeveloperResourcesView.ts | filterByText": {
+    "message": "Chuja kulingana na URL na hitilafu"
+  },
   "panels/developer_resources/DeveloperResourcesView.ts | loadHttpsDeveloperResources": {
     "message": "Pakia nyenzo za wasanidi programu za HTTP(S) kupitia tovuti unayokagua, si kupitia Zana za Wasanidi Programu"
   },
@@ -5738,6 +5738,9 @@
   "panels/elements/ElementsTreeElement.ts | showFrameDetails": {
     "message": "Onyesha maelezo ya iframe"
   },
+  "panels/elements/ElementsTreeElement.ts | showPopoverTarget": {
+    "message": "Onyesha kidirisha cha kipengele kinacholengwa"
+  },
   "panels/elements/ElementsTreeElement.ts | thisFrameWasIdentifiedAsAnAd": {
     "message": "Fremu hii imetambuliwa kama fremu ya tangazo"
   },
@@ -5757,7 +5760,7 @@
     "message": "onyesha"
   },
   "panels/elements/ElementsTreeOutline.ts | showAllNodesDMore": {
-    "message": "Onyesha Vipengele Vyote (Vingine {PH1})"
+    "message": "Onyesha vifaa vyote kwenye mtandao ({PH1} zaidi)"
   },
   "panels/elements/ElementsTreeOutline.ts | storeAsGlobalVariable": {
     "message": "Hifadhi ikiwa kipengele cha jumla"
@@ -5865,7 +5868,7 @@
     "message": "{PH1}[Muundo wa Sifa]"
   },
   "panels/elements/StylePropertiesSection.ts | showAllPropertiesSMore": {
-    "message": "Onyesha Vipengele Vyote (vingine {PH1})"
+    "message": "Onyesha vipengele vyote ({PH1} zaidi)"
   },
   "panels/elements/StylePropertiesSection.ts | styleAttribute": {
     "message": "Sifa ya style"
@@ -5983,6 +5986,9 @@
   },
   "panels/elements/components/AdornerSettingsPane.ts | settingsTitle": {
     "message": "Onyesha beji"
+  },
+  "panels/elements/components/AnchorFunctionLinkSwatch.ts | jumpToAnchorNode": {
+    "message": "Ruka uende kwenye kipengee cha kijachini"
   },
   "panels/elements/components/CSSHintDetailsView.ts | learnMore": {
     "message": "Pata Maelezo Zaidi"
@@ -6314,9 +6320,6 @@
   "panels/event_listeners/EventListenersView.ts | passive": {
     "message": "Hali tuli"
   },
-  "panels/event_listeners/EventListenersView.ts | remove": {
-    "message": "Ondoa"
-  },
   "panels/event_listeners/EventListenersView.ts | revealInElementsPanel": {
     "message": "Onyesha katika kidirisha cha Vipengee"
   },
@@ -6387,7 +6390,7 @@
     "message": "Msimbo unaohusiana"
   },
   "panels/explain/components/ConsoleInsight.ts | reloadRecommendation": {
-    "message": "Reload the page to capture related network request data for this message in order to create a better insight."
+    "message": "Pakia upya ukurasa ili upate data inayohusiana na ombi la mtandao kuhusu ujumbe huu ili ubuni maarifa bora."
   },
   "panels/explain/components/ConsoleInsight.ts | report": {
     "message": "Kuripoti tatizo la kisheria"
@@ -6435,10 +6438,37 @@
     "message": "Shirika lako limezima kipengele hiki. Wasiliana na wasimamizi wako ili upate maelezo zaidi."
   },
   "panels/explain/explain-meta.ts | rolloutRestricted": {
-    "message": "This feature is currently being rolled out. Stay tuned."
+    "message": "Kipengele hiki kinaendelea kusambazwa kwa sasa. Endelea kumakinika."
   },
   "panels/explain/explain-meta.ts | wrongLocale": {
     "message": "Ili utumie kipengele hiki, sasisha mapendeleo yako ya Lugha katika Mipangilio ya Zana za Wasanidi Programu hadi Kiingereza."
+  },
+  "panels/freestyler/FreestylerPanel.ts | clearMessages": {
+    "message": "Futa ujumbe"
+  },
+  "panels/freestyler/FreestylerPanel.ts | sendFeedback": {
+    "message": "Tuma maoni"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | emptyStateText": {
+    "message": "Nikusaidiaje?"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | inputDisclaimer": {
+    "message": "Freestyler inaweza kukosea au kuonyesha maelezo yasiyo sahihi"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | inputPlaceholder": {
+    "message": "Uliza Freestyler au uandike / ili uone amri"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | selectAnElement": {
+    "message": "Chagua kipengee"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | sendButtonTitle": {
+    "message": "Tuma"
+  },
+  "panels/freestyler/freestyler-meta.ts | freestyler": {
+    "message": "Freestyler"
+  },
+  "panels/freestyler/freestyler-meta.ts | showFreestyler": {
+    "message": "Onyesha Freestyler"
   },
   "panels/issues/AffectedBlockedByResponseView.ts | blockedResource": {
     "message": "Nyenzo Iliyozuiwa"
@@ -6824,6 +6854,24 @@
   "panels/issues/issues-meta.ts | showIssues": {
     "message": "Onyesha Matatizo"
   },
+  "panels/js_timeline/js_timeline-meta.ts | performance": {
+    "message": "Utendaji"
+  },
+  "panels/js_timeline/js_timeline-meta.ts | record": {
+    "message": "Rekodi"
+  },
+  "panels/js_timeline/js_timeline-meta.ts | showPerformance": {
+    "message": "Onyesha Utendaji"
+  },
+  "panels/js_timeline/js_timeline-meta.ts | showRecentTimelineSessions": {
+    "message": "Onyesha vipindi vya rekodi za matukio ya hivi karibuni"
+  },
+  "panels/js_timeline/js_timeline-meta.ts | startProfilingAndReloadPage": {
+    "message": "Anza kuchanganua na upakie ukurasa upya"
+  },
+  "panels/js_timeline/js_timeline-meta.ts | stop": {
+    "message": "Komesha"
+  },
   "panels/layer_viewer/LayerDetailsView.ts | compositingReasons": {
     "message": "Sababu za Kuchanganya"
   },
@@ -7031,9 +7079,6 @@
   "panels/lighthouse/LighthouseController.ts | doesThisPageFollowBestPractices": {
     "message": "Iwapo ukurasa huu unafuata mbinu bora za kisasa za kusanidi programu za wavuti"
   },
-  "panels/lighthouse/LighthouseController.ts | doesThisPageMeetTheStandardOfA": {
-    "message": "Je, ukurasa huu unatimiza viwango vya Programu ya Wavuti Iliyoundwa kwa Teknolojia Mpya"
-  },
   "panels/lighthouse/LighthouseController.ts | enableJavaScriptSampling": {
     "message": "Washa utumiaji wa sampuli wa JavaScript wakati kutekeleza Lighthouse. Hali hii itatoa maelezo zaidi ya utekelezaji katika kidirisha cha kutekeleza unapoangalia historia ya shughuli, lakini ina kiini cha kompyuta (CPU) ya juu zaidi na inaweza kuathiri utendaji wa ukurasa."
   },
@@ -7075,9 +7120,6 @@
   },
   "panels/lighthouse/LighthouseController.ts | performance": {
     "message": "Utendaji"
-  },
-  "panels/lighthouse/LighthouseController.ts | progressiveWebApp": {
-    "message": "Programu ya Wavuti Iliyoundwa kwa Teknolojia Mpya"
   },
   "panels/lighthouse/LighthouseController.ts | resetStorageLocalstorage": {
     "message": "Weka nafasi ya hifadhi upya (cache, service workers, n.k) kabla ya ukaguzi. (Inafaa kwa utendaji na jaribio la PWA)"
@@ -7423,6 +7465,9 @@
   },
   "panels/media/PlayerMessagesView.ts | errorStackLabel": {
     "message": "Ufuatiliaji wa rafu:"
+  },
+  "panels/media/PlayerMessagesView.ts | filterByLogMessages": {
+    "message": "Chuja kulingana na ujumbe wa kumbukumbu"
   },
   "panels/media/PlayerMessagesView.ts | info": {
     "message": "Maelezo"
@@ -7780,6 +7825,9 @@
   },
   "panels/network/EventSourceMessagesView.ts | eventSource": {
     "message": "Chanzo cha Tukio"
+  },
+  "panels/network/EventSourceMessagesView.ts | filterByRegex": {
+    "message": "Chuja ukitumia kauli ya kawaida (mfano: https?)"
   },
   "panels/network/EventSourceMessagesView.ts | id": {
     "message": "Kitambulisho"
@@ -8714,6 +8762,9 @@
   "panels/network/ResourceWebSocketFrameView.ts | filter": {
     "message": "Kichujio"
   },
+  "panels/network/ResourceWebSocketFrameView.ts | filterUsingRegex": {
+    "message": "Chuja ukitumia kauli ya kawaida (kwa mfano: (wavuti)?soketi)"
+  },
   "panels/network/ResourceWebSocketFrameView.ts | length": {
     "message": "Urefu"
   },
@@ -9362,11 +9413,17 @@
   "panels/profiler/HeapSnapshotView.ts | containment": {
     "message": "Udhibiti"
   },
+  "panels/profiler/HeapSnapshotView.ts | duplicatedStrings": {
+    "message": "Nakala za mifuatano"
+  },
   "panels/profiler/HeapSnapshotView.ts | exposeInternals": {
     "message": "Fichua data ya ndani (ikijumuisha maelezo mahususi ya ziada ya utekelezaji)"
   },
   "panels/profiler/HeapSnapshotView.ts | filter": {
     "message": "Kichujio"
+  },
+  "panels/profiler/HeapSnapshotView.ts | filterByClass": {
+    "message": "Chuja kulingana na daraja"
   },
   "panels/profiler/HeapSnapshotView.ts | find": {
     "message": "Tafuta"
@@ -9397,6 +9454,12 @@
   },
   "panels/profiler/HeapSnapshotView.ts | objectsAllocatedBetweenSAndS": {
     "message": "Vipengee vilivyowekwa kati ya {PH1} na {PH2}"
+  },
+  "panels/profiler/HeapSnapshotView.ts | objectsRetainedByConsole": {
+    "message": "Vipengee vilivyohifadhiwa na dashibodi ya zana za Wasanidi Programu"
+  },
+  "panels/profiler/HeapSnapshotView.ts | objectsRetainedByDetachedDomNodes": {
+    "message": "Vipengee vilivyohifadhiwa na vifaa kwenye mtandao vilivyotenganishwa vya DOM"
   },
   "panels/profiler/HeapSnapshotView.ts | percentagePlaceholder": {
     "message": "Asilimia {PH1}"
@@ -9594,7 +9657,7 @@
     "message": "Haijaboreshwa: {PH1}"
   },
   "panels/profiler/ProfileLauncherView.ts | load": {
-    "message": "Pakia"
+    "message": "Pakia wasifu"
   },
   "panels/profiler/ProfileLauncherView.ts | selectJavascriptVmInstance": {
     "message": "Chagua tukio la JavaScript VM"
@@ -9998,34 +10061,37 @@
   "panels/recorder/components/RecordingView.ts | upload": {
     "message": "Pakia: {value}"
   },
-  "panels/recorder/components/ReplayButton.ts | ReplayExtremelySlowButtonLabel": {
-    "message": "Kucheza tena taratibu zaidi"
-  },
-  "panels/recorder/components/ReplayButton.ts | ReplayExtremelySlowItemLabel": {
-    "message": "Taratibu zaidi"
-  },
-  "panels/recorder/components/ReplayButton.ts | ReplayNormalButtonLabel": {
+  "panels/recorder/components/ReplaySection.ts | Replay": {
     "message": "Cheza tena"
   },
-  "panels/recorder/components/ReplayButton.ts | ReplayNormalItemLabel": {
+  "panels/recorder/components/ReplaySection.ts | ReplayExtremelySlowButtonLabel": {
+    "message": "Kasi ya taratibu zaidi"
+  },
+  "panels/recorder/components/ReplaySection.ts | ReplayExtremelySlowItemLabel": {
+    "message": "Taratibu zaidi"
+  },
+  "panels/recorder/components/ReplaySection.ts | ReplayNormalButtonLabel": {
+    "message": "Kasi ya kawaida"
+  },
+  "panels/recorder/components/ReplaySection.ts | ReplayNormalItemLabel": {
     "message": "Kawaida (Chaguomsingi)"
   },
-  "panels/recorder/components/ReplayButton.ts | ReplaySlowButtonLabel": {
-    "message": "Cheza tena taratibu"
+  "panels/recorder/components/ReplaySection.ts | ReplaySlowButtonLabel": {
+    "message": "Kasi ya taratibu"
   },
-  "panels/recorder/components/ReplayButton.ts | ReplaySlowItemLabel": {
+  "panels/recorder/components/ReplaySection.ts | ReplaySlowItemLabel": {
     "message": "Taratibu"
   },
-  "panels/recorder/components/ReplayButton.ts | ReplayVerySlowButtonLabel": {
-    "message": "Cheza tena taratibu zaidi"
+  "panels/recorder/components/ReplaySection.ts | ReplayVerySlowButtonLabel": {
+    "message": "Kasi ya taratibu sana"
   },
-  "panels/recorder/components/ReplayButton.ts | ReplayVerySlowItemLabel": {
+  "panels/recorder/components/ReplaySection.ts | ReplayVerySlowItemLabel": {
     "message": "Taratibu sana"
   },
-  "panels/recorder/components/ReplayButton.ts | extensionGroup": {
+  "panels/recorder/components/ReplaySection.ts | extensionGroup": {
     "message": "Viendelezi"
   },
-  "panels/recorder/components/ReplayButton.ts | speedGroup": {
+  "panels/recorder/components/ReplaySection.ts | speedGroup": {
     "message": "Kasi"
   },
   "panels/recorder/components/StartView.ts | createRecording": {
@@ -10218,7 +10284,25 @@
     "message": "Onyesha nyingine {PH1}"
   },
   "panels/search/SearchView.ts | clear": {
+    "message": "Futa utafutaji"
+  },
+  "panels/search/SearchView.ts | clearInput": {
     "message": "Futa"
+  },
+  "panels/search/SearchView.ts | disableCaseSensitive": {
+    "message": "Zima utafutaji unaozingatia herufi kubwa au ndogo"
+  },
+  "panels/search/SearchView.ts | disableRegularExpression": {
+    "message": "Zima utafutaji unaotumia kauli za kawaida"
+  },
+  "panels/search/SearchView.ts | enableCaseSensitive": {
+    "message": "Washa utafutaji unaozingatia herufi kubwa au ndogo"
+  },
+  "panels/search/SearchView.ts | enableRegularExpression": {
+    "message": "Washa utafutaji unaotumia kauli za kawaida"
+  },
+  "panels/search/SearchView.ts | find": {
+    "message": "Tafuta"
   },
   "panels/search/SearchView.ts | foundDMatchingLinesInDFiles": {
     "message": "Imepata mistari {PH1} inayolingana katika faili {PH2}."
@@ -10235,17 +10319,11 @@
   "panels/search/SearchView.ts | indexingInterrupted": {
     "message": "Kunakili katika faharasa kumekatizwa."
   },
-  "panels/search/SearchView.ts | matchCase": {
-    "message": "Linganisha Ukubwa wa Herufi"
-  },
   "panels/search/SearchView.ts | noMatchesFound": {
     "message": "Hakuna matokeo yanayolingana yaliyopatikana."
   },
   "panels/search/SearchView.ts | refresh": {
     "message": "Onyesha upya"
-  },
-  "panels/search/SearchView.ts | search": {
-    "message": "Tafuta"
   },
   "panels/search/SearchView.ts | searchFinished": {
     "message": "Utafutaji umekamilika."
@@ -10253,14 +10331,8 @@
   "panels/search/SearchView.ts | searchInterrupted": {
     "message": "Utafutaji umekatizwa."
   },
-  "panels/search/SearchView.ts | searchQuery": {
-    "message": "Hoja ya Utafutaji"
-  },
   "panels/search/SearchView.ts | searching": {
     "message": "Inatafuta…"
-  },
-  "panels/search/SearchView.ts | useRegularExpression": {
-    "message": "Tumia Kilinganishi"
   },
   "panels/security/SecurityModel.ts | cipherWithMAC": {
     "message": "{PH1} iliyo na {PH2}"
@@ -11390,12 +11462,6 @@
   "panels/sources/DebuggerPlugin.ts | errorLoading": {
     "message": "Hitilafu wakati wa kupakia url {PH1}: {PH2}"
   },
-  "panels/sources/DebuggerPlugin.ts | ignoreContentScripts": {
-    "message": "Puuzia hati za kiendelezi"
-  },
-  "panels/sources/DebuggerPlugin.ts | ignoreScript": {
-    "message": "Puuzia faili hili"
-  },
   "panels/sources/DebuggerPlugin.ts | neverPauseHere": {
     "message": "Kamwe usisitishe hapa"
   },
@@ -12314,9 +12380,6 @@
   "panels/timeline/EventUICategory.ts | imageDecode": {
     "message": "Usimbuaji wa Picha"
   },
-  "panels/timeline/EventUICategory.ts | imageResize": {
-    "message": "Kubadilisha Ukubwa wa Picha"
-  },
   "panels/timeline/EventUICategory.ts | installTimer": {
     "message": "Weka Kipima Muda"
   },
@@ -12494,6 +12557,12 @@
   "panels/timeline/EventUICategory.ts | willSendRequest": {
     "message": "Itatuma Ombi"
   },
+  "panels/timeline/EventUICategory.ts | wsMessageReceived": {
+    "message": "Pokea Ujumbe kupitia WebSocket"
+  },
+  "panels/timeline/EventUICategory.ts | wsMessageSent": {
+    "message": "Tuma Ujumbe kupitia WebSocket"
+  },
   "panels/timeline/EventUICategory.ts | xhrLoad": {
     "message": "Upakiaji wa XHR"
   },
@@ -12555,7 +12624,7 @@
     "message": "Kuu — {PH1}"
   },
   "panels/timeline/ThreadAppender.ts | onIgnoreList": {
-    "message": "Kwenye kipengele cha kupuuza orodha"
+    "message": "Kwenye orodha ya vipengee vilivyopuuzwa"
   },
   "panels/timeline/ThreadAppender.ts | raster": {
     "message": "Rasta"
@@ -12677,6 +12746,21 @@
   "panels/timeline/TimelineHistoryManager.ts | selectTimelineSession": {
     "message": "Chagua Kipindi cha Rekodi ya Matukio"
   },
+  "panels/timeline/TimelineLandingPage.ts | afterRecordingSelectAnAreaOf": {
+    "message": "Baada ya kurekodi, chagua eneo unalotaka katika muhtasari kwa kuburuta. Kisha, kuza na ugeuze rekodi ya matukio upande kwa kutumia kigurudumu cha kipanya au vitufe vya {PH1}. {PH2}"
+  },
+  "panels/timeline/TimelineLandingPage.ts | clickTheRecordButtonSOrHitSTo": {
+    "message": "Bofya kitufe cha kurekodi {PH1} au ubonyeze {PH2} ili uanzishe rekodi mpya."
+  },
+  "panels/timeline/TimelineLandingPage.ts | clickTheReloadButtonSOrHitSTo": {
+    "message": "Bofya kitufe cha kupakia upya {PH1} au ubonyeze {PH2} ili urekodi upakiaji wa ukurasa."
+  },
+  "panels/timeline/TimelineLandingPage.ts | learnmore": {
+    "message": "Pata maelezo zaidi"
+  },
+  "panels/timeline/TimelineLandingPage.ts | wasd": {
+    "message": "WASD"
+  },
   "panels/timeline/TimelineLoader.ts | malformedTimelineDataS": {
     "message": "Data ya rekodi ya matukio ina hitilafu: {PH1}"
   },
@@ -12698,9 +12782,6 @@
   "panels/timeline/TimelinePanel.ts | SignificantOverheadDueToPaint": {
     "message": "- Utendaji mkubwa wa ziada kwa sababu ya mchakato wa kuchora pikseli kwenye skrini"
   },
-  "panels/timeline/TimelinePanel.ts | afterRecordingSelectAnAreaOf": {
-    "message": "Baada ya kurekodi, chagua eneo unalotaka katika muhtasari kwa kuburuta. Kisha, kuza na ugeuze rekodi ya matukio upande kwa kutumia kigurudumu cha kipanya au vitufe vya {PH1}. {PH2}"
-  },
   "panels/timeline/TimelinePanel.ts | bufferUsage": {
     "message": "Matumizi ya akiba"
   },
@@ -12718,12 +12799,6 @@
   },
   "panels/timeline/TimelinePanel.ts | clear": {
     "message": "Futa"
-  },
-  "panels/timeline/TimelinePanel.ts | clickTheRecordButtonSOrHitSTo": {
-    "message": "Bofya kitufe cha kurekodi {PH1} au ubonyeze {PH2} ili uanzishe rekodi mpya."
-  },
-  "panels/timeline/TimelinePanel.ts | clickTheReloadButtonSOrHitSTo": {
-    "message": "Bofya kitufe cha kupakia upya {PH1} au ubonyeze {PH2} ili urekodi upakiaji wa ukurasa."
   },
   "panels/timeline/TimelinePanel.ts | close": {
     "message": "Funga"
@@ -12750,7 +12825,7 @@
     "message": "Washa hali ya kina ya kuonyesha maudhui (polepole)"
   },
   "panels/timeline/TimelinePanel.ts | enableSelectorStats": {
-    "message": "Washa takwimu za kiteuzi cha huduma ya ulinganishaji wa bei (CSS)"
+    "message": "Washa takwimu za kiteuzi cha Huduma ya Ulinganishaji wa Bei (CSS) (taratibu)"
   },
   "panels/timeline/TimelinePanel.ts | failedToSaveTimelineSS": {
     "message": "Imeshindwa kuhifadhi rekodi ya matukio: {PH1} ({PH2})"
@@ -12760,9 +12835,6 @@
   },
   "panels/timeline/TimelinePanel.ts | initializingProfiler": {
     "message": "Inaanzisha kichanganuzi…"
-  },
-  "panels/timeline/TimelinePanel.ts | learnmore": {
-    "message": "Pata maelezo zaidi"
   },
   "panels/timeline/TimelinePanel.ts | loadProfile": {
     "message": "Pakia wasifu…"
@@ -12815,9 +12887,6 @@
   "panels/timeline/TimelinePanel.ts | time": {
     "message": "Saa"
   },
-  "panels/timeline/TimelinePanel.ts | wasd": {
-    "message": "WASD"
-  },
   "panels/timeline/TimelineSelectorStatsView.ts | copyTable": {
     "message": "Nakili Jedwali"
   },
@@ -12834,7 +12903,10 @@
     "message": "Idadi ya Vipengele Vinavyolingana"
   },
   "panels/timeline/TimelineSelectorStatsView.ts | rejectPercentage": {
-    "message": "Asilimia ya njia za taratibu zisizolingana"
+    "message": "Asilimia ya Njia za Taratibu Zisizolingana"
+  },
+  "panels/timeline/TimelineSelectorStatsView.ts | rejectPercentageExplanation": {
+    "message": "Asilimia ya vifaa kwenye mtandao visivyolingana (Majaribio ya Vipengele Vinavyolingana - Idadi ya Vipengele Vinavyolingana) ambavyo havikuweza kufutwa kwa haraka na kichujio cha bloom. Ni bora kuwa na asilimia chache."
   },
   "panels/timeline/TimelineSelectorStatsView.ts | selector": {
     "message": "Kiteuzi"
@@ -12847,6 +12919,9 @@
   },
   "panels/timeline/TimelineSelectorStatsView.ts | tableCopiedToClipboard": {
     "message": "Jedwali limenakiliwa kwenye ubao wa kunakili"
+  },
+  "panels/timeline/TimelineSelectorStatsView.ts | totalForAllSelectors": {
+    "message": "(Jumla ya viteuzi vyote)"
   },
   "panels/timeline/TimelineSelectorStatsView.ts | unableToLink": {
     "message": "Imeshindwa kuunganisha"
@@ -12904,9 +12979,6 @@
   },
   "panels/timeline/TimelineTreeView.ts | noGrouping": {
     "message": "Hakuna Kuweka Kwenye Vikundi"
-  },
-  "panels/timeline/TimelineTreeView.ts | notOptimizedS": {
-    "message": "Haijaboreshwa: {PH1}"
   },
   "panels/timeline/TimelineTreeView.ts | page": {
     "message": "Ukurasa"
@@ -13077,7 +13149,7 @@
     "message": "Kitambulisho"
   },
   "panels/timeline/TimelineUIUtils.ts | invalidationWithCallFrame": {
-    "message": "{PH1} kwenye {PH2}"
+    "message": "{PH1} katika {PH2}"
   },
   "panels/timeline/TimelineUIUtils.ts | invalidations": {
     "message": "Ubatilishaji"
@@ -13223,6 +13295,9 @@
   "panels/timeline/TimelineUIUtils.ts | scriptLoadedFromCache": {
     "message": "hati imepakiwa kutoka kwenye akiba"
   },
+  "panels/timeline/TimelineUIUtils.ts | scriptNotEligibleToBeLoadedFromCache": {
+    "message": "hati haiwezi kutumika"
+  },
   "panels/timeline/TimelineUIUtils.ts | selectorStatsTitle": {
     "message": "Takwimu za Kiteuzi"
   },
@@ -13261,6 +13336,9 @@
   },
   "panels/timeline/TimelineUIUtils.ts | totalTime": {
     "message": "Jumla ya Muda"
+  },
+  "panels/timeline/TimelineUIUtils.ts | traceEvent": {
+    "message": "Tukio la Ufuatiliaji"
   },
   "panels/timeline/TimelineUIUtils.ts | type": {
     "message": "Aina"
@@ -13342,6 +13420,12 @@
   },
   "panels/timeline/components/DetailsView.ts | sTookS": {
     "message": "{PH1} imechukua {PH2}."
+  },
+  "panels/timeline/components/DetailsView.ts | webSocketBytes": {
+    "message": "Baiti {PH1}"
+  },
+  "panels/timeline/components/DetailsView.ts | webSocketDataLength": {
+    "message": "Urefu wa Data"
   },
   "panels/timeline/components/DetailsView.ts | websocketProtocol": {
     "message": "Itifaki ya WebSocket"
@@ -13844,8 +13928,14 @@
   "ui/legacy/RemoteDebuggingTerminatedScreen.ts | reconnectWhenReadyByReopening": {
     "message": "Unganisha tena ukiwa tayari kwa kufungua zana za DevTools upya."
   },
-  "ui/legacy/SearchableView.ts | cancel": {
-    "message": "Ghairi"
+  "ui/legacy/SearchableView.ts | accessibledOfD": {
+    "message": "Inaonyesha tokeo la {PH1} kati ya {PH2}"
+  },
+  "ui/legacy/SearchableView.ts | clearInput": {
+    "message": "Futa"
+  },
+  "ui/legacy/SearchableView.ts | closeSearchBar": {
+    "message": "Funga upau wa kutafutia"
   },
   "ui/legacy/SearchableView.ts | dMatches": {
     "message": "Matokeo {PH1} yanayolingana"
@@ -13853,11 +13943,26 @@
   "ui/legacy/SearchableView.ts | dOfD": {
     "message": "{PH1} kati ya {PH2}"
   },
+  "ui/legacy/SearchableView.ts | disableCaseSensitive": {
+    "message": "Zima utafutaji unaozingatia herufi kubwa au ndogo"
+  },
+  "ui/legacy/SearchableView.ts | disableFindAndReplace": {
+    "message": "Zima hali ya kutafuta na kubadilisha"
+  },
+  "ui/legacy/SearchableView.ts | disableRegularExpression": {
+    "message": "Zima utafutaji unaotumia kauli za kawaida"
+  },
+  "ui/legacy/SearchableView.ts | enableCaseSensitive": {
+    "message": "Washa utafutaji unaozingatia herufi kubwa au ndogo"
+  },
+  "ui/legacy/SearchableView.ts | enableFindAndReplace": {
+    "message": "Tafuta na ubadilishe"
+  },
+  "ui/legacy/SearchableView.ts | enableRegularExpression": {
+    "message": "Washa utafutaji unaotumia kauli za kawaida"
+  },
   "ui/legacy/SearchableView.ts | findString": {
     "message": "Tafuta"
-  },
-  "ui/legacy/SearchableView.ts | matchCase": {
-    "message": "Linganisha Ukubwa wa Herufi"
   },
   "ui/legacy/SearchableView.ts | matchString": {
     "message": "Tokeo moja linalolingana"
@@ -13869,13 +13974,10 @@
     "message": "Badilisha zote"
   },
   "ui/legacy/SearchableView.ts | searchNext": {
-    "message": "Tafuta tukio linalofuata"
+    "message": "Onyesha tokeo linalofuata"
   },
   "ui/legacy/SearchableView.ts | searchPrevious": {
-    "message": "Tafuta tukio lililotangulia"
-  },
-  "ui/legacy/SearchableView.ts | useRegularExpression": {
-    "message": "Tumia Kilinganishi"
+    "message": "Onyesha tokeo lililotangulia"
   },
   "ui/legacy/SettingsUI.ts | oneOrMoreSettingsHaveChanged": {
     "message": "Mpangilio mmoja au zaidi umebadilika, unahitaji kupakia upya ili mipangilio itekelezwe."
@@ -13932,7 +14034,10 @@
     "message": "Ukurasa ukipakiwa upya, zana za DevTools zitaunganishwa tena kiotomatiki."
   },
   "ui/legacy/Toolbar.ts | clearInput": {
-    "message": "Futa neno"
+    "message": "Futa"
+  },
+  "ui/legacy/Toolbar.ts | filter": {
+    "message": "Chuja"
   },
   "ui/legacy/Toolbar.ts | notPressed": {
     "message": "haijabonyezwa"
@@ -13972,9 +14077,6 @@
   },
   "ui/legacy/UIUtils.ts | promiseResolvedAsync": {
     "message": "Ahadi imetatuliwa (hailandani)"
-  },
-  "ui/legacy/UIUtils.ts | sAsync": {
-    "message": "{PH1} (hailandani)"
   },
   "ui/legacy/ViewManager.ts | sPanel": {
     "message": "Kidirisha cha {PH1}"
@@ -14351,6 +14453,15 @@
   "ui/legacy/components/perf_ui/FilmStripView.ts | screenshotForSSelectToView": {
     "message": "Picha ya skrini ya {PH1} - chagua ili uone maombi yaliyotangulia."
   },
+  "ui/legacy/components/perf_ui/FlameChart.ts | addScriptToIgnoreList": {
+    "message": "Weka hati kwenye kipengele cha kupuuza orodha"
+  },
+  "ui/legacy/components/perf_ui/FlameChart.ts | enterTrackConfigurationMode": {
+    "message": "Inaweka mipangilio ya vikundi…"
+  },
+  "ui/legacy/components/perf_ui/FlameChart.ts | exitTrackConfigurationMode": {
+    "message": "Maliza kuweka mipangilio ya vikundi"
+  },
   "ui/legacy/components/perf_ui/FlameChart.ts | flameChart": {
     "message": "Chati ya Miale ya Shughuli"
   },
@@ -14362,6 +14473,9 @@
   },
   "ui/legacy/components/perf_ui/FlameChart.ts | hideRepeatingChildren": {
     "message": "Ficha vipengele vidogo vinavyojirudia"
+  },
+  "ui/legacy/components/perf_ui/FlameChart.ts | removeScriptFromIgnoreList": {
+    "message": "Ondoa hati kwenye kipengele cha kupuuza orodha"
   },
   "ui/legacy/components/perf_ui/FlameChart.ts | resetChildren": {
     "message": "Badilisha vipengee tegemezi"

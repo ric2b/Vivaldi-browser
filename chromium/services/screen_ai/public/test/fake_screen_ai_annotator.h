@@ -25,13 +25,11 @@ class FakeScreenAIAnnotator : public mojom::ScreenAIAnnotator {
       const ::SkBitmap& image,
       PerformOcrAndReturnAXTreeUpdateCallback callback) override;
 
-  void ExtractSemanticLayout(const ::SkBitmap& image,
-                             const ::ui::AXTreeID& parent_tree_id,
-                             ExtractSemanticLayoutCallback callback) override;
-
   void PerformOcrAndReturnAnnotation(
       const ::SkBitmap& image,
       PerformOcrAndReturnAnnotationCallback callback) override;
+
+  void SetClientType(mojom::OcrClientType client_type) override;
 
   mojo::PendingRemote<mojom::ScreenAIAnnotator> BindNewPipeAndPassRemote();
 

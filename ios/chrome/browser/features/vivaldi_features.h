@@ -9,11 +9,11 @@
 // chromium/ios/chrome/browser/flags/about_flags.mm
 // so the flag gets picked up by the flag UI
 
-// Feature flag to enable new Start page layout.
-BASE_DECLARE_FEATURE(kNewStartPage);
+// Feature flag to enable top sites.
+BASE_DECLARE_FEATURE(kShowTopSites);
 
-// Whether the new Start page is enabled.
-bool IsNewStartPageIsEnabled();
+// Whether the top site is enabled.
+bool IsTopSitesEnabled();
 
 BASE_DECLARE_FEATURE(kViewMarkdownAsHTML);
 

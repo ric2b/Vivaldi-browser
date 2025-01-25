@@ -91,7 +91,7 @@ void DeduplicateProfiles(const AutofillProfileComparator& comparator,
         return p.source() == AutofillProfile::Source::kLocalOrSyncable;
       });
 
-  size_t num_profiles_deleted = 0;
+  size_t num_profiles_deleted = 0, num_quasi_duplicates_deleted = 0;
   for (auto local_profile_it = profiles.begin();
        local_profile_it != bgn_account_profiles; ++local_profile_it) {
     // If possible, merge `*local_profile_it` with another local profile and
@@ -140,10 +140,13 @@ void DeduplicateProfiles(const AutofillProfileComparator& comparator,
                                           comparator)) {
       adm.RemoveProfile(local_profile_it->guid());
       num_profiles_deleted++;
+      num_quasi_duplicates_deleted++;
     }
   }
   autofill_metrics::LogNumberOfProfilesRemovedDuringDedupe(
       num_profiles_deleted);
+  autofill_metrics::LogNumberOfQuasiDuplicateProfilesRemovedDuringDedupe(
+      num_quasi_duplicates_deleted);
 }
 
 }  // namespace
@@ -172,10 +175,21 @@ void AddressDataCleaner::MaybeCleanupAddressData() {
   are_cleanups_pending_ = false;
 
   // Ensure that deduplication is only run one per milestone.
+  // To simplify the rollout of AutofillSilentlyRemoveQuasiDuplicates, this
+  // condition is relaxed to twice per milestone (but still limited to at most
+  // once per startup).
+  // TODO(crbug.com/325450676): Revert to once per milestone after the rollout.
   if (pref_service_->GetInteger(prefs::kAutofillLastVersionDeduped) <
       CHROME_VERSION_MAJOR) {
     pref_service_->SetInteger(prefs::kAutofillLastVersionDeduped,
                               CHROME_VERSION_MAJOR);
+    ApplyDeduplicationRoutine();
+  } else if (base::FeatureList::IsEnabled(
+                 features::kAutofillSilentlyRemoveQuasiDuplicates) &&
+             !pref_service_->GetBoolean(
+                 prefs::kAutofillRanQuasiDuplicateExtraDeduplication)) {
+    pref_service_->SetBoolean(
+        prefs::kAutofillRanQuasiDuplicateExtraDeduplication, true);
     ApplyDeduplicationRoutine();
   }
 
@@ -215,13 +229,26 @@ AddressDataCleaner::CalculateMinimalIncompatibleTypeSets(
 }
 
 // static
+std::vector<FieldTypeSet>
+AddressDataCleaner::CalculateMinimalIncompatibleTypeSets(
+    const AutofillProfile& import_candidate,
+    base::span<const AutofillProfile* const> existing_profiles,
+    const AutofillProfileComparator& comparator) {
+  // Unfortunately, a vector of non-pointers is needed for
+  // `CalculateMinimalIncompatibleTypeSets()`.
+  std::vector<AutofillProfile> existing_profiles_copy;
+  existing_profiles_copy.reserve(existing_profiles.size());
+  for (const AutofillProfile* profile : existing_profiles) {
+    existing_profiles_copy.push_back(*profile);
+  }
+  return CalculateMinimalIncompatibleTypeSets(
+      import_candidate, existing_profiles_copy, comparator);
+}
+
+// static
 bool AddressDataCleaner::IsTokenLowQualityForDeduplicationPurposes(
     const AutofillProfile& profile,
     FieldType type) {
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillTrackProfileTokenQuality)) {
-    return false;
-  }
   using ObservationType = ProfileTokenQuality::ObservationType;
   // A token is considered low quality for deduplication purposes, if the
   // majority of its observers are "bad", as defined by the switch below.
@@ -262,7 +289,7 @@ void AddressDataCleaner::ApplyDeduplicationRoutine() {
     return;
   }
 
-  const std::vector<AutofillProfile*>& profiles =
+  const std::vector<const AutofillProfile*>& profiles =
       address_data_manager_->GetProfiles(
           AddressDataManager::ProfileOrder::kHighestFrecencyDesc);
   // Early return to prevent polluting metrics with uninteresting events.
@@ -284,7 +311,7 @@ void AddressDataCleaner::ApplyDeduplicationRoutine() {
 }
 
 void AddressDataCleaner::DeleteDisusedAddresses() {
-  const std::vector<AutofillProfile*>& profiles =
+  const std::vector<const AutofillProfile*>& profiles =
       address_data_manager_->GetProfilesFromSource(
           AutofillProfile::Source::kLocalOrSyncable);
   // Early return to prevent polluting metrics with uninteresting events.
@@ -294,7 +321,7 @@ void AddressDataCleaner::DeleteDisusedAddresses() {
   // Don't call `PDM::RemoveByGUID()` directly, since this can invalidate the
   // pointers in `profiles`.
   std::vector<std::string> guids_to_delete;
-  for (AutofillProfile* profile : profiles) {
+  for (const AutofillProfile* profile : profiles) {
     if (profile->IsDeletable()) {
       guids_to_delete.push_back(profile->guid());
     }

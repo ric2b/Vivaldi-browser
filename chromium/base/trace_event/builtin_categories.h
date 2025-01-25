@@ -37,6 +37,7 @@
   /* The rest of the list is in alphabetical order */                    \
   X("accessibility")                                                     \
   X("AccountFetcherService")                                             \
+  X("android.adpf")                                                      \
   X("android.ui.jank")                                                   \
   X("android_webview")                                                   \
   X("android_webview.timeline")                                          \
@@ -364,6 +365,7 @@
   X("input,rail")                                                             \
   X("input,input.scrolling")                                                  \
   X("input,views")                                                            \
+  X("interactions,input.scrolling")                                           \
   X("interactions,startup")                                                   \
   X("ipc,security")                                                           \
   X("ipc,toplevel")                                                           \
@@ -392,6 +394,7 @@
   X("v8," TRACE_DISABLED_BY_DEFAULT("v8.compile"))                            \
   X("v8,devtools.timeline")                                                   \
   X("v8,devtools.timeline," TRACE_DISABLED_BY_DEFAULT("v8.compile"))          \
+  X("viz,android.adpf")                                                       \
   X("viz,benchmark")                                                          \
   X("viz,benchmark,graphics.pipeline")                                        \
   X("wakeup.flow,toplevel.flow")                                              \

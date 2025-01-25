@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <memory>
 #include <string_view>
 #include <utility>
@@ -119,10 +124,12 @@ class NeverSerializedMessage : public TestMessageBase {
  private:
   // TestMessageBase:
   void GetSerializedSize(size_t* num_bytes, size_t* num_handles) override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
-  void SerializeHandles(MojoHandle* handles) override { NOTREACHED(); }
-  void SerializePayload(void* buffer) override { NOTREACHED(); }
+  void SerializeHandles(MojoHandle* handles) override {
+    NOTREACHED_IN_MIGRATION();
+  }
+  void SerializePayload(void* buffer) override { NOTREACHED_IN_MIGRATION(); }
 
   base::OnceClosure destruction_callback_;
 };

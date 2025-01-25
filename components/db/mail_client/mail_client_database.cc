@@ -70,7 +70,8 @@ sql::InitStatus LogInitFailure(InitStep what) {
 }  // namespace
 
 MailClientDatabase::MailClientDatabase()
-    : db_({// Set the database page size to something a little larger to give us
+    : db_({
+          // Set the database page size to something a little larger to give us
            // better performance (we're typically seek rather than bandwidth
            // limited). Must be a power of 2 and a max of 65536.
            .page_size = 4096,
@@ -78,7 +79,7 @@ MailClientDatabase::MailClientDatabase()
            // value, tells us how much memory the cache will use maximum.
            // 1000 * 4kB = 4MB
            .cache_size = 1000,
-           .enable_virtual_tables_discouraged = true}) {}
+           }) {}
 
 MailClientDatabase::~MailClientDatabase() {}
 
@@ -129,11 +130,11 @@ int MailClientDatabase::GetCurrentVersion() {
 }
 
 void MailClientDatabase::BeginTransaction() {
-  db_.BeginTransaction();
+  db_.BeginTransactionDeprecated();
 }
 
 void MailClientDatabase::CommitTransaction() {
-  db_.CommitTransaction();
+  db_.CommitTransactionDeprecated();
 }
 
 void MailClientDatabase::RollbackTransaction() {
@@ -143,7 +144,7 @@ void MailClientDatabase::RollbackTransaction() {
   // transaction. This will crash on a DCHECK. So transaction_nesting() is
   // checked first.
   if (db_.transaction_nesting())
-    db_.RollbackTransaction();
+    db_.RollbackTransactionDeprecated();
 }
 
 void MailClientDatabase::TrimMemory(bool aggressively) {

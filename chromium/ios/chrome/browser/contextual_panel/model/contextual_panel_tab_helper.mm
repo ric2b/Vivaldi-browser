@@ -4,12 +4,17 @@
 
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_tab_helper.h"
 
+#import "base/metrics/histogram_functions.h"
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_item_configuration.h"
+#import "ios/chrome/browser/contextual_panel/model/contextual_panel_item_type.h"
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_model.h"
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_tab_helper_observer.h"
+#import "ios/chrome/browser/contextual_panel/utils/contextual_panel_metrics.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/public/commands/contextual_sheet_commands.h"
 #import "ios/web/public/navigation/navigation_context.h"
 #import "ios/web/public/web_state.h"
+#import "ui/base/page_transition_types.h"
 
 ContextualPanelTabHelper::ContextualPanelTabHelper(
     web::WebState* web_state,
@@ -50,20 +55,67 @@ ContextualPanelTabHelper::GetFirstCachedConfig() {
   return HasCachedConfigsAvailable() ? sorted_weak_configurations_[0] : nullptr;
 }
 
+void ContextualPanelTabHelper::SetContextualSheetHandler(
+    id<ContextualSheetCommands> handler) {
+  contextual_sheet_handler_ = handler;
+}
+
 bool ContextualPanelTabHelper::IsContextualPanelCurrentlyOpened() {
   return is_contextual_panel_currently_opened_;
 }
 
-void ContextualPanelTabHelper::SetContextualPanelCurrentlyOpened(bool opened) {
-  is_contextual_panel_currently_opened_ = opened;
+void ContextualPanelTabHelper::OpenContextualPanel() {
+  if (is_contextual_panel_currently_opened_) {
+    return;
+  }
+  is_contextual_panel_currently_opened_ = true;
+  for (auto& observer : observers_) {
+    observer.ContextualPanelOpened(this);
+  }
 }
 
-bool ContextualPanelTabHelper::WasLargeEntrypointShown() {
-  return large_entrypoint_shown_for_curent_page_navigation_;
+void ContextualPanelTabHelper::CloseContextualPanel() {
+  if (!is_contextual_panel_currently_opened_) {
+    return;
+  }
+  is_contextual_panel_currently_opened_ = false;
+  for (auto& observer : observers_) {
+    observer.ContextualPanelClosed(this);
+  }
 }
 
-void ContextualPanelTabHelper::SetLargeEntrypointShown(bool shown) {
-  large_entrypoint_shown_for_curent_page_navigation_ = shown;
+bool ContextualPanelTabHelper::WasLoudMomentEntrypointShown() {
+  return loud_moment_entrypoint_shown_for_curent_page_navigation_;
+}
+
+void ContextualPanelTabHelper::SetLoudMomentEntrypointShown(bool shown) {
+  loud_moment_entrypoint_shown_for_curent_page_navigation_ = shown;
+}
+
+std::optional<ContextualPanelTabHelper::EntrypointMetricsData>&
+ContextualPanelTabHelper::GetMetricsData() {
+  return metrics_data_;
+}
+
+void ContextualPanelTabHelper::SetMetricsData(
+    ContextualPanelTabHelper::EntrypointMetricsData data) {
+  metrics_data_ = data;
+}
+
+bool ContextualPanelTabHelper::ShouldRefreshData(
+    web::WebState* web_state,
+    web::NavigationContext* navigation_context) {
+  // `pushState` from Javascript shows up as this set of parameters, and should
+  // count as a navigation to a new page and thus a data refresh.
+  if (navigation_context->IsSameDocument() &&
+      navigation_context->HasUserGesture() &&
+      ui::PageTransitionCoreTypeIs(navigation_context->GetPageTransition(),
+                                   ui::PAGE_TRANSITION_LINK)) {
+    return true;
+  }
+
+  // Otherwise, refresh the data if the navigation is to a new document.
+  return !navigation_context->IsSameDocument();
 }
 
 #pragma mark - WebStateObserver
@@ -73,13 +125,20 @@ void ContextualPanelTabHelper::DidStartNavigation(
     web::NavigationContext* navigation_context) {
   DCHECK_EQ(web_state_, web_state);
 
-  // If the navigation was started for the same document, do nothing.
-  if (navigation_context->IsSameDocument()) {
+  if (!ShouldRefreshData(web_state, navigation_context)) {
     return;
   }
 
-  is_contextual_panel_currently_opened_ = false;
-  large_entrypoint_shown_for_curent_page_navigation_ = false;
+  if (IsContextualPanelCurrentlyOpened()) {
+    base::UmaHistogramEnumeration(
+        "IOS.ContextualPanel.DismissedReason",
+        ContextualPanelDismissedReason::NavigationInitiated);
+    [contextual_sheet_handler_ hideContextualSheet];
+    CloseContextualPanel();
+  }
+
+  metrics_data_ = std::nullopt;
+  loud_moment_entrypoint_shown_for_curent_page_navigation_ = false;
 
   // Clear the configs and notify the observers.
   sorted_weak_configurations_.clear();
@@ -93,6 +152,11 @@ void ContextualPanelTabHelper::DidFinishNavigation(
     web::WebState* web_state,
     web::NavigationContext* navigation_context) {
   DCHECK_EQ(web_state_, web_state);
+
+  if (!ShouldRefreshData(web_state, navigation_context)) {
+    return;
+  }
+
   QueryModels();
 }
 
@@ -106,6 +170,20 @@ void ContextualPanelTabHelper::PageLoaded(
     web::WebState* web_state,
     web::PageLoadCompletionStatus load_completion_status) {
   DCHECK_EQ(web_state_, web_state);
+}
+
+void ContextualPanelTabHelper::WasShown(web::WebState* web_state) {
+  if (IsContextualPanelCurrentlyOpened()) {
+    [contextual_sheet_handler_ showContextualSheetUIIfActive];
+  }
+}
+
+void ContextualPanelTabHelper::WasHidden(web::WebState* web_state) {
+  if (IsContextualPanelCurrentlyOpened()) {
+    base::UmaHistogramEnumeration("IOS.ContextualPanel.DismissedReason",
+                                  ContextualPanelDismissedReason::TabChanged);
+    [contextual_sheet_handler_ hideContextualSheet];
+  }
 }
 
 #pragma mark - Private
@@ -164,7 +242,7 @@ void ContextualPanelTabHelper::AllRequestsFinished() {
 
     if (response.configuration) {
       sorted_weak_configurations_.push_back(
-          response.configuration->AsWeakPtr());
+          response.configuration->weak_ptr_factory.GetWeakPtr());
     }
   }
 
@@ -184,6 +262,33 @@ void ContextualPanelTabHelper::AllRequestsFinished() {
 
   for (auto& observer : observers_) {
     observer.ContextualPanelHasNewData(this, sorted_weak_configurations_);
+  }
+
+  FireRequestsFinishedMetrics();
+}
+
+void ContextualPanelTabHelper::FireRequestsFinishedMetrics() {
+  base::UmaHistogramExactLinear(
+      "IOS.ContextualPanel.Model.InfoBlocksWithContentCount",
+      sorted_weak_configurations_.size(),
+      static_cast<int>(ContextualPanelItemType::kMaxValue));
+
+  for (const auto& [key, response] : responses_) {
+    std::string item_type = StringForItemType(key);
+    std::string histogram_name =
+        std::string("IOS.ContextualPanel.Model.Relevance.").append(item_type);
+    ModelRelevanceType relevance_type;
+    if (!response.configuration) {
+      relevance_type = ModelRelevanceType::NoData;
+    } else {
+      int relevance = response.configuration->relevance;
+      if (relevance >= ContextualPanelItemConfiguration::high_relevance) {
+        relevance_type = ModelRelevanceType::High;
+      } else {
+        relevance_type = ModelRelevanceType::Low;
+      }
+    }
+    base::UmaHistogramEnumeration(histogram_name, relevance_type);
   }
 }
 

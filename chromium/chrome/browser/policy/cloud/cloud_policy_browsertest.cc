@@ -22,7 +22,7 @@
 #include "chrome/test/base/chrome_test_utils.h"
 #include "components/invalidation/impl/fake_invalidation_service.h"
 #include "components/invalidation/impl/profile_identity_provider.h"
-#include "components/invalidation/impl/profile_invalidation_provider.h"
+#include "components/invalidation/profile_invalidation_provider.h"
 #include "components/invalidation/public/invalidation.h"
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/invalidation/public/invalidation_util.h"
@@ -424,9 +424,6 @@ IN_PROC_BROWSER_TEST_F(CloudPolicyTest, EnsureDefaultPoliciesSet) {
 
 // crbug.com/1230268 not working on Lacros.
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-#define MAYBE_InvalidatePolicy DISABLED_InvalidatePolicy
-#elif BUILDFLAG(IS_WIN)
-// Test is flaky on Windows bots: https://crbug.com/40187980
 #define MAYBE_InvalidatePolicy DISABLED_InvalidatePolicy
 #else
 #define MAYBE_InvalidatePolicy InvalidatePolicy

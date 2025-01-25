@@ -1198,8 +1198,8 @@ static int load_input_picture(MpegEncContext *s, const AVFrame *pic_arg)
                 ptrdiff_t dst_stride = i ? s->uvlinesize : s->linesize;
                 int h_shift = i ? s->chroma_x_shift : 0;
                 int v_shift = i ? s->chroma_y_shift : 0;
-                int w = s->width  >> h_shift;
-                int h = s->height >> v_shift;
+                int w = AV_CEIL_RSHIFT(s->width , h_shift);
+                int h = AV_CEIL_RSHIFT(s->height, v_shift);
                 const uint8_t *src = pic_arg->data[i];
                 uint8_t *dst = pic->f->data[i];
                 int vpad = 16;
@@ -1433,7 +1433,7 @@ static int estimate_best_b_count(MpegEncContext *s)
                 goto fail;
             }
 
-            rd += (out_size * lambda2) >> (FF_LAMBDA_SHIFT - 3);
+            rd += (out_size * (uint64_t)lambda2) >> (FF_LAMBDA_SHIFT - 3);
         }
 
         /* get the delayed frames */
@@ -1442,7 +1442,7 @@ static int estimate_best_b_count(MpegEncContext *s)
             ret = out_size;
             goto fail;
         }
-        rd += (out_size * lambda2) >> (FF_LAMBDA_SHIFT - 3);
+        rd += (out_size * (uint64_t)lambda2) >> (FF_LAMBDA_SHIFT - 3);
 
         rd += c->error[0] + c->error[1] + c->error[2];
 
@@ -3623,15 +3623,15 @@ static int encode_picture(MpegEncContext *s)
         s->q_chroma_intra_matrix16 = s->q_intra_matrix16;
     }
 
+    if(ff_init_me(s)<0)
+        return -1;
+
     s->mb_intra=0; //for the rate distortion & bit compare functions
     for(i=1; i<context_count; i++){
         ret = ff_update_duplicate_context(s->thread_context[i], s);
         if (ret < 0)
             return ret;
     }
-
-    if(ff_init_me(s)<0)
-        return -1;
 
     /* Estimate motion for every MB */
     if(s->pict_type != AV_PICTURE_TYPE_I){

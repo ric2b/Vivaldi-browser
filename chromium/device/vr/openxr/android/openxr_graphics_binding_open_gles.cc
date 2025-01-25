@@ -79,7 +79,7 @@ bool OpenXrGraphicsBindingOpenGLES::Initialize(XrInstance instance,
   // None of the other runtimes support ANGLE, so we disable it too for now.
   // TODO(alcooper): Investigate if we can support ANGLE or if we'll run into
   // similar problems as cardboard.
-  gl::init::DisableANGLE();
+  gl::DisableANGLE();
 
   // Everything below is a hacky first pass at making a session and likely needs
   // to be re-written with proper context/surfaces/types.
@@ -237,7 +237,7 @@ void OpenXrGraphicsBindingOpenGLES::ResizeSharedBuffer(
   // The SharedImages created here will eventually be transferred to other
   // processes to have their contents written by WebGL and read via GL by
   // OpenXR.
-  uint32_t shared_image_usage =
+  gpu::SharedImageUsageSet shared_image_usage =
       gpu::SHARED_IMAGE_USAGE_SCANOUT | gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
       gpu::SHARED_IMAGE_USAGE_GLES2_READ | gpu::SHARED_IMAGE_USAGE_GLES2_WRITE;
 
@@ -267,7 +267,7 @@ void OpenXrGraphicsBindingOpenGLES::ResizeSharedBuffer(
       std::move(gmb_handle));
   CHECK(swap_chain_info.shared_image);
   swap_chain_info.sync_token = sii->GenVerifiedSyncToken();
-  DCHECK_EQ(swap_chain_info.shared_image->GetTextureTarget(format),
+  DCHECK_EQ(swap_chain_info.shared_image->GetTextureTarget(),
             static_cast<uint32_t>(GL_TEXTURE_2D));
 
   DVLOG(2) << ": CreateSharedImage, mailbox="

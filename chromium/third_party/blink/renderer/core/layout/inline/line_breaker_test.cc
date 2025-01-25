@@ -13,7 +13,7 @@
 #include "third_party/blink/renderer/core/layout/inline/inline_item_result_ruby_column.h"
 #include "third_party/blink/renderer/core/layout/inline/inline_node.h"
 #include "third_party/blink/renderer/core/layout/inline/line_info.h"
-#include "third_party/blink/renderer/core/layout/layout_ng_block_flow.h"
+#include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/layout/positioned_float.h"
 #include "third_party/blink/renderer/core/layout/unpositioned_float.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_view.h"
@@ -1104,7 +1104,7 @@ TEST_F(LineBreakerTest, BreakAtTrailingSpacesAfterAtomicInline) {
 // crbug.com/338437458
 TEST_F(LineBreakerTest, WideContentInRuby) {
   InlineNode node = CreateInlineNode(R"HTML(
-      <div id=container>
+      <div id=container style="text-wrap:nowrap">
       <ruby><div style="width:109162843px; margin-right:1000px"></div><div>
       a</div><rt>a</ruby>
       </div>)HTML");
@@ -1156,8 +1156,8 @@ TEST_F(LineBreakerTest, SetInputRange) {
 TEST_F(LineBreakerTest, CreateSubLineInfoAvailableWidth) {
   LoadAhem();
   InlineNode node = CreateInlineNode(R"HTML(
-      <div id=container style="font: 40px Ahem"><ruby><b>
-      foo bar foo bar foo bar foo bar foo bar
+      <div id=container style="font: 40px Ahem"><ruby style="text-wrap:nowrap">
+      <b>foo bar foo bar foo bar foo bar foo bar
       foo bar foo bar foo bar foo bar foo bar
       <button style="float:left;">f</button></b>
       <rt>annotation</ruby></div>)HTML");
@@ -1174,6 +1174,63 @@ TEST_F(LineBreakerTest, CreateSubLineInfoAvailableWidth) {
   // The line should contain the whole text.
   EXPECT_EQ(InlineItem::kOpenRubyColumn, line_info.Results()[1].item->Type());
   EXPECT_GE(line_info.Results()[1].ruby_column->base_line.EndTextOffset(), 79u);
+}
+
+// crbug.com/341142174 A crash with an overflowing continuation ruby column.
+TEST_F(LineBreakerTest, OverflowingContinuationRuby) {
+  InlineNode node = CreateInlineNode(R"HTML(
+<div id="container" style="width:1px; font-variant:small-caps;">
+<ruby>
+<q>
+AxBxC AxBxC
+</q>
+<rt>C b
+C AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+</ruby>)HTML");
+  ComputeMinMaxSizes(node);
+  // This test passes if no CHECK failures.
+}
+
+// crbug.com/342027571 A crash with an overflowing continuation ruby column.
+TEST_F(LineBreakerTest, OverflowingContinuationRuby2) {
+  InlineNode node = CreateInlineNode(R"HTML(
+<div id="container" style="writing-mode:vertical-rl; word-wrap:break-word;">
+<ruby>)S
+<rb dir="rtl" style="margin-bottom:-6em;"><svg></svg></rb>
+<rt>x AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+</ruby>
+)HTML");
+  ComputeMinMaxSizes(node);
+  // This test passes if no DCHECK failures.
+}
+
+TEST_F(LineBreakerTest, MinMaxWithAtomicInlineInRuby) {
+  InlineNode node = CreateInlineNode(R"HTML(
+<div id="container">
+<ruby><svg></svg><rt></ruby>)HTML");
+  ComputeMinMaxSizes(node);
+  // This test passes if no CHECK failures.
+}
+
+// crbug.com/342801061 LineInfo::Width() was zero unexpectedly.
+TEST_F(LineBreakerTest, RemoveTrailingCollapsibleSpace) {
+  InlineNode node = CreateInlineNode(R"HTML(
+<div id="container" style="font-size:20px; word-spacing:2569999em;">
+<ruby dir="rtl">
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA AxBxC
+<rt  dir="ltr">a AxBxC</ruby>
+</div>)HTML");
+  ComputeMinMaxSizes(node);
+  // Pass if no division-by-zero.
+}
+
+// crbug.com/350122891
+TEST_F(LineBreakerTest, MinMaxWithEmptyRubyBase) {
+  InlineNode node = CreateInlineNode(R"HTML(
+<div id="container" style="display:inline-block;">
+<ruby><rt><wbr>++P}A[X9e+52FuYyMsuADbOcYXMu73ci73uDMfYQsD</ruby></div>)HTML");
+  ComputeMinMaxSizes(node);
+  // Pass if no CHECK failure.
 }
 
 struct CanBreakInsideTestData {

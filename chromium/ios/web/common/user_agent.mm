@@ -19,15 +19,17 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "base/vivaldi_user_agent.h"
+#import "components/user_agent/vivaldi_user_agent.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 namespace {
 
+// The Desktop OS version should always remain 10_15_7, to be consisent with
+// Chrome, Firefox, and Safari: https://crbug.com/40167872
 const char kDesktopUserAgentProductPlaceholder[] =
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_5) "
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/605.1.15 (KHTML, like Gecko) %s"
     "Version/11.1.1 "
     "Safari/605.1.15";
@@ -42,11 +44,20 @@ std::string OSVersion() {
   int32_t os_major_version = 0;
   int32_t os_minor_version = 0;
   int32_t os_bugfix_version = 0;
+
   base::SysInfo::OperatingSystemVersionNumbers(
       &os_major_version, &os_minor_version, &os_bugfix_version);
 
   std::string os_version;
-  base::StringAppendF(&os_version, "%d_%d", os_major_version, os_minor_version);
+
+  if (base::FeatureList::IsEnabled(web::features::kUserAgentBugFixVersion)) {
+    base::StringAppendF(&os_version, "%d_%d_%d", os_major_version,
+                        os_minor_version, os_bugfix_version);
+  } else {
+    base::StringAppendF(&os_version, "%d_%d", os_major_version,
+                        os_minor_version);
+  }
+
   return os_version;
 }
 

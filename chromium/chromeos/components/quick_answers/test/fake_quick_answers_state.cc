@@ -4,31 +4,15 @@
 
 #include "chromeos/components/quick_answers/test/fake_quick_answers_state.h"
 
+#include "base/observer_list.h"
+#include "chromeos/components/quick_answers/public/cpp/quick_answers_prefs.h"
+
 FakeQuickAnswersState::FakeQuickAnswersState() = default;
 
 FakeQuickAnswersState::~FakeQuickAnswersState() = default;
 
 void FakeQuickAnswersState::SetSettingsEnabled(bool settings_enabled) {
-  if (settings_enabled_ == settings_enabled) {
-    return;
-  }
-  settings_enabled_ = settings_enabled;
-
-  for (auto& observer : observers_) {
-    observer.OnSettingsEnabled(settings_enabled_);
-  }
-}
-
-void FakeQuickAnswersState::SetConsentStatus(
-    quick_answers::prefs::ConsentStatus consent_status) {
-  if (consent_status_ == consent_status) {
-    return;
-  }
-  consent_status_ = consent_status;
-
-  for (auto& observer : observers_) {
-    observer.OnConsentStatusUpdated(consent_status_);
-  }
+  AsyncWriteEnabled(settings_enabled);
 }
 
 void FakeQuickAnswersState::SetApplicationLocale(const std::string& locale) {
@@ -41,7 +25,7 @@ void FakeQuickAnswersState::SetApplicationLocale(const std::string& locale) {
     observer.OnApplicationLocaleReady(locale);
   }
 
-  UpdateEligibility();
+  MaybeNotifyEligibilityChanged();
 }
 
 void FakeQuickAnswersState::SetPreferredLanguages(
@@ -63,5 +47,21 @@ void FakeQuickAnswersState::OnPrefsInitialized() {
     observer.OnPrefsInitialized();
   }
 
-  UpdateEligibility();
+  MaybeNotifyEligibilityChanged();
+  MaybeNotifyIsEnabledChanged();
+}
+
+void FakeQuickAnswersState::AsyncWriteConsentUiImpressionCount(int32_t count) {
+  consent_ui_impression_count_ = count;
+}
+
+void FakeQuickAnswersState::AsyncWriteConsentStatus(
+    quick_answers::prefs::ConsentStatus consent_status) {
+  SetQuickAnswersFeatureConsentStatus(consent_status);
+}
+
+void FakeQuickAnswersState::AsyncWriteEnabled(bool enabled) {
+  quick_answers_enabled_ = enabled;
+
+  MaybeNotifyIsEnabledChanged();
 }

@@ -8,8 +8,8 @@
 #import "base/functional/bind.h"
 #import "base/functional/callback.h"
 #import "components/sessions/core/session_id.h"
-#import "ios/chrome/browser/sessions/session_restoration_service.h"
-#import "ios/chrome/browser/sessions/session_restoration_service_factory.h"
+#import "ios/chrome/browser/sessions/model/session_restoration_service.h"
+#import "ios/chrome/browser/sessions/model/session_restoration_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/web_state_list/order_controller.h"
@@ -22,7 +22,19 @@
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/web/public/web_state.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
+// End Vivaldi
+
 namespace {
+
+// Information about a tab group.
+struct TabGroupInfo {
+  const TabGroupRange group_range;
+  const tab_groups::TabGroupId tab_group_id;
+  const tab_groups::TabGroupVisualData visual_data;
+};
 
 // Moves WebStates in range [start; start+count) from `source` to `target`.
 void MoveWebStatesInRangeBetweenLists(WebStateList* source,
@@ -46,7 +58,7 @@ void MoveWebStatesInRangeBetweenLists(WebStateList* source,
       old_active_index, RemovingIndexes({.start = start, .count = count})));
 
   // Store the groups info.
-  std::vector<std::pair<TabGroupRange, tab_groups::TabGroupVisualData>> groups;
+  std::vector<TabGroupInfo> groups;
   for (const TabGroup* group : source->GetGroups()) {
     TabGroupRange range = group->range();
     // The group is not in the range of moving items, ignore it.
@@ -59,7 +71,11 @@ void MoveWebStatesInRangeBetweenLists(WebStateList* source,
     // range of closed items.
     CHECK(start <= range.range_begin() && range.range_end() <= end);
     range.Move(offset - start);
-    groups.push_back({range, group->visual_data()});
+    groups.push_back(TabGroupInfo{
+        .group_range = range,
+        .tab_group_id = group->tab_group_id(),
+        .visual_data = group->visual_data(),
+    });
   }
 
   for (int n = 0; n < count; ++n) {
@@ -77,8 +93,9 @@ void MoveWebStatesInRangeBetweenLists(WebStateList* source,
   }
 
   // Restore the groups info.
-  for (const auto& [range, visual_data] : groups) {
-    target->CreateGroup(range.AsSet(), visual_data);
+  for (const auto& group : groups) {
+    target->CreateGroup(group.group_range.AsSet(), group.visual_data,
+                        group.tab_group_id);
   }
 }
 
@@ -238,6 +255,13 @@ bool TabsCloser::CanCloseTabs() const {
 
 int TabsCloser::CloseTabs() {
   DCHECK(CanCloseTabs());
+
+  if (vivaldi::IsVivaldiRunning()) {
+    [[NSNotificationCenter defaultCenter]
+        postNotificationName:vTabGridWillCloseAllTabsNotification
+          object:nil
+            userInfo:nil];
+  } // End Vivaldi
 
   WebStateList* web_state_list = browser_->GetWebStateList();
 

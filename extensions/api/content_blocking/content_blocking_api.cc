@@ -5,9 +5,9 @@
 #include "base/lazy_instance.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "components/ad_blocker/adblock_known_sources_handler.h"
+#include "components/request_filter/adblock_filter/adblock_request_filter_tab_helper.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
-#include "components/request_filter/adblock_filter/blocked_urls_reporter_tab_helper.h"
 #include "extensions/schema/content_blocking.h"
 #include "extensions/tools/vivaldi_tools.h"
 
@@ -24,7 +24,6 @@ std::optional<adblock_filter::RuleGroup> FromVivaldiContentBlockingRuleGroup(
       return adblock_filter::RuleGroup::kAdBlockingRules;
     default:
       NOTREACHED();
-      return std::nullopt;
   }
 }
 
@@ -55,7 +54,6 @@ FromVivaldiContentBlockingExceptionList(
       return adblock_filter::RuleManager::kExemptList;
     default:
       NOTREACHED();
-      return std::nullopt;
   }
 }
 
@@ -168,7 +166,7 @@ vivaldi::content_blocking::RuleSource ToVivaldiContentBlockingRuleSource(
 }
 
 void RecordBLockedUrls(
-    const adblock_filter::BlockedUrlsReporterTabHelper::BlockedUrlInfoMap&
+    const adblock_filter::RequestFilterTabHelper::BlockedUrlInfoMap&
         blocked_urls,
     std::vector<vivaldi::content_blocking::BlockedUrlsInfo>*
         blocked_urls_info) {
@@ -196,7 +194,7 @@ ContentBlockingEventRouter::ContentBlockingEventRouter(
     rules_service->AddObserver(this);
     if (rules_service->IsLoaded()) {
       rules_service->GetKnownSourcesHandler()->AddObserver(this);
-      rules_service->GetBlockerUrlsReporter()->AddObserver(this);
+      rules_service->GetTabHandler()->AddObserver(this);
       rules_service->GetRuleManager()->AddObserver(this);
     }
   }
@@ -205,7 +203,7 @@ ContentBlockingEventRouter::ContentBlockingEventRouter(
 void ContentBlockingEventRouter::OnRuleServiceStateLoaded(
     adblock_filter::RuleService* rule_service) {
   rule_service->GetKnownSourcesHandler()->AddObserver(this);
-  rule_service->GetBlockerUrlsReporter()->AddObserver(this);
+  rule_service->GetTabHandler()->AddObserver(this);
   rule_service->GetRuleManager()->AddObserver(this);
 }
 
@@ -311,7 +309,7 @@ void ContentBlockingEventRouter::Shutdown() {
     rules_service->RemoveObserver(this);
     if (rules_service->IsLoaded()) {
       rules_service->GetKnownSourcesHandler()->RemoveObserver(this);
-      rules_service->GetBlockerUrlsReporter()->RemoveObserver(this);
+      rules_service->GetTabHandler()->RemoveObserver(this);
       rules_service->GetRuleManager()->RemoveObserver(this);
     }
   }
@@ -722,13 +720,12 @@ ContentBlockingGetBlockedUrlsInfoFunction::RunWithService(
     if (ExtensionTabUtil::GetTabById(tab_id, browser_context(), true,
                                      &web_contents) &&
         web_contents) {
-      adblock_filter::BlockedUrlsReporterTabHelper* tab_helper =
-          adblock_filter::BlockedUrlsReporterTabHelper::FromWebContents(
-              web_contents);
+      adblock_filter::RequestFilterTabHelper* tab_helper =
+          adblock_filter::RequestFilterTabHelper::FromWebContents(web_contents);
       if (!tab_helper)
         continue;
 
-      const adblock_filter::BlockedUrlsReporterTabHelper::TabBlockedUrlInfo&
+      const adblock_filter::RequestFilterTabHelper::TabBlockedUrlInfo&
           tab_blocked_urls_info = tab_helper->GetBlockedUrlsInfo(group);
       if (tab_blocked_urls_info.blocked_trackers.empty() &&
           tab_blocked_urls_info.blocked_urls.empty()) {
@@ -743,7 +740,7 @@ ContentBlockingGetBlockedUrlsInfoFunction::RunWithService(
       for (const auto& blocked_tracker :
            tab_blocked_urls_info.blocked_trackers) {
         auto* source_to_info_map =
-            rules_service->GetBlockerUrlsReporter()->GetTrackerInfo(
+            rules_service->GetTabHandler()->GetTrackerInfo(
                 group, blocked_tracker.first);
         if (!source_to_info_map) {
           // The information forthis tracker went away since the blocking was
@@ -795,7 +792,7 @@ ExtensionFunction::ResponseValue
 ContentBlockingGetBlockedCountersFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   namespace Results = vivaldi::content_blocking::GetBlockedCounters::Results;
-  const auto* reporter = rules_service->GetBlockerUrlsReporter();
+  const auto* reporter = rules_service->GetTabHandler();
   Results::Counters counters;
   counters.blocked_domains.tracking =
       ToVivaldiBlockedCounter(reporter->GetBlockedDomains()[static_cast<size_t>(
@@ -816,7 +813,7 @@ ContentBlockingGetBlockedCountersFunction::RunWithService(
 ExtensionFunction::ResponseValue
 ContentBlockingClearBlockedCountersFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
-  rules_service->GetBlockerUrlsReporter()->ClearBlockedCounters();
+  rules_service->GetTabHandler()->ClearBlockedCounters();
   return NoArguments();
 }
 

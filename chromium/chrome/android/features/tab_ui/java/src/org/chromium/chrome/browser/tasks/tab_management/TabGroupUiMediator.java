@@ -37,6 +37,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilterObserver;
+import org.chromium.chrome.browser.tasks.tab_management.TabGridDialogMediator.DialogController;
 import org.chromium.chrome.browser.toolbar.bottom.BottomControlsCoordinator;
 import org.chromium.chrome.browser.toolbar.bottom.BottomControlsCoordinator.BottomControlsVisibilityController;
 import org.chromium.chrome.tab_ui.R;
@@ -103,12 +104,11 @@ public class TabGroupUiMediator implements BackPressHandler {
     private final BottomControlsCoordinator.BottomControlsVisibilityController
             mVisibilityController;
     private final IncognitoStateProvider mIncognitoStateProvider;
-    private final LazyOneshotSupplier<TabGridDialogMediator.DialogController>
-            mTabGridDialogControllerSupplier;
+    private final LazyOneshotSupplier<DialogController> mTabGridDialogControllerSupplier;
     private final IncognitoStateObserver mIncognitoStateObserver;
     private final TabModelSelectorObserver mTabModelSelectorObserver;
     private final ObservableSupplier<Boolean> mOmniboxFocusStateSupplier;
-    private final ObservableSupplierImpl<Boolean> mBackPressStateSupplier;
+    private final ObservableSupplierImpl<Boolean> mHandleBackPressChangedSupplier;
 
     private CallbackController mCallbackController = new CallbackController();
     private final LayoutStateObserver mLayoutStateObserver;
@@ -125,6 +125,7 @@ public class TabGroupUiMediator implements BackPressHandler {
     TabGroupUiMediator(
             Context context,
             BottomControlsVisibilityController visibilityController,
+            ObservableSupplierImpl<Boolean> handleBackPressChangedSupplier,
             ResetHandler resetHandler,
             PropertyModel model,
             TabModelSelector tabModelSelector,
@@ -138,6 +139,7 @@ public class TabGroupUiMediator implements BackPressHandler {
         this(
                 context,
                 visibilityController,
+                handleBackPressChangedSupplier,
                 resetHandler,
                 model,
                 tabModelSelector,
@@ -154,6 +156,7 @@ public class TabGroupUiMediator implements BackPressHandler {
     TabGroupUiMediator(
             Context context,
             BottomControlsVisibilityController visibilityController,
+            ObservableSupplierImpl<Boolean> handleBackPressChangedSupplier,
             ResetHandler resetHandler,
             PropertyModel model,
             TabModelSelector tabModelSelector,
@@ -178,14 +181,9 @@ public class TabGroupUiMediator implements BackPressHandler {
         mPrimaryBackgroundColor = primaryBackgroundColor;
         mIncognitoBackgroundColor = incognitoBackgroundColor;
 
-        if (layoutStateProviderSupplier.get() != null
-                && (layoutStateProviderSupplier.get().isLayoutVisible(LayoutType.TAB_SWITCHER)
-                        || (layoutStateProviderSupplier
-                                .get()
-                                .isLayoutVisible(LayoutType.START_SURFACE)))) {
-            // It is possible that the overview mode is showing when the TabGroupUiMediator is
-            // created, sets the mIsShowingOverViewMode early to prevent the Tab strip is wrongly
-            // showing on the Start surface homepage. See https://crbug.com/1239272.
+        var layoutStateProvider = layoutStateProviderSupplier.get();
+        if (layoutStateProvider != null
+                && layoutStateProvider.isLayoutVisible(LayoutType.TAB_SWITCHER)) {
             mIsShowingOverViewMode = true;
         }
 
@@ -252,9 +250,7 @@ public class TabGroupUiMediator implements BackPressHandler {
                         if (currentTab == null
                                 || (mLayoutStateProvider != null
                                         && (mLayoutStateProvider.isLayoutVisible(
-                                                        LayoutType.TAB_SWITCHER)
-                                                || mLayoutStateProvider.isLayoutVisible(
-                                                        LayoutType.START_SURFACE)))) {
+                                                LayoutType.TAB_SWITCHER)))) {
                             return;
                         }
                         resetTabStripWithRelatedTabsForId(currentTab.getId());
@@ -274,8 +270,7 @@ public class TabGroupUiMediator implements BackPressHandler {
                 new LayoutStateProvider.LayoutStateObserver() {
                     @Override
                     public void onStartedShowing(@LayoutType int layoutType) {
-                        if (layoutType == LayoutType.TAB_SWITCHER
-                                || layoutType == LayoutType.START_SURFACE) {
+                        if (layoutType == LayoutType.TAB_SWITCHER) {
                             mIsShowingOverViewMode = true;
                             resetTabStripWithRelatedTabsForId(Tab.INVALID_TAB_ID);
                         }
@@ -283,8 +278,7 @@ public class TabGroupUiMediator implements BackPressHandler {
 
                     @Override
                     public void onFinishedHiding(@LayoutType int layoutType) {
-                        if (layoutType == LayoutType.TAB_SWITCHER
-                                || layoutType == LayoutType.START_SURFACE) {
+                        if (layoutType == LayoutType.TAB_SWITCHER) {
                             mIsShowingOverViewMode = false;
                             Tab tab = mTabModelSelector.getCurrentTab();
                             if (tab == null) return;
@@ -375,12 +369,12 @@ public class TabGroupUiMediator implements BackPressHandler {
         filterProvider.addTabModelFilterObserver(mTabModelObserver);
         mTabModelSelector.addObserver(mTabModelSelectorObserver);
 
-        layoutStateProviderSupplier.onAvailable(
-                mCallbackController.makeCancelable(
-                        (layoutStateProvider) -> {
-                            mLayoutStateProvider = layoutStateProvider;
-                            mLayoutStateProvider.addObserver(mLayoutStateObserver);
-                        }));
+        if (layoutStateProvider != null) {
+            setLayoutStateProvider(layoutStateProvider);
+        } else {
+            layoutStateProviderSupplier.onAvailable(
+                    mCallbackController.makeCancelable(this::setLayoutStateProvider));
+        }
 
         mIncognitoStateProvider.addIncognitoStateObserverAndTrigger(mIncognitoStateObserver);
 
@@ -391,15 +385,20 @@ public class TabGroupUiMediator implements BackPressHandler {
             resetTabStripWithRelatedTabsForId(tab.getId());
         }
 
-        mBackPressStateSupplier = new ObservableSupplierImpl<>();
+        mHandleBackPressChangedSupplier = handleBackPressChangedSupplier;
         if (mTabGridDialogControllerSupplier != null) {
             mTabGridDialogControllerSupplier.onAvailable(
                     controller -> {
                         controller
                                 .getHandleBackPressChangedSupplier()
-                                .addObserver(mBackPressStateSupplier::set);
+                                .addObserver(mHandleBackPressChangedSupplier::set);
                     });
         }
+    }
+
+    private void setLayoutStateProvider(LayoutStateProvider layoutStateProvider) {
+        mLayoutStateProvider = layoutStateProvider;
+        layoutStateProvider.addObserver(mLayoutStateObserver);
     }
 
     private void setBottomControlsBackgroundColor(boolean isIncognito) {
@@ -420,6 +419,12 @@ public class TabGroupUiMediator implements BackPressHandler {
     private void setupToolbarButtons() {
         View.OnClickListener leftButtonOnClickListener =
                 view -> {
+                    // Don't handle taps until fully visible and done animating.
+                    @Nullable DialogController controller = getTabGridDialogControllerIfExists();
+                    if (controller != null && controller.getShowingOrAnimationSupplier().get()) {
+                        return;
+                    }
+
                     Tab currentTab = mTabModelSelector.getCurrentTab();
                     if (currentTab == null) return;
                     mResetHandler.resetGridWithListOfTabs(getTabsToShowForId(currentTab.getId()));
@@ -464,8 +469,6 @@ public class TabGroupUiMediator implements BackPressHandler {
      *     not, associated tabs from #getTabsToShowForID will be showing in the tab strip.
      */
     private void resetTabStripWithRelatedTabsForId(int id) {
-        // TODO(crbug.com/40064910): PseudoTab#getRelatedTabList() requires the tab state to be
-        // initialized. If this is called before tab state is initialized just skip.
         if (!mTabModelSelector.isTabStateInitialized()) return;
 
         // TODO(crbug.com/40133857): We should be able to guard this call behind some checks so that
@@ -520,23 +523,22 @@ public class TabGroupUiMediator implements BackPressHandler {
     public boolean onBackPressed() {
         // TODO(crbug.com/40099884): add a regression test to make sure that the back button closes
         // the dialog when the dialog is showing.
-        return mTabGridDialogControllerSupplier != null
-                && mTabGridDialogControllerSupplier.hasValue()
-                && mTabGridDialogControllerSupplier.get().handleBackPressed();
+        @Nullable DialogController controller = getTabGridDialogControllerIfExists();
+        return controller != null ? controller.handleBackPressed() : false;
     }
 
     @Override
     public @BackPressResult int handleBackPress() {
-        if (mTabGridDialogControllerSupplier != null
-                && mTabGridDialogControllerSupplier.hasValue()) {
-            return mTabGridDialogControllerSupplier.get().handleBackPress();
+        @Nullable DialogController controller = getTabGridDialogControllerIfExists();
+        if (controller != null) {
+            return controller.handleBackPress();
         }
         return BackPressResult.FAILURE;
     }
 
     @Override
     public ObservableSupplier<Boolean> getHandleBackPressChangedSupplier() {
-        return mBackPressStateSupplier;
+        return mHandleBackPressChangedSupplier;
     }
 
     public void destroy() {
@@ -573,10 +575,17 @@ public class TabGroupUiMediator implements BackPressHandler {
         return mIsShowingOverViewMode;
     }
 
+    private @Nullable DialogController getTabGridDialogControllerIfExists() {
+        if (mTabGridDialogControllerSupplier == null) return null;
+        if (!mTabGridDialogControllerSupplier.hasValue()) return null;
+        return mTabGridDialogControllerSupplier.get();
+    }
+
     /** Vivaldi **/
     public void resetTabListForCurrentTab() {
         Tab currentTab = mTabModelSelector.getCurrentTab();
         if (currentTab == null) return;
         mResetHandler.resetGridWithListOfTabs(getTabsToShowForId(currentTab.getId()));
     }
+    /** End Vivaldi */
 }

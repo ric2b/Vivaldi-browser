@@ -129,7 +129,8 @@ class BuildSettings {
   // callback is is_null() (the default) the output will be printed to the
   // console.
   const PrintCallback& print_callback() const { return print_callback_; }
-  void set_print_callback(const PrintCallback& cb) { print_callback_ = cb; }
+  void set_print_callback(const PrintCallback cb) { print_callback_ = cb; }
+  const PrintCallback swap_print_callback(const PrintCallback cb);
 
   // A list of files that can call exec_script(). If the returned pointer is
   // null, exec_script may be called from anywhere.

@@ -46,7 +46,7 @@ void RecordExtendedReportingPrefChanged(
                             pref_value);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -111,10 +111,6 @@ bool IsEnhancedProtectionEnabled(const PrefService& prefs) {
          IsSafeBrowsingEnabled(prefs);
 }
 
-bool ExtendedReportingPrefExists(const PrefService& prefs) {
-  return prefs.HasPrefPath(prefs::kSafeBrowsingScoutReportingEnabled);
-}
-
 ExtendedReportingLevel GetExtendedReportingLevel(const PrefService& prefs) {
   return IsExtendedReportingEnabled(prefs) ? SBER_LEVEL_SCOUT : SBER_LEVEL_OFF;
 }
@@ -128,6 +124,12 @@ bool IsExtendedReportingOptInAllowed(const PrefService& prefs) {
 bool IsExtendedReportingEnabled(const PrefService& prefs) {
   if (vivaldi::IsVivaldiRunning())
     return false;
+  return (IsSafeBrowsingEnabled(prefs) &&
+          prefs.GetBoolean(prefs::kSafeBrowsingScoutReportingEnabled)) ||
+         IsEnhancedProtectionEnabled(prefs);
+}
+
+bool IsExtendedReportingEnabledBypassDeprecationFlag(const PrefService& prefs) {
   return (IsSafeBrowsingEnabled(prefs) &&
           prefs.GetBoolean(prefs::kSafeBrowsingScoutReportingEnabled)) ||
          IsEnhancedProtectionEnabled(prefs);

@@ -47,10 +47,6 @@ class WebStateID;
 // Tells the delegate that an item was moved.
 - (void)gridViewControllerDidMoveItem:
     (BaseGridViewController*)gridViewController;
-// Tells the delegate that the the number of items in `gridViewController`
-// changed to `count`.
-- (void)gridViewController:(BaseGridViewController*)gridViewController
-        didChangeItemCount:(NSUInteger)count;
 // Tells the delegate that the item with `itemID` was removed.
 - (void)gridViewController:(BaseGridViewController*)gridViewController
        didRemoveItemWIthID:(web::WebStateID)itemID;
@@ -88,10 +84,9 @@ class WebStateID;
 - (void)didTapInactiveTabsSettingsLinkInGridViewController:
     (BaseGridViewController*)gridViewController;
 
-// Tells the delegate that the item with `itemID` has been long pressed to
-// request the context menu.
-- (void)gridViewController:(BaseGridViewController*)gridViewController
-    didRequestContextMenuForItemWithID:(web::WebStateID)itemID;
+// Tells the delegate that a context menu has been requested.
+- (void)gridViewControllerDidRequestContextMenu:
+    (BaseGridViewController*)gridViewController;
 
 @end
 
@@ -143,6 +138,11 @@ class WebStateID;
 // of a scrollview, they don't all get the correct information when being laid
 // out. To that end, contentInsets are manually added.
 @property(nonatomic, assign) UIEdgeInsets contentInsets;
+// A Boolean value that controls whether the scroll-to-top gesture is enabled.
+// It is a wrapper around the inner `collectionView.scrollsToTop` property.
+// The default value of this property is YES.
+@property(nonatomic, assign, getter=isGridScrollsToTopEnabled)
+    BOOL gridScrollsToTopEnabled;
 
 // Returns the layout of the grid for use in an animated transition.
 - (LegacyGridTransitionLayout*)transitionLayout;

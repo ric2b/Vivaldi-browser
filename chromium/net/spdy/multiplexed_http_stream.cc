@@ -8,7 +8,6 @@
 
 #include "base/notreached.h"
 #include "net/http/http_raw_request_headers.h"
-#include "net/third_party/quiche/src/quiche/spdy/core/http2_header_block.h"
 
 namespace net {
 
@@ -31,7 +30,7 @@ void MultiplexedHttpStream::SaveSSLInfo() {
 }
 
 void MultiplexedHttpStream::Drain(HttpNetworkSession* session) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   Close(false);
   delete this;
 }
@@ -53,7 +52,7 @@ void MultiplexedHttpStream::SetRequestHeadersCallback(
 }
 
 void MultiplexedHttpStream::DispatchRequestHeadersCallback(
-    const spdy::Http2HeaderBlock& spdy_headers) {
+    const quiche::HttpHeaderBlock& spdy_headers) {
   if (!request_headers_callback_)
     return;
   HttpRawRequestHeaders raw_headers;

@@ -37,7 +37,7 @@
         "id": "SortField",
         "type": "string",
         "description": "Defines what element to use as sort key",
-        "enum": ["title", "url", "nickname", "description", "dateadded"]
+        "enum": ["title", "url", "nickname", "description", "dateAdded"]
       },
       {
         "id": "Edge",

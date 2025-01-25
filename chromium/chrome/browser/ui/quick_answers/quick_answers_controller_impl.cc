@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/quick_answers/quick_answers_controller_impl.h"
 
+#include "base/check_is_test.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
@@ -40,6 +41,11 @@ using ::quick_answers::QuickAnswersRequest;
 using ::quick_answers::ResultType;
 
 constexpr char kQuickAnswersExitPoint[] = "QuickAnswers.ExitPoint";
+constexpr char kQuickAnswersConsent[] = "QuickAnswers.V2.Consent";
+constexpr char kQuickAnswersConsentImpression[] =
+    "QuickAnswers.V2.Consent.Impression";
+constexpr char kQuickAnswersConsentDuration[] =
+    "QuickAnswers.V2.Consent.Duration";
 
 std::u16string IntentTypeToString(IntentType intent_type) {
   switch (intent_type) {
@@ -55,6 +61,34 @@ std::u16string IntentTypeToString(IntentType intent_type) {
   }
 }
 
+std::string ConsentResultTypeToString(ConsentResultType type) {
+  switch (type) {
+    case ConsentResultType::kAllow:
+      return "Allow";
+    case ConsentResultType::kNoThanks:
+      return "NoThanks";
+    case ConsentResultType::kDismiss:
+      return "Dismiss";
+  }
+}
+
+void RecordConsentUiHistograms(ConsentResultType consent_result_type,
+                               int32_t impression_count,
+                               const base::TimeDelta& ui_duration) {
+  base::UmaHistogramExactLinear(kQuickAnswersConsent, impression_count,
+                                kConsentImpressionCap);
+
+  std::string interaction_type = ConsentResultTypeToString(consent_result_type);
+  base::UmaHistogramExactLinear(
+      base::StringPrintf("%s.%s", kQuickAnswersConsentImpression,
+                         interaction_type.c_str()),
+      impression_count, kConsentImpressionCap);
+  base::UmaHistogramTimes(
+      base::StringPrintf("%s.%s", kQuickAnswersConsentDuration,
+                         interaction_type.c_str()),
+      ui_duration);
+}
+
 // Returns if the request has already been processed (by the text annotator).
 bool IsProcessedRequest(const QuickAnswersRequest& request) {
   return (request.preprocessed_output.intent_info.intent_type !=
@@ -62,14 +96,32 @@ bool IsProcessedRequest(const QuickAnswersRequest& request) {
 }
 
 bool ShouldShowQuickAnswers() {
-  if (!QuickAnswersState::Get()->is_eligible())
+  if (!QuickAnswersState::IsEligible()) {
     return false;
+  }
 
-  bool settings_enabled = QuickAnswersState::Get()->settings_enabled();
+  if (QuickAnswersState::IsEnabled()) {
+    return true;
+  }
 
-  bool should_show_consent = QuickAnswersState::Get()->consent_status() ==
-                             quick_answers::prefs::ConsentStatus::kUnknown;
-  return settings_enabled || should_show_consent;
+  // If feature type is `kQuickAnswers`, return `true` for the case `kUnknown`
+  // to show a consent UI.
+  if (QuickAnswersState::GetFeatureType() ==
+      QuickAnswersState::FeatureType::kQuickAnswers) {
+    base::expected<quick_answers::prefs::ConsentStatus,
+                   QuickAnswersState::Error>
+        maybe_consent_status = QuickAnswersState::GetConsentStatus();
+    if (!maybe_consent_status.has_value()) {
+      return false;
+    }
+
+    if (maybe_consent_status.value() ==
+        quick_answers::prefs::ConsentStatus::kUnknown) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 bool IsActiveUserInternal() {
@@ -83,6 +135,25 @@ bool IsActiveUserInternal() {
   return gaia::IsGoogleInternalAccountEmail(email);
 }
 
+// Error case might return nullptr(s). Consider an error case as no result.
+// TODO(b/349920395): use std::variant<NoResult, DefinitionResult, ...> for
+// structured result.
+bool IsNoResult(
+    const quick_answers::QuickAnswersSession* quick_answers_session) {
+  if (!quick_answers_session) {
+    return true;
+  }
+
+  if (!quick_answers_session->structured_result) {
+    return true;
+  }
+
+  return quick_answers_session->structured_result->GetResultType() ==
+         ResultType::kNoResult;
+}
+
+// TODO(b/340628526): This can be IsEnabled waiter as IsEnabled is gated by a
+// consent status now.
 class PerformOnConsentAccepted : public QuickAnswersStateObserver {
  public:
   explicit PerformOnConsentAccepted(base::OnceCallback<void()> action)
@@ -108,15 +179,15 @@ class PerformOnConsentAccepted : public QuickAnswersStateObserver {
       return;
     }
 
-    QuickAnswersState* quick_answers_state = QuickAnswersState::Get();
-    CHECK(quick_answers_state->prefs_initialized());
+    bool settings_enabled = QuickAnswersState::IsEnabledAs(
+        QuickAnswersState::FeatureType::kQuickAnswers);
+    if (!settings_enabled) {
+      return;
+    }
 
-    bool settings_enabled = quick_answers_state->settings_enabled();
-    quick_answers::prefs::ConsentStatus consent_status =
-        quick_answers_state->consent_status();
-
-    if (!settings_enabled ||
-        consent_status != quick_answers::prefs::ConsentStatus::kAccepted) {
+    if (QuickAnswersState::GetConsentStatusAs(
+            QuickAnswersState::FeatureType::kQuickAnswers) !=
+        quick_answers::prefs::ConsentStatus::kAccepted) {
       return;
     }
 
@@ -144,6 +215,10 @@ QuickAnswersControllerImpl::QuickAnswersControllerImpl(
 }
 
 QuickAnswersControllerImpl::~QuickAnswersControllerImpl() {
+  // `PerformOnConsentAccepted` depends on `QuickAnswersState`. It has to be
+  // destructed before `QuickAnswersState`.
+  perform_on_consent_accepted_.reset();
+
   quick_answers_client_.reset();
   quick_answers_state_.reset();
 }
@@ -236,10 +311,11 @@ void QuickAnswersControllerImpl::DismissQuickAnswers(
       return;
     }
     case QuickAnswersVisibility::kUserConsentVisible: {
+      // TODO(b/340628526): Replace IsShowingUserConsentView condition and
+      // visibility_ write with CHECK.
       if (quick_answers_ui_controller_->IsShowingUserConsentView()) {
-        QuickAnswersState::Get()->OnConsentResult(ConsentResultType::kDismiss);
+        OnUserConsent(ConsentResultType::kDismiss);
       }
-      quick_answers_ui_controller_->CloseUserConsentView();
       visibility_ = QuickAnswersVisibility::kClosed;
       return;
     }
@@ -275,27 +351,43 @@ void QuickAnswersControllerImpl::DismissQuickAnswers(
 
 void QuickAnswersControllerImpl::HandleQuickAnswerRequest(
     const quick_answers::QuickAnswersRequest& request) {
-  CHECK(QuickAnswersState::Get()->consent_status() !=
-        quick_answers::prefs::ConsentStatus::kRejected);
-
-  if (QuickAnswersState::Get()->consent_status() ==
-      quick_answers::prefs::ConsentStatus::kUnknown) {
-    ShowUserConsent(
-        IntentTypeToString(request.preprocessed_output.intent_info.intent_type),
-        base::UTF8ToUTF16(request.preprocessed_output.intent_info.intent_text));
-  } else {
-    visibility_ = QuickAnswersVisibility::kQuickAnswersVisible;
-    // TODO(b/327501381): Use `ReadWriteCardsUiController` for this view.
-    quick_answers_ui_controller_->CreateQuickAnswersView(
-        profile_, title_, query_,
-        request.context.device_properties.is_internal);
-
-    if (IsProcessedRequest(request)) {
-      quick_answers_client_->FetchQuickAnswers(request);
-    } else {
-      quick_answers_client_->SendRequest(request);
-    }
+  base::expected<quick_answers::prefs::ConsentStatus, QuickAnswersState::Error>
+      maybe_consent_status = QuickAnswersState::GetConsentStatus();
+  if (!maybe_consent_status.has_value()) {
+    // No UI should be shown at this point, i.e., there should be no need to
+    // reset UI. Reset is done in `OnTextAvailable` by a next request.
+    // TODO(b/352469160): move those states to `QuickAnswersSession` as we can
+    // easily reset a state.
+    return;
   }
+
+  switch (maybe_consent_status.value()) {
+    case quick_answers::prefs::ConsentStatus::kRejected:
+      CHECK(false) << "No request should be made if kRejected.";
+      return;
+    case quick_answers::prefs::ConsentStatus::kUnknown:
+      MaybeShowUserConsent(
+          IntentTypeToString(
+              request.preprocessed_output.intent_info.intent_type),
+          base::UTF8ToUTF16(
+              request.preprocessed_output.intent_info.intent_text));
+      return;
+    case quick_answers::prefs::ConsentStatus::kAccepted:
+      visibility_ = QuickAnswersVisibility::kQuickAnswersVisible;
+      // TODO(b/327501381): Use `ReadWriteCardsUiController` for this view.
+      quick_answers_ui_controller_->CreateQuickAnswersView(
+          profile_, title_, query_,
+          request.context.device_properties.is_internal);
+
+      if (IsProcessedRequest(request)) {
+        quick_answers_client_->FetchQuickAnswers(request);
+      } else {
+        quick_answers_client_->SendRequest(request);
+      }
+      return;
+  }
+
+  CHECK(false) << "Invalid ConsentStatus enum value provided.";
 }
 
 quick_answers::QuickAnswersDelegate*
@@ -321,26 +413,25 @@ void QuickAnswersControllerImpl::OnQuickAnswerReceived(
 
   quick_answers_session_ = std::move(quick_answers_session);
 
-  if (quick_answer()) {
-    if (quick_answer()->title.empty()) {
-      quick_answer()->title.push_back(
-          std::make_unique<quick_answers::QuickAnswerText>(title_));
-    }
-    quick_answers_ui_controller_->RenderQuickAnswersViewWithResult(
-        *quick_answer());
-  } else {
-    quick_answers::QuickAnswer quick_answer_with_no_result;
-    quick_answer_with_no_result.title.push_back(
-        std::make_unique<quick_answers::QuickAnswerText>(title_));
-    quick_answer_with_no_result.first_answer_row.push_back(
-        std::make_unique<quick_answers::QuickAnswerResultText>(
-            l10n_util::GetStringUTF8(IDS_QUICK_ANSWERS_VIEW_NO_RESULT_V2)));
-    quick_answers_ui_controller_->RenderQuickAnswersViewWithResult(
-        quick_answer_with_no_result);
+  if (IsNoResult(quick_answers_session_.get())) {
     // Fallback query to title if no result is available.
     query_ = title_;
     quick_answers_ui_controller_->SetActiveQuery(profile_, query_);
+
+    // `quick_answers_session_` can be nullptr. Create an empty result session
+    // for the case if nullptr.
+    if (!quick_answers_session_) {
+      quick_answers_session_ =
+          std::make_unique<quick_answers::QuickAnswersSession>();
+    }
+    if (!quick_answers_session_->structured_result) {
+      quick_answers_session_->structured_result =
+          std::make_unique<quick_answers::StructuredResult>();
+    }
   }
+
+  quick_answers_ui_controller_->RenderQuickAnswersViewWithResult(
+      *(quick_answers_session_->structured_result));
 }
 
 void QuickAnswersControllerImpl::OnNetworkError() {
@@ -387,35 +478,100 @@ void QuickAnswersControllerImpl::OnRetryQuickAnswersRequest() {
   }
 }
 
-void QuickAnswersControllerImpl::OnQuickAnswerClick() {
+void QuickAnswersControllerImpl::OnQuickAnswersResultClick() {
+  CHECK(quick_answers_client_);
+  CHECK(quick_answers_session_);
+  CHECK(quick_answers_session_->structured_result);
+
   quick_answers_client_->OnQuickAnswerClick(
-      quick_answer() ? quick_answer()->result_type : ResultType::kNoResult);
+      quick_answers_session_->structured_result->GetResultType());
+}
+
+void QuickAnswersControllerImpl::OnUserConsent(
+    ConsentResultType consent_result_type) {
+  CHECK(!consent_ui_shown_.is_null()) << "Consent ui is not shown.";
+
+  quick_answers_ui_controller_->CloseUserConsentView();
+
+  QuickAnswersState* quick_answers_state = QuickAnswersState::Get();
+  CHECK(quick_answers_state);
+
+  // It's okay to initialize this as false since there is no chance that this
+  // becomes true if `consent_ui_duration` is less than the minimum cap:
+  // a. there is no increment for increment cap for the case.
+  // b. consent ui should not be shown in the first place for the case.
+  bool reached_impression_cap = false;
+
+  base::TimeDelta consent_ui_duration = GetTimeTicksNow() - consent_ui_shown_;
+  if (consent_ui_duration.InSeconds() >= kConsentImpressionMinimumDuration) {
+    int incremented_count =
+        quick_answers_state->AsyncIncrementImpressionCount();
+    RecordConsentUiHistograms(consent_result_type, incremented_count,
+                              consent_ui_duration);
+
+    reached_impression_cap = incremented_count >= kConsentImpressionCap;
+  }
+
+  switch (consent_result_type) {
+    case ConsentResultType::kAllow: {
+      CHECK_EQ(QuickAnswersState::GetFeatureType(),
+               QuickAnswersState::FeatureType::kQuickAnswers)
+          << "User consent is handled by Magic Boost if not kQuickAnswers";
+
+      visibility_ = QuickAnswersVisibility::kPending;
+      quick_answers_state->AsyncSetConsentStatus(
+          quick_answers::prefs::ConsentStatus::kAccepted);
+
+      // Preference value can be updated as an async operation. Wait the value
+      // change and then display quick answer for the cached query. There should
+      // be no need to reset `perform_on_consent_accepted_` as there is no case
+      // a user accepts a consent twice on a device. Toggling from OS settings
+      // will set value directly to `kAccepted`.
+      CHECK(!perform_on_consent_accepted_)
+          << "There is already a pending action. A user should not accept "
+             "a consent twice or more.";
+      perform_on_consent_accepted_ =
+          std::make_unique<PerformOnConsentAccepted>(base::BindOnce(
+              &QuickAnswersControllerImpl::OnTextAvailable, GetWeakPtr(),
+              anchor_bounds_, title_, context_.surrounding_text));
+      break;
+    }
+    case ConsentResultType::kNoThanks: {
+      visibility_ = QuickAnswersVisibility::kClosed;
+      quick_answers_state->AsyncSetConsentStatus(
+          quick_answers::prefs::ConsentStatus::kRejected);
+      break;
+    }
+    case ConsentResultType::kDismiss:
+      visibility_ = QuickAnswersVisibility::kClosed;
+      if (reached_impression_cap) {
+        quick_answers_state->AsyncSetConsentStatus(
+            quick_answers::prefs::ConsentStatus::kRejected);
+      }
+      break;
+  }
 }
 
 void QuickAnswersControllerImpl::OnUserConsentResult(bool consented) {
-  quick_answers_ui_controller_->CloseUserConsentView();
+  OnUserConsent(consented ? ConsentResultType::kAllow
+                          : ConsentResultType::kNoThanks);
+}
 
-  QuickAnswersState::Get()->OnConsentResult(
-      consented ? ConsentResultType::kAllow : ConsentResultType::kNoThanks);
-
-  if (consented) {
-    visibility_ = QuickAnswersVisibility::kPending;
-
-    // Preference value can be updated as an async operation. Wait the value
-    // change and then display quick answer for the cached query. There should
-    // be no need to reset `perform_on_consent_accepted_` as there is no case a
-    // user accepts a consent twice on a device. Toggling from OS settings will
-    // set value directly to `kAccepted` or `kRejected`.
-    CHECK(!perform_on_consent_accepted_)
-        << "There is already a pending action. A user should not accept a "
-           "consent twice or more.";
-    perform_on_consent_accepted_ =
-        std::make_unique<PerformOnConsentAccepted>(base::BindOnce(
-            &QuickAnswersControllerImpl::OnTextAvailable, GetWeakPtr(),
-            anchor_bounds_, title_, context_.surrounding_text));
-  } else {
-    visibility_ = QuickAnswersVisibility::kClosed;
+base::TimeTicks QuickAnswersControllerImpl::GetTimeTicksNow() {
+  if (time_tick_now_function_.is_null()) {
+    return base::TimeTicks::Now();
   }
+
+  CHECK_IS_TEST();
+  return time_tick_now_function_.Run();
+}
+
+void QuickAnswersControllerImpl::OverrideTimeTickNowForTesting(
+    TimeTickNowFunction time_tick_now_function) {
+  CHECK_IS_TEST();
+  CHECK(time_tick_now_function_.is_null());
+
+  time_tick_now_function_ = time_tick_now_function;
 }
 
 base::WeakPtr<QuickAnswersControllerImpl>
@@ -423,16 +579,27 @@ QuickAnswersControllerImpl::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
-void QuickAnswersControllerImpl::ShowUserConsent(
+bool QuickAnswersControllerImpl::MaybeShowUserConsent(
     const std::u16string& intent_type,
     const std::u16string& intent_text) {
-  // Show consent informing user about the feature if required.
-  if (!quick_answers_ui_controller_->IsShowingUserConsentView()) {
-    quick_answers_ui_controller_->CreateUserConsentView(
-        anchor_bounds_, intent_type, intent_text);
-    QuickAnswersState::Get()->StartConsent();
-    visibility_ = QuickAnswersVisibility::kUserConsentVisible;
+  // For non-QuickAnswers case (i.e., HMR), user consent is handled outside of
+  // QuickAnswers code.
+  if (QuickAnswersState::GetFeatureType() !=
+      QuickAnswersState::FeatureType::kQuickAnswers) {
+    return false;
   }
+
+  if (quick_answers_ui_controller_->IsShowingUserConsentView()) {
+    return false;
+  }
+
+  quick_answers_ui_controller_->CreateUserConsentView(anchor_bounds_,
+                                                      intent_type, intent_text);
+
+  consent_ui_shown_ = GetTimeTicksNow();
+  visibility_ = QuickAnswersVisibility::kUserConsentVisible;
+
+  return true;
 }
 
 QuickAnswersRequest QuickAnswersControllerImpl::BuildRequest() {

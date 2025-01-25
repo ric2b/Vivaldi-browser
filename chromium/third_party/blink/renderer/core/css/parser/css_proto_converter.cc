@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/css/parser/css_proto_converter.h"
 #include <string>
 
@@ -369,7 +374,7 @@ void Converter::Visit(const Length& length) {
   } else if (length.unit() == Length::PC) {
     string_ += "pc";
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -382,7 +387,7 @@ void Converter::Visit(const Angle& angle) {
   } else if (angle.unit() == Angle::GRAD) {
     string_ += "grad";
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -393,7 +398,7 @@ void Converter::Visit(const Time& time) {
   } else if (time.unit() == Time::S) {
     string_ += "s";
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -405,7 +410,7 @@ void Converter::Visit(const Freq& freq) {
   } else if (freq.unit() == Freq::KHZ) {
     string_ += "kHz";
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 

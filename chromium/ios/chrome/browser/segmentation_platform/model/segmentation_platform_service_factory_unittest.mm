@@ -75,9 +75,9 @@ class SegmentationPlatformServiceFactoryTest : public PlatformTest {
     ChromeBrowserState* otr_browser_state =
         profile_->browser_state
             ->CreateOffTheRecordBrowserStateWithTestingFactories(
-                {std::make_pair(
+                {TestChromeBrowserState::TestingFactory{
                     SegmentationPlatformServiceFactory::GetInstance(),
-                    SegmentationPlatformServiceFactory::GetDefaultFactory())});
+                    SegmentationPlatformServiceFactory::GetDefaultFactory()}});
     ASSERT_FALSE(SegmentationPlatformServiceFactory::GetForBrowserState(
         otr_browser_state));
   }

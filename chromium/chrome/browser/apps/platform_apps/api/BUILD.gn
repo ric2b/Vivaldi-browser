@@ -47,6 +47,8 @@ source_set("api") {
 
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     "//build:chromeos_buildflags",
     "//chrome/app:generated_resources_grit",
@@ -83,9 +85,19 @@ source_set("api") {
     ]
 
     deps += [
+      "//chrome/browser/ash/app_list/arc",
       "//chrome/browser/ash/crosapi",
+      "//chrome/browser/ash/login/demo_mode",
+      "//chrome/browser/ash/remote_apps",
       "//ui/events:event_constants",
     ]
+
+    # TODO(crbug.com/40251081): Remove these deps. Needed only to allow circular includes.
+    deps += [ "//chrome/browser/ash/extensions/file_manager" ]
+
+    # TODO(crbug.com/40251079): Remove circular dependencies.
+    allow_circular_includes_from =
+        [ "//chrome/browser/ash/extensions/file_manager" ]
   }
 
   if (use_lld) {

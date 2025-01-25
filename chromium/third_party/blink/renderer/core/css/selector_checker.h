@@ -160,6 +160,8 @@ class CORE_EXPORT SelectorChecker {
     bool in_rightmost_compound = true;
     bool has_scrollbar_pseudo = false;
     bool has_selection_pseudo = false;
+    bool has_search_text_pseudo = false;
+    bool has_scroll_marker_pseudo = false;
     bool treat_shadow_host_as_normal_scope = false;
     bool in_nested_complex_selector = false;
     // If true, elements that are links will match :visited. Otherwise,
@@ -174,6 +176,8 @@ class CORE_EXPORT SelectorChecker {
     bool had_match_visited = false;
     bool pseudo_has_in_rightmost_compound = true;
     bool is_inside_has_pseudo_class = false;
+    // Affects whether or not :current matches after a ::search-text.
+    bool search_text_request_is_current = false;
   };
 
   struct MatchResult {
@@ -283,7 +287,8 @@ class CORE_EXPORT SelectorChecker {
     return Match(context, ignore_result);
   }
 
-  static bool MatchesFocusPseudoClass(const Element&);
+  static bool MatchesFocusPseudoClass(const Element&,
+                                      bool has_scroll_marker_pseudo);
   static bool MatchesFocusVisiblePseudoClass(const Element&);
   static bool MatchesSelectorFragmentAnchorPseudoClass(const Element&);
 

@@ -134,6 +134,7 @@ class UtilityProcessSandboxBrowserTest
 #if BUILDFLAG(IS_CHROMEOS_ASH)
       case Sandbox::kIme:
       case Sandbox::kTts:
+      case Sandbox::kNearby:
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
       case Sandbox::kLibassistant:
 #endif  // BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
@@ -156,7 +157,7 @@ class UtilityProcessSandboxBrowserTest
       case Sandbox::kGpu:
       case Sandbox::kRenderer:
       case Sandbox::kZygoteIntermediateSandbox:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
 

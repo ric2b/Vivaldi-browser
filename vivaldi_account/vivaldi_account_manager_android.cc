@@ -26,7 +26,7 @@ static jlong JNI_VivaldiAccountManager_Init(
 }
 
 VivaldiAccountManagerAndroid::VivaldiAccountManagerAndroid(JNIEnv* env,
-                                                           jobject obj)
+                                                const base::android::JavaRef<jobject>& obj)
     : profile_(ProfileManager::GetActiveUserProfile()),
       weak_java_ref_(env, obj) {
   DCHECK(profile_);
@@ -157,6 +157,7 @@ void VivaldiAccountManagerAndroid::SendStateUpdate() {
       base::android::ConvertUTF8ToJavaString(env, account_info.account_id),
       base::android::ConvertUTF8ToJavaString(env, account_info.username),
       base::android::ConvertUTF8ToJavaString(env, account_info.picture_url),
+      base::android::ConvertUTF8ToJavaString(env, account_info.donation_tier),
       base::android::ConvertUTF8ToJavaString(
           env, profile_->GetPrefs()->GetString(vivaldiprefs::kSyncSessionName)),
       !account_manager_->password_handler()->password().empty(),
@@ -182,10 +183,6 @@ void VivaldiAccountManagerAndroid::OnTokenFetchSucceeded() {
 }
 
 void VivaldiAccountManagerAndroid::OnTokenFetchFailed() {
-  SendStateUpdate();
-}
-
-void VivaldiAccountManagerAndroid::OnAccountInfoFetchFailed() {
   SendStateUpdate();
 }
 

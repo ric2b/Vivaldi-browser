@@ -20,8 +20,8 @@ namespace autofill::payments {
 // systems.
 class PaymentsWindowManager {
  public:
-  using RedirectCompletionProof =
-      base::StrongAlias<class RedirectCompletionProofTag, std::string>;
+  using RedirectCompletionResult =
+      base::StrongAlias<class RedirectCompletionResultTag, std::string>;
 
   // The response fields for a VCN 3DS authentication, created once a response
   // to the second UnmaskCardRequest has been received.
@@ -56,6 +56,9 @@ class PaymentsWindowManager {
     // The context token that was returned from the Payments Server for the
     // ongoing VCN authentication flow.
     std::string context_token;
+    // The risk data that must be sent to the Payments Server during a VCN 3DS
+    // card unmask request.
+    std::string risk_data;
     // The challenge option that was returned from the server which contains
     // details required for the VCN 3DS authentication flow.
     CardUnmaskChallengeOption challenge_option;

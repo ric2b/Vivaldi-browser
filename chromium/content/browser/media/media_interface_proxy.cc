@@ -451,7 +451,7 @@ void MediaInterfaceProxy::CreateCdm(const media::CdmConfig& cdm_config,
   // process because the browser is trusted.
   auto callback = mojo::WrapCallbackWithDefaultInvokeIfNotRun(
       std::move(create_cdm_cb), mojo::NullRemote(), nullptr,
-      "CDM creation failed");
+      media::CreateCdmStatus::kDisconnectionError);
 
   // Handle `use_hw_secure_codecs` cases first.
 #if BUILDFLAG(USE_CHROMEOS_PROTECTED_MEDIA)
@@ -488,7 +488,8 @@ void MediaInterfaceProxy::CreateCdm(const media::CdmConfig& cdm_config,
         !cdm_config.allow_persistent_state) {
       DVLOG(2) << "MediaFoundationService requires both distinctive identifier "
                   "and persistent state";
-      std::move(callback).Run(mojo::NullRemote(), nullptr, "Invalid CdmConfig");
+      std::move(callback).Run(mojo::NullRemote(), nullptr,
+                              media::CreateCdmStatus::kInvalidCdmConfig);
       return;
     }
 
@@ -522,7 +523,7 @@ void MediaInterfaceProxy::CreateCdm(const media::CdmConfig& cdm_config,
 
   if (!factory) {
     std::move(callback).Run(mojo::NullRemote(), nullptr,
-                            "Unable to find a CDM factory");
+                            media::CreateCdmStatus::kCdmFactoryCreationFailed);
     return;
   }
 
@@ -602,15 +603,15 @@ media::mojom::CdmFactory* MediaInterfaceProxy::GetCdmFactory(
   auto cdm_info = CdmRegistryImpl::GetInstance()->GetCdmInfo(
       key_system, CdmInfo::Robustness::kSoftwareSecure);
   if (!cdm_info) {
-    NOTREACHED() << "No valid CdmInfo for " << key_system;
+    NOTREACHED_IN_MIGRATION() << "No valid CdmInfo for " << key_system;
     return nullptr;
   }
   if (cdm_info->path.empty()) {
-    NOTREACHED() << "CDM path for " << key_system << " is empty";
+    NOTREACHED_IN_MIGRATION() << "CDM path for " << key_system << " is empty";
     return nullptr;
   }
   if (!IsValidCdmDisplayName(cdm_info->name)) {
-    NOTREACHED() << "Invalid CDM display name " << cdm_info->name;
+    NOTREACHED_IN_MIGRATION() << "Invalid CDM display name " << cdm_info->name;
     return nullptr;
   }
 
@@ -661,12 +662,12 @@ void MediaInterfaceProxy::OnChromeOsCdmCreated(
     CreateCdmCallback callback,
     mojo::PendingRemote<media::mojom::ContentDecryptionModule> receiver,
     media::mojom::CdmContextPtr cdm_context,
-    const std::string& error_message) {
+    media::CreateCdmStatus status) {
   if (receiver) {
     ReportCdmTypeUMA(CrosCdmType::kPlatformCdm);
     // Success case, just pass it back through the callback.
     std::move(callback).Run(std::move(receiver), std::move(cdm_context),
-                            error_message);
+                            status);
     return;
   }
 
@@ -676,7 +677,7 @@ void MediaInterfaceProxy::OnChromeOsCdmCreated(
   auto* factory = GetCdmFactory(cdm_config.key_system);
   if (!factory) {
     std::move(callback).Run(mojo::NullRemote(), nullptr,
-                            "Unable to find a CDM factory");
+                            media::CreateCdmStatus::kCdmFactoryCreationFailed);
     return;
   }
   ReportCdmTypeUMA(CrosCdmType::kChromeCdm);

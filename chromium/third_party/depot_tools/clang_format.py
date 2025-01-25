@@ -49,10 +49,12 @@ def FindClangFormatToolInChromiumTree():
     arch = detect_host_arch.HostArch()
     if sys.platform == 'darwin' and arch == 'arm64':
         new_bin_path += '_arm64'
-    new_tool_path = os.path.join(new_bin_path, 'format',
-                                 'clang-format' + gclient_paths.GetExeSuffix())
+    old_new_tool_path = os.path.join(
+        new_bin_path, 'format', 'clang-format' + gclient_paths.GetExeSuffix())
+    latest_new_tool_path = os.path.join(
+        f'{new_bin_path}-format', 'clang-format' + gclient_paths.GetExeSuffix())
 
-    possible_paths = [new_tool_path, old_tool_path]
+    possible_paths = [latest_new_tool_path, old_new_tool_path, old_tool_path]
     for path in possible_paths:
         if os.path.exists(path):
             return path

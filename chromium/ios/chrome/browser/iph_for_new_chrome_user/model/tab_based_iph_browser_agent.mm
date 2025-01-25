@@ -125,7 +125,8 @@ void TabBasedIPHBrowserAgent::NewTabDidLoadUrl(const GURL& url,
 void TabBasedIPHBrowserAgent::DidStartNavigation(
     web::WebState* web_state,
     web::NavigationContext* navigation_context) {
-  if (navigation_context->IsSameDocument()) {
+  if (navigation_context->IsSameDocument() &&
+      !navigation_context->HasUserGesture()) {
     return;
   }
   // `multi_gesture_refresh_` would be set to `false` immediately after the
@@ -157,30 +158,38 @@ void TabBasedIPHBrowserAgent::DidFinishNavigation(
 }
 
 void TabBasedIPHBrowserAgent::DidStopLoading(web::WebState* web_state) {
-  if (web_state->GetLoadingProgress() == 1) {
-    if (multi_gesture_refresh_) {
-      [HelpHandler() presentPullToRefreshGestureInProductHelp];
-      multi_gesture_refresh_ = false;
-    } else if (back_forward_button_tapped_) {
-      [HelpHandler() presentBackForwardSwipeGestureInProductHelp];
-      back_forward_button_tapped_ = false;
-    } else if (tapped_adjacent_tab_) {
-      [HelpHandler() presentToolbarSwipeGestureInProductHelp];
-      tapped_adjacent_tab_ = false;
-    }
-    return;
-  }
   // User navigates away before loading completes.
   // In case of multi-gesture refresh, `DidStopLoading` would be called BEFORE
   // the refresh attempt, instead of AFTER, so any invocations of this observer
   // that doesn't satisfy GetLoadingProgress() == 1 means user navigates away
   // from the current page before loading completes.
-  multi_gesture_refresh_ = false;
-
+  if (web_state->GetLoadingProgress() < 1) {
+    multi_gesture_refresh_ = false;
+    tapped_adjacent_tab_ = false;
+  }
   // If the user taps the back/forward button when the current page is still
   // loading, it is expected that `DidStopLoading` would be called with
   // `GetLoadingProgress() < 1` AFTER, as a result of the user performing the
   // tap. Therefore, the state should NOT be reset.
+}
+
+void TabBasedIPHBrowserAgent::PageLoaded(
+    web::WebState* web_state,
+    web::PageLoadCompletionStatus load_completion_status) {
+  if (load_completion_status == web::PageLoadCompletionStatus::FAILURE) {
+    ResetFeatureStatesAndRemoveIPHViews();
+    return;
+  }
+  if (multi_gesture_refresh_) {
+    [HelpHandler() presentPullToRefreshGestureInProductHelp];
+    multi_gesture_refresh_ = false;
+  } else if (back_forward_button_tapped_) {
+    [HelpHandler() presentBackForwardSwipeGestureInProductHelp];
+    back_forward_button_tapped_ = false;
+  } else if (tapped_adjacent_tab_) {
+    [HelpHandler() presentToolbarSwipeGestureInProductHelp];
+    tapped_adjacent_tab_ = false;
+  }
 }
 
 void TabBasedIPHBrowserAgent::WasHidden(web::WebState* web_state) {

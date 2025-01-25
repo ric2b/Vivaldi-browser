@@ -16,7 +16,6 @@
 #include <wrl/client.h>
 #include <wtsapi32.h>
 
-#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <optional>
@@ -375,13 +374,12 @@ bool SetRegistryKey(HKEY root,
   return result == ERROR_SUCCESS;
 }
 
-int GetDownloadProgress(int64_t downloaded_bytes, int64_t total_bytes) {
-  if (downloaded_bytes == -1 || total_bytes == -1 || total_bytes == 0) {
-    return -1;
-  }
-  CHECK_LE(downloaded_bytes, total_bytes);
-  return 100 * std::clamp(static_cast<double>(downloaded_bytes) / total_bytes,
-                          0.0, 1.0);
+bool SetEulaAccepted(UpdaterScope scope, bool eula_accepted) {
+  const HKEY root = UpdaterScopeToHKeyRoot(scope);
+  return eula_accepted
+             ? DeleteRegValue(root, UPDATER_KEY, L"eulaaccepted")
+             : base::win::RegKey(root, UPDATER_KEY, Wow6432(KEY_WRITE))
+                       .WriteValue(L"eulaaccepted", 0ul) == ERROR_SUCCESS;
 }
 
 HResultOr<bool> IsTokenAdmin(HANDLE token) {
@@ -1519,6 +1517,17 @@ bool StoreRunTimeEnrollmentToken(const std::string& enrollment_token) {
              .WriteValue(kRegValueCloudManagementEnrollmentToken,
                          base::SysUTF8ToWide(enrollment_token).c_str()) ==
          ERROR_SUCCESS;
+}
+
+std::optional<base::FilePath> GetUniqueTempFilePath(base::FilePath file) {
+  base::FilePath temp_dir;
+  if (file.empty() || !base::GetTempDir(&temp_dir)) {
+    return {};
+  }
+  return temp_dir.Append(base::StrCat(
+      {file.RemoveExtension().BaseName().value(),
+       base::UTF8ToWide(base::Uuid::GenerateRandomV4().AsLowercaseString()),
+       file.Extension()}));
 }
 
 }  // namespace updater

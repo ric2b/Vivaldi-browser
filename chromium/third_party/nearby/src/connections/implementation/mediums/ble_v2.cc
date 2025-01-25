@@ -122,7 +122,7 @@ bool BleV2::StartAdvertising(const std::string& service_id,
 
   if (!radio_.IsEnabled()) {
     NEARBY_LOGS(INFO)
-        << "Can't start BLE scanning because Bluetooth was never turned on";
+        << "Can't start BLE advertising because Bluetooth was never turned on";
     return false;
   }
 
@@ -1089,6 +1089,10 @@ bool BleV2::StartAsyncScanningLocked(absl::string_view service_id,
                             interesting_service_ids, advertisement_read_result);
                       });
                 });
+              },
+          .advertisement_lost_cb =
+              [](api::ble_v2::BlePeripheral& peripheral) {
+                // TODO(b/345514862): Implement.
               },
       });
   service_ids_to_scanning_sessions_.insert(

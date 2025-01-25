@@ -7,28 +7,24 @@
 #include <stddef.h>
 
 #include <string_view>
+#include <utility>
 
 #include "base/base64.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "ui/gl/gl_bindings.h"
-
-#if defined(USE_EGL)
 #include "ui/gl/gl_display.h"
 #include "ui/gl/gl_surface_egl.h"
-#endif  // defined(USE_EGL)
 
 namespace gpu {
 namespace gles2 {
 
 namespace {
 
-#if defined(USE_EGL)
 bool BlobCacheExtensionAvailable(gl::GLDisplayEGL* gl_display) {
   // The display should be initialized if the extension is available.
   return gl_display->ext->b_EGL_ANDROID_blob_cache;
 }
-#endif  // defined(USE_EGL)
 
 // EGL_ANDROID_blob_cache doesn't give user pointer to the callbacks so we are
 // forced to have this be global.
@@ -50,7 +46,6 @@ PassthroughProgramCache::PassthroughProgramCache(
       curr_size_bytes_(0),
       store_(ProgramLRUCache::NO_AUTO_EVICT),
       value_added_hook_(value_added_hook) {
-#if defined(USE_EGL)
   gl::GLDisplayEGL* gl_display = gl::GLSurfaceEGL::GetGLDisplayEGL();
   EGLDisplay egl_display = gl_display->GetDisplay();
 
@@ -64,17 +59,14 @@ PassthroughProgramCache::PassthroughProgramCache(
     eglSetBlobCacheFuncsANDROID(egl_display, BlobCacheSet, BlobCacheGet);
     g_blob_cache_funcs_set = true;
   }
-#endif  // defined(USE_EGL)
 }
 
 PassthroughProgramCache::~PassthroughProgramCache() {
-#if defined(USE_EGL)
   // Clear up the blob cache callbacks.  Note that this not allowed by the
   // EGL_ANDROID_blob_cache spec, so we just set the pointer to this object to
   // nullptr as a workaround.  The callbacks don't work with this pointer
   // missing.
   g_program_cache = nullptr;
-#endif  // defined(USE_EGL)
 }
 
 void PassthroughProgramCache::ClearBackend() {
@@ -91,7 +83,7 @@ ProgramCache::ProgramLoadResult PassthroughProgramCache::LoadLinkedProgram(
     const std::vector<std::string>& transform_feedback_varyings,
     GLenum transform_feedback_buffer_mode,
     DecoderClient* client) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return PROGRAM_LOAD_FAILURE;
 }
 
@@ -103,7 +95,7 @@ void PassthroughProgramCache::SaveLinkedProgram(
     const std::vector<std::string>& transform_feedback_varyings,
     GLenum transform_feedback_buffer_mode,
     DecoderClient* client) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void PassthroughProgramCache::LoadProgram(const std::string& key,
@@ -263,15 +255,23 @@ PassthroughProgramCache::ProgramCacheValue::ProgramCacheValue(
 }
 
 PassthroughProgramCache::ProgramCacheValue::~ProgramCacheValue() {
-  program_cache_->curr_size_bytes_ -= program_blob_.size();
+  if (program_cache_) {
+    program_cache_->curr_size_bytes_ -= program_blob_.size();
+  }
 }
 
 PassthroughProgramCache::ProgramCacheValue::ProgramCacheValue(
-    ProgramCacheValue&& other) = default;
+    ProgramCacheValue&& other)
+    : program_blob_(std::move(other.program_blob_)),
+      program_cache_(std::exchange(other.program_cache_, nullptr)) {}
 
 PassthroughProgramCache::ProgramCacheValue&
 PassthroughProgramCache::ProgramCacheValue::operator=(
-    ProgramCacheValue&& other) = default;
+    ProgramCacheValue&& other) {
+  program_blob_ = std::move(other.program_blob_);
+  program_cache_ = std::exchange(other.program_cache_, nullptr);
+  return *this;
+}
 
 }  // namespace gles2
 }  // namespace gpu

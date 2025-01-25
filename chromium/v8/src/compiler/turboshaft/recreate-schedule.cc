@@ -21,9 +21,10 @@
 #include "src/compiler/linkage.h"
 #include "src/compiler/machine-operator.h"
 #include "src/compiler/node-origin-table.h"
+#include "src/compiler/phase.h"
+#include "src/compiler/pipeline-data-inl.h"
 #include "src/compiler/schedule.h"
 #include "src/compiler/scheduler.h"
-#include "src/compiler/simplified-operator.h"
 #include "src/compiler/turboshaft/deopt-data.h"
 #include "src/compiler/turboshaft/graph.h"
 #include "src/compiler/turboshaft/operations.h"
@@ -42,24 +43,19 @@ struct ScheduleBuilder {
   PipelineData* data;
   CallDescriptor* call_descriptor;
   Zone* phase_zone;
+  compiler::TFPipelineData* turbofan_data;
 
   const Graph& input_graph = data->graph();
   JSHeapBroker* broker = data->broker();
-  Zone* graph_zone = data->graph_zone();
-  SourcePositionTable* source_positions = data->source_positions();
-  NodeOriginTable* origins = data->node_origins();
-  const size_t node_count_estimate =
-      static_cast<size_t>(1.1 * input_graph.op_id_count());
-  Schedule* const schedule =
-      graph_zone->New<Schedule>(graph_zone, node_count_estimate);
-  compiler::Graph* const tf_graph =
-      graph_zone->New<compiler::Graph>(graph_zone);
-  compiler::MachineOperatorBuilder machine{
-      graph_zone, MachineType::PointerRepresentation(),
-      InstructionSelector::SupportedMachineOperatorFlags(),
-      InstructionSelector::AlignmentRequirements()};
-  compiler::CommonOperatorBuilder common{graph_zone};
-  compiler::SimplifiedOperatorBuilder simplified{graph_zone};
+  Zone* graph_zone = turbofan_data->graph_zone();
+  SourcePositionTable* source_positions = turbofan_data->source_positions();
+  NodeOriginTable* origins = turbofan_data->node_origins();
+
+  Schedule* const schedule = turbofan_data->schedule();
+  compiler::Graph* const tf_graph = turbofan_data->graph();
+  compiler::MachineOperatorBuilder& machine = *turbofan_data->machine();
+  compiler::CommonOperatorBuilder& common = *turbofan_data->common();
+
   compiler::BasicBlock* current_block = schedule->start();
   const Block* current_input_block = nullptr;
   ZoneAbslFlatHashMap<int, Node*> parameters{phase_zone};
@@ -1076,6 +1072,11 @@ Node* ScheduleBuilder::ProcessOperation(const ConstantOp& op) {
     case ConstantOp::Kind::kRelocatableWasmStubCall:
       return RelocatableIntPtrConstant(op.integral(),
                                        RelocInfo::WASM_STUB_CALL);
+    case ConstantOp::Kind::kRelocatableWasmCanonicalSignatureId:
+      return AddNode(common.RelocatableInt32Constant(
+                         base::checked_cast<int32_t>(op.integral()),
+                         RelocInfo::WASM_CANONICAL_SIG_ID),
+                     {});
   }
 }
 
@@ -1400,6 +1401,10 @@ std::pair<Node*, MachineType> ScheduleBuilder::BuildDeoptInput(
       return {AddNode(common.ArgumentsLengthState(), {}),
               MachineType::AnyTagged()};
     }
+    case Instr::kRestLength:
+      // For now, kRestLength is only generated when using the Maglev frontend,
+      // which doesn't use recreate-schedule.
+      [[fallthrough]];
     case Instr::kUnusedRegister:
       UNREACHABLE();
   }
@@ -1926,7 +1931,7 @@ Node* ScheduleBuilder::ProcessOperation(const LoadStackPointerOp& op) {
 }
 
 Node* ScheduleBuilder::ProcessOperation(const SetStackPointerOp& op) {
-  return AddNode(machine.SetStackPointer(op.fp_scope), {GetNode(op.value())});
+  return AddNode(machine.SetStackPointer(), {GetNode(op.value())});
 }
 
 #endif  // V8_ENABLE_WEBASSEMBLY
@@ -1934,9 +1939,10 @@ Node* ScheduleBuilder::ProcessOperation(const SetStackPointerOp& op) {
 }  // namespace
 
 RecreateScheduleResult RecreateSchedule(PipelineData* data,
+                                        compiler::TFPipelineData* turbofan_data,
                                         CallDescriptor* call_descriptor,
                                         Zone* phase_zone) {
-  ScheduleBuilder builder{data, call_descriptor, phase_zone};
+  ScheduleBuilder builder{data, call_descriptor, phase_zone, turbofan_data};
   return builder.Run();
 }
 

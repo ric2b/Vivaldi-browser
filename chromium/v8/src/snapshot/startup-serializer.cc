@@ -88,10 +88,10 @@ StartupSerializer::StartupSerializer(
 }
 
 StartupSerializer::~StartupSerializer() {
-  for (Handle<AccessorInfo> info : accessor_infos_) {
+  for (DirectHandle<AccessorInfo> info : accessor_infos_) {
     RestoreExternalReferenceRedirector(isolate(), *info);
   }
-  for (Handle<FunctionTemplateInfo> info : function_template_infos_) {
+  for (DirectHandle<FunctionTemplateInfo> info : function_template_infos_) {
     RestoreExternalReferenceRedirector(isolate(), *info);
   }
   OutputStatistics("StartupSerializer");
@@ -124,20 +124,20 @@ void StartupSerializer::SerializeObjectImpl(Handle<HeapObject> obj,
 
   if (USE_SIMULATOR_BOOL && IsAccessorInfo(*obj, cage_base)) {
     // Wipe external reference redirects in the accessor info.
-    Handle<AccessorInfo> info = Handle<AccessorInfo>::cast(obj);
+    auto info = Cast<AccessorInfo>(obj);
     info->remove_getter_redirection(isolate());
     accessor_infos_.Push(*info);
   } else if (USE_SIMULATOR_BOOL && IsFunctionTemplateInfo(*obj, cage_base)) {
-    Handle<FunctionTemplateInfo> info = Handle<FunctionTemplateInfo>::cast(obj);
+    auto info = Cast<FunctionTemplateInfo>(obj);
     info->remove_callback_redirection(isolate());
     function_template_infos_.Push(*info);
   } else if (IsScript(*obj, cage_base) &&
-             Handle<Script>::cast(obj)->IsUserJavaScript()) {
-    Handle<Script>::cast(obj)->set_context_data(
+             Cast<Script>(obj)->IsUserJavaScript()) {
+    Cast<Script>(obj)->set_context_data(
         ReadOnlyRoots(isolate()).uninitialized_symbol());
   } else if (IsSharedFunctionInfo(*obj, cage_base)) {
     // Clear inferred name for native functions.
-    Handle<SharedFunctionInfo> shared = Handle<SharedFunctionInfo>::cast(obj);
+    auto shared = Cast<SharedFunctionInfo>(obj);
     if (!shared->IsSubjectToDebugging() && shared->HasUncompiledData()) {
       shared->uncompiled_data()->set_inferred_name(
           ReadOnlyRoots(isolate()).empty_string());
@@ -186,9 +186,9 @@ void StartupSerializer::SerializeStrongReferences(
 SerializedHandleChecker::SerializedHandleChecker(
     Isolate* isolate, std::vector<Tagged<Context>>* contexts)
     : isolate_(isolate) {
-  AddToSet(FixedArray::cast(isolate->heap()->serialized_objects()));
+  AddToSet(Cast<FixedArray>(isolate->heap()->serialized_objects()));
   for (auto const& context : *contexts) {
-    AddToSet(FixedArray::cast(context->serialized_objects()));
+    AddToSet(Cast<FixedArray>(context->serialized_objects()));
   }
 }
 

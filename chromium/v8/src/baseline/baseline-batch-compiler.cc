@@ -79,9 +79,9 @@ class BaselineCompilerTask {
     if (IsScript(shared_function_info_->script())) {
       Compiler::LogFunctionCompilation(
           isolate, LogEventListener::CodeTag::kFunction,
-          handle(Script::cast(shared_function_info_->script()), isolate),
+          handle(Cast<Script>(shared_function_info_->script()), isolate),
           shared_function_info_, Handle<FeedbackVector>(),
-          Handle<AbstractCode>::cast(code), CodeKind::BASELINE,
+          Cast<AbstractCode>(code), CodeKind::BASELINE,
           time_taken_.InMillisecondsF());
     }
   }
@@ -95,7 +95,8 @@ class BaselineCompilerTask {
 
 class BaselineBatchCompilerJob {
  public:
-  BaselineBatchCompilerJob(Isolate* isolate, Handle<WeakFixedArray> task_queue,
+  BaselineBatchCompilerJob(Isolate* isolate,
+                           DirectHandle<WeakFixedArray> task_queue,
                            int batch_size) {
     handles_ = isolate->NewPersistentHandles();
     tasks_.reserve(batch_size);
@@ -107,7 +108,7 @@ class BaselineBatchCompilerJob {
       // Skip functions where weak reference is no longer valid.
       if (!maybe_sfi.GetHeapObjectIfWeak(&obj)) continue;
       // Skip functions where the bytecode has been flushed.
-      Tagged<SharedFunctionInfo> shared = SharedFunctionInfo::cast(obj);
+      Tagged<SharedFunctionInfo> shared = Cast<SharedFunctionInfo>(obj);
       if (!CanCompileWithConcurrentBaseline(shared, isolate)) continue;
       // Skip functions that are already being compiled.
       if (shared->is_sparkplug_compiling()) continue;
@@ -253,7 +254,7 @@ bool BaselineBatchCompiler::concurrent() const {
 }
 
 void BaselineBatchCompiler::EnqueueFunction(Handle<JSFunction> function) {
-  Handle<SharedFunctionInfo> shared(function->shared(), isolate_);
+  DirectHandle<SharedFunctionInfo> shared(function->shared(), isolate_);
   // Immediately compile the function if batch compilation is disabled.
   if (!is_enabled()) {
     IsCompiledScope is_compiled_scope(
@@ -282,7 +283,7 @@ void BaselineBatchCompiler::EnqueueSFI(Tagged<SharedFunctionInfo> shared) {
   }
 }
 
-void BaselineBatchCompiler::Enqueue(Handle<SharedFunctionInfo> shared) {
+void BaselineBatchCompiler::Enqueue(DirectHandle<SharedFunctionInfo> shared) {
   EnsureQueueCapacity();
   compilation_queue_->set(last_index_++, MakeWeak(*shared));
 }
@@ -300,7 +301,7 @@ void BaselineBatchCompiler::EnsureQueueCapacity() {
     return;
   }
   if (last_index_ >= compilation_queue_->length()) {
-    Handle<WeakFixedArray> new_queue =
+    DirectHandle<WeakFixedArray> new_queue =
         isolate_->factory()->CopyWeakFixedArrayAndGrow(compilation_queue_,
                                                        last_index_);
     GlobalHandles::Destroy(compilation_queue_.location());
@@ -375,7 +376,7 @@ bool BaselineBatchCompiler::MaybeCompileFunction(
   // Skip functions where the weak reference is no longer valid.
   if (!maybe_sfi.GetHeapObjectIfWeak(&heapobj)) return false;
   Handle<SharedFunctionInfo> shared =
-      handle(SharedFunctionInfo::cast(heapobj), isolate_);
+      handle(Cast<SharedFunctionInfo>(heapobj), isolate_);
   // Skip functions where the bytecode has been flushed.
   if (!shared->is_compiled()) return false;
 

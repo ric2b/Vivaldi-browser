@@ -95,12 +95,16 @@ std::string_view ConvertIconToPrintableString(Suggestion::Icon icon) {
       return "kDevice";
     case Suggestion::Icon::kEdit:
       return "kEdit";
+    case Suggestion::Icon::kEmail:
+      return "kEmail";
     case Suggestion::Icon::kEmpty:
       return "kEmpty";
     case Suggestion::Icon::kGlobe:
       return "kGlobe";
     case Suggestion::Icon::kGoogle:
       return "kGoogle";
+    case Suggestion::Icon::kGoogleMonochrome:
+      return "kGoogleMonochrome";
     case Suggestion::Icon::kGooglePasswordManager:
       return "kGooglePasswordManager";
     case Suggestion::Icon::kGooglePay:

@@ -116,8 +116,6 @@ static_library("browser") {
     "password_manager_metrics_recorder.h",
     "password_manager_setting.h",
     "password_manager_settings_service.h",
-    "password_manager_switches.cc",
-    "password_manager_switches.h",
     "password_manager_util.cc",
     "password_manager_util.h",
     "password_manual_fallback_flow.cc",
@@ -134,6 +132,7 @@ static_library("browser") {
     "password_reuse_manager.h",
     "password_reuse_manager_impl.cc",
     "password_reuse_manager_impl.h",
+    "password_reuse_manager_signin_notifier.h",
     "password_save_manager.h",
     "password_save_manager_impl.cc",
     "password_save_manager_impl.h",
@@ -141,7 +140,6 @@ static_library("browser") {
     "password_session_durations_metrics_recorder.h",
     "password_store_factory_util.cc",
     "password_store_factory_util.h",
-    "password_store_signin_notifier.h",
     "password_suggestion_flow.h",
     "password_suggestion_generator.cc",
     "password_suggestion_generator.h",
@@ -186,10 +184,13 @@ static_library("browser") {
     "//build:blink_buildflags",
     "//build:branding_buildflags",
     "//components/autofill/core/browser",
-    "//components/autofill/core/common",
+    "//components/autofill/core/common:autofill_regex",
+    "//components/autofill/core/common:credit_card_number_validation",
     "//components/device_reauth",
     "//components/favicon/core",
+    "//components/favicon_base",
     "//components/os_crypt/sync:os_crypt",
+    "//components/password_manager/core/browser:password_switches",
     "//components/password_manager/core/browser/affiliation:affiliation_match_helper",
     "//components/password_manager/core/browser/features:password_features",
     "//components/password_manager/core/browser/form_parsing",
@@ -230,10 +231,18 @@ static_library("browser") {
 
   if (!is_chromeos_ash && !is_android) {
     sources += [
-      "password_store_signin_notifier_impl.cc",
-      "password_store_signin_notifier_impl.h",
+      "password_reuse_manager_signin_notifier_impl.cc",
+      "password_reuse_manager_signin_notifier_impl.h",
     ]
   }
+}
+
+source_set("password_switches") {
+  sources = [
+    "password_manager_switches.cc",
+    "password_manager_switches.h",
+  ]
+  public_deps = [ "//base" ]
 }
 
 # PasswordForm is an extremely common struct used by many sub-components and
@@ -246,8 +255,9 @@ source_set("password_form") {
     "password_form_digest.cc",
     "password_form_digest.h",
   ]
-  deps = [
+  public_deps = [
     "//base",
+    "//components/autofill/core/browser",
     "//components/autofill/core/common",
     "//components/autofill/core/common/mojom:mojo_types_shared",
     "//components/signin/public/base",
@@ -284,7 +294,9 @@ source_set("metrics_util") {
     "//components/autofill/core/common/mojom:mojo_types",
     "//components/device_reauth:device_reauth",
     "//components/password_manager/core/browser/features:utils",
+    "//components/password_manager/core/browser/password_store:password_store_interface",
     "//components/password_manager/core/common",
+    "//components/prefs:prefs",
     "//services/metrics/public/cpp:metrics_cpp",
     "//services/metrics/public/cpp:ukm_builders",
   ]
@@ -389,6 +401,7 @@ static_library("test_support") {
     "//components/autofill/core/browser:test_support",
     "//components/device_reauth:test_support",
     "//components/keyed_service/core",
+    "//components/password_manager/core/browser:password_switches",
     "//components/password_manager/core/browser/affiliation:test_support",
     "//components/password_manager/core/browser/leak_detection",
     "//components/password_manager/core/browser/password_store:test_support",
@@ -479,7 +492,7 @@ source_set("unit_tests") {
   }
 
   if (!is_chromeos_ash && !is_android) {
-    sources += [ "password_store_signin_notifier_impl_unittest.cc" ]
+    sources += [ "password_reuse_manager_signin_notifier_impl_unittest.cc" ]
   }
 
   deps = [

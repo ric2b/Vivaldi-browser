@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-official",
-              "project": "chromium-m126"
+              "project": "chromium-m128"
             },
             "builder_spec": {
               "builder_group": "chromium",
@@ -40,7 +40,7 @@
         {
           "bucket": "ci",
           "builder": "android-official",
-          "project": "chromium-m126"
+          "project": "chromium-m128"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -54,7 +54,6 @@
   },
   "$build/reclient": {
     "instance": "rbe-chromium-trusted",
-    "jobs": 500,
     "metrics_project": "chromium-reclient-metrics",
     "scandeps_server": true
   },
@@ -76,6 +75,9 @@
     ]
   },
   "builder_group": "chromium",
+  "gardener_rotations": [
+    "chrome_browser_release"
+  ],
   "recipe": "chromium",
   "sheriff_rotations": [
     "chrome_browser_release"

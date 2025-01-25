@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/ssl/client_cert_store_win.h"
 
 #include <algorithm>
@@ -157,7 +162,7 @@ ClientCertIdentityList GetClientCertsImpl(HCERTSTORE cert_store,
     BOOL ok = CertAddCertificateContextToStore(
         nullptr, cert_context, CERT_STORE_ADD_USE_EXISTING, &raw);
     if (!ok) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       continue;
     }
     cert_context2.reset(raw);

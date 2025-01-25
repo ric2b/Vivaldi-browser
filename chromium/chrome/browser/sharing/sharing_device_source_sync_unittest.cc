@@ -14,11 +14,11 @@
 #include "base/time/time.h"
 #include "base/uuid.h"
 #include "chrome/browser/sharing/fake_device_info.h"
-#include "chrome/browser/sharing/features.h"
 #include "chrome/browser/sharing/sharing_constants.h"
 #include "chrome/browser/sharing/sharing_utils.h"
 #include "components/send_tab_to_self/features.h"
 #include "components/send_tab_to_self/target_device_info.h"
+#include "components/sharing_message/features.h"
 #include "components/sync/test/test_sync_service.h"
 #include "components/sync_device_info/device_info.h"
 #include "components/sync_device_info/fake_device_info_sync_service.h"
@@ -37,6 +37,7 @@ const char kDevicep256dh[] = "test_p256_dh";
 const char kSenderIdP256dh[] = "sharing_p256dh";
 const char kDeviceAuthSecret[] = "test_auth_secret";
 const char kSenderIdAuthSecret[] = "sharing_auth_secret";
+const char kChimeRepresentativeTargetId[] = "chime_rep_id";
 
 std::unique_ptr<syncer::DeviceInfo> CreateDeviceInfo(
     const std::string& client_name,
@@ -45,11 +46,12 @@ std::unique_ptr<syncer::DeviceInfo> CreateDeviceInfo(
     const std::string& model_name = "model",
     syncer::DeviceInfo::SharingTargetInfo vapid_target_info =
         {kVapidFCMToken, kDevicep256dh, kDeviceAuthSecret},
-    syncer::DeviceInfo::SharingTargetInfo sender_id_target_info = {
-        kSenderIdFCMToken, kSenderIdP256dh, kSenderIdAuthSecret}) {
+    syncer::DeviceInfo::SharingTargetInfo sender_id_target_info =
+        {kSenderIdFCMToken, kSenderIdP256dh, kSenderIdAuthSecret},
+    const std::string& chime_rep_id = kChimeRepresentativeTargetId) {
   syncer::DeviceInfo::SharingInfo sharing_info(std::move(vapid_target_info),
                                                std::move(sender_id_target_info),
-                                               {enabled_feature});
+                                               chime_rep_id, {enabled_feature});
 
   return CreateFakeDeviceInfo(
       base::Uuid::GenerateRandomV4().AsLowercaseString(), client_name,
@@ -143,8 +145,7 @@ TEST_F(SharingDeviceSourceSyncTest, GetDeviceByGuid_UnknownGuid) {
 
 TEST_F(SharingDeviceSourceSyncTest, GetDeviceByGuid_SyncDisabled) {
   auto device_source = CreateDeviceSource(/*wait_until_ready=*/true);
-  test_sync_service_.SetTransportState(
-      syncer::SyncService::TransportState::DISABLED);
+  test_sync_service_.SetSignedOut();
   EXPECT_FALSE(device_source->GetDeviceByGuid(local_device_info_->guid()));
 }
 

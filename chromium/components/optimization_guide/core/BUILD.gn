@@ -123,6 +123,8 @@ component("features") {
   sources = [
     "insertion_ordered_set.h",
     "model_execution/feature_keys.h",
+    "model_execution/model_execution_prefs.cc",
+    "model_execution/model_execution_prefs.h",
     "optimization_guide_constants.cc",
     "optimization_guide_constants.h",
     "optimization_guide_enums.h",
@@ -175,7 +177,6 @@ static_library("core") {
     "model_quality/feature_type_map.h",
     "model_quality/model_quality_log_entry.cc",
     "model_quality/model_quality_log_entry.h",
-    "model_quality/model_quality_logs_uploader.h",
     "model_quality/model_quality_logs_uploader_service.cc",
     "model_quality/model_quality_logs_uploader_service.h",
     "model_quality/model_quality_util.cc",
@@ -219,6 +220,8 @@ static_library("core") {
   ]
   if (!is_fuchsia || !optimize_for_size) {
     sources += [
+      "model_execution/json_response_parser.cc",
+      "model_execution/json_response_parser.h",
       "model_execution/model_execution_features.cc",
       "model_execution/model_execution_features.h",
       "model_execution/model_execution_features_controller.cc",
@@ -227,8 +230,6 @@ static_library("core") {
       "model_execution/model_execution_fetcher.h",
       "model_execution/model_execution_manager.cc",
       "model_execution/model_execution_manager.h",
-      "model_execution/model_execution_prefs.cc",
-      "model_execution/model_execution_prefs.h",
       "model_execution/model_execution_util.cc",
       "model_execution/model_execution_util.h",
       "model_execution/on_device_model_access_controller.cc",
@@ -248,12 +249,18 @@ static_library("core") {
       "model_execution/on_device_model_metadata.h",
       "model_execution/on_device_model_service_controller.cc",
       "model_execution/on_device_model_service_controller.h",
+      "model_execution/on_device_model_validator.cc",
+      "model_execution/on_device_model_validator.h",
       "model_execution/optimization_guide_model_execution_error.cc",
       "model_execution/optimization_guide_model_execution_error.h",
       "model_execution/redactor.cc",
       "model_execution/redactor.h",
       "model_execution/repetition_checker.cc",
       "model_execution/repetition_checker.h",
+      "model_execution/response_parser.cc",
+      "model_execution/response_parser.h",
+      "model_execution/response_parser_registry.cc",
+      "model_execution/response_parser_registry.h",
       "model_execution/safety_config.cc",
       "model_execution/safety_config.h",
       "model_execution/safety_model_info.cc",
@@ -262,6 +269,8 @@ static_library("core") {
       "model_execution/session_impl.h",
       "model_execution/settings_enabled_observer.cc",
       "model_execution/settings_enabled_observer.h",
+      "model_execution/simple_response_parser.cc",
+      "model_execution/simple_response_parser.h",
       "model_execution/substitution.cc",
       "model_execution/substitution.h",
       output_proto_descriptors_cc_file,
@@ -309,13 +318,16 @@ static_library("core") {
     "//services/metrics/public/cpp:ukm_builders",
     "//services/network/public/cpp",
     "//services/on_device_model/public/mojom",
+    "//third_party/tflite:buildflags",
     "//url:url",
   ]
 
   if (!is_fuchsia || !optimize_for_size) {
     deps += [
       ":on_device_model_execution_proto_generator",
+      "//components/component_updater",
       "//components/version_info",
+      "//services/data_decoder/public/cpp",
       "//third_party/re2",
     ]
   }
@@ -364,6 +376,8 @@ static_library("test_support") {
   sources = [
     "mock_push_notification_manager.cc",
     "mock_push_notification_manager.h",
+    "model_quality/test_model_quality_logs_uploader_service.cc",
+    "model_quality/test_model_quality_logs_uploader_service.h",
     "optimization_guide_test_util.cc",
     "optimization_guide_test_util.h",
     "proto_database_provider_test_base.cc",
@@ -394,6 +408,7 @@ static_library("test_support") {
     "//base",
     "//components/leveldb_proto",
     "//components/optimization_guide/proto:optimization_guide_proto",
+    "//services/network/public/cpp",
     "//testing/gmock",
     "//testing/gtest",
     "//url",
@@ -463,6 +478,7 @@ source_set("unit_tests") {
 
   if (!is_fuchsia || !optimize_for_size) {
     sources += [
+      "model_execution/json_response_parser_unittest.cc",
       "model_execution/model_execution_features_controller_unittest.cc",
       "model_execution/model_execution_features_unittest.cc",
       "model_execution/model_execution_fetcher_unittest.cc",
@@ -476,12 +492,20 @@ source_set("unit_tests") {
       "model_execution/on_device_model_service_controller_unittest.cc",
       "model_execution/on_device_model_test_utils.cc",
       "model_execution/on_device_model_test_utils.h",
+      "model_execution/on_device_model_validator_unittest.cc",
       "model_execution/optimization_guide_model_execution_error_unittest.cc",
       "model_execution/redactor_unittest.cc",
       "model_execution/repetition_checker_unittest.cc",
+      "model_execution/simple_response_parser_unittest.cc",
       "model_execution/substitution_unittest.cc",
-      "model_execution/test_on_device_model_component.cc",
-      "model_execution/test_on_device_model_component.h",
+      "model_execution/test/feature_config_builder.cc",
+      "model_execution/test/feature_config_builder.h",
+      "model_execution/test/request_builder.cc",
+      "model_execution/test/request_builder.h",
+      "model_execution/test/response_holder.cc",
+      "model_execution/test/response_holder.h",
+      "model_execution/test/test_on_device_model_component_state_manager.cc",
+      "model_execution/test/test_on_device_model_component_state_manager.h",
     ]
   }
   if (build_with_tflite_lib) {
@@ -519,11 +543,13 @@ source_set("unit_tests") {
     "//components/unified_consent",
     "//components/variations:test_support",
     "//net:test_support",
+    "//services/data_decoder/public/cpp:test_support",
     "//services/network:network_service",
     "//services/network:test_support",
     "//services/on_device_model/public/cpp/test_support",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/tflite:buildflags",
     "//third_party/zlib/google:zip",
     "//ui/base",
     "//url:url",
@@ -531,6 +557,11 @@ source_set("unit_tests") {
   if (!is_ios) {
     deps += [ "//components/services/unzip/content" ]
   }
+
+  if (!is_fuchsia || !optimize_for_size) {
+    deps += [ "//components/component_updater" ]
+  }
+
   if (build_with_tflite_lib) {
     deps += [
       "//third_party/abseil-cpp:absl",
@@ -604,6 +635,7 @@ action("on_device_model_execution_proto_generator") {
     "$root_gen_dir/components/optimization_guide/proto/compose.descriptor",
     "$root_gen_dir/components/optimization_guide/proto/string_value.descriptor",
     "$root_gen_dir/components/optimization_guide/proto/tab_organization.descriptor",
+    "$root_gen_dir/components/optimization_guide/proto/history_answer.descriptor",
   ]
   outputs = [ output_proto_descriptors_cc_file ]
 
@@ -613,6 +645,15 @@ action("on_device_model_execution_proto_generator") {
     "--include=\"components/optimization_guide/proto/features/compose.pb.h\"",
     "--include=\"components/optimization_guide/proto/string_value.pb.h\"",
     "--include=\"components/optimization_guide/proto/features/tab_organization.pb.h\"",
+    "--include=\"components/optimization_guide/proto/features/history_answer.pb.h\"",
+    "--request=.optimization_guide.proto.ComposeRequest",
+    "--request=.optimization_guide.proto.TabOrganizationRequest",
+    "--request=.optimization_guide.proto.HistoryAnswerRequest",
+    "--request=.optimization_guide.proto.StringValue",
+    "--response=.optimization_guide.proto.ComposeResponse",
+    "--response=.optimization_guide.proto.TabOrganizationResponse",
+    "--response=.optimization_guide.proto.HistoryAnswerResponse",
+    "--response=.optimization_guide.proto.StringValue",
   ]
   foreach(file, inputs) {
     args += [
@@ -623,6 +664,7 @@ action("on_device_model_execution_proto_generator") {
 
   deps = [
     "//components/optimization_guide/proto:compose_proto_descriptor",
+    "//components/optimization_guide/proto:history_answer_proto_descriptor",
     "//components/optimization_guide/proto:string_value_proto_descriptor",
     "//components/optimization_guide/proto:tab_organization_proto_descriptor",
     "//third_party/protobuf:py_proto_runtime",

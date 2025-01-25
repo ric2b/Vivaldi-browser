@@ -74,8 +74,6 @@ class LocalAuthenticationRequestControllerImplTest : public LoginTestBase {
   }
 
   void TearDown() override {
-    LoginTestBase::TearDown();
-
     // If the test did not explicitly dismissed the widget, destroy it now.
     LocalAuthenticationRequestWidget* local_authentication_request_widget =
         LocalAuthenticationRequestWidget::Get();
@@ -87,6 +85,7 @@ class LocalAuthenticationRequestControllerImplTest : public LoginTestBase {
     SystemSaltGetter::Shutdown();
     UserDataAuthClient::Shutdown();
     CryptohomeMiscClient::Shutdown();
+    LoginTestBase::TearDown();
   }
 
   void SetExpectedCredentialsWithDbusClient(const AccountId& account_id,
@@ -101,18 +100,23 @@ class LocalAuthenticationRequestControllerImplTest : public LoginTestBase {
                   SystemSaltGetter::ConvertRawSaltToHexString(
                       FakeCryptohomeMiscClient::GetStubSystemSalt()));
 
-    cryptohome::Key cryptohome_key;
-    cryptohome_key.mutable_data()->set_label(kCryptohomeLocalPasswordKeyLabel);
-    cryptohome_key.set_secret(key.GetSecret());
+    user_data_auth::AuthFactor auth_factor;
+    user_data_auth::AuthInput auth_input;
 
+    auth_factor.set_label(ash::kCryptohomeLocalPasswordKeyLabel);
+    auth_factor.set_type(user_data_auth::AUTH_FACTOR_TYPE_PASSWORD);
+
+    auth_input.mutable_password_input()->set_secret(key.GetSecret());
+
+    // Add the password key to the user.
     test_api->AddExistingUser(cryptohome_id);
-    test_api->AddKey(cryptohome_id, cryptohome_key);
+    test_api->AddAuthFactor(cryptohome_id, auth_factor, auth_input);
     session_ids_ = test_api->AddSession(cryptohome_id, false);
   }
 
   // Simulates mouse press event on a |button|.
   void SimulateButtonPress(views::Button* button) {
-    ui::MouseEvent event(/*type=*/ui::ET_MOUSE_PRESSED,
+    ui::MouseEvent event(/*type=*/ui::EventType::kMousePressed,
                          /*location=*/gfx::Point(),
                          /*root_location=*/gfx::Point(),
                          /*time_stamp=*/ui::EventTimeForNow(),

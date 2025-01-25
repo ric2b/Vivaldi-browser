@@ -5,15 +5,16 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_METRICS_AUTOFILL_METRICS_TEST_BASE_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_METRICS_AUTOFILL_METRICS_TEST_BASE_H_
 
+#include "base/check_deref.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "components/autofill/core/browser/address_data_manager.h"
 #include "components/autofill/core/browser/autofill_form_test_utils.h"
-#include "components/autofill/core/browser/autofill_suggestion_generator.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/browser_autofill_manager_test_api.h"
 #include "components/autofill/core/browser/payments/test_credit_card_save_manager.h"
+#include "components/autofill/core/browser/payments/test_payments_autofill_client.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_autofill_driver.h"
 #include "components/autofill/core/browser/test_browser_autofill_manager.h"
@@ -28,7 +29,6 @@ constexpr char kTestProfileId[] = "00000000-0000-0000-0000-000000000001";
 constexpr char kTestProfile2Id[] = "00000000-0000-0000-0000-000000000002";
 constexpr char kTestLocalCardId[] = "10000000-0000-0000-0000-000000000001";
 constexpr char kTestMaskedCardId[] = "10000000-0000-0000-0000-000000000002";
-constexpr char kTestFullServerCardId[] = "10000000-0000-0000-0000-000000000003";
 // These variables store the GUIDs of a Local and a masked Server card which
 // have the same card attributes, i.e., are duplicates of each other.
 constexpr char kTestDuplicateLocalCardId[] =
@@ -42,8 +42,9 @@ class MockAutofillClient : public TestAutofillClient {
   ~MockAutofillClient() override;
   MOCK_METHOD(bool,
               ShowTouchToFillCreditCard,
-              (base::WeakPtr<TouchToFillDelegate>,
-               base::span<const autofill::CreditCard>),
+              ((base::WeakPtr<TouchToFillDelegate>),
+               (base::span<const autofill::CreditCard>),
+               (const std::vector<bool>&)),
               (override));
 };
 
@@ -68,14 +69,12 @@ class AutofillMetricsBaseTest {
   // something.
   void RecreateCreditCards(bool include_local_credit_card,
                            bool include_masked_server_credit_card,
-                           bool include_full_server_credit_card,
                            bool masked_card_is_enrolled_for_virtual_card);
 
-  // Creates a local, masked server, full server, and/or virtual credit card,
-  // according to the parameters.
+  // Creates a local, masked server, and/or virtual credit card, according to
+  // the parameters.
   void CreateCreditCards(bool include_local_credit_card,
                          bool include_masked_server_credit_card,
-                         bool include_full_server_credit_card,
                          bool masked_card_is_enrolled_for_virtual_card);
 
   // Creates a local card and then a duplicate server card with the same
@@ -93,9 +92,10 @@ class AutofillMetricsBaseTest {
   void SetFidoEligibility(bool is_verifiable);
 
   // Mocks a RPC response from Payments.
-  void OnDidGetRealPan(AutofillClient::PaymentsRpcResult result,
-                       const std::string& real_pan,
-                       bool is_virtual_card = false);
+  void OnDidGetRealPan(
+      payments::PaymentsAutofillClient::PaymentsRpcResult result,
+      const std::string& real_pan,
+      bool is_virtual_card = false);
 
   // Mocks a RPC response from Payments, but where a non-HTTP_OK response
   // stopped it from parsing a valid response.
@@ -108,10 +108,19 @@ class AutofillMetricsBaseTest {
 
   // Convenience wrapper for `EmulateUserChangedTextFieldTo` that appends
   // '_changed' to the fields value.
-  void SimulateUserChangedTextField(const FormData& form,
-                                    FormFieldData& field,
+  void SimulateUserChangedTextField(FormData& form,
+                                    const FormFieldData& field,
                                     base::TimeTicks timestamp = {}) {
-    SimulateUserChangedTextFieldTo(form, field, field.value() + u"_changed",
+    SimulateUserChangedTextFieldTo(form, field.global_id(),
+                                   field.value() + u"_changed", timestamp);
+  }
+
+  // TODO(crbug.com/40100455): Remove this overload.
+  void SimulateUserChangedTextFieldTo(FormData& form,
+                                      const FormFieldData& field,
+                                      const std::u16string& new_value,
+                                      base::TimeTicks timestamp = {}) {
+    SimulateUserChangedTextFieldTo(form, field.global_id(), new_value,
                                    timestamp);
   }
 
@@ -119,15 +128,18 @@ class AutofillMetricsBaseTest {
   // `is_autofilled` field attribute, settings the field's value to `new_value`
   // and notifying the `AutofillManager` of the change that is emulated to have
   // happened at `timestamp`.
-  void SimulateUserChangedTextFieldTo(const FormData& form,
-                                      FormFieldData& field,
+  void SimulateUserChangedTextFieldTo(FormData& form,
+                                      const FieldGlobalId& field_id,
                                       const std::u16string& new_value,
                                       base::TimeTicks timestamp = {}) {
+    // TODO(crbug.com/40100455): Remove const_cast.
+    FormFieldData& field = const_cast<FormFieldData&>(
+        CHECK_DEREF(form.FindFieldByGlobalId(field_id)));
     // Assert that the field is actually set to a different value.
     ASSERT_NE(field.value(), new_value);
     field.set_is_autofilled(false);
     field.set_value(new_value);
-    autofill_manager().OnTextFieldDidChange(form, field, timestamp);
+    autofill_manager().OnTextFieldDidChange(form, field.global_id(), timestamp);
   }
 
   // TODO(crbug.com/40240189): Remove this method once the metrics are fixed.
@@ -136,7 +148,7 @@ class AutofillMetricsBaseTest {
       FormFieldData& field,
       base::TimeTicks timestamp = {}) {
     field.set_is_autofilled(false);
-    autofill_manager().OnTextFieldDidChange(form, field, timestamp);
+    autofill_manager().OnTextFieldDidChange(form, field.global_id(), timestamp);
   }
 
   void FillAutofillFormData(const FormData& form,
@@ -176,7 +188,7 @@ class AutofillMetricsBaseTest {
       SuggestionType suggestion_type = SuggestionType::kAddressEntry) {
     autofill_manager().DidShowSuggestions(
         std::vector<SuggestionType>({suggestion_type}), form,
-        form.fields[field_index]);
+        form.fields()[field_index]);
   }
 
   void FillTestProfile(const FormData& form) {
@@ -186,31 +198,31 @@ class AutofillMetricsBaseTest {
   void FillProfileByGUID(const FormData& form,
                          const std::string& profile_guid) {
     autofill_manager().FillOrPreviewProfileForm(
-        mojom::ActionPersistence::kFill, form, form.fields.front(),
+        mojom::ActionPersistence::kFill, form, form.fields().front(),
         *personal_data().address_data_manager().GetProfileByGUID(profile_guid),
         {.trigger_source = AutofillTriggerSource::kPopup});
   }
 
   void UndoAutofill(const FormData& form) {
     autofill_manager().UndoAutofill(mojom::ActionPersistence::kFill, form,
-                                    form.fields.front());
+                                    form.fields().front());
   }
 
   [[nodiscard]] FormData CreateEmptyForm() {
     FormData form;
-    form.host_frame = test::MakeLocalFrameToken();
-    form.renderer_id = test::MakeFormRendererId();
-    form.name = u"TestForm";
-    form.url = GURL("https://example.com/form.html");
-    form.action = GURL("https://example.com/submit.html");
-    form.main_frame_origin =
-        url::Origin::Create(autofill_client_->form_origin());
+    form.set_host_frame(test::MakeLocalFrameToken());
+    form.set_renderer_id(test::MakeFormRendererId());
+    form.set_name(u"TestForm");
+    form.set_url(GURL("https://example.com/form.html"));
+    form.set_action(GURL("https://example.com/submit.html"));
+    form.set_main_frame_origin(
+        url::Origin::Create(autofill_client_->form_origin()));
     return form;
   }
 
   [[nodiscard]] FormData CreateForm(std::vector<FormFieldData> fields) {
     FormData form = CreateEmptyForm();
-    form.fields = std::move(fields);
+    form.set_fields(std::move(fields));
     return form;
   }
 

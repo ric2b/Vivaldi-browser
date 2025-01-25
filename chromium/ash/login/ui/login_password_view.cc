@@ -35,13 +35,16 @@
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/color/color_id.h"
 #include "ui/compositor/layer_animation_observer.h"
+#include "ui/events/ash/keyboard_capability.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_constants.h"
+#include "ui/gfx/vector_icon_types.h"
 #include "ui/resources/grit/ui_resources.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
@@ -422,12 +425,9 @@ LoginPasswordView::LoginPasswordView()
   submit_button_->SetBackgroundColorId(kColorAshControlBackgroundColorInactive);
   submit_button_->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_ASH_LOGIN_SUBMIT_BUTTON_ACCESSIBLE_NAME));
-  submit_button_->SetAccessibleName(
+  submit_button_->GetViewAccessibility().SetName(
       l10n_util::GetStringUTF16(IDS_ASH_LOGIN_SUBMIT_BUTTON_ACCESSIBLE_NAME));
   submit_button_->SetEnabled(false);
-
-  // Initialize the capslock icon without a highlight.
-  is_capslock_higlight_ = false;
 
   // Make sure the textfield always starts with focus.
   RequestFocus();
@@ -450,11 +450,6 @@ void LoginPasswordView::Init(
   DCHECK(on_password_text_changed);
   on_submit_ = on_submit;
   on_password_text_changed_ = on_password_text_changed;
-}
-
-void LoginPasswordView::SetEnabledOnEmptyPassword(bool enabled) {
-  enabled_on_empty_password_ = enabled;
-  UpdateUiState();
 }
 
 void LoginPasswordView::SetFocusEnabledForTextfield(bool enable) {
@@ -497,9 +492,9 @@ void LoginPasswordView::Backspace() {
 
   // views::Textfield::OnKeyPressed is private, so we call it via views::View.
   auto* view = static_cast<views::View*>(textfield_);
-  view->OnKeyPressed(ui::KeyEvent(ui::ET_KEY_PRESSED, ui::VKEY_BACK,
+  view->OnKeyPressed(ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_BACK,
                                   ui::DomCode::BACKSPACE, ui::EF_NONE));
-  view->OnKeyPressed(ui::KeyEvent(ui::ET_KEY_RELEASED, ui::VKEY_BACK,
+  view->OnKeyPressed(ui::KeyEvent(ui::EventType::kKeyReleased, ui::VKEY_BACK,
                                   ui::DomCode::BACKSPACE, ui::EF_NONE));
 }
 
@@ -595,7 +590,7 @@ bool LoginPasswordView::HandleKeyEvent(views::Textfield* sender,
     return false;
   }
 
-  if (key_event.type() != ui::ET_KEY_PRESSED) {
+  if (key_event.type() != ui::EventType::kKeyPressed) {
     return false;
   }
 
@@ -633,8 +628,7 @@ void LoginPasswordView::OnImplicitAnimationsCompleted() {
 }
 
 bool LoginPasswordView::IsPasswordSubmittable() {
-  return !textfield_->GetReadOnly() &&
-         (enabled_on_empty_password_ || !textfield_->GetText().empty());
+  return !textfield_->GetReadOnly() && !textfield_->GetText().empty();
 }
 
 void LoginPasswordView::SubmitPassword() {
@@ -647,8 +641,10 @@ void LoginPasswordView::SubmitPassword() {
 }
 
 void LoginPasswordView::SetCapsLockHighlighted(bool highlight) {
-  is_capslock_higlight_ = highlight;
-
+  const gfx::VectorIcon& capslock_icon =
+      Shell::Get()->keyboard_capability()->IsModifierSplitEnabled()
+          ? kModifierSplitLockScreenCapsLockIcon
+          : kLockScreenCapsLockIcon;
   const bool is_jelly = chromeos::features::IsJellyrollEnabled();
   const ui::ColorId enabled_icon_color_id =
       is_jelly ? static_cast<ui::ColorId>(cros_tokens::kCrosSysOnSurface)
@@ -657,7 +653,7 @@ void LoginPasswordView::SetCapsLockHighlighted(bool highlight) {
       is_jelly ? static_cast<ui::ColorId>(cros_tokens::kCrosSysDisabled)
                : kColorAshIconPrimaryDisabledColor;
   capslock_icon_->SetImage(ui::ImageModel::FromVectorIcon(
-      kLockScreenCapsLockIcon,
+      capslock_icon,
       highlight ? enabled_icon_color_id : disabled_icon_color_id));
 }
 
@@ -668,7 +664,7 @@ void LoginPasswordView::SetLoginArrowNavigationDelegate(
 
 void LoginPasswordView::SetAccessibleNameOnTextfield(
     const std::u16string& new_name) {
-  textfield_->SetAccessibleName(new_name);
+  textfield_->GetViewAccessibility().SetName(new_name);
 }
 
 BEGIN_METADATA(LoginPasswordView)

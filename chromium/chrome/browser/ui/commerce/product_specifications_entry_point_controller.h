@@ -6,9 +6,11 @@
 #define CHROME_BROWSER_UI_COMMERCE_PRODUCT_SPECIFICATIONS_ENTRY_POINT_CONTROLLER_H_
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/commerce/core/commerce_types.h"
+#include "components/commerce/core/compare/cluster_manager.h"
 #include "content/public/browser/web_contents.h"
 
 class Browser;
@@ -18,7 +20,9 @@ namespace commerce {
 class ShoppingService;
 class ProductSpecificationsService;
 
-class ProductSpecificationsEntryPointController : public TabStripModelObserver {
+class ProductSpecificationsEntryPointController
+    : public TabStripModelObserver,
+      public ClusterManager::Observer {
  public:
   // Observer that will listen to ProductSpecificationsEntryPointController for
   // updates regarding visibility and content of the entry point.
@@ -26,6 +30,9 @@ class ProductSpecificationsEntryPointController : public TabStripModelObserver {
    public:
     // Called when entry points should show with `title`.
     virtual void ShowEntryPointWithTitle(const std::string title) {}
+
+    // Called when entry points should hide.
+    virtual void HideEntryPoint() {}
   };
 
   explicit ProductSpecificationsEntryPointController(Browser* browser);
@@ -36,6 +43,9 @@ class ProductSpecificationsEntryPointController : public TabStripModelObserver {
       TabStripModel* tab_strip_model,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
+  void TabChangedAt(content::WebContents* contents,
+                    int index,
+                    TabChangeType change_type) override;
 
   // Registers an observer.
   void AddObserver(Observer* observer);
@@ -55,17 +65,62 @@ class ProductSpecificationsEntryPointController : public TabStripModelObserver {
   // been clicked (4) is no longer valid.
   virtual void OnEntryPointHidden();
 
+  // The moment when (1) the entry point being triggered to show and (2) the
+  // entry point becoming eligible to show on the UI-side could be different.
+  // This method allows the entry point to check if it should still show when it
+  // becomes eligible to show on the UI side.
+  virtual bool ShouldExecuteEntryPointShow();
+
+  // ClusterManager::Observer
+  void OnClusterFinishedForNavigation(const GURL& url) override;
+
   std::optional<EntryPointInfo> entry_point_info_for_testing() {
     return current_entry_point_info_;
   }
 
  private:
+  void MaybeHideEntryPoint();
+
+  // Check entry point info for tab selection. This will first check if the
+  // `entry_point_info` is valid based on info of current browser window. Then
+  // it might call server-side clustering, and ultimately trigger an observer
+  // event to show the UI.
+  void CheckEntryPointInfoForSelection(
+      const GURL old_url,
+      const GURL new_url,
+      std::optional<EntryPointInfo> entry_point_info);
+
+  // Check entry point info for navigation. This will first check if the
+  // `entry_point_info` is valid based on info of current browser window. Then
+  // it might call server-side clustering, and ultimately trigger an observer
+  // event to show the UI.
+  void CheckEntryPointInfoForNavigation(
+      std::optional<EntryPointInfo> entry_point_info);
+
+  // Show the tab strip entry point for tab selection.
+  void ShowEntryPointWithTitleForSelection(
+      const GURL old_url,
+      const GURL new_url,
+      std::optional<EntryPointInfo> entry_point_info);
+
+  // Show the tab strip entry point for navigation.
+  void ShowEntryPointWithTitleForNavigation(
+      std::optional<EntryPointInfo> entry_point_info);
+
+  // Helper method to show the entry point with title.
+  void ShowEntryPointWithTitle(std::optional<EntryPointInfo> entry_point_info);
+
   // Info of the entry point that is currently showing, when available.
   std::optional<EntryPointInfo> current_entry_point_info_;
   raw_ptr<Browser, DanglingUntriaged> browser_;
   raw_ptr<ShoppingService, DanglingUntriaged> shopping_service_;
+  raw_ptr<ClusterManager, DanglingUntriaged> cluster_manager_;
   raw_ptr<ProductSpecificationsService> product_specifications_service_;
   base::ObserverList<Observer> observers_;
+  base::ScopedObservation<ClusterManager, ClusterManager::Observer>
+      cluster_manager_observations_{this};
+  base::WeakPtrFactory<ProductSpecificationsEntryPointController>
+      weak_ptr_factory_{this};
 };
 }  // namespace commerce
 

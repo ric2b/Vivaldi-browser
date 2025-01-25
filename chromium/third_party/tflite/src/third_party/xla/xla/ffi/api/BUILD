@@ -23,6 +23,17 @@ package(
 # `ffi.h` defines builtin decoding for canonical XLA types, but users can add their own decodings
 # with template specializations.
 
+# A user of the FFI interface will only need the three headers included in the `all_headers`
+# filegroup: `api.h`, `c_api.h`, and `ffi.h`.
+filegroup(
+    name = "all_headers",
+    srcs = [
+        "api.h",
+        "c_api.h",
+        "ffi.h",
+    ],
+)
+
 filegroup(
     name = "api_headers",
     srcs = ["api.h"],
@@ -60,22 +71,23 @@ cc_library(
     ],
 )
 
-#===-------------------------------------------------------------------------------------------===//
-# Internal tests for XLA FFI API
-#===-------------------------------------------------------------------------------------------===//
-
 xla_cc_test(
     name = "ffi_test",
     srcs = ["ffi_test.cc"],
     deps = [
         ":ffi",
+        "//xla:shape_util",
         "//xla:xla_data_proto_cc",
         "//xla/ffi:call_frame",
         "//xla/ffi:execution_context",
+        "//xla/ffi:execution_state",
         "//xla/ffi:ffi_api",
+        "//xla/ffi:type_id_registry",
         "//xla/stream_executor:device_memory",
+        "//xla/stream_executor:device_memory_allocator",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
         "@local_tsl//tsl/lib/core:status_test_util",
         "@local_tsl//tsl/platform:errors",
         "@local_tsl//tsl/platform:status_matchers",

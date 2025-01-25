@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "osp/impl/quic/quic_utils.h"
+#include "platform/base/span.h"
 #include "util/osp_logging.h"
 
 namespace openscreen::osp {
@@ -24,7 +25,9 @@ quic::WriteResult PacketWriterImpl::WritePacket(
     const quic::QuicSocketAddress& peer_address,
     quic::PerPacketOptions* /*options*/,
     const quic::QuicPacketWriterParams& /*params*/) {
-  socket_->SendMessage(buffer, buffer_length, ToIPEndpoint(peer_address));
+  socket_->SendMessage(
+      ByteView(reinterpret_cast<const uint8_t*>(buffer), buffer_length),
+      ToIPEndpoint(peer_address));
   OSP_CHECK_LE(buffer_length,
                static_cast<size_t>(std::numeric_limits<int>::max()));
   return quic::WriteResult(quic::WRITE_STATUS_OK,

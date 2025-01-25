@@ -246,7 +246,6 @@ public abstract class ClearBrowsingDataFragment extends PreferenceFragmentCompat
 
     private Profile mProfile;
     private SigninManager mSigninManager;
-    private SnackbarManager mSnackbarManager;
 
     private ProgressDialog mProgressDialog;
     private Item[] mItems;
@@ -793,10 +792,6 @@ public abstract class ClearBrowsingDataFragment extends PreferenceFragmentCompat
                                 requireContext(), createSignOutOfChromeCallback())));
     }
 
-    public void setSnackbarManager(SnackbarManager snackbarManager) {
-        mSnackbarManager = snackbarManager;
-    }
-
     private Callback<View> createSignOutOfChromeCallback() {
         return view ->
                 SignOutCoordinator.startSignOutFlow(
@@ -804,8 +799,9 @@ public abstract class ClearBrowsingDataFragment extends PreferenceFragmentCompat
                         mProfile,
                         getFragmentManager(),
                         ((ModalDialogManagerHolder) getActivity()).getModalDialogManager(),
-                        mSnackbarManager,
+                        ((SnackbarManager.SnackbarManageable) getActivity()).getSnackbarManager(),
                         SignoutReason.USER_CLICKED_SIGNOUT_FROM_CLEAR_BROWSING_DATA_PAGE,
+                        /* showConfirmDialog= */ true,
                         () -> {});
     }
 
@@ -930,7 +926,6 @@ public abstract class ClearBrowsingDataFragment extends PreferenceFragmentCompat
 
     /** A method to show the post-delete snack-bar confirmation. */
     private void showSnackbar() {
-        // This snack bar is not shown from SettingsActivity. So we can't use mSnackbarManager.
         SnackbarManager snackbarManager = null;
         Activity activity = getLastFocusedActivity();
         if (activity instanceof SnackbarManager.SnackbarManageable) {

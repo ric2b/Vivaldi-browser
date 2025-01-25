@@ -86,7 +86,6 @@
 <translation id="2439110203301358333">パソコン上の別のプログラムにより、Vivaldi の動作方法を変更する可能性のある拡張機能が追加されました。</translation>
 <translation id="2443487764245141020">サイトは識別子を使用してデバイスを認識する必要がある場合もあります</translation>
 <translation id="2445081178310039857">拡張機能のルートフォルダーを指定してください。</translation>
-<translation id="2470702053775288986">サポートされていない拡張機能が無効になりました</translation>
 <translation id="2485422356828889247">アンインストール</translation>
 <translation id="2498539833203011245">最小化</translation>
 <translation id="2509495747794740764">倍率は 10 ～ 200 の数値で指定してください。</translation>
@@ -206,7 +205,6 @@
 <translation id="431076611119798497">詳細</translation>
 <translation id="4345587454538109430">設定...</translation>
 <translation id="4348766275249686434">エラー収集</translation>
-<translation id="4363771538994847871">キャスト先が見つかりません。ヘルプを表示しますか？</translation>
 <translation id="4384652540891215547">拡張機能を有効にする</translation>
 <translation id="4394049700291259645">無効にする</translation>
 <translation id="4409697491990005945">余白</translation>
@@ -390,7 +388,6 @@
 <translation id="7771452384635174008">レイアウト</translation>
 <translation id="7782102568078991263">候補は以上です</translation>
 <translation id="7786889348652477777">アプリを再読み込み (&amp;R)</translation>
-<translation id="7791543448312431591">追加</translation>
 <translation id="7800518121066352902">反時計回りに回転 (&amp;O)</translation>
 <translation id="7814458197256864873">コピー</translation>
 <translation id="7818135753970109980">新しいテーマが追加されました（<ph name="EXTENSION_NAME" />）</translation>
@@ -455,7 +452,7 @@
 <translation id="8962083179518285172">詳細を非表示</translation>
 <translation id="8973557916016709913">拡大縮小指定を削除</translation>
 <translation id="897939795688207351"><ph name="ORIGIN" /> のみ</translation>
-<translation id="9003647077635673607">全てのウェブサイトでの実行を許可</translation>
+<translation id="9003647077635673607">すべてのウェブサイトでの実行を許可</translation>
 <translation id="9027459031423301635">新しいタブでリンクを開く (&amp;T)</translation>
 <translation id="9033857511263905942">貼り付け</translation>
 <translation id="9056810968620647706">一致する項目が見つかりません。</translation>

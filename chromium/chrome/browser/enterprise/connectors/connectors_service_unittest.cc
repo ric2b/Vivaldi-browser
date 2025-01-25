@@ -9,10 +9,10 @@
 #include "base/json/json_reader.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/test_future.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/enterprise/connectors/connectors_manager.h"
-#include "chrome/browser/enterprise/connectors/reporting/browser_crash_event_router.h"
 #include "chrome/browser/enterprise/connectors/test/deep_scanning_test_utils.h"
 #include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/browser/profiles/profile_testing_helper.h"
@@ -196,9 +196,11 @@ class ConnectorsServiceReportingFeatureTest
       case 2:
         return kEmptySettingsPref;
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
+
+  PrefService* pref_service() const { return profile_->GetPrefs(); }
 
   bool reporting_enabled() const { return policy_value() == 1; }
 
@@ -270,6 +272,38 @@ TEST_P(ConnectorsServiceReportingFeatureTest,
                    ->is_chrome_os_managed_guest_session());
 }
 #endif
+
+TEST_P(ConnectorsServiceReportingFeatureTest, CheckTelemetryPolicyObserver) {
+  ConnectorsService* connectors_service =
+      ConnectorsServiceFactory::GetForBrowserContext(profile_);
+  ConnectorsManager* connectors_manager =
+      connectors_service->ConnectorsManagerForTesting();
+
+  base::test::TestFuture<void> future;
+  connectors_service->ObserveTelemetryReporting(future.GetRepeatingCallback());
+
+  ASSERT_FALSE(
+      connectors_manager->GetTelemetryObserverCallbackForTesting().is_null());
+  // Cache initially empty
+  ASSERT_TRUE(
+      connectors_manager->GetReportingConnectorsSettingsForTesting().empty());
+
+  // Enable browser crash event
+  test::SetOnSecurityEventReporting(pref_service(), true, {kBrowserCrashEvent},
+                                    {});
+  EXPECT_TRUE(future.WaitAndClear());
+
+  // Clear enabled events (not cached when cleared)
+  test::SetOnSecurityEventReporting(pref_service(), false, {}, {});
+  ASSERT_TRUE(
+      connectors_manager->GetReportingConnectorsSettingsForTesting().empty());
+  EXPECT_TRUE(future.WaitAndClear());
+
+  // Enable telemetry event
+  test::SetOnSecurityEventReporting(pref_service(), true,
+                                    {kExtensionTelemetryEvent}, {});
+  EXPECT_TRUE(future.WaitAndClear());
+}
 
 INSTANTIATE_TEST_SUITE_P(
     ,
@@ -446,8 +480,6 @@ class ConnectorsServiceProfileTypeBrowserTest : public testing::Test {
 
   std::unique_ptr<ConnectorsService> CreateService(Profile* profile) {
     auto manager = std::make_unique<ConnectorsManager>(
-        std::make_unique<BrowserCrashEventRouter>(profile),
-        std::make_unique<ExtensionInstallEventRouter>(profile),
         profile->GetPrefs(), GetServiceProviderConfig(), false);
 
     return std::make_unique<ConnectorsService>(profile, std::move(manager));

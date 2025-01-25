@@ -29,7 +29,6 @@ limitations under the License.
 #include "absl/container/btree_map.h"
 #include "absl/container/node_hash_map.h"
 #include "absl/functional/function_ref.h"
-#include "absl/hash/hash.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
@@ -48,6 +47,7 @@ limitations under the License.
 #include "xla/service/rendezvous.h"
 #include "xla/status_macros.h"
 #include "xla/stream_executor/stream_executor.h"
+#include "xla/util.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/hash.h"
@@ -98,6 +98,10 @@ static absl::Duration TerminateTimeout() {
                                   : absl::InfiniteDuration();
 }
 
+static bool TerminateOnNcclError() {
+  return xla::GetDebugOptionsFromFlags().xla_gpu_nccl_terminate_on_error();
+}
+
 //===----------------------------------------------------------------------===//
 // NcclClique
 //===----------------------------------------------------------------------===//
@@ -129,11 +133,11 @@ void NcclCliqueCommunicators::ForEachComm(
 }
 
 std::string NcclCliqueCommunicators::DebugString() const {
-  std::string out =
-      absl::StrFormat("clique_key: %s; hash(id): %d; size: %d; communicators: ",
-                      clique_key_.ToString(),
-                      clique_id_.has_value() ? absl::HashOf(*clique_id_) : 0,
-                      communicators_.size());
+  std::string out = absl::StrFormat(
+      "clique_key: %s; fingerprint(id): %d; size: %d; communicators: ",
+      clique_key_.ToString(),
+      clique_id_.has_value() ? clique_id_->fingerprint() : 0,
+      communicators_.size());
   int32_t cnt = 0;
   for (const auto& [rank, comm] : communicators_) {
     if (cnt++) absl::StrAppend(&out, ", ");
@@ -180,6 +184,13 @@ static absl::Status CheckComm(NcclApi::NcclCommHandle comm) {
 // Runs async check on all communicators in a clique.
 static void CheckClique(const NcclCliqueKey& clique_key,
                         NcclClique& lockable_clique) {
+  if (TerminateOnNcclError()) {
+    absl::Status status = lockable_clique.CheckAsyncErrors();
+    if (!status.ok()) {
+      LOG(FATAL) << "Terminating process due to async NCCL error: " << status;
+    }
+    return;
+  }
   if (NcclClique::Lock clique = lockable_clique.TryAcquire()) {
     VLOG(5) << "Checking NCCL clique " << clique_key.ToString()
             << " for async errors; num_communicators="
@@ -248,24 +259,38 @@ static absl::StatusOr<std::shared_ptr<NcclClique::Lock>> InitializeNcclClique(
   // Start NCCL clique heart beat monitor when create a first clique.
   StartNcclCliqueHeartBeatMonitor();
 
+  using RendezvousArg = std::pair<NcclApi::DeviceRank, /*synchronized=*/bool>;
+
   // Initializes a NcclClique for given device ranks and returns a lock that
   // gives access to clique communicators.
-  auto initialize = [&](absl::Span<const NcclApi::DeviceRank* const> args)
+  auto initialize = [&](absl::Span<const RendezvousArg* const> args)
       -> absl::StatusOr<NcclClique::Lock> {
     TF_ASSIGN_OR_RETURN(auto clique_id, clique_id_callback(clique_key));
 
+    // Check that all ranks successfully synchronized device activity before
+    // trying to instantiate NCCL communicators.
+    for (const RendezvousArg* arg : args) {
+      if (auto& [device_rank, synchronized] = *arg; !synchronized) {
+        return Internal(
+            "Failed to synchronize device activity on rank %d. Do not attempt "
+            "to initialize NCCL clique.",
+            device_rank.rank);
+      }
+    }
+
     std::vector<NcclApi::DeviceRank> ranks;
     ranks.reserve(args.size());
-    for (auto* arg : args) ranks.emplace_back(*arg);
+    for (auto* arg : args) ranks.emplace_back(arg->first);
 
     // Sort device ranks, mainly to get more readable logs below, NCCL does
     // not care in what order ranks are initialized.
     absl::c_sort(ranks, [](auto& a, auto& b) { return a.rank < b.rank; });
 
     VLOG(3) << absl::StreamFormat(
-        "Create NCCL communicators for clique %s; ranks=[%s]; hash(id)=%d",
+        "Create NCCL communicators for clique %s; ranks=[%s]; "
+        "fingerprint(id)=%d",
         clique_key.ToString(), DeviceRanksToString(ranks),
-        absl::HashOf(clique_id));
+        clique_id.fingerprint());
 
     TF_ASSIGN_OR_RETURN(
         std::vector<NcclApi::OwnedNcclComm> created_comms,
@@ -277,9 +302,10 @@ static absl::StatusOr<std::shared_ptr<NcclClique::Lock>> InitializeNcclClique(
     }
 
     VLOG(3) << absl::StreamFormat(
-        "Created NCCL communicators for clique %s; ranks=[%s]; hash(id)=%d",
+        "Created NCCL communicators for clique %s; ranks=[%s]; "
+        "fingerprint(id)=%d",
         clique_key.ToString(), DeviceRanksToString(ranks),
-        absl::HashOf(clique_id));
+        clique_id.fingerprint());
 
     NcclCliques& cliques = GetNcclCliques();
     absl::MutexLock lock(&cliques.mu);
@@ -309,9 +335,19 @@ static absl::StatusOr<std::shared_ptr<NcclClique::Lock>> InitializeNcclClique(
                       rank, clique_key.ToString(), run_id.ToInt());
 
   NcclApi::DeviceRank device_rank = {device, rank};
+  bool synchronized = device->SynchronizeAllActivity();
+
+  // We choose not to exit early on failed synchronization, because it will lead
+  // to a deadlock, as not all participants will arrive to a rendezvous point,
+  // instead we check synchronization result in the initialization callback.
+  //
+  // Unfortunately we can't share synchronization result across different
+  // processes, so we still might end up in a deadlock situation when some
+  // processes are not able to synchronize device activity.
+  RendezvousArg rendezvous_arg = std::make_pair(device_rank, synchronized);
 
   return RendezvousSingle<absl::StatusOr<NcclClique::Lock>>(
-      initialization_rendezvous_name, rendezvous_key, device_rank,
+      initialization_rendezvous_name, rendezvous_key, rendezvous_arg,
       num_local_participants, initialize, WarnStuckTimeout(),
       TerminateTimeout());
 }
@@ -508,6 +544,24 @@ absl::StatusOr<std::shared_ptr<NcclClique::Lock>> AcquireNcclClique(
   // If we can't split any of the acquired cliques, create a new one.
   return InitializeNcclClique(device, run_id, clique_key, clique_id_callback,
                               num_local_participants, rank, config);
+}
+
+absl::Status NcclClique::CheckAsyncErrors() {
+  return async_error_checker_.Check();
+}
+
+absl::Status NcclCliqueCommunicators::AsyncErrorChecker::Check() {
+  absl::Status status = absl::OkStatus();
+  communicators_.ForEachComm(
+      [&status](int32_t rank, NcclApi::NcclCommHandle comm) {
+        // Do not overwrite previous errors.
+        if (!status.ok()) return;
+        status = NcclApi::Default()->CommGetAsyncError(comm);
+        if (!status.ok()) {
+          LOG(ERROR) << "NCCL async error (rank " << rank << "): " << status;
+        }
+      });
+  return status;
 }
 
 }  // namespace xla::gpu

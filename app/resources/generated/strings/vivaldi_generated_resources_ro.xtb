@@ -55,7 +55,6 @@
 <translation id="241082044617551207">Plugin necunoscut</translation>
 <translation id="2439110203301358333">Un alt program de pe calculator a adăugat o extensie care poate schimba modul în care funcționează Vivaldi.</translation>
 <translation id="2445081178310039857">Este necesar directorul rădăcină pentru extensie.</translation>
-<translation id="2470702053775288986">Extensiile incompatibile au fost dezactivate</translation>
 <translation id="2509495747794740764">Valoarea de scalare trebuie să fie un număr între 10 și 200.</translation>
 <translation id="26224892172169984">Nu permite niciunui site web să gestioneze protocoale</translation>
 <translation id="2662876636500006917">Magazinul web Vivaldi</translation>
@@ -114,7 +113,6 @@
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KiB (<ph name="NUM_KILOBYTES_LIVE" /> KiB live)</translation>
 <translation id="4345587454538109430">Configurează...</translation>
 <translation id="4348766275249686434">Colectează erorile</translation>
-<translation id="4363771538994847871">Nu s-a găsit nicio destinație Google Cast. Aveți nevoie de ajutor?</translation>
 <translation id="4384652540891215547">Activați extensia</translation>
 <translation id="4409697491990005945">Margini</translation>
 <translation id="4423376891418188461">Restaurează setările</translation>
@@ -206,7 +204,6 @@
 <translation id="7771452384635174008">Aspect</translation>
 <translation id="7782102568078991263">Nu mai există sugestii de la Google</translation>
 <translation id="7786889348652477777">&amp;Reîncarcă aplicația</translation>
-<translation id="7791543448312431591">Adaugă</translation>
 <translation id="7818135753970109980">A fost adăugată o temă nouă (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">C&amp;opiază adresa videoului</translation>
 <translation id="786073089922909430">Serviciu: <ph name="ARC_PROCESS_NAME" /></translation>

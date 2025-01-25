@@ -564,7 +564,7 @@ std::optional<syncer::ModelError> HistorySyncBridge::MergeFullSyncData(
     syncer::EntityChangeList entity_data) {
   // Since HISTORY is in ApplyUpdatesImmediatelyTypes(), MergeFullSyncData()
   // should never be called.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return {};
 }
 
@@ -639,7 +639,7 @@ HistorySyncBridge::ApplyIncrementalSyncChanges(
         // entities *is* tracked, but then an incoming tombstone would result in
         // a conflict that'd be resolved as "local edit wins over remote
         // deletion", so still no ACTION_DELETE would arrive here.]
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
   }
@@ -673,13 +673,13 @@ void HistorySyncBridge::ApplyDisableSyncChanges(
       std::move(delete_metadata_change_list));
 }
 
-void HistorySyncBridge::GetDataForCommit(StorageKeyList storage_keys,
-                                         DataCallback callback) {
-  GetDataImpl(storage_keys, std::move(callback));
+std::unique_ptr<syncer::DataBatch> HistorySyncBridge::GetDataForCommit(
+    StorageKeyList storage_keys) {
+  return GetDataImpl(storage_keys);
 }
 
-void HistorySyncBridge::GetDataImpl(StorageKeyList storage_keys,
-                                    DataCallback callback) {
+std::unique_ptr<syncer::DataBatch> HistorySyncBridge::GetDataImpl(
+    StorageKeyList storage_keys) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   auto batch = std::make_unique<syncer::MutableDataBatch>();
@@ -714,14 +714,14 @@ void HistorySyncBridge::GetDataImpl(StorageKeyList storage_keys,
     batch->Put(key, std::move(entity_data));
   }
 
-  std::move(callback).Run(std::move(batch));
+  return batch;
 }
 
-void HistorySyncBridge::GetAllDataForDebugging(DataCallback callback) {
+std::unique_ptr<syncer::DataBatch> HistorySyncBridge::GetAllDataForDebugging() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!sync_metadata_database_) {
-    return;
+    return nullptr;
   }
 
   auto metadata_batch = std::make_unique<syncer::MetadataBatch>();
@@ -735,7 +735,7 @@ void HistorySyncBridge::GetAllDataForDebugging(DataCallback callback) {
   for (const auto& [storage_key, metadata] : metadata_batch->GetAllMetadata()) {
     storage_keys.push_back(storage_key);
   }
-  GetDataImpl(std::move(storage_keys), std::move(callback));
+  return GetDataImpl(std::move(storage_keys));
 }
 
 std::string HistorySyncBridge::GetClientTag(

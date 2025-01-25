@@ -277,7 +277,7 @@ class View : public mojom::View {
 #else
   void UpdateBrowserControlsState(bool enable_hiding, bool enable_showing,
                                   bool animate) override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 #endif
 };
@@ -398,6 +398,8 @@ enforce that the input data is valid. Common ones to watch out for:
 *   Time types: use `mojo_base.mojom.TimeDelta` /
     `mojo_base.mojom.TimeTicks` / `mojo_base.mojom.Time`, not `int64` /
     `uint64` / `double` / et cetera.
+    *   In WebUI, use `mojo_base.mojom.JSTime` for times coming from Javascript
+        Date objects.
 *   URLs: use `url.mojom.Url`, not `string`.
 *   `array<uint8>` or `string` and `memcpy()`: use a Mojo struct and statically
     define the serialized fields. While `memcpy()` may be tempting for its

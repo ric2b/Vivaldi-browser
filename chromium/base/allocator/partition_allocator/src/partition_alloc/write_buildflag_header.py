@@ -87,13 +87,9 @@ def WriteHeader(options):
     output_file.write('\n#ifndef %s\n' % options.header_guard)
     output_file.write('#define %s\n\n' % options.header_guard)
     output_file.write('#include "partition_alloc/buildflag.h" // IWYU pragma: export\n\n')
-    # TODO(https://crbug.com/41481467) Remove dependency on chromium:
-    output_file.write('#include "build/buildflag.h" // IWYU pragma: export\n\n')
 
     for pair in options.flags:
       output_file.write('#define PA_BUILDFLAG_INTERNAL_%s() (%s)\n' % pair)
-      # TODO(https://crbug.com/41481467) Remove dependency on chromium:
-      output_file.write('#define BUILDFLAG_INTERNAL_%s() (%s)\n' % pair)
 
     output_file.write('\n#endif  // %s\n' % options.header_guard)
 

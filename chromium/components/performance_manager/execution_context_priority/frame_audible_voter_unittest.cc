@@ -69,7 +69,6 @@ class FrameAudibleVoterTest : public GraphTestHarness {
   FrameAudibleVoterTest& operator=(const FrameAudibleVoterTest&) = delete;
 
   void SetUp() override {
-    Super::GetGraphFeatures().EnableExecutionContextRegistry();
     Super::SetUp();
     wrapper_ = graph()->PassToGraph(std::make_unique<GraphOwnedWrapper>());
   }
@@ -96,7 +95,7 @@ TEST_F(FrameAudibleVoterTest, AudibleChanged) {
       voter_id(), GetExecutionContext(frame_node.get()),
       base::TaskPriority::LOWEST, FrameAudibleVoter::kFrameAudibleReason));
 
-  // Make the frame visible. This should increase the priority.
+  // Make the frame audible. This should increase the priority.
   mock_graph.frame->SetIsAudible(true);
   EXPECT_EQ(observer().GetVoteCount(), 1u);
   EXPECT_TRUE(observer().HasVote(voter_id(),

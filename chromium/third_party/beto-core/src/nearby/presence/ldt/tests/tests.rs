@@ -18,7 +18,8 @@ use alloc::vec;
 use crypto_provider::aes::BLOCK_SIZE;
 use crypto_provider_default::CryptoProviderImpl;
 use ldt::{
-    DefaultPadder, LdtDecryptCipher, LdtEncryptCipher, LdtError, LdtKey, Padder, Swap, XorPadder,
+    DefaultPadder, LdtCipher, LdtDecryptCipher, LdtEncryptCipher, LdtError, LdtKey, Padder, Swap,
+    XorPadder,
 };
 use xts_aes::{XtsAes128, XtsAes128Key};
 
@@ -137,20 +138,22 @@ fn xor_pad_too_big_panics() {
 
 #[test]
 fn encrypt_too_short_err() {
-    do_length_check_enc(7)
+    do_length_check_enc(15)
 }
 
 #[test]
 fn encrypt_too_long_err() {
-    do_length_check_enc(40)
+    do_length_check_enc(32)
 }
+
 #[test]
 fn decrypt_too_short_err() {
-    do_length_check_dec(7)
+    do_length_check_dec(15)
 }
+
 #[test]
 fn decrypt_too_long_err() {
-    do_length_check_dec(40)
+    do_length_check_dec(32)
 }
 
 fn do_length_check_dec(len: usize) {

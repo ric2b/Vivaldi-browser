@@ -20,7 +20,6 @@
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/enterprise/connectors/reporting/metrics_utils.h"
-#include "chrome/browser/enterprise/connectors/reporting/reporting_service_settings.h"
 #include "chrome/browser/enterprise/identifiers/profile_id_service_factory.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
@@ -28,6 +27,7 @@
 #include "chrome/browser/profiles/reporting_util.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "components/enterprise/browser/identifiers/profile_id_service.h"
+#include "components/enterprise/connectors/reporting/reporting_service_settings.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_util.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
@@ -60,6 +60,7 @@
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 #include "chrome/browser/enterprise/signals/signals_aggregator_factory.h"
+#include "chrome/browser/enterprise/signin/enterprise_signin_prefs.h"
 #include "components/device_signals/core/browser/signals_aggregator.h"
 #include "components/device_signals/core/common/signals_constants.h"
 #include "components/policy/core/common/features.h"
@@ -337,8 +338,8 @@ RealtimeReportingClient::InitBrowserReportingClient(
 std::pair<std::string, policy::CloudPolicyClient*>
 RealtimeReportingClient::InitProfileReportingClient(
     const std::string& dm_token) {
-  policy::UserCloudPolicyManager* policy_manager =
-      Profile::FromBrowserContext(context_)->GetUserCloudPolicyManager();
+  policy::CloudPolicyManager* policy_manager =
+      Profile::FromBrowserContext(context_)->GetCloudPolicyManager();
   if (!policy_manager || !policy_manager->core() ||
       !policy_manager->core()->client()) {
     return {kProfilePolicyClientDescription, nullptr};
@@ -457,7 +458,7 @@ void RealtimeReportingClient::ReportEventWithTimestamp(
 #ifndef NDEBUG
   // Make sure the event is included in the kAllReportingEvents array.
   bool found = false;
-  for (const char* event_name : ReportingServiceSettings::kAllReportingEvents) {
+  for (const char* event_name : kAllReportingEvents) {
     if (event_name == name) {
       found = true;
       break;
@@ -500,8 +501,18 @@ void RealtimeReportingClient::ReportEventWithTimestamp(
 }
 
 std::string RealtimeReportingClient::GetProfileUserName() const {
-  return identity_manager_ ? safe_browsing::GetProfileEmail(identity_manager_)
-                           : std::string();
+  std::string username = identity_manager_
+                             ? safe_browsing::GetProfileEmail(identity_manager_)
+                             : std::string();
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  if (username.empty()) {
+    username = Profile::FromBrowserContext(context_)->GetPrefs()->GetString(
+        enterprise_signin::prefs::kProfileUserEmail);
+  }
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
+  return username;
 }
 
 std::string RealtimeReportingClient::GetProfileIdentifier() const {

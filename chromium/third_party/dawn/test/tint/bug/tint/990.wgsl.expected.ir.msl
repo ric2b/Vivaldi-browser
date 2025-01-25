@@ -1,22 +1,18 @@
-SKIP: FAILED
-
 #include <metal_stdlib>
 using namespace metal;
 
 void f() {
   int i = 0;
   {
-    thread int* const p = i;
+    thread int* const p = (&i);
     while(true) {
       if (false) {
       } else {
         break;
       }
+      {
+      }
       continue;
     }
   }
 }
-program_source:7:23: error: cannot initialize a variable of type 'int *const' with an lvalue of type 'int'
-    thread int* const p = i;
-                      ^   ~
-

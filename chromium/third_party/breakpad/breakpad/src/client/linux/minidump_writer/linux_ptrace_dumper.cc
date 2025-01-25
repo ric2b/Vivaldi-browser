@@ -59,6 +59,7 @@
 
 #include "client/linux/minidump_writer/directory_reader.h"
 #include "client/linux/minidump_writer/line_reader.h"
+#include "common/linux/eintr_wrapper.h"
 #include "common/linux/linux_libc_support.h"
 #include "third_party/lss/linux_syscall_support.h"
 
@@ -84,11 +85,29 @@ static bool SuspendThread(pid_t pid) {
       errno != 0) {
     return false;
   }
-  while (sys_waitpid(pid, NULL, __WALL) < 0) {
-    if (errno != EINTR) {
+  while (true) {
+    int status;
+    int r = HANDLE_EINTR(sys_waitpid(pid, &status, __WALL));
+    if (r < 0) {
       sys_ptrace(PTRACE_DETACH, pid, NULL, NULL);
       return false;
     }
+
+    if (!WIFSTOPPED(status))
+      return false;
+
+    // Any signal will stop the thread, make sure it is SIGSTOP. Otherwise, this
+    // signal will be delivered after PTRACE_DETACH, and the thread will enter
+    // the "T (stopped)" state.
+    if (WSTOPSIG(status) == SIGSTOP)
+      break;
+
+    // Signals other than SIGSTOP that are received need to be reinjected,
+    // or they will otherwise get lost.
+    r = sys_ptrace(PTRACE_CONT, pid, NULL,
+                   reinterpret_cast<void*>(WSTOPSIG(status)));
+    if (r < 0)
+      return false;
   }
 #if defined(__i386) || defined(__x86_64)
   // On x86, the stack pointer is NULL or -1, when executing trusted code in

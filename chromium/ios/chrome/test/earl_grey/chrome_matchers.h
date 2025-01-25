@@ -36,6 +36,12 @@ id<GREYMatcher> MatchInBlockerWindowWithNumber(int window_number,
 id<GREYMatcher> ButtonWithAccessibilityLabelId(int message_id);
 
 // Returns a matcher for element with accessibility label corresponding to
+// `message_id`, `number` for the plural rule and accessibility trait
+// UIAccessibilityTraitButton.
+id<GREYMatcher> ButtonWithAccessibilityLabelIdAndNumberForPlural(int message_id,
+                                                                 int number);
+
+// Returns a matcher for element with accessibility label corresponding to
 // `label` and accessibility trait UIAccessibilityTraitButton.
 id<GREYMatcher> ButtonWithAccessibilityLabel(NSString* label);
 
@@ -161,9 +167,6 @@ id<GREYMatcher> OmniboxContainingText(const std::string& text);
 
 // Returns a matcher for `text` being inline autocomplete text in the omnibox.
 id<GREYMatcher> OmniboxContainingAutocompleteText(NSString* text);
-
-// Returns a matcher for omnibox autocomplete.
-id<GREYMatcher> OmniboxAutocompleteLabel();
 
 // Returns a matcher for `text` being a substring of the text in the location
 // view.
@@ -343,10 +346,6 @@ id<GREYMatcher> ManageSyncSettingsButton();
 // screen.
 id<GREYMatcher> InactiveTabsSettingsButton();
 
-// Returns a matcher for the Tab Pickup Settings button on the Tabs Settings
-// screen.
-id<GREYMatcher> TabPickupSettingsButton();
-
 // Returns a matcher for the Tabs Settings button on the main Settings screen.
 id<GREYMatcher> TabsSettingsButton();
 
@@ -517,6 +516,9 @@ id<GREYMatcher> HistoryClearBrowsingDataButton();
 // Returns a matcher for "Open In..." button.
 id<GREYMatcher> OpenInButton();
 
+// Returns a matcher for "Open" button.
+id<GREYMatcher> OpenPDFButton();
+
 // Returns a matcher for the cell at `index` in the tab grid.
 id<GREYMatcher> TabGridCellAtIndex(unsigned int index);
 
@@ -596,6 +598,10 @@ id<GREYMatcher> IncognitoTabGrid();
 // Returns a matcher for the button to close the cell at `index` in the
 // tab grid.
 id<GREYMatcher> TabGridCloseButtonForCellAtIndex(unsigned int index);
+
+// Returns a matcher for the button to close the group cell at `index` in the
+// tab grid.
+id<GREYMatcher> TabGridCloseButtonForGroupCellAtIndex(unsigned int index);
 
 // Returns a matcher for the password settings collection view.
 id<GREYMatcher> SettingsPasswordMatcher();

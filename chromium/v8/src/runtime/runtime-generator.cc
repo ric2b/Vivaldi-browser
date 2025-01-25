@@ -37,7 +37,7 @@ RUNTIME_FUNCTION(Runtime_CreateJSGeneratorObject) {
   HandleScope scope(isolate);
   DCHECK_EQ(2, args.length());
   Handle<JSFunction> function = args.at<JSFunction>(0);
-  Handle<Object> receiver = args.at(1);
+  DirectHandle<JSAny> receiver = args.at<JSAny>(1);
   CHECK_IMPLIES(IsAsyncFunction(function->shared()->kind()),
                 IsAsyncGeneratorFunction(function->shared()->kind()));
   CHECK(IsResumableFunction(function->shared()->kind()));
@@ -47,10 +47,10 @@ RUNTIME_FUNCTION(Runtime_CreateJSGeneratorObject) {
   int size =
       function->shared()->internal_formal_parameter_count_without_receiver() +
       function->shared()->GetBytecodeArray(isolate)->register_count();
-  Handle<FixedArray> parameters_and_registers =
+  DirectHandle<FixedArray> parameters_and_registers =
       isolate->factory()->NewFixedArray(size);
 
-  Handle<JSGeneratorObject> generator =
+  DirectHandle<JSGeneratorObject> generator =
       isolate->factory()->NewJSGeneratorObject(function);
   DisallowGarbageCollection no_gc;
   Tagged<JSGeneratorObject> raw_generator = *generator;
@@ -61,7 +61,7 @@ RUNTIME_FUNCTION(Runtime_CreateJSGeneratorObject) {
   raw_generator->set_resume_mode(JSGeneratorObject::ResumeMode::kNext);
   raw_generator->set_continuation(JSGeneratorObject::kGeneratorExecuting);
   if (IsJSAsyncGeneratorObject(*raw_generator)) {
-    JSAsyncGeneratorObject::cast(raw_generator)->set_is_awaiting(0);
+    Cast<JSAsyncGeneratorObject>(raw_generator)->set_is_awaiting(0);
   }
   return raw_generator;
 }
@@ -75,7 +75,7 @@ RUNTIME_FUNCTION(Runtime_GeneratorClose) {
 RUNTIME_FUNCTION(Runtime_GeneratorGetFunction) {
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
-  Handle<JSGeneratorObject> generator = args.at<JSGeneratorObject>(0);
+  DirectHandle<JSGeneratorObject> generator = args.at<JSGeneratorObject>(0);
 
   return generator->function();
 }

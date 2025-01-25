@@ -18,8 +18,10 @@
 #define SRC_TRACE_PROCESSOR_IMPORTERS_COMMON_TRACK_TRACKER_H_
 
 #include <optional>
+
 #include "src/trace_processor/importers/common/args_tracker.h"
 #include "src/trace_processor/storage/trace_storage.h"
+#include "src/trace_processor/tables/profiler_tables_py.h"
 #include "src/trace_processor/types/trace_processor_context.h"
 
 namespace perfetto {
@@ -41,6 +43,7 @@ class TrackTracker {
     kDeviceState,
     kThermals,
     kClockFrequency,
+    kBatteryMitigation,
 
     // Keep this last.
     kSizeSentinel,
@@ -87,6 +90,9 @@ class TrackTracker {
   // Returns the ID of the implicit trace-global default track for triggers
   // received by the service.
   TrackId GetOrCreateTriggerTrack();
+
+  // Returns the ID of the track for Google Interconnect events
+  TrackId GetOrCreateInterconnectTrack();
 
   // Interns a global counter track into the storage.
   TrackId InternGlobalCounterTrack(Group group,
@@ -142,7 +148,7 @@ class TrackTracker {
   // Creates a counter track for values within perf samples.
   // The tracks themselves are managed by PerfSampleTracker.
   TrackId CreatePerfCounterTrack(StringId name,
-                                 uint32_t perf_session_id,
+                                 tables::PerfSessionTable::Id perf_session_id,
                                  uint32_t cpu,
                                  bool is_timebase);
 
@@ -224,6 +230,7 @@ class TrackTracker {
 
   std::optional<TrackId> chrome_global_instant_track_id_;
   std::optional<TrackId> trigger_track_id_;
+  std::optional<TrackId> interconnect_events_track_id_;
 
   const StringId source_key_ = kNullStringId;
   const StringId trace_id_key_ = kNullStringId;

@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.tab_resumption;
 
+import android.text.format.DateUtils;
+
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 
@@ -87,6 +89,12 @@ public class TabResumptionModuleMetricsUtils {
     static final String HISTOGRAM_SEE_MORE_LINK_CLICKED =
             "MagicStack.Clank.TabResumption.SeeMoreLinkClicked";
 
+    static final String HISTOGRAM_TAB_RECENCY_SHOW =
+            "MagicStack.Clank.TabResumption.TabRecency.Show";
+
+    static final String HISTOGRAM_TAB_RECENCY_CLICK =
+            "MagicStack.Clank.TabResumption.TabRecency.Click";
+
     /** Maps specification of a clicked tile to a ClickInfo for logging. */
     static @ClickInfo int computeClickInfo(@ModuleShowConfig int moduleShowConfig, int tileIndex) {
         switch (moduleShowConfig) {
@@ -121,13 +129,13 @@ public class TabResumptionModuleMetricsUtils {
         if (bundle == null || bundle.entries.size() == 0) return null;
 
         if (bundle.entries.size() == 1) {
-            return (bundle.entries.get(0) instanceof LocalTabSuggestionEntry)
+            return bundle.entries.get(0).isLocalTab()
                     ? ModuleShowConfig.SINGLE_TILE_LOCAL
                     : ModuleShowConfig.SINGLE_TILE_FOREIGN;
         }
 
         // If Local Tab suggestion exists, it's always at index 0.
-        return (bundle.entries.get(0) instanceof LocalTabSuggestionEntry)
+        return bundle.entries.get(0).isLocalTab()
                 ? ModuleShowConfig.DOUBLE_TILE_LOCAL_FOREIGN
                 : ModuleShowConfig.DOUBLE_TILE_FOREIGN_FOREIGN;
     }
@@ -172,5 +180,23 @@ public class TabResumptionModuleMetricsUtils {
     static void recordSeeMoreLinkClicked(@ModuleShowConfig int config) {
         RecordHistogram.recordEnumeratedHistogram(
                 HISTOGRAM_SEE_MORE_LINK_CLICKED, config, ModuleShowConfig.NUM_ENTRIES);
+    }
+
+    /**
+     * Records the recency of a suggestion tile, i.e., the duration between the tile's tab's last
+     * active time to when the tile gets shown.
+     */
+    static void recordTabRecencyShow(long recencyMs) {
+        RecordHistogram.recordCustomTimesHistogram(
+                HISTOGRAM_TAB_RECENCY_SHOW, recencyMs, 1, DateUtils.DAY_IN_MILLIS * 2, 50);
+    }
+
+    /**
+     * Records the recency of a suggested tile on click, i.e., the duratoin of the tile's tab's last
+     * active time to when the tile gets shown (NOT when click takes place).
+     */
+    static void recordTabRecencyClick(long recencyMs) {
+        RecordHistogram.recordCustomTimesHistogram(
+                HISTOGRAM_TAB_RECENCY_CLICK, recencyMs, 1, DateUtils.DAY_IN_MILLIS * 2, 50);
     }
 }

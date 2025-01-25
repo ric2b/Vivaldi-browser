@@ -54,8 +54,6 @@ title: For Developers
 *   [Generated files](/developers/generated-files)
 *   [Chromoting (Chrome Remote Desktop)
             compilation](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/chromoting_build_instructions.md)
-*   [Updating module
-            dependencies](/developers/how-tos/chromium-modularization)
 *   [Editing
             dictionaries](/developers/how-tos/editing-the-spell-checking-dictionaries)
 *   Editors Guides
@@ -144,7 +142,7 @@ See also: All [How-tos](/developers/how-tos).
             documentation](https://chromium.googlesource.com/infra/infra/+/HEAD/doc/index.md)
 *   [Contacting a
             Trooper](https://chromium.googlesource.com/infra/infra/+/HEAD/doc/users/contacting_troopers.md)
-            
+
 
 ### Performance
 
@@ -196,7 +194,7 @@ See also: All [How-tos](/developers/how-tos).
 *   [Core Product Principles](/developers/core-principles)
     *   [No Hidden
                 Preferences](/developers/core-principles/no-hidden-preferences)
-*   [Contributing code](/developers/contributing-code)
+*   [Contributing code](https://chromium.googlesource.com/chromium/src/+/main/docs/contributing.md)
     *   [Coding style](/developers/coding-style)
         *   [C++ Dos and
                     Don'ts](/developers/coding-style/cpp-dos-and-donts)

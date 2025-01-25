@@ -67,7 +67,7 @@ void RuleServiceImpl::Shutdown() {
 void RuleServiceImpl::AddRequestFilter(RuleGroup group) {
   auto request_filter = std::make_unique<AdBlockRequestFilter>(
       index_managers_[static_cast<size_t>(group)]->AsWeakPtr(),
-      blocked_urls_reporter_->AsWeakPtr(), resources_->AsWeakPtr());
+      tab_handler_->AsWeakPtr(), resources_->AsWeakPtr());
   request_filters_[static_cast<size_t>(group)] = request_filter.get();
   vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context_)
       ->AddFilter(std::move(request_filter));
@@ -111,7 +111,7 @@ void RuleServiceImpl::OnStateLoaded(
   // All cases of base::Unretained here are safe. We are generally passing
   // callbacks to objects that we own, calling to either this or other objects
   // that we own.
-  blocked_urls_reporter_.emplace(
+  tab_handler_.emplace(
       load_result.blocked_reporting_start,
       std::move(load_result.blocked_domains_counters),
       std::move(load_result.blocked_for_origin_counters),
@@ -128,8 +128,8 @@ void RuleServiceImpl::OnStateLoaded(
       base::BindRepeating(&RuleServiceStorage::ScheduleSave,
                           base::Unretained(&state_store_.value())),
       rules_compiler_,
-      base::BindRepeating(&BlockedUrlsReporter::OnTrackerInfosUpdated,
-                          base::Unretained(&blocked_urls_reporter_.value())));
+      base::BindRepeating(&TabHandler::OnTrackerInfosUpdated,
+                          base::Unretained(&tab_handler_.value())));
   rule_manager_->AddObserver(this);
 
   for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
@@ -175,18 +175,19 @@ bool RuleServiceImpl::IsDocumentBlocked(RuleGroup group,
   if (!url.SchemeIs(url::kFtpScheme) && !url.SchemeIsHTTPOrHTTPS())
     return false;
 
-  url::Origin origin = url::Origin::Create(url);
-  if (rule_manager_->IsExemptOfFiltering(group, origin))
-    return false;
-
   auto* index = index_managers_[static_cast<size_t>(group)]->rules_index();
   if (!index)
     return false;
 
-  RulesIndex::ActivationsFound activations =
-      index->FindMatchingActivationsRules(url, origin, false, frame);
+  // Unretained is safe, since we own the rule_manager_ and this callback should
+  // only be called synchronously.
+  RulesIndex::ActivationResults activations = index->GetActivationsForFrame(
+      base::BindRepeating(&RuleManager::IsExemptOfFiltering,
+                          base::Unretained(&*rule_manager_), group),
+      frame, url);
 
-  return (activations.in_block_rules & flat::ActivationType_DOCUMENT) != 0;
+  return activations[flat::ActivationType_DOCUMENT].GetDecision().value_or(
+             flat::Decision_PASS) != flat::Decision_PASS;
 }
 
 RuleManager* RuleServiceImpl::GetRuleManager() {
@@ -199,9 +200,9 @@ KnownRuleSourcesHandler* RuleServiceImpl::GetKnownSourcesHandler() {
   return &known_sources_handler_.value();
 }
 
-BlockedUrlsReporter* RuleServiceImpl::GetBlockerUrlsReporter() {
-  DCHECK(blocked_urls_reporter_);
-  return &blocked_urls_reporter_.value();
+TabHandler* RuleServiceImpl::GetTabHandler() {
+  DCHECK(tab_handler_);
+  return &tab_handler_.value();
 }
 
 void RuleServiceImpl::OnExceptionListChanged(RuleGroup group,

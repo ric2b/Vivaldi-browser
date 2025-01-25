@@ -10,7 +10,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
 #include "media/gpu/macros.h"
-#include "media/video/h265_parser.h"
+#include "media/parsers/h265_parser.h"
 
 namespace media {
 namespace v4l2_test {
@@ -615,8 +615,9 @@ bool H265Decoder::ProcessCurrentSlice() {
   // supported in ChromeOS require the start code prefix.
   std::vector<uint8_t> slice_data = {0x00, 0x00, 0x01};
 
-  slice_data.insert(slice_data.end(), curr_slice_hdr_->nalu_data,
-                    curr_slice_hdr_->nalu_data + curr_slice_hdr_->nalu_size);
+  slice_data.insert(
+      slice_data.end(), curr_slice_hdr_->nalu_data.get(),
+      (curr_slice_hdr_->nalu_data + curr_slice_hdr_->nalu_size).get());
 
   scoped_refptr<MmappedBuffer> OUTPUT_buffer = OUTPUT_queue_->GetBuffer(0);
   OUTPUT_buffer->mmapped_planes()[0].CopyInSlice(
@@ -1415,7 +1416,8 @@ VideoDecoder::Result H265Decoder::DecodeNextFrame(const int frame_number,
   }
 
   if (frames_ready_to_be_outputted_.empty()) {
-    NOTREACHED() << "Stream ended with |frames_ready_to_be_outputted_| empty";
+    NOTREACHED_IN_MIGRATION()
+        << "Stream ended with |frames_ready_to_be_outputted_| empty";
   }
 
   scoped_refptr<H265Picture> picture = frames_ready_to_be_outputted_.front();

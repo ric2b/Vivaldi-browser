@@ -13,13 +13,13 @@
 #include "src/heap/concurrent-marking.h"
 #include "src/heap/heap-verifier.h"
 #include "src/heap/incremental-marking.h"
-#include "src/heap/large-page.h"
+#include "src/heap/large-page-metadata.h"
 #include "src/heap/list.h"
 #include "src/heap/marking-state-inl.h"
 #include "src/heap/marking.h"
 #include "src/heap/memory-allocator.h"
 #include "src/heap/memory-chunk-layout.h"
-#include "src/heap/mutable-page-inl.h"
+#include "src/heap/mutable-page-metadata-inl.h"
 #include "src/heap/remembered-set.h"
 #include "src/heap/slot-set.h"
 #include "src/heap/spaces-inl.h"
@@ -187,7 +187,7 @@ void OldLargeObjectSpace::PromoteNewLargeObject(LargePageMetadata* page) {
   static_cast<LargeObjectSpace*>(page->owner())->RemovePage(page);
   chunk->ClearFlagNonExecutable(MemoryChunk::FROM_PAGE);
   chunk->SetOldGenerationPageFlags(
-      heap()->incremental_marking()->marking_mode(), false);
+      heap()->incremental_marking()->marking_mode(), LO_SPACE);
   AddPage(page, static_cast<size_t>(page->GetObject()->Size(cage_base)));
 }
 

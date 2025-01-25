@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/browsing_data/content/browsing_data_model.h"
+
 #include <memory>
 #include <string>
 #include <string_view>
@@ -30,7 +32,6 @@
 #include "chrome/test/base/chrome_test_utils.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/browsing_data/content/browsing_data_model.h"
 #include "components/browsing_data/content/browsing_data_model_test_util.h"
 #include "components/browsing_data/content/browsing_data_test_util.h"
 #include "components/browsing_data/content/shared_worker_info.h"
@@ -57,7 +58,7 @@
 #include "net/base/features.h"
 #include "net/base/schemeful_site.h"
 #include "net/dns/mock_host_resolver.h"
-#include "net/extras/shared_dictionary/shared_dictionary_isolation_key.h"
+#include "net/shared_dictionary/shared_dictionary_isolation_key.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "services/network/public/cpp/cors/cors.h"
@@ -406,10 +407,6 @@ void AddLocalStorageUsage(content::RenderFrameHost* render_frame_host,
   auto command =
       content::JsReplace("localStorage.setItem('key', '!'.repeat($1))", size);
   EXPECT_TRUE(ExecJs(render_frame_host, command));
-  base::RunLoop run_loop;
-  render_frame_host->GetStoragePartition()->GetLocalStorageControl()->Flush(
-      run_loop.QuitClosure());
-  run_loop.Run();
 }
 
 void WaitForModelUpdate(BrowsingDataModel* model, size_t expected_size) {
@@ -475,14 +472,14 @@ class BrowsingDataModelBrowserTest
         {network::features::kCompressionDictionaryTransport, {}},
         // Need to enable CompressionDictionaryTransportOverHttp1 because
         // EmbeddedTestServer uses HTTP/1.1 by default.
-        {network::features::kCompressionDictionaryTransportOverHttp1, {}},
+        {net::features::kCompressionDictionaryTransportOverHttp1, {}},
     };
 
     std::vector<FeatureRef> disabled_features = {
         // Need to disable kCompressionDictionaryTransportRequireKnownRootCert
         // because EmbeddedTestServer's certificate is not rooted at a standard
         // CA root.
-        network::features::kCompressionDictionaryTransportRequireKnownRootCert};
+        net::features::kCompressionDictionaryTransportRequireKnownRootCert};
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
     enabled_features.push_back({media::kExternalClearKeyForTesting, {}});

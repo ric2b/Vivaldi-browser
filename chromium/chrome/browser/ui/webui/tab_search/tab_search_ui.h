@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/webui/tab_search/tab_search.mojom.h"
 #include "chrome/browser/ui/webui/tab_search/tab_search_page_handler.h"
 #include "chrome/browser/ui/webui/top_chrome/top_chrome_web_ui_controller.h"
+#include "chrome/browser/ui/webui/top_chrome/top_chrome_webui_config.h"
 #include "chrome/browser/ui/webui/webui_load_timer.h"
 #include "chrome/common/webui_url_constants.h"
 #include "content/public/browser/webui_config.h"
@@ -28,11 +29,12 @@ class ColorChangeHandler;
 
 class TabSearchUI;
 
-class TabSearchUIConfig : public content::DefaultWebUIConfig<TabSearchUI> {
+class TabSearchUIConfig : public DefaultTopChromeWebUIConfig<TabSearchUI> {
  public:
-  TabSearchUIConfig()
-      : DefaultWebUIConfig(content::kChromeUIScheme,
-                           chrome::kChromeUITabSearchHost) {}
+  TabSearchUIConfig();
+
+  // DefaultTopChromeWebUIConfig:
+  bool ShouldAutoResizeHost() override;
 };
 
 class TabSearchUI : public TopChromeWebUIController,
@@ -60,6 +62,11 @@ class TabSearchUI : public TopChromeWebUIController,
 
   static constexpr std::string GetWebUIName() { return "TabSearch"; }
 
+  void set_page_handler_creation_callback_for_testing(
+      base::OnceClosure callback) {
+    page_handler_creation_callback_ = std::move(callback);
+  }
+
  private:
   // tab_search::mojom::PageHandlerFactory
   void CreatePageHandler(
@@ -77,6 +84,8 @@ class TabSearchUI : public TopChromeWebUIController,
       this};
 
   WebuiLoadTimer webui_load_timer_;
+
+  base::OnceClosure page_handler_creation_callback_;
 
   // A timer used to track the duration between when the WebUI is constructed
   // and when the TabSearchPageHandler is constructed.

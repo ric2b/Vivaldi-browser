@@ -187,12 +187,9 @@ class DumpAccessibilityTestBase
 
   base::test::ScopedFeatureList scoped_feature_list_;
 
-  bool HasHtmlAttribute(BrowserAccessibility& node,
-                        const char* attr,
-                        const std::string& value) const;
-
-  BrowserAccessibility* FindNodeByHTMLAttribute(const char* attr,
-                                                const std::string& value) const;
+  BrowserAccessibility* FindNodeByStringAttribute(
+      const ax::mojom::StringAttribute attr,
+      const std::string& value) const;
 
  protected:
   ui::AXInspectTestHelper test_helper_;
@@ -233,9 +230,9 @@ class DumpAccessibilityTestBase
   BrowserAccessibility* FindNodeInSubtree(BrowserAccessibility& node,
                                           const std::string& name) const;
 
-  BrowserAccessibility* FindNodeByHTMLAttributeInSubtree(
+  BrowserAccessibility* FindNodeByStringAttributeInSubtree(
       BrowserAccessibility& node,
-      const char* attr,
+      const ax::mojom::StringAttribute attr,
       const std::string& value) const;
 
   // The entries in skip_urls will be omitted from the result. This is used,
@@ -245,7 +242,7 @@ class DumpAccessibilityTestBase
       const std::vector<std::string>& skip_urls);
 
   // Wait until all initial content is completely loaded, included within
-  // subframes, objects and portals with given AXMode.
+  // subframes and objects with given AXMode.
   void WaitForAllFramesLoaded(ui::AXMode mode);
 
   void OnEventRecorded(const std::string& event) const {

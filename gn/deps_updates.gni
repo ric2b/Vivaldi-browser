@@ -21,10 +21,12 @@ if (!is_ios) {
   import("//vivaldi/installer/deps_updates.gni")
   import("//vivaldi/menus/deps_updates.gni")
   import("//vivaldi/prefs/deps_updates.gni")
-  import("//vivaldi/proxy/deps_updates.gni")
   import("//vivaldi/renderer/deps_updates.gni")
   import("//vivaldi/sessions/deps_updates.gni")
   import("//vivaldi/sync/deps_updates.gni")
+  if (is_linux) {
+    import("//vivaldi/sandbox/linux/deps_updates.gni")
+  }
   import("//vivaldi/thirdparty/deps_updates.gni")
   import("//vivaldi/translate_history/deps_updates.gni")
   import("//vivaldi/ui/deps_updates.gni")
@@ -36,7 +38,6 @@ if (!is_ios) {
   }
 
   import("//vivaldi/testing/testing.gni")
-  import("//vivaldi/proxy/proxy_feature.gni")
 
   if (!is_android) {
     update_target("//chrome/browser:test_support_ui") {
@@ -107,9 +108,6 @@ if (!is_ios) {
         "//vivaldi/sync:browser",
         "//vivaldi/translate_history",
       ]
-      if (enable_relay_proxy) {
-        deps += [ "//vivaldi/proxy"]
-      }
     }
   }
 
@@ -223,4 +221,5 @@ if (!is_ios) {
 } else { # !is_ios
   import("//vivaldi/ios/deps_update_ios.gni")
   import("//vivaldi/ios/chrome/browser/features/deps_updates.gni")
+  import("//vivaldi/thirdparty/deps_updates.gni")
 } # is_ios

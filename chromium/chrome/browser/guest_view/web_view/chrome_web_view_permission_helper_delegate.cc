@@ -10,6 +10,7 @@
 #include "base/functional/bind.h"
 #include "base/metrics/user_metrics.h"
 #include "chrome/common/buildflags.h"
+#include "components/guest_view/browser/guest_view_base.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/permission_controller.h"
 #include "content/public/browser/render_frame_host.h"
@@ -19,6 +20,9 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
+#include "url/origin.h"
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
@@ -33,6 +37,30 @@ namespace {
 void CallbackWrapper(base::OnceCallback<void(bool)> callback,
                      blink::mojom::PermissionStatus status) {
   std::move(callback).Run(status == blink::mojom::PermissionStatus::GRANTED);
+}
+
+// Checks the embedder's permissions policy for whether the feature is enabled
+// for both the requesting origin and the embedder's origin.
+bool IsFeatureEnabledByEmbedderPermissionsPolicy(
+    WebViewGuest* web_view_guest,
+    blink::mojom::PermissionsPolicyFeature feature,
+    const url::Origin& requesting_origin) {
+  content::RenderFrameHost* embedder_rfh = web_view_guest->embedder_rfh();
+  CHECK(embedder_rfh);
+
+  const blink::PermissionsPolicy* permissions_policy =
+      embedder_rfh->GetPermissionsPolicy();
+  CHECK(permissions_policy);
+  if (!permissions_policy->IsFeatureEnabledForOrigin(feature,
+                                                     requesting_origin)) {
+    return false;
+  }
+
+  if (!permissions_policy->IsFeatureEnabledForOrigin(
+          feature, embedder_rfh->GetLastCommittedOrigin())) {
+    return false;
+  }
+  return true;
 }
 
 }  // anonymous namespace
@@ -177,6 +205,19 @@ void ChromeWebViewPermissionHelperDelegate::RequestGeolocationPermission(
     const GURL& requesting_frame,
     bool user_gesture,
     base::OnceCallback<void(bool)> callback) {
+  // Controlled Frame embedders have permissions policy. Permission can
+  // only be granted if the embedder's permissions policy allows for both the
+  // requesting origin and the embedder origin.
+  if (web_view_guest()->attached() &&
+      web_view_guest()->IsOwnedByControlledFrameEmbedder() &&
+      !IsFeatureEnabledByEmbedderPermissionsPolicy(
+          web_view_guest(),
+          blink::mojom::PermissionsPolicyFeature::kGeolocation,
+          url::Origin::Create(requesting_frame))) {
+    std::move(callback).Run(false);
+    return;
+  }
+
   base::Value::Dict request_info;
   request_info.Set(guest_view::kUrl, requesting_frame.spec());
   request_info.Set(guest_view::kUserGesture, user_gesture);
@@ -199,13 +240,13 @@ void ChromeWebViewPermissionHelperDelegate::OnGeolocationPermissionResponse(
     base::OnceCallback<void(blink::mojom::PermissionStatus)> callback,
     bool allow,
     const std::string& user_input) {
-  // The <webview> embedder has allowed the permission. We now need to make sure
-  // that the embedder has geolocation permission.
   if (!allow || !web_view_guest()->attached()) {
     std::move(callback).Run(blink::mojom::PermissionStatus::DENIED);
     return;
   }
 
+  // The <webview> embedder has responded to the permission request. We now need
+  // to make sure that the embedder has geolocation permission.
   web_view_guest()
       ->browser_context()
       ->GetPermissionController()
@@ -219,6 +260,18 @@ void ChromeWebViewPermissionHelperDelegate::OnGeolocationPermissionResponse(
 void ChromeWebViewPermissionHelperDelegate::RequestHidPermission(
     const GURL& requesting_frame_url,
     base::OnceCallback<void(bool)> callback) {
+  // Controlled Frame embedders have permissions policy. Permission can
+  // only be granted if the embedder's permissions policy allows for both the
+  // requesting origin and the embedder origin.
+  if (web_view_guest()->attached() &&
+      web_view_guest()->IsOwnedByControlledFrameEmbedder() &&
+      !IsFeatureEnabledByEmbedderPermissionsPolicy(
+          web_view_guest(), blink::mojom::PermissionsPolicyFeature::kHid,
+          url::Origin::Create(requesting_frame_url))) {
+    std::move(callback).Run(false);
+    return;
+  }
+
   auto request_info =
       base::Value::Dict().Set(guest_view::kUrl, requesting_frame_url.spec());
 
@@ -235,6 +288,7 @@ void ChromeWebViewPermissionHelperDelegate::OnHidPermissionResponse(
     base::OnceCallback<void(bool)> callback,
     bool allow,
     const std::string& user_input) {
+
   std::move(callback).Run(allow && web_view_guest()->attached());
 }
 

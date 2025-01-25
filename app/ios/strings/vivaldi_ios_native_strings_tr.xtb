@@ -8,6 +8,7 @@
 <translation id="1123707809902612118">İzleyicileri ve Reklamları Engelle</translation>
 <translation id="1151972924205500581">Parola gerekli</translation>
 <translation id="1166425484559430538">Senkronizasyon verileriniz şifrelenir. Verilerin şifresini çözmek için şifreleme parolanızı girin.</translation>
+<translation id="1173894706177603556">Yeniden adlandır</translation>
 <translation id="1181037720776840403">Kaldır</translation>
 <translation id="1182668946911971500">Not Çubuğu</translation>
 <translation id="1198271701881992799">Başlayalım</translation>
@@ -148,6 +149,7 @@ engellendi</translation>
 <translation id="3842727926262967527">Sekme Çubuğunun ve Adres Alanının nerede olmasını tercih ettiğinizi seçin.</translation>
 <translation id="3845564230651302310">Yeni Engelleyici Ayarları Uygulanıyor...</translation>
 <translation id="3858860766373142691">Ad</translation>
+<translation id="3861379244432690245">Doğrudan Eşleşmeyi Etkinleştir</translation>
 <translation id="3866249974567520381">Tanım</translation>
 <translation id="3872195896030547485">Lütfen geçerli bir e-posta adresi giriniz.</translation>
 <translation id="3897092660631435901">Menü</translation>
@@ -173,6 +175,7 @@ engellendi</translation>
 <translation id="4209092469652827314">Büyük</translation>
 <translation id="4219175188138757774">Çekçe ve Slovakça (<ph name="ORIGIN" />)</translation>
 <translation id="4222285809803895512">Oluşturma Tarihi</translation>
+<translation id="4274598629843497594">Bu grubun başlangıç sayfasında görünmesini sağlamak için Hızlı Aramaları Görüntüle'yi etkinleştirin. Gruba yer imleri panelleri aracılığıyla erişmeye devam edebileceksiniz.</translation>
 <translation id="4276839458685471670">Oluşturmaya Göre</translation>
 <translation id="4277085371281330061">İzleyiciler
 engellendi</translation>
@@ -202,6 +205,7 @@ engellendi</translation>
 <translation id="4619615317237390068">Diğer cihazlardan sekmeler</translation>
 <translation id="462860218383788109">Değiştirme Tarihi</translation>
 <translation id="4640946580087069269">Nota kopyala</translation>
+<translation id="4643117005422448078">En iyi Siteler</translation>
 <translation id="4654578955713250802">Reklamları ve İzleyicileri Engelle</translation>
 <translation id="4655510151391078468">Bu kod size gönderdiğimiz kodla eşleşmiyor.
          <ph name="ATTEMPTS" /> deneme hakkınız kaldı.</translation>
@@ -211,6 +215,7 @@ engellendi</translation>
 <translation id="4727698999970341158">İzlandaca (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">Güncelle</translation>
 <translation id="4739712911308055817">Alınamadı</translation>
+<translation id="4750394297954878236">Öneriler</translation>
 <translation id="4759399863961855552">Sıralama Düzeni</translation>
 <translation id="4780953868408193639">İzleyici
 engellendi</translation>
@@ -226,6 +231,7 @@ engellendi</translation>
 <translation id="4943266325467647391">Vivaldi'nin yerleşik İzleyicisi ve Reklam Engelleyicisi sizi kötü amaçlı yazılımlardan ve reklamlardan korur.</translation>
 <translation id="495421405224926623">Kullanım Koşullarını ve Gizlilik Politikasını okudum ve kabul ediyorum</translation>
 <translation id="497942794017668482">İzleyiciler ve Reklamlar Engelleniyor</translation>
+<translation id="4993477362660748586">Senkronizasyon</translation>
 <translation id="5037761343305489956">Nota kopyalandı</translation>
 <translation id="504986598654589766">Özel Sekmede gezinme, aramaların, ziyaret edilen sitelerin, çerezlerin ve geçici dosyaların Vivaldi tarafından saklanmayacağı anlamına gelir. Bağlantınızı şifrelemez veya başka şekilde değiştirmez.</translation>
 <translation id="505774819758747674">Seçili vurgu rengine sahip araç çubuğu için önizleme</translation>
@@ -236,10 +242,12 @@ engellendi</translation>
 <translation id="5153806174841856652">Giriş Başarısız Oldu</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Kodu Tekrar Gönder<ph name="END_LINK" /></translation>
 <translation id="5191012692655103305">Sekmeler ve geçmiş getiriliyor...</translation>
+<translation id="5221269430020540672">Resmi Arka Plan Sekmesinde Aç</translation>
 <translation id="5238642303473095117">Verileri Sil</translation>
 <translation id="5245732982828228444">Notlarınızı burada bulacaksınız</translation>
 <translation id="5249199221558969362">Lütfen gerçekçi bir kullanım ömrü numarası girin.</translation>
 <translation id="5271549068863921519">Parolayı kaydet</translation>
+<translation id="5273620430932404871">Yer İmleri Takma Ad Eşleşmesini Etkinleştir</translation>
 <translation id="5290452628447338707">Not yok</translation>
 <translation id="5317780077021120954">Kaydet</translation>
 <translation id="5349678548463426691">Açıklamaya Göre</translation>
@@ -248,7 +256,6 @@ engellendi</translation>
 <translation id="5378841821586202982">Çöp klasörü</translation>
 <translation id="5398772614898833570">Reklamlar engellendi</translation>
 <translation id="5421638721143596928">Kimlik bilgilerinizin şifresi çözülemedi. Lütfen tekrar giriş yapın.</translation>
-<translation id="5422086212043657100">Hızlı Arama Klasörü Olarak Kullan</translation>
 <translation id="5439835075346716808">Kayıt, bu IP'den geçici olarak engellendi. Lütfen daha sonra tekrar deneyiniz.</translation>
 <translation id="5486261815000869482">Parolayı onayla</translation>
 <translation id="5494016731375030300">Son Kapatılan Sekmeler</translation>
@@ -260,6 +267,7 @@ engellendi</translation>
 <translation id="5710478562694930157">Artan</translation>
 <translation id="574392208103952083">Orta</translation>
 <translation id="5787420647064736989">Cihaz adı</translation>
+<translation id="5801825598531634872">Günler Sonra Etkin Değil</translation>
 <translation id="5822336771053074270">Not ekle</translation>
 <translation id="5823830882692559950">Vivaldi.net kimlik bilgilerinizi reddetti: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">Yeni Klasör</translation>
@@ -277,6 +285,7 @@ engellendi</translation>
 <translation id="6147094071357011481">Son Kapatılan Sekmeler Kullanılamıyor</translation>
 <translation id="6193995664633100765">Hintçe (<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">Web sitesi görünüm seçenekleri</translation>
+<translation id="6257488392933423163">HTML olarak görüntüle</translation>
 <translation id="6365929278691047681">Almanca (<ph name="ORIGIN" />)</translation>
 <translation id="6406506848690869874">Senkronize Et</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> seçildi</translation>
@@ -285,6 +294,7 @@ engellendi</translation>
 <translation id="6517411226162529295">Yedek şifreleme anahtarı</translation>
 <translation id="6527303717912515753">Paylaş</translation>
 <translation id="6535988230515403205">Lehçe (<ph name="ORIGIN" />)</translation>
+<translation id="6566198107563125484">Yer İmleri Eşleşmesini Etkinleştir</translation>
 <translation id="659351303388691480">Tarayıcı Verilerini Temizle...</translation>
 <translation id="6602272356389933803">Görünüm ve Tema</translation>
 <translation id="6614744450826097546">Reklam detayları</translation>
@@ -303,7 +313,6 @@ engellendi</translation>
 <translation id="681368974849482173">Öğe oluşturuldu</translation>
 <translation id="6830986331692390764">Senkronizasyon verileri temizleniyor. Lütfen bekleyin.</translation>
 <translation id="6875510405870945573">Tercih ettiğiniz engelleme seviyesini seçin.</translation>
-<translation id="6885837502028760851">Yalnızca Hızlı Arama klasörlerini göster</translation>
 <translation id="6887143077297974801">Senkronizasyon Başlatılamadı.</translation>
 <translation id="691132463664340655">Tarayıcı Teması</translation>
 <translation id="6937750621455385628">Giriş yapmak için bir Vivaldi hesabı kullanmalısınız.</translation>
@@ -316,6 +325,7 @@ engellendi</translation>
 <translation id="7006864796794806241">Parolayı Kurtar</translation>
 <translation id="7029809446516969842">Parolalar</translation>
 <translation id="7041964446309059643">Manuel</translation>
+<translation id="7083011465470143310"><ph name="BEGIN_LINK" />Şifrenizi<ph name="END_LINK" /> unuttunuz mu?</translation>
 <translation id="7110758301321962823">Kullanıcı Adını Kurtar</translation>
 <translation id="7158507293261405349">Yeni Grup Ekle</translation>
 <translation id="7192066917392691622">Azalan</translation>
@@ -354,6 +364,7 @@ engellendi</translation>
 <translation id="7732622593814325274">İzleyici Engelleme Kaynaklarını Yönetin</translation>
 <translation id="7765158879357617694">Taşı</translation>
 <translation id="7771452384635174008">Sayfa Düzeni</translation>
+<translation id="7791161131809889864">Tümünü Arka Planda Aç</translation>
 <translation id="7801204999757211519">Zaten hesabınız var mı? <ph name="BEGIN_LINK" />Giriş yap ➔<ph name="END_LINK" /></translation>
 <translation id="7850070199083838600">Yeni bir Grup oluşturulsun mu?</translation>
 <translation id="7914995060146784406">Notu Düzenle</translation>
@@ -365,6 +376,7 @@ engellendi</translation>
 <translation id="8058018971942772071">Grup Olarak Kullan</translation>
 <translation id="8066170816074394954">Sunucu hatası.</translation>
 <translation id="8076492880354921740">Sekmeler</translation>
+<translation id="8077675488769462025">Etkin Olmayan Sekmeler</translation>
 <translation id="8112996065264879835">Bu kod size gönderdiğimiz kodla eşleşmiyor.
          Maksimum yanlış deneme sınırına ulaştınız. Lütfen aşağıdaki Yeniden Gönder seçeneğini kullanarak yeni bir kod isteyin.</translation>
 <translation id="8134672010161840864">Görüntüyü sıkıştırarak kırp ve konumlandır</translation>
@@ -386,6 +398,7 @@ engellendi</translation>
 <translation id="8359194106448244241">Diğer cihazlardaki sekmeleri görmek için Senkronizasyonu etkinleştirmeniz gerekir.</translation>
 <translation id="8366175803122817174">Tüm Not Adreslerini Aç</translation>
 <translation id="8384409685584033392">Sayfa Bilgisi</translation>
+<translation id="8395378633507873708">Adres Çubuğu</translation>
 <translation id="839736845446313156">Kayıt ol</translation>
 <translation id="8414685983518053656">Notlar</translation>
 <translation id="8423076545503792640">Bir hata nedeniyle istek başarısız oldu. Lütfen daha sonra tekrar deneyiniz.</translation>
@@ -402,6 +415,7 @@ engellendi</translation>
 <translation id="8675578805254882416">Alınıyor</translation>
 <translation id="8677007239430848917">Aşağıdaki artı simgesine dokunarak ilk notunuzu ekleyin</translation>
 <translation id="8684294196284714094">Vivaldi'yi varsayılan tarayıcınız olarak ayarlamaya hazır mısınız?</translation>
+<translation id="8733945742171960420">Göz atmaya başlar başlamaz En İyi Siteleriniz burada gösterilecektir.</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> öğe silindi</translation>
 <translation id="8763006697839582351">Vivaldi Özel'de aç</translation>
 <translation id="8765173886020357878">Arama Önerileri</translation>
@@ -412,6 +426,7 @@ engellendi</translation>
 <translation id="8855707633300847215">Sekme Çubuğunu Göster</translation>
 <translation id="8892354889971902600">Yakın zamanda kapattığınız sekmeler burada görünür.</translation>
 <translation id="89390081013973080">Her şey hazır! Cihazlar arasında hangi verilerin senkronize edileceğine karar verme zamanı.</translation>
+<translation id="8964449607824577665">Mevcut şifreleme şifreniz olmadan verilerinizin şifresini çözemeyiz. Bu şifrenin sıfırlanması, Vivaldi sunucularındaki mevcut tüm Senkronizasyon verilerinin silinmesini gerektirir.</translation>
 <translation id="8965371804397726192">Tüm Verileri Senkronize Etmeye Başlayın</translation>
 <translation id="9028089729841356743">Ağ hatası.</translation>
 <translation id="9043882097999887291">Reklamlar

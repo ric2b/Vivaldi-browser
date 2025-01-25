@@ -521,7 +521,8 @@ SimpleTimeZone::getOffsetFromLocal(UDate date, UTimeZoneLocalOption nonExistingT
     int32_t year, month, dom, dow, millis;
     int32_t day = ClockMath::floorDivide(date, U_MILLIS_PER_DAY, &millis);
 
-    Grego::dayToFields(day, year, month, dom, dow);
+    Grego::dayToFields(day, year, month, dom, dow, status);
+    if (U_FAILURE(status)) return;
 
     savingsDST = getOffset(GregorianCalendar::AD, year, month, dom,
                           (uint8_t) dow, millis,
@@ -549,7 +550,8 @@ SimpleTimeZone::getOffsetFromLocal(UDate date, UTimeZoneLocalOption nonExistingT
     }
     if (recalc) {
         day = ClockMath::floorDivide(date, U_MILLIS_PER_DAY, &millis);
-        Grego::dayToFields(day, year, month, dom, dow);
+        Grego::dayToFields(day, year, month, dom, dow, status);
+        if (U_FAILURE(status)) return;
         savingsDST = getOffset(GregorianCalendar::AD, year, month, dom,
                           (uint8_t) dow, millis,
                           Grego::monthLength(year, month),

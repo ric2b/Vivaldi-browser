@@ -43,6 +43,10 @@ bool FakeTabSlotController::IsFocusInTabs() const {
   return false;
 }
 
+bool FakeTabSlotController::ShouldCompactLeadingEdge() const {
+  return true;
+}
+
 TabSlotController::Liveness FakeTabSlotController::ContinueDrag(
     views::View* view,
     const ui::LocatedEvent& event) {
@@ -136,4 +140,12 @@ SkColor FakeTabSlotController::GetPaintedGroupColor(
 
 const Browser* FakeTabSlotController::GetBrowser() const {
   return nullptr;
+}
+
+int FakeTabSlotController::GetInactiveTabWidth() const {
+  return inactive_tab_width_;
+}
+
+bool FakeTabSlotController::IsFrameCondensed() const {
+  return false;
 }

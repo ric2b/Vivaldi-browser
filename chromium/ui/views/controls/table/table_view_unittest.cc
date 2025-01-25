@@ -183,6 +183,9 @@ class TestTableModel2 : public ui::TableModel {
   TestTableModel2(const TestTableModel2&) = delete;
   TestTableModel2& operator=(const TestTableModel2&) = delete;
 
+  // Clears the model entirely, leaving it empty.
+  void Clear();
+
   // Adds a new row at index |row| with values |c1_value| and |c2_value|.
   void AddRow(size_t row, int c1_value, int c2_value);
 
@@ -227,6 +230,10 @@ TestTableModel2::TestTableModel2() {
   AddRow(1, 1, 1);
   AddRow(2, 2, 2);
   AddRow(3, 3, 0);
+}
+
+void TestTableModel2::Clear() {
+  RemoveRows(0, rows_.size());
 }
 
 void TestTableModel2::AddRow(size_t row, int c1_value, int c2_value) {
@@ -411,21 +418,21 @@ std::string GetHeaderRowAsString(TableView* table) {
 }
 
 bool PressLeftMouseAt(views::View* target, const gfx::Point& point) {
-  const ui::MouseEvent pressed(ui::ET_MOUSE_PRESSED, point, point,
+  const ui::MouseEvent pressed(ui::EventType::kMousePressed, point, point,
                                ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
                                ui::EF_LEFT_MOUSE_BUTTON);
   return target->OnMousePressed(pressed);
 }
 
 void ReleaseLeftMouseAt(views::View* target, const gfx::Point& point) {
-  const ui::MouseEvent release(ui::ET_MOUSE_RELEASED, point, point,
+  const ui::MouseEvent release(ui::EventType::kMouseReleased, point, point,
                                ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
                                ui::EF_LEFT_MOUSE_BUTTON);
   target->OnMouseReleased(release);
 }
 
 bool DragLeftMouseTo(views::View* target, const gfx::Point& point) {
-  const ui::MouseEvent dragged(ui::ET_MOUSE_DRAGGED, point, point,
+  const ui::MouseEvent dragged(ui::EventType::kMouseDragged, point, point,
                                ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
                                0);
   return target->OnMouseDragged(dragged);
@@ -474,7 +481,8 @@ class TableViewTest : public ViewsTestBase,
 
     widget_ = std::make_unique<Widget>();
     Widget::InitParams params =
-        CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
+        CreateParams(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+                     Widget::InitParams::TYPE_WINDOW_FRAMELESS);
     params.bounds = gfx::Rect(0, 0, 650, 650);
     params.delegate = ConfigureWidgetDelegate();
     widget_->Init(std::move(params));
@@ -589,7 +597,7 @@ class TableViewTest : public ViewsTestBase,
         if (row_index == 0)
           EXPECT_EQ(ax::mojom::Role::kColumnHeader, cell_data.role);
         else
-          EXPECT_EQ(ax::mojom::Role::kCell, cell_data.role);
+          EXPECT_EQ(ax::mojom::Role::kGridCell, cell_data.role);
 
         // Add 1 to get the cell's index into |expected_bounds| since the first
         // entry is the row's bounds.
@@ -650,6 +658,18 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Combine(/*use_default_construction=*/testing::Bool(),
                      /*use_rtl=*/testing::Bool()));
 
+// Using one of the arrow keys (which normally change selection) with an empty
+// table must leave the selection state empty.
+// Regression test for https://issues.chromium.org/issues/342341277
+TEST_P(TableViewTest, SelectedIndexWithNoRows) {
+  model_->Clear();
+  table_->RequestFocus();
+  EXPECT_TRUE(table_->selection_model().empty());
+  table_->OnKeyPressed(
+      ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_DOWN, 0));
+  EXPECT_TRUE(table_->selection_model().empty());
+}
+
 // Verifies GetPaintRegion.
 TEST_P(TableViewTest, GetPaintRegion) {
   // Two columns should be visible.
@@ -707,7 +727,7 @@ TEST_P(TableViewTest, RebuildVirtualAccessibilityChildren) {
     for (const auto& cell : row->children()) {
       ASSERT_TRUE(cell);
       const ui::AXNodeData& cell_data = cell->GetData();
-      EXPECT_EQ(ax::mojom::Role::kCell, cell_data.role);
+      EXPECT_EQ(ax::mojom::Role::kGridCell, cell_data.role);
       EXPECT_EQ(i, static_cast<size_t>(cell_data.GetIntAttribute(
                        ax::mojom::IntAttribute::kTableCellRowIndex)));
       EXPECT_EQ(j++, cell_data.GetIntAttribute(
@@ -766,7 +786,7 @@ TEST_P(TableViewTest, GetVirtualAccessibilityCell) {
       const AXVirtualView* cell = helper_->GetVirtualAccessibilityCell(i, j);
       ASSERT_TRUE(cell);
       const ui::AXNodeData& cell_data = cell->GetData();
-      EXPECT_EQ(ax::mojom::Role::kCell, cell_data.role);
+      EXPECT_EQ(ax::mojom::Role::kGridCell, cell_data.role);
       EXPECT_EQ(i, static_cast<size_t>(cell_data.GetIntAttribute(
                        ax::mojom::IntAttribute::kTableCellRowIndex)));
       EXPECT_EQ(j, static_cast<size_t>(cell_data.GetIntAttribute(
@@ -864,11 +884,11 @@ TEST_P(TableViewTest, ResizeViaGesture) {
   // Drag the mouse 1 pixel to the left.
   ui::GestureEvent scroll_begin(
       x, 0, 0, base::TimeTicks(),
-      ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_BEGIN));
+      ui::GestureEventDetails(ui::EventType::kGestureScrollBegin));
   helper_->header()->OnGestureEvent(&scroll_begin);
   ui::GestureEvent scroll_update(
       x - 1, 0, 0, base::TimeTicks(),
-      ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_UPDATE));
+      ui::GestureEventDetails(ui::EventType::kGestureScrollUpdate));
   helper_->header()->OnGestureEvent(&scroll_update);
 
   // This should shrink the first column and pull the second column in.
@@ -2293,7 +2313,9 @@ class TableViewDefaultConstructabilityTest : public ViewsTestBase {
   void SetUp() override {
     ViewsTestBase::SetUp();
     widget_ = std::make_unique<Widget>();
-    Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+    Widget::InitParams params =
+        CreateParams(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+                     Widget::InitParams::TYPE_WINDOW);
     params.bounds = gfx::Rect(0, 0, 650, 650);
     widget_->Init(std::move(params));
     widget_->Show();
@@ -2365,7 +2387,8 @@ class TableViewPaintIconBoundsTest : public ViewsTestBase {
 
     widget_ = std::make_unique<Widget>();
     Widget::InitParams params =
-        CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
+        CreateParams(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+                     Widget::InitParams::TYPE_WINDOW_FRAMELESS);
     params.bounds = gfx::Rect(0, 0, 650, 650);
     widget_->Init(std::move(params));
     test::RunScheduledLayout(

@@ -5,11 +5,11 @@
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 
 #include <ostream>
+#include <string_view>
 
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/ranges/algorithm.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/types/expected.h"
@@ -20,7 +20,7 @@ namespace web_package {
 
 // static
 base::expected<SignedWebBundleId, std::string> SignedWebBundleId::Create(
-    base::StringPiece encoded_id) {
+    std::string_view encoded_id) {
   if (encoded_id.size() != kEd25519EncodedIdLength &&
       encoded_id.size() != kEcdsaP256EncodedIdLength) {
     return base::unexpected(base::StringPrintf(
@@ -82,7 +82,7 @@ base::expected<SignedWebBundleId, std::string> SignedWebBundleId::Create(
 }
 
 // static
-SignedWebBundleId SignedWebBundleId::CreateForEd25519PublicKey(
+SignedWebBundleId SignedWebBundleId::CreateForPublicKey(
     const Ed25519PublicKey& public_key) {
   std::array<uint8_t, kEd25519DecodedIdLength> decoded_id;
   base::ranges::copy(public_key.bytes(), decoded_id.begin());
@@ -96,7 +96,7 @@ SignedWebBundleId SignedWebBundleId::CreateForEd25519PublicKey(
 }
 
 // static
-SignedWebBundleId SignedWebBundleId::CreateForEcdsaP256PublicKey(
+SignedWebBundleId SignedWebBundleId::CreateForPublicKey(
     const EcdsaP256PublicKey& public_key) {
   std::array<uint8_t, kEcdsaP256DecodedIdLength> decoded_id;
   base::ranges::copy(public_key.bytes(), decoded_id.begin());
@@ -129,7 +129,7 @@ SignedWebBundleId SignedWebBundleId::CreateRandomForProxyMode() {
   return CreateForProxyMode(random_bytes);
 }
 
-SignedWebBundleId::SignedWebBundleId(Type type, base::StringPiece encoded_id)
+SignedWebBundleId::SignedWebBundleId(Type type, std::string_view encoded_id)
     : type_(type), encoded_id_(encoded_id) {}
 
 SignedWebBundleId::SignedWebBundleId(const SignedWebBundleId& other) = default;

@@ -9,6 +9,10 @@
 
 #include <stdint.h>
 
+#include <array>
+
+#include "core/fxcrt/span.h"
+
 struct CRYPT_aes_context {
   static constexpr int kMaxNb = 8;
   static constexpr int kMaxNr = 14;
@@ -16,9 +20,9 @@ struct CRYPT_aes_context {
 
   int Nb;
   int Nr;
-  unsigned int keysched[kSchedSize];
-  unsigned int invkeysched[kSchedSize];
-  unsigned int iv[kMaxNb];
+  std::array<uint32_t, kSchedSize> keysched;
+  std::array<uint32_t, kSchedSize> invkeysched;
+  std::array<uint32_t, kMaxNb> iv;
 };
 
 void CRYPT_AESSetKey(CRYPT_aes_context* ctx,
@@ -30,8 +34,7 @@ void CRYPT_AESDecrypt(CRYPT_aes_context* ctx,
                       const uint8_t* src,
                       uint32_t size);
 void CRYPT_AESEncrypt(CRYPT_aes_context* ctx,
-                      uint8_t* dest,
-                      const uint8_t* src,
-                      uint32_t size);
+                      pdfium::span<uint8_t> dest,
+                      pdfium::span<const uint8_t> src);
 
 #endif  // CORE_FDRM_FX_CRYPT_AES_H_

@@ -30,6 +30,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "dawn/common/Log.h"
 #include "dawn/native/BindGroupLayout.h"
@@ -90,16 +91,16 @@
         }                                                       \
     } while (0)
 
-#define EXPECT_DEPRECATION_WARNINGS(statement, n)                                                  \
-    do {                                                                                           \
-        FlushWire();                                                                               \
-        size_t warningsBefore = dawn::native::GetDeprecationWarningCountForTesting(backendDevice); \
-        EXPECT_EQ(mLastWarningCount, warningsBefore);                                              \
-        statement;                                                                                 \
-        FlushWire();                                                                               \
-        size_t warningsAfter = dawn::native::GetDeprecationWarningCountForTesting(backendDevice);  \
-        EXPECT_EQ(warningsAfter, warningsBefore + n);                                              \
-        mLastWarningCount = warningsAfter;                                                         \
+#define EXPECT_DEPRECATION_WARNINGS(statement, n)                                        \
+    do {                                                                                 \
+        FlushWire();                                                                     \
+        uint64_t warningsBefore = mDawnInstance->GetDeprecationWarningCountForTesting(); \
+        EXPECT_EQ(mLastWarningCount, warningsBefore);                                    \
+        statement;                                                                       \
+        FlushWire();                                                                     \
+        uint64_t warningsAfter = mDawnInstance->GetDeprecationWarningCountForTesting();  \
+        EXPECT_EQ(warningsAfter, warningsBefore + n);                                    \
+        mLastWarningCount = warningsAfter;                                               \
     } while (0)
 #define EXPECT_DEPRECATION_WARNING(statement) EXPECT_DEPRECATION_WARNINGS(statement, 1)
 
@@ -128,6 +129,8 @@ class ValidationTest : public testing::Test {
     ValidationTest();
     ~ValidationTest() override;
 
+    // The default setup initializes the Instance with AllowUnsafeAPIs enabled and additional
+    // toggles and features via the getters enabled/disabled on the device.
     void SetUp() override;
     void TearDown() override;
 
@@ -141,7 +144,7 @@ class ValidationTest : public testing::Test {
     bool UsesWire() const;
 
     void FlushWire();
-    void WaitForAllOperations(const wgpu::Device& device);
+    void WaitForAllOperations();
 
     // Helper functions to create objects to test validation.
 
@@ -164,25 +167,23 @@ class ValidationTest : public testing::Test {
 
   protected:
     dawn::native::Adapter& GetBackendAdapter();
-    // Helper function to create testing adapter and device during SetUp. Override these functions
-    // to change the creation behavior.
-    virtual void CreateTestAdapter(wgpu::RequestAdapterOptions options);
-    virtual WGPUDevice CreateTestDevice(dawn::native::Adapter dawnAdapter,
-                                        wgpu::DeviceDescriptor descriptor);
 
-    // Reinitializes the ValidationTest internal members given the instance descriptors.
-    // Particularly useful when writing tests that may need to pass different toggles to the
-    // instance. Note that this also reinitializes the adapter and device on the new instances via
-    // potentially overriden CreateTest[Adapter|Device] functions above.
-    void ReinitializeInstances(const wgpu::InstanceDescriptor* nativeDesc,
-                               const wgpu::InstanceDescriptor* wireDesc = nullptr);
+    // Called during SetUp() to get the required features and toggles to be enabled for the tests.
+    // Override these appropriately for different tests.
+    virtual bool AllowUnsafeAPIs();
+    virtual std::vector<wgpu::FeatureName> GetRequiredFeatures();
+    virtual std::vector<const char*> GetEnabledToggles();
+    virtual std::vector<const char*> GetDisabledToggles();
 
+    // Sets up the internal members by initializing the instances, adapter, and device.
+    void SetUp(const wgpu::InstanceDescriptor* nativeDesc,
+               const wgpu::InstanceDescriptor* wireDesc = nullptr);
+
+    // Helps compute expected deprecated warning count for creating device with given descriptor.
+    uint32_t GetDeviceCreationDeprecationWarningExpectation(
+        const wgpu::DeviceDescriptor& descriptor);
+    // Request device and handle deprecation warning emitted during creating device.
     wgpu::Device RequestDeviceSync(const wgpu::DeviceDescriptor& deviceDesc);
-    static void OnDeviceError(WGPUErrorType type, const char* message, void* userdata);
-    static void OnDeviceLost(WGPUDevice const* device,
-                             WGPUDeviceLostReason reason,
-                             const char* message,
-                             void* userdata);
 
     virtual bool UseCompatibilityMode() const;
 
@@ -191,7 +192,7 @@ class ValidationTest : public testing::Test {
     WGPUDevice backendDevice;
     wgpu::Instance instance;
 
-    size_t mLastWarningCount = 0;
+    uint64_t mLastWarningCount = 0;
 
   private:
     std::unique_ptr<dawn::native::Instance> mDawnInstance;

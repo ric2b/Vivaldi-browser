@@ -80,9 +80,10 @@ class DepthStencilLoadOpTests : public DawnTestWithParams<DepthStencilLoadOpTest
 
         DAWN_TEST_UNSUPPORTED_IF(!mIsFormatSupported);
 
-        // Readback of Depth/Stencil textures not fully supported on GL right now.
-        // Also depends on glTextureView which is not supported on ES.
-        DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
+        // Skip formats other than Depth24PlusStencil8 if we're specifically testing with the packed
+        // depth24_unorm_stencil8 toggle.
+        DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("use_packed_depth24_unorm_stencil8_format") &&
+                                 GetParam().mFormat != wgpu::TextureFormat::Depth24PlusStencil8);
 
         wgpu::TextureDescriptor descriptor;
         descriptor.size = {kRTSize, kRTSize};
@@ -130,6 +131,8 @@ class DepthStencilLoadOpTests : public DawnTestWithParams<DepthStencilLoadOpTest
         switch (GetParam().mCheck) {
             case Check::SampleDepth: {
                 DAWN_TEST_UNSUPPORTED_IF(utils::IsStencilOnlyFormat(GetParam().mFormat));
+                // textureLoad with texture_depth_xxx is not supported in compat mode.
+                DAWN_TEST_UNSUPPORTED_IF(IsCompatibilityMode());
 
                 std::vector<float> expectedDepth(mipSize * mipSize, kDepthValues[mipLevel]);
                 ExpectSampledDepthData(
@@ -436,8 +439,9 @@ TEST_P(DepthTextureClearTwiceTest, ClearDepthAspectTwice) {
 }
 
 DAWN_INSTANTIATE_TEST_P(DepthTextureClearTwiceTest,
-                        {D3D11Backend(), D3D12Backend(), MetalBackend(), OpenGLBackend(),
-                         OpenGLESBackend(), VulkanBackend()},
+                        {D3D11Backend(), D3D11Backend({"use_packed_depth24_unorm_stencil8_format"}),
+                         D3D12Backend(), D3D12Backend({"use_packed_depth24_unorm_stencil8_format"}),
+                         MetalBackend(), OpenGLBackend(), OpenGLESBackend(), VulkanBackend()},
                         {wgpu::TextureFormat::Depth16Unorm, wgpu::TextureFormat::Depth24Plus,
                          wgpu::TextureFormat::Depth32Float,
                          wgpu::TextureFormat::Depth32FloatStencil8,

@@ -78,36 +78,8 @@
 
 namespace blink {
 
-namespace {
-
-class HitTestLatencyRecorder {
- public:
-  HitTestLatencyRecorder(bool allows_child_frame_content)
-      : start_(base::TimeTicks::Now()),
-        allows_child_frame_content_(allows_child_frame_content) {}
-
-  ~HitTestLatencyRecorder() {
-    base::TimeDelta duration = base::TimeTicks::Now() - start_;
-    if (allows_child_frame_content_) {
-      DEFINE_STATIC_LOCAL(CustomCountHistogram, recursive_latency_histogram,
-                          ("Event.Latency.HitTestRecursive", 0, 10000000, 100));
-      recursive_latency_histogram.CountMicroseconds(duration);
-    } else {
-      DEFINE_STATIC_LOCAL(CustomCountHistogram, latency_histogram,
-                          ("Event.Latency.HitTest", 0, 10000000, 100));
-      latency_histogram.CountMicroseconds(duration);
-    }
-  }
-
- private:
-  base::TimeTicks start_;
-  bool allows_child_frame_content_;
-};
-
-}  // namespace
-
 LayoutView::LayoutView(ContainerNode* document)
-    : LayoutNGBlockFlow(document),
+    : LayoutBlockFlow(document),
       frame_view_(To<Document>(document)->View()),
       layout_counter_count_(0),
       hit_test_count_(0),
@@ -139,7 +111,7 @@ void LayoutView::Trace(Visitor* visitor) const {
   visitor->Trace(text_to_variable_length_transform_result_);
   visitor->Trace(hit_test_cache_);
   visitor->Trace(initial_containing_block_resize_handled_list_);
-  LayoutNGBlockFlow::Trace(visitor);
+  LayoutBlockFlow::Trace(visitor);
 }
 
 bool LayoutView::HitTest(const HitTestLocation& location,
@@ -175,8 +147,6 @@ bool LayoutView::HitTest(const HitTestLocation& location,
   if (!FirstFragment().HasLocalBorderBoxProperties())
     return false;
 
-  HitTestLatencyRecorder hit_test_latency_recorder(
-      result.GetHitTestRequest().AllowsChildFrameContent());
   return HitTestNoLifecycleUpdate(location, result);
 }
 
@@ -276,8 +246,8 @@ void LayoutView::AddChild(LayoutObject* new_child, LayoutObject* before_child) {
 
     LayoutViewTransitionRoot* snapshot_containing_block =
         MakeGarbageCollected<LayoutViewTransitionRoot>(GetDocument());
-    LayoutNGBlockFlow::AddChild(snapshot_containing_block,
-                                /*before_child=*/nullptr);
+    LayoutBlockFlow::AddChild(snapshot_containing_block,
+                              /*before_child=*/nullptr);
     snapshot_containing_block->AddChild(new_child);
 
     ViewTransition* transition =
@@ -287,7 +257,7 @@ void LayoutView::AddChild(LayoutObject* new_child, LayoutObject* before_child) {
     return;
   }
 
-  LayoutNGBlockFlow::AddChild(new_child, before_child);
+  LayoutBlockFlow::AddChild(new_child, before_child);
 }
 
 bool LayoutView::IsChildAllowed(LayoutObject* child,
@@ -516,19 +486,20 @@ void LayoutView::CommitPendingSelection() {
   frame_view_->GetFrame().Selection().CommitAppearanceIfNeeded();
 }
 
-bool LayoutView::ShouldUsePrintingLayout(const Document& document) {
+bool LayoutView::ShouldUsePaginatedLayout(const Document& document) {
   if (!document.Printing())
     return false;
   const LocalFrameView* frame_view = document.View();
   if (!frame_view)
     return false;
-  return frame_view->GetFrame().ShouldUsePrintingLayout();
+  return frame_view->GetFrame().ShouldUsePaginatedLayout();
 }
 
 PhysicalRect LayoutView::ViewRect() const {
   NOT_DESTROYED();
-  if (ShouldUsePrintingLayout())
+  if (GetDocument().Printing()) {
     return PhysicalRect(PhysicalOffset(), Size());
+  }
 
   if (!frame_view_)
     return PhysicalRect();
@@ -739,10 +710,15 @@ PhysicalRect LayoutView::DocumentRect() const {
 gfx::Size LayoutView::GetLayoutSize(
     IncludeScrollbarsInRect scrollbar_inclusion) const {
   NOT_DESTROYED();
-  if (ShouldUsePrintingLayout()) {
-    return ToFlooredSize(initial_containing_block_size_for_pagination_);
+  if (GetDocument().Printing()) {
+    return ToFlooredSize(initial_containing_block_size_for_printing_);
   }
+  return GetNonPrintingLayoutSize(scrollbar_inclusion);
+}
 
+gfx::Size LayoutView::GetNonPrintingLayoutSize(
+    IncludeScrollbarsInRect scrollbar_inclusion) const {
+  NOT_DESTROYED();
   if (!frame_view_)
     return gfx::Size();
 
@@ -770,8 +746,8 @@ int LayoutView::ViewLogicalHeight(
 
 LayoutUnit LayoutView::ViewLogicalHeightForPercentages() const {
   NOT_DESTROYED();
-  if (ShouldUsePrintingLayout()) {
-    PhysicalSize size = initial_containing_block_size_for_pagination_;
+  if (GetDocument().Printing()) {
+    PhysicalSize size = initial_containing_block_size_for_printing_;
     return IsHorizontalWritingMode() ? size.height : size.width;
   }
   return LayoutUnit(ViewLogicalHeight());
@@ -786,7 +762,7 @@ const LayoutBox& LayoutView::RootBox() const {
 }
 
 void LayoutView::InvalidateSvgRootsWithRelativeLengthDescendents() {
-  if (GetDocument().SvgExtensions() && !ShouldUsePrintingLayout()) {
+  if (GetDocument().SvgExtensions() && !ShouldUsePaginatedLayout()) {
     GetDocument()
         .AccessSVGExtensions()
         .InvalidateSVGRootsWithRelativeLengthDescendents();
@@ -795,7 +771,7 @@ void LayoutView::InvalidateSvgRootsWithRelativeLengthDescendents() {
 
 void LayoutView::LayoutRoot() {
   NOT_DESTROYED();
-  if (ShouldUsePrintingLayout()) {
+  if (ShouldUsePaginatedLayout()) {
     intrinsic_logical_widths_ = LogicalWidth();
   }
 
@@ -853,7 +829,7 @@ void LayoutView::UpdateAfterLayout() {
       GetScrollableArea()->ClampScrollOffsetAfterOverflowChange();
     }
   }
-  LayoutNGBlockFlow::UpdateAfterLayout();
+  LayoutBlockFlow::UpdateAfterLayout();
 }
 
 void LayoutView::UpdateHitTestResult(HitTestResult& result,
@@ -918,12 +894,12 @@ void LayoutView::WillBeDestroyed() {
   // Should find and fix the root cause.
   if (PaintLayer* layer = Layer())
     layer->SetNeedsRepaint();
-  LayoutNGBlockFlow::WillBeDestroyed();
+  LayoutBlockFlow::WillBeDestroyed();
 }
 
 void LayoutView::UpdateFromStyle() {
   NOT_DESTROYED();
-  LayoutNGBlockFlow::UpdateFromStyle();
+  LayoutBlockFlow::UpdateFromStyle();
 
   // LayoutView of the main frame is responsible for painting base background.
   if (GetFrameView()->ShouldPaintBaseBackgroundColor())
@@ -933,7 +909,7 @@ void LayoutView::UpdateFromStyle() {
 void LayoutView::StyleDidChange(StyleDifference diff,
                                 const ComputedStyle* old_style) {
   NOT_DESTROYED();
-  LayoutNGBlockFlow::StyleDidChange(diff, old_style);
+  LayoutBlockFlow::StyleDidChange(diff, old_style);
 
   LocalFrame& frame = GetFrameView()->GetFrame();
   VisualViewport& visual_viewport = frame.GetPage()->GetVisualViewport();
@@ -1029,7 +1005,7 @@ Vector<gfx::Rect> LayoutView::GetTickmarks() const {
 }
 
 bool LayoutView::IsFragmentationContextRoot() const {
-  return ShouldUsePrintingLayout();
+  return ShouldUsePaginatedLayout();
 }
 
 }  // namespace blink

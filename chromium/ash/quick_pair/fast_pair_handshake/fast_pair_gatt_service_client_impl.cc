@@ -10,7 +10,6 @@
 #include "ash/quick_pair/fast_pair_handshake/fast_pair_data_encryptor.h"
 #include "base/memory/ptr_util.h"
 #include "base/ranges/algorithm.h"
-#include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "components/cross_device/logging/logging.h"
 #include "device/bluetooth/bluetooth_device.h"
@@ -19,7 +18,6 @@
 #include "device/bluetooth/bluetooth_remote_gatt_characteristic.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service.h"
 #include "device/bluetooth/public/cpp/bluetooth_address.h"
-
 #include "third_party/boringssl/src/include/openssl/rand.h"
 
 namespace {
@@ -90,7 +88,7 @@ constexpr const char* ErrorCodeToString(
     case device::BluetoothGattService::GattErrorCode::kNotSupported:
       return "GATT_ERROR_NOT_SUPPORTED";
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
   }
 }
@@ -115,7 +113,7 @@ constexpr ash::quick_pair::AccountKeyFailure GattErrorCodeToAccountKeyFailure(
     case device::BluetoothGattService::GattErrorCode::kNotSupported:
       return ash::quick_pair::AccountKeyFailure::kGattErrorNotSupported;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -139,7 +137,7 @@ constexpr const char* ErrorCodeToString(
     case device::BluetoothDevice::ConnectErrorCode::ERROR_UNSUPPORTED_DEVICE:
       return "ERROR_UNSUPPORTED_DEVICE";
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
   }
 }
@@ -690,7 +688,7 @@ void FastPairGattServiceClientImpl::OnNotifySessionError(
         << ": for passkey characteristic: " << ErrorCodeToString(error);
     NotifyWritePasskeyError(failure);
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 

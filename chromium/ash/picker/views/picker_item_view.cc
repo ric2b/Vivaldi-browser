@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "ash/picker/views/picker_focus_indicator.h"
-#include "ash/picker/views/picker_preview_bubble_controller.h"
+#include "ash/picker/views/picker_submenu_controller.h"
 #include "ash/style/style_util.h"
 #include "base/check.h"
 #include "base/functional/bind.h"
@@ -21,9 +21,9 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_host.h"
-#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/focus_ring.h"
@@ -86,20 +86,7 @@ PickerItemView::PickerItemView(SelectItemCallback select_item_callback,
   }
 }
 
-PickerItemView::~PickerItemView() {
-  if (preview_bubble_controller_ != nullptr) {
-    preview_bubble_controller_->CloseBubble();
-  }
-}
-
-void PickerItemView::SetPreview(
-    PickerPreviewBubbleController* preview_bubble_controller) {
-  if (preview_bubble_controller_ != nullptr) {
-    preview_bubble_controller_->CloseBubble();
-  }
-
-  preview_bubble_controller_ = preview_bubble_controller;
-}
+PickerItemView::~PickerItemView() = default;
 
 void PickerItemView::PaintButtonContents(gfx::Canvas* canvas) {
   views::Button::PaintButtonContents(canvas);
@@ -117,20 +104,14 @@ void PickerItemView::SelectItem() {
   select_item_callback_.Run();
 }
 
-void PickerItemView::OnMouseEntered(const ui::MouseEvent&) {
-  if (preview_bubble_controller_ != nullptr) {
-    preview_bubble_controller_->ShowBubble(this);
-  }
-}
-
-void PickerItemView::OnMouseExited(const ui::MouseEvent&) {
-  if (preview_bubble_controller_ != nullptr) {
-    preview_bubble_controller_->CloseBubble();
-  }
-}
-
 void PickerItemView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   UpdateClipPathForFocusRingWithInsetGap();
+}
+
+void PickerItemView::OnMouseEntered(const ui::MouseEvent& event) {
+  if (submenu_controller_ != nullptr) {
+    submenu_controller_->Close();
+  }
 }
 
 void PickerItemView::SetCornerRadius(int corner_radius) {
@@ -142,6 +123,15 @@ void PickerItemView::SetCornerRadius(int corner_radius) {
   StyleUtil::InstallRoundedCornerHighlightPathGenerator(
       this, gfx::RoundedCornersF(corner_radius_));
   SetBackground(GetPickerItemBackground(item_state_, corner_radius_));
+}
+
+PickerSubmenuController* PickerItemView::GetSubmenuController() {
+  return submenu_controller_;
+}
+
+void PickerItemView::SetSubmenuController(
+    PickerSubmenuController* submenu_controller) {
+  submenu_controller_ = submenu_controller;
 }
 
 PickerItemView::ItemState PickerItemView::GetItemState() const {

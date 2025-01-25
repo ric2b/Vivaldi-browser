@@ -10,14 +10,19 @@
 #include "ash/style/rounded_label_widget.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/overview/overview_constants.h"
+#include "ash/wm/overview/overview_controller.h"
+#include "ash/wm/overview/overview_focus_cycler_old.h"
 #include "ash/wm/overview/overview_focusable_view.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_group_container_view.h"
 #include "ash/wm/overview/overview_item.h"
 #include "ash/wm/overview/overview_item_base.h"
 #include "ash/wm/overview/overview_item_view.h"
+#include "ash/wm/overview/overview_session.h"
+#include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/snap_group/snap_group.h"
 #include "ash/wm/snap_group/snap_group_controller.h"
+#include "ash/wm/splitview/layout_divider_controller.h"
 #include "ash/wm/splitview/split_view_utils.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_constants.h"
@@ -28,6 +33,7 @@
 #include "base/notreached.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/widget/widget.h"
@@ -197,7 +203,7 @@ void OverviewGroupItem::SetBounds(const gfx::RectF& target_bounds,
     return item0->SetBounds(target_bounds, animation_type);
   }
 
-  CHECK_EQ(size, 2);
+  CHECK_EQ(2, size);
   auto& item1 = overview_items_[1];
 
   aura::Window* item0_window = item0->GetWindow();
@@ -323,7 +329,11 @@ float OverviewGroupItem::GetItemScale(int height) {
 void OverviewGroupItem::ScaleUpSelectedItem(
     OverviewAnimationType animation_type) {}
 
-void OverviewGroupItem::EnsureVisible() {}
+void OverviewGroupItem::EnsureVisible() {
+  for (const auto& overview_item : overview_items_) {
+    overview_item->EnsureVisible();
+  }
+}
 
 std::vector<OverviewFocusableView*> OverviewGroupItem::GetFocusableViews()
     const {
@@ -334,6 +344,14 @@ std::vector<OverviewFocusableView*> OverviewGroupItem::GetFocusableViews()
     }
   }
   return focusable_views;
+}
+
+std::vector<views::Widget*> OverviewGroupItem::GetFocusableWidgets() {
+  std::vector<views::Widget*> focusable_widgets;
+  for (const auto& overview_item : overview_items_) {
+    focusable_widgets.push_back(overview_item->item_widget());
+  }
+  return focusable_widgets;
 }
 
 views::View* OverviewGroupItem::GetBackDropView() const {
@@ -359,6 +377,10 @@ float OverviewGroupItem::GetOpacity() const {
 }
 
 void OverviewGroupItem::PrepareForOverview() {
+  for (const auto& overview_item : overview_items_) {
+    overview_item->PrepareForOverview();
+  }
+
   prepared_for_overview_ = true;
 }
 
@@ -376,13 +398,49 @@ void OverviewGroupItem::OnStartingAnimationComplete() {
   }
 }
 
-void OverviewGroupItem::CloseWindows() {
+void OverviewGroupItem::Restack() {
+  if (overview_items_.empty() || !item_widget_) {
+    return;
+  }
+
+  // Sort the items in `sorted_items` based on their stacking order, starting
+  // with the lowest.
+  std::vector<OverviewItem*> sorted_items;
   for (const auto& overview_item : overview_items_) {
-    overview_item->CloseWindows();
+    sorted_items.push_back(overview_item.get());
+  }
+
+  std::sort(sorted_items.begin(), sorted_items.end(),
+            [](OverviewItem* a, OverviewItem* b) {
+              return window_util::IsStackedBelow(a->GetWindow(),
+                                                 b->GetWindow());
+            });
+
+  for (auto* overview_item : sorted_items) {
+    overview_item->Restack();
+  }
+
+  // Then `sorted_items.front()` is the lowest, and `sorted_items.back()` is the
+  // topmost.
+  aura::Window* group_item_widget_window = item_widget_->GetNativeWindow();
+  aura::Window* group_item_widget_window_parent =
+      group_item_widget_window->parent();
+
+  // Adjust the stacking order between the two individual items and the group
+  // item and stack group item widget below the bottom window between the two.
+  group_item_widget_window_parent->StackChildBelow(
+      group_item_widget_window,
+      sorted_items.front()->item_widget()->GetNativeWindow());
+
+  // And stack the `cannot_snap_widget_` above the window of the topmost item.
+  if (cannot_snap_widget_) {
+    DCHECK_EQ(group_item_widget_window_parent,
+              cannot_snap_widget_->GetNativeWindow()->parent());
+    group_item_widget_window_parent->StackChildAbove(
+        cannot_snap_widget_->GetNativeWindow(),
+        sorted_items.back()->GetWindow());
   }
 }
-
-void OverviewGroupItem::Restack() {}
 
 void OverviewGroupItem::StartDrag() {
   for (const auto& item : overview_items_) {
@@ -400,6 +458,11 @@ void OverviewGroupItem::OnOverviewItemDragEnded(bool snap) {
   for (const auto& item : overview_items_) {
     item->OnOverviewItemDragEnded(snap);
   }
+
+  // Refreshes the stacking order of `this` so that the `item_widget_` window of
+  // the group is stacked below the two windows allowing the `OverviewItemView`
+  // to receive the events.
+  Restack();
 }
 
 void OverviewGroupItem::OnOverviewItemContinuousScroll(
@@ -418,25 +481,56 @@ void OverviewGroupItem::OnMovingItemToAnotherDesk() {
   }
 }
 
-void OverviewGroupItem::Shutdown() {}
-
-void OverviewGroupItem::AnimateAndCloseItem(bool up) {}
-
-void OverviewGroupItem::StopWidgetAnimation() {}
-
-OverviewGridWindowFillMode OverviewGroupItem::GetWindowDimensionsType() const {
-  // This return value assumes that the snap group represented by `this` will
-  // occupy the entire work space. So it's mostly likely that the window
-  // dimension type will be normal.
-  // TODO(michelefan): Consider the corner cases when the work space has
-  // abnormal dimension ratios.
-  return OverviewGridWindowFillMode::kNormal;
+void OverviewGroupItem::Shutdown() {
+  for (const auto& overview_item : overview_items_) {
+    overview_item->Shutdown();
+  }
 }
 
-void OverviewGroupItem::UpdateWindowDimensionsType() {}
+void OverviewGroupItem::AnimateAndCloseItem(bool up) {
+  animating_to_close_ = true;
+
+  for (const auto& overview_item : overview_items_) {
+    overview_item->AnimateAndCloseItem(up);
+  }
+}
+
+void OverviewGroupItem::StopWidgetAnimation() {
+  for (const auto& overview_item : overview_items_) {
+    overview_item->StopWidgetAnimation();
+  }
+
+  item_widget_->GetNativeWindow()->layer()->GetAnimator()->StopAnimating();
+}
+
+OverviewItemFillMode OverviewGroupItem::GetOverviewItemFillMode() const {
+  return ash::GetOverviewItemFillMode(
+      gfx::ToRoundedSize(target_bounds_.size()));
+}
+
+void OverviewGroupItem::UpdateOverviewItemFillMode() {
+  for (const auto& overview_item : overview_items_) {
+    overview_item->UpdateOverviewItemFillMode();
+  }
+}
 
 gfx::Point OverviewGroupItem::GetMagnifierFocusPointInScreen() const {
-  return overview_group_container_view_->GetBoundsInScreen().CenterPoint();
+  CHECK(!overview_items_.empty());
+
+  OverviewSession* overview_session =
+      OverviewController::Get()->overview_session();
+  CHECK(overview_session);
+  OverviewFocusCyclerOld* focus_cycler_old =
+      overview_session->focus_cycler_old();
+  for (const auto& overview_item : overview_items_) {
+    if (overview_item->overview_item_view() ==
+        focus_cycler_old->focused_view()) {
+      return overview_item->GetMagnifierFocusPointInScreen();
+    }
+  }
+
+  NOTREACHED_IN_MIGRATION();
+  return gfx::Point();
 }
 
 const gfx::RoundedCornersF OverviewGroupItem::GetRoundedCorners() const {
@@ -459,6 +553,8 @@ const gfx::RoundedCornersF OverviewGroupItem::GetRoundedCorners() const {
 void OverviewGroupItem::OnOverviewItemWindowDestroying(
     OverviewItem* overview_item,
     bool reposition) {
+  RefreshFocusedViewOnItemDestroying(overview_item->overview_item_view());
+
   // We use 2-step removal to ensure that the `overview_item` gets removed from
   // the vector before been destroyed so that all the overview items in
   // `overview_items_` are valid.
@@ -508,6 +604,18 @@ void OverviewGroupItem::CreateItemWidget() {
       std::make_unique<OverviewGroupContainerView>(this));
   item_widget_->Show();
   item_widget_->GetLayer()->SetMasksToBounds(/*masks_to_bounds=*/false);
+}
+
+void OverviewGroupItem::RefreshFocusedViewOnItemDestroying(
+    OverviewItemView* item_view) {
+  OverviewController* overview_controller = OverviewController::Get();
+  OverviewSession* overview_session = overview_controller->overview_session();
+  if (overview_session) {
+    if (OverviewFocusCyclerOld* focus_cycler_old =
+            overview_session->focus_cycler_old()) {
+      focus_cycler_old->OnViewDestroyingOrDisabling(item_view);
+    }
+  }
 }
 
 }  // namespace ash

@@ -15,8 +15,14 @@ import org.chromium.base.supplier.LazyOneshotSupplier;
 import java.util.HashMap;
 import java.util.Locale;
 
+// Vivaldi
+import java.util.ArrayList;
+import java.util.List;
+
 /** Builder for creating an immutable list of all {@link Pane}s to be shown in the Hub. */
 public class PaneListBuilder {
+    public static List<Pane> mPaneRoots = new ArrayList<>(); // Vivaldi
+
     private static final String TAG = "PaneListBuilder";
 
     private final PaneOrderController mPaneOrderController;
@@ -77,6 +83,8 @@ public class PaneListBuilder {
      * supplied {@link PaneOrderController}.
      */
     ImmutableMap<Integer, LazyOneshotSupplier<Pane>> build() {
+        // Vivaldi
+        mPaneRoots.clear();
         if (isBuilt()) {
             throw new IllegalStateException("PaneListBuilder#build() was already invoked");
         }
@@ -91,6 +99,7 @@ public class PaneListBuilder {
             }
             panesBuilder.put(paneId, paneSupplier);
             mRegisteredPanes.remove(paneId);
+            mPaneRoots.add(paneSupplier.get()); // Vivaldi
         }
 
         if (!mRegisteredPanes.isEmpty()) {

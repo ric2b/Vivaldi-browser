@@ -48,7 +48,7 @@ enum class TableComputation {
 // Implements the SQLite table interface for db tables.
 struct DbSqliteModule : public sqlite::Module<DbSqliteModule> {
   struct State {
-    State(const Table*, Table::Schema);
+    State(Table*, Table::Schema);
     explicit State(std::unique_ptr<RuntimeTable>);
     explicit State(std::unique_ptr<StaticTableFunction>);
 
@@ -57,7 +57,7 @@ struct DbSqliteModule : public sqlite::Module<DbSqliteModule> {
     int argument_count = 0;
 
     // Only valid when computation == TableComputation::kStatic.
-    const Table* static_table = nullptr;
+    Table* static_table = nullptr;
 
     // Only valid when computation == TableComputation::kRuntime.
     std::unique_ptr<RuntimeTable> runtime_table;
@@ -158,6 +158,10 @@ struct DbSqliteModule : public sqlite::Module<DbSqliteModule> {
                                 sqlite3_index_info* info,
                                 const std::vector<int>&,
                                 const std::vector<int>&);
+
+  // This needs to happen at the end as it depends on the functions
+  // defined above.
+  static constexpr sqlite3_module kModule = CreateModule();
 };
 
 }  // namespace perfetto::trace_processor

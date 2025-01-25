@@ -32,7 +32,9 @@
 #include "xla/python/ifrt/executable.h"
 #include "xla/python/ifrt/future.h"
 #include "xla/python/ifrt/host_callback.h"
+#include "xla/python/ifrt/program.h"
 #include "xla/python/ifrt/serdes.h"
+#include "xla/python/ifrt/topology.h"
 #include "xla/python/ifrt_proxy/client/executable.h"
 #include "xla/python/ifrt_proxy/client/rpc_helper.h"
 #include "xla/python/ifrt_proxy/common/ifrt_service.pb.h"
@@ -95,17 +97,6 @@ absl::StatusOr<std::unique_ptr<xla::ifrt::LoadedExecutable>> Compiler::Compile(
   TF_ASSIGN_OR_RETURN(std::shared_ptr<CompileResponse> response,
                       rpc_helper_->Compile(std::move(request)).Await());
 
-  std::vector<xla::ifrt::LoadedExecutable::LogicalDeviceIds>
-      addressable_device_logical_device_ids;
-  addressable_device_logical_device_ids.reserve(
-      response->addressable_device_logical_ids_size());
-  for (const auto& logical_device_id :
-       response->addressable_device_logical_ids()) {
-    xla::ifrt::LoadedExecutable::LogicalDeviceIds id{
-        logical_device_id.replica(), logical_device_id.partition()};
-    addressable_device_logical_device_ids.push_back(id);
-  }
-
   std::vector<xla::ifrt::Device*> addressable_devices;
   addressable_devices.reserve(response->addressable_device_ids_size());
   for (const int32_t device_id : response->addressable_device_ids()) {
@@ -136,11 +127,17 @@ absl::StatusOr<std::unique_ptr<xla::ifrt::LoadedExecutable>> Compiler::Compile(
 
   return std::make_unique<LoadedExecutable>(
       client_, rpc_helper_, response->loaded_executable_handle(),
-      response->name(), response->num_devices(),
-      std::move(addressable_device_logical_device_ids),
-      std::move(addressable_devices), std::move(fingerprint),
-      std::move(ready_future), std::move(loaded_host_callbacks),
+      response->name(), response->num_devices(), std::move(addressable_devices),
+      std::move(fingerprint), std::move(ready_future),
+      std::move(loaded_host_callbacks),
       std::move(loaded_host_callback_handles));
+}
+
+absl::StatusOr<std::unique_ptr<Executable>> Compiler::Compile(
+    std::unique_ptr<Program> program, const Topology& topology,
+    std::unique_ptr<CompileOptions> options) {
+  return absl::UnimplementedError(
+      "IFRT service compiler does not support `Compile` with a topology");
 }
 
 absl::StatusOr<std::unique_ptr<xla::ifrt::LoadedExecutable>>

@@ -16,6 +16,7 @@ import android.system.Os;
 
 import androidx.core.content.ContextCompat;
 import androidx.test.InstrumentationRegistry;
+import androidx.test.espresso.IdlingPolicies;
 import androidx.test.internal.runner.ClassPathScanner;
 import androidx.test.internal.runner.RunnerArgs;
 import androidx.test.internal.runner.TestExecutor;
@@ -27,19 +28,19 @@ import dalvik.system.DexFile;
 import org.junit.runner.Request;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.ApplicationStatus;
 import org.chromium.base.CommandLineInitUtil;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.FileUtils;
-import org.chromium.base.LifetimeAssert;
 import org.chromium.base.Log;
 import org.chromium.base.ResettersForTesting;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.InMemorySharedPreferencesContext;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.ScalableTimeout;
+import org.chromium.base.test.util.TestAnimations;
 import org.chromium.build.BuildConfig;
 import org.chromium.testing.TestListInstrumentationRunListener;
 
@@ -88,10 +89,6 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
     static InMemorySharedPreferencesContext sInMemorySharedPreferencesContext;
     private static boolean sTestListMode;
 
-    static {
-        CommandLineInitUtil.setFilenameOverrideForTesting(CommandLineFlags.getTestCmdLineFile());
-    }
-
     public BaseChromiumAndroidJUnitRunner() {
         sInstance = this;
     }
@@ -99,6 +96,10 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
     @Override
     public Application newApplication(ClassLoader cl, String className, Context context)
             throws ClassNotFoundException, IllegalAccessException, InstantiationException {
+        // Must come before super.newApplication(), because Chrome's Application.attachBaseContext()
+        // initializes command-line.
+        CommandLineInitUtil.setFilenameOverrideForTesting(CommandLineFlags.getTestCmdLineFile());
+
         // Wrap |context| here so that calls to getSharedPreferences() from within
         // attachBaseContext() will hit our InMemorySharedPreferencesContext.
         sInMemorySharedPreferencesContext = new InMemorySharedPreferencesContext(context);
@@ -129,8 +130,16 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
         return sInMemorySharedPreferencesContext;
     }
 
+    private static boolean isDefaultProcess() {
+        return !ContextUtils.getProcessName().contains(":");
+    }
+
     @Override
     public void onCreate(Bundle arguments) {
+        if (!isDefaultProcess()) {
+            super.onCreate(arguments);
+            return;
+        }
         if (arguments == null) {
             arguments = new Bundle();
         }
@@ -139,6 +148,10 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
         // an activity in @BeforeClass and have it live until @AfterClass.
         arguments.putString("waitForActivitiesToComplete", "false");
         super.onCreate(arguments);
+        if (!sTestListMode) {
+            // Initialize before Application.onCreate() to ensure settings take effect.
+            initTestRunner(arguments);
+        }
     }
 
     /**
@@ -150,11 +163,10 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
      */
     @Override
     public void onStart() {
-        Bundle arguments = InstrumentationRegistry.getArguments();
-        String timeoutScale = arguments.getString(EXTRA_TIMEOUT_SCALE);
-        if (timeoutScale != null) {
-            ScalableTimeout.setScale(Float.valueOf(timeoutScale));
+        if (!isDefaultProcess()) {
+            throw new IllegalStateException();
         }
+        Bundle arguments = InstrumentationRegistry.getArguments();
         if (sTestListMode) {
             Log.w(
                     TAG,
@@ -164,14 +176,21 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
                             arguments.toString()));
             listTests(); // Intentionally not calling super.onStart() to avoid additional work.
         } else {
-            initTestRunner(arguments);
+            ThreadUtils.recordInstrumentationThreadForTesting();
+            // Full name required because the super class has a nested class of the same name.
+            org.chromium.base.test.ActivityFinisher.finishAll();
             super.onStart();
         }
     }
 
+    // Called on the UI thread.
     private void initTestRunner(Bundle arguments) {
-        org.chromium.base.test.ActivityFinisher.finishAll();
-        BaseJUnit4TestRule.clearJobSchedulerJobs();
+        String timeoutScale = arguments.getString(EXTRA_TIMEOUT_SCALE);
+        if (timeoutScale != null) {
+            ScalableTimeout.setScale(Float.valueOf(timeoutScale));
+        }
+        CommandLineFlags.ensureInitialized();
+        BaseJUnit4ClassRunner.clearJobSchedulerJobs();
         clearDataDirectory(sInMemorySharedPreferencesContext);
         setInTouchMode(true);
         // //third_party/mockito is looking for android.support.test.InstrumentationRegistry.
@@ -180,6 +199,8 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
         System.setProperty(
                 "org.mockito.android.target",
                 sInMemorySharedPreferencesContext.getCacheDir().getPath());
+        // Reduce the time Espresso waits before failing to be less than the Python test timeout.
+        IdlingPolicies.setMasterPolicyTimeout(20, TimeUnit.SECONDS);
         setClangCoverageEnvIfEnabled();
         if (arguments.getString(IS_UNIT_TEST_FLAG) != null) {
             LibraryLoader.setBrowserProcessStartupBlockedForTesting();
@@ -218,7 +239,7 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
                 });
 
         try {
-            idleCallback.waitForFirst((int) WAIT_FOR_IDLE_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            idleCallback.waitForOnly((int) WAIT_FOR_IDLE_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (TimeoutException ex) {
             Log.w(TAG, "Timeout while waiting for idle main thread.");
         }
@@ -478,19 +499,11 @@ public class BaseChromiumAndroidJUnitRunner extends AndroidJUnitRunner {
             return;
         }
 
-        try {
-            org.chromium.base.test.ActivityFinisher.finishAll();
-            writeClangCoverageProfileIfEnabled();
+        // Leave animations in the default state.
+        TestAnimations.setEnabled(true);
 
-            // There is a bug on L and below that DestroyActivitiesRule does not cause onStop and
-            // onDestroy. On other versions, DestroyActivitiesRule may still fail flakily. Ignore
-            // lifetime asserts if that is the case.
-            if (!ApplicationStatus.isInitialized()
-                    || ApplicationStatus.isEveryActivityDestroyed()) {
-                LifetimeAssert.assertAllInstancesDestroyedForTesting();
-            } else {
-                LifetimeAssert.resetForTesting();
-            }
+        try {
+            writeClangCoverageProfileIfEnabled();
         } catch (Exception e) {
             // It's not possible (as far as I know) to update already reported test results, so we
             // send another status update have the instrumentation test instance parse it.

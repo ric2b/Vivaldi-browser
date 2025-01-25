@@ -195,6 +195,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
         return;
 
       sourceItem.source = updatedSourceItem;
+      sourceItem.text = updatedSourceItem.title;
       sourceItem.detailText = [updatedSourceItem subtitle];
       sourceItem.on = updatedSourceItem.is_enabled;
 

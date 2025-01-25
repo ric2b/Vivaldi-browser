@@ -34,10 +34,16 @@ constexpr int kSearchEnginesResponse = 1024 * 1024;
 
 void SearchEnginesUpdater::Update(scoped_refptr<network::SharedURLLoaderFactory>
                                   url_loader_factory) {
-  LOG(INFO) << "Search engines updater started.";
+  if (vivaldi::IsDebuggingSearchEngines() &&
+      !vivaldi::UsesCustomSearchEnginesUrl()) {
+    VLOG(1) << "Debugging search engines, skipping the update.";
+    return;
+  }
+
   auto resource_request = std::make_unique<network::ResourceRequest>();
-  resource_request->url =
-      GURL(GetSignedResourceUrl(SignedResourceUrl::kSearchEnginesUrl));
+  std::string url = GetSignedResourceUrl(SignedResourceUrl::kSearchEnginesUrl);
+  VLOG(1) << "Fetching search engines from: " << url;
+  resource_request->url = GURL(url);
   resource_request->method = "GET";
   resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
 

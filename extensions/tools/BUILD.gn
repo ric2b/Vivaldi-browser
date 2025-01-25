@@ -4,7 +4,7 @@ source_set("tools") {
     "../tools/vivaldi_tools.h",
   ]
   deps = [
-    "//chrome/browser/sharing/proto",
+    "//components/sharing_message/proto",
     "//chrome/common",
     "//components/zoom",
     "//extensions/buildflags",

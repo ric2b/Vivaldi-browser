@@ -266,6 +266,7 @@ class ProfilePickerParametrizedInteractiveUiTest
                                            "cr-radio-button"};
     const DeepQuery searchEngineChoiceList{"search-engine-choice-app",
                                            "#choiceList"};
+
     return Steps(
         WaitForWebContentsNavigation(
             kPickerWebContentsId, GURL(chrome::kChromeUISearchEngineChoiceURL)),
@@ -288,7 +289,6 @@ class ProfilePickerParametrizedInteractiveUiTest
         WaitForButtonDisabled(kPickerWebContentsId,
                               kSearchEngineChoiceActionButton),
 
-        PressJsButton(kPickerWebContentsId, kSearchEngineChoiceActionButton),
         PressJsButton(kPickerWebContentsId, first_search_engine),
         WaitForButtonEnabled(kPickerWebContentsId,
                              kSearchEngineChoiceActionButton),
@@ -522,14 +522,8 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerInteractiveUiTest,
   );
 }
 
-// TODO(crbug.com/330201475): Flaky on win-asan.
-#if BUILDFLAG(IS_WIN) && defined(ADDRESS_SANITIZER)
-#define MAYBE_ContinueWithoutAccount DISABLED_ContinueWithoutAccount
-#else
-#define MAYBE_ContinueWithoutAccount ContinueWithoutAccount
-#endif
 IN_PROC_BROWSER_TEST_P(ProfilePickerParametrizedInteractiveUiTest,
-                       MAYBE_ContinueWithoutAccount) {
+                       ContinueWithoutAccount) {
   ShowAndFocusPicker(ProfilePicker::EntryPoint::kProfileMenuManageProfiles,
                      GURL("chrome://profile-picker"));
 

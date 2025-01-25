@@ -41,7 +41,7 @@ struct Resources {
 
 const Resources* g_resources = nullptr;
 
-std::vector<uint8_t> ToVector(base::StringPiece str) {
+std::vector<uint8_t> ToVector(std::string_view str) {
   return std::vector<uint8_t>(str.begin(), str.end());
 }
 
@@ -190,7 +190,7 @@ std::string SyncedFileStoreImpl::SetLocalFile(base::Uuid owner_uuid,
   auto& file_data = files_data_[checksum];
   if (!file_data.content) {
     net::SniffMimeTypeFromLocalData(
-        base::StringPiece(reinterpret_cast<char*>(&content[0]), content.size()),
+        std::string_view(reinterpret_cast<char*>(&content[0]), content.size()),
         &file_data.mimetype);
     if (file_data.mimetype.empty())
       file_data.mimetype = "text/plain";
@@ -374,9 +374,9 @@ size_t SyncedFileStoreImpl::GetTotalStorageSize() {
   DCHECK(IsLoaded());
   size_t total_size = 0;
   for (const auto& file_data : files_data_) {
-    base::StringPiece name(file_data.first);
+    std::string_view name(file_data.first);
     const size_t size_start = name.find(".");
-    if (size_start != base::StringPiece::npos) {
+    if (size_start != std::string_view::npos) {
       size_t size;
       if (base::StringToSizeT(name.substr(size_start + 1), &size))
         total_size += size;

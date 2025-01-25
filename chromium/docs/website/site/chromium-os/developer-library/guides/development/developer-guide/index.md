@@ -182,13 +182,11 @@ $ sudo apt-get install python3.9
 Some host OS tools are needed to manipulate code, bootstrap the development
 environment, and run preupload hooks later on.
 
-Install the git revision control system, the curl download helper, and more.
-
 ```bash
 (outside)
 # On Ubuntu, make sure to enable the universe repository.
 $ sudo add-apt-repository universe
-$ sudo apt-get install git gitk git-gui curl xz-utils
+$ sudo apt-get install git gitk git-gui curl xz-utils zstd
 ```
 
 These commands also installs git's graphical front end (`git gui`) and revision
@@ -467,6 +465,13 @@ This will store authentication credentials in `~${HOME}/.config/gcloud` that
 will be mapped into the chroot, and which will allow Bazel executions within
 your builds to authenticate as you to RBE to access the remote cache it hosts.
 
+If you need to disable remote caching for packages that build under Bazel and
+have remote caching enabled, this can be done via
+`BAZEL_USE_REMOTE_CACHING=false cros build-packages ...`
+
+For Googlers, please reach out to chromeos-build-discuss@google.com if you
+believe you should have access to remote Bazel caching but don't.
+
 More details about configuring remote caching for non-Google organizations is
 available at [bazel_remote_caching].
 
@@ -544,7 +549,7 @@ target "boards". The following are some example boards:
     device (find your board name [here][ChromeOS Devices]); recommended for
     deploying to official hardware
 *   **betty** - (Googlers only) builds an ARC++-enabled image for running in a
-    VM
+    VM; recommended for Chromium developers.
 
 To list all known boards in your checkout, run this command:
 
@@ -808,6 +813,20 @@ serving on localhost on the default VNC port (5900). You can connect to
 A good VNC client for Linux is the package tigervnc-viewer (available on at
 least Debian); its command line program is `vncviewer`. Note that before you use
 it, you should click **Options** → **Misc** → **Show dot when no cursor**.
+To download tigervnc-viewer, run:
+
+```bash
+(outside)
+$ sudo apt-get install tigervnc-viewer
+```
+
+To connect to `localhost` using vncviewer, run:
+
+```bash
+(outside)
+$ vncviewer localhost:5900 &
+```
+
 Other options include the VNC feature in [ChromiumIDE]'s device management, and
 [novnc], which makes the device accessible via a web browser.
 
@@ -1573,7 +1592,6 @@ enrollment setting:
     ```bash
     (device)
     $ vpd -i RW_VPD -s check_enrollment=0
-    $ dump_vpd_log --force
     $ crossystem clear_tpm_owner_request=1
     $ reboot
     ```
@@ -1917,19 +1935,19 @@ Below are a few links to external sites that you might also find helpful
 
 
 [README.md]: README.md
-[Prerequisites]: #Prerequisites
-[Getting the source code]: #Get-the-Source
-[sync to stable]: #Sync-to-stable
-[Building ChromiumOS]: #Building-ChromiumOS
-[Installing ChromiumOS on your Device]: #Installing-ChromiumOS-on-your-Device
-[Making changes to packages whose source code is checked into ChromiumOS git repositories]: #Making-changes-to-packages-whose-source-code-is-checked-into-ChromiumOS-git-repositories
-[Making changes to non-cros-workon-able packages]: #Making-changes-to-non_cros-workon_able-packages
-[Local Debugging]: #Local-Debugging
-[Remote Debugging]: #Remote-Debugging
-[Troubleshooting]: #Troubleshooting
-[Running Tests]: #Running-Tests
-[Additional information]: #Additional-information
-[Attribution requirements]: #Attribution-requirements
+[Prerequisites]: #prerequisites
+[Getting the source code]: #get-the-source
+[sync to stable]: #sync-to-stable
+[Building ChromiumOS]: #building-chromiumos
+[Installing ChromiumOS on your Device]: #installing-chromiumos-on-your-device
+[Making changes to packages whose source code is checked into ChromiumOS git repositories]: #making-changes-to-packages-whose-source-code-is-checked-into-chromiumos-git-repositories
+[Making changes to non-cros-workon-able packages]: #making-changes-to-non_cros-workon_able-packages
+[Local Debugging]: #local-debugging
+[Remote Debugging]: #remote-debugging
+[Troubleshooting]: #troubleshooting
+[Running Tests]: #running-tests
+[Additional information]: #additional-information
+[Attribution requirements]: #attribution-requirements
 [Ubuntu]: https://www.ubuntu.com/
 [RAM-thread]: https://groups.google.com/a/chromium.org/d/topic/chromium-os-dev/ZcbP-33Smiw/discussion
 [install depot_tools]: https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up

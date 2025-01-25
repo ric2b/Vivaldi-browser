@@ -88,6 +88,7 @@ class ChannelProxy;
 
 namespace network {
 struct CrossOriginEmbedderPolicy;
+struct DocumentIsolationPolicy;
 }  // namespace network
 
 namespace storage {
@@ -212,6 +213,12 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // used to determine if the process should be backgrounded or not.
   virtual void OnForegroundServiceWorkerAdded() = 0;
   virtual void OnForegroundServiceWorkerRemoved() = 0;
+
+  // This is an experimental code that keeps the renderer process foregrounded
+  // from CommitNavigation to DOMContentLoaded (crbug/351953350). This is used
+  // to determine if the process should be backgrounded or not.
+  virtual void OnBoostForLoadingAdded() = 0;
+  virtual void OnBoostForLoadingRemoved() = 0;
 
   // Indicates whether the current RenderProcessHost is exclusively hosting
   // guest RenderFrames. Not all guest RenderFrames are created equal.  A guest,
@@ -345,11 +352,14 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual void RemovePriorityClient(
       RenderProcessHostPriorityClient* priority_client) = 0;
 
+#if !BUILDFLAG(IS_ANDROID)
   // Sets a process priority override. This overrides the entire built-in
   // priority setting mechanism for the process.
+  // TODO(pmonette): Make this work well on Android.
   virtual void SetPriorityOverride(bool foreground) = 0;
   virtual bool HasPriorityOverride() = 0;
   virtual void ClearPriorityOverride() = 0;
+#endif
 
 #if BUILDFLAG(IS_ANDROID)
   // Return the highest importance of all widgets in this process.
@@ -587,6 +597,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
       const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
           coep_reporter_remote,
+      const network::DocumentIsolationPolicy& document_isolation_policy,
       const storage::BucketLocator& bucket_locator,
       mojo::PendingReceiver<blink::mojom::CacheStorage> receiver) = 0;
   virtual void BindFileSystemManager(
@@ -598,11 +609,12 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
           receiver) = 0;
   virtual void GetSandboxedFileSystemForBucket(
       const storage::BucketLocator& bucket_locator,
+      const std::vector<std::string>& directory_path_components,
       blink::mojom::FileSystemAccessManager::GetSandboxedFileSystemCallback
           callback) = 0;
   virtual void BindIndexedDB(
       const blink::StorageKey& storage_key,
-      const GlobalRenderFrameHostId& rfh_id,
+      BucketContext& bucket_context,
       mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) = 0;
   virtual void BindBucketManagerHost(
       base::WeakPtr<BucketContext> bucket_context,

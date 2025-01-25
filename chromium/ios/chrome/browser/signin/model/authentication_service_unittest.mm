@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#import "ios/chrome/browser/signin/model/authentication_service.h"
+
 #import <memory>
 
+#import "base/apple/foundation_util.h"
 #import "base/functional/bind.h"
 #import "base/functional/callback_helpers.h"
 #import "base/memory/raw_ptr.h"
@@ -12,11 +15,14 @@
 #import "base/test/bind.h"
 #import "base/test/gtest_util.h"
 #import "base/test/metrics/histogram_tester.h"
+#import "base/test/scoped_feature_list.h"
 #import "components/keyed_service/core/service_access_type.h"
+#import "components/policy/core/common/policy_loader_ios_constants.h"
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/pref_registry_simple.h"
 #import "components/signin/ios/browser/features.h"
 #import "components/signin/public/base/signin_pref_names.h"
+#import "components/signin/public/base/signin_switches.h"
 #import "components/signin/public/identity_manager/device_accounts_synchronizer.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/signin/public/identity_manager/identity_test_environment.h"
@@ -33,6 +39,7 @@
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state_manager.h"
 #import "ios/chrome/browser/shared/model/prefs/browser_prefs.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -40,6 +47,7 @@
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/model/fake_authentication_service_delegate.h"
+#import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity_manager.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/signin/model/refresh_access_token_error.h"
@@ -96,7 +104,10 @@ class AuthenticationServiceObserverTest : public AuthenticationServiceObserver {
 class AuthenticationServiceTest : public PlatformTest {
  protected:
   AuthenticationServiceTest() : identity_test_env_() {
-    fake_system_identity_manager()->AddIdentities(@[ @"foo", @"foo2" ]);
+    fake_system_identity1_ = [FakeSystemIdentity fakeIdentity1];
+    fake_system_identity_manager()->AddIdentity(fake_system_identity1_);
+    fake_system_identity2_ = [FakeSystemIdentity fakeIdentity2];
+    fake_system_identity_manager()->AddIdentity(fake_system_identity2_);
 
     TestChromeBrowserState::Builder builder;
     builder.SetPrefService(CreatePrefService());
@@ -139,10 +150,6 @@ class AuthenticationServiceTest : public PlatformTest {
   void FireAccessTokenRefreshFailed(id<SystemIdentity> identity,
                                     id<RefreshAccessTokenError> error) {
     authentication_service()->OnAccessTokenRefreshFailed(identity, error);
-  }
-
-  void FireIdentityListChanged(bool notify_user) {
-    authentication_service()->OnIdentityListChanged(notify_user);
   }
 
   // Simulates that fetching access token for `identity` fails with a given
@@ -222,6 +229,7 @@ class AuthenticationServiceTest : public PlatformTest {
         prefs::kRestrictAccountsToPatterns, std::move(allowed_patterns));
   }
 
+  base::test::ScopedFeatureList scoped_feature_list_;
   IOSChromeScopedTestingLocalState local_state_;
   raw_ptr<ChromeAccountManagerService> account_manager_;
   web::WebTaskEnvironment task_environment_{
@@ -230,6 +238,8 @@ class AuthenticationServiceTest : public PlatformTest {
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   // Used to verify histogram logging.
   base::HistogramTester histogram_tester_;
+  FakeSystemIdentity* fake_system_identity1_;
+  FakeSystemIdentity* fake_system_identity2_;
 };
 
 TEST_F(AuthenticationServiceTest, TestDefaultGetPrimaryIdentity) {
@@ -347,7 +357,9 @@ TEST_F(AuthenticationServiceTest,
       identity(0), signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
   VerifyLastSigninTimestamp();
 
-  fake_system_identity_manager()->AddIdentities(@[ @"foo3" ]);
+  FakeSystemIdentity* fake_system_identity3 =
+      [FakeSystemIdentity fakeIdentity3];
+  fake_system_identity_manager()->AddIdentity(fake_system_identity3);
 
   auto account_compare_func = [](const CoreAccountInfo& first,
                                  const CoreAccountInfo& second) {
@@ -357,8 +369,12 @@ TEST_F(AuthenticationServiceTest,
       identity_manager()->GetAccountsWithRefreshTokens();
   std::sort(accounts.begin(), accounts.end(), account_compare_func);
   ASSERT_EQ(2u, accounts.size());
-  EXPECT_EQ(CoreAccountId::FromGaiaId("foo2ID"), accounts[0].account_id);
-  EXPECT_EQ(CoreAccountId::FromGaiaId("fooID"), accounts[1].account_id);
+  CoreAccountId gaiad_id_1 = CoreAccountId::FromGaiaId(
+      base::SysNSStringToUTF8(fake_system_identity1_.gaiaID));
+  EXPECT_EQ(gaiad_id_1, accounts[0].account_id);
+  CoreAccountId gaiad_id_2 = CoreAccountId::FromGaiaId(
+      base::SysNSStringToUTF8(fake_system_identity2_.gaiaID));
+  EXPECT_EQ(gaiad_id_2, accounts[1].account_id);
 
   // Simulate a switching to background and back to foreground, triggering a
   // credentials reload.
@@ -370,9 +386,11 @@ TEST_F(AuthenticationServiceTest,
   accounts = identity_manager()->GetAccountsWithRefreshTokens();
   std::sort(accounts.begin(), accounts.end(), account_compare_func);
   ASSERT_EQ(3u, accounts.size());
-  EXPECT_EQ(CoreAccountId::FromGaiaId("foo2ID"), accounts[0].account_id);
-  EXPECT_EQ(CoreAccountId::FromGaiaId("foo3ID"), accounts[1].account_id);
-  EXPECT_EQ(CoreAccountId::FromGaiaId("fooID"), accounts[2].account_id);
+  EXPECT_EQ(gaiad_id_1, accounts[0].account_id);
+  EXPECT_EQ(gaiad_id_2, accounts[1].account_id);
+  CoreAccountId gaiad_id_3 = CoreAccountId::FromGaiaId(
+      base::SysNSStringToUTF8(fake_system_identity3.gaiaID));
+  EXPECT_EQ(gaiad_id_3, accounts[2].account_id);
 }
 
 TEST_F(AuthenticationServiceTest, HasPrimaryIdentityBackground) {
@@ -472,7 +490,9 @@ TEST_F(AuthenticationServiceTest,
 // Tests that local data are not cleared when signing out of a non-syncing
 // managed account.
 TEST_F(AuthenticationServiceTest, SignedInManagedAccountSignOut) {
-  fake_system_identity_manager()->AddManagedIdentities(@[ @"foo3" ]);
+  FakeSystemIdentity* fake_system_identity =
+      [FakeSystemIdentity fakeManagedIdentity];
+  fake_system_identity_manager()->AddIdentity(fake_system_identity);
 
   authentication_service()->SignIn(
       identity(2), signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
@@ -490,6 +510,70 @@ TEST_F(AuthenticationServiceTest, SignedInManagedAccountSignOut) {
   EXPECT_EQ(ClearBrowsingDataCount(), 0);
 }
 
+// Tests that local data is cleared on signout when
+// `kClearDeviceDataOnSignOutForManagedUsers` is enabled for a managed account.
+TEST_F(
+    AuthenticationServiceTest,
+    SignedInManagedAccountSignOutWithClearDataFeatureEnabled_UnmanagedBrowser) {
+  scoped_feature_list_.InitWithFeatures(
+      {kClearDeviceDataOnSignOutForManagedUsers}, {});
+  FakeSystemIdentity* fake_system_identity =
+      [FakeSystemIdentity fakeManagedIdentity];
+  fake_system_identity_manager()->AddIdentity(fake_system_identity);
+
+  authentication_service()->SignIn(
+      identity(2), signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+  EXPECT_EQ(identity_manager()->GetAccountsWithRefreshTokens().size(), 3UL);
+  EXPECT_TRUE(authentication_service()->HasPrimaryIdentityManaged(
+      signin::ConsentLevel::kSignin));
+  VerifyLastSigninTimestamp();
+
+  SetCachedMDMInfo(identity(2), CreateRefreshAccessTokenError(identity(0)));
+  // Data will be cleared regardless of `force_clear_browsing_data` value
+  // passed. This is intended because signout is not always triggered from UI
+  // sources that set this value to true.
+  authentication_service()->SignOut(
+      signin_metrics::ProfileSignout::kUserClickedSignoutSettings,
+      /*force_clear_browsing_data=*/false, nil);
+  EXPECT_FALSE(HasCachedMDMInfo(identity(2)));
+  EXPECT_EQ(identity_manager()->GetAccountsWithRefreshTokens().size(), 0UL);
+  EXPECT_EQ(ClearBrowsingDataCount(), 1);
+}
+
+// Tests that local data is not cleared on managed user's signout when
+// `kClearDeviceDataOnSignOutForManagedUsers` is enabled for a managed account
+// and the browser is managed.
+TEST_F(
+    AuthenticationServiceTest,
+    SignedInManagedAccountSignOutWithClearDataFeatureEnabled_ManagedBrowser) {
+  scoped_feature_list_.InitWithFeatures(
+      {kClearDeviceDataOnSignOutForManagedUsers}, {});
+  // Add managed configuration so the browser is managed.
+  NSUserDefaults* userDefaults = [NSUserDefaults standardUserDefaults];
+  NSDictionary* dict = @{@"key" : @"value"};
+  [userDefaults setObject:dict forKey:kPolicyLoaderIOSConfigurationKey];
+  FakeSystemIdentity* fake_system_identity =
+      [FakeSystemIdentity fakeManagedIdentity];
+  fake_system_identity_manager()->AddIdentity(fake_system_identity);
+
+  authentication_service()->SignIn(
+      identity(2), signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+  ASSERT_EQ(identity_manager()->GetAccountsWithRefreshTokens().size(), 3UL);
+  ASSERT_TRUE(authentication_service()->HasPrimaryIdentityManaged(
+      signin::ConsentLevel::kSignin));
+  VerifyLastSigninTimestamp();
+
+  SetCachedMDMInfo(identity(2), CreateRefreshAccessTokenError(identity(0)));
+  // Data should not be cleared if the browser is managed.
+  authentication_service()->SignOut(
+      signin_metrics::ProfileSignout::kAbortSignin,
+      /*force_clear_browsing_data=*/false, nil);
+  ASSERT_FALSE(HasCachedMDMInfo(identity(2)));
+  ASSERT_EQ(identity_manager()->GetAccountsWithRefreshTokens().size(), 0UL);
+  EXPECT_EQ(ClearBrowsingDataCount(), 0);
+  [userDefaults removeObjectForKey:kPolicyLoaderIOSConfigurationKey];
+}
+
 // Tests that MDM errors do not lead to seeding empty account ids.
 //
 // Regression test for root cause of crbug/1482236
@@ -502,7 +586,9 @@ TEST_F(AuthenticationServiceTest, MDMErrorsDontSeedEmptyAccountIds) {
   SetCachedMDMInfo(identity(0), CreateRefreshAccessTokenError(identity(0)));
 
   // Fake an mdm error for an identity that is not loaded in IdentityManager.
-  fake_system_identity_manager()->AddIdentities(@[ @"foo3" ]);
+  FakeSystemIdentity* fake_system_identity3 =
+      [FakeSystemIdentity fakeIdentity3];
+  fake_system_identity_manager()->AddIdentity(fake_system_identity3);
   SetCachedMDMInfo(identity(2), CreateRefreshAccessTokenError(identity(2)));
 
   GoogleServiceAuthError error(
@@ -521,7 +607,9 @@ TEST_F(AuthenticationServiceTest, MDMErrorsDontSeedEmptyAccountIds) {
 // Tests that MDM errors are correctly cleared when signing out of a managed
 // account.
 TEST_F(AuthenticationServiceTest, ManagedAccountSignOut) {
-  fake_system_identity_manager()->AddManagedIdentities(@[ @"foo3" ]);
+  FakeSystemIdentity* fake_system_identity =
+      [FakeSystemIdentity fakeManagedIdentity];
+  fake_system_identity_manager()->AddIdentity(fake_system_identity);
 
   authentication_service()->SignIn(
       identity(2), signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
@@ -545,7 +633,9 @@ TEST_F(AuthenticationServiceTest, ManagedAccountSignOut) {
 // Tests that MDM errors are correctly cleared when signing out with clearing
 // browsing data of a managed account.
 TEST_F(AuthenticationServiceTest, ManagedAccountSignOutAndClearBrowsingData) {
-  fake_system_identity_manager()->AddManagedIdentities(@[ @"foo3" ]);
+  FakeSystemIdentity* fake_system_identity =
+      [FakeSystemIdentity fakeManagedIdentity];
+  fake_system_identity_manager()->AddIdentity(fake_system_identity);
 
   authentication_service()->SignIn(
       identity(2), signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
@@ -784,4 +874,45 @@ TEST_F(AuthenticationServiceTest, TestGetServiceStatus) {
   // Expect onServiceStatus notification called.
   EXPECT_EQ(4, observer_test.GetOnServiceStatusChangedCounter());
   authentication_service()->RemoveObserver(&observer_test);
+}
+
+// Tests that identity manager loads identities while being signed out.
+// And also tests that an identity being added is loaded by identity manager.
+// kAlwaysLoadDeviceAccounts flag is enabled.
+TEST_F(AuthenticationServiceTest,
+       TestAccountsLoadedByIdentityManagerWhenSignedOut) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(switches::kAlwaysLoadDeviceAccounts);
+  // `fakeIdentity1` and `fakeIdentity2` are already loaded.
+  std::vector<AccountInfo> account_info_vector =
+      identity_manager()->GetExtendedAccountInfoForAccountsWithRefreshToken();
+  EXPECT_EQ(2ul, account_info_vector.size());
+  // Let's load `fakeIdentity3`.
+  id<SystemIdentity> fake_identity3 = [FakeSystemIdentity fakeIdentity3];
+  fake_system_identity_manager()->AddIdentity(fake_identity3);
+  base::RunLoop().RunUntilIdle();
+  account_info_vector =
+      identity_manager()->GetExtendedAccountInfoForAccountsWithRefreshToken();
+  EXPECT_EQ(3ul, account_info_vector.size());
+}
+
+// Tests that identity manager loads identities while being signed out.
+// And also tests that an identity being removed is forgotten by identity
+// manager.
+// kAlwaysLoadDeviceAccounts flag is enabled.
+TEST_F(AuthenticationServiceTest, TestAccountsForgetIdentityWhenSignedOut) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(switches::kAlwaysLoadDeviceAccounts);
+  std::vector<AccountInfo> account_info_vector =
+      identity_manager()->GetExtendedAccountInfoForAccountsWithRefreshToken();
+  // `fakeIdentity1` and `fakeIdentity2` are already loaded.
+  EXPECT_EQ(2ul, account_info_vector.size());
+  // Let's forget `fakeIdentity2`.
+  id<SystemIdentity> fake_identity2 = [FakeSystemIdentity fakeIdentity2];
+  fake_system_identity_manager()->ForgetIdentity(fake_identity2,
+                                                 base::DoNothing());
+  base::RunLoop().RunUntilIdle();
+  account_info_vector =
+      identity_manager()->GetExtendedAccountInfoForAccountsWithRefreshToken();
+  EXPECT_EQ(1ul, account_info_vector.size());
 }

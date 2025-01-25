@@ -32,12 +32,11 @@
 
 #include "src/tint/lang/core/access.h"
 #include "src/tint/lang/core/address_space.h"
-#include "src/tint/lang/core/ir/disassembly.h"
+#include "src/tint/lang/core/ir/disassembler.h"
 #include "src/tint/lang/core/texel_format.h"
 #include "src/tint/lang/core/type/storage_texture.h"
 #include "src/tint/lang/core/type/texture_dimension.h"
 #include "src/tint/lang/wgsl/ir/builtin_call.h"
-#include "src/tint/lang/wgsl/ir/unary.h"
 #include "src/tint/lang/wgsl/writer/ir_to_program/ir_to_program.h"
 #include "src/tint/lang/wgsl/writer/ir_to_program/ir_to_program_test.h"
 #include "src/tint/lang/wgsl/writer/writer.h"
@@ -51,7 +50,7 @@ using namespace tint::core::fluent_types;     // NOLINT
 IRToProgramTest::Result IRToProgramTest::Run() {
     Result result;
 
-    result.ir = tint::core::ir::Disassemble(mod).Plain();
+    result.ir = tint::core::ir::Disassembler(mod).Plain();
 
     ProgramOptions options;
     options.allowed_features = AllowedFeatures::Everything();
@@ -129,7 +128,7 @@ TEST_F(IRToProgramTest, EntryPoint_Compute) {
     fn->Block()->Append(b.Return(fn));
 
     EXPECT_WGSL(R"(
-@compute @workgroup_size(3, 4, 5)
+@compute @workgroup_size(3u, 4u, 5u)
 fn f() {
 }
 )");
@@ -151,12 +150,62 @@ TEST_F(IRToProgramTest, EntryPoint_Vertex) {
     auto* fn = b.Function("f", ty.vec4<f32>(), core::ir::Function::PipelineStage::kVertex);
     fn->SetReturnBuiltin(core::BuiltinValue::kPosition);
 
-    fn->Block()->Append(b.Return(fn, b.Splat(ty.vec4<f32>(), 0_f, 4)));
+    fn->Block()->Append(b.Return(fn, b.Splat<vec4<f32>>(0_f)));
 
     EXPECT_WGSL(R"(
 @vertex
 fn f() -> @builtin(position) vec4<f32> {
   return vec4<f32>();
+}
+)");
+}
+
+TEST_F(IRToProgramTest, EntryPoint_Parameter_BuiltinAndInvariant) {
+    auto* fn = b.Function("f", ty.void_(), core::ir::Function::PipelineStage::kFragment);
+    auto* param = b.FunctionParam("input", ty.vec4<f32>());
+    param->SetBuiltin(core::BuiltinValue::kPosition);
+    param->SetInvariant(true);
+    fn->SetParams({param});
+
+    fn->Block()->Append(b.Return(fn));
+
+    EXPECT_WGSL(R"(
+@fragment
+fn f(@builtin(position) @invariant input : vec4<f32>) {
+}
+)");
+}
+
+TEST_F(IRToProgramTest, EntryPoint_Parameter_LocationAndInterpolation) {
+    auto* fn = b.Function("f", ty.void_(), core::ir::Function::PipelineStage::kFragment);
+    auto* param = b.FunctionParam("input", ty.f32());
+    param->SetLocation(2u);
+    param->SetInterpolation(core::Interpolation{core::InterpolationType::kLinear,
+                                                core::InterpolationSampling::kCentroid});
+    fn->SetParams({param});
+
+    fn->Block()->Append(b.Return(fn));
+
+    EXPECT_WGSL(R"(
+@fragment
+fn f(@location(2u) @interpolate(linear, centroid) input : f32) {
+}
+)");
+}
+
+TEST_F(IRToProgramTest, EntryPoint_Parameter_Color) {
+    auto* fn = b.Function("f", ty.void_(), core::ir::Function::PipelineStage::kFragment);
+    auto* param = b.FunctionParam("input", ty.f32());
+    param->SetColor(2u);
+    fn->SetParams({param});
+
+    fn->Block()->Append(b.Return(fn));
+
+    EXPECT_WGSL(R"(
+enable chromium_experimental_framebuffer_fetch;
+
+@fragment
+fn f(@color(2u) input : f32) {
 }
 )");
 }
@@ -194,7 +243,7 @@ TEST_F(IRToProgramTest, EntryPoint_ReturnAttribute_Invariant) {
     fn->SetReturnBuiltin(core::BuiltinValue::kPosition);
     fn->SetReturnInvariant(true);
 
-    fn->Block()->Append(b.Return(fn, b.Splat(ty.vec4<f32>(), 0_f, 4)));
+    fn->Block()->Append(b.Return(fn, b.Splat<vec4<f32>>(0_f)));
 
     EXPECT_WGSL(R"(
 @vertex
@@ -206,13 +255,13 @@ fn f() -> @builtin(position) @invariant vec4<f32> {
 
 TEST_F(IRToProgramTest, EntryPoint_ReturnAttribute_Location) {
     auto* fn = b.Function("f", ty.vec4<f32>(), core::ir::Function::PipelineStage::kFragment);
-    fn->SetReturnLocation(1, std::nullopt);
+    fn->SetReturnLocation(1);
 
-    fn->Block()->Append(b.Return(fn, b.Splat(ty.vec4<f32>(), 0_f, 4)));
+    fn->Block()->Append(b.Return(fn, b.Splat<vec4<f32>>(0_f)));
 
     EXPECT_WGSL(R"(
 @fragment
-fn f() -> @location(1) vec4<f32> {
+fn f() -> @location(1u) vec4<f32> {
   return vec4<f32>();
 }
 )");
@@ -246,7 +295,7 @@ TEST_F(IRToProgramTest, EntryPoint_ParameterAttribute_Compute) {
     EXPECT_WGSL(R"(
 enable chromium_experimental_subgroups;
 
-@compute @workgroup_size(3, 4, 5)
+@compute @workgroup_size(3u, 4u, 5u)
 fn f(@builtin(local_invocation_id) v : vec3<u32>, @builtin(local_invocation_index) v_1 : u32, @builtin(global_invocation_id) v_2 : vec3<u32>, @builtin(workgroup_id) v_3 : vec3<u32>, @builtin(num_workgroups) v_4 : vec3<u32>, @builtin(subgroup_invocation_id) v_5 : u32, @builtin(subgroup_size) v_6 : u32) {
 }
 )");
@@ -2093,7 +2142,7 @@ TEST_F(IRToProgramTest, For_ComplexBody_NoCont) {
                 b.Append(if2->True(), [&] { b.Return(fn, 1_i); });
                 b.Append(if2->False(), [&] { b.Return(fn, 2_i); });
 
-                b.NextIteration(loop);
+                b.Continue(loop);
             });
         });
 
@@ -2226,7 +2275,7 @@ TEST_F(IRToProgramTest, For_IncInInit_Cmp) {
     });
 
     EXPECT_WGSL(R"(
-@group(0) @binding(0) var<storage, read_write> v : u32;
+@group(0u) @binding(0u) var<storage, read_write> v : u32;
 
 fn f() {
   for(v = (v + 1u); (v < 10u); ) {
@@ -2342,6 +2391,75 @@ TEST_F(IRToProgramTest, While_IfBreak) {
 fn f(cond : bool) {
   while(true) {
     if (cond) {
+      break;
+    }
+  }
+}
+)");
+}
+
+TEST_F(IRToProgramTest, While_BreakAfterStatement) {
+    auto* fn = b.Function("f", ty.void_());
+
+    b.Append(fn->Block(), [&] {
+        auto* loop = b.Loop();
+
+        b.Append(loop->Body(), [&] {
+            auto* let = b.Let("cond", true);
+            auto* cond = b.If(let);
+            b.Append(cond->True(), [&] { b.ExitIf(cond); });
+            b.Append(cond->False(), [&] { b.ExitLoop(loop); });
+
+            b.ExitLoop(loop);
+        });
+
+        b.Return(fn);
+    });
+
+    EXPECT_WGSL(R"(
+fn f() {
+  loop {
+    let cond = true;
+    if (cond) {
+    } else {
+      break;
+    }
+    break;
+  }
+}
+)");
+}
+
+// Test that only the first "if continue then break" instruction is treated as the loop condition.
+// See crbug.com/351700183.
+TEST_F(IRToProgramTest, While_IfBreakInFalse) {
+    auto* fn = b.Function("f", ty.void_());
+    auto* cond = b.FunctionParam("cond", ty.bool_());
+    fn->SetParams({cond});
+
+    b.Append(fn->Block(), [&] {
+        auto* loop = b.Loop();
+
+        b.Append(loop->Body(), [&] {
+            auto* if1 = b.If(true);
+            b.Append(if1->True(), [&] { b.ExitIf(if1); });
+            b.Append(if1->False(), [&] { b.ExitLoop(loop); });
+
+            auto* if2 = b.If(cond);
+            b.Append(if2->True(), [&] { b.ExitIf(if2); });
+            b.Append(if2->False(), [&] { b.ExitLoop(loop); });
+
+            b.Continue(loop);
+        });
+
+        b.Return(fn);
+    });
+
+    EXPECT_WGSL(R"(
+fn f(cond : bool) {
+  while(true) {
+    if (cond) {
+    } else {
       break;
     }
   }
@@ -2549,8 +2667,8 @@ fn f() {
 TEST_F(IRToProgramTest, Enable_ChromiumExperimentalSubgroups_SubgroupBallot) {
     auto* fn = b.Function("f", ty.void_());
     b.Append(fn->Block(), [&] {
-        auto* call = b.Append(mod.allocators.instructions.Create<wgsl::ir::BuiltinCall>(
-            b.InstructionResult(ty.vec4<u32>()), wgsl::BuiltinFn::kSubgroupBallot, Empty));
+        auto* call = b.CallWithResult<wgsl::ir::BuiltinCall>(
+            b.InstructionResult(ty.vec4<u32>()), wgsl::BuiltinFn::kSubgroupBallot, true);
         b.Let("v", call);
         b.Return(fn);
     });
@@ -2559,7 +2677,7 @@ TEST_F(IRToProgramTest, Enable_ChromiumExperimentalSubgroups_SubgroupBallot) {
 enable chromium_experimental_subgroups;
 
 fn f() {
-  let v = subgroupBallot();
+  let v = subgroupBallot(true);
 }
 )");
 }
@@ -2568,8 +2686,8 @@ TEST_F(IRToProgramTest, Enable_ChromiumExperimentalSubgroups_SubgroupBroadcast) 
     auto* fn = b.Function("f", ty.void_());
     b.Append(fn->Block(), [&] {
         auto* one = b.Value(1_u);
-        auto* call = b.Append(mod.allocators.instructions.Create<wgsl::ir::BuiltinCall>(
-            b.InstructionResult(ty.u32()), wgsl::BuiltinFn::kSubgroupBroadcast, Vector{one, one}));
+        auto* call = b.CallWithResult<wgsl::ir::BuiltinCall>(
+            b.InstructionResult(ty.u32()), wgsl::BuiltinFn::kSubgroupBroadcast, Vector{one, one});
         b.Let("v", call);
         b.Return(fn);
     });
@@ -2633,6 +2751,31 @@ fn f(v : S) {
 )");
 }
 
+TEST_F(IRToProgramTest, Enable_ChromiumExperimentalFramebufferFetch_StructColor) {
+    core::type::Manager::StructMemberDesc member;
+    member.name = mod.symbols.New("a");
+    member.type = ty.f32();
+    member.attributes.color = 2u;
+
+    auto* S = ty.Struct(mod.symbols.New("S"), {member});
+
+    auto* fn = b.Function("f", ty.void_());
+    fn->SetParams({b.FunctionParam(S)});
+    b.Append(fn->Block(), [&] { b.Return(fn); });
+
+    EXPECT_WGSL(R"(
+enable chromium_experimental_framebuffer_fetch;
+
+struct S {
+  @color(2u)
+  a : f32,
+}
+
+fn f(v : S) {
+}
+)");
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // chromium_internal_graphite
 ////////////////////////////////////////////////////////////////////////////////
@@ -2647,7 +2790,7 @@ TEST_F(IRToProgramTest, Enable_ChromiumInternalGraphite_SubgroupBallot) {
     EXPECT_WGSL(R"(
 enable chromium_internal_graphite;
 
-@group(0) @binding(0) var T : texture_storage_2d<r8unorm, read>;
+@group(0u) @binding(0u) var T : texture_storage_2d<r8unorm, read>;
 )");
 }
 

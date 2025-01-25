@@ -4,7 +4,8 @@
 
 #include "content/browser/accessibility/browser_accessibility.h"
 
-#include <cstddef>
+#include <stddef.h>
+
 #include <iterator>
 
 #include "base/check.h"
@@ -19,7 +20,6 @@
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/public/common/content_client.h"
-#include "third_party/blink/public/strings/grit/blink_accessibility_strings.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_id_forward.h"
 #include "ui/accessibility/ax_role_properties.h"
@@ -27,10 +27,10 @@
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/accessibility/platform/ax_platform.h"
 #include "ui/accessibility/platform/ax_platform_tree_manager_delegate.h"
-#include "ui/accessibility/platform/ax_unique_id.h"
 #include "ui/base/buildflags.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "ui/strings/grit/auto_image_annotation_strings.h"
 #include "ui/strings/grit/ax_strings.h"
 
 namespace content {
@@ -72,7 +72,7 @@ BrowserAccessibility::BrowserAccessibility(BrowserAccessibilityManager* manager,
 #if DCHECK_IS_ON()
   if (++browser_accessibility_count > kDumpBrowserAccessibilityLeakNumObjects &&
       !has_dumped_possible_leak) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     has_dumped_possible_leak = true;
   }
 #endif
@@ -254,8 +254,9 @@ BrowserAccessibility* BrowserAccessibility::PlatformDeepestFirstChild() const {
   if (IsLeaf())
     return nullptr;
   BrowserAccessibility* deepest_child = PlatformGetFirstChild();
-  while (!deepest_child->IsLeaf())
+  while (deepest_child && !deepest_child->IsLeaf()) {
     deepest_child = deepest_child->PlatformGetFirstChild();
+  }
   return deepest_child;
 }
 
@@ -265,8 +266,9 @@ BrowserAccessibility* BrowserAccessibility::PlatformDeepestLastChild() const {
   if (IsLeaf())
     return nullptr;
   BrowserAccessibility* deepest_child = PlatformGetLastChild();
-  while (!deepest_child->IsLeaf())
+  while (deepest_child && !deepest_child->IsLeaf()) {
     deepest_child = deepest_child->PlatformGetLastChild();
+  }
   return deepest_child;
 }
 
@@ -860,7 +862,7 @@ BrowserAccessibility::GetSourceNodesForReverseRelations(
       manager_->ax_tree()->GetReverseRelations(attr, GetData().id));
 }
 
-const ui::AXUniqueId& BrowserAccessibility::GetUniqueId() const {
+ui::AXPlatformNodeId BrowserAccessibility::GetUniqueId() const {
   // This is not the same as GetData().id which comes from Blink, because
   // those ids are only unique within the Blink process. We need one that is
   // unique per OS window.
@@ -901,7 +903,7 @@ BrowserAccessibility::GetUIADirectChildrenInRange(
     ui::AXPlatformNodeDelegate* end) {
   // This method is only called on Windows. Other platforms should not call it.
   // The BrowserAccessibilityWin subclass overrides this method.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return {};
 }
 
@@ -1277,7 +1279,6 @@ bool BrowserAccessibility::AccessibilityPerformAction(
     case ax::mojom::Action::kStitchChildTree:
       CHECK_NE(data.target_tree_id, ui::AXTreeIDUnknown());
       CHECK_EQ(data.target_tree_id, manager()->GetTreeID());
-      CHECK_NE(data.target_node_id, ui::kInvalidAXNodeID);
       CHECK_EQ(data.target_node_id, node()->id());
       CHECK_NE(data.child_tree_id, ui::AXTreeIDUnknown());
       CHECK_NE(data.child_tree_id, manager()->GetTreeID())
@@ -1419,6 +1420,7 @@ std::u16string BrowserAccessibility::GetLocalizedStringForRoleDescription()
     case ax::mojom::Role::kComboBoxMenuButton:
     case ax::mojom::Role::kDesktop:
     case ax::mojom::Role::kFigcaption:
+    case ax::mojom::Role::kGridCell:
     case ax::mojom::Role::kGroup:
     case ax::mojom::Role::kIframe:
     case ax::mojom::Role::kLegend:
@@ -1696,8 +1698,6 @@ std::u16string BrowserAccessibility::GetLocalizedStringForRoleDescription()
       return content_client->GetLocalizedString(IDS_AX_ROLE_EMBEDDED_OBJECT);
     case ax::mojom::Role::kPopUpButton:
       return content_client->GetLocalizedString(IDS_AX_ROLE_POP_UP_BUTTON);
-    case ax::mojom::Role::kPortal:
-      return {};
     case ax::mojom::Role::kProgressIndicator:
       return content_client->GetLocalizedString(IDS_AX_ROLE_PROGRESS_INDICATOR);
     case ax::mojom::Role::kRadioButton:
@@ -1788,6 +1788,7 @@ std::u16string BrowserAccessibility::GetLocalizedStringForRoleDescription()
       return {};
     case ax::mojom::Role::kDescriptionListTermDeprecated:
     case ax::mojom::Role::kPreDeprecated:
+    case ax::mojom::Role::kPortalDeprecated:
     case ax::mojom::Role::kDescriptionListDetailDeprecated:
     case ax::mojom::Role::kDirectoryDeprecated:
       NOTREACHED_NORETURN();
@@ -1954,7 +1955,7 @@ void BrowserAccessibility::MergeSpellingAndGrammarIntoTextAttributes(
     int start_offset,
     ui::TextAttributeMap* text_attributes) {
   if (!text_attributes) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 

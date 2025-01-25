@@ -36,10 +36,10 @@ namespace compiler {
 static_assert(std::is_convertible<TNode<Number>, TNode<Object>>::value,
               "test subtyping");
 static_assert(
-    std::is_convertible<TNode<Number>, TNode<UnionT<Smi, HeapObject>>>::value,
+    std::is_convertible<TNode<Number>, TNode<UnionOf<Smi, HeapObject>>>::value,
     "test subtyping");
 static_assert(
-    !std::is_convertible<TNode<UnionT<Smi, HeapObject>>, TNode<Number>>::value,
+    !std::is_convertible<TNode<UnionOf<Smi, HeapObject>>, TNode<Number>>::value,
     "test subtyping");
 
 CodeAssemblerState::CodeAssemblerState(
@@ -312,13 +312,17 @@ TNode<String> CodeAssembler::StringConstant(const char* str) {
 TNode<Boolean> CodeAssembler::BooleanConstant(bool value) {
   Handle<Boolean> object = isolate()->factory()->ToBoolean(value);
   return UncheckedCast<Boolean>(
-      jsgraph()->HeapConstantNoHole(Handle<HeapObject>::cast(object)));
+      jsgraph()->HeapConstantNoHole(i::Cast<HeapObject>(object)));
 }
 
 TNode<ExternalReference> CodeAssembler::ExternalConstant(
     ExternalReference address) {
   return UncheckedCast<ExternalReference>(
       raw_assembler()->ExternalConstant(address));
+}
+
+TNode<ExternalReference> CodeAssembler::IsolateField(IsolateFieldId id) {
+  return ExternalConstant(ExternalReference::Create(id));
 }
 
 TNode<Float32T> CodeAssembler::Float32Constant(double value) {
@@ -594,9 +598,8 @@ TNode<RawPtrT> CodeAssembler::LoadStackPointer() {
   return UncheckedCast<RawPtrT>(raw_assembler()->LoadStackPointer());
 }
 
-void CodeAssembler::SetStackPointer(TNode<RawPtrT> ptr,
-                                    wasm::FPRelativeScope fp_scope) {
-  raw_assembler()->SetStackPointer(ptr, fp_scope);
+void CodeAssembler::SetStackPointer(TNode<RawPtrT> ptr) {
+  raw_assembler()->SetStackPointer(ptr);
 }
 #endif
 
@@ -798,7 +801,7 @@ Node* CodeAssembler::PackMapWord(Node* value) {
 TNode<AnyTaggedT> CodeAssembler::LoadRootMapWord(RootIndex root_index) {
 #ifdef V8_MAP_PACKING
   Handle<Object> root = isolate()->root_handle(root_index);
-  Node* map = HeapConstantNoHole(Handle<Map>::cast(root));
+  Node* map = HeapConstantNoHole(Cast<Map>(root));
   map = PackMapWord(map);
   return ReinterpretCast<AnyTaggedT>(map);
 #else
@@ -810,9 +813,9 @@ TNode<Object> CodeAssembler::LoadRoot(RootIndex root_index) {
   if (RootsTable::IsImmortalImmovable(root_index)) {
     Handle<Object> root = isolate()->root_handle(root_index);
     if (IsSmi(*root)) {
-      return SmiConstant(Smi::cast(*root));
+      return SmiConstant(i::Cast<Smi>(*root));
     } else {
-      return HeapConstantMaybeHole(Handle<HeapObject>::cast(root));
+      return HeapConstantMaybeHole(i::Cast<HeapObject>(root));
     }
   }
 

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/341324165): Fix and remove.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/containers/buffer_iterator.h"
 
 #include <string.h>
@@ -233,7 +238,7 @@ TEST(BufferIteratorTest, CopyObject) {
 
 TEST(BufferIteratorTest, SeekWithSizeConfines) {
   const char buffer[] = "vindicate";
-  BufferIterator<const char> iterator(buffer);
+  BufferIterator<const char> iterator(base::span_from_cstring(buffer));
   iterator.Seek(5);
   iterator.TruncateTo(3);
   EXPECT_TRUE(iterator.Span<char>(4).empty());

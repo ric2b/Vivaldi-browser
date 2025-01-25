@@ -263,7 +263,7 @@ void DevtoolsConnectorItem::BeforeUnloadFired(content::WebContents* tab,
 content::KeyboardEventProcessingResult
 DevtoolsConnectorItem::PreHandleKeyboardEvent(
     content::WebContents* source,
-    const content::NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   content::KeyboardEventProcessingResult handled =
       content::KeyboardEventProcessingResult::NOT_HANDLED;
 
@@ -286,6 +286,9 @@ bool DevtoolsConnectorItem::HandleContextMenu(
 const std::vector<std::string> commands_to_fwd = {
   "COMMAND_CLOSE_TAB",
   "COMMAND_CLOSE_WINDOW",
+  "COMMAND_DEVELOPER_TOOLS",
+  "COMMAND_DEVTOOLS_CONSOLE",
+  "COMMAND_DEVTOOLS_INSPECTOR",
   "COMMAND_NEW_TAB",
   "COMMAND_NEW_BACKGROUND_TAB",
   "COMMAND_NEW_PRIVATE_WINDOW",
@@ -306,6 +309,9 @@ bool ShouldForwardKeyCombo(std::string shortcut_text,
 
   for (int i = 0; i < (int)commands_to_fwd.size(); i++) {
     const base::Value::Dict* shortcut = dict->FindDict(commands_to_fwd.at(i));
+    if (!shortcut) {
+      continue;
+    }
     for (const auto [name, keycombo] : *shortcut) {
       if (name == "shortcuts") {
         for (const base::Value& kc : keycombo.GetList()) {
@@ -322,7 +328,7 @@ bool ShouldForwardKeyCombo(std::string shortcut_text,
 
 bool DevtoolsConnectorItem::HandleKeyboardEvent(
     content::WebContents* source,
-    const content::NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   // NOTE(david@vivaldi.com): With SHIFT+CTRL+I we are now able to debug dev
   // tools in undocked state.
   const int modifier_mask =
@@ -338,15 +344,17 @@ bool DevtoolsConnectorItem::HandleKeyboardEvent(
 
 #if BUILDFLAG(IS_MAC)
   if ((event.GetType() == blink::WebInputEvent::Type::kRawKeyDown) &&
-      event.windows_key_code != ui::VKEY_CONTROL &&
+      ((event.windows_key_code != ui::VKEY_CONTROL &&
       event.windows_key_code != ui::VKEY_MENU &&
       event.windows_key_code != ui::VKEY_SHIFT &&
       event.windows_key_code != ui::VKEY_COMMAND &&
-      event.GetModifiers() > 0) {
+      event.GetModifiers() > 0) ||
+      (ui::VKEY_F1 <= event.windows_key_code &&
+      event.windows_key_code <= ui::VKEY_F12))) {
     std::string shortcut_text =
         base::ToLowerASCII(::vivaldi::ShortcutTextFromEvent(event));
     if (ShouldForwardKeyCombo(shortcut_text, browser_context_)) {
-      content::NativeWebKeyboardEvent new_event(event);
+      input::NativeWebKeyboardEvent new_event(event);
       new_event.from_devtools = true;
       return devtools_delegate_->HandleKeyboardEvent(source, new_event);
     }
@@ -367,7 +375,7 @@ DevtoolsConnectorItem::GetJavaScriptDialogManager(
     return devtools_delegate_->GetJavaScriptDialogManager(source);
   }
   NOTREACHED();
-  return nullptr;
+  //return nullptr;
 }
 
 void DevtoolsConnectorItem::RunFileChooser(
@@ -388,7 +396,7 @@ bool DevtoolsConnectorItem::PreHandleGestureEvent(
     return devtools_delegate_->PreHandleGestureEvent(source, event);
   }
   NOTREACHED();
-  return true;
+  //return true;
 }
 
 content::WebContents* DevtoolsConnectorItem::OpenURLFromTab(
@@ -401,7 +409,7 @@ content::WebContents* DevtoolsConnectorItem::OpenURLFromTab(
         source, params, std::move(navigation_handle_callback));
   }
   NOTREACHED();
-  return nullptr;
+  //return nullptr;
 }
 
 std::unique_ptr<content::EyeDropper> DevtoolsConnectorItem::OpenEyeDropper(
@@ -411,7 +419,7 @@ std::unique_ptr<content::EyeDropper> DevtoolsConnectorItem::OpenEyeDropper(
     return devtools_delegate_->OpenEyeDropper(frame, listener);
   }
   NOTREACHED();
-  return nullptr;
+  //return nullptr;
 }
 
 // DevToolsUIBindings::Delegate implementation

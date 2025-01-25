@@ -87,8 +87,9 @@ Accelerator::Accelerator(KeyboardCode key_code,
 
 Accelerator::Accelerator(const KeyEvent& key_event)
     : key_code_(key_event.key_code()),
-      key_state_(key_event.type() == ET_KEY_PRESSED ? KeyState::PRESSED
-                                                    : KeyState::RELEASED),
+      key_state_(key_event.type() == EventType::kKeyPressed
+                     ? KeyState::PRESSED
+                     : KeyState::RELEASED),
       // |modifiers_| may include the repeat flag.
       modifiers_(key_event.flags() & kInterestingFlagsMask),
       time_stamp_(key_event.time_stamp()),
@@ -120,8 +121,8 @@ int Accelerator::MaskOutKeyEventFlags(int flags) {
 
 KeyEvent Accelerator::ToKeyEvent() const {
   return KeyEvent(key_state() == Accelerator::KeyState::PRESSED
-                      ? ET_KEY_PRESSED
-                      : ET_KEY_RELEASED,
+                      ? EventType::kKeyPressed
+                      : EventType::kKeyReleased,
                   key_code(),
 #if BUILDFLAG(IS_CHROMEOS)
                   code(),
@@ -430,7 +431,7 @@ std::u16string Accelerator::ApplyLongFormModifiers(
 #elif BUILDFLAG(IS_WIN)
     result = ApplyModifierToAcceleratorString(result, IDS_APP_WINDOWS_KEY);
 #else
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
 #endif
   }
 
@@ -442,14 +443,21 @@ std::u16string Accelerator::ApplyShortFormModifiers(
   std::u16string result;
   result.reserve(6);
 
-  if (IsCtrlDown())
+  // Add modifiers in the order that matches how they are displayed in native
+  // menus.
+  if (IsCtrlDown()) {
     result.push_back(u'⌃');  // U+2303, UP ARROWHEAD
-  if (IsAltDown())
+  }
+  if (IsAltDown()) {
     result.push_back(u'⌥');  // U+2325, OPTION KEY
-  if (IsShiftDown())
+  }
+  if (IsShiftDown()) {
     result.push_back(u'⇧');  // U+21E7, UPWARDS WHITE ARROW
-  if (IsCmdDown())
+  }
+  if (IsCmdDown()) {
     result.push_back(u'⌘');  // U+2318, PLACE OF INTEREST SIGN
+  }
+
   if (IsFunctionDown()) {
     // The real "fn" used by menus is actually U+E23E in the Private Use Area in
     // the keyboard font obtained with CTFontCreateUIFontForLanguage, with key
@@ -470,8 +478,8 @@ std::u16string Accelerator::ApplyShortFormModifiers(
     // -[NSKeyboardShortcut localizedModifierMaskDisplayName] for an example of
     // this.
     //
-    // TODO(crbug.com/40800376): Implement all of this when text-style
-    // presentations are implemented for Views in https://crbug.com/1099591.
+    // TODO(http://crbug.com/40800376): Implement all of this when text-style
+    // presentations are implemented for Views in https://crbug.com/40137571.
     result.append(u"(fn) ");
   }
 

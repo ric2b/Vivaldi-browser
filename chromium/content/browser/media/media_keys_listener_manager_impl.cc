@@ -333,12 +333,15 @@ void MediaKeysListenerManagerImpl::StartListeningForMediaKeysIfNecessary() {
     return;
   }
 
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) || \
-    BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) || BUILDFLAG(IS_WIN)
   // Create SystemMediaControls with the SingletonHwnd.
   browser_system_media_controls_ =
       system_media_controls::SystemMediaControls::Create(
           media::AudioManager::GetGlobalAppName());
+#elif BUILDFLAG(IS_MAC)
+  browser_system_media_controls_ =
+      system_media_controls::SystemMediaControls::Create(
+          /*application_host=*/nullptr);
 #endif
 
   if (browser_system_media_controls_) {
@@ -406,7 +409,7 @@ void MediaKeysListenerManagerImpl::UpdateSystemMediaControlsEnabledControls() {
           browser_system_media_controls_->SetIsStopEnabled(should_enable);
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
       }
     }
   }
@@ -448,7 +451,7 @@ void MediaKeysListenerManagerImpl::UpdateSystemMediaControlsEnabledControls() {
           smc->SetIsStopEnabled(should_enable);
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
       }
     }
   }
@@ -510,11 +513,12 @@ bool MediaKeysListenerManagerImpl::ShouldActiveMediaSessionControllerReceiveKey(
 }
 
 bool MediaKeysListenerManagerImpl::ShouldUseWebAppSystemMediaControls() const {
-#if BUILDFLAG(IS_WIN)
-  return base::FeatureList::IsEnabled(features::kWebAppSystemMediaControlsWin);
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+  // This feature is enabled by default on Windows, disabled on mac.
+  return base::FeatureList::IsEnabled(features::kWebAppSystemMediaControls);
 #else
   return false;
-#endif
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 }
 
 bool MediaKeysListenerManagerImpl::IsDelegateForWebAppSession(

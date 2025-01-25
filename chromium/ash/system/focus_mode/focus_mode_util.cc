@@ -20,6 +20,15 @@
 
 namespace ash::focus_mode_util {
 
+SelectedPlaylist::SelectedPlaylist() = default;
+
+SelectedPlaylist::SelectedPlaylist(const SelectedPlaylist&) = default;
+
+SelectedPlaylist& SelectedPlaylist::operator=(const SelectedPlaylist& other) =
+    default;
+
+SelectedPlaylist::~SelectedPlaylist() = default;
+
 std::u16string GetDurationString(base::TimeDelta duration_to_format,
                                  bool digital_format) {
   UErrorCode status = U_ZERO_ERROR;
@@ -75,9 +84,10 @@ std::u16string GetFormattedClockString(const base::Time end_time) {
       base::kKeepAmPm);
 }
 
-std::u16string GetNotificationTitleForFocusSession(const base::Time end_time) {
+std::u16string GetNotificationDescriptionForFocusSession(
+    const base::Time end_time) {
   return l10n_util::GetStringFUTF16(
-      IDS_ASH_DO_NOT_DISTURB_NOTIFICATION_IN_FOCUS_MODE_TITLE,
+      IDS_ASH_DO_NOT_DISTURB_NOTIFICATION_IN_FOCUS_MODE_DESCRIPTION,
       GetFormattedClockString(end_time));
 }
 
@@ -98,6 +108,33 @@ std::u16string GetFormattedEndTimeString(const base::Time end_time) {
   return l10n_util::GetStringFUTF16(
       IDS_ASH_STATUS_TRAY_FOCUS_MODE_TOGGLE_TIME_SUBLABEL,
       focus_mode_util::GetFormattedClockString(end_time));
+}
+
+std::string GetSourceTitleForMediaControls(const SelectedPlaylist& playlist) {
+  if (playlist.empty() || playlist.type == SoundType::kNone) {
+    return "";
+  }
+
+  std::string playlist_type = l10n_util::GetStringUTF8(
+      playlist.type == SoundType::kYouTubeMusic
+          ? IDS_ASH_STATUS_TRAY_FOCUS_MODE_SOUNDS_YOUTUBE_MUSIC_BUTTON
+          : IDS_ASH_STATUS_TRAY_FOCUS_MODE_SOUNDS_SOUNDSCAPE_BUTTON);
+
+  if (playlist.title.empty()) {
+    return playlist_type;
+  }
+
+  return l10n_util::GetStringFUTF8(
+      IDS_ASH_STATUS_TRAY_FOCUS_MODE_SOUNDS_MEDIA_CONTROLS_SOURCE_TITLE,
+      base::UTF8ToUTF16(playlist_type), base::UTF8ToUTF16(playlist.title));
+}
+
+std::u16string GetCongratulatoryTextAndEmoji() {
+  return base::JoinString(
+      {l10n_util::GetStringUTF16(
+           IDS_ASH_STATUS_TRAY_FOCUS_MODE_ENDING_MOMENT_TITLE),
+       u"🎉"},
+      u" ");
 }
 
 }  // namespace ash::focus_mode_util

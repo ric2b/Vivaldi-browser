@@ -64,6 +64,7 @@
 #include "chromeos/ash/components/system/statistics_provider.h"
 #include "chromeos/ash/components/timezone/timezone_resolver.h"
 #include "chromeos/components/disks/disks_prefs.h"
+#include "chromeos/components/magic_boost/public/cpp/magic_boost_state.h"
 #include "chromeos/constants/pref_names.h"
 #include "components/feedback/content/content_tracing_manager.h"
 #include "components/language/core/browser/pref_names.h"
@@ -173,6 +174,12 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kDeviceSwitchFunctionKeysBehaviorEnabled,
                                 false);
   registry->RegisterBooleanPref(::prefs::kLocalUserFilesAllowed, true);
+  registry->RegisterStringPref(::prefs::kLocalUserFilesMigrationDestination,
+                               "read_only");
+  registry->RegisterListPref(prefs::kDnsOverHttpsExcludedDomains,
+                             base::Value::List());
+  registry->RegisterListPref(prefs::kDnsOverHttpsIncludedDomains,
+                             base::Value::List());
 
   RegisterLocalStatePrefs(registry);
 }
@@ -292,13 +299,17 @@ void Preferences::RegisterProfilePrefs(
       base::to_underlying(input_method::ConsentStatus::kUnset));
   registry->RegisterIntegerPref(prefs::kOrcaConsentWindowDismissCount, 0);
   registry->RegisterBooleanPref(prefs::kEmojiPickerGifSupportEnabled, true);
+  registry->RegisterDictionaryPref(prefs::kEmojiPickerHistory);
+  registry->RegisterDictionaryPref(prefs::kEmojiPickerPreferences);
   registry->RegisterDictionaryPref(
       ::prefs::kLanguageInputMethodSpecificSettings);
   registry->RegisterBooleanPref(prefs::kLastUsedImeShortcutReminderDismissed,
                                 false);
   registry->RegisterBooleanPref(prefs::kNextImeShortcutReminderDismissed,
                                 false);
-
+  registry->RegisterIntegerPref(prefs::kGenAIWallpaperSettings, /*enabled=*/1);
+  registry->RegisterIntegerPref(prefs::kGenAIVcBackgroundSettings,
+                                /*enabled=*/1);
   registry->RegisterIntegerPref(
       ::prefs::kLanguageRemapSearchKeyTo,
       static_cast<int>(ui::mojom::ModifierKey::kMeta),
@@ -426,6 +437,9 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterInt64Pref(::prefs::kHatsLastInteractionTimestamp, 0);
 
+  registry->RegisterTimePref(::prefs::kHatsPrioritizedLastInteractionTimestamp,
+                             base::Time());
+
   registry->RegisterInt64Pref(::prefs::kHatsSurveyCycleEndTimestamp, 0);
 
   registry->RegisterBooleanPref(::prefs::kHatsDeviceIsSelected, false);
@@ -474,6 +488,16 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(::prefs::kHatsGeneralCameraIsSelected, false);
 
+  registry->RegisterInt64Pref(
+      ::prefs::kHatsGeneralCameraPrioritizedSurveyCycleEndTs, 0);
+
+  registry->RegisterBooleanPref(
+      ::prefs::kHatsGeneralCameraPrioritizedIsSelected, false);
+
+  registry->RegisterTimePref(
+      ::prefs::kHatsGeneralCameraPrioritizedLastInteractionTimestamp,
+      base::Time());
+
   registry->RegisterInt64Pref(::prefs::kHatsBluetoothRevampCycleEndTs, 0);
 
   registry->RegisterBooleanPref(::prefs::kHatsBluetoothRevampIsSelected, false);
@@ -512,6 +536,10 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterInt64Pref(::prefs::kHatsPhotosExperienceCycleEndTs, 0);
   registry->RegisterBooleanPref(::prefs::kHatsPhotosExperienceIsSelected,
                                 false);
+
+  // Office HaTS prefs.
+  registry->RegisterInt64Pref(::prefs::kHatsOfficeSurveyCycleEndTs, 0);
+  registry->RegisterBooleanPref(::prefs::kHatsOfficeSurveyIsSelected, false);
 
   registry->RegisterBooleanPref(::prefs::kPinUnlockFeatureNotificationShown,
                                 false);
@@ -569,7 +597,15 @@ void Preferences::RegisterProfilePrefs(
       prefs::kSuggestedContentEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 
-  registry->RegisterBooleanPref(prefs::kMahiEnabled, true);
+  registry->RegisterBooleanPref(prefs::kMagicBoostEnabled, true);
+
+  registry->RegisterBooleanPref(prefs::kHmrEnabled, true);
+
+  registry->RegisterIntegerPref(
+      prefs::kHMRConsentStatus,
+      base::to_underlying(chromeos::HMRConsentStatus::kUnset));
+
+  registry->RegisterIntegerPref(prefs::kHMRConsentWindowDismissCount, 0);
 
   registry->RegisterBooleanPref(
       prefs::kLauncherResultEverLaunched, false,
@@ -593,9 +629,9 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(prefs::kShowAiIntroScreenEnabled, true);
 
-  registry->RegisterBooleanPref(prefs::kShowTouchpadScrollScreenEnabled, true);
+  registry->RegisterBooleanPref(prefs::kShowGeminiIntroScreenEnabled, true);
 
-  registry->RegisterBooleanPref(prefs::kShowTunaScreenEnabled, true);
+  registry->RegisterBooleanPref(prefs::kShowTouchpadScrollScreenEnabled, true);
 
   // Settings HaTS survey prefs for Settings and Settings Search features.
   registry->RegisterInt64Pref(::prefs::kHatsOsSettingsSearchSurveyCycleEndTs,
@@ -609,6 +645,11 @@ void Preferences::RegisterProfilePrefs(
                                 false);
   registry->RegisterTimePref(
       ::prefs::kHatsBorealisGamesLastInteractionTimestamp, base::Time());
+
+  // Launcher HaTS survey prefs.
+  registry->RegisterInt64Pref(::prefs::kHatsLauncherAppsSurveyCycleEndTs, 0);
+  registry->RegisterBooleanPref(::prefs::kHatsLauncherAppsSurveyIsSelected,
+                                false);
 
   registry->RegisterBooleanPref(prefs::kShowDisplaySizeScreenEnabled, true);
 

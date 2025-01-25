@@ -41,197 +41,202 @@ struct ModelTypeInfo {
 //  - update the SyncModelTypes enum in enums.xml, and
 //  - update the SyncModelType histogram suffix in histograms.xml.
 // Struct field values should be unique across the entire map.
-const ModelTypeInfo kModelTypeInfoMap[] = {
-    {UNSPECIFIED, "", "", "Unspecified", -1,
-     ModelTypeForHistograms::kUnspecified},
-    {BOOKMARKS, "BOOKMARK", "bookmarks", "Bookmarks",
-     sync_pb::EntitySpecifics::kBookmarkFieldNumber,
-     ModelTypeForHistograms::kBookmarks},
-    {PREFERENCES, "PREFERENCE", "preferences", "Preferences",
-     sync_pb::EntitySpecifics::kPreferenceFieldNumber,
-     ModelTypeForHistograms::kPreferences},
-    {PASSWORDS, "PASSWORD", "passwords", "Passwords",
-     sync_pb::EntitySpecifics::kPasswordFieldNumber,
-     ModelTypeForHistograms::kPasswords},
-    {AUTOFILL_PROFILE, "AUTOFILL_PROFILE", "autofill_profiles",
-     "Autofill Profiles", sync_pb::EntitySpecifics::kAutofillProfileFieldNumber,
-     ModelTypeForHistograms::kAutofillProfile},
-    {AUTOFILL, "AUTOFILL", "autofill", "Autofill",
-     sync_pb::EntitySpecifics::kAutofillFieldNumber,
-     ModelTypeForHistograms::kAutofill},
-    {AUTOFILL_WALLET_CREDENTIAL, "AUTOFILL_WALLET_CREDENTIAL",
-     "autofill_wallet_credential", "Autofill Wallet Credential",
-     sync_pb::EntitySpecifics::kAutofillWalletCredentialFieldNumber,
-     ModelTypeForHistograms::kAutofillWalletCredential},
-    {AUTOFILL_WALLET_DATA, "AUTOFILL_WALLET", "autofill_wallet",
-     "Autofill Wallet", sync_pb::EntitySpecifics::kAutofillWalletFieldNumber,
-     ModelTypeForHistograms::kAutofillWalletData},
-    {AUTOFILL_WALLET_METADATA, "WALLET_METADATA", "autofill_wallet_metadata",
-     "Autofill Wallet Metadata",
-     sync_pb::EntitySpecifics::kWalletMetadataFieldNumber,
-     ModelTypeForHistograms::kAutofillWalletMetadata},
-    {AUTOFILL_WALLET_OFFER, "AUTOFILL_OFFER", "autofill_wallet_offer",
-     "Autofill Wallet Offer",
-     sync_pb::EntitySpecifics::kAutofillOfferFieldNumber,
-     ModelTypeForHistograms::kAutofillWalletOffer},
-    {AUTOFILL_WALLET_USAGE, "AUTOFILL_WALLET_USAGE", "autofill_wallet_usage",
-     "Autofill Wallet Usage",
-     sync_pb::EntitySpecifics::kAutofillWalletUsageFieldNumber,
-     ModelTypeForHistograms::kAutofillWalletUsage},
-    {THEMES, "THEME", "themes", "Themes",
-     sync_pb::EntitySpecifics::kThemeFieldNumber,
-     ModelTypeForHistograms::kThemes},
-    {EXTENSIONS, "EXTENSION", "extensions", "Extensions",
-     sync_pb::EntitySpecifics::kExtensionFieldNumber,
-     ModelTypeForHistograms::kExtensions},
-    {SEARCH_ENGINES, "SEARCH_ENGINE", "search_engines", "Search Engines",
-     sync_pb::EntitySpecifics::kSearchEngineFieldNumber,
-     ModelTypeForHistograms::kSearchEngines},
-    {SESSIONS, "SESSION", "sessions", "Sessions",
-     sync_pb::EntitySpecifics::kSessionFieldNumber,
-     ModelTypeForHistograms::kSessions},
-    {APPS, "APP", "apps", "Apps", sync_pb::EntitySpecifics::kAppFieldNumber,
-     ModelTypeForHistograms::kApps},
-    {APP_SETTINGS, "APP_SETTING", "app_settings", "App settings",
-     sync_pb::EntitySpecifics::kAppSettingFieldNumber,
-     ModelTypeForHistograms::kAppSettings},
-    {EXTENSION_SETTINGS, "EXTENSION_SETTING", "extension_settings",
-     "Extension settings",
-     sync_pb::EntitySpecifics::kExtensionSettingFieldNumber,
-     ModelTypeForHistograms::kExtensionSettings},
-    {HISTORY_DELETE_DIRECTIVES, "HISTORY_DELETE_DIRECTIVE",
-     "history_delete_directives", "History Delete Directives",
-     sync_pb::EntitySpecifics::kHistoryDeleteDirectiveFieldNumber,
-     ModelTypeForHistograms::kHistoryDeleteDirectices},
-    {DICTIONARY, "DICTIONARY", "dictionary", "Dictionary",
-     sync_pb::EntitySpecifics::kDictionaryFieldNumber,
-     ModelTypeForHistograms::kDictionary},
-    {DEVICE_INFO, "DEVICE_INFO", "device_info", "Device Info",
-     sync_pb::EntitySpecifics::kDeviceInfoFieldNumber,
-     ModelTypeForHistograms::kDeviceInfo},
-    {PRIORITY_PREFERENCES, "PRIORITY_PREFERENCE", "priority_preferences",
-     "Priority Preferences",
-     sync_pb::EntitySpecifics::kPriorityPreferenceFieldNumber,
-     ModelTypeForHistograms::kPriorityPreferences},
-    {SUPERVISED_USER_SETTINGS, "MANAGED_USER_SETTING", "managed_user_settings",
-     "Managed User Settings",
-     sync_pb::EntitySpecifics::kManagedUserSettingFieldNumber,
-     ModelTypeForHistograms::kSupervisedUserSettings},
-    {APP_LIST, "APP_LIST", "app_list", "App List",
-     sync_pb::EntitySpecifics::kAppListFieldNumber,
-     ModelTypeForHistograms::kAppList},
-    {ARC_PACKAGE, "ARC_PACKAGE", "arc_package", "Arc Package",
-     sync_pb::EntitySpecifics::kArcPackageFieldNumber,
-     ModelTypeForHistograms::kArcPackage},
-    {PRINTERS, "PRINTER", "printers", "Printers",
-     sync_pb::EntitySpecifics::kPrinterFieldNumber,
-     ModelTypeForHistograms::kPrinters},
-    {READING_LIST, "READING_LIST", "reading_list", "Reading List",
-     sync_pb::EntitySpecifics::kReadingListFieldNumber,
-     ModelTypeForHistograms::kReadingList},
-    {USER_EVENTS, "USER_EVENT", "user_events", "User Events",
-     sync_pb::EntitySpecifics::kUserEventFieldNumber,
-     ModelTypeForHistograms::kUserEvents},
-    {USER_CONSENTS, "USER_CONSENT", "user_consent", "User Consents",
-     sync_pb::EntitySpecifics::kUserConsentFieldNumber,
-     ModelTypeForHistograms::kUserConsents},
-    {SEND_TAB_TO_SELF, "SEND_TAB_TO_SELF", "send_tab_to_self",
-     "Send Tab To Self", sync_pb::EntitySpecifics::kSendTabToSelfFieldNumber,
-     ModelTypeForHistograms::kSendTabToSelf},
-    {SECURITY_EVENTS, "SECURITY_EVENT", "security_events", "Security Events",
-     sync_pb::EntitySpecifics::kSecurityEventFieldNumber,
-     ModelTypeForHistograms::kSecurityEvents},
-    {WIFI_CONFIGURATIONS, "WIFI_CONFIGURATION", "wifi_configurations",
-     "Wifi Configurations",
-     sync_pb::EntitySpecifics::kWifiConfigurationFieldNumber,
-     ModelTypeForHistograms::kWifiConfigurations},
-    {WEB_APPS, "WEB_APP", "web_apps", "Web Apps",
-     sync_pb::EntitySpecifics::kWebAppFieldNumber,
-     ModelTypeForHistograms::kWebApps},
-    {WEB_APKS, "WEB_APK", "web_apks", "Web Apks",
-     sync_pb::EntitySpecifics::kWebApkFieldNumber,
-     ModelTypeForHistograms::kWebApks},
-    {OS_PREFERENCES, "OS_PREFERENCE", "os_preferences", "OS Preferences",
-     sync_pb::EntitySpecifics::kOsPreferenceFieldNumber,
-     ModelTypeForHistograms::kOsPreferences},
-    {OS_PRIORITY_PREFERENCES, "OS_PRIORITY_PREFERENCE",
-     "os_priority_preferences", "OS Priority Preferences",
-     sync_pb::EntitySpecifics::kOsPriorityPreferenceFieldNumber,
-     ModelTypeForHistograms::kOsPriorityPreferences},
-    {SHARING_MESSAGE, "SHARING_MESSAGE", "sharing_message", "Sharing Message",
-     sync_pb::EntitySpecifics::kSharingMessageFieldNumber,
-     ModelTypeForHistograms::kSharingMessage},
-    {WORKSPACE_DESK, "WORKSPACE_DESK", "workspace_desk", "Workspace Desk",
-     sync_pb::EntitySpecifics::kWorkspaceDeskFieldNumber,
-     ModelTypeForHistograms::kWorkspaceDesk},
-    {HISTORY, "HISTORY", "history", "History",
-     sync_pb::EntitySpecifics::kHistoryFieldNumber,
-     ModelTypeForHistograms::kHistory},
-    {PRINTERS_AUTHORIZATION_SERVERS, "PRINTERS_AUTHORIZATION_SERVER",
-     "printers_authorization_servers", "Printers Authorization Servers",
-     sync_pb::EntitySpecifics::kPrintersAuthorizationServerFieldNumber,
-     ModelTypeForHistograms::kPrintersAuthorizationServers},
-    {CONTACT_INFO, "CONTACT_INFO", "contact_info", "Contact Info",
-     sync_pb::EntitySpecifics::kContactInfoFieldNumber,
-     ModelTypeForHistograms::kContactInfo},
-    {SAVED_TAB_GROUP, "SAVED_TAB_GROUP", "saved_tab_group", "Saved Tab Group",
-     sync_pb::EntitySpecifics::kSavedTabGroupFieldNumber,
-     ModelTypeForHistograms::kSavedTabGroups},
-    {POWER_BOOKMARK, "POWER_BOOKMARK", "power_bookmark", "Power Bookmark",
-     sync_pb::EntitySpecifics::kPowerBookmarkFieldNumber,
-     ModelTypeForHistograms::kPowerBookmark},
-    {WEBAUTHN_CREDENTIAL, "WEBAUTHN_CREDENTIAL", "webauthn_credential",
-     "WebAuthn Credentials",
-     sync_pb::EntitySpecifics::kWebauthnCredentialFieldNumber,
-     ModelTypeForHistograms::kWebAuthnCredentials},
-    {INCOMING_PASSWORD_SHARING_INVITATION,
-     "INCOMING_PASSWORD_SHARING_INVITATION",
-     "incoming_password_sharing_invitation",
-     "Incoming Password Sharing Invitations",
-     sync_pb::EntitySpecifics::kIncomingPasswordSharingInvitationFieldNumber,
-     ModelTypeForHistograms::kIncomingPasswordSharingInvitations},
-    {OUTGOING_PASSWORD_SHARING_INVITATION,
-     "OUTGOING_PASSWORD_SHARING_INVITATION",
-     "outgoing_password_sharing_invitation",
-     "Outgoing Password Sharing Invitations",
-     sync_pb::EntitySpecifics::kOutgoingPasswordSharingInvitationFieldNumber,
-     ModelTypeForHistograms::kOutgoingPasswordSharingInvitations},
-    {SHARED_TAB_GROUP_DATA, "SHARED_TAB_GROUP_DATA", "shared_tab_group_data",
-     "Shared Tab Group Data",
-     sync_pb::EntitySpecifics::kSharedTabGroupDataFieldNumber,
-     ModelTypeForHistograms::kSharedTabGroupData},
-    {COLLABORATION_GROUP, "COLLABORATION_GROUP", "collaboration_group",
-     "Collaboration Group",
-     sync_pb::EntitySpecifics::kCollaborationGroupFieldNumber,
-     ModelTypeForHistograms::kCollaborationGroup},
-    {PLUS_ADDRESS, "PLUS_ADDRESS", "plus_address", "Plus Address",
-     sync_pb::EntitySpecifics::kPlusAddressFieldNumber,
-     ModelTypeForHistograms::kPlusAddresses},
-    {COMPARE, "COMPARE", "compare", "Compare",
-     sync_pb::EntitySpecifics::kCompareFieldNumber,
-     ModelTypeForHistograms::kCompare},
-    {COOKIES, "COOKIE", "cookies", "Cookies",
-     sync_pb::EntitySpecifics::kCookieFieldNumber,
-     ModelTypeForHistograms::kCookies},
+constexpr auto kModelTypeInfoMap = std::to_array<ModelTypeInfo>(
+    {{UNSPECIFIED, "", "", "Unspecified", -1,
+      ModelTypeForHistograms::kUnspecified},
+     {BOOKMARKS, "BOOKMARK", "bookmarks", "Bookmarks",
+      sync_pb::EntitySpecifics::kBookmarkFieldNumber,
+      ModelTypeForHistograms::kBookmarks},
+     {PREFERENCES, "PREFERENCE", "preferences", "Preferences",
+      sync_pb::EntitySpecifics::kPreferenceFieldNumber,
+      ModelTypeForHistograms::kPreferences},
+     {PASSWORDS, "PASSWORD", "passwords", "Passwords",
+      sync_pb::EntitySpecifics::kPasswordFieldNumber,
+      ModelTypeForHistograms::kPasswords},
+     {AUTOFILL_PROFILE, "AUTOFILL_PROFILE", "autofill_profiles",
+      "Autofill Profiles",
+      sync_pb::EntitySpecifics::kAutofillProfileFieldNumber,
+      ModelTypeForHistograms::kAutofillProfile},
+     {AUTOFILL, "AUTOFILL", "autofill", "Autofill",
+      sync_pb::EntitySpecifics::kAutofillFieldNumber,
+      ModelTypeForHistograms::kAutofill},
+     {AUTOFILL_WALLET_CREDENTIAL, "AUTOFILL_WALLET_CREDENTIAL",
+      "autofill_wallet_credential", "Autofill Wallet Credential",
+      sync_pb::EntitySpecifics::kAutofillWalletCredentialFieldNumber,
+      ModelTypeForHistograms::kAutofillWalletCredential},
+     {AUTOFILL_WALLET_DATA, "AUTOFILL_WALLET", "autofill_wallet",
+      "Autofill Wallet", sync_pb::EntitySpecifics::kAutofillWalletFieldNumber,
+      ModelTypeForHistograms::kAutofillWalletData},
+     {AUTOFILL_WALLET_METADATA, "WALLET_METADATA", "autofill_wallet_metadata",
+      "Autofill Wallet Metadata",
+      sync_pb::EntitySpecifics::kWalletMetadataFieldNumber,
+      ModelTypeForHistograms::kAutofillWalletMetadata},
+     {AUTOFILL_WALLET_OFFER, "AUTOFILL_OFFER", "autofill_wallet_offer",
+      "Autofill Wallet Offer",
+      sync_pb::EntitySpecifics::kAutofillOfferFieldNumber,
+      ModelTypeForHistograms::kAutofillWalletOffer},
+     {AUTOFILL_WALLET_USAGE, "AUTOFILL_WALLET_USAGE", "autofill_wallet_usage",
+      "Autofill Wallet Usage",
+      sync_pb::EntitySpecifics::kAutofillWalletUsageFieldNumber,
+      ModelTypeForHistograms::kAutofillWalletUsage},
+     {THEMES, "THEME", "themes", "Themes",
+      sync_pb::EntitySpecifics::kThemeFieldNumber,
+      ModelTypeForHistograms::kThemes},
+     {EXTENSIONS, "EXTENSION", "extensions", "Extensions",
+      sync_pb::EntitySpecifics::kExtensionFieldNumber,
+      ModelTypeForHistograms::kExtensions},
+     {SEARCH_ENGINES, "SEARCH_ENGINE", "search_engines", "Search Engines",
+      sync_pb::EntitySpecifics::kSearchEngineFieldNumber,
+      ModelTypeForHistograms::kSearchEngines},
+     {SESSIONS, "SESSION", "sessions", "Sessions",
+      sync_pb::EntitySpecifics::kSessionFieldNumber,
+      ModelTypeForHistograms::kSessions},
+     {APPS, "APP", "apps", "Apps", sync_pb::EntitySpecifics::kAppFieldNumber,
+      ModelTypeForHistograms::kApps},
+     {APP_SETTINGS, "APP_SETTING", "app_settings", "App settings",
+      sync_pb::EntitySpecifics::kAppSettingFieldNumber,
+      ModelTypeForHistograms::kAppSettings},
+     {EXTENSION_SETTINGS, "EXTENSION_SETTING", "extension_settings",
+      "Extension settings",
+      sync_pb::EntitySpecifics::kExtensionSettingFieldNumber,
+      ModelTypeForHistograms::kExtensionSettings},
+     {HISTORY_DELETE_DIRECTIVES, "HISTORY_DELETE_DIRECTIVE",
+      "history_delete_directives", "History Delete Directives",
+      sync_pb::EntitySpecifics::kHistoryDeleteDirectiveFieldNumber,
+      ModelTypeForHistograms::kHistoryDeleteDirectices},
+     {DICTIONARY, "DICTIONARY", "dictionary", "Dictionary",
+      sync_pb::EntitySpecifics::kDictionaryFieldNumber,
+      ModelTypeForHistograms::kDictionary},
+     {DEVICE_INFO, "DEVICE_INFO", "device_info", "Device Info",
+      sync_pb::EntitySpecifics::kDeviceInfoFieldNumber,
+      ModelTypeForHistograms::kDeviceInfo},
+     {PRIORITY_PREFERENCES, "PRIORITY_PREFERENCE", "priority_preferences",
+      "Priority Preferences",
+      sync_pb::EntitySpecifics::kPriorityPreferenceFieldNumber,
+      ModelTypeForHistograms::kPriorityPreferences},
+     {SUPERVISED_USER_SETTINGS, "MANAGED_USER_SETTING", "managed_user_settings",
+      "Managed User Settings",
+      sync_pb::EntitySpecifics::kManagedUserSettingFieldNumber,
+      ModelTypeForHistograms::kSupervisedUserSettings},
+     {APP_LIST, "APP_LIST", "app_list", "App List",
+      sync_pb::EntitySpecifics::kAppListFieldNumber,
+      ModelTypeForHistograms::kAppList},
+     {ARC_PACKAGE, "ARC_PACKAGE", "arc_package", "Arc Package",
+      sync_pb::EntitySpecifics::kArcPackageFieldNumber,
+      ModelTypeForHistograms::kArcPackage},
+     {PRINTERS, "PRINTER", "printers", "Printers",
+      sync_pb::EntitySpecifics::kPrinterFieldNumber,
+      ModelTypeForHistograms::kPrinters},
+     {READING_LIST, "READING_LIST", "reading_list", "Reading List",
+      sync_pb::EntitySpecifics::kReadingListFieldNumber,
+      ModelTypeForHistograms::kReadingList},
+     {USER_EVENTS, "USER_EVENT", "user_events", "User Events",
+      sync_pb::EntitySpecifics::kUserEventFieldNumber,
+      ModelTypeForHistograms::kUserEvents},
+     {USER_CONSENTS, "USER_CONSENT", "user_consent", "User Consents",
+      sync_pb::EntitySpecifics::kUserConsentFieldNumber,
+      ModelTypeForHistograms::kUserConsents},
+     {SEND_TAB_TO_SELF, "SEND_TAB_TO_SELF", "send_tab_to_self",
+      "Send Tab To Self", sync_pb::EntitySpecifics::kSendTabToSelfFieldNumber,
+      ModelTypeForHistograms::kSendTabToSelf},
+     {SECURITY_EVENTS, "SECURITY_EVENT", "security_events", "Security Events",
+      sync_pb::EntitySpecifics::kSecurityEventFieldNumber,
+      ModelTypeForHistograms::kSecurityEvents},
+     {WIFI_CONFIGURATIONS, "WIFI_CONFIGURATION", "wifi_configurations",
+      "Wifi Configurations",
+      sync_pb::EntitySpecifics::kWifiConfigurationFieldNumber,
+      ModelTypeForHistograms::kWifiConfigurations},
+     {WEB_APPS, "WEB_APP", "web_apps", "Web Apps",
+      sync_pb::EntitySpecifics::kWebAppFieldNumber,
+      ModelTypeForHistograms::kWebApps},
+     {WEB_APKS, "WEB_APK", "web_apks", "Web Apks",
+      sync_pb::EntitySpecifics::kWebApkFieldNumber,
+      ModelTypeForHistograms::kWebApks},
+     {OS_PREFERENCES, "OS_PREFERENCE", "os_preferences", "OS Preferences",
+      sync_pb::EntitySpecifics::kOsPreferenceFieldNumber,
+      ModelTypeForHistograms::kOsPreferences},
+     {OS_PRIORITY_PREFERENCES, "OS_PRIORITY_PREFERENCE",
+      "os_priority_preferences", "OS Priority Preferences",
+      sync_pb::EntitySpecifics::kOsPriorityPreferenceFieldNumber,
+      ModelTypeForHistograms::kOsPriorityPreferences},
+     {SHARING_MESSAGE, "SHARING_MESSAGE", "sharing_message", "Sharing Message",
+      sync_pb::EntitySpecifics::kSharingMessageFieldNumber,
+      ModelTypeForHistograms::kSharingMessage},
+     {WORKSPACE_DESK, "WORKSPACE_DESK", "workspace_desk", "Workspace Desk",
+      sync_pb::EntitySpecifics::kWorkspaceDeskFieldNumber,
+      ModelTypeForHistograms::kWorkspaceDesk},
+     {HISTORY, "HISTORY", "history", "History",
+      sync_pb::EntitySpecifics::kHistoryFieldNumber,
+      ModelTypeForHistograms::kHistory},
+     {PRINTERS_AUTHORIZATION_SERVERS, "PRINTERS_AUTHORIZATION_SERVER",
+      "printers_authorization_servers", "Printers Authorization Servers",
+      sync_pb::EntitySpecifics::kPrintersAuthorizationServerFieldNumber,
+      ModelTypeForHistograms::kPrintersAuthorizationServers},
+     {CONTACT_INFO, "CONTACT_INFO", "contact_info", "Contact Info",
+      sync_pb::EntitySpecifics::kContactInfoFieldNumber,
+      ModelTypeForHistograms::kContactInfo},
+     {SAVED_TAB_GROUP, "SAVED_TAB_GROUP", "saved_tab_group", "Saved Tab Group",
+      sync_pb::EntitySpecifics::kSavedTabGroupFieldNumber,
+      ModelTypeForHistograms::kSavedTabGroups},
+     {POWER_BOOKMARK, "POWER_BOOKMARK", "power_bookmark", "Power Bookmark",
+      sync_pb::EntitySpecifics::kPowerBookmarkFieldNumber,
+      ModelTypeForHistograms::kPowerBookmark},
+     {WEBAUTHN_CREDENTIAL, "WEBAUTHN_CREDENTIAL", "webauthn_credential",
+      "WebAuthn Credentials",
+      sync_pb::EntitySpecifics::kWebauthnCredentialFieldNumber,
+      ModelTypeForHistograms::kWebAuthnCredentials},
+     {INCOMING_PASSWORD_SHARING_INVITATION,
+      "INCOMING_PASSWORD_SHARING_INVITATION",
+      "incoming_password_sharing_invitation",
+      "Incoming Password Sharing Invitations",
+      sync_pb::EntitySpecifics::kIncomingPasswordSharingInvitationFieldNumber,
+      ModelTypeForHistograms::kIncomingPasswordSharingInvitations},
+     {OUTGOING_PASSWORD_SHARING_INVITATION,
+      "OUTGOING_PASSWORD_SHARING_INVITATION",
+      "outgoing_password_sharing_invitation",
+      "Outgoing Password Sharing Invitations",
+      sync_pb::EntitySpecifics::kOutgoingPasswordSharingInvitationFieldNumber,
+      ModelTypeForHistograms::kOutgoingPasswordSharingInvitations},
+     {SHARED_TAB_GROUP_DATA, "SHARED_TAB_GROUP_DATA", "shared_tab_group_data",
+      "Shared Tab Group Data",
+      sync_pb::EntitySpecifics::kSharedTabGroupDataFieldNumber,
+      ModelTypeForHistograms::kSharedTabGroupData},
+     {COLLABORATION_GROUP, "COLLABORATION_GROUP", "collaboration_group",
+      "Collaboration Group",
+      sync_pb::EntitySpecifics::kCollaborationGroupFieldNumber,
+      ModelTypeForHistograms::kCollaborationGroup},
+     {PLUS_ADDRESS, "PLUS_ADDRESS", "plus_address", "Plus Address",
+      sync_pb::EntitySpecifics::kPlusAddressFieldNumber,
+      ModelTypeForHistograms::kPlusAddresses},
+     {PRODUCT_COMPARISON, "PRODUCT_COMPARISON", "product_comparison",
+      "Product Comparison",
+      sync_pb::EntitySpecifics::kProductComparisonFieldNumber,
+      ModelTypeForHistograms::kProductComparison},
+     {COOKIES, "COOKIE", "cookies", "Cookies",
+      sync_pb::EntitySpecifics::kCookieFieldNumber,
+      ModelTypeForHistograms::kCookies},
+     {PLUS_ADDRESS_SETTING, "PLUS_ADDRESS_SETTING", "plus_address_setting",
+      "Plus Address Setting",
+      sync_pb::EntitySpecifics::kPlusAddressSettingFieldNumber,
+      ModelTypeForHistograms::kPlusAddressSettings},
 
-    {NOTES, "NOTES", "vivaldi_notes", "Notes",
-     sync_pb::EntitySpecifics::kNotesFieldNumber,
-     ModelTypeForHistograms::kNotes},
+     {NOTES, "NOTES", "vivaldi_notes", "Notes",
+      sync_pb::EntitySpecifics::kNotesFieldNumber,
+      ModelTypeForHistograms::kNotes},
 
-    // ---- Control Types ----
-    {NIGORI, "NIGORI", "nigori", "Encryption Keys",
-     sync_pb::EntitySpecifics::kNigoriFieldNumber,
-     ModelTypeForHistograms::kNigori},
-};
+     // ---- Control Types ----
+     {NIGORI, "NIGORI", "nigori", "Encryption Keys",
+      sync_pb::EntitySpecifics::kNigoriFieldNumber,
+      ModelTypeForHistograms::kNigori}});
 
-static_assert(std::size(kModelTypeInfoMap) == GetNumModelTypes(),
+static_assert(kModelTypeInfoMap.size() == GetNumModelTypes(),
               "kModelTypeInfoMap should have GetNumModelTypes() elements");
 
-static_assert(52 + 1 /* notes */ == syncer::GetNumModelTypes(),
+static_assert(53 + 1 /* notes */ == syncer::GetNumModelTypes(),
               "When adding a new type, update enum SyncModelTypes in enums.xml "
               "and suffix SyncModelType in histograms.xml.");
 
-static_assert(52 + 1 /* notes */ == syncer::GetNumModelTypes(),
+static_assert(53 + 1 /* notes */ == syncer::GetNumModelTypes(),
               "When adding a new type, follow the integration checklist in "
               "https://www.chromium.org/developers/design-documents/sync/"
               "integration-checklist/");
@@ -314,8 +319,11 @@ constexpr kSpecificsFieldNumberToModelTypeMap
         {sync_pb::EntitySpecifics::kCollaborationGroupFieldNumber,
          COLLABORATION_GROUP},
         {sync_pb::EntitySpecifics::kPlusAddressFieldNumber, PLUS_ADDRESS},
-        {sync_pb::EntitySpecifics::kCompareFieldNumber, COMPARE},
+        {sync_pb::EntitySpecifics::kProductComparisonFieldNumber,
+         PRODUCT_COMPARISON},
         {sync_pb::EntitySpecifics::kCookieFieldNumber, COOKIES},
+        {sync_pb::EntitySpecifics::kPlusAddressSettingFieldNumber,
+         PLUS_ADDRESS_SETTING},
         // ---- Control Types ----
         {sync_pb::EntitySpecifics::kNigoriFieldNumber, NIGORI},
 
@@ -328,8 +336,8 @@ constexpr kSpecificsFieldNumberToModelTypeMap
 void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
   switch (type) {
     case UNSPECIFIED:
-      NOTREACHED() << "No default field value for "
-                   << ModelTypeToDebugString(type);
+      NOTREACHED_IN_MIGRATION()
+          << "No default field value for " << ModelTypeToDebugString(type);
       break;
     case BOOKMARKS:
       specifics->mutable_bookmark();
@@ -478,11 +486,14 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case PLUS_ADDRESS:
       specifics->mutable_plus_address();
       break;
-    case COMPARE:
-      specifics->mutable_compare();
+    case PRODUCT_COMPARISON:
+      specifics->mutable_product_comparison();
       break;
     case COOKIES:
       specifics->mutable_cookie();
+      break;
+    case PLUS_ADDRESS_SETTING:
+      specifics->mutable_plus_address_setting();
       break;
 
 
@@ -519,7 +530,7 @@ void internal::GetModelTypeSetFromSpecificsFieldNumberListHelper(
 }
 
 ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
-  static_assert(52 + 1 /* notes */ == syncer::GetNumModelTypes(),
+  static_assert(53 + 1 /* notes */ == syncer::GetNumModelTypes(),
                 "When adding new protocol types, the following type lookup "
                 "logic must be updated.");
   if (specifics.has_bookmark())
@@ -628,11 +639,14 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
   if (specifics.has_plus_address()) {
     return PLUS_ADDRESS;
   }
-  if (specifics.has_compare()) {
-    return COMPARE;
+  if (specifics.has_product_comparison()) {
+    return PRODUCT_COMPARISON;
   }
   if (specifics.has_cookie()) {
     return COOKIES;
+  }
+  if (specifics.has_plus_address_setting()) {
+    return PLUS_ADDRESS_SETTING;
   }
 
   if (specifics.has_notes())
@@ -644,7 +658,7 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
 }
 
 ModelTypeSet EncryptableUserTypes() {
-  static_assert(52 + 1 /* notes */ == syncer::GetNumModelTypes(),
+  static_assert(53 + 1 /* notes */ == syncer::GetNumModelTypes(),
                 "If adding an unencryptable type, remove from "
                 "encryptable_user_types below.");
   ModelTypeSet encryptable_user_types = UserTypes();
@@ -682,9 +696,10 @@ ModelTypeSet EncryptableUserTypes() {
   // encryptable_user_types.Remove(OUTGOING_PASSWORD_SHARING_INVITATION);
   // // Never encrypted because consumed server-side.
   // encryptable_user_types.Remove(SHARED_TAB_GROUP_DATA);
-  // // Plus addresses are never encrypted because the originate from outside
-  // // Chrome.
-  // encryptable_user_types.Remove(PLUS_ADDRESS);
+  // // Plus addresses and their settings are never encrypted because they
+  // // originate from outside Chrome.
+  // // encryptable_user_types.Remove(PLUS_ADDRESS);
+  // encryptable_user_types.Remove(PLUS_ADDRESS_SETTING);
   //
   return encryptable_user_types;
 }

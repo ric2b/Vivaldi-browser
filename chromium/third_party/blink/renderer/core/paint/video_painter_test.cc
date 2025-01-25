@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/core/paint/video_painter.h"
 
+#include <memory>
+
 #include "base/unguessable_token.h"
 #include "cc/layers/layer.h"
 #include "components/paint_preview/common/paint_preview_tracker.h"
@@ -15,7 +17,6 @@
 #include "third_party/blink/renderer/core/paint/paint_controller_paint_test.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
 #include "third_party/blink/renderer/platform/testing/empty_web_media_player.h"
-#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 
@@ -154,7 +155,7 @@ class MockWebMediaPlayer : public StubWebMediaPlayer {
 
 class TestWebFrameClientImpl : public frame_test_helpers::TestWebFrameClient {
  public:
-  WebMediaPlayer* CreateMediaPlayer(
+  std::unique_ptr<WebMediaPlayer> CreateMediaPlayer(
       const WebMediaPlayerSource&,
       WebMediaPlayerClient* client,
       blink::MediaInspectorContext*,
@@ -163,7 +164,7 @@ class TestWebFrameClientImpl : public frame_test_helpers::TestWebFrameClient {
       const WebString& sink_id,
       const cc::LayerTreeSettings* settings,
       scoped_refptr<base::TaskRunner> compositor_worker_task_runner) override {
-    MockWebMediaPlayer* player = new MockWebMediaPlayer(client);
+    auto player = std::make_unique<MockWebMediaPlayer>(client);
     EXPECT_CALL(*player, HasAvailableVideoFrame)
         .WillRepeatedly(testing::Return(false));
     return player;
@@ -244,10 +245,13 @@ class VideoPaintPreviewTest : public testing::Test,
 
   LocalFrame* GetFrame() { return GetLocalMainFrame().GetFrame(); }
 
+  TestWebFrameClientImpl web_frame_client_;
+
+  // This must be destroyed before `web_frame_client_`; when the WebViewHelper
+  // is deleted, it destroys child views that were created, but the list of
+  // child views is maintained on `web_frame_client_`.
   frame_test_helpers::WebViewHelper web_view_helper_;
   gfx::Rect bounds_ = {0, 0, 640, 480};
-
-  TestWebFrameClientImpl web_frame_client_;
 };
 
 INSTANTIATE_PAINT_TEST_SUITE_P(VideoPaintPreviewTest);

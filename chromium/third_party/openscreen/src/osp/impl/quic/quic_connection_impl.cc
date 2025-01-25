@@ -4,7 +4,6 @@
 
 #include "osp/impl/quic/quic_connection_impl.h"
 
-#include "osp/impl/quic/quic_connection_factory_base.h"
 #include "osp/impl/quic/quic_utils.h"
 #include "quiche/quic/core/quic_packets.h"
 #include "util/osp_logging.h"
@@ -12,11 +11,10 @@
 
 namespace openscreen::osp {
 
-QuicConnectionImpl::QuicConnectionImpl(
-    QuicConnectionFactoryBase& parent_factory,
-    QuicConnection::Delegate& delegate,
-    const quic::QuicClock& clock)
-    : QuicConnection(delegate), parent_factory_(parent_factory), clock_(clock) {
+QuicConnectionImpl::QuicConnectionImpl(std::string_view instance_name,
+                                       QuicConnection::Delegate& delegate,
+                                       const quic::QuicClock& clock)
+    : QuicConnection(instance_name, delegate), clock_(clock) {
   TRACE_SCOPED(TraceCategory::kQuic, "QuicConnectionImpl::QuicConnectionImpl");
 }
 
@@ -39,7 +37,7 @@ void QuicConnectionImpl::OnPacketReceived(const UdpPacket& packet) {
 }
 
 QuicStream* QuicConnectionImpl::MakeOutgoingStream(
-    QuicStream::Delegate* delegate) {
+    QuicStream::Delegate& delegate) {
   TRACE_SCOPED(TraceCategory::kQuic, "QuicConnectionImpl::MakeOutgoingStream");
   OSP_CHECK(session_);
 
@@ -59,8 +57,7 @@ void QuicConnectionImpl::OnConnectionClosed(
     const std::string& error_details,
     quic::ConnectionCloseSource source) {
   TRACE_SCOPED(TraceCategory::kQuic, "QuicConnectionImpl::OnConnectionClosed");
-  parent_factory_.OnConnectionClosed(this);
-  delegate_.OnConnectionClosed(session_->connection_id().ToString());
+  delegate_.OnConnectionClosed(instance_id_);
   if (dispatcher_) {
     dispatcher_->OnConnectionClosed(server_connection_id, error_code,
                                     error_details, source);
@@ -119,12 +116,15 @@ void QuicConnectionImpl::OnPathDegrading() {}
 void QuicConnectionImpl::OnCryptoHandshakeComplete() {
   TRACE_SCOPED(TraceCategory::kQuic,
                "QuicConnectionImpl::OnCryptoHandshakeComplete");
-  delegate_.OnCryptoHandshakeComplete(session_->connection_id().ToString());
+  instance_id_ = delegate_.OnCryptoHandshakeComplete(instance_name_);
+  OSP_VLOG << "QUIC connection handshake complete for instance: "
+           << instance_name_
+           << ", the corresponding instance ID is: " << instance_id_;
 }
 
 void QuicConnectionImpl::OnIncomingStream(QuicStream* stream) {
   TRACE_SCOPED(TraceCategory::kQuic, "QuicConnectionImpl::OnIncomingStream");
-  delegate_.OnIncomingStream(session_->connection_id().ToString(), stream);
+  delegate_.OnIncomingStream(instance_id_, stream);
 }
 
 }  // namespace openscreen::osp

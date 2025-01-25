@@ -20,14 +20,9 @@ import {
   autosaveConfigStore,
   recordTargetStore,
 } from '../frontend/record_config';
-import {SqlTables} from '../frontend/sql_table/well_known_tables';
+import {SqlTables} from '../frontend/well_known_sql_tables';
 
-import {
-  defaultTraceTime,
-  NonSerializableState,
-  State,
-  STATE_VERSION,
-} from './state';
+import {NonSerializableState, State, STATE_VERSION} from './state';
 
 const AUTOLOAD_STARTED_CONFIG_FLAG = featureFlags.register({
   id: 'autoloadStartedConfig',
@@ -92,16 +87,13 @@ export function createEmptyState(): State {
     version: STATE_VERSION,
     nextId: '-1',
     newEngineMode: 'USE_HTTP_RPC_IF_AVAILABLE',
-    traceTime: {...defaultTraceTime},
     tracks: {},
     utidToThreadSortKey: {},
     aggregatePreferences: {},
     trackGroups: {},
     pinnedTracks: [],
     scrollingTracks: [],
-    areas: {},
     queries: {},
-    permalink: {},
     notes: {},
 
     recordConfig: AUTOLOAD_STARTED_CONFIG_FLAG.get()
@@ -109,14 +101,6 @@ export function createEmptyState(): State {
       : createEmptyRecordConfig(),
     displayConfigAsPbtxt: false,
     lastLoadedConfig: {type: 'NONE'},
-
-    frontendLocalState: {
-      visibleState: {
-        ...defaultTraceTime,
-        lastUpdate: 0,
-        resolution: 0n,
-      },
-    },
 
     omniboxState: {
       omnibox: '',
@@ -127,7 +111,6 @@ export function createEmptyState(): State {
     selection: {
       kind: 'empty',
     },
-    currentFlamegraphState: null,
     traceConversionInProgress: false,
 
     perfDebug: false,

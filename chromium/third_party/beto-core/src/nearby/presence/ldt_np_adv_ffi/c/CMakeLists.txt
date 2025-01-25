@@ -32,7 +32,7 @@ ExternalProject_Add(
         BINARY_DIR "${NEARBY_ROOT}/target/"
         INSTALL_COMMAND "")
 
-include_directories(${CMAKE_SOURCE_DIR}/ldt_np_adv_ffi/c/include/)
+include_directories(${NEARBY_ROOT}/presence/ldt_np_adv_ffi/c/include/)
 
 add_subdirectory(sample)
 

@@ -9,9 +9,9 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
-#include "components/ml/webnn/features.mojom-features.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/webnn/buildflags.h"
+#include "services/webnn/public/mojom/features.mojom-features.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
 #include "services/webnn/public/mojom/webnn_error.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -43,11 +43,11 @@ class WebNNContextProviderImplTest : public testing::Test {
 // For supported platforms, it should be tested by the backend specific test
 // cases.
 //
-// For Windows platform, `dml::ContextImpl` is implemented by the DirectML
+// For Windows platform, `dml::ContextImplDml` is implemented by the DirectML
 // backend. It relies on a real GPU adapter and is tested by
 // `WebNNContextDMLImplTest`.
 //
-// For platforms using TFLite, `tflite::ContextImpl` is always available.
+// For platforms using TFLite, `tflite::ContextImplTflite` is always available.
 
 #if !BUILDFLAG(IS_WIN) && !BUILDFLAG(WEBNN_USE_TFLITE)
 
@@ -79,12 +79,11 @@ TEST_F(WebNNContextProviderImplTest, NotSupported) {
 
 #if BUILDFLAG(IS_WIN)
 
-// The DirectML implementation does not support CPU execution.
-TEST_F(WebNNContextProviderImplTest, CPUNotSupported) {
+TEST_F(WebNNContextProviderImplTest, CPUIsSupported) {
   mojo::Remote<mojom::WebNNContextProvider> provider_remote;
 
   WebNNContextProviderImpl::CreateForTesting(
-      provider_remote.BindNewPipeAndPassReceiver(), /*is_gpu_supported=*/true);
+      provider_remote.BindNewPipeAndPassReceiver());
 
   base::test::TestFuture<mojom::CreateContextResultPtr> future;
   provider_remote->CreateWebNNContext(
@@ -94,19 +93,19 @@ TEST_F(WebNNContextProviderImplTest, CPUNotSupported) {
           /*thread_count_hint=*/0),
       future.GetCallback());
   mojom::CreateContextResultPtr result = future.Take();
-  ASSERT_TRUE(result->is_error());
-  const mojom::ErrorPtr& create_context_error = result->get_error();
-  EXPECT_EQ(create_context_error->code, mojom::Error::Code::kNotSupportedError);
-  EXPECT_EQ(create_context_error->message, "The cpu device is not supported.");
+  ASSERT_TRUE(result->is_success());
+  EXPECT_TRUE(result->get_success()->context_remote.is_valid());
 }
 
-// Checking for GPU compatibility is Windows-specific because only the DirectML
-// implementation unconditionally depends on a GPU.
+// Checking for GPU/NPU compatibility is Windows-specific because only the
+// DirectML implementation unconditionally depends on a GPU/NPU.
+
 TEST_F(WebNNContextProviderImplTest, GPUNotSupported) {
   mojo::Remote<mojom::WebNNContextProvider> provider_remote;
 
   WebNNContextProviderImpl::CreateForTesting(
-      provider_remote.BindNewPipeAndPassReceiver(), /*is_gpu_supported=*/false);
+      provider_remote.BindNewPipeAndPassReceiver(),
+      WebNNContextProviderImpl::WebNNStatus::kWebNNGpuDisabled);
 
   base::test::TestFuture<mojom::CreateContextResultPtr> future;
   provider_remote->CreateWebNNContext(
@@ -119,8 +118,54 @@ TEST_F(WebNNContextProviderImplTest, GPUNotSupported) {
   ASSERT_TRUE(result->is_error());
   const mojom::ErrorPtr& create_context_error = result->get_error();
   EXPECT_EQ(create_context_error->code, mojom::Error::Code::kNotSupportedError);
-  EXPECT_EQ(create_context_error->message, "WebNN is not compatible with GPU.");
+  EXPECT_EQ(create_context_error->message,
+            "DirectML: WebNN is blocklisted for GPU.");
 }
+
+TEST_F(WebNNContextProviderImplTest, NPUNotSupported) {
+  mojo::Remote<mojom::WebNNContextProvider> provider_remote;
+
+  WebNNContextProviderImpl::CreateForTesting(
+      provider_remote.BindNewPipeAndPassReceiver(),
+      WebNNContextProviderImpl::WebNNStatus::kWebNNNpuDisabled);
+
+  base::test::TestFuture<mojom::CreateContextResultPtr> future;
+  provider_remote->CreateWebNNContext(
+      mojom::CreateContextOptions::New(
+          mojom::CreateContextOptions::Device::kNpu,
+          mojom::CreateContextOptions::PowerPreference::kDefault,
+          /*thread_count_hint=*/0),
+      future.GetCallback());
+  mojom::CreateContextResultPtr result = future.Take();
+  ASSERT_TRUE(result->is_error());
+  const mojom::ErrorPtr& create_context_error = result->get_error();
+  EXPECT_EQ(create_context_error->code, mojom::Error::Code::kNotSupportedError);
+  EXPECT_EQ(create_context_error->message,
+            "DirectML: WebNN is blocklisted for NPU.");
+}
+
+TEST_F(WebNNContextProviderImplTest, GpuFeatureStatusDisabled) {
+  mojo::Remote<mojom::WebNNContextProvider> provider_remote;
+
+  WebNNContextProviderImpl::CreateForTesting(
+      provider_remote.BindNewPipeAndPassReceiver(),
+      WebNNContextProviderImpl::WebNNStatus::kWebNNGpuFeatureStatusDisabled);
+
+  base::test::TestFuture<mojom::CreateContextResultPtr> future;
+  provider_remote->CreateWebNNContext(
+      mojom::CreateContextOptions::New(
+          mojom::CreateContextOptions::Device::kNpu,
+          mojom::CreateContextOptions::PowerPreference::kDefault,
+          /*thread_count_hint=*/0),
+      future.GetCallback());
+  mojom::CreateContextResultPtr result = future.Take();
+  ASSERT_TRUE(result->is_error());
+  const mojom::ErrorPtr& create_context_error = result->get_error();
+  EXPECT_EQ(create_context_error->code, mojom::Error::Code::kNotSupportedError);
+  EXPECT_EQ(create_context_error->message,
+            "WebNN is not compatible with device.");
+}
+
 #endif
 
 }  // namespace webnn

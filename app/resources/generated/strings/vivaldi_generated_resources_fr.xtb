@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Appliquer</translation>
 <translation id="1603914832182249871">(Navigation privée)</translation>
 <translation id="1627276047960621195">Descripteurs de fichiers</translation>
+<translation id="1654713139320245449">Aucune destination de diffusion trouvée. Besoin d’aide ?</translation>
 <translation id="166278006618318542">Algorithme de clé publique de l’objet</translation>
 <translation id="1682548588986054654">Nouvelle fenêtre privée</translation>
 <translation id="1708338024780164500">(Inactive)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Un autre programme sur votre ordinateur a ajouté une extension qui risque de modifier le fonctionnement de Vivaldi.</translation>
 <translation id="2443487764245141020">Les sites peuvent aussi avoir besoin reconnaître votre appareil grâce à un identifiant</translation>
 <translation id="2445081178310039857">Le répertoire racine de l’extension doit être indiqué.</translation>
-<translation id="2470702053775288986">Désactivation des extensions non compatibles</translation>
 <translation id="2485422356828889247">Désinstaller</translation>
 <translation id="2498539833203011245">Réduire</translation>
 <translation id="2509495747794740764">Le facteur d’échelle doit être un nombre compris entre 10 et 200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Détails</translation>
 <translation id="4345587454538109430">Configurer...</translation>
 <translation id="4348766275249686434">Détecter les erreurs</translation>
-<translation id="4363771538994847871">Aucune destination Cast trouvée. Avez-vous besoin d’aide ?</translation>
 <translation id="4384652540891215547">Activer l’extension</translation>
 <translation id="4394049700291259645">Désactiver</translation>
 <translation id="4409697491990005945">Marges</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Mise en page</translation>
 <translation id="7782102568078991263">Aucune autre suggestion de Google</translation>
 <translation id="7786889348652477777">&amp;Actualiser l’application</translation>
-<translation id="7791543448312431591">Ajouter</translation>
 <translation id="7800518121066352902">Rotation &amp;antihoraire</translation>
 <translation id="7814458197256864873">&amp;Copier</translation>
 <translation id="7818135753970109980">Nouveau thème (<ph name="EXTENSION_NAME" />) ajouté</translation>

@@ -13,8 +13,8 @@
 #include "base/trace_event/trace_event.h"
 #include "base/types/strong_alias.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom-blink.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/callback_promise_adapter.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
@@ -1466,6 +1466,29 @@ void MaybeSetBoolSetting(bool value,
   setting = value;
 }
 
+void MaybeSetEyeGazeCorrectionSetting(
+    bool value,
+    const Vector<bool>& capability,
+    std::optional<EyeGazeCorrectionMode>& setting) {
+  if (!base::Contains(capability, value)) {
+    return;
+  }
+
+  setting = ParseEyeGazeCorrection(value);
+}
+
+void MaybeSetFaceFramingSetting(bool value,
+                                const Vector<bool>& capability,
+                                bool& has_setting,
+                                MeteringMode& setting) {
+  if (!base::Contains(capability, value)) {
+    return;
+  }
+
+  has_setting = true;
+  setting = ParseFaceFraming(value);
+}
+
 void MaybeSetDoubleSetting(double value,
                            const MediaSettingsRange& capability,
                            bool& has_setting,
@@ -1684,6 +1707,17 @@ void ImageCapture::GotPhotoState(
       capabilities_->hasBackgroundBlur() != capabilities->hasBackgroundBlur() ||
       (capabilities_->hasBackgroundBlur() &&
        capabilities_->backgroundBlur() != capabilities->backgroundBlur())) {
+    std::move(callback).Run(true);
+    return;
+  }
+
+  // Check whether face framing settings and capabilities have changed.
+  if (settings_->hasFaceFraming() != settings->hasFaceFraming() ||
+      (settings_->hasFaceFraming() &&
+       settings_->faceFraming() != settings->faceFraming()) ||
+      capabilities_->hasFaceFraming() != capabilities->hasFaceFraming() ||
+      (capabilities_->hasFaceFraming() &&
+       capabilities_->faceFraming() != capabilities->faceFraming())) {
     std::move(callback).Run(true);
     return;
   }
@@ -1915,10 +1949,24 @@ void ImageCapture::SetVideoTrackDeviceSettingsFromTrack(
           *device_settings->background_blur, capabilities_->backgroundBlur(),
           settings->has_background_blur_mode, settings->background_blur_mode);
     }
+    if (device_settings->eye_gaze_correction.has_value() &&
+        capabilities_->hasEyeGazeCorrection()) {
+      MaybeSetEyeGazeCorrectionSetting(*device_settings->eye_gaze_correction,
+                                       capabilities_->eyeGazeCorrection(),
+                                       settings->eye_gaze_correction_mode);
+    }
+    if (device_settings->face_framing.has_value() &&
+        capabilities_->hasFaceFraming()) {
+      MaybeSetFaceFramingSetting(
+          *device_settings->face_framing, capabilities_->faceFraming(),
+          settings->has_face_framing_mode, settings->face_framing_mode);
+    }
 
     if (service_.is_bound() &&
         (settings->has_pan || settings->has_tilt || settings->has_zoom ||
-         settings->has_torch || settings->has_background_blur_mode)) {
+         settings->has_torch || settings->has_background_blur_mode ||
+         settings->has_face_framing_mode ||
+         settings->eye_gaze_correction_mode.has_value())) {
       service_->SetPhotoOptions(
           SourceId(), std::move(settings),
           WTF::BindOnce(&ImageCapture::OnSetVideoTrackDeviceSettingsFromTrack,
@@ -2515,7 +2563,7 @@ void ImageCapture::OnMojoTakePhoto(ScriptPromiseResolverBase* resolver,
         DOMExceptionCode::kUnknownError, "platform error"));
   } else {
     resolver->DowncastTo<Blob>()->Resolve(
-        Blob::Create(blob->data.data(), blob->data.size(), blob->mime_type));
+        Blob::Create(blob->data, blob->mime_type));
   }
   service_requests_.erase(resolver);
 }
@@ -2673,7 +2721,8 @@ void ImageCapture::UpdateMediaTrackSettingsAndCapabilities(
       !photo_state->supported_face_framing_modes->empty()) {
     Vector<bool> supported_face_framing_modes;
     for (auto mode : *photo_state->supported_face_framing_modes) {
-      if (mode == MeteringMode::CONTINUOUS) {
+      if (mode == MeteringMode::CONTINUOUS ||
+          mode == MeteringMode::SINGLE_SHOT) {
         supported_face_framing_modes.push_back(true);
       } else if (mode == MeteringMode::NONE) {
         supported_face_framing_modes.push_back(false);

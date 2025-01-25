@@ -264,7 +264,6 @@
 <translation id="2783001728278437613">{COUNT,plural, =1{dar #}one{dar #}few{dar #}many{dar #}other{dar #}}</translation>
 <translation id="2792200646155001340">Be to, galite perbraukti vienu pirštu iš dešinės į kairę, kad pereitumėte prie ankstesnio elemento. Išbandykite dabar.</translation>
 <translation id="280499067616661124">„ChromeVox“ radimas puslapyje</translation>
-<translation id="2811019999044652585">Jei norite pereiti į kitas ekrano dalis, pvz., įrankių juostas ar sistemos juostelę, paspauskite „Control“ ir „Forward“. „Chromebook“ klavišas „Forward“ yra iškart virš skaičiaus 2 klavišo.</translation>
 <translation id="2811204574343810641">Eilutė</translation>
 <translation id="2816868829355607410">Praktinių užduočių sritis: perėjimo komandos</translation>
 <translation id="2841013758207633010">Laikas</translation>
@@ -520,6 +519,7 @@
 <translation id="4432457053224379116">Sodriai raudona spalva</translation>
 <translation id="4432896207833262240">Pažymėtas turinys</translation>
 <translation id="4437615272777527928">Įveskite, jei norite ieškoti meniu. Naršykite rezultatus rodyklėmis aukštyn ir žemyn. Reguliuokite teksto žymeklį ir judėkite tarp meniu rodyklėmis dešinėn ir kairėn.</translation>
+<translation id="4453530046591759283">Jei norite pereiti į kitas ekrano dalis, pvz., įrankių juostas ar sistemos juostelę, paspauskite „Control“ + F1. F1 yra pirmasis klavišas dešinėje nuo klavišo „Escape“.</translation>
 <translation id="4457472090507035117">Pasirinkti dabartinį balsą:</translation>
 <translation id="4476183483923481720">nauja eilutė</translation>
 <translation id="4479068155583208887">Plytų raudonumo spalva</translation>
@@ -880,6 +880,7 @@
 <translation id="7091296112653361280">Pieno spalva</translation>
 <translation id="7095834689119144465">Redaguoti tik skaitinį tekstą</translation>
 <translation id="7096001299300236431">Ankstesnis medijų raktas</translation>
+<translation id="7096668131290451939">Norėdami išeiti iš mokymosi režimo, dar kartą paspauskite klavišą „Escape“</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">žodžio aidas</translation>
 <translation id="7137397390322864165">Rausvai oranžinė spalva</translation>

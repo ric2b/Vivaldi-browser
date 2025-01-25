@@ -79,24 +79,21 @@ class AutofillDriver {
 
   // Returns whether the AutofillDriver instance is associated with an active
   // frame in the MPArch sense.
-  virtual bool IsInActiveFrame() const = 0;
+  virtual bool IsActive() const = 0;
 
   // Returns whether the AutofillDriver instance is associated with a main
   // frame, in the MPArch sense. This can be a primary or non-primary main
   // frame.
   virtual bool IsInAnyMainFrame() const = 0;
 
-  // Returns whether the AutofillDriver instance is associated with a
-  // prerendered frame.
-  virtual bool IsPrerendering() const = 0;
-
   // Returns whether the policy-controlled feature "shared-autofill" is enabled
   // in the document. In the main frame the permission is enabled by default.
   // The main frame may pass it on to its children.
   virtual bool HasSharedAutofillPermission() const = 0;
 
-  // Returns the IsolationInfo of the associated frame.
-  virtual net::IsolationInfo IsolationInfo() = 0;
+  // Returns the IsolationInfo of the associated frame. May be nullopt if the
+  // IsolationInfo is not used (for example, on iOS).
+  virtual std::optional<net::IsolationInfo> GetIsolationInfo() = 0;
 
   // Returns true iff a popup can be shown on the behalf of the associated
   // frame.
@@ -189,7 +186,7 @@ class AutofillDriver {
   virtual base::flat_set<FieldGlobalId> ApplyFormAction(
       mojom::FormActionType action_type,
       mojom::ActionPersistence action_persistence,
-      const FormData& form,
+      base::span<const FormFieldData> data,
       const url::Origin& triggered_origin,
       const base::flat_map<FieldGlobalId, FieldType>& field_type_map) = 0;
 
@@ -203,7 +200,7 @@ class AutofillDriver {
   // Sends the field type predictions specified in |forms| to the renderer. This
   // method is a no-op if the renderer is not available or the appropriate
   // command-line flag is not set.
-  virtual void SendAutofillTypePredictionsToRenderer(
+  virtual void SendTypePredictionsToRenderer(
       const std::vector<raw_ptr<FormStructure, VectorExperimental>>& forms) = 0;
 
   // Tells the renderer to accept data list suggestions for |value|.

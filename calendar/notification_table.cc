@@ -37,7 +37,7 @@ bool NotificationTable::CreateNotificationTable() {
       "last_modified INTEGER"
       ")");
 
-  return GetDB().Execute(sql.c_str());
+  return GetDB().Execute(sql);
 }
 
 NotificationID NotificationTable::CreateNotification(

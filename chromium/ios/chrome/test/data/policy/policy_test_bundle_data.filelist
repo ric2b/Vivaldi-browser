@@ -33,6 +33,7 @@
 //ios/chrome/test/data/policy/pref_mapping/DefaultSearchProviderSearchURLPostParams.json
 //ios/chrome/test/data/policy/pref_mapping/DefaultSearchProviderSuggestURL.json
 //ios/chrome/test/data/policy/pref_mapping/DefaultSearchProviderSuggestURLPostParams.json
+//ios/chrome/test/data/policy/pref_mapping/DeletingUndecryptablePasswordsEnabled.json
 //ios/chrome/test/data/policy/pref_mapping/DisableSafeBrowsingProceedAnyway.json
 //ios/chrome/test/data/policy/pref_mapping/DownloadManagerSaveToDriveSettings.json
 //ios/chrome/test/data/policy/pref_mapping/EditBookmarksEnabled.json
@@ -42,6 +43,7 @@
 //ios/chrome/test/data/policy/pref_mapping/IncognitoModeAvailability.json
 //ios/chrome/test/data/policy/pref_mapping/InsecureFormsWarningsEnabled.json
 //ios/chrome/test/data/policy/pref_mapping/LensCameraAssistedSearchEnabled.json
+//ios/chrome/test/data/policy/pref_mapping/LensOverlaySettings.json
 //ios/chrome/test/data/policy/pref_mapping/ManagedBookmarks.json
 //ios/chrome/test/data/policy/pref_mapping/MetricsReportingEnabled.json
 //ios/chrome/test/data/policy/pref_mapping/NTPContentSuggestionsEnabled.json

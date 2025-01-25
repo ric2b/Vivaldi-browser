@@ -35,8 +35,6 @@ const char kVivaldiTranslateLanguageListLastUpdate[] =
     "vivaldi.translate.language_list_last_update";
 const char kVivaldiAccountServerUrlIdentity[] =
     "vivaldi.vivaldi.account.server_url.identity";
-const char kVivaldiAccountServerUrlOpenId[] =
-    "vivaldi.vivaldi.account.server_url.open_id";
 const char kVivaldiSyncServerUrl[] = "vivaldi.sync.server_url";
 const char kVivaldiSyncNotificationsServerUrl[] =
     "vivaldi.sync.notifications.server_url";
@@ -74,6 +72,14 @@ const char kVivaldiBookmarkFoldersViewMode[] =
 const char kVivaldiBookmarksSortingMode[] = "vivaldi.bookmarks.sorting_mode";
 const char kVivaldiBookmarksSortingOrder[] = "vivaldi.bookmarks.sorting_order";
 
+// Search Engine
+const char kVivaldiEnableSearchEngineNickname[] =
+    "vivaldi.search_engine.enable_nickname";
+
+// Address bar
+const char kVivaldiShowFullAddressEnabled[] =
+    "vivaldi.addressbar.show_full_address";
+
 // Tabs
 // Desktop style tabs enabled status
 const char kVivaldiDesktopTabsEnabled[] = "vivaldi.desktop_tabs.mode";
@@ -82,6 +88,15 @@ const char kVivaldiReverseSearchResultsEnabled[] =
     "vivaldi.tabs.reverse_search_results";
 // Tab stack use status
 const char kVivaldiTabStackEnabled[] = "vivaldi.desktop_tabs.tab_stack";
+// Show X button in background tabs
+const char kVivaldiShowXButtonBackgroundTabsEnabled[] =
+    "vivaldi.tabs.show_x_button_background_tabs";
+// Open new tab when last open tab is closed
+const char kVivaldiOpenNTPOnClosingLastTabEnabled[] =
+    "vivaldi.tabs.open_ntp_on_closing_last_tab";
+// Focus omnibox on new tab page
+const char kVivaldiFocusOmniboxOnNTPEnabled[] =
+    "vivaldi.tabs.focus_omnibox_on_ntp";
 
 // Apearance
 const char kVivaldiAppearanceMode[] = "vivaldi.appearance.selected.mode";

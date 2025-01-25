@@ -18,6 +18,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_combobox_model.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/combobox/combobox.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/test/combobox_test_api.h"
@@ -68,7 +69,6 @@ class MediaViewControllerBaseTestParameterized
     media_view_ = std::make_unique<MediaView>();
     combobox_model_ = std::make_unique<ui::SimpleComboboxModel>(
         std::vector<ui::SimpleComboboxModel::Item>());
-    UpdateComboboxModel(0);
     controller_ = std::make_unique<MediaViewControllerBase>(
         *media_view_, /*needs_borders=*/true, combobox_model_.get(),
         source_change_callback_.Get(),
@@ -94,7 +94,8 @@ class MediaViewControllerBaseTestParameterized
   void InitializeWidget() {
     widget_ = std::make_unique<views::Widget>();
     views::Widget::InitParams init_params =
-        CreateParams(views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
+        CreateParams(views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+                     views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
     widget_->Init(std::move(init_params));
     widget_->Show();
     widget_->SetContentsView(std::move(media_view_));
@@ -103,7 +104,7 @@ class MediaViewControllerBaseTestParameterized
   // ui::ComboboxModelObserver override
   void OnComboboxModelDestroying(ui::ComboboxModel* model) override {}
   void OnComboboxModelChanged(ui::ComboboxModel* model) override {
-    controller_->OnDeviceListChanged(actual_device_count_);
+    controller_->OnDeviceListChanged(model->GetItemCount());
   }
 
   bool IsComboboxVisible() const {
@@ -116,25 +117,24 @@ class MediaViewControllerBaseTestParameterized
     return controller_->GetNoDeviceLabelViewForTesting()->GetVisible();
   }
 
-  const std::u16string& GetComboboxAccessibleName() const {
-    return controller_->GetComboboxForTesting()->GetAccessibleName();
+  std::u16string GetComboboxAccessibleName() const {
+    return controller_->GetComboboxForTesting()
+        ->GetViewAccessibility()
+        .GetCachedName();
   }
+
   const std::u16string& GetDeviceNameLabel() const {
     return controller_->GetDeviceNameLabelViewForTesting()->GetText();
   }
+
   const std::u16string& GetNoDeviceLabel() const {
     return controller_->GetNoDeviceLabelViewForTesting()->GetText();
   }
 
   void UpdateComboboxModel(size_t device_count) {
-    actual_device_count_ = device_count;
     std::vector<ui::SimpleComboboxModel::Item> items;
-    if (device_count == 0) {
-      items.emplace_back(std::u16string());
-    } else {
-      for (size_t i = 1; i <= device_count; ++i) {
-        items.emplace_back(GetDeviceName(i));
-      }
+    for (size_t i = 1; i <= device_count; ++i) {
+      items.emplace_back(GetDeviceName(i));
     }
     combobox_model_->UpdateItemList(std::move(items));
   }
@@ -158,7 +158,6 @@ class MediaViewControllerBaseTestParameterized
 
   base::HistogramTester histogram_tester_;
   bool allow_device_selection_ = false;
-  size_t actual_device_count_ = 0;
   views::UniqueWidgetPtr widget_;
   std::unique_ptr<MediaView> media_view_;
   std::unique_ptr<ui::SimpleComboboxModel> combobox_model_;

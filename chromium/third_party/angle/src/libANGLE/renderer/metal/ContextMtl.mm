@@ -1441,7 +1441,7 @@ GLint ContextMtl::getGPUDisjoint()
 GLint64 ContextMtl::getTimestamp()
 {
     // Timestamps are currently unsupported. An implementation
-    // strategy is written up in anglebug.com/7828 if they're needed
+    // strategy is written up in anglebug.com/42266300 if they're needed
     // in the future.
     return 0;
 }
@@ -1464,7 +1464,7 @@ angle::Result ContextMtl::onUnMakeCurrent(const gl::Context *context)
     // Note: this 2nd flush is needed because if there is a query in progress
     // then during flush, new command buffers are allocated that also need
     // to be flushed. This is a temporary fix and we should probably refactor
-    // this later. See TODO(anglebug.com/7138)
+    // this later. See TODO(anglebug.com/42265611)
     flushCommandBuffer(mtl::WaitUntilScheduled);
     gl::Query *query = mState.getActiveQuery(gl::QueryType::TimeElapsed);
     if (query)
@@ -1720,7 +1720,7 @@ void ContextMtl::invalidateDefaultAttributes(const gl::AttributesMask &dirtyMask
         mDirtyBits.set(DIRTY_BIT_DEFAULT_ATTRIBS);
     }
 
-    // TODO(anglebug.com/5505): determine how to merge this.
+    // TODO(anglebug.com/40096755): determine how to merge this.
 #if 0
     if (getDisplay()->getFeatures().hasExplicitMemBarrier.enabled)
     {
@@ -1823,6 +1823,8 @@ void ContextMtl::endRenderEncoding(mtl::RenderCommandEncoder *encoder)
     {
         mBlitEncoder.endEncoding();
     }
+
+    mOcclusionQueryPool.prepareRenderPassVisibilityPoolBuffer(this);
 
     encoder->endEncoding();
 
@@ -2756,8 +2758,8 @@ angle::Result ContextMtl::handleDirtyActiveTextures(const gl::Context *context)
     const gl::State &glState                = mState;
     const gl::ProgramExecutable *executable = glState.getProgramExecutable();
 
-    constexpr auto ensureTextureCreated = [](const gl::Context *context,
-                                             gl::Texture *texture) -> angle::Result {
+    constexpr auto ensureTextureStorageCreated = [](const gl::Context *context,
+                                                    gl::Texture *texture) -> angle::Result {
         if (texture == nullptr)
         {
             return angle::Result::Continue;
@@ -2765,8 +2767,8 @@ angle::Result ContextMtl::handleDirtyActiveTextures(const gl::Context *context)
 
         TextureMtl *textureMtl = mtl::GetImpl(texture);
 
-        // Make sure texture's images update will be transferred to GPU.
-        ANGLE_TRY(textureMtl->ensureTextureCreated(context));
+        // Make sure texture's image definitions will be transferred to GPU.
+        ANGLE_TRY(textureMtl->ensureNativeStorageCreated(context));
 
         // The binding of this texture will be done by ProgramMtl.
         return angle::Result::Continue;
@@ -2777,12 +2779,13 @@ angle::Result ContextMtl::handleDirtyActiveTextures(const gl::Context *context)
 
     for (size_t textureUnit : activeTextures)
     {
-        ANGLE_TRY(ensureTextureCreated(context, textures[textureUnit]));
+        ANGLE_TRY(ensureTextureStorageCreated(context, textures[textureUnit]));
     }
 
     for (size_t imageUnit : executable->getActiveImagesMask())
     {
-        ANGLE_TRY(ensureTextureCreated(context, glState.getImageUnit(imageUnit).texture.get()));
+        ANGLE_TRY(
+            ensureTextureStorageCreated(context, glState.getImageUnit(imageUnit).texture.get()));
     }
 
     return angle::Result::Continue;

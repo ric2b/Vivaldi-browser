@@ -264,7 +264,6 @@
 <translation id="2783001728278437613">{COUNT,plural, =1{# más}other{# más}}</translation>
 <translation id="2792200646155001340">También puedes deslizar un dedo de derecha a izquierda para moverte hacia el elemento anterior. Pruébalo ahora.</translation>
 <translation id="280499067616661124">ChromeVox se encuentra en la página</translation>
-<translation id="2811019999044652585">Para pasar a otras partes de la pantalla, como barras de tareas o la bandeja del sistema, presiona Ctrl + flecha hacia adelante. En una Chromebook, la tecla de la flecha hacia adelante está arriba de la del número 2.</translation>
 <translation id="2811204574343810641">Fila</translation>
 <translation id="2816868829355607410">Área de práctica: Comandos de salto</translation>
 <translation id="2841013758207633010">Hora</translation>
@@ -520,6 +519,7 @@
 <translation id="4432457053224379116">Rojo indio</translation>
 <translation id="4432896207833262240">Contenido marcado</translation>
 <translation id="4437615272777527928">Escribe para realizar una búsqueda en los menús. Usa las flechas hacia arriba y abajo para moverte entre los resultados. Usa las flechas hacia la izquierda y la derecha para ajustar el símbolo de intercalación de texto y para moverte entre los menús.</translation>
+<translation id="4453530046591759283">Para pasar a otras partes de la pantalla, como barras de herramientas o la bandeja del sistema, presiona Ctrl + F1. F1 es la primera tecla a la derecha de la tecla escape.</translation>
 <translation id="4457472090507035117">Seleccionar voz actual:</translation>
 <translation id="4476183483923481720">Nueva línea</translation>
 <translation id="4479068155583208887">Rojo ladrillo</translation>
@@ -880,6 +880,7 @@
 <translation id="7091296112653361280">Blanco navajo</translation>
 <translation id="7095834689119144465">Modificar solo texto numérico</translation>
 <translation id="7096001299300236431">Archivo multimedia anterior</translation>
+<translation id="7096668131290451939">Vuelve a presionar Escape para salir del Modo de aprendizaje</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">reproducción oral de palabras</translation>
 <translation id="7137397390322864165">Salmón</translation>

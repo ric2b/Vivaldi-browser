@@ -5,12 +5,16 @@
 #ifndef BASE_TRACE_EVENT_NAMED_TRIGGER_H_
 #define BASE_TRACE_EVENT_NAMED_TRIGGER_H_
 
+#include <stdint.h>
+
 #include <optional>
 #include <string>
 
 #include "base/base_export.h"
 
 namespace base::trace_event {
+
+inline constexpr char kStartupTracingTriggerName[] = "startup";
 
 // Notifies that a manual trigger event has occurred. Returns true if the
 // trigger caused a scenario to either begin recording or finalize the trace

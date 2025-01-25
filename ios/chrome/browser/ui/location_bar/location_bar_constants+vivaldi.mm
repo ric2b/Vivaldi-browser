@@ -21,3 +21,5 @@ NSString* vLocationBarLightBGColor = @"location_bar_light_bg_color";
 NSString* vLocationBarDarkBGColor = @"location_bar_dark_bg_color";
 
 const CGFloat vLocationBarSteadyViewPlaceholderOpacity = 0.6;
+const CGFloat vLocationBarSteadyViewFullAddressOpacity = 0.6;
+const CGFloat vLocationBarSteadyViewDomainOpacity = 1.0;

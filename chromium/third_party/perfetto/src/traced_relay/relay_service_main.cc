@@ -28,20 +28,33 @@ namespace perfetto {
 namespace {
 void PrintUsage(const char* prog_name) {
   fprintf(stderr, R"(
-Usage: %s [option] ...
-Options and arguments
-    --background : Exits immediately and continues running in the background
-    --version : print the version number and exit.
-    --set-socket-permissions <permissions> : sets group ownership and permission
-        mode bits of the listening socket.
-        <permissions> format: <prod_group>:<prod_mode>,
-        where <prod_group> is the group name for chgrp the listening socket,
-        <prod_mode> is the mode bits (e.g. 0660) for chmod the producer socket,
+Relays trace data to a remote tracing service. Cannot run alongside the "traced"
+daemon.
+
+Usage: %s [OPTION]...
+
+Options:
+  --background
+      Run as a background process.
+  --set-socket-permissions <GROUP>:<MODE>
+      Set group ownership and permissions for the listening socket.
+      Example: traced-producer:0660 (rw-rw----)
+  --version
+      Display version information and exit.
+
+Environment Variable:
+  PERFETTO_RELAY_SOCK_NAME
+      Socket name of the remote tracing service.
+      Example: 192.168.0.1:20001 or vsock://2:20001
 
 Example:
-    %s --set-socket-permissions traced-producer:0660 starts the service and sets
-    the group ownership of the listening socket to "traced-producer". The
-    listening socket is chmod with 0660 (rw-rw----) mode bits. )",
+  PERFETTO_RELAY_SOCK_NAME=192.168.0.1:20001 %s \
+      --set-socket-permissions traced-producer:0660
+
+  Starts the service, relaying trace data to 192.168.0.1:20001.
+  The local listening socket's group is set to "traced-producer" with
+  permissions 0660.
+)",
           prog_name, prog_name);
 }
 
@@ -63,8 +76,7 @@ static int RelayServiceMain(int argc, char** argv) {
        OPT_SET_SOCKET_PERMISSIONS},
       {nullptr, 0, nullptr, 0}};
 
-  std::string listen_socket_group, consumer_socket_group,
-      listen_socket_mode_bits, consumer_socket_mode;
+  std::string listen_socket_group, listen_socket_mode_bits;
 
   for (;;) {
     int option = getopt_long(argc, argv, "", long_options, nullptr);
@@ -94,24 +106,48 @@ static int RelayServiceMain(int argc, char** argv) {
     }
   }
 
+  if (!GetRelaySocket()) {
+    PrintUsage(argv[0]);
+    return 1;
+  }
+
   if (background) {
     base::Daemonize([] { return 0; });
   }
 
-  auto listen_socket = GetProducerSocket();
-  remove(listen_socket);
-  if (!listen_socket_group.empty()) {
-    auto status = base::SetFilePermissions(listen_socket, listen_socket_group,
-                                           listen_socket_mode_bits);
-    if (!status.ok()) {
-      PERFETTO_ELOG("Failed to set socket permissions: %s", status.c_message());
-      return 1;
-    }
-  }
-
   base::UnixTaskRunner task_runner;
   auto svc = std::make_unique<RelayService>(&task_runner);
-  svc->Start(listen_socket, GetRelaySocket());
+
+  // traced_relay binds to the producer socket of the `traced` service. When
+  // built for Android, this socket is created and bound during init, and its
+  // file descriptor is passed through the environment variable.
+  const char* env_prod = getenv("ANDROID_SOCKET_traced_producer");
+  base::ScopedFile producer_fd;
+  if (env_prod) {
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_WIN)
+    PERFETTO_CHECK(false);
+#else
+    auto opt_fd = base::CStringToInt32(env_prod);
+    if (opt_fd.has_value())
+      producer_fd.reset(*opt_fd);
+
+    svc->Start(std::move(producer_fd), GetRelaySocket());
+#endif
+  } else {
+    auto listen_socket = GetProducerSocket();
+    remove(listen_socket);
+    if (!listen_socket_group.empty()) {
+      auto status = base::SetFilePermissions(listen_socket, listen_socket_group,
+                                             listen_socket_mode_bits);
+      if (!status.ok()) {
+        PERFETTO_ELOG("Failed to set socket permissions: %s",
+                      status.c_message());
+        return 1;
+      }
+    }
+
+    svc->Start(listen_socket, GetRelaySocket());
+  }
 
   // Set the CPU limit and start the watchdog running. The memory limit will
   // be set inside the service code as it relies on the size of buffers.

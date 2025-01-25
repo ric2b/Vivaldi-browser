@@ -7,11 +7,16 @@
 
 #include <string>
 
+#include "base/types/strong_alias.h"
 #include "url/gurl.h"
 
 namespace data_sharing {
 
-enum class MemberRole { kUnknown, kOwner, kMember, kInvitee };
+using GroupId = base::StrongAlias<class GroupIdTag, std::string>;
+
+// GENERATED_JAVA_ENUM_PACKAGE: (
+//   org.chromium.components.data_sharing.member_role)
+enum class MemberRole { kUnknown = 0, kOwner = 1, kMember = 2, kInvitee = 3 };
 
 struct GroupMember {
   GroupMember();
@@ -42,7 +47,7 @@ struct GroupData {
 
   ~GroupData();
 
-  std::string group_id;
+  GroupId group_id;
   std::string display_name;
   std::vector<GroupMember> members;
 };

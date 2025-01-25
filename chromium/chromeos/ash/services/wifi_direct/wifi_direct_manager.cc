@@ -5,6 +5,7 @@
 #include "chromeos/ash/services/wifi_direct/wifi_direct_manager.h"
 
 #include "chromeos/ash/components/wifi_p2p/wifi_p2p_group.h"
+#include "chromeos/ash/components/wifi_p2p/wifi_p2p_metrics_logger.h"
 #include "chromeos/ash/services/wifi_direct/wifi_direct_connection.h"
 #include "components/device_event_log/device_event_log.h"
 
@@ -56,9 +57,12 @@ WifiDirectOperationResult GetMojoOperationResult(
 
 WifiDirectManager::WifiDirectManager() {
   DCHECK(WifiP2PController::IsInitialized());
+  WifiP2PController::Get()->AddObserver(this);
 }
 
-WifiDirectManager::~WifiDirectManager() = default;
+WifiDirectManager::~WifiDirectManager() {
+  WifiP2PController::Get()->RemoveObserver(this);
+}
 
 void WifiDirectManager::BindPendingReceiver(
     mojo::PendingReceiver<mojom::WifiDirectManager> pending_receiver) {
@@ -94,8 +98,26 @@ void WifiDirectManager::GetWifiP2PCapabilities(
       WifiP2PController::Get()->GetP2PCapabilities().is_owner_ready;
   result->is_client_ready =
       WifiP2PController::Get()->GetP2PCapabilities().is_client_ready;
+  result->is_p2p_supported =
+      WifiP2PController::Get()->GetP2PCapabilities().is_p2p_supported;
 
   std::move(callback).Run(std::move(result));
+}
+
+void WifiDirectManager::OnWifiDirectConnectionDisconnected(const int shill_id,
+                                                           bool is_owner) {
+  const auto it = shill_id_to_wifi_direct_connection_.find(shill_id);
+  if (it == shill_id_to_wifi_direct_connection_.end()) {
+    NET_LOG(ERROR) << "Couldn't find the Wifi direct connection with shill id: "
+                   << shill_id << " in map";
+    return;
+  }
+  CHECK(shill_id_to_wifi_direct_connection_[shill_id]->IsOwner() == is_owner);
+  WifiP2PMetricsLogger::RecordWifiP2PDisconnectReason(
+      WifiP2PMetricsLogger::DisconnectReason::kInternalError, is_owner);
+
+  shill_id_to_wifi_direct_connection_[shill_id].reset();
+  shill_id_to_wifi_direct_connection_.erase(it);
 }
 
 void WifiDirectManager::OnCreateOrConnectWifiDirectGroup(
@@ -152,7 +174,9 @@ void WifiDirectManager::OnClientRequestedDisconnection(int shill_id) {
                    << shill_id << " in map";
     return;
   }
-  if (shill_id_to_wifi_direct_connection_[shill_id]->IsOwner()) {
+  const bool is_owner =
+      shill_id_to_wifi_direct_connection_[shill_id]->IsOwner();
+  if (is_owner) {
     WifiP2PController::Get()->DestroyWifiP2PGroup(
         shill_id,
         base::BindOnce(&WifiDirectManager::OnDestroyOrDisconnectWifiDirectGroup,
@@ -163,6 +187,8 @@ void WifiDirectManager::OnClientRequestedDisconnection(int shill_id) {
         base::BindOnce(&WifiDirectManager::OnDestroyOrDisconnectWifiDirectGroup,
                        weak_ptr_factory_.GetWeakPtr()));
   }
+  WifiP2PMetricsLogger::RecordWifiP2PDisconnectReason(
+      WifiP2PMetricsLogger::DisconnectReason::kClientInitiated, is_owner);
   shill_id_to_wifi_direct_connection_.erase(it);
 }
 

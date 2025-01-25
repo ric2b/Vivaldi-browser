@@ -4,14 +4,19 @@
 
 #include "chrome/browser/extensions/api/webstore_private/extension_install_status.h"
 
+#include "base/containers/contains.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/manifest_v2_experiment_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "components/crx_file/id_util.h"
 #include "components/prefs/pref_service.h"
+#include "components/supervised_user/core/browser/supervised_user_preferences.h"
+#include "components/supervised_user/core/common/features.h"
+#include "components/supervised_user/core/common/pref_names.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
@@ -82,11 +87,6 @@ ExtensionInstallStatus GetWebstoreExtensionInstallStatus(
     int manifest_version) {
   DCHECK(crx_file::id_util::IdIsValid(extension_id));
 
-  if (ExtensionPrefs::Get(profile)->HasDisableReason(
-          extension_id, disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED)) {
-    return kCustodianApprovalRequired;
-  }
-
   const GURL update_url = extension_urls::GetWebstoreUpdateUrl();
   ExtensionManagement* extension_management =
       ExtensionManagementFactory::GetForBrowserContext(profile);
@@ -103,6 +103,29 @@ ExtensionInstallStatus GetWebstoreExtensionInstallStatus(
     return kForceInstalled;
 
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile);
+
+  // Check if parent approval is needed for a supervised user to install
+  // a new extension.
+  if (base::FeatureList::IsEnabled(
+          supervised_user::
+              kExposedParentalControlNeededForExtensionInstallation) &&
+      !registry->GetInstalledExtension(extension_id) &&
+      supervised_user::AreExtensionsPermissionsEnabled(*profile->GetPrefs()) &&
+      !supervised_user::SupervisedUserCanSkipExtensionParentApprovals(
+          *profile->GetPrefs()) &&
+      !base::Contains(profile->GetPrefs()->GetDict(
+                          prefs::kSupervisedUserApprovedExtensions),
+                      extension_id)) {
+    return kCustodianApprovalRequiredForInstallation;
+  }
+  // Check if parent approval is needed for a supervised user to enable
+  // an existing extension which is missing parental approval.
+  if (registry->GetInstalledExtension(extension_id) &&
+      ExtensionPrefs::Get(profile)->HasDisableReason(
+          extension_id, disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED)) {
+    return kCustodianApprovalRequired;
+  }
+
   if (registry->enabled_extensions().Contains(extension_id))
     return kEnabled;
 
@@ -119,35 +142,61 @@ ExtensionInstallStatus GetWebstoreExtensionInstallStatus(
     return kBlockedByPolicy;
   }
 
-  // If an installed extension is disabled due to policy, returns
-  // kBlockedByPolicy, kCanRequest or kRequestPending instead of kDisabled.
+  bool is_blocked_by_policy = IsExtensionInstallBlockedByPolicy(
+      extension_management, mode, extension_id, update_url.spec(),
+      manifest_type, required_permission_set);
+
+  // Check if it's possible for the extension to be requested.
+  if (is_blocked_by_policy) {
+    // The ability to request extension installs is not available if the
+    // extension request policy is disabled.
+    if (!profile->GetPrefs()->GetBoolean(
+            prefs::kCloudExtensionRequestEnabled)) {
+      return kBlockedByPolicy;
+    }
+
+    // An extension which is explicitly blocked by enterprise policy can't be
+    // requested anymore.
+    if (extension_management->IsInstallationExplicitlyBlocked(extension_id)) {
+      return kBlockedByPolicy;
+    }
+  }
+
+  // Check if the extension is using an unsupported manifest version.
+  ManifestV2ExperimentManager* mv2_experiment_manager =
+      ManifestV2ExperimentManager::Get(profile);
+  // At this point, we don't know what the extension manifest location really
+  // is (because it's not installed). We pretend it will be kInternal, which
+  // reflects an extension installed by the webstore.
+  constexpr mojom::ManifestLocation kManifestLocation =
+      mojom::ManifestLocation::kInternal;
+  if (mv2_experiment_manager->ShouldBlockExtensionInstallation(
+          extension_id, manifest_version, manifest_type, kManifestLocation,
+          HashedExtensionId(extension_id))) {
+    // The extension is using a deprecated manifest version and should not
+    // be installable.
+    return kDeprecatedManifestVersion;
+  }
+
+  // If an installed extension is disabled due to policy, return kCanRequest or
+  // kRequestPending instead of kDisabled.
   // By doing so, user can still request an installed and policy blocked
   // extension.
-  if (!IsExtensionInstallBlockedByPolicy(
-          extension_management, mode, extension_id, update_url.spec(),
-          manifest_type, required_permission_set)) {
-    if (registry->disabled_extensions().Contains(extension_id))
-      return kDisabled;
-    return kInstallable;
+  if (is_blocked_by_policy) {
+    if (profile->GetPrefs()
+            ->GetDict(prefs::kCloudExtensionRequestIds)
+            .Find(extension_id)) {
+      return kRequestPending;
+    }
+
+    return kCanRequest;
   }
 
-  // The ability to request extension installs is not available if the extension
-  // request policy is disabled
-  if (!profile->GetPrefs()->GetBoolean(prefs::kCloudExtensionRequestEnabled))
-    return kBlockedByPolicy;
-
-  // An extension which is explicitly blocked by enterprise policy can't be
-  // requested anymore.
-  if (extension_management->IsInstallationExplicitlyBlocked(extension_id))
-    return kBlockedByPolicy;
-
-  if (profile->GetPrefs()
-          ->GetDict(prefs::kCloudExtensionRequestIds)
-          .Find(extension_id)) {
-    return kRequestPending;
+  if (registry->disabled_extensions().Contains(extension_id)) {
+    return kDisabled;
   }
 
-  return kCanRequest;
+  return kInstallable;
 }
 
 }  // namespace extensions

@@ -305,5 +305,5 @@ bool VivaldiSubresourceFilterAdblockingThrottle::
       return false;
   }
   NOTREACHED();
-  return false;
+  //return false;
 }

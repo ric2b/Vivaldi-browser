@@ -33,11 +33,7 @@ class VIZ_SERVICE_EXPORT OutputPresenterGL : public OutputPresenter {
 
   // OutputPresenter implementation:
   void InitializeCapabilities(OutputSurface::Capabilities* capabilities) final;
-  bool Reshape(const SkImageInfo& image_info,
-               const gfx::ColorSpace& color_space,
-               int sample_count,
-               float device_scale_factor,
-               gfx::OverlayTransform transform) final;
+  bool Reshape(const ReshapeParams& params) final;
   std::vector<std::unique_ptr<Image>> AllocateImages(
       gfx::ColorSpace color_space,
       gfx::Size image_size,
@@ -56,7 +52,6 @@ class VIZ_SERVICE_EXPORT OutputPresenterGL : public OutputPresenter {
   void SetVSyncDisplayID(int64_t display_id) final;
 
 #if BUILDFLAG(IS_APPLE)
-  void SetCALayerErrorCode(gfx::CALayerResult ca_layer_error_code) final;
   void SetMaxPendingSwaps(int max_pending_swaps) final;
 #endif
 
@@ -70,10 +65,6 @@ class VIZ_SERVICE_EXPORT OutputPresenterGL : public OutputPresenter {
   const raw_ptr<gpu::SharedImageFactory> shared_image_factory_;
   const raw_ptr<gpu::SharedImageRepresentationFactory>
       shared_image_representation_factory_;
-
-#if BUILDFLAG(IS_APPLE)
-  gfx::CALayerResult ca_layer_error_code_ = gfx::kCALayerSuccess;
-#endif
 };
 
 }  // namespace viz

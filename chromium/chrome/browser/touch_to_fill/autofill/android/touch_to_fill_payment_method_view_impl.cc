@@ -4,16 +4,19 @@
 
 #include "chrome/browser/touch_to_fill/autofill/android/touch_to_fill_payment_method_view_impl.h"
 
+#include "base/android/jni_android.h"
+#include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "chrome/browser/autofill/android/personal_data_manager_android.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_android.h"
-#include "chrome/browser/touch_to_fill/autofill/android/internal/jni/TouchToFillPaymentMethodViewBridge_jni.h"
 #include "chrome/browser/touch_to_fill/autofill/android/touch_to_fill_payment_method_view_controller.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "chrome/browser/touch_to_fill/autofill/android/internal/jni/TouchToFillPaymentMethodViewBridge_jni.h"
 
 namespace autofill {
 
@@ -46,8 +49,7 @@ bool TouchToFillPaymentMethodViewImpl::IsReadyToShow(
 
   java_object_.Reset(Java_TouchToFillPaymentMethodViewBridge_create(
       env, java_controller,
-      ProfileAndroid::FromProfile(
-          Profile::FromBrowserContext(web_contents_->GetBrowserContext()))
+      Profile::FromBrowserContext(web_contents_->GetBrowserContext())
           ->GetJavaObject(),
       web_contents_->GetTopLevelNativeWindow()->GetJavaObject()));
   if (!java_object_)
@@ -59,7 +61,9 @@ bool TouchToFillPaymentMethodViewImpl::IsReadyToShow(
 bool TouchToFillPaymentMethodViewImpl::Show(
     TouchToFillPaymentMethodViewController* controller,
     base::span<const autofill::CreditCard> cards_to_suggest,
+    const std::vector<bool>& card_acceptabilities,
     bool should_show_scan_credit_card) {
+  CHECK_EQ(cards_to_suggest.size(), card_acceptabilities.size());
   JNIEnv* env = base::android::AttachCurrentThread();
   if (!IsReadyToShow(controller, env)) {
     return false;
@@ -71,8 +75,10 @@ bool TouchToFillPaymentMethodViewImpl::Show(
     credit_cards_array.push_back(
         PersonalDataManagerAndroid::CreateJavaCreditCardFromNative(env, card));
   }
+
   Java_TouchToFillPaymentMethodViewBridge_showSheet(
       env, java_object_, std::move(credit_cards_array),
+      base::android::ToJavaBooleanArray(env, card_acceptabilities),
       should_show_scan_credit_card);
   return true;
 }

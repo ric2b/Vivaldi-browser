@@ -118,6 +118,12 @@ void AutoUpdateAPI::SendDidAbortWithError(const std::string& desc,
       auto_update::OnDidAbortWithError::Create(desc, reason));
 }
 
+/* static */
+void AutoUpdateAPI::SendUpdateFinished() {
+  ::vivaldi::BroadcastEventToAllProfiles(
+      auto_update::OnUpdateFinished::kEventName);
+}
+
 void AutoUpdateGetUpdateStatusFunction::SendResult(
     std::optional<AutoUpdateStatus> status,
     std::string version,

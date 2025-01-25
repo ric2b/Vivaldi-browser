@@ -9,6 +9,7 @@
 
 #include "cast/streaming/rtp_defines.h"
 #include "platform/api/task_runner.h"
+#include "platform/base/span.h"
 #include "util/osp_logging.h"
 
 namespace openscreen::cast {
@@ -96,7 +97,7 @@ void Environment::SendPacket(ByteView packet, PacketMetadata metadata) {
   OSP_CHECK(remote_endpoint_.address);
   OSP_CHECK_NE(remote_endpoint_.port, 0);
   if (socket_) {
-    socket_->SendMessage(packet.data(), packet.size(), remote_endpoint_);
+    socket_->SendMessage(packet, remote_endpoint_);
   }
   if (statistics_collector_) {
     statistics_collector_->CollectPacketSentEvent(packet, metadata);

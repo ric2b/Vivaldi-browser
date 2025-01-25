@@ -11,7 +11,7 @@ script can be run in standalone mode to check for existing violations.
 Example command:
 
 $ git ls-files third_party/blink \
-    | python third_party/blink/tools/blinkpy/presubmit/audit_non_blink_usage.py
+    | python3 third_party/blink/tools/blinkpy/presubmit/audit_non_blink_usage.py
 """
 
 from __future__ import print_function
@@ -35,20 +35,10 @@ _DISALLOW_CONTINUATION_DATA_ = (
 
 _CONFIG = [
     {
-        'paths': ['third_party/blink/renderer/'],
+        'paths': ['third_party/blink/'],
         'allowed': [
-            # TODO(dcheng): Should these be in a more specific config?
-            'gfx::ColorSpace',
-            'gfx::CubicBezier',
-            'gfx::HDRMetadata',
-            'gfx::HdrMetadataExtendedRange',
-            'gfx::ICCProfile',
-            'gfx::RadToDeg',
-
-            # For fast cos/sin functions
-            'gfx::SinCosDegrees',
-
             # absl
+            'absl::Cleanup',
             'absl::MakeInt128',
             'absl::MakeUint128',
             'absl::Int128High64',
@@ -73,6 +63,7 @@ _CONFIG = [
             'base::AutoReset',
             'base::Contains',
             'base::ConditionVariable',
+            'base::CPU',
             'base::ValuesEquivalent',
             'base::Days',
             'base::DefaultTickClock',
@@ -96,7 +87,9 @@ _CONFIG = [
             'base::Location',
             'base::MakeRefCounted',
             'base::MappedReadOnlyRegion',
+            'base::MatchPattern',
             'base::MatcherStringPattern',
+            'base::MessagePump',
             'base::MetricsSubSampler',
             'base::Microseconds',
             'base::Milliseconds',
@@ -110,6 +103,8 @@ _CONFIG = [
             'base::PersistentHash',
             'base::PlatformThread',
             'base::PlatformThreadId',
+            'base::Process',
+            'base::RadToDeg',
             'base::RefCountedData',
             'base::RunLoop',
             'base::HashingLRUCache',
@@ -148,6 +143,7 @@ _CONFIG = [
             'base::as_byte_span',
             'base::as_bytes',
             'base::as_chars',
+            'base::as_string_view',
             'base::as_writable_bytes',
             'base::bit_cast',
             'base::expected',
@@ -158,7 +154,8 @@ _CONFIG = [
             'base::ranges::.+',
             'base::sequence_manager::TaskTimeObserver',
             'base::span',
-            'base::Span(Reader|Writer)',
+            'base::span(_with_nul)?_from_cstring',
+            'base::Span(OrSize|Reader|Writer)',
             'base::as_byte_span',
             'base::as_writable_byte_span',
             'base::as_bytes',
@@ -169,9 +166,6 @@ _CONFIG = [
             'base::(byte_)?span_from_ref',
             'logging::GetVlogLevel',
             'logging::SetLogItems',
-
-            # //base/allocator/partition_allocator/src/partition_alloc/partition_alloc_constants.h
-            'partition_alloc::internal::kAlignment',
 
             # //base/task/bind_post_task.h
             'base::BindPostTask',
@@ -197,7 +191,8 @@ _CONFIG = [
             'base::SplitOnceCallback',
 
             # //base/functional/callback.h is allowed, but you need to use
-            # WTF::Bind or WTF::BindRepeating to create callbacks in Blink.
+            # WTF::Bind or WTF::BindRepeating to create callbacks in
+            # //third_party/blink/renderer.
             'base::BarrierCallback',
             'base::BarrierClosure',
             'base::NullCallback',
@@ -279,6 +274,7 @@ _CONFIG = [
             # //base/numerics/clamped_math.h.
             'base::ClampAdd',
             'base::ClampedNumeric',
+            'base::ClampMin',
             'base::ClampMax',
             'base::ClampSub',
             'base::MakeClampedNum',
@@ -305,8 +301,8 @@ _CONFIG = [
 
             # Byte order
             'base::BigEndian(Reader|Writer)',
-            'base::numerics::U(8|16|32|64)(To|From)(Big|Little|Native)Endian',
-            'base::numerics::ByteSwap',
+            'base::(numerics::)?((I|U)(8|16|32|64)|(Float|Double))(To|From)(Big|Little|Native)Endian',
+            'base::(numerics::)?ByteSwap',
 
             # (Cryptographic) random number generation
             'base::RandUint64',
@@ -323,14 +319,6 @@ _CONFIG = [
             'base::features::.+',
             'features::.+',
 
-            # PartitionAlloc
-            'base::PartitionFree',
-            'base::PartitionAllocZeroFill',
-            'base::PartitionAllocReturnNull',
-
-            # For TaskObserver.
-            'base::PendingTask',
-
             # Time
             'base::Clock',
             'base::DefaultClock',
@@ -340,6 +328,43 @@ _CONFIG = [
 
             # State transition checking
             'base::StateTransitions',
+
+        ]
+    },
+    {
+        'paths': ['third_party/blink/common/'],
+        'allowed': [
+            # By definition, files in common are expected to use STL types.
+            'std::.+',
+
+            # Blink code shouldn't need to be qualified with the Blink namespace,
+            # but there are exceptions, e.g. traits for Mojo.
+            'blink::.+',
+        ],
+    },
+    {
+        'paths': ['third_party/blink/renderer/'],
+        'allowed': [
+            # TODO(dcheng): Should these be in a more specific config?
+            'gfx::ColorSpace',
+            'gfx::CubicBezier',
+            'gfx::HDRMetadata',
+            'gfx::HdrMetadataExtendedRange',
+            'gfx::ICCProfile',
+
+            # For fast cos/sin functions
+            'gfx::SinCosDegrees',
+
+            # //base/allocator/partition_allocator/src/partition_alloc/partition_alloc_constants.h
+            'partition_alloc::internal::kAlignment',
+
+            # PartitionAlloc
+            'base::PartitionFree',
+            'base::PartitionAllocZeroFill',
+            'base::PartitionAllocReturnNull',
+
+            # For TaskObserver.
+            'base::PendingTask',
 
             # cc painting and raster types.
             'cc::CategorizedWorkerPool',
@@ -525,6 +550,7 @@ _CONFIG = [
             'cc::kPixelsPerLineStep',
             'cc::kMinFractionToStepWhenPaging',
             'cc::kPercentDeltaForDirectionalScroll',
+            'cc::BrowserControlsOffsetTagsInfo',
             'cc::MainThreadScrollingReason',
             'cc::ManipulationInfo',
             'cc::ScrollSnapAlign',
@@ -625,8 +651,9 @@ _CONFIG = [
             'protocol::.+',
 
             # Blink code shouldn't need to be qualified with the Blink namespace,
-            # but there are exceptions.
+            # but there are exceptions, e.g. traits for Mojo.
             'blink::.+',
+
             # Assume that identifiers where the first qualifier is internal are
             # nested in the blink namespace.
             'internal::.+',
@@ -648,6 +675,7 @@ _CONFIG = [
 
             # HTTP status codes
             'net::HTTP_.+',
+            'net::ERR_.*',
 
             # For ConnectionInfo enumeration
             'net::HttpConnectionInfo',
@@ -658,6 +686,9 @@ _CONFIG = [
             # Used in network service types.
             'net::SchemefulSite',
             'net::SiteForCookies',
+
+            # Storage Access API metadata
+            'net::StorageAccessApiStatus',
 
             # PartitionAlloc
             'partition_alloc::.+',
@@ -768,7 +799,12 @@ _CONFIG = [
 
             # Protected memory
             'base::ProtectedMemory',
+            'base::ProtectedMemoryInitializer',
             'base::AutoWritableMemory',
+
+            # Allow Highway SIMD Library and the possible namespace aliases.
+            'hwy::HWY_NAMESPACE.*',
+            'hw::.+',
         ],
         'disallowed': [
             ('base::Bind(Once|Repeating)',
@@ -1095,11 +1131,53 @@ _CONFIG = [
     },
     {
         'paths': [
-            'third_party/blink/public/web/web_frame_widget.h',
+            'third_party/blink/public/',
         ],
         'allowed': [
-            'base::OnceCallback',
+            'gfx::Point',
+            'gfx::PointF',
             'gfx::Rect',
+            'gfx::RectF',
+
+            # The Blink public API is shared between non-Blink and Blink code
+            # and must use the regular variants.
+            'mojom::.+',
+
+            # Metadata for the Storage Access API.
+            'net::StorageAccessApiStatus',
+
+            # Prefer WebString over std::string in the public API. Other STL
+            # types are generally allowed for interop with non-Blink code, as
+            # containers like WTF::Vector are not exposed outside Blink.
+            'std::.+',
+        ],
+    },
+    {
+        'paths': [
+            'third_party/blink/public/common',
+        ],
+        'allowed': [
+            # Blink code shouldn't need to be qualified with the Blink namespace,
+            # but there are exceptions, e.g. traits for Mojo.
+            'blink::.+',
+        ],
+    },
+    {
+        'paths': [
+            'third_party/blink/public/platform/web_audio_device.h',
+        ],
+        'allowed': [
+            'media::OutputDeviceStatus',
+        ],
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/core/scheduler/scripted_idle_task_controller.cc',
+            'third_party/blink/renderer/core/scheduler/scripted_idle_task_controller.h',
+            ],
+        'allowed': [
+            'base::DelayedTaskHandle',
+            'base::subtle::PostDelayedTaskPassKey',
         ],
     },
     {
@@ -1431,7 +1509,6 @@ _CONFIG = [
             'third_party/blink/renderer/modules/mediarecorder/',
         ],
         'allowed': [
-            'std::data',
             # TODO(crbug.com/960665): Remove base::queue once it is replaced with a WTF equivalent.
             'base::queue',
             'base::ClampMul',
@@ -1693,6 +1770,15 @@ _CONFIG = [
             'third_party/blink/renderer/core/paint/theme_painter_default.cc',
         ],
         'allowed': ['ui::NativeTheme.*', 'ui::color_utils.*'],
+    },
+    {
+        'paths': [
+            'third_party/blink/public/platform/web_theme_engine.h',
+            'third_party/blink/renderer/core/layout/layout_theme.cc',
+            'third_party/blink/renderer/core/layout/layout_theme.h',
+            'third_party/blink/renderer/core/scroll/scrollbar_theme_fluent.cc',
+        ],
+        'allowed': ['ui::ColorProvider'],
     },
     {
         'paths': [
@@ -2049,38 +2135,14 @@ _CONFIG = [
     },
     {
         'paths': [
-            'third_party/blink/renderer/modules/ml/webnn/ml_graph_builder.cc',
-        ],
-        'allowed': [
-            'webnn::features::.+',
-        ]
-    },
-    {
-        'paths': [
-            'third_party/blink/renderer/modules/ml/webnn/ml_graph_test_mojo.cc',
-        ],
-        'allowed': [
-            'base::test::ScopedFeatureList',
-            'blink_mojom::.+',
-            'webnn::features::.+',
-        ]
-    },
-    {
-        'paths': [
-            'third_party/blink/renderer/modules/ml/webnn/ml_graph_type_converter.cc',
+            'third_party/blink/renderer/modules/ml/webnn/',
+            'third_party/blink/renderer/modules/ml/ml_context.cc',
+            'third_party/blink/renderer/modules/ml/ml_context.h',
+            'third_party/blink/renderer/modules/ml/ml_model_loader_test_util.cc',
         ],
         'allowed': [
             'blink_mojom::.+',
-        ]
-    },
-    {
-        'paths': [
-            'third_party/blink/renderer/modules/ml/webnn/ml_graph_tflite_converter.cc',
-            'third_party/blink/renderer/modules/ml/webnn/ml_graph_test_model_loader.cc',
-        ],
-        'allowed': [
-            'flatbuffers::.+',
-            'tflite::.+',
+            'webnn::.+',
         ]
     },
     {
@@ -2094,11 +2156,19 @@ _CONFIG = [
     },
      {
         'paths': [
-            'third_party/blink/renderer/modules/scheduler/',
+            'third_party/blink/renderer/core/scheduler/',
             'third_party/blink/renderer/modules/shared_storage/',
         ],
         'allowed': [
             _DISALLOW_CONTINUATION_DATA_[0],
+        ]
+    },
+     {
+        'paths': [
+            'third_party/blink/public/common/permissions_policy/permissions_policy.h',
+        ],
+        'allowed': [
+            'url::Origin',
         ]
     },
 ]
@@ -2323,7 +2393,7 @@ def main():
                     print('%s uses disallowed identifiers:' % path)
                     for i in disallowed_identifiers:
                         print(i.line, i.identifier, i.advice)
-        except IOError as e:
+        except (IOError, UnicodeDecodeError) as e:
             print('could not open %s: %s' % (path, e))
 
 

@@ -195,7 +195,7 @@ MaybeError TranslateToHLSL(d3d::HlslCompilationRequest r,
                            std::string* remappedEntryPointName,
                            CompiledShader* compiledShader) {
     std::ostringstream errorStream;
-    errorStream << "Tint HLSL failure:" << std::endl;
+    errorStream << "Tint HLSL failure:\n";
 
     tint::ast::transform::Manager transformManager;
     tint::ast::transform::DataMap transformInputs;
@@ -270,7 +270,18 @@ MaybeError TranslateToHLSL(d3d::HlslCompilationRequest r,
     }
 
     TRACE_EVENT0(tracePlatform.UnsafeGetValue(), General, "tint::hlsl::writer::Generate");
-    auto result = tint::hlsl::writer::Generate(transformedProgram, r.tintOptions);
+    tint::Result<tint::hlsl::writer::Output> result;
+    if (r.useTintIR) {
+        // Convert the AST program to an IR module.
+        auto ir = tint::wgsl::reader::ProgramToLoweredIR(transformedProgram);
+        DAWN_INVALID_IF(ir != tint::Success, "An error occurred while generating Tint IR\n%s",
+                        ir.Failure().reason.Str());
+
+        result = tint::hlsl::writer::Generate(ir.Get(), r.tintOptions);
+    } else {
+        result = tint::hlsl::writer::Generate(transformedProgram, r.tintOptions);
+    }
+
     DAWN_INVALID_IF(result != tint::Success, "An error occurred while generating HLSL:\n%s",
                     result.Failure().reason.Str());
 
@@ -385,16 +396,14 @@ void DumpFXCCompiledShader(Device* device,
     std::ostringstream dumpedMsg;
     // The HLSL may be empty if compilation failed.
     if (!compiledShader.hlslSource.empty()) {
-        dumpedMsg << "/* Dumped generated HLSL */" << std::endl
-                  << compiledShader.hlslSource << std::endl;
+        dumpedMsg << "/* Dumped generated HLSL */\n" << compiledShader.hlslSource << "\n";
     }
 
     // The blob may be empty if FXC compilation failed.
     const Blob& shaderBlob = compiledShader.shaderBlob;
     if (!shaderBlob.Empty()) {
-        dumpedMsg << "/* FXC compile flags */ " << std::endl
-                  << CompileFlagsToString(compileFlags) << std::endl;
-        dumpedMsg << "/* Dumped disassembled DXBC */" << std::endl;
+        dumpedMsg << "/* FXC compile flags */\n" << CompileFlagsToString(compileFlags) << "\n";
+        dumpedMsg << "/* Dumped disassembled DXBC */\n";
         ComPtr<ID3DBlob> disassembly;
         UINT flags =
             // Some literals are printed as floats with precision(6) which is not enough
@@ -402,7 +411,7 @@ void DumpFXCCompiledShader(Device* device,
             D3D_DISASM_PRINT_HEX_LITERALS;
         if (FAILED(device->GetFunctions()->d3dDisassemble(shaderBlob.Data(), shaderBlob.Size(),
                                                           flags, nullptr, &disassembly))) {
-            dumpedMsg << "D3D disassemble failed" << std::endl;
+            dumpedMsg << "D3D disassemble failed\n";
         } else {
             dumpedMsg << std::string_view(static_cast<const char*>(disassembly->GetBufferPointer()),
                                           disassembly->GetBufferSize());

@@ -24,9 +24,6 @@ const char kAccountIdMigrationState[] = "account_id_migration_state";
 // tracked by this signin.
 const char kAccountInfo[] = "account_info";
 
-// Boolean identifying whether reverse auto-login is enabled.
-const char kAutologinEnabled[] = "autologin.enabled";
-
 // Whether the "clear on exit" migration is complete.
 // If this preference is not true, then the user needs to be migrated.
 // If a user has set clear cookies on exit prior to the activation of
@@ -112,11 +109,6 @@ const char kGoogleServicesSyncingUsernameMigratedToSignedIn[] =
 const char kGoogleServicesUsernamePattern[] =
     "google.services.username_pattern";
 
-// List to keep track of emails for which the user has rejected one-click
-// sign-in.
-const char kReverseAutologinRejectedEmailList[] =
-    "reverse_autologin.rejected_email_list";
-
 // Boolean indicating if this profile was signed in with information from a
 // credential provider.
 const char kSignedInWithCredentialProvider[] =
@@ -128,6 +120,22 @@ const char kSigninAllowed[] = "signin.allowed";
 // Contains last |ListAccounts| data which corresponds to Gaia cookies.
 const char kGaiaCookieLastListAccountsData[] =
     "gaia_cookie.last_list_accounts_data";
+
+// The timestamp when History Sync was last declined (in the opt-in screen or
+// in the settings).
+// This value is reset when the user opts in to History Sync.
+// TODO(b/344543852): This pref is not used on iOS. Migrate the equivalent iOS
+// pref to this one.
+const char kHistorySyncLastDeclinedTimestamp[] =
+    "signin.history_sync.last_declined_timestamp";
+
+// Number of times the user successively declined History Sync (in the opt-in
+// screen or in the settings).
+// This value is reset to zero when the user accepts History Sync.
+// TODO(b/344543852): This pref is not used on iOS. Migrate the equivalent iOS
+// pref to this one.
+const char kHistorySyncSuccessiveDeclineCount[] =
+    "signin.history_sync.successive_decline_count";
 
 // List of patterns to determine the account visibility.
 const char kRestrictAccountsToPatterns[] =

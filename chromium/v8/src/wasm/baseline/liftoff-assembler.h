@@ -450,9 +450,26 @@ class LiftoffAssembler : public MacroAssembler {
   // {PeekToRegister(0)} should result in the same register.
   // When the value is finally popped, the use counter of its register has to be
   // decremented. This can be done by popping the value with {DropValues}.
-  LiftoffRegister PeekToRegister(int index, LiftoffRegList pinned);
+  LiftoffRegister PeekToRegister(int index, LiftoffRegList pinned) {
+    DCHECK_LT(index, cache_state_.stack_state.size());
+    VarState& slot = cache_state_.stack_state.end()[-1 - index];
+    if (V8_LIKELY(slot.is_reg())) return slot.reg();
+    LiftoffRegister reg = LoadToRegister(slot, pinned);
+    cache_state_.inc_used(reg);
+    slot.MakeRegister(reg);
+    return reg;
+  }
 
-  void DropValues(int count);
+  void DropValues(int count) {
+    DCHECK_GE(cache_state_.stack_state.size(), count);
+    for (VarState& slot :
+         base::VectorOf(cache_state_.stack_state.end() - count, count)) {
+      if (slot.is_reg()) {
+        cache_state_.dec_used(slot.reg());
+      }
+    }
+    cache_state_.stack_state.pop_back(count);
+  }
 
   // Drop a specific value from the stack; this is an expensive operation which
   // is currently only used for exceptions.
@@ -460,9 +477,9 @@ class LiftoffAssembler : public MacroAssembler {
   // the bottom of the stack.
   void DropExceptionValueAtOffset(int offset);
 
-  // Ensure that the loop inputs are either in a register or spilled to the
-  // stack, so that we can merge different values on the back-edge.
-  void PrepareLoopArgs(int num);
+  // Spill all loop inputs to the stack to free registers and to ensure that we
+  // can merge different values on the back-edge.
+  void SpillLoopArgs(int num);
 
   V8_INLINE static int NextSpillOffset(ValueKind kind, int top_spill_offset);
   V8_INLINE int NextSpillOffset(ValueKind kind);
@@ -944,6 +961,11 @@ class LiftoffAssembler : public MacroAssembler {
                              Register rhs, const FreezeCacheState& frozen);
   inline void emit_i32_cond_jumpi(Condition, Label*, Register lhs, int imm,
                                   const FreezeCacheState& frozen);
+  // ptrsize compare+jump, but with 32-bit immediate. This will get
+  // sign-extended on 64-bit architectures before the comparison.
+  inline void emit_ptrsize_cond_jumpi(Condition, Label*, Register lhs,
+                                      int32_t imm,
+                                      const FreezeCacheState& frozen);
   // Set {dst} to 1 if condition holds, 0 otherwise.
   inline void emit_i32_eqz(Register dst, Register src);
   inline void emit_i32_set_cond(Condition, Register dst, Register lhs,
@@ -1003,6 +1025,7 @@ class LiftoffAssembler : public MacroAssembler {
   inline void emit_i16x8_splat(LiftoffRegister dst, LiftoffRegister src);
   inline void emit_i32x4_splat(LiftoffRegister dst, LiftoffRegister src);
   inline void emit_i64x2_splat(LiftoffRegister dst, LiftoffRegister src);
+  inline bool emit_f16x8_splat(LiftoffRegister dst, LiftoffRegister src);
   inline void emit_f32x4_splat(LiftoffRegister dst, LiftoffRegister src);
   inline void emit_f64x2_splat(LiftoffRegister dst, LiftoffRegister src);
   inline void emit_i8x16_eq(LiftoffRegister dst, LiftoffRegister lhs,
@@ -1395,6 +1418,8 @@ class LiftoffAssembler : public MacroAssembler {
                                       uint8_t imm_lane_idx);
   inline void emit_i64x2_extract_lane(LiftoffRegister dst, LiftoffRegister lhs,
                                       uint8_t imm_lane_idx);
+  inline bool emit_f16x8_extract_lane(LiftoffRegister dst, LiftoffRegister lhs,
+                                      uint8_t imm_lane_idx);
   inline void emit_f32x4_extract_lane(LiftoffRegister dst, LiftoffRegister lhs,
                                       uint8_t imm_lane_idx);
   inline void emit_f64x2_extract_lane(LiftoffRegister dst, LiftoffRegister lhs,
@@ -1409,6 +1434,9 @@ class LiftoffAssembler : public MacroAssembler {
                                       LiftoffRegister src2,
                                       uint8_t imm_lane_idx);
   inline void emit_i64x2_replace_lane(LiftoffRegister dst, LiftoffRegister src1,
+                                      LiftoffRegister src2,
+                                      uint8_t imm_lane_idx);
+  inline bool emit_f16x8_replace_lane(LiftoffRegister dst, LiftoffRegister src1,
                                       LiftoffRegister src2,
                                       uint8_t imm_lane_idx);
   inline void emit_f32x4_replace_lane(LiftoffRegister dst, LiftoffRegister src1,
@@ -1541,8 +1569,6 @@ class LiftoffAssembler : public MacroAssembler {
   LiftoffBailoutReason bailout_reason_ = kSuccess;
   const char* bailout_detail_ = nullptr;
 };
-
-std::ostream& operator<<(std::ostream& os, LiftoffAssembler::VarState);
 
 #if DEBUG
 inline FreezeCacheState::FreezeCacheState(LiftoffAssembler& assm)

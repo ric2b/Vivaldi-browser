@@ -1220,10 +1220,10 @@ TEST_P(ShaderTests, FragmentInputIsSubsetOfVertexOutput) {
     wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
 struct ShaderIO {
     @location(1) var1: f32,
-    @location(3) @interpolate(flat) var3: u32,
-    @location(5) @interpolate(flat) var5: i32,
+    @location(3) @interpolate(flat, either) var3: u32,
+    @location(5) @interpolate(flat, either) var5: i32,
     @location(7) var7: f32,
-    @location(9) @interpolate(flat) var9: u32,
+    @location(9) @interpolate(flat, either) var9: u32,
     @builtin(position) pos: vec4f,
 }
 
@@ -1247,7 +1247,7 @@ struct ShaderIO {
 
     wgpu::ShaderModule fsModule = utils::CreateShaderModule(device, R"(
 struct ShaderIO {
-    @location(3) @interpolate(flat) var3: u32,
+    @location(3) @interpolate(flat, either) var3: u32,
     @location(7) var7: f32,
 }
 
@@ -2507,6 +2507,54 @@ fn main() {
     queue.Submit(1, &commands);
 
     EXPECT_BUFFER_U32_RANGE_EQ(expected.data(), output, 0, expected.size());
+}
+
+// A regression test for chromium:341282611. Test that Vulkan shader module cache should take the
+// primitive type into account because for `PointList` we should generate `PointSize` in the SPIRV
+// of the vertex shader.
+TEST_P(ShaderTests, SameShaderModuleToRenderPointAndNonPoint) {
+    std::string shader = R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4f {
+    return vec4f(0.0, 0.0, 0.0, 1.0);
+}
+@fragment
+fn fs_main() -> @location(0) vec4f {
+    return vec4f(0.0, 0.0, 0.0, 1.0);
+}
+)";
+    wgpu::PipelineLayoutDescriptor layoutDesc = {};
+    layoutDesc.bindGroupLayoutCount = 0;
+    wgpu::PipelineLayout layout = device.CreatePipelineLayout(&layoutDesc);
+
+    wgpu::ShaderModule shaderModule = utils::CreateShaderModule(device, shader.c_str());
+    utils::ComboRenderPipelineDescriptor rpDesc;
+    rpDesc.vertex.module = shaderModule;
+    rpDesc.vertex.entryPoint = "vs_main";
+    rpDesc.layout = layout;
+    rpDesc.cFragment.module = shaderModule;
+    rpDesc.cFragment.entryPoint = "fs_main";
+
+    utils::BasicRenderPass renderPass = utils::CreateBasicRenderPass(device, 64, 64);
+    rpDesc.cTargets[0].format = renderPass.colorFormat;
+
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPass.renderPassInfo);
+    {
+        rpDesc.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
+        wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&rpDesc);
+        pass.SetPipeline(pipeline);
+        pass.Draw(3);
+    }
+    {
+        rpDesc.primitive.topology = wgpu::PrimitiveTopology::PointList;
+        wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&rpDesc);
+        pass.SetPipeline(pipeline);
+        pass.Draw(1);
+    }
+    pass.End();
+    wgpu::CommandBuffer commandBuffer = encoder.Finish();
+    queue.Submit(1, &commandBuffer);
 }
 
 DAWN_INSTANTIATE_TEST(ShaderTests,

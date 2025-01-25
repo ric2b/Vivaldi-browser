@@ -7,7 +7,7 @@ import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js'
 import {BrowserProxy} from '//resources/cr_components/color_change_listener/browser_proxy.js';
 import type {CrIconButtonElement} from '//resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import {flush} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {LETTER_SPACING_EVENT} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import {ToolbarEvent} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import type {ReadAnythingToolbarElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {assertEquals, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 
@@ -28,7 +28,7 @@ suite('LetterSpacing', () => {
     const readingMode = new FakeReadingMode();
     chrome.readingMode = readingMode as unknown as typeof chrome.readingMode;
     spacingEmitted = -1;
-    document.addEventListener(LETTER_SPACING_EVENT, event => {
+    document.addEventListener(ToolbarEvent.LETTER_SPACING, event => {
       spacingEmitted = (event as CustomEvent).detail.data;
     });
     toolbar = document.createElement('read-anything-toolbar');
@@ -55,13 +55,13 @@ suite('LetterSpacing', () => {
     });
 
     test('has 3 options', () => {
-      assertEquals(letterSpacingMenuOptions.length, 3);
+      assertEquals(3, letterSpacingMenuOptions.length);
     });
 
     test('first option propagates standard spacing', () => {
       letterSpacingMenuOptions[0]!.click();
 
-      assertEquals(spacingEmitted, chrome.readingMode.standardLetterSpacing);
+      assertEquals(chrome.readingMode.standardLetterSpacing, spacingEmitted);
       assertEquals(
           chrome.readingMode.letterSpacing,
           chrome.readingMode.standardLetterSpacing);
@@ -70,7 +70,7 @@ suite('LetterSpacing', () => {
     test('second option propagates wide spacing', () => {
       letterSpacingMenuOptions[1]!.click();
 
-      assertEquals(spacingEmitted, chrome.readingMode.wideLetterSpacing);
+      assertEquals(chrome.readingMode.wideLetterSpacing, spacingEmitted);
       assertEquals(
           chrome.readingMode.letterSpacing,
           chrome.readingMode.wideLetterSpacing);
@@ -79,7 +79,7 @@ suite('LetterSpacing', () => {
     test('third option propagates very wide spacing', () => {
       letterSpacingMenuOptions[2]!.click();
 
-      assertEquals(spacingEmitted, chrome.readingMode.veryWideLetterSpacing);
+      assertEquals(chrome.readingMode.veryWideLetterSpacing, spacingEmitted);
       assertEquals(
           chrome.readingMode.letterSpacing,
           chrome.readingMode.veryWideLetterSpacing);

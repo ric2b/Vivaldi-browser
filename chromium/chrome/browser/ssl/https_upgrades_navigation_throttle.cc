@@ -51,13 +51,6 @@ HttpsUpgradesNavigationThrottle::MaybeCreateThrottleFor(
     return nullptr;
   }
 
-  // Repair prefs if the user was previously affected by crbug.com/1475747. This
-  // will reset the affected prefs, before setting up the state for the Throttle
-  // for this navigation.
-  // TODO(crbug.com/40070502): Remove this after M120 (or after
-  // kHttpsFirstModeV2ForTypicallySecureUsers is enabled by default).
-  HttpsFirstModeService::FixTypicallySecureUserPrefs(profile);
-
   PrefService* prefs = profile->GetPrefs();
   security_interstitials::https_only_mode::HttpInterstitialState
       interstitial_state;
@@ -67,13 +60,19 @@ HttpsUpgradesNavigationThrottle::MaybeCreateThrottleFor(
   if (base::FeatureList::IsEnabled(features::kHttpsFirstModeIncognito)) {
     if (profile->IsIncognitoProfile() && prefs &&
         prefs->GetBoolean(prefs::kHttpsFirstModeIncognito)) {
-      interstitial_state.enabled_by_pref = true;
+      interstitial_state.enabled_by_incognito = true;
     }
   }
 
   StatefulSSLHostStateDelegate* state =
       static_cast<StatefulSSLHostStateDelegate*>(
           profile->GetSSLHostStateDelegate());
+
+  if (IsBalanceModeEnabled() &&
+      (state && !state->HttpsFirstBalancedModeSuppressedForTesting())) {
+    interstitial_state.enabled_in_balanced_mode = true;
+  }
+
   auto* storage_partition =
       handle->GetWebContents()->GetPrimaryMainFrame()->GetStoragePartition();
 

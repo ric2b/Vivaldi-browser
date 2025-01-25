@@ -24,5 +24,7 @@ extern NSString* vLocationBarLightBGColor;
 extern NSString* vLocationBarDarkBGColor;
 
 extern const CGFloat vLocationBarSteadyViewPlaceholderOpacity;
+extern const CGFloat vLocationBarSteadyViewFullAddressOpacity;
+extern const CGFloat vLocationBarSteadyViewDomainOpacity;
 
 #endif  // IOS_CHROME_BROWSER_UI_LOCATION_BAR_CONSTANTS_VIVALDI_H_

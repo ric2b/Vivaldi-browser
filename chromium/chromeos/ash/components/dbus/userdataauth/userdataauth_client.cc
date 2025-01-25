@@ -207,14 +207,6 @@ class UserDataAuthClientImpl : public UserDataAuthClient {
                     std::move(callback));
   }
 
-  void RestoreDeviceKey(
-      const ::user_data_auth::RestoreDeviceKeyRequest& request,
-      RestoreDeviceKeyCallback callback) override {
-    CallProtoMethod(::user_data_auth::kRestoreDeviceKey,
-                    ::user_data_auth::kUserDataAuthInterface, request,
-                    std::move(callback));
-  }
-
   void PreparePersistentVault(
       const ::user_data_auth::PreparePersistentVaultRequest& request,
       PreparePersistentVaultCallback callback) override {
@@ -274,6 +266,14 @@ class UserDataAuthClientImpl : public UserDataAuthClient {
       const ::user_data_auth::UpdateAuthFactorMetadataRequest& request,
       UpdateAuthFactorMetadataCallback callback) override {
     CallProtoMethod(::user_data_auth::kUpdateAuthFactorMetadata,
+                    ::user_data_auth::kUserDataAuthInterface, request,
+                    std::move(callback));
+  }
+
+  void ReplaceAuthFactor(
+      const ::user_data_auth::ReplaceAuthFactorRequest& request,
+      ReplaceAuthFactorCallback callback) override {
+    CallProtoMethod(::user_data_auth::kReplaceAuthFactor,
                     ::user_data_auth::kUserDataAuthInterface, request,
                     std::move(callback));
   }

@@ -16,6 +16,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
+#include "base/not_fatal_until.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
@@ -721,7 +722,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
         pending_follow_redirect_params_->modified_headers.SetHeader(
             set_header, header_value);
       } else {
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
       }
     }
 
@@ -1080,22 +1081,26 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 
 // Determines whether it is safe to redirect from |from_url| to |to_url|.
 bool RequestFilterProxyingURLLoaderFactory::InProgressRequest::IsRedirectSafe(
-    const GURL& from_url,
-    const GURL& to_url,
+    const GURL& upstream_url,
+    const GURL& target_url,
     bool is_navigation_request) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  if (!is_navigation_request && to_url.SchemeIs(extensions::kExtensionScheme)) {
+  if (!is_navigation_request &&
+      target_url.SchemeIs(extensions::kExtensionScheme)) {
     const extensions::Extension* extension =
         extensions::ExtensionRegistry::Get(factory_->browser_context_)
             ->enabled_extensions()
-            .GetByID(to_url.host());
-    return extension &&
-           extensions::WebAccessibleResourcesInfo::IsResourceWebAccessible(
-               extension, to_url.path(),
-               base::OptionalToPtr(original_initiator_));
+            .GetByID(target_url.host());
+    if (!extension) {
+      return false;
+    }
+    return extensions::WebAccessibleResourcesInfo::
+        IsResourceWebAccessibleRedirect(extension, target_url,
+                                        original_initiator_,
+                                        upstream_url);
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-  return content::IsSafeRedirectTarget(from_url, to_url);
+  return content::IsSafeRedirectTarget(upstream_url, target_url);
 }
 
 network::URLLoaderCompletionStatus RequestFilterProxyingURLLoaderFactory::
@@ -1250,7 +1255,7 @@ void RequestFilterProxyingURLLoaderFactory::OnLoaderCreated(
         request_id, forwarding_header_client.InitWithNewPipeAndPassReceiver());
   }
   auto request_it = requests_.find(it->second);
-  DCHECK(request_it != requests_.end());
+  CHECK(request_it != requests_.end(), base::NotFatalUntil::M130);
   request_it->second->OnLoaderCreated(std::move(receiver),
                                       std::move(forwarding_header_client));
 }

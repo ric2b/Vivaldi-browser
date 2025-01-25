@@ -33,6 +33,7 @@ class FrameSinkId;
 class BackToTabLabelButton;
 class CloseImageButton;
 class HangUpButton;
+class OverlayWindowMinimizeButton;
 class PlaybackImageButton;
 class ResizeHandleButton;
 class SimpleOverlayWindowImageButton;
@@ -46,12 +47,11 @@ class VolumeSlider;
 
 // The Chrome desktop implementation of VideoOverlayWindow. This will only be
 // implemented in views, which will support all desktop platforms.
-class VideoOverlayWindowViews
-    : public content::VideoOverlayWindow,
-      public views::Widget,
-      public display::DisplayObserver,
-      public views::ViewObserver,
-      public AutoPipSettingOverlayView::AutoPipSettingOverlayViewObserver {
+class VideoOverlayWindowViews : public content::VideoOverlayWindow,
+                                public views::Widget,
+                                public display::DisplayObserver,
+                                public views::ViewObserver,
+                                public AutoPipSettingOverlayView::Delegate {
  public:
   using GetOverlayViewCb =
       base::RepeatingCallback<std::unique_ptr<AutoPipSettingOverlayView>()>;
@@ -115,7 +115,7 @@ class VideoOverlayWindowViews
   void OnViewVisibilityChanged(views::View* observed_view,
                                views::View* starting_view) override;
 
-  // AutoPipSettingOverlayView::AutoPipSettingOverlayViewObserver:
+  // AutoPipSettingOverlayView::Delegate:
   void OnAutoPipSettingOverlayViewHidden() override;
 
   bool ControlsHitTestContainsPoint(const gfx::Point& point);
@@ -155,6 +155,7 @@ class VideoOverlayWindowViews
   gfx::Rect GetBackToTabControlsBounds();
   gfx::Rect GetSkipAdControlsBounds();
   gfx::Rect GetCloseControlsBounds();
+  gfx::Rect GetMinimizeControlsBounds();
   gfx::Rect GetPlayPauseControlsBounds();
   gfx::Rect GetNextTrackControlsBounds();
   gfx::Rect GetPreviousTrackControlsBounds();
@@ -176,6 +177,7 @@ class VideoOverlayWindowViews
   SimpleOverlayWindowImageButton* previous_slide_controls_view_for_testing()
       const;
   CloseImageButton* close_button_for_testing() const;
+  OverlayWindowMinimizeButton* minimize_button_for_testing() const;
   gfx::Point close_image_position_for_testing() const;
   gfx::Point resize_handle_position_for_testing() const;
   PlaybackState playback_state_for_testing() const;
@@ -245,6 +247,10 @@ class VideoOverlayWindowViews
   // state.
   void TogglePlayPause();
 
+  // Closes this window and also pauses the underlying video if pausing is
+  // available.
+  void CloseAndPauseIfAvailable();
+
   // Returns the current frame sink id for the surface displayed in the
   // |video_view_|. If |video_view_| is not currently displaying a surface then
   // returns nullptr.
@@ -270,7 +276,8 @@ class VideoOverlayWindowViews
     kHangUp,
     kPreviousSlide,
     kNextSlide,
-    kMaxValue = kNextSlide
+    kMinimize,
+    kMaxValue = kMinimize
   };
   void RecordButtonPressed(OverlayWindowControl);
   void RecordTapGesture(OverlayWindowControl);
@@ -340,6 +347,7 @@ class VideoOverlayWindowViews
   raw_ptr<views::View> controls_scrim_view_ = nullptr;
   raw_ptr<views::View> controls_container_view_ = nullptr;
   raw_ptr<CloseImageButton> close_controls_view_ = nullptr;
+  raw_ptr<OverlayWindowMinimizeButton> minimize_button_ = nullptr;
   raw_ptr<BackToTabLabelButton> back_to_tab_label_button_ = nullptr;
   raw_ptr<SimpleOverlayWindowImageButton> previous_track_controls_view_ =
       nullptr;
@@ -405,13 +413,6 @@ class VideoOverlayWindowViews
   // Callback to get / create an overlay view.  This is a callback to let tests
   // provide alternate implementations.
   GetOverlayViewCb get_overlay_view_cb_;
-
-  // Auto pip setting overlay view observation. Used to observe the overlay view
-  // and receive notifications when it is hidden.
-  base::ScopedObservation<
-      AutoPipSettingOverlayView,
-      AutoPipSettingOverlayView::AutoPipSettingOverlayViewObserver>
-      auto_pip_setting_overlay_view_observation_{this};
 
 // Vivaldi
   raw_ptr<vivaldi::VideoProgress> progress_view_ = nullptr;

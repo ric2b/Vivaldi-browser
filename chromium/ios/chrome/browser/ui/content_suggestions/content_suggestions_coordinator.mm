@@ -34,8 +34,8 @@
 #import "ios/chrome/browser/ntp/model/set_up_list_item_type.h"
 #import "ios/chrome/browser/ntp/model/set_up_list_prefs.h"
 #import "ios/chrome/browser/ntp_tiles/model/ios_most_visited_sites_factory.h"
+#import "ios/chrome/browser/parcel_tracking/features.h"
 #import "ios/chrome/browser/parcel_tracking/parcel_tracking_prefs.h"
-#import "ios/chrome/browser/parcel_tracking/parcel_tracking_util.h"
 #import "ios/chrome/browser/passwords/model/password_checkup_utils.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/promos_manager/model/promos_manager_factory.h"
@@ -79,6 +79,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/cells/most_visited_tiles_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/shortcuts_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_image_data_source.h"
@@ -128,6 +129,7 @@
 #import "url/gurl.h"
 
 @interface ContentSuggestionsCoordinator () <
+    ContentSuggestionsCommands,
     ContentSuggestionsViewControllerAudience,
     MagicStackCollectionViewControllerAudience,
     MagicStackHalfSheetTableViewControllerDelegate,
@@ -289,16 +291,6 @@
   BOOL isSetupListEnabled = set_up_list_utils::IsSetUpListActive(
       GetApplicationContext()->GetLocalState());
   if (isSetupListEnabled) {
-    _setUpListMediator = [[SetUpListMediator alloc]
-          initWithPrefService:prefs
-                  syncService:syncService
-              identityManager:identityManager
-        authenticationService:authenticationService
-                   sceneState:self.browser->GetSceneState()];
-    _setUpListMediator.commandHandler = self;
-    _setUpListMediator.contentSuggestionsMetricsRecorder =
-        self.contentSuggestionsMetricsRecorder;
-    _setUpListMediator.delegate = self.delegate;
     const TemplateURL* defaultSearchURLTemplate =
         ios::TemplateURLServiceFactory::GetForBrowserState(
             self.browser->GetBrowserState())
@@ -306,7 +298,17 @@
     BOOL isDefaultSearchEngine = defaultSearchURLTemplate &&
                                  defaultSearchURLTemplate->prepopulate_id() ==
                                      TemplateURLPrepopulateData::google.id;
-    _setUpListMediator.isDefaultSearchEngine = isDefaultSearchEngine;
+    _setUpListMediator = [[SetUpListMediator alloc]
+          initWithPrefService:prefs
+                  syncService:syncService
+              identityManager:identityManager
+        authenticationService:authenticationService
+                   sceneState:self.browser->GetSceneState()
+        isDefaultSearchEngine:isDefaultSearchEngine];
+    _setUpListMediator.commandHandler = self;
+    _setUpListMediator.contentSuggestionsMetricsRecorder =
+        self.contentSuggestionsMetricsRecorder;
+    _setUpListMediator.delegate = self.delegate;
     self.contentSuggestionsMediator.setUpListMediator = _setUpListMediator;
     [moduleMediators addObject:_setUpListMediator];
   }
@@ -354,44 +356,31 @@
       self.contentSuggestionsMetricsRecorder;
   self.contentSuggestionsMediator.magicStackRankingModel =
       _magicStackRankingModel;
-  if (IsIOSMagicStackCollectionViewEnabled()) {
-    _magicStackRankingModel.delegate = self.contentSuggestionsMediator;
-  }
+  _magicStackRankingModel.delegate = self.contentSuggestionsMediator;
   _magicStackRankingModel.homeStartDataSource = self.homeStartDataSource;
 
-  self.contentSuggestionsViewController =
-      [[ContentSuggestionsViewController alloc] init];
-  self.contentSuggestionsViewController.audience = self;
-  self.contentSuggestionsViewController.urlLoadingBrowserAgent =
-      UrlLoadingBrowserAgent::FromBrowser(self.browser);
-  self.contentSuggestionsViewController.contentSuggestionsMetricsRecorder =
-      self.contentSuggestionsMetricsRecorder;
-  self.contentSuggestionsViewController.layoutGuideCenter =
-      LayoutGuideCenterForBrowser(self.browser);
-  self.contentSuggestionsViewController.parcelTrackingCommandHandler =
-      HandlerForProtocol(self.browser->GetCommandDispatcher(),
-                         ParcelTrackingOptInCommands);
-
-  if (IsIOSMagicStackCollectionViewEnabled()) {
-    _magicStackCollectionView =
-        [[MagicStackCollectionViewController alloc] init];
-    _magicStackCollectionView.audience = self;
+  if (!ShouldPutMostVisitedSitesInMagicStack()) {
+    ContentSuggestionsViewController* viewController =
+        [[ContentSuggestionsViewController alloc] init];
+    viewController.audience = self;
+    viewController.urlLoadingBrowserAgent =
+        UrlLoadingBrowserAgent::FromBrowser(self.browser);
+    viewController.contentSuggestionsMetricsRecorder =
+        self.contentSuggestionsMetricsRecorder;
+    self.contentSuggestionsViewController = viewController;
   }
 
-  if (_magicStackRankingModel) {
-    _magicStackRankingModel.consumer = self.contentSuggestionsViewController;
-  }
-  _shortcutsMediator.consumer = self.contentSuggestionsViewController;
-  _safetyCheckMediator.consumer = self.contentSuggestionsViewController;
+  _magicStackCollectionView = [[MagicStackCollectionViewController alloc] init];
+  _magicStackCollectionView.audience = self;
   _mostVisitedTilesMediator.consumer = self.contentSuggestionsViewController;
-  _setUpListMediator.consumer = self.contentSuggestionsViewController;
 
-  if (IsIOSMagicStackCollectionViewEnabled()) {
-    self.contentSuggestionsMediator.magicStackConsumer =
-        _magicStackCollectionView;
-  }
+  self.contentSuggestionsMediator.magicStackConsumer =
+      _magicStackCollectionView;
   self.contentSuggestionsMediator.consumer =
       self.contentSuggestionsViewController;
+  [self.browser->GetCommandDispatcher()
+      startDispatchingToTarget:self
+                   forProtocol:@protocol(ContentSuggestionsCommands)];
 }
 
 - (void)stop {
@@ -427,6 +416,8 @@
   [self dismissParcelTrackingAlertCoordinator];
   [_notificationsOptInAlertCoordinator stop];
   _notificationsOptInAlertCoordinator = nil;
+  [self.browser->GetCommandDispatcher()
+      stopDispatchingForProtocol:@protocol(ContentSuggestionsCommands)];
   _started = NO;
 }
 
@@ -439,6 +430,36 @@
 - (void)refresh {
   // Refresh in case there are new MVT to show.
   [_mostVisitedTilesMediator refreshMostVisitedTiles];
+  [_safetyCheckMediator reset];
+  [_parcelTrackingMediator reset];
+  [_magicStackRankingModel fetchLatestMagicStackRanking];
+}
+
+#pragma mark - ContentSuggestionsCommands
+
+- (void)showSetUpListSeeMoreMenu {
+  [_setUpListShowMoreViewController.presentingViewController
+      dismissViewControllerAnimated:NO
+                         completion:nil];
+  NSArray<SetUpListItemViewData*>* items = [self.setUpListMediator allItems];
+  _setUpListShowMoreViewController =
+      [[SetUpListShowMoreViewController alloc] initWithItems:items
+                                                 tapDelegate:self];
+  _setUpListShowMoreViewController.modalPresentationStyle =
+      UIModalPresentationPageSheet;
+  UISheetPresentationController* presentationController =
+      _setUpListShowMoreViewController.sheetPresentationController;
+  presentationController.prefersEdgeAttachedInCompactHeight = YES;
+  presentationController.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
+  presentationController.detents = @[
+    UISheetPresentationControllerDetent.mediumDetent,
+    UISheetPresentationControllerDetent.largeDetent
+  ];
+  presentationController.preferredCornerRadius = 16;
+  [_magicStackCollectionView
+      presentViewController:_setUpListShowMoreViewController
+                   animated:YES
+                 completion:nil];
 }
 
 #pragma mark - ContentSuggestionsViewControllerAudience
@@ -474,9 +495,9 @@
     UISheetPresentationControllerDetent.mediumDetent,
     UISheetPresentationControllerDetent.largeDetent
   ];
-  [self.viewController presentViewController:navViewController
-                                    animated:YES
-                                  completion:nil];
+  [_magicStackCollectionView presentViewController:navViewController
+                                          animated:YES
+                                        completion:nil];
 }
 
 - (void)showMagicStackParcelList {
@@ -497,13 +518,20 @@
     UISheetPresentationControllerDetent.mediumDetent,
     UISheetPresentationControllerDetent.largeDetent
   ];
-  [self.viewController presentViewController:navViewController
-                                    animated:YES
-                                  completion:nil];
+  [_magicStackCollectionView presentViewController:navViewController
+                                          animated:YES
+                                        completion:nil];
 }
 
 - (void)didTapSetUpListItemView:(SetUpListItemView*)view {
   [self didSelectSetUpListItem:view.type];
+}
+
+- (void)showMagicStackRecentTabs {
+  CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
+  id<BrowserCoordinatorCommands> browserCoordinatorCommands =
+      HandlerForProtocol(dispatcher, BrowserCoordinatorCommands);
+  [browserCoordinatorCommands showRecentTabs];
 }
 
 #pragma mark - MagicStackModuleContainerDelegate
@@ -514,10 +542,13 @@
       [self didSelectSafetyCheckItem:SafetyCheckItemType::kDefault];
       break;
     case ContentSuggestionsModuleType::kCompactedSetUpList:
-      [self showSetUpListShowMoreMenu];
+      [self showSetUpListSeeMoreMenu];
       break;
     case ContentSuggestionsModuleType::kParcelTracking:
       [self showMagicStackParcelList];
+      break;
+    case ContentSuggestionsModuleType::kTabResumption:
+      [self showMagicStackRecentTabs];
       break;
     default:
       break;
@@ -595,6 +626,10 @@
                                [weakSettingsHandler showNotificationsSettings];
                              }
                           completionAction:nil];
+}
+
+- (void)customizeCardsWasTapped {
+  [self didTapMagicStackEditButton];
 }
 
 #pragma mark - MagicStackHalfSheetTableViewControllerDelegate
@@ -728,7 +763,7 @@
       case SetUpListItemType::kFollow:
       case SetUpListItemType::kAllSet:
         // TODO(crbug.com/40262090): Add a Follow item to the Set Up List.
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   };
 
@@ -803,27 +838,6 @@
                       CredentialProviderPromoCommands)
       showCredentialProviderPromoWithTrigger:CredentialProviderPromoTrigger::
                                                  SetUpList];
-}
-
-- (void)showSetUpListShowMoreMenu {
-  NSArray<SetUpListItemViewData*>* items = [self.setUpListMediator allItems];
-  _setUpListShowMoreViewController =
-      [[SetUpListShowMoreViewController alloc] initWithItems:items
-                                                 tapDelegate:self];
-  _setUpListShowMoreViewController.modalPresentationStyle =
-      UIModalPresentationPageSheet;
-  UISheetPresentationController* presentationController =
-      _setUpListShowMoreViewController.sheetPresentationController;
-  presentationController.prefersEdgeAttachedInCompactHeight = YES;
-  presentationController.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
-  presentationController.detents = @[
-    UISheetPresentationControllerDetent.mediumDetent,
-    UISheetPresentationControllerDetent.largeDetent
-  ];
-  presentationController.preferredCornerRadius = 16;
-  [self.viewController presentViewController:_setUpListShowMoreViewController
-                                    animated:YES
-                                  completion:nil];
 }
 
 - (void)showContentNotificationBottomSheet {

@@ -40,6 +40,11 @@ class Rect;
 class Size;
 }  // namespace gfx
 
+namespace input {
+struct NativeWebKeyboardEvent;
+class RenderWidgetHostInputEventRouter;
+}  // namespace input
+
 namespace ui {
 class Compositor;
 }  // namespace ui
@@ -49,12 +54,10 @@ namespace content {
 class BrowserAccessibilityManager;
 class RenderFrameProxyHost;
 class RenderWidgetHostImpl;
-class RenderWidgetHostInputEventRouter;
 class RenderViewHostDelegateView;
 class TextInputManager;
 class VisibleTimeRequestTrigger;
 enum class KeyboardEventProcessingResult;
-struct NativeWebKeyboardEvent;
 
 //
 // RenderWidgetHostDelegate
@@ -100,7 +103,7 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // event before sending it to the renderer. See enum for details on return
   // value.
   virtual KeyboardEventProcessingResult PreHandleKeyboardEvent(
-      const NativeWebKeyboardEvent& event);
+      const input::NativeWebKeyboardEvent& event);
 
   // Callback to inform the browser that the renderer did not process the
   // specified events. This gives an opportunity to the browser to process the
@@ -110,7 +113,7 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // Callback to inform the browser that the renderer did not process the
   // specified events. This gives an opportunity to the browser to process the
   // event (used for keyboard shortcuts).
-  virtual bool HandleKeyboardEvent(const NativeWebKeyboardEvent& event);
+  virtual bool HandleKeyboardEvent(const input::NativeWebKeyboardEvent& event);
 
   // Callback to inform the browser that the renderer did not process the
   // specified mouse wheel event.  Returns true if the browser has handled
@@ -170,7 +173,7 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // Request the renderer to Move the caret to the new position.
   virtual void MoveCaret(const gfx::Point& extent) {}
 
-  virtual RenderWidgetHostInputEventRouter* GetInputEventRouter();
+  virtual input::RenderWidgetHostInputEventRouter* GetInputEventRouter();
 
   virtual void GetRenderWidgetHostAtPointAsynchronously(
       RenderWidgetHostViewBase* root_view,
@@ -334,9 +337,6 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // indicate the absence of a vertical scroll direction.
   virtual void OnVerticalScrollDirectionChanged(
       viz::VerticalScrollDirection scroll_direction) {}
-
-  // Returns true if the delegate is a portal.
-  virtual bool IsPortal();
 
   // Notify the delegate that the screen orientation has been changed.
   virtual void DidChangeScreenOrientation() {}

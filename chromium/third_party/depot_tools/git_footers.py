@@ -10,6 +10,7 @@ import sys
 
 from collections import defaultdict
 
+import gclient_utils
 import git_common as git
 
 FOOTER_PATTERN = re.compile(r'^\s*([\w-]+): *(.*)$')
@@ -212,6 +213,10 @@ def get_position(footers):
 
 
 def main(args):
+    if gclient_utils.IsEnvCog():
+        print('footers command is not supported in non-git environment',
+              file=sys.stderr)
+        return 1
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('ref',

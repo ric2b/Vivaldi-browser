@@ -8,7 +8,7 @@ header {
   padding: 0 0 6px;
   border-bottom: 1px solid var(--sys-color-divider);
   flex: none;
-  margin-bottom: 25px;
+  margin-bottom: 16px;
 }
 
 h1 {
@@ -80,6 +80,10 @@ h1 {
 .keybinds-shortcut.devtools-link {
   align-items: center;
   margin-left: 3px;
+}
+
+.keybinds-shortcut .devtools-link {
+  padding: 4px 0;
 }
 
 .keybinds-info .devtools-link {
@@ -162,7 +166,7 @@ h1 {
 
 .keybinds-set-select {
   text-align: right;
-  margin-bottom: 25px;
+  margin-bottom: 16px;
 }
 
 .keybinds-set-select label p {
@@ -172,6 +176,7 @@ h1 {
 
 .keybinds-set-select select {
   margin-left: 6px;
+  margin-top: 6px;
 }
 
 button.text-button {

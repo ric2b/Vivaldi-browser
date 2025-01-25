@@ -956,8 +956,19 @@ std::string GetPathDisplayTextForSettings(Profile* const profile,
 
   bool is_odfs_mounted = ash::cloud_upload::IsODFSMounted(profile);
 
-  if (ReplacePrefix(&result, "/home/chronos/user/MyFiles",
-                    GetStringUTF8(IDS_FILE_BROWSER_MY_FILES_ROOT_LABEL))) {
+  const std::string_view sep = " › ";
+  const std::string downloads_label =
+      StrCat({GetStringUTF8(IDS_FILE_BROWSER_MY_FILES_ROOT_LABEL), sep,
+              GetStringUTF8(IDS_FILE_BROWSER_DOWNLOADS_DIRECTORY_LABEL)});
+  if (ReplacePrefix(&result, "/home/chronos/user/MyFiles/Downloads",
+                    downloads_label)) {
+  } else if (ReplacePrefix(
+                 &result,
+                 profile->GetPath().Append("MyFiles/Downloads").value(),
+                 downloads_label)) {
+  } else if (ReplacePrefix(
+                 &result, "/home/chronos/user/MyFiles",
+                 GetStringUTF8(IDS_FILE_BROWSER_MY_FILES_ROOT_LABEL))) {
   } else if (ReplacePrefix(
                  &result, profile->GetPath().Append(kFolderNameMyFiles).value(),
                  GetStringUTF8(IDS_FILE_BROWSER_MY_FILES_ROOT_LABEL))) {
@@ -1041,7 +1052,7 @@ std::string GetPathDisplayTextForSettings(Profile* const profile,
     // Strip prefix of "/media/archive/" including trailing slash.
   }
 
-  base::ReplaceChars(result, "/", " › ", &result);
+  base::ReplaceChars(result, "/", sep, &result);
   return result;
 }
 
@@ -1184,7 +1195,7 @@ std::optional<FilePath> GetDisplayablePath(Profile* profile, FilePath path) {
     case VOLUME_TYPE_SYSTEM_INTERNAL:
       return std::nullopt;
     case NUM_VOLUME_TYPE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return std::nullopt;
   }
   while (cur_component != path_components.end()) {

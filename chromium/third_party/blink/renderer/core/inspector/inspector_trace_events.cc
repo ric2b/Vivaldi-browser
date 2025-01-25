@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/core/inspector/inspector_animation_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_network_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_page_agent.h"
+#include "third_party/blink/renderer/core/inspector/invalidation_set_to_selector_map.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_image.h"
@@ -363,7 +364,7 @@ const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
     DEFINE_STRING_MAPPING(PseudoScrollbarTrack)
     DEFINE_STRING_MAPPING(PseudoScrollbarTrackPiece)
     DEFINE_STRING_MAPPING(PseudoScrollMarker)
-    DEFINE_STRING_MAPPING(PseudoScrollMarkers)
+    DEFINE_STRING_MAPPING(PseudoScrollMarkerGroup)
     DEFINE_STRING_MAPPING(PseudoWindowInactive)
     DEFINE_STRING_MAPPING(PseudoCornerPresent)
     DEFINE_STRING_MAPPING(PseudoDecrement)
@@ -615,6 +616,11 @@ const char
     inspector_style_invalidator_invalidate_event::kInvalidateCustomPseudo[] =
         "Invalidate custom pseudo element";
 const char inspector_style_invalidator_invalidate_event::
+    kInvalidationSetInvalidatesSelf[] = "Invalidation set invalidates self";
+const char inspector_style_invalidator_invalidate_event::
+    kInvalidationSetInvalidatesSubtree[] =
+        "Invalidation set invalidates subtree";
+const char inspector_style_invalidator_invalidate_event::
     kInvalidationSetMatchedAttribute[] = "Invalidation set matched attribute";
 const char inspector_style_invalidator_invalidate_event::
     kInvalidationSetMatchedClass[] = "Invalidation set matched class";
@@ -634,6 +640,22 @@ void FillCommonPart(perfetto::TracedDictionary& dict,
   SetNodeInfo(dict, &node, "nodeId", "nodeName");
   dict.Add("reason", reason);
 }
+void FillSelectors(
+    perfetto::TracedDictionary& dict,
+    const InvalidationSet& invalidation_set,
+    InvalidationSetToSelectorMap::SelectorFeatureType feature_type,
+    const AtomicString& feature_value) {
+  const InvalidationSetToSelectorMap::IndexedSelectorList* selectors =
+      InvalidationSetToSelectorMap::Lookup(&invalidation_set, feature_type,
+                                           feature_value);
+  if (selectors != nullptr && selectors->size() > 0) {
+    dict.Add("selectorCount", selectors->size());
+    auto array = dict.AddArray("selectors");
+    for (auto selector : *selectors) {
+      array.Append(selector->GetSelectorText());
+    }
+  }
+}
 }  // namespace inspector_style_invalidator_invalidate_event
 
 void inspector_style_invalidator_invalidate_event::Data(
@@ -649,9 +671,29 @@ void inspector_style_invalidator_invalidate_event::SelectorPart(
     Element& element,
     const char* reason,
     const InvalidationSet& invalidation_set,
-    const String& selector_part) {
+    const AtomicString& selector_part) {
   auto dict = std::move(context).WriteDictionary();
   FillCommonPart(dict, element, reason);
+  InvalidationSetToSelectorMap::SelectorFeatureType feature_type =
+      InvalidationSetToSelectorMap::SelectorFeatureType::kUnknown;
+  if (reason == kInvalidationSetMatchedClass) {
+    feature_type = InvalidationSetToSelectorMap::SelectorFeatureType::kClass;
+  } else if (reason == kInvalidationSetMatchedId) {
+    feature_type = InvalidationSetToSelectorMap::SelectorFeatureType::kId;
+  } else if (reason == kInvalidationSetMatchedTagName) {
+    feature_type = InvalidationSetToSelectorMap::SelectorFeatureType::kTagName;
+  } else if (reason == kInvalidationSetMatchedAttribute) {
+    feature_type =
+        InvalidationSetToSelectorMap::SelectorFeatureType::kAttribute;
+  } else if (reason == kInvalidationSetInvalidatesSubtree) {
+    feature_type =
+        InvalidationSetToSelectorMap::SelectorFeatureType::kWholeSubtree;
+  }
+  if (feature_type !=
+      InvalidationSetToSelectorMap::SelectorFeatureType::kUnknown) {
+    FillSelectors(dict, invalidation_set, feature_type, selector_part);
+  }
+
   {
     auto array = dict.AddArray("invalidationList");
     array.Append(invalidation_set);

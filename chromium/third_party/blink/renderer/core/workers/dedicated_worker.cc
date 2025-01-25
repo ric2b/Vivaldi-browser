@@ -231,7 +231,8 @@ void DedicatedWorker::Start() {
     factory_client_->CreateWorkerHost(
         token_, script_request_url_, credentials_mode,
         WebFetchClientSettingsObject(*outside_fetch_client_settings_object_),
-        std::move(blob_url_token), GetExecutionContext()->HasStorageAccess());
+        std::move(blob_url_token),
+        GetExecutionContext()->GetStorageAccessApiStatus());
     // Continue in OnScriptLoadStarted() or OnScriptLoadStartFailed().
     return;
   }
@@ -304,7 +305,8 @@ void DedicatedWorker::OnHostCreated(
                   std::move(back_forward_cache_controller_host));
     return;
   }
-  NOTREACHED() << "Invalid type: " << IDLEnumAsString(options_->type());
+  NOTREACHED_IN_MIGRATION()
+      << "Invalid type: " << IDLEnumAsString(options_->type());
 }
 
 void DedicatedWorker::terminate() {
@@ -332,6 +334,7 @@ void DedicatedWorker::OnWorkerHostCreated(
         browser_interface_broker,
     CrossVariantMojoRemote<mojom::blink::DedicatedWorkerHostInterfaceBase>
         dedicated_worker_host) {
+  TRACE_EVENT("blink.worker", "DedicatedWorker::OnWorkerHostCreated");
   DCHECK(!browser_interface_broker_);
   browser_interface_broker_ = std::move(browser_interface_broker);
   pending_dedicated_worker_host_ = std::move(dedicated_worker_host);
@@ -447,6 +450,49 @@ void DedicatedWorker::ContinueStart(
         back_forward_cache_controller_host) {
   UMA_HISTOGRAM_TIMES("Worker.TopLevelScript.LoadStartedTime",
                       base::TimeTicks::Now() - start_time_);
+  TRACE_EVENT("blink.worker", "DedicatedWorker::ContinueStart");
+  if (base::FeatureList::IsEnabled(
+          features::kDedicatedWorkerAblationStudyEnabled)) {
+    CHECK(GetExecutionContext());
+    TRACE_EVENT("blink.worker", "DedicatedWorkerAblationStudyEnabled",
+                "DedicatedWorkerStartDelayInMs",
+                features::kDedicatedWorkerStartDelayInMs.Get());
+    GetExecutionContext()
+        ->GetTaskRunner(TaskType::kInternalDefault)
+        ->PostDelayedTask(
+            FROM_HERE,
+            WTF::BindOnce(&DedicatedWorker::ContinueStartInternal,
+                          WrapWeakPersistent(this), script_url,
+                          std::move(worker_main_script_load_params),
+                          std::move(referrer_policy),
+                          std::move(response_content_security_policies),
+                          source_code, reject_coep_unsafe_none,
+                          std::move(back_forward_cache_controller_host)),
+            base::Milliseconds(features::kDedicatedWorkerStartDelayInMs.Get()));
+    return;
+  }
+  ContinueStartInternal(script_url, std::move(worker_main_script_load_params),
+                        std::move(referrer_policy),
+                        std::move(response_content_security_policies),
+                        source_code, reject_coep_unsafe_none,
+                        std::move(back_forward_cache_controller_host));
+}
+
+void DedicatedWorker::ContinueStartInternal(
+    const KURL& script_url,
+    std::unique_ptr<WorkerMainScriptLoadParameters>
+        worker_main_script_load_params,
+    network::mojom::ReferrerPolicy referrer_policy,
+    Vector<network::mojom::blink::ContentSecurityPolicyPtr>
+        response_content_security_policies,
+    const String& source_code,
+    RejectCoepUnsafeNone reject_coep_unsafe_none,
+    mojo::PendingRemote<mojom::blink::BackForwardCacheControllerHost>
+        back_forward_cache_controller_host) {
+  TRACE_EVENT("blink.worker", "DedicatedWorker::ContinueStartInternal");
+  if (!GetExecutionContext()) {
+    return;
+  }
   context_proxy_->StartWorkerGlobalScope(
       CreateGlobalScopeCreationParams(
           script_url, referrer_policy,
@@ -551,7 +597,8 @@ DedicatedWorker::CreateGlobalScopeCreationParams(
       execution_context->IsIsolatedContext(),
       /*interface_registry=*/nullptr,
       std::move(agent_group_scheduler_compositor_task_runner),
-      top_level_frame_security_origin, execution_context->HasStorageAccess());
+      top_level_frame_security_origin,
+      execution_context->GetStorageAccessApiStatus());
   params->dedicated_worker_start_time = start_time_;
   return params;
 }

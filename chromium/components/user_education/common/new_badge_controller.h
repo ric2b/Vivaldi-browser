@@ -14,8 +14,11 @@
 #include "components/user_education/common/feature_promo_registry.h"
 #include "components/user_education/common/feature_promo_storage_service.h"
 #include "components/user_education/common/new_badge_policy.h"
+#include "ui/base/models/simple_menu_model.h"
 
 namespace user_education {
+
+using DisplayNewBadge = ui::IsNewFeatureAtValue;
 
 // Controls display of "New" Badge based on approved parameters.
 class NewBadgeController {
@@ -35,7 +38,7 @@ class NewBadgeController {
   // user. Returns true if the badge should be shown. Note that successfully
   // calling this method a number of times will permanently disable the badge,
   // so do not call this method unless the badge will actually be displayed.
-  bool MaybeShowNewBadge(const base::Feature& feature);
+  DisplayNewBadge MaybeShowNewBadge(const base::Feature& feature);
 
   // Notifies that the `feature` associated with the badge has been shown. After
   // a certain (but low) number of uses, the badge will disappear. Fails if

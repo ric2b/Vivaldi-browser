@@ -97,6 +97,8 @@ viz_component("service") {
     "display/output_surface_client.h",
     "display/output_surface_frame.cc",
     "display/output_surface_frame.h",
+    "display/overdraw_tracker.cc",
+    "display/overdraw_tracker.h",
     "display/overlay_candidate.cc",
     "display/overlay_candidate.h",
     "display/overlay_candidate_factory.cc",
@@ -267,7 +269,6 @@ viz_component("service") {
 
     # Note that dependency on //gpu/ipc/client is for GpuMemoryBufferImpl. This
     # dependency should not be in public_deps.
-    "//components/ml/webnn:features",
     "//components/version_info:version_info",
     "//components/viz/common",
     "//gpu/command_buffer/client",
@@ -285,6 +286,7 @@ viz_component("service") {
     "//services/tracing/public/cpp:cpp",
     "//services/viz/privileged/mojom",
     "//services/webnn:webnn_service",
+    "//services/webnn/public/mojom",
     "//skia",
     "//skia:skcms",
     "//third_party/libyuv",
@@ -541,6 +543,7 @@ viz_source_set("unit_tests") {
     "display/draw_polygon_unittest.cc",
     "display/frame_rate_decider_unittest.cc",
     "display/occlusion_culler_unittest.cc",
+    "display/overdraw_tracker_unittest.cc",
     "display/overlay_candidate_factory_unittest.cc",
     "display/readback_pixeltest.cc",
     "display/renderer_pixeltest.cc",
@@ -589,7 +592,6 @@ viz_source_set("unit_tests") {
     "//build:chromeos_buildflags",
     "//cc:test_support",
     "//cc/paint",
-    "//components/ml/webnn:features",
     "//components/viz/client",
     "//components/viz/common",
     "//components/viz/host",
@@ -617,7 +619,6 @@ viz_source_set("unit_tests") {
     sources += [
       "display/overlay_combination_cache_unittest.cc",
       "display/overlay_processor_ozone_unittest.cc",
-      "display/overlay_proposed_candidate_unittest.cc",
       "display/overlay_unittest.cc",
       "display_embedder/software_output_device_ozone_unittest.cc",
     ]
@@ -658,7 +659,6 @@ viz_source_set("unit_tests") {
     sources += [
       "display/overlay_combination_cache_unittest.cc",
       "display/overlay_processor_surface_control_unittest.cc",
-      "display/overlay_proposed_candidate_unittest.cc",
       "display/overlay_unittest.cc",
       "frame_sinks/external_begin_frame_source_android_unittest.cc",
     ]

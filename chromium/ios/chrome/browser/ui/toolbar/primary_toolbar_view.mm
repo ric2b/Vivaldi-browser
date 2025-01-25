@@ -304,6 +304,8 @@ using vivaldi::IsVivaldiRunning;
 
   if (IsVivaldiRunning()) {
     self.vivaldiMoreButton = [self.buttonFactory vivaldiMoreButton];
+    [self.vivaldiMoreButton setImage:[UIImage imageNamed:vToolbarMoreButtonIcon]
+                            forState:UIControlStateNormal];
     self.trailingStackViewButtons = [self buttonsForTrailingStackView];
   } else {
   self.trailingStackViewButtons =
@@ -626,13 +628,15 @@ using vivaldi::IsVivaldiRunning;
             withButtons:(NSArray*)buttons {
 
   // Remove all subviews
-  for (UIView *view in stackView.arrangedSubviews) {
-    [stackView removeArrangedSubview:view];
-    [view removeFromSuperview];
+  for (ToolbarButton *button in stackView.arrangedSubviews) {
+    [stackView removeArrangedSubview:button];
+    [button removeFromSuperview];
   }
 
   // Add new buttons
-  for (UIView *button in buttons) {
+  for (ToolbarButton *button in buttons) {
+    [button checkImageVisibility];
+    [button updateTintColor];
     [stackView addArrangedSubview:button];
   }
 }

@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "components/bookmarks/browser/titled_url_index.h"
-#include "base/strings/utf_string_conversions.h"
 
 #include <stdint.h>
 
@@ -52,11 +51,23 @@ void TitledUrlIndex::SetNodeSorter(
 void TitledUrlIndex::Add(const TitledUrlNode* node) {
   for (const std::u16string& term : ExtractIndexTerms(node))
     RegisterNode(term, node);
+
+  // Vivaldi
+  for (const std::u16string& term :
+       ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()))) {
+    nickname_index_[term].insert(node);
+  }
 }
 
 void TitledUrlIndex::Remove(const TitledUrlNode* node) {
   for (const std::u16string& term : ExtractIndexTerms(node))
     UnregisterNode(term, node);
+
+  // Vivaldi
+  for (const std::u16string& term :
+       ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()))) {
+    UnregisterNicknameNode(term, node);
+  }
 }
 
 void TitledUrlIndex::AddPath(const TitledUrlNode* node) {
@@ -85,6 +96,15 @@ std::vector<TitledUrlMatch> TitledUrlIndex::GetResultsMatching(
   std::vector<std::u16string> terms = ExtractQueryWords(query);
   if (terms.empty())
     return {};
+
+  // `ExtractQueryWords()` splits on symbols like '@'. That's usually good; e.g.
+  // it allows 'xyz@gmail' to match 'xyz gmail'. But for inputs starting with
+  // '@', like '@h', the user's more likely wants to enter the history scope
+  // search than to select a 'https://google.com' bookmark.
+  if (query.starts_with('@') && query.size() >= 2 && terms[0].size() >= 1 &&
+      query[1] == terms[0][0]) {
+    return {};
+  }
 
   // `matches` shouldn't exclude nodes that don't match every query term, as the
   // query terms may match in the ancestors. `MatchTitledUrlNodeWithQuery()`
@@ -242,10 +262,10 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
         query_node->HasMatchIn(ancestor_words, false);
     query_has_ancestor_matches =
         query_has_ancestor_matches || has_ancestor_matches;
-#if !(BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD))
-    if (!has_title_matches && !has_url_matches && !has_ancestor_matches)
-      return std::nullopt;
-#else
+    query_parser::QueryParser::SortAndCoalesceMatchPositions(&title_matches);
+    query_parser::QueryParser::SortAndCoalesceMatchPositions(&url_matches);
+
+#if defined(VIVALDI_BUILD)
     const bool has_description_matches =
         query_node->HasMatchIn(description_words, &description_matches);
     const bool has_nickname_matches =
@@ -253,11 +273,6 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
     if (!has_title_matches && !has_url_matches && !has_ancestor_matches &&
         !has_description_matches && !has_nickname_matches)
       return std::nullopt;
-#endif
-
-    query_parser::QueryParser::SortAndCoalesceMatchPositions(&title_matches);
-    query_parser::QueryParser::SortAndCoalesceMatchPositions(&url_matches);
-#if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
     query_parser::QueryParser::SortAndCoalesceMatchPositions(
         &description_matches);
     query_parser::QueryParser::SortAndCoalesceMatchPositions(&nickname_matches);
@@ -454,10 +469,6 @@ std::vector<std::u16string> TitledUrlIndex::ExtractIndexTerms(
        ExtractQueryWords(Normalize(node->GetTitledUrlNodeDescription()))) {
     terms.push_back(term);
   }
-  for (const std::u16string& term :
-       ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()))) {
-    terms.push_back(term);
-  }
 #endif
 
   return terms;
@@ -479,6 +490,40 @@ void TitledUrlIndex::UnregisterNode(const std::u16string& term,
   i->second.erase(node);
   if (i->second.empty())
     index_.erase(i);
+}
+
+// Vivaldi
+void TitledUrlIndex::UnregisterNicknameNode(const std::u16string& term,
+                                            const TitledUrlNode* node) {
+  auto i = nickname_index_.find(term);
+  if (i == nickname_index_.end()) {
+    // We can get here if the node has the same term more than once. For
+    // example, a node with the title 'foo foo' would end up here.
+    return;
+  }
+  i->second.erase(node);
+  if (i->second.empty())
+    nickname_index_.erase(i);
+}
+
+TitledUrlIndex::TitledUrlNodeSet
+TitledUrlIndex::RetrieveNicknameNodesMatchingAnyTerms(
+    const std::vector<std::u16string>& terms) const {
+  TitledUrlNodes prefix_matches;
+  for (const std::u16string& term : terms) {
+    Index::const_iterator i = nickname_index_.lower_bound(term);
+    if (i == nickname_index_.end()) {
+      return {};
+    }
+    // Loop through index adding all entries that start with term to
+    // |prefix_matches|.*/
+    while (i != nickname_index_.end() && IsPrefix(term, i->first)) {
+      prefix_matches.insert(prefix_matches.end(), i->second.begin(),
+                            i->second.end());
+      ++i;
+    }
+  }
+  return prefix_matches;
 }
 
 }  // namespace bookmarks

@@ -66,12 +66,8 @@ const CGFloat kSymbolToolbarPointSize = 24;
     return [backImage imageFlippedForRightToLeftLayoutDirection];
   };
 
-  ToolbarButton* backButton = nil;
-  if (base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
-    backButton = [[ToolbarButton alloc] initWithImageLoader:loadImageBlock];
-  } else {
-    backButton = [[ToolbarButton alloc] initWithImage:loadImageBlock()];
-  }
+  ToolbarButton* backButton =
+      [[ToolbarButton alloc] initWithImageLoader:loadImageBlock];
 
   [self configureButton:backButton width:kAdaptiveToolbarButtonWidth];
   backButton.accessibilityLabel = l10n_util::GetNSString(IDS_ACCNAME_BACK);
@@ -94,12 +90,8 @@ const CGFloat kSymbolToolbarPointSize = 24;
     return [forwardImage imageFlippedForRightToLeftLayoutDirection];
   };
 
-  ToolbarButton* forwardButton = nil;
-  if (base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
-    forwardButton = [[ToolbarButton alloc] initWithImageLoader:loadImageBlock];
-  } else {
-    forwardButton = [[ToolbarButton alloc] initWithImage:loadImageBlock()];
-  }
+  ToolbarButton* forwardButton =
+      [[ToolbarButton alloc] initWithImageLoader:loadImageBlock];
 
   [self configureButton:forwardButton width:kAdaptiveToolbarButtonWidth];
   forwardButton.visibilityMask =
@@ -123,14 +115,8 @@ const CGFloat kSymbolToolbarPointSize = 24;
                                      kSymbolToolbarPointSize);
   };
 
-  ToolbarTabGridButton* tabGridButton = nil;
-  if (base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
-    tabGridButton =
-        [[ToolbarTabGridButton alloc] initWithImageLoader:loadImageBlock];
-  } else {
-    tabGridButton =
-        [[ToolbarTabGridButton alloc] initWithImage:loadImageBlock()];
-  }
+  ToolbarTabGridButton* tabGridButton =
+      [[ToolbarTabGridButton alloc] initWithImageLoader:loadImageBlock];
 
   [self configureButton:tabGridButton width:kAdaptiveToolbarButtonWidth];
   SetA11yLabelAndUiAutomationName(tabGridButton, IDS_IOS_TOOLBAR_SHOW_TABS,
@@ -151,17 +137,15 @@ const CGFloat kSymbolToolbarPointSize = 24;
     return DefaultSymbolWithPointSize(kMenuSymbol, kSymbolToolbarPointSize);
   };
 
-  ToolbarButton* toolsMenuButton = nil;
-  if (base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
-    toolsMenuButton =
-        [[ToolbarButton alloc] initWithImageLoader:loadImageBlock];
-  } else {
-    toolsMenuButton = [[ToolbarButton alloc] initWithImage:loadImageBlock()];
-  }
+  ToolbarButton* toolsMenuButton =
+      [[ToolbarButton alloc] initWithImageLoader:loadImageBlock];
 
   if (IsVivaldiRunning()) {
-    UIImage *menuImage = [UIImage imageNamed:vToolbarMenu];
-    toolsMenuButton = [[ToolbarButton alloc] initWithImage:menuImage];
+    auto iconImageBlock = ^UIImage* {
+      return [UIImage imageNamed:vToolbarMenu];
+    };
+    toolsMenuButton =
+        [[ToolbarButton alloc] initWithImageLoader:iconImageBlock];
   } // End Vivaldi
 
   SetA11yLabelAndUiAutomationName(toolsMenuButton, IDS_IOS_TOOLBAR_SETTINGS,
@@ -183,12 +167,8 @@ const CGFloat kSymbolToolbarPointSize = 24;
     return DefaultSymbolWithPointSize(kShareSymbol, kSymbolToolbarPointSize);
   };
 
-  ToolbarButton* shareButton = nil;
-  if (base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
-    shareButton = [[ToolbarButton alloc] initWithImageLoader:loadImageBlock];
-  } else {
-    shareButton = [[ToolbarButton alloc] initWithImage:loadImageBlock()];
-  }
+  ToolbarButton* shareButton =
+      [[ToolbarButton alloc] initWithImageLoader:loadImageBlock];
 
   [self configureButton:shareButton width:kAdaptiveToolbarButtonWidth];
   SetA11yLabelAndUiAutomationName(shareButton, IDS_IOS_TOOLS_MENU_SHARE,
@@ -208,12 +188,8 @@ const CGFloat kSymbolToolbarPointSize = 24;
                                      kSymbolToolbarPointSize);
   };
 
-  ToolbarButton* reloadButton = nil;
-  if (base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
-    reloadButton = [[ToolbarButton alloc] initWithImageLoader:loadImageBlock];
-  } else {
-    reloadButton = [[ToolbarButton alloc] initWithImage:loadImageBlock()];
-  }
+  ToolbarButton* reloadButton =
+      [[ToolbarButton alloc] initWithImageLoader:loadImageBlock];
 
   [self configureButton:reloadButton width:kAdaptiveToolbarButtonWidth];
   reloadButton.accessibilityLabel =
@@ -231,12 +207,8 @@ const CGFloat kSymbolToolbarPointSize = 24;
     return DefaultSymbolWithPointSize(kXMarkSymbol, kSymbolToolbarPointSize);
   };
 
-  ToolbarButton* stopButton = nil;
-  if (base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
-    stopButton = [[ToolbarButton alloc] initWithImageLoader:loadImageBlock];
-  } else {
-    stopButton = [[ToolbarButton alloc] initWithImage:loadImageBlock()];
-  }
+  ToolbarButton* stopButton =
+      [[ToolbarButton alloc] initWithImageLoader:loadImageBlock];
 
   [self configureButton:stopButton width:kAdaptiveToolbarButtonWidth];
   stopButton.accessibilityLabel = l10n_util::GetNSString(IDS_IOS_ACCNAME_STOP);
@@ -275,23 +247,18 @@ const CGFloat kSymbolToolbarPointSize = 24;
 
   ToolbarButton* newTabButton = nil;
   if (IsVivaldiRunning()) {
-    UIImage* newTabButtonImage =
-      [[UIImage imageNamed:@"toolbar_new_tab_page"]
-        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    auto iconImageBlock = ^UIImage* {
+      UIImage* newTabButtonImage =
+          [[UIImage imageNamed:vToolbarNTPButtonIcon]
+              imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+      return [newTabButtonImage imageFlippedForRightToLeftLayoutDirection];
+    };
     newTabButton =
-      [[ToolbarButton alloc]
-          initWithImage:[newTabButtonImage
-                        imageFlippedForRightToLeftLayoutDirection]];
+        [[ToolbarButton alloc] initWithImageLoader:iconImageBlock];
   } else
-  if (base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
-    newTabButton = [[ToolbarButton alloc]
-              initWithImageLoader:loadImageBlock
-        IPHHighlightedImageLoader:loadIPHHighlightedImageBlock];
-  } else {
-    newTabButton =
-        [[ToolbarButton alloc] initWithImage:loadImageBlock()
-                         IPHHighlightedImage:loadIPHHighlightedImageBlock()];
-  }
+  newTabButton =
+      [[ToolbarButton alloc] initWithImageLoader:loadImageBlock
+                       IPHHighlightedImageLoader:loadIPHHighlightedImageBlock];
 
   [newTabButton addTarget:self.actionHandler
                    action:@selector(newTabAction:)
@@ -344,11 +311,12 @@ const CGFloat kSymbolToolbarPointSize = 24;
 
 #pragma mark: - VIVALDI
 - (ToolbarButton*)panelButton {
-  UIImage* panelImage = [UIImage imageNamed:vToolbarPanelButtonIcon];
+  auto iconImageBlock = ^UIImage* {
+    UIImage* panelImage = [UIImage imageNamed:vToolbarPanelButtonIcon];
+    return [panelImage imageFlippedForRightToLeftLayoutDirection];
+  };
   ToolbarButton* panelButton =
-    [[ToolbarButton alloc]
-        initWithImage:[panelImage
-                      imageFlippedForRightToLeftLayoutDirection]];
+    [[ToolbarButton alloc] initWithImageLoader:iconImageBlock];
   [self configureButton:panelButton width:kAdaptiveToolbarButtonWidth];
   panelButton.accessibilityLabel = GetNSString(IDS_ACCNAME_PANEL);
   [panelButton addTarget:self.actionHandler
@@ -361,11 +329,13 @@ const CGFloat kSymbolToolbarPointSize = 24;
 
 // Vivaldi search button -> Visible only on new tab page.
 - (ToolbarButton*)vivaldiSearchButton {
-  UIImage* searchImage = [UIImage imageNamed:@"toolbar_search"];
+  auto iconImageBlock = ^UIImage* {
+    UIImage* searchImage = [UIImage imageNamed:vToolbarSearchButtonIcon];
+    return [searchImage imageFlippedForRightToLeftLayoutDirection];
+  };
+
   ToolbarButton* searchButton =
-    [[ToolbarButton alloc]
-        initWithImage:[searchImage
-                      imageFlippedForRightToLeftLayoutDirection]];
+      [[ToolbarButton alloc] initWithImageLoader:iconImageBlock];
   [self configureButton:searchButton width:kAdaptiveToolbarButtonWidth];
   searchButton.accessibilityLabel = GetNSString(IDS_ACCNAME_SEARCH);
   [searchButton addTarget:self.actionHandler
@@ -377,11 +347,13 @@ const CGFloat kSymbolToolbarPointSize = 24;
 }
 
 - (ToolbarButton*)shieldButton {
-  UIImage* shieldImage = [UIImage imageNamed:vATBShieldNone];
+  auto iconImageBlock = ^UIImage* {
+    UIImage* shieldImage = [UIImage imageNamed:vATBShieldNone];
+    return [shieldImage imageFlippedForRightToLeftLayoutDirection];
+  };
+
   ToolbarButton* shieldButton =
-    [[ToolbarButton alloc]
-        initWithImage:[shieldImage
-                      imageFlippedForRightToLeftLayoutDirection]];
+      [[ToolbarButton alloc] initWithImageLoader:iconImageBlock];
   [self configureButton:shieldButton width:kAdaptiveToolbarButtonWidth];
   shieldButton.accessibilityLabel = GetNSString(IDS_ACCNAME_ATB);
   [shieldButton addTarget:self.actionHandler
@@ -395,11 +367,13 @@ const CGFloat kSymbolToolbarPointSize = 24;
 // Visible only in iPhone portrait + Tab bar enabled + bottom omnibox enabled
 // state.
 - (ToolbarButton*)vivaldiMoreButton {
-  UIImage* moreImage = [UIImage imageNamed:@"toolbar_more"];
+  auto iconImageBlock = ^UIImage* {
+    UIImage* moreImage = [UIImage imageNamed:vToolbarMoreButtonIcon];
+    return [moreImage imageFlippedForRightToLeftLayoutDirection];
+  };
+
   ToolbarButton* moreButton =
-    [[ToolbarButton alloc]
-        initWithImage:[moreImage
-                      imageFlippedForRightToLeftLayoutDirection]];
+      [[ToolbarButton alloc] initWithImageLoader:iconImageBlock];
   [self configureButton:moreButton width:kAdaptiveToolbarButtonWidth];
   moreButton.accessibilityLabel = GetNSString(IDS_ACCNAME_MORE);
   moreButton.visibilityMask =

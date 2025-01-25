@@ -76,7 +76,6 @@ group("All") {
   }
   if (is_win) {
     deps += [
-      "//vivaldi/tools/vivaldi_proxy",
       "//chrome/installer/mini_installer",
       "//components/zucchini:zucchini",
       "//components/zucchini:zucchini64",
@@ -165,8 +164,8 @@ group("All") {
   }
   if (is_mac || is_linux || is_android) {
     deps += [
-      "//third_party/breakpad:minidump_stackwalk($host_toolchain)",
-      "//third_party/breakpad:dump_syms($host_toolchain)",
+      "//third_party/breakpad:minidump_stackwalk($host_system_allocator_toolchain)",
+      "//third_party/breakpad:dump_syms($host_system_allocator_toolchain)",
     ]
   }
 }
@@ -191,9 +190,6 @@ group("vivaldi") {
   }
   if (is_mac || is_win) {
     deps += [ "//third_party/crashpad/crashpad/handler:crashpad_handler" ]
-  }
-  if (is_win) {
-    deps += [ "//vivaldi/tools/vivaldi_proxy" ]
   }
 }
 }

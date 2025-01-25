@@ -77,16 +77,14 @@ FlatStringListOffset SerializeDomainList(
 
 uint8_t OptionsFromRequestFilterRule(const RequestFilterRule& rule) {
   uint8_t options = 0;
+  if (rule.modify_block)
+    options |= flat::OptionFlag_MODIFY_BLOCK;
   if (rule.party.test(RequestFilterRule::kFirstParty))
     options |= flat::OptionFlag_FIRST_PARTY;
   if (rule.party.test(RequestFilterRule::kThirdParty))
     options |= flat::OptionFlag_THIRD_PARTY;
-  if (rule.is_allow_rule)
-    options |= flat::OptionFlag_IS_ALLOW_RULE;
   if (rule.is_case_sensitive)
     options |= flat::OptionFlag_IS_CASE_SENSITIVE;
-  if (rule.is_csp_rule)
-    options |= flat::OptionFlag_IS_CSP_RULE;
   return options;
 }
 
@@ -119,6 +117,29 @@ uint16_t ResourceTypesFromRequestFilterRule(const RequestFilterRule& rule) {
   if (rule.resource_types.test(RequestFilterRule::kOther))
     resource_types |= flat::ResourceType_OTHER;
   return resource_types;
+}
+
+flat::Decision DecisionFromRequestFilterRule(const RequestFilterRule& rule) {
+  switch (rule.decision) {
+    case RequestFilterRule::kModify:
+      return flat::Decision_MODIFY;
+    case RequestFilterRule::kPass:
+      return flat::Decision_PASS;
+    case RequestFilterRule::kModifyImportant:
+      return flat::Decision_MODIFY_IMPORTANT;
+  }
+}
+
+flat::Modifier ModifierFromRequestFilterModifier(
+    const RequestFilterRule& rule) {
+  switch (rule.modifier) {
+    case RequestFilterRule::kNoModifier:
+      return flat::Modifier_NO_MODIFIER;
+    case RequestFilterRule::kRedirect:
+      return flat::Modifier_REDIRECT;
+    case RequestFilterRule::kCsp:
+      return flat::Modifier_CSP;
+  }
 }
 
 uint8_t ActivationTypesFromRequestFilterRule(const RequestFilterRule& rule) {
@@ -159,6 +180,15 @@ uint8_t AnchorTypeFromRequestFilterRule(const RequestFilterRule& rule) {
   return anchor_type;
 }
 
+FlatStringOffset StringOffsetFromOptionalString(
+    flatbuffers::FlatBufferBuilder* builder,
+    const std::optional<std::string>& string) {
+  if (!string) {
+    return FlatStringOffset();
+  }
+  return builder->CreateSharedString(*string);
+}
+
 void AddRuleToBuffer(
     flatbuffers::FlatBufferBuilder* builder,
     const RequestFilterRule& rule,
@@ -172,20 +202,23 @@ void AddRuleToBuffer(
   FlatStringOffset pattern_offset = builder->CreateSharedString(rule.pattern);
 
   FlatStringOffset ngram_search_string_offset =
-      builder->CreateSharedString(rule.ngram_search_string);
+      StringOffsetFromOptionalString(builder, rule.ngram_search_string);
 
-  FlatStringOffset host_offset = builder->CreateSharedString(rule.host);
-  FlatStringOffset redirect_offset = builder->CreateSharedString(rule.redirect);
-  FlatStringOffset csp_offset = builder->CreateSharedString(rule.csp);
+  FlatStringOffset host_offset =
+      StringOffsetFromOptionalString(builder, rule.host);
+  FlatStringOffset modifier_value_offset =
+      StringOffsetFromOptionalString(builder, rule.modifier_value);
 
   rules_offsets->push_back(flat::CreateRequestFilterRule(
-      *builder, OptionsFromRequestFilterRule(rule),
+      *builder, DecisionFromRequestFilterRule(rule),
+      OptionsFromRequestFilterRule(rule),
       ResourceTypesFromRequestFilterRule(rule),
       ActivationTypesFromRequestFilterRule(rule),
       PatternTypeFromRequestFilterRule(rule),
       AnchorTypeFromRequestFilterRule(rule), host_offset,
-      domains_included_offset, domains_excluded_offset, redirect_offset,
-      csp_offset, pattern_offset, ngram_search_string_offset));
+      domains_included_offset, domains_excluded_offset,
+      ModifierFromRequestFilterModifier(rule), modifier_value_offset,
+      pattern_offset, ngram_search_string_offset));
 }
 
 FlatOffset<flat::ContentInjectionRuleCore> AddContentInjectionRuleCoreToBuffer(

@@ -16,48 +16,56 @@
 #import "components/autofill/core/browser/webdata/payments/autofill_wallet_sync_bridge.h"
 #import "components/autofill/core/common/autofill_features.h"
 #import "components/browser_sync/browser_sync_switches.h"
+#import "components/browser_sync/common_controller_builder.h"
 #import "components/browser_sync/sync_api_component_factory_impl.h"
 #import "components/browser_sync/sync_client_utils.h"
 #import "components/consent_auditor/consent_auditor.h"
 #import "components/dom_distiller/core/dom_distiller_service.h"
 #import "components/history/core/browser/history_service.h"
 #import "components/keyed_service/core/service_access_type.h"
-#import "components/metrics/demographics/user_demographics.h"
 #import "components/password_manager/core/browser/password_store/password_store_interface.h"
 #import "components/password_manager/core/browser/sharing/password_receiver_service.h"
 #import "components/password_manager/core/browser/sharing/password_sender_service.h"
+#import "components/plus_addresses/settings/plus_address_setting_service.h"
 #import "components/plus_addresses/webdata/plus_address_webdata_service.h"
 #import "components/reading_list/core/dual_reading_list_model.h"
 #import "components/reading_list/core/reading_list_model.h"
+#import "components/saved_tab_groups/tab_group_sync_service.h"
 #import "components/supervised_user/core/browser/supervised_user_settings_service.h"
 #import "components/sync/base/features.h"
 #import "components/sync/base/report_unrecoverable_error.h"
 #import "components/sync/base/sync_util.h"
+#import "components/sync/model/forwarding_model_type_controller_delegate.h"
+#import "components/sync/model/model_type_store_service.h"
 #import "components/sync/service/sync_api_component_factory.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/trusted_vault_synthetic_field_trial.h"
+#import "components/sync_device_info/device_info_sync_service.h"
 #import "components/sync_sessions/session_sync_service.h"
 #import "components/sync_user_events/user_event_service.h"
 #import "components/trusted_vault/trusted_vault_service.h"
-#import "components/variations/service/google_groups_updater_service.h"
 #import "components/webauthn/core/browser/passkey_model.h"
 #import "ios/chrome/browser/bookmarks/model/account_bookmark_sync_service_factory.h"
+#import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_sync_service_factory.h"
 #import "ios/chrome/browser/consent_auditor/model/consent_auditor_factory.h"
 #import "ios/chrome/browser/data_sharing/model/data_sharing_service_factory.h"
 #import "ios/chrome/browser/dom_distiller/model/dom_distiller_service_factory.h"
 #import "ios/chrome/browser/favicon/model/favicon_service_factory.h"
 #import "ios/chrome/browser/history/model/history_service_factory.h"
-#import "ios/chrome/browser/metrics/model/google_groups_updater_service_factory.h"
+#import "ios/chrome/browser/metrics/model/google_groups_manager_factory.h"
 #import "ios/chrome/browser/metrics/model/ios_chrome_metrics_service_accessor.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_account_password_store_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_receiver_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_sender_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
+#import "ios/chrome/browser/plus_addresses/model/plus_address_setting_service_factory.h"
 #import "ios/chrome/browser/power_bookmarks/model/power_bookmark_service_factory.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_model_factory.h"
+#import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_settings_service_factory.h"
@@ -95,16 +103,6 @@ bool trusted_vault_synthetic_field_trial_registered = false;
 
 IOSChromeSyncClient::IOSChromeSyncClient(ChromeBrowserState* browser_state)
     : browser_state_(browser_state) {
-  profile_web_data_service_ =
-      ios::WebDataServiceFactory::GetAutofillWebDataForBrowserState(
-          browser_state_, ServiceAccessType::IMPLICIT_ACCESS);
-  account_web_data_service_ =
-      ios::WebDataServiceFactory::GetAutofillWebDataForAccount(
-          browser_state_, ServiceAccessType::IMPLICIT_ACCESS);
-  ;
-  db_thread_ = profile_web_data_service_
-                   ? profile_web_data_service_->GetDBTaskRunner()
-                   : nullptr;
   profile_password_store_ =
       IOSChromeProfilePasswordStoreFactory::GetForBrowserState(
           browser_state_, ServiceAccessType::IMPLICIT_ACCESS);
@@ -112,48 +110,24 @@ IOSChromeSyncClient::IOSChromeSyncClient(ChromeBrowserState* browser_state)
       IOSChromeAccountPasswordStoreFactory::GetForBrowserState(
           browser_state_, ServiceAccessType::IMPLICIT_ACCESS);
 
-  supervised_user::SupervisedUserSettingsService*
-      supervised_user_settings_service =
-          SupervisedUserSettingsServiceFactory::GetForBrowserState(
-              browser_state);
-
-  sync_bookmarks::BookmarkSyncService* local_or_syncable_bookmark_sync_service =
-      ios::LocalOrSyncableBookmarkSyncServiceFactory::GetForBrowserState(
-          browser_state_);
-  sync_bookmarks::BookmarkSyncService* account_bookmark_sync_service =
-      ios::AccountBookmarkSyncServiceFactory::GetForBrowserState(
-          browser_state_);
-
   component_factory_ =
       std::make_unique<browser_sync::SyncApiComponentFactoryImpl>(
-          this, ::GetChannel(), web::GetUIThreadTaskRunner({}), db_thread_,
-          profile_web_data_service_, account_web_data_service_,
-          profile_password_store_, account_password_store_,
-          local_or_syncable_bookmark_sync_service,
-          account_bookmark_sync_service,
-          PowerBookmarkServiceFactory::GetForBrowserState(browser_state_),
-          supervised_user_settings_service,
-          ios::WebDataServiceFactory::GetPlusAddressWebDataForBrowserState(
-              browser_state_, ServiceAccessType::IMPLICIT_ACCESS),
-          /*TODO(crbug.com/330201909) implement for iOS
-             product_specifications_service= */
-          nullptr,
-          data_sharing::DataSharingServiceFactory::GetForBrowserState(
-              browser_state_),
-          vivaldi::NoteSyncServiceFactory::GetForBrowserState(browser_state_));
+          this,
+          DeviceInfoSyncServiceFactory::GetForBrowserState(browser_state_)
+              ->GetDeviceInfoTracker(),
+          ModelTypeStoreServiceFactory::GetForBrowserState(browser_state_)
+              ->GetSyncDataPath());
 
   local_data_query_helper_ =
       std::make_unique<browser_sync::LocalDataQueryHelper>(
           profile_password_store_.get(), account_password_store_.get(),
-          local_or_syncable_bookmark_sync_service,
-          account_bookmark_sync_service,
+          ios::BookmarkModelFactory::GetForBrowserState(browser_state_),
           ReadingListModelFactory::GetAsDualReadingListModelForBrowserState(
               browser_state_));
   local_data_migration_helper_ =
       std::make_unique<browser_sync::LocalDataMigrationHelper>(
           profile_password_store_.get(), account_password_store_.get(),
-          local_or_syncable_bookmark_sync_service,
-          account_bookmark_sync_service,
+          ios::BookmarkModelFactory::GetForBrowserState(browser_state_),
           ReadingListModelFactory::GetAsDualReadingListModelForBrowserState(
               browser_state_));
 }
@@ -174,75 +148,110 @@ base::FilePath IOSChromeSyncClient::GetLocalSyncBackendFolder() {
   return base::FilePath();
 }
 
-syncer::ModelTypeStoreService* IOSChromeSyncClient::GetModelTypeStoreService() {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return ModelTypeStoreServiceFactory::GetForBrowserState(browser_state_);
-}
-
-syncer::DeviceInfoSyncService* IOSChromeSyncClient::GetDeviceInfoSyncService() {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return DeviceInfoSyncServiceFactory::GetForBrowserState(browser_state_);
-}
-
-favicon::FaviconService* IOSChromeSyncClient::GetFaviconService() {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return ios::FaviconServiceFactory::GetForBrowserState(
-      browser_state_, ServiceAccessType::IMPLICIT_ACCESS);
-}
-
-history::HistoryService* IOSChromeSyncClient::GetHistoryService() {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return ios::HistoryServiceFactory::GetForBrowserState(
-      browser_state_, ServiceAccessType::EXPLICIT_ACCESS);
-}
-
-ReadingListModel* IOSChromeSyncClient::GetReadingListModel() {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return ReadingListModelFactory::GetForBrowserState(browser_state_);
-}
-
-send_tab_to_self::SendTabToSelfSyncService*
-IOSChromeSyncClient::GetSendTabToSelfSyncService() {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return SendTabToSelfSyncServiceFactory::GetForBrowserState(browser_state_);
-}
-
-sync_preferences::PrefServiceSyncable*
-IOSChromeSyncClient::GetPrefServiceSyncable() {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return browser_state_->GetSyncablePrefs();
-}
-
-sync_sessions::SessionSyncService*
-IOSChromeSyncClient::GetSessionSyncService() {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return SessionSyncServiceFactory::GetForBrowserState(browser_state_);
-}
-
-password_manager::PasswordReceiverService*
-IOSChromeSyncClient::GetPasswordReceiverService() {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return IOSChromePasswordReceiverServiceFactory::GetForBrowserState(
-      browser_state_);
-}
-
-password_manager::PasswordSenderService*
-IOSChromeSyncClient::GetPasswordSenderService() {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return IOSChromePasswordSenderServiceFactory::GetForBrowserState(
-      browser_state_);
-}
-
 syncer::ModelTypeController::TypeVector
 IOSChromeSyncClient::CreateModelTypeControllers(
     syncer::SyncService* sync_service) {
-  if (vivaldi::IsVivaldiRunning()) {
-    syncer::ModelTypeController::TypeVector controllers =
-        component_factory_->CreateCommonModelTypeControllers(
-            /*disabled_types=*/{}, sync_service);
+  scoped_refptr<autofill::AutofillWebDataService> profile_web_data_service =
+      ios::WebDataServiceFactory::GetAutofillWebDataForBrowserState(
+          browser_state_, ServiceAccessType::IMPLICIT_ACCESS);
 
+  browser_sync::CommonControllerBuilder builder;
+  builder.SetAutofillWebDataService(
+      web::GetUIThreadTaskRunner({}),
+      profile_web_data_service ? profile_web_data_service->GetDBTaskRunner()
+                               : nullptr,
+      profile_web_data_service,
+      ios::WebDataServiceFactory::GetAutofillWebDataForAccount(
+          browser_state_, ServiceAccessType::IMPLICIT_ACCESS));
+  builder.SetBookmarkModel(
+      ios::BookmarkModelFactory::GetForBrowserState(browser_state_));
+  builder.SetBookmarkSyncService(
+      ios::LocalOrSyncableBookmarkSyncServiceFactory::GetForBrowserState(
+          browser_state_),
+      ios::AccountBookmarkSyncServiceFactory::GetForBrowserState(
+          browser_state_));
+  builder.SetConsentAuditor(
+      ConsentAuditorFactory::GetForBrowserState(browser_state_));
+  builder.SetDataSharingService(
+      data_sharing::DataSharingServiceFactory::GetForBrowserState(
+          browser_state_));
+  builder.SetDeviceInfoSyncService(
+      DeviceInfoSyncServiceFactory::GetForBrowserState(browser_state_));
+  builder.SetDualReadingListModel(
+      ReadingListModelFactory::GetAsDualReadingListModelForBrowserState(
+          browser_state_));
+  builder.SetFaviconService(ios::FaviconServiceFactory::GetForBrowserState(
+      browser_state_, ServiceAccessType::IMPLICIT_ACCESS));
+  builder.SetGoogleGroupsManager(
+      GoogleGroupsManagerFactory::GetForBrowserState(browser_state_));
+  builder.SetHistoryService(ios::HistoryServiceFactory::GetForBrowserState(
+      browser_state_, ServiceAccessType::EXPLICIT_ACCESS));
+  builder.SetIdentityManager(GetIdentityManager());
+  builder.SetModelTypeStoreService(
+      ModelTypeStoreServiceFactory::GetForBrowserState(browser_state_));
+#if !BUILDFLAG(IS_ANDROID)
+  builder.SetPasskeyModel(
+      base::FeatureList::IsEnabled(syncer::kSyncWebauthnCredentials)
+          ? IOSPasskeyModelFactory::GetForBrowserState(browser_state_)
+          : nullptr);
+#endif  // !BUILDFLAG(IS_ANDROID)
+  builder.SetPasswordReceiverService(
+      IOSChromePasswordReceiverServiceFactory::GetForBrowserState(
+          browser_state_));
+  builder.SetPasswordSenderService(
+      IOSChromePasswordSenderServiceFactory::GetForBrowserState(
+          browser_state_));
+  builder.SetPasswordStore(profile_password_store_, account_password_store_);
+  builder.SetPlusAddressServices(
+      PlusAddressSettingServiceFactory::GetForBrowserState(browser_state_),
+      ios::WebDataServiceFactory::GetPlusAddressWebDataForBrowserState(
+          browser_state_, ServiceAccessType::IMPLICIT_ACCESS));
+  builder.SetPowerBookmarkService(
+      PowerBookmarkServiceFactory::GetForBrowserState(browser_state_));
+  builder.SetPrefService(browser_state_->GetPrefs());
+  builder.SetPrefServiceSyncable(browser_state_->GetSyncablePrefs());
+  // TODO(crbug.com/330201909) implement for iOS.
+  builder.SetProductSpecificationsService(nullptr);
+  builder.SetSendTabToSelfSyncService(
+      SendTabToSelfSyncServiceFactory::GetForBrowserState(browser_state_));
+  builder.SetSessionSyncService(
+      SessionSyncServiceFactory::GetForBrowserState(browser_state_));
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  builder.SetSupervisedUserSettingsService(
+      SupervisedUserSettingsServiceFactory::GetForBrowserState(browser_state_));
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  builder.SetUserEventService(
+      IOSUserEventServiceFactory::GetForBrowserState(browser_state_));
+
+  // vivaldi
+  builder.SetNoteSyncService(
+      vivaldi::NoteSyncServiceFactory::GetForBrowserState(browser_state_));
+  // End Vivaldi
+
+  syncer::ModelTypeController::TypeVector controllers = builder.Build(
+      /*disabled_types=*/{}, sync_service, ::GetChannel());
+
+  if (IsTabGroupSyncEnabled()) {
+    syncer::ModelTypeControllerDelegate* delegate =
+        tab_groups::TabGroupSyncServiceFactory::GetForBrowserState(
+            browser_state_)
+            ->GetSavedTabGroupControllerDelegate()
+            .get();
+    // TODO(crbug.com/344893270): Move this controller to
+    // CreateCommonModelTypeControllers().
+    controllers.push_back(std::make_unique<syncer::ModelTypeController>(
+        syncer::SAVED_TAB_GROUP, /*delegate_for_full_sync_mode=*/
+        std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
+            delegate),
+        /*delegate_for_transport_mode=*/
+        std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
+            delegate)));
+  }
+
+  if (vivaldi::IsVivaldiRunning()) {
     syncer::RepeatingModelTypeStoreFactory model_type_store_factory =
-        GetModelTypeStoreService()->GetStoreFactory();
+        ModelTypeStoreServiceFactory::GetForBrowserState(browser_state_)
+            ->GetStoreFactory();
     syncer::SyncableService* syncable_turl_service =
         ios::TemplateURLServiceFactory::GetForBrowserState(browser_state_);
     controllers.push_back(
@@ -253,12 +262,9 @@ IOSChromeSyncClient::CreateModelTypeControllers(
             base::DoNothing(),
             syncer::SyncableServiceBasedModelTypeController::DelegateMode::
                 kLegacyFullSyncModeOnly));
-    return controllers;
   }  // End Vivaldi
 
-  // The iOS port does not have any platform-specific datatypes.
-  return component_factory_->CreateCommonModelTypeControllers(
-      /*disabled_types=*/{}, sync_service);
+  return controllers;
 }
 
 syncer::SyncInvalidationsService*
@@ -277,38 +283,6 @@ IOSChromeSyncClient::GetExtensionsActivity() {
   return nullptr;
 }
 
-base::WeakPtr<syncer::ModelTypeControllerDelegate>
-IOSChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
-  switch (type) {
-    case syncer::USER_CONSENTS:
-      return ConsentAuditorFactory::GetForBrowserState(browser_state_)
-          ->GetControllerDelegate();
-    case syncer::USER_EVENTS:
-      return IOSUserEventServiceFactory::GetForBrowserState(browser_state_)
-          ->GetControllerDelegate();
-    case syncer::WEBAUTHN_CREDENTIAL:
-      return IOSPasskeyModelFactory::GetForBrowserState(browser_state_)
-          ->GetModelTypeControllerDelegate();
-
-    // We don't exercise this function for certain datatypes, because their
-    // controllers get the delegate elsewhere.
-    case syncer::AUTOFILL:
-    case syncer::AUTOFILL_PROFILE:
-    case syncer::AUTOFILL_WALLET_DATA:
-    case syncer::AUTOFILL_WALLET_METADATA:
-    case syncer::BOOKMARKS:
-    case syncer::DEVICE_INFO:
-    case syncer::READING_LIST:
-    case syncer::SESSIONS:
-      NOTREACHED();
-      return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
-
-    default:
-      NOTREACHED();
-      return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
-  }
-}
-
 syncer::SyncApiComponentFactory*
 IOSChromeSyncClient::GetSyncApiComponentFactory() {
   return component_factory_.get();
@@ -325,17 +299,6 @@ bool IOSChromeSyncClient::IsCustomPassphraseAllowed() {
   return true;
 }
 
-void IOSChromeSyncClient::OnLocalSyncTransportDataCleared() {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  metrics::ClearDemographicsPrefs(browser_state_->GetPrefs());
-
-  GoogleGroupsUpdaterService* google_groups_updater =
-      GoogleGroupsUpdaterServiceFactory::GetForBrowserState(browser_state_);
-  if (google_groups_updater != nullptr) {
-    google_groups_updater->ClearSigninScopedState();
-  }
-}
-
 bool IOSChromeSyncClient::IsPasswordSyncAllowed() {
   return true;
 }
@@ -349,6 +312,8 @@ void IOSChromeSyncClient::GetLocalDataDescriptions(
     syncer::ModelTypeSet types,
     base::OnceCallback<void(
         std::map<syncer::ModelType, syncer::LocalDataDescription>)> callback) {
+  types.RemoveAll(
+      local_data_migration_helper_->GetTypesWithOngoingMigrations());
   local_data_query_helper_->Run(types, std::move(callback));
 }
 

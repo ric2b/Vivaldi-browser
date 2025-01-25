@@ -65,7 +65,6 @@ void EditorSystemActuator::InsertText(const std::string& text) {
   // other announcements triggered from a text insertion do not collide with the
   // original announcement.
   system_->Announce(kAnnouncementForInsertion);
-  announcement_delay_.Reset();
   announcement_delay_.Start(
       FROM_HERE, kAnnouncementDelay,
       base::BindOnce(&EditorSystemActuator::QueueTextInsertion,
@@ -73,11 +72,14 @@ void EditorSystemActuator::InsertText(const std::string& text) {
 }
 
 void EditorSystemActuator::ApproveConsent() {
-  system_->ProcessConsentAction(ConsentAction::kApproved);
+  system_->ProcessConsentAction(ConsentAction::kApprove);
+  system_->HandleTrigger(/*preset_query_id=*/std::nullopt,
+                         /*freeform_text=*/std::nullopt);
 }
 
 void EditorSystemActuator::DeclineConsent() {
-  system_->ProcessConsentAction(ConsentAction::kDeclined);
+  system_->ProcessConsentAction(ConsentAction::kDecline);
+  system_->CloseUI();
 }
 
 void EditorSystemActuator::OpenUrlInNewWindow(const GURL& url) {

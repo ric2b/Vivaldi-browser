@@ -166,18 +166,9 @@ uint32_t SamplingHeapProfiler::Start() {
   }
   unwinder_.store(unwinder);
 
-  auto* poisson_allocation_sampler = PoissonAllocationSampler::Get();
-
-  // Sampling interval is in bytes. Record it in KB since the extra precision
-  // isn't needed for metrics and HeapProfilerController can set the interval to
-  // center around 10M bytes, which would overflow the buckets.
-  base::UmaHistogramCounts10M(
-      "HeapProfiling.SamplingIntervalKB",
-      static_cast<int>(poisson_allocation_sampler->SamplingInterval() / 1024));
-
   AutoLock lock(start_stop_mutex_);
   if (!running_sessions_++)
-    poisson_allocation_sampler->AddSamplesObserver(this);
+    PoissonAllocationSampler::Get()->AddSamplesObserver(this);
   return last_sample_ordinal_;
 }
 
@@ -258,7 +249,7 @@ void SamplingHeapProfiler::SampleAdded(void* address,
     // Throw away any non-test samples that were being collected before
     // ScopedMuteHookedSamplesForTesting was enabled. This is done inside the
     // lock to catch any samples that were being collected while
-    // ClearSamplesForTesting is running.
+    // MuteHookedSamplesForTesting is running.
     return;
   }
   RecordString(sample.context);
@@ -341,14 +332,20 @@ void SamplingHeapProfiler::OnThreadNameChanged(const char* name) {
   UpdateAndGetThreadName(name);
 }
 
-void SamplingHeapProfiler::ClearSamplesForTesting() {
-  DCHECK(PoissonAllocationSampler::AreHookedSamplesMuted());
+PoissonAllocationSampler::ScopedMuteHookedSamplesForTesting
+SamplingHeapProfiler::MuteHookedSamplesForTesting() {
+  // Only one ScopedMuteHookedSamplesForTesting can exist at a time.
+  CHECK(!PoissonAllocationSampler::AreHookedSamplesMuted());
+  PoissonAllocationSampler::ScopedMuteHookedSamplesForTesting
+      mute_hooked_samples;
+
   base::AutoLock lock(mutex_);
   samples_.clear();
   // Since hooked samples are muted, any samples that are waiting to take the
   // lock in SampleAdded will be discarded. Tests can now call
   // PoissonAllocationSampler::RecordAlloc with allocator type kManualForTesting
   // to add samples cleanly.
+  return mute_hooked_samples;
 }
 
 }  // namespace base

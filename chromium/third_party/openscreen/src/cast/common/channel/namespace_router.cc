@@ -24,7 +24,7 @@ void NamespaceRouter::RemoveNamespaceHandler(const std::string& namespace_) {
 
 void NamespaceRouter::OnMessage(VirtualConnectionRouter* router,
                                 CastSocket* socket,
-                                ::cast::channel::CastMessage message) {
+                                proto::CastMessage message) {
   const std::string& ns = message.namespace_();
   auto it = handlers_.find(ns);
   if (it != handlers_.end()) {

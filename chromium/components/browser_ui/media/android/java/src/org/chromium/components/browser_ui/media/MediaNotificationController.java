@@ -42,6 +42,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+// Vivaldi
+import android.os.Bundle;
+import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.common.VivaldiIntentHandler;
+
 /**
  * A class that manages the notification, foreground service, and {@link MediaSessionCompat} for a
  * specific type of media.
@@ -709,6 +714,16 @@ public class MediaNotificationController {
         mMediaSession.setMetadata(createMetadata());
 
         mMediaSession.setPlaybackState(createPlaybackState());
+
+        if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
+            String referrer = IntentUtils.safeGetStringExtra(
+                    mMediaNotificationInfo.contentIntent,
+                    VivaldiIntentHandler.EXTRA_ACTIVITY_REFERRER);
+            Log.d(TAG, "referrer = " + referrer);
+            Bundle bundle = new Bundle();
+            bundle.putString(VivaldiIntentHandler.EXTRA_ACTIVITY_REFERRER, referrer);
+            mMediaSession.setExtras(bundle);
+        }
     }
 
     @VisibleForTesting

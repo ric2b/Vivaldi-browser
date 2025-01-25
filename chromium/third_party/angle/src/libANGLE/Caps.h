@@ -143,7 +143,7 @@ struct Limitations
     bool noVertexAttributeAliasing = false;
 
     // Renderer doesn't support GL_TEXTURE_COMPARE_MODE=GL_NONE on a shadow sampler.
-    // TODO(http://anglebug.com/5231): add validation code to front-end.
+    // TODO(http://anglebug.com/42263785): add validation code to front-end.
     bool noShadowSamplerCompareModeNone = false;
 
     // PVRTC1 textures must be squares.
@@ -346,6 +346,8 @@ struct Caps
     GLint maxTessEvaluationInputComponents  = 0;
     GLint maxTessEvaluationOutputComponents = 0;
 
+    bool primitiveRestartForPatchesSupported = false;
+
     GLuint subPixelBits = 4;
 
     // GL_EXT_blend_func_extended
@@ -393,7 +395,12 @@ struct Caps
     GLfloat minSmoothLineWidth                  = 0.0f;
     GLfloat maxSmoothLineWidth                  = 0.0f;
 
-    // ES 3.2 Table 20.41: Implementation Dependent Values (cont.)
+    // ES 3.2 Table 21.40: Implementation Dependent Values
+    GLfloat lineWidthGranularity    = 0.0f;
+    GLfloat minMultisampleLineWidth = 0.0f;
+    GLfloat maxMultisampleLineWidth = 0.0f;
+
+    // ES 3.2 Table 21.42: Implementation Dependent Values (cont.)
     GLint maxTextureBufferSize         = 0;
     GLint textureBufferOffsetAlignment = 0;
 
@@ -700,6 +707,12 @@ struct DeviceExtensions
     // EGL_ANGLE_device_d3d
     bool deviceD3D = false;
 
+    // EGL_ANGLE_device_d3d9
+    bool deviceD3D9 = false;
+
+    // EGL_ANGLE_device_d3d11
+    bool deviceD3D11 = false;
+
     // EGL_ANGLE_device_cgl
     bool deviceCGL = false;
 
@@ -753,6 +766,9 @@ struct ClientExtensions
 
     // EGL_ANGLE_platform_angle_d3d11on12
     bool platformANGLED3D11ON12 = false;
+
+    // EGL_ANGLE_platform_angle_d3d_luid
+    bool platformANGLED3DLUID = false;
 
     // EGL_ANGLE_platform_angle_opengl
     bool platformANGLEOpenGL = false;

@@ -11,6 +11,8 @@ NSString* vDefaultBrowserSetting = @"vivaldi_setting_default_browser";
 // Image name for search engine setting
 NSString* vSearchEngineSetting = @"vivaldi_setting_search_engine";
 
+// Image name for address bar setting
+NSString* vAddressBarSetting = @"vivaldi_setting_addressbar";
 // Image name for passwords setting
 NSString* vPasswordSetting = @"vivaldi_setting_passwords";
 // Image name for payment methods setting

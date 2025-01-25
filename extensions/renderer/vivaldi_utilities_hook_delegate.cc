@@ -46,7 +46,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleRequest(
       v8::Local<v8::Context>, v8::LocalVector<v8::Value> &);
   static struct {
     Handler handler;
-    base::StringPiece method;
+    std::string_view method;
   } kHandlers[] = {
       {&VivaldiUtilitiesHookDelegate::HandleGetUrlFragments,
        "utilities.getUrlFragments"},
@@ -108,13 +108,13 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
 
   v8::Local<v8::Object> fragments = v8::Object::New(isolate);
 
-  auto set_fragment = [&](base::StringPiece key, base::StringPiece value) {
+  auto set_fragment = [&](std::string_view key, std::string_view value) {
     fragments
         ->Set(context, gin::StringToV8(isolate, key),
               gin::StringToV8(isolate, value))
         .ToChecked();
   };
-  auto set_fragment16 = [&](base::StringPiece key,
+  auto set_fragment16 = [&](std::string_view key,
                             const std::u16string& value) {
     fragments
         ->Set(context, gin::StringToV8(isolate, key),
@@ -123,7 +123,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
   };
   // Set a url component for security display
   auto set_fragment16_for_sd = [&](const std::u16string& url,
-                                   base::StringPiece key, url::Component comp) {
+                                   std::string_view key, url::Component comp) {
     std::u16string value;
     if (comp.len > 0) {
       value = std::u16string(&url[comp.begin], comp.len);
@@ -197,7 +197,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
 
   if (parsed.host.is_valid()) {
     lookalikes::DomainInfo info = lookalikes::GetDomainInfo(url);
-    base::StringPiece tld(info.domain_and_registry);
+    std::string_view tld(info.domain_and_registry);
     if (!info.domain_without_registry.empty()) {
       tld = tld.substr(info.domain_without_registry.length() + 1);
     }
@@ -233,7 +233,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleUrlToThumbnailText(
     } else {
       domain_and_registry[0] = base::UTF16ToUTF8(base::i18n::ToUpper(
           base::UTF8ToUTF16(domain_and_registry.substr(0, 1))))[0];
-      base::StringPiece domain(domain_and_registry);
+      std::string_view domain(domain_and_registry);
 
       result.return_value =
           gin::StringToV8(isolate, domain.substr(0, domain.find_first_of('.')));
@@ -264,14 +264,14 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetVersion(
 namespace {
 
 bool DoesBrowserHandleUrl(const GURL& url) {
-  base::StringPiece scheme = url.scheme_piece();
+  std::string_view scheme = url.scheme_piece();
   if (URLPattern::IsValidSchemeForExtensions(scheme))
     return true;
-  static const base::StringPiece extra_schemes[] = {
+  static const std::string_view extra_schemes[] = {
       url::kJavaScriptScheme,     url::kDataScheme,      url::kMailToScheme,
       content::kViewSourceScheme, kDevToolsLegacyScheme, kDevToolsScheme,
   };
-  for (base::StringPiece extra_scheme : extra_schemes) {
+  for (std::string_view extra_scheme : extra_schemes) {
     if (scheme == extra_scheme)
       return true;
   }

@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/buildflags.h"
 #include "base/debug/stack_trace.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
@@ -149,7 +149,7 @@ mojom::AllocatorType ConvertType(AllocationSubsystem type) {
     case AllocationSubsystem::kPartitionAllocator:
       return mojom::AllocatorType::kPartitionAlloc;
     case AllocationSubsystem::kManualForTesting:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return mojom::AllocatorType::kMalloc;
   }
 }
@@ -236,7 +236,7 @@ void ProfilingClient::AddHeapProfileToTrace(
 #else
   bool success = false;
   // Tracing is not supported in iOS.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #endif
 
   std::move(callback).Run(success);

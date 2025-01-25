@@ -34,6 +34,7 @@ const char kFwCarrierUuid[] = "carrier_uuid";
 // Keys used for the kGetHeartbeatConfig switch
 const char kHeartbeatMaxFailures[] = "max_failures";
 const char kHeartbeatInterval[] = "interval";
+const char kHeartbeatModemIdleInterval[] = "modem_idle_interval";
 
 }  // namespace modemfwd
 

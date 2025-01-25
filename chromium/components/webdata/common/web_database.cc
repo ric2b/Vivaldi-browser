@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -14,39 +15,14 @@
 
 #include "app/vivaldi_apptools.h"
 
-// Current version number.  Note: when changing the current version number,
-// corresponding changes must happen in the unit tests, and new migration test
-// added.  See `WebDatabaseMigrationTest::kCurrentTestedVersionNumber`.
-// static
-const int WebDatabase::kCurrentVersionNumber = 128;
-
-// To support users who are upgrading from older versions of Chrome, we enable
-// migrating from any database version newer than `kDeprecatedVersionNumber`.
-// If an upgrading user has a database version of `kDeprecatedVersionNumber` or
-// lower, their database will be fully deleted and recreated instead (losing all
-// data previously in it).
-//
-// To determine this migration window, we support the same Chrome versions that
-// Chrome Sync does. Any database version that was added before the oldest
-// Chrome version that sync supports can be dropped from the Chromium codebase
-// (i.e., increment `kDeprecatedVersionNumber` and remove related tests +
-// support files).
-//
-// Note the difference between database version and Chrome version! To determine
-// the database version for a given Chrome version, check out the git branch for
-// the Chrome version, and look at `kCurrentVersionNumber` in that branch.
-//
-// To determine the versions of Chrome that Chrome Sync supports, see
-// `max_client_version_to_reject` in server_chrome_sync_config.proto (internal
-// only).
-const int WebDatabase::kDeprecatedVersionNumber = 82;
-
-const int WebDatabase::kVivaldiCurrentVersionNumber = 1;
-
 const base::FilePath::CharType WebDatabase::kInMemoryPath[] =
     FILE_PATH_LITERAL(":memory");
 
 namespace {
+
+BASE_FEATURE(kSqlWALModeOnWebDatabase,
+             "SqlWALModeOnWebDatabase",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // These values are logged as histogram buckets and most not be changed nor
 // reused.
@@ -98,7 +74,8 @@ sql::InitStatus FailedMigrationTo(int version_num) {
 }  // namespace
 
 WebDatabase::WebDatabase()
-    : db_({// We don't store that much data in the tables so use a small page
+    : db_({.wal_mode = base::FeatureList::IsEnabled(kSqlWALModeOnWebDatabase),
+           // We don't store that much data in the tables so use a small page
            // size. This provides a large benefit for empty tables (which is
            // very likely with the tables we create).
            .page_size = 2048,
@@ -117,11 +94,11 @@ WebDatabaseTable* WebDatabase::GetTable(WebDatabaseTable::TypeKey key) {
 }
 
 void WebDatabase::BeginTransaction() {
-  db_.BeginTransaction();
+  db_.BeginTransactionDeprecated();
 }
 
 void WebDatabase::CommitTransaction() {
-  db_.CommitTransaction();
+  db_.CommitTransactionDeprecated();
 }
 
 std::string WebDatabase::GetDiagnosticInfo(int extended_error,
@@ -307,13 +284,6 @@ sql::InitStatus WebDatabase::MigrateOldVivaldiVersionsAsNeeded(
   if (!meta_table_.GetValue(kVivaldiVersion, &current_version))
     current_version = 0;
 
-  auto failed_migration_to = [](int version_num) {
-    LOG(WARNING) << "Unable to update web database to version " << version_num
-                 << ".";
-    NOTREACHED();
-    return sql::INIT_FAILURE;
-  };
-
   // Determines which vivaldi migrations need to be applied before which
   // chromium migration.
   int target_version = [chromium_version]() {
@@ -334,7 +304,9 @@ sql::InitStatus WebDatabase::MigrateOldVivaldiVersionsAsNeeded(
     for (auto it = tables_.begin(); it != tables_.end(); ++it) {
       // Any of the tables may set this to true, but by default it is false.
       if (!it->second->MigrateToVivaldiVersion(next_version)) {
-        return failed_migration_to(next_version);
+        LOG(WARNING) << "Unable to update web database to version "
+                     << next_version << ".";
+        NOTREACHED();
       }
 
       meta_table_.SetValue(kVivaldiVersion, next_version);

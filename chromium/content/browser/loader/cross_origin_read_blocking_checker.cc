@@ -99,7 +99,7 @@ CrossOriginReadBlockingChecker::CrossOriginReadBlockingChecker(
     const network::ResourceRequest& request,
     const network::mojom::URLResponseHead& response,
     const storage::BlobDataHandle& blob_data_handle,
-    network::orb::PerFactoryState& orb_state,
+    network::orb::PerFactoryState* orb_state,
     base::OnceCallback<void(Result)> callback)
     : callback_(std::move(callback)) {
   DCHECK(!callback_.is_null());
@@ -128,7 +128,7 @@ CrossOriginReadBlockingChecker::CrossOriginReadBlockingChecker(
                                     base::Unretained(blob_io_state_.get())));
       return;
   }
-  NOTREACHED();  // Unrecognized `decision` value?
+  NOTREACHED_IN_MIGRATION();  // Unrecognized `decision` value?
 }
 
 CrossOriginReadBlockingChecker::~CrossOriginReadBlockingChecker() {
@@ -188,12 +188,12 @@ void CrossOriginReadBlockingChecker::OnReadComplete(
     case network::orb::ResponseAnalyzer::Decision::kSniffMore:
       // This should be impossible after going through
       // HandleEndOfSniffableResponseBody above.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   // Fall back to blocking after encountering an unexpected or unrecognized
   // `orb_decision` in the `switch` statement above.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   OnBlocked();
 }
 

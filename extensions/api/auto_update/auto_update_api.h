@@ -41,7 +41,7 @@ class AutoUpdateAPI : public BrowserContextKeyedAPI {
   static void SendUpdaterDidRelaunchApplication();
   static void SendDidAbortWithError(const std::string& error,
                                     const std::string& reason);
-
+  static void SendUpdateFinished();
 
  private:
   friend class BrowserContextKeyedAPIFactory<AutoUpdateAPI>;

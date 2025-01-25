@@ -24,7 +24,7 @@
 #include "src/compiler/node-matchers.h"
 #include "src/compiler/osr.h"
 #include "src/execution/frame-constants.h"
-#include "src/heap/mutable-page.h"
+#include "src/heap/mutable-page-metadata.h"
 #include "src/objects/code-kind.h"
 #include "src/objects/smi.h"
 
@@ -153,10 +153,7 @@ class X64OperandConverter : public InstructionOperandConverter {
       DCHECK_EQ(0, constant.ToFloat64().AsUint64());
       return Immediate(0);
     }
-    if (RelocInfo::IsWasmReference(constant.rmode())) {
-      return Immediate(constant.ToInt32(), constant.rmode());
-    }
-    return Immediate(constant.ToInt32());
+    return Immediate(constant.ToInt32(), constant.rmode());
   }
 
   Operand ToOperand(InstructionOperand* op, int extra = 0) {
@@ -403,26 +400,30 @@ class OutOfLineRecordWrite final : public OutOfLineCode {
       __ DecompressTagged(value_, value_);
     }
 
+    // No need to check value page flags with the indirect pointer write barrier
+    // because the value is always an ExposedTrustedObject.
+    if (mode_ != RecordWriteMode::kValueIsIndirectPointer) {
 #if V8_ENABLE_STICKY_MARK_BITS_BOOL
-    // TODO(333906585): Optimize this path.
-    Label stub_call_with_decompressed_value;
-    __ CheckPageFlag(value_, scratch0_, MemoryChunk::kIsInReadOnlyHeapMask,
-                     not_zero, exit());
-    __ CheckMarkBit(value_, scratch0_, scratch1_, carry, exit());
-    __ jmp(&stub_call_with_decompressed_value);
+      // TODO(333906585): Optimize this path.
+      Label stub_call_with_decompressed_value;
+      __ CheckPageFlag(value_, scratch0_, MemoryChunk::kIsInReadOnlyHeapMask,
+                       not_zero, exit());
+      __ CheckMarkBit(value_, scratch0_, scratch1_, carry, exit());
+      __ jmp(&stub_call_with_decompressed_value);
 
-    __ bind(&stub_call_);
-    if (COMPRESS_POINTERS_BOOL &&
-        mode_ != RecordWriteMode::kValueIsIndirectPointer) {
-      __ DecompressTagged(value_, value_);
-    }
+      __ bind(&stub_call_);
+      if (COMPRESS_POINTERS_BOOL &&
+          mode_ != RecordWriteMode::kValueIsIndirectPointer) {
+        __ DecompressTagged(value_, value_);
+      }
 
-    __ bind(&stub_call_with_decompressed_value);
+      __ bind(&stub_call_with_decompressed_value);
 #else   // !V8_ENABLE_STICKY_MARK_BITS_BOOL
-    __ CheckPageFlag(value_, scratch0_,
-                     MemoryChunk::kPointersToHereAreInterestingMask, zero,
-                     exit());
+      __ CheckPageFlag(value_, scratch0_,
+                       MemoryChunk::kPointersToHereAreInterestingMask, zero,
+                       exit());
 #endif  // !V8_ENABLE_STICKY_MARK_BITS_BOOL
+    }
 
     __ leaq(scratch1_, operand_);
 
@@ -1794,15 +1795,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       EmitTSANAwareStore<std::memory_order_relaxed>(
           zone(), this, masm(), operand, value, i, DetermineStubCallMode(),
           MachineRepresentation::kIndirectPointer, instr);
-#if V8_ENABLE_STICKY_MARK_BITS_BOOL
-      __ CheckPageFlag(object, scratch0, MemoryChunk::kIncrementalMarking,
-                       not_zero, ool->stub_call());
-      __ CheckMarkBit(object, scratch0, scratch1, carry, ool->entry());
-#else   // !V8_ENABLE_STICKY_MARK_BITS_BOOL
-      __ CheckPageFlag(object, scratch0,
-                       MemoryChunk::kPointersFromHereAreInterestingMask,
-                       not_zero, ool->entry());
-#endif  // !V8_ENABLE_STICKY_MARK_BITS_BOOL
+      __ JumpIfMarking(ool->entry());
       __ bind(ool->exit());
       break;
     }
@@ -3930,11 +3923,25 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       break;
     }
     case kX64Minps: {
-      ASSEMBLE_SIMD_BINOP(minps);
+      VectorLength vec_len = VectorLengthField::decode(opcode);
+      if (vec_len == kV128) {
+        ASSEMBLE_SIMD_BINOP(minps);
+      } else if (vec_len == kV256) {
+        ASSEMBLE_SIMD256_BINOP(minps, AVX);
+      } else {
+        UNREACHABLE();
+      }
       break;
     }
     case kX64Maxps: {
-      ASSEMBLE_SIMD_BINOP(maxps);
+      VectorLength vec_len = VectorLengthField::decode(opcode);
+      if (vec_len == kV128) {
+        ASSEMBLE_SIMD_BINOP(maxps);
+      } else if (vec_len == kV256) {
+        ASSEMBLE_SIMD256_BINOP(maxps, AVX);
+      } else {
+        UNREACHABLE();
+      }
       break;
     }
     case kX64F32x8Pmin: {
@@ -3974,11 +3981,25 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       break;
     }
     case kX64Minpd: {
-      ASSEMBLE_SIMD_BINOP(minpd);
+      VectorLength vec_len = VectorLengthField::decode(opcode);
+      if (vec_len == kV128) {
+        ASSEMBLE_SIMD_BINOP(minpd);
+      } else if (vec_len == kV256) {
+        ASSEMBLE_SIMD256_BINOP(minpd, AVX);
+      } else {
+        UNREACHABLE();
+      }
       break;
     }
     case kX64Maxpd: {
-      ASSEMBLE_SIMD_BINOP(maxpd);
+      VectorLength vec_len = VectorLengthField::decode(opcode);
+      if (vec_len == kV128) {
+        ASSEMBLE_SIMD_BINOP(maxpd);
+      } else if (vec_len == kV256) {
+        ASSEMBLE_SIMD256_BINOP(maxpd, AVX);
+      } else {
+        UNREACHABLE();
+      }
       break;
     }
     case kX64ISplat: {
@@ -5458,10 +5479,16 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     }
     case kX64I32x8DotI8x32I7x32AddS: {
       DCHECK_EQ(i.OutputSimd256Register(), i.InputSimd256Register(2));
+      // If AVX_VNNI supported, pass kScratchSimd256Reg twice as unused
+      // arguments.
+      YMMRegister tmp = kScratchSimd256Reg;
+      if (!CpuFeatures::IsSupported(AVX_VNNI)) {
+        tmp = i.TempSimd256Register(0);
+      }
       __ I32x8DotI8x32I7x32AddS(
           i.OutputSimd256Register(), i.InputSimd256Register(0),
           i.InputSimd256Register(1), i.InputSimd256Register(2),
-          kScratchSimd256Reg, i.TempSimd256Register(0));
+          kScratchSimd256Reg, tmp);
       break;
     }
     case kX64I32x4ExtAddPairwiseI16x8S: {
@@ -6981,7 +7008,8 @@ void CodeGenerator::AssembleArchDeoptBranch(Instruction* instr,
     __ j(FlagsConditionToCondition(branch->condition), tlabel);
   }
 
-  // TODO(14667): Support this test mode in wasm in an isolate-independent way.
+  // TODO(42204618): Support this test mode in wasm in an isolate-independent
+  // way.
   if (v8_flags.deopt_every_n_times > 0 && isolate() != nullptr) {
     ExternalReference counter =
         ExternalReference::stress_deopt_count(isolate());
@@ -7447,8 +7475,7 @@ void CodeGenerator::AssembleReturn(InstructionOperand* additional_pop_count) {
     __ j(greater, &mismatch_return, Label::kNear);
     __ Ret(parameter_slots * kSystemPointerSize, scratch_reg);
     __ bind(&mismatch_return);
-    __ DropArguments(argc_reg, scratch_reg, MacroAssembler::kCountIsInteger,
-                     MacroAssembler::kCountIncludesReceiver);
+    __ DropArguments(argc_reg, scratch_reg);
     // We use a return instead of a jump for better return address prediction.
     __ Ret();
   } else if (additional_pop_count->IsImmediate()) {
@@ -7599,7 +7626,7 @@ void CodeGenerator::SetPendingMove(MoveOperands* move) {
     X64OperandConverter g(this, nullptr);
     Constant src = g.ToConstant(&move->source());
     if (move->destination().IsStackSlot() &&
-        (RelocInfo::IsWasmReference(src.rmode()) ||
+        (!RelocInfo::IsNoInfo(src.rmode()) ||
          (src.type() != Constant::kInt32 && src.type() != Constant::kInt64))) {
       move_cycle_.pending_scratch_register_use = true;
     }
@@ -7645,23 +7672,19 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
   auto MoveConstantToRegister = [&](Register dst, Constant src) {
     switch (src.type()) {
       case Constant::kInt32: {
-        if (RelocInfo::IsWasmReference(src.rmode())) {
-          __ movq(dst, Immediate64(src.ToInt64(), src.rmode()));
+        int32_t value = src.ToInt32();
+        if (value == 0 && RelocInfo::IsNoInfo(src.rmode())) {
+          __ xorl(dst, dst);
         } else {
-          int32_t value = src.ToInt32();
-          if (value == 0) {
-            __ xorl(dst, dst);
-          } else {
-            __ movl(dst, Immediate(value));
-          }
+          __ movl(dst, Immediate(value, src.rmode()));
         }
         break;
       }
       case Constant::kInt64:
-        if (RelocInfo::IsWasmReference(src.rmode())) {
-          __ movq(dst, Immediate64(src.ToInt64(), src.rmode()));
-        } else {
+        if (RelocInfo::IsNoInfo(src.rmode())) {
           __ Move(dst, src.ToInt64());
+        } else {
+          __ movq(dst, Immediate64(src.ToInt64(), src.rmode()));
         }
         break;
       case Constant::kFloat32:
@@ -7699,7 +7722,7 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
   };
   // Helper function to write the given constant to the stack.
   auto MoveConstantToSlot = [&](Operand dst, Constant src) {
-    if (!RelocInfo::IsWasmReference(src.rmode())) {
+    if (RelocInfo::IsNoInfo(src.rmode())) {
       switch (src.type()) {
         case Constant::kInt32:
           __ Move(dst, src.ToInt32());
@@ -7718,6 +7741,9 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
   if (v8_flags.trace_turbo_stack_accesses) {
     IncrementStackAccessCounter(source, destination);
   }
+  // Whether the ymm source should be used as a xmm.
+  const bool src_simd256_as_simd128 =
+      source->IsSimd256Register() && destination->IsSimd128Register();
 
   // Dispatch on the source and destination operand kinds.
   switch (MoveType::InferMove(source, destination)) {
@@ -7735,8 +7761,14 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
             LocationOperand::cast(source)->representation();
         if (rep == MachineRepresentation::kSimd256) {
           CpuFeatureScope avx_scope(masm(), AVX);
-          __ vmovapd(g.ToSimd256Register(destination),
-                     g.ToSimd256Register(source));
+          if (src_simd256_as_simd128) {
+            __ vmovapd(g.ToSimd128Register(destination),
+                       g.ToSimd128Register(source));
+
+          } else {
+            __ vmovapd(g.ToSimd256Register(destination),
+                       g.ToSimd256Register(source));
+          }
         } else {
           __ Movapd(g.ToDoubleRegister(destination),
                     g.ToDoubleRegister(source));
@@ -7755,9 +7787,12 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
         if (rep == MachineRepresentation::kSimd128) {
           __ Movups(dst, src);
         } else if (rep == MachineRepresentation::kSimd256) {
-          YMMRegister src = g.ToSimd256Register(source);
           CpuFeatureScope avx_scope(masm(), AVX);
-          __ vmovups(dst, src);
+          if (src_simd256_as_simd128) {
+            __ vmovups(dst, g.ToSimd128Register(source));
+          } else {
+            __ vmovups(dst, g.ToSimd256Register(source));
+          }
         } else {
           __ Movsd(dst, src);
         }
@@ -7780,9 +7815,12 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
         if (rep == MachineRepresentation::kSimd128) {
           __ Movups(dst, src);
         } else if (rep == MachineRepresentation::kSimd256) {
-          YMMRegister dst = g.ToSimd256Register(destination);
           CpuFeatureScope avx_scope(masm(), AVX);
-          __ vmovups(dst, src);
+          if (src_simd256_as_simd128) {
+            __ vmovups(g.ToSimd128Register(destination), src);
+          } else {
+            __ vmovups(g.ToSimd256Register(destination), src);
+          }
         } else {
           __ Movsd(dst, src);
         }
@@ -7811,8 +7849,13 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
           __ Movups(dst, kScratchDoubleReg);
         } else if (rep == MachineRepresentation::kSimd256) {
           CpuFeatureScope avx_scope(masm(), AVX);
-          __ vmovups(kScratchSimd256Reg, src);
-          __ vmovups(dst, kScratchSimd256Reg);
+          if (src_simd256_as_simd128) {
+            __ vmovups(kScratchDoubleReg, src);
+            __ vmovups(dst, kScratchDoubleReg);
+          } else {
+            __ vmovups(kScratchSimd256Reg, src);
+            __ vmovups(dst, kScratchSimd256Reg);
+          }
         } else {
           __ Movsd(kScratchDoubleReg, src);
           __ Movsd(dst, kScratchDoubleReg);

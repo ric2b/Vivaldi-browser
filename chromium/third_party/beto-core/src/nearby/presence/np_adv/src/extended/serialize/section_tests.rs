@@ -17,28 +17,46 @@
 extern crate std;
 
 use super::*;
-use crate::credential::{
-    v1::{SimpleSignedBroadcastCryptoMaterial, V1},
-    SimpleBroadcastCryptoMaterial,
+use crate::extended::{
+    V1_ENCODING_ENCRYPTED_MIC_WITH_EXTENDED_SALT_AND_TOKEN,
+    V1_ENCODING_ENCRYPTED_SIGNATURE_WITH_EXTENDED_SALT_AND_TOKEN, V1_ENCODING_UNENCRYPTED,
 };
-use crate::extended::data_elements::GenericDataElement;
-use crate::extended::serialize::AddSectionError::MaxSectionCountExceeded;
-use crypto_provider::aes::ctr::AES_CTR_NONCE_LEN;
+use crate::{
+    credential::v1::V1BroadcastCredential,
+    extended::{
+        data_elements::{GenericDataElement, GenericDataElementError},
+        deserialize::SectionMic,
+        salt::V1Salt,
+        section_signature_payload::SectionSignaturePayload,
+        serialize::AddSectionError::MaxSectionCountExceeded,
+        V1IdentityToken, V1_IDENTITY_TOKEN_LEN,
+    },
+    NP_SVC_UUID,
+};
+use crypto_provider::ed25519;
+use crypto_provider::ed25519::SIGNATURE_LENGTH;
+use crypto_provider::{
+    aes::ctr::{AesCtr, NonceAndCounter},
+    hmac::Hmac,
+    CryptoRng,
+};
 use crypto_provider_default::CryptoProviderImpl;
-use np_hkdf::v1_salt::V1Salt;
-use rand::rngs::StdRng;
-use rand::{prelude::SliceRandom as _, Rng as _, SeedableRng as _};
+use np_hkdf::v1_salt::EXTENDED_SALT_LEN;
+use np_hkdf::DerivedSectionKeys;
+use rand::{rngs::StdRng, Rng as _, SeedableRng as _};
 use std::{prelude::rust_2021::*, vec};
-use strum::IntoEnumIterator as _;
 
-type KeyPair = np_ed25519::KeyPair<CryptoProviderImpl>;
+type Ed25519ProviderImpl = <CryptoProviderImpl as CryptoProvider>::Ed25519;
 
 #[test]
-fn public_identity_section_empty() {
+fn unencrypted_section_empty() {
     let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
-    let section_builder = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
+    let section_builder = adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
 
-    assert_eq!(&[1_u8, 0x03], section_builder.into_section().as_slice());
+    assert_eq!(
+        &[V1_ENCODING_UNENCRYPTED, 0_u8],
+        section_builder.into_section::<CryptoProviderImpl>().as_slice()
+    );
 }
 
 #[test]
@@ -64,96 +82,78 @@ fn mic_encrypted_identity_section_random_des() {
             })
             .collect::<Vec<_>>();
 
-        let metadata_key = rng.gen();
-        let metadata_key = MetadataKey(metadata_key);
+        let identity_token: V1IdentityToken = crypto_rng.gen();
         let key_seed = rng.gen();
-        let identity_type =
-            *EncryptedIdentityDataElementType::iter().collect::<Vec<_>>().choose(&mut rng).unwrap();
         let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
 
         let mut adv_builder = AdvBuilder::new(AdvertisementType::Encrypted);
 
-        let broadcast_cm = SimpleBroadcastCryptoMaterial::<V1>::new(key_seed, metadata_key);
+        let broadcast_cred = V1BroadcastCredential::new(
+            key_seed,
+            identity_token,
+            ed25519::PrivateKey::generate::<Ed25519ProviderImpl>(),
+        );
 
-        let mut section_builder = adv_builder
-            .section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new_random_salt(
-                &mut crypto_rng,
-                identity_type,
-                &broadcast_cm,
-            ))
-            .unwrap();
-        let section_salt: V1Salt<CryptoProviderImpl> = section_builder.section_encoder.salt.into();
+        let mut section_builder =
+            adv_builder
+                .section_builder(MicEncryptedSectionEncoder::<_>::new_random_salt::<
+                    CryptoProviderImpl,
+                >(&mut crypto_rng, &broadcast_cred))
+                .unwrap();
+        let section_salt = section_builder.section_encoder.salt;
 
         for de in extra_des.iter() {
             section_builder.add_de(|_| de).unwrap();
         }
 
-        // length 53: 19 for encryption info, 18 for identity, 16 for MIC
-        let section_length = 53
-            + extra_des
-                .iter()
-                .map(|de| de.de_header().serialize().len() as u8 + de.de_header().len.as_u8())
-                .sum::<u8>();
+        let section_length = mic_section_len(&extra_des);
 
-        let encryption_info = [
-            &[
-                0x91, 0x10, // header
-                0x00, // scheme (mic)
-            ],
-            section_salt.as_slice(),
-        ]
-        .concat();
+        let mut hmac = key_seed_hkdf
+            .v1_mic_extended_salt_keys()
+            .mic_hmac_key()
+            .build_hmac::<CryptoProviderImpl>();
+        let nonce = section_salt.compute_nonce::<CryptoProviderImpl>();
 
-        let identity_de_header =
-            DeHeader { len: 16_u8.try_into().unwrap(), de_type: identity_type.type_code() };
+        let mut cipher = <CryptoProviderImpl as CryptoProvider>::AesCtr128::new(
+            &key_seed_hkdf.v1_mic_extended_salt_keys().aes_key(),
+            NonceAndCounter::from_nonce(nonce),
+        );
 
-        let mut hmac = np_hkdf::UnsignedSectionKeys::hmac_key(&key_seed_hkdf).build_hmac();
+        // encrypt identity token and de contents
+        let mut plaintext_identity_token = identity_token.as_slice().to_vec();
+        cipher.apply_keystream(&mut plaintext_identity_token);
+        let ct_identity_token = plaintext_identity_token;
+
+        let mut de_contents = Vec::new();
+        for de in extra_des {
+            de_contents.extend_from_slice(de.de_header().serialize().as_slice());
+            let _ = de.write_de_contents(&mut de_contents);
+        }
+        cipher.apply_keystream(&mut de_contents);
+
         // just to be sure, we'll construct our test hmac all in one update() call
         let mut hmac_input = vec![];
         hmac_input.extend_from_slice(NP_SVC_UUID.as_slice());
-        hmac_input.push(0b00100000); // v1
-
-        // section header
-        hmac_input.push(section_length);
-        hmac_input.extend_from_slice(&encryption_info);
-        let nonce = section_salt.derive::<{ AES_CTR_NONCE_LEN }>(Some(1.into())).unwrap();
+        hmac_input.push(VERSION_HEADER_V1);
+        hmac_input.push(V1_ENCODING_ENCRYPTED_MIC_WITH_EXTENDED_SALT_AND_TOKEN);
+        hmac_input.extend_from_slice(section_salt.as_slice());
         hmac_input.extend_from_slice(nonce.as_slice());
-
-        hmac_input.extend_from_slice(identity_de_header.serialize().as_slice());
-
-        let mut cipher = <CryptoProviderImpl as CryptoProvider>::AesCtr128::new(
-            &np_hkdf::UnsignedSectionKeys::aes_key(&key_seed_hkdf),
-            NonceAndCounter::from_nonce(nonce),
-        );
-        let mut plaintext = metadata_key.0.as_slice().to_vec();
-
-        for de in extra_des {
-            plaintext.extend_from_slice(de.de_header().serialize().as_slice());
-            let _ = de.write_de_contents(&mut plaintext);
-        }
-
-        cipher.apply_keystream(&mut plaintext);
-        let ciphertext = plaintext;
-
-        hmac_input.extend_from_slice(&ciphertext);
-
+        hmac_input.extend_from_slice(&ct_identity_token);
+        hmac_input.push(section_length);
+        hmac_input.extend_from_slice(&de_contents);
         hmac.update(&hmac_input);
         let mic = hmac.finalize();
 
         let mut expected = vec![];
+        expected.push(V1_ENCODING_ENCRYPTED_MIC_WITH_EXTENDED_SALT_AND_TOKEN);
+        expected.extend_from_slice(section_salt.as_slice());
+        expected.extend_from_slice(&ct_identity_token);
         expected.push(section_length);
-        expected.extend_from_slice(&encryption_info);
-        expected.extend_from_slice(identity_de_header.serialize().as_slice());
-        expected.extend_from_slice(&ciphertext);
+        expected.extend_from_slice(&de_contents);
         expected.extend_from_slice(&mic[..16]);
 
-        assert_eq!(&expected, section_builder.into_section().as_slice());
+        assert_eq!(&expected, section_builder.into_section::<CryptoProviderImpl>().as_slice());
     }
-}
-
-#[test]
-fn signature_encrypted_identity_section_empty() {
-    do_signature_encrypted_identity_fixed_key_material_test::<DummyDataElement>(&[]);
 }
 
 #[test]
@@ -164,29 +164,23 @@ fn signature_encrypted_identity_section_random_des() {
     for _ in 0..1_000 {
         let num_des = rng.gen_range(1..=5);
 
-        let metadata_key = MetadataKey(rng.gen());
+        let identity_token = V1IdentityToken(rng.gen());
         let key_seed = rng.gen();
-        let identity_type =
-            *EncryptedIdentityDataElementType::iter().collect::<Vec<_>>().choose(&mut rng).unwrap();
         let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
 
         let mut adv_builder = AdvBuilder::new(AdvertisementType::Encrypted);
-        let key_pair = KeyPair::generate();
+        let private_key = ed25519::PrivateKey::generate::<Ed25519ProviderImpl>();
 
-        let broadcast_cm = SimpleSignedBroadcastCryptoMaterial::new(
-            key_seed,
-            metadata_key,
-            key_pair.private_key(),
-        );
+        let broadcast_cred =
+            V1BroadcastCredential::new(key_seed, identity_token, private_key.clone());
 
         let mut section_builder = adv_builder
-            .section_builder(SignedEncryptedSectionEncoder::<CryptoProviderImpl>::new_random_salt(
+            .section_builder(SignedEncryptedSectionEncoder::new_random_salt::<CryptoProviderImpl>(
                 &mut crypto_rng,
-                identity_type,
-                &broadcast_cm,
+                &broadcast_cred,
             ))
             .unwrap();
-        let section_salt: V1Salt<CryptoProviderImpl> = section_builder.section_encoder.salt.into();
+        let section_salt = section_builder.section_encoder.salt;
 
         let extra_des = (0..num_des)
             .map(|_| {
@@ -200,32 +194,8 @@ fn signature_encrypted_identity_section_random_des() {
             .filter_map(|de| section_builder.add_de(|_| de.clone()).ok().map(|_| de))
             .collect::<Vec<_>>();
 
-        // 19 for encryption info, 18 for identity, 64 for signature
-        let section_length = 19
-            + 18
-            + 64
-            + extra_des
-                .iter()
-                .map(|de| de.de_header().serialize().len() as u8 + de.de_header().len.as_u8())
-                .sum::<u8>();
-
-        let encryption_info = [
-            &[
-                0x91, 0x10, // header
-                0x08, // scheme (signature)
-            ],
-            section_salt.as_slice(),
-        ]
-        .concat();
-        let encryption_info: [u8; EncryptionInfo::TOTAL_DE_LEN] =
-            encryption_info.try_into().unwrap();
-
-        let identity_de_header =
-            DeHeader { len: 16_u8.try_into().unwrap(), de_type: identity_type.type_code() };
-        let identity_de_header: [u8; 2] =
-            identity_de_header.serialize().as_slice().try_into().unwrap();
-
-        let nonce = section_salt.derive::<{ AES_CTR_NONCE_LEN }>(Some(1.into())).unwrap();
+        let section_length = sig_section_len(&extra_des);
+        let nonce = section_salt.compute_nonce::<CryptoProviderImpl>();
 
         let mut section_body = Vec::new();
         for de in extra_des {
@@ -233,34 +203,41 @@ fn signature_encrypted_identity_section_random_des() {
             let _ = de.write_de_contents(&mut section_body);
         }
 
-        let sig_payload = SectionSignaturePayload::from_deserialized_parts(
-            0x20,
-            section_length,
-            &encryption_info,
+        let mut section_header = vec![];
+        section_header
+            .extend_from_slice(&[V1_ENCODING_ENCRYPTED_SIGNATURE_WITH_EXTENDED_SALT_AND_TOKEN]);
+        section_header.extend_from_slice(section_salt.as_slice());
+        section_header.extend_from_slice(identity_token.as_slice());
+
+        let sig_payload = SectionSignaturePayload::new(
+            &[V1_ENCODING_ENCRYPTED_SIGNATURE_WITH_EXTENDED_SALT_AND_TOKEN],
+            section_salt.as_slice(),
             &nonce,
-            identity_de_header,
-            metadata_key,
+            identity_token.as_slice(),
+            section_length,
             &section_body,
         );
 
-        let mut plaintext = metadata_key.0.as_slice().to_vec();
-        plaintext.extend_from_slice(section_body.as_slice());
+        let mut plaintext = section_body.as_slice().to_vec();
+        plaintext
+            .extend_from_slice(&sig_payload.sign::<Ed25519ProviderImpl>(&private_key).to_bytes());
 
-        plaintext.extend_from_slice(&sig_payload.sign(&key_pair).to_bytes());
-
-        <CryptoProviderImpl as CryptoProvider>::AesCtr128::new(
-            &key_seed_hkdf.extended_signed_section_aes_key(),
+        let mut cipher = <CryptoProviderImpl as CryptoProvider>::AesCtr128::new(
+            &key_seed_hkdf.v1_signature_keys().aes_key(),
             NonceAndCounter::from_nonce(nonce),
-        )
-        .apply_keystream(&mut plaintext);
+        );
+        let start_of_identity_token = section_header.len() - V1_IDENTITY_TOKEN_LEN;
+        cipher.apply_keystream(&mut section_header[start_of_identity_token..]);
+
+        cipher.apply_keystream(&mut plaintext);
         let ciphertext = plaintext;
 
-        let mut expected = vec![section_length];
-        expected.extend_from_slice(&encryption_info);
-        expected.extend_from_slice(&identity_de_header);
+        let mut expected = vec![];
+        expected.extend_from_slice(&section_header);
+        expected.push(section_length);
         expected.extend_from_slice(&ciphertext);
 
-        assert_eq!(&expected, section_builder.into_section().as_slice());
+        assert_eq!(&expected, section_builder.into_section::<CryptoProviderImpl>().as_slice());
     }
 }
 
@@ -272,23 +249,26 @@ fn section_builder_too_full_doesnt_advance_de_index() {
 
     let key_seed = [22; 32];
     let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
-    let metadata_key = MetadataKey([33; 16]);
+    let identity_token = V1IdentityToken([33; 16]);
 
-    let broadcast_cm = SimpleBroadcastCryptoMaterial::<V1>::new(key_seed, metadata_key);
+    let broadcast_cred = V1BroadcastCredential::new(
+        key_seed,
+        identity_token,
+        ed25519::PrivateKey::generate::<Ed25519ProviderImpl>(),
+    );
 
     let mut section_builder = adv_builder
-        .section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new_random_salt(
+        .section_builder(MicEncryptedSectionEncoder::<_>::new_random_salt::<CryptoProviderImpl>(
             &mut crypto_rng,
-            EncryptedIdentityDataElementType::Trusted,
-            &broadcast_cm,
+            &broadcast_cred,
         ))
         .unwrap();
-    let salt: V1Salt<CryptoProviderImpl> = section_builder.section_encoder.salt.into();
+    let salt = section_builder.section_encoder.salt;
 
     section_builder
         .add_de(|de_salt| DummyDataElement {
             de_type: 100_u32.into(),
-            data: de_salt.derive::<100>().unwrap().to_vec(),
+            data: de_salt.derive::<100, CryptoProviderImpl>().unwrap().to_vec(),
         })
         .unwrap();
 
@@ -298,7 +278,7 @@ fn section_builder_too_full_doesnt_advance_de_index() {
         section_builder
             .add_de(|de_salt| DummyDataElement {
                 de_type: 101_u32.into(),
-                data: de_salt.derive::<100>().unwrap().to_vec(),
+                data: de_salt.derive::<100, CryptoProviderImpl>().unwrap().to_vec(),
             })
             .unwrap_err()
     );
@@ -306,35 +286,38 @@ fn section_builder_too_full_doesnt_advance_de_index() {
     section_builder
         .add_de(|de_salt| DummyDataElement {
             de_type: 102_u32.into(),
-            data: de_salt.derive::<10>().unwrap().to_vec(),
+            data: de_salt.derive::<10, CryptoProviderImpl>().unwrap().to_vec(),
         })
         .unwrap();
 
-    section_builder.add_to_advertisement();
+    section_builder.add_to_advertisement::<CryptoProviderImpl>();
 
     let mut expected = vec![];
-    // metadata key
-    expected.extend_from_slice(&metadata_key.0);
+    // identity token
+    expected.extend_from_slice(&identity_token.0);
+    // section len
+    expected.push(2 + 100 + 2 + 10u8 + u8::try_from(SectionMic::CONTENTS_LEN).unwrap());
     // de header
     expected.extend_from_slice(&[0x80 + 100, 100]);
-    // section 0 de 2
-    expected.extend_from_slice(&salt.derive::<100>(Some(2.into())).unwrap());
+    // section 0 de 0
+    expected.extend_from_slice(&salt.derive::<100, CryptoProviderImpl>(Some(0.into())).unwrap());
     // de header
     expected.extend_from_slice(&[0x80 + 10, 102]);
-    // section 0 de 3
-    expected.extend_from_slice(&salt.derive::<10>(Some(3.into())).unwrap());
+    // section 0 de 1
+    expected.extend_from_slice(&salt.derive::<10, CryptoProviderImpl>(Some(1.into())).unwrap());
 
     let mut cipher = <CryptoProviderImpl as CryptoProvider>::AesCtr128::new(
-        &np_hkdf::UnsignedSectionKeys::aes_key(&key_seed_hkdf),
-        NonceAndCounter::from_nonce(salt.derive(Some(1.into())).unwrap()),
+        &key_seed_hkdf.v1_mic_extended_salt_keys().aes_key(),
+        NonceAndCounter::from_nonce(salt.compute_nonce::<CryptoProviderImpl>()),
     );
 
-    cipher.apply_keystream(&mut expected);
+    cipher.apply_keystream(&mut expected[..V1_IDENTITY_TOKEN_LEN]);
+    cipher.apply_keystream(&mut expected[V1_IDENTITY_TOKEN_LEN + 1..]);
 
     let adv_bytes = adv_builder.into_advertisement();
     // ignoring the MIC, etc, since that's tested elsewhere
-    let ciphertext_end = adv_bytes.as_slice().len() - 16;
-    assert_eq!(&expected, &adv_bytes.as_slice()[1 + 1 + 19 + 2..ciphertext_end])
+    let ciphertext_end = adv_bytes.as_slice().len() - SectionMic::CONTENTS_LEN;
+    assert_eq!(&expected, &adv_bytes.as_slice()[1 + 1 + EXTENDED_SALT_LEN..ciphertext_end])
 }
 
 #[test]
@@ -344,9 +327,10 @@ fn section_de_fits_exactly() {
     let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
 
     // fill up space to produce desired capacity
-    let mut section_builder = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
-    // leave space for adv header, 1 section headers, 1 section identity and fill almost full
-    fill_section_builder(BLE_ADV_SVC_CONTENT_LEN - 1 - 1 - 1 - 1, &mut section_builder);
+    let mut section_builder = adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
+    // leave space for adv header, 1 section len, 1 section header and 1 extra byte
+    fill_section_builder(BLE_5_ADV_SVC_MAX_CONTENT_LEN - 1 - 1 - 1 - 1, &mut section_builder)
+        .unwrap();
     assert_eq!(1, section_builder.section.capacity() - section_builder.section.len(), "capacity: ");
 
     // can't add a 2 byte DE
@@ -368,23 +352,26 @@ fn section_builder_build_de_error_doesnt_advance_de_index() {
 
     let key_seed = [22; 32];
     let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
-    let metadata_key = MetadataKey([33; 16]);
+    let identity_token = V1IdentityToken([33; 16]);
 
-    let broadcast_cm = SimpleBroadcastCryptoMaterial::<V1>::new(key_seed, metadata_key);
+    let broadcast_cred = V1BroadcastCredential::new(
+        key_seed,
+        identity_token,
+        ed25519::PrivateKey::generate::<Ed25519ProviderImpl>(),
+    );
 
     let mut section_builder = adv_builder
-        .section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new_random_salt(
+        .section_builder(MicEncryptedSectionEncoder::<_>::new_random_salt::<CryptoProviderImpl>(
             &mut crypto_rng,
-            EncryptedIdentityDataElementType::Trusted,
-            &broadcast_cm,
+            &broadcast_cred,
         ))
         .unwrap();
-    let salt: V1Salt<CryptoProviderImpl> = section_builder.section_encoder.salt.into();
+    let salt = section_builder.section_encoder.salt;
 
     section_builder
         .add_de(|de_salt| DummyDataElement {
             de_type: 100_u32.into(),
-            data: de_salt.derive::<100>().unwrap().to_vec(),
+            data: de_salt.derive::<100, CryptoProviderImpl>().unwrap().to_vec(),
         })
         .unwrap();
 
@@ -396,35 +383,38 @@ fn section_builder_build_de_error_doesnt_advance_de_index() {
     section_builder
         .add_de(|de_salt| DummyDataElement {
             de_type: 103_u32.into(),
-            data: de_salt.derive::<10>().unwrap().to_vec(),
+            data: de_salt.derive::<10, CryptoProviderImpl>().unwrap().to_vec(),
         })
         .unwrap();
 
-    section_builder.add_to_advertisement();
+    section_builder.add_to_advertisement::<CryptoProviderImpl>();
 
     let mut expected = vec![];
-    // metadata key
-    expected.extend_from_slice(&metadata_key.0);
+    // identity_token
+    expected.extend_from_slice(identity_token.as_slice());
+    //section len
+    expected.push(2 + 100 + 2 + 10 + u8::try_from(SectionMic::CONTENTS_LEN).unwrap());
     // de header
     expected.extend_from_slice(&[0x80 + 100, 100]);
-    // section 0 de 2
-    expected.extend_from_slice(&salt.derive::<100>(Some(2.into())).unwrap());
+    // section 0 de 0
+    expected.extend_from_slice(&salt.derive::<100, CryptoProviderImpl>(Some(0.into())).unwrap());
     // de header
     expected.extend_from_slice(&[0x80 + 10, 103]);
-    // section 0 de 3
-    expected.extend_from_slice(&salt.derive::<10>(Some(3.into())).unwrap());
+    // section 0 de 1
+    expected.extend_from_slice(&salt.derive::<10, CryptoProviderImpl>(Some(1.into())).unwrap());
 
     let mut cipher = <CryptoProviderImpl as CryptoProvider>::AesCtr128::new(
-        &np_hkdf::UnsignedSectionKeys::aes_key(&key_seed_hkdf),
-        NonceAndCounter::from_nonce(salt.derive(Some(1.into())).unwrap()),
+        &key_seed_hkdf.v1_mic_extended_salt_keys().aes_key(),
+        NonceAndCounter::from_nonce(salt.compute_nonce::<CryptoProviderImpl>()),
     );
 
-    cipher.apply_keystream(&mut expected);
+    cipher.apply_keystream(&mut expected[..V1_IDENTITY_TOKEN_LEN]);
+    cipher.apply_keystream(&mut expected[V1_IDENTITY_TOKEN_LEN + 1..]);
 
     let adv_bytes = adv_builder.into_advertisement();
     // ignoring the MIC, etc, since that's tested elsewhere
-    let ciphertext_end = adv_bytes.as_slice().len() - 16;
-    assert_eq!(&expected, &adv_bytes.as_slice()[1 + 1 + 19 + 2..ciphertext_end])
+    let ciphertext_end = adv_bytes.as_slice().len() - SectionMic::CONTENTS_LEN;
+    assert_eq!(&expected, &adv_bytes.as_slice()[1 + 1 + EXTENDED_SALT_LEN..ciphertext_end])
 }
 
 #[test]
@@ -435,57 +425,63 @@ fn add_multiple_de_correct_de_offsets_mic_encrypted_identity() {
 
     let key_seed = [22; 32];
     let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
-    let metadata_key = MetadataKey([33; 16]);
+    let identity_token = V1IdentityToken([33; 16]);
 
-    let broadcast_cm = SimpleBroadcastCryptoMaterial::<V1>::new(key_seed, metadata_key);
+    let broadcast_cred = V1BroadcastCredential::new(
+        key_seed,
+        identity_token,
+        ed25519::PrivateKey::generate::<Ed25519ProviderImpl>(),
+    );
 
     let mut section_builder = adv_builder
-        .section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new_random_salt(
+        .section_builder(MicEncryptedSectionEncoder::<_>::new_random_salt::<CryptoProviderImpl>(
             &mut crypto_rng,
-            EncryptedIdentityDataElementType::Trusted,
-            &broadcast_cm,
+            &broadcast_cred,
         ))
         .unwrap();
-    let salt: V1Salt<CryptoProviderImpl> = section_builder.section_encoder.salt.into();
+    let salt = section_builder.section_encoder.salt;
 
     section_builder
         .add_de(|de_salt| DummyDataElement {
             de_type: 64_u32.into(),
-            data: de_salt.derive::<16>().unwrap().to_vec(),
+            data: de_salt.derive::<16, CryptoProviderImpl>().unwrap().to_vec(),
         })
         .unwrap();
     section_builder
         .add_de(|de_salt| DummyDataElement {
             de_type: 65_u32.into(),
-            data: de_salt.derive::<16>().unwrap().to_vec(),
+            data: de_salt.derive::<16, CryptoProviderImpl>().unwrap().to_vec(),
         })
         .unwrap();
 
-    section_builder.add_to_advertisement();
+    section_builder.add_to_advertisement::<CryptoProviderImpl>();
 
     let mut expected = vec![];
-    // metadata key
-    expected.extend_from_slice(&metadata_key.0);
+    // identity_token
+    expected.extend_from_slice(identity_token.as_slice());
+    // section len, 2 des of 18 bytes each + section mic length
+    expected.push((18 * 2u8) + u8::try_from(SectionMic::CONTENTS_LEN).unwrap());
     // de header
     expected.extend_from_slice(&[0x90, 0x40]);
-    // section 0 de 2
-    expected.extend_from_slice(&salt.derive::<16>(Some(2.into())).unwrap());
+    // section 0 de 0
+    expected.extend_from_slice(&salt.derive::<16, CryptoProviderImpl>(Some(0.into())).unwrap());
     // de header
     expected.extend_from_slice(&[0x90, 0x41]);
-    // section 0 de 3
-    expected.extend_from_slice(&salt.derive::<16>(Some(3.into())).unwrap());
+    // section 0 de 1
+    expected.extend_from_slice(&salt.derive::<16, CryptoProviderImpl>(Some(1.into())).unwrap());
 
     let mut cipher = <CryptoProviderImpl as CryptoProvider>::AesCtr128::new(
-        &np_hkdf::UnsignedSectionKeys::aes_key(&key_seed_hkdf),
-        NonceAndCounter::from_nonce(salt.derive(Some(1.into())).unwrap()),
+        &key_seed_hkdf.v1_mic_extended_salt_keys().aes_key(),
+        NonceAndCounter::from_nonce(salt.derive::<12, CryptoProviderImpl>(None).unwrap()),
     );
 
-    cipher.apply_keystream(&mut expected);
+    cipher.apply_keystream(&mut expected[..V1_IDENTITY_TOKEN_LEN]);
+    cipher.apply_keystream(&mut expected[V1_IDENTITY_TOKEN_LEN + 1..]);
 
     let adv_bytes = adv_builder.into_advertisement();
     // ignoring the MIC, etc, since that's tested elsewhere
     let ciphertext_end = adv_bytes.as_slice().len() - 16;
-    assert_eq!(&expected, &adv_bytes.as_slice()[1 + 1 + 19 + 2..ciphertext_end])
+    assert_eq!(&expected, &adv_bytes.as_slice()[1 + 1 + 16..ciphertext_end])
 }
 
 #[test]
@@ -496,60 +492,62 @@ fn add_multiple_de_correct_de_offsets_signature_encrypted_identity() {
 
     let key_seed = [22; 32];
     let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
-    let metadata_key = MetadataKey([33; 16]);
-    let key_pair = KeyPair::generate();
+    let identity_token = V1IdentityToken([33; 16]);
+    let private_key = ed25519::PrivateKey::generate::<Ed25519ProviderImpl>();
 
-    let broadcast_cm =
-        SimpleSignedBroadcastCryptoMaterial::new(key_seed, metadata_key, key_pair.private_key());
+    let broadcast_cred = V1BroadcastCredential::new(key_seed, identity_token, private_key.clone());
 
     let mut section_builder = adv_builder
-        .section_builder(SignedEncryptedSectionEncoder::<CryptoProviderImpl>::new_random_salt(
+        .section_builder(SignedEncryptedSectionEncoder::new_random_salt::<CryptoProviderImpl>(
             &mut crypto_rng,
-            EncryptedIdentityDataElementType::Trusted,
-            &broadcast_cm,
+            &broadcast_cred,
         ))
         .unwrap();
-    let salt: V1Salt<CryptoProviderImpl> = section_builder.section_encoder.salt.into();
+    let salt = section_builder.section_encoder.salt;
 
     section_builder
         .add_de(|de_salt| DummyDataElement {
             de_type: 64_u32.into(),
-            data: de_salt.derive::<16>().unwrap().to_vec(),
+            data: de_salt.derive::<16, CryptoProviderImpl>().unwrap().to_vec(),
         })
         .unwrap();
     section_builder
         .add_de(|de_salt| DummyDataElement {
             de_type: 65_u32.into(),
-            data: de_salt.derive::<16>().unwrap().to_vec(),
+            data: de_salt.derive::<16, CryptoProviderImpl>().unwrap().to_vec(),
         })
         .unwrap();
 
-    section_builder.add_to_advertisement();
+    section_builder.add_to_advertisement::<CryptoProviderImpl>();
 
     let mut expected = vec![];
-    // metadata key
-    expected.extend_from_slice(&metadata_key.0);
+    // identity token
+    expected.extend_from_slice(&identity_token.0);
+    //len
+    expected.push((18 * 2) + u8::try_from(SIGNATURE_LENGTH).unwrap());
     // de header
     expected.extend_from_slice(&[0x90, 0x40]);
-    // section 0 de 2
-    expected.extend_from_slice(&salt.derive::<16>(Some(2.into())).unwrap());
+    // section 0 de 0
+    expected.extend_from_slice(&salt.derive::<16, CryptoProviderImpl>(Some(0.into())).unwrap());
     // de header
     expected.extend_from_slice(&[0x90, 0x41]);
-    // section 0 de 3
-    expected.extend_from_slice(&salt.derive::<16>(Some(3.into())).unwrap());
+    // section 0 de 1
+    expected.extend_from_slice(&salt.derive::<16, CryptoProviderImpl>(Some(1.into())).unwrap());
 
-    <CryptoProviderImpl as CryptoProvider>::AesCtr128::new(
-        &key_seed_hkdf.extended_signed_section_aes_key(),
-        NonceAndCounter::from_nonce(salt.derive(Some(1.into())).unwrap()),
-    )
-    .apply_keystream(&mut expected);
+    let mut cipher = <CryptoProviderImpl as CryptoProvider>::AesCtr128::new(
+        &key_seed_hkdf.v1_signature_keys().aes_key(),
+        NonceAndCounter::from_nonce(salt.derive::<12, CryptoProviderImpl>(None).unwrap()),
+    );
+
+    cipher.apply_keystream(&mut expected[..V1_IDENTITY_TOKEN_LEN]);
+    cipher.apply_keystream(&mut expected[V1_IDENTITY_TOKEN_LEN + 1..]);
 
     let adv_bytes = adv_builder.into_advertisement();
     // ignoring the signature since that's tested elsewhere
     assert_eq!(
         &expected,
-        // adv header + salt + section header + encryption info + identity header
-        &adv_bytes.as_slice()[1 + 1 + 19 + 2..adv_bytes.as_slice().len() - 64]
+        // skip adv header + section header + salt
+        &adv_bytes.as_slice()[1 + 1 + 16..adv_bytes.as_slice().len() - 64]
     )
 }
 
@@ -560,17 +558,15 @@ fn signature_encrypted_section_de_lengths_allow_room_for_suffix() {
     let mut adv_builder = AdvBuilder::new(AdvertisementType::Encrypted);
 
     let key_seed = [22; 32];
-    let metadata_key = MetadataKey([33; 16]);
-    let key_pair = KeyPair::generate();
+    let metadata_key = V1IdentityToken([33; 16]);
+    let private_key = ed25519::PrivateKey::generate::<Ed25519ProviderImpl>();
 
-    let broadcast_cm =
-        SimpleSignedBroadcastCryptoMaterial::new(key_seed, metadata_key, key_pair.private_key());
+    let broadcast_cred = V1BroadcastCredential::new(key_seed, metadata_key, private_key.clone());
 
     let mut section_builder = adv_builder
-        .section_builder(SignedEncryptedSectionEncoder::<CryptoProviderImpl>::new_random_salt(
+        .section_builder(SignedEncryptedSectionEncoder::new_random_salt::<CryptoProviderImpl>(
             &mut crypto_rng,
-            EncryptedIdentityDataElementType::Trusted,
-            &broadcast_cm,
+            &broadcast_cred,
         ))
         .unwrap();
 
@@ -588,7 +584,7 @@ fn signature_encrypted_section_de_lengths_allow_room_for_suffix() {
         section_builder
             .add_de(|_| DummyDataElement {
                 de_type: 100_u32.into(),
-                data: vec![0; max_total_de_len - 100 - 1]
+                data: vec![0; max_total_de_len - 100 - 1],
             })
             .unwrap_err()
     );
@@ -599,7 +595,7 @@ fn signature_encrypted_section_de_lengths_allow_room_for_suffix() {
         section_builder
             .add_de(|_| DummyDataElement {
                 de_type: 100_u32.into(),
-                data: vec![0; max_total_de_len - 100 - 2]
+                data: vec![0; max_total_de_len - 100 - 2],
             })
             .unwrap_err()
     );
@@ -609,154 +605,142 @@ fn signature_encrypted_section_de_lengths_allow_room_for_suffix() {
 fn serialize_max_number_of_public_sections() {
     let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
     for _ in 0..NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT {
-        let mut section_builder =
-            adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
+        let mut section_builder = adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
         section_builder
             .add_de(|_| DummyDataElement { de_type: 100_u32.into(), data: vec![0; 98] })
             .unwrap();
-        section_builder.add_to_advertisement();
+        section_builder.add_to_advertisement::<CryptoProviderImpl>();
     }
     assert_eq!(
-        adv_builder.section_builder(PublicSectionEncoder::default()).unwrap_err(),
+        adv_builder.section_builder(UnencryptedSectionEncoder).unwrap_err(),
         MaxSectionCountExceeded
     );
 }
 
 fn do_mic_encrypted_identity_fixed_key_material_test<W: WriteDataElement>(extra_des: &[W]) {
-    let metadata_key = MetadataKey([1; 16]);
+    let identity_token = V1IdentityToken([1; 16]);
     let key_seed = [2; 32];
     let adv_header_byte = 0b00100000;
-    let raw_salt = [3; 16];
-    let section_salt: V1Salt<CryptoProviderImpl> = raw_salt.into();
-    let identity_type = EncryptedIdentityDataElementType::Private;
+    let section_salt: ExtendedV1Salt = [3; 16].into();
     let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
 
-    let broadcast_cm = SimpleBroadcastCryptoMaterial::<V1>::new(key_seed, metadata_key);
+    let broadcast_cred = V1BroadcastCredential::new(
+        key_seed,
+        identity_token,
+        ed25519::PrivateKey::generate::<Ed25519ProviderImpl>(),
+    );
 
     let mut adv_builder = AdvBuilder::new(AdvertisementType::Encrypted);
-
     let mut section_builder = adv_builder
-        .section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new(
-            identity_type,
-            RawV1Salt(raw_salt),
-            &broadcast_cm,
+        .section_builder(MicEncryptedSectionEncoder::<_>::new::<CryptoProviderImpl>(
+            section_salt,
+            &broadcast_cred,
         ))
         .unwrap();
-
     for de in extra_des {
         section_builder.add_de(|_| de).unwrap();
     }
 
-    // length 53: 19 for encryption info, 18 for identity, 16 for MIC
-    let section_length = 53
-        + extra_des
-            .iter()
-            .map(|de| de.de_header().serialize().len() as u8 + de.de_header().len.as_u8())
-            .sum::<u8>();
+    // now construct expected bytes
+    // mic length + length of des
+    let section_length = mic_section_len(extra_des);
 
-    let encryption_info = [
-        &[
-            0x91, 0x10, // header
-            0x00, // scheme (mic)
-        ],
-        section_salt.as_slice(),
-    ]
-    .concat();
+    let mut hmac =
+        key_seed_hkdf.v1_mic_extended_salt_keys().mic_hmac_key().build_hmac::<CryptoProviderImpl>();
+    let nonce = section_salt.compute_nonce::<CryptoProviderImpl>();
 
-    let identity_de_header =
-        DeHeader { len: 16_u8.try_into().unwrap(), de_type: identity_type.type_code() };
+    let mut cipher = <CryptoProviderImpl as CryptoProvider>::AesCtr128::new(
+        &key_seed_hkdf.v1_mic_extended_salt_keys().aes_key(),
+        NonceAndCounter::from_nonce(nonce),
+    );
 
-    let mut hmac = np_hkdf::UnsignedSectionKeys::hmac_key(&key_seed_hkdf).build_hmac();
+    // encrypt identity token and de contents
+    let mut plaintext_identity_token = identity_token.as_slice().to_vec();
+    cipher.apply_keystream(&mut plaintext_identity_token);
+    let ct_identity_token = plaintext_identity_token;
+
+    let mut de_contents = Vec::new();
+    for de in extra_des {
+        de_contents.extend_from_slice(de.de_header().serialize().as_slice());
+        let _ = de.write_de_contents(&mut de_contents);
+    }
+    cipher.apply_keystream(&mut de_contents);
+
     // just to be sure, we'll construct our test hmac all in one update() call
     let mut hmac_input = vec![];
     hmac_input.extend_from_slice(NP_SVC_UUID.as_slice());
     hmac_input.push(adv_header_byte);
-    // section header
-    hmac_input.push(section_length);
-    hmac_input.extend_from_slice(&encryption_info);
-    let nonce = section_salt.derive::<{ AES_CTR_NONCE_LEN }>(Some(1.into())).unwrap();
+    hmac_input.push(V1_ENCODING_ENCRYPTED_MIC_WITH_EXTENDED_SALT_AND_TOKEN);
+    hmac_input.extend_from_slice(section_salt.as_slice());
     hmac_input.extend_from_slice(nonce.as_slice());
-
-    hmac_input.extend_from_slice(identity_de_header.serialize().as_slice());
-
-    let mut cipher = <CryptoProviderImpl as CryptoProvider>::AesCtr128::new(
-        &np_hkdf::UnsignedSectionKeys::aes_key(&key_seed_hkdf),
-        NonceAndCounter::from_nonce(nonce),
-    );
-    let mut plaintext = metadata_key.0.as_slice().to_vec();
-
-    for de in extra_des {
-        plaintext.extend_from_slice(de.de_header().serialize().as_slice());
-        let _ = de.write_de_contents(&mut plaintext);
-    }
-
-    cipher.apply_keystream(&mut plaintext);
-    let ciphertext = plaintext;
-
-    hmac_input.extend_from_slice(&ciphertext);
-
+    hmac_input.extend_from_slice(&ct_identity_token);
+    hmac_input.push(section_length);
+    hmac_input.extend_from_slice(&de_contents);
     hmac.update(&hmac_input);
     let mic = hmac.finalize();
 
     let mut expected = vec![];
+    expected.push(V1_ENCODING_ENCRYPTED_MIC_WITH_EXTENDED_SALT_AND_TOKEN);
+    expected.extend_from_slice(section_salt.as_slice());
+    expected.extend_from_slice(&ct_identity_token);
     expected.push(section_length);
-    expected.extend_from_slice(&encryption_info);
-    expected.extend_from_slice(identity_de_header.serialize().as_slice());
-    expected.extend_from_slice(&ciphertext);
+    expected.extend_from_slice(&de_contents);
     expected.extend_from_slice(&mic[..16]);
 
-    assert_eq!(&expected, section_builder.into_section().as_slice());
+    assert_eq!(&expected, section_builder.into_section::<CryptoProviderImpl>().as_slice());
 }
 
-fn do_signature_encrypted_identity_fixed_key_material_test<W: WriteDataElement>(extra_des: &[W]) {
-    let metadata_key = MetadataKey([1; 16]);
-    let key_seed = [2; 32];
-    let adv_header_byte = 0b00100000;
-    let raw_salt = [3; 16];
-    let section_salt: V1Salt<CryptoProviderImpl> = raw_salt.into();
-    let identity_type = EncryptedIdentityDataElementType::Private;
-    let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
-    let key_pair = KeyPair::generate();
-
-    let broadcast_cm =
-        SimpleSignedBroadcastCryptoMaterial::new(key_seed, metadata_key, key_pair.private_key());
-
-    let mut adv_builder = AdvBuilder::new(AdvertisementType::Encrypted);
-
-    let mut section_builder = adv_builder
-        .section_builder(SignedEncryptedSectionEncoder::<CryptoProviderImpl>::new(
-            identity_type,
-            RawV1Salt(raw_salt),
-            &broadcast_cm,
-        ))
-        .unwrap();
-
-    for de in extra_des {
-        section_builder.add_de(|_| de).unwrap();
-    }
-
-    // 19 for encryption info, 18 for identity, 64 for sig
-    let section_length = 19
-        + 18
-        + 64
+/// Returns the length of a mic section containing `extra_des`
+fn mic_section_len<W: WriteDataElement>(extra_des: &[W]) -> u8 {
+    u8::try_from(SectionMic::CONTENTS_LEN).unwrap()
         + extra_des
             .iter()
             .map(|de| de.de_header().serialize().len() as u8 + de.de_header().len.as_u8())
-            .sum::<u8>();
+            .sum::<u8>()
+}
 
-    let encryption_info = [
-        &[
-            0x91, 0x10, // header
-            0x08, // scheme (signature)
-        ],
-        section_salt.as_slice(),
-    ]
-    .concat();
-    let encryption_info: [u8; EncryptionInfo::TOTAL_DE_LEN] = encryption_info.try_into().unwrap();
+/// Returns the length of a signed section containing `extra_des`
+fn sig_section_len<W: WriteDataElement>(extra_des: &[W]) -> u8 {
+    u8::try_from(crypto_provider::ed25519::SIGNATURE_LENGTH).unwrap()
+        + extra_des
+            .iter()
+            .map(|de| de.de_header().serialize().len() as u8 + de.de_header().len.as_u8())
+            .sum::<u8>()
+}
 
-    let identity_de_header =
-        DeHeader { len: 16_u8.try_into().unwrap(), de_type: identity_type.type_code() };
-    let identity_de_header: [u8; 2] = identity_de_header.serialize().as_slice().try_into().unwrap();
+#[test]
+fn signature_encrypted_identity_section_empty() {
+    do_signature_encrypted_identity_fixed_key_material_test::<DummyDataElement>(&[]);
+}
+
+fn do_signature_encrypted_identity_fixed_key_material_test<W: WriteDataElement>(extra_des: &[W]) {
+    // input fixed credential data used to encode the adv
+    let identity_token = V1IdentityToken::from([1; 16]);
+    let key_seed = [2; 32];
+    let section_salt: ExtendedV1Salt = [3; 16].into();
+    let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
+    let private_key = ed25519::PrivateKey::generate::<Ed25519ProviderImpl>();
+    let broadcast_cred = V1BroadcastCredential::new(key_seed, identity_token, private_key.clone());
+
+    // Build an adv given the provided DEs in extra_des
+    let mut adv_builder = AdvBuilder::new(AdvertisementType::Encrypted);
+    let mut section_builder = adv_builder
+        .section_builder(SignedEncryptedSectionEncoder::new::<CryptoProviderImpl>(
+            section_salt,
+            &broadcast_cred,
+        ))
+        .unwrap();
+    for de in extra_des {
+        section_builder.add_de(|_| de).unwrap();
+    }
+    let section = section_builder.into_section::<CryptoProviderImpl>();
+
+    // now manually construct the expected output
+    let format = [V1_ENCODING_ENCRYPTED_SIGNATURE_WITH_EXTENDED_SALT_AND_TOKEN];
+    let salt_bytes = section_salt.as_slice();
+    let identity_token_bytes = identity_token.as_slice();
+    // len of de contents + signature
+    let section_length = sig_section_len(extra_des);
 
     let mut section_body = Vec::new();
     for de in extra_des {
@@ -764,49 +748,55 @@ fn do_signature_encrypted_identity_fixed_key_material_test<W: WriteDataElement>(
         let _ = de.write_de_contents(&mut section_body);
     }
 
-    let nonce = section_salt.derive(Some(1.into())).unwrap();
+    let nonce = section_salt.compute_nonce::<CryptoProviderImpl>();
 
-    let sig_payload = SectionSignaturePayload::from_deserialized_parts(
-        adv_header_byte,
-        section_length,
-        &encryption_info,
+    let sig_payload = SectionSignaturePayload::new(
+        format.as_slice(),
+        salt_bytes,
         &nonce,
-        identity_de_header,
-        metadata_key,
+        identity_token.as_slice(),
+        section_length,
         &section_body,
     );
+    let sig = sig_payload.sign::<Ed25519ProviderImpl>(&private_key).to_bytes();
 
-    let mut plaintext = metadata_key.0.as_slice().to_vec();
-    plaintext.extend_from_slice(section_body.as_slice());
-    plaintext.extend_from_slice(&sig_payload.sign(&key_pair).to_bytes());
-
-    <CryptoProviderImpl as CryptoProvider>::AesCtr128::new(
-        &key_seed_hkdf.extended_signed_section_aes_key(),
+    let mut cipher = <CryptoProviderImpl as CryptoProvider>::AesCtr128::new(
+        &key_seed_hkdf.v1_signature_keys().aes_key(),
         NonceAndCounter::from_nonce(nonce),
-    )
-    .apply_keystream(&mut plaintext);
-    let ciphertext = plaintext;
+    );
 
-    let mut expected = vec![section_length];
+    let mut expected = vec![];
+    expected.extend_from_slice(&format);
+    expected.extend_from_slice(salt_bytes);
 
-    expected.extend_from_slice(&encryption_info);
-    expected.extend_from_slice(&identity_de_header);
-    expected.extend_from_slice(&ciphertext);
+    let mut ct_identity_token = Vec::new();
+    ct_identity_token.extend_from_slice(identity_token_bytes);
+    cipher.apply_keystream(&mut ct_identity_token);
 
-    assert_eq!(&expected, section_builder.into_section().as_slice());
+    expected.extend_from_slice(&ct_identity_token);
+    expected.push(section_length);
+
+    let mut remaining_ct = Vec::new();
+    remaining_ct.extend_from_slice(&section_body);
+    remaining_ct.extend_from_slice(&sig);
+    cipher.apply_keystream(&mut remaining_ct);
+
+    expected.extend_from_slice(&remaining_ct);
+
+    assert_eq!(&expected, section.as_slice());
 }
 
-/// Write `section_contents_len` bytes of DE and header into `section_builder`
+/// Write `section_contents_len` bytes of DE into `section_builder`
 pub(crate) fn fill_section_builder<I: SectionEncoder>(
     section_contents_len: usize,
     section_builder: &mut SectionBuilder<&mut AdvBuilder, I>,
-) {
+) -> Result<(), AddDataElementError<GenericDataElementError>> {
+    let original_len = section_builder.section.len();
     // DEs can only go up to 127, so we'll need multiple for long sections
     for _ in 0..(section_contents_len / 100) {
         let de_contents = vec![0x33; 98];
         section_builder
-            .add_de_res(|_| GenericDataElement::try_from(100_u32.into(), &de_contents))
-            .unwrap();
+            .add_de_res(|_| GenericDataElement::try_from(100_u32.into(), &de_contents))?;
     }
 
     let remainder_len = section_contents_len % 100;
@@ -816,25 +806,24 @@ pub(crate) fn fill_section_builder<I: SectionEncoder>(
         }
         1 => {
             // 1 byte header
-            section_builder
-                .add_de_res(|_| GenericDataElement::try_from(3_u32.into(), &[]))
-                .unwrap();
+            section_builder.add_de_res(|_| GenericDataElement::try_from(3_u32.into(), &[]))?;
         }
         2 => {
             // 2 byte header
-            section_builder
-                .add_de_res(|_| GenericDataElement::try_from(100_u32.into(), &[]))
-                .unwrap();
+            section_builder.add_de_res(|_| GenericDataElement::try_from(100_u32.into(), &[]))?;
         }
         _ => {
             // 2 byte header + contents as needed
-            // leave room for section and DE headers
+            // leave room for section length, section header, and DE headers
             let de_contents = vec![0x44; remainder_len - 2];
             section_builder
-                .add_de_res(|_| GenericDataElement::try_from(100_u32.into(), &de_contents))
-                .unwrap();
+                .add_de_res(|_| GenericDataElement::try_from(100_u32.into(), &de_contents))?;
         }
     }
+
+    assert_eq!(section_contents_len, section_builder.section.len() - original_len);
+
+    Ok(())
 }
 
 #[derive(Clone)]
@@ -854,17 +843,12 @@ impl WriteDataElement for DummyDataElement {
 }
 
 pub(crate) trait SectionBuilderExt {
-    fn into_section(self) -> EncodedSection;
+    fn into_section<C: CryptoProvider>(self) -> EncodedSection;
 }
 
 impl<R: AsMut<AdvBuilder>, I: SectionEncoder> SectionBuilderExt for SectionBuilder<R, I> {
     /// Convenience method for tests
-    fn into_section(mut self) -> EncodedSection {
-        let adv_builder_header_byte = self.adv_builder.as_mut().header_byte();
-        Self::build_section(
-            adv_builder_header_byte,
-            self.section.into_inner(),
-            self.section_encoder,
-        )
+    fn into_section<C: CryptoProvider>(self) -> EncodedSection {
+        Self::build_section::<C>(self.header_len, self.section.into_inner(), self.section_encoder)
     }
 }

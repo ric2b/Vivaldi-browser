@@ -20,6 +20,7 @@
 #include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/apps/app_service/intent_util.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
@@ -186,13 +187,15 @@ class WebShareTargetBrowserTest : public WebAppBrowserTestBase {
     const scoped_refptr<storage::FileSystemContext> file_system_context =
         file_manager::util::GetFileSystemContextForRenderFrameHost(
             profile(), contents->GetPrimaryMainFrame());
+    ash::RecentModelOptions options;
+    options.source_specs.emplace_back(ash::RecentSourceSpec{
+        .volume_type =
+            extensions::api::file_manager_private::VolumeType::kTesting,
+    });
     ash::RecentModelFactory::GetForProfile(profile())->GetRecentFiles(
         file_system_context.get(),
         /*origin=*/GURL(),
-        /*query=*/"",
-        /*cutoff_days=*/base::Days(30),
-        /*file_type=*/ash::RecentModel::FileType::kAll,
-        /*invalidate_cache=*/false,
+        /*query=*/"", options,
         base::BindLambdaForTesting(
             [&result, &run_loop](const std::vector<ash::RecentFile>& files) {
               result = files.size();

@@ -48,6 +48,10 @@ struct TitledUrlMatch {
 
   // Whether there was at least 1 match in the titles of ancestors of the node.
   bool has_ancestor_match;
+
+  // Vivaldi
+  // Location of the matching words in the nickname of the node.
+  MatchPositions nickname_match_positions;
 };
 
 }  // namespace bookmarks

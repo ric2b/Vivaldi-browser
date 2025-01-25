@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/clipboard/clipboard_history.h"
+
 #include <iterator>
 #include <list>
 #include <memory>
 #include <string_view>
 #include <tuple>
 
-#include "ash/clipboard/clipboard_history.h"
 #include "ash/clipboard/clipboard_history_controller_impl.h"
 #include "ash/clipboard/clipboard_history_item.h"
 #include "ash/clipboard/clipboard_history_menu_model_adapter.h"
@@ -65,6 +66,7 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/controls/menu/menu_config.h"
 #include "ui/views/controls/menu/menu_item_view.h"
@@ -122,20 +124,19 @@ class ClipboardDataWaiter : public ui::ClipboardObserver {
     return clipboard_data == nullptr || *clipboard_data == *clipboard_data_;
   }
 
-  // This field is not a raw_ptr<> because it was filtered by the rewriter
-  // for: #addr-of, #constexpr-ctor-field-initializer
+  // RAW_PTR_EXCLUSION: #addr-of
   RAW_PTR_EXCLUSION const ui::ClipboardData* clipboard_data_ = nullptr;
   std::unique_ptr<base::RunLoop> run_loop_;
 };
 
 // Helpers ---------------------------------------------------------------------
 
-std::unique_ptr<views::Widget> CreateTestWidget() {
+std::unique_ptr<views::Widget> CreateTestWidget(
+    views::Widget::InitParams::Ownership ownership) {
   auto widget = std::make_unique<views::Widget>();
 
-  views::Widget::InitParams params;
-  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  params.type = views::Widget::InitParams::TYPE_WINDOW_FRAMELESS;
+  views::Widget::InitParams params(
+      ownership, views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   widget->Init(std::move(params));
 
   return widget;
@@ -253,7 +254,7 @@ class ClipboardHistoryBrowserTest : public ash::LoginManagerTest {
         l10n_util::GetStringUTF16(
             IDS_CLIPBOARD_HISTORY_DELETE_BUTTON_HOVER_TEXT));
     EXPECT_EQ(
-        delete_button->GetAccessibleName(),
+        delete_button->GetViewAccessibility().GetCachedName(),
         l10n_util::GetStringFUTF16(IDS_CLIPBOARD_HISTORY_DELETE_ITEM_TEXT,
                                    GetClipboardItemAt(index).display_text()));
     GetEventGenerator()->ClickLeftButton();
@@ -1127,9 +1128,10 @@ class ClipboardHistoryTextfieldBrowserTest
     CloseAllBrowsers();
 
     // Create a widget containing a single, focusable textfield.
-    widget_ = CreateTestWidget();
+    widget_ =
+        CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
     textfield_ = widget_->SetContentsView(std::make_unique<views::Textfield>());
-    textfield_->SetAccessibleName(u"Textfield");
+    textfield_->GetViewAccessibility().SetName(u"Textfield");
     textfield_->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
 
     // Show the widget.

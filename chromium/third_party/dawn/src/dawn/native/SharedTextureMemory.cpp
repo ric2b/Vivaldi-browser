@@ -29,6 +29,7 @@
 
 #include <utility>
 
+#include "dawn/common/WeakRef.h"
 #include "dawn/native/ChainUtils.h"
 #include "dawn/native/Device.h"
 #include "dawn/native/Queue.h"
@@ -54,6 +55,7 @@ class ErrorSharedTextureMemory : public SharedTextureMemoryBase {
         DAWN_UNREACHABLE();
     }
     ResultOrError<FenceAndSignalValue> EndAccessImpl(TextureBase* texture,
+                                                     ExecutionSerial lastUsageSerial,
                                                      UnpackedPtr<EndAccessState>& state) override {
         DAWN_UNREACHABLE();
     }
@@ -86,16 +88,19 @@ SharedTextureMemoryBase::SharedTextureMemoryBase(DeviceBase* device,
     : SharedResourceMemory(device, label), mProperties(properties) {
     // Reify properties to ensure we don't expose capabilities not supported by the device.
     const Format& internalFormat = device->GetValidInternalFormat(mProperties.format);
-    if (!internalFormat.supportsStorageUsage || internalFormat.IsMultiPlanar()) {
-        mProperties.usage = mProperties.usage & ~wgpu::TextureUsage::StorageBinding;
-    }
-    if (!internalFormat.isRenderable || (internalFormat.IsMultiPlanar() &&
-                                         !device->HasFeature(Feature::MultiPlanarRenderTargets))) {
-        mProperties.usage = mProperties.usage & ~wgpu::TextureUsage::RenderAttachment;
-    }
-    if (internalFormat.IsMultiPlanar() &&
-        !device->HasFeature(Feature::MultiPlanarFormatExtendedUsages)) {
-        mProperties.usage = mProperties.usage & ~wgpu::TextureUsage::CopyDst;
+    if (internalFormat.format != wgpu::TextureFormat::External) {
+        if (!internalFormat.supportsStorageUsage || internalFormat.IsMultiPlanar()) {
+            mProperties.usage = mProperties.usage & ~wgpu::TextureUsage::StorageBinding;
+        }
+        if (!internalFormat.isRenderable ||
+            (internalFormat.IsMultiPlanar() &&
+             !device->HasFeature(Feature::MultiPlanarRenderTargets))) {
+            mProperties.usage = mProperties.usage & ~wgpu::TextureUsage::RenderAttachment;
+        }
+        if (internalFormat.IsMultiPlanar() &&
+            !device->HasFeature(Feature::MultiPlanarFormatExtendedUsages)) {
+            mProperties.usage = mProperties.usage & ~wgpu::TextureUsage::CopyDst;
+        }
     }
 
     GetObjectTrackingList()->Track(this);
@@ -105,16 +110,33 @@ ObjectType SharedTextureMemoryBase::GetType() const {
     return ObjectType::SharedTextureMemory;
 }
 
-void SharedTextureMemoryBase::APIGetProperties(SharedTextureMemoryProperties* properties) const {
+wgpu::Status SharedTextureMemoryBase::APIGetProperties(
+    SharedTextureMemoryProperties* properties) const {
+    if (GetDevice()->ConsumedError(GetProperties(properties), "calling %s.GetProperties", this)) {
+        return wgpu::Status::Error;
+    }
+    return wgpu::Status::Success;
+}
+
+MaybeError SharedTextureMemoryBase::GetProperties(SharedTextureMemoryProperties* properties) const {
     properties->usage = mProperties.usage;
     properties->size = mProperties.size;
     properties->format = mProperties.format;
 
     UnpackedPtr<SharedTextureMemoryProperties> unpacked;
-    if (GetDevice()->ConsumedError(ValidateAndUnpack(properties), &unpacked,
-                                   "calling %s.GetProperties", this)) {
-        return;
+    DAWN_TRY_ASSIGN(unpacked, ValidateAndUnpack(properties));
+
+    if (unpacked.Get<SharedTextureMemoryAHardwareBufferProperties>()) {
+        DAWN_INVALID_IF(
+            !GetDevice()->HasFeature(Feature::SharedTextureMemoryAHardwareBuffer),
+            "SharedTextureMemory properties (%s) have a chained "
+            "SharedTextureMemoryAHardwareBufferProperties without the %s feature being set.",
+            this, ToAPI(Feature::SharedTextureMemoryAHardwareBuffer));
     }
+
+    DAWN_TRY(GetChainedProperties(unpacked));
+
+    return {};
 }
 
 TextureBase* SharedTextureMemoryBase::APICreateTexture(const TextureDescriptor* descriptor) {
@@ -152,8 +174,6 @@ ResultOrError<Ref<TextureBase>> SharedTextureMemoryBase::CreateTexture(
                     wgpu::TextureDimension::e2D);
     DAWN_INVALID_IF(descriptor->mipLevelCount != 1, "Mip level count (%u) is not 1.",
                     descriptor->mipLevelCount);
-    DAWN_INVALID_IF(descriptor->size.depthOrArrayLayers != 1, "Array layer count (%u) is not 1.",
-                    descriptor->size.depthOrArrayLayers);
     DAWN_INVALID_IF(descriptor->sampleCount != 1, "Sample count (%u) is not 1.",
                     descriptor->sampleCount);
 
@@ -178,8 +198,16 @@ ResultOrError<Ref<TextureBase>> SharedTextureMemoryBase::CreateTexture(
     Ref<TextureBase> texture;
     DAWN_TRY_ASSIGN(texture, CreateTextureImpl(descriptor));
     // Access is started on memory.BeginAccess.
-    texture->SetHasAccess(false);
+    texture->OnEndAccess();
     return texture;
+}
+
+Ref<SharedResourceMemoryContents> SharedTextureMemoryBase::CreateContents() {
+    return AcquireRef(new SharedTextureMemoryContents(GetWeakRef(this)));
+}
+
+SharedTextureMemoryContents* SharedTextureMemoryBase::GetContents() const {
+    return static_cast<SharedTextureMemoryContents*>(SharedResourceMemory::GetContents());
 }
 
 void APISharedTextureMemoryEndAccessStateFreeMembers(WGPUSharedTextureMemoryEndAccessState cState) {
@@ -189,6 +217,22 @@ void APISharedTextureMemoryEndAccessStateFreeMembers(WGPUSharedTextureMemoryEndA
     }
     delete[] state->fences;
     delete[] state->signaledValues;
+}
+
+// SharedTextureMemoryContents
+
+SharedTextureMemoryContents::SharedTextureMemoryContents(
+    WeakRef<SharedTextureMemoryBase> sharedTextureMemory)
+    : SharedResourceMemoryContents(sharedTextureMemory),
+      mSupportedExternalSampleTypes(SampleTypeBit::None) {}
+
+SampleTypeBit SharedTextureMemoryContents::GetExternalFormatSupportedSampleTypes() const {
+    return mSupportedExternalSampleTypes;
+}
+
+void SharedTextureMemoryContents::SetExternalFormatSupportedSampleTypes(
+    SampleTypeBit supportedSampleType) {
+    mSupportedExternalSampleTypes = supportedSampleType;
 }
 
 }  // namespace dawn::native

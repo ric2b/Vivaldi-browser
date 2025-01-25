@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fxge/win32/ctext_only_printer_driver.h"
 
 #include <limits.h>
@@ -15,10 +10,12 @@
 #include <algorithm>
 
 #include "core/fxcrt/check_op.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/notreached.h"
+#include "core/fxge/agg/cfx_agg_imagerenderer.h"
 #include "core/fxge/cfx_font.h"
 #include "core/fxge/dib/cfx_dibbase.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
@@ -97,12 +94,8 @@ bool CTextOnlyPrinterDriver::SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
   return false;
 }
 
-bool CTextOnlyPrinterDriver::GetClipBox(FX_RECT* pRect) {
-  pRect->left = 0;
-  pRect->right = m_Width;
-  pRect->top = 0;
-  pRect->bottom = m_Height;
-  return true;
+FX_RECT CTextOnlyPrinterDriver::GetClipBox() const {
+  return FX_RECT(0, 0, m_Width, m_Height);
 }
 
 bool CTextOnlyPrinterDriver::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
@@ -117,15 +110,14 @@ bool CTextOnlyPrinterDriver::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
   return false;
 }
 
-bool CTextOnlyPrinterDriver::StartDIBits(
+RenderDeviceDriverIface::StartResult CTextOnlyPrinterDriver::StartDIBits(
     RetainPtr<const CFX_DIBBase> bitmap,
     float alpha,
     uint32_t color,
     const CFX_Matrix& matrix,
     const FXDIB_ResampleOptions& options,
-    std::unique_ptr<CFX_ImageRenderer>* handle,
     BlendMode blend_type) {
-  return false;
+  return {false, nullptr};
 }
 
 bool CTextOnlyPrinterDriver::DrawDeviceText(
@@ -178,7 +170,7 @@ bool CTextOnlyPrinterDriver::DrawDeviceText(
     uint8_t buffer[1026];
     size_t send_len = std::min<size_t>(text_span.size(), 1024);
     *(reinterpret_cast<uint16_t*>(buffer)) = static_cast<uint16_t>(send_len);
-    FXSYS_memcpy(buffer + 2, text_span.data(), send_len);
+    UNSAFE_TODO(FXSYS_memcpy(buffer + 2, text_span.data(), send_len));
     ::GdiComment(m_hDC, static_cast<UINT>(send_len + 2), buffer);
     text_span = text_span.subspan(send_len);
   }

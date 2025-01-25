@@ -301,7 +301,7 @@
 
   --sys-color-primary-bright: var(--ref-palette-primary50);
   --sys-color-blue-bright: var(--ref-palette-blue50);
-  --sys-color-green-bright: var(--ref-palette-green50);
+  --sys-color-green-bright: var(--ref-palette-green60);
   --sys-color-error-bright: var(--ref-palette-error50);
   --sys-color-orange-bright: var(--ref-palette-orange60);
   --sys-color-yellow-bright: var(--ref-palette-yellow60);
@@ -404,6 +404,12 @@
   --app-color-async: var(--ref-palette-error60);
   --app-color-async-children: var(--ref-palette-error70);
   --app-color-other: var(--ref-palette-neutral87);
+  --app-color-doc: var(--ref-palette-blue60);
+  --app-color-css: var(--ref-palette-purple60);
+  --app-color-image: var(--ref-palette-green80);
+  --app-color-media: var(--ref-palette-green60);
+  --app-color-font: var(--ref-palette-cyan60);
+  --app-color-wasm: var(--ref-palette-indigo60);
 
   /**
    * Color for the active breadcrumb in the Performance Panel timeline.
@@ -427,6 +433,24 @@
    * Colors for menus.
    */
   --app-color-menu-background: var(--sys-color-surface);
+
+  /**
+   * Colors for navigation drawers.
+   */
+  --app-color-navigation-drawer-label-selected: var(--sys-color-on-surface);
+  --app-color-navigation-drawer-background-selected: var(--ref-palette-primary95);
+
+  /**
+   * Colors for performance panel metric ratings.
+   */
+  --app-color-performance-bad: var(--color-error-bright);
+  --app-color-performance-ok: var(--color-orange-bright);
+  --app-color-performance-good: var(--sys-color-green-bright);
+
+  /**
+   * Colors for performance panel annotations list in sidebar.
+   */
+  --app-color-performance-sidebar-label: var(--ref-palette-purple80);
 }
 
 :root.baseline-default {
@@ -435,6 +459,18 @@
   --sys-color-surface3: color-mix(in sRGB, #6991d6 11%, var(--ref-palette-neutral100));
   --sys-color-surface2: color-mix(in sRGB, #6991d6 8%, var(--ref-palette-neutral100));
   --sys-color-surface1: color-mix(in sRGB, #6991d6 5%, var(--ref-palette-neutral100));
+
+  /**
+   * Color for navigation drawers.
+   */
+  --app-color-navigation-drawer-label-selected: var(--sys-color-primary);
+
+  &.theme-with-dark-background {
+    /**
+    * Color for navigation drawers.
+    */
+    --app-color-navigation-drawer-label-selected: var(--sys-color-surface);
+  }
 }
 
 :root.baseline-grayscale {
@@ -452,7 +488,7 @@
   --sys-color-surface: var(--ref-palette-neutral100);
   --sys-color-cdt-base-container: var(--ref-palette-neutral100);
 
-  &.-theme-with-dark-background {
+  &.theme-with-dark-background {
     --sys-color-surface5: color-mix(in sRGB, #d1e1ff 14%, var(--ref-palette-neutral10));
     --sys-color-surface4: color-mix(in sRGB, #d1e1ff 12%, var(--ref-palette-neutral10));
     --sys-color-surface3: color-mix(in sRGB, #d1e1ff 11%, var(--ref-palette-neutral10));
@@ -465,7 +501,7 @@
   }
 }
 
-.-theme-with-dark-background {
+.theme-with-dark-background {
   --color-primary-old: rgb(138 180 248);
   --color-primary-variant: rgb(102 157 246);
   --color-background: rgb(32 33 36);
@@ -821,6 +857,12 @@
   --app-color-async: var(--ref-palette-error60);
   --app-color-async-children: var(--ref-palette-error50);
   --app-color-other: var(--ref-palette-neutral60);
+  --app-color-doc: var(--ref-palette-blue60);
+  --app-color-css: var(--ref-palette-purple60);
+  --app-color-image: var(--ref-palette-green80);
+  --app-color-media: var(--ref-palette-green60);
+  --app-color-font: var(--ref-palette-cyan60);
+  --app-color-wasm: var(--ref-palette-indigo60);
 
   /**
    * Color for the active breadcrumb in the Performance Panel timeline.
@@ -844,4 +886,10 @@
    * Colors for menus.
    */
   --app-color-menu-background: var(--sys-color-surface3);
+
+  /**
+   * Colors for navigation drawers.
+   */
+  --app-color-navigation-drawer-label-selected: var(--sys-color-surface);
+  --app-color-navigation-drawer-background-selected: var(--ref-palette-primary70);
 }

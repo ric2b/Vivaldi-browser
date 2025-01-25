@@ -328,9 +328,8 @@ void FakeShillServiceClient::Disconnect(const dbus::ObjectPath& service_path,
       base::BindOnce(&FakeShillServiceClient::SetProperty,
                      weak_ptr_factory_.GetWeakPtr(), service_path,
                      shill::kStateProperty, base::Value(shill::kStateIdle),
-                     base::DoNothing(), std::move(error_callback)),
+                     std::move(callback), std::move(error_callback)),
       GetInteractiveDelay());
-  std::move(callback).Run();
 }
 
 void FakeShillServiceClient::Remove(const dbus::ObjectPath& service_path,
@@ -597,6 +596,16 @@ bool FakeShillServiceClient::SetServiceProperty(const std::string& service_path,
     const std::string* profile_path = dict->FindString(shill::kProfileProperty);
     if (profile_path && !profile_path->empty())
       profile_test->UpdateService(*profile_path, service_path);
+  }
+
+  if (property == shill::kCellularCustomApnListProperty) {
+    const std::string* type = dict->FindString(shill::kTypeProperty);
+    if (type && *type == shill::kTypeCellular && value.GetList().size() > 0) {
+      // Set connected APN to the latest custom APN to simulate the behavior in
+      // Shill.
+      dict->Set(shill::kCellularLastGoodApnProperty,
+                value.GetList().front().Clone());
+    }
   }
 
   // Notify the Manager if the state changed (affects DefaultService).

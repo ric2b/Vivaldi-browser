@@ -12,7 +12,7 @@ import {type Loggable} from './Loggable.js';
 import {getLoggingConfig} from './LoggingConfig.js';
 import {logChange, logClick, logDrag, logHover, logImpressions, logKeyDown, logResize} from './LoggingEvents.js';
 import {getLoggingState, getOrCreateLoggingState, type LoggingState} from './LoggingState.js';
-import {getNonDomState, unregisterAllLoggables, unregisterLoggable} from './NonDomState.js';
+import {getNonDomLoggables, hasNonDomLoggables, unregisterAllLoggables, unregisterLoggables} from './NonDomState.js';
 
 const PROCESS_DOM_INTERVAL = 500;
 const KEYBOARD_LOG_INTERVAL = 3000;
@@ -20,7 +20,7 @@ const HOVER_LOG_INTERVAL = 1000;
 const DRAG_LOG_INTERVAL = 1250;
 const DRAG_REPORT_THRESHOLD = 50;
 const CLICK_LOG_INTERVAL = 500;
-const RESIZE_LOG_INTERVAL = 1000;
+const RESIZE_LOG_INTERVAL = 200;
 const RESIZE_REPORT_THRESHOLD = 50;
 
 const noOpThrottler = {
@@ -39,6 +39,7 @@ const resizeObserver = new ResizeObserver(onResizeOrIntersection);
 const intersectionObserver = new IntersectionObserver(onResizeOrIntersection);
 const documents: Document[] = [];
 const pendingResize = new Map<Element, DOMRect>();
+const pendingChange = new Set<Element>();
 
 function observeMutations(roots: Node[]): void {
   for (const root of roots) {
@@ -94,9 +95,43 @@ export function stopLogging(): void {
   documents.length = 0;
   viewportRects.clear();
   processingThrottler = noOpThrottler;
+  pendingResize.clear();
+  pendingChange.clear();
 }
 
-export function scheduleProcessing(): void {
+export function pendingWorkComplete(): Promise<void> {
+  return Promise
+      .all([
+        processingThrottler,
+        keyboardLogThrottler,
+        hoverLogThrottler,
+        dragLogThrottler,
+        clickLogThrottler,
+        resizeLogThrottler,
+      ].map(async throttler => {
+        for (let i = 0; throttler.process && i < 3; ++i) {
+          await throttler.processCompleted;
+        }
+      }))
+      .then(() => {});
+}
+
+async function yieldToInteractions(): Promise<void> {
+  while (clickLogThrottler.process) {
+    await clickLogThrottler.processCompleted;
+  }
+  while (keyboardLogThrottler.process) {
+    await keyboardLogThrottler.processCompleted;
+  }
+}
+
+function flushPendingChangeEvents(): void {
+  for (const element of pendingChange) {
+    logPendingChange(element);
+  }
+}
+
+export async function scheduleProcessing(): Promise<void> {
   if (!processingThrottler) {
     return;
   }
@@ -121,6 +156,7 @@ async function process(): Promise<void> {
   const {loggables, shadowRoots} = getDomState(documents);
   const visibleLoggables: Loggable[] = [];
   observeMutations(shadowRoots);
+  const nonDomRoots: (Loggable|undefined)[] = [undefined];
 
   for (const {element, parent} of loggables) {
     const loggingState = getOrCreateLoggingState(element, getLoggingConfig(element), parent);
@@ -135,6 +171,9 @@ async function process(): Promise<void> {
         loggingState.impressionLogged = true;
       }
     }
+    if (loggingState.impressionLogged && hasNonDomLoggables(element)) {
+      nonDomRoots.push(element);
+    }
     if (!loggingState.processed) {
       const clickLikeHandler = (doubleClick: boolean) => (e: Event) => {
         const loggable = e.currentTarget as Element;
@@ -142,6 +181,7 @@ async function process(): Promise<void> {
       };
       if (loggingState.config.track?.click) {
         element.addEventListener('click', clickLikeHandler(false), {capture: true});
+        element.addEventListener('auxclick', clickLikeHandler(false), {capture: true});
         element.addEventListener('contextmenu', clickLikeHandler(false), {capture: true});
       }
       if (loggingState.config.track?.dblclick) {
@@ -151,7 +191,8 @@ async function process(): Promise<void> {
       if (trackHover) {
         element.addEventListener('mouseover', logHover(hoverLogThrottler), {capture: true});
         element.addEventListener(
-            'mouseout', () => hoverLogThrottler.schedule(cancelLogging, /* asSoonAsPossible=*/ true), {capture: true});
+            'mouseout', () => hoverLogThrottler.schedule(cancelLogging, Common.Throttler.Scheduling.AsSoonAsPossible),
+            {capture: true});
       }
       const trackDrag = loggingState.config.track?.drag;
       if (trackDrag) {
@@ -165,14 +206,15 @@ async function process(): Promise<void> {
             return;
           }
           if (loggingState.lastInputEventType && loggingState.lastInputEventType !== event.inputType) {
-            void logChange(event);
+            void logPendingChange(element);
           }
           loggingState.lastInputEventType = event.inputType;
+          pendingChange.add(element);
         }, {capture: true});
-        element.addEventListener('change', logChange, {capture: true});
-        element.addEventListener('focusout', event => {
+        element.addEventListener('change', () => logPendingChange(element), {capture: true});
+        element.addEventListener('focusout', () => {
           if (loggingState.lastInputEventType) {
-            void logChange(event);
+            void logPendingChange(element);
           }
         }, {capture: true});
       }
@@ -185,12 +227,13 @@ async function process(): Promise<void> {
         intersectionObserver.observe(element);
       }
       if (element.tagName === 'SELECT') {
-        const onSelectOpen = (): void => {
+        const onSelectOpen = (e: Event): void => {
+          void logClick(clickLogThrottler)(element, e);
           if (loggingState.selectOpen) {
             return;
           }
           loggingState.selectOpen = true;
-          scheduleProcessing();
+          void scheduleProcessing();
         };
         element.addEventListener('click', onSelectOpen, {capture: true});
         // Based on MenuListSelectType::ShouldOpenPopupForKey{Down,Press}Event
@@ -198,13 +241,13 @@ async function process(): Promise<void> {
           const e = event as KeyboardEvent;
           if ((Host.Platform.isMac() || e.altKey) && (e.code === 'ArrowDown' || e.code === 'ArrowUp') ||
               (!e.altKey && !e.ctrlKey && e.code === 'F4')) {
-            onSelectOpen();
+            onSelectOpen(event);
           }
         }, {capture: true});
         element.addEventListener('keypress', event => {
           const e = event as KeyboardEvent;
           if (e.key === ' ' || !Host.Platform.isMac() && e.key === '\r') {
-            onSelectOpen();
+            onSelectOpen(event);
           }
         }, {capture: true});
         element.addEventListener('change', e => {
@@ -219,21 +262,37 @@ async function process(): Promise<void> {
     }
     processForDebugging(element);
   }
-  for (const {loggable, config, parent} of getNonDomState().loggables) {
-    const loggingState = getOrCreateLoggingState(loggable, config, parent);
-    const visible = !parent || loggingState.parent?.impressionLogged;
-    if (!visible) {
-      continue;
+  for (let i = 0; i < nonDomRoots.length; ++i) {
+    const root = nonDomRoots[i];
+    for (const {loggable, config, parent} of getNonDomLoggables(root)) {
+      const loggingState = getOrCreateLoggingState(loggable, config, parent);
+      processForDebugging(loggable);
+      visibleLoggables.push(loggable);
+      loggingState.impressionLogged = true;
+      if (hasNonDomLoggables(loggable)) {
+        nonDomRoots.push(loggable);
+      }
     }
-    processForDebugging(loggable);
-    visibleLoggables.push(loggable);
-    loggingState.impressionLogged = true;
     // No need to track loggable as soon as we've logged the impression
     // We can still log interaction events with a handle to a loggable
-    unregisterLoggable(loggable);
+    unregisterLoggables(root);
   }
-  await logImpressions(visibleLoggables);
+  if (visibleLoggables.length) {
+    await yieldToInteractions();
+    flushPendingChangeEvents();
+    await logImpressions(visibleLoggables);
+  }
   Host.userMetrics.visualLoggingProcessingDone(performance.now() - startTime);
+}
+
+function logPendingChange(element: Element): void {
+  const loggingState = getLoggingState(element);
+  if (!loggingState) {
+    return;
+  }
+  void logChange(element);
+  delete loggingState.lastInputEventType;
+  pendingChange.delete(element);
 }
 
 async function cancelLogging(): Promise<void> {
@@ -258,7 +317,7 @@ function maybeCancelDrag(event: Event): void {
       Math.abs(event.screenY - dragStartY) >= DRAG_REPORT_THRESHOLD) {
     return;
   }
-  void dragLogThrottler.schedule(cancelLogging, /* asSoonAsPossible=*/ true);
+  void dragLogThrottler.schedule(cancelLogging, Common.Throttler.Scheduling.AsSoonAsPossible);
 }
 
 function isAncestorOf(state1: LoggingState|null, state2: LoggingState|null): boolean {
@@ -271,7 +330,7 @@ function isAncestorOf(state1: LoggingState|null, state2: LoggingState|null): boo
   return false;
 }
 
-function onResizeOrIntersection(entries: ResizeObserverEntry[]|IntersectionObserverEntry[]): void {
+async function onResizeOrIntersection(entries: ResizeObserverEntry[]|IntersectionObserverEntry[]): Promise<void> {
   for (const entry of entries) {
     const element = entry.target;
     const loggingState = getLoggingState(element);
@@ -299,6 +358,10 @@ function onResizeOrIntersection(entries: ResizeObserverEntry[]|IntersectionObser
     }
     pendingResize.set(element, overlap);
     void resizeLogThrottler.schedule(async () => {
+      if (pendingResize.size) {
+        await yieldToInteractions();
+        flushPendingChangeEvents();
+      }
       for (const [element, overlap] of pendingResize.entries()) {
         const loggingState = getLoggingState(element);
         if (!loggingState) {
@@ -310,6 +373,6 @@ function onResizeOrIntersection(entries: ResizeObserverEntry[]|IntersectionObser
         }
       }
       pendingResize.clear();
-    });
+    }, Common.Throttler.Scheduling.Delayed);
   }
 }

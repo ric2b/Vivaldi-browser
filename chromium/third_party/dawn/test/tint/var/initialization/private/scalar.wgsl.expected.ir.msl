@@ -1,12 +1,11 @@
-SKIP: FAILED
-
 #include <metal_stdlib>
 using namespace metal;
 
-thread int v = 0;
-kernel void tint_symbol() {
-}
-program_source:4:12: error: program scope variable must reside in constant address space
-thread int v = 0;
-           ^
+struct tint_module_vars_struct {
+  thread int* v;
+};
 
+kernel void tint_symbol() {
+  thread int v = 0;
+  tint_module_vars_struct const tint_module_vars = tint_module_vars_struct{.v=(&v)};
+}

@@ -209,9 +209,9 @@ class V8_EXPORT_PRIVATE WasmFunctionBuilder : public ZoneObject {
   void WriteAsmWasmOffsetTable(ZoneBuffer* buffer) const;
 
   WasmModuleBuilder* builder() const { return builder_; }
-  uint32_t func_index() { return func_index_; }
-  uint32_t sig_index() { return signature_index_; }
-  inline const FunctionSig* signature();
+  uint32_t func_index() const { return func_index_; }
+  uint32_t sig_index() const { return signature_index_; }
+  inline const FunctionSig* signature() const;
 
  private:
   explicit WasmFunctionBuilder(WasmModuleBuilder* builder);
@@ -353,9 +353,12 @@ class V8_EXPORT_PRIVATE WasmModuleBuilder : public ZoneObject {
   uint32_t AddTable(ValueType type, uint32_t min_size, uint32_t max_size);
   uint32_t AddTable(ValueType type, uint32_t min_size, uint32_t max_size,
                     WasmInitExpr init);
-  uint32_t AddMemory(uint32_t min_size);
-  uint32_t AddMemory(uint32_t min_size, uint32_t max_size);
-  uint32_t AddMemory64(uintptr_t min_size, uintptr_t max_size);
+  uint32_t AddTable64(ValueType type, uint32_t min_size, uint32_t max_size);
+  uint32_t AddTable64(ValueType type, uint32_t min_size, uint32_t max_size,
+                      WasmInitExpr init);
+  uint32_t AddMemory(uint32_t min_pages);
+  uint32_t AddMemory(uint32_t min_pages, uint32_t max_pages);
+  uint32_t AddMemory64(uint32_t min_pages, uint32_t max_pages);
   void MarkStartFunction(WasmFunctionBuilder* builder);
   void AddExport(base::Vector<const char> name, ImportExportKindCode kind,
                  uint32_t index);
@@ -479,17 +482,19 @@ class V8_EXPORT_PRIVATE WasmModuleBuilder : public ZoneObject {
   struct WasmTable {
     ValueType type;
     uint32_t min_size;
-    uint32_t max_size;
-    bool has_maximum;
-    base::Optional<WasmInitExpr> init;
+    uint32_t max_size = 0;
+    bool has_maximum = false;
+    bool is_shared = false;
+    bool is_table64 = false;
+    base::Optional<WasmInitExpr> init = {};
   };
 
   struct WasmMemory {
-    uintptr_t min_size;
-    uintptr_t max_size;
-    bool has_max_size;
-    bool is_shared;
-    bool is_memory64;
+    uint32_t min_pages;
+    uint32_t max_pages = 0;
+    bool has_max_pages = false;
+    bool is_shared = false;
+    bool is_memory64 = false;
   };
 
   struct WasmDataSegment {
@@ -522,7 +527,7 @@ class V8_EXPORT_PRIVATE WasmModuleBuilder : public ZoneObject {
 #endif
 };
 
-const FunctionSig* WasmFunctionBuilder::signature() {
+const FunctionSig* WasmFunctionBuilder::signature() const {
   return builder_->types_[signature_index_].function_sig;
 }
 

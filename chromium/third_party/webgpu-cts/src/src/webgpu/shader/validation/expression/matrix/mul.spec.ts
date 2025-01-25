@@ -524,7 +524,7 @@ g.test('overflow_vec_f16')
       }
     }
     lhs += ')';
-    const rhs = `vec${t.params.c}h(${t.params.rhs})`;
+    const rhs = `vec${t.params.c}h(${t.params.rhs}/${t.params.c})`;
 
     const code = `
 enable f16;
@@ -534,7 +534,7 @@ fn main() {
 }
 `;
 
-    t.expectCompileResult(t.params.rhs === 1, code);
+    t.expectCompileResult(t.params.rhs !== kValue.f16.positive.max, code);
   });
 
 g.test('overflow_vec_f16_internal')

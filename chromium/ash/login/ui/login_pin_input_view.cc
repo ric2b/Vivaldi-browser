@@ -33,8 +33,6 @@ namespace {
 constexpr const int kMaxWidthPinInputDp = 280;
 constexpr const int kFieldWidth = 24;
 constexpr const int kFieldSpace = 8;
-// Total height of the view.
-constexpr const int kPinInputTotalHeightDp = 37;
 // Default length
 constexpr const int kPinAutosubmitMinLength = 6;
 constexpr const int kPinAutosubmitMaxLength = 12;
@@ -120,7 +118,7 @@ bool LoginPinInput::HandleMouseEvent(views::Textfield* sender,
 
 bool LoginPinInput::HandleGestureEvent(views::Textfield* sender,
                                        const ui::GestureEvent& gesture_event) {
-  if (gesture_event.details().type() != ui::EventType::ET_GESTURE_TAP) {
+  if (gesture_event.details().type() != ui::EventType::kGestureTap) {
     return false;
   }
 
@@ -131,7 +129,7 @@ bool LoginPinInput::HandleGestureEvent(views::Textfield* sender,
 bool LoginPinInput::HandleKeyEvent(views::Textfield* sender,
                                    const ui::KeyEvent& key_event) {
   // Let the parent view handle the 'Return' key. Triggers SmartLock login.
-  if (key_event.type() == ui::ET_KEY_PRESSED &&
+  if (key_event.type() == ui::EventType::kKeyPressed &&
       key_event.key_code() == ui::VKEY_RETURN) {
     return false;
   }
@@ -194,8 +192,7 @@ void LoginPinInputView::OnImplicitAnimationsCompleted() {
 }
 
 bool LoginPinInputView::IsAutosubmitSupported(int length) {
-  return features::IsPinAutosubmitFeatureEnabled() &&
-         length >= kPinAutosubmitMinLength && length <= kPinAutosubmitMaxLength;
+  return length >= kPinAutosubmitMinLength && length <= kPinAutosubmitMaxLength;
 }
 
 void LoginPinInputView::Init(const OnPinSubmit& on_submit,
@@ -280,8 +277,10 @@ bool LoginPinInputView::IsReadOnly() const {
 gfx::Size LoginPinInputView::CalculatePreferredSize(
     const views::SizeBounds& available_size) const {
   const int ideal_size = kFieldWidth * length_ + kFieldSpace * (length_ - 1);
-  return gfx::Size(std::min(kMaxWidthPinInputDp, ideal_size),
-                   kPinInputTotalHeightDp);
+  const int available_width = std::min(kMaxWidthPinInputDp, ideal_size);
+  return gfx::Size(
+      available_width,
+      GetLayoutManager()->GetPreferredHeightForWidth(this, available_width));
 }
 
 void LoginPinInputView::RequestFocus() {

@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 """Definitions of builders in the tryserver.blink builder group."""
 
-load("//lib/builders.star", "cpu", "os", "reclient")
+load("//lib/builders.star", "cpu", "os", "siso")
 load("//lib/builder_config.star", "builder_config")
 load("//lib/branches.star", "branches")
 load("//lib/try.star", "try_")
@@ -16,10 +16,10 @@ try_.defaults.set(
     pool = try_.DEFAULT_POOL,
     cores = 8,
     execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
-    reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
     siso_enabled = True,
-    siso_remote_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
+    siso_project = siso.project.DEFAULT_UNTRUSTED,
+    siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
 )
 
 consoles.list_view(
@@ -61,9 +61,11 @@ try_.builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "chrome_with_codecs",
             "minimal_symbols",
+            "linux",
+            "x64",
         ],
     ),
     os = os.LINUX_DEFAULT,
@@ -90,10 +92,6 @@ Chrome.\
 
 try_.builder(
     name = "win10-wpt-chromium-rel",
-    description_html = """\
-Runs <a href="https://web-platform-tests.org">web platform tests</a> against
-Chrome.\
-""",
     mirrors = ["ci/win10-wpt-chromium-rel"],
     builder_config_settings = builder_config.try_settings(
         retry_failed_shards = False,
@@ -129,8 +127,9 @@ try_.builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "chrome_with_codecs",
+            "win",
             "x64",
             "minimal_symbols",
         ],
@@ -162,8 +161,9 @@ try_.builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "chrome_with_codecs",
+            "win",
             "arm64",
             "minimal_symbols",
         ],
@@ -195,8 +195,9 @@ try_.builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "chrome_with_codecs",
+            "win",
             "x64",
             "minimal_symbols",
         ],
@@ -227,11 +228,15 @@ blink_mac_builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "chrome_with_codecs",
             "minimal_symbols",
+            "mac",
+            "x64",
         ],
     ),
+    cores = None,
+    cpu = cpu.ARM64,
 )
 
 blink_mac_builder(
@@ -256,9 +261,11 @@ blink_mac_builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "chrome_with_codecs",
             "minimal_symbols",
+            "mac",
+            "x64",
         ],
     ),
     builderless = False,
@@ -287,10 +294,11 @@ blink_mac_builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "chrome_with_codecs",
             "arm64",
             "minimal_symbols",
+            "mac",
         ],
     ),
     cores = None,
@@ -319,9 +327,10 @@ blink_mac_builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "chrome_with_codecs",
             "minimal_symbols",
+            "mac",
             "x64",
         ],
     ),
@@ -350,8 +359,9 @@ blink_mac_builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "chrome_with_codecs",
+            "mac",
             "arm64",
             "minimal_symbols",
         ],
@@ -382,9 +392,10 @@ blink_mac_builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "chrome_with_codecs",
             "minimal_symbols",
+            "mac",
             "x64",
         ],
     ),
@@ -394,10 +405,6 @@ blink_mac_builder(
 
 try_.builder(
     name = "mac13-wpt-chromium-rel",
-    description_html = """\
-Runs <a href="https://web-platform-tests.org">web platform tests</a> against
-Chrome.\
-""",
     mirrors = ["ci/mac13-wpt-chromium-rel"],
     builder_config_settings = builder_config.try_settings(
         retry_failed_shards = False,
@@ -433,8 +440,9 @@ blink_mac_builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "chrome_with_codecs",
+            "mac",
             "arm64",
             "minimal_symbols",
         ],
@@ -465,12 +473,15 @@ blink_mac_builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "chrome_with_codecs",
+            "mac",
             "arm64",
             "minimal_symbols",
         ],
     ),
+    cores = None,
+    cpu = cpu.ARM64,
 )
 
 blink_mac_builder(
@@ -498,9 +509,10 @@ blink_mac_builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "chrome_with_codecs",
             "minimal_symbols",
+            "mac",
             "x64",
         ],
     ),
@@ -533,8 +545,9 @@ blink_mac_builder(
     gn_args = gn_args.config(
         configs = [
             "release_builder",
-            "reclient",
+            "remoteexec",
             "chrome_with_codecs",
+            "mac",
             "arm64",
             "minimal_symbols",
         ],

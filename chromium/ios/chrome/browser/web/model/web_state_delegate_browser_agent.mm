@@ -7,8 +7,9 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/content_settings/core/browser/host_content_settings_map.h"
 #import "components/content_settings/core/common/content_settings.h"
-#import "components/supervised_user/core/browser/supervised_user_preferences.h"
 #import "ios/chrome/browser/content_settings/model/host_content_settings_map_factory.h"
+#import "ios/chrome/browser/context_menu/ui_bundled/context_menu_configuration_provider.h"
+#import "ios/chrome/browser/dialogs/ui_bundled/nsurl_protection_space_util.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_callback_manager.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_modality.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_request.h"
@@ -19,9 +20,8 @@
 #import "ios/chrome/browser/permissions/model/permissions_tab_helper.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
+#import "ios/chrome/browser/supervised_user/model/supervised_user_capabilities.h"
 #import "ios/chrome/browser/tab_insertion/model/tab_insertion_browser_agent.h"
-#import "ios/chrome/browser/ui/context_menu/context_menu_configuration_provider.h"
-#import "ios/chrome/browser/ui/dialogs/nsurl_protection_space_util.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/browser/web/model/blocked_popup_tab_helper.h"
@@ -70,8 +70,8 @@ void OnInsecureFormWarningResponse(base::OnceCallback<void(bool)> callback,
 bool IsMicOrCameraAccessSubjectToParentalControls(
     ChromeBrowserState* browser_state,
     NSArray<NSNumber*>* permissions) {
-  if (!browser_state || !supervised_user::IsSubjectToParentalControls(
-                            *browser_state->GetPrefs())) {
+  if (!browser_state ||
+      !supervised_user::IsSubjectToParentalControls(browser_state)) {
     return false;
   }
 
@@ -313,7 +313,7 @@ void WebStateDelegateBrowserAgent::ShowRepostFormWarningDialog(
     }
 
     case web::FormWarningType::kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 

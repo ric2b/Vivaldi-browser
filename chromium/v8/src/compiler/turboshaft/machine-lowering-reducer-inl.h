@@ -113,6 +113,27 @@ class MachineLoweringReducer : public Next {
 
         return i32;
       }
+      case ChangeOrDeoptOp::Kind::kFloat64ToUint32: {
+        V<Float64> f64_input = V<Float64>::Cast(input);
+        V<Word32> ui32 = __ TruncateFloat64ToUint32OverflowUndefined(f64_input);
+        __ DeoptimizeIfNot(
+            __ Float64Equal(__ ChangeUint32ToFloat64(ui32), f64_input),
+            frame_state, DeoptimizeReason::kLostPrecisionOrNaN, feedback);
+
+        if (minus_zero_mode == CheckForMinusZeroMode::kCheckForMinusZero) {
+          // Check if {value} is -0.
+          IF (UNLIKELY(__ Word32Equal(ui32, 0))) {
+            // In case of 0, we need to check the high bits for the IEEE -0
+            // pattern.
+            V<Word32> check_negative =
+                __ Int32LessThan(__ Float64ExtractHighWord32(f64_input), 0);
+            __ DeoptimizeIf(check_negative, frame_state,
+                            DeoptimizeReason::kMinusZero, feedback);
+          }
+        }
+
+        return ui32;
+      }
       case ChangeOrDeoptOp::Kind::kFloat64ToInt64: {
         V<Float64> f64_input = V<Float64>::Cast(input);
         V<Word64> i64 = __ TruncateFloat64ToInt64OverflowToMin(f64_input);
@@ -357,6 +378,25 @@ class MachineLoweringReducer : public Next {
         V<Map> map = __ LoadMapField(input);
         GOTO(done,
              __ TaggedEqual(map, __ HeapConstant(factory_->heap_number_map())));
+
+        BIND(done, result);
+        return result;
+      }
+      case ObjectIsOp::Kind::kNumberOrBigInt: {
+        Label<Word32> done(this);
+        DCHECK_NE(input_assumptions, ObjectIsOp::InputAssumptions::kBigInt);
+
+        // Check for Smi if necessary.
+        if (NeedsHeapObjectCheck(input_assumptions)) {
+          GOTO_IF(__ IsSmi(input), done, 1);
+        }
+
+        V<Map> map = __ LoadMapField(input);
+        GOTO_IF(
+            __ TaggedEqual(map, __ HeapConstant(factory_->heap_number_map())),
+            done, 1);
+        GOTO(done,
+             __ TaggedEqual(map, __ HeapConstant(factory_->bigint_map())));
 
         BIND(done, result);
         return result;
@@ -865,113 +905,17 @@ class MachineLoweringReducer : public Next {
         DCHECK_EQ(input_rep, RegisterRepresentation::Word32());
         V<Word32> input_w32 = V<Word32>::Cast(input);
 
-        Label<Word32> single_code(this);
-        Label<String> done(this);
-
-        if (input_interpretation ==
-            ConvertUntaggedToJSPrimitiveOp::InputInterpretation::kCharCode) {
-          GOTO(single_code, __ Word32BitwiseAnd(input_w32, 0xFFFF));
-        } else {
-          DCHECK_EQ(
-              input_interpretation,
-              ConvertUntaggedToJSPrimitiveOp::InputInterpretation::kCodePoint);
-          // Check if the input is a single code unit.
-          GOTO_IF(LIKELY(__ Uint32LessThanOrEqual(input_w32, 0xFFFF)),
-                  single_code, input_w32);
-
-          // Generate surrogate pair string.
-
-          // Convert UTF32 to UTF16 code units and store as a 32 bit word.
-          V<Word32> lead_offset = __ Word32Constant(0xD800 - (0x10000 >> 10));
-
-          // lead = (codepoint >> 10) + LEAD_OFFSET
-          V<Word32> lead = __ Word32Add(
-              __ Word32ShiftRightLogical(input_w32, 10), lead_offset);
-
-          // trail = (codepoint & 0x3FF) + 0xDC00
-          V<Word32> trail =
-              __ Word32Add(__ Word32BitwiseAnd(input_w32, 0x3FF), 0xDC00);
-
-          // codepoint = (trail << 16) | lead
-#if V8_TARGET_BIG_ENDIAN
-          V<Word32> code =
-              __ Word32BitwiseOr(__ Word32ShiftLeft(lead, 16), trail);
-#else
-          V<Word32> code =
-              __ Word32BitwiseOr(__ Word32ShiftLeft(trail, 16), lead);
-#endif
-
-          // Allocate a new SeqTwoByteString for {code}.
-          auto string = __ template Allocate<String>(
-              __ IntPtrConstant(SeqTwoByteString::SizeFor(2)),
-              AllocationType::kYoung);
-          // Set padding to 0.
-          __ Initialize(string, __ IntPtrConstant(0),
-                        MemoryRepresentation::TaggedSigned(),
-                        WriteBarrierKind::kNoWriteBarrier,
-                        SeqTwoByteString::SizeFor(2) - kObjectAlignment);
-          __ InitializeField(
-              string, AccessBuilder::ForMap(),
-              __ HeapConstant(factory_->seq_two_byte_string_map()));
-          __ InitializeField(string, AccessBuilder::ForNameRawHashField(),
-                             __ Word32Constant(Name::kEmptyHashField));
-          __ InitializeField(string, AccessBuilder::ForStringLength(),
-                             __ Word32Constant(2));
-          // Write the code as a single 32-bit value by adapting the elements
-          // access to SeqTwoByteString characters.
-          ElementAccess char_access =
-              AccessBuilder::ForSeqTwoByteStringCharacter();
-          char_access.machine_type = MachineType::Uint32();
-          __ InitializeNonArrayBufferElement(string, char_access,
-                                             __ IntPtrConstant(0), code);
-          GOTO(done, __ FinishInitialization(std::move(string)));
-        }
-
-        if (BIND(single_code, code)) {
-          // Check if the {code} is a one byte character.
-          IF (LIKELY(__ Uint32LessThanOrEqual(code,
-                                              String::kMaxOneByteCharCode))) {
-            // Load the isolate wide single character string table.
-            V<Object> table =
-                __ HeapConstant(factory_->single_character_string_table());
-
-            // Compute the {table} index for {code}.
-            V<WordPtr> index = __ ChangeUint32ToUintPtr(code);
-
-            // Load the string for the {code} from the single character string
-            // table.
-            V<String> entry = __ template LoadNonArrayBufferElement<String>(
-                table, AccessBuilder::ForFixedArrayElement(), index);
-
-            // Use the {entry} from the {table}.
-            GOTO(done, entry);
-          } ELSE {
-            // Allocate a new SeqTwoBytesString for {code}.
-            auto string = __ template Allocate<String>(
-                __ IntPtrConstant(SeqTwoByteString::SizeFor(1)),
-                AllocationType::kYoung);
-
-            // Set padding to 0.
-            __ Initialize(string, __ IntPtrConstant(0),
-                          MemoryRepresentation::TaggedSigned(),
-                          WriteBarrierKind::kNoWriteBarrier,
-                          SeqTwoByteString::SizeFor(1) - kObjectAlignment);
-            __ InitializeField(
-                string, AccessBuilder::ForMap(),
-                __ HeapConstant(factory_->seq_two_byte_string_map()));
-            __ InitializeField(string, AccessBuilder::ForNameRawHashField(),
-                               __ Word32Constant(Name::kEmptyHashField));
-            __ InitializeField(string, AccessBuilder::ForStringLength(),
-                               __ Word32Constant(1));
-            __ InitializeNonArrayBufferElement(
-                string, AccessBuilder::ForSeqTwoByteStringCharacter(),
-                __ IntPtrConstant(0), code);
-            GOTO(done, __ FinishInitialization(std::move(string)));
+        switch (input_interpretation) {
+          case ConvertUntaggedToJSPrimitiveOp::InputInterpretation::kCharCode:
+            return StringFromSingleCharCode(
+                __ Word32BitwiseAnd(input_w32, 0xFFFF));
+          case ConvertUntaggedToJSPrimitiveOp::InputInterpretation::
+              kCodePoint: {
+            return StringFromSingleCodePoint(input_w32, UnicodeEncoding::UTF32);
           }
+          default:
+            UNREACHABLE();
         }
-
-        BIND(done, result);
-        return result;
       }
     }
 
@@ -1303,8 +1247,8 @@ class MachineLoweringReducer : public Next {
             builder.AddParam(MachineType::TaggedPointer());
             auto desc = Linkage::GetSimplifiedCDescriptor(__ graph_zone(),
                                                           builder.Build());
-            auto ts_desc =
-                TSCallDescriptor::Create(desc, CanThrow::kNo, __ graph_zone());
+            auto ts_desc = TSCallDescriptor::Create(
+                desc, CanThrow::kNo, LazyDeoptOnThrow::kNo, __ graph_zone());
             OpIndex callee = __ ExternalConstant(
                 ExternalReference::string_to_array_index_function());
             // NOTE: String::ToArrayIndex() currently returns int32_t.
@@ -1520,13 +1464,13 @@ class MachineLoweringReducer : public Next {
 #endif
   }
 
-  V<Object> REDUCE(ConvertJSPrimitiveToObject)(
-      V<JSPrimitive> value, V<Context> native_context,
-      OptionalV<JSGlobalProxy> global_proxy, ConvertReceiverMode mode) {
+  V<Object> REDUCE(ConvertJSPrimitiveToObject)(V<JSPrimitive> value,
+                                               V<Context> native_context,
+                                               V<JSGlobalProxy> global_proxy,
+                                               ConvertReceiverMode mode) {
     switch (mode) {
       case ConvertReceiverMode::kNullOrUndefined:
-        DCHECK(global_proxy.valid());
-        return global_proxy.value();
+        return global_proxy;
       case ConvertReceiverMode::kNotNullOrUndefined:
       case ConvertReceiverMode::kAny: {
         Label<Object> done(this);
@@ -1541,14 +1485,13 @@ class MachineLoweringReducer : public Next {
         // Wrap the primitive {value} into a JSPrimitiveWrapper.
         if (BIND(convert_to_object)) {
           if (mode != ConvertReceiverMode::kNotNullOrUndefined) {
-            DCHECK(global_proxy.valid());
             // Replace the {value} with the {global_proxy}.
             GOTO_IF(UNLIKELY(__ TaggedEqual(
                         value, __ HeapConstant(factory_->undefined_value()))),
-                    done, global_proxy.value());
+                    done, global_proxy);
             GOTO_IF(UNLIKELY(__ TaggedEqual(
                         value, __ HeapConstant(factory_->null_value()))),
-                    done, global_proxy.value());
+                    done, global_proxy);
           }
           GOTO(done, __ CallBuiltin_ToObject(isolate_, native_context, value));
         }
@@ -2245,31 +2188,7 @@ class MachineLoweringReducer : public Next {
       return result;
     } else {
       DCHECK_EQ(kind, StringAtOp::Kind::kCodePoint);
-      Label<Word32> done(this);
-
-      V<Word32> first_code_unit = __ StringCharCodeAt(string, pos);
-      GOTO_IF_NOT(UNLIKELY(__ Word32Equal(
-                      __ Word32BitwiseAnd(first_code_unit, 0xFC00), 0xD800)),
-                  done, first_code_unit);
-      V<WordPtr> length =
-          __ ChangeUint32ToUintPtr(__ template LoadField<Word32>(
-              string, AccessBuilder::ForStringLength()));
-      V<WordPtr> next_index = __ WordPtrAdd(pos, 1);
-      GOTO_IF_NOT(__ IntPtrLessThan(next_index, length), done, first_code_unit);
-
-      V<Word32> second_code_unit = __ StringCharCodeAt(string, next_index);
-      GOTO_IF_NOT(
-          __ Word32Equal(__ Word32BitwiseAnd(second_code_unit, 0xFC00), 0xDC00),
-          done, first_code_unit);
-
-      const int32_t surrogate_offset = 0x10000 - (0xD800 << 10) - 0xDC00;
-      V<Word32> value =
-          __ Word32Add(__ Word32ShiftLeft(first_code_unit, 10),
-                       __ Word32Add(second_code_unit, surrogate_offset));
-      GOTO(done, value);
-
-      BIND(done, result);
-      return result;
+      return LoadSurrogatePairAt(string, {}, pos, UnicodeEncoding::UTF32);
     }
 
     UNREACHABLE();
@@ -2406,9 +2325,22 @@ class MachineLoweringReducer : public Next {
   }
 
   V<Object> REDUCE(LoadStackArgument)(V<WordPtr> base, V<WordPtr> index) {
-    V<WordPtr> argument = __ template LoadNonArrayBufferElement<WordPtr>(
-        base, AccessBuilder::ForStackArgument(), index);
-    return __ BitcastWordPtrToTagged(argument);
+    // Note that this is a load of a Tagged value
+    // (MemoryRepresentation::TaggedPointer()), but since it's on the stack
+    // where stack slots are all kSystemPointerSize, we use kSystemPointerSize
+    // for element_size_log2. On 64-bit plateforms with pointer compression,
+    // this means that we're kinda loading a 32-bit value from an array of
+    // 64-bit values.
+#if V8_COMPRESS_POINTERS && V8_TARGET_BIG_ENDIAN
+    constexpr int offset =
+        CommonFrameConstants::kFixedFrameSizeAboveFp - kSystemPointerSize + 4;
+#else
+    constexpr int offset =
+        CommonFrameConstants::kFixedFrameSizeAboveFp - kSystemPointerSize;
+#endif
+    return __ Load(base, index, LoadOp::Kind::RawAligned(),
+                   MemoryRepresentation::TaggedPointer(), offset,
+                   kSystemPointerSizeLog2);
   }
 
   OpIndex REDUCE(StoreTypedElement)(OpIndex buffer, V<Object> base,
@@ -2949,7 +2881,7 @@ class MachineLoweringReducer : public Next {
     return input;
   }
 
-  OpIndex REDUCE(CheckEqualsInternalizedString)(V<Object> expected,
+  V<None> REDUCE(CheckEqualsInternalizedString)(V<Object> expected,
                                                 V<Object> value,
                                                 V<FrameState> frame_state) {
     Label<> done(this);
@@ -2989,12 +2921,13 @@ class MachineLoweringReducer : public Next {
       OpIndex try_string_to_index_or_lookup_existing = __ ExternalConstant(
           ExternalReference::try_string_to_index_or_lookup_existing());
       OpIndex isolate_ptr =
-          __ ExternalConstant(ExternalReference::isolate_address(isolate_));
+          __ ExternalConstant(ExternalReference::isolate_address());
       V<String> value_internalized = V<String>::Cast(__ Call(
           try_string_to_index_or_lookup_existing, {isolate_ptr, value},
           TSCallDescriptor::Create(Linkage::GetSimplifiedCDescriptor(
                                        __ graph_zone(), builder.Build()),
-                                   CanThrow::kNo, __ graph_zone())));
+                                   CanThrow::kNo, LazyDeoptOnThrow::kNo,
+                                   __ graph_zone())));
 
       // Now see if the results match.
       __ DeoptimizeIfNot(__ TaggedEqual(expected, value_internalized),
@@ -3005,7 +2938,7 @@ class MachineLoweringReducer : public Next {
     GOTO(done);
 
     BIND(done);
-    return OpIndex::Invalid();
+    return V<None>::Invalid();
   }
 
   V<Object> REDUCE(LoadMessage)(V<WordPtr> offset) {
@@ -3013,10 +2946,10 @@ class MachineLoweringReducer : public Next {
         offset, AccessBuilder::ForExternalIntPtr()));
   }
 
-  OpIndex REDUCE(StoreMessage)(V<WordPtr> offset, V<Object> object) {
+  V<None> REDUCE(StoreMessage)(V<WordPtr> offset, V<Object> object) {
     __ StoreField(offset, AccessBuilder::ForExternalIntPtr(),
                   __ BitcastTaggedToWordPtr(object));
-    return OpIndex::Invalid();
+    return V<None>::Invalid();
   }
 
   V<Boolean> REDUCE(SameValue)(OpIndex left, OpIndex right,
@@ -3203,6 +3136,175 @@ class MachineLoweringReducer : public Next {
     }
   }
 
+  // Loads a surrogate pair from {string} starting at {index} and returns the
+  // result encode in {encoding}. Note that UTF32 encoding is identical to the
+  // code point. If the string's {length} is already available, it can be
+  // passed, otherwise it will be loaded when required.
+  V<Word32> LoadSurrogatePairAt(V<String> string, OptionalV<WordPtr> length,
+                                V<WordPtr> index, UnicodeEncoding encoding) {
+    Label<Word32> done(this);
+
+    V<Word32> first_code_unit = __ StringCharCodeAt(string, index);
+    GOTO_IF_NOT(UNLIKELY(__ Word32Equal(
+                    __ Word32BitwiseAnd(first_code_unit, 0xFC00), 0xD800)),
+                done, first_code_unit);
+    if (!length.has_value()) {
+      length = __ ChangeUint32ToUintPtr(__ template LoadField<Word32>(
+          string, AccessBuilder::ForStringLength()));
+    }
+    V<WordPtr> next_index = __ WordPtrAdd(index, 1);
+    GOTO_IF_NOT(__ IntPtrLessThan(next_index, length.value()), done,
+                first_code_unit);
+
+    V<Word32> second_code_unit = __ StringCharCodeAt(string, next_index);
+    GOTO_IF_NOT(
+        __ Word32Equal(__ Word32BitwiseAnd(second_code_unit, 0xFC00), 0xDC00),
+        done, first_code_unit);
+
+    switch (encoding) {
+      case UnicodeEncoding::UTF16: {
+// Need to swap the order for big-endian platforms
+#if V8_TARGET_BIG_ENDIAN
+        V<Word32> value = __ Word32BitwiseOr(
+            __ Word32ShiftLeft(first_code_unit, 16), second_code_unit);
+#else
+        V<Word32> value = __ Word32BitwiseOr(
+            __ Word32ShiftLeft(second_code_unit, 16), first_code_unit);
+#endif
+        GOTO(done, value);
+        break;
+      }
+      case UnicodeEncoding::UTF32: {
+        const int32_t surrogate_offset = 0x10000 - (0xD800 << 10) - 0xDC00;
+        V<Word32> value =
+            __ Word32Add(__ Word32ShiftLeft(first_code_unit, 10),
+                         __ Word32Add(second_code_unit, surrogate_offset));
+        GOTO(done, value);
+        break;
+      }
+    }
+
+    BIND(done, result);
+    return result;
+  }
+
+  V<String> StringFromSingleCharCode(V<Word32> code) {
+    Label<String> done(this);
+
+    // Check if the {code} is a one byte character.
+    IF (LIKELY(__ Uint32LessThanOrEqual(code, String::kMaxOneByteCharCode))) {
+      // Load the isolate wide single character string table.
+      V<FixedArray> table = __ SingleCharacterStringTableConstant();
+
+      // Compute the {table} index for {code}.
+      V<WordPtr> index = __ ChangeUint32ToUintPtr(code);
+
+      // Load the string for the {code} from the single character string
+      // table.
+      V<String> entry = __ LoadElement(
+          table, AccessBuilderTS::ForFixedArrayElement<String>(), index);
+
+      // Use the {entry} from the {table}.
+      GOTO(done, entry);
+    } ELSE {
+      Uninitialized<SeqTwoByteString> string =
+          AllocateSeqTwoByteString(1, AllocationType::kYoung);
+      __ InitializeElement(
+          string, AccessBuilderTS::ForSeqTwoByteStringCharacter(), 0, code);
+      GOTO(done, __ FinishInitialization(std::move(string)));
+    }
+
+    BIND(done, result);
+    return result;
+  }
+
+  V<String> StringFromSingleCodePoint(V<Word32> codepoint,
+                                      UnicodeEncoding encoding) {
+    Label<String> done(this);
+    // Check if the input is a single code unit.
+    GOTO_IF(LIKELY(__ Uint32LessThan(codepoint, 0x10000)), done,
+            StringFromSingleCharCode(codepoint));
+
+    V<Word32> code;
+    switch (encoding) {
+      case UnicodeEncoding::UTF16:
+        code = codepoint;
+        break;
+      case UnicodeEncoding::UTF32: {
+        // Convert UTF32 to UTF16 code units and store as a 32 bit word.
+        V<Word32> lead_offset = __ Word32Constant(0xD800 - (0x10000 >> 10));
+
+        // lead = (codepoint >> 10) + LEAD_OFFSET
+        V<Word32> lead = __ Word32Add(__ Word32ShiftRightLogical(codepoint, 10),
+                                      lead_offset);
+
+        // trail = (codepoint & 0x3FF) + 0xDC00
+        V<Word32> trail =
+            __ Word32Add(__ Word32BitwiseAnd(codepoint, 0x3FF), 0xDC00);
+
+        // codepoint = (trail << 16) | lead
+#if V8_TARGET_BIG_ENDIAN
+        code = __ Word32BitwiseOr(__ Word32ShiftLeft(lead, 16), trail);
+#else
+        code = __ Word32BitwiseOr(__ Word32ShiftLeft(trail, 16), lead);
+#endif
+        break;
+      }
+    }
+
+    Uninitialized<SeqTwoByteString> string =
+        AllocateSeqTwoByteString(2, AllocationType::kYoung);
+    // Write the code as a single 32-bit value by adapting the elements
+    // access to SeqTwoByteString characters.
+    auto access = AccessBuilderTS::ForSeqTwoByteStringCharacter();
+    access.machine_type = MachineType::Uint32();
+    __ InitializeElement(string, access, 0, code);
+    GOTO(done, __ FinishInitialization(std::move(string)));
+
+    BIND(done, result);
+    return result;
+  }
+
+  Uninitialized<SeqTwoByteString> AllocateSeqTwoByteString(
+      uint32_t length, AllocationType type) {
+    __ CodeComment("AllocateSeqTwoByteString");
+    DCHECK_GT(length, 0);
+    // Allocate a new string object.
+    Uninitialized<SeqTwoByteString> string =
+        __ template Allocate<SeqTwoByteString>(
+            SeqTwoByteString::SizeFor(length), type);
+    // Set padding to 0.
+    __ Initialize(string, __ IntPtrConstant(0),
+                  MemoryRepresentation::TaggedSigned(),
+                  WriteBarrierKind::kNoWriteBarrier,
+                  SeqTwoByteString::SizeFor(length) - kObjectAlignment);
+    // Initialize remaining fields.
+    DCHECK(RootsTable::IsImmortalImmovable(RootIndex::kSeqTwoByteStringMap));
+    __ InitializeField(string, AccessBuilderTS::ForMap(),
+                       __ SeqTwoByteStringMapConstant());
+    __ InitializeField(string, AccessBuilderTS::ForStringLength(), length);
+    __ InitializeField(string, AccessBuilderTS::ForNameRawHashField(),
+                       Name::kEmptyHashField);
+    // Do not finish allocation here, because the caller has to initialize
+    // characters.
+    return string;
+  }
+
+#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
+  V<Object> REDUCE(GetContinuationPreservedEmbedderData)() {
+    return __ LoadOffHeap(
+        __ IsolateField(IsolateFieldId::kContinuationPreservedEmbedderData),
+        MemoryRepresentation::UncompressedTaggedPointer());
+  }
+
+  V<None> REDUCE(SetContinuationPreservedEmbedderData)(V<Object> data) {
+    __ StoreOffHeap(
+        __ IsolateField(IsolateFieldId::kContinuationPreservedEmbedderData),
+        data, MemoryRepresentation::UncompressedTaggedPointer());
+    return {};
+  }
+#endif  // V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
+
  private:
   V<Word32> BuildUint32Mod(V<Word32> left, V<Word32> right) {
     Label<Word32> done(this);
@@ -3273,12 +3375,7 @@ class MachineLoweringReducer : public Next {
   }
 
   V<HeapNumber> AllocateHeapNumberWithValue(V<Float64> value) {
-    auto result = __ template Allocate<HeapNumber>(
-        __ IntPtrConstant(sizeof(HeapNumber)), AllocationType::kYoung);
-    __ InitializeField(result, AccessBuilder::ForMap(),
-                       __ HeapConstant(factory_->heap_number_map()));
-    __ InitializeField(result, AccessBuilder::ForHeapNumberValue(), value);
-    return __ FinishInitialization(std::move(result));
+    return __ AllocateHeapNumberWithValue(value, factory_);
   }
 
   V<Float64> ConvertHeapObjectToFloat64OrDeopt(
@@ -3377,8 +3474,8 @@ class MachineLoweringReducer : public Next {
         __ graph_zone(), callable.descriptor(),
         callable.descriptor().GetStackParameterCount(),
         CallDescriptor::kNoFlags, Operator::kFoldable | Operator::kNoThrow);
-    auto ts_descriptor =
-        TSCallDescriptor::Create(descriptor, CanThrow::kNo, __ graph_zone());
+    auto ts_descriptor = TSCallDescriptor::Create(
+        descriptor, CanThrow::kNo, LazyDeoptOnThrow::kNo, __ graph_zone());
     return __ Call(__ HeapConstant(callable.code()), OpIndex::Invalid(),
                    base::VectorOf(args), ts_descriptor);
   }

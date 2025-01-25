@@ -17,6 +17,7 @@
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
+#include "base/version_info/channel.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/signin/public/identity_manager/primary_account_access_token_fetcher.h"
 #include "components/supervised_user/core/browser/fetcher_config.h"
@@ -64,6 +65,8 @@ constexpr FetcherConfig kTestGetConfig{
                                       // this tests since there's no real
                                       // traffic.
     .access_token_config{
+        .credentials_requirement =
+            AccessTokenConfig::CredentialsRequirement::kStrict,
         .mode = signin::PrimaryAccountAccessTokenFetcher::Mode::kImmediate,
         // TODO(b/284523446): Refer to GaiaConstants rather than literal.
         .oauth2_scope =
@@ -81,6 +84,8 @@ constexpr FetcherConfig kTestGetConfigWithoutMetrics{
                                       // this tests since there's no real
                                       // traffic.
     .access_token_config{
+        .credentials_requirement =
+            AccessTokenConfig::CredentialsRequirement::kStrict,
         .mode = signin::PrimaryAccountAccessTokenFetcher::Mode::kImmediate,
         // TODO(b/284523446): Refer to GaiaConstants rather than literal.
         .oauth2_scope =
@@ -99,6 +104,8 @@ constexpr FetcherConfig kTestPostConfig{
                                       // this tests since there's no real
                                       // traffic.
     .access_token_config{
+        .credentials_requirement =
+            AccessTokenConfig::CredentialsRequirement::kStrict,
         .mode = signin::PrimaryAccountAccessTokenFetcher::Mode::kImmediate,
         // TODO(b/284523446): Refer to GaiaConstants rather than literal.
         .oauth2_scope =
@@ -124,6 +131,28 @@ constexpr FetcherConfig kTestRetryConfig{
             .always_use_initial_delay = false,
         },
     .access_token_config{
+        .credentials_requirement =
+            AccessTokenConfig::CredentialsRequirement::kStrict,
+        .mode = signin::PrimaryAccountAccessTokenFetcher::Mode::kImmediate,
+        // TODO(b/284523446): Refer to GaiaConstants rather than literal.
+        .oauth2_scope =
+            "https://www.googleapis.com/auth/kid.permission",  // Real scope
+                                                               // required.
+
+    },
+};
+
+constexpr FetcherConfig kTestGetConfigBestEffortAccessToken{
+    .service_path = "/superviser/user:get",
+    .method = FetcherConfig::Method::kGet,
+    .histogram_basename = "SupervisedUser.Request",
+    .traffic_annotation =
+        annotations::ClassifyUrlTag,  // traffic annotation is meaningless for
+                                      // this tests since there's no real
+                                      // traffic.
+    .access_token_config{
+        .credentials_requirement =
+            AccessTokenConfig::CredentialsRequirement::kBestEffort,
         .mode = signin::PrimaryAccountAccessTokenFetcher::Mode::kImmediate,
         // TODO(b/284523446): Refer to GaiaConstants rather than literal.
         .oauth2_scope =
@@ -318,7 +347,7 @@ TEST_P(ProtoFetcherTest, AcceptsRequests) {
 // Tests a flow where the caller is denied access token. There should be
 // response consumed, that indicated auth error and contains details about the
 // reason for denying access.
-TEST_P(ProtoFetcherTest, NoAccessToken) {
+TEST_P(ProtoFetcherTest, NoAccessTokenStrict) {
   MakePrimaryAccountAvailable();
   std::unique_ptr<Receiver> receiver = MakeReceiver();
   std::unique_ptr<Fetcher> fetcher = MakeFetcher(*receiver.get());
@@ -784,7 +813,7 @@ TEST_P(StatusFetcherTest, StatusFetcherReportsSuccess) {
   StatusFetcher fetcher(
       *identity_test_env_.identity_manager(),
       test_url_loader_factory_.GetSafeWeakWrapper(), /* payload= */ "",
-      GetConfig(), /* args= */ {},
+      GetConfig(), /* args= */ {}, version_info::Channel::UNKNOWN,
       base::BindOnce(
           &StatusFetcherTest_StatusFetcherReportsSuccess_Test::OnStatus,
           base::Unretained(this)));
@@ -806,7 +835,7 @@ TEST_P(StatusFetcherTest, StatusFetcherReportsFailure) {
   StatusFetcher fetcher(
       *identity_test_env_.identity_manager(),
       test_url_loader_factory_.GetSafeWeakWrapper(), /* payload= */ "",
-      GetConfig(), /* args= */ {},
+      GetConfig(), /* args= */ {}, version_info::Channel::UNKNOWN,
       base::BindOnce(
           &StatusFetcherTest_StatusFetcherReportsFailure_Test::OnStatus,
           base::Unretained(this)));
@@ -847,6 +876,49 @@ INSTANTIATE_TEST_SUITE_P(All,
                                          kTestRetryConfig,
                                          kTestGetConfigWithoutMetrics),
                          &PrettyPrintFetcherTestCaseName);
+
+class BestEffortProtoFetcherTest : public ProtoFetcherTestBase,
+                                   public testing::Test {
+ public:
+  BestEffortProtoFetcherTest() : ProtoFetcherTestBase(GetConfig()) {}
+  static const FetcherConfig& GetConfig() {
+    return kTestGetConfigBestEffortAccessToken;
+  }
+};
+
+// Tests a flow where the caller is denied access token.
+//
+// Since the fetcher config specifies best effort as the credentials
+// requirement, the request proceeds.
+TEST_F(BestEffortProtoFetcherTest, NoAccessToken) {
+  MakePrimaryAccountAvailable();
+  std::unique_ptr<Receiver> receiver = MakeReceiver();
+  std::unique_ptr<Fetcher> fetcher = MakeFetcher(*receiver.get());
+
+  base::HistogramTester histogram_tester;
+
+  identity_test_env_.WaitForAccessTokenRequestIfNecessaryAndRespondWithError(
+      GoogleServiceAuthError(
+          GoogleServiceAuthError::State::INVALID_GAIA_CREDENTIALS));
+
+  ASSERT_EQ(test_url_loader_factory_.NumPending(), 1);
+  ASSERT_TRUE(
+      test_url_loader_factory_.GetPendingRequest(0)->request.headers.HasHeader(
+          "X-Goog-Api-Key"));
+
+  SimulateDefaultResponseForPendingRequest(0);
+
+  EXPECT_TRUE(receiver->GetResult().has_value());
+
+  // Check that both the overall Status, and the detailed AuthError metrics
+  // are recorded.
+  histogram_tester.ExpectUniqueSample(
+      base::StrCat({*GetConfig().histogram_basename, ".Status"}),
+      ProtoFetcherStatus::State::OK, 1);
+  histogram_tester.ExpectUniqueSample(
+      base::StrCat({*GetConfig().histogram_basename, ".AuthError"}),
+      GoogleServiceAuthError::State::INVALID_GAIA_CREDENTIALS, 1);
+}
 
 class FetchManagerTest : public testing::Test {
  public:

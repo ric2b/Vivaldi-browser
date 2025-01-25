@@ -46,6 +46,7 @@
 #include "src/tint/lang/core/type/depth_multisampled_texture.h"
 #include "src/tint/lang/core/type/depth_texture.h"
 #include "src/tint/lang/core/type/external_texture.h"
+#include "src/tint/lang/core/type/input_attachment.h"
 #include "src/tint/lang/core/type/memory_view.h"
 #include "src/tint/lang/core/type/multisampled_texture.h"
 #include "src/tint/lang/core/type/pointer.h"
@@ -64,6 +65,7 @@
 #include "src/tint/lang/wgsl/ast/for_loop_statement.h"
 #include "src/tint/lang/wgsl/ast/id_attribute.h"
 #include "src/tint/lang/wgsl/ast/if_statement.h"
+#include "src/tint/lang/wgsl/ast/input_attachment_index_attribute.h"
 #include "src/tint/lang/wgsl/ast/internal_attribute.h"
 #include "src/tint/lang/wgsl/ast/interpolate_attribute.h"
 #include "src/tint/lang/wgsl/ast/loop_statement.h"
@@ -130,7 +132,9 @@ constexpr size_t kMaxNestDepthOfCompositeType = 255;
 
 }  // namespace
 
-Resolver::Resolver(ProgramBuilder* builder, const wgsl::AllowedFeatures& allowed_features)
+Resolver::Resolver(ProgramBuilder* builder,
+                   const wgsl::AllowedFeatures& allowed_features,
+                   wgsl::ValidationMode mode)
     : b(*builder),
       diagnostics_(builder->Diagnostics()),
       const_eval_(builder->constants, diagnostics_),
@@ -140,6 +144,7 @@ Resolver::Resolver(ProgramBuilder* builder, const wgsl::AllowedFeatures& allowed
                  sem_,
                  enabled_extensions_,
                  allowed_features_,
+                 mode,
                  atomic_composite_info_,
                  valid_type_storage_layouts_),
       allowed_features_(allowed_features) {}
@@ -613,7 +618,7 @@ sem::Variable* Resolver::Var(const ast::Var* var, bool is_global) {
         bool has_io_address_space = sem->AddressSpace() == core::AddressSpace::kIn ||
                                     sem->AddressSpace() == core::AddressSpace::kOut;
 
-        std::optional<uint32_t> group, binding;
+        std::optional<uint32_t> group, binding, input_attachment_index;
         for (auto* attribute : var->attributes) {
             Mark(attribute);
             enum Status { kSuccess, kErrored, kInvalid };
@@ -635,6 +640,14 @@ sem::Variable* Resolver::Var(const ast::Var* var, bool is_global) {
                     group = value.Get();
                     return kSuccess;
                 },
+                [&](const ast::InputAttachmentIndexAttribute* attr) {
+                    auto value = InputAttachmentIndexAttribute(attr);
+                    if (value != Success) {
+                        return kErrored;
+                    }
+                    input_attachment_index = value.Get();
+                    return kSuccess;
+                },
                 [&](const ast::LocationAttribute* attr) {
                     if (!has_io_address_space) {
                         return kInvalid;
@@ -654,7 +667,7 @@ sem::Variable* Resolver::Var(const ast::Var* var, bool is_global) {
                     if (value != Success) {
                         return kErrored;
                     }
-                    global->Attributes().index = value.Get();
+                    global->Attributes().blend_src = value.Get();
                     return kSuccess;
                 },
                 [&](const ast::ColorAttribute* attr) {
@@ -668,17 +681,17 @@ sem::Variable* Resolver::Var(const ast::Var* var, bool is_global) {
                     global->Attributes().color = value.Get();
                     return kSuccess;
                 },
-                [&](const ast::BuiltinAttribute* attr) {
+                [&](const ast::BuiltinAttribute*) {
                     if (!has_io_address_space) {
                         return kInvalid;
                     }
-                    return BuiltinAttribute(attr) == Success ? kSuccess : kErrored;
+                    return kSuccess;
                 },
-                [&](const ast::InterpolateAttribute* attr) {
+                [&](const ast::InterpolateAttribute*) {
                     if (!has_io_address_space) {
                         return kInvalid;
                     }
-                    return InterpolateAttribute(attr) == Success ? kSuccess : kErrored;
+                    return kSuccess;
                 },
                 [&](const ast::InvariantAttribute* attr) {
                     if (!has_io_address_space) {
@@ -705,6 +718,10 @@ sem::Variable* Resolver::Var(const ast::Var* var, bool is_global) {
 
         if (group && binding) {
             global->Attributes().binding_point = BindingPoint{group.value(), binding.value()};
+        }
+
+        if (input_attachment_index) {
+            global->Attributes().input_attachment_index = input_attachment_index;
         }
 
     } else {
@@ -762,15 +779,11 @@ sem::Parameter* Resolver::Parameter(const ast::Parameter* param,
                     sem->Attributes().color = value.Get();
                     return true;
                 },
-                [&](const ast::BuiltinAttribute* attr) {
-                    return BuiltinAttribute(attr) == Success;
-                },
+                [&](const ast::BuiltinAttribute*) { return true; },
                 [&](const ast::InvariantAttribute* attr) -> bool {
                     return InvariantAttribute(attr);
                 },
-                [&](const ast::InterpolateAttribute* attr) {
-                    return InterpolateAttribute(attr) == Success;
-                },
+                [&](const ast::InterpolateAttribute*) { return true; },
                 [&](const ast::InternalAttribute* attr) -> bool { return InternalAttribute(attr); },
                 [&](const ast::GroupAttribute* attr) {
                     if (validator_.IsValidationEnabled(
@@ -1095,6 +1108,9 @@ sem::Function* Resolver::Function(const ast::Function* decl) {
                     return kSuccess;
                 },
                 [&](const ast::BlendSrcAttribute* attr) {
+                    if (!permissive) {
+                        return kInvalid;
+                    }
                     auto value = BlendSrcAttribute(attr);
                     if (value != Success) {
                         return kErrored;
@@ -1102,15 +1118,11 @@ sem::Function* Resolver::Function(const ast::Function* decl) {
                     func->SetReturnIndex(value.Get());
                     return kSuccess;
                 },
-                [&](const ast::BuiltinAttribute* attr) {
-                    return BuiltinAttribute(attr) == Success ? kSuccess : kErrored;
-                },
+                [&](const ast::BuiltinAttribute*) { return kSuccess; },
                 [&](const ast::InternalAttribute* attr) {
                     return InternalAttribute(attr) ? kSuccess : kErrored;
                 },
-                [&](const ast::InterpolateAttribute* attr) {
-                    return InterpolateAttribute(attr) == Success ? kSuccess : kErrored;
-                },
+                [&](const ast::InterpolateAttribute*) { return kSuccess; },
                 [&](const ast::InvariantAttribute* attr) {
                     return InvariantAttribute(attr) ? kSuccess : kErrored;
                 },
@@ -1580,7 +1592,7 @@ sem::Expression* Resolver::Expression(const ast::Expression* root) {
                     // Mark entire expression tree to not const-evaluate
                     auto r = ast::TraverseExpressions(  //
                         (*binary)->rhs, [&](const ast::Expression* e) {
-                            skip_const_eval_.Add(e);
+                            not_evaluated_.Add(e);
                             return ast::TraverseAction::Descend;
                         });
                     if (!r) {
@@ -1652,11 +1664,6 @@ sem::BuiltinEnumExpression<core::AddressSpace>* Resolver::AddressSpaceExpression
     return address_space_expr;
 }
 
-sem::BuiltinEnumExpression<core::BuiltinValue>* Resolver::BuiltinValueExpression(
-    const ast::Expression* expr) {
-    return sem_.AsBuiltinValue(Expression(expr));
-}
-
 sem::BuiltinEnumExpression<core::TexelFormat>* Resolver::TexelFormatExpression(
     const ast::Expression* expr) {
     return sem_.AsTexelFormat(Expression(expr));
@@ -1664,16 +1671,6 @@ sem::BuiltinEnumExpression<core::TexelFormat>* Resolver::TexelFormatExpression(
 
 sem::BuiltinEnumExpression<core::Access>* Resolver::AccessExpression(const ast::Expression* expr) {
     return sem_.AsAccess(Expression(expr));
-}
-
-sem::BuiltinEnumExpression<core::InterpolationSampling>* Resolver::InterpolationSampling(
-    const ast::Expression* expr) {
-    return sem_.AsInterpolationSampling(Expression(expr));
-}
-
-sem::BuiltinEnumExpression<core::InterpolationType>* Resolver::InterpolationType(
-    const ast::Expression* expr) {
-    return sem_.AsInterpolationType(Expression(expr));
 }
 
 void Resolver::RegisterStore(const sem::ValueExpression* expr) {
@@ -1864,7 +1861,7 @@ const sem::ValueExpression* Resolver::Load(const sem::ValueExpression* expr) {
         return expr;
     }
 
-    auto* load = b.create<sem::Load>(expr, current_statement_);
+    auto* load = b.create<sem::Load>(expr, current_statement_, expr->Stage());
     load->Behaviors() = expr->Behaviors();
     b.Sem().Replace(expr->Declaration(), load);
 
@@ -1895,7 +1892,7 @@ const sem::ValueExpression* Resolver::Materialize(
     }
 
     const core::constant::Value* materialized_val = nullptr;
-    if (!skip_const_eval_.Contains(decl)) {
+    if (!not_evaluated_.Contains(decl)) {
         auto expr_val = expr->ConstantValue();
         if (TINT_UNLIKELY(!expr_val)) {
             ICE(decl->source) << "Materialize(" << decl->TypeInfo().name
@@ -2032,7 +2029,7 @@ sem::ValueExpression* Resolver::IndexAccessor(const ast::IndexAccessorExpression
 
     const core::constant::Value* val = nullptr;
     auto stage = core::EarliestStage(obj->Stage(), idx->Stage());
-    if (stage == core::EvaluationStage::kConstant && skip_const_eval_.Contains(expr)) {
+    if (not_evaluated_.Contains(expr)) {
         stage = core::EvaluationStage::kNotEvaluated;
     } else {
         if (auto* idx_val = idx->ConstantValue()) {
@@ -2125,7 +2122,7 @@ sem::Call* Resolver::Call(const ast::CallExpression* expr) {
 
         const core::constant::Value* value = nullptr;
         auto stage = core::EarliestStage(overload_stage, args_stage);
-        if (stage == core::EvaluationStage::kConstant && skip_const_eval_.Contains(expr)) {
+        if (not_evaluated_.Contains(expr)) {
             stage = core::EvaluationStage::kNotEvaluated;
         }
         if (stage == core::EvaluationStage::kConstant) {
@@ -2151,7 +2148,7 @@ sem::Call* Resolver::Call(const ast::CallExpression* expr) {
                                const sem::CallTarget* call_target) -> sem::Call* {
         auto stage = args_stage;                       // The evaluation stage of the call
         const core::constant::Value* value = nullptr;  // The constant value for the call
-        if (stage == core::EvaluationStage::kConstant && skip_const_eval_.Contains(expr)) {
+        if (not_evaluated_.Contains(expr)) {
             stage = core::EvaluationStage::kNotEvaluated;
         }
         if (stage == core::EvaluationStage::kConstant) {
@@ -2418,7 +2415,7 @@ sem::Call* Resolver::BuiltinCall(const ast::CallExpression* expr,
     // now.
     const core::constant::Value* value = nullptr;
     auto stage = core::EarliestStage(arg_stage, target->Stage());
-    if (stage == core::EvaluationStage::kConstant && skip_const_eval_.Contains(expr)) {
+    if (not_evaluated_.Contains(expr)) {
         stage = core::EvaluationStage::kNotEvaluated;
     }
     if (stage == core::EvaluationStage::kConstant) {
@@ -2654,6 +2651,8 @@ core::type::Type* Resolver::BuiltinType(core::BuiltinType builtin_ty,
             return StorageTexture(ident, core::type::TextureDimension::k2dArray);
         case core::BuiltinType::kTextureStorage3D:
             return StorageTexture(ident, core::type::TextureDimension::k3d);
+        case core::BuiltinType::kInputAttachment:
+            return InputAttachment(ident);
         case core::BuiltinType::kPackedVec3:
             return PackedVec3T(ident);
         case core::BuiltinType::kAtomicCompareExchangeResultI32:
@@ -2968,6 +2967,21 @@ core::type::StorageTexture* Resolver::StorageTexture(const ast::Identifier* iden
     return tex;
 }
 
+core::type::InputAttachment* Resolver::InputAttachment(const ast::Identifier* ident) {
+    auto* tmpl_ident = TemplatedIdentifier(ident, 1);
+    if (TINT_UNLIKELY(!tmpl_ident)) {
+        return nullptr;
+    }
+
+    auto* ty_expr = sem_.GetType(tmpl_ident->arguments[0]);
+    if (TINT_UNLIKELY(!ty_expr)) {
+        return nullptr;
+    }
+
+    auto* out = b.create<core::type::InputAttachment>(ty_expr);
+    return validator_.InputAttachment(out, ident->source) ? out : nullptr;
+}
+
 core::type::Vector* Resolver::PackedVec3T(const ast::Identifier* ident) {
     auto* tmpl_ident = TemplatedIdentifier(ident, 1);
     if (TINT_UNLIKELY(!tmpl_ident)) {
@@ -3041,6 +3055,12 @@ size_t Resolver::NestDepth(const core::type::Type* ty) const {
 
 void Resolver::CollectTextureSamplerPairs(const sem::BuiltinFn* builtin,
                                           VectorRef<const sem::ValueExpression*> args) const {
+    if (builtin->Fn() == wgsl::BuiltinFn::kInputAttachmentLoad) {
+        // inputAttachmentLoad() is considered a texture function, however it doesn't need sampler,
+        // and its parameter has ParameterUsage::kInputAttachment, so return early.
+        return;
+    }
+
     // Collect a texture/sampler pair for this builtin.
     const auto& signature = builtin->Signature();
     int texture_index = signature.IndexOf(core::ParameterUsage::kTexture);
@@ -3072,10 +3092,12 @@ sem::Call* Resolver::FunctionCall(const ast::CallExpression* expr,
         return nullptr;
     }
 
+    auto stage = not_evaluated_.Contains(expr) ? core::EvaluationStage::kNotEvaluated
+                                               : core::EvaluationStage::kRuntime;
+
     // TODO(crbug.com/tint/1420): For now, assume all function calls have side effects.
     bool has_side_effects = true;
-    auto* call = b.create<sem::Call>(expr, target, core::EvaluationStage::kRuntime, std::move(args),
-                                     current_statement_,
+    auto* call = b.create<sem::Call>(expr, target, stage, std::move(args), current_statement_,
                                      /* constant_value */ nullptr, has_side_effects);
 
     target->AddCallSite(call);
@@ -3199,7 +3221,7 @@ sem::ValueExpression* Resolver::Literal(const ast::LiteralExpression* literal) {
 
     const core::constant::Value* val = nullptr;
     auto stage = core::EvaluationStage::kConstant;
-    if (skip_const_eval_.Contains(literal)) {
+    if (not_evaluated_.Contains(literal)) {
         stage = core::EvaluationStage::kNotEvaluated;
     }
     if (stage == core::EvaluationStage::kConstant) {
@@ -3253,7 +3275,7 @@ sem::Expression* Resolver::Identifier(const ast::IdentifierExpression* expr) {
 
                 auto stage = variable->Stage();
                 const core::constant::Value* value = variable->ConstantValue();
-                if (skip_const_eval_.Contains(expr)) {
+                if (not_evaluated_.Contains(expr)) {
                     // This expression is short-circuited by an ancestor expression.
                     // Do not const-eval.
                     stage = core::EvaluationStage::kNotEvaluated;
@@ -3263,12 +3285,12 @@ sem::Expression* Resolver::Identifier(const ast::IdentifierExpression* expr) {
                     b.create<sem::VariableUser>(expr, stage, current_statement_, value, variable);
 
                 if (current_statement_) {
-                    // If identifier is part of a loop continuing block, make sure it
-                    // doesn't refer to a variable that is bypassed by a continue statement
-                    // in the loop's body block.
-                    if (auto* continuing_block =
-                            current_statement_
-                                ->FindFirstParent<sem::LoopContinuingBlockStatement>()) {
+                    // Check all parent continuing blocks to make sure that this is not a reference
+                    // to a variable that is bypassed by a continue statement in a loop's body
+                    // block.
+                    auto* continuing_block =
+                        current_statement_->FindFirstParent<sem::LoopContinuingBlockStatement>();
+                    while (continuing_block) {
                         auto* loop_block =
                             continuing_block->FindFirstParent<sem::LoopBlockStatement>();
                         if (loop_block->FirstContinue()) {
@@ -3289,6 +3311,9 @@ sem::Expression* Resolver::Identifier(const ast::IdentifierExpression* expr) {
                                 }
                             }
                         }
+                        continuing_block =
+                            continuing_block->Parent()
+                                ->FindFirstParent<sem::LoopContinuingBlockStatement>();
                     }
                 }
 
@@ -3357,29 +3382,6 @@ sem::Expression* Resolver::Identifier(const ast::IdentifierExpression* expr) {
         return CheckNotTemplated("address space", ident)
                    ? b.create<sem::BuiltinEnumExpression<core::AddressSpace>>(
                          expr, current_statement_, addr)
-                   : nullptr;
-    }
-
-    if (auto builtin = resolved->BuiltinValue(); builtin != core::BuiltinValue::kUndefined) {
-        return CheckNotTemplated("builtin value", ident)
-                   ? b.create<sem::BuiltinEnumExpression<core::BuiltinValue>>(
-                         expr, current_statement_, builtin)
-                   : nullptr;
-    }
-
-    if (auto i_smpl = resolved->InterpolationSampling();
-        i_smpl != core::InterpolationSampling::kUndefined) {
-        return CheckNotTemplated("interpolation sampling", ident)
-                   ? b.create<sem::BuiltinEnumExpression<core::InterpolationSampling>>(
-                         expr, current_statement_, i_smpl)
-                   : nullptr;
-    }
-
-    if (auto i_type = resolved->InterpolationType();
-        i_type != core::InterpolationType::kUndefined) {
-        return CheckNotTemplated("interpolation type", ident)
-                   ? b.create<sem::BuiltinEnumExpression<core::InterpolationType>>(
-                         expr, current_statement_, i_type)
                    : nullptr;
     }
 
@@ -3592,8 +3594,12 @@ sem::ValueExpression* Resolver::Binary(const ast::BinaryExpression* expr) {
         }
     }
 
+    if (!validator_.BinaryExpression(expr, rhs, lhs_ty)) {
+        return nullptr;
+    }
+
     const core::constant::Value* value = nullptr;
-    if (skip_const_eval_.Contains(expr)) {
+    if (not_evaluated_.Contains(expr)) {
         // This expression is short-circuited by an ancestor expression.
         // Do not const-eval.
         stage = core::EvaluationStage::kNotEvaluated;
@@ -3795,8 +3801,8 @@ tint::Result<uint32_t> Resolver::BlendSrcAttribute(const ast::BlendSrcAttribute*
     }
 
     if (!materialized->Type()->IsAnyOf<core::type::I32, core::type::U32>()) {
-        AddError(attr->source) << style::Attribute("@blend_src") << style::Type("i32") << " or "
-                               << style::Type("u32") << " value";
+        AddError(attr->source) << style::Attribute("@blend_src") << " value must be "
+                               << style::Type("i32") << " or " << style::Type("u32");
         return Failure{};
     }
 
@@ -3851,6 +3857,31 @@ tint::Result<uint32_t> Resolver::GroupAttribute(const ast::GroupAttribute* attr)
     auto value = const_value->ValueAs<AInt>();
     if (value < 0) {
         AddError(attr->source) << style::Attribute("@group") << " value must be non-negative";
+        return Failure{};
+    }
+    return static_cast<uint32_t>(value);
+}
+
+tint::Result<uint32_t> Resolver::InputAttachmentIndexAttribute(
+    const ast::InputAttachmentIndexAttribute* attr) {
+    ExprEvalStageConstraint constraint{core::EvaluationStage::kConstant, "@input_attachment_index"};
+    TINT_SCOPED_ASSIGNMENT(expr_eval_stage_constraint_, constraint);
+
+    auto* materialized = Materialize(ValueExpression(attr->expr));
+    if (!materialized) {
+        return Failure{};
+    }
+    if (!materialized->Type()->IsAnyOf<core::type::I32, core::type::U32>()) {
+        AddError(attr->source) << style::Attribute("@input_attachment_index") << " must be an "
+                               << style::Type("i32") << " or " << style::Type("u32") << " value";
+        return Failure{};
+    }
+
+    auto const_value = materialized->ConstantValue();
+    auto value = const_value->ValueAs<AInt>();
+    if (value < 0) {
+        AddError(attr->source) << style::Attribute("@input_attachment_index")
+                               << " value must be non-negative";
         return Failure{};
     }
     return static_cast<uint32_t>(value);
@@ -3943,18 +3974,6 @@ tint::Result<sem::WorkgroupSize> Resolver::WorkgroupAttribute(const ast::Workgro
     return ws;
 }
 
-tint::Result<tint::core::BuiltinValue> Resolver::BuiltinAttribute(
-    const ast::BuiltinAttribute* attr) {
-    auto* builtin_expr = BuiltinValueExpression(attr->builtin);
-    if (!builtin_expr) {
-        return Failure{};
-    }
-    // Apply the resolved tint::sem::BuiltinEnumExpression<tint::core::BuiltinValue> to the
-    // attribute.
-    b.Sem().Add(attr, builtin_expr);
-    return builtin_expr->Value();
-}
-
 bool Resolver::DiagnosticAttribute(const ast::DiagnosticAttribute* attr) {
     return DiagnosticControl(attr->control);
 }
@@ -3973,24 +3992,6 @@ bool Resolver::InvariantAttribute(const ast::InvariantAttribute*) {
 
 bool Resolver::StrideAttribute(const ast::StrideAttribute*) {
     return true;
-}
-
-tint::Result<core::Interpolation> Resolver::InterpolateAttribute(
-    const ast::InterpolateAttribute* attr) {
-    core::Interpolation out;
-    auto* type = InterpolationType(attr->type);
-    if (!type) {
-        return Failure{};
-    }
-    out.type = type->Value();
-    if (attr->sampling) {
-        auto* sampling = InterpolationSampling(attr->sampling);
-        if (!sampling) {
-            return Failure{};
-        }
-        out.sampling = sampling->Value();
-    }
-    return out;
 }
 
 bool Resolver::InternalAttribute(const ast::InternalAttribute* attr) {
@@ -4310,7 +4311,7 @@ sem::Struct* Resolver::Structure(const ast::Struct* str) {
         bool has_offset_attr = false;
         bool has_align_attr = false;
         bool has_size_attr = false;
-        core::type::StructMemberAttributes attributes;
+        core::IOAttributes attributes;
         for (auto* attribute : member->attributes) {
             Mark(attribute);
             bool ok = Switch(
@@ -4438,19 +4439,11 @@ sem::Struct* Resolver::Structure(const ast::Struct* str) {
                     return true;
                 },
                 [&](const ast::BuiltinAttribute* attr) {
-                    auto value = BuiltinAttribute(attr);
-                    if (value != Success) {
-                        return false;
-                    }
-                    attributes.builtin = value.Get();
+                    attributes.builtin = attr->builtin;
                     return true;
                 },
                 [&](const ast::InterpolateAttribute* attr) {
-                    auto value = InterpolateAttribute(attr);
-                    if (value != Success) {
-                        return false;
-                    }
-                    attributes.interpolation = value.Get();
+                    attributes.interpolation = attr->interpolation;
                     return true;
                 },
                 [&](const ast::InvariantAttribute* attr) {

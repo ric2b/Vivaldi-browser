@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "sandbox/win/src/top_level_dispatcher.h"
 
 #include <stdint.h>
@@ -103,7 +108,7 @@ Dispatcher* TopLevelDispatcher::OnMessageReady(IPCParams* ipc,
 
   Dispatcher* dispatcher = GetDispatcher(ipc->ipc_tag);
   if (!dispatcher) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
   return dispatcher->OnMessageReady(ipc, callback);
@@ -117,7 +122,7 @@ bool TopLevelDispatcher::SetupService(InterceptionManager* manager,
 
   Dispatcher* dispatcher = GetDispatcher(service);
   if (!dispatcher) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return false;
   }
   return dispatcher->SetupService(manager, service);

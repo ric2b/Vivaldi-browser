@@ -8,6 +8,7 @@
 #include "ash/ash_element_identifiers.h"
 #include "ash/picker/picker_controller.h"
 #include "ash/picker/views/picker_emoji_item_view.h"
+#include "ash/picker/views/picker_feature_tour.h"
 #include "ash/picker/views/picker_list_item_view.h"
 #include "ash/shell.h"
 #include "base/strings/string_util.h"
@@ -15,7 +16,7 @@
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/browser/ash/accessibility/speech_monitor.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/test/base/chromeos/crosier/interactive_ash_test.h"
+#include "chrome/test/base/ash/interactive/interactive_ash_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/browsertest_util.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -122,6 +123,7 @@ class PickerInteractiveUiTest : public InteractiveAshTest {
 
   PickerInteractiveUiTest() {
     ash::PickerController::DisableFeatureKeyCheckForTesting();
+    ash::PickerFeatureTour::DisableFeatureTourForTesting();
   }
 
   void SetUpOnMainThread() override {
@@ -178,10 +180,10 @@ IN_PROC_BROWSER_TEST_F(PickerInteractiveUiTest, SearchAndInsertEmoji) {
       ObserveState(kSearchFieldFocusedState, std::ref(picker_search_field)),
       WaitForState(kSearchFieldFocusedState, true),
       EnterText(ash::kPickerSearchFieldTextfieldElementId, u"thumbs up"),
-      WaitForShow(ash::kPickerSearchResultsEmojiItemElementId),
-      WaitForShow(ash::kPickerSearchResultsPageElementId),
+      WaitForShow(ash::kPickerEmojiItemElementId,
+                  /*transition_only_on_event=*/true),
       NameDescendantView(
-          ash::kPickerSearchResultsPageElementId, kFirstEmojiResultName,
+          ash::kPickerEmojiBarElementId, kFirstEmojiResultName,
           base::BindLambdaForTesting(
               [kExpectedFirstEmoji](const views::View* view) {
                 if (const auto* emoji_item_view =
@@ -227,8 +229,8 @@ IN_PROC_BROWSER_TEST_F(PickerInteractiveUiTest, SearchAndInsertDate) {
       ObserveState(kSearchFieldFocusedState, std::ref(picker_search_field)),
       WaitForState(kSearchFieldFocusedState, true),
       EnterText(ash::kPickerSearchFieldTextfieldElementId, u"today"),
-      WaitForShow(ash::kPickerSearchResultsListItemElementId),
       WaitForShow(ash::kPickerSearchResultsPageElementId),
+      WaitForShow(ash::kPickerSearchResultsListItemElementId),
       NameDescendantView(
           ash::kPickerSearchResultsPageElementId, kDateResultName,
           base::BindLambdaForTesting([kExpectedDate](const views::View* view) {
@@ -245,14 +247,7 @@ IN_PROC_BROWSER_TEST_F(PickerInteractiveUiTest, SearchAndInsertDate) {
 
 // Searches for '1 + 1', checks the top result is '2', and inserts it
 // into a web input field.
-// TODO: crbug.com/40240570 - Re-enable once MSan stops failing on Rust-side
-// allocations.
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_SearchAndInsertMath DISABLED_SearchAndInsertMath
-#else
-#define MAYBE_SearchAndInsertMath SearchAndInsertMath
-#endif
-IN_PROC_BROWSER_TEST_F(PickerInteractiveUiTest, MAYBE_SearchAndInsertMath) {
+IN_PROC_BROWSER_TEST_F(PickerInteractiveUiTest, SearchAndInsertMath) {
   ASSERT_TRUE(CreateBrowserWindow(
       GURL("data:text/html,<input type=\"text\" autofocus/>")));
   const ui::ElementContext browser_context =
@@ -272,8 +267,8 @@ IN_PROC_BROWSER_TEST_F(PickerInteractiveUiTest, MAYBE_SearchAndInsertMath) {
       ObserveState(kSearchFieldFocusedState, std::ref(picker_search_field)),
       WaitForState(kSearchFieldFocusedState, true),
       EnterText(ash::kPickerSearchFieldTextfieldElementId, u"1 + 1"),
-      WaitForShow(ash::kPickerSearchResultsListItemElementId),
       WaitForShow(ash::kPickerSearchResultsPageElementId),
+      WaitForShow(ash::kPickerSearchResultsListItemElementId),
       NameDescendantView(
           ash::kPickerSearchResultsPageElementId, kMathResultName,
           base::BindLambdaForTesting(
@@ -355,8 +350,6 @@ IN_PROC_BROWSER_TEST_F(PickerSpokenFeedbackInteractiveUiTest,
       ObserveState(kSearchFieldFocusedState, std::ref(picker_search_field)),
       WaitForState(kSearchFieldFocusedState, true));
 
-  // TODO(b/309706053): Replace this once the strings are finalized.
-  sm_.ExpectSpeechPattern("placeholder");
   sm_.ExpectSpeechPattern("Edit text");
   sm_.ExpectSpeechPattern("window");
   sm_.Replay();
@@ -401,17 +394,8 @@ IN_PROC_BROWSER_TEST_F(PickerSpokenFeedbackInteractiveUiTest,
       }));
 }
 
-// TODO(b/328144222): Re-enable this test. Causes build failures with MSAN
-// enabled on CrOS.
-#if BUILDFLAG(IS_CHROMEOS) && defined(MEMORY_SANITIZER)
-#define MAYBE_AnnouncesKeyboardNavigationOnResultsPage \
-  DISABLED_AnnouncesKeyboardNavigationOnResultsPage
-#else
-#define MAYBE_AnnouncesKeyboardNavigationOnResultsPage \
-  AnnouncesKeyboardNavigationOnResultsPage
-#endif
 IN_PROC_BROWSER_TEST_F(PickerSpokenFeedbackInteractiveUiTest,
-                       MAYBE_AnnouncesKeyboardNavigationOnResultsPage) {
+                       AnnouncesKeyboardNavigationOnResultsPage) {
   ASSERT_TRUE(CreateBrowserWindow(
       GURL("data:text/html,<input type=\"text\" autofocus/>")));
   const ui::ElementContext browser_context =
@@ -430,8 +414,9 @@ IN_PROC_BROWSER_TEST_F(PickerSpokenFeedbackInteractiveUiTest,
       WaitForState(kSearchFieldFocusedState, true),
       // Enter a query that is guaranteed to have some results.
       EnterText(ash::kPickerSearchFieldTextfieldElementId, u"a"),
+      WaitForShow(ash::kPickerSearchResultsPageElementId),
       WaitForShow(ash::kPickerSearchResultsListItemElementId),
-      WaitForShow(ash::kPickerSearchResultsPageElementId), Do([&sm = sm_]() {
+      Do([&sm = sm_]() {
         SendKeyPress(ui::VKEY_DOWN);
         sm.ExpectSpeechPattern("*");
         // TODO: b/338142316 - Use correct role for result items.
@@ -445,5 +430,7 @@ IN_PROC_BROWSER_TEST_F(PickerSpokenFeedbackInteractiveUiTest,
         sm.Replay();
       }));
 }
+
+// TODO: b/330786933: Add interactive UI test for file previews.
 
 }  // namespace

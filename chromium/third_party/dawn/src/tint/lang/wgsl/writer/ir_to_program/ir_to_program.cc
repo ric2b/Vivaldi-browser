@@ -72,6 +72,7 @@
 #include "src/tint/lang/core/type/atomic.h"
 #include "src/tint/lang/core/type/depth_multisampled_texture.h"
 #include "src/tint/lang/core/type/depth_texture.h"
+#include "src/tint/lang/core/type/input_attachment.h"
 #include "src/tint/lang/core/type/multisampled_texture.h"
 #include "src/tint/lang/core/type/pointer.h"
 #include "src/tint/lang/core/type/reference.h"
@@ -115,6 +116,13 @@ class State {
             b.Diagnostics() = res.Failure().reason;
             return Program{resolver::Resolve(b)};
         }
+
+        // Clone all symbols before we start.
+        // This ensures that we preserve the names of named values and prevents unnamed values
+        // receiving names that would conflict with named values that are emitted later than them.
+        mod.symbols.Foreach([&](Symbol s) {  //
+            b.Symbols().New(s.Name());
+        });
 
         RootBlock(mod.root_block);
 
@@ -252,10 +260,14 @@ class State {
                 }
             }
             if (auto loc = param->Location()) {
-                attrs.Push(b.Location(AInt(loc->value)));
-                if (auto interp = loc->interpolation) {
-                    attrs.Push(b.Interpolate(interp->type, interp->sampling));
-                }
+                attrs.Push(b.Location(u32(loc.value())));
+            }
+            if (auto color = param->Color()) {
+                Enable(wgsl::Extension::kChromiumExperimentalFramebufferFetch);
+                attrs.Push(b.Color(u32(color.value())));
+            }
+            if (auto interp = param->Interpolation()) {
+                attrs.Push(b.Interpolate(interp->type, interp->sampling));
             }
             if (param->Invariant()) {
                 attrs.Push(b.Invariant());
@@ -277,7 +289,7 @@ class State {
             case core::ir::Function::PipelineStage::kCompute: {
                 auto wgsize = fn->WorkgroupSize().value();
                 attrs.Push(b.Stage(ast::PipelineStage::kCompute));
-                attrs.Push(b.WorkgroupSize(AInt(wgsize[0]), AInt(wgsize[1]), AInt(wgsize[2])));
+                attrs.Push(b.WorkgroupSize(u32(wgsize[0]), u32(wgsize[1]), u32(wgsize[2])));
                 break;
             }
             case core::ir::Function::PipelineStage::kFragment:
@@ -305,10 +317,10 @@ class State {
             }
         }
         if (auto loc = fn->ReturnLocation()) {
-            ret_attrs.Push(b.Location(AInt(loc->value)));
-            if (auto interp = loc->interpolation) {
-                ret_attrs.Push(b.Interpolate(interp->type, interp->sampling));
-            }
+            ret_attrs.Push(b.Location(u32(loc.value())));
+        }
+        if (auto interp = fn->ReturnInterpolation()) {
+            ret_attrs.Push(b.Interpolate(interp->type, interp->sampling));
         }
         if (fn->ReturnInvariant()) {
             ret_attrs.Push(b.Invariant());
@@ -420,7 +432,7 @@ class State {
         {
             TINT_SCOPED_ASSIGNMENT(statements_, &body_stmts);
             for (auto* inst : *l->Body()) {
-                if (body_stmts.IsEmpty()) {
+                if (body_stmts.IsEmpty() && !cond) {
                     if (auto* if_ = inst->As<core::ir::If>()) {
                         if (if_->Results().IsEmpty() &&                          //
                             if_->True()->Length() == 1 &&                        //
@@ -557,8 +569,12 @@ class State {
 
         Vector<const ast::Attribute*, 4> attrs;
         if (auto bp = var->BindingPoint()) {
-            attrs.Push(b.Group(AInt(bp->group)));
-            attrs.Push(b.Binding(AInt(bp->binding)));
+            attrs.Push(b.Group(u32(bp->group)));
+            attrs.Push(b.Binding(u32(bp->binding)));
+        }
+
+        if (auto ii = var->InputAttachmentIndex()) {
+            attrs.Push(b.InputAttachmentIndex(u32(ii.value())));
         }
 
         const ast::Expression* init = nullptr;
@@ -675,14 +691,15 @@ class State {
             case core::UnaryOp::kNegation:
                 expr = b.Negation(Expr(u->Val()));
                 break;
+            case core::UnaryOp::kNot:
+                expr = b.Not(Expr(u->Val()));
+                break;
             case core::UnaryOp::kAddressOf:
                 expr = b.AddressOf(Expr(u->Val()));
                 break;
             case core::UnaryOp::kIndirection:
                 expr = b.Deref(Expr(u->Val()));
                 break;
-            default:
-                TINT_UNIMPLEMENTED() << u->Op();
         }
         Bind(u->Result(0), expr);
     }
@@ -984,11 +1001,22 @@ class State {
             },
             [&](const core::type::Reference*) -> ast::Type {
                 TINT_ICE() << "reference types should never appear in the IR";
+            },
+            [&](const core::type::InputAttachment* i) {
+                Enable(wgsl::Extension::kChromiumInternalInputAttachments);
+                auto el = Type(i->type());
+                return b.ty.input_attachment(el);
             },  //
             TINT_ICE_ON_NO_MATCH);
     }
 
     ast::Type Struct(const core::type::Struct* s) {
+        // Skip builtin structures.
+        // TODO(350778507): Consider using a struct flag for builtin structures instead.
+        if (tint::HasPrefix(s->Name().NameView(), "__")) {
+            return ast::Type{};
+        }
+
         auto n = structs_.GetOrAdd(s, [&] {
             auto members = tint::Transform<8>(s->Members(), [&](const core::type::StructMember* m) {
                 auto ty = Type(m->Type());
@@ -1004,8 +1032,12 @@ class State {
                     ast_attrs.Push(b.Location(u32(*location)));
                 }
                 if (auto blend_src = ir_attrs.blend_src) {
-                    Enable(wgsl::Extension::kChromiumInternalDualSourceBlending);
+                    Enable(wgsl::Extension::kDualSourceBlending);
                     ast_attrs.Push(b.BlendSrc(u32(*blend_src)));
+                }
+                if (auto color = ir_attrs.color) {
+                    Enable(wgsl::Extension::kChromiumExperimentalFramebufferFetch);
+                    ast_attrs.Push(b.Color(u32(*color)));
                 }
                 if (auto builtin = ir_attrs.builtin) {
                     if (RequiresSubgroups(*builtin)) {
@@ -1069,9 +1101,7 @@ class State {
     /// name.
     void Bind(const core::ir::Value* value, Symbol name) {
         TINT_ASSERT(value);
-
-        bool added = bindings_.Add(value, VariableValue{name});
-        if (TINT_UNLIKELY(!added)) {
+        if (TINT_UNLIKELY(!bindings_.Add(value, VariableValue{name}))) {
             TINT_ICE() << "Bind(" << value->TypeInfo().name << ") called twice for same value";
         }
     }

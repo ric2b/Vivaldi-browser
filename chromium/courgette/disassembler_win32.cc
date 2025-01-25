@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "courgette/disassembler_win32.h"
 
 #include <algorithm>
@@ -31,7 +36,7 @@ RVA DisassemblerWin32::FileOffsetToRVA(FileOffset file_offset) const {
     }
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return kNoRVA;
 }
 
@@ -55,7 +60,7 @@ FileOffset DisassemblerWin32::RVAToFileOffset(RVA rva) const {
   if (rva == 0 || rva == 2)
     return static_cast<FileOffset>(rva);
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return kNoFileOffset;
 }
 
@@ -161,7 +166,7 @@ bool DisassemblerWin32::ParseHeader() {
       break;
 
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   if (size_of_image_ >= 0x80000000U)

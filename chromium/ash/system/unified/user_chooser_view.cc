@@ -34,6 +34,7 @@
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/color/color_id.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
@@ -68,7 +69,7 @@ AddUserButton::AddUserButton(UserChooserDetailedViewController* controller)
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal,
       gfx::Insets(kUnifiedTopShortcutSpacing), kUnifiedTopShortcutSpacing));
-  SetAccessibleName(
+  GetViewAccessibility().SetName(
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SIGN_IN_ANOTHER_ACCOUNT));
   SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
 
@@ -285,6 +286,11 @@ UserItemButton::UserItemButton(PressedCallback callback,
 
   SetTooltipText(GetUserItemAccessibleString(user_index));
   SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
+
+  // The button for the currently active user is not clickable.
+  GetViewAccessibility().SetRole(user_index_ == 0 ? ax::mojom::Role::kLabelText
+                                                  : ax::mojom::Role::kButton);
+  GetViewAccessibility().SetName(GetUserItemAccessibleString(user_index_));
 }
 
 void UserItemButton::SetCaptureState(MediaCaptureState capture_state) {
@@ -319,13 +325,6 @@ std::u16string UserItemButton::GetTooltipText(const gfx::Point& p) const {
     return std::u16string();
   }
   return views::Button::GetTooltipText(p);
-}
-
-void UserItemButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  // The button for the currently active user is not clickable.
-  node_data->role =
-      user_index_ == 0 ? ax::mojom::Role::kLabelText : ax::mojom::Role::kButton;
-  node_data->SetName(GetUserItemAccessibleString(user_index_));
 }
 
 BEGIN_METADATA(UserItemButton)

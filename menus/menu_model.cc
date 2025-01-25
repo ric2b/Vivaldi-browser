@@ -194,20 +194,20 @@ bool Menu_Model::Move(const Menu_Node* node,
                       size_t index) {
   if (!loaded_ || !node || !IsValidIndex(new_parent, index)) {
     NOTREACHED();
-    return false;
+    //return false;
   }
 
   DCHECK(!new_parent->HasAncestor(node));
   if (new_parent->HasAncestor(node)) {
     // Can't make an ancestor of the node be a child of the node.
     NOTREACHED();
-    return false;
+    //return false;
   }
 
   const Menu_Node* menu = new_parent->GetMenu();
   if (!menu) {
     NOTREACHED();
-    return false;
+    //return false;
   }
 
   const Menu_Node* old_parent = node->parent();
@@ -243,13 +243,13 @@ Menu_Node* Menu_Model::Add(std::unique_ptr<Menu_Node> node,
   if (parent->id() == Menu_Node::mainmenu_node_id()) {
     if (!node->is_menu()) {
       NOTREACHED();
-      return nullptr;
+      //return nullptr;
     }
     // Sanity check to prevent duplicate menus.
     for (const auto& menu_node : parent->children()) {
       if (menu_node->action() == node->action()) {
         NOTREACHED();
-        return nullptr;
+        //return nullptr;
       }
     }
     action = node->action();
@@ -258,7 +258,7 @@ Menu_Node* Menu_Model::Add(std::unique_ptr<Menu_Node> node,
     const Menu_Node* menu = parent->GetMenu();
     if (!menu) {
       NOTREACHED();
-      return nullptr;
+      //return nullptr;
     }
     action = menu->action();
   }
@@ -282,7 +282,7 @@ bool Menu_Model::SetTitle(Menu_Node* node, const std::u16string& title) {
   const Menu_Node* menu = node->GetMenu();
   if (!menu) {
     NOTREACHED();
-    return false;
+    //return false;
   }
 
   RemoveBundleTag(node, false);
@@ -306,7 +306,7 @@ bool Menu_Model::SetParameter(Menu_Node* node, const std::string& parameter) {
   const Menu_Node* menu = node->GetMenu();
   if (!menu) {
     NOTREACHED();
-    return false;
+    //return false;
   }
 
   RemoveBundleTag(node, false);
@@ -325,7 +325,7 @@ bool Menu_Model::SetShowShortcut(Menu_Node* node, bool show_shortcut) {
   const Menu_Node* menu = node->GetMenu();
   if (!menu) {
     NOTREACHED();
-    return false;
+    //return false;
   }
 
   if (node->showShortcut().has_value() &&
@@ -348,7 +348,7 @@ bool Menu_Model::SetShowShortcut(Menu_Node* node, bool show_shortcut) {
 bool Menu_Model::SetContainerMode(Menu_Node* node, const std::string& mode) {
   if (!node->is_container()) {
     NOTREACHED();
-    return false;
+    //return false;
   }
 
   if (node->containerMode() == mode) {
@@ -358,7 +358,7 @@ bool Menu_Model::SetContainerMode(Menu_Node* node, const std::string& mode) {
   const Menu_Node* menu = node->GetMenu();
   if (!menu) {
     NOTREACHED();
-    return false;
+    //return false;
   }
 
   RemoveBundleTag(node, false);
@@ -376,7 +376,7 @@ bool Menu_Model::SetContainerMode(Menu_Node* node, const std::string& mode) {
 bool Menu_Model::SetContainerEdge(Menu_Node* node, const std::string& edge) {
   if (!node->is_container()) {
     NOTREACHED();
-    return false;
+    //return false;
   }
 
   if (node->containerEdge() == edge) {
@@ -386,7 +386,7 @@ bool Menu_Model::SetContainerEdge(Menu_Node* node, const std::string& edge) {
   const Menu_Node* menu = node->GetMenu();
   if (!menu) {
     NOTREACHED();
-    return false;
+    //return false;
   }
 
   RemoveBundleTag(node, false);
@@ -405,7 +405,7 @@ bool Menu_Model::Remove(Menu_Node* node) {
   const Menu_Node* menu = node->GetMenu();
   if (!menu) {
     NOTREACHED();
-    return false;
+    //return false;
   }
 
   RemoveBundleTag(node, true);

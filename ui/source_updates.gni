@@ -7,20 +7,22 @@ update_target("//content/public/browser:browser_sources") {
   ]
 }
 
-update_target("//content/common:common") {
+update_target("//components/input:input") {
   sources += [
     "//vivaldi/ui/content/vivaldi_event_hooks.cc",
     "//vivaldi/ui/content/vivaldi_event_hooks.h",
   ]
-  deps += [
-    "//components/services/storage/public/mojom",
-    "//components/services/storage/privileged/mojom",
-    "//components/services/quarantine/public/mojom",
-    "//content/services/auction_worklet/public/mojom",
-    "//media/mojo/mojom:remoting",
-    "//services/cert_verifier/public/mojom",
-    "//vivaldi/renderer/mojo:frame_service",
-  ]
+  if ((is_linux || is_win) && (target_cpu == "arm64" || target_cpu == "arm")) {
+    deps += [
+      "//components/services/storage/public/mojom",
+      "//components/services/storage/privileged/mojom",
+      "//components/services/quarantine/public/mojom",
+      "//content/services/auction_worklet/public/mojom",
+      "//media/mojo/mojom:remoting",
+      "//services/cert_verifier/public/mojom",
+      "//vivaldi/renderer/mojo:frame_service",
+    ]
+  }
 }
 
 update_target("//chrome/browser/ui:ui") {
@@ -100,7 +102,6 @@ update_target("//chrome/browser/ui:ui") {
 
   configs += [
     "//vivaldi/gn/config:release_kind",
-    "//vivaldi/proxy:relayproxy_config",
   ]
 }
 

@@ -15,7 +15,29 @@
 
 namespace visited_url_ranking {
 
-const char kTabResumptionRankerKey[] = "tab_resumption_ranker";
+// Value must match `segmentation_platform::kURLVisitResumptionClassifierKey`.
+const char kTabResumptionRankerKey[] = "url_visit_resumption_ranker";
+
+// Aggregate metrics event related names.
+const char kURLVisitSeenEventName[] = "VisitedURLRanking.URLVisit.Seen";
+const char kURLVisitActivatedEventName[] =
+    "VisitedURLRanking.URLVisit.Activated";
+const char kURLVisitDismissedEventName[] =
+    "VisitedURLRanking.URLVisit.Dismissed";
+
+// An action performed by the user on a `URLVisit` through a UI surface.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.visited_url_ranking
+// LINT.IfChange(ScoredURLUserAction)
+enum ScoredURLUserAction {
+  kUnknown = 0,
+  kSeen = 1,
+  kActivated = 2,
+  kDismissed = 3,
+  kMaxValue = kDismissed,
+};
+// LINT.ThenChange(/tools/metrics/histograms/visited_url_ranking/enums.xml:ScoredURLUserAction)
 
 // Settings leveraged for ranking `URLVisitAggregate` objects.
 struct Config {
@@ -23,9 +45,12 @@ struct Config {
   std::string key;
 };
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
 enum class ResultStatus {
   kError = 0,
   kSuccess = 1,
+  kMaxValue = kSuccess,
 };
 
 // Provides APIs suitable for combining URL Visit data across various data
@@ -55,22 +80,42 @@ class VisitedURLRankingService : public KeyedService {
   VisitedURLRankingService() = default;
   ~VisitedURLRankingService() override = default;
 
-  // Computes `URLVisitAggregate` objects based on a series of
-  // `options` from one or more data providers and triggers the `callback` with
-  // such data.
+  // Computes `URLVisitAggregate` objects based on a series of `options` for
+  // one or more data providers and triggers the `callback` with such data.
   using GetURLVisitAggregatesCallback =
       base::OnceCallback<void(ResultStatus, std::vector<URLVisitAggregate>)>;
   virtual void FetchURLVisitAggregates(
       const FetchOptions& options,
       GetURLVisitAggregatesCallback callback) = 0;
 
-  using RankVisitAggregatesCallback =
+  using RankURLVisitAggregatesCallback =
       base::OnceCallback<void(ResultStatus, std::vector<URLVisitAggregate>)>;
-  // Ranks a collection of `URLVisitAggregate` objects based on a
-  // client specified strategy.
-  virtual void RankURLVisitAggregates(const Config& config,
-                                      std::vector<URLVisitAggregate> visits,
-                                      RankVisitAggregatesCallback callback) = 0;
+  // Ranks a collection of `URLVisitAggregate` objects based on a client
+  // specified strategy.
+  virtual void RankURLVisitAggregates(
+      const Config& config,
+      std::vector<URLVisitAggregate> visit_aggregates,
+      RankURLVisitAggregatesCallback callback) = 0;
+
+  // Records a user action performed for a `URLVisitAggregate` object returned
+  // by `RankURLVisitAggregates`. This is needed to collect feedback on whether
+  // the predicted URL visit was a success or failure, to help train the ranking
+  // system. The caller must call `RecordAction` for every `URLVisitAggregate`
+  // object seen, dismissed, or activated by the user.  It would be preferred to
+  // not record actions in situations where the visit was not shown to the user,
+  // or the visit was not in a visible part of the screen. `visit_id` and
+  // `visit_request_id` are provided in the `URLVisitAggregate` object. Only
+  // valid to call within the same Chrome session as the call to
+  // `RankURLVisitAggregates`. It is ok to make multiple calls to
+  // `RankURLVisitAggregates` before calling `RecordAction` since
+  // `visit_request_id` is globally unique.
+  // It is better to call RecordAction at a point where user can no longer
+  // activate the URL, like NTP is being destroyed. But, it is ok to record seen
+  // and activated events when ever they happen.
+  virtual void RecordAction(
+      ScoredURLUserAction action,
+      const std::string& visit_id,
+      segmentation_platform::TrainingRequestId visit_request_id) = 0;
 };
 
 }  // namespace visited_url_ranking

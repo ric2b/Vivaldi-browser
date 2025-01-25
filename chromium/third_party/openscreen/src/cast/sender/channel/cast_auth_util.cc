@@ -23,10 +23,10 @@
 
 namespace openscreen::cast {
 
-using ::cast::channel::AuthResponse;
-using ::cast::channel::CastMessage;
-using ::cast::channel::DeviceAuthMessage;
-using ::cast::channel::HashAlgorithm;
+using proto::AuthResponse;
+using proto::CastMessage;
+using proto::DeviceAuthMessage;
+using proto::HashAlgorithm;
 
 namespace {
 
@@ -45,8 +45,7 @@ constexpr int kNonceExpirationTimeInHours = 24;
 // message.
 Error ParseAuthMessage(const CastMessage& challenge_reply,
                        DeviceAuthMessage* auth_message) {
-  if (challenge_reply.payload_type() !=
-      ::cast::channel::CastMessage_PayloadType_BINARY) {
+  if (challenge_reply.payload_type() != proto::CastMessage_PayloadType_BINARY) {
     return Error(Error::Code::kCastV2WrongPayloadType,
                  PARSE_ERROR_PREFIX "Wrong payload type in challenge reply");
   }
@@ -163,14 +162,14 @@ Error VerifyAndMapDigestAlgorithm(HashAlgorithm response_digest_algorithm,
                                   DigestAlgorithm* digest_algorithm,
                                   bool enforce_sha256_checking) {
   switch (response_digest_algorithm) {
-    case ::cast::channel::SHA1:
+    case proto::SHA1:
       if (enforce_sha256_checking) {
         return Error(Error::Code::kCastV2DigestUnsupported,
                      "Unsupported digest algorithm.");
       }
       *digest_algorithm = DigestAlgorithm::kSha1;
       break;
-    case ::cast::channel::SHA256:
+    case proto::SHA256:
       *digest_algorithm = DigestAlgorithm::kSha256;
       break;
     default:

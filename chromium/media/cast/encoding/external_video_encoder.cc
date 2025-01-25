@@ -42,7 +42,7 @@
 #include "media/cast/encoding/encoding_util.h"
 #include "media/cast/encoding/vpx_quantizer_parser.h"
 #include "media/cast/logging/logging_defines.h"
-#include "media/video/h264_parser.h"
+#include "media/parsers/h264_parser.h"
 
 namespace media::cast {
 namespace {
@@ -782,7 +782,8 @@ void ExternalVideoEncoder::OnCreateVideoEncodeAccelerator(
       codec_profile = media::H264PROFILE_MAIN;
       break;
     case VideoCodec::kUnknown:
-      NOTREACHED() << "Fake software video encoder cannot be external";
+      NOTREACHED_IN_MIGRATION()
+          << "Fake software video encoder cannot be external";
       [[fallthrough]];
     default:
       cast_environment_->PostTask(

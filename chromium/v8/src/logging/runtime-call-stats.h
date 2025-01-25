@@ -150,7 +150,6 @@ class RuntimeCallTimer final {
   V(Context_NewRemoteContext)                              \
   V(DataView_New)                                          \
   V(Date_New)                                              \
-  V(Date_NumberValue)                                      \
   V(Date_Parse)                                            \
   V(Debug_Call)                                            \
   V(debug_GetPrivateMembers)                               \
@@ -328,7 +327,7 @@ class RuntimeCallTimer final {
   ADD_THREAD_SPECIFIC_COUNTER(V, Compile, Script)                             \
   ADD_THREAD_SPECIFIC_COUNTER(V, Compile, CompileTask)                        \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, AllocateFPRegisters)               \
-  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, AllocateSIMD128Registers)          \
+  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, AllocateSimd128Registers)          \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, AllocateGeneralRegisters)          \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, AssembleCode)                      \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, AssignSpillSlots)                  \
@@ -362,7 +361,7 @@ class RuntimeCallTimer final {
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, MeetRegisterConstraints)           \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, MemoryOptimization)                \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, OptimizeMoves)                     \
-  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, PopulatePointerMaps)               \
+  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, PopulateReferenceMaps)             \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, PrintGraph)                        \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, PrintTurboshaftGraph)              \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, ResolveControlFlow)                \
@@ -375,6 +374,7 @@ class RuntimeCallTimer final {
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, SimplifiedLowering)                \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, SimplifyLoops)                     \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TraceScheduleAndVerify)            \
+  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurboshaftBlockInstrumentation)    \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurboshaftBuildGraph)              \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize,                                    \
                               TurboshaftCodeEliminationAndSimplification)     \
@@ -395,6 +395,7 @@ class RuntimeCallTimer final {
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurboshaftMachineLowering)         \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurboshaftMaglevGraphBuilding)     \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurboshaftOptimize)                \
+  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurboshaftProfileApplication)      \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurboshaftRecreateSchedule)        \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurboshaftSimplifiedLowering)      \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurboshaftSpecialRPOScheduling)    \

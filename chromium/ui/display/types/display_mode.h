@@ -5,8 +5,8 @@
 #ifndef UI_DISPLAY_TYPES_DISPLAY_MODE_H_
 #define UI_DISPLAY_TYPES_DISPLAY_MODE_H_
 
+#include <iosfwd>
 #include <memory>
-#include <ostream>
 #include <string>
 
 #include "ui/display/types/display_types_export.h"
@@ -39,6 +39,7 @@ class DISPLAY_TYPES_EXPORT DisplayMode {
 
   ~DisplayMode();
   std::unique_ptr<DisplayMode> Clone() const;
+  std::unique_ptr<DisplayMode> CopyWithSize(const gfx::Size& size) const;
 
   const gfx::Size& size() const { return size_; }
   bool is_interlaced() const { return is_interlaced_; }

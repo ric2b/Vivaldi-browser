@@ -57,6 +57,7 @@ class FilePath;
 
 namespace content {
 
+class AdAuctionPageData;
 class InterestGroupStorage;
 struct DebugReportLockoutAndCooldowns;
 
@@ -73,6 +74,8 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
       InterestGroupKAnonymityManager::GetKAnonymityServiceDelegateCallback;
   using RealTimeReportingContributions =
       std::vector<auction_worklet::mojom::RealTimeReportingContributionPtr>;
+  using AdAuctionPageDataCallback =
+      base::RepeatingCallback<AdAuctionPageData*()>;
 
   // Controls how auction worklets will be run. kDedicated will use
   // fully-isolated utility processes solely for worklet. kInRenderer will
@@ -331,6 +334,7 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // Virtual for testing.
   virtual void EnqueueRealTimeReports(
       std::map<url::Origin, RealTimeReportingContributions> contributions,
+      AdAuctionPageDataCallback ad_auction_page_data_callback,
       int frame_tree_node_id,
       const url::Origin& frame_origin,
       const network::mojom::ClientSecurityState& client_security_state,
@@ -412,6 +416,16 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
     reporting_interval_ = interval;
   }
 
+  // For testing *only*; changes `real_time_reporting_window_`.
+  void set_real_time_reporting_window_for_testing(base::TimeDelta window) {
+    real_time_reporting_window_ = window;
+  }
+
+  // For testing *only*; changes `max_real_time_reports_`.
+  void set_max_real_time_reports_for_testing(int max_num_reports) {
+    max_real_time_reports_ = max_num_reports;
+  }
+
   size_t report_queue_length_for_testing() const {
     return report_requests_.size();
   }
@@ -421,16 +435,20 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // (including ads). Also reports membership in the interest group to the
   // k-anonymity of interest-group service.
   void QueueKAnonymityUpdateForInterestGroup(
-      const blink::InterestGroupKey& group_key);
-  // Records K-anonymity to the database.
-  void UpdateKAnonymity(const StorageInterestGroup::KAnonymityData& data);
-
-  // Gets all KAnonymityData for ads part of the interest group specified by
-  // `interest_group_key`.
-  void GetKAnonymityDataForUpdate(
       const blink::InterestGroupKey& group_key,
-      base::OnceCallback<void(
-          const std::vector<StorageInterestGroup::KAnonymityData>&)> callback);
+      const std::optional<InterestGroupKanonUpdateParameter> update_parameter);
+  // Records a K-anonymity update for an interest group. If
+  // `replace_existing_values` is true, this update will store the new
+  // `update_time` and `positive_hashed_values`, replacing the interest
+  // group's existing update time and keys. If `replace_existing_values` is
+  // false, `positive_hashed_keys` will be added to the existing positive keys
+  // without updating the stored update time.  No value is stored if
+  // `update_time` is older than the `update_time` already stored in the
+  // database.
+  void UpdateKAnonymity(const blink::InterestGroupKey& interest_group_key,
+                        const std::vector<std::string>& positive_hashed_keys,
+                        const base::Time update_time,
+                        bool initial_update);
 
   // Gets lockout and cooldown for sending forDebuggingOnly reports.
   void GetDebugReportLockoutAndCooldowns(
@@ -500,6 +518,7 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
     // Real time reporting histograms to be sent in POST request's body. Null
     // for other report types.
     std::optional<std::vector<uint8_t>> real_time_histogram;
+
     url::Origin frame_origin;
     network::mojom::ClientSecurityState client_security_state;
 
@@ -577,11 +596,12 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
                            base::OnceCallback<void(bool)> callback);
 
   // Called when a call to UpdateInterestGroup() completes. Sends a notification
-  // about the update and invokes `callback` with `success`.
-  void OnUpdateComplete(const url::Origin& owner_origin,
-                        const std::string& name,
-                        base::OnceCallback<void(bool)> callback,
-                        bool success);
+  // about the update and invokes `callback` with `success`. Queues a
+  // k-anonymity update with `kanon_update_parameter`.
+  void OnUpdateComplete(
+      const blink::InterestGroupKey& group_key,
+      base::OnceCallback<void(bool)> callback,
+      std::optional<InterestGroupKanonUpdateParameter> kanon_update_parameter);
 
   // Modifies the update rate limits stored in the database, with a longer delay
   // for parse failure.
@@ -698,8 +718,8 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // Should *only* be changed by tests.
   int max_report_queue_length_;
 
-  // The time interval to wait before sending the next report request after
-  // sending one.
+  // The time interval to wait before sending the next batch of report requests
+  // after sending one batch.
   //
   // Should *only* be changed by tests.
   base::TimeDelta reporting_interval_;
@@ -709,6 +729,13 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   //
   // Should *only* be changed by tests.
   base::TimeDelta max_reporting_round_duration_;
+
+  // The number of real time reports (`max_real_time_reports_`) per reporting
+  // origin per page per `real_time_reporting_window_`.
+  //
+  // Should *only* be changed by tests.
+  base::TimeDelta real_time_reporting_window_;
+  double max_real_time_reports_;
 
   // Used to clear all pending reports in the queue if reporting takes too long.
   // Started when sending reports starts. Stopped once all reports are sent.

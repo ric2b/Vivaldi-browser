@@ -14,6 +14,7 @@
     "Android x86 Builder (dbg)": "ci/Android x86 Builder (dbg)/gn-args.json",
     "Cast Android (dbg)": "ci/Cast Android (dbg)/gn-args.json",
     "android-12-x64-rel": "ci/android-12-x64-rel/gn-args.json",
+    "android-13-x64-rel": "ci/android-13-x64-rel/gn-args.json",
     "android-cronet-arm-dbg": "ci/android-cronet-arm-dbg/gn-args.json",
     "android-cronet-arm-rel": "ci/android-cronet-arm-rel/gn-args.json",
     "android-cronet-mainline-clang-x86-dbg": "ci/android-cronet-mainline-clang-x86-dbg/gn-args.json",
@@ -116,6 +117,7 @@
   },
   "tryserver.chromium.android": {
     "android-12-x64-rel": "try/android-12-x64-rel/gn-args.json",
+    "android-13-x64-rel": "try/android-13-x64-rel/gn-args.json",
     "android-arm-compile-dbg": "try/android-arm-compile-dbg/gn-args.json",
     "android-arm64-rel": "try/android-arm64-rel/gn-args.json",
     "android-binary-size": "try/android-binary-size/gn-args.json",
@@ -193,6 +195,7 @@
     "mac12-arm64-rel": "try/mac12-arm64-rel/gn-args.json",
     "mac12-tests": "try/mac12-tests/gn-args.json",
     "mac13-arm64-rel": "try/mac13-arm64-rel/gn-args.json",
+    "mac13-tests": "try/mac13-tests/gn-args.json",
     "mac14-arm64-rel": "try/mac14-arm64-rel/gn-args.json",
     "mac14-tests": "try/mac14-tests/gn-args.json",
     "mac_chromium_10.15_rel_ng": "try/mac_chromium_10.15_rel_ng/gn-args.json",

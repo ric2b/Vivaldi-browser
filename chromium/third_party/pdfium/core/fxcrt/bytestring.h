@@ -11,19 +11,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <functional>
 #include <iosfwd>
-#include <iterator>
-#include <optional>
 #include <utility>
 
-#include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_string_wrappers.h"
-#include "core/fxcrt/retain_ptr.h"
-#include "core/fxcrt/span.h"
-#include "core/fxcrt/string_data_template.h"
 #include "core/fxcrt/string_template.h"
-#include "core/fxcrt/string_view_template.h"
 
 namespace fxcrt {
 
@@ -44,6 +37,9 @@ class ByteString : public StringTemplate<char> {
 
   ~ByteString() = default;
 
+  UNSAFE_BUFFER_USAGE ByteString(const char* pStr, size_t len);
+  UNSAFE_BUFFER_USAGE ByteString(const uint8_t* pStr, size_t len);
+
   // Make a one-character string from a char.
   explicit ByteString(char ch);
 
@@ -54,9 +50,6 @@ class ByteString : public StringTemplate<char> {
   // No implicit conversions from wide strings.
   // NOLINTNEXTLINE(runtime/explicit)
   ByteString(wchar_t) = delete;
-
-  ByteString(const char* pStr, size_t len);
-  ByteString(const uint8_t* pStr, size_t len);
 
   explicit ByteString(ByteStringView bstrc);
   ByteString(ByteStringView str1, ByteStringView str2);

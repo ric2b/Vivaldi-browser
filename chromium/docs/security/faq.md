@@ -329,6 +329,19 @@ These browser's actions/shortcuts are specific to Chrome. They are different
 from the behavior specified by the web-platform, such as using executing
 `window.open()` or opening a link with the `target=_blank` attribute.
 
+<a name="TOC-What-is-the-threat-model-for-Chrome-for-Testing"</a>
+### What is the threat model for Chrome for Testing?
+
+[Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing) is a
+distribution of current and older versions of Chrome. It does not auto-update.
+Therefore, it may lack recent fixes for security bugs. Security bugs can more
+easily be exploited once their fixes are [published in the main Chromium source
+code repository](updates.md) and so it is unsafe to use Chrome for Testing to
+access any untrusted website.  You should use Chrome for Testing only for
+browser automation and testing purposes, consuming only trustworthy content.
+`chrome-headless-shell` also lacks auto-updates and so, for the same reason,
+should only be used to consume trusted content.
+
 ## Areas outside Chrome's Threat Model
 
 <a name="TOC-Are-privacy-issues-considered-security-bugs-"></a>
@@ -555,6 +568,13 @@ the operating system and avoid accessing them, e.g.:
 *    C variable length array with an attacker-controlled size.
 *    A call to `alloca()` with an attacker-controlled size.
 
+<a name="TOC-Are-tint-ICE-considered-security-bugs-"></a>
+### Are tint shader compiler Internal Compiler Errors considered security bugs?
+
+No. When tint fails and throws an ICE (Internal Compiler Error), it will
+terminate the process in an intentional manner and produce no shader output.
+Thus there is not security bug that follows from it.
+
 <a name="TOC-Are-enterprise-admins-considered-privileged-"></a>
 ### Are enterprise admins considered privileged?
 
@@ -616,7 +636,7 @@ pointers](https://chromium.googlesource.com/chromium/src/+/main/docs/dangling_pt
 
 Notable build flags are:
 - `enable_dangling_raw_ptr_checks=true`
-- `use_asan_unowned_ptr=true`
+- `use_raw_ptr_asan_unowned_impl=true`
 
 Notable runtime flags are:
 - `--enable-features=PartitionAllocDanglingPtr`
@@ -822,14 +842,20 @@ for more details.
 ### What's the story with certificate revocation?
 
 Chrome's primary mechanism for checking certificate revocation status is
-[CRLsets](https://dev.chromium.org/Home/chromium-security/crlsets).
+[CRLSets](https://dev.chromium.org/Home/chromium-security/crlsets).
 Additionally, by default, [stapled Online Certificate Status Protocol (OCSP)
 responses](https://en.wikipedia.org/wiki/OCSP_stapling) are honored.
 
-"Online" certificate revocation status checks using Certificate Revocation
-List (CRL) or OCSP URLs included in certificates are disabled by default. This
-is because unless a client, like Chrome, refuses to connect to a website if it
-cannot get a valid response, online checks offer limited security value.
+As of 2024, Chrome enforces most security-relevant certificate revocations that
+are visible via Certificate Revocation Lists (CRLs) published to the
+[CCADB](https://www.ccadb.org/) via CRLSets. There is some inherent delay in
+getting revocation information to Chrome clients, but most revocations should
+reach most users within a few days of appearing on a CA's CRL.
+
+Chrome clients do not, by default, perform "online" certificate revocation
+status checks using CRLs directly or via OCSP URLs included in certificates.
+This is because online checks offer limited security value unless a client, like
+Chrome, refuses to connect to a website if it cannot get a valid response,
 
 Unfortunately, there are many widely-prevalent causes for why a client
 might be unable to get a valid certificate revocation status response to
@@ -846,10 +872,6 @@ OCSP responder (i.e., a third party). These details can be exposed accidentally
 (e.g., via data breach of logs) or intentionally (e.g., via subpoena). Chrome
 used to perform revocation checks for Extended Validation certificates, but that
 behavior was disabled in 2022 for [privacy reasons](https://groups.google.com/a/mozilla.org/g/dev-security-policy/c/S6A14e_X-T0/m/T4WxWgajAAAJ).
-
-For more discussion on challenges with certificate revocation status checking,
-explained by Adam Langley, see [https://www.imperialviolet.org/2014/04/29/revocationagain.html](https://www.imperialviolet.org/2014/04/29/revocationagain.html)
-and [https://www.imperialviolet.org/2014/04/19/revchecking.html](https://www.imperialviolet.org/2014/04/19/revchecking.html).
 
 The following enterprise policies can be used to change the default revocation
 checking behavior in Chrome, though these may be removed in the future:

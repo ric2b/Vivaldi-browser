@@ -150,10 +150,6 @@ RenderProcessImpl::RenderProcessImpl()
   SetV8FlagIfFeature(features::kJavaScriptExperimentalSharedMemory,
                      "--shared-string-table --harmony-struct");
 
-  SetV8FlagIfOverridden(features::kJavaScriptArrayGrouping,
-                        "--harmony-array-grouping",
-                        "--no-harmony-array-grouping");
-
   SetV8FlagIfOverridden(features::kV8VmFuture, "--future", "--no-future");
 
   SetV8FlagIfOverridden(features::kWebAssemblyBaseline, "--liftoff",
@@ -168,6 +164,10 @@ RenderProcessImpl::RenderProcessImpl()
   SetV8FlagIfOverridden(features::kWebAssemblyLazyCompilation,
                         "--wasm-lazy-compilation",
                         "--no-wasm-lazy-compilation");
+
+  SetV8FlagIfOverridden(features::kWebAssemblyMemory64,
+                        "--experimental-wasm-memory64",
+                        "--no-experimental-wasm-memory64");
 
   SetV8FlagIfOverridden(features::kWebAssemblyTiering, "--wasm-tier-up",
                         "--no-wasm-tier-up");
@@ -224,11 +224,11 @@ std::unique_ptr<RenderProcess> RenderProcessImpl::Create() {
 }
 
 void RenderProcessImpl::AddRefProcess() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void RenderProcessImpl::ReleaseProcess() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 }  // namespace content

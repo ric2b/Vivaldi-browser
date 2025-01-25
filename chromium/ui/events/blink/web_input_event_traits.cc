@@ -30,8 +30,9 @@ void ApppendEventDetails(const WebKeyboardEvent& event, std::string* result) {
                 "{\n WinCode: %d\n NativeCode: %d\n IsSystem: %d\n"
                 " Text: %s\n UnmodifiedText: %s\n}",
                 event.windows_key_code, event.native_key_code,
-                event.is_system_key, reinterpret_cast<const char*>(event.text),
-                reinterpret_cast<const char*>(event.unmodified_text));
+                event.is_system_key,
+                reinterpret_cast<const char*>(event.text.data()),
+                reinterpret_cast<const char*>(event.unmodified_text.data()));
 }
 
 void ApppendEventDetails(const WebMouseEvent& event, std::string* result) {
@@ -188,43 +189,6 @@ uint32_t WebInputEventTraits::GetUniqueTouchEventId(
     return static_cast<const WebTouchEvent&>(event).unique_touch_event_id;
   }
   return 0U;
-}
-
-// static
-LatencyInfo WebInputEventTraits::CreateLatencyInfoForWebGestureEvent(
-    const WebGestureEvent& event) {
-  SourceEventType source_event_type = SourceEventType::UNKNOWN;
-  if (event.SourceDevice() == blink::WebGestureDevice::kTouchpad) {
-    source_event_type = SourceEventType::WHEEL;
-    if (event.GetType() >= blink::WebInputEvent::Type::kGesturePinchTypeFirst &&
-        event.GetType() <= blink::WebInputEvent::Type::kGesturePinchTypeLast) {
-      source_event_type = SourceEventType::TOUCHPAD;
-    }
-  } else if (event.SourceDevice() == blink::WebGestureDevice::kTouchscreen) {
-    blink::WebGestureEvent::InertialPhaseState inertial_phase_state =
-        blink::WebGestureEvent::InertialPhaseState::kUnknownMomentum;
-
-    switch (event.GetType()) {
-      case blink::WebInputEvent::Type::kGestureScrollBegin:
-        inertial_phase_state = event.data.scroll_begin.inertial_phase;
-        break;
-      case blink::WebInputEvent::Type::kGestureScrollUpdate:
-        inertial_phase_state = event.data.scroll_update.inertial_phase;
-        break;
-      case blink::WebInputEvent::Type::kGestureScrollEnd:
-        inertial_phase_state = event.data.scroll_end.inertial_phase;
-        break;
-      default:
-        break;
-    }
-    bool is_in_inertial_phase =
-        inertial_phase_state ==
-        blink::WebGestureEvent::InertialPhaseState::kMomentum;
-    source_event_type = is_in_inertial_phase ? SourceEventType::INERTIAL
-                                             : SourceEventType::TOUCH;
-  }
-  LatencyInfo latency_info(source_event_type);
-  return latency_info;
 }
 
 }  // namespace ui

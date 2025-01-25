@@ -142,12 +142,6 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="IncorrectlyLocked"/>
 </enum>
 
-<enum name="CellularCarrierLockOobeResult">
-  <int value="0" label="DevModeCarrierLocked"/>
-  <int value="1" label="DevModeLocked"/>
-  <int value="2" label="DevModeUnlocked"/>
-</enum>
-
 <enum name="CellularCarrierLockProvisioningResult">
   <int value="0" label="ConfigLocked"/>
   <int value="1" label="ConfigUnlocked"/>
@@ -649,14 +643,6 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Refresh"/>
 </enum>
 
-<enum name="MdnsResponderServiceError">
-  <int value="0" label="Fail to start manager"/>
-  <int value="1" label="Fail to create responder"/>
-  <int value="2" label="Fatal socket handler error"/>
-  <int value="3" label="Invalid IP to register name"/>
-  <int value="4" label="Conflicting name resolution"/>
-</enum>
-
 <enum name="NeighborLinkMonitorFailureType">
   <int value="0" label="Unknown type of failure"/>
   <int value="1" label="IPv4 gateway neighbor lost"/>
@@ -715,12 +701,6 @@ chromium-metrics-reviews@google.com.
   <int value="14" label="Not allowed because carrier is not known"/>
   <int value="15" label="Cellular device has no IP address"/>
   <int value="16" label="Cellular device doesn't exist"/>
-</enum>
-
-<enum name="NetworkCellularESimInstallResult">
-  <int value="0" label="Success"/>
-  <int value="1" label="Inhibit failed"/>
-  <int value="2" label="Hermes install failed"/>
 </enum>
 
 <enum name="NetworkCellularESimProfileStatus">
@@ -2423,6 +2403,13 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Tunnel group is used"/>
 </enum>
 
+<enum name="VPNNameServers">
+  <int value="0" label="None"/>
+  <int value="1" label="IPv4 only"/>
+  <int value="2" label="IPv6 only"/>
+  <int value="3" label="Dual stack"/>
+</enum>
+
 <enum name="VPNOpenVPNCipher">
   <int value="0" label="Unknown"/>
   <int value="1" label="BF-CBC"/>
@@ -2436,6 +2423,13 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="L2TP/IPsec Default"/>
   <int value="3" label="L2TP/IPsec Certificate"/>
   <int value="4" label="L2TP/IPsec PSK"/>
+</enum>
+
+<enum name="VPNRoutingType">
+  <int value="0" label="Full"/>
+  <int value="1" label="Split routing"/>
+  <int value="2" label="Bypass"/>
+  <int value="3" label="Blocked"/>
 </enum>
 
 <enum name="VPNUserAuthenticationType">
@@ -2572,6 +2566,37 @@ chromium-metrics-reviews@google.com.
 <enum name="WiFiCQMNotificationType">
   <int value="0" label="Packet loss"/>
   <int value="1" label="Beacon loss"/>
+</enum>
+
+<enum name="WifiP2PCapabilities">
+  <int value="0" label="Neither group owner nor client is ready."/>
+  <int value="1" label="Only group owner is ready."/>
+  <int value="2" label="Only group client is ready."/>
+  <int value="3" label="Both group owner and client are ready."/>
+</enum>
+
+<enum name="WifiP2PDisconnectReason">
+  <int value="0" label="Client Initiated."/>
+  <int value="1" label="Internal Error."/>
+</enum>
+
+<enum name="WifiP2POperationResult">
+  <int value="0" label="Success."/>
+  <int value="1" label="Operation not allowed."/>
+  <int value="2" label="Operation not supported."/>
+  <int value="3" label="Concurreny not supported"/>
+  <int value="4" label="Frequency not supported"/>
+  <int value="5" label="Authentication failed."/>
+  <int value="6" label="P2P group not found."/>
+  <int value="7" label="P2P group already connected."/>
+  <int value="8" label="Not connected to P2P group."/>
+  <int value="9" label="Operaion in progress."/>
+  <int value="10" label="Invalid arguments."/>
+  <int value="11" label="Operation timed out."/>
+  <int value="12" label="Invalid or missing result code."/>
+  <int value="13" label="P2P group miss or has invalid properties."/>
+  <int value="14" label="Operation failed."/>
+  <int value="15" label="DBus error."/>
 </enum>
 
 <enum name="WiFiReasonCode">

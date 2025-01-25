@@ -44,6 +44,7 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "services/device/public/cpp/geolocation/geoposition.h"
 #include "services/device/public/mojom/geolocation.mojom.h"
+#include "services/device/public/mojom/geolocation_client_id.mojom.h"
 #include "services/device/public/mojom/geolocation_context.mojom.h"
 #include "services/device/public/mojom/geoposition.mojom.h"
 #include "ui/display/display.h"
@@ -188,10 +189,10 @@ class FingerprintDataLoader : public content::GpuDataManagerObserver {
       const std::string& version,
       const std::string& charset,
       const std::string& accept_languages,
-      const base::Time& install_time,
+      base::Time install_time,
       const std::string& app_locale,
       const std::string& user_agent,
-      const base::TimeDelta& timeout,
+      base::TimeDelta timeout,
       base::OnceCallback<void(std::unique_ptr<Fingerprint>)> callback);
 
   FingerprintDataLoader(const FingerprintDataLoader&) = delete;
@@ -266,10 +267,10 @@ FingerprintDataLoader::FingerprintDataLoader(
     const std::string& version,
     const std::string& charset,
     const std::string& accept_languages,
-    const base::Time& install_time,
+    base::Time install_time,
     const std::string& app_locale,
     const std::string& user_agent,
-    const base::TimeDelta& timeout,
+    base::TimeDelta timeout,
     base::OnceCallback<void(std::unique_ptr<Fingerprint>)> callback)
     : gpu_data_manager_(content::GpuDataManager::GetInstance()),
       obfuscated_gaia_id_(obfuscated_gaia_id),
@@ -315,7 +316,8 @@ FingerprintDataLoader::FingerprintDataLoader(
     content::GetDeviceService().BindGeolocationContext(
         geolocation_context_.BindNewPipeAndPassReceiver());
     geolocation_context_->BindGeolocation(
-        geolocation_.BindNewPipeAndPassReceiver(), GURL());
+        geolocation_.BindNewPipeAndPassReceiver(), GURL(),
+        device::mojom::GeolocationClientId::kFingerprintDataLoader);
     geolocation_->SetHighAccuracy(false);
     geolocation_->QueryNextPosition(
         base::BindOnce(&FingerprintDataLoader::OnGotGeoposition,
@@ -449,10 +451,10 @@ void GetFingerprintInternal(
     const std::string& version,
     const std::string& charset,
     const std::string& accept_languages,
-    const base::Time& install_time,
+    base::Time install_time,
     const std::string& app_locale,
     const std::string& user_agent,
-    const base::TimeDelta& timeout,
+    base::TimeDelta timeout,
     base::OnceCallback<void(std::unique_ptr<Fingerprint>)> callback) {
   // Begin loading all of the data that we need to load asynchronously.
   // This class is responsible for freeing its own memory.
@@ -471,7 +473,7 @@ void GetFingerprint(
     const std::string& version,
     const std::string& charset,
     const std::string& accept_languages,
-    const base::Time& install_time,
+    base::Time install_time,
     const std::string& app_locale,
     const std::string& user_agent,
     base::OnceCallback<void(std::unique_ptr<Fingerprint>)> callback) {

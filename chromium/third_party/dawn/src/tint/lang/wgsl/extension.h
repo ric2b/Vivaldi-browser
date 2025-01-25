@@ -51,10 +51,13 @@ enum class Extension : uint8_t {
     kChromiumExperimentalPixelLocal,
     kChromiumExperimentalPushConstant,
     kChromiumExperimentalSubgroups,
-    kChromiumInternalDualSourceBlending,
     kChromiumInternalGraphite,
+    kChromiumInternalInputAttachments,
     kChromiumInternalRelaxedUniformLayout,
+    kDualSourceBlending,
     kF16,
+    kSubgroups,
+    kSubgroupsF16,
 };
 
 /// @param value the enum value
@@ -80,10 +83,13 @@ constexpr std::string_view kExtensionStrings[] = {
     "chromium_experimental_pixel_local",
     "chromium_experimental_push_constant",
     "chromium_experimental_subgroups",
-    "chromium_internal_dual_source_blending",
     "chromium_internal_graphite",
+    "chromium_internal_input_attachments",
     "chromium_internal_relaxed_uniform_layout",
+    "dual_source_blending",
     "f16",
+    "subgroups",
+    "subgroups_f16",
 };
 
 /// All extensions
@@ -93,10 +99,13 @@ static constexpr Extension kAllExtensions[] = {
     Extension::kChromiumExperimentalPixelLocal,
     Extension::kChromiumExperimentalPushConstant,
     Extension::kChromiumExperimentalSubgroups,
-    Extension::kChromiumInternalDualSourceBlending,
     Extension::kChromiumInternalGraphite,
+    Extension::kChromiumInternalInputAttachments,
     Extension::kChromiumInternalRelaxedUniformLayout,
+    Extension::kDualSourceBlending,
     Extension::kF16,
+    Extension::kSubgroups,
+    Extension::kSubgroupsF16,
 };
 
 /// A unique vector of extensions

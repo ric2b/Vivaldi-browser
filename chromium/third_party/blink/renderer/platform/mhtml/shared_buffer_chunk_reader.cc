@@ -28,6 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/mhtml/shared_buffer_chunk_reader.h"
 
 #include "base/notreached.h"
@@ -113,7 +118,7 @@ bool SharedBufferChunkReader::NextChunk(Vector<char>& chunk,
     segment_ = it->data();
     segment_length_ = base::checked_cast<uint32_t>(it->size());
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 

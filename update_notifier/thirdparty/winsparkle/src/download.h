@@ -55,7 +55,7 @@ class FileDownloader {
     disable_caching_ = true;
   }
 
-  void SetHeader(base::StringPiece name, base::StringPiece value);
+  void SetHeader(std::string_view name, std::string_view value);
 
   // Connect to the given URL.
   void Connect(const GURL& url, Error& error);

@@ -2,10 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
 
 #include <memory>
 #include <utility>
+
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/checked_math.h"
 #include "base/numerics/clamped_math.h"
@@ -98,7 +104,7 @@ ImageBitmap::ParsedOptions ParseOptions(const ImageBitmapOptions* options,
       (options->colorSpaceConversion() != kImageBitmapOptionNone);
   if (options->colorSpaceConversion() != kImageBitmapOptionNone &&
       options->colorSpaceConversion() != kImageBitmapOptionDefault) {
-    NOTREACHED()
+    NOTREACHED_IN_MIGRATION()
         << "Invalid ImageBitmap creation attribute colorSpaceConversion: "
         << IDLEnumAsString(options->colorSpaceConversion());
   }
@@ -658,8 +664,9 @@ ImageBitmap::ImageBitmap(HTMLCanvasElement* canvas,
                          std::optional<gfx::Rect> crop_rect,
                          const ImageBitmapOptions* options) {
   SourceImageStatus status;
-  scoped_refptr<Image> image_input = canvas->GetSourceImageForCanvas(
-      FlushReason::kCreateImageBitmap, &status, gfx::SizeF());
+  scoped_refptr<Image> image_input =
+      canvas->GetSourceImageForCanvas(FlushReason::kCreateImageBitmap, &status,
+                                      gfx::SizeF(), kPremultiplyAlpha);
   if (status != kNormalSourceImageStatus)
     return;
   DCHECK(IsA<StaticBitmapImage>(image_input.get()));
@@ -993,7 +1000,7 @@ ScriptPromise<ImageBitmap> ImageBitmap::CreateAsync(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "The ImageBitmap could not be allocated.");
-    return ScriptPromise<ImageBitmap>();
+    return EmptyPromise();
   }
 
   scoped_refptr<Image> input = image->CachedImage()->GetImage();
@@ -1013,7 +1020,7 @@ ScriptPromise<ImageBitmap> ImageBitmap::CreateAsync(
       exception_state.ThrowDOMException(
           DOMExceptionCode::kInvalidStateError,
           "The ImageBitmap could not be allocated.");
-      return ScriptPromise<ImageBitmap>();
+      return EmptyPromise();
     }
   }
 
@@ -1040,8 +1047,8 @@ ScriptPromise<ImageBitmap> ImageBitmap::CreateAsync(
     }
   }
 
-  SVGImageForContainer::Create(To<SVGImage>(input.get()),
-                               gfx::SizeF(input_rect.size()), 1, NullURL(),
+  SVGImageForContainer::Create(To<SVGImage>(*input),
+                               gfx::SizeF(input_rect.size()), 1, nullptr,
                                preferred_color_scheme)
       ->Draw(canvas, cc::PaintFlags(), gfx::RectF(draw_dst_rect),
              gfx::RectF(draw_src_rect), ImageDrawOptions());

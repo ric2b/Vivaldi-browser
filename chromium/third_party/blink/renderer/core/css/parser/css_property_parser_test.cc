@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
+#include "third_party/blink/renderer/core/css/parser/css_parser_token_stream.h"
 #include "third_party/blink/renderer/core/css/parser/css_tokenizer.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
@@ -46,11 +47,10 @@ static int ComputeNumberOfTracks(const CSSValueList* value_list) {
 static bool IsValidPropertyValueForStyleRule(CSSPropertyID property_id,
                                              const String& value) {
   CSSTokenizer tokenizer(value);
-  const auto tokens = tokenizer.TokenizeToEOF();
-  const CSSParserTokenRange range(tokens);
+  CSSParserTokenStream stream(tokenizer);
   HeapVector<CSSPropertyValue, 64> parsed_properties;
   return CSSPropertyParser::ParseValue(
-      property_id, /*allow_important_annotation=*/false, {range, value},
+      property_id, /*allow_important_annotation=*/false, stream,
       StrictCSSParserContext(SecureContextMode::kSecureContext),
       parsed_properties, StyleRule::RuleType::kStyle);
 }
@@ -353,8 +353,8 @@ TEST(CSSPropertyParserTest, PaintUseCount) {
   auto dummy_page_holder =
       std::make_unique<DummyPageHolder>(gfx::Size(800, 600));
   dummy_page_holder->GetFrame().Loader().CommitNavigation(
-      WebNavigationParams::CreateWithHTMLBufferForTesting(
-          SharedBuffer::Create(), KURL("https://example.com")),
+      WebNavigationParams::CreateWithEmptyHTMLForTesting(
+          KURL("https://example.com")),
       nullptr /* extra_data */);
   Document& document = dummy_page_holder->GetDocument();
   Page::InsertOrdinaryPageForTesting(&dummy_page_holder->GetPage());
@@ -920,46 +920,6 @@ TEST(CSSPropertyParserTest, LightDarkAuthor) {
       "light-dark(url(light.png), url(dark.png))", context));
 }
 
-TEST(CSSPropertyParserTest, UALightDarkColor) {
-  ScopedCSSLightDarkColorsForTest disable_light_dark(false);
-  auto* ua_context = MakeGarbageCollected<CSSParserContext>(
-      kUASheetMode, SecureContextMode::kInsecureContext);
-
-  const struct {
-    const char* value;
-    bool valid;
-  } tests[] = {
-      {"light-dark()", false},
-      {"light-dark(#feedab)", false},
-      {"light-dark(red blue)", false},
-      {"light-dark(red,,blue)", false},
-      {"light-dark(red, blue)", true},
-      {"light-dark(#000000, #ffffff)", true},
-      {"light-dark(rgb(0, 0, 0), hsl(180, 75%, 50%))", true},
-      {"light-dark(rgba(0, 0, 0, 0.5), hsla(180, 75%, 50%, "
-       "0.7))",
-       true},
-      {"light-dark(ff0000, green)", false},
-  };
-
-  for (const auto& test : tests) {
-    EXPECT_EQ(!!CSSParser::ParseSingleValue(CSSPropertyID::kColor, test.value,
-                                            ua_context),
-              test.valid);
-  }
-}
-
-TEST(CSSPropertyParserTest, UALightDarkColorSerialization) {
-  ScopedCSSLightDarkColorsForTest disable_light_dark(false);
-
-  auto* ua_context = MakeGarbageCollected<CSSParserContext>(
-      kUASheetMode, SecureContextMode::kInsecureContext);
-  const CSSValue* value = CSSParser::ParseSingleValue(
-      CSSPropertyID::kColor, "light-dark(red,#aaa)", ua_context);
-  ASSERT_TRUE(value);
-  EXPECT_EQ("light-dark(red, rgb(170, 170, 170))", value->CssText());
-}
-
 TEST(CSSPropertyParserTest, UALightDarkBackgroundImage) {
   auto* ua_context = MakeGarbageCollected<CSSParserContext>(
       kUASheetMode, SecureContextMode::kInsecureContext);
@@ -1005,12 +965,11 @@ bool ParseCSSValue(CSSPropertyID property_id,
                    const String& value,
                    const CSSParserContext* context) {
   CSSTokenizer tokenizer(value);
-  const auto tokens = tokenizer.TokenizeToEOF();
-  const CSSParserTokenRange range(tokens);
+  CSSParserTokenStream stream(tokenizer);
   HeapVector<CSSPropertyValue, 64> parsed_properties;
   return CSSPropertyParser::ParseValue(
-      property_id, /*allow_important_annotation=*/false, {range, value},
-      context, parsed_properties, StyleRule::RuleType::kStyle);
+      property_id, /*allow_important_annotation=*/false, stream, context,
+      parsed_properties, StyleRule::RuleType::kStyle);
 }
 
 }  // namespace
@@ -1049,10 +1008,10 @@ TEST(CSSPropertyParserTest, ParseRevert) {
 
   String string = " revert";
   CSSTokenizer tokenizer(string);
-  const auto tokens = tokenizer.TokenizeToEOF();
+  CSSParserTokenStream stream(tokenizer);
 
   const CSSValue* value = CSSPropertyParser::ParseSingleValue(
-      CSSPropertyID::kMarginLeft, CSSParserTokenRange(tokens), context);
+      CSSPropertyID::kMarginLeft, stream, context);
   ASSERT_TRUE(value);
   EXPECT_TRUE(value->IsRevertValue());
 }
@@ -1063,10 +1022,10 @@ TEST(CSSPropertyParserTest, ParseRevertLayer) {
 
   String string = " revert-layer";
   CSSTokenizer tokenizer(string);
-  const auto tokens = tokenizer.TokenizeToEOF();
+  CSSParserTokenStream stream(tokenizer);
 
   const CSSValue* value = CSSPropertyParser::ParseSingleValue(
-      CSSPropertyID::kMarginLeft, CSSParserTokenRange(tokens), context);
+      CSSPropertyID::kMarginLeft, stream, context);
   ASSERT_TRUE(value);
   EXPECT_TRUE(value->IsRevertLayerValue());
 }

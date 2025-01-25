@@ -67,31 +67,26 @@ ContentInjectionProvider::GetInjectionsForFrame(
 
     auto* index_manager = index_managers_[static_cast<size_t>(group)];
 
-    if (!index_manager || !index_manager->rules_index() ||
-        !IsOriginWanted(service, group, document_origin)) {
+    if (!index_manager || !index_manager->rules_index()) {
       continue;
     }
 
-    RulesIndex::ActivationsFound activations =
-        index_manager->rules_index()->FindMatchingActivationsRules(
-            url, document_origin, IsThirdParty(url, document_origin), frame);
+    RulesIndex::ActivationResults activations =
+        index_manager->rules_index()->GetActivationsForFrame(
+            base::BindRepeating(&IsOriginWanted, service,
+                                index_manager->group()),
+            frame, url);
 
-    activations.in_allow_rules |=
-        index_manager->rules_index()
-            ->GetActivationsForFrame(
-                base::BindRepeating(&IsOriginWanted, service,
-                                    index_manager->group()),
-                frame->GetParent())
-            .in_allow_rules;
-
-    if ((activations.in_allow_rules &
-         (flat::ActivationType_DOCUMENT | flat::ActivationType_ELEMENT_HIDE)) !=
-        0) {
+    if (activations[flat::ActivationType_DOCUMENT].GetDecision().value_or(
+            flat::Decision_MODIFY) == flat::Decision_PASS ||
+        activations[flat::ActivationType_ELEMENT_HIDE].GetDecision().value_or(
+            flat::Decision_MODIFY) == flat::Decision_PASS) {
       continue;
     }
 
     RulesIndex::InjectionData injection_data;
-    if ((activations.in_allow_rules & flat::ActivationType_GENERIC_HIDE) != 0) {
+    if (activations[flat::ActivationType_GENERIC_HIDE].GetDecision().value_or(
+            flat::Decision_MODIFY) == flat::Decision_PASS) {
       injection_data = index_manager->rules_index()->GetInjectionDataForOrigin(
           document_origin, true);
     } else {

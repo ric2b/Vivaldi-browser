@@ -15,6 +15,7 @@
 #include "base/command_line.h"
 #include "base/containers/adapters.h"
 #include "base/containers/contains.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/format_macros.h"
 #include "base/i18n/case_conversion.h"
@@ -50,7 +51,6 @@
 #include "url/gurl.h"
 
 namespace {
-
 // The TemplateURLRef has any number of terms that need to be replaced. Each of
 // the terms is enclosed in braces. If the character preceeding the final
 // brace is a ?, it indicates the term is optional and can be replaced with
@@ -206,7 +206,7 @@ std::string YandexSearchPathFromDeviceFormFactor() {
     case ui::DEVICE_FORM_FACTOR_AUTOMOTIVE:
       return "search/pad/";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -349,7 +349,7 @@ std::string TemplateURLRef::GetURL() const {
     case INDEXED:
       return owner_->alternate_urls()[index_in_owner_];
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return std::string();
   }
 }
@@ -369,7 +369,7 @@ std::string TemplateURLRef::GetPostParamsString() const {
     case IMAGE_TRANSLATE:
       return owner_->image_url_post_params();
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return std::string();
   }
 }
@@ -468,11 +468,14 @@ std::string TemplateURLRef::ReplaceSearchTerms(
     query_params.push_back(search_terms_args.additional_query_params);
   if (!gurl.query().empty())
     query_params.push_back(gurl.query());
-  if (owner_->created_from_play_api()) {
+#if BUILDFLAG(IS_ANDROID)
+  if (base::FeatureList::IsEnabled(switches::kSearchEngineChoiceAttribution) &&
+      owner_->created_from_play_api()) {
     // Append attribution parameter to query originating from Play API search
     // engine.
     query_params.push_back("chrome_dse_attribution=1");
   }
+#endif
 
   if (query_params.empty())
     return url;
@@ -848,11 +851,37 @@ bool TemplateURLRef::ParseParameter(size_t start,
     url->insert(start, "clid=2207714");
 #endif
   } else if (!prepopulated_) {
-    // If it's a prepopulated URL, we know that it's safe to remove unknown
-    // parameters, so just ignore this and return true below. Otherwise it could
-    // be some garbage but can also be a javascript block. Put it back.
-    url->insert(start, full_parameter.data(), full_parameter.size());
-    return false;
+    base::UmaHistogramBoolean("Omnibox.TemplateUrl.UnrecognizedParameter",
+                              /* is externally supplied template? */ false);
+    // Note: in certain scenarios this function is tested before FeatureFlag is
+    // initialized. Check whether FeatureList has been instantiated before
+    // testing the flag to avoid talking to EarlyFeatureAccessTracker.
+    if (!base::FeatureList::GetInstance() ||
+        !base::FeatureList::IsEnabled(
+            omnibox::kDropUnrecognizedTemplateUrlParameters)) {
+      url->insert(start, full_parameter.data(), full_parameter.size());
+      return false;
+    }
+    // The unrecognized parameters can originate from Chrome's DMA upstream
+    // definitions, or Chrome Extensions. In each case, data has shown that the
+    // parameters don't carry any JSON or Javascript content and should be safe
+    // to be removed.
+    // This still allows JSON payload to be included in the Template URL, but
+    // requires the braces to be escaped ahead of time.
+    //
+    // Fallthrough.
+  } else {
+    // Despite Chrome normally relying on prepopulated_engines.json file, there
+    // are other mechanisms that can supply overrides - see:
+    // http://cs/search?q=google:acceptedSuggestion
+    // The use of these parameters - and Template URLs - was further confirmed
+    // by collecting additional data with the help of the crash/ service.
+    //
+    // Since we can't mark this NOTREACHED(), remove all parameters seen here.
+    //
+    // Fallthrough.
+    base::UmaHistogramBoolean("Omnibox.TemplateUrl.UnrecognizedParameter",
+                              /* is externally supplied template? */ true);
   }
   return true;
 }
@@ -1133,36 +1162,64 @@ std::string TemplateURLRef::HandleReplacements(
 
       case GOOGLE_ASSISTED_QUERY_STATS: {
         DCHECK(!replacement.is_post_param);
+
+        // TODO(crbug.com/345275145): Use GOOGLE_ASSISTED_QUERY_STATS which is
+        // on both the server and local configuration to attach the prefetch
+        // param. If this approach works well, remove the prefetchSource
+        // component. If the browser process is starting up,
+        // base::FeatureList::GetInstance may return null, in this case we treat
+        // it as enabled to ensure the prefetch parameter is always attached to
+        // the URL.
+        bool is_search_prefetch = !search_terms_args.prefetch_param.empty();
+        bool should_attach_prefetch_param =
+            is_search_prefetch &&
+            (!base::FeatureList::GetInstance() ||
+             base::FeatureList::IsEnabled(switches::kPrefetchParameterFix));
+        if (should_attach_prefetch_param) {
+          // Ensure the prefetch param is attached even if gs_lcrp is not
+          // needed.
+          HandleReplacement("pf", search_terms_args.prefetch_param, replacement,
+                            &url);
+        }
+
         const size_t searchbox_stats_size =
             search_terms_args.searchbox_stats.ByteSizeLong();
-        if (searchbox_stats_size > 0) {
-          // Get the base URL without substituting gs_lcrp to avoid infinite
-          // recursion and unwanted replacement respectively. We need the URL to
-          // find out if it meets all gs_lcrp requirements (e.g. HTTPS protocol
-          // check). See TemplateURLRef::SearchTermsArgs for more details.
-          SearchTermsArgs sanitized_search_terms_args(search_terms_args);
-          // Clear the proto. Its empty state has a serialized size of zero.
-          sanitized_search_terms_args.searchbox_stats.Clear();
-          GURL base_url(ReplaceSearchTerms(sanitized_search_terms_args,
-                                           search_terms_data, nullptr));
-          if (base_url.SchemeIsCryptographic()) {
-            TRACE_EVENT0(
-                "omnibox",
-                "TemplateURLRef::HandleReplacement:serialize_searchbox_stats");
-            std::vector<uint8_t> serialized_searchbox_stats(
-                searchbox_stats_size);
-            search_terms_args.searchbox_stats.SerializeWithCachedSizesToArray(
-                &serialized_searchbox_stats[0]);
-            std::string encoded_searchbox_stats;
-            base::Base64UrlEncode(serialized_searchbox_stats,
-                                  base::Base64UrlEncodePolicy::OMIT_PADDING,
-                                  &encoded_searchbox_stats);
-            HandleReplacement("gs_lcrp", encoded_searchbox_stats, replacement,
-                              &url);
-            base::UmaHistogramCounts1000(
-                "Omnibox.SearchboxStats.Length",
-                static_cast<int>(encoded_searchbox_stats.length()));
-          }
+        if (searchbox_stats_size == 0) {
+          break;
+        }
+
+        // Don't have to attach the searchbox stats to prefetch requests.
+        if (is_search_prefetch &&
+            base::FeatureList::IsEnabled(
+                switches::kRemoveSearchboxStatsParamFromPrefetchRequests)) {
+          break;
+        }
+
+        // Get the base URL without substituting gs_lcrp to avoid infinite
+        // recursion and unwanted replacement respectively. We need the URL to
+        // find out if it meets all gs_lcrp requirements (e.g. HTTPS protocol
+        // check). See TemplateURLRef::SearchTermsArgs for more details.
+        SearchTermsArgs sanitized_search_terms_args(search_terms_args);
+        // Clear the proto. Its empty state has a serialized size of zero.
+        sanitized_search_terms_args.searchbox_stats.Clear();
+        GURL base_url(ReplaceSearchTerms(sanitized_search_terms_args,
+                                         search_terms_data, nullptr));
+        if (base_url.SchemeIsCryptographic()) {
+          TRACE_EVENT0(
+              "omnibox",
+              "TemplateURLRef::HandleReplacement:serialize_searchbox_stats");
+          std::vector<uint8_t> serialized_searchbox_stats(searchbox_stats_size);
+          search_terms_args.searchbox_stats.SerializeWithCachedSizesToArray(
+              &serialized_searchbox_stats[0]);
+          std::string encoded_searchbox_stats;
+          base::Base64UrlEncode(serialized_searchbox_stats,
+                                base::Base64UrlEncodePolicy::OMIT_PADDING,
+                                &encoded_searchbox_stats);
+          HandleReplacement("gs_lcrp", encoded_searchbox_stats, replacement,
+                            &url);
+          base::UmaHistogramCounts1000(
+              "Omnibox.SearchboxStats.Length",
+              static_cast<int>(encoded_searchbox_stats.length()));
         }
         break;
       }
@@ -1266,13 +1323,12 @@ std::string TemplateURLRef::HandleReplacements(
       }
 
       case GOOGLE_PREFETCH_SOURCE: {
-        if (!search_terms_args.prefetch_param.empty()) {
-          // Currently, Chrome only support "cs" for prefetches, but if new
-          // prefetch sources (outside of suggestions) are added, a new prefetch
-          // source value is needed. These should denote the source of the
-          // prefetch to allow the search server to treat the requests based on
-          // source. "cs" represents Chrome Suggestions as the source. Adding a
-          // new source should be supported by the Search engine.
+        // Ignore this replacement if the fix feature flag is enabled; the
+        // parameter will be handled by `GOOGLE_ASSISTED_QUERY_STATS`. See
+        // crbug.com/345275145 for details.
+        if ((base::FeatureList::GetInstance() &&
+             !base::FeatureList::IsEnabled(switches::kPrefetchParameterFix)) &&
+            !search_terms_args.prefetch_param.empty()) {
           HandleReplacement("pf", search_terms_args.prefetch_param, replacement,
                             &url);
         }
@@ -1290,6 +1346,9 @@ std::string TemplateURLRef::HandleReplacements(
         if (!rlz_string.empty()) {
           HandleReplacement("rlz", base::UTF16ToUTF8(rlz_string), replacement,
                             &url);
+          base::UmaHistogramBoolean("Omnibox.TemplateUrl.RlzPresent", true);
+        } else {
+          base::UmaHistogramBoolean("Omnibox.TemplateUrl.RlzPresent", false);
         }
         break;
       }
@@ -1297,8 +1356,14 @@ std::string TemplateURLRef::HandleReplacements(
       case GOOGLE_SEARCH_CLIENT: {
         DCHECK(!replacement.is_post_param);
         std::string client = search_terms_data.GetSearchClient();
-        if (!client.empty())
+        if (!client.empty()) {
+          base::UmaHistogramBoolean("Omnibox.TemplateUrl.SearchClientPresent",
+                                    true);
           HandleReplacement("client", client, replacement, &url);
+        } else {
+          base::UmaHistogramBoolean("Omnibox.TemplateUrl.SearchClientPresent",
+                                    false);
+        }
         break;
       }
 
@@ -1349,7 +1414,7 @@ std::string TemplateURLRef::HandleReplacements(
             HandleReplacement(std::string(), "chrome-ios-ntp", replacement,
                               &url);
 #else
-            NOTREACHED();
+            NOTREACHED_IN_MIGRATION();
 #endif
             break;
           case RequestSource::CONTEXTUAL_SEARCHBOX:
@@ -1533,7 +1598,7 @@ std::string TemplateURLRef::HandleReplacements(
       }
 
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
   }
@@ -1925,7 +1990,7 @@ void TemplateURL::EncodeSearchTerms(
       return;
     }
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 GURL TemplateURL::GenerateSearchURL(const SearchTermsData& search_terms_data,

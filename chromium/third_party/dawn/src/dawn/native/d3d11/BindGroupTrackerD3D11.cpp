@@ -32,6 +32,7 @@
 
 #include "dawn/common/Assert.h"
 #include "dawn/common/MatchVariant.h"
+#include "dawn/common/Range.h"
 #include "dawn/native/Format.h"
 #include "dawn/native/d3d/D3DError.h"
 #include "dawn/native/d3d11/BindGroupD3D11.h"
@@ -169,8 +170,7 @@ MaybeError BindGroupTracker::Apply() {
             BindGroupBase* group = mBindGroups[index];
             const ityp::vector<BindingIndex, uint64_t>& dynamicOffsets = mDynamicOffsets[index];
 
-            for (BindingIndex bindingIndex{0}; bindingIndex < group->GetLayout()->GetBindingCount();
-                 ++bindingIndex) {
+            for (BindingIndex bindingIndex : Range(group->GetLayout()->GetBindingCount())) {
                 const BindingInfo& bindingInfo = group->GetLayout()->GetBindingInfo(bindingIndex);
 
                 DAWN_TRY(MatchVariant(
@@ -190,10 +190,9 @@ MaybeError BindGroupTracker::Apply() {
                                     bindingInfo.visibility,
                                     wgpu::ShaderStage::Fragment | wgpu::ShaderStage::Compute));
                                 ComPtr<ID3D11UnorderedAccessView> d3d11UAV;
-                                DAWN_TRY_ASSIGN(d3d11UAV, ToBackend(binding.buffer)
-                                                              ->CreateD3D11UnorderedAccessView1(
-                                                                  offset, binding.size));
-                                ToBackend(binding.buffer)->MarkMutated();
+                                DAWN_TRY_ASSIGN(d3d11UAV, ToGPUUsableBuffer(binding.buffer)
+                                                              ->UseAsUAV(mCommandContext, offset,
+                                                                         binding.size));
                                 uavsInBindGroup.insert(uavsInBindGroup.begin(),
                                                        std::move(d3d11UAV));
                                 break;
@@ -232,6 +231,10 @@ MaybeError BindGroupTracker::Apply() {
                     [](const StaticSamplerBindingInfo&) -> MaybeError {
                         // Static samplers are implemented in the frontend on
                         // D3D11.
+                        DAWN_UNREACHABLE();
+                        return {};
+                    },
+                    [](const InputAttachmentBindingInfo&) -> MaybeError {
                         DAWN_UNREACHABLE();
                         return {};
                     }));
@@ -287,8 +290,7 @@ MaybeError BindGroupTracker::ApplyBindGroup(BindGroupIndex index) {
     const ityp::vector<BindingIndex, uint64_t>& dynamicOffsets = mDynamicOffsets[index];
     const auto& indices = ToBackend(mPipelineLayout)->GetBindingIndexInfo()[index];
 
-    for (BindingIndex bindingIndex{0}; bindingIndex < group->GetLayout()->GetBindingCount();
-         ++bindingIndex) {
+    for (BindingIndex bindingIndex : Range(group->GetLayout()->GetBindingCount())) {
         const BindingInfo& bindingInfo = group->GetLayout()->GetBindingInfo(bindingIndex);
         const uint32_t bindingSlot = indices[bindingIndex];
         const auto bindingVisibility = bindingInfo.visibility & mVisibleStages;
@@ -305,9 +307,9 @@ MaybeError BindGroupTracker::ApplyBindGroup(BindGroupIndex index) {
 
                 switch (layout.type) {
                     case wgpu::BufferBindingType::Uniform: {
-                        ToBackend(binding.buffer)->EnsureConstantBufferIsUpdated(mCommandContext);
-                        ID3D11Buffer* d3d11Buffer =
-                            ToBackend(binding.buffer)->GetD3D11ConstantBuffer();
+                        ID3D11Buffer* d3d11Buffer;
+                        DAWN_TRY_ASSIGN(d3d11Buffer, ToGPUUsableBuffer(binding.buffer)
+                                                         ->GetD3D11ConstantBuffer(mCommandContext));
                         // https://learn.microsoft.com/en-us/windows/win32/api/d3d11_1/nf-d3d11_1-id3d11devicecontext1-vssetconstantbuffers1
                         // Offset and size are measured in shader constants, which are 16 bytes
                         // (4*32-bit components). And the offsets and counts must be multiples
@@ -341,10 +343,9 @@ MaybeError BindGroupTracker::ApplyBindGroup(BindGroupIndex index) {
                                      wgpu::ShaderStage::Fragment | wgpu::ShaderStage::Compute));
                         if (bindingVisibility & wgpu::ShaderStage::Compute) {
                             ComPtr<ID3D11UnorderedAccessView> d3d11UAV;
-                            DAWN_TRY_ASSIGN(d3d11UAV, ToBackend(binding.buffer)
-                                                          ->CreateD3D11UnorderedAccessView1(
-                                                              offset, binding.size));
-                            ToBackend(binding.buffer)->MarkMutated();
+                            DAWN_TRY_ASSIGN(d3d11UAV,
+                                            ToGPUUsableBuffer(binding.buffer)
+                                                ->UseAsUAV(mCommandContext, offset, binding.size));
                             deviceContext->CSSetUnorderedAccessViews(
                                 bindingSlot, 1, d3d11UAV.GetAddressOf(), nullptr);
                         }
@@ -353,8 +354,8 @@ MaybeError BindGroupTracker::ApplyBindGroup(BindGroupIndex index) {
                     case wgpu::BufferBindingType::ReadOnlyStorage: {
                         ComPtr<ID3D11ShaderResourceView> d3d11SRV;
                         DAWN_TRY_ASSIGN(d3d11SRV,
-                                        ToBackend(binding.buffer)
-                                            ->CreateD3D11ShaderResourceView(offset, binding.size));
+                                        ToGPUUsableBuffer(binding.buffer)
+                                            ->UseAsSRV(mCommandContext, offset, binding.size));
                         if (bindingVisibility & wgpu::ShaderStage::Vertex) {
                             deviceContext->VSSetShaderResources(bindingSlot, 1,
                                                                 d3d11SRV.GetAddressOf());
@@ -446,6 +447,10 @@ MaybeError BindGroupTracker::ApplyBindGroup(BindGroupIndex index) {
                         DAWN_UNREACHABLE();
                 }
                 return {};
+            },
+            [](const InputAttachmentBindingInfo&) -> MaybeError {
+                DAWN_UNREACHABLE();
+                return {};
             }));
     }
     return {};
@@ -457,8 +462,7 @@ void BindGroupTracker::UnApplyBindGroup(BindGroupIndex index) {
         mLastAppliedPipelineLayout->GetBindGroupLayout(index);
     const auto& indices = ToBackend(mLastAppliedPipelineLayout)->GetBindingIndexInfo()[index];
 
-    for (BindingIndex bindingIndex{0}; bindingIndex < groupLayout->GetBindingCount();
-         ++bindingIndex) {
+    for (BindingIndex bindingIndex : Range(groupLayout->GetBindingCount())) {
         const BindingInfo& bindingInfo = groupLayout->GetBindingInfo(bindingIndex);
         const uint32_t bindingSlot = indices[bindingIndex];
         const auto bindingVisibility = bindingInfo.visibility & mVisibleStages;
@@ -578,7 +582,8 @@ void BindGroupTracker::UnApplyBindGroup(BindGroupIndex index) {
                     default:
                         DAWN_UNREACHABLE();
                 }
-            });
+            },
+            [](const InputAttachmentBindingInfo&) { DAWN_UNREACHABLE(); });
     }
 }
 

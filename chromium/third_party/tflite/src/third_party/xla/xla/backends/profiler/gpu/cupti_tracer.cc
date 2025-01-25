@@ -15,27 +15,33 @@ limitations under the License.
 
 #include "xla/backends/profiler/gpu/cupti_tracer.h"
 
+#include <list>
+#include <string_view>
+#include <tuple>
+#include <utility>
+#include <vector>
+
 #include "absl/cleanup/cleanup.h"
 #include "absl/container/flat_hash_set.h"
-#include "third_party/gpus/cuda/extras/CUPTI/include/cupti_activity.h"
+#include "absl/types/span.h"
 #include "third_party/gpus/cuda/extras/CUPTI/include/generated_nvtx_meta.h"
 #include "third_party/gpus/cuda/include/cuda.h"
+#include "xla/backends/profiler/gpu/cupti_buffer_events.h"
 #include "xla/backends/profiler/gpu/cupti_collector.h"
+#include "xla/backends/profiler/gpu/cupti_interface.h"
 #include "xla/backends/profiler/gpu/nvtx_utils.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/host_info.h"
 #include "tsl/platform/logging.h"
-#include "tsl/platform/macros.h"
 #include "tsl/profiler/backends/cpu/annotation_stack.h"
+#include "tsl/profiler/utils/per_thread.h"
 
 namespace xla {
 namespace profiler {
 
 namespace {
 
-using absl::OkStatus;
-using absl::Status;
 using tsl::Env;
 using tsl::profiler::AnnotationStack;
 
@@ -49,25 +55,25 @@ class CuptiApiTracingDisabler {
   ~CuptiApiTracingDisabler() { internalCuCall--; }
 };
 
-Status ToStatus(CUptiResult result) {
+absl::Status ToStatus(CUptiResult result) {
   if (result == CUPTI_SUCCESS) {
-    return OkStatus();
+    return absl::OkStatus();
   }
   const char *str = nullptr;
   cuptiGetResultString(result, &str);
   return tsl::errors::Unavailable("CUPTI error: ", str ? str : "<unknown>");
 }
 
-Status ToStatus(CUresult result) {
+absl::Status ToStatus(CUresult result) {
   if (result == CUDA_SUCCESS) {
-    return OkStatus();
+    return absl::OkStatus();
   }
   const char *str = nullptr;
   cuGetErrorName(result, &str);
   return tsl::errors::Unavailable("CUDA error: ", str ? str : "<unknown>");
 }
 
-inline void LogIfError(const Status &status) {
+inline void LogIfError(const absl::Status &status) {
   if (status.ok()) return;
   LOG(ERROR) << status.message();
 }
@@ -302,18 +308,17 @@ void CUPTIAPI ProcessCuptiActivityBuffer(CUcontext context, uint32_t stream_id,
           << " size: " << size << " valid_size: " << valid_size;
   VLOG(3) << "Activity profile for stream " << stream_id;
 
-  Status status = CuptiTracer::GetCuptiTracerSingleton()->ProcessActivityBuffer(
-      context, stream_id, buffer, valid_size);
+  absl::Status status =
+      CuptiTracer::GetCuptiTracerSingleton()->ProcessActivityBuffer(
+          context, stream_id, buffer, valid_size);
   if (!status.ok()) {
     LOG(ERROR) << status;
   }
 }
 
-void AddKernelEventUponApiExit(CuptiTraceCollector *collector,
-                               uint32_t device_id,
+void SetKernelEventUponApiExit(CuptiTracerEvent &event, uint32_t device_id,
                                const CUpti_CallbackData *cbdata,
                                uint64_t start_time, uint64_t end_time) {
-  CuptiTracerEvent event{};
   event.type = CuptiTracerEventType::Kernel;
   event.source = CuptiTracerEventSource::DriverCallback;
   event.name = cbdata->symbolName ? cbdata->symbolName : cbdata->functionName;
@@ -324,15 +329,15 @@ void AddKernelEventUponApiExit(CuptiTraceCollector *collector,
   event.context_id = cbdata->contextUid;
   event.correlation_id = cbdata->correlationId;
   VLOG(3) << "Cuda Kernel launch API exit. name=" << event.name;
-  collector->AddEvent(std::move(event));
 }
 
 // Performs the actual callback for both normal and P2P memcpy operations.
-CuptiTracerEvent PopulateMemcpyCallbackEvent(
-    CuptiTracerEventType type, const CUpti_CallbackData *cbdata,
-    size_t num_bytes, uint32_t src_device, uint32_t dst_device, bool async,
-    uint64_t start_time, uint64_t end_time) {
-  CuptiTracerEvent event{};
+void PopulateMemcpyCallbackEvent(CuptiTracerEvent &event,
+                                 CuptiTracerEventType type,
+                                 const CUpti_CallbackData *cbdata,
+                                 size_t num_bytes, uint32_t src_device,
+                                 uint32_t dst_device, bool async,
+                                 uint64_t start_time, uint64_t end_time) {
   event.type = type;
   event.source = CuptiTracerEventSource::DriverCallback;
   event.start_time_ns = start_time;
@@ -348,10 +353,9 @@ CuptiTracerEvent PopulateMemcpyCallbackEvent(
   event.memcpy_info.copy_kind = CUPTI_ACTIVITY_MEMCPY_KIND_UNKNOWN;
   event.memcpy_info.dst_mem_kind = CUPTI_ACTIVITY_MEMORY_KIND_UNKNOWN;
   event.memcpy_info.src_mem_kind = CUPTI_ACTIVITY_MEMORY_KIND_UNKNOWN;
-  return event;
 }
 
-void AddNormalMemcpyEventUponApiExit(CuptiTraceCollector *collector,
+void SetNormalMemcpyEventUponApiExit(CuptiTracerEvent &event,
                                      uint32_t device_id, CUpti_CallbackId cbid,
                                      const CUpti_CallbackData *cbdata,
                                      uint64_t start_time, uint64_t end_time) {
@@ -362,14 +366,12 @@ void AddNormalMemcpyEventUponApiExit(CuptiTraceCollector *collector,
       DecodeDriverMemcpy(cbid, cbdata->functionParams);
 
   VLOG(3) << "Cuda Memcpy API exit. sz=" << num_bytes;
-  CuptiTracerEvent event =
-      PopulateMemcpyCallbackEvent(type, cbdata, num_bytes, device_id, device_id,
-                                  async, start_time, end_time);
-  collector->AddEvent(std::move(event));
+  PopulateMemcpyCallbackEvent(event, type, cbdata, num_bytes, device_id,
+                              device_id, async, start_time, end_time);
 }
 
-void AddCuMemsetEventUponApiExit(CuptiTraceCollector *collector,
-                                 uint32_t device_id, CUpti_CallbackId cbid,
+void SetCuMemsetEventUponApiExit(CuptiTracerEvent &event, uint32_t device_id,
+                                 CUpti_CallbackId cbid,
                                  const CUpti_CallbackData *cbdata,
                                  uint64_t start_time, uint64_t end_time) {
   // We are casting all variants of cuMemset to cuMemsetD8 for accessing the
@@ -382,7 +384,6 @@ void AddCuMemsetEventUponApiExit(CuptiTraceCollector *collector,
   std::tie(num_bytes, type, async) =
       DecodeDriverMemset(cbid, cbdata->functionParams);
 
-  CuptiTracerEvent event{};
   event.type = type;
   event.source = CuptiTracerEventSource::DriverCallback;
   event.start_time_ns = start_time;
@@ -397,10 +398,9 @@ void AddCuMemsetEventUponApiExit(CuptiTraceCollector *collector,
   VLOG(3) << "Cuda Memset API exit."
           << " dptr=" << reinterpret_cast<void *>(params->dstDevice)
           << " sz=" << num_bytes;
-  collector->AddEvent(std::move(event));
 }
 
-void AddP2PMemcpyEventUponApiExit(CuptiTraceCollector *collector,
+void SetP2PMemcpyEventUponApiExit(CuptiTracerEvent &event,
                                   CuptiInterface *cupti_interface,
                                   uint32_t device_id, CUpti_CallbackId cbid,
                                   const CUpti_CallbackData *cbdata,
@@ -418,20 +418,17 @@ void AddP2PMemcpyEventUponApiExit(CuptiTraceCollector *collector,
   cupti_interface->GetDeviceId(p2p_params->dstContext, &dst_device);
   VLOG(3) << "Cuda P2P Memcpy API exit, src: " << src_device
           << " dst: " << dst_device << " size:" << num_bytes;
-  CuptiTracerEvent event =
-      PopulateMemcpyCallbackEvent(type, cbdata, num_bytes, src_device,
-                                  dst_device, async, start_time, end_time);
-  collector->AddEvent(std::move(event));
+  PopulateMemcpyCallbackEvent(event, type, cbdata, num_bytes, src_device,
+                              dst_device, async, start_time, end_time);
 }
 
-void AddCuMemAllocEventUponApiExit(CuptiTraceCollector *collector,
-                                   uint32_t device_id, CUpti_CallbackId cbid,
+void SetCuMemAllocEventUponApiExit(CuptiTracerEvent &event, uint32_t device_id,
+                                   CUpti_CallbackId cbid,
                                    const CUpti_CallbackData *cbdata,
                                    uint64_t start_time, uint64_t end_time) {
   const auto *params =
       static_cast<const cuMemAlloc_v2_params *>(cbdata->functionParams);
   const void *dptr = reinterpret_cast<void *>(*params->dptr);
-  CuptiTracerEvent event{};
   event.type = CuptiTracerEventType::MemoryAlloc;
   event.source = CuptiTracerEventSource::DriverCallback;
   event.name = cbdata->functionName;
@@ -445,16 +442,14 @@ void AddCuMemAllocEventUponApiExit(CuptiTraceCollector *collector,
   event.memalloc_info.num_bytes = params->bytesize;
   VLOG(3) << "Cuda MemAlloc API exit." << " dptr=" << dptr
           << " sz=" << params->bytesize;
-  collector->AddEvent(std::move(event));
 }
 
-void AddCuMemAllocPitchEventUponApiExit(
-    CuptiTraceCollector *collector, uint32_t device_id, CUpti_CallbackId cbid,
+void SetCuMemAllocPitchEventUponApiExit(
+    CuptiTracerEvent &event, uint32_t device_id, CUpti_CallbackId cbid,
     const CUpti_CallbackData *cbdata, uint64_t start_time, uint64_t end_time) {
   const auto *params =
       static_cast<const cuMemAllocPitch_v2_params *>(cbdata->functionParams);
   const void *dptr = reinterpret_cast<void *>(*params->dptr);
-  CuptiTracerEvent event{};
   event.type = CuptiTracerEventType::MemoryAlloc;
   event.source = CuptiTracerEventSource::DriverCallback;
   event.name = cbdata->functionName;
@@ -469,16 +464,14 @@ void AddCuMemAllocPitchEventUponApiExit(
   event.memalloc_info.num_bytes = size_in_bytes;
   VLOG(3) << "Cuda MemAllocPitch API exit." << " dptr=" << dptr
           << " sz=" << size_in_bytes;
-  collector->AddEvent(std::move(event));
 }
 
-void AddCuMemAllocManagedEventUponApiExit(
-    CuptiTraceCollector *collector, uint32_t device_id, CUpti_CallbackId cbid,
+void SetCuMemAllocManagedEventUponApiExit(
+    CuptiTracerEvent &event, uint32_t device_id, CUpti_CallbackId cbid,
     const CUpti_CallbackData *cbdata, uint64_t start_time, uint64_t end_time) {
   const auto *params =
       static_cast<const cuMemAllocManaged_params *>(cbdata->functionParams);
   const void *dptr = reinterpret_cast<void *>(*params->dptr);
-  CuptiTracerEvent event{};
   event.type = CuptiTracerEventType::MemoryAlloc;
   event.source = CuptiTracerEventSource::DriverCallback;
   event.name = cbdata->functionName;
@@ -492,17 +485,15 @@ void AddCuMemAllocManagedEventUponApiExit(
   event.memalloc_info.num_bytes = params->bytesize;
   VLOG(3) << "Cuda MemAllocManaged API exit." << " dptr=" << dptr
           << " sz=" << params->bytesize;
-  collector->AddEvent(std::move(event));
 }
 
-void AddCuMemAllocHostEventUponApiExit(CuptiTraceCollector *collector,
+void SetCuMemAllocHostEventUponApiExit(CuptiTracerEvent &event,
                                        uint32_t device_id,
                                        CUpti_CallbackId cbid,
                                        const CUpti_CallbackData *cbdata,
                                        uint64_t start_time, uint64_t end_time) {
   const auto *params =
       static_cast<const cuMemAllocHost_v2_params *>(cbdata->functionParams);
-  CuptiTracerEvent event{};
   event.type = CuptiTracerEventType::MemoryAlloc;
   event.source = CuptiTracerEventSource::DriverCallback;
   event.name = cbdata->functionName;
@@ -516,17 +507,15 @@ void AddCuMemAllocHostEventUponApiExit(CuptiTraceCollector *collector,
   event.memalloc_info.num_bytes = params->bytesize;
   VLOG(3) << "Cuda MemAllocHost API exit." << " pp=" << *params->pp
           << " sz=" << params->bytesize;
-  collector->AddEvent(std::move(event));
 }
 
-void AddCuMemHostAllocEventUponApiExit(CuptiTraceCollector *collector,
+void SetCuMemHostAllocEventUponApiExit(CuptiTracerEvent &event,
                                        uint32_t device_id,
                                        CUpti_CallbackId cbid,
                                        const CUpti_CallbackData *cbdata,
                                        uint64_t start_time, uint64_t end_time) {
   const auto *params =
       static_cast<const cuMemHostAlloc_params *>(cbdata->functionParams);
-  CuptiTracerEvent event{};
   event.type = CuptiTracerEventType::MemoryAlloc;
   event.source = CuptiTracerEventSource::DriverCallback;
   event.name = cbdata->functionName;
@@ -540,17 +529,15 @@ void AddCuMemHostAllocEventUponApiExit(CuptiTraceCollector *collector,
   event.memalloc_info.num_bytes = params->bytesize;
   VLOG(3) << "Cuda MemHostAlloc API exit." << " pp=" << *params->pp
           << " sz=" << params->bytesize << " Flags=" << params->Flags;
-  collector->AddEvent(std::move(event));
 }
 
-void AddCuMemFreeEventUponApiExit(CuptiTraceCollector *collector,
-                                  uint32_t device_id, CUpti_CallbackId cbid,
+void SetCuMemFreeEventUponApiExit(CuptiTracerEvent &event, uint32_t device_id,
+                                  CUpti_CallbackId cbid,
                                   const CUpti_CallbackData *cbdata,
                                   uint64_t start_time, uint64_t end_time) {
   const auto *params =
       static_cast<const cuMemFree_v2_params *>(cbdata->functionParams);
   const void *dptr = reinterpret_cast<void *>(params->dptr);
-  CuptiTracerEvent event{};
   event.type = CuptiTracerEventType::MemoryFree;
   event.source = CuptiTracerEventSource::DriverCallback;
   event.name = cbdata->functionName;
@@ -562,16 +549,14 @@ void AddCuMemFreeEventUponApiExit(CuptiTraceCollector *collector,
   event.correlation_id = cbdata->correlationId;
   event.memfree_info.address = reinterpret_cast<uintptr_t>(dptr);
   VLOG(3) << "Cuda MemFree API exit." << " dptr=" << dptr;
-  collector->AddEvent(std::move(event));
 }
 
-void AddCuMemFreeHostEventUponApiExit(CuptiTraceCollector *collector,
+void SetCuMemFreeHostEventUponApiExit(CuptiTracerEvent &event,
                                       uint32_t device_id, CUpti_CallbackId cbid,
                                       const CUpti_CallbackData *cbdata,
                                       uint64_t start_time, uint64_t end_time) {
   const auto *params =
       static_cast<const cuMemFreeHost_params *>(cbdata->functionParams);
-  CuptiTracerEvent event{};
   event.type = CuptiTracerEventType::MemoryFree;
   event.source = CuptiTracerEventSource::DriverCallback;
   event.name = cbdata->functionName;
@@ -583,15 +568,13 @@ void AddCuMemFreeHostEventUponApiExit(CuptiTraceCollector *collector,
   event.correlation_id = cbdata->correlationId;
   event.memfree_info.address = reinterpret_cast<uintptr_t>(params->p);
   VLOG(3) << "Cuda MemFreeHost API exit." << " p=" << params->p;
-  collector->AddEvent(std::move(event));
 }
 
-void AddCuMemHostRegisterEventUponApiExit(
-    CuptiTraceCollector *collector, uint32_t device_id, CUpti_CallbackId cbid,
+void SetCuMemHostRegisterEventUponApiExit(
+    CuptiTracerEvent &event, uint32_t device_id, CUpti_CallbackId cbid,
     const CUpti_CallbackData *cbdata, uint64_t start_time, uint64_t end_time) {
   const auto *params =
       static_cast<const cuMemHostRegister_v2_params *>(cbdata->functionParams);
-  CuptiTracerEvent event{};
   event.type = CuptiTracerEventType::HostRegister;
   event.source = CuptiTracerEventSource::DriverCallback;
   event.name = cbdata->functionName;
@@ -606,15 +589,13 @@ void AddCuMemHostRegisterEventUponApiExit(
   event.host_register_info.flags = params->Flags;
   VLOG(3) << "Cuda HostRegister API exit." << " p=" << params->p
           << " bytesize=" << params->bytesize << " flags=" << params->Flags;
-  collector->AddEvent(std::move(event));
 }
 
-void AddCuMemHostUnregisterEventUponApiExit(
-    CuptiTraceCollector *collector, uint32_t device_id, CUpti_CallbackId cbid,
+void SetCuMemHostUnregisterEventUponApiExit(
+    CuptiTracerEvent &event, uint32_t device_id, CUpti_CallbackId cbid,
     const CUpti_CallbackData *cbdata, uint64_t start_time, uint64_t end_time) {
   const auto *params =
       static_cast<const cuMemHostUnregister_params *>(cbdata->functionParams);
-  CuptiTracerEvent event{};
   event.type = CuptiTracerEventType::HostUnregister;
   event.source = CuptiTracerEventSource::DriverCallback;
   event.name = cbdata->functionName;
@@ -626,14 +607,53 @@ void AddCuMemHostUnregisterEventUponApiExit(
   event.correlation_id = cbdata->correlationId;
   event.host_unregister_info.address = reinterpret_cast<uintptr_t>(params->p);
   VLOG(3) << "Cuda HostUnregister API exit." << " p=" << params->p;
-  collector->AddEvent(std::move(event));
 }
 
-void AddGenericEventUponApiExit(CuptiTraceCollector *collector,
-                                uint32_t device_id, CUpti_CallbackId cbid,
+struct GraphResourceCreationInfo {
+  uint32_t graph_id = 0;
+  uint32_t orig_graph_id = 0;
+};
+
+static GraphResourceCreationInfo &GetGraphResourceCreationInfo() {
+  static thread_local GraphResourceCreationInfo per_thread_graph_info;
+  return per_thread_graph_info;
+}
+
+// Currently used for cuGraphInstantiate*, cuGraphLaunch*, cuGraphCreate,
+// cuGraphClone.
+void SetCudaGraphEventUponApiExit(CuptiTracerEvent &event,
+                                  CuptiInterface *cupti_interface,
+                                  uint32_t device_id, CUpti_CallbackId cbid,
+                                  const CUpti_CallbackData *cbdata,
+                                  uint64_t start_time, uint64_t end_time) {
+  GraphResourceCreationInfo &graph_id_info = GetGraphResourceCreationInfo();
+  if (cbid == CUPTI_DRIVER_TRACE_CBID_cuGraphLaunch ||
+      cbid == CUPTI_DRIVER_TRACE_CBID_cuGraphLaunch_ptsz) {
+    const auto *params =
+        static_cast<const cuGraphLaunch_params *>(cbdata->functionParams);
+    cupti_interface->GetGraphExecId(params->hGraph, &graph_id_info.graph_id);
+    graph_id_info.orig_graph_id = 0;
+  }
+
+  event.type = CuptiTracerEventType::CudaGraph;
+  event.source = CuptiTracerEventSource::DriverCallback;
+  event.name = cbdata->functionName;
+  event.start_time_ns = start_time;
+  event.end_time_ns = end_time;
+  event.thread_id = Env::Default()->GetCurrentThreadId();
+  event.device_id = device_id;
+  event.context_id = cbdata->contextUid;
+  event.correlation_id = cbdata->correlationId;
+  event.cuda_graph_info.cbid = cbid;
+  event.graph_id = graph_id_info.graph_id;
+  event.cuda_graph_info.orig_graph_id = graph_id_info.orig_graph_id;
+  VLOG(3) << "Observed CudaGraph API exit." << " name=" << cbdata->functionName;
+}
+
+void SetGenericEventUponApiExit(CuptiTracerEvent &event, uint32_t device_id,
+                                CUpti_CallbackId cbid,
                                 const CUpti_CallbackData *cbdata,
                                 uint64_t start_time, uint64_t end_time) {
-  CuptiTracerEvent event{};
   event.type = CuptiTracerEventType::Generic;
   event.source = CuptiTracerEventSource::DriverCallback;
   event.name = cbdata->functionName;
@@ -643,92 +663,16 @@ void AddGenericEventUponApiExit(CuptiTraceCollector *collector,
   event.device_id = device_id;
   event.context_id = cbdata->contextUid;
   event.correlation_id = cbdata->correlationId;
+  event.generic_info.cbid = cbid;
   VLOG(3) << "Observed generic API exit." << " name=" << cbdata->functionName;
-  collector->AddEvent(std::move(event));
 }
 
-// This hook uses cupti activity api to measure device side activities.
-class CuptiDriverApiHookWithActivityApi : public CuptiDriverApiHook {
- public:
-  CuptiDriverApiHookWithActivityApi(const CuptiTracerOptions &option,
-                                    CuptiInterface *cupti_interface,
-                                    CuptiTraceCollector *collector)
-      : option_(option),
-        cupti_interface_(cupti_interface),
-        collector_(collector) {}
-
-  Status OnDriverApiEnter(int device_id, CUpti_CallbackDomain domain,
-                          CUpti_CallbackId cbid,
-                          const CUpti_CallbackData *cbdata) override {
-    // Stash away the current Cupti timestamp into cbdata.
-    *cbdata->correlationData =
-        option_.required_callback_api_events ? CuptiTracer::GetTimestamp() : 0;
-    return OkStatus();
-  }
-  Status OnDriverApiExit(int device_id, CUpti_CallbackDomain domain,
-                         CUpti_CallbackId cbid,
-                         const CUpti_CallbackData *cbdata) override {
-    // If we are not collecting CPU events from Callback API, we can return now.
-    if (!option_.required_callback_api_events) {
-      return OkStatus();
-    }
-
-    // Grab timestamp for API exit. API entry timestamp saved in cbdata.
-    uint64_t end_tsc = CuptiTracer::GetTimestamp();
-    uint64_t start_tsc = *cbdata->correlationData;
-    TrackContext(cbid, cbdata->context);
-    return AddDriverApiCallbackEvent(collector_, cupti_interface_, device_id,
-                                     start_tsc, end_tsc, domain, cbid, cbdata);
-  }
-  Status SyncAndFlush() override {
-    if (option_.sync_devices_before_stop) {
-      CuptiApiTracingDisabler disabler;
-      absl::MutexLock lock(&mutex_);
-      for (auto &ctx : contexts_) {
-        cuCtxPushCurrent(ctx);
-        cuCtxSynchronize();  // Ignore error here for best effort.
-        CUcontext current;
-        cuCtxPopCurrent(&current);
-      }
-    }
-    return OkStatus();
-  }
-
- private:
-  void TrackContext(CUpti_CallbackId cbid, CUcontext ctx) {
-    if (!option_.sync_devices_before_stop) return;
-    if (ctx == nullptr) return;
-    absl::MutexLock lock(&mutex_);
-    if (cbid == CUPTI_DRIVER_TRACE_CBID_cuCtxDestroy_v2 ||
-        cbid == CUPTI_DRIVER_TRACE_CBID_cuCtxDestroy) {
-      contexts_.erase(ctx);
-    } else {
-      contexts_.emplace(ctx);
-    }
-  }
-
-  const CuptiTracerOptions option_;
-  CuptiInterface *cupti_interface_;
-  CuptiTraceCollector *collector_;
-  absl::Mutex mutex_;
-  absl::flat_hash_set<CUcontext> contexts_ TF_GUARDED_BY(mutex_);
-
-  CuptiDriverApiHookWithActivityApi(const CuptiDriverApiHookWithActivityApi &) =
-      delete;
-  void operator=(const CuptiDriverApiHookWithActivityApi &) = delete;
-};
-
-/*static*/ std::string ErrorWithHostname(absl::string_view error_message) {
-  return absl::StrCat(tsl::port::Hostname(), ": ", error_message);
-}
-
-}  // namespace
-
-/*static*/ Status CuptiDriverApiHook::AddDriverApiCallbackEvent(
-    CuptiTraceCollector *collector, CuptiInterface *cupti_interface,
-    int device_id, uint64_t start_tsc, uint64_t end_tsc,
-    CUpti_CallbackDomain domain, CUpti_CallbackId cbid,
-    const CUpti_CallbackData *cbdata) {
+static void SetCallbackEventUponApiExit(CuptiTracerEvent &event,
+                                        CuptiInterface *cupti_interface,
+                                        uint32_t device_id,
+                                        CUpti_CallbackId cbid,
+                                        const CUpti_CallbackData *cbdata,
+                                        uint64_t start_tsc, uint64_t end_tsc) {
   switch (cbid) {
     case CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel:
 #if CUDA_VERSION >= 11080  // CUDA 11.8
@@ -736,8 +680,7 @@ class CuptiDriverApiHookWithActivityApi : public CuptiDriverApiHook {
 #endif  // CUDA_VERSION >= 11080
     case CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernel:
     case CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernelMultiDevice:
-      AddKernelEventUponApiExit(collector, device_id, cbdata, start_tsc,
-                                end_tsc);
+      SetKernelEventUponApiExit(event, device_id, cbdata, start_tsc, end_tsc);
       break;
     case CUPTI_DRIVER_TRACE_CBID_cuMemcpy:
     case CUPTI_DRIVER_TRACE_CBID_cuMemcpyAsync:
@@ -763,48 +706,48 @@ class CuptiDriverApiHookWithActivityApi : public CuptiDriverApiHook {
       // dst memory kind by casting cbdata->functionParams. However, we are not
       // doing that because that will incur significant overhead to get the
       // memory aperture of each argument.
-      AddNormalMemcpyEventUponApiExit(collector, device_id, cbid, cbdata,
-                                      start_tsc, end_tsc);
+      SetNormalMemcpyEventUponApiExit(event, device_id, cbid, cbdata, start_tsc,
+                                      end_tsc);
       break;
     case CUPTI_DRIVER_TRACE_CBID_cuMemcpyPeer:
     case CUPTI_DRIVER_TRACE_CBID_cuMemcpyPeerAsync:
-      AddP2PMemcpyEventUponApiExit(collector, cupti_interface, device_id, cbid,
+      SetP2PMemcpyEventUponApiExit(event, cupti_interface, device_id, cbid,
                                    cbdata, start_tsc, end_tsc);
       break;
     case CUPTI_DRIVER_TRACE_CBID_cuMemAlloc_v2:
-      AddCuMemAllocEventUponApiExit(collector, device_id, cbid, cbdata,
-                                    start_tsc, end_tsc);
+      SetCuMemAllocEventUponApiExit(event, device_id, cbid, cbdata, start_tsc,
+                                    end_tsc);
       break;
     case CUPTI_DRIVER_TRACE_CBID_cuMemAllocPitch_v2:
-      AddCuMemAllocPitchEventUponApiExit(collector, device_id, cbid, cbdata,
+      SetCuMemAllocPitchEventUponApiExit(event, device_id, cbid, cbdata,
                                          start_tsc, end_tsc);
       break;
     case CUPTI_DRIVER_TRACE_CBID_cuMemAllocManaged:
-      AddCuMemAllocManagedEventUponApiExit(collector, device_id, cbid, cbdata,
+      SetCuMemAllocManagedEventUponApiExit(event, device_id, cbid, cbdata,
                                            start_tsc, end_tsc);
       break;
     case CUPTI_DRIVER_TRACE_CBID_cuMemAllocHost_v2:
-      AddCuMemAllocHostEventUponApiExit(collector, device_id, cbid, cbdata,
+      SetCuMemAllocHostEventUponApiExit(event, device_id, cbid, cbdata,
                                         start_tsc, end_tsc);
       break;
     case CUPTI_DRIVER_TRACE_CBID_cuMemHostAlloc:
-      AddCuMemHostAllocEventUponApiExit(collector, device_id, cbid, cbdata,
+      SetCuMemHostAllocEventUponApiExit(event, device_id, cbid, cbdata,
                                         start_tsc, end_tsc);
       break;
     case CUPTI_DRIVER_TRACE_CBID_cuMemFree_v2:
-      AddCuMemFreeEventUponApiExit(collector, device_id, cbid, cbdata,
-                                   start_tsc, end_tsc);
+      SetCuMemFreeEventUponApiExit(event, device_id, cbid, cbdata, start_tsc,
+                                   end_tsc);
       break;
     case CUPTI_DRIVER_TRACE_CBID_cuMemFreeHost:
-      AddCuMemFreeHostEventUponApiExit(collector, device_id, cbid, cbdata,
+      SetCuMemFreeHostEventUponApiExit(event, device_id, cbid, cbdata,
                                        start_tsc, end_tsc);
       break;
     case CUPTI_DRIVER_TRACE_CBID_cuMemHostRegister_v2:
-      AddCuMemHostRegisterEventUponApiExit(collector, device_id, cbid, cbdata,
+      SetCuMemHostRegisterEventUponApiExit(event, device_id, cbid, cbdata,
                                            start_tsc, end_tsc);
       break;
     case CUPTI_DRIVER_TRACE_CBID_cuMemHostUnregister:
-      AddCuMemHostUnregisterEventUponApiExit(collector, device_id, cbid, cbdata,
+      SetCuMemHostUnregisterEventUponApiExit(event, device_id, cbid, cbdata,
                                              start_tsc, end_tsc);
       break;
     case CUPTI_DRIVER_TRACE_CBID_cuMemsetD8_v2:
@@ -819,16 +762,184 @@ class CuptiDriverApiHookWithActivityApi : public CuptiDriverApiHook {
     case CUPTI_DRIVER_TRACE_CBID_cuMemsetD2D8Async:
     case CUPTI_DRIVER_TRACE_CBID_cuMemsetD2D16Async:
     case CUPTI_DRIVER_TRACE_CBID_cuMemsetD2D32Async:
-      AddCuMemsetEventUponApiExit(collector, device_id, cbid, cbdata, start_tsc,
+      SetCuMemsetEventUponApiExit(event, device_id, cbid, cbdata, start_tsc,
                                   end_tsc);
       break;
+#if CUDA_VERSION >= 11070  // CUDA 11.7
+    case CUPTI_DRIVER_TRACE_CBID_cuGraphCreate:
+    case CUPTI_DRIVER_TRACE_CBID_cuGraphInstantiate:
+    case CUPTI_DRIVER_TRACE_CBID_cuGraphLaunch:
+    case CUPTI_DRIVER_TRACE_CBID_cuGraphLaunch_ptsz:
+    case CUPTI_DRIVER_TRACE_CBID_cuGraphClone:
+    case CUPTI_DRIVER_TRACE_CBID_cuGraphInstantiate_v2:
+    case CUPTI_DRIVER_TRACE_CBID_cuGraphInstantiateWithFlags:
+    case CUPTI_DRIVER_TRACE_CBID_cuGraphInstantiateWithParams:
+    case CUPTI_DRIVER_TRACE_CBID_cuGraphInstantiateWithParams_ptsz:
+      SetCudaGraphEventUponApiExit(event, cupti_interface, device_id, cbid,
+                                   cbdata, start_tsc, end_tsc);
+      break;
+#endif  // CUDA_VERSION >= 11070
     default:
-      AddGenericEventUponApiExit(collector, device_id, cbid, cbdata, start_tsc,
+      SetGenericEventUponApiExit(event, device_id, cbid, cbdata, start_tsc,
                                  end_tsc);
       break;
   }
-  return OkStatus();
 }
+
+// This class is instantiated per thread. The contention will happen at the
+// moment of start/stop the tracing, when control thread is clearing all thread
+// local data, while worker threads are injecting events. The mutex in practice
+// will have no contention at all, so still cheap.
+class GuardedCallbackAnnotationsAndEvents {
+ public:
+  CallbackAnnotationsAndEvents Consume() {
+    tsl::mutex_lock lock(mu_);
+    CallbackAnnotationsAndEvents grabbed;
+    std::swap(grabbed, annotations_and_events_);
+    return grabbed;
+  }
+
+  void Clear() {
+    tsl::mutex_lock lock(mu_);
+    annotations_and_events_.Clear();
+  }
+
+  void IncNumDroppedEvents() {
+    tsl::mutex_lock lock(mu_);
+    annotations_and_events_.IncNumDroppedEvents();
+  }
+
+  void Push(const CuptiTracer &tracer, CuptiTracerEvent &&event) {
+    tsl::mutex_lock lock(mu_);
+    // Some logic change as no cross thread string comparison should be
+    // made here. The max_annotation_string is used to limit per-thread
+    // annotation string count. And annotation string is not collected
+    // if total callback event count overflow.
+    bool too_many_annotations = tracer.TooManyAnnotationStrings(
+        annotations_and_events_.NumAnnotations());
+    event.annotation = annotations_and_events_.DedupAnnotation(
+        too_many_annotations ? absl::string_view() : event.annotation),
+    event.nvtx_range = annotations_and_events_.DedupNvtxRange(
+        too_many_annotations ? absl::string_view() : event.nvtx_range);
+    annotations_and_events_.event_queue().Push(std::move(event));
+  }
+
+ private:
+  tsl::mutex mu_;
+  CallbackAnnotationsAndEvents annotations_and_events_ TF_GUARDED_BY(mu_);
+};
+
+using PerThreadCallbackAnnotationsAndEvents =
+    tsl::profiler::PerThread<GuardedCallbackAnnotationsAndEvents>;
+
+absl::Status AddDriverApiCallbackEvent(
+    CuptiTracer *tracer, CuptiInterface *cupti_interface, int device_id,
+    uint64_t start_tsc, uint64_t end_tsc, CUpti_CallbackDomain domain,
+    CUpti_CallbackId cbid, const CUpti_CallbackData *cbdata) {
+  absl::string_view annotation = AnnotationStack::Get();
+  absl::string_view nvtx_range = "";
+  if (!annotation.empty() &&
+      cbid != CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernelMultiDevice) {
+    nvtx_range = NVTXRangeTracker::CurrentRange();
+  }
+
+  auto &guarded_annotations_and_events =
+      PerThreadCallbackAnnotationsAndEvents::Get();
+  if (tracer->TooManyCallbackEvents()) {
+    guarded_annotations_and_events.IncNumDroppedEvents();
+    return absl::OkStatus();
+  }
+  tracer->IncCallbackEventCount();
+  CuptiTracerEvent event{};
+  event.correlation_id = cbdata->correlationId;
+  event.annotation = annotation;
+  event.nvtx_range = nvtx_range;
+  SetCallbackEventUponApiExit(event, cupti_interface, device_id, cbid, cbdata,
+                              start_tsc, end_tsc);
+  guarded_annotations_and_events.Push(*tracer, std::move(event));
+  return absl::OkStatus();
+}
+
+// This hook uses cupti activity api to measure device side activities.
+class CuptiDriverApiHookWithActivityApi : public CuptiDriverApiHook {
+ public:
+  CuptiDriverApiHookWithActivityApi(const CuptiTracerOptions &option,
+                                    CuptiInterface *cupti_interface,
+                                    CuptiTracer *tracer)
+      : option_(option), cupti_interface_(cupti_interface), tracer_(tracer) {}
+
+  absl::Status OnDriverApiEnter(int device_id, CUpti_CallbackDomain domain,
+                                CUpti_CallbackId cbid,
+                                const CUpti_CallbackData *cbdata) override {
+    // Stash away the current Cupti timestamp into cbdata.
+    *cbdata->correlationData =
+        option_.required_callback_api_events ? CuptiTracer::GetTimestamp() : 0;
+    return absl::OkStatus();
+  }
+  absl::Status OnDriverApiExit(int device_id, CUpti_CallbackDomain domain,
+                               CUpti_CallbackId cbid,
+                               const CUpti_CallbackData *cbdata) override {
+    // Grab timestamp for API exit. API entry timestamp saved in cbdata.
+    uint64_t end_tsc = CuptiTracer::GetTimestamp();
+    uint64_t start_tsc = *cbdata->correlationData;
+    TrackContext(cbid, cbdata->context);
+    return AddDriverApiCallbackEvent(tracer_, cupti_interface_, device_id,
+                                     start_tsc, end_tsc, domain, cbid, cbdata);
+  }
+  absl::Status SyncAndFlush() override {
+    if (option_.sync_devices_before_stop) {
+      CuptiApiTracingDisabler disabler;
+      absl::MutexLock lock(&mutex_);
+      for (auto &ctx : contexts_) {
+        cuCtxPushCurrent(ctx);
+        cuCtxSynchronize();  // Ignore error here for best effort.
+        CUcontext current;
+        cuCtxPopCurrent(&current);
+      }
+    }
+    return absl::OkStatus();
+  }
+
+ private:
+  void TrackContext(CUpti_CallbackId cbid, CUcontext ctx) {
+    if (!option_.sync_devices_before_stop) return;
+    if (ctx == nullptr) return;
+    absl::MutexLock lock(&mutex_);
+    if (cbid == CUPTI_DRIVER_TRACE_CBID_cuCtxDestroy_v2 ||
+        cbid == CUPTI_DRIVER_TRACE_CBID_cuCtxDestroy) {
+      contexts_.erase(ctx);
+    } else {
+      contexts_.emplace(ctx);
+    }
+  }
+
+  const CuptiTracerOptions option_;
+  CuptiInterface *cupti_interface_;
+  CuptiTracer *tracer_;
+  absl::Mutex mutex_;
+  absl::flat_hash_set<CUcontext> contexts_ TF_GUARDED_BY(mutex_);
+
+  CuptiDriverApiHookWithActivityApi(const CuptiDriverApiHookWithActivityApi &) =
+      delete;
+  void operator=(const CuptiDriverApiHookWithActivityApi &) = delete;
+};
+
+/*static*/ std::string ErrorWithHostname(absl::string_view error_message) {
+  return absl::StrCat(tsl::port::Hostname(), ": ", error_message);
+}
+
+absl::Span<const uint32_t> GetCudaGraphTracingResourceCbids() {
+#if CUDA_VERSION >= 11070
+  static constexpr uint32_t res_cbids[] = {
+      CUPTI_CBID_RESOURCE_GRAPH_CREATED, CUPTI_CBID_RESOURCE_GRAPH_CLONED,
+      CUPTI_CBID_RESOURCE_GRAPHEXEC_CREATED};
+  return absl::MakeSpan(res_cbids);
+#else
+  return absl::Span<const uint32_t>();
+#endif
+}
+
+}  // namespace
 
 const char *GetTraceEventTypeName(const CuptiTracerEventType &type) {
   // Do not use a default so that this gives a build error when
@@ -864,6 +975,8 @@ const char *GetTraceEventTypeName(const CuptiTracerEventType &type) {
       return "HostRegister";
     case CuptiTracerEventType::HostUnregister:
       return "HostUnregister";
+    case CuptiTracerEventType::CudaGraph:
+      return "CudaGraph";
     case CuptiTracerEventType::Unsupported:
       return "";
   }
@@ -901,10 +1014,10 @@ void CuptiTracer::Enable(const CuptiTracerOptions &option,
   option_ = option;
   collector_ = collector;
 
-  cupti_driver_api_hook_.reset(new CuptiDriverApiHookWithActivityApi(
-      option, cupti_interface_, collector));
+  cupti_driver_api_hook_ = std::make_unique<CuptiDriverApiHookWithActivityApi>(
+      option, cupti_interface_, this);
 
-  Status status = EnableApiTracing();
+  absl::Status status = EnableApiTracing();
   need_root_access_ |= status.code() == tsl::error::PERMISSION_DENIED;
   if (!status.ok()) return;
 
@@ -919,7 +1032,21 @@ void CuptiTracer::Disable() {
   Finalize().IgnoreError();
   cupti_driver_api_hook_->SyncAndFlush().IgnoreError();
 
-  collector_->OnTracerCachedActivityBuffers(std::move(activity_buffers_));
+  collector_->SetTracingEndTimeNs(GetTimestamp());
+
+  // The callback API events must be processed before activity API buffers
+  // because the AnnotationMap is populated from the callback API events and
+  // queried by the activity API events.
+  collector_->OnTracerCollectedCallbackData(
+      GatherCallbackAnnotationsAndEvents(/*stop_recording=*/true),
+      IsCallbackApiEventsRequired());
+
+  if (activity_buffers_) {
+    auto cached_buffers = activity_buffers_->PopCachedBuffers();
+    activity_buffers_.reset();
+    collector_->OnTracerCachedActivityBuffers(std::move(cached_buffers));
+  }
+
   if (cupti_dropped_activity_event_count_ > 0) {
     collector_->OnEventsDropped("Activity Event dropped by Cupti Lib:",
                                 cupti_dropped_activity_event_count_);
@@ -936,8 +1063,46 @@ void CuptiTracer::Disable() {
   tsl::profiler::AnnotationStack::Enable(false);
 }
 
-Status CuptiTracer::EnableApiTracing() {
-  if (api_tracing_enabled_) return OkStatus();
+absl::Status CuptiTracer::FlushEventsToCollector() {
+  if (!api_tracing_enabled_ && !activity_tracing_enabled_)
+    return absl::OkStatus();
+
+  // Need get the cached activity buffers first, but send to collector after
+  // the callback events are processed.
+  std::list<CuptiActivityBufferManager::ActivityBufferAndSize> cached_buffers;
+  if (activity_tracing_enabled_) {
+    cached_buffers = activity_buffers_->PopCachedBuffers();
+  }
+
+  if (api_tracing_enabled_) {
+    collector_->OnTracerCollectedCallbackData(
+        GatherCallbackAnnotationsAndEvents(/*stop_recording=*/false),
+        IsCallbackApiEventsRequired());
+  }
+
+  collector_->OnTracerCachedActivityBuffers(std::move(cached_buffers));
+  return absl::OkStatus();
+}
+
+absl::Status CuptiTracer::SetActivityFlushPeriod(uint32_t period_ms) {
+  if (activity_tracing_enabled_) {
+    LOG(INFO) << "Set CUPTI activity flush period to " << period_ms << "ms.";
+    RETURN_IF_CUPTI_ERROR(cupti_interface_->SetActivityFlushPeriod(period_ms));
+  }
+  return absl::OkStatus();
+}
+
+absl::Status CuptiTracer::FlushActivityBuffers() {
+  // Not forced flush. Only flush completed activity buffers.
+  RETURN_IF_CUPTI_ERROR(cupti_interface_->ActivityFlushAll(0));
+  return absl::OkStatus();
+}
+
+// Need to trace graph ids from creation and instantiation.
+absl::Status CuptiTracer::EnableApiTracing() {
+  if (api_tracing_enabled_) return absl::OkStatus();
+
+  PrepareCallbackStart();
 
   VLOG(1) << "Enable subscriber";
   // Subscribe can return CUPTI_ERROR_MAX_LIMIT_REACHED.
@@ -946,6 +1111,12 @@ Status CuptiTracer::EnableApiTracing() {
   RETURN_IF_CUPTI_ERROR(cupti_interface_->Subscribe(
       &subscriber_, (CUpti_CallbackFunc)ApiCallback, this));
   api_tracing_enabled_ = true;
+
+  absl::Span<const uint32_t> res_cbids = GetCudaGraphTracingResourceCbids();
+  for (auto cbid : res_cbids) {
+    RETURN_IF_CUPTI_ERROR(cupti_interface_->EnableCallback(
+        1 /* ENABLE */, subscriber_, CUPTI_CB_DOMAIN_RESOURCE, cbid));
+  }
 
   if (!option_->cbids_selected.empty()) {
     for (auto cbid : option_->cbids_selected) {
@@ -961,13 +1132,19 @@ Status CuptiTracer::EnableApiTracing() {
     RETURN_IF_CUPTI_ERROR(cupti_interface_->EnableDomain(
         1 /* ENABLE */, subscriber_, CUPTI_CB_DOMAIN_NVTX));
   }
-  return OkStatus();
+  return absl::OkStatus();
 }
 
-Status CuptiTracer::DisableApiTracing() {
-  if (!api_tracing_enabled_) return OkStatus();
+absl::Status CuptiTracer::DisableApiTracing() {
+  if (!api_tracing_enabled_) return absl::OkStatus();
 
   api_tracing_enabled_ = false;
+
+  absl::Span<const uint32_t> res_cbids = GetCudaGraphTracingResourceCbids();
+  for (auto cbid : res_cbids) {
+    RETURN_IF_CUPTI_ERROR(cupti_interface_->EnableCallback(
+        0 /* DISABLE */, subscriber_, CUPTI_CB_DOMAIN_RESOURCE, cbid));
+  }
 
   if (!option_->cbids_selected.empty()) {
     for (auto cbid : option_->cbids_selected) {
@@ -986,11 +1163,11 @@ Status CuptiTracer::DisableApiTracing() {
 
   VLOG(1) << "Disable subscriber";
   RETURN_IF_CUPTI_ERROR(cupti_interface_->Unsubscribe(subscriber_));
-  return OkStatus();
+  return absl::OkStatus();
 }
 
-Status CuptiTracer::EnableActivityTracing() {
-  if (activity_tracing_enabled_) return OkStatus();
+absl::Status CuptiTracer::EnableActivityTracing() {
+  if (activity_tracing_enabled_) return absl::OkStatus();
   PrepareActivityStart();
   if (!option_->activities_selected.empty()) {
     // Initialize callback functions for Cupti Activity API.
@@ -1003,7 +1180,6 @@ Status CuptiTracer::EnableActivityTracing() {
     }
     RETURN_IF_CUPTI_ERROR(cupti_interface_->ActivityRegisterCallbacks(
         RequestCuptiActivityBuffer, ProcessCuptiActivityBuffer));
-
     VLOG(1) << "Enabling activity tracing for "
             << option_->activities_selected.size() << " activities";
     for (auto activity : option_->activities_selected) {
@@ -1015,10 +1191,10 @@ Status CuptiTracer::EnableActivityTracing() {
     }
   }
   activity_tracing_enabled_ = true;
-  return OkStatus();
+  return absl::OkStatus();
 }
 
-Status CuptiTracer::DisableActivityTracing() {
+absl::Status CuptiTracer::DisableActivityTracing() {
   if (activity_tracing_enabled_) {
     VLOG(1) << "Disabling activity tracing for "
             << option_->activities_selected.size() << " activities";
@@ -1037,15 +1213,15 @@ Status CuptiTracer::DisableActivityTracing() {
     LOG(INFO) << "CUPTI activity buffer flushed";
   }
   activity_tracing_enabled_ = false;
-  return OkStatus();
+  return absl::OkStatus();
 }
 
-Status CuptiTracer::Finalize() {
+absl::Status CuptiTracer::Finalize() {
   if (option_->cupti_finalize) {
     VLOG(1) << "CuptiFinalize";
     RETURN_IF_CUPTI_ERROR(cupti_interface_->Finalize());
   }
-  return OkStatus();
+  return absl::OkStatus();
 }
 
 /*static*/ uint64_t CuptiTracer::GetTimestamp() {
@@ -1059,8 +1235,8 @@ Status CuptiTracer::Finalize() {
   return 0;
 }
 
-Status CuptiTracer::HandleNVTXCallback(CUpti_CallbackId cbid,
-                                       const CUpti_CallbackData *cbdata) {
+absl::Status CuptiTracer::HandleNVTXCallback(CUpti_CallbackId cbid,
+                                             const CUpti_CallbackData *cbdata) {
   const CUpti_NvtxData *pdata =
       reinterpret_cast<const CUpti_NvtxData *>(cbdata);
   if (cbid == CUPTI_CBID_NVTX_nvtxDomainRangePushEx) {
@@ -1075,17 +1251,41 @@ Status CuptiTracer::HandleNVTXCallback(CUpti_CallbackId cbid,
   } else if (cbid == CUPTI_CBID_NVTX_nvtxDomainRangePop) {
     NVTXRangeTracker::ExitRange();
   }
-  return OkStatus();
+  return absl::OkStatus();
 }
 
-Status CuptiTracer::HandleCallback(CUpti_CallbackDomain domain,
-                                   CUpti_CallbackId cbid,
-                                   const CUpti_CallbackData *cbdata) {
-  if (!api_tracing_enabled_) return OkStatus();    // already unsubscribed.
-  if (!cupti_driver_api_hook_) return OkStatus();  // already unsubscribed.
-  if (domain == CUPTI_CB_DOMAIN_NVTX) return HandleNVTXCallback(cbid, cbdata);
-  if (domain != CUPTI_CB_DOMAIN_DRIVER_API) return OkStatus();
-  if (internalCuCall) return OkStatus();
+// Resource callback happens logically inside a driver API call's enter/exit.
+// Some per-thread data structure to record the graph ids.
+absl::Status CuptiTracer::HandleResourceCallback(
+    CUpti_CallbackId cbid, const CUpti_CallbackData *cbdata) {
+  auto *resource = reinterpret_cast<const CUpti_ResourceData *>(cbdata);
+  auto *graph_data =
+      reinterpret_cast<const CUpti_GraphData *>(resource->resourceDescriptor);
+  GraphResourceCreationInfo &graph_id_info = GetGraphResourceCreationInfo();
+  switch (cbid) {
+    case CUPTI_CBID_RESOURCE_GRAPH_CREATED:
+      cupti_interface_->GetGraphId(graph_data->graph, &graph_id_info.graph_id);
+      graph_id_info.orig_graph_id = 0;
+      break;
+    case CUPTI_CBID_RESOURCE_GRAPH_CLONED:
+      cupti_interface_->GetGraphId(graph_data->graph, &graph_id_info.graph_id);
+      cupti_interface_->GetGraphId(graph_data->originalGraph,
+                                   &graph_id_info.orig_graph_id);
+      break;
+    case CUPTI_CBID_RESOURCE_GRAPHEXEC_CREATED:
+      cupti_interface_->GetGraphExecId(graph_data->graphExec,
+                                       &graph_id_info.graph_id);
+      cupti_interface_->GetGraphId(graph_data->graph,
+                                   &graph_id_info.orig_graph_id);
+      break;
+  }
+  return absl::OkStatus();
+}
+
+absl::Status CuptiTracer::HandleDriverApiCallback(
+    CUpti_CallbackId cbid, const CUpti_CallbackData *cbdata) {
+  constexpr CUpti_CallbackDomain domain = CUPTI_CB_DOMAIN_DRIVER_API;
+  if (internalCuCall) return absl::OkStatus();
 
   if (cbdata->context == nullptr) {
     // API callback is called before any CUDA context is created.
@@ -1106,28 +1306,24 @@ Status CuptiTracer::HandleCallback(CUpti_CallbackDomain domain,
     TF_RETURN_IF_ERROR(cupti_driver_api_hook_->OnDriverApiEnter(
         device_id, domain, cbid, cbdata));
   } else if (cbdata->callbackSite == CUPTI_API_EXIT) {
-    // Set up the map from correlation id to annotation string.
-    const auto &annotation = AnnotationStack::Get();
-    if (!annotation.empty()) {
-      if (cbid ==
-          CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernelMultiDevice) {
-        // Kernels are launched on different devices by this API call, therefore
-        // we need to populate per device annotation map respectively.
-        for (int i = 0; i < num_gpus_; ++i) {
-          collector_->annotation_map()->Add(i, cbdata->correlationId,
-                                            annotation, "");
-        }
-      } else {
-        absl::string_view nvtx_range = NVTXRangeTracker::CurrentRange();
-        collector_->annotation_map()->Add(device_id, cbdata->correlationId,
-                                          annotation, nvtx_range);
-      }
-    }
-
     TF_RETURN_IF_ERROR(cupti_driver_api_hook_->OnDriverApiExit(
         device_id, domain, cbid, cbdata));
   }
-  return OkStatus();
+  return absl::OkStatus();
+}
+
+absl::Status CuptiTracer::HandleCallback(CUpti_CallbackDomain domain,
+                                         CUpti_CallbackId cbid,
+                                         const CUpti_CallbackData *cbdata) {
+  if (!api_tracing_enabled_) return absl::OkStatus();  // already unsubscribed.
+  if (!cupti_driver_api_hook_)
+    return absl::OkStatus();  // already unsubscribed.
+  if (domain == CUPTI_CB_DOMAIN_NVTX) return HandleNVTXCallback(cbid, cbdata);
+  if (domain == CUPTI_CB_DOMAIN_DRIVER_API)
+    return HandleDriverApiCallback(cbid, cbdata);
+  if (domain == CUPTI_CB_DOMAIN_RESOURCE)
+    return HandleResourceCallback(cbid, cbdata);
+  return absl::OkStatus();
 }
 
 void CuptiTracer::ConfigureActivityUnifiedMemoryCounter(bool enable) {
@@ -1190,17 +1386,18 @@ static size_t CountCuptiActivityEvent(uint8_t *buffer, size_t size) {
   return total_event_count;
 }
 
-Status CuptiTracer::ProcessActivityBuffer(CUcontext context, uint32_t stream_id,
-                                          uint8_t *buffer, size_t size) {
+absl::Status CuptiTracer::ProcessActivityBuffer(CUcontext context,
+                                                uint32_t stream_id,
+                                                uint8_t *buffer, size_t size) {
   absl::Cleanup buffer_cleanup = [&]() {
     if (buffer) activity_buffers_->ReclaimBuffer(buffer);
   };
   if (size == 0 || buffer == nullptr) {
-    return OkStatus();
+    return absl::OkStatus();
   }
   if (!activity_tracing_enabled_) {
     LOG(WARNING) << "CUPTI activity buffer is reclaimed after flush.";
-    return OkStatus();
+    return absl::OkStatus();
   }
   if (cupti_interface_->Disabled()) return tsl::errors::Internal("Disabled.");
 
@@ -1220,7 +1417,7 @@ Status CuptiTracer::ProcessActivityBuffer(CUcontext context, uint32_t stream_id,
                  << size << "bytes of event to reuse.";
     num_activity_events_in_dropped_buffer_ += event_count_in_buffer;
     // buffer will be return to the pool
-    return OkStatus();
+    return absl::OkStatus();
   }
   num_activity_events_in_cached_buffer_ += event_count_in_buffer;
 
@@ -1231,7 +1428,7 @@ Status CuptiTracer::ProcessActivityBuffer(CUcontext context, uint32_t stream_id,
   activity_buffers_->CacheCuptiFilledActivityBuffer(buffer, size);
   buffer = nullptr;  // So cleanup will not free it as it was saved already
 
-  return OkStatus();
+  return absl::OkStatus();
 }
 
 /*static*/ std::string CuptiTracer::ErrorIfAny() {
@@ -1247,12 +1444,56 @@ Status CuptiTracer::ProcessActivityBuffer(CUcontext context, uint32_t stream_id,
   return "";
 }
 
+std::vector<CallbackAnnotationsAndEvents>
+CuptiTracer::GatherCallbackAnnotationsAndEvents(bool stop_recording) {
+  // Note that it is OK to call PerThread<T>'s StartRecording() multiple times
+  // without calling StopRecording().
+  auto guarded_collection =
+      stop_recording ? PerThreadCallbackAnnotationsAndEvents::StopRecording()
+                     : PerThreadCallbackAnnotationsAndEvents::StartRecording();
+  VLOG(3) << "Total grabbed per thread annotated events buffer: "
+          << guarded_collection.size();
+
+  std::vector<CallbackAnnotationsAndEvents> result;
+  result.reserve(guarded_collection.size());
+  for (auto &guarded_annotations_events : guarded_collection) {
+    result.emplace_back(guarded_annotations_events->Consume());
+  }
+  return result;
+}
+
+void CuptiTracer::PrepareCallbackStart() {
+  auto guarded_collection =
+      PerThreadCallbackAnnotationsAndEvents::StartRecording();
+  for (auto &guarded_annotations_events : guarded_collection) {
+    guarded_annotations_events->Clear();
+  }
+  num_callback_events_ = 0;
+}
+
 void CuptiTracer::PrepareActivityStart() {
   activity_buffers_ =
       std::make_unique<CuptiActivityBufferManager>(kBufferSizeInBytes);
   cupti_dropped_activity_event_count_ = 0;
   num_activity_events_in_cached_buffer_ = 0;
   num_activity_events_in_dropped_buffer_ = 0;
+}
+
+bool CuptiTracer::TooManyCallbackEvents() const {
+  if (collector_ != nullptr) {
+    size_t count = num_callback_events_.load(std::memory_order_acquire);
+    size_t max_events = collector_->GetOptions().max_callback_api_events;
+    return max_events > 0 && count >= max_events;
+  }
+  return true;
+}
+
+bool CuptiTracer::TooManyAnnotationStrings(size_t count) const {
+  if (collector_ != nullptr) {
+    size_t max_strings = collector_->GetOptions().max_annotation_strings;
+    return max_strings > 0 && count >= max_strings;
+  }
+  return true;
 }
 
 }  // namespace profiler

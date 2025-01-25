@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "osp/impl/quic/open_screen_session_base.h"
@@ -19,12 +20,10 @@
 
 namespace openscreen::osp {
 
-class QuicConnectionFactoryBase;
-
 class QuicConnectionImpl final : public QuicConnection,
                                  public OpenScreenSessionBase::Visitor {
  public:
-  QuicConnectionImpl(QuicConnectionFactoryBase& parent_factory,
+  QuicConnectionImpl(std::string_view instance_name,
                      QuicConnection::Delegate& delegate,
                      const quic::QuicClock& clock);
   QuicConnectionImpl(const QuicConnectionImpl&) = delete;
@@ -33,7 +32,7 @@ class QuicConnectionImpl final : public QuicConnection,
 
   // QuicConnection overrides.
   void OnPacketReceived(const UdpPacket& packet) override;
-  QuicStream* MakeOutgoingStream(QuicStream::Delegate* delegate) override;
+  QuicStream* MakeOutgoingStream(QuicStream::Delegate& delegate) override;
   void Close() override;
 
   // quic::QuicSession::Visitor overrides
@@ -58,6 +57,7 @@ class QuicConnectionImpl final : public QuicConnection,
   void OnCryptoHandshakeComplete() override;
   void OnIncomingStream(QuicStream* QuicStream) override;
   Delegate& GetConnectionDelegate() override { return delegate_; }
+  uint64_t GetInstanceID() override { return instance_id_; }
 
   void set_dispacher(QuicDispatcherImpl* dispatcher) {
     dispatcher_ = dispatcher;
@@ -69,16 +69,15 @@ class QuicConnectionImpl final : public QuicConnection,
   }
 
  private:
-  QuicConnectionFactoryBase& parent_factory_;
   const quic::QuicClock& clock_;  // Not owned.
   // `dispatcher_` is only needed for QuicServer side.
-  QuicDispatcherImpl* dispatcher_;
-  OpenScreenSessionBase* session_;
+  QuicDispatcherImpl* dispatcher_ = nullptr;
+  OpenScreenSessionBase* session_ = nullptr;
   // On QuicClient side, `owns_session_` is true and `session_` is owned by
   // this class.
   // On QuicServer side, `owns_session_` is false and `session_` is owned by
   // QuicDispatcherImpl.
-  bool owns_session_;
+  bool owns_session_ = false;
 };
 
 }  // namespace openscreen::osp

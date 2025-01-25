@@ -180,7 +180,7 @@ bool IsNodeIdIntAttribute(ax::mojom::IntAttribute attr) {
       return false;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -483,9 +483,11 @@ bool AXNodeData::GetHtmlAttribute(const char* attribute,
 }
 
 void AXNodeData::AddChildTreeId(const AXTreeID& tree_id) {
-  DCHECK(!HasChildTreeID());
+  if (HasStringAttribute(ax::mojom::StringAttribute::kChildTreeId)) {
+    RemoveStringAttribute(ax::mojom::StringAttribute::kChildTreeId);
+  }
   if (tree_id.type() == ax::mojom::AXTreeIDType::kUnknown) {
-    DUMP_WILL_BE_NOTREACHED_NORETURN();
+    DUMP_WILL_BE_NOTREACHED();
     return;
   }
   std::string tree_id_str = tree_id.ToString();
@@ -793,7 +795,7 @@ void AXNodeData::RemoveState(ax::mojom::State state_enum) {
 void AXNodeData::AddAction(ax::mojom::Action action_enum) {
   switch (action_enum) {
     case ax::mojom::Action::kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
 
     // Note: all of the attributes are included here explicitly, rather than
@@ -1233,7 +1235,7 @@ std::string AXNodeData::ToString(bool verbose) const {
           GetStringAttribute(ax::mojom::StringAttribute::kClassName).c_str());
     }
     std::string id_attr;
-    if (GetHtmlAttribute("id", &id_attr)) {
+    if (GetStringAttribute(ax::mojom::StringAttribute::kHtmlId, &id_attr)) {
       result += base::StringPrintf("#%s", id_attr.c_str());
     }
     result += ">";
@@ -1694,6 +1696,12 @@ std::string AXNodeData::ToString(bool verbose) const {
       case ax::mojom::StringAttribute::kAccessKey:
         result += " access_key=" + value;
         break;
+      case ax::mojom::StringAttribute::kAriaCellColumnIndexText:
+        result += " aria_cell_column_index_text=" + value;
+        break;
+      case ax::mojom::StringAttribute::kAriaCellRowIndexText:
+        result += " aria_cell_row_index_text=" + value;
+        break;
       case ax::mojom::StringAttribute::kAriaInvalidValueDeprecated:
         result += " aria_invalid_value=" + value;
         break;
@@ -1791,6 +1799,7 @@ std::string AXNodeData::ToString(bool verbose) const {
         result += " virtual_content=" + value;
         break;
       case ax::mojom::StringAttribute::kClassName:
+      case ax::mojom::StringAttribute::kHtmlId:
       case ax::mojom::StringAttribute::kHtmlTag:
       case ax::mojom::StringAttribute::kRole:
       case ax::mojom::StringAttribute::kUrl:

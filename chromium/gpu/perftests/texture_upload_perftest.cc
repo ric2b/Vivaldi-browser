@@ -111,7 +111,7 @@ GLenum GLFormatToStorageFormat(GLenum format) {
     case GL_RED:
       return GL_R8;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return 0;
 }
@@ -161,7 +161,7 @@ bool CompareBufferToRGBABuffer(GLenum format,
           memcpy(expected, &pixels[pixels_index], 4);
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
       }
       if (memcmp(&rgba[rgba_index], expected, 4)) {
         return false;
@@ -216,11 +216,11 @@ class TextureUploadPerfTest : public testing::Test {
     // used to draw a quad on the offscreen surface.
     vertex_shader_ = LoadShader(GL_VERTEX_SHADER, kVertexShader);
 
-    bool is_gles = gl_context_->GetVersionInfo()->is_es;
-    fragment_shader_ = LoadShader(
-        GL_FRAGMENT_SHADER,
-        base::StringPrintf("%s%s", is_gles ? kShaderDefaultFloatPrecision : "",
-                           kFragmentShader).c_str());
+    fragment_shader_ =
+        LoadShader(GL_FRAGMENT_SHADER,
+                   base::StringPrintf("%s%s", kShaderDefaultFloatPrecision,
+                                      kFragmentShader)
+                       .c_str());
     program_object_ = glCreateProgram();
     CHECK_NE(0u, program_object_);
 

@@ -4,7 +4,7 @@
 
 syntax = "proto2";
 
-package cast.certificate;
+package openscreen.cast.proto;
 
 option optimize_for = LITE_RUNTIME;
 
@@ -16,7 +16,7 @@ message DeviceCertTestSuite {
 
 enum VerificationResult {
   // This should never be encountered in a valid test.
-  UNSPECIFIED = 0;
+  UNKNOWN = 0;
 
   // The device certificate is valid.
   SUCCESS = 1;

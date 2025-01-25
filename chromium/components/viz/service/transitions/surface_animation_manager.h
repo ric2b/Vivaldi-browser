@@ -100,12 +100,17 @@ class VIZ_SERVICE_EXPORT SurfaceAnimationManager
       SaveDirectiveCompleteCallback callback,
       const CompositorFrameTransitionDirective& directive);
 
+  // Maps the textures cached by the save directive to transferable resources.
+  // Shared element resource IDs can only be replaced with cached textures after
+  // this step.
+  void ImportTextures();
+
   enum class Stage { kPendingCopy, kWaitingForAnimate, kAnimating };
   Stage stage_ = Stage::kPendingCopy;
 
   TransferableResourceTracker transferable_resource_tracker_;
 
-  std::unique_ptr<SurfaceSavedFrame> saved_frame_;
+  SurfaceSavedFrame saved_frame_;
   base::flat_set<ViewTransitionElementResourceId> empty_resource_ids_;
 
   std::optional<TransferableResourceTracker::ResourceFrame> saved_textures_;

@@ -325,6 +325,7 @@ dawn_test("dawn_unittests") {
     "unittests/BuddyMemoryAllocatorTests.cpp",
     "unittests/ChainUtilsTests.cpp",
     "unittests/CommandAllocatorTests.cpp",
+    "unittests/CommandLineParserTests.cpp",
     "unittests/ContentLessObjectCacheTests.cpp",
     "unittests/DefaultTests.cpp",
     "unittests/EnumClassBitmasksTests.cpp",
@@ -437,6 +438,7 @@ dawn_test("dawn_unittests") {
     "unittests/wire/WireFutureTest.h",
     "unittests/wire/WireInjectBufferTests.cpp",
     "unittests/wire/WireInjectInstanceTests.cpp",
+    "unittests/wire/WireInjectSurfaceTests.cpp",
     "unittests/wire/WireInjectSwapChainTests.cpp",
     "unittests/wire/WireInjectTextureTests.cpp",
     "unittests/wire/WireInstanceTests.cpp",
@@ -482,16 +484,13 @@ dawn_test("dawn_unittests") {
 source_set("partition_alloc_support") {
   testonly = true
 
-  deps = [
-    "${dawn_root}/src/dawn/common",
-    "${dawn_root}/src/dawn/partition_alloc",
-  ]
-
+  deps = [ "${dawn_root}/src/dawn/common" ]
   public = [ "PartitionAllocSupport.h" ]
   sources = [ "PartitionAllocSupport.cpp" ]
 
   if (dawn_enable_partition_alloc) {
     defines = [ "DAWN_ENABLE_PARTITION_ALLOC" ]
+    deps += [ "${dawn_root}/src/dawn/partition_alloc" ]
   }
 }
 
@@ -619,7 +618,6 @@ source_set("end2end_tests_sources") {
     "end2end/DynamicBufferOffsetTests.cpp",
     "end2end/EntryPointTests.cpp",
     "end2end/EventTests.cpp",
-    "end2end/ExperimentalSubgroupsTests.cpp",
     "end2end/ExternalTextureTests.cpp",
     "end2end/FirstIndexOffsetTests.cpp",
     "end2end/FragDepthTests.cpp",
@@ -658,6 +656,7 @@ source_set("end2end_tests_sources") {
     "end2end/ShaderTests.cpp",
     "end2end/ShaderValidationTests.cpp",
     "end2end/StorageTextureTests.cpp",
+    "end2end/SubgroupsTests.cpp",
     "end2end/SubresourceRenderAttachmentTests.cpp",
     "end2end/Texture3DTests.cpp",
     "end2end/TextureCorruptionTests.cpp",
@@ -682,10 +681,7 @@ source_set("end2end_tests_sources") {
       "dxgi.lib",
     ]
 
-    sources += [
-      "end2end/D3DResourceWrappingTests.cpp",
-      "end2end/VideoViewsTests_win.cpp",
-    ]
+    sources += [ "end2end/VideoViewsTests_win.cpp" ]
   }
 
   if (dawn_enable_d3d12) {

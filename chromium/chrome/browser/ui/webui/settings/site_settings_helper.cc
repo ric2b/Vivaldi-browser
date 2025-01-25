@@ -60,6 +60,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/strings/grit/privacy_sandbox_strings.h"
 #include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
@@ -104,6 +105,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::IMAGES, "images"},
     {ContentSettingsType::JAVASCRIPT, "javascript"},
     {ContentSettingsType::JAVASCRIPT_JIT, "javascript-jit"},
+    {ContentSettingsType::JAVASCRIPT_OPTIMIZER, "javascript-optimizer"},
     {ContentSettingsType::POPUPS, "popups"},
     {ContentSettingsType::GEOLOCATION, "location"},
     {ContentSettingsType::NOTIFICATIONS, "notifications"},
@@ -228,6 +230,8 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::DIRECT_SOCKETS, nullptr},
     {ContentSettingsType::REVOKED_ABUSIVE_NOTIFICATION_PERMISSIONS, nullptr},
     {ContentSettingsType::TOP_LEVEL_TPCD_ORIGIN_TRIAL, nullptr},
+    {ContentSettingsType::DISPLAY_MEDIA_SYSTEM_AUDIO, nullptr},
+    {ContentSettingsType::STORAGE_ACCESS_HEADER_ORIGIN_TRIAL, nullptr},
 };
 
 static_assert(
@@ -315,7 +319,7 @@ SiteSettingSource CalculateSiteSettingSource(
     return SiteSettingSource::kPreference;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return SiteSettingSource::kPreference;
 }
 
@@ -519,8 +523,8 @@ std::string_view ContentSettingsTypeToGroupName(ContentSettingsType type) {
     }
   }
 
-  NOTREACHED() << static_cast<int32_t>(type)
-               << " is not a recognized content settings type.";
+  NOTREACHED_IN_MIGRATION() << static_cast<int32_t>(type)
+                            << " is not a recognized content settings type.";
   return std::string_view();
 }
 
@@ -667,7 +671,7 @@ std::string SiteSettingSourceToString(const SiteSettingSource source) {
     case SiteSettingSource::kPreference:
       return "preference";
     case SiteSettingSource::kNumSources:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
   }
 }
@@ -694,7 +698,7 @@ SiteSettingSource ProviderTypeToSiteSettingsSource(
     case content_settings::ProviderType::kNotificationAndroidProvider:
     case content_settings::ProviderType::kProviderForTests:
     case content_settings::ProviderType::kOtherProviderForTests:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return SiteSettingSource::kPreference;
   }
 }
@@ -1030,23 +1034,9 @@ void Append3pcExceptions(Profile* profile,
   base::Value::List cookie_exceptions;
   GetExceptionsForContentType(ContentSettingsType::COOKIES, profile, web_ui,
                               /*incognito=*/false, &cookie_exceptions);
-  // Create a set of TP exceptions keyed off of <name, source>.
-  std::set<std::pair<std::string, std::string>> display_name_and_source;
-  for (const auto& exception : *exceptions) {
-    const auto& dict = exception.GetDict();
-    CHECK(dict.contains(kEmbeddingOrigin) && dict.contains(kSource));
-    display_name_and_source.insert(std::make_pair(
-        *dict.FindString(kEmbeddingOrigin), *dict.FindString(kSource)));
-  }
-
   for (auto& cookie_exception : cookie_exceptions) {
     auto& dict = cookie_exception.GetDict();
-    CHECK(dict.contains(kEmbeddingOrigin) && dict.contains(kSource) &&
-          dict.contains(kOrigin));
-    // Add 3PC exceptions that are not also TP exceptions.
-    if (*dict.FindString(kOrigin) == "*" &&
-        !display_name_and_source.contains(std::make_pair(
-            *dict.FindString(kEmbeddingOrigin), *dict.FindString(kSource)))) {
+    if (dict.contains(kOrigin) && *dict.FindString(kOrigin) == "*") {
       dict.Set(kDescription,
                l10n_util::GetStringUTF16(
                    IDS_SETTINGS_THIRD_PARTY_COOKIES_ONLY_EXCEPTION_LABEL));
@@ -1234,7 +1224,7 @@ ContentSetting GetContentSettingForOrigin(Profile* profile,
   if (info.metadata.session_model() ==
       content_settings::mojom::SessionModel::ONE_TIME) {
     DCHECK(
-        permissions::PermissionUtil::CanPermissionBeAllowedOnce(content_type));
+        permissions::PermissionUtil::DoesSupportTemporaryGrants(content_type));
     DCHECK_EQ(result.status, PermissionStatus::GRANTED);
     return CONTENT_SETTING_DEFAULT;
   }

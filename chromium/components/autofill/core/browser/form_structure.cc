@@ -114,22 +114,22 @@ std::string ServerTypesToString(const AutofillField* field) {
 }  // namespace
 
 FormStructure::FormStructure(const FormData& form)
-    : id_attribute_(form.id_attribute),
-      name_attribute_(form.name_attribute),
-      form_name_(form.name),
-      button_titles_(form.button_titles),
-      source_url_(form.url),
-      full_source_url_(form.full_url),
-      target_url_(form.action),
-      main_frame_origin_(form.main_frame_origin),
-      all_fields_are_passwords_(!form.fields.empty()),
+    : id_attribute_(form.id_attribute()),
+      name_attribute_(form.name_attribute()),
+      form_name_(form.name()),
+      button_titles_(form.button_titles()),
+      source_url_(form.url()),
+      full_source_url_(form.full_url()),
+      target_url_(form.action()),
+      main_frame_origin_(form.main_frame_origin()),
+      all_fields_are_passwords_(!form.fields().empty()),
       form_parsed_timestamp_(base::TimeTicks::Now()),
-      host_frame_(form.host_frame),
-      version_(form.version),
-      renderer_id_(form.renderer_id),
-      child_frames_(form.child_frames) {
+      host_frame_(form.host_frame()),
+      version_(form.version()),
+      renderer_id_(form.renderer_id()),
+      child_frames_(form.child_frames()) {
   // Copy the form fields.
-  for (const FormFieldData& field : form.fields) {
+  for (const FormFieldData& field : form.fields()) {
     if (!IsCheckable(field.check_status())) {
       ++active_field_count_;
     }
@@ -260,7 +260,8 @@ void FormStructure::DetermineNonActiveHeuristicTypes(
     } else {
       // Run heuristics.
       context.pattern_source = *pattern_source;
-      ParseFieldTypesWithPatterns(context);
+      AssignBestFieldTypes(ParseFieldTypesWithPatterns(context),
+                           *pattern_source);
     }
   }
 }
@@ -546,6 +547,7 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
         cached_field->may_use_prefilled_placeholder());
     field->set_previously_autofilled(cached_field->previously_autofilled());
     field->set_did_trigger_suggestions(cached_field->did_trigger_suggestions());
+    field->set_was_focused(cached_field->was_focused());
 
     // During form parsing, we don't care for heuristic field classifications
     // and information derived from the autocomplete attribute as those are
@@ -574,9 +576,12 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
 
   UpdateAutofillCount();
 
-  // Update form parsed timestamp
+  // Preserve timestamp from the cache as a new form from the renderer does not
+  // know the parsing/filling history, as this information is computed in the
+  // browser.
   form_parsed_timestamp_ =
       std::min(form_parsed_timestamp_, cached_form.form_parsed_timestamp_);
+  last_filling_timestamp_ = cached_form.last_filling_timestamp_;
 
   // The form signature should match between query and upload requests to the
   // server. On many websites, form elements are dynamically added, removed, or
@@ -656,8 +661,7 @@ FieldCandidatesMap FormStructure::ParseFieldTypesWithPatterns(
     FormFieldParser::ParseFormFields(context, fields_, is_form_element(),
                                      field_type_map);
   } else if (ShouldRunHeuristicsForSingleFieldForms()) {
-    FormFieldParser::ParseSingleFieldForms(context, fields_, is_form_element(),
-                                           field_type_map);
+    FormFieldParser::ParseSingleFieldForms(context, fields_, field_type_map);
     FormFieldParser::ParseStandaloneCVCFields(context, fields_, field_type_map);
 
     // For standalone email fields inside a form tag, allow heuristics even
@@ -707,7 +711,7 @@ void FormStructure::AssignBestFieldTypes(
 
 const AutofillField* FormStructure::field(size_t index) const {
   if (index >= fields_.size()) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
   return fields_[index].get();
@@ -746,23 +750,24 @@ bool FormStructure::is_form_element() const {
 
 FormData FormStructure::ToFormData() const {
   FormData data;
-  data.id_attribute = id_attribute_;
-  data.name_attribute = name_attribute_;
-  data.name = form_name_;
-  data.button_titles = button_titles_;
-  data.url = source_url_;
-  data.full_url = full_source_url_;
-  data.action = target_url_;
-  data.main_frame_origin = main_frame_origin_;
-  data.renderer_id = renderer_id_;
-  data.host_frame = host_frame_;
-  data.version = version_;
-  data.child_frames = child_frames_;
-
+  data.set_id_attribute(id_attribute_);
+  data.set_name_attribute(name_attribute_);
+  data.set_name(form_name_);
+  data.set_button_titles(button_titles_);
+  data.set_url(source_url_);
+  data.set_full_url(full_source_url_);
+  data.set_action(target_url_);
+  data.set_main_frame_origin(main_frame_origin_);
+  data.set_renderer_id(renderer_id_);
+  data.set_host_frame(host_frame_);
+  data.set_version(version_);
+  data.set_child_frames(child_frames_);
+  std::vector<FormFieldData> fields;
+  fields.reserve(fields_.size());
   for (const auto& field : fields_) {
-    data.fields.push_back(*field);
+    fields.push_back(*field);
   }
-
+  data.set_fields(std::move(fields));
   return data;
 }
 

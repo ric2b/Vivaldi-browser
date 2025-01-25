@@ -9,11 +9,13 @@
 #include "base/functional/callback_forward.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/metadata/view_factory.h"
 #include "ui/views/widget/widget_observer.h"
 
 namespace ash {
 
-class PickerPreviewBubbleController;
+enum class PickerActionType;
+class PickerSubmenuController;
 
 // View for a Picker item which can be selected.
 class ASH_EXPORT PickerItemView : public views::Button {
@@ -53,17 +55,17 @@ class ASH_EXPORT PickerItemView : public views::Button {
   PickerItemView& operator=(const PickerItemView&) = delete;
   ~PickerItemView() override;
 
-  void SetPreview(PickerPreviewBubbleController* preview_bubble_controller);
-
   // views::Button:
   void PaintButtonContents(gfx::Canvas* canvas) override;
-  void OnMouseEntered(const ui::MouseEvent& event) override;
-  void OnMouseExited(const ui::MouseEvent& event) override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
+  void OnMouseEntered(const ui::MouseEvent& event) override;
 
   void SelectItem();
 
   void SetCornerRadius(int corner_radius);
+
+  PickerSubmenuController* GetSubmenuController();
+  void SetSubmenuController(PickerSubmenuController* submenu_controller);
 
   ItemState GetItemState() const;
   void SetItemState(ItemState item_state);
@@ -80,9 +82,15 @@ class ASH_EXPORT PickerItemView : public views::Button {
   // Corner radius of the item background and highlight.
   int corner_radius_ = 0;
 
-  raw_ptr<PickerPreviewBubbleController> preview_bubble_controller_;
+  raw_ptr<PickerSubmenuController> submenu_controller_ = nullptr;
 };
 
+BEGIN_VIEW_BUILDER(ASH_EXPORT, PickerItemView, views::Button)
+VIEW_BUILDER_PROPERTY(PickerSubmenuController*, SubmenuController)
+END_VIEW_BUILDER
+
 }  // namespace ash
+
+DEFINE_VIEW_BUILDER(ASH_EXPORT, ash::PickerItemView)
 
 #endif  // ASH_PICKER_VIEWS_PICKER_ITEM_VIEW_H_

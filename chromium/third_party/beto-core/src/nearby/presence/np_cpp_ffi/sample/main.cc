@@ -14,22 +14,28 @@
 
 #include <bitset>
 #include <iostream>
+#include <string>
+#include <utility>
 
 #include "absl/strings/escaping.h"
 #include "nearby_protocol.h"
+#include "np_cpp_ffi_types.h"
 
-static void SamplePanicHandler(nearby_protocol::PanicReason reason);
+void SamplePanicHandler(nearby_protocol::PanicReason reason);
 
-void HandleAdvertisementResult(nearby_protocol::DeserializeAdvertisementResult);
+void HandleAdvertisementResult(
+    nearby_protocol::DeserializeAdvertisementResult /*result*/);
 
-void HandleV0Adv(nearby_protocol::DeserializedV0Advertisement);
-void HandleLegibleV0Adv(nearby_protocol::LegibleDeserializedV0Advertisement);
-void HandleV0IdentityKind(nearby_protocol::DeserializedV0IdentityKind);
-void HandleDataElement(nearby_protocol::V0DataElement);
+void HandleV0Adv(nearby_protocol::DeserializedV0Advertisement /*result*/);
+void HandleLegibleV0Adv(
+    nearby_protocol::LegibleDeserializedV0Advertisement /*legible_adv*/);
+void HandleV0IdentityKind(
+    nearby_protocol::DeserializedV0IdentityKind /*identity*/);
+void HandleDataElement(nearby_protocol::V0DataElement /*de*/);
 
-void HandleV1Adv(nearby_protocol::DeserializedV1Advertisement);
-void HandleV1Section(nearby_protocol::DeserializedV1Section);
-void HandleV1DataElement(nearby_protocol::V1DataElement);
+void HandleV1Adv(nearby_protocol::DeserializedV1Advertisement /*adv*/);
+void HandleV1Section(const nearby_protocol::DeserializedV1Section& /*section*/);
+void HandleV1DataElement(nearby_protocol::V1DataElement /*de*/);
 
 int main() {
   auto result =
@@ -45,54 +51,48 @@ int main() {
   std::cout << "\n========= Example V0 Adv ==========\n";
   std::cout << "Hex bytes: 00031503260046\n\n";
 
-  // Create an empty credential slab and verify that it is successful
-  auto cred_slab_result = nearby_protocol::CredentialSlab::TryCreate();
-  if (!cred_slab_result.ok()) {
-    std::cout << cred_slab_result.status().ToString();
-    return -1;
-  }
+  nearby_protocol::CredentialSlab credential_slab;
+  nearby_protocol::CredentialBook credential_book(credential_slab);
 
-  // Create an empty credential book from the empty slab, and verify success.
-  auto cred_book_result = nearby_protocol::CredentialBook::TryCreateFromSlab(
-      cred_slab_result.value());
-  if (!cred_book_result.ok()) {
-    std::cout << cred_book_result.status().ToString();
-    return -1;
-  }
-
-  auto v0_byte_string =
+  const auto* v0_byte_string =
       "00"       // Adv Header
       "03"       // Public DE header
       "1503"     // Length 1 Tx Power DE with value 3
       "260046";  // Length 2 Actions
 
-  auto v0_bytes = absl::HexStringToBytes(v0_byte_string);
+  std::string v0_bytes;
+  if (!absl::HexStringToBytes(v0_byte_string, &v0_bytes)) {
+    return -1;
+  }
   auto v0_buffer = nearby_protocol::ByteBuffer<255>::TryFromString(v0_bytes);
-  nearby_protocol::RawAdvertisementPayload v0_payload(v0_buffer.value());
+  nearby_protocol::RawAdvertisementPayload const v0_payload(v0_buffer.value());
 
   // Try to deserialize a V0 payload
   auto deserialize_v0_result =
-      nearby_protocol::Deserializer::DeserializeAdvertisement(
-          v0_payload, cred_book_result.value());
+      nearby_protocol::Deserializer::DeserializeAdvertisement(v0_payload,
+                                                              credential_book);
   HandleAdvertisementResult(std::move(deserialize_v0_result));
 
   std::cout << "\n========= Example V1 Adv ==========\n";
   std::cout << "Hex bytes: 20040326004603031505\n\n";
 
-  auto v1_byte_string =
+  const auto* v1_byte_string =
       "20"       // V1 Advertisement header
       "04"       // Section Header
       "03"       // Public Identity DE header
       "260046";  // Length 2 Actions DE
 
-  auto v1_bytes = absl::HexStringToBytes(v1_byte_string);
+  std::string v1_bytes;
+  if (!absl::HexStringToBytes(v1_byte_string, &v1_bytes)) {
+    return -1;
+  }
   auto v1_buffer = nearby_protocol::ByteBuffer<255>::TryFromString(v1_bytes);
-  nearby_protocol::RawAdvertisementPayload v1_payload(v1_buffer.value());
+  nearby_protocol::RawAdvertisementPayload const v1_payload(v1_buffer.value());
 
   // Try to deserialize a V1 payload
   auto deserialize_v1_result =
-      nearby_protocol::Deserializer::DeserializeAdvertisement(
-          v1_payload, cred_book_result.value());
+      nearby_protocol::Deserializer::DeserializeAdvertisement(v1_payload,
+                                                              credential_book);
   HandleAdvertisementResult(std::move(deserialize_v1_result));
 
   std::cout << "\n========= User input sample ==========\n\n";
@@ -101,19 +101,25 @@ int main() {
     std::cout << "Enter the hex of the advertisement you would like to parse "
                  "(see above examples): ";
     std::cin >> user_input;
-    auto bytes = absl::HexStringToBytes(user_input);
+    std::string bytes;
+    auto hex_result = absl::HexStringToBytes(user_input, &bytes);
+    if (!hex_result) {
+      std::cout << "Provided string is not valid hex";
+      continue;
+    }
     auto buffer = nearby_protocol::ByteBuffer<255>::TryFromString(bytes);
     if (!buffer.ok()) {
       std::cout << "Too many bytes provided, must fit into a max length 255 "
                    "byte BLE advertisement\n";
       continue;
     }
-    nearby_protocol::RawAdvertisementPayload user_input_payload(buffer.value());
+    nearby_protocol::RawAdvertisementPayload const user_input_payload(
+        buffer.value());
 
     // Try to deserialize user input
     auto user_input_result =
         nearby_protocol::Deserializer::DeserializeAdvertisement(
-            user_input_payload, cred_book_result.value());
+            user_input_payload, credential_book);
     HandleAdvertisementResult(std::move(user_input_result));
 
     char choice;
@@ -128,7 +134,7 @@ int main() {
   }
 }
 
-static void SamplePanicHandler(nearby_protocol::PanicReason reason) {
+void SamplePanicHandler(nearby_protocol::PanicReason reason) {
   std::cout << "Panicking! Reason: ";
   switch (reason) {
     case nearby_protocol::PanicReason::EnumCastFailed: {
@@ -143,6 +149,9 @@ static void SamplePanicHandler(nearby_protocol::PanicReason reason) {
       std::cout << "InvalidStackDataStructure \n";
       break;
     }
+    case np_ffi::internal::PanicReason::ExceededMaxHandleAllocations:
+      std::cout << "ExceededMaxHandleAllocations \n";
+      break;
   }
   std::abort();
 }
@@ -182,7 +191,8 @@ void HandleLegibleV0Adv(
   HandleV0IdentityKind(legible_adv.GetIdentityKind());
 
   auto num_des = legible_adv.GetNumberOfDataElements();
-  std::cout << "\t\tAdv contains " << unsigned(num_des) << " data elements \n";
+  std::cout << "\t\tAdv contains " << static_cast<unsigned>(num_des)
+            << " data elements \n";
   auto payload = legible_adv.IntoPayload();
   for (int i = 0; i < num_des; i++) {
     auto de_result = payload.TryGetDataElement(i);
@@ -214,7 +224,8 @@ void HandleDataElement(nearby_protocol::V0DataElement de) {
     case nearby_protocol::V0DataElementKind::TxPower: {
       std::cout << "\t\t\tDE Type is TxPower\n";
       auto tx_power = de.AsTxPower();
-      std::cout << "\t\t\tpower: " << int(tx_power.GetAsI8()) << "\n";
+      std::cout << "\t\t\tpower: " << static_cast<int>(tx_power.GetAsI8())
+                << "\n";
       return;
     }
     case nearby_protocol::V0DataElementKind::Actions: {
@@ -229,11 +240,11 @@ void HandleDataElement(nearby_protocol::V0DataElement de) {
 
 void HandleV1Adv(nearby_protocol::DeserializedV1Advertisement adv) {
   auto legible_sections = adv.GetNumLegibleSections();
-  std::cout << "\tAdv has " << unsigned(legible_sections)
+  std::cout << "\tAdv has " << static_cast<unsigned>(legible_sections)
             << " legible sections \n";
 
   auto encrypted_sections = adv.GetNumUndecryptableSections();
-  std::cout << "\tAdv has " << unsigned(encrypted_sections)
+  std::cout << "\tAdv has " << static_cast<unsigned>(encrypted_sections)
             << " undecryptable sections\n";
 
   for (auto i = 0; i < legible_sections; i++) {
@@ -247,7 +258,7 @@ void HandleV1Adv(nearby_protocol::DeserializedV1Advertisement adv) {
   }
 }
 
-void HandleV1Section(nearby_protocol::DeserializedV1Section section) {
+void HandleV1Section(const nearby_protocol::DeserializedV1Section& section) {
   switch (section.GetIdentityKind()) {
     case np_ffi::internal::DeserializedV1IdentityKind::Plaintext: {
       std::cout << "\t\tIdentity is Plaintext\n";
@@ -260,7 +271,8 @@ void HandleV1Section(nearby_protocol::DeserializedV1Section section) {
   }
 
   auto num_des = section.NumberOfDataElements();
-  std::cout << "\t\tSection has " << unsigned(num_des) << " data elements \n";
+  std::cout << "\t\tSection has " << static_cast<unsigned>(num_des)
+            << " data elements \n";
   for (auto i = 0; i < num_des; i++) {
     auto de_result = section.TryGetDataElement(i);
     if (!de_result.ok()) {
@@ -275,7 +287,7 @@ void HandleV1Section(nearby_protocol::DeserializedV1Section section) {
 
 void HandleV1DataElement(nearby_protocol::V1DataElement de) {
   std::cout << "\t\t\tData Element type code: "
-            << unsigned(de.GetDataElementTypeCode()) << "\n";
+            << static_cast<unsigned>(de.GetDataElementTypeCode()) << "\n";
   std::cout << "\t\t\tPayload bytes as hex: "
             << absl::BytesToHexString(de.GetPayload().ToString()) << "\n";
 }

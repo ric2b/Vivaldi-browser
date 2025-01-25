@@ -26,6 +26,7 @@ namespace syncable_prefs_ids {
 // tools/metrics/histograms/enums.xml. When removing an unused enumerator,
 // comment it out here, making it clear the value was previously used, and
 // add "(obsolete)" to the corresponding entry in enums.xml.
+// LINT.IfChange(IosSyncablePref)
 enum {
   // Starts with 200000 to avoid clash with prefs listed in
   // common_syncable_prefs_database.cc and
@@ -48,6 +49,7 @@ enum {
   // guidance and escalation path in case anything is unclear.
   // ^^^^^ IMPORTANT! ^^^^^
 };
+// LINT.ThenChange(/tools/metrics/histograms/metadata/sync/enums.xml:IosSyncablePref)
 }  // namespace syncable_prefs_ids
 
 // iOS specific list of syncable preferences.
@@ -104,7 +106,7 @@ constexpr auto kIOSChromeSyncablePrefsAllowlist =
 
 std::optional<sync_preferences::SyncablePrefMetadata>
 IOSChromeSyncablePrefsDatabase::GetSyncablePrefMetadata(
-    const std::string& pref_name) const {
+    std::string_view pref_name) const {
   const auto it = kIOSChromeSyncablePrefsAllowlist.find(pref_name);
   if (it != kIOSChromeSyncablePrefsAllowlist.end()) {
     DCHECK(!common_syncable_prefs_database_.GetSyncablePrefMetadata(pref_name)

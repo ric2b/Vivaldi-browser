@@ -56,22 +56,8 @@ class LockScreenReauthDialogTestHelper {
   LockScreenReauthDialogTestHelper& operator=(
       LockScreenReauthDialogTestHelper&& other);
 
-  // Waits for the 'Verify Account' screen (the first screen the dialog shows)
-  // to be visible.
-  void WaitForVerifyAccountScreen();
-
-  // Clicks the 'Verify' button on the 'Verify Account' screen and wait for the
-  // authenticator page to be loaded.
-  // For SAML flows this proceeds to the SAML flow.
-  void ClickVerifyButton();
-
-  // Clicks the 'Cancel' button on the 'Verify Account' screen.
-  void ClickCancelButtonOnVerifyScreen();
-
-  // Clicks the 'Cancel' button on the 'Error' screen.
   void ClickCancelButtonOnErrorScreen();
 
-  // Clicks the 'Cancel' button on the 'Saml Account' screen.
   void ClickCancelButtonOnSamlScreen();
 
   // Clicks the 'Enter Google Account Info' button on the SAML screen.
@@ -90,10 +76,8 @@ class LockScreenReauthDialogTestHelper {
   void ExpectChangeIdPButtonVisible();
   void ExpectChangeIdPButtonHidden();
 
-  // Waits for sign-in webview to be shown.
   void WaitForSigninWebview();
 
-  void ExpectVerifyAccountScreenVisible();
   void ExpectVerifyAccountScreenHidden();
   void ExpectErrorScreenVisible();
   void ExpectSigninWebviewVisible();
@@ -122,9 +106,13 @@ class LockScreenReauthDialogTestHelper {
   // Wait until the main dialog closes.
   void WaitForReauthDialogToClose();
 
-  // Wait for the SAML IdP page to load.
-  // Precondition: The SAML container is visible.
-  void WaitForIdpPageLoad();
+  // SAML notice message is displayed when we show a 3P IdP page.
+  test::UIPath SamlNoticeMessage() const;
+  void WaitForSamlNoticeMessage();
+  void ExpectSamlNoticeMessageVisible();
+  void ExpectSamlNoticeMessageHidden();
+
+  void WaitForSamlIdpPageLoad();
 
   // Next members allow to wait for the captive portal dialog to load (i.e. be
   // initialized in `LockScreenStartReauthDialog`), be shown or be closed.
@@ -137,7 +125,6 @@ class LockScreenReauthDialogTestHelper {
   void ExpectCaptivePortalDialogHidden();
   void CloseCaptivePortalDialogAndWait();
 
-  // Returns the WebContents of the dialog's WebUI.
   content::WebContents* DialogWebContents();
   // Returns a JSChecker for the WebContents of the dialog's WebUI.
   test::JSChecker DialogJS();

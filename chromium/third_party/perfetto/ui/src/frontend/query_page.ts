@@ -14,12 +14,11 @@
 
 import m from 'mithril';
 
-import {Disposable} from '../base/disposable';
 import {SimpleResizeObserver} from '../base/resize_observer';
 import {undoCommonChatAppReplacements} from '../base/string_utils';
 import {QueryResponse, runQuery} from '../common/queries';
 import {raf} from '../core/raf_scheduler';
-import {EngineProxy} from '../trace_processor/engine';
+import {Engine} from '../trace_processor/engine';
 import {Callout} from '../widgets/callout';
 import {Editor} from '../widgets/editor';
 
@@ -71,7 +70,7 @@ function runManualQuery(query: string) {
   raf.scheduleDelayedFullRedraw();
 }
 
-function getEngine(): EngineProxy | undefined {
+function getEngine(): Engine | undefined {
   const engineId = globals.getCurrentEngine()?.id;
   if (engineId === undefined) {
     return undefined;
@@ -92,7 +91,7 @@ class QueryInput implements m.ClassComponent {
 
   onremove(): void {
     if (this.resize) {
-      this.resize.dispose();
+      this.resize[Symbol.dispose]();
       this.resize = undefined;
     }
   }

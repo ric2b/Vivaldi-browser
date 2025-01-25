@@ -89,7 +89,6 @@ void UrlCheckerDelegateImpl::StartDisplayingBlockingPageHelper(
     const security_interstitials::UnsafeResource& resource,
     const std::string& method,
     const net::HttpRequestHeaders& headers,
-    bool is_main_frame,
     bool has_user_gesture) {
   // Query the allow list on the UI thread to determine whether the navigation
   // can proceed.
@@ -100,8 +99,7 @@ void UrlCheckerDelegateImpl::StartDisplayingBlockingPageHelper(
 
 void UrlCheckerDelegateImpl::
     StartObservingInteractionsForDelayedBlockingPageHelper(
-        const security_interstitials::UnsafeResource& resource,
-        bool is_main_frame) {}
+        const security_interstitials::UnsafeResource& resource) {}
 
 bool UrlCheckerDelegateImpl::IsUrlAllowlisted(const GURL& url) {
   return false;
@@ -137,6 +135,6 @@ UrlCheckerDelegateImpl::GetDatabaseManager() {
 }
 
 safe_browsing::BaseUIManager* UrlCheckerDelegateImpl::GetUIManager() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }

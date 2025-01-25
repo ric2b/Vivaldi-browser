@@ -146,10 +146,10 @@ void RuleServiceImpl::SetRuleGroupEnabled(RuleGroup group, bool enabled) {
   NOTREACHED();
   // TODO(juliem): Implement
 
-  for (RuleService::Observer& observer : observers_)
+  /*for (RuleService::Observer& observer : observers_)
     observer.OnGroupStateChanged(group);
 
-  state_store_->ScheduleSave();
+  state_store_->ScheduleSave();*/
 }
 
 void RuleServiceImpl::OnStateLoaded(std::unique_ptr<LoadData> load_data) {
@@ -227,7 +227,7 @@ KnownRuleSourcesHandler* RuleServiceImpl::GetKnownSourcesHandler() {
   return &known_sources_handler_.value();
 }
 
-BlockedUrlsReporter* RuleServiceImpl::GetBlockerUrlsReporter() {
+TabHandler* RuleServiceImpl::GetTabHandler() {
   return nullptr;
 }
 

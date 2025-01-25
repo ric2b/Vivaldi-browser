@@ -8,6 +8,7 @@
 <translation id="1123707809902612118">Loka á rekjara og auglýsingar</translation>
 <translation id="1151972924205500581">Krafist er lykilorðs</translation>
 <translation id="1166425484559430538">Samstilltu gögnin þín eru dulkóðuð. Þú þarf að gefa upp dulkóðunarlykilorðið þitt ef þú ætlar að afkóða gögnin.</translation>
+<translation id="1173894706177603556">Endurnefna</translation>
 <translation id="1181037720776840403">Fjarlægja</translation>
 <translation id="1182668946911971500">Minnismiðastika</translation>
 <translation id="1198271701881992799">Hefjumst handa</translation>
@@ -106,7 +107,7 @@
 <translation id="2961573414320947355">Viltu opna alla hlekki með Vivaldi? Drífðu þig þá í að gera hann sjálfgefinn.</translation>
 <translation id="3006429105107822794">Þú þarft ekki að muna þetta lykilorð. Það verður vistað í lykilorðastýringu hjá Vivaldi.</translation>
 <translation id="3018244467214569202">Gríska (<ph name="ORIGIN" />)</translation>
-<translation id="3029426144711327484">Sýna hraðval</translation>
+<translation id="3029426144711327484">Sýna hraðvalshnappa</translation>
 <translation id="3039671569659952257">Eyða möppu</translation>
 <translation id="3073196329485613487">Skráðu þig inn á reikninginn þinn</translation>
 <translation id="307859903981308731">Með því að halda áfram, samþykkir þú Vivaldi</translation>
@@ -148,6 +149,7 @@
 <translation id="3842727926262967527">Veldu hvar þú vilt hafa flipastikuna og veffangastikuna.</translation>
 <translation id="3845564230651302310">Virkja nýjar stillingar fyrir varnir...</translation>
 <translation id="3858860766373142691">Nafn</translation>
+<translation id="3861379244432690245">Virkja Direct Match</translation>
 <translation id="3866249974567520381">Lýsing</translation>
 <translation id="3872195896030547485">Vinsamlegast sláðu inn gilt netfang.</translation>
 <translation id="3897092660631435901">Valmynd</translation>
@@ -173,6 +175,7 @@
 <translation id="4209092469652827314">Stór</translation>
 <translation id="4219175188138757774">Tékkneska og slóvakíska (<ph name="ORIGIN" />)</translation>
 <translation id="4222285809803895512">Búið til</translation>
+<translation id="4274598629843497594">Virkja sýnileika hraðvalshnappa svo grúppan verði sýnileg á upphafssíðunni. Þú munt áfram hafa aðgang að grúppunni á bókamerkjaspjöldum.</translation>
 <translation id="4276839458685471670">Eftir hvenær búið til</translation>
 <translation id="4277085371281330061">Lokað á
 rekjara</translation>
@@ -202,6 +205,7 @@ rekjara</translation>
 <translation id="4619615317237390068">Flipar frá öðrum tækjum</translation>
 <translation id="462860218383788109">Dagsetning þegar síðast var breytt</translation>
 <translation id="4640946580087069269">Afritað á minnismiða</translation>
+<translation id="4643117005422448078">Oftast heimsóttar síður</translation>
 <translation id="4654578955713250802">Lokar á auglýsingar og rekjara</translation>
 <translation id="4655510151391078468">Þetta er ekki kóðinn sem við sendum þér.
         Þú getur prófað <ph name="ATTEMPTS" /> sinnum í viðbót.</translation>
@@ -211,6 +215,7 @@ rekjara</translation>
 <translation id="4727698999970341158">Íslenska (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">Uppfæra</translation>
 <translation id="4739712911308055817">Ekki sótt</translation>
+<translation id="4750394297954878236">Tillögur</translation>
 <translation id="4759399863961855552">Röðun</translation>
 <translation id="4780953868408193639">Lokað
 á rekjara</translation>
@@ -226,6 +231,7 @@ rekjara</translation>
 <translation id="4943266325467647391">Innbyggð rekjara- og auglýsingavörn í Vivaldi, vernda þig gegn spilliforritum og auglýsingum.</translation>
 <translation id="495421405224926623">Ég hef lesið og samþykkt skilmálana og friðhelgisstefnuna</translation>
 <translation id="497942794017668482">Lokar á rekjara og auglýsingar</translation>
+<translation id="4993477362660748586">Samstilling</translation>
 <translation id="5037761343305489956">Afritað á minnismiða</translation>
 <translation id="504986598654589766">Að vafra í einkaflipa merkir að leitir, heimsóknir á síður, kökur og skammtíma skjöl verða ekki geymd í Vivaldi. Einkaflipi dulkóðar ekki né breytir tengingunni þinni.</translation>
 <translation id="505774819758747674">Forsýna tækjastiku með völdum áherslulit</translation>
@@ -236,10 +242,12 @@ rekjara</translation>
 <translation id="5153806174841856652">Innskráning mistókst</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Endursenda kóða<ph name="END_LINK" /></translation>
 <translation id="5191012692655103305">Sæki flipa og sögu...</translation>
+<translation id="5221269430020540672">Opna mynd í bakgrunnsflipa</translation>
 <translation id="5238642303473095117">Eyða gögnum</translation>
 <translation id="5245732982828228444">Þú finnur minnismiðana þína hér</translation>
 <translation id="5249199221558969362">Vinsamlegast sláðu inn raunhæfa tölu fyrir endingartíma.</translation>
 <translation id="5271549068863921519">Vista lykilorð</translation>
+<translation id="5273620430932404871">Gælunöfn bókamerkja í sjálfvirkri útfyllingu</translation>
 <translation id="5290452628447338707">Engir minnismiðar</translation>
 <translation id="5317780077021120954">Vista</translation>
 <translation id="5349678548463426691">Eftir lýsingu</translation>
@@ -248,18 +256,18 @@ rekjara</translation>
 <translation id="5378841821586202982">Ruslafata</translation>
 <translation id="5398772614898833570">Auglýsingavörn</translation>
 <translation id="5421638721143596928">Ekki tókst að afkóða persónuupplýsingar. Vinsamlegast skráðu þig inn aftur.</translation>
-<translation id="5422086212043657100">Nota sem hraðvalsmöppu</translation>
 <translation id="5439835075346716808">Búið er að loka tímabundið á skráningu frá þessari IP tölu. Vinsamlegast reyndu aftur síðar.</translation>
 <translation id="5486261815000869482">Staðfesta lykilorð</translation>
 <translation id="5494016731375030300">Nýlega lokaðir flipar</translation>
 <translation id="5564687523685713029">Sýna bara grúppur</translation>
-<translation id="5600792731098584229">Hraðvalsstærð</translation>
+<translation id="5600792731098584229">Stærð á hraðvalshnappi</translation>
 <translation id="5639137028584114536">Fyrirtækið sem þú vinnur hjá krefst þess að þú vafrir í einkaham. Flipar eru ekki vistaðir í einkaham.
         <ph name="BEGIN_LINK" />Kynntu þér málið<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">Listi</translation>
 <translation id="5710478562694930157">Hækkandi</translation>
 <translation id="574392208103952083">Meðal</translation>
 <translation id="5787420647064736989">Nafn tækis</translation>
+<translation id="5801825598531634872">Óvirkir eftir daga</translation>
 <translation id="5822336771053074270">Bæta við minnismiða</translation>
 <translation id="5823830882692559950">Vivaldi.net hafnaði innskráningu þinni: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">Ný mappa</translation>
@@ -277,6 +285,7 @@ rekjara</translation>
 <translation id="6147094071357011481">Nýlega lokaðir flipar eru ekki aðgengilegir</translation>
 <translation id="6193995664633100765">Indverska(<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">Stillingar fyrir útlit vefsíðu</translation>
+<translation id="6257488392933423163">Skoða sem HTML</translation>
 <translation id="6365929278691047681">Þýska (<ph name="ORIGIN" />)</translation>
 <translation id="6406506848690869874">Samstilla</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> valdir</translation>
@@ -285,6 +294,7 @@ rekjara</translation>
 <translation id="6517411226162529295">Lykill að dulkóðuðu öryggisafriti</translation>
 <translation id="6527303717912515753">Deila</translation>
 <translation id="6535988230515403205">Pólska (<ph name="ORIGIN" />)</translation>
+<translation id="6566198107563125484">Bókamerki í sjálfvirkri útfyllingu</translation>
 <translation id="659351303388691480">Hreinsa vafragögn...</translation>
 <translation id="6602272356389933803">Útlit og þema</translation>
 <translation id="6614744450826097546">Nánar um auglýsingu</translation>
@@ -303,7 +313,6 @@ rekjara</translation>
 <translation id="681368974849482173">Búa til minnismiða</translation>
 <translation id="6830986331692390764">Hreinsun samræmdra gagna. Vinsamlegast bíðið.</translation>
 <translation id="6875510405870945573">Veldu hvaða varnarstig þú vilt.</translation>
-<translation id="6885837502028760851">Sýna bara hraðvals möppur</translation>
 <translation id="6887143077297974801">Samstilling fór ekki í gang.</translation>
 <translation id="691132463664340655">Vafraþema</translation>
 <translation id="6937750621455385628">Þú verður að nota Vivaldi reikning til þess að skrá þig inn.</translation>
@@ -316,6 +325,7 @@ rekjara</translation>
 <translation id="7006864796794806241">Endurheimta lykilorð</translation>
 <translation id="7029809446516969842">Lykilorð</translation>
 <translation id="7041964446309059643">Handvirkt</translation>
+<translation id="7083011465470143310">Gleymt <ph name="BEGIN_LINK" />lykilorð<ph name="END_LINK" />?</translation>
 <translation id="7110758301321962823">Endurheimta notandanafn</translation>
 <translation id="7158507293261405349">Bæta við nýrri grúppu</translation>
 <translation id="7192066917392691622">Lækkandi röð</translation>
@@ -354,6 +364,7 @@ rekjara</translation>
 <translation id="7732622593814325274">Vinna með uppruna rekjaravarna</translation>
 <translation id="7765158879357617694">Færa</translation>
 <translation id="7771452384635174008">Uppsetning</translation>
+<translation id="7791161131809889864">Opna alla í bakgrunni</translation>
 <translation id="7801204999757211519">Ertu þegar með reikning? <ph name="BEGIN_LINK" />Skráðu þig inn➔<ph name="END_LINK" /></translation>
 <translation id="7850070199083838600">Búa til nýja grúppu?</translation>
 <translation id="7914995060146784406">Breyta minnismiða</translation>
@@ -365,6 +376,7 @@ rekjara</translation>
 <translation id="8058018971942772071">Nota sem grúppu</translation>
 <translation id="8066170816074394954">Villa á netþjóni.</translation>
 <translation id="8076492880354921740">Flipar</translation>
+<translation id="8077675488769462025">Óvirkir flipar</translation>
 <translation id="8112996065264879835">Þetta er ekki kóðinn sem við sendum þér.
         Þú hefur slegið inn rangan kóða of oft. Vinsamlegast óskaðu eftir nýjum kóða með því að nota endursenda-hnappinn hér fyrir neðan.</translation>
 <translation id="8134672010161840864">Klíptu til þess að skera og færa myndina til</translation>
@@ -379,12 +391,14 @@ rekjara</translation>
 <translation id="8275038454117074363">Flytja inn</translation>
 <translation id="8284356787013856231">Beiðni um að opna skrá hafnað</translation>
 <translation id="8289933454364510719">Uppi eða niðri</translation>
+<translation id="8304044605002588416">Hnappur til að sérsníða upphafssíðu</translation>
 <translation id="8326104954595890674">Nýr einkaflipi</translation>
 <translation id="8329813750766387010">Uppfært: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Fjarlægja kökuviðvaranir (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">Til þess að geta séð flipa frá öðrum tækjum, verður þú að leyfa samstillingu.</translation>
 <translation id="8366175803122817174">Opna öll vefföng minnismiða</translation>
 <translation id="8384409685584033392">Síðuupplýsingar</translation>
+<translation id="8395378633507873708">Veffangastika</translation>
 <translation id="839736845446313156">Nýskrá</translation>
 <translation id="8414685983518053656">Minnismiðar</translation>
 <translation id="8423076545503792640">Beiðni hafnað vegna villu. Vinsamlegast prófaðu aftur síðar.</translation>
@@ -401,6 +415,7 @@ rekjara</translation>
 <translation id="8675578805254882416">Sæki</translation>
 <translation id="8677007239430848917">Bættu við fyrsta minnismiðanum þínum með því að ýta á plústáknið hér fyrir neðan</translation>
 <translation id="8684294196284714094">Ertu klár í að gera Vivaldi að sjálfgefnum vafra?</translation>
+<translation id="8733945742171960420">Um leið og þú byrjar að vafra, munu vinsælustu síðurnar birtast hér.</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> minnismiðum eytt</translation>
 <translation id="8763006697839582351">Opna í Vivaldi í einkaham</translation>
 <translation id="8765173886020357878">Leitartillögur</translation>
@@ -411,6 +426,7 @@ rekjara</translation>
 <translation id="8855707633300847215">Sýna flipastiku</translation>
 <translation id="8892354889971902600">Flipar sem þú hefur nýlega lokað birtast hér.</translation>
 <translation id="89390081013973080">Allt er klárt! Tímabært að ákveða hvaða gögn á að samstilla á milli tækja.</translation>
+<translation id="8964449607824577665">Ef við höfum ekki aðgang að dulkóðaða lykilorðinu sem þú notar núna, getum við ekki afkóðað gögnin þín. Ef þetta lykilorð er endurstillt, eyðast öll samstillt gögn af Vivaldi netþjónum.</translation>
 <translation id="8965371804397726192">Byrja að samstilla öll gögn</translation>
 <translation id="9028089729841356743">Villa í nettengingu.</translation>
 <translation id="9043882097999887291">Auglýsinga

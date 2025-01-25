@@ -23,6 +23,7 @@
 
 #include "psobjs.h"
 #include "psconv.h"
+#include "psft.h"
 
 #include "psauxerr.h"
 #include "psauxmod.h"
@@ -200,7 +201,9 @@
     /* add the object to the base block and adjust offset */
     table->elements[idx] = FT_OFFSET( table->block, table->cursor );
     table->lengths [idx] = length;
-    FT_MEM_COPY( table->block + table->cursor, object, length );
+    /* length == 0 also implies a NULL destination, so skip the copy call */
+    if ( length > 0 )
+      FT_MEM_COPY( table->block + table->cursor, object, length );
 
     table->cursor += length;
     return FT_Err_Ok;
@@ -1624,7 +1627,7 @@
     if ( builder->load_points )
     {
       FT_Vector*  point   = outline->points + outline->n_points;
-      FT_Byte*    control = (FT_Byte*)outline->tags + outline->n_points;
+      FT_Byte*    control = outline->tags   + outline->n_points;
 
 
       point->x = FIXED_TO_INT( x );
@@ -1677,8 +1680,7 @@
     if ( !error )
     {
       if ( outline->n_contours > 0 )
-        outline->contours[outline->n_contours - 1] =
-          (short)( outline->n_points - 1 );
+        outline->contours[outline->n_contours - 1] = outline->n_points - 1;
 
       outline->n_contours++;
     }
@@ -1740,7 +1742,7 @@
     {
       FT_Vector*  p1      = outline->points + first;
       FT_Vector*  p2      = outline->points + outline->n_points - 1;
-      FT_Byte*    control = (FT_Byte*)outline->tags + outline->n_points - 1;
+      FT_Byte*    control = outline->tags   + outline->n_points - 1;
 
 
       /* `delete' last point only if it coincides with the first */
@@ -1760,8 +1762,7 @@
         outline->n_points--;
       }
       else
-        outline->contours[outline->n_contours - 1] =
-          (short)( outline->n_points - 1 );
+        outline->contours[outline->n_contours - 1] = outline->n_points - 1;
     }
   }
 
@@ -1899,7 +1900,7 @@
     if ( builder->load_points )
     {
       FT_Vector*  point   = outline->points + outline->n_points;
-      FT_Byte*    control = (FT_Byte*)outline->tags + outline->n_points;
+      FT_Byte*    control = outline->tags   + outline->n_points;
 
 #ifdef CFF_CONFIG_OPTION_OLD_ENGINE
       PS_Driver  driver   = (PS_Driver)FT_FACE_DRIVER( builder->face );
@@ -1959,8 +1960,7 @@
     if ( !error )
     {
       if ( outline->n_contours > 0 )
-        outline->contours[outline->n_contours - 1] =
-          (short)( outline->n_points - 1 );
+        outline->contours[outline->n_contours - 1] = outline->n_points - 1;
 
       outline->n_contours++;
     }
@@ -2019,7 +2019,7 @@
     {
       FT_Vector*  p1      = outline->points + first;
       FT_Vector*  p2      = outline->points + outline->n_points - 1;
-      FT_Byte*    control = (FT_Byte*)outline->tags + outline->n_points - 1;
+      FT_Byte*    control = outline->tags   + outline->n_points - 1;
 
 
       /* `delete' last point only if it coincides with the first    */
@@ -2039,8 +2039,7 @@
         outline->n_points--;
       }
       else
-        outline->contours[outline->n_contours - 1] =
-          (short)( outline->n_points - 1 );
+        outline->contours[outline->n_contours - 1] = outline->n_points - 1;
     }
   }
 
@@ -2188,7 +2187,7 @@
     if ( builder->load_points )
     {
       FT_Vector*  point   = outline->points + outline->n_points;
-      FT_Byte*    control = (FT_Byte*)outline->tags + outline->n_points;
+      FT_Byte*    control = outline->tags   + outline->n_points;
 
 #ifdef CFF_CONFIG_OPTION_OLD_ENGINE
       PS_Driver  driver   = (PS_Driver)FT_FACE_DRIVER( builder->face );
@@ -2267,8 +2266,7 @@
     if ( !error )
     {
       if ( outline->n_contours > 0 )
-        outline->contours[outline->n_contours - 1] =
-          (short)( outline->n_points - 1 );
+        outline->contours[outline->n_contours - 1] = outline->n_points - 1;
 
       outline->n_contours++;
     }
@@ -2327,7 +2325,7 @@
     {
       FT_Vector*  p1      = outline->points + first;
       FT_Vector*  p2      = outline->points + outline->n_points - 1;
-      FT_Byte*    control = (FT_Byte*)outline->tags + outline->n_points - 1;
+      FT_Byte*    control = outline->tags   + outline->n_points - 1;
 
 
       /* `delete' last point only if it coincides with the first */
@@ -2347,8 +2345,7 @@
         outline->n_points--;
       }
       else
-        outline->contours[outline->n_contours - 1] =
-          (short)( outline->n_points - 1 );
+        outline->contours[outline->n_contours - 1] = outline->n_points - 1;
     }
   }
 

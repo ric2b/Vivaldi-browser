@@ -120,8 +120,6 @@ Ref: [Google Style Guide on Rvalue References](https://google.github.io/stylegui
 We prefer to use `noexcept` on move constructors.  Although exceptions are not
 allowed, this declaration [enables STL optimizations](https://en.cppreference.com/w/cpp/language/noexcept_spec).
 
-TODO(https://issuetracker.google.com/issues/160731444): Enforce this
-
 Additionally, GCC requires that any type using a defaulted `noexcept` move
 constructor/operator= has a `noexcept` copy or move constructor/operator= for
 all of its members.

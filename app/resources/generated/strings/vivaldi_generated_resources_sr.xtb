@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Примени</translation>
 <translation id="1603914832182249871">(Приватно)</translation>
 <translation id="1627276047960621195">Дескриптори датотека</translation>
+<translation id="1654713139320245449">Није пронађено ниједно одредиште за пребацивање. Потребна вам је помоћ?</translation>
 <translation id="166278006618318542">Алгоритам јавног кључа субјекта</translation>
 <translation id="1682548588986054654">Нови приватни прозор</translation>
 <translation id="1708338024780164500">(Неактивно)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Други програм на рачунару је додао проширење које може да промени начин на који Vivaldi функционише.</translation>
 <translation id="2443487764245141020">Сајтови ће можда морати и да препознају ваш уређај помоћу идентификатора</translation>
 <translation id="2445081178310039857">Основни директоријум проширења је обавезан.</translation>
-<translation id="2470702053775288986">Неподржана проширења су онемогућена</translation>
 <translation id="2485422356828889247">Деинсталирај</translation>
 <translation id="2498539833203011245">Умањи</translation>
 <translation id="2509495747794740764">Износ промене величине мора да буде број између 10 и 200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Детаљи</translation>
 <translation id="4345587454538109430">Конфигуриши...</translation>
 <translation id="4348766275249686434">Прикупи грешке</translation>
-<translation id="4363771538994847871">Нема пронађених одредишта за пребацивање. Да ли вам треба помоћ?</translation>
 <translation id="4384652540891215547">Активирање проширења</translation>
 <translation id="4394049700291259645">Онемогући</translation>
 <translation id="4409697491990005945">Маргине</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Распоред</translation>
 <translation id="7782102568078991263">Нема више предлога са Google-а</translation>
 <translation id="7786889348652477777">&amp;Поново учитај апликацију</translation>
-<translation id="7791543448312431591">Додај</translation>
 <translation id="7800518121066352902">Окрени у с&amp;меру супротном од казаљке на сату</translation>
 <translation id="7814458197256864873">&amp;Копирај</translation>
 <translation id="7818135753970109980">Нова тема је додата (<ph name="EXTENSION_NAME" />)</translation>

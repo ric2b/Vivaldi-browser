@@ -4,7 +4,7 @@
 
 // Flags: --wasm-deopt --allow-natives-syntax --turboshaft-wasm
 // Flags: --experimental-wasm-inlining --liftoff
-// Flags: --turboshaft-wasm-instruction-selection-staged
+// Flags: --turboshaft-wasm-instruction-selection-staged --no-jit-fuzzing
 
 d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
 
@@ -39,15 +39,21 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
   assertEquals(30, wasm.main(10, 20, wasm.add));
   %WasmTierUpFunction(wasm.main);
   assertEquals(30, wasm.main(10, 20, wasm.add));
-  assertTrue(%IsTurboFanFunction(wasm.main));
+  if (%IsolateCountForTesting() == 1) {
+    assertTrue(%IsTurboFanFunction(wasm.main));
+  }
   // Call with new target causing a deopt.
   assertEquals(-10, wasm.main(10, 20, wasm.sub));
-  assertFalse(%IsTurboFanFunction(wasm.main));
+  if (%IsolateCountForTesting() == 1) {
+    assertFalse(%IsTurboFanFunction(wasm.main));
+  }
   // Re-opt. Due to the size of sub(), the target will not be inlined.
   // This causes sub() to take the slow call_ref implementation and no deopt
   // point is created.
   %WasmTierUpFunction(wasm.main);
-  // Calling with a new call targe therefore doesn't trigger a deopt.
+  // Calling with a new call target therefore doesn't trigger a deopt.
   assertEquals(200, wasm.main(10, 20, wasm.mul));
-  assertTrue(%IsTurboFanFunction(wasm.main));
+  if (%IsolateCountForTesting() == 1) {
+    assertTrue(%IsTurboFanFunction(wasm.main));
+  }
 })();

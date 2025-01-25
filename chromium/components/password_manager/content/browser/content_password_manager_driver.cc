@@ -64,7 +64,7 @@ bool HasValidURL(content::RenderFrameHost* render_frame_host) {
   if (!url.is_valid())
     return false;
 
-  return password_manager::bad_message::CheckChildProcessSecurityPolicyForURL(
+  return password_manager::bad_message::CheckForIllegalURL(
       render_frame_host, url,
       password_manager::BadMessageReason::CPMD_BAD_ORIGIN_FORM_SUBMITTED);
 }
@@ -148,7 +148,10 @@ ContentPasswordManagerDriver::GetForRenderFrameHost(
   ContentPasswordManagerDriverFactory* factory =
       ContentPasswordManagerDriverFactory::FromWebContents(
           content::WebContents::FromRenderFrameHost(render_frame_host));
-  return factory ? factory->GetDriverForFrame(render_frame_host) : nullptr;
+  return factory ? factory->GetDriverForFrame(
+                       render_frame_host,
+                       base::PassKey<ContentPasswordManagerDriver>())
+                 : nullptr;
 }
 
 void ContentPasswordManagerDriver::BindPendingReceiver(
@@ -226,16 +229,17 @@ void ContentPasswordManagerDriver::FocusNextFieldAfterPasswords() {
   GetPasswordGenerationAgent()->FocusNextFieldAfterPasswords();
 }
 
-void ContentPasswordManagerDriver::FillField(autofill::FieldRendererId field_id,
-                                             const std::u16string& value) {
+void ContentPasswordManagerDriver::FillField(const std::u16string& value) {
   if (const auto& agent = GetPasswordAutofillAgent()) {
-    agent->FillField(field_id, value);
+    LogFilledFieldType();
+    agent->FillField(last_triggering_field_id_, value);
   }
 }
 
 void ContentPasswordManagerDriver::FillSuggestion(
     const std::u16string& username,
     const std::u16string& password) {
+  LogFilledFieldType();
   GetPasswordAutofillAgent()->FillPasswordSuggestion(username, password);
 }
 
@@ -243,6 +247,7 @@ void ContentPasswordManagerDriver::FillIntoFocusedField(
     bool is_password,
     const std::u16string& credential) {
   if (const auto& agent = GetPasswordAutofillAgent()) {
+    LogFilledFieldType();
     agent->FillIntoFocusedField(is_password, credential);
   }
 }
@@ -294,7 +299,7 @@ ContentPasswordManagerDriver::GetPasswordGenerationHelper() {
   return &password_generation_helper_;
 }
 
-PasswordManager* ContentPasswordManagerDriver::GetPasswordManager() {
+PasswordManagerInterface* ContentPasswordManagerDriver::GetPasswordManager() {
   return client_->GetPasswordManager();
 }
 
@@ -426,7 +431,7 @@ void ContentPasswordManagerDriver::InformAboutUserInput(
     // not used, such as on Android.
     content::SiteInstance::StartIsolatingSite(
         render_frame_host_->GetSiteInstance()->GetBrowserContext(),
-        form_data.url,
+        form_data.url(),
         content::ChildProcessSecurityPolicy::IsolatedOriginSource::
             USER_TRIGGERED);
   }
@@ -505,36 +510,50 @@ void ContentPasswordManagerDriver::ShowPasswordSuggestions(
           render_frame_host_))
     return;
 
-  if ((request.username_field_index > request.form_data.fields.size()) ||
-      (request.password_field_index > request.form_data.fields.size())) {
+  if ((request.username_field_index > request.form_data.fields().size()) ||
+      (request.password_field_index > request.form_data.fields().size())) {
     mojo::ReportBadMessage(
         "username_field_index or password_field_index cannot be greater than "
         "form.fields.size()!");
   }
 
-#if BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(
-          features::kPasswordSuggestionBottomSheetV2)) {
-    // TODO(crbug.com/40269373): Remove the parameter
-    // autofill::mojom::SubmissionReadinessState::kNoInformation when the
-    // feature is launched.
-    if (client_->ShowKeyboardReplacingSurface(
-            this,
-            PasswordFillingParams(
-                request.form_data, request.username_field_index,
-                request.password_field_index, request.element_id,
-                autofill::mojom::SubmissionReadinessState::kNoInformation),
-            request.show_webauthn_credentials)) {
-      return;
-    }
-  }
-#endif  // BUILDFLAG(IS_ANDROID)
+  last_triggering_field_id_ = request.element_id;
 
-  GetPasswordAutofillManager()->OnShowPasswordSuggestions(
-      request.element_id, request.trigger_source, request.text_direction,
-      request.typed_username,
+  base::OnceClosure show_with_autofill_manager_cb = base::BindOnce(
+      &PasswordAutofillManager::OnShowPasswordSuggestions,
+      GetPasswordAutofillManager()->GetWeakPtr(), request.element_id,
+      request.trigger_source, request.text_direction, request.typed_username,
       ShowWebAuthnCredentials(request.show_webauthn_credentials),
       TransformToRootCoordinates(render_frame_host_, request.bounds));
+#if !BUILDFLAG(IS_ANDROID)
+  std::move(show_with_autofill_manager_cb).Run();
+#else
+  if (!base::FeatureList::IsEnabled(
+          features::kPasswordSuggestionBottomSheetV2)) {
+    std::move(show_with_autofill_manager_cb).Run();
+    return;
+  }
+  // TODO(crbug.com/40269373): Remove the parameter
+  // autofill::mojom::SubmissionReadinessState::kNoInformation when the
+  // feature is launched.
+  client_->ShowKeyboardReplacingSurface(
+      this,
+      PasswordFillingParams(
+          request.form_data, request.username_field_index,
+          request.password_field_index, request.element_id,
+          autofill::mojom::SubmissionReadinessState::kNoInformation),
+      request.show_webauthn_credentials,
+      base::BindOnce(
+          [](base::OnceClosure cb, bool shown) {
+            if (shown) {
+              // UI shown by `client_`, all done.
+              return;
+            }
+            // Otherwise, show with PasswordAutofillManager.
+            std::move(cb).Run();
+          },
+          std::move(show_with_autofill_manager_cb)));
+#endif  // !BUILDFLAG(IS_ANDROID)
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -555,7 +574,7 @@ void ContentPasswordManagerDriver::ShowKeyboardReplacingSurface(
       this,
       PasswordFillingParams(form, 0, 0, autofill::FieldRendererId(),
                             submission_readiness),
-      is_webauthn_form);
+      is_webauthn_form, base::DoNothing());
 }
 #endif
 
@@ -586,6 +605,14 @@ void ContentPasswordManagerDriver::LogFirstFillingResult(
           render_frame_host_))
     return;
   GetPasswordManager()->LogFirstFillingResult(this, form_renderer_id, result);
+}
+
+void ContentPasswordManagerDriver::LogFilledFieldType() {
+  bool field_classified_as_target_filling_password =
+      GetPasswordManager()->GetPasswordFormCache()->HasPasswordForm(
+          this, last_triggering_field_id_);
+  base::UmaHistogramBoolean("Autofill.FilledFieldType.Password",
+                            field_classified_as_target_filling_password);
 }
 
 const mojo::AssociatedRemote<autofill::mojom::AutofillAgent>&

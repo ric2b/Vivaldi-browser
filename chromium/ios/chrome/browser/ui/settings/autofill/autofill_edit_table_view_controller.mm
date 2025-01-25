@@ -7,9 +7,9 @@
 #import "base/apple/foundation_util.h"
 #import "base/check.h"
 #import "base/notreached.h"
+#import "ios/chrome/browser/autofill/ui_bundled/cells/autofill_credit_card_edit_item.h"
+#import "ios/chrome/browser/autofill/ui_bundled/form_input_accessory/form_input_accessory_chromium_text_data.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/autofill/cells/autofill_credit_card_edit_item.h"
-#import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_chromium_text_data.h"
 #import "ios/chrome/common/ui/elements/form_input_accessory_view.h"
 
 @interface AutofillEditTableViewController () <FormInputAccessoryViewDelegate> {
@@ -131,7 +131,8 @@
 
 - (void)fromInputAccessoryViewDidTapOmniboxTypingShield:
     (FormInputAccessoryView*)sender {
-  NOTREACHED() << "The typing shield should only be present on web";
+  NOTREACHED_IN_MIGRATION()
+      << "The typing shield should only be present on web";
 }
 
 #pragma mark - Helper methods
@@ -192,7 +193,7 @@
 }
 
 - (BOOL)isItemAtIndexPathTextEditCell:(NSIndexPath*)cellPath {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return YES;
 }
 

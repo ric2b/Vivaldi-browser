@@ -9,8 +9,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/autofill/risk_util.h"
+#include "components/autofill/core/browser/payments_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/facilitated_payments/core/browser/network_api/facilitated_payments_network_interface.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/web_contents.h"
 
 ChromeFacilitatedPaymentsClient::ChromeFacilitatedPaymentsClient(
@@ -20,7 +22,9 @@ ChromeFacilitatedPaymentsClient::ChromeFacilitatedPaymentsClient(
           *web_contents),
       driver_factory_(web_contents,
                       /*client=*/this,
-                      optimization_guide_decider) {}
+                      optimization_guide_decider),
+      facilitated_payments_controller_(
+          std::make_unique<FacilitatedPaymentsController>(web_contents)) {}
 
 ChromeFacilitatedPaymentsClient::~ChromeFacilitatedPaymentsClient() = default;
 
@@ -30,14 +34,15 @@ void ChromeFacilitatedPaymentsClient::LoadRiskData(
                                     std::move(on_risk_data_loaded_callback));
 }
 
-autofill::PersonalDataManager*
-ChromeFacilitatedPaymentsClient::GetPersonalDataManager() {
-  Profile* profile =
-      Profile::FromBrowserContext(GetWebContents().GetBrowserContext());
-  if (profile) {
-    return autofill::PersonalDataManagerFactory::GetForProfile(profile);
+autofill::PaymentsDataManager*
+ChromeFacilitatedPaymentsClient::GetPaymentsDataManager() {
+  content::BrowserContext* context = GetWebContents().GetBrowserContext();
+  if (!context) {
+    return nullptr;
   }
-  return nullptr;
+  autofill::PersonalDataManager* pdm =
+      autofill::PersonalDataManagerFactory::GetForBrowserContext(context);
+  return pdm ? &pdm->payments_data_manager() : nullptr;
 }
 
 payments::facilitated::FacilitatedPaymentsNetworkInterface*
@@ -52,24 +57,47 @@ ChromeFacilitatedPaymentsClient::GetFacilitatedPaymentsNetworkInterface() {
         payments::facilitated::FacilitatedPaymentsNetworkInterface>(
         profile->GetURLLoaderFactory(),
         IdentityManagerFactory::GetForProfile(profile->GetOriginalProfile()),
-        &GetPersonalDataManager()->payments_data_manager(),
-        profile->IsOffTheRecord());
+        GetPaymentsDataManager(), profile->IsOffTheRecord());
   }
   return facilitated_payments_network_interface_.get();
+}
+
+std::optional<CoreAccountInfo>
+ChromeFacilitatedPaymentsClient::GetCoreAccountInfo() {
+  Profile* profile =
+      Profile::FromBrowserContext(GetWebContents().GetBrowserContext());
+  if (!profile) {
+    return std::nullopt;
+  }
+  auto* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile->GetOriginalProfile());
+  return identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
 }
 
 bool ChromeFacilitatedPaymentsClient::ShowPixPaymentPrompt(
     base::span<autofill::BankAccount> bank_account_suggestions,
     base::OnceCallback<void(bool, int64_t)> on_user_decision_callback) {
-#if BUILDFLAG(IS_ANDROID)
-  return facilitated_payments_controller_.Show(
-      std::make_unique<
-          payments::facilitated::FacilitatedPaymentsBottomSheetBridge>(),
-      &GetWebContents());
-#else
-  // Facilitated Payments is not supported on Desktop.
-  NOTREACHED_NORETURN();
-#endif
+  return facilitated_payments_controller_->Show(
+      std::move(bank_account_suggestions),
+      std::move(on_user_decision_callback));
+}
+
+void ChromeFacilitatedPaymentsClient::ShowProgressScreen() {
+  facilitated_payments_controller_->ShowProgressScreen();
+}
+
+void ChromeFacilitatedPaymentsClient::ShowErrorScreen() {
+  facilitated_payments_controller_->ShowErrorScreen();
+}
+
+void ChromeFacilitatedPaymentsClient::DismissPrompt() {
+  facilitated_payments_controller_->Dismiss();
+}
+
+void ChromeFacilitatedPaymentsClient::
+    SetFacilitatedPaymentsControllerForTesting(
+        std::unique_ptr<FacilitatedPaymentsController> mock_controller) {
+  facilitated_payments_controller_ = std::move(mock_controller);
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(ChromeFacilitatedPaymentsClient);

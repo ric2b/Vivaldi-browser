@@ -21,7 +21,7 @@
 #include "quiche/quic/tools/quic_backend_response.h"
 #include "quiche/quic/tools/quic_memory_cache_backend.h"
 #include "quiche/quic/tools/quic_simple_server_backend.h"
-#include "quiche/spdy/core/http2_header_block.h"
+#include "quiche/common/http/http_header_block.h"
 
 namespace quic {
 
@@ -34,7 +34,7 @@ class QUIC_NO_EXPORT MasqueServerBackend : public QuicMemoryCacheBackend {
   class QUIC_NO_EXPORT BackendClient {
    public:
     virtual std::unique_ptr<QuicBackendResponse> HandleMasqueRequest(
-        const spdy::Http2HeaderBlock& request_headers,
+        const quiche::HttpHeaderBlock& request_headers,
         QuicSimpleServerBackend::RequestHandler* request_handler) = 0;
     virtual ~BackendClient() = default;
   };
@@ -49,10 +49,10 @@ class QUIC_NO_EXPORT MasqueServerBackend : public QuicMemoryCacheBackend {
 
   // From QuicMemoryCacheBackend.
   void FetchResponseFromBackend(
-      const spdy::Http2HeaderBlock& request_headers,
+      const quiche::HttpHeaderBlock& request_headers,
       const std::string& request_body,
       QuicSimpleServerBackend::RequestHandler* request_handler) override;
-  void HandleConnectHeaders(const spdy::Http2HeaderBlock& request_headers,
+  void HandleConnectHeaders(const quiche::HttpHeaderBlock& request_headers,
                             RequestHandler* request_handler) override;
 
   void CloseBackendResponseStream(
@@ -70,33 +70,33 @@ class QUIC_NO_EXPORT MasqueServerBackend : public QuicMemoryCacheBackend {
 
   // Pass in a list of key identifiers and hex-encoded public keys, separated
   // with colons and semicolons. For example: "kid1:0123...f;kid2:0123...f".
-  void SetSignatureAuth(absl::string_view signature_auth);
+  void SetConcealedAuth(absl::string_view concealed_auth);
 
-  // Returns whether any signature auth credentials are configured.
-  bool IsSignatureAuthEnabled() const {
-    return !signature_auth_credentials_.empty();
+  // Returns whether any concealed auth credentials are configured.
+  bool IsConcealedAuthEnabled() const {
+    return !concealed_auth_credentials_.empty();
   }
 
   // If the key ID is known, copies the corresponding public key to
   // out_public_key and returns true. Otherwise returns false.
-  bool GetSignatureAuthKeyForId(
+  bool GetConcealedAuthKeyForId(
       absl::string_view key_id,
       uint8_t out_public_key[ED25519_PUBLIC_KEY_LEN]) const;
 
-  // Enable signature auth on all requests (e.g., GET) instead of just MASQUE.
-  void SetSignatureAuthOnAllRequests(bool signature_auth_on_all_requests) {
-    signature_auth_on_all_requests_ = signature_auth_on_all_requests;
+  // Enable concealed auth on all requests (e.g., GET) instead of just MASQUE.
+  void SetConcealedAuthOnAllRequests(bool concealed_auth_on_all_requests) {
+    concealed_auth_on_all_requests_ = concealed_auth_on_all_requests;
   }
 
-  // Whether signature auth is enabled on all requests (e.g., GET).
-  bool IsSignatureAuthOnAllRequests() const {
-    return signature_auth_on_all_requests_;
+  // Whether concealed auth is enabled on all requests (e.g., GET).
+  bool IsConcealedAuthOnAllRequests() const {
+    return concealed_auth_on_all_requests_;
   }
 
  private:
   // Handle MASQUE request.
   bool MaybeHandleMasqueRequest(
-      const spdy::Http2HeaderBlock& request_headers,
+      const quiche::HttpHeaderBlock& request_headers,
       QuicSimpleServerBackend::RequestHandler* request_handler);
 
   MasqueMode masque_mode_;
@@ -110,12 +110,12 @@ class QUIC_NO_EXPORT MasqueServerBackend : public QuicMemoryCacheBackend {
                       QuicConnectionIdHash>
       backend_client_states_;
   uint8_t connect_ip_next_client_ip_[4];
-  struct QUIC_NO_EXPORT SignatureAuthCredential {
+  struct QUIC_NO_EXPORT ConcealedAuthCredential {
     std::string key_id;
     uint8_t public_key[ED25519_PUBLIC_KEY_LEN];
   };
-  std::list<SignatureAuthCredential> signature_auth_credentials_;
-  bool signature_auth_on_all_requests_ = false;
+  std::list<ConcealedAuthCredential> concealed_auth_credentials_;
+  bool concealed_auth_on_all_requests_ = false;
 };
 
 }  // namespace quic

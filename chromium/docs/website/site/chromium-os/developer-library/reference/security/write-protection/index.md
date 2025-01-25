@@ -59,8 +59,10 @@ That separate chip is often referred to as a secure element (SE), the firmware
 controlling the SE is called Cr50. This secure element firmware is fully
 authored and controlled by Google.
 
-Note that even in case of the devices protected by the SE, opening up the
-device and disconnecting the battery would still disable write protection.
+Note that even for devices protected by the SE, opening up the device and
+disconnecting the battery may still disable write protection. If disconnecting
+the battery does not disable write protection immediately, then see the
+[guide for firmware unlock on 2023+ devices].
 
 ## Software write protect
 
@@ -175,7 +177,9 @@ protect, disable software write protect, and clear the write protection ranges.
     *    Run `wp disable` on the [Cr50 console].
 
 If you don't want to go through the CCD open process or don't have a [suzyQ], you
-can open the case and remove the battery to disable hardware write protect.
+may be able to open the case and remove the battery to disable hardware write protect.
+For newer devices just removing the battery may not be enough, see also the
+[guide for firmware unlock on 2023+ devices].
 *   Disassemble the device, locate the battery connector, remove the battery connector from the
     PCB to disconnect the battery.
 *   Reassemble the device, insert the original OEM charger (necessary since the
@@ -264,3 +268,4 @@ For EC firmware,
 [Servo]: https://chromium.googlesource.com/chromiumos/third_party/hdctools/+/HEAD/README.md
 [suzyQ]: https://chromium.googlesource.com/chromiumos/third_party/hdctools/+/HEAD/docs/ccd.md#suzyq-suzyqable
 [Verified Boot]: https://www.chromium.org/chromium-os/chromiumos-design-docs/verified-boot
+[guide for firmware unlock on 2023+ devices]:  ../../../guides/device/ro-firmware-unlock/index.md

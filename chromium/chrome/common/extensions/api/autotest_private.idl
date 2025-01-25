@@ -382,6 +382,7 @@ namespace autotestPrivate {
     double presentDeviation;
     double renderQuality;
     double janksPerMinute;
+    double janksPercentage;
   };
 
   callback TakeScreenshotCallback = void (DOMString base64Png);
@@ -717,6 +718,8 @@ namespace autotestPrivate {
     long jankCount;
     // Display throughput percentage at fixed intervals.
     long[] throughput;
+    // The durations of the janks during this animation in millisecond.
+    double[] jankDurations;
   };
 
   // Callback invoked to report the smoothness after StopSmoothnessTracking is
@@ -1009,7 +1012,7 @@ namespace autotestPrivate {
         VoidCallback callback);
 
     // Launches Files app directly to absolutePath, if the path does not
-    // exist, it will launch to the default opening location (i.e. My files).
+    // exist, it will launch to the default opening location (i.e. MyFiles).
     // If the supplied path is a file (and it exists) it will open Files app
     // to the parent folder instead.
     static void launchFilesAppToPath(

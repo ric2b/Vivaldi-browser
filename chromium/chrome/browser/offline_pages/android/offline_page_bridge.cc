@@ -23,7 +23,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
-#include "chrome/android/chrome_jni_headers/OfflinePageBridge_jni.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/offline_pages/offline_page_mhtml_archiver.h"
 #include "chrome/browser/offline_pages/offline_page_model_factory.h"
@@ -31,7 +30,6 @@
 #include "chrome/browser/offline_pages/offline_page_utils.h"
 #include "chrome/browser/offline_pages/recent_tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/profiles/profile_key_android.h"
 #include "components/offline_pages/core/archive_validator.h"
@@ -47,6 +45,9 @@
 #include "content/public/browser/web_contents.h"
 #include "net/base/filename_util.h"
 #include "url/android/gurl_android.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "chrome/android/chrome_jni_headers/OfflinePageBridge_jni.h"
 
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
@@ -182,7 +183,7 @@ void ValidateFileCallback(
           offline_pages::OfflinePageHeader::Reason::NET_ERROR_SUGGESTION;
       break;
     case offline_items_collection::LaunchLocation::DOWNLOAD_SHELF:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case offline_items_collection::LaunchLocation::DOWNLOAD_INTERSTITIAL:
       offline_header.reason =

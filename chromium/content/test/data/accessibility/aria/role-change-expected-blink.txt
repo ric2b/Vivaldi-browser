@@ -2,11 +2,11 @@ rootWebArea
 ++genericContainer ignored
 ++++genericContainer ignored
 ++++++grid
-++++++++row
-++++++++++cell name='Cell'
+++++++++row name='Cell Cell'
+++++++++++gridCell name='Cell'
 ++++++++++++staticText name='Cell'
 ++++++++++++++inlineTextBox name='Cell'
-++++++++++cell name='Cell'
+++++++++++gridCell name='Cell'
 ++++++++++++staticText name='Cell'
 ++++++++++++++inlineTextBox name='Cell'
 ++++++table name='Real data table'

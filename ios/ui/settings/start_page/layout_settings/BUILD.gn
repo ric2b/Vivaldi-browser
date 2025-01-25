@@ -11,8 +11,6 @@ source_set("layout_settings") {
     "vivaldi_start_page_layout_settings_coordinator.mm",
     "vivaldi_start_page_layout_settings_mediator.h",
     "vivaldi_start_page_layout_settings_mediator.mm",
-    "vivaldi_start_page_layout_settings_view_controller.h",
-    "vivaldi_start_page_layout_settings_view_controller.mm",
     "vivaldi_start_page_layout_state.h",
     "vivaldi_start_page_layout_style.h",
   ]
@@ -43,7 +41,8 @@ swift_source_set("layout_settings_swift") {
     "//ui/base",
     "//ios/chrome/app/strings",
     "//vivaldi/ios/ui/settings/start_page/wallpaper_settings",
-    "//vivaldi/ios/ui/settings/start_page/wallpaper_settings:wallpaper_settings_swift"
+    "//vivaldi/ios/ui/settings/start_page/wallpaper_settings:wallpaper_settings_swift",
+    "//vivaldi/ios/ui/helpers:helpers_swift",
   ]
 
   frameworks = [

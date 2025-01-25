@@ -227,10 +227,8 @@ export class ThrottlingManager {
   }
 
   createMobileThrottlingButton(): UI.Toolbar.ToolbarMenuButton {
-    const button = new UI.Toolbar.ToolbarMenuButton(appendItems, undefined, 'mobile-throttling');
+    const button = new UI.Toolbar.ToolbarMenuButton(appendItems, undefined, undefined, 'mobile-throttling');
     button.setTitle(i18nString(UIStrings.throttling));
-    button.setGlyph('');
-    button.turnIntoSelect();
     button.setDarkText();
 
     let options: ConditionsList = [];
@@ -301,14 +299,15 @@ export class ThrottlingManager {
   createCPUThrottlingSelector(): UI.Toolbar.ToolbarComboBox {
     const control = new UI.Toolbar.ToolbarComboBox(
         event => this.setCPUThrottlingRate(this.cpuThrottlingRates[(event.target as HTMLSelectElement).selectedIndex]),
-        i18nString(UIStrings.cpuThrottling));
+        i18nString(UIStrings.cpuThrottling), '', 'cpu-throttling-selector');
     this.cpuThrottlingControls.add(control);
     const currentRate = this.cpuThrottlingManager.cpuThrottlingRate();
 
     for (let i = 0; i < this.cpuThrottlingRates.length; ++i) {
       const rate = this.cpuThrottlingRates[i];
       const title = rate === 1 ? i18nString(UIStrings.noThrottling) : i18nString(UIStrings.dSlowdown, {PH1: rate});
-      const option = control.createOption(title);
+      const value = rate === 1 ? 'cpu-no-throttling' : `cpu-throttled-${rate}`;
+      const option = control.createOption(title, value);
       control.addOption(option);
       if (currentRate === rate) {
         control.setSelectedIndex(i);
@@ -323,15 +322,17 @@ export class ThrottlingManager {
     warning: UI.Toolbar.ToolbarItem,
     toggle: UI.Toolbar.ToolbarItem,
   } {
-    const input = new UI.Toolbar.ToolbarItem(UI.UIUtils.createInput('devtools-text-input', 'number'));
+    const input = new UI.Toolbar.ToolbarItem(
+        UI.UIUtils.createInput('devtools-text-input', 'number', 'hardware-concurrency-selector'));
     input.setTitle(i18nString(UIStrings.hardwareConcurrencySettingTooltip));
     const inputElement = input.element as HTMLInputElement;
     inputElement.min = '1';
     input.setEnabled(false);
 
     const toggle = new UI.Toolbar.ToolbarCheckbox(
-        i18nString(UIStrings.hardwareConcurrency), i18nString(UIStrings.hardwareConcurrencySettingTooltip));
-    const reset = new UI.Toolbar.ToolbarButton('Reset concurrency', 'undo');
+        i18nString(UIStrings.hardwareConcurrency), i18nString(UIStrings.hardwareConcurrencySettingTooltip), undefined,
+        'hardware-concurrency-toggle');
+    const reset = new UI.Toolbar.ToolbarButton('Reset concurrency', 'undo', undefined, 'hardware-concurrency-reset');
     reset.setTitle(i18nString(UIStrings.resetConcurrency));
     const icon = new IconButton.Icon.Icon();
     icon.data = {iconName: 'warning-filled', color: 'var(--icon-warning)', width: '14px', height: '14px'};
@@ -406,7 +407,7 @@ export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
       return true;
     }
     if (actionId === 'network-conditions.network-mid-tier-mobile') {
-      SDK.NetworkManager.MultitargetNetworkManager.instance().setNetworkConditions(SDK.NetworkManager.Fast3GConditions);
+      SDK.NetworkManager.MultitargetNetworkManager.instance().setNetworkConditions(SDK.NetworkManager.Slow4GConditions);
       return true;
     }
     if (actionId === 'network-conditions.network-offline') {

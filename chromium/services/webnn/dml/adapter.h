@@ -8,7 +8,10 @@
 #include "base/component_export.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/task/thread_pool.h"
 #include "base/types/expected.h"
+#include "gpu/config/gpu_feature_info.h"
+#include "gpu/config/gpu_info.h"
 #include "services/webnn/dml/error.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
 #include "third_party/microsoft_dxheaders/include/directml.h"
@@ -26,12 +29,12 @@ class CommandQueue;
 // An `Adapter` instance creates and maintains corresponding `IDXGIAdapter` or
 // `IDXCoreAdapter`, `ID3D12Device`, `IDMLDevice` and `webnn::dml::CommandQueue`
 // for a physical adapter. A single `Adapter` instance is shared and
-// reference-counted by all `webnn::dml::GraphImpl` of the same adapter. The
-// `Adapter` instance is created upon the first `webnn::dml::GraphImpl` call
+// reference-counted by all `GraphImplDml` of the same adapter. The
+// `Adapter` instance is created upon the first `GraphImplDml` call
 // `Adapter::GetGpuInstance()` or `Adapter::GetNpuInstance()` and is released
-// when the last `webnn::dml::GraphImpl` is destroyed.
+// when the last `GraphImplDml` is destroyed.
 class COMPONENT_EXPORT(WEBNN_SERVICE) Adapter final
-    : public base::RefCounted<Adapter> {
+    : public base::RefCountedThreadSafe<Adapter> {
  public:
   // Get the shared `Adapter` instance. If `Adapter` instance already exists,
   // the that one is returned regardless of whether the `dxgi_adapter` matches.
@@ -49,8 +52,13 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) Adapter final
 
   // Similar to the `GetGpuInstance` method above, get the shared
   // `Adapter` instance for NPU.
+  static base::expected<scoped_refptr<Adapter>, mojom::ErrorPtr>
+  GetNpuInstanceForTesting();
+
   static base::expected<scoped_refptr<Adapter>, mojom::ErrorPtr> GetNpuInstance(
-      DML_FEATURE_LEVEL min_required_dml_feature_level);
+      DML_FEATURE_LEVEL min_required_dml_feature_level,
+      const gpu::GpuFeatureInfo& gpu_feature_info,
+      const gpu::GPUInfo& gpu_info);
 
   // Same as GetGpuInstance() but use the first enumerated DXGI adapter. The
   // minimum required feature level is DML_FEATURE_LEVEL_2_0 because that is
@@ -67,6 +75,20 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) Adapter final
   IDMLDevice* dml_device() const { return dml_device_.Get(); }
 
   CommandQueue* command_queue() const { return command_queue_.get(); }
+
+  DML_FEATURE_LEVEL max_supported_feature_level() const {
+    return max_supported_dml_feature_level_;
+  }
+
+  CommandQueue* init_command_queue_for_npu() const {
+    return init_command_queue_for_npu_.get();
+  }
+
+  base::SequencedTaskRunner* init_task_runner_for_npu() const {
+    return init_task_runner_for_npu_.get();
+  }
+
+  bool IsNPU() const { return npu_instance_ == this; }
 
   // Enable the debug layer (requires the Graphics Tools "optional feature").
   // Must be called prior to Adapter::GetGpuInstance() since the D3D12 device
@@ -88,11 +110,12 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) Adapter final
   FRIEND_TEST_ALL_PREFIXES(WebNNAdapterTest, GetGpuInstance);
   FRIEND_TEST_ALL_PREFIXES(WebNNAdapterTest, GetNpuInstance);
 
-  friend class base::RefCounted<Adapter>;
+  friend class base::RefCountedThreadSafe<Adapter>;
   Adapter(Microsoft::WRL::ComPtr<IUnknown> dxgi_or_dxcore_adapter,
           Microsoft::WRL::ComPtr<ID3D12Device> d3d12_device,
           Microsoft::WRL::ComPtr<IDMLDevice> dml_device,
           scoped_refptr<CommandQueue> command_queue,
+          scoped_refptr<CommandQueue> init_command_queue_for_npu,
           DML_FEATURE_LEVEL max_supported_dml_feature_level,
           bool is_uma);
   ~Adapter();
@@ -114,6 +137,13 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) Adapter final
   Microsoft::WRL::ComPtr<ID3D12Device> d3d12_device_;
   Microsoft::WRL::ComPtr<IDMLDevice> dml_device_;
   scoped_refptr<CommandQueue> command_queue_;
+  // It's dedicated to initialize graph on background thread for the NPU
+  // adapter, it's nullptr for the GPU adapter.
+  scoped_refptr<CommandQueue> init_command_queue_for_npu_;
+  // It's used to post the graph initialization tasks to the background thread
+  // and guarantee the tasks are executed in order for the NPU adapter, it's
+  // nullptr for the GPU adapter.
+  scoped_refptr<base::SequencedTaskRunner> init_task_runner_for_npu_;
 
   DML_FEATURE_LEVEL max_supported_dml_feature_level_ = DML_FEATURE_LEVEL_1_0;
 

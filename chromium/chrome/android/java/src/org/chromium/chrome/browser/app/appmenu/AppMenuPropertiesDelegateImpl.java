@@ -61,6 +61,7 @@ import org.chromium.chrome.browser.share.ShareUtils;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tinker_tank.TinkerTankDelegateImpl;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.translate.TranslateUtils;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
@@ -70,7 +71,6 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuPropertiesDelegate;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuUtil;
 import org.chromium.chrome.browser.ui.appmenu.CustomViewBinder;
 import org.chromium.chrome.browser.util.BrowserUiUtils;
-import org.chromium.chrome.browser.util.BrowserUiUtils.HostSurface;
 import org.chromium.chrome.browser.util.BrowserUiUtils.ModuleTypeOnStartAndNtp;
 import org.chromium.chrome.browser.webapps.WebappRegistry;
 import org.chromium.components.browser_ui.accessibility.PageZoomCoordinator;
@@ -107,6 +107,8 @@ import android.text.style.SuperscriptSpan;
 import org.chromium.build.BuildConfig;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.night_mode.settings.ThemeSettingsFragment;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.ui.text.SpanApplier;
@@ -338,17 +340,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     private boolean isInTabSwitcher() {
         return mLayoutStateProvider != null
                 && mLayoutStateProvider.isLayoutVisible(LayoutType.TAB_SWITCHER)
-                && !mLayoutStateProvider.isLayoutStartingToHide(LayoutType.TAB_SWITCHER)
-                && !isInStartSurfaceHomepage();
-    }
-
-    /**
-     * @return Whether the Start surface homepage is showing.
-     */
-    @VisibleForTesting
-    boolean isInStartSurfaceHomepage() {
-        return mLayoutStateProvider != null
-                && mLayoutStateProvider.isLayoutVisible(LayoutType.START_SURFACE);
+                && !mLayoutStateProvider.isLayoutStartingToHide(LayoutType.TAB_SWITCHER);
     }
 
     private void setMenuGroupVisibility(@MenuGroup int menuGroup, Menu menu) {
@@ -396,6 +388,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             propertyModel.set(AppMenuItemProperties.SUPPORT_ENTER_ANIMATION, true);
             propertyModel.set(AppMenuItemProperties.MENU_ICON_AT_START, isMenuIconAtStart());
             propertyModel.set(AppMenuItemProperties.TITLE_CONDENSED, getContentDescription(item));
+            propertyModel.set(AppMenuItemProperties.MANAGED, isMenuItemManaged(item));
             if (item.hasSubMenu()) {
                 // Only support top level menu items have SUBMENU, and a SUBMENU item cannot have a
                 // SUBMENU.
@@ -453,8 +446,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         Tab currentTab = mActivityTabProvider.get();
 
         if (menuGroup == MenuGroup.PAGE_MENU) {
-            preparePageMenu(
-                    menu, isInStartSurfaceHomepage() ? null : currentTab, handler, isIncognito);
+            preparePageMenu(menu, currentTab, handler, isIncognito);
         }
         prepareCommonMenuItems(menu, menuGroup, isIncognito);
     }
@@ -612,7 +604,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                                 && shouldShowPaintPreview(isNativePage, currentTab, isIncognito));
 
         // Enable image descriptions if touch exploration is currently enabled, but not on the
-        // native NTP or Start surface.
+        // native NTP.
         if (isCurrentTabNotNull
                 && shouldShowWebContentsDependentMenuItem(currentTab)
                 && ImageDescriptionsController.getInstance()
@@ -637,7 +629,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             menu.findItem(R.id.get_image_descriptions_id).setVisible(false);
         }
 
-        // Conditionally add the Zoom menu item, but not on the native NTP or on Start surface.
+        // Conditionally add the Zoom menu item, but not on the native NTP.
         menu.findItem(R.id.page_zoom_id)
                 .setVisible(
                         isCurrentTabNotNull
@@ -645,7 +637,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                                 && shouldShowWebContentsDependentMenuItem(currentTab)
                                 && PageZoomCoordinator.shouldShowMenuItem());
 
-        // Disable find in page on the native NTP (except for PDF native page) or on Start surface.
+        // Disable find in page on the native NTP (except for PDF native page).
         updateFindInPageMenuItem(menu, currentTab);
 
         if (ChromeApplicationImpl.isVivaldi()) {
@@ -679,9 +671,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         else
         updateRequestDesktopSiteMenuItem(menu, currentTab, true /* can show */, isNativePage);
 
-        if (ChromeApplicationImpl.isVivaldi())
-            menu.findItem(R.id.auto_dark_web_contents_row_menu_id).setVisible(false);
-        else
         updateAutoDarkMenuItem(menu, currentTab, isNativePage);
 
         if (ChromeApplicationImpl.isVivaldi())
@@ -816,6 +805,10 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 item.setVisible(isQuickDeleteEnabled(isIncognito));
                 item.setEnabled(isQuickDeleteEnabled(isIncognito));
             }
+            if (item.getItemId() == R.id.tinker_tank_menu_id) {
+                item.setVisible(TinkerTankDelegateImpl.enabled());
+                item.setEnabled(TinkerTankDelegateImpl.enabled());
+            }
 
             // This needs to be done after the visibility of the item is set.
             if (item.getItemId() == R.id.divider_line_id) {
@@ -910,9 +903,12 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     public boolean isAutoDarkWebContentsEnabled() {
         Profile profile = mTabModelSelector.getCurrentModel().getProfile();
         assert profile != null;
+        boolean vivaldiWebpageDarkModeFlag = ChromeSharedPreferences.getInstance().readBoolean(
+                ThemeSettingsFragment.KEY_DARK_MODE_FOR_WEBPAGES, false);
         boolean isFlagEnabled =
                 ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.DARKEN_WEBSITES_CHECKBOX_IN_THEMES_SETTING);
+                        ChromeFeatureList.DARKEN_WEBSITES_CHECKBOX_IN_THEMES_SETTING)
+                || vivaldiWebpageDarkModeFlag; // Vivaldi
         boolean isFeatureEnabled =
                 WebContentsDarkModeController.isFeatureEnabled(mContext, profile);
         return isFlagEnabled && isFeatureEnabled;
@@ -967,7 +963,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     /**
      * @param currentTab The currentTab for which the app menu is showing.
      * @return Whether the currentTab should show an app menu item that requires a webContents. This
-     *     will return false for the Start surface or native NTP, and true otherwise.
+     *     will return false for native NTP, and true otherwise.
      */
     protected boolean shouldShowWebContentsDependentMenuItem(@NonNull Tab currentTab) {
         return !currentTab.isNativePage() && currentTab.getWebContents() != null;
@@ -1180,7 +1176,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         }
 
         // now try to insert it.
-        assert mReadAloudPos != 1 : "Unexpectedly missing position for the read aloud menu item";
+        assert mReadAloudPos != -1 : "Unexpectedly missing position for the read aloud menu item";
         if (mReadAloudPos != -1) {
             item.setVisible(true);
             mHasReadAloudInserted = true;
@@ -1192,6 +1188,15 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                     mReadAloudPos,
                     new MVCListAdapter.ListItem(AppMenuItemType.STANDARD, propertyModel));
         }
+    }
+
+    /** Return whether the given {@link MenuItem} is managed by policy. */
+    protected boolean isMenuItemManaged(MenuItem item) {
+        if (item.getItemId() == R.id.new_incognito_tab_menu_id) {
+            return IncognitoUtils.isIncognitoModeManaged(
+                    mTabModelSelector.getCurrentModel().getProfile());
+        }
+        return false;
     }
 
     /** Returns true if a badge (i.e. a red-dot) should be shown on the menu item icon. */
@@ -1277,7 +1282,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 mIsTablet
                         ? mDecorView.getWidth()
                                 < DeviceFormFactor.getNonMultiDisplayMinimumTabletWidthPx(mContext)
-                        : !isInStartSurfaceHomepage();
+                        : true;
 
         final boolean isMenuButtonOnTop = mToolbarManager != null;
         shouldShowIconRow &= isMenuButtonOnTop;
@@ -1537,7 +1542,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     public boolean isIncognitoEnabled() {
-        return IncognitoUtils.isIncognitoModeEnabled();
+        return IncognitoUtils.isIncognitoModeEnabled(
+                mTabModelSelector.getCurrentModel().getProfile());
     }
 
     static void setPageBookmarkedForTesting(Boolean bookmarked) {
@@ -1580,20 +1586,14 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         }
     }
 
-    /** Records user clicking on the menu button in New tab page or Start surface. */
+    /** Records user clicking on the menu button in New tab page. */
     @Override
     public void onMenuShown() {
-        if (isInStartSurfaceHomepage()) {
-            BrowserUiUtils.recordModuleClickHistogram(
-                    HostSurface.START_SURFACE, ModuleTypeOnStartAndNtp.MENU_BUTTON);
-            return;
-        }
         Tab currentTab = mActivityTabProvider.get();
         if (currentTab != null
                 && UrlUtilities.isNtpUrl(currentTab.getUrl())
                 && !currentTab.isIncognito()) {
-            BrowserUiUtils.recordModuleClickHistogram(
-                    HostSurface.NEW_TAB_PAGE, ModuleTypeOnStartAndNtp.MENU_BUTTON);
+            BrowserUiUtils.recordModuleClickHistogram(ModuleTypeOnStartAndNtp.MENU_BUTTON);
         }
     }
 

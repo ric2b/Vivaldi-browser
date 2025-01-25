@@ -105,7 +105,7 @@ base::FilePath GetDefaultInstallTopDir(InstallType install_type) {
       break;
     case InstallType::kStandalone:
       NOTREACHED();
-      return base::FilePath();
+      //return base::FilePath();
   }
 
   wchar_t szPath[MAX_PATH];

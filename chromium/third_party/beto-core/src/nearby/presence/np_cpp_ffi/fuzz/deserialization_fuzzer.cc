@@ -47,17 +47,15 @@ static std::vector<uint8_t> V1AdvEncryptedVec(V1AdvEncryptedBytes.begin(),
 void HandleAdvertisementResult(nearby_protocol::DeserializeAdvertisementResult);
 
 void PlaintextDeserializer(std::span<const uint8_t> adv_bytes) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate();
-  EXPECT_TRUE(slab.ok());
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(*slab);
-  EXPECT_TRUE(book.ok());
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   auto buffer = nearby_protocol::ByteBuffer<255>::TryFromSpan(adv_bytes);
   EXPECT_TRUE(buffer.ok());
 
   nearby_protocol::RawAdvertisementPayload payload(
       (nearby_protocol::ByteBuffer<255>(*buffer)));
   auto deserialize_result =
-      nearby_protocol::Deserializer::DeserializeAdvertisement(payload, *book);
+      nearby_protocol::Deserializer::DeserializeAdvertisement(payload, book);
 
   // Since we are seeding with valid data, we can add extra calls into the
   // result processing APIs to ensure none of the internal asserts are
@@ -78,22 +76,24 @@ struct IdentityData {
   uint32_t credential_id;
   std::array<uint8_t, 32> key_seed;
   std::array<uint8_t, 32> legacy_metadata_key_hmac;
-  std::array<uint8_t, 32> expected_unsigned_metadata_key_hmac;
-  std::array<uint8_t, 32> expected_signed_metadata_key_hmac;
+  std::array<uint8_t, 32> expected_unsigned_identity_token_hmac;
+  std::array<uint8_t, 32> expected_signed_identity_token_hmac;
   std::array<uint8_t, 32> pub_key;
   std::vector<uint8_t> encrypted_metadata_bytes;
 };
 
 static struct IdentityData V0TestCaseIdentityData {
   .credential_id = static_cast<uint32_t>(rand()), .key_seed = V0AdvKeySeed,
-  .legacy_metadata_key_hmac = V0AdvLegacyMetadataKeyHmac,
+  .legacy_metadata_key_hmac = V0AdvLegacyIdentityTokenHmac,
   .encrypted_metadata_bytes = V0AdvEncryptedMetadata
 };
 
 static struct IdentityData V1TestCaseIdentityData {
   .credential_id = static_cast<uint32_t>(rand()), .key_seed = V1AdvKeySeed,
-  .expected_unsigned_metadata_key_hmac = V1AdvExpectedUnsignedMetadataKeyHmac,
-  .expected_signed_metadata_key_hmac = V1AdvExpectedSignedMetadataKeyHmac,
+  .expected_unsigned_identity_token_hmac =
+      V1AdvExpectedMicExtendedSaltIdentityTokenHmac,
+  .expected_signed_identity_token_hmac =
+      V1AdvExpectedSignatureIdentityTokenHmac,
   .pub_key = V1AdvPublicKey, .encrypted_metadata_bytes = V1AdvEncryptedMetadata,
 };
 
@@ -105,9 +105,7 @@ static struct IdentityData V1TestCaseIdentityData {
 // and combinations of matching and undecryptable sections etc.
 void DeserializeWithCredentials(std::span<const IdentityData> identities,
                                 std::span<const uint8_t> adv_bytes) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate();
-  EXPECT_TRUE(slab.ok());
-
+  nearby_protocol::CredentialSlab slab;
   // populate book with fuzzer generated credential data
   for (auto data : identities) {
     nearby_protocol::MatchedCredentialData match_data(
@@ -115,23 +113,22 @@ void DeserializeWithCredentials(std::span<const IdentityData> identities,
     nearby_protocol::V0MatchableCredential v0_cred(
         data.key_seed, data.legacy_metadata_key_hmac, match_data);
     // adding v0 credentials is infallible
-    EXPECT_TRUE(slab->AddV0Credential(v0_cred).ok());
+    slab.AddV0Credential(v0_cred);
 
     nearby_protocol::V1MatchableCredential v1_cred(
-        data.key_seed, data.expected_unsigned_metadata_key_hmac,
-        data.expected_signed_metadata_key_hmac, data.pub_key, match_data);
-    [[maybe_unused]] auto result = slab->AddV1Credential(v1_cred);
+        data.key_seed, data.expected_unsigned_identity_token_hmac,
+        data.expected_signed_identity_token_hmac, data.pub_key, match_data);
+    [[maybe_unused]] auto result = slab.AddV1Credential(v1_cred);
   }
 
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(*slab);
-  EXPECT_TRUE(book.ok());
+  nearby_protocol::CredentialBook book(slab);
   auto buffer = nearby_protocol::ByteBuffer<255>::TryFromSpan(adv_bytes);
   EXPECT_TRUE(buffer.ok());
 
   nearby_protocol::RawAdvertisementPayload payload(
       (nearby_protocol::ByteBuffer<255>(*buffer)));
   auto deserialize_result =
-      nearby_protocol::Deserializer::DeserializeAdvertisement(payload, *book);
+      nearby_protocol::Deserializer::DeserializeAdvertisement(payload, book);
 
   // Since we are seeding with valid data, we can add extra calls into the
   // result processing APIs to ensure none of the internal asserts are

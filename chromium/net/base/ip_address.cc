@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/base/ip_address.h"
 
 #include <stddef.h>
@@ -563,7 +568,7 @@ size_t CommonPrefixLength(const IPAddress& a1, const IPAddress& a2) {
         return i * CHAR_BIT + j;
       diff <<= 1;
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
   return a1.size() * CHAR_BIT;
 }

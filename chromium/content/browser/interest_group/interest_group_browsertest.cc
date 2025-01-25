@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/public/common/interest_group/interest_group.h"
 
 #include <stdint.h>
@@ -53,7 +58,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/aggregation_service/aggregation_coordinator_utils.h"
-#include "components/aggregation_service/features.h"
+#include "components/cbor/reader.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/web_package/web_bundle_builder.h"
 #include "content/browser/aggregation_service/aggregatable_report.h"
@@ -72,6 +77,7 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/features.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/tracing_controller.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
@@ -106,6 +112,7 @@
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/ip_address_space.mojom.h"
 #include "services/network/test/test_network_context.h"
+#include "services/network/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
@@ -625,7 +632,7 @@ std::unique_ptr<net::test_server::HttpResponse> HandleWellKnownRequest(
   // .well-known requests should advertise they accept JSON responses.
   const auto accept_header =
       request.headers.find(net::HttpRequestHeaders::kAccept);
-  DCHECK(accept_header != request.headers.end());
+  CHECK(accept_header != request.headers.end());
   EXPECT_EQ(accept_header->second, "application/json");
 
   auto response = std::make_unique<net::test_server::BasicHttpResponse>();
@@ -633,7 +640,7 @@ std::unique_ptr<net::test_server::HttpResponse> HandleWellKnownRequest(
   response->set_content("{}");
 
   const auto host_header = request.headers.find(net::HttpRequestHeaders::kHost);
-  DCHECK(host_header != request.headers.end());
+  CHECK(host_header != request.headers.end());
   if (base::StartsWith(host_header->second, "allow-join.")) {
     response->set_content(R"({"joinAdInterestGroup" : true})");
     response->AddCustomHeader("Access-Control-Allow-Origin", "*");
@@ -644,7 +651,8 @@ std::unique_ptr<net::test_server::HttpResponse> HandleWellKnownRequest(
     response->set_content(
         R"({"joinAdInterestGroup" : true, "leaveAdInterestGroup" : true})");
   } else {
-    NOTREACHED() << "Unexpected host_header: " << host_header->second;
+    NOTREACHED_IN_MIGRATION()
+        << "Unexpected host_header: " << host_header->second;
   }
   return response;
 }
@@ -5114,23 +5122,7 @@ IN_PROC_BROWSER_TEST_F(InterestGroupBrowserTest,
   }
 }
 
-class InterestGroupAggregationCoordinatorBrowserTest
-    : public InterestGroupBrowserTest {
- public:
-  InterestGroupAggregationCoordinatorBrowserTest() {
-    feature_list_.InitWithFeatures(
-        {blink::features::kPrivateAggregationApiMultipleCloudProviders,
-         aggregation_service::kAggregationServiceMultipleCloudProviders},
-        /*disabled_features=*/{});
-  }
-
-  ~InterestGroupAggregationCoordinatorBrowserTest() override = default;
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(InterestGroupAggregationCoordinatorBrowserTest,
+IN_PROC_BROWSER_TEST_F(InterestGroupBrowserTest,
                        JoinInterestGroupInvalidAggregationCoordinatorOrigin) {
   const char kScriptTemplate[] = R"(
 (async function() {
@@ -5161,7 +5153,7 @@ IN_PROC_BROWSER_TEST_F(InterestGroupAggregationCoordinatorBrowserTest,
       EvalJs(shell(), JsReplace(kScriptTemplate, origin_string.c_str())));
 }
 
-IN_PROC_BROWSER_TEST_F(InterestGroupAggregationCoordinatorBrowserTest,
+IN_PROC_BROWSER_TEST_F(InterestGroupBrowserTest,
                        JoinInterestGroupValidAggregationCoordinatorOrigin) {
   const char kScriptTemplate[] = R"(
 (async function() {
@@ -5193,7 +5185,7 @@ IN_PROC_BROWSER_TEST_F(InterestGroupAggregationCoordinatorBrowserTest,
                  aggregation_service::kDefaultAggregationCoordinatorAwsCloud)));
 }
 
-IN_PROC_BROWSER_TEST_F(InterestGroupAggregationCoordinatorBrowserTest,
+IN_PROC_BROWSER_TEST_F(InterestGroupBrowserTest,
                        JoinInterestGroupNonHTTPSAggregationCoordinatorOrigin) {
   const char kScriptTemplate[] = R"(
 (async function() {
@@ -5225,7 +5217,7 @@ IN_PROC_BROWSER_TEST_F(InterestGroupAggregationCoordinatorBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(
-    InterestGroupAggregationCoordinatorBrowserTest,
+    InterestGroupBrowserTest,
     JoinInterestGroupUnsupportedAggregationCoordinatorOrigin) {
   const char kScriptTemplate[] = R"(
 (async function() {
@@ -18096,6 +18088,69 @@ IN_PROC_BROWSER_TEST_F(InterestGroupBrowserTest, DeprecatedURNToURLValidURN) {
   EXPECT_FALSE(HasServerSeenUrl(kTestCases[0].report_url));
 }
 
+IN_PROC_BROWSER_TEST_F(InterestGroupBrowserTest, ExecutionModeCompatibility) {
+  const char kScript[] = R"(
+    if (!('count' in globalThis))
+      globalThis.count = 0;
+    function generateBid() {
+      ++count;
+      return {ad: ["ad"], bid:count, render:$1 + count};
+    }
+    function reportWin(auctionSignals, perBuyerSignals, sellerSignals,
+                       browserSignals) {
+    }
+  )";
+
+  const int kNumGroups = 10;  // as many ads in each group, too.
+  GURL test_url =
+      embedded_https_test_server().GetURL("a.test", "/page_with_iframe.html");
+  ASSERT_TRUE(NavigateToURL(shell(), test_url));
+  url::Origin test_origin = url::Origin::Create(test_url);
+
+  std::vector<GURL> ad_urls;
+  for (int i = 0; i < kNumGroups; ++i) {
+    ad_urls.push_back(embedded_https_test_server().GetURL(
+        "c.test", "/echo?" + base::NumberToString(i + 1)));
+  }
+
+  network_responder_->RegisterNetworkResponse(
+      "/interest_group/bidding_logic.js",
+      JsReplace(kScript,
+                embedded_https_test_server().GetURL("c.test", "/echo?")),
+      "application/javascript");
+
+  std::vector<blink::InterestGroup::Ad> ads;
+  for (const GURL& ad_url : ad_urls) {
+    ads.emplace_back(ad_url, /*metadata=*/std::nullopt);
+  }
+
+  for (int i = 0; i < kNumGroups; ++i) {
+    EXPECT_EQ(
+        kSuccess,
+        JoinInterestGroupAndVerify(
+            blink::TestInterestGroupBuilder(
+                /*owner=*/test_origin,
+                /*name=*/"cars" + base::NumberToString(i))
+                .SetExecutionMode(
+                    blink::InterestGroup::ExecutionMode::kCompatibilityMode)
+                .SetBiddingUrl(embedded_https_test_server().GetURL(
+                    test_url.host(), "/interest_group/bidding_logic.js"))
+                .SetAds(ads)
+                .Build()));
+  }
+
+  EXPECT_EQ(embedded_https_test_server().GetURL("c.test", "/echo?1"),
+            RunAuctionAndWaitForUrl(JsReplace(
+                R"({
+                  seller: $1,
+                  decisionLogicURL: $2,
+                  interestGroupBuyers: [$1],
+                })",
+                test_origin,
+                embedded_https_test_server().GetURL(
+                    "a.test", "/interest_group/decision_logic.js"))));
+}
+
 IN_PROC_BROWSER_TEST_F(InterestGroupBrowserTest, ExecutionModeGroupByOrigin) {
   const char kScript[] = R"(
     if (!('count' in globalThis))
@@ -18132,40 +18187,45 @@ IN_PROC_BROWSER_TEST_F(InterestGroupBrowserTest, ExecutionModeGroupByOrigin) {
     ads.emplace_back(ad_url, /*metadata=*/std::nullopt);
   }
 
-  for (auto execution_mode :
-       {blink::InterestGroup::ExecutionMode::kCompatibilityMode,
-        blink::InterestGroup::ExecutionMode::kGroupedByOriginMode}) {
-    for (int i = 0; i < kNumGroups; ++i) {
-      EXPECT_EQ(
-          kSuccess,
-          JoinInterestGroupAndVerify(
-              blink::TestInterestGroupBuilder(
-                  /*owner=*/test_origin,
-                  /*name=*/"cars" + base::NumberToString(i))
-                  .SetExecutionMode(execution_mode)
-                  .SetBiddingUrl(embedded_https_test_server().GetURL(
-                      test_url.host(), "/interest_group/bidding_logic.js"))
-                  .SetAds(ads)
-                  .Build()));
-    }
-
+  for (int i = 0; i < kNumGroups; ++i) {
     EXPECT_EQ(
-        embedded_https_test_server().GetURL(
-            "c.test",
-            execution_mode ==
-                    blink::InterestGroup::ExecutionMode::kCompatibilityMode
-                ? "/echo?1"
-                : "/echo?10"),
-        RunAuctionAndWaitForUrl(JsReplace(
-            R"({
-                    seller: $1,
-                    decisionLogicURL: $2,
-                    interestGroupBuyers: [$1],
-                  })",
-            test_origin,
-            embedded_https_test_server().GetURL(
-                "a.test", "/interest_group/decision_logic.js"))));
+        kSuccess,
+        JoinInterestGroupAndVerify(
+            blink::TestInterestGroupBuilder(
+                /*owner=*/test_origin,
+                /*name=*/"cars" + base::NumberToString(i))
+                .SetExecutionMode(
+                    blink::InterestGroup::ExecutionMode::kGroupedByOriginMode)
+                .SetBiddingUrl(embedded_https_test_server().GetURL(
+                    test_url.host(), "/interest_group/bidding_logic.js"))
+                .SetAds(ads)
+                .Build()));
   }
+
+  int number_of_bidder_threads =
+      1 +
+      static_cast<int>(
+          features::kFledgeBidderWorkletThreadPoolSizeLogarithmicScalingFactor
+              .Get() *
+          std::log10(kNumGroups));
+
+  // With existing field trial configuration, only 1-2 threads are possible.
+  // With 2 threads, expect result "/echo?5", as generateBid() is called 5 times
+  // on each context.
+  CHECK(number_of_bidder_threads == 1 || number_of_bidder_threads == 2);
+
+  EXPECT_EQ(
+      embedded_https_test_server().GetURL(
+          "c.test", (number_of_bidder_threads == 1) ? "/echo?10" : "/echo?5"),
+      RunAuctionAndWaitForUrl(JsReplace(
+          R"({
+                  seller: $1,
+                  decisionLogicURL: $2,
+                  interestGroupBuyers: [$1],
+                })",
+          test_origin,
+          embedded_https_test_server().GetURL(
+              "a.test", "/interest_group/decision_logic.js"))));
 }
 
 enum FetchMethod {
@@ -20150,16 +20210,15 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_NE(signals, nullptr);
 }
 
-class AdsAPIsOriginTrialBrowserTest : public ContentBrowserTest {
+class BiddingAndAuctionServerAPIsOriginTrialBrowserTest
+    : public ContentBrowserTest {
  public:
-  AdsAPIsOriginTrialBrowserTest() {
-    // Disable `kFledgeBiddingAndAuctionServer` to show that it won't affect the
-    // exposure of the `adAuctionHeaders` fetch param.
+  BiddingAndAuctionServerAPIsOriginTrialBrowserTest() {
     feature_list_.InitWithFeatures(
-        /*enabled_features=*/{blink::features::kPrivacySandboxAdsAPIs,
-                              blink::features::kInterestGroupStorage},
-        /*disabled_features=*/{
-            blink::features::kFledgeBiddingAndAuctionServer});
+        /*enabled_features=*/{blink::features::kFledge,
+                              blink::features::kInterestGroupStorage,
+                              blink::features::kFledgeBiddingAndAuctionServer},
+        {});
   }
 
   void SetUpOnMainThread() override {
@@ -20173,9 +20232,6 @@ class AdsAPIsOriginTrialBrowserTest : public ContentBrowserTest {
     url_loader_interceptor_ =
         std::make_unique<URLLoaderInterceptor>(base::BindLambdaForTesting(
             [&](URLLoaderInterceptor::RequestParams* params) -> bool {
-              last_request_is_ad_auction_header_request_ =
-                  params->url_request.ad_auction_headers;
-
               URLLoaderInterceptor::WriteResponse(
                   base::StrCat(
                       {kBaseDataDir, params->url_request.url.path_piece()}),
@@ -20195,98 +20251,9 @@ class AdsAPIsOriginTrialBrowserTest : public ContentBrowserTest {
         .root();
   }
 
-  bool last_request_is_ad_auction_header_request() const {
-    return last_request_is_ad_auction_header_request_;
-  }
-
  private:
-  bool last_request_is_ad_auction_header_request_ = false;
-
   std::unique_ptr<URLLoaderInterceptor> url_loader_interceptor_;
 
-  base::test::ScopedFeatureList feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(AdsAPIsOriginTrialBrowserTest,
-                       AdsAPIsOriginTrial_AdAuctionHeadersAllowedForFetch) {
-  EXPECT_TRUE(NavigateToURL(
-      shell(), GURL("https://example.test/page_with_ads_apis_ot.html")));
-
-  EXPECT_TRUE(
-      ExecJs(shell()->web_contents(),
-             content::JsReplace("fetch($1, {adAuctionHeaders: true})",
-                                GURL("https://example.test/empty.html"))));
-
-  EXPECT_TRUE(last_request_is_ad_auction_header_request());
-}
-
-IN_PROC_BROWSER_TEST_F(
-    AdsAPIsOriginTrialBrowserTest,
-    NotInAdsAPIsOriginTrial_AdAuctionHeadersNotAllowedForFetch) {
-  EXPECT_TRUE(NavigateToURL(
-      shell(), GURL("https://example.test/page_with_ba_server_ot.html")));
-
-  EXPECT_TRUE(
-      ExecJs(shell()->web_contents(),
-             content::JsReplace("fetch($1, {adAuctionHeaders: true})",
-                                GURL("https://example.test/empty.html"))));
-
-  EXPECT_FALSE(last_request_is_ad_auction_header_request());
-}
-
-IN_PROC_BROWSER_TEST_F(
-    AdsAPIsOriginTrialBrowserTest,
-    AdsAPIsOriginTrial_NoFetchParam_AdAuctionHeadersNotAllowedForFetch) {
-  EXPECT_TRUE(NavigateToURL(
-      shell(), GURL("https://example.test/page_with_ads_apis_ot.html")));
-
-  EXPECT_TRUE(
-      ExecJs(shell()->web_contents(),
-             content::JsReplace("fetch($1)",
-                                GURL("https://example.test/empty.html"))));
-
-  EXPECT_FALSE(last_request_is_ad_auction_header_request());
-}
-
-class AdsAPIsOriginTrialWithMainFledgeFeatureDisabledBrowserTest
-    : public AdsAPIsOriginTrialBrowserTest {
- public:
-  AdsAPIsOriginTrialWithMainFledgeFeatureDisabledBrowserTest() {
-    feature_list_.InitWithFeatures(
-        /*enabled_features=*/{blink::features::kPrivacySandboxAdsAPIs},
-        /*disabled_features=*/{blink::features::kInterestGroupStorage});
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(
-    AdsAPIsOriginTrialWithMainFledgeFeatureDisabledBrowserTest,
-    AdsAPIsOriginTrial_AdAuctionHeadersNotAllowedForFetch) {
-  EXPECT_TRUE(NavigateToURL(
-      shell(), GURL("https://example.test/page_with_ads_apis_ot.html")));
-
-  EXPECT_TRUE(
-      ExecJs(shell()->web_contents(),
-             content::JsReplace("fetch($1, {adAuctionHeaders: true})",
-                                GURL("https://example.test/empty.html"))));
-
-  EXPECT_FALSE(last_request_is_ad_auction_header_request());
-}
-
-class BiddingAndAuctionServerAPIsOriginTrialBrowserTest
-    : public AdsAPIsOriginTrialBrowserTest {
- public:
-  BiddingAndAuctionServerAPIsOriginTrialBrowserTest() {
-    feature_list_.InitWithFeatures(
-        /*enabled_features=*/{blink::features::kFledge,
-                              blink::features::kInterestGroupStorage,
-                              blink::features::kFledgeBiddingAndAuctionServer},
-        {});
-  }
-
- private:
   base::test::ScopedFeatureList feature_list_;
 };
 
@@ -20297,15 +20264,6 @@ IN_PROC_BROWSER_TEST_F(BiddingAndAuctionServerAPIsOriginTrialBrowserTest,
 
   EXPECT_EQ(true, EvalJs(shell()->web_contents(),
                          "'getInterestGroupAdAuctionData' in navigator"));
-}
-
-IN_PROC_BROWSER_TEST_F(BiddingAndAuctionServerAPIsOriginTrialBrowserTest,
-                       WrongOTFeatureDisabled) {
-  EXPECT_TRUE(NavigateToURL(
-      shell(), GURL("https://example.test/page_with_ads_apis_ot.html")));
-
-  EXPECT_EQ(false, EvalJs(shell()->web_contents(),
-                          "'getInterestGroupAdAuctionData' in navigator"));
 }
 
 class InterestGroupBiddingAndAuctionServerBrowserTest
@@ -24157,9 +24115,17 @@ IN_PROC_BROWSER_TEST_F(InterestGroupOOPIFBrowserTest,
       blink::mojom::AuctionAdConfigAuctionId::NewMainAuction(0), "adSlot1");
 
   run_loop.Run();
-  EXPECT_EQ(maybe_config.has_value(),
-            root_ftn->current_frame_host()
-                ->ShouldChangeRenderFrameHostOnSameSiteNavigation());
+  if (SiteIsolationPolicy::AreOriginKeyedProcessesEnabledByDefault()) {
+    // With Origin Isolation enabled, the cross-origin, same-site navigation
+    // ends up being cross-process, so a config value is expected.
+    EXPECT_TRUE(maybe_config.has_value());
+  } else {
+    // Without Origin Isolation enabled, whether on not there is a config value
+    // depends on the RenderDocument status.
+    EXPECT_EQ(maybe_config.has_value(),
+              root_ftn->current_frame_host()
+                  ->ShouldChangeRenderFrameHostOnSameSiteNavigation());
+  }
 }
 
 class InterestGroupCrossOriginTrustedSignalsBrowserTest
@@ -24174,15 +24140,21 @@ class InterestGroupCrossOriginTrustedSignalsBrowserTest
 
   void TestTrustedSellerSignals(bool expect_success,
                                 bool add_cors_header,
-                                bool add_script_header);
+                                bool add_script_header,
+                                bool attest_signals_origin);
 
   // Tries to run an auction which uses cross-site trusted bidding signals.
   // `add_cors_header` controls whether the signals JSON has an appropriate
   // Access-Control-Allow-Origin.
   //
+  // `attest_signals_origin` controls whether content_browser_client
+  // permits the origin trusted signals or not.
+  //
   // `expect_success` controls whether the test expects the auction to succeed
   // or not.
-  void TestTrustedBidderSignals(bool expect_success, bool add_cors_header);
+  void TestTrustedBidderSignals(bool expect_success,
+                                bool add_cors_header,
+                                bool attest_signals_origin);
 
  protected:
   base::test::ScopedFeatureList feature_list_;
@@ -24191,16 +24163,22 @@ class InterestGroupCrossOriginTrustedSignalsBrowserTest
 void InterestGroupCrossOriginTrustedSignalsBrowserTest::
     TestTrustedSellerSignals(bool expect_success,
                              bool add_cors_header,
-                             bool add_script_header) {
+                             bool add_script_header,
+                             bool attest_signals_origin) {
   // This test helper cares about kSellerSignals and kSeller being cross-origin.
   // Whether other origins are the same or different does not matter.
   const char kPublisher[] = "a.test";
   const char kBidder[] = "b.test";
   const char kSeller[] = "c.test";
-  const char kSellerSignals[] = "d.test";
+  const char kSellerSignals[] = "trusted-signals.d.test";
 
   GURL seller_signals_url = embedded_https_test_server().GetURL(
       kSellerSignals, "/trusted_scoring_signals.json");
+
+  if (attest_signals_origin) {
+    content_browser_client_->AddToAllowList(
+        {url::Origin::Create(seller_signals_url)});
+  }
 
   GURL ad_url = embedded_https_test_server().GetURL(
       kBidder, "/set-header?Supports-Loading-Mode: fenced-frame");
@@ -24223,6 +24201,15 @@ void InterestGroupCrossOriginTrustedSignalsBrowserTest::
   ASSERT_TRUE(
       NavigateToURL(shell(), embedded_https_test_server().GetURL(
                                  kPublisher, "/page_with_iframe.html")));
+
+  WebContentsConsoleObserver console_observer(shell()->web_contents());
+  if (!attest_signals_origin) {
+    console_observer.SetPattern(
+        "Worklet error: runAdAuction() auction with seller 'https://c.test:*' "
+        "failed because it lacks attestation of cross-origin trusted signals "
+        "origin 'https://trusted-signals.d.test:*' or that origin is "
+        "disallowed by user preferences");
+  }
 
   GURL seller_logic_url = embedded_https_test_server().GetURL(
       kSeller, "/interest_group/decision_logic_need_signals.js");
@@ -24296,16 +24283,22 @@ void InterestGroupCrossOriginTrustedSignalsBrowserTest::
   } else {
     EXPECT_EQ(nullptr, RunAuctionAndWait(config));
   }
+
+  if (!attest_signals_origin) {
+    EXPECT_TRUE(console_observer.Wait());
+  }
 }
 
 void InterestGroupCrossOriginTrustedSignalsBrowserTest::
-    TestTrustedBidderSignals(bool expect_success, bool add_cors_header) {
+    TestTrustedBidderSignals(bool expect_success,
+                             bool add_cors_header,
+                             bool attest_signals_origin) {
   // This test helper cares about kBidder and kBidderSignals being cross-origin.
   // Whether other origins are the same or different does not matter.
   const char kPublisher[] = "a.test";
   const char kBidder[] = "b.test";
   const char kSeller[] = "c.test";
-  const char kBidderSignals[] = "d.test";
+  const char kBidderSignals[] = "trusted-signals.d.test";
 
   GURL bidder_script_url = embedded_https_test_server().GetURL(
       kBidder, "/interest_group/cotbs_bidding_logic.js");
@@ -24313,22 +24306,45 @@ void InterestGroupCrossOriginTrustedSignalsBrowserTest::
   GURL bidder_signals_url = embedded_https_test_server().GetURL(
       kBidderSignals, "/trusted_bidding_signals.json");
 
+  if (attest_signals_origin) {
+    content_browser_client_->AddToAllowList(
+        {url::Origin::Create(bidder_signals_url)});
+  }
+
   GURL ad_url = embedded_https_test_server().GetURL(
       kBidder, "/set-header?Supports-Loading-Mode: fenced-frame");
 
   // Navigate to bidder site, and add an interest group.
   GURL bidder_url = embedded_https_test_server().GetURL(kBidder, "/echo");
   ASSERT_TRUE(NavigateToURL(shell(), bidder_url));
+
+  WebContentsConsoleObserver console_observer(shell()->web_contents());
+  if (!attest_signals_origin) {
+    console_observer.SetPattern(
+        "joinAdInterestGroup of interest group with owner 'https://b.test:*' "
+        "blocked because it lacks attestation of cross-origin trusted signals "
+        "origin 'https://trusted-signals.d.test:*' or that origin is "
+        "disallowed by user preferences");
+  }
+
   url::Origin bidder_origin = url::Origin::Create(bidder_url);
-  EXPECT_EQ(kSuccess, JoinInterestGroupAndVerify(
-                          blink::TestInterestGroupBuilder(
-                              /*owner=*/bidder_origin,
-                              /*name=*/"cars")
-                              .SetBiddingUrl(bidder_script_url)
-                              .SetAds({{{ad_url, /*metadata=*/std::nullopt}}})
-                              .SetTrustedBiddingSignalsUrl(bidder_signals_url)
-                              .SetTrustedBiddingSignalsKeys({{"key1"}})
-                              .Build()));
+  auto ig = blink::TestInterestGroupBuilder(
+                /*owner=*/bidder_origin,
+                /*name=*/"cars")
+                .SetBiddingUrl(bidder_script_url)
+                .SetAds({{{ad_url, /*metadata=*/std::nullopt}}})
+                .SetTrustedBiddingSignalsUrl(bidder_signals_url)
+                .SetTrustedBiddingSignalsKeys({{"key1"}})
+                .Build();
+  if (attest_signals_origin) {
+    EXPECT_EQ(kSuccess, JoinInterestGroupAndVerify(ig));
+  } else {
+    // Can't actually tell the join failed, but it won't verify.
+    EXPECT_EQ(kSuccess, JoinInterestGroup(ig));
+    EXPECT_TRUE(console_observer.Wait());
+
+    // Auction will fail w/o an IG available.
+  }
 
   // Navigate to publisher.
   ASSERT_TRUE(
@@ -24410,19 +24426,29 @@ void InterestGroupCrossOriginTrustedSignalsBrowserTest::
 IN_PROC_BROWSER_TEST_F(InterestGroupCrossOriginTrustedSignalsBrowserTest,
                        SellerSignalsPermitted) {
   TestTrustedSellerSignals(/*expect_success=*/true, /*add_cors_header=*/true,
-                           /*add_script_header=*/true);
+                           /*add_script_header=*/true,
+                           /*attest_signals_origin=*/true);
 }
 
 IN_PROC_BROWSER_TEST_F(InterestGroupCrossOriginTrustedSignalsBrowserTest,
                        SellerSignalsNoCors) {
   TestTrustedSellerSignals(/*expect_success=*/false, /*add_cors_header=*/false,
-                           /*add_script_header=*/true);
+                           /*add_script_header=*/true,
+                           /*attest_signals_origin=*/true);
 }
 
 IN_PROC_BROWSER_TEST_F(InterestGroupCrossOriginTrustedSignalsBrowserTest,
                        SellerSignalsNoScriptHeader) {
   TestTrustedSellerSignals(/*expect_success=*/false, /*add_cors_header=*/true,
-                           /*add_script_header=*/false);
+                           /*add_script_header=*/false,
+                           /*attest_signals_origin=*/true);
+}
+
+IN_PROC_BROWSER_TEST_F(InterestGroupCrossOriginTrustedSignalsBrowserTest,
+                       SellerSignalsNoAttestation) {
+  TestTrustedSellerSignals(/*expect_success=*/false, /*add_cors_header=*/true,
+                           /*add_script_header=*/true,
+                           /*attest_signals_origin=*/false);
 }
 
 IN_PROC_BROWSER_TEST_F(InterestGroupCrossOriginTrustedSignalsBrowserTest,
@@ -24454,18 +24480,25 @@ IN_PROC_BROWSER_TEST_F(InterestGroupCrossOriginTrustedSignalsBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(InterestGroupCrossOriginTrustedSignalsBrowserTest,
                        BidderSignalsCors) {
-  TestTrustedBidderSignals(/*expect_success=*/true, /*add_cors_header=*/true);
+  TestTrustedBidderSignals(/*expect_success=*/true, /*add_cors_header=*/true,
+                           /*attest_signals_origin=*/true);
 }
 
 IN_PROC_BROWSER_TEST_F(InterestGroupCrossOriginTrustedSignalsBrowserTest,
                        BidderSignalsNoCors) {
-  TestTrustedBidderSignals(/*expect_success=*/false, /*add_cors_header=*/false);
+  TestTrustedBidderSignals(/*expect_success=*/false, /*add_cors_header=*/false,
+                           /*attest_signals_origin=*/true);
 }
 
-class AuctionConfigRealTimeReportingEnabledTest
-    : public InterestGroupBrowserTest {
+IN_PROC_BROWSER_TEST_F(InterestGroupCrossOriginTrustedSignalsBrowserTest,
+                       BidderSignalsNoAttestation) {
+  TestTrustedBidderSignals(/*expect_success=*/false, /*add_cors_header=*/true,
+                           /*attest_signals_origin=*/false);
+}
+
+class RealTimeReportingEnabledTest : public InterestGroupBrowserTest {
  public:
-  AuctionConfigRealTimeReportingEnabledTest() {
+  RealTimeReportingEnabledTest() {
     feature_list_.InitAndEnableFeature(
         {blink::features::kFledgeRealTimeReporting});
   }
@@ -24474,10 +24507,130 @@ class AuctionConfigRealTimeReportingEnabledTest
   base::test::ScopedFeatureList feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(AuctionConfigRealTimeReportingEnabledTest,
-                       RealTimeReporting) {
+// Opted-in buyers will receive real time histograms. Since real time reporting
+// URLs have same path and different reporting origins, but this browser test
+// always replaces requests' hosts to "127.0.0.1" and only handles requests
+// based on their paths, we cannot test different origin sellers' and buyers'
+// real time reports at the same time (they'll be treated as the same request).
+IN_PROC_BROWSER_TEST_F(RealTimeReportingEnabledTest, RealTimeReporting) {
   const char kHostA[] = "a.test";
   const char kHostB[] = "b.test";
+
+  // Setting a small reporting interval to run the test faster.
+  manager_->set_reporting_interval_for_testing(base::Milliseconds(1));
+  manager_->set_max_report_queue_length_for_testing(50);
+  manager_->set_max_active_report_requests_for_testing(50);
+
+  URLLoaderMonitor url_loader_monitor;
+
+  GURL test_url =
+      embedded_https_test_server().GetURL(kHostA, "/page_with_iframe.html");
+  ASSERT_TRUE(NavigateToURL(shell(), test_url));
+  url::Origin test_origin = url::Origin::Create(test_url);
+  GURL ad_url =
+      embedded_https_test_server().GetURL(kHostA, "/echo?render_cars");
+  url::Origin test_origin_b =
+      url::Origin::Create(embedded_https_test_server().GetURL(kHostB, "/echo"));
+
+  EXPECT_EQ(
+      kSuccess,
+      JoinInterestGroupAndVerify(
+          /*owner=*/test_origin,
+          /*name=*/"cars",
+          /*priority=*/0.0,
+          /*execution_mode=*/
+          blink::InterestGroup::ExecutionMode::kCompatibilityMode,
+          /*bidding_url=*/
+          embedded_https_test_server().GetURL(
+              kHostA,
+              "/interest_group/bidding_logic_with_real_time_reporting.js"),
+          /*ads=*/{{{ad_url, /*metadata=*/std::nullopt}}}));
+
+  // Only opt in buyer, otherwise seller will send a real time report as well.
+  const char kConfigTemplate[] = R"({
+    seller: $1,
+    decisionLogicURL: $2,
+    interestGroupBuyers: [$3],
+    perBuyerRealTimeReportingConfig: {
+      $3: {type: 'default-local-reporting'}
+    }
+  })";
+
+  std::string auction_config = JsReplace(
+      kConfigTemplate, test_origin_b,
+      embedded_https_test_server().GetURL(
+          kHostB, "/interest_group/decision_logic_with_real_time_reporting.js"),
+      test_origin);
+  RunAuctionAndWaitForURLAndNavigateIframe(auction_config, ad_url);
+
+  const GURL expected_report_url = embedded_https_test_server().GetURL(
+      "a.test", "/.well-known/interest-group/real-time-report");
+
+  WaitForUrl(expected_report_url);
+  std::optional<network::ResourceRequest> request =
+      url_loader_monitor.WaitForUrl(expected_report_url);
+  ASSERT_TRUE(request);
+  EXPECT_EQ(net::HttpRequestHeaders::kPostMethod, request->method);
+  EXPECT_EQ(network::mojom::CredentialsMode::kOmit, request->credentials_mode);
+  EXPECT_EQ(network::mojom::RedirectMode::kError, request->redirect_mode);
+  EXPECT_EQ(test_origin, request->request_initiator);
+
+  std::string content_type;
+  EXPECT_TRUE(request->headers.GetHeader(net::HttpRequestHeaders::kContentType,
+                                         &content_type));
+  EXPECT_EQ("application/cbor", content_type);
+
+  ASSERT_TRUE(request->trusted_params);
+  const net::IsolationInfo& isolation_info =
+      request->trusted_params->isolation_info;
+  EXPECT_EQ(net::IsolationInfo::RequestType::kOther,
+            isolation_info.request_type());
+  EXPECT_TRUE(isolation_info.network_isolation_key().IsTransient());
+  EXPECT_TRUE(isolation_info.site_for_cookies().IsNull());
+
+  // Check the request body, which is the real time report in cbor.
+  std::string body = network::GetUploadData(*request);
+  const auto maybe_map =
+      cbor::Reader::Read(base::as_bytes(base::make_span(body)));
+  ASSERT_TRUE(maybe_map && maybe_map->is_map());
+  const auto& map = maybe_map->GetMap();
+
+  const auto version_it = map.find(cbor::Value("version"));
+  ASSERT_TRUE(version_it != map.end() && version_it->second.is_integer());
+  EXPECT_EQ(1, version_it->second.GetInteger());
+
+  for (const std::string& field : {"histogram", "platformHistogram"}) {
+    const auto histogram_it = map.find(cbor::Value(field));
+    ASSERT_TRUE(histogram_it != map.end() && histogram_it->second.is_map());
+    const auto& histogram_map = histogram_it->second.GetMap();
+    const auto buckets_it = histogram_map.find(cbor::Value("buckets"));
+    ASSERT_TRUE(buckets_it != histogram_map.end() &&
+                buckets_it->second.is_bytestring());
+    std::vector<uint8_t> buckets = buckets_it->second.GetBytestring();
+    size_t expected_buckets_size = field == "histogram" ? 128u : 1u;
+    CHECK_EQ(expected_buckets_size, buckets.size());
+    const auto length_it = histogram_map.find(cbor::Value("length"));
+    ASSERT_TRUE(length_it != histogram_map.end() &&
+                length_it->second.is_integer());
+    int expected_length = field == "histogram" ? 1024 : 4;
+    EXPECT_EQ(expected_length, length_it->second.GetInteger());
+  }
+}
+
+// Opted-in sellers will receive real time histograms, even if they don't call
+// the API.
+IN_PROC_BROWSER_TEST_F(RealTimeReportingEnabledTest,
+                       RealTimeReportingSellerDoesNotCallAPI) {
+  const char kHostA[] = "a.test";
+  const char kHostB[] = "b.test";
+
+  // Setting a small reporting interval to run the test faster.
+  manager_->set_reporting_interval_for_testing(base::Milliseconds(1));
+  manager_->set_max_report_queue_length_for_testing(50);
+  manager_->set_max_active_report_requests_for_testing(50);
+
+  URLLoaderMonitor url_loader_monitor;
+
   GURL test_url =
       embedded_https_test_server().GetURL(kHostA, "/page_with_iframe.html");
   ASSERT_TRUE(NavigateToURL(shell(), test_url));
@@ -24504,6 +24657,79 @@ IN_PROC_BROWSER_TEST_F(AuctionConfigRealTimeReportingEnabledTest,
     decisionLogicURL: $2,
     interestGroupBuyers: [$3],
     sellerRealTimeReportingConfig: {type: 'default-local-reporting'},
+  })";
+
+  std::string auction_config =
+      JsReplace(kConfigTemplate, test_origin_b,
+                embedded_https_test_server().GetURL(
+                    kHostB, "/interest_group/decision_logic.js"),
+                test_origin);
+  RunAuctionAndWaitForURLAndNavigateIframe(auction_config, ad_url);
+
+  const GURL expected_report_url = embedded_https_test_server().GetURL(
+      "b.test", "/.well-known/interest-group/real-time-report");
+
+  WaitForUrl(expected_report_url);
+  std::optional<network::ResourceRequest> request =
+      url_loader_monitor.WaitForUrl(expected_report_url);
+  ASSERT_TRUE(request);
+  EXPECT_EQ(net::HttpRequestHeaders::kPostMethod, request->method);
+  EXPECT_EQ(network::mojom::CredentialsMode::kOmit, request->credentials_mode);
+  EXPECT_EQ(network::mojom::RedirectMode::kError, request->redirect_mode);
+  EXPECT_EQ(test_origin, request->request_initiator);
+
+  std::string content_type;
+  EXPECT_TRUE(request->headers.GetHeader(net::HttpRequestHeaders::kContentType,
+                                         &content_type));
+  EXPECT_EQ("application/cbor", content_type);
+  ASSERT_TRUE(request->trusted_params);
+  const net::IsolationInfo& isolation_info =
+      request->trusted_params->isolation_info;
+  EXPECT_EQ(net::IsolationInfo::RequestType::kOther,
+            isolation_info.request_type());
+  EXPECT_TRUE(isolation_info.network_isolation_key().IsTransient());
+  EXPECT_TRUE(isolation_info.site_for_cookies().IsNull());
+}
+
+// Opted-in buyers will receive real time histograms, even if they don't call
+// the API.
+IN_PROC_BROWSER_TEST_F(RealTimeReportingEnabledTest,
+                       RealTimeReportingBuyerDoesNotCallAPI) {
+  const char kHostA[] = "a.test";
+  const char kHostB[] = "b.test";
+
+  // Setting a small reporting interval to run the test faster.
+  manager_->set_reporting_interval_for_testing(base::Milliseconds(1));
+  manager_->set_max_report_queue_length_for_testing(50);
+  manager_->set_max_active_report_requests_for_testing(50);
+
+  URLLoaderMonitor url_loader_monitor;
+
+  GURL test_url =
+      embedded_https_test_server().GetURL(kHostA, "/page_with_iframe.html");
+  ASSERT_TRUE(NavigateToURL(shell(), test_url));
+  url::Origin test_origin = url::Origin::Create(test_url);
+  GURL ad_url =
+      embedded_https_test_server().GetURL(kHostA, "/echo?render_cars");
+  url::Origin test_origin_b =
+      url::Origin::Create(embedded_https_test_server().GetURL(kHostB, "/echo"));
+
+  EXPECT_EQ(kSuccess,
+            JoinInterestGroupAndVerify(
+                /*owner=*/test_origin,
+                /*name=*/"cars",
+                /*priority=*/0.0,
+                /*execution_mode=*/
+                blink::InterestGroup::ExecutionMode::kCompatibilityMode,
+                /*bidding_url=*/
+                embedded_https_test_server().GetURL(
+                    kHostA, "/interest_group/bidding_logic.js"),
+                /*ads=*/{{{ad_url, /*metadata=*/std::nullopt}}}));
+
+  const char kConfigTemplate[] = R"({
+    seller: $1,
+    decisionLogicURL: $2,
+    interestGroupBuyers: [$3],
     perBuyerRealTimeReportingConfig: {
       $3: {type: 'default-local-reporting'}
     }
@@ -24516,17 +24742,238 @@ IN_PROC_BROWSER_TEST_F(AuctionConfigRealTimeReportingEnabledTest,
                 test_origin);
   RunAuctionAndWaitForURLAndNavigateIframe(auction_config, ad_url);
 
-  // Both the buyer and the seller will receive a real time histogram, even
-  // though they didn't call the API, since they both opted-in.
-  const GURL kExpectedRealTimeReportUrls[] = {
+  const GURL expected_report_url = embedded_https_test_server().GetURL(
+      "a.test", "/.well-known/interest-group/real-time-report");
+
+  WaitForUrl(expected_report_url);
+  std::optional<network::ResourceRequest> request =
+      url_loader_monitor.WaitForUrl(expected_report_url);
+  ASSERT_TRUE(request);
+  EXPECT_EQ(net::HttpRequestHeaders::kPostMethod, request->method);
+}
+
+IN_PROC_BROWSER_TEST_F(RealTimeReportingEnabledTest,
+                       RealTimeReportingRateLimitIsPerPagePerReportOrigin) {
+  const GURL kRealTimeReportUrlA = embedded_https_test_server().GetURL(
+      "a.test", "/.well-known/interest-group/real-time-report");
+
+  URLLoaderMonitor url_loader_monitor;
+  // Setting a small reporting interval to run the test faster.
+  manager_->set_reporting_interval_for_testing(base::Milliseconds(1));
+  manager_->set_max_report_queue_length_for_testing(50);
+  manager_->set_max_active_report_requests_for_testing(50);
+  // Two real time reports allowed to be sent per reporting origin per page per
+  // day.
+  manager_->set_real_time_reporting_window_for_testing(base::Days(1));
+  manager_->set_max_real_time_reports_for_testing(1);
+
+  GURL test_url_a =
+      embedded_https_test_server().GetURL("a.test", "/page_with_iframe.html");
+  ASSERT_TRUE(NavigateToURL(shell(), test_url_a));
+  const url::Origin origin_a = url::Origin::Create(test_url_a);
+
+  GURL ad1_url =
+      embedded_https_test_server().GetURL("c.test", "/echo?render_winner");
+
+  EXPECT_EQ(
+      kSuccess,
+      JoinInterestGroupAndVerify(
+          blink::TestInterestGroupBuilder(
+              /*owner=*/origin_a,
+              /*name=*/"winner")
+              .SetBiddingUrl(embedded_https_test_server().GetURL(
+                  "a.test",
+                  "/interest_group/bidding_logic_with_real_time_reporting.js"))
+              .SetAds({{{ad1_url, R"({"ad":"metadata","here":[1,2]})"}}})
+              .Build()));
+
+  // Only opt-in origin_a as buyer.
+  std::string auction_config = JsReplace(
+      R"({
+    seller: $1,
+    decisionLogicURL: $2,
+    interestGroupBuyers: [$1],
+    perBuyerRealTimeReportingConfig: {
+      $1: {type: 'default-local-reporting'}
+    }
+  })",
+      origin_a,
+      embedded_https_test_server().GetURL(
+          "a.test",
+          "/interest_group/decision_logic_with_real_time_reporting.js"));
+  // Run an ad auction.
+  RunAuctionAndWaitForURLAndNavigateIframe(auction_config, ad1_url);
+
+  // origin_a sent one as buyer. Since it does not opt-in as seller, so the
+  // report was from its `generateBid()`.
+  WaitForUrl(kRealTimeReportUrlA);
+  ClearReceivedRequests();
+
+  // Run auction again on the same page. origin_a opted in as seller.
+  auction_config = JsReplace(
+      R"({
+    seller: $1,
+    decisionLogicURL: $2,
+    interestGroupBuyers: [$1],
+    sellerRealTimeReportingConfig: {type: 'default-local-reporting'},
+    perBuyerRealTimeReportingConfig: {
+      $1: {type: 'default-local-reporting'}
+    }
+  })",
+      origin_a,
+      embedded_https_test_server().GetURL(
+          "a.test",
+          "/interest_group/decision_logic_with_real_time_reporting.js"));
+  RunAuctionAndWaitForURLAndNavigateIframe(auction_config, ad1_url);
+
+  // No real time report is sent after this auction, since origin_a is rate
+  // limited now.
+  EXPECT_TRUE(!HasServerSeenUrl(kRealTimeReportUrlA));
+  ClearReceivedRequests();
+
+  // Navigate to the same URL to open a new page of it, to test that the rate
+  // limit is per page, not per URL or something.
+  ASSERT_TRUE(NavigateToURL(shell(), test_url_a));
+
+  auction_config = JsReplace(
+      R"({
+    seller: $1,
+    decisionLogicURL: $2,
+    interestGroupBuyers: [$1],
+    perBuyerRealTimeReportingConfig: {
+      $1: {type: 'default-local-reporting'}
+    }
+  })",
+      origin_a,
+      embedded_https_test_server().GetURL(
+          "a.test",
+          "/interest_group/decision_logic_with_real_time_reporting.js"));
+  RunAuctionAndWaitForURLAndNavigateIframe(auction_config, ad1_url);
+
+  // origin_a sent real time reports after the auction, because rate limit was
+  // per reporting origin per page, and it's a new page after navigation,
+  // although it's the same URL.
+  WaitForUrl(kRealTimeReportUrlA);
+  ClearReceivedRequests();
+
+  // Run the third auction on another page c.test.
+  GURL test_url_c =
+      embedded_https_test_server().GetURL("c.test", "/page_with_iframe.html");
+  ASSERT_TRUE(NavigateToURL(shell(), test_url_c));
+
+  auction_config = JsReplace(
+      R"({
+    seller: $1,
+    decisionLogicURL: $2,
+    interestGroupBuyers: [$1],
+    perBuyerRealTimeReportingConfig: {
+      $1: {type: 'default-local-reporting'}
+    }
+  })",
+      origin_a,
+      embedded_https_test_server().GetURL(
+          "a.test",
+          "/interest_group/decision_logic_with_real_time_reporting.js"));
+  RunAuctionAndWaitForURLAndNavigateIframe(auction_config, ad1_url);
+
+  // origin_a sent real time reports after the auction, because rate limit was
+  // per reporting origin per page, and there was rate limit for page a.test,
+  // not for page c.test.
+  WaitForUrl(kRealTimeReportUrlA);
+}
+
+class RealTimeReportingAndCookieDeprecationEnabledTest
+    : public InterestGroupBrowserTest {
+ public:
+  RealTimeReportingAndCookieDeprecationEnabledTest() {
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/{blink::features::kFledgeRealTimeReporting,
+                              features::kCookieDeprecationFacilitatedTesting},
+        /*disabled_features=*/{});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(RealTimeReportingAndCookieDeprecationEnabledTest,
+                       RealTimeReporting) {
+  const char kHostA[] = "a.test";
+  const char kHostB[] = "b.test";
+  GURL test_url =
+      embedded_https_test_server().GetURL(kHostA, "/page_with_iframe.html");
+  ASSERT_TRUE(NavigateToURL(shell(), test_url));
+  url::Origin test_origin = url::Origin::Create(test_url);
+  GURL ad_url =
+      embedded_https_test_server().GetURL(kHostA, "/echo?render_cars");
+  GURL ad2_url =
+      embedded_https_test_server().GetURL("c.test", "/echo?render_bikes");
+  url::Origin test_origin_b =
+      url::Origin::Create(embedded_https_test_server().GetURL(kHostB, "/echo"));
+
+  // IG "winner" should bid 2 and should have won the auction if it bids
+  // successfully, but it should fail to bid due to it calls undefined real time
+  // reporting API.
+  EXPECT_EQ(
+      kSuccess,
+      JoinInterestGroupAndVerify(
+          /*owner=*/test_origin,
+          /*name=*/"winner",
+          /*priority=*/0.0,
+          /*execution_mode=*/
+          blink::InterestGroup::ExecutionMode::kCompatibilityMode,
+          /*bidding_url=*/
+          embedded_https_test_server().GetURL(
+              kHostA,
+              "/interest_group/bidding_logic_with_real_time_reporting.js"),
+          /*ads=*/{{{ad_url, /*metadata=*/std::nullopt}}}));
+  EXPECT_EQ(kSuccess,
+            JoinInterestGroupAndVerify(
+                /*owner=*/test_origin,
+                /*name=*/"bikes",
+                /*priority=*/0.0,
+                /*execution_mode=*/
+                blink::InterestGroup::ExecutionMode::kCompatibilityMode,
+                /*bidding_url=*/
+                embedded_https_test_server().GetURL(
+                    kHostA, "/interest_group/bidding_logic.js"),
+                /*ads=*/{{{ad2_url, /*metadata=*/std::nullopt}}}));
+
+  // IG "bikes" won the auction, since "winner" failed to bid.
+  std::string auction_config = JsReplace(
+      R"({
+        seller: $1,
+        decisionLogicURL: $2,
+        interestGroupBuyers: [$3],
+        sellerRealTimeReportingConfig: {type: 'default-local-reporting'},
+        perBuyerRealTimeReportingConfig: {
+          $3: {type: 'default-local-reporting'}
+        }
+      })",
+      test_origin_b,
+      embedded_https_test_server().GetURL(kHostB,
+                                          "/interest_group/decision_logic.js"),
+      test_origin);
+  RunAuctionAndWaitForURLAndNavigateIframe(auction_config, ad2_url);
+
+  WaitForUrl(embedded_https_test_server().GetURL("/echoall?report_seller"));
+  WaitForUrl(embedded_https_test_server().GetURL("/echoall?report_bidder"));
+
+  EXPECT_FALSE(HasServerSeenUrl(embedded_https_test_server().GetURL(
+      "a.test", "/.well-known/interest-group/real-time-report")));
+  // Seller didn't call real time reporting API, so it succeeded, but it
+  // does not send the default real time report although it opted in.
+  EXPECT_FALSE(HasServerSeenUrl(embedded_https_test_server().GetURL(
+      "b.test", "/.well-known/interest-group/real-time-report")));
+
+  const GURL kRealTimeReportUrls[] = {
       embedded_https_test_server().GetURL(
           "a.test", "/.well-known/interest-group/real-time-report"),
       embedded_https_test_server().GetURL(
           "b.test", "/.well-known/interest-group/real-time-report")};
 
-  for (const auto& expected_report_url : kExpectedRealTimeReportUrls) {
-    SCOPED_TRACE(expected_report_url);
-    WaitForUrl(expected_report_url);
+  for (const auto& report_url : kRealTimeReportUrls) {
+    EXPECT_FALSE(HasServerSeenUrl(report_url));
   }
 }
 

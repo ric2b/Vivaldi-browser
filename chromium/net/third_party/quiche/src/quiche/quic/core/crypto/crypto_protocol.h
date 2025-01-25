@@ -298,6 +298,7 @@ const QuicTag kNCMR = TAG('N', 'C', 'M', 'R');   // Do not attempt connection
 
 // Allows disabling defer_send_in_response_to_packets in QuicConnection.
 const QuicTag kDFER = TAG('D', 'F', 'E', 'R');   // Do not defer sending.
+const QuicTag kCDFR = TAG('C', 'D', 'F', 'R');   // Defer sending on client.
 
 // Pacing options.
 const QuicTag kNPCO = TAG('N', 'P', 'C', 'O');  // No pacing offload.
@@ -439,6 +440,11 @@ const QuicTag kMPQM = TAG('M', 'P', 'Q', 'M');   // Enable multi-port QUIC
 const QuicTag kGWCH = TAG('G', 'W', 'C', 'H');
 const QuicTag kYTCH = TAG('Y', 'T', 'C', 'H');
 const QuicTag kACH0 = TAG('A', 'C', 'H', '0');
+
+// Client sends this connection option to express the intention of skipping IP
+// matching when trying to send a request on active sessions. If server echos
+// back this connection option, client can actually skip IP matching.
+const QuicTag kNOIP = TAG('N', 'O', 'I', 'P');
 
 // Rejection tags
 const QuicTag kRREJ = TAG('R', 'R', 'E', 'J');   // Reasons for server sending

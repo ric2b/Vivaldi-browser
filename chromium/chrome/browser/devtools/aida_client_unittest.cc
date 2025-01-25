@@ -45,9 +45,7 @@ class AidaClientTest : public testing::Test {
   void SetUp() override {
     profile_->GetPrefs()->SetInteger(prefs::kDevToolsGenAiSettings, 0);
     feature_list_.InitWithFeatures(
-        /*enabled_features=*/{::features::kDevToolsConsoleInsights,
-                              ::features::
-                                  kDevToolsConsoleInsightsSettingVisible},
+        /*enabled_features=*/{::features::kDevToolsConsoleInsights},
         /*disabled_features=*/{});
 
     auto account_info = identity_test_env_->MakePrimaryAccountAvailable(
@@ -69,6 +67,7 @@ class AidaClientTest : public testing::Test {
   raw_ptr<signin::IdentityTestEnvironment> identity_test_env_;
   base::HistogramTester histogram_tester_;
   base::test::ScopedFeatureList feature_list_;
+  AidaClient::ScopedOverride scoped_country_override_;
 };
 
 class Delegate {
@@ -103,17 +102,6 @@ class Delegate {
 
 constexpr char kOAuthToken[] = "5678";
 
-TEST_F(AidaClientTest, DoesNothingIfNoScope) {
-  Delegate delegate;
-
-  AidaClient aida_client(profile_.get());
-  aida_client.OverrideAidaEndpointAndScopeForTesting("", "");
-  aida_client.PrepareRequestOrFail(base::BindOnce(
-      &Delegate::FinishCallback, base::Unretained(&delegate), nullptr));
-  EXPECT_EQ(R"({"error": "AIDA scope is not configured"})",
-            absl::get<std::string>(delegate.response_));
-}
-
 TEST_F(AidaClientTest, FailsIfNotAuthorized) {
   base::RunLoop run_loop;
   Delegate delegate;
@@ -132,6 +120,7 @@ TEST_F(AidaClientTest, FailsIfNotAuthorized) {
 }
 
 TEST_F(AidaClientTest, NotAvailableIfFeatureDisabled) {
+  scoped_country_override_ = AidaClient::OverrideCountryForTesting("us");
   auto blocked_reason = AidaClient::CanUseAida(profile_.get());
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   EXPECT_FALSE(blocked_reason.blocked);
@@ -154,6 +143,7 @@ TEST_F(AidaClientTest, NotAvailableIfFeatureDisabled) {
 }
 
 TEST_F(AidaClientTest, NotAvailableIfCapabilityFalse) {
+  scoped_country_override_ = AidaClient::OverrideCountryForTesting("us");
   auto blocked_reason = AidaClient::CanUseAida(profile_.get());
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   EXPECT_FALSE(blocked_reason.blocked);
@@ -182,6 +172,38 @@ TEST_F(AidaClientTest, NotAvailableIfCapabilityFalse) {
   EXPECT_TRUE(blocked_reason.blocked_by_feature_flag);
   EXPECT_FALSE(blocked_reason.blocked_by_age);
 #endif
+}
+
+TEST_F(AidaClientTest, NotAvailableInCountry) {
+  scoped_country_override_ = AidaClient::OverrideCountryForTesting("cn");
+  auto blocked_reason = AidaClient::CanUseAida(profile_.get());
+  EXPECT_TRUE(blocked_reason.blocked);
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  EXPECT_FALSE(blocked_reason.blocked_by_feature_flag);
+  EXPECT_TRUE(blocked_reason.blocked_by_geo);
+#else
+  EXPECT_TRUE(blocked_reason.blocked_by_feature_flag);
+  EXPECT_FALSE(blocked_reason.blocked_by_geo);
+#endif
+  EXPECT_FALSE(blocked_reason.blocked_by_age);
+  EXPECT_FALSE(blocked_reason.blocked_by_enterprise_policy);
+}
+
+TEST_F(AidaClientTest, NoLoggingInEurope) {
+  scoped_country_override_ = AidaClient::OverrideCountryForTesting("de");
+  auto blocked_reason = AidaClient::CanUseAida(profile_.get());
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  EXPECT_FALSE(blocked_reason.blocked);
+  EXPECT_FALSE(blocked_reason.blocked_by_feature_flag);
+  EXPECT_TRUE(blocked_reason.disallow_logging);
+#else
+  EXPECT_TRUE(blocked_reason.blocked);
+  EXPECT_TRUE(blocked_reason.blocked_by_feature_flag);
+  EXPECT_FALSE(blocked_reason.disallow_logging);
+#endif
+  EXPECT_FALSE(blocked_reason.blocked_by_geo);
+  EXPECT_FALSE(blocked_reason.blocked_by_age);
+  EXPECT_FALSE(blocked_reason.blocked_by_enterprise_policy);
 }
 
 TEST_F(AidaClientTest, Succeeds) {

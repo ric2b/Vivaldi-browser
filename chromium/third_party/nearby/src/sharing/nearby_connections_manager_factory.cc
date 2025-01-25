@@ -18,23 +18,23 @@
 
 #include "internal/analytics/event_logger.h"
 #include "internal/platform/device_info.h"
+#include "internal/platform/task_runner.h"
 #include "sharing/internal/public/context.h"
 #include "sharing/nearby_connections_manager.h"
 #include "sharing/nearby_connections_manager_impl.h"
 #include "sharing/nearby_connections_service_impl.h"
 
-namespace nearby {
-namespace sharing {
+namespace nearby::sharing {
 
 std::unique_ptr<NearbyConnectionsManager>
 NearbyConnectionsManagerFactory::CreateConnectionsManager(
-    LinkType link_type, Context* context,
+    nearby::TaskRunner* connections_callback_task_runner, Context* context,
     nearby::DeviceInfo& device_info,
     nearby::analytics::EventLogger* event_logger) {
   return std::make_unique<NearbyConnectionsManagerImpl>(
-      context, *context->GetConnectivityManager(), device_info,
+      connections_callback_task_runner, context,
+      *context->GetConnectivityManager(), device_info,
       std::make_unique<NearbyConnectionsServiceImpl>(event_logger));
 }
 
-}  // namespace sharing
-}  // namespace nearby
+}  // namespace nearby::sharing

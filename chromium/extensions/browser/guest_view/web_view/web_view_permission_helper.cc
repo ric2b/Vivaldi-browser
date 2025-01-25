@@ -83,7 +83,7 @@ static std::string PermissionTypeToString(WebViewPermissionType type) {
     case WEB_VIEW_PROTOCOL_HANDLING:
       return "protocol_handling";
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return std::string();
   }
 }

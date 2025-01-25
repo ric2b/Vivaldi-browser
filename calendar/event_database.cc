@@ -81,7 +81,7 @@ bool EventDatabase::CreateEventTable() {
       "last_modified INTEGER"
       ")");
 
-  return GetDB().Execute(sql.c_str());
+  return GetDB().Execute(sql);
 }
 
 EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
@@ -337,7 +337,7 @@ bool EventDatabase::DoesEventIdExist(EventID event_id) {
 bool EventDatabase::MigrateEventsWithoutSequenceAndIcalColumns() {
   if (!GetDB().DoesTableExist("events")) {
     NOTREACHED() << "Events table should exist before migration";
-    return false;
+    //return false;
   }
 
   if (!GetDB().DoesColumnExist("events", "sequence") &&
@@ -365,7 +365,7 @@ bool EventDatabase::MigrateEventsWithoutSequenceAndIcalColumns() {
 bool EventDatabase::MigrateCalendarToVersion4() {
   if (!GetDB().DoesTableExist("events")) {
     NOTREACHED() << "events table should exist before migration";
-    return false;
+    //return false;
   }
 
   if (!GetDB().DoesColumnExist("events", "rrule")) {
@@ -380,7 +380,7 @@ bool EventDatabase::MigrateCalendarToVersion4() {
 bool EventDatabase::MigrateCalendarToVersion6() {
   if (!GetDB().DoesTableExist("events")) {
     NOTREACHED() << "events table should exist before migration";
-    return false;
+    //return false;
   }
 
   if (!GetDB().DoesColumnExist("events", "timezone")) {
@@ -391,7 +391,7 @@ bool EventDatabase::MigrateCalendarToVersion6() {
 
   if (!GetDB().DoesTableExist("calendar")) {
     NOTREACHED() << "calendar table should exist before migration";
-    return false;
+    //return false;
   }
 
   if (!GetDB().DoesColumnExist("calendar", "timezone")) {
@@ -406,7 +406,7 @@ bool EventDatabase::MigrateCalendarToVersion6() {
 bool EventDatabase::MigrateCalendarToVersion8() {
   if (!GetDB().DoesTableExist("events")) {
     NOTREACHED() << "events table should exist before migration";
-    return false;
+    //return false;
   }
 
   if (!GetDB().DoesColumnExist("events", "is_template")) {
@@ -423,7 +423,7 @@ bool EventDatabase::MigrateCalendarToVersion8() {
 bool EventDatabase::MigrateCalendarToVersion9() {
   if (!GetDB().DoesTableExist("events")) {
     NOTREACHED() << "events table should exist before migration";
-    return false;
+    //return false;
   }
 
   if (!GetDB().DoesColumnExist("events", "due")) {
@@ -480,7 +480,7 @@ bool EventDatabase::MigrateCalendarToVersion9() {
 bool EventDatabase::MigrateCalendarToVersion11() {
   if (!GetDB().DoesTableExist("events")) {
     NOTREACHED() << "Events table should exist before migration";
-    return false;
+    //return false;
   }
 
   if (!GetDB().DoesColumnExist("events", "sync_pending")) {

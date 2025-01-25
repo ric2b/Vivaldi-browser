@@ -69,6 +69,12 @@
 // Returns a cell with the same theme, icon, snapshot, title, and frame as
 // `cell` (but no delegate or identifier) for use in animated transitions.
 + (instancetype)transitionCellFromCell:(GridCell*)cell;
+
+// Vivaldi
+- (void)removeSelectionBorder;
+- (void)setTopHeaderColor:(BOOL)isIncognito;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TAB_SWITCHER_TAB_GRID_GRID_GRID_CELL_H_

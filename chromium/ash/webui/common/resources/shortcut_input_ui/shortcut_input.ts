@@ -15,7 +15,7 @@ import {FakeShortcutInputProvider} from './fake_shortcut_input_provider.js';
 import {KeyEvent} from './input_device_settings.mojom-webui.js';
 import {getTemplate} from './shortcut_input.html.js';
 import {ShortcutInputObserverReceiver, ShortcutInputProviderInterface} from './shortcut_input_provider.mojom-webui.js';
-import {getSortedModifiers, KeyInputState, KeyToIconNameMap, Modifier, ModifierKeyCodes, Modifiers} from './shortcut_utils.js';
+import {getSortedModifiers, KeyInputState, KeyToIconNameMap, MetaKey, Modifier, ModifierKeyCodes, Modifiers} from './shortcut_utils.js';
 
 export interface ShortcutInputElement {
   $: {
@@ -55,9 +55,7 @@ export class ShortcutInputElement extends ShortcutInputElementBase {
         type: Boolean,
       },
 
-      hasLauncherButton: {
-        type: Boolean,
-      },
+      metaKey: Object,
 
       // When `updateOnKeyPress` is true, always show edit-view and and updates
       // occur on key press events rather than on key release.
@@ -82,10 +80,16 @@ export class ShortcutInputElement extends ShortcutInputElementBase {
       shouldIgnoreKeyRelease: {
         type: Boolean,
       },
+
+      hasFunctionKey: {
+        type: Boolean,
+      },
+
     };
   }
 
-  hasLauncherButton: boolean = true;
+  metaKey: MetaKey = MetaKey.kSearch;
+  hasFunctionKey: boolean = false;
   shortcutInputProvider: ShortcutInputProviderInterface|null = null;
   pendingKeyEvent: KeyEvent|null = null;
   pendingPrerewrittenKeyEvent: KeyEvent|null = null;
@@ -348,6 +352,13 @@ export class ShortcutInputElement extends ShortcutInputElementBase {
   /**
    * Returns the specified CSS state of the modifier key element.
    */
+  protected getFunctionState(): string {
+    return this.getModifierState(Modifier.FN_KEY);
+  }
+
+  /**
+   * Returns the specified CSS state of the modifier key element.
+   */
   private getModifierState(modifier: Modifier): KeyInputState {
     const keyEvent = this.getPendingKeyEvent();
     if (keyEvent && keyEvent?.modifiers & modifier) {
@@ -367,6 +378,8 @@ export class ShortcutInputElement extends ShortcutInputElementBase {
         return 'alt';
       case Modifier.COMMAND:
         return 'meta';
+      case Modifier.FN_KEY:
+        return 'fn';
     }
     return assertNotReached();
   }

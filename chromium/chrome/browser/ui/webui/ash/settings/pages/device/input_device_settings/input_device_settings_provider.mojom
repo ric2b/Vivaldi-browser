@@ -6,6 +6,7 @@ module ash.settings.mojom;
 
 import "ash/public/mojom/input_device_settings.mojom";
 import "ash/public/mojom/accelerator_actions.mojom";
+import "ui/events/ash/mojom/meta_key.mojom";
 
 // Represents the options for user in the dropdown of button customization.
 struct ActionChoice {
@@ -76,6 +77,15 @@ interface KeyboardBrightnessObserver {
   OnKeyboardBrightnessChanged(double brightness_percent);
 };
 
+// Interface for observing keyboard ambient light sensor settings changes in
+// OSSettings SWA.
+interface KeyboardAmbientLightSensorObserver {
+  // OnKeyboardAmbientLightSensorEnabledChanged calls are triggered when the
+  // keyboard ambient light sensor is enabled or disabled.
+  OnKeyboardAmbientLightSensorEnabledChanged(
+    bool keyboard_ambient_light_sensor_enabled);
+};
+
 // Interface for fetching and configuring input device settings in OSSettings.
 interface InputDeviceSettingsProvider {
   // Registers an observer which will be notified every time
@@ -117,6 +127,11 @@ interface InputDeviceSettingsProvider {
   ObserveKeyboardBrightness(
       pending_remote<KeyboardBrightnessObserver> observer);
 
+  // Registers an observer for keyboard ambient light sensor changes and
+  // returns whether the keyboard ambient light sensor is currently enabled.
+  ObserveKeyboardAmbientLightSensor(
+    pending_remote<KeyboardAmbientLightSensorObserver> observer);
+
   // Restore the keyboard remappings to default based on its id.
   RestoreDefaultKeyboardRemappings(uint32 device_id);
   // Sets the keyboard settings based on its id.
@@ -152,11 +167,10 @@ interface InputDeviceSettingsProvider {
   GetActionsForGraphicsTabletButtonCustomization() =>
       (array<ActionChoice> options);
 
-  // Returns whether any of the keyboards has launcher button.
-  // True if the keyboard has launcher button as meta key and we display the
-  // launcher icon in settings. False if the keyboard has other buttons as meta
-  // key and we display the search icon in settings.
-  HasLauncherButton() => (bool has_launcher_button);
+  // Returns the meta key to display in the UI to represent the overall current
+  // keyboard situation. This will only return either Launcher, Search, or
+  // LauncherRefresh.
+  GetMetaKeyToDisplay() => (ui.mojom.MetaKey meta_key);
 
   // Returns whether the internal keyboard has a backlight.
   HasKeyboardBacklight() => (bool has_keyboard_backlight);
@@ -174,4 +188,11 @@ interface InputDeviceSettingsProvider {
   // Records metric each time user changes the keyboard brightness through
   // the slider.
   RecordKeyboardBrightnessChangeFromSlider(double percent);
+
+  // Returns the device image as a Data URL. Returns null if the device doesn't
+  // have a corresponding image.
+  GetDeviceIconImage(string device_key) => (string? data_url);
+
+  // Opens companion app for a connected peripheral.
+  LaunchCompanionApp(string package_id);
 };

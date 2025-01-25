@@ -136,7 +136,6 @@ bool ShouldShowEmailMenuItem() {
     case user_manager::UserType::kGuest:
     case user_manager::UserType::kPublicAccount:
     case user_manager::UserType::kKioskApp:
-    case user_manager::UserType::kArcKioskApp:
     case user_manager::UserType::kWebKioskApp:
       return false;
   }
@@ -206,7 +205,7 @@ class PowerButton::MenuController : public ui::SimpleMenuModel::Delegate,
       case VIEW_ID_QS_POWER_SIGNOUT_MENU_BUTTON:
         quick_settings_metrics_util::RecordQsButtonActivated(
             QsButtonCatalogName::kPowerSignoutMenuButton);
-        Shell::Get()->session_controller()->RequestSignOut();
+        Shell::Get()->lock_state_controller()->RequestSignOut();
         break;
       case VIEW_ID_QS_POWER_RESTART_MENU_BUTTON:
         quick_settings_metrics_util::RecordQsButtonActivated(
@@ -220,7 +219,7 @@ class PowerButton::MenuController : public ui::SimpleMenuModel::Delegate,
         Shell::Get()->session_controller()->LockScreen();
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -360,7 +359,8 @@ PowerButtonContainer::PowerButtonContainer(PressedCallback callback)
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 
-  SetAccessibleName(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_POWER_MENU));
+  GetViewAccessibility().SetName(
+      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_POWER_MENU));
   SetTooltipText(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_POWER_MENU));
 }
 

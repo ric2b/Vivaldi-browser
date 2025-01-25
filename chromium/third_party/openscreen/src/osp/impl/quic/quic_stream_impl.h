@@ -20,7 +20,7 @@ class QuicStreamImpl final : public QuicStream, public quic::QuicStream {
 
   // QuicStream overrides.
   uint64_t GetStreamId() override;
-  void Write(const ByteView& bytes) override;
+  void Write(ByteView bytes) override;
   void CloseWriteEnd() override;
 
   // quic::QuicStream overrides.

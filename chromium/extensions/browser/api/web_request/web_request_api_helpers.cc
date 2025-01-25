@@ -20,6 +20,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/not_fatal_until.h"
 #include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 #include "base/strings/strcat.h"
@@ -348,7 +349,8 @@ std::string GetDNRNewRequestHeaderValue(net::HttpRequestHeaders* headers,
 
   if (has_header && operation == dnr_api::HeaderOperation::kAppend) {
     const auto it = dnr::kDNRRequestHeaderAppendAllowList.find(header_name);
-    DCHECK(it != dnr::kDNRRequestHeaderAppendAllowList.end());
+    CHECK(it != dnr::kDNRRequestHeaderAppendAllowList.end(),
+          base::NotFatalUntil::M130);
     return base::StrCat({existing_value, it->second, header_value});
   }
 
@@ -377,7 +379,7 @@ struct DNRHeaderAction {
       case dnr_api::HeaderOperation::kRemove:
         return true;
       case dnr_api::HeaderOperation::kNone:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return true;
     }
   }
@@ -459,7 +461,7 @@ bool ModifyRequestHeadersForAction(
         break;
       }
       case dnr_api::HeaderOperation::kNone:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
 
     request_headers_modified |= header_modified;
@@ -556,7 +558,7 @@ bool ModifyResponseHeadersForAction(
         break;
       }
       case dnr_api::HeaderOperation::kNone:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
 
     response_headers_modified |= header_modified;

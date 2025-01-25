@@ -31,7 +31,6 @@ class SearchEnginesAPI : public BrowserContextKeyedAPI,
   void OnTemplateURLServiceChanged() override;
   void OnTemplateURLServiceShuttingDown() override;
 
-
  private:
   friend class BrowserContextKeyedAPIFactory<SearchEnginesAPI>;
 

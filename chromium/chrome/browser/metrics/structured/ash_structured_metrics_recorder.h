@@ -42,8 +42,6 @@ class AshStructuredMetricsRecorder : public StructuredMetricsRecorder,
   explicit AshStructuredMetricsRecorder(
       metrics::MetricsProvider* system_profile_provider);
 
-  ~AshStructuredMetricsRecorder() override;
-
   void OnExternalMetricsCollected(const EventsProto& events);
 
   // StructuredMetricsRecorder:
@@ -54,6 +52,7 @@ class AshStructuredMetricsRecorder : public StructuredMetricsRecorder,
                            const Event& event,
                            const ProjectValidator& project_validator,
                            const KeyData& key_data) override;
+  void ProvideLogMetadata(ChromeUserMetricsExtension& uma_proto) override;
 
   // Recorder::RecorderImpl:
   void OnSystemProfileInitialized() override;
@@ -64,7 +63,10 @@ class AshStructuredMetricsRecorder : public StructuredMetricsRecorder,
   void ProfileAdded(const Profile& profile) override;
 
  private:
+  friend class base::RefCountedDeleteOnSequence<StructuredMetricsRecorder>;
+  friend class base::DeleteHelper<StructuredMetricsRecorder>;
   friend class AshStructuredMetricsRecorderTest;
+  ~AshStructuredMetricsRecorder() override;
 
   AshStructuredMetricsRecorder(
       std::unique_ptr<KeyDataProvider> key_provider,

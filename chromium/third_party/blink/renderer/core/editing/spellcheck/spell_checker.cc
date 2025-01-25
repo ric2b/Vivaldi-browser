@@ -24,6 +24,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/editing/spellcheck/spell_checker.h"
 
 #include "third_party/blink/public/platform/web_spell_check_panel_host_client.h"
@@ -59,7 +64,6 @@
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/text/text_break_iterator.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
@@ -375,7 +379,7 @@ void SpellChecker::MarkAndReplaceFor(
         }
         continue;
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -496,13 +500,8 @@ void SpellChecker::ReplaceMisspelledRange(const String& text) {
   if (cancel)
     return;
 
-  if (RuntimeEnabledFeatures::SpellCheckerReplaceRangeUseInsertTextEnabled()) {
-    GetFrame().GetEditor().InsertTextWithoutSendingTextEvent(
-        text, false, nullptr, InputEvent::InputType::kInsertReplacementText);
-  } else {
-    GetFrame().GetEditor().ReplaceSelectionWithText(
-        text, false, false, InputEvent::InputType::kInsertReplacementText);
-  }
+  GetFrame().GetEditor().InsertTextWithoutSendingTextEvent(
+      text, false, nullptr, InputEvent::InputType::kInsertReplacementText);
 }
 
 void SpellChecker::RespondToChangedSelection() {

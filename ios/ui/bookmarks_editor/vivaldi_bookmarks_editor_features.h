@@ -6,10 +6,8 @@
 #import <Foundation/Foundation.h>
 
 @interface VivaldiBookmarksEditorFeatures: NSObject
-// Whether new bookmark editor should be shown.
-// Currently the difference between new and old editor is fundamentally
-// a couple of strings.
-+ (BOOL)shouldShowNewBookmarkEditor;
+// Whether top sites are visible in bookmarks editor.
++ (BOOL)shouldShowTopSites;
 @end
 
 #endif  // IOS_UI_BOOKMARKS_EDITOR_FEATURES_H_

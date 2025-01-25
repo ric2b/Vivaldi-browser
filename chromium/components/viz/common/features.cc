@@ -23,14 +23,6 @@
 #include "base/android/build_info.h"
 #endif
 
-namespace {
-
-// FieldTrialParams for `DynamicSchedulerForDraw` and
-// `kDynamicSchedulerForClients`.
-const char kDynamicSchedulerPercentile[] = "percentile";
-
-}  // namespace
-
 namespace features {
 
 #if BUILDFLAG(IS_ANDROID)
@@ -85,6 +77,14 @@ BASE_FEATURE(kDelegatedCompositingLimitToUi,
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
+// If enabled, the overlay processor will force the use of dcomp surfaces as the
+// render pass backing while delegated ink is being employed. This will avoid
+// the need for finding what surface to synchronize ink updates with by making
+// all surfaces synchronize with dcomp commit
+BASE_FEATURE(kUseDCompSurfacesForDelegatedInk,
+             "UseDCompSurfacesForDelegatedInk",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kRenderPassDrawnRect,
              "RenderPassDrawnRect",
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -127,12 +127,6 @@ BASE_FEATURE(kUseSetPresentDuration,
              "UseSetPresentDuration",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN)
-
-// Enables platform supported delegated ink trails instead of Skia backed
-// delegated ink trails.
-BASE_FEATURE(kUsePlatformDelegatedInk,
-             "UsePlatformDelegatedInk",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Used to debug Android WebView Vulkan composite. Composite to an intermediate
 // buffer and draw the intermediate buffer to the secondary command buffer.
@@ -178,15 +172,6 @@ const char kPredictorLinear1[] = "linear-1";
 const char kPredictorLinear2[] = "linear-2";
 const char kPredictorLsq[] = "lsq";
 
-// Used by Viz to parameterize adjustments to scheduler deadlines.
-BASE_FEATURE(kDynamicSchedulerForDraw,
-             "DynamicSchedulerForDraw",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-// User to parameterize adjustments to clients' deadlines.
-BASE_FEATURE(kDynamicSchedulerForClients,
-             "DynamicSchedulerForClients",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 #if BUILDFLAG(IS_APPLE)
 // Increase the max CALayer number allowed for CoreAnimation.
 // * If this feature is disabled, then the default limit is 128 quads,
@@ -197,7 +182,7 @@ BASE_FEATURE(kDynamicSchedulerForClients,
 //   feature parameters.
 BASE_FEATURE(kCALayerNewLimit,
              "CALayerNewLimit",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 // Set FeatureParam default to -1. CALayerOverlayProcessor choose the default in
 // ca_layer_overlay.cc When it's < 0.
 const base::FeatureParam<int> kCALayerNewLimitDefault{&kCALayerNewLimit,
@@ -237,18 +222,16 @@ const base::FeatureParam<int> kNumPendingFrames{&kVSyncAlignedPresent,
 
 BASE_FEATURE(kAllowUndamagedNonrootRenderPassToSkip,
              "AllowUndamagedNonrootRenderPassToSkip",
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS_LACROS)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 // Allow SurfaceAggregator to merge render passes when they contain quads that
 // require overlay (e.g. protected video). See usage in |EmitSurfaceContent|.
 BASE_FEATURE(kAllowForceMergeRenderPassWithRequireOverlayQuads,
              "AllowForceMergeRenderPassWithRequireOverlayQuads",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Used to gate calling SetPurgeable on OutputPresenter::Image from
-// SkiaOutputDeviceBufferQueue.
-BASE_FEATURE(kBufferQueueImageSetPurgeable,
-             "BufferQueueImageSetPurgeable",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
@@ -258,11 +241,7 @@ BASE_FEATURE(kBufferQueueImageSetPurgeable,
 // SkiaOutputDeviceBufferQueue itself.
 BASE_FEATURE(kRendererAllocatesImages,
              "RendererAllocatesImages",
-#if BUILDFLAG(IS_MAC)
              base::FEATURE_ENABLED_BY_DEFAULT
-#else
-             base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 #endif
 
@@ -386,6 +365,22 @@ BASE_FEATURE(kSnapshotEvictedRootSurface,
 #endif
 );
 
+// If enabled, info for quads from the last render pass will be reported as
+// UMAs.
+BASE_FEATURE(kShouldLogFrameQuadInfo,
+             "ShouldLogFrameQuadInfo",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// When enabled, ClientResourceProvider will allow for the batching of
+// callbacks. So that the client can perform a series of individual releases,
+// but have ClientResourceProvider coordinate the callbacks. This allows all of
+// the Main-thread callbacks to be batched into a single jump to that thread.
+//
+// When disabled each callback will perform its own separate post task.
+BASE_FEATURE(kBatchResourceRelease,
+             "BatchResourceRelease",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // The scale to use for root surface snapshots on eviction. See
 // `kSnapshotEvictedRootSurface`.
 const base::FeatureParam<double> kSnapshotEvictedRootSurfaceScale{
@@ -395,19 +390,19 @@ const base::FeatureParam<double> kSnapshotEvictedRootSurfaceScale{
 // inserting a separate color conversion pass during surface aggregation.
 BASE_FEATURE(kColorConversionInRenderer,
              "ColorConversionInRenderer",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Stops BeginFrame issue to use |last_vsync_interval_| instead of the current
+// set of BeginFrameArgs.
+// TODO(b/333940735): Should be removed if the issue isn't fixed.
+BASE_FEATURE(kLastVSyncArgsKillswitch,
+             "LastVSyncArgsKillswitch",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Use BlitRequests for copy requests made by ViewTransition.
 BASE_FEATURE(kBlitRequestsForViewTransition,
              "BlitRequestsForViewTransition",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Changes BeginFrame issue to use LastUsedBeginFrameArgs() instead of the
-// current set of BeginFrameArgs.
-// TODO(b/333940735): Should be removed if the issue isn't fixed.
-BASE_FEATURE(kUseLastBeginFrameArgs,
-             "UseLastBeginFrameArgs",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsDelegatedCompositingEnabled() {
   return base::FeatureList::IsEnabled(kDelegatedCompositing);
@@ -453,7 +448,7 @@ std::optional<int> ShouldDrawPredictedInkPoints() {
   else if (predicted_points == kDraw2Points3Ms)
     return viz::PredictionConfig::k2Points3Ms;
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::nullopt;
 }
 
@@ -462,10 +457,6 @@ std::string InkPredictor() {
     return "";
 
   return GetFieldTrialParamValueByFeature(kDrawPredictedInkPoint, "predictor");
-}
-
-bool ShouldUsePlatformDelegatedInk() {
-  return base::FeatureList::IsEnabled(kUsePlatformDelegatedInk);
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -494,32 +485,6 @@ bool UseSurfaceLayerForVideo() {
 #else
   return true;
 #endif
-}
-
-// Used by Viz to determine if viz::DisplayScheduler should dynamically adjust
-// its frame deadline. Returns the percentile of historic draw times to base the
-// deadline on. Or std::nullopt if the feature is disabled.
-std::optional<double> IsDynamicSchedulerEnabledForDraw() {
-  if (!base::FeatureList::IsEnabled(kDynamicSchedulerForDraw))
-    return std::nullopt;
-  double result = base::GetFieldTrialParamByFeatureAsDouble(
-      kDynamicSchedulerForDraw, kDynamicSchedulerPercentile, -1.0);
-  if (result < 0.0)
-    return std::nullopt;
-  return result;
-}
-
-// Used by Viz to determine if the frame deadlines provided to CC should be
-// dynamically adjusted. Returns the percentile of historic draw times to base
-// the deadline on. Or std::nullopt if the feature is disabled.
-std::optional<double> IsDynamicSchedulerEnabledForClients() {
-  if (!base::FeatureList::IsEnabled(kDynamicSchedulerForClients))
-    return std::nullopt;
-  double result = base::GetFieldTrialParamByFeatureAsDouble(
-      kDynamicSchedulerForClients, kDynamicSchedulerPercentile, -1.0);
-  if (result < 0.0)
-    return std::nullopt;
-  return result;
 }
 
 int MaxOverlaysConsidered() {
@@ -555,6 +520,10 @@ std::optional<double> SnapshotEvictedRootSurfaceScale() {
     return std::nullopt;
   }
   return kSnapshotEvictedRootSurfaceScale.Get();
+}
+
+bool ShouldLogFrameQuadInfo() {
+  return base::FeatureList::IsEnabled(features::kShouldLogFrameQuadInfo);
 }
 
 #if BUILDFLAG(IS_MAC)

@@ -72,7 +72,8 @@ class OfferNotificationControllerAndroidBrowserTest
 
   // AndroidBrowserTest
   void SetUpOnMainThread() override {
-    personal_data_ = PersonalDataManagerFactory::GetForProfile(GetProfile());
+    personal_data_ =
+        PersonalDataManagerFactory::GetForBrowserContext(GetProfile());
     // Mimic the user is signed in so payments integration is considered
     // enabled.
     personal_data_->payments_data_manager().SetSyncingForTest(true);
@@ -142,9 +143,7 @@ class OfferNotificationControllerAndroidBrowserTestForMessagesUi
 
   void VerifyMessageShownCountMetric(int count) {
     histogram_tester_.ExpectBucketCount(
-        messages::IsStackingAnimationEnabled()
-            ? "Android.Messages.Stacking.InsertAtFront"
-            : "Android.Messages.Enqueued.Visible",
+        "Android.Messages.Stacking.InsertAtFront",
         static_cast<int>(messages::MessageIdentifier::OFFER_NOTIFICATION),
         count);
   }

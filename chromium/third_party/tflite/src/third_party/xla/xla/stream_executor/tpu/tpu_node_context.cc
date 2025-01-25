@@ -18,8 +18,9 @@ limitations under the License.
 #include <memory>
 
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "xla/service/backend.h"
-#include "xla/stream_executor/stream_executor_pimpl.h"
+#include "xla/service/stream_pool.h"
 #include "xla/stream_executor/tpu/status_helper.h"
 #include "xla/stream_executor/tpu/tpu_api.h"
 #include "xla/stream_executor/tpu/tpu_ops_c_api.h"
@@ -28,10 +29,8 @@ limitations under the License.
 namespace tensorflow {
 namespace tpu {
 
-using absl::StatusOr;
-
 /*static*/
-StatusOr<std::unique_ptr<TpuNodeContext>> TpuNodeContext::Create(
+absl::StatusOr<std::unique_ptr<TpuNodeContext>> TpuNodeContext::Create(
     int device_ordinal) {
   StatusHelper status;
   XLA_TpuNodeContext* node_context =

@@ -39,15 +39,15 @@ async function renderThreadAppendersFromTrace(context: Mocha.Context|Mocha.Suite
   const entryTypeByLevel: Timeline.TimelineFlameChartDataProvider.EntryType[] = [];
   const entryData: Timeline.TimelineFlameChartDataProvider.TimelineFlameChartEntry[] = [];
   const flameChartData = PerfUI.FlameChart.FlameChartTimelineData.createEmpty();
-  const traceParsedData = await TraceLoader.traceEngine(context, trace);
-  const threadAppenders = initTrackAppender(flameChartData, traceParsedData, entryData, entryTypeByLevel);
+  const {traceData} = await TraceLoader.traceEngine(context, trace);
+  const threadAppenders = initTrackAppender(flameChartData, traceData, entryData, entryTypeByLevel);
   let level = 0;
   for (const appender of threadAppenders) {
     level = appender.appendTrackAtLevel(level);
   }
   return {
     entryTypeByLevel,
-    traceParsedData,
+    traceParsedData: traceData,
     flameChartData,
     threadAppenders,
     entryData,
@@ -97,9 +97,12 @@ describeWithEnvironment('ThreadAppender', function() {
 
   it('renders tracks for threads in correct order when a process url is about:blank', async function() {
     const {flameChartData} = await renderThreadAppendersFromTrace(this, 'about-blank-first.json.gz');
-    assert.strictEqual(flameChartData.groups[0].name, 'Main — chrome://new-tab-page/');
-    assert.isTrue(flameChartData.groups[1].name.startsWith('Frame — chrome-untrusted://new-tab-page/'));
-    assert.strictEqual(flameChartData.groups[2].name, 'Main — about:blank');
+    const groupNames = flameChartData.groups.map(g => g.name.replace(/(new-tab-page\/).*/, '$1'));
+    assert.deepStrictEqual(groupNames.slice(0, 3), [
+      'Frame — chrome-untrusted://new-tab-page/',
+      'Main — chrome://new-tab-page/',
+      'Main — about:blank',
+    ]);
   });
 
   it('marks all levels used by the track with the TrackAppender type', async function() {
@@ -481,7 +484,7 @@ describeWithEnvironment('ThreadAppender', function() {
         if (!regularEvent) {
           return 'Unknown type';
         }
-        if (TraceModel.Legacy.eventIsFromNewEngine(entry) && TraceModel.Types.TraceEvents.isProfileCall(entry)) {
+        if (TraceModel.Types.TraceEvents.isProfileCall(entry)) {
           return entry.callFrame.functionName;
         }
         return entry.name;

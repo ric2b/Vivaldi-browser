@@ -11,8 +11,8 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "build/chromeos_buildflags.h"
-#include "components/enterprise/data_controls/dlp_histogram_helper.h"
-#include "components/enterprise/data_controls/dlp_policy_event.pb.h"
+#include "components/enterprise/data_controls/core/dlp_histogram_helper.h"
+#include "components/enterprise/data_controls/core/dlp_policy_event.pb.h"
 #include "components/reporting/client/report_queue.h"
 #include "components/reporting/client/report_queue_configuration.h"
 #include "components/reporting/client/report_queue_factory.h"
@@ -105,7 +105,6 @@ DlpPolicyEvent_UserType GetCurrentUserType() {
     case user_manager::UserType::kPublicAccount:
       return DlpPolicyEvent_UserType_MANAGED_GUEST;
     case user_manager::UserType::kKioskApp:
-    case user_manager::UserType::kArcKioskApp:
     case user_manager::UserType::kWebKioskApp:
       return DlpPolicyEvent_UserType_KIOSK;
     case user_manager::UserType::kGuest:
@@ -384,7 +383,7 @@ void DlpReportingManager::ReportEvent(DlpPolicyEvent event) {
           DlpEventRestriction2RuleRestriction(event.restriction()));
       break;
     case DlpPolicyEvent_Mode_UNDEFINED_MODE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   report_queue_->Enqueue(std::make_unique<DlpPolicyEvent>(std::move(event)),

@@ -145,7 +145,7 @@ std::string GetDownloadBlockingExtensionMetricName(
           kInsecureDownloadExtensionInitiatorInferredInsecure,
           kInsecureDownloadHistogramTargetInsecure);
     case InsecureDownloadSecurityStatus::kDownloadIgnored:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case InsecureDownloadSecurityStatus::kInitiatorInsecureNonUniqueFileSecure:
       return GetDLBlockingHistogramName(
@@ -157,7 +157,7 @@ std::string GetDownloadBlockingExtensionMetricName(
           kInsecureDownloadExtensionInitiatorInsecureNonUnique,
           kInsecureDownloadHistogramTargetInsecure);
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -434,7 +434,7 @@ bool IsDownloadPermittedByContentSettings(
       return setting.GetContentSetting() == CONTENT_SETTING_ALLOW;
     }
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #endif
 
   return false;

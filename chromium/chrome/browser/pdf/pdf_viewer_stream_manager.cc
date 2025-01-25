@@ -38,7 +38,7 @@ PdfViewerStreamManager::Factory* g_factory = nullptr;
 
 // Creates a claimed `EmbedderHostInfo` from the `embedder_host`.
 PdfViewerStreamManager::EmbedderHostInfo GetEmbedderHostInfo(
-    content::RenderFrameHost* embedder_host) {
+    const content::RenderFrameHost* embedder_host) {
   return {embedder_host->GetFrameTreeNodeId(), embedder_host->GetGlobalId()};
 }
 
@@ -182,10 +182,10 @@ PdfViewerStreamManager::GetStreamContainer(
 }
 
 bool PdfViewerStreamManager::IsPdfExtensionHost(
-    content::RenderFrameHost* render_frame_host) {
+    const content::RenderFrameHost* render_frame_host) const {
   // The PDF extension host should always have a parent host (the embedder
   // host).
-  content::RenderFrameHost* parent_host = render_frame_host->GetParent();
+  const content::RenderFrameHost* parent_host = render_frame_host->GetParent();
   if (!parent_host) {
     return false;
   }
@@ -195,28 +195,21 @@ bool PdfViewerStreamManager::IsPdfExtensionHost(
 }
 
 bool PdfViewerStreamManager::IsPdfExtensionFrameTreeNodeId(
-    content::RenderFrameHost* embedder_host,
-    int frame_tree_node_id) {
-  auto* stream_info = GetClaimedStreamInfo(embedder_host);
-  if (!stream_info) {
-    return false;
-  }
-
-  return frame_tree_node_id == stream_info->extension_host_frame_tree_node_id();
+    const content::RenderFrameHost* embedder_host,
+    int frame_tree_node_id) const {
+  const auto* stream_info = GetClaimedStreamInfo(embedder_host);
+  return stream_info &&
+         frame_tree_node_id == stream_info->extension_host_frame_tree_node_id();
 }
 
 bool PdfViewerStreamManager::DidPdfExtensionFinishNavigation(
-    content::RenderFrameHost* embedder_host) {
-  auto* stream_info = GetClaimedStreamInfo(embedder_host);
-  if (!stream_info) {
-    return false;
-  }
-
-  return stream_info->did_extension_finish_navigation();
+    const content::RenderFrameHost* embedder_host) const {
+  const auto* stream_info = GetClaimedStreamInfo(embedder_host);
+  return stream_info && stream_info->did_extension_finish_navigation();
 }
 
 bool PdfViewerStreamManager::IsPdfContentHost(
-    content::RenderFrameHost* render_frame_host) {
+    const content::RenderFrameHost* render_frame_host) const {
   // The PDF content host should always have a parent host.
   content::RenderFrameHost* parent_host = render_frame_host->GetParent();
   if (!parent_host) {
@@ -237,34 +230,23 @@ bool PdfViewerStreamManager::IsPdfContentHost(
 }
 
 bool PdfViewerStreamManager::IsPdfContentFrameTreeNodeId(
-    content::RenderFrameHost* embedder_host,
-    int frame_tree_node_id) {
-  auto* stream_info = GetClaimedStreamInfo(embedder_host);
-  if (!stream_info) {
-    return false;
-  }
-
-  return frame_tree_node_id == stream_info->content_host_frame_tree_node_id();
+    const content::RenderFrameHost* embedder_host,
+    int frame_tree_node_id) const {
+  const auto* stream_info = GetClaimedStreamInfo(embedder_host);
+  return stream_info &&
+         frame_tree_node_id == stream_info->content_host_frame_tree_node_id();
 }
 
 bool PdfViewerStreamManager::DidPdfContentNavigate(
-    content::RenderFrameHost* embedder_host) {
-  auto* stream_info = GetClaimedStreamInfo(embedder_host);
-  if (!stream_info) {
-    return false;
-  }
-
-  return stream_info->DidPdfContentNavigate();
+    const content::RenderFrameHost* embedder_host) const {
+  const auto* stream_info = GetClaimedStreamInfo(embedder_host);
+  return stream_info && stream_info->DidPdfContentNavigate();
 }
 
 bool PdfViewerStreamManager::PluginCanSave(
-    content::RenderFrameHost* embedder_host) {
+    const content::RenderFrameHost* embedder_host) const {
   auto* stream_info = GetClaimedStreamInfo(embedder_host);
-  if (!stream_info) {
-    return false;
-  }
-
-  return stream_info->plugin_can_save();
+  return stream_info && stream_info->plugin_can_save();
 }
 
 void PdfViewerStreamManager::SetPluginCanSave(
@@ -474,12 +456,6 @@ void PdfViewerStreamManager::DidFinishNavigation(
   stream_info->set_extension_host_frame_tree_node_id(
       extension_host_frame_tree_node_id);
 
-  ReportPDFLoadStatus(embedder_host->IsInPrimaryMainFrame()
-                          ? PDFLoadStatus::kLoadedFullPagePdfWithPdfium
-                          : PDFLoadStatus::kLoadedEmbeddedPdfWithPdfium);
-  // TODO(b:289010799): Call `RecordPDFOpenedWithA11yFeatureWithPdfOcr`in
-  // pdf_ocr_util.cc after figuring out how to fix the build dependency issue.
-
   NavigateToPdfExtensionUrl(extension_host_frame_tree_node_id, stream_info,
                             embedder_host->GetSiteInstance(),
                             about_blank_host->GetGlobalId());
@@ -524,13 +500,16 @@ void PdfViewerStreamManager::NavigateToPdfExtensionUrl(
 
 PdfViewerStreamManager::StreamInfo*
 PdfViewerStreamManager::GetClaimedStreamInfo(
-    content::RenderFrameHost* embedder_host) {
+    const content::RenderFrameHost* embedder_host) {
   auto iter = stream_infos_.find(GetEmbedderHostInfo(embedder_host));
-  if (iter == stream_infos_.end()) {
-    return nullptr;
-  }
+  return iter != stream_infos_.end() ? iter->second.get() : nullptr;
+}
 
-  return iter->second.get();
+const PdfViewerStreamManager::StreamInfo*
+PdfViewerStreamManager::GetClaimedStreamInfo(
+    const content::RenderFrameHost* embedder_host) const {
+  auto iter = stream_infos_.find(GetEmbedderHostInfo(embedder_host));
+  return iter != stream_infos_.end() ? iter->second.get() : nullptr;
 }
 
 PdfViewerStreamManager::StreamInfo*
@@ -706,6 +685,14 @@ bool PdfViewerStreamManager::MaybeSetUpPostMessage(
                              claimed_stream_info->stream()->original_url());
   claimed_stream_info->set_mime_handler_view_container_manager(
       std::move(container_manager));
+
+  // Now that postMessage is set up, the PDF viewer has finished loading, so
+  // update metrics.
+  ReportPDFLoadStatus(embedder_host->IsInPrimaryMainFrame()
+                          ? PDFLoadStatus::kLoadedFullPagePdfWithPdfium
+                          : PDFLoadStatus::kLoadedEmbeddedPdfWithPdfium);
+  // TODO(b:289010799): Call `RecordPDFOpenedWithA11yFeatureWithPdfOcr`in
+  // pdf_ocr_util.cc after figuring out how to fix the build dependency issue.
 
   return true;
 }

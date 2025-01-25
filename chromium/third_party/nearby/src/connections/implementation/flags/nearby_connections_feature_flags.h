@@ -66,6 +66,30 @@ constexpr auto kSafeToDisconnectVersion =
 constexpr auto kProcessBwuFrameAfterPcpConnected =
     flags::Flag<bool>(kConfigPackage, "45627835", false);
 
+// When true, check illegal characters in the file name and parent folder.
+constexpr auto kCheckIllegalCharacters =
+    flags::Flag<bool>(kConfigPackage, "45632028", false);
+
+// When true, allows to enable Multiplex feature.
+constexpr auto kEnableMultiplex =
+    flags::Flag<bool>(kConfigPackage, "45627836", false);
+
+// When true, allows to ignore the upgrade path available frame for advertiser.
+constexpr auto kIgnoreUpgradePathAvailableFrameForAdvertiser =
+    flags::Flag<bool>(kConfigPackage, "45633895", false);
+
+// When true, use the medium in connection info.
+constexpr auto kUseMediumInConnectionInfo =
+    flags::Flag<bool>(kConfigPackage, "45635058", false);
+
+// When true, use the medium in connection info.
+constexpr auto kUseStableEndpointId =
+    flags::Flag<bool>(kConfigPackage, "45639298", false);
+
+// When true, use the medium in connection info.
+constexpr auto kDisableBluetoothClassicScanning =
+    flags::Flag<bool>(kConfigPackage, "45639961", false);
+
 }  // namespace nearby_connections_feature
 }  // namespace config_package_nearby
 }  // namespace connections

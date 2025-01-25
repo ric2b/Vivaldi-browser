@@ -20,11 +20,10 @@ namespace message_serialization {
 
 // Serializes |message_proto| into |message_data|.
 // Returns true if the message was serialized successfully, false otherwise.
-ErrorOr<std::vector<uint8_t>> Serialize(
-    const ::cast::channel::CastMessage& message);
+ErrorOr<std::vector<uint8_t>> Serialize(const proto::CastMessage& message);
 
 struct DeserializeResult {
-  ::cast::channel::CastMessage message;
+  proto::CastMessage message;
   size_t length;
 };
 

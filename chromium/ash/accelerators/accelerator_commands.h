@@ -69,11 +69,9 @@ ASH_EXPORT bool CanLock();
 
 ASH_EXPORT bool CanMoveActiveWindowBetweenDisplays();
 
-ASH_EXPORT bool CanGroupOrUngroupWindows();
+ASH_EXPORT bool CanCreateSnapGroup();
 
-ASH_EXPORT void GroupOrUngroupWindowsInSnapGroup();
-
-ASH_EXPORT bool CanMinimizeSnapGroupWindows();
+ASH_EXPORT void CreateSnapGroup();
 
 ASH_EXPORT bool CanMinimizeTopWindowOnBack();
 
@@ -86,6 +84,8 @@ ASH_EXPORT bool CanShowStylusTools();
 ASH_EXPORT bool CanStopScreenRecording();
 
 ASH_EXPORT bool CanSwapPrimaryDisplay();
+
+ASH_EXPORT bool CanTilingWindowResize();
 
 ASH_EXPORT bool CanToggleCalendar();
 
@@ -246,6 +246,9 @@ ASH_EXPORT void OpenFileManager();
 // Opens the help/explore app.
 ASH_EXPORT void OpenHelp();
 
+// Resizes window as a tile.
+ASH_EXPORT void PerformTilingWindowResize(AcceleratorAction action);
+
 // Presses power button.
 ASH_EXPORT void PowerPressed(bool pressed);
 
@@ -324,6 +327,10 @@ ASH_EXPORT void ToggleClipboardHistory(bool is_plain_text_paste);
 // triggered Picker.
 ASH_EXPORT void TogglePicker(base::TimeTicks accelerator_timestamp);
 
+// Enables Select to Speak if the feature is currently disabled. Does nothing if
+// the feature is currently enabled.
+ASH_EXPORT void EnableSelectToSpeak();
+
 // Enables Dictation if the feature is currently disabled. Toggles (either
 // starts or stops) Dictation if the feature is currently enabled.
 ASH_EXPORT void EnableOrToggleDictation();
@@ -365,8 +372,13 @@ ASH_EXPORT void ToggleMessageCenterBubble();
 // restored.
 ASH_EXPORT bool ToggleMinimized();
 
+// Turns on or off Mouse Keys.
+ASH_EXPORT void ToggleMouseKeys();
+
 // Minimizes the topmost unminimized snap groups. If there is no such snap
 // group, restores the most recently used minimized snap group.
+// TODO(b/333772909): Remove this API when the mojom conversion is disabled for
+// deprecated shortcuts.
 ASH_EXPORT void ToggleSnapGroupsMinimize();
 
 // Turns the mirror mode on or off.

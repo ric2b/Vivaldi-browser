@@ -24,8 +24,8 @@
 namespace openscreen::cast {
 namespace {
 
-using ::cast::channel::CastMessage;
-using ::cast::channel::DeviceAuthMessage;
+using proto::CastMessage;
+using proto::DeviceAuthMessage;
 
 using ::testing::_;
 using ::testing::Invoke;
@@ -64,7 +64,7 @@ class DeviceAuthTest : public ::testing::Test {
       std::string output;
       DeviceAuthMessage auth_message;
       ASSERT_EQ(auth_challenge.payload_type(),
-                ::cast::channel::CastMessage_PayloadType_BINARY);
+                proto::CastMessage_PayloadType_BINARY);
       ASSERT_TRUE(
           auth_message.ParseFromString(auth_challenge.payload_binary()));
       ASSERT_TRUE(auth_message.has_challenge());
@@ -92,7 +92,7 @@ class DeviceAuthTest : public ::testing::Test {
       std::string output;
       DeviceAuthMessage auth_message;
       ASSERT_EQ(challenge_reply.payload_type(),
-                ::cast::channel::CastMessage_PayloadType_BINARY);
+                proto::CastMessage_PayloadType_BINARY);
       ASSERT_TRUE(
           auth_message.ParseFromString(challenge_reply.payload_binary()));
       ASSERT_TRUE(auth_message.has_response());

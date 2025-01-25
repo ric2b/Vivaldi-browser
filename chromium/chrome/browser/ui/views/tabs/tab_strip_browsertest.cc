@@ -21,8 +21,8 @@
 
 namespace {
 ui::MouseEvent GetDummyEvent() {
-  return ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::PointF(), gfx::PointF(),
-                        base::TimeTicks::Now(), 0, 0);
+  return ui::MouseEvent(ui::EventType::kMousePressed, gfx::PointF(),
+                        gfx::PointF(), base::TimeTicks::Now(), 0, 0);
 }
 }  // namespace
 
@@ -558,7 +558,13 @@ IN_PROC_BROWSER_TEST_F(TabStripBrowsertest, ShiftGroupLeft_Success) {
   EXPECT_EQ(expected, GetWebContentses());
 }
 
-IN_PROC_BROWSER_TEST_F(TabStripBrowsertest, ShiftGroupLeft_OtherGroup) {
+// TODO(crbug.com/353618704): Re-enable this test
+#if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER)
+#define MAYBE_ShiftGroupLeft_OtherGroup DISABLED_ShiftGroupLeft_OtherGroup
+#else
+#define MAYBE_ShiftGroupLeft_OtherGroup ShiftGroupLeft_OtherGroup
+#endif
+IN_PROC_BROWSER_TEST_F(TabStripBrowsertest, MAYBE_ShiftGroupLeft_OtherGroup) {
   ASSERT_TRUE(tab_strip_model()->SupportsTabGroups());
 
   AppendTab();
@@ -818,6 +824,45 @@ IN_PROC_BROWSER_TEST_F(TabStripBrowsertest,
 }
 
 IN_PROC_BROWSER_TEST_F(TabStripBrowsertest,
+                       CollapseGroup_WhenAddingActiveTab_ExpandsGroup) {
+  ASSERT_TRUE(tab_strip_model()->SupportsTabGroups());
+
+  AppendTab();
+
+  tab_groups::TabGroupId group = AddTabToNewGroup(0);
+  ASSERT_FALSE(tab_strip()->IsGroupCollapsed(group));
+  tab_strip()->ToggleTabGroupCollapsedState(group);
+
+  EXPECT_TRUE(tab_strip()->IsGroupCollapsed(group));
+  EXPECT_EQ(1, tab_strip()->GetActiveIndex());
+
+  tab_strip_model()->AddToExistingGroup({1}, group);
+  EXPECT_FALSE(tab_strip()->IsGroupCollapsed(group));
+  EXPECT_EQ(1, tab_strip()->GetActiveIndex());
+}
+
+IN_PROC_BROWSER_TEST_F(TabStripBrowsertest,
+                       CollapseGroup_WhenAddingInactiveTab_StaysCollapsed) {
+  ASSERT_TRUE(tab_strip_model()->SupportsTabGroups());
+
+  AppendTab();
+  AppendTab();
+
+  tab_groups::TabGroupId group = AddTabToNewGroup(0);
+
+  ASSERT_FALSE(tab_strip()->IsGroupCollapsed(group));
+  tab_strip()->ToggleTabGroupCollapsedState(group);
+
+  EXPECT_TRUE(tab_strip()->IsGroupCollapsed(group));
+  EXPECT_EQ(2, tab_strip()->GetActiveIndex());
+
+  tab_strip_model()->AddToExistingGroup({1}, group);
+
+  EXPECT_TRUE(tab_strip()->IsGroupCollapsed(group));
+  EXPECT_EQ(2, tab_strip()->GetActiveIndex());
+}
+
+IN_PROC_BROWSER_TEST_F(TabStripBrowsertest,
                        CollapseGroup_WithActiveTabInGroup_SelectsPrevious) {
   AppendTab();
 
@@ -856,7 +901,12 @@ IN_PROC_BROWSER_TEST_F(TabStripBrowsertest, CollapseGroup_CreatesNewTab) {
   tab_groups::TabGroupId group = AddTabToNewGroup(0);
   tab_strip_model()->AddToExistingGroup({1}, group);
   ASSERT_FALSE(tab_strip()->IsGroupCollapsed(group));
-  tab_strip()->ToggleTabGroupCollapsedState(group);
+
+  // Any origin other than kMenuAction will work here. At the time this was
+  // written, it was impossible to trigger this specific interaction (collapsing
+  // a group) from a context menu.
+  tab_strip()->ToggleTabGroupCollapsedState(
+      group, ToggleTabGroupCollapsedStateOrigin::kMouse);
   ASSERT_EQ(3, tab_strip_model()->count());
 
   EXPECT_TRUE(tab_strip()->IsGroupCollapsed(group));

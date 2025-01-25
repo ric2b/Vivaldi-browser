@@ -617,7 +617,7 @@ bool TestAXNodeWrapper::AccessibilityPerformAction(
 
       switch (GetRole()) {
         case ax::mojom::Role::kListBoxOption:
-        case ax::mojom::Role::kCell: {
+        case ax::mojom::Role::kGridCell: {
           bool current_value =
               GetBoolAttribute(ax::mojom::BoolAttribute::kSelected);
           ReplaceBoolAttribute(ax::mojom::BoolAttribute::kSelected,
@@ -846,7 +846,7 @@ std::u16string TestAXNodeWrapper::GetLocalizedStringForImageAnnotationStatus(
       return std::u16string();
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::u16string();
 }
 
@@ -885,7 +885,7 @@ TestAXNodeWrapper::GetSourceNodesForReverseRelations(
       tree_->GetReverseRelations(attr, GetData().id));
 }
 
-const ui::AXUniqueId& TestAXNodeWrapper::GetUniqueId() const {
+AXPlatformNodeId TestAXNodeWrapper::GetUniqueId() const {
   return unique_id_;
 }
 

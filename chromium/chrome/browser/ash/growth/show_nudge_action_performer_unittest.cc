@@ -11,47 +11,46 @@
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/ash/growth/campaigns_manager_client_impl.h"
 #include "chrome/browser/ash/growth/metrics.h"
-#include "chrome/browser/ash/growth/ui_action_performer.h"
+#include "chrome/browser/ash/growth/mock_ui_performer_observer.h"
+#include "chrome/test/base/testing_browser_process.h"
+#include "chrome/test/base/testing_profile_manager.h"
 #include "content/public/test/browser_task_environment.h"
-#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
 
 constexpr char kNudgePayloadTemplate[] = R"(
     {
+      "clearEvents": ["event"],
       "title": "title",
       "%s": "text"
     }
 )";
 
-class MockUiPerformerObserver : public UiActionPerformer::Observer {
- public:
-  // UiActionPerformer::Observer:
-  MOCK_METHOD(void, OnReadyToLogImpression, (int), (override));
-
-  MOCK_METHOD(void, OnDismissed, (int), (override));
-
-  MOCK_METHOD(void, OnButtonPressed, (int, CampaignButtonId, bool), (override));
-};
-
 }  // namespace
 
 class ShowNudgeActionPerformerTest : public testing::Test {
  public:
-  ShowNudgeActionPerformerTest() = default;
+  ShowNudgeActionPerformerTest()
+      : profile_manager_(std::make_unique<TestingProfileManager>(
+            TestingBrowserProcess::GetGlobal())) {}
   ShowNudgeActionPerformerTest(const ShowNudgeActionPerformerTest&) = delete;
   ShowNudgeActionPerformerTest& operator=(const ShowNudgeActionPerformerTest&) =
       delete;
   ~ShowNudgeActionPerformerTest() override = default;
 
   void SetUp() override {
+    ASSERT_TRUE(profile_manager_->SetUp());
     action_ = std::make_unique<ShowNudgeActionPerformer>();
     scoped_observation_.Observe(action_.get());
   }
 
-  void TearDown() override { scoped_observation_.Reset(); }
+  void TearDown() override {
+    scoped_observation_.Reset();
+    profile_manager_->DeleteAllTestingProfiles();
+  }
 
   ShowNudgeActionPerformer& action() { return *action_; }
 
@@ -92,6 +91,8 @@ class ShowNudgeActionPerformerTest : public testing::Test {
 
   base::ScopedObservation<UiActionPerformer, UiActionPerformer::Observer>
       scoped_observation_{&mock_observer_};
+  CampaignsManagerClientImpl client_;
+  std::unique_ptr<TestingProfileManager> profile_manager_;
 };
 
 TEST_F(ShowNudgeActionPerformerTest, TestValidPayloadParams) {
@@ -100,7 +101,7 @@ TEST_F(ShowNudgeActionPerformerTest, TestValidPayloadParams) {
   auto value = base::JSONReader::Read(validPayloadParam);
   ASSERT_TRUE(value.has_value());
   action().Run(
-      /*campaign_id=*/1, &value->GetDict(),
+      /*campaign_id=*/1, /*group_id=*/std::nullopt, &value->GetDict(),
       base::BindOnce(&ShowNudgeActionPerformerTest::RunActionPerformerCallback,
                      base::Unretained(this)));
 
@@ -112,7 +113,7 @@ TEST_F(ShowNudgeActionPerformerTest, TestInvalidPayloadParams) {
   auto value = base::JSONReader::Read(inValidOpenUrlParam);
   ASSERT_TRUE(value.has_value());
   action().Run(
-      /*campaign_id=*/1, &value->GetDict(),
+      /*campaign_id=*/1, /*group_id=*/std::nullopt, &value->GetDict(),
       base::BindOnce(&ShowNudgeActionPerformerTest::RunActionPerformerCallback,
                      base::Unretained(this)));
 
@@ -125,7 +126,7 @@ TEST_F(ShowNudgeActionPerformerTest, TestInvalidPayloadBody) {
   auto value = base::JSONReader::Read(inValidOpenUrlParam);
   ASSERT_TRUE(value.has_value());
   action().Run(
-      /*campaign_id=*/1, &value->GetDict(),
+      /*campaign_id=*/1, /*group_id=*/std::nullopt, &value->GetDict(),
       base::BindOnce(&ShowNudgeActionPerformerTest::RunActionPerformerCallback,
                      base::Unretained(this)));
 
@@ -139,11 +140,15 @@ TEST_F(ShowNudgeActionPerformerTest, ShouldCallOnReadyToLogImpression) {
   ASSERT_TRUE(value.has_value());
 
   int campaign_id = 100;
-  EXPECT_CALL(mock_observer_, OnReadyToLogImpression(testing::Eq(campaign_id)))
+  EXPECT_CALL(
+      mock_observer_,
+      OnReadyToLogImpression(testing::Eq(campaign_id),
+                             /*group_id=*/testing::_,
+                             /*should_log_cros_events=*/testing::Eq(false)))
       .Times(1);
 
   action().Run(
-      campaign_id, &value->GetDict(),
+      campaign_id, /*group_id=*/std::nullopt, &value->GetDict(),
       base::BindOnce(&ShowNudgeActionPerformerTest::RunActionPerformerCallback,
                      base::Unretained(this)));
 

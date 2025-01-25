@@ -262,6 +262,14 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
 // The item used to present the Password Manager widget promo.
 @property(nonatomic, readonly) InlinePromoItem* widgetPromoItem;
 
+// Deleting passwords updates the SavedPasswordsPresenter, resulting in an
+// observer callback, which handles general data updates with a `reloadData`.
+// Visually, it is better to handle user-initiated changes with more specific
+// actions such as inserting or removing items/sections, instead of waiting on a
+// data reload. This boolean is used to stop the observer callback from acting
+// on user-initiated changes.
+@property(nonatomic, readwrite, assign) BOOL deletionInProgress;
+
 @end
 
 @implementation PasswordManagerViewController {
@@ -278,6 +286,8 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
   // Boolean indicating if password forms have been received for the first time.
   // Used to show a loading indicator while waiting for the store response.
   BOOL _didReceivePasswords;
+  // Whether -viewDidAppear was called.
+  BOOL _hasViewAppeared;
   // Whether the table view is in search mode. That is, it only has the search
   // bar potentially saved passwords and blocked sites.
   BOOL _tableIsInSearchMode;
@@ -405,18 +415,8 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
 
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
-  if (_shouldOpenInSearchMode) {
-    // Queue search bar focus so the keyboard animation doesn't collide with
-    // other animations.
-    __weak __typeof(self.searchController.searchBar) weakSearchBar =
-        self.searchController.searchBar;
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(^{
-          [weakSearchBar becomeFirstResponder];
-        }));
-
-    _shouldOpenInSearchMode = NO;
-  }
+  _hasViewAppeared = YES;
+  [self maybeFocusSearchBar];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
@@ -451,20 +451,27 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
 }
 
 - (void)setEditing:(BOOL)editing animated:(BOOL)animated {
+  BOOL viewWasInEditMode = self.editing;
   [super setEditing:editing animated:animated];
+
+  // The UI needs to be updated only when we are switching between editing
+  // states (i.e. no-edit -> edit and edit -> no-edit). Updating the UI using
+  // batchUpdate (or equivalent) when the view is already in edit mode, causes
+  // the view to forcibly exit edit mode.
+  if (viewWasInEditMode == editing) {
+    return;
+  }
+
   [self setSearchBarEnabled:self.shouldEnableSearchBar];
   [self setWidgetPromoItemEnabled:!editing];
   [self updatePasswordCheckButtonWithState:self.passwordCheckState];
   [self updatePasswordCheckStatusLabelWithState:self.passwordCheckState];
-  [self reconfigurePasswordCheckSectionCellsWithState:self.passwordCheckState];
   [self setAddPasswordButtonEnabled:!editing];
-
-  //  We want to update the toolbar only if the current view is the Password
-  //  Manager.
   if ([self.navigationController.topViewController
           isKindOfClass:[PasswordManagerViewController class]]) {
     [self updateUIForEditState];
   }
+  [self reconfigurePasswordCheckSectionCellsWithState:self.passwordCheckState];
 }
 
 - (BOOL)hasPasswords {
@@ -876,6 +883,10 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
                blockedSites:
                    (const std::vector<password_manager::CredentialUIEntry>&)
                        blockedSites {
+  if (self.deletionInProgress) {
+    return;
+  }
+
   if (!_didReceivePasswords) {
     _blockedSites = blockedSites;
     _affiliatedGroups = affiliatedGroups;
@@ -902,6 +913,9 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
 
 - (void)updatePasswordManagerUI {
   if ([self shouldShowEmptyStateView]) {
+    // Force UI update, as setting table view's editing state to disabled might
+    // not update the UI.
+    [self updateUIForEditState];
     [self setEditing:NO animated:YES];
     [self reloadData];
     return;
@@ -1425,6 +1439,9 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
     [self focusAccessibilityOnPasswordCheckStatus];
     self.checkWasTriggeredManually = NO;
   }
+
+  // Apply the changes to the "Password Check" cell.
+  [self reconfigureCellsForItems:@[ self.passwordProblemsItem ]];
 }
 
 // Enables or disables the `widgetPromoItem`.
@@ -1479,6 +1496,8 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
 }
 
 - (void)deleteItemAtIndexPaths:(NSArray<NSIndexPath*>*)indexPaths {
+  self.deletionInProgress = YES;
+
   std::vector<password_manager::CredentialUIEntry> credentialsToDelete;
   for (NSIndexPath* indexPath in indexPaths) {
     // Only form items are editable.
@@ -1555,8 +1574,8 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
           [strongSelf reloadData];
         }
         [strongSelf updateUIForEditState];
+        strongSelf.deletionInProgress = NO;
       }];
-
   [self.delegate deleteCredentials:credentialsToDelete];
 }
 
@@ -1719,10 +1738,36 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
       password_manager::CreatePasswordManagerTitleView(/*title=*/self.title);
 }
 
+// Don't focus the searchBar before the view has loaded or if the empty state
+// view is displayed. It's possible for the view to load before the model or
+// vice versa.
+- (void)maybeFocusSearchBar {
+  if ([self shouldShowEmptyStateView]) {
+    return;
+  }
+
+  if (!_hasViewAppeared) {
+    return;
+  }
+
+  if (_shouldOpenInSearchMode) {
+    // Queue search bar focus so the keyboard animation doesn't collide with
+    // other animations.
+    __weak __typeof(self.searchController.searchBar) weakSearchBar =
+        self.searchController.searchBar;
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(^{
+          [weakSearchBar becomeFirstResponder];
+        }));
+
+    _shouldOpenInSearchMode = NO;
+  }
+}
+
 // Shows the empty state view when there is no content to display in the
 // tableView, otherwise hides the empty state view if one is being displayed.
 - (void)showOrHideEmptyView {
-  if (![self hasPasswords] && _blockedSites.empty()) {
+  if ([self shouldShowEmptyStateView]) {
     NSString* title =
         l10n_util::GetNSString(IDS_IOS_SETTINGS_PASSWORD_EMPTY_TITLE);
 
@@ -1768,6 +1813,7 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
     [self removeEmptyTableView];
     self.navigationItem.searchController = self.searchController;
     self.tableView.alwaysBounceVertical = YES;
+    [self maybeFocusSearchBar];
   }
 }
 
@@ -1979,7 +2025,7 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
     case ItemTypeLinkHeader:
     case ItemTypeHeader:
     case ItemTypeWidgetPromo:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }

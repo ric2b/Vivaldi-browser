@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/background_fetch/background_fetch_registration.h"
 
 #include <optional>
@@ -337,7 +342,7 @@ void BackgroundFetchRegistration::DidAbort(
       break;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 const String BackgroundFetchRegistration::result() const {
@@ -349,7 +354,7 @@ const String BackgroundFetchRegistration::result() const {
     case mojom::BackgroundFetchResult::UNSET:
       return "";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 const String BackgroundFetchRegistration::failureReason() const {
@@ -378,7 +383,7 @@ const String BackgroundFetchRegistration::failureReason() const {
     case mojom::BackgroundFetchFailureReason::DOWNLOAD_TOTAL_EXCEEDED:
       return "download-total-exceeded";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 bool BackgroundFetchRegistration::HasPendingActivity() const {

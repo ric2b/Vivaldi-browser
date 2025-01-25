@@ -10,16 +10,12 @@ import android.view.MenuItem;
 import android.view.View.OnClickListener;
 
 import androidx.annotation.IdRes;
-import androidx.annotation.Nullable;
 import androidx.appcompat.widget.Toolbar.OnMenuItemClickListener;
 import androidx.core.view.MenuCompat;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiState.BookmarkUiMode;
-import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.components.bookmarks.BookmarkId;
-import org.chromium.components.bookmarks.BookmarkItem;
-import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.browser_ui.util.ToolbarUtils;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
@@ -43,22 +39,18 @@ import org.chromium.chrome.browser.read_later.ReadingListUtils;
  */
 public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         implements OnMenuItemClickListener, OnClickListener {
-    // TODO(crbug.com/40898590): Remove BookmarkModel reference.
-    private BookmarkModel mBookmarkModel;
     private BookmarkOpener mBookmarkOpener;
     private SelectionDelegate<BookmarkId> mSelectionDelegate;
 
-    // The current folder can be null before being set by the mediator.
-    private @Nullable BookmarkItem mCurrentFolder;
-    private @BookmarkUiMode int mBookmarkUiMode;
-    private boolean mSoftKeyboardVisible;
-    // Whether the selection ui is currently showing. This isn't captured by an explicit
-    // BookmarkUiMode.
-    private boolean mIsSelectionUiShowing;
-    private boolean mSearchButtonVisible;
     private boolean mEditButtonVisible;
     private boolean mNewFolderButtonVisible;
     private boolean mNewFolderButtonEnabled;
+    private boolean mSelectionShowEdit;
+    private boolean mSelectionShowOpenInNewTab;
+    private boolean mSelectionShowOpenInIncognito;
+    private boolean mSelectionShowMove;
+    private boolean mSelectionShowMarkRead;
+    private boolean mSelectionShowMarkUnread;
 
     private List<Integer> mSortMenuIds;
     private boolean mSortMenuIdsEnabled;
@@ -74,9 +66,9 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
 
         @Override
         public void bookmarkModelChanged() {
-            boolean isReadingListFolder = mCurrentFolder != null &&
+            /*boolean isReadingListFolder = mCurrentFolder != null &&
                     mCurrentFolder.getId().equals(mBookmarkModel.getDefaultReadingListFolder());
-            setAddToReadingListButtonVisible(isReadingListFolder);
+            setAddToReadingListButtonVisible(isReadingListFolder);*/ // TODO CHR128: Check this
         }
     };
 
@@ -97,19 +89,9 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
 	    if (ChromeApplicationImpl.isVivaldi()) {
             getMenu().removeItem(R.id.normal_options_submenu);
             getMenu().findItem(R.id.add_page_to_reading_list_menu_id).setVisible(false);
-	        if (mCurrentFolder != null &&
-	                mCurrentFolder.getId().equals(mBookmarkModel.getTrashFolderId()))
-	            BookmarkUtils.setLastUsedParent(mCurrentFolder.getId());
 	    }
 
         setOnMenuItemClickListener(this);
-    }
-
-    void setBookmarkModel(BookmarkModel bookmarkModel) {
-        mBookmarkModel = bookmarkModel;
-        // Vivaldi
-        if (mBookmarkModel != null)
-            mBookmarkModel.addObserver(mVivaldiBookmarkModelObserver);
     }
 
     void setBookmarkOpener(BookmarkOpener bookmarkOpener) {
@@ -122,15 +104,12 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
     }
 
     void setBookmarkUiMode(@BookmarkUiMode int mode) {
-        mBookmarkUiMode = mode;
-        mIsSelectionUiShowing = false;
-        if (mBookmarkUiMode != BookmarkUiMode.LOADING) {
+        if (mode != BookmarkUiMode.LOADING) {
             showNormalView();
         }
     }
 
     void setSoftKeyboardVisible(boolean visible) {
-        mSoftKeyboardVisible = visible;
         if (!visible) hideKeyboard();
     }
 
@@ -172,6 +151,42 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         getMenu().findItem(R.id.create_new_folder_menu_id).setEnabled(enabled);
     }
 
+    void setSelectionShowEdit(boolean show) {
+        mSelectionShowEdit = show;
+        if (show) assert mIsSelectionEnabled;
+        getMenu().findItem(R.id.selection_mode_edit_menu_id).setVisible(show);
+    }
+
+    void setSelectionShowOpenInNewTab(boolean show) {
+        mSelectionShowOpenInNewTab = show;
+        if (show) assert mIsSelectionEnabled;
+        getMenu().findItem(R.id.selection_open_in_new_tab_id).setVisible(show);
+    }
+
+    void setSelectionShowOpenInIncognito(boolean show) {
+        mSelectionShowOpenInIncognito = show;
+        if (show) assert mIsSelectionEnabled;
+        getMenu().findItem(R.id.selection_open_in_incognito_tab_id).setVisible(show);
+    }
+
+    void setSelectionShowMove(boolean show) {
+        mSelectionShowMove = show;
+        if (show) assert mIsSelectionEnabled;
+        getMenu().findItem(R.id.selection_mode_move_menu_id).setVisible(show);
+    }
+
+    void setSelectionShowMarkRead(boolean show) {
+        mSelectionShowMarkRead = show;
+        if (show) assert mIsSelectionEnabled;
+        getMenu().findItem(R.id.reading_list_mark_as_read_id).setVisible(show);
+    }
+
+    void setSelectionShowMarkUnread(boolean show) {
+        mSelectionShowMarkUnread = show;
+        if (show) assert mIsSelectionEnabled;
+        getMenu().findItem(R.id.reading_list_mark_as_unread_id).setVisible(show);
+    }
+
     void setNavigationButtonState(@NavigationButton int navigationButtonState) {
         setNavigationButton(navigationButtonState);
     }
@@ -200,10 +215,6 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
     void setCheckedViewMenuId(@IdRes int id) {
         if (ChromeApplicationImpl.isVivaldi()) return;
         getMenu().findItem(id).setChecked(true);
-    }
-
-    void setCurrentFolder(BookmarkId folder) {
-        mCurrentFolder = mBookmarkModel.getBookmarkById(folder);
     }
 
     void setNavigateBackRunnable(Runnable navigateBackRunnable) {
@@ -243,109 +254,18 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         setNewFolderButtonVisible(mNewFolderButtonVisible);
         setNewFolderButtonEnabled(mNewFolderButtonEnabled);
         setSortMenuIdsEnabled(mSortMenuIdsEnabled);
-
-        if (mCurrentFolder!= null && mCurrentFolder.getId().getType() == BookmarkType.READING_LIST) {
-            setSortButtonVisible(false);
-        } else setAddToReadingListButtonVisible(false);
     }
 
     @Override
-    public void onSelectionStateChange(List<BookmarkId> selectedBookmarks) {
-        super.onSelectionStateChange(selectedBookmarks);
+    protected void showSelectionView(List<BookmarkId> selectedItems, boolean wasSelectionEnabled) {
+        super.showSelectionView(selectedItems, wasSelectionEnabled);
 
-        // The super class registers itself as a SelectionObserver before #setBookmarkModel.
-        // Return early if mBookmarkModel has not been set.
-        if (mBookmarkModel == null) return;
-
-        if (mIsSelectionEnabled) {
-            mIsSelectionUiShowing = true;
-            // Editing a bookmark action on multiple selected items doesn't make sense. So disable.
-            BookmarkId bookmarkId = selectedBookmarks.get(0);
-            if (ChromeApplicationImpl.isVivaldi() &&
-                    bookmarkId != null &&
-                    bookmarkId.getType() == BookmarkType.READING_LIST) {
-                getMenu()
-                        .findItem(R.id.selection_mode_edit_menu_id)
-                        .setVisible(false);
-            } else // End Vivaldi
-            getMenu()
-                    .findItem(R.id.selection_mode_edit_menu_id)
-                    .setVisible(selectedBookmarks.size() == 1);
-            getMenu()
-                    .findItem(R.id.selection_open_in_incognito_tab_id)
-                    .setVisible(IncognitoUtils.isIncognitoModeEnabled());
-
-            // It does not make sense to open a folder in new tab.
-            for (BookmarkId bookmark : selectedBookmarks) {
-                BookmarkItem item = mBookmarkModel.getBookmarkById(bookmark);
-                if (item != null && item.isFolder()) {
-                    getMenu().findItem(R.id.selection_open_in_new_tab_id).setVisible(false);
-                    getMenu().findItem(R.id.selection_open_in_incognito_tab_id).setVisible(false);
-                    break;
-                }
-            }
-
-            boolean hasPartnerBoomarkSelected = false;
-            // Partner bookmarks can't move, so if the selection includes a partner bookmark,
-            // disable the move button.
-            for (BookmarkId bookmark : selectedBookmarks) {
-                if (bookmark.getType() == BookmarkType.PARTNER) {
-                    hasPartnerBoomarkSelected = true;
-                    getMenu().findItem(R.id.selection_mode_move_menu_id).setVisible(false);
-                    break;
-                }
-            }
-
-            // Compute whether all selected bookmarks are reading list items and add up the number
-            // of read items.
-            int numReadingListItems = 0;
-            int numRead = 0;
-            for (int i = 0; i < selectedBookmarks.size(); i++) {
-                BookmarkId bookmark = selectedBookmarks.get(i);
-                BookmarkItem bookmarkItem = mBookmarkModel.getBookmarkById(bookmark);
-                if (bookmark.getType() == BookmarkType.READING_LIST) {
-                    numReadingListItems++;
-                    if (bookmarkItem.isRead()) numRead++;
-                }
-            }
-
-            // Don't show the move/edit buttons if there are also partner bookmarks selected since
-            // these bookmarks can't be moved or edited. If there are no reading list items
-            // selected, then use default behavior.
-            if (numReadingListItems > 0) {
-                if (ChromeApplicationImpl.isVivaldi()) {
-                    getMenu().findItem(R.id.selection_mode_move_menu_id).setVisible(false);
-                    getMenu()
-                            .findItem(R.id.selection_mode_edit_menu_id)
-                            .setVisible(false);
-                } else { // end Vivaldi
-                getMenu()
-                        .findItem(R.id.selection_mode_move_menu_id)
-                        .setVisible(!hasPartnerBoomarkSelected);
-                getMenu()
-                        .findItem(R.id.selection_mode_edit_menu_id)
-                        .setVisible(selectedBookmarks.size() == 1 && !hasPartnerBoomarkSelected);
-                }
-
-                getMenu().findItem(R.id.selection_open_in_new_tab_id).setVisible(true);
-                getMenu().findItem(R.id.selection_open_in_incognito_tab_id).setVisible(true);
-            }
-
-            // Only show the "mark as" options when all selections are reading list items and
-            // have the same read state.
-            boolean onlyReadingListSelected =
-                    selectedBookmarks.size() > 0 && numReadingListItems == selectedBookmarks.size();
-            getMenu()
-                    .findItem(R.id.reading_list_mark_as_read_id)
-                    .setVisible(onlyReadingListSelected && numRead == 0);
-            getMenu()
-                    .findItem(R.id.reading_list_mark_as_unread_id)
-                    .setVisible(onlyReadingListSelected && numRead == selectedBookmarks.size());
-        } else if (mIsSelectionUiShowing) {
-            // When selection isn't enabled (e.g. we just de-selected the last item) but the
-            // selection UI is still showing we want to revert to the previous known mode.
-            setBookmarkUiMode(mBookmarkUiMode);
-        }
+        setSelectionShowEdit(mSelectionShowEdit);
+        setSelectionShowOpenInNewTab(mSelectionShowOpenInNewTab);
+        setSelectionShowOpenInIncognito(mSelectionShowOpenInIncognito);
+        setSelectionShowMove(mSelectionShowMove);
+        setSelectionShowMarkRead(mSelectionShowMarkRead);
+        setSelectionShowMarkUnread(mSelectionShowMarkUnread);
     }
 
     /**
@@ -357,10 +277,11 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         if (activity.getActivityTab() == null) return false;
         if (!ReadingListUtils.isReadingListSupported(activity.getActivityTab().getUrl()))
             return false;
-        BookmarkId existingBookmark =
+        /*BookmarkId existingBookmark =
                 mBookmarkModel.getUserBookmarkIdForTab(activity.getActivityTab());
         if (existingBookmark == null) return true;
-        return existingBookmark.getType() != BookmarkType.READING_LIST;
+        return existingBookmark.getType() != BookmarkType.READING_LIST;*/ // TODO CHR128: Check this.
+        return false;
     }
 
     void setSortButtonVisible(boolean visible) {

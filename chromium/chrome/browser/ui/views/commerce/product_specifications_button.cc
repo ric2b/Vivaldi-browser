@@ -18,6 +18,7 @@
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/flex_layout.h"
 #include "ui/views/mouse_watcher_view_host.h"
 #include "ui/views/view_class_properties.h"
 
@@ -105,6 +106,8 @@ ProductSpecificationsButton::ProductSpecificationsButton(
 
   layout_manager->SetFlexForView(close_button_, 1);
 
+  SetLayoutManager(std::make_unique<views::FlexLayout>());
+
   UpdateColors();
 }
 
@@ -147,6 +150,10 @@ void ProductSpecificationsButton::AnimationProgressed(
 }
 
 void ProductSpecificationsButton::Show() {
+  // If the button is already showing, don't update locked expansion mode.
+  if (expansion_animation_.IsShowing()) {
+    return;
+  }
   if (locked_expansion_view_->IsMouseHovered()) {
     SetLockedExpansionMode(LockedExpansionMode::kWillShow);
   }
@@ -171,6 +178,10 @@ void ProductSpecificationsButton::ShowEntryPointWithTitle(
   Show();
 }
 
+void ProductSpecificationsButton::HideEntryPoint() {
+  Hide();
+}
+
 void ProductSpecificationsButton::SetOpacity(float factor) {
   label()->layer()->SetOpacity(factor);
   close_button_->layer()->SetOpacity(factor);
@@ -193,6 +204,10 @@ void ProductSpecificationsButton::ApplyAnimationValue(
 void ProductSpecificationsButton::ExecuteShow() {
   // If the tab strip already has a modal UI showing, exit early.
   if (!tab_strip_model_->CanShowModalUI()) {
+    return;
+  }
+  // Check if the entry point is still eligible for showing.
+  if (!entry_point_controller_->ShouldExecuteEntryPointShow()) {
     return;
   }
 

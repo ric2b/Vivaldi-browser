@@ -239,7 +239,7 @@ void DesktopWindowTreeHostLinux::DispatchEvent(ui::Event* event) {
     if (vivaldi::IsVivaldiRunning()) {
       // NOTE(espen@vivaldi.com): Support for page history navigation with
       // mouse. Ensure to release capture if present (VB-47254).
-      if (event->type() == ui::ET_MOUSE_RELEASED) {
+      if (event->type() == ui::kMouseReleased) {
         bool back_button_pressed =
             (located_event->AsMouseEvent()->changed_button_flags() ==
              ui::EF_BACK_MOUSE_BUTTON);

@@ -41,6 +41,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/gfx/vector_icon_types.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/view_class_properties.h"
 
 namespace {
@@ -81,7 +82,7 @@ PriceTrackingIconView::PriceTrackingIconView(
       icon_(&omnibox::kPriceTrackingDisabledRefreshIcon) {
   SetUpForInOutAnimation();
   SetProperty(views::kElementIdentifierKey, kPriceTrackingChipElementId);
-  SetAccessibilityProperties(
+  GetViewAccessibility().SetProperties(
       /*role*/ std::nullopt,
       l10n_util::GetStringUTF16(IDS_OMNIBOX_TRACK_PRICE));
 
@@ -235,20 +236,6 @@ void PriceTrackingIconView::EnablePriceTracking(bool enable) {
     base::RecordAction(
         base::UserMetricsAction("Commerce.PriceTracking.OmniboxChip.Tracked"));
     commerce::MaybeEnableEmailNotifications(profile_->GetPrefs());
-    if (!features::IsSidePanelPinningEnabled()) {
-      bool should_show_iph = browser_->window()->MaybeShowFeaturePromo(
-          feature_engagement::kIPHPriceTrackingInSidePanelFeature);
-      if (should_show_iph) {
-        SidePanelUI* side_panel_ui =
-            SidePanelUI::GetSidePanelUIForBrowser(browser_);
-        if (side_panel_ui) {
-          SidePanelRegistry* registry =
-              SidePanelCoordinator::GetGlobalSidePanelRegistry(browser_);
-          registry->SetActiveEntry(registry->GetEntryForKey(
-              SidePanelEntry::Key(SidePanelEntry::Id::kBookmarks)));
-        }
-      }
-    }
 
     commerce::metrics::RecordShoppingActionUKM(
         GetWebContents()->GetPrimaryMainFrame()->GetPageUkmSourceId(),
@@ -272,13 +259,13 @@ void PriceTrackingIconView::SetVisualState(bool enable) {
                    : &omnibox::kPriceTrackingDisabledRefreshIcon;
   // TODO(meiliang@): Confirm with UXW on the tooltip string. If this expected,
   // we can return label()->GetText() instead.
-  SetAccessibleName(l10n_util::GetStringUTF16(
-      enable ? IDS_OMNIBOX_TRACKING_PRICE : IDS_OMNIBOX_TRACK_PRICE));
+    GetViewAccessibility().SetName(l10n_util::GetStringUTF16(
+        enable ? IDS_OMNIBOX_TRACKING_PRICE : IDS_OMNIBOX_TRACK_PRICE));
 
-  SetLabel(l10n_util::GetStringUTF16(enable ? IDS_OMNIBOX_TRACKING_PRICE
-                                            : IDS_OMNIBOX_TRACK_PRICE));
-  SetPaintLabelOverSolidBackground(true);
-  UpdateIconImage();
+    SetLabel(l10n_util::GetStringUTF16(enable ? IDS_OMNIBOX_TRACKING_PRICE
+                                              : IDS_OMNIBOX_TRACK_PRICE));
+    SetBackgroundVisibility(BackgroundVisibility::kWithLabel);
+    UpdateIconImage();
 }
 
 void PriceTrackingIconView::OnPriceTrackingServerStateUpdated(bool success) {

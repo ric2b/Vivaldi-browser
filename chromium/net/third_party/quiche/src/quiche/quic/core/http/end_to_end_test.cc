@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <list>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <utility>
@@ -74,12 +77,12 @@
 #include "quiche/quic/tools/quic_server.h"
 #include "quiche/quic/tools/quic_simple_client_stream.h"
 #include "quiche/quic/tools/quic_simple_server_stream.h"
+#include "quiche/common/http/http_header_block.h"
 #include "quiche/common/platform/api/quiche_test.h"
 #include "quiche/common/quiche_stream.h"
 #include "quiche/common/test_tools/quiche_test_utils.h"
-#include "quiche/spdy/core/http2_header_block.h"
 
-using spdy::Http2HeaderBlock;
+using quiche::HttpHeaderBlock;
 using spdy::kV3LowestPriority;
 using spdy::SpdyFramer;
 using spdy::SpdySerializedFrame;
@@ -162,8 +165,8 @@ std::vector<TestParams> GetTestParams() {
                                       connection_id_length));
         }
       }  // End of outer version loop.
-    }    // End of congestion_control_tag loop.
-  }      // End of connection_id_length loop.
+    }  // End of congestion_control_tag loop.
+  }  // End of connection_id_length loop.
 
   // Only run every event loop implementation for one fixed configuration.
   for (QuicEventLoopFactory* event_loop : GetAllSupportedEventLoops()) {
@@ -180,7 +183,7 @@ std::vector<TestParams> GetTestParams() {
 void WriteHeadersOnStream(QuicSpdyStream* stream) {
   // Since QuicSpdyStream uses QuicHeaderList::empty() to detect too large
   // headers, it also fails when receiving empty headers.
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":authority"] = "test.example.com:443";
   headers[":path"] = "/path";
   headers[":method"] = "GET";
@@ -720,7 +723,8 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
 
   bool CheckResponseHeaders(QuicTestClient* client,
                             const std::string& expected_status) {
-    const spdy::Http2HeaderBlock* response_headers = client->response_headers();
+    const quiche::HttpHeaderBlock* response_headers =
+        client->response_headers();
     auto it = response_headers->find(":status");
     if (it == response_headers->end()) {
       ADD_FAILURE() << "Did not find :status header in response";
@@ -808,7 +812,7 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
       return nullptr;
     }
 
-    spdy::Http2HeaderBlock headers;
+    quiche::HttpHeaderBlock headers;
     headers[":scheme"] = "https";
     headers[":authority"] = "localhost";
     headers[":path"] = path;
@@ -914,6 +918,36 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
                 client_connection))) {
       client_->client()->WaitForEvents();
     }
+  }
+
+  // TODO(b/154162689) Remove this method once PSK support is added for
+  // QUIC+TLS.
+  void InitializeAndCheckForTlsPskFailure(bool expect_client_failure = true) {
+    connect_to_server_on_initialize_ = false;
+    EXPECT_TRUE(Initialize());
+
+    EXPECT_QUIC_BUG(
+        CreateClientWithWriter(),
+        expect_client_failure
+            ? "QUIC client pre-shared keys not yet supported with TLS"
+            : "QUIC server pre-shared keys not yet supported with TLS");
+
+    // Reset the client and server state so that `TearDown()` can complete
+    // successfully.
+    pre_shared_key_client_ = "";
+    pre_shared_key_server_ = "";
+
+    StopServer();
+    server_writer_ = new PacketDroppingTestWriter();
+    StartServer();
+
+    if (client_) {
+      // If `client_` is populated it means that the `CreateClientWithWriter()`
+      // call above ran in-process, in which case `client_` owns
+      // `client_writer_` and we need to create a new one.
+      client_writer_ = new PacketDroppingTestWriter();
+    }
+    CreateClientWithWriter();
   }
 
   quiche::test::ScopedEnvironmentForThreads environment_;
@@ -1351,7 +1385,7 @@ TEST_P(EndToEndTest, MixGoodAndBadConnectionIdLengths) {
 
   // Start client2 which will use a good connection ID length.
   std::unique_ptr<QuicTestClient> client2(CreateQuicClient(nullptr));
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -1452,7 +1486,7 @@ TEST_P(EndToEndTest, SeparateFinPacket) {
   ASSERT_TRUE(Initialize());
 
   // Send a request in two parts: the request and then an empty packet with FIN.
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -1495,7 +1529,7 @@ TEST_P(EndToEndTest, MultipleStreams) {
 
   const int kNumRequests = 10;
 
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -1516,7 +1550,7 @@ TEST_P(EndToEndTest, MultipleClients) {
   ASSERT_TRUE(Initialize());
   std::unique_ptr<QuicTestClient> client2(CreateQuicClient(nullptr));
 
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -1561,7 +1595,7 @@ TEST_P(EndToEndTest, PostMissingBytes) {
   ASSERT_TRUE(Initialize());
 
   // Add a content length header with no body.
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -1583,7 +1617,7 @@ TEST_P(EndToEndTest, LargePostNoPacketLoss) {
 
   // 1 MB body.
   std::string body(1024 * 1024, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -1605,7 +1639,7 @@ TEST_P(EndToEndTest, QUICHE_SLOW_TEST(LargePostNoPacketLoss1sRTT)) {
 
   // 100 KB body.
   std::string body(100 * 1024, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -1629,7 +1663,7 @@ TEST_P(EndToEndTest, LargePostWithPacketLoss) {
 
   // 10 KB body.
   std::string body(1024 * 10, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -1673,7 +1707,7 @@ TEST_P(EndToEndTest, LargePostWithPacketLossAndAlwaysBundleWindowUpdates) {
 
   // 10 KB body.
   std::string body(1024 * 10, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -1697,7 +1731,7 @@ TEST_P(EndToEndTest, LargePostWithPacketLossAndBlockedSocket) {
 
   // 10 KB body.
   std::string body(1024 * 10, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -1716,7 +1750,7 @@ TEST_P(EndToEndTest, LargePostNoPacketLossWithDelayAndReordering) {
 
   // 1 MB body.
   std::string body(1024 * 1024, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -1892,7 +1926,7 @@ TEST_P(EndToEndTest, LargePostZeroRTTFailure) {
   }
 
   std::string body(20480, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -2044,7 +2078,7 @@ TEST_P(EndToEndTest, LargePostSynchronousRequest) {
   ASSERT_TRUE(Initialize());
 
   std::string body(20480, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -2163,7 +2197,7 @@ TEST_P(EndToEndTest, PostZeroRTTRequestDuringHandshake) {
         EXPECT_TRUE(
             GetClientConnection()->framer().HasEncrypterOfEncryptionLevel(
                 ENCRYPTION_HANDSHAKE));
-        Http2HeaderBlock headers;
+        HttpHeaderBlock headers;
         headers[":method"] = "POST";
         headers[":path"] = "/foo";
         headers[":scheme"] = "https";
@@ -2288,7 +2322,7 @@ TEST_P(EndToEndTest, LargePostSmallBandwidthLargeBuffer) {
 
   // 1 MB body.
   std::string body(1024 * 1024, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -2346,7 +2380,7 @@ TEST_P(EndToEndTest, InvalidStream) {
   EXPECT_TRUE(client_->client()->WaitForOneRttKeysAvailable());
 
   std::string body(kMaxOutgoingPacketSize, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -2372,7 +2406,7 @@ TEST_P(EndToEndTest, LargeHeaders) {
   EXPECT_TRUE(client_->client()->WaitForOneRttKeysAvailable());
 
   std::string body(kMaxOutgoingPacketSize, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -2401,7 +2435,7 @@ TEST_P(EndToEndTest, EarlyResponseWithQuicStreamNoError) {
   EXPECT_TRUE(client_->client()->WaitForOneRttKeysAvailable());
 
   std::string large_body(1024 * 1024, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -2473,7 +2507,7 @@ TEST_P(EndToEndTest, MaxDynamicStreamsLimitRespected) {
   QuicSessionPeer::SetMaxOpenOutgoingStreams(client_session,
                                              kServerMaxStreams + 1);
 
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -2845,15 +2879,9 @@ TEST_P(EndToEndTest, StreamCancelErrorTest) {
       client_connection->GetStats().packets_sent;
 
   if (version_.UsesHttp3()) {
-    if (GetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data5)) {
-      // QPACK decoder instructions and RESET_STREAM and STOP_SENDING frames are
-      // sent in a single packet.
-      EXPECT_EQ(packets_sent_before + 1, packets_sent_now);
-    } else {
-      // Make sure 2 packets were sent, one for QPACK instructions, another for
-      // RESET_STREAM and STOP_SENDING.
-      EXPECT_EQ(packets_sent_before + 2, packets_sent_now);
-    }
+    // QPACK decoder instructions and RESET_STREAM and STOP_SENDING frames are
+    // sent in a single packet.
+    EXPECT_EQ(packets_sent_before + 1, packets_sent_now);
   }
 
   // WaitForEvents waits 50ms and returns true if there are outstanding
@@ -3028,7 +3056,6 @@ TEST_P(EndToEndTest,
     return;
   }
   override_client_connection_id_length_ = kQuicDefaultConnectionIdLength;
-  SetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data5, false);
   ASSERT_TRUE(Initialize());
   SendSynchronousFooRequestAndCheckResponse();
 
@@ -3037,6 +3064,19 @@ TEST_P(EndToEndTest,
       client_->client()->network_helper()->GetLatestClientAddress().host();
   QuicConnection* client_connection = GetClientConnection();
   ASSERT_TRUE(client_connection != nullptr);
+
+  {
+    QuicConnection::ScopedPacketFlusher flusher(client_connection);
+    if (client_connection->SupportsMultiplePacketNumberSpaces()) {
+      if (client_connection->received_packet_manager()
+              .GetEarliestAckTimeout()
+              .IsInitialized()) {
+        client_connection->SendAllPendingAcks();
+      }
+    } else {
+      client_connection->SendAck();
+    }
+  }
 
   // Migrate socket to a new IP address.
   QuicIpAddress host1 = TestLoopback(2);
@@ -3859,7 +3899,7 @@ class TestAckListener : public QuicAckListenerInterface {
 class TestResponseListener : public QuicSpdyClientBase::ResponseListener {
  public:
   void OnCompleteResponse(QuicStreamId id,
-                          const Http2HeaderBlock& response_headers,
+                          const HttpHeaderBlock& response_headers,
                           absl::string_view response_body) override {
     QUIC_DVLOG(1) << "response for stream " << id << " "
                   << response_headers.DebugString() << "\n"
@@ -3911,7 +3951,7 @@ TEST_P(EndToEndTest, AckNotifierWithPacketLossAndBlockedSocket) {
   }
 
   // Create a POST request and send the headers only.
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -4373,7 +4413,7 @@ TEST_P(EndToEndTest, CanceledStreamDoesNotBecomeZombie) {
   EXPECT_TRUE(client_->client()->WaitForOneRttKeysAvailable());
   // Lose the request.
   SetPacketLossPercentage(100);
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -4405,7 +4445,7 @@ class ServerStreamWithErrorResponseBody : public QuicSimpleServerStream {
  protected:
   void SendErrorResponse() override {
     QUIC_DLOG(INFO) << "Sending error response for stream " << id();
-    Http2HeaderBlock headers;
+    HttpHeaderBlock headers;
     headers[":status"] = "500";
     headers["content-length"] = absl::StrCat(response_body_.size());
     // This method must call CloseReadSide to cause the test case, StopReading
@@ -4638,7 +4678,7 @@ TEST_P(EndToEndTest, EarlyResponseFinRecording) {
   // and before the body is received, due to invalid content-length.
   // Set an invalid content-length, so the request will receive an early 500
   // response.
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/garbage";
   headers[":scheme"] = "https";
@@ -4687,11 +4727,11 @@ TEST_P(EndToEndTest, Trailers) {
   // Add a response with headers, body, and trailers.
   const std::string kBody = "body content";
 
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":status"] = "200";
   headers["content-length"] = absl::StrCat(kBody.size());
 
-  Http2HeaderBlock trailers;
+  HttpHeaderBlock trailers;
   trailers["some-trailing-header"] = "trailing-header-value";
 
   memory_cache_backend_.AddResponse(server_hostname_, "/trailer_url",
@@ -4721,7 +4761,7 @@ TEST_P(EndToEndTest, DISABLED_TestHugePostWithPacketLoss) {
   ASSERT_LT(INT64_C(4294967296), request_body_size_bytes);
   std::string body(kSizeBytes, 'a');
 
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -4799,7 +4839,7 @@ TEST_P(EndToEndTest, ReleaseHeadersStreamBufferWhenIdle) {
 TEST_P(EndToEndTest, WayTooLongRequestHeaders) {
   ASSERT_TRUE(Initialize());
 
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "GET";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -4849,7 +4889,7 @@ TEST_P(EndToEndTest, WindowUpdateInAck) {
   client_connection->set_debug_visitor(&observer);
   // 100KB body.
   std::string body(100 * 1024, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -4968,7 +5008,7 @@ TEST_P(EndToEndTest, DoNotCrashOnPacketWriteError) {
 
   // 1 MB body.
   std::string body(1024 * 1024, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -5007,8 +5047,7 @@ TEST_P(EndToEndTest, PreSharedKey) {
 
   if (version_.UsesTls()) {
     // TODO(b/154162689) add PSK support to QUIC+TLS.
-    EXPECT_QUIC_BUG(EXPECT_FALSE(Initialize()),
-                    "QUIC client pre-shared keys not yet supported with TLS");
+    InitializeAndCheckForTlsPskFailure();
     return;
   }
 
@@ -5028,8 +5067,7 @@ TEST_P(EndToEndTest, QUIC_TEST_DISABLED_IN_CHROME(PreSharedKeyMismatch)) {
 
   if (version_.UsesTls()) {
     // TODO(b/154162689) add PSK support to QUIC+TLS.
-    EXPECT_QUIC_BUG(EXPECT_FALSE(Initialize()),
-                    "QUIC client pre-shared keys not yet supported with TLS");
+    InitializeAndCheckForTlsPskFailure();
     return;
   }
 
@@ -5053,8 +5091,7 @@ TEST_P(EndToEndTest, QUIC_TEST_DISABLED_IN_CHROME(PreSharedKeyNoClient)) {
 
   if (version_.UsesTls()) {
     // TODO(b/154162689) add PSK support to QUIC+TLS.
-    EXPECT_QUIC_BUG(EXPECT_FALSE(Initialize()),
-                    "QUIC server pre-shared keys not yet supported with TLS");
+    InitializeAndCheckForTlsPskFailure(/*expect_client_failure=*/false);
     return;
   }
 
@@ -5072,8 +5109,7 @@ TEST_P(EndToEndTest, QUIC_TEST_DISABLED_IN_CHROME(PreSharedKeyNoServer)) {
 
   if (version_.UsesTls()) {
     // TODO(b/154162689) add PSK support to QUIC+TLS.
-    EXPECT_QUIC_BUG(EXPECT_FALSE(Initialize()),
-                    "QUIC client pre-shared keys not yet supported with TLS");
+    InitializeAndCheckForTlsPskFailure();
     return;
   }
 
@@ -5088,7 +5124,7 @@ TEST_P(EndToEndTest, RequestAndStreamRstInOnePacket) {
   // INCOMPLETE_RESPONSE will cause the server to not to send the trailer
   // (and the FIN) after the response body.
   std::string response_body(1305, 'a');
-  Http2HeaderBlock response_headers;
+  HttpHeaderBlock response_headers;
   response_headers[":status"] = absl::StrCat(200);
   response_headers["content-length"] = absl::StrCat(response_body.length());
   memory_cache_backend_.AddSpecialResponse(
@@ -5428,7 +5464,7 @@ TEST_P(EndToEndTest, ClientPortMigrationOnPathDegrading) {
   ASSERT_TRUE(client_->client()->WaitForHandshakeConfirmed());
   QuicConnection* client_connection = GetClientConnection();
   QuicSocketAddress original_self_addr = client_connection->self_address();
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/bar";
   headers[":scheme"] = "https";
@@ -5465,6 +5501,60 @@ TEST_P(EndToEndTest, ClientPortMigrationOnPathDegrading) {
   EXPECT_EQ(2u, GetClientConnection()->GetStats().num_path_response_received);
   // It should take fewer PTOs to trigger port migration than the default(4).
   EXPECT_GT(pto_count + 4, GetClientConnection()->GetStats().pto_count);
+}
+
+TEST_P(EndToEndTest, ClientLimitPortMigrationOnPathDegrading) {
+  connect_to_server_on_initialize_ = false;
+  Initialize();
+  if (!version_.HasIetfQuicFrames()) {
+    CreateClientWithWriter();
+    return;
+  }
+  const uint32_t max_num_path_degrading_to_mitigate =
+      GetQuicFlag(quic_max_num_path_degrading_to_mitigate);
+
+  delete client_writer_;
+  client_.reset(EndToEndTest::CreateQuicClient(nullptr));
+  client_->client()->EnablePortMigrationUponPathDegrading(std::nullopt);
+  ASSERT_TRUE(client_->client()->WaitForHandshakeConfirmed());
+  QuicConnection* client_connection = GetClientConnection();
+  HttpHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/bar";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
+  // Manually trigger path degrading 5 times and expect they should all trigger
+  // port migration.
+  for (uint32_t i = 0; i < max_num_path_degrading_to_mitigate; ++i) {
+    client_->SendMessage(headers, "aaaa", false);
+    QuicSocketAddress original_self_addr = client_connection->self_address();
+    WaitForNewConnectionIds();
+    client_connection->OnPathDegradingDetected();
+    client_->SendData("bbbb", true);
+    client_->WaitForResponse();
+    while (client_->client()->HasPendingPathValidation()) {
+      client_->client()->WaitForEvents();
+    }
+    QuicSocketAddress new_self_addr = client_connection->self_address();
+    EXPECT_NE(original_self_addr, new_self_addr);
+  }
+
+  EXPECT_EQ(max_num_path_degrading_to_mitigate,
+            GetClientConnection()->GetStats().num_path_degrading);
+  EXPECT_EQ(max_num_path_degrading_to_mitigate,
+            GetClientConnection()->GetStats().num_path_response_received);
+
+  // The next path degrading shouldn't trigger port migration.
+  WaitForNewConnectionIds();
+  QuicSocketAddress original_self_addr = client_connection->self_address();
+  client_connection->OnPathDegradingDetected();
+  EXPECT_FALSE(client_->client()->HasPendingPathValidation());
+  client_->SendSynchronousRequest("/eep");
+  EXPECT_EQ(original_self_addr, client_connection->self_address());
+  EXPECT_EQ(max_num_path_degrading_to_mitigate + 1,
+            GetClientConnection()->GetStats().num_path_degrading);
+  EXPECT_EQ(max_num_path_degrading_to_mitigate,
+            GetClientConnection()->GetStats().num_path_response_received);
 }
 
 TEST_P(EndToEndTest, ClientMultiPortMigrationOnPathDegrading) {
@@ -5909,7 +5999,7 @@ TEST_P(EndToEndPacketReorderingTest, Buffer0RttRequest) {
   client_->client()->Initialize();
 
   // Send a request before handshake finishes.
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/bar";
   headers[":scheme"] = "https";
@@ -5929,7 +6019,7 @@ TEST_P(EndToEndTest, SimpleStopSendingRstStreamTest) {
   ASSERT_TRUE(Initialize());
 
   // Send a request without a fin, to keep the stream open
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -6104,7 +6194,7 @@ TEST_P(EndToEndTest, TooBigStreamIdClosesConnection) {
   EXPECT_TRUE(client_->client()->WaitForOneRttKeysAvailable());
 
   std::string body(kMaxOutgoingPacketSize, 'a');
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":method"] = "POST";
   headers[":path"] = "/foo";
   headers[":scheme"] = "https";
@@ -6599,7 +6689,7 @@ TEST_P(EndToEndTest, WebTransportSessionSetupWithEchoWithSuffix) {
   EXPECT_TRUE(server_session->GetWebTransportSession(web_transport->id()) !=
               nullptr);
   server_thread_->Resume();
-  const spdy::Http2HeaderBlock* response_headers = client_->response_headers();
+  const quiche::HttpHeaderBlock* response_headers = client_->response_headers();
   auto it = response_headers->find("bar");
   EXPECT_NE(it, response_headers->end());
   EXPECT_EQ(it->second, "baz");
@@ -7147,7 +7237,7 @@ TEST_P(EndToEndTest, InvalidExtendedConnect) {
     return;
   }
   // Missing :path header.
-  spdy::Http2HeaderBlock headers;
+  quiche::HttpHeaderBlock headers;
   headers[":scheme"] = "https";
   headers[":authority"] = "localhost";
   headers[":method"] = "CONNECT";
@@ -7169,7 +7259,7 @@ TEST_P(EndToEndTest, RejectExtendedConnect) {
     return;
   }
   // This extended CONNECT should be rejected.
-  spdy::Http2HeaderBlock headers;
+  quiche::HttpHeaderBlock headers;
   headers[":scheme"] = "https";
   headers[":authority"] = "localhost";
   headers[":method"] = "CONNECT";
@@ -7181,7 +7271,7 @@ TEST_P(EndToEndTest, RejectExtendedConnect) {
   CheckResponseHeaders("400");
 
   // Vanilla CONNECT should be sent to backend.
-  spdy::Http2HeaderBlock headers2;
+  quiche::HttpHeaderBlock headers2;
   headers2[":authority"] = "localhost";
   headers2[":method"] = "CONNECT";
 
@@ -7196,7 +7286,7 @@ TEST_P(EndToEndTest, RejectInvalidRequestHeader) {
   SetQuicReloadableFlag(quic_act_upon_invalid_header, true);
   ASSERT_TRUE(Initialize());
 
-  spdy::Http2HeaderBlock headers;
+  quiche::HttpHeaderBlock headers;
   headers[":scheme"] = "https";
   headers[":authority"] = "localhost";
   headers[":method"] = "GET";
@@ -7214,11 +7304,11 @@ TEST_P(EndToEndTest, RejectTransferEncodingResponse) {
   ASSERT_TRUE(Initialize());
 
   // Add a response with transfer-encoding headers.
-  Http2HeaderBlock headers;
+  HttpHeaderBlock headers;
   headers[":status"] = "200";
   headers["transfer-encoding"] = "gzip";
 
-  Http2HeaderBlock trailers;
+  HttpHeaderBlock trailers;
   trailers["some-trailing-header"] = "trailing-header-value";
 
   memory_cache_backend_.AddResponse(server_hostname_, "/eep",
@@ -7233,7 +7323,7 @@ TEST_P(EndToEndTest, RejectUpperCaseRequest) {
   SetQuicReloadableFlag(quic_act_upon_invalid_header, true);
   ASSERT_TRUE(Initialize());
 
-  spdy::Http2HeaderBlock headers;
+  quiche::HttpHeaderBlock headers;
   headers[":scheme"] = "https";
   headers[":authority"] = "localhost";
   headers[":method"] = "GET";
@@ -7249,7 +7339,7 @@ TEST_P(EndToEndTest, RejectRequestWithInvalidToken) {
   SetQuicReloadableFlag(quic_act_upon_invalid_header, true);
   ASSERT_TRUE(Initialize());
 
-  spdy::Http2HeaderBlock headers;
+  quiche::HttpHeaderBlock headers;
   headers[":scheme"] = "https";
   headers[":authority"] = "localhost";
   headers[":method"] = "GET";

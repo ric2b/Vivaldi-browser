@@ -61,17 +61,16 @@ namespace password_manager_util {
 namespace {
 
 std::tuple<int, base::Time, int> GetPriorityProperties(
-    const PasswordForm* form) {
-  return std::make_tuple(-static_cast<int>(GetMatchType(*form)),
-                         form->date_last_used,
-                         static_cast<int>(form->in_store));
+    const PasswordForm& form) {
+  return std::make_tuple(-static_cast<int>(GetMatchType(form)),
+                         form.date_last_used, static_cast<int>(form.in_store));
 }
 
 // Consider the following properties:
 // 1. Match strength for the original form (Exact > Affiliations > PSL).
 // 2. Last time used. Most recent is better.
 // 3. Account vs. profile store. Account is better.
-bool IsBetterMatch(const PasswordForm* lhs, const PasswordForm* rhs) {
+bool IsBetterMatch(const PasswordForm& lhs, const PasswordForm& rhs) {
   return GetPriorityProperties(lhs) > GetPriorityProperties(rhs);
 }
 
@@ -111,8 +110,9 @@ bool ShowAllSavedPasswordsContextMenuEnabled(
     password_manager::PasswordManagerDriver* driver) {
   password_manager::PasswordManagerInterface* password_manager =
       driver ? driver->GetPasswordManager() : nullptr;
-  if (!password_manager)
+  if (!password_manager) {
     return false;
+  }
 
   password_manager::PasswordManagerClient* client =
       password_manager->GetClient();
@@ -160,7 +160,8 @@ void UserTriggeredManualGenerationFromContextMenu(
 bool IsAbleToSavePasswords(password_manager::PasswordManagerClient* client) {
 #if BUILDFLAG(IS_ANDROID)
   if (password_manager::UsesSplitStoresAndUPMForLocal(client->GetPrefs()) &&
-      IsSyncFeatureEnabledIncludingPasswords(client->GetSyncService())) {
+      password_manager::sync_util::HasChosenToSyncPasswords(
+          client->GetSyncService())) {
     // After store split on Android, AccountPasswordStore is a default store for
     // saving passwords when sync is enabled. If either of conditions above is
     // not satisfied fallback to ProfilePasswordStore.
@@ -207,60 +208,42 @@ GetLoginMatchType GetMatchType(const password_manager::PasswordForm& form) {
   NOTREACHED_NORETURN();
 }
 
-std::vector<PasswordForm> FindBestMatches(
-    const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>&
-        non_federated_matches,
-    PasswordForm::Scheme scheme,
-    std::vector<raw_ptr<const PasswordForm, VectorExperimental>>*
-        non_federated_same_scheme) {
-  CHECK(base::ranges::none_of(non_federated_matches,
-                              &PasswordForm::blocked_by_user));
-  CHECK(non_federated_same_scheme);
+std::vector<PasswordForm> FindBestMatches(base::span<PasswordForm> matches) {
+  CHECK(base::ranges::none_of(matches, &PasswordForm::blocked_by_user));
+
+  base::ranges::sort(matches, IsBetterMatch, {});
 
   std::vector<PasswordForm> best_matches;
-  non_federated_same_scheme->clear();
-
-  for (const password_manager::PasswordForm* match : non_federated_matches) {
-    if (match->scheme == scheme)
-      non_federated_same_scheme->push_back(match);
-  }
-
-  if (non_federated_same_scheme->empty())
-    return best_matches;
-
-  std::sort(non_federated_same_scheme->begin(),
-            non_federated_same_scheme->end(), IsBetterMatch);
 
   // Map from usernames to the best matching password forms.
-  std::map<std::u16string, std::vector<const PasswordForm*>>
-      matches_per_username;
-  for (const PasswordForm* match : *non_federated_same_scheme) {
-    auto it = matches_per_username.find(match->username_value);
+  std::map<std::u16string, std::vector<PasswordForm>> matches_per_username;
+  for (auto& match : matches) {
+    auto it = matches_per_username.find(match.username_value);
     // The first match for |username_value| in the sorted array is best
     // match.
     if (it == matches_per_username.end()) {
-      matches_per_username[match->username_value] = {match};
-      best_matches.push_back(*match);
+      matches_per_username[match.username_value] = {match};
+      best_matches.push_back(match);
     } else {
       // Insert another credential only if the store is different as well as the
       // password value.
-      if (base::Contains(it->second, match->in_store,
-                         [](const auto* form) { return form->in_store; })) {
+      if (base::Contains(it->second, match.in_store,
+                         [](const auto& form) { return form.in_store; })) {
         continue;
       };
       // If 2 credential have the same password and the same username, update
       // the in_store value in the best matches.
       auto duplicate_match_it = base::ranges::find_if(
           best_matches, [&match](const PasswordForm& form) {
-            return match->username_value == form.username_value &&
-                   match->password_value == form.password_value;
+            return match.username_value == form.username_value &&
+                   match.password_value == form.password_value;
           });
       if (duplicate_match_it != best_matches.end()) {
         duplicate_match_it->in_store =
-            duplicate_match_it->in_store | match->in_store;
+            duplicate_match_it->in_store | match.in_store;
         continue;
       }
-      best_matches.push_back(*match);
+      best_matches.push_back(match);
       it->second.push_back(match);
     }
   }
@@ -295,16 +278,18 @@ const PasswordForm* GetMatchForUpdating(
     bool username_updated_in_bubble) {
   // This is the case for the credential management API. It should not depend on
   // form managers. Once that's the case, this should be turned into a DCHECK.
-  // TODO(crbug.com/40620575): turn it into a DCHECK.
-  if (!submitted_form.federation_origin.opaque())
+  // TODO(crbug/40620575): turn it into a DCHECK.
+  if (submitted_form.IsFederatedCredential()) {
     return nullptr;
+  }
 
   // Try to return form with matching |username_value|.
   const PasswordForm* username_match =
       FindFormByUsername(credentials, submitted_form.username_value);
   if (username_match) {
-    if (GetMatchType(*username_match) != GetLoginMatchType::kPSL)
+    if (GetMatchType(*username_match) != GetLoginMatchType::kPSL) {
       return username_match;
+    }
 
     const auto& password_to_save = submitted_form.new_password_value.empty()
                                        ? submitted_form.password_value
@@ -330,15 +315,17 @@ const PasswordForm* GetMatchForUpdating(
   }
 
   for (const PasswordForm* stored_match : credentials) {
-    if (stored_match->password_value == submitted_form.password_value)
+    if (stored_match->password_value == submitted_form.password_value) {
       return stored_match;
+    }
   }
 
   // If the user manually changed the username value: consider this at this
   // point of the heuristic a new credential (didn't match other
   // passwords/usernames).
-  if (username_updated_in_bubble)
+  if (username_updated_in_bubble) {
     return nullptr;
+  }
 
   // Last try. The submitted form had no username but a password. Assume that
   // it's an existing credential.
@@ -447,6 +434,10 @@ bool IsUppercaseLetter(char16_t c) {
 }
 
 bool IsSpecialSymbol(char16_t c) {
+  // The static assert is intended to ensure that the underlying type of
+  // `kSpecialSymbols` does not become a char. If that happened, the call to
+  // `base::Contains` would lead to (silent) overflow.
+  static_assert(sizeof(decltype(kSpecialSymbols)::value_type) == sizeof(c));
   return base::Contains(kSpecialSymbols, c);
 }
 

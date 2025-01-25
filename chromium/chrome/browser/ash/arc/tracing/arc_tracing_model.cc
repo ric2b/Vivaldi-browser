@@ -10,7 +10,6 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/trace_event/common/trace_event_common.h"
 #include "chrome/browser/ash/arc/tracing/arc_tracing_event.h"
@@ -515,7 +514,7 @@ bool ArcTracingModel::ProcessEvent(base::Value::List* events) {
         }
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return false;
     }
   }

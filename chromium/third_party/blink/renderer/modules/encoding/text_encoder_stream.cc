@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/encoding/text_encoder_stream.h"
 
 #include <stdint.h>
@@ -43,7 +48,7 @@ class TextEncoderStream::Transformer final : public TransformStreamTransformer {
       ExceptionState& exception_state) override {
     V8StringResource<> input_resource{script_state_->GetIsolate(), chunk};
     if (!input_resource.Prepare(exception_state)) {
-      return ScriptPromise<IDLUndefined>();
+      return EmptyPromise();
     }
     const String input = input_resource;
     if (input.empty())

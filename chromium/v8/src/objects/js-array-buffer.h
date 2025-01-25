@@ -5,6 +5,7 @@
 #ifndef V8_OBJECTS_JS_ARRAY_BUFFER_H_
 #define V8_OBJECTS_JS_ARRAY_BUFFER_H_
 
+#include "include/v8-array-buffer.h"
 #include "include/v8-typed-array.h"
 #include "src/handles/maybe-handles.h"
 #include "src/objects/backing-store.h"
@@ -111,7 +112,7 @@ class JSArrayBuffer
   // is used by the implementation of Wasm memory growth in order to bypass the
   // non-detachable check.
   V8_EXPORT_PRIVATE V8_WARN_UNUSED_RESULT static Maybe<bool> Detach(
-      Handle<JSArrayBuffer> buffer, bool force_for_wasm_memory = false,
+      DirectHandle<JSArrayBuffer> buffer, bool force_for_wasm_memory = false,
       Handle<Object> key = Handle<Object>());
 
   // Get a reference to backing store of this array buffer, if there is a
@@ -130,7 +131,7 @@ class JSArrayBuffer
 
   // Allocates an ArrayBufferExtension for this array buffer, unless it is
   // already associated with an extension.
-  ArrayBufferExtension* EnsureExtension();
+  V8_EXPORT_PRIVATE ArrayBufferExtension* EnsureExtension();
 
   // Frees the associated ArrayBufferExtension and returns its backing store.
   std::shared_ptr<BackingStore> RemoveExtension();
@@ -155,9 +156,11 @@ class JSArrayBuffer
   DECL_PRINTER(JSArrayBuffer)
   DECL_VERIFIER(JSArrayBuffer)
 
-  static const int kSizeWithEmbedderFields =
+  static constexpr int kSizeWithEmbedderFields =
       kHeaderSize +
       v8::ArrayBuffer::kEmbedderFieldCount * kEmbedderDataSlotSize;
+  static constexpr bool kContainsEmbedderFields =
+      v8::ArrayBuffer::kEmbedderFieldCount > 0;
 
   class BodyDescriptor;
 
@@ -190,6 +193,8 @@ class ArrayBufferExtension final
     : public Malloced {
 #endif  // V8_COMPRESS_POINTERS
  public:
+  enum class Age : uint8_t { kYoung, kOld };
+
   ArrayBufferExtension() : backing_store_(std::shared_ptr<BackingStore>()) {}
   explicit ArrayBufferExtension(std::shared_ptr<BackingStore> backing_store)
       : backing_store_(backing_store) {}
@@ -233,9 +238,13 @@ class ArrayBufferExtension final
   ArrayBufferExtension* next() const { return next_; }
   void set_next(ArrayBufferExtension* extension) { next_ = extension; }
 
+  Age age() const { return age_; }
+  void set_age(Age age) { age_ = age; }
+
  private:
   enum class GcState : uint8_t { Dead = 0, Copied, Promoted };
 
+  Age age_ = Age::kOld;
   std::atomic<bool> marked_{false};
   std::atomic<GcState> young_gc_state_{GcState::Dead};
   std::shared_ptr<BackingStore> backing_store_;
@@ -374,9 +383,11 @@ class JSTypedArray
   // static_assert(IsAligned(kLengthOffset, kTaggedSize));
   // static_assert(IsAligned(kExternalPointerOffset, kTaggedSize));
 
-  static const int kSizeWithEmbedderFields =
+  static constexpr int kSizeWithEmbedderFields =
       kHeaderSize +
       v8::ArrayBufferView::kEmbedderFieldCount * kEmbedderDataSlotSize;
+  static constexpr bool kContainsEmbedderFields =
+      v8::ArrayBufferView::kEmbedderFieldCount > 0;
 
   class BodyDescriptor;
 
@@ -417,9 +428,11 @@ class JSDataViewOrRabGsabDataView
   // TODO(v8:9287): Re-enable when GCMole stops mixing 32/64 bit configs.
   // static_assert(IsAligned(kDataPointerOffset, kTaggedSize));
 
-  static const int kSizeWithEmbedderFields =
+  static constexpr int kSizeWithEmbedderFields =
       kHeaderSize +
       v8::ArrayBufferView::kEmbedderFieldCount * kEmbedderDataSlotSize;
+  static constexpr bool kContainsEmbedderFields =
+      v8::ArrayBufferView::kEmbedderFieldCount > 0;
 
   class BodyDescriptor;
 

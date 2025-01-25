@@ -13,10 +13,12 @@ namespace {
 
 constexpr int64_t kModelVersion = 1;
 constexpr size_t kOutputSize = 768ul;
+constexpr size_t kMockPassageWordCount = 10;
 
 Embedding ComputeEmbeddingForPassage(const std::string& passage) {
   Embedding embedding(std::vector<float>(kOutputSize, 1.0f));
   embedding.Normalize();
+  embedding.SetPassageWordCount(kMockPassageWordCount);
   return embedding;
 }
 
@@ -37,7 +39,8 @@ void MockEmbedder::ComputePassagesEmbeddings(
     ComputePassagesEmbeddingsCallback callback) {
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), std::move(passages),
-                                ComputeEmbeddingsForPassages(passages)));
+                                ComputeEmbeddingsForPassages(passages),
+                                ComputeEmbeddingsStatus::SUCCESS));
 }
 
 void MockEmbedder::SetOnEmbedderReady(OnEmbedderReadyCallback callback) {

@@ -45,12 +45,12 @@
 #include "cc/test/fake_frame_info.h"
 #include "cc/test/fake_layer_tree_host_client.h"
 #include "cc/test/fake_paint_image_generator.h"
-#include "cc/test/fake_painted_scrollbar_layer.h"
 #include "cc/test/fake_picture_layer.h"
 #include "cc/test/fake_picture_layer_impl.h"
 #include "cc/test/fake_proxy.h"
 #include "cc/test/fake_recording_source.h"
 #include "cc/test/fake_scoped_ui_resource.h"
+#include "cc/test/fake_scrollbar_layer.h"
 #include "cc/test/fake_video_frame_provider.h"
 #include "cc/test/layer_test_common.h"
 #include "cc/test/layer_tree_test.h"
@@ -835,7 +835,7 @@ class LayerTreeHostTestSetNeedsCommit2 : public LayerTreeHostTest {
         EndTest();
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -987,7 +987,7 @@ class LayerTreeHostTestInvisibleLayersSkipRenderPass
     ++index_;
     switch (index_) {
       case kAllInvisible:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
       case kOneVisible:
         child1_->SetHideLayerAndSubtree(false);
@@ -2682,10 +2682,11 @@ class LayerTreeHostTestNoExtraCommitFromScrollbarInvalidate
     root_layer_ = Layer::Create();
     root_layer_->SetBounds(gfx::Size(10, 20));
 
-    bool paint_scrollbar = true;
-    bool has_thumb = false;
-    scrollbar_ = FakePaintedScrollbarLayer::Create(paint_scrollbar, has_thumb,
-                                                   root_layer_->element_id());
+    auto scrollbar = FakePaintedScrollbarLayer::CreateScrollbar();
+    scrollbar->set_should_paint(true);
+    scrollbar->set_has_thumb(false);
+    scrollbar_ = base::MakeRefCounted<FakePaintedScrollbarLayer>(
+        root_layer_->element_id());
     scrollbar_->SetPosition(gfx::PointF(0.f, 10.f));
     scrollbar_->SetBounds(gfx::Size(10, 10));
 
@@ -2867,7 +2868,7 @@ class LayerTreeHostTestRasterColorSpaceChange : public LayerTreeHostTest {
         EndTest();
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
 
@@ -2919,7 +2920,7 @@ class LayerTreeHostTestRasterColorSpaceChange : public LayerTreeHostTest {
       case 6:
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
   }
@@ -2983,7 +2984,7 @@ class LayerTreeHostTestSetNeedsCommitWithForcedRedraw
         EXPECT_EQ(gfx::Rect(bounds_), root_damage_rect);
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
 
     return draw_result;
@@ -3079,7 +3080,7 @@ class LayerTreeHostTestUndrawnLayersDamageLater : public LayerTreeHostTest {
         EXPECT_EQ(gfx::Rect(child_layer_bounds_), root_damage_rect);
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
 
     return draw_result;
@@ -3103,7 +3104,7 @@ class LayerTreeHostTestUndrawnLayersDamageLater : public LayerTreeHostTest {
         EndTest();
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -3191,7 +3192,7 @@ class LayerTreeHostTestDamageWithScale : public LayerTreeHostTest {
         break;
       }
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
 
     return draw_result;
@@ -3208,7 +3209,7 @@ class LayerTreeHostTestDamageWithScale : public LayerTreeHostTest {
         EndTest();
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -4294,7 +4295,7 @@ class LayerTreeHostTestSynchronousCompositorActivateWithoutDraw
     } else if (activate_count_ == 2) {
       EndTest();
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -4855,10 +4856,11 @@ class LayerTreeHostTestPropertyChangesDuringUpdateArePushed
     root_ = Layer::Create();
     root_->SetBounds(gfx::Size(1, 1));
 
-    bool paint_scrollbar = true;
-    bool has_thumb = false;
-    scrollbar_layer_ = FakePaintedScrollbarLayer::Create(
-        paint_scrollbar, has_thumb, root_->element_id());
+    auto scrollbar = FakePaintedScrollbarLayer::CreateScrollbar();
+    scrollbar->set_should_paint(true);
+    scrollbar->set_has_thumb(false);
+    scrollbar_layer_ =
+        base::MakeRefCounted<FakePaintedScrollbarLayer>(root_->element_id());
 
     root_->AddChild(scrollbar_layer_);
 
@@ -5952,7 +5954,7 @@ class LayerTreeHostTestElasticOverscroll : public LayerTreeHostTest {
         EndTest();
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -6207,7 +6209,7 @@ class LayerTreeHostTestKeepSwapPromise : public LayerTreeHostTest {
       case 2:
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
   }
@@ -6289,7 +6291,7 @@ class LayerTreeHostTestKeepSwapPromiseMFBA : public LayerTreeHostTest {
     if (host_impl->sync_tree()->source_frame_number() == 0) {
       host_impl->BlockNotifyReadyToActivateForTesting(true);
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -6323,7 +6325,7 @@ class LayerTreeHostTestKeepSwapPromiseMFBA : public LayerTreeHostTest {
       case 2:
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
   }
@@ -6768,7 +6770,7 @@ class LayerTreeHostTestGpuRasterizationEnabledWithMSAA : public LayerTreeTest {
                               host_impl->sync_tree()->LayerById(layer_->id()))
                               ->GetRasterSource();
     EXPECT_GT(host_impl->GetMSAASampleCountForRaster(
-                  raster_source->GetDisplayItemList()),
+                  *raster_source->GetDisplayItemList()),
               0);
     EXPECT_TRUE(host_impl->pending_tree()->use_gpu_rasterization());
     EXPECT_TRUE(host_impl->use_gpu_rasterization());
@@ -7557,7 +7559,8 @@ class LayerTreeHostTestContinuousDrawWhenCreatingVisibleTiles
         // try to draw once more.
         break;
       case 7:
-        NOTREACHED() << "No draws should happen once we have a complete frame.";
+        NOTREACHED_IN_MIGRATION()
+            << "No draws should happen once we have a complete frame.";
         break;
     }
     return draw_result;
@@ -8457,7 +8460,7 @@ class LayerTreeHostTestImageAnimation : public LayerTreeHostTest {
         break;
       default:
         // Only 3 draws should happen for 3 frames of the animate image.
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
 
     if (draw_count_ == 3)
@@ -8673,10 +8676,10 @@ class DontUpdateLayersWithEmptyBounds : public LayerTreeTest {
         break;
       case 2: {
         scoped_refptr<RasterSource> child_raster =
-            child_->GetRecordingSourceForTesting()->CreateRasterSource();
+            child_->GetRecordingSourceForTesting().CreateRasterSource();
         EXPECT_FALSE(child_raster->IsSolidColor());
         scoped_refptr<RasterSource> mask_raster =
-            mask_->GetRecordingSourceForTesting()->CreateRasterSource();
+            mask_->GetRecordingSourceForTesting().CreateRasterSource();
         EXPECT_FALSE(mask_raster->IsSolidColor());
       }
 
@@ -8722,7 +8725,7 @@ class LayerTreeHostTestNewLocalSurfaceIdForcesDraw : public LayerTreeHostTest {
         EndTest();
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 };
@@ -9292,7 +9295,7 @@ class LayerTreeHostTestEventsMetrics : public LayerTreeHostTest {
     tick_clock.Advance(base::Microseconds(10));
     std::unique_ptr<EventMetrics> metrics =
         ScrollUpdateEventMetrics::CreateForTesting(
-            ui::ET_GESTURE_SCROLL_UPDATE, ui::ScrollInputType::kWheel,
+            ui::EventType::kGestureScrollUpdate, ui::ScrollInputType::kWheel,
             /*is_inertial=*/false,
             ScrollUpdateEventMetrics::ScrollUpdateType::kContinued,
             /*delta=*/10.0f, event_time, arrived_in_browser_main_timestamp,
@@ -9625,7 +9628,7 @@ class LayerTreeHostTestIgnoreEventsMetricsForNoUpdate
         EndTest();
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -9913,7 +9916,7 @@ class LayerTreeHostTestHideLayerAndSubtree
         EndTest();
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -9964,7 +9967,7 @@ class LayerTreeHostTestHideLayerAndSubtreeOnParent
         EndTest();
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -10185,7 +10188,8 @@ class LayerTreeHostTestDelayRecreateTiling
         }
         break;
       case 3:
-        NOTREACHED() << "We shouldn't see another commit in this test";
+        NOTREACHED_IN_MIGRATION()
+            << "We shouldn't see another commit in this test";
         break;
     }
   }
@@ -10750,11 +10754,6 @@ class LayerTreeHostTestDamagePropagatesFromViewTransitionSurface
     view_transition_layer_->SetEffectTreeIndex(view_transition_layer_node.id);
     view_transition_layer_node.render_surface_reason =
         RenderSurfaceReason::kBlendMode;
-
-    layer_tree_host()
-        ->property_trees()
-        ->effect_tree_mutable()
-        .AddTransitionPseudoElementEffectId(view_transition_layer_node.id);
   }
 
   void BeginTest() override { layer_tree_host()->SetNeedsCommit(); }

@@ -24,13 +24,7 @@
 
 void V0PlaintextCApi(benchmark::State &state) {
   auto num_ciphers = state.range(0);
-  auto slab_result = np_ffi::internal::np_ffi_create_credential_slab();
-  assert(
-      np_ffi::internal::np_ffi_CreateCredentialSlabResult_kind(slab_result) ==
-      np_ffi::internal::CreateCredentialSlabResultKind::Success);
-  auto slab = np_ffi::internal::np_ffi_CreateCredentialSlabResult_into_SUCCESS(
-      slab_result);
-
+  auto slab = np_ffi::internal::np_ffi_create_credential_slab();
   auto book_result =
       np_ffi::internal::np_ffi_create_credential_book_from_slab(slab);
   assert(

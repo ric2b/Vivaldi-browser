@@ -114,8 +114,11 @@ void SetContainerState(const std::string& edge, int index) {
 
 void ClearBookmarkMenu() {
   AppController* appController = static_cast<AppController*>([NSApp delegate]);
-  if ([appController bookmarkMenuBridge]) {
-    [appController bookmarkMenuBridge]->ClearBookmarkMenu();
+  if (appController && [appController
+    respondsToSelector:@selector(setVivaldiMenuItemAction:)]) {
+    if ([appController bookmarkMenuBridge]) {
+      [appController bookmarkMenuBridge]->ClearBookmarkMenu();
+    }
   }
 }
 
@@ -154,10 +157,13 @@ void AddExtraBookmarkMenuItems(NSMenu* menu, unsigned int* menu_index,
                    action:nil
             keyEquivalent:@""];
     [item setTag:IDC_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS];
-    AppController* app_controller =
+    AppController* appController =
       static_cast<AppController*>([NSApp delegate]);
-    [item setTarget:app_controller];
-    [app_controller setVivaldiMenuItemAction:item];
+    [item setTarget:appController];
+    if (appController && [appController
+        respondsToSelector:@selector(setVivaldiMenuItemAction:)]) {
+      [appController setVivaldiMenuItemAction:item];
+    }
     [item setRepresentedObject:[NSString stringWithFormat:@"%lld", node->id()]];
     [menu insertItem:item atIndex:*menu_index];
     *menu_index += 1;

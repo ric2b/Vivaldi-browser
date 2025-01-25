@@ -2,6 +2,7 @@ include_rules = [
   # See README.md.
   "+ash",
 
+  "+components/cross_device/nearby",
   "+components/guest_os",
   "+components/qr_code_generator",
   "+components/metrics/structured/test/test_structured_metrics_recorder.h",
@@ -15,7 +16,6 @@ include_rules = [
   # ChromeOS.
   "+chrome/browser/apps",
   "+chrome/browser/ash",
-  "+chrome/browser/resources/preinstalled_web_apps/internal/container.h",
   "+chrome/browser/browser_process_platform_part_ash.h",
   "+chrome/browser/chromeos",
   "+chrome/browser/lifetime/application_lifetime_chromeos.h",

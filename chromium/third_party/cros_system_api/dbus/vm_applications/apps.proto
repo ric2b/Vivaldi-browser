@@ -75,6 +75,7 @@ enum VmType {
   // so for backcompat don't renumber.
   UNKNOWN = 4;
   ARCVM = 5;
+  BAGUETTE = 6;
 }
 
 // List of App.

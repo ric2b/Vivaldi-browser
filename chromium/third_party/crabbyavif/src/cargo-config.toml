@@ -1,0 +1,7 @@
+#[target.aarch64-linux-android]
+#ar = "/Volumes/Android NDK r26b/AndroidNDK10909125.app/Contents/NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-ar"
+#linker = "/Volumes/Android NDK r26b/AndroidNDK10909125.app/Contents/NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android21-clang++"
+
+[target.aarch64-linux-android]
+ar = "/usr/local/google/home/vigneshv/ndk/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+linker = "/usr/local/google/home/vigneshv/ndk/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++"

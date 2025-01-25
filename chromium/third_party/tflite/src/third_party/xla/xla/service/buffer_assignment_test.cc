@@ -36,6 +36,7 @@ limitations under the License.
 #include "xla/service/copy_insertion.h"
 #include "xla/service/flatten_call_graph.h"
 #include "xla/service/hlo.pb.h"
+#include "xla/service/hlo_alias_analysis.h"
 #include "xla/service/hlo_dce.h"
 #include "xla/service/hlo_memory_scheduler.h"
 #include "xla/service/hlo_ordering.h"
@@ -62,12 +63,12 @@ class InstructionListVisitor : public DfsHloVisitorWithDefault {
  public:
   explicit InstructionListVisitor(const HloInstruction* root) : root_(root) {}
 
-  Status DefaultAction(HloInstruction* hlo) override {
+  absl::Status DefaultAction(HloInstruction* hlo) override {
     // For each instruction, just push it on the list after walking the
     // operands.
     instructions_.push_back(hlo);
     VLOG(0) << "List instruction " << hlo->ToString();
-    return OkStatus();
+    return absl::OkStatus();
   }
 
   std::vector<const HloInstruction*> GetInstructions() { return instructions_; }
@@ -143,7 +144,8 @@ class BufferAssignmentTest : public HloTestBase {
 
   std::unique_ptr<BufferAssignment> RunBufferAssignmentNoBuffersReuseForAdd(
       HloModule* module, int64_t alignment = 1) {
-    auto must_not_live_out = [](const HloInstruction* instruction,
+    auto must_not_live_out = [](const HloAliasAnalysis& alias_analysis,
+                                const HloInstruction* instruction,
                                 const ShapeIndex&) {
       return instruction->opcode() == HloOpcode::kAdd;
     };
@@ -714,7 +716,7 @@ TEST_F(BufferAssignmentTest, BasicUniquelyColored) {
       color_map[value.defining_instruction()] = color;
       value.set_color(BufferValue::Color(color++));
     }
-    return OkStatus();
+    return absl::OkStatus();
   };
 
   auto buffers = RunColoredBufferAssignment(module.get(), colorer);
@@ -788,7 +790,7 @@ TEST_F(BufferAssignmentTest, BasicPartiallyColored) {
         value.set_color(LogicalBuffer::Color(0));
       }
     }
-    return OkStatus();
+    return absl::OkStatus();
   };
 
   auto buffers = RunColoredBufferAssignment(module.get(), colorer);
@@ -2847,7 +2849,7 @@ ENTRY %main (a: f32[4096], b: f32[4096]) -> f32[4096] {
             .set_color(BufferValue::Color(color));
       }
     }
-    return OkStatus();
+    return absl::OkStatus();
   };
 
   BufferAssigner::PrivateStacks private_stacks;
@@ -2957,7 +2959,7 @@ ENTRY %main (a: f32[4096], b: f32[4096]) -> f32[4096] {
             .set_color(BufferValue::Color(color));
       }
     }
-    return OkStatus();
+    return absl::OkStatus();
   };
 
   BufferAssigner::PrivateStacks private_stacks;

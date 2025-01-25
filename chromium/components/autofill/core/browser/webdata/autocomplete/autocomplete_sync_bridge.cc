@@ -28,7 +28,6 @@
 #include "components/sync/model/sync_metadata_store_change_list.h"
 #include "components/sync/protocol/entity_data.h"
 
-using base::Time;
 using sync_pb::AutofillSpecifics;
 using syncer::ClientTagBasedModelTypeProcessor;
 using syncer::EntityChange;
@@ -48,6 +47,7 @@ const char kAutocompleteEntryNamespaceTag[] = "autofill_entry|";
 const char kAutocompleteTagDelimiter[] = "|";
 
 // Simplify checking for optional errors and returning only when present.
+#undef RETURN_IF_ERROR
 #define RETURN_IF_ERROR(x)                     \
   if (std::optional<ModelError> ret_val = x) { \
     return ret_val;                            \
@@ -121,8 +121,9 @@ AutocompleteEntry CreateAutocompleteEntry(
 
   auto [date_created_iter, date_last_used_iter] =
       std::minmax_element(timestamps.begin(), timestamps.end());
-  return AutocompleteEntry(key, Time::FromInternalValue(*date_created_iter),
-                           Time::FromInternalValue(*date_last_used_iter));
+  return AutocompleteEntry(key,
+                           base::Time::FromInternalValue(*date_created_iter),
+                           base::Time::FromInternalValue(*date_last_used_iter));
 }
 
 // This is used to respond to ApplyIncrementalSyncChanges() and
@@ -243,7 +244,8 @@ class SyncDifferenceTracker {
     if (!InitializeIfNeeded()) {
       return false;
     }
-    auto iter = unique_to_local_.find(AutocompleteEntry(key, Time(), Time()));
+    auto iter = unique_to_local_.find(
+        AutocompleteEntry(key, base::Time(), base::Time()));
     if (iter != unique_to_local_.end()) {
       *entry = *iter;
     }
@@ -387,15 +389,15 @@ std::optional<ModelError> AutocompleteSyncBridge::ApplyIncrementalSyncChanges(
   return std::nullopt;
 }
 
-void AutocompleteSyncBridge::AutocompleteSyncBridge::GetData(
-    StorageKeyList storage_keys,
-    DataCallback callback) {
+std::unique_ptr<syncer::DataBatch>
+AutocompleteSyncBridge::AutocompleteSyncBridge::GetDataForCommit(
+    StorageKeyList storage_keys) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   std::vector<AutocompleteEntry> entries;
   if (!GetAutocompleteTable()->GetAllAutocompleteEntries(&entries)) {
     change_processor()->ReportError(
         {FROM_HERE, "Failed to load entries from table."});
-    return;
+    return nullptr;
   }
 
   std::unordered_set<std::string> keys_set(storage_keys.begin(),
@@ -407,24 +409,25 @@ void AutocompleteSyncBridge::AutocompleteSyncBridge::GetData(
       batch->Put(key, CreateEntityData(entry));
     }
   }
-  std::move(callback).Run(std::move(batch));
+  return batch;
 }
 
-void AutocompleteSyncBridge::GetAllDataForDebugging(DataCallback callback) {
+std::unique_ptr<syncer::DataBatch>
+AutocompleteSyncBridge::GetAllDataForDebugging() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::vector<AutocompleteEntry> entries;
   if (!GetAutocompleteTable()->GetAllAutocompleteEntries(&entries)) {
     change_processor()->ReportError(
         {FROM_HERE, "Failed to load entries from table."});
-    return;
+    return nullptr;
   }
 
   auto batch = std::make_unique<MutableDataBatch>();
   for (const AutocompleteEntry& entry : entries) {
     batch->Put(GetStorageKeyFromModel(entry.key()), CreateEntityData(entry));
   }
-  std::move(callback).Run(std::move(batch));
+  return batch;
 }
 
 void AutocompleteSyncBridge::ActOnLocalChanges(

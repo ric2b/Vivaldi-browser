@@ -81,6 +81,7 @@
 #include "components/permissions/permission_util.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
+#include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/app_update.h"
@@ -563,7 +564,7 @@ base::Value::Dict CreateZoomLevelException(
   // Calculate the zoom percent from the factor. Round up to the nearest
   // whole number.
   int zoom_percent =
-      static_cast<int>(blink::PageZoomLevelToZoomFactor(zoom) * 100 + 0.5);
+      static_cast<int>(blink::ZoomLevelToZoomFactor(zoom) * 100 + 0.5);
   exception.Set(kZoom, base::FormatPercent(zoom_percent));
   return exception;
 }
@@ -1684,8 +1685,24 @@ void SiteSettingsHandler::HandleResetCategoryPermissionForPattern(
   if (content_type == ContentSettingsType::COOKIES &&
       primary_pattern.MatchesAllHosts() &&
       !secondary_pattern.MatchesAllHosts()) {
+    // Remove TP exceptions along with 3PC exceptions if we are not showing
+    // them explicitly in settings but are supporting adding/removing via UB.
+    // TODO(https://b/333527273): Remove post-3PCD launch.
+    if (base::FeatureList::IsEnabled(
+            privacy_sandbox::kTrackingProtectionContentSettingUbControl) &&
+        !base::FeatureList::IsEnabled(
+            privacy_sandbox::kTrackingProtectionContentSettingInSettings)) {
+      map->SetContentSettingCustomScope(
+          ContentSettingsPattern::Wildcard(), secondary_pattern,
+          ContentSettingsType::TRACKING_PROTECTION, CONTENT_SETTING_DEFAULT);
+    }
     base::RecordAction(base::UserMetricsAction(
         "ThirdPartyCookies.SettingsSiteException.Removed"));
+  }
+
+  if (content_type == ContentSettingsType::TRACKING_PROTECTION) {
+    base::RecordAction(base::UserMetricsAction(
+        "Settings.TrackingProtection.SiteExceptionRemoved"));
   }
 }
 
@@ -1765,6 +1782,11 @@ void SiteSettingsHandler::HandleSetCategoryPermissionForPattern(
       !secondary_pattern.MatchesAllHosts()) {
     base::RecordAction(base::UserMetricsAction(
         "ThirdPartyCookies.SettingsSiteException.Added"));
+  }
+
+  if (content_type == ContentSettingsType::TRACKING_PROTECTION) {
+    base::RecordAction(base::UserMetricsAction(
+        "Settings.TrackingProtection.SiteExceptionAdded"));
   }
 }
 
@@ -1921,7 +1943,7 @@ void SiteSettingsHandler::SendZoomLevels() {
         // start. Therefore, we don't care for them.
         continue;
       case content::HostZoomMap::ZOOM_CHANGED_TEMPORARY_ZOOM:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 

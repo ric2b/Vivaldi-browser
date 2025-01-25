@@ -12,7 +12,7 @@
 namespace openscreen::osp {
 
 bool ServiceInfo::operator==(const ServiceInfo& other) const {
-  return (instance_id == other.instance_id &&
+  return (instance_name == other.instance_name &&
           friendly_name == other.friendly_name &&
           fingerprint == other.fingerprint &&
           network_interface_index == other.network_interface_index &&
@@ -48,9 +48,9 @@ bool ServiceInfo::Update(const std::string& new_friendly_name,
 
 std::string ServiceInfo::ToString() const {
   std::stringstream ss;
-  ss << "ServiceInfo{instance_id=\"" << instance_id << "\", friendly_name=\""
-     << friendly_name << "\", fingerprint=\"" << fingerprint
-     << "\", network_interface_index=" << network_interface_index
+  ss << "ServiceInfo{instance_name=\"" << instance_name
+     << "\", friendly_name=\"" << friendly_name << "\", fingerprint=\""
+     << fingerprint << "\", network_interface_index=" << network_interface_index
      << ", v4_endpoint=\"" << v4_endpoint.ToString() << "\", v6_endpoint=\""
      << v6_endpoint.ToString() << "\"}";
   return ss.str();

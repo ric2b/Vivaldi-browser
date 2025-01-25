@@ -96,6 +96,16 @@ void ArcChromeFeatureFlagsBridge::NotifyFeatureFlags() {
   flags->resize_compat = base::FeatureList::IsEnabled(arc::kResizeCompat);
   flags->ignore_hover_event_anr =
       base::FeatureList::IsEnabled(arc::kIgnoreHoverEventAnr);
+  flags->extend_input_anr_timeout =
+      base::FeatureList::IsEnabled(arc::kExtendInputAnrTimeout);
+  flags->extend_intent_anr_timeout =
+      base::FeatureList::IsEnabled(arc::kExtendIntentAnrTimeout);
+  flags->extend_service_anr_timeout =
+      base::FeatureList::IsEnabled(arc::kExtendServiceAnrTimeout);
+  flags->notification_width_increase =
+      chromeos::features::IsNotificationWidthIncreaseEnabled();
+  flags->enable_friendlier_error_dialog =
+      base::FeatureList::IsEnabled(arc::kEnableFriendlierErrorDialog);
 
   chrome_feature_flags_instance->NotifyFeatureFlags(std::move(flags));
 }

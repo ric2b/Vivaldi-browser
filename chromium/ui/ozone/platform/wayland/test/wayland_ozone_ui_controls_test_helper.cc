@@ -13,6 +13,14 @@
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 
+namespace ui {
+
+OzoneUIControlsTestHelper* CreateOzoneUIControlsTestHelperWayland() {
+  return new wl::WaylandOzoneUIControlsTestHelper();
+}
+
+}  // namespace ui
+
 namespace wl {
 
 namespace {
@@ -54,7 +62,7 @@ unsigned WaylandOzoneUIControlsTestHelper::ButtonDownMask() const {
   // use SendMouseMotionNotifyEvent instead of calling MoveCursorTo via
   // aura::Window, regardless of what the button down mask is.
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0;
 }
 
@@ -125,7 +133,7 @@ void WaylandOzoneUIControlsTestHelper::UpdateDisplay(
 
 void WaylandOzoneUIControlsTestHelper::RunClosureAfterAllPendingUIEvents(
     base::OnceClosure closure) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 bool WaylandOzoneUIControlsTestHelper::MustUseUiControlsForMoveCursorTo() {

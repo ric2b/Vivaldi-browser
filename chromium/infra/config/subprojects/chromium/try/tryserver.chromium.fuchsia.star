@@ -6,7 +6,7 @@
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
 load("//lib/builder_url.star", "linkify_builder")
-load("//lib/builders.star", "builders", "os", "reclient")
+load("//lib/builders.star", "builders", "os", "siso")
 load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
 load("//lib/try.star", "try_")
@@ -21,11 +21,11 @@ try_.defaults.set(
     compilator_cores = 8,
     execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
     orchestrator_cores = 2,
-    orchestrator_siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
-    reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
+    orchestrator_siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CQ,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
     siso_enabled = True,
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
+    siso_project = siso.project.DEFAULT_UNTRUSTED,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CQ,
 )
 
 consoles.list_view(
@@ -46,11 +46,13 @@ try_.builder(
         ],
     ),
     main_list_view = "try",
-    # This is the only bot that builds //chromecast code for Fuchsia on ARM64
-    # so trigger it when changes are made.
     tryjob = try_.job(
         location_filters = [
+            # This is the only bot that builds //chromecast code for Fuchsia on
+            # ARM64, so trigger it when changes are made.
             "chromecast/.+",
+            # Always trigger this builder when drilling the fuchsia-sdk.
+            "build/fuchsia/sdk_override.txt",
         ],
     ),
 )
@@ -63,7 +65,7 @@ try_.builder(
         configs = [
             "release",
             "official_optimize",
-            "reclient",
+            "remoteexec",
             "fuchsia",
             "arm64",
             "cast_receiver_size_optimized",
@@ -117,8 +119,9 @@ try_.builder(
     gn_args = gn_args.config(
         configs = [
             "debug_builder",
-            "reclient",
+            "remoteexec",
             "fuchsia_smart_display",
+            "x64",
         ],
     ),
     free_space = builders.free_space.high,
@@ -139,15 +142,9 @@ try_.builder(
 )
 
 try_.builder(
-    name = "fuchsia-fyi-x64-dbg",
-    mirrors = ["ci/fuchsia-fyi-x64-dbg"],
-    gn_args = "ci/fuchsia-fyi-x64-dbg",
-)
-
-try_.builder(
     name = "fuchsia-fyi-x64-dbg-persistent-emulator",
     mirrors = ["ci/fuchsia-fyi-x64-dbg-persistent-emulator"],
-    gn_args = "ci/fuchsia-fyi-x64-dbg",
+    gn_args = "ci/fuchsia-fyi-x64-dbg-persistent-emulator",
     contact_team_email = "chrome-fuchsia-engprod@google.com",
     execution_timeout = 10 * time.hour,
 )
@@ -155,7 +152,6 @@ try_.builder(
 try_.builder(
     name = "fuchsia-x64-cast-receiver-dbg",
     branch_selector = branches.selector.FUCHSIA_BRANCHES,
-    description_html = "try replica of " + linkify_builder("ci", "fuchsia-x64-cast-receiver-dbg", "chromium"),
     mirrors = ["ci/fuchsia-x64-cast-receiver-dbg"],
     gn_args = gn_args.config(
         configs = [
@@ -205,6 +201,8 @@ try_.orchestrator_builder(
         "chromium.compilator_can_outlive_parent": 100,
         # crbug.com/940930
         "chromium.enable_cleandead": 100,
+        # b/346598710
+        "chromium.luci_analysis_v2": 100,
     },
     main_list_view = "try",
     tryjob = try_.job(),

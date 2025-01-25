@@ -38,10 +38,26 @@ tools/xngen src/f16-igemm/avx2-broadcast.c.in -D MR=3 -D NR=16 -D ACCTYPE=F32 -o
 tools/xngen src/f16-igemm/avx2-broadcast.c.in -D MR=4 -D NR=16 -D ACCTYPE=F32 -o src/f16-f32acc-igemm/gen/f16-f32acc-igemm-4x16-minmax-avx2-broadcast.c &
 tools/xngen src/f16-igemm/avx2-broadcast.c.in -D MR=5 -D NR=16 -D ACCTYPE=F32 -o src/f16-f32acc-igemm/gen/f16-f32acc-igemm-5x16-minmax-avx2-broadcast.c &
 
-wait # JIT requires assembly files to be generated first.
+################################# x86 AVX-512 FP16 #################################
+### AVX512FP16+BROADCAST micro-kernels
+tools/xngen src/f16-igemm/avx512fp16-broadcast.c.in -D MR=1 -D NR=32 -D DATATYPE=F16 -o src/f16-igemm/gen/f16-igemm-1x32-minmax-avx512fp16-broadcast.c &
+tools/xngen src/f16-igemm/avx512fp16-broadcast.c.in -D MR=4 -D NR=32 -D DATATYPE=F16 -o src/f16-igemm/gen/f16-igemm-4x32-minmax-avx512fp16-broadcast.c &
+tools/xngen src/f16-igemm/avx512fp16-broadcast.c.in -D MR=5 -D NR=32 -D DATATYPE=F16 -o src/f16-igemm/gen/f16-igemm-5x32-minmax-avx512fp16-broadcast.c &
+tools/xngen src/f16-igemm/avx512fp16-broadcast.c.in -D MR=6 -D NR=32 -D DATATYPE=F16 -o src/f16-igemm/gen/f16-igemm-6x32-minmax-avx512fp16-broadcast.c &
+tools/xngen src/f16-igemm/avx512fp16-broadcast.c.in -D MR=7 -D NR=32 -D DATATYPE=F16 -o src/f16-igemm/gen/f16-igemm-7x32-minmax-avx512fp16-broadcast.c &
+tools/xngen src/f16-igemm/avx512fp16-broadcast.c.in -D MR=8 -D NR=32 -D DATATYPE=F16 -o src/f16-igemm/gen/f16-igemm-8x32-minmax-avx512fp16-broadcast.c &
+
+tools/xngen src/f16-igemm/avx512fp16-broadcast.c.in -D MR=1 -D NR=64 -D DATATYPE=F16 -o src/f16-igemm/gen/f16-igemm-1x64-minmax-avx512fp16-broadcast.c &
+tools/xngen src/f16-igemm/avx512fp16-broadcast.c.in -D MR=4 -D NR=64 -D DATATYPE=F16 -o src/f16-igemm/gen/f16-igemm-4x64-minmax-avx512fp16-broadcast.c &
+tools/xngen src/f16-igemm/avx512fp16-broadcast.c.in -D MR=5 -D NR=64 -D DATATYPE=F16 -o src/f16-igemm/gen/f16-igemm-5x64-minmax-avx512fp16-broadcast.c &
+tools/xngen src/f16-igemm/avx512fp16-broadcast.c.in -D MR=6 -D NR=64 -D DATATYPE=F16 -o src/f16-igemm/gen/f16-igemm-6x64-minmax-avx512fp16-broadcast.c &
+tools/xngen src/f16-igemm/avx512fp16-broadcast.c.in -D MR=7 -D NR=64 -D DATATYPE=F16 -o src/f16-igemm/gen/f16-igemm-7x64-minmax-avx512fp16-broadcast.c &
+tools/xngen src/f16-igemm/avx512fp16-broadcast.c.in -D MR=8 -D NR=64 -D DATATYPE=F16 -o src/f16-igemm/gen/f16-igemm-8x64-minmax-avx512fp16-broadcast.c &
+
+wait
+ # JIT requires assembly files to be generated first.
 
 ##################################### JIT #####################################
-
 scripts/convert-assembly-to-jit.py --no-post-op -i src/f16-igemm/f16-igemm-1x16-minmax-asm-aarch64-neonfp16arith-ld64.S -o src/f16-igemm/gen/f16-igemm-1x16-aarch64-neonfp16arith-ld64.cc &
 scripts/convert-assembly-to-jit.py --no-post-op -i src/f16-igemm/f16-igemm-4x16-minmax-asm-aarch64-neonfp16arith-ld64.S -o src/f16-igemm/gen/f16-igemm-4x16-aarch64-neonfp16arith-ld64.cc &
 scripts/convert-assembly-to-jit.py --no-post-op --force-prfm -i src/f16-igemm/f16-igemm-6x16-minmax-asm-aarch64-neonfp16arith-ld64.S -o src/f16-igemm/gen/f16-igemm-6x16-aarch64-neonfp16arith-ld64.cc &

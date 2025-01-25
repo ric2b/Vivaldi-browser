@@ -376,6 +376,7 @@ class V8_EXPORT_PRIVATE CodeGenerator final : public GapResolver::Assembler {
   // ===========================================================================
 
   struct HandlerInfo {
+    // {handler} is nullptr if the Call should lazy deopt on exceptions.
     Label* handler;
     int pc_offset;
   };
@@ -422,6 +423,10 @@ class V8_EXPORT_PRIVATE CodeGenerator final : public GapResolver::Assembler {
   // offset to the first stack check of an optimized function.
   const size_t max_unoptimized_frame_height_;
   const size_t max_pushed_argument_count_;
+
+  // The number of incoming parameters for code using JS linkage (i.e.
+  // JavaScript functions). Only computed during AssembleCode.
+  uint16_t parameter_count_ = 0;
 
   // kArchCallCFunction could be reached either:
   //   kArchCallCFunction;

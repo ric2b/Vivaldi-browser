@@ -254,10 +254,7 @@ void BookmarksPrivateIOFunction::ShowSelectFileDialog(
 
   // Fail if we can not locate owning window
   Browser* browser = ::vivaldi::FindBrowserByWindowId(window_id);
-  if (!browser || !browser->window()) {
-    NOTREACHED() << "No window found";
-    return;
-  }
+  CHECK(browser && browser->window());
   gfx::NativeWindow owning_window = browser->window()->GetNativeWindow();
 
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -279,14 +276,13 @@ void BookmarksPrivateIOFunction::ShowSelectFileDialog(
       base::FilePath::StringType(), owning_window, nullptr);
 }
 
-void BookmarksPrivateIOFunction::FileSelectionCanceled(void* params) {
+void BookmarksPrivateIOFunction::FileSelectionCanceled() {
   select_file_dialog_.reset();
   Release();  // Balanced in BookmarkManagerPrivateIOFunction::SelectFile()
 }
 
 void BookmarksPrivateIOFunction::MultiFilesSelected(
-    const std::vector<ui::SelectedFileInfo>& files,
-    void* params) {
+    const std::vector<ui::SelectedFileInfo>& files) {
   select_file_dialog_.reset();
   Release();  // Balanced in BookmarsIOFunction::SelectFile()
   NOTREACHED() << "Should not be able to select multiple files";
@@ -321,8 +317,7 @@ BookmarksPrivateExportFunction::RunOnReady() {
 
 void BookmarksPrivateExportFunction::FileSelected(
     const ui::SelectedFileInfo& path,
-    int index,
-    void* params) {
+    int index) {
   bookmark_html_writer::WriteBookmarks(GetProfile(), path.file_path, nullptr);
   select_file_dialog_.reset();
   Release();  // Balanced in BookmarkManagerPrivateIOFunction::SelectFile()

@@ -5,23 +5,24 @@
 
 #pragma once
 
-#include <xnnpack.h>
-#include <xnnpack/microfnptr.h>
-#include <xnnpack/microparams.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <limits>
 #include <numeric>
 #include <random>
 #include <vector>
 
-#include "replicable_random_device.h"
 #include <gtest/gtest.h>
 #include <fp16/fp16.h>
+#include "xnnpack.h"
+#include "xnnpack/microfnptr.h"
+#include "xnnpack/microparams.h"
+#include "xnnpack/requantization.h"
+#include "replicable_random_device.h"
 
 class RSumMicrokernelTester {
  public:
@@ -51,6 +52,84 @@ class RSumMicrokernelTester {
 
   size_t iterations() const {
     return this->iterations_;
+  }
+
+  RSumMicrokernelTester& input_scale(float input_scale) {
+    assert(input_scale > 0.0f);
+    assert(std::isnormal(input_scale));
+    this->input_scale_ = input_scale;
+    return *this;
+  }
+
+  float input_scale() const {
+    return this->input_scale_;
+  }
+
+  RSumMicrokernelTester& output_scale(float output_scale) {
+    assert(output_scale > 0.0f);
+    assert(std::isnormal(output_scale));
+    this->output_scale_ = output_scale;
+    return *this;
+  }
+
+  float output_scale() const {
+    return this->output_scale_;
+  }
+
+  RSumMicrokernelTester& input_zero_point(uint8_t input_zero_point) {
+    this->input_zero_point_ = input_zero_point;
+    return *this;
+  }
+
+  uint8_t input_zero_point() const {
+    return this->input_zero_point_;
+  }
+
+  RSumMicrokernelTester& output_zero_point(uint8_t output_zero_point) {
+    this->output_zero_point_ = output_zero_point;
+    return *this;
+  }
+
+  uint8_t output_zero_point() const {
+    return this->output_zero_point_;
+  }
+
+  uint8_t qmin() const {
+    return this->qmin_;
+  }
+
+  uint8_t qmax() const {
+    return this->qmax_;
+  }
+
+  void Test(xnn_qs8_rsum_ukernel_fn rsum,
+      xnn_init_qs8_rsum_params_fn init_params) const {
+    xnnpack::ReplicableRandomDevice rng;
+    std::uniform_int_distribution<int32_t> i8dist(
+      std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
+
+    std::vector<int8_t> input(batch_size() + XNN_EXTRA_BYTES / sizeof(int8_t));
+    for (size_t iteration = 0; iteration < iterations(); iteration++) {
+      std::generate(input.begin(), input.end(), [&]() { return i8dist(rng); });
+
+      // Compute reference results.
+      int32_t output_init = i8dist(rng);
+      int32_t output_ref = output_init;
+      for (size_t i = 0; i < batch_size(); i++) {
+        output_ref += int32_t(input[i]);
+      }
+
+      // Prepare parameters
+      union xnn_qs8_rsum_params params;
+      init_params(&params);
+
+      // Call optimized micro-kernel.
+      int32_t output = output_init;
+      rsum(batch_size() * sizeof(int8_t), input.data(), &output, &params);
+
+      // Verify results.
+      EXPECT_EQ(output_ref, output);
+    }
   }
 
   void Test(xnn_f16_rsum_ukernel_fn rsum, xnn_init_f16_scale_params_fn init_params) const {
@@ -102,11 +181,11 @@ class RSumMicrokernelTester {
       init_params(&params, scale());
 
       // Call optimized micro-kernel.
-      uint16_t output = fp16_ieee_from_fp32_value(0.f);
+      float output = 0.f;
       rsum(batch_size() * sizeof(uint16_t), input.data(), &output, &params);
 
       // Verify results.
-      EXPECT_NEAR(fp16_ieee_to_fp32_value(output), output_ref, std::abs(output_ref) * 1.0e-3f)
+      EXPECT_NEAR(output, output_ref, std::abs(output_ref) * 1.0e-5f)
         << "with batch " << batch_size() << ", scale " << scale();
     }
   }
@@ -140,4 +219,10 @@ class RSumMicrokernelTester {
   size_t batch_size_{1};
   float scale_{1.0f};
   size_t iterations_{15};
+  float input_scale_{1.25f};
+  float output_scale_{0.75f};
+  uint8_t input_zero_point_{121};
+  uint8_t output_zero_point_{133};
+  uint8_t qmin_{0};
+  uint8_t qmax_{255};
 };

@@ -20,8 +20,10 @@ struct DataTypeActivationResponse;
 struct TypeEntitiesCount;
 
 // The ModelTypeControllerDelegate handles communication of ModelTypeController
-// with the data type. Unlike the controller which lives on the UI thread, the
-// delegate can assume all its functions are run on the model thread.
+// with the data type.
+// Actual implementations live on the model sequence, but there is often a
+// "proxy" implementation on the UI thread for use by the ModelTypeController
+// (which lives on the UI thread).
 class ModelTypeControllerDelegate {
  public:
   using AllNodesCallback =
@@ -41,6 +43,12 @@ class ModelTypeControllerDelegate {
   // data type. Severs all ties to the sync thread, and depending on
   // |metadata_fate|, might delete all local sync metadata.
   virtual void OnSyncStopping(SyncStopMetadataFate metadata_fate) = 0;
+
+  // Returns whether this data type has any unsynced changes, i.e. any local
+  // changes that are waiting to be committed.
+  // May be invoked at any time; if the model isn't loaded yet or is in an error
+  // state, this should typically return "false".
+  virtual void HasUnsyncedData(base::OnceCallback<void(bool)> callback) = 0;
 
   // Returns a Value::List representing all nodes for the type to |callback|.
   // Used for populating nodes in Sync Node Browser of chrome://sync-internals.

@@ -90,6 +90,14 @@ public class ImprovedBookmarkRowCoordinator {
                         && !bookmarkItem.isAccountBookmark();
         propertyModel.set(ImprovedBookmarkRowProperties.IS_LOCAL_BOOKMARK, isLocalBookmark);
         propertyModel.set(ImprovedBookmarkRowProperties.DESCRIPTION_VISIBLE, !isFolder);
+        // Vivaldi - We show desription with bookmark count in second line for folders
+        if (ChromeApplicationImpl.isVivaldi() && isFolder) {
+            String description = BookmarkUtils.getFolderDescriptionText(
+                    bookmarkId, mBookmarkModel, mContext.getResources());
+            propertyModel.set(
+                    ImprovedBookmarkRowProperties.DESCRIPTION, description);
+            propertyModel.set(ImprovedBookmarkRowProperties.DESCRIPTION_VISIBLE, true);
+        } else // End Vivaldi
         if (isFolder) {
             String contentDescription =
                     String.format(
@@ -200,6 +208,11 @@ public class ImprovedBookmarkRowCoordinator {
                 ImprovedBookmarkRowProperties.FOLDER_CHILD_COUNT,
                 BookmarkUtils.getChildCountForDisplay(bookmarkItem.getId(), mBookmarkModel));
         propertyModel.set(
+                ImprovedBookmarkRowProperties.FOLDER_CHILD_COUNT_TEXT_STYLE,
+                BookmarkUtils.isSpecialFolder(mBookmarkModel, bookmarkItem)
+                        ? R.style.TextAppearance_SpecialFolderChildCount
+                        : R.style.TextAppearance_RegularFolderChildCount);
+        propertyModel.set(
                 ImprovedBookmarkRowProperties.FOLDER_START_AREA_BACKGROUND_COLOR,
                 BookmarkUtils.getIconBackground(mContext, mBookmarkModel, bookmarkItem));
         propertyModel.set(
@@ -237,7 +250,7 @@ public class ImprovedBookmarkRowCoordinator {
             BookmarkItem item, @BookmarkRowDisplayPref int displayPref) {
         // Local bookmarks shouldn't get images, even if they're cached. This is only relevant when
         // account bookmarks are enabled.
-        if (SyncFeatureMap.isEnabled(SyncFeatureMap.ENABLE_BOOKMARK_FOLDERS_FOR_ACCOUNT_STORAGE)
+        if (SyncFeatureMap.isEnabled(SyncFeatureMap.SYNC_ENABLE_BOOKMARKS_IN_TRANSPORT_MODE)
                 && !item.isAccountBookmark()) {
             return false;
         }

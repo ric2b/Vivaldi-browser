@@ -862,7 +862,7 @@ int ofilter_bind_ost(OutputFilter *ofilter, OutputStream *ost,
         ofp->fps.vsync_method        = opts->vsync_method;
         ofp->fps.framerate           = ost->frame_rate;
         ofp->fps.framerate_max       = ost->max_frame_rate;
-        ofp->fps.framerate_supported = ost->force_fps && opts->enc ?
+        ofp->fps.framerate_supported = ost->force_fps || !opts->enc ?
                                        NULL : opts->enc->supported_framerates;
 
         // reduce frame rate for mpeg4 to be within the spec limits
@@ -1198,10 +1198,10 @@ int init_simple_filtergraph(InputStream *ist, OutputStream *ost,
     FilterGraphPriv *fgp;
     int ret;
 
-    ret = fg_create(&fg, graph_desc, sch);
+    ret = fg_create(&ost->fg_simple, graph_desc, sch);
     if (ret < 0)
         return ret;
-    ost->fg_simple = fg;
+    fg  = ost->fg_simple;
     fgp = fgp_from_fg(fg);
 
     fgp->is_simple = 1;

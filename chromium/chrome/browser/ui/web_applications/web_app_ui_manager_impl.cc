@@ -6,7 +6,6 @@
 
 #include <map>
 #include <memory>
-#include <string_view>
 #include <type_traits>
 #include <utility>
 
@@ -21,7 +20,6 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/one_shot_event.h"
-#include "base/strings/string_piece.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -334,12 +332,13 @@ bool WebAppUiManagerImpl::CanReparentAppTabToWindow(
 #endif
 }
 
-void WebAppUiManagerImpl::ReparentAppTabToWindow(content::WebContents* contents,
-                                                 const webapps::AppId& app_id,
-                                                 bool shortcut_created) {
+Browser* WebAppUiManagerImpl::ReparentAppTabToWindow(
+    content::WebContents* contents,
+    const webapps::AppId& app_id,
+    bool shortcut_created) {
   DCHECK(CanReparentAppTabToWindow(app_id, shortcut_created));
   // Reparent the tab into an app window immediately.
-  ReparentWebContentsIntoAppBrowser(contents, app_id);
+  return ReparentWebContentsIntoAppBrowser(contents, app_id);
 }
 
 void WebAppUiManagerImpl::ShowWebAppFileLaunchDialog(

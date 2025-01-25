@@ -391,7 +391,7 @@ class ModelInfo {
   }
 }
 
-class Binding implements TextUtils.ContentProvider.SafeContentProvider {
+class Binding implements TextUtils.ContentProvider.ContentProvider {
   readonly resources: Set<SDK.Resource.Resource>;
   readonly #project: ContentProviderBasedProject;
   readonly #uiSourceCode: Workspace.UISourceCode.UISourceCode;
@@ -453,9 +453,9 @@ class Binding implements TextUtils.ContentProvider.SafeContentProvider {
       return;
     }  // There is already a styleSheetChanged loop running
 
-    const {content} = await this.#uiSourceCode.requestContent();
-    if (content !== null) {
-      await this.innerStyleSheetChanged(content);
+    const content = await this.#uiSourceCode.requestContentData();
+    if (!TextUtils.ContentData.ContentData.isError(content)) {
+      await this.innerStyleSheetChanged(content.text);
     }
     this.#edits = [];
   }

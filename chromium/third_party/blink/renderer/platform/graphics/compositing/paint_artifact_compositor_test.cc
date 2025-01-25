@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h"
 
 #include <memory>
@@ -35,7 +40,6 @@
 #include "third_party/blink/renderer/platform/testing/paint_property_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/paint_test_configurations.h"
 #include "third_party/blink/renderer/platform/testing/picture_matchers.h"
-#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/test_paint_artifact.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -3998,6 +4002,7 @@ TEST_P(PaintArtifactCompositorTest, LayerRasterInvalidationWithClip) {
   cc::TestTaskGraphRunner task_graph_runner_;
   cc::FakeLayerTreeHostImpl host_impl(&task_runner_provider_,
                                       &task_graph_runner_);
+  host_impl.EnsureSyncTree();
 
   // The layer's painting is initially not clipped.
   auto clip = CreateClip(c0(), t0(), FloatRoundedRect(10, 20, 300, 400));
@@ -4029,7 +4034,7 @@ TEST_P(PaintArtifactCompositorTest, LayerRasterInvalidationWithClip) {
   // from layer_tree_host_->active_commit_state(); we use pending_commit_state()
   // just to keep the test code simple.
   layer->PushPropertiesTo(
-      layer->CreateLayerImpl(host_impl.active_tree()).get(),
+      layer->CreateLayerImpl(host_impl.sync_tree()).get(),
       *const_cast<const cc::LayerTreeHost&>(GetLayerTreeHost())
            .pending_commit_state(),
       const_cast<const cc::LayerTreeHost&>(GetLayerTreeHost())
@@ -4056,7 +4061,7 @@ TEST_P(PaintArtifactCompositorTest, LayerRasterInvalidationWithClip) {
           .Build();
   // Simluate commit to the compositor thread.
   layer->PushPropertiesTo(
-      layer->CreateLayerImpl(host_impl.active_tree()).get(),
+      layer->CreateLayerImpl(host_impl.sync_tree()).get(),
       *const_cast<const cc::LayerTreeHost&>(GetLayerTreeHost())
            .pending_commit_state(),
       const_cast<const cc::LayerTreeHost&>(GetLayerTreeHost())
@@ -4959,7 +4964,8 @@ TEST_P(PaintArtifactCompositorTest, AddIndirectlyCompositedScrollNodes) {
   EXPECT_TRUE(scroll_node->is_composited);
   EXPECT_EQ(cc::MainThreadScrollingReason::kNotScrollingOnMain,
             scroll_node->main_thread_scrolling_reasons);
-  EXPECT_TRUE(scroll_tree.CanRealizeScrollsOnCompositor(*scroll_node));
+  EXPECT_TRUE(scroll_tree.CanRealizeScrollsOnActiveTree(*scroll_node));
+  EXPECT_FALSE(scroll_tree.CanRealizeScrollsOnPendingTree(*scroll_node));
   EXPECT_FALSE(scroll_tree.ShouldRealizeScrollsOnMain(*scroll_node));
 }
 
@@ -4978,10 +4984,18 @@ TEST_P(PaintArtifactCompositorTest, AddNonCompositedScrollNodes) {
       scroll_state.Transform().ScrollNode()->GetCompositorElementId());
   ASSERT_TRUE(scroll_node);
   EXPECT_FALSE(scroll_node->is_composited);
-  EXPECT_FALSE(scroll_tree.CanRealizeScrollsOnCompositor(*scroll_node));
-  EXPECT_EQ(cc::MainThreadScrollingReason::kNotOpaqueForTextAndLCDText,
-            scroll_node->main_thread_scrolling_reasons);
-  EXPECT_TRUE(scroll_tree.ShouldRealizeScrollsOnMain(*scroll_node));
+  EXPECT_FALSE(scroll_tree.CanRealizeScrollsOnActiveTree(*scroll_node));
+  if (RuntimeEnabledFeatures::RasterInducingScrollEnabled()) {
+    EXPECT_EQ(cc::MainThreadScrollingReason::kNotScrollingOnMain,
+              scroll_node->main_thread_scrolling_reasons);
+    EXPECT_TRUE(scroll_tree.CanRealizeScrollsOnPendingTree(*scroll_node));
+    EXPECT_FALSE(scroll_tree.ShouldRealizeScrollsOnMain(*scroll_node));
+  } else {
+    EXPECT_EQ(cc::MainThreadScrollingReason::kNotOpaqueForTextAndLCDText,
+              scroll_node->main_thread_scrolling_reasons);
+    EXPECT_FALSE(scroll_tree.CanRealizeScrollsOnPendingTree(*scroll_node));
+    EXPECT_TRUE(scroll_tree.ShouldRealizeScrollsOnMain(*scroll_node));
+  }
 }
 
 TEST_P(PaintArtifactCompositorTest, AddNonCompositedMainThreadScrollNodes) {
@@ -4999,11 +5013,18 @@ TEST_P(PaintArtifactCompositorTest, AddNonCompositedMainThreadScrollNodes) {
       scroll_state.Transform().ScrollNode()->GetCompositorElementId());
   ASSERT_TRUE(scroll_node);
   EXPECT_FALSE(scroll_node->is_composited);
-  EXPECT_EQ(
-      cc::MainThreadScrollingReason::kNotOpaqueForTextAndLCDText |
-          cc::MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects,
-      scroll_node->main_thread_scrolling_reasons);
-  EXPECT_FALSE(scroll_tree.CanRealizeScrollsOnCompositor(*scroll_node));
+  if (RuntimeEnabledFeatures::RasterInducingScrollEnabled()) {
+    EXPECT_EQ(
+        cc::MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects,
+        scroll_node->main_thread_scrolling_reasons);
+  } else {
+    EXPECT_EQ(
+        cc::MainThreadScrollingReason::kNotOpaqueForTextAndLCDText |
+            cc::MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects,
+        scroll_node->main_thread_scrolling_reasons);
+  }
+  EXPECT_FALSE(scroll_tree.CanRealizeScrollsOnActiveTree(*scroll_node));
+  EXPECT_FALSE(scroll_tree.CanRealizeScrollsOnPendingTree(*scroll_node));
   EXPECT_TRUE(scroll_tree.ShouldRealizeScrollsOnMain(*scroll_node));
 }
 
@@ -5029,7 +5050,8 @@ TEST_P(PaintArtifactCompositorTest,
   EXPECT_TRUE(scroll_node->is_composited);
   EXPECT_EQ(cc::MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects,
             scroll_node->main_thread_scrolling_reasons);
-  EXPECT_FALSE(scroll_tree.CanRealizeScrollsOnCompositor(*scroll_node));
+  EXPECT_FALSE(scroll_tree.CanRealizeScrollsOnActiveTree(*scroll_node));
+  EXPECT_FALSE(scroll_tree.CanRealizeScrollsOnPendingTree(*scroll_node));
   EXPECT_TRUE(scroll_tree.ShouldRealizeScrollsOnMain(*scroll_node));
 }
 
@@ -5053,7 +5075,8 @@ TEST_P(PaintArtifactCompositorTest, AddUnpaintedNonCompositedScrollNodes) {
   EXPECT_EQ(scroll_node->transform_id, cc::kInvalidPropertyNodeId);
   EXPECT_EQ(gfx::PointF(-7, -9),
             scroll_tree.current_scroll_offset(scroll_node->element_id));
-  EXPECT_FALSE(scroll_tree.CanRealizeScrollsOnCompositor(*scroll_node));
+  EXPECT_FALSE(scroll_tree.CanRealizeScrollsOnActiveTree(*scroll_node));
+  EXPECT_FALSE(scroll_tree.CanRealizeScrollsOnPendingTree(*scroll_node));
   EXPECT_FALSE(scroll_tree.ShouldRealizeScrollsOnMain(*scroll_node));
 }
 

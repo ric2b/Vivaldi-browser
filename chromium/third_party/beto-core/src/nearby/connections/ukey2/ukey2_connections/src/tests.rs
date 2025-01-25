@@ -18,10 +18,10 @@ use crypto_provider::CryptoProvider;
 use crypto_provider_default::CryptoProviderImpl;
 use rand::SeedableRng;
 use rand::{rngs::StdRng, CryptoRng, RngCore};
-use ukey2_rs::HandshakeImplementation;
+use ukey2_rs::{HandshakeImplementation, NextProtocol};
 
 use crate::{
-    crypto_utils::{decrypt, encrypt},
+    crypto_utils::{decrypt_cbc, encrypt_cbc},
     java_utils, Aes256Key, D2DConnectionContextV1, D2DHandshakeContext, DeserializeError,
     InitiatorD2DHandshakeContext, ServerD2DHandshakeContext,
 };
@@ -33,8 +33,8 @@ fn crypto_test_encrypt_decrypt() {
     let message = b"Hello World!";
     let key = b"42424242424242424242424242424242";
     let (ciphertext, iv) =
-        encrypt::<_, AesCbcPkcs7Padded>(key, message, &mut rand::rngs::StdRng::from_entropy());
-    let decrypt_result = decrypt::<AesCbcPkcs7Padded>(key, ciphertext.as_slice(), &iv);
+        encrypt_cbc::<_, AesCbcPkcs7Padded>(key, message, &mut rand::rngs::StdRng::from_entropy());
+    let decrypt_result = decrypt_cbc::<AesCbcPkcs7Padded>(key, ciphertext.as_slice(), &iv);
     let ptext = decrypt_result.expect("Decrypt should be successful");
     assert_eq!(ptext, message.to_vec());
 }
@@ -44,7 +44,7 @@ fn crypto_test_encrypt_seeded() {
     let message = b"Hello World!";
     let key = b"42424242424242424242424242424242";
     let mut rng = MockRng;
-    let (ciphertext, iv) = encrypt::<_, AesCbcPkcs7Padded>(key, message, &mut rng);
+    let (ciphertext, iv) = encrypt_cbc::<_, AesCbcPkcs7Padded>(key, message, &mut rng);
     // Expected values extracted from the results of the current implementation.
     // This test makes sure that we don't accidentally change the encryption logic that
     // causes incompatibility between versions.
@@ -60,7 +60,7 @@ fn crypto_test_decrypt_seeded() {
     let iv = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
     let ciphertext = [20, 59, 195, 101, 11, 208, 245, 128, 247, 196, 81, 80, 158, 77, 174, 61];
     let key = b"42424242424242424242424242424242";
-    let plaintext = decrypt::<AesCbcPkcs7Padded>(key, &ciphertext, &iv).unwrap();
+    let plaintext = decrypt_cbc::<AesCbcPkcs7Padded>(key, &ciphertext, &iv).unwrap();
     assert_eq!(plaintext, b"Hello World!");
 }
 
@@ -68,27 +68,41 @@ fn crypto_test_decrypt_seeded() {
 fn decrypt_test_wrong_key() {
     let message = b"Hello World!";
     let good_key = b"42424242424242424242424242424242";
-    let (ciphertext, iv) =
-        encrypt::<_, AesCbcPkcs7Padded>(good_key, message, &mut rand::rngs::StdRng::from_entropy());
+    let (ciphertext, iv) = encrypt_cbc::<_, AesCbcPkcs7Padded>(
+        good_key,
+        message,
+        &mut rand::rngs::StdRng::from_entropy(),
+    );
     let bad_key = b"43434343434343434343434343434343";
-    let decrypt_result = decrypt::<AesCbcPkcs7Padded>(bad_key, ciphertext.as_slice(), &iv);
+    let decrypt_result = decrypt_cbc::<AesCbcPkcs7Padded>(bad_key, ciphertext.as_slice(), &iv);
     match decrypt_result {
         // The padding is valid, but the decrypted value should be bad since the keys don't match
         Ok(decrypted_bad) => assert_ne!(decrypted_bad, message),
         // The padding is bad, so it returns an error and is unable to decrypt
         Err(crypto_provider::aes::cbc::DecryptionError::BadPadding) => (),
     }
-    let decrypt_result = decrypt::<AesCbcPkcs7Padded>(good_key, ciphertext.as_slice(), &iv);
+    let decrypt_result = decrypt_cbc::<AesCbcPkcs7Padded>(good_key, ciphertext.as_slice(), &iv);
     let ptext = decrypt_result.unwrap();
     assert_eq!(ptext, message.to_vec());
 }
 
-fn run_handshake() -> (D2DConnectionContextV1, D2DConnectionContextV1) {
-    run_handshake_with_rng::<CryptoProviderImpl, _>(rand::rngs::StdRng::from_entropy())
+fn run_cbc_handshake() -> (D2DConnectionContextV1, D2DConnectionContextV1) {
+    run_handshake_with_rng::<CryptoProviderImpl, _>(
+        rand::rngs::StdRng::from_entropy(),
+        vec![NextProtocol::Aes256CbcHmacSha256],
+    )
+}
+
+fn run_gcm_handshake() -> (D2DConnectionContextV1, D2DConnectionContextV1) {
+    run_handshake_with_rng::<CryptoProviderImpl, _>(
+        rand::rngs::StdRng::from_entropy(),
+        vec![NextProtocol::Aes256GcmSiv],
+    )
 }
 
 fn run_handshake_with_rng<C, R>(
     mut rng: R,
+    next_protocols: Vec<NextProtocol>,
 ) -> (D2DConnectionContextV1<R>, D2DConnectionContextV1<R>)
 where
     C: CryptoProvider,
@@ -97,10 +111,12 @@ where
     let mut initiator_ctx = InitiatorD2DHandshakeContext::<C, R>::new_impl(
         HandshakeImplementation::Spec,
         R::from_rng(&mut rng).unwrap(),
+        next_protocols.clone(),
     );
     let mut server_ctx = ServerD2DHandshakeContext::<C, R>::new_impl(
         HandshakeImplementation::Spec,
         R::from_rng(&mut rng).unwrap(),
+        &next_protocols,
     );
     server_ctx
         .handle_handshake_message(
@@ -130,7 +146,10 @@ fn send_receive_message_seeded() {
     let rng = MockRng;
     let message = b"Hello World!";
     let (mut init_conn_ctx, mut server_conn_ctx) =
-        run_handshake_with_rng::<RustCryptoImpl<MockRng>, _>(rng);
+        run_handshake_with_rng::<RustCryptoImpl<MockRng>, _>(
+            rng,
+            vec![NextProtocol::Aes256CbcHmacSha256],
+        );
     let encoded =
         init_conn_ctx.encode_message_to_peer::<RustCryptoImpl<MockRng>, &[u8]>(message, None);
     // Expected values extracted from the results of the current implementation.
@@ -140,10 +159,10 @@ fn send_receive_message_seeded() {
         encoded,
         &[
             10, 64, 10, 28, 8, 1, 16, 2, 42, 16, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-            50, 4, 8, 13, 16, 1, 18, 32, 58, 224, 12, 10, 216, 38, 219, 232, 231, 222, 226, 63, 37,
-            20, 92, 208, 40, 8, 29, 98, 226, 132, 30, 61, 229, 78, 20, 182, 217, 26, 176, 77, 18,
-            32, 212, 221, 67, 39, 137, 138, 163, 222, 119, 216, 28, 176, 130, 152, 211, 63, 182,
-            45, 239, 234, 248, 148, 9, 150, 204, 117, 32, 216, 5, 126, 224, 39
+            50, 4, 8, 13, 16, 1, 18, 32, 23, 58, 102, 24, 40, 222, 59, 212, 182, 181, 96, 44, 57,
+            21, 93, 253, 71, 54, 67, 37, 226, 43, 104, 224, 178, 221, 219, 189, 106, 135, 175, 150,
+            18, 32, 134, 9, 237, 41, 112, 183, 129, 198, 240, 13, 139, 66, 21, 56, 28, 100, 142,
+            240, 155, 52, 242, 11, 211, 132, 175, 230, 15, 241, 208, 185, 15, 105
         ]
     );
     let decoded = server_conn_ctx
@@ -155,7 +174,17 @@ fn send_receive_message_seeded() {
 #[test]
 fn send_receive_message() {
     let message = b"Hello World!";
-    let (mut init_conn_ctx, mut server_conn_ctx) = run_handshake();
+    let (mut init_conn_ctx, mut server_conn_ctx) = run_cbc_handshake();
+    let encoded = init_conn_ctx.encode_message_to_peer::<CryptoProviderImpl, &[u8]>(message, None);
+    let decoded = server_conn_ctx
+        .decode_message_from_peer::<CryptoProviderImpl, &[u8]>(encoded.as_slice(), None);
+    assert_eq!(message.to_vec(), decoded.expect("Decode should be successful"));
+}
+
+#[test]
+fn send_receive_message_gcm() {
+    let message = b"Hello World!";
+    let (mut init_conn_ctx, mut server_conn_ctx) = run_gcm_handshake();
     let encoded = init_conn_ctx.encode_message_to_peer::<CryptoProviderImpl, &[u8]>(message, None);
     let decoded = server_conn_ctx
         .decode_message_from_peer::<CryptoProviderImpl, &[u8]>(encoded.as_slice(), None);
@@ -165,7 +194,7 @@ fn send_receive_message() {
 #[test]
 fn send_receive_message_associated_data() {
     let message = b"Hello World!";
-    let (mut init_conn_ctx, mut server_conn_ctx) = run_handshake();
+    let (mut init_conn_ctx, mut server_conn_ctx) = run_cbc_handshake();
     let encoded = init_conn_ctx
         .encode_message_to_peer::<CryptoProviderImpl, _>(message, Some(b"associated data"));
     let decoded = server_conn_ctx.decode_message_from_peer::<CryptoProviderImpl, _>(
@@ -187,7 +216,7 @@ fn send_receive_message_associated_data() {
 
 #[test]
 fn test_save_restore_session() {
-    let (init_conn_ctx, server_conn_ctx) = run_handshake();
+    let (init_conn_ctx, server_conn_ctx) = run_cbc_handshake();
     let init_session = init_conn_ctx.save_session();
     let server_session = server_conn_ctx.save_session();
     let mut init_restored_ctx =
@@ -206,7 +235,7 @@ fn test_save_restore_session() {
 
 #[test]
 fn test_save_restore_bad_session() {
-    let (init_conn_ctx, server_conn_ctx) = run_handshake();
+    let (init_conn_ctx, server_conn_ctx) = run_cbc_handshake();
     let init_session = init_conn_ctx.save_session();
     let server_session = server_conn_ctx.save_session();
     let _ =
@@ -219,7 +248,7 @@ fn test_save_restore_bad_session() {
 
 #[test]
 fn test_save_restore_bad_protocol_version() {
-    let (init_conn_ctx, server_conn_ctx) = run_handshake();
+    let (init_conn_ctx, server_conn_ctx) = run_cbc_handshake();
     let init_session = init_conn_ctx.save_session();
     let mut server_session = server_conn_ctx.save_session();
     let _ =
@@ -233,7 +262,7 @@ fn test_save_restore_bad_protocol_version() {
 
 #[test]
 fn test_unique_session() {
-    let (mut init_conn_ctx, mut server_conn_ctx) = run_handshake();
+    let (mut init_conn_ctx, mut server_conn_ctx) = run_cbc_handshake();
     let init_session = init_conn_ctx.get_session_unique::<CryptoProviderImpl>();
     let server_session = server_conn_ctx.get_session_unique::<CryptoProviderImpl>();
     let message = b"Hello World!";
@@ -249,6 +278,7 @@ fn test_unique_session() {
         Aes256Key::default(),
         Aes256Key::default(),
         StdRng::from_entropy(),
+        NextProtocol::Aes256CbcHmacSha256,
     );
     assert_eq!(init_session, init_session_after);
     assert_eq!(server_session, server_session_after);

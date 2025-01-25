@@ -51,22 +51,10 @@ class SharedTextureMemory;
 class CommandRecordingContext;
 class Device;
 
-MaybeError ValidateTextureCanBeWrapped(ID3D12Resource* d3d12Resource,
-                                       const UnpackedPtr<TextureDescriptor>& descriptor);
-MaybeError ValidateVideoTextureCanBeShared(Device* device, DXGI_FORMAT textureFormat);
-
 class Texture final : public d3d::Texture {
   public:
     static ResultOrError<Ref<Texture>> Create(Device* device,
                                               const UnpackedPtr<TextureDescriptor>& descriptor);
-    static ResultOrError<Ref<Texture>> CreateExternalImage(
-        Device* device,
-        const UnpackedPtr<TextureDescriptor>& descriptor,
-        ComPtr<IUnknown> d3dTexture,
-        Ref<d3d::KeyedMutex> keyedMutex,
-        std::vector<FenceAndSignalValue> waitFences,
-        bool isSwapChainTexture,
-        bool isInitialized);
     static ResultOrError<Ref<Texture>> Create(Device* device,
                                               const UnpackedPtr<TextureDescriptor>& descriptor,
                                               ComPtr<ID3D12Resource> d3d12Texture);
@@ -171,9 +159,9 @@ class Texture final : public d3d::Texture {
 
     Ref<d3d::KeyedMutex> mKeyedMutex;
 
-    // TODO(crbug.com/1515640): Remove these once Chromium has migrated to SharedTextureMemory.
+    // TODO(crbug.com/1515640): Remove wait fences once Chromium has migrated to
+    // SharedTextureMemory.
     std::vector<FenceAndSignalValue> mWaitFences;
-    std::optional<ExecutionSerial> mSignalFenceValue;
 
     bool mSwapChainTexture = false;
 

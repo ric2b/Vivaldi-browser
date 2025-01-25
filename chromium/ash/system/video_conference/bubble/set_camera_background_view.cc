@@ -95,6 +95,12 @@ CameraEffectsController* GetCameraEffectsController() {
   return Shell::Get()->camera_effects_controller();
 }
 
+bool IsVcBackgroundAllowedByEnterprise() {
+  auto* controller = Shell::Get()->session_controller();
+  return std::get<1>(
+      controller->IsEligibleForSeaPen(controller->GetActiveAccountId()));
+}
+
 // Returns a gradient lottie animation defined in the resource file for the
 // `Create with AI` button.
 std::unique_ptr<lottie::Animation> GetGradientAnimation(
@@ -181,7 +187,7 @@ class RecentlyUsedImageButton : public views::ImageButton {
   // Called when decoding metadata complete.
   void SetAccessibilityLabelFromRecentSeaPenImageInfo(
       personalization_app::mojom::RecentSeaPenImageInfoPtr info) {
-    SetAccessibleRole(ax::mojom::Role::kListItem);
+    GetViewAccessibility().SetRole(ax::mojom::Role::kListItem);
     GetViewAccessibility().SetDescription(l10n_util::GetStringUTF16(
         IDS_ASH_VIDEO_CONFERENCE_BUBBLE_BACKGROUND_BLUR_IMAGE_LIST_ITEM_DESCRIPTION));
 
@@ -190,7 +196,7 @@ class RecentlyUsedImageButton : public views::ImageButton {
     if (text.empty() || !base::UTF8ToUTF16(text.c_str(), text.size(), &query)) {
       query.clear();
     }
-    SetAccessibleName(
+    GetViewAccessibility().SetName(
         query, query.empty() ? ax::mojom::NameFrom::kAttributeExplicitlyEmpty
                              : ax::mojom::NameFrom::kAttribute);
   }
@@ -326,7 +332,7 @@ class CreateImageButton : public views::Button {
                                           base::Unretained(this))),
         controller_(controller) {
     SetID(BubbleViewID::kCreateWithAiButton);
-    SetAccessibleName(
+    GetViewAccessibility().SetName(
         l10n_util::GetStringUTF16(IDS_ASH_VIDEO_CONFERENCE_CREAT_WITH_AI_NAME));
     SetLayoutManager(std::make_unique<views::FillLayout>());
     SetBackground(views::CreateThemedRoundedRectBackground(
@@ -449,7 +455,9 @@ SetCameraBackgroundView::SetCameraBackgroundView(
     VideoConferenceTrayController* controller)
     : controller_(controller) {
   SetID(BubbleViewID::kSetCameraBackgroundView);
-  SetVisible(false);
+  SetVisible(
+      GetCameraEffectsController()->GetCameraEffects()->replace_enabled &&
+      IsVcBackgroundAllowedByEnterprise());
 
   // `SetCameraBackgroundView` has 2+ children, we want to stack them
   // vertically.
@@ -471,8 +479,11 @@ void SetCameraBackgroundView::SetBackgroundReplaceUiVisible(bool visible) {
   // We don't want to show the SetCameraBackgroundView if there is no recently
   // used background; instead, the webui is shown.
   if (visible && recently_used_background_view_->children().empty()) {
-    controller_->CreateBackgroundImage();
-    return;
+    // We need to double check that there is no background images.
+    GetCameraEffectsController()->GetRecentlyUsedBackgroundImages(
+        1, base::BindOnce(
+               &SetCameraBackgroundView::OnGetRecentlyUsedBackgroundImages,
+               weak_factory_.GetWeakPtr()));
   }
 
   SetVisible(visible);
@@ -485,10 +496,20 @@ void SetCameraBackgroundView::SetBackgroundReplaceUiVisible(bool visible) {
   }
 }
 
+SetCameraBackgroundView::~SetCameraBackgroundView() = default;
+
 bool SetCameraBackgroundView::
     IsAnimationPlayingForCreateWithAiButtonForTesting() {
   return views::AsViewClass<CreateImageButton>(create_with_image_button_)
       ->IsAnimationPlaying();
+}
+
+void SetCameraBackgroundView::OnGetRecentlyUsedBackgroundImages(
+    const std::vector<BackgroundImageInfo>& background_images) {
+  // Directly open the VcBackgroundApp if no background image exists.
+  if (background_images.empty()) {
+    controller_->CreateBackgroundImage();
+  }
 }
 
 BEGIN_METADATA(SetCameraBackgroundView)

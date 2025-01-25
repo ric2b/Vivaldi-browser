@@ -61,7 +61,8 @@ class DevNull : public dawn::wire::CommandSerializer {
     std::vector<char> buf;
 };
 
-std::unique_ptr<dawn::native::Instance> sInstance;
+// We need this static function pointer to make AdapterSupported accessible in
+// instanceRequestAdapter
 static bool (*sAdapterSupported)(const dawn::native::Adapter&) = nullptr;
 #if DAWN_PLATFORM_IS(WINDOWS) && defined(ADDRESS_SANITIZER)
 static dawn::DynamicLib sVulkanLoader;
@@ -70,11 +71,6 @@ static dawn::DynamicLib sVulkanLoader;
 }  // namespace
 
 int DawnWireServerFuzzer::Initialize(int* argc, char*** argv) {
-    // TODO(crbug.com/1038952): The Instance must be static because destructing the vkInstance with
-    // Swiftshader crashes libFuzzer. When this is fixed, move this into Run so that error injection
-    // for adapter discovery can be fuzzed.
-    sInstance = std::make_unique<dawn::native::Instance>();
-
     // TODO(crbug.com/1038952): Although we keep a static instance, when discovering Vulkan
     // adapters, if no adapter is found, the vulkan loader DLL will be loaded and then unloaded,
     // resulting in ASAN false positives. We work around this by explicitly loading the loader
@@ -89,6 +85,8 @@ int DawnWireServerFuzzer::Run(const uint8_t* data,
                               size_t size,
                               bool (*AdapterSupported)(const dawn::native::Adapter&),
                               bool supportsErrorInjection) {
+    std::unique_ptr<dawn::native::Instance> instance = std::make_unique<dawn::native::Instance>();
+
     // We require at least the injected error index.
     if (size < sizeof(uint64_t)) {
         return 0;
@@ -113,19 +111,51 @@ int DawnWireServerFuzzer::Run(const uint8_t* data,
     DawnProcTable procs = dawn::native::GetProcs();
 
     // Override requestAdapter to find an adapter that the fuzzer supports.
-    procs.instanceRequestAdapter = [](WGPUInstance cInstance,
-                                      const WGPURequestAdapterOptions* options,
-                                      WGPURequestAdapterCallback callback, void* userdata) {
-        std::vector<dawn::native::Adapter> adapters = sInstance->EnumerateAdapters();
+    // TODO: crbug.com/42241461 - Remove overrides once older entry points are deprecated.
+    static constexpr auto RequestAdapter = [](WGPUInstance cInstance,
+                                              WGPURequestAdapterCallback2 callback, void* userdata1,
+                                              void* userdata2) -> WGPUFuture {
+        std::vector<dawn::native::Adapter> adapters =
+            dawn::native::Instance(reinterpret_cast<dawn::native::InstanceBase*>(cInstance))
+                .EnumerateAdapters();
         for (dawn::native::Adapter adapter : adapters) {
             if (sAdapterSupported(adapter)) {
                 WGPUAdapter cAdapter = adapter.Get();
-                dawn::native::GetProcs().adapterReference(cAdapter);
-                callback(WGPURequestAdapterStatus_Success, cAdapter, nullptr, userdata);
-                return;
+                dawn::native::GetProcs().adapterAddRef(cAdapter);
+                callback(WGPURequestAdapterStatus_Success, cAdapter, nullptr, userdata1, userdata2);
+                return {};
             }
         }
-        callback(WGPURequestAdapterStatus_Unavailable, nullptr, "No supported adapter.", userdata);
+        callback(WGPURequestAdapterStatus_Unavailable, nullptr, "No supported adapter.", userdata1,
+                 userdata2);
+        return {};
+    };
+    procs.instanceRequestAdapter = [](WGPUInstance cInstance, const WGPURequestAdapterOptions*,
+                                      WGPURequestAdapterCallback callback, void* userdata) {
+        RequestAdapter(
+            cInstance,
+            [](WGPURequestAdapterStatus status, WGPUAdapter adapter, const char* message,
+               void* callback, void* userdata) {
+                auto cb = reinterpret_cast<WGPURequestAdapterCallback>(callback);
+                cb(status, adapter, message, userdata);
+            },
+            reinterpret_cast<void*>(callback), userdata);
+    };
+    procs.instanceRequestAdapterF = [](WGPUInstance cInstance, const WGPURequestAdapterOptions*,
+                                       WGPURequestAdapterCallbackInfo callbackInfo) -> WGPUFuture {
+        return RequestAdapter(
+            cInstance,
+            [](WGPURequestAdapterStatus status, WGPUAdapter adapter, const char* message,
+               void* callback, void* userdata) {
+                auto cb = reinterpret_cast<WGPURequestAdapterCallback>(callback);
+                cb(status, adapter, message, userdata);
+            },
+            reinterpret_cast<void*>(callbackInfo.callback), callbackInfo.userdata);
+    };
+    procs.instanceRequestAdapter2 = [](WGPUInstance cInstance, const WGPURequestAdapterOptions*,
+                                       WGPURequestAdapterCallbackInfo2 callbackInfo) -> WGPUFuture {
+        return RequestAdapter(cInstance, callbackInfo.callback, callbackInfo.userdata1,
+                              callbackInfo.userdata2);
     };
 
     dawnProcSetProcs(&procs);
@@ -136,16 +166,7 @@ int DawnWireServerFuzzer::Run(const uint8_t* data,
     serverDesc.serializer = &devNull;
 
     std::unique_ptr<dawn::wire::WireServer> wireServer(new dawn::wire::WireServer(serverDesc));
-    wireServer->InjectInstance(sInstance->Get(), {1, 0});
+    wireServer->InjectInstance(instance->Get(), {1, 0});
     wireServer->HandleCommands(reinterpret_cast<const char*>(data), size);
-
-    // Flush remaining callbacks to avoid memory leaks.
-    // TODO(crbug.com/dawn/1712): DeviceNull's APITick() will always return true so cannot
-    // do a polling loop here.
-    dawn::native::InstanceProcessEvents(sInstance->Get());
-
-    // Note: Deleting the server will release all created objects.
-    // Deleted devices will wait for idle on destruction.
-    wireServer = nullptr;
     return 0;
 }

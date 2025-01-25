@@ -58,13 +58,11 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   using Container = extensions::vivaldi::context_menu::Container;
   using Params = extensions::vivaldi::context_menu::Show::Params;
 
-  // When 'rv_context_menu' is a non-nullptr we will treat the root model of
-  // that object as our root menu model. In that case it means it is the code of
-  // VivaldiRenderViewContextMenu that will control how long this object will
-  // live via MenuClosed.
-  ContextMenuController(content::WebContents* window_web_contents,
-                        VivaldiRenderViewContextMenu* rv_context_menu,
-                        std::optional<Params> params);
+  static ContextMenuController* Create(
+      content::WebContents* window_web_contents,
+      VivaldiRenderViewContextMenu* rv_context_menu,
+      std::optional<Params> params);
+
   ~ContextMenuController() override;
 
   Profile* GetProfile();
@@ -99,6 +97,13 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   bool IsCommandIdPersistent(int command_id) const;
 
  private:
+  // When 'rv_context_menu' is a non-nullptr we will treat the root model of
+  // that object as our root menu model. In that case it means it is the code of
+  // VivaldiRenderViewContextMenu that will control how long this object will
+  // live via MenuClosed.
+  ContextMenuController(content::WebContents* window_web_contents,
+                        VivaldiRenderViewContextMenu* rv_context_menu,
+                        std::optional<Params> params);
   void InitModel();
   void PopulateModel(const Element& child,
                      bool dark_text_color,
@@ -115,11 +120,13 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   void OnFaviconDataAvailable(
       int command_id,
       const favicon_base::FaviconImageResult& image_result);
-  void Delete();
+  void CleanupAndNotifyClose();
 
   typedef std::map<int, bool> IdToBoolMap;
   typedef std::map<int, std::string> IdToStringMap;
   typedef std::map<int, ui::Accelerator> IdToAcceleratorMap;
+
+  static std::unique_ptr<ContextMenuController> active_controller_;
 
   const raw_ptr<content::WebContents> window_web_contents_;
   raw_ptr<VivaldiRenderViewContextMenu> rv_context_menu_;
@@ -140,6 +147,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   IdToBoolMap id_to_enabled_map_;
   IdToBoolMap id_to_persistent_map_;
   IdToAcceleratorMap id_to_accelerator_map_;
+  bool has_closed_ = false;
   bool show_shortcuts_ = true;
   IdToStringMap id_to_action_map_;
   gfx::Rect rect_;

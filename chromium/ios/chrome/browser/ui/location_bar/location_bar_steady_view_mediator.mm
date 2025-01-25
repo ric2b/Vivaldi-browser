@@ -11,6 +11,7 @@
 #import "ios/chrome/browser/overlays/model/public/overlay_presenter_observer_bridge.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_request.h"
 #import "ios/chrome/browser/overlays/model/public/web_content_area/http_auth_overlay.h"
+#import "ios/chrome/browser/shared/model/url/url_util.h"
 #import "ios/chrome/browser/shared/model/web_state_list/active_web_state_observation_forwarder.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_steady_view_consumer.h"
@@ -24,7 +25,13 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "app/vivaldi_constants.h"
+#import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
+#import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
 #import "ios/components/webui/web_ui_url_constants.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "prefs/vivaldi_pref_names.h"
 
 using vivaldi::IsVivaldiRunning;
 using vivaldi::kVivaldiUIScheme;
@@ -32,6 +39,11 @@ using vivaldi::kVivaldiUIScheme;
 
 @interface LocationBarSteadyViewMediator () <CRWWebStateObserver,
                                              WebStateListObserving,
+
+                                             // Vivaldi
+                                             BooleanObserver,
+                                             // End Vivaldi
+
                                              OverlayPresenterObserving>
 
 // Whether an overlay is currently presented over the web content area.
@@ -56,6 +68,11 @@ using vivaldi::kVivaldiUIScheme;
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
   std::unique_ptr<ActiveWebStateObservationForwarder> _forwarder;
   std::unique_ptr<OverlayPresenterObserverBridge> _overlayObserver;
+
+  // Vivaldi
+  PrefBackedBoolean* _showFullAddressEnabled;
+  // End Vivaldi
+
 }
 
 - (instancetype)initWithLocationBarModel:(LocationBarModel*)locationBarModel {
@@ -66,6 +83,11 @@ using vivaldi::kVivaldiUIScheme;
     _webStateListObserver = std::make_unique<WebStateListObserverBridge>(self);
     _webStateObserver = std::make_unique<web::WebStateObserverBridge>(self);
     _overlayObserver = std::make_unique<OverlayPresenterObserverBridge>(self);
+
+    if (IsVivaldiRunning()) {
+      [self observeShowFullAddressSettings];
+    } // End Vivaldi
+
   }
   return self;
 }
@@ -89,6 +111,11 @@ using vivaldi::kVivaldiUIScheme;
     _webContentAreaOverlayPresenter = nullptr;
   }
   _overlayObserver = nullptr;
+
+  if (IsVivaldiRunning()) {
+    [self stopObservingShowFullAddressSettings];
+  } // End Vivaldi
+
 }
 
 #pragma mark - Setters
@@ -222,8 +249,17 @@ using vivaldi::kVivaldiUIScheme;
 }
 
 - (void)notifyConsumerOfChangedLocation {
+
+  if (IsVivaldiRunning()) {
+    std::u16string domain = self.locationBarModel->GetURLForDisplay();
+    [self.consumer updateLocationText:[self currentLocationString]
+                               domain:base::SysUTF16ToNSString(domain)
+                             showFull:[self shouldShowFullAddress]];
+  } else {
   [self.consumer updateLocationText:[self currentLocationString]
                            clipTail:[self locationShouldClipTail]];
+  } // End Vivaldi
+
   GURL URL =
       self.currentWebState ? self.currentWebState->GetVisibleURL() : GURL();
   BOOL isNTP = IsURLNewTabPage(URL);
@@ -245,20 +281,17 @@ using vivaldi::kVivaldiUIScheme;
     return l10n_util::GetNSString(IDS_IOS_LOCATION_BAR_SIGN_IN);
   std::u16string string = self.locationBarModel->GetURLForDisplay();
 
-  // Note(VIB-250): (prio@vivaldi.com) - We use chrome scheme underneath
-  // everywhere but show Vivaldi scheme for UI.
   if (IsVivaldiRunning()) {
-    NSString* locationString = base::SysUTF16ToNSString(string);
-    NSURLComponents* locationUrlComponents =
-        [NSURLComponents componentsWithString:locationString];
-    NSString* chromeSchemeString =
-        [NSString stringWithUTF8String:kChromeUIScheme];
-    NSString* vivaldiSchemeString =
-        [NSString stringWithUTF8String:kVivaldiUIScheme];
+    if ([self shouldShowFullAddress]) {
+      string = self.locationBarModel->GetFormattedFullURL();
+    }
 
-    if ([[locationUrlComponents scheme] isEqualToString:chromeSchemeString]) {
-      [locationUrlComponents setScheme:vivaldiSchemeString];
-      return [[locationUrlComponents URL] absoluteString];
+    // Note(VIB-250): (prio@vivaldi.com) - We use chrome scheme underneath
+    // everywhere but show Vivaldi scheme for UI.
+    NSString* locationString = base::SysUTF16ToNSString(string);
+    if (locationString != nil) {
+      return [VivaldiGlobalHelpers
+              formattedURLStringForChromeScheme:locationString];
     }
   } // End Vivaldi
 
@@ -316,7 +349,49 @@ using vivaldi::kVivaldiUIScheme;
   }
 
   const GURL& URL = self.currentWebState->GetLastCommittedURL();
-  return URL.is_valid() && !web::GetWebClient()->IsAppSpecificURL(URL);
+
+  // Enable sharing when the current page url is valid and the url is not app
+  // specific (the url's scheme is `chrome`) except when:
+  // 1. The page url represents a chrome's download path `chrome://downloads`.
+  // 2. The page url is a reference to an external file
+  // `chrome://external-file`.
+  return URL.is_valid() &&
+         (UrlIsDownloadedFile(URL) || UrlIsExternalFileReference(URL) ||
+          !web::GetWebClient()->IsAppSpecificURL(URL));
 }
+
+#pragma mark - Vivaldi
+- (void)observeShowFullAddressSettings {
+  _showFullAddressEnabled =
+      [[PrefBackedBoolean alloc]
+          initWithPrefService:[self localPrefs]
+              prefName:vivaldiprefs::kVivaldiShowFullAddressEnabled];
+  [_showFullAddressEnabled setObserver:self];
+  [self booleanDidChange:_showFullAddressEnabled];
+}
+
+- (void)stopObservingShowFullAddressSettings {
+  [_showFullAddressEnabled stop];
+  [_showFullAddressEnabled setObserver:nil];
+  _showFullAddressEnabled = nil;
+}
+
+#pragma mark - Helpers
+- (PrefService*)localPrefs {
+  return GetApplicationContext()->GetLocalState();
+}
+
+- (BOOL)shouldShowFullAddress {
+  return [self localPrefs]->GetBoolean(
+                vivaldiprefs::kVivaldiShowFullAddressEnabled);
+}
+
+#pragma mark - BooleanObserver
+- (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
+  if (observableBoolean == _showFullAddressEnabled) {
+    [self notifyConsumerOfChangedLocation];
+  }
+}
+// End Vivaldi
 
 @end

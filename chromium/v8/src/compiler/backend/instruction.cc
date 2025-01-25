@@ -261,6 +261,9 @@ std::ostream& operator<<(std::ostream& os, const InstructionOperand& op) {
         case MachineRepresentation::kWord64:
           os << "|w64";
           break;
+        case MachineRepresentation::kFloat16:
+          os << "|f16";
+          break;
         case MachineRepresentation::kFloat32:
           os << "|f32";
           break;
@@ -626,7 +629,7 @@ std::ostream& operator<<(std::ostream& os, const Constant& constant) {
     case Constant::kFloat64:
       return os << constant.ToFloat64().value();
     case Constant::kExternalReference:
-      return os << constant.ToExternalReference().address();
+      return os << constant.ToExternalReference();
     case Constant::kHeapObject:  // Fall through.
     case Constant::kCompressedHeapObject:
       return os << Brief(*constant.ToHeapObject());
@@ -1036,6 +1039,7 @@ static MachineRepresentation FilterRepresentation(MachineRepresentation rep) {
     case MachineRepresentation::kBit:
     case MachineRepresentation::kWord8:
     case MachineRepresentation::kWord16:
+    case MachineRepresentation::kFloat16:
       return InstructionSequence::DefaultRepresentation();
     case MachineRepresentation::kWord32:
     case MachineRepresentation::kWord64:
@@ -1217,14 +1221,16 @@ size_t GetTotalConservativeFrameSizeInBytes(FrameStateType type,
 
 FrameStateDescriptor::FrameStateDescriptor(
     Zone* zone, FrameStateType type, BytecodeOffset bailout_id,
-    OutputFrameStateCombine state_combine, size_t parameters_count,
-    size_t locals_count, size_t stack_count,
+    OutputFrameStateCombine state_combine, uint16_t parameters_count,
+    uint16_t max_arguments, size_t locals_count, size_t stack_count,
     MaybeHandle<SharedFunctionInfo> shared_info,
-    FrameStateDescriptor* outer_state, uint32_t wasm_liftoff_frame_size)
+    FrameStateDescriptor* outer_state, uint32_t wasm_liftoff_frame_size,
+    uint32_t wasm_function_index)
     : type_(type),
       bailout_id_(bailout_id),
       frame_state_combine_(state_combine),
       parameters_count_(parameters_count),
+      max_arguments_(max_arguments),
       locals_count_(locals_count),
       stack_count_(stack_count),
       total_conservative_frame_size_in_bytes_(
@@ -1233,7 +1239,8 @@ FrameStateDescriptor::FrameStateDescriptor(
               wasm_liftoff_frame_size, outer_state)),
       values_(zone),
       shared_info_(shared_info),
-      outer_state_(outer_state) {}
+      outer_state_(outer_state),
+      wasm_function_index_(wasm_function_index) {}
 
 size_t FrameStateDescriptor::GetHeight() const {
   switch (type()) {
@@ -1303,12 +1310,12 @@ size_t FrameStateDescriptor::GetJSFrameCount() const {
 #if V8_ENABLE_WEBASSEMBLY
 JSToWasmFrameStateDescriptor::JSToWasmFrameStateDescriptor(
     Zone* zone, FrameStateType type, BytecodeOffset bailout_id,
-    OutputFrameStateCombine state_combine, size_t parameters_count,
+    OutputFrameStateCombine state_combine, uint16_t parameters_count,
     size_t locals_count, size_t stack_count,
     MaybeHandle<SharedFunctionInfo> shared_info,
     FrameStateDescriptor* outer_state, const wasm::FunctionSig* wasm_signature)
     : FrameStateDescriptor(zone, type, bailout_id, state_combine,
-                           parameters_count, locals_count, stack_count,
+                           parameters_count, 0, locals_count, stack_count,
                            shared_info, outer_state),
       return_kind_(wasm::WasmReturnTypeFromSignature(wasm_signature)) {}
 #endif  // V8_ENABLE_WEBASSEMBLY
@@ -1340,6 +1347,8 @@ std::ostream& operator<<(std::ostream& os, StateValueKind kind) {
       return os << "ArgumentsElements";
     case StateValueKind::kArgumentsLength:
       return os << "ArgumentsLength";
+    case StateValueKind::kRestLength:
+      return os << "RestLength";
     case StateValueKind::kPlain:
       return os << "Plain";
     case StateValueKind::kOptimizedOut:

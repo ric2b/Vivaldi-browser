@@ -6,7 +6,7 @@
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
 load("//lib/builder_url.star", "linkify_builder")
-load("//lib/builders.star", "os", "reclient")
+load("//lib/builders.star", "os", "siso")
 load("//lib/try.star", "try_")
 load("//lib/consoles.star", "consoles")
 load("//project.star", "settings")
@@ -22,11 +22,11 @@ try_.defaults.set(
     compilator_cores = 16,
     execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
     orchestrator_cores = 2,
-    orchestrator_siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
-    reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
+    orchestrator_siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CQ,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
     siso_enabled = True,
-    siso_remote_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
+    siso_project = siso.project.DEFAULT_UNTRUSTED,
+    siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
 )
 
 consoles.list_view(
@@ -36,7 +36,6 @@ consoles.list_view(
 
 try_.builder(
     name = "linux-win-cross-rel",
-    description_html = "Linux to Windows cross compile.",
     mirrors = ["ci/linux-win-cross-rel"],
     gn_args = gn_args.config(
         configs = [
@@ -62,6 +61,21 @@ try_.builder(
 )
 
 try_.builder(
+    name = "win-arm64-clobber-rel",
+    mirrors = [
+        "ci/win-arm64-archive-rel",
+    ],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/win-arm64-archive-rel",
+            "no_symbols",
+            "dcheck_always_on",
+        ],
+    ),
+    contact_team_email = "chrome-desktop-engprod@google.com",
+)
+
+try_.builder(
     name = "win-asan",
     mirrors = [
         "ci/win-asan",
@@ -70,7 +84,7 @@ try_.builder(
     cores = 16,
     ssd = True,
     execution_timeout = 9 * time.hour,
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CQ,
 )
 
 try_.builder(
@@ -106,9 +120,10 @@ try_.builder(
     experiments = {
         # crbug/940930
         "chromium.enable_cleandead": 100,
+        "chromium.use_per_builder_build_dir_name": 100,
     },
     main_list_view = "try",
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CQ,
     tryjob = try_.job(),
 )
 
@@ -139,6 +154,8 @@ try_.orchestrator_builder(
         "chromium.compilator_can_outlive_parent": 100,
         # crbug/940930
         "chromium.enable_cleandead": 100,
+        # b/346598710
+        "chromium.luci_analysis_v2": 100,
     },
     main_list_view = "try",
     # TODO (crbug.com/1372179): Use orchestrator pool once overloaded test pools
@@ -190,7 +207,7 @@ try_.builder(
     cores = 16,
     ssd = True,
     main_list_view = "try",
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CQ,
     tryjob = try_.job(
         # TODO(crbug.com/40847153) Remove once cancelling doesn't wipe
         # out builder cache
@@ -237,7 +254,7 @@ try_.builder(
     cores = 32,
     os = os.WINDOWS_ANY,
     execution_timeout = 6 * time.hour,
-    reclient_instance = None,
+    siso_project = None,
 )
 
 try_.builder(
@@ -247,7 +264,7 @@ try_.builder(
     cores = 32,
     os = os.WINDOWS_ANY,
     execution_timeout = 6 * time.hour,
-    reclient_instance = None,
+    siso_project = None,
 )
 
 try_.builder(
@@ -260,21 +277,6 @@ try_.builder(
     cores = 16,
     os = os.WINDOWS_10,
     ssd = True,
-)
-
-try_.builder(
-    name = "win10-multiscreen-fyi-rel",
-    description_html = (
-        "This builder is intended to run tests related to multiscreen " +
-        "functionality on Windows. For more info, see " +
-        "<a href=\"http://shortn/_4L6uYvA1xU\">http://shortn/_4L6uYvA1xU</a>."
-    ),
-    mirrors = [
-        "ci/win10-multiscreen-fyi-rel",
-    ],
-    gn_args = "ci/win10-multiscreen-fyi-rel",
-    os = os.WINDOWS_10,
-    contact_team_email = "web-windowing-team@google.com",
 )
 
 try_.builder(
@@ -349,6 +351,7 @@ try_.orchestrator_builder(
     # are addressed
     #use_orchestrator_pool = True,
     tryjob = try_.job(
+        experiment_percentage = 100,
         location_filters = [
             "sandbox/win/.+",
             "sandbox/policy/win/.+",
@@ -379,13 +382,11 @@ try_.builder(
     os = os.WINDOWS_10,
     contact_team_email = "chrome-desktop-engprod@google.com",
     main_list_view = "try",
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CQ,
     tryjob = try_.job(
         # TODO(crbug.com/40847153) Remove once cancelling doesn't wipe
         # out builder cache
         cancel_stale = False,
-        # TODO(crbug.com/328175907) Enable after resources verified.
-        experiment_percentage = 100,
     ),
 )
 
@@ -408,7 +409,7 @@ try_.builder(
     contact_team_email = "chrome-desktop-engprod@google.com",
     # Enable when stable.
     # main_list_view = "try",
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CQ,
 )
 
 try_.builder(
@@ -464,9 +465,11 @@ try_.gpu.optional_tests_builder(
         configs = [
             "gpu_fyi_tests",
             "release_builder",
-            "reclient",
+            "remoteexec",
             "minimal_symbols",
             "dcheck_always_on",
+            "win",
+            "x64",
         ],
     ),
     os = os.WINDOWS_DEFAULT,

@@ -21,6 +21,7 @@
 #include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/current_thread.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
@@ -36,6 +37,7 @@
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/history/top_sites_factory.h"
+#include "chrome/browser/icon_manager.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
 #include "chrome/browser/platform_util.h"
@@ -87,7 +89,9 @@
 #include "net/base/filename_util.h"
 #include "net/base/mime_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/display/screen.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_constants.h"
@@ -104,6 +108,7 @@
 #include "components/direct_match/direct_match_service_factory.h"
 #include "components/locale/locale_kit.h"
 #include "extensions/api/runtime/runtime_api.h"
+#include "extensions/api/vivaldi_utilities/drag_download_items.h"
 #include "extensions/helper/file_selection_options.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_gen_prefs.h"
@@ -123,9 +128,6 @@
 
 #include "components/qr_code_generator/qr_code_generator.h"
 #include "components/qr_code_generator/bitmap_generator.h"
-#if defined(ENABLE_RELAY_PROXY)
-#include "proxy/launcher.h"
-#endif
 
 #if BUILDFLAG(IS_WIN)
 
@@ -520,16 +522,13 @@ UtilitiesClearRecentlyClosedTabsFunction::Run() {
   if (tab_restore_service) {
     result = true;
     for (std::string id : params->ids) {
-      size_t before = tab_restore_service->entries().size();
-      tab_restore_service->RemoveEntryById(
+      int num_removed =  tab_restore_service->VivaldiRemoveEntryById(
           SessionID::FromSerializedValue(std::stoi(id)));
-      // We have no direct mechanism to detect errors, so just test that the
-      // number of entries are as expected.
-      if (before - tab_restore_service->entries().size() != 1) {
+      if (num_removed == 0) {
         result = false;
         break;
       }
-      tab_restore_service->VivaldiRequestSave(1);
+      tab_restore_service->VivaldiRequestSave(num_removed);
     }
   }
   return RespondNow(ArgumentList(Results::Create(result)));
@@ -1413,7 +1412,7 @@ CookieControlsMode ToCookieControlsMode(
       return CookieControlsMode::kIncognitoOnly;
     default:
       NOTREACHED() << "Incorrect cookie mode to the API";
-      return CookieControlsMode::kBlockThirdParty;
+      //return CookieControlsMode::kBlockThirdParty;
   }
 }
 
@@ -1429,7 +1428,7 @@ vivaldi::utilities::CookieMode ToCookieMode(CookieControlsMode mode) {
       return CookieMode::kBlockThirdPartyIncognitoOnly;
     default:
       NOTREACHED() << "Incorrect cookie controls mode to the API";
-      return CookieMode::kBlockThirdParty;
+      //return CookieMode::kBlockThirdParty;
   }
 }
 
@@ -2276,104 +2275,6 @@ ExtensionFunction::ResponseAction UtilitiesSetProtocolHandlingFunction::Run() {
   return RespondNow(NoArguments());
 }
 
-ExtensionFunction::ResponseAction UtilitiesConnectProxyFunction::Run() {
-#if defined(ENABLE_RELAY_PROXY)
-  namespace Results = vivaldi::utilities::ConnectProxy::Results;
-  std::optional<vivaldi::utilities::ConnectProxy::Params> params(
-      vivaldi::utilities::ConnectProxy::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  ::vivaldi::proxy::ConnectSettings settings;
-  settings.local_port =
-      std::to_string(static_cast<int>(params->options.local.port));
-  settings.remote_host = params->options.remote.host;
-  settings.remote_port =
-      std::to_string(static_cast<int>(params->options.remote.port));
-  settings.token = params->options.token;
-  ::vivaldi::proxy::ConnectState state;
-
-  vivaldi::utilities::ProxyConnectInfo info;
-  info.success = ::vivaldi::proxy::connect(settings, state);
-  info.pid = state.pid;
-  info.message = state.message;
-
-  return RespondNow(ArgumentList(Results::Create(info)));
-#else
-  return RespondNow(Error("Unexpected call to the browser process"));
-#endif  // ENABLE_RELAY_PROXY
-}
-
-ExtensionFunction::ResponseAction UtilitiesDisconnectProxyFunction::Run() {
-#if defined(ENABLE_RELAY_PROXY)
-  namespace Results = vivaldi::utilities::DisconnectProxy::Results;
-  ::vivaldi::proxy::disconnect();
-  return RespondNow(ArgumentList(Results::Create(true)));
-#else
-  return RespondNow(Error("Unexpected call to the browser process"));
-#endif  // ENABLE_RELAY_PROXY
-}
-
-ExtensionFunction::ResponseAction UtilitiesSupportsProxyFunction::Run() {
-  // Implemented in vivaldi_utilities_hook_delegate.cc to provide synchronous
-  // access.
-  return RespondNow(Error("Unexpected call to the browser process"));
-}
-
-ExtensionFunction::ResponseAction UtilitiesGetOtherProxiesFunction::Run() {
-  namespace Results = vivaldi::utilities::GetOtherProxies::Results;
-  std::optional<vivaldi::utilities::GetOtherProxies::Params> params(
-      vivaldi::utilities::GetOtherProxies::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-
-  std::unique_ptr<PrefProxyConfigTracker> pref_proxy_config_tracker =
-      ProxyServiceFactory::CreatePrefProxyConfigTrackerOfProfile(
-          profile->GetPrefs(), g_browser_process->local_state());
-
-  std::unique_ptr<net::ProxyConfigService> proxy_config_service =
-      ProxyServiceFactory::CreateProxyConfigService(
-          pref_proxy_config_tracker.get(), profile);
-
-  vivaldi::utilities::ProxyInfo info;
-  info.has_other = true;  // Assume conflict by default.
-
-  net::ProxyConfigWithAnnotation config;
-  net::ProxyConfigService::ConfigAvailability available =
-      proxy_config_service->GetLatestProxyConfig(&config);
-  if (available != net::ProxyConfigService::CONFIG_VALID) {
-    // No conflict.
-    info.has_other = false;
-  } else if (config.value().proxy_rules().empty()) {
-    // No other proxies.
-    info.has_other = false;
-  } else if (config.value().proxy_rules().type ==
-             net::ProxyConfig::ProxyRules::Type::PROXY_LIST) {
-    const net::ProxyList& list = config.value().proxy_rules().single_proxies;
-    if (list.size() == 1) {
-      // Assumne there can only be one proxy in the chain to be ours.
-      if (list.First().is_single_proxy()) {
-        const net::ProxyServer& server = list.First().GetProxyServer(0);
-        if (server.GetHost() == params->options.host &&
-            server.GetPort() == params->options.port) {
-          // Only one element and it is our proxy. No conflict.
-          info.has_other = false;
-        }
-      }
-    } else {
-      // Any other size than one means conflict.
-    }
-  } else {
-    // We do not use separate proxies for ftp, https etc (proxy rules type is
-    // then PROXY_LIST_PER_SCHEME) so in that case it is always another proxy
-    // and we have a conflict.
-  }
-  // Fixes a DCHECK in tracker's destructor,
-  pref_proxy_config_tracker->DetachFromPrefService();
-
-  return RespondNow(ArgumentList(Results::Create(info)));
-}
-
 ExtensionFunction::ResponseAction UtilitiesBrowserWindowReadyFunction::Run() {
   namespace Results = vivaldi::utilities::BrowserWindowReady::Results;
   std::optional<vivaldi::utilities::BrowserWindowReady::Params> params(
@@ -2548,6 +2449,123 @@ ExtensionFunction::ResponseAction UtilitiesGetDirectMatchFunction::Run() {
     item.image_path = unit_found->image_path;
     return RespondNow(ArgumentList(Results::Create(item)));
   }
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction UtilitiesEmulateUserInputFunction::Run() {
+  using vivaldi::utilities::EmulateUserInput::Params;
+  namespace Results = vivaldi::utilities::EmulateUserInput::Results;
+
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::FromId(params->window_id);
+  if (!window) {
+    return RespondNow(Error("No such window"));
+  }
+
+  window->web_contents()->GetPrimaryMainFrame()->NotifyUserActivation(
+    blink::mojom::UserActivationNotificationType::kInteraction);
+  return RespondNow(ArgumentList(Results::Create(true)));
+}
+
+void UtilitiesIsVivaldiPinnedToLaunchBarFunction::SendResult(std::optional<bool> isPinned) {
+  namespace Results = vivaldi::utilities::IsVivaldiPinnedToLaunchBar::Results;
+  if (isPinned.has_value())
+    Respond(ArgumentList(Results::Create(isPinned.value())));
+  else
+    Respond(Error("Vivaldi cannot be pinned in the current environment."));
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesIsVivaldiPinnedToLaunchBarFunction::Run() {
+#if BUILDFLAG(IS_WIN)
+  return RespondNow(
+      Error("IsVivaldiPinnedToLaunchBar API is not implemented on "
+            "windows yet"));
+#else
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(
+          &UtilitiesIsVivaldiPinnedToLaunchBarFunction::CheckIsPinned, this),
+      base::BindOnce(&UtilitiesIsVivaldiPinnedToLaunchBarFunction::SendResult,
+                     this));
+
+  return RespondLater();
+#endif
+}
+
+void UtilitiesPinVivaldiToLaunchBarFunction::SendResult(bool success) {
+  namespace Results = vivaldi::utilities::PinVivaldiToLaunchBar::Results;
+  Respond(ArgumentList(Results::Create(success)));
+  return;
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesPinVivaldiToLaunchBarFunction::Run() {
+#if BUILDFLAG(IS_WIN)
+  return RespondNow(Error(
+      "PinVivaldiToLaunchBar API is not implemented on windows yet"));
+#else
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(&UtilitiesPinVivaldiToLaunchBarFunction::PinToLaunchBar,
+                     this),
+      base::BindOnce(&UtilitiesPinVivaldiToLaunchBarFunction::SendResult,
+                     this));
+
+  return RespondLater();
+#endif
+}
+
+ExtensionFunction::ResponseAction UtilitiesDownloadsDragFunction::Run() {
+  using vivaldi::utilities::DownloadsDrag::Params;
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Browser* browser = ::vivaldi::FindBrowserByWindowId(params->window_id);
+  if (!browser) {
+    return RespondNow(Error("No Browser instance."));
+  }
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  DCHECK(profile);
+
+  content::DownloadManager* manager =
+      profile->GetOriginalProfile()->GetDownloadManager();
+
+  const display::Screen* const screen = display::Screen::GetScreen();
+  DCHECK(screen);
+
+  std::vector<extensions::DraggableDownloadItem> items;
+  for (const auto& id : params->download_ids) {
+    download::DownloadItem* download_item = manager->GetDownload(id);
+    if (!download_item ||
+        download_item->GetState() != download::DownloadItem::COMPLETE) {
+      continue;
+    }
+
+    // Use scale for primary display as it's more likely that the icon is cached
+    gfx::Image* icon =
+        g_browser_process->icon_manager()->LookupIconFromFilepath(
+            download_item->GetTargetFilePath(), IconLoader::NORMAL,
+            screen->GetPrimaryDisplay().device_scale_factor());
+    items.push_back({download_item, icon});
+  }
+
+  content::WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  gfx::NativeView view = web_contents->GetNativeView();
+  {
+    // Enable nested tasks during DnD, while |DragDownload()| blocks.
+    base::CurrentThread::ScopedAllowApplicationTasksInNativeNestedLoop allow;
+    DragDownloadItems(items, view);
+  }
+
   return RespondNow(NoArguments());
 }
 

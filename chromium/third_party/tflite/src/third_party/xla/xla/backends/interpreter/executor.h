@@ -31,25 +31,57 @@ limitations under the License.
 #include "xla/stream_executor/device_description.h"
 #include "xla/stream_executor/device_memory.h"
 #include "xla/stream_executor/event.h"
-#include "xla/stream_executor/event_interface.h"
 #include "xla/stream_executor/host/host_stream.h"
 #include "xla/stream_executor/host_memory_allocation.h"
 #include "xla/stream_executor/kernel.h"
 #include "xla/stream_executor/kernel_spec.h"
 #include "xla/stream_executor/launch_dim.h"
 #include "xla/stream_executor/memory_allocation.h"
+#include "xla/stream_executor/platform.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/stream_executor/stream_executor.h"
-#include "xla/stream_executor/stream_executor_interface.h"
+#include "xla/stream_executor/stream_executor_common.h"
 #include "xla/xla_data.pb.h"
 
 namespace stream_executor {
 namespace interpreter {
 
-class XlaInterpreterExecutor : public StreamExecutor {
+// A HostStream that is used for the interpreter.
+class InterpreterStream : public host::HostStream {
+ public:
+  explicit InterpreterStream(StreamExecutor *executor)
+      : host::HostStream(executor) {}
+  absl::Status WaitFor(Stream *stream) override {
+    return host::HostStream::WaitFor(stream);
+  }
+  absl::Status WaitFor(Event *event) override {
+    return absl::UnimplementedError("Not implemented.");
+  }
+  absl::Status RecordEvent(Event *event) override {
+    return absl::UnimplementedError("Not implemented.");
+  }
+
+  absl::Status Memcpy(void *host_dst, const DeviceMemoryBase &gpu_src,
+                      uint64_t size) override {
+    void *src_mem = const_cast<void *>(gpu_src.opaque());
+    EnqueueTask(
+        [this, host_dst, src_mem, size]() { memcpy(host_dst, src_mem, size); });
+    return BlockUntilDone();
+  }
+
+  absl::Status Memcpy(DeviceMemoryBase *gpu_dst, const void *host_src,
+                      uint64_t size) override {
+    void *dst_mem = gpu_dst->opaque();
+    EnqueueTask(
+        [this, dst_mem, host_src, size]() { memcpy(dst_mem, host_src, size); });
+    return BlockUntilDone();
+  }
+};
+
+class XlaInterpreterExecutor : public StreamExecutorCommon {
  public:
   XlaInterpreterExecutor(int device_ordinal, Platform *platform)
-      : StreamExecutor(platform), device_ordinal_(device_ordinal) {}
+      : StreamExecutorCommon(platform), device_ordinal_(device_ordinal) {}
 
   absl::Status Init() override { return absl::OkStatus(); }
 
@@ -75,26 +107,8 @@ class XlaInterpreterExecutor : public StreamExecutor {
     delete[] static_cast<char *>(mem);
   }
 
-  absl::Status Memcpy(Stream *stream, void *host_dst,
-                      const DeviceMemoryBase &dev_src, uint64_t size) override;
-  absl::Status Memcpy(Stream *stream, DeviceMemoryBase *dev_dst,
-                      const void *host_src, uint64_t size) override;
-  bool MemcpyDeviceToDevice(Stream *stream, DeviceMemoryBase *pop_dst,
-                            const DeviceMemoryBase &host_src,
-                            uint64_t size) override {
-    return false;
-  }
-
-  absl::Status MemZero(Stream *stream, DeviceMemoryBase *location,
-                       uint64_t size) override {
-    return absl::InternalError("Interpreter can not memzero");
-  }
   absl::Status Memset(Stream *stream, DeviceMemoryBase *location,
                       uint8_t pattern, uint64_t size) override {
-    return absl::InternalError("Interpreter can not memset");
-  }
-  absl::Status Memset32(Stream *stream, DeviceMemoryBase *location,
-                        uint32_t pattern, uint64_t size) override {
     return absl::InternalError("Interpreter can not memset");
   }
 
@@ -114,27 +128,7 @@ class XlaInterpreterExecutor : public StreamExecutor {
   bool HostCallback(Stream *stream,
                     absl::AnyInvocable<absl::Status() &&> callback) override;
 
-  absl::Status AllocateEvent(Event *event) override { return absl::OkStatus(); }
-
-  absl::Status DeallocateEvent(Event *event) override {
-    return absl::OkStatus();
-  }
-
-  absl::Status RecordEvent(Stream *stream, Event *event) override {
-    return absl::Status{absl::StatusCode::kUnimplemented, "RecordEvent"};
-  }
-
-  absl::Status WaitForEvent(Stream *stream, Event *event) override {
-    return absl::Status{absl::StatusCode::kUnimplemented, "WaitForEvent"};
-  }
-
-  Event::Status PollForEventStatus(Event *event) override {
-    return Event::Status::kError;
-  }
-
-  bool AllocateStream(Stream *stream) override { return true; }
   void DeallocateStream(Stream *stream) override {}
-  bool CreateStreamDependency(Stream *dependent, Stream *other) override;
 
   absl::Status BlockHostUntilDone(Stream *stream) override;
 
@@ -150,31 +144,25 @@ class XlaInterpreterExecutor : public StreamExecutor {
   static absl::StatusOr<std::unique_ptr<DeviceDescription>>
   CreateDeviceDescription(int device_ordinal);
 
-  absl::Status EnablePeerAccessTo(StreamExecutorInterface *other) override {
+  absl::Status EnablePeerAccessTo(StreamExecutor *other) override {
     return absl::OkStatus();
   }
 
-  bool CanEnablePeerAccessTo(StreamExecutorInterface *other) override {
-    return true;
+  bool CanEnablePeerAccessTo(StreamExecutor *other) override { return true; }
+  absl::StatusOr<std::unique_ptr<Event>> CreateEvent() override {
+    return std::make_unique<Event>();
   }
 
-  std::unique_ptr<EventInterface> CreateEventImplementation() override {
-    return nullptr;
-  }
-
-  std::unique_ptr<StreamInterface> GetStreamImplementation() override {
-    return std::make_unique<host::HostStream>();
+  absl::StatusOr<std::unique_ptr<Stream>> CreateStream(
+      std::optional<std::variant<StreamPriority, int>> priority =
+          std::nullopt) override {
+    return std::make_unique<InterpreterStream>(this);
   }
 
  private:
   // The device ordinal value that this executor was initialized with; recorded
   // for use in getting device metadata. Immutable post-initialization.
   int device_ordinal_;
-
-  DeviceMemoryBase AllocateSingleOutput(const xla::Shape &shape);
-
-  absl::StatusOr<DeviceMemoryBase> AllocateOutputBuffer(
-      const xla::Shape &shape);
 };
 
 }  // namespace interpreter

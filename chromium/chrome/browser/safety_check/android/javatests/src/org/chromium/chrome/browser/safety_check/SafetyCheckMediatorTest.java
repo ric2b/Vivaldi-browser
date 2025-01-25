@@ -10,6 +10,7 @@ import static androidx.test.espresso.intent.matcher.IntentMatchers.anyIntent;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -37,7 +38,6 @@ import androidx.test.espresso.intent.Intents;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -54,6 +54,7 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRule;
 import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.JniMocker;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.loading_modal.LoadingModalDialogCoordinator;
 import org.chromium.chrome.browser.password_check.PasswordCheck;
 import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
@@ -68,6 +69,7 @@ import org.chromium.chrome.browser.password_manager.PasswordCheckupClientHelper.
 import org.chromium.chrome.browser.password_manager.PasswordCheckupClientHelperFactory;
 import org.chromium.chrome.browser.password_manager.PasswordManagerBackendSupportHelper;
 import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
+import org.chromium.chrome.browser.password_manager.PasswordManagerHelperJni;
 import org.chromium.chrome.browser.password_manager.PasswordManagerUtilBridge;
 import org.chromium.chrome.browser.password_manager.PasswordManagerUtilBridgeJni;
 import org.chromium.chrome.browser.password_manager.PasswordStoreBridge;
@@ -84,10 +86,13 @@ import org.chromium.chrome.browser.safety_check.SafetyCheckMediator.SafetyCheckI
 import org.chromium.chrome.browser.safety_check.SafetyCheckProperties.SafeBrowsingState;
 import org.chromium.chrome.browser.safety_check.SafetyCheckProperties.UpdatesState;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
+import org.chromium.chrome.browser.ui.signin.SigninAndHistorySyncActivityLauncher;
+import org.chromium.chrome.browser.ui.signin.SigninAndHistorySyncCoordinator;
 import org.chromium.chrome.browser.ui.signin.SyncConsentActivityLauncher;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.sync.SyncService;
 import org.chromium.components.sync.UserSelectableType;
 import org.chromium.components.user_prefs.UserPrefs;
@@ -120,8 +125,6 @@ public class SafetyCheckMediatorTest {
     @Rule(order = -2)
     public BaseRobolectricTestRule mBaseRule = new BaseRobolectricTestRule();
 
-    @Rule public TestRule mFeaturesProcessor = new Features.JUnitProcessor();
-
     @Rule public JniMocker mJniMocker = new JniMocker();
 
     private PropertyModel mSafetyCheckModel;
@@ -130,7 +133,8 @@ public class SafetyCheckMediatorTest {
     @Mock private SafetyCheckBridge.Natives mSafetyCheckBridge;
     @Mock private Profile mProfile;
     @Mock private SafetyCheckUpdatesDelegate mUpdatesDelegate;
-    @Mock private SyncConsentActivityLauncher mSigninLauncher;
+    @Mock private SigninAndHistorySyncActivityLauncher mSigninLauncher;
+    @Mock private SyncConsentActivityLauncher mSyncLauncher;
     @Mock private SettingsLauncher mSettingsLauncher;
     @Mock private SyncService mSyncService;
     @Mock private Handler mHandler;
@@ -145,6 +149,7 @@ public class SafetyCheckMediatorTest {
     // TODO(crbug.com/40854050): Use fake instead of mocking
     @Mock private PasswordManagerBackendSupportHelper mBackendSupportHelperMock;
     @Mock private PasswordManagerUtilBridge.Natives mPasswordManagerUtilBridgeNativeMock;
+    @Mock private PasswordManagerHelper.Natives mPasswordManagerHelperNativeMock;
     @Mock LoadingModalDialogCoordinator mLoadingModalDialogCoordinator;
     private FakePasswordCheckControllerFactory mPasswordCheckControllerFactory;
 
@@ -211,6 +216,8 @@ public class SafetyCheckMediatorTest {
         when(mSyncService.hasSyncConsent()).thenReturn(true);
         when(mSyncService.getAccountInfo())
                 .thenReturn(CoreAccountInfo.createFromEmailAndGaiaId(TEST_EMAIL_ADDRESS, "0"));
+        when(mPasswordManagerHelperNativeMock.hasChosenToSyncPasswords(mSyncService))
+                .thenReturn(true);
 
         // TODO(crbug.com/41483841): Parametrize the tests in SafetyCheckMediatorTest for local and
         // account storage.
@@ -226,6 +233,7 @@ public class SafetyCheckMediatorTest {
     private SafetyCheckMediator createSafetyCheckMediator(
             PropertyModel passwordCheckAccountModel, PropertyModel passwordCheckLocalModel) {
         return new SafetyCheckMediator(
+                mProfile,
                 mSafetyCheckModel,
                 passwordCheckAccountModel,
                 passwordCheckLocalModel,
@@ -233,6 +241,7 @@ public class SafetyCheckMediatorTest {
                 new SafetyCheckBridge(mProfile),
                 mSettingsLauncher,
                 mSigninLauncher,
+                mSyncLauncher,
                 mSyncService,
                 mPrefService,
                 mPasswordStoreBridge,
@@ -257,6 +266,7 @@ public class SafetyCheckMediatorTest {
         MockitoAnnotations.initMocks(this);
         mJniMocker.mock(
                 PasswordManagerUtilBridgeJni.TEST_HOOKS, mPasswordManagerUtilBridgeNativeMock);
+        mJniMocker.mock(PasswordManagerHelperJni.TEST_HOOKS, mPasswordManagerHelperNativeMock);
         when(mProfile.getOriginalProfile()).thenReturn(mProfile);
         configureMockSyncService();
 
@@ -268,7 +278,7 @@ public class SafetyCheckMediatorTest {
         // PasswordManagerHelper so the bridge method needs to be mocked.
         // The parameter mUseGmsApi currently means that the mock SyncService will be configured to
         // sync passwords, which so far is the only case in which the GMS APIs can be used.
-        when(mPasswordManagerUtilBridgeNativeMock.shouldUseUpmWiring(mUseGmsApi, mPrefService))
+        when(mPasswordManagerUtilBridgeNativeMock.shouldUseUpmWiring(mSyncService, mPrefService))
                 .thenReturn(mUseGmsApi);
 
         mJniMocker.mock(SafetyCheckBridgeJni.TEST_HOOKS, mSafetyCheckBridge);
@@ -761,6 +771,31 @@ public class SafetyCheckMediatorTest {
     }
 
     @Test
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    public void testClickListenerStartsSignInFlowWhenUserSignedOut() {
+        mMediator.setInitialState();
+        setUpPasswordCheckToReturnError(
+                PasswordStorageType.ACCOUNT_STORAGE,
+                new PasswordCheckNativeException(
+                        "Test signed out error", PasswordCheckUIStatus.ERROR_SIGNED_OUT));
+        assertEquals(PasswordsState.SIGNED_OUT, mPasswordCheckModel.get(PASSWORDS_STATE));
+
+        click(getPasswordsClickListener(mPasswordCheckModel));
+
+        verify(mSigninLauncher)
+                .launchActivityIfAllowed(
+                        any(),
+                        eq(mProfile),
+                        any(),
+                        eq(SigninAndHistorySyncCoordinator.NoAccountSigninMode.ADD_ACCOUNT),
+                        eq(
+                                SigninAndHistorySyncCoordinator.WithAccountSigninMode
+                                        .DEFAULT_ACCOUNT_BOTTOM_SHEET),
+                        eq(SigninAndHistorySyncCoordinator.HistoryOptInMode.NONE),
+                        eq(SigninAccessPoint.SAFETY_CHECK));
+    }
+
+    @Test
     public void testClickListenerLeadsToUPMAccountPasswordCheckup() {
         // Order: initial state -> safety check triggered -> check done -> load completed.
         mMediator.setInitialState();
@@ -802,7 +837,7 @@ public class SafetyCheckMediatorTest {
 
             Intent settingsLauncherIntent = new Intent();
             settingsLauncherIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            when(mSettingsLauncher.createSettingsActivityIntent(any(), any(), any()))
+            when(mSettingsLauncher.createSettingsActivityIntent(any(), anyInt(), any()))
                     .thenReturn(settingsLauncherIntent);
             intending(anyIntent())
                     .respondWith(new ActivityResult(Activity.RESULT_OK, new Intent()));
@@ -825,7 +860,7 @@ public class SafetyCheckMediatorTest {
                 .getLocalCredentialManagerIntent(
                         eq(ManagePasswordsReferrer.SAFETY_CHECK), any(), any());
         verify(mSettingsLauncher, times(mUseGmsApi ? 0 : 1))
-                .createSettingsActivityIntent(any(), any(), any());
+                .createSettingsActivityIntent(any(), anyInt(), any());
     }
 
     @Test
@@ -840,7 +875,7 @@ public class SafetyCheckMediatorTest {
                 createSafetyCheckMediator(
                         /* passwordCheckAccountModel= */ null, passwordCheckLocalModel);
 
-        when(mPasswordManagerUtilBridgeNativeMock.shouldUseUpmWiring(false, mPrefService))
+        when(mPasswordManagerUtilBridgeNativeMock.shouldUseUpmWiring(mSyncService, mPrefService))
                 .thenReturn(mUseGmsApi);
         when(mSyncService.getSelectedTypes()).thenReturn(new HashSet<>());
 

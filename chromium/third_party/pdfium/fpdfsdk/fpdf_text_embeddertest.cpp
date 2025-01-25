@@ -2,16 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include <algorithm>
+#include <array>
 #include <utility>
 #include <vector>
 
 #include "build/build_config.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxge/fx_font.h"
 #include "public/cpp/fpdf_scopers.h"
@@ -21,7 +18,10 @@
 #include "public/fpdfview.h"
 #include "testing/embedder_test.h"
 #include "testing/fx_string_testhelpers.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using ::testing::ElementsAreArray;
 
 namespace {
 
@@ -35,8 +35,10 @@ bool check_unsigned_shorts(const char* expected,
     return false;
 
   for (size_t i = 0; i < length; ++i) {
-    if (actual[i] != static_cast<unsigned short>(expected[i]))
+    if (UNSAFE_TODO(actual[i]) !=
+        static_cast<unsigned short>(UNSAFE_TODO(expected[i]))) {
       return false;
+    }
   }
   return true;
 }
@@ -78,7 +80,7 @@ TEST_F(FPDFTextEmbedderTest, Text) {
   // Count does not include the terminating NUL in the string literal.
   EXPECT_EQ(kHelloGoodbyeTextSize - 1, FPDFText_CountChars(textpage));
   for (size_t i = 0; i < kHelloGoodbyeTextSize - 1; ++i) {
-    EXPECT_EQ(static_cast<unsigned int>(kHelloGoodbyeText[i]),
+    EXPECT_EQ(static_cast<unsigned int>(UNSAFE_TODO(kHelloGoodbyeText[i])),
               FPDFText_GetUnicode(textpage, i))
         << " at " << i;
   }
@@ -210,19 +212,22 @@ TEST_F(FPDFTextEmbedderTest, Text) {
   fxcrt::Fill(buffer, 0xbdbd);
   EXPECT_EQ(
       1, FPDFText_GetBoundedText(textpage, 41.0, 56.0, 82.0, 48.0, buffer, 1));
-  EXPECT_TRUE(check_unsigned_shorts(kHelloGoodbyeText + 4, buffer, 1));
+  EXPECT_TRUE(
+      check_unsigned_shorts(UNSAFE_TODO(kHelloGoodbyeText + 4), buffer, 1));
   EXPECT_EQ(0xbdbd, buffer[1]);
 
   fxcrt::Fill(buffer, 0xbdbd);
   EXPECT_EQ(
       9, FPDFText_GetBoundedText(textpage, 41.0, 56.0, 82.0, 48.0, buffer, 9));
-  EXPECT_TRUE(check_unsigned_shorts(kHelloGoodbyeText + 4, buffer, 8));
+  EXPECT_TRUE(
+      check_unsigned_shorts(UNSAFE_TODO(kHelloGoodbyeText + 4), buffer, 8));
   EXPECT_EQ(0xbdbd, buffer[9]);
 
   fxcrt::Fill(buffer, 0xbdbd);
   EXPECT_EQ(10, FPDFText_GetBoundedText(textpage, 41.0, 56.0, 82.0, 48.0,
                                         buffer, 128));
-  EXPECT_TRUE(check_unsigned_shorts(kHelloGoodbyeText + 4, buffer, 9));
+  EXPECT_TRUE(
+      check_unsigned_shorts(UNSAFE_TODO(kHelloGoodbyeText + 4), buffer, 9));
   EXPECT_EQ(0u, buffer[9]);
   EXPECT_EQ(0xbdbd, buffer[10]);
 
@@ -690,36 +695,37 @@ TEST_F(FPDFTextEmbedderTest, WebLinks) {
 
   static const char expected_url[] = "http://example.com?q=foo";
   static const size_t expected_len = sizeof(expected_url);
-  unsigned short buffer[128];
+  std::array<unsigned short, 128> buffer;
 
   // Retrieve a link with too small a buffer.  Buffer will not be
   // NUL-terminated, but must not be modified past indicated length,
   // so pre-fill with a pattern to check write bounds.
   fxcrt::Fill(buffer, 0xbdbd);
-  EXPECT_EQ(1, FPDFLink_GetURL(pagelink, 0, buffer, 1));
-  EXPECT_TRUE(check_unsigned_shorts(expected_url, buffer, 1));
+  EXPECT_EQ(1, FPDFLink_GetURL(pagelink, 0, buffer.data(), 1));
+  EXPECT_TRUE(check_unsigned_shorts(expected_url, buffer.data(), 1));
   EXPECT_EQ(0xbdbd, buffer[1]);
 
   // Check buffer that doesn't have space for a terminating NUL.
   fxcrt::Fill(buffer, 0xbdbd);
   EXPECT_EQ(static_cast<int>(expected_len - 1),
-            FPDFLink_GetURL(pagelink, 0, buffer, expected_len - 1));
-  EXPECT_TRUE(check_unsigned_shorts(expected_url, buffer, expected_len - 1));
+            FPDFLink_GetURL(pagelink, 0, buffer.data(), expected_len - 1));
+  EXPECT_TRUE(
+      check_unsigned_shorts(expected_url, buffer.data(), expected_len - 1));
   EXPECT_EQ(0xbdbd, buffer[expected_len - 1]);
 
   // Retreive link with exactly-sized buffer.
   fxcrt::Fill(buffer, 0xbdbd);
   EXPECT_EQ(static_cast<int>(expected_len),
-            FPDFLink_GetURL(pagelink, 0, buffer, expected_len));
-  EXPECT_TRUE(check_unsigned_shorts(expected_url, buffer, expected_len));
+            FPDFLink_GetURL(pagelink, 0, buffer.data(), expected_len));
+  EXPECT_TRUE(check_unsigned_shorts(expected_url, buffer.data(), expected_len));
   EXPECT_EQ(0u, buffer[expected_len - 1]);
   EXPECT_EQ(0xbdbd, buffer[expected_len]);
 
   // Retreive link with ample-sized-buffer.
   fxcrt::Fill(buffer, 0xbdbd);
   EXPECT_EQ(static_cast<int>(expected_len),
-            FPDFLink_GetURL(pagelink, 0, buffer, 128));
-  EXPECT_TRUE(check_unsigned_shorts(expected_url, buffer, expected_len));
+            FPDFLink_GetURL(pagelink, 0, buffer.data(), buffer.size()));
+  EXPECT_TRUE(check_unsigned_shorts(expected_url, buffer.data(), expected_len));
   EXPECT_EQ(0u, buffer[expected_len - 1]);
   EXPECT_EQ(0xbdbd, buffer[expected_len]);
 
@@ -781,7 +787,7 @@ TEST_F(FPDFTextEmbedderTest, WebLinksAcrossLines) {
   FPDF_PAGELINK pagelink = FPDFLink_LoadWebLinks(textpage);
   EXPECT_TRUE(pagelink);
 
-  static const char* const kExpectedUrls[] = {
+  static constexpr auto kExpectedUrls = fxcrt::ToArray<const char*>({
       "http://example.com",           // from "http://www.example.com?\r\nfoo"
       "http://example.com/",          // from "http://www.example.com/\r\nfoo"
       "http://example.com/test-foo",  // from "http://example.com/test-\r\nfoo"
@@ -789,7 +795,7 @@ TEST_F(FPDFTextEmbedderTest, WebLinksAcrossLines) {
       // Next two links from "http://www.example.com/\r\nhttp://www.abc.com/"
       "http://example.com/",
       "http://www.abc.com",
-  };
+  });
   static const int kNumLinks = static_cast<int>(std::size(kExpectedUrls));
 
   EXPECT_EQ(kNumLinks, FPDFLink_CountWebLinks(pagelink));
@@ -956,15 +962,15 @@ TEST_F(FPDFTextEmbedderTest, GetFontSize) {
   FPDF_TEXTPAGE textpage = FPDFText_LoadPage(page);
   ASSERT_TRUE(textpage);
 
-  const double kExpectedFontsSizes[] = {12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
-                                        12, 12, 12, 1,  1,  16, 16, 16, 16, 16,
-                                        16, 16, 16, 16, 16, 16, 16, 16, 16, 16};
+  constexpr auto kExpectedFontsSizes = fxcrt::ToArray<const double>(
+      {12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 1,  1,
+       16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16});
 
   int count = FPDFText_CountChars(textpage);
   ASSERT_EQ(std::size(kExpectedFontsSizes), static_cast<size_t>(count));
-  for (int i = 0; i < count; ++i)
+  for (int i = 0; i < count; ++i) {
     EXPECT_EQ(kExpectedFontsSizes[i], FPDFText_GetFontSize(textpage, i)) << i;
-
+  }
   FPDFText_ClosePage(textpage);
   UnloadPage(page);
 }
@@ -1158,7 +1164,7 @@ TEST_F(FPDFTextEmbedderTest, IsInvalidUnicode) {
   UnloadPage(page);
 }
 
-TEST_F(FPDFTextEmbedderTest, Bug_921) {
+TEST_F(FPDFTextEmbedderTest, Bug921) {
   ASSERT_TRUE(OpenDocument("bug_921.pdf"));
   FPDF_PAGE page = LoadPage(0);
   ASSERT_TRUE(page);
@@ -1166,23 +1172,25 @@ TEST_F(FPDFTextEmbedderTest, Bug_921) {
   FPDF_TEXTPAGE textpage = FPDFText_LoadPage(page);
   ASSERT_TRUE(textpage);
 
-  static constexpr unsigned int kData[] = {
-      1095, 1077, 1083, 1086, 1074, 1077, 1095, 1077, 1089, 1082, 1086, 1077,
-      32,   1089, 1090, 1088, 1072, 1076, 1072, 1085, 1080, 1077, 46,   32};
+  static constexpr auto kData = fxcrt::ToArray<const unsigned int>(
+      {1095, 1077, 1083, 1086, 1074, 1077, 1095, 1077, 1089, 1082, 1086, 1077,
+       32,   1089, 1090, 1088, 1072, 1076, 1072, 1085, 1080, 1077, 46,   32});
   static constexpr int kStartIndex = 238;
 
   ASSERT_EQ(268, FPDFText_CountChars(textpage));
-  for (size_t i = 0; i < std::size(kData); ++i)
+  for (size_t i = 0; i < std::size(kData); ++i) {
     EXPECT_EQ(kData[i], FPDFText_GetUnicode(textpage, kStartIndex + i));
-
-  unsigned short buffer[std::size(kData) + 1];
+  }
+  std::array<unsigned short, std::size(kData) + 1> buffer;
   fxcrt::Fill(buffer, 0xbdbd);
-  int count = FPDFText_GetText(textpage, kStartIndex, std::size(kData), buffer);
+  int count =
+      FPDFText_GetText(textpage, kStartIndex, kData.size(), buffer.data());
   ASSERT_GT(count, 0);
   ASSERT_EQ(std::size(kData) + 1, static_cast<size_t>(count));
-  for (size_t i = 0; i < std::size(kData); ++i)
+  for (size_t i = 0; i < std::size(kData); ++i) {
     EXPECT_EQ(kData[i], buffer[i]);
-  EXPECT_EQ(0, buffer[std::size(kData)]);
+  }
+  EXPECT_EQ(0, buffer[kData.size()]);
 
   FPDFText_ClosePage(textpage);
   UnloadPage(page);
@@ -1200,15 +1208,14 @@ TEST_F(FPDFTextEmbedderTest, GetTextWithHyphen) {
   // Expecting 'Veritaserum', except there is a \uFFFE where the hyphen was in
   // the original text. This is a weird thing that Adobe does, which we
   // replicate.
-  constexpr unsigned short soft_expected[] = {
-      0x0056, 0x0065, 0x0072, 0x0069, 0x0074, 0x0061, 0xfffe,
-      0x0073, 0x0065, 0x0072, 0x0075, 0x006D, 0x0000};
+  constexpr auto soft_expected = fxcrt::ToArray<unsigned short>(
+      {0x0056, 0x0065, 0x0072, 0x0069, 0x0074, 0x0061, 0xfffe, 0x0073, 0x0065,
+       0x0072, 0x0075, 0x006D, 0x0000});
   {
     constexpr int count = std::size(soft_expected) - 1;
-    unsigned short buffer[std::size(soft_expected)] = {};
-    EXPECT_EQ(count + 1, FPDFText_GetText(textpage, 0, count, buffer));
-    for (int i = 0; i < count; i++)
-      EXPECT_EQ(soft_expected[i], buffer[i]);
+    std::array<unsigned short, soft_expected.size()> buffer = {};
+    EXPECT_EQ(count + 1, FPDFText_GetText(textpage, 0, count, buffer.data()));
+    EXPECT_THAT(buffer, ElementsAreArray(soft_expected));
   }
 
   // Check that hard hyphens are included
@@ -1218,22 +1225,23 @@ TEST_F(FPDFTextEmbedderTest, GetTextWithHyphen) {
     constexpr size_t offset = std::size(soft_expected) + 1;
     // Expecting 'User-\r\ngenerated', the - is a unicode character, so cannot
     // store in a char[].
-    constexpr unsigned short hard_expected[] = {
-        0x0055, 0x0073, 0x0065, 0x0072, 0x2010, 0x000d, 0x000a, 0x0067, 0x0065,
-        0x006e, 0x0065, 0x0072, 0x0061, 0x0074, 0x0065, 0x0064, 0x0000};
+    constexpr auto hard_expected = fxcrt::ToArray<unsigned short>(
+        {0x0055, 0x0073, 0x0065, 0x0072, 0x2010, 0x000d, 0x000a, 0x0067, 0x0065,
+         0x006e, 0x0065, 0x0072, 0x0061, 0x0074, 0x0065, 0x0064, 0x0000});
     constexpr int count = std::size(hard_expected) - 1;
-    unsigned short buffer[std::size(hard_expected)];
-
-    EXPECT_EQ(count + 1, FPDFText_GetText(textpage, offset, count, buffer));
-    for (int i = 0; i < count; i++)
+    std::array<unsigned short, hard_expected.size()> buffer;
+    EXPECT_EQ(count + 1,
+              FPDFText_GetText(textpage, offset, count, buffer.data()));
+    for (int i = 0; i < count; i++) {
       EXPECT_EQ(hard_expected[i], buffer[i]);
+    }
   }
 
   FPDFText_ClosePage(textpage);
   UnloadPage(page);
 }
 
-TEST_F(FPDFTextEmbedderTest, bug_782596) {
+TEST_F(FPDFTextEmbedderTest, Bug782596) {
   // If there is a regression in this test, it will only fail under ASAN
   ASSERT_TRUE(OpenDocument("bug_782596.pdf"));
   FPDF_PAGE page = LoadPage(0);
@@ -1279,7 +1287,7 @@ TEST_F(FPDFTextEmbedderTest, ControlCharacters) {
 
 // Testing that hyphen makers (0x0002) are replacing hard hyphens when
 // the word contains non-ASCII characters.
-TEST_F(FPDFTextEmbedderTest, bug_1029) {
+TEST_F(FPDFTextEmbedderTest, Bug1029) {
   ASSERT_TRUE(OpenDocument("bug_1029.pdf"));
   FPDF_PAGE page = LoadPage(0);
   ASSERT_TRUE(page);
@@ -1296,14 +1304,15 @@ TEST_F(FPDFTextEmbedderTest, bug_1029) {
   //
   // The original text has a fi ligature, but that is broken up into
   // two characters when the PDF is processed.
-  constexpr unsigned int expected[] = {
+  static constexpr auto expected = fxcrt::ToArray<unsigned int>({
       0x004d, 0x0045, 0x0054, 0x0041, 0x0044, 0x0041, 0x0054, 0x0041,
       0x0020, 0x0074, 0x0061, 0x0062, 0x006c, 0x0065, 0x002e, 0x0020,
       0x0057, 0x0068, 0x0065, 0x006e, 0x0020, 0x0074, 0x0068, 0x0065,
       0x0020, 0x0073, 0x0070, 0x006c, 0x0069, 0x0074, 0x0020, 0x0068,
       0x0061, 0x0073, 0x0020, 0x0063, 0x006f, 0x006d, 0x006d, 0x0069,
       0x0074, 0x0074, 0x0065, 0x0064, 0x002c, 0x0020, 0x0069, 0x0074,
-      0x0020, 0x006e, 0x006f, 0x0074, 0x0069, 0x0002, 0x0066, 0x0069};
+      0x0020, 0x006e, 0x006f, 0x0074, 0x0069, 0x0002, 0x0066, 0x0069,
+  });
   static_assert(page_range_length == std::size(expected),
                 "Expected should be the same size as the range being "
                 "extracted from page.");
@@ -1437,18 +1446,18 @@ TEST_F(FPDFTextEmbedderTest, GetText) {
 
 TEST_F(FPDFTextEmbedderTest, CroppedText) {
   static constexpr int kPageCount = 4;
-  static constexpr FS_RECTF kBoxes[kPageCount] = {
+  static constexpr std::array<FS_RECTF, kPageCount> kBoxes = {{
       {50.0f, 150.0f, 150.0f, 50.0f},
       {50.0f, 150.0f, 150.0f, 50.0f},
       {60.0f, 150.0f, 150.0f, 60.0f},
       {60.0f, 150.0f, 150.0f, 60.0f},
-  };
-  static constexpr const char* kExpectedText[kPageCount] = {
+  }};
+  static constexpr std::array<const char*, kPageCount> kExpectedText = {{
       " world!\r\ndbye, world!",
       " world!\r\ndbye, world!",
       "bye, world!",
       "bye, world!",
-  };
+  }};
 
   ASSERT_TRUE(OpenDocument("cropped_text.pdf"));
   ASSERT_EQ(kPageCount, FPDF_GetPageCount(document()));
@@ -1492,7 +1501,7 @@ TEST_F(FPDFTextEmbedderTest, CroppedText) {
   }
 }
 
-TEST_F(FPDFTextEmbedderTest, Bug_1139) {
+TEST_F(FPDFTextEmbedderTest, Bug1139) {
   ASSERT_TRUE(OpenDocument("bug_1139.pdf"));
   FPDF_PAGE page = LoadPage(0);
   ASSERT_TRUE(page);
@@ -1515,7 +1524,7 @@ TEST_F(FPDFTextEmbedderTest, Bug_1139) {
   UnloadPage(page);
 }
 
-TEST_F(FPDFTextEmbedderTest, Bug_642) {
+TEST_F(FPDFTextEmbedderTest, Bug642) {
   ASSERT_TRUE(OpenDocument("bug_642.pdf"));
   FPDF_PAGE page = LoadPage(0);
   ASSERT_TRUE(page);
@@ -1609,24 +1618,29 @@ TEST_F(FPDFTextEmbedderTest, GetTextRenderMode) {
   FPDF_PAGE page = LoadPage(0);
   ASSERT_TRUE(page);
 
-  FPDF_TEXTPAGE text_page = FPDFText_LoadPage(page);
-  ASSERT_TRUE(text_page);
+  {
+    ScopedFPDFTextPage text_page(FPDFText_LoadPage(page));
+    ASSERT_TRUE(text_page);
 
-  ASSERT_EQ(12, FPDFText_CountChars(text_page));
+    ASSERT_EQ(12, FPDFText_CountChars(text_page.get()));
 
-  ASSERT_EQ(FPDF_TEXTRENDERMODE_UNKNOWN,
-            FPDFText_GetTextRenderMode(nullptr, 0));
-  ASSERT_EQ(FPDF_TEXTRENDERMODE_UNKNOWN,
-            FPDFText_GetTextRenderMode(text_page, -1));
-  ASSERT_EQ(FPDF_TEXTRENDERMODE_UNKNOWN,
-            FPDFText_GetTextRenderMode(text_page, 314));
+    ASSERT_FALSE(FPDFText_GetTextObject(nullptr, 0));
+    ASSERT_FALSE(FPDFText_GetTextObject(text_page.get(), -1));
+    ASSERT_FALSE(FPDFText_GetTextObject(text_page.get(), 314));
 
-  ASSERT_EQ(FPDF_TEXTRENDERMODE_FILL, FPDFText_GetTextRenderMode(text_page, 0));
+    FPDF_PAGEOBJECT text_object = FPDFText_GetTextObject(text_page.get(), 0);
+    ASSERT_TRUE(text_object);
+    ASSERT_EQ(FPDF_PAGEOBJ_TEXT, FPDFPageObj_GetType(text_object));
+    EXPECT_EQ(FPDF_TEXTRENDERMODE_FILL,
+              FPDFTextObj_GetTextRenderMode(text_object));
 
-  ASSERT_EQ(FPDF_TEXTRENDERMODE_STROKE,
-            FPDFText_GetTextRenderMode(text_page, 7));
+    text_object = FPDFText_GetTextObject(text_page.get(), 7);
+    ASSERT_TRUE(text_object);
+    ASSERT_EQ(FPDF_PAGEOBJ_TEXT, FPDFPageObj_GetType(text_object));
+    EXPECT_EQ(FPDF_TEXTRENDERMODE_STROKE,
+              FPDFTextObj_GetTextRenderMode(text_object));
+  }
 
-  FPDFText_ClosePage(text_page);
   UnloadPage(page);
 }
 
@@ -1699,7 +1713,7 @@ TEST_F(FPDFTextEmbedderTest, GetStrokeColor) {
 TEST_F(FPDFTextEmbedderTest, GetMatrix) {
   constexpr char kExpectedText[] = "A1\r\nA2\r\nA3";
   constexpr size_t kExpectedTextSize = std::size(kExpectedText);
-  constexpr FS_MATRIX kExpectedMatrices[] = {
+  constexpr auto kExpectedMatrices = fxcrt::ToArray<const FS_MATRIX>({
       {12.0f, 0.0f, 0.0f, 10.0f, 66.0f, 90.0f},
       {12.0f, 0.0f, 0.0f, 10.0f, 66.0f, 90.0f},
       {1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f},
@@ -1710,7 +1724,7 @@ TEST_F(FPDFTextEmbedderTest, GetMatrix) {
       {1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f},
       {1.0f, 0.0f, 0.0f, 0.833333, 60.0f, 130.0f},
       {1.0f, 0.0f, 0.0f, 0.833333, 60.0f, 130.0f},
-  };
+  });
   constexpr size_t kExpectedCount = std::size(kExpectedMatrices);
   static_assert(kExpectedCount + 1 == kExpectedTextSize,
                 "Bad expected matrix size");
@@ -1878,7 +1892,7 @@ TEST_F(FPDFTextEmbedderTest, BigtableTextExtraction) {
     ASSERT_EQ(kExpectedTextCount, char_count);
 
     for (int i = 0; i < kExpectedTextCount; ++i) {
-      EXPECT_EQ(static_cast<uint32_t>(kExpectedText[i]),
+      EXPECT_EQ(static_cast<uint32_t>(UNSAFE_TODO(kExpectedText[i])),
                 FPDFText_GetUnicode(text_page.get(), i));
     }
   }

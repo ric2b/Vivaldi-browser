@@ -10,7 +10,7 @@
 #include "components/ad_blocker/adblock_known_sources_handler.h"
 #include "components/ad_blocker/adblock_rule_manager.h"
 #include "components/ad_blocker/adblock_rule_service.h"
-#include "components/request_filter/adblock_filter/blocked_urls_reporter.h"
+#include "components/request_filter/adblock_filter/adblock_tab_handler.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function.h"
@@ -23,7 +23,7 @@ class ContentBlockingEventRouter
     : public adblock_filter::RuleService::Observer,
       public adblock_filter::RuleManager::Observer,
       public adblock_filter::KnownRuleSourcesHandler::Observer,
-      public adblock_filter::BlockedUrlsReporter::Observer {
+      public adblock_filter::TabHandler::Observer {
  public:
   explicit ContentBlockingEventRouter(content::BrowserContext* browser_context);
   ~ContentBlockingEventRouter() override;
@@ -56,7 +56,7 @@ class ContentBlockingEventRouter
   void OnKnownSourceDisabled(adblock_filter::RuleGroup group,
                              uint32_t source_id) override;
 
-  // adblock_filter::BlockedUrlsReporter::Observer implementation.
+  // adblock_filter::TabHandler::Observer implementation.
   void OnNewBlockedUrlsReported(
       adblock_filter::RuleGroup group,
       std::set<content::WebContents*> tabs_with_new_blocks) override;

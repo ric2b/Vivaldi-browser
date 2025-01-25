@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/functional/bind.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "components/signin/public/identity_manager/access_token_fetcher.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
@@ -244,7 +243,7 @@ void SyncAuthManager::ConnectionStatusChanged(ConnectionStatus status) {
       break;
     case CONNECTION_NOT_ATTEMPTED:
       // The connection status should never change to "not attempted".
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -294,10 +293,6 @@ void SyncAuthManager::ConnectionClosed() {
 
 void SyncAuthManager::OnPrimaryAccountChanged(
     const signin::PrimaryAccountChangeEvent& event) {
-  if (event.GetEventTypeFor(signin::ConsentLevel::kSync) ==
-      signin::PrimaryAccountChangeEvent::Type::kCleared) {
-    UMA_HISTOGRAM_ENUMERATION("Sync.StopSource", SIGN_OUT, STOP_SOURCE_LIMIT);
-  }
   UpdateSyncAccountIfNecessary();
 }
 

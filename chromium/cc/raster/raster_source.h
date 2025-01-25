@@ -18,6 +18,7 @@
 #include "cc/debug/rendering_stats_instrumentation.h"
 #include "cc/layers/recording_source.h"
 #include "cc/paint/image_id.h"
+#include "cc/paint/scroll_offset_map.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "ui/gfx/color_space.h"
@@ -34,7 +35,6 @@ class AxisTransform2d;
 
 namespace cc {
 class DisplayItemList;
-class DrawImage;
 class ImageProvider;
 
 class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
@@ -58,6 +58,7 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
     float hdr_headroom = 1.f;
 
     raw_ptr<ImageProvider> image_provider = nullptr;
+    raw_ptr<const ScrollOffsetMap> raster_inducing_scroll_offsets = nullptr;
   };
 
   RasterSource(const RasterSource&) = delete;
@@ -106,11 +107,6 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   // Returns the content size of this raster source at a particular scale.
   gfx::Size GetContentSize(const gfx::Vector2dF& content_scale) const;
 
-  // Populate the given list with all images that may overlap the given
-  // rect in layer space.
-  void GetDiscardableImagesInRect(const gfx::Rect& layer_rect,
-                                  std::vector<const DrawImage*>* images) const;
-
   // Return true iff this raster source can raster the given rect in layer
   // space.
   bool IntersectsRect(const gfx::Rect& layer_rect) const;
@@ -118,7 +114,7 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   // Returns true if this raster source has anything to rasterize.
   bool HasRecordings() const;
 
-  // Valid rectangle in which everything is recorded and can be rastered from.
+  // Valid rectangle in which anything is recorded and can be rastered from.
   gfx::Rect recorded_bounds() const {
     // TODO(crbug.com/41490692): Create tiling for directly composited images
     // based on the recorded bounds.
@@ -130,7 +126,7 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   void DidBeginTracing();
   void AsValueInto(base::trace_event::TracedValue* array) const;
 
-  const scoped_refptr<DisplayItemList>& GetDisplayItemList() const {
+  const scoped_refptr<const DisplayItemList>& GetDisplayItemList() const {
     return display_list_;
   }
 
@@ -139,9 +135,6 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   SkColor4f background_color() const { return background_color_; }
 
   bool requires_clear() const { return requires_clear_; }
-
-  base::flat_map<PaintImage::Id, PaintImage::DecodingMode>
-  TakeDecodingModeMap();
 
   size_t* max_op_size_hint() { return &max_op_size_hint_; }
 
@@ -158,7 +151,7 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   friend class RecordingSource;
   friend class base::RefCountedThreadSafe<RasterSource>;
 
-  explicit RasterSource(const RecordingSource* other);
+  explicit RasterSource(const RecordingSource& other);
   virtual ~RasterSource();
 
   void ClearForOpaqueRaster(SkCanvas* raster_canvas,
@@ -172,8 +165,9 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   // This function will replace pixels in the clip region without blending.
   //
   // Virtual for testing.
-  virtual void PlaybackDisplayListToCanvas(SkCanvas* canvas,
-                                           ImageProvider* image_provider) const;
+  virtual void PlaybackDisplayListToCanvas(
+      SkCanvas* canvas,
+      const PlaybackSettings& settings) const;
 
   // The serialized size for the largest op in this RasterSource. This is
   // accessed only on the raster threads with the context lock acquired.
@@ -182,7 +176,7 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
 
   // These members are const as this raster source may be in use on another
   // thread and so should not be touched after construction.
-  const scoped_refptr<DisplayItemList> display_list_;
+  const scoped_refptr<const DisplayItemList> display_list_;
   const SkColor4f background_color_;
   const bool requires_clear_;
   const bool is_solid_color_;

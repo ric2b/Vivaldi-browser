@@ -7,7 +7,7 @@ load("//lib/args.star", "args")
 load("//lib/builder_config.star", "builder_config")
 load("//lib/builder_health_indicators.star", "health_spec")
 load("//lib/builder_url.star", "linkify_builder")
-load("//lib/builders.star", "builders", "cpu", "os", "reclient", "sheriff_rotations")
+load("//lib/builders.star", "builders", "cpu", "gardener_rotations", "os", "siso")
 load("//lib/branches.star", "branches")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
@@ -21,7 +21,7 @@ ci.defaults.set(
     builderless = True,
     cores = 32,
     os = os.LINUX_DEFAULT,
-    sheriff_rotations = sheriff_rotations.CHROMIUM_CLANG,
+    gardener_rotations = gardener_rotations.CHROMIUM_CLANG,
     # Because these run ToT Clang, reclient is not used.
     # Naturally the runtime will be ~4-8h on average, depending on config.
     # CFI builds will take even longer - around 11h.
@@ -37,13 +37,10 @@ ci.defaults.set(
     properties = {
         "perf_dashboard_machine_group": "ChromiumClang",
     },
-    # TODO: b/335361392 - Rename reclient_instance to rbe_project or siso_project.
-    # This is used by Siso to upload Cloud logging/trace/profiler even without remote execution.
-    reclient_instance = reclient.instance.DEFAULT_TRUSTED,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
     shadow_service_account = ci.DEFAULT_SHADOW_SERVICE_ACCOUNT,
-    siso_configs = ["builder", "clang-tot"],
     siso_enabled = True,
+    siso_project = siso.project.DEFAULT_TRUSTED,
 )
 
 consoles.console_view(
@@ -86,6 +83,8 @@ consoles.console_view(
 )]
 
 def clang_mac_builder(*, name, cores = 12, **kwargs):
+    if "gn_args" in kwargs:
+        kwargs["gn_args"].configs.append("mac")
     return ci.builder(
         name = name,
         cores = cores,
@@ -103,6 +102,8 @@ def clang_mac_builder(*, name, cores = 12, **kwargs):
     )
 
 def clang_tot_linux_builder(short_name, category = "ToT Linux", **kwargs):
+    if "gn_args" in kwargs:
+        kwargs["gn_args"].configs.append("linux")
     ci.builder(
         console_view_entry = consoles.console_view_entry(
             category = category,
@@ -143,7 +144,9 @@ ci.builder(
             "cfi_recover",
             "thin_lto",
             "release_builder",
-            "reclient",
+            "remoteexec",
+            "linux",
+            "x64",
         ],
     ),
     console_view_entry = consoles.console_view_entry(
@@ -152,8 +155,7 @@ ci.builder(
     ),
     contact_team_email = "lexan@google.com",
     notifies = ["CFI Linux"],
-    siso_configs = ["builder"],  # disable clang_tot config to use remote execution.
-    siso_remote_jobs = reclient.jobs.DEFAULT,
+    siso_remote_jobs = siso.remote_jobs.DEFAULT,
 )
 
 ci.builder(
@@ -181,6 +183,8 @@ ci.builder(
             "thin_lto",
             "release_builder",
             "dcheck_always_on",
+            "linux",
+            "x64",
         ],
     ),
     console_view_entry = consoles.console_view_entry(
@@ -215,6 +219,8 @@ ci.builder(
             "release_builder",
             "v8_heap",
             "minimal_symbols",
+            "win",
+            "x64",
         ],
     ),
     os = os.WINDOWS_DEFAULT,
@@ -249,6 +255,8 @@ ci.builder(
             "release",
             "v8_heap",
             "minimal_symbols",
+            "win",
+            "x64",
         ],
     ),
     os = os.WINDOWS_DEFAULT,
@@ -287,6 +295,7 @@ ci.builder(
             "minimal_symbols",
             "strip_debug_info",
             "clang_tot",
+            "arm",
         ],
     ),
     console_view_entry = consoles.console_view_entry(
@@ -323,6 +332,7 @@ ci.builder(
             "clang_tot",
             "shared",
             "debug",
+            "arm",
         ],
     ),
     console_view_entry = consoles.console_view_entry(
@@ -511,6 +521,7 @@ ci.builder(
             "asan",
             "debug_builder",
             "strip_debug_info",
+            "arm",
         ],
     ),
     console_view_entry = consoles.console_view_entry(
@@ -584,6 +595,7 @@ ci.builder(
             "release",
             "also_build_ash_chrome",
             "clang_tot",
+            "x64",
         ],
     ),
     console_view_entry = consoles.console_view_entry(
@@ -618,6 +630,7 @@ ci.builder(
             "debug",
             "also_build_ash_chrome",
             "clang_tot",
+            "x64",
         ],
     ),
     console_view_entry = consoles.console_view_entry(
@@ -654,6 +667,7 @@ ci.builder(
             "release_builder",
             "clang_tot",
             "cast_receiver_size_optimized",
+            "x64",
         ],
     ),
     console_view_entry = [
@@ -733,6 +747,7 @@ clang_tot_linux_builder(
             "full_symbols",
             "shared",
             "release",
+            "x64",
         ],
     ),
     short_name = "rel",
@@ -760,6 +775,7 @@ clang_tot_linux_builder(
             "clang_tot",
             "shared",
             "debug",
+            "x64",
         ],
     ),
     short_name = "dbg",
@@ -788,6 +804,7 @@ clang_tot_linux_builder(
             "asan",
             "lsan",
             "release_builder",
+            "x64",
         ],
     ),
     short_name = "asn",
@@ -821,6 +838,7 @@ clang_tot_linux_builder(
             "pdf_xfa",
             "optimize_for_fuzzing",
             "mojo_fuzzer",
+            "x64",
         ],
     ),
     # Requires a large disk, so has a machine specifically devoted to it
@@ -837,6 +855,7 @@ clang_tot_linux_builder(
             "use_clang_coverage",
             "minimal_symbols",
             "release",
+            "x64",
         ],
     ),
     category = "ToT Code Coverage",
@@ -865,6 +884,7 @@ clang_tot_linux_builder(
             "clang_tot",
             "msan",
             "release",
+            "x64",
         ],
     ),
     os = os.LINUX_FOCAL,
@@ -894,6 +914,7 @@ clang_tot_linux_builder(
             "official_optimize",
             "no_symbols",
             "pgo_phase_1",
+            "x64",
         ],
     ),
     short_name = "pgo",
@@ -921,6 +942,7 @@ clang_tot_linux_builder(
             "clang_tot",
             "tsan",
             "release",
+            "x64",
         ],
     ),
     short_name = "tsn",
@@ -948,6 +970,7 @@ clang_tot_linux_builder(
             "clang_tot",
             "ubsan_vptr_no_recover_hack",
             "release_builder",
+            "x64",
         ],
     ),
     short_name = "usn",
@@ -975,6 +998,7 @@ ci.builder(
             "minimal_symbols",
             "release_builder",
             "x86",
+            "win",
         ],
     ),
     os = os.WINDOWS_DEFAULT,
@@ -1008,6 +1032,7 @@ ci.builder(
             "shared",
             "debug",
             "x86",
+            "win",
         ],
     ),
     builderless = False,
@@ -1043,6 +1068,7 @@ ci.builder(
             "release",
             "x86",
             "dcheck_always_on",
+            "win",
         ],
     ),
     os = os.WINDOWS_DEFAULT,
@@ -1074,6 +1100,8 @@ ci.builder(
             "clang_tot",
             "minimal_symbols",
             "release_builder",
+            "win",
+            "x64",
         ],
     ),
     os = os.WINDOWS_DEFAULT,
@@ -1105,6 +1133,8 @@ ci.builder(
             "clang_tot",
             "shared",
             "debug",
+            "win",
+            "x64",
         ],
     ),
     os = os.WINDOWS_DEFAULT,
@@ -1138,6 +1168,8 @@ ci.builder(
             "shared",
             "release",
             "dcheck_always_on",
+            "win",
+            "x64",
         ],
     ),
     os = os.WINDOWS_DEFAULT,
@@ -1174,6 +1206,8 @@ ci.builder(
             "chrome_with_codecs",
             "pdf_xfa",
             "minimal_symbols",
+            "win",
+            "x64",
         ],
     ),
     builderless = False,
@@ -1213,10 +1247,11 @@ ci.builder(
             "no_symbols",
             "pgo_phase_1",
             "arm64",
+            "win",
         ],
     ),
     os = os.WINDOWS_DEFAULT,
-    sheriff_rotations = args.ignore_default(None),
+    gardener_rotations = args.ignore_default(None),
     console_view_entry = consoles.console_view_entry(
         category = "ToT Windows",
         short_name = "pgo-arm",
@@ -1233,6 +1268,8 @@ ci.builder(
             "use_clang_coverage",
             "minimal_symbols",
             "release",
+            "win",
+            "x64",
         ],
     ),
     os = os.WINDOWS_DEFAULT,
@@ -1265,6 +1302,8 @@ ci.builder(
             "official_optimize",
             "no_symbols",
             "pgo_phase_1",
+            "win",
+            "x64",
         ],
     ),
     os = os.WINDOWS_DEFAULT,
@@ -1306,6 +1345,7 @@ ci.builder(
             "shared",
             "release",
             "dcheck_always_on",
+            "x64",
         ],
     ),
     console_view_entry = consoles.console_view_entry(
@@ -1491,6 +1531,7 @@ clang_mac_builder(
             "clang_tot",
             "minimal_symbols",
             "release_builder",
+            "x64",
         ],
     ),
     console_view_entry = consoles.console_view_entry(

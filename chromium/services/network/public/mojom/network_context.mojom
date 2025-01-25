@@ -54,6 +54,7 @@ import "services/network/public/mojom/shared_dictionary_usage_info.mojom";
 import "services/network/public/mojom/site_for_cookies.mojom";
 import "services/network/public/mojom/socket_broker.mojom";
 import "services/network/public/mojom/ssl_config.mojom";
+import "services/network/public/mojom/storage_access_api.mojom";
 import "services/network/public/mojom/tcp_socket.mojom";
 import "services/network/public/mojom/transferable_directory.mojom";
 import "services/network/public/mojom/trust_tokens.mojom";
@@ -195,7 +196,6 @@ struct HttpAuthStaticNetworkContextParams {
 struct CTPolicy {
   array<string> excluded_hosts;
   array<string> excluded_spkis;
-  array<string> excluded_legacy_spkis;
 };
 
 struct NetworkContextFilePaths {
@@ -665,6 +665,9 @@ struct SharedDictionaryInfo {
   SHA256HashValue hash;
 };
 
+// An opaque handle that keeps preloaded the preloaded shared dictionaries.
+interface PreloadedSharedDictionaryInfoHandle {};
+
 // Represents a signed exchange report.
 // Spec: https://wicg.github.io/webpackage/loading.html#queue-report
 struct SignedExchangeReport {
@@ -892,6 +895,19 @@ struct URLLoaderFactoryParams {
   bool require_cross_site_request_for_cookies = false;
 };
 
+// A GeoHint represents a course location of a user. Values are based on
+// RFC 8805 geolocation.
+struct GeoHint {
+  // Country code of the geo. Example: "US".
+  string country_code;
+
+  // ISO region of the geo. Example: "US-CA".
+  string iso_region;
+
+  // City name of the geo. Example: "MOUNTAIN VIEW".
+  string city_name;
+};
+
 // A blind-signed auth token, suitable for use with IP protection proxies.
 struct BlindSignedAuthToken {
   // The token value, for inclusion in a header.
@@ -899,6 +915,9 @@ struct BlindSignedAuthToken {
 
   // The expiration time of this token.
   mojo_base.mojom.Time expiration;
+
+  // The GeoHint which specifies the coarse geolocation of the token.
+  GeoHint geo_hint;
 };
 
 // The proxy layer to fetch batches of tokens for.
@@ -926,7 +945,7 @@ interface IpProtectionConfigGetter {
   //
   // This method will return an up-to-date list, possibly fetching that list
   // remotely before returning it.
-  GetProxyList() => (array<ProxyChain>? proxy_list);
+  GetProxyList() => (array<ProxyChain>? proxy_list, GeoHint? geo_hint);
 };
 
 // Access to the IP Protection ProxyDelegate in the network service process.
@@ -1090,16 +1109,16 @@ interface NetworkContext {
                        mojo_base.mojom.Time end_time)
       => (bool is_upper_bound, int64 size_or_error);
 
-  // Notifies the HttpCache of a renderer-level cache hit with |url|
-  // and |http_method|, with the network isolation key |key| and
-  // |is_subframe_document_resource| is true if this is a subframe navigation
-  // resource.
+  // Notifies the HttpCache of a renderer-level cache hit with `url`
+  // and `http_method`, with the network isolation key `key` and
+  // `include_credentials` used when calculating the corresponding cache
+  // partition. Note that this assumes that the cache hits being recorded are
+  // for resources and not for navigations.
   //
   // This is being proxied by the browser because the renderer is unable to
   // directly interact with NetworkContext.
   NotifyExternalCacheHit(url.mojom.Url url, string http_method,
                          NetworkIsolationKey key,
-                         bool is_subframe_document_resource,
                          bool include_credentials);
 
   // Clears the host cache. This will affect all NetworkContexts that share the
@@ -1203,9 +1222,8 @@ interface NetworkContext {
   // Queues a report via the Reporting API. |type| describes the type of report
   // (as well as what data will contained in |body|). |group| specifies the
   // endpoint group that the report will be delivered to. |url| indicates the
-  // URL of the resource that the report describes. |user_agent| may be
-  // provided, or will be automatically generated if omitted; |body| holds the
-  // contents of the report.
+  // URL of the resource that the report describes. |body| holds the contents
+  // of the report.
   //
   // |reporting_source| and |network_isolation_key| are used both for looking
   // up the appropriately scoped reporting information and for sending the
@@ -1228,7 +1246,11 @@ interface NetworkContext {
               url.mojom.Url url,
               mojo_base.mojom.UnguessableToken? reporting_source,
               NetworkAnonymizationKey network_anonymization_key,
-              string? user_agent,
+              mojo_base.mojom.DictionaryValue body);
+
+  QueueEnterpriseReport(string type,
+              string group,
+              url.mojom.Url url,
               mojo_base.mojom.DictionaryValue body);
 
   // Queues a signed exchange report.
@@ -1388,10 +1410,10 @@ interface NetworkContext {
   // as "sec-websocket-protocol" and "origin" are handled separately, (e.g.,
   // "sec-websocket-protocol" is constructed from  |requested_protocols| in this
   // message). |site_for_cookies| represents the first-party origin for the
-  // request. |has_storage_access| is whether the calling context has opted into
-  // using a "storage-access" permission grant. |options| may be a combination
-  // of the kWebSocketOption* flags.  |isolation_info| includes SiteForCookies,
-  // top frame origin, and current frame origin, and is used to isolate shared
+  // request. |storage_access_api_status| is used to opt into using a
+  // "storage-access" permission grant. |options| may be a combination of the
+  // kWebSocketOption* flags.  |isolation_info| includes SiteForCookies, top
+  // frame origin, and current frame origin, and is used to isolate shared
   // network stack resources based on the context. It must have
   // RediredMode::kUpdateNothing. Currently, |isolation_info|'s SiteForCookies
   // field is ignored, but it will eventually replace the |site_for_cookies|
@@ -1423,7 +1445,7 @@ interface NetworkContext {
       url.mojom.Url url,
       array<string> requested_protocols,
       SiteForCookies site_for_cookies,
-      bool has_storage_access,
+      StorageAccessApiStatus storage_access_api_status,
       IsolationInfo isolation_info,
       array<HttpHeader> additional_headers,
       int32 process_id,
@@ -1660,6 +1682,13 @@ interface NetworkContext {
   // Sets maximum size of the shared dictionary cache.
   SetSharedDictionaryCacheMaxSize(uint64 cache_max_size);
 
+  // Preloads matching dictionaries for loading documents of the `urls`.
+  PreloadSharedDictionaryInfoForDocument(
+      array<url.mojom.Url> urls,
+      pending_receiver<PreloadedSharedDictionaryInfoHandle> preload_handle);
+  // Check if there is a preloaded shared dictionary info.
+  HasPreloadedSharedDictionaryInfoForTesting() => (bool value);
+
   // Called when visibility of ResourceSchedulerClient has changed.
   // `client_token` identifies which client has changed its visibility.
   ResourceSchedulerClientVisibilityChanged(
@@ -1698,4 +1727,20 @@ interface NetworkContext {
   // take effect afterwards.
   ExemptUrlFromNetworkRevocationForNonce(
       url.mojom.Url exempted_url, mojo_base.mojom.UnguessableToken nonce) => ();
+
+  // Request that `request` be performed and cached as a prefetch. If a matching
+  // request is subseqently received from a render process, the prefetch will
+  // be consumed. `request_id`, `options` and `traffic_annotation` will be
+  // passed to the CreateLoaderAndStart() method of CorsURLLoaderFactory when
+  // the request is started.
+  Prefetch(int32 request_id,
+           uint32 options,
+           URLRequest request,
+           MutableNetworkTrafficAnnotationTag traffic_annotation);
+
+  // Returns whether this NetworkContext was bound to a network.
+  // `bound_network` represents a net::handles::NetworkHandle,
+  // `bound_network` == -1 means that this NetworkContext is not bound to any
+  // network. Refer to NetworkContextParams::bound_network for more info.
+  GetBoundNetworkForTesting() => (int64 bound_network);
 };

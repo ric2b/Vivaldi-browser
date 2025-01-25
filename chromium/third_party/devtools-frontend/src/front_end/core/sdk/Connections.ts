@@ -3,12 +3,10 @@
 // found in the LICENSE file.
 
 import * as Common from '../common/common.js';
-import type * as Platform from '../platform/platform.js';
 import * as Host from '../host/host.js';
+import type * as Platform from '../platform/platform.js';
 import * as ProtocolClient from '../protocol_client/protocol_client.js';
 import * as Root from '../root/root.js';
-
-import {TargetManager} from './TargetManager.js';
 
 export class MainConnection implements ProtocolClient.InspectorBackend.Connection {
   onMessage: ((arg0: (Object|string)) => void)|null;
@@ -270,17 +268,6 @@ export async function initMainConnection(
   ProtocolClient.InspectorBackend.Connection.setFactory(createMainConnection.bind(null, websocketConnectionLost));
   await createRootTarget();
   Host.InspectorFrontendHost.InspectorFrontendHostInstance.connectionReady();
-  Host.InspectorFrontendHost.InspectorFrontendHostInstance.events.addEventListener(
-      Host.InspectorFrontendHostAPI.Events.ReattachRootTarget, () => {
-        const target = TargetManager.instance().rootTarget();
-        if (target) {
-          const router = target.router();
-          if (router) {
-            void router.connection().disconnect();
-          }
-        }
-        void createRootTarget();
-      });
 }
 
 function createMainConnection(websocketConnectionLost: () => void): ProtocolClient.InspectorBackend.Connection {

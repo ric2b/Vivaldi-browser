@@ -27,6 +27,7 @@
 
 #include "dawn/native/SharedResourceMemory.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "dawn/native/Buffer.h"
@@ -89,18 +90,22 @@ MaybeError SharedResourceMemory::ValidateResourceCreatedFromSelf(SharedResource*
     return {};
 }
 
-bool SharedResourceMemory::APIBeginAccess(
+wgpu::Status SharedResourceMemory::APIBeginAccess(
     TextureBase* texture,
     const SharedTextureMemoryBeginAccessDescriptor* descriptor) {
-    return !GetDevice()->ConsumedError(BeginAccess(texture, descriptor),
-                                       "calling %s.BeginAccess(%s).", this, texture);
+    return GetDevice()->ConsumedError(BeginAccess(texture, descriptor),
+                                      "calling %s.BeginAccess(%s).", this, texture)
+               ? wgpu::Status::Error
+               : wgpu::Status::Success;
 }
 
-bool SharedResourceMemory::APIBeginAccess(
+wgpu::Status SharedResourceMemory::APIBeginAccess(
     BufferBase* buffer,
     const SharedBufferMemoryBeginAccessDescriptor* descriptor) {
-    return !GetDevice()->ConsumedError(BeginAccess(buffer, descriptor),
-                                       "calling %s.BeginAccess(%s).", this, buffer);
+    return GetDevice()->ConsumedError(BeginAccess(buffer, descriptor),
+                                      "calling %s.BeginAccess(%s).", this, buffer)
+               ? wgpu::Status::Error
+               : wgpu::Status::Success;
 }
 
 template <typename Resource, typename BeginAccessDescriptor>
@@ -165,29 +170,38 @@ MaybeError SharedResourceMemory::BeginAccess(Resource* resource,
     DAWN_TRY(BeginAccessImpl(resource, descriptor));
 
     for (size_t i = 0; i < descriptor->fenceCount; ++i) {
+        // Add the fences to mPendingFences if they are not already contained in the list.
+        // This loop is O(n*m), but there shouldn't be very many fences.
+        auto it = std::find_if(
+            mContents->mPendingFences.begin(), mContents->mPendingFences.end(),
+            [&](const auto& fence) { return fence.object.Get() == descriptor->fences[i]; });
+        if (it != mContents->mPendingFences.end()) {
+            it->signaledValue = std::max(it->signaledValue, descriptor->signaledValues[i]);
+            continue;
+        }
         mContents->mPendingFences.push_back({descriptor->fences[i], descriptor->signaledValues[i]});
     }
 
     DAWN_ASSERT(!resource->IsError());
-    resource->SetHasAccess(true);
+    resource->OnBeginAccess();
     resource->SetInitialized(descriptor->initialized);
     return {};
 }
 
-bool SharedResourceMemory::APIEndAccess(TextureBase* texture,
-                                        SharedTextureMemoryEndAccessState* state) {
-    bool didEnd = false;
-    [[maybe_unused]] bool hadError = GetDevice()->ConsumedError(
-        EndAccess(texture, state, &didEnd), "calling %s.EndAccess(%s).", this, texture);
-    return didEnd;
+wgpu::Status SharedResourceMemory::APIEndAccess(TextureBase* texture,
+                                                SharedTextureMemoryEndAccessState* state) {
+    return GetDevice()->ConsumedError(EndAccess(texture, state), "calling %s.EndAccess(%s).", this,
+                                      texture)
+               ? wgpu::Status::Error
+               : wgpu::Status::Success;
 }
 
-bool SharedResourceMemory::APIEndAccess(BufferBase* buffer,
-                                        SharedBufferMemoryEndAccessState* state) {
-    bool didEnd = false;
-    [[maybe_unused]] bool hadError = GetDevice()->ConsumedError(
-        EndAccess(buffer, state, &didEnd), "calling %s.EndAccess(%s).", this, buffer);
-    return didEnd;
+wgpu::Status SharedResourceMemory::APIEndAccess(BufferBase* buffer,
+                                                SharedBufferMemoryEndAccessState* state) {
+    return GetDevice()->ConsumedError(EndAccess(buffer, state), "calling %s.EndAccess(%s).", this,
+                                      buffer)
+               ? wgpu::Status::Error
+               : wgpu::Status::Success;
 }
 
 MaybeError SharedResourceMemory::BeginAccessImpl(
@@ -204,12 +218,14 @@ MaybeError SharedResourceMemory::BeginAccessImpl(
 
 ResultOrError<FenceAndSignalValue> SharedResourceMemory::EndAccessImpl(
     TextureBase* texture,
+    ExecutionSerial lastUsageSerial,
     UnpackedPtr<SharedTextureMemoryEndAccessState>& state) {
     DAWN_UNREACHABLE();
 }
 
 ResultOrError<FenceAndSignalValue> SharedResourceMemory::EndAccessImpl(
     BufferBase* buffer,
+    ExecutionSerial lastUsageSerial,
     UnpackedPtr<SharedBufferMemoryEndAccessState>& state) {
     DAWN_UNREACHABLE();
 }
@@ -219,9 +235,7 @@ bool SharedResourceMemory::APIIsDeviceLost() const {
 }
 
 template <typename Resource, typename EndAccessState>
-MaybeError SharedResourceMemory::EndAccess(Resource* resource,
-                                           EndAccessState* state,
-                                           bool* didEnd) {
+MaybeError SharedResourceMemory::EndAccess(Resource* resource, EndAccessState* state) {
     DAWN_TRY(GetDevice()->ValidateObject(resource));
     DAWN_TRY(ValidateResourceCreatedFromSelf(resource));
 
@@ -260,19 +274,24 @@ MaybeError SharedResourceMemory::EndAccess(Resource* resource,
     }
 
     PendingFenceList fenceList;
-    mContents->AcquirePendingFences(&fenceList);
+    // The state transitions to NotAccessed if the exclusive access ends, or the last concurrent
+    // read ends. When this occurs, acquire any pending fences that may remain. This occurs if
+    // the accesses never acquired them.
+    if (mContents->mSharedResourceAccessState == SharedResourceAccessState::NotAccessed) {
+        mContents->AcquirePendingFences(&fenceList);
+    }
 
     DAWN_ASSERT(!resource->IsError());
-    resource->SetHasAccess(false);
+    ExecutionSerial lastUsageSerial = resource->OnEndAccess();
 
-    *didEnd = true;
-
-    // Call the error-generating part of the EndAccess implementation. This is separated out because
-    // writing the output state must happen regardless of whether or not EndAccessInternal
-    // succeeds.
+    // If the last usage serial is non-zero, the texture was used.
+    // Call the error-generating part of the EndAccess implementation to export a fence.
+    // This is separated out because writing the output state must happen regardless of whether
+    // or not EndAccessInternal succeeds.
     MaybeError err;
-    {
-        ResultOrError<FenceAndSignalValue> result = EndAccessInternal(resource, state);
+    if (lastUsageSerial != kBeginningOfGPUTime) {
+        ResultOrError<FenceAndSignalValue> result =
+            EndAccessInternal(lastUsageSerial, resource, state);
         if (result.IsSuccess()) {
             fenceList.push_back(result.AcquireSuccess());
         } else {
@@ -303,13 +322,14 @@ MaybeError SharedResourceMemory::EndAccess(Resource* resource,
 
 template <typename Resource, typename EndAccessState>
 ResultOrError<FenceAndSignalValue> SharedResourceMemory::EndAccessInternal(
+    ExecutionSerial lastUsageSerial,
     Resource* resource,
     EndAccessState* rawState) {
     UnpackedPtr<EndAccessState> state;
     DAWN_TRY_ASSIGN(state, ValidateAndUnpack(rawState));
     // Ensure that commands are submitted before exporting fences with the last usage serial.
-    DAWN_TRY(GetDevice()->GetQueue()->EnsureCommandsFlushed(mContents->GetLastUsageSerial()));
-    return EndAccessImpl(resource, state);
+    DAWN_TRY(GetDevice()->GetQueue()->EnsureCommandsFlushed(lastUsageSerial));
+    return EndAccessImpl(resource, lastUsageSerial, state);
 }
 
 // SharedResourceMemoryContents
@@ -325,14 +345,6 @@ const WeakRef<SharedResourceMemory>& SharedResourceMemoryContents::GetSharedReso
 void SharedResourceMemoryContents::AcquirePendingFences(PendingFenceList* fences) {
     *fences = mPendingFences;
     mPendingFences.clear();
-}
-
-void SharedResourceMemoryContents::SetLastUsageSerial(ExecutionSerial lastUsageSerial) {
-    mLastUsageSerial = lastUsageSerial;
-}
-
-ExecutionSerial SharedResourceMemoryContents::GetLastUsageSerial() const {
-    return mLastUsageSerial;
 }
 
 }  // namespace dawn::native

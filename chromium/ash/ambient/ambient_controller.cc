@@ -616,10 +616,10 @@ void AmbientController::OnUserActivity(const ui::Event* event) {
 void AmbientController::OnKeyEvent(ui::KeyEvent* event) {
   // Prevent dispatching key press event to the login UI.
   MaybeStopUiEventPropagation(event);
-  // |DismissUI| only on |ET_KEY_PRESSED|. Otherwise it won't be possible to
-  // start the preview by pressing "enter" key. It'll be cancelled immediately
-  // on |ET_KEY_RELEASED|.
-  if (event->type() == ui::ET_KEY_PRESSED) {
+  // |DismissUI| only on |EventType::kKeyPressed|. Otherwise it won't be
+  // possible to start the preview by pressing "enter" key. It'll be cancelled
+  // immediately on |EventType::kKeyReleased|.
+  if (event->type() == ui::EventType::kKeyPressed) {
     DismissUI();
   }
 }
@@ -627,7 +627,7 @@ void AmbientController::OnKeyEvent(ui::KeyEvent* event) {
 void AmbientController::OnMouseEvent(ui::MouseEvent* event) {
   // |DismissUI| on actual mouse move only if the screen saver widget is shown
   // (images are downloaded).
-  if (event->type() == ui::ET_MOUSE_MOVED) {
+  if (event->type() == ui::EventType::kMouseMoved) {
     MaybeDismissUIOnMouseMove();
     last_mouse_event_was_move_ = true;
     return;
@@ -1158,12 +1158,12 @@ std::unique_ptr<views::Widget> AmbientController::CreateWidget(
   auto* widget_delegate = new AmbientWidgetDelegate();
   widget_delegate->SetInitiallyFocusedView(container_view.get());
 
-  views::Widget::InitParams params;
-  params.type = views::Widget::InitParams::TYPE_WINDOW_FRAMELESS;
+  views::Widget::InitParams params(
+      views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
+      views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   params.name = GetWidgetName();
   params.show_state = ui::SHOW_STATE_FULLSCREEN;
   params.parent = container;
-  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.delegate = widget_delegate;
   params.visible_on_all_workspaces = true;
 

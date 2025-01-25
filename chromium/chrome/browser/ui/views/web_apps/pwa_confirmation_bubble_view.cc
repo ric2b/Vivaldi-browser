@@ -57,6 +57,9 @@
 #include "ui/vivaldi_browser_window.h"
 
 namespace {
+
+PWAConfirmationBubbleView* g_bubble_ = nullptr;
+
 // Returns an ImageView containing the app icon.
 std::unique_ptr<views::ImageView> CreateIconView(
     const web_app::WebAppInstallInfo& web_app_info) {
@@ -85,10 +88,20 @@ DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(PWAConfirmationBubbleView,
 DEFINE_CLASS_CUSTOM_ELEMENT_EVENT_TYPE(PWAConfirmationBubbleView,
                                        kInstalledPWAEventId);
 
+// static
+bool PWAConfirmationBubbleView::IsShowing() {
+  return g_bubble_;
+}
+
+// static
+PWAConfirmationBubbleView* PWAConfirmationBubbleView::GetBubble() {
+  return g_bubble_;
+}
+
 PWAConfirmationBubbleView::PWAConfirmationBubbleView(
     views::View* anchor_view,
     base::WeakPtr<content::WebContents> web_contents,
-    PageActionIconView* highlight_icon_button,
+    PageActionIconView* pwa_install_icon_view,
     std::unique_ptr<web_app::WebAppInstallInfo> web_app_info,
     std::unique_ptr<webapps::MlInstallOperationTracker> install_tracker,
     web_app::AppInstallationAcceptanceCallback callback,
@@ -97,6 +110,7 @@ PWAConfirmationBubbleView::PWAConfirmationBubbleView(
     feature_engagement::Tracker* tracker)
     : LocationBarBubbleDelegateView(anchor_view, web_contents.get()),
       web_contents_(web_contents),
+      pwa_install_icon_view_(pwa_install_icon_view),
       web_app_info_(std::move(web_app_info)),
       install_tracker_(std::move(install_tracker)),
       callback_(std::move(callback)),
@@ -145,7 +159,7 @@ PWAConfirmationBubbleView::PWAConfirmationBubbleView(
   labels->AddChildView(
       web_app::CreateNameLabel(web_app_info_->title).release());
   labels->AddChildView(
-      web_app::CreateOriginLabelFromStartUrl(web_app_info_->start_url, false)
+      web_app::CreateOriginLabelFromStartUrl(web_app_info_->start_url(), false)
           .release());
 
   if (base::FeatureList::IsEnabled(blink::features::kDesktopPWAsTabStrip) &&
@@ -163,7 +177,10 @@ PWAConfirmationBubbleView::PWAConfirmationBubbleView(
 
   SetDefaultButton(ui::DIALOG_BUTTON_CANCEL);
 
-  SetHighlightedButton(highlight_icon_button);
+  SetHighlightedButton(pwa_install_icon_view_);
+
+  CHECK(!g_bubble_);
+  g_bubble_ = this;
 }
 
 PWAConfirmationBubbleView::~PWAConfirmationBubbleView() = default;
@@ -178,6 +195,8 @@ void PWAConfirmationBubbleView::OnWidgetInitialized() {
 
 bool PWAConfirmationBubbleView::OnCloseRequested(
     views::Widget::ClosedReason close_reason) {
+  base::UmaHistogramEnumeration("WebApp.InstallConfirmation.CloseReason",
+                                close_reason);
   webapps::MlInstallUserResponse response;
   switch (close_reason) {
     case views::Widget::ClosedReason::kAcceptButtonClicked:
@@ -206,11 +225,18 @@ views::View* PWAConfirmationBubbleView::GetInitiallyFocusedView() {
 }
 
 void PWAConfirmationBubbleView::WindowClosing() {
+  DCHECK_EQ(g_bubble_, this);
+  g_bubble_ = nullptr;
+
+  if (pwa_install_icon_view_) {
+    pwa_install_icon_view_->Update();
+  }
+
   // If |web_app_info_| is populated, then the bubble was not accepted.
   if (web_app_info_) {
     base::RecordAction(base::UserMetricsAction("WebAppInstallCancelled"));
     const webapps::AppId app_id =
-        web_app::GenerateAppIdFromManifestId(web_app_info_->manifest_id);
+        web_app::GenerateAppIdFromManifestId(web_app_info_->manifest_id());
 #if BUILDFLAG(IS_CHROMEOS)
     metrics::structured::StructuredMetricsClient::Record(
         cros_events::AppDiscovery_Browser_AppInstallDialogResult()
@@ -241,7 +267,7 @@ bool PWAConfirmationBubbleView::Accept() {
           : web_app::mojom::UserDisplayMode::kStandalone;
 
   webapps::AppId app_id =
-      web_app::GenerateAppIdFromManifestId(web_app_info_->manifest_id);
+      web_app::GenerateAppIdFromManifestId(web_app_info_->manifest_id());
 
 #if BUILDFLAG(IS_CHROMEOS)
   metrics::structured::StructuredMetricsClient::Record(

@@ -28,8 +28,6 @@
 #import "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/strings/grit/ax_strings.h"
 
-#include "app/vivaldi_apptools.h"
-
 using AXRange = ui::AXPlatformNodeDelegate::AXRange;
 
 @interface AXAnnouncementSpec ()
@@ -576,6 +574,8 @@ void CollectAncestorRoles(
       // a list as of 10.12.6, so following WebKit and using table role:
       // crbug.com/753925
       return NSAccessibilityTableRole;
+    case ax::mojom::Role::kGridCell:
+      return @"AXCell";
     case ax::mojom::Role::kHeading:
       return @"AXHeading";
     case ax::mojom::Role::kImage:
@@ -620,8 +620,6 @@ void CollectAncestorRoles(
       return NSAccessibilityButtonRole;
     case ax::mojom::Role::kPopUpButton:
       return NSAccessibilityPopUpButtonRole;
-    case ax::mojom::Role::kPortal:
-      return NSAccessibilityButtonRole;
     case ax::mojom::Role::kProgressIndicator:
       return NSAccessibilityProgressIndicatorRole;
     case ax::mojom::Role::kRadioButton:
@@ -686,6 +684,7 @@ void CollectAncestorRoles(
     case ax::mojom::Role::kDescriptionListDetailDeprecated:
     case ax::mojom::Role::kDirectoryDeprecated:
     case ax::mojom::Role::kPreDeprecated:
+    case ax::mojom::Role::kPortalDeprecated:
       NOTREACHED_NORETURN();
   }
 }
@@ -1274,10 +1273,6 @@ void CollectAncestorRoles(
     [axAttributes addObject:NSAccessibilityDetailsElementsAttribute];
   }
 
-  // Drop effect.
-  if (_node->HasHtmlAttribute("aria-dropeffect"))
-    [axAttributes addObject:NSAccessibilityDropEffectsAttribute];
-
   // Error messages.
   if (_node->HasIntListAttribute(
           ax::mojom::IntListAttribute::kErrormessageIds)) {
@@ -1441,7 +1436,7 @@ void CollectAncestorRoles(
 
   switch (static_cast<ax::mojom::AriaCurrentState>(ariaCurrent)) {
     case ax::mojom::AriaCurrentState::kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return @"false";
     case ax::mojom::AriaCurrentState::kFalse:
       return @"false";
@@ -1459,7 +1454,7 @@ void CollectAncestorRoles(
       return @"time";
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return @"false";
 }
 
@@ -1601,14 +1596,11 @@ void CollectAncestorRoles(
     return nil;
 
   std::string id;
-  if (_node->GetHtmlAttribute("id", &id))
+  if (_node->GetStringAttribute(ax::mojom::StringAttribute::kHtmlId, &id)) {
     return base::SysUTF8ToNSString(id);
+  }
 
   return @"";
-}
-
-- (NSString*)AXDropEffects {
-  return nil;
 }
 
 - (id)AXEditableAncestor {
@@ -2241,11 +2233,13 @@ void CollectAncestorRoles(
       "accessibility", "AXPlatformNodeCocoa::isAccessibilitySelectorAllowed",
       "selector=", base::SysNSStringToUTF8(NSStringFromSelector(selector)));
 
-  if (!_node)
+  if (!_node) {
     return NO;
+  }
 
-  if (selector == @selector(setAccessibilityFocused:))
+  if (selector == @selector(setAccessibilityFocused:)) {
     return _node->IsFocusable();
+  }
 
   if (selector == @selector(setAccessibilityValue:)) {
     switch (_node->GetRole()) {
@@ -2291,20 +2285,10 @@ void CollectAncestorRoles(
   // remove the check here when the selector is setAccessibilitySelectedText*;
   // right now, this check serves to prevent accessibility clients from trying
   // to set the selection range, which won't work because of 692362.
-  if (_node->GetDelegate()->IsReadOnlyOrDisabled() && IsAXSetter(selector))
+  if (_node->GetDelegate() && _node->GetDelegate()->IsReadOnlyOrDisabled() &&
+      IsAXSetter(selector)) {
     return NO;
-
-
-  // VB-101227
-  if (vivaldi::IsVivaldiRunning() &&
-      [NSStringFromSelector(selector) hasPrefix:@"accessibilityParent"] &&
-      [[self accessibilityParent] accessibilityParent] == self) {
-      LOG(INFO) << "Selector is 'accessibilityParent', "
-                << "accessibilityParents parent is self, "
-                << "returning NO from isAccessibilitySelectorAllowed";
-      return NO;
-  } // end vivaldi
-
+  }
 
   // TODO(crbug.com/41115917): What about role-specific selectors?
   return [super isAccessibilitySelectorAllowed:selector];

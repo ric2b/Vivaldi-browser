@@ -52,7 +52,7 @@ TEST_F(WGSLParserTest, VariableAttributeList_Parses) {
     EXPECT_EQ(exp->value, 4u);
 
     ASSERT_TRUE(attr_1->Is<ast::BuiltinAttribute>());
-    ast::CheckIdentifier(attr_1->As<ast::BuiltinAttribute>()->builtin, "position");
+    EXPECT_EQ(attr_1->As<ast::BuiltinAttribute>()->builtin, core::BuiltinValue::kPosition);
 }
 
 TEST_F(WGSLParserTest, VariableAttributeList_Invalid) {
@@ -64,7 +64,7 @@ TEST_F(WGSLParserTest, VariableAttributeList_Invalid) {
     EXPECT_TRUE(attrs.value.IsEmpty());
     EXPECT_EQ(p->error(), R"(1:2: expected attribute
 Did you mean 'invariant'?
-Possible values: 'align', 'binding', 'blend_src', 'builtin', 'color', 'compute', 'diagnostic', 'fragment', 'group', 'id', 'interpolate', 'invariant', 'location', 'must_use', 'size', 'vertex', 'workgroup_size')");
+Possible values: 'align', 'binding', 'blend_src', 'builtin', 'color', 'compute', 'diagnostic', 'fragment', 'group', 'id', 'input_attachment_index', 'interpolate', 'invariant', 'location', 'must_use', 'size', 'vertex', 'workgroup_size')");
 }
 
 }  // namespace

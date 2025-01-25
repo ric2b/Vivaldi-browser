@@ -105,6 +105,8 @@ TEST_F(GWSPageLoadMetricsObserverTest, Search) {
   tester()->histogram_tester().ExpectBucketCount(
       internal::kHistogramGWSNavigationStartToFinalLoaderCallback, 1, 1);
   tester()->histogram_tester().ExpectTotalCount(
+      internal::kHistogramGWSNavigationStartToOnComplete, 1);
+  tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramGWSParseStart, 1);
   tester()->histogram_tester().ExpectBucketCount(
       internal::kHistogramGWSParseStart, 1, 1);
@@ -147,6 +149,8 @@ TEST_F(GWSPageLoadMetricsObserverTest, NonSearch) {
   tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramGWSNavigationStartToFinalLoaderCallback, 0);
   tester()->histogram_tester().ExpectTotalCount(
+      internal::kHistogramGWSNavigationStartToOnComplete, 0);
+  tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramGWSParseStart, 0);
   tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramGWSFirstContentfulPaint, 0);
@@ -183,6 +187,8 @@ TEST_F(GWSPageLoadMetricsObserverTest, SearchBackground) {
       internal::kHistogramGWSNavigationStartToFinalResponseStart, 0);
   tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramGWSNavigationStartToFinalLoaderCallback, 0);
+  tester()->histogram_tester().ExpectTotalCount(
+      internal::kHistogramGWSNavigationStartToOnComplete, 1);
   tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramGWSParseStart, 0);
   tester()->histogram_tester().ExpectTotalCount(
@@ -236,6 +242,8 @@ TEST_F(GWSPageLoadMetricsObserverTest, SearchBackgroundLater) {
   tester()->histogram_tester().ExpectBucketCount(
       internal::kHistogramGWSNavigationStartToFinalLoaderCallback, 0, 1);
   tester()->histogram_tester().ExpectTotalCount(
+      internal::kHistogramGWSNavigationStartToOnComplete, 1);
+  tester()->histogram_tester().ExpectTotalCount(
       internal::kHistogramGWSParseStart, 1);
   tester()->histogram_tester().ExpectBucketCount(
       internal::kHistogramGWSParseStart, 0, 1);
@@ -247,4 +255,35 @@ TEST_F(GWSPageLoadMetricsObserverTest, SearchBackgroundLater) {
       internal::kHistogramGWSLargestContentfulPaint, 1);
   tester()->histogram_tester().ExpectBucketCount(
       internal::kHistogramGWSLargestContentfulPaint, 0, 1);
+}
+
+TEST_F(GWSPageLoadMetricsObserverTest, CustomUserTimingMark) {
+  // No user timing mark. Expecting AFT events are not recorded.
+  page_load_metrics::mojom::CustomUserTimingMark timing;
+  NavigateAndCommit(GURL(kGoogleSearchResultsUrl));
+  tester()->SimulateCustomUserTimingUpdate(timing.Clone());
+  tester()->histogram_tester().ExpectTotalCount(internal::kHistogramGWSAFTStart,
+                                                0);
+  tester()->histogram_tester().ExpectTotalCount(internal::kHistogramGWSAFTEnd,
+                                                0);
+
+  // Simulate AFT events. This is recorded with expected event name.
+  auto timing2 = timing.Clone();
+  timing2->mark_name = internal::kGwsAFTStartMarkName;
+  timing2->start_time = base::Milliseconds(100);
+
+  auto timing3 = timing.Clone();
+  timing3->mark_name = internal::kGwsAFTEndMarkName;
+  timing3->start_time = base::Milliseconds(500);
+
+  tester()->SimulateCustomUserTimingUpdate(timing2.Clone());
+  tester()->histogram_tester().ExpectTotalCount(internal::kHistogramGWSAFTStart,
+                                                1);
+
+  tester()->SimulateCustomUserTimingUpdate(timing2.Clone());
+  tester()->SimulateCustomUserTimingUpdate(timing3.Clone());
+  tester()->histogram_tester().ExpectTotalCount(internal::kHistogramGWSAFTStart,
+                                                2);
+  tester()->histogram_tester().ExpectTotalCount(internal::kHistogramGWSAFTEnd,
+                                                1);
 }

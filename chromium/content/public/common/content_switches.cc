@@ -213,9 +213,6 @@ const char kDisableNotifications[]          = "disable-notifications";
 // Disable Pepper3D.
 const char kDisablePepper3d[]               = "disable-pepper-3d";
 
-// Disables the Permissions API.
-const char kDisablePermissionsAPI[]         = "disable-permissions-api";
-
 // Disables compositor-accelerated touch-screen pinch gestures.
 const char kDisablePinch[]                  = "disable-pinch";
 
@@ -759,9 +756,6 @@ const char kSkiaResourceCacheLimitMb[] = "skia-resource-cache-limit-mb";
 // Type of the current test harness ("browser" or "ui" or "gpu").
 const char kTestType[]                      = "test-type";
 
-// The time zone to use for testing. Passed to renderers and plugins on startup.
-const char kTimeZoneForTesting[] = "time-zone-for-testing";
-
 // Enable support for touch event feature detection.
 const char kTouchEventFeatureDetection[] = "touch-events";
 
@@ -799,6 +793,12 @@ const char kUseFakeUIForFedCM[] = "use-fake-ui-for-fedcm";
 // with screen/tab capture.
 const char kUseFakeUIForMediaStream[]     = "use-fake-ui-for-media-stream";
 
+#if BUILDFLAG(IS_WIN)
+// This will replace the existing font manager with SkiaFontManager in the
+// renderer.
+const char kUseSkiaFontManager[] = "use-skia-font-manager";
+#endif
+
 // Texture target for CHROMIUM_image backed video frame textures.
 const char kVideoImageTextureTarget[] = "video-image-texture-target";
 
@@ -830,9 +830,6 @@ const char kUtilityStartupDialog[] = "utility-startup-dialog";
 // services offered by the process, but is added to the command line for
 // debugging and profiling purposes.
 const char kUtilitySubType[] = "utility-sub-type";
-
-// In debug builds, asserts that the stream of input events is valid.
-const char kValidateInputEventStream[] = "validate-input-event-stream";
 
 // Causes tests to attempt to verify pixel output.
 const char kVerifyPixels[] = "browser-ui-tests-verify-pixels";

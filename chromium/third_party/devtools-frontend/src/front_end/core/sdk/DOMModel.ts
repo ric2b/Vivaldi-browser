@@ -160,7 +160,7 @@ export class DOMNode {
       this.childrenInternal = [];
     }
 
-    const frameOwnerTags = new Set(['EMBED', 'IFRAME', 'OBJECT', 'PORTAL', 'FENCEDFRAME']);
+    const frameOwnerTags = new Set(['EMBED', 'IFRAME', 'OBJECT', 'FENCEDFRAME']);
     if (payload.contentDocument) {
       this.contentDocumentInternal = new DOMDocument(this.#domModelInternal, payload.contentDocument);
       this.contentDocumentInternal.parentNode = this;
@@ -313,10 +313,6 @@ export class DOMNode {
 
   isIframe(): boolean {
     return this.#nodeNameInternal === 'IFRAME';
-  }
-
-  isPortal(): boolean {
-    return this.#nodeNameInternal === 'PORTAL';
   }
 
   importedDocument(): DOMNode|null {
@@ -1002,6 +998,19 @@ export class DOMNode {
     }
     return lowerCaseName;
   }
+
+  async getAnchorBySpecifier(specifier?: string): Promise<DOMNode|null> {
+    const response = await this.#agent.invoke_getAnchorElement({
+      nodeId: this.id,
+      anchorSpecifier: specifier,
+    });
+
+    if (response.getError()) {
+      return null;
+    }
+
+    return this.domModel().nodeForId(response.nodeId);
+  }
 }
 
 export namespace DOMNode {
@@ -1253,8 +1262,8 @@ export class DOMModel extends SDKModel<EventTypes> {
     this.scheduleMutationEvent(node);
   }
 
-  inlineStyleInvalidated(nodeIds: number[]): void {
-    Platform.SetUtilities.addAll(this.#attributeLoadNodeIds, nodeIds);
+  inlineStyleInvalidated(nodeIds: Protocol.DOM.NodeId[]): void {
+    nodeIds.forEach(nodeId => this.#attributeLoadNodeIds.add(nodeId));
     if (!this.#loadNodeAttributesTimeout) {
       this.#loadNodeAttributesTimeout = window.setTimeout(this.loadNodeAttributes.bind(this), 20);
     }
@@ -1545,6 +1554,11 @@ export class DOMModel extends SDKModel<EventTypes> {
 
   getTopLayerElements(): Promise<Protocol.DOM.NodeId[]|null> {
     return this.agent.invoke_getTopLayerElements().then(({nodeIds}) => nodeIds);
+  }
+
+  getElementByRelation(nodeId: Protocol.DOM.NodeId, relation: Protocol.DOM.GetElementByRelationRequestRelation):
+      Promise<Protocol.DOM.NodeId|null> {
+    return this.agent.invoke_getElementByRelation({nodeId, relation}).then(({nodeId}) => nodeId);
   }
 
   markUndoableState(minorChange?: boolean): void {

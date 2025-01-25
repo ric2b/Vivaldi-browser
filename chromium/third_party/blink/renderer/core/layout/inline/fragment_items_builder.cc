@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/layout/inline/fragment_items_builder.h"
 
 #include "third_party/blink/renderer/core/layout/box_fragment_builder.h"
@@ -151,6 +156,15 @@ void FragmentItemsBuilder::AddLine(const PhysicalLineBoxFragment& line_fragment,
     if (!annotation_line->FirstInFlowChild()) {
       continue;
     }
+
+    // If the line is hidden (e.g. because of line-clamp), annotations on that
+    // line should be hidden as well.
+    if (line_fragment.IsHiddenForPaint()) {
+      for (auto& item : *annotation_line.line_items) {
+        item.is_hidden_for_paint = true;
+      }
+    }
+
     LogicalOffset line_offset = annotation_line->FirstInFlowChild()->Offset();
     LayoutUnit line_inline_size =
         annotation_line->LastInFlowChild()->rect.InlineEndOffset() -
@@ -307,7 +321,7 @@ FragmentItemsBuilder::AddPreviousItems(const PhysicalBoxFragment& container,
           current_items_data = items_data = &node_.ItemsData(false);
         if (UNLIKELY(
                 !current_items_data->IsValidOffset(break_token->Start()))) {
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
         }
 

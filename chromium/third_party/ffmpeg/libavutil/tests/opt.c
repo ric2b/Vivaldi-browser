@@ -30,7 +30,9 @@
 
 typedef struct TestContext {
     const AVClass *class;
+    struct ChildContext *child;
     int num;
+    int unum;
     int toggle;
     char *string;
     int flags;
@@ -85,7 +87,8 @@ static const AVOptionArrayDef array_dict = {
 };
 
 static const AVOption test_options[]= {
-    {"num",        "set num",            OFFSET(num),            AV_OPT_TYPE_INT,            { .i64 = 0 },                      0,       100, 1 },
+    {"num",        "set num",            OFFSET(num),            AV_OPT_TYPE_INT,            { .i64 = 0 },                     -1,       100, 1 },
+    {"unum",       "set unum",           OFFSET(unum),           AV_OPT_TYPE_UINT,           { .i64 = 1U << 31 },               0,  1U << 31, 1 },
     {"toggle",     "set toggle",         OFFSET(toggle),         AV_OPT_TYPE_INT,            { .i64 = 1 },                      0,         1, 1 },
     {"rational",   "set rational",       OFFSET(rational),       AV_OPT_TYPE_RATIONAL,       { .dbl = 1 },                      0,        10, 1 },
     {"string",     "set string",         OFFSET(string),         AV_OPT_TYPE_STRING,         { .str = "default" },       CHAR_MIN,  CHAR_MAX, 1 },
@@ -104,7 +107,7 @@ static const AVOption test_options[]= {
     {"bin",        "set binary value",   OFFSET(binary),         AV_OPT_TYPE_BINARY,         { .str="62696e00" },               0,         0, 1 },
     {"bin1",       "set binary value",   OFFSET(binary1),        AV_OPT_TYPE_BINARY,         { .str=NULL },                     0,         0, 1 },
     {"bin2",       "set binary value",   OFFSET(binary2),        AV_OPT_TYPE_BINARY,         { .str="" },                       0,         0, 1 },
-    {"num64",      "set num 64bit",      OFFSET(num64),          AV_OPT_TYPE_INT64,          { .i64 = 1 },                      0,       100, 1 },
+    {"num64",      "set num 64bit",      OFFSET(num64),          AV_OPT_TYPE_INT64,          { .i64 = 1LL << 32 },             -1, 1LL << 32, 1 },
     {"flt",        "set float",          OFFSET(flt),            AV_OPT_TYPE_FLOAT,          { .dbl = 1.0 / 3 },                0,       100, 1 },
     {"dbl",        "set double",         OFFSET(dbl),            AV_OPT_TYPE_DOUBLE,         { .dbl = 1.0 / 3 },                0,       100, 1 },
     {"bool1",      "set boolean value",  OFFSET(bool1),          AV_OPT_TYPE_BOOL,           { .i64 = -1 },                    -1,         1, 1 },
@@ -123,10 +126,46 @@ static const char *test_get_name(void *ctx)
     return "test";
 }
 
+typedef struct ChildContext {
+    const AVClass *class;
+    int64_t child_num64;
+    int child_num;
+} ChildContext;
+
+#undef OFFSET
+#define OFFSET(x) offsetof(ChildContext, x)
+
+static const AVOption child_options[]= {
+    {"child_num64", "set num 64bit", OFFSET(child_num64), AV_OPT_TYPE_INT64, { .i64 = 0 }, 0, 100, 1 },
+    {"child_num",   "set child_num", OFFSET(child_num),   AV_OPT_TYPE_INT,   { .i64 = 1 }, 0, 100, 1 },
+    { NULL },
+};
+
+static const char *child_get_name(void *ctx)
+{
+    return "child";
+}
+
+static const AVClass child_class = {
+    .class_name = "ChildContext",
+    .item_name  = child_get_name,
+    .option     = child_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
+static void *test_child_next(void *obj, void *prev)
+{
+    TestContext *test_ctx = obj;
+    if (!prev)
+        return test_ctx->child;
+    return NULL;
+}
+
 static const AVClass test_class = {
     .class_name = "TestContext",
     .item_name  = test_get_name,
     .option     = test_options,
+    .child_next = test_child_next,
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
@@ -149,6 +188,7 @@ int main(void)
         av_opt_set_defaults(&test_ctx);
 
         printf("num=%d\n", test_ctx.num);
+        printf("unum=%u\n", test_ctx.unum);
         printf("toggle=%d\n", test_ctx.toggle);
         printf("string=%s\n", test_ctx.string);
         printf("escape=%s\n", test_ctx.escape);
@@ -277,8 +317,19 @@ int main(void)
             av_set_options_string(&test_ctx, buf, "=", ",");
             av_free(buf);
             if (av_opt_serialize(&test_ctx, 0, 0, &buf, '=', ',') >= 0) {
+                ChildContext child_ctx = { 0 };
                 printf("%s\n", buf);
                 av_free(buf);
+                child_ctx.class = &child_class;
+                test_ctx.child = &child_ctx;
+                if (av_opt_serialize(&test_ctx, 0,
+                                     AV_OPT_SERIALIZE_SKIP_DEFAULTS|AV_OPT_SERIALIZE_SEARCH_CHILDREN,
+                                     &buf, '=', ',') >= 0) {
+                    printf("%s\n", buf);
+                    av_free(buf);
+                }
+                av_opt_free(&child_ctx);
+                test_ctx.child = NULL;
             }
         }
         av_opt_free(&test_ctx);
@@ -332,11 +383,25 @@ int main(void)
             "bin=boguss",
             "bin=111",
             "bin=ffff",
+            "num=bogus",
+            "num=44",
+            "num=44.4",
+            "num=-1",
+            "num=-2",
+            "num=101",
+            "unum=bogus",
+            "unum=44",
+            "unum=44.4",
+            "unum=-1",
+            "unum=2147483648",
+            "unum=2147483649",
             "num64=bogus",
             "num64=44",
             "num64=44.4",
             "num64=-1",
-            "num64=101",
+            "num64=-2",
+            "num64=4294967296",
+            "num64=4294967297",
             "flt=bogus",
             "flt=2",
             "flt=2.2",
@@ -402,6 +467,55 @@ int main(void)
                 printf("OK    '%s'\n", options[i]);
         }
         av_opt_free(&test_ctx);
+    }
+
+    printf("\nTesting av_opt_find2()\n");
+    {
+        TestContext test_ctx = { 0 };
+        ChildContext child_ctx = { 0 };
+        void *target;
+        const AVOption *opt;
+
+        test_ctx.class = &test_class;
+        child_ctx.class = &child_class;
+        test_ctx.child = &child_ctx;
+
+        av_log_set_level(AV_LOG_QUIET);
+
+        // Should succeed. num exists and has opt_flags 1
+        opt = av_opt_find2(&test_ctx, "num", NULL, 1, 0, &target);
+        if (opt && target == &test_ctx)
+            printf("OK    '%s'\n", opt->name);
+        else
+            printf("Error 'num'\n");
+
+        // Should fail. num64 exists but has opt_flags 1, not 2
+        opt = av_opt_find(&test_ctx, "num64", NULL, 2, 0);
+        if (opt)
+            printf("OK    '%s'\n", opt->name);
+        else
+            printf("Error 'num64'\n");
+
+        // Should fail. child_num exists but in a child object we're not searching
+        opt = av_opt_find(&test_ctx, "child_num", NULL, 0, 0);
+        if (opt)
+            printf("OK    '%s'\n", opt->name);
+        else
+            printf("Error 'child_num'\n");
+
+        // Should succeed. child_num exists in a child object we're searching
+        opt = av_opt_find2(&test_ctx, "child_num", NULL, 0, AV_OPT_SEARCH_CHILDREN, &target);
+        if (opt && target == &child_ctx)
+            printf("OK    '%s'\n", opt->name);
+        else
+            printf("Error 'child_num'\n");
+
+        // Should fail. foo doesn't exist
+        opt = av_opt_find(&test_ctx, "foo", NULL, 0, 0);
+        if (opt)
+            printf("OK    '%s'\n", opt->name);
+        else
+            printf("Error 'foo'\n");
     }
 
     return 0;

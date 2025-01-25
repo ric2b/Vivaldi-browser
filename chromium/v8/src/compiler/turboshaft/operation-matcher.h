@@ -16,7 +16,7 @@ namespace v8::internal::compiler::turboshaft {
 
 class OperationMatcher {
  public:
-  explicit OperationMatcher(Graph& graph) : graph_(graph) {}
+  explicit OperationMatcher(const Graph& graph) : graph_(graph) {}
 
   template <class Op>
   bool Is(OpIndex op_idx) const {
@@ -71,7 +71,7 @@ class OperationMatcher {
     const ConstantOp* op = TryCast<ConstantOp>(matched);
     if (!op) return false;
     if (op->kind != ConstantOp::Kind::kFloat32) return false;
-    *constant = op->float32();
+    *constant = op->storage.float32;
     return true;
   }
 
@@ -79,7 +79,7 @@ class OperationMatcher {
     const ConstantOp* op = TryCast<ConstantOp>(matched);
     if (!op) return false;
     if (op->kind != ConstantOp::Kind::kFloat64) return false;
-    *constant = op->float64();
+    *constant = op->storage.float64;
     return true;
   }
 
@@ -87,10 +87,10 @@ class OperationMatcher {
     const ConstantOp* op = TryCast<ConstantOp>(matched);
     if (!op) return false;
     if (op->kind == ConstantOp::Kind::kFloat64) {
-      *value = op->float64();
+      *value = op->storage.float64;
       return true;
     } else if (op->kind == ConstantOp::Kind::kFloat32) {
-      *value = op->float32();
+      *value = op->storage.float32;
       return true;
     }
     return false;
@@ -108,14 +108,17 @@ class OperationMatcher {
     return MatchFloat(matched, &k) && std::isnan(k);
   }
 
-  bool MatchTaggedConstant(OpIndex matched, Handle<HeapObject>* tagged) const {
+  bool MatchHeapConstant(OpIndex matched,
+                         Handle<HeapObject>* tagged = nullptr) const {
     const ConstantOp* op = TryCast<ConstantOp>(matched);
     if (!op) return false;
     if (!(op->kind == any_of(ConstantOp::Kind::kHeapObject,
                              ConstantOp::Kind::kCompressedHeapObject))) {
       return false;
     }
-    *tagged = op->handle();
+    if (tagged) {
+      *tagged = op->handle();
+    }
     return true;
   }
 
@@ -468,7 +471,7 @@ class OperationMatcher {
   }
 
  private:
-  Graph& graph_;
+  const Graph& graph_;
 };
 
 }  // namespace v8::internal::compiler::turboshaft

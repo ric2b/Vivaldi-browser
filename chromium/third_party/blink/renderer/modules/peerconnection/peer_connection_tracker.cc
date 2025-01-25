@@ -20,8 +20,8 @@
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "build/chromecast_buildflags.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/peerconnection/peer_connection_tracker.mojom-blink.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -167,7 +167,7 @@ String SerializeDirection(webrtc::RtpTransceiverDirection direction) {
     case webrtc::RtpTransceiverDirection::kStopped:
       return "'stopped'";
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return String();
   }
 }
@@ -191,7 +191,7 @@ String SerializeTransceiverKind(const String& indent,
   } else if (kind == MediaStreamSource::StreamType::kTypeVideo) {
     result.Append("'video'");
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
   result.Append(",\n");
   return result.ToString();
@@ -343,7 +343,7 @@ String SerializeIceTransportType(
       transport_type = "noHost";
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return transport_type;
 }
@@ -362,7 +362,7 @@ String SerializeBundlePolicy(
       policy_str = "max-compat";
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return policy_str;
 }
@@ -378,7 +378,7 @@ String SerializeRtcpMuxPolicy(
       policy_str = "require";
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return policy_str;
 }
@@ -420,7 +420,7 @@ const char* GetTransceiverUpdatedReasonString(
     case PeerConnectionTracker::TransceiverUpdatedReason::kSetRemoteDescription:
       return "setRemoteDescription";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 
@@ -1048,7 +1048,7 @@ void PeerConnectionTracker::TrackSessionDescriptionCallback(
       update_type = "createAnswer";
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   update_type = update_type + callback_type;

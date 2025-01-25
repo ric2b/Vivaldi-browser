@@ -112,12 +112,17 @@ gfx::Rect WebContentsViewChildFrame::GetContainerBounds() const {
 void WebContentsViewChildFrame::SetInitialFocus() {
   // Expected in Vivaldi as all webviews are ChildFrames.
   if (!vivaldi::IsVivaldiRunning()) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   }
 }
 
 gfx::Rect WebContentsViewChildFrame::GetViewBounds() const {
-  NOTREACHED();
+  if (vivaldi::IsVivaldiRunning()) {
+    return web_contents_->GetRenderWidgetHostView()
+               ? web_contents_->GetRenderWidgetHostView()->GetViewBounds()
+               : gfx::Rect();
+  }
+  NOTREACHED_IN_MIGRATION();
   return gfx::Rect();
 }
 
@@ -169,19 +174,22 @@ WebContentsViewChildFrame::GetBackForwardTransitionAnimationManager() {
 }
 
 void WebContentsViewChildFrame::RestoreFocus() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void WebContentsViewChildFrame::Focus() {
-  NOTREACHED();
+  // VB-108626. To be examined (hard to reproduce)
+  if (!vivaldi::IsVivaldiRunning()) {
+  NOTREACHED_IN_MIGRATION();
+  }
 }
 
 void WebContentsViewChildFrame::StoreFocus() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void WebContentsViewChildFrame::FocusThroughTabTraversal(bool reverse) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 DropData* WebContentsViewChildFrame::GetDropData() const {
@@ -193,12 +201,8 @@ DropData* WebContentsViewChildFrame::GetDropData() const {
     return embedder_web_contents ? embedder_web_contents->GetDropData()
       : nullptr;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
-}
-
-void WebContentsViewChildFrame::TransferDragSecurityInfo(WebContentsView*) {
-  NOTREACHED();
 }
 
 void WebContentsViewChildFrame::UpdateDragOperation(
@@ -211,19 +215,19 @@ void WebContentsViewChildFrame::UpdateDragOperation(
 
 void WebContentsViewChildFrame::GotFocus(
     RenderWidgetHostImpl* render_widget_host) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void WebContentsViewChildFrame::TakeFocus(bool reverse) {
   // This is handled in RenderFrameHostImpl::TakeFocus we shouldn't
   // end up here.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void WebContentsViewChildFrame::ShowContextMenu(
     RenderFrameHost& render_frame_host,
     const ContextMenuParams& params) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)

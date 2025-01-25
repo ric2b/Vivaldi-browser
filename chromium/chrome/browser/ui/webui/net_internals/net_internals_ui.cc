@@ -44,8 +44,8 @@
 #include "net/base/schemeful_site.h"
 #include "net/dns/public/host_resolver_results.h"
 #include "net/dns/public/resolve_error_info.h"
-#include "net/extras/shared_dictionary/shared_dictionary_isolation_key.h"
 #include "net/extras/shared_dictionary/shared_dictionary_usage_info.h"
+#include "net/shared_dictionary/shared_dictionary_isolation_key.h"
 #include "services/network/public/cpp/request_destination.h"
 #include "services/network/public/mojom/clear_data_filter.mojom.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
@@ -155,10 +155,10 @@ class NetInternalsResolveHostClient : public network::mojom::ResolveHostClient {
                              endpoint_results_with_metadata, this);
   }
   void OnTextResults(const std::vector<std::string>& text_results) override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
   void OnHostnameResults(const std::vector<net::HostPortPair>& hosts) override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
  private:

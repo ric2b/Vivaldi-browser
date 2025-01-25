@@ -12,20 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {time} from '../base/time';
 import {Actions} from '../common/actions';
 import {AggregateData} from '../common/aggregation_data';
 import {ConversionJobStatusUpdate} from '../common/conversion_jobs';
 import {MetricResult} from '../common/metric_data';
-import {CurrentSearchResults, SearchSummary} from '../common/search_data';
+import {CurrentSearchResults} from '../common/search_data';
 import {raf} from '../core/raf_scheduler';
 import {HttpRpcState} from '../trace_processor/http_rpc_engine';
 import {getLegacySelection} from '../common/state';
 
 import {
-  CounterDetails,
   CpuProfileDetails,
-  FlamegraphDetails,
   Flow,
   globals,
   QuantizedLoad,
@@ -76,16 +73,6 @@ export function publishHttpRpcState(httpRpcState: HttpRpcState) {
   raf.scheduleFullRedraw();
 }
 
-export function publishCounterDetails(click: CounterDetails) {
-  globals.counterDetails = click;
-  globals.publishRedraw();
-}
-
-export function publishFlamegraphDetails(click: FlamegraphDetails) {
-  globals.flamegraphDetails = click;
-  globals.publishRedraw();
-}
-
 export function publishCpuProfileDetails(details: CpuProfileDetails) {
   globals.cpuProfileDetails = details;
   globals.publishRedraw();
@@ -93,17 +80,6 @@ export function publishCpuProfileDetails(details: CpuProfileDetails) {
 
 export function publishHasFtrace(value: boolean): void {
   globals.hasFtrace = value;
-  globals.publishRedraw();
-}
-
-export function publishRealtimeOffset(
-  offset: time,
-  utcOffset: time,
-  traceTzOffset: time,
-) {
-  globals.realtimeOffset = offset;
-  globals.utcOffset = utcOffset;
-  globals.traceTzOffset = traceTzOffset;
   globals.publishRedraw();
 }
 
@@ -123,11 +99,6 @@ export function publishLoading(numQueuedQueries: number) {
 
 export function publishBufferUsage(args: {percentage: number}) {
   globals.setBufferUsage(args.percentage);
-  globals.publishRedraw();
-}
-
-export function publishSearch(args: SearchSummary) {
-  globals.searchSummary = args;
   globals.publishRedraw();
 }
 
@@ -195,7 +166,7 @@ export function publishConnectedFlows(connectedFlows: Flow[]) {
   globals.dispatch(Actions.setHighlightedFlowLeftId({flowId: -1}));
   globals.dispatch(Actions.setHighlightedFlowRightId({flowId: -1}));
   const currentSelection = getLegacySelection(globals.state);
-  if (currentSelection?.kind === 'CHROME_SLICE') {
+  if (currentSelection?.kind === 'SLICE') {
     const sliceId = currentSelection.id;
     for (const flow of globals.connectedFlows) {
       if (flow.begin.sliceId === sliceId) {
@@ -212,5 +183,10 @@ export function publishConnectedFlows(connectedFlows: Flow[]) {
 
 export function publishShowPanningHint() {
   globals.showPanningHint = true;
+  globals.publishRedraw();
+}
+
+export function publishPermalinkHash(hash: string | undefined): void {
+  globals.permalinkHash = hash;
   globals.publishRedraw();
 }

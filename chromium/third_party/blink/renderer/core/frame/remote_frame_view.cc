@@ -99,7 +99,7 @@ void RemoteFrameView::DetachFromLayout() {
 
 bool RemoteFrameView::UpdateViewportIntersectionsForSubtree(
     unsigned parent_flags,
-    std::optional<base::TimeTicks>&) {
+    ComputeIntersectionsContext&) {
   UpdateViewportIntersection(parent_flags, needs_occlusion_tracking_);
   return needs_occlusion_tracking_;
 }
@@ -121,8 +121,10 @@ void RemoteFrameView::SetNeedsOcclusionTracking(bool needs_tracking) {
     return;
   needs_occlusion_tracking_ = needs_tracking;
   if (needs_tracking) {
-    if (LocalFrameView* parent_view = ParentLocalRootFrameView())
+    if (LocalFrameView* parent_view = ParentLocalRootFrameView()) {
+      parent_view->SetIntersectionObservationState(LocalFrameView::kRequired);
       parent_view->ScheduleAnimation();
+    }
   }
 }
 
@@ -264,7 +266,6 @@ void RemoteFrameView::Dispose() {
   // RemoteFrameView is disconnected before detachment.
   if (owner_element && owner_element->OwnedEmbeddedContentView() == this)
     owner_element->SetEmbeddedContentView(nullptr);
-  SetNeedsOcclusionTracking(false);
 }
 
 void RemoteFrameView::SetFrameRect(const gfx::Rect& rect) {
@@ -290,8 +291,8 @@ void RemoteFrameView::UpdateFrozenSize() {
   needs_frame_rect_propagation_ = true;
 }
 
-void RemoteFrameView::ZoomChanged(float zoom_factor) {
-  remote_frame_->ZoomLevelChanged(PageZoomFactorToZoomLevel(zoom_factor));
+void RemoteFrameView::ZoomFactorChanged(float zoom_factor) {
+  remote_frame_->ZoomFactorChanged(zoom_factor);
 }
 
 void RemoteFrameView::PropagateFrameRects() {

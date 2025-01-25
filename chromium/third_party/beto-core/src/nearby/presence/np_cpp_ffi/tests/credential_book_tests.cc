@@ -21,31 +21,9 @@
 #include "np_cpp_test.h"
 #include "shared_test_util.h"
 
-TEST_F(NpCppTest, TestSetMaxCredBooks) {
-  auto slab1_result = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(slab1_result.ok());
-  auto book1_result =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(slab1_result.value());
-  ASSERT_TRUE(book1_result.ok());
-
-  auto slab2_result = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(slab2_result.ok());
-  auto book2_result =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(slab2_result.value());
-  ASSERT_TRUE(book2_result.ok());
-
-  auto slab3_result = nearby_protocol::CredentialSlab::TryCreate();
-  ASSERT_TRUE(slab3_result.ok());
-  auto book3_result =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(slab3_result.value());
-
-  ASSERT_FALSE(book3_result.ok());
-  ASSERT_TRUE(absl::IsResourceExhausted(book3_result.status()));
-}
-
-TEST_F(NpCppTest, TestBookMoveConstructor) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+TEST_F(NpCppTest, TestCredBookMoveConstructor) {
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   auto deserialize_result =
       nearby_protocol::Deserializer::DeserializeAdvertisement(V0AdvPlaintext,
                                                               book);
@@ -76,9 +54,35 @@ TEST_F(NpCppTest, TestBookMoveConstructor) {
                "");
 }
 
-TEST_F(NpCppTest, TestBookMoveAssignment) {
-  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
+TEST_F(NpCppTest, TestCredBookDestructor) {
+  nearby_protocol::CredentialSlab slab1;
+  auto current_allocations =
+      nearby_protocol::GlobalConfig::GetCurrentHandleAllocationCount();
+  ASSERT_EQ(current_allocations.cred_slab, 1U);
+  nearby_protocol::CredentialBook book1(slab1);
+  current_allocations =
+      nearby_protocol::GlobalConfig::GetCurrentHandleAllocationCount();
+  ASSERT_EQ(current_allocations.cred_book, 1U);
+  ASSERT_EQ(current_allocations.cred_slab, 0U);
+
+  {
+    nearby_protocol::CredentialSlab slab2;
+    nearby_protocol::CredentialBook book2(slab2);
+    current_allocations =
+        nearby_protocol::GlobalConfig::GetCurrentHandleAllocationCount();
+    ASSERT_EQ(current_allocations.cred_book, 2U);
+  }
+
+  // After above RAII class goes out of scope, its de-allocation should be
+  // reflected in the handle allocation count
+  current_allocations =
+      nearby_protocol::GlobalConfig::GetCurrentHandleAllocationCount();
+  ASSERT_EQ(current_allocations.cred_book, 1U);
+}
+
+TEST_F(NpCppTest, TestCredBookMoveAssignment) {
+  nearby_protocol::CredentialSlab slab;
+  nearby_protocol::CredentialBook book(slab);
   auto deserialize_result =
       nearby_protocol::Deserializer::DeserializeAdvertisement(V0AdvPlaintext,
                                                               book);
@@ -86,9 +90,8 @@ TEST_F(NpCppTest, TestBookMoveAssignment) {
             nearby_protocol::DeserializeAdvertisementResultKind::V0);
 
   // create a second empty credential book
-  auto other_slab = nearby_protocol::CredentialSlab::TryCreate().value();
-  auto other_book =
-      nearby_protocol::CredentialBook::TryCreateFromSlab(other_slab).value();
+  nearby_protocol::CredentialSlab other_slab;
+  nearby_protocol::CredentialBook other_book(other_slab);
   other_book = std::move(book);
 
   // new credential book should still be successful

@@ -19,7 +19,6 @@
 #include "chrome/android/chrome_jni_headers/NotesBridge_jni.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "components/notes/note_id.h"
 #include "components/notes/notes_factory.h"
@@ -31,6 +30,8 @@
 
 #include "components/undo/undo_manager.h"
 #include "content/public/browser/browser_thread.h"
+
+#include "third_party/abseil-cpp/absl/container/inlined_vector.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF16ToJavaString;
@@ -83,7 +84,7 @@ std::unique_ptr<icu::Collator> GetICUCollator() {
 NotesBridge::NotesBridge(JNIEnv* env,
                          const JavaRef<jobject>& obj,
                          const JavaRef<jobject>& j_profile)
-    : profile_(ProfileAndroid::FromProfileAndroid(j_profile)),
+    : profile_(Profile::FromJavaObject(j_profile)),
       notes_model_(NotesModelFactory::GetForBrowserContext(profile_)),
       weak_java_ref_(env, obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -488,10 +489,7 @@ ScopedJavaLocalRef<jobject> NotesBridge::AddFolder(
 
   const NoteNode* new_node = notes_model_->AddFolder(
       parent, index, base::android::ConvertJavaStringToUTF16(env, j_title));
-  if (!new_node) {
-    NOTREACHED();
-    return ScopedJavaLocalRef<jobject>();
-  }
+  DCHECK(new_node);
   ScopedJavaLocalRef<jobject> new_java_obj =
       JavaNoteIdCreateNoteId(env, new_node->id());
   return new_java_obj;
@@ -505,10 +503,7 @@ void NotesBridge::DeleteNote(JNIEnv* env,
 
   long note_id = JavaNoteIdGetId(env, j_note_id_obj);
   const NoteNode* node = GetNodeByID(note_id);
-  if (!IsEditable(node)) {
-    NOTREACHED();
-    return;
-  }
+  DCHECK(IsEditable(node));
   notes_model_->Remove(node, FROM_HERE);
 }
 
@@ -529,10 +524,7 @@ void NotesBridge::MoveNote(JNIEnv* env,
 
   long note_id = JavaNoteIdGetId(env, j_note_id_obj);
   const NoteNode* node = GetNodeByID(note_id);
-  if (!IsEditable(node)) {
-    NOTREACHED();
-    return;
-  }
+  DCHECK(IsEditable(node));
   note_id = JavaNoteIdGetId(env, j_parent_id_obj);
   const NoteNode* new_parent_node = GetNodeByID(note_id);
   notes_model_->Move(node, new_parent_node, index);
@@ -554,10 +546,7 @@ ScopedJavaLocalRef<jobject> NotesBridge::AddNote(
       GURL(base::android::ConvertJavaStringToUTF16(env, j_url)),
       base::android::ConvertJavaStringToUTF16(env, j_content));
 
-  if (!new_node) {
-    NOTREACHED();
-    return ScopedJavaLocalRef<jobject>();
-  }
+  DCHECK(new_node);
   ScopedJavaLocalRef<jobject> new_java_obj =
       JavaNoteIdCreateNoteId(env, new_node->id());
   return new_java_obj;

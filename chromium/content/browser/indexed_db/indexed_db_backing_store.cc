@@ -411,34 +411,6 @@ bool DecodeExternalObjects(const std::string& data,
   return true;
 }
 
-bool IsPathTooLong(const base::FilePath& leveldb_dir) {
-  std::optional<int> limit =
-      base::GetMaximumPathComponentLength(leveldb_dir.DirName());
-  if (!limit.has_value()) {
-    DLOG(WARNING) << "GetMaximumPathComponentLength returned -1";
-// In limited testing, ChromeOS returns 143, other OSes 255.
-#if BUILDFLAG(IS_CHROMEOS)
-    limit = 143;
-#else
-    limit = 255;
-#endif
-  }
-  size_t component_length = leveldb_dir.BaseName().value().length();
-  if (component_length > static_cast<uint32_t>(*limit)) {
-    DLOG(WARNING) << "Path component length (" << component_length
-                  << ") exceeds maximum (" << *limit
-                  << ") allowed by this filesystem.";
-    const int min = 140;
-    const int max = 300;
-    const int num_buckets = 12;
-    base::UmaHistogramCustomCounts(
-        "WebCore.IndexedDB.BackingStore.OverlyLargeOriginLength",
-        component_length, min, max, num_buckets);
-    return true;
-  }
-  return false;
-}
-
 Status DeleteBlobsInRange(IndexedDBBackingStore::Transaction* transaction,
                           int64_t database_id,
                           const std::string& start_key,
@@ -1001,9 +973,6 @@ leveldb::Status IndexedDBBackingStore::Initialize(bool clean_active_journal) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!initialized_);
 #endif
-  base::UmaHistogramEnumeration(
-      indexed_db::kBackingStoreActionUmaName,
-      indexed_db::IndexedDBAction::kBackingStoreOpenAttempt);
 
   const IndexedDBDataFormatVersion latest_known_data_version =
       IndexedDBDataFormatVersion::GetCurrent();
@@ -1381,7 +1350,7 @@ bool IndexedDBBackingStore::RecordCorruptionInfo(
     const std::string& message) {
   const base::FilePath info_path =
       path_base.Append(indexed_db::ComputeCorruptionFileName(bucket_locator));
-  if (IsPathTooLong(info_path)) {
+  if (indexed_db::IsPathTooLong(info_path)) {
     return false;
   }
 
@@ -1882,7 +1851,7 @@ Status IndexedDBBackingStore::GetRecord(Transaction* transaction,
     return InternalInconsistencyStatus();
   }
 
-  record->bits = std::string(slice);
+  record->bits.assign(slice.begin(), slice.end());
   return transaction->GetExternalObjectsForRecord(database_id, leveldb_key,
                                                   record);
 }
@@ -1940,7 +1909,7 @@ Status IndexedDBBackingStore::PutRecord(
 
   std::string v;
   EncodeVarInt(version, &v);
-  v.append(value->bits);
+  v.append(value->bits.begin(), value->bits.end());
 
   s = leveldb_transaction->Put(object_store_data_key, &v);
   if (!s.ok())
@@ -2481,7 +2450,7 @@ Status IndexedDBBackingStore::Transaction::GetExternalObjectsForRecord(
   std::string_view leveldb_key_piece(object_store_data_key);
   if (!BlobEntryKey::FromObjectStoreDataKey(&leveldb_key_piece,
                                             &blob_entry_key)) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return InternalInconsistencyStatus();
   }
   std::string encoded_key = blob_entry_key.Encode();
@@ -3212,7 +3181,7 @@ class ObjectStoreKeyCursorImpl : public IndexedDBBackingStore::Cursor {
 
   // IndexedDBBackingStore::Cursor
   IndexedDBValue* value() override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
   bool LoadCurrentRow(Status* s) override;
@@ -3225,7 +3194,7 @@ class ObjectStoreKeyCursorImpl : public IndexedDBBackingStore::Cursor {
   }
   std::string EncodeKey(const IndexedDBKey& key,
                         const IndexedDBKey& primary_key) override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return std::string();
   }
 
@@ -3320,7 +3289,7 @@ class ObjectStoreCursorImpl : public IndexedDBBackingStore::Cursor {
   }
   std::string EncodeKey(const IndexedDBKey& key,
                         const IndexedDBKey& primary_key) override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return std::string();
   }
 
@@ -3365,7 +3334,7 @@ bool ObjectStoreCursorImpl::LoadCurrentRow(Status* s) {
   if (!s->ok())
     return false;
 
-  current_value_.bits = std::string(value_slice);
+  current_value_.bits.assign(value_slice.begin(), value_slice.end());
   return true;
 }
 
@@ -3397,7 +3366,7 @@ class IndexKeyCursorImpl : public IndexedDBBackingStore::Cursor {
 
   // IndexedDBBackingStore::Cursor
   IndexedDBValue* value() override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
   const IndexedDBKey& primary_key() const override {
@@ -3406,7 +3375,7 @@ class IndexKeyCursorImpl : public IndexedDBBackingStore::Cursor {
   }
   const IndexedDBBackingStore::RecordIdentifier& record_identifier()
       const override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return record_identifier_;
   }
   bool LoadCurrentRow(Status* s) override;
@@ -3542,7 +3511,7 @@ class IndexCursorImpl : public IndexedDBBackingStore::Cursor {
   }
   const IndexedDBBackingStore::RecordIdentifier& record_identifier()
       const override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return record_identifier_;
   }
   bool LoadCurrentRow(Status* s) override;
@@ -3647,7 +3616,7 @@ bool IndexCursorImpl::LoadCurrentRow(Status* s) {
     return false;
   }
 
-  current_value_.bits = std::string(slice);
+  current_value_.bits.assign(slice.begin(), slice.end());
   *s = transaction_->GetExternalObjectsForRecord(
       database_id_, primary_leveldb_key_, &current_value_);
   return s->ok();
@@ -3942,7 +3911,7 @@ bool IndexedDBBackingStore::Transaction::CollectBlobFilesToRemove() {
     BlobEntryKey blob_entry_key;
     std::string_view key_piece(iter.second->object_store_data_key());
     if (!BlobEntryKey::FromObjectStoreDataKey(&key_piece, &blob_entry_key)) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       INTERNAL_WRITE_ERROR(TRANSACTION_COMMIT_METHOD);
       transaction_ = nullptr;
       return false;
@@ -4067,7 +4036,7 @@ Status IndexedDBBackingStore::Transaction::CommitPhaseTwo() {
         std::string_view key_piece(iter.second->object_store_data_key());
         if (!BlobEntryKey::FromObjectStoreDataKey(&key_piece,
                                                   &blob_entry_key)) {
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           return InternalInconsistencyStatus();
         }
         // Add the new blob-table entry for each blob to the main transaction,
@@ -4378,7 +4347,7 @@ Status IndexedDBBackingStore::Transaction::PutExternalObjectsIfNeeded(
     std::string_view leveldb_key_piece(object_store_data_key);
     if (!BlobEntryKey::FromObjectStoreDataKey(&leveldb_key_piece,
                                               &blob_entry_key)) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return InternalInconsistencyStatus();
     }
     std::string value;

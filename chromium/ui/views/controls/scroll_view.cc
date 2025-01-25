@@ -620,27 +620,17 @@ base::CallbackListSubscription ScrollView::AddContentsScrollEndedCallback(
 
 gfx::Size ScrollView::CalculatePreferredSize(
     const SizeBounds& available_size) const {
+  gfx::Insets insets = GetInsets();
   gfx::Size size =
-      contents_ ? contents_->GetPreferredSize(available_size) : gfx::Size();
+      contents_ ? contents_->GetPreferredSize(available_size.Inset(insets))
+                : gfx::Size();
+  size.Enlarge(insets.width(), insets.height());
+
   if (is_bounded()) {
     size.SetToMax(gfx::Size(size.width(), min_height_));
     size.SetToMin(gfx::Size(size.width(), max_height_));
   }
-  gfx::Insets insets = GetInsets();
-  size.Enlarge(insets.width(), insets.height());
   return size;
-}
-
-int ScrollView::GetHeightForWidth(int width) const {
-  if (!is_bounded()) {
-    return View::GetHeightForWidth(width);
-  }
-
-  gfx::Insets insets = GetInsets();
-  width = std::max(0, width - insets.width());
-  int height = contents_ ? contents_->GetHeightForWidth(width) + insets.height()
-                         : insets.height();
-  return std::clamp(height, min_height_, max_height_);
 }
 
 void ScrollView::Layout(PassKey) {
@@ -931,10 +921,10 @@ void ScrollView::OnGestureEvent(ui::GestureEvent* event) {
   // If the event happened on one of the scrollbars, then those events are
   // sent directly to the scrollbars. Otherwise, only scroll events are sent to
   // the scrollbars.
-  bool scroll_event = event->type() == ui::ET_GESTURE_SCROLL_UPDATE ||
-                      event->type() == ui::ET_GESTURE_SCROLL_BEGIN ||
-                      event->type() == ui::ET_GESTURE_SCROLL_END ||
-                      event->type() == ui::ET_SCROLL_FLING_START;
+  bool scroll_event = event->type() == ui::EventType::kGestureScrollUpdate ||
+                      event->type() == ui::EventType::kGestureScrollBegin ||
+                      event->type() == ui::EventType::kGestureScrollEnd ||
+                      event->type() == ui::EventType::kScrollFlingStart;
 
   // Note: we will not invert gesture events because it will be confusing to
   // have a vertical finger gesture on a touchscreen cause the scroll pane to

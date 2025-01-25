@@ -21,6 +21,7 @@ limitations under the License.
 #include <vector>
 
 #include "xla/stream_executor/kernel.h"
+#include "xla/stream_executor/kernel_factory.h"
 #include "xla/stream_executor/platform.h"
 #include "xla/stream_executor/platform_manager.h"
 #include "xla/stream_executor/stream.h"
@@ -46,7 +47,8 @@ TEST(CutlassGemmKernelTest, SimpleGemm) {
       /*indices=*/{0, 1, 2}, /*slices=*/{}, executor->GetDeviceDescription());
 
   TF_ASSERT_OK_AND_ASSIGN(
-      auto gemm, se::Kernel::Create(executor, custom_kernel->kernel_spec()));
+      auto gemm,
+      se::KernelFactory::Create(executor, custom_kernel->kernel_spec()));
 
   int64_t length = 4 * 4;
   int64_t byte_length = sizeof(float) * length;
@@ -68,8 +70,8 @@ TEST(CutlassGemmKernelTest, SimpleGemm) {
   se::KernelArgsDeviceMemoryArray arr(
       std::vector<se::DeviceMemoryBase>({a, b, c}),
       custom_kernel->shared_memory_bytes());
-  TF_ASSERT_OK(executor->Launch(stream.get(), custom_kernel->thread_dims(),
-                                custom_kernel->block_dims(), *gemm, arr));
+  TF_ASSERT_OK(stream->Launch(custom_kernel->thread_dims(),
+                              custom_kernel->block_dims(), *gemm, arr));
 
   // Copy `c` data back to host.
   std::vector<float> dst(length, -1.0f);
@@ -96,7 +98,8 @@ TEST(CutlassGemmKernelTest, LoadFromSharedLibrary) {
       /*indices=*/{0, 1, 2}, /*slices=*/{}, executor->GetDeviceDescription());
 
   TF_ASSERT_OK_AND_ASSIGN(
-      auto gemm, se::Kernel::Create(executor, custom_kernel->kernel_spec()));
+      auto gemm,
+      se::KernelFactory::Create(executor, custom_kernel->kernel_spec()));
 
   int64_t length = 4 * 4;
   int64_t byte_length = sizeof(float) * length;
@@ -117,8 +120,8 @@ TEST(CutlassGemmKernelTest, LoadFromSharedLibrary) {
   se::KernelArgsDeviceMemoryArray arr(
       std::vector<se::DeviceMemoryBase>({a, b, c}),
       custom_kernel->shared_memory_bytes());
-  TF_ASSERT_OK(executor->Launch(stream.get(), custom_kernel->thread_dims(),
-                                custom_kernel->block_dims(), *gemm, arr));
+  TF_ASSERT_OK(stream->Launch(custom_kernel->thread_dims(),
+                              custom_kernel->block_dims(), *gemm, arr));
 
   // Copy `c` data back to host.
   std::vector<float> dst(length, -1.0f);

@@ -17,6 +17,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use crypto_provider::{CryptoProvider, CryptoRng};
 use crypto_provider_default::CryptoProviderImpl;
+use np_hkdf::DerivedSectionKeys;
 use rand_ext::random_bytes;
 
 pub fn build_np_hkdf(c: &mut Criterion) {
@@ -45,7 +46,7 @@ pub fn build_np_hkdf(c: &mut Criterion) {
                 .collect::<Vec<_>>();
             b.iter(|| {
                 for hkdf in keys.iter() {
-                    black_box(hkdf.extended_unsigned_metadata_key_hmac_key());
+                    black_box(hkdf.v1_mic_extended_salt_keys().identity_token_hmac_key());
                 }
             });
         });
@@ -62,7 +63,7 @@ pub fn build_np_hkdf(c: &mut Criterion) {
                 .collect::<Vec<_>>();
             b.iter(|| {
                 for hkdf in keys.iter() {
-                    black_box(np_hkdf::UnsignedSectionKeys::aes_key(hkdf));
+                    black_box(hkdf.v1_mic_extended_salt_keys().aes_key());
                 }
             });
         });
@@ -79,7 +80,7 @@ pub fn build_np_hkdf(c: &mut Criterion) {
                 .collect::<Vec<_>>();
             b.iter(|| {
                 for hkdf in keys.iter() {
-                    black_box(hkdf.legacy_ldt_key());
+                    black_box(hkdf.v0_ldt_key());
                 }
             });
         });

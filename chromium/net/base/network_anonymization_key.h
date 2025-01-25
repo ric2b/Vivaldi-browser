@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <tuple>
 
@@ -170,15 +171,8 @@ class NET_EXPORT NetworkAnonymizationKey {
       NetworkAnonymizationKey* out_network_anonymization_key);
 
   // Determine whether network state partitioning is enabled. This is true if
-  // any of the features
-  //
-  // * `SplitHostCacheByNetworkIsolationKey`
-  // * `PartitionConnectionsByNetworkIsolationKey`
-  // * `PartitionHttpServerPropertiesByNetworkIsolationKey`
-  // * `PartitionSSLSessionsByNetworkIsolationKey`
-  // * `PartitionNelAndReportingByNetworkIsolationKey`
-  //
-  // is enabled, or if `PartitionByDefault()` has been called.
+  // the `PartitionConnectionsByNetworkIsolationKey` feature is enabled, or if
+  // `PartitionByDefault()` has been called.
   static bool IsPartitioningEnabled();
 
   // Default partitioning to enabled, regardless of feature settings. This must
@@ -211,6 +205,9 @@ class NET_EXPORT NetworkAnonymizationKey {
   // for non-opaque origins.
   std::optional<base::UnguessableToken> nonce_;
 };
+
+NET_EXPORT std::ostream& operator<<(std::ostream& os,
+                                    const NetworkAnonymizationKey& nak);
 
 }  // namespace net
 

@@ -48,6 +48,10 @@ extern bool MoveTabToWindow(Browser* source_browser,
                             int add_types);
 extern bool GetTabById(int tab_id, content::WebContents** contents, int* index);
 
+// Detects if the current thread can show UI elements. Used to detect if we can safely
+// display Dialog boxes in case the code may run before main window shows up.
+extern bool IsUIAvailable();
+
 }  // namespace ui_tools
 }  // namespace vivaldi
 

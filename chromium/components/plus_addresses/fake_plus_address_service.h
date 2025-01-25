@@ -10,14 +10,23 @@
 #include <utility>
 
 #include "base/functional/callback.h"
+#include "components/affiliations/core/browser/mock_affiliation_service.h"
 #include "components/plus_addresses/plus_address_service.h"
 #include "components/plus_addresses/plus_address_types.h"
+#include "testing/gmock/include/gmock/gmock.h"
+
+namespace signin {
+class IdentityManager;
+}  // namespace signin
 
 namespace plus_addresses {
 
+class PlusAddressSettingService;
+
 class FakePlusAddressService : public PlusAddressService {
  public:
-  FakePlusAddressService();
+  FakePlusAddressService(signin::IdentityManager* identity_manager,
+                         PlusAddressSettingService* setting_service);
   ~FakePlusAddressService() override;
 
   static constexpr char kFakeProfileId[] = "123";
@@ -29,6 +38,8 @@ class FakePlusAddressService : public PlusAddressService {
                           PlusAddressRequestCallback on_completed) override;
   void ConfirmPlusAddress(const url::Origin& origin,
                           const std::string& plus_address,
+                          PlusAddressRequestCallback on_completed) override;
+  void RefreshPlusAddress(const url::Origin& origin,
                           PlusAddressRequestCallback on_completed) override;
   std::optional<std::string> GetPrimaryEmail() override;
 
@@ -47,16 +58,24 @@ class FakePlusAddressService : public PlusAddressService {
     should_fail_to_confirm_ = status;
   }
 
-  // Toggles on/off whether an error occurs on `ConfirmPlusAddress`.
+  // Toggles on/off whether an error occurs on `ReservePlusAddress`.
   void set_should_fail_to_reserve(bool status) {
     should_fail_to_reserve_ = status;
   }
 
+  // Toggles on/off whether an error occurs on `RefreshPlusAddress`.
+  void set_should_fail_to_refresh(bool status) {
+    should_fail_to_refresh_ = status;
+  }
+
  private:
   PlusAddressRequestCallback on_confirmed_;
+  testing::NiceMock<affiliations::MockAffiliationService>
+      mock_affiliation_service_;
   bool is_confirmed_ = false;
   bool should_fail_to_confirm_ = false;
   bool should_fail_to_reserve_ = false;
+  bool should_fail_to_refresh_ = false;
 };
 
 }  // namespace plus_addresses

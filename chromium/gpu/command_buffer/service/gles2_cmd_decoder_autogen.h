@@ -348,10 +348,6 @@ error::Error GLES2DecoderImpl::HandleClear(uint32_t immediate_data_size,
                                            const volatile void* cmd_data) {
   const volatile gles2::cmds::Clear& c =
       *static_cast<const volatile gles2::cmds::Clear*>(cmd_data);
-  error::Error error;
-  error = WillAccessBoundFramebufferForDraw();
-  if (error != error::kNoError)
-    return error;
   GLbitfield mask = static_cast<GLbitfield>(c.mask);
   DoClear(mask);
   return error::kNoError;
@@ -575,10 +571,6 @@ error::Error GLES2DecoderImpl::HandleCopyTexImage2D(
     const volatile void* cmd_data) {
   const volatile gles2::cmds::CopyTexImage2D& c =
       *static_cast<const volatile gles2::cmds::CopyTexImage2D*>(cmd_data);
-  error::Error error;
-  error = WillAccessBoundFramebufferForRead();
-  if (error != error::kNoError)
-    return error;
   GLenum target = static_cast<GLenum>(c.target);
   GLint level = static_cast<GLint>(c.level);
   GLenum internalformat = static_cast<GLenum>(c.internalformat);
@@ -613,10 +605,6 @@ error::Error GLES2DecoderImpl::HandleCopyTexSubImage2D(
     const volatile void* cmd_data) {
   const volatile gles2::cmds::CopyTexSubImage2D& c =
       *static_cast<const volatile gles2::cmds::CopyTexSubImage2D*>(cmd_data);
-  error::Error error;
-  error = WillAccessBoundFramebufferForRead();
-  if (error != error::kNoError)
-    return error;
   GLenum target = static_cast<GLenum>(c.target);
   GLint level = static_cast<GLint>(c.level);
   GLint xoffset = static_cast<GLint>(c.xoffset);
@@ -648,10 +636,6 @@ error::Error GLES2DecoderImpl::HandleCopyTexSubImage3D(
     return error::kUnknownCommand;
   const volatile gles2::cmds::CopyTexSubImage3D& c =
       *static_cast<const volatile gles2::cmds::CopyTexSubImage3D*>(cmd_data);
-  error::Error error;
-  error = WillAccessBoundFramebufferForRead();
-  if (error != error::kNoError)
-    return error;
   GLenum target = static_cast<GLenum>(c.target);
   GLint level = static_cast<GLint>(c.level);
   GLint xoffset = static_cast<GLint>(c.xoffset);
@@ -989,10 +973,6 @@ error::Error GLES2DecoderImpl::HandleFenceSync(uint32_t immediate_data_size,
 
 error::Error GLES2DecoderImpl::HandleFinish(uint32_t immediate_data_size,
                                             const volatile void* cmd_data) {
-  error::Error error;
-  error = WillAccessBoundFramebufferForRead();
-  if (error != error::kNoError)
-    return error;
   DoFinish();
   return error::kNoError;
 }
@@ -2220,9 +2200,7 @@ error::Error GLES2DecoderImpl::HandleHint(uint32_t immediate_data_size,
     case GL_GENERATE_MIPMAP_HINT:
       if (state_.hint_generate_mipmap != mode) {
         state_.hint_generate_mipmap = mode;
-        if (!feature_info_->gl_version_info().is_desktop_core_profile) {
-          api()->glHintFn(target, mode);
-        }
+        api()->glHintFn(target, mode);
       }
       break;
     case GL_FRAGMENT_SHADER_DERIVATIVE_HINT_OES:
@@ -2234,7 +2212,7 @@ error::Error GLES2DecoderImpl::HandleHint(uint32_t immediate_data_size,
       }
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return error::kNoError;
 }
@@ -4267,13 +4245,6 @@ error::Error GLES2DecoderImpl::HandleBlitFramebufferCHROMIUM(
     return error::kUnknownCommand;
   }
 
-  error::Error error;
-  error = WillAccessBoundFramebufferForDraw();
-  if (error != error::kNoError)
-    return error;
-  error = WillAccessBoundFramebufferForRead();
-  if (error != error::kNoError)
-    return error;
   GLint srcX0 = static_cast<GLint>(c.srcX0);
   GLint srcY0 = static_cast<GLint>(c.srcY0);
   GLint srcX1 = static_cast<GLint>(c.srcX1);
@@ -6088,7 +6059,7 @@ bool GLES2DecoderImpl::SetCapabilityState(GLenum cap, bool enabled) {
       }
       return false;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
 }

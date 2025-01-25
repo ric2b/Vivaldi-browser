@@ -24,6 +24,7 @@
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "components/omnibox/browser/titled_url_match_utils.h"
 #include "components/omnibox/common/omnibox_features.h"
+#include "components/search_engines/search_engines_test_environment.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_starter_pack_data.h"
@@ -181,6 +182,7 @@ class BookmarkProviderTest : public testing::Test {
   // provided.
   [[nodiscard]] size_t GetNumMatches(std::string input_text);
 
+  search_engines::SearchEnginesTestEnvironment search_engines_test_environment_;
   std::unique_ptr<MockAutocompleteProviderClient> provider_client_;
   std::unique_ptr<BookmarkModel> local_or_syncable_model_;
   scoped_refptr<BookmarkProvider> provider_;
@@ -199,7 +201,7 @@ void BookmarkProviderTest::SetUp() {
       .WillByDefault(testing::ReturnRef(classifier_));
 
   provider_client_->set_template_url_service(
-      std::make_unique<TemplateURLService>(nullptr, 0));
+      search_engines_test_environment_.ReleaseTemplateURLService());
 
   ResetProvider();
 
@@ -556,41 +558,37 @@ TEST_F(BookmarkProviderTest, KeywordModeExtractUserInput) {
 
   ACMatches matches = provider_->matches();
   ASSERT_GT(matches.size(), 0u);
-  EXPECT_EQ(u"domain", matches[0].description);
+  EXPECT_EQ(matches[0].description, u"domain");
 
-  // Test result for "@bookmarks" and "@bookmarks domain" while NOT in keyword
-  // mode, we should get a result for the @bookmarks bookmark and not for the
-  // domain bookmark since we're searching for the whole input text including
-  // "@bookmarks".
+  // Test result for "@bookmarks" while NOT in keyword mode, we shouldn't get a
+  // result because the input starts with "@".
   AutocompleteInput input2(u"@bookmarks", metrics::OmniboxEventProto::OTHER,
                            TestSchemeClassifier());
   provider_->Start(input2, /*minimal_changes=*/false);
+  EXPECT_TRUE(provider_->matches().empty());
 
-  matches = provider_->matches();
-  ASSERT_GT(matches.size(), 0u);
-  EXPECT_EQ(u"@bookmarks", matches[0].description);
-
-  AutocompleteInput input3(u"@bookmarks domain",
+  // Test result for "domain @bookmarks" while NOT in keyword mode, we should
+  // get a result. Although the input contains "@", it doesn't start with it.
+  AutocompleteInput input3(u"domain @bookmarks",
                            metrics::OmniboxEventProto::OTHER,
                            TestSchemeClassifier());
   provider_->Start(input3, /*minimal_changes=*/false);
+  EXPECT_EQ(provider_->matches().size(), 1u);
+  EXPECT_EQ(matches[0].description, u"domain");
 
-  matches = provider_->matches();
-
-  // TODO(crbug.com/40257159): This used to be 0u. Is 1u OK?
-  ASSERT_EQ(matches.size(), 1u);
-
-  // Turn on keyword mode, test result again, we should only get back the result
-  // for the domain bookmark since we're searching only for the user text after
-  // the keyword.
-  input3.set_prefer_keyword(true);
-  input3.set_keyword_mode_entry_method(
+  // In keyword mode, "@bookmarks domain" should match since we're only trying
+  // to match "domain".
+  AutocompleteInput input4(u"@bookmarks domain",
+                           metrics::OmniboxEventProto::OTHER,
+                           TestSchemeClassifier());
+  input4.set_prefer_keyword(true);
+  input4.set_keyword_mode_entry_method(
       metrics::OmniboxEventProto_KeywordModeEntryMethod_TAB);
-  provider_->Start(input3, /*minimal_changes=*/false);
+  provider_->Start(input4, /*minimal_changes=*/false);
 
   matches = provider_->matches();
   ASSERT_EQ(matches.size(), 1u);
-  EXPECT_EQ(u"domain", matches[0].description);
+  EXPECT_EQ(matches[0].description, u"domain");
 
   // Ensure keyword and transition are set properly to keep user in keyword
   // mode.

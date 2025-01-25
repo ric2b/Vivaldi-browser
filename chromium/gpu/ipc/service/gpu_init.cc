@@ -78,7 +78,7 @@
 #include "gpu/vulkan/vulkan_util.h"
 #endif
 
-#if defined(USE_EGL) && !BUILDFLAG(IS_MAC)
+#if !BUILDFLAG(IS_MAC)
 #include "ui/gl/gl_fence_egl.h"
 #endif
 
@@ -254,7 +254,7 @@ uint64_t CHROME_LUID_to_uint64_t(const CHROME_LUID& luid) {
 }
 #endif  // BUILDFLAG(IS_WIN)
 
-#if defined(USE_EGL) && (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 // GPU picking is only effective with ANGLE/Metal backend on Mac and
 // on Windows with EGL.
 // Returns the default GPU's system_device_id.
@@ -321,7 +321,7 @@ void SetupGLDisplayManagerEGL(const GPUInfo& gpu_info,
   }
   return;
 }
-#endif  // USE_EGL && (IS_WIN || IS_MAC)
+#endif  // IS_WIN || IS_MAC
 
 }  // namespace
 
@@ -373,9 +373,9 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   gpu_feature_info_ = ComputeGpuFeatureInfo(gpu_info_, gpu_preferences_,
                                             command_line, &needs_more_info);
 
-#if defined(USE_EGL) && (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   SetupGLDisplayManagerEGL(gpu_info_, gpu_feature_info_);
-#endif  // USE_EGL && (IS_WIN || IS_MAC)
+#endif  // IS_WIN || IS_MAC
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CASTOS)
 
   gpu_info_.in_process_gpu = false;
@@ -455,6 +455,8 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   params.single_process = false;
   params.enable_native_gpu_memory_buffers =
       gpu_preferences_.enable_native_gpu_memory_buffers;
+  params.handle_overlays_swap_failure =
+      base::FeatureList::IsEnabled(features::kHandleOverlaysSwapFailure);
 
   // Page flip testing will only happen in ash-chrome, not in lacros-chrome.
   // Therefore, we only allow or disallow sync and real buffer page flip
@@ -482,14 +484,12 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
 #if BUILDFLAG(IS_WIN)
   UMA_HISTOGRAM_BOOLEAN("GPU.AppHelpIsLoaded",
                         static_cast<bool>(::GetModuleHandle(L"apphelp.dll")));
-#if defined(USE_EGL)
   if (gpu_preferences_.gr_context_type == GrContextType::kGraphiteDawn &&
       features::kSkiaGraphiteDawnBackendValidation.Get()) {
     // Enable ANGLE debug layer if we need backend validation for Graphite since
     // we can share the D3D11 device between ANGLE and Dawn.
     gl::GLDisplayEGL::EnableANGLEDebugLayer();
   }
-#endif
 #endif
   if (gl::GetGLImplementation() != gl::kGLImplementationDisabled) {
     gl_display = gl::init::InitializeGLNoExtensionsOneOff(
@@ -680,11 +680,6 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
       }
     }
   }
-
-#if BUILDFLAG(IS_MAC)
-  SetMacOSSpecificTextureTargetFromCurrentGLImplementation();
-  gpu_info_.macos_specific_texture_target = GetPlatformSpecificTextureTarget();
-#endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_WIN)
   {
@@ -928,7 +923,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
     watchdog_init.SetGpuWatchdogPtr(nullptr);
   }
 
-#if defined(USE_EGL) && !BUILDFLAG(IS_MAC)
+#if !BUILDFLAG(IS_MAC)
   if (gpu_feature_info_.IsWorkaroundEnabled(CHECK_EGL_FENCE_BEFORE_WAIT)) {
     gl::GLFenceEGL::CheckEGLFenceBeforeWait();
   }
@@ -980,6 +975,8 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
 #if BUILDFLAG(IS_OZONE)
   ui::OzonePlatform::InitParams params;
   params.single_process = true;
+  params.handle_overlays_swap_failure =
+      base::FeatureList::IsEnabled(features::kHandleOverlaysSwapFailure);
 
   // Page flip testing will only happen in ash-chrome, not in lacros-chrome.
   // Therefore, we only allow or disallow sync and real buffer page flip
@@ -1056,11 +1053,6 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
       }
     }
   }
-
-#if BUILDFLAG(IS_MAC)
-  SetMacOSSpecificTextureTargetFromCurrentGLImplementation();
-  gpu_info_.macos_specific_texture_target = GetPlatformSpecificTextureTarget();
-#endif  // BUILDFLAG(IS_MAC)
 
   if (!gl_disabled) {
     if (!gpu_feature_info_.disabled_extensions.empty()) {
@@ -1180,15 +1172,15 @@ bool GpuInit::InitializeDawn() {
 #if BUILDFLAG(ENABLE_VULKAN)
       // Even though Dawn successfully initialized Vulkan we still have to check
       // if the Vulkan driver is problematic and shouldn't be used.
-      wgpu::AdapterProperties adapter_properties;
+      wgpu::AdapterInfo adapter_info;
       wgpu::AdapterPropertiesVk adapter_properties_vk;
-      adapter_properties.nextInChain = &adapter_properties_vk;
-      dawn_context_provider_->GetAdapter().GetProperties(&adapter_properties);
+      adapter_info.nextInChain = &adapter_properties_vk;
+      dawn_context_provider_->GetAdapter().GetInfo(&adapter_info);
 
       VulkanPhysicalDeviceProperties device_properties;
-      device_properties.device_name = adapter_properties.name;
-      device_properties.vendor_id = adapter_properties.vendorID;
-      device_properties.device_id = adapter_properties.deviceID;
+      device_properties.device_name = adapter_info.device;
+      device_properties.vendor_id = adapter_info.vendorID;
+      device_properties.device_id = adapter_info.deviceID;
       device_properties.driver_version = adapter_properties_vk.driverVersion;
 
 #if BUILDFLAG(IS_ANDROID)

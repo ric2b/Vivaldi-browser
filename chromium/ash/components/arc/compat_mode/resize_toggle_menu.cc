@@ -80,7 +80,9 @@ END_METADATA
 ResizeToggleMenu::MenuButtonView::MenuButtonView(PressedCallback callback,
                                                  const gfx::VectorIcon& icon,
                                                  int title_string_id)
-    : views::Button(std::move(callback)), icon_(icon) {
+    : views::Button(std::move(callback)),
+      icon_(icon),
+      title_string_id_(title_string_id) {
   // Don't use FlexLayout here because it breaks the focus ring's bounds.
   // TODO(b/193195191): Investigate why we can't use FlexLayout.
   SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -111,9 +113,6 @@ ResizeToggleMenu::MenuButtonView::MenuButtonView(PressedCallback callback,
         ash::TypographyToken::kCrosButton2, *label);
   }
 
-  SetAccessibleName(l10n_util::GetStringUTF16(title_string_id));
-  GetViewAccessibility().SetRole(ax::mojom::Role::kMenuItem);
-
   constexpr int kBorderThicknessDp = 1;
   const auto button_radius =
       chromeos::features::IsJellyEnabled()
@@ -142,6 +141,9 @@ ResizeToggleMenu::MenuButtonView::MenuButtonView(PressedCallback callback,
     views::FocusRing::Get(this)->SetColorId(
         static_cast<ui::ColorId>(cros_tokens::kCrosSysFocusRing));
   }
+
+  GetViewAccessibility().SetRole(ax::mojom::Role::kMenuItem);
+  GetViewAccessibility().SetName(l10n_util::GetStringUTF16(title_string_id_));
 }
 
 ResizeToggleMenu::MenuButtonView::~MenuButtonView() = default;
@@ -375,16 +377,16 @@ ResizeToggleMenu::MakeBubbleDelegateView(
     return container_view->AddChildView(std::make_unique<MenuButtonView>(
         base::BindRepeating(command_handler, command_id), icon, string_id));
   };
-  phone_button_ = add_menu_button(ash::ResizeCompatMode::kPhone,
-                                  chromeos::features::IsJellyEnabled()
-                                      ? ash::kSystemMenuPhoneIcon
-                                      : ash::kSystemMenuPhoneLegacyIcon,
-                                  IDS_ARC_COMPAT_MODE_RESIZE_TOGGLE_MENU_PHONE);
+  phone_button_ = add_menu_button(
+      ash::ResizeCompatMode::kPhone,
+      chromeos::features::IsJellyEnabled() ? ash::kSystemMenuPhoneIcon
+                                           : ash::kSystemMenuPhoneLegacyIcon,
+      IDS_ARC_COMPAT_MODE_RESIZE_TOGGLE_MENU_PORTRAIT);
   tablet_button_ = add_menu_button(
       ash::ResizeCompatMode::kTablet,
       chromeos::features::IsJellyEnabled() ? ash::kSystemMenuTabletIcon
                                            : ash::kSystemMenuTabletLegacyIcon,
-      IDS_ARC_COMPAT_MODE_RESIZE_TOGGLE_MENU_TABLET);
+      IDS_ARC_COMPAT_MODE_RESIZE_TOGGLE_MENU_LANDSCAPE);
   resizable_button_ = add_menu_button(
       ash::ResizeCompatMode::kResizable, ash::kAppCompatResizableIcon,
       IDS_ARC_COMPAT_MODE_RESIZE_TOGGLE_MENU_RESIZABLE);

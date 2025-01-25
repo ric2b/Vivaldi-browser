@@ -44,6 +44,7 @@
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
+#include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style_property_shorthand.h"
@@ -298,7 +299,7 @@ class TestCascade {
       case CascadeOrigin::kAnimation:
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
   }
@@ -3063,6 +3064,30 @@ TEST_F(StyleCascadeTest, VerticalAlignBaselineSourceReversed) {
   EXPECT_EQ("auto", cascade.ComputedValue("baseline-source"));
 }
 
+TEST_F(StyleCascadeTest, WebkitBoxDecorationBreakOverlap) {
+  ScopedBoxDecorationBreakForTest scoped_feature(true);
+
+  TestCascade cascade(GetDocument());
+  cascade.Add("-webkit-box-decoration-break", "slice");
+  cascade.Add("box-decoration-break", "clone");
+  cascade.Apply();
+
+  EXPECT_EQ("clone", cascade.ComputedValue("box-decoration-break"));
+  EXPECT_EQ("clone", cascade.ComputedValue("-webkit-box-decoration-break"));
+}
+
+TEST_F(StyleCascadeTest, WebkitBoxDecorationBreakOverlapReverse) {
+  ScopedBoxDecorationBreakForTest scoped_feature(true);
+
+  TestCascade cascade(GetDocument());
+  cascade.Add("box-decoration-break", "slice");
+  cascade.Add("-webkit-box-decoration-break", "clone");
+  cascade.Apply();
+
+  EXPECT_EQ("clone", cascade.ComputedValue("box-decoration-break"));
+  EXPECT_EQ("clone", cascade.ComputedValue("-webkit-box-decoration-break"));
+}
+
 TEST_F(StyleCascadeTest, InitialDirection) {
   TestCascade cascade(GetDocument());
   cascade.Add("margin-inline-start:10px");
@@ -3103,6 +3128,33 @@ TEST_F(StyleCascadeTest, NonInitialWritingMode) {
 
   EXPECT_EQ("20px", cascade.ComputedValue("width"));
   EXPECT_EQ("10px", cascade.ComputedValue("height"));
+}
+
+TEST_F(StyleCascadeTest, InitialTextSizeAdjust) {
+  GetDocument().GetSettings()->SetTextAutosizingEnabled(true);
+  ScopedTextSizeAdjustImprovementsForTest scoped_feature(true);
+
+  TestCascade cascade(GetDocument());
+  cascade.Add("font-size:10px");
+  cascade.Add("line-height:20px");
+  cascade.Apply();
+
+  EXPECT_EQ("10px", cascade.ComputedValue("font-size"));
+  EXPECT_EQ("20px", cascade.ComputedValue("line-height"));
+}
+
+TEST_F(StyleCascadeTest, NonInitialTextSizeAdjust) {
+  GetDocument().GetSettings()->SetTextAutosizingEnabled(true);
+  ScopedTextSizeAdjustImprovementsForTest scoped_feature(true);
+
+  TestCascade cascade(GetDocument());
+  cascade.Add("font-size:10px");
+  cascade.Add("line-height:20px");
+  cascade.Add("text-size-adjust:200%");
+  cascade.Apply();
+
+  EXPECT_EQ("20px", cascade.ComputedValue("font-size"));
+  EXPECT_EQ("40px", cascade.ComputedValue("line-height"));
 }
 
 TEST_F(StyleCascadeTest, DoesNotDependOnCascadeAffectingProperty) {

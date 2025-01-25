@@ -80,7 +80,7 @@ bool SyncChangeIsNewWebsiteApproval(const std::string& name,
       return !old_value->GetIfBool().value_or(true);
     }
     default: {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
     }
   }
@@ -457,9 +457,6 @@ SupervisedUserSettingsService::ProcessSyncChanges(
 base::WeakPtr<syncer::SyncableService>
 SupervisedUserSettingsService::AsWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
-}
-
-void SupervisedUserSettingsService::OnPrefValueChanged(const std::string& key) {
 }
 
 void SupervisedUserSettingsService::OnInitializationCompleted(bool success) {

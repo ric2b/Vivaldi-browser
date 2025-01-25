@@ -19,6 +19,9 @@
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/ui/symbols/chrome_icon.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
@@ -65,6 +68,9 @@ CGFloat noteTextViewBottomPadding = 12;
 // Padding for the body container view
 UIEdgeInsets bodyContainerViewPadding = UIEdgeInsetsMake(12, 12, 0, 12);
 CGFloat bodyContainerCornerRadius = 6;
+// Markdown toggle button icons
+NSString *vMarkdownToggleOn = @"markdown_toggle_on";
+NSString *vMarkdownToggleOff = @"markdown_toggle_off";
 }  // namespace
 
 @interface NoteAddEditViewController () <NoteFolderChooserViewControllerDelegate,
@@ -110,8 +116,6 @@ CGFloat bodyContainerCornerRadius = 6;
 
 // For markdown to HTML toggle
 @property(nonatomic, strong) UIView* bodyContainerView;
-@property(nonatomic, strong) UISwitch* toggleMarkdownButton;
-@property(nonatomic, strong) UIStackView* switchWithLabel;
 @property(nonatomic, strong) WKWebView* webView;
 
 // The action sheet coordinator, if one is currently being shown.
@@ -158,6 +162,8 @@ CGFloat bodyContainerCornerRadius = 6;
 // Bottom constraint for the note text view.
 @property (nonatomic, strong) NSLayoutConstraint *noteTextViewBottomConstraint;
 
+@property(nonatomic, strong) id<ApplicationCommands> handler;
+
 @end
 
 #pragma mark
@@ -179,8 +185,6 @@ CGFloat bodyContainerCornerRadius = 6;
 @synthesize allowsCancel = _allowsCancel;
 @synthesize noteTextViewBottomConstraint = _noteTextViewBottomConstraint;
 @synthesize bodyContainerView = _bodyContainerView;
-@synthesize toggleMarkdownButton = _toggleMarkdownButton;
-@synthesize switchWithLabel = _switchWithLabel;
 @synthesize webView = _webView;
 
 #pragma mark - Lifecycle
@@ -219,6 +223,9 @@ CGFloat bodyContainerCornerRadius = 6;
     // Set up the note model oberver.
     _modelBridge.reset(
       new notes::NoteModelBridge(self, _noteModel));
+
+    self.handler = HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                                      ApplicationCommands);
   }
   return self;
 }
@@ -233,6 +240,8 @@ CGFloat bodyContainerCornerRadius = 6;
   [super viewDidLoad];
   [self setUpUI];
   [self updateNoteUI];
+  // Toggle Initial state
+  self.isToggledOn = NO;
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -289,14 +298,30 @@ CGFloat bodyContainerCornerRadius = 6;
     self.cancelItem = cancelItem;
   }
 
+  UIBarButtonItem* spaceButton = [[UIBarButtonItem alloc]
+    initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
+    target:self
+    action:nil];
+
+  self.toggleButton = [[UIBarButtonItem alloc]
+    initWithImage:[UIImage imageNamed:vMarkdownToggleOff]
+    style:UIBarButtonItemStylePlain
+    target:self
+    action:@selector(toggleMarkdown)];
+
   UIBarButtonItem* doneItem = [[UIBarButtonItem alloc]
     initWithBarButtonSystemItem:UIBarButtonSystemItemDone
-                         target:self
-                         action:@selector(saveNote)];
-  doneItem.accessibilityIdentifier =
-    kNoteEditNavigationBarDoneButtonIdentifier;
-  self.navigationItem.rightBarButtonItem = doneItem;
+    target:self
+    action:@selector(saveNote)];
+
+  doneItem.accessibilityIdentifier = kNoteEditNavigationBarDoneButtonIdentifier;
+
+  self.navigationItem.rightBarButtonItems = @[
+    doneItem, spaceButton,
+    spaceButton, self.toggleButton];
   self.doneItem = doneItem;
+  if(!IsViewMarkdownAsHTMLEnabled())
+    [self.toggleButton setHidden: YES];
 }
 
 - (void)setupToolbar{
@@ -338,43 +363,13 @@ CGFloat bodyContainerCornerRadius = 6;
   [self.bodyContainerView
     fillSuperviewToSafeAreaInsetWithPadding:bodyContainerViewPadding];
 
-
-  // Markdown toggle
-  if (IsViewMarkdownAsHTMLEnabled()) {
-    self.toggleMarkdownButton = [[UISwitch alloc] init];
-    self.toggleMarkdownButton.on = NO;
-    [self.toggleMarkdownButton addTarget:self
-                      action:@selector(onToggleMarkdownView:)
-            forControlEvents:UIControlEventValueChanged];
-
-    self.switchWithLabel = [[UIStackView alloc] init];
-    self.switchWithLabel.axis = UILayoutConstraintAxisHorizontal;
-    self.switchWithLabel.spacing = UIStackViewSpacingUseSystem;
-    self.switchWithLabel.alignment = UIStackViewAlignmentCenter;
-
-    UILabel* viewAsHTMLLabel = [[UILabel alloc] init];
-    viewAsHTMLLabel.text = l10n_util::GetNSString(IDS_IOS_NOTE_VIEW_AS_HTML);
-    [self.switchWithLabel addArrangedSubview:viewAsHTMLLabel];
-    [self.switchWithLabel addArrangedSubview:self.toggleMarkdownButton];
-
-    [self.bodyContainerView addSubview:self.switchWithLabel];
-
-    [self.switchWithLabel anchorTop:self.bodyContainerView.topAnchor
-                    leading:nil
-                    bottom:nil
-                  trailing:self.bodyContainerView.trailingAnchor
-                    padding:noteTextViewPadding];
-  }
-
   // Note text view
   VivaldiTextView* noteTextView = [[VivaldiTextView alloc] init];
   _noteTextView = noteTextView;
 
   [self.bodyContainerView addSubview:self.noteTextView];
   // Add anchoring of note textView
-  [noteTextView anchorTop:IsViewMarkdownAsHTMLEnabled() ?
-                            self.switchWithLabel.bottomAnchor :
-                            self.bodyContainerView.topAnchor
+  [noteTextView anchorTop:self.bodyContainerView.topAnchor
                   leading:self.bodyContainerView.leadingAnchor
                    bottom:nil
                  trailing:self.bodyContainerView.trailingAnchor
@@ -385,23 +380,27 @@ CGFloat bodyContainerCornerRadius = 6;
      constraintEqualToAnchor:self.bodyContainerView.bottomAnchor
      constant:-noteTextViewBottomPadding];
   [self.noteTextViewBottomConstraint setActive:YES];
+  [self setupWebView];
+}
+
+-(void)setupWebView {
+  if (!IsViewMarkdownAsHTMLEnabled()) {
+    return;
+  }
+  self.webView = web::BuildWKWebView(self.bodyContainerView.bounds,
+                                     self.browserState);
+  self.webView.navigationDelegate = self;
+  [self.bodyContainerView addSubview:self.webView];
+  [self.webView fillSuperview];
+
+  [self setWebViewHidden:YES];
+  [self createMarkdownWebView];
 }
 
 - (void)createMarkdownWebView {
   if (!IsViewMarkdownAsHTMLEnabled()) {
     return;
   }
-  self.webView = web::BuildWKWebView(self.bodyContainerView.bounds,
-                                      self.browserState);
-  self.webView.navigationDelegate = self;
-
-  [self.bodyContainerView addSubview:self.webView];
-
-  [self.webView anchorTop:self.switchWithLabel.bottomAnchor
-                            leading:self.bodyContainerView.leadingAnchor
-                              bottom:self.bodyContainerView.bottomAnchor
-                            trailing:self.bodyContainerView.trailingAnchor];
-
   NSURL* url =
       [base::apple::FrameworkBundle() URLForResource:vMarkdownHTMLFilename
                                        withExtension:@"html"];
@@ -433,25 +432,42 @@ CGFloat bodyContainerCornerRadius = 6;
 }
 
 - (void)fallbackToMarkdownViewDueToError {
-  self.toggleMarkdownButton.on = NO;
-  [self deleteMarkdownWebView];
+  [self setWebViewHidden:YES];
   [self setupContentView];
   [self updateUIFromNote];
 }
 
-- (void)deleteMarkdownWebView {
-  [self.webView removeFromSuperview];
-  self.webView = nil;
-}
-
-- (void)onToggleMarkdownView:(id)sender {
-  if (self.webView == nil) {
+- (void)toggleMarkdown {
+  if (self.webView.hidden) {
+    [self.noteTextView endEditing:YES];
     [self commitNoteChanges];
-    [self createMarkdownWebView];
+    [self.webView reloadFromOrigin];
+    [self setWebViewHidden:NO];
   } else {
-    [self deleteMarkdownWebView];
+    [self setWebViewHidden:YES];
     [self setupContentView];
     [self updateUIFromNote];
+  }
+
+  // set toggle button
+  self.isToggledOn = !self.isToggledOn;
+  UIImage *newImage;
+  if (self.isToggledOn) {
+    newImage = [UIImage imageNamed:vMarkdownToggleOn];
+  } else {
+    newImage = [UIImage imageNamed:vMarkdownToggleOff];
+  }
+  [self.toggleButton setImage:newImage];
+}
+
+- (void)setWebViewHidden:(BOOL)hidden {
+  self.webView.hidden = hidden;
+  if (hidden) {
+    self.webView.alpha = 0.0;
+  } else {
+    [UIView animateWithDuration:0.3 animations:^{
+      self.webView.alpha = 1.0;
+    }];
   }
 }
 
@@ -483,6 +499,32 @@ CGFloat bodyContainerCornerRadius = 6;
       return;
     }
   }];
+}
+
+- (void)webView:(WKWebView *)webView
+    decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction
+      decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
+  // Check if the navigation action is a link click
+  if (navigationAction.navigationType == WKNavigationTypeLinkActivated) {
+    NSURL *url = navigationAction.request.URL;
+    const std::string urlString = [url.absoluteString UTF8String];
+    GURL gurl(urlString);
+    __weak NoteAddEditViewController* weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [weakSelf openURL:gurl];
+    });
+    // Cancel the navigation so the link is not opened in the WebView
+    decisionHandler(WKNavigationActionPolicyCancel);
+  } else {
+    // Allow all other types of navigation actions
+    decisionHandler(WKNavigationActionPolicyAllow);
+  }
+}
+
+- (void)openURL:(GURL)URL {
+  OpenNewTabCommand* command = [OpenNewTabCommand commandWithURLFromChrome:URL];
+  [self.handler openURLInNewTab:command];
+  [self dismiss];
 }
 
 - (void)setupKeyboardObservers {
@@ -623,15 +665,23 @@ CGFloat bodyContainerCornerRadius = 6;
          self.note, [self inputNoteName], GURL(),
          self.folder, self.noteModel, self.browserState)];
   } else {
+    NSString *noteString = [self.inputNoteName stringByTrimmingCharactersInSet:
+                            [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if ([noteString length] == 0) {
+      return;
+    }
     std::u16string folderTitle =
     l10n_util::GetStringUTF16(IDS_VIVALDI_NOTE_CONTEXT_BAR_NEW_NOTE);
-    std::u16string titleString =
-    base::SysNSStringToUTF16([self inputNoteName]);
-    self.noteModel->AddNote(self.folder,
-                            self.folder->children().size(),
-                            titleString,
-                            GURL(),
-                            titleString);
+    std::u16string titleString = base::SysNSStringToUTF16(noteString);
+
+    if(!self.note) {
+      self.note = self.noteModel->AddNote(self.folder,
+                                          self.folder->children().size(),
+                                          titleString,
+                                          GURL(),
+                                          titleString);
+      self.editingExistingItem = YES;
+    }
   }
 }
 
@@ -654,7 +704,7 @@ CGFloat bodyContainerCornerRadius = 6;
   [self removeKeyboardObservers];
   [self.delegate noteEditorWantsDismissal:self];
   if (IsViewMarkdownAsHTMLEnabled()) {
-    [self deleteMarkdownWebView];
+    [self setWebViewHidden:YES];
   }
 }
 

@@ -15,6 +15,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "content/public/common/content_features.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
 #include "content/services/auction_worklet/bidder_lazy_filler.h"
 #include "content/services/auction_worklet/for_debugging_only_bindings.h"
@@ -79,6 +80,16 @@ class ContextRecyclerTest : public testing::Test {
         std::make_unique<AuctionV8Helper::TimeLimitScope>(time_limit_.get());
   }
   ~ContextRecyclerTest() override = default;
+
+  auction_worklet::mojom::EventTypePtr Reserved(
+      auction_worklet::mojom::ReservedEventType reserved_event_type) {
+    return auction_worklet::mojom::EventType::NewReserved(reserved_event_type);
+  }
+
+  auction_worklet::mojom::EventTypePtr NonReserved(
+      const std::string& event_type) {
+    return auction_worklet::mojom::EventType::NewNonReserved(event_type);
+  }
 
   v8::Local<v8::UnboundScript> Compile(const std::string& code) {
     v8::Local<v8::UnboundScript> script;
@@ -3279,7 +3290,7 @@ class ContextRecyclerPrivateAggregationExtensionsEnabledTest
   auction_worklet::mojom::PrivateAggregationRequestPtr CreateForEventRequest(
       absl::uint128 bucket,
       int value,
-      const std::string& event_type,
+      auction_worklet::mojom::EventTypePtr event_type,
       std::optional<uint64_t> filtering_id = std::nullopt) {
     auction_worklet::mojom::AggregatableReportForEventContribution contribution(
         auction_worklet::mojom::ForEventSignalBucket::NewIdBucket(bucket),
@@ -3413,18 +3424,29 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
                            ->TakePrivateAggregationRequests();
 
     ASSERT_EQ(pa_requests.size(), 4u);
-    EXPECT_EQ(pa_requests[0],
-              CreateForEventRequest(/*bucket=*/123, /*value=*/45,
-                                    /*event_type=*/kReservedWin));
-    EXPECT_EQ(pa_requests[1],
-              CreateForEventRequest(/*bucket=*/123, /*value=*/46,
-                                    /*event_type=*/kReservedLoss));
-    EXPECT_EQ(pa_requests[2],
-              CreateForEventRequest(/*bucket=*/123, /*value=*/47,
-                                    /*event_type=*/kReservedAlways));
+    EXPECT_EQ(
+        pa_requests[0],
+        CreateForEventRequest(
+            /*bucket=*/123, /*value=*/45,
+            /*event_type=*/
+            Reserved(auction_worklet::mojom::ReservedEventType::kReservedWin)));
+    EXPECT_EQ(
+        pa_requests[1],
+        CreateForEventRequest(
+            /*bucket=*/123, /*value=*/46,
+            /*event_type=*/
+            Reserved(
+                auction_worklet::mojom::ReservedEventType::kReservedLoss)));
+    EXPECT_EQ(
+        pa_requests[2],
+        CreateForEventRequest(
+            /*bucket=*/123, /*value=*/47,
+            /*event_type=*/
+            Reserved(
+                auction_worklet::mojom::ReservedEventType::kReservedAlways)));
     EXPECT_EQ(pa_requests[3],
               CreateForEventRequest(/*bucket=*/123, /*value=*/48,
-                                    /*event_type=*/"click"));
+                                    /*event_type=*/NonReserved("click")));
 
     EXPECT_TRUE(context_recycler.private_aggregation_bindings()
                     ->TakePrivateAggregationRequests()
@@ -3538,7 +3560,8 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
             /*value=*/
             auction_worklet::mojom::ForEventSignalValue::NewIntValue(45),
             /*filtering_id=*/std::nullopt,
-            /*event_type=*/kReservedWin);
+            /*event_type=*/
+            Reserved(auction_worklet::mojom::ReservedEventType::kReservedWin));
 
     ExpectOneForEventRequestEqualTo(
         context_recycler.private_aggregation_bindings()
@@ -3566,7 +3589,8 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
             /*value=*/
             auction_worklet::mojom::ForEventSignalValue::NewIntValue(45),
             /*filtering_id=*/std::nullopt,
-            /*event_type=*/kReservedWin);
+            /*event_type=*/
+            Reserved(auction_worklet::mojom::ReservedEventType::kReservedWin));
 
     ExpectOneForEventRequestEqualTo(
         context_recycler.private_aggregation_bindings()
@@ -3594,7 +3618,8 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
             /*value=*/
             auction_worklet::mojom::ForEventSignalValue::NewIntValue(45),
             /*filtering_id=*/std::nullopt,
-            /*event_type=*/kReservedWin);
+            /*event_type=*/
+            Reserved(auction_worklet::mojom::ReservedEventType::kReservedWin));
 
     ExpectOneForEventRequestEqualTo(
         context_recycler.private_aggregation_bindings()
@@ -3622,7 +3647,8 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
             /*value=*/
             auction_worklet::mojom::ForEventSignalValue::NewIntValue(0),
             /*filtering_id=*/std::nullopt,
-            /*event_type=*/kReservedWin);
+            /*event_type=*/
+            Reserved(auction_worklet::mojom::ReservedEventType::kReservedWin));
 
     ExpectOneForEventRequestEqualTo(
         context_recycler.private_aggregation_bindings()
@@ -3658,12 +3684,18 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
         context_recycler.private_aggregation_bindings()
             ->TakePrivateAggregationRequests();
     ASSERT_EQ(pa_requests.size(), 2u);
-    EXPECT_EQ(pa_requests[0],
-              CreateForEventRequest(/*bucket=*/123, /*value=*/45,
-                                    /*event_type=*/kReservedWin));
-    EXPECT_EQ(pa_requests[1],
-              CreateForEventRequest(/*bucket=*/678, /*value=*/90,
-                                    /*event_type=*/kReservedWin));
+    EXPECT_EQ(
+        pa_requests[0],
+        CreateForEventRequest(
+            /*bucket=*/123, /*value=*/45,
+            /*event_type=*/
+            Reserved(auction_worklet::mojom::ReservedEventType::kReservedWin)));
+    EXPECT_EQ(
+        pa_requests[1],
+        CreateForEventRequest(
+            /*bucket=*/678, /*value=*/90,
+            /*event_type=*/
+            Reserved(auction_worklet::mojom::ReservedEventType::kReservedWin)));
   }
 
   // Too large bucket
@@ -3720,7 +3752,8 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
             /*value=*/
             auction_worklet::mojom::ForEventSignalValue::NewIntValue(1),
             /*filtering_id=*/std::nullopt,
-            /*event_type=*/kReservedWin);
+            /*event_type=*/
+            Reserved(auction_worklet::mojom::ReservedEventType::kReservedWin));
 
     ExpectOneForEventRequestEqualTo(
         context_recycler.private_aggregation_bindings()
@@ -3757,7 +3790,8 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
             /*value=*/
             auction_worklet::mojom::ForEventSignalValue::NewIntValue(1),
             /*filtering_id=*/std::nullopt,
-            /*event_type=*/kReservedWin);
+            /*event_type=*/
+            Reserved(auction_worklet::mojom::ReservedEventType::kReservedWin));
 
     ExpectOneForEventRequestEqualTo(
         context_recycler.private_aggregation_bindings()
@@ -3785,7 +3819,8 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
             /*value=*/
             auction_worklet::mojom::ForEventSignalValue::NewIntValue(4),
             /*filtering_id=*/std::nullopt,
-            /*event_type=*/kReservedWin);
+            /*event_type=*/
+            Reserved(auction_worklet::mojom::ReservedEventType::kReservedWin));
 
     ExpectOneForEventRequestEqualTo(
         context_recycler.private_aggregation_bindings()
@@ -4009,7 +4044,8 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
             auction_worklet::mojom::ForEventSignalValue::NewSignalValue(
                 std::move(signal_value)),
             /*filtering_id=*/std::nullopt,
-            /*event_type=*/kReservedWin);
+            /*event_type=*/
+            Reserved(auction_worklet::mojom::ReservedEventType::kReservedWin));
 
     ExpectOneForEventRequestEqualTo(
         context_recycler.private_aggregation_bindings()
@@ -4297,11 +4333,14 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
                            ->TakePrivateAggregationRequests();
 
     ASSERT_EQ(pa_requests.size(), 1u);
-    EXPECT_EQ(pa_requests[0],
-              CreateForEventRequest(/*bucket=*/123, /*value=*/45,
-                                    /*event_type=*/kReservedWin,
-                                    /*filtering_id=*/
-                                    0));
+    EXPECT_EQ(
+        pa_requests[0],
+        CreateForEventRequest(
+            /*bucket=*/123, /*value=*/45,
+            /*event_type=*/
+            Reserved(auction_worklet::mojom::ReservedEventType::kReservedWin),
+            /*filtering_id=*/
+            0));
     EXPECT_TRUE(context_recycler.private_aggregation_bindings()
                     ->TakePrivateAggregationRequests()
                     .empty());
@@ -4325,10 +4364,13 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
                            ->TakePrivateAggregationRequests();
 
     ASSERT_EQ(pa_requests.size(), 1u);
-    EXPECT_EQ(pa_requests[0], CreateForEventRequest(
-                                  /*bucket=*/123, /*value=*/45,
-                                  /*event_type=*/kReservedWin, /*filtering_id=*/
-                                  255));
+    EXPECT_EQ(pa_requests[0],
+              CreateForEventRequest(
+                  /*bucket=*/123, /*value=*/45,
+                  /*event_type=*/
+                  Reserved(auction_worklet::mojom::ReservedEventType::
+                               kReservedWin), /*filtering_id=*/
+                  255));
     EXPECT_TRUE(context_recycler.private_aggregation_bindings()
                     ->TakePrivateAggregationRequests()
                     .empty());
@@ -4642,7 +4684,8 @@ TEST_F(ContextRecyclerPrivateAggregationOnlyFilteringIdsDisabledTest,
                               auction_worklet::mojom::ForEventSignalValue::
                                   NewIntValue(45),
                               /*filtering_id=*/std::nullopt,
-                              std::move(kReservedWin))),
+                              Reserved(auction_worklet::mojom::
+                                           ReservedEventType::kReservedWin))),
               blink::mojom::AggregationServiceMode::kDefault,
               blink::mojom::DebugModeDetails::New());
 
@@ -4776,32 +4819,21 @@ class ContextRecyclerRealTimeReportingEnabledTest : public ContextRecyclerTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-// Exercise RealTimeReportingBindings, and make sure they reset properly.
+// Exercise RealTimeReportingBindings, and make sure they are not available when
+// kCookieDeprecationFacilitatedTesting is enabled.
 TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
   const char kScript[] = R"(
     function test(args) {
-      realTimeReporting.contributeToRealTimeHistogram(123,args);
-    }
-    function testNegativeBucket(args) {
-      realTimeReporting.contributeToRealTimeHistogram(-123,args);
-    }
-    function testBiggerBucket(args) {
-      realTimeReporting.contributeToRealTimeHistogram(12345,args);
-    }
-    function testReservedBucket(args) {
-      realTimeReporting.contributeToRealTimeHistogram(1,args);
-    }
-    function testLatency(args) {
-      realTimeReporting.contributeOnWorkletLatency(200, args);
+      realTimeReporting.contributeToHistogram(args);
     }
     function testMultiCalls(args) {
-      realTimeReporting.contributeToRealTimeHistogram(100,args);
+      realTimeReporting.contributeToHistogram(args);
       // Allow multiple contributions with the same bucket.
-      realTimeReporting.contributeToRealTimeHistogram(100,args);
-      realTimeReporting.contributeToRealTimeHistogram(101,args);
-      realTimeReporting.contributeOnWorkletLatency(200, args);
-      realTimeReporting.contributeOnWorkletLatency(200, args);
-      realTimeReporting.contributeOnWorkletLatency(201, args);
+      realTimeReporting.contributeToHistogram(args);
+      // Allow a mix of latency calls as well.
+      args.latencyThreshold = 200;
+      realTimeReporting.contributeToHistogram(args);
+      realTimeReporting.contributeToHistogram(args);
     }
 
     function doNothing() {}
@@ -4822,6 +4854,7 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
     std::vector<std::string> error_msgs;
 
     gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
+    dict.Set("bucket", 123);
     dict.Set("priorityWeight", 0.5);
 
     Run(scope, script, "test", error_msgs,
@@ -4844,9 +4877,10 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
     std::vector<std::string> error_msgs;
 
     gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
+    dict.Set("bucket", -123);
     dict.Set("priorityWeight", 0.5);
 
-    Run(scope, script, "testNegativeBucket", error_msgs,
+    Run(scope, script, "test", error_msgs,
         gin::ConvertToV8(helper_->isolate(), dict));
     EXPECT_THAT(error_msgs, ElementsAre());
     EXPECT_TRUE(context_recycler.real_time_reporting_bindings()
@@ -4854,15 +4888,16 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
                     .empty());
   }
 
-  // Bigger than supported bucket.
+  // Bigger than the API's max bucket (kFledgeRealTimeReportingNumBuckets).
   {
     ContextRecyclerScope scope(context_recycler);
     std::vector<std::string> error_msgs;
 
     gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
+    dict.Set("bucket", 1024);
     dict.Set("priorityWeight", 0.5);
 
-    Run(scope, script, "testBiggerBucket", error_msgs,
+    Run(scope, script, "test", error_msgs,
         gin::ConvertToV8(helper_->isolate(), dict));
     EXPECT_THAT(error_msgs, ElementsAre());
     EXPECT_TRUE(context_recycler.real_time_reporting_bindings()
@@ -4870,18 +4905,20 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
                     .empty());
   }
 
-  // Reserved bucket for errors outside of worklets, such as script fetch error.
-  // API calls with these buckets will be ignored.
+  // Missing bucket.
   {
     ContextRecyclerScope scope(context_recycler);
     std::vector<std::string> error_msgs;
 
     gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
     dict.Set("priorityWeight", 0.5);
-
-    Run(scope, script, "testReservedBucket", error_msgs,
+    Run(scope, script, "test", error_msgs,
         gin::ConvertToV8(helper_->isolate(), dict));
-    EXPECT_THAT(error_msgs, ElementsAre());
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre("https://example.test/script.js:3 Uncaught TypeError: "
+                    "realTimeReporting.contributeToHistogram() 'contribution' "
+                    "argument: Required field 'bucket' is undefined."));
     EXPECT_TRUE(context_recycler.real_time_reporting_bindings()
                     ->TakeRealTimeReportingContributions()
                     .empty());
@@ -4893,13 +4930,13 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
     std::vector<std::string> error_msgs;
 
     gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
-
+    dict.Set("bucket", 123);
     Run(scope, script, "test", error_msgs,
         gin::ConvertToV8(helper_->isolate(), dict));
     EXPECT_THAT(
         error_msgs,
         ElementsAre("https://example.test/script.js:3 Uncaught TypeError: "
-                    "realTimeReporting.contributeToRealTimeHistogram() 'value' "
+                    "realTimeReporting.contributeToHistogram() 'contribution' "
                     "argument: Required field 'priorityWeight' is undefined."));
     EXPECT_TRUE(context_recycler.real_time_reporting_bindings()
                     ->TakeRealTimeReportingContributions()
@@ -4912,6 +4949,7 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
     std::vector<std::string> error_msgs;
 
     gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
+    dict.Set("bucket", 123);
     dict.Set("priorityWeight", 0);
 
     Run(scope, script, "test", error_msgs,
@@ -4931,6 +4969,7 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
     std::vector<std::string> error_msgs;
 
     gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
+    dict.Set("bucket", 123);
     dict.Set("priorityWeight", -0.5);
 
     Run(scope, script, "test", error_msgs,
@@ -4950,6 +4989,7 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
     std::vector<std::string> error_msgs;
 
     gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
+    dict.Set("bucket", 123);
     dict.Set("priorityWeight", std::numeric_limits<double>::quiet_NaN());
 
     Run(scope, script, "test", error_msgs,
@@ -4957,7 +4997,7 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
     EXPECT_THAT(
         error_msgs,
         ElementsAre("https://example.test/script.js:3 Uncaught TypeError: "
-                    "realTimeReporting.contributeToRealTimeHistogram() 'value' "
+                    "realTimeReporting.contributeToHistogram() 'contribution' "
                     "argument: Converting field 'priorityWeight' to a Number "
                     "did not produce a finite double."));
     EXPECT_TRUE(context_recycler.real_time_reporting_bindings()
@@ -4971,6 +5011,7 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
     std::vector<std::string> error_msgs;
 
     gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
+    dict.Set("bucket", 123);
     dict.Set("priorityWeight", std::numeric_limits<double>::infinity());
 
     Run(scope, script, "test", error_msgs,
@@ -4978,7 +5019,7 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
     EXPECT_THAT(
         error_msgs,
         ElementsAre("https://example.test/script.js:3 Uncaught TypeError: "
-                    "realTimeReporting.contributeToRealTimeHistogram() 'value' "
+                    "realTimeReporting.contributeToHistogram() 'contribution' "
                     "argument: Converting field 'priorityWeight' to a Number "
                     "did not produce a finite double."));
     EXPECT_TRUE(context_recycler.real_time_reporting_bindings()
@@ -4986,15 +5027,15 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
                     .empty());
   }
 
-  // latency_threshold is ignored for contributeToRealTimeHistogram().
+  // Unknown keys are ignored.
   {
     ContextRecyclerScope scope(context_recycler);
     std::vector<std::string> error_msgs;
 
     gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
+    dict.Set("bucket", 123);
     dict.Set("priorityWeight", 0.5);
-    dict.Set("latencyThreshold", 200);
-    // Other unknown keys are just ignored.
+    // Unknown keys are just ignored.
     dict.Set("someUnknown", 200);
 
     Run(scope, script, "test", error_msgs,
@@ -5017,15 +5058,16 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
     std::vector<std::string> error_msgs;
 
     gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
+    dict.Set("bucket", 123);
     dict.Set("priorityWeight", 0.5);
     dict.Set("latencyThreshold", 200);
 
-    Run(scope, script, "testLatency", error_msgs,
+    Run(scope, script, "test", error_msgs,
         gin::ConvertToV8(helper_->isolate(), dict));
     EXPECT_THAT(error_msgs, ElementsAre());
 
     auction_worklet::mojom::RealTimeReportingContribution expected_contribution(
-        /*bucket=*/200, /*priority_weight*/ 0.5, /*latency_threshold=*/200);
+        /*bucket=*/123, /*priority_weight*/ 0.5, /*latency_threshold=*/200);
     auto contributions = context_recycler.real_time_reporting_bindings()
                              ->TakeRealTimeReportingContributions();
 
@@ -5033,55 +5075,37 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
     EXPECT_EQ(contributions[0], expected_contribution.Clone());
   }
 
-  // Worklet latency API missing priorityWeight.
+  // Negative latencyThreshold.
   {
     ContextRecyclerScope scope(context_recycler);
     std::vector<std::string> error_msgs;
 
     gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
-    dict.Set("latencyThreshold", 200);
+    dict.Set("bucket", 123);
+    dict.Set("priorityWeight", 0.5);
+    dict.Set("latencyThreshold", -200);
 
-    Run(scope, script, "testLatency", error_msgs,
+    Run(scope, script, "test", error_msgs,
         gin::ConvertToV8(helper_->isolate(), dict));
-    EXPECT_THAT(
-        error_msgs,
-        ElementsAre("https://example.test/script.js:15 Uncaught TypeError: "
-                    "realTimeReporting.contributeOnWorkletLatency() 'value' "
-                    "argument: Required field 'priorityWeight' is undefined."));
-    EXPECT_TRUE(context_recycler.real_time_reporting_bindings()
-                    ->TakeRealTimeReportingContributions()
-                    .empty());
+    EXPECT_THAT(error_msgs, ElementsAre());
+
+    auction_worklet::mojom::RealTimeReportingContribution expected_contribution(
+        /*bucket=*/123, /*priority_weight*/ 0.5, /*latency_threshold=*/-200);
+    auto contributions = context_recycler.real_time_reporting_bindings()
+                             ->TakeRealTimeReportingContributions();
+
+    ASSERT_EQ(contributions.size(), 1u);
+    EXPECT_EQ(contributions[0], expected_contribution.Clone());
   }
 
-  // Worklet latency API missing latencyThreshold.
+  // Multi API calls.
   {
     ContextRecyclerScope scope(context_recycler);
     std::vector<std::string> error_msgs;
 
     gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
+    dict.Set("bucket", 123);
     dict.Set("priorityWeight", 0.5);
-
-    Run(scope, script, "testLatency", error_msgs,
-        gin::ConvertToV8(helper_->isolate(), dict));
-    EXPECT_THAT(
-        error_msgs,
-        ElementsAre(
-            "https://example.test/script.js:15 Uncaught TypeError: "
-            "realTimeReporting.contributeOnWorkletLatency() 'value' argument: "
-            "Required field 'latencyThreshold' is undefined."));
-    EXPECT_TRUE(context_recycler.real_time_reporting_bindings()
-                    ->TakeRealTimeReportingContributions()
-                    .empty());
-  }
-
-  // Multi API calls, and calls both APIs.
-  {
-    ContextRecyclerScope scope(context_recycler);
-    std::vector<std::string> error_msgs;
-
-    gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
-    dict.Set("priorityWeight", 0.5);
-    dict.Set("latencyThreshold", 200);
 
     Run(scope, script, "testMultiCalls", error_msgs,
         gin::ConvertToV8(helper_->isolate(), dict));
@@ -5090,7 +5114,7 @@ TEST_F(ContextRecyclerRealTimeReportingEnabledTest, RealTimeReportingBindings) {
     auto contributions = context_recycler.real_time_reporting_bindings()
                              ->TakeRealTimeReportingContributions();
 
-    ASSERT_EQ(contributions.size(), 6u);
+    ASSERT_EQ(contributions.size(), 4u);
   }
 
   // API not called.
@@ -5127,7 +5151,82 @@ TEST_F(ContextRecyclerRealTimeReportingDisabledTest,
        RealTimeReportingBindings) {
   const char kScript[] = R"(
     function test(args) {
-      realTimeReporting.contributeToRealTimeHistogram(123,args);
+      realTimeReporting.contributeToHistogram(123,args);
+    }
+    function testLatency(args) {
+      realTimeReporting.contributeOnWorkletLatency(200, args);
+    }
+  )";
+
+  v8::Local<v8::UnboundScript> script = Compile(kScript);
+  ASSERT_FALSE(script.IsEmpty());
+
+  ContextRecycler context_recycler(helper_.get());
+  {
+    ContextRecyclerScope scope(context_recycler);  // Initialize context
+    context_recycler.AddRealTimeReportingBindings();
+  }
+
+  {
+    ContextRecyclerScope scope(context_recycler);
+    std::vector<std::string> error_msgs;
+
+    gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
+    dict.Set("priorityWeight", 0.5);
+
+    Run(scope, script, "test", error_msgs,
+        gin::ConvertToV8(helper_->isolate(), dict));
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre("https://example.test/script.js:3 Uncaught ReferenceError: "
+                    "realTimeReporting is not defined."));
+
+    EXPECT_TRUE(context_recycler.real_time_reporting_bindings()
+                    ->TakeRealTimeReportingContributions()
+                    .empty());
+  }
+
+  {
+    ContextRecyclerScope scope(context_recycler);
+    std::vector<std::string> error_msgs;
+
+    gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
+    dict.Set("priorityWeight", 0.5);
+    dict.Set("latencyThreshold", 200);
+
+    Run(scope, script, "testLatency", error_msgs,
+        gin::ConvertToV8(helper_->isolate(), dict));
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre("https://example.test/script.js:6 Uncaught ReferenceError: "
+                    "realTimeReporting is not defined."));
+
+    EXPECT_TRUE(context_recycler.real_time_reporting_bindings()
+                    ->TakeRealTimeReportingContributions()
+                    .empty());
+  }
+}
+
+class ContextRecyclerRealTimeReportingAndCookieDeprecationEnabledTest
+    : public ContextRecyclerTest {
+ public:
+  ContextRecyclerRealTimeReportingAndCookieDeprecationEnabledTest() {
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{blink::features::kFledgeRealTimeReporting,
+                              features::kCookieDeprecationFacilitatedTesting},
+        /*disabled_features=*/{});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Exercise RealTimeReportingBindings, and make sure they reset properly.
+TEST_F(ContextRecyclerRealTimeReportingAndCookieDeprecationEnabledTest,
+       RealTimeReportingBindings) {
+  const char kScript[] = R"(
+    function test(args) {
+      realTimeReporting.contributeToHistogram(123,args);
     }
     function testLatency(args) {
       realTimeReporting.contributeOnWorkletLatency(200, args);

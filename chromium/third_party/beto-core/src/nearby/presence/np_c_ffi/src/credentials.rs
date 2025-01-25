@@ -13,12 +13,16 @@
 // limitations under the License.
 //! Credential-related data-types and functions
 
-use crate::{unwrap, PanicReason};
+use crate::{panic, unwrap, PanicReason};
 use core::slice;
 use np_ffi_core::common::*;
-use np_ffi_core::credentials::CredentialBook;
-use np_ffi_core::credentials::CredentialSlab;
-use np_ffi_core::credentials::*;
+use np_ffi_core::credentials::{
+    create_credential_book_from_slab, create_credential_slab, deallocate_credential_book,
+    deallocate_credential_slab, AddV0CredentialToSlabResult, AddV1CredentialToSlabResult,
+    CredentialBook, CredentialSlab, MatchedCredential, V0DiscoveryCredential,
+    V1DiscoveryCredential,
+};
+use np_ffi_core::declare_enum_cast;
 use np_ffi_core::deserialize::DecryptedMetadata;
 use np_ffi_core::deserialize::{
     DecryptMetadataResult, DecryptMetadataResultKind, GetMetadataBufferPartsResult,
@@ -32,7 +36,61 @@ use np_ffi_core::utils::FfiEnum;
 pub extern "C" fn np_ffi_create_credential_book_from_slab(
     slab: CredentialSlab,
 ) -> CreateCredentialBookResult {
-    create_credential_book_from_slab(slab)
+    create_credential_book_from_slab(slab).into()
+}
+
+/// Result type for `create_credential_book`
+#[repr(u8)]
+#[allow(missing_docs)]
+pub enum CreateCredentialBookResult {
+    Success(CredentialBook) = 0,
+    InvalidSlabHandle = 2,
+}
+
+//TODO: unwrap allocation errors at the ffi-core layer and remove this, after design has been
+// agreed upon
+impl From<np_ffi_core::credentials::CreateCredentialBookResult> for CreateCredentialBookResult {
+    fn from(value: np_ffi_core::credentials::CreateCredentialBookResult) -> Self {
+        match value {
+            np_ffi_core::credentials::CreateCredentialBookResult::Success(v) => {
+                CreateCredentialBookResult::Success(v)
+            }
+            np_ffi_core::credentials::CreateCredentialBookResult::InvalidSlabHandle => {
+                CreateCredentialBookResult::InvalidSlabHandle
+            }
+            np_ffi_core::credentials::CreateCredentialBookResult::NoSpaceLeft => {
+                panic(PanicReason::ExceededMaxHandleAllocations)
+            }
+        }
+    }
+}
+
+/// Discriminant for `CreateCredentialBookResult`
+#[repr(u8)]
+pub enum CreateCredentialBookResultKind {
+    /// We created a new credential book behind the given handle.
+    /// The associated payload may be obtained via
+    /// `CreateCredentialBookResult#into_success()`.
+    Success = 0,
+    /// The slab that we tried to create a credential-book from
+    /// actually was an invalid handle.
+    InvalidSlabHandle = 1,
+}
+
+impl np_ffi_core::utils::FfiEnum for CreateCredentialBookResult {
+    type Kind = CreateCredentialBookResultKind;
+    fn kind(&self) -> Self::Kind {
+        match self {
+            CreateCredentialBookResult::Success(_) => CreateCredentialBookResultKind::Success,
+            CreateCredentialBookResult::InvalidSlabHandle => {
+                CreateCredentialBookResultKind::InvalidSlabHandle
+            }
+        }
+    }
+}
+
+impl CreateCredentialBookResult {
+    declare_enum_cast! {into_success, Success, CredentialBook}
 }
 
 /// Gets the tag of a `CreateCredentialBookResult` tagged enum.
@@ -70,25 +128,8 @@ pub extern "C" fn np_ffi_deallocate_credential_book(
 
 /// Allocates a new credential-slab, returning a handle to the created object
 #[no_mangle]
-pub extern "C" fn np_ffi_create_credential_slab() -> CreateCredentialSlabResult {
-    create_credential_slab()
-}
-
-/// Gets the tag of a `CreateCredentialSlabResult` tagged enum.
-#[no_mangle]
-pub extern "C" fn np_ffi_CreateCredentialSlabResult_kind(
-    result: CreateCredentialSlabResult,
-) -> CreateCredentialSlabResultKind {
-    result.kind()
-}
-
-/// Casts a `CreateCredentialSlabResult` to the `SUCCESS` variant, panicking in the
-/// case where the passed value is of a different enum variant.
-#[no_mangle]
-pub extern "C" fn np_ffi_CreateCredentialSlabResult_into_SUCCESS(
-    result: CreateCredentialSlabResult,
-) -> CredentialSlab {
-    unwrap(result.into_success(), PanicReason::EnumCastFailed)
+pub extern "C" fn np_ffi_create_credential_slab() -> CredentialSlab {
+    unwrap(create_credential_slab().into_success(), PanicReason::ExceededMaxHandleAllocations)
 }
 
 /// Representation of a V0 credential that contains additional data to provide back to caller once it

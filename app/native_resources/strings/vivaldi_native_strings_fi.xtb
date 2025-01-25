@@ -85,6 +85,9 @@
 <translation id="3943857333388298514">Liitä</translation>
 <translation id="4005270918754737597">Ohita tämä versio</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi ei voinut avata suojattua avainsäilöäsi. Ilman avainsäilöä menetät tallennetut kirjautumistietosi, suojatut evästeet ja jotkin ominaisuudet lakkaavat toimimasta (mm. Synkronointi, Sähköposti ja Kalenteri). Sulje sovellus nyt, avaa avainvarastosi lukitus tai korjaa se, ja yritä sitten uudelleen.
+
+Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="4074744496918018786">Avaa kuva yksityisikkunassa</translation>
 <translation id="410351446219883937">Automaattitoisto</translation>
 <translation id="4281844954008187215">Palveluehdot</translation>
@@ -175,6 +178,7 @@
 <translation id="8669345741879513971">Hirviö 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Tarkastele portaalitiedostoa</translation>
+<translation id="875142999698251063">Sulje nyt</translation>
 <translation id="8768970203213061953">Maisema 14</translation>
 <translation id="8773635261052182196">Et saa enää näitä ilmoituksia. Voit ottaa ne uudelleen käyttöön Vivaldin asetuksista.</translation>
 <translation id="8774017153185436870">Sivustot saattavat automaattitoistaa videoita</translation>

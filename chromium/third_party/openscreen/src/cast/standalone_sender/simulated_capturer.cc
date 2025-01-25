@@ -27,19 +27,19 @@ constexpr std::chrono::seconds kPauseWarningThreshold{3};
 
 SimulatedCapturer::Observer::~Observer() = default;
 
-SimulatedCapturer::SimulatedCapturer(Environment* environment,
+SimulatedCapturer::SimulatedCapturer(Environment& environment,
                                      const char* path,
                                      AVMediaType media_type,
                                      Clock::time_point start_time,
                                      Observer& observer)
     : format_context_(MakeUniqueAVFormatContext(path)),
-      now_(environment->now_function()),
+      now_(environment.now_function()),
       media_type_(media_type),
       start_time_(start_time),
       observer_(observer),
       packet_(MakeUniqueAVPacket()),
       decoded_frame_(MakeUniqueAVFrame()),
-      next_task_(environment->now_function(), environment->task_runner()) {
+      next_task_(environment.now_function(), environment.task_runner()) {
   if (!format_context_) {
     OnError("MakeUniqueAVFormatContext", AVERROR_UNKNOWN);
     return;  // Capturer is halted (unable to start).
@@ -238,7 +238,7 @@ void SimulatedCapturer::ConsumeNextDecodedFrame() {
 
 SimulatedAudioCapturer::Client::~Client() = default;
 
-SimulatedAudioCapturer::SimulatedAudioCapturer(Environment* environment,
+SimulatedAudioCapturer::SimulatedAudioCapturer(Environment& environment,
                                                const char* path,
                                                int num_channels,
                                                int sample_rate,
@@ -375,7 +375,7 @@ void SimulatedAudioCapturer::DeliverDataToClient(
 
 SimulatedVideoCapturer::Client::~Client() = default;
 
-SimulatedVideoCapturer::SimulatedVideoCapturer(Environment* environment,
+SimulatedVideoCapturer::SimulatedVideoCapturer(Environment& environment,
                                                const char* path,
                                                Clock::time_point start_time,
                                                Client& client)

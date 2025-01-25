@@ -226,7 +226,10 @@ bool FieldTrial::FieldTrialEntry::GetParams(
 
 PickleIterator FieldTrial::FieldTrialEntry::GetPickleIterator() const {
   Pickle pickle = Pickle::WithUnownedBuffer(
-      span(GetPickledDataPtr(), checked_cast<size_t>(pickle_size)));
+      // TODO(crbug.com/40284755): FieldTrialEntry should be constructed with a
+      // span over the pickle memory.
+      UNSAFE_BUFFERS(
+          span(GetPickledDataPtr(), checked_cast<size_t>(pickle_size))));
   return PickleIterator(pickle);
 }
 
@@ -334,6 +337,10 @@ FieldTrial* FieldTrial::CreateSimulatedFieldTrial(
     Probability total_probability,
     std::string_view default_group_name,
     double entropy_value) {
+  // `is_low_anonymity` is only used for differentiating which observers of the
+  // global `FieldTrialList` should be notified. As this field trial is assumed
+  // to never be registered with the global `FieldTrialList`, `is_low_anonymity`
+  // can be set to an arbitrary value here.
   return new FieldTrial(trial_name, total_probability, default_group_name,
                         entropy_value, /*is_low_anonymity=*/false,
                         /*is_overridden=*/false);

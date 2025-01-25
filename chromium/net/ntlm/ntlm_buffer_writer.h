@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef NET_NTLM_NTLM_BUFFER_WRITER_H_
 #define NET_NTLM_NTLM_BUFFER_WRITER_H_
 
@@ -12,7 +17,6 @@
 #include <string>
 
 #include "base/containers/span.h"
-#include "base/strings/string_piece.h"
 #include "net/base/net_export.h"
 #include "net/ntlm/ntlm_constants.h"
 

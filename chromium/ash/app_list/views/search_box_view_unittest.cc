@@ -54,6 +54,7 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/test/widget_test.h"
@@ -182,7 +183,7 @@ class SearchBoxViewTest : public views::test::WidgetTest,
   }
 
   void KeyPress(ui::KeyboardCode key_code, bool is_shift_down = false) {
-    ui::KeyEvent event(ui::ET_KEY_PRESSED, key_code,
+    ui::KeyEvent event(ui::EventType::kKeyPressed, key_code,
                        is_shift_down ? ui::EF_SHIFT_DOWN : ui::EF_NONE);
     view()->search_box()->OnKeyEvent(&event);
     // Emulates the input method.
@@ -254,9 +255,6 @@ class SearchBoxViewTest : public views::test::WidgetTest,
   void ActiveChanged(SearchBoxViewBase* sender) override {}
   void OnSearchBoxKeyEvent(ui::KeyEvent* event) override {}
   bool CanSelectSearchResults() override { return true; }
-  bool HandleFocusMoveAboveSearchResults(const ui::KeyEvent& event) override {
-    return false;
-  }
 
   base::test::ScopedFeatureList scoped_feature_list_;
   AshColorProvider ash_color_provider_;
@@ -303,7 +301,7 @@ TEST_F(SearchBoxViewTest, FilterButtonNotCreatedWithDisabledImageSearch) {
 // Tests that the close button is still visible after the search box is
 // activated (in zero state).
 TEST_F(SearchBoxViewTest, CloseButtonVisibleInZeroStateSearchBox) {
-  SetSearchBoxActive(true, ui::ET_MOUSE_PRESSED);
+  SetSearchBoxActive(true, ui::EventType::kMousePressed);
   EXPECT_FALSE(view()->filter_and_close_button_container()->GetVisible());
 }
 
@@ -311,16 +309,16 @@ TEST_F(SearchBoxViewTest, CloseButtonVisibleInZeroStateSearchBox) {
 TEST_F(SearchBoxViewTest,
        DISABLED_AccessibilityHintRemovedWhenSearchBoxActive) {
   EXPECT_TRUE(IsValidSearchBoxAccessibilityHint(
-      view()->search_box()->GetAccessibleName()));
-  SetSearchBoxActive(true, ui::ET_MOUSE_PRESSED);
+      view()->search_box()->GetViewAccessibility().GetCachedName()));
+  SetSearchBoxActive(true, ui::EventType::kMousePressed);
   EXPECT_TRUE(IsValidSearchBoxAccessibilityHint(
-      view()->search_box()->GetAccessibleName()));
+      view()->search_box()->GetViewAccessibility().GetCachedName()));
 }
 
 // Tests that the black Google icon is used for an inactive Google search.
 TEST_F(SearchBoxViewTest, SearchBoxInactiveSearchBoxGoogle) {
   SetSearchEngineIsGoogle(true);
-  SetSearchBoxActive(false, ui::ET_UNKNOWN);
+  SetSearchBoxActive(false, ui::EventType::kUnknown);
   const gfx::ImageSkia expected_icon = gfx::CreateVectorIcon(
       kGoogleBlackIcon, view()->GetSearchBoxIconSize(),
       view()->GetColorProvider()->GetColor(kColorAshButtonIconColor));
@@ -334,7 +332,7 @@ TEST_F(SearchBoxViewTest, SearchBoxInactiveSearchBoxGoogle) {
 // Tests that the colored Google icon is used for an active Google search.
 TEST_F(SearchBoxViewTest, SearchBoxActiveSearchEngineGoogle) {
   SetSearchEngineIsGoogle(true);
-  SetSearchBoxActive(true, ui::ET_MOUSE_PRESSED);
+  SetSearchBoxActive(true, ui::EventType::kMousePressed);
   const gfx::ImageSkia expected_icon = gfx::CreateVectorIcon(
       vector_icons::kGoogleColorIcon, view()->GetSearchBoxIconSize(),
       view()->GetColorProvider()->GetColor(kColorAshButtonIconColor));
@@ -348,7 +346,7 @@ TEST_F(SearchBoxViewTest, SearchBoxActiveSearchEngineGoogle) {
 // Tests that the non-Google icon is used for an inactive non-Google search.
 TEST_F(SearchBoxViewTest, SearchBoxInactiveSearchEngineNotGoogle) {
   SetSearchEngineIsGoogle(false);
-  SetSearchBoxActive(false, ui::ET_UNKNOWN);
+  SetSearchBoxActive(false, ui::EventType::kUnknown);
   const gfx::ImageSkia expected_icon = gfx::CreateVectorIcon(
       kSearchEngineNotGoogleIcon, view()->GetSearchBoxIconSize(),
       view()->GetColorProvider()->GetColor(kColorAshButtonIconColor));
@@ -362,7 +360,7 @@ TEST_F(SearchBoxViewTest, SearchBoxInactiveSearchEngineNotGoogle) {
 // Tests that the non-Google icon is used for an active non-Google search.
 TEST_F(SearchBoxViewTest, SearchBoxActiveSearchEngineNotGoogle) {
   SetSearchEngineIsGoogle(false);
-  SetSearchBoxActive(true, ui::ET_UNKNOWN);
+  SetSearchBoxActive(true, ui::EventType::kUnknown);
   const gfx::ImageSkia expected_icon = gfx::CreateVectorIcon(
       kSearchEngineNotGoogleIcon, view()->GetSearchBoxIconSize(),
       view()->GetColorProvider()->GetColor(kColorAshButtonIconColor));
@@ -631,7 +629,7 @@ TEST_F(SearchBoxViewTest, ResetSelectionAfterResettingSearchBox) {
 
   // Reset the search box.
   view()->ClearSearchAndDeactivateSearchBox();
-  SetSearchBoxActive(true, ui::ET_UNKNOWN);
+  SetSearchBoxActive(true, ui::EventType::kUnknown);
 }
 
 TEST_F(SearchBoxViewTest, NewSearchQueryActionRecordedWhenUserType) {
@@ -834,8 +832,8 @@ TEST_F(SearchBoxViewAutocompleteTest, SearchBoxAutocompletesAcceptsNextChar) {
 TEST_F(SearchBoxViewAutocompleteTest, SearchBoxAcceptsAutocompleteForClick) {
   SetupAutocompleteBehaviorTest();
 
-  ui::MouseEvent mouse_event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                             ui::EventTimeForNow(), 0, 0);
+  ui::MouseEvent mouse_event(ui::EventType::kMousePressed, gfx::Point(),
+                             gfx::Point(), ui::EventTimeForNow(), 0, 0);
   // Forward |mouse_event| to HandleMouseEvent() directly because we cannot
   // test MouseEvents properly due to not having ash dependencies. Static cast
   // to TextfieldController because HandleGestureEvent() is a private method
@@ -853,8 +851,9 @@ TEST_F(SearchBoxViewAutocompleteTest, SearchBoxAcceptsAutocompleteForClick) {
 TEST_F(SearchBoxViewAutocompleteTest, SearchBoxAcceptsAutocompleteForTap) {
   SetupAutocompleteBehaviorTest();
 
-  ui::GestureEvent gesture_event(0, 0, 0, ui::EventTimeForNow(),
-                                 ui::GestureEventDetails(ui::ET_GESTURE_TAP));
+  ui::GestureEvent gesture_event(
+      0, 0, 0, ui::EventTimeForNow(),
+      ui::GestureEventDetails(ui::EventType::kGestureTap));
   // Forward |gesture_event| to HandleGestureEvent() directly because we
   // cannot test GestureEvents properly due to not having ash dependencies.
   // Static cast to TextfieldController because HandleGestureEvent() is
@@ -1057,7 +1056,7 @@ TEST_F(SearchBoxViewAppListBubbleTest, HasAccessibilityHintWhenActive) {
   EXPECT_TRUE(view->is_search_box_active());
 
   EXPECT_TRUE(IsValidSearchBoxAccessibilityHint(
-      view->search_box()->GetAccessibleName()));
+      view->search_box()->GetViewAccessibility().GetCachedName()));
 }
 
 class SearchBoxViewTabletTest : public AshTestBase {
@@ -1104,7 +1103,7 @@ TEST_F(SearchBoxViewAnimationTest, SearchBoxImageButtonAnimations) {
   EXPECT_TRUE(search_box->assistant_button_container()->GetVisible());
 
   // Set search box to active state.
-  search_box->SetSearchBoxActive(true, ui::ET_MOUSE_PRESSED);
+  search_box->SetSearchBoxActive(true, ui::EventType::kMousePressed);
 
   // Close button should be fading in.
   EXPECT_TRUE(search_box->filter_and_close_button_container()->GetVisible());
@@ -1124,7 +1123,7 @@ TEST_F(SearchBoxViewAnimationTest, SearchBoxImageButtonAnimations) {
   EXPECT_EQ(assistant_animator->GetTargetOpacity(), 0.0f);
 
   // Set search box to inactive state, hiding the close button.
-  search_box->SetSearchBoxActive(false, ui::ET_MOUSE_PRESSED);
+  search_box->SetSearchBoxActive(false, ui::EventType::kMousePressed);
 
   // Close button should be fading out.
   EXPECT_TRUE(search_box->filter_and_close_button_container()->GetVisible());
@@ -1149,7 +1148,7 @@ TEST_F(SearchBoxViewAnimationTest, SearchBoxIconImageViewAnimation) {
   auto* old_animator = search_box->search_icon()->layer()->GetAnimator();
 
   // Set search box to active state.
-  search_box->SetSearchBoxActive(true, ui::ET_MOUSE_PRESSED);
+  search_box->SetSearchBoxActive(true, ui::EventType::kMousePressed);
 
   // Check that the old layer is fading out and the new animator is fading in.
   auto* animator = search_box->search_icon()->layer()->GetAnimator();
@@ -1161,7 +1160,7 @@ TEST_F(SearchBoxViewAnimationTest, SearchBoxIconImageViewAnimation) {
   EXPECT_EQ(old_animator->GetTargetOpacity(), 0.0f);
 
   // Set search box to inactive state.
-  search_box->SetSearchBoxActive(false, ui::ET_MOUSE_PRESSED);
+  search_box->SetSearchBoxActive(false, ui::EventType::kMousePressed);
 
   old_animator = animator;
   animator = search_box->search_icon()->layer()->GetAnimator();

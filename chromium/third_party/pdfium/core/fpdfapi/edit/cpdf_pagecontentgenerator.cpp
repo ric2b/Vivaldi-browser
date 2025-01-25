@@ -55,19 +55,18 @@ using ResourcesMap = std::map<ByteString, std::set<ByteString>>;
 
 // Returns whether it wrote to `buf` or not.
 bool WriteColorToStream(fxcrt::ostringstream& buf, const CPDF_Color* color) {
-  if (!color || !color->IsColorSpaceRGB()) {
+  if (!color || (!color->IsColorSpaceRGB() && !color->IsColorSpaceGray())) {
     return false;
   }
 
-  std::optional<FX_COLORREF> colors = color->GetColorRef();
+  std::optional<FX_RGB_STRUCT<float>> colors = color->GetRGB();
   if (!colors.has_value()) {
     return false;
   }
 
-  // TODO(thestig): Remove float to int to float conversion.
-  WriteFloat(buf, FXSYS_GetRValue(colors.value()) / 255.0f) << " ";
-  WriteFloat(buf, FXSYS_GetGValue(colors.value()) / 255.0f) << " ";
-  WriteFloat(buf, FXSYS_GetBValue(colors.value()) / 255.0f);
+  WriteFloat(buf, colors.value().red) << " ";
+  WriteFloat(buf, colors.value().green) << " ";
+  WriteFloat(buf, colors.value().blue);
   return true;
 }
 
@@ -758,8 +757,9 @@ void CPDF_PageContentGenerator::ProcessText(fxcrt::ostringstream* buf,
   *buf << static_cast<int>(pTextObj->GetTextRenderMode()) << " Tr ";
   ByteString text;
   for (uint32_t charcode : pTextObj->GetCharCodes()) {
-    if (charcode != CPDF_Font::kInvalidCharCode)
+    if (charcode != CPDF_Font::kInvalidCharCode) {
       pFont->AppendChar(&text, charcode);
+    }
   }
   *buf << PDF_HexEncodeString(text.AsStringView()) << " Tj ET";
   *buf << " Q\n";

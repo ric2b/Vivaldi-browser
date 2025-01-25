@@ -89,7 +89,6 @@ cc_library(
     testonly = 1,
     srcs = ["fuzztest_gtest_main.cc"],
     deps = [
-        "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/strings",
         "@com_google_fuzztest//fuzztest:init_fuzztest",
         "@com_google_googletest//:gtest",
@@ -106,8 +105,12 @@ cc_library(
         ":flag_name",
         ":googletest_adaptor",
         ":io",
+        ":logging",
         ":registry",
         ":runtime",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:no_destructor",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/flags:reflection",
@@ -487,7 +490,9 @@ cc_library(
     srcs = ["internal/logging.cc"],
     hdrs = ["internal/logging.h"],
     deps = [
+        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
     ],
 )
 

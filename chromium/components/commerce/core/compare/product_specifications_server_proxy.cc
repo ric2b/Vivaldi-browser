@@ -5,13 +5,14 @@
 #include "components/commerce/core/compare/product_specifications_server_proxy.h"
 
 #include <optional>
+#include <string>
 
 #include "base/command_line.h"
-#include "base/json/json_writer.h"
-#include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/commerce/core/commerce_constants.h"
+#include "components/commerce/core/compare/compare_utils.h"
 #include "components/commerce/core/feature_utils.h"
 #include "components/endpoint_fetcher/endpoint_fetcher.h"
 #include "net/http/http_status_code.h"
@@ -23,22 +24,26 @@
 namespace commerce {
 
 namespace {
+const char kAltTextKey[] = "alternativeText";
+const char kDescriptionKey[] = "description";
+const char kFaviconUrlKey[] = "faviconUrl";
+const char kGPCKey[] = "gpcId";
+const char kIdentifiersKey[] = "identifiers";
+const char kImageURLKey[] = "imageUrl";
+const char kKeyKey[] = "key";
+const char kLabelKey[] = "label";
+const char kMIDKey[] = "mid";
+const char kOptionsKey[] = "options";
 const char kProductSpecificationsKey[] = "productSpecifications";
 const char kProductSpecificationSectionsKey[] = "productSpecificationSections";
 const char kProductSpecificationValuesKey[] = "productSpecificationValues";
-const char kProductIdsKey[] = "productIds";
-const char kKeyKey[] = "key";
+const char kSpecificationDescriptionsKey[] = "specificationDescriptions";
+const char kSummaryKey[] = "summaryDescription";
+const char kThumbnailUrlKey[] = "thumbnailImageUrl";
 const char kTitleKey[] = "title";
-const char kTypeKey[] = "type";
-const char kIdentifierKey[] = "identifier";
-const char kIdentifiersKey[] = "identifiers";
-const char kGPCKey[] = "gpcId";
-const char kMIDKey[] = "mid";
-const char kImageURLKey[] = "imageUrl";
-const char kDescriptionsKey[] = "descriptions";
-const char kSummaryKey[] = "summary";
-
-const char kGPCTypeName[] = "GLOBAL_PRODUCT_CLUSTER_ID";
+const char kTextKey[] = "text";
+const char kUrlKey[] = "url";
+const char kUrlsKey[] = "urls";
 
 const uint64_t kTimeoutMs = 5000;
 
@@ -78,6 +83,123 @@ constexpr net::NetworkTrafficAnnotationTag kShoppingListTrafficAnnotation =
           chrome_policy {}
         })");
 
+std::optional<ProductSpecifications::DescriptionText> ParseDescriptionText(
+    const base::Value::Dict* desc_text_dict) {
+  if (!desc_text_dict) {
+    return std::nullopt;
+  }
+
+  std::optional<ProductSpecifications::DescriptionText> description;
+  description.emplace();
+
+  const std::string* description_text = desc_text_dict->FindString(kTextKey);
+
+  const base::Value::List* url_list = desc_text_dict->FindList(kUrlsKey);
+  if (url_list) {
+    for (const auto& url_object : *url_list) {
+      if (!url_object.is_dict()) {
+        continue;
+      }
+      const std::string* url_string = url_object.GetDict().FindString(kUrlKey);
+      const std::string* title = url_object.GetDict().FindString(kTitleKey);
+      const std::string* favicon_url =
+          url_object.GetDict().FindString(kFaviconUrlKey);
+      const std::string* thumbnail_url =
+          url_object.GetDict().FindString(kThumbnailUrlKey);
+      description->urls.push_back(UrlInfo(
+          GURL(url_string ? *url_string : ""),
+          base::UTF8ToUTF16(title ? *title : ""),
+          favicon_url ? std::make_optional(GURL(*favicon_url)) : std::nullopt,
+          thumbnail_url ? std::make_optional(GURL(*thumbnail_url))
+                        : std::nullopt));
+    }
+  }
+
+  description->text = description_text ? *description_text : "";
+
+  return description;
+}
+
+std::optional<ProductSpecifications::Description> ParseDescription(
+    const base::Value::Dict* desc_dict) {
+  if (!desc_dict) {
+    return std::nullopt;
+  }
+
+  std::optional<ProductSpecifications::Description> description;
+  description.emplace();
+
+  const std::string* label = desc_dict->FindString(kLabelKey);
+  const std::string* alt_text = desc_dict->FindString(kAltTextKey);
+
+  description->label = label ? *label : "";
+  description->alt_text = alt_text ? *alt_text : "";
+
+  const base::Value::List* options = desc_dict->FindList(kOptionsKey);
+
+  if (options) {
+    for (const auto& option_value : *options) {
+      ProductSpecifications::Description::Option option;
+
+      if (!option_value.is_dict()) {
+        continue;
+      }
+
+      const base::Value::List* desc_list =
+          option_value.GetIfDict()->FindList(kDescriptionKey);
+      if (desc_list) {
+        for (const auto& list_item : *desc_list) {
+          std::optional<ProductSpecifications::DescriptionText> desc_text =
+              ParseDescriptionText(list_item.GetIfDict());
+          if (desc_text.has_value()) {
+            option.descriptions.push_back(desc_text.value());
+          }
+        }
+      }
+
+      description->options.push_back(std::move(option));
+    }
+  }
+
+  return description;
+}
+
+std::optional<ProductSpecifications::Value> ParseValue(
+    const base::Value::Dict* value_dict) {
+  if (!value_dict) {
+    return std::nullopt;
+  }
+
+  ProductSpecifications::Value value;
+
+  // Process value description
+  const base::Value::List* specs_descriptions_list =
+      value_dict->FindList(kSpecificationDescriptionsKey);
+  if (specs_descriptions_list) {
+    for (const auto& spec_description : *specs_descriptions_list) {
+      std::optional<ProductSpecifications::Description> description =
+          ParseDescription(spec_description.GetIfDict());
+      if (description.has_value()) {
+        value.descriptions.push_back(description.value());
+      }
+    }
+  }
+
+  const base::Value::List* summary_descriptions_list =
+      value_dict->FindList(kSummaryKey);
+  if (summary_descriptions_list) {
+    for (const auto& summary_item : *summary_descriptions_list) {
+      std::optional<ProductSpecifications::DescriptionText> summary =
+          ParseDescriptionText(summary_item.GetIfDict());
+      if (summary.has_value()) {
+        value.summary.push_back(summary.value());
+      }
+    }
+  }
+
+  return value;
+}
+
 }  // namespace
 
 ProductSpecificationsServerProxy::ProductSpecificationsServerProxy(
@@ -98,23 +220,10 @@ void ProductSpecificationsServerProxy::GetProductSpecificationsForClusterIds(
     return;
   }
 
-  base::Value::List product_id_list;
-  for (uint64_t id : cluster_ids) {
-    base::Value::Dict id_definition;
-    id_definition.Set(kTypeKey, kGPCTypeName);
-    id_definition.Set(kIdentifierKey, base::NumberToString(id));
-    product_id_list.Append(std::move(id_definition));
-  }
-
-  base::Value::Dict json_dict;
-  json_dict.Set(kProductIdsKey, std::move(product_id_list));
-  std::string post_data;
-  base::JSONWriter::Write(json_dict, &post_data);
-
   auto fetcher = CreateEndpointFetcher(
       GURL(base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           kProductSpecificationsUrlKey)),
-      kPostHttpMethod, post_data);
+      kPostHttpMethod, GetJsonStringForProductClusterIds(cluster_ids));
 
   auto* const fetcher_ptr = fetcher.get();
   fetcher_ptr->Fetch(base::BindOnce(
@@ -249,14 +358,21 @@ ProductSpecificationsServerProxy::ProductSpecificationsFromJsonResponse(
       product.title = *title;
     }
 
+    const base::Value::List* summary_list =
+        spec.GetDict().FindList(kSummaryKey);
+    if (summary_list) {
+      for (const auto& summary_item : *summary_list) {
+        std::optional<ProductSpecifications::DescriptionText> summary =
+            ParseDescriptionText(summary_item.GetIfDict());
+        if (summary.has_value()) {
+          product.summary.push_back(summary.value());
+        }
+      }
+    }
+
     const std::string* image_url = spec.GetDict().FindString(kImageURLKey);
     if (image_url) {
       product.image_url = GURL(*image_url);
-    }
-
-    const std::string* summary = spec.GetDict().FindString(kSummaryKey);
-    if (summary) {
-      product.summary = *summary;
     }
 
     const base::Value::List* product_spec_values =
@@ -278,18 +394,12 @@ ProductSpecificationsServerProxy::ProductSpecificationsFromJsonResponse(
         continue;
       }
 
-      const base::Value::List* descriptions_list =
-          spec_value.GetDict().FindList(kDescriptionsKey);
-      if (!descriptions_list) {
-        continue;
-      }
+      std::optional<ProductSpecifications::Value> value_object =
+          ParseValue(spec_value.GetIfDict());
 
-      std::vector<std::string> descriptions;
-      for (const base::Value& description : *descriptions_list) {
-        descriptions.push_back(description.GetString());
+      if (value_object.has_value()) {
+        product.product_dimension_values[value_id] = value_object.value();
       }
-
-      product.product_dimension_values[value_id] = descriptions;
     }
 
     product_specs->products.push_back(product);

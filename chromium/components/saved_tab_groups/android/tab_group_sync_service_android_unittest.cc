@@ -11,12 +11,15 @@
 #include "base/test/task_environment.h"
 #include "components/saved_tab_groups/android/tab_group_sync_conversions_bridge.h"
 #include "components/saved_tab_groups/android/tab_group_sync_conversions_utils.h"
-#include "components/saved_tab_groups/native_j_unittests_jni_headers/TabGroupSyncServiceAndroidUnitTest_jni.h"
+#include "components/saved_tab_groups/mock_tab_group_sync_service.h"
 #include "components/saved_tab_groups/saved_tab_group_test_utils.h"
 #include "components/sync/test/test_matchers.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "components/saved_tab_groups/native_j_unittests_jni_headers/TabGroupSyncServiceAndroidUnitTest_jni.h"
 
 using base::android::AttachCurrentThread;
 using base::android::JavaParamRef;
@@ -35,59 +38,6 @@ const char16_t kTestTabTitle[] = u"Test Tab";
 const int kTabId1 = 2;
 const int kTabId2 = 4;
 const int kPosition = 3;
-
-class MockTabGroupSyncService : public TabGroupSyncService {
- public:
-  MockTabGroupSyncService() = default;
-  ~MockTabGroupSyncService() override = default;
-
-  MOCK_METHOD(void, AddGroup, (const SavedTabGroup&));
-  MOCK_METHOD(void, RemoveGroup, (const LocalTabGroupID&));
-  MOCK_METHOD(void, RemoveGroup, (const base::Uuid&));
-  MOCK_METHOD(void,
-              UpdateVisualData,
-              (const LocalTabGroupID, const tab_groups::TabGroupVisualData*));
-  MOCK_METHOD(void,
-              AddTab,
-              (const LocalTabGroupID&,
-               const LocalTabID&,
-               const std::u16string&,
-               GURL,
-               std::optional<size_t>));
-  MOCK_METHOD(void,
-              UpdateTab,
-              (const LocalTabGroupID&,
-               const LocalTabID&,
-               const std::u16string&,
-               GURL,
-               std::optional<size_t>));
-  MOCK_METHOD(void, RemoveTab, (const LocalTabGroupID&, const LocalTabID&));
-  MOCK_METHOD(void, MoveTab, (const LocalTabGroupID&, const LocalTabID&, int));
-
-  MOCK_METHOD(std::vector<SavedTabGroup>, GetAllGroups, ());
-  MOCK_METHOD(std::optional<SavedTabGroup>, GetGroup, (const base::Uuid&));
-  MOCK_METHOD(std::optional<SavedTabGroup>, GetGroup, (LocalTabGroupID&));
-  MOCK_METHOD(std::vector<LocalTabGroupID>, GetDeletedGroupIds, ());
-
-  MOCK_METHOD(void,
-              UpdateLocalTabGroupMapping,
-              (const base::Uuid&, const LocalTabGroupID&));
-  MOCK_METHOD(void, RemoveLocalTabGroupMapping, (const LocalTabGroupID&));
-  MOCK_METHOD(void,
-              UpdateLocalTabId,
-              (const LocalTabGroupID&, const base::Uuid&, const LocalTabID&));
-
-  MOCK_METHOD(syncer::ModelTypeSyncBridge*, bridge, ());
-  MOCK_METHOD(base::WeakPtr<syncer::ModelTypeControllerDelegate>,
-              GetSavedTabGroupControllerDelegate,
-              ());
-  MOCK_METHOD(base::WeakPtr<syncer::ModelTypeControllerDelegate>,
-              GetSharedTabGroupControllerDelegate,
-              ());
-
-  MOCK_METHOD(void, AddObserver, (Observer*));
-  MOCK_METHOD(void, RemoveObserver, (Observer*));
-};
 
 MATCHER_P(UuidEq, uuid, "") {
   return arg.saved_guid() == uuid;
@@ -163,15 +113,18 @@ TEST_F(TabGroupSyncServiceAndroidTest, TabIdConversion) {
             tab_id);
 }
 
-TEST_F(TabGroupSyncServiceAndroidTest, SaveTabGroupConversion) {
+TEST_F(TabGroupSyncServiceAndroidTest, SavedTabGroupConversion) {
   auto* env = AttachCurrentThread();
   SavedTabGroup group = test::CreateTestSavedTabGroup();
   group.SetTitle(kTestGroupTitle);
   group.SetColor(tab_groups::TabGroupColorId::kRed);
+  group.SetCreatorCacheGuid("creator_cache_guid");
+  group.SetLastUpdaterCacheGuid("last_updater_cache_guid");
 
   SavedTabGroupTab tab3(GURL(), kTestTabTitle, group.saved_guid(),
                         /*position=*/std::nullopt,
-                        /*saved_tab_guid=*/std::nullopt, /*local_tab_id=*/9);
+                        /*saved_tab_guid=*/std::nullopt, /*local_tab_id=*/9,
+                        "creator_cache_guid", "last_updater_cache_guid");
   group.AddTabLocally(tab3);
   auto j_group = TabGroupSyncConversionsBridge::CreateGroup(env, group);
   Java_TabGroupSyncServiceAndroidUnitTest_testSavedTabGroupConversion(

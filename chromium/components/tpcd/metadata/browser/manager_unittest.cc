@@ -12,6 +12,7 @@
 #include <tuple>
 
 #include "base/run_loop.h"
+#include "base/strings/strcat.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -31,6 +32,36 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace tpcd::metadata {
+
+namespace {
+
+class TestTpcdManagerDelegate : public Manager::Delegate {
+ public:
+  TestTpcdManagerDelegate() {
+    RegisterLocalStatePrefs(local_state_.registry());
+  }
+
+  void SetTpcdMetadataGrants(const ContentSettingsForOneType& grants) override {
+    if (grants_callback_) {
+      grants_callback_.Run(grants);
+    }
+  }
+
+  PrefService& GetLocalState() override { return local_state_; }
+
+  void set_grants_callback(
+      base::RepeatingCallback<void(const ContentSettingsForOneType&)>
+          grants_callback) {
+    grants_callback_ = std::move(grants_callback);
+  }
+
+ private:
+  base::RepeatingCallback<void(const ContentSettingsForOneType&)>
+      grants_callback_;
+  TestingPrefServiceSimple local_state_;
+};
+
+}  // namespace
 
 class ManagerTest : public testing::Test,
                     public testing::WithParamInterface<
@@ -52,16 +83,14 @@ class ManagerTest : public testing::Test,
     return parser_.get();
   }
 
-  Manager* GetManager(GrantsSyncCallback callback = base::NullCallback()) {
+  Manager* GetManager() {
     if (!manager_) {
-      manager_ = std::make_unique<Manager>(GetParser(), callback, nullptr);
+      manager_ = std::make_unique<Manager>(GetParser(), test_delegate_);
     }
     return manager_.get();
   }
 
  protected:
-  base::test::TaskEnvironment env_;
-
   void SetUp() override {
     std::vector<base::test::FeatureRef> enabled_features;
     std::vector<base::test::FeatureRef> disabled_features;
@@ -89,9 +118,10 @@ class ManagerTest : public testing::Test,
     delete parser_.release();
   }
 
- private:
+  base::test::TaskEnvironment env_;
   base::test::ScopedFeatureList scoped_list_;
   std::unique_ptr<Parser> parser_;
+  TestTpcdManagerDelegate test_delegate_;
   std::unique_ptr<Manager> manager_;
 };
 
@@ -186,7 +216,9 @@ TEST_P(ManagerTest, FireSyncCallback) {
                 content_settings::mojom::TpcdMetadataRuleSource::SOURCE_TEST);
     }
   };
-  Manager* manager = GetManager(base::BindLambdaForTesting(dummy_callback));
+  Manager* manager = GetManager();
+  test_delegate_.set_grants_callback(
+      base::BindLambdaForTesting(dummy_callback));
 
   Metadata metadata;
   helpers::AddEntryToMetadata(metadata, primary_pattern_spec,
@@ -202,11 +234,9 @@ TEST_P(ManagerTest, FireSyncCallback) {
   }
 }
 
-class ManagerCohortsTest
-    : public testing::Test,
-      public testing::WithParamInterface<std::tuple<
-          /*IsTpcdMetadataStagedRollbackEnabled:*/ bool,
-          /*content_settings::mojom::TpcdMetadataRuleSource:*/ int32_t>> {
+class ManagerCohortsTest : public testing::Test,
+                           public testing::WithParamInterface<
+                               /*IsTpcdMetadataStagedRollbackEnabled:*/ bool> {
  public:
   ManagerCohortsTest() = default;
   ~ManagerCohortsTest() override = default;
@@ -218,18 +248,14 @@ class ManagerCohortsTest
     return parser_.get();
   }
 
-  Manager* GetManager(GrantsSyncCallback callback = base::NullCallback()) {
+  Manager* GetManager() {
     if (!manager_) {
-      manager_ = std::make_unique<Manager>(GetParser(), callback, nullptr);
+      manager_ = std::make_unique<Manager>(GetParser(), test_delegate_);
     }
     return manager_.get();
   }
 
-  bool IsTpcdMetadataStagedRollbackEnabled() { return std::get<0>(GetParam()); }
-  content_settings::mojom::TpcdMetadataRuleSource GetTpcdMetadataRuleSource() {
-    return static_cast<content_settings::mojom::TpcdMetadataRuleSource>(
-        std::get<1>(GetParam()));
-  }
+  bool IsTpcdMetadataStagedRollbackEnabled() { return GetParam(); }
 
   std::string ToRuleSourceStr(
       const content_settings::mojom::TpcdMetadataRuleSource& rule_source) {
@@ -264,9 +290,9 @@ class ManagerCohortsTest
         content_settings::features::kIndexedHostContentSettingsMap);
 
     if (IsTpcdMetadataStagedRollbackEnabled()) {
-      enabled_features.push_back(net::features::kTpcdMetadataStagedRollback);
+      enabled_features.push_back(net::features::kTpcdMetadataStageControl);
     } else {
-      disabled_features.push_back(net::features::kTpcdMetadataStagedRollback);
+      disabled_features.push_back(net::features::kTpcdMetadataStageControl);
     }
 
     scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
@@ -281,59 +307,14 @@ class ManagerCohortsTest
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<Parser> parser_;
+  TestTpcdManagerDelegate test_delegate_;
   std::unique_ptr<Manager> manager_;
 };
 
 INSTANTIATE_TEST_SUITE_P(
     /* no label */,
     ManagerCohortsTest,
-    testing::Combine(
-        testing::Bool(),
-        testing::Range<int32_t>(
-            static_cast<int32_t>(
-                content_settings::mojom::TpcdMetadataRuleSource::kMinValue),
-            static_cast<int32_t>(
-                content_settings::mojom::TpcdMetadataRuleSource::kMaxValue) +
-                1,
-            /*step=*/1)));
-
-TEST_P(ManagerCohortsTest, DTRP_Eligibility) {
-  const std::string primary_pattern_spec = "https://www.der.com";
-  const std::string secondary_pattern_spec = "https://www.foo.com";
-
-  Metadata metadata;
-  helpers::AddEntryToMetadata(metadata, primary_pattern_spec,
-                              secondary_pattern_spec,
-                              ToRuleSourceStr(GetTpcdMetadataRuleSource()));
-  EXPECT_EQ(metadata.metadata_entries_size(), 1);
-
-  Manager* manager = GetManager();
-  GetParser()->ParseMetadata(metadata.SerializeAsString());
-
-  EXPECT_EQ(manager->GetGrants().size(), 1u);
-  auto grant = manager->GetGrants().front();
-  EXPECT_EQ(grant.primary_pattern.ToString(), primary_pattern_spec);
-  EXPECT_EQ(grant.secondary_pattern.ToString(), secondary_pattern_spec);
-
-  auto rule_source = grant.metadata.tpcd_metadata_rule_source();
-  EXPECT_EQ(rule_source, GetTpcdMetadataRuleSource());
-
-  switch (GetTpcdMetadataRuleSource()) {
-    case content_settings::mojom::TpcdMetadataRuleSource::SOURCE_TEST:
-    case content_settings::mojom::TpcdMetadataRuleSource::SOURCE_1P_DT:
-    case content_settings::mojom::TpcdMetadataRuleSource::SOURCE_3P_DT:
-      EXPECT_TRUE(Parser::IsDtrpEligible(rule_source));
-      break;
-    case content_settings::mojom::TpcdMetadataRuleSource::SOURCE_DOGFOOD:
-    case content_settings::mojom::TpcdMetadataRuleSource::
-        SOURCE_CRITICAL_SECTOR:
-    case content_settings::mojom::TpcdMetadataRuleSource::SOURCE_CUJ:
-    case content_settings::mojom::TpcdMetadataRuleSource::SOURCE_GOV_EDU_TLD:
-    case content_settings::mojom::TpcdMetadataRuleSource::SOURCE_UNSPECIFIED:
-      EXPECT_FALSE(Parser::IsDtrpEligible(rule_source));
-      break;
-  }
-}
+    testing::Bool());
 
 TEST_P(ManagerCohortsTest, DTRP_0Percent) {
   const uint32_t dtrp_being_tested = 0;
@@ -342,9 +323,9 @@ TEST_P(ManagerCohortsTest, DTRP_0Percent) {
   const std::string secondary_pattern_spec = "https://www.foo.com";
 
   Metadata metadata;
-  helpers::AddEntryToMetadata(
-      metadata, primary_pattern_spec, secondary_pattern_spec,
-      ToRuleSourceStr(GetTpcdMetadataRuleSource()), dtrp_being_tested);
+  helpers::AddEntryToMetadata(metadata, primary_pattern_spec,
+                              secondary_pattern_spec, Parser::kSourceTest,
+                              dtrp_being_tested);
   EXPECT_EQ(metadata.metadata_entries_size(), 1);
 
   Manager* manager = GetManager();
@@ -355,13 +336,10 @@ TEST_P(ManagerCohortsTest, DTRP_0Percent) {
   EXPECT_EQ(grant.primary_pattern.ToString(), primary_pattern_spec);
   EXPECT_EQ(grant.secondary_pattern.ToString(), secondary_pattern_spec);
 
-  auto rule_source = grant.metadata.tpcd_metadata_rule_source();
-  EXPECT_EQ(rule_source, GetTpcdMetadataRuleSource());
-
-  EXPECT_EQ(grant.metadata.tpcd_metadata_elected_dtrp(), dtrp_being_tested);
-  auto picked_cohort = grant.metadata.tpcd_metadata_cohort();
+  auto picked_cohort =
+      manager->GetGrants().front().metadata.tpcd_metadata_cohort();
   if (IsTpcdMetadataStagedRollbackEnabled() &&
-      Parser::IsDtrpEligible(rule_source)) {
+      metadata.metadata_entries().begin()->has_dtrp()) {
     EXPECT_EQ(
         picked_cohort,
         content_settings::mojom::TpcdMetadataCohort::GRACE_PERIOD_FORCED_ON);
@@ -378,9 +356,9 @@ TEST_P(ManagerCohortsTest, DTRP_100Percent) {
   const std::string secondary_pattern_spec = "https://www.foo.com";
 
   Metadata metadata;
-  helpers::AddEntryToMetadata(
-      metadata, primary_pattern_spec, secondary_pattern_spec,
-      ToRuleSourceStr(GetTpcdMetadataRuleSource()), dtrp_being_tested);
+  helpers::AddEntryToMetadata(metadata, primary_pattern_spec,
+                              secondary_pattern_spec, Parser::kSourceTest,
+                              dtrp_being_tested);
   EXPECT_EQ(metadata.metadata_entries_size(), 1);
 
   Manager* manager = GetManager();
@@ -391,13 +369,10 @@ TEST_P(ManagerCohortsTest, DTRP_100Percent) {
   EXPECT_EQ(grant.primary_pattern.ToString(), primary_pattern_spec);
   EXPECT_EQ(grant.secondary_pattern.ToString(), secondary_pattern_spec);
 
-  auto rule_source = grant.metadata.tpcd_metadata_rule_source();
-  EXPECT_EQ(rule_source, GetTpcdMetadataRuleSource());
-
-  EXPECT_EQ(grant.metadata.tpcd_metadata_elected_dtrp(), dtrp_being_tested);
-  auto picked_cohort = grant.metadata.tpcd_metadata_cohort();
+  auto picked_cohort =
+      manager->GetGrants().front().metadata.tpcd_metadata_cohort();
   if (IsTpcdMetadataStagedRollbackEnabled() &&
-      Parser::IsDtrpEligible(rule_source)) {
+      metadata.metadata_entries().begin()->has_dtrp()) {
     EXPECT_EQ(
         picked_cohort,
         content_settings::mojom::TpcdMetadataCohort::GRACE_PERIOD_FORCED_OFF);
@@ -417,9 +392,9 @@ TEST_P(ManagerCohortsTest, DTRP_GE_Rand) {
   const std::string secondary_pattern_spec = "https://www.foo.com";
 
   Metadata metadata;
-  helpers::AddEntryToMetadata(
-      metadata, primary_pattern_spec, secondary_pattern_spec,
-      ToRuleSourceStr(GetTpcdMetadataRuleSource()), dtrp_being_tested);
+  helpers::AddEntryToMetadata(metadata, primary_pattern_spec,
+                              secondary_pattern_spec, Parser::kSourceTest,
+                              dtrp_being_tested);
   EXPECT_EQ(metadata.metadata_entries_size(), 1);
 
   Manager* manager = GetManager();
@@ -432,13 +407,10 @@ TEST_P(ManagerCohortsTest, DTRP_GE_Rand) {
   EXPECT_EQ(grant.primary_pattern.ToString(), primary_pattern_spec);
   EXPECT_EQ(grant.secondary_pattern.ToString(), secondary_pattern_spec);
 
-  auto rule_source = grant.metadata.tpcd_metadata_rule_source();
-  EXPECT_EQ(rule_source, GetTpcdMetadataRuleSource());
-
-  EXPECT_EQ(grant.metadata.tpcd_metadata_elected_dtrp(), dtrp_being_tested);
-  auto picked_cohort = grant.metadata.tpcd_metadata_cohort();
+  auto picked_cohort =
+      manager->GetGrants().front().metadata.tpcd_metadata_cohort();
   if (IsTpcdMetadataStagedRollbackEnabled() &&
-      Parser::IsDtrpEligible(rule_source)) {
+      metadata.metadata_entries().begin()->has_dtrp()) {
     EXPECT_EQ(
         picked_cohort,
         content_settings::mojom::TpcdMetadataCohort::GRACE_PERIOD_FORCED_OFF);
@@ -458,9 +430,9 @@ TEST_P(ManagerCohortsTest, DTRP_LT_Rand) {
   const std::string secondary_pattern_spec = "https://www.foo.com";
 
   Metadata metadata;
-  helpers::AddEntryToMetadata(
-      metadata, primary_pattern_spec, secondary_pattern_spec,
-      ToRuleSourceStr(GetTpcdMetadataRuleSource()), dtrp_being_tested);
+  helpers::AddEntryToMetadata(metadata, primary_pattern_spec,
+                              secondary_pattern_spec, Parser::kSourceTest,
+                              dtrp_being_tested);
   EXPECT_EQ(metadata.metadata_entries_size(), 1);
 
   Manager* manager = GetManager();
@@ -473,13 +445,10 @@ TEST_P(ManagerCohortsTest, DTRP_LT_Rand) {
   EXPECT_EQ(grant.primary_pattern.ToString(), primary_pattern_spec);
   EXPECT_EQ(grant.secondary_pattern.ToString(), secondary_pattern_spec);
 
-  auto rule_source = grant.metadata.tpcd_metadata_rule_source();
-  EXPECT_EQ(rule_source, GetTpcdMetadataRuleSource());
-
-  EXPECT_EQ(grant.metadata.tpcd_metadata_elected_dtrp(), dtrp_being_tested);
-  auto picked_cohort = grant.metadata.tpcd_metadata_cohort();
+  auto picked_cohort =
+      manager->GetGrants().front().metadata.tpcd_metadata_cohort();
   if (IsTpcdMetadataStagedRollbackEnabled() &&
-      Parser::IsDtrpEligible(rule_source)) {
+      metadata.metadata_entries().begin()->has_dtrp()) {
     EXPECT_EQ(
         picked_cohort,
         content_settings::mojom::TpcdMetadataCohort::GRACE_PERIOD_FORCED_ON);
@@ -490,20 +459,24 @@ TEST_P(ManagerCohortsTest, DTRP_LT_Rand) {
 }
 
 TEST_P(ManagerCohortsTest, MetadataCohortDistributionUma) {
-  std::optional<uint32_t> dtrp =
-      Parser::IsDtrpEligible(GetTpcdMetadataRuleSource()) ? std::optional(0)
-                                                          : std::nullopt;
-
   Metadata metadata;
-  MetadataEntry* me = helpers::AddEntryToMetadata(
-      metadata, "*", "*", ToRuleSourceStr(GetTpcdMetadataRuleSource()), dtrp);
-  EXPECT_TRUE(Parser::IsValidMetadata(metadata));
+  for (const auto& source : testing::Range<int32_t>(
+           static_cast<int32_t>(TpcdMetadataRuleSource::kMinValue),
+           static_cast<int32_t>(TpcdMetadataRuleSource::kMaxValue) + 1,
+           /*step=*/1)) {
+    helpers::AddEntryToMetadata(
+        metadata, "*",
+        base::StrCat({"[*.]foo-", base::NumberToString(source), ".com"}),
+        ToRuleSourceStr(static_cast<TpcdMetadataRuleSource>(source)),
+        /*dtrp=*/0);
+  }
+  helpers::AddEntryToMetadata(metadata, "*", "[*.]foo.com");
 
   base::HistogramTester histogram_tester;
   GetParser()->ParseMetadata(metadata.SerializeAsString());
-  EXPECT_EQ(GetManager()->GetGrants().size(), 1u);
+  EXPECT_EQ(GetManager()->GetGrants().size(), 9u);
 
-  if (IsTpcdMetadataStagedRollbackEnabled() && Parser::IsTestEntry(*me)) {
+  if (IsTpcdMetadataStagedRollbackEnabled()) {
     histogram_tester.ExpectUniqueSample(
         helpers::kMetadataCohortDistributionHistogram,
         content_settings::mojom::TpcdMetadataCohort::GRACE_PERIOD_FORCED_ON, 1);
@@ -530,25 +503,22 @@ class ManagerPrefsTest : public testing::Test {
 
   Manager* GetManager() {
     if (!manager_) {
-      manager_ = std::make_unique<Manager>(GetParser(), base::NullCallback(),
-                                           &local_state_);
+      manager_ = std::make_unique<Manager>(GetParser(), test_delegate_);
     }
     return manager_.get();
   }
 
   DeterministicGenerator* GetDetGenerator() { return det_generator_; }
 
-  PrefService* GetLocalState() { return &local_state_; }
+  PrefService* GetLocalState() { return &test_delegate_.GetLocalState(); }
 
  protected:
   base::test::TaskEnvironment env_;
 
   void SetUp() override {
     scoped_list_.InitWithFeatures({net::features::kTpcdMetadataGrants,
-                                   net::features::kTpcdMetadataStagedRollback},
+                                   net::features::kTpcdMetadataStageControl},
                                   {});
-
-    RegisterLocalStatePrefs(local_state_.registry());
   }
 
   // Guarantees proper tear down of dependencies.
@@ -562,8 +532,8 @@ class ManagerPrefsTest : public testing::Test {
   base::test::ScopedFeatureList scoped_list_;
   raw_ptr<DeterministicGenerator> det_generator_;
   std::unique_ptr<Parser> parser_;
+  TestTpcdManagerDelegate test_delegate_;
   std::unique_ptr<Manager> manager_;
-  TestingPrefServiceSimple local_state_;
 };
 
 TEST_F(ManagerPrefsTest, PersistedCohorts) {

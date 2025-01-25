@@ -229,17 +229,91 @@ extern int GetLensOverlayImageCompressionQuality();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern int GetLensOverlayScreenshotRenderQuality();
 
-// Returns the finch configured max image area for the Lens overlay feature.
+// Returns whether to use the tiered downscaling approach. If false, defaults to
+// the normal since tier approach.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool LensOverlayUseTieredDownscaling();
+
+// Returns whether or not to send a gen204 latency ping.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetLensOverlaySendLatencyGen204();
+
+// Returns whether or not to send task completion pings.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetLensOverlaySendTaskCompletionGen204();
+
+// Returns the finch configured max image height for the Lens overlay feature
+// when tiered downscaling approach is disabled.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern int GetLensOverlayImageMaxArea();
 
-// Returns the finch configured max image height for the Lens overlay feature.
+// Returns the finch configured max image height for the Lens overlay feature
+// between Tiers 1 and 2. With the UI scaling, there is a possibility the image
+// needs to be downscaled, but doesn't fit in a specific tier, which is when the
+// image gets downscaled to this value. Corresponds to Tier 1.5 in
+// go/lens-overlay-tiered-downscaling. This is also the value used if tier
+// downscaling approach is disabled.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern int GetLensOverlayImageMaxHeight();
 
-// Returns the finch configured max image width for the Lens overlay feature.
+// Returns the finch configured max image width for the Lens overlay feature
+// between Tiers 1 and 2. With the UI scaling, there is a possibility the image
+// needs to be downscaled, but doesn't fit in a specific tier, which is when the
+// image gets downscaled to this value. Corresponds to Tier 1.5 in
+// go/lens-overlay-tiered-downscaling.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern int GetLensOverlayImageMaxWidth();
+
+// Returns the finch configured max image area for the Lens overlay feature at
+// Tier 1. Tier 1 is the lower resolution we downscale to.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlayImageMaxAreaTier1();
+
+// Returns the finch configured max image height for the Lens overlay feature at
+// Tier 1. Tier 1 is the lower resolution we downscale to.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlayImageMaxHeightTier1();
+
+// Returns the finch configured max image width for the Lens overlay feature at
+// Tier 1. Tier 1 is the lower resolution we downscale to.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlayImageMaxWidthTier1();
+
+// Returns the finch configured max image area for the Lens overlay feature at
+// Tier 2. Tier 2 is the middle tier resolution we downscale to.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlayImageMaxAreaTier2();
+
+// Returns the finch configured max image height for the Lens overlay feature at
+// Tier 2. Tier 2 is the middle tier resolution we downscale to.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlayImageMaxHeightTier2();
+
+// Returns the finch configured max image width for the Lens overlay feature at
+// Tier 2. Tier 2 is the middle tier resolution we downscale to.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlayImageMaxWidthTier2();
+
+// Returns the finch configured max image area for the Lens overlay feature at
+// Tier 3. Tier 3 is the highest resolution we downscale to.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlayImageMaxAreaTier3();
+
+// Returns the finch configured max image height for the Lens overlay feature at
+// Tier 3. Tier 3 is the highest resolution we downscale to.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlayImageMaxHeightTier3();
+
+// Returns the finch configured max image width for the Lens overlay feature at
+// Tier 3. Tier 3 is the highest resolution we downscale to.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlayImageMaxWidthTier3();
+
+// Returns the finch configured UI scaling factor that is used to decide what
+// tier the captured screenshot should be downscaled to. A lower scaling factor
+// threshold leads to more downscaling at that threshold.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlayImageDownscaleUiScalingFactorThreshold();
 
 // Returns the finch configured endpoint URL for the Lens overlay.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -276,11 +350,6 @@ extern int GetLensOverlayHorizontalTextMargin();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsLensOverlaySearchBubbleEnabled();
 
-// Returns whether to use segmentation mask polygons for object highlighting on
-// the Lens overlay.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool IsLensOverlayPreciseHighlightEnabled();
-
 // Returns whether to render the Lens overlay shimmer.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsLensOverlayShimmerEnabled();
@@ -288,10 +357,6 @@ extern bool IsLensOverlayShimmerEnabled();
 // Returns whether to render the sparkling effect on the Lens overlay shimmer.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsLensOverlayShimmerSparklesEnabled();
-
-// Returns whether to allow dragging the Lens overlay selection box.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool IsLensOverlaySelectionDraggingEnabled();
 
 // Returns whether to require that Google is the user's DSE (default search
 // engine) for the Lens overlay feature to be enabled.
@@ -315,10 +380,15 @@ extern int GetLensOverlayTapRegionHeight();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern int GetLensOverlayTapRegionWidth();
 
-// Returns whether to enable the image context menu extrypoint for Lens
+// Returns whether to enable the image context menu entry point for Lens
 // Overlay.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool UseLensOverlayForImageSearch();
+
+// Returns whether to enable the video context menu entry point for Lens
+// Overlay.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool UseLensOverlayForVideoFrameSearch();
 
 // Returns whether to enable the find-in-page entry point.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -327,6 +397,11 @@ extern bool IsFindInPageEntryPointEnabled();
 // Returns whether to enable the omnibox entry point.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsOmniboxEntryPointEnabled();
+
+// True if the overlay entrypoint should suppress its label and be always
+// visible in the omnibox.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool IsOmniboxEntrypointAlwaysVisible();
 
 // Returns whether or not to read the browser dark mode setting
 // for Lens Overlay. If false, it will fall back to light mode.
@@ -361,6 +436,51 @@ extern double GetLensOverlaySelectTextOverRegionTriggerThreshold();
 // Api.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool GetLensOverlayUseShimmerCanvas();
+
+// Minimum area (in device-independent pixels) for significant regions to send
+// with the screenshot.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlaySignificantRegionMinArea();
+
+// Maximum number of significant regions to send with the screenshot. If
+// negative, no maximum will be imposed.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlayMaxSignificantRegions();
+
+// Threshold for comparing equality of object bounding box and previously
+// selected bounding box. Unit is proportion of the image dimensions.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern double GetLensOverlayPostSelectionComparisonThreshold();
+
+// The radius of the live page / underlying tab contents blur in pixels.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlayLivePageBlurRadiusPixels();
+
+// The timeout set for every request from the browser to the server in
+// milliseconds.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlayServerRequestTimeout();
+
+// Whether the error page is enabled on the lens overlay. This error page is
+// visible when the full image request times out or when the user is offline. It
+// prevents the user from interacting with the side panel results and searchbox.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetLensOverlayEnableErrorPage();
+
+// The value of the search companion query parameter `gsc` used in search URLs
+// that are loaded in the side panel.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern std::string GetLensOverlayGscQueryParamValue();
+
+// Whether to allow the Lens Overlay in fullscreen without top Chrome. When this
+// is disabled, Lens Overlay is only enabled if top chrome is enabled.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetLensOverlayEnableInFullscreen();
+
+// The corner radius in pixels for the vertex corners of the segmentation mask.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlaySegmentationMaskCornerRadius();
+
 }  // namespace lens::features
 
 #endif  // COMPONENTS_LENS_LENS_FEATURES_H_

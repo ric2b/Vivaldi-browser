@@ -85,7 +85,8 @@ void OTRWebStateObserver::WebStateObserver::BatchOperationEnded(
 }
 
 void OTRWebStateObserver::WebStateObserver::UpdateOtrWebStateCount() {
-  const std::set<Browser*>& browsers = browser_list_->AllIncognitoBrowsers();
+  std::set<Browser*> browsers =
+      browser_list_->BrowsersOfType(BrowserList::BrowserType::kIncognito);
   int otr_state_count = 0;
   for (Browser* browser : browsers) {
     WebStateList* web_state_list = browser->GetWebStateList();
@@ -122,7 +123,7 @@ void OTRWebStateObserver::OnBrowserStateAdded(const base::FilePath& path) {
     return;
   }
   BrowserList* browser_list = BrowserListFactory::GetForBrowserState(
-      browser_state_manager_->GetBrowserState(path));
+      browser_state_manager_->GetBrowserStateByPath(path));
   DCHECK(browser_list);
 
   auto it = browser_state_data_.emplace(
@@ -133,7 +134,7 @@ void OTRWebStateObserver::OnBrowserStateAdded(const base::FilePath& path) {
       std::make_unique<AllWebStateListObservationRegistrar>(
           browser_list,
           std::make_unique<WebStateObserver>(path, this, browser_list),
-          AllWebStateListObservationRegistrar::INCOGNITO);
+          AllWebStateListObservationRegistrar::Mode::INCOGNITO);
 }
 
 void OTRWebStateObserver::OnBrowserStateWasRemoved(const base::FilePath& path) {

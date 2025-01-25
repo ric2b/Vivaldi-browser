@@ -5,17 +5,14 @@
 #include <optional>
 #include <sstream>
 
-#include "base/feature_list.h"
 #include "base/functional/overloaded.h"
 #include "base/test/metrics/user_action_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model.h"
 #include "chrome/browser/ui/toolbar_controller_util.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
@@ -52,10 +49,6 @@ class ToolbarControllerUiTest : public InteractiveFeaturePromoTest {
       : InteractiveFeaturePromoTest(UseDefaultTrackerAllowingPromos(
             {feature_engagement::kIPHTabSearchFeature})) {
     ToolbarControllerUtil::SetPreventOverflowForTesting(false);
-    scoped_feature_list_.InitWithFeatures(
-        {features::kResponsiveToolbar, features::kSidePanelPinning,
-         features::kChromeRefresh2023},
-        {});
   }
 
   void SetUpOnMainThread() override {
@@ -129,7 +122,7 @@ class ToolbarControllerUiTest : public InteractiveFeaturePromoTest {
     auto button = std::make_unique<ToolbarButton>();
     button->SetPreferredSize(dummy_button_size_);
     button->SetMinSize(dummy_button_size_);
-    button->SetAccessibleName(u"dummybutton");
+    button->GetViewAccessibility().SetName(u"dummybutton");
     button->SetVisible(true);
     return button;
   }
@@ -335,12 +328,10 @@ class ToolbarControllerUiTest : public InteractiveFeaturePromoTest {
     return toolbar_controller_->GetOverflowedElements();
   }
   const ui::SimpleMenuModel* GetOverflowMenu() {
-    return static_cast<OverflowButton*>(overflow_button_)
-        ->menu_model_for_testing();
+    return toolbar_controller_->menu_model_for_testing();
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
   raw_ptr<BrowserView> browser_view_;
   raw_ptr<ToolbarController> toolbar_controller_;
   raw_ptr<views::View> toolbar_container_view_;

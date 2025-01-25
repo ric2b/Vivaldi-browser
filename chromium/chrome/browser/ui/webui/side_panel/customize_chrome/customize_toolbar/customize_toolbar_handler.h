@@ -7,6 +7,7 @@
 
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model.h"
 #include "chrome/browser/ui/webui/side_panel/customize_chrome/customize_toolbar/customize_toolbar.mojom.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -14,15 +15,14 @@
 
 class CustomizeToolbarHandler
     : public side_panel::customize_chrome::mojom::CustomizeToolbarHandler,
-      PinnedToolbarActionsModel::Observer {
+      public PinnedToolbarActionsModel::Observer {
  public:
   CustomizeToolbarHandler(
       mojo::PendingReceiver<
           side_panel::customize_chrome::mojom::CustomizeToolbarHandler> handler,
       mojo::PendingRemote<
           side_panel::customize_chrome::mojom::CustomizeToolbarClient> client,
-      Profile* profile,
-      content::WebContents* web_contents);
+      raw_ptr<Browser> browser);
 
   CustomizeToolbarHandler(const CustomizeToolbarHandler&) = delete;
   CustomizeToolbarHandler& operator=(const CustomizeToolbarHandler&) = delete;
@@ -31,10 +31,11 @@ class CustomizeToolbarHandler
 
   // side_panel::customize_chrome::mojom::CustomizeToolbarHandler:
   void ListActions(ListActionsCallback callback) override;
-  void GetActionPinned(side_panel::customize_chrome::mojom::ActionId action_id,
-                       GetActionPinnedCallback callback) override;
+  void ListCategories(ListCategoriesCallback callback) override;
   void PinAction(side_panel::customize_chrome::mojom::ActionId action_id,
                  bool pin) override;
+  void GetIsCustomized(GetIsCustomizedCallback callback) override;
+  void ResetToDefault() override;
 
   // PinnedToolbarActionsModel::Observer:
   void OnActionAdded(const actions::ActionId& id) override;
@@ -46,16 +47,24 @@ class CustomizeToolbarHandler
 
  private:
   void OnActionPinnedChanged(actions::ActionId id, bool pinned);
+  void OnShowHomeButtonChanged();
+  void OnShowForwardButtonChanged();
 
-  const Browser* browser() const;
+  PrefService* prefs() const;
 
   mojo::Remote<side_panel::customize_chrome::mojom::CustomizeToolbarClient>
       client_;
   mojo::Receiver<side_panel::customize_chrome::mojom::CustomizeToolbarHandler>
       receiver_;
 
-  raw_ptr<Profile> profile_;
-  raw_ptr<content::WebContents> web_contents_;
+  raw_ptr<Browser> browser_;
+  raw_ptr<PinnedToolbarActionsModel> model_;
+
+  base::ScopedObservation<PinnedToolbarActionsModel,
+                          PinnedToolbarActionsModel::Observer>
+      model_observation_{this};
+
+  PrefChangeRegistrar pref_change_registrar_;
 };
 
 #endif  // CHROME_BROWSER_UI_WEBUI_SIDE_PANEL_CUSTOMIZE_CHROME_CUSTOMIZE_TOOLBAR_CUSTOMIZE_TOOLBAR_HANDLER_H_

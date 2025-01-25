@@ -6,3 +6,5 @@ per-file featured.h = file:/featured/OWNERS
 per-file crash_reporter.h = file:/crash-reporter/OWNERS
 
 per-file lorgnette_dlc.h = file:/lorgnette/OWNERS
+
+per-file flex_hwis.h = file:/flex_hwis/OWNERS

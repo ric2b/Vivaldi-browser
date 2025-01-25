@@ -31,8 +31,8 @@ enum CrlVersion {
 // at |time|. The validity period of the CRL is adjusted to be the earliest
 // of the issuer certificate chain's expiration and the CRL's expiration and
 // the result is stored in |overall_not_after|.
-bool VerifyCRL(const Crl& crl,
-               const TbsCrl& tbs_crl,
+bool VerifyCRL(const proto::Crl& crl,
+               const proto::TbsCrl& tbs_crl,
                const DateTime& time,
                TrustStore* trust_store,
                DateTime* overall_not_after) {
@@ -90,7 +90,8 @@ bool VerifyCRL(const Crl& crl,
 
 }  // namespace
 
-CastCRL::CastCRL(const TbsCrl& tbs_crl, const DateTime& overall_not_after) {
+CastCRL::CastCRL(const proto::TbsCrl& tbs_crl,
+                 const DateTime& overall_not_after) {
   // Parse the validity information.
   // Assume DateTimeFromSeconds will succeed. Successful call to VerifyCRL means
   // that these calls were successful.
@@ -173,12 +174,12 @@ bool CastCRL::CheckRevocation(
 std::unique_ptr<CastCRL> ParseAndVerifyCRL(const std::string& crl_proto,
                                            const DateTime& time,
                                            TrustStore* trust_store) {
-  CrlBundle crl_bundle;
+  proto::CrlBundle crl_bundle;
   if (!crl_bundle.ParseFromString(crl_proto)) {
     return nullptr;
   }
   for (const auto& crl : crl_bundle.crls()) {
-    TbsCrl tbs_crl;
+    proto::TbsCrl tbs_crl;
     if (!tbs_crl.ParseFromString(crl.tbs_crl())) {
       OSP_LOG_WARN << "Binary TBS CRL could not be parsed.";
       continue;

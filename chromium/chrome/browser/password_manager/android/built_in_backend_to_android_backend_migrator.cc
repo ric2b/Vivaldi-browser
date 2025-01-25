@@ -4,6 +4,7 @@
 
 #include "chrome/browser/password_manager/android/built_in_backend_to_android_backend_migrator.h"
 
+#include <optional>
 #include <string>
 
 #include "base/barrier_callback.h"
@@ -13,12 +14,14 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "base/trace_event/trace_event.h"
+#include "chrome/browser/password_manager/android/password_store_android_backend.h"
+#include "chrome/browser/password_manager/android/password_store_android_backend_api_error_codes.h"
 #include "components/browser_sync/sync_to_signin_migration.h"
 #include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_store/password_store_backend.h"
-#include "components/password_manager/core/browser/password_sync_util.h"
+#include "components/password_manager/core/browser/password_store/password_store_backend_error.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_pref_names.h"
@@ -27,9 +30,6 @@
 namespace password_manager {
 
 namespace {
-
-// TODO(crbug.com/40067770): Migrate away from `ConsentLevel::kSync` on Android.
-using sync_util::IsSyncFeatureEnabledIncludingPasswords;
 
 // Threshold for the next migration attempt. This is needed in order to prevent
 // clients from spamming GMS Core API.
@@ -74,7 +74,7 @@ std::string MigrationTypeToString(
         kReenrollmentAttempt:
       return "ReenrollmentAttemptMigration";
     case BuiltInBackendToAndroidBackendMigrator::MigrationType::kNone:
-      NOTREACHED() << "No migration should be executed.";
+      NOTREACHED_IN_MIGRATION() << "No migration should be executed.";
       return std::string();
   }
 }
@@ -92,6 +92,9 @@ std::string BackendOperationToString(
     case BuiltInBackendToAndroidBackendMigrator::BackendOperationForMigration::
         kRemoveLogin:
       return "RemoveLogin";
+    case BuiltInBackendToAndroidBackendMigrator::BackendOperationForMigration::
+        kGetAllLogins:
+      return "GetAllLogins";
   }
 }
 
@@ -155,8 +158,16 @@ struct BuiltInBackendToAndroidBackendMigrator::BackendAndLoginsResults {
   raw_ptr<PasswordStoreBackend> backend;
   LoginsResultOrError logins_result;
 
-  bool HasError() {
+  bool HasError() const {
     return absl::holds_alternative<PasswordStoreBackendError>(logins_result);
+  }
+
+  std::optional<int> GetApiError() const {
+    if (HasError()) {
+      return absl::get<PasswordStoreBackendError>(logins_result)
+          .android_backend_api_error;
+    }
+    return std::nullopt;
   }
 
   // Converts std::vector<std::unique_ptr<PasswordForms>> into
@@ -217,13 +228,21 @@ class BuiltInBackendToAndroidBackendMigrator::MigrationMetricsReporter {
   }
 
   void HandleBackendOperationResult(
+      std::string backend_infix,
       BackendOperationForMigration backend_operation,
-      bool is_success) {
-    base::UmaHistogramBoolean(metric_infix_ +
+      bool is_success,
+      std::optional<int> api_error) {
+    base::UmaHistogramBoolean(metric_infix_ + backend_infix + "." +
                                   BackendOperationToString(backend_operation) +
                                   ".Success",
                               is_success);
     if (!is_success) {
+      if (api_error.has_value()) {
+        base::UmaHistogramSparse(
+            metric_infix_ + backend_infix + "." +
+                BackendOperationToString(backend_operation) + ".APIError",
+            api_error.value());
+      }
       return;
     }
 
@@ -235,7 +254,7 @@ class BuiltInBackendToAndroidBackendMigrator::MigrationMetricsReporter {
         update_logins_count_++;
         break;
       case BackendOperationForMigration::kRemoveLogin:
-        // No metric for removal operation.
+      case BackendOperationForMigration::kGetAllLogins:
         break;
     }
   }
@@ -279,14 +298,16 @@ void BuiltInBackendToAndroidBackendMigrator::StartAccountMigrationIfNecessary(
       base::Time::Now() -
       base::Time::FromTimeT(prefs_->GetDouble(
           password_manager::prefs::kTimeOfLastMigrationAttempt));
-  if (time_passed_since_last_migration_attempt < kMigrationThreshold)
+  if (time_passed_since_last_migration_attempt < kMigrationThreshold) {
     return;
+  }
 
   // Do not migrate if a migration is already running. By the time it ends, the
   // two backends will be identical, therefore the second migration won't be
   // needed.
-  if (migration_in_progress_type_ != MigrationType::kNone)
+  if (migration_in_progress_type_ != MigrationType::kNone) {
     return;
+  }
 
   PrepareForMigration(type);
 }
@@ -453,6 +474,13 @@ void BuiltInBackendToAndroidBackendMigrator::
   DCHECK_EQ(2u, results.size());
 
   if (results[0].HasError() || results[1].HasError()) {
+    for (const auto& result : results) {
+      metrics_reporter_->HandleBackendOperationResult(
+          GetMetricInfixFromBackend(result.backend),
+          BackendOperationForMigration::kGetAllLogins, !result.HasError(),
+          result.GetApiError());
+    }
+
     MigrationFinished(/*is_success=*/false);
     return;
   }
@@ -538,6 +566,7 @@ void BuiltInBackendToAndroidBackendMigrator::AddLoginToBackend(
       base::BindOnce(
           &BuiltInBackendToAndroidBackendMigrator::RunCallbackOrAbortMigration,
           weak_ptr_factory_.GetWeakPtr(), std::move(callback),
+          GetMetricInfixFromBackend(backend),
           BackendOperationForMigration::kAddLogin));
 }
 
@@ -550,6 +579,7 @@ void BuiltInBackendToAndroidBackendMigrator::UpdateLoginInBackend(
       base::BindOnce(
           &BuiltInBackendToAndroidBackendMigrator::RunCallbackOrAbortMigration,
           weak_ptr_factory_.GetWeakPtr(), std::move(callback),
+          GetMetricInfixFromBackend(backend),
           BackendOperationForMigration::kUpdateLogin));
 }
 
@@ -562,16 +592,21 @@ void BuiltInBackendToAndroidBackendMigrator::RemoveLoginFromBackend(
       base::BindOnce(
           &BuiltInBackendToAndroidBackendMigrator::RunCallbackOrAbortMigration,
           weak_ptr_factory_.GetWeakPtr(), std::move(callback),
+          GetMetricInfixFromBackend(backend),
           BackendOperationForMigration::kRemoveLogin));
 }
 
 void BuiltInBackendToAndroidBackendMigrator::RunCallbackOrAbortMigration(
     base::OnceClosure callback,
+    const std::string& backend_infix,
     BackendOperationForMigration backend_operation,
     PasswordChangesOrError changes_or_error) {
   if (absl::holds_alternative<PasswordStoreBackendError>(changes_or_error)) {
-    metrics_reporter_->HandleBackendOperationResult(backend_operation,
-                                                    /*is_success=*/false);
+    const PasswordStoreBackendError& error =
+        absl::get<PasswordStoreBackendError>(changes_or_error);
+    metrics_reporter_->HandleBackendOperationResult(
+        backend_infix, backend_operation, /*is_success=*/false,
+        error.android_backend_api_error);
     MigrationFinished(/*is_success=*/false);
     return;
   }
@@ -581,16 +616,21 @@ void BuiltInBackendToAndroidBackendMigrator::RunCallbackOrAbortMigration(
   // provide exact changelist (e.g. Android). This indicates success operation
   // as well as non-empty changelist.
   if (!changes.has_value() || !changes.value().empty()) {
-    metrics_reporter_->HandleBackendOperationResult(backend_operation,
-                                                    /*is_success=*/true);
+    metrics_reporter_->HandleBackendOperationResult(backend_infix,
+                                                    backend_operation,
+                                                    /*is_success=*/true,
+                                                    /*api_error=*/std::nullopt);
     // The step was successful, continue the migration.
     std::move(callback).Run();
     return;
   }
 
   // Migration failed.
-  metrics_reporter_->HandleBackendOperationResult(backend_operation,
-                                                  /*is_success=*/false);
+  // It is unclear what the reason for this could be, but since there
+  // was technically no API error, there is none to record.
+  metrics_reporter_->HandleBackendOperationResult(
+      backend_infix, backend_operation, /*is_success=*/false,
+      /*api_error=*/std::nullopt);
   MigrationFinished(/*is_success=*/false);
 }
 
@@ -673,6 +713,11 @@ void BuiltInBackendToAndroidBackendMigrator::RemoveBlocklistedFormsWithValues(
   }
 
   std::move(callback_chain).Run();
+}
+
+std::string BuiltInBackendToAndroidBackendMigrator::GetMetricInfixFromBackend(
+    PasswordStoreBackend* backend) {
+  return backend == built_in_backend_ ? "BuiltInBackend" : "AndroidBackend";
 }
 
 }  // namespace password_manager

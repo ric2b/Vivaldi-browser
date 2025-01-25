@@ -25,8 +25,10 @@
 #include "chrome/test/chromedriver/chrome/devtools_client.h"
 #include "chrome/test/chromedriver/chrome/devtools_event_listener.h"
 #include "chrome/test/chromedriver/chrome/status.h"
+#include "chrome/test/chromedriver/net/stub_sync_websocket.h"
 #include "chrome/test/chromedriver/net/sync_websocket.h"
 #include "chrome/test/chromedriver/net/timeout.h"
+#include "mojo/public/cpp/bindings/lib/string_serialization.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -34,17 +36,23 @@
 namespace {
 
 using testing::Eq;
+using testing::Optional;
 using testing::Pointee;
 
 const char kTestMapperScript[] = "Lorem ipsum dolor sit amet";
 const base::Value::Dict empty_mapper_options;
 
-testing::AssertionResult StatusOk(const Status& status) {
-  if (status.IsOk()) {
+template <int Code>
+testing::AssertionResult StatusCodeIs(const Status& status) {
+  if (status.code() == Code) {
     return testing::AssertionSuccess();
   } else {
     return testing::AssertionFailure() << status.message();
   }
+}
+
+testing::AssertionResult StatusOk(const Status& status) {
+  return StatusCodeIs<kOk>(status);
 }
 
 bool ParseCommand(const base::Value::Dict& command,
@@ -392,126 +400,6 @@ class MultiSessionMockSyncWebSocket : public SyncWebSocket {
   std::queue<std::string> queued_response_;
 };
 
-class MockSyncWebSocket : public SyncWebSocket {
- public:
-  MockSyncWebSocket() = default;
-  ~MockSyncWebSocket() override = default;
-
-  bool IsConnected() override { return connected_; }
-
-  bool Connect(const GURL& url) override {
-    EXPECT_STREQ("http://url/", url.possibly_invalid_spec().c_str());
-    connected_ = true;
-    return true;
-  }
-
-  bool Send(const std::string& message) override {
-    EXPECT_TRUE(connected_);
-    int cmd_id;
-    std::string method;
-    base::Value::Dict params;
-    std::string session_id;
-
-    if (!ParseMessage(message, &cmd_id, &method, &params, &session_id)) {
-      return false;
-    }
-
-    if (connect_complete_) {
-      EXPECT_STREQ("method", method.c_str());
-      int param = params.FindInt("param").value_or(-1);
-      EXPECT_EQ(1, param);
-      EnqueueDefaultResponse(cmd_id);
-    } else {
-      EnqueueHandshakeResponse(cmd_id, method);
-    }
-    return true;
-  }
-
-  SyncWebSocket::StatusCode ReceiveNextMessage(
-      std::string* message,
-      const Timeout& timeout) override {
-    if (timeout.IsExpired())
-      return SyncWebSocket::StatusCode::kTimeout;
-    EXPECT_TRUE(HasNextMessage());
-    if (PopMessage(message)) {
-      return SyncWebSocket::StatusCode::kOk;
-    } else {
-      return SyncWebSocket::StatusCode::kDisconnected;
-    }
-  }
-
-  bool HasNextMessage() override { return !queued_response_.empty(); }
-
-  void EnqueueDefaultResponse(int cmd_id) {
-    base::Value::Dict response;
-    response.Set("id", cmd_id);
-    base::Value::Dict result;
-    result.Set("param", 1);
-    response.Set("result", std::move(result));
-    std::string message;
-    base::JSONWriter::Write(base::Value(std::move(response)), &message);
-    queued_response_.push(std::move(message));
-  }
-
-  void EnqueueHandshakeResponse(int cmd_id, const std::string& method) {
-    if (method == "Page.addScriptToEvaluateOnNewDocument") {
-      EXPECT_FALSE(handshake_add_script_handled_);
-      if (!handshake_add_script_handled_) {
-        handshake_add_script_handled_ = true;
-      } else {
-        return;
-      }
-    } else if (method == "Runtime.evaluate") {
-      EXPECT_FALSE(handshake_runtime_eval_handled_);
-      if (!handshake_runtime_eval_handled_) {
-        handshake_runtime_eval_handled_ = true;
-      } else {
-        return;
-      }
-    } else if (method == "Page.enable") {
-      EXPECT_FALSE(handshake_page_enable_handled_);
-      if (!handshake_page_enable_handled_) {
-        handshake_page_enable_handled_ = true;
-      } else {
-        return;
-      }
-    } else {
-      // Unexpected handshake command
-      VLOG(0) << "unexpected handshake method: " << method;
-      FAIL();
-    }
-
-    connect_complete_ =
-        handshake_add_script_handled_ && handshake_runtime_eval_handled_;
-
-    base::Value::Dict response;
-    response.Set("id", cmd_id);
-    base::Value::Dict result;
-    result.Set("param", 1);
-    response.Set("result", std::move(result));
-    std::string message;
-    base::JSONWriter::Write(base::Value(std::move(response)), &message);
-    queued_response_.push(std::move(message));
-  }
-
-  bool PopMessage(std::string* dest) {
-    if (queued_response_.empty()) {
-      return false;
-    }
-    *dest = std::move(queued_response_.front());
-    queued_response_.pop();
-    return true;
-  }
-
- protected:
-  bool connected_ = false;
-  bool handshake_add_script_handled_ = false;
-  bool handshake_runtime_eval_handled_ = false;
-  bool handshake_page_enable_handled_ = false;
-  bool connect_complete_ = false;
-  std::queue<std::string> queued_response_;
-};
-
 class DevToolsClientImplTest : public testing::Test {
  protected:
   DevToolsClientImplTest() : long_timeout_(base::Minutes(5)) {}
@@ -535,10 +423,21 @@ TEST_F(DevToolsClientImplTest, Ctor) {
   EXPECT_EQ(1, client.NextMessageId());
   EXPECT_EQ(nullptr, client.GetOwner());
   EXPECT_EQ(nullptr, client.GetParentClient());
+  EXPECT_FALSE(client.AutoAcceptsBeforeunload());
+  // No dialog
+  std::string message("old message");
+  std::string type("old type");
+  ASSERT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetDialogMessage(message)));
+  ASSERT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetTypeOfDialog(type)));
+  ASSERT_FALSE(client.IsDialogOpen());
+  ASSERT_STREQ("old message", message.c_str());
+  ASSERT_STREQ("old type", type.c_str());
+  ASSERT_TRUE(
+      StatusCodeIs<kNoSuchAlert>(client.HandleDialog(false, std::nullopt)));
 }
 
 TEST_F(DevToolsClientImplTest, SendCommand) {
-  SocketHolder<MockSyncWebSocket> socket_holder;
+  SocketHolder<StubSyncWebSocket> socket_holder;
   DevToolsClientImpl client("id", "");
   EXPECT_TRUE(socket_holder.ConnectSocket());
   ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
@@ -548,7 +447,7 @@ TEST_F(DevToolsClientImplTest, SendCommand) {
 }
 
 TEST_F(DevToolsClientImplTest, SendCommandAndGetResult) {
-  SocketHolder<MockSyncWebSocket> socket_holder;
+  SocketHolder<StubSyncWebSocket> socket_holder;
   DevToolsClientImpl client("id", "");
   EXPECT_TRUE(socket_holder.ConnectSocket());
   ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
@@ -563,7 +462,7 @@ TEST_F(DevToolsClientImplTest, SendCommandAndGetResult) {
 }
 
 TEST_F(DevToolsClientImplTest, SetMainPage) {
-  SocketHolder<MockSyncWebSocket> socket_holder;
+  SocketHolder<StubSyncWebSocket> socket_holder;
   DevToolsClientImpl client("E2F4", "BC80031");
   client.SetMainPage(true);
   EXPECT_TRUE(socket_holder.ConnectSocket());
@@ -617,11 +516,11 @@ TEST_F(DevToolsClientImplTest, AttachToAnotherRoot) {
 }
 
 TEST_F(DevToolsClientImplTest, AttachRootToRoot) {
-  SocketHolder<MockSyncWebSocket> socket_holder1;
+  SocketHolder<StubSyncWebSocket> socket_holder1;
   DevToolsClientImpl root_client1("root_client_1", "root_session_1");
   ASSERT_TRUE(socket_holder1.ConnectSocket());
   ASSERT_TRUE(StatusOk(root_client1.SetSocket(socket_holder1.Wrapper())));
-  SocketHolder<MockSyncWebSocket> socket_holder2;
+  SocketHolder<StubSyncWebSocket> socket_holder2;
   DevToolsClientImpl root_client2("root_client_2", "root_session_2");
   ASSERT_TRUE(socket_holder2.ConnectSocket());
   ASSERT_TRUE(StatusOk(root_client2.SetSocket(socket_holder2.Wrapper())));
@@ -642,7 +541,7 @@ TEST_F(DevToolsClientImplTest, AttachAsGrandChild) {
 
 namespace {
 
-class MockSyncWebSocket3 : public MockSyncWebSocket {
+class MockSyncWebSocket3 : public StubSyncWebSocket {
  public:
   explicit MockSyncWebSocket3(bool send_returns_after_connect)
       : send_returns_after_connect_(send_returns_after_connect) {}
@@ -714,7 +613,7 @@ TEST_F(DevToolsClientImplTest, SendCommandReceiveNextMessageFails) {
 
 namespace {
 
-class FakeSyncWebSocket : public MockSyncWebSocket {
+class FakeSyncWebSocket : public StubSyncWebSocket {
  public:
   FakeSyncWebSocket() = default;
   ~FakeSyncWebSocket() override = default;
@@ -759,40 +658,40 @@ class FakeSyncWebSocket : public MockSyncWebSocket {
 
 bool ReturnCommand(const std::string& message,
                    int expected_id,
-                   std::string* session_id,
-                   internal::InspectorMessageType* type,
-                   InspectorEvent* event,
-                   InspectorCommandResponse* command_response) {
-  *type = internal::kCommandResponseMessageType;
-  session_id->clear();
-  command_response->id = expected_id;
-  command_response->result = base::Value::Dict();
+                   std::string& session_id,
+                   internal::InspectorMessageType& type,
+                   InspectorEvent& event,
+                   InspectorCommandResponse& command_response) {
+  type = internal::kCommandResponseMessageType;
+  session_id.clear();
+  command_response.id = expected_id;
+  command_response.result = base::Value::Dict();
   return true;
 }
 
 bool ReturnBadResponse(const std::string& message,
                        int expected_id,
-                       std::string* session_id,
-                       internal::InspectorMessageType* type,
-                       InspectorEvent* event,
-                       InspectorCommandResponse* command_response) {
-  *type = internal::kCommandResponseMessageType;
-  session_id->clear();
-  command_response->id = expected_id;
-  command_response->result = base::Value::Dict();
+                       std::string& session_id,
+                       internal::InspectorMessageType& type,
+                       InspectorEvent& event,
+                       InspectorCommandResponse& command_response) {
+  type = internal::kCommandResponseMessageType;
+  session_id.clear();
+  command_response.id = expected_id;
+  command_response.result = base::Value::Dict();
   return false;
 }
 
 bool ReturnCommandBadId(const std::string& message,
                         int expected_id,
-                        std::string* session_id,
-                        internal::InspectorMessageType* type,
-                        InspectorEvent* event,
-                        InspectorCommandResponse* command_response) {
-  *type = internal::kCommandResponseMessageType;
-  session_id->clear();
-  command_response->id = expected_id + 100;
-  command_response->result = base::Value::Dict();
+                        std::string& session_id,
+                        internal::InspectorMessageType& type,
+                        InspectorEvent& event,
+                        InspectorCommandResponse& command_response) {
+  type = internal::kCommandResponseMessageType;
+  session_id.clear();
+  command_response.id = expected_id + 100;
+  command_response.result = base::Value::Dict();
   return true;
 }
 
@@ -800,20 +699,20 @@ bool ReturnUnexpectedIdThenResponse(
     bool* first,
     const std::string& message,
     int expected_id,
-    std::string* session_id,
-    internal::InspectorMessageType* type,
-    InspectorEvent* event,
-    InspectorCommandResponse* command_response) {
-  session_id->clear();
+    std::string& session_id,
+    internal::InspectorMessageType& type,
+    InspectorEvent& event,
+    InspectorCommandResponse& command_response) {
+  session_id.clear();
   if (*first) {
-    *type = internal::kCommandResponseMessageType;
-    command_response->id = expected_id + 100;
-    command_response->error = "{\"code\":-32001,\"message\":\"ERR\"}";
+    type = internal::kCommandResponseMessageType;
+    command_response.id = expected_id + 100;
+    command_response.error = "{\"code\":-32001,\"message\":\"ERR\"}";
   } else {
-    *type = internal::kCommandResponseMessageType;
-    command_response->id = expected_id;
-    command_response->result = base::Value::Dict();
-    command_response->result->Set("key", 2);
+    type = internal::kCommandResponseMessageType;
+    command_response.id = expected_id;
+    command_response.result = base::Value::Dict();
+    command_response.result->Set("key", 2);
   }
   *first = false;
   return true;
@@ -821,14 +720,14 @@ bool ReturnUnexpectedIdThenResponse(
 
 bool ReturnCommandError(const std::string& message,
                         int expected_id,
-                        std::string* session_id,
-                        internal::InspectorMessageType* type,
-                        InspectorEvent* event,
-                        InspectorCommandResponse* command_response) {
-  *type = internal::kCommandResponseMessageType;
-  session_id->clear();
-  command_response->id = expected_id;
-  command_response->error = "err";
+                        std::string& session_id,
+                        internal::InspectorMessageType& type,
+                        InspectorEvent& event,
+                        InspectorCommandResponse& command_response) {
+  type = internal::kCommandResponseMessageType;
+  session_id.clear();
+  command_response.id = expected_id;
+  command_response.error = "err";
   return true;
 }
 
@@ -855,21 +754,21 @@ class MockListener : public DevToolsEventListener {
 bool ReturnEventThenResponse(bool* first,
                              const std::string& message,
                              int expected_id,
-                             std::string* session_id,
-                             internal::InspectorMessageType* type,
-                             InspectorEvent* event,
-                             InspectorCommandResponse* command_response) {
-  session_id->clear();
+                             std::string& session_id,
+                             internal::InspectorMessageType& type,
+                             InspectorEvent& event,
+                             InspectorCommandResponse& command_response) {
+  session_id.clear();
   if (*first) {
-    *type = internal::kEventMessageType;
-    event->method = "method";
-    event->params = base::Value::Dict();
-    event->params->Set("key", 1);
+    type = internal::kEventMessageType;
+    event.method = "method";
+    event.params = base::Value::Dict();
+    event.params->Set("key", 1);
   } else {
-    *type = internal::kCommandResponseMessageType;
-    command_response->id = expected_id;
-    command_response->result = base::Value::Dict();
-    command_response->result->Set("key", 2);
+    type = internal::kCommandResponseMessageType;
+    command_response.id = expected_id;
+    command_response.result = base::Value::Dict();
+    command_response.result->Set("key", 2);
   }
   *first = false;
   return true;
@@ -877,14 +776,14 @@ bool ReturnEventThenResponse(bool* first,
 
 bool ReturnEvent(const std::string& message,
                  int expected_id,
-                 std::string* session_id,
-                 internal::InspectorMessageType* type,
-                 InspectorEvent* event,
-                 InspectorCommandResponse* command_response) {
-  *type = internal::kEventMessageType;
-  event->method = "method";
-  event->params = base::Value::Dict();
-  event->params->Set("key", 1);
+                 std::string& session_id,
+                 internal::InspectorMessageType& type,
+                 InspectorEvent& event,
+                 InspectorCommandResponse& command_response) {
+  type = internal::kEventMessageType;
+  event.method = "method";
+  event.params = base::Value::Dict();
+  event.params->Set("key", 1);
   return true;
 }
 
@@ -892,47 +791,52 @@ bool ReturnOutOfOrderResponses(int* recurse_count,
                                DevToolsClient* client,
                                const std::string& message,
                                int expected_id,
-                               std::string* session_id,
-                               internal::InspectorMessageType* type,
-                               InspectorEvent* event,
-                               InspectorCommandResponse* command_response) {
+                               std::string& session_id,
+                               internal::InspectorMessageType& type,
+                               InspectorEvent& event,
+                               InspectorCommandResponse& command_response) {
   int key = 0;
   base::Value::Dict params;
   params.Set("param", 1);
   switch ((*recurse_count)++) {
     case 0:
       client->SendCommand("method", params);
-      *type = internal::kEventMessageType;
-      event->method = "method";
-      event->params = base::Value::Dict();
-      event->params->Set("key", 1);
+      type = internal::kEventMessageType;
+      event.method = "method";
+      event.params = base::Value::Dict();
+      event.params->Set("key", 1);
       return true;
     case 1:
-      command_response->id = expected_id - 1;
+      command_response.id = expected_id - 1;
       key = 2;
       break;
     case 2:
-      command_response->id = expected_id;
+      command_response.id = expected_id;
       key = 3;
       break;
   }
-  *type = internal::kCommandResponseMessageType;
-  command_response->result = base::Value::Dict();
-  command_response->result->Set("key", key);
+  type = internal::kCommandResponseMessageType;
+  command_response.result = base::Value::Dict();
+  command_response.result->Set("key", key);
   return true;
 }
 
 bool ReturnError(const std::string& message,
                  int expected_id,
-                 std::string* session_id,
-                 internal::InspectorMessageType* type,
-                 InspectorEvent* event,
-                 InspectorCommandResponse* command_response) {
+                 std::string& session_id,
+                 internal::InspectorMessageType& type,
+                 InspectorEvent& event,
+                 InspectorCommandResponse& command_response) {
   return false;
 }
 
 Status AlwaysTrue(bool* is_met) {
   *is_met = true;
+  return Status(kOk);
+}
+
+Status AlwaysFalse(bool* is_met) {
+  *is_met = false;
   return Status(kOk);
 }
 
@@ -1018,8 +922,8 @@ TEST(ParseInspectorMessage, NonJson) {
   InspectorEvent event;
   InspectorCommandResponse response;
   std::string session_id;
-  ASSERT_FALSE(internal::ParseInspectorMessage("hi", 0, &session_id, &type,
-                                               &event, &response));
+  ASSERT_FALSE(internal::ParseInspectorMessage("hi", 0, session_id, type, event,
+                                               response));
 }
 
 TEST(ParseInspectorMessage, NeitherCommandNorEvent) {
@@ -1027,8 +931,8 @@ TEST(ParseInspectorMessage, NeitherCommandNorEvent) {
   InspectorEvent event;
   InspectorCommandResponse response;
   std::string session_id;
-  ASSERT_FALSE(internal::ParseInspectorMessage("{}", 0, &session_id, &type,
-                                               &event, &response));
+  ASSERT_FALSE(internal::ParseInspectorMessage("{}", 0, session_id, type, event,
+                                               response));
 }
 
 TEST(ParseInspectorMessage, EventNoParams) {
@@ -1037,7 +941,7 @@ TEST(ParseInspectorMessage, EventNoParams) {
   InspectorCommandResponse response;
   std::string session_id;
   ASSERT_TRUE(internal::ParseInspectorMessage(
-      "{\"method\":\"method\"}", 0, &session_id, &type, &event, &response));
+      "{\"method\":\"method\"}", 0, session_id, type, event, response));
   ASSERT_EQ(internal::kEventMessageType, type);
   ASSERT_STREQ("method", event.method.c_str());
 }
@@ -1048,8 +952,8 @@ TEST(ParseInspectorMessage, EventNoParamsWithSessionId) {
   InspectorCommandResponse response;
   std::string session_id;
   ASSERT_TRUE(internal::ParseInspectorMessage(
-      "{\"method\":\"method\",\"sessionId\":\"B221AF2\"}", 0, &session_id,
-      &type, &event, &response));
+      "{\"method\":\"method\",\"sessionId\":\"B221AF2\"}", 0, session_id, type,
+      event, response));
   ASSERT_EQ(internal::kEventMessageType, type);
   ASSERT_STREQ("method", event.method.c_str());
   EXPECT_EQ("B221AF2", session_id);
@@ -1062,7 +966,7 @@ TEST(ParseInspectorMessage, EventWithParams) {
   std::string session_id;
   ASSERT_TRUE(internal::ParseInspectorMessage(
       "{\"method\":\"method\",\"params\":{\"key\":100},\"sessionId\":\"AB3A\"}",
-      0, &session_id, &type, &event, &response));
+      0, session_id, type, event, response));
   ASSERT_EQ(internal::kEventMessageType, type);
   ASSERT_STREQ("method", event.method.c_str());
   int key = event.params->FindInt("key").value_or(-1);
@@ -1080,7 +984,7 @@ TEST(ParseInspectorMessage, CommandNoErrorOrResult) {
   // "result" keys are present, a blank result dictionary should be inferred.
   ASSERT_TRUE(
       internal::ParseInspectorMessage("{\"id\":1,\"sessionId\":\"AB2AF3C\"}", 0,
-                                      &session_id, &type, &event, &response));
+                                      session_id, type, event, response));
   ASSERT_TRUE(response.result->empty());
   EXPECT_EQ("AB2AF3C", session_id);
 }
@@ -1091,7 +995,7 @@ TEST(ParseInspectorMessage, CommandError) {
   InspectorCommandResponse response;
   std::string session_id;
   ASSERT_TRUE(internal::ParseInspectorMessage(
-      "{\"id\":1,\"error\":{}}", 0, &session_id, &type, &event, &response));
+      "{\"id\":1,\"error\":{}}", 0, session_id, type, event, response));
   ASSERT_EQ(internal::kCommandResponseMessageType, type);
   ASSERT_EQ(1, response.id);
   ASSERT_TRUE(response.error.length());
@@ -1105,7 +1009,7 @@ TEST(ParseInspectorMessage, Command) {
   std::string session_id;
   ASSERT_TRUE(
       internal::ParseInspectorMessage("{\"id\":1,\"result\":{\"key\":1}}", 0,
-                                      &session_id, &type, &event, &response));
+                                      session_id, type, event, response));
   ASSERT_EQ(internal::kCommandResponseMessageType, type);
   ASSERT_EQ(1, response.id);
   ASSERT_FALSE(response.error.length());
@@ -1118,11 +1022,11 @@ TEST(ParseInspectorMessage, NoBindingName) {
   InspectorEvent event;
   InspectorCommandResponse response;
   std::string session_id;
-  ASSERT_FALSE(internal::ParseInspectorMessage(
-      "{\"method\":\"Runtime.bindingCalled\","
-      "\"params\":{\"key\":100},"
-      "\"sessionId\":\"AB3A\"}",
-      -1, &session_id, &type, &event, &response));
+  ASSERT_FALSE(
+      internal::ParseInspectorMessage("{\"method\":\"Runtime.bindingCalled\","
+                                      "\"params\":{\"key\":100},"
+                                      "\"sessionId\":\"AB3A\"}",
+                                      -1, session_id, type, event, response));
 }
 
 TEST(ParseInspectorMessage, UnknownBindingName) {
@@ -1134,7 +1038,7 @@ TEST(ParseInspectorMessage, UnknownBindingName) {
       "{\"method\":\"Runtime.bindingCalled\","
       "\"params\":{\"name\":\"helloWorld\", \"payload\": \"{}\"},"
       "\"sessionId\":\"AB3A\"}",
-      -1, &session_id, &type, &event, &response));
+      -1, session_id, type, event, response));
   ASSERT_EQ(internal::kEventMessageType, type);
 }
 
@@ -1147,7 +1051,7 @@ TEST(ParseInspectorMessage, BidiMessageNoPayload) {
       "{\"method\":\"Runtime.bindingCalled\","
       "\"params\":{\"name\":\"sendBidiResponse\"},"
       "\"sessionId\":\"AB3A\"}",
-      -1, &session_id, &type, &event, &response));
+      -1, session_id, type, event, response));
 }
 
 TEST(ParseInspectorMessage, BidiMessagePayloadNotADict) {
@@ -1159,7 +1063,7 @@ TEST(ParseInspectorMessage, BidiMessagePayloadNotADict) {
       "{\"method\":\"Runtime.bindingCalled\","
       "\"params\":{\"name\":\"sendBidiResponse\", \"payload\": \"7\"},"
       "\"sessionId\":\"AB3A\"}",
-      -1, &session_id, &type, &event, &response));
+      -1, session_id, type, event, response));
 }
 
 TEST(ParseInspectorMessage, TunneledCdpEvent) {
@@ -1183,8 +1087,8 @@ TEST(ParseInspectorMessage, TunneledCdpEvent) {
   InspectorEvent event;
   InspectorCommandResponse response;
   std::string session_id;
-  ASSERT_TRUE(internal::ParseInspectorMessage(message, -1, &session_id, &type,
-                                              &event, &response));
+  ASSERT_TRUE(internal::ParseInspectorMessage(message, -1, session_id, type,
+                                              event, response));
   EXPECT_EQ(internal::kEventMessageType, type);
   EXPECT_EQ("ABC", session_id);
   EXPECT_EQ("event", event.method);
@@ -1212,8 +1116,8 @@ TEST(ParseInspectorMessage, TunneledCdpEventNoCdpSession) {
   InspectorEvent event;
   InspectorCommandResponse response;
   std::string session_id;
-  ASSERT_TRUE(internal::ParseInspectorMessage(message, -1, &session_id, &type,
-                                              &event, &response));
+  ASSERT_TRUE(internal::ParseInspectorMessage(message, -1, session_id, type,
+                                              event, response));
   EXPECT_EQ(internal::kEventMessageType, type);
   EXPECT_EQ("", session_id);
   EXPECT_EQ("event", event.method);
@@ -1239,8 +1143,8 @@ TEST(ParseInspectorMessage, TunneledCdpEventNoCdpParams) {
   InspectorEvent event;
   InspectorCommandResponse response;
   std::string session_id;
-  ASSERT_TRUE(internal::ParseInspectorMessage(message, -1, &session_id, &type,
-                                              &event, &response));
+  ASSERT_TRUE(internal::ParseInspectorMessage(message, -1, session_id, type,
+                                              event, response));
   EXPECT_EQ(internal::kEventMessageType, type);
   EXPECT_EQ("ABC", session_id);
   EXPECT_EQ("event", event.method);
@@ -1264,8 +1168,8 @@ TEST(ParseInspectorMessage, TunneledCdpEventNoCdpMethod) {
   InspectorEvent event;
   InspectorCommandResponse response;
   std::string session_id;
-  ASSERT_FALSE(internal::ParseInspectorMessage(message, -1, &session_id, &type,
-                                               &event, &response));
+  ASSERT_FALSE(internal::ParseInspectorMessage(message, -1, session_id, type,
+                                               event, response));
 }
 
 TEST(ParseInspectorMessage, TunneledCdpEventNoPayloadParams) {
@@ -1281,8 +1185,8 @@ TEST(ParseInspectorMessage, TunneledCdpEventNoPayloadParams) {
   InspectorEvent event;
   InspectorCommandResponse response;
   std::string session_id;
-  ASSERT_FALSE(internal::ParseInspectorMessage(message, -1, &session_id, &type,
-                                               &event, &response));
+  ASSERT_FALSE(internal::ParseInspectorMessage(message, -1, session_id, type,
+                                               event, response));
 }
 
 TEST(ParseInspectorMessage, TunneledCdpResponse) {
@@ -1302,8 +1206,8 @@ TEST(ParseInspectorMessage, TunneledCdpResponse) {
   InspectorEvent event;
   InspectorCommandResponse response;
   std::string session_id;
-  ASSERT_TRUE(internal::ParseInspectorMessage(message, -1, &session_id, &type,
-                                              &event, &response));
+  ASSERT_TRUE(internal::ParseInspectorMessage(message, -1, session_id, type,
+                                              event, response));
   EXPECT_EQ(internal::kCommandResponseMessageType, type);
   EXPECT_EQ("ABC", session_id);
   EXPECT_EQ(11, response.id);
@@ -1327,8 +1231,8 @@ TEST(ParseInspectorMessage, TunneledCdpResponseNoSession) {
   InspectorEvent event;
   InspectorCommandResponse response;
   std::string session_id;
-  ASSERT_TRUE(internal::ParseInspectorMessage(message, -1, &session_id, &type,
-                                              &event, &response));
+  ASSERT_TRUE(internal::ParseInspectorMessage(message, -1, session_id, type,
+                                              event, response));
   EXPECT_EQ(internal::kCommandResponseMessageType, type);
   EXPECT_EQ("", session_id);
   EXPECT_EQ(11, response.id);
@@ -1352,8 +1256,8 @@ TEST(ParseInspectorMessage, TunneledCdpResponseNoId) {
   InspectorEvent event;
   InspectorCommandResponse response;
   std::string session_id;
-  ASSERT_FALSE(internal::ParseInspectorMessage(message, -1, &session_id, &type,
-                                               &event, &response));
+  ASSERT_FALSE(internal::ParseInspectorMessage(message, -1, session_id, type,
+                                               event, response));
 }
 
 TEST(ParseInspectorMessage, TunneledCdpResponseNoResult) {
@@ -1370,8 +1274,8 @@ TEST(ParseInspectorMessage, TunneledCdpResponseNoResult) {
   InspectorEvent event;
   InspectorCommandResponse response;
   std::string session_id;
-  ASSERT_TRUE(internal::ParseInspectorMessage(message, -1, &session_id, &type,
-                                              &event, &response));
+  ASSERT_TRUE(internal::ParseInspectorMessage(message, -1, session_id, type,
+                                              event, response));
   EXPECT_EQ(internal::kCommandResponseMessageType, type);
   EXPECT_EQ("ABC", session_id);
   EXPECT_EQ(11, response.id);
@@ -1395,8 +1299,8 @@ TEST(ParseInspectorMessage, TunneledCdpResponseError) {
   InspectorEvent event;
   InspectorCommandResponse response;
   std::string session_id;
-  ASSERT_TRUE(internal::ParseInspectorMessage(message, -1, &session_id, &type,
-                                              &event, &response));
+  ASSERT_TRUE(internal::ParseInspectorMessage(message, -1, session_id, type,
+                                              event, response));
   EXPECT_EQ(internal::kCommandResponseMessageType, type);
   EXPECT_EQ("ABC", session_id);
   EXPECT_EQ(11, response.id);
@@ -1468,9 +1372,29 @@ TEST(ParseInspectorError, SessionNotFoundError) {
   ASSERT_EQ("no such frame: SOME MESSAGE", status.message());
 }
 
+TEST(ParseInspectorError, ExecutionContextWasDestroyed) {
+  const std::string error(
+      "{\"code\":-32000,\"message\":\"Execution context was destroyed.\"}");
+  Status status = internal::ParseInspectorError(error);
+  ASSERT_EQ(kNavigationDetectedByRemoteEnd, status.code());
+  ASSERT_EQ(
+      "navigation detected by remote end: Execution context was destroyed.",
+      status.message());
+}
+
+TEST(ParseInspectorError, InspectedTargetNavigatedOrClosed) {
+  const std::string error(
+      "{\"code\":-32000,\"message\":\"Inspected target navigated or closed\"}");
+  Status status = internal::ParseInspectorError(error);
+  ASSERT_EQ(kNavigationDetectedByRemoteEnd, status.code());
+  ASSERT_EQ(
+      "navigation detected by remote end: Inspected target navigated or closed",
+      status.message());
+}
+
 TEST_F(DevToolsClientImplTest, HandleEventsUntil) {
   MockListener listener;
-  SocketHolder<MockSyncWebSocket> socket_holder;
+  SocketHolder<StubSyncWebSocket> socket_holder;
   DevToolsClientImpl client("id", "");
   client.AddListener(&listener);
   ASSERT_TRUE(socket_holder.ConnectSocket());
@@ -1482,18 +1406,18 @@ TEST_F(DevToolsClientImplTest, HandleEventsUntil) {
 }
 
 TEST_F(DevToolsClientImplTest, HandleEventsUntilTimeout) {
-  SocketHolder<MockSyncWebSocket> socket_holder;
+  SocketHolder<StubSyncWebSocket> socket_holder;
   DevToolsClientImpl client("id", "");
   ASSERT_TRUE(socket_holder.ConnectSocket());
   ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
   client.SetParserFuncForTesting(base::BindRepeating(&ReturnEvent));
-  Status status = client.HandleEventsUntil(base::BindRepeating(&AlwaysTrue),
+  Status status = client.HandleEventsUntil(base::BindRepeating(&AlwaysFalse),
                                            Timeout(base::TimeDelta()));
   ASSERT_EQ(kTimeout, status.code());
 }
 
 TEST_F(DevToolsClientImplTest, WaitForNextEventCommand) {
-  SocketHolder<MockSyncWebSocket> socket_holder;
+  SocketHolder<StubSyncWebSocket> socket_holder;
   DevToolsClientImpl client("id", "");
   client.SetParserFuncForTesting(base::BindRepeating(&ReturnCommand));
   ASSERT_TRUE(socket_holder.ConnectSocket());
@@ -1504,7 +1428,7 @@ TEST_F(DevToolsClientImplTest, WaitForNextEventCommand) {
 }
 
 TEST_F(DevToolsClientImplTest, WaitForNextEventError) {
-  SocketHolder<MockSyncWebSocket> socket_holder;
+  SocketHolder<StubSyncWebSocket> socket_holder;
   DevToolsClientImpl client("id", "");
   ASSERT_TRUE(socket_holder.ConnectSocket());
   ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
@@ -1515,7 +1439,7 @@ TEST_F(DevToolsClientImplTest, WaitForNextEventError) {
 }
 
 TEST_F(DevToolsClientImplTest, WaitForNextEventConditionalFuncReturnsError) {
-  SocketHolder<MockSyncWebSocket> socket_holder;
+  SocketHolder<StubSyncWebSocket> socket_holder;
   DevToolsClientImpl client("id", "");
   ASSERT_TRUE(socket_holder.ConnectSocket());
   ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
@@ -1526,7 +1450,7 @@ TEST_F(DevToolsClientImplTest, WaitForNextEventConditionalFuncReturnsError) {
 }
 
 TEST_F(DevToolsClientImplTest, NestedCommandsWithOutOfOrderResults) {
-  SocketHolder<MockSyncWebSocket> socket_holder;
+  SocketHolder<StubSyncWebSocket> socket_holder;
   int recurse_count = 0;
   DevToolsClientImpl client("id", "");
   ASSERT_TRUE(socket_holder.ConnectSocket());
@@ -1584,7 +1508,7 @@ class OnConnectedListener : public DevToolsEventListener {
   bool on_event_called_ = false;
 };
 
-class OnConnectedSyncWebSocket : public MockSyncWebSocket {
+class OnConnectedSyncWebSocket : public StubSyncWebSocket {
  public:
   OnConnectedSyncWebSocket() = default;
   ~OnConnectedSyncWebSocket() override = default;
@@ -1653,7 +1577,7 @@ TEST_F(DevToolsClientImplTest, ProcessOnConnectedFirstOnCommand) {
   ASSERT_TRUE(socket_holder.ConnectSocket());
   ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
   base::Value::Dict params;
-  EXPECT_EQ(kOk, client.SendCommand("Runtime.execute", params).code());
+  EXPECT_TRUE(StatusOk(client.SendCommand("Runtime.execute", params)));
   listener1.VerifyCalled();
   listener2.VerifyCalled();
   listener3.VerifyCalled();
@@ -1667,7 +1591,7 @@ TEST_F(DevToolsClientImplTest, ProcessOnConnectedFirstOnHandleEventsUntil) {
   OnConnectedListener listener3("Page.enable", &client);
   ASSERT_TRUE(socket_holder.ConnectSocket());
   ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
-  EXPECT_EQ(kOk, client.HandleReceivedEvents().code());
+  EXPECT_TRUE(StatusOk(client.HandleReceivedEvents()));
   listener1.VerifyCalled();
   listener2.VerifyCalled();
   listener3.VerifyCalled();
@@ -1769,7 +1693,7 @@ TEST_F(DevToolsClientImplTest, ProcessOnEventFirst) {
 
 namespace {
 
-class MockSyncWebSocket6 : public MockSyncWebSocket {
+class MockSyncWebSocket6 : public StubSyncWebSocket {
  public:
   explicit MockSyncWebSocket6(std::list<std::string>* messages)
       : messages_(messages) {}
@@ -1817,9 +1741,9 @@ class MockDevToolsEventListener : public DevToolsEventListener {
     Status status = client->SendCommand("hello", params);
 
     if (msg_id == expected_blocked_id_) {
-      EXPECT_EQ(kUnexpectedAlertOpen, status.code());
+      EXPECT_TRUE(StatusCodeIs<kUnexpectedAlertOpen>(status));
     } else {
-      EXPECT_EQ(kOk, status.code());
+      EXPECT_TRUE(StatusOk(status));
     }
     return Status(kOk);
   }
@@ -1830,6 +1754,28 @@ class MockDevToolsEventListener : public DevToolsEventListener {
   int expected_blocked_id_ = -1;
 };
 
+std::string JavaScriptDialogOpeningEvent(const std::string& message,
+                                         const std::string& type,
+                                         const std::string& default_prompt) {
+  return base::StringPrintf(
+      "{\"method\": \"Page.javascriptDialogOpening\", \"params\": {"
+      "\"message\": \"%s\","
+      "\"type\": \"%s\","
+      "\"defaultPrompt\": \"%s\""
+      "}}",
+      message.c_str(), type.c_str(), default_prompt.c_str());
+}
+
+std::string JavaScriptDialogClosedEvent(bool result,
+                                        const std::string& user_input) {
+  return base::StringPrintf(
+      "{\"method\": \"Page.javascriptDialogClosed\", \"params\": {"
+      "\"result\": %s,"
+      "\"userInput\": \"%s\""
+      "}}",
+      (result ? "true" : "false"), user_input.c_str());
+}
+
 }  // namespace
 
 TEST_F(DevToolsClientImplTest, BlockedByAlert) {
@@ -1839,7 +1785,7 @@ TEST_F(DevToolsClientImplTest, BlockedByAlert) {
   ASSERT_TRUE(socket_holder.ConnectSocket());
   ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
   msgs.push_back(
-      "{\"method\": \"Page.javascriptDialogOpening\", \"params\": {}}");
+      JavaScriptDialogOpeningEvent("irrelevant", "irrelevant", "irrelevant"));
   msgs.push_back("{\"id\": 2, \"result\": {}}");
   base::Value::Dict params;
   ASSERT_EQ(kUnexpectedAlertOpen,
@@ -1880,7 +1826,7 @@ TEST_F(DevToolsClientImplTest, CorrectlyDeterminesWhichIsBlockedByAlert) {
                   << "{\"id\": " << next_msg_id++ << ", \"result\": {}}")
                      .str());
   msgs.push_back(
-      "{\"method\": \"Page.javascriptDialogOpening\", \"params\": {}}");
+      JavaScriptDialogOpeningEvent("irrelevant", "irrelevant", "irrelevant"));
   msgs.push_back((std::stringstream()
                   << "{\"id\": " << next_msg_id++ << ", \"result\": {}}")
                      .str());
@@ -1895,6 +1841,374 @@ TEST_F(DevToolsClientImplTest, CorrectlyDeterminesWhichIsBlockedByAlert) {
                   << "{\"id\": " << next_msg_id++ << ", \"result\": {}}")
                      .str());
   ASSERT_EQ(kOk, client.HandleReceivedEvents().code());
+}
+
+TEST_F(DevToolsClientImplTest, AutoAcceptsBeforeunloadInheritance) {
+  SocketHolder<OnConnectedSyncWebSocket> socket_holder;
+  DevToolsClientImpl parent("parent", "parent_session");
+  DevToolsClientImpl child("child", "child_session");
+  ASSERT_TRUE(socket_holder.ConnectSocket());
+  ASSERT_TRUE(StatusOk(parent.SetSocket(socket_holder.Wrapper())));
+  ASSERT_TRUE(StatusOk(child.AttachTo(&parent)));
+
+  // both clients must have the default value
+  EXPECT_EQ(false, parent.AutoAcceptsBeforeunload());
+  EXPECT_EQ(false, child.AutoAcceptsBeforeunload());
+
+  // The property must not be inherited by the child from the parent.
+  for (int mask = 0; mask < 4; ++mask) {
+    const bool parent_is_on = (mask & 2) == 2;
+    const bool child_is_on = (mask & 1) == 1;
+    parent.SetAutoAcceptBeforeunload(parent_is_on);
+    child.SetAutoAcceptBeforeunload(child_is_on);
+    EXPECT_EQ(parent_is_on, parent.AutoAcceptsBeforeunload());
+    EXPECT_EQ(child_is_on, child.AutoAcceptsBeforeunload());
+  }
+}
+
+TEST_F(DevToolsClientImplTest, NoDialog) {
+  SocketHolder<OnConnectedSyncWebSocket> socket_holder;
+  DevToolsClientImpl client("", "");
+  ASSERT_TRUE(socket_holder.ConnectSocket());
+  ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
+  base::Value::Dict params;
+  // Check if the setup is correct
+  EXPECT_TRUE(StatusOk(client.SendCommand("Runtime.execute", params)));
+
+  std::string message("old message");
+  std::string type("old type");
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetDialogMessage(message)));
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetTypeOfDialog(type)));
+  EXPECT_FALSE(client.IsDialogOpen());
+  EXPECT_STREQ("old message", message.c_str());
+  EXPECT_STREQ("old type", type.c_str());
+  EXPECT_TRUE(
+      StatusCodeIs<kNoSuchAlert>(client.HandleDialog(false, std::nullopt)));
+}
+
+TEST_F(DevToolsClientImplTest, HandleDialogPassesParams) {
+  SocketHolder<StubSyncWebSocket> socket_holder;
+  DevToolsClientImpl client("", "");
+  ASSERT_TRUE(socket_holder.ConnectSocket());
+  ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
+  socket_holder.Socket().EnqueueResponse(
+      JavaScriptDialogOpeningEvent("hi", "prompt", ""));
+  EXPECT_TRUE(socket_holder.Socket().HasNextMessage());
+  // Consume the Page.javaScriptDialogOpening event
+  EXPECT_TRUE(StatusOk(client.HandleReceivedEvents()));
+  EXPECT_TRUE(client.IsDialogOpen());
+
+  bool is_handled = false;
+  socket_holder.Socket().AddCommandHandler(
+      "Page.handleJavaScriptDialog",
+      base::BindRepeating(
+          [](bool& is_handled, int cmd_id, const base::Value::Dict& params,
+             base::Value::Dict& response) {
+            EXPECT_THAT(params.FindBool("accept"), Optional(Eq(false)));
+            EXPECT_THAT(params.FindString("promptText"), Pointee(Eq("text")));
+            response.Set("id", cmd_id);
+            response.Set("result", base::Value::Dict());
+            is_handled = true;
+            return true;
+          },
+          std::ref(is_handled)));
+
+  std::string given_text("text");
+  EXPECT_TRUE(
+      StatusOk(client.HandleDialog(false, std::make_optional(given_text))));
+  EXPECT_TRUE(is_handled);
+}
+
+TEST_F(DevToolsClientImplTest, HandleDialogNullPrompt) {
+  SocketHolder<StubSyncWebSocket> socket_holder;
+  DevToolsClientImpl client("", "");
+  ASSERT_TRUE(socket_holder.ConnectSocket());
+  ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
+  socket_holder.Socket().EnqueueResponse(
+      JavaScriptDialogOpeningEvent("hi", "prompt", "from-event"));
+  EXPECT_TRUE(socket_holder.Socket().HasNextMessage());
+  // Consume the Page.javaScriptDialogOpening event
+  EXPECT_TRUE(StatusOk(client.HandleReceivedEvents()));
+  EXPECT_TRUE(client.IsDialogOpen());
+
+  bool is_handled = false;
+  socket_holder.Socket().AddCommandHandler(
+      "Page.handleJavaScriptDialog",
+      base::BindRepeating(
+          [](bool& is_handled, int cmd_id, const base::Value::Dict& params,
+             base::Value::Dict& response) {
+            EXPECT_THAT(params.FindBool("accept"), Optional(Eq(false)));
+            EXPECT_THAT(params.FindString("promptText"),
+                        Pointee(Eq("from-event")));
+            response.Set("id", cmd_id);
+            response.Set("result", base::Value::Dict());
+            is_handled = true;
+            return true;
+          },
+          std::ref(is_handled)));
+
+  EXPECT_TRUE(StatusOk(client.HandleDialog(false, std::nullopt)));
+  EXPECT_TRUE(is_handled);
+}
+
+TEST_F(DevToolsClientImplTest, OneDialog) {
+  SocketHolder<StubSyncWebSocket> socket_holder;
+  DevToolsClientImpl client("", "");
+  ASSERT_TRUE(socket_holder.ConnectSocket());
+  ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
+  socket_holder.Socket().EnqueueResponse(
+      JavaScriptDialogOpeningEvent("hi", "alert", "from-event"));
+  EXPECT_FALSE(client.IsDialogOpen());
+  std::string message;
+  std::string type;
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetDialogMessage(message)));
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetTypeOfDialog(type)));
+
+  // Consume the Page.javaScriptDialogOpening event
+  EXPECT_TRUE(StatusOk(client.HandleReceivedEvents()));
+  EXPECT_TRUE(client.IsDialogOpen());
+  EXPECT_TRUE(StatusOk(client.GetDialogMessage(message)));
+  EXPECT_EQ("hi", message);
+  EXPECT_TRUE(StatusOk(client.GetTypeOfDialog(type)));
+  EXPECT_EQ("alert", type);
+
+  int handle_dialog_counter = 0;
+  socket_holder.Socket().AddCommandHandler(
+      "Page.handleJavaScriptDialog",
+      base::BindRepeating(
+          [](StubSyncWebSocket& socket, int& counter, int cmd_id,
+             const base::Value::Dict& params, base::Value::Dict& response) {
+            socket.EnqueueResponse(JavaScriptDialogClosedEvent(true, ""));
+            response.Set("id", cmd_id);
+            response.Set("result", base::Value::Dict());
+            ++counter;
+            return true;
+          },
+          std::ref(socket_holder.Socket()), std::ref(handle_dialog_counter)));
+
+  EXPECT_TRUE(StatusOk(client.HandleDialog(false, std::nullopt)));
+  EXPECT_FALSE(client.IsDialogOpen());
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetDialogMessage(message)));
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetTypeOfDialog(type)));
+  EXPECT_TRUE(
+      StatusCodeIs<kNoSuchAlert>(client.HandleDialog(false, std::nullopt)));
+  EXPECT_EQ(1, handle_dialog_counter);
+}
+
+TEST_F(DevToolsClientImplTest, TwoDialogs) {
+  SocketHolder<StubSyncWebSocket> socket_holder;
+  DevToolsClientImpl client("", "");
+  ASSERT_TRUE(socket_holder.ConnectSocket());
+  ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
+  socket_holder.Socket().EnqueueResponse(
+      JavaScriptDialogOpeningEvent("1", "confirm", ""));
+  socket_holder.Socket().EnqueueResponse(
+      JavaScriptDialogOpeningEvent("2", "alert", ""));
+
+  EXPECT_FALSE(client.IsDialogOpen());
+  std::string message;
+  std::string type;
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetDialogMessage(message)));
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetTypeOfDialog(type)));
+
+  // Consume the Page.javaScriptDialogOpening events
+  EXPECT_TRUE(StatusOk(client.HandleReceivedEvents()));
+
+  EXPECT_TRUE(StatusOk(client.GetDialogMessage(message)));
+  EXPECT_TRUE(StatusOk(client.GetTypeOfDialog(type)));
+  EXPECT_TRUE(client.IsDialogOpen());
+  EXPECT_EQ("1", message);
+  EXPECT_EQ("confirm", type);
+
+  socket_holder.Socket().AddCommandHandler(
+      "Page.handleJavaScriptDialog",
+      base::BindRepeating([](int cmd_id, const base::Value::Dict& params,
+                             base::Value::Dict& response) {
+        response.Set("id", cmd_id);
+        response.Set("result", base::Value::Dict());
+        return true;
+      }));
+
+  EXPECT_TRUE(StatusOk(client.HandleDialog(false, std::nullopt)));
+
+  EXPECT_TRUE(client.IsDialogOpen());
+  EXPECT_TRUE(StatusOk(client.GetDialogMessage(message)));
+  EXPECT_TRUE(StatusOk(client.GetTypeOfDialog(type)));
+  EXPECT_EQ("2", message);
+  EXPECT_EQ("alert", type);
+
+  int handle_dialog_counter = 0;
+  socket_holder.Socket().AddCommandHandler(
+      "Page.handleJavaScriptDialog",
+      base::BindRepeating(
+          [](StubSyncWebSocket& socket, int& counter, int cmd_id,
+             const base::Value::Dict& params, base::Value::Dict& response) {
+            socket.EnqueueResponse(JavaScriptDialogClosedEvent(true, ""));
+            socket.EnqueueResponse(JavaScriptDialogClosedEvent(true, ""));
+            response.Set("id", cmd_id);
+            response.Set("result", base::Value::Dict());
+            ++counter;
+            return true;
+          },
+          std::ref(socket_holder.Socket()), std::ref(handle_dialog_counter)));
+
+  EXPECT_TRUE(StatusOk(client.HandleDialog(false, std::nullopt)));
+
+  EXPECT_FALSE(client.IsDialogOpen());
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetDialogMessage(message)));
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetTypeOfDialog(type)));
+  EXPECT_TRUE(
+      StatusCodeIs<kNoSuchAlert>(client.HandleDialog(false, std::nullopt)));
+  EXPECT_EQ(1, handle_dialog_counter);
+}
+
+TEST_F(DevToolsClientImplTest, OneDialogManualClose) {
+  SocketHolder<StubSyncWebSocket> socket_holder;
+  DevToolsClientImpl client("", "");
+  ASSERT_TRUE(socket_holder.ConnectSocket());
+  ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
+  socket_holder.Socket().EnqueueResponse(
+      JavaScriptDialogOpeningEvent("hi", "alert", ""));
+
+  EXPECT_FALSE(client.IsDialogOpen());
+  std::string message;
+  std::string type;
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetDialogMessage(message)));
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetTypeOfDialog(type)));
+
+  // Consume the Page.javaScriptDialogOpening events
+  EXPECT_TRUE(StatusOk(client.HandleReceivedEvents()));
+
+  EXPECT_TRUE(client.IsDialogOpen());
+  EXPECT_TRUE(StatusOk(client.GetDialogMessage(message)));
+  EXPECT_EQ("hi", message);
+  EXPECT_TRUE(StatusOk(client.GetTypeOfDialog(type)));
+  EXPECT_EQ("alert", type);
+
+  socket_holder.Socket().EnqueueResponse(JavaScriptDialogClosedEvent(true, ""));
+
+  // Consume the Page.javascriptDialogClosed events
+  EXPECT_TRUE(StatusOk(client.HandleReceivedEvents()));
+
+  EXPECT_FALSE(client.IsDialogOpen());
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetDialogMessage(message)));
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetTypeOfDialog(type)));
+  EXPECT_TRUE(
+      StatusCodeIs<kNoSuchAlert>(client.HandleDialog(false, std::nullopt)));
+}
+
+TEST_F(DevToolsClientImplTest, BeforeunloadIsNotAutoAccepted) {
+  SocketHolder<StubSyncWebSocket> socket_holder;
+  DevToolsClientImpl client("", "");
+  // Prohibit auto-acceptance of beforeunload dialogs
+  client.SetAutoAcceptBeforeunload(false);
+  ASSERT_TRUE(socket_holder.ConnectSocket());
+  ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
+  socket_holder.Socket().EnqueueResponse(
+      JavaScriptDialogOpeningEvent("hi", "beforeunload", ""));
+  EXPECT_FALSE(client.IsDialogOpen());
+  std::string message;
+  std::string type;
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetDialogMessage(message)));
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetTypeOfDialog(type)));
+
+  bool is_handled = false;
+  socket_holder.Socket().AddCommandHandler(
+      "Page.handleJavaScriptDialog",
+      base::BindRepeating(
+          [](bool& is_handled, int cmd_id, const base::Value::Dict& params,
+             base::Value::Dict& response) {
+            response.Set("id", cmd_id);
+            response.Set("result", base::Value::Dict());
+            is_handled = true;
+            return true;
+          },
+          std::ref(is_handled)));
+
+  // Consume the Page.javaScriptDialogOpening event
+  EXPECT_TRUE(StatusOk(client.HandleReceivedEvents()));
+
+  EXPECT_TRUE(client.IsDialogOpen());
+  EXPECT_TRUE(StatusOk(client.GetDialogMessage(message)));
+  EXPECT_EQ("hi", message);
+  EXPECT_TRUE(StatusOk(client.GetTypeOfDialog(type)));
+  EXPECT_EQ("beforeunload", type);
+  EXPECT_FALSE(is_handled);
+}
+
+TEST_F(DevToolsClientImplTest, BeforeunloadIsAutoAccepted) {
+  SocketHolder<StubSyncWebSocket> socket_holder;
+  DevToolsClientImpl client("", "");
+  client.SetAutoAcceptBeforeunload(true);
+  ASSERT_TRUE(socket_holder.ConnectSocket());
+  ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
+  socket_holder.Socket().EnqueueResponse(
+      JavaScriptDialogOpeningEvent("hi", "beforeunload", ""));
+  EXPECT_FALSE(client.IsDialogOpen());
+  std::string message;
+  std::string type;
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetDialogMessage(message)));
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetTypeOfDialog(type)));
+
+  bool is_handled = false;
+  socket_holder.Socket().AddCommandHandler(
+      "Page.handleJavaScriptDialog",
+      base::BindRepeating(
+          [](bool& is_handled, int cmd_id, const base::Value::Dict& params,
+             base::Value::Dict& response) {
+            response.Set("id", cmd_id);
+            response.Set("result", base::Value::Dict());
+            is_handled = true;
+            return true;
+          },
+          std::ref(is_handled)));
+
+  // Consume the Page.javaScriptDialogOpening event
+  EXPECT_TRUE(StatusOk(client.HandleReceivedEvents()));
+
+  EXPECT_FALSE(client.IsDialogOpen());
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetDialogMessage(message)));
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetTypeOfDialog(type)));
+  EXPECT_TRUE(is_handled);
+}
+
+TEST_F(DevToolsClientImplTest, AlertAndBeforeunloadAreAutoAccepted) {
+  SocketHolder<StubSyncWebSocket> socket_holder;
+  DevToolsClientImpl client("", "");
+  client.SetAutoAcceptBeforeunload(true);
+  ASSERT_TRUE(socket_holder.ConnectSocket());
+  ASSERT_TRUE(StatusOk(client.SetSocket(socket_holder.Wrapper())));
+  socket_holder.Socket().EnqueueResponse(
+      JavaScriptDialogOpeningEvent("1", "alert", ""));
+  socket_holder.Socket().EnqueueResponse(
+      JavaScriptDialogOpeningEvent("2", "beforeunload", ""));
+  EXPECT_FALSE(client.IsDialogOpen());
+  std::string message;
+  std::string type;
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetDialogMessage(message)));
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetTypeOfDialog(type)));
+
+  int handle_dialog_counter = 0;
+  socket_holder.Socket().AddCommandHandler(
+      "Page.handleJavaScriptDialog",
+      base::BindRepeating(
+          [](StubSyncWebSocket& socket, int& counter, int cmd_id,
+             const base::Value::Dict& params, base::Value::Dict& response) {
+            socket.EnqueueResponse(JavaScriptDialogClosedEvent(true, ""));
+            response.Set("id", cmd_id);
+            response.Set("result", base::Value::Dict());
+            ++counter;
+            return true;
+          },
+          std::ref(socket_holder.Socket()), std::ref(handle_dialog_counter)));
+
+  // Consume the Page.javaScriptDialogOpening event
+  EXPECT_TRUE(StatusOk(client.HandleReceivedEvents()));
+
+  EXPECT_FALSE(client.IsDialogOpen());
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetDialogMessage(message)));
+  EXPECT_TRUE(StatusCodeIs<kNoSuchAlert>(client.GetTypeOfDialog(type)));
+  EXPECT_EQ(1, handle_dialog_counter);
 }
 
 namespace {
@@ -1926,7 +2240,7 @@ class MockCommandListener : public DevToolsEventListener {
 };
 
 void HandleReceivedEvents(DevToolsClient* client) {
-  EXPECT_EQ(kOk, client->HandleReceivedEvents().code());
+  EXPECT_TRUE(StatusOk(client->HandleReceivedEvents()));
 }
 
 }  // namespace
@@ -2001,7 +2315,7 @@ class PingingListener : public DevToolsEventListener {
     base::Value::Dict result;
     event_handled_ = true;
     Status status = client_->SendCommandAndGetResult("method", params, &result);
-    EXPECT_EQ(kOk, status.code());
+    EXPECT_TRUE(StatusOk(status));
     if (!status.IsOk()) {
       return status;
     }
@@ -2854,6 +3168,7 @@ struct BidiMapperState {
   bool subscribed_to_cdp = false;
   bool mapper_is_started_with_options = false;
 };
+
 class BidiServerMockSyncWebSocket : public BidiMockSyncWebSocket {
  public:
   explicit BidiServerMockSyncWebSocket(BidiMapperState* mapper_state)

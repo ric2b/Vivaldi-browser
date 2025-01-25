@@ -32,7 +32,7 @@
 
 #include "src/tint/api/common/binding_point.h"
 #include "src/tint/lang/core/builtin_value.h"
-#include "src/tint/lang/core/ir/location.h"
+#include "src/tint/lang/core/io_attributes.h"
 #include "src/tint/lang/core/ir/value.h"
 #include "src/tint/utils/containers/vector.h"
 #include "src/tint/utils/ice/ice.h"
@@ -63,63 +63,88 @@ class FunctionParam : public Castable<FunctionParam, Value> {
     /// @returns the function that this parameter belongs to, or nullptr
     const ir::Function* Function() const { return func_; }
 
+    /// Sets the index of the parameter in the function's parameter list
+    /// @param index the index
+    void SetIndex(uint32_t index) { index_ = index; }
+
+    /// @returns the index of the parameter in the function's parameter list
+    uint32_t Index() const { return index_; }
+
     /// @returns the type of the var
     const core::type::Type* Type() const override { return type_; }
+
+    /// Sets the type of the parameter to @p type
+    /// @param type the new type of the parameter
+    void SetType(const core::type::Type* type) { type_ = type; }
 
     /// @copydoc Value::Clone()
     FunctionParam* Clone(CloneContext& ctx) override;
 
+    /// Sets the IO attributes.
+    /// @param attrs the attributes
+    void SetAttributes(const IOAttributes& attrs) { attributes_ = attrs; }
+    /// @returns the IO attributes
+    const IOAttributes& Attributes() const { return attributes_; }
+
     /// Sets the builtin information. Note, it is currently an error if the builtin is already set.
     /// @param val the builtin to set
     void SetBuiltin(core::BuiltinValue val) {
-        TINT_ASSERT(!builtin_.has_value());
-        builtin_ = val;
+        TINT_ASSERT(!attributes_.builtin.has_value());
+        attributes_.builtin = val;
     }
     /// @returns the builtin set for the parameter
-    std::optional<core::BuiltinValue> Builtin() const { return builtin_; }
-
-    /// Clears the builtin attribute.
-    void ClearBuiltin() { builtin_ = {}; }
+    std::optional<core::BuiltinValue> Builtin() const { return attributes_.builtin; }
 
     /// Sets the parameter as invariant
     /// @param val the value to set for invariant
-    void SetInvariant(bool val) { invariant_ = val; }
+    void SetInvariant(bool val) { attributes_.invariant = val; }
 
     /// @returns true if parameter is invariant
-    bool Invariant() const { return invariant_; }
+    bool Invariant() const { return attributes_.invariant; }
 
-    /// Sets the location
-    /// @param location the location
-    void SetLocation(ir::Location location) { location_ = std::move(location); }
+    /// Sets the location.
+    /// @param loc the optional location value
+    void SetLocation(std::optional<uint32_t> loc) { attributes_.location = loc; }
 
-    /// Sets the location
-    /// @param loc the location value
-    /// @param interpolation if the location interpolation settings
-    void SetLocation(uint32_t loc, std::optional<core::Interpolation> interpolation) {
-        location_ = {loc, interpolation};
+    /// @returns the optional location attribute value
+    std::optional<uint32_t> Location() const { return attributes_.location; }
+
+    /// Sets the color.
+    /// @param col the optional color value
+    void SetColor(std::optional<uint32_t> col) { attributes_.color = col; }
+
+    /// @returns the optional color attribute value
+    std::optional<uint32_t> Color() const { return attributes_.color; }
+
+    /// Sets the interpolation.
+    /// @param interpolation the optional location interpolation settings
+    void SetInterpolation(std::optional<core::Interpolation> interpolation) {
+        attributes_.interpolation = interpolation;
     }
 
-    /// @returns the location if `Attributes` contains `kLocation`
-    std::optional<ir::Location> Location() const { return location_; }
-
-    /// Clears the location attribute.
-    void ClearLocation() { location_ = {}; }
+    /// @returns the optional interpolation attribute value
+    std::optional<core::Interpolation> Interpolation() const { return attributes_.interpolation; }
 
     /// Sets the binding point
     /// @param group the group
     /// @param binding the binding
     void SetBindingPoint(uint32_t group, uint32_t binding) { binding_point_ = {group, binding}; }
 
+    /// Sets the binding point
+    /// @param binding_point the binding point
+    void SetBindingPoint(std::optional<struct BindingPoint> binding_point) {
+        binding_point_ = binding_point;
+    }
+
     /// @returns the binding points if `Attributes` contains `kBindingPoint`
     std::optional<struct BindingPoint> BindingPoint() const { return binding_point_; }
 
   private:
     ir::Function* func_ = nullptr;
+    uint32_t index_ = 0xffffffff;
     const core::type::Type* type_ = nullptr;
-    std::optional<core::BuiltinValue> builtin_;
-    std::optional<struct Location> location_;
     std::optional<struct BindingPoint> binding_point_;
-    bool invariant_ = false;
+    IOAttributes attributes_;
 };
 
 }  // namespace tint::core::ir

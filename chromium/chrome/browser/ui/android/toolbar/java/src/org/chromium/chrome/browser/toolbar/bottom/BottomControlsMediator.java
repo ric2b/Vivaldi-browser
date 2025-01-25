@@ -10,7 +10,10 @@ import androidx.annotation.Nullable;
 import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
+import org.chromium.chrome.browser.browser_controls.BottomControlsLayer;
+import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
+import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerScrollBehavior;
+import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerType;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
@@ -36,7 +39,8 @@ class BottomControlsMediator
         implements BrowserControlsStateProvider.Observer,
                 KeyboardVisibilityDelegate.KeyboardVisibilityListener,
                 LayoutStateObserver,
-                TabObscuringHandler.Observer {
+                TabObscuringHandler.Observer,
+                BottomControlsLayer {
     private static final String TAG = "BotControlsMediator";
 
     /** The model for the bottom controls component that holds all of its view state. */
@@ -46,7 +50,7 @@ class BottomControlsMediator
     private final FullscreenManager mFullscreenManager;
 
     /** The browser controls sizer/manager to observe browser controls events. */
-    private final BrowserControlsSizer mBrowserControlsSizer;
+    private final BottomControlsStacker mBottomControlsStacker;
 
     private final TabObscuringHandler mTabObscuringHandler;
 
@@ -88,7 +92,7 @@ class BottomControlsMediator
      * @param windowAndroid A {@link WindowAndroid} for watching keyboard visibility events.
      * @param model The {@link BottomControlsProperties} that holds all the view state for the
      *     bottom controls component.
-     * @param controlsSizer The {@link BrowserControlsSizer} to manipulate browser controls.
+     * @param controlsStacker The {@link BottomControlsStacker} to manipulate browser controls.
      * @param fullscreenManager A {@link FullscreenManager} for events related to the browser
      *     controls.
      * @param tabObscuringHandler Delegate object handling obscuring views.
@@ -102,7 +106,7 @@ class BottomControlsMediator
     BottomControlsMediator(
             WindowAndroid windowAndroid,
             PropertyModel model,
-            BrowserControlsSizer controlsSizer,
+            BottomControlsStacker controlsStacker,
             FullscreenManager fullscreenManager,
             TabObscuringHandler tabObscuringHandler,
             int bottomControlsHeight,
@@ -112,8 +116,8 @@ class BottomControlsMediator
         mModel = model;
 
         mFullscreenManager = fullscreenManager;
-        mBrowserControlsSizer = controlsSizer;
-        mBrowserControlsSizer.addObserver(this);
+        mBottomControlsStacker = controlsStacker;
+        getBrowserControls().addObserver(this);
         mTabObscuringHandler = tabObscuringHandler;
         tabObscuringHandler.addObserver(this);
 
@@ -139,6 +143,7 @@ class BottomControlsMediator
             mEdgeToEdgeControllerSupplier.get().registerObserver(mEdgeToEdgeChangeObserver);
         }
         mReadAloudRestoringSupplier = readAloudRestoringSupplier;
+        mBottomControlsStacker.addLayer(this);
     }
 
     void setLayoutStateProvider(LayoutStateProvider layoutStateProvider) {
@@ -159,7 +164,8 @@ class BottomControlsMediator
     /** Clean up anything that needs to be when the bottom controls component is destroyed. */
     void destroy() {
         mCallbackController.destroy();
-        mBrowserControlsSizer.removeObserver(this);
+        getBrowserControls().removeObserver(this);
+        mBottomControlsStacker.removeLayer(this);
         mWindowAndroid.getKeyboardDelegate().removeKeyboardVisibilityListener(this);
         if (mLayoutStateProvider != null) {
             mLayoutStateProvider.removeObserver(this);
@@ -178,12 +184,12 @@ class BottomControlsMediator
             int topControlsMinHeightOffset,
             int bottomOffset,
             int bottomControlsMinHeightOffset,
-            boolean needsAnimate) {
-        int minHeight = mBrowserControlsSizer.getBottomControlsMinHeight();
-        mModel.set(BottomControlsProperties.Y_OFFSET, bottomOffset - minHeight);
+            boolean needsAnimate,
+            boolean isVisibilityForced) {
+        // Method call routed to onBrowserControlsOffsetUpdate.
+        if (BottomControlsStacker.isDispatchingYOffset()) return;
 
-        // This call also updates the view's position if the animation has just finished.
-        updateAndroidViewVisibility();
+        setYOffset(bottomOffset - getBrowserControls().getBottomControlsMinHeight());
     }
 
     @Override
@@ -201,7 +207,7 @@ class BottomControlsMediator
         // A min height greater than 0 suggests the presence of some other UI component underneath
         // the bottom controls.
         if (bottomControlsMinHeight == 0) {
-            mBrowserControlsSizer.notifyBackgroundColor(mBottomControlsColor);
+            mBottomControlsStacker.notifyBackgroundColor(mBottomControlsColor);
         }
     }
 
@@ -238,12 +244,19 @@ class BottomControlsMediator
         return mFullscreenManager != null && mFullscreenManager.getPersistentFullscreenMode();
     }
 
+    private void setYOffset(int yOffset) {
+        mModel.set(BottomControlsProperties.Y_OFFSET, yOffset);
+
+        // This call also updates the view's position if the animation has just finished.
+        updateAndroidViewVisibility();
+    }
+
     /**
      * The composited view is the composited version of the Android View. It is used to be able to
-     * scroll the bottom controls off-screen synchronously. Since the bottom controls live below
-     * the webcontents we re-size the webcontents through
-     * {@link BrowserControlsSizer#setBottomControlsHeight(int,int)} whenever the composited view
-     * visibility changes.
+     * scroll the bottom controls off-screen synchronously. Since the bottom controls live below the
+     * webcontents we re-size the webcontents through {@link
+     * BottomControlsStacker#setBottomControlsHeight(int, int, boolean)} whenever the composited
+     * view visibility changes.
      */
     private void updateCompositedViewVisibility() {
         final boolean isCompositedViewVisible = isCompositedViewVisible();
@@ -252,7 +265,7 @@ class BottomControlsMediator
     }
 
     private int getBrowserControlsHeight() {
-        int minHeight = mBrowserControlsSizer.getBottomControlsMinHeight();
+        int minHeight = getBrowserControls().getBottomControlsMinHeight();
         int androidViewHeight = getAndroidViewHeight();
 
         return isCompositedViewVisible() ? androidViewHeight + minHeight : minHeight;
@@ -274,8 +287,10 @@ class BottomControlsMediator
         // Note(david@vivaldi.com): The bottom controls height will be set in the
         // |VivaldiTopToolbarCoordinator|
         if (!BuildConfig.IS_VIVALDI)
-        mBrowserControlsSizer.setBottomControlsHeight(
-                getBrowserControlsHeight(), mBrowserControlsSizer.getBottomControlsMinHeight());
+        mBottomControlsStacker.setBottomControlsHeight(
+                getBrowserControlsHeight(),
+                getBrowserControls().getBottomControlsMinHeight(),
+                false);
     }
 
     boolean isCompositedViewVisible() {
@@ -286,11 +301,11 @@ class BottomControlsMediator
      * The Android View is the interactive view. The composited view should always be behind the
      * Android view which means we hide the Android view whenever the composited view is hidden. We
      * also hide the Android view as we are scrolling the bottom controls off screen this is done by
-     * checking if {@link BrowserControlsSizer#getBottomControlOffset()} is non-zero.
+     * checking if {@link BrowserControlsStateProvider#getBottomControlOffset()} is non-zero.
      */
     private void updateAndroidViewVisibility() {
         // Note(david@vivaldi.com): Don't show android view when controls are off screen.
-        if (BrowserControlsUtils.areBrowserControlsOffScreen(mBrowserControlsSizer)) {
+        if (BrowserControlsUtils.areBrowserControlsOffScreen(getBrowserControls())) {
             mModel.set(BottomControlsProperties.ANDROID_VIEW_VISIBLE, false);
             return;
         }
@@ -299,12 +314,12 @@ class BottomControlsMediator
                 isCompositedViewVisible()
                         && !mIsOverlayPanelShowing
                         && !mIsInSwipeLayout
-                        && mBrowserControlsSizer.getBottomControlOffset() == 0;
+                        && getBrowserControls().getBottomControlOffset() == 0;
         if (visible) {
             // Translate view so that its bottom is aligned with browser controls min height.
             mModel.set(
                     BottomControlsProperties.ANDROID_VIEW_TRANSLATE_Y,
-                    -mBrowserControlsSizer.getBottomControlsMinHeight());
+                    -getBrowserControls().getBottomControlsMinHeight());
         }
         mModel.set(BottomControlsProperties.ANDROID_VIEW_VISIBLE, visible);
     }
@@ -312,6 +327,38 @@ class BottomControlsMediator
     @Override
     public void updateObscured(boolean obscureTabContent, boolean obscureToolbar) {
         mModel.set(BottomControlsProperties.IS_OBSCURED, obscureToolbar);
+    }
+
+    private BrowserControlsStateProvider getBrowserControls() {
+        return mBottomControlsStacker.getBrowserControls();
+    }
+
+    // Implements BottomControlsLayer
+
+    @Override
+    public int getType() {
+        return LayerType.BOTTOM_TOOLBAR;
+    }
+
+    @Override
+    public int getHeight() {
+        return getAndroidViewHeight();
+    }
+
+    @Override
+    public @LayerScrollBehavior int getScrollBehavior() {
+        return LayerScrollBehavior.SCROLL_OFF;
+    }
+
+    @Override
+    public boolean isVisible() {
+        return isCompositedViewVisible();
+    }
+
+    @Override
+    public void onBrowserControlsOffsetUpdate(int layerYOffset) {
+        assert BottomControlsStacker.isDispatchingYOffset();
+        setYOffset(layerYOffset);
     }
 
     ChangeObserver getEdgeToEdgeChangeObserverForTesting() {

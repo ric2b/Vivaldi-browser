@@ -13,6 +13,12 @@
 namespace v8 {
 namespace internal {
 
+#ifdef V8_ENABLE_EXPERIMENTAL_TSA_BUILTINS
+#define IF_TSA(TSA_MACRO, CSA_MACRO) TSA_MACRO
+#else
+#define IF_TSA(TSA_MACRO, CSA_MACRO) CSA_MACRO
+#endif
+
 // CPP: Builtin in C++. Entered via BUILTIN_EXIT frame.
 //      Args: name
 // TFJ: Builtin in Turbofan, with JS linkage (callable as Javascript function).
@@ -20,6 +26,8 @@ namespace internal {
 // TFS: Builtin in Turbofan, with CodeStub linkage.
 //      Args: name, needs context, explicit argument names...
 // TFC: Builtin in Turbofan, with CodeStub linkage and custom descriptor.
+//      Args: name, interface descriptor
+// TSC: Builtin in Turboshaft, with CodeStub linkage and custom descriptor.
 //      Args: name, interface descriptor
 // TFH: Handlers in Turbofan, with CodeStub linkage.
 //      Args: name, interface descriptor
@@ -53,122 +61,120 @@ namespace internal {
   /* Adaptor for CPP builtins. */                             \
   TFC(AdaptorWithBuiltinExitFrame, CppBuiltinAdaptor)
 
-#define BUILTIN_LIST_BASE_TIER1(CPP, TFJ, TFC, TFS, TFH, ASM)                  \
-  /* GC write barriers */                                                      \
-  TFC(IndirectPointerBarrierSaveFP, IndirectPointerWriteBarrier)               \
-  TFC(IndirectPointerBarrierIgnoreFP, IndirectPointerWriteBarrier)             \
-                                                                               \
-  /* TSAN support for stores in generated code. */                             \
-  IF_TSAN(TFC, TSANRelaxedStore8IgnoreFP, TSANStore)                           \
-  IF_TSAN(TFC, TSANRelaxedStore8SaveFP, TSANStore)                             \
-  IF_TSAN(TFC, TSANRelaxedStore16IgnoreFP, TSANStore)                          \
-  IF_TSAN(TFC, TSANRelaxedStore16SaveFP, TSANStore)                            \
-  IF_TSAN(TFC, TSANRelaxedStore32IgnoreFP, TSANStore)                          \
-  IF_TSAN(TFC, TSANRelaxedStore32SaveFP, TSANStore)                            \
-  IF_TSAN(TFC, TSANRelaxedStore64IgnoreFP, TSANStore)                          \
-  IF_TSAN(TFC, TSANRelaxedStore64SaveFP, TSANStore)                            \
-  IF_TSAN(TFC, TSANSeqCstStore8IgnoreFP, TSANStore)                            \
-  IF_TSAN(TFC, TSANSeqCstStore8SaveFP, TSANStore)                              \
-  IF_TSAN(TFC, TSANSeqCstStore16IgnoreFP, TSANStore)                           \
-  IF_TSAN(TFC, TSANSeqCstStore16SaveFP, TSANStore)                             \
-  IF_TSAN(TFC, TSANSeqCstStore32IgnoreFP, TSANStore)                           \
-  IF_TSAN(TFC, TSANSeqCstStore32SaveFP, TSANStore)                             \
-  IF_TSAN(TFC, TSANSeqCstStore64IgnoreFP, TSANStore)                           \
-  IF_TSAN(TFC, TSANSeqCstStore64SaveFP, TSANStore)                             \
-                                                                               \
-  /* TSAN support for loads in generated code. */                              \
-  IF_TSAN(TFC, TSANRelaxedLoad32IgnoreFP, TSANLoad)                            \
-  IF_TSAN(TFC, TSANRelaxedLoad32SaveFP, TSANLoad)                              \
-  IF_TSAN(TFC, TSANRelaxedLoad64IgnoreFP, TSANLoad)                            \
-  IF_TSAN(TFC, TSANRelaxedLoad64SaveFP, TSANLoad)                              \
-                                                                               \
-  /* Calls */                                                                  \
-  /* ES6 section 9.2.1 [[Call]] ( thisArgument, argumentsList) */              \
-  ASM(CallFunction_ReceiverIsNullOrUndefined, CallTrampoline)                  \
-  ASM(CallFunction_ReceiverIsNotNullOrUndefined, CallTrampoline)               \
-  ASM(CallFunction_ReceiverIsAny, CallTrampoline)                              \
-  /* ES6 section 9.4.1.1 [[Call]] ( thisArgument, argumentsList) */            \
-  ASM(CallBoundFunction, CallTrampoline)                                       \
-  /* #sec-wrapped-function-exotic-objects-call-thisargument-argumentslist */   \
-  TFC(CallWrappedFunction, CallTrampoline)                                     \
-  /* ES6 section 7.3.12 Call(F, V, [argumentsList]) */                         \
-  ASM(Call_ReceiverIsNullOrUndefined, CallTrampoline)                          \
-  ASM(Call_ReceiverIsNotNullOrUndefined, CallTrampoline)                       \
-  ASM(Call_ReceiverIsAny, CallTrampoline)                                      \
-  TFC(Call_ReceiverIsNullOrUndefined_Baseline_Compact,                         \
-      CallTrampoline_Baseline_Compact)                                         \
-  TFC(Call_ReceiverIsNullOrUndefined_Baseline, CallTrampoline_Baseline)        \
-  TFC(Call_ReceiverIsNotNullOrUndefined_Baseline_Compact,                      \
-      CallTrampoline_Baseline_Compact)                                         \
-  TFC(Call_ReceiverIsNotNullOrUndefined_Baseline, CallTrampoline_Baseline)     \
-  TFC(Call_ReceiverIsAny_Baseline_Compact, CallTrampoline_Baseline_Compact)    \
-  TFC(Call_ReceiverIsAny_Baseline, CallTrampoline_Baseline)                    \
-  TFC(Call_ReceiverIsNullOrUndefined_WithFeedback,                             \
-      CallTrampoline_WithFeedback)                                             \
-  TFC(Call_ReceiverIsNotNullOrUndefined_WithFeedback,                          \
-      CallTrampoline_WithFeedback)                                             \
-  TFC(Call_ReceiverIsAny_WithFeedback, CallTrampoline_WithFeedback)            \
-                                                                               \
-  /* ES6 section 9.5.12[[Call]] ( thisArgument, argumentsList ) */             \
-  TFC(CallProxy, CallTrampoline)                                               \
-  ASM(CallVarargs, CallVarargs)                                                \
-  TFC(CallWithSpread, CallWithSpread)                                          \
-  TFC(CallWithSpread_Baseline, CallWithSpread_Baseline)                        \
-  TFC(CallWithSpread_WithFeedback, CallWithSpread_WithFeedback)                \
-  TFC(CallWithArrayLike, CallWithArrayLike)                                    \
-  TFC(CallWithArrayLike_WithFeedback, CallWithArrayLike_WithFeedback)          \
-  ASM(CallForwardVarargs, CallForwardVarargs)                                  \
-  ASM(CallFunctionForwardVarargs, CallForwardVarargs)                          \
-  /* Call an API callback via a {FunctionTemplateInfo}, doing appropriate */   \
-  /* access and compatible receiver checks. */                                 \
-  TFC(CallFunctionTemplate_Generic, CallFunctionTemplateGeneric)               \
-  TFC(CallFunctionTemplate_CheckAccess, CallFunctionTemplate)                  \
-  TFC(CallFunctionTemplate_CheckCompatibleReceiver, CallFunctionTemplate)      \
-  TFC(CallFunctionTemplate_CheckAccessAndCompatibleReceiver,                   \
-      CallFunctionTemplate)                                                    \
-                                                                               \
-  /* Construct */                                                              \
-  /* ES6 section 9.2.2 [[Construct]] ( argumentsList, newTarget) */            \
-  ASM(ConstructFunction, JSTrampoline)                                         \
-  /* ES6 section 9.4.1.2 [[Construct]] (argumentsList, newTarget) */           \
-  ASM(ConstructBoundFunction, JSTrampoline)                                    \
-  ASM(ConstructedNonConstructable, JSTrampoline)                               \
-  /* ES6 section 7.3.13 Construct (F, [argumentsList], [newTarget]) */         \
-  ASM(Construct, JSTrampoline)                                                 \
-  ASM(ConstructVarargs, ConstructVarargs)                                      \
-  TFC(ConstructWithSpread, ConstructWithSpread)                                \
-  TFC(ConstructWithSpread_Baseline, ConstructWithSpread_Baseline)              \
-  TFC(ConstructWithSpread_WithFeedback, ConstructWithSpread_WithFeedback)      \
-  TFC(ConstructWithArrayLike, ConstructWithArrayLike)                          \
-  TFC(ConstructWithArrayLike_WithFeedback,                                     \
-      ConstructWithArrayLike_WithFeedback)                                     \
-  ASM(ConstructForwardVarargs, ConstructForwardVarargs)                        \
-  ASM(ConstructForwardAllArgs, ConstructForwardAllArgs)                        \
-  TFC(ConstructForwardAllArgs_Baseline, ConstructForwardAllArgs_Baseline)      \
-  TFC(ConstructForwardAllArgs_WithFeedback,                                    \
-      ConstructForwardAllArgs_WithFeedback)                                    \
-  ASM(ConstructFunctionForwardVarargs, ConstructForwardVarargs)                \
-  TFC(Construct_Baseline, Construct_Baseline)                                  \
-  TFC(Construct_WithFeedback, Construct_WithFeedback)                          \
-  ASM(JSConstructStubGeneric, ConstructStub)                                   \
-  ASM(JSBuiltinsConstructStub, ConstructStub)                                  \
-  TFC(FastNewObject, FastNewObject)                                            \
-  TFS(FastNewClosure, NeedsContext::kYes, kSharedFunctionInfo, kFeedbackCell)  \
-  /* ES6 section 9.5.14 [[Construct]] ( argumentsList, newTarget) */           \
-  TFC(ConstructProxy, JSTrampoline)                                            \
-                                                                               \
-  /* Apply and entries */                                                      \
-  ASM(JSEntry, JSEntry)                                                        \
-  ASM(JSConstructEntry, JSEntry)                                               \
-  ASM(JSRunMicrotasksEntry, RunMicrotasksEntry)                                \
-  /* Call a JSValue. */                                                        \
-  ASM(JSEntryTrampoline, JSEntry)                                              \
-  /* Construct a JSValue. */                                                   \
-  ASM(JSConstructEntryTrampoline, JSEntry)                                     \
-  ASM(ResumeGeneratorTrampoline, ResumeGenerator)                              \
-                                                                               \
-  /* String helpers */                                                         \
-  TFC(StringFromCodePointAt, StringAtAsString)                                 \
+#define BUILTIN_LIST_BASE_TIER1(CPP, TFJ, TSC, TFC, TFS, TFH, ASM)            \
+  /* GC write barriers */                                                     \
+  TFC(IndirectPointerBarrierSaveFP, IndirectPointerWriteBarrier)              \
+  TFC(IndirectPointerBarrierIgnoreFP, IndirectPointerWriteBarrier)            \
+                                                                              \
+  /* TSAN support for stores in generated code. */                            \
+  IF_TSAN(TFC, TSANRelaxedStore8IgnoreFP, TSANStore)                          \
+  IF_TSAN(TFC, TSANRelaxedStore8SaveFP, TSANStore)                            \
+  IF_TSAN(TFC, TSANRelaxedStore16IgnoreFP, TSANStore)                         \
+  IF_TSAN(TFC, TSANRelaxedStore16SaveFP, TSANStore)                           \
+  IF_TSAN(TFC, TSANRelaxedStore32IgnoreFP, TSANStore)                         \
+  IF_TSAN(TFC, TSANRelaxedStore32SaveFP, TSANStore)                           \
+  IF_TSAN(TFC, TSANRelaxedStore64IgnoreFP, TSANStore)                         \
+  IF_TSAN(TFC, TSANRelaxedStore64SaveFP, TSANStore)                           \
+  IF_TSAN(TFC, TSANSeqCstStore8IgnoreFP, TSANStore)                           \
+  IF_TSAN(TFC, TSANSeqCstStore8SaveFP, TSANStore)                             \
+  IF_TSAN(TFC, TSANSeqCstStore16IgnoreFP, TSANStore)                          \
+  IF_TSAN(TFC, TSANSeqCstStore16SaveFP, TSANStore)                            \
+  IF_TSAN(TFC, TSANSeqCstStore32IgnoreFP, TSANStore)                          \
+  IF_TSAN(TFC, TSANSeqCstStore32SaveFP, TSANStore)                            \
+  IF_TSAN(TFC, TSANSeqCstStore64IgnoreFP, TSANStore)                          \
+  IF_TSAN(TFC, TSANSeqCstStore64SaveFP, TSANStore)                            \
+                                                                              \
+  /* TSAN support for loads in generated code. */                             \
+  IF_TSAN(TFC, TSANRelaxedLoad32IgnoreFP, TSANLoad)                           \
+  IF_TSAN(TFC, TSANRelaxedLoad32SaveFP, TSANLoad)                             \
+  IF_TSAN(TFC, TSANRelaxedLoad64IgnoreFP, TSANLoad)                           \
+  IF_TSAN(TFC, TSANRelaxedLoad64SaveFP, TSANLoad)                             \
+                                                                              \
+  /* Calls */                                                                 \
+  /* ES6 section 9.2.1 [[Call]] ( thisArgument, argumentsList) */             \
+  ASM(CallFunction_ReceiverIsNullOrUndefined, CallTrampoline)                 \
+  ASM(CallFunction_ReceiverIsNotNullOrUndefined, CallTrampoline)              \
+  ASM(CallFunction_ReceiverIsAny, CallTrampoline)                             \
+  /* ES6 section 9.4.1.1 [[Call]] ( thisArgument, argumentsList) */           \
+  ASM(CallBoundFunction, CallTrampoline)                                      \
+  /* #sec-wrapped-function-exotic-objects-call-thisargument-argumentslist */  \
+  TFC(CallWrappedFunction, CallTrampoline)                                    \
+  /* ES6 section 7.3.12 Call(F, V, [argumentsList]) */                        \
+  ASM(Call_ReceiverIsNullOrUndefined, CallTrampoline)                         \
+  ASM(Call_ReceiverIsNotNullOrUndefined, CallTrampoline)                      \
+  ASM(Call_ReceiverIsAny, CallTrampoline)                                     \
+  TFC(Call_ReceiverIsNullOrUndefined_Baseline_Compact,                        \
+      CallTrampoline_Baseline_Compact)                                        \
+  TFC(Call_ReceiverIsNullOrUndefined_Baseline, CallTrampoline_Baseline)       \
+  TFC(Call_ReceiverIsNotNullOrUndefined_Baseline_Compact,                     \
+      CallTrampoline_Baseline_Compact)                                        \
+  TFC(Call_ReceiverIsNotNullOrUndefined_Baseline, CallTrampoline_Baseline)    \
+  TFC(Call_ReceiverIsAny_Baseline_Compact, CallTrampoline_Baseline_Compact)   \
+  TFC(Call_ReceiverIsAny_Baseline, CallTrampoline_Baseline)                   \
+  TFC(Call_ReceiverIsNullOrUndefined_WithFeedback,                            \
+      CallTrampoline_WithFeedback)                                            \
+  TFC(Call_ReceiverIsNotNullOrUndefined_WithFeedback,                         \
+      CallTrampoline_WithFeedback)                                            \
+  TFC(Call_ReceiverIsAny_WithFeedback, CallTrampoline_WithFeedback)           \
+                                                                              \
+  /* ES6 section 9.5.12[[Call]] ( thisArgument, argumentsList ) */            \
+  TFC(CallProxy, CallTrampoline)                                              \
+  ASM(CallVarargs, CallVarargs)                                               \
+  TFC(CallWithSpread, CallWithSpread)                                         \
+  TFC(CallWithSpread_Baseline, CallWithSpread_Baseline)                       \
+  TFC(CallWithSpread_WithFeedback, CallWithSpread_WithFeedback)               \
+  TFC(CallWithArrayLike, CallWithArrayLike)                                   \
+  TFC(CallWithArrayLike_WithFeedback, CallWithArrayLike_WithFeedback)         \
+  ASM(CallForwardVarargs, CallForwardVarargs)                                 \
+  ASM(CallFunctionForwardVarargs, CallForwardVarargs)                         \
+  /* Call an API callback via a {FunctionTemplateInfo}, doing appropriate */  \
+  /* access and compatible receiver checks. */                                \
+  TFC(CallFunctionTemplate_Generic, CallFunctionTemplateGeneric)              \
+  TFC(CallFunctionTemplate_CheckAccess, CallFunctionTemplate)                 \
+  TFC(CallFunctionTemplate_CheckCompatibleReceiver, CallFunctionTemplate)     \
+  TFC(CallFunctionTemplate_CheckAccessAndCompatibleReceiver,                  \
+      CallFunctionTemplate)                                                   \
+                                                                              \
+  /* Construct */                                                             \
+  /* ES6 section 9.2.2 [[Construct]] ( argumentsList, newTarget) */           \
+  ASM(ConstructFunction, JSTrampoline)                                        \
+  /* ES6 section 9.4.1.2 [[Construct]] (argumentsList, newTarget) */          \
+  ASM(ConstructBoundFunction, JSTrampoline)                                   \
+  ASM(ConstructedNonConstructable, JSTrampoline)                              \
+  /* ES6 section 7.3.13 Construct (F, [argumentsList], [newTarget]) */        \
+  ASM(Construct, JSTrampoline)                                                \
+  ASM(ConstructVarargs, ConstructVarargs)                                     \
+  TFC(ConstructWithSpread, ConstructWithSpread)                               \
+  TFC(ConstructWithSpread_Baseline, ConstructWithSpread_Baseline)             \
+  TFC(ConstructWithSpread_WithFeedback, ConstructWithSpread_WithFeedback)     \
+  TFC(ConstructWithArrayLike, ConstructWithArrayLike)                         \
+  ASM(ConstructForwardVarargs, ConstructForwardVarargs)                       \
+  ASM(ConstructForwardAllArgs, ConstructForwardAllArgs)                       \
+  TFC(ConstructForwardAllArgs_Baseline, ConstructForwardAllArgs_Baseline)     \
+  TFC(ConstructForwardAllArgs_WithFeedback,                                   \
+      ConstructForwardAllArgs_WithFeedback)                                   \
+  ASM(ConstructFunctionForwardVarargs, ConstructForwardVarargs)               \
+  TFC(Construct_Baseline, Construct_Baseline)                                 \
+  TFC(Construct_WithFeedback, Construct_WithFeedback)                         \
+  ASM(JSConstructStubGeneric, ConstructStub)                                  \
+  ASM(JSBuiltinsConstructStub, ConstructStub)                                 \
+  TFC(FastNewObject, FastNewObject)                                           \
+  TFS(FastNewClosure, NeedsContext::kYes, kSharedFunctionInfo, kFeedbackCell) \
+  /* ES6 section 9.5.14 [[Construct]] ( argumentsList, newTarget) */          \
+  TFC(ConstructProxy, JSTrampoline)                                           \
+                                                                              \
+  /* Apply and entries */                                                     \
+  ASM(JSEntry, JSEntry)                                                       \
+  ASM(JSConstructEntry, JSEntry)                                              \
+  ASM(JSRunMicrotasksEntry, RunMicrotasksEntry)                               \
+  /* Call a JSValue. */                                                       \
+  ASM(JSEntryTrampoline, JSEntry)                                             \
+  /* Construct a JSValue. */                                                  \
+  ASM(JSConstructEntryTrampoline, JSEntry)                                    \
+  ASM(ResumeGeneratorTrampoline, ResumeGenerator)                             \
+                                                                              \
+  /* String helpers */                                                        \
+  IF_TSA(TSC, TFC)(StringFromCodePointAt, StringAtAsString)                    \
   TFC(StringEqual, StringEqual)                                                \
   TFC(StringGreaterThan, CompareNoContext)                                     \
   TFC(StringGreaterThanOrEqual, CompareNoContext)                              \
@@ -283,6 +289,7 @@ namespace internal {
   TFC(ToNumberConvertBigInt, TypeConversion)                                   \
   TFC(ToBigIntConvertNumber, TypeConversion)                                   \
   TFC(Typeof, Typeof)                                                          \
+  TFC(Typeof_Baseline, UnaryOp_Baseline)                                       \
   TFC(BigIntToI64, BigIntToI64)                                                \
   TFC(BigIntToI32Pair, BigIntToI32Pair)                                        \
   TFC(I64ToBigInt, I64ToBigInt)                                                \
@@ -601,6 +608,15 @@ namespace internal {
   CPP(DisposableStackConstructor)                                              \
   CPP(DisposableStackPrototypeUse)                                             \
   CPP(DisposableStackPrototypeDispose)                                         \
+  CPP(DisposableStackPrototypeGetDisposed)                                     \
+  CPP(DisposableStackPrototypeAdopt)                                           \
+  CPP(DisposableStackPrototypeDefer)                                           \
+  CPP(DisposableStackPrototypeMove)                                            \
+                                                                               \
+  /* Async DisposabeStack*/                                                    \
+  CPP(AsyncDisposableStackOnFulfilled)                                         \
+  CPP(AsyncDisposableStackOnRejected)                                          \
+  CPP(AsyncDisposeFromSyncDispose)                                             \
                                                                                \
   /* Error */                                                                  \
   CPP(ErrorConstructor)                                                        \
@@ -961,6 +977,7 @@ namespace internal {
   CPP(AtomicsIsLockFree)                                                       \
   CPP(AtomicsWait)                                                             \
   CPP(AtomicsWaitAsync)                                                        \
+  CPP(AtomicsPause)                                                            \
                                                                                \
   /* String */                                                                 \
   /* ES #sec-string.fromcodepoint */                                           \
@@ -1766,9 +1783,9 @@ namespace internal {
   TFJ(StringFixedArrayFromIterable, kJSArgcReceiverSlots, kIterable)           \
   TFJ(TemporalInstantFixedArrayFromIterable, kJSArgcReceiverSlots, kIterable)
 
-#define BUILTIN_LIST_BASE(CPP, TFJ, TFC, TFS, TFH, ASM) \
-  BUILTIN_LIST_BASE_TIER0(CPP, TFJ, TFC, TFS, TFH, ASM) \
-  BUILTIN_LIST_BASE_TIER1(CPP, TFJ, TFC, TFS, TFH, ASM)
+#define BUILTIN_LIST_BASE(CPP, TFJ, TSC, TFC, TFS, TFH, ASM) \
+  BUILTIN_LIST_BASE_TIER0(CPP, TFJ, TFC, TFS, TFH, ASM)      \
+  BUILTIN_LIST_BASE_TIER1(CPP, TFJ, TSC, TFC, TFS, TFH, ASM)
 
 #ifdef V8_INTL_SUPPORT
 #define BUILTIN_LIST_INTL(CPP, TFJ, TFS)                               \
@@ -1850,6 +1867,8 @@ namespace internal {
   CPP(LocalePrototypeCollation)                                        \
   /* ecma402 #sec-Intl.Locale.prototype.collations */                  \
   CPP(LocalePrototypeCollations)                                       \
+  /* ecma402 #sec-Intl.Locale.prototype.firstDayOfWeek */              \
+  CPP(LocalePrototypeFirstDayOfWeek)                                   \
   /* ecma402 #sec-Intl.Locale.prototype.getCalendars */                \
   CPP(LocalePrototypeGetCalendars)                                     \
   /* ecma402 #sec-Intl.Locale.prototype.getCollations */               \
@@ -2003,10 +2022,10 @@ namespace internal {
   CPP(StringPrototypeToUpperCase)
 #endif  // V8_INTL_SUPPORT
 
-#define BUILTIN_LIST(CPP, TFJ, TFC, TFS, TFH, BCH, ASM)  \
-  BUILTIN_LIST_BASE(CPP, TFJ, TFC, TFS, TFH, ASM)        \
-  BUILTIN_LIST_FROM_TORQUE(CPP, TFJ, TFC, TFS, TFH, ASM) \
-  BUILTIN_LIST_INTL(CPP, TFJ, TFS)                       \
+#define BUILTIN_LIST(CPP, TFJ, TSC, TFC, TFS, TFH, BCH, ASM) \
+  BUILTIN_LIST_BASE(CPP, TFJ, TSC, TFC, TFS, TFH, ASM)       \
+  BUILTIN_LIST_FROM_TORQUE(CPP, TFJ, TFC, TFS, TFH, ASM)     \
+  BUILTIN_LIST_INTL(CPP, TFJ, TFS)                           \
   BUILTIN_LIST_BYTECODE_HANDLERS(BCH)
 
 // See the comment on top of BUILTIN_LIST_BASE_TIER0 for an explanation of
@@ -2042,31 +2061,35 @@ namespace internal {
 
 #define BUILTIN_LIST_C(V)                                         \
   BUILTIN_LIST(V, IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, \
-               IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN)
+               IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN)
 
 #define BUILTIN_LIST_TFJ(V)                                       \
   BUILTIN_LIST(IGNORE_BUILTIN, V, IGNORE_BUILTIN, IGNORE_BUILTIN, \
-               IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN)
+               IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN)
+
+#define BUILTIN_LIST_TSC(V)                                       \
+  BUILTIN_LIST(IGNORE_BUILTIN, IGNORE_BUILTIN, V, IGNORE_BUILTIN, \
+               IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN)
 
 #define BUILTIN_LIST_TFC(V)                                       \
-  BUILTIN_LIST(IGNORE_BUILTIN, IGNORE_BUILTIN, V, IGNORE_BUILTIN, \
-               IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN)
-
-#define BUILTIN_LIST_TFS(V)                                       \
   BUILTIN_LIST(IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, V, \
-               IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN)
+               IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN)
+
+#define BUILTIN_LIST_TFS(V)                                                    \
+  BUILTIN_LIST(IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, \
+               V, IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN)
 
 #define BUILTIN_LIST_TFH(V)                                                    \
   BUILTIN_LIST(IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, \
-               V, IGNORE_BUILTIN, IGNORE_BUILTIN)
+               IGNORE_BUILTIN, V, IGNORE_BUILTIN, IGNORE_BUILTIN)
 
 #define BUILTIN_LIST_BCH(V)                                                    \
   BUILTIN_LIST(IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, \
-               IGNORE_BUILTIN, V, IGNORE_BUILTIN)
+               IGNORE_BUILTIN, IGNORE_BUILTIN, V, IGNORE_BUILTIN)
 
 #define BUILTIN_LIST_A(V)                                                      \
   BUILTIN_LIST(IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, \
-               IGNORE_BUILTIN, IGNORE_BUILTIN, V)
+               IGNORE_BUILTIN, IGNORE_BUILTIN, IGNORE_BUILTIN, V)
 
 }  // namespace internal
 }  // namespace v8

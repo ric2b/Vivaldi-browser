@@ -19,8 +19,8 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {GooglePhotosAlbum, TopicSource, WallpaperCollection} from '../personalization_app.mojom-webui.js';
 
-import {isAmbientModeAllowed} from './load_time_booleans.js';
-import {logPersonalizationPathUMA} from './personalization_metrics_logger.js';
+import {isAmbientModeAllowed, isManagedSeaPenEnabled} from './load_time_booleans.js';
+import {logAmbientAlbumsPathUMA, logPersonalizationPathUMA} from './personalization_metrics_logger.js';
 import {getTemplate} from './personalization_router_element.html.js';
 import {WallpaperObserver} from './wallpaper/wallpaper_observer.js';
 
@@ -34,6 +34,7 @@ export enum Paths {
   ROOT = '/',
   SEA_PEN_COLLECTION = '/wallpaper/sea-pen',
   SEA_PEN_RESULTS = '/wallpaper/sea-pen/results',
+  SEA_PEN_FREEFORM = '/wallpaper/sea-pen/freeform',
   USER = '/user',
 }
 
@@ -66,12 +67,16 @@ export function isAmbientPathNotAllowed(path: string|null): boolean {
   return isAmbientPath(path) && !isAmbientModeAllowed();
 }
 
-export function isSeaPenPath(path: string|null): boolean {
+function isSeaPenPath(path: string|null): boolean {
   return !!path && path.startsWith(Paths.SEA_PEN_COLLECTION);
 }
 
-export function isSeaPenPathNotAllowed(path: string|null): boolean {
-  return isSeaPenPath(path) && !isSeaPenEnabled();
+function isSeaPenAllowed() {
+  return isSeaPenEnabled() && isManagedSeaPenEnabled();
+}
+
+function isSeaPenPathNotAllowed(path: string|null): boolean {
+  return isSeaPenPath(path) && !isSeaPenAllowed();
 }
 
 export class PersonalizationRouterElement extends PolymerElement {
@@ -197,11 +202,11 @@ export class PersonalizationRouterElement extends PolymerElement {
   }
 
   private shouldShowSeaPen_(path: string|null): boolean {
-    return isSeaPenEnabled() && isSeaPenPath(path);
+    return isSeaPenAllowed() && isSeaPenPath(path);
   }
 
-  private shouldShowWallpaperSelected_(templateId: string|null): boolean {
-    return !templateId;
+  private shouldShowWallpaperSelected_(path: string|null): boolean {
+    return path === Paths.SEA_PEN_COLLECTION;
   }
 
   private shouldShowBreadcrumb_(path: string|null): boolean {
@@ -238,6 +243,10 @@ export class PersonalizationRouterElement extends PolymerElement {
         break;
       case Paths.AMBIENT_ALBUMS: {
         assert(!!this.queryParams_.topicSource);
+        const topicSource = parseInt(this.queryParams_.topicSource!, 10);
+        if (!isNaN(topicSource) && topicSource in TopicSource) {
+          logAmbientAlbumsPathUMA(topicSource as TopicSource);
+        }
         if (this.queryParams_.topicSource ===
             TopicSource.kGooglePhotos.toString()) {
           document.title =

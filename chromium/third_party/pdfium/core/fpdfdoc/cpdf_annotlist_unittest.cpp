@@ -19,6 +19,7 @@
 #include "core/fpdfapi/parser/cpdf_test_document.h"
 #include "core/fpdfdoc/cpdf_annot.h"
 #include "core/fxcrt/bytestring.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/retain_ptr.h"
 #include "core/fxcrt/widestring.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -48,8 +49,7 @@ class CPDFAnnotListTest : public TestWithPageModule {
     RetainPtr<CPDF_Dictionary> annotation =
         page_->GetOrCreateAnnotsArray()->AppendNew<CPDF_Dictionary>();
     annotation->SetNewFor<CPDF_Name>(pdfium::annotation::kSubtype, "Text");
-    annotation->SetNewFor<CPDF_String>(pdfium::annotation::kContents, contents,
-                                       /*bHex=*/false);
+    annotation->SetNewFor<CPDF_String>(pdfium::annotation::kContents, contents);
   }
 
   std::unique_ptr<CPDF_TestDocument> document_;
@@ -57,7 +57,8 @@ class CPDFAnnotListTest : public TestWithPageModule {
 };
 
 ByteString MakeByteString(std::initializer_list<uint8_t> bytes) {
-  return ByteString(std::data(bytes), std::size(bytes));
+  // SAFETY: compiler determines size of initializer_list.
+  return UNSAFE_BUFFERS(ByteString(std::data(bytes), std::size(bytes)));
 }
 
 ByteString GetRawContents(const CPDF_Annot* annotation) {

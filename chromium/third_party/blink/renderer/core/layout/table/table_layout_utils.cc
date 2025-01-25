@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/layout/table/table_layout_utils.h"
 
 #include "third_party/blink/renderer/core/layout/block_layout_algorithm_utils.h"
@@ -738,7 +743,7 @@ Vector<LayoutUnit> DistributeInlineSizeToComputedInlineSizeAuto(
             remaining_deficit -= delta;
             *computed_size = *column->max_inline_size + delta;
           } else {
-            NOTREACHED();
+            NOTREACHED_IN_MIGRATION();
           }
         }
         if (remaining_deficit != LayoutUnit()) {

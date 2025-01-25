@@ -4,14 +4,17 @@
 
 #include "cc/input/input_handler.h"
 
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "base/feature_list.h"
 #include "base/notreached.h"
+#include "base/types/optional_ref.h"
 #include "build/build_config.h"
 #include "cc/base/features.h"
 #include "cc/input/browser_controls_offset_manager.h"
+#include "cc/input/browser_controls_offset_tags_info.h"
 #include "cc/input/scroll_elasticity_helper.h"
 #include "cc/input/scroll_utils.h"
 #include "cc/input/scrollbar_controller.h"
@@ -34,6 +37,27 @@ namespace cc {
 namespace {
 
 enum SlowScrollMetricThread { MAIN_THREAD, CC_THREAD };
+
+InputHandlerClient::ScrollEventDispatchMode GetScrollEventDispatchMode() {
+  const std::string mode_name = ::features::kScrollEventDispatchMode.Get();
+  if (mode_name ==
+      ::features::kScrollEventDispatchModeDispatchScrollEventsImmediately) {
+    return InputHandlerClient::ScrollEventDispatchMode::
+        kDispatchScrollEventsImmediately;
+  } else if (mode_name ==
+             ::features::
+                 kScrollEventDispatchModeUseScrollPredictorForEmptyQueue) {
+    return InputHandlerClient::ScrollEventDispatchMode::
+        kUseScrollPredictorForEmptyQueue;
+  } else if (mode_name ==
+             ::features::
+                 kScrollEventDispatchModeUseScrollPredictorForDeadline) {
+    return InputHandlerClient::ScrollEventDispatchMode::
+        kUseScrollPredictorForDeadline;
+  }
+
+  return InputHandlerClient::ScrollEventDispatchMode::kEnqueueScrollEvents;
+}
 
 }  // namespace
 
@@ -68,8 +92,8 @@ void InputHandler::BindToClient(InputHandlerClient* client) {
   DCHECK(input_handler_client_ == nullptr);
   input_handler_client_ = client;
   input_handler_client_->SetPrefersReducedMotion(prefers_reduced_motion_);
-  input_handler_client_->SetWaitForLateScrollEvents(
-      base::FeatureList::IsEnabled(::features::kWaitForLateScrollEvents));
+  input_handler_client_->SetScrollEventDispatchMode(
+      GetScrollEventDispatchMode());
 }
 
 InputHandler::ScrollStatus InputHandler::ScrollBegin(ScrollState* scroll_state,
@@ -154,15 +178,9 @@ InputHandler::ScrollStatus InputHandler::ScrollBegin(ScrollState* scroll_state,
           gfx::ScalePoint(gfx::PointF(viewport_point),
                           compositor_delegate_->DeviceScaleFactor());
 
-      if (scroll_state->main_thread_hit_tested_reasons()) {
-        // The client should have discarded the scroll when the hit test came
-        // back with an invalid element id. If we somehow get here, we should
-        // drop the scroll as continuing could cause us to infinitely bounce
-        // back and forth between here and hit testing on the main thread.
-        NOTREACHED();
-        scroll_status.thread = InputHandler::ScrollThread::kScrollIgnored;
-        return scroll_status;
-      }
+      // The client should have discarded the scroll when the hit test came back
+      // with an invalid element id.
+      CHECK(!scroll_state->main_thread_hit_tested_reasons());
 
       ScrollHitTestResult scroll_hit_test =
           HitTestScrollNode(device_viewport_point);
@@ -1091,6 +1109,15 @@ void InputHandler::DidFinishImplFrame() {
   }
 }
 
+void InputHandler::OnBeginImplFrameDeadline() {
+  if (!IsCurrentlyScrolling()) {
+    return;
+  }
+  if (input_handler_client_) {
+    input_handler_client_->DeliverInputForDeadline();
+  }
+}
+
 void InputHandler::RootLayerStateMayHaveChanged() {
   UpdateRootLayerStateForSynchronousInputHandler();
 }
@@ -1910,9 +1937,12 @@ bool InputHandler::SnapAtScrollEnd(SnapReason reason) {
   SnapContainerData& data = scroll_node->snap_container_data.value();
   gfx::PointF current_position = GetVisualScrollOffset(*scroll_node);
 
-  if (!snap_strategy_) {
-    // You might think that if a scroll never received a scroll update we could
-    // just drop the snap. However, if the GSB+GSE arrived while we were
+  if (!snap_strategy_ || snap_fling_state_ == kConstrainedNativeFling) {
+    // If this was a constrained native fling, SnapFlingController would not
+    // have had the correct final scroll position with which to create the snap
+    // strategy.
+    // Also, you might think that if a scroll never received a scroll update we
+    // could just drop the snap. However, if the GSB+GSE arrived while we were
     // mid-snap from a previous gesture, this would leave the scroller at a
     // non-snap-point.
     DCHECK(last_scroll_update_state_ || last_scroll_begin_state_);
@@ -2087,11 +2117,13 @@ void InputHandler::SetDeferBeginMainFrame(bool defer_begin_main_frame) const {
   compositor_delegate_->SetDeferBeginMainFrame(defer_begin_main_frame);
 }
 
-void InputHandler::UpdateBrowserControlsState(BrowserControlsState constraints,
-                                              BrowserControlsState current,
-                                              bool animate) {
+void InputHandler::UpdateBrowserControlsState(
+    BrowserControlsState constraints,
+    BrowserControlsState current,
+    bool animate,
+    base::optional_ref<const BrowserControlsOffsetTagsInfo> offset_tags_info) {
   compositor_delegate_->UpdateBrowserControlsState(constraints, current,
-                                                   animate);
+                                                   animate, offset_tags_info);
 }
 
 void InputHandler::SetIsHandlingTouchSequence(bool is_handling_touch_sequence) {

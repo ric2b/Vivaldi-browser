@@ -51,8 +51,15 @@ static constexpr wgpu::BufferUsage kInternalStorageBuffer =
 static constexpr wgpu::BufferUsage kReadOnlyStorageBuffer =
     static_cast<wgpu::BufferUsage>(1u << 30);
 
+// Add an extra buffer usage (copy-src buffer usage) that can be combined with MapRead
+static constexpr wgpu::BufferUsage kInternalCopySrcBuffer =
+    static_cast<wgpu::BufferUsage>(1u << 29);
+
+// TODO(350497225): We should store Buffer's internal and external usage in separate member
+// variables, so that the external usage can be queried directly without bit hacks using this
+// special flag.
 static constexpr wgpu::BufferUsage kAllInternalBufferUsages =
-    kInternalStorageBuffer | kReadOnlyStorageBuffer;
+    kInternalStorageBuffer | kReadOnlyStorageBuffer | kInternalCopySrcBuffer;
 
 // Extra texture usages
 // Usage to denote an extra tag value used in system specific ways.
@@ -93,6 +100,14 @@ static constexpr wgpu::BufferBindingType kInternalStorageBufferBinding =
 // Extra TextureSampleType for sampling from a resolve attachment.
 static constexpr wgpu::TextureSampleType kInternalResolveAttachmentSampleType =
     static_cast<wgpu::TextureSampleType>(~0u);
+
+// Extra TextureViewDimension for input attachment.
+static constexpr wgpu::TextureViewDimension kInternalInputAttachmentDim =
+    static_cast<wgpu::TextureViewDimension>(~0u);
+
+static constexpr uint32_t kEnumPrefixMask = 0xFFFF'0000;
+static constexpr uint32_t kDawnEnumPrefix = 0x0005'0000;
+
 }  // namespace dawn::native
 
 #endif  // SRC_DAWN_NATIVE_DAWN_PLATFORM_H_

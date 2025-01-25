@@ -6,6 +6,9 @@
 
 #include <cstring>
 #include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
@@ -70,7 +73,7 @@ class SessionCloseVisitor : public WebTransportVisitor {
 
 QuicSimpleServerBackend::WebTransportResponse
 QuicTestBackend::ProcessWebTransportRequest(
-    const spdy::Http2HeaderBlock& request_headers,
+    const quiche::HttpHeaderBlock& request_headers,
     WebTransportSession* session) {
   if (!SupportsWebTransport()) {
     return QuicSimpleServerBackend::ProcessWebTransportRequest(request_headers,

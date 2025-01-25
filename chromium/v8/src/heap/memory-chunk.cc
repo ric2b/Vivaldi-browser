@@ -6,8 +6,8 @@
 
 #include "src/common/code-memory-access-inl.h"
 #include "src/heap/base-space.h"
-#include "src/heap/large-page.h"
-#include "src/heap/page.h"
+#include "src/heap/large-page-metadata.h"
+#include "src/heap/page-metadata.h"
 #include "src/heap/read-only-spaces.h"
 #include "src/heap/trusted-range.h"
 
@@ -31,9 +31,6 @@ constexpr MemoryChunk::MainThreadFlags MemoryChunk::kIsLargePageMask;
 // static
 constexpr MemoryChunk::MainThreadFlags
     MemoryChunk::kSkipEvacuationSlotsRecordingMask;
-
-// static
-constexpr MemoryChunk::MainThreadFlags MemoryChunk::kCopyOnFlipFlagsMask;
 
 MemoryChunk::MemoryChunk(MainThreadFlags flags, MemoryChunkMetadata* metadata)
     : main_thread_flags_(flags),
@@ -76,7 +73,7 @@ uint32_t MemoryChunk::MetadataTableIndex(Address chunk_address) {
     DCHECK_LT(offset >> kPageSizeBits, kPagesInTrustedCage);
     index = kTrustedSpaceMetadataOffset + (offset >> kPageSizeBits);
   } else {
-    CodeRange* code_range = CodeRange::GetProcessWideCodeRange();
+    CodeRange* code_range = IsolateGroup::current()->GetCodeRange();
     DCHECK(code_range->region().contains(chunk_address));
     uint32_t offset = static_cast<uint32_t>(chunk_address - code_range->base());
     DCHECK_LT(offset >> kPageSizeBits, kPagesInCodeCage);
@@ -146,9 +143,10 @@ bool MemoryChunk::InReadOnlySpace() const {
 
 bool MemoryChunk::IsTrusted() const {
   bool is_trusted = IsFlagSet(IS_TRUSTED);
-  DCHECK_EQ(is_trusted,
-            Metadata()->owner()->identity() == TRUSTED_SPACE ||
-                Metadata()->owner()->identity() == TRUSTED_LO_SPACE);
+#if DEBUG
+  AllocationSpace id = Metadata()->owner()->identity();
+  DCHECK_EQ(is_trusted, IsAnyTrustedSpace(id) || IsAnyCodeSpace(id));
+#endif
   return is_trusted;
 }
 
@@ -185,14 +183,19 @@ void MemoryChunk::ClearFlagSlow(Flag flag) {
 
 // static
 MemoryChunk::MainThreadFlags MemoryChunk::OldGenerationPageFlags(
-    MarkingMode marking_mode, bool in_shared_space) {
+    MarkingMode marking_mode, AllocationSpace space) {
   MainThreadFlags flags_to_set = NO_FLAGS;
+
+  if (!v8_flags.sticky_mark_bits || (space != OLD_SPACE)) {
+    flags_to_set |= MemoryChunk::CONTAINS_ONLY_OLD;
+  }
 
   if (marking_mode == MarkingMode::kMajorMarking) {
     flags_to_set |= MemoryChunk::POINTERS_TO_HERE_ARE_INTERESTING |
                     MemoryChunk::POINTERS_FROM_HERE_ARE_INTERESTING |
-                    MemoryChunk::INCREMENTAL_MARKING;
-  } else if (in_shared_space) {
+                    MemoryChunk::INCREMENTAL_MARKING |
+                    MemoryChunk::IS_MAJOR_GC_IN_PROGRESS;
+  } else if (IsAnySharedSpace(space)) {
     // We need to track pointers into the SHARED_SPACE for OLD_TO_SHARED.
     flags_to_set |= MemoryChunk::POINTERS_TO_HERE_ARE_INTERESTING;
   } else {
@@ -212,18 +215,20 @@ MemoryChunk::MainThreadFlags MemoryChunk::YoungGenerationPageFlags(
   if (marking_mode != MarkingMode::kNoMarking) {
     flags |= MemoryChunk::POINTERS_FROM_HERE_ARE_INTERESTING;
     flags |= MemoryChunk::INCREMENTAL_MARKING;
+    if (marking_mode == MarkingMode::kMajorMarking) {
+      flags |= MemoryChunk::IS_MAJOR_GC_IN_PROGRESS;
+    }
   }
   return flags;
 }
 
 void MemoryChunk::SetOldGenerationPageFlags(MarkingMode marking_mode,
-                                            bool in_shared_space) {
-  MainThreadFlags flags_to_set =
-      OldGenerationPageFlags(marking_mode, in_shared_space);
+                                            AllocationSpace space) {
+  MainThreadFlags flags_to_set = OldGenerationPageFlags(marking_mode, space);
   MainThreadFlags flags_to_clear = NO_FLAGS;
 
   if (marking_mode != MarkingMode::kMajorMarking) {
-    if (in_shared_space) {
+    if (IsAnySharedSpace(space)) {
       // No need to track OLD_TO_NEW or OLD_TO_SHARED within the shared space.
       flags_to_clear |= MemoryChunk::POINTERS_FROM_HERE_ARE_INTERESTING |
                         MemoryChunk::INCREMENTAL_MARKING;
@@ -251,6 +256,17 @@ void MemoryChunk::SetYoungGenerationPageFlags(MarkingMode marking_mode) {
   SetFlagsNonExecutable(flags_to_set, flags_to_set);
   ClearFlagsNonExecutable(flags_to_clear);
 }
+
+#ifdef V8_ENABLE_SANDBOX
+bool MemoryChunk::SandboxSafeInReadOnlySpace() const {
+  // When the sandbox is enabled, only the ReadOnlyPageMetadata are stored
+  // inline in the MemoryChunk.
+  // ReadOnlyPageMetadata::ChunkAddress() is a special version that boils down
+  // to `metadata_address - kMemoryChunkHeaderSize`.
+  return static_cast<const ReadOnlyPageMetadata*>(Metadata())->ChunkAddress() ==
+         address();
+}
+#endif
 
 }  // namespace internal
 }  // namespace v8

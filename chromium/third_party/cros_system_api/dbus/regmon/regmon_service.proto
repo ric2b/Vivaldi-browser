@@ -1,0 +1,49 @@
+// Copyright 2024 The ChromiumOS Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+syntax = "proto2";
+option optimize_for = LITE_RUNTIME;
+
+// This file defines the messages used by the regmon D-Bus API.
+package regmon;
+
+message PolicyViolation {
+  // Hash of the Chromium traffic annotation tag's unique id.
+  optional int32 annotation_hash = 1;
+
+  // The request's destination URL, domain, or IP address.
+  optional string destination = 2;
+
+  // The enterprise policy setting which has been violated.
+  enum Policy {
+    // Default value. No policy specified.
+    POLICY_UNSPECIFIED = 0;
+
+    // Advanced Protection Program policy
+    ADVANCED_PROTECTION_ALLOWED = 1;
+
+    // Autofill Payments policy
+    AUTOFILL_CREDIT_CARD_ENABLED = 2;
+
+    // Calendar policy
+    CALENDAR_INTEGRATION_ENABLED = 3;
+  }
+
+  optional Policy policy = 3;
+}
+
+message Status {
+  // Error message returned from the request
+  optional string error_message = 1;
+}
+
+// RecordPolicyViolationRequest records a policy violation to be logged and
+// reported.
+message RecordPolicyViolationRequest {
+  optional PolicyViolation violation = 1;
+}
+
+message RecordPolicyViolationResponse {
+  optional Status status = 1;
+}

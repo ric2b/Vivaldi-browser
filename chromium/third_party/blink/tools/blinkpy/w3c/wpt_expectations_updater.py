@@ -160,7 +160,7 @@ class WPTExpectationsUpdater:
         # here. See https://crbug.com/1154650 .
         self.port.wpt_manifest.cache_clear()
 
-        resolver = BuildResolver(self.host.web,
+        resolver = BuildResolver(self.host,
                                  self.git_cl,
                                  can_trigger_jobs=False)
         builds = [Build(builder) for builder in self._get_try_bots()]
@@ -376,7 +376,7 @@ class WPTExpectationsUpdater:
         results_to_update = WebTestResults(
             results_to_update,
             step_name=test_results.step_name(),
-            interrupted=test_results.interrupted,
+            incomplete_reason=test_results.incomplete_reason,
             builder_name=test_results.builder_name)
         return tests_to_rebaseline, results_to_update
 

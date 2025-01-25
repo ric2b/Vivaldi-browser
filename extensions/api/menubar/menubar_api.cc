@@ -12,10 +12,12 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "extensions/browser/app_window/app_window.h"
+#include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom.h"
 
 #include "app/vivaldi_command_controller.h"
 #include "app/vivaldi_commands.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "ui/vivaldi_browser_window.h"
 #include "extensions/schema/menubar.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_main_menu.h"
@@ -206,6 +208,21 @@ bool MenubarAPI::HandleActionById(content::BrowserContext* browser_context,
   std::string action = GetActionById(command_id);
   if (action.empty()) {
     return false;
+  }
+
+  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromId(window_id);
+  if (window) {
+    // VB-107552. Ping renderer code with a message telling
+    // user input happens. A blocking blocking menu event loop will prevent
+    // automatic updates. Some functions in blink/render require recent
+    // input to run (to minimize risk of rouge page code executing those).
+    // We may call such functions when selecting a menu item.
+    // See user_activation_state.cc - an input notification remains valid
+    // for 5 seconds.
+    window->web_contents()->GetPrimaryMainFrame()->NotifyUserActivation(
+      blink::mojom::UserActivationNotificationType::kInteraction);
+  } else {
+    LOG(ERROR) << "Menu bar. Failed to look up window";
   }
 
   ::vivaldi::BroadcastEvent(

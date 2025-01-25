@@ -33,8 +33,11 @@
 #include <utility>
 
 #include "src/tint/lang/core/evaluation_stage.h"
+#include "src/tint/lang/core/type/input_attachment.h"
+#include "src/tint/lang/wgsl/ast/input_attachment_index_attribute.h"
 #include "src/tint/lang/wgsl/ast/pipeline_stage.h"
 #include "src/tint/lang/wgsl/common/allowed_features.h"
+#include "src/tint/lang/wgsl/common/validation_mode.h"
 #include "src/tint/lang/wgsl/program/program_builder.h"
 #include "src/tint/lang/wgsl/resolver/sem_helper.h"
 #include "src/tint/utils/containers/hashmap.h"
@@ -116,12 +119,14 @@ class Validator {
     /// @param helper the SEM helper to validate with
     /// @param enabled_extensions all the extensions declared in current module
     /// @param allowed_features the allowed extensions and features
+    /// @param mode the validation mode to use
     /// @param atomic_composite_info atomic composite info of the module
     /// @param valid_type_storage_layouts a set of validated type layouts by address space
     Validator(ProgramBuilder* builder,
               SemHelper& helper,
               const wgsl::Extensions& enabled_extensions,
               const wgsl::AllowedFeatures& allowed_features,
+              wgsl::ValidationMode mode,
               const Hashmap<const core::type::Type*, const Source*, 8>& atomic_composite_info,
               Hashset<TypeAndAddressSpace, 8>& valid_type_storage_layouts);
     ~Validator();
@@ -217,6 +222,15 @@ class Validator {
     /// @param rhs_ty the type of the right hand side
     /// @returns true on success, false otherwise.
     bool Assignment(const ast::Statement* a, const core::type::Type* rhs_ty) const;
+
+    /// Validates a binary expression
+    /// @param expr the ast binary expression
+    /// @param rhs the right hand side sem node
+    /// @param lhs_ty the type of the left hand side
+    /// @returns true on success, false otherwise.
+    bool BinaryExpression(const ast::BinaryExpression* expr,
+                          const tint::sem::ValueExpression* rhs,
+                          const tint::core::type::Type* lhs_ty) const;
 
     /// Validates a break statement
     /// @param stmt the break statement to validate
@@ -359,7 +373,7 @@ class Validator {
                         const Source& source,
                         const std::optional<bool> is_input = std::nullopt) const;
 
-    /// Validates a index attribute
+    /// Validates a blend_src attribute
     /// @param blend_src_attr the blend_src attribute to validate
     /// @param stage the current pipeline stage
     /// @param is_input true if is an input variable, false if output variable, std::nullopt is
@@ -427,6 +441,21 @@ class Validator {
     /// @param source the source of the texture
     /// @returns true on success, false otherwise
     bool MultisampledTexture(const core::type::MultisampledTexture* t, const Source& source) const;
+
+    /// Validates a input attachment
+    /// @param t the input attachment to validate
+    /// @param source the source of the input attachment
+    /// @returns true on success, false otherwise
+    bool InputAttachment(const core::type::InputAttachment* t, const Source& source) const;
+
+    /// Validates a input attachment index attribute
+    /// @param attr the input attachment index attribute to validate
+    /// @param type the variable type
+    /// @param source the source of declaration using the attribute
+    /// @returns true on success, false otherwise.
+    bool InputAttachmentIndexAttribute(const ast::InputAttachmentIndexAttribute* attr,
+                                       const core::type::Type* type,
+                                       const Source& source) const;
 
     /// Validates a structure
     /// @param str the structure to validate
@@ -609,6 +638,7 @@ class Validator {
     DiagnosticFilterStack diagnostic_filters_;
     const wgsl::Extensions& enabled_extensions_;
     const wgsl::AllowedFeatures& allowed_features_;
+    const wgsl::ValidationMode mode_;
     const Hashmap<const core::type::Type*, const Source*, 8>& atomic_composite_info_;
     Hashset<TypeAndAddressSpace, 8>& valid_type_storage_layouts_;
 };

@@ -7,6 +7,7 @@
 
 #include <optional>
 
+#include "components/prefs/pref_service.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_export.h"
@@ -192,6 +193,18 @@ DEVICE_BLUETOOTH_EXPORT void RecordUserInitiatedReconnectionAttemptDuration(
 
 // Record each time a Bluetooth device nickname change is attempted.
 DEVICE_BLUETOOTH_EXPORT void RecordSetDeviceNickName(SetNicknameResult success);
+
+// Record the time interval between consecutive bluetooth connections.
+DEVICE_BLUETOOTH_EXPORT void RecordTimeIntervalBetweenConnections(
+    base::TimeDelta time_interval_since_last_connection);
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+// Record the number of times the connection toast is shown to user in the
+// last 24 hours.
+DEVICE_BLUETOOTH_EXPORT void MaybeRecordConnectionToastShownCount(
+    PrefService* local_state_pref,
+    bool triggered_by_connect);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 }  // namespace device
 

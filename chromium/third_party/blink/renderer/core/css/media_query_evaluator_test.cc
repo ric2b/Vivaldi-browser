@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/css/media_query_evaluator.h"
 
 #include <memory>
@@ -36,12 +41,20 @@ namespace blink {
 
 namespace {
 
+const CSSNumericLiteralValue& WrapDouble(
+    double value,
+    CSSPrimitiveValue::UnitType unit_type =
+        CSSPrimitiveValue::UnitType::kNumber) {
+  return *CSSNumericLiteralValue::Create(value, unit_type);
+}
+
 MediaQueryExpValue PxValue(double value) {
-  return MediaQueryExpValue(value, CSSPrimitiveValue::UnitType::kPixels);
+  return MediaQueryExpValue(
+      WrapDouble(value, CSSPrimitiveValue::UnitType::kPixels));
 }
 
 MediaQueryExpValue RatioValue(unsigned numerator, unsigned denominator) {
-  return MediaQueryExpValue(numerator, denominator);
+  return MediaQueryExpValue(WrapDouble(numerator), WrapDouble(denominator));
 }
 
 }  // namespace

@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -14,8 +9,9 @@
 #include <vector>
 
 #include "core/fxcrt/bytestring.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
-#include "core/fxcrt/span_util.h"
+#include "core/fxcrt/stl_util.h"
 #include "public/fpdf_doc.h"
 #include "public/fpdfview.h"
 #include "testing/embedder_test.h"
@@ -119,8 +115,8 @@ class TestAsyncLoader final : public FX_DOWNLOADHINTS, FX_FILEAVAIL {
     if (end <= pos)
       return 0;
     const unsigned long bytes_to_copy = end - pos;
-    fxcrt::spancpy(pdfium::make_span(pBuf, size),
-                   file_contents().subspan(pos, bytes_to_copy));
+    fxcrt::Copy(file_contents().subspan(pos, bytes_to_copy),
+                UNSAFE_TODO(pdfium::make_span(pBuf, size)));
     SetDataAvailable(pos, bytes_to_copy);
     return static_cast<int>(bytes_to_copy);
   }
@@ -414,14 +410,14 @@ TEST_F(FPDFDataAvailEmbedderTest, NegativePageIndex) {
             FPDFAvail_IsPageAvail(avail(), -1, loader.hints()));
 }
 
-TEST_F(FPDFDataAvailEmbedderTest, Bug_1324189) {
+TEST_F(FPDFDataAvailEmbedderTest, Bug1324189) {
   // Test passes if it doesn't crash.
   TestAsyncLoader loader("bug_1324189.pdf");
   CreateAvail(loader.file_avail(), loader.file_access());
   ASSERT_EQ(PDF_DATA_NOTAVAIL, FPDFAvail_IsDocAvail(avail(), loader.hints()));
 }
 
-TEST_F(FPDFDataAvailEmbedderTest, Bug_1324503) {
+TEST_F(FPDFDataAvailEmbedderTest, Bug1324503) {
   // Test passes if it doesn't crash.
   TestAsyncLoader loader("bug_1324503.pdf");
   CreateAvail(loader.file_avail(), loader.file_access());

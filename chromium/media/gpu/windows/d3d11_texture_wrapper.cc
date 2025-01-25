@@ -16,6 +16,7 @@
 #include "gpu/command_buffer/service/dxgi_shared_handle_manager.h"
 #include "gpu/command_buffer/service/shared_image/d3d_image_backing.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
+#include "gpu/ipc/service/gpu_channel_shared_image_interface.h"
 #include "gpu/ipc/service/shared_image_stub.h"
 #include "media/base/media_switches.h"
 #include "media/base/win/mf_helpers.h"
@@ -24,6 +25,12 @@
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 
 namespace media {
+
+// Allows texture wrappers to use ClientSharedImage (instead of
+// Mailbox) to access shared images.
+BASE_FEATURE(kUseClientSharedImageForD3D11Video,
+             "UseClientSharedImageForD3D11Video",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 namespace {
 
@@ -45,14 +52,6 @@ bool SupportsFormat(DXGI_FORMAT dxgi_format) {
   }
 }
 
-size_t NumPlanes(DXGI_FORMAT dxgi_format) {
-  if (IsMultiPlaneFormatForHardwareVideoEnabled()) {
-    return 1;
-  }
-
-  return GetFormatPlaneCount(dxgi_format);
-}
-
 viz::SharedImageFormat DXGIFormatToMultiPlanarSharedImageFormat(
     DXGI_FORMAT dxgi_format) {
   switch (dxgi_format) {
@@ -67,7 +66,7 @@ viz::SharedImageFormat DXGIFormatToMultiPlanarSharedImageFormat(
     case DXGI_FORMAT_R16G16B16A16_FLOAT:
       return viz::SinglePlaneFormat::kRGBA_F16;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return viz::SinglePlaneFormat::kBGRA_8888;
   }
 }
@@ -99,8 +98,9 @@ D3D11Status DefaultTexture2DWrapper::BeginSharedImageAccess() {
     TRACE_EVENT0("gpu", "D3D11TextureWrapper::BeginScopedWriteAccess");
     shared_image_access_ = shared_image_rep_->BeginScopedWriteAccess();
     if (!shared_image_access_) {
-      return D3D11Status::Codes::
-          kVideoDecodeImageRepresentationBeginScopedWriteAccessFailed;
+      return {D3D11Status::Codes::
+                  kVideoDecodeImageRepresentationBeginScopedWriteAccessFailed,
+              "Failed to begin shared image access"};
     }
   }
 
@@ -109,7 +109,7 @@ D3D11Status DefaultTexture2DWrapper::BeginSharedImageAccess() {
 
 D3D11Status DefaultTexture2DWrapper::ProcessTexture(
     const gfx::ColorSpace& input_color_space,
-    MailboxHolderArray* mailbox_dest,
+    ClientSharedImageOrMailboxHolder& shared_image_dest,
     gfx::ColorSpace* output_color_space) {
   // If we've received an error, then return it to our caller.  This is probably
   // from some previous operation.
@@ -119,11 +119,7 @@ D3D11Status DefaultTexture2DWrapper::ProcessTexture(
     shared_image_access_.reset();
   }
 
-  // TODO(liberato): make sure that |mailbox_holders_| is zero-initialized in
-  // case we don't use all the planes.
-  for (size_t i = 0; i < VideoFrame::kMaxPlanes; i++) {
-    (*mailbox_dest)[i] = mailbox_holders_[i];
-  }
+  shared_image_dest = shared_image_;
 
   // We're just binding, so the output and output color spaces are the same.
   *output_color_space = input_color_space;
@@ -146,14 +142,15 @@ D3D11Status DefaultTexture2DWrapper::Init(
   if (!SupportsFormat(dxgi_format_))
     return D3D11Status::Codes::kUnsupportedTextureFormatForBind;
 
-  // Generate mailboxes and holders.
+  // Generate mailbox and holder.
   // TODO(liberato): Verify that this is really okay off the GPU main thread.
   // The current implementation is.
-  std::vector<gpu::Mailbox> mailboxes;
-  for (size_t plane = 0; plane < NumPlanes(dxgi_format_); plane++) {
-    mailboxes.push_back(gpu::Mailbox::GenerateForSharedImage());
-    mailbox_holders_[plane] = gpu::MailboxHolder(
-        mailboxes[plane], gpu::SyncToken(), GL_TEXTURE_EXTERNAL_OES);
+  gpu::Mailbox mailbox;
+  if (!base::FeatureList::IsEnabled(
+          media::kUseClientSharedImageForD3D11Video)) {
+    mailbox = gpu::Mailbox::Generate();
+    shared_image_ =
+        gpu::MailboxHolder(mailbox, gpu::SyncToken(), GL_TEXTURE_EXTERNAL_OES);
   }
 
   picture_buffer_gpu_resource_init_done_cb_ =
@@ -172,7 +169,7 @@ D3D11Status DefaultTexture2DWrapper::Init(
                      weak_factory_.GetWeakPtr()));
   gpu_resources_ = base::SequenceBound<GpuResources>(
       std::move(gpu_task_runner), std::move(on_error_cb),
-      std::move(get_helper_cb), std::move(mailboxes), size_, color_space_,
+      std::move(get_helper_cb), std::move(mailbox), size_, color_space_,
       dxgi_format_, video_device_, texture, array_slice,
       std::move(picture_buffer), std::move(gpu_resource_init_cb));
   return D3D11Status::Codes::kOk;
@@ -191,9 +188,13 @@ void DefaultTexture2DWrapper::SetDisplayHDRMetadata(
 
 void DefaultTexture2DWrapper::OnGPUResourceInitDone(
     scoped_refptr<media::D3D11PictureBuffer> picture_buffer,
-    std::unique_ptr<gpu::VideoDecodeImageRepresentation> shared_image_rep) {
+    std::unique_ptr<gpu::VideoDecodeImageRepresentation> shared_image_rep,
+    scoped_refptr<gpu::ClientSharedImage> client_shared_image) {
   DCHECK(shared_image_rep);
   shared_image_rep_ = std::move(shared_image_rep);
+  if (client_shared_image) {
+    shared_image_ = std::move(client_shared_image);
+  }
   std::move(picture_buffer_gpu_resource_init_done_cb_)
       .Run(std::move(picture_buffer));
 }
@@ -201,7 +202,7 @@ void DefaultTexture2DWrapper::OnGPUResourceInitDone(
 DefaultTexture2DWrapper::GpuResources::GpuResources(
     OnErrorCB on_error_cb,
     GetCommandBufferHelperCB get_helper_cb,
-    const std::vector<gpu::Mailbox>& mailboxes,
+    const gpu::Mailbox& mailbox,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     DXGI_FORMAT dxgi_format,
@@ -221,7 +222,7 @@ DefaultTexture2DWrapper::GpuResources::GpuResources(
 
   // Usage flags to allow the display compositor to draw from it, video to
   // decode from it, and webgl/canvas to read from it.
-  uint32_t usage =
+  gpu::SharedImageUsageSet usage =
       gpu::SHARED_IMAGE_USAGE_VIDEO_DECODE |
       gpu::SHARED_IMAGE_USAGE_GLES2_READ | gpu::SHARED_IMAGE_USAGE_RASTER_READ |
       gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT;
@@ -259,59 +260,90 @@ DefaultTexture2DWrapper::GpuResources::GpuResources(
         helper_->GetDXGISharedHandleManager()->CreateAnonymousSharedHandleState(
             base::win::ScopedHandle(shared_handle), texture);
   }
+  const bool is_thread_safe =
+      IsDedicatedMediaServiceThreadEnabled(gl::ANGLEImplementation::kD3D11);
+  if (base::FeatureList::IsEnabled(media::kUseClientSharedImageForD3D11Video)) {
+    gpu::SharedImageInfo si_info{
+        DXGIFormatToMultiPlanarSharedImageFormat(dxgi_format),
+        size,
+        color_space,
+        kTopLeft_GrSurfaceOrigin,
+        kPremul_SkAlphaType,
+        usage,
+        "VideoTexture"};
+    scoped_refptr<gpu::GpuChannelSharedImageInterface>
+        gpu_channel_shared_image_interface =
+            helper_->GetSharedImageStub()->shared_image_interface();
+    scoped_refptr<gpu::ClientSharedImage> shared_image =
+        gpu_channel_shared_image_interface->CreateSharedImageForD3D11Video(
+            si_info, texture, std::move(dxgi_shared_handle_state), array_slice,
+            is_thread_safe);
+    if (!shared_image) {
+      std::move(on_error_cb)
+          .Run(std::move(D3D11Status::Codes::kCreateSharedImageFailed));
+      return;
+    }
 
-  std::vector<std::unique_ptr<gpu::SharedImageBacking>> shared_image_backings;
-  auto caps =
-      helper_->GetSharedImageStub()->shared_context_state()->GetGLFormatCaps();
-  if (IsMultiPlaneFormatForHardwareVideoEnabled()) {
-    DCHECK_EQ(mailboxes.size(), 1u);
+    auto* shared_image_manager = helper_->GetSharedImageManager();
+    auto* memory_type_tracker = helper_->GetMemoryTypeTracker();
+    std::unique_ptr<gpu::VideoDecodeImageRepresentation> shared_image_rep =
+        shared_image_manager->ProduceVideoDecode(
+            video_device.Get(), shared_image->mailbox(), memory_type_tracker);
+    if (!shared_image_rep) {
+      std::move(on_error_cb)
+          .Run(
+              D3D11Status::Codes::kProduceVideoDecodeImageRepresentationFailed);
+      shared_image_ = nullptr;
+      return;
+    }
+
+    std::move(gpu_resource_init_cb)
+        .Run(std::move(picture_buffer), std::move(shared_image_rep),
+             std::move(shared_image));
+  } else {
+    auto caps = helper_->GetSharedImageStub()
+                    ->shared_context_state()
+                    ->GetGLFormatCaps();
     // The target must be GL_TEXTURE_EXTERNAL_OES as the texture is not created
     // with D3D11_BIND_RENDER_TARGET bind flag and so it cannot be bound to the
     // framebuffer. To prevent Skia trying to bind it for read pixels, we need
     // it to be GL_TEXTURE_EXTERNAL_OES.
     std::unique_ptr<gpu::SharedImageBacking> backing =
         gpu::D3DImageBacking::Create(
-            mailboxes[0], DXGIFormatToMultiPlanarSharedImageFormat(dxgi_format),
+            mailbox, DXGIFormatToMultiPlanarSharedImageFormat(dxgi_format),
             size, color_space, kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
             usage, "VideoTexture", texture, std::move(dxgi_shared_handle_state),
-            caps, GL_TEXTURE_EXTERNAL_OES, array_slice, /*plane_index=*/0u);
-    if (backing) {
-      // Need to clear the backing since the D3D11 Video Decoder will initialize
-      // the textures.
-      backing->SetCleared();
-      shared_image_backings.push_back(std::move(backing));
+            caps, GL_TEXTURE_EXTERNAL_OES, array_slice,
+            /*use_update_subresource1=*/false, is_thread_safe);
+
+    if (!backing) {
+      std::move(on_error_cb)
+          .Run(std::move(D3D11Status::Codes::kCreateSharedImageFailed));
+      return;
     }
-  } else {
-    shared_image_backings = gpu::D3DImageBacking::CreateFromVideoTexture(
-        mailboxes, dxgi_format, size, usage, array_slice, caps, texture,
-        std::move(dxgi_shared_handle_state));
-  }
-  if (shared_image_backings.empty()) {
-    std::move(on_error_cb)
-        .Run(std::move(D3D11Status::Codes::kCreateSharedImageFailed));
-    return;
-  }
-  DCHECK_EQ(shared_image_backings.size(), NumPlanes(dxgi_format));
+    // Need to clear the backing since the D3D11 Video Decoder will initialize
+    // the textures.
+    backing->SetCleared();
 
-  auto* shared_image_manager = helper_->GetSharedImageManager();
-  auto* memory_type_tracker = helper_->GetMemoryTypeTracker();
-  for (auto& backing : shared_image_backings) {
-    shared_images_.push_back(shared_image_manager->Register(
-        std::move(backing), memory_type_tracker));
-  }
+    auto* shared_image_manager = helper_->GetSharedImageManager();
+    auto* memory_type_tracker = helper_->GetMemoryTypeTracker();
+    shared_image_ =
+        shared_image_manager->Register(std::move(backing), memory_type_tracker);
 
-  std::unique_ptr<gpu::VideoDecodeImageRepresentation> shared_image_rep =
-      shared_image_manager->ProduceVideoDecode(video_device.Get(), mailboxes[0],
-                                               memory_type_tracker);
-  if (!shared_image_rep) {
-    std::move(on_error_cb)
-        .Run(D3D11Status::Codes::kProduceVideoDecodeImageRepresentationFailed);
-    shared_images_.clear();
-    return;
-  }
+    std::unique_ptr<gpu::VideoDecodeImageRepresentation> shared_image_rep =
+        shared_image_manager->ProduceVideoDecode(video_device.Get(), mailbox,
+                                                 memory_type_tracker);
+    if (!shared_image_rep) {
+      std::move(on_error_cb)
+          .Run(
+              D3D11Status::Codes::kProduceVideoDecodeImageRepresentationFailed);
+      shared_image_ = nullptr;
+      return;
+    }
 
-  std::move(gpu_resource_init_cb)
-      .Run(std::move(picture_buffer), std::move(shared_image_rep));
+    std::move(gpu_resource_init_cb)
+        .Run(std::move(picture_buffer), std::move(shared_image_rep), nullptr);
+  }
 }
 
 DefaultTexture2DWrapper::GpuResources::~GpuResources() = default;

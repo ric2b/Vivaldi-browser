@@ -36,22 +36,33 @@ class Advertisement {
  public:
   static constexpr uint8_t kSaltSize = 2;
   static constexpr uint8_t kMetadataEncryptionKeyHashByteSize = 14;
+  // LINT.IfChange()
+  // Lists supported vendors for target blocking.
+  enum class BlockedVendorId : uint8_t {
+    kNone = 0,
+    kSamsung = 1,
+  };
+  // LINT.ThenChange(//depot/google3/java/com/google/android/gmscore/integ/client/nearby/src/com/google/android/gms/nearby/sharing/SharingOptions.java:VendorId)
 
   static std::unique_ptr<Advertisement> NewInstance(
       std::vector<uint8_t> salt, std::vector<uint8_t> encrypted_metadata_key,
-      ShareTargetType device_type, std::optional<std::string> device_name);
+      ShareTargetType device_type, std::optional<std::string> device_name,
+      uint8_t vendor_id);
 
+  // TODO: b/341967036 - Remove uses of std::optional for device name. Empty
+  // string should be enough.
   Advertisement(int version, std::vector<uint8_t> salt,
                 std::vector<uint8_t> encrypted_metadata_key,
                 ShareTargetType device_type,
-                std::optional<std::string> device_name);
+                std::optional<std::string> device_name, uint8_t vendor_id);
   ~Advertisement() = default;
   Advertisement(const Advertisement&) = default;
   Advertisement& operator=(const Advertisement&) = default;
   Advertisement(Advertisement&&) = default;
   Advertisement& operator=(Advertisement&&) = default;
+  bool operator==(const Advertisement& other) const;
 
-  std::vector<uint8_t> ToEndpointInfo();
+  std::vector<uint8_t> ToEndpointInfo() const;
 
   int version() const { return version_; }
   const std::vector<uint8_t>& salt() const { return salt_; }
@@ -61,6 +72,7 @@ class Advertisement {
   ShareTargetType device_type() const { return device_type_; }
   const std::optional<std::string>& device_name() const { return device_name_; }
   bool HasDeviceName() const { return device_name_.has_value(); }
+  uint8_t vendor_id() const { return vendor_id_; }
 
   static std::unique_ptr<Advertisement> FromEndpointInfo(
       absl::Span<const uint8_t> endpoint_info);
@@ -85,6 +97,10 @@ class Advertisement {
 
   // The human-readable name of the remote device.
   std::optional<std::string> device_name_ = std::nullopt;
+
+  // The vendor identifier of the remote device. Reference for vendor ID:
+  // google3/java/com/google/android/gmscore/integ/client/nearby/src/com/google/android/gms/nearby/sharing/SharingOptions.java
+  const uint8_t vendor_id_;
 };
 
 }  // namespace sharing

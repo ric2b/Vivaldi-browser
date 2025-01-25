@@ -22,13 +22,13 @@
 
 namespace openscreen::cast {
 
-using ::cast::channel::CastMessage;
-using ::cast::channel::CastMessage_PayloadType;
+using proto::CastMessage;
+using proto::CastMessage_PayloadType;
 
 namespace {
 
 bool IsValidProtocolVersion(int version) {
-  return ::cast::channel::CastMessage_ProtocolVersion_IsValid(version);
+  return proto::CastMessage_ProtocolVersion_IsValid(version);
 }
 
 std::optional<int> FindMaxProtocolVersion(const Json::Value* version,
@@ -38,7 +38,7 @@ std::optional<int> FindMaxProtocolVersion(const Json::Value* version,
                 "Assuming ArrayIndex is integral");
   std::optional<int> max_version;
   if (version_list && version_list->isArray()) {
-    max_version = ::cast::channel::CastMessage_ProtocolVersion_CASTV2_1_0;
+    max_version = proto::CastMessage_ProtocolVersion_CASTV2_1_0;
     for (auto it = version_list->begin(), end = version_list->end(); it != end;
          ++it) {
       if (it->isInt()) {
@@ -53,7 +53,7 @@ std::optional<int> FindMaxProtocolVersion(const Json::Value* version,
     int version_int = version->asInt();
     if (IsValidProtocolVersion(version_int)) {
       if (!max_version) {
-        max_version = ::cast::channel::CastMessage_ProtocolVersion_CASTV2_1_0;
+        max_version = proto::CastMessage_ProtocolVersion_CASTV2_1_0;
       }
       if (version_int > max_version) {
         max_version = version_int;
@@ -270,13 +270,13 @@ void ConnectionNamespaceHandler::HandleConnectedResponse(
 }
 
 void ConnectionNamespaceHandler::SendConnect(VirtualConnection virtual_conn) {
-  ::cast::channel::CastMessage message =
+  proto::CastMessage message =
       MakeConnectMessage(virtual_conn.local_id, virtual_conn.peer_id);
   vc_router_.Send(std::move(virtual_conn), std::move(message));
 }
 
 void ConnectionNamespaceHandler::SendClose(VirtualConnection virtual_conn) {
-  ::cast::channel::CastMessage message =
+  proto::CastMessage message =
       MakeCloseMessage(virtual_conn.local_id, virtual_conn.peer_id);
   vc_router_.Send(std::move(virtual_conn), std::move(message));
 }

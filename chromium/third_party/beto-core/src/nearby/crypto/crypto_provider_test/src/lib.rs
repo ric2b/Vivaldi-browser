@@ -13,7 +13,7 @@
 // limitations under the License.
 extern crate alloc;
 
-use alloc::{format, string::String};
+use alloc::format;
 use core::marker::PhantomData;
 
 use crypto_provider::CryptoProvider;
@@ -47,7 +47,7 @@ pub mod prelude {
 pub type CryptoProviderTestCase<T> = fn(PhantomData<T>);
 
 #[derive(Debug)]
-pub(crate) struct TestError(String);
+pub(crate) struct TestError(#[allow(unused)] String);
 
 impl TestError {
     pub(crate) fn new<D: core::fmt::Debug>(value: D) -> Self {

@@ -93,13 +93,13 @@ found in the LICENSE file.
             android:id="@+id/add_page_to_reading_list_menu_id"
             android:title="@string/add_page_to_reading_list"
             android:visible="false"
-            app:showAsAction="ifRoom" />
+            app:showAsAction="never" />
         <!-- Vivaldi -->
         <item
             android:id="@+id/close_menu_id"
             android:icon="@drawable/material_ic_close_24dp"
             android:title="@string/bookmark_toolbar_close"
-            app:showAsAction="ifRoom"
+            app:showAsAction="never"
             app:iconTint="@color/default_icon_color_secondary_tint_list" />
     </group>
     <group

@@ -19,6 +19,11 @@
  *
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/text/text_break_iterator.h"
 
 #include <unicode/rbbi.h>
@@ -200,7 +205,7 @@ int32_t TextExtract(UText*,
                     UErrorCode* error_code) {
   // In the present context, this text provider is used only with ICU functions
   // that do not perform an extract operation.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   *error_code = U_UNSUPPORTED_ERROR;
   return 0;
 }

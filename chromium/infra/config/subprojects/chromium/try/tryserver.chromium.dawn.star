@@ -4,7 +4,7 @@
 """Definitions of builders in the tryserver.chromium.swangle builder group."""
 
 load("//lib/branches.star", "branches")
-load("//lib/builders.star", "cpu", "os", "reclient")
+load("//lib/builders.star", "cpu", "os", "siso")
 load("//lib/consoles.star", "consoles")
 load("//lib/try.star", "try_")
 
@@ -18,10 +18,10 @@ try_.defaults.set(
     check_for_flakiness_with_resultdb = False,
     contact_team_email = "chrome-gpu-infra@google.com",
     execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
-    reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
     service_account = try_.gpu.SERVICE_ACCOUNT,
     siso_enabled = True,
-    siso_remote_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
+    siso_project = siso.project.DEFAULT_UNTRUSTED,
+    siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
 )
 
 consoles.list_view(
@@ -250,7 +250,6 @@ try_.builder(
 
 try_.builder(
     name = "dawn-win11-arm64-deps-rel",
-    description_html = "Compiles and tests DEPSed binaries for Windows/ARM64",
     mirrors = [
         "ci/Dawn Win11 arm64 DEPS Builder",
     ],
@@ -398,6 +397,34 @@ try_.builder(
 )
 
 try_.builder(
+    name = "dawn-try-chromeos-volteer-rel",
+    mirrors = [
+        "ci/Dawn ChromeOS Skylab Release (volteer)",
+    ],
+    gn_args = "ci/Dawn ChromeOS Skylab Release (volteer)",
+    pool = "luci.chromium.gpu.chromeos.volteer.try",
+    builderless = True,
+    test_presentation = resultdb.test_presentation(
+        grouping_keys = ["status", "v.test_suite", "v.gpu"],
+    ),
+)
+
+try_.builder(
+    name = "dawn-try-linux-x64-intel-uhd770-rel",
+    description_html = "Runs ToT Dawn tests on 12th gen Intel CPUs with UHD 770 GPUs",
+    mirrors = [
+        "ci/Dawn Linux x64 Builder",
+        "ci/Dawn Linux x64 Release (Intel UHD 770)",
+    ],
+    gn_args = "ci/Dawn Linux x64 Builder",
+    pool = "luci.chromium.gpu.linux.intel.uhd770.try",
+    builderless = True,
+    test_presentation = resultdb.test_presentation(
+        grouping_keys = ["status", "v.test_suite", "v.gpu"],
+    ),
+)
+
+try_.builder(
     name = "dawn-try-linux-tsan-rel",
     mirrors = [
         "ci/Dawn Linux TSAN Release",
@@ -505,6 +532,22 @@ try_.builder(
 )
 
 try_.builder(
+    name = "dawn-try-win-x64-intel-uhd770-rel",
+    description_html = "Runs ToT Dawn tests on 12th gen Intel CPUs with UHD 770 GPUs",
+    mirrors = [
+        "ci/Dawn Win10 x64 Builder",
+        "ci/Dawn Win10 x64 Release (Intel UHD 770)",
+    ],
+    gn_args = "ci/Dawn Win10 x64 Builder",
+    pool = "luci.chromium.gpu.win10.intel.uhd770.try",
+    builderless = True,
+    os = os.WINDOWS_ANY,
+    test_presentation = resultdb.test_presentation(
+        grouping_keys = ["status", "v.test_suite", "v.gpu"],
+    ),
+)
+
+try_.builder(
     name = "dawn-try-win-x64-nvidia-exp",
     description_html = "Runs ToT Dawn tests on experimental NVIDIA configs",
     mirrors = [
@@ -567,7 +610,6 @@ try_.builder(
 
 try_.builder(
     name = "win11-arm64-dawn-rel",
-    description_html = "Compiles and tests ToT binaries for Windows/ARM64",
     mirrors = [
         "ci/Dawn Win11 arm64 Builder",
     ],

@@ -24,9 +24,9 @@
 #include "chrome/updater/constants.h"
 #include "chrome/updater/persisted_data.h"
 #include "chrome/updater/prefs.h"
+#include "chrome/updater/registration_data.h"
 #include "chrome/updater/test/integration_test_commands.h"
 #include "chrome/updater/test/integration_tests_impl.h"
-#include "chrome/updater/test/test_scope.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/util/util.h"
@@ -51,11 +51,32 @@ std::string BoolToString(const bool value) {
   return value ? "true" : "false";
 }
 
+std::string RegistrationRequestToString(
+    const RegistrationRequest& registration) {
+  base::Value::Dict value;
+  value.Set("app_id", registration.app_id);
+  value.Set("brand_code", registration.brand_code);
+  value.Set("brand_path", registration.brand_path.MaybeAsASCII());
+  value.Set("ap", registration.ap);
+  value.Set("ap_path", registration.ap_path.MaybeAsASCII());
+  value.Set("ap_key", registration.ap_key);
+  value.Set("version", registration.version.GetString());
+  value.Set("version_path", registration.version_path.MaybeAsASCII());
+  value.Set("version_key", registration.version_key);
+  value.Set("existence_checker_path",
+            registration.existence_checker_path.MaybeAsASCII());
+  value.Set("cohort", registration.cohort);
+  value.Set("cohort_name", registration.cohort_name);
+  value.Set("cohort_hint", registration.cohort_hint);
+  return StringFromValue(base::Value(value.Clone()));
+}
+
 }  // namespace
 
 class IntegrationTestCommandsSystem : public IntegrationTestCommands {
  public:
-  IntegrationTestCommandsSystem() = default;
+  explicit IntegrationTestCommandsSystem(UpdaterScope scope)
+      : updater_scope_(scope) {}
 
   void ExpectNoCrashes() const override {
     updater::test::ExpectNoCrashes(updater_scope_);
@@ -63,18 +84,24 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
 
   void PrintLog() const override { RunCommand("print_log"); }
 
-  void CopyLog() const override {
+  void CopyLog(const std::string& infix) const override {
     const std::optional<base::FilePath> path =
         GetInstallDirectory(updater_scope_);
     ASSERT_TRUE(path);
     if (path) {
-      updater::test::CopyLog(*path);
+      updater::test::CopyLog(*path, infix);
     }
   }
 
-  void Clean() const override { RunCommand("clean"); }
+  void Clean() const override {
+    RunCommand("clean");
+    updater::test::Clean(UpdaterScope::kUser);
+  }
 
-  void ExpectClean() const override { RunCommand("expect_clean"); }
+  void ExpectClean() const override {
+    RunCommand("expect_clean");
+    updater::test::ExpectClean(UpdaterScope::kUser);
+  }
 
   void Install(const base::Value::List& switches) const override {
     RunCommand(
@@ -269,6 +296,11 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     RunCommand("expect_app_tag", {Param("app_id", app_id), Param("tag", tag)});
   }
 
+  void SetAppTag(const std::string& app_id,
+                 const std::string& tag) const override {
+    RunCommand("set_app_tag", {Param("app_id", app_id), Param("tag", tag)});
+  }
+
   void ExpectAppVersion(const std::string& app_id,
                         const base::Version& version) const override {
     RunCommand(
@@ -298,6 +330,12 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     RunCommand("run_server",
                {Param("internal", BoolToString(internal)),
                 Param("exit_code", base::NumberToString(expected_exit_code))});
+  }
+
+  void RegisterApp(const RegistrationRequest& registration) const override {
+    RunCommand(
+        "register_app",
+        {Param("registration", RegistrationRequestToString(registration))});
   }
 
   void CheckForUpdate(const std::string& app_id) const override {
@@ -336,10 +374,6 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
                   const base::Version& version) const override {
     RunCommand("install_app", {Param("app_id", app_id),
                                Param("app_version", version.GetString())});
-  }
-
-  bool WaitForUpdaterExit() const override {
-    return updater::test::WaitForUpdaterExit(updater_scope_);
   }
 
 #if BUILDFLAG(IS_WIN)
@@ -413,7 +447,7 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
   base::FilePath GetDifferentUserPath() const override {
     // On POSIX, the path may be chowned; so do not use a file not owned by the
     // test, nor the test executable itself.
-    NOTREACHED() << __func__ << ": not implemented.";
+    NOTREACHED_IN_MIGRATION() << __func__ << ": not implemented.";
     return base::FilePath();
   }
 
@@ -576,11 +610,12 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     RunCommand(command_switch, {});
   }
 
-  inline static const UpdaterScope updater_scope_ = GetUpdaterScopeForTesting();
+  const UpdaterScope updater_scope_;
 };
 
-scoped_refptr<IntegrationTestCommands> CreateIntegrationTestCommandsSystem() {
-  return base::MakeRefCounted<IntegrationTestCommandsSystem>();
+scoped_refptr<IntegrationTestCommands> CreateIntegrationTestCommandsSystem(
+    UpdaterScope scope) {
+  return base::MakeRefCounted<IntegrationTestCommandsSystem>(scope);
 }
 
 }  // namespace updater::test

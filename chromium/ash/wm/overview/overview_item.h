@@ -76,6 +76,9 @@ class ASH_EXPORT OverviewItem : public OverviewItemBase,
     eligible_for_shadow_config_ = eligible_for_shadow_config;
   }
 
+  // Closes window hosted by `this`.
+  void CloseWindow();
+
   // Handles events forwarded from the contents view.
   void OnFocusedViewActivated();
   void OnFocusedViewClosed();
@@ -116,6 +119,7 @@ class ASH_EXPORT OverviewItem : public OverviewItemBase,
   gfx::RectF GetTargetBoundsWithInsets() const override;
   gfx::RectF GetTransformedBounds() const override;
   std::vector<OverviewFocusableView*> GetFocusableViews() const override;
+  std::vector<views::Widget*> GetFocusableWidgets() override;
   views::View* GetBackDropView() const override;
   bool ShouldHaveShadow() const override;
   void UpdateRoundedCornersAndShadow() override;
@@ -123,7 +127,6 @@ class ASH_EXPORT OverviewItem : public OverviewItemBase,
   void PrepareForOverview() override;
   void SetShouldUseSpawnAnimation(bool value) override;
   void OnStartingAnimationComplete() override;
-  void CloseWindows() override;
   void Restack() override;
   void StartDrag() override;
   void OnOverviewItemDragStarted() override;
@@ -136,8 +139,8 @@ class ASH_EXPORT OverviewItem : public OverviewItemBase,
   void Shutdown() override;
   void AnimateAndCloseItem(bool up) override;
   void StopWidgetAnimation() override;
-  OverviewGridWindowFillMode GetWindowDimensionsType() const override;
-  void UpdateWindowDimensionsType() override;
+  OverviewItemFillMode GetOverviewItemFillMode() const override;
+  void UpdateOverviewItemFillMode() override;
   gfx::Point GetMagnifierFocusPointInScreen() const override;
   const gfx::RoundedCornersF GetRoundedCorners() const override;
 
@@ -151,6 +154,7 @@ class ASH_EXPORT OverviewItem : public OverviewItemBase,
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds,
                              ui::PropertyChangeReason reason) override;
+  void OnWindowStackingChanged(aura::Window* window) override;
   void OnWindowDestroying(aura::Window* window) override;
 
   // WindowStateObserver:
@@ -180,6 +184,10 @@ class ASH_EXPORT OverviewItem : public OverviewItemBase,
   void OnItemSpawnedAnimationCompleted();
   void OnItemBoundsAnimationStarted();
   void OnItemBoundsAnimationEnded();
+
+  // Returns the target that the window of `this` should be stacked below,
+  // returns `nullptr` if no stacking is needed.
+  aura::Window* GetStackBelowTarget() const;
 
   // Performs the spawn-item-in-overview animation (which is a fade-in plus
   // scale-up animation), on the given |window|. |target_transform| is the final

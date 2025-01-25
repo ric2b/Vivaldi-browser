@@ -18,6 +18,8 @@ source_set("minimal") {
   sources = [
     "active_chrome_processes_tracker.cc",
     "active_chrome_processes_tracker.h",
+    "args_parser.cc",
+    "args_parser.h",
     "chrome_string_lookup.cc",
     "chrome_string_lookup.h",
     "chrome_system_probes_module.cc",
@@ -40,7 +42,7 @@ source_set("minimal") {
     "network_trace_module.h",
     "packet_analyzer.cc",
     "packet_analyzer.h",
-    "packet_sequence_state.h",
+    "packet_sequence_state_builder.h",
     "packet_sequence_state_generation.cc",
     "perf_sample_tracker.cc",
     "perf_sample_tracker.h",
@@ -50,9 +52,8 @@ source_set("minimal") {
     "profile_packet_sequence_state.h",
     "profile_packet_utils.cc",
     "profile_packet_utils.h",
-    "proto_incremental_state.h",
-    "proto_trace_parser.cc",
-    "proto_trace_parser.h",
+    "proto_trace_parser_impl.cc",
+    "proto_trace_parser_impl.h",
     "proto_trace_reader.cc",
     "proto_trace_reader.h",
     "proto_trace_tokenizer.cc",
@@ -63,6 +64,7 @@ source_set("minimal") {
     "track_event_module.h",
     "track_event_parser.cc",
     "track_event_parser.h",
+    "track_event_sequence_state.cc",
     "track_event_tokenizer.cc",
     "track_event_tokenizer.h",
     "track_event_tracker.cc",
@@ -70,8 +72,8 @@ source_set("minimal") {
   ]
   public_deps = [ ":proto_importer_module" ]
   deps = [
-    ":packet_sequence_state_generation_hdr",
     "../../../../gn:default_deps",
+    "../../../../include/perfetto/trace_processor:trace_processor",
     "../../../../protos/perfetto/common:zero",
     "../../../../protos/perfetto/config:zero",
     "../../../../protos/perfetto/trace:zero",
@@ -98,6 +100,7 @@ source_set("minimal") {
     "../../util:build_id",
     "../../util:gzip",
     "../../util:profiler_util",
+    "../../util:trace_blob_view_reader",
     "../common",
     "../common:parser_types",
     "../etw:minimal",
@@ -135,6 +138,12 @@ source_set("full") {
     "heap_graph_tracker.h",
     "metadata_module.cc",
     "metadata_module.h",
+    "pigweed_detokenizer.cc",
+    "pigweed_detokenizer.h",
+    "pixel_modem_module.cc",
+    "pixel_modem_module.h",
+    "pixel_modem_parser.cc",
+    "pixel_modem_parser.h",
     "statsd_module.cc",
     "statsd_module.h",
     "string_encoding_utils.cc",
@@ -200,8 +209,11 @@ source_set("proto_importer_module") {
     "proto_importer_module.cc",
     "proto_importer_module.h",
   ]
+  public_deps = [ ":packet_sequence_state_generation_hdr" ]
   deps = [
+    ":packet_sequence_state_generation_hdr",
     "../../../../gn:default_deps",
+    "../../../../include/perfetto/trace_processor:trace_processor",
     "../../../base",
     "../../types",
     "../common:trace_parser_hdr",
@@ -209,12 +221,16 @@ source_set("proto_importer_module") {
 }
 
 source_set("packet_sequence_state_generation_hdr") {
-  sources = [ "packet_sequence_state_generation.h" ]
+  sources = [
+    "packet_sequence_state_generation.h",
+    "track_event_sequence_state.h",
+  ]
   deps = [
     "../../../../gn:default_deps",
     "../../../../include/perfetto/ext/base",
     "../../../../protos/perfetto/trace:non_minimal_zero",
     "../../../../protos/perfetto/trace/track_event:zero",
+    "../../types:types",
     "../../util:interned_message_view",
   ]
 }
@@ -239,6 +255,12 @@ perfetto_cc_proto_descriptor("gen_cc_chrome_track_event_descriptor") {
   descriptor_target = "../../../../protos/third_party/chromium:descriptor"
 }
 
+perfetto_cc_proto_descriptor("gen_cc_android_track_event_descriptor") {
+  descriptor_name = "android_track_event.descriptor"
+  descriptor_target =
+      "../../../../protos/perfetto/trace/android:android_track_event_descriptor"
+}
+
 perfetto_cc_proto_descriptor("gen_cc_config_descriptor") {
   descriptor_name = "config.descriptor"
   descriptor_target = "../../../../protos/perfetto/config:descriptor"
@@ -253,12 +275,15 @@ source_set("unittests") {
     "network_trace_module_unittest.cc",
     "perf_sample_tracker_unittest.cc",
     "profile_packet_sequence_state_unittest.cc",
-    "proto_trace_parser_unittest.cc",
+    "proto_trace_parser_impl_unittest.cc",
+    "proto_trace_reader_unittest.cc",
+    "proto_trace_tokenizer_unittest.cc",
     "string_encoding_utils_unittests.cc",
   ]
   deps = [
     ":full",
     ":minimal",
+    ":packet_sequence_state_generation_hdr",
     "../../../../gn:default_deps",
     "../../../../gn:gtest_and_gmock",
     "../../../../protos/perfetto/common:cpp",

@@ -45,9 +45,7 @@ namespace content {
 // Required by the several platform specific
 // `BrowserAccessibilityManager::ToBrowserAccessibilityManager...()` methods
 // declared below.
-#if BUILDFLAG(IS_ANDROID)
-class BrowserAccessibilityManagerAndroid;
-#elif BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN)
 class BrowserAccessibilityManagerWin;
 #elif BUILDFLAG(USE_ATK)
 class BrowserAccessibilityManagerAuraLinux;
@@ -282,10 +280,6 @@ class CONTENT_EXPORT BrowserAccessibilityManager
   // highlighted matches are deactivated.
   virtual void OnFindInPageTermination() {}
 
-#if BUILDFLAG(IS_ANDROID)
-  BrowserAccessibilityManagerAndroid* ToBrowserAccessibilityManagerAndroid();
-#endif
-
 #if BUILDFLAG(IS_WIN)
   BrowserAccessibilityManagerWin* ToBrowserAccessibilityManagerWin();
 #endif
@@ -405,7 +399,6 @@ class CONTENT_EXPORT BrowserAccessibilityManager
 
   // AXTreeManager overrides.
   ui::AXNode* GetNode(const ui::AXNodeID node_id) const override;
-  void CleanUp() override;
   void UpdateAttributesOnParent(ui::AXNode* parent) override;
 
   // AXPlatformTreeManager overrides.
@@ -492,6 +485,10 @@ class CONTENT_EXPORT BrowserAccessibilityManager
  protected:
   FRIEND_TEST_ALL_PREFIXES(BrowserAccessibilityManagerTest,
                            TestShouldFireEventForNode);
+  FRIEND_TEST_ALL_PREFIXES(BrowserAccessibilityManagerTest,
+                           TestShouldFireEventForAlertEventWithEmptyName);
+  FRIEND_TEST_ALL_PREFIXES(BrowserAccessibilityManagerTest,
+                           TestShouldFireEventForAlertEventWithNonEmptyName);
 
   explicit BrowserAccessibilityManager(
       ui::AXPlatformTreeManagerDelegate* delegate);
@@ -511,6 +508,9 @@ class CONTENT_EXPORT BrowserAccessibilityManager
       std::set<ui::AXPlatformNode*>* nodes_needing_update);
 
   bool ShouldFireEventForNode(BrowserAccessibility* node) const;
+
+  virtual std::unique_ptr<BrowserAccessibility> CreateBrowserAccessibility(
+      ui::AXNode* node);
 
   // An object that can retrieve information or perform actions on our behalf,
   // based on which layer this code is running on, Web vs. Views.

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef IOS_CHROME_BROWSER_PREFS_PREF_NAMES_H_
-#define IOS_CHROME_BROWSER_PREFS_PREF_NAMES_H_
+#ifndef IOS_CHROME_BROWSER_SHARED_MODEL_PREFS_PREF_NAMES_H_
+#define IOS_CHROME_BROWSER_SHARED_MODEL_PREFS_PREF_NAMES_H_
 
 namespace prefs {
 
@@ -59,6 +59,9 @@ inline constexpr char kBrowserStatesLastActive[] =
 // browser states directories.
 inline constexpr char kBrowserStatesNumCreated[] = "profile.profiles_created";
 
+// A string of NSUUID used to access the WebKit storage per BrowserState.
+inline constexpr char kBrowserStateStorageIdentifier[] = "profile.storage_id";
+
 // Boolean which indicates whether browsing data migration is/was possible in
 // this or a previous cold start.
 inline constexpr char kBrowsingDataMigrationHasBeenPossible[] =
@@ -71,6 +74,17 @@ inline constexpr char kClearBrowsingDataHistoryNoticeShownTimes[] =
 // stored in BrowserState prefs.
 inline constexpr char kContentNotificationsEnrollmentEligibility[] =
     "ios.content_notification.enrollment_eligibility";
+
+// String indicating the content notification enrollment type.
+// "" - undecided (feature unchecked because the user is not eligible)
+// "promo_enabled" - top of feed promo is enabled
+// "promo_registered" - top of feed promo is registered
+// "provisional_enabled" - provisional is enabled
+// "provisional_registered" - provisional is registered
+// "setuplist_enabled" - set up list is enabled
+// "setuplist_registered" - set up list is registered
+inline constexpr char kContentNotificationsEnrollmentType[] =
+    "ios.content_notification.enrollment_type";
 
 // String indicating the Contextual Search enabled state.
 // "false" - opt-out (disabled)
@@ -133,6 +147,9 @@ inline constexpr char kIosBookmarkCachedFolderId[] =
 
 // Caches the folder’s model of user's position in the bookmark hierarchy
 // navigator.
+// TODO(crbug.com/346918509): Deprecate this pref, as it is no longer needed
+// after a single BookmarkModel instance was adopted on iOS and the node ID
+// alone is able to uniquely identify the folder.
 inline constexpr char kIosBookmarkCachedFolderModel[] =
     "ios.bookmark.cached_folder_model";
 
@@ -148,12 +165,15 @@ inline constexpr char kIosBookmarkCachedTopMostRow[] =
 // instead consider the "default folder" to be the one selected when this
 // preference is set to `kLastUsedBookmarkFolderNone`. Related to
 // kIosBookmarkLastUsedStorageReceivingBookmarks.
+// TODO(crbug.com/346918509): Deprecate this pref, as it is no longer needed
+// after a single BookmarkModel instance was adopted on iOS and the node ID
+// alone is able to uniquely identify the folder.
 inline constexpr char kIosBookmarkLastUsedFolderReceivingBookmarks[] =
     "ios.bookmark.default_folder";
 
 // Preference that keep information about the storage type for
 // kIosBookmarkLastUsedFolderReceivingBookmarks. The value is based on
-// BookmarkModelType enum. This value should be ignored if the value of
+// BookmarkStorageType enum. This value should be ignored if the value of
 // `kIosBookmarkLastUsedFolderReceivingBookmarks` preference is
 // `kLastUsedBookmarkFolderNone`. Related to
 // `kIosBookmarkLastUsedFolderReceivingBookmarks`.
@@ -204,6 +224,10 @@ inline constexpr char kIosCredentialProviderPromoStopPromo[] =
 inline constexpr char
     kIosCredentialProviderPromoHasRegisteredWithPromoManager[] =
         "ios.credential_provider_promo.has_registered_with_promo_manager";
+
+// The timestamp of the first time default browser blue dot promo was shown.
+inline constexpr char kIosDefaultBrowserBlueDotPromoFirstDisplay[] =
+    "ios.default_browser_blue_dot_promo.first_display";
 
 // The last action that the user took when a Default Browser promo was
 // presented.
@@ -274,6 +298,12 @@ inline constexpr char kIosParcelTrackingPolicyEnabled[] =
 // sheet or from the keyboard accessory.
 inline constexpr char kIosPasswordBottomSheetDismissCount[] =
     "ios.password_bottom_sheet_dismiss_count";
+
+// The number of consecutive times the user dismissed the password bottom sheet.
+// This gets reset to 0 whenever the user selects the generated password from
+// the bottom sheet or from the keyboard accessory.
+inline constexpr char kIosPasswordGenerationBottomSheetDismissCount[] =
+    "ios.password_generation_bottom_sheet_dismiss_count";
 
 // The user's account info from before a device restore.
 inline constexpr char kIosPreRestoreAccountInfo[] =
@@ -603,6 +633,19 @@ inline constexpr char kLastApplicationStorageMetricsLogTime[] =
 inline constexpr char kChoiceScreenSkippedCount[] =
     "ios.search_engine_choice_screen.skip_count";
 
+// Prefs indicating whether Home surface modules are enabled.
+inline constexpr char kHomeCustomizationMostVisitedEnabled[] =
+    "ios.home_customization.most_visited.enabled";
+inline constexpr char kHomeCustomizationMagicStackEnabled[] =
+    "ios.home_customization.magic_stack.enabled";
+inline constexpr char kHomeCustomizationDiscoverEnabled[] =
+    "ios.home_customization.discover.enabled";
+
+// A time object storing when the last the identity confirmation snackbar was
+// prompted. Used to limit the frequency of this snackbar.
+inline constexpr char kIdentityConfirmationSnackbarLastPromptTime[] =
+    "ios.identity_confirmation_snackbar_last_prompt_time";
+
 }  // namespace prefs
 
-#endif  // IOS_CHROME_BROWSER_PREFS_PREF_NAMES_H_
+#endif  // IOS_CHROME_BROWSER_SHARED_MODEL_PREFS_PREF_NAMES_H_

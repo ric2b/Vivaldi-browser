@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fxge/win32/cps_printer_driver.h"
 
 #include <stdint.h>
@@ -17,15 +12,16 @@
 #include <utility>
 
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/notreached.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxge/agg/cfx_agg_imagerenderer.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_path.h"
 #include "core/fxge/dib/cfx_dibbase.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
-#include "core/fxge/dib/cfx_imagerenderer.h"
 #include "core/fxge/win32/cpsoutput.h"
 
 namespace {
@@ -81,8 +77,8 @@ CPSPrinterDriver::CPSPrinterDriver(HDC hDC,
       if (::GetRegionData(hRgn, dwCount, pData)) {
         CFX_Path path;
         for (uint32_t i = 0; i < pData->rdh.nCount; i++) {
-          RECT* pRect =
-              reinterpret_cast<RECT*>(pData->Buffer + pData->rdh.nRgnSize * i);
+          RECT* pRect = UNSAFE_TODO(
+              reinterpret_cast<RECT*>(pData->Buffer + pData->rdh.nRgnSize * i));
           path.AppendRect(static_cast<float>(pRect->left),
                           static_cast<float>(pRect->bottom),
                           static_cast<float>(pRect->right),
@@ -158,9 +154,8 @@ bool CPSPrinterDriver::DrawPath(const CFX_Path& path,
                                stroke_color, fill_options);
 }
 
-bool CPSPrinterDriver::GetClipBox(FX_RECT* pRect) {
-  *pRect = m_PSRenderer.GetClipBox();
-  return true;
+FX_RECT CPSPrinterDriver::GetClipBox() const {
+  return m_PSRenderer.GetClipBox();
 }
 
 bool CPSPrinterDriver::SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
@@ -188,19 +183,19 @@ bool CPSPrinterDriver::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                                     dest_top, dest_width, dest_height, options);
 }
 
-bool CPSPrinterDriver::StartDIBits(RetainPtr<const CFX_DIBBase> bitmap,
-                                   float alpha,
-                                   uint32_t color,
-                                   const CFX_Matrix& matrix,
-                                   const FXDIB_ResampleOptions& options,
-                                   std::unique_ptr<CFX_ImageRenderer>* handle,
-                                   BlendMode blend_type) {
+RenderDeviceDriverIface::StartResult CPSPrinterDriver::StartDIBits(
+    RetainPtr<const CFX_DIBBase> bitmap,
+    float alpha,
+    uint32_t color,
+    const CFX_Matrix& matrix,
+    const FXDIB_ResampleOptions& options,
+    BlendMode blend_type) {
   if (blend_type != BlendMode::kNormal || alpha != 1.0f) {
-    return false;
+    return {false, nullptr};
   }
 
-  *handle = nullptr;
-  return m_PSRenderer.DrawDIBits(std::move(bitmap), color, matrix, options);
+  return {m_PSRenderer.DrawDIBits(std::move(bitmap), color, matrix, options),
+          nullptr};
 }
 
 bool CPSPrinterDriver::DrawDeviceText(

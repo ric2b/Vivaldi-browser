@@ -34,6 +34,7 @@ export LC_ALL=C
 BASE=$(pwd)
 SRC="${BASE}/source/libaom"
 CFG="${BASE}/source/config"
+TMP="$(mktemp -d "${BASE}/build.XXXX")"
 
 function cleanup() {
   rm -rf "${TMP}"
@@ -112,7 +113,6 @@ git -C "${SRC}" fetch --tags
 
 # Scope 'trap' error reporting to configuration generation.
 (
-TMP=$(mktemp -d "${BASE}/build.XXXX")
 cd "${TMP}"
 
 trap '{
@@ -184,13 +184,11 @@ gen_config_files linux/arm-neon \
 
 reset_dirs linux/arm-neon-cpu-detect
 gen_config_files linux/arm-neon-cpu-detect \
-  "${toolchain}/armv7-linux-gcc.cmake -DCONFIG_RUNTIME_CPU_DETECT=1 \
-   ${all_platforms}"
+  "${toolchain}/armv7-linux-gcc.cmake ${all_platforms}"
 
 reset_dirs linux/arm64-cpu-detect
 gen_config_files linux/arm64-cpu-detect \
-  "${toolchain}/arm64-linux-gcc.cmake -DCONFIG_RUNTIME_CPU_DETECT=1 \
-   ${all_platforms}"
+  "${toolchain}/arm64-linux-gcc.cmake ${all_platforms}"
 
 # Copy linux configurations and modify for Windows.
 reset_dirs win/arm64-cpu-detect

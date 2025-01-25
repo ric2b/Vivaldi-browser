@@ -82,9 +82,6 @@ class CursorWindowControllerTest : public AshTestBase {
   void SetUp() override {
     AshTestBase::SetUp();
 
-    scoped_feature_list_.InitAndEnableFeature(
-        ::features::kAccessibilityExtraLargeCursor);
-
     // Shell hides the cursor by default; show it for these tests.
     Shell::Get()->cursor_manager()->ShowCursor();
 
@@ -231,7 +228,7 @@ class TestCursorImageSource : public gfx::ImageSkiaSource {
     } else if (resource_scale == 2.f) {
       return rep_2x_;
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return rep_1x_;
   }
 

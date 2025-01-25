@@ -35,14 +35,15 @@ import * as Root from '../../core/root/root.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import type * as TimelineModel from '../../models/timeline_model/timeline_model.js';
 import * as TraceEngine from '../../models/trace/trace.js';
-import * as AnnotationsManager from '../../services/annotations_manager/annotations_manager.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
 
 import {CompatibilityTracksAppender, type TrackAppenderName} from './CompatibilityTracksAppender.js';
 import * as Components from './components/components.js';
+import {ExtensionDataGatherer} from './ExtensionDataGatherer.js';
 import {initiatorsDataToDraw} from './Initiators.js';
+import {ModificationsManager} from './ModificationsManager.js';
 import {ThreadAppender} from './ThreadAppender.js';
 import timelineFlamechartPopoverStyles from './timelineFlamechartPopover.css.js';
 import {FlameChartStyle, Selection} from './TimelineFlameChartView.js';
@@ -104,9 +105,12 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
   private screenshotImageCache!: Map<TraceEngine.Types.TraceEvents.SyntheticScreenshot, HTMLImageElement|null>;
   private entryIndexToTitle!: string[];
   private lastInitiatorEntry!: number;
+  private lastInitiatorsData: PerfUI.FlameChart.FlameChartInitiatorData[] = [];
   private lastSelection?: Selection;
   #font: string;
-  #eventIndexByEvent: WeakMap<TraceEngine.Types.TraceEvents.TraceEventData, number|null> = new WeakMap();
+  #eventIndexByEvent: WeakMap<
+      TraceEngine.Types.TraceEvents.TraceEventData|TraceEngine.Handlers.ModelHandlers.Frames.TimelineFrame,
+      number|null> = new WeakMap();
 
   constructor() {
     super();
@@ -152,15 +156,12 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
   modifyTree(node: number, action: TraceEngine.EntriesFilter.FilterAction): void {
     const entry = this.entryData[node] as TraceEngine.Types.TraceEvents.SyntheticTraceEntry;
 
-    AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance()?.getEntriesFilter().applyFilterAction(
-        {type: action, entry});
+    ModificationsManager.activeManager()?.getEntriesFilter().applyFilterAction({type: action, entry});
   }
 
   findPossibleContextMenuActions(node: number): TraceEngine.EntriesFilter.PossibleFilterActions|void {
     const entry = this.entryData[node] as TraceEngine.Types.TraceEvents.SyntheticTraceEntry;
-    return AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance()
-        ?.getEntriesFilter()
-        .findPossibleActions(entry);
+    return ModificationsManager.activeManager()?.getEntriesFilter().findPossibleActions(entry);
   }
 
   private buildGroupStyle(extra: Object): PerfUI.FlameChart.GroupStyle {
@@ -179,6 +180,7 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
   setModel(traceEngineData: TraceEngine.Handlers.Types.TraceParseData|null, isCpuProfile = false): void {
     this.reset();
     this.traceEngineData = traceEngineData;
+    ExtensionDataGatherer.instance().modelChanged(traceEngineData);
 
     this.isCpuProfile = isCpuProfile;
     if (traceEngineData) {
@@ -253,7 +255,7 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
   }
 
   entryTitle(entryIndex: number): string|null {
-    const entryType = this.entryType(entryIndex);
+    const entryType = this.#entryTypeForIndex(entryIndex);
     if (entryType === EntryType.Screenshot) {
       return '';
     }
@@ -334,10 +336,13 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
         this.#processInspectorTrace();
       }
     }
-
     return this.timelineDataInternal;
   }
 
+  /**
+   * Register the groups (aka tracks) with the VisualElements framework so
+   * later on we can log when an entry inside this group is selected.
+   */
   #processGenericTrace(): void {
     if (!this.compatibilityTracksAppender) {
       return;
@@ -372,16 +377,16 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
           return 2;
         case 'LayoutShifts':
           return 3;
-        case 'GPU':
-          return 8;
-        case 'Thread':
-          return 4;
-        case 'Thread_AuctionWorklet':
-          return 10;
         case 'Extension':
-          return 11;
+          return 4;
+        case 'Thread':
+          return 5;
+        case 'GPU':
+          return 6;
+        case 'Thread_AuctionWorklet':
+          return 7;
         default:
-          return 12;
+          return 8;
       }
     };
 
@@ -443,6 +448,11 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
 
       if (!TimelineFlameChartDataProvider.timelineEntryIsTraceEvent(entry)) {
         // We only search for events, not for frames, hence this early exit.
+        continue;
+      }
+
+      if (TraceEngine.Types.TraceEvents.isTraceEventScreenshot(entry)) {
+        // Screenshots are represented as trace events, but you can't search for them, so skip.
         continue;
       }
 
@@ -554,11 +564,10 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
     ++this.currentLevel;
   }
 
-  private entryType(entryIndex: number): EntryType {
-    return this.entryTypeByLevel[(this.timelineDataInternal as PerfUI.FlameChart.FlameChartTimelineData)
-                                     .entryLevels[entryIndex]];
+  #entryTypeForIndex(entryIndex: number): EntryType {
+    const level = this.timelineData().entryLevels[entryIndex];
+    return this.entryTypeByLevel[level];
   }
-
   prepareHighlightedEntryInfo(entryIndex: number): Element|null {
     let time = '';
     let title;
@@ -567,7 +576,7 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
 
     const additionalContent: HTMLElement[] = [];
 
-    const entryType = this.entryType(entryIndex);
+    const entryType = this.#entryTypeForIndex(entryIndex);
     if (entryType === EntryType.TrackAppender) {
       if (!this.compatibilityTracksAppender) {
         return null;
@@ -633,9 +642,8 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
     });
 
     const entry = this.entryData[entryIndex] as TraceEngine.Types.TraceEvents.SyntheticTraceEntry;
-    const hiddenEntriesAmount = AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance()
-                                    ?.getEntriesFilter()
-                                    .findHiddenDescendantsAmount(entry);
+    const hiddenEntriesAmount =
+        ModificationsManager.activeManager()?.getEntriesFilter().findHiddenDescendantsAmount(entry);
 
     if (!hiddenEntriesAmount) {
       return null;
@@ -647,7 +655,7 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
   }
 
   entryColor(entryIndex: number): string {
-    const entryType = this.entryType(entryIndex);
+    const entryType = this.#entryTypeForIndex(entryIndex);
     if (entryType === EntryType.Frame) {
       return 'white';
     }
@@ -772,7 +780,7 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
   decorateEntry(
       entryIndex: number, context: CanvasRenderingContext2D, text: string|null, barX: number, barY: number,
       barWidth: number, barHeight: number, unclippedBarX: number, timeToPixelRatio: number): boolean {
-    const entryType = this.entryType(entryIndex);
+    const entryType = this.#entryTypeForIndex(entryIndex);
 
     if (entryType === EntryType.Frame) {
       this.drawFrame(entryIndex, context, text, barX, barY, barWidth, barHeight);
@@ -898,7 +906,7 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
   }
 
   forceDecoration(entryIndex: number): boolean {
-    const entryType = this.entryType(entryIndex);
+    const entryType = this.#entryTypeForIndex(entryIndex);
     if (entryType === EntryType.Frame) {
       return true;
     }
@@ -940,7 +948,7 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
   }
 
   createSelection(entryIndex: number): TimelineSelection|null {
-    const entryType = this.entryType(entryIndex);
+    const entryType = this.#entryTypeForIndex(entryIndex);
     let timelineSelection: TimelineSelection|null = null;
     const entry = this.entryData[entryIndex];
     if (entry && TimelineFlameChartDataProvider.timelineEntryIsTraceEvent(entry)) {
@@ -978,7 +986,7 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
     // Try revealing the entry and getting the index again.
     if (this.entryData.indexOf(selection.object) === -1 && TimelineSelection.isTraceEventSelection(selection.object)) {
       if (this.timelineDataInternal?.selectedGroup) {
-        AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance()?.getEntriesFilter().revealEntry(
+        ModificationsManager.activeManager()?.getEntriesFilter().revealEntry(
             selection.object as TraceEngine.Types.TraceEvents.SyntheticTraceEntry);
         this.timelineData(true);
       }
@@ -991,7 +999,8 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
     return index;
   }
 
-  getIndexForEvent(targetEvent: TraceEngine.Types.TraceEvents.TraceEventData): number|null {
+  indexForEvent(targetEvent: TraceEngine.Types.TraceEvents.TraceEventData|
+                TraceEngine.Handlers.ModelHandlers.Frames.TimelineFrame): number|null {
     // Gets the index for the given event by walking through the array of entryData.
     // This may seem inefficient - but we have seen that by building up large
     // maps keyed by trace events that this has a significant impact on the
@@ -1014,13 +1023,16 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
    * @returns if we should re-render the flame chart (canvas)
    */
   buildFlowForInitiator(entryIndex: number): boolean {
-    if (this.lastInitiatorEntry === entryIndex) {
-      return false;
-    }
     if (!this.traceEngineData) {
       return false;
     }
     if (!this.timelineDataInternal) {
+      return false;
+    }
+    if (this.lastInitiatorEntry === entryIndex) {
+      if (this.lastInitiatorsData) {
+        this.timelineDataInternal.initiatorsData = this.lastInitiatorsData;
+      }
       return false;
     }
     if (!this.compatibilityTracksAppender) {
@@ -1043,7 +1055,7 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
       return true;
     }
 
-    const entryType = this.entryType(entryIndex);
+    const entryType = this.#entryTypeForIndex(entryIndex);
     if (entryType !== EntryType.TrackAppender) {
       return false;
     }
@@ -1053,29 +1065,23 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
     this.lastInitiatorEntry = entryIndex;
 
     const hiddenEvents: TraceEngine.Types.TraceEvents.TraceEventData[] =
-        AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance()
-            ?.getEntriesFilter()
-            .invisibleEntries() ??
-        [];
-    const modifiedEntries: TraceEngine.Types.TraceEvents.TraceEventData[] =
-        AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance()
-            ?.getEntriesFilter()
-            .modifiedEntries() ??
-        [];
+        ModificationsManager.activeManager()?.getEntriesFilter().invisibleEntries() ?? [];
+    const expandableEntries: TraceEngine.Types.TraceEvents.TraceEventData[] =
+        ModificationsManager.activeManager()?.getEntriesFilter().expandableEntries() ?? [];
 
     const initiatorsData = initiatorsDataToDraw(
         this.traceEngineData,
         event,
         hiddenEvents,
-        modifiedEntries,
+        expandableEntries,
     );
     // This means there is no change for arrows.
     if (previousInitiatorsDataLength === 0 && initiatorsData.length === 0) {
       return false;
     }
     for (const intiatorData of initiatorsData) {
-      const eventIndex = this.getIndexForEvent(intiatorData.event);
-      const initiatorIndex = this.getIndexForEvent(intiatorData.initiator);
+      const eventIndex = this.indexForEvent(intiatorData.event);
+      const initiatorIndex = this.indexForEvent(intiatorData.initiator);
       if (eventIndex === null || initiatorIndex === null) {
         continue;
       }
@@ -1086,22 +1092,27 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
         isEntryHidden: intiatorData.isEntryHidden,
       });
     }
+    this.lastInitiatorsData = this.timelineDataInternal.initiatorsData;
     return true;
   }
 
-  eventByIndex(entryIndex: number): TraceEngine.Types.TraceEvents.TraceEventData|null {
+  eventByIndex(entryIndex: number): TraceEngine.Types.TraceEvents.TraceEventData
+      |TraceEngine.Handlers.ModelHandlers.Frames.TimelineFrame|null {
     if (entryIndex < 0) {
       return null;
     }
-    const entryType = this.entryType(entryIndex);
+    const entryType = this.#entryTypeForIndex(entryIndex);
     if (entryType === EntryType.TrackAppender) {
       return this.entryData[entryIndex] as TraceEngine.Types.TraceEvents.TraceEventData;
+    }
+    if (entryType === EntryType.Frame) {
+      return this.entryData[entryIndex] as TraceEngine.Handlers.ModelHandlers.Frames.TimelineFrame;
     }
     return null;
   }
 }
 
-export const InstantEventVisibleDurationMs = 0.001;
+export const InstantEventVisibleDurationMs = TraceEngine.Types.Timing.MilliSeconds(0.001);
 
 export const enum Events {
   DataChanged = 'DataChanged',

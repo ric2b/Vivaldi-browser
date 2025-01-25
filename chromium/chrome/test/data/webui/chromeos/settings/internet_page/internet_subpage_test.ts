@@ -5,7 +5,7 @@
 import 'chrome://os-settings/lazy_load.js';
 
 import {CellularNetworksListElement, NetworkAlwaysOnVpnElement, NetworkListElement, SettingsInternetSubpageElement} from 'chrome://os-settings/lazy_load.js';
-import {Router, routes, settingMojom} from 'chrome://os-settings/os_settings.js';
+import {Router, routes, settingMojom, SettingsToggleButtonElement} from 'chrome://os-settings/os_settings.js';
 import {setESimManagerRemoteForTesting} from 'chrome://resources/ash/common/cellular_setup/mojo_interface_provider.js';
 import {MojoInterfaceProviderImpl} from 'chrome://resources/ash/common/network/mojo_interface_provider.js';
 import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
@@ -75,6 +75,7 @@ suite('<settings-internet-subpage>', () => {
       managedNetworkAvailable: false,
       serial: undefined,
       isCarrierLocked: false,
+      isFlashing: false,
     };
   }
 
@@ -537,21 +538,51 @@ suite('<settings-internet-subpage>', () => {
         await initSubpage();
         initVpn();
 
-        internetSubpage.isAddingBuiltInVpnProhibited = true;
+        internetSubpage.isBuiltInVpnManagementBlocked = true;
         await flushTasks();
 
         const addBuiltInVpnButton =
             internetSubpage.shadowRoot!.querySelector<HTMLButtonElement>(
                 '#addBuiltInVpnButton');
 
-        assertTrue(!!addBuiltInVpnButton);
-        assertTrue(addBuiltInVpnButton.disabled);
+        assertTrue(
+            !!addBuiltInVpnButton, 'add built in vpn button falsely hidden');
+        assertTrue(
+            addBuiltInVpnButton.disabled,
+            'add built in vpn button falsely enabled');
 
-        internetSubpage.isAddingBuiltInVpnProhibited = false;
+        internetSubpage.isBuiltInVpnManagementBlocked = false;
         await flushTasks();
 
-        assertTrue(!!addBuiltInVpnButton);
-        assertFalse(addBuiltInVpnButton.disabled);
+        assertTrue(
+            !!addBuiltInVpnButton, 'add built in vpn button falsely hidden');
+        assertFalse(
+            addBuiltInVpnButton.disabled,
+            'add built in vpn button falsely disabled');
+      });
+
+      test('Disable built-in VPN list subpage buttons', async () => {
+        createSubpage();
+        await initSubpage();
+        initVpn();
+
+        internetSubpage.isBuiltInVpnManagementBlocked = true;
+        await flushTasks();
+
+        let allNetworkLists =
+            internetSubpage.shadowRoot!.querySelectorAll<NetworkListElement>(
+                'network-list');
+
+        assertTrue(allNetworkLists[0]!.isBuiltInVpnManagementBlocked);
+
+        internetSubpage.isBuiltInVpnManagementBlocked = false;
+        await flushTasks();
+
+        allNetworkLists =
+            internetSubpage.shadowRoot!.querySelectorAll<NetworkListElement>(
+                'network-list');
+
+        assertFalse(allNetworkLists[0]!.isBuiltInVpnManagementBlocked);
       });
 
       test(
@@ -696,6 +727,68 @@ suite('<settings-internet-subpage>', () => {
         assertEquals(2, networkAlwaysOnVpn.networks.length);
       });
 
+      [false, true].forEach(isInstantHotspotRebrandEnabled => {
+        test('Instant Hotspot Notification Control is Presented', async () => {
+          loadTimeData.overrideValues({
+            'isInstantHotspotRebrandEnabled': isInstantHotspotRebrandEnabled,
+          });
+          const fakePrefs = {
+            tether: {
+              notifications_enabled: {
+                key: 'notifications_enabled',
+                type: chrome.settingsPrivate.PrefType.BOOLEAN,
+                value: true,
+              },
+            },
+          };
+
+          createSubpage();
+          mojoApi.addNetworksForTest(
+              [OncMojo.getDefaultNetworkState(NetworkType.kTether, 'tether1')]);
+
+          internetSubpage.defaultNetwork =
+              OncMojo.getDefaultNetworkState(NetworkType.kTether, 'tether1');
+          internetSubpage.deviceState =
+              mojoApi.getDeviceStateForTest(NetworkType.kTether) || undefined;
+          internetSubpage.prefs = fakePrefs;
+
+          mojoApi.setDeviceStateForTest({
+            type: NetworkType.kTether,
+            deviceState: DeviceStateType.kEnabled,
+            scanning: false,
+            ipv4Address: undefined,
+            ipv6Address: undefined,
+            imei: undefined,
+            macAddress: undefined,
+            simLockStatus: undefined,
+            simInfos: undefined,
+            inhibitReason: InhibitReason.kNotInhibited,
+            simAbsent: false,
+            managedNetworkAvailable: false,
+            serial: undefined,
+            isCarrierLocked: false,
+            isFlashing: false,
+          });
+          assertFalse(mojoApi.getIsDeviceScanning(NetworkType.kTether));
+
+          initSubpage();
+
+          const notificationsControl =
+              internetSubpage.shadowRoot!
+                  .querySelector<SettingsToggleButtonElement>(
+                      '#instant-tether-notifications-toggle');
+          if (isInstantHotspotRebrandEnabled) {
+            assertTrue(!!notificationsControl);
+            assertTrue(notificationsControl.checked);
+            notificationsControl.click();
+            await flushTasks();
+            assertFalse(notificationsControl.checked);
+          } else {
+            assertNull(notificationsControl);
+          }
+        });
+      });
+
       test('Instant Hotspot page initiates tether scanning', async () => {
         loadTimeData.overrideValues({
           'isInstantHotspotRebrandEnabled': true,
@@ -724,6 +817,7 @@ suite('<settings-internet-subpage>', () => {
           managedNetworkAvailable: false,
           serial: undefined,
           isCarrierLocked: false,
+          isFlashing: false,
         });
         assertFalse(mojoApi.getIsDeviceScanning(NetworkType.kTether));
 
@@ -762,6 +856,7 @@ suite('<settings-internet-subpage>', () => {
             managedNetworkAvailable: false,
             serial: undefined,
             isCarrierLocked: false,
+            isFlashing: false,
           });
           assertFalse(mojoApi.getIsDeviceScanning(NetworkType.kTether));
 

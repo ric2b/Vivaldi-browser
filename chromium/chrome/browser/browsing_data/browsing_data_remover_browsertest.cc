@@ -3,12 +3,14 @@
 // found in the LICENSE file.
 
 #include <stddef.h>
+
 #include <memory>
 #include <string>
 
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/metrics/histogram_samples.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -16,6 +18,7 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/simple_test_clock.h"
 #include "base/test/test_future.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -38,8 +41,10 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/browsing_data/content/browsing_data_model.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/history/core/common/pref_names.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
+#include "components/nacl/common/buildflags.h"
 #include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/features/password_manager_features_util.h"
 #include "components/prefs/pref_service.h"
@@ -100,6 +105,9 @@
 using content::BrowserThread;
 using content::BrowsingDataFilterBuilder;
 
+using testing::UnorderedElementsAre;
+using testing::UnorderedElementsAreArray;
+
 namespace {
 static const char* kExampleHost = "example.com";
 static const char* kLocalHost = "localhost";
@@ -128,6 +136,23 @@ base::Time TimeEnumToTime(TimeEnum time) {
       return base::Time();
   }
 }
+
+std::vector<std::string> GetHistogramSuffixes(
+    const base::HistogramTester& tester,
+    const std::string& prefix) {
+  std::vector<std::string> types;
+  for (const auto& entry : tester.GetTotalCountsForPrefix(prefix)) {
+    types.push_back(entry.first.substr(prefix.length()));
+  }
+  return types;
+}
+
+void AppendRange(std::vector<std::string>& target,
+                 const std::vector<std::string_view> append) {
+  // Use std append_range() when c++23 is available.
+  target.insert(target.end(), append.begin(), append.end());
+}
+
 }  // namespace
 
 class BrowsingDataRemoverBrowserTest
@@ -135,9 +160,7 @@ class BrowsingDataRemoverBrowserTest
  public:
   BrowsingDataRemoverBrowserTest() {
     std::vector<base::test::FeatureRef> enabled_features = {};
-    // TODO(b/314968275): Add tests for when UNO Desktop is enabled.
-    std::vector<base::test::FeatureRef> disabled_features = {
-        switches::kExplicitBrowserSigninUIOnDesktop};
+    std::vector<base::test::FeatureRef> disabled_features = {};
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
     enabled_features.push_back(media::kExternalClearKeyForTesting);
     enabled_features.push_back(features::kCdmStorageDatabase);
@@ -645,6 +668,25 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, WebrtcVideoPerfHistory) {
     run_loop.Run();
   }
 
+  auto filter_builder = BrowsingDataFilterBuilder::Create(
+      BrowsingDataFilterBuilder::Mode::kDelete);
+  filter_builder->AddRegisterableDomain("example.com");
+  RemoveWithFilterAndWait(chrome_browsing_data_remover::FILTERABLE_DATA_TYPES,
+                          std::move(filter_builder));
+
+  // This data type doesn't implement per-origin deletion so just test that
+  // nothing got removed.
+  {
+    base::RunLoop run_loop;
+    webrtc_video_perf_history->GetPerfInfo(
+        media::mojom::WebrtcPredictionFeatures::New(features), kFrameRate,
+        base::BindLambdaForTesting([&](bool smooth) {
+          EXPECT_FALSE(smooth);
+          run_loop.Quit();
+        }));
+    run_loop.Run();
+  }
+
   // Clear history.
   RemoveAndWait(chrome_browsing_data_remover::DATA_TYPE_HISTORY);
 
@@ -831,39 +873,66 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, HistoryDeletion) {
   EXPECT_FALSE(HasDataForType(kType));
 }
 
+// ChromeOS users cannot sign out, their account preferences can never be
+// cleared.
+#if !BUILDFLAG(IS_CHROMEOS)
+
 IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
                        ClearingCookiesAlsoClearsPasswordAccountStorageOptIn) {
+  const char kTestEmail[] = "foo@gmail.com";
   PrefService* prefs = GetProfile()->GetPrefs();
   syncer::SyncService* sync_service =
       SyncServiceFactory::GetForProfile(GetProfile());
-  signin::MakePrimaryAccountAvailable(
-      IdentityManagerFactory::GetForProfile(GetProfile()), "foo@gmail.com",
-      signin::ConsentLevel::kSignin);
-  password_manager::features_util::OptInToAccountStorage(prefs, sync_service);
-  ASSERT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
-      prefs, sync_service));
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(GetProfile());
+  signin::MakePrimaryAccountAvailable(identity_manager, kTestEmail,
+                                      signin::ConsentLevel::kSignin);
 
+  if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
+    password_manager::features_util::OptOutOfAccountStorage(prefs,
+                                                            sync_service);
+  } else {
+    password_manager::features_util::OptInToAccountStorage(prefs, sync_service);
+  }
+  ASSERT_EQ(password_manager::features_util::IsOptedInForAccountStorage(
+                prefs, sync_service),
+            !switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
+
+  signin::ClearPrimaryAccount(identity_manager);
   RemoveAndWait(chrome_browsing_data_remover::DATA_TYPE_SITE_DATA);
+  signin::MakePrimaryAccountAvailable(identity_manager, kTestEmail,
+                                      signin::ConsentLevel::kSignin);
 
-  EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
-      prefs, sync_service));
+  EXPECT_EQ(password_manager::features_util::IsOptedInForAccountStorage(
+                prefs, sync_service),
+            switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
 }
 
 IN_PROC_BROWSER_TEST_F(
     BrowsingDataRemoverBrowserTest,
     ClearingCookiesWithFilterAlsoClearsPasswordAccountStorageOptIn) {
+  const char kTestEmail[] = "foo@gmail.com";
   PrefService* prefs = GetProfile()->GetPrefs();
   syncer::SyncService* sync_service =
       SyncServiceFactory::GetForProfile(GetProfile());
-  signin::MakePrimaryAccountAvailable(
-      IdentityManagerFactory::GetForProfile(GetProfile()), "foo@gmail.com",
-      signin::ConsentLevel::kSignin);
-  password_manager::features_util::OptInToAccountStorage(prefs, sync_service);
-  ASSERT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
-      prefs, sync_service));
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(GetProfile());
+  signin::MakePrimaryAccountAvailable(identity_manager, kTestEmail,
+                                      signin::ConsentLevel::kSignin);
+
+  if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
+    password_manager::features_util::OptOutOfAccountStorage(prefs,
+                                                            sync_service);
+  } else {
+    password_manager::features_util::OptInToAccountStorage(prefs, sync_service);
+  }
+  ASSERT_EQ(password_manager::features_util::IsOptedInForAccountStorage(
+                prefs, sync_service),
+            !switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
 
   // Clearing cookies for some random domain should have no effect on the
   // opt-in.
+  signin::ClearPrimaryAccount(identity_manager);
   {
     std::unique_ptr<BrowsingDataFilterBuilder> filter_builder =
         BrowsingDataFilterBuilder::Create(
@@ -872,10 +941,14 @@ IN_PROC_BROWSER_TEST_F(
     RemoveWithFilterAndWait(chrome_browsing_data_remover::DATA_TYPE_SITE_DATA,
                             std::move(filter_builder));
   }
-  EXPECT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
-      prefs, sync_service));
+  signin::MakePrimaryAccountAvailable(identity_manager, kTestEmail,
+                                      signin::ConsentLevel::kSignin);
+  EXPECT_EQ(password_manager::features_util::IsOptedInForAccountStorage(
+                prefs, sync_service),
+            !switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
 
   // Clearing cookies for google.com should clear the opt-in.
+  signin::ClearPrimaryAccount(identity_manager);
   {
     std::unique_ptr<BrowsingDataFilterBuilder> filter_builder =
         BrowsingDataFilterBuilder::Create(
@@ -884,17 +957,22 @@ IN_PROC_BROWSER_TEST_F(
     RemoveWithFilterAndWait(chrome_browsing_data_remover::DATA_TYPE_SITE_DATA,
                             std::move(filter_builder));
   }
-  EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
-      prefs, sync_service));
+  signin::MakePrimaryAccountAvailable(identity_manager, kTestEmail,
+                                      signin::ConsentLevel::kSignin);
+  EXPECT_EQ(password_manager::features_util::IsOptedInForAccountStorage(
+                prefs, sync_service),
+            switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
 }
 
 IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, ClearSiteData) {
+  const char kTestEmail[] = "foo@gmail.com";
   PrefService* prefs = GetProfile()->GetPrefs();
   syncer::SyncService* sync_service =
       SyncServiceFactory::GetForProfile(GetProfile());
-  signin::MakePrimaryAccountAvailable(
-      IdentityManagerFactory::GetForProfile(GetProfile()), "foo@gmail.com",
-      signin::ConsentLevel::kSignin);
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(GetProfile());
+  signin::MakePrimaryAccountAvailable(identity_manager, kTestEmail,
+                                      signin::ConsentLevel::kSignin);
 
   const GURL kFirstPartyURL("https://google.com");
   const GURL kCrossSiteURL("https://example.com");
@@ -903,7 +981,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, ClearSiteData) {
     const url::Origin origin;
     const std::optional<net::CookiePartitionKey> cookie_partition_key;
     const std::optional<blink::StorageKey> storage_key;
-    bool expects_opted_in;
+    bool expects_keep_optin_pref;
   } test_cases[] = {
       {
           url::Origin::Create(kFirstPartyURL),
@@ -950,18 +1028,35 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, ClearSiteData) {
     SCOPED_TRACE(base::StringPrintf("Test case %zu", i));
     const auto& test_case = test_cases[i];
 
-    password_manager::features_util::OptInToAccountStorage(prefs, sync_service);
-    ASSERT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
-        prefs, sync_service));
-
-    ClearSiteDataAndWait(test_case.origin, test_case.cookie_partition_key,
-                         test_case.storage_key, {});
-
+    if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
+      password_manager::features_util::OptOutOfAccountStorage(prefs,
+                                                              sync_service);
+    } else {
+      password_manager::features_util::OptInToAccountStorage(prefs,
+                                                             sync_service);
+    }
     ASSERT_EQ(password_manager::features_util::IsOptedInForAccountStorage(
                   prefs, sync_service),
-              test_case.expects_opted_in);
+              !switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
+    signin::ClearPrimaryAccount(identity_manager);
+    ClearSiteDataAndWait(test_case.origin, test_case.cookie_partition_key,
+                         test_case.storage_key, {});
+    signin::MakePrimaryAccountAvailable(identity_manager, kTestEmail,
+                                        signin::ConsentLevel::kSignin);
+
+    if (test_case.expects_keep_optin_pref) {
+      EXPECT_EQ(password_manager::features_util::IsOptedInForAccountStorage(
+                    prefs, sync_service),
+                !switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
+    } else {
+      EXPECT_EQ(password_manager::features_util::IsOptedInForAccountStorage(
+                    prefs, sync_service),
+                switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
+    }
   }
 }
+
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 // Storage Buckets
 
@@ -1039,6 +1134,97 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverStorageBucketsBrowserTest,
                             error_or_buckets) {
         EXPECT_EQ(1u, error_or_buckets.value().size());
       }));
+}
+
+const char kDelegateHistogramPrefix[] =
+    "History.ClearBrowsingData.Duration.ChromeTask.";
+const char kImplHistogramPrefix[] = "History.ClearBrowsingData.Duration.Task.";
+
+// Add data types here that support filtering and only delete data that matches
+// the BrowsingDataFilterBuilder.
+const std::vector<std::string_view> kSupportsOriginFilteringImpl{
+    "AuthCache",           "EmbedderData",     "HttpCache",
+    "NetworkErrorLogging", "PreflightCache",   "ReportingCache",
+    "SharedDictionary",    "StoragePartition", "Synchronous",
+    "TrustTokens",
+};
+const std::vector<std::string_view> kSupportsOriginFilteringDelegate{
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN)
+    "CdmLicenses",
+#endif
+    "Cookies",           "DisableAutoSigninForProfilePasswords",
+    "DomainReliability", "MediaDeviceSalts",
+    "Synchronous",
+};
+
+// This test ensures that all deletions that are part of FILTERABLE_DATA_TYPES
+// fully support the BrowsingDataFilterBuilder if they are running for
+// origin-specific deletions. Ideally, every web-visible data type should
+// support filtering. If you implemented filtering already, just add your type
+// to kSupportsOriginFiltering above.
+//
+// If it is not important that your data is cleared with per-origin deletions,
+// you can add your type to kDoesNotSupportOriginFiltering and ensure that
+// deletions are only performed when the filter builder
+// MatchesMostOriginsAndDomains().
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, FullyFilteredDataTypes) {
+  base::HistogramTester tester;
+  auto filter_builder = BrowsingDataFilterBuilder::Create(
+      BrowsingDataFilterBuilder::Mode::kDelete);
+  filter_builder->AddRegisterableDomain("example.com");
+  RemoveWithFilterAndWait(chrome_browsing_data_remover::FILTERABLE_DATA_TYPES,
+                          std::move(filter_builder));
+
+  EXPECT_THAT(GetHistogramSuffixes(tester, kImplHistogramPrefix),
+              UnorderedElementsAreArray(kSupportsOriginFilteringImpl));
+  EXPECT_THAT(GetHistogramSuffixes(tester, kDelegateHistogramPrefix),
+              UnorderedElementsAreArray(kSupportsOriginFilteringDelegate));
+}
+
+// Add data types here that do not support the BrowsingDataFilterBuilder.
+// These deletions should only run when the mode of the filter builder is
+// "kPreserve" and MatchesMostOriginsAndDomains() is true. Otherwise data for
+// these types will be cleared when per-origin deletions like those from the
+// Clear-Site-Data header are performed.
+const std::vector<std::string_view> kDoesNotSupportOriginFilteringImpl{
+    "CodeCaches",
+    "NetworkHistory",
+};
+const std::vector<std::string_view> kDoesNotSupportOriginFilteringDelegate{
+    "FaviconCacheExpiration",
+#if BUILDFLAG(ENABLE_DOWNGRADE_PROCESSING)
+    "UserDataSnapshot",
+#endif
+    "WebrtcEventLogs",
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    "TpmAttestationKeys",
+#endif
+#if BUILDFLAG(ENABLE_NACL)
+    "NaclCache",
+    "PnaclCache",
+#endif
+};
+
+// See comment on FullyFilteredDataTypes test for advice when this test fails.
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, AllFilterableDataTypes) {
+  base::HistogramTester tester;
+  auto filter_builder = BrowsingDataFilterBuilder::Create(
+      BrowsingDataFilterBuilder::Mode::kPreserve);
+  filter_builder->AddRegisterableDomain("example.com");
+  RemoveWithFilterAndWait(chrome_browsing_data_remover::FILTERABLE_DATA_TYPES,
+                          std::move(filter_builder));
+
+  std::vector<std::string> all_impl_types;
+  AppendRange(all_impl_types, kSupportsOriginFilteringImpl);
+  AppendRange(all_impl_types, kDoesNotSupportOriginFilteringImpl);
+  EXPECT_THAT(GetHistogramSuffixes(tester, kImplHistogramPrefix),
+              UnorderedElementsAreArray(all_impl_types));
+
+  std::vector<std::string> all_delegate_types;
+  AppendRange(all_delegate_types, kSupportsOriginFilteringDelegate);
+  AppendRange(all_delegate_types, kDoesNotSupportOriginFilteringDelegate);
+  EXPECT_THAT(GetHistogramSuffixes(tester, kDelegateHistogramPrefix),
+              UnorderedElementsAreArray(all_delegate_types));
 }
 
 // Parameterized to run tests for different deletion time ranges.
@@ -1565,6 +1751,94 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
                    ->GetClearUserCredentialsCount());
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
+                       RelatedWebsiteSetsDeletion) {
+  const GURL kPrimaryUrl("https://subdomain.example.com:112");
+  const GURL kSecondaryUrl("https://subidubi.testsite.com:55");
+
+  HostContentSettingsMap* settings_map =
+      HostContentSettingsMapFactory::GetForProfile(GetProfile());
+
+  // Setting the HostContentSettingsMap's clock to test last_modified of
+  // RuleMetaData below.
+  base::SimpleTestClock test_clock;
+  settings_map->SetClockForTesting(&test_clock);
+  test_clock.SetNow(base::Time::Now());
+
+  // Expected setting for the default grant.
+  const ContentSettingPatternSource kExpectedSettingDefault(
+      ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
+      content_settings::ContentSettingToValue(CONTENT_SETTING_ASK),
+      content_settings::ProviderType::kDefaultProvider,
+      /*incognito=*/false);
+
+  // Check that there are only default grants.
+  ASSERT_THAT(
+      settings_map->GetSettingsForOneType(ContentSettingsType::STORAGE_ACCESS),
+      UnorderedElementsAre(kExpectedSettingDefault));
+  ASSERT_THAT(settings_map->GetSettingsForOneType(
+                  ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS),
+              UnorderedElementsAre(kExpectedSettingDefault));
+
+  // Set RWS grants.
+  content_settings::ContentSettingConstraints constraints;
+  constraints.set_session_model(
+      content_settings::mojom::SessionModel::NON_RESTORABLE_USER_SESSION);
+  settings_map->SetContentSettingDefaultScope(
+      kPrimaryUrl, kSecondaryUrl, ContentSettingsType::STORAGE_ACCESS,
+      CONTENT_SETTING_ALLOW, constraints);
+  settings_map->SetContentSettingDefaultScope(
+      kPrimaryUrl, kSecondaryUrl, ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS,
+      CONTENT_SETTING_ALLOW, constraints);
+
+  // Check that the grants were set.
+  content_settings::RuleMetaData expected_metadata;
+  expected_metadata.SetFromConstraints(constraints);
+  expected_metadata.set_last_modified(test_clock.Now());
+  EXPECT_THAT(
+      settings_map->GetSettingsForOneType(ContentSettingsType::STORAGE_ACCESS),
+      UnorderedElementsAre(
+          kExpectedSettingDefault,
+          ContentSettingPatternSource(
+              ContentSettingsPattern::FromURLToSchemefulSitePattern(
+                  GURL(kPrimaryUrl)),  // https://[*.]example.com
+              ContentSettingsPattern::FromURLToSchemefulSitePattern(
+                  GURL(kSecondaryUrl)),  // https://[*.]testsite.com
+              content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW),
+              content_settings::ProviderType::kPrefProvider,
+              /*incognito=*/false, expected_metadata)));
+  EXPECT_THAT(
+      settings_map->GetSettingsForOneType(
+          ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS),
+      UnorderedElementsAre(
+          kExpectedSettingDefault,
+          ContentSettingPatternSource(
+              ContentSettingsPattern::FromURLNoWildcard(
+                  GURL(kPrimaryUrl)),  // https://subdomain.example.com:112
+              ContentSettingsPattern::FromURLToSchemefulSitePattern(
+                  GURL(kSecondaryUrl)),
+              content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW),
+              content_settings::ProviderType::kPrefProvider,
+              /*incognito=*/false, expected_metadata)));
+
+  // Remove Related Website Sets storage grants.
+  std::unique_ptr<BrowsingDataFilterBuilder> filter_builder =
+      BrowsingDataFilterBuilder::Create(
+          BrowsingDataFilterBuilder::Mode::kDelete);
+  filter_builder->AddOrigin(url::Origin::Create(kPrimaryUrl));
+  RemoveWithFilterAndWait(
+      content::BrowsingDataRemover::DATA_TYPE_RELATED_WEBSITE_SETS_PERMISSIONS,
+      std::move(filter_builder));
+
+  // Check that there's only the default grant left.
+  EXPECT_THAT(
+      settings_map->GetSettingsForOneType(ContentSettingsType::STORAGE_ACCESS),
+      UnorderedElementsAre(kExpectedSettingDefault));
+  EXPECT_THAT(settings_map->GetSettingsForOneType(
+                  ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS),
+              UnorderedElementsAre(kExpectedSettingDefault));
+}
 
 // Some storage backend use a different code path for full deletions and
 // partial deletions, so we need to test both.

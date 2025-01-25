@@ -14,6 +14,7 @@
 #include "src/common/globals.h"
 #include "src/execution/isolate.h"
 #include "src/flags/flags.h"
+#include "src/heap/base/cached-unordered-map.h"
 #include "src/heap/ephemeron-remembered-set.h"
 #include "src/heap/gc-tracer-inl.h"
 #include "src/heap/gc-tracer.h"
@@ -25,11 +26,12 @@
 #include "src/heap/marking-visitor-inl.h"
 #include "src/heap/marking-visitor.h"
 #include "src/heap/marking.h"
+#include "src/heap/memory-chunk-metadata.h"
 #include "src/heap/memory-measurement-inl.h"
 #include "src/heap/memory-measurement.h"
 #include "src/heap/minor-mark-sweep-inl.h"
 #include "src/heap/minor-mark-sweep.h"
-#include "src/heap/mutable-page.h"
+#include "src/heap/mutable-page-metadata.h"
 #include "src/heap/object-lock.h"
 #include "src/heap/objects-visiting-inl.h"
 #include "src/heap/objects-visiting.h"
@@ -44,12 +46,18 @@
 #include "src/objects/js-array-buffer-inl.h"
 #include "src/objects/slots-inl.h"
 #include "src/objects/transitions-inl.h"
-#include "src/objects/visitors.h"
 #include "src/utils/utils-inl.h"
-#include "src/utils/utils.h"
 
 namespace v8 {
 namespace internal {
+
+struct MemoryChunkData final {
+  intptr_t live_bytes = 0;
+  std::unique_ptr<TypedSlots> typed_slots;
+};
+
+using MemoryChunkDataMap =
+    ::heap::base::CachedUnorderedMap<MutablePageMetadata*, MemoryChunkData>;
 
 class ConcurrentMarkingVisitor final
     : public FullMarkingVisitorBase<ConcurrentMarkingVisitor> {
@@ -58,14 +66,13 @@ class ConcurrentMarkingVisitor final
                            WeakObjects::Local* local_weak_objects, Heap* heap,
                            unsigned mark_compact_epoch,
                            base::EnumSet<CodeFlushMode> code_flush_mode,
-                           bool embedder_tracing_enabled,
                            bool should_keep_ages_unchanged,
                            uint16_t code_flushing_increase,
                            MemoryChunkDataMap* memory_chunk_data)
-      : FullMarkingVisitorBase(
-            local_marking_worklists, local_weak_objects, heap,
-            mark_compact_epoch, code_flush_mode, embedder_tracing_enabled,
-            should_keep_ages_unchanged, code_flushing_increase),
+      : FullMarkingVisitorBase(local_marking_worklists, local_weak_objects,
+                               heap, mark_compact_epoch, code_flush_mode,
+                               should_keep_ages_unchanged,
+                               code_flushing_increase),
         memory_chunk_data_(memory_chunk_data) {}
 
   using FullMarkingVisitorBase<
@@ -76,13 +83,14 @@ class ConcurrentMarkingVisitor final
   // Implements ephemeron semantics: Marks value if key is already reachable.
   // Returns true if value was actually marked.
   bool ProcessEphemeron(Tagged<HeapObject> key, Tagged<HeapObject> value) {
-    if (IsMarked(key)) {
-      if (TryMark(value)) {
-        local_marking_worklists_->Push(value);
+    if (marking_state()->IsMarked(key)) {
+      const auto target_worklist =
+          MarkingHelper::ShouldMarkObject(heap_, value);
+      DCHECK(target_worklist.has_value());
+      if (MarkObject(key, value, target_worklist.value())) {
         return true;
       }
-
-    } else if (IsUnmarked(value)) {
+    } else if (marking_state()->IsUnmarked(value)) {
       local_weak_objects_->next_ephemerons_local.Push(Ephemeron{key, value});
     }
     return false;
@@ -115,10 +123,6 @@ class ConcurrentMarkingVisitor final
       data.typed_slots.reset(new TypedSlots());
     }
     data.typed_slots->Insert(info.slot_type, info.offset);
-  }
-
-  TraceRetainingPathMode retaining_path_mode() {
-    return TraceRetainingPathMode::kDisabled;
   }
 
   MemoryChunkDataMap* memory_chunk_data_;
@@ -271,11 +275,8 @@ void ConcurrentMarking::RunMajor(JobDelegate* delegate,
   WeakObjects::Local local_weak_objects(weak_objects_);
   ConcurrentMarkingVisitor visitor(
       &local_marking_worklists, &local_weak_objects, heap_, mark_compact_epoch,
-      code_flush_mode,
-      cpp_heap && local_marking_worklists.cpp_marking_state()
-                      ->SupportsWrappableExtraction(),
-      should_keep_ages_unchanged, heap_->tracer()->CodeFlushingIncrease(),
-      &task_state->memory_chunk_data);
+      code_flush_mode, should_keep_ages_unchanged,
+      heap_->tracer()->CodeFlushingIncrease(), &task_state->memory_chunk_data);
   NativeContextInferrer native_context_inferrer;
   NativeContextStats& native_context_stats = task_state->native_context_stats;
   double time_ms;
@@ -574,8 +575,13 @@ void ConcurrentMarking::TryScheduleJob(GarbageCollector garbage_collector,
   DCHECK(!heap_->IsTearingDown());
   DCHECK(IsStopped());
 
+  DCHECK_NE(garbage_collector, GarbageCollector::SCAVENGER);
   if (garbage_collector == GarbageCollector::MARK_COMPACTOR &&
       !heap_->mark_compact_collector()->UseBackgroundThreadsInCycle()) {
+    return;
+  }
+  if (garbage_collector == GarbageCollector::MINOR_MARK_SWEEPER &&
+      !heap_->minor_mark_sweep_collector()->UseBackgroundThreadsInCycle()) {
     return;
   }
 
@@ -598,6 +604,7 @@ void ConcurrentMarking::TryScheduleJob(GarbageCollector garbage_collector,
       }));
   garbage_collector_ = garbage_collector;
   if (garbage_collector == GarbageCollector::MARK_COMPACTOR) {
+    heap_->mark_compact_collector()->local_marking_worklists()->Publish();
     marking_worklists_ = heap_->mark_compact_collector()->marking_worklists();
     auto job = std::make_unique<JobTaskMajor>(
         this, heap_->mark_compact_collector()->epoch(),
@@ -610,6 +617,7 @@ void ConcurrentMarking::TryScheduleJob(GarbageCollector garbage_collector,
   } else {
     DCHECK(garbage_collector == GarbageCollector::MINOR_MARK_SWEEPER);
     minor_marking_state_ = std::make_unique<MinorMarkingState>();
+    heap_->minor_mark_sweep_collector()->local_marking_worklists()->Publish();
     marking_worklists_ =
         heap_->minor_mark_sweep_collector()->marking_worklists();
     auto job = std::make_unique<JobTaskMinor>(this);
@@ -659,6 +667,11 @@ void ConcurrentMarking::RescheduleJobIfNeeded(
   } else {
     DCHECK(garbage_collector_.has_value());
     DCHECK_EQ(garbage_collector, garbage_collector_.value());
+    if (garbage_collector == GarbageCollector::MARK_COMPACTOR) {
+      heap_->mark_compact_collector()->local_marking_worklists()->Publish();
+    } else {
+      heap_->minor_mark_sweep_collector()->local_marking_worklists()->Publish();
+    }
     if (!IsWorkLeft()) return;
     if (priority != TaskPriority::kUserVisible)
       job_handle_->UpdatePriority(priority);

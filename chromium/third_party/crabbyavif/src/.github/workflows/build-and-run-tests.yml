@@ -1,0 +1,98 @@
+name: Build and Run Tests
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+# Cancel the workflow if a new one is triggered from the same PR, branch, or tag, except on main.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  build-and-run-tests:
+    name: "Build and Run Tests on ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      CC: clang
+      CXX: clang++
+
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+    - name: Setup Visual Studio shell
+      if: runner.os == 'Windows'
+      uses: egor-tensin/vs-shell@9a932a62d05192eae18ca370155cf877eecc2202 # v2.1
+
+    - name: Cache external dependencies
+      id: cache-ext
+      uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2 # v4.0.0
+      with:
+        path: |
+          sys
+          external
+        key: ${{ runner.os }}-${{ hashFiles('sys/dav1d-sys/Cargo.toml', 'sys/dav1d-sys/dav1d.cmd', 'sys/dav1d-sys/build.rs', 'sys/libyuv-sys/Cargo.toml', 'sys/libyuv-sys/libyuv.cmd', 'sys/libyuv-sys/build.rs', 'sys/libgav1-sys/Cargo.toml', 'sys/libgav1-sys/libgav1.cmd', 'sys/libgav1-sys/build.rs', 'external/googletest.cmd') }}
+
+    - uses: jwlawson/actions-setup-cmake@d06b37b47cfd043ec794ffa3e40e0b6b5858a7ec # v1.14.2
+      if: steps.cache-ext.outputs.cache-hit != 'true'
+    - uses: ilammy/setup-nasm@13cbeb366c45c4379d3478cdcbadd8295feb5028 # v1.5.1
+      if: steps.cache-ext.outputs.cache-hit != 'true'
+    - uses: seanmiddleditch/gha-setup-ninja@8b297075da4cd2a5f1fd21fe011b499edf06e9d2 # v4
+      if: steps.cache-ext.outputs.cache-hit != 'true'
+    - run: pip install meson
+      if: steps.cache-ext.outputs.cache-hit != 'true'
+
+    - name: Build dav1d
+      if: steps.cache-ext.outputs.cache-hit != 'true'
+      working-directory: ./sys/dav1d-sys
+      run: ./dav1d.cmd
+    - name: Build libyuv
+      if: steps.cache-ext.outputs.cache-hit != 'true'
+      working-directory: ./sys/libyuv-sys
+      run: ./libyuv.cmd
+
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      with:
+        toolchain: stable
+
+    - name: Build and run the Rust tests
+      run: cargo test -- --skip test_conformance
+
+    - name: Build GoogleTest
+      if: steps.cache-ext.outputs.cache-hit != 'true' && runner.os != 'Windows'
+      working-directory: ./external
+      run: bash -e googletest.cmd
+
+    - name: Build and run the C++ tests
+      # TODO: This step fails on macos. So run it on linux only for now.
+      if: runner.os == 'Linux'
+      run: |
+        cargo build --features capi --release
+        cmake -S c_api_tests -B c_build
+        make -C c_build
+        ctest --test-dir c_build -E conformance_tests
+
+    - name: Build libgav1
+      if: steps.cache-ext.outputs.cache-hit != 'true'
+      working-directory: ./sys/libgav1-sys
+      run: ./libgav1.cmd
+
+    - name: Build and run the Rust tests with libgav1
+      run: cargo test --no-default-features --features libgav1,libyuv -- --skip test_conformance
+
+    - name: Build and run the C++ tests with libgav1
+      # TODO: This step fails on macos. So run it on linux only for now.
+      if: runner.os == 'Linux'
+      run: |
+        cargo build --no-default-features --features capi,libgav1,libyuv --release
+        cmake -S c_api_tests -B c_build_gav1
+        make -C c_build_gav1
+        ctest --test-dir c_build_gav1 -E conformance_tests

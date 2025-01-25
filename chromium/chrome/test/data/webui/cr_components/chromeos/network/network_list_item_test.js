@@ -14,6 +14,7 @@ import {ActivationStateType, CrosNetworkConfigRemote, InhibitReason, SecurityTyp
 import {ConnectionStateType, NetworkType, OncSource, PortalState} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {FakeNetworkConfig} from 'chrome://webui-test/chromeos/fake_network_config_mojom.js';
 import {FakeESimManagerRemote} from 'chrome://webui-test/cr_components/chromeos/cellular_setup/fake_esim_manager_remote.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
@@ -617,6 +618,30 @@ suite('NetworkListItemTest', function() {
     assertFalse(eventTriggered);
   });
 
+  test('Disable VPN subpage button when Always-On VPN forced on', async () => {
+    init();
+
+    const properties =
+        OncMojo.getDefaultManagedProperties(NetworkType.kVPN, 'vpn');
+    mojoApi_.setManagedPropertiesForTest(properties);
+    listItem.networkState = OncMojo.managedPropertiesToNetworkState(properties);
+    listItem.isBuiltInVpnManagementBlocked = false;
+    await flushAsync();
+
+    const arrow = listItem.$$('#subpageButton');
+    let policyIcon = listItem.$$('#policyIcon');
+
+    assertFalse(arrow.disabled, 'subpage button is falsely disabled');
+    assertFalse(!!policyIcon, 'policy icon is falsely showing');
+
+    listItem.isBuiltInVpnManagementBlocked = true;
+    await flushAsync();
+
+    policyIcon = listItem.$$('#policyIcon');
+    assertTrue(arrow.disabled, 'subpage button is falsely enabled');
+    assertTrue(!!policyIcon, 'policy icon is falsely hidden');
+  });
+
   test(
       'Network disabled, no arrow and enter and click does not fire events',
       async () => {
@@ -688,7 +713,6 @@ suite('NetworkListItemTest', function() {
       async () => {
         loadTimeData.overrideValues({
           'isUserLoggedIn': true,
-          'isCellularCarrierLockEnabled': true,
         });
         init();
         const iccid = '11111111111111111111';
@@ -704,24 +728,6 @@ suite('NetworkListItemTest', function() {
         assertTrue(!!sublabel);
         assertEquals(networkStateLockedText, sublabel.textContent.trim());
       });
-
-  test('Show sim locked sublabel when carrier lock is disabled', async () => {
-    loadTimeData.overrideValues(
-        {'isUserLoggedIn': true, 'isCellularCarrierLockEnabled': false});
-    init();
-    const iccid = '11111111111111111111';
-    const eid = '1';
-    eSimManagerRemote.addEuiccForTest(/*numProfiles=*/ 1);
-    const networkStateLockedText =
-        listItem.i18n('networkListItemUpdatedCellularSimCardLocked');
-    listItem.item = initCellularNetwork(
-        iccid, eid, /*simlocked=*/ true, /*simlocktype*/ 'network-pin');
-
-    await flushAsync();
-    const sublabel = listItem.$$('#sublabel');
-    assertTrue(!!sublabel);
-    assertEquals(networkStateLockedText, sublabel.textContent.trim());
-  });
 
   test(
       'Show locked sublabel when cellular network is locked and scanning',

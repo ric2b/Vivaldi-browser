@@ -32,7 +32,6 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 
 #include "app/vivaldi_apptools.h"
-#include "ui/vivaldi_browser_window.h"
 
 @interface ChromeRenderWidgetHostViewMacDelegate () <HistorySwiperDelegate>
 

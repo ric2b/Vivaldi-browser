@@ -132,8 +132,6 @@ feedback::FeedbackSource ToChromeFeedbackSource(
       return feedback::FeedbackSource::kFeedbackSourceGameDashboard;
     case ash::ShellDelegate::FeedbackSource::kOverview:
       return feedback::FeedbackSource::kFeedbackSourceOverview;
-    case ash::ShellDelegate::FeedbackSource::kSnapGroups:
-      return feedback::FeedbackSource::kFeedbackSourceSnapGroups;
     case ash::ShellDelegate::FeedbackSource::kWindowLayoutMenu:
       return feedback::FeedbackSource::kFeedbackSourceWindowLayoutMenu;
   }
@@ -495,4 +493,9 @@ void ChromeShellDelegate::OpenMultitaskingSettings() {
   chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
       ProfileManager::GetActiveUserProfile(), sub_page_path,
       chromeos::settings::mojom::Setting::kSnapWindowSuggestions);
+}
+
+bool ChromeShellDelegate::IsNoFirstRunSwitchOn() const {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      ::switches::kNoFirstRun);
 }

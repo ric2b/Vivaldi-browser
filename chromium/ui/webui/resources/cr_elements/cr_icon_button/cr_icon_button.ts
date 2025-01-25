@@ -99,7 +99,7 @@ export class CrIconButtonElement extends CrIconbuttonElementBase {
 
   disabled: boolean = false;
   ironIcon?: string;
-  private multipleIcons_: boolean = false;
+  protected multipleIcons_: boolean = false;
 
   /**
    * It is possible to activate a tab when the space key is pressed down. When
@@ -183,10 +183,8 @@ export class CrIconButtonElement extends CrIconbuttonElementBase {
       crIcon.icon = icon;
       this.$.icon.appendChild(crIcon);
       await crIcon.updateComplete;
-      if (crIcon.shadowRoot) {
-        crIcon.shadowRoot.querySelectorAll('svg, img')
-            .forEach(child => child.setAttribute('role', 'none'));
-      }
+      crIcon.shadowRoot!.querySelectorAll('svg, img')
+          .forEach(child => child.setAttribute('role', 'none'));
     });
   }
 

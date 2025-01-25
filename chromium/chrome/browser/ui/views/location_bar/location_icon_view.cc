@@ -250,7 +250,7 @@ void LocationIconView::SetAccessibleProperties(bool is_initialization) {
   const std::u16string name =
       delegate_->IsEditingOrEmpty()
           ? l10n_util::GetStringUTF16(IDS_ACC_SEARCH_ICON)
-          : GetAccessibleName();
+          : GetViewAccessibility().GetCachedName();
 
   // If no display text exists, ensure that the accessibility label is added.
   const std::u16string description =
@@ -261,10 +261,10 @@ void LocationIconView::SetAccessibleProperties(bool is_initialization) {
           : std::u16string();
 
   if (is_initialization) {
-    SetAccessibilityProperties(role, name, description);
+    GetViewAccessibility().SetProperties(role, name, description);
   } else {
-    SetAccessibleRole(role);
-    SetAccessibleName(name);
+    GetViewAccessibility().SetRole(role);
+    GetViewAccessibility().SetName(name);
     GetViewAccessibility().SetDescription(description);
   }
 }
@@ -392,7 +392,8 @@ bool LocationIconView::IsTriggerableEvent(const ui::Event& event) {
   if (event.IsMouseEvent()) {
     if (event.AsMouseEvent()->IsOnlyMiddleMouseButton())
       return false;
-  } else if (event.IsGestureEvent() && event.type() != ui::ET_GESTURE_TAP) {
+  } else if (event.IsGestureEvent() &&
+             event.type() != ui::EventType::kGestureTap) {
     return false;
   }
 

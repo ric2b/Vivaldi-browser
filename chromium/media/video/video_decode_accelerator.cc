@@ -30,24 +30,15 @@ std::string VideoDecodeAccelerator::Config::AsHumanReadableString() const {
 
 void VideoDecodeAccelerator::Client::NotifyInitializationComplete(
     DecoderStatus status) {
-  NOTREACHED() << "By default deferred initialization is not supported.";
-}
-
-gpu::SharedImageStub* VideoDecodeAccelerator::Client::GetSharedImageStub()
-    const {
-  return nullptr;
-}
-
-CommandBufferHelper* VideoDecodeAccelerator::Client::GetCommandBufferHelper()
-    const {
-  return nullptr;
+  NOTREACHED_IN_MIGRATION()
+      << "By default deferred initialization is not supported.";
 }
 
 VideoDecodeAccelerator::~VideoDecodeAccelerator() = default;
 
 void VideoDecodeAccelerator::Decode(scoped_refptr<DecoderBuffer> buffer,
                                     int32_t bitstream_id) {
-  NOTREACHED() << "By default DecoderBuffer is not supported.";
+  NOTREACHED_IN_MIGRATION() << "By default DecoderBuffer is not supported.";
 }
 
 bool VideoDecodeAccelerator::TryToSetupDecodeOnSeparateSequence(
@@ -62,19 +53,11 @@ void VideoDecodeAccelerator::ImportBufferForPicture(
     int32_t picture_buffer_id,
     VideoPixelFormat pixel_format,
     gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle) {
-  NOTREACHED() << "Buffer import not supported.";
+  NOTREACHED_IN_MIGRATION() << "Buffer import not supported.";
 }
 
 void VideoDecodeAccelerator::SetOverlayInfo(const OverlayInfo& overlay_info) {
-  NOTREACHED() << "Overlays are not supported.";
-}
-
-GLenum VideoDecodeAccelerator::GetSurfaceInternalFormat() const {
-  return GL_RGBA;
-}
-
-bool VideoDecodeAccelerator::SupportsSharedImagePictureBuffers() const {
-  return false;
+  NOTREACHED_IN_MIGRATION() << "Overlays are not supported.";
 }
 
 VideoDecodeAccelerator::SupportedProfile::SupportedProfile()

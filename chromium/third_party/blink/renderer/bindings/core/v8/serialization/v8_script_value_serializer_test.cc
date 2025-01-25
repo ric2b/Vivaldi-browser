@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/bindings/core/v8/serialization/v8_script_value_serializer.h"
 
 #include "base/test/scoped_feature_list.h"
@@ -1603,9 +1608,9 @@ TEST(V8ScriptValueSerializerTest, RoundTripBlob) {
   test::TaskEnvironment task_environment;
   V8TestingScope scope;
   const char kHelloWorld[] = "Hello world!";
-  Blob* blob =
-      Blob::Create(reinterpret_cast<const unsigned char*>(&kHelloWorld),
-                   sizeof(kHelloWorld), "text/plain");
+  Blob* blob = Blob::Create(
+      base::as_bytes(base::span_with_nul_from_cstring(kHelloWorld)),
+      "text/plain");
   String uuid = blob->Uuid();
   EXPECT_FALSE(uuid.empty());
   v8::Local<v8::Value> wrapper =
@@ -1640,9 +1645,9 @@ TEST(V8ScriptValueSerializerTest, RoundTripBlobIndex) {
   test::TaskEnvironment task_environment;
   V8TestingScope scope;
   const char kHelloWorld[] = "Hello world!";
-  Blob* blob =
-      Blob::Create(reinterpret_cast<const unsigned char*>(&kHelloWorld),
-                   sizeof(kHelloWorld), "text/plain");
+  Blob* blob = Blob::Create(
+      base::as_bytes(base::span_with_nul_from_cstring(kHelloWorld)),
+      "text/plain");
   String uuid = blob->Uuid();
   EXPECT_FALSE(uuid.empty());
   v8::Local<v8::Value> wrapper =

@@ -21,9 +21,9 @@ title: Running tests locally
 
 ### Linux
 
-1.  `cd` `src/`
+1.  `cd src/`
 2.  [Build](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/linux/build_instructions.md)
-3.  `Run the test of interest, e.g. ./out/Debug/base_unittests`
+3.  Run the test of interest, e.g. `./out/Debug/base_unittests`
 
 Many unit tests create a chromium UI, which means they need the ability to
 create a visible window. To run these tests remotely in a terminal, or to keep
@@ -118,17 +118,23 @@ Frame Buffer). There are multiple ways to run tests with xvfb!
 Example with unittests and testing/xvfb.py (note: you will need to install
 xcompmgr, although this is done as part of install-build-deps.py)
 
-testing/xvfb.py out/Default/component_unittests
+```
+testing/xvfb.py out/Default/components_unittests
+```
 
 Example with browser tests and running Xvfb and setting the DISPLAY env
 variable.
 
+```
 Xvfb.py :100 -screen 0 1600x1200x24 &
 DISPLAY=localhost:100 out/Default/browser_tests
+```
 
 Third example, with xvfb-run:
 
+```
 xvfb-run -s "-screen 0 1024x768x24" out/Default/content_unittests
+```
 
 ## **Run tests 5x faster on gLinux**
 
@@ -136,6 +142,8 @@ Browser tests on gLinux start up extremely slowly due to idiosyncratic NSS
 configurations. If you need to regularly run browser tests on gLinux, consider
 using the run_with_dummy_home.py helper script:
 
+```
 testing/run_with_dummy_home.py testing/xvfb.py out/Default/browser_tests
+```
 
 This can speed tests up by 5x or more.

@@ -36,6 +36,7 @@
 #include "chrome/updater/mac/privileged_helper/service.h"
 #include "chrome/updater/persisted_data.h"
 #include "chrome/updater/prefs.h"
+#include "chrome/updater/registration_data.h"
 #include "chrome/updater/test/integration_tests_impl.h"
 #include "chrome/updater/test/unit_test_util.h"
 #include "chrome/updater/updater_branding.h"
@@ -256,7 +257,7 @@ void ExpectNotActive(UpdaterScope scope, const std::string& app_id) {
   EXPECT_FALSE(base::PathIsWritable(*path));
 }
 
-bool WaitForUpdaterExit(UpdaterScope /*scope*/) {
+bool WaitForUpdaterExit() {
   return WaitFor(
       [] {
         std::string ps_stdout;
@@ -283,6 +284,9 @@ void SetupRealUpdaterLowerVersion(UpdaterScope scope) {
 #endif
 #elif BUILDFLAG(GOOGLE_CHROME_BRANDING)
   old_updater_path = old_updater_path.Append("chrome_mac_universal");
+#endif
+#if BUILDFLAG(CHROMIUM_BRANDING) || BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  old_updater_path = old_updater_path.Append("cipd");
 #endif
   base::CommandLine command_line(
       old_updater_path.Append(PRODUCT_FULLNAME_STRING "_test.app")
@@ -371,7 +375,10 @@ void ExpectLegacyUpdaterMigrated(UpdaterScope scope) {
 void InstallApp(UpdaterScope scope,
                 const std::string& app_id,
                 const base::Version& version) {
-  RegisterApp(scope, app_id, version);
+  RegistrationRequest registration;
+  registration.app_id = app_id;
+  registration.version = version;
+  RegisterApp(scope, registration);
 }
 
 void UninstallApp(UpdaterScope scope, const std::string& app_id) {
@@ -452,6 +459,7 @@ void PrivilegedHelperInstall(UpdaterScope scope) {
   ASSERT_TRUE(CopyDir(src_dir.Append("third_party")
                           .Append("updater")
                           .Append("chrome_mac_universal_prod")
+                          .Append("cipd")
                           .Append(PRODUCT_FULLNAME_STRING ".app"),
                       helpers_dir, false));
   ASSERT_TRUE(

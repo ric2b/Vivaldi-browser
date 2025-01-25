@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as Platform from '../../core/platform/platform.js';
 import type * as Protocol from '../../generated/protocol.js';
 import * as TraceEngine from '../../models/trace/trace.js';
 
@@ -49,7 +48,7 @@ export class Node {
     throw 'Not implemented';
   }
 
-  searchTree(matchFunction: (arg0: TraceEngine.Legacy.CompatibleTraceEvent) => boolean, results?: Node[]): Node[] {
+  searchTree(matchFunction: (arg0: TraceEngine.Types.TraceEvents.TraceEventData) => boolean, results?: Node[]): Node[] {
     results = results || [];
     if (this.event && matchFunction(this.event)) {
       results.push(this);
@@ -127,7 +126,8 @@ export class TopDownNode extends Node {
     );
 
     function onStartEvent(e: TraceEngine.Types.TraceEvents.TraceEventData): void {
-      const {startTime: currentStartTime, endTime: currentEndTime} = TraceEngine.Legacy.timesForEventInMilliseconds(e);
+      const {startTime: currentStartTime, endTime: currentEndTime} =
+          TraceEngine.Helpers.Timing.eventTimingsMilliSeconds(e);
 
       ++depth;
       if (depth > path.length + 2) {
@@ -193,7 +193,7 @@ export class TopDownNode extends Node {
      * is cached on `matchedDepth`, for future checks.
      */
     function matchPath(e: TraceEngine.Types.TraceEvents.TraceEventData): boolean {
-      const {endTime} = TraceEngine.Legacy.timesForEventInMilliseconds(e);
+      const {endTime} = TraceEngine.Helpers.Timing.eventTimingsMilliSeconds(e);
       if (matchedDepth === path.length) {
         return true;
       }
@@ -562,31 +562,6 @@ export class BottomUpNode extends Node {
     }
     return results;
   }
-}
-
-export function eventURL(event: TraceEngine.Legacy.Event|
-                         TraceEngine.Types.TraceEvents.TraceEventData): Platform.DevToolsPath.UrlString|null {
-  const data = event.args['data'] || event.args['beginData'];
-  if (data && data['url']) {
-    return data['url'];
-  }
-  // Temporary break to aid migration: no events are from the old engine now,
-  // and we are incrementally removing these checks
-  if (!TraceEngine.Legacy.eventIsFromNewEngine(event)) {
-    return null;
-  }
-
-  let frame = eventStackFrame(event);
-  while (frame) {
-    const url = frame['url'] as Platform.DevToolsPath.UrlString;
-    if (url) {
-      return url;
-    }
-    // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    frame = ((frame as any).parent);
-  }
-  return null;
 }
 
 export function eventStackFrame(event: TraceEngine.Types.TraceEvents.TraceEventData): Protocol.Runtime.CallFrame|null {

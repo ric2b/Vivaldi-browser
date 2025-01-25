@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/modules/mediarecorder/audio_track_mojo_encoder.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
+#include "third_party/blink/renderer/platform/heap/weak_cell.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_track.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_component_impl.h"
@@ -172,7 +173,8 @@ class TestInterfaceFactory : public media::mojom::InterfaceFactory {
 #endif  // BUILDFLAG(IS_ANDROID)
   void CreateCdm(const media::CdmConfig& cdm_config,
                  CreateCdmCallback callback) override {
-    std::move(callback).Run(mojo::NullRemote(), nullptr, "CDM not supported");
+    std::move(callback).Run(mojo::NullRemote(), nullptr,
+                            media::CreateCdmStatus::kCdmNotSupported);
   }
 
 #if BUILDFLAG(IS_WIN)
@@ -320,7 +322,13 @@ class MockAudioTrackRecorderCallbackInterface
        base::TimeTicks capture_time),
       (override));
   MOCK_METHOD(void, OnSourceReadyStateChanged, (), (override));
-  void Trace(Visitor*) const override {}
+  void Trace(Visitor* v) const override { v->Trace(weak_factory_); }
+  WeakCell<AudioTrackRecorder::CallbackInterface>* GetWeakCell() {
+    return weak_factory_.GetWeakCell();
+  }
+
+ private:
+  WeakCellFactory<AudioTrackRecorder::CallbackInterface> weak_factory_{this};
 };
 
 class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
@@ -404,7 +412,7 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
     encoder_task_runner_ = base::ThreadPool::CreateSingleThreadTaskRunner({});
     audio_track_recorder_ = std::make_unique<AudioTrackRecorder>(
         scheduler::GetSingleThreadTaskRunnerForTesting(), codec_,
-        media_stream_component_, mock_callback_interface_,
+        media_stream_component_, mock_callback_interface_->GetWeakCell(),
         0u /* bits_per_second */, GetParam().bitrate_mode,
         encoder_task_runner_);
 
@@ -483,7 +491,7 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
         frames_per_buffer_ = kAacFramesPerBuffer;
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -675,7 +683,7 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
 #endif  // HAS_AAC_DECODER
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
 
     DoOnEncodedAudio(params, std::move(encoded_data), timestamp);
@@ -735,7 +743,7 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
         channel_layout = media::ChannelLayout::CHANNEL_LAYOUT_5_1_BACK;
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
     media::AudioDecoderConfig config(media::AudioCodec::kAAC,
                                      media::SampleFormat::kSampleFormatS16,

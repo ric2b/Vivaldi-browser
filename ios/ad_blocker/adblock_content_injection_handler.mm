@@ -26,7 +26,7 @@ namespace {
 
 constexpr char kMessageNamePrefix[] = "vivaldi_adblock_scriptlet_";
 constexpr size_t kMessageNamePrefixLength =
-    base::StringPiece(kMessageNamePrefix).length();
+    std::string_view(kMessageNamePrefix).length();
 
 constexpr char kJSScriptArgRequestPart1[] = "window.webkit.messageHandlers['";
 constexpr char kJSScriptArgRequestPart2[] =
@@ -38,7 +38,7 @@ constexpr char kJSScriptArgRequestPart3[] = R"JsSource(;
   }
 });)JsSource";
 
-std::string SourceToTemplatedHexString(base::StringPiece source) {
+std::string SourceToTemplatedHexString(std::string_view source) {
   std::string result("`");
   // 200 should be able to hold the expansion of 9 placeholders.
   result.reserve(source.length() * 4 + 200);
@@ -50,7 +50,7 @@ std::string SourceToTemplatedHexString(base::StringPiece source) {
       if (*(c + 1) == '{' && base::IsAsciiDigit(*(c + 2)) && *(c + 3) == '}' &&
           *(c + 4) == '}') {
         int index = -1;
-        base::StringToInt(base::StringPiece(c + 2, c + 3), &index);
+        base::StringToInt(std::string_view(c + 2, c + 3), &index);
         result.append("${scriptlet_arguments[");
         result.append(base::NumberToString(index - 1));
         result.append("]}");
@@ -59,7 +59,7 @@ std::string SourceToTemplatedHexString(base::StringPiece source) {
     }
 
     result.append("\\x");
-    result.append(base::HexEncode(base::StringPiece(c, c + 1)));
+    result.append(base::HexEncode(std::string_view(c, c + 1)));
   }
 
   result.push_back('`');

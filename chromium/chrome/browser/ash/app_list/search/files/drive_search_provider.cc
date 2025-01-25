@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <optional>
+#include <utility>
 
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "base/files/file_util.h"
@@ -51,51 +52,12 @@ void LogStatus(Status status) {
                                 status);
 }
 
-// Stats each file to retrieve its last accessed time.
-std::vector<std::unique_ptr<DriveSearchProvider::FileInfo>> GetFileInfo(
-    std::vector<drivefs::mojom::QueryItemPtr> items,
-    base::FilePath mount_path) {
-  std::vector<std::unique_ptr<DriveSearchProvider::FileInfo>> item_info;
-
-  for (const auto& item : items) {
-    // Strip leading separators so that the path can be reparented.
-    const auto& path = item->path;
-    DCHECK(!path.value().empty());
-    const base::FilePath relative_path =
-        !path.value().empty() && base::FilePath::IsSeparator(path.value()[0])
-            ? base::FilePath(path.value().substr(1))
-            : path;
-
-    // Reparent the file path into the user's DriveFS mount.
-    DCHECK(!relative_path.IsAbsolute());
-    base::FilePath reparented_path = mount_path.Append(relative_path.value());
-
-    base::File::Info info;
-    std::optional<base::Time> last_accessed;
-    if (base::GetFileInfo(reparented_path, &info))
-      last_accessed = info.last_accessed;
-
-    item_info.push_back(std::make_unique<DriveSearchProvider::FileInfo>(
-        reparented_path, std::move(item->metadata), last_accessed));
-  }
-
-  return item_info;
-}
-
 }  // namespace
 
-DriveSearchProvider::FileInfo::FileInfo(
-    const base::FilePath& reparented_path,
-    drivefs::mojom::FileMetadataPtr metadata,
-    const std::optional<base::Time>& last_accessed)
-    : reparented_path(reparented_path), last_accessed(last_accessed) {
-  this->metadata = std::move(metadata);
-}
-
-DriveSearchProvider::FileInfo::~FileInfo() = default;
-
-DriveSearchProvider::DriveSearchProvider(Profile* profile)
+DriveSearchProvider::DriveSearchProvider(Profile* profile,
+                                         bool should_filter_shared_files)
     : SearchProvider(SearchCategory::kFiles),
+      should_filter_shared_files_(should_filter_shared_files),
       profile_(profile),
       drive_service_(
           drive::DriveIntegrationServiceFactory::GetForProfile(profile)) {
@@ -105,6 +67,11 @@ DriveSearchProvider::DriveSearchProvider(Profile* profile)
 }
 
 DriveSearchProvider::~DriveSearchProvider() = default;
+
+void DriveSearchProvider::SetQuerySource(
+    drivefs::mojom::QueryParameters::QuerySource query_source) {
+  query_source_ = query_source;
+}
 
 ash::AppListSearchResultType DriveSearchProvider::ResultType() const {
   return ash::AppListSearchResultType::kDriveSearch;
@@ -117,6 +84,8 @@ void DriveSearchProvider::Start(const std::u16string& query) {
   weak_factory_.InvalidateWeakPtrs();
 
   if (!drive_service_ || !drive_service_->is_enabled()) {
+    Results empty_results;
+    SwapResults(&empty_results);
     LogStatus(Status::kDriveUnavailable);
     return;
   }
@@ -128,7 +97,7 @@ void DriveSearchProvider::Start(const std::u16string& query) {
       base::UTF16ToUTF8(query), kMaxResults,
       drivefs::mojom::QueryParameters::SortField::kLastModified,
       drivefs::mojom::QueryParameters::SortDirection::kDescending,
-      drivefs::mojom::QueryParameters::QuerySource::kLocalOnly,
+      query_source_,
       base::BindOnce(&DriveSearchProvider::OnSearchDriveByFileName,
                      weak_factory_.GetWeakPtr()));
 }
@@ -145,59 +114,79 @@ void DriveSearchProvider::OnSearchDriveByFileName(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (error != drive::FileError::FILE_ERROR_OK) {
+    Results empty_results;
+    SwapResults(&empty_results);
     LogStatus(Status::kFileError);
     return;
   }
 
-  // Filter out shared files if the query length is below a threshold.
-  if (last_query_.size() < kMinQuerySizeForSharedFiles) {
+  // Filter out shared files if it was not disabled in the ctor, and the query
+  // length is below a threshold.
+  if (should_filter_shared_files_ &&
+      last_query_.size() < kMinQuerySizeForSharedFiles) {
     std::vector<drivefs::mojom::QueryItemPtr> filtered_items;
     for (auto& item : items) {
-      if (!item->metadata->shared)
+      if (!item->metadata->shared) {
         filtered_items.push_back(std::move(item));
+      }
     }
     items = std::move(filtered_items);
   }
 
-  if (!drive_service_->IsMounted())
+  if (!drive_service_->IsMounted()) {
     return;
+  }
 
   base::UmaHistogramTimes("Apps.AppList.DriveSearchProvider.DriveFSLatency",
                           base::TimeTicks::Now() - query_start_time_);
   results_returned_time_ = base::TimeTicks::Now();
 
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-      base::BindOnce(&GetFileInfo, std::move(items),
-                     drive_service_->GetMountPointPath()),
-      base::BindOnce(&DriveSearchProvider::SetSearchResults,
-                     weak_factory_.GetWeakPtr()));
-}
-
-void DriveSearchProvider::SetSearchResults(
-    std::vector<std::unique_ptr<DriveSearchProvider::FileInfo>> item_info) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  base::FilePath mount_path = drive_service_->GetMountPointPath();
 
   SearchProvider::Results results;
-  for (const auto& info : item_info) {
+  for (const auto& item : items) {
+    // Strip leading separators so that the path can be reparented.
+    const auto& path = item->path;
+    DCHECK(!path.value().empty());
+    const base::FilePath relative_path =
+        !path.value().empty() && base::FilePath::IsSeparator(path.value()[0])
+            ? base::FilePath(path.value().substr(1))
+            : path;
+
+    // Reparent the file path into the user's DriveFS mount.
+    DCHECK(!relative_path.IsAbsolute());
+    base::FilePath reparented_path = mount_path.Append(relative_path.value());
+
+    std::optional<base::Time> last_accessed;
+    // DriveFS surfaces atime in the virtual vilesystem as
+    // `last_viewed_by_me_time` (http://go/lkrez), which does not account for
+    // "last viewed by other users".
+    // We can use `last_viewed_by_me_time` from the metadata response directly
+    // as it should be the same (http://go/yufhv).
+    // This avoids needing to perform I/O to stat the file.
+    if (base::Time viewed_time = item->metadata->last_viewed_by_me_time;
+        !viewed_time.is_null()) {
+      last_accessed = viewed_time;
+    }
+
     double relevance = FileResult::CalculateRelevance(
-        last_tokenized_query_, info->reparented_path, info->last_accessed);
+        last_tokenized_query_, reparented_path, last_accessed);
     if (search_features::IsLauncherFuzzyMatchAcrossProvidersEnabled() &&
         relevance < kRelevanceThreshold) {
       continue;
     }
 
     std::unique_ptr<FileResult> result;
-    GURL url(info->metadata->alternate_url);
-    if (info->metadata->type ==
+    GURL url(item->metadata->alternate_url);
+    if (item->metadata->type ==
         drivefs::mojom::FileMetadata::Type::kDirectory) {
-      const auto type = info->metadata->shared
+      const auto type = item->metadata->shared
                             ? FileResult::Type::kSharedDirectory
                             : FileResult::Type::kDirectory;
-      result = MakeResult(info->reparented_path, relevance, type, url);
+      result = MakeResult(reparented_path, relevance, type, url);
     } else {
-      result = MakeResult(info->reparented_path, relevance,
-                          FileResult::Type::kFile, url);
+      result =
+          MakeResult(reparented_path, relevance, FileResult::Type::kFile, url);
     }
     results.push_back(std::move(result));
   }

@@ -121,6 +121,7 @@ VideoImageReaderImageBacking::VideoImageReaderImageBacking(
     const gfx::ColorSpace color_space,
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
+    std::string debug_label,
     scoped_refptr<StreamTextureSharedImageInterface> stream_texture_sii,
     scoped_refptr<SharedContextState> context_state,
     scoped_refptr<RefCountedLock> drdc_lock)
@@ -129,6 +130,7 @@ VideoImageReaderImageBacking::VideoImageReaderImageBacking(
                                color_space,
                                surface_origin,
                                alpha_type,
+                               std::move(debug_label),
                                !!drdc_lock),
       RefCountedLockHelperDrDc(std::move(drdc_lock)),
       stream_texture_sii_(std::move(stream_texture_sii)),
@@ -317,14 +319,17 @@ class VideoImageReaderImageBacking::GLTexturePassthroughVideoImageRepresentation
 // inner class out of the implementation here and that in
 // DawnAHBImageRepresentation.
 class VideoImageReaderImageBacking::SkiaGraphiteDawnImageRepresentation
-    : public SkiaGraphiteImageRepresentation {
+    : public SkiaGraphiteImageRepresentation,
+      public RefCountedLockHelperDrDc {
  public:
   SkiaGraphiteDawnImageRepresentation(
       SharedImageManager* manager,
       VideoImageReaderImageBacking* backing,
       MemoryTypeTracker* tracker,
-      scoped_refptr<SharedContextState> context_state)
+      scoped_refptr<SharedContextState> context_state,
+      scoped_refptr<RefCountedLock> drdc_lock)
       : SkiaGraphiteImageRepresentation(manager, backing, tracker),
+        RefCountedLockHelperDrDc(std::move(drdc_lock)),
         context_state_(context_state) {}
   ~SkiaGraphiteDawnImageRepresentation() override = default;
 
@@ -347,7 +352,10 @@ class VideoImageReaderImageBacking::SkiaGraphiteDawnImageRepresentation
     auto* stream_texture_sii = video_backing()->stream_texture_sii_.get();
 
     // Obtain the AHB for the current video frame.
-    scoped_hardware_buffer_ = stream_texture_sii->GetAHardwareBuffer();
+    {
+      base::AutoLockMaybe auto_lock(GetDrDcLockPtr());
+      scoped_hardware_buffer_ = stream_texture_sii->GetAHardwareBuffer();
+    }
     if (!scoped_hardware_buffer_) {
       LOG(ERROR) << "Failed to get the hardware buffer.";
       return {};
@@ -356,11 +364,7 @@ class VideoImageReaderImageBacking::SkiaGraphiteDawnImageRepresentation
 
     // Set the Dawn texture and SharedTextureMemory parameters.
 
-    // TODO(crbug.com/41488897): Need to set the external format.
-    wgpu::TextureFormat webgpu_format = ToDawnFormat(format());
-    if (webgpu_format == wgpu::TextureFormat::Undefined) {
-      LOG(ERROR) << "Unable to find a suitable WebGPU format.";
-    }
+    wgpu::TextureFormat webgpu_format = wgpu::TextureFormat::External;
     auto device = context_state_->dawn_context_provider()->GetDevice();
 
     wgpu::TextureDescriptor texture_descriptor;
@@ -421,17 +425,32 @@ class VideoImageReaderImageBacking::SkiaGraphiteDawnImageRepresentation
     wgpu::SharedTextureMemoryAHardwareBufferDescriptor
         stm_ahardwarebuffer_desc = {};
     stm_ahardwarebuffer_desc.handle = scoped_hardware_buffer_->buffer();
+    stm_ahardwarebuffer_desc.useExternalFormat = true;
     desc.nextInChain = &stm_ahardwarebuffer_desc;
     shared_texture_memory_ = device.ImportSharedTextureMemory(&desc);
 
-    // Create the Dawn texture and wrap it in a Skia texture.
+    // Create the Dawn texture.
     texture_ = shared_texture_memory_.CreateTexture(&texture_descriptor);
-    if (!shared_texture_memory_.BeginAccess(texture_, &begin_access_desc)) {
+    if (shared_texture_memory_.BeginAccess(texture_, &begin_access_desc) !=
+        wgpu::Status::Success) {
       LOG(ERROR) << "Failed to begin access for texture";
     }
-    // TODO(crbug.com/41488897): Obtain the needed YCbCr info and pass it in a
-    // DawnTextureInfo when creating the BackendTexture.
-    return {skgpu::graphite::BackendTexture(texture_.Get())};
+
+    // Obtain the YCbCr info from the device.
+    wgpu::AHardwareBufferProperties ahb_properties;
+    if (!device.GetAHardwareBufferProperties(scoped_hardware_buffer_->buffer(),
+                                             &ahb_properties)) {
+      LOG(ERROR) << "Failed to get the ycbcr info";
+    }
+
+    // Wrap the Dawn texture in a Skia texture, passing the YCbCr info.
+    skgpu::graphite::DawnTextureInfo dawn_texture_info(
+        /*sampleCount=*/1, skgpu::Mipmapped::kNo, webgpu_format, webgpu_format,
+        texture_descriptor.usage, wgpu::TextureAspect::All, /*slice=*/0,
+        ahb_properties.yCbCrInfo);
+    return {skgpu::graphite::BackendTexture(
+        SkISize::Make(ahb_desc.width, ahb_desc.height), dawn_texture_info,
+        texture_.Get())};
   }
 
   void EndReadAccess() override {
@@ -441,7 +460,8 @@ class VideoImageReaderImageBacking::SkiaGraphiteDawnImageRepresentation
     wgpu::SharedTextureMemoryVkImageLayoutEndState end_layout{};
     end_access_desc.nextInChain = &end_layout;
 
-    if (!shared_texture_memory_.EndAccess(texture_, &end_access_desc)) {
+    if (shared_texture_memory_.EndAccess(texture_, &end_access_desc) !=
+        wgpu::Status::Success) {
       LOG(ERROR) << "Failed to end access for texture";
     }
 
@@ -453,21 +473,8 @@ class VideoImageReaderImageBacking::SkiaGraphiteDawnImageRepresentation
     wgpu::SharedFenceVkSemaphoreSyncFDExportInfo sync_fd_export_info;
     export_info.nextInChain = &sync_fd_export_info;
 
-    // If Dawn read the texture, ensure that its fence is added to the set of
-    // fences that the ScopedAHB uses to determine when the underlying buffer
-    // can be reused.
-    // If Dawn *didn't* read the texture during the access, it will return 2
-    // fences: the fence that this instance gave it in BeginAccess() (which Dawn
-    // didn't consume), and a fence that Dawn created in EndAccess(). In that
-    // case there is no need to add either fence to the ScopedAHB's set of
-    // fences that determine when the underlying buffer can be reused. Any other
-    // consumer of the underlying buffer will get the buffer in a new ScopedAHB
-    // via StreamTextureSII, and that ScopedAHB would have its own copy of the
-    // fence that determines when the buffer can be read.
-    // TODO(crbug.com/dawn/2454): If we want to preserve this optimization after
-    // Dawn returns a single fence in this case, we could save the initial fence
-    // and do comparison on it here.
-    if (end_access_desc.fenceCount == 1u) {
+    if (end_access_desc.fenceCount) {
+      CHECK(end_access_desc.fenceCount == 1u);
       end_access_desc.fences[0].ExportInfo(&export_info);
 
       // Dawn will close its FD when `end_access_desc` falls out of scope, and
@@ -484,6 +491,8 @@ class VideoImageReaderImageBacking::SkiaGraphiteDawnImageRepresentation
     texture_.Destroy();
     texture_ = nullptr;
     shared_texture_memory_ = nullptr;
+
+    base::AutoLockMaybe auto_lock(GetDrDcLockPtr());
     scoped_hardware_buffer_ = nullptr;
   }
 
@@ -696,8 +705,10 @@ VideoImageReaderImageBacking::ProduceSkiaGraphite(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     scoped_refptr<SharedContextState> context_state) {
+  base::AutoLockMaybe auto_lock(GetDrDcLockPtr());
+
   return std::make_unique<SkiaGraphiteDawnImageRepresentation>(
-      manager, this, tracker, context_state);
+      manager, this, tracker, context_state, GetDrDcLock());
 }
 #endif
 

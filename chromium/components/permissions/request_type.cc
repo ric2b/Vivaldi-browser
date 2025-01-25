@@ -14,7 +14,6 @@
 #include "components/permissions/features.h"
 #include "components/permissions/permission_request.h"
 #include "components/permissions/permissions_client.h"
-#include "ui/base/ui_base_features.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "components/resources/android/theme_resources.h"
@@ -65,7 +64,7 @@ int GetIconIdAndroid(RequestType type) {
     case RequestType::kTopLevelStorageAccess:
       return IDR_ANDROID_STORAGE_ACCESS;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0;
 }
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -111,7 +110,7 @@ const gfx::VectorIcon& GetIconIdDesktop(RequestType type) {
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
     case RequestType::kProtectedMediaIdentifier:
       // This icon is provided by ChromePermissionsClient::GetOverrideIconId.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return gfx::kNoneIcon;
 #endif
     case RequestType::kRegisterProtocolHandler:
@@ -136,49 +135,44 @@ const gfx::VectorIcon& GetIconIdDesktop(RequestType type) {
       // TODO(crbug.com/40252825): provide a dedicated icon.
       return vector_icons::kFolderIcon;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return gfx::kNoneIcon;
 }
 
 const gfx::VectorIcon& GetBlockedIconIdDesktop(RequestType type) {
-  const bool cr23 = ::features::IsChromeRefresh2023();
   switch (type) {
     case RequestType::kGeolocation:
-      return cr23 ? vector_icons::kLocationOffChromeRefreshIcon
-                  : vector_icons::kLocationOffIcon;
+      return vector_icons::kLocationOffChromeRefreshIcon;
     case RequestType::kNotifications:
-      return cr23 ? vector_icons::kNotificationsOffChromeRefreshIcon
-                  : vector_icons::kNotificationsOffIcon;
+      return vector_icons::kNotificationsOffChromeRefreshIcon;
     case RequestType::kArSession:
     case RequestType::kVrSession:
-      return cr23 ? vector_icons::kVrHeadsetOffChromeRefreshIcon
-                  : vector_icons::kVrHeadsetOffIcon;
+      return vector_icons::kVrHeadsetOffChromeRefreshIcon;
     case RequestType::kCameraStream:
-      return cr23 ? vector_icons::kVideocamOffChromeRefreshIcon
-                  : vector_icons::kVideocamOffIcon;
+      return vector_icons::kVideocamOffChromeRefreshIcon;
     case RequestType::kCapturedSurfaceControl:
       return vector_icons::kTouchpadMouseOffIcon;
     case RequestType::kClipboard:
-      return cr23 ? vector_icons::kContentPasteOffChromeRefreshIcon
-                  : vector_icons::kContentPasteOffIcon;
+      return vector_icons::kContentPasteOffChromeRefreshIcon;
     case RequestType::kIdleDetection:
-      return cr23 ? vector_icons::kDevicesOffChromeRefreshIcon
-                  : vector_icons::kDevicesOffIcon;
+      return vector_icons::kDevicesOffChromeRefreshIcon;
     case RequestType::kMicStream:
-      return cr23 ? vector_icons::kMicOffChromeRefreshIcon
-                  : vector_icons::kMicOffIcon;
+      return vector_icons::kMicOffChromeRefreshIcon;
     case RequestType::kMidiSysex:
-      return cr23 ? vector_icons::kMidiOffChromeRefreshIcon
-                  : vector_icons::kMidiOffIcon;
+      return vector_icons::kMidiOffChromeRefreshIcon;
     case RequestType::kStorageAccess:
       return vector_icons::kStorageAccessOffIcon;
     case RequestType::kIdentityProvider:
       // TODO(crbug.com/40252825): use a dedicated icon
       return gfx::kNoneIcon;
+    case RequestType::kKeyboardLock:
+      return vector_icons::kKeyboardLockOffIcon;
+    case RequestType::kPointerLock:
+      return vector_icons::kPointerLockOffIcon;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return gfx::kNoneIcon;
 }
 #endif  // !BUILDFLAG(IS_ANDROID)

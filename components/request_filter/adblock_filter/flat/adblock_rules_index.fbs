@@ -14,6 +14,11 @@ table RuleId {
   rule_nr: uint;
 }
 
+table PrioritizedRuleList {
+  // A list of Rules, Sorted in descending order of rule priority.
+  rules: [RuleId];
+}
+
 // Contains an N-gram (acting as a key in a hash table) and a list of rule IDs
 // associated with that N-gram.
 table NGramToRules {
@@ -23,8 +28,9 @@ table NGramToRules {
   ngram : ulong;
 
   // The list of rules containing |ngram| as a substring of their URL pattern.
-  // Sorted in descending order of rule priority.
-  rule_list : [RuleId];
+  // It is subdivided in multiple lists, each dealing with a different kind of
+  // modifier rules.
+  rules_by_modifier : [PrioritizedRuleList];
 }
 
 // A data structure used to select only a handful of URL rule candidates that
@@ -42,13 +48,14 @@ table RulesMap {
   ngram_index_empty_slot : NGramToRules;
 
   // A list storing the rules that doesn't contain any valid N-grams in their
-  // URL patterns. Contains all the REGEXP rules as well. Sorted in descending
+  // URL patterns.  It is subdivided in multiple lists, each dealing with a
+  // different kind of modifier rules.
   // order of rule priority.
   // TODO(pkalinnikov): Think about better implementation for the fallback
   // index. Possibly make it a hash map and maybe merge it with the N-gram
   // index, since we can treat any sequence of characters shorter than N as an
   // N-gram with zero bytes used for padding.
-  fallback_rules : [RuleId];
+  fallback_rules_by_modifier : [PrioritizedRuleList];
 }
 
 table SourceChecksum {
@@ -87,6 +94,10 @@ table RulesIndex {
   // These rules are used to determine if a given sub-resource request should
   // be blocked, allowed, or cause a redirect.
   before_request_map: RulesMap;
+
+  // These rules are used to determine if a given sub-resource request should
+  // be modified.
+  request_modifier: RulesMap;
 
   // These rules can modify the response headers for matching requests,
   // before they're passed on.

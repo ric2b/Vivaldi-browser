@@ -26,9 +26,9 @@ VivaldiContextMenu* CreateVivaldiContextMenu(
     ui::SimpleMenuModel* menu_model,
     const gfx::Rect& rect,
     bool force_views /* ignored here*/,
-    VivaldiRenderViewContextMenu* context_menu) {
+    VivaldiRenderViewContextMenu* render_view_context_menu) {
   return new VivaldiContextMenuViews(web_contents, menu_model, rect,
-                                     context_menu);
+                                     render_view_context_menu);
 }
 
 #endif
@@ -37,15 +37,15 @@ VivaldiContextMenuViews::VivaldiContextMenuViews(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
     const gfx::Rect& rect,
-    VivaldiRenderViewContextMenu* context_menu)
+    VivaldiRenderViewContextMenu* render_view_context_menu)
     : web_contents_(web_contents),
       menu_model_(menu_model),
       rect_(rect),
-      context_menu_(context_menu) {
-  if (context_menu_) {
+      render_view_context_menu_(render_view_context_menu) {
+  if (render_view_context_menu_) {
     std::unique_ptr<RenderViewContextMenu::ToolkitDelegate> delegate(
         new ToolkitDelegateViews);
-    context_menu->set_toolkit_delegate(std::move(delegate));
+    render_view_context_menu->set_toolkit_delegate(std::move(delegate));
   }
 }
 
@@ -55,10 +55,11 @@ void VivaldiContextMenuViews::Init(
     ui::SimpleMenuModel* menu_model,
     base::WeakPtr<ContextMenuPostitionDelegate> delegate) {
   menu_model_ = menu_model;
-  if (context_menu_) {
+  if (render_view_context_menu_) {
     menu_view_ =
-        static_cast<ToolkitDelegateViews*>(context_menu_->toolkit_delegate())
-            ->VivaldiInit(menu_model_, delegate);
+        static_cast<ToolkitDelegateViews*>(
+            render_view_context_menu_->toolkit_delegate())
+                ->VivaldiInit(menu_model_, delegate);
   } else {
     std::unique_ptr<ToolkitDelegateViews> toolkitdelegate(
         new ToolkitDelegateViews);
@@ -70,9 +71,10 @@ void VivaldiContextMenuViews::Init(
 void VivaldiContextMenuViews::RunMenuAt(views::Widget* parent,
                                         const gfx::Rect& rect,
                                         ui::MenuSourceType type) {
-  if (context_menu_) {
-    static_cast<ToolkitDelegateViews*>(context_menu_->toolkit_delegate())
-        ->VivaldiRunMenuAt(parent, rect, type);
+  if (render_view_context_menu_) {
+    static_cast<ToolkitDelegateViews*>(
+        render_view_context_menu_->toolkit_delegate())
+            ->VivaldiRunMenuAt(parent, rect, type);
   } else {
     toolkit_delegate_->VivaldiRunMenuAt(parent, rect, type);
   }
@@ -129,9 +131,10 @@ void VivaldiContextMenuViews::UpdateMenu(ui::SimpleMenuModel* menu_model,
                                          int id) {
   views::MenuItemView* view = menu_view_->GetMenuItemByID(id);
   if (view) {
-    if (context_menu_) {
-      static_cast<ToolkitDelegateViews*>(context_menu_->toolkit_delegate())
-          ->VivaldiUpdateMenu(view, menu_model);
+    if (render_view_context_menu_) {
+      static_cast<ToolkitDelegateViews*>(
+          render_view_context_menu_->toolkit_delegate())
+              ->VivaldiUpdateMenu(view, menu_model);
     } else {
       toolkit_delegate_->VivaldiUpdateMenu(view, menu_model);
     }

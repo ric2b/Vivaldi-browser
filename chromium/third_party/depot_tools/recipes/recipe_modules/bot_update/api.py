@@ -31,11 +31,6 @@ class RelativeRoot:
     return cls(name=name, path=checkout_dir / name)
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class Json:
-  output: dict[str, typing.Any]
-
-
 class ManifestRepo(typing.TypedDict):
   repository: str
   revision: str
@@ -72,23 +67,6 @@ class Result:
   manifest: dict[str, ManifestRepo]
   fixed_revisions: dict[str, str]
 
-  # TODO: crbug.com/339472834 - Once all downstream users are switched to use
-  # the above fields, these attributes and the property methods can be removed,
-  # as well as the Json type
-  _api: 'BotUpdateApi'
-  _presentation: StepPresentation
-  _json: Json
-
-  @property
-  def presentation(self):
-    self._api.m.warning.issue('BOT_UPDATE_CUSTOM_RESULT_ATTRIBUTES')
-    return self._presentation
-
-  @property
-  def json(self):
-    self._api.m.warning.issue('BOT_UPDATE_CUSTOM_RESULT_ATTRIBUTES')
-    return self._json
-
 
 class BotUpdateApi(recipe_api.RecipeApi):
 
@@ -97,6 +75,7 @@ class BotUpdateApi(recipe_api.RecipeApi):
 
     self._last_returned_properties = {}
     super(BotUpdateApi, self).__init__(*args, **kwargs)
+    self._bot_update_properties = properties
 
   def __call__(self, name, cmd, **kwargs):
     """Wrapper for easy calling of bot_update."""
@@ -185,6 +164,9 @@ class BotUpdateApi(recipe_api.RecipeApi):
           self.m.buildbucket.build.builder.bucket,
           self.m.buildbucket.build.builder.builder, self.m.buildbucket.build.id)
 
+    if 'stale_process_duration_override' in self._bot_update_properties:
+      env['STALE_PROCESS_DURATION'] = self._bot_update_properties[
+          'stale_process_duration_override']
     return env
 
   def _upload_traces(self):
@@ -586,9 +568,6 @@ class BotUpdateApi(recipe_api.RecipeApi):
         properties=result.get('properties', {}),
         manifest=result.get('manifest', {}),
         fixed_revisions=result.get('fixed_revisions', {}),
-        _api=self,
-        _presentation=step_result.presentation,
-        _json=Json(output=result),
     )
 
   def _destination_ref(self, cfg, path):
@@ -618,13 +597,13 @@ class BotUpdateApi(recipe_api.RecipeApi):
 
     return self.m.tryserver.gerrit_change_target_ref
 
-  def resolve_fixed_revision(self, bot_update_json, name):
+  def resolve_fixed_revision(self, bot_update_result, name):
     """Sets a fixed revision for a single dependency using project revision
     properties.
     """
     rev_properties = self.get_project_revision_properties(name)
     self.m.gclient.c.revisions = {
-      name: bot_update_json['properties'][rev_properties[0]]
+        name: bot_update_result.properties[rev_properties[0]]
     }
 
   def _resolve_fixed_revisions(self, bot_update_result):

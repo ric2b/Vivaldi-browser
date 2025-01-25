@@ -27,7 +27,12 @@
 
 class PrefChangeRegistrar;
 
+
 namespace extensions {
+
+void FillInfoFromManifest(vivaldi::extension_action_utils::ExtensionInfo* info,
+                          const Extension* extension);
+
 typedef std::vector<vivaldi::extension_action_utils::ExtensionInfo>
     ToolbarExtensionInfoList;
 
@@ -36,6 +41,7 @@ class ExtensionService;
 class VivaldiExtensionDisabledGlobalError;
 
 using ExtensionToIdMap = base::flat_map<std::string, int>;
+
 
 // Helper class to map extension id to an unique id used for each error.
 class ExtensionToIdProvider {
@@ -121,6 +127,9 @@ class ExtensionActionUtil : public KeyedService,
     return errors_;
   }
 
+  // Fires update events for the extensions where user-set visibility has changed.
+  void ExtensionVisibilityChanged();
+
  private:
   ~ExtensionActionUtil() override;
 
@@ -150,10 +159,8 @@ class ExtensionActionUtil : public KeyedService,
   void OnExtensionCommandRemoved(const std::string& extension_id,
                                  const Command& removed_command) override;
 
-  void PrefsChange();
-
   // Cached settings
-  base::Value user_hidden_extensions_;
+  base::Value::List user_hidden_extensions_;
 
   std::unique_ptr<PrefChangeRegistrar> prefs_registrar_;
 

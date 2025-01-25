@@ -7,14 +7,13 @@
 #include "base/base64.h"
 #include "base/feature_list.h"
 #include "base/json/values_util.h"
-#include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chrome/browser/sharing/features.h"
-#include "chrome/browser/sharing/proto/sharing_message.pb.h"
 #include "chrome/browser/sharing/sharing_metrics.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/sharing_message/features.h"
+#include "components/sharing_message/proto/sharing_message.pb.h"
 #include "components/sync/protocol/device_info_specifics.pb.h"
 #include "components/sync_device_info/device_info_sync_service.h"
 #include "components/sync_device_info/local_device_info_provider.h"
@@ -263,7 +262,10 @@ SharingSyncPreference::GetLocalSharingInfoForSync(PrefService* prefs) {
         static_cast<SharingSpecificFields::EnabledFeatures>(feature_value));
   }
 
-  return syncer::DeviceInfo::SharingInfo(std::move(*vapid_target_info),
-                                         std::move(*sender_id_target_info),
-                                         std::move(enabled_features));
+  // Pass in null for chime_representative_target_id field because currently
+  // only iOS devices register with Chime.
+  return syncer::DeviceInfo::SharingInfo(
+      std::move(*vapid_target_info), std::move(*sender_id_target_info),
+      /*chime_representative_target_id=*/std::string(),
+      std::move(enabled_features));
 }

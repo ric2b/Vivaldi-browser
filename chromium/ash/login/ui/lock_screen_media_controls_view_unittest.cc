@@ -23,7 +23,6 @@
 #include "services/media_session/public/cpp/test/test_media_controller.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "ui/accessibility/ax_enums.mojom.h"
-#include "ui/base/ui_base_features.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/layer_observer.h"
@@ -32,6 +31,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/vector_icons.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/bounds_animator.h"
 #include "ui/views/animation/bounds_animator_observer.h"
 #include "ui/views/controls/image_view.h"
@@ -209,7 +209,8 @@ class LockScreenMediaControlsViewTest : public LoginTestBase {
   }
 
   void SimulateTab() {
-    ui::KeyEvent pressed_tab(ui::ET_KEY_PRESSED, ui::VKEY_TAB, ui::EF_NONE);
+    ui::KeyEvent pressed_tab(ui::EventType::kKeyPressed, ui::VKEY_TAB,
+                             ui::EF_NONE);
     media_controls_view_->GetFocusManager()->OnKeyEvent(pressed_tab);
   }
 
@@ -394,7 +395,10 @@ TEST_F(LockScreenMediaControlsViewTest, ButtonsSanityCheck) {
         kActionButtonOrder[i]);
 
     EXPECT_TRUE(child->GetVisible());
-    EXPECT_FALSE(views::Button::AsButton(child)->GetAccessibleName().empty());
+    EXPECT_FALSE(views::Button::AsButton(child)
+                     ->GetViewAccessibility()
+                     .GetCachedName()
+                     .empty());
   }
 
   EXPECT_TRUE(GetButtonForAction(MediaSessionAction::kPause));
@@ -662,11 +666,8 @@ TEST_F(LockScreenMediaControlsViewTest, SeekForwardButtonClick) {
   EXPECT_EQ(1, media_controller()->seek_forward_count());
 }
 
-TEST_F(LockScreenMediaControlsViewTest, UpdateAppIcon) {
-  // TODO (crbug/1520620): Remove the skip code once test is fixed.
-  if (::features::IsChromeRefresh2023()) {
-    GTEST_SKIP();
-  }
+// TODO (crbug/1520620): Test fails post-ChromeRefresh2023. Fix and reenable.
+TEST_F(LockScreenMediaControlsViewTest, DISABLED_UpdateAppIcon) {
   SimulateMediaSessionChanged(
       media_session::mojom::MediaPlaybackState::kPlaying);
 

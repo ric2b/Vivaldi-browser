@@ -91,9 +91,9 @@ void TlsConnectionPosix::SetClient(Client* client) {
   client_ = client;
 }
 
-bool TlsConnectionPosix::Send(const void* data, size_t len) {
+bool TlsConnectionPosix::Send(ByteView data) {
   OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
-  return buffer_.Push(data, len);
+  return buffer_.Push(data);
 }
 
 IPEndpoint TlsConnectionPosix::GetRemoteEndpoint() const {

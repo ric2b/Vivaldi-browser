@@ -754,7 +754,7 @@ TEST_F(ChromePasswordProtectionServiceTest, VerifyUpdateSecurityState) {
   NavigateAndCommit(url);
   SBThreatType current_threat_type = SBThreatType::SB_THREAT_TYPE_UNUSED;
   ASSERT_FALSE(service_->ui_manager()->IsUrlAllowlistedOrPendingForWebContents(
-      url, false, web_contents()->GetController().GetLastCommittedEntry(),
+      url, web_contents()->GetController().GetLastCommittedEntry(),
       web_contents(), false, &current_threat_type));
   EXPECT_EQ(SB_THREAT_TYPE_UNUSED, current_threat_type);
 
@@ -773,7 +773,7 @@ TEST_F(ChromePasswordProtectionServiceTest, VerifyUpdateSecurityState) {
   service_->UpdateSecurityState(SB_THREAT_TYPE_SIGNED_IN_SYNC_PASSWORD_REUSE,
                                 reused_password_type, web_contents());
   ASSERT_TRUE(service_->ui_manager()->IsUrlAllowlistedOrPendingForWebContents(
-      url, false, web_contents()->GetController().GetLastCommittedEntry(),
+      url, web_contents()->GetController().GetLastCommittedEntry(),
       web_contents(), false, &current_threat_type));
   EXPECT_EQ(SB_THREAT_TYPE_SIGNED_IN_SYNC_PASSWORD_REUSE, current_threat_type);
 
@@ -781,7 +781,7 @@ TEST_F(ChromePasswordProtectionServiceTest, VerifyUpdateSecurityState) {
                                 web_contents());
   current_threat_type = SB_THREAT_TYPE_UNUSED;
   service_->ui_manager()->IsUrlAllowlistedOrPendingForWebContents(
-      url, false, web_contents()->GetController().GetLastCommittedEntry(),
+      url, web_contents()->GetController().GetLastCommittedEntry(),
       web_contents(), false, &current_threat_type);
   EXPECT_EQ(SB_THREAT_TYPE_UNUSED, current_threat_type);
   LoginReputationClientResponse verdict;
@@ -1691,9 +1691,8 @@ class PasswordCheckupWithPhishGuardTest
     sync_service_ = static_cast<syncer::TestSyncService*>(
         SyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
             profile(), base::BindRepeating(&CreateTestSyncService)));
-    sync_service_->SetAccountInfo(account);
-    // Selecting what is synced.
-    sync_service_->SetHasSyncConsent(true);
+    sync_service_->SetSignedIn(signin::ConsentLevel::kSync, account);
+    ASSERT_TRUE(sync_service_->IsSyncFeatureEnabled());
     sync_service_->GetUserSettings()->SetSelectedType(
         syncer::UserSelectableType::kPasswords, is_syncing_passwords);
   }

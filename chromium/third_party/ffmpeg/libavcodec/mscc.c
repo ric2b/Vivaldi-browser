@@ -54,6 +54,9 @@ static int rle_uncompress(AVCodecContext *avctx, GetByteContext *gb, PutByteCont
         unsigned run = bytestream2_get_byte(gb);
 
         if (run) {
+            if (bytestream2_get_bytes_left_p(pb) < run * s->bpp)
+                return AVERROR_INVALIDDATA;
+
             switch (avctx->bits_per_coded_sample) {
             case 8:
                 fill = bytestream2_get_byte(gb);
@@ -102,6 +105,9 @@ static int rle_uncompress(AVCodecContext *avctx, GetByteContext *gb, PutByteCont
 
                 bytestream2_seek_p(pb, y * avctx->width * s->bpp + x * s->bpp, SEEK_SET);
             } else {
+                if (bytestream2_get_bytes_left_p(pb) < copy * s->bpp)
+                    return AVERROR_INVALIDDATA;
+
                 for (j = 0; j < copy; j++) {
                     switch (avctx->bits_per_coded_sample) {
                     case 8:
@@ -204,9 +210,6 @@ inflate_error:
         memcpy(frame->data[0] + (avctx->height - j - 1) * frame->linesize[0],
                s->uncomp_buf + s->bpp * j * avctx->width, s->bpp * avctx->width);
     }
-
-    frame->flags |= AV_FRAME_FLAG_KEY;
-    frame->pict_type = AV_PICTURE_TYPE_I;
 
     *got_frame = 1;
 

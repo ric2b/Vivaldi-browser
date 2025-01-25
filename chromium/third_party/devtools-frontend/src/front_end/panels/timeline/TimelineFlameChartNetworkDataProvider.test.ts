@@ -11,12 +11,12 @@ import * as Timeline from './timeline.js';
 describeWithEnvironment('TimelineFlameChartNetworkDataProvider', function() {
   it('renders the network track correctly', async function() {
     const dataProvider = new Timeline.TimelineFlameChartNetworkDataProvider.TimelineFlameChartNetworkDataProvider();
-    const traceParsedData = await TraceLoader.traceEngine(this, 'load-simple.json.gz');
+    const {traceData} = await TraceLoader.traceEngine(this, 'load-simple.json.gz');
 
-    const minTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(traceParsedData.Meta.traceBounds.min);
-    const maxTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(traceParsedData.Meta.traceBounds.max);
+    const minTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(traceData.Meta.traceBounds.min);
+    const maxTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(traceData.Meta.traceBounds.max);
 
-    dataProvider.setModel(traceParsedData);
+    dataProvider.setModel(traceData);
     dataProvider.setWindowTimes(minTime, maxTime);
 
     // TimelineFlameChartNetworkDataProvider only has network track, so should always be one track group.
@@ -26,7 +26,7 @@ describeWithEnvironment('TimelineFlameChartNetworkDataProvider', function() {
     assert.deepEqual(dataProvider.minimumBoundary(), minTime);
     assert.deepEqual(dataProvider.totalTime(), maxTime - minTime);
 
-    const networkEvents = traceParsedData.NetworkRequests.byTime;
+    const networkEvents = traceData.NetworkRequests.byTime;
     const networkEventsStartTimes =
         networkEvents.map(request => TraceEngine.Helpers.Timing.microSecondsToMilliseconds(request.ts));
     const networkEventsTotalTimes = networkEvents.map(request => {
@@ -51,21 +51,21 @@ describeWithEnvironment('TimelineFlameChartNetworkDataProvider', function() {
     assert.strictEqual(dataProvider.preferredHeight(), 17);
     networkTrackGroup.expanded = true;
     assert.isTrue(dataProvider.isExpanded());
-    // The max level here is 3, so `clamp(this.#maxLevel + 1, 4, 8.5)` = 4
-    assert.strictEqual(dataProvider.preferredHeight(), 17 * 4);
+    // The max level here is 3, so `clamp(this.#maxLevel + 1, 7, 8.5)` = 7
+    assert.strictEqual(dataProvider.preferredHeight(), 17 * 7);
   });
 
   it('filters navigations to only return those that happen on the main frame', async function() {
     const dataProvider = new Timeline.TimelineFlameChartNetworkDataProvider.TimelineFlameChartNetworkDataProvider();
-    const traceParsedData = await TraceLoader.traceEngine(this, 'multiple-navigations-with-iframes.json.gz');
+    const {traceData} = await TraceLoader.traceEngine(this, 'multiple-navigations-with-iframes.json.gz');
 
-    const minTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(traceParsedData.Meta.traceBounds.min);
-    const maxTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(traceParsedData.Meta.traceBounds.max);
+    const minTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(traceData.Meta.traceBounds.min);
+    const maxTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(traceData.Meta.traceBounds.max);
 
-    dataProvider.setModel(traceParsedData);
+    dataProvider.setModel(traceData);
     dataProvider.setWindowTimes(minTime, maxTime);
 
-    const mainFrameID = traceParsedData.Meta.mainFrameId;
+    const mainFrameID = traceData.Meta.mainFrameId;
     const navigationEvents = dataProvider.mainFrameNavigationStartEvents();
     // Ensure that every navigation event that we return is for the main frame.
     assert.isTrue(navigationEvents.every(navEvent => {
@@ -73,14 +73,24 @@ describeWithEnvironment('TimelineFlameChartNetworkDataProvider', function() {
     }));
   });
 
+  it('can provide the index for an event and the event for a given index', async function() {
+    const dataProvider = new Timeline.TimelineFlameChartNetworkDataProvider.TimelineFlameChartNetworkDataProvider();
+    const {traceData} = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
+    dataProvider.setModel(traceData);
+
+    const event = dataProvider.eventByIndex(0);
+    assert.isOk(event);
+    assert.strictEqual(dataProvider.indexForEvent(event), 0);
+  });
+
   it('does not render the network track if there is no network requests', async function() {
     const dataProvider = new Timeline.TimelineFlameChartNetworkDataProvider.TimelineFlameChartNetworkDataProvider();
-    const traceParsedData = await TraceLoader.traceEngine(this, 'basic.json.gz');
+    const {traceData} = await TraceLoader.traceEngine(this, 'basic.json.gz');
 
-    const minTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(traceParsedData.Meta.traceBounds.min);
-    const maxTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(traceParsedData.Meta.traceBounds.max);
+    const minTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(traceData.Meta.traceBounds.min);
+    const maxTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(traceData.Meta.traceBounds.max);
 
-    dataProvider.setModel(traceParsedData);
+    dataProvider.setModel(traceData);
     dataProvider.setWindowTimes(minTime, maxTime);
 
     // Network track appender won't append the network track if there is no network requests.
@@ -106,7 +116,7 @@ describeWithEnvironment('TimelineFlameChartNetworkDataProvider', function() {
 
   it('decorate a event correctly', async function() {
     const dataProvider = new Timeline.TimelineFlameChartNetworkDataProvider.TimelineFlameChartNetworkDataProvider();
-    const traceParsedData = await TraceLoader.traceEngine(this, 'cls-cluster-max-timeout.json.gz');
+    const {traceData} = await TraceLoader.traceEngine(this, 'cls-cluster-max-timeout.json.gz');
     // The field that is important of this test:
     // {
     // "ts": 183752441.977,
@@ -125,13 +135,13 @@ describeWithEnvironment('TimelineFlameChartNetworkDataProvider', function() {
     //   "responseTime": 1634222299.776
     // ...
     // }
-    const event = traceParsedData.NetworkRequests.byTime[1];
+    const event = traceData.NetworkRequests.byTime[1];
     // So for this request:
     // The earliest event belonging to this request starts at 183752441.977.
     // This is used in flamechart to calculate unclippedBarX.
     // Start time is 183752441.977
     // End time is 183752670.454
-    // Finish time is 183752669.23299998
+    // Finish time is 183752669.233
     // request time is 183752.449687, but it is in second, so 183752449.687
     // in milliseconds.
     // sendStartTime is requestTime + sendStart = 183752462.479
@@ -140,14 +150,18 @@ describeWithEnvironment('TimelineFlameChartNetworkDataProvider', function() {
     // To calculate the pixel of a timestamp, we substrate the begin time  from
     // it, then multiple the timeToPixelRatio and then add the unclippedBarX.
     // Then get the floor of the pixel.
-    // So the pixel of sendStart is 30.
-    // So the pixel of headersEnd is 235.
-    // So the pixel of finish is 237.
-    // So the pixel of start is 10.
-    // So the pixel of end is 238.
-    assert.deepEqual(
-        dataProvider.getDecorationPixels(event, /* unclippedBarX= */ 10, /* timeToPixelRatio= */ 1),
-        {sendStart: 30, headersEnd: 235, finish: 237, start: 10, end: 238});
+    // So the pixel of sendStart is (183752462.479 - 183752441.977) + 10, in ts it will be 30.502000004053116.
+    // So the pixel of headersEnd is (183752667.771 - 183752441.977) + 10, in ts it will be 235.79399999976158.
+    // So the pixel of finish is (183752669.233 - 183752441.977) + 10, in ts it will be 237.25600001215935.
+    // So the pixel of start is (183752441.977 - 183752441.977) + 10 = 10.
+    // So the pixel of end is (183752670.454 - 183752441.977) + 10, in ts it will be 238.47699999809265.
+    assert.deepEqual(dataProvider.getDecorationPixels(event, /* unclippedBarX= */ 10, /* timeToPixelRatio= */ 1), {
+      sendStart: (183752462.479 - 183752441.977) + 10,
+      headersEnd: (183752667.771 - 183752441.977) + 10,
+      finish: (183752669.233 - 183752441.977) + 10,
+      start: 10,
+      end: (183752670.454 - 183752441.977) + 10,
+    });
   });
 });
 

@@ -47,12 +47,13 @@ SkColor GetDarkModeBackgroundColor() {
 // TODO(michaelcheco): Update to correct icon.
 std::unique_ptr<web_app::WebAppInstallInfo>
 CreateWebAppInfoForFirmwareUpdateSystemWebApp() {
-  auto info = std::make_unique<web_app::WebAppInstallInfo>();
-  info->start_url = GURL(ash::kChromeUIFirmwareUpdateAppURL);
+  GURL start_url(ash::kChromeUIFirmwareUpdateAppURL);
+  auto info =
+      web_app::CreateSystemWebAppInstallInfoWithStartUrlAsIdentity(start_url);
   info->scope = GURL(ash::kChromeUIFirmwareUpdateAppURL);
   info->title = l10n_util::GetStringUTF16(IDS_ASH_FIRMWARE_UPDATE_APP_TITLE);
   web_app::CreateIconInfoForSystemWebApp(
-      info->start_url,
+      info->start_url(),
       {{"app_icon_192.png", 192, IDR_ASH_FIRMWARE_UPDATE_APP_APP_ICON_192_PNG}},
       *info);
   info->display_mode = blink::mojom::DisplayMode::kStandalone;

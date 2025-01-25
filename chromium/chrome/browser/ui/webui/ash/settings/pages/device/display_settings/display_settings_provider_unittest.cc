@@ -15,6 +15,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
+#include "base/time/time.h"
 #include "chrome/test/base/chrome_ash_test_base.h"
 #include "chromeos/dbus/power_manager/backlight.pb.h"
 #include "content/public/test/browser_task_environment.h"
@@ -24,6 +25,8 @@
 namespace ash::settings {
 
 namespace {
+
+constexpr base::TimeDelta kMetricsDelayTimerInterval = base::Seconds(2);
 
 // A mock observer that records current tablet mode status and counts when
 // OnTabletModeChanged function is called.
@@ -653,26 +656,45 @@ TEST_F(DisplaySettingsProviderTest,
       "ChromeOS.Settings.Display.Internal.BrightnessSliderAdjusted",
       /*expected_count=*/0);
 
-  double brightness_percent = 33.3;
-  provider_->SetInternalDisplayScreenBrightness(brightness_percent);
+  double first_brightness_percent = 33.3;
+  double second_brightness_percent = 44.4;
+  double third_brightness_percent = 55.5;
+  // Move the brightness slider rapidly in succession.
+  provider_->SetInternalDisplayScreenBrightness(first_brightness_percent);
+  FastForwardBy(kMetricsDelayTimerInterval / 4);
+  provider_->SetInternalDisplayScreenBrightness(second_brightness_percent);
+  FastForwardBy(kMetricsDelayTimerInterval / 4);
+  provider_->SetInternalDisplayScreenBrightness(third_brightness_percent);
 
-  // The BrightnessControlDelegate should have been called with the new
+  // The BrightnessControlDelegate should have been called with the most recent
   // brightness percent.
-  EXPECT_EQ(brightness_percent,
+  EXPECT_EQ(third_brightness_percent,
             brightness_control_delegate_->brightness_percent());
   // The BrightnessChangeSource should indicate that this change came from the
   // Settings app.
   EXPECT_EQ(BrightnessControlDelegate::BrightnessChangeSource::kSettingsApp,
             brightness_control_delegate_->last_brightness_change_source());
 
-  // Histogram should have been recorded for this change.
+  // Wait for the metrics delay timer to resolve.
+  FastForwardBy(kMetricsDelayTimerInterval);
+
+  // Histogram should have been recorded for this change, but only for the most
+  // recent brightness percent.
   histogram_tester_.ExpectTotalCount(
       "ChromeOS.Settings.Display.Internal.BrightnessSliderAdjusted",
       /*expected_count=*/1);
-  histogram_tester_.ExpectUniqueSample(
+  histogram_tester_.ExpectBucketCount(
       "ChromeOS.Settings.Display.Internal.BrightnessSliderAdjusted",
-      /*sample=*/brightness_percent,
-      /*expected_bucket_count=*/1);
+      /*sample=*/first_brightness_percent,
+      /*expected_count=*/0);
+  histogram_tester_.ExpectBucketCount(
+      "ChromeOS.Settings.Display.Internal.BrightnessSliderAdjusted",
+      /*sample=*/second_brightness_percent,
+      /*expected_count=*/0);
+  histogram_tester_.ExpectBucketCount(
+      "ChromeOS.Settings.Display.Internal.BrightnessSliderAdjusted",
+      /*sample=*/third_brightness_percent,
+      /*expected_count=*/1);
 }
 
 // Test the behavior when setting the internal display screen brightness (when
@@ -848,6 +870,64 @@ TEST_F(DisplaySettingsProviderTest, HasAmbientLightSensor) {
       base::BindOnce([](bool has_ambient_light_sensor) {
         EXPECT_FALSE(has_ambient_light_sensor);
       }));
+}
+
+TEST_F(DisplaySettingsProviderTest, RecordUserInitiatedALSDisabledCause) {
+  feature_list_.Reset();
+  feature_list_.InitAndEnableFeature(
+      ash::features::kEnableBrightnessControlInSettings);
+
+  // No histograms should have been recorded yet.
+  histogram_tester_.ExpectTotalCount(
+      "ChromeOS.Settings.Display.Internal.UserInitiated."
+      "AmbientLightSensorDisabledCause",
+      /*expected_count=*/0);
+
+  // Verify histogram recording when ALS is disabled via settings app.
+  {
+    power_manager::AmbientLightSensorChange cause_settings_app;
+    cause_settings_app.set_sensor_enabled(false);
+    cause_settings_app.set_cause(
+        power_manager::
+            AmbientLightSensorChange_Cause_USER_REQUEST_SETTINGS_APP);
+    provider_->AmbientLightSensorEnabledChanged(cause_settings_app);
+    histogram_tester_.ExpectUniqueSample(
+        "ChromeOS.Settings.Display.Internal.UserInitiated."
+        "AmbientLightSensorDisabledCause",
+        DisplaySettingsProvider::
+            UserInitiatedDisplayAmbientLightSensorDisabledCause::
+                kUserRequestSettingsApp,
+        1);
+  }
+
+  // Ensure enabling ALS does not emit histogram.
+  {
+    power_manager::AmbientLightSensorChange cause_settings_app;
+    cause_settings_app.set_sensor_enabled(true);
+    cause_settings_app.set_cause(
+        power_manager::AmbientLightSensorChange_Cause_BRIGHTNESS_USER_REQUEST);
+    provider_->AmbientLightSensorEnabledChanged(cause_settings_app);
+    histogram_tester_.ExpectTotalCount(
+        "ChromeOS.Settings.Display.Internal.UserInitiated."
+        "AmbientLightSensorDisabledCause",
+        /*expected_count=*/1);
+  }
+
+  // Test histogram update when ALS is disabled due to brightness change.
+  {
+    power_manager::AmbientLightSensorChange cause_settings_app;
+    cause_settings_app.set_sensor_enabled(false);
+    cause_settings_app.set_cause(
+        power_manager::AmbientLightSensorChange_Cause_BRIGHTNESS_USER_REQUEST);
+    provider_->AmbientLightSensorEnabledChanged(cause_settings_app);
+    histogram_tester_.ExpectBucketCount(
+        "ChromeOS.Settings.Display.Internal.UserInitiated."
+        "AmbientLightSensorDisabledCause",
+        DisplaySettingsProvider::
+            UserInitiatedDisplayAmbientLightSensorDisabledCause::
+                kBrightnessUserRequest,
+        1);
+  }
 }
 
 }  // namespace ash::settings

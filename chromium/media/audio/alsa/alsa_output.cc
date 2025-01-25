@@ -199,7 +199,7 @@ bool AlsaPcmOutputStream::Open() {
     return false;
 
   if (!CanTransitionTo(kIsOpened)) {
-    NOTREACHED() << "Invalid state: " << state();
+    NOTREACHED_IN_MIGRATION() << "Invalid state: " << state();
     return false;
   }
 
@@ -745,9 +745,10 @@ snd_pcm_t* AlsaPcmOutputStream::AutoSelectDevice(unsigned int latency) {
   // downmixing.
   uint32_t default_channels = channels_;
   if (default_channels > 2) {
-    channel_mixer_ = std::make_unique<ChannelMixer>(
-        channel_layout_, kDefaultOutputChannelLayout);
     default_channels = 2;
+    channel_mixer_ = std::make_unique<ChannelMixer>(channel_layout_, channels_,
+                                                    kDefaultOutputChannelLayout,
+                                                    default_channels);
     mixed_audio_bus_ = AudioBus::Create(
         default_channels, audio_bus_->frames());
   }
@@ -804,7 +805,8 @@ AlsaPcmOutputStream::TransitionTo(InternalState to) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!CanTransitionTo(to)) {
-    NOTREACHED() << "Cannot transition from: " << state_ << " to: " << to;
+    NOTREACHED_IN_MIGRATION()
+        << "Cannot transition from: " << state_ << " to: " << to;
     state_ = kInError;
   } else {
     state_ = to;

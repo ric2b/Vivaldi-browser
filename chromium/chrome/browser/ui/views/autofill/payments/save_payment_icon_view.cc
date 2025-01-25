@@ -7,10 +7,12 @@
 #include "base/notreached.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/autofill/payments/save_payment_icon_controller.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/view_ids.h"
+#include "chrome/browser/ui/views/autofill/autofill_location_bar_bubble.h"
 #include "chrome/browser/ui/views/autofill/payments/manage_saved_iban_bubble_view.h"
 #include "chrome/browser/ui/views/autofill/payments/save_card_and_virtual_card_enroll_confirmation_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/save_card_bubble_views.h"
@@ -22,6 +24,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/accessibility/view_accessibility.h"
 
 namespace autofill {
 
@@ -30,13 +33,13 @@ SavePaymentIconView::SavePaymentIconView(
     IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
     PageActionIconView::Delegate* page_action_icon_delegate,
     int command_id)
-    : PageActionIconView(command_updater,
-                         command_id,
-                         icon_label_bubble_delegate,
-                         page_action_icon_delegate,
-                         command_id == IDC_SAVE_CREDIT_CARD_FOR_PAGE
-                             ? "SaveCard"
-                             : "SaveIban") {
+    : PageActionIconView(
+          command_updater,
+          command_id,
+          icon_label_bubble_delegate,
+          page_action_icon_delegate,
+          command_id == IDC_SAVE_CREDIT_CARD_FOR_PAGE ? "SaveCard" : "SaveIban",
+          kActionShowPaymentsBubbleOrPage) {
   if (command_id == IDC_SAVE_CREDIT_CARD_FOR_PAGE) {
     SetID(VIEW_ID_SAVE_CREDIT_CARD_BUTTON);
   } else {
@@ -45,37 +48,16 @@ SavePaymentIconView::SavePaymentIconView(
   }
   command_id_ = command_id;
   SetUpForInOutAnimation();
-  SetAccessibilityProperties(/*role*/ std::nullopt,
-                             GetTextForTooltipAndAccessibleName());
+  GetViewAccessibility().SetProperties(/*role*/ std::nullopt,
+                                       GetTextForTooltipAndAccessibleName());
 }
 
 SavePaymentIconView::~SavePaymentIconView() = default;
 
 views::BubbleDialogDelegate* SavePaymentIconView::GetBubble() const {
-  SavePaymentIconController* controller = GetController();
-  if (!controller) {
-    return nullptr;
-  }
-
-  switch (controller->GetPaymentBubbleType()) {
-    case SavePaymentIconController::PaymentBubbleType::kUnknown:
-      return nullptr;
-    case SavePaymentIconController::PaymentBubbleType::kCreditCard:
-      return static_cast<autofill::SaveCardBubbleViews*>(
-          controller->GetPaymentBubbleView());
-    case SavePaymentIconController::PaymentBubbleType::kSaveIban:
-      return static_cast<autofill::SaveIbanBubbleView*>(
-          controller->GetPaymentBubbleView());
-    case SavePaymentIconController::PaymentBubbleType::kManageSavedIban:
-      return static_cast<autofill::ManageSavedIbanBubbleView*>(
-          controller->GetPaymentBubbleView());
-    case SavePaymentIconController::PaymentBubbleType::
-        kCreditCardSaveConfirmation:
-      return static_cast<
-          autofill::SaveCardAndVirtualCardEnrollConfirmationBubbleViews*>(
-          controller->GetPaymentBubbleView());
-  }
-  NOTREACHED_NORETURN();
+  return GetController() ? static_cast<AutofillLocationBarBubble*>(
+                               GetController()->GetPaymentBubbleView())
+                         : nullptr;
 }
 
 void SavePaymentIconView::UpdateImpl() {
@@ -90,7 +72,7 @@ void SavePaymentIconView::UpdateImpl() {
       SetCommandEnabled(controller && controller->IsIconVisible());
   SetVisible(command_enabled);
 
-  SetAccessibleName(GetTextForTooltipAndAccessibleName());
+  GetViewAccessibility().SetName(GetTextForTooltipAndAccessibleName());
 
   if (command_enabled && controller->ShouldShowSavingPaymentAnimation()) {
     SetEnabled(false);

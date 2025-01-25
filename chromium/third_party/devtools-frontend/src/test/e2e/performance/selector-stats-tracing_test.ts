@@ -4,8 +4,9 @@
 
 import {assert} from 'chai';
 
-import {click, getBrowserAndPages, reloadDevTools, step, waitForFunction} from '../../shared/helper.js';
+import {click, getBrowserAndPages, step, waitForFunction} from '../../shared/helper.js';
 import {describe, it} from '../../shared/mocha-extensions.js';
+import {reloadDevTools} from '../helpers/cross-tool-helper.js';
 import {getDataGridRows} from '../helpers/datagrid-helpers.js';
 import {
   disableCSSSelectorStats,
@@ -81,7 +82,8 @@ describe('The Performance panel', function() {
     });
   });
 
-  it('CSS selector stats performance test', async () => {
+  // Flaking on multiple bots on CQ.
+  it.skip('[crbug.com/349787448] CSS selector stats performance test', async () => {
     // set a tentative threshold of 50%
     const timeDiffPercentageMax = 0.5;
 

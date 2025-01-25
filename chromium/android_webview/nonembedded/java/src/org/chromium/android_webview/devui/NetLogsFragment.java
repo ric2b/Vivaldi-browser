@@ -6,6 +6,8 @@ package org.chromium.android_webview.devui;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.MenuInflater;
@@ -13,20 +15,26 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.ListView;
 import android.widget.PopupMenu;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.FileProvider;
 
-import org.chromium.base.ContextUtils;
+import org.chromium.android_webview.services.AwNetLogService;
+import org.chromium.base.Log;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.ThreadUtils;
+import org.chromium.ui.widget.Toast;
 
 import java.io.File;
 import java.text.DateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 
@@ -35,7 +43,7 @@ public class NetLogsFragment extends DevUiBaseFragment {
 
     private static final Long MAX_TOTAL_CAPACITY = 1000L * 1024 * 1024; // 1 GB
 
-    private static List<File> sFileList = getAllJsonFilesInDirectory();
+    private static List<File> sFileList = getAllNetLogFilesInDir();
     private static long sTotalBytes;
     private static NetLogListAdapter sLogAdapter;
 
@@ -59,6 +67,12 @@ public class NetLogsFragment extends DevUiBaseFragment {
         Activity activity = (Activity) mContext;
         activity.setTitle("WebView Net Logs");
 
+        Button deleteAllNetLogsButton = view.findViewById(R.id.delete_all_net_logs_button);
+        deleteAllNetLogsButton.setOnClickListener(
+                (View flagButton) -> {
+                    deleteAllNetLogs();
+                });
+
         updateTotalCapacityText(view.findViewById(R.id.net_logs_total_capacity));
 
         ListView netLogListView = view.findViewById(R.id.net_log_list);
@@ -75,7 +89,7 @@ public class NetLogsFragment extends DevUiBaseFragment {
     }
 
     public void updateNetLogData() {
-        List<File> updatedList = getAllJsonFilesInDirectory();
+        List<File> updatedList = getAllNetLogFilesInDir();
         if (updatedList.size() == sFileList.size()) {
             return;
         }
@@ -89,43 +103,33 @@ public class NetLogsFragment extends DevUiBaseFragment {
         return String.format(Locale.US, "%.2f MB", megabytes);
     }
 
-    private static List<File> getAllJsonFilesInDirectory() {
-        sTotalBytes = 0L;
+    private static List<File> getAllNetLogFilesInDir() {
         List<File> allFiles = new ArrayList<>();
-        Context dirContext = ContextUtils.getApplicationContext();
-        File directory = dirContext.getFilesDir();
-        if (directory.isDirectory()) {
-            directory.list();
-            File[] files = directory.listFiles();
-            if (files != null) {
-                for (File file : files) {
-                    if (file.isFile() && file.getName().endsWith(".json")) {
-                        allFiles.add(file);
-                        sTotalBytes += file.length();
-                    }
-                }
-            }
+        sTotalBytes = 0L;
+        File directory = AwNetLogService.getNetLogFileDirectory();
+        for (File file : directory.listFiles()) {
+            allFiles.add(file);
+            sTotalBytes += file.length();
         }
 
-        return allFiles;
+        return sortFilesForDisplay(allFiles);
     }
 
-    public static Long getCreationTimeFromFileName(String fileName) {
-        String pid = getProcessID(fileName);
-        // Find every integer value.
-        String integerName = fileName.replaceAll("[^0-9]+", "");
-        return Long.parseLong(integerName.substring(pid.length()));
-    }
-
-    private static String getProcessID(String fileName) {
-        String pid = "";
-        for (int i = 0; i < fileName.length(); i++) {
-            if (fileName.charAt(i) == '_') {
-                break;
-            }
-            pid += fileName.charAt(i);
+    public static List<File> sortFilesForDisplay(List<File> fileList) {
+        List<Long> timeList = new ArrayList<Long>();
+        HashMap<Long, File> fileMap = new HashMap<Long, File>();
+        for (int i = 0; i < fileList.size(); i++) {
+            Long creationTime =
+                    AwNetLogService.getCreationTimeFromFileName(fileList.get(i).getName());
+            fileMap.put(creationTime, fileList.get(i));
+            timeList.add(creationTime);
         }
-        return pid;
+        List<File> sortedFileList = new ArrayList<File>();
+        Collections.sort(timeList);
+        for (int i = timeList.size() - 1; i >= 0; i--) {
+            sortedFileList.add(fileMap.get(timeList.get(i)));
+        }
+        return sortedFileList;
     }
 
     public static void setFileListForTesting(@NonNull List<File> fileList) {
@@ -140,10 +144,32 @@ public class NetLogsFragment extends DevUiBaseFragment {
         sFileList.add(file);
     }
 
+    private static void deleteAllNetLogs() {
+        ArrayList<File> filesToDelete = new ArrayList<>(sFileList);
+        for (File file : filesToDelete) {
+            deleteNetLogFile(file);
+        }
+    }
+
+    private static void deleteNetLogFile(File file) {
+        if (file.exists()) {
+            long capacity = file.length();
+            boolean deleted = file.delete();
+            if (deleted) {
+                sFileList.remove(file);
+                sLogAdapter.remove(file);
+                sLogAdapter.notifyDataSetChanged();
+                sTotalBytes -= capacity;
+            } else {
+                Log.w(TAG, "Failed to delete file: " + file.getAbsolutePath());
+            }
+        }
+    }
+
     public static String getFilePackageName(File file) {
-        // Find all instances of commas, underscore and integers.
-        String fileName = file.getName().replaceAll("[0-9, _]+", "");
-        return fileName.substring(0, fileName.length() - 5);
+        String[] fileAttributes = file.getName().split("_", 3);
+        String fileText = fileAttributes[2];
+        return fileText.substring(0, (fileText.length() - 5));
     }
 
     private static void updateTotalCapacityText(TextView textView) {
@@ -183,7 +209,9 @@ public class NetLogsFragment extends DevUiBaseFragment {
 
             TextView fileTimeView = view.findViewById(R.id.file_time);
             DateFormat dateFormat = DateFormat.getDateTimeInstance();
-            String date = dateFormat.format(new Date(getCreationTimeFromFileName(file.getName())));
+            String date =
+                    dateFormat.format(
+                            new Date(AwNetLogService.getCreationTimeFromFileName(file.getName())));
             fileTimeView.setText(date);
 
             TextView fileCapacityView = view.findViewById(R.id.file_capacity);
@@ -214,17 +242,35 @@ public class NetLogsFragment extends DevUiBaseFragment {
                         @Override
                         public boolean onMenuItemClick(MenuItem item) {
                             int id = item.getItemId();
+                            File file = getItem(position);
                             if (id == R.id.net_log_menu_delete) {
-                                // TODO(thomasbull): Implement Delete
+                                deleteNetLogFile(file);
                                 return true;
                             } else if (id == R.id.net_log_menu_share) {
-                                // TODO(thomasbull): Implement Share
+                                shareFile(file);
                                 return true;
                             }
                             return false;
                         }
                     });
             popup.show();
+        }
+
+        public void shareFile(File file) {
+            try {
+                Uri contentUri =
+                        FileProvider.getUriForFile(
+                                mContext, mContext.getPackageName() + ".net_logs_provider", file);
+                Intent intent = new Intent(Intent.ACTION_SEND);
+                intent.setType("application/json");
+                intent.putExtra(Intent.EXTRA_STREAM, contentUri);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                startActivity(Intent.createChooser(intent, "Share JSON File"));
+            } catch (Exception e) {
+                Toast.makeText(mContext, "Error sharing net log file", Toast.LENGTH_LONG).show();
+                Log.e(TAG, "Error sharing net log file:", e);
+            }
         }
     }
 }

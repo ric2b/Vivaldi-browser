@@ -18,8 +18,7 @@ namespace skgpu::graphite {
 sk_sp<DawnBuffer> DawnBuffer::Make(const DawnSharedContext* sharedContext,
                                    size_t size,
                                    BufferType type,
-                                   AccessPattern accessPattern,
-                                   std::string_view label) {
+                                   AccessPattern accessPattern) {
     if (size <= 0) {
         return nullptr;
     }
@@ -61,7 +60,11 @@ sk_sp<DawnBuffer> DawnBuffer::Make(const DawnSharedContext* sharedContext,
     if (sharedContext->caps()->drawBufferCanBeMapped() &&
         accessPattern == AccessPattern::kHostVisible &&
         type != BufferType::kXferGpuToCpu) {
+        // If the buffer is intended to be mappabe, add MapWrite usage and remove
+        // CopyDst.
+        // We don't want to allow both CPU and GPU to write to the same buffer.
         usage |= wgpu::BufferUsage::MapWrite;
+        usage &= ~wgpu::BufferUsage::CopyDst;
     }
 
     wgpu::BufferDescriptor desc;
@@ -82,21 +85,16 @@ sk_sp<DawnBuffer> DawnBuffer::Make(const DawnSharedContext* sharedContext,
         SkASSERT(mappedAtCreationPtr);
     }
 
-    return sk_sp<DawnBuffer>(new DawnBuffer(sharedContext,
-                                            size,
-                                            std::move(buffer),
-                                            mappedAtCreationPtr,
-                                            std::move(label)));
+    return sk_sp<DawnBuffer>(
+            new DawnBuffer(sharedContext, size, std::move(buffer), mappedAtCreationPtr));
 }
 
 DawnBuffer::DawnBuffer(const DawnSharedContext* sharedContext,
                        size_t size,
                        wgpu::Buffer buffer,
-                       void* mappedAtCreationPtr,
-                       std::string_view label)
+                       void* mappedAtCreationPtr)
         : Buffer(sharedContext,
                  size,
-                 std::move(label),
                  /*commandBufferRefsAsUsageRefs=*/buffer.GetUsage() & wgpu::BufferUsage::MapWrite)
         , fBuffer(std::move(buffer)) {
     fMapPtr = mappedAtCreationPtr;
@@ -182,20 +180,16 @@ void DawnBuffer::onMap() {
     // Use wgpu::Future and WaitAny with timeout=0 to trigger callback immediately.
     // This should work because our resource tracking mechanism should make sure that
     // the buffer is free of any GPU use at this point.
-    wgpu::BufferMapCallbackInfo callbackInfo{};
-    callbackInfo.mode = wgpu::CallbackMode::WaitAnyOnly;
-    callbackInfo.userdata = this;
-    callbackInfo.callback = [](WGPUBufferMapAsyncStatus s, void* userData) {
-        auto buffer = static_cast<DawnBuffer*>(userData);
-        buffer->mapCallback(s);
-    };
-
     wgpu::FutureWaitInfo mapWaitInfo{};
 
-    mapWaitInfo.future = fBuffer.MapAsync(isWrite ? wgpu::MapMode::Write : wgpu::MapMode::Read,
-                                          0,
-                                          fBuffer.GetSize(),
-                                          callbackInfo);
+    mapWaitInfo.future =
+            fBuffer.MapAsync(isWrite ? wgpu::MapMode::Write : wgpu::MapMode::Read,
+                             0,
+                             fBuffer.GetSize(),
+                             wgpu::CallbackMode::WaitAnyOnly,
+                             [this](wgpu::MapAsyncStatus s, const char*) {
+                                 this->mapCallback(static_cast<WGPUBufferMapAsyncStatus>(s));
+                             });
 
     wgpu::Device device = static_cast<const DawnSharedContext*>(sharedContext())->device();
     wgpu::Instance instance = device.GetAdapter().GetInstance();

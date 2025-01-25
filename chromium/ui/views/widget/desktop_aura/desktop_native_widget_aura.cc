@@ -112,10 +112,11 @@ class DesktopNativeWidgetTopLevelHandler : public aura::WindowObserver {
 
     child_window->SetBounds(gfx::Rect(bounds.size()));
 
-    Widget::InitParams init_params;
-    init_params.type = full_screen ? Widget::InitParams::TYPE_WINDOW
-                       : is_menu   ? Widget::InitParams::TYPE_MENU
-                                   : Widget::InitParams::TYPE_POPUP;
+    Widget::InitParams init_params(
+        Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+        full_screen ? Widget::InitParams::TYPE_WINDOW
+        : is_menu   ? Widget::InitParams::TYPE_MENU
+                    : Widget::InitParams::TYPE_POPUP);
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
     // Evaluate if the window needs shadow.
@@ -132,7 +133,6 @@ class DesktopNativeWidgetTopLevelHandler : public aura::WindowObserver {
       init_params.remove_standard_frame = true;
 #endif
     init_params.bounds = bounds;
-    init_params.ownership = Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET;
     init_params.layer_type = ui::LAYER_NOT_DRAWN;
     init_params.activatable = full_screen
                                   ? Widget::InitParams::Activatable::kYes
@@ -442,8 +442,8 @@ DesktopNativeWidgetAura::tooltip_controller() {
 }
 
 void DesktopNativeWidgetAura::HandleActivationChanged(bool active) {
-  DCHECK(native_widget_delegate_);
-  if (!native_widget_delegate_->ShouldHandleNativeWidgetActivationChanged(
+  if (!native_widget_delegate_ ||
+      !native_widget_delegate_->ShouldHandleNativeWidgetActivationChanged(
           active)) {
     return;
   }
@@ -1064,7 +1064,6 @@ void DesktopNativeWidgetAura::FlashFrame(bool flash_frame) {
 }
 
 void DesktopNativeWidgetAura::RunShellDrag(
-    View* view,
     std::unique_ptr<ui::OSExchangeData> data,
     const gfx::Point& location,
     int operation,
@@ -1206,6 +1205,20 @@ void DesktopNativeWidgetAura::OnNativeViewHierarchyWillChange() {}
 
 void DesktopNativeWidgetAura::OnNativeViewHierarchyChanged() {}
 
+bool DesktopNativeWidgetAura::SetAllowScreenshots(bool allow) {
+  if (desktop_window_tree_host_) {
+    desktop_window_tree_host_->SetAllowScreenshots(allow);
+    return true;
+  }
+  return false;
+}
+
+bool DesktopNativeWidgetAura::AreScreenshotsAllowed() {
+  return desktop_window_tree_host_
+             ? desktop_window_tree_host_->AreScreenshotsAllowed()
+             : true;
+}
+
 std::string DesktopNativeWidgetAura::GetName() const {
   return name_;
 }
@@ -1316,7 +1329,7 @@ void DesktopNativeWidgetAura::OnMouseEvent(ui::MouseEvent* event) {
   DCHECK(content_window_->IsVisible());
 
 #if BUILDFLAG(IS_WIN)
-  if (event->type() == ui::ET_MOUSE_MOVED) {
+  if (event->type() == ui::EventType::kMouseMoved) {
     // Showing a tooltip causes Windows to generate a MOUSE_MOVED
     // event to the same location it was already at; when that happens,
     // we need to throw the event away rather than acting as if someone
@@ -1340,7 +1353,7 @@ void DesktopNativeWidgetAura::OnScrollEvent(ui::ScrollEvent* event) {
   if (!native_widget_delegate_)
     return;
 
-  if (event->type() == ui::ET_SCROLL) {
+  if (event->type() == ui::EventType::kScroll) {
     native_widget_delegate_->OnScrollEvent(event);
     if (event->handled())
       return;

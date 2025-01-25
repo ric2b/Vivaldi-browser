@@ -321,13 +321,10 @@ void CommandBufferStub::Destroy() {
     sync_point_client_state_ = nullptr;
   }
 
-  bool have_context = false;
-  if (decoder_context_ && decoder_context_->GetGLContext()) {
-    // Try to make the context current regardless of whether it was lost, so we
-    // don't leak resources.
-    have_context =
-        decoder_context_->GetGLContext()->MakeCurrent(surface_.get());
-  }
+  // Try to make the context current regardless of whether it was lost, so we
+  // don't leak resources. Don't use GetGLContext()->MakeCurrent() since that
+  // will make |have_context| false when RasterDecoder doesn't use GL.
+  const bool have_context = decoder_context_ && decoder_context_->MakeCurrent();
 
   std::optional<gles2::ProgramCache::ScopedCacheUse> cache_use;
   if (have_context)
@@ -746,19 +743,20 @@ CommandBufferStub::SetOrGetMemoryTrackerFactory(MemoryTrackerFactory factory) {
 CommandBufferStub::ScopedContextOperation::ScopedContextOperation(
     CommandBufferStub& stub)
     : stub_(stub) {
-  stub_->UpdateActiveUrl();
-  if (stub_->decoder_context_ && stub_->MakeCurrent()) {
+  stub_.UpdateActiveUrl();
+  if (stub_.decoder_context_ && stub_.MakeCurrent()) {
     have_context_ = true;
-    stub_->CreateCacheUse(cache_use_);
+    stub_.CreateCacheUse(cache_use_);
   }
 }
 
 CommandBufferStub::ScopedContextOperation::~ScopedContextOperation() {
-  stub_->CheckCompleteWaits();
+  stub_.CheckCompleteWaits();
   if (have_context_) {
-    if (stub_->decoder_context_)
-      stub_->decoder_context_->ProcessPendingQueries(/*did_finish=*/false);
-    stub_->ScheduleDelayedWork(base::Milliseconds(kHandleMoreWorkPeriodMs));
+    if (stub_.decoder_context_) {
+      stub_.decoder_context_->ProcessPendingQueries(/*did_finish=*/false);
+    }
+    stub_.ScheduleDelayedWork(base::Milliseconds(kHandleMoreWorkPeriodMs));
   }
 }
 

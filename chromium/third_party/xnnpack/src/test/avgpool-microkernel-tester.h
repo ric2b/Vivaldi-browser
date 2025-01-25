@@ -8,12 +8,6 @@
 
 #pragma once
 
-#include <xnnpack.h>
-#include <xnnpack/aligned-allocator.h>
-#include <xnnpack/microfnptr.h>
-#include <xnnpack/microparams.h>
-#include <xnnpack/requantization.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -24,9 +18,14 @@
 #include <random>
 #include <vector>
 
-#include "replicable_random_device.h"
 #include <gtest/gtest.h>
 #include <fp16/fp16.h>
+#include "xnnpack.h"
+#include "xnnpack/aligned-allocator.h"
+#include "xnnpack/microfnptr.h"
+#include "xnnpack/microparams.h"
+#include "xnnpack/requantization.h"
+#include "replicable_random_device.h"
 
 class AvgPoolMicrokernelTester {
  public:
@@ -60,13 +59,13 @@ class AvgPoolMicrokernelTester {
     return this->input_offset_;
   }
 
-  AvgPoolMicrokernelTester& zero_index(size_t zero_index) {
-    this->zero_index_ = zero_index;
+  AvgPoolMicrokernelTester& zero_index_mod2(size_t zero_index_mod2) {
+    this->zero_index_mod2_ = zero_index_mod2;
     return *this;
   }
 
-  size_t zero_index() const {
-    return this->zero_index_;
+  size_t zero_index_mod2() const {
+    return this->zero_index_mod2_;
   }
 
   AvgPoolMicrokernelTester& pooling_elements(size_t pooling_elements) {
@@ -227,8 +226,10 @@ class AvgPoolMicrokernelTester {
       }
       std::shuffle(indirect_input.begin(),
         indirect_input.begin() + (output_pixels() - 1) * step() + pooling_elements(), rng);
-      if (zero_index() != SIZE_MAX) {
-        indirect_input[zero_index()] = zero.data();
+      if (zero_index_mod2() != SIZE_MAX) {
+        for (size_t i = zero_index_mod2(); i < indirect_input.size(); i += 2) {
+          indirect_input[i] = zero.data();
+        }
       }
 
       // Compute reference results, without clamping.
@@ -318,8 +319,10 @@ class AvgPoolMicrokernelTester {
       }
       std::shuffle(indirect_input.begin(),
         indirect_input.begin() + (output_pixels() - 1) * step() + pooling_elements(), rng);
-      if (zero_index() != SIZE_MAX) {
-        indirect_input[zero_index()] = zero.data();
+      if (zero_index_mod2() != SIZE_MAX) {
+        for (size_t i = zero_index_mod2(); i < indirect_input.size(); i += 2) {
+          indirect_input[i] = zero.data();
+        }
       }
 
       // Compute reference results, without clamping.
@@ -408,8 +411,10 @@ class AvgPoolMicrokernelTester {
       }
       std::shuffle(indirect_input.begin(),
         indirect_input.begin() + (output_pixels() - 1) * step() + pooling_elements(), rng);
-      if (zero_index() != SIZE_MAX) {
-        indirect_input[zero_index()] = zero.data();
+      if (zero_index_mod2() != SIZE_MAX) {
+        for (size_t i = zero_index_mod2(); i < indirect_input.size(); i += 2) {
+          indirect_input[i] = zero.data();
+        }
       }
 
       // Compute reference results, without clamping.
@@ -495,8 +500,10 @@ class AvgPoolMicrokernelTester {
       }
       std::shuffle(indirect_input.begin(),
         indirect_input.begin() + (output_pixels() - 1) * step() + pooling_elements(), rng);
-      if (zero_index() != SIZE_MAX) {
-        indirect_input[zero_index()] = zero.data();
+      if (zero_index_mod2() != SIZE_MAX) {
+        for (size_t i = zero_index_mod2(); i < indirect_input.size(); i += 2) {
+          indirect_input[i] = zero.data();
+        }
       }
 
       // Compute reference results, without clamping.
@@ -590,8 +597,10 @@ class AvgPoolMicrokernelTester {
       }
       std::shuffle(indirect_input.begin(),
         indirect_input.begin() + (output_pixels() - 1) * step() + pooling_elements(), rng);
-      if (zero_index() != SIZE_MAX) {
-        indirect_input[zero_index()] = zero.data();
+      if (zero_index_mod2() != SIZE_MAX) {
+        for (size_t i = zero_index_mod2(); i < indirect_input.size(); i += 2) {
+          indirect_input[i] = zero.data();
+        }
       }
 
       // Prepare parameters.
@@ -685,8 +694,10 @@ class AvgPoolMicrokernelTester {
       }
       std::shuffle(indirect_input.begin(),
         indirect_input.begin() + (output_pixels() - 1) * step() + pooling_elements(), rng);
-      if (zero_index() != SIZE_MAX) {
-        indirect_input[zero_index()] = zero.data();
+      if (zero_index_mod2() != SIZE_MAX) {
+        for (size_t i = zero_index_mod2(); i < indirect_input.size(); i += 2) {
+          indirect_input[i] = zero.data();
+        }
       }
 
       // Prepare parameters.
@@ -773,8 +784,10 @@ class AvgPoolMicrokernelTester {
       }
       std::shuffle(indirect_input.begin(),
         indirect_input.begin() + (output_pixels() - 1) * step() + pooling_elements(), rng);
-      if (zero_index() != SIZE_MAX) {
-        indirect_input[zero_index()] = zero.data();
+      if (zero_index_mod2() != SIZE_MAX) {
+        for (size_t i = zero_index_mod2(); i < indirect_input.size(); i += 2) {
+          indirect_input[i] = zero.data();
+        }
       }
 
       // Compute reference results, without clamping.
@@ -867,8 +880,10 @@ class AvgPoolMicrokernelTester {
       }
       std::shuffle(indirect_input.begin(),
         indirect_input.begin() + (output_pixels() - 1) * step() + pooling_elements(), rng);
-      if (zero_index() != SIZE_MAX) {
-        indirect_input[zero_index()] = zero.data();
+      if (zero_index_mod2() != SIZE_MAX) {
+        for (size_t i = zero_index_mod2(); i < indirect_input.size(); i += 2) {
+          indirect_input[i] = zero.data();
+        }
       }
 
       // Compute reference results, without clamping.
@@ -960,8 +975,10 @@ class AvgPoolMicrokernelTester {
       }
       std::shuffle(indirect_input.begin(),
         indirect_input.begin() + (output_pixels() - 1) * step() + pooling_elements(), rng);
-      if (zero_index() != SIZE_MAX) {
-        indirect_input[zero_index()] = zero.data();
+      if (zero_index_mod2() != SIZE_MAX) {
+        for (size_t i = zero_index_mod2(); i < indirect_input.size(); i += 2) {
+          indirect_input[i] = zero.data();
+        }
       }
 
       // Compute reference results, without clamping.
@@ -1050,8 +1067,10 @@ class AvgPoolMicrokernelTester {
       }
       std::shuffle(indirect_input.begin(),
         indirect_input.begin() + (output_pixels() - 1) * step() + pooling_elements(), rng);
-      if (zero_index() != SIZE_MAX) {
-        indirect_input[zero_index()] = zero.data();
+      if (zero_index_mod2() != SIZE_MAX) {
+        for (size_t i = zero_index_mod2(); i < indirect_input.size(); i += 2) {
+          indirect_input[i] = zero.data();
+        }
       }
 
       // Compute reference results, without clamping.
@@ -1120,7 +1139,7 @@ class AvgPoolMicrokernelTester {
   size_t pooling_elements_{1};
   size_t channels_{1};
   size_t input_offset_{0};
-  size_t zero_index_{SIZE_MAX};
+  size_t zero_index_mod2_{SIZE_MAX};
   size_t step_{1};
   size_t primary_pooling_tile_{1};
   size_t incremental_pooling_tile_{1};

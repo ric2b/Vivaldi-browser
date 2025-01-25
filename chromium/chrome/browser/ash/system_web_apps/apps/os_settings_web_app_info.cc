@@ -20,13 +20,13 @@
 
 std::unique_ptr<web_app::WebAppInstallInfo>
 CreateWebAppInfoForOSSettingsSystemWebApp() {
-  std::unique_ptr<web_app::WebAppInstallInfo> info =
-      std::make_unique<web_app::WebAppInstallInfo>();
-  info->start_url = GURL(chrome::kChromeUIOSSettingsURL);
+  GURL start_url = GURL(chrome::kChromeUIOSSettingsURL);
+  auto info =
+      web_app::CreateSystemWebAppInstallInfoWithStartUrlAsIdentity(start_url);
   info->scope = GURL(chrome::kChromeUIOSSettingsURL);
   info->title = l10n_util::GetStringUTF16(IDS_SETTINGS_SETTINGS);
   web_app::CreateIconInfoForSystemWebApp(
-      info->start_url,
+      info->start_url(),
       {
           {"icon-192.png", 192, IDR_SETTINGS_LOGO_192},
 

@@ -16,7 +16,6 @@
 <translation id="1728677426644403582">웹페이지 소스를 보는 중</translation>
 <translation id="1734878702283171397">시스템 관리자에게 문의하세요.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windows 네트워크 진단 실행해보기<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">이 사이트에 유해한 프로그램이 있습니다</translation>
 <translation id="1974060860693918893">세부정보</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />프록시 및 방화벽 확인<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">발급 대상: <ph name="ORGANIZATION" />[<ph name="JURISDICTION" />]</translation>
@@ -42,7 +41,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />연결 진단 프로그램 실행<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">연결이 재설정되었습니다.</translation>
 <translation id="2826760142808435982">이 연결은 <ph name="CIPHER" />을(를) 사용하여 암호화되고 인증되며 <ph name="KX" />을(를) 키 교환 매커니즘으로 사용합니다.</translation>
-<translation id="2856444702002559011">해커가 <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />에서 정보(예: 비밀번호, 메시지, 신용카드 등)를 도용하려고 할 수 있습니다. <ph name="BEGIN_LEARN_MORE_LINK" />자세히 알아보기<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">네트워크 변경이 감지되었습니다.</translation>
 <translation id="2948083400971632585">연결을 위해 구성한 프록시는 설정 페이지에서 비활성화 할 수 있습니다.</translation>
 <translation id="2991571918955627853">웹사이트에서 HSTS를 사용하므로 지금은 <ph name="SITE" />에 방문할 수 없습니다. 네트워크 오류와 공격은 대체로 일시적이므로 나중에 이 페이지가 정상적으로 작동할 수 있습니다.</translation>
@@ -92,7 +90,6 @@
 <translation id="4265872034478892965">관리자에 의해 허용됨</translation>
 <translation id="4305666528087210886">파일에 액세스할 수 없음</translation>
 <translation id="4312866146174492540">차단(기본값)</translation>
-<translation id="4356973930735388585">이 사이트의 공격자가 사용자 정보(예: 사진, 비밀번호, 메시지, 신용카드)를 도용하거나 삭제하는 위험한 프로그램을 컴퓨터에 설치하려고 시도할 수 있습니다.</translation>
 <translation id="4408413947728134509">쿠키 <ph name="NUM_COOKIES" />개</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" />에서 로그인 인증서를 승인하지 않았거나 로그인 인증서가 제공되지 않았을 수 있습니다.</translation>
 <translation id="4506599922270137252">시스템 관리자에게 문의</translation>
@@ -144,7 +141,6 @@
 <translation id="6305205051461490394"><ph name="URL" />에 연결할 수 없습니다.</translation>
 <translation id="6321917430147971392">DNS 설정 확인</translation>
 <translation id="6328639280570009161">네트워크 예측을 비활성화해보세요</translation>
-<translation id="6328786501058569169">사기성 사이트입니다</translation>
 <translation id="6348220984832452017">활성화된</translation>
 <translation id="6358450015545214790">이것이 무엇을 의미하나요?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" />에서 연결을 거부했습니다.</translation>
@@ -158,7 +154,6 @@
 <translation id="6897140037006041989">사용자 에이전트</translation>
 <translation id="6957624206566198865">새 시크릿 탭에서 페이지 열기</translation>
 <translation id="7053983685419859001">차단</translation>
-<translation id="7079718277001814089">이 사이트에 멀웨어가 있습니다</translation>
 <translation id="7096937462164235847">인증된 웹사이트가 아닙니다.</translation>
 <translation id="7108819624672055576">확장 프로그램에 의해 허용됨</translation>
 <translation id="7111012039238467737">(유효)</translation>
@@ -175,7 +170,6 @@
 <translation id="759889825892636187">현재 <ph name="HOST_NAME" />에서 요청을 처리할 수 없습니다.</translation>
 <translation id="7662298039739062396">확장 프로그램에 의해 관리되는 설정</translation>
 <translation id="7663736086183791259">인증서: <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">이 사이트의 공격자가 인터넷 사용 환경에 악영향을 미치는 프로그램을 설치하도록 속임수(예를 들어, 방문하는 사이트의 홈페이지를 변경하거나 추가로 광고를 표시)를 시도할 수 있습니다.</translation>
 <translation id="7714464543167945231">인증서</translation>
 <translation id="7716147886133743102">관리자에 의해 차단됨</translation>
 <translation id="7716424297397655342">이 사이트를 캐시에서 로드할 수 없음</translation>
@@ -185,7 +179,6 @@
 <translation id="7878562273885520351">비밀번호가 유출될 수도 있음</translation>
 <translation id="7951415247503192394">(32비트)</translation>
 <translation id="7953236668995583915">이 페이지를 새로고침하여 이 사이트에 업데이트된 설정 적용</translation>
-<translation id="8025119109950072390">이 사이트의 공격자가 소프트웨어를 설치하거나 개인정보(예: 비밀번호, 전화번호, 신용카드)를 공개하는 등의 위험한 행동을 하도록 사용자를 속일 수 있습니다.</translation>
 <translation id="8037357227543935929">요청(기본값)</translation>
 <translation id="8041940743680923270">전체 기본값 사용(요청)</translation>
 <translation id="808894953321890993">비밀번호 변경</translation>

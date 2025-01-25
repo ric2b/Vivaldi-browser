@@ -7,7 +7,7 @@ from __future__ import division
 from __future__ import absolute_import
 
 from flask import Flask
-import mock
+from unittest import mock
 import sys
 import unittest
 import webtest
@@ -175,6 +175,7 @@ class AlertsTest(testing_common.TestCase):
             'key': alert.key.urlsafe(),
             'median_after_anomaly': 30,
             'median_before_anomaly': 40,
+            'new_url': '',
             'recovered': True,
             'start_revision': 5,
             'units': 'ms',

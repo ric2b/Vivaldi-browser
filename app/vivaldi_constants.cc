@@ -38,8 +38,6 @@ const char kVivaldiNewTabURL[] = "chrome://vivaldi-webui/startpage";
 const char kVivaldiReservedApiError[] =
     "Access denied while trying to set a reserved property.";
 
-const char kVivaldiUIScheme[] = "vivaldi";
-
 const char kVivaldiGameHost[] = "game";
 
 const char kVivaldiNativeScheme[] = "vivaldi-native";

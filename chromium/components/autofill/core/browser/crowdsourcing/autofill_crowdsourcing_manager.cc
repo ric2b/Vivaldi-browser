@@ -34,6 +34,7 @@
 #include "components/autofill/core/browser/logging/log_protobufs.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/proto/api_v1.pb.h"
+#include "components/autofill/core/browser/proto/server.pb.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_internals/log_message.h"
@@ -41,6 +42,7 @@
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/logging/log_buffer.h"
+#include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/google/core/common/google_util.h"
@@ -130,6 +132,13 @@ const base::FeatureParam<int> kAutofillMaxServerAttempts(
 enum class RequestType {
   kRequestQuery,
   kRequestUpload,
+};
+
+// Used in `ShouldThrottleUpload` to specify which part of the upload is
+// checked for throttling.
+enum class UploadType {
+  kVote,
+  kMetadata,
 };
 
 // Returns the base URL for the autofill server.
@@ -417,21 +426,27 @@ LogBuffer& operator<<(LogBuffer& out, const AutofillUploadContents& upload) {
   return out;
 }
 
-// Returns true if an upload of a form with `form_signature`, triggered by
-// `form_submission_source` can be throttled/suppressed. This is true if
+// Returns true if part of upload of a form with `form_signature`, triggered by
+// `form_submission_source` should be throttled/suppressed. This is true if
 // `pref_service` indicates that this upload has already happened within the
 // last update window. Updates `pref_service` account for the upload of a form
 // with `form_signature`.
-bool CanThrottleUpload(FormSignature form_signature,
-                       mojom::SubmissionSource form_submission_source,
-                       base::TimeDelta throttle_reset_period,
-                       PrefService* pref_service) {
-  // PasswordManager uploads are triggered via specific first occurrences and
-  // do not participate in the pref-service tracked throttling mechanism. Return
-  // false for these uploads.
-  if (!pref_service)
-    return false;
-
+// If `upload_type` equals `UploadType::kVote`, the check is done on the vote
+// part of the upload. Vote throttling is only used on the Autofill side.
+// If `upload_type` equals `UploadType::kMetadata` the check is done on the
+// metadata part of the upload. Metadata throttling is shared by Autofill and
+// the Password Manager, ensuring that together they don't upload metadata more
+// frequently than desired.
+bool ShouldThrottleUpload(FormSignature form_signature,
+                          UploadType upload_type,
+                          base::TimeDelta throttle_reset_period,
+                          PrefService* pref_service,
+                          std::optional<mojom::SubmissionSource>
+                              form_submission_source_for_vote_upload) {
+  // `form_submission_source_for_vote_upload` must be set only on vote uploads.
+  CHECK(upload_type == UploadType::kMetadata ||
+        form_submission_source_for_vote_upload.has_value());
+  CHECK(pref_service);
   // If the upload event pref needs to be reset, clear it now.
   base::Time now = AutofillClock::Now();
   base::Time last_reset =
@@ -440,26 +455,37 @@ bool CanThrottleUpload(FormSignature form_signature,
     AutofillCrowdsourcingManager::ClearUploadHistory(pref_service);
   }
 
+  std::string_view preference = upload_type == UploadType::kVote
+                                    ? prefs::kAutofillVoteUploadEvents
+                                    : prefs::kAutofillMetadataUploadEvents;
+
   // Get the key for the upload bucket and extract the current bitfield value.
   static constexpr size_t kNumUploadBuckets = 1021;
   std::string key = base::StringPrintf(
       "%03X", static_cast<int>(form_signature.value() % kNumUploadBuckets));
-  const auto& upload_events =
-      pref_service->GetDict(prefs::kAutofillUploadEvents);
-  int value = upload_events.FindInt(key).value_or(0);
+  int value = pref_service->GetDict(preference).FindInt(key).value_or(0);
 
   // Calculate the mask we expect to be set for the form's upload bucket.
-  const int bit = static_cast<int>(form_submission_source);
-  DCHECK_LE(0, bit);
-  DCHECK_LT(bit, 32);
-  const int mask = (1 << bit);
+  int mask = 0;
+  switch (upload_type) {
+    case UploadType::kVote: {
+      const int bit = static_cast<int>(*form_submission_source_for_vote_upload);
+      DCHECK_LE(0, bit);
+      DCHECK_LT(bit, 32);
+      mask = (1 << bit);
+      break;
+    }
+    case UploadType::kMetadata:
+      mask = 1;
+      break;
+  }
 
   // Check if this is the first upload for this event. If so, update the upload
   // event pref to set the appropriate bit.
   const bool is_first_upload_for_event = ((value & mask) == 0);
   if (is_first_upload_for_event) {
-    ScopedDictPrefUpdate update(pref_service, prefs::kAutofillUploadEvents);
-    update->Set(std::move(key), value | mask);
+    ScopedDictPrefUpdate update(pref_service, std::string(preference));
+    update->Set(key, value | mask);
   }
 
   return !is_first_upload_for_event;
@@ -573,11 +599,6 @@ void InitActiveExperiments() {
           {variations::GOOGLE_WEB_PROPERTIES_TRIGGER_ANY_CONTEXT,
            variations::GOOGLE_WEB_PROPERTIES_TRIGGER_FIRST_PARTY});
   std::erase_if(active_experiments, std::not_fn(&IsAutofillExperimentId));
-  if (base::FeatureList::IsEnabled(
-          autofill::features::kAutofillServerBehaviors)) {
-    active_experiments.push_back(
-        autofill::features::kAutofillServerBehaviorsParam.Get());
-  }
   std::sort(active_experiments.begin(), active_experiments.end());
   active_experiments.erase(
       std::unique(active_experiments.begin(), active_experiments.end()),
@@ -633,7 +654,7 @@ bool AutofillCrowdsourcingManager::IsEnabled() const {
 
 bool AutofillCrowdsourcingManager::StartQueryRequest(
     const std::vector<raw_ptr<FormStructure, VectorExperimental>>& forms,
-    net::IsolationInfo isolation_info,
+    std::optional<net::IsolationInfo> isolation_info,
     QueryRequestCompleteCallback callback) {
   if (!IsEnabled())
     return false;
@@ -697,8 +718,7 @@ bool AutofillCrowdsourcingManager::StartQueryRequest(
 bool AutofillCrowdsourcingManager::StartUploadRequest(
     std::vector<AutofillUploadContents> upload_contents,
     mojom::SubmissionSource form_submission_source,
-    int form_active_field_count,
-    PrefService* prefs) {
+    bool is_password_manager_upload) {
   if (!IsEnabled()) {
     return false;
   }
@@ -706,15 +726,35 @@ bool AutofillCrowdsourcingManager::StartUploadRequest(
     return false;
   }
 
+  PrefService* prefs = client_->GetPrefs();
   const FormSignature form_signature(upload_contents[0].form_signature());
-  const bool can_throttle_upload = CanThrottleUpload(
-      form_signature, form_submission_source, throttle_reset_period_, prefs);
-  const bool is_small_form = form_active_field_count < 3;
-  const bool allow_upload = !(can_throttle_upload &&
-                              (base::FeatureList::IsEnabled(
-                                   features::test::kAutofillUploadThrottling) ||
-                               is_small_form));
+  // Autofill vote uploads are limited via throttling so that only one vote is
+  // uploaded per form_submission_source and form signature in a given period of
+  // time.
+  // Password Manager votes uploaded via specific first occurrences and do not
+  // participate in the pref-service tracked throttling mechanism. Always allow
+  // Password Manager vote uploads.
+  const bool allow_upload =
+      is_password_manager_upload ||
+      !ShouldThrottleUpload(form_signature, UploadType::kVote,
+                            throttle_reset_period_, prefs,
+                            form_submission_source) ||
+      !base::FeatureList::IsEnabled(features::test::kAutofillUploadThrottling);
+
   AutofillMetrics::LogUploadEvent(form_submission_source, allow_upload);
+
+  // Metadata throttling does not cancel the upload, but only clears all
+  // metadata related entries.
+  if (ShouldThrottleUpload(
+          form_signature, UploadType::kMetadata, throttle_reset_period_, prefs,
+          /*form_submission_source_for_vote_upload=*/std::nullopt)) {
+    for (AutofillUploadContents& upload : upload_contents) {
+      upload.clear_randomized_form_metadata();
+      for (AutofillUploadContents::Field& field : *upload.mutable_field()) {
+        field.clear_randomized_field_metadata();
+      }
+    }
+  }
 
   // For debugging purposes, even throttled uploads are logged. If no log
   // manager is active, the function can exit early for throttled uploads.
@@ -723,17 +763,6 @@ bool AutofillCrowdsourcingManager::StartUploadRequest(
     return false;
 
   auto Upload = [&](AutofillUploadContents upload) {
-    // If this upload was a candidate for throttling, tag it and make sure that
-    // any throttling sensitive features are enforced.
-    if (can_throttle_upload) {
-      upload.set_was_throttleable(true);
-
-      // Don't send randomized metadata.
-      upload.clear_randomized_form_metadata();
-      for (auto& f : *upload.mutable_field())
-        f.clear_randomized_field_metadata();
-    }
-
     // Get the POST payload that contains upload data.
     std::optional<std::string> payload = GetUploadPayloadForApi(upload);
     if (!payload) {
@@ -767,7 +796,8 @@ bool AutofillCrowdsourcingManager::StartUploadRequest(
 
 void AutofillCrowdsourcingManager::ClearUploadHistory(PrefService* pref_service) {
   if (pref_service) {
-    pref_service->ClearPref(prefs::kAutofillUploadEvents);
+    pref_service->ClearPref(prefs::kAutofillVoteUploadEvents);
+    pref_service->ClearPref(prefs::kAutofillMetadataUploadEvents);
     pref_service->SetTime(prefs::kAutofillUploadEventsLastResetTimestamp,
                           AutofillClock::Now());
   }
@@ -814,9 +844,12 @@ bool AutofillCrowdsourcingManager::StartRequest(FormRequestData request_data) {
   // NavigationRequest. Not setting an IsolationInfo is safe because no
   // information about the response is passed to the renderer, or is otherwise
   // visible to a page. See crbug/1176635#c22.
+#if BUILDFLAG(IS_IOS)
+  DCHECK(!request_data.isolation_info);
+#else
   DCHECK((request_data.request_type == RequestType::kRequestUpload) ==
          !request_data.isolation_info);
-
+#endif
   // Get the URL and method to use for this request.
   auto [request_url, method] = GetRequestURLAndMethod(request_data);
 
@@ -833,17 +866,12 @@ bool AutofillCrowdsourcingManager::StartRequest(FormRequestData request_data) {
   resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
   resource_request->method = method;
 
-  // On iOS we have a single, shared URLLoaderFactory provided by BrowserState.
-  // As it is shared, it is not trusted and we cannot assign trusted_params
-  // to the network request.
-#if !BUILDFLAG(IS_IOS)
   if (request_data.isolation_info) {
     resource_request->trusted_params =
         network::ResourceRequest::TrustedParams();
     resource_request->trusted_params->isolation_info =
         *request_data.isolation_info;
   }
-#endif
 
   // Add Chrome experiment state to the request headers.
   variations::AppendVariationsHeaderUnknownSignedIn(

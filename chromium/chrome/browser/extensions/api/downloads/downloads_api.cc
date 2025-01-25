@@ -223,7 +223,7 @@ extensions::api::downloads::DangerType ConvertDangerType(
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_SCAN_FAILED:
       return extensions::api::downloads::DangerType::kBlockedScanFailed;
     case download::DOWNLOAD_DANGER_TYPE_MAX:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return extensions::api::downloads::DangerType::kMaxValue;
   }
 }
@@ -476,7 +476,7 @@ IconLoader::IconSize IconLoaderSizeFromPixelSize(int pixel_size) {
     case 32:
       return IconLoader::NORMAL;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return IconLoader::NORMAL;
   }
 }
@@ -763,7 +763,7 @@ ConvertConflictAction(downloads::FilenameConflictAction action) {
     case downloads::FilenameConflictAction::kPrompt:
       return DownloadPathReservationTracker::PROMPT;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return download::DownloadPathReservationTracker::UNIQUIFY;
 }
 
@@ -1448,7 +1448,7 @@ void DownloadsAcceptDangerFunction::PromptOrWait(int download_id, int retries) {
   // DownloadDangerPrompt displays a modal dialog using native widgets that the
   // user must either accept or cancel. It cannot be scripted.
   DownloadDangerPrompt* prompt = DownloadDangerPrompt::Create(
-      download_item, web_contents, true,
+      download_item, web_contents,
       base::BindOnce(&DownloadsAcceptDangerFunction::DangerPromptCallback, this,
                      download_id));
   // DownloadDangerPrompt deletes itself
@@ -1724,9 +1724,6 @@ ExtensionFunction::ResponseAction DownloadsGetFileIconFunction::Run() {
       downloads::GetFileIcon::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   const std::optional<downloads::GetFileIconOptions>& options = params->options;
-  int icon_size = kDefaultIconSize;
-  if (options && options->size)
-    icon_size = *options->size;
   DownloadItem* download_item = GetDownload(
       browser_context(), include_incognito_information(), params->download_id);
   std::string error;
@@ -1734,6 +1731,15 @@ ExtensionFunction::ResponseAction DownloadsGetFileIconFunction::Run() {
       Fault(download_item->GetTargetFilePath().empty(),
             download_extension_errors::kEmptyFile, &error))
     return RespondNow(Error(std::move(error)));
+
+  int icon_size = kDefaultIconSize;
+  if (options && options->size) {
+    icon_size = *options->size;
+    if (icon_size != 16 && icon_size != 32) {
+      return RespondNow(Error("Invalid `size`. Must be either `16` or `32`."));
+    }
+  }
+
   // In-progress downloads return the intermediate filename for GetFullPath()
   // which doesn't have the final extension. Therefore a good file icon can't be
   // found, so use GetTargetFilePath() instead.

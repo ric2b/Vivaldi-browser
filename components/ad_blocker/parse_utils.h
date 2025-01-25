@@ -18,6 +18,7 @@ constexpr auto kTypeStringMap = base::MakeFixedFlatMap<std::string_view, int>(
      {"background",
       RequestFilterRule::kImage},  // Compat with older filter formats
      {"stylesheet", RequestFilterRule::kStylesheet},
+     {"css", RequestFilterRule::kStylesheet},
      {"object", RequestFilterRule::kObject},
      {"xmlhttprequest", RequestFilterRule::kXmlHttpRequest},
      {"subdocument", RequestFilterRule::kSubDocument},
@@ -26,6 +27,7 @@ constexpr auto kTypeStringMap = base::MakeFixedFlatMap<std::string_view, int>(
      {"webrtc", RequestFilterRule::kWebRTC},
      {"font", RequestFilterRule::kFont},
      {"webtransport", RequestFilterRule::kWebTransport},
+     {"webbundle", RequestFilterRule::kWebBundle},
      {"media", RequestFilterRule::kMedia},
      {"other", RequestFilterRule::kOther},
      {"xbl", RequestFilterRule::kOther},  // Compat with older filter formats

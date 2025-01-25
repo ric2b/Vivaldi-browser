@@ -195,10 +195,10 @@ class AudioEncodersTest : public ::testing::TestWithParam<TestAudioParams> {
         // GTEST_SKIP() returns.
       }
 #else
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
 #endif
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
 
     min_number_input_frames_needed_ = frames_per_buffer_;
@@ -738,7 +738,7 @@ TEST_P(AudioOpusEncoderTest, FullCycleEncodeDecode) {
     // get the expected number of frames per buffer.
     EXPECT_EQ(kOpusDecoderFramesPerBuffer,
               opus_decode_float(opus_decoder, output.encoded_data.data(),
-                                output.encoded_data_size, buffer.data(),
+                                output.encoded_data.size(), buffer.data(),
                                 kOpusDecoderFramesPerBuffer, 0));
   };
 
@@ -791,7 +791,7 @@ TEST_P(AudioOpusEncoderTest, FullCycleEncodeDecode_BitrateMode) {
       // get the expected number of frames per buffer.
       EXPECT_EQ(kOpusDecoderFramesPerBuffer,
                 opus_decode_float(opus_decoder, output.encoded_data.data(),
-                                  output.encoded_data_size, buffer.data(),
+                                  output.encoded_data.size(), buffer.data(),
                                   kOpusDecoderFramesPerBuffer, 0));
     };
 
@@ -874,7 +874,7 @@ TEST_P(AudioOpusEncoderTest, FullCycleEncodeDecode_OpusOptions) {
       // get the expected number of frames per buffer.
       EXPECT_EQ(decoder_frames_per_buffer,
                 opus_decode_float(opus_decoder, output.encoded_data.data(),
-                                  output.encoded_data_size, buffer.data(),
+                                  output.encoded_data.size(), buffer.data(),
                                   decoder_frames_per_buffer, 0));
     };
 
@@ -968,7 +968,7 @@ class AACAudioEncoderTest : public AudioEncodersTest {
         channel_layout = CHANNEL_LAYOUT_5_1_BACK;
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
     AudioDecoderConfig config(AudioCodec::kAAC, SampleFormat::kSampleFormatS16,
                               channel_layout, options_.sample_rate,
@@ -1020,8 +1020,8 @@ TEST_P(AACAudioEncoderTest, FullCycleEncodeDecode) {
       ++decode_status_callback_count;
       EXPECT_EQ(status, DecoderStatus::Codes::kOk);
     };
-    scoped_refptr<DecoderBuffer> decoder_buffer = DecoderBuffer::FromArray(
-        std::move(output.encoded_data), output.encoded_data_size);
+    scoped_refptr<DecoderBuffer> decoder_buffer =
+        DecoderBuffer::FromArray(std::move(output.encoded_data));
     decoder_->Decode(decoder_buffer, base::BindLambdaForTesting(decode_cb));
   };
 
@@ -1062,8 +1062,8 @@ TEST_P(AACAudioEncoderTest, FullCycleEncodeDecode_BitrateMode) {
       auto decode_cb = [&](DecoderStatus status) {
         EXPECT_EQ(status, DecoderStatus::Codes::kOk);
       };
-      scoped_refptr<DecoderBuffer> decoder_buffer = DecoderBuffer::FromArray(
-          std::move(output.encoded_data), output.encoded_data_size);
+      scoped_refptr<DecoderBuffer> decoder_buffer =
+          DecoderBuffer::FromArray(std::move(output.encoded_data));
       decoder_->Decode(decoder_buffer, base::BindLambdaForTesting(decode_cb));
     };
 

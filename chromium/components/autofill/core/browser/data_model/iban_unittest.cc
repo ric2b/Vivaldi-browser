@@ -129,13 +129,13 @@ TEST(IbanTest, ValuePrefixSuffixAndLength) {
   Iban iban;
   iban.set_value(u"DE91100000000123456789");
   EXPECT_EQ(u"DE91100000000123456789", iban.value());
-  EXPECT_EQ(u"DE91", iban.prefix());
+  EXPECT_EQ(u"DE", iban.prefix());
   EXPECT_EQ(u"6789", iban.suffix());
   EXPECT_EQ(22, iban.length());
 
   iban.set_value(u"CH5604835012345678009");
   EXPECT_EQ(u"CH5604835012345678009", iban.value());
-  EXPECT_EQ(u"CH56", iban.prefix());
+  EXPECT_EQ(u"CH", iban.prefix());
   EXPECT_EQ(u"8009", iban.suffix());
   EXPECT_EQ(21, iban.length());
 }
@@ -173,28 +173,28 @@ TEST(IbanTest, GetUserFacingValue_LocalIban) {
 
   iban.set_value(u"CH5604835012345678009");
 
-  EXPECT_EQ(u"CH56 **** **** **** *800 9",
+  EXPECT_EQ(u"CH** **** **** **** *800 9",
             GetIbanValueGroupedByFour(iban, /*is_value_masked=*/true));
   EXPECT_EQ(u"CH56 0483 5012 3456 7800 9",
             GetIbanValueGroupedByFour(iban, /*is_value_masked=*/false));
 
   iban.set_value(u"DE91100000000123456789");
 
-  EXPECT_EQ(u"DE91 **** **** **** **67 89",
+  EXPECT_EQ(u"DE** **** **** **** **67 89",
             GetIbanValueGroupedByFour(iban, /*is_value_masked=*/true));
   EXPECT_EQ(u"DE91 1000 0000 0123 4567 89",
             GetIbanValueGroupedByFour(iban, /*is_value_masked=*/false));
 
   iban.set_value(u"GR9608100010000001234567890");
 
-  EXPECT_EQ(u"GR96 **** **** **** **** ***7 890",
+  EXPECT_EQ(u"GR** **** **** **** **** ***7 890",
             GetIbanValueGroupedByFour(iban, /*is_value_masked=*/true));
   EXPECT_EQ(u"GR96 0810 0010 0000 0123 4567 890",
             GetIbanValueGroupedByFour(iban, /*is_value_masked=*/false));
 
   iban.set_value(u"PK70BANK0000123456789000");
 
-  EXPECT_EQ(u"PK70 **** **** **** **** 9000",
+  EXPECT_EQ(u"PK** **** **** **** **** 9000",
             GetIbanValueGroupedByFour(iban, /*is_value_masked=*/true));
   EXPECT_EQ(u"PK70 BANK 0000 1234 5678 9000",
             GetIbanValueGroupedByFour(iban, /*is_value_masked=*/false));
@@ -329,6 +329,7 @@ TEST(IbanTest, GetCountryCode) {
   Iban iban;
   iban.set_value(u"ch5604835012345678009");
 
+  EXPECT_EQ(iban.GetCountryCode(iban.value()), "CH");
   EXPECT_EQ(iban.GetCountryCode(), "CH");
 }
 
@@ -338,6 +339,16 @@ TEST(IbanTest, IsIbanApplicableInCountry) {
 
   // Not an IBAN-supported country.
   EXPECT_FALSE(Iban::IsIbanApplicableInCountry("AB"));
+}
+
+TEST(IbanTest, GetIbanSupportedCountry) {
+  // Is an IBAN-supported country.
+  EXPECT_EQ(Iban::IbanSupportedCountry::kKW,
+            Iban::GetIbanSupportedCountry("KW"));
+
+  // Not an IBAN-supported country.
+  EXPECT_EQ(Iban::IbanSupportedCountry::kUnsupported,
+            Iban::GetIbanSupportedCountry("AB"));
 }
 
 // Test that `MatchesPrefixSuffixAndLength()` returns the expected outcome based

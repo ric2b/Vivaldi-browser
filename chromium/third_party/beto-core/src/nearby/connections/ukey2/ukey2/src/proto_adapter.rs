@@ -17,6 +17,8 @@
 use crypto_provider::elliptic_curve::EcdhProvider;
 use crypto_provider::p256::{P256EcdhProvider, P256PublicKey, P256};
 use crypto_provider::CryptoProvider;
+use std::collections::HashSet;
+use std::fmt::{Display, Formatter};
 use ukey2_proto::ukey2_all_proto::{securemessage, ukey};
 
 /// For generated proto types for UKEY2 messages
@@ -71,6 +73,41 @@ pub(crate) trait IntoAdapter<A> {
     fn into_adapter(self) -> Result<A, ukey::ukey2alert::AlertType>;
 }
 
+/// Enum representing the different supported next_protocol strings, ordered by desirability.
+#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
+#[repr(i32)]
+pub enum NextProtocol {
+    /// AES-256-GCM-SIV, for use with newer clients.
+    Aes256GcmSiv,
+    /// AES_256_CBC-HMAC_SHA256, already in use and supported by all clients.
+    Aes256CbcHmacSha256,
+}
+
+impl TryFrom<&String> for NextProtocol {
+    type Error = ukey::ukey2alert::AlertType;
+
+    fn try_from(value: &String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "AES_256_GCM_SIV" => Ok(NextProtocol::Aes256GcmSiv),
+            "AES_256_CBC-HMAC_SHA256" => Ok(NextProtocol::Aes256CbcHmacSha256),
+            _ => Err(ukey::ukey2alert::AlertType::BAD_NEXT_PROTOCOL),
+        }
+    }
+}
+
+impl Display for NextProtocol {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                NextProtocol::Aes256CbcHmacSha256 => "AES_256_CBC-HMAC_SHA256",
+                NextProtocol::Aes256GcmSiv => "AES_256_GCM_SIV",
+            },
+        )
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum MessageType {
     ClientInit,
@@ -81,7 +118,7 @@ pub(crate) enum MessageType {
 pub(crate) struct ClientInit {
     version: i32,
     commitments: Vec<CipherCommitment>,
-    next_protocol: String,
+    next_protocols: HashSet<NextProtocol>,
 }
 
 impl ClientInit {
@@ -93,8 +130,8 @@ impl ClientInit {
         &self.commitments
     }
 
-    pub fn next_protocol(&self) -> &str {
-        &self.next_protocol
+    pub fn next_protocols(&self) -> &HashSet<NextProtocol> {
+        &self.next_protocols
     }
 }
 
@@ -104,6 +141,7 @@ pub(crate) struct ServerInit {
     random: [u8; 32],
     handshake_cipher: HandshakeCipher,
     pub(crate) public_key: Vec<u8>,
+    selected_next_protocol: NextProtocol,
 }
 
 impl ServerInit {
@@ -113,6 +151,10 @@ impl ServerInit {
 
     pub fn handshake_cipher(&self) -> HandshakeCipher {
         self.handshake_cipher
+    }
+
+    pub fn selected_next_protocol(&self) -> NextProtocol {
+        self.selected_next_protocol
     }
 }
 
@@ -208,8 +250,13 @@ impl IntoAdapter<ClientInit> for ukey::Ukey2ClientInit {
             .next_protocol
             .filter(|n| !n.is_empty())
             .ok_or(ukey::ukey2alert::AlertType::BAD_NEXT_PROTOCOL)?;
+        let mut next_protocols: HashSet<NextProtocol> =
+            HashSet::from([(&next_protocol).try_into()?]);
+        let other_next_protocols: Vec<NextProtocol> =
+            self.next_protocols.iter().filter_map(|p| p.try_into().ok()).collect();
+        next_protocols.extend(&other_next_protocols);
         Ok(ClientInit {
-            next_protocol,
+            next_protocols,
             version,
             commitments: self
                 .cipher_commitments
@@ -234,7 +281,11 @@ impl IntoAdapter<ServerInit> for ukey::Ukey2ServerInit {
         // We will be handling bad pubkeys in the layers above
         let public_key: Vec<u8> =
             self.public_key.ok_or(ukey::ukey2alert::AlertType::BAD_PUBLIC_KEY)?;
-        Ok(ServerInit { handshake_cipher, version, public_key, random })
+        let selected_next_protocol = self
+            .selected_next_protocol
+            .and_then(|p| (&p).try_into().ok())
+            .unwrap_or(NextProtocol::Aes256CbcHmacSha256);
+        Ok(ServerInit { handshake_cipher, version, public_key, random, selected_next_protocol })
     }
 }
 

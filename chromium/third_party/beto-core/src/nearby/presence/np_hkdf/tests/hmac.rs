@@ -21,11 +21,11 @@ fn verify_hmac_correct_mac() {
     let data = &[1_u8; 32];
     let hmac_key = [2; 32];
 
-    let hmac = NpHmacSha256Key::<CryptoProviderImpl>::from(hmac_key);
+    let hmac = NpHmacSha256Key::from(hmac_key);
 
-    let mac = hmac.calculate_hmac(data);
+    let mac = hmac.calculate_hmac::<CryptoProviderImpl>(data);
 
-    assert_eq!(Ok(()), hmac.verify_hmac(data, mac));
+    assert_eq!(Ok(()), hmac.verify_hmac::<CryptoProviderImpl>(data, mac));
 }
 
 #[test]
@@ -33,10 +33,10 @@ fn verify_hmac_incorrect_mac() {
     let data = &[1_u8; 32];
     let hmac_key = [2; 32];
 
-    let hmac = NpHmacSha256Key::<CryptoProviderImpl>::from(hmac_key);
+    let hmac = NpHmacSha256Key::from(hmac_key);
 
-    let _mac = hmac.calculate_hmac(data);
+    let _mac = hmac.calculate_hmac::<CryptoProviderImpl>(data);
 
     // wrong mac
-    assert_eq!(Err(MacError), hmac.verify_hmac(data, [0xFF; 32]));
+    assert_eq!(Err(MacError), hmac.verify_hmac::<CryptoProviderImpl>(data, [0xFF; 32]));
 }

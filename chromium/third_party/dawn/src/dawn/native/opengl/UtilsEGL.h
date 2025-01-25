@@ -28,13 +28,12 @@
 #ifndef SRC_DAWN_NATIVE_OPENGL_UTILSEGL_H_
 #define SRC_DAWN_NATIVE_OPENGL_UTILSEGL_H_
 
-#include <EGL/egl.h>
-
+#include "dawn/common/egl_platform.h"
 #include "dawn/native/Error.h"
 
 namespace dawn::native::opengl {
 
-struct EGLFunctions;
+class EGLFunctions;
 
 const char* EGLErrorAsString(EGLint error);
 MaybeError CheckEGL(const EGLFunctions& egl, EGLBoolean result, const char* context);

@@ -18,6 +18,7 @@ extern "C" {
 
 #include <algorithm>
 #include <fstream>
+#include <iomanip>
 
 // TODO: get multi threaded tests working on windows
 #ifndef _WIN32
@@ -36,9 +37,9 @@ static const uint8_t KEY_SEED_BYTES[] = {
     204, 219, 36, 137, 233, 252, 172, 66,  179, 147, 72, 184, 148, 30, 209, 154,
     29,  54,  14, 117, 224, 152, 200, 193, 94,  107, 28, 194, 182, 32, 205, 57};
 static const uint8_t KNOWN_HMAC_BYTES[] = {
-    223, 185, 10,  31,  155, 31, 226, 141, 24,  187, 204,
-    165, 34,  64,  181, 204, 44, 203, 95,  141, 82,  137,
-    163, 203, 100, 235, 53,  65, 202, 97,  75,  180};
+    0xB4, 0xC5, 0x9F, 0xA5, 0x99, 0x24, 0x1B, 0x81, 0x75, 0x8D, 0x97,
+    0x6B, 0x5A, 0x62, 0x1C, 0x05, 0x23, 0x2F, 0xE1, 0xBF, 0x89, 0xAE,
+    0x59, 0x87, 0xCA, 0x25, 0x4C, 0x35, 0x54, 0xDC, 0xE5, 0x0E};
 static const uint8_t TEST_DATA_BYTES[] = {205, 104, 63, 225, 161, 209, 248,
                                           70,  84,  61, 10,  19,  212, 174,
                                           164, 0,   64, 200, 214, 123};
@@ -65,7 +66,7 @@ static NpLdtDecryptHandle create_dec_handle_from_test_key() {
 static void hex_string_to_bytes(const char *hexString, uint8_t *out,
                                 size_t len) {
   for (size_t count = 0; count < len; count++) {
-    sscanf(hexString, "%2hhx", &out[count]); // NOLINT(cert-err34-c)
+    sscanf(hexString, "%2hhx", &out[count]);  // NOLINT(cert-err34-c)
     hexString += 2;
   }
 }
@@ -93,11 +94,11 @@ TEST(LdtFfiTests, TestJsonData) {
   if (!parsingSuccessful) {
     std::cout << reader.getFormattedErrorMessages() << "\n";
   }
-  ASSERT_TRUE(root.size() == 1000);
+  ASSERT_TRUE(root.size() == 100);
 
   for (const auto &v : root) {
     auto key_seed = v["key_seed"].asCString();
-    auto metadata_key_hmac = v["metadata_key_hmac"].asCString();
+    auto identity_token_hmac = v["identity_token_hmac"].asCString();
     auto adv_salt = v["adv_salt"].asCString();
     auto plaintext = v["plaintext"].asCString();
     auto ciphertext = v["ciphertext"].asCString();
@@ -105,12 +106,12 @@ TEST(LdtFfiTests, TestJsonData) {
     NpLdtKeySeed np_key_seed;
     auto len = strlen(key_seed) / 2;
     hex_string_to_bytes(key_seed, np_key_seed.bytes, len);
-    ASSERT_EQ(len, 32);
+    ASSERT_EQ(len, 32u);
 
     NpMetadataKeyHmac known_hmac;
-    len = strlen(metadata_key_hmac) / 2;
-    hex_string_to_bytes(metadata_key_hmac, known_hmac.bytes, len);
-    ASSERT_EQ(len, 32);
+    len = strlen(identity_token_hmac) / 2;
+    hex_string_to_bytes(identity_token_hmac, known_hmac.bytes, len);
+    ASSERT_EQ(len, 32u);
 
     NpLdtEncryptHandle enc_handle = NpLdtEncryptCreate(np_key_seed);
     ASSERT_TRUE(enc_handle.handle != 0);
@@ -118,7 +119,7 @@ TEST(LdtFfiTests, TestJsonData) {
     NpLdtSalt salt_data;
     len = strlen(adv_salt) / 2;
     hex_string_to_bytes(adv_salt, salt_data.bytes, len);
-    ASSERT_TRUE(len == 2);
+    ASSERT_TRUE(len == 2u);
 
     len = strlen(plaintext) / 2;
     auto buffer = (uint8_t *)malloc(len);
@@ -294,7 +295,6 @@ TEST(LdtFfiTests, MultiThreadedTests) {
   pthread_cond_broadcast(&cond);
 
   // Wait for them all to finish and check the status
-  for (i = 0; i < num_threads; i++)
-    ASSERT_EQ(pthread_join(tid[i], nullptr), 0);
+  for (i = 0; i < num_threads; i++) ASSERT_EQ(pthread_join(tid[i], nullptr), 0);
 }
 #endif

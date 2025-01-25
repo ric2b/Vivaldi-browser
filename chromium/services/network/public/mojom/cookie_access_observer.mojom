@@ -10,6 +10,7 @@ import "services/network/public/mojom/site_for_cookies.mojom";
 import "services/network/public/mojom/cookie_manager.mojom";
 import "services/network/public/mojom/cookie_setting_overrides.mojom";
 
+// LINT.IfChange(CookieAccessDetails)
 struct CookieAccessDetails {
   enum Type {
     kRead,
@@ -52,6 +53,7 @@ struct CookieAccessDetails {
   // A set of enum values as a bitmask.
   CookieSettingOverrides cookie_setting_overrides;
 };
+// LINT.ThenChange(/services/network/counted_cookie_access_details_set.cc:CookieAccessDetails)
 
 // Cloneable interface to observe the cookie reads or writes.
 // The user of the NetworkService should create a dedicated

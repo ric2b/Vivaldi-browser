@@ -23,7 +23,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 project('dav1d', ['c'],
-    version: '1.4.0',
+    version: '1.4.2',
     default_options: ['c_std=c99',
                       'warning_level=2',
                       'buildtype=release',
@@ -80,6 +80,8 @@ cdata.set10('TRIM_DSP_FUNCTIONS', get_option('trim_dsp') == 'true' or
 
 # Logging option
 cdata.set10('CONFIG_LOG', get_option('logging'))
+
+cdata.set10('CONFIG_MACOS_KPERF', get_option('macos_kperf'))
 
 #
 # OS/Compiler checks and defines
@@ -307,6 +309,10 @@ if (host_machine.system() in ['darwin', 'ios', 'tvos'] and cc.get_id() == 'clang
     cc.version().startswith('11'))
     # Workaround for Xcode 11 -fstack-check bug, see #301
     optional_arguments += '-fno-stack-check'
+endif
+
+if (host_machine.cpu_family() == 'aarch64' or host_machine.cpu_family().startswith('arm'))
+    optional_arguments += '-fno-align-functions'
 endif
 
 add_project_arguments(cc.get_supported_arguments(optional_arguments), language : 'c')

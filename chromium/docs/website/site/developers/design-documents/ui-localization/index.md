@@ -35,8 +35,7 @@ included on the platforms where they're actually used.
 1.  Strings get added to a .grd(p) file in en-US.
 2.  \[BlackCloudOfMagic\] Translators are provided with the new strings.
 3.  &lt;Googler-only link&gt; Further internal detail about the
-    translation process
-    [here](https://g3doc.corp.google.com/chrome/language/g3doc/localization.md).
+    translation process [here](http://go/chrome-localization).
     &lt;/Googler-only link&gt;
 4.  \[BlackCloudOfMagic\] Translations are created and stored in .xtb
     files

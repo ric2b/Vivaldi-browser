@@ -46,6 +46,10 @@
 #include "sandbox/policy/switches.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
 
+
+// Vivaldi: Added for flatpak support.
+#include "sandbox/linux/services/flatpak_sandbox.h"
+
 namespace content {
 
 namespace {
@@ -135,6 +139,7 @@ static void EnterNamespaceSandbox(sandbox::policy::SandboxLinux* linux_sandbox,
 
 static void EnterLayerOneSandbox(sandbox::policy::SandboxLinux* linux_sandbox,
                                  const bool using_layer1_sandbox,
+                                 const bool vivaldi_using_flatpak_sandbox,
                                  base::OnceClosure post_fork_parent_callback) {
   DCHECK(linux_sandbox);
 
@@ -154,7 +159,8 @@ static void EnterLayerOneSandbox(sandbox::policy::SandboxLinux* linux_sandbox,
   } else if (sandbox::NamespaceSandbox::InNewUserNamespace()) {
     EnterNamespaceSandbox(linux_sandbox, std::move(post_fork_parent_callback));
   } else {
-    CHECK(!using_layer1_sandbox);
+    // The Flatpak sandbox means that we're fully sandboxed from the start.
+    CHECK(!using_layer1_sandbox || vivaldi_using_flatpak_sandbox);
   }
 }
 
@@ -178,8 +184,13 @@ bool ZygoteMain(
       linux_sandbox->setuid_sandbox_client()->IsSuidSandboxChild();
   const bool using_namespace_sandbox =
       sandbox::NamespaceSandbox::InNewUserNamespace();
+  const bool vivaldi_using_flatpak_sandbox =
+      vivaldi::sandbox::FlatpakSandbox::GetInstance()->GetSandboxLevel() ==
+      vivaldi::sandbox::FlatpakSandbox::SandboxLevel::kRestricted;
   const bool using_layer1_sandbox =
-      using_setuid_sandbox || using_namespace_sandbox;
+      using_setuid_sandbox || using_namespace_sandbox
+      // Vivaldi: Also consider flatpak sandbox.
+      || vivaldi_using_flatpak_sandbox;
 
   if (using_setuid_sandbox) {
     linux_sandbox->setuid_sandbox_client()->CloseDummyFile();
@@ -206,7 +217,7 @@ bool ZygoteMain(
 
   // Turn on the first layer of the sandbox if the configuration warrants it.
   EnterLayerOneSandbox(
-      linux_sandbox, using_layer1_sandbox,
+      linux_sandbox, using_layer1_sandbox, vivaldi_using_flatpak_sandbox,
       base::BindOnce(CloseFds, linux_sandbox->GetFileDescriptorsToClose()));
 
   const int sandbox_flags = linux_sandbox->GetStatus();
@@ -217,6 +228,10 @@ bool ZygoteMain(
   const bool namespace_sandbox_engaged =
       !!(sandbox_flags & sandbox::policy::SandboxLinux::kUserNS);
   CHECK_EQ(using_namespace_sandbox, namespace_sandbox_engaged);
+
+  const bool flatpak_sandbox_engaged =
+      !!(sandbox_flags & sandbox::policy::SandboxLinux::kFlatpak);
+  CHECK_EQ(vivaldi_using_flatpak_sandbox, flatpak_sandbox_engaged);
 
   Zygote zygote(sandbox_flags, std::move(fork_delegates),
                 base::GlobalDescriptors::Descriptor(

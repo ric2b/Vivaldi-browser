@@ -91,6 +91,9 @@ class FaceGazeTestUtils {
     KEY_PRESS_RIGHT = 40,
     KEY_PRESS_UP = 41,
     KEY_PRESS_DOWN = 42,
+    MOUSE_LONG_CLICK_LEFT = 45,
+    TOGGLE_FACEGAZE = 46,
+    OPEN_FACEGAZE_SETTINGS = 47,
   };
 
   // Facial gestures recognized by Mediapipe. Ensure this enum stays in sync
@@ -199,6 +202,8 @@ class FaceGazeTestUtils {
     MockFaceLandmarkerResult& WithGesture(const MediapipeGesture& gesture,
                                           int confidence);
 
+    MockFaceLandmarkerResult& WithLatency(int latency);
+
     const base::Value::Dict& forehead_location() const {
       return forehead_location_;
     }
@@ -206,7 +211,10 @@ class FaceGazeTestUtils {
       return recognized_gestures_;
     }
 
+    const std::optional<int>& latency() const { return latency_; }
+
    private:
+    std::optional<int> latency_;
     base::Value::Dict forehead_location_;
     base::Value::List recognized_gestures_;
   };
@@ -237,6 +245,7 @@ class FaceGazeTestUtils {
   // Setup-related methods.
   void SetUpMediapipeDir();
   void WaitForJSReady();
+  void SkipInitializeWebCamFaceLandmarker();
   void SetUpJSTestSupport();
   void CancelMouseControllerInterval();
   // Creates and initializes the FaceLandmarker API within the extension.

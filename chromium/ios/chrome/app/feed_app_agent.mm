@@ -14,6 +14,7 @@
 #import "components/search_engines/template_url_service.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
+#import "ios/chrome/app/background_refresh_constants.h"
 #import "ios/chrome/browser/content_notification/model/content_notification_util.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service_factory.h"
@@ -28,14 +29,7 @@
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
-#import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_constants.h"
 #import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
-
-namespace {
-// NSUserDefaults key for the last time background refresh was called.
-NSString* const kFeedLastBackgroundRefreshTimestamp =
-    @"FeedLastBackgroundRefreshTimestamp";
-}  // namespace
 
 @implementation FeedAppAgent {
   // Set to YES when the app is foregrounded.
@@ -83,7 +77,7 @@ NSString* const kFeedLastBackgroundRefreshTimestamp =
     }
 
     BOOL isContentNotificationProvisionalEnabled = NO;
-    if (IsContentNotificationExperimentEnalbed()) {
+    if (IsContentNotificationExperimentEnabled()) {
       // Only start doing the content notificaiton user eligibiliey check when
       // content notification experiment is enabled.
       AuthenticationService* authService =
@@ -108,8 +102,7 @@ NSString* const kFeedLastBackgroundRefreshTimestamp =
               isUserSignedIn, isDefaultSearchEngine, pref_service);
     }
 
-    if ((!IsFirstRunRecent(base::Days(30)) &&
-         isContentNotificationProvisionalEnabled)) {
+    if (isContentNotificationProvisionalEnabled) {
       // This method does not show a UI prompt to the user. Provisional
       // notifications are authorized without any user input if the user hasn't
       // previously disabled notifications.
@@ -144,8 +137,6 @@ NSString* const kFeedLastBackgroundRefreshTimestamp =
     // This is not strictly necessary, but it makes it more explicit. The OS
     // limits to 1 refresh task at any time, and a new request will replace a
     // previous request. Tasks are only executed in the background.
-    // TODO(crbug.com/40231943): Coordinate background tasks when more are
-    // added.
     [BGTaskScheduler.sharedScheduler cancelAllTaskRequests];
   }
 }

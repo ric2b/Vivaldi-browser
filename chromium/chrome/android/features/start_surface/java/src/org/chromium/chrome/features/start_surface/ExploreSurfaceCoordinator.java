@@ -38,7 +38,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.toolbar.top.Toolbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.util.BrowserUiUtils;
-import org.chromium.chrome.browser.xsurface.feed.FeedLaunchReliabilityLogger.SurfaceType;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
 import org.chromium.ui.base.WindowAndroid;
@@ -88,7 +87,8 @@ public class ExploreSurfaceCoordinator {
             @NonNull ObservableSupplier<Integer> tabStripHeightSupplier) {
         mActivity = activity;
         mJankTracker = jankTracker;
-        mExploreSurfaceNavigationDelegate = new ExploreSurfaceNavigationDelegate(parentTabSupplier);
+        mExploreSurfaceNavigationDelegate =
+                new ExploreSurfaceNavigationDelegate(parentTabSupplier, profile);
         mProfile = profile;
 
         mFeedSurfaceCoordinator =
@@ -111,7 +111,6 @@ public class ExploreSurfaceCoordinator {
                         launchOrigin,
                         PrivacyPreferencesManagerImpl.getInstance(),
                         toolbarSupplier,
-                        SurfaceType.START_SURFACE,
                         embeddingSurfaceConstructedTimeNs,
                         swipeRefreshLayout,
                         /* overScrollDisabled= */ true,
@@ -148,14 +147,14 @@ public class ExploreSurfaceCoordinator {
         if (!maybeRecordContentLoadingTime() && mFeedSurfaceCoordinator.isLoadingFeed()) {
             mHasPendingUmaRecording = true;
         }
-        StartSurfaceConfiguration.recordHistogram(
+        BrowserUiUtils.recordHistogram(
                 FEED_STREAM_CREATED_TIME_MS_UMA, mStreamCreatedTimeMs - activityCreationTimeMs);
     }
 
     private boolean maybeRecordContentLoadingTime() {
         if (mActivityCreationTimeMs == 0 || mContentFirstAvailableTimeMs == 0) return false;
 
-        StartSurfaceConfiguration.recordHistogram(
+        BrowserUiUtils.recordHistogram(
                 FEED_CONTENT_FIRST_LOADED_TIME_MS_UMA,
                 mContentFirstAvailableTimeMs - mActivityCreationTimeMs);
         return true;
@@ -189,7 +188,6 @@ public class ExploreSurfaceCoordinator {
                     snackbarManager,
                     mExploreSurfaceNavigationDelegate,
                     bookmarkModel,
-                    BrowserUiUtils.HostSurface.START_SURFACE,
                     tabModelSelector,
                     mProfile,
                     bottomSheetController);
@@ -215,9 +213,9 @@ public class ExploreSurfaceCoordinator {
     private class ExploreFeedSurfaceDelegate implements FeedSurfaceDelegate {
         @Override
         public FeedSurfaceLifecycleManager createStreamLifecycleManager(
-                Activity activity, SurfaceCoordinator coordinator) {
+                Activity activity, SurfaceCoordinator coordinator, Profile profile) {
             return new ExploreSurfaceFeedLifecycleManager(
-                    activity, (FeedSurfaceCoordinator) coordinator);
+                    activity, (FeedSurfaceCoordinator) coordinator, profile);
         }
 
         @Override

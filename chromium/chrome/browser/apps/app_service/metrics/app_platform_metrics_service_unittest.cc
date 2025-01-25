@@ -828,15 +828,6 @@ class AppPlatformMetricsServiceTest
     ASSERT_EQ(1, count);
   }
 
-  void DisableSyncServiceByPolicy() {
-    sync_service()->SetDisableReasons(
-        {syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY});
-  }
-
-  void AllowSyncService() {
-    sync_service()->SetDisableReasons(syncer::SyncService::DisableReasonSet());
-  }
-
   std::map<std::string, TestApp>& pre_installed_apps() {
     return pre_installed_apps_;
   }
@@ -1360,15 +1351,13 @@ TEST_P(AppPlatformMetricsServiceTest, UsageTimeUkm) {
   ModifyInstance(app_constants::kChromeAppId,
                  browser->window()->GetNativeWindow(), kActiveInstanceState);
 
-  DisableSyncServiceByPolicy();
+  sync_service()->SetAllowedByEnterprisePolicy(false);
 
   // Fast forward by 2 hours and verify no usage data is reported to UKM.
   task_environment_.FastForwardBy(base::Hours(2));
   VerifyNoAppUsageTimeUkm();
 
-  AllowSyncService();
-  sync_service()->SetTransportState(
-      syncer::SyncService::TransportState::ACTIVE);
+  sync_service()->SetAllowedByEnterprisePolicy(true);
 
   static constexpr base::TimeDelta kAppUsageDuration = base::Hours(1);
   task_environment_.FastForwardBy(kAppUsageDuration);
@@ -2185,7 +2174,7 @@ TEST_P(AppPlatformMetricsServiceTest,
                                 usage_time.ConvertToDict());
   }
 
-  DisableSyncServiceByPolicy();
+  sync_service()->SetAllowedByEnterprisePolicy(false);
 
   // Fast forward by two hours and verify usage info is cleared from the pref
   // store.
@@ -2257,7 +2246,7 @@ TEST_P(AppPlatformMetricsServiceTest,
 }
 
 TEST_P(AppPlatformMetricsServiceTest, ShouldNotPersistUsageDataIfSyncDisabled) {
-  DisableSyncServiceByPolicy();
+  sync_service()->SetAllowedByEnterprisePolicy(false);
 
   // Create a new window for the app.
   auto window = std::make_unique<aura::Window>(nullptr);
@@ -2287,7 +2276,8 @@ class AppPlatformInputMetricsTest : public AppPlatformMetricsServiceTest {
   void SetUp() override {
     PreSetUp();
     AppPlatformMetricsServiceTest::SetUp();
-    widget_ = ash::AshTestBase::CreateTestWidget();
+    widget_ = ash::AshTestBase::CreateTestWidget(
+        views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
   }
 
   // This function can be called before the `SetUp` function is called, then
@@ -2316,7 +2306,7 @@ class AppPlatformInputMetricsTest : public AppPlatformMetricsServiceTest {
       case InputEventSource::kUnknown:
         break;
       case InputEventSource::kMouse: {
-        ui::MouseEvent mouse_event(ui::ET_MOUSE_RELEASED, gfx::Point(),
+        ui::MouseEvent mouse_event(ui::EventType::kMouseReleased, gfx::Point(),
                                    gfx::Point(), base::TimeTicks(), 0, 0);
         ui::Event::DispatcherApi(&mouse_event).set_target(window());
         app_platform_input_metrics()->OnMouseEvent(&mouse_event);
@@ -2324,7 +2314,7 @@ class AppPlatformInputMetricsTest : public AppPlatformMetricsServiceTest {
       }
       case InputEventSource::kStylus: {
         ui::TouchEvent touch_event(
-            ui::ET_TOUCH_RELEASED, gfx::Point(), base::TimeTicks(),
+            ui::EventType::kTouchReleased, gfx::Point(), base::TimeTicks(),
             ui::PointerDetails(ui::EventPointerType::kPen, 0));
         ui::Event::DispatcherApi(&touch_event).set_target(window());
         app_platform_input_metrics()->OnTouchEvent(&touch_event);
@@ -2332,14 +2322,14 @@ class AppPlatformInputMetricsTest : public AppPlatformMetricsServiceTest {
       }
       case InputEventSource::kTouch: {
         ui::TouchEvent touch_event(
-            ui::ET_TOUCH_RELEASED, gfx::Point(), base::TimeTicks(),
+            ui::EventType::kTouchReleased, gfx::Point(), base::TimeTicks(),
             ui::PointerDetails(ui::EventPointerType::kTouch, 0));
         ui::Event::DispatcherApi(&touch_event).set_target(window());
         app_platform_input_metrics()->OnTouchEvent(&touch_event);
         break;
       }
       case InputEventSource::kKeyboard: {
-        ui::KeyEvent key_event(ui::ET_KEY_RELEASED, ui::VKEY_MENU,
+        ui::KeyEvent key_event(ui::EventType::kKeyReleased, ui::VKEY_MENU,
                                ui::EF_ALT_DOWN);
         ui::Event::DispatcherApi(&key_event).set_target(window());
         app_platform_input_metrics()->OnKeyEvent(&key_event);
@@ -2817,7 +2807,7 @@ class AppPlatformMetricsObserverTest : public AppPlatformMetricsServiceTest {
 
 TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnAppInstalled) {
   // Observers should be notified even when app sync is disabled.
-  DisableSyncServiceByPolicy();
+  sync_service()->SetAllowedByEnterprisePolicy(false);
 
   const std::string app_id(borealis::FakeAppId("borealis-fake"));
   EXPECT_CALL(
@@ -2832,7 +2822,7 @@ TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnAppInstalled) {
 
 TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnAppLaunch) {
   // Observers should be notified even when app sync is disabled.
-  DisableSyncServiceByPolicy();
+  sync_service()->SetAllowedByEnterprisePolicy(false);
 
   // Launch a pre-installed app and verify the observer is notified.
   EXPECT_CALL(observer_, OnAppLaunched(kAndroidAppId, AppType::kArc,
@@ -2849,7 +2839,7 @@ TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnAppLaunch) {
 
 TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnAppUninstall) {
   // Observers should be notified even when app sync is disabled.
-  DisableSyncServiceByPolicy();
+  sync_service()->SetAllowedByEnterprisePolicy(false);
 
   // Uninstall a pre-installed app and verify the observer is notified.
   EXPECT_CALL(observer_, OnAppUninstalled(kAndroidAppId, AppType::kArc,
@@ -2865,7 +2855,7 @@ TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnAppUninstall) {
 
 TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnAppUsage) {
   // Observers should be notified even when app sync is disabled.
-  DisableSyncServiceByPolicy();
+  sync_service()->SetAllowedByEnterprisePolicy(false);
 
   // Create a new window for the app.
   auto window = std::make_unique<aura::Window>(nullptr);
@@ -2923,7 +2913,9 @@ TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnDestruction) {
       apps::AppServiceProxyFactory::GetForProfile(profile())
           ->AppRegistryCache(),
       apps::AppServiceProxyFactory::GetForProfile(profile())
-          ->InstanceRegistry());
+          ->InstanceRegistry(),
+      apps::AppServiceProxyFactory::GetForProfile(profile())
+          ->AppCapabilityAccessCache());
   app_platform_metrics_service->AppPlatformMetrics()->AddObserver(&observer_);
 
   EXPECT_CALL(observer_, OnAppPlatformMetricsDestroyed()).Times(1);
@@ -3434,7 +3426,9 @@ TEST_P(AppPlatformMetricsServiceObserverTest,
       });
   app_platform_metrics_service.Start(
       AppServiceProxyFactory::GetForProfile(profile())->AppRegistryCache(),
-      AppServiceProxyFactory::GetForProfile(profile())->InstanceRegistry());
+      AppServiceProxyFactory::GetForProfile(profile())->InstanceRegistry(),
+      AppServiceProxyFactory::GetForProfile(profile())
+          ->AppCapabilityAccessCache());
 }
 
 TEST_P(AppPlatformMetricsServiceObserverTest,
@@ -3449,7 +3443,9 @@ TEST_P(AppPlatformMetricsServiceObserverTest,
   EXPECT_CALL(*observer_ptr, OnAppPlatformMetricsInit(_)).Times(0);
   app_platform_metrics_service.Start(
       AppServiceProxyFactory::GetForProfile(profile())->AppRegistryCache(),
-      AppServiceProxyFactory::GetForProfile(profile())->InstanceRegistry());
+      AppServiceProxyFactory::GetForProfile(profile())->InstanceRegistry(),
+      AppServiceProxyFactory::GetForProfile(profile())
+          ->AppCapabilityAccessCache());
 }
 
 TEST_P(AppPlatformMetricsServiceObserverTest,
@@ -3476,7 +3472,9 @@ TEST_P(AppPlatformMetricsServiceObserverTest,
       });
   app_platform_metrics_service.Start(
       AppServiceProxyFactory::GetForProfile(profile())->AppRegistryCache(),
-      AppServiceProxyFactory::GetForProfile(profile())->InstanceRegistry());
+      AppServiceProxyFactory::GetForProfile(profile())->InstanceRegistry(),
+      AppServiceProxyFactory::GetForProfile(profile())
+          ->AppCapabilityAccessCache());
 }
 
 INSTANTIATE_TEST_SUITE_P(All,
@@ -3492,7 +3490,8 @@ class ManagedGuestSessionBaseTest {
     app_platform_metrics_test.set_user_segment(
         UserTypeByDeviceTypeMetricsProvider::UserSegment::kManagedGuestSession);
     // Sync is disabled for MGS, but AppKM should still be enabled.
-    app_platform_metrics_test.DisableSyncServiceByPolicy();
+    app_platform_metrics_test.sync_service()->SetAllowedByEnterprisePolicy(
+        false);
   }
 
   void SimulateMgsShutdown(
@@ -3641,7 +3640,7 @@ TEST_P(ManagedGuestSessionAppMetricsTest,
     } else {
       // All install reasons should be covered by either
       // `kAllowedInstallReasonsInMgs` or `kBlockedInstallReasonsInMgs`.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
 }

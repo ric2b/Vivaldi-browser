@@ -8,6 +8,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/time/time.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/safety_hub/unused_site_permissions_service.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -65,7 +66,8 @@ class UnusedSitePermissionsBridgeTest : public testing::Test {
 
 TEST_F(UnusedSitePermissionsBridgeTest, TestJavaRoundTrip) {
   PermissionsData expected;
-  expected.origin = ContentSettingsPattern::FromString(kUnusedTestSite);
+  expected.primary_pattern =
+      ContentSettingsPattern::FromString(kUnusedTestSite);
   expected.permission_types = kUnusedPermissionList;
   expected.constraints =
       content_settings::ContentSettingConstraints(kExpiration - kLifetime);
@@ -74,7 +76,7 @@ TEST_F(UnusedSitePermissionsBridgeTest, TestJavaRoundTrip) {
   const auto jobject = ToJavaPermissionsData(env(), expected);
   PermissionsData converted = FromJavaPermissionsData(env(), jobject);
 
-  EXPECT_EQ(expected.origin, converted.origin);
+  EXPECT_EQ(expected.primary_pattern, converted.primary_pattern);
   EXPECT_EQ(expected.permission_types, converted.permission_types);
   EXPECT_EQ(kExpiration, converted.constraints.expiration());
   EXPECT_EQ(kLifetime, converted.constraints.lifetime());
@@ -82,11 +84,14 @@ TEST_F(UnusedSitePermissionsBridgeTest, TestJavaRoundTrip) {
 
 TEST_F(UnusedSitePermissionsBridgeTest, TestDefaultValuesRoundTrip) {
   PermissionsData expected;
+  // The pattern has to be a valid single origin pattern.
+  expected.primary_pattern =
+      ContentSettingsPattern::FromString(kUnusedTestSite);
 
   const auto jobject = ToJavaPermissionsData(env(), expected);
   PermissionsData converted = FromJavaPermissionsData(env(), jobject);
 
-  EXPECT_EQ(expected.origin, converted.origin);
+  EXPECT_EQ(expected.primary_pattern, converted.primary_pattern);
   EXPECT_EQ(expected.permission_types, converted.permission_types);
   EXPECT_EQ(expected.constraints.expiration(),
             converted.constraints.expiration());
@@ -94,6 +99,7 @@ TEST_F(UnusedSitePermissionsBridgeTest, TestDefaultValuesRoundTrip) {
 }
 
 TEST_F(UnusedSitePermissionsBridgeTest, TestGetRevokedPermissions) {
+  // Populate revoked permissions.
   AddRevokedPermissions();
   std::vector<PermissionsData> revoked_permissions_list =
       GetRevokedPermissions(profile());
@@ -101,4 +107,43 @@ TEST_F(UnusedSitePermissionsBridgeTest, TestGetRevokedPermissions) {
 
   PermissionsData& permissions_data = revoked_permissions_list[0];
   EXPECT_EQ(permissions_data.permission_types, kUnusedPermissionList);
+}
+
+TEST_F(UnusedSitePermissionsBridgeTest, TestRegrantAndUndoRegrantPermissions) {
+  // Populate revoked permissions.
+  AddRevokedPermissions();
+  std::vector<PermissionsData> revoked_permissions_list =
+      GetRevokedPermissions(profile());
+  EXPECT_EQ(revoked_permissions_list.size(), 1UL);
+  PermissionsData revoked_permissions_data = revoked_permissions_list[0];
+
+  // Regrant the revoked permissions.
+  std::string primary_pattern(kUnusedTestSite);
+  RegrantPermissions(profile(), primary_pattern);
+  revoked_permissions_list = GetRevokedPermissions(profile());
+  EXPECT_EQ(revoked_permissions_list.size(), 0UL);
+
+  // Undo the previous regranting and revoke the permissions again.
+  UndoRegrantPermissions(profile(), revoked_permissions_data);
+  revoked_permissions_list = GetRevokedPermissions(profile());
+  EXPECT_EQ(revoked_permissions_list.size(), 1UL);
+}
+
+TEST_F(UnusedSitePermissionsBridgeTest, TestAckAndUndoAckPermissionsList) {
+  // Populate revoked permissions.
+  AddRevokedPermissions();
+  std::vector<PermissionsData> revoked_permissions_list =
+      GetRevokedPermissions(profile());
+  EXPECT_EQ(revoked_permissions_list.size(), 1UL);
+
+  // Acknowledge the revoked permissions list
+  ClearRevokedPermissionsReviewList(profile());
+  std::vector<PermissionsData> empty_permissions_list =
+      GetRevokedPermissions(profile());
+  EXPECT_EQ(empty_permissions_list.size(), 0UL);
+
+  // Undo the previous acknowledgement and restore the revoked permissions list.
+  RestoreRevokedPermissionsReviewList(profile(), revoked_permissions_list);
+  revoked_permissions_list = GetRevokedPermissions(profile());
+  EXPECT_EQ(revoked_permissions_list.size(), 1UL);
 }

@@ -61,17 +61,17 @@ class ConnectionNamespaceHandler : public CastMessageHandler {
   // CastMessageHandler overrides.
   void OnMessage(VirtualConnectionRouter* router,
                  CastSocket* socket,
-                 ::cast::channel::CastMessage message) override;
+                 proto::CastMessage message) override;
 
  private:
   void HandleConnect(CastSocket* socket,
-                     ::cast::channel::CastMessage message,
+                     proto::CastMessage message,
                      Json::Value parsed_message);
   void HandleClose(CastSocket* socket,
-                   ::cast::channel::CastMessage message,
+                   proto::CastMessage message,
                    Json::Value parsed_message);
   void HandleConnectedResponse(CastSocket* socket,
-                               ::cast::channel::CastMessage message,
+                               proto::CastMessage message,
                                Json::Value parsed_message);
 
   void SendConnect(VirtualConnection virtual_conn);

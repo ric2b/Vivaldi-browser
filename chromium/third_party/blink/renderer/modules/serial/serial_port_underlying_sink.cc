@@ -76,7 +76,7 @@ ScriptPromise<IDLUndefined> SerialPortUnderlyingSink::write(
   buffer_source_ = V8BufferSource::Create(script_state->GetIsolate(),
                                           chunk.V8Value(), exception_state);
   if (exception_state.HadException())
-    return ScriptPromise<IDLUndefined>();
+    return EmptyPromise();
 
   pending_operation_ =
       MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
@@ -148,7 +148,7 @@ void SerialPortUnderlyingSink::SignalError(SerialSendError error) {
   v8::Local<v8::Value> exception;
   switch (error) {
     case SerialSendError::NONE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case SerialSendError::DISCONNECTED:
       exception = V8ThrowDOMException::CreateOrDie(
@@ -205,7 +205,7 @@ void SerialPortUnderlyingSink::OnHandleReady(MojoResult result,
       PipeClosed();
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -236,19 +236,14 @@ void SerialPortUnderlyingSink::WriteData() {
     return;
   }
 
-  const uint8_t* data = array_piece.Bytes();
-  const size_t length = array_piece.ByteLength();
-
-  DCHECK_LT(offset_, length);
-  data += offset_;
-  size_t num_bytes = length - offset_;
-
+  size_t actually_written_bytes = 0;
   MojoResult result =
-      data_pipe_->WriteData(data, &num_bytes, MOJO_WRITE_DATA_FLAG_NONE);
+      data_pipe_->WriteData(array_piece.ByteSpan().subspan(offset_),
+                            MOJO_WRITE_DATA_FLAG_NONE, actually_written_bytes);
   switch (result) {
     case MOJO_RESULT_OK:
-      offset_ += num_bytes;
-      if (offset_ == length) {
+      offset_ += actually_written_bytes;
+      if (offset_ == array_piece.ByteLength()) {
         buffer_source_ = nullptr;
         offset_ = 0;
         pending_operation_->Resolve();
@@ -263,7 +258,7 @@ void SerialPortUnderlyingSink::WriteData() {
       PipeClosed();
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 

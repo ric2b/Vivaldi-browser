@@ -32,10 +32,12 @@
 #include "ash/wm/overview/scoped_overview_hide_windows.h"
 #include "ash/wm/raster_scale/raster_scale_controller.h"
 #include "ash/wm/snap_group/snap_group_controller.h"
+#include "ash/wm/splitview/layout_divider_controller.h"
 #include "ash/wm/splitview/split_view_constants.h"
 #include "ash/wm/splitview/split_view_utils.h"
 #include "ash/wm/window_mini_view_header_view.h"
 #include "ash/wm/window_preview_view.h"
+#include "ash/wm/window_properties.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_transient_descendant_iterator.h"
 #include "ash/wm/window_util.h"
@@ -192,6 +194,27 @@ OverviewItem::~OverviewItem() {
   aura::Window* window = GetWindow();
   WindowState::Get(window)->RemoveObserver(this);
   window->RemoveObserver(this);
+}
+
+void OverviewItem::CloseWindow() {
+  RefreshShadowVisuals(/*shadow_visible=*/false);
+
+  gfx::RectF inset_bounds(target_bounds_);
+  inset_bounds.Inset(gfx::InsetsF::VH(target_bounds_.height() * kPreCloseScale,
+                                      target_bounds_.width() * kPreCloseScale));
+  // Scale down both the window and label.
+  SetBounds(inset_bounds, OVERVIEW_ANIMATION_CLOSING_OVERVIEW_ITEM);
+
+  // First animate opacity to an intermediate value concurrently with the
+  // scaling animation.
+  AnimateOpacity(kClosingItemOpacity, OVERVIEW_ANIMATION_CLOSING_OVERVIEW_ITEM);
+
+  // Fade out the window and the label, effectively hiding them.
+  AnimateOpacity(/*opacity=*/0.0, OVERVIEW_ANIMATION_CLOSE_OVERVIEW_ITEM);
+
+  // `transform_window_` will delete `this` by deleting the widget associated
+  // with `this`.
+  transform_window_.Close();
 }
 
 void OverviewItem::OnFocusedViewActivated() {
@@ -527,8 +550,8 @@ gfx::Transform OverviewItem::ComputeTargetTransform(
           screen_rect, transformed_bounds, top_view_inset,
           kWindowMiniViewHeaderHeight);
 
-  if (transform_window_.type() == OverviewGridWindowFillMode::kNormal ||
-      transform_window_.type() == OverviewGridWindowFillMode::kLetterBoxed) {
+  if (transform_window_.fill_mode() == OverviewItemFillMode::kNormal ||
+      transform_window_.fill_mode() == OverviewItemFillMode::kLetterBoxed) {
     overview_item_bounds.set_x(transformed_bounds.x());
     overview_item_bounds.set_width(transformed_bounds.width());
   }
@@ -537,8 +560,8 @@ gfx::Transform OverviewItem::ComputeTargetTransform(
   // normal or pillar dimensions type to make sure there's no gap between the
   // header and the window and no empty space at the end of the overview item
   // container.
-  if (transform_window_.type() == OverviewGridWindowFillMode::kNormal ||
-      transform_window_.type() == OverviewGridWindowFillMode::kPillarBoxed) {
+  if (transform_window_.fill_mode() == OverviewItemFillMode::kNormal ||
+      transform_window_.fill_mode() == OverviewItemFillMode::kPillarBoxed) {
     if (!overview_item_view_->header_view()->GetBoundsInScreen().IsEmpty()) {
       // The window top bar's target height with the transform.
       const float window_top_inset_target_height =
@@ -646,6 +669,10 @@ std::vector<OverviewFocusableView*> OverviewItem::GetFocusableViews() const {
              : std::vector<OverviewFocusableView*>{};
 }
 
+std::vector<views::Widget*> OverviewItem::GetFocusableWidgets() {
+  return {item_widget_.get()};
+}
+
 views::View* OverviewItem::GetBackDropView() const {
   return overview_item_view_->backdrop_view();
 }
@@ -716,83 +743,24 @@ void OverviewItem::OnStartingAnimationComplete() {
   }
 
   const bool show_backdrop =
-      GetWindowDimensionsType() != OverviewGridWindowFillMode::kNormal;
+      GetOverviewItemFillMode() != OverviewItemFillMode::kNormal;
   overview_item_view_->SetBackdropVisibility(show_backdrop);
   UpdateCannotSnapWarningVisibility(/*animate=*/true);
 }
 
-void OverviewItem::CloseWindows() {
-  RefreshShadowVisuals(/*shadow_visible=*/false);
-
-  gfx::RectF inset_bounds(target_bounds_);
-  inset_bounds.Inset(gfx::InsetsF::VH(target_bounds_.height() * kPreCloseScale,
-                                      target_bounds_.width() * kPreCloseScale));
-  // Scale down both the window and label.
-  SetBounds(inset_bounds, OVERVIEW_ANIMATION_CLOSING_OVERVIEW_ITEM);
-
-  // First animate opacity to an intermediate value concurrently with the
-  // scaling animation.
-  AnimateOpacity(kClosingItemOpacity, OVERVIEW_ANIMATION_CLOSING_OVERVIEW_ITEM);
-
-  // Fade out the window and the label, effectively hiding them.
-  AnimateOpacity(/*opacity=*/0.0, OVERVIEW_ANIMATION_CLOSE_OVERVIEW_ITEM);
-
-  // `transform_window_` will delete `this` by deleting the widget associated
-  // with `this`.
-  transform_window_.Close();
-}
-
 void OverviewItem::Restack() {
+  aura::Window* parent_window = transform_window_.window()->parent();
+  aura::Window* stacking_target = GetStackBelowTarget();
   aura::Window* window = GetWindow();
-  aura::Window* parent_window = window->parent();
-  aura::Window* stacking_target = nullptr;
-
-  // Stack `window` below the split view window if split view is active.
-  SplitViewController* split_view_controller =
-      SplitViewController::Get(root_window_);
-  if (split_view_controller->InSplitViewMode()) {
-    aura::Window* snapped_window =
-        split_view_controller->GetDefaultSnappedWindow();
-    if (snapped_window->parent() == parent_window) {
-      stacking_target = snapped_window;
-    }
-  }
-  // Stack `window` below the last window in `overview_grid_` that comes before
-  // `window` and has the same parent.
-  for (const std::unique_ptr<OverviewItemBase>& overview_item :
-       overview_grid_->window_list()) {
-    if (overview_item.get() == this ||
-        overview_item.get() == overview_grid_->drop_target()) {
-      break;
-    }
-
-    if (overview_item->GetWindow()->parent() == parent_window) {
-      stacking_target = overview_item->item_widget()->GetNativeWindow();
-    }
-  }
-
   if (stacking_target) {
     DCHECK_EQ(parent_window, stacking_target->parent());
     parent_window->StackChildBelow(window, stacking_target);
   }
-  DCHECK_EQ(parent_window, item_widget_->GetNativeWindow()->parent());
-  parent_window->StackChildBelow(item_widget_->GetNativeWindow(), window);
-  if (cannot_snap_widget_) {
-    DCHECK_EQ(parent_window, cannot_snap_widget_->GetNativeWindow()->parent());
-    parent_window->StackChildAbove(cannot_snap_widget_->GetNativeWindow(),
-                                   window);
-  }
 }
 
 void OverviewItem::StartDrag() {
-  // Stack the window and the widget window at the top. This is to ensure that
-  // they appear above other app windows, as well as above the desks bar. Note
-  // that the stacking operations are done in this order to make sure that the
-  // window appears above the widget window.
-  if (aura::Window* widget_window = item_widget_->GetNativeWindow()) {
-    widget_window->parent()->StackChildAtTop(widget_window);
-  }
-
+  // Stack the window at the top. This is to ensure that they appear above other
+  // app windows, as well as above the desks bar.
   aura::Window* window = GetWindow();
   window->parent()->StackChildAtTop(window);
 }
@@ -919,7 +887,7 @@ void OverviewItem::AnimateAndCloseItem(bool up) {
   overview_session_->PositionWindows(/*animate=*/true);
   overview_item_view_->OnOverviewItemWindowRestoring();
 
-  int translation_y = kSwipeToCloseCloseTranslationDp * (up ? -1 : 1);
+  const int translation_y = kSwipeToCloseCloseTranslationDp * (up ? -1 : 1);
   gfx::Transform transform;
   transform.Translate(gfx::Vector2d(0, translation_y));
 
@@ -952,14 +920,14 @@ void OverviewItem::StopWidgetAnimation() {
   item_widget_->GetNativeWindow()->layer()->GetAnimator()->StopAnimating();
 }
 
-OverviewGridWindowFillMode OverviewItem::GetWindowDimensionsType() const {
-  return transform_window_.type();
+OverviewItemFillMode OverviewItem::GetOverviewItemFillMode() const {
+  return transform_window_.fill_mode();
 }
 
-void OverviewItem::UpdateWindowDimensionsType() {
-  transform_window_.UpdateWindowDimensionsType();
+void OverviewItem::UpdateOverviewItemFillMode() {
+  transform_window_.UpdateOverviewItemFillMode();
   const bool show_backdrop =
-      GetWindowDimensionsType() != OverviewGridWindowFillMode::kNormal;
+      GetOverviewItemFillMode() != OverviewItemFillMode::kNormal;
   overview_item_view_->SetBackdropVisibility(show_backdrop);
 }
 
@@ -972,7 +940,7 @@ const gfx::RoundedCornersF OverviewItem::GetRoundedCorners() const {
     return overview_item_view_->GetRoundedCorners();
   }
 
-  aura::Window* window = transform_window_.window();
+  const aura::Window* window = transform_window_.window();
   const auto header_rounded_corners = overview_item_view_->header_view()
                                           ->GetBackground()
                                           ->GetRoundedCornerRadii()
@@ -1058,8 +1026,32 @@ void OverviewItem::OnWindowBoundsChanged(aura::Window* window,
   // Immediately finish any active bounds animation.
   window->layer()->GetAnimator()->StopAnimatingProperty(
       ui::LayerAnimationElement::BOUNDS);
-  UpdateWindowDimensionsType();
+  UpdateOverviewItemFillMode();
   overview_grid_->PositionWindows(/*animate=*/false);
+}
+
+void OverviewItem::OnWindowStackingChanged(aura::Window* window) {
+  if (overview_session_ && overview_session_->is_shutting_down()) {
+    return;
+  }
+
+  CHECK(item_widget_);
+  auto* parent_window = window->parent();
+  auto* item_widget_window = item_widget_->GetNativeWindow();
+
+  // Window parent change should be handled in
+  // `OverviewItem::OnWindowParentChanged()`.
+  if (parent_window != item_widget_window->parent()) {
+    return;
+  }
+
+  parent_window->StackChildBelow(item_widget_window, window);
+
+  if (cannot_snap_widget_) {
+    CHECK_EQ(parent_window, cannot_snap_widget_->GetNativeWindow()->parent());
+    parent_window->StackChildAbove(cannot_snap_widget_->GetNativeWindow(),
+                                   window);
+  }
 }
 
 void OverviewItem::OnWindowDestroying(aura::Window* window) {
@@ -1132,11 +1124,16 @@ void OverviewItem::CreateItemWidget(
     EventHandlerDelegate* event_handler_delegate) {
   TRACE_EVENT0("ui", "OverviewItem::CreateItemWidget");
 
-  item_widget_ = std::make_unique<views::Widget>();
+  views::Widget::InitParams params = CreateOverviewItemWidgetParams(
+      GetWindow()->parent(), "OverviewItemWidget",
+      /*accept_events=*/true);
+  // The key is not needed for all `OverviewItemBase` objects, such as the drop
+  // target.
+  params.init_properties_container.SetProperty(kIsOverviewItemKey, true);
+
+  item_widget_ = std::make_unique<views::Widget>(std::move(params));
   item_widget_->set_focus_on_creation(false);
-  item_widget_->Init(CreateOverviewItemWidgetParams(
-      transform_window_.window()->parent(), "OverviewItemWidget",
-      /*accept_events=*/true));
+
   aura::Window* widget_window = item_widget_->GetNativeWindow();
   widget_window->parent()->StackChildBelow(widget_window, GetWindow());
   // Overview uses custom animations so remove the default ones.
@@ -1198,6 +1195,45 @@ void OverviewItem::OnItemBoundsAnimationEnded() {
     Restack();
     should_restack_on_animation_end_ = false;
   }
+}
+
+aura::Window* OverviewItem::GetStackBelowTarget() const {
+  aura::Window* stacking_target = nullptr;
+  aura::Window* window = transform_window_.window();
+  aura::Window* parent_window = window->parent();
+
+  SplitViewController* split_view_controller =
+      SplitViewController::Get(root_window_);
+  if (split_view_controller->InSplitViewMode()) {
+    aura::Window* snapped_window =
+        split_view_controller->GetDefaultSnappedWindow();
+    if (snapped_window->parent() == parent_window) {
+      stacking_target = snapped_window;
+    }
+  }
+
+  // Find the last window in `overview_grid_` that comes before `window` and has
+  // the same parent.
+  for (const std::unique_ptr<OverviewItemBase>& overview_item :
+       overview_grid_->item_list()) {
+    // `overview_item` could represent an overview group item, which would never
+    // be strictly equal to this. However, the group item would contain `this`.
+    // Using `Contains()` ensures `this` check works correctly for both single
+    // overview items and group items.
+    if (overview_item->Contains(window) ||
+        overview_item.get() == overview_grid_->drop_target()) {
+      break;
+    }
+
+    // The parent window of `overview_item` can be different than
+    // `parent_window`, particularly when `overview_item` represents a float
+    // window.
+    if (overview_item->GetWindow()->parent() == parent_window) {
+      stacking_target = overview_item->item_widget()->GetNativeWindow();
+    }
+  }
+
+  return stacking_target;
 }
 
 void OverviewItem::PerformItemSpawnedAnimation(
@@ -1422,7 +1458,8 @@ void OverviewItem::CloseButtonPressed() {
     base::RecordAction(
         base::UserMetricsAction("Tablet_WindowCloseFromOverviewButton"));
   }
-  CloseWindows();
+
+  CloseWindow();
 }
 
 }  // namespace ash

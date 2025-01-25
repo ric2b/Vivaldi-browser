@@ -5,14 +5,13 @@
 #ifndef COMPONENTS_AUTOFILL_CONTENT_BROWSER_CONTENT_AUTOFILL_DRIVER_H_
 #define COMPONENTS_AUTOFILL_CONTENT_BROWSER_CONTENT_AUTOFILL_DRIVER_H_
 
-#include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "base/types/optional_ref.h"
-#include "build/build_config.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/common/mojom/autofill_agent.mojom.h"
 #include "components/autofill/content/common/mojom/autofill_driver.mojom.h"
@@ -27,10 +26,6 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 
 #include "components/autofill/core/browser/browser_autofill_manager.h"
-
-namespace content {
-class RenderFrameHost;
-}  // namespace content
 
 namespace autofill {
 
@@ -53,14 +48,14 @@ class AutofillDriverRouter;
 //
 // Events in AutofillDriver and mojom::AutofillDriver are passed on to
 // AutofillDriverRouter, which has one instance per WebContents. The naming
-// pattern is that for all of these events, there are three functions:
+// pattern is that for all of these events, there are two functions:
 //
-//   1. ReturnType ContentAutofillDriver::f(Args...)
-//   2. ReturnType AutofillDriverRouter::f(AutofillDriver*, Args..., callback)
-//   3. ReturnType callback(AutofillDriver*, Args...)
+//   1. ReturnType ContentAutofillDriver::Foo(Args...)
+//   2. ReturnType AutofillDriverRouter::Foo(RoutedCallback, Args...)
 //
-// The first function calls the second, and the second calls the third, perhaps
-// for a different AutofillDriver and with modified arguments.
+// The first function calls the second, and the second calls the callback.
+// That callback takes a target AutofillDriver, which may be different from the
+// first function's ContentAutofillDriver.
 //
 // Consider the following pseudo-HTML:
 //   <!-- frame name "ABC" -->
@@ -159,12 +154,11 @@ class ContentAutofillDriver : public AutofillDriver,
   ContentAutofillDriver* GetParent() override;
   ContentAutofillClient& GetAutofillClient() override;
   AutofillManager& GetAutofillManager() override;
-  bool IsInActiveFrame() const override;
+  bool IsActive() const override;
   bool IsInAnyMainFrame() const override;
-  bool IsPrerendering() const override;
   bool HasSharedAutofillPermission() const override;
   bool CanShowAutofillUi() const override;
-  net::IsolationInfo IsolationInfo() override;
+  std::optional<net::IsolationInfo> GetIsolationInfo() override;
 
   // Called on certain types of navigations by ContentAutofillDriverFactory.
   void Reset();
@@ -216,7 +210,7 @@ class ContentAutofillDriver : public AutofillDriver,
   base::flat_set<FieldGlobalId> ApplyFormAction(
       mojom::FormActionType action_type,
       mojom::ActionPersistence action_persistence,
-      const FormData& data,
+      base::span<const FormFieldData> data,
       const url::Origin& triggered_origin,
       const base::flat_map<FieldGlobalId, FieldType>& field_type_map) override;
   void ApplyFieldAction(mojom::FieldActionType action_type,
@@ -234,7 +228,7 @@ class ContentAutofillDriver : public AutofillDriver,
   void RendererShouldTriggerSuggestions(
       const FieldGlobalId& field_id,
       AutofillSuggestionTriggerSource trigger_source) override;
-  void SendAutofillTypePredictionsToRenderer(
+  void SendTypePredictionsToRenderer(
       const std::vector<raw_ptr<FormStructure, VectorExperimental>>& forms)
       override;
 
@@ -257,57 +251,36 @@ class ContentAutofillDriver : public AutofillDriver,
   // mojom::AutofillDriver:
   void AskForValuesToFill(
       const FormData& form,
-      const FormFieldData& field,
+      FieldRendererId field_id,
       const gfx::Rect& caret_bounds,
       AutofillSuggestionTriggerSource trigger_source) override;
   void DidFillAutofillFormData(const FormData& form,
                                base::TimeTicks timestamp) override;
   void FocusOnFormField(const FormData& form,
-                        const FormFieldData& field) override;
+                        FieldRendererId field_id) override;
   void FormsSeen(const std::vector<FormData>& updated_forms,
                  const std::vector<FormRendererId>& removed_forms) override;
   void FormSubmitted(const FormData& form,
                      bool known_success,
                      mojom::SubmissionSource submission_source) override;
   void JavaScriptChangedAutofilledValue(const FormData& form,
-                                        const FormFieldData& field,
+                                        FieldRendererId field_id,
                                         const std::u16string& old_value,
                                         bool formatting_only) override;
   void SelectControlDidChange(const FormData& form,
-                              const FormFieldData& field) override;
+                              FieldRendererId field_id) override;
   void SelectOrSelectListFieldOptionsDidChange(const FormData& form) override;
   void CaretMovedInFormField(const FormData& form,
-                             const FormFieldData& field,
+                             FieldRendererId field_id,
                              const gfx::Rect& caret_bounds) override;
   void TextFieldDidChange(const FormData& form,
-                          const FormFieldData& field,
+                          FieldRendererId field_id,
                           base::TimeTicks timestamp) override;
   void TextFieldDidScroll(const FormData& form,
-                          const FormFieldData& field) override;
+                          FieldRendererId field_id) override;
 
-  // Sets parameters of |form| and |field| that can be extracted from
-  // |render_frame_host_|. |field| is treated as if it is a field of |form|.
-  //
-  // These functions must be called for every FormData and FormFieldData
-  // received from the renderer.
-  void SetFrameAndFormMetaData(FormData& form,
-                               base::optional_ref<FormFieldData> field) const;
-  // Returns a copy of `form` after applying `SetFormAndFormMetaData` to it.
-  [[nodiscard]] FormData GetFormWithFrameAndFormMetaData(FormData form) const;
-  [[nodiscard]] std::optional<FormData> GetFormWithFrameAndFormMetaData(
-      base::optional_ref<const FormData> form) const;
+  void LiftForTest(FormData& form);
 
-  // Transform bounding box coordinates to real viewport coordinates. In the
-  // case of a page spanning multiple renderer processes, subframe renderers
-  // cannot do this transformation themselves.
-  [[nodiscard]] gfx::Rect TransformBoundingBoxToViewportCoordinates(
-      const gfx::Rect& bounding_box) const;
-  [[nodiscard]] gfx::RectF TransformBoundingBoxToViewportCoordinates(
-      const gfx::RectF& bounding_box) const;
-
-  // Returns the `AutofillDriverRouter` and confirms that it may be accessed (we
-  // should not be using the router if we're prerendering).
-  //
   // The router must only route among ContentAutofillDrivers because
   // ContentAutofillDriver casts AutofillDrivers to ContentAutofillDrivers.
   AutofillDriverRouter& router();

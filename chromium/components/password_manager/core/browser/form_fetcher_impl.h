@@ -49,18 +49,14 @@ class FormFetcherImpl : public FormFetcher,
   void Fetch() override;
   State GetState() const override;
   const std::vector<InteractionsStats>& GetInteractionsStats() const override;
-  std::vector<raw_ptr<const PasswordForm, VectorExperimental>>
-  GetInsecureCredentials() const override;
-  std::vector<raw_ptr<const PasswordForm, VectorExperimental>>
-  GetNonFederatedMatches() const override;
-  std::vector<raw_ptr<const PasswordForm, VectorExperimental>>
-  GetFederatedMatches() const override;
+  base::span<const PasswordForm> GetInsecureCredentials() const override;
+  base::span<const PasswordForm> GetNonFederatedMatches() const override;
+  base::span<const PasswordForm> GetFederatedMatches() const override;
   bool IsBlocklisted() const override;
   bool IsMovingBlocked(const signin::GaiaIdHash& destination,
                        const std::u16string& username) const override;
 
-  const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>&
-  GetAllRelevantMatches() const override;
+  base::span<const PasswordForm> GetAllRelevantMatches() const override;
   base::span<const PasswordForm> GetBestMatches() const override;
   const PasswordForm* GetPreferredMatch() const override;
   std::unique_ptr<FormFetcher> Clone() override;
@@ -74,7 +70,7 @@ class FormFetcherImpl : public FormFetcher,
     filter_grouped_credentials_ = filter_grouped_credentials;
   }
 
- protected:
+ private:
   // Actually finds best matches and notifies consumers.
   void FindMatchesAndNotifyConsumers(
       std::vector<std::unique_ptr<PasswordForm>> results);
@@ -83,35 +79,6 @@ class FormFetcherImpl : public FormFetcher,
   // |is_blocklisted_in_profile_store_| and |is_blocklisted_in_account_store_|.
   void SplitResults(std::vector<std::unique_ptr<PasswordForm>> results);
 
-  // PasswordStore results will be fetched for this description.
-  const PasswordFormDigest form_digest_;
-
-  // Client used to obtain a CredentialFilter.
-  const raw_ptr<PasswordManagerClient> client_;
-
-  // State of the fetcher.
-  State state_ = State::NOT_WAITING;
-
-  // False unless FetchDataFromPasswordStore has been called again without the
-  // password store returning results in the meantime.
-  bool need_to_refetch_ = false;
-
-  // Results obtained from PasswordStore:
-  std::vector<std::unique_ptr<PasswordForm>> non_federated_;
-
-  // Federated credentials relevant to the observed form. They are neither
-  // filled not saved by PasswordFormManager, so they are kept separately from
-  // non-federated matches.
-  std::vector<std::unique_ptr<PasswordForm>> federated_;
-
-  // List of insecure credentials for the current domain.
-  std::vector<std::unique_ptr<PasswordForm>> insecure_credentials_;
-
-  // Indicates whether HTTP passwords should be migrated to HTTPS. This is
-  // always false for non HTML forms.
-  const bool should_migrate_http_passwords_;
-
- private:
   // PasswordStoreConsumer:
   void OnGetPasswordStoreResults(
       std::vector<std::unique_ptr<PasswordForm>> results) override;
@@ -130,14 +97,40 @@ class FormFetcherImpl : public FormFetcher,
   void AggregatePasswordStoreResults(
       std::vector<std::unique_ptr<PasswordForm>> results);
 
+  // PasswordStore results will be fetched for this description.
+  const PasswordFormDigest form_digest_;
+
+  // Client used to obtain a CredentialFilter.
+  const raw_ptr<PasswordManagerClient> client_;
+
+  // State of the fetcher.
+  State state_ = State::NOT_WAITING;
+
+  // False unless FetchDataFromPasswordStore has been called again without the
+  // password store returning results in the meantime.
+  bool need_to_refetch_ = false;
+
+  // Results obtained from PasswordStore. Matches with the same schema as the
+  // observed form are always at the beginning of the vector, sorted by their
+  // priority.
+  std::vector<PasswordForm> non_federated_;
+
+  // Federated credentials relevant to the observed form. They are neither
+  // filled not saved by PasswordFormManager, so they are kept separately from
+  // non-federated matches.
+  std::vector<PasswordForm> federated_;
+
+  // List of insecure credentials for the current domain.
+  std::vector<PasswordForm> insecure_credentials_;
+
+  // Indicates whether HTTP passwords should be migrated to HTTPS. This is
+  // always false for non HTML forms.
+  const bool should_migrate_http_passwords_;
+
   // Does the actual migration.
   base::flat_map<PasswordStoreInterface*,
                  std::unique_ptr<HttpPasswordStoreMigrator>>
       http_migrators_;
-
-  // Non-federated credentials of the same scheme as the observed form.
-  std::vector<raw_ptr<const PasswordForm, VectorExperimental>>
-      non_federated_same_scheme_;
 
   // Set of nonblocklisted PasswordForms from the password store that best match
   // the form being managed by |this|.

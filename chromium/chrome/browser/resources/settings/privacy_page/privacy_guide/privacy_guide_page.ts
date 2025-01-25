@@ -30,7 +30,6 @@ import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener
 import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../../hats_browser_proxy.js';
 import {loadTimeData} from '../../i18n_setup.js';
 import type {MetricsBrowserProxy} from '../../metrics_browser_proxy.js';
 import {MetricsBrowserProxyImpl, PrivacyGuideInteractions, PrivacyGuideStepsEligibleAndReached} from '../../metrics_browser_proxy.js';
@@ -42,6 +41,8 @@ import {CookiePrimarySetting} from '../../site_settings/site_settings_prefs_brow
 
 import {PrivacyGuideStep} from './constants.js';
 import {PrivacyGuideAvailabilityMixin} from './privacy_guide_availability_mixin.js';
+import type {PrivacyGuideBrowserProxy} from './privacy_guide_browser_proxy.js';
+import {PrivacyGuideBrowserProxyImpl} from './privacy_guide_browser_proxy.js';
 import {getTemplate} from './privacy_guide_page.html.js';
 import type {StepIndicatorModel} from './step_indicator.js';
 
@@ -135,6 +136,11 @@ export class SettingsPrivacyGuidePageElement extends PrivacyGuideBase {
             'computeStepIndicatorModel(privacyGuideStep_, prefs.generated.cookie_primary_setting, prefs.generated.safe_browsing, prefs.net.network_prediction_options)',
       },
 
+      shouldShowAdTopicsCard_: {
+        type: Boolean,
+        value: false,
+      },
+
       syncStatus_: Object,
     };
   }
@@ -157,6 +163,9 @@ export class SettingsPrivacyGuidePageElement extends PrivacyGuideBase {
   private translateMultiplier_: number;
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
+  private privacyGuideBrowserProxy_: PrivacyGuideBrowserProxy =
+      PrivacyGuideBrowserProxyImpl.getInstance();
+  private shouldShowAdTopicsCard_: boolean;
 
   constructor() {
     super();
@@ -173,6 +182,11 @@ export class SettingsPrivacyGuidePageElement extends PrivacyGuideBase {
         (syncStatus: SyncStatus) => this.onSyncStatusChanged_(syncStatus));
     this.syncBrowserProxy_.getSyncStatus().then(
         (syncStatus: SyncStatus) => this.onSyncStatusChanged_(syncStatus));
+    this.privacyGuideBrowserProxy_
+        .privacySandboxPrivacyGuideShouldShowAdTopicsCard()
+        .then(state => {
+          this.shouldShowAdTopicsCard_ = state;
+        });
   }
 
   disableAnimationsForTesting() {
@@ -270,10 +284,8 @@ export class SettingsPrivacyGuidePageElement extends PrivacyGuideBase {
       [
         PrivacyGuideStep.COOKIES,
         {
-          nextStep: PrivacyGuideStep.COMPLETION,
+          nextStep: PrivacyGuideStep.AD_TOPICS,
           onForwardNavigation: () => {
-            HatsBrowserProxyImpl.getInstance().trustSafetyInteractionOccurred(
-                TrustSafetyInteraction.COMPLETED_PRIVACY_GUIDE);
             this.metricsBrowserProxy_.recordPrivacyGuideNextNavigationHistogram(
                 PrivacyGuideInteractions.COOKIES_NEXT_BUTTON);
             this.metricsBrowserProxy_.recordAction(
@@ -288,13 +300,22 @@ export class SettingsPrivacyGuidePageElement extends PrivacyGuideBase {
         },
       ],
       [
+        PrivacyGuideStep.AD_TOPICS,
+        {
+          // TODO(crbug.com/331970504): Add Metrics.
+          nextStep: PrivacyGuideStep.COMPLETION,
+          previousStep: PrivacyGuideStep.COOKIES,
+          isAvailable: () => this.shouldShowAdTopicsCard_,
+        },
+      ],
+      [
         PrivacyGuideStep.COMPLETION,
         {
           onBackwardNavigation: () => {
             this.metricsBrowserProxy_.recordAction(
                 'Settings.PrivacyGuide.BackClickCompletion');
           },
-          previousStep: PrivacyGuideStep.COOKIES,
+          previousStep: PrivacyGuideStep.AD_TOPICS,
           isAvailable: () => true,
         },
       ],
@@ -378,6 +399,11 @@ export class SettingsPrivacyGuidePageElement extends PrivacyGuideBase {
       const component = this.privacyGuideStepToComponentsMap_.get(step);
       assert(component);
       if (!component.isAvailable()) {
+        continue;
+      }
+      // TODO(crbug.com/331970504): Add Metrics for Eligibility and Completion
+      // of Ad Topics Card.
+      if (step === PrivacyGuideStep.AD_TOPICS) {
         continue;
       }
       this.metricsBrowserProxy_

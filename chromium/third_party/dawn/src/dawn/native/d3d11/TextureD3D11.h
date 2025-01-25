@@ -53,10 +53,6 @@ class TextureView;
 class ScopedCommandRecordingContext;
 class SharedTextureMemory;
 
-MaybeError ValidateTextureCanBeWrapped(ID3D11Resource* d3d11Resource,
-                                       const UnpackedPtr<TextureDescriptor>& descriptor);
-MaybeError ValidateVideoTextureCanBeShared(Device* device, DXGI_FORMAT textureFormat);
-
 class Texture final : public d3d::Texture {
   public:
     static ResultOrError<Ref<Texture>> Create(Device* device,
@@ -64,14 +60,6 @@ class Texture final : public d3d::Texture {
     static ResultOrError<Ref<Texture>> Create(Device* device,
                                               const UnpackedPtr<TextureDescriptor>& descriptor,
                                               ComPtr<ID3D11Resource> d3d11Texture);
-    static ResultOrError<Ref<Texture>> CreateExternalImage(
-        Device* device,
-        const UnpackedPtr<TextureDescriptor>& descriptor,
-        ComPtr<IUnknown> d3dTexture,
-        Ref<d3d::KeyedMutex> keyedMutex,
-        std::vector<FenceAndSignalValue> waitFences,
-        bool isSwapChainTexture,
-        bool isInitialized);
     static ResultOrError<Ref<Texture>> CreateFromSharedTextureMemory(
         SharedTextureMemory* memory,
         const UnpackedPtr<TextureDescriptor>& descriptor);
@@ -197,9 +185,6 @@ class Texture final : public d3d::Texture {
     const Kind mKind = Kind::Normal;
     ComPtr<ID3D11Resource> mD3d11Resource;
     Ref<d3d::KeyedMutex> mKeyedMutex;
-
-    // TODO(crbug.com/1515640): Remove this once Chromium has migrated to SharedTextureMemory.
-    std::optional<ExecutionSerial> mLastUsageSerial;
 
     // The internal 'R8Uint' texture for sampling stencil from depth-stencil textures.
     Ref<Texture> mTextureForStencilSampling;

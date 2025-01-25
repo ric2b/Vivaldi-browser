@@ -4,18 +4,20 @@
 
 import 'chrome://os-settings/lazy_load.js';
 
-import {AppManagementArcDetailViewElement} from 'chrome://os-settings/lazy_load.js';
+import {AppManagementArcDetailViewElement, MediaDevicesProxy} from 'chrome://os-settings/lazy_load.js';
 import {AppManagementReadOnlyPermissionItemElement, AppManagementStore, CrButtonElement, CrToggleElement, GeolocationAccessLevel, LocalizedLinkElement, updateSelectedAppId} from 'chrome://os-settings/os_settings.js';
 import {AppType, PermissionType, TriState} from 'chrome://resources/cr_components/app_management/app_management.mojom-webui.js';
 import {PermissionTypeIndex} from 'chrome://resources/cr_components/app_management/permission_constants.js';
 import {createBoolPermission, createTriStatePermission} from 'chrome://resources/cr_components/app_management/permission_util.js';
 import {getPermissionValueBool} from 'chrome://resources/cr_components/app_management/util.js';
+import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertEquals, assertFalse, assertNull, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
 import {FakePageHandler} from '../../app_management/fake_page_handler.js';
-import {getPermissionCrToggleByType, getPermissionItemByType, isHidden, isHiddenByDomIf, replaceBody, replaceStore, setupFakeHandler} from '../../app_management/test_util.js';
+import {addFakeSensor, getPermissionCrToggleByType, getPermissionItemByType, isHidden, isHiddenByDomIf, replaceBody, replaceStore, setupFakeHandler} from '../../app_management/test_util.js';
+import {FakeMediaDevices} from '../../fake_media_devices.js';
 
 function getFakePrefs() {
   return {
@@ -40,6 +42,7 @@ function getFakePrefs() {
 suite('<app-management-arc-detail-view>', () => {
   let arcPermissionView: AppManagementArcDetailViewElement;
   let fakeHandler: FakePageHandler;
+  let mediaDevices: FakeMediaDevices;
 
   function getPermissionBoolByType(permissionType: PermissionTypeIndex):
       boolean {
@@ -214,6 +217,14 @@ suite('<app-management-arc-detail-view>', () => {
             '#permissionDescription')!.localizedString.toString();
   }
 
+  async function setPermission(
+      permissionType: PermissionType, value: TriState): Promise<void> {
+    fakeHandler.setPermission(
+        arcPermissionView.get('app_').id,
+        createTriStatePermission(permissionType, value, /*is_managed=*/ false));
+    await flushTasks();
+  }
+
   suite('Read-only permissions', () => {
     setup(async () => {
       loadTimeData.overrideValues(
@@ -259,31 +270,16 @@ suite('<app-management-arc-detail-view>', () => {
       const locationItem =
           getPermissionItemByType(arcPermissionView, 'kLocation');
 
-      fakeHandler.setPermission(
-          arcPermissionView.get('app_').id,
-          createTriStatePermission(
-              PermissionType.kLocation, /*value=*/ TriState.kAllow,
-              /*is_managed=*/ false));
-      await flushTasks();
+      await setPermission(PermissionType.kLocation, TriState.kAllow);
 
       assertEquals('Allowed', getPermissionDescriptionString(locationItem));
 
-      fakeHandler.setPermission(
-          arcPermissionView.get('app_').id,
-          createTriStatePermission(
-              PermissionType.kLocation, /*value=*/ TriState.kAsk,
-              /*is_managed=*/ false));
-      await flushTasks();
+      await setPermission(PermissionType.kLocation, TriState.kAsk);
 
       assertEquals(
           'Ask every time', getPermissionDescriptionString(locationItem));
 
-      fakeHandler.setPermission(
-          arcPermissionView.get('app_').id,
-          createTriStatePermission(
-              PermissionType.kLocation, /*value=*/ TriState.kBlock,
-              /*is_managed=*/ false));
-      await flushTasks();
+      await setPermission(PermissionType.kLocation, TriState.kBlock);
 
       assertEquals('Denied', getPermissionDescriptionString(locationItem));
     });
@@ -345,11 +341,28 @@ suite('<app-management-arc-detail-view>', () => {
       'System wide sensor access control from read-only permission items',
       () => {
         setup(async () => {
+          mediaDevices = new FakeMediaDevices();
+          MediaDevicesProxy.setMediaDevicesForTesting(mediaDevices);
+
           loadTimeData.overrideValues({
             'appManagementArcReadOnlyPermissions': true,
             'privacyHubAppPermissionsV2Enabled': true,
             'privacyHubLocationAccessControlEnabled': true,
           });
+
+          // Add an arc app with camera, location and microphone permission, and
+          // make it the currently selected app.
+          const arcOptions = {
+            type: AppType.kArc,
+            permissions: FakePageHandler.createArcPermissions([
+              PermissionType.kCamera,
+              PermissionType.kLocation,
+              PermissionType.kMicrophone,
+            ]),
+          };
+          const app = await fakeHandler.addApp('id', arcOptions);
+          AppManagementStore.getInstance().dispatch(
+              updateSelectedAppId(app.id));
 
           // Re-render with the new loadTimeData.
           arcPermissionView =
@@ -367,14 +380,6 @@ suite('<app-management-arc-detail-view>', () => {
             'privacyHubLocationAccessControlEnabled': false,
           });
         });
-
-        async function setPermission(value: TriState): Promise<void> {
-          fakeHandler.setPermission(
-              arcPermissionView.get('app_').id,
-              createTriStatePermission(
-                  PermissionType.kLocation, value, /*is_managed=*/ false));
-          await flushTasks();
-        }
 
         function getDialogElement(permissionItem: HTMLElement): HTMLElement|
             null {
@@ -400,7 +405,7 @@ suite('<app-management-arc-detail-view>', () => {
                       '[permission-type=kLocation]');
           assertTrue(!!locationItem);
 
-          await setPermission(TriState.kAllow);
+          await setPermission(PermissionType.kLocation, TriState.kAllow);
 
           assertEquals(
               loadTimeData.getString('appManagementPermissionAllowed'),
@@ -442,7 +447,7 @@ suite('<app-management-arc-detail-view>', () => {
                       '[permission-type=kLocation]');
           assertTrue(!!locationItem);
 
-          await setPermission(TriState.kAllow);
+          await setPermission(PermissionType.kLocation, TriState.kAllow);
           locationItem.set(
               'prefs.ash.user.geolocation_access_level.value',
               GeolocationAccessLevel.DISALLOWED);
@@ -475,5 +480,155 @@ suite('<app-management-arc-detail-view>', () => {
               locationItem.get('prefs.ash.user.geolocation_access_level')
                   .value);
         });
+
+        test(
+            'Permission description updated when no sensor connected',
+            async () => {
+              const checkPermissionDescription = async (
+                  permissionType: PermissionTypeIndex,
+                  expectedDescription: string) => {
+                const permissionItem =
+                    getPermissionItemByType(arcPermissionView, permissionType);
+
+                await setPermission(
+                    PermissionType[permissionType], TriState.kAsk);
+
+                assertEquals(
+                    loadTimeData.getString('appManagementPermissionAsk'),
+                    getPermissionDescriptionString(permissionItem));
+
+                await setPermission(
+                    PermissionType[permissionType], TriState.kAllow);
+
+                assertEquals(
+                    expectedDescription,
+                    getPermissionDescriptionString(permissionItem));
+
+                await addFakeSensor(mediaDevices, permissionType);
+
+                assertEquals(
+                    loadTimeData.getString('appManagementPermissionAllowed'),
+                    getPermissionDescriptionString(permissionItem));
+
+                mediaDevices.popDevice();
+                await flushTasks();
+
+                assertEquals(
+                    expectedDescription,
+                    getPermissionDescriptionString(permissionItem));
+              };
+
+              await checkPermissionDescription(
+                  'kCamera',
+                  loadTimeData.getString(
+                      'permissionAllowedButNoCameraConnectedText'));
+              await checkPermissionDescription(
+                  'kMicrophone',
+                  loadTimeData.getString(
+                      'permissionAllowedButNoMicrophoneConnectedText'));
+            });
+
+        test(
+            'Permission description updated when microphone hw switch ON',
+            async () => {
+              const permissionItem =
+                  getPermissionItemByType(arcPermissionView, 'kMicrophone');
+
+              await setPermission(PermissionType.kMicrophone, TriState.kAllow);
+
+              assertEquals(
+                  loadTimeData.getString(
+                      'permissionAllowedButNoMicrophoneConnectedText'),
+                  getPermissionDescriptionString(permissionItem));
+
+              await addFakeSensor(mediaDevices, 'kMicrophone');
+
+              assertEquals(
+                  loadTimeData.getString('appManagementPermissionAllowed'),
+                  getPermissionDescriptionString(permissionItem));
+
+              webUIListenerCallback('microphone-hardware-toggle-changed', true);
+              await waitAfterNextRender(arcPermissionView);
+
+              assertEquals(
+                  loadTimeData.getString(
+                      'permissionAllowedButMicrophoneHwSwitchActiveText'),
+                  getPermissionDescriptionString(permissionItem));
+
+              webUIListenerCallback(
+                  'microphone-hardware-toggle-changed', false);
+              await waitAfterNextRender(arcPermissionView);
+
+              assertEquals(
+                  loadTimeData.getString('appManagementPermissionAllowed'),
+                  getPermissionDescriptionString(permissionItem));
+            });
+
+        // Camera toggle button is force-disabled in CRD session.
+        test(
+            'Allow camera access button hidden if camera toggle force disabled',
+            async () => {
+              const permissionItem =
+                  getPermissionItemByType(arcPermissionView, 'kCamera');
+
+              await setPermission(PermissionType.kCamera, TriState.kAllow);
+              arcPermissionView.set(
+                  'prefs.ash.user.camera_allowed.value', false);
+              await addFakeSensor(mediaDevices, 'kCamera');
+
+              assertEquals(
+                  loadTimeData.getString(
+                      'permissionAllowedTextWithTurnOnCameraAccessButton'),
+                  getPermissionDescriptionString(permissionItem));
+
+              webUIListenerCallback('force-disable-camera-switch', true);
+              await waitAfterNextRender(arcPermissionView);
+
+              assertEquals(
+                  loadTimeData.getString('appManagementPermissionAllowed'),
+                  getPermissionDescriptionString(permissionItem));
+
+              webUIListenerCallback('force-disable-camera-switch', false);
+              await waitAfterNextRender(arcPermissionView);
+
+              assertEquals(
+                  loadTimeData.getString(
+                      'permissionAllowedTextWithTurnOnCameraAccessButton'),
+                  getPermissionDescriptionString(permissionItem));
+            });
+
+        test(
+            'Allow mic access button hidden if mic muted by security curtain',
+            async () => {
+              const permissionItem =
+                  getPermissionItemByType(arcPermissionView, 'kMicrophone');
+
+              await setPermission(PermissionType.kMicrophone, TriState.kAllow);
+              arcPermissionView.set(
+                  'prefs.ash.user.microphone_allowed.value', false);
+              await addFakeSensor(mediaDevices, 'kMicrophone');
+
+              assertEquals(
+                  loadTimeData.getString(
+                      'permissionAllowedTextWithTurnOnMicrophoneAccessButton'),
+                  getPermissionDescriptionString(permissionItem));
+
+              webUIListenerCallback(
+                  'microphone-muted-by-security-curtain-changed', true);
+              await waitAfterNextRender(arcPermissionView);
+
+              assertEquals(
+                  loadTimeData.getString('appManagementPermissionAllowed'),
+                  getPermissionDescriptionString(permissionItem));
+
+              webUIListenerCallback(
+                  'microphone-muted-by-security-curtain-changed', false);
+              await waitAfterNextRender(arcPermissionView);
+
+              assertEquals(
+                  loadTimeData.getString(
+                      'permissionAllowedTextWithTurnOnMicrophoneAccessButton'),
+                  getPermissionDescriptionString(permissionItem));
+            });
       });
 });

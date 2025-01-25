@@ -133,19 +133,10 @@ Centipede::Centipede(const Environment &env, CentipedeCallbacks &user_callbacks,
 }
 
 void Centipede::CorpusToFiles(const Environment &env, std::string_view dir) {
-  const auto corpus_files = WorkDir{env}.CorpusFiles();
-  for (size_t shard = 0; shard < env.total_shards; shard++) {
-    auto reader = DefaultBlobFileReaderFactory();
-    auto corpus_path = corpus_files.ShardPath(shard);
-    reader->Open(corpus_path).IgnoreError();  // may not exist.
-    ByteSpan blob;
-    size_t num_read = 0;
-    while (reader->Read(blob).ok()) {
-      ++num_read;
-      WriteToRemoteHashedFileInDir(dir, blob);
-    }
-    LOG(INFO) << "Read " << num_read << " from " << corpus_path;
-  }
+  std::vector<std::string> sharded_corpus_files;
+  RemoteGlobMatch(WorkDir{env}.CorpusFiles().AllShardsGlob(),
+                  sharded_corpus_files);
+  ExportCorpus(sharded_corpus_files, dir);
 }
 
 void Centipede::CorpusFromFiles(const Environment &env, std::string_view dir) {
@@ -155,7 +146,7 @@ void Centipede::CorpusFromFiles(const Environment &env, std::string_view dir) {
   std::vector<std::vector<std::string>> sharded_paths(env.total_shards);
   std::vector<std::string> paths;
   size_t total_paths = 0;
-  for (const std::string &path : RemoteListFilesRecursively(dir)) {
+  for (const std::string &path : RemoteListFiles(dir, /*recursively=*/true)) {
     size_t filename_hash = std::hash<std::string>{}(path);
     sharded_paths[filename_hash % env.total_shards].push_back(path);
     ++total_paths;
@@ -844,11 +835,11 @@ void Centipede::ReportCrash(std::string_view binary,
   // TODO(b/274705740): When the bug is fixed, set `input_idxs_to_try`'s size to
   //  `suspect_input_idx + 1`.
   std::vector<size_t> input_idxs_to_try(input_vec.size() + 1);
-  input_idxs_to_try.front() = suspect_input_idx;
-  std::iota(input_idxs_to_try.begin() + 1, input_idxs_to_try.end(), 0);
   // Prioritize the presumed crasher by inserting it in front of everything
   // else. However, do keep it at the old location, too, in case the target was
   // primed for a crash by the sequence of inputs that preceded the crasher.
+  input_idxs_to_try.front() = suspect_input_idx;
+  std::iota(input_idxs_to_try.begin() + 1, input_idxs_to_try.end(), 0);
 
   if (batch_result.failure_description() == kExecutionFailurePerBatchTimeout) {
     LOG(INFO) << log_prefix
@@ -870,16 +861,13 @@ void Centipede::ReportCrash(std::string_view binary,
       RemoteMkdir(crash_dir);
       std::string file_path = std::filesystem::path(crash_dir).append(hash);
       LOG(INFO) << log_prefix << "Detected crash-reproducing input:"
-                << "\nInput index    : " << input_idx
-                << "\nInput bytes    : " << AsString(one_input, /*max_len=*/32)
+                << "\nInput index    : " << input_idx << "\nInput bytes    : "
+                << AsPrintableString(one_input, /*max_len=*/32)
                 << "\nExit code      : " << one_input_batch_result.exit_code()
                 << "\nFailure        : "
                 << one_input_batch_result.failure_description()
                 << "\nSaving input to: " << file_path;
-      auto *file = RemoteFileOpen(file_path, "w");  // overwrites existing file.
-      CHECK(file != nullptr) << log_prefix << "Failed to open " << file_path;
-      RemoteFileAppend(file, one_input);
-      RemoteFileClose(file);
+      RemoteFileSetContents(file_path, one_input);
       return;
     }
   }
@@ -888,13 +876,14 @@ void Centipede::ReportCrash(std::string_view binary,
             << "Crash was not observed when running inputs one-by-one";
 
   // There will be cases when several inputs collectively cause a crash, but no
-  // single input does. Handle this by writing out all inputs from the batch.
-
+  // single input does. Handle this by writing out the inputs from the batch
+  // between 0 and `suspect_input_idx` (inclusive) as individual files under the
+  // <--workdir>/crash/unreliable_batch-<HASH_OF_SUSPECT_INPUT> directory.
   // TODO(bookholt): Check for repro by re-running the whole batch.
-  // TODO(ussuri): Consolidate logic for test case reproduction.
-
+  // TODO(ussuri): Consolidate the crash reproduction logic here and above.
+  // TODO(ussuri): This can create a lot of tiny files. Write to a single
+  //  shard-like corpus file instead.
   const auto &suspect_input = input_vec[suspect_input_idx];
-  // Save inputs to <--workdir>/crash/unreliable_batch-<HASH_OF_SUSPECT_INPUT>.
   auto suspect_hash = Hash(suspect_input);
   auto crash_dir = wd_.CrashReproducerDirPath();
   RemoteMkdir(crash_dir);
@@ -908,10 +897,7 @@ void Centipede::ReportCrash(std::string_view binary,
     auto hash = Hash(one_input);
     std::string file_path = std::filesystem::path(save_dir).append(
         absl::StrFormat("input-%010d-%s", i, hash));
-    auto *file = RemoteFileOpen(file_path, "w");
-    CHECK(file != nullptr) << log_prefix << "Failed to open " << file_path;
-    RemoteFileAppend(file, one_input);
-    RemoteFileClose(file);
+    RemoteFileSetContents(file_path, one_input);
   }
 }
 

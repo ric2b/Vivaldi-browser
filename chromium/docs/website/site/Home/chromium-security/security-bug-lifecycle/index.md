@@ -228,8 +228,9 @@ apply cleanly you may want to reconsider whether the fix will introduce an
 unacceptable breakage risk. In the event that you can’t use drover to merge a
 fix, you still have the option of manually merging from a branch checkout. In
 general, most team members should have a checkout for the current stable, beta
-and trunk branches. So, this can generally just follow the [normal patch
-process](/developers/contributing-code), but using a branch repository.
+and trunk branches. So, this can generally just follow the
+[normal patch process](https://chromium.googlesource.com/chromium/src/+/main/docs/contributing.md),
+but using a branch repository.
 
 Once the fix is successfully merged you will need to update the the bug with the
 merge revision numbers, and change the status to **FixUnreleased** (or to

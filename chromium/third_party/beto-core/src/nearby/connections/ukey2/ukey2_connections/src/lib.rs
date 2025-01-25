@@ -42,4 +42,4 @@ pub use d2d_handshake_context::{
     D2DHandshakeContext, HandleMessageError, HandshakeError, InitiatorD2DHandshakeContext,
     ServerD2DHandshakeContext,
 };
-pub use ukey2_rs::HandshakeImplementation;
+pub use ukey2_rs::{HandshakeImplementation, NextProtocol};

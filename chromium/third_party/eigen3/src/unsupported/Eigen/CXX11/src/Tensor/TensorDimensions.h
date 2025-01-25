@@ -215,14 +215,13 @@ struct DSizes : array<DenseIndex, NumDims> {
   }
 
   template <typename... IndexTypes>
-      EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE explicit DSizes(DenseIndex firstDimension, DenseIndex secondDimension,
-                                                            IndexTypes... otherDimensions)
-      : Base({{firstDimension, secondDimension, otherDimensions...}}){EIGEN_STATIC_ASSERT(
-            sizeof...(otherDimensions) + 2 == NumDims, YOU_MADE_A_PROGRAMMING_MISTAKE)}
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE explicit DSizes(DenseIndex firstDimension, DenseIndex secondDimension,
+                                                        IndexTypes... otherDimensions)
+      : Base({{firstDimension, secondDimension, otherDimensions...}}) {
+    EIGEN_STATIC_ASSERT(sizeof...(otherDimensions) + 2 == NumDims, YOU_MADE_A_PROGRAMMING_MISTAKE)
+  }
 
-        EIGEN_DEVICE_FUNC DSizes
-        &
-        operator=(const array<DenseIndex, NumDims>& other) {
+  EIGEN_DEVICE_FUNC DSizes& operator=(const array<DenseIndex, NumDims>& other) {
     *static_cast<Base*>(this) = other;
     return *this;
   }

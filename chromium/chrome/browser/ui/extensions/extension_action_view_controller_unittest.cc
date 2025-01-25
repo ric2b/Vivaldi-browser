@@ -145,7 +145,7 @@ class ExtensionActionViewControllerUnitTest : public BrowserWithTestWindowTest {
         extensions::ExtensionBuilder(name)
             .SetAction(action_type)
             .SetLocation(ManifestLocation::kInternal)
-            .AddPermissions(permissions)
+            .AddHostPermissions(permissions)
             .Build();
 
     if (!permissions.empty())
@@ -291,7 +291,7 @@ TEST_F(ExtensionActionViewControllerUnitTest, OnlyHostPermissionsAppearance) {
   scoped_refptr<const extensions::Extension> extension =
       extensions::ExtensionBuilder("just hosts")
           .SetLocation(ManifestLocation::kInternal)
-          .AddPermission("https://www.google.com/*")
+          .AddHostPermission("https://www.google.com/*")
           .Build();
 
   extension_service()->GrantPermissions(extension.get());
@@ -570,7 +570,7 @@ ExtensionActionViewControllerGrayscaleTest::CreateExtension(
       break;
     }
     case PermissionType::kExplicitHost:
-      builder.AddPermission(kHostGoogle);
+      builder.AddHostPermission(kHostGoogle);
       break;
   }
 
@@ -659,8 +659,8 @@ TEST_F(ExtensionActionViewControllerUnitTest, ActiveTabIconAppearance) {
   static constexpr char16_t kNoAccessTooltip[] = u"active tab";
   scoped_refptr<const extensions::Extension> extension =
       extensions::ExtensionBuilder("active tab")
-          .AddPermission("activeTab")
-          .AddPermission(kGrantedHost.spec())
+          .AddAPIPermission("activeTab")
+          .AddHostPermission(kGrantedHost.spec())
           .Build();
   extension_service()->GrantPermissions(extension.get());
   extension_service()->AddExtension(extension.get());
@@ -719,8 +719,16 @@ TEST_F(ExtensionActionViewControllerUnitTest, ActiveTabIconAppearance) {
 // Tests that an extension with the activeTab permission has active tab site
 // interaction except for restricted URLs.
 TEST_F(ExtensionActionViewControllerUnitTest, GetSiteInteractionWithActiveTab) {
-  auto extension = CreateAndAddExtensionWithGrantedHostPermissions(
-      "active tab", extensions::ActionInfo::Type::kBrowser, {"activeTab"});
+  // Note: Not using `CreateAndAddExtensionWithGrantedHostPermissions` because
+  // this adds an API permission (activeTab).
+  scoped_refptr<const extensions::Extension> extension =
+      extensions::ExtensionBuilder("active tab")
+          .SetAction(extensions::ActionInfo::Type::kAction)
+          .SetLocation(ManifestLocation::kInternal)
+          .AddAPIPermission("activeTab")
+          .Build();
+  extension_service()->GrantPermissions(extension.get());
+  extension_service()->AddExtension(extension.get());
 
   // Navigate the browser to google.com. Since clicking the extension would
   // grant access to the page, the page interaction status should show as
@@ -814,7 +822,7 @@ TEST_F(ExtensionActionViewControllerUnitTest,
 // See https://crbug.com/888121
 TEST_F(ExtensionActionViewControllerUnitTest, TestGetIconWithNullWebContents) {
   auto extension = CreateAndAddExtensionWithGrantedHostPermissions(
-      "extension name", extensions::ActionInfo::Type::kBrowser,
+      "extension name", extensions::ActionInfo::Type::kAction,
       {"https://example.com/"});
 
   extensions::ScriptingPermissionsModifier permissions_modifier(profile(),
@@ -1119,7 +1127,7 @@ TEST_F(ExtensionActionViewControllerWithSidePanelUnitTest,
       extensions::ExtensionBuilder("just side panel")
           .SetLocation(ManifestLocation::kInternal)
           .SetManifestVersion(3)
-          .AddPermission("sidePanel")
+          .AddAPIPermission("sidePanel")
           .Build();
 
   extension_service()->GrantPermissions(extension.get());

@@ -114,6 +114,11 @@ void DocumentBlockedInterstitial::CommandReceived(const std::string& command) {
       }
       controller()->Proceed();
     } break;
+    case security_interstitials::CMD_ERROR:
+    case security_interstitials::CMD_TEXT_FOUND:
+    case security_interstitials::CMD_TEXT_NOT_FOUND:
+      // Commands are for testing.
+      break;
     case security_interstitials::CMD_DO_REPORT:
     case security_interstitials::CMD_DONT_REPORT:
     case security_interstitials::CMD_SHOW_MORE_SECTION:
@@ -125,14 +130,10 @@ void DocumentBlockedInterstitial::CommandReceived(const std::string& command) {
     case security_interstitials::CMD_OPEN_DIAGNOSTIC:
     case security_interstitials::CMD_OPEN_LOGIN:
     case security_interstitials::CMD_REPORT_PHISHING_ERROR:
-      // Not supported by the lookalike URL warning page.
+    case security_interstitials::CMD_OPEN_ENHANCED_PROTECTION_SETTINGS:
+    case security_interstitials::CMD_CLOSE_INTERSTITIAL_WITHOUT_UI:
+    case security_interstitials::CMD_REQUEST_SITE_ACCESS_PERMISSION:
       NOTREACHED() << "Unsupported command: " << command;
-      break;
-    case security_interstitials::CMD_ERROR:
-    case security_interstitials::CMD_TEXT_FOUND:
-    case security_interstitials::CMD_TEXT_NOT_FOUND:
-      // Commands are for testing.
-      break;
   }
 }
 

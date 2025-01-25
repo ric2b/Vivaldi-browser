@@ -269,10 +269,10 @@ std::optional<SkColor> GetAccentColor(const ComputedStyle& style,
   if (css_accent_color)
     return css_accent_color->Rgb();
 
-  bool in_image =
-      document.GetPage()->GetChromeClient().IsIsolatedSVGChromeClient();
-  if (!RuntimeEnabledFeatures::PreventReadingSystemAccentColorEnabled() ||
-      !in_image) {
+  // We should not allow the system accent color to be rendered in image
+  // contexts because it could be read back by the page and used for
+  // fingerprinting.
+  if (!document.GetPage()->GetChromeClient().IsIsolatedSVGChromeClient()) {
     mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
     LayoutTheme& layout_theme = LayoutTheme::GetTheme();
     if (layout_theme.IsAccentColorCustomized(color_scheme)) {
@@ -559,8 +559,8 @@ bool ThemePainterDefault::PaintSliderTrack(const Element& element,
       RuntimeEnabledFeatures::
           NonStandardAppearanceValueSliderVerticalEnabled() &&
       style.EffectiveAppearance() == kSliderVerticalPart;
-  bool is_writing_mode_vertical =
-      !IsHorizontalWritingMode(style.GetWritingMode());
+  const WritingMode writing_mode = style.GetWritingMode();
+  bool is_writing_mode_vertical = !IsHorizontalWritingMode(writing_mode);
   slider.vertical = is_writing_mode_vertical || is_slider_vertical;
   slider.in_drag = false;
 
@@ -574,13 +574,15 @@ bool ThemePainterDefault::PaintSliderTrack(const Element& element,
   // behave like it has direction rtl and its value should be rendered
   // bottom-to-top.
   slider.right_to_left =
-      (IsHorizontalWritingMode(style.GetWritingMode()) &&
-       !is_slider_vertical) ||
+      (IsHorizontalWritingMode(writing_mode) && !is_slider_vertical) ||
               (RuntimeEnabledFeatures::
                    FormControlsVerticalWritingModeDirectionSupportEnabled() &&
                is_writing_mode_vertical)
           ? !style.IsLeftToRightDirection()
           : true;
+  if (writing_mode == WritingMode::kSidewaysLr) {
+    slider.right_to_left = !slider.right_to_left;
+  }
   if (auto* input = DynamicTo<HTMLInputElement>(element)) {
     Element* thumb_element = input->UserAgentShadowRoot()
                                  ? input->UserAgentShadowRoot()->getElementById(

@@ -66,7 +66,12 @@ while (isRunningInGen && !pathToOutTargetDir.endsWith(`out${path.sep}${target}`)
 const pathToBuiltOutTargetDirectory =
     isRunningInGen ? pathToOutTargetDir : path.resolve(path.join(process.cwd(), 'out', target));
 
-const devtoolsRootFolder = path.resolve(path.join(pathToBuiltOutTargetDirectory, 'gen'));
+let devtoolsRootFolder = path.resolve(path.join(pathToBuiltOutTargetDirectory, 'gen'));
+const fullCheckoutDevtoolsRootFolder = path.join(devtoolsRootFolder, 'third_party', 'devtools-frontend', 'src');
+if (__dirname.startsWith(fullCheckoutDevtoolsRootFolder)) {
+  devtoolsRootFolder = fullCheckoutDevtoolsRootFolder;
+}
+
 const componentDocsBaseFolder = path.join(devtoolsRootFolder, componentDocsBaseArg);
 
 if (!fs.existsSync(devtoolsRootFolder)) {
@@ -272,8 +277,6 @@ const COVERAGE_INSTRUMENTER = createInstrumenter({
 
 const instrumentedSourceCacheForFilePaths = new Map();
 
-const SHOULD_GATHER_COVERAGE_INFORMATION = process.env.COVERAGE === '1';
-
 /**
  * @param {http.IncomingMessage} request
  * @param {http.ServerResponse} response
@@ -401,7 +404,7 @@ async function requestHandler(request, response) {
     let fileContents = await fs.promises.readFile(fullPath, encoding);
     const isComputingCoverageRequest = request.headers['devtools-compute-coverage'] === '1';
 
-    if (SHOULD_GATHER_COVERAGE_INFORMATION && fullPath.endsWith('.js') && filePath.startsWith('/front_end/') &&
+    if (argv.coverage && fullPath.endsWith('.js') && filePath.startsWith('/front_end/') &&
         isIncludedForCoverageComputation(filePath)) {
       const previouslyGeneratedInstrumentedSource = instrumentedSourceCacheForFilePaths.get(fullPath);
 

@@ -132,66 +132,66 @@ TEST(fxcrt, FXSYS_ToUTF16BE) {
 
 TEST(fxcrt, FXSYS_wcstof) {
   size_t used_len = 0;
-  EXPECT_FLOAT_EQ(-12.0f, FXSYS_wcstof(L"-12", 3, &used_len));
+  EXPECT_FLOAT_EQ(-12.0f, FXSYS_wcstof(L"-12", &used_len));
   EXPECT_EQ(3u, used_len);
 
   used_len = 0;
-  EXPECT_FLOAT_EQ(12.0f, FXSYS_wcstof(L"+12", 3, &used_len));
+  EXPECT_FLOAT_EQ(12.0f, FXSYS_wcstof(L"+12", &used_len));
   EXPECT_EQ(3u, used_len);
 
   used_len = 0;
-  EXPECT_FLOAT_EQ(123.0f, FXSYS_wcstof(L" 123", 4, &used_len));
+  EXPECT_FLOAT_EQ(123.0f, FXSYS_wcstof(L" 123", &used_len));
   EXPECT_EQ(4u, used_len);
 
   used_len = 0;
-  EXPECT_FLOAT_EQ(123.0f, FXSYS_wcstof(L" 123 ", 5, &used_len));
+  EXPECT_FLOAT_EQ(123.0f, FXSYS_wcstof(L" 123 ", &used_len));
   EXPECT_EQ(4u, used_len);
 
   used_len = 0;
-  EXPECT_FLOAT_EQ(1.0f, FXSYS_wcstof(L" 1 2 3 ", 7, &used_len));
+  EXPECT_FLOAT_EQ(1.0f, FXSYS_wcstof(L" 1 2 3 ", &used_len));
   EXPECT_EQ(2u, used_len);
 
   used_len = 0;
-  EXPECT_FLOAT_EQ(1.5362f, FXSYS_wcstof(L"1.5362", 6, &used_len));
+  EXPECT_FLOAT_EQ(1.5362f, FXSYS_wcstof(L"1.5362", &used_len));
   EXPECT_EQ(6u, used_len);
 
   used_len = 0;
-  EXPECT_FLOAT_EQ(1.0f, FXSYS_wcstof(L"1 .5362", 7, &used_len));
+  EXPECT_FLOAT_EQ(1.0f, FXSYS_wcstof(L"1 .5362", &used_len));
   EXPECT_EQ(1u, used_len);
 
   used_len = 0;
-  EXPECT_FLOAT_EQ(1.0f, FXSYS_wcstof(L"1. 5362", 7, &used_len));
+  EXPECT_FLOAT_EQ(1.0f, FXSYS_wcstof(L"1. 5362", &used_len));
   EXPECT_EQ(2u, used_len);
 
   used_len = 0;
-  EXPECT_FLOAT_EQ(1.5f, FXSYS_wcstof(L"1.5.3.6.2", 9, &used_len));
+  EXPECT_FLOAT_EQ(1.5f, FXSYS_wcstof(L"1.5.3.6.2", &used_len));
   EXPECT_EQ(3u, used_len);
 
   used_len = 0;
-  EXPECT_FLOAT_EQ(0.875f, FXSYS_wcstof(L"0.875", 5, &used_len));
+  EXPECT_FLOAT_EQ(0.875f, FXSYS_wcstof(L"0.875", &used_len));
   EXPECT_EQ(5u, used_len);
 
   used_len = 0;
-  EXPECT_FLOAT_EQ(5.56e-2f, FXSYS_wcstof(L"5.56e-2", 7, &used_len));
+  EXPECT_FLOAT_EQ(5.56e-2f, FXSYS_wcstof(L"5.56e-2", &used_len));
   EXPECT_EQ(7u, used_len);
 
   used_len = 0;
-  EXPECT_FLOAT_EQ(1.234e10f, FXSYS_wcstof(L"1.234E10", 8, &used_len));
+  EXPECT_FLOAT_EQ(1.234e10f, FXSYS_wcstof(L"1.234E10", &used_len));
   EXPECT_EQ(8u, used_len);
 
   used_len = 0;
-  EXPECT_TRUE(isinf(FXSYS_wcstof(L"1.234E100000000000000", 21, &used_len)));
+  EXPECT_TRUE(isinf(FXSYS_wcstof(L"1.234E100000000000000", &used_len)));
   EXPECT_EQ(21u, used_len);
 
   used_len = 0;
-  EXPECT_FLOAT_EQ(0.0f, FXSYS_wcstof(L"1.234E-128", 10, &used_len));
+  EXPECT_FLOAT_EQ(0.0f, FXSYS_wcstof(L"1.234E-128", &used_len));
   EXPECT_EQ(10u, used_len);
 
   // TODO(dsinclair): This should round as per IEEE 64-bit values.
   // EXPECT_EQ(L"123456789.01234567", FXSYS_wcstof(L"123456789.012345678"));
   used_len = 0;
   EXPECT_FLOAT_EQ(123456789.012345678f,
-                  FXSYS_wcstof(L"123456789.012345678", 19, &used_len));
+                  FXSYS_wcstof(L"123456789.012345678", &used_len));
   EXPECT_EQ(19u, used_len);
 
   // TODO(dsinclair): This is spec'd as rounding when > 16 significant digits
@@ -199,25 +199,25 @@ TEST(fxcrt, FXSYS_wcstof) {
   // EXPECT_EQ(100000000000000000, FXSYS_wcstof(L"99999999999999999"));
   used_len = 0;
   EXPECT_FLOAT_EQ(99999999999999999.0f,
-                  FXSYS_wcstof(L"99999999999999999", 17, &used_len));
+                  FXSYS_wcstof(L"99999999999999999", &used_len));
   EXPECT_EQ(17u, used_len);
 
   // For https://crbug.com/pdfium/1217
-  EXPECT_FLOAT_EQ(0.0f, FXSYS_wcstof(L"e76", 3, nullptr));
+  EXPECT_FLOAT_EQ(0.0f, FXSYS_wcstof(L"e76", nullptr));
 
   // Overflow to infinity.
   used_len = 0;
   EXPECT_TRUE(isinf(FXSYS_wcstof(
       L"88888888888888888888888888888888888888888888888888888888888888888888888"
       L"88888888888888888888888888888888888888888888888888888888888",
-      130, &used_len)));
+      &used_len)));
   EXPECT_EQ(130u, used_len);
 
   used_len = 0;
   EXPECT_TRUE(isinf(FXSYS_wcstof(
       L"-8888888888888888888888888888888888888888888888888888888888888888888888"
       L"888888888888888888888888888888888888888888888888888888888888",
-      131, &used_len)));
+      &used_len)));
   EXPECT_EQ(131u, used_len);
 }
 
@@ -228,8 +228,7 @@ TEST(fxcrt, FXSYS_SafeOps) {
   const float fNan = std::numeric_limits<float>::quiet_NaN();
   const float ascending[] = {fMin, 1.0f, 2.0f, fMax, fInf, fNan};
 
-  // TODO(tsepez): make safe.
-  UNSAFE_BUFFERS({
+  UNSAFE_TODO({
     for (size_t i = 0; i < std::size(ascending); ++i) {
       for (size_t j = 0; j < std::size(ascending); ++j) {
         if (i == j) {

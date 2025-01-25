@@ -7,7 +7,7 @@ import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js'
 import {BrowserProxy} from '//resources/cr_components/color_change_listener/browser_proxy.js';
 import type {CrIconButtonElement} from '//resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import {flush} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {LINE_SPACING_EVENT} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import {ToolbarEvent} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import type {ReadAnythingToolbarElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {assertEquals, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 
@@ -28,7 +28,7 @@ suite('LineSpacing', () => {
     const readingMode = new FakeReadingMode();
     chrome.readingMode = readingMode as unknown as typeof chrome.readingMode;
     spacingEmitted = -1;
-    document.addEventListener(LINE_SPACING_EVENT, event => {
+    document.addEventListener(ToolbarEvent.LINE_SPACING, event => {
       spacingEmitted = (event as CustomEvent).detail.data;
     });
     toolbar = document.createElement('read-anything-toolbar');
@@ -55,13 +55,13 @@ suite('LineSpacing', () => {
     });
 
     test('has 3 options', () => {
-      assertEquals(lineSpacingMenuOptions.length, 3);
+      assertEquals(3, lineSpacingMenuOptions.length);
     });
 
     test('first option propagates standard spacing', () => {
       lineSpacingMenuOptions[0]!.click();
 
-      assertEquals(spacingEmitted, chrome.readingMode.standardLineSpacing);
+      assertEquals(chrome.readingMode.standardLineSpacing, spacingEmitted);
       assertEquals(
           chrome.readingMode.lineSpacing,
           chrome.readingMode.standardLineSpacing);
@@ -70,15 +70,15 @@ suite('LineSpacing', () => {
     test('second option propagates loose spacing', () => {
       lineSpacingMenuOptions[1]!.click();
 
-      assertEquals(spacingEmitted, chrome.readingMode.looseLineSpacing);
+      assertEquals(chrome.readingMode.looseLineSpacing, spacingEmitted);
       assertEquals(
-          chrome.readingMode.lineSpacing, chrome.readingMode.looseLineSpacing);
+          chrome.readingMode.looseLineSpacing, chrome.readingMode.lineSpacing);
     });
 
     test('third option propagates very loose spacing', () => {
       lineSpacingMenuOptions[2]!.click();
 
-      assertEquals(spacingEmitted, chrome.readingMode.veryLooseLineSpacing);
+      assertEquals(chrome.readingMode.veryLooseLineSpacing, spacingEmitted);
       assertEquals(
           chrome.readingMode.lineSpacing,
           chrome.readingMode.veryLooseLineSpacing);

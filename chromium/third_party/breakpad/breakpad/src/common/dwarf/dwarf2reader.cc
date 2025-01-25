@@ -463,7 +463,11 @@ uint64_t CompilationUnit::Start() {
   }
 
   // Now that we have our abbreviations, start processing DIE's.
-  ProcessDIEs();
+  if (!ProcessDIEs()) {
+    // If ProcessDIEs fails return 0, ourlength must be non-zero
+    // as it is equal to header_.length + (12 or 4)
+    return 0;
+  }
 
   // If this is a skeleton compilation unit generated with split DWARF,
   // and the client needs the full debug info, we need to find the full
@@ -922,7 +926,7 @@ const uint8_t* CompilationUnit::ProcessDIE(uint64_t dieoffset,
   return start;
 }
 
-void CompilationUnit::ProcessDIEs() {
+bool CompilationUnit::ProcessDIEs() {
   const uint8_t* dieptr = after_header_;
   size_t len;
 
@@ -953,11 +957,19 @@ void CompilationUnit::ProcessDIEs() {
     if (abbrev_num == 0) {
       if (die_stack.size() == 0)
         // If it is padding, then we are done with the compilation unit's DIEs.
-        return;
+        return true;
       const uint64_t offset = die_stack.top();
       die_stack.pop();
       handler_->EndDIE(offset);
       continue;
+    }
+
+    // Abbrev > abbrev_.size() indicates a corruption in the dwarf file.
+    if (abbrev_num > abbrevs_->size()) {
+      fprintf(stderr, "An invalid abbrev was referenced %" PRIu64 " / %zu. "
+              "Stopped procesing following DIEs in this CU.", abbrev_num,
+              abbrevs_->size());
+      return false;
     }
 
     const Abbrev& abbrev = abbrevs_->at(static_cast<size_t>(abbrev_num));
@@ -989,6 +1001,7 @@ void CompilationUnit::ProcessDIEs() {
       handler_->EndDIE(absolute_offset);
     }
   }
+  return true;
 }
 
 // Check for a valid ELF file and return the Address size.

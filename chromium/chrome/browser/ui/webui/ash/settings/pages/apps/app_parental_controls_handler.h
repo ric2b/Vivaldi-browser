@@ -17,11 +17,12 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
 
-class PrefService;
+class Profile;
 
 namespace ash {
 
 namespace on_device_controls {
+class AppControlsNotifier;
 class BlockedAppRegistry;
 }  // namespace on_device_controls
 
@@ -36,11 +37,21 @@ class AppParentalControlsHandler
       public apps::AppRegistryCache::Observer {
  public:
   AppParentalControlsHandler(apps::AppServiceProxy* app_service_proxy,
-                             PrefService* pref_service);
+                             Profile* profile);
   ~AppParentalControlsHandler() override;
 
   // app_parental_controls::mojom::AppParentalControlsHandler:
   void GetApps(GetAppsCallback callback) override;
+  void UpdateApp(const std::string& id, bool is_blocked) override;
+  void AddObserver(mojo::PendingRemote<
+                   app_parental_controls::mojom::AppParentalControlsObserver>
+                       observer) override;
+  void OnControlsDisabled() override;
+  void ValidatePin(const std::string& pin,
+                   ValidatePinCallback callback) override;
+  void SetUpPin(const std::string& pin, SetUpPinCallback callback) override;
+  void VerifyPin(const std::string& pin, VerifyPinCallback callback) override;
+  void IsSetupCompleted(IsSetupCompletedCallback callback) override;
 
   void BindInterface(
       mojo::PendingReceiver<
@@ -48,10 +59,16 @@ class AppParentalControlsHandler
 
  private:
   // apps::AppRegistryCache::Observer:
+  void OnAppUpdate(const apps::AppUpdate& update) override;
   void OnAppRegistryCacheWillBeDestroyed(
       apps::AppRegistryCache* cache) override;
 
   std::vector<app_parental_controls::mojom::AppPtr> GetAppList();
+  void NotifyAppInstalledOrUpdated(app_parental_controls::mojom::AppPtr app);
+  void NotifyAppRemoved(app_parental_controls::mojom::AppPtr app);
+
+  mojo::RemoteSet<app_parental_controls::mojom::AppParentalControlsObserver>
+      observer_list_;
 
   raw_ptr<apps::AppServiceProxy> app_service_proxy_ = nullptr;
 
@@ -59,7 +76,12 @@ class AppParentalControlsHandler
                           apps::AppRegistryCache::Observer>
       app_registry_cache_observer_{this};
 
+  std::unique_ptr<on_device_controls::AppControlsNotifier>
+      app_controls_notifier_;
+
   std::unique_ptr<on_device_controls::BlockedAppRegistry> blocked_app_registry_;
+
+  const raw_ptr<Profile> profile_;
 
   mojo::Receiver<app_parental_controls::mojom::AppParentalControlsHandler>
       receiver_{this};

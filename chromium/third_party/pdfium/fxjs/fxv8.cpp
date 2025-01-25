@@ -6,6 +6,7 @@
 
 #include "fxjs/fxv8.h"
 
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
 #include "v8/include/v8-container.h"
 #include "v8/include/v8-date.h"
@@ -120,12 +121,14 @@ v8::Local<v8::Date> NewDateHelper(v8::Isolate* pIsolate, double d) {
 
 WideString ToWideString(v8::Isolate* pIsolate, v8::Local<v8::String> pValue) {
   v8::String::Utf8Value s(pIsolate, pValue);
-  return WideString::FromUTF8(ByteStringView(*s, s.length()));
+  // SAFETY: required from V8.
+  return WideString::FromUTF8(UNSAFE_BUFFERS(ByteStringView(*s, s.length())));
 }
 
 ByteString ToByteString(v8::Isolate* pIsolate, v8::Local<v8::String> pValue) {
   v8::String::Utf8Value s(pIsolate, pValue);
-  return ByteString(*s, s.length());
+  // SAFETY: required from V8.
+  return UNSAFE_BUFFERS(ByteString(*s, s.length()));
 }
 
 int ReentrantToInt32Helper(v8::Isolate* pIsolate, v8::Local<v8::Value> pValue) {

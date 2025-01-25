@@ -9,8 +9,6 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_cell.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_layout.h"
 
-extern NSString* const kGridOpenTabsSectionIdentifier;
-
 // To ease the use of generics with the diffable data source, define a Snapshot
 // type.
 typedef NSDiffableDataSourceSnapshot<NSString*, GridItemIdentifier*>
@@ -18,13 +16,9 @@ typedef NSDiffableDataSourceSnapshot<NSString*, GridItemIdentifier*>
 typedef UICollectionViewDiffableDataSource<NSString*, GridItemIdentifier*>
     GridDiffableDataSource;
 
-@interface BaseGridViewController (Subclassing) <
-    GridCellDelegate,
-    UICollectionViewDragDelegate,
-    UICollectionViewDelegate,
-    // TODO(crbug.com/40944622): Remove when the compositional layout is fully
-    // landed.
-    UICollectionViewDelegateFlowLayout>
+@interface BaseGridViewController (Subclassing) <GridCellDelegate,
+                                                 UICollectionViewDragDelegate,
+                                                 UICollectionViewDelegate>
 
 // A collection view of items in a grid format.
 @property(nonatomic, weak, readonly) UICollectionView* collectionView;
@@ -42,6 +36,13 @@ typedef UICollectionViewDiffableDataSource<NSString*, GridItemIdentifier*>
 
 // Returns a configured header for the given index path.
 - (UICollectionReusableView*)headerForSectionAtIndexPath:(NSIndexPath*)indexPath
+    NS_REQUIRES_SUPER;
+
+// Returns a configured cell for the given `indexPath` and `itemIdentifier`. The
+// subclass must call super if it can't handle it.
+- (UICollectionViewCell*)cellForItemAtIndexPath:(NSIndexPath*)indexPath
+                                 itemIdentifier:
+                                     (GridItemIdentifier*)itemIdentifier
     NS_REQUIRES_SUPER;
 
 // Updates the ring to be around the currently selected item. If
@@ -64,6 +65,13 @@ typedef UICollectionViewDiffableDataSource<NSString*, GridItemIdentifier*>
 
 // Returns the number of tabs in the collection view.
 - (NSInteger)numberOfTabs;
+
+// Provides an opportunity to the subclasses to add items to `snapshot`.
+- (void)addAdditionalItemsToSnapshot:(GridSnapshot*)snapshot;
+
+// Provides an opportunity to update `snapshot` after an update of the grid's
+// mode.
+- (void)updateSnapshotForModeUpdate:(GridSnapshot*)snapshot;
 
 @end
 

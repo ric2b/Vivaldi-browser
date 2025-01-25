@@ -16,11 +16,11 @@ namespace openscreen::cast {
 // Creates a message that responds to a previous app availability request with
 // ID |request_id| which declares |app_id| to have availability of either
 // available or unavailable respectively.
-ErrorOr<::cast::channel::CastMessage> CreateAppAvailableResponse(
+ErrorOr<proto::CastMessage> CreateAppAvailableResponse(
     int request_id,
     const std::string& sender_id,
     const std::string& app_id);
-ErrorOr<::cast::channel::CastMessage> CreateAppUnavailableResponse(
+ErrorOr<proto::CastMessage> CreateAppUnavailableResponse(
     int request_id,
     const std::string& sender_id,
     const std::string& app_id);

@@ -13,7 +13,7 @@
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "chrome/browser/extensions/extension_view.h"
-#include "content/public/common/input/native_web_keyboard_event.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
 #include "ui/views/controls/webview/webview.h"
@@ -69,9 +69,8 @@ class ExtensionViewViews : public views::WebView,
   void ResizeDueToAutoResize(content::WebContents* web_contents,
                              const gfx::Size& new_size) override;
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
-  bool HandleKeyboardEvent(
-      content::WebContents* source,
-      const content::NativeWebKeyboardEvent& event) override;
+  bool HandleKeyboardEvent(content::WebContents* source,
+                           const input::NativeWebKeyboardEvent& event) override;
   void OnLoaded() override;
 
   // views::WebView:
@@ -89,9 +88,7 @@ class ExtensionViewViews : public views::WebView,
 
   // The container this view is in (not necessarily its direct superview).
   // Note: the view does not own its container.
-  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
-  // #addr-of
-  RAW_PTR_EXCLUSION Container* container_ = nullptr;
+  raw_ptr<Container> container_ = nullptr;
 
   // A handler to handle unhandled keyboard messages coming back from the
   // renderer process.

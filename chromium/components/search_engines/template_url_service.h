@@ -160,16 +160,11 @@ class TemplateURLService final : public WebDataServiceConsumer,
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   );
 
-  // For testing only.
-  // DEPRECATED, prefer the constructor that takes a `PrefService`.
-  // TODO(crbug.com/40287734): Remove once all usage is cleaned up.
-  TemplateURLService(const Initializer* initializers, const size_t count);
-
   // For testing only. `initializers` will be used to simulate having loaded
   // some template URL data.
   explicit TemplateURLService(
-      PrefService* prefs,
-      search_engines::SearchEngineChoiceService* search_engine_choice_service,
+      PrefService& prefs,
+      search_engines::SearchEngineChoiceService& search_engine_choice_service,
       base::span<const TemplateURLService::Initializer> initializers = {});
 
   TemplateURLService(const TemplateURLService&) = delete;
@@ -310,6 +305,9 @@ class TemplateURLService final : public WebDataServiceConsumer,
   // the template URLs for the engines to show. See
   // `search_engines::ChoiceScreenData` for more details.
   std::unique_ptr<search_engines::ChoiceScreenData> GetChoiceScreenData();
+
+  TemplateURLService::TemplateURLVector GetFeaturedEnterpriseSearchEngines()
+      const;
 
 #if BUILDFLAG(IS_ANDROID)
   // Returns the list prepopulated template URLs for `country_code`.

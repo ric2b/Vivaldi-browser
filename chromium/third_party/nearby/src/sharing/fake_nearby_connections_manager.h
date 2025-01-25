@@ -49,6 +49,7 @@ class FakeNearbyConnectionsManager : public NearbyConnectionsManager {
   void StartAdvertising(std::vector<uint8_t> endpoint_info,
                         IncomingConnectionListener* listener,
                         PowerLevel power_level, proto::DataUsage data_usage,
+                        bool use_stable_endpoint_id,
                         ConnectionsCallback callback) override;
   void StopAdvertising(ConnectionsCallback callback) override;
   void StartDiscovery(DiscoveryListener* listener, proto::DataUsage data_usage,
@@ -65,21 +66,15 @@ class FakeNearbyConnectionsManager : public NearbyConnectionsManager {
   void RegisterPayloadStatusListener(
       int64_t payload_id,
       std::weak_ptr<PayloadStatusListener> listener) override;
-  void RegisterPayloadPath(int64_t payload_id,
-                           const std::filesystem::path& file_path,
-                           ConnectionsCallback callback) override;
-  Payload* GetIncomingPayload(int64_t payload_id) override;
+  const Payload* GetIncomingPayload(int64_t payload_id) const override;
   void Cancel(int64_t payload_id) override;
   void ClearIncomingPayloads() override;
   std::optional<std::vector<uint8_t>> GetRawAuthenticationToken(
       absl::string_view endpoint_id) override;
   void UpgradeBandwidth(absl::string_view endpoint_id) override;
   void SetCustomSavePath(absl::string_view custom_save_path) override;
-  absl::flat_hash_set<std::filesystem::path> GetUnknownFilePathsToDelete()
-      override;
   absl::flat_hash_set<std::filesystem::path>
   GetAndClearUnknownFilePathsToDelete() override;
-  void ClearUnknownFilePathsToDelete() override;
 
   // Testing methods
   void SetRawAuthenticationToken(absl::string_view endpoint_id,
@@ -92,12 +87,9 @@ class FakeNearbyConnectionsManager : public NearbyConnectionsManager {
   bool IsAdvertising() const;
   bool IsDiscovering() const;
   bool DidUpgradeBandwidth(absl::string_view endpoint_id) const;
-  void SetPayloadPathStatus(int64_t payload_id, ConnectionsStatus status);
   std::weak_ptr<PayloadStatusListener> GetRegisteredPayloadStatusListener(
       int64_t payload_id);
   void SetIncomingPayload(int64_t payload_id, std::unique_ptr<Payload> payload);
-  std::optional<std::filesystem::path> GetRegisteredPayloadPath(
-      int64_t payload_id);
   bool WasPayloadCanceled(int64_t payload_id) const;
   void CleanupForProcessStopped();
   ConnectionsCallback GetStartAdvertisingCallback();
@@ -140,6 +132,8 @@ class FakeNearbyConnectionsManager : public NearbyConnectionsManager {
     return !incoming_payloads_.empty();
   }
 
+  absl::flat_hash_set<std::filesystem::path>
+  GetUnknownFilePathsToDeleteForTesting();
   void AddUnknownFilePathsToDeleteForTesting(std::filesystem::path file_path);
 
  private:
@@ -175,13 +169,11 @@ class FakeNearbyConnectionsManager : public NearbyConnectionsManager {
   // Maps endpoint_id to endpoint_info.
   std::map<std::string, std::vector<uint8_t>> connection_endpoint_infos_;
 
-  std::map<int64_t, ConnectionsStatus> payload_path_status_;
   std::map<int64_t, std::weak_ptr<PayloadStatusListener>>
       payload_status_listeners_;
-  absl::Mutex incoming_payloads_mutex_;
+  mutable absl::Mutex incoming_payloads_mutex_;
   std::map<int64_t, std::unique_ptr<Payload>> incoming_payloads_
       ABSL_GUARDED_BY(incoming_payloads_mutex_);
-  std::map<int64_t, std::filesystem::path> registered_payload_paths_;
   absl::flat_hash_set<std::filesystem::path> file_paths_to_delete_;
   std::string Dump() const override;
 };

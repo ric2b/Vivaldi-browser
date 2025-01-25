@@ -75,7 +75,7 @@ bool ContactTable::CreateContactTable() {
       "last_modified INTEGER"
       ")");
 
-  bool res = GetDB().Execute(sql.c_str());
+  bool res = GetDB().Execute(sql);
 
   return res;
 }

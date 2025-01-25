@@ -107,4 +107,19 @@ public interface WebSettingsBoundaryInterface {
     int getWebViewMediaIntegrityApiDefaultStatus();
 
     Map<String, @WebViewMediaIntegrityApiStatus Integer> getWebViewMediaIntegrityApiOverrideRules();
+
+    @Retention(RetentionPolicy.SOURCE)
+    @interface SpeculativeLoadingStatus {
+        int DISABLED = 0;
+        int PRERENDER_ENABLED = 1;
+    }
+
+    void setSpeculativeLoadingStatus(@SpeculativeLoadingStatus int speculativeLoadingStatus);
+
+    @SpeculativeLoadingStatus
+    int getSpeculativeLoadingStatus();
+
+    void setBackForwardCacheEnabled(boolean backForwardCacheEnabled);
+
+    boolean getBackForwardCacheEnabled();
 }

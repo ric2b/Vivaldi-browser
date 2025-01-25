@@ -198,6 +198,12 @@ export class SettingsSecurityPageElement extends
         },
       },
 
+      hideExtendedReportingRadioButton_: {
+        type: Boolean,
+        value: () =>
+            loadTimeData.getBoolean('extendedReportingRemovePrefDependency'),
+      },
+
       showDisableSafebrowsingDialog_: Boolean,
 
       /**
@@ -249,6 +255,7 @@ export class SettingsSecurityPageElement extends
   private safeBrowsingStateOnOpen_: SafeBrowsingSetting;
   private isRouteSecurity_: boolean;
   private eventTracker_: EventTracker = new EventTracker();
+  private hideExtendedReportingRadioButton_: boolean;
 
   private browserProxy_: PrivacyPageBrowserProxy =
       PrivacyPageBrowserProxyImpl.getInstance();
@@ -532,11 +539,10 @@ export class SettingsSecurityPageElement extends
   }
 
   private onNewManageCertificatesClick_() {
-    // Use the same route and histogram as the old NSS-only cert management
-    // page.
-    Router.getInstance().navigateTo(routes.CERTIFICATES);
     this.metricsBrowserProxy_.recordSettingsPageHistogram(
         PrivacyElementInteractions.MANAGE_CERTIFICATES);
+    OpenWindowProxyImpl.getInstance().openUrl(
+        loadTimeData.getString('certManagementV2URL'));
   }
 
   private onChromeCertificatesClick_() {

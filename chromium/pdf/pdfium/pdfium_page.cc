@@ -265,7 +265,8 @@ AccessibilityTextStyleInfo CalculateTextRunStyleInfo(FPDF_TEXTPAGE text_page,
     style_info.stroke_color = MakeARGB(0xff, 0, 0, 0);
   }
 
-  int render_mode = FPDFText_GetTextRenderMode(text_page, char_index);
+  FPDF_PAGEOBJECT text_object = FPDFText_GetTextObject(text_page, char_index);
+  int render_mode = FPDFTextObj_GetTextRenderMode(text_object);
   DCHECK_GE(render_mode,
             static_cast<int>(AccessibilityTextRenderMode::kUnknown));
   DCHECK_LE(render_mode,
@@ -779,8 +780,9 @@ std::vector<AccessibilityImageInfo> PDFiumPage::GetImageInfo(
 
 SkBitmap PDFiumPage::GetImageForOcr(int page_object_index) {
   FPDF_PAGE page = GetPage();
+  FPDF_PAGEOBJECT page_object = FPDFPage_GetObject(page, page_object_index);
   SkBitmap bitmap =
-      ::chrome_pdf::GetImageForOcr(engine_->doc(), page, page_object_index);
+      ::chrome_pdf::GetImageForOcr(engine_->doc(), page, page_object);
 
   SkBitmapOperations::RotationAmount rotation;
   switch (FPDFPage_GetRotation(page)) {
@@ -797,11 +799,6 @@ SkBitmap PDFiumPage::GetImageForOcr(int page_object_index) {
       break;
   }
 
-  // TODO(crbug/40068467): Currently, `::chrome_pdf::GetImageForOcr` returns the
-  // full image stored in the PDF without applying the transformation matrix. To
-  // ensure the image sent to OCR matches how users view it on the browser,
-  // rotate the bitmap by the page's rotation. We may also need to consider the
-  // transformation of the image.
   return SkBitmapOperations::Rotate(bitmap, rotation);
 }
 

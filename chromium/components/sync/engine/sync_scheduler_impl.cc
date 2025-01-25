@@ -45,7 +45,7 @@ bool IsConfigRelatedUpdateOriginValue(
     case sync_pb::SyncEnums::RETRY:
       return false;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -70,7 +70,7 @@ bool ShouldRequestEarlyExit(const SyncProtocolError& error) {
       return true;
     case CONFLICT:
     case INVALID_MESSAGE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
   return false;
@@ -89,16 +89,13 @@ SyncSchedulerImpl::SyncSchedulerImpl(
     std::unique_ptr<BackoffDelayProvider> delay_provider,
     SyncCycleContext* context,
     std::unique_ptr<Syncer> syncer,
-    bool ignore_auth_credentials,
-    bool sync_poll_immediately_on_every_startup)
+    bool ignore_auth_credentials)
     : name_(name),
       syncer_poll_interval_(context->poll_interval()),
       delay_provider_(std::move(delay_provider)),
       syncer_(std::move(syncer)),
       cycle_context_(context),
-      ignore_auth_credentials_(ignore_auth_credentials),
-      sync_poll_immediately_on_every_startup_(
-          sync_poll_immediately_on_every_startup) {}
+      ignore_auth_credentials_(ignore_auth_credentials) {}
 
 SyncSchedulerImpl::~SyncSchedulerImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -166,15 +163,7 @@ void SyncSchedulerImpl::Start(Mode mode, base::Time last_poll_time) {
 
   // Only adjust the poll reset time if the last poll is valid and in the past.
   if (!last_poll_time.is_null() && last_poll_time <= now) {
-    last_poll_reset_time_ =
-        ComputeLastPollOnStart(last_poll_time, GetPollInterval(), now,
-                               sync_poll_immediately_on_every_startup_);
-
-    // Convert from base::Time (used for persisting) to base::TimeTicks (used
-    // for scheduling). Note that TimeTicks values are not safe to persist, and
-    // may "pause" while the device is suspended.
-    base::TimeDelta time_since_last_poll = now - last_poll_reset_time_;
-    last_poll_reset_ticks_ = TimeTicks::Now() - time_since_last_poll;
+    last_poll_reset_time_ = last_poll_time;
   }
 
   if (old_mode != mode_ && mode_ == NORMAL_MODE) {
@@ -190,20 +179,6 @@ void SyncSchedulerImpl::Start(Mode mode, base::Time last_poll_time) {
       TrySyncCycleJob(RespectGlobalBackoff(true));
     }
   }
-}
-
-// static
-base::Time SyncSchedulerImpl::ComputeLastPollOnStart(
-    base::Time last_poll,
-    base::TimeDelta poll_interval,
-    base::Time now,
-    bool sync_poll_immediately_on_every_startup) {
-  if (sync_poll_immediately_on_every_startup) {
-    // Hack: Pretend the last poll happened sufficiently long ago to trigger a
-    // poll.
-    return now - (poll_interval + base::Seconds(1));
-  }
-  return last_poll;
 }
 
 ModelTypeSet SyncSchedulerImpl::GetEnabledAndUnblockedTypes() {
@@ -384,7 +359,7 @@ const char* SyncSchedulerImpl::GetModeString(SyncScheduler::Mode mode) {
     case NORMAL_MODE:
       return "NORMAL_MODE";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return "";
 }
 
@@ -431,9 +406,7 @@ void SyncSchedulerImpl::DoNudgeSyncCycleJob() {
 
     // The poll timer may need to be restarted, in case it fired while the
     // scheduler was in an error state, ignoring the poll.
-    // Note: At most one of the two poll timers can be running (which one
-    // depends on the state of kSyncSchedulerUseWallClockTimer).
-    if (!poll_timer_ticks_.IsRunning() && !poll_timer_wall_.IsRunning()) {
+    if (!poll_timer_.IsRunning()) {
       SDVLOG(1) << "Job succeeded, restarting polling.";
       AdjustPolling(UPDATE_INTERVAL);
     }
@@ -531,7 +504,6 @@ void SyncSchedulerImpl::AdjustPolling(PollAdjustType type) {
     return;
 
   const base::Time now = base::Time::Now();
-  const base::TimeTicks now_ticks = base::TimeTicks::Now();
 
   switch (type) {
     case UPDATE_INTERVAL:
@@ -539,46 +511,24 @@ void SyncSchedulerImpl::AdjustPolling(PollAdjustType type) {
         // There was no previous poll. Treat this as if a poll had just been
         // completed.
         last_poll_reset_time_ = now;
-        last_poll_reset_ticks_ = now_ticks;
       }
       break;
     case FORCE_RESET:
       // Just restart the timer.
       last_poll_reset_time_ = now;
-      last_poll_reset_ticks_ = now_ticks;
       break;
   }
 
-  if (base::FeatureList::IsEnabled(kSyncSchedulerUseWallClockTimer)) {
-    base::Time new_poll_time = last_poll_reset_time_ + GetPollInterval();
-    if (new_poll_time < now) {
-      new_poll_time = now;
-    }
-    SDVLOG(1) << "Scheduling a poll in " << (new_poll_time - now).InMinutes()
-              << " minutes.";
-
-    // Adjust poll rate. Start will reset the timer if it was already running.
-    poll_timer_wall_.Start(FROM_HERE, new_poll_time, this,
-                           &SyncSchedulerImpl::PollTimerCallback);
-  } else {
-    const base::TimeTicks new_poll_time =
-        last_poll_reset_ticks_ + GetPollInterval();
-    base::TimeDelta poll_delay = new_poll_time - now_ticks;
-
-    if (poll_delay.is_negative()) {
-      // The desired poll time was in the past, so trigger a poll now (the
-      // timer will post the task asynchronously, so re-entrancy isn't an
-      // issue).
-      poll_delay = base::TimeDelta();
-    }
-
-    SDVLOG(1) << "Scheduling a poll in " << poll_delay.InMinutes()
-              << " minutes.";
-
-    // Adjust poll rate. Start will reset the timer if it was already running.
-    poll_timer_ticks_.Start(FROM_HERE, poll_delay, this,
-                            &SyncSchedulerImpl::PollTimerCallback);
+  base::Time new_poll_time = last_poll_reset_time_ + GetPollInterval();
+  if (new_poll_time < now) {
+    new_poll_time = now;
   }
+  SDVLOG(1) << "Scheduling a poll in " << (new_poll_time - now).InMinutes()
+            << " minutes.";
+
+  // Adjust poll rate. Start will reset the timer if it was already running.
+  poll_timer_.Start(FROM_HERE, new_poll_time, this,
+                    &SyncSchedulerImpl::PollTimerCallback);
 }
 
 void SyncSchedulerImpl::RestartWaiting() {
@@ -633,12 +583,12 @@ void SyncSchedulerImpl::Stop() {
   weak_ptr_factory_.InvalidateWeakPtrs();
   wait_interval_.reset();
   NotifyRetryTime(base::Time());
-  poll_timer_ticks_.Stop();
-  poll_timer_wall_.Stop();
+  poll_timer_.Stop();
   pending_wakeup_timer_.Stop();
   pending_configure_params_.reset();
-  if (started_)
+  if (started_) {
     started_ = false;
+  }
 }
 
 void SyncSchedulerImpl::TrySyncCycleJob(RespectGlobalBackoff respect_backoff) {
@@ -668,9 +618,7 @@ void SyncSchedulerImpl::TrySyncCycleJobImpl(
       // Most likely this was called from PollTimerCallback(), but it's also
       // possible that the poll was triggered earlier while the scheduler was
       // in an error state, and now it has exited the error state.
-      // Note: At most one of the two poll timers can be running (which one
-      // depends on the state of kSyncSchedulerUseWallClockTimer).
-      if (!poll_timer_ticks_.IsRunning() && !poll_timer_wall_.IsRunning()) {
+      if (!poll_timer_.IsRunning()) {
         SDVLOG(2) << "Found pending poll";
         DoPollSyncCycleJob();
       }

@@ -116,7 +116,7 @@ message SuspendDone {
 
 // Included in calls to powerd's RegisterSuspendDelay method.
 message RegisterSuspendDelayRequest {
-  // Next ID to use: 3
+  // Next ID to use: 4
 
   // Upper bound on the amount of time that the power manager will wait for this
   // client to call HandleSuspendReadiness before suspending the system, as
@@ -127,6 +127,10 @@ message RegisterSuspendDelayRequest {
   // Human-readable description of the delay's purpose (e.g. the name of
   // the daemon that requested the delay). Only used for debugging.
   optional string description = 2;
+
+  // Specifies whether the delay is applicable during key eviction. If false
+  // the delay is ignored when the device key is evicted.
+  optional bool applicable_during_key_eviction = 3;
 }
 
 // Included in responses to powerd's RegisterSuspendDelay method.

@@ -102,7 +102,7 @@ TEST_F(PasswordsGrouperTest, GetAllCredentials) {
   federated_form.signon_realm = "federation://test.com/accounts.federation.com";
   federated_form.username_value = u"username2";
   federated_form.federation_origin =
-      url::Origin::Create(GURL("https://test.com"));
+      url::SchemeHostPort(GURL("https://test.com"));
 
   GroupedFacets group;
   group.facets = {
@@ -112,14 +112,19 @@ TEST_F(PasswordsGrouperTest, GetAllCredentials) {
           base::test::RunOnceCallbackRepeatedly<1>(std::vector<GroupedFacets>{
               std::move(group), GetSingleGroupForForm(form)}));
 
-  PasskeyCredential passkey = CreatePasskey("test.com");
-  grouper().GroupCredentials({form, blocked_form, federated_form}, {passkey},
-                             base::DoNothing());
+  // These passkeys should be sorted by username and thus should be in the order
+  // 3, 1, 2 in the output.
+  PasskeyCredential passkey1 = CreatePasskey("test.com", "username1");
+  PasskeyCredential passkey2 = CreatePasskey("test.com", "username2");
+  PasskeyCredential passkey3 = CreatePasskey("test.com", "username0");
+  grouper().GroupCredentials({form, blocked_form, federated_form},
+                             {passkey1, passkey2, passkey3}, base::DoNothing());
 
-  EXPECT_THAT(grouper().GetAllCredentials(),
-              UnorderedElementsAre(CredentialUIEntry(form),
-                                   CredentialUIEntry(federated_form),
-                                   CredentialUIEntry(passkey)));
+  EXPECT_THAT(
+      grouper().GetAllCredentials(),
+      ElementsAre(CredentialUIEntry(form), CredentialUIEntry(federated_form),
+                  CredentialUIEntry(passkey3), CredentialUIEntry(passkey1),
+                  CredentialUIEntry(passkey2)));
 }
 
 TEST_F(PasswordsGrouperTest, GetPasskeyFor) {
@@ -173,7 +178,7 @@ TEST_F(PasswordsGrouperTest, GetAffiliatedGroupsWithGroupingInfo) {
   federated_form.signon_realm = "federation://test.com/accounts.federation.com";
   federated_form.username_value = u"username2";
   federated_form.federation_origin =
-      url::Origin::Create(GURL("https://accounts.federation.com"));
+      url::SchemeHostPort(GURL("https://accounts.federation.com"));
 
   std::vector<FacetURI> facets = {
       FacetURI::FromPotentiallyInvalidSpec(form.signon_realm),
@@ -219,7 +224,7 @@ TEST_F(PasswordsGrouperTest, GroupPasswords) {
   federated_form.signon_realm = "federation://test.com/accounts.federation.com";
   federated_form.username_value = u"username2";
   federated_form.federation_origin =
-      url::Origin::Create(GURL("https://accounts.federation.com"));
+      url::SchemeHostPort(GURL("https://accounts.federation.com"));
 
   GroupedFacets group;
   group.facets = {
@@ -263,7 +268,7 @@ TEST_F(PasswordsGrouperTest, GroupCredentialsWithoutAffiliation) {
   federated_form.signon_realm = "federation://test.com/accounts.federation.com";
   federated_form.username_value = u"username2";
   federated_form.federation_origin =
-      url::Origin::Create(GURL("https://accounts.federation.com"));
+      url::SchemeHostPort(GURL("https://accounts.federation.com"));
 
   GroupedFacets federated_group;
   federated_group.facets = {
@@ -316,7 +321,7 @@ TEST_F(PasswordsGrouperTest, FederatedCredentialsGroupedWithRegular) {
   federated_form.signon_realm = "federation://test.com/accounts.federation.com";
   federated_form.username_value = u"username2";
   federated_form.federation_origin =
-      url::Origin::Create(GURL("https://accounts.federation.com"));
+      url::SchemeHostPort(GURL("https://accounts.federation.com"));
 
   EXPECT_CALL(affiliation_service(), GetGroupingInfo)
       .WillRepeatedly(base::test::RunOnceCallbackRepeatedly<1>(
@@ -333,18 +338,24 @@ TEST_F(PasswordsGrouperTest, FederatedCredentialsGroupedWithRegular) {
 
 TEST_F(PasswordsGrouperTest, PasskeysGroupedWithPasswords) {
   PasswordForm form = CreateForm("https://test.com/");
-  PasskeyCredential passkey = CreatePasskey("test.com");
+  // These passkeys should be sorted by username and thus should be in the order
+  // 3, 1, 2 in the output.
+  PasskeyCredential passkey1 = CreatePasskey("test.com", "username1");
+  PasskeyCredential passkey2 = CreatePasskey("test.com", "username2");
+  PasskeyCredential passkey3 = CreatePasskey("test.com", "username0");
 
   EXPECT_CALL(affiliation_service(), GetGroupingInfo)
       .WillRepeatedly(base::test::RunOnceCallbackRepeatedly<1>(
           std::vector<GroupedFacets>{GetSingleGroupForForm(form)}));
-  grouper().GroupCredentials({form}, {passkey}, base::DoNothing());
+  grouper().GroupCredentials({form}, {passkey1, passkey2, passkey3},
+                             base::DoNothing());
 
   CredentialUIEntry credential(form);
-  EXPECT_THAT(
-      grouper().GetAffiliatedGroupsWithGroupingInfo(),
-      ElementsAre(AffiliatedGroup({credential, CredentialUIEntry(passkey)},
-                                  {GetDefaultBrandingInfo(credential)})));
+  EXPECT_THAT(grouper().GetAffiliatedGroupsWithGroupingInfo(),
+              ElementsAre(AffiliatedGroup(
+                  {credential, CredentialUIEntry(passkey3),
+                   CredentialUIEntry(passkey1), CredentialUIEntry(passkey2)},
+                  {GetDefaultBrandingInfo(credential)})));
 }
 
 TEST_F(PasswordsGrouperTest, GroupsWithMatchingMainDomainsMerged) {
@@ -459,7 +470,7 @@ TEST_F(PasswordsGrouperTest, FederatedAndroidAppGroupedWithRegularPasswords) {
   federated_android_form.username_value = u"test@gmail.com";
   federated_android_form.url = GURL(federated_android_form.signon_realm);
   federated_android_form.federation_origin =
-      url::Origin::Create(GURL(u"https://federatedOrigin.com"));
+      url::SchemeHostPort(GURL(u"https://federatedOrigin.com"));
 
   GroupedFacets group;
   group.facets = {
@@ -495,7 +506,7 @@ TEST_F(PasswordsGrouperTest, EncodedCharactersInSignonRealm) {
   federated_form.signon_realm = "federation://test.com/accounts.federation.com";
   federated_form.username_value = u"username2";
   federated_form.federation_origin =
-      url::Origin::Create(GURL("https://accounts.federation.com"));
+      url::SchemeHostPort(GURL("https://accounts.federation.com"));
 
   GroupedFacets group;
   // Group them only by TLD.

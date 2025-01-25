@@ -20,6 +20,9 @@ BASE_DECLARE_FEATURE(kEnableProfileTokenManagement);
 // Controls whether OIDC-response profile management is enabled.
 BASE_DECLARE_FEATURE(kOidcAuthProfileManagement);
 
+// Controls whether the generic OIDC-response profile management is enabled.
+BASE_DECLARE_FEATURE(kEnableGenericOidcAuthProfileManagement);
+
 // Oidc authentication related feature params.
 extern const base::FeatureParam<std::string> kOidcAuthStubDmToken;
 extern const base::FeatureParam<std::string> kOidcAuthStubProfileId;
@@ -27,6 +30,8 @@ extern const base::FeatureParam<std::string> kOidcAuthStubClientId;
 extern const base::FeatureParam<std::string> kOidcAuthStubUserName;
 extern const base::FeatureParam<std::string> kOidcAuthStubUserEmail;
 extern const base::FeatureParam<bool> kOidcAuthIsDasherBased;
+extern const base::FeatureParam<bool> kOidcAuthForceErrorUi;
+extern const base::FeatureParam<bool> kOidcAuthForceTimeoutUi;
 
 }  // namespace profile_management::features
 

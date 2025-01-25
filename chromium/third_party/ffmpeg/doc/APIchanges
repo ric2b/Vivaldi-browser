@@ -2,6 +2,18 @@ The last version increases of all libraries were on 2024-03-07
 
 API changes, most recent first:
 
+2024-05-xx - xxxxxxxxxx - lavu 59.19.100 - hwcontext_qsv.h
+  Add AVQSVFramesContext.info
+
+2024-05-10 - xxxxxxxxx - lavu 59.18.100 - cpu.h
+  Add AV_CPU_FLAG_RV_ZVBB.
+
+2024-05-04 - xxxxxxxxxx - lavu 59.17.100 - opt.h
+  Add AV_OPT_TYPE_UINT and av_opt_eval_uint().
+
+2024-04-24 - 8616cfe0890 - lavu 59.16.100 - opt.h
+  Add AV_OPT_SERIALIZE_SEARCH_CHILDREN.
+
 2024-04-11 - xxxxxxxxxx - lavc 61.5.102 - avcodec.h
   AVCodecContext.decoded_side_data may now be set by libavcodec after
   calling avcodec_open2().

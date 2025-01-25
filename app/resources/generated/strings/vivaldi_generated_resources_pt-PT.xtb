@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Aplicar</translation>
 <translation id="1603914832182249871">(Modo Privado)</translation>
 <translation id="1627276047960621195">Descritores de ficheiros</translation>
+<translation id="1654713139320245449">Não foi encontrado nenhum destino de transmissão. Precisa de ajuda?</translation>
 <translation id="166278006618318542">Algoritmo da chave pública do sujeito</translation>
 <translation id="1682548588986054654">Nova janela privada</translation>
 <translation id="1708338024780164500">(Inativa)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Outro programa do computador adicionou uma extensão que pode alterar o funcionamento do Vivaldi.</translation>
 <translation id="2443487764245141020">Alguns websites também podem precisar de um identificador para reconhecer o seu equipamento</translation>
 <translation id="2445081178310039857">É necessário o directório de raiz da extensão.</translation>
-<translation id="2470702053775288986">Extensões não suportadas desativadas</translation>
 <translation id="2485422356828889247">Desinstalar</translation>
 <translation id="2498539833203011245">Minimizar</translation>
 <translation id="2509495747794740764">O valor de dimensionamento tem de ser um número entre 10 e 200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Detalhes</translation>
 <translation id="4345587454538109430">Configurar...</translation>
 <translation id="4348766275249686434">Recolher erros</translation>
-<translation id="4363771538994847871">Não foi encontrado nenhum destino para transmissão. Precisa de ajuda?</translation>
 <translation id="4384652540891215547">Ativar a extensão</translation>
 <translation id="4394049700291259645">Desactivar</translation>
 <translation id="4409697491990005945">Margens</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Disposição</translation>
 <translation id="7782102568078991263">Não obter mais sugestões da Google</translation>
 <translation id="7786889348652477777">&amp;Recarregar aplicação</translation>
-<translation id="7791543448312431591">Adicionar</translation>
 <translation id="7800518121066352902">Rodar para a &amp;Esquerda</translation>
 <translation id="7814458197256864873">&amp;Copiar</translation>
 <translation id="7818135753970109980">Novo tema adicionado (<ph name="EXTENSION_NAME" />)</translation>

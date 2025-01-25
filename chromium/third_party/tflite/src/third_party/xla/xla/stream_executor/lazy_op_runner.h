@@ -26,9 +26,9 @@ limitations under the License.
 #include "absl/base/call_once.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "xla/stream_executor/blas.h"
 #include "xla/stream_executor/dnn.h"
 #include "xla/stream_executor/stream.h"
+#include "xla/stream_executor/stream_executor.h"
 #include "tsl/platform/statusor.h"
 #include "tsl/protobuf/dnn.pb.h"
 
@@ -66,7 +66,7 @@ inline absl::StatusOr<DnnSupport*> GetDnnFromStream(Stream* stream) {
 //   struct Config;
 //
 //   // Use a StreamExecutor to create an OpRunner.
-//   static StatusOr<OpRunner<Config>> OpRunnerFromDesc(
+//   static absl::StatusOr<OpRunner<Config>> OpRunnerFromDesc(
 //       const AlgorithmDesc& desc, Config config, StreamExecutor* stream);
 // };
 template <typename Op>
@@ -329,6 +329,7 @@ struct FusedMHABackwardOp {
     std::optional<double> dropout_rate;
     std::optional<int64_t> seed;
     FMHAMaskKind mask_type;
+    bool force_deterministic;
   };
 
   static absl::StatusOr<
@@ -345,7 +346,7 @@ struct FusedMHABackwardOp {
         config.d_bmm2_rhs_descriptor, config.d_s_descriptor,
         config.d_bias_descriptor, config.fwd_output_descriptor,
         config.bias_descriptor, config.scale, config.dropout_rate, config.seed,
-        config.mask_type);
+        config.mask_type, config.force_deterministic);
   }
 };
 

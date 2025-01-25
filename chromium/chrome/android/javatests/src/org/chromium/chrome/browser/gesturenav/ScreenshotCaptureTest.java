@@ -25,7 +25,9 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.blink_public.common.BlinkFeatures;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -50,7 +52,8 @@ import java.util.concurrent.TimeoutException;
     "hide-scrollbars",
     "enable-features=" + BlinkFeatures.BACK_FORWARD_TRANSITIONS
 })
-@DoNotBatch(reason = "Test")
+@DoNotBatch(reason = "Affect nav settings")
+@EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
 public class ScreenshotCaptureTest {
     @Rule
     public final SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
@@ -61,7 +64,7 @@ public class ScreenshotCaptureTest {
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus()
-                    .setRevision(1)
+                    .setRevision(2)
                     .setBugComponent(RenderTestRule.Component.UI_BROWSER_NAVIGATION_GESTURENAV)
                     .build();
 
@@ -128,7 +131,7 @@ public class ScreenshotCaptureTest {
         mScreenshotCaptureTestHelper.setNavScreenshotCallbackForTesting(
                 new ScreenshotCaptureTestHelper.NavScreenshotCallback() {
                     @Override
-                    public void onAvailable(int navIndex, Bitmap bitmap, boolean requested) {
+                    public Bitmap onAvailable(int navIndex, Bitmap bitmap, boolean requested) {
                         Assert.assertEquals(
                                 "Should capture the screenshot of the previous page.",
                                 currentNavIndex,
@@ -136,12 +139,13 @@ public class ScreenshotCaptureTest {
                         Assert.assertTrue(requested);
                         mCapturedBitmap = bitmap;
                         callbackHelper.notifyCalled();
+                        return null;
                     }
                 });
 
         mActivityTestRule.loadUrl(mTestServer.getURL(TEST_PAGE));
 
-        callbackHelper.waitForFirst();
+        callbackHelper.waitForOnly();
         mRenderTestRule.compareForResult(mCapturedBitmap, "navigate_away_from_ntp_to_normal_page");
     }
 
@@ -167,7 +171,7 @@ public class ScreenshotCaptureTest {
         mScreenshotCaptureTestHelper.setNavScreenshotCallbackForTesting(
                 new ScreenshotCaptureTestHelper.NavScreenshotCallback() {
                     @Override
-                    public void onAvailable(int navIndex, Bitmap bitmap, boolean requested) {
+                    public Bitmap onAvailable(int navIndex, Bitmap bitmap, boolean requested) {
                         Assert.assertEquals(
                                 "Should capture the screenshot of the previous page.",
                                 currentNavIndex,
@@ -175,12 +179,13 @@ public class ScreenshotCaptureTest {
                         Assert.assertTrue(requested);
                         mCapturedBitmap = bitmap;
                         callbackHelper.notifyCalled();
+                        return null;
                     }
                 });
 
         mActivityTestRule.loadUrl(UrlConstants.GPU_URL);
 
-        callbackHelper.waitForFirst();
+        callbackHelper.waitForOnly();
         mRenderTestRule.compareForResult(mCapturedBitmap, "navigate_away_from_ntp_to_webui_page");
     }
 
@@ -205,7 +210,7 @@ public class ScreenshotCaptureTest {
         mScreenshotCaptureTestHelper.setNavScreenshotCallbackForTesting(
                 new ScreenshotCaptureTestHelper.NavScreenshotCallback() {
                     @Override
-                    public void onAvailable(int navIndex, Bitmap bitmap, boolean requested) {
+                    public Bitmap onAvailable(int navIndex, Bitmap bitmap, boolean requested) {
                         Assert.assertEquals(
                                 "Should attempt to capture the screenshot of the previous page.",
                                 currentNavIndex,
@@ -213,10 +218,11 @@ public class ScreenshotCaptureTest {
                         Assert.assertFalse("No screenshot should be captured", requested);
                         Assert.assertNull("No screenshot should be captured", bitmap);
                         callbackHelper.notifyCalled();
+                        return null;
                     }
                 });
 
         mActivityTestRule.loadUrl(mTestServer.getURL(TEST_PAGE_2));
-        callbackHelper.waitForFirst();
+        callbackHelper.waitForOnly();
     }
 }

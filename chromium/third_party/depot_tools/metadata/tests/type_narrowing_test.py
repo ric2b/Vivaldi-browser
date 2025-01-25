@@ -28,9 +28,11 @@ class FieldValidationTest(unittest.TestCase):
         def expect(value: str, expected_value: Any, reason: str):
             output = field.narrow_type(value)
             self.assertEqual(
-                output, expected_value,
+                output,
+                expected_value,
                 f'Field "{field.get_name()}" should {reason}. Input value'
-                f' was: "{value}", but got coerced into {repr(output)}')
+                f' was: "{value}", but got coerced into {repr(output)}',
+            )
 
         return expect
 
@@ -49,17 +51,25 @@ class FieldValidationTest(unittest.TestCase):
         expect("", None, "treat empty string as None")
         expect("https://example.com/", ["https://example.com/"],
                "return valid url")
-        expect("https://example.com/,\nhttps://example2.com/",
-               ["https://example.com/", "https://example2.com/"],
-               "return multiple valid urls")
+        expect(
+            "https://example.com/,\nhttps://example2.com/",
+            ["https://example.com/", "https://example2.com/"],
+            "return multiple valid urls",
+        )
         expect("file://test", [], "reject unsupported scheme")
-        expect("file://test,\nhttps://example.com", ["https://example.com"],
-               "reject unsupported scheme")
+        expect(
+            "file://test,\nhttps://example.com",
+            ["https://example.com"],
+            "reject unsupported scheme",
+        )
         expect("HTTPS://example.com", ["https://example.com"],
                "canonicalize url")
         expect("http", [], "reject invalid url")
-        expect("This is the canonical repo.", None,
-               "understand the this repo is canonical message")
+        expect(
+            "This is the canonical repo.",
+            None,
+            "understand the this repo is canonical message",
+        )
 
     def test_version(self):
         expect = self._test_on_field(fields.VERSION)
@@ -80,8 +90,10 @@ class FieldValidationTest(unittest.TestCase):
                "accepts ISO 8601 date time")
         expect("Jan 2 2024", "2024-01-02", "accepts locale format")
         expect(
-            "02/03/2000", "2000-03-02",
-            "accepts ambiguous MM/DD format (better than no date info at all)")
+            "02/03/2000",
+            "2000-03-02",
+            "accepts ambiguous MM/DD format (better than no date info at all)",
+        )
         expect("11/30/2000", "2000-11-30", "accepts unambiguous MM/DD format")
 
     def test_revision(self):
@@ -92,6 +104,24 @@ class FieldValidationTest(unittest.TestCase):
         expect("see deps", None, "treat invalid value as None")
         expect("N/A", None, "N/A is treated as None")
         expect("Not applicable.", None, "N/A is treated as None")
+        expect("invalid", None, "treat invalid hex as None")
+        expect("123456", None, "treat too short hex as None")
+        expect(
+            "0123456789abcdef0123456789abcdef01234567abcabc",
+            None,
+            "treat long hex (>40) as None",
+        )
+        expect("varies", None, "treat varies as None")
+        expect("see deps", None, "treat see deps as None")
+        expect("N/A", None, "treat N/A as None")
+        expect("Not applicable.", None, "treat 'Not applicable.' as None")
+        expect("Head", None, "treat 'Head' as None")
+        expect("abcdef1", "abcdef1", "leave valid hex unchanged")
+        expect(
+            "abcdef1abcdef1",
+            "abcdef1abcdef1",
+            "leave valid hex unchanged if between 7-40 chars",
+        )
 
     def test_license(self):
         expect = self._test_on_field(fields.LICENSE)
@@ -157,8 +187,11 @@ class FieldValidationTest(unittest.TestCase):
         expect("(none)", False, "understands none")
         expect("not applicable", False, "understands N/A")
         expect("", False, "treat empty string as False")
-        expect("modified X file", "modified X file",
-               "return value as-is if it doesn't mean no modification")
+        expect(
+            "modified X file",
+            "modified X file",
+            "return value as-is if it doesn't mean no modification",
+        )
 
     def test_dependency_data_return_as_property(self):
         dm = DependencyMetadata()

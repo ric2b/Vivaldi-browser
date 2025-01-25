@@ -4,6 +4,7 @@
 
 #include "public/fpdf_annot.h"
 
+#include <array>
 #include <memory>
 #include <sstream>
 #include <utility>
@@ -303,25 +304,42 @@ CPDF_FormField* GetFormField(FPDF_FORMHANDLE hHandle, FPDF_ANNOTATION annot) {
   return pPDFForm->GetFieldByDict(pAnnotDict);
 }
 
-const CPDFSDK_Widget* GetRadioButtonOrCheckBoxWidget(FPDF_FORMHANDLE hHandle,
-                                                     FPDF_ANNOTATION annot) {
-  const CPDF_Dictionary* pAnnotDict = GetAnnotDictFromFPDFAnnotation(annot);
-  if (!pAnnotDict)
-    return nullptr;
-
-  CPDFSDK_InteractiveForm* pForm = FormHandleToInteractiveForm(hHandle);
-  if (!pForm)
-    return nullptr;
-
-  CPDF_InteractiveForm* pPDFForm = pForm->GetInteractiveForm();
-  CPDF_FormField* pFormField = pPDFForm->GetFieldByDict(pAnnotDict);
-  if (!pFormField || (pFormField->GetType() != CPDF_FormField::kCheckBox &&
-                      pFormField->GetType() != CPDF_FormField::kRadioButton)) {
+// If `allowed_types` is empty, then match all types.
+const CPDFSDK_Widget* GetWidgetOfTypes(
+    FPDF_FORMHANDLE hHandle,
+    FPDF_ANNOTATION annot,
+    pdfium::span<const CPDF_FormField::Type> allowed_types) {
+  const CPDF_Dictionary* annot_dict = GetAnnotDictFromFPDFAnnotation(annot);
+  if (!annot_dict) {
     return nullptr;
   }
 
-  CPDF_FormControl* pFormControl = pPDFForm->GetControlByDict(pAnnotDict);
-  return pFormControl ? pForm->GetWidget(pFormControl) : nullptr;
+  CPDFSDK_InteractiveForm* form = FormHandleToInteractiveForm(hHandle);
+  if (!form) {
+    return nullptr;
+  }
+
+  CPDF_InteractiveForm* pdf_form = form->GetInteractiveForm();
+  CPDF_FormField* form_field = pdf_form->GetFieldByDict(annot_dict);
+  if (!form_field) {
+    return nullptr;
+  }
+
+  if (!allowed_types.empty()) {
+    if (!pdfium::Contains(allowed_types, form_field->GetType())) {
+      return nullptr;
+    }
+  }
+
+  CPDF_FormControl* form_control = pdf_form->GetControlByDict(annot_dict);
+  return form_control ? form->GetWidget(form_control) : nullptr;
+}
+
+const CPDFSDK_Widget* GetRadioButtonOrCheckBoxWidget(FPDF_FORMHANDLE handle,
+                                                     FPDF_ANNOTATION annot) {
+  constexpr std::array<CPDF_FormField::Type, 2> kAllowedTypes = {
+      CPDF_FormField::kCheckBox, CPDF_FormField::kRadioButton};
+  return GetWidgetOfTypes(handle, annot, kAllowedTypes);
 }
 
 RetainPtr<const CPDF_Array> GetInkList(FPDF_ANNOTATION annot) {
@@ -519,9 +537,8 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFAnnot_AddInkStroke(FPDF_ANNOTATION annot,
 
   auto ink_coord_list = inklist->AppendNew<CPDF_Array>();
   for (size_t i = 0; i < point_count; i++) {
-    // TODO(crbug.com/pdfium/2155): investigate safety issues.
-    ink_coord_list->AppendNew<CPDF_Number>(UNSAFE_BUFFERS(points[i].x));
-    ink_coord_list->AppendNew<CPDF_Number>(UNSAFE_BUFFERS(points[i].y));
+    ink_coord_list->AppendNew<CPDF_Number>(UNSAFE_TODO(points[i].x));
+    ink_coord_list->AppendNew<CPDF_Number>(UNSAFE_TODO(points[i].y));
   }
   return static_cast<int>(inklist->size() - 1);
 }
@@ -878,9 +895,8 @@ FPDFAnnot_GetVertices(FPDF_ANNOTATION annot,
       fxcrt::CollectionSize<unsigned long>(*vertices) / 2;
   if (buffer && length >= points_len) {
     for (unsigned long i = 0; i < points_len; ++i) {
-      // TODO(crbug.com/pdfium/2155): investigate safety issues.
-      UNSAFE_BUFFERS(buffer[i].x) = vertices->GetFloatAt(i * 2);
-      UNSAFE_BUFFERS(buffer[i].y) = vertices->GetFloatAt(i * 2 + 1);
+      UNSAFE_TODO(buffer[i].x) = vertices->GetFloatAt(i * 2);
+      UNSAFE_TODO(buffer[i].y) = vertices->GetFloatAt(i * 2 + 1);
     }
   }
   return points_len;
@@ -910,9 +926,8 @@ FPDFAnnot_GetInkListPath(FPDF_ANNOTATION annot,
       fxcrt::CollectionSize<unsigned long>(*path) / 2;
   if (buffer && length >= points_len) {
     for (unsigned long i = 0; i < points_len; ++i) {
-      // TODO(crbug.com/pdfium/2155): investigate safety issues.
-      UNSAFE_BUFFERS(buffer[i].x) = path->GetFloatAt(i * 2);
-      UNSAFE_BUFFERS(buffer[i].y) = path->GetFloatAt(i * 2 + 1);
+      UNSAFE_TODO(buffer[i].x) = path->GetFloatAt(i * 2);
+      UNSAFE_TODO(buffer[i].y) = path->GetFloatAt(i * 2 + 1);
     }
   }
   return points_len;
@@ -1064,13 +1079,13 @@ FPDFAnnot_SetAP(FPDF_ANNOTATION annot,
   if (appearanceMode < 0 || appearanceMode >= FPDF_ANNOT_APPEARANCEMODE_COUNT)
     return false;
 
-  static constexpr const char* kModeKeyForMode[] = {"N", "R", "D"};
-  static_assert(std::size(kModeKeyForMode) == FPDF_ANNOT_APPEARANCEMODE_COUNT,
+  static constexpr auto kModeKeyForMode =
+      fxcrt::ToArray<const char*>({"N", "R", "D"});
+  static_assert(kModeKeyForMode.size() == FPDF_ANNOT_APPEARANCEMODE_COUNT,
                 "length of kModeKeyForMode should be equal to "
                 "FPDF_ANNOT_APPEARANCEMODE_COUNT");
 
-  // TODO(crbug.com/pdfium/2155): investigate safety issues.
-  const char* mode_key = UNSAFE_BUFFERS(kModeKeyForMode[appearanceMode]);
+  const char* mode_key = kModeKeyForMode[appearanceMode];
 
   RetainPtr<CPDF_Dictionary> pApDict =
       pAnnotDict->GetMutableDictFor(pdfium::annotation::kAP);
@@ -1345,27 +1360,42 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
 FPDFAnnot_GetFontSize(FPDF_FORMHANDLE hHandle,
                       FPDF_ANNOTATION annot,
                       float* value) {
-  if (!value)
+  if (!value) {
     return false;
+  }
 
-  CPDFSDK_InteractiveForm* pForm = FormHandleToInteractiveForm(hHandle);
-  if (!pForm)
+  const CPDFSDK_Widget* widget = GetWidgetOfTypes(hHandle, annot, {});
+  if (!widget) {
     return false;
+  }
 
-  const CPDF_Dictionary* pAnnotDict = GetAnnotDictFromFPDFAnnotation(annot);
-  if (!pAnnotDict)
+  *value = widget->GetFontSize();
+  return true;
+}
+
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
+FPDFAnnot_GetFontColor(FPDF_FORMHANDLE hHandle,
+                       FPDF_ANNOTATION annot,
+                       unsigned int* R,
+                       unsigned int* G,
+                       unsigned int* B) {
+  if (!R || !G || !B) {
     return false;
+  }
 
-  CPDF_InteractiveForm* pPDFForm = pForm->GetInteractiveForm();
-  CPDF_FormControl* pFormControl = pPDFForm->GetControlByDict(pAnnotDict);
-  if (!pFormControl)
+  const CPDFSDK_Widget* widget = GetWidgetOfTypes(hHandle, annot, {});
+  if (!widget) {
     return false;
+  }
 
-  CPDFSDK_Widget* pWidget = pForm->GetWidget(pFormControl);
-  if (!pWidget)
+  std::optional<FX_COLORREF> text_color = widget->GetTextColor();
+  if (!text_color) {
     return false;
+  }
 
-  *value = pWidget->GetFontSize();
+  *R = FXSYS_GetRValue(*text_color);
+  *G = FXSYS_GetGValue(*text_color);
+  *B = FXSYS_GetBValue(*text_color);
   return true;
 }
 
@@ -1391,9 +1421,8 @@ FPDFAnnot_SetFocusableSubtypes(FPDF_FORMHANDLE hHandle,
   std::vector<CPDF_Annot::Subtype> focusable_annot_types;
   focusable_annot_types.reserve(count);
   for (size_t i = 0; i < count; ++i) {
-    // TODO(crbug.com/pdfium/2155): investigate safety issues.
     focusable_annot_types.push_back(
-        static_cast<CPDF_Annot::Subtype>(UNSAFE_BUFFERS(subtypes[i])));
+        static_cast<CPDF_Annot::Subtype>(UNSAFE_TODO(subtypes[i])));
   }
 
   pFormFillEnv->SetFocusableAnnotSubtypes(focusable_annot_types);
@@ -1431,9 +1460,8 @@ FPDFAnnot_GetFocusableSubtypes(FPDF_FORMHANDLE hHandle,
     return false;
 
   for (size_t i = 0; i < focusable_annot_types.size(); ++i) {
-    // TODO(crbug.com/pdfium/2155): investigate safety issues.
-    UNSAFE_BUFFERS(subtypes[i] = static_cast<FPDF_ANNOTATION_SUBTYPE>(
-                       focusable_annot_types[i]));
+    UNSAFE_TODO(subtypes[i]) =
+        static_cast<FPDF_ANNOTATION_SUBTYPE>(focusable_annot_types[i]);
   }
 
   return true;
@@ -1483,7 +1511,7 @@ FPDFAnnot_GetFormFieldExportValue(FPDF_FORMHANDLE hHandle,
   // SAFETY: required from caller.
   return Utf16EncodeMaybeCopyAndReturnLength(
       pWidget->GetExportValue(),
-      UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
+      UNSAFE_TODO(SpanFromFPDFApiArgs(buffer, buflen)));
 }
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFAnnot_SetURI(FPDF_ANNOTATION annot,
@@ -1496,7 +1524,7 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFAnnot_SetURI(FPDF_ANNOTATION annot,
   auto action = annot_dict->SetNewFor<CPDF_Dictionary>("A");
   action->SetNewFor<CPDF_Name>("Type", "Action");
   action->SetNewFor<CPDF_Name>("S", "URI");
-  action->SetNewFor<CPDF_String>("URI", uri, /*bHex=*/false);
+  action->SetNewFor<CPDF_String>("URI", uri);
   return true;
 }
 

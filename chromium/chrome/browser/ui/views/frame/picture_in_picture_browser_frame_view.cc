@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
+#include "chrome/browser/ui/views/frame/browser_frame_bounds_change_animation.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/overlay/overlay_window_image_button.h"
@@ -27,6 +28,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
 #include "extensions/buildflags/buildflags.h"
+#include "media/base/media_switches.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -35,6 +37,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/display/screen.h"
 #include "ui/events/event_observer.h"
+#include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/animation_container.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -67,6 +70,8 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/ui/base/window_properties.h"
+#include "chromeos/ui/base/window_state_type.h"
 #include "chromeos/ui/frame/interior_resize_handler_targeter.h"
 #endif
 
@@ -148,8 +153,8 @@ class WindowEventObserver : public ui::EventObserver {
       : pip_browser_frame_view_(pip_browser_frame_view) {
     event_monitor_ = views::EventMonitor::CreateWindowMonitor(
         this, pip_browser_frame_view_->GetWidget()->GetNativeWindow(),
-        {ui::ET_MOUSE_MOVED, ui::ET_MOUSE_EXITED, ui::ET_KEY_PRESSED,
-         ui::ET_KEY_RELEASED});
+        {ui::EventType::kMouseMoved, ui::EventType::kMouseExited,
+         ui::EventType::kKeyPressed, ui::EventType::kKeyReleased});
   }
 
   WindowEventObserver(const WindowEventObserver&) = delete;
@@ -500,12 +505,9 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
     auto image_view = std::make_unique<ContentSettingImageView>(
         std::move(model), this, this, font_list);
 
-    // The ContentSettingImageView loses 4px of margin in Chrome Refresh that we
-    // don't want to lose in the document picture-in-picture toolbar.
-    if (features::IsChromeRefresh2023()) {
-      image_view->SetProperty(views::kMarginsKey,
-                              gfx::Insets::TLBR(0, 0, 0, 4));
-    }
+    // The ContentSettingImageView loses 4px of margin that we don't want to
+    // lose in the document picture-in-picture toolbar.
+    image_view->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(0, 0, 0, 4));
 
     content_setting_views_.push_back(
         button_container_view_->AddChildView(std::move(image_view)));
@@ -602,7 +604,10 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   frame->GetNativeWindow()->SetEventTargeter(
-      std::make_unique<chromeos::InteriorResizeHandleTargeter>());
+      std::make_unique<chromeos::InteriorResizeHandleTargeter>(
+          base::BindRepeating([](const aura::Window* window) {
+            return window->GetProperty(chromeos::kWindowStateTypeKey);
+          })));
 #endif
 }
 
@@ -913,6 +918,18 @@ SkRRect PictureInPictureBrowserFrameView::GetRestoredClipRegion() const {
   return clip;
 }
 #endif
+
+void PictureInPictureBrowserFrameView::SetFrameBounds(const gfx::Rect& bounds) {
+  if (!base::FeatureList::IsEnabled(
+          media::kDocumentPictureInPictureAnimateResize) ||
+      !gfx::Animation::ShouldRenderRichAnimation()) {
+    BrowserNonClientFrameView::SetFrameBounds(bounds);
+    return;
+  }
+  bounds_change_animation_ =
+      std::make_unique<BrowserFrameBoundsChangeAnimation>(*frame(), bounds);
+  bounds_change_animation_->Start();
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // ChromeLocationBarModelDelegate implementations:

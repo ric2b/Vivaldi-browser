@@ -11,18 +11,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <functional>
 #include <iosfwd>
-#include <iterator>
-#include <optional>
 #include <utility>
 
-#include "core/fxcrt/check.h"
-#include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/span.h"
-#include "core/fxcrt/string_data_template.h"
 #include "core/fxcrt/string_template.h"
-#include "core/fxcrt/string_view_template.h"
 
 namespace fxcrt {
 
@@ -46,6 +40,8 @@ class WideString : public StringTemplate<wchar_t> {
 
   ~WideString() = default;
 
+  UNSAFE_BUFFER_USAGE WideString(const wchar_t* pStr, size_t len);
+
   // Make a one-character string from one wide char.
   explicit WideString(wchar_t ch);
 
@@ -56,8 +52,6 @@ class WideString : public StringTemplate<wchar_t> {
   // No implicit conversions from byte strings.
   // NOLINTNEXTLINE(runtime/explicit)
   WideString(char) = delete;
-
-  WideString(const wchar_t* pStr, size_t len);
 
   explicit WideString(WideStringView str);
   WideString(WideStringView str1, WideStringView str2);

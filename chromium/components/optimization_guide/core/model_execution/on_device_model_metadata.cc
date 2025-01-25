@@ -8,46 +8,25 @@
 #include <memory>
 
 #include "base/containers/contains.h"
-#include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "components/optimization_guide/core/model_execution/model_execution_util.h"
 #include "components/optimization_guide/core/model_execution/on_device_model_feature_adapter.h"
-#include "components/optimization_guide/core/model_util.h"
 #include "components/optimization_guide/core/optimization_guide_constants.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/core/optimization_guide_switches.h"
 
 namespace optimization_guide {
 
-namespace {
-
-std::unique_ptr<proto::OnDeviceModelExecutionConfig>
-ReadOnDeviceModelExecutionConfig(const base::FilePath& path) {
-  // Unpack and verify model config file.
-  base::FilePath config_path = path.Append(kOnDeviceModelExecutionConfigFile);
-  std::string binary_config_pb;
-  if (!base::ReadFileToString(config_path, &binary_config_pb)) {
-    return nullptr;
-  }
-
-  auto config = std::make_unique<proto::OnDeviceModelExecutionConfig>();
-  if (!config->ParseFromString(binary_config_pb)) {
-    return nullptr;
-  }
-
-  return config;
-}
-
-}  // namespace
-
 OnDeviceModelMetadata::OnDeviceModelMetadata(
     const base::FilePath& model_path,
     const std::string& version,
+    const OnDeviceBaseModelSpec& model_spec,
     std::unique_ptr<proto::OnDeviceModelExecutionConfig> config)
-    : model_path_(model_path), version_(version) {
+    : model_path_(model_path), version_(version), model_spec_(model_spec) {
   if (!config) {
     return;
   }
@@ -57,6 +36,8 @@ OnDeviceModelMetadata::OnDeviceModelMetadata(
     adapters_[feature] = base::MakeRefCounted<OnDeviceModelFeatureAdapter>(
         std::move(feature_config));
   }
+
+  validation_config_ = std::move(*config->mutable_validation_config());
 }
 
 OnDeviceModelMetadata::~OnDeviceModelMetadata() = default;
@@ -65,9 +46,10 @@ OnDeviceModelMetadata::~OnDeviceModelMetadata() = default;
 std::unique_ptr<OnDeviceModelMetadata> OnDeviceModelMetadata::New(
     base::FilePath model_path,
     std::string version,
+    const OnDeviceBaseModelSpec& model_spec,
     std::unique_ptr<proto::OnDeviceModelExecutionConfig> config) {
-  return base::WrapUnique(
-      new OnDeviceModelMetadata(model_path, version, std::move(config)));
+  return base::WrapUnique(new OnDeviceModelMetadata(
+      model_path, version, model_spec, std::move(config)));
 }
 
 scoped_refptr<const OnDeviceModelFeatureAdapter>
@@ -90,13 +72,6 @@ OnDeviceModelMetadataLoader::OnDeviceModelMetadataLoader(
   background_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
       {base::MayBlock(), background_task_priority});
 
-  auto model_path_override_switch =
-      switches::GetOnDeviceModelExecutionOverride();
-  if (model_path_override_switch) {
-    Load(*StringToFilePath(*model_path_override_switch), "override");
-    return;
-  }
-
   if (on_device_component_state_manager) {
     on_device_component_state_manager_ =
         std::move(on_device_component_state_manager);
@@ -111,11 +86,16 @@ OnDeviceModelMetadataLoader::~OnDeviceModelMetadataLoader() {
   }
 }
 
-void OnDeviceModelMetadataLoader::Load(const base::FilePath& model_path,
-                                       const std::string& version) {
+void OnDeviceModelMetadataLoader::Load(
+    const base::FilePath& model_path,
+    const std::string& version,
+    const OnDeviceBaseModelSpec& model_spec) {
   background_task_runner_->PostTaskAndReplyWithResult(
-      FROM_HERE, base::BindOnce(&ReadOnDeviceModelExecutionConfig, model_path),
-      base::BindOnce(&OnDeviceModelMetadata::New, model_path, version)
+      FROM_HERE,
+      base::BindOnce(&ReadOnDeviceModelExecutionConfig,
+                     model_path.Append(kOnDeviceModelExecutionConfigFile)),
+      base::BindOnce(&OnDeviceModelMetadata::New, model_path, version,
+                     model_spec)
           .Then(on_load_fn_));
 }
 
@@ -126,7 +106,8 @@ void OnDeviceModelMetadataLoader::StateChanged(
   if (!state) {
     return;
   }
-  Load(state->GetInstallDirectory(), state->GetComponentVersion().GetString());
+  Load(state->GetInstallDirectory(), state->GetComponentVersion().GetString(),
+       state->GetBaseModelSpec());
 }
 
 void OnDeviceModelMetadataLoader::Invalidate() {

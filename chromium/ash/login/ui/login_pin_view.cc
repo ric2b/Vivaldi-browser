@@ -15,8 +15,8 @@
 #include "ash/style/color_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/memory/raw_ptr.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
 #include "ui/accessibility/ax_action_data.h"
@@ -29,6 +29,7 @@
 #include "ui/events/base_event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_highlight.h"
@@ -98,7 +99,7 @@ class BasePinButton : public views::View {
                 const std::u16string& accessible_name,
                 const base::RepeatingClosure& on_press)
       : on_press_(on_press) {
-    SetAccessibleName(accessible_name);
+    GetViewAccessibility().SetName(accessible_name);
     SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
     SetPreferredSize(size);
 
@@ -169,11 +170,11 @@ class BasePinButton : public views::View {
   }
 
   void OnEvent(ui::Event* event) override {
-    bool is_key_press = event->type() == ui::ET_KEY_PRESSED &&
+    bool is_key_press = event->type() == ui::EventType::kKeyPressed &&
                         (event->AsKeyEvent()->code() == ui::DomCode::ENTER ||
                          event->AsKeyEvent()->code() == ui::DomCode::SPACE);
-    bool is_mouse_press = event->type() == ui::ET_MOUSE_PRESSED;
-    bool is_gesture_tap = event->type() == ui::ET_GESTURE_TAP_DOWN;
+    bool is_mouse_press = event->type() == ui::EventType::kMousePressed;
+    bool is_gesture_tap = event->type() == ui::EventType::kGestureTapDown;
 
     if (is_key_press || is_mouse_press || is_gesture_tap) {
       DispatchPress(event);
@@ -185,7 +186,7 @@ class BasePinButton : public views::View {
 
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     node_data->role = ax::mojom::Role::kButton;
-    node_data->SetName(GetAccessibleName());
+    node_data->SetName(GetViewAccessibility().GetCachedName());
   }
 
  protected:
@@ -296,7 +297,7 @@ class LoginPinView::BackspacePinButton : public BasePinButton {
   }
 
   std::u16string GetTooltipText(const gfx::Point& p) const override {
-    return GetAccessibleName();
+    return GetViewAccessibility().GetCachedName();
   }
 
   void OnEnabledChanged() {
@@ -315,9 +316,9 @@ class LoginPinView::BackspacePinButton : public BasePinButton {
       return;
     }
     // If this is a button release style event cancel any repeat.
-    if (event->type() == ui::ET_GESTURE_TAP_CANCEL ||
-        event->type() == ui::ET_GESTURE_END ||
-        event->type() == ui::ET_MOUSE_RELEASED) {
+    if (event->type() == ui::EventType::kGestureTapCancel ||
+        event->type() == ui::EventType::kGestureEnd ||
+        event->type() == ui::EventType::kMouseReleased) {
       CancelRepeat();
     }
   }
@@ -476,7 +477,7 @@ void LoginPinView::TestApi::SetBackspaceTimers(
 }
 
 void LoginPinView::TestApi::ClickOnDigit(int number) const {
-  ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+  ui::MouseEvent event(ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
                        ui::EventTimeForNow(), 0, 0);
   GetButton(number)->OnEvent(&event);
 }

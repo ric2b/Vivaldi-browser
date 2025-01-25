@@ -8,7 +8,7 @@ from recipe_engine import recipe_test_api
 class GerritTestApi(recipe_test_api.RecipeTestApi):
 
   @staticmethod
-  def _gerrit_change_data(change_number=91827, patchset=1, **kwargs):
+  def gerrit_change_data(change_number=91827, patchset=1, **kwargs):
     # Exemplary change. Note: This contains only a subset of the key/value pairs
     # present in production to limit recipe simulation output.
     data = {
@@ -85,16 +85,19 @@ class GerritTestApi(recipe_test_api.RecipeTestApi):
     })
 
   def get_one_change_response_data(self, **kwargs):
-    return self._make_gerrit_response_json([self._gerrit_change_data(**kwargs)])
+    return self.get_multiple_changes_response_data([self.gerrit_change_data(**kwargs)])
+
+  def get_multiple_changes_response_data(self, changes):
+    return self._make_gerrit_response_json(changes)
 
   def update_files_response_data(self, **kwargs):
-    return self._make_gerrit_response_json(self._gerrit_change_data(**kwargs))
+    return self._make_gerrit_response_json(self.gerrit_change_data(**kwargs))
 
   def get_empty_changes_response_data(self):
     return self._make_gerrit_response_json([])
 
   def get_move_change_response_data(self, **kwargs):
-    return self._make_gerrit_response_json([self._gerrit_change_data(**kwargs)])
+    return self._make_gerrit_response_json([self.gerrit_change_data(**kwargs)])
 
   def get_related_changes_response_data(self, **kwargs):
     return self._make_gerrit_response_json(self._related_changes_data(**kwargs))

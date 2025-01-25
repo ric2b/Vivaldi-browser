@@ -12,17 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fmt::Debug;
+
+use log::error;
+
+use crypto_provider::CryptoProvider;
+use ukey2_proto::protobuf::Message;
+use ukey2_proto::ukey2_all_proto::ukey;
+
 use crate::proto_adapter::{IntoAdapter, MessageType, ToWrappedMessage as _};
 use crate::ukey2_handshake::ClientFinishedError;
 use crate::ukey2_handshake::{
     ClientInit, ClientInitError, Ukey2Client, Ukey2ClientStage1, Ukey2Server, Ukey2ServerStage1,
     Ukey2ServerStage2,
 };
-use crypto_provider::CryptoProvider;
-use log::error;
-use std::fmt::Debug;
-use ukey2_proto::protobuf::Message;
-use ukey2_proto::ukey2_all_proto::ukey;
 
 /// An alert type and message to be sent to the other party.
 #[derive(Debug, PartialEq, Eq)]

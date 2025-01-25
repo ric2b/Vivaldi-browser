@@ -88,6 +88,6 @@ std::ostream& operator<<(std::ostream& out,
     case ProfileKeepAliveOrigin::kHeadlessCommand:
       return out << "kHeadlessCommand";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return out << static_cast<int>(origin);
 }

@@ -26,7 +26,7 @@ QuicSessionPool::DirectJob::DirectJob(
     QuicSessionPool* pool,
     quic::ParsedQuicVersion quic_version,
     HostResolver* host_resolver,
-    const QuicSessionAliasKey& key,
+    QuicSessionAliasKey key,
     std::unique_ptr<CryptoClientConfigHandle> client_config_handle,
     bool retry_on_alternate_network_before_handshake,
     RequestPriority priority,
@@ -36,7 +36,7 @@ QuicSessionPool::DirectJob::DirectJob(
     const NetLogWithSource& net_log)
     : QuicSessionPool::Job::Job(
           pool,
-          key,
+          std::move(key),
           std::move(client_config_handle),
           priority,
           NetLogWithSource::Make(
@@ -120,7 +120,7 @@ int QuicSessionPool::DirectJob::DoLoop(int rv) {
         rv = DoAttemptSession();
         break;
       default:
-        NOTREACHED() << "io_state_: " << io_state_;
+        NOTREACHED_IN_MIGRATION() << "io_state_: " << io_state_;
         break;
     }
   } while (io_state_ != STATE_NONE && rv != ERR_IO_PENDING);
@@ -220,7 +220,8 @@ void QuicSessionPool::DirectJob::OnResolveHostComplete(int rv) {
   rv = DoLoop(rv);
 
   for (QuicSessionRequest* request : requests()) {
-    request->OnHostResolutionComplete(rv);
+    request->OnHostResolutionComplete(rv, dns_resolution_start_time_,
+                                      dns_resolution_end_time_);
   }
 
   if (rv != ERR_IO_PENDING && !callback_.is_null()) {

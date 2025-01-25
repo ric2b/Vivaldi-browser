@@ -10,7 +10,6 @@ import "mojo/public/mojom/base/time.mojom";
 import
   "third_party/blink/public/mojom/loader/javascript_framework_detection.mojom";
 import "services/network/public/mojom/request_priority.mojom";
-import "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom";
 import "third_party/blink/public/mojom/use_counter/use_counter_feature.mojom";
 
 // TimeDeltas below relative to navigation start.
@@ -99,9 +98,6 @@ struct PaintTiming {
   // (Experimental) Time when first input or scroll is received, causing the
   // largest contentful paint algorithm to stop.
   mojo_base.mojom.TimeDelta? first_input_or_scroll_notified_timestamp;
-
-  // Time when the first paint happens after a portal activation.
-  mojo_base.mojom.TimeTicks? portal_activated_paint;
 };
 
 // TimeDeltas below represent durations of time during the page load.
@@ -156,6 +152,13 @@ struct InteractiveTiming {
 
   // The timestamp of the user's first scroll after a navigation.
   mojo_base.mojom.TimeDelta? first_scroll_timestamp;
+};
+
+struct CustomUserTimingMark {
+  // The mark name from performance.mark().
+  string mark_name;
+  // The startTime from performance.mark().
+  mojo_base.mojom.TimeDelta start_time;
 };
 
 // PageLoadTiming contains timing metrics associated with a page load. Many of
@@ -430,6 +433,10 @@ struct ServiceWorkerSubresourceLoadMetrics {
   // `RouterSourceEnum.race-network-and-fetch-handler` in ServiceWorker Static
   // Routing API, from navigation start till onload event.
   uint32 matched_race_network_and_fetch_router_source_count = 0;
+
+  // Total router evaluation time of ServiceWorker Static Routing API for
+  // sub-resources.
+  mojo_base.mojom.TimeDelta total_router_evaluation_time_for_subresources;
 };
 
 // Enumeration of distinct cache types.
@@ -579,6 +586,17 @@ interface PageLoadMetrics {
   // //cc/metrics/ukm_smoothness_data.h
   SetUpSharedMemoryForSmoothness(
       mojo_base.mojom.ReadOnlySharedMemoryRegion shared_memory);
+
+  // Called when performance entries are added via `performance.mark()` from the
+  // outermost main frame in renderer, except for the case when standard
+  // UserTiming marks `mark_fully_loaded`, `mark_fully_visible`, and
+  // `mark_interactive` occur. Unlike `UpdateTiming`, this calls are not
+  // buffered, and expects it always contains the user timing entry which is not
+  // sent yet before.
+  //
+  // `AddCustomUserTiming` should be used when the expected transport data size
+  // can be larger. Otherwise `UpdateTiming` is recommended.
+  AddCustomUserTiming(CustomUserTimingMark custom_user_timing);
 };
 
 // TimeDelta below relative to the navigation start of the navigation restoring

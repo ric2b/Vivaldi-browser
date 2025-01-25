@@ -4,6 +4,8 @@
 
 #include "ash/system/video_conference/bubble/vc_tile_ui_controller.h"
 
+#include <optional>
+
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -27,14 +29,24 @@
 namespace ash::video_conference {
 
 VcTileUiController::VcTileUiController(const VcHostedEffect* effect)
-    : effect_(effect) {
+    : effect_(effect->get_weak_ptr()) {
   effect_id_ = effect->id();
-  effect_state_ = effect->GetState(/*index=*/0);
-  DlcserviceClient::Get()->AddObserver(this);
+  effect_state_ = effect->GetWeakState(/*index=*/0);
+  auto* dlc_service_client = DlcserviceClient::Get();
+  if (!dlc_service_client) {
+    // `dlc_service_client` may not exist in tests.
+    return;
+  }
+  dlc_service_client->AddObserver(this);
 }
 
 VcTileUiController::~VcTileUiController() {
-  DlcserviceClient::Get()->RemoveObserver(this);
+  auto* dlc_service_client = DlcserviceClient::Get();
+  if (!dlc_service_client) {
+    // `dlc_service_client` may not exist in tests.
+    return;
+  }
+  dlc_service_client->RemoveObserver(this);
 }
 
 std::unique_ptr<FeatureTile> VcTileUiController::CreateTile() {
@@ -51,12 +63,17 @@ std::unique_ptr<FeatureTile> VcTileUiController::CreateTile() {
 
   // Set up the initial state of the tile, including elements like label, icon,
   // and colors based on toggle state.
-  tile->SetLabel(effect_state_->label_text());
-  tile->SetVectorIcon(*effect_state_->icon());
+  tile->SetLabel(effect_state_ ? effect_state_->label_text()
+                               : std::u16string());
+  if (effect_state_) {
+    tile->SetVectorIcon(*effect_state_->icon());
+  }
   tile->SetForegroundColorId(cros_tokens::kCrosSysOnSurface);
-  std::optional<int> current_state = effect_->get_state_callback().Run();
-  CHECK(current_state.has_value());
-  tile->SetToggled(current_state.value() != 0);
+  std::optional<int> current_state =
+      effect_ ? effect_->get_state_callback().Run() : std::nullopt;
+  if (current_state.has_value()) {
+    tile->SetToggled(current_state.value() != 0);
+  }
   UpdateTooltip();
 
   // Set the initial download state of the tile. Future changes to the tile's
@@ -211,6 +228,10 @@ void VcTileUiController::OnDlcDownloadStateFetched(
   if (!tile_) {
     return;
   }
+
+  VideoConferenceTrayController::Get()->OnDlcDownloadStateFetched(
+      /*add_warning=*/download_state == FeatureTile::DownloadState::kError,
+      effect_state_->label_text());
 
   tile_->SetDownloadState(download_state, progress);
 }

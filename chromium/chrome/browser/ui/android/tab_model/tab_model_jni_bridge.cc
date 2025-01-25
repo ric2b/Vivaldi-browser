@@ -14,7 +14,6 @@
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_observer_jni_bridge.h"
@@ -24,7 +23,7 @@
 #include "ui/base/window_open_disposition.h"
 #include "url/android/gurl_android.h"
 
-// Must come after other includes, because FromJniType() uses Profile.
+// Must come after all headers that specialize FromJniType() / ToJniType().
 #include "chrome/android/chrome_jni_headers/TabModelJniBridge_jni.h"
 
 using base::android::AttachCurrentThread;
@@ -35,12 +34,13 @@ using chrome::android::ActivityType;
 using content::WebContents;
 
 TabModelJniBridge::TabModelJniBridge(JNIEnv* env,
-                                     jobject jobj,
+                                     const jni_zero::JavaRef<jobject>& jobj,
                                      Profile* profile,
                                      ActivityType activity_type,
                                      bool track_in_native_model_list)
     : TabModel(profile, activity_type),
-      java_object_(env, env->NewWeakGlobalRef(jobj)) {
+      java_object_(env, jobj),
+      track_in_native_model_list_(track_in_native_model_list) {
   if (track_in_native_model_list) {
     TabModelList::AddTabModel(this);
   }
@@ -85,8 +85,7 @@ void TabModelJniBridge::CreateTab(TabAndroid* parent,
 
   Java_TabModelJniBridge_createTabWithWebContents(
       env, java_object_.get(env), (parent ? parent->GetJavaObject() : nullptr),
-      ProfileAndroid::FromProfile(profile)->GetJavaObject(),
-      web_contents->GetJavaWebContents());
+      profile->GetJavaObject(), web_contents->GetJavaWebContents());
 }
 
 void TabModelJniBridge::HandlePopupNavigation(TabAndroid* parent,
@@ -212,7 +211,9 @@ void TabModelJniBridge::RemoveObserver(TabModelObserver* observer) {
 void TabModelJniBridge::BroadcastSessionRestoreComplete(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  TabModel::BroadcastSessionRestoreComplete();
+  if (track_in_native_model_list_) {
+    TabModel::BroadcastSessionRestoreComplete();
+  }
 }
 
 int TabModelJniBridge::GetTabCountNavigatedInTimeWindow(
@@ -241,7 +242,9 @@ jclass TabModelJniBridge::GetClazz(JNIEnv* env) {
 }
 
 TabModelJniBridge::~TabModelJniBridge() {
-  TabModelList::RemoveTabModel(this);
+  if (track_in_native_model_list_) {
+    TabModelList::RemoveTabModel(this);
+  }
 }
 
 static jlong JNI_TabModelJniBridge_Init(

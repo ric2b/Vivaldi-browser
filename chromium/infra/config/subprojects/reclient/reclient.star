@@ -4,7 +4,7 @@
 
 load("//console-header.star", "HEADER")
 load("//lib/builder_config.star", "builder_config")
-load("//lib/builders.star", "builders", "cpu", "os", "reclient")
+load("//lib/builders.star", "builders", "cpu", "os", "siso")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
@@ -76,14 +76,14 @@ def fyi_reclient_staging_builder(
         *,
         name,
         console_view_category,
-        reclient_instance = "rbe-chromium-%s",
+        siso_project = "rbe-chromium-%s",
         untrusted_service_account = (
             "chromium-cq-staging-builder@chops-service-accounts.iam.gserviceaccount.com"
         ),
         reclient_version = "staging",
         **kwargs):
-    trusted_instance = reclient_instance % "trusted"
-    unstrusted_instance = reclient_instance % "untrusted"
+    trusted_instance = siso_project % "trusted"
+    unstrusted_instance = siso_project % "untrusted"
     reclient_bootstrap_env = kwargs.pop("reclient_bootstrap_env", {})
 
     reclient_bootstrap_env.update({
@@ -92,8 +92,6 @@ def fyi_reclient_staging_builder(
         "GOMA_DEPS_CACHE_TABLE_THRESHOLD": "40000",
         "RBE_fast_log_collection": "true",
         "RBE_use_unified_uploads": "true",
-        # TODO(b/297350970): remove once fully rolled out.
-        "RBE_use_round_robin_balancer": "true",
     })
 
     reclient_rewrapper_env = kwargs.pop("reclient_rewrapper_env", {})
@@ -105,7 +103,7 @@ def fyi_reclient_staging_builder(
             name = name,
             description_html = "Builds chromium using the %s version of reclient and the %s rbe instance." %
                                (reclient_version, trusted_instance),
-            reclient_instance = trusted_instance,
+            siso_project = trusted_instance,
             console_view_entry = consoles.console_view_entry(
                 category = "rbe|" + console_view_category,
                 short_name = "rcs",
@@ -119,7 +117,7 @@ def fyi_reclient_staging_builder(
             name = name + " untrusted",
             description_html = "Builds chromium using the %s version of reclient and the %s rbe instance." %
                                (reclient_version, unstrusted_instance),
-            reclient_instance = unstrusted_instance,
+            siso_project = unstrusted_instance,
             console_view_entry = consoles.console_view_entry(
                 category = "rbecq|" + console_view_category,
                 short_name = "rcs",
@@ -149,7 +147,7 @@ def fyi_reclient_test_builder(
     return fyi_reclient_staging_builder(
         name = name,
         console_view_category = console_view_category,
-        reclient_instance = "rbe-chromium-%s-test",
+        siso_project = "rbe-chromium-%s-test",
         reclient_version = "test",
         untrusted_service_account = ci.DEFAULT_SERVICE_ACCOUNT,
         reclient_bootstrap_env = reclient_bootstrap_env,
@@ -173,7 +171,13 @@ fyi_reclient_staging_builder(
         ),
     ),
     gn_args = gn_args.config(
-        configs = ["gpu_tests", "release_builder", "reclient"],
+        configs = [
+            "gpu_tests",
+            "release_builder",
+            "remoteexec",
+            "linux",
+            "x64",
+        ],
     ),
     os = os.LINUX_DEFAULT,
     console_view_category = "linux",
@@ -195,7 +199,13 @@ fyi_reclient_test_builder(
         ),
     ),
     gn_args = gn_args.config(
-        configs = ["gpu_tests", "release_builder", "reclient"],
+        configs = [
+            "gpu_tests",
+            "release_builder",
+            "remoteexec",
+            "linux",
+            "x64",
+        ],
     ),
     os = os.LINUX_DEFAULT,
     console_view_category = "linux",
@@ -269,11 +279,19 @@ fyi_reclient_staging_builder(
         ),
     ),
     gn_args = gn_args.config(
-        configs = ["gpu_tests", "release_builder", "reclient", "minimal_symbols"],
+        configs = [
+            "gpu_tests",
+            "release_builder",
+            "remoteexec",
+            "minimal_symbols",
+            "mac",
+            "x64",
+        ],
     ),
     builderless = True,
-    cores = 12,
+    cores = None,
     os = os.MAC_DEFAULT,
+    cpu = cpu.ARM64,
     console_view_category = "mac",
     priority = 35,
     reclient_bootstrap_env = {
@@ -297,7 +315,14 @@ fyi_reclient_test_builder(
         ),
     ),
     gn_args = gn_args.config(
-        configs = ["gpu_tests", "release_builder", "reclient", "minimal_symbols"],
+        configs = [
+            "gpu_tests",
+            "release_builder",
+            "remoteexec",
+            "minimal_symbols",
+            "mac",
+            "arm64",
+        ],
     ),
     builderless = True,
     cores = None,
@@ -330,7 +355,14 @@ fyi_reclient_staging_builder(
         ),
     ),
     gn_args = gn_args.config(
-        configs = ["gpu_tests", "release_builder", "reclient", "minimal_symbols"],
+        configs = [
+            "gpu_tests",
+            "release_builder",
+            "remoteexec",
+            "minimal_symbols",
+            "win",
+            "x64",
+        ],
     ),
     builderless = True,
     cores = 32,
@@ -355,7 +387,14 @@ fyi_reclient_test_builder(
         ),
     ),
     gn_args = gn_args.config(
-        configs = ["gpu_tests", "release_builder", "reclient", "minimal_symbols"],
+        configs = [
+            "gpu_tests",
+            "release_builder",
+            "remoteexec",
+            "minimal_symbols",
+            "win",
+            "x64",
+        ],
     ),
     builderless = True,
     cores = 32,
@@ -412,11 +451,12 @@ fyi_reclient_test_builder(
         configs = [
             "chromeos_device",
             "dcheck_off",
-            "reclient",
+            "remoteexec",
             "amd64-generic-vm",
             "ozone_headless",
             "use_fake_dbus_clients",
             "also_build_lacros_chrome_for_architecture_amd64",
+            "x64",
         ],
     ),
     os = os.LINUX_DEFAULT,
@@ -444,7 +484,7 @@ fyi_reclient_test_builder(
             "debug",
             "static",
             "minimal_symbols",
-            "reclient",
+            "remoteexec",
             "ios_simulator",
             "x64",
             "xctest",
@@ -481,7 +521,7 @@ fyi_reclient_staging_builder(
             "debug",
             "static",
             "minimal_symbols",
-            "reclient",
+            "remoteexec",
             "ios_simulator",
             "x64",
             "xctest",
@@ -518,13 +558,15 @@ fyi_reclient_staging_builder(
             "arm64",
             "gpu_tests",
             "release_builder",
-            "reclient",
+            "remoteexec",
             "minimal_symbols",
+            "mac",
         ],
     ),
     builderless = True,
-    cores = 12,
+    cores = None,
     os = os.MAC_DEFAULT,
+    cpu = cpu.ARM64,
     console_view_category = "mac",
     priority = 35,
     reclient_bootstrap_env = {
@@ -552,8 +594,9 @@ fyi_reclient_test_builder(
             "arm64",
             "gpu_tests",
             "release_builder",
-            "reclient",
+            "remoteexec",
             "minimal_symbols",
+            "mac",
         ],
     ),
     builderless = True,
@@ -572,10 +615,22 @@ ci.builder(
     executable = "recipe:reclient_reclient_comparison",
     gn_args = {
         "build1": gn_args.config(
-            configs = ["gpu_tests", "release_builder", "reclient"],
+            configs = [
+                "gpu_tests",
+                "release_builder",
+                "remoteexec",
+                "linux",
+                "x64",
+            ],
         ),
         "build2": gn_args.config(
-            configs = ["gpu_tests", "release_builder", "reclient_with_remoteexec_links"],
+            configs = [
+                "gpu_tests",
+                "release_builder",
+                "reclient_with_remoteexec_links",
+                "linux",
+                "x64",
+            ],
         ),
     },
     os = os.LINUX_DEFAULT,
@@ -591,8 +646,8 @@ ci.builder(
         "RBE_fast_log_collection": "true",
     },
     reclient_cache_silo = "Comparison Linux remote links - cache siloed",
-    reclient_instance = reclient.instance.TEST_TRUSTED,
-    siso_remote_jobs = reclient.jobs.DEFAULT,
+    siso_project = siso.project.TEST_TRUSTED,
+    siso_remote_jobs = siso.remote_jobs.DEFAULT,
 )
 
 # The following 2 builders use the untrusted RBE instance because each instance has its own
@@ -605,10 +660,10 @@ ci.builder(
     executable = "recipe:swarming/deterministic_build",
     gn_args = {
         "local": gn_args.config(
-            configs = ["release_builder", "x86", "minimal_symbols"],
+            configs = ["release_builder", "x86", "minimal_symbols", "win"],
         ),
         "reclient": gn_args.config(
-            configs = ["release_builder", "reclient", "x86", "minimal_symbols"],
+            configs = ["release_builder", "remoteexec", "x86", "minimal_symbols", "win"],
         ),
     },
     builderless = True,
@@ -623,8 +678,8 @@ ci.builder(
         "GOMA_DEPS_CACHE_TABLE_THRESHOLD": "40000",
         "RBE_fast_log_collection": "true",
     },
-    reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
     service_account = "chromium-cq-staging-builder@chops-service-accounts.iam.gserviceaccount.com",
+    siso_project = siso.project.DEFAULT_UNTRUSTED,
 )
 
 # TODO(b/260228493) Remove once CI backend is switched
@@ -645,7 +700,14 @@ ci.builder(
         ),
     ),
     gn_args = gn_args.config(
-        configs = ["gpu_tests", "release_builder", "reclient", "minimal_symbols"],
+        configs = [
+            "gpu_tests",
+            "release_builder",
+            "remoteexec",
+            "minimal_symbols",
+            "win",
+            "x64",
+        ],
     ),
     builderless = True,
     cores = 32,
@@ -661,13 +723,13 @@ ci.builder(
     },
     reclient_disable_bq_upload = True,
     reclient_ensure_verified = True,
-    reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
     reclient_rewrapper_env = {
         "RBE_compare": "true",
         "RBE_num_local_reruns": "1",
         "RBE_num_remote_reruns": "1",
     },
     service_account = "chromium-cq-staging-builder@chops-service-accounts.iam.gserviceaccount.com",
+    siso_project = siso.project.DEFAULT_UNTRUSTED,
     siso_remote_jobs = None,
 )
 
@@ -687,7 +749,13 @@ ci.builder(
         ),
     ),
     gn_args = gn_args.config(
-        configs = ["gpu_tests", "debug_builder", "reclient"],
+        configs = [
+            "gpu_tests",
+            "debug_builder",
+            "remoteexec",
+            "linux",
+            "x64",
+        ],
     ),
     cores = 32,
     os = os.LINUX_DEFAULT,
@@ -701,7 +769,6 @@ ci.builder(
         "RBE_fast_log_collection": "true",
     },
     reclient_ensure_verified = True,
-    reclient_instance = reclient.instance.TEST_TRUSTED,
     reclient_rewrapper_env = {
         "RBE_compare": "true",
         "RBE_num_local_reruns": "1",
@@ -710,6 +777,7 @@ ci.builder(
         "RBE_canonicalize_working_dir": "true",
         "RBE_cache_silo": "Linux Builder (canonical wd) (reclient compare)",
     },
+    siso_project = siso.project.TEST_TRUSTED,
     siso_remote_jobs = None,
 )
 
@@ -718,10 +786,10 @@ ci.builder(
     executable = "recipe:reclient_reclient_comparison",
     gn_args = {
         "build1": gn_args.config(
-            configs = ["gpu_tests", "release_builder", "reclient"],
+            configs = ["gpu_tests", "release_builder", "remoteexec", "linux", "x64"],
         ),
         "build2": gn_args.config(
-            configs = ["gpu_tests", "release_builder", "reclient"],
+            configs = ["gpu_tests", "release_builder", "remoteexec", "linux", "x64"],
         ),
     },
     os = os.LINUX_DEFAULT,
@@ -735,9 +803,9 @@ ci.builder(
         "RBE_fast_log_collection": "true",
     },
     reclient_cache_silo = "Comparison Linux - cache siloed",
-    reclient_instance = reclient.instance.TEST_TRUSTED,
-    shadow_reclient_instance = reclient.instance.TEST_UNTRUSTED,
-    siso_remote_jobs = reclient.jobs.DEFAULT,
+    shadow_siso_project = siso.project.TEST_UNTRUSTED,
+    siso_project = siso.project.TEST_TRUSTED,
+    siso_remote_jobs = siso.remote_jobs.DEFAULT,
 )
 
 ci.builder(
@@ -749,10 +817,10 @@ The bot specs should be in sync with <a href="https://ci.chromium.org/p/chromium
     executable = "recipe:reclient_reclient_comparison",
     gn_args = {
         "build1": gn_args.config(
-            configs = ["gpu_tests", "release_builder", "reclient"],
+            configs = ["gpu_tests", "release_builder", "remoteexec", "linux", "x64"],
         ),
         "build2": gn_args.config(
-            configs = ["gpu_tests", "release_builder", "reclient"],
+            configs = ["gpu_tests", "release_builder", "remoteexec", "linux", "x64"],
         ),
     },
     cores = 16,
@@ -768,7 +836,7 @@ The bot specs should be in sync with <a href="https://ci.chromium.org/p/chromium
         "RBE_fast_log_collection": "true",
     },
     reclient_cache_silo = "Comparison Linux CQ - cache siloed",
-    reclient_instance = reclient.instance.TEST_UNTRUSTED,
-    shadow_reclient_instance = reclient.instance.TEST_UNTRUSTED,
-    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
+    shadow_siso_project = siso.project.TEST_UNTRUSTED,
+    siso_project = siso.project.TEST_UNTRUSTED,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CQ,
 )

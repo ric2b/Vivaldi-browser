@@ -12,18 +12,14 @@ BASE_FEATURE(kDeferredSyncStartupCustomDelay,
              "DeferredSyncStartupCustomDelay",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kSharingOfferKeyPairBootstrap,
-             "SharingOfferKeyPairBootstrap",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kSharingOfferKeyPairRead,
-             "SharingOfferKeyPairRead",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kSyncAndroidLimitNTPPromoImpressions,
              "SyncAndroidLimitNTPPromoImpressions",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableBatchUploadFromSettings,
+             "EnableBatchUploadFromSettings",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 BASE_FEATURE(kSyncAutofillWalletUsageData,
@@ -36,6 +32,10 @@ BASE_FEATURE(kSyncAutofillWalletCredentialData,
 
 BASE_FEATURE(kSyncPlusAddress,
              "SyncPlusAddress",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSyncPlusAddressSetting,
+             "SyncPlusAddressSetting",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -51,10 +51,6 @@ BASE_FEATURE(kChromeOSSyncedSessionSharing,
              "ChromeOSSyncedSessionSharing",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_CHROMEOS)
-
-BASE_FEATURE(kSyncPersistInvalidations,
-             "SyncPersistInvalidations",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSkipInvalidationOptimizationsWhenDeviceInfoUpdated,
              "SkipInvalidationOptimizationsWhenDeviceInfoUpdated",
@@ -113,11 +109,6 @@ BASE_FEATURE(kEnablePreferencesAccountStorage,
 #endif
 );
 
-BASE_FEATURE(kSyncPollImmediatelyOnEveryStartup,
-             "SyncPollImmediatelyOnEveryStartup2",
-             base::FEATURE_DISABLED_BY_DEFAULT
-);
-
 #if !BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kSyncWebauthnCredentials,
              "SyncWebauthnCredentials",
@@ -146,9 +137,14 @@ BASE_FEATURE(kReplaceSyncPromosWithSignInPromos,
 #endif
 );
 
-BASE_FEATURE(kEnableBookmarkFoldersForAccountStorage,
-             "EnableBookmarkFoldersForAccountStorage",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kSyncEnableBookmarksInTransportMode,
+             "SyncEnableBookmarksInTransportMode",
+#if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif  // BUILDFLAG(IS_IOS)
+);
 
 #if !BUILDFLAG(IS_IOS)
 BASE_FEATURE(kReadingListEnableSyncTransportModeUponSignIn,
@@ -199,18 +195,27 @@ BASE_FEATURE(kSyncIncreaseNudgeDelayForSingleClient,
              "SyncIncreaseNudgeDelayForSingleClient",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kSyncSchedulerUseWallClockTimer,
-             "SyncSchedulerUseWallClockTimer",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kTrustedVaultAutoUpgradeSyntheticFieldTrial,
              "TrustedVaultAutoUpgradeSyntheticFieldTrial",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kWebApkBackupAndRestoreBackend,
              "WebApkBackupAndRestoreBackend",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
+
+BASE_FEATURE(kSyncAccountKeyedTransportPrefs,
+             "SyncAccountKeyedTransportPrefs",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSyncEnableModelTypeLocalDataBatchUploaders,
+             "SyncEnableModelTypeLocalDataBatchUploaders",
+#if BUILDFLAG(IS_IOS)
+             base::FEATURE_DISABLED_BY_DEFAULT
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT
+#endif  // BUILDFLAG(IS_IOS)
+);
 
 }  // namespace syncer

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "services/network/cookie_manager.h"
 
 #include <optional>
@@ -204,6 +209,33 @@ void CookieManager::DeleteSessionOnlyCookies(
       std::move(callback));
 }
 
+void CookieManager::DeleteStaleSessionOnlyCookies(
+    DeleteStaleSessionOnlyCookiesCallback callback) {
+  cookie_store_->DeleteMatchingCookiesAsync(
+      base::BindRepeating([](const net::CanonicalCookie& cookie) {
+        // We do not delete persistent cookies.
+        if (cookie.IsPersistent()) {
+          return false;
+        }
+
+        // We only examine the newer date between the last read/write time.
+        const base::Time last_accessed_or_updated =
+            cookie.LastAccessDate() > cookie.LastUpdateDate()
+                ? cookie.LastAccessDate()
+                : cookie.LastUpdateDate();
+
+        // Without timing data we cannot delete the cookie.
+        if (last_accessed_or_updated.is_null()) {
+          return false;
+        }
+
+        // Delete cookies that haven't been accessed or updated in 7 days.
+        // See crbug.com/40285083 for more info.
+        return (base::Time::Now() - last_accessed_or_updated) > base::Days(7);
+      }),
+      std::move(callback));
+}
+
 void CookieManager::AddCookieChangeListener(
     const GURL& url,
     const std::optional<std::string>& name,
@@ -289,7 +321,7 @@ void CookieManager::RemoveChangeListener(ListenerRegistration* registration) {
     }
   }
   // A broken connection error should never be raised for an unknown pipe.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void CookieManager::CloneInterface(
@@ -333,11 +365,6 @@ void CookieManager::BlockThirdPartyCookies(bool block) {
   cookie_settings_.set_block_third_party_cookies(block);
 }
 
-void CookieManager::BlockTruncatedCookies(bool block) {
-  OnSettingsWillChange();
-  cookie_settings_.set_block_truncated_cookies(block);
-}
-
 void CookieManager::SetMitigationsEnabledFor3pcd(bool enable) {
   OnSettingsWillChange();
   cookie_settings_.set_mitigations_enabled_for_3pcd(enable);
@@ -359,7 +386,6 @@ void CookieManager::ConfigureCookieSettings(
     const network::mojom::CookieManagerParams& params,
     CookieSettings* out) {
   out->set_block_third_party_cookies(params.block_third_party_cookies);
-  out->set_block_truncated_cookies(params.block_truncated_cookies);
   out->set_mitigations_enabled_for_3pcd(params.mitigations_enabled_for_3pcd);
   out->set_tracking_protection_enabled_for_3pcd(
       params.tracking_protection_enabled_for_3pcd);

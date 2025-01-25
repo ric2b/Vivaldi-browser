@@ -6,10 +6,9 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
-
 #include <wasm_simd128.h>
 
-#include <xnnpack/math-stubs.h>
+#include "xnnpack/math-stubs.h"
 
 
 void xnn_math_f32_roundu__wasmsimd_native(

@@ -9,6 +9,7 @@
 
 #include <stdint.h>
 
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -25,7 +26,7 @@ class CPDF_MeshVertex {
   ~CPDF_MeshVertex();
 
   CFX_PointF position;
-  FX_RGB<float> rgb = {};
+  FX_RGB_STRUCT<float> rgb = {};
 };
 
 class CFX_BitStream;
@@ -53,7 +54,7 @@ class CPDF_MeshStream {
 
   uint32_t ReadFlag() const;
   CFX_PointF ReadCoords() const;
-  FX_RGB<float> ReadColor() const;
+  FX_RGB_STRUCT<float> ReadColor() const;
 
   bool ReadVertex(const CFX_Matrix& pObject2Bitmap,
                   CPDF_MeshVertex* vertex,
@@ -83,8 +84,8 @@ class CPDF_MeshStream {
   float m_ymax = 0.0f;
   RetainPtr<CPDF_StreamAcc> m_pStream;
   std::unique_ptr<CFX_BitStream> m_BitStream;
-  float m_ColorMin[kMaxComponents] = {};
-  float m_ColorMax[kMaxComponents] = {};
+  std::array<float, kMaxComponents> m_ColorMin = {};
+  std::array<float, kMaxComponents> m_ColorMax = {};
 };
 
 #endif  // CORE_FPDFAPI_PAGE_CPDF_MESHSTREAM_H_

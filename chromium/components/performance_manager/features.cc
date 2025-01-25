@@ -15,21 +15,18 @@
 
 namespace performance_manager::features {
 
-BASE_FEATURE(kRunOnMainThread,
-             "RunPerformanceManagerOnMainThread",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kRunOnMainThreadSync,
              "RunPerformanceManagerOnMainThreadSync",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_CHROMEOS)
+             base::FEATURE_DISABLED_BY_DEFAULT
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+);
 
 #if !BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kBackgroundTabLoadingFromPerformanceManager,
              "BackgroundTabLoadingFromPerformanceManager",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kBatterySaverModeRenderTuning,
-             "BatterySaverModeRenderTuning",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPerformanceControlsPerformanceSurvey,
@@ -61,14 +58,6 @@ BASE_FEATURE(kPrefetchVirtualMemoryPolicy,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
-// The variable was renamed to "MemorySaver" but the experiment name remains as
-// "HighEfficiency" because it is already running (crbug.com/1493843).
-BASE_FEATURE(kMemorySaverMultistateMode,
-             "HighEfficiencyMultistateMode",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<bool> kMemorySaverShowRecommendedBadge{
-    &kMemorySaverMultistateMode, "show_recommended_badge", false};
-
 BASE_FEATURE(kMemorySaverModeAggressiveness,
              "MemorySaverModeAggressiveness",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -77,13 +66,32 @@ BASE_FEATURE(kDiscardRingImprovements,
              "DiscardRingImprovements",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kPerformanceControlsSidePanel,
-             "PerformanceControlsSidePanel",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kPerformanceIntervention,
              "PerformanceIntervention",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPerformanceInterventionUI,
+             "PerformanceInterventionUI",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPerformanceInterventionDemoMode,
+             "PerformanceInterventionDemoMode",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool ShouldUsePerformanceInterventionBackend() {
+  return base::FeatureList::IsEnabled(kPerformanceIntervention) ||
+         base::FeatureList::IsEnabled(kPerformanceInterventionUI);
+}
+
+const base::FeatureParam<int> kInterventionDialogStringVersion{
+    &kPerformanceInterventionUI, "intervention_dialog_version", 1};
+
+const base::FeatureParam<bool> kInterventionShowMixedProfileSuggestions{
+    &kPerformanceInterventionUI, "intervention_show_mixed_profile", false};
+
+const base::FeatureParam<base::TimeDelta> kInterventionButtonTimeout{
+    &kPerformanceInterventionUI, "intervention_button_timeout",
+    base::Seconds(10)};
 
 const base::FeatureParam<base::TimeDelta> kCPUTimeOverThreshold{
     &kPerformanceIntervention, "cpu_time_over_threshold", base::Seconds(60)};
@@ -113,7 +121,7 @@ const base::FeatureParam<int> kMemoryFreeBytesThreshold{
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 BASE_FEATURE(kAshUrgentDiscardingFromPerformanceManager,
              "AshUrgentDiscardingFromPerformanceManager",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -128,8 +136,8 @@ BASE_FEATURE(kPMProcessPriorityPolicy,
              "PMProcessPriorityPolicy",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::FeatureParam<bool> kBoostChildFrames{&kPMProcessPriorityPolicy,
-                                                 "boost_child_frames", true};
+const base::FeatureParam<bool> kInheritParentPriority{
+    &kPMProcessPriorityPolicy, "inherit_parent_priority", true};
 
 const base::FeatureParam<bool> kDownvoteAdFrames{&kPMProcessPriorityPolicy,
                                                  "downvote_ad_frames", false};
@@ -156,6 +164,17 @@ const base::FeatureParam<base::TimeDelta> kDelayBeforeLogging{
 
 const base::FeatureParam<int> kThresholdChromeCPUPercent{
     &kCPUInterventionEvaluationLogging, "threshold_chrome_cpu_percent", 25};
+
+BASE_FEATURE(kCPUMeasurementInFreezingPolicy,
+             "CPUMeasurementInFreezingPolicy",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Note: This param is associated with `kCPUMeasurementInFreezingPolicy` instead
+// of `kFreezingOnBatterySaver`, to allow retrieving the value without
+// activating the `kFreezingOnBatterySaver` feature.
+const base::FeatureParam<double> kFreezingOnBatterySaverHighCPUProportion{
+    &kCPUMeasurementInFreezingPolicy,
+    "freezing_on_battery_saver_high_cpu_proportion", 0.25};
 
 BASE_FEATURE(kFreezingOnBatterySaver,
              "FreezingOnBatterySaver",

@@ -66,7 +66,7 @@ dawn_component("proc") {
 }
 
 ###############################################################################
-# Other generated files (upstream header, emscripten header, emscripten bits)
+# Generated header to match upstream webgpu-headers
 ###############################################################################
 
 dawn_json_generator("webgpu_headers_gen") {
@@ -74,13 +74,9 @@ dawn_json_generator("webgpu_headers_gen") {
   outputs = [ "webgpu-headers/webgpu.h" ]
 }
 
-dawn_json_generator("emscripten_bits_gen") {
-  target = "emscripten_bits"
-  outputs = [
-    "emscripten-bits/system/include/webgpu/webgpu.h",
-    "emscripten-bits/system/include/webgpu/webgpu_cpp.h",
-    "emscripten-bits/system/include/webgpu/webgpu_cpp_chained_struct.h",
-    "emscripten-bits/webgpu_struct_info.json",
-    "emscripten-bits/library_webgpu_enum_tables.js",
-  ]
+###############################################################################
+# Generated files to expose WebGPU Kotlin bindings
+###############################################################################
+group("proxy_for_jni") {
+  deps = [ "${dawn_root}/tools/android" ]
 }

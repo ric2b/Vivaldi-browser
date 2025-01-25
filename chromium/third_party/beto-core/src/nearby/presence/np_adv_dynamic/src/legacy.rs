@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use array_view::ArrayView;
 use crypto_provider::CryptoProvider;
-use np_adv::legacy::actions::*;
-use np_adv::legacy::data_elements::*;
-use np_adv::legacy::serialize::*;
-use np_adv::legacy::*;
-use np_adv::shared_data::*;
-use np_adv::PublicIdentity;
+use np_adv::{
+    legacy::{
+        data_elements::{actions::*, tx_power::TxPowerDataElement, *},
+        serialize::*,
+        *,
+    },
+    shared_data::*,
+};
 use std::fmt::{Display, Formatter};
 
 /// Wrapper around a V0 advertisement builder which
@@ -29,10 +30,10 @@ use std::fmt::{Display, Formatter};
 /// Generic over the Aes algorithm used for any encrypted identities,
 /// since that is generally specified at compile-time.
 pub enum BoxedAdvBuilder<C: CryptoProvider> {
-    /// Builder for public advertisements.
-    Public(AdvBuilder<PublicIdentity>),
-    /// Builder for LDT-encryptedadvertisements.
-    Ldt(AdvBuilder<LdtIdentity<C>>),
+    /// Builder for unencrypted advertisements.
+    Unencrypted(AdvBuilder<UnencryptedEncoder>),
+    /// Builder for LDT-encrypted advertisements.
+    Ldt(AdvBuilder<LdtEncoder<C>>),
 }
 
 /// Wrapper around possible errors which occur only during
@@ -41,7 +42,9 @@ pub enum BoxedAdvBuilder<C: CryptoProvider> {
 pub enum BoxedAdvConstructionError {
     /// An error originating from a problem with LDT
     /// encryption of the advertisement contents.
-    Ldt(LdtPostprocessError),
+    Ldt(LdtEncodeError),
+    /// An error from encoding an unencrypted adv
+    Unencrypted(UnencryptedEncodeError),
 }
 
 impl<C: CryptoProvider> BoxedAdvBuilder<C> {
@@ -49,15 +52,17 @@ impl<C: CryptoProvider> BoxedAdvBuilder<C> {
     /// leverages some encrypted identity.
     pub fn is_encrypted(&self) -> bool {
         match self {
-            BoxedAdvBuilder::Public(_) => false,
+            BoxedAdvBuilder::Unencrypted(_) => false,
             BoxedAdvBuilder::Ldt(_) => true,
         }
     }
     /// Constructs a new BoxedAdvBuilder from the given BoxedIdentity
-    pub fn new(identity: BoxedIdentity<C>) -> Self {
+    pub fn new(identity: BoxedEncoder<C>) -> Self {
         match identity {
-            BoxedIdentity::Public(identity) => BoxedAdvBuilder::Public(AdvBuilder::new(identity)),
-            BoxedIdentity::LdtIdentity(identity) => BoxedAdvBuilder::Ldt(AdvBuilder::new(identity)),
+            BoxedEncoder::Unencrypted(encoder) => {
+                BoxedAdvBuilder::Unencrypted(AdvBuilder::new(encoder))
+            }
+            BoxedEncoder::LdtEncrypted(encoder) => BoxedAdvBuilder::Ldt(AdvBuilder::new(encoder)),
         }
     }
     /// Attempts to add a data element to the advertisement
@@ -66,10 +71,10 @@ impl<C: CryptoProvider> BoxedAdvBuilder<C> {
     /// if something went wrong in the attempt to add the DE.
     pub fn add_data_element(
         &mut self,
-        data_element: ToBoxedDataElementBundle,
+        data_element: ToBoxedSerializeDataElement,
     ) -> Result<(), BoxedAddDataElementError> {
         match self {
-            BoxedAdvBuilder::Public(public_builder) => {
+            BoxedAdvBuilder::Unencrypted(public_builder) => {
                 //Verify that we can get the data element as plaintext
                 let maybe_plaintext_data_element = data_element.to_plaintext();
                 match maybe_plaintext_data_element {
@@ -93,15 +98,10 @@ impl<C: CryptoProvider> BoxedAdvBuilder<C> {
     }
     /// Consume this BoxedAdvBuilder and attempt to create
     /// a serialized advertisement including the added DEs.
-    pub fn into_advertisement(
-        self,
-    ) -> Result<ArrayView<u8, BLE_ADV_SVC_CONTENT_LEN>, BoxedAdvConstructionError> {
+    pub fn into_advertisement(self) -> Result<SerializedAdv, BoxedAdvConstructionError> {
         match self {
-            BoxedAdvBuilder::Public(x) => {
-                match x.into_advertisement() {
-                    Ok(x) => Ok(x),
-                    Err(x) => match x {}, //Infallible
-                }
+            BoxedAdvBuilder::Unencrypted(x) => {
+                x.into_advertisement().map_err(BoxedAdvConstructionError::Unencrypted)
             }
             BoxedAdvBuilder::Ldt(x) => {
                 x.into_advertisement().map_err(BoxedAdvConstructionError::Ldt)
@@ -145,121 +145,100 @@ impl From<AddDataElementError> for BoxedAddDataElementError {
     }
 }
 
-/// Trait object reference to a `ToDataElementBundle<I>` with lifetime `'a`.
-/// Implements `ToDataElementBundle<I>` by deferring to the wrapped trait object.
-pub struct DynamicToDataElementBundle<'a, I: PacketFlavor> {
-    wrapped: &'a dyn ToDataElementBundle<I>,
-}
-
-impl<'a, I: PacketFlavor> From<&'a dyn ToDataElementBundle<I>>
-    for DynamicToDataElementBundle<'a, I>
-{
-    fn from(wrapped: &'a dyn ToDataElementBundle<I>) -> Self {
-        DynamicToDataElementBundle { wrapped }
-    }
-}
-
-impl<'a, I: PacketFlavor> ToDataElementBundle<I> for DynamicToDataElementBundle<'a, I> {
-    fn to_de_bundle(&self) -> DataElementBundle<I> {
-        self.wrapped.to_de_bundle()
-    }
-}
-
 /// Trait for types which can provide trait object
-/// references to either plaintext or ciphertext [ToDataElementBundle]
-pub trait ToMultiFlavorElementBundle {
-    /// Gets the associated trait object reference to a `ToDataElementBundle<Plaintext>`
+/// references to either plaintext or ciphertext [SerializeDataElement]
+pub trait ToMultiFlavorSerializeDataElement {
+    /// Gets the associated trait object reference to a `SerializeDataElement<Plaintext>`
     /// with the same lifetime as a reference to the implementor.
-    fn to_plaintext(&self) -> DynamicToDataElementBundle<Plaintext>;
+    fn to_plaintext(&self) -> DynamicSerializeDataElement<Plaintext>;
 
-    /// Gets the associated trait object reference to a `ToDataElementBundle<Ciphertext>`
+    /// Gets the associated trait object reference to a `SerializeDataElement<Ciphertext>`
     /// with the same lifetime as a reference to the implementor.
-    fn to_ciphertext(&self) -> DynamicToDataElementBundle<Ciphertext>;
+    fn to_ciphertext(&self) -> DynamicSerializeDataElement<Ciphertext>;
 }
 
-/// Blanket impl of [ToMultiFlavorElementBundle] for implementors of [ToDataElementBundle]
+/// Blanket impl of [ToMultiFlavorSerializeDataElement] for implementors of [SerializeDataElement]
 /// for both [Plaintext] and [Ciphertext] packet flavors.
-impl<T: ToDataElementBundle<Plaintext> + ToDataElementBundle<Ciphertext>> ToMultiFlavorElementBundle
-    for T
+impl<T: SerializeDataElement<Plaintext> + SerializeDataElement<Ciphertext>>
+    ToMultiFlavorSerializeDataElement for T
 {
-    fn to_plaintext(&self) -> DynamicToDataElementBundle<Plaintext> {
-        let reference: &dyn ToDataElementBundle<Plaintext> = self;
+    fn to_plaintext(&self) -> DynamicSerializeDataElement<Plaintext> {
+        let reference: &dyn SerializeDataElement<Plaintext> = self;
         reference.into()
     }
-    fn to_ciphertext(&self) -> DynamicToDataElementBundle<Ciphertext> {
-        let reference: &dyn ToDataElementBundle<Ciphertext> = self;
+    fn to_ciphertext(&self) -> DynamicSerializeDataElement<Ciphertext> {
+        let reference: &dyn SerializeDataElement<Ciphertext> = self;
         reference.into()
     }
 }
 
-/// Boxed trait object version of [ToDataElementBundle] which incorporates
+/// Boxed trait object version of [SerializeDataElement] which incorporates
 /// all possible variants on generatable packet flavoring
-/// (`Plaintext`, `Ciphertext`, or both, as a [ToMultiFlavorElementBundle])
-pub enum ToBoxedDataElementBundle {
+/// (`Plaintext`, `Ciphertext`, or both, as a [ToMultiFlavorSerializeDataElement])
+pub enum ToBoxedSerializeDataElement {
     /// The underlying DE is plaintext-only.
-    Plaintext(Box<dyn ToDataElementBundle<Plaintext>>),
+    Plaintext(Box<dyn SerializeDataElement<Plaintext>>),
     /// The underlying DE is ciphertext-only.
-    Ciphertext(Box<dyn ToDataElementBundle<Ciphertext>>),
+    Ciphertext(Box<dyn SerializeDataElement<Ciphertext>>),
     /// The underlying DE may exist in plaintext or
     /// in ciphertext advertisements.
-    Both(Box<dyn ToMultiFlavorElementBundle>),
+    Both(Box<dyn ToMultiFlavorSerializeDataElement>),
 }
 
-impl ToBoxedDataElementBundle {
-    /// If this [ToBoxedDataElementBundle] can generate plaintext, returns
-    /// a trait object reference to a `ToDataElementBundle<Plaintext>`
-    pub fn to_plaintext(&self) -> Option<DynamicToDataElementBundle<Plaintext>> {
+impl ToBoxedSerializeDataElement {
+    /// If this [ToBoxedSerializeDataElement] can generate plaintext, returns
+    /// a trait object reference to a `SerializeDataElement<Plaintext>`
+    pub fn to_plaintext(&self) -> Option<DynamicSerializeDataElement<Plaintext>> {
         match &self {
-            ToBoxedDataElementBundle::Plaintext(x) => Some(x.as_ref().into()),
-            ToBoxedDataElementBundle::Ciphertext(_) => None,
-            ToBoxedDataElementBundle::Both(x) => Some(x.as_ref().to_plaintext()),
+            ToBoxedSerializeDataElement::Plaintext(x) => Some(x.as_ref().into()),
+            ToBoxedSerializeDataElement::Ciphertext(_) => None,
+            ToBoxedSerializeDataElement::Both(x) => Some(x.as_ref().to_plaintext()),
         }
     }
-    /// If this [ToBoxedDataElementBundle] can generate ciphertext, returns
-    /// a trait object reference to a `ToDataElementBundle<Ciphertext>`
-    pub fn to_ciphertext(&self) -> Option<DynamicToDataElementBundle<Ciphertext>> {
+    /// If this [ToBoxedSerializeDataElement] can generate ciphertext, returns
+    /// a trait object reference to a `SerializeDataElement<Ciphertext>`
+    pub fn to_ciphertext(&self) -> Option<DynamicSerializeDataElement<Ciphertext>> {
         match &self {
-            ToBoxedDataElementBundle::Plaintext(_) => None,
-            ToBoxedDataElementBundle::Ciphertext(x) => Some(x.as_ref().into()),
-            ToBoxedDataElementBundle::Both(x) => Some(x.as_ref().to_ciphertext()),
+            ToBoxedSerializeDataElement::Plaintext(_) => None,
+            ToBoxedSerializeDataElement::Ciphertext(x) => Some(x.as_ref().into()),
+            ToBoxedSerializeDataElement::Both(x) => Some(x.as_ref().to_ciphertext()),
         }
     }
 }
 
-/// Boxed version of implementors of the Identity trait.
-/// A is the underlying Aes algorithm leveraged by ciphertext-based identities.
-pub enum BoxedIdentity<C: CryptoProvider> {
-    /// Public Identity.
-    Public(PublicIdentity),
-    /// An encrypted identity, using LDT encryption.
-    LdtIdentity(LdtIdentity<C>),
+/// Boxed version of implementors of the [AdvEncoder] trait.
+pub enum BoxedEncoder<C: CryptoProvider> {
+    /// Unencrypted encoding.
+    Unencrypted(UnencryptedEncoder),
+    /// An encrypted encoding, using LDT encryption.
+    LdtEncrypted(LdtEncoder<C>),
 }
 
-impl<C: CryptoProvider> From<PublicIdentity> for BoxedIdentity<C> {
-    fn from(public_identity: PublicIdentity) -> BoxedIdentity<C> {
-        BoxedIdentity::Public(public_identity)
+impl<C: CryptoProvider> From<UnencryptedEncoder> for BoxedEncoder<C> {
+    fn from(encoder: UnencryptedEncoder) -> BoxedEncoder<C> {
+        BoxedEncoder::Unencrypted(encoder)
     }
 }
 
-impl<C: CryptoProvider> From<LdtIdentity<C>> for BoxedIdentity<C> {
-    fn from(ldt_identity: LdtIdentity<C>) -> BoxedIdentity<C> {
-        BoxedIdentity::LdtIdentity(ldt_identity)
+impl<C: CryptoProvider> From<LdtEncoder<C>> for BoxedEncoder<C> {
+    fn from(encoder: LdtEncoder<C>) -> BoxedEncoder<C> {
+        BoxedEncoder::LdtEncrypted(encoder)
     }
 }
 
-impl From<TxPower> for ToBoxedDataElementBundle {
+impl From<TxPower> for ToBoxedSerializeDataElement {
     fn from(data: TxPower) -> Self {
-        ToBoxedDataElementBundle::Both(Box::new(TxPowerDataElement::from(data)))
+        ToBoxedSerializeDataElement::Both(Box::new(TxPowerDataElement::from(data)))
     }
 }
 
-impl From<BoxedActionBits> for ToBoxedDataElementBundle {
+impl From<BoxedActionBits> for ToBoxedSerializeDataElement {
     fn from(action_bits: BoxedActionBits) -> Self {
         match action_bits {
-            BoxedActionBits::Plaintext(action_bits) => {
-                ToBoxedDataElementBundle::Plaintext(Box::new(ActionsDataElement::from(action_bits)))
-            }
-            BoxedActionBits::Ciphertext(action_bits) => ToBoxedDataElementBundle::Ciphertext(
+            BoxedActionBits::Plaintext(action_bits) => ToBoxedSerializeDataElement::Plaintext(
+                Box::new(ActionsDataElement::from(action_bits)),
+            ),
+            BoxedActionBits::Ciphertext(action_bits) => ToBoxedSerializeDataElement::Ciphertext(
                 Box::new(ActionsDataElement::from(action_bits)),
             ),
         }
@@ -269,8 +248,10 @@ impl From<BoxedActionBits> for ToBoxedDataElementBundle {
 /// Boxed version of `ToActionElement` which allows abstracting over
 /// what packet flavors are supported by a given action.
 pub enum ToBoxedActionElement {
-    /// A context-sync sequence number.
-    ContextSyncSeqNum(ContextSyncSeqNum),
+    /// Action bit for cross device SDK.
+    CrossDevSdk(bool),
+    /// Action bit for call transfer.
+    CallTransfer(bool),
     /// Action bit for active unlock.
     ActiveUnlock(bool),
     /// Action bit for nearby share.
@@ -279,12 +260,6 @@ pub enum ToBoxedActionElement {
     InstantTethering(bool),
     /// Action bit for PhoneHub.
     PhoneHub(bool),
-    /// Action bit for Finder.
-    Finder(bool),
-    /// Action bit for Fast Pair/SASS
-    FastPairSass(bool),
-    /// Action bit for Presence Manager.
-    PresenceManager(bool),
 }
 
 /// [`ActionBits`] with runtime-determined packet flavoring
@@ -323,25 +298,17 @@ impl BoxedActionBits {
         }
     }
 
-    /// Gets the context-sync sequence number from these boxed action bits.
-    pub fn get_context_sync_seq_num(&self) -> ContextSyncSeqNum {
-        match self {
-            BoxedActionBits::Plaintext(x) => x.context_sync_seq_num(),
-            BoxedActionBits::Ciphertext(x) => x.context_sync_seq_num(),
-        }
-    }
-
     /// Returns whether a boolean action type is set in these action bits, or `None`
     /// if the given action type does not represent a boolean (e.g: a context-sync
     /// sequence number).
-    pub fn has_action(&self, action_type: &ActionType) -> Option<bool> {
+    pub fn has_action(&self, action_type: ActionType) -> bool {
         match self {
             BoxedActionBits::Plaintext(x) => x.has_action(action_type),
             BoxedActionBits::Ciphertext(x) => x.has_action(action_type),
         }
     }
 
-    fn set<F: PacketFlavor, E: ToActionElement<F>>(
+    fn set<F: PacketFlavor, E: ActionElementFlavor<F>>(
         action_bits: &mut ActionBits<F>,
         to_element: E,
     ) -> Result<(), BoxedSetActionFlavorError> {
@@ -358,18 +325,24 @@ impl BoxedActionBits {
     ) -> Result<(), BoxedSetActionFlavorError> {
         match self {
             BoxedActionBits::Plaintext(action_bits) => match to_element {
-                ToBoxedActionElement::ContextSyncSeqNum(x) => Self::set(action_bits, x),
+                ToBoxedActionElement::CrossDevSdk(b) => {
+                    Self::set(action_bits, CrossDevSdk::from(b))
+                }
                 ToBoxedActionElement::NearbyShare(b) => {
                     Self::set(action_bits, NearbyShare::from(b))
                 }
-                ToBoxedActionElement::Finder(b) => Self::set(action_bits, Finder::from(b)),
-                ToBoxedActionElement::FastPairSass(b) => {
-                    Self::set(action_bits, FastPairSass::from(b))
-                }
-                _ => Err(BoxedSetActionFlavorError),
+                ToBoxedActionElement::CallTransfer(_)
+                | ToBoxedActionElement::ActiveUnlock(_)
+                | ToBoxedActionElement::InstantTethering(_)
+                | ToBoxedActionElement::PhoneHub(_) => Err(BoxedSetActionFlavorError),
             },
             BoxedActionBits::Ciphertext(action_bits) => match to_element {
-                ToBoxedActionElement::ContextSyncSeqNum(x) => Self::set(action_bits, x),
+                ToBoxedActionElement::CrossDevSdk(b) => {
+                    Self::set(action_bits, CrossDevSdk::from(b))
+                }
+                ToBoxedActionElement::CallTransfer(b) => {
+                    Self::set(action_bits, CallTransfer::from(b))
+                }
                 ToBoxedActionElement::ActiveUnlock(b) => {
                     Self::set(action_bits, ActiveUnlock::from(b))
                 }
@@ -380,10 +353,6 @@ impl BoxedActionBits {
                     Self::set(action_bits, InstantTethering::from(b))
                 }
                 ToBoxedActionElement::PhoneHub(b) => Self::set(action_bits, PhoneHub::from(b)),
-                ToBoxedActionElement::PresenceManager(b) => {
-                    Self::set(action_bits, PresenceManager::from(b))
-                }
-                _ => Err(BoxedSetActionFlavorError),
             },
         }
     }

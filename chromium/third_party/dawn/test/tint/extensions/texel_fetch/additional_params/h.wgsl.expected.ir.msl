@@ -1,24 +1,23 @@
-SKIP: FAILED
-
 #include <metal_stdlib>
 using namespace metal;
+
 struct FBF {
   float4 c1;
   int4 c3;
 };
 
+struct f_inputs {
+  float4 FBF_c1 [[color(1)]];
+  int4 FBF_c3 [[color(3)]];
+};
+
 void g(float a, float b, int c) {
 }
-fragment void f(float4 pos [[position]], FBF fbf) {
+
+void f_inner(float4 pos, FBF fbf) {
   g(fbf.c1[0u], pos[1u], fbf.c3[2u]);
 }
-program_source:10:42: error: invalid type 'FBF' for input declaration in a fragment function
-fragment void f(float4 pos [[position]], FBF fbf) {
-                                         ^~~~~~~
-program_source:4:10: note: 'color' attribute must be made explicit
-  float4 c1;
-         ^
-program_source:5:8: note: 'color' attribute must be made explicit
-  int4 c3;
-       ^
 
+fragment void f(float4 pos [[position]], f_inputs inputs [[stage_in]]) {
+  f_inner(pos, FBF{.c1=inputs.FBF_c1, .c3=inputs.FBF_c3});
+}

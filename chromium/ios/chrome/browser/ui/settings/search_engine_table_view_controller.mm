@@ -297,6 +297,7 @@ enum class SearchEngineSettingVersion {
 
     [model addSectionWithIdentifier:SectionIdentifierFirstList];
 
+    if (!IsVivaldiRunning()) {
     if (_searchEngineSettingVersion ==
         SearchEngineSettingVersion::kEEASettings) {
       TableViewTextHeaderFooterItem* header =
@@ -306,6 +307,7 @@ enum class SearchEngineSettingVersion {
       [model setHeader:header
           forSectionWithIdentifier:SectionIdentifierFirstList];
     }
+    } // End Vivaldi
 
     for (const TemplateURL* templateURL : _firstList) {
       TableViewItem* item = nil;
@@ -318,12 +320,14 @@ enum class SearchEngineSettingVersion {
   if (_secondList.size() > 0) {
     [model addSectionWithIdentifier:SectionIdentifierSecondList];
 
+    if (!IsVivaldiRunning()) {
     TableViewTextHeaderFooterItem* header =
         [[TableViewTextHeaderFooterItem alloc] initWithType:ItemTypeHeader];
     header.text = l10n_util::GetNSString(
         IDS_IOS_SEARCH_ENGINE_SETTING_CUSTOM_SECTION_HEADER);
     [model setHeader:header
         forSectionWithIdentifier:SectionIdentifierSecondList];
+    } // End Vivaldi
 
     for (const TemplateURL* templateURL : _secondList) {
       DCHECK(templateURL->prepopulate_id() == 0);
@@ -634,20 +638,25 @@ enum class SearchEngineSettingVersion {
   item.templateURL = templateURL;
   item.text = base::SysUTF16ToNSString(templateURL->short_name());
   item.detailText = base::SysUTF16ToNSString(templateURL->keyword());
+
+  // Note(prio@vivaldi.com) - Skip chromium favicon fetching method.
+  // Also skip their default search engine check logic.
+  if (!IsVivaldiRunning()) {
   if ([self isItem:item
           equalForTemplateURL:_templateURLService
                                   ->GetDefaultSearchProvider()]) {
     [item setAccessoryType:UITableViewCellAccessoryCheckmark];
   }
-
-  // Note(prio@vivaldi.com) - Skip chromium favicon fetching method.
-  if (!IsVivaldiRunning()) {
   __weak __typeof(self) weakSelf = self;
   GetSearchEngineFavicon(
       *templateURL, _searchEngineChoiceService, _templateURLService,
       _faviconLoader, ^(FaviconAttributes* attributes) {
         [weakSelf faviconReceivedFor:item faviconAttributes:attributes];
       });
+  } else {
+    if ([self isItem:item equalForTemplateURL:[self defaultSearchEngine]]) {
+      [item setAccessoryType:UITableViewCellAccessoryCheckmark];
+    }
   } // End Vivaldi
 
   return item;
@@ -921,7 +930,8 @@ enum class SearchEngineSettingVersion {
   if (!_templateURLService)
     return;
   _templateURLService->SetUserSelectedDefaultSearchProvider(
-      url, [self defaultSearchType]);
+      url, [self defaultSearchType],
+      search_engines::ChoiceMadeLocation::kSearchEngineSettings);
 }
 
 - (void)executeRestoreAction {

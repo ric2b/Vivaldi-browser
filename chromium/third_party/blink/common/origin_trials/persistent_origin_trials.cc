@@ -27,6 +27,8 @@ bool IsTrialPersistentToNextResponse(std::string_view trial_name) {
       "WebViewXRequestedWithDeprecation",
       "Tpcd",
       "TopLevelTpcd",
+      "LimitThirdPartyCookies",
+      "DisableReduceAcceptLanguage",
   };
   return base::Contains(kPersistentTrials, trial_name);
 }

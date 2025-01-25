@@ -14,6 +14,8 @@
 #include "base/nix/xdg_util.h"
 #include "base/path_service.h"
 
+#include "launch_bar_gnome_support.h"
+
 namespace extensions {
 void reduce_spaces(std::string& s) {
   // strip leading spaces.
@@ -123,6 +125,24 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
       getMomentJsFormatString(nl_langinfo(T_FMT), false);
 
   return true;
+}
+
+std::optional<bool>
+UtilitiesIsVivaldiPinnedToLaunchBarFunction::CheckIsPinned() {
+  if (dock::GnomeLaunchBar::IsGnomeRunning()) {
+    return dock::GnomeLaunchBar::IsVivaldiPinned();
+  }
+
+  LOG(INFO) << "Pinning is not suppported by the current linux environment.";
+  return std::nullopt;
+}
+
+bool UtilitiesPinVivaldiToLaunchBarFunction::PinToLaunchBar() {
+  if (dock::GnomeLaunchBar::IsGnomeRunning()) {
+    return dock::GnomeLaunchBar::PinVivaldi();
+  }
+
+  return false;
 }
 
 }  // namespace extensions

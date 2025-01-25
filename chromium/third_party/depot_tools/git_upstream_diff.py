@@ -8,10 +8,17 @@ import sys
 
 import subprocess2
 
+import gclient_utils
 import git_common as git
 
 
 def main(args):
+    if gclient_utils.IsEnvCog():
+        print(
+            'upstream-diff command is not supported. Please navigate to source '
+            'control view in the activity bar to check the diff.',
+            file=sys.stderr)
+        return 1
     default_args = git.get_config_list('depot-tools.upstream-diff.default-args')
     args = default_args + args
 

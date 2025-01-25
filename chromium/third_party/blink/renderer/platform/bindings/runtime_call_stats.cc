@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/bindings/runtime_call_stats.h"
 
 #include <inttypes.h>
@@ -14,6 +19,7 @@
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/traced_value.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
@@ -150,6 +156,12 @@ void RuntimeCallStats::SetRuntimeCallStatsForTesting() {
 // static
 void RuntimeCallStats::ClearRuntimeCallStatsForTesting() {
   g_runtime_call_stats_for_testing = nullptr;
+}
+
+// This function exists to remove runtime_enabled_features.h dependnency from
+// runtime_call_stats.h.
+bool RuntimeCallStats::IsEnabled() {
+  return RuntimeEnabledFeatures::BlinkRuntimeCallStatsEnabled();
 }
 
 #if BUILDFLAG(RCS_COUNT_EVERYTHING)

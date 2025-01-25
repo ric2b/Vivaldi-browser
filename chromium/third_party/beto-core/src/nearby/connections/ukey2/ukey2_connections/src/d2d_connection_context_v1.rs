@@ -18,14 +18,15 @@ use std::fmt::Formatter;
 use bytes::BufMut;
 use rand::SeedableRng as _;
 
+use crypto_provider::aead::Aead;
 use crypto_provider::{hkdf::Hkdf, hmac::Hmac, sha2::Sha256, CryptoProvider};
-use ukey2_proto::protobuf::Message as _;
+use ukey2_proto::protobuf::{Enum, Message as _};
 use ukey2_proto::ukey2_all_proto::{
     device_to_device_messages::DeviceToDeviceMessage,
     securegcm::{GcmMetadata, Type},
     securemessage::{EncScheme, Header, HeaderAndBody, SecureMessage, SigScheme},
 };
-use ukey2_rs::CompletedHandshake;
+use ukey2_rs::{CompletedHandshake, NextProtocol};
 
 use crate::{crypto_utils, java_utils};
 
@@ -52,7 +53,7 @@ const SESSION_UNIQUE_SALT: [u8; 32] = [
 ];
 
 pub(crate) type AesCbcIv = [u8; 16];
-pub type Aes256Key = [u8; 32];
+pub type Aes256Key = [u8; AES_256_KEY_SIZE];
 
 const HKDF_INFO_KEY_INITIATOR: &[u8; 6] = b"client";
 const HKDF_INFO_KEY_RESPONDER: &[u8; 6] = b"server";
@@ -118,6 +119,7 @@ where
     signing_key: Aes256Key,
     verify_key: Aes256Key,
     rng: R,
+    protocol: NextProtocol,
 }
 
 /// Error type for [`decode_message_from_peer`][D2DConnectionContextV1::decode_message_from_peer].
@@ -160,14 +162,13 @@ impl<R> D2DConnectionContextV1<R>
 where
     R: rand::Rng + rand::SeedableRng + rand::CryptoRng,
 {
-    pub(crate) const NEXT_PROTOCOL_IDENTIFIER: &'static str = "AES_256_CBC-HMAC_SHA256";
-
     pub fn new<C: CryptoProvider>(
         decode_sequence_num: i32,
         encode_sequence_num: i32,
         encode_key: Aes256Key,
         decode_key: Aes256Key,
         rng: R,
+        protocol: NextProtocol,
     ) -> Self {
         let encryption_key = derive_aes256_key::<C>(&encode_key, b"ENC:2");
         let decryption_key = derive_aes256_key::<C>(&decode_key, b"ENC:2");
@@ -183,6 +184,7 @@ where
             signing_key,
             verify_key,
             rng,
+            protocol,
         }
     }
 
@@ -198,6 +200,7 @@ where
             encryption_key::<32, C>(&next_protocol_secret, HKDF_INFO_KEY_INITIATOR).unwrap(),
             encryption_key::<32, C>(&next_protocol_secret, HKDF_INFO_KEY_RESPONDER).unwrap(),
             rng,
+            handshake.next_protocol,
         )
     }
 
@@ -213,6 +216,7 @@ where
             encryption_key::<32, C>(&next_protocol_secret, HKDF_INFO_KEY_RESPONDER).unwrap(),
             encryption_key::<32, C>(&next_protocol_secret, HKDF_INFO_KEY_INITIATOR).unwrap(),
             rng,
+            handshake.next_protocol,
         )
     }
 
@@ -240,6 +244,9 @@ where
         ret.put_i32(self.decode_sequence_num);
         ret.extend_from_slice(self.encode_key.as_slice());
         ret.extend_from_slice(self.decode_key.as_slice());
+        if self.protocol == NextProtocol::Aes256GcmSiv {
+            ret.extend_from_slice(&EncScheme::AES_256_GCM_SIV.value().to_be_bytes())
+        }
         ret
     }
 
@@ -247,31 +254,52 @@ where
         session: &[u8],
         rng: R,
     ) -> Result<Self, DeserializeError> {
-        if session.len() != 73 {
+        if session.len() != 73 && session.len() != 77 {
             return Err(DeserializeError::BadDataLength);
         }
         let (rem, _) = nom::bytes::complete::tag(PROTOCOL_VERSION.to_be_bytes())(session)
             .map_err(|_: nom::Err<nom::error::Error<_>>| DeserializeError::BadProtocolVersion)?;
-
-        let (_, (encode_sequence_num, decode_sequence_num, encode_key, decode_key)) =
-            nom::combinator::all_consuming(nom::sequence::tuple::<_, _, nom::error::Error<_>, _>(
-                (
-                    nom::number::complete::be_i32,
-                    nom::number::complete::be_i32,
-                    nom::combinator::map_res(
-                        nom::bytes::complete::take(32_usize),
-                        TryInto::<Aes256Key>::try_into,
-                    ),
-                    nom::combinator::map_res(
-                        nom::bytes::complete::take(32_usize),
-                        TryInto::<Aes256Key>::try_into,
-                    ),
+        let (
+            _,
+            (encode_sequence_num, decode_sequence_num, encode_key, decode_key, next_protocol_int),
+        ) = nom::combinator::all_consuming(nom::sequence::tuple::<_, _, nom::error::Error<_>, _>(
+            (
+                nom::number::complete::be_i32,
+                nom::number::complete::be_i32,
+                nom::combinator::map_res(
+                    nom::bytes::complete::take(32_usize),
+                    TryInto::<Aes256Key>::try_into,
                 ),
-            ))(rem)
-            // This should always succeed since all of the parsers above are valid over the entire
-            // [u8] space, and we already checked the length at the start.
-            .expect("Saved session parsing should succeed");
-        Ok(Self::new::<C>(encode_sequence_num, decode_sequence_num, encode_key, decode_key, rng))
+                nom::combinator::map_res(
+                    nom::bytes::complete::take(32_usize),
+                    TryInto::<Aes256Key>::try_into,
+                ),
+                nom::combinator::opt(nom::number::complete::be_i32),
+            ),
+        ))(rem)
+        // This should always succeed since all of the parsers above are valid over the entire
+        // [u8] space, and we already checked the length at the start.
+        .expect("Saved session parsing should succeed");
+
+        let next_protocol = if let Some(next_protocol_raw) = next_protocol_int {
+            let enc_scheme =
+                EncScheme::from_i32(next_protocol_raw).ok_or(DeserializeError::BadData)?;
+            match enc_scheme {
+                EncScheme::NONE => Err(DeserializeError::BadData),
+                EncScheme::AES_256_CBC => Ok(NextProtocol::Aes256CbcHmacSha256),
+                EncScheme::AES_256_GCM_SIV => Ok(NextProtocol::Aes256GcmSiv),
+            }?
+        } else {
+            NextProtocol::Aes256CbcHmacSha256
+        };
+        Ok(Self::new::<C>(
+            encode_sequence_num,
+            decode_sequence_num,
+            encode_key,
+            decode_key,
+            rng,
+            next_protocol,
+        ))
     }
 
     /// Once initiator and responder have exchanged public keys, use this method to encrypt and
@@ -292,11 +320,6 @@ where
             message: payload.to_vec(),
             sequence_num: self.get_sequence_number_for_encoding(),
         });
-        let (ciphertext, iv) = crypto_utils::encrypt::<_, C::AesCbcPkcs7Padded>(
-            &self.encryption_key,
-            message.as_slice(),
-            &mut self.rng,
-        );
         let metadata = GcmMetadata {
             type_: Some(Type::DEVICE_TO_DEVICE_MESSAGE.into()),
             // As specified in
@@ -304,32 +327,74 @@ where
             version: Some(1),
             ..Default::default()
         };
-        let header = Header {
-            signature_scheme: Some(SigScheme::HMAC_SHA256.into()),
-            encryption_scheme: Some(EncScheme::AES_256_CBC.into()),
-            iv: Some(iv.to_vec()),
-            public_metadata: Some(metadata.write_to_bytes().unwrap()),
-            associated_data_length: associated_data.as_ref().map(|d| d.as_ref().len() as u32),
-            ..Default::default()
+        let (ciphertext, header) = match self.protocol {
+            NextProtocol::Aes256GcmSiv => {
+                let nonce: [u8; 12] = self.rng.gen();
+                let ciphertext = crypto_utils::encrypt_gcm_siv::<C::Aes256GcmSiv>(
+                    &self.encryption_key,
+                    &message,
+                    associated_data.as_ref().map_or(&[], AsRef::as_ref),
+                    &nonce,
+                )
+                .unwrap();
+                (
+                    ciphertext,
+                    Header {
+                        signature_scheme: Some(SigScheme::AEAD.into()),
+                        encryption_scheme: Some(EncScheme::AES_256_GCM_SIV.into()),
+                        nonce: Some(nonce.to_vec()),
+                        public_metadata: Some(metadata.write_to_bytes().unwrap()),
+                        associated_data_length: associated_data
+                            .as_ref()
+                            .map(|d| d.as_ref().len() as u32),
+                        ..Default::default()
+                    },
+                )
+            }
+            NextProtocol::Aes256CbcHmacSha256 => {
+                let (ciphertext, iv) = crypto_utils::encrypt_cbc::<_, C::AesCbcPkcs7Padded>(
+                    &self.encryption_key,
+                    message.as_slice(),
+                    &mut self.rng,
+                );
+                (
+                    ciphertext,
+                    Header {
+                        signature_scheme: Some(SigScheme::HMAC_SHA256.into()),
+                        encryption_scheme: Some(EncScheme::AES_256_CBC.into()),
+                        iv: Some(iv.to_vec()),
+                        public_metadata: Some(metadata.write_to_bytes().unwrap()),
+                        associated_data_length: associated_data
+                            .as_ref()
+                            .map(|d| d.as_ref().len() as u32),
+                        ..Default::default()
+                    },
+                )
+            }
         };
+
         let header_and_body = HeaderAndBody {
             header: Some(header).into(),
             body: Some(ciphertext),
             ..Default::default()
         };
         let header_and_body_bytes = header_and_body.write_to_bytes().unwrap();
-
-        // add sha256 MAC
-        let mut hmac = C::HmacSha256::new_from_slice(&self.signing_key).unwrap();
-        hmac.update(header_and_body_bytes.as_slice());
-        if let Some(associated_data_vec) = associated_data.as_ref() {
-            hmac.update(associated_data_vec.as_ref())
-        }
-        let result_mac = hmac.finalize().to_vec();
+        let signature = match self.protocol {
+            NextProtocol::Aes256CbcHmacSha256 => {
+                // add sha256 MAC
+                let mut hmac = C::HmacSha256::new_from_slice(&self.signing_key).unwrap();
+                hmac.update(header_and_body_bytes.as_slice());
+                if let Some(associated_data_vec) = associated_data.as_ref() {
+                    hmac.update(associated_data_vec.as_ref())
+                }
+                Some(hmac.finalize().to_vec())
+            }
+            NextProtocol::Aes256GcmSiv => Some(vec![]),
+        };
 
         let secure_message = SecureMessage {
             header_and_body: Some(header_and_body_bytes),
-            signature: Some(result_mac),
+            signature,
             ..Default::default()
         };
         secure_message.write_to_bytes().unwrap()
@@ -349,36 +414,60 @@ where
     ) -> Result<Vec<u8>, DecodeError> {
         // first confirm that the payload MAC matches the header_and_body
         let message = SecureMessage::parse_from_bytes(payload).map_err(|_| DecodeError::BadData)?;
-        let payload_mac: [u8; 32] = message
-            .signature
-            .and_then(|signature| signature.try_into().ok())
-            .ok_or(DecodeError::BadData)?;
-        let payload = message.header_and_body.ok_or(DecodeError::BadData)?;
-        let mut hmac = C::HmacSha256::new_from_slice(&self.verify_key).unwrap();
-        hmac.update(&payload);
-        if let Some(associated_data) = associated_data.as_ref() {
-            hmac.update(associated_data.as_ref())
+        let header_and_body = message.header_and_body.ok_or(DecodeError::BadData)?;
+        match self.protocol {
+            NextProtocol::Aes256CbcHmacSha256 => {
+                let payload_mac: [u8; 32] = message
+                    .signature
+                    .and_then(|signature| signature.try_into().ok())
+                    .ok_or(DecodeError::BadData)?;
+                let mut hmac = C::HmacSha256::new_from_slice(&self.verify_key).unwrap();
+                hmac.update(&header_and_body);
+                if let Some(associated_data) = associated_data.as_ref() {
+                    hmac.update(associated_data.as_ref())
+                }
+                hmac.verify(payload_mac).map_err(|_| DecodeError::BadData)?;
+            }
+            NextProtocol::Aes256GcmSiv => {} // No need to check signature on an AEAD cipher.
         }
-        hmac.verify(payload_mac).map_err(|_| DecodeError::BadData)?;
+
         let payload =
-            HeaderAndBody::parse_from_bytes(&payload).map_err(|_| DecodeError::BadData)?;
-        let associated_data_len =
-            payload.header.as_ref().and_then(|header| header.associated_data_length);
-        if associated_data_len != associated_data.map(|ad| ad.as_ref().len() as u32) {
-            return Err(DecodeError::BadData);
-        }
-        let iv: AesCbcIv = payload
-            .header
-            .as_ref()
-            .and_then(|header| header.iv().try_into().ok())
-            .ok_or(DecodeError::BadData)?;
-        let decrypted = crypto_utils::decrypt::<C::AesCbcPkcs7Padded>(
-            &self.decryption_key,
-            &payload.body.unwrap_or_default(),
-            &iv,
-        )
-        .map_err(|_| DecodeError::BadData)?;
-        let d2d_message = unwrap_device_to_device_message(decrypted.as_slice())?;
+            HeaderAndBody::parse_from_bytes(&header_and_body).map_err(|_| DecodeError::BadData)?;
+        let decrypted = match self.protocol {
+            NextProtocol::Aes256GcmSiv => {
+                let nonce: <<C as CryptoProvider>::Aes256GcmSiv as Aead>::Nonce = payload
+                    .header
+                    .as_ref()
+                    .and_then(|header| header.nonce().try_into().ok())
+                    .ok_or(DecodeError::BadData)?;
+                crypto_utils::decrypt_gcm_siv::<C::Aes256GcmSiv>(
+                    &self.decryption_key,
+                    &payload.body.unwrap_or_default(),
+                    associated_data.as_ref().map_or(&[], AsRef::as_ref),
+                    &nonce,
+                )
+                .map_err(|_| DecodeError::BadData)?
+            }
+            NextProtocol::Aes256CbcHmacSha256 => {
+                let associated_data_len =
+                    payload.header.as_ref().and_then(|header| header.associated_data_length);
+                if associated_data_len != associated_data.map(|ad| ad.as_ref().len() as u32) {
+                    return Err(DecodeError::BadData);
+                }
+                let iv: AesCbcIv = payload
+                    .header
+                    .as_ref()
+                    .and_then(|header| header.iv().try_into().ok())
+                    .ok_or(DecodeError::BadData)?;
+                crypto_utils::decrypt_cbc::<C::AesCbcPkcs7Padded>(
+                    &self.decryption_key,
+                    &payload.body.unwrap_or_default(),
+                    &iv,
+                )
+                .map_err(|_| DecodeError::BadData)?
+            }
+        };
+        let d2d_message = unwrap_device_to_device_message(&decrypted)?;
         if d2d_message.sequence_num != self.get_sequence_number_for_decoding() + 1 {
             return Err(DecodeError::BadSequenceNumber);
         }

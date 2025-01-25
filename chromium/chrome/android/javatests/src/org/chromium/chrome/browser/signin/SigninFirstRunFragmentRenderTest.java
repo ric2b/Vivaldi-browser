@@ -28,6 +28,7 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.Promise;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterProvider;
@@ -51,14 +52,15 @@ import org.chromium.chrome.browser.signin.SigninFirstRunFragmentTest.CustomSigni
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninChecker;
 import org.chromium.chrome.browser.signin.services.SigninManager;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.signin.identitymanager.IdentityManager;
+import org.chromium.components.sync.SyncService;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.BlankUiTestActivityTestCase;
 import org.chromium.ui.test.util.DeviceRestriction;
 import org.chromium.ui.test.util.RenderTestRule;
@@ -115,6 +117,7 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     @Rule
     public final RenderTestRule mRenderTestRule =
             RenderTestRule.Builder.withPublicCorpus()
+                    .setRevision(1)
                     .setBugComponent(RenderTestRule.Component.UI_BROWSER_FIRST_RUN)
                     .build();
 
@@ -127,6 +130,7 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     @Mock private FirstRunPageDelegate mFirstRunPageDelegateMock;
     @Mock private PolicyLoadListener mPolicyLoadListenerMock;
     @Mock private SigninManager mSigninManagerMock;
+    @Mock private SyncService mSyncService;
     @Mock private SigninChecker mSigninCheckerMock;
     @Mock private IdentityManager mIdentityManagerMock;
     @Mock private IdentityServicesProvider mIdentityServicesProviderMock;
@@ -136,7 +140,7 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
 
     @ParameterAnnotations.UseMethodParameterBefore(NightModeAndOrientationParameterProvider.class)
     public void setupNightModeAndDeviceOrientation(boolean nightModeEnabled, int orientation) {
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     AppCompatDelegate.setDefaultNightMode(
                             nightModeEnabled
@@ -152,7 +156,7 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     public void setUp() {
         NativeLibraryTestUtils.loadNativeLibraryAndInitBrowserProcess();
         OneshotSupplierImpl<ProfileProvider> profileSupplier =
-                TestThreadUtils.runOnUiThreadBlockingNoException(
+                ThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             OneshotSupplierImpl<ProfileProvider> supplier =
                                     new OneshotSupplierImpl<>();
@@ -166,20 +170,21 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
         when(mExternalAuthUtilsMock.canUseGooglePlayServices()).thenReturn(true);
         ExternalAuthUtils.setInstanceForTesting(mExternalAuthUtilsMock);
         IdentityServicesProvider.setInstanceForTests(mIdentityServicesProviderMock);
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     when(IdentityServicesProvider.get().getSigninManager(mProfileMock))
                             .thenReturn(mSigninManagerMock);
                     when(IdentityServicesProvider.get().getIdentityManager(mProfileMock))
                             .thenReturn(mIdentityManagerMock);
                 });
+        SyncServiceFactory.setInstanceForTesting(mSyncService);
         SigninCheckerProvider.setForTests(mSigninCheckerMock);
         when(mPolicyLoadListenerMock.get()).thenReturn(false);
         when(mFirstRunPageDelegateMock.getPolicyLoadListener()).thenReturn(mPolicyLoadListenerMock);
         when(mFirstRunPageDelegateMock.canUseLandscapeLayout()).thenReturn(true);
         mFragment = new CustomSigninFirstRunFragment();
         mFragment.setPageDelegate(mFirstRunPageDelegateMock);
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     Promise<Void> nativeSideIsInitialized = new Promise<>();
                     nativeSideIsInitialized.fulfill(null);
@@ -393,6 +398,7 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     @Test
     @MediumTest
     @Feature("RenderTest")
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
     public void testFragmentWithAccountWhenSigninIsDisabledByPolicy(
             boolean nightModeEnabled, int orientation) throws IOException {
@@ -409,6 +415,26 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     @Test
     @MediumTest
     @Feature("RenderTest")
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
+    public void
+            testFragmentWithAccountWhenSigninIsDisabledByPolicy_replaceSyncWithSigninPromosEnabled(
+                    boolean nightModeEnabled, int orientation) throws IOException {
+        when(mSigninManagerMock.isSigninDisabledByPolicy()).thenReturn(true);
+        when(mPolicyLoadListenerMock.get()).thenReturn(true);
+        mAccountManagerTestRule.addAccount(TEST_EMAIL1);
+
+        launchActivityWithFragment(orientation);
+
+        mRenderTestRule.render(
+                mFragment.getView(),
+                "signin_first_run_fragment_when_signin_disabled_by_policy_replace_sync_with_signin_promos_enabled");
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    @Features.DisableFeatures({ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS})
     @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
     public void testFragmentWithAccountWhenSigninIsDisabledByPolicy_doesNotApplyFREStringVariation(
             boolean nightModeEnabled, int orientation) throws IOException {
@@ -426,6 +452,26 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     @Test
     @MediumTest
     @Feature("RenderTest")
+    @Features.EnableFeatures({ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS})
+    @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
+    public void
+            testFragmentWithAccountWhenSigninIsDisabledByPolicy_doesNotApplyFREStringVariation_replaceSyncWithSigninEnabled(
+                    boolean nightModeEnabled, int orientation) throws IOException {
+        when(mSigninManagerMock.isSigninDisabledByPolicy()).thenReturn(true);
+        when(mPolicyLoadListenerMock.get()).thenReturn(true);
+        mAccountManagerTestRule.addAccount(TEST_EMAIL1);
+
+        launchActivityWithFragment(orientation);
+
+        mRenderTestRule.render(
+                mFragment.getView(),
+                "signin_first_run_fragment_when_signin_disabled_by_policy_and_string_variation_replace_sync_with_signin_promos_enabled");
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
     public void testFragmentWithoutAccount(boolean nightModeEnabled, int orientation)
             throws IOException {
@@ -437,6 +483,21 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     @Test
     @MediumTest
     @Feature("RenderTest")
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
+    public void testFragmentWithoutAccount_replaceSyncWithSignin(
+            boolean nightModeEnabled, int orientation) throws IOException {
+        launchActivityWithFragment(orientation);
+
+        mRenderTestRule.render(
+                mFragment.getView(),
+                "signin_first_run_fragment_without_account_replace_sync_with_signin_promos_enabled");
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
     public void testFragmentWithoutAccountOnManagedDevice(boolean nightModeEnabled, int orientation)
             throws IOException {
@@ -445,6 +506,21 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
 
         mRenderTestRule.render(
                 mFragment.getView(), "signin_first_run_fragment_without_account_managed");
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
+    public void testFragmentWithoutAccountOnManagedDevice_replaceSyncWithSigninPromos(
+            boolean nightModeEnabled, int orientation) throws IOException {
+        when(mPolicyLoadListenerMock.get()).thenReturn(true);
+        launchActivityWithFragment(orientation);
+
+        mRenderTestRule.render(
+                mFragment.getView(),
+                "signin_first_run_fragment_without_account_managed_replace_sync_with_signin_promos_enabled");
     }
 
     @Test
@@ -529,6 +605,7 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     @Test
     @MediumTest
     @Feature("RenderTest")
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
     public void testFragmentWhenCannotUseGooglePlayService(
             boolean nightModeEnabled, int orientation) throws IOException {
@@ -543,6 +620,23 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     @Test
     @MediumTest
     @Feature("RenderTest")
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
+    public void testFragmentWhenCannotUseGooglePlayService_replaceSyncWithSigninEnabled(
+            boolean nightModeEnabled, int orientation) throws IOException {
+        when(mExternalAuthUtilsMock.canUseGooglePlayServices()).thenReturn(false);
+
+        launchActivityWithFragment(orientation);
+
+        mRenderTestRule.render(
+                mFragment.getView(),
+                "signin_first_run_fragment_signin_not_supported_replace_sync_with_signin_promos_enabled");
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
     public void testFragmentWhenMetricsReportingIsDisabledByPolicy(
             boolean nightModeEnabled, int orientation) throws IOException {
@@ -557,6 +651,26 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
         mRenderTestRule.render(
                 mFragment.getView(),
                 "signin_first_run_fragment_when_metrics_reporting_is_disabled_by_policy");
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
+    public void testFragmentWhenMetricsReportingIsDisabledByPolicy_replaceSyncWithSigninEnabled(
+            boolean nightModeEnabled, int orientation) throws IOException {
+        when(mPolicyLoadListenerMock.get()).thenReturn(true);
+        when(mPrivacyPreferencesManagerMock.isUsageAndCrashReportingPermittedByPolicy())
+                .thenReturn(false);
+
+        PrivacyPreferencesManagerImpl.setInstanceForTesting(mPrivacyPreferencesManagerMock);
+
+        launchActivityWithFragment(orientation);
+
+        mRenderTestRule.render(
+                mFragment.getView(),
+                "signin_first_run_fragment_when_metrics_reporting_is_disabled_by_policy_replace_sync_with_signin_promos_enabled");
     }
 
     @Test
@@ -668,6 +782,7 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     @Test
     @MediumTest
     @Feature("RenderTest")
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
     public void testFragment_WelcomeToChrome_EasierAcrossDevices(
             boolean nightModeEnabled, int orientation) throws IOException {
@@ -678,12 +793,23 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
                 "signin_first_run_fragment_welcome_to_chrome_easier_across_devices");
     }
 
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
+    public void testFragment_WelcomeToChrome_EasierAcrossDevices_replaceSyncWithSigninPromoEnabled(
+            boolean nightModeEnabled, int orientation) throws IOException {
+        launchActivityWithFragment(orientation);
 
-
+        mRenderTestRule.render(
+                mFragment.getView(),
+                "signin_first_run_fragment_welcome_to_chrome_easier_across_devices_replace_sync_with_signin_promos_enabled");
+    }
 
     private void launchActivityWithFragment(int orientation) {
         ActivityTestUtils.rotateActivityToOrientation(getActivity(), orientation);
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     getActivity()
                             .getSupportFragmentManager()

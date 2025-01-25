@@ -38,7 +38,8 @@ namespace ash::file_system_provider {
 // A simple wrapper over a `ProvidedFileSystem` that adds additional logging,
 // currently this is hidden behind the `FileSystemProviderCloudFileSystem`
 // feature flag.
-class CloudFileSystem : public ProvidedFileSystemInterface {
+class CloudFileSystem : public ProvidedFileSystemInterface,
+                        public ContentCache::Observer {
  public:
   explicit CloudFileSystem(
       std::unique_ptr<ProvidedFileSystemInterface> file_system);
@@ -136,11 +137,22 @@ class CloudFileSystem : public ProvidedFileSystemInterface {
   base::WeakPtr<ProvidedFileSystemInterface> GetWeakPtr() override;
   std::unique_ptr<ScopedUserInteraction> StartUserInteraction() override;
 
+  // ContentCache::Observer
+  void OnItemEvicted(const base::FilePath& fsp_path) override;
+
  private:
   const std::string GetFileSystemId() const;
   void OnTimer();
   void OnContentCacheInitialized(
       base::FileErrorOr<std::unique_ptr<ContentCache>> error_or_cache);
+  // Attempts to add a watcher on the file with `file_path`. If the attempt
+  // fails with `FILE_ERROR_SECURITY`, this could be because the FSP (extension)
+  // is not ready yet to handle FSP calls. Try again every 2 seconds until the
+  // max number of attempts is reached.
+  void AddWatcherOnCachedFile(const base::FilePath& file_path);
+  void AddWatcherOnCachedFileImpl(const base::FilePath& file_path,
+                                  int attempts,
+                                  base::File::Error result);
   void OnItemEvictedFromCache(const base::FilePath& file_path);
   // Called when opening a file is completed with either a success or an error.
   void OnOpenFileCompleted(const base::FilePath& file_path,
@@ -181,6 +193,18 @@ class CloudFileSystem : public ProvidedFileSystemInterface {
                            int bytes_read,
                            bool has_more,
                            base::File::Error result);
+
+  // Called when the write file request is completed with either a success or
+  // an error.
+  void OnWriteFileCompleted(int file_handle,
+                            storage::AsyncFileUtil::StatusCallback callback,
+                            base::File::Error result);
+
+  // Called when the delete entry request is completed with either a success or
+  // an error.
+  void OnDeleteEntryCompleted(const base::FilePath& entry_path,
+                              storage::AsyncFileUtil::StatusCallback callback,
+                              base::File::Error result);
 
   // After the bytes have finished caching, invoke the `callback`. This is the
   // `ReadChunkReceivedCallback` above and will always be invoked as the FSP

@@ -7,46 +7,29 @@
 
 #include <memory>
 
-class GrDirectContext;
 class SkCanvas;
 
 namespace chrome_pdf {
 
 class InkInProgressStroke;
 class InkStroke;
+struct InkAffineTransform;
 
 class InkSkiaRenderer {
  public:
-  // NOTE: This is the equivalent to the following 3x3 matrix:
-  //
-  //  a  b  c
-  //  d  e  f
-  //  0  0  1
-  //
-  // Thus the identity matrix is {1, 0, 0, 0, 1, 0}, and not {1, 0, 0, 1, 0, 0}.
-  struct AffineTransform {
-    float a;
-    float b;
-    float c;
-    float d;
-    float e;
-    float f;
-  };
-
   static std::unique_ptr<InkSkiaRenderer> Create();
 
   InkSkiaRenderer(const InkSkiaRenderer&) = delete;
   InkSkiaRenderer& operator=(const InkSkiaRenderer&) = delete;
   virtual ~InkSkiaRenderer() = default;
 
-  // TODO(thestig): Remove `context` parameter.
-  virtual bool Draw(GrDirectContext* context,
-                    const InkInProgressStroke& stroke,
-                    const AffineTransform& object_to_canvas,
+  // Note that the context parameter has been omitted, as it is always set to
+  // nullptr.
+  virtual bool Draw(const InkInProgressStroke& stroke,
+                    const InkAffineTransform& object_to_canvas,
                     SkCanvas& canvas) = 0;
-  virtual bool Draw(GrDirectContext* context,
-                    const InkStroke& stroke,
-                    const AffineTransform& object_to_canvas,
+  virtual bool Draw(const InkStroke& stroke,
+                    const InkAffineTransform& object_to_canvas,
                     SkCanvas& canvas) = 0;
 
  protected:

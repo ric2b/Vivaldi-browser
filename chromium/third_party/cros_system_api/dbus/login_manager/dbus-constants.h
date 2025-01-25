@@ -23,6 +23,7 @@ const char kSessionManagerLoginScreenStorageDelete[] =
     "LoginScreenStorageDelete";
 const char kSessionManagerStartSession[] = "StartSession";
 const char kSessionManagerStartSessionEx[] = "StartSessionEx";
+const char kSessionManagerEmitStartedUserSession[] = "EmitStartedUserSession";
 const char kSessionManagerStopSession[] = "StopSession";
 const char kSessionManagerStopSessionWithReason[] = "StopSessionWithReason";
 const char kSessionManagerLoadShillProfile[] = "LoadShillProfile";
@@ -114,6 +115,7 @@ const char kPubkeySetIllegal[] = INTERFACE ".PubkeySetIllegal";
 const char kPolicySignatureRequired[] = INTERFACE ".PolicySignatureRequired";
 const char kSessionDoesNotExist[] = INTERFACE ".SessionDoesNotExist";
 const char kSessionExists[] = INTERFACE ".SessionExists";
+const char kSessionNotExists[] = INTERFACE ".SessionNotExists";
 const char kSigDecodeFail[] = INTERFACE ".SigDecodeFail";
 const char kSigEncodeFail[] = INTERFACE ".SigEncodeFail";
 const char kStateKeysRequestFail[] = INTERFACE ".StateKeysRequestFail";
@@ -181,8 +183,8 @@ enum class SessionStopReason {
   // ARC requests device encryption update.
   ARC_MIGRATION_REQUESTED = 7,
 
-  // ARC provision failed in kiosk mode.
-  ARC_KIOSK_PROVISION_FAILED = 8,
+  // ARC provision failed in kiosk mode. Deprecated
+  // ARC_KIOSK_PROVISION_FAILED = 8,
 
   // Request to optimize memory usage.
   BACKGROUND_OPTIMIZATION_REQUESTED = 9,

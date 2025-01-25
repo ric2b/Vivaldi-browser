@@ -289,6 +289,10 @@ void TypingCommand::ForwardDeleteKeyPressed(Document& document,
             LastTypingCommandIfStillOpenForTyping(frame)) {
       UpdateSelectionIfDifferentFromCurrentSelection(last_typing_command,
                                                      frame);
+      // Reset the 'input_type_' to default value. The actual 'input_type_' will
+      // be determined later in TypingCommand::GetInputType() based on the
+      // 'command_type_'
+      last_typing_command->input_type_ = InputEvent::InputType::kNone;
       last_typing_command->ForwardDeleteKeyPressed(
           granularity, options & kKillRing, editing_state);
       return;
@@ -584,7 +588,7 @@ void TypingCommand::DoApply(EditingState* editing_state) {
       return;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 InputEvent::InputType TypingCommand::GetInputType() const {
@@ -855,7 +859,7 @@ void TypingCommand::DeleteKeyPressed(TextGranularity granularity,
   }
 
   if (!EndingSelection().IsCaret()) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 
@@ -1042,7 +1046,7 @@ void TypingCommand::ForwardDeleteKeyPressed(TextGranularity granularity,
   }
 
   if (!EndingSelection().IsCaret()) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 
@@ -1178,7 +1182,7 @@ void TypingCommand::UpdatePreservesTypingStyle(CommandType command_type) {
       preserves_typing_style_ = false;
       return;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   preserves_typing_style_ = false;
 }
 

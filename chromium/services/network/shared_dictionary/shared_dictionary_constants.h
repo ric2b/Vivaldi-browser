@@ -30,17 +30,9 @@ COMPONENT_EXPORT(NETWORK_SERVICE)
 base::ScopedClosureRunner SetDictionarySizeLimitForTesting(
     size_t dictionary_size_limit);
 
-// The header name of "available-dictionary".
-COMPONENT_EXPORT(NETWORK_SERVICE)
-extern const char kAvailableDictionaryHeaderName[];
-
 // The header name of "use-as-dictionary".
 COMPONENT_EXPORT(NETWORK_SERVICE)
 extern const char kUseAsDictionaryHeaderName[];
-
-// The header name of "content-dictionary".
-COMPONENT_EXPORT(NETWORK_SERVICE)
-extern const char kContentDictionaryHeaderName[];
 
 // The dictionary option name of "match".
 COMPONENT_EXPORT(NETWORK_SERVICE) extern const char kOptionNameMatch[];

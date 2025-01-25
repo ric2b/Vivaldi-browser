@@ -550,6 +550,11 @@ void HTMLAnchorElement::NavigateToHyperlink(ResourceRequest request,
            ->GetTargetBlankImpliesNoOpenerEnabledWillBeRemoved())) {
     frame_request.SetNoOpener();
   }
+  if (RuntimeEnabledFeatures::RelOpenerBcgDependencyHintEnabled(
+          GetExecutionContext()) &&
+      HasRel(kRelationOpener) && !frame_request.GetWindowFeatures().noopener) {
+    frame_request.SetExplicitOpener();
+  }
 
   frame_request.SetTriggeringEventInfo(
       is_trusted ? mojom::blink::TriggeringEventInfo::kFromTrustedEvent
@@ -748,7 +753,8 @@ void HTMLAnchorElement::HandleClick(MouseEvent& event) {
 bool IsEnterKeyKeydownEvent(Event& event) {
   auto* keyboard_event = DynamicTo<KeyboardEvent>(event);
   return event.type() == event_type_names::kKeydown && keyboard_event &&
-         keyboard_event->key() == "Enter" && !keyboard_event->repeat();
+         keyboard_event->key() == keywords::kCapitalEnter &&
+         !keyboard_event->repeat();
 }
 
 bool IsLinkClick(Event& event) {

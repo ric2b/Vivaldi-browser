@@ -83,12 +83,9 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(KeyEqualityChecksSnippetID, reporter, context
     SkArenaAlloc arena{256};
     ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
 
-    int userSnippetID1 = dict->addRuntimeEffectSnippet("key1");
-    int userSnippetID2 = dict->addRuntimeEffectSnippet("key2");
-
-    PaintParamsKey keyA = create_key(dict, userSnippetID1, &arena);
-    PaintParamsKey keyB = create_key(dict, userSnippetID1, &arena);
-    PaintParamsKey keyC = create_key(dict, userSnippetID2, &arena);
+    PaintParamsKey keyA = create_key(dict, (int) BuiltInCodeSnippetID::kSolidColorShader, &arena);
+    PaintParamsKey keyB = create_key(dict, (int) BuiltInCodeSnippetID::kSolidColorShader, &arena);
+    PaintParamsKey keyC = create_key(dict, (int) BuiltInCodeSnippetID::kRGBPaintColor, &arena);
 
     // Verify that keyA matches keyB, and that it does not match keyC.
     REPORTER_ASSERT(reporter, keyA == keyB);
@@ -106,7 +103,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ShaderInfoDetectsFixedFunctionBlend, reporter
         add_block(&builder, bm + kFixedFunctionBlendModeIDOffset);
         UniquePaintParamsID paintID = dict->findOrCreate(&builder);
 
-        ShaderInfo shaderInfo{paintID, dict, /*rteDict=*/nullptr, /*ssboIndex=*/""};
+        ShaderInfo shaderInfo{paintID, dict, /*rteDict=*/nullptr, /*useSSBOs=*/false};
 
         SkBlendModeCoeff expectedSrc, expectedDst;
         REPORTER_ASSERT(reporter, SkBlendMode_AsCoeff(static_cast<SkBlendMode>(bm),

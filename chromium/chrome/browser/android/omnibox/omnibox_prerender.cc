@@ -23,16 +23,16 @@
 #include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
 
-// Must come after other includes, because FromJniType() uses Profile.
+// Must come after all headers that specialize FromJniType() / ToJniType().
 #include "chrome/browser/ui/android/omnibox/jni_headers/OmniboxPrerender_jni.h"
 
 using base::android::JavaParamRef;
 using predictors::AutocompleteActionPredictor;
 using predictors::AutocompleteActionPredictorFactory;
 
-OmniboxPrerender::OmniboxPrerender(JNIEnv* env, jobject obj)
-    : weak_java_omnibox_(env, obj) {
-}
+OmniboxPrerender::OmniboxPrerender(JNIEnv* env,
+                                   const jni_zero::JavaRef<jobject>& obj)
+    : weak_java_omnibox_(env, obj) {}
 
 OmniboxPrerender::~OmniboxPrerender() {
 }
@@ -124,7 +124,7 @@ void OmniboxPrerender::PrerenderMaybe(
     case AutocompleteActionPredictor::ACTION_NONE:
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }
@@ -157,7 +157,8 @@ void OmniboxPrerender::DoPreconnect(const AutocompleteMatch& match,
       predictors::LoadingPredictorFactory::GetForProfile(profile);
   if (loading_predictor) {
     loading_predictor->PrepareForPageLoad(
-        match.destination_url, predictors::HintOrigin::OMNIBOX,
+        /*initiator_origin=*/std::nullopt, match.destination_url,
+        predictors::HintOrigin::OMNIBOX,
         predictors::AutocompleteActionPredictor::IsPreconnectable(match));
   }
 }

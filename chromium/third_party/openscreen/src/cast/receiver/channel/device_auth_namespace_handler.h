@@ -5,6 +5,7 @@
 #ifndef CAST_RECEIVER_CHANNEL_DEVICE_AUTH_NAMESPACE_HANDLER_H_
 #define CAST_RECEIVER_CHANNEL_DEVICE_AUTH_NAMESPACE_HANDLER_H_
 
+#include <openssl/base.h>
 #include <openssl/evp.h>
 
 #include <string>
@@ -47,7 +48,7 @@ class DeviceAuthNamespaceHandler final : public CastMessageHandler {
   // CastMessageHandler overrides.
   void OnMessage(VirtualConnectionRouter* router,
                  CastSocket* socket,
-                 ::cast::channel::CastMessage message) override;
+                 proto::CastMessage message) override;
 
  private:
   CredentialsProvider& creds_provider_;

@@ -20,6 +20,7 @@
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
@@ -85,7 +86,7 @@ class ContentView : public views::LabelButton {
       : available_width_(available_width) {
     SetText(
         l10n_util::GetStringUTF16(IDS_INPUT_OVERLAY_SETTINGS_NUDGE_ALPHAV2));
-    SetAccessibleName(base::UTF8ToUTF16(GetClassName()));
+    GetViewAccessibility().SetName(base::UTF8ToUTF16(GetClassName()));
     SetBorder(views::CreateEmptyBorder(
         gfx::Insets::VH(kVerticalInset, kHorizontalInset)));
     SetImageModel(
@@ -118,13 +119,17 @@ class ContentView : public views::LabelButton {
 
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override {
-    int button_width = std::min(
-        label()->GetPreferredSize(views::SizeBounds(label()->width(), {}))
-                .width() +
-            2 * kHorizontalInset + kSpaceIconLabel + kIconSize,
-        available_width_);
-    int button_height = GetHeightForWidth(button_width);
-    return gfx::Size(button_width, button_height);
+    constexpr int extra_width =
+        2 * kHorizontalInset + kSpaceIconLabel + kIconSize;
+    const views::SizeBound label_available_width =
+        std::max<views::SizeBound>(0, available_size.width() - extra_width);
+
+    const int label_width =
+        label()
+            ->GetPreferredSize(views::SizeBounds(label_available_width, {}))
+            .width();
+    return views::LabelButton::CalculatePreferredSize(views::SizeBounds(
+        std::min(label_width + extra_width, available_width_), {}));
   }
 
   ~ContentView() override = default;

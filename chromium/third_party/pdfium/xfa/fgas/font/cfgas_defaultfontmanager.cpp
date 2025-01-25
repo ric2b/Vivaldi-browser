@@ -4,13 +4,9 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "xfa/fgas/font/cfgas_defaultfontmanager.h"
 
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_codepage.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxge/fx_font.h"
@@ -46,18 +42,18 @@ RetainPtr<CFGAS_GEFont> CFGAS_DefaultFontManager::GetFont(
   while (iLength > 0) {
     const char* pNameText = pReplace;
     while (*pNameText != ',' && iLength > 0) {
-      pNameText++;
+      UNSAFE_TODO(pNameText++);
       iLength--;
     }
-    WideString wsReplace =
-        WideString::FromASCII(ByteStringView(pReplace, pNameText - pReplace));
+    WideString wsReplace = WideString::FromASCII(
+        UNSAFE_TODO(ByteStringView(pReplace, pNameText - pReplace)));
     pFont =
         pFontMgr->LoadFont(wsReplace.c_str(), dwStyle, FX_CodePage::kFailure);
     if (pFont)
       break;
 
     iLength--;
-    pNameText++;
+    UNSAFE_TODO(pNameText++);
     pReplace = pNameText;
   }
   return pFont;

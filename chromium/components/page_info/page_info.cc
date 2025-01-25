@@ -50,8 +50,6 @@
 #include "components/permissions/request_type.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/safe_browsing/buildflags.h"
-#include "components/safe_browsing/content/browser/password_protection/password_protection_service.h"
-#include "components/safe_browsing/core/browser/password_protection/metrics_util.h"
 #include "components/safe_browsing/core/common/proto/csd.pb.h"
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
 #include "components/ssl_errors/error_info.h"
@@ -82,6 +80,11 @@
 #else
 #include "third_party/blink/public/common/features.h"
 #endif  // BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+#include "components/safe_browsing/content/browser/password_protection/password_protection_service.h"
+#include "components/safe_browsing/core/browser/password_protection/metrics_util.h"
+#endif  // BUILDFLAG(FULL_SAFE_BROWSING)
 
 using base::ASCIIToUTF16;
 using base::UTF16ToUTF8;
@@ -138,6 +141,10 @@ ContentSettingsType kPermissionType[] = {
     ContentSettingsType::CAPTURED_SURFACE_CONTROL,
 #endif  // !BUILDFLAG(IS_ANDROID)
     ContentSettingsType::AUTOMATIC_FULLSCREEN,
+#if !BUILDFLAG(IS_ANDROID)
+    ContentSettingsType::KEYBOARD_LOCK,
+    ContentSettingsType::POINTER_LOCK,
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 #if defined(VIVALDI_BUILD)
     ContentSettingsType::AUTOPLAY,
@@ -343,11 +350,13 @@ PageInfo::~PageInfo() {
 #endif
 }
 
-void PageInfo::OnStatusChanged(bool controls_visible,
-                               bool protections_on,
-                               CookieControlsEnforcement enforcement,
-                               CookieBlocking3pcdStatus blocking_status,
-                               base::Time expiration) {
+void PageInfo::OnStatusChanged(
+    bool controls_visible,
+    bool protections_on,
+    CookieControlsEnforcement enforcement,
+    CookieBlocking3pcdStatus blocking_status,
+    base::Time expiration,
+    std::vector<content_settings::TrackingProtectionFeature> features) {
   if (controls_visible_ != controls_visible ||
       protections_on_ != protections_on || enforcement != enforcement_ ||
       blocking_status != blocking_status_ ||
@@ -735,7 +744,7 @@ void PageInfo::OnUIClosing(bool* reload_prompt) {
     *reload_prompt = false;
   }
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #else
   if (show_info_bar_ && web_contents_ && !web_contents_->IsBeingDestroyed()) {
     if (delegate_->CreateInfoBarDelegate() && reload_prompt) {
@@ -762,7 +771,7 @@ void PageInfo::OnPermissionUsageChange() {
 
 void PageInfo::OpenSiteSettingsView() {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #else
   RecordPageInfoAction(page_info::PAGE_INFO_SITE_SETTINGS_OPENED);
   delegate_->ShowSiteSettings(site_url());
@@ -771,7 +780,7 @@ void PageInfo::OpenSiteSettingsView() {
 
 void PageInfo::OpenCookiesSettingsView() {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #else
   RecordPageInfoAction(page_info::PAGE_INFO_COOKIES_SETTINGS_OPENED);
   delegate_->ShowCookiesSettings();
@@ -780,7 +789,7 @@ void PageInfo::OpenCookiesSettingsView() {
 
 void PageInfo::OpenAllSitesViewFilteredToFps() {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #else
   auto fps_owner = delegate_->GetFpsOwner(site_url_);
   RecordPageInfoAction(page_info::PAGE_INFO_ALL_SITES_WITH_FPS_FILTER_OPENED);
@@ -795,7 +804,7 @@ void PageInfo::OpenAllSitesViewFilteredToFps() {
 
 void PageInfo::OpenCookiesDialog() {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #else
   if (!web_contents_ || web_contents_->IsBeingDestroyed()) {
     return;
@@ -808,7 +817,7 @@ void PageInfo::OpenCookiesDialog() {
 
 void PageInfo::OpenCertificateDialog(net::X509Certificate* certificate) {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #else
   if (!web_contents_ || web_contents_->IsBeingDestroyed()) {
     return;
@@ -824,7 +833,7 @@ void PageInfo::OpenCertificateDialog(net::X509Certificate* certificate) {
 
 void PageInfo::OpenSafetyTipHelpCenterPage() {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #else
   RecordPageInfoAction(page_info::PAGE_INFO_SAFETY_TIP_HELP_OPENED);
   delegate_->OpenSafetyTipHelpCenterPage();
@@ -833,7 +842,7 @@ void PageInfo::OpenSafetyTipHelpCenterPage() {
 
 void PageInfo::OpenConnectionHelpCenterPage(const ui::Event& event) {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #else
   RecordPageInfoAction(page_info::PAGE_INFO_CONNECTION_HELP_OPENED);
   delegate_->OpenConnectionHelpCenterPage(event);
@@ -843,7 +852,7 @@ void PageInfo::OpenConnectionHelpCenterPage(const ui::Event& event) {
 void PageInfo::OpenContentSettingsExceptions(
     ContentSettingsType content_settings_type) {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #else
   RecordPageInfoAction(page_info::PAGE_INFO_CONNECTION_HELP_OPENED);
   delegate_->OpenContentSettingsExceptions(content_settings_type);
@@ -1114,7 +1123,7 @@ void PageInfo::ComputeUIInputs(const GURL& url) {
         key_exchange =
             SSL_get_curve_name(visible_security_state.key_exchange_group);
         if (!key_exchange) {
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           key_exchange = "";
         }
       }
@@ -1574,7 +1583,7 @@ void PageInfo::GetSafeBrowsingStatusByMaliciousContentStatus(
     std::u16string* details) {
   switch (malicious_content_status) {
     case security_state::MALICIOUS_CONTENT_STATUS_NONE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case security_state::MALICIOUS_CONTENT_STATUS_MALWARE:
       *status = PageInfo::SAFE_BROWSING_STATUS_MALWARE;

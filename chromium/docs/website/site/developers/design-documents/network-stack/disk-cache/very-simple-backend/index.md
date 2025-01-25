@@ -64,8 +64,10 @@ cache will benefit simultaneously.
 
 ## Status
 
-See [Bug 173381](https://code.google.com/p/chromium/issues/detail?id=173381) for
-status on this implementation, or [track the Internals-Network-Cache-Simple
+The Simple Cache is enabled by default on all platforms except Windows. This
+design doc is significantly out-of-date.
+For older updates, see [Bug 173381](https://code.google.com/p/chromium/issues/detail?id=173381)
+for status on this implementation, or [track the Internals-Network-Cache-Simple
 issue in
 crbug](https://code.google.com/p/chromium/issues/list?q=label:Internals-Network-Cache-Simple).
 For related designs covering performance tracking, see [Disk Cache Benchmarking
@@ -84,11 +86,11 @@ There is one index file, and each entry is stored in a single file in that
 directory.
 An Entry Hash is a relatively short hash of the url, used for storage efficiency
 in index and entry naming. Two entries with the same Entry Hash cannot be
-stored. With a 40 bit per-user-salted SHA-2 of the url; collisions would occur
-only at one in a million probability with a million entry cache. Each cache
+stored. With a 64 bit SHA-1 of the url; collisions would occur
+only at one in a billion probability with a billion entry cache. Each cache
 entry is stored in a file named by the Entry Hash in hexadecimal, an underscore,
 and the backend stream number.
-The cache is stored in a single directory, with a file file 00index that
+The cache is stored in a single directory, with a file 00index that
 contains data for initializing an in memory index used for faster cache
 performance. The index consists of entry hashes for records, together with
 simple eviction information.
@@ -124,7 +126,7 @@ life cycle.
 The index is flushed on shutdown, and periodically while running to guard
 against system crashes. On recovery from a system crash, the browser will have a
 stale index, and thus will need to periodically iterate over the cache directory
-to find entries in the directory not mentioned in the idex.
+to find entries in the directory not mentioned in the index.
 
 ### Operation without Index
 

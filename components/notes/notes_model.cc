@@ -164,7 +164,7 @@ void NotesModel::MigrateAttachmentsRecursive(NoteNode* node) {
     if (deprecated_attachment.second.content().empty())
       continue;
 
-    base::StringPiece content(deprecated_attachment.second.content());
+    std::string_view content(deprecated_attachment.second.content());
     size_t separator_pos = content.find_first_of(',');
     if (separator_pos == std::string::npos)
       continue;
@@ -440,7 +440,7 @@ void NotesModel::SetTitle(const NoteNode* node,
     return;
 
   if (is_permanent_node(node)) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 

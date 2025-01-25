@@ -11,7 +11,6 @@ workspace = true
 
 [dependencies]
 ukey2_connections = { path = "../ukey2_connections" }
-ukey2_rs = { path = "../ukey2" }
 lock_adapter = {workspace = true, features = ["spin"]}
 
 cfg-if.workspace = true

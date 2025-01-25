@@ -13,39 +13,42 @@
 // limitations under the License.
 
 //! Cryptographic materials for v0 advertisement-format credentials.
-use crate::credential::{protocol_version_seal, DiscoveryCryptoMaterial, ProtocolVersion};
-use crate::legacy::ShortMetadataKey;
-use crate::MetadataKey;
-use crypto_provider::{CryptoProvider, CryptoRng};
+use crate::credential::{protocol_version_seal, DiscoveryMetadataCryptoMaterial, ProtocolVersion};
+use crypto_provider::{aead::Aead, aes, aes::ctr, CryptoProvider};
+use ldt_np_adv::V0IdentityToken;
+use np_hkdf::NpKeySeedHkdf;
 
 /// Cryptographic information about a particular V0 discovery credential
 /// necessary to match and decrypt encrypted V0 advertisements.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct V0DiscoveryCredential {
-    key_seed: [u8; 32],
-    legacy_metadata_key_hmac: [u8; 32],
+    /// The 32-byte key-seed used for generating other key material.
+    pub key_seed: [u8; 32],
+
+    /// The (LDT-variant) HMAC of the identity token.
+    pub expected_identity_token_hmac: [u8; 32],
 }
 
 impl V0DiscoveryCredential {
     /// Construct an [V0DiscoveryCredential] from the provided identity data.
-    pub fn new(key_seed: [u8; 32], legacy_metadata_key_hmac: [u8; 32]) -> Self {
-        Self { key_seed, legacy_metadata_key_hmac }
+    pub fn new(key_seed: [u8; 32], expected_identity_token_hmac: [u8; 32]) -> Self {
+        Self { key_seed, expected_identity_token_hmac }
     }
 }
 
-impl DiscoveryCryptoMaterial<V0> for V0DiscoveryCredential {
+impl DiscoveryMetadataCryptoMaterial<V0> for V0DiscoveryCredential {
     fn metadata_nonce<C: CryptoProvider>(&self) -> [u8; 12] {
-        V0::metadata_nonce_from_key_seed::<C>(&self.key_seed)
+        np_hkdf::NpKeySeedHkdf::<C>::new(&self.key_seed).v0_metadata_nonce()
     }
 }
 
 impl V0DiscoveryCryptoMaterial for V0DiscoveryCredential {
-    fn ldt_adv_cipher<C: CryptoProvider>(&self) -> ldt_np_adv::LdtNpAdvDecrypterXtsAes128<C> {
-        let hkdf = np_hkdf::NpKeySeedHkdf::new(&self.key_seed);
+    fn ldt_adv_cipher<C: CryptoProvider>(&self) -> ldt_np_adv::AuthenticatedNpLdtDecryptCipher<C> {
+        let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&self.key_seed);
         ldt_np_adv::build_np_adv_decrypter(
-            &hkdf.legacy_ldt_key(),
-            self.legacy_metadata_key_hmac,
-            hkdf.legacy_metadata_key_hmac_key(),
+            &hkdf.v0_ldt_key(),
+            self.expected_identity_token_hmac,
+            hkdf.v0_identity_token_hmac_key(),
         )
     }
 }
@@ -58,17 +61,17 @@ impl protocol_version_seal::ProtocolVersionSeal for V0 {}
 
 impl ProtocolVersion for V0 {
     type DiscoveryCredential = V0DiscoveryCredential;
-    type MetadataKey = ShortMetadataKey;
+    type IdentityToken = V0IdentityToken;
 
-    fn metadata_nonce_from_key_seed<C: CryptoProvider>(key_seed: &[u8; 32]) -> [u8; 12] {
-        let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(key_seed);
-        hkdf.legacy_metadata_nonce()
+    fn metadata_nonce_from_key_seed<C: CryptoProvider>(
+        hkdf: &NpKeySeedHkdf<C>,
+    ) -> <C::Aes128Gcm as Aead>::Nonce {
+        hkdf.v0_metadata_nonce()
     }
-    fn expand_metadata_key<C: CryptoProvider>(metadata_key: ShortMetadataKey) -> MetadataKey {
-        metadata_key.expand::<C>()
-    }
-    fn gen_random_metadata_key<R: CryptoRng>(rng: &mut R) -> ShortMetadataKey {
-        ShortMetadataKey(rng.gen())
+
+    // TODO should be IdP specific
+    fn extract_metadata_key<C: CryptoProvider>(metadata_key: V0IdentityToken) -> aes::Aes128Key {
+        np_hkdf::v0_metadata_expanded_key::<C>(&metadata_key.bytes()).into()
     }
 }
 
@@ -83,18 +86,18 @@ impl V0ProtocolVersion for V0 {}
 /// be stored in implementors of this trait.
 // Space-time tradeoffs:
 // - LDT keys (64b) take about 1.4us.
-pub trait V0DiscoveryCryptoMaterial: DiscoveryCryptoMaterial<V0> {
+pub trait V0DiscoveryCryptoMaterial: DiscoveryMetadataCryptoMaterial<V0> {
     /// Returns an LDT NP advertisement cipher built with the provided `Aes`
-    fn ldt_adv_cipher<C: CryptoProvider>(&self) -> ldt_np_adv::LdtNpAdvDecrypterXtsAes128<C>;
+    fn ldt_adv_cipher<C: CryptoProvider>(&self) -> ldt_np_adv::AuthenticatedNpLdtDecryptCipher<C>;
 }
 
 /// [`V0DiscoveryCryptoMaterial`] that minimizes CPU time when providing key material at
 /// the expense of occupied memory.
 pub struct PrecalculatedV0DiscoveryCryptoMaterial {
     pub(crate) legacy_ldt_key: ldt::LdtKey<xts_aes::XtsAes128Key>,
-    pub(crate) legacy_metadata_key_hmac: [u8; 32],
-    pub(crate) legacy_metadata_key_hmac_key: [u8; 32],
-    pub(crate) metadata_nonce: [u8; 12],
+    pub(crate) legacy_identity_token_hmac: [u8; 32],
+    pub(crate) legacy_identity_token_hmac_key: [u8; 32],
+    pub(crate) metadata_nonce: ctr::AesCtrNonce,
 }
 
 impl PrecalculatedV0DiscoveryCryptoMaterial {
@@ -102,26 +105,26 @@ impl PrecalculatedV0DiscoveryCryptoMaterial {
     pub(crate) fn new<C: CryptoProvider>(discovery_credential: &V0DiscoveryCredential) -> Self {
         let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&discovery_credential.key_seed);
         Self {
-            legacy_ldt_key: hkdf.legacy_ldt_key(),
-            legacy_metadata_key_hmac: discovery_credential.legacy_metadata_key_hmac,
-            legacy_metadata_key_hmac_key: *hkdf.legacy_metadata_key_hmac_key().as_bytes(),
-            metadata_nonce: hkdf.legacy_metadata_nonce(),
+            legacy_ldt_key: hkdf.v0_ldt_key(),
+            legacy_identity_token_hmac: discovery_credential.expected_identity_token_hmac,
+            legacy_identity_token_hmac_key: *hkdf.v0_identity_token_hmac_key().as_bytes(),
+            metadata_nonce: hkdf.v0_metadata_nonce(),
         }
     }
 }
 
-impl DiscoveryCryptoMaterial<V0> for PrecalculatedV0DiscoveryCryptoMaterial {
+impl DiscoveryMetadataCryptoMaterial<V0> for PrecalculatedV0DiscoveryCryptoMaterial {
     fn metadata_nonce<C: CryptoProvider>(&self) -> [u8; 12] {
         self.metadata_nonce
     }
 }
 
 impl V0DiscoveryCryptoMaterial for PrecalculatedV0DiscoveryCryptoMaterial {
-    fn ldt_adv_cipher<C: CryptoProvider>(&self) -> ldt_np_adv::LdtNpAdvDecrypterXtsAes128<C> {
+    fn ldt_adv_cipher<C: CryptoProvider>(&self) -> ldt_np_adv::AuthenticatedNpLdtDecryptCipher<C> {
         ldt_np_adv::build_np_adv_decrypter(
             &self.legacy_ldt_key,
-            self.legacy_metadata_key_hmac,
-            self.legacy_metadata_key_hmac_key.into(),
+            self.legacy_identity_token_hmac,
+            self.legacy_identity_token_hmac_key.into(),
         )
     }
 }
@@ -129,26 +132,65 @@ impl V0DiscoveryCryptoMaterial for PrecalculatedV0DiscoveryCryptoMaterial {
 // Implementations for reference types -- we don't provide a blanket impl for references
 // due to the potential to conflict with downstream crates' implementations.
 
-impl<'a> DiscoveryCryptoMaterial<V0> for &'a V0DiscoveryCredential {
+impl<'a> DiscoveryMetadataCryptoMaterial<V0> for &'a V0DiscoveryCredential {
     fn metadata_nonce<C: CryptoProvider>(&self) -> [u8; 12] {
         (*self).metadata_nonce::<C>()
     }
 }
 
 impl<'a> V0DiscoveryCryptoMaterial for &'a V0DiscoveryCredential {
-    fn ldt_adv_cipher<C: CryptoProvider>(&self) -> ldt_np_adv::LdtNpAdvDecrypterXtsAes128<C> {
+    fn ldt_adv_cipher<C: CryptoProvider>(&self) -> ldt_np_adv::AuthenticatedNpLdtDecryptCipher<C> {
         (*self).ldt_adv_cipher::<C>()
     }
 }
 
-impl<'a> DiscoveryCryptoMaterial<V0> for &'a PrecalculatedV0DiscoveryCryptoMaterial {
+impl<'a> DiscoveryMetadataCryptoMaterial<V0> for &'a PrecalculatedV0DiscoveryCryptoMaterial {
     fn metadata_nonce<C: CryptoProvider>(&self) -> [u8; 12] {
         (*self).metadata_nonce::<C>()
     }
 }
 
 impl<'a> V0DiscoveryCryptoMaterial for &'a PrecalculatedV0DiscoveryCryptoMaterial {
-    fn ldt_adv_cipher<C: CryptoProvider>(&self) -> ldt_np_adv::LdtNpAdvDecrypterXtsAes128<C> {
+    fn ldt_adv_cipher<C: CryptoProvider>(&self) -> ldt_np_adv::AuthenticatedNpLdtDecryptCipher<C> {
         (*self).ldt_adv_cipher::<C>()
+    }
+}
+
+/// Crypto material for creating V1 advertisements.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct V0BroadcastCredential {
+    /// The 32-byte key-seed used for generating other key material.
+    pub key_seed: [u8; 32],
+
+    /// The 14-byte identity-token which identifies the sender.
+    pub identity_token: V0IdentityToken,
+}
+
+impl V0BroadcastCredential {
+    /// Builds some simple broadcast crypto-materials out of
+    /// the provided key-seed and version-specific metadata-key.
+    pub fn new(key_seed: [u8; 32], identity_token: V0IdentityToken) -> Self {
+        Self { key_seed, identity_token }
+    }
+
+    /// Key seed from which other keys are derived.
+    pub(crate) fn key_seed(&self) -> [u8; 32] {
+        self.key_seed
+    }
+
+    /// Identity token that will be incorporated into encrypted advertisements.
+    pub(crate) fn identity_token(&self) -> V0IdentityToken {
+        self.identity_token
+    }
+
+    /// Derive a discovery credential with the data necessary to discover advertisements produced
+    /// by this broadcast credential.
+    pub fn derive_discovery_credential<C: CryptoProvider>(&self) -> V0DiscoveryCredential {
+        let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&self.key_seed);
+
+        V0DiscoveryCredential::new(
+            self.key_seed,
+            hkdf.v0_identity_token_hmac_key().calculate_hmac::<C>(&self.identity_token.bytes()),
+        )
     }
 }

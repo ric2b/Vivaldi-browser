@@ -92,10 +92,8 @@ class TabSearchPageHandler
   void SetTabIndex(int32_t index) override;
   void StartTabGroupTutorial() override;
   void TriggerFeedback(int32_t session_id) override;
-  void TriggerSync() override;
   void TriggerSignIn() override;
   void OpenHelpPage() override;
-  void OpenSyncSettings() override;
   void SetUserFeedback(int32_t session_id,
                        int32_t organization_id,
                        tab_search::mojom::UserFeedback feedback) override;
@@ -137,6 +135,10 @@ class TabSearchPageHandler
 
   // SettingsEnabledObserver
   void OnChangeInFeatureCurrentlyEnabledState(bool is_now_enabled) override;
+
+  void disable_last_active_elapsed_text_for_testing() {
+    disable_last_active_time_for_testing_ = true;
+  }
 
  protected:
   void SetTimerForTesting(std::unique_ptr<base::RetainingOneShotTimer> timer);
@@ -235,6 +237,8 @@ class TabSearchPageHandler
   // will only be shown once all tabs are ready.
   bool organization_ready_to_show_ = false;
   bool search_ready_to_show_ = false;
+
+  bool disable_last_active_time_for_testing_ = false;
 
   // Listened TabOrganization sessions.
   std::vector<raw_ptr<TabOrganizationSession, VectorExperimental>>

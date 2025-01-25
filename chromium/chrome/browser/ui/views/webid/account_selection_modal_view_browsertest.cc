@@ -46,8 +46,7 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
     }
 
     dialog_ = new AccountSelectionModalView(
-        kTopFrameETLDPlusOne, kIdpETLDPlusOne,
-        blink::mojom::RpContext::kSignIn,
+        kRpETLDPlusOne, kIdpETLDPlusOne, blink::mojom::RpContext::kSignIn,
         browser()->tab_strip_model()->GetActiveWebContents(),
         shared_url_loader_factory(), /*observer=*/nullptr,
         /*widget_observer=*/nullptr);
@@ -67,25 +66,21 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
       const content::IdentityRequestAccount& account,
       const content::IdentityProviderMetadata& idp_metadata,
       const std::string& terms_of_service_url,
-      bool show_auto_reauthn_checkbox = false,
-      bool exclude_iframe = true) {
+      bool show_auto_reauthn_checkbox = false) {
     CreateAccountSelectionModal();
     IdentityProviderDisplayData idp_data(
         kIdpETLDPlusOne, idp_metadata,
         CreateTestClientMetadata(terms_of_service_url), {account},
         /*request_permission=*/true, /*has_login_status_mismatch=*/false);
-    dialog_->ShowSingleAccountConfirmDialog(
-        kTopFrameETLDPlusOne, /*iframe_for_display=*/std::nullopt, account,
-        idp_data, show_back_button);
+    dialog_->ShowSingleAccountConfirmDialog(account, idp_data,
+                                            show_back_button);
   }
 
   void CreateAndShowMultiAccountPicker(
       const std::vector<std::string>& account_suffixes,
       bool supports_add_account = false) {
     std::vector<content::IdentityRequestAccount> account_list =
-        CreateTestIdentityRequestAccounts(
-            account_suffixes,
-            content::IdentityRequestAccount::LoginState::kSignUp);
+        CreateTestIdentityRequestAccounts(account_suffixes);
 
     CreateAccountSelectionModal();
     std::vector<IdentityProviderDisplayData> idp_data;
@@ -95,7 +90,8 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
         kIdpETLDPlusOne, metadata,
         CreateTestClientMetadata(/*terms_of_service_url=*/""), account_list,
         /*request_permission=*/true, /*has_login_status_mismatch=*/false);
-    dialog_->ShowMultiAccountPicker(idp_data, /*show_back_button=*/false);
+    dialog_->ShowMultiAccountPicker(idp_data, /*show_back_button=*/false,
+                                    /*is_choose_an_account=*/false);
   }
 
   void CreateAndShowRequestPermissionDialog(
@@ -107,8 +103,7 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
         kIdpETLDPlusOne, idp_metadata,
         CreateTestClientMetadata(terms_of_service_url), {account},
         /*request_permission=*/true, /*has_login_status_mismatch=*/false);
-    dialog_->ShowRequestPermissionDialog(kTopFrameETLDPlusOne, account,
-                                         idp_data);
+    dialog_->ShowRequestPermissionDialog(account, idp_data);
   }
 
   void CreateAndShowVerifyingSheet() {
@@ -173,6 +168,7 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
     views::View* icon_image =
         static_cast<views::View*>(icon_container_children[0]);
     ASSERT_TRUE(icon_image);
+    EXPECT_TRUE(icon_image->GetVisible());
 
     // Check icon image is of the correct size.
     EXPECT_EQ(icon_image->size(),
@@ -555,4 +551,20 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
                        RequestPermissionReturningUser) {
   TestRequestPermission(content::IdentityRequestAccount::LoginState::kSignIn);
+}
+
+// Tests that the brand icon view does not hide the brand icon like it does on
+// bubble. This is because we show a placeholder globe icon on modal.
+IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
+                       InvalidBrandIconUrlDoesNotHideBrandIcon) {
+  const std::string kAccountSuffix = "suffix";
+  content::IdentityRequestAccount account(CreateTestIdentityRequestAccount(
+      kAccountSuffix, content::IdentityRequestAccount::LoginState::kSignUp));
+  content::IdentityProviderMetadata idp_metadata;
+  idp_metadata.brand_icon_url = GURL("invalid url");
+  CreateAndShowSingleAccountPicker(
+      /*show_back_button=*/false, account, idp_metadata, kTermsOfServiceUrl);
+
+  // We check that the icon is visible in PerformHeaderChecks.
+  PerformHeaderChecks(dialog()->children()[0]);
 }

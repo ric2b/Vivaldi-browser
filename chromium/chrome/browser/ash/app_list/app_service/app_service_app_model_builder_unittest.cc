@@ -333,9 +333,9 @@ class WebAppBuilderTest : public AppServiceAppModelBuilderTest {
   std::string CreateWebApp(const std::string& app_name) {
     const GURL kAppUrl("https://example.com/");
 
-    auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
+    auto web_app_info =
+        web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(kAppUrl);
     web_app_info->title = base::UTF8ToUTF16(app_name);
-    web_app_info->start_url = kAppUrl;
     web_app_info->scope = kAppUrl;
     web_app_info->user_display_mode =
         web_app::mojom::UserDisplayMode::kStandalone;
@@ -378,7 +378,7 @@ class WebAppBuilderTest : public AppServiceAppModelBuilderTest {
 
     extensions::ChromeAppIcon::ApplyEffects(
         size_in_dip, extensions::ChromeAppIcon::ResizeFunction(),
-        true /* app_launchable */, true /* from_bookmark */,
+        /*app_launchable=*/true, /*rounded_corners=*/true,
         extensions::ChromeAppIcon::Badge::kNone, &output_image_skia);
     for (const auto scale_factor : ui::GetSupportedResourceScaleFactors()) {
       // Force the icon to be loaded.

@@ -29,6 +29,7 @@
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
 #include "content/public/browser/identity_request_dialog_controller.h"
+#include "content/public/browser/web_contents.h"
 #include "skia/ext/image_operations.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -63,8 +64,49 @@ constexpr int kDialogWidth = 448;
 // The margins of the modal dialog.
 constexpr int kDialogMargin = 20;
 
+class BackgroundImageView : public views::ImageView {
+  METADATA_HEADER(BackgroundImageView, views::ImageView)
+
+ public:
+  explicit BackgroundImageView(base::WeakPtr<content::WebContents> web_contents)
+      : web_contents_(web_contents) {
+    constexpr int kBackgroundWidth = 408;
+    constexpr int kBackgroundHeight = 100;
+    SetImageSize(gfx::Size(kBackgroundWidth, kBackgroundHeight));
+    UpdateBackgroundImage();
+  }
+
+  BackgroundImageView(const BackgroundImageView&) = delete;
+  BackgroundImageView& operator=(const BackgroundImageView&) = delete;
+  ~BackgroundImageView() override = default;
+
+  void UpdateBackgroundImage() {
+    CHECK(web_contents_);
+    const bool is_dark_mode = color_utils::IsDark(
+        web_contents_->GetColorProvider().GetColor(ui::kColorDialogBackground));
+    gfx::ImageSkia* background =
+        ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+            is_dark_mode ? IDR_WEBID_MODAL_ICON_BACKGROUND_DARK
+                         : IDR_WEBID_MODAL_ICON_BACKGROUND_LIGHT);
+    SetImage(*background);
+  }
+
+  void OnThemeChanged() override {
+    views::ImageView::OnThemeChanged();
+    UpdateBackgroundImage();
+  }
+
+ private:
+  // Web contents is used to determine whether to show the light or dark mode
+  // image.
+  base::WeakPtr<content::WebContents> web_contents_;
+};
+
+BEGIN_METADATA(BackgroundImageView)
+END_METADATA
+
 AccountSelectionModalView::AccountSelectionModalView(
-    const std::u16string& top_frame_for_display,
+    const std::u16string& rp_for_display,
     const std::optional<std::u16string>& idp_title,
     blink::mojom::RpContext rp_context,
     content::WebContents* web_contents,
@@ -74,7 +116,8 @@ AccountSelectionModalView::AccountSelectionModalView(
     : AccountSelectionViewBase(web_contents,
                                observer,
                                widget_observer,
-                               std::move(url_loader_factory)) {
+                               std::move(url_loader_factory),
+                               rp_for_display) {
   SetModalType(ui::MODAL_TYPE_CHILD);
   SetOwnedByWidget(true);
   set_fixed_width(kDialogWidth);
@@ -85,9 +128,7 @@ AccountSelectionModalView::AccountSelectionModalView(
       kBetweenChildSpacing));
   SetButtons(ui::DIALOG_BUTTON_NONE);
 
-  title_ = webid::GetTitle(top_frame_for_display,
-                           /*iframe_for_display=*/std::nullopt, idp_title,
-                           rp_context);
+  title_ = webid::GetTitle(rp_for_display_, idp_title, rp_context);
 }
 
 AccountSelectionModalView::~AccountSelectionModalView() = default;
@@ -119,12 +160,12 @@ void AccountSelectionModalView::AddProgressBar() {
   has_progress_bar_ = true;
 }
 
-void AccountSelectionModalView::UpdateModalPositionAndTitle() {
+void AccountSelectionModalView::UpdateDialogPosition() {
   constrained_window::UpdateWebContentsModalDialogPosition(
-      GetWidget(),
-      web_modal::WebContentsModalDialogManager::FromWebContents(web_contents_)
-          ->delegate()
-          ->GetWebContentsModalDialogHost());
+      GetWidget(), web_modal::WebContentsModalDialogManager::FromWebContents(
+                       web_contents_.get())
+                       ->delegate()
+                       ->GetWebContentsModalDialogHost());
 
   if (accessibility_state_utils::IsScreenReaderEnabled()) {
     GetInitiallyFocusedView()->RequestFocus();
@@ -137,16 +178,16 @@ void AccountSelectionModalView::InitDialogWidget() {
   }
 
   if (dialog_widget_) {
-    UpdateModalPositionAndTitle();
+    UpdateDialogPosition();
     return;
   }
 
   views::Widget* widget =
-      constrained_window::ShowWebModalDialogViews(this, web_contents_);
+      constrained_window::ShowWebModalDialogViews(this, web_contents_.get());
   if (!widget) {
     return;
   }
-  UpdateModalPositionAndTitle();
+  UpdateDialogPosition();
 
   // Add the widget observer, if available. It is null in tests.
   if (widget_observer_) {
@@ -154,6 +195,7 @@ void AccountSelectionModalView::InitDialogWidget() {
   }
 
   dialog_widget_ = widget->GetWeakPtr();
+  occlusion_observation_.Observe(widget);
 }
 
 std::unique_ptr<views::View>
@@ -348,20 +390,19 @@ AccountSelectionModalView::CreateMultipleAccountChooser(
   // Add separator before the account rows.
   content->AddChildView(std::make_unique<views::Separator>());
 
-  size_t num_rows = 0;
+  int num_rows = 0;
   constexpr int kMultipleAccountsVerticalPadding = 2;
   for (const auto& idp_display_data : idp_display_data_list) {
     for (const auto& account : idp_display_data.accounts) {
       content->AddChildView(CreateAccountRow(
           account, idp_display_data,
-          /*should_hover=*/true,
+          /*clickable_position=*/num_rows++,
           /*should_include_idp=*/false,
           /*is_modal_dialog=*/true,
           /*additional_vertical_padding=*/kMultipleAccountsVerticalPadding));
       // Add separator after each account row.
       content->AddChildView(std::make_unique<views::Separator>());
     }
-    num_rows += idp_display_data.accounts.size();
   }
 
   const int per_account_size = content->GetPreferredSize().height() / num_rows;
@@ -371,7 +412,8 @@ AccountSelectionModalView::CreateMultipleAccountChooser(
 
 void AccountSelectionModalView::ShowMultiAccountPicker(
     const std::vector<IdentityProviderDisplayData>& idp_display_data_list,
-    bool show_back_button) {
+    bool show_back_button,
+    bool is_choose_an_account) {
   DCHECK(!show_back_button);
   RemoveNonHeaderChildViews();
 
@@ -465,10 +507,11 @@ AccountSelectionModalView::CreateSingleAccountChooser(
   }
 
   // Add account row.
-  row->AddChildView(CreateAccountRow(account, idp_display_data, should_hover,
-                                     /*should_include_idp=*/false,
-                                     /*is_modal_dialog=*/true,
-                                     additional_row_vertical_padding));
+  row->AddChildView(CreateAccountRow(
+      account, idp_display_data,
+      should_hover ? std::make_optional<int>(0) : std::nullopt,
+      /*should_include_idp=*/false,
+      /*is_modal_dialog=*/true, additional_row_vertical_padding));
 
   // Add separator after the account row.
   if (show_separator) {
@@ -491,8 +534,6 @@ AccountSelectionModalView::CreateSingleAccountChooser(
 }
 
 void AccountSelectionModalView::ShowSingleAccountConfirmDialog(
-    const std::u16string& top_frame_for_display,
-    const std::optional<std::u16string>& iframe_for_display,
     const content::IdentityRequestAccount& account,
     const IdentityProviderDisplayData& idp_display_data,
     bool show_back_button) {
@@ -529,21 +570,17 @@ void AccountSelectionModalView::ShowSingleAccountConfirmDialog(
 }
 
 void AccountSelectionModalView::ShowFailureDialog(
-    const std::u16string& top_frame_for_display,
-    const std::optional<std::u16string>& iframe_for_display,
     const std::u16string& idp_for_display,
     const content::IdentityProviderMetadata& idp_metadata) {
-  NOTREACHED()
+  NOTREACHED_IN_MIGRATION()
       << "ShowFailureDialog is only implemented for AccountSelectionBubbleView";
 }
 
 void AccountSelectionModalView::ShowErrorDialog(
-    const std::u16string& top_frame_for_display,
-    const std::optional<std::u16string>& iframe_for_display,
     const std::u16string& idp_for_display,
     const content::IdentityProviderMetadata& idp_metadata,
     const std::optional<TokenError>& error) {
-  NOTREACHED()
+  NOTREACHED_IN_MIGRATION()
       << "ShowErrorDialog is only implemented for AccountSelectionBubbleView";
 }
 
@@ -557,7 +594,6 @@ void AccountSelectionModalView::ShowLoadingDialog() {
 }
 
 void AccountSelectionModalView::ShowRequestPermissionDialog(
-    const std::u16string& top_frame_for_display,
     const content::IdentityRequestAccount& account,
     const IdentityProviderDisplayData& idp_display_data) {
   RemoveNonHeaderChildViews();
@@ -591,8 +627,9 @@ void AccountSelectionModalView::ShowRequestPermissionDialog(
 
 void AccountSelectionModalView::ShowSingleReturningAccountDialog(
     const std::vector<IdentityProviderDisplayData>& idp_data_list) {
-  NOTREACHED() << "ShowSingleReturningAccountDialog is only implemented for "
-                  "AccountSelectionBubbleView";
+  NOTREACHED_IN_MIGRATION()
+      << "ShowSingleReturningAccountDialog is only implemented for "
+         "AccountSelectionBubbleView";
 }
 
 std::unique_ptr<views::View>
@@ -603,7 +640,7 @@ AccountSelectionModalView::CreateBrandIconImageView(
       std::make_unique<BrandIconImageView>(
           base::BindOnce(&AccountSelectionViewBase::AddIdpImage,
                          weak_ptr_factory_.GetWeakPtr()),
-          kModalIdpIconSize, /*should_circle_crop=*/false);
+          kModalIdpIconSize, /*should_circle_crop=*/true);
   brand_icon_ = brand_icon_image_view.get();
   brand_icon_image_view->SetImageSize(
       gfx::Size(kModalIdpIconSize, kModalIdpIconSize));
@@ -616,19 +653,8 @@ AccountSelectionModalView::CreateBrandIconImageView(
   }
 
   // Create background image view.
-  constexpr int kBackgroundWidth = 408;
-  constexpr int kBackgroundHeight = 100;
-  const bool is_dark_mode = color_utils::IsDark(
-      web_contents_->GetColorProvider().GetColor(ui::kColorDialogBackground));
-  gfx::ImageSkia* background =
-      ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-          is_dark_mode ? IDR_WEBID_MODAL_ICON_BACKGROUND_DARK
-                       : IDR_WEBID_MODAL_ICON_BACKGROUND_LIGHT);
-  std::unique_ptr<views::ImageView> background_image_view =
-      std::make_unique<views::ImageView>();
-  background_image_view->SetImage(*background);
-  background_image_view->SetImageSize(
-      gfx::Size(kBackgroundWidth, kBackgroundHeight));
+  std::unique_ptr<BackgroundImageView> background_image_view =
+      std::make_unique<BackgroundImageView>(web_contents_);
 
   // Put background image view into a FillLayout container.
   std::unique_ptr<views::View> background_container =
@@ -665,12 +691,6 @@ void AccountSelectionModalView::CloseDialog() {
 
 std::string AccountSelectionModalView::GetDialogTitle() const {
   return base::UTF16ToUTF8(title_label_->GetText());
-}
-
-std::optional<std::string> AccountSelectionModalView::GetDialogSubtitle()
-    const {
-  // We do not support showing iframe domain at this point in time.
-  return std::nullopt;
 }
 
 std::u16string AccountSelectionModalView::GetQueuedAnnouncementForTesting() {

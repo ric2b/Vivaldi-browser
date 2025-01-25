@@ -20,7 +20,7 @@ types of automated testing including:
 manual](https://docs.google.com/document/d/e/2PACX-1vQKDTDTQFKjNxJatFkFUSjCPdVzgry9vkLLvxL8vwqasrKMP2KReEMZ3iva9GX8EzQYo-kANnzPlFG_/pub)
 will guide you from equipment procurement to successfully run your first test.
 
-[Moblab release notes](/chromium-os/testing/moblab/releasenotes) are available
+[Moblab release notes](/chromium-os/developer-library/reference/infrastructure/moblab/releasenotes) are available
 for getting the latest version of Moblab.
 
 We also encourage all Moblab users join [Moblab

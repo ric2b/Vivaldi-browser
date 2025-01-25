@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fxcodec/jbig2/JBig2_TrdProc.h"
 
 #include <memory>
@@ -18,6 +13,7 @@
 #include "core/fxcodec/jbig2/JBig2_ArithIntDecoder.h"
 #include "core/fxcodec/jbig2/JBig2_GrrdProc.h"
 #include "core/fxcodec/jbig2/JBig2_HuffmanDecoder.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/maybe_owned.h"
 
@@ -53,7 +49,7 @@ CJBig2_TRDProc::~CJBig2_TRDProc() = default;
 
 std::unique_ptr<CJBig2_Image> CJBig2_TRDProc::DecodeHuffman(
     CJBig2_BitStream* pStream,
-    JBig2ArithCtx* grContext) {
+    pdfium::span<JBig2ArithCtx> grContexts) {
   auto SBREG = std::make_unique<CJBig2_Image>(SBW, SBH);
   if (!SBREG->data())
     return nullptr;
@@ -144,7 +140,7 @@ std::unique_ptr<CJBig2_Image> CJBig2_TRDProc::DecodeHuffman(
 
       MaybeOwned<CJBig2_Image> IBI;
       if (RI == 0) {
-        IBI = SBSYMS[IDI];
+        IBI = UNSAFE_TODO(SBSYMS[IDI]);
       } else {
         int32_t RDWI;
         int32_t RDHI;
@@ -160,7 +156,7 @@ std::unique_ptr<CJBig2_Image> CJBig2_TRDProc::DecodeHuffman(
         }
         pStream->alignByte();
         uint32_t nTmp = pStream->getOffset();
-        CJBig2_Image* IBOI = SBSYMS[IDI];
+        CJBig2_Image* IBOI = UNSAFE_TODO(SBSYMS[IDI]);
         if (!IBOI)
           return nullptr;
 
@@ -190,12 +186,12 @@ std::unique_ptr<CJBig2_Image> CJBig2_TRDProc::DecodeHuffman(
         pGRRD->GRAT[3] = SBRAT[3];
 
         auto pArithDecoder = std::make_unique<CJBig2_ArithDecoder>(pStream);
-        IBI = pGRRD->Decode(pArithDecoder.get(), grContext);
+        IBI = pGRRD->Decode(pArithDecoder.get(), grContexts);
         if (!IBI)
           return nullptr;
 
         pStream->alignByte();
-        pStream->offset(2);
+        pStream->addOffset(2);
         if (static_cast<uint32_t>(HUFFRSIZE) != (pStream->getOffset() - nTmp))
           return nullptr;
       }
@@ -227,7 +223,7 @@ std::unique_ptr<CJBig2_Image> CJBig2_TRDProc::DecodeHuffman(
 
 std::unique_ptr<CJBig2_Image> CJBig2_TRDProc::DecodeArith(
     CJBig2_ArithDecoder* pArithDecoder,
-    JBig2ArithCtx* grContext,
+    pdfium::span<JBig2ArithCtx> grContexts,
     JBig2IntDecoderState* pIDS) {
   auto SBREG = std::make_unique<CJBig2_Image>(SBW, SBH);
   if (!SBREG->data())
@@ -330,7 +326,7 @@ std::unique_ptr<CJBig2_Image> CJBig2_TRDProc::DecodeArith(
 
       MaybeOwned<CJBig2_Image> pIBI;
       if (RI == 0) {
-        pIBI = SBSYMS[IDI];
+        pIBI = UNSAFE_TODO(SBSYMS[IDI]);
       } else {
         int32_t RDWI;
         int32_t RDHI;
@@ -340,7 +336,7 @@ std::unique_ptr<CJBig2_Image> CJBig2_TRDProc::DecodeArith(
         pIARDH->Decode(pArithDecoder, &RDHI);
         pIARDX->Decode(pArithDecoder, &RDXI);
         pIARDY->Decode(pArithDecoder, &RDYI);
-        CJBig2_Image* IBOI = SBSYMS[IDI];
+        CJBig2_Image* IBOI = UNSAFE_TODO(SBSYMS[IDI]);
         if (!IBOI)
           return nullptr;
 
@@ -368,7 +364,7 @@ std::unique_ptr<CJBig2_Image> CJBig2_TRDProc::DecodeArith(
         pGRRD->GRAT[1] = SBRAT[1];
         pGRRD->GRAT[2] = SBRAT[2];
         pGRRD->GRAT[3] = SBRAT[3];
-        pIBI = pGRRD->Decode(pArithDecoder, grContext);
+        pIBI = pGRRD->Decode(pArithDecoder, grContexts);
       }
       if (!pIBI)
         return nullptr;

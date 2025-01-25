@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/containers/span.h"
 #include "base/cpu.h"
 #include "base/dcheck_is_on.h"
 #include "base/files/file_tracing.h"
@@ -74,6 +75,7 @@
 #if BUILDFLAG(IS_WIN)
 #include <windows.h>
 
+#include "base/power_monitor/cpu_frequency_utils.h"
 #include "base/win/registry.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
@@ -136,7 +138,7 @@ std::string GetClockString() {
       return "WIN_ROLLOVER_PROTECTED_TIME_GET_TIME";
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -343,6 +345,10 @@ std::optional<base::Value::Dict> TracingControllerImpl::GenerateMetadataDict() {
                     base::SysInfo::AmountOfPhysicalMemoryMB());
 
   metadata_dict.Set("cpu-brand", cpu.cpu_brand());
+
+#if BUILDFLAG(IS_WIN)
+  base::GenerateCpuInfoForTracingMetadata(&metadata_dict);
+#endif
 
   // GPU
   const gpu::GPUInfo gpu_info =
@@ -555,10 +561,9 @@ void TracingControllerImpl::OnTracingFailed() {
   CompleteFlush();
 }
 
-void TracingControllerImpl::OnDataAvailable(const void* data,
-                                            size_t num_bytes) {
+void TracingControllerImpl::OnDataAvailable(base::span<const uint8_t> data) {
   if (trace_data_endpoint_) {
-    const std::string chunk(static_cast<const char*>(data), num_bytes);
+    const std::string chunk(base::as_string_view(data));
     trace_data_endpoint_->ReceiveTraceChunk(
         std::make_unique<std::string>(chunk));
   }

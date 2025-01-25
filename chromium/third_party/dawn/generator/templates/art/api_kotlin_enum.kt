@@ -24,17 +24,23 @@
 //* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 //* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 //* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-package {{ metadata.kotlin_package }}
+package {{ kotlin_package }}
 
 @JvmInline
-value class {{ enum.name.CamelCase() }}(val v: Int) {
+value class {{ enum.name.CamelCase() }}(@get:JvmName("getValue") val v: Int) {
     {% if enum.category == 'bitmask' %}
         infix fun or(b: {{ enum.name.CamelCase() }}) = {{ enum.name.CamelCase() }}(this.v or b.v)
     {% endif %}
     companion object {
         {% for value in enum.values %}
-            val {{ as_ktName(value.name.CamelCase()) }} =
+            val {{ as_ktName(value.name.CamelCase()) }} ={{' '}}
                 {{- enum.name.CamelCase() }}({{ '{:#010x}'.format(value.value) }})
         {% endfor %}
+        val names = mapOf(
+            {% for value in enum.values %}
+                {{ '{:#010x}'.format(value.value) }} to "{{ as_ktName(value.name.CamelCase()) }}",
+            {% endfor %}
+        )
     }
+    override fun toString(): String = names[v]?:v.toString()
 }

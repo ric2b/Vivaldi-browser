@@ -137,7 +137,7 @@ class TabHoverCardInteractiveUiTest
     return Steps(Do(base::BindLambdaForTesting([=]() {
       TabStrip* const tab_strip = GetTabStrip(browser());
       HoverCardDestroyedWaiter waiter(tab_strip);
-      ui::MouseEvent stop_hover_event(ui::ET_MOUSE_EXITED, gfx::Point(),
+      ui::MouseEvent stop_hover_event(ui::EventType::kMouseExited, gfx::Point(),
                                       gfx::Point(), base::TimeTicks(),
                                       ui::EF_NONE, 0);
       static_cast<views::View*>(tab_strip)->OnMouseExited(stop_hover_event);
@@ -191,7 +191,7 @@ IN_PROC_BROWSER_TEST_F(TabHoverCardInteractiveUiTest,
 }
 
 // TODO(crbug.com/41481726):  Enable once failing test is fixed.
-#if BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #define MAYBE_HoverCardShownOnTabFocus DISABLED_HoverCardShownOnTabFocus
 #else
 #define MAYBE_HoverCardShownOnTabFocus HoverCardShownOnTabFocus
@@ -223,7 +223,7 @@ IN_PROC_BROWSER_TEST_F(TabHoverCardInteractiveUiTest,
   tab_strip->GetFocusManager()->SetFocusedView(tab);
   WaitForHoverCardVisible(tab_strip);
 
-  ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_SPACE, 0);
+  ui::KeyEvent key_event(ui::EventType::kKeyPressed, ui::VKEY_SPACE, 0);
   tab->OnKeyPressed(key_event);
   EXPECT_TRUE(IsHoverCardVisible(tab_strip));
 }
@@ -253,8 +253,8 @@ IN_PROC_BROWSER_TEST_F(TabHoverCardInteractiveUiTest,
   tab_strip->GetFocusManager()->SetFocusedView(tab);
   WaitForHoverCardVisible(tab_strip);
 
-  ui::MouseEvent click_event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                             base::TimeTicks(), ui::EF_NONE, 0);
+  ui::MouseEvent click_event(ui::EventType::kMousePressed, gfx::Point(),
+                             gfx::Point(), base::TimeTicks(), ui::EF_NONE, 0);
   tab->OnMousePressed(click_event);
   EXPECT_FALSE(IsHoverCardVisible(tab_strip));
 }

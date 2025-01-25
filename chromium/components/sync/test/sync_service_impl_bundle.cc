@@ -36,6 +36,8 @@ std::unique_ptr<SyncClientMock> SyncServiceImplBundle::CreateSyncClientMock() {
       .WillByDefault(Return(sync_invalidations_service()));
   ON_CALL(*sync_client, GetTrustedVaultClient())
       .WillByDefault(Return(trusted_vault_client()));
+  ON_CALL(*sync_client, GetIdentityManager())
+      .WillByDefault(Return(identity_manager()));
   return std::move(sync_client);
 }
 
@@ -44,13 +46,12 @@ SyncServiceImpl::InitParams SyncServiceImplBundle::CreateBasicInitParams(
   SyncServiceImpl::InitParams init_params;
 
   init_params.sync_client = std::move(sync_client);
-  init_params.identity_manager = identity_manager();
   init_params.url_loader_factory =
       base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
           &test_url_loader_factory_);
   init_params.network_connection_tracker =
       network::TestNetworkConnectionTracker::GetInstance();
-  init_params.debug_identifier = "dummyDebugName";
+  init_params.debug_identifier = "fakeDebugName";
 
   return init_params;
 }

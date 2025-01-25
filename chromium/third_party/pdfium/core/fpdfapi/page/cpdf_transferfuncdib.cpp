@@ -4,156 +4,156 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fpdfapi/page/cpdf_transferfuncdib.h"
 
 #include <utility>
 
 #include "build/build_config.h"
 #include "core/fpdfapi/page/cpdf_transferfunc.h"
-#include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/zip.h"
 #include "core/fxge/calculate_pitch.h"
 
+namespace {
+
+CFX_DIBBase::kPlatformRGBStruct MakePlatformRGBStruct(uint8_t red,
+                                                      uint8_t green,
+                                                      uint8_t blue) {
+  // Note that the return value may have an alpha value that will be set to 0.
+  return {
+      .blue = blue,
+      .green = green,
+      .red = red,
+  };
+}
+
+}  // namespace
+
 CPDF_TransferFuncDIB::CPDF_TransferFuncDIB(
-    RetainPtr<CFX_DIBBase> pSrc,
-    RetainPtr<CPDF_TransferFunc> pTransferFunc)
-    : m_pSrc(std::move(pSrc)),
-      m_pTransferFunc(std::move(pTransferFunc)),
-      m_RampR(m_pTransferFunc->GetSamplesR()),
-      m_RampG(m_pTransferFunc->GetSamplesG()),
-      m_RampB(m_pTransferFunc->GetSamplesB()) {
-  m_Width = m_pSrc->GetWidth();
-  m_Height = m_pSrc->GetHeight();
-  m_Format = GetDestFormat();
-  m_Pitch = fxge::CalculatePitch32OrDie(GetBppFromFormat(m_Format), m_Width);
-  m_Scanline.resize(m_Pitch);
-  DCHECK(m_palette.empty());
+    RetainPtr<const CFX_DIBBase> src,
+    RetainPtr<CPDF_TransferFunc> transfer_func)
+    : src_(std::move(src)),
+      transfer_func_(std::move(transfer_func)),
+      r_samples_(transfer_func_->GetSamplesR()),
+      g_samples_(transfer_func_->GetSamplesG()),
+      b_samples_(transfer_func_->GetSamplesB()) {
+  SetWidth(src_->GetWidth());
+  SetHeight(src_->GetHeight());
+  SetFormat(GetDestFormat());
+  SetPitch(fxge::CalculatePitch32OrDie(GetBPP(), GetWidth()));
+  scanline_.resize(GetPitch());
+  CHECK(!HasPalette());
 }
 
 CPDF_TransferFuncDIB::~CPDF_TransferFuncDIB() = default;
 
 FXDIB_Format CPDF_TransferFuncDIB::GetDestFormat() const {
-  if (m_pSrc->IsMaskFormat())
+  if (src_->IsMaskFormat()) {
     return FXDIB_Format::k8bppMask;
+  }
 
-  if (m_pSrc->IsAlphaFormat())
+  if (src_->IsAlphaFormat()) {
     return FXDIB_Format::kArgb;
+  }
 
   return CFX_DIBBase::kPlatformRGBFormat;
 }
 
 void CPDF_TransferFuncDIB::TranslateScanline(
     pdfium::span<const uint8_t> src_span) const {
-  const uint8_t* src_buf = src_span.data();
-  bool bSkip = false;
-  switch (m_pSrc->GetFormat()) {
+  auto scanline_span = pdfium::make_span(scanline_);
+  switch (src_->GetFormat()) {
+    case FXDIB_Format::kInvalid: {
+      break;
+    }
     case FXDIB_Format::k1bppRgb: {
-      int r0 = m_RampR[0];
-      int g0 = m_RampG[0];
-      int b0 = m_RampB[0];
-      int r1 = m_RampR[255];
-      int g1 = m_RampG[255];
-      int b1 = m_RampB[255];
-      int index = 0;
-      for (int i = 0; i < m_Width; i++) {
-        if (src_buf[i / 8] & (1 << (7 - i % 8))) {
-          m_Scanline[index++] = b1;
-          m_Scanline[index++] = g1;
-          m_Scanline[index++] = r1;
-        } else {
-          m_Scanline[index++] = b0;
-          m_Scanline[index++] = g0;
-          m_Scanline[index++] = r0;
-        }
-#if BUILDFLAG(IS_APPLE)
-        index++;
-#endif
+      const auto color0 =
+          MakePlatformRGBStruct(r_samples_[0], g_samples_[0], b_samples_[0]);
+      const auto color1 = MakePlatformRGBStruct(
+          r_samples_[255], g_samples_[255], b_samples_[255]);
+      auto dest = fxcrt::reinterpret_span<kPlatformRGBStruct>(scanline_span);
+      for (int i = 0; i < GetWidth(); i++) {
+        const bool is_on = (src_span[i / 8] & (1 << (7 - i % 8)));
+        dest[i] = is_on ? color1 : color0;
       }
       break;
     }
     case FXDIB_Format::k1bppMask: {
-      int m0 = m_RampR[0];
-      int m1 = m_RampR[255];
-      int index = 0;
-      for (int i = 0; i < m_Width; i++) {
-        if (src_buf[i / 8] & (1 << (7 - i % 8)))
-          m_Scanline[index++] = m1;
-        else
-          m_Scanline[index++] = m0;
+      const int m0 = r_samples_[0];
+      const int m1 = r_samples_[255];
+      for (int i = 0; i < GetWidth(); i++) {
+        const bool is_on = (src_span[i / 8] & (1 << (7 - i % 8)));
+        scanline_[i] = is_on ? m1 : m0;
       }
       break;
     }
     case FXDIB_Format::k8bppRgb: {
-      pdfium::span<const uint32_t> src_palette = m_pSrc->GetPaletteSpan();
-      int index = 0;
-      for (int i = 0; i < m_Width; i++) {
-        if (m_pSrc->HasPalette()) {
-          FX_ARGB src_argb = src_palette[*src_buf];
-          m_Scanline[index++] = m_RampB[FXARGB_R(src_argb)];
-          m_Scanline[index++] = m_RampG[FXARGB_G(src_argb)];
-          m_Scanline[index++] = m_RampR[FXARGB_B(src_argb)];
-        } else {
-          uint32_t src_byte = *src_buf;
-          m_Scanline[index++] = m_RampB[src_byte];
-          m_Scanline[index++] = m_RampG[src_byte];
-          m_Scanline[index++] = m_RampR[src_byte];
+      pdfium::span<const uint32_t> src_palette = src_->GetPaletteSpan();
+      auto dest = fxcrt::reinterpret_span<kPlatformRGBStruct>(scanline_span);
+      auto zip = fxcrt::Zip(src_span.first(GetWidth()), dest);
+      if (src_->HasPalette()) {
+        for (auto [input, output] : zip) {
+          const FX_ARGB src_argb = src_palette[input];
+          output = MakePlatformRGBStruct(r_samples_[FXARGB_B(src_argb)],
+                                         g_samples_[FXARGB_G(src_argb)],
+                                         b_samples_[FXARGB_R(src_argb)]);
         }
-        src_buf++;
-#if BUILDFLAG(IS_APPLE)
-        index++;
-#endif
+      } else {
+        for (auto [input, output] : zip) {
+          output = MakePlatformRGBStruct(r_samples_[input], g_samples_[input],
+                                         b_samples_[input]);
+        }
       }
       break;
     }
     case FXDIB_Format::k8bppMask: {
-      int index = 0;
-      for (int i = 0; i < m_Width; i++)
-        m_Scanline[index++] = m_RampR[*(src_buf++)];
+      for (auto [input, output] :
+           fxcrt::Zip(src_span.first(GetWidth()), scanline_span)) {
+        output = r_samples_[input];
+      }
       break;
     }
     case FXDIB_Format::kRgb: {
-      int index = 0;
-      for (int i = 0; i < m_Width; i++) {
-        m_Scanline[index++] = m_RampB[*(src_buf++)];
-        m_Scanline[index++] = m_RampG[*(src_buf++)];
-        m_Scanline[index++] = m_RampR[*(src_buf++)];
-#if BUILDFLAG(IS_APPLE)
-        index++;
-#endif
+      auto src =
+          fxcrt::reinterpret_span<const FX_BGR_STRUCT<uint8_t>>(src_span);
+      auto dest = fxcrt::reinterpret_span<kPlatformRGBStruct>(scanline_span);
+      for (auto [input, output] : fxcrt::Zip(src.first(GetWidth()), dest)) {
+        output = MakePlatformRGBStruct(r_samples_[input.red],
+                                       g_samples_[input.green],
+                                       b_samples_[input.blue]);
       }
       break;
     }
-    case FXDIB_Format::kRgb32:
-      bSkip = true;
-      [[fallthrough]];
+    case FXDIB_Format::kRgb32: {
+      auto src =
+          fxcrt::reinterpret_span<const FX_BGRA_STRUCT<uint8_t>>(src_span);
+      auto dest = fxcrt::reinterpret_span<kPlatformRGBStruct>(scanline_span);
+      for (auto [input, output] : fxcrt::Zip(src.first(GetWidth()), dest)) {
+        output = MakePlatformRGBStruct(r_samples_[input.red],
+                                       g_samples_[input.green],
+                                       b_samples_[input.blue]);
+      }
+      break;
+    }
     case FXDIB_Format::kArgb: {
-      int index = 0;
-      for (int i = 0; i < m_Width; i++) {
-        m_Scanline[index++] = m_RampB[*(src_buf++)];
-        m_Scanline[index++] = m_RampG[*(src_buf++)];
-        m_Scanline[index++] = m_RampR[*(src_buf++)];
-        if (!bSkip) {
-          m_Scanline[index++] = *src_buf;
-#if BUILDFLAG(IS_APPLE)
-        } else {
-          index++;
-#endif
-        }
-        src_buf++;
+      auto src =
+          fxcrt::reinterpret_span<const FX_BGRA_STRUCT<uint8_t>>(src_span);
+      auto dest =
+          fxcrt::reinterpret_span<FX_BGRA_STRUCT<uint8_t>>(scanline_span);
+      for (auto [input, output] : fxcrt::Zip(src.first(GetWidth()), dest)) {
+        output = {
+            .blue = b_samples_[input.blue],
+            .green = g_samples_[input.green],
+            .red = r_samples_[input.red],
+            .alpha = input.alpha,
+        };
       }
       break;
     }
-    default:
-      break;
   }
 }
 
 pdfium::span<const uint8_t> CPDF_TransferFuncDIB::GetScanline(int line) const {
-  TranslateScanline(m_pSrc->GetScanline(line));
-  return m_Scanline;
+  TranslateScanline(src_->GetScanline(line));
+  return scanline_;
 }

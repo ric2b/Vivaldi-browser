@@ -78,6 +78,7 @@ type Number = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 type Special =
   | 'Enter'
   | 'Escape'
+  | 'Delete'
   | '/'
   | '?'
   | '!'
@@ -96,13 +97,34 @@ export type Modifier =
   | 'Ctrl+'
   | 'Alt+'
   | 'Mod+Shift+'
-  | 'Mod+Alt'
-  | 'Mod+Shift+Alt'
+  | 'Mod+Alt+'
+  | 'Mod+Shift+Alt+'
   | 'Ctrl+Shift+'
   | 'Ctrl+Alt'
   | 'Ctrl+Shift+Alt';
 type AllowInEditable = '!' | '';
 export type Hotkey = `${AllowInEditable}${Modifier}${Key}`;
+
+// The following list of keys cannot be pressed wither with or without the
+// presence of the Shift modifier on most keyboard layouts. Thus we should
+// ignore shift in these cases.
+const shiftExceptions = [
+  '0',
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9',
+  '/',
+  '?',
+  '!',
+  '[',
+  ']',
+];
 
 // Represents a deconstructed hotkey.
 export interface HotkeyParts {
@@ -191,7 +213,8 @@ function checkMods(
 
   // For certain keys we relax the shift requirement, as they usually cannot be
   // pressed without the shift key on English keyboards.
-  const shiftOk = key.match(/[\?\!]/) || shiftKey === wantShift;
+  const shiftOk =
+    shiftExceptions.includes(key as string) || shiftKey === wantShift;
 
   return (
     metaKey === wantMeta &&

@@ -17,13 +17,14 @@
 #include <numeric>
 #include <vector>
 
-#include <xnnpack.h>
+#include "xnnpack.h"
 
 class BinaryElementwiseOperatorTester {
  public:
   enum class OperationType {
     Unknown,
     Add,
+    CopySign,
     Divide,
     Maximum,
     Minimum,
@@ -159,6 +160,8 @@ class BinaryElementwiseOperatorTester {
     switch (operation_type()) {
       case OperationType::Add:
         return a + b;
+      case OperationType::CopySign:
+        return std::copysign(a, b);
       case OperationType::Divide:
         return a / b;
       case OperationType::Maximum:

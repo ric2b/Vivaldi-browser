@@ -42,7 +42,6 @@ namespace extensions {
 namespace {
 
 using vivaldi::history_private::HistoryPrivateItem;
-namespace Search = vivaldi::history_private::Search;
 namespace OnVisitModified = vivaldi::history_private::OnVisitModified;
 
 using vivaldi::history_private::TopUrlItem;
@@ -113,7 +112,7 @@ ui::PageTransition HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
       NOTREACHED();
   }
   // We have to return something
-  return ui::PAGE_TRANSITION_LINK;
+  //return ui::PAGE_TRANSITION_LINK;
 }
 // static
 vivaldi::history_private::TransitionType
@@ -146,7 +145,7 @@ HistoryPrivateAPI::UiTransitionToPrivateHistoryTransition(
       NOTREACHED();
   }
   // We have to return something
-  return vivaldi::history_private::TransitionType::kLink;
+  //return vivaldi::history_private::TransitionType::kLink;
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<HistoryPrivateAPI>>::
@@ -208,87 +207,6 @@ void HistoryPrivateEventRouter::DispatchEvent(Profile* profile,
   }
 }
 
-ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
-  std::optional<Search::Params> params(Search::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  std::u16string search_text = base::UTF8ToUTF16(params->query.text);
-
-  history::QueryOptions options;
-  options.SetRecentDayRange(1);
-  options.max_count = 100;
-
-  if (params->query.start_time.has_value())
-    options.begin_time = GetTime(params->query.start_time.value());
-  if (params->query.end_time.has_value())
-    options.end_time = GetTime(params->query.end_time.value());
-  if (params->query.max_results.has_value())
-    options.max_count = params->query.max_results.value();
-
-  if (params->query.result_grouping !=
-      vivaldi::history_private::HistoryResultSetGrouping::kNone) {
-    if (params->query.result_grouping ==
-        vivaldi::history_private::HistoryResultSetGrouping::
-            kKeepAllDuplicates) {
-      options.duplicate_policy = history::QueryOptions::KEEP_ALL_DUPLICATES;
-    } else if (params->query.result_grouping ==
-               vivaldi::history_private::HistoryResultSetGrouping::
-                   kRemoveDuplicatesPerDay) {
-      options.duplicate_policy =
-          history::QueryOptions::REMOVE_DUPLICATES_PER_DAY;
-    }
-  }
-
-  history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
-  if (!hs) {
-    NOTREACHED();
-    return RespondNow(NoArguments());
-  }
-
-  hs->QueryHistory(
-      search_text, options,
-      base::BindOnce(&HistoryPrivateSearchFunction::SearchComplete, this),
-      &task_tracker_);
-  return RespondLater();
-}
-
-HistoryPrivateItem GetHistoryAndVisitItem(const history::URLResult& row,
-                                          BookmarkModel* bookmark_model) {
-  HistoryPrivateItem history_item;
-
-  if (row.visit_time().is_null()) {
-    // If the row has visitTime, id is not unique. Caused by grouping.
-    history_item.id = row.id();
-  } else {
-    history_item.id =
-        std::to_string(row.visit_time().InMillisecondsFSinceUnixEpoch());
-  }
-  history_item.is_bookmarked = bookmark_model->IsBookmarked(row.url());
-  history_item.visit_time = row.visit_time().InMillisecondsFSinceUnixEpoch();
-  history_item.url = row.url().spec();
-  history_item.title = base::UTF16ToUTF8(row.title());
-  history_item.last_visit_time =
-      row.last_visit().InMillisecondsFSinceUnixEpoch();
-  history_item.typed_count = row.typed_count();
-  history_item.visit_count = row.visit_count();
-
-  return history_item;
-}
-
-void HistoryPrivateSearchFunction::SearchComplete(
-    history::QueryResults results) {
-  Profile* profile = GetFunctionCallerProfile(*this);
-  if (!profile)
-    return;
-  HistoryItemList history_item_vec;
-  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile);
-  if (!results.empty()) {
-    for (const auto& item : results)
-      history_item_vec.push_back(GetHistoryAndVisitItem(item, model));
-  }
-  Respond(ArgumentList(Search::Results::Create(history_item_vec)));
-}
-
 ExtensionFunction::ResponseAction HistoryPrivateDeleteVisitsFunction::Run() {
   std::optional<vivaldi::history_private::DeleteVisits::Params> params(
       vivaldi::history_private::DeleteVisits::Params::Create(args()));
@@ -304,7 +222,7 @@ ExtensionFunction::ResponseAction HistoryPrivateDeleteVisitsFunction::Run() {
   history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
   if (!hs) {
     NOTREACHED();
-    return RespondNow(NoArguments());
+    //return RespondNow(NoArguments());
   }
 
   // This implementation is copied from BrowsingHistoryService::RemoveVisits
@@ -350,7 +268,7 @@ HistoryPrivateGetTopUrlsPerDayFunction::Run() {
   history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
   if (!hs) {
     NOTREACHED();
-    return RespondNow(NoArguments());
+    //return RespondNow(NoArguments());
   }
 
   hs->TopUrlsPerDay(
@@ -381,9 +299,7 @@ void HistoryPrivateGetTopUrlsPerDayFunction::TopUrlsComplete(
   Respond(ArgumentList(GetTopUrlsPerDay::Results::Create(history_item_vec)));
 }
 
-std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
-    history::Visit visit,
-    BookmarkModel* bookmark_model) {
+std::unique_ptr<HistoryPrivateItem> GetVisitsItem(history::Visit visit) {
   std::unique_ptr<HistoryPrivateItem> history_item(new HistoryPrivateItem());
 
   base::Time visitTime = visit.visit_time;
@@ -392,19 +308,11 @@ std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
 
   history_item->id = visit.id;
   history_item->url = visit.url.spec();
-  history_item->protocol = visit.url.spec();
   history_item->address = visit.url.host();
   history_item->title = base::UTF16ToUTF8(visit.title);
   history_item->visit_time = visit.visit_time.InMillisecondsFSinceUnixEpoch();
-  history_item->is_bookmarked = bookmark_model->IsBookmarked(visit.url);
   history_item->date_key = base::StringPrintf(
       "%04d-%02d-%02d", exploded.year, exploded.month, exploded.day_of_month);
-  // history_item->date_key.reset(new std::string(base::StringPrintf(
-  //    "%04d-%02d-%02d", exploded.year, exploded.month,
-  //    exploded.day_of_month)));
-  history_item->hour = int(exploded.hour);
-  history_item->visit_count = int(visit.visit_count);
-
   history_item->transition_type =
       HistoryPrivateAPI::UiTransitionToPrivateHistoryTransition(
           visit.transition);
@@ -426,7 +334,7 @@ ExtensionFunction::ResponseAction HistoryPrivateVisitSearchFunction::Run() {
   history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
   if (!hs) {
     NOTREACHED();
-    return RespondNow(NoArguments());
+    //return RespondNow(NoArguments());
   }
 
   hs->VisitSearch(
@@ -443,10 +351,9 @@ void HistoryPrivateVisitSearchFunction::VisitsComplete(
   if (!profile)
     return;
   VisitsPrivateList history_item_vec;
-  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile);
 
   for (auto& item : visit_list) {
-    history_item_vec.push_back(std::move(*(GetVisitsItem(item, model))));
+    history_item_vec.push_back(std::move(*(GetVisitsItem(item))));
   }
   Respond(ArgumentList(VisitSearch::Results::Create(history_item_vec)));
 }
@@ -461,7 +368,7 @@ ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
   history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
   if (!hs) {
     NOTREACHED();
-    return RespondNow(NoArguments());
+    //return RespondNow(NoArguments());
   }
 
   hs->GetVivaldiTypedHistory(
@@ -554,7 +461,7 @@ HistoryPrivateGetDetailedHistoryFunction::Run() {
   history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
   if (!hs) {
     NOTREACHED();
-    return RespondNow(NoArguments());
+    //return RespondNow(NoArguments());
   }
 
   hs->GetVivaldiDetailedHistory(

@@ -184,7 +184,7 @@ TEST_P(RasterDecoderManualInitTest, GetCapabilitiesNorm16) {
   // R16 requires an ES3 context plus the extension to be available.
   InitState init;
   init.context_type = CONTEXT_TYPE_OPENGLES3;
-  init.gl_version = "3.0";
+  init.gl_version = "OpenGL ES 3.0";
   init.extensions.push_back("GL_EXT_texture_norm16");
   InitDecoder(init);
   AddExpectationsForGetCapabilities();
@@ -292,7 +292,7 @@ class RasterDecoderOOPTest : public testing::Test, DecoderClient {
                              GLsizei width,
                              GLsizei height,
                              bool cleared) {
-    gpu::Mailbox mailbox = gpu::Mailbox::GenerateForSharedImage();
+    gpu::Mailbox mailbox = gpu::Mailbox::Generate();
     gfx::Size size(width, height);
     auto color_space = gfx::ColorSpace::CreateSRGB();
 

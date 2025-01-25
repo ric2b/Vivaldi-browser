@@ -193,7 +193,7 @@ base::RefCountedMemory* NTPResourceCache::GetNewTabHTML(
       return new_tab_non_primary_otr_html_.get();
 
     case NORMAL:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return nullptr;
   }
 }
@@ -353,6 +353,10 @@ void NTPResourceCache::CreateNewTabGuestHTML() {
                           l10n_util::GetStringUTF16(IDS_LEARN_MORE));
     localized_strings.Set("enterpriseInfoHintLink",
                           chrome::kLearnMoreEnterpriseURL);
+    localized_strings.Set(
+        "enterpriseLearnMoreA11yLabel",
+        l10n_util::GetStringUTF16(
+            IDS_NEW_TAB_ENTERPRISE_GUEST_SESSION_LEARN_MORE_ACCESSIBILITY_TEXT));
     std::u16string enterprise_info;
     if (connector->IsCloudManaged()) {
       const std::string enterprise_domain_manager =
@@ -361,7 +365,7 @@ void NTPResourceCache::CreateNewTabGuestHTML() {
           IDS_ASH_ENTERPRISE_DEVICE_MANAGED_BY, ui::GetChromeOSDeviceName(),
           base::UTF8ToUTF16(enterprise_domain_manager));
     } else {
-      NOTREACHED() << "Unknown management type";
+      NOTREACHED_IN_MIGRATION() << "Unknown management type";
     }
     localized_strings.Set("enterpriseInfoMessage", enterprise_info);
   } else {
@@ -369,6 +373,7 @@ void NTPResourceCache::CreateNewTabGuestHTML() {
     localized_strings.Set("enterpriseInfoMessage", "");
     localized_strings.Set("enterpriseLearnMore", "");
     localized_strings.Set("enterpriseInfoHintLink", "");
+    localized_strings.Set("enterpriseLearnMoreA11yLabel", "");
   }
 #endif
 

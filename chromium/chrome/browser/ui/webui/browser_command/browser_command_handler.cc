@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/user_education/tutorial_identifiers.h"
 #include "chrome/browser/user_education/user_education_service.h"
 #include "chrome/browser/user_education/user_education_service_factory.h"
 #include "chrome/common/chrome_features.h"
@@ -28,6 +29,7 @@
 #include "components/safe_browsing/core/common/safe_browsing_policy_handler.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/core/common/safebrowsing_referral_methods.h"
+#include "components/saved_tab_groups/features.h"
 #include "components/user_education/common/tutorial_identifier.h"
 #include "components/user_education/common/tutorial_service.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -112,7 +114,9 @@ void BrowserCommandHandler::CanExecuteCommand(
       can_execute = TutorialServiceExists();
       break;
     case Command::kStartSavedTabGroupTutorial:
-      can_execute = TutorialServiceExists() && BrowserSupportsSavedTabGroups();
+      can_execute = TutorialServiceExists() &&
+                    BrowserSupportsSavedTabGroups() &&
+                    !tab_groups::IsTabGroupsSaveV2Enabled();
       break;
     case Command::kOpenAISettings:
       can_execute = true;
@@ -203,7 +207,7 @@ void BrowserCommandHandler::ExecuteCommandWithDisposition(
                     disposition);
       break;
     default:
-      NOTREACHED() << "Unspecified behavior for command " << id;
+      NOTREACHED_IN_MIGRATION() << "Unspecified behavior for command " << id;
       break;
   }
 }

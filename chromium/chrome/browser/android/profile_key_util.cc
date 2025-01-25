@@ -6,9 +6,11 @@
 
 #include "base/android/scoped_java_ref.h"
 #include "chrome/browser/android/profile_key_startup_accessor.h"
-#include "chrome/browser/profiles/android/jni_headers/ProfileKeyUtil_jni.h"
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/profiles/profile_manager.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "chrome/browser/profiles/android/jni_headers/ProfileKeyUtil_jni.h"
 
 using base::android::ScopedJavaLocalRef;
 
@@ -38,13 +40,13 @@ ScopedJavaLocalRef<jobject> JNI_ProfileKeyUtil_GetLastUsedRegularProfileKey(
     JNIEnv* env) {
   ProfileKey* key = ::android::GetLastUsedRegularProfileKey();
   if (!key) {
-    NOTREACHED() << "ProfileKey not found.";
+    NOTREACHED_IN_MIGRATION() << "ProfileKey not found.";
     return ScopedJavaLocalRef<jobject>();
   }
 
   ProfileKeyAndroid* profile_key_android = key->GetProfileKeyAndroid();
   if (!profile_key_android) {
-    NOTREACHED() << "ProfileKeyAndroid not found.";
+    NOTREACHED_IN_MIGRATION() << "ProfileKeyAndroid not found.";
     return ScopedJavaLocalRef<jobject>();
   }
 

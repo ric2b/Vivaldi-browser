@@ -25,7 +25,7 @@
 #include "base/time/time_override.h"
 #include "base/trace_event/base_tracing.h"
 #include "build/build_config.h"
-#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/buildflags.h"
 #include "partition_alloc/partition_alloc_config.h"
 
 #if (BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL)) || BUILDFLAG(IS_FUCHSIA)
@@ -401,8 +401,6 @@ void WorkerThread::RunWorker() {
     std::optional<WatchHangsInScope> hang_watch_scope;
 
     TRACE_EVENT_END0("base", "WorkerThread active");
-    // TODO(crbug.com/40657156): Remove this once fixed.
-    PERFETTO_INTERNAL_ADD_EMPTY_EVENT();
     hang_watch_scope.reset();
     delegate()->WaitForWork();
     TRACE_EVENT_BEGIN("base", "WorkerThread active",
@@ -475,8 +473,6 @@ void WorkerThread::RunWorker() {
 
   TRACE_EVENT_END0("base", "WorkerThread active");
   TRACE_EVENT_INSTANT0("base", "WorkerThread dead", TRACE_EVENT_SCOPE_THREAD);
-  // TODO(crbug.com/40657156): Remove this once fixed.
-  PERFETTO_INTERNAL_ADD_EMPTY_EVENT();
 }
 
 }  // namespace base::internal

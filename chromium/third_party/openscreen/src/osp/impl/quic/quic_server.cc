@@ -5,190 +5,142 @@
 #include "osp/impl/quic/quic_server.h"
 
 #include <functional>
-#include <memory>
+#include <utility>
 
-#include "platform/api/task_runner.h"
-#include "platform/api/time.h"
 #include "util/osp_logging.h"
 
 namespace openscreen::osp {
 
+// static
+QuicAgentCertificate& QuicServer::GetAgentCertificate() {
+  static QuicAgentCertificate agent_certificate;
+  return agent_certificate;
+}
+
 QuicServer::QuicServer(
-    const EndpointConfig& config,
+    const ServiceConfig& config,
     MessageDemuxer& demuxer,
     std::unique_ptr<QuicConnectionFactoryServer> connection_factory,
-    ProtocolConnectionServer::Observer& observer,
+    ProtocolConnectionServiceObserver& observer,
     ClockNowFunctionPtr now_function,
     TaskRunner& task_runner)
-    : ProtocolConnectionServer(demuxer, observer),
-      connection_endpoints_(config.connection_endpoints),
-      connection_factory_(std::move(connection_factory)),
-      cleanup_alarm_(now_function, task_runner) {}
+    : QuicServiceBase(config,
+                      demuxer,
+                      observer,
+                      InstanceRequestIds::Role::kServer,
+                      now_function,
+                      task_runner),
+      instance_name_(config.instance_name),
+      connection_factory_(std::move(connection_factory)) {}
 
 QuicServer::~QuicServer() {
   CloseAllConnections();
 }
 
 bool QuicServer::Start() {
-  if (state_ != State::kStopped)
-    return false;
-  state_ = State::kRunning;
-  connection_factory_->SetServerDelegate(this, connection_endpoints_);
-  Cleanup();  // Start periodic clean-ups.
-  observer_.OnRunning();
-  return true;
+  bool result = StartImpl();
+  if (result) {
+    connection_factory_->SetServerDelegate(this, connection_endpoints_);
+  }
+  return result;
 }
 
 bool QuicServer::Stop() {
-  if (state_ != State::kRunning && state_ != State::kSuspended)
-    return false;
-  connection_factory_->SetServerDelegate(nullptr, {});
-  CloseAllConnections();
-  state_ = State::kStopped;
-  Cleanup();  // Final clean-up.
-  observer_.OnStopped();
-  return true;
+  bool result = StopImpl();
+  if (result) {
+    connection_factory_->SetServerDelegate(nullptr, {});
+  }
+  return result;
 }
 
 bool QuicServer::Suspend() {
-  // TODO(btolsch): QuicStreams should either buffer or reject writes.
-  if (state_ != State::kRunning)
-    return false;
-  state_ = State::kSuspended;
-  observer_.OnSuspended();
-  return true;
+  return SuspendImpl();
 }
 
 bool QuicServer::Resume() {
-  if (state_ != State::kSuspended)
-    return false;
-  state_ = State::kRunning;
-  observer_.OnRunning();
-  return true;
+  return ResumeImpl();
 }
 
-std::string QuicServer::GetFingerprint() {
-  return connection_factory_->GetFingerprint();
+ProtocolConnectionEndpoint::State QuicServer::GetState() {
+  return state_;
 }
 
-void QuicServer::Cleanup() {
-  for (auto& entry : connections_)
-    entry.second.delegate->DestroyClosedStreams();
+MessageDemuxer& QuicServer::GetMessageDemuxer() {
+  return demuxer_;
+}
 
-  for (uint64_t endpoint_id : delete_connections_) {
-    auto it = connections_.find(endpoint_id);
-    if (it != connections_.end()) {
-      connections_.erase(it);
-    }
-  }
-  delete_connections_.clear();
-
-  constexpr Clock::duration kQuicCleanupPeriod = std::chrono::milliseconds(500);
-  if (state_ != State::kStopped) {
-    cleanup_alarm_.ScheduleFromNow([this] { Cleanup(); }, kQuicCleanupPeriod);
-  }
+InstanceRequestIds& QuicServer::GetInstanceRequestIds() {
+  return instance_request_ids_;
 }
 
 std::unique_ptr<ProtocolConnection> QuicServer::CreateProtocolConnection(
-    uint64_t endpoint_id) {
-  if (state_ != State::kRunning) {
-    return nullptr;
-  }
-  auto connection_entry = connections_.find(endpoint_id);
-  if (connection_entry == connections_.end()) {
-    return nullptr;
-  }
-  return QuicProtocolConnection::FromExisting(
-      *this, connection_entry->second.connection.get(),
-      connection_entry->second.delegate.get(), endpoint_id);
+    uint64_t instance_id) {
+  return CreateProtocolConnectionImpl(instance_id);
 }
 
-void QuicServer::OnConnectionDestroyed(QuicProtocolConnection* connection) {
-  if (!connection->stream())
-    return;
-
-  auto connection_entry = connections_.find(connection->endpoint_id());
-  if (connection_entry == connections_.end())
-    return;
-
-  connection_entry->second.delegate->DropProtocolConnection(connection);
+std::string QuicServer::GetAgentFingerprint() {
+  return GetAgentCertificate().GetAgentFingerprint();
 }
 
-uint64_t QuicServer::OnCryptoHandshakeComplete(
-    ServiceConnectionDelegate* delegate,
-    std::string connection_id) {
-  OSP_CHECK_EQ(state_, State::kRunning);
-  const IPEndpoint& endpoint = delegate->endpoint();
-  auto pending_entry = pending_connections_.find(endpoint);
-  if (pending_entry == pending_connections_.end())
+uint64_t QuicServer::OnCryptoHandshakeComplete(std::string_view instance_name) {
+  OSP_CHECK_EQ(state_, ProtocolConnectionEndpoint::State::kRunning);
+
+  auto pending_entry = pending_connections_.find(instance_name);
+  if (pending_entry == pending_connections_.end()) {
     return 0;
+  }
+
   ServiceConnectionData connection_data = std::move(pending_entry->second);
   pending_connections_.erase(pending_entry);
-  uint64_t endpoint_id = next_endpoint_id_++;
-  endpoint_map_[endpoint] = endpoint_id;
-  connections_.emplace(endpoint_id, std::move(connection_data));
-  return endpoint_id;
+  uint64_t instance_id = next_instance_id_++;
+  instance_map_.emplace(instance_name, instance_id);
+  connection_data.stream_manager->set_quic_connection(
+      connection_data.connection.get());
+  connections_.emplace(instance_id, std::move(connection_data));
+  return instance_id;
 }
 
-void QuicServer::OnIncomingStream(
-    std::unique_ptr<QuicProtocolConnection> connection) {
-  OSP_CHECK_EQ(state_, State::kRunning);
-  observer_.OnIncomingConnection(std::move(connection));
-}
+void QuicServer::OnConnectionClosed(uint64_t instance_id) {
+  OSP_CHECK_EQ(state_, ProtocolConnectionEndpoint::State::kRunning);
 
-void QuicServer::OnConnectionClosed(uint64_t endpoint_id,
-                                    std::string connection_id) {
-  OSP_CHECK_EQ(state_, State::kRunning);
-  auto connection_entry = connections_.find(endpoint_id);
-  if (connection_entry == connections_.end())
+  auto connection_entry = connections_.find(instance_id);
+  if (connection_entry == connections_.end()) {
     return;
-  delete_connections_.push_back(endpoint_id);
+  }
 
-  // TODO(crbug.com/openscreen/42): If we reset request IDs when a connection is
-  // closed, we might end up re-using request IDs when a new connection is
-  // created to the same endpoint.
-  endpoint_request_ids_.ResetRequestId(endpoint_id);
-}
-
-void QuicServer::OnDataReceived(uint64_t endpoint_id,
-                                uint64_t protocol_connection_id,
-                                const ByteView& bytes) {
-  OSP_CHECK_EQ(state_, State::kRunning);
-  demuxer_.OnStreamData(endpoint_id, protocol_connection_id, bytes.data(),
-                        bytes.size());
+  connection_factory_->OnConnectionClosed(
+      connection_entry->second.connection.get());
+  delete_connections_.push_back(instance_id);
+  instance_request_ids_.ResetRequestId(instance_id);
 }
 
 void QuicServer::CloseAllConnections() {
-  for (auto& conn : pending_connections_)
+  for (auto& conn : pending_connections_) {
     conn.second.connection->Close();
-
+    connection_factory_->OnConnectionClosed(conn.second.connection.get());
+  }
   pending_connections_.clear();
 
-  for (auto& conn : connections_)
+  for (auto& conn : connections_) {
     conn.second.connection->Close();
-
+    connection_factory_->OnConnectionClosed(conn.second.connection.get());
+  }
   connections_.clear();
-  endpoint_map_.clear();
-  next_endpoint_id_ = 0;
-  endpoint_request_ids_.Reset();
-}
 
-QuicConnection::Delegate* QuicServer::NextConnectionDelegate(
-    const IPEndpoint& source) {
-  OSP_CHECK_EQ(state_, State::kRunning);
-  OSP_CHECK(!pending_connection_delegate_);
-  pending_connection_delegate_ =
-      std::make_unique<ServiceConnectionDelegate>(*this, source);
-  return pending_connection_delegate_.get();
+  instance_map_.clear();
+  next_instance_id_ = 1u;
+  instance_request_ids_.Reset();
 }
 
 void QuicServer::OnIncomingConnection(
     std::unique_ptr<QuicConnection> connection) {
   OSP_CHECK_EQ(state_, State::kRunning);
-  const IPEndpoint& endpoint = pending_connection_delegate_->endpoint();
+
+  const std::string& instance_name = connection->instance_name();
   pending_connections_.emplace(
-      endpoint, ServiceConnectionData(std::move(connection),
-                                      std::move(pending_connection_delegate_)));
+      instance_name,
+      ServiceConnectionData(std::move(connection),
+                            std::make_unique<QuicStreamManager>(*this)));
 }
 
 }  // namespace openscreen::osp

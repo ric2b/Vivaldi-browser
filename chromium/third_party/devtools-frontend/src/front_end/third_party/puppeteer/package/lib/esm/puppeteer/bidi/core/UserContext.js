@@ -71,7 +71,7 @@ let UserContext = (() => {
             context.#initialize();
             return context;
         }
-        #reason = (__runInitializers(this, _instanceExtraInitializers), void 0);
+        #reason = __runInitializers(this, _instanceExtraInitializers);
         // Note these are only top-level contexts.
         #browsingContexts = new Map();
         #disposables = new DisposableStack();
@@ -95,7 +95,7 @@ let UserContext = (() => {
                 if (info.userContext !== this.#id) {
                     return;
                 }
-                const browsingContext = BrowsingContext.from(this, undefined, info.context, info.url);
+                const browsingContext = BrowsingContext.from(this, undefined, info.context, info.url, info.originalOpener);
                 this.#browsingContexts.set(browsingContext.id, browsingContext);
                 const browsingContextEmitter = this.#disposables.use(new EventEmitter(browsingContext));
                 browsingContextEmitter.on('closed', () => {

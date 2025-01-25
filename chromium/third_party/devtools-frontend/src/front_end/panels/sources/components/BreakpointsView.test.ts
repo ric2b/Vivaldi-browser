@@ -20,7 +20,6 @@ import {
   describeWithEnvironment,
 } from '../../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../../testing/MockConnection.js';
-import {describeWithRealConnection} from '../../../testing/RealConnection.js';
 import {
   createContentProviderUISourceCode,
   createFakeScriptMapping,
@@ -747,7 +746,20 @@ describeWithEnvironment('BreakpointsSidebarController', () => {
   });
 });
 
-describeWithRealConnection('BreakpointsSidebarController', () => {
+describeWithMockConnection('BreakpointsSidebarController', () => {
+  beforeEach(() => {
+    const workspace = Workspace.Workspace.WorkspaceImpl.instance();
+    const targetManager = SDK.TargetManager.TargetManager.instance();
+    const resourceMapping = new Bindings.ResourceMapping.ResourceMapping(targetManager, workspace);
+    const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
+      forceNew: true,
+      resourceMapping,
+      targetManager,
+    });
+    Breakpoints.BreakpointManager.BreakpointManager.instance(
+        {forceNew: true, targetManager, workspace, debuggerWorkspaceBinding});
+  });
+
   const DEFAULT_BREAKPOINT:
       [Breakpoints.BreakpointManager.UserCondition, boolean, boolean, Breakpoints.BreakpointManager.BreakpointOrigin] =
           [
@@ -757,7 +769,8 @@ describeWithRealConnection('BreakpointsSidebarController', () => {
             Breakpoints.BreakpointManager.BreakpointOrigin.USER_ACTION,
           ];
 
-  it('auto-expands if a user adds a new  breakpoint', async () => {
+  // Flaky
+  it.skip('[crbug.com/345456307] auto-expands if a user adds a new  breakpoint', async () => {
     const breakpointManager = Breakpoints.BreakpointManager.BreakpointManager.instance();
     const settings = Common.Settings.Settings.instance();
     const {uiSourceCode, project} = createContentProviderUISourceCode(
@@ -830,6 +843,10 @@ describeWithRealConnection('BreakpointsSidebarController', () => {
   });
 
   it('auto-expands if a breakpoint was hit', async () => {
+    sinon.stub(
+        Common.Revealer.RevealerRegistry.instance(),
+        'reveal');  // Prevent pending reveal promises after tests are done.
+
     const breakpointManager = Breakpoints.BreakpointManager.BreakpointManager.instance();
 
     // Set up sdk and ui location, and a mapping between them, such that we can identify that

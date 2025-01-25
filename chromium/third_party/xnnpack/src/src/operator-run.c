@@ -11,19 +11,20 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <xnnpack.h>
-#include <xnnpack/common.h>
-#include <xnnpack/compute.h>
-#include <xnnpack/config.h>
-#include <xnnpack/indirection.h>
-#include <xnnpack/log.h>
-#include <xnnpack/math.h>
-#include <xnnpack/microkernel-type.h>
-#include <xnnpack/microparams.h>
-#include <xnnpack/operator-type.h>
-#include <xnnpack/operator.h>
-#include <xnnpack/quantization.h>
-
+#include "xnnpack.h"
+#include "xnnpack/common.h"
+#include "xnnpack/compute.h"
+#include "xnnpack/config-types.h"
+#include "xnnpack/indirection.h"
+#include "xnnpack/log.h"
+#include "xnnpack/math.h"
+#include "xnnpack/microfnptr.h"
+#include "xnnpack/microkernel-type.h"
+#include "xnnpack/microparams.h"
+#include "xnnpack/operator-type.h"
+#include "xnnpack/operator.h"
+#include "xnnpack/packq.h"
+#include "xnnpack/quantization.h"
 #include "pthreadpool.h"
 
 void xnn_compute_transposec_2d(
@@ -502,6 +503,33 @@ void xnn_compute_dqgemm(
       context->cn_stride,
       context->fused_params,
       (const void*) ((uintptr_t) &context->quantization_params[mr_block_start]));
+}
+
+void xnn_compute_hmp_qp8gemm(
+    const struct gemm_context context[restrict XNN_MIN_ELEMENTS(1)],
+    uint32_t uarch_index, size_t mr_block_start, size_t nr_block_start,
+    size_t mr_block_size, size_t nr_block_size) {
+  const size_t a_offset = xnn_x8_packq_f32qp8_packed_offset(
+      mr_block_start, context->k_scaled, context->mr, context->kr, context->sr);
+  const size_t cm_stride = context->cm_stride;
+
+  context->qp8_ukernel.function[uarch_index](
+      mr_block_size, nr_block_size, context->k_scaled,
+      (const void*)((uintptr_t)context->a + a_offset),
+      (const void*)((uintptr_t)context->packed_w +
+                    nr_block_start * context->w_stride),
+      (void*)((uintptr_t)context->c + mr_block_start * cm_stride +
+              (nr_block_start << context->log2_csize)),
+      cm_stride,
+      /*dst_stride_col=*/sizeof(float), context->fused_params);
+}
+
+void xnn_compute_qp8gemm(
+    const struct gemm_context context[restrict XNN_MIN_ELEMENTS(1)],
+    size_t mr_block_start, size_t nr_block_start, size_t mr_block_size,
+    size_t nr_block_size) {
+  xnn_compute_hmp_qp8gemm(context, XNN_UARCH_DEFAULT, mr_block_start,
+                          nr_block_start, mr_block_size, nr_block_size);
 }
 
 void xnn_compute_spmm(
@@ -2115,16 +2143,26 @@ void xnn_compute_contiguous_reduce(
   const size_t* input_stride = context->input_stride;
   const size_t* output_stride = context->output_stride;
 
-  // input dimensions 1, 3 & 5 are reduced so the entireity of these dimensions
+  // input dimensions 1, 3 & 5 are reduced so the entirety of these dimensions
   // are processed so their indices are always 0.
-  size_t input_offset = input_stride[0] * output_idx0 + input_stride[2] * output_idx1 + input_stride[4] * output_idx2;
-  size_t output_offset = output_stride[0] * output_idx0 + output_stride[1] * output_idx1 + output_stride[2] * output_idx2;
+  size_t input_offset = input_stride[0] * output_idx0 + input_stride[2] * output_idx1
+      + input_stride[4] * output_idx2;
+  size_t output_offset = (output_stride[0] * output_idx0 + output_stride[1] * output_idx1
+                          + output_stride[2] * output_idx2) * context->output_element_size;
+  size_t workspace_offset = (output_stride[0] * output_idx0 + output_stride[1] * output_idx1
+                             + output_stride[2] * output_idx2) * context->accumulation_element_size;
   int input_shape1 = context->input_shape[1];
   int input_shape3 = context->input_shape[3];
 
-  void* output = (void*) ((uintptr_t) context->output + output_offset);
+  void* output_ptr = NULL;
+  if (context->workspace) {
+    output_ptr = context->workspace;
+  } else {
+    output_ptr = context->output;
+  }
+  void* output = (void*) ((uintptr_t) output_ptr + workspace_offset);
   // Rsum microkernels accumulate into the output buffer.
-  memset(output, 0, context->element_size * output2_block_size);
+  memset(output, 0, context->accumulation_element_size * output2_block_size);
 
   // Input dimension 1 is reduced.
   for (size_t i = 0; i < input_shape1; ++i) {
@@ -2135,21 +2173,89 @@ void xnn_compute_contiguous_reduce(
       // output2_block_size output elements are written.
       for (size_t k = 0; k < output2_block_size; ++k) {
         // The microkernel reduces input dimension 5.
-        context->ukernel(context->scaled_elements, input_row, output, &context->params);
+        context->ukernel.rsum(context->channels, input_row, output, &context->params);
         // input_stride[4] is the number of bytes of input which have been
         // processed by the microkernel call.
         input_row = (const void*) ((uintptr_t) input_row + input_stride[4]);
         // Increment output pointer by the number of output bytes which have
         // been written.
-        output = (void*) ((uintptr_t) output + output_stride[2]);
+        output = (void*) ((uintptr_t) output + context->accumulation_element_size);
       }
       // Reset the output pointer.
-      output = (void*) ((uintptr_t) context->output + output_offset);
+      output = (void*) ((uintptr_t) output_ptr + workspace_offset);
       // Iterating over input_shape[3].
       input = (const void*) ((uintptr_t) input + input_stride[3]);
     }
     // Iterating over input_shape[1].
     input_offset += input_stride[1];
+  }
+  // Convert to output datatype if accumulation type != output type.
+  if (context->workspace) {
+    const void* workspace_ptr = (void*) ((uintptr_t) context->workspace + workspace_offset);
+    output_ptr = (void*) ((uintptr_t) context->output + output_offset);
+    context->cvt_ukernel(context->accumulation_element_size * output2_block_size, workspace_ptr,
+                         output_ptr, &context->cvt_params);
+  }
+}
+
+void xnn_compute_discontiguous_reduce(
+    const struct reduce_context context[restrict XNN_MIN_ELEMENTS(1)],
+    size_t output_idx0,
+    size_t output_idx1,
+    size_t output_idx2,
+    size_t output1_block_size,
+    size_t output2_block_size)
+{
+  assert(output1_block_size == 1);
+  const size_t* input_stride = context->input_stride;
+  const size_t* output_stride = context->output_stride;
+
+  // input dimensions 0, 2 & 4 are reduced so the entirety of these dimensions
+  // are processed so their indices are always 0.
+  size_t input_offset = input_stride[1] * output_idx0 + input_stride[3] * output_idx1 + input_stride[5] * output_idx2;
+  size_t output_offset = (output_stride[0] * output_idx0 + output_stride[1] * output_idx1
+                          + output_stride[2] * output_idx2) * context->output_element_size;
+  size_t workspace_offset = (output_stride[0] * output_idx0 + output_stride[1] * output_idx1
+                             + output_stride[2] * output_idx2) * context->accumulation_element_size;
+  int input_shape0 = context->input_shape[0];
+  int input_shape2 = context->input_shape[2];
+
+  void* output_ptr = NULL;
+  if (context->workspace) {
+    output_ptr = context->workspace;
+  } else {
+    output_ptr = context->output;
+  }
+  void* output = (void*) ((uintptr_t) output_ptr + workspace_offset);
+  // RDsum microkernels accumulate into the output buffer.
+  memset(output, 0, context->accumulation_element_size * output2_block_size);
+
+  // Input dimension 0 is reduced.
+  for (size_t i = 0; i < input_shape0; ++i) {
+    const void* input = (const void*) ((uintptr_t) context->input + input_offset);
+    // Input dimension 2 is reduced.
+    for (size_t j = 0; j < input_shape2; ++j) {
+      const void* input_row = input;
+      // The microkernel reduces input dimension 4 and iterates over output_block_size elements of dimension 5.
+      context->ukernel.rdsum(context->channels, output2_block_size, input_row, input_stride[4],
+                             context->zero, output, &context->params);
+      // input_stride[4] is the number of bytes of input which have been
+      // processed by the microkernel call.
+      input_row = (const void*) ((uintptr_t) input_row + input_stride[4]);
+      // Reset the output pointer.
+      output = (void*) ((uintptr_t) output_ptr + workspace_offset);
+      // Iterating over input_shape[2].
+      input = (const void*) ((uintptr_t) input + input_stride[2]);
+    }
+    // Iterating over input_shape[0].
+    input_offset += input_stride[0];
+  }
+  // Convert to output datatype if accumulation type != output type.
+  if (context->workspace) {
+    const void* workspace_ptr = (void*) ((uintptr_t) context->workspace + workspace_offset);
+    output_ptr = (void*) ((uintptr_t) context->output + output_offset);
+    context->cvt_ukernel(context->accumulation_element_size * output2_block_size, workspace_ptr,
+                         output_ptr, &context->cvt_params);
   }
 }
 
@@ -2201,6 +2307,21 @@ void xnn_compute_f32_qd8_convert(
   union xnn_f32_qs8_cvt_params params;
   context->init_params(&params, 1.0f / context->quantization_params[batch_index].inv_scale, context->quantization_params[batch_index].zero_point, INT8_MIN, INT8_MAX);
   context->convert_ukernel(n, input, output, &params);
+}
+
+void xnn_compute_f32_qp8_convert(
+    const struct f32_qp8_convert_context context[restrict XNN_MIN_ELEMENTS(1)],
+    size_t m_idx_start) {
+  const float* lhs = (const float*)((const char*)context->lhs +
+                                    m_idx_start * context->lhs_stride);
+  int8_t* lhs_packed =
+      context->lhs_packed +
+      xnn_x8_packq_f32qp8_packed_offset(m_idx_start, context->k, context->mr,
+                                        context->kr, context->sr);
+
+  context->packq_ukernel(/*m=*/1, context->k, context->mr, context->kr,
+                         context->sr, m_idx_start, lhs, context->lhs_stride,
+                         lhs_packed);
 }
 
 void xnn_compute_u8_softmax(

@@ -623,6 +623,25 @@ Examples
       each one was set from.
 )";
 
+class PrintCallbackHolder {
+ public:
+  PrintCallbackHolder() {}
+  ~PrintCallbackHolder() {
+    if (_settings.has_value()) {
+      _settings.value()->swap_print_callback(_callback.value());
+    }
+  }
+  void SwapCallbacks(BuildSettings* settings,
+                     BuildSettings::PrintCallback new_callback) {
+    _settings = settings;
+    _callback = settings->swap_print_callback(new_callback);
+  }
+
+ private:
+  std::optional<BuildSettings*> _settings;
+  std::optional<BuildSettings::PrintCallback> _callback;
+};
+
 int RunDesc(const std::vector<std::string>& args) {
   if (args.size() != 2 && args.size() != 3) {
     Err(Location(), "Unknown command format. See \"gn help desc\"",
@@ -634,6 +653,16 @@ int RunDesc(const std::vector<std::string>& args) {
 
   // Deliberately leaked to avoid expensive process teardown.
   Setup* setup = new Setup;
+
+  bool json = cmdline->GetSwitchValueString("format") == "json";
+  PrintCallbackHolder print_callback_holder;
+  if (json) {
+    // Silence all output while running desc if outputting to json.
+    BuildSettings* settings = &setup->build_settings();
+    print_callback_holder.SwapCallbacks(settings,
+                                        [](const std::string& str) {});
+  }
+
   if (!setup->DoSetup(args[0], false))
     return 1;
   if (!setup->Run())
@@ -656,8 +685,6 @@ int RunDesc(const std::vector<std::string>& args) {
   std::string what_to_print;
   if (args.size() == 3)
     what_to_print = args[2];
-
-  bool json = cmdline->GetSwitchValueString("format") == "json";
 
   if (target_matches.empty() && config_matches.empty()) {
     OutputString(

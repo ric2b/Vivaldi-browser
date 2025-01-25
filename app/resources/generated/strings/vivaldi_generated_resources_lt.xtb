@@ -18,7 +18,6 @@
 <translation id="241082044617551207">Nežinomas papildinys</translation>
 <translation id="2439110203301358333">Kita jūsų kompiuteryje esanti programa pridėjo plėtinį, kuris gali pakeisti „Vivaldi“ veikimo būdą.</translation>
 <translation id="2445081178310039857">Reikalingas plėtinio šakninis katalogas.</translation>
-<translation id="2470702053775288986">Nepalaikomi plėtiniai išjungti</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Iš naujo įgalinti</translation>
 <translation id="2850541429955027218">Pridėti temą</translation>
@@ -75,7 +74,6 @@
 <translation id="7629827748548208700">Skirtukas: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">Gavėjas: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7704305437604973648">Užduotis</translation>
-<translation id="7791543448312431591">Pridėti</translation>
 <translation id="7818135753970109980">Pridėta nauja tema (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="786073089922909430">Paslauga: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">Paslaugų programa: <ph name="UTILITY_TYPE" /></translation>

@@ -11,6 +11,7 @@
 #import "base/functional/bind.h"
 #import "base/location.h"
 #import "base/memory/raw_ptr.h"
+#import "base/memory/weak_ptr.h"
 #import "base/scoped_observation.h"
 #import "base/strings/string_util.h"
 #import "base/values.h"
@@ -49,7 +50,6 @@ web::WebUIIOSDataSource* CreateNetExportHTMLSource() {
 // this class's member methods are expected to run on the UI thread.
 class NetExportMessageHandler
     : public web::WebUIIOSMessageHandler,
-      public base::SupportsWeakPtr<NetExportMessageHandler>,
       public net_log::NetExportFileWriter::StateObserver {
  public:
   NetExportMessageHandler();
@@ -86,12 +86,11 @@ class NetExportMessageHandler
                           net_log::NetExportFileWriter::StateObserver>
       state_observation_manager_{this};
 
-  base::WeakPtrFactory<NetExportMessageHandler> weak_ptr_factory_;
+  base::WeakPtrFactory<NetExportMessageHandler> weak_factory_{this};
 };
 
 NetExportMessageHandler::NetExportMessageHandler()
-    : file_writer_(GetApplicationContext()->GetNetExportFileWriter()),
-      weak_ptr_factory_(this) {
+    : file_writer_(GetApplicationContext()->GetNetExportFileWriter()) {
   file_writer_->Initialize();
 }
 
@@ -163,7 +162,7 @@ void NetExportMessageHandler::OnStopNetLog(const base::Value::List& list) {
 void NetExportMessageHandler::OnSendNetLog(const base::Value::List& list) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   file_writer_->GetFilePathToCompletedLog(base::BindOnce(
-      &NetExportMessageHandler::SendEmail, base::Unretained(this)));
+      &NetExportMessageHandler::SendEmail, weak_factory_.GetWeakPtr()));
 }
 
 void NetExportMessageHandler::OnNewState(const base::Value::Dict& state) {

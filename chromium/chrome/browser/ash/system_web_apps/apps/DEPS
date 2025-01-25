@@ -23,6 +23,9 @@ include_rules = [
   "+chrome/browser/ash/assistant",
   "+chrome/browser/ash/borealis",
   "+chrome/browser/ash/camera_presence_notifier.h",
+  # TODO(b/342514059): Allow help app to depend on child_accounts without
+  # depending on chrome.
+  "+chrome/browser/ash/child_accounts",
   "+chrome/browser/ash/crosapi",
   "+chrome/browser/ash/crostini",
   "+chrome/browser/ash/drive",
@@ -39,6 +42,7 @@ include_rules = [
   "+chrome/browser/ash/login/session",
   "+chrome/browser/ash/login/test",
   "+chrome/browser/ash/login/users",
+  "+chrome/browser/ash/mahi/media_app",
   "+chrome/browser/ash/os_feedback",
   "+chrome/browser/ash/policy/dlp",
   "+chrome/browser/ash/policy/external_data/handlers",
@@ -56,6 +60,7 @@ include_rules = [
   "+chrome/browser/extensions/component_loader.h",
   "+chrome/browser/extensions/extension_tab_util.h",
   "+chrome/browser/lifetime",
+  "+chrome/browser/manta/manta_service_factory.h",
   "+chrome/browser/media/webrtc",
   "+chrome/browser/metrics",
   "+chrome/browser/notifications",
@@ -67,6 +72,7 @@ include_rules = [
   "+chrome/browser/scalable_iph",
   # TODO(b/338516458): Allow ash to use ScreenAI without depending on //chrome.
   "+chrome/browser/screen_ai/public",
+  "+chrome/browser/search_engines/template_url_service_factory.h",
   "+chrome/browser/ui/ash",
   "+chrome/browser/ui/browser_commands.h",
   "+chrome/browser/ui/browser_finder.h",
@@ -93,6 +99,7 @@ include_rules = [
   "+chrome/browser/web_applications/web_app_install_info.h",
   "+chrome/browser/web_applications/web_app_launch_queue.h",
   "+chrome/browser/web_applications/web_app_provider.h",
+  "+chrome/browser/web_applications/web_app_registrar.h",
   "+chrome/browser/web_applications/web_app_tab_helper.h",
   "+chrome/browser/web_applications/web_app_utils.h",
   "+chrome/common/channel_info.h",
@@ -114,7 +121,9 @@ specific_include_rules = {
   ],
   "personalization_app_integration_browsertest.cc": [
     "+ash/ambient/test/ambient_ash_test_helper.h",
-    "+chrome/browser/ui/views/frame/browser_view.h",
     "+ui/message_center/message_center.h",
+  ],
+  "personalization_app_utils_unittest.cc": [
+    "+chrome/browser/signin/identity_manager_factory.h",
   ],
 }

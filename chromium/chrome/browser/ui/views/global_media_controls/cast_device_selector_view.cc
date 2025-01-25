@@ -4,10 +4,10 @@
 
 #include "chrome/browser/ui/views/global_media_controls/cast_device_selector_view.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "chrome/browser/ui/views/controls/hover_button.h"
 #include "chrome/browser/ui/views/global_media_controls/media_item_ui_helper.h"
 #include "chrome/browser/ui/views/global_media_controls/media_notification_device_entry_ui.h"
-#include "chrome/browser/ui/views/media_router/cast_dialog_helper.h"
 #include "components/global_media_controls/public/views/media_item_ui_updated_view.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
@@ -15,11 +15,12 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/styled_label.h"
+#include "ui/views/controls/throbber.h"
 #include "ui/views/layout/box_layout_view.h"
 
 namespace {
 
-constexpr gfx::Size kPreferredSize{370, 0};
 constexpr gfx::Size kCloseButtonSize{20, 20};
 
 constexpr int kBackgroundBorderThickness = 1;
@@ -46,7 +47,6 @@ CastDeviceSelectorView::CastDeviceSelectorView(
     : device_list_host_(std::move(device_list_host)),
       device_list_client_(this, std::move(device_list_client)),
       media_color_theme_(media_color_theme) {
-  SetPreferredSize(kPreferredSize);
   SetBorder(views::CreateThemedRoundedRectBorder(
       kBackgroundBorderThickness, kBackgroundCornerRadius,
       media_color_theme_.device_selector_border_color_id));
@@ -72,7 +72,7 @@ CastDeviceSelectorView::CastDeviceSelectorView(
   // Create the close button.
   auto close_button =
       std::make_unique<global_media_controls::MediaActionButton>(
-          base::BindRepeating(&CastDeviceSelectorView::HideDevices,
+          base::BindRepeating(&CastDeviceSelectorView::CloseButtonPressed,
                               base::Unretained(this)),
           global_media_controls::kEmptyMediaActionButtonId,
           IDS_GLOBAL_MEDIA_CONTROLS_CLOSE_DEVICE_LIST_TEXT,
@@ -151,9 +151,19 @@ std::unique_ptr<HoverButton> CastDeviceSelectorView::BuildCastDeviceEntryView(
     global_media_controls::mojom::IconType icon) {
   std::unique_ptr<HoverButton> device_entry_button;
   if (icon == global_media_controls::mojom::IconType::kThrobber) {
+    // Create the device entry button with an animating throbber icon view.
+    std::unique_ptr<views::Throbber> throbber =
+        std::make_unique<views::Throbber>();
+    throbber->Start();
+
     device_entry_button = std::make_unique<HoverButton>(
-        std::move(callback), media_router::CreateThrobber(), text);
+        std::move(callback), std::move(throbber), text);
+    device_entry_button->title()->SetDefaultTextStyle(
+        views::style::STYLE_BODY_2);
+    device_entry_button->title()->SetDefaultEnabledColorId(
+        media_color_theme_.secondary_foreground_color_id);
   } else {
+    // Create the device entry button with a static icon view.
     device_entry_button = std::make_unique<HoverButton>(
         std::move(callback),
         ui::ImageModel::FromVectorIcon(
@@ -161,11 +171,11 @@ std::unique_ptr<HoverButton> CastDeviceSelectorView::BuildCastDeviceEntryView(
             media_color_theme_.secondary_foreground_color_id,
             kDeviceEntryIconSize),
         text);
+    device_entry_button->SetLabelStyle(views::style::STYLE_BODY_2);
+    device_entry_button->SetEnabledTextColorIds(
+        media_color_theme_.secondary_foreground_color_id);
+    device_entry_button->SetImageLabelSpacing(kDeviceEntrySeparator);
   }
-  device_entry_button->SetLabelStyle(views::style::STYLE_BODY_2);
-  device_entry_button->SetEnabledTextColorIds(
-      media_color_theme_.secondary_foreground_color_id);
-  device_entry_button->SetImageLabelSpacing(kDeviceEntrySeparator);
   device_entry_button->SetFocusRingCornerRadius(kDeviceEntryCornerRadius);
   return device_entry_button;
 }
@@ -190,6 +200,14 @@ void CastDeviceSelectorView::UpdateVisibility() {
   if (media_item_ui_updated_view_) {
     media_item_ui_updated_view_->UpdateDeviceSelectorVisibility(is_expanded_);
   }
+}
+
+void CastDeviceSelectorView::CloseButtonPressed() {
+  base::UmaHistogramEnumeration(
+      global_media_controls::kMediaItemUIUpdatedViewActionHistogram,
+      global_media_controls::MediaItemUIUpdatedViewAction::
+          kCloseDeviceListForCasting);
+  HideDevices();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

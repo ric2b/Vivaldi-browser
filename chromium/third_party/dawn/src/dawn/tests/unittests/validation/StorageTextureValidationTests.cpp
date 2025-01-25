@@ -186,19 +186,13 @@ class StorageTextureValidationTests : public ValidationTest {
 TEST_F(StorageTextureValidationTests, RenderPipeline) {
     // Write-only storage textures cannot be declared in a vertex shader.
     {
-        wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
+        ASSERT_DEVICE_ERROR(utils::CreateShaderModule(device, R"(
             @group(0) @binding(0) var image0 : texture_storage_2d<rgba8unorm, write>;
             @vertex
             fn main(@builtin(vertex_index) vertex_index : u32) -> @builtin(position) vec4f {
                 textureStore(image0, vec2i(i32(vertex_index), 0), vec4f(1.0, 0.0, 0.0, 1.0));
                 return vec4f(0.0);
-            })");
-
-        utils::ComboRenderPipelineDescriptor descriptor;
-        descriptor.layout = nullptr;
-        descriptor.vertex.module = vsModule;
-        descriptor.cFragment.module = mDefaultFSModule;
-        ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&descriptor));
+            })"));
     }
 
     // Write-only storage textures can be declared in a fragment shader.
@@ -238,15 +232,21 @@ TEST_F(StorageTextureValidationTests, ComputePipeline) {
     }
 }
 
-// Validate read-only, write-only and read-write storage textures are supported in shader modules.
+// Validate read-only, write-only and read-write storage textures are supported in shader modules,
+// excepting that only read-only storage textures are supported in vertex shaders.
 TEST_F(StorageTextureValidationTests, ReadWriteStorageTexture) {
-    constexpr std::array<wgpu::StorageTextureAccess, 2> kStorageTextureAccesses = {
-        {wgpu::StorageTextureAccess::ReadOnly, wgpu::StorageTextureAccess::ReadWrite}};
+    constexpr std::array<wgpu::StorageTextureAccess, 3> kStorageTextureAccesses = {
+        {wgpu::StorageTextureAccess::ReadOnly, wgpu::StorageTextureAccess::WriteOnly,
+         wgpu::StorageTextureAccess::ReadWrite}};
     constexpr std::array<wgpu::ShaderStage, 3> kShaderStages = {
         {wgpu::ShaderStage::Vertex, wgpu::ShaderStage::Fragment, wgpu::ShaderStage::Compute}};
 
     for (wgpu::StorageTextureAccess access : kStorageTextureAccesses) {
         for (wgpu::ShaderStage shaderStage : kShaderStages) {
+            if (shaderStage == wgpu::ShaderStage::Vertex &&
+                access != wgpu::StorageTextureAccess::ReadOnly) {
+                continue;
+            }
             std::string shader = CreateShaderWithStorageTexture(
                 access, wgpu::TextureFormat::R32Float, "texture_storage_2d", shaderStage);
             utils::CreateShaderModule(device, shader.c_str());
@@ -285,14 +285,11 @@ class BGRA8UnormStorageTextureValidationTests
       // Bool param indicates whether requires the BGRA8UnormStorage feature or not.
       public ::testing::WithParamInterface<bool> {
   protected:
-    WGPUDevice CreateTestDevice(native::Adapter dawnAdapter,
-                                wgpu::DeviceDescriptor descriptor) override {
-        wgpu::FeatureName requiredFeatures[1] = {wgpu::FeatureName::BGRA8UnormStorage};
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
         if (GetParam()) {
-            descriptor.requiredFeatures = requiredFeatures;
-            descriptor.requiredFeatureCount = 1;
+            return {wgpu::FeatureName::BGRA8UnormStorage};
         }
-        return dawnAdapter.CreateDevice(&descriptor);
+        return {};
     }
 };
 
@@ -494,12 +491,8 @@ TEST_F(StorageTextureValidationTests, StorageTextureFormatInBindGroupLayout) {
 
 class BGRA8UnormStorageBindGroupLayoutTest : public StorageTextureValidationTests {
   protected:
-    WGPUDevice CreateTestDevice(native::Adapter dawnAdapter,
-                                wgpu::DeviceDescriptor descriptor) override {
-        wgpu::FeatureName requiredFeatures[1] = {wgpu::FeatureName::BGRA8UnormStorage};
-        descriptor.requiredFeatures = requiredFeatures;
-        descriptor.requiredFeatureCount = 1;
-        return dawnAdapter.CreateDevice(&descriptor);
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
+        return {wgpu::FeatureName::BGRA8UnormStorage};
     }
 };
 
@@ -1192,12 +1185,8 @@ TEST_F(ReadWriteStorageTextureResourceUsageTrackingTests, StorageTextureInComput
 }
 
 class R8UnormStorageValidationTests : public StorageTextureValidationTests {
-    WGPUDevice CreateTestDevice(native::Adapter dawnAdapter,
-                                wgpu::DeviceDescriptor descriptor) override {
-        wgpu::FeatureName requiredFeatures[1] = {wgpu::FeatureName::R8UnormStorage};
-        descriptor.requiredFeatures = requiredFeatures;
-        descriptor.requiredFeatureCount = 1;
-        return dawnAdapter.CreateDevice(&descriptor);
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
+        return {wgpu::FeatureName::R8UnormStorage};
     }
 };
 

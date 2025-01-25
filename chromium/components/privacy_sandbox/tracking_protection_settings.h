@@ -9,6 +9,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/scoped_observation.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/privacy_sandbox/tracking_protection_onboarding.h"
 #include "components/privacy_sandbox/tracking_protection_prefs.h"
@@ -74,11 +75,17 @@ class TrackingProtectionSettings
   // This removes both site-scoped (wildcarded) and origin-scoped exceptions.
   void RemoveTrackingProtectionException(const GURL& first_party_url);
 
-  // Returns whether a given url has a tracking protection exception.
-  bool HasTrackingProtectionException(const GURL& first_party_url) const;
+  // Returns the tracking protection setting for `first_party_url`. This will be
+  // BLOCK unless the user has made an explicit exception for `first_party_url`.
+  ContentSetting GetTrackingProtectionSetting(
+      const GURL& first_party_url,
+      content_settings::SettingInfo* info = nullptr) const;
 
  private:
   void OnEnterpriseControlForPrefsChanged();
+  void MaybeInitializeIppPref();
+  void MigrateUserBypassExceptions(ContentSettingsType from,
+                                   ContentSettingsType to);
 
   // Callbacks for pref observation.
   void OnDoNotTrackEnabledPrefChanged();

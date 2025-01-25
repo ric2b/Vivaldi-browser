@@ -93,7 +93,7 @@ class QuerierImplTesting : public QuerierImpl {
       : QuerierImpl(mock_service_,
                     task_runner_,
                     reporting_client_,
-                    network_config_),
+                    FakeNetworkInterfaceConfig()),
         clock_(Clock::now()),
         task_runner_(clock_) {}
 
@@ -124,7 +124,6 @@ class QuerierImplTesting : public QuerierImpl {
  private:
   FakeClock clock_;
   FakeTaskRunner task_runner_;
-  FakeNetworkInterfaceConfig network_config_;
   StrictMock<MockMdnsService> mock_service_;
   StrictMock<MockReportingClient> reporting_client_;
 

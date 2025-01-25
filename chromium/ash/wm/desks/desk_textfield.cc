@@ -12,6 +12,7 @@
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/canvas.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/widget/widget.h"
 
@@ -70,7 +71,7 @@ std::u16string DeskTextfield::GetTooltipText(const gfx::Point& p) const {
 
 void DeskTextfield::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   Textfield::GetAccessibleNodeData(node_data);
-  node_data->SetNameChecked(GetAccessibleName());
+  node_data->SetNameChecked(GetViewAccessibility().GetCachedName());
 }
 
 ui::Cursor DeskTextfield::GetCursor(const ui::MouseEvent& event) {
@@ -86,7 +87,7 @@ void DeskTextfield::OnBlur() {
   GetRenderText()->SetElideBehavior(gfx::ELIDE_TAIL);
   SystemTextfield::OnBlur();
   // Give user indication for the quick activatable view.
-  if (!use_default_focus_manager_) {
+  if (!use_default_focus_manager_ && !features::IsOverviewNewFocusEnabled()) {
     SetShowBackground(true);
   }
   // Avoid having the focus restored to the same DeskNameView when the desk bar

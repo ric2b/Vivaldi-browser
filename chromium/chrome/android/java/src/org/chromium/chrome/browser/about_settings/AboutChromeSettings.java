@@ -108,7 +108,7 @@ public class AboutChromeSettings extends PreferenceFragmentCompat
                 version = version.concat("(MM)");
             }
             // Add make and model
-            if (BuildConfig.IS_OEM_RENAULT_BUILD) {
+            if (BuildConfig.IS_OEM_RENAULT_BUILD || BuildConfig.IS_OEM_GAS_BUILD) {
                 version = version.concat(" ")
                         .concat(CarDataProvider.getVhalInfoMake()).concat("/")
                         .concat(CarDataProvider.getVhalInfoModel());

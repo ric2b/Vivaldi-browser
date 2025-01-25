@@ -114,6 +114,13 @@ typedef NS_ENUM(NSUInteger, IPadLayoutState) {
 /// Returns whether the given URL string is an internal
 /// page.
 + (BOOL)isURLInternalPage:(NSString* _Nonnull)urlString;
+/// Returns an attributed string highlighting a certain
+/// part of the string wih different color.
++ (NSAttributedString* _Nonnull)
+    attributedStringWithText:(NSString* _Nonnull)text
+         highlight:(NSString* _Nonnull)highlight
+               textColor:(UIColor* _Nonnull)textColor
+                    highlightColor:(UIColor* _Nonnull)highlightColor;
 @end
 
 #endif  // IOS_UI_HELPERS_VIVALDI_GLOBAL_HELPERS_H_

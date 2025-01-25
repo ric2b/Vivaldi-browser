@@ -143,7 +143,9 @@ class ShellDevToolsBindings::NetworkResourceLoader
     bindings_->loaders_.erase(bindings_->loaders_.find(this));
   }
 
-  void OnRetry(base::OnceClosure start_retry) override { NOTREACHED(); }
+  void OnRetry(base::OnceClosure start_retry) override {
+    NOTREACHED_IN_MIGRATION();
+  }
 
   const int stream_id_;
   const int request_id_;
@@ -187,18 +189,6 @@ ShellDevToolsBindings::~ShellDevToolsBindings() {
   auto* bindings = GetShellDevtoolsBindingsInstances();
   DCHECK(base::Contains(*bindings, this));
   std::erase(*bindings, this);
-}
-
-// static
-std::vector<ShellDevToolsBindings*>
-ShellDevToolsBindings::GetInstancesForWebContents(WebContents* web_contents) {
-  std::vector<ShellDevToolsBindings*> result;
-  base::ranges::copy_if(*GetShellDevtoolsBindingsInstances(),
-                        std::back_inserter(result),
-                        [web_contents](ShellDevToolsBindings* binding) {
-                          return binding->inspected_contents() == web_contents;
-                        });
-  return result;
 }
 
 void ShellDevToolsBindings::ReadyToCommitNavigation(
@@ -247,20 +237,6 @@ void ShellDevToolsBindings::AttachInternal() {
 
 void ShellDevToolsBindings::Attach() {
   AttachInternal();
-}
-
-void ShellDevToolsBindings::UpdateInspectedWebContents(
-    WebContents* new_contents,
-    base::OnceCallback<void()> callback) {
-  inspected_contents_ = new_contents;
-  if (!agent_host_)
-    return;
-  AttachInternal();
-  CallClientFunction(
-      "DevToolsAPI", "reattachMainTarget", {}, {}, {},
-      base::BindOnce([](base::OnceCallback<void()> callback,
-                        base::Value) { std::move(callback).Run(); },
-                     std::move(callback)));
 }
 
 void ShellDevToolsBindings::WebContentsDestroyed() {
@@ -357,6 +333,9 @@ void ShellDevToolsBindings::HandleMessageFromDevToolsFrontend(
     return;
   } else if (*method == "getPreferences") {
     SendMessageAck(request_id, std::move(preferences_));
+    return;
+  } else if (*method == "getHostConfig") {
+    SendMessageAck(request_id, {});
     return;
   } else if (*method == "setPreference") {
     if (params.size() < 2)

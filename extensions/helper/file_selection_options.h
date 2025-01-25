@@ -25,14 +25,14 @@ class FileSelectionOptions {
       base::OnceCallback<void(base::FilePath file_path, bool cancelled)>;
   void RunDialog(RunDialogResult callback) &&;
 
-  void SetTitle(base::StringPiece str);
+  void SetTitle(std::string_view str);
 
   void SetType(ui::SelectFileDialog::Type type);
 
-  void SetDefaultPath(base::StringPiece str);
+  void SetDefaultPath(std::string_view str);
 
   // Add extension to file_type_info. The extension must be without the dot.
-  void AddExtension(base::StringPiece extension);
+  void AddExtension(std::string_view extension);
 
   void SetIncludeAllFiles();
 

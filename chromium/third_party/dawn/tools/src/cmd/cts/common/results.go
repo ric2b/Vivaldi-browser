@@ -29,6 +29,7 @@ package common
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -95,7 +96,7 @@ func (r *ResultSource) GetResults(ctx context.Context, cfg Config, auth auth.Opt
 	if err != nil {
 		return nil, err
 	}
-	rdb, err := resultsdb.New(ctx, auth)
+	client, err := resultsdb.NewBigQueryClient(ctx, resultsdb.DefaultQueryProject)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +115,7 @@ func (r *ResultSource) GetResults(ctx context.Context, cfg Config, auth auth.Opt
 		}
 		fmt.Printf("scanning for latest patchset of %v...\n", latest.Number)
 		var resultsByExecutionMode result.ResultsByExecutionMode
-		resultsByExecutionMode, *ps, err = MostRecentResultsForChange(ctx, cfg, r.CacheDir, gerrit, bb, rdb, latest.Number)
+		resultsByExecutionMode, *ps, err = MostRecentResultsForChange(ctx, cfg, r.CacheDir, gerrit, bb, client, latest.Number)
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +145,7 @@ func (r *ResultSource) GetResults(ctx context.Context, cfg Config, auth auth.Opt
 		return nil, err
 	}
 
-	resultsByExecutionMode, err := CacheResults(ctx, cfg, *ps, r.CacheDir, rdb, builds)
+	resultsByExecutionMode, err := CacheResults(ctx, cfg, *ps, r.CacheDir, client, builds)
 	if err != nil {
 		return nil, err
 	}
@@ -153,16 +154,16 @@ func (r *ResultSource) GetResults(ctx context.Context, cfg Config, auth auth.Opt
 }
 
 // CacheResults looks in the cache at 'cacheDir' for the results for the given patchset.
-// If the cache contains the results, then these are loaded, transformed with CleanTags() and
+// If the cache contains the results, then these are loaded, transformed with CleanResults() and
 // returned.
 // If the cache does not contain the results, then they are fetched using GetRawResults(), saved to
-// the cache directory, transformed with CleanTags() and then returned.
+// the cache directory, transformed with CleanResults() and then returned.
 func CacheResults(
 	ctx context.Context,
 	cfg Config,
 	ps gerrit.Patchset,
 	cacheDir string,
-	rdb *resultsdb.ResultsDB,
+	client resultsdb.Querier,
 	builds BuildsByName) (result.ResultsByExecutionMode, error) {
 
 	var cachePath string
@@ -177,7 +178,7 @@ func CacheResults(
 	}
 
 	log.Printf("fetching results from cl %v ps %v...", ps.Change, ps.Patchset)
-	resultsByExecutionMode, err := GetRawResults(ctx, cfg, rdb, builds)
+	resultsByExecutionMode, err := GetRawResults(ctx, cfg, client, builds)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +189,7 @@ func CacheResults(
 
 	// Expand aliased tags, remove specific tags
 	for i, results := range resultsByExecutionMode {
-		CleanTags(cfg, &results)
+		CleanResults(cfg, &results)
 		results.Sort()
 		resultsByExecutionMode[i] = results
 	}
@@ -196,22 +197,22 @@ func CacheResults(
 	return resultsByExecutionMode, nil
 }
 
-// GetResults calls GetRawResults() to fetch the build results from ResultDB and applies CleanTags().
+// GetResults calls GetRawResults() to fetch the build results from ResultDB and applies CleanResults().
 // GetResults does not trigger new builds.
 func GetResults(
 	ctx context.Context,
 	cfg Config,
-	rdb *resultsdb.ResultsDB,
+	client resultsdb.Querier,
 	builds BuildsByName) (result.ResultsByExecutionMode, error) {
 
-	resultsByExecutionMode, err := GetRawResults(ctx, cfg, rdb, builds)
+	resultsByExecutionMode, err := GetRawResults(ctx, cfg, client, builds)
 	if err != nil {
 		return nil, err
 	}
 
 	// Expand aliased tags, remove specific tags
 	for i, results := range resultsByExecutionMode {
-		CleanTags(cfg, &results)
+		CleanResults(cfg, &results)
 		results.Sort()
 		resultsByExecutionMode[i] = results
 	}
@@ -219,31 +220,31 @@ func GetResults(
 	return resultsByExecutionMode, err
 }
 
-// GetRawResults fetches the build results from ResultDB, without applying CleanTags().
+// GetRawResults fetches the build results from ResultDB, without applying CleanResults().
 // GetRawResults does not trigger new builds.
 func GetRawResults(
 	ctx context.Context,
 	cfg Config,
-	rdb *resultsdb.ResultsDB,
+	client resultsdb.Querier,
 	builds BuildsByName) (result.ResultsByExecutionMode, error) {
 
 	fmt.Printf("fetching results from resultdb...")
 
 	lastPrintedDot := time.Now()
 
-	toStatus := func(s rdbpb.TestStatus) result.Status {
+	toStatus := func(s string) result.Status {
 		switch s {
 		default:
 			return result.Unknown
-		case rdbpb.TestStatus_PASS:
+		case rdbpb.TestStatus_PASS.String():
 			return result.Pass
-		case rdbpb.TestStatus_FAIL:
+		case rdbpb.TestStatus_FAIL.String():
 			return result.Failure
-		case rdbpb.TestStatus_CRASH:
+		case rdbpb.TestStatus_CRASH.String():
 			return result.Crash
-		case rdbpb.TestStatus_ABORT:
+		case rdbpb.TestStatus_ABORT.String():
 			return result.Abort
-		case rdbpb.TestStatus_SKIP:
+		case rdbpb.TestStatus_SKIP.String():
 			return result.Skip
 		}
 	}
@@ -252,36 +253,34 @@ func GetRawResults(
 	for _, test := range cfg.Tests {
 		results := result.List{}
 		for _, prefix := range test.Prefixes {
-			err := rdb.QueryTestResults(ctx, builds.ids(), prefix+".*", func(rpb *rdbpb.TestResult) error {
+
+			err := client.QueryTestResults(ctx, builds.ids(), prefix, func(r *resultsdb.QueryResult) error {
 				if time.Since(lastPrintedDot) > 5*time.Second {
 					lastPrintedDot = time.Now()
 					fmt.Printf(".")
 				}
 
-				if !strings.HasPrefix(rpb.GetTestId(), prefix) {
-					return nil
+				if !strings.HasPrefix(r.TestId, prefix) {
+					return errors.New(fmt.Sprintf("Test ID %s did not start with %s even though query should have filtered.", r.TestId, prefix))
 				}
 
-				testName := rpb.GetTestId()[len(prefix):]
-				status := toStatus(rpb.Status)
+				testName := r.TestId[len(prefix):]
+				status := toStatus(r.Status)
 				tags := result.NewTags()
-
-				duration := rpb.GetDuration().AsDuration()
+				duration := time.Duration(r.Duration * float64(time.Second))
 				mayExonerate := false
 
-				for _, sp := range rpb.Tags {
-					if sp.Key == "typ_tag" {
-						tags.Add(sp.Value)
-					}
-					if sp.Key == "javascript_duration" {
+				for _, tagPair := range r.Tags {
+					if tagPair.Key == "typ_tag" {
+						tags.Add(tagPair.Value)
+					} else if tagPair.Key == "javascript_duration" {
 						var err error
-						if duration, err = time.ParseDuration(sp.Value); err != nil {
+						if duration, err = time.ParseDuration(tagPair.Value); err != nil {
 							return err
 						}
-					}
-					if sp.Key == "may_exonerate" {
+					} else if tagPair.Key == "may_exonerate" {
 						var err error
-						if mayExonerate, err = strconv.ParseBool(sp.Value); err != nil {
+						if mayExonerate, err = strconv.ParseBool(tagPair.Value); err != nil {
 							return err
 						}
 					}
@@ -351,7 +350,7 @@ func MostRecentResultsForChange(
 	cacheDir string,
 	g *gerrit.Gerrit,
 	bb *buildbucket.Buildbucket,
-	rdb *resultsdb.ResultsDB,
+	client resultsdb.Querier,
 	change int) (result.ResultsByExecutionMode, gerrit.Patchset, error) {
 
 	ps, err := LatestPatchset(g, change)
@@ -369,7 +368,7 @@ func MostRecentResultsForChange(
 				return nil, gerrit.Patchset{}, err
 			}
 
-			results, err := CacheResults(ctx, cfg, ps, cacheDir, rdb, builds)
+			results, err := CacheResults(ctx, cfg, ps, cacheDir, client, builds)
 			if err != nil {
 				return nil, gerrit.Patchset{}, err
 			}
@@ -384,10 +383,10 @@ func MostRecentResultsForChange(
 	return nil, gerrit.Patchset{}, fmt.Errorf("no builds found for change %v", change)
 }
 
-// CleanTags modifies each result so that tags in cfg.Tag.Remove are removed and
+// CleanResults modifies each result so that tags in cfg.Tag.Remove are removed and
 // duplicate results are removed by erring towards Failure.
 // See: crbug.com/dawn/1387, crbug.com/dawn/1401
-func CleanTags(cfg Config, results *result.List) {
+func CleanResults(cfg Config, results *result.List) {
 	// Remove any tags found in cfg.Tag.Remove
 	remove := result.NewTags(cfg.Tag.Remove...)
 	for _, r := range *results {

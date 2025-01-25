@@ -22,11 +22,11 @@
 #include "perfetto/base/logging.h"
 #include "perfetto/ext/base/string_view.h"
 #include "perfetto/trace_processor/trace_blob.h"
+#include "src/trace_processor/importers/common/cpu_tracker.h"
 #include "src/trace_processor/importers/common/process_tracker.h"
 #include "src/trace_processor/importers/common/slice_tracker.h"
 #include "src/trace_processor/importers/fuchsia/fuchsia_record.h"
 #include "src/trace_processor/importers/fuchsia/fuchsia_trace_parser.h"
-#include "src/trace_processor/importers/proto/proto_trace_parser.h"
 #include "src/trace_processor/importers/proto/proto_trace_reader.h"
 #include "src/trace_processor/sorter/trace_sorter.h"
 #include "src/trace_processor/types/task_state.h"
@@ -258,7 +258,7 @@ void FuchsiaTraceTokenizer::SwitchFrom(Thread* thread,
   // state.
   tables::ThreadStateTable::Row state_row;
   state_row.ts = ts;
-  state_row.cpu = cpu;
+  state_row.ucpu = context_->cpu_tracker->GetOrCreateCpu(cpu);
   state_row.dur = -1;
   state_row.state = state;
   state_row.utid = utid;
@@ -288,10 +288,11 @@ void FuchsiaTraceTokenizer::SwitchTo(Thread* thread,
     thread->last_state_row.reset();
   }
 
+  auto ucpu = context_->cpu_tracker->GetOrCreateCpu(cpu);
   // Open a new slice record for this thread.
   tables::SchedSliceTable::Row slice_row;
   slice_row.ts = ts;
-  slice_row.cpu = cpu;
+  slice_row.ucpu = ucpu;
   slice_row.dur = -1;
   slice_row.utid = utid;
   slice_row.priority = weight;
@@ -302,7 +303,7 @@ void FuchsiaTraceTokenizer::SwitchTo(Thread* thread,
   // Open a new state record for this thread.
   tables::ThreadStateTable::Row state_row;
   state_row.ts = ts;
-  state_row.cpu = cpu;
+  state_row.ucpu = context_->cpu_tracker->GetOrCreateCpu(cpu);
   state_row.dur = -1;
   state_row.state = running_string_id_;
   state_row.utid = utid;
@@ -332,7 +333,7 @@ void FuchsiaTraceTokenizer::Wake(Thread* thread, int64_t ts, uint32_t cpu) {
   // Open a new state record for this thread.
   tables::ThreadStateTable::Row state_row;
   state_row.ts = ts;
-  state_row.cpu = cpu;
+  state_row.ucpu = context_->cpu_tracker->GetOrCreateCpu(cpu);
   state_row.dur = -1;
   state_row.state = waking_string_id_;
   state_row.utid = utid;

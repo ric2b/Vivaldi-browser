@@ -9,9 +9,12 @@
 #include <algorithm>
 #include <cstdio>
 #include <map>
+#include <optional>
 #include <unordered_set>
 #include <utility>
 
+#include "base/containers/span.h"
+#include "base/containers/to_vector.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
@@ -89,12 +92,8 @@ std::optional<DeviceInfo::SharingInfo> SpecificsToSharingInfo(
       {specifics.sharing_fields().sender_id_fcm_token_v2(),
        specifics.sharing_fields().sender_id_p256dh_v2(),
        specifics.sharing_fields().sender_id_auth_secret_v2()},
+      specifics.sharing_fields().chime_representative_target_id(),
       std::move(enabled_features));
-}
-
-std::vector<uint8_t> VectorFromString(const std::string& s) {
-  const uint8_t* ptr = reinterpret_cast<const uint8_t*>(s.data());
-  return std::vector<uint8_t>(ptr, ptr + s.size());
 }
 
 std::optional<DeviceInfo::PhoneAsASecurityKeyInfo>
@@ -113,7 +112,7 @@ SpecificsToPhoneAsASecurityKeyInfo(const DeviceInfoSpecifics& specifics) {
   }
   to.tunnel_server_domain = from.tunnel_server_domain();
   to.id = from.id();
-  to.contact_id = VectorFromString(from.contact_id());
+  to.contact_id = base::ToVector(base::as_byte_span(from.contact_id()));
 
   if (from.secret().size() != to.secret.size()) {
     return std::nullopt;
@@ -127,6 +126,17 @@ SpecificsToPhoneAsASecurityKeyInfo(const DeviceInfoSpecifics& specifics) {
          to.peer_public_key_x962.size());
 
   return to;
+}
+
+std::optional<base::Time> SpecificsToFloatingWorkspaceLastSigninTime(
+    const DeviceInfoSpecifics& specifics) {
+  if (!specifics.feature_fields()
+           .has_floating_workspace_last_signin_time_windows_epoch_micros()) {
+    return std::nullopt;
+  }
+  return base::Time::FromDeltaSinceWindowsEpoch(base::Microseconds(
+      specifics.feature_fields()
+          .floating_workspace_last_signin_time_windows_epoch_micros()));
 }
 
 std::string GetVersionNumberFromSpecifics(
@@ -173,11 +183,13 @@ DeviceInfo SpecificsToModel(const DeviceInfoSpecifics& specifics) {
       ProtoTimeToTime(specifics.last_updated_timestamp()),
       GetPulseIntervalFromSpecifics(specifics),
       specifics.feature_fields().send_tab_to_self_receiving_enabled(),
+      specifics.feature_fields().send_tab_to_self_receiving_type(),
       SpecificsToSharingInfo(specifics),
       SpecificsToPhoneAsASecurityKeyInfo(specifics),
       specifics.invalidation_fields().instance_id_token(),
       GetModelTypeSetFromSpecificsFieldNumberList(
-          specifics.invalidation_fields().interested_data_type_ids()));
+          specifics.invalidation_fields().interested_data_type_ids()),
+      SpecificsToFloatingWorkspaceLastSigninTime(specifics));
 }
 
 // Allocate a EntityData and copies |specifics| into it.
@@ -234,7 +246,16 @@ std::unique_ptr<DeviceInfoSpecifics> MakeLocalDeviceSpecifics(
   FeatureSpecificFields* feature_fields = specifics->mutable_feature_fields();
   feature_fields->set_send_tab_to_self_receiving_enabled(
       info.send_tab_to_self_receiving_enabled());
-
+  feature_fields->set_send_tab_to_self_receiving_type(
+      info.send_tab_to_self_receiving_type());
+  if (info.floating_workspace_last_signin_timestamp().has_value()) {
+    feature_fields
+        ->set_floating_workspace_last_signin_time_windows_epoch_micros(
+            info.floating_workspace_last_signin_timestamp()
+                .value()
+                .ToDeltaSinceWindowsEpoch()
+                .InMicroseconds());
+  }
   const std::optional<DeviceInfo::SharingInfo>& sharing_info =
       info.sharing_info();
   if (sharing_info) {
@@ -250,6 +271,8 @@ std::unique_ptr<DeviceInfoSpecifics> MakeLocalDeviceSpecifics(
         sharing_info->sender_id_target_info.p256dh);
     sharing_fields->set_sender_id_auth_secret_v2(
         sharing_info->sender_id_target_info.auth_secret);
+    sharing_fields->set_chime_representative_target_id(
+        sharing_info->chime_representative_target_id);
     for (sync_pb::SharingSpecificFields::EnabledFeatures feature :
          sharing_info->enabled_features) {
       sharing_fields->add_enabled_features(feature);
@@ -297,6 +320,8 @@ bool StoredDeviceInfoStillAccurate(const DeviceInfo* stored,
          current->full_hardware_class() == stored->full_hardware_class() &&
          current->send_tab_to_self_receiving_enabled() ==
              stored->send_tab_to_self_receiving_enabled() &&
+         current->send_tab_to_self_receiving_type() ==
+             stored->send_tab_to_self_receiving_type() &&
          current->sharing_info() == stored->sharing_info() &&
          current->paask_info().has_value() ==
              stored->paask_info().has_value() &&
@@ -305,7 +330,11 @@ bool StoredDeviceInfoStillAccurate(const DeviceInfo* stored,
               stored->paask_info().value())) &&
          current->fcm_registration_token() ==
              stored->fcm_registration_token() &&
-         current->interested_data_types() == stored->interested_data_types();
+         current->interested_data_types() == stored->interested_data_types() &&
+         current->floating_workspace_last_signin_timestamp().has_value() ==
+             stored->floating_workspace_last_signin_timestamp().has_value() &&
+         current->floating_workspace_last_signin_timestamp() ==
+             stored->floating_workspace_last_signin_timestamp();
 }
 
 // Record a histogram of the age of the PaaSK fields, in days. To confirm that
@@ -502,8 +531,8 @@ std::optional<ModelError> DeviceInfoSyncBridge::ApplyIncrementalSyncChanges(
   return std::nullopt;
 }
 
-void DeviceInfoSyncBridge::GetData(StorageKeyList storage_keys,
-                                   DataCallback callback) {
+std::unique_ptr<DataBatch> DeviceInfoSyncBridge::GetDataForCommit(
+    StorageKeyList storage_keys) {
   auto batch = std::make_unique<MutableDataBatch>();
   for (const auto& key : storage_keys) {
     const auto& iter = all_data_.find(key);
@@ -512,15 +541,15 @@ void DeviceInfoSyncBridge::GetData(StorageKeyList storage_keys,
       batch->Put(key, CopyToEntityData(iter->second.specifics()));
     }
   }
-  std::move(callback).Run(std::move(batch));
+  return batch;
 }
 
-void DeviceInfoSyncBridge::GetAllDataForDebugging(DataCallback callback) {
+std::unique_ptr<DataBatch> DeviceInfoSyncBridge::GetAllDataForDebugging() {
   auto batch = std::make_unique<MutableDataBatch>();
   for (const auto& [cache_guid, device_info] : all_data_) {
     batch->Put(cache_guid, CopyToEntityData(device_info.specifics()));
   }
-  std::move(callback).Run(std::move(batch));
+  return batch;
 }
 
 std::string DeviceInfoSyncBridge::GetClientTag(const EntityData& entity_data) {
@@ -705,6 +734,7 @@ void DeviceInfoSyncBridge::OnStoreCreated(
   }
 
   store_ = std::move(store);
+  CHECK(store_);
 
   GetLocalDeviceNameInfo(
       base::BindOnce(&DeviceInfoSyncBridge::OnLocalDeviceNameInfoRetrieved,
@@ -801,7 +831,7 @@ void DeviceInfoSyncBridge::OnReadAllMetadata(
   // is needed to prevent an unnecessary DeviceInfo commit on browser startup
   // when the SyncInvalidationsService is not initialized.
   auto iter = all_data_.find(local_cache_guid_);
-  DCHECK(iter != all_data_.end());
+  CHECK(iter != all_data_.end());
 
   local_device_info_provider_->Initialize(
       local_cache_guid_, GetLocalClientName(),
@@ -831,12 +861,14 @@ void DeviceInfoSyncBridge::OnCommit(
 
 bool DeviceInfoSyncBridge::ReconcileLocalAndStored() {
   TRACE_EVENT0("sync", "DeviceInfoSyncBridge::ReconcileLocalAndStored");
+  CHECK(store_);
+
   const DeviceInfo* current_info =
       local_device_info_provider_->GetLocalDeviceInfo();
   DCHECK(current_info);
 
   auto iter = all_data_.find(current_info->guid());
-  DCHECK(iter != all_data_.end());
+  CHECK(iter != all_data_.end());
 
   // Convert |iter->second| to a DeviceInfo for comparison.
   const DeviceInfo& previous_device_info = iter->second.device_info();
@@ -876,12 +908,14 @@ bool DeviceInfoSyncBridge::ReconcileLocalAndStored() {
 }
 
 void DeviceInfoSyncBridge::SendLocalData() {
+  CHECK(store_);
+  CHECK(IsSyncing());
   SendLocalDataWithBatch(store_->CreateWriteBatch());
 }
 
 void DeviceInfoSyncBridge::SendLocalDataWithBatch(
     std::unique_ptr<ModelTypeStore::WriteBatch> batch) {
-  DCHECK(store_);
+  CHECK(store_);
   DCHECK(local_device_info_provider_->GetLocalDeviceInfo());
   DCHECK(change_processor()->IsTrackingMetadata());
 
@@ -900,6 +934,7 @@ void DeviceInfoSyncBridge::SendLocalDataWithBatch(
 
 void DeviceInfoSyncBridge::CommitAndNotify(std::unique_ptr<WriteBatch> batch,
                                            bool should_notify) {
+  CHECK(store_);
   store_->CommitWriteBatch(std::move(batch),
                            base::BindOnce(&DeviceInfoSyncBridge::OnCommit,
                                           weak_ptr_factory_.GetWeakPtr()));
@@ -979,6 +1014,7 @@ DeviceInfoSyncBridge::CountActiveDevicesByType() const {
 }
 
 void DeviceInfoSyncBridge::ExpireOldEntries() {
+  CHECK(store_);
   TRACE_EVENT0("sync", "DeviceInfoSyncBridge::ExpireOldEntries");
   const base::Time expiration_threshold =
       base::Time::Now() - kExpirationThreshold;

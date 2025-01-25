@@ -20,7 +20,6 @@
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/test/fake_frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/test/fake_page_scheduler.h"
-#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 using base::sequence_manager::TaskQueue;
 using base::sequence_manager::FakeTask;
@@ -194,7 +193,7 @@ class MainThreadMetricsHelperTest : public testing::Test {
             .SetPageScheduler(throtting_exempt_view_.get());
         break;
       case FrameStatus::kCount:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return nullptr;
     }
     return builder.Build();

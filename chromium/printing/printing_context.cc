@@ -159,7 +159,7 @@ mojom::ResultCode PrintingContext::UpdatePrintSettings(
     std::unique_ptr<PrintSettings> settings =
         PrintSettingsFromJobSettings(job_settings);
     if (!settings) {
-      DUMP_WILL_BE_NOTREACHED_NORETURN();
+      DUMP_WILL_BE_NOTREACHED();
       return OnError();
     }
     settings_ = std::move(settings);
@@ -169,7 +169,7 @@ mojom::ResultCode PrintingContext::UpdatePrintSettings(
       job_settings.FindInt(kSettingPrinterType).value());
   if (printer_type == mojom::PrinterType::kPrivetDeprecated ||
       printer_type == mojom::PrinterType::kCloudDeprecated) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return OnError();
   }
 

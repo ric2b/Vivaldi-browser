@@ -2,20 +2,30 @@
 //
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
+//
+// Auto-generated file. Do not edit!
+//   Generator: tools/update-microkernels.py -a
 
 #include <assert.h>
+#include <float.h>
 #include <math.h>
+#include <stddef.h>
+#include <stdint.h>
+#if XNN_ENABLE_KLEIDIAI
+#include "kai/ukernels/matmul/pack/kai_lhs_quant_pack_qai8dxp_f32.h"
+#endif  // XNN_ENABLE_KLEIDIAI
 
 #include <arm_neon.h>
 
-#include <xnnpack/common.h>
-#include <xnnpack/intrinsics-polyfill.h>
-#include <xnnpack/lut.h>
-#include <xnnpack/math.h>
-#include <xnnpack/microparams.h>
-#include <xnnpack/transpose.h>
-#include <xnnpack/vbinary.h>
-#include <xnnpack/vunary.h>
+#include "xnnpack/common.h"
+#include "xnnpack/intrinsics-polyfill.h"
+#include "xnnpack/lut.h"
+#include "xnnpack/math.h"
+#include "xnnpack/microparams.h"
+#include "xnnpack/packq.h"
+#include "xnnpack/transpose.h"
+#include "xnnpack/vbinary.h"
+#include "xnnpack/vunary.h"
 
 
 void xnn_f32_vdiv_minmax_ukernel__aarch64_neon_u8(
@@ -580,4 +590,18 @@ void xnn_x8_lut_ukernel__aarch64_neon_tbx128x4_u64(
       vst1_lane_u8(output, vy_lo, 0);
     }
   }
+}
+
+void xnn_x8_packq_f32qp8_ukernel__aarch64_neon_u2(size_t m, size_t k, size_t mr,
+                                          size_t kr, size_t sr,
+                                          size_t m_idx_start,
+                                          const float* XNN_RESTRICT lhs,
+                                          size_t lhs_stride,
+                                          void* XNN_RESTRICT lhs_packed) {
+#if XNN_ENABLE_KLEIDIAI
+  kai_run_lhs_quant_pack_qai8dxp_f32(m, k, mr, kr, sr, m_idx_start, lhs,
+                                     lhs_stride, lhs_packed);
+#else
+  assert("Not compiled with XNN_ENABLE_KLEIDIAI" && 0);
+#endif  // XNN_ENABLE_KLEIDIAI
 }

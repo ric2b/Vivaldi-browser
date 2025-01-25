@@ -7,11 +7,12 @@ import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js'
 import {flush} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {BrowserProxy} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import type {ReadAnythingElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
-import {defaultFontName, FONT_EVENT, FONT_SIZE_EVENT, HIGHLIGHT_TOGGLE_EVENT, LANGUAGE_TOGGLE_EVENT, LETTER_SPACING_EVENT, LINE_SPACING_EVENT, NEXT_GRANULARITY_EVENT, PLAY_PAUSE_EVENT, PREVIOUS_GRANULARITY_EVENT, RATE_EVENT, THEME_EVENT} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import {ToolbarEvent, VoiceClientSideStatusCode} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 
 import {emitEvent, suppressInnocuousErrors} from './common.js';
 import {FakeReadingMode} from './fake_reading_mode.js';
+import {FakeSpeechSynthesis} from './fake_speech_synthesis.js';
 import {TestColorUpdaterBrowserProxy} from './test_color_updater_browser_proxy.js';
 
 suite('AppReceivesToolbarChanges', () => {
@@ -37,21 +38,21 @@ suite('AppReceivesToolbarChanges', () => {
     }
 
     function emitLetterSpacing(spacing: number): void {
-      emitEvent(app, LETTER_SPACING_EVENT, {detail: {data: spacing}});
+      emitEvent(app, ToolbarEvent.LETTER_SPACING, {detail: {data: spacing}});
     }
 
     test('container letter spacing updated', () => {
       const letterSpacing1 = 0.5;
       emitLetterSpacing(letterSpacing1);
-      assertEquals(containerLetterSpacing(), letterSpacing1);
+      assertEquals(letterSpacing1, containerLetterSpacing());
 
       const letterSpacing2 = 1.2;
       emitLetterSpacing(letterSpacing2);
-      assertEquals(containerLetterSpacing(), letterSpacing2);
+      assertEquals(letterSpacing2, containerLetterSpacing());
 
       const letterSpacing3 = 2;
       emitLetterSpacing(letterSpacing3);
-      assertEquals(containerLetterSpacing(), letterSpacing3);
+      assertEquals(letterSpacing3, containerLetterSpacing());
     });
   });
 
@@ -62,21 +63,21 @@ suite('AppReceivesToolbarChanges', () => {
     }
 
     function emitLineSpacing(spacing: number): void {
-      emitEvent(app, LINE_SPACING_EVENT, {detail: {data: spacing}});
+      emitEvent(app, ToolbarEvent.LINE_SPACING, {detail: {data: spacing}});
     }
 
     test('container line spacing updated', () => {
       const lineSpacing1 = 0.5;
       emitLineSpacing(lineSpacing1);
-      assertEquals(containerLineSpacing(), lineSpacing1);
+      assertEquals(lineSpacing1, containerLineSpacing());
 
       const lineSpacing2 = 1.2;
       emitLineSpacing(lineSpacing2);
-      assertEquals(containerLineSpacing(), lineSpacing2);
+      assertEquals(lineSpacing2, containerLineSpacing());
 
       const lineSpacing3 = 2;
       emitLineSpacing(lineSpacing3);
-      assertEquals(containerLineSpacing(), lineSpacing3);
+      assertEquals(lineSpacing3, containerLineSpacing());
     });
   });
 
@@ -88,24 +89,24 @@ suite('AppReceivesToolbarChanges', () => {
     }
 
     function emitFontSize(): void {
-      emitEvent(app, FONT_SIZE_EVENT);
+      emitEvent(app, ToolbarEvent.FONT_SIZE);
     }
 
     test('container font size updated', () => {
       const fontSize1 = 12;
       chrome.readingMode.fontSize = fontSize1;
       emitFontSize();
-      assertEquals(containerFontSize(), fontSize1);
+      assertEquals(fontSize1, containerFontSize());
 
       const fontSize2 = 16;
       chrome.readingMode.fontSize = fontSize2;
       emitFontSize();
-      assertEquals(containerFontSize(), fontSize2);
+      assertEquals(fontSize2, containerFontSize());
 
       const fontSize3 = 9;
       chrome.readingMode.fontSize = fontSize3;
       emitFontSize();
-      assertEquals(containerFontSize(), fontSize3);
+      assertEquals(fontSize3, containerFontSize());
     });
   });
 
@@ -147,7 +148,7 @@ suite('AppReceivesToolbarChanges', () => {
     }
 
     function emitColorTheme(color: string): void {
-      emitEvent(app, THEME_EVENT, {detail: {data: color}});
+      emitEvent(app, ToolbarEvent.THEME, {detail: {data: color}});
       flush();
     }
 
@@ -171,16 +172,16 @@ suite('AppReceivesToolbarChanges', () => {
     }
 
     function emitFont(fontName: string): void {
-      emitEvent(app, FONT_EVENT, {detail: {fontName}});
+      emitEvent(app, ToolbarEvent.FONT, {detail: {fontName}});
     }
 
     function assertFontsEqual(actual: string, expected: string): void {
       assertEquals(
-          actual.trim().toLowerCase().replaceAll('"', ''),
-          expected.trim().toLowerCase().replaceAll('"', ''));
+          expected.trim().toLowerCase().replaceAll('"', ''),
+          actual.trim().toLowerCase().replaceAll('"', ''));
     }
 
-    test('valid font updates container font', () => {
+    test('font updates container font', () => {
       const font1 = 'Andika';
       emitFont(font1);
       assertFontsEqual(containerFont(), font1);
@@ -189,47 +190,23 @@ suite('AppReceivesToolbarChanges', () => {
       emitFont(font2);
       assertFontsEqual(containerFont(), font2);
     });
-
-    test('invalid font uses default', () => {
-      const font1 = 'not a real font';
-      emitFont(font1);
-      assertFontsEqual(containerFont(), defaultFontName);
-
-      const font2 = 'FakeFont';
-      emitFont(font2);
-      assertFontsEqual(containerFont(), defaultFontName);
-    });
-
-    test('unsupported font uses default', () => {
-      const font1 = 'Comic Sans';
-      emitFont(font1);
-      assertFontsEqual(containerFont(), defaultFontName);
-
-      const font2 = 'Times New Roman';
-      emitFont(font2);
-      assertFontsEqual(containerFont(), defaultFontName);
-    });
   });
 
   suite('on language toggle', () => {
     function emitLanguageToggle(lang: string): void {
-      emitEvent(app, LANGUAGE_TOGGLE_EVENT, {detail: {language: lang}});
+      emitEvent(app, ToolbarEvent.LANGUAGE_TOGGLE, {detail: {language: lang}});
     }
 
     test('enabled languages are added', () => {
       const firstLanguage = 'English';
       emitLanguageToggle(firstLanguage);
-      // Bypass Typescript compiler to allow us to read a private property
-      // @ts-ignore
-      assertTrue(app.enabledLanguagesInPref.includes(firstLanguage));
+      assertTrue(app.enabledLangs.includes(firstLanguage));
       assertTrue(chrome.readingMode.getLanguagesEnabledInPref()
         .includes(firstLanguage));
 
       const secondLanguage = 'French';
       emitLanguageToggle(secondLanguage);
-      // Bypass Typescript compiler to allow us to read a private property
-      // @ts-ignore
-      assertTrue(app.enabledLanguagesInPref.includes(secondLanguage));
+      assertTrue(app.enabledLangs.includes(secondLanguage));
       assertTrue(chrome.readingMode.getLanguagesEnabledInPref()
         .includes(secondLanguage));
     });
@@ -237,60 +214,121 @@ suite('AppReceivesToolbarChanges', () => {
     test('disabled languages are removed', () => {
       const firstLanguage = 'English';
       emitLanguageToggle(firstLanguage);
-      // Bypass Typescript compiler to allow us to read a private property
-      // @ts-ignore
-      assertTrue(app.enabledLanguagesInPref.includes(firstLanguage));
+      assertTrue(app.enabledLangs.includes(firstLanguage));
       assertTrue(chrome.readingMode.getLanguagesEnabledInPref()
         .includes(firstLanguage));
 
       emitLanguageToggle(firstLanguage);
-      // Bypass Typescript compiler to allow us to read a private property
-      // @ts-ignore
-      assertFalse(app.enabledLanguagesInPref.includes(firstLanguage));
+      assertFalse(app.enabledLangs.includes(firstLanguage));
       assertFalse(chrome.readingMode.getLanguagesEnabledInPref()
         .includes(firstLanguage));
     });
+
+    suite('with language downloading enabled', () => {
+      let sentInstallRequestFor: string;
+
+      setup(() => {
+        chrome.readingMode.isLanguagePackDownloadingEnabled = true;
+
+        sentInstallRequestFor = '';
+        // Monkey patch sendInstallVoicePackRequest() to spy on the method
+        chrome.readingMode.sendInstallVoicePackRequest = (language) => {
+          sentInstallRequestFor = language;
+        };
+      });
+
+      suite('when the previous install of the language failed', () => {
+        const lang = 'en-us';
+        setup(() => {
+          app.updateVoicePackStatus(lang, 'kOther');
+        });
+
+        test(
+            'directly installs lang without usual protocol of sending status request first',
+            () => {
+              emitLanguageToggle(lang);
+
+              assertEquals(lang, sentInstallRequestFor);
+              assertEquals(
+                  app.getVoicePackStatusForTesting(lang).client,
+                  VoiceClientSideStatusCode.SENT_INSTALL_REQUEST_ERROR_RETRY);
+            });
+      });
+
+      suite('when there is no status for lang', () => {
+        test('directly sends install request', () => {
+          emitLanguageToggle('en-us');
+
+          assertEquals('en-us', sentInstallRequestFor);
+        });
+      });
+
+
+      suite('when the language status is uninstalled', () => {
+        const lang = 'en-us';
+        setup(() => {
+          app.updateVoicePackStatus(lang, 'kNotInstalled');
+        });
+
+        test('does not directly install lang', () => {
+          emitLanguageToggle(lang);
+
+          assertEquals('', sentInstallRequestFor);
+        });
+      });
+    });
+
   });
 
   suite('on speech rate change', () => {
-    function emitRate(rate: number): void {
-      emitEvent(app, RATE_EVENT, {detail: {rate}});
+    function emitRate(): void {
+      emitEvent(app, ToolbarEvent.RATE);
     }
 
     test('speech rate updated', () => {
+      const speechSynthesis = new FakeSpeechSynthesis();
+      app.synth = speechSynthesis;
+      app.playSpeech();
+
       const speechRate1 = 2;
-      emitRate(speechRate1);
-      assertEquals(app.rate, speechRate1);
+      chrome.readingMode.speechRate = speechRate1;
+      emitRate();
+      assertTrue(speechSynthesis.spokenUtterances.every(
+          utterance => utterance.rate === speechRate1));
 
       const speechRate2 = 0.5;
-      emitRate(speechRate2);
-      assertEquals(app.rate, speechRate2);
+      chrome.readingMode.speechRate = speechRate2;
+      emitRate();
+      assertTrue(speechSynthesis.spokenUtterances.every(
+          utterance => utterance.rate === speechRate2));
 
       const speechRate3 = 4;
-      emitRate(speechRate3);
-      assertEquals(app.rate, speechRate3);
+      chrome.readingMode.speechRate = speechRate3;
+      emitRate();
+      assertTrue(speechSynthesis.spokenUtterances.every(
+          utterance => utterance.rate === speechRate3));
     });
   });
 
   suite('play/pause', () => {
-    let propagatedPauseState: boolean;
+    let propagatedActiveState: boolean;
 
     setup(() => {
-      chrome.readingMode.onSpeechPlayingStateChanged = paused => {
-        propagatedPauseState = paused;
+      chrome.readingMode.onSpeechPlayingStateChanged = isSpeechActive => {
+        propagatedActiveState = isSpeechActive;
       };
       app.updateContent();
     });
 
     function emitPlayPause(): void {
-      emitEvent(app, PLAY_PAUSE_EVENT);
+      emitEvent(app, ToolbarEvent.PLAY_PAUSE);
     }
 
     suite('by default', () => {
       test('is paused', () => {
-        assertTrue(app.speechPlayingState.paused);
-        assertFalse(app.speechPlayingState.speechStarted);
-        assertTrue(propagatedPauseState);
+        assertFalse(app.speechPlayingState.isSpeechActive);
+        assertFalse(app.speechPlayingState.isSpeechTreeInitialized);
+        assertFalse(propagatedActiveState);
       });
     });
 
@@ -300,9 +338,9 @@ suite('AppReceivesToolbarChanges', () => {
       });
 
       test('starts speech', () => {
-        assertFalse(app.speechPlayingState.paused);
-        assertTrue(app.speechPlayingState.speechStarted);
-        assertFalse(propagatedPauseState);
+        assertTrue(app.speechPlayingState.isSpeechActive);
+        assertTrue(app.speechPlayingState.isSpeechTreeInitialized);
+        assertTrue(propagatedActiveState);
       });
     });
 
@@ -313,9 +351,9 @@ suite('AppReceivesToolbarChanges', () => {
       });
 
       test('stops speech', () => {
-        assertTrue(app.speechPlayingState.paused);
-        assertTrue(app.speechPlayingState.speechStarted);
-        assertTrue(propagatedPauseState);
+        assertFalse(app.speechPlayingState.isSpeechActive);
+        assertTrue(app.speechPlayingState.isSpeechTreeInitialized);
+        assertFalse(propagatedActiveState);
       });
     });
 
@@ -328,15 +366,15 @@ suite('AppReceivesToolbarChanges', () => {
 
       test('first press plays', () => {
         app.$.appFlexParent!.dispatchEvent(kPress);
-        assertFalse(app.speechPlayingState.paused);
-        assertFalse(propagatedPauseState);
+        assertTrue(app.speechPlayingState.isSpeechActive);
+        assertTrue(propagatedActiveState);
       });
 
       test('second press pauses', () => {
         app.$.appFlexParent!.dispatchEvent(kPress);
         app.$.appFlexParent!.dispatchEvent(kPress);
-        assertTrue(app.speechPlayingState.paused);
-        assertTrue(propagatedPauseState);
+        assertFalse(app.speechPlayingState.isSpeechActive);
+        assertFalse(propagatedActiveState);
       });
     });
   });
@@ -348,36 +386,36 @@ suite('AppReceivesToolbarChanges', () => {
     }
 
     function emitHighlight(highlightOn: boolean): void {
-      emitEvent(app, HIGHLIGHT_TOGGLE_EVENT, {detail: {highlightOn}});
+      emitEvent(app, ToolbarEvent.HIGHLIGHT_TOGGLE, {detail: {highlightOn}});
     }
 
     setup(() => {
-      emitEvent(app, THEME_EVENT, {detail: {data: ''}});
+      emitEvent(app, ToolbarEvent.THEME, {detail: {data: ''}});
       app.updateContent();
       app.playSpeech();
     });
 
     test('on hide, uses transparent highlight', () => {
       emitHighlight(false);
-      assertEquals(highlightColor(), 'transparent');
+      assertEquals('transparent', highlightColor());
     });
 
     test('on show, uses colored highlight', () => {
       emitHighlight(true);
-      assertNotEquals(highlightColor(), 'transparent');
+      assertNotEquals('transparent', highlightColor());
     });
 
     suite('after update color theme', () => {
       test('uses colored highlight with highlights on', () => {
         emitHighlight(true);
-        emitEvent(app, THEME_EVENT, {detail: {data: '-blue'}});
-        assertNotEquals(highlightColor(), 'transparent');
+        emitEvent(app, ToolbarEvent.THEME, {detail: {data: '-blue'}});
+        assertNotEquals('transparent', highlightColor());
       });
 
       test('uses transparent highlight with highlights off', () => {
         emitHighlight(false);
-        emitEvent(app, THEME_EVENT, {detail: {data: '-yellow'}});
-        assertEquals(highlightColor(), 'transparent');
+        emitEvent(app, ToolbarEvent.THEME, {detail: {data: '-yellow'}});
+        assertEquals('transparent', highlightColor());
       });
     });
   });
@@ -388,11 +426,11 @@ suite('AppReceivesToolbarChanges', () => {
     });
 
     function emitNextGranularity(): void {
-      emitEvent(app, NEXT_GRANULARITY_EVENT);
+      emitEvent(app, ToolbarEvent.NEXT_GRANULARITY);
     }
 
     function emitPreviousGranularity(): void {
-      emitEvent(app, PREVIOUS_GRANULARITY_EVENT);
+      emitEvent(app, ToolbarEvent.PREVIOUS_GRANULARITY);
     }
 
     suite('next', () => {

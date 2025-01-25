@@ -162,10 +162,6 @@
       "id": 40,
       "merge_method": "none"
     },
-    "vivaldi.address_bar.typed_history_enabled": {
-      "id": 41,
-      "merge_method": "none"
-    },
     "vivaldi.address_bar.url_open_shortcut": {
       "id": 42,
       "merge_method": "none"
@@ -822,14 +818,6 @@
       "id": 205,
       "merge_method": "none"
     },
-    "vivaldi.proxy.connectStrategy": {
-      "id": 206,
-      "merge_method": "none"
-    },
-    "vivaldi.proxy.token": {
-      "id": 207,
-      "merge_method": "none"
-    },
     "vivaldi.sessions.open_in_new_window": {
       "id": 208,
       "merge_method": "none"
@@ -1246,10 +1234,6 @@
       "id": 311,
       "merge_method": "none"
     },
-    "vivaldi.proxy.seen": {
-      "id": 312,
-      "merge_method": "none"
-    },
     "vivaldi.mail.search_folder": {
       "id": 313,
       "merge_method": "none"
@@ -1585,6 +1569,12 @@
               "ctrl+shift+enter"
             ]
           },
+          "COMMAND_MAIL_COMPOSER_CHOOSE_ATTACHMENTS": {
+            "shortcuts": []
+          },
+          "COMMAND_MAIL_COMPOSER_DELETE_DRAFT": {
+            "shortcuts": []
+          },
           "COMMAND_MAIL_SHOW_QUICK_REPLY": {
             "shortcuts": []
           },
@@ -2064,10 +2054,23 @@
           "COMMAND_WORKSPACE_SWITCH_10": {
             "shortcuts": []
           },
+          "COMMAND_WORKSPACE_MOVE_TABS_TO_0": { "shortcuts": [] },
+          "COMMAND_WORKSPACE_MOVE_TABS_TO_1": { "shortcuts": [] },
+          "COMMAND_WORKSPACE_MOVE_TABS_TO_2": { "shortcuts": [] },
+          "COMMAND_WORKSPACE_MOVE_TABS_TO_3": { "shortcuts": [] },
+          "COMMAND_WORKSPACE_MOVE_TABS_TO_4": { "shortcuts": [] },
+          "COMMAND_WORKSPACE_MOVE_TABS_TO_5": { "shortcuts": [] },
+          "COMMAND_WORKSPACE_MOVE_TABS_TO_6": { "shortcuts": [] },
+          "COMMAND_WORKSPACE_MOVE_TABS_TO_7": { "shortcuts": [] },
+          "COMMAND_WORKSPACE_MOVE_TABS_TO_8": { "shortcuts": [] },
+          "COMMAND_WORKSPACE_MOVE_TABS_TO_9": { "shortcuts": [] },
           "COMMAND_HIBERNATE_INACTIVE_WORKSPACES": {
             "shortcuts": []
           },
           "COMMAND_SHOW_WORKSPACE_MENU": {
+            "shortcuts": []
+          },
+          "COMMAND_TOGGLE_FORCE_DARK_MODE": {
             "shortcuts": []
           }
         }
@@ -2388,6 +2391,12 @@
               "ctrl+shift+enter"
             ]
           },
+          "COMMAND_MAIL_COMPOSER_CHOOSE_ATTACHMENTS": {
+            "shortcuts": []
+          },
+          "COMMAND_MAIL_COMPOSER_DELETE_DRAFT": {
+            "shortcuts": []
+          },
           "COMMAND_MAIL_SHOW_QUICK_REPLY": {
             "shortcuts": []
           },
@@ -2872,6 +2881,9 @@
           },
           "COMMAND_SHOW_WORKSPACE_MENU": {
             "shortcuts": []
+          },
+          "COMMAND_TOGGLE_FORCE_DARK_MODE": {
+            "shortcuts": []
           }
         }
       ],
@@ -3172,6 +3184,12 @@
             "shortcuts": [
               "meta+shift+enter"
             ]
+          },
+          "COMMAND_MAIL_COMPOSER_CHOOSE_ATTACHMENTS": {
+            "shortcuts": []
+          },
+          "COMMAND_MAIL_COMPOSER_DELETE_DRAFT": {
+            "shortcuts": []
           },
           "COMMAND_MAIL_SHOW_QUICK_REPLY": {
             "shortcuts": []
@@ -3662,6 +3680,9 @@
           },
           "COMMAND_SHOW_WORKSPACE_MENU": {
             "shortcuts": []
+          },
+          "COMMAND_TOGGLE_FORCE_DARK_MODE": {
+            "shortcuts": []
           }
         }
       ]
@@ -3941,6 +3962,7 @@
         "default": false
       },
       "typed_history_enabled": {
+        "description": "[DEPRECATED 2024/08] VB-108294",
         "type": "boolean",
         "default": true
       },
@@ -4530,7 +4552,7 @@
     },
     "homepage": {
       "type": "string",
-      "default": "https://vivaldi.com/"
+      "default": "vivaldi://startpage"
     },
     "homepage_cache": {
       "type": "string",
@@ -4778,8 +4800,8 @@
       },
       "show_quick_reply": {
         "description": "Show quick reply editor below the message",
-        "type": "boolean",
-        "default": true
+        "type": "string",
+        "default": "show"
       },
       "quick_reply_quote": {
         "description": "Include quotation from original message when replying via quick reply editor",
@@ -5664,6 +5686,7 @@
           "default": {
             "showToolbar": true,
             "allControls": true,
+            "deviceControl": true,
             "zoomControls": false
           }
         }
@@ -5733,6 +5756,13 @@
         },
         "hangout_services": {
           "description": "Load Google hangout services.",
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "block_pings": {
+        "enabled": {
+          "description": "Block pings (hyperlink auditing)",
           "type": "boolean",
           "default": true
         }
@@ -5851,38 +5881,6 @@
         ]
       }
     },
-    "proxy": {
-      "bypassList": {
-        "description": "List of urls that shall not pass through the proxy. Format: See https://developer.chrome.com/docs/extensions/reference/proxy/",
-        "type": "list",
-        "default": []
-      },
-      "connected": {
-        "description": "Connected state.",
-        "type": "boolean",
-        "default": false
-      },
-      "connectStrategy": {
-        "description": "How a relay server is selected when a connection is made.",
-        "type": "string",
-        "default": "fastest"
-      },
-      "seen": {
-        "description": "Timestamp to show a survey dialog. Set to 'now' first time popup opens and 0 once dialog has been shown",
-        "type": "double",
-        "default": -1.0
-      },
-      "token": {
-        "description": "For setting up connection.",
-        "type": "string",
-        "default": ""
-      },
-      "webRTCIPHandlingPolicy": {
-        "description": "WebRTC IP broadcast state before connecting.",
-        "type": "string",
-        "default": ""
-      }
-    },
     "sessions": {
       "open_in_new_window": {
         "description": "Open sessions in a new window (when using the dialog)",
@@ -5947,7 +5945,7 @@
       "size": {
         "width": {
           "type": "integer",
-          "default": 980
+          "default": 990
         },
         "height": {
           "type": "integer",
@@ -5961,6 +5959,11 @@
           "type": "integer",
           "default": -1
         }
+      },
+      "donation_promo_dismissed": {
+        "description": "Timestamp when donation suggestion was dismissed. 0 means we show it.",
+        "type": "double",
+        "default": 0.0
       }
     },
     "startpage": {
@@ -6025,7 +6028,7 @@
         },
         "columns": {
           "type": "integer",
-          "default": 6
+          "default": 7
         },
         "controls_visible": {
           "type": "boolean",
@@ -6573,6 +6576,11 @@
       }
     },
     "appearance": {
+      "density": {
+        "description": "Spacing in toolbars, tabs, and other UI elements",
+        "type": "boolean",
+        "default": false
+      },
       "disable_title_bar": {
         "type": "boolean",
         "default": true
@@ -7023,8 +7031,6 @@
           "Forward",
           "Reload",
           "AddressField",
-          "SearchField",
-          "Proxy",
           "Spacer",
           "UpdateButton",
           "Extensions",
@@ -7583,7 +7589,21 @@
           "type": "boolean",
           "default": null
         }
-      }
+      },
+      "search_engine": {
+          "default": {
+            "last_change": {
+              "description": "The last version of the search_engines.json (kCurrentDataVersion) that changed default search engine.",
+              "type": "integer",
+              "default": 10000153
+            },
+            "index": {
+              "description": "The search engine index that is default for user locale.",
+              "type": "integer",
+              "default": -1
+            }
+          }
+        }
     },
     "oauth": {
       "refresh_tokens": {
@@ -7619,8 +7639,16 @@
       "path": "autofill.profile_enabled",
       "type": "boolean"
     },
+    "kAutofillCanMakePaymentEnabled": {
+      "path": "payments.can_make_payment_enabled",
+      "type": "boolean"
+    },
     "kAutofillCreditCardEnabled": {
       "path": "autofill.credit_card_enabled",
+      "type": "boolean"
+    },
+    "kAutofillMandatoryReauthEnabled": {
+      "path": "autofill.payment_methods_mandatory_reauth",
       "type": "boolean"
     },
     "kCredentialsEnableService": {
@@ -7632,6 +7660,7 @@
       "type": "file_path"
     },
     "kEnableHyperlinkAuditing": {
+      "description": "[DEPRECATED 2024/07] VB-106943 Replaced by kPrivacyBlockPingsEnabled",
       "path": "enable_a_ping",
       "type": "boolean"
     },
@@ -7835,6 +7864,10 @@
     },
     "kHardwareAccelerationModeEnabled": {
       "path": "hardware_acceleration_mode.enabled",
+      "type": "boolean"
+    },
+    "kHoverCardMemoryUsageEnabled": {
+      "path": "browser.hovercard.memory_usage_enabled",
       "type": "boolean"
     },
     "kMemorySaverModeState": {

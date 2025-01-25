@@ -23,14 +23,14 @@ class CFX_CRTFileStream final : public IFX_SeekableStream {
   FX_FILESIZE GetPosition() override { return m_pFile->GetPosition(); }
   bool ReadBlockAtOffset(pdfium::span<uint8_t> buffer,
                          FX_FILESIZE offset) override {
-    return m_pFile->ReadPos(buffer.data(), buffer.size(), offset) > 0;
+    return m_pFile->ReadPos(buffer, offset) > 0;
   }
   size_t ReadBlock(pdfium::span<uint8_t> buffer) override {
-    return m_pFile->Read(buffer.data(), buffer.size());
+    return m_pFile->Read(buffer);
   }
   bool WriteBlockAtOffset(pdfium::span<const uint8_t> buffer,
                           FX_FILESIZE offset) override {
-    return !!m_pFile->WritePos(buffer.data(), buffer.size(), offset);
+    return !!m_pFile->WritePos(buffer, offset);
   }
   bool Flush() override { return m_pFile->Flush(); }
 
@@ -62,8 +62,7 @@ bool IFX_WriteStream::WriteDWord(uint32_t i) {
 bool IFX_WriteStream::WriteFilesize(FX_FILESIZE size) {
   char buf[20] = {};
   FXSYS_i64toa(size, buf, 10);
-  auto buf_span = fxcrt::reinterpret_span<uint8_t>(pdfium::make_span(buf));
-  return WriteBlock(buf_span.first(strlen(buf)));
+  return WriteBlock(pdfium::as_writable_byte_span(buf).first(strlen(buf)));
 }
 
 // static

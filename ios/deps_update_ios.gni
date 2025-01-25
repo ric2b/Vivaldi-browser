@@ -77,13 +77,13 @@ update_target("//ios/chrome/browser/ui/tabs:tabs") {
   ]
 }
 
-update_target("//ios/chrome/browser/ui/bookmarks/home:home") {
+update_target("//ios/chrome/browser/bookmarks/ui_bundled/home:home") {
   deps += [
     "//vivaldi/ios/ui/bookmarks_editor:vivaldi_bookmarks_editor"
   ]
 }
 
-update_target("//ios/chrome/browser/ui/badges:badges") {
+update_target("//ios/chrome/browser/badges/ui_bundled:ui_bundled") {
   deps += [
     "//vivaldi/ios/chrome/browser/ui/badges/resources:incognito_badge",
     "//vivaldi/ios/chrome/browser/ui/badges/resources:incognito_small_badge",
@@ -99,15 +99,16 @@ update_target("//ios/chrome/browser/ui/location_bar:location_bar") {
 
 update_target("//ios/chrome/browser/ui/settings:settings") {
   deps += [
-    "//vivaldi/ios/ui/settings/sync:vivaldi_sync_settings",
-    "//vivaldi/ios/ui/settings/start_page:start_page_settings",
-    "//vivaldi/ios/ui/settings/tabs:vivaldi_tab_settings",
+    "//vivaldi/ios/ui/settings/addressbar:vivaldi_addressbar_settings",
+    "//vivaldi/ios/ui/settings/appearance:vivaldi_appearance_settings",
+    "//vivaldi/ios/ui/settings/custom_app_icon:vivaldi_custom_app_icon",
     "//vivaldi/ios/ui/settings/resources:main_settings",
     "//vivaldi/ios/ui/settings/resources:vivaldi_passwords_autofill_banner",
     "//vivaldi/ios/ui/settings/resources:vivaldi_passwords_manager_empty",
-    "//vivaldi/ios/ui/settings/custom_app_icon:vivaldi_custom_app_icon",
     "//vivaldi/ios/ui/settings/search_engine:vivaldi_search_engine_settings",
-    "//vivaldi/ios/ui/settings/appearance:vivaldi_appearance_settings"
+    "//vivaldi/ios/ui/settings/start_page:start_page_settings",
+    "//vivaldi/ios/ui/settings/sync:vivaldi_sync_settings",
+    "//vivaldi/ios/ui/settings/tabs:vivaldi_tab_settings",
   ]
 }
 
@@ -139,7 +140,7 @@ update_template_instance("//ios/components:ios_components_unittests") {
   ]
 }
 
-update_target("//ios/chrome/browser/ui/default_promo:default_promo") {
+update_target("//ios/chrome/browser/default_promo/ui_bundled:coordinator") {
   deps += [
     "//vivaldi/ios/ui/promos:vivaldi_promo",
   ]
@@ -172,7 +173,7 @@ update_template_instance("//ios/chrome/search_widget_extension/appex:appex") {
   ]
 }
 
-update_target("//ios/chrome/browser/ui/autofill/manual_fill:manual_fill_ui") {
+update_target("//ios/chrome/browser/autofill/ui_bundled/manual_fill:manual_fill_ui") {
   deps += [
     "//vivaldi//ios/ui/autofill/resources:vivaldi_autofill_keyboards",
     "//vivaldi//ios/ui/autofill/resources:vivaldi_autofill_passwords",
@@ -190,5 +191,16 @@ update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs:inact
 update_target("//ios/chrome/browser/ui/browser_container:browser_container") {
   deps += [
     "//vivaldi/ios/ui/copy_to_note",
+  ]
+}
+
+update_template_instance("//ios/web/common:user_agent") {
+  deps += [
+    "//vivaldi/components:user_agent",
+  ]
+}
+update_template_instance("//ios/web/navigation:navigation") {
+  deps += [
+    "//vivaldi/components:user_agent",
   ]
 }

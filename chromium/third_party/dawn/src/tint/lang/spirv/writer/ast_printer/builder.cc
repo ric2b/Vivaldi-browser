@@ -37,6 +37,7 @@
 #include "src/tint/lang/core/type/atomic.h"
 #include "src/tint/lang/core/type/depth_multisampled_texture.h"
 #include "src/tint/lang/core/type/depth_texture.h"
+#include "src/tint/lang/core/type/input_attachment.h"
 #include "src/tint/lang/core/type/multisampled_texture.h"
 #include "src/tint/lang/core/type/reference.h"
 #include "src/tint/lang/core/type/sampled_texture.h"
@@ -49,6 +50,7 @@
 #include "src/tint/lang/wgsl/ast/traverse_expressions.h"
 #include "src/tint/lang/wgsl/helpers/append_vector.h"
 #include "src/tint/lang/wgsl/helpers/check_supported_extensions.h"
+#include "src/tint/lang/wgsl/sem/builtin_enum_expression.h"
 #include "src/tint/lang/wgsl/sem/builtin_fn.h"
 #include "src/tint/lang/wgsl/sem/call.h"
 #include "src/tint/lang/wgsl/sem/function.h"
@@ -279,9 +281,12 @@ bool Builder::Build() {
                 wgsl::Extension::kChromiumDisableUniformityAnalysis,
                 wgsl::Extension::kChromiumExperimentalPushConstant,
                 wgsl::Extension::kChromiumExperimentalSubgroups,
-                wgsl::Extension::kChromiumInternalDualSourceBlending,
                 wgsl::Extension::kChromiumInternalGraphite,
+                wgsl::Extension::kChromiumInternalInputAttachments,
                 wgsl::Extension::kF16,
+                wgsl::Extension::kDualSourceBlending,
+                wgsl::Extension::kSubgroups,
+                wgsl::Extension::kSubgroupsF16,
             })) {
         return false;
     }
@@ -350,6 +355,9 @@ bool Builder::GenerateExtension(wgsl::Extension extension) {
             module_.PushCapability(SpvCapabilityFloat16);
             module_.PushCapability(SpvCapabilityUniformAndStorageBuffer16BitAccess);
             module_.PushCapability(SpvCapabilityStorageBuffer16BitAccess);
+            break;
+        case wgsl::Extension::kChromiumInternalInputAttachments:
+            module_.PushCapability(SpvCapabilityInputAttachment);
             break;
         default:
             return false;
@@ -487,8 +495,7 @@ bool Builder::GenerateExecutionModes(const ast::Function* func, uint32_t id) {
     }
 
     for (auto it : func_sem->TransitivelyReferencedBuiltinVariables()) {
-        auto builtin = builder_.Sem().Get(it.second)->Value();
-        if (builtin == core::BuiltinValue::kFragDepth) {
+        if (it.second->builtin == core::BuiltinValue::kFragDepth) {
             module_.PushExecutionMode(spv::Op::OpExecutionMode,
                                       {Operand(id), U32Operand(SpvExecutionModeDepthReplacing)});
             break;
@@ -785,10 +792,10 @@ bool Builder::GenerateGlobalVariable(const ast::Variable* v) {
         bool ok = Switch(
             attr,
             [&](const ast::BuiltinAttribute* builtin_attr) {
-                auto builtin = builder_.Sem().Get(builtin_attr)->Value();
-                module_.PushAnnot(spv::Op::OpDecorate,
-                                  {Operand(var_id), U32Operand(SpvDecorationBuiltIn),
-                                   U32Operand(ConvertBuiltin(builtin, sem->AddressSpace()))});
+                module_.PushAnnot(
+                    spv::Op::OpDecorate,
+                    {Operand(var_id), U32Operand(SpvDecorationBuiltIn),
+                     U32Operand(ConvertBuiltin(builtin_attr->builtin, sem->AddressSpace()))});
                 return true;
             },
             [&](const ast::LocationAttribute*) {
@@ -800,23 +807,12 @@ bool Builder::GenerateGlobalVariable(const ast::Variable* v) {
             [&](const ast::BlendSrcAttribute*) {
                 module_.PushAnnot(spv::Op::OpDecorate,
                                   {Operand(var_id), U32Operand(SpvDecorationIndex),
-                                   Operand(sem->Attributes().index.value())});
+                                   Operand(sem->Attributes().blend_src.value())});
                 return true;
             },
             [&](const ast::InterpolateAttribute* interpolate) {
-                auto& s = builder_.Sem();
-                auto i_type =
-                    s.Get<sem::BuiltinEnumExpression<core::InterpolationType>>(interpolate->type)
-                        ->Value();
-
-                auto i_smpl = core::InterpolationSampling::kUndefined;
-                if (interpolate->sampling) {
-                    i_smpl = s.Get<sem::BuiltinEnumExpression<core::InterpolationSampling>>(
-                                  interpolate->sampling)
-                                 ->Value();
-                }
-
-                AddInterpolationDecorations(var_id, i_type, i_smpl);
+                AddInterpolationDecorations(var_id, interpolate->interpolation.type,
+                                            interpolate->interpolation.sampling);
                 return true;
             },
             [&](const ast::InvariantAttribute*) {
@@ -843,7 +839,14 @@ bool Builder::GenerateGlobalVariable(const ast::Variable* v) {
             },
             [&](const ast::InternalAttribute*) {
                 return true;  // ignored
-            },                //
+            },
+            [&](const ast::InputAttachmentIndexAttribute*) {
+                auto iidx = sem->Attributes().input_attachment_index;
+                module_.PushAnnot(spv::Op::OpDecorate,
+                                  {Operand(var_id), U32Operand(SpvDecorationInputAttachmentIndex),
+                                   Operand(iidx.value())});
+                return true;
+            },  //
             TINT_ICE_ON_NO_MATCH);
         if (!ok) {
             return false;
@@ -2539,11 +2542,12 @@ uint32_t Builder::GenerateBuiltinCall(const sem::Call* call, const sem::BuiltinF
         }
         case wgsl::BuiltinFn::kSubgroupBallot: {
             module_.PushCapability(SpvCapabilityGroupNonUniformBallot);
+            auto first_param_id = get_arg_as_value_id(0);
             if (!push_function_inst(
                     spv::Op::OpGroupNonUniformBallot,
                     {Operand(result_type_id), result,
                      Operand(GenerateConstantIfNeeded(ScalarConstant::U32(SpvScopeSubgroup))),
-                     Operand(GenerateConstantIfNeeded(ScalarConstant::Bool(true)))})) {
+                     Operand(first_param_id)})) {
                 return 0;
             }
             return result_id;
@@ -2617,7 +2621,13 @@ bool Builder::GenerateTextureBuiltin(const sem::Call* call,
         return gen(argument);
     };
 
-    auto* texture = arg(Usage::kTexture);
+    Usage textureUsage;
+    if (builtin->Fn() == wgsl::BuiltinFn::kInputAttachmentLoad) {
+        textureUsage = Usage::kInputAttachment;
+    } else {
+        textureUsage = Usage::kTexture;
+    }
+    auto* texture = arg(textureUsage);
     if (TINT_UNLIKELY(!texture)) {
         TINT_ICE() << "missing texture argument";
     }
@@ -2663,7 +2673,7 @@ bool Builder::GenerateTextureBuiltin(const sem::Call* call,
             auto* f32 = builder_.create<core::type::F32>();
             auto* spirv_result_type = builder_.create<core::type::Vector>(f32, 4u);
             auto spirv_result = result_op();
-            post_emission = [=] {
+            post_emission = [this, result_type, result_id, spirv_result] {
                 return push_function_inst(spv::Op::OpCompositeExtract,
                                           {result_type, result_id, spirv_result, Operand(0u)});
             };
@@ -2694,7 +2704,7 @@ bool Builder::GenerateTextureBuiltin(const sem::Call* call,
             auto* spirv_result_type =
                 builder_.create<core::type::Vector>(element_type, spirv_result_width);
             if (swizzle.size() > 1) {
-                post_emission = [=] {
+                post_emission = [this, result_type, result_id, spirv_result, swizzle] {
                     OperandList operands{
                         result_type,
                         result_id,
@@ -2707,7 +2717,7 @@ bool Builder::GenerateTextureBuiltin(const sem::Call* call,
                     return push_function_inst(spv::Op::OpVectorShuffle, operands);
                 };
             } else {
-                post_emission = [=] {
+                post_emission = [this, result_type, result_id, spirv_result, swizzle] {
                     return push_function_inst(
                         spv::Op::OpCompositeExtract,
                         {result_type, result_id, spirv_result, Operand(swizzle[0])});
@@ -2965,6 +2975,18 @@ bool Builder::GenerateTextureBuiltin(const sem::Call* call,
             image_operands.emplace_back(
                 ImageOperand{SpvImageOperandsLodMask,
                              Operand(GenerateConstantIfNeeded(ScalarConstant::F32(0.0)))});
+            break;
+        }
+        case wgsl::BuiltinFn::kInputAttachmentLoad: {
+            op = spv::Op::OpImageRead;
+            append_result_type_and_id_to_spirv_params_for_read();
+            spirv_params.emplace_back(gen_arg(Usage::kInputAttachment));
+
+            // coords for input_attachment are always (0, 0)
+            auto* vec2i =
+                builder_.create<core::type::Vector>(builder_.create<core::type::I32>(), 2u);
+            spirv_params.emplace_back(Operand(GenerateConstantNullIfNeeded(vec2i)));
+
             break;
         }
         default:
@@ -3759,6 +3781,10 @@ bool Builder::GenerateTextureType(const core::type::Texture* texture, const Oper
         dim_literal = SpvDimCube;
     }
 
+    if (texture->Is<core::type::InputAttachment>()) {
+        dim_literal = SpvDimSubpassData;
+    }
+
     uint32_t ms_literal = 0u;
     if (texture->IsAnyOf<core::type::MultisampledTexture, core::type::DepthMultisampledTexture>()) {
         ms_literal = 1u;
@@ -3791,7 +3817,8 @@ bool Builder::GenerateTextureType(const core::type::Texture* texture, const Oper
         },
         [&](const core::type::SampledTexture* t) { return GenerateTypeIfNeeded(t->type()); },
         [&](const core::type::MultisampledTexture* t) { return GenerateTypeIfNeeded(t->type()); },
-        [&](const core::type::StorageTexture* t) { return GenerateTypeIfNeeded(t->type()); },  //
+        [&](const core::type::StorageTexture* t) { return GenerateTypeIfNeeded(t->type()); },
+        [&](const core::type::InputAttachment* t) { return GenerateTypeIfNeeded(t->type()); },  //
         TINT_ICE_ON_NO_MATCH);
     if (type_id == 0u) {
         return false;
@@ -4057,6 +4084,8 @@ void Builder::AddInterpolationDecorations(uint32_t id,
             module_.PushAnnot(spv::Op::OpDecorate, {Operand(id), U32Operand(SpvDecorationSample)});
             break;
         case core::InterpolationSampling::kCenter:
+        case core::InterpolationSampling::kFirst:
+        case core::InterpolationSampling::kEither:
         case core::InterpolationSampling::kUndefined:
             break;
     }

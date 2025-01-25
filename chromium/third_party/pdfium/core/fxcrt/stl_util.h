@@ -6,8 +6,12 @@
 #define CORE_FXCRT_STL_UTIL_H_
 
 #include <algorithm>
+#include <array>
+#include <iterator>
 #include <memory>
 
+#include "core/fxcrt/check_op.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
 
 namespace fxcrt {
@@ -43,8 +47,41 @@ bool IndexInBounds(const Collection& collection, IndexType index) {
 
 // Equivalent of C++20 std::ranges::fill().
 template <typename T, typename V>
-void Fill(T& container, const V& value) {
+void Fill(T&& container, const V& value) {
   std::fill(std::begin(container), std::end(container), value);
+}
+
+// Non-flawed version of C++20 std::ranges::copy(), which takes an output
+// range as the second parameter and CHECKS() if it not sufficiently sized.
+template <typename T, typename U>
+void Copy(const T& source_container, U&& dest_container) {
+  static_assert(sizeof(source_container[0]) == sizeof(dest_container[0]));
+  CHECK_GE(std::size(dest_container), std::size(source_container));
+  std::copy(std::begin(source_container), std::end(source_container),
+            std::begin(dest_container));
+}
+
+// ToArray<>() implementation as taken from chromium /base. Replace with
+// std::to_array<>() when C++20 becomes available.
+//
+// Helper inspired by C++20's std::to_array to convert a C-style array to a
+// std::array. As opposed to the C++20 version this implementation does not
+// provide an overload for rvalues and does not strip cv qualifers from the
+// returned std::array::value_type. The returned value_type needs to be
+// specified explicitly, allowing the construction of std::arrays with const
+// elements.
+//
+// Reference: https://en.cppreference.com/w/cpp/container/array/to_array
+template <typename U, typename T, size_t N, size_t... I>
+constexpr std::array<U, N> ToArrayImpl(const T (&data)[N],
+                                       std::index_sequence<I...>) {
+  // SAFETY: compiler-deduced size `N`.
+  return UNSAFE_BUFFERS({{static_cast<U>(data[I])...}});
+}
+
+template <typename U, size_t N>
+constexpr std::array<U, N> ToArray(const U (&data)[N]) {
+  return ToArrayImpl<U>(data, std::make_index_sequence<N>());
 }
 
 }  // namespace fxcrt

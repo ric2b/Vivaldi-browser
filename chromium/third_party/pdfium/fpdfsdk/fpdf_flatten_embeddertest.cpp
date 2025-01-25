@@ -7,7 +7,11 @@
 #include "public/fpdf_flatten.h"
 #include "public/fpdfview.h"
 #include "testing/embedder_test.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using testing::HasSubstr;
+using testing::Not;
 
 namespace {
 
@@ -39,7 +43,22 @@ TEST_F(FPDFFlattenEmbedderTest, FlatPrint) {
   UnloadPage(page);
 }
 
-TEST_F(FPDFFlattenEmbedderTest, BUG_861842) {
+TEST_F(FPDFFlattenEmbedderTest, FlatWithBadFont) {
+  ASSERT_TRUE(OpenDocument("344775293.pdf"));
+  FPDF_PAGE page = LoadPage(0);
+  EXPECT_TRUE(page);
+
+  FORM_OnLButtonDown(form_handle(), page, 0, 20, 30);
+  FORM_OnLButtonUp(form_handle(), page, 0, 20, 30);
+
+  EXPECT_EQ(FLATTEN_SUCCESS, FPDFPage_Flatten(page, FLAT_PRINT));
+  EXPECT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
+
+  EXPECT_THAT(GetString(), Not(HasSubstr("/PDFDocEncoding")));
+  UnloadPage(page);
+}
+
+TEST_F(FPDFFlattenEmbedderTest, Bug861842) {
   const char* checkbox_checksum = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_APPLE)
@@ -72,7 +91,7 @@ TEST_F(FPDFFlattenEmbedderTest, BUG_861842) {
   VerifySavedDocument(100, 120, kBlankPageHash);
 }
 
-TEST_F(FPDFFlattenEmbedderTest, BUG_889099) {
+TEST_F(FPDFFlattenEmbedderTest, Bug889099) {
   const char* page_checksum = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
@@ -122,7 +141,7 @@ TEST_F(FPDFFlattenEmbedderTest, BUG_889099) {
   VerifySavedDocument(300, 400, flattened_page_checksum);
 }
 
-TEST_F(FPDFFlattenEmbedderTest, BUG_890322) {
+TEST_F(FPDFFlattenEmbedderTest, Bug890322) {
   const char* checksum = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
       return "793689536cf64fe792c2f241888c0cf3";
@@ -144,7 +163,7 @@ TEST_F(FPDFFlattenEmbedderTest, BUG_890322) {
   VerifySavedDocument(200, 200, checksum);
 }
 
-TEST_F(FPDFFlattenEmbedderTest, BUG_896366) {
+TEST_F(FPDFFlattenEmbedderTest, Bug896366) {
   const char* checksum = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
       return "c3cccfadc4c5249e6aa0675e511fa4c3";

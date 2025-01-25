@@ -19,11 +19,11 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "absl/strings/string_view.h"
 #include "internal/network/url.h"
-#include "sharing/attachment.h"
+#include "sharing/advertisement.h"
+#include "sharing/attachment_container.h"
 #include "sharing/internal/api/sharing_rpc_notifier.h"
 #include "sharing/local_device_data/nearby_share_local_device_data_manager.h"
 #include "sharing/nearby_sharing_settings.h"
@@ -70,7 +70,11 @@ class NearbySharingService {
     // Bluetooth or WiFi hardware ran into an irrecoverable state. User PC needs
     // to be restarted.
     kIrrecoverableHardwareError = 6,
-    kMaxValue = kIrrecoverableHardwareError
+    // Method argument is invalid.
+    // TODO(b/341292610): update dart side to use kInvalidArgument.
+    // https://source.corp.google.com/piper///depot/google3/location/nearby/cpp/sharing/clients/dart/platform/lib/types/models.dart;rcl=637648200;l=21
+    kInvalidArgument = 7,
+    kMaxValue = kInvalidArgument
   };
 
   enum class ReceiveSurfaceState {
@@ -93,6 +97,13 @@ class NearbySharingService {
 
   class Observer {
    public:
+    enum class AdapterState {
+      INVALID = 0,
+      NOT_PRESENT = 1,
+      DISABLED = 2,
+      ENABLED = 3,
+    };
+
     virtual ~Observer() = default;
     virtual void OnHighVisibilityChangeRequested() {}
     virtual void OnHighVisibilityChanged(bool in_high_visibility) = 0;
@@ -104,9 +115,9 @@ class NearbySharingService {
     virtual void OnFastInitiationDevicesNotDetected() {}
     virtual void OnFastInitiationScanningStopped() {}
 
-    virtual void OnBluetoothStatusChanged() {}
-    virtual void OnWifiStatusChanged() {}
-    virtual void OnLanStatusChanged() {}
+    virtual void OnBluetoothStatusChanged(AdapterState state) {}
+    virtual void OnWifiStatusChanged(AdapterState state) {}
+    virtual void OnLanStatusChanged(AdapterState state) {}
     virtual void OnIrrecoverableHardwareErrorReported() {}
 
     // Called during the |KeyedService| shutdown, but before everything has been
@@ -128,20 +139,34 @@ class NearbySharingService {
 
   // Registers a send surface for handling payload transfer status and device
   // discovery.
+  ABSL_DEPRECATED("Use the variant with vendor ID/blocking request instead.")
   virtual void RegisterSendSurface(
       TransferUpdateCallback* transfer_callback,
       ShareTargetDiscoveredCallback* discovery_callback, SendSurfaceState state,
       std::function<void(StatusCodes)> status_codes_callback) = 0;
 
+  // Registers a send surface for handling payload transfer status and device
+  // discovery, with optional blocking on a specified vendor ID.
+  // |transfer_callback| is used as the main identity for the surface, so trying
+  // to re-register the same transfer callback with a different
+  // |discovery_callback| will result in an error delivered via the status
+  // callback.
+  virtual void RegisterSendSurface(
+      TransferUpdateCallback* transfer_callback,
+      ShareTargetDiscoveredCallback* discovery_callback, SendSurfaceState state,
+      Advertisement::BlockedVendorId blocked_vendor_id,
+      std::function<void(StatusCodes)> status_codes_callback) = 0;
+
   // Unregisters the current send surface.
   virtual void UnregisterSendSurface(
       TransferUpdateCallback* transfer_callback,
-      ShareTargetDiscoveredCallback* discovery_callback,
       std::function<void(StatusCodes)> status_codes_callback) = 0;
 
-  // Registers a receiver surface for handling payload transfer status.
+  // Registers a receiver surface for handling payload transfer status, and
+  // advertises the vendor ID specified by |vendor_id|.
   virtual void RegisterReceiveSurface(
       TransferUpdateCallback* transfer_callback, ReceiveSurfaceState state,
+      Advertisement::BlockedVendorId vendor_id,
       std::function<void(StatusCodes)> status_codes_callback) = 0;
 
   // Unregisters the current receive surface.
@@ -196,7 +221,7 @@ class NearbySharingService {
   // Sends |attachments| to the remote |share_target|.
   virtual void SendAttachments(
       int64_t share_target_id,
-      std::vector<std::unique_ptr<Attachment>> attachments,
+      std::unique_ptr<AttachmentContainer> attachment_container,
       std::function<void(StatusCodes)> status_codes_callback) = 0;
 
   // Accepts incoming share from the remote |share_target|.
@@ -218,9 +243,12 @@ class NearbySharingService {
   // |share_target|.
   virtual bool DidLocalUserCancelTransfer(int64_t share_target_id) = 0;
 
-  // Opens attachments from the remote |share_target|.
+  // Opens attachments in |attachment_container| from the remote |share_target|.
+  // If |attachment_container| is null, or the container is empty, the status
+  // code will be set to kInvalidArgument.
   virtual void Open(
-      const ShareTarget& share_target,
+      ShareTarget share_target,
+      std::unique_ptr<AttachmentContainer> attachment_container,
       std::function<void(StatusCodes status_codes)> status_codes_callback) = 0;
 
   // Opens an url target on a browser instance.
@@ -232,10 +260,6 @@ class NearbySharingService {
   // Persists and joins the Wi-Fi network.
   virtual void JoinWifiNetwork(absl::string_view ssid,
                                absl::string_view password) = 0;
-
-  // Sets a cleanup callback to be called once done with transfer for ARC.
-  virtual void SetArcTransferCleanupCallback(
-      std::function<void()> callback) = 0;
 
   virtual std::string Dump() const = 0;
   virtual void UpdateFilePathsInProgress(bool update_file_paths) = 0;

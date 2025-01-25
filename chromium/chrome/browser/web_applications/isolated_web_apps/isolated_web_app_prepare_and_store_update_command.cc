@@ -29,6 +29,7 @@
 #include "chrome/browser/web_applications/commands/web_app_command.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_features.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_install_command_helper.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_integrity_block_data.h"
 #include "chrome/browser/web_applications/isolated_web_apps/pending_install_info.h"
 #include "chrome/browser/web_applications/locks/app_lock.h"
 #include "chrome/browser/web_applications/web_app.h"
@@ -229,21 +230,25 @@ void IsolatedWebAppUpdatePrepareAndStoreCommand::OnCopiedToProfileDirectory(
 }
 
 void IsolatedWebAppUpdatePrepareAndStoreCommand::CheckTrustAndSignatures(
-    base::OnceClosure next_step_callback) {
+    base::OnceCallback<
+        void(std::optional<web_package::SignedWebBundleIntegrityBlock>)>
+        next_step_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   command_helper_->CheckTrustAndSignatures(
       *destination_location_, &profile(),
       base::BindOnce(
           &IsolatedWebAppUpdatePrepareAndStoreCommand::RunNextStepOnSuccess<
-              void>,
+              std::optional<web_package::SignedWebBundleIntegrityBlock>>,
           weak_factory_.GetWeakPtr(), std::move(next_step_callback)));
 }
 
 void IsolatedWebAppUpdatePrepareAndStoreCommand::CreateStoragePartition(
-    base::OnceClosure next_step_callback) {
+    base::OnceClosure next_step_callback,
+    std::optional<web_package::SignedWebBundleIntegrityBlock> integrity_block) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  integrity_block_ = std::move(integrity_block);
   // TODO(cmfcmf): Maybe we should log somewhere when the storage partition is
   // unexpectedly missing?
   command_helper_->CreateStoragePartitionIfNotPresent(profile());
@@ -264,26 +269,25 @@ void IsolatedWebAppUpdatePrepareAndStoreCommand::LoadInstallUrl(
 
 void IsolatedWebAppUpdatePrepareAndStoreCommand::
     CheckInstallabilityAndRetrieveManifest(
-        base::OnceCallback<
-            void(IsolatedWebAppInstallCommandHelper::ManifestAndUrl)>
+        base::OnceCallback<void(blink::mojom::ManifestPtr)>
             next_step_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   command_helper_->CheckInstallabilityAndRetrieveManifest(
       *web_contents_.get(),
       base::BindOnce(
           &IsolatedWebAppUpdatePrepareAndStoreCommand::RunNextStepOnSuccess<
-              IsolatedWebAppInstallCommandHelper::ManifestAndUrl>,
+              blink::mojom::ManifestPtr>,
           weak_factory_.GetWeakPtr(), std::move(next_step_callback)));
 }
 
 void IsolatedWebAppUpdatePrepareAndStoreCommand::
     ValidateManifestAndCreateInstallInfo(
         base::OnceCallback<void(WebAppInstallInfo)> next_step_callback,
-        IsolatedWebAppInstallCommandHelper::ManifestAndUrl manifest_and_url) {
+        blink::mojom::ManifestPtr manifest) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   base::expected<WebAppInstallInfo, std::string> install_info =
       command_helper_->ValidateManifestAndCreateInstallInfo(expected_version_,
-                                                            manifest_and_url);
+                                                            *manifest);
   RunNextStepOnSuccess(std::move(next_step_callback), std::move(install_info));
 }
 
@@ -329,8 +333,13 @@ void IsolatedWebAppUpdatePrepareAndStoreCommand::Finalize(
   WebApp::IsolationData updated_isolation_data =
       *app_to_update->isolation_data();
   updated_isolation_data.SetPendingUpdateInfo(
-      WebApp::IsolationData::PendingUpdateInfo(*destination_storage_location_,
-                                               info.isolated_web_app_version));
+      WebApp::IsolationData::PendingUpdateInfo(
+          *destination_storage_location_, info.isolated_web_app_version,
+          integrity_block_
+              ? std::make_optional(
+                    IsolatedWebAppIntegrityBlockData::FromIntegrityBlock(
+                        *integrity_block_))
+              : std::nullopt));
   app_to_update->SetIsolationData(std::move(updated_isolation_data));
 }
 

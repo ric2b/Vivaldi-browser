@@ -49,10 +49,20 @@
       "Bucket": "try",
       "Builder": "dawn-try-win10-x86-rel"
     },
+    "Win-Intel-UHD770": {
+      "Project": "chromium",
+      "Bucket": "try",
+      "Builder": "dawn-try-win-x64-intel-uhd770-rel"
+    },
     "Mac": {
       "Project": "chromium",
       "Bucket": "try",
       "Builder": "mac-dawn-rel"
+    },
+    "Mac-Arm64-M2-Experimental": {
+      "Project": "chromium",
+      "Bucket": "try",
+      "Builder": "dawn-try-mac-arm64-m2-exp"
     },
     "Mac-x64-Intel-Experimental": {
       "Project": "chromium",
@@ -73,6 +83,11 @@
       "Project": "chromium",
       "Bucket": "try",
       "Builder": "linux-dawn-rel"
+    },
+    "Linux-Intel-UHD770" : {
+      "Project": "chromium",
+      "Bucket": "try",
+      "Builder": "dawn-try-linux-x64-intel-uhd770-rel"
     }
   },
   "Tag": {

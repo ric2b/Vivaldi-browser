@@ -4,6 +4,7 @@
 
 #include "gpu/command_buffer/service/shared_image/shared_image_backing.h"
 
+#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -76,7 +77,7 @@ SharedImageBacking::SharedImageBacking(
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
-    uint32_t usage,
+    SharedImageUsageSet usage,
     std::string debug_label,
     size_t estimated_size,
     bool is_thread_safe,
@@ -114,7 +115,7 @@ SkImageInfo SharedImageBacking::AsSkImageInfo(int plane_index) const {
 }
 
 bool SharedImageBacking::CopyToGpuMemoryBuffer() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -127,13 +128,13 @@ void SharedImageBacking::Update(std::unique_ptr<gfx::GpuFence> in_fence) {}
 
 bool SharedImageBacking::UploadFromMemory(
     const std::vector<SkPixmap>& pixmaps) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
 bool SharedImageBacking::ReadbackToMemory(
     const std::vector<SkPixmap>& pixmaps) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -281,7 +282,8 @@ std::unique_ptr<VulkanImageRepresentation> SharedImageBacking::ProduceVulkan(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     gpu::VulkanDeviceQueue* vulkan_device_queue,
-    gpu::VulkanImplementation& vulkan_impl) {
+    gpu::VulkanImplementation& vulkan_impl,
+    bool needs_detiling) {
   return nullptr;
 }
 #endif
@@ -340,7 +342,7 @@ void SharedImageBacking::ReleaseRef(SharedImageRepresentation* representation) {
   DCHECK(is_ref_counted_);
 
   auto found = base::ranges::find(refs_, representation);
-  DCHECK(found != refs_.end());
+  CHECK(found != refs_.end(), base::NotFatalUntil::M130);
 
   // If the found representation is the first (owning) ref, free the attributed
   // memory.
@@ -438,7 +440,7 @@ ClearTrackingSharedImageBacking::ClearTrackingSharedImageBacking(
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
-    uint32_t usage,
+    gpu::SharedImageUsageSet usage,
     std::string debug_label,
     size_t estimated_size,
     bool is_thread_safe,
@@ -483,7 +485,7 @@ gfx::GpuMemoryBufferHandle SharedImageBacking::GetGpuMemoryBufferHandle() {
   // Reaching here is invalid since this method should be only called for
   // backings which implements it,i.e., memory buffer handle should only be
   // retrieved from the backings which supports native buffer or shared memory.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return gfx::GpuMemoryBufferHandle();
 }
 

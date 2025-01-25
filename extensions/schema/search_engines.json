@@ -97,6 +97,9 @@
           },
           "defaultImage": {
             "type": "string"
+          },
+          "systemDefaultSearchChanged": {
+            "type": "boolean"
           }
         }
       },

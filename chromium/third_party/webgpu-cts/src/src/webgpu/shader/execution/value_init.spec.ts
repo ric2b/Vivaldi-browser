@@ -52,17 +52,10 @@ async function run(t: GPUTest, wgsl: string) {
     },
   });
 
-  const resultBuffer = t.device.createBuffer({
+  const resultBuffer = t.createBufferTracked({
     size: 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
   });
-  t.trackForCleanup(resultBuffer);
-
-  const zeroBuffer = t.device.createBuffer({
-    size: 4,
-    usage: GPUBufferUsage.UNIFORM,
-  });
-  t.trackForCleanup(zeroBuffer);
 
   const bindGroup = t.device.createBindGroup({
     layout: pipeline.getBindGroupLayout(0),

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/disk_cache/blockfile/sparse_control.h"
 
 #include <stdint.h>
@@ -165,7 +170,7 @@ net::NetLogEventType GetSparseEventType(
     case disk_cache::SparseControl::kGetRangeOperation:
       return net::NetLogEventType::SPARSE_GET_RANGE;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return net::NetLogEventType::CANCELLED;
   }
 }
@@ -187,7 +192,7 @@ void LogChildOperationEnd(const net::NetLogWithSource& net_log,
       case disk_cache::SparseControl::kGetRangeOperation:
         return;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return;
     }
     net_log.EndEventWithNetErrorCode(event_type, result);
@@ -760,7 +765,7 @@ bool SparseControl::DoChildIO() {
       rv = DoGetAvailableRange();
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   if (rv == net::ERR_IO_PENDING) {

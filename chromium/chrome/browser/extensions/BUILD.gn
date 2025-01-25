@@ -23,7 +23,7 @@ assert(enable_extensions)
 assert(enable_supervised_users)
 assert(!is_fuchsia, "Fuchsia shouldn't use anything in //chrome")
 
-static_library("extensions") {
+source_set("extensions") {
   sources = [
     "active_install_data.cc",
     "active_install_data.h",
@@ -101,8 +101,6 @@ static_library("extensions") {
     "api/cookies/cookies_api_constants.h",
     "api/cookies/cookies_helpers.cc",
     "api/cookies/cookies_helpers.h",
-    "api/dashboard_private/dashboard_private_api.cc",
-    "api/dashboard_private/dashboard_private_api.h",
     "api/debugger/debugger_api.cc",
     "api/debugger/debugger_api.h",
     "api/debugger/debugger_api_constants.cc",
@@ -439,6 +437,8 @@ static_library("extensions") {
     "blocklist_factory.h",
     "blocklist_state_fetcher.cc",
     "blocklist_state_fetcher.h",
+    "bookmark_app_util.cc",
+    "bookmark_app_util.h",
     "browser_context_keyed_service_factories.cc",
     "browser_context_keyed_service_factories.h",
     "browser_extension_window_controller.cc",
@@ -465,7 +465,6 @@ static_library("extensions") {
     "chrome_content_verifier_delegate.h",
     "chrome_extension_browser_constants.cc",
     "chrome_extension_browser_constants.h",
-    "chrome_extension_chooser_dialog.h",
     "chrome_extension_cookies.cc",
     "chrome_extension_cookies.h",
     "chrome_extension_cookies_factory.cc",
@@ -568,6 +567,8 @@ static_library("extensions") {
     "extension_menu_icon_loader.h",
     "extension_migrator.cc",
     "extension_migrator.h",
+    "extension_safety_check_utils.cc",
+    "extension_safety_check_utils.h",
     "extension_service.cc",
     "extension_service.h",
     "extension_side_panel_view_host.cc",
@@ -771,11 +772,20 @@ static_library("extensions") {
     # Lots of APIs use headers from the list above.
     "//chrome/browser/extensions/api:api_registration",
 
-    # TODO(crbug.com/40124309): Remove this circular dependency.
+    # TODO(crbug.com/346472679): Remove this circular dependency.
     "//chrome/browser/web_applications/extensions",
 
     # TODO(crbug.com/41437292): Remove this circular dependency.
     "//chrome/browser/safe_browsing",
+
+    # TODO(crbug.com/343037853): Remove this circular dependency.
+    "//chrome/browser/themes",
+
+    # TODO(crbug.com/344921703): Remove circular dependencies.
+    "//chrome/browser/sync",
+
+    # TODO(crbug.com/345487716): Remove this circular dependency.
+    "//chrome/browser/ui/views/side_panel",
   ]
 
   # Since browser and browser_extensions actually depend on each other,
@@ -784,7 +794,9 @@ static_library("extensions") {
   # have the same dependencies. Once browser_extensions is untangled from
   # browser, then we can clean up these dependencies.
   public_deps = [
+    "//chrome/browser:browser_public_dependencies",
     "//chrome/browser/extensions/api:api_registration",
+    "//chrome/browser/resource_coordinator:tab_lifecycle_observer",
     "//chrome/common",
     "//chrome/common/extensions/api",
     "//components/omnibox/browser",
@@ -811,10 +823,16 @@ static_library("extensions") {
     "//chrome/app/theme:theme_resources",
     "//chrome/app/vector_icons",
     "//chrome/browser:browser_process",
-    "//chrome/browser:ntp_background_proto",
-    "//chrome/browser:theme_properties",
+    "//chrome/browser:font_pref",
     "//chrome/browser/apps:user_type_filter",
     "//chrome/browser/apps/app_service:constants",
+    "//chrome/browser/search/background",
+    "//chrome/browser/search_engines",
+    "//chrome/browser/sync",
+    "//chrome/browser/themes",
+    "//chrome/browser/ui:ui_features",
+    "//chrome/browser/ui/browser_window",
+    "//chrome/browser/ui/views/side_panel",
 
     # Only for allow_circular_includes_from
     "//chrome/browser/apps/app_service/app_icon",
@@ -842,6 +860,7 @@ static_library("extensions") {
     "//components/optimization_guide/core:features",
     "//components/safe_browsing/content/browser",
     "//components/safe_browsing/core/browser:safe_browsing_metrics_collector",
+    "//components/saved_tab_groups:model",
     "//components/security_interstitials/content:security_interstitial_page",
     "//components/site_engagement/core/mojom:mojo_bindings",
     "//components/supervised_user/core/browser",
@@ -850,7 +869,7 @@ static_library("extensions") {
     "//components/webapps/common",
     "//components/webauthn/json",
 
-    # TODO(crbug.com/40124309): Remove this dependency:
+    # TODO(crbug.com/346472679): Remove this dependency:
     "//chrome/browser/web_applications/extensions",
     "//chrome/common/extensions/api:extensions_features",
     "//chrome/common/safe_browsing:proto",
@@ -859,6 +878,7 @@ static_library("extensions") {
     "//components/affiliations/core/browser:affiliations",
     "//components/app_constants",
     "//components/autofill/content/browser",
+    "//components/autofill/core/common:credit_card_number_validation",
     "//components/back_forward_cache",
     "//components/bookmarks/browser",
     "//components/bookmarks/managed",
@@ -879,6 +899,7 @@ static_library("extensions") {
     "//components/embedder_support:browser_util",
     "//components/enterprise",
     "//components/enterprise/buildflags",
+    "//components/enterprise/connectors",
     "//components/favicon/content",
     "//components/feedback",
     "//components/gcm_driver",
@@ -958,6 +979,9 @@ static_library("extensions") {
     "//device/fido",
     "//extensions:extensions_resources",
     "//extensions/browser",
+    "//extensions/browser/api/content_settings:content_settings",
+    "//extensions/browser/api/storage:settings_namespace",
+    "//extensions/browser/api/storage:settings_observer",
     "//extensions/browser/updater",
     "//extensions/browser/updater:keepalive",
     "//extensions/buildflags",
@@ -1101,6 +1125,7 @@ static_library("extensions") {
       ]
     }
     deps += [
+      "//chrome/browser/chromeos/app_mode",
       "//chrome/browser/chromeos/drivefs:native_message_host_origins",
       "//chrome/browser/chromeos/extensions:constants",
       "//chrome/browser/chromeos/extensions/smart_card_provider_private:smart_card_provider_private",
@@ -1116,13 +1141,19 @@ static_library("extensions") {
       "//chromeos/crosapi/mojom",
       "//chromeos/dbus/missive:missive",
       "//chromeos/dbus/power",
+      "//chromeos/services/chromebox_for_meetings/public/cpp",
+      "//chromeos/services/chromebox_for_meetings/public/mojom",
       "//remoting/host/it2me:chrome_os_host",
     ]
+
+    allow_circular_includes_from += [ "//chrome/browser/chromeos/app_mode" ]
   } else {
     sources += [
       "api/enterprise_reporting_private/chrome_desktop_report_request_helper.cc",
       "api/enterprise_reporting_private/chrome_desktop_report_request_helper.h",
       "api/image_writer_private/operation_nonchromeos.cc",
+      "api/messaging/launch_context.cc",
+      "api/messaging/launch_context.h",
       "api/messaging/native_message_process_host.cc",
       "api/messaging/native_message_process_host.h",
       "api/messaging/native_messaging_launch_from_native.cc",
@@ -1139,7 +1170,7 @@ static_library("extensions") {
       "//components/keep_alive_registry",
     ]
     if (is_posix) {
-      sources += [ "api/messaging/native_process_launcher_posix.cc" ]
+      sources += [ "api/messaging/launch_context_posix.cc" ]
     }
     if (use_gio) {
       configs += [ "//build/linux:gio_config" ]
@@ -1215,10 +1246,57 @@ static_library("extensions") {
       "//ash/webui/file_manager/untrusted_resources:file_manager_untrusted_resources",
       "//ash/webui/resources:media_app_bundle_resources_grit",
       "//ash/webui/settings/public/constants:mojom",
+      "//chrome/browser/ash/accessibility",
+      "//chrome/browser/ash/account_manager",
+      "//chrome/browser/ash/app_list",
+      "//chrome/browser/ash/app_mode",
+      "//chrome/browser/ash/app_mode/web_app",
+      "//chrome/browser/ash/app_restore",
+      "//chrome/browser/ash/arc",
+      "//chrome/browser/ash/arc/accessibility",
+      "//chrome/browser/ash/arc/extensions",
+      "//chrome/browser/ash/arc/optin",
+      "//chrome/browser/ash/attestation",
+      "//chrome/browser/ash/bruschetta",
+      "//chrome/browser/ash/child_accounts",
+      "//chrome/browser/ash/child_accounts/time_limits",
       "//chrome/browser/ash/crosapi",
+      "//chrome/browser/ash/crostini",
       "//chrome/browser/ash/crostini:crostini_installer_types_mojom",
+      "//chrome/browser/ash/crostini/throttle",
+      "//chrome/browser/ash/customization",
+      "//chrome/browser/ash/extensions",
+      "//chrome/browser/ash/extensions/autotest_private",
+      "//chrome/browser/ash/extensions/file_manager",
+      "//chrome/browser/ash/extensions/speech",
+      "//chrome/browser/ash/extensions/users_private",
+      "//chrome/browser/ash/file_manager",
+      "//chrome/browser/ash/file_system_provider",
+      "//chrome/browser/ash/fileapi",
+      "//chrome/browser/ash/guest_os",
+      "//chrome/browser/ash/guest_os/public",
+      "//chrome/browser/ash/guest_os/virtual_machines",
+      "//chrome/browser/ash/input_method",
+      "//chrome/browser/ash/login",
+      "//chrome/browser/ash/login/app_mode",
+      "//chrome/browser/ash/login/demo_mode",
+      "//chrome/browser/ash/login/quick_unlock",
+      "//chrome/browser/ash/login/session",
+      "//chrome/browser/ash/login/ui",
+      "//chrome/browser/ash/net",
+      "//chrome/browser/ash/ownership",
+      "//chrome/browser/ash/platform_keys",
+      "//chrome/browser/ash/plugin_vm",
+      "//chrome/browser/ash/policy/core",
+      "//chrome/browser/ash/policy/handlers",
+      "//chrome/browser/ash/printing",
+      "//chrome/browser/ash/profiles",
+      "//chrome/browser/ash/remote_apps",
+      "//chrome/browser/ash/system_logs",
+      "//chrome/browser/ash/system_web_apps/apps",
       "//chrome/browser/devtools",
       "//chrome/browser/nearby_sharing/common",
+      "//chrome/browser/ui/ash/keyboard",
       "//chromeos/ash/components/attestation",
       "//chromeos/ash/components/browser_context_helper",
       "//chromeos/ash/components/cryptohome",
@@ -1232,6 +1310,7 @@ static_library("extensions") {
       "//chromeos/ash/components/dbus/image_burner",
       "//chromeos/ash/components/dbus/update_engine",
       "//chromeos/ash/components/disks",
+      "//chromeos/ash/components/enhanced_network_tts",
       "//chromeos/ash/components/enhanced_network_tts/mojom",
       "//chromeos/ash/components/language_packs",
       "//chromeos/ash/components/language_packs/public/mojom",
@@ -1242,10 +1321,9 @@ static_library("extensions") {
       "//chromeos/ash/components/proximity_auth",
       "//chromeos/ash/components/settings",
       "//chromeos/ash/components/system",
+      "//chromeos/ash/components/tether:tether",
       "//chromeos/ash/components/tpm",
       "//chromeos/ash/services/assistant/public/cpp",
-      "//chromeos/ash/services/chromebox_for_meetings/public/cpp",
-      "//chromeos/ash/services/chromebox_for_meetings/public/mojom",
       "//chromeos/ash/services/ime/public/mojom",
       "//chromeos/components/remote_apps/mojom",
       "//chromeos/process_proxy",
@@ -1274,10 +1352,54 @@ static_library("extensions") {
       "//ui/views",
     ]
 
-    allow_circular_includes_from += [ "//chrome/browser/ash/crosapi" ]
+    allow_circular_includes_from += [
+      "//chrome/browser/ash/app_mode",
+      "//chrome/browser/ash/app_mode/web_app",
+      "//chrome/browser/ash/app_list",
+      "//chrome/browser/ash/accessibility",
+      "//chrome/browser/ash/input_method",
+      "//chrome/browser/ash/app_restore",
+      "//chrome/browser/ash/arc",
+      "//chrome/browser/ash/arc/optin",
+      "//chrome/browser/ash/attestation",
+      "//chrome/browser/ash/bruschetta",
+      "//chrome/browser/ash/file_manager",
+      "//chrome/browser/ash/fileapi",
+      "//chrome/browser/ash/crosapi",
+      "//chrome/browser/ash/crostini",
+      "//chrome/browser/ash/customization",
+      "//chrome/browser/ash/file_system_provider",
+      "//chrome/browser/ash/guest_os",
+      "//chrome/browser/ash/guest_os/public",
+      "//chrome/browser/ash/guest_os/virtual_machines",
+      "//chrome/browser/ash/extensions",
+      "//chrome/browser/ash/extensions/autotest_private",
+      "//chrome/browser/ash/extensions/file_manager",
+      "//chrome/browser/ash/extensions/speech",
+      "//chrome/browser/ash/extensions/users_private",
+      "//chrome/browser/ash/login",
+      "//chrome/browser/ash/login/app_mode",
+      "//chrome/browser/ash/login/demo_mode",
+      "//chrome/browser/ash/login/quick_unlock",
+      "//chrome/browser/ash/login/session",
+      "//chrome/browser/ash/login/ui",
+      "//chrome/browser/ash/net",
+      "//chrome/browser/ash/platform_keys",
+      "//chrome/browser/ash/policy/core",
+      "//chrome/browser/ash/policy/handlers",
+      "//chrome/browser/ash/profiles",
+      "//chrome/browser/ash/system_web_apps/apps",
+      "//chrome/browser/ash/system_logs",
+      "//chrome/browser/ash/account_manager",
+      "//chrome/browser/ash/child_accounts",
+      "//chrome/browser/ash/child_accounts/time_limits",
+    ]
 
     if (is_cfm) {
-      deps += [ "//chromeos/ash/components/chromebox_for_meetings" ]
+      deps += [
+        "//chrome/browser/ash/chromebox_for_meetings/xu_camera",
+        "//chromeos/ash/components/chromebox_for_meetings",
+      ]
     }
   }
 
@@ -1353,7 +1475,7 @@ static_library("extensions") {
   if (is_win) {
     sources += [
       "api/image_writer_private/removable_storage_provider_win.cc",
-      "api/messaging/native_process_launcher_win.cc",
+      "api/messaging/launch_context_win.cc",
       "external_registry_loader_win.cc",
       "external_registry_loader_win.h",
       "global_shortcut_listener_win.cc",
@@ -1406,11 +1528,6 @@ static_library("extensions") {
       "//pdf:buildflags",
       "//pdf:features",
     ]
-
-    if (enable_screen_ai_service) {
-      deps +=
-          [ "//chrome/browser/extensions/api/pdf_viewer_private:event_router" ]
-    }
   }
 
   if (enable_rlz_support) {
@@ -1441,7 +1558,7 @@ static_library("extensions") {
   if (enterprise_data_controls) {
     deps += [
       "//components/enterprise/buildflags",
-      "//components/enterprise/data_controls",
+      "//components/enterprise/data_controls/core",
     ]
   }
 }
@@ -1480,6 +1597,8 @@ static_library("test_support") {
     "mock_extension_special_storage_policy.h",
     "scoped_database_manager_for_test.cc",
     "scoped_database_manager_for_test.h",
+    "scoped_test_mv2_enabler.cc",
+    "scoped_test_mv2_enabler.h",
     "test_blocklist.cc",
     "test_blocklist.h",
     "test_blocklist_state_fetcher.cc",

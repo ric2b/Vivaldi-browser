@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Toepassen</translation>
 <translation id="1603914832182249871">(Privé)</translation>
 <translation id="1627276047960621195">Bestandsdescriptors</translation>
+<translation id="1654713139320245449">Geen castbestemmingen gevonden. Hulp nodig?</translation>
 <translation id="166278006618318542">Algoritme van openbare sleutel van entiteit</translation>
 <translation id="1682548588986054654">Nieuw privévenster</translation>
 <translation id="1708338024780164500">(Inactief)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Een ander programma op je computer heeft een extensie toegevoegd die de manier waarop Vivaldi werkt kan wijzigen.</translation>
 <translation id="2443487764245141020">Misschien willen websites je ook herkennen via een ID</translation>
 <translation id="2445081178310039857">Hoofddirectory van extensie is vereist.</translation>
-<translation id="2470702053775288986">Niet-ondersteunde extensies uitgeschakeld</translation>
 <translation id="2485422356828889247">Installatie ongedaan maken</translation>
 <translation id="2498539833203011245">Minimaliseren</translation>
 <translation id="2509495747794740764">De waarde voor de schaal moet een getal tussen de 10 en 200 zijn.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Details</translation>
 <translation id="4345587454538109430">Configureren...</translation>
 <translation id="4348766275249686434">Fouten verzamelen</translation>
-<translation id="4363771538994847871">Er zijn geen Cast-bestemmingen gevonden. Hulp nodig?</translation>
 <translation id="4384652540891215547">Activeer de extensie</translation>
 <translation id="4394049700291259645">Uitschakelen</translation>
 <translation id="4409697491990005945">Marges</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Opmaak</translation>
 <translation id="7782102568078991263">Geen verdere suggesties van Google</translation>
 <translation id="7786889348652477777">App ve&amp;rnieuwen</translation>
-<translation id="7791543448312431591">Toevoegen</translation>
 <translation id="7800518121066352902">Links&amp;om draaien</translation>
 <translation id="7814458197256864873">K&amp;opiëren</translation>
 <translation id="7818135753970109980">Nieuw thema toegevoegd (<ph name="EXTENSION_NAME" />)</translation>

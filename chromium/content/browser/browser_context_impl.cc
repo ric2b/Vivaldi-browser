@@ -71,7 +71,7 @@ BrowserContextImpl::~BrowserContextImpl() {
       << "StoragePartitionMap is not shut down properly";
 
   if (!will_be_destroyed_soon_) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   // Verify that there are no outstanding RenderProcessHosts that reference
@@ -93,7 +93,7 @@ BrowserContextImpl::~BrowserContextImpl() {
   if (!rph_crash_key_value.empty()) {
     SCOPED_CRASH_KEY_STRING256("BrowserContext", "dangling_rph",
                                rph_crash_key_value);
-    DUMP_WILL_BE_NOTREACHED_NORETURN()
+    DUMP_WILL_BE_NOTREACHED()
         << "rph_with_bc_reference : " << rph_crash_key_value;
   }
 

@@ -5,13 +5,10 @@
 package org.chromium.chrome.test.transit.testhtmls;
 
 import org.chromium.base.test.transit.Elements;
-import org.chromium.base.test.transit.Facility;
-import org.chromium.base.test.transit.Transition;
-import org.chromium.base.test.transit.Trip;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.transit.PageStation;
-import org.chromium.chrome.test.transit.PopupBlockedMessageFacility;
-import org.chromium.chrome.test.transit.WebPageStation;
+import org.chromium.chrome.test.transit.page.PageStation;
+import org.chromium.chrome.test.transit.page.PopupBlockedMessageFacility;
+import org.chromium.chrome.test.transit.page.WebPageStation;
 import org.chromium.content_public.browser.test.transit.HtmlElement;
 import org.chromium.content_public.browser.test.transit.HtmlElementInState;
 
@@ -32,7 +29,7 @@ public class PopupOnClickPageStation extends WebPageStation {
         Builder<PopupOnClickPageStation> builder = new Builder<>(PopupOnClickPageStation::new);
 
         String url = activityTestRule.getTestServer().getURL(PATH);
-        return currentPageStation.loadPageProgramatically(builder, url);
+        return currentPageStation.loadPageProgrammatically(url, builder);
     }
 
     @Override
@@ -52,7 +49,7 @@ public class PopupOnClickPageStation extends WebPageStation {
                         .withIsOpeningTabs(1)
                         .withIsSelectingTabs(1)
                         .build();
-        return Trip.travelSync(this, newPage, Transition.retryOption(), mLinkToPopup::click);
+        return travelToSync(newPage, mLinkToPopup::click);
     }
 
     /**
@@ -60,7 +57,7 @@ public class PopupOnClickPageStation extends WebPageStation {
      * message to be shown.
      */
     public PopupBlockedMessageFacility clickLinkAndExpectPopupBlockedMessage() {
-        PopupBlockedMessageFacility infoBar = new PopupBlockedMessageFacility(this, 1);
-        return Facility.enterSync(infoBar, Transition.retryOption(), mLinkToPopup::click);
+        return enterFacilitySync(
+                new PopupBlockedMessageFacility<PopupOnClickPageStation>(1), mLinkToPopup::click);
     }
 }

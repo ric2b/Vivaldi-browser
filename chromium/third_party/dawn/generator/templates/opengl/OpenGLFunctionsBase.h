@@ -34,7 +34,6 @@
 #include "dawn/native/opengl/opengl_platform.h"
 
 namespace dawn::native::opengl {
-    using GetProcAddress = void* (*) (const char*);
 
     struct OpenGLFunctionsBase {
       public:
@@ -46,26 +45,19 @@ namespace dawn::native::opengl {
 
         {% endfor%}
 
-        // GL_ANGLE_base_vertex_base_instance
-        // See crbug.com/dawn/1715 for why this is embedded
-        PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEANGLEPROC DrawArraysInstancedBaseInstanceANGLE = nullptr;
-        PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEANGLEPROC DrawElementsInstancedBaseVertexBaseInstanceANGLE = nullptr;
-        PFNGLMULTIDRAWARRAYSINSTANCEDBASEINSTANCEANGLEPROC MultiDrawArraysInstancedBaseInstanceANGLE = nullptr;
-        PFNGLMULTIDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEANGLEPROC MultiDrawElementsInstancedBaseVertexBaseInstanceANGLE = nullptr;
-
         bool IsGLExtensionSupported(const char* extension) const;
 
       protected:
 #if defined(DAWN_ENABLE_BACKEND_DESKTOP_GL)
-        MaybeError LoadDesktopGLProcs(GetProcAddress getProc, int majorVersion, int minorVersion);
+        MaybeError LoadDesktopGLProcs(GLGetProcProc getProc, int majorVersion, int minorVersion);
 #endif
 #if defined(DAWN_ENABLE_BACKEND_OPENGLES)
-        MaybeError LoadOpenGLESProcs(GetProcAddress getProc, int majorVersion, int minorVersion);
+        MaybeError LoadOpenGLESProcs(GLGetProcProc getProc, int majorVersion, int minorVersion);
 #endif
 
       private:
         template<typename T>
-        MaybeError LoadProc(GetProcAddress getProc, T* memberProc, const char* name);
+        MaybeError LoadProc(GLGetProcProc getProc, T* memberProc, const char* name);
         void InitializeSupportedGLExtensions();
 
         std::unordered_set<std::string> mSupportedGLExtensionsSet;

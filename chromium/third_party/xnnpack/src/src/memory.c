@@ -4,7 +4,7 @@
 // LICENSE file in the root directory of this source tree.
 
 // Include first for the platform detection macros.
-#include <xnnpack/common.h>
+#include "xnnpack/common.h"
 
 #if XNN_PLATFORM_WEB
 #include <emscripten/emscripten.h>
@@ -14,7 +14,10 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+
+#include <inttypes.h>
 #include <windows.h>
+
 #else
 // This define needs to come first because errno include features.h and would have defined macros that lead to
 // sys/mman.h not having mremap.
@@ -40,10 +43,10 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <xnnpack.h>
-#include <xnnpack/log.h>
-#include <xnnpack/math.h>
-#include <xnnpack/memory.h>
+#include "xnnpack.h"
+#include "xnnpack/log.h"
+#include "xnnpack/math.h"
+#include "xnnpack/memory.h"
 
 // Helpers to allocate/mmap and release memory used by both code and weights cache.
 

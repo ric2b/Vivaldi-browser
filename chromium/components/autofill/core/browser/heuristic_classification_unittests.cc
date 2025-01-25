@@ -139,11 +139,13 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/browser/heuristic_source.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/logging/log_router.h"
 #include "components/autofill/core/common/autocomplete_parsing_util.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_test_utils.h"
+#include "components/autofill/core/common/form_data_test_api.h"
 #include "components/autofill/core/common/language_code.h"
 #include "components/variations/variations_switches.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -360,9 +362,9 @@ FormFieldData ParseFieldFromJsonDict(const base::Value::Dict& field_dict,
   }
   field.set_is_focusable(true);
   field.set_role(FormFieldData::RoleAttribute::kOther);
-  field.set_origin(form_data.main_frame_origin);
-  field.set_host_frame(form_data.host_frame);
-  field.set_host_form_id(form_data.renderer_id);
+  field.set_origin(form_data.main_frame_origin());
+  field.set_host_frame(form_data.host_frame());
+  field.set_host_form_id(form_data.renderer_id());
   field.set_renderer_id(test::MakeFieldRendererId());
   std::vector<SelectOption> options;
   if (const base::Value::List* select_options =
@@ -371,7 +373,7 @@ FormFieldData ParseFieldFromJsonDict(const base::Value::Dict& field_dict,
       const base::Value::Dict& option_dict = option.GetDict();
       options.push_back(SelectOption{
           .value = base::UTF8ToUTF16(*option_dict.FindString("value")),
-          .content = base::UTF8ToUTF16(*option_dict.FindString("label"))});
+          .text = base::UTF8ToUTF16(*option_dict.FindString("label"))});
     }
   }
   field.set_options(std::move(options));
@@ -382,10 +384,10 @@ FormFieldData ParseFieldFromJsonDict(const base::Value::Dict& field_dict,
     const base::Value::Dict& form_dict,
     const std::string& site_url,
     FormData& form_data) {
-  form_data.url = GURL(site_url);
-  form_data.main_frame_origin = url::Origin::Create(form_data.url);
-  form_data.host_frame = test::MakeLocalFrameToken();
-  form_data.renderer_id = test::MakeFormRendererId();
+  form_data.set_url(GURL(site_url));
+  form_data.set_main_frame_origin(url::Origin::Create(form_data.url()));
+  form_data.set_host_frame(test::MakeLocalFrameToken());
+  form_data.set_renderer_id(test::MakeFormRendererId());
 
   const base::Value::List* fields = form_dict.FindList("fields");
   if (!fields) {
@@ -396,7 +398,7 @@ FormFieldData ParseFieldFromJsonDict(const base::Value::Dict& field_dict,
     if (!field_json.is_dict()) {
       return AssertionFailure() << "A field is no dict in " << site_url;
     }
-    form_data.fields.push_back(
+    test_api(form_data).Append(
         ParseFieldFromJsonDict(field_json.GetDict(), form_data));
   }
 
@@ -514,6 +516,8 @@ TEST_P(HeuristicClassificationTests, EndToEnd) {
              "--run-internal-tests --test-launcher-timeout 100000 "
              "to execute these tests.";
     }
+    ASSERT_NE(GetActiveHeuristicSource(), HeuristicSource::kLegacy)
+        << "Internal tests are only supported with internal parsing patterns";
     ASSERT_GE(TestTimeouts::test_launcher_timeout().InSeconds(), 100)
         << "This is a long-running test; you must specify "
            "--test-launcher-timeout to have a value of at least 100000.";
@@ -545,7 +549,11 @@ TEST_P(HeuristicClassificationTests, EndToEnd) {
   std::vector<base::test::FeatureRef> enabled_features = {
       // Support for new field types.
       features::kAutofillUseI18nAddressModel,
+      features::kAutofillUseAUAddressModel,
       features::kAutofillUseBRAddressModel,
+      features::kAutofillUseCAAddressModel,
+      features::kAutofillUseDEAddressModel,
+      features::kAutofillUseITAddressModel,
       features::kAutofillUseMXAddressModel,
       features::kAutofillUsePLAddressModel,
       features::kAutofillEnableSupportForBetweenStreets,
@@ -580,8 +588,6 @@ TEST_P(HeuristicClassificationTests, EndToEnd) {
   // parser is used.
   const bool kEnableAddressFieldParserNG = base::FeatureList::IsEnabled(
       features::kAutofillEnableAddressFieldParserNG);
-  init_feature_to_value(features::kAutofillParsingPatternProvider,
-                        kEnableAddressFieldParserNG);
   init_feature_to_value(features::kAutofillUseINAddressModel,
                         kEnableAddressFieldParserNG);
 

@@ -3,24 +3,13 @@
 // found in the LICENSE file.
 
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import {asArray, commandLineArgs, DiffBehaviors} from './commandline.js';
-import {SOURCE_ROOT} from './paths.js';
+import {defaultChromePath, SOURCE_ROOT} from './paths.js';
 
 const yargs = require('yargs');
 const options = commandLineArgs(yargs(yargs.argv['_'])).argv;
-
-function chromePath() {
-  const paths = {
-    'linux': path.join('chrome-linux', 'chrome'),
-    'darwin':
-        path.join('chrome-mac', 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'),
-    'win32': path.join('chrome-win', 'chrome.exe'),
-  };
-  return path.join(SOURCE_ROOT, 'third_party', 'chrome', paths[os.platform() as 'linux' | 'win32' | 'darwin']);
-}
 
 export const enum ServerType {
   HostedMode = 'hosted-mode',
@@ -73,10 +62,22 @@ function mochaGrep(): Config['mochaGrep'] {
   return grep;
 }
 
+function getTestsFromOptions() {
+  const tests = options['tests'];
+  if (Array.isArray(tests)) {
+    return tests;
+  }
+
+  if (typeof tests === 'string') {
+    return [tests];
+  }
+  return [];
+}
+
 export const TestConfig: Config = {
-  tests: options['tests'],
+  tests: getTestsFromOptions(),
   artifactsDir: options['artifacts-dir'] || SOURCE_ROOT,
-  chromeBinary: options['chrome-binary'] ?? chromePath(),
+  chromeBinary: options['chrome-binary'] ?? defaultChromePath(),
   serverType: ServerType.HostedMode,
   debug: options['debug'],
   coverage: options['coverage'],

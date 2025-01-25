@@ -37,6 +37,10 @@ class ASH_EXPORT FocusModeDetailedView : public TrayDetailedView,
   METADATA_HEADER(FocusModeDetailedView, TrayDetailedView)
 
  public:
+  // Ids to easily find child views in `FocusModeDetailedView`. Unique only
+  // within the `FocusModeDetailedView`.
+  enum ViewId { kTimerView = 1000, kTaskView, kSoundView };
+
   explicit FocusModeDetailedView(DetailedViewDelegate* delegate);
   FocusModeDetailedView(const FocusModeDetailedView&) = delete;
   FocusModeDetailedView& operator=(const FocusModeDetailedView&) = delete;
@@ -93,7 +97,7 @@ class ASH_EXPORT FocusModeDetailedView : public TrayDetailedView,
   // allow the user to select a task. Once the user enters a task in the
   // textfield or selects a task from the list, this view only shows the
   // selected saved task item view and the header.
-  void CreateTaskView();
+  void CreateTaskView(bool is_network_connected);
 
   // Performs an animation to shift the visible container views below
   // `task_view_container_`.
@@ -158,6 +162,9 @@ class ASH_EXPORT FocusModeDetailedView : public TrayDetailedView,
   // The decrement and increment buttons in the `timer_setting_view_`.
   raw_ptr<IconButton> timer_decrement_button_ = nullptr;
   raw_ptr<IconButton> timer_increment_button_ = nullptr;
+  // The visual "minutes" label that pairs with the `timer_textfield_` timer
+  // duration.
+  raw_ptr<views::Label> minutes_label_ = nullptr;
   // A label that displays the end time of the focus session when focus is
   // not active.
   raw_ptr<views::Label> end_time_label_ = nullptr;

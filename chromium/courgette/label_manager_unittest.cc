@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "courgette/label_manager.h"
 
 #include <stddef.h>
@@ -68,7 +73,7 @@ LabelVector CreateLabelVectorWithIndexes(const std::string& encoded_index) {
     if (ch != '.') {
       // Sanity check for test case.
       if (ch < 'A' || ch > 'Z' || used_ch.find(ch) != used_ch.end())
-        NOTREACHED() << "Malformed test case: " << encoded_index;
+        NOTREACHED_IN_MIGRATION() << "Malformed test case: " << encoded_index;
       used_ch.insert(ch);
       index = ch - 'A';
     }
@@ -89,7 +94,7 @@ std::string EncodeLabelIndexes(const LabelVector& labels) {
     else if (label.index_ >= 0 && label.index_ <= 'Z' - 'A')
       encoded += static_cast<char>(label.index_ + 'A');
     else
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return encoded;
 }

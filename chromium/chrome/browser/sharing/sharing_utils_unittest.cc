@@ -6,9 +6,9 @@
 
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/sharing/fake_device_info.h"
-#include "chrome/browser/sharing/features.h"
-#include "chrome/browser/sharing/proto/sharing_message.pb.h"
 #include "chrome/browser/sharing/sharing_constants.h"
+#include "components/sharing_message/features.h"
+#include "components/sharing_message/proto/sharing_message.pb.h"
 #include "components/sync/protocol/device_info_specifics.pb.h"
 #include "components/sync/protocol/sync_enums.pb.h"
 #include "components/sync/test/test_sync_service.h"
@@ -37,8 +37,6 @@ class SharingUtilsTest : public testing::Test {
 }  // namespace
 
 TEST_F(SharingUtilsTest, SyncEnabled_FullySynced) {
-  test_sync_service_.SetTransportState(
-      syncer::SyncService::TransportState::ACTIVE);
   // PREFERENCES is actively synced.
   test_sync_service_.GetUserSettings()->SetSelectedTypes(
       /*sync_everything=*/false,
@@ -49,8 +47,6 @@ TEST_F(SharingUtilsTest, SyncEnabled_FullySynced) {
 }
 
 TEST_F(SharingUtilsTest, SyncDisabled_FullySynced_MissingDataTypes) {
-  test_sync_service_.SetTransportState(
-      syncer::SyncService::TransportState::ACTIVE);
   // Missing PREFERENCES.
   test_sync_service_.GetUserSettings()->SetSelectedTypes(
       /*sync_everything=*/false,
@@ -63,16 +59,12 @@ TEST_F(SharingUtilsTest, SyncDisabled_FullySynced_MissingDataTypes) {
 }
 
 TEST_F(SharingUtilsTest, SyncEnabled_SigninOnly) {
-  test_sync_service_.SetTransportState(
-      syncer::SyncService::TransportState::ACTIVE);
   // SHARING_MESSAGE is actively synced.
   EXPECT_TRUE(IsSyncEnabledForSharing(&test_sync_service_));
   EXPECT_FALSE(IsSyncDisabledForSharing(&test_sync_service_));
 }
 
 TEST_F(SharingUtilsTest, SyncDisabled_SigninOnly_MissingDataTypes) {
-  test_sync_service_.SetTransportState(
-      syncer::SyncService::TransportState::ACTIVE);
   // Missing SHARING_MESSAGE.
   test_sync_service_.GetUserSettings()->SetSelectedTypes(
       /*sync_everything=*/false,
@@ -84,8 +76,7 @@ TEST_F(SharingUtilsTest, SyncDisabled_SigninOnly_MissingDataTypes) {
 }
 
 TEST_F(SharingUtilsTest, SyncDisabled_Disabled) {
-  test_sync_service_.SetTransportState(
-      syncer::SyncService::TransportState::DISABLED);
+  test_sync_service_.SetSignedOut();
   test_sync_service_.GetUserSettings()->SetSelectedTypes(
       /*sync_everything=*/false,
       /*types=*/{syncer::UserSelectableType::kPreferences});
@@ -95,7 +86,7 @@ TEST_F(SharingUtilsTest, SyncDisabled_Disabled) {
 }
 
 TEST_F(SharingUtilsTest, SyncDisabled_Configuring) {
-  test_sync_service_.SetTransportState(
+  test_sync_service_.SetMaxTransportState(
       syncer::SyncService::TransportState::CONFIGURING);
   test_sync_service_.GetUserSettings()->SetSelectedTypes(
       /*sync_everything=*/false,
@@ -111,6 +102,7 @@ TEST_F(SharingUtilsTest, GetFCMChannel) {
       syncer::DeviceInfo::SharingInfo(
           {kVapidFCMToken, kVapidP256dh, kVapidAuthSecret},
           {kSenderIdFCMToken, kSenderIdP256dh, kSenderIdAuthSecret},
+          /*chime_representative_target_id=*/std::string(),
           std::set<sync_pb::SharingSpecificFields::EnabledFeatures>()));
 
   auto fcm_channel = GetFCMChannel(*device_info);

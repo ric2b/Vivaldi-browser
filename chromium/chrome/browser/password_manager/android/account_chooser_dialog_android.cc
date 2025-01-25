@@ -9,7 +9,6 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
-#include "chrome/android/chrome_jni_headers/AccountChooserDialog_jni.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/password_manager/android/credential_android.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
@@ -24,6 +23,9 @@
 #include "ui/android/window_android.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/android/java_bitmap.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "chrome/android/chrome_jni_headers/AccountChooserDialog_jni.h"
 
 namespace {
 
@@ -86,8 +88,9 @@ void FetchAvatar(const base::android::ScopedJavaGlobalRef<jobject>& java_dialog,
                  int index,
                  network::mojom::URLLoaderFactory* loader_factory,
                  const url::Origin& initiator) {
-  if (!password_form->icon_url.is_valid())
+  if (!password_form->icon_url.is_valid()) {
     return;
+  }
   // Fetcher deletes itself once fetching is finished.
   auto* fetcher =
       new AvatarFetcherAndroid(password_form->icon_url, index, java_dialog);
@@ -168,8 +171,9 @@ void AccountChooserDialogAndroid::OnCredentialClicked(
     jboolean signin_button_clicked) {
   bool credential_handled =
       HandleCredentialChosen(credential_item, signin_button_clicked);
-  if (credential_handled)
+  if (credential_handled) {
     delete this;
+  }
 }
 
 void AccountChooserDialogAndroid::CancelDialog(
@@ -197,8 +201,9 @@ void AccountChooserDialogAndroid::WebContentsDestroyed() {
 
 void AccountChooserDialogAndroid::OnVisibilityChanged(
     content::Visibility visibility) {
-  if (visibility != content::Visibility::HIDDEN)
+  if (visibility != content::Visibility::HIDDEN) {
     return;
+  }
 
   // If an authentication is in progress, the user already selected a
   // credential so the dialog action should not be marked as cancel.
@@ -228,7 +233,7 @@ bool AccountChooserDialogAndroid::HandleCredentialChosen(
 
   std::unique_ptr<device_reauth::DeviceAuthenticator> authenticator =
       client_->GetDeviceAuthenticator();
-  if (client_->CanUseBiometricAuthForFilling(authenticator.get())) {
+  if (client_->IsReauthBeforeFillingRequired(authenticator.get())) {
     authenticator_ = std::move(authenticator);
     authenticator_->AuthenticateWithMessage(
         u"", base::BindOnce(&AccountChooserDialogAndroid::OnReauthCompleted,

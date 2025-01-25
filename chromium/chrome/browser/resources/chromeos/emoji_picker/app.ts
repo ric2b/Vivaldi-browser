@@ -592,13 +592,13 @@ export class EmojiPickerApp extends PolymerElement {
               case Category.kEmojis:
                 break;
               case Category.kSymbols:
-                this.onCategoryButtonClick(CategoryEnum.SYMBOL);
+                await this.onCategoryButtonClick(CategoryEnum.SYMBOL);
                 break;
               case Category.kEmoticons:
-                this.onCategoryButtonClick(CategoryEnum.EMOTICON);
+                await this.onCategoryButtonClick(CategoryEnum.EMOTICON);
                 break;
               case Category.kGifs:
-                this.onCategoryButtonClick(CategoryEnum.GIF);
+                await this.onCategoryButtonClick(CategoryEnum.GIF);
                 break;
             }
 
@@ -1173,14 +1173,15 @@ export class EmojiPickerApp extends PolymerElement {
    * change of incognito state.
    *
    */
-  updateIncognitoState(incognito: boolean) {
+  async updateIncognitoState(incognito: boolean) {
     this.incognito = incognito;
     this.updateEmojiPreferencesStore();
 
     // Load the history item for each category.
     for (const category of Object.values(CategoryEnum)) {
       this.categoriesHistory[category] =
-          incognito ? null : new RecentlyUsedStore(`${category}-recently-used`);
+          incognito ? null : new RecentlyUsedStore(category);
+      await this.categoriesHistory[category]?.mergeWithPrefsHistory();
       this.categoryHistoryUpdated(category);
     }
   }
@@ -1371,10 +1372,7 @@ export class EmojiPickerApp extends PolymerElement {
    *
    */
   private getEmojiGroupPreference(category: CategoryEnum): PreferenceMapping {
-    return this.incognito ? {} :
-                            // ! is safe as categories history must contain
-                            // entries for all categories.
-        this.categoriesHistory[category]!.getPreferenceMapping();
+    return this.categoriesHistory[category]?.getPreferenceMapping() ?? {};
   }
 
   private onShowEmojiVariants(ev: events.EmojiVariantsShownEvent) {

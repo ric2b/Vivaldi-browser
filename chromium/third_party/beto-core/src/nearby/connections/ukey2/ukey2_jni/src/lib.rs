@@ -18,25 +18,24 @@
 //TODO: remove this and fix instances of unwrap/panic
 #![allow(clippy::unwrap_used, clippy::panic)]
 
-use std::collections::HashMap;
-
-use jni::objects::{JByteArray, JClass, JThrowable};
-use jni::sys::{jboolean, jbyteArray, jint, jlong, JNI_TRUE};
+use jni::objects::{JByteArray, JClass, JIntArray, JThrowable};
+use jni::sys::{jboolean, jbyteArray, jint, jintArray, jlong, JNI_TRUE};
 use jni::JNIEnv;
 use lazy_static::lazy_static;
 use lock_adapter::NoPoisonMutex;
 use rand::Rng;
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+use std::collections::HashMap;
 
 #[cfg(not(feature = "std"))]
 use lock_adapter::spin::Mutex;
 #[cfg(feature = "std")]
-use lock_adapter::std::Mutex;
+use lock_adapter::stdlib::Mutex;
 
 use ukey2_connections::{
     D2DConnectionContextV1, D2DHandshakeContext, DecodeError, DeserializeError, HandleMessageError,
-    HandshakeError, HandshakeImplementation, InitiatorD2DHandshakeContext,
+    HandshakeError, HandshakeImplementation, InitiatorD2DHandshakeContext, NextProtocol,
     ServerD2DHandshakeContext,
 };
 
@@ -110,20 +109,57 @@ pub extern "system" fn Java_com_google_security_cryptauth_lib_securegcm_ukey2_D2
 }
 
 /// Creates a new handshake context
+// Safety:
+// - Valid pointer: We know the message pointer is safe as it is coming directly from the JVM.
+// - This pointer is nullable, but we null-check and default to AES-CBC-256_HMAC-SHA256 otherwise.
+// - Lifetime - the jintArray passed in here is consumed immediately and is copied into a Rust array,
+//   so this data does not outlive this frame.
+// - Aliasing - there is no other JObject representing this as it is only used in one place.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "system" fn Java_com_google_security_cryptauth_lib_securegcm_ukey2_D2DHandshakeContext_create_1context(
-    _: JNIEnv,
+    mut env: JNIEnv,
     _: JClass,
     is_client: jboolean,
+    next_protocols: jintArray,
 ) -> jlong {
+    let next_protocols = if next_protocols.is_null() {
+        vec![NextProtocol::Aes256CbcHmacSha256]
+    } else {
+        let next_protocols_raw = unsafe { JIntArray::from_raw(next_protocols) };
+        let next_protocols_len =
+            env.get_array_length(&next_protocols_raw).expect("Array should be valid!");
+        let mut next_protocol_buf =
+            vec![0; usize::try_from(next_protocols_len).expect("len should be valid usize!")];
+        env.get_int_array_region(&next_protocols_raw, 0, &mut next_protocol_buf)
+            .expect("Should've extracted next protocols!");
+        next_protocol_buf
+            .iter()
+            .map(|p| match *p {
+                0 => NextProtocol::Aes256CbcHmacSha256,
+                1 => NextProtocol::Aes256GcmSiv,
+                _ => {
+                    env.throw_new(
+                        "com/google/security/cryptauth/lib/securegcm/ukey2/HandshakeException",
+                        "Unsupported next protocols selected! Supported: [0, 1]",
+                    )
+                    .expect("failed to find error class");
+                    unreachable!()
+                }
+            })
+            .collect()
+    };
+
     if is_client == JNI_TRUE {
         let client_obj = Box::new(InitiatorD2DHandshakeContext::<CryptoProvider>::new(
             HandshakeImplementation::PublicKeyInProtobuf,
+            next_protocols,
         ));
         insert_handshake_handle(client_obj) as jlong
     } else {
         let server_obj = Box::new(ServerD2DHandshakeContext::<CryptoProvider>::new(
             HandshakeImplementation::PublicKeyInProtobuf,
+            &next_protocols,
         ));
         insert_handshake_handle(server_obj) as jlong
     }

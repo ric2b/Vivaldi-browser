@@ -16,9 +16,7 @@ import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -27,7 +25,6 @@ import org.robolectric.RuntimeEnvironment;
 import org.chromium.base.Token;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -54,12 +51,12 @@ import java.util.Set;
 @RunWith(BaseRobolectricTestRunner.class)
 @EnableFeatures(ChromeFeatureList.ANDROID_TAB_GROUP_STABLE_IDS)
 public class TabListEditorGroupActionUnitTest {
-    @Rule public TestRule mProcessor = new Features.JUnitProcessor();
 
     @Mock private SelectionDelegate<Integer> mSelectionDelegate;
     @Mock private TabGroupModelFilter mGroupFilter;
     @Mock private ActionDelegate mDelegate;
     @Mock private Profile mProfile;
+    @Mock private TabGroupCreationDialogManager mTabGroupCreationDialogManager;
     private MockTabModel mTabModel;
     private TabListEditorAction mAction;
 
@@ -69,6 +66,7 @@ public class TabListEditorGroupActionUnitTest {
         mAction =
                 TabListEditorGroupAction.createAction(
                         RuntimeEnvironment.application,
+                        mTabGroupCreationDialogManager,
                         ShowMode.MENU_ONLY,
                         ButtonType.TEXT,
                         IconPosition.START);
@@ -148,6 +146,10 @@ public class TabListEditorGroupActionUnitTest {
 
     @Test
     @SmallTest
+    @EnableFeatures({
+        ChromeFeatureList.TAB_GROUP_PARITY_ANDROID,
+        ChromeFeatureList.TAB_GROUP_CREATION_DIALOG_ANDROID
+    })
     public void testSingleTabToGroup() {
         configure(false);
         List<Integer> tabIds = new ArrayList<>();
@@ -168,6 +170,7 @@ public class TabListEditorGroupActionUnitTest {
 
         Assert.assertTrue(mAction.perform());
         verify(mGroupFilter).createSingleTabGroup(tab, true);
+        verify(mTabGroupCreationDialogManager).showDialog(tab.getRootId(), mGroupFilter);
 
         tab.setTabGroupId(new Token(1L, 2L));
         when(mGroupFilter.isTabInTabGroup(tab)).thenReturn(true);
@@ -175,6 +178,42 @@ public class TabListEditorGroupActionUnitTest {
         verify(mGroupFilter, atLeastOnce()).getTabModel();
         verify(mGroupFilter, atLeastOnce()).isTabInTabGroup(any());
         verifyNoMoreInteractions(mGroupFilter);
+    }
+
+    @Test
+    @SmallTest
+    @EnableFeatures({
+        ChromeFeatureList.TAB_GROUP_PARITY_ANDROID,
+        ChromeFeatureList.TAB_GROUP_CREATION_DIALOG_ANDROID
+    })
+    public void testGroupActionWithTabs_WillMergingCreateNewGroup() throws Exception {
+        configure(false);
+        List<Integer> tabIds = new ArrayList<>();
+        tabIds.add(5);
+        tabIds.add(3);
+        tabIds.add(7);
+        List<Tab> tabs = new ArrayList<>();
+        for (int id : tabIds) {
+            tabs.add(mTabModel.addTab(id));
+        }
+        Set<Integer> tabIdsSet = new LinkedHashSet<>(tabIds);
+        when(mSelectionDelegate.getSelectedItems()).thenReturn(tabIdsSet);
+
+        List<Tab> tabsToMerge = new ArrayList<>();
+        tabsToMerge.addAll(tabs);
+        tabsToMerge.add(tabs.get(2));
+        when(mGroupFilter.willMergingCreateNewGroup(tabsToMerge)).thenReturn(true);
+
+        mAction.onSelectionStateChange(tabIds);
+        Assert.assertEquals(
+                true, mAction.getPropertyModel().get(TabListEditorActionProperties.ENABLED));
+        Assert.assertEquals(
+                3, mAction.getPropertyModel().get(TabListEditorActionProperties.ITEM_COUNT));
+
+        Assert.assertTrue(mAction.perform());
+        verify(mGroupFilter).mergeListOfTabsToGroup(tabs, tabs.get(2), true);
+        verify(mTabGroupCreationDialogManager).showDialog(tabs.get(2).getRootId(), mGroupFilter);
+        verify(mDelegate).hideByAction();
     }
 
     @Test
@@ -212,7 +251,7 @@ public class TabListEditorGroupActionUnitTest {
         verify(mGroupFilter).mergeListOfTabsToGroup(tabs, tabs.get(2), true);
         verify(mDelegate).hideByAction();
 
-        helper.waitForFirst();
+        helper.waitForOnly();
         mAction.removeActionObserver(observer);
 
         Assert.assertTrue(mAction.perform());

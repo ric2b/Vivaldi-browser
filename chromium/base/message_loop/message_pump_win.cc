@@ -19,12 +19,13 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/task_features.h"
 #include "base/trace_event/base_tracing.h"
 #include "base/tracing_buildflags.h"
 
 #if BUILDFLAG(ENABLE_BASE_TRACING)
-#include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_message_pump.pbzero.h"
+#include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_message_pump.pbzero.h"  // nogncheck
 #endif  // BUILDFLAG(ENABLE_BASE_TRACING)
 
 namespace base {
@@ -95,7 +96,9 @@ void MessagePumpWin::Quit() {
 MessagePumpForUI::MessagePumpForUI() {
   bool succeeded = message_window_.Create(
       BindRepeating(&MessagePumpForUI::MessageCallback, Unretained(this)));
-  CHECK(succeeded);
+  CHECK(succeeded) << "Failed to create message-only Window with error"
+                   << StringPrintf("0x%08x",
+                                   static_cast<unsigned int>(::GetLastError()));
 }
 
 MessagePumpForUI::~MessagePumpForUI() = default;
@@ -271,7 +274,7 @@ void MessagePumpForUI::DoRunLoop() {
     if (more_work_is_plausible)
       continue;
 
-    more_work_is_plausible = run_state_->delegate->DoIdleWork();
+    run_state_->delegate->DoIdleWork();
     // DoIdleWork() shouldn't end up in native nested loops, nor should it
     // permit native nested loops, and thus shouldn't have any chance of
     // reinstalling a native timer.
@@ -280,9 +283,6 @@ void MessagePumpForUI::DoRunLoop() {
     if (run_state_->should_quit) {
       break;
     }
-
-    if (more_work_is_plausible)
-      continue;
 
     WaitForWork(next_work_info);
   }
@@ -803,12 +803,9 @@ void MessagePumpForIO::DoRunLoop() {
     if (more_work_is_plausible)
       continue;
 
-    more_work_is_plausible = run_state_->delegate->DoIdleWork();
+    run_state_->delegate->DoIdleWork();
     if (run_state_->should_quit)
       break;
-
-    if (more_work_is_plausible)
-      continue;
 
     run_state_->delegate->BeforeWait();
     WaitForWork(next_work_info);

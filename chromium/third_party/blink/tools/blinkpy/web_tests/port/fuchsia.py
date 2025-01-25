@@ -33,6 +33,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 
 from argparse import Namespace
 from blinkpy.common import exit_codes
@@ -54,12 +55,12 @@ def _import_fuchsia_runner():
     # pylint: disable=import-error
     # pylint: disable=invalid-name
     # pylint: disable=redefined-outer-name
-    global SDK_ROOT, SDK_TOOLS_DIR, run_continuous_ffx_command, run_ffx_command
-    from common import SDK_ROOT, SDK_TOOLS_DIR, run_continuous_ffx_command, run_ffx_command
-    global get_ssh_prefix
-    from compatible_utils import get_ssh_prefix
-    global port_forward
-    from test_server import port_forward
+    global SDK_ROOT, SDK_TOOLS_DIR, get_ssh_address, run_continuous_ffx_command, run_ffx_command
+    from common import SDK_ROOT, SDK_TOOLS_DIR, get_ssh_address, run_continuous_ffx_command, run_ffx_command
+    global get_host_arch, get_ssh_prefix
+    from compatible_utils import get_host_arch, get_ssh_prefix
+    global ports_forward, port_forward
+    from test_server import ports_forward, port_forward
     # pylint: enable=import-error
     # pylint: enable=invalid-name
     # pylint: disable=redefined-outer-name
@@ -110,35 +111,17 @@ class SubprocessOutputLogger(object):
 
 
 class _TargetHost(object):
-    def __init__(self, ports_to_forward, target_id):
-        self._target_id = target_id
-        self._setup_target(ports_to_forward)
 
-    def _setup_target(self, ports_to_forward):
+    def __init__(self, ports, target_id):
+        self._target_id = target_id
         # Tell SSH to forward all server ports from the Fuchsia device to
         # the host.
-
-        self._host_port_pair = run_ffx_command(
-            cmd=('target', 'get-ssh-address'),
-            target_id=self._target_id,
-            capture_output=True).stdout.strip()
-        self._proxy = self._port_forward_list(ports_to_forward)
-
-    def _port_forward_list(self, ports):
-        """Reverse forward all ports listed in |ports| to the device."""
-
-        ssh_prefix = get_ssh_prefix(self._host_port_pair)
-        forwarding_flags = [
-            '-O',
-            'forward',  # Send SSH mux control signal.
-            '-N',  # Don't execute command
-            '-T'  # Don't allocate terminal.
-        ]
+        self._host_port_pair = get_ssh_address(self._target_id)
+        # Reverse forward all ports listed in |ports| to the device.
+        forwarding_ports = []
         for port in ports:
-            forwarding_flags += ['-R', f'{port}:localhost:{port}']
-        return subprocess.Popen(ssh_prefix + forwarding_flags,
-                                stdout=subprocess.PIPE,
-                                stderr=open('/dev/null'))
+            forwarding_ports.append((port, port))
+        ports_forward(self._host_port_pair, forwarding_ports)
 
     def run_command(self, command):
         ssh_prefix = get_ssh_prefix(self._host_port_pair)
@@ -173,13 +156,11 @@ class FuchsiaPort(base.Port):
 
     def __init__(self, host, port_name, target_host=None, **kwargs):
         super(FuchsiaPort, self).__init__(host, port_name, **kwargs)
+        _import_fuchsia_runner()
 
         self._operating_system = 'fuchsia'
         self._version = 'fuchsia'
-        self._target_device = self.get_option('device')
-
-        self._architecture = 'x86_64' if self._target_cpu(
-        ) == 'x64' else 'arm64'
+        self._architecture = 'x86_64' if get_host_arch() == 'x64' else 'arm64'
 
         self.server_process_constructor = FuchsiaServerProcess
 
@@ -188,10 +169,10 @@ class FuchsiaPort(base.Port):
 
         self._target_host = target_host
         self._zircon_logger = None
-        _import_fuchsia_runner()
         self._symbolizer = os.path.join(SDK_TOOLS_DIR, 'symbolizer')
         self._build_id_dir = os.path.join(SDK_ROOT, '.build-id')
 
+    # TODO(b/340288531): Should use ffx debug symbolize.
     def run_symbolizer(self, input_fd, output_fd, ids_txt_paths):
         """Starts a symbolizer process.
 
@@ -225,9 +206,6 @@ class FuchsiaPort(base.Port):
         if self._zircon_logger:
             self._zircon_logger.close()
 
-    def _target_cpu(self):
-        return self.get_option('fuchsia_target_cpu')
-
     def _cpu_cores(self):
         # TODO(crbug.com/1340573): Four parallel jobs always gives reasonable
         # performance, while using larger numbers may actually slow things.
@@ -240,13 +218,11 @@ class FuchsiaPort(base.Port):
             target_id = self.get_option('fuchsia_target_id')
             self._target_host = _TargetHost(self.SERVER_PORTS, target_id)
 
-            if self.get_option('zircon_logging'):
-                klog_proc = self._target_host.run_command(['dlog', '-f'])
-                symbolized_klog_proc = self.run_symbolizer(
-                    klog_proc.stdout, subprocess.PIPE,
-                    [self.get_build_ids_path()])
-                self._zircon_logger = SubprocessOutputLogger(symbolized_klog_proc,
-                    'Zircon')
+            klog_proc = self._target_host.run_command(['dlog', '-f'])
+            symbolized_klog_proc = self.run_symbolizer(
+                klog_proc.stdout, subprocess.PIPE, [self.get_build_ids_path()])
+            self._zircon_logger = SubprocessOutputLogger(
+                symbolized_klog_proc, 'Zircon')
         except:
             return exit_codes.NO_DEVICES_EXIT_STATUS
 
@@ -278,6 +254,14 @@ class FuchsiaPort(base.Port):
             self._path_from_chromium_base('third_party', 'blink')
         super(FuchsiaPort, self).start_http_server(additional_dirs,
                                                    number_of_drivers)
+        # Wait for the ssh proxy to be ready.
+        for _ in range(5):
+            if self.get_target_host().run_command(
+                ['curl', 'http://127.0.0.1:8000/']).wait() == 0:
+                break
+            time.sleep(1)
+        # But still continue the tests if it's not working.
+
 
     def operating_system(self):
         return self._operating_system
@@ -313,17 +297,15 @@ class ChromiumFuchsiaDriver(driver.Driver):
             more_logging=self._port.get_option('driver_logging'))
 
     def _base_cmd_line(self):
-        cmd = []
-        if self._port._target_device == 'qemu':
-            cmd.append('--ozone-platform=headless')
-        # Use Scenic on AEMU
-        else:
-            cmd.extend([
-                '--use-vulkan', '--enable-gpu-rasterization',
-                '--force-device-scale-factor=1', '--enable-features=Vulkan',
-                '--gpu-watchdog-timeout-seconds=60'
-            ])
-        return cmd
+        return [
+            '--run-web-tests',
+            '--user-data-dir',
+            '--use-vulkan',
+            '--enable-gpu-rasterization',
+            '--force-device-scale-factor=1',
+            '--enable-features=Vulkan',
+            '--gpu-watchdog-timeout-seconds=60',
+        ]
 
     def _command_from_driver_input(self, driver_input):
         command = super(ChromiumFuchsiaDriver,

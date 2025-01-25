@@ -10,13 +10,13 @@
 #include <vector>
 
 #include "base/containers/circular_deque.h"
+#include "base/containers/flat_set.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
-#include "cc/base/rolling_time_delta_history.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/gpu/context_lost_observer.h"
 #include "components/viz/common/resources/returned_resource.h"
@@ -107,16 +107,8 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   static constexpr base::TimeDelta kDrawToSwapMax = base::Milliseconds(50);
   static constexpr uint32_t kDrawToSwapUsBuckets = 50;
 
-  // TODO(cblume, crbug.com/900973): |enable_shared_images| is a temporary
-  // solution that unblocks us until SharedImages are threadsafe in WebView.
-#if defined(ANDROID)
-  static constexpr bool kEnableSharedImages = false;
-#else
-  static constexpr bool kEnableSharedImages = true;
-#endif
   void Initialize(DisplayClient* client,
                   SurfaceManager* surface_manager,
-                  bool enable_shared_images = kEnableSharedImages,
                   bool hw_support_for_multiple_refresh_rates = false);
 
   void AddObserver(DisplayObserver* observer);
@@ -161,8 +153,6 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   // DisplaySchedulerClient implementation.
   bool DrawAndSwap(const DrawAndSwapParams& params) override;
   void DidFinishFrame(const BeginFrameAck& ack) override;
-  base::TimeDelta GetEstimatedDisplayDrawTime(const base::TimeDelta interval,
-                                              double percentile) const override;
 
   // OutputSurfaceClient implementation.
   void DidReceiveSwapBuffersAck(const gpu::SwapBuffersCompleteParams& params,
@@ -202,10 +192,15 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   void ForceImmediateDrawAndSwapIfPossible();
   void SetNeedsOneBeginFrame();
 
-  void SetSupportedFrameIntervals(std::vector<base::TimeDelta> intervals);
+  void SetSupportedFrameIntervals(base::flat_set<base::TimeDelta> intervals);
+
+  void SetHwSupportForMultipleRefreshRates(bool support);
+
   void PreserveChildSurfaceControls();
 
+#if BUILDFLAG(IS_ANDROID)
   base::ScopedClosureRunner GetCacheBackBufferCb();
+#endif
 
   bool IsRootFrameMissing() const;
   bool HasPendingSurfaces(const BeginFrameArgs& args) const;
@@ -224,6 +219,9 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   // `old_client` is used to guarantee that the callee is a correct owner of
   // this Display instance.
   void ResetDisplayClientForTesting(DisplayClient* old_client);
+  void MaybeLogQuadsProperties(
+      AggregatedRenderPass& last_render_pass,
+      const SurfaceDamageRectList* surface_damage_rect_list);
 
  protected:
   friend class DisplayTest;
@@ -265,9 +263,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
     HintSession::BoostType boost_type_;
   };
 
-  // TODO(cblume, crbug.com/900973): |enable_shared_images| is a temporary
-  // solution that unblocks us until SharedImages are threadsafe in WebView.
-  void InitializeRenderer(bool enable_shared_images = true);
+  void InitializeRenderer();
 
   // ContextLostObserver implementation.
   void OnContextLost() override;
@@ -345,12 +341,9 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   int pending_swaps_ = 0;
 
   uint64_t frame_sequence_number_ = 0;
-  // The height of the top-controls in the previously drawn frame.
-  float last_top_controls_visible_height_ = 0.f;
 
-  // The historical drawing times of the most recent 100 frames. Recorded
-  // without the delays caused by waiting for scheduling.
-  cc::RollingTimeDeltaHistory draw_time_without_scheduling_waits_{100};
+  // A subsampler for potential quad information logging.
+  base::MetricsSubSampler metrics_subsampler_;
 };
 
 }  // namespace viz

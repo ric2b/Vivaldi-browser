@@ -25,17 +25,14 @@ template <class T>
   requires(std::derived_from<T, google::protobuf::MessageLite>)
 class ArenaPersistentProto : public internal::PersistentProtoInternal {
  public:
-  ArenaPersistentProto(google::protobuf::Arena* arena,
-                       const base::FilePath& path,
+  ArenaPersistentProto(const base::FilePath& path,
                        base::TimeDelta write_delay,
                        PersistentProtoInternal::ReadCallback on_read,
                        PersistentProtoInternal::WriteCallback on_write)
       : internal::PersistentProtoInternal(path,
                                           write_delay,
                                           std::move(on_read),
-                                          std::move(on_write)) {
-    handle_ = google::protobuf::Arena::Create<T>(arena_);
-  }
+                                          std::move(on_write)) {}
 
   ~ArenaPersistentProto() override { DeallocProto(); }
 
@@ -50,11 +47,14 @@ class ArenaPersistentProto : public internal::PersistentProtoInternal {
   T& operator*() { return *get(); }
   const T& operator*() const { return *get(); }
 
- private:
-  google::protobuf::MessageLite* GetProto() override { return handle_; }
+  const google::protobuf::Arena* arena() const { return &arena_; }
 
-  raw_ptr<T> handle_;
-  raw_ptr<google::protobuf::Arena> arena_;
+ private:
+  google::protobuf::MessageLite* GetProto() override {
+    return google::protobuf::Arena::Create<T>(&arena_);
+  }
+
+  google::protobuf::Arena arena_;
 };
 }  // namespace metrics::structured
 

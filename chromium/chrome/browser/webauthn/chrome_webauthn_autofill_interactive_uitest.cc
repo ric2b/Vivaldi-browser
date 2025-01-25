@@ -12,8 +12,10 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/scoped_logging_settings.h"
 #include "build/build_config.h"
 #include "chrome/browser/password_manager/profile_password_store_factory.h"
+#include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/ssl/cert_verifier_browser_test.h"
 #include "chrome/browser/sync/device_info_sync_service_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
@@ -22,6 +24,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/webauthn/chrome_authenticator_request_delegate.h"
 #include "chrome/browser/webauthn/passkey_model_factory.h"
+#include "chrome/browser/webauthn/test_util.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/autofill/core/browser/ui/suggestion_hiding_reason.h"
@@ -36,6 +39,9 @@
 #include "components/sync_device_info/device_info.h"
 #include "components/sync_device_info/fake_device_info_sync_service.h"
 #include "components/sync_device_info/fake_device_info_tracker.h"
+#include "components/trusted_vault/proto/vault.pb.h"
+#include "components/trusted_vault/test/mock_trusted_vault_connection.h"
+#include "components/trusted_vault/trusted_vault_connection.h"
 #include "components/webauthn/core/browser/test_passkey_model.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/scoped_authenticator_environment_for_testing.h"
@@ -130,9 +136,14 @@ syncer::DeviceInfo CreateDeviceInfo() {
       /*full_hardware_class=*/"full_hardware_class",
       /*last_updated_timestamp=*/base::Time::Now(),
       /*pulse_interval=*/base::TimeDelta(),
-      /*send_tab_to_self_receiving_enabled=*/false,
+      /*send_tab_to_self_receiving_enabled=*/
+      false,
+      /*send_tab_to_self_receiving_type=*/
+      sync_pb::
+          SyncEnums_SendTabReceivingType_SEND_TAB_RECEIVING_TYPE_CHROME_OR_UNSPECIFIED,
       /*sharing_info=*/std::nullopt, std::move(paask_info),
-      /*fcm_registration_token=*/"fcm_token", syncer::ModelTypeSet());
+      /*fcm_registration_token=*/"fcm_token", syncer::ModelTypeSet(),
+      /*floating_workspace_last_signin_timestamp=*/base::Time::Now());
 }
 
 // Autofill integration tests. This file contains end-to-end tests for
@@ -143,6 +154,66 @@ syncer::DeviceInfo CreateDeviceInfo() {
 // no setup.
 class WebAuthnAutofillIntegrationTest : public CertVerifierBrowserTest {
  public:
+  class DelegateObserver
+      : public ChromeAuthenticatorRequestDelegate::TestObserver {
+   public:
+    explicit DelegateObserver(WebAuthnAutofillIntegrationTest* test_instance)
+        : test_instance_(test_instance) {
+      run_loop_ = std::make_unique<base::RunLoop>();
+    }
+    virtual ~DelegateObserver() = default;
+
+    void WaitForUI() {
+      run_loop_->Run();
+      run_loop_ = std::make_unique<base::RunLoop>();
+    }
+
+    // ChromeAuthenticatorRequestDelegate::TestObserver:
+    void Created(ChromeAuthenticatorRequestDelegate* delegate) override {
+      std::unique_ptr<
+          testing::NiceMock<trusted_vault::MockTrustedVaultConnection>>
+          connection = std::make_unique<
+              testing::NiceMock<trusted_vault::MockTrustedVaultConnection>>();
+      ON_CALL(*connection, DownloadAuthenticationFactorsRegistrationState(
+                               testing::_, testing::_))
+          .WillByDefault(
+              [](const CoreAccountInfo&,
+                 base::OnceCallback<void(
+                     trusted_vault::
+                         DownloadAuthenticationFactorsRegistrationStateResult)>
+                     callback) mutable {
+                trusted_vault::
+                    DownloadAuthenticationFactorsRegistrationStateResult result;
+                result.state = trusted_vault::
+                    DownloadAuthenticationFactorsRegistrationStateResult::
+                        State::kEmpty;
+                std::move(callback).Run(std::move(result));
+                return std::make_unique<
+                    trusted_vault::TrustedVaultConnection::Request>();
+              });
+
+      delegate->SetTrustedVaultConnectionForTesting(std::move(connection));
+    }
+
+    void UIShown(ChromeAuthenticatorRequestDelegate* delegate) override {
+      run_loop_->QuitWhenIdle();
+    }
+
+    std::vector<std::unique_ptr<device::cablev2::Pairing>>
+    GetCablePairingsFromSyncedDevices() override {
+      std::vector<std::unique_ptr<device::cablev2::Pairing>> ret;
+      ret.emplace_back(TestPhone(base::UTF16ToUTF8(kPhoneName).c_str(),
+                                 /*public_key=*/0,
+                                 /*last_updated=*/base::Time::FromTimeT(1),
+                                 /*channel_priority=*/1));
+      return ret;
+    }
+
+   private:
+    const raw_ptr<WebAuthnAutofillIntegrationTest> test_instance_;
+    std::unique_ptr<base::RunLoop> run_loop_;
+  };
+
   WebAuthnAutofillIntegrationTest() = default;
 
   WebAuthnAutofillIntegrationTest(const WebAuthnAutofillIntegrationTest&) =
@@ -172,6 +243,9 @@ class WebAuthnAutofillIntegrationTest : public CertVerifierBrowserTest {
                 base::Unretained(this)));
 
     CertVerifierBrowserTest::SetUp();
+
+    // Log call `FIDO_LOG` messages.
+    scoped_vmodule_.InitWithSwitches("device_event_log_impl=2");
   }
 
   void SetUpOnMainThread() override {
@@ -217,12 +291,24 @@ class WebAuthnAutofillIntegrationTest : public CertVerifierBrowserTest {
     // Since we do not verify any expectations, it is okay to leak this mock.
     testing::Mock::AllowLeak(mock_bluetooth_adapter_.get());
 
+    identity_test_env_adaptor_ =
+        std::make_unique<IdentityTestEnvironmentProfileAdaptor>(
+            browser()->profile());
+    identity_test_env_adaptor_->identity_test_env()->SetPrimaryAccount(
+        "test@gmail.com", signin::ConsentLevel::kSync);
+
+    delegate_observer_ = std::make_unique<DelegateObserver>(this);
+    ChromeAuthenticatorRequestDelegate::SetGlobalObserverForTesting(
+        delegate_observer_.get());
+
     ASSERT_TRUE(ui_test_utils::NavigateToURL(
         browser(),
         https_server_.GetURL(kRpId, "/webauthn_conditional_mediation.html")));
   }
 
   void RegisterTestServiceFactories(content::BrowserContext* context) {
+    IdentityTestEnvironmentProfileAdaptor::
+        SetIdentityTestEnvironmentFactoriesOnBrowserContext(context);
     PasskeyModelFactory::GetInstance()->SetTestingFactory(
         context,
         base::BindRepeating(
@@ -363,11 +449,15 @@ class WebAuthnAutofillIntegrationTest : public CertVerifierBrowserTest {
 
   virtual std::u16string GetDeviceString() = 0;
 
+  std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
+      identity_test_env_adaptor_;
   scoped_refptr<device::MockBluetoothAdapter> mock_bluetooth_adapter_ = nullptr;
   base::CallbackListSubscription create_services_subscription_;
   net::EmbeddedTestServer https_server_{net::EmbeddedTestServer::TYPE_HTTPS};
   device::FidoRequestHandlerBase::ScopedAlwaysAllowBLECalls always_allow_ble_;
+  std::unique_ptr<DelegateObserver> delegate_observer_;
   base::test::ScopedFeatureList scoped_feature_list_;
+  logging::ScopedVmoduleSwitches scoped_vmodule_;
 };
 
 // Autofill integration test using the devtools virtual environment.
@@ -461,6 +551,8 @@ IN_PROC_BROWSER_TEST_F(WebAuthnDevtoolsAutofillIntegrationTest, GPMPasskeys) {
   content::DOMMessageQueue message_queue(web_contents);
   content::ExecuteScriptAsync(web_contents, kConditionalUIRequest);
 
+  delegate_observer_->WaitForUI();
+
   // Interact with the username field until the popup shows up. This has the
   // effect of waiting for the browser to send the renderer the password
   // information, and waiting for the UI to render.
@@ -525,6 +617,8 @@ IN_PROC_BROWSER_TEST_F(WebAuthnDevtoolsAutofillIntegrationTest,
   // Execute the Conditional UI request.
   content::DOMMessageQueue message_queue(web_contents);
   content::ExecuteScriptAsync(web_contents, kConditionalUIRequest);
+
+  delegate_observer_->WaitForUI();
 
   // Interact with the username field until the popup shows up. This has the
   // effect of waiting for the browser to send the renderer the password

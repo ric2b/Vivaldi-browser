@@ -4,12 +4,15 @@
 
 # Build against Abseil.
 ABSL_DEPS=\
+	absl_absl_check\
+	absl_absl_log\
 	absl_base\
 	absl_core_headers\
 	absl_fixed_array\
 	absl_flags\
 	absl_flat_hash_map\
 	absl_flat_hash_set\
+	absl_hash\
 	absl_inlined_vector\
 	absl_optional\
 	absl_span\
@@ -31,8 +34,8 @@ LDABSL=$(shell $(PKG_CONFIG) $(ABSL_DEPS) --libs | sed -e 's/-Wl / /g')
 
 # Build against GoogleTest and Benchmark for... testing and benchmarking.
 # Capture only the `-L` flags for now; we will pass the `-l` flags later.
-CCGTEST=$(shell $(PKG_CONFIG) gtest --cflags)
-LDGTEST=$(shell $(PKG_CONFIG) gtest --libs-only-L)
+CCGTEST=$(shell $(PKG_CONFIG) gtest gtest_main --cflags)
+LDGTEST=$(shell $(PKG_CONFIG) gtest gtest_main --libs-only-L)
 CCBENCHMARK=$(shell $(PKG_CONFIG) benchmark --cflags)
 LDBENCHMARK=$(shell $(PKG_CONFIG) benchmark --libs-only-L)
 
@@ -113,7 +116,6 @@ INSTALL_HFILES=\
 	re2/stringpiece.h\
 
 HFILES=\
-	util/logging.h\
 	util/malloc_counter.h\
 	util/pcre.h\
 	util/strutil.h\

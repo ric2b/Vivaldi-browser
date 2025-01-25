@@ -428,22 +428,27 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   // Revoke read raw cookies permission.
   void RevokeReadRawCookies(int child_id);
 
-  // Opaque origins loaded with LoadDataWithBaseURL are allowed to bypass some
+  // Some APIs for Android WebView and <webview> tags allow bypassing some
   // security checks, such as which URLs are allowed to commit. This method
-  // grants that ability to any document from such an opaque origin, because
-  // those actions could be taken from about:blank frames that inherit the same
-  // origin.
+  // grants that ability to any document with an origin used with these APIs,
+  // because the exemption is needed for about:blank frames that inherit the
+  // same origin.
+  //
+  // For safety, this is limited to opaque origins used with LoadDataWithBaseURL
+  // in unlocked processes, as well as file origins used with
+  // allow_universal_access_from_file_urls.
   //
   // Note that LoadDataWithBaseURL can be used with non-opaque origins as well,
   // but in that case the bypass is only allowed for the document and not the
   // entire origin, to prevent other code in the origin from bypassing checks.
-  void GrantOpaqueOriginForLoadDataWithBaseURL(int child_id,
-                                               const url::Origin& origin);
+  void GrantOriginCheckExemptionForWebView(int child_id,
+                                           const url::Origin& origin);
 
-  // Returns whether the given opaque origin was loaded via LoadDataWithBaseURL,
-  // allowing its navigations to bypass certain URL and origin checks.
-  bool IsOpaqueOriginForLoadDataWithBaseURL(int child_id,
-                                            const url::Origin& origin);
+  // Returns whether the given opaque or file origin was granted an exemption
+  // due to Android WebView and <webview> APIs, allowing its documents to bypass
+  // certain URL and origin checks.
+  bool HasOriginCheckExemptionForWebView(int child_id,
+                                         const url::Origin& origin);
 
   // Explicit permissions checks for FileSystemURL specified files.
   bool CanReadFileSystemFile(int child_id,
@@ -627,10 +632,12 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
                            IsolatedOriginsRemovedWhenBrowserContextDestroyed);
   FRIEND_TEST_ALL_PREFIXES(ChildProcessSecurityPolicyTest,
                            IsolateAllSuborigins);
-  FRIEND_TEST_ALL_PREFIXES(ChildProcessSecurityPolicyTest,
-                           WildcardAndNonWildcardOrigins);
-  FRIEND_TEST_ALL_PREFIXES(ChildProcessSecurityPolicyTest,
-                           WildcardAndNonWildcardEmbedded);
+  FRIEND_TEST_ALL_PREFIXES(
+      ChildProcessSecurityPolicyTest_NoOriginKeyedProcessesByDefault,
+      WildcardAndNonWildcardOrigins);
+  FRIEND_TEST_ALL_PREFIXES(
+      ChildProcessSecurityPolicyTest_NoOriginKeyedProcessesByDefault,
+      WildcardAndNonWildcardEmbedded);
   FRIEND_TEST_ALL_PREFIXES(ChildProcessSecurityPolicyTest,
                            ParseIsolatedOrigins);
   FRIEND_TEST_ALL_PREFIXES(ChildProcessSecurityPolicyTest, WildcardDefaultPort);
@@ -865,6 +872,10 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
                                           const GURL& url,
                                           bool url_is_for_opaque_origin,
                                           AccessType access_type);
+
+  // Helper used by CanAccessOrigin to impose additional restrictions on a
+  // process that only hosts PDF documents.
+  bool IsAccessAllowedForPdfProcess(AccessType access_type);
 
   // Utility function to simplify lookups for OriginAgentClusterOptInEntry
   // values by origin.

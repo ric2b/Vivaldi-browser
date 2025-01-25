@@ -102,8 +102,7 @@ class SenderSocketFactory final : public TlsConnectionFactory::Client,
 
   // CastSocket::Client overrides.
   void OnError(CastSocket* socket, const Error& error) override;
-  void OnMessage(CastSocket* socket,
-                 ::cast::channel::CastMessage message) override;
+  void OnMessage(CastSocket* socket, proto::CastMessage message) override;
 
   Client& client_;
   TaskRunner& task_runner_;

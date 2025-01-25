@@ -78,7 +78,7 @@ class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
   bool SetEncryptionPassword(const std::string& password);
 
   std::string GetBackupEncryptionToken();
-  bool RestoreEncryptionToken(const base::StringPiece& token);
+  bool RestoreEncryptionToken(const std::string_view& token);
 
   CycleData GetCycleData();
   EngineData GetEngineData();

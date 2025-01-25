@@ -17,8 +17,10 @@
 #include "chrome/services/sharing/nearby/test_support/fake_nearby_presence_credential_storage.h"
 #include "chrome/services/sharing/nearby/test_support/mock_webrtc_dependencies.h"
 #include "chromeos/ash/services/nearby/public/cpp/fake_firewall_hole_factory.h"
+#include "chromeos/ash/services/nearby/public/cpp/fake_mdns_manager.h"
 #include "chromeos/ash/services/nearby/public/cpp/fake_tcp_socket_factory.h"
 #include "chromeos/ash/services/nearby/public/mojom/firewall_hole.mojom.h"
+#include "chromeos/ash/services/nearby/public/mojom/mdns.mojom.h"
 #include "chromeos/ash/services/nearby/public/mojom/nearby_decoder.mojom.h"
 #include "chromeos/ash/services/nearby/public/mojom/nearby_presence_credential_storage.mojom.h"
 #include "chromeos/ash/services/nearby/public/mojom/quick_start_decoder.mojom.h"
@@ -30,6 +32,31 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+namespace {
+
+// Noop implementation for tests.
+class FakeWifiDirectManager
+    : public ash::wifi_direct::mojom::WifiDirectManager {
+  // ash::wifi_direct::mojom::WifiDirectManager
+  void CreateWifiDirectGroup(
+      ash::wifi_direct::mojom::WifiCredentialsPtr credentials,
+      CreateWifiDirectGroupCallback callback) override {
+    // Noop
+  }
+  void ConnectToWifiDirectGroup(
+      ash::wifi_direct::mojom::WifiCredentialsPtr credentials,
+      std::optional<uint32_t> frequency,
+      ConnectToWifiDirectGroupCallback callback) override {
+    // Noop
+  }
+  void GetWifiP2PCapabilities(
+      GetWifiP2PCapabilitiesCallback callback) override {
+    // Noop
+  }
+};
+
+}  // namespace
 
 namespace sharing {
 
@@ -70,6 +97,26 @@ class SharingImplTest : public testing::Test {
                 net::IPAddress(192, 168, 86, 75), 44444)),
         tcp_socket_factory_remote.InitWithNewPipeAndPassReceiver());
 
+    // Set up Mdns manager mojo service.
+    mojo::PendingRemote<::sharing::mojom::MdnsManager> mdns_manager_remote;
+    mdns_manager_self_owned_receiver_ref_ = mojo::MakeSelfOwnedReceiver(
+        std::make_unique<ash::nearby::FakeMdnsManager>(),
+        mdns_manager_remote.InitWithNewPipeAndPassReceiver());
+
+    // Set up fake WiFiDirect mojo services.
+    mojo::PendingRemote<ash::wifi_direct::mojom::WifiDirectManager>
+        wifi_direct_manager_remote;
+    wifi_direct_manager_self_owned_receiver_ref_ = mojo::MakeSelfOwnedReceiver(
+        std::make_unique<FakeWifiDirectManager>(),
+        wifi_direct_manager_remote.InitWithNewPipeAndPassReceiver());
+    mojo::PendingRemote<::sharing::mojom::FirewallHoleFactory>
+        wifi_direct_firewall_hole_factory_remote;
+    wifi_direct_firewall_hole_factory_self_owned_receiver_ref_ =
+        mojo::MakeSelfOwnedReceiver(
+            std::make_unique<ash::nearby::FakeFirewallHoleFactory>(),
+            wifi_direct_firewall_hole_factory_remote
+                .InitWithNewPipeAndPassReceiver());
+
     Connect(
         connections_.BindNewPipeAndPassReceiver(),
         presence_.BindNewPipeAndPassReceiver(),
@@ -84,7 +131,9 @@ class SharingImplTest : public testing::Test {
         webrtc_dependencies_.messenger_.BindNewPipeAndPassRemote(),
         std::move(cros_network_config_remote),
         std::move(firewall_hole_factory_remote),
-        std::move(tcp_socket_factory_remote));
+        std::move(tcp_socket_factory_remote), std::move(mdns_manager_remote),
+        std::move(wifi_direct_manager_remote),
+        std::move(wifi_direct_firewall_hole_factory_remote));
 
     ASSERT_TRUE(AreNearbyInstancesActive());
     ASSERT_TRUE(connections_.is_connected());
@@ -118,16 +167,25 @@ class SharingImplTest : public testing::Test {
       mojo::PendingRemote<::sharing::mojom::FirewallHoleFactory>
           firewall_hole_factory,
       mojo::PendingRemote<::sharing::mojom::TcpSocketFactory>
-          tcp_socket_factory) {
+          tcp_socket_factory,
+      mojo::PendingRemote<::sharing::mojom::MdnsManager> mdns_manager,
+      mojo::PendingRemote<ash::wifi_direct::mojom::WifiDirectManager>
+          wifi_direct_manager,
+      mojo::PendingRemote<::sharing::mojom::FirewallHoleFactory>
+          wifi_direct_firewall_hole_factory) {
     auto webrtc_dependencies = ::sharing::mojom::WebRtcDependencies::New(
         std::move(socket_manager), std::move(mdns_responder_factory),
         std::move(ice_config_fetcher), std::move(webrtc_signaling_messenger));
     auto wifilan_dependencies = ::sharing::mojom::WifiLanDependencies::New(
         std::move(cros_network_config), std::move(firewall_hole_factory),
-        std::move(tcp_socket_factory));
+        std::move(tcp_socket_factory), std::move(mdns_manager));
+    auto wifidirect_dependencies =
+        ::sharing::mojom::WifiDirectDependencies::New(
+            std::move(wifi_direct_manager),
+            std::move(wifi_direct_firewall_hole_factory));
     auto dependencies = ::sharing::mojom::NearbyDependencies::New(
         std::move(bluetooth_adapter), std::move(webrtc_dependencies),
-        std::move(wifilan_dependencies),
+        std::move(wifilan_dependencies), std::move(wifidirect_dependencies),
         std::move(nearby_presence_credential_storage),
         nearby::api::LogMessage::Severity::kInfo);
     base::RunLoop run_loop;
@@ -177,6 +235,12 @@ class SharingImplTest : public testing::Test {
       firewall_hole_factory_self_owned_receiver_ref_;
   mojo::SelfOwnedReceiverRef<::sharing::mojom::TcpSocketFactory>
       tcp_socket_factory_self_owned_receiver_ref_;
+  mojo::SelfOwnedReceiverRef<::sharing::mojom::MdnsManager>
+      mdns_manager_self_owned_receiver_ref_;
+  mojo::SelfOwnedReceiverRef<ash::wifi_direct::mojom::WifiDirectManager>
+      wifi_direct_manager_self_owned_receiver_ref_;
+  mojo::SelfOwnedReceiverRef<::sharing::mojom::FirewallHoleFactory>
+      wifi_direct_firewall_hole_factory_self_owned_receiver_ref_;
 };
 
 TEST_F(SharingImplTest, ConnectAndShutDown) {
@@ -227,6 +291,22 @@ TEST_F(SharingImplTest, NearbyConnections_FirewallHoleFactoryDisconnects) {
 
 TEST_F(SharingImplTest, NearbyConnections_TcpSocketFactoryDisconnects) {
   tcp_socket_factory_self_owned_receiver_ref_->Close();
+  EnsureDependenciesAreDisconnected();
+}
+
+TEST_F(SharingImplTest, NearbyConnections_MdnsManagerDisconnects) {
+  mdns_manager_self_owned_receiver_ref_->Close();
+  EnsureDependenciesAreDisconnected();
+}
+
+TEST_F(SharingImplTest, NearbyConnections_WifiDirectManagerDisconnects) {
+  wifi_direct_manager_self_owned_receiver_ref_->Close();
+  EnsureDependenciesAreDisconnected();
+}
+
+TEST_F(SharingImplTest,
+       NearbyConnections_WifiDirectFirewallHoleFactoryDisconnects) {
+  wifi_direct_firewall_hole_factory_self_owned_receiver_ref_->Close();
   EnsureDependenciesAreDisconnected();
 }
 

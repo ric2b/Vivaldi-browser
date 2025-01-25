@@ -34,6 +34,7 @@
 #include "ash/accessibility/sticky_keys/sticky_keys_controller.h"
 #include "ash/accessibility/ui/accessibility_focus_ring_controller_impl.h"
 #include "ash/ambient/ambient_controller.h"
+#include "ash/annotator/annotator_controller.h"
 #include "ash/api/tasks/tasks_controller.h"
 #include "ash/api/tasks/tasks_delegate.h"
 #include "ash/app_list/app_list_controller_impl.h"
@@ -95,12 +96,14 @@
 #include "ash/in_session_auth/webauthn_dialog_controller_impl.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/keyboard/ui/keyboard_ui_factory.h"
+#include "ash/lobster/lobster_controller.h"
 #include "ash/login/login_screen_controller.h"
 #include "ash/login/ui/local_authentication_request_controller_impl.h"
 #include "ash/login_status.h"
 #include "ash/media/media_controller_impl.h"
 #include "ash/metrics/feature_discovery_duration_reporter_impl.h"
 #include "ash/metrics/login_unlock_throughput_recorder.h"
+#include "ash/metrics/unlock_throughput_recorder.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/multi_capture/multi_capture_service_client.h"
 #include "ash/multi_device_setup/multi_device_notification_presenter.h"
@@ -199,11 +202,9 @@
 #include "ash/tray_action/tray_action.h"
 #include "ash/user_education/user_education_controller.h"
 #include "ash/user_education/user_education_delegate.h"
-#include "ash/utility/forest_util.h"
 #include "ash/utility/occlusion_tracker_pauser.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "ash/wm/ash_focus_rules.h"
-#include "ash/wm/bounds_tracker/window_bounds_tracker.h"
 #include "ash/wm/container_finder.h"
 #include "ash/wm/coral/coral_controller.h"
 #include "ash/wm/cursor_manager_chromeos.h"
@@ -218,6 +219,7 @@
 #include "ash/wm/multi_display/multi_display_metrics_controller.h"
 #include "ash/wm/multi_display/persistent_window_controller.h"
 #include "ash/wm/native_cursor_manager_ash.h"
+#include "ash/wm/overview/birch/birch_privacy_nudge_controller.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/pip/pip_controller.h"
 #include "ash/wm/raster_scale/raster_scale_controller.h"
@@ -235,7 +237,7 @@
 #include "ash/wm/window_animations.h"
 #include "ash/wm/window_cycle/window_cycle_controller.h"
 #include "ash/wm/window_properties.h"
-#include "ash/wm/window_restore/pine_controller.h"
+#include "ash/wm/window_restore/informed_restore_controller.h"
 #include "ash/wm/window_restore/window_restore_controller.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_shadow_controller_delegate.h"
@@ -672,6 +674,10 @@ DeskProfilesDelegate* Shell::GetDeskProfilesDelegate() {
   return shell_delegate_->GetDeskProfilesDelegate();
 }
 
+WebAuthNDialogController* Shell::webauthn_dialog_controller() {
+  return webauthn_dialog_controller_.get();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Shell, private:
 
@@ -683,8 +689,6 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate)
           std::make_unique<WebAuthNDialogControllerImpl>()),
       in_session_auth_dialog_controller_(
           std::make_unique<InSessionAuthDialogControllerImpl>()),
-      keyboard_brightness_control_delegate_(
-          std::make_unique<KeyboardBrightnessController>()),
       locale_update_controller_(std::make_unique<LocaleUpdateControllerImpl>()),
       parent_access_controller_(std::make_unique<ParentAccessControllerImpl>()),
       local_authentication_request_controller_(
@@ -710,6 +714,7 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate)
   PowerStatus::Initialize();
 
   session_controller_->AddObserver(this);
+  keyboard_controller_->AddObserver(ime_controller_.get());
 }
 
 Shell::~Shell() {
@@ -722,6 +727,7 @@ Shell::~Shell() {
   }
 #endif
   booting_animation_controller_.reset();
+  unlock_throughput_recorder_.reset();
   login_unlock_throughput_recorder_.reset();
 
   hud_display::HUDDisplayView::Destroy();
@@ -805,6 +811,7 @@ Shell::~Shell() {
   // EventRewriterController directly, so it must be reset first to avoid
   // accessing invalid memory (see b/315127220).
   AccessibilityController::Get()->SetAccessibilityEventRewriter(nullptr);
+  AccessibilityController::Get()->SetDisableTrackpadEventRewriter(nullptr);
   event_rewriter_controller_.reset();
   keyboard_modifier_metrics_recorder_.reset();
   touchscreen_metrics_recorder_.reset();
@@ -816,6 +823,7 @@ Shell::~Shell() {
   screen_orientation_controller_.reset();
   screen_layout_observer_.reset();
 
+  keyboard_controller_->RemoveObserver(ime_controller_.get());
   // Destroy the virtual keyboard controller before the tablet mode controller
   // since the latters destructor triggers events that the former is listening
   // to but no longer cares about.
@@ -826,6 +834,7 @@ Shell::~Shell() {
   shelf_controller_->Shutdown();
   shelf_config_->Shutdown();
 
+  birch_privacy_nudge_controller_.reset();
   birch_model_.reset();
 
   // Depends on `app_list_controller_` and `tablet_mode_controller_`.
@@ -884,8 +893,6 @@ Shell::~Shell() {
   // before |window_tree_host_manager_| is deleted.
   persistent_window_controller_.reset();
 
-  window_bounds_tracker_.reset();
-
   display_highlight_controller_.reset();
 
   // VideoActivityNotifier must be deleted before |video_detector_| is
@@ -901,6 +908,10 @@ Shell::~Shell() {
 
   // Has to happen before ~MruWindowTracker.
   window_cycle_controller_.reset();
+
+  // As a client of `projector_controller_` and `capture_mode_controller_`,
+  // `annotator_controller_` needs to be destroyed first.
+  annotator_controller_.reset();
 
   // As clients of `capture_mode_controller_`, `projector_controller_` and
   // `game_dashboard_controller_` need to be destroyed before
@@ -929,7 +940,7 @@ Shell::~Shell() {
   post_login_glanceables_metrics_reporter_.reset();
 
   // Has to happen before `~OverviewController` since it's an observer.
-  pine_controller_.reset();
+  informed_restore_controller_.reset();
 
   // Has to happen before `~MruWindowTracker` and after
   // `~GameDashboardController`.
@@ -1169,6 +1180,7 @@ Shell::~Shell() {
   // Observes `SessionController` and must be destroyed before it.
   federated_service_controller_.reset();
   brightness_control_delegate_.reset();
+  keyboard_brightness_control_delegate_.reset();
 
   UsbguardClient::Shutdown();
 
@@ -1198,6 +1210,7 @@ void Shell::Init(
   native_display_delegate_ = std::move(native_display_delegate);
   login_unlock_throughput_recorder_ =
       std::make_unique<LoginUnlockThroughputRecorder>();
+  unlock_throughput_recorder_ = std::make_unique<UnlockThroughputRecorder>();
 
   // Required by DetachableBaseHandler.
   chromeos::InitializeDBusClient<HammerdClient>(dbus_bus.get());
@@ -1206,19 +1219,14 @@ void Shell::Init(
 
   local_state_ = local_state;
 
-  if (local_state_ != nullptr) {
-    // Only construct BatterySaverController if prefs exists. It uses prefs to
-    // store the battery saver state, so testing its functionality without
-    // prefs doesn't make sense.
-    if (features::IsBatterySaverAvailable()) {
-      battery_saver_controller_ =
-          std::make_unique<BatterySaverController>(local_state_);
-    } else {
-      // It's possible that we have a new Chrome without battery saver mode
-      // available, but still have battery saver running because the previous
-      // chrome did. So unconditionally reset battery saver state.
-      BatterySaverController::ResetState(local_state_);
-    }
+  if (features::IsBatterySaverAvailable()) {
+    battery_saver_controller_ =
+        std::make_unique<BatterySaverController>(local_state_);
+  } else {
+    // It's possible that we have a new Chrome without battery saver mode
+    // available, but still have battery saver running because the previous
+    // chrome did. So unconditionally reset battery saver state.
+    BatterySaverController::ResetState(local_state_);
   }
 
   // This creates the MessageCenter object which is used by some other objects
@@ -1235,6 +1243,11 @@ void Shell::Init(
       std::make_unique<system::BrightnessControllerChromeos>(
           local_state_, session_controller_.get());
 
+  // This needs to be initialized after SessionController.
+  keyboard_brightness_control_delegate_ =
+      std::make_unique<KeyboardBrightnessController>(local_state_,
+                                                     session_controller_.get());
+
   // These controllers call Shell::Get() in their constructors, so they cannot
   // be in the member initialization list.
   touch_devices_controller_ = std::make_unique<TouchDevicesController>();
@@ -1248,9 +1261,11 @@ void Shell::Init(
       std::make_unique<PolicyRecommendationRestorer>();
   screen_switch_check_controller_ =
       std::make_unique<ScreenSwitchCheckController>();
-  multidevice_notification_presenter_ =
-      std::make_unique<MultiDeviceNotificationPresenter>(
-          message_center::MessageCenter::Get());
+  if (features::IsCrossDeviceFeatureSuiteAllowed()) {
+    multidevice_notification_presenter_ =
+        std::make_unique<MultiDeviceNotificationPresenter>(
+            message_center::MessageCenter::Get());
+  }
   media_controller_ = std::make_unique<MediaControllerImpl>();
   media_notification_provider_ =
       shell_delegate_->CreateMediaNotificationProvider();
@@ -1410,12 +1425,6 @@ void Shell::Init(
   focus_rules_ = new AshFocusRules();
   focus_controller_ = std::make_unique<::wm::FocusController>(focus_rules_);
   focus_controller_->AddObserver(this);
-
-  // `WindowBoundsTracker` depends on `FocusController`, as it needs to track
-  // the window's activation changes.
-  if (features::IsWindowBoundsTrackerEnabled()) {
-    window_bounds_tracker_ = std::make_unique<WindowBoundsTracker>();
-  }
 
   overview_controller_ = std::make_unique<OverviewController>();
 
@@ -1600,8 +1609,10 @@ void Shell::Init(
   // used in its constructor.
   app_list_controller_ = std::make_unique<AppListControllerImpl>();
 
-  if (IsForestFeatureFlagEnabled()) {
+  if (features::IsForestFeatureEnabled()) {
     birch_model_ = std::make_unique<BirchModel>();
+    birch_privacy_nudge_controller_ =
+        std::make_unique<BirchPrivacyNudgeController>();
   }
 
   autoclick_controller_ = std::make_unique<AutoclickController>();
@@ -1645,6 +1656,13 @@ void Shell::Init(
       focus_controller_.get(), std::make_unique<WmShadowControllerDelegate>(),
       env);
 
+  if (features::IsFocusModeEnabled()) {
+    tasks_controller_ = std::make_unique<api::TasksController>(
+        shell_delegate_->CreateTasksDelegate());
+    focus_mode_controller_ = std::make_unique<FocusModeController>(
+        shell_delegate_->CreateFocusModeDelegate());
+  }
+
   logout_confirmation_controller_ =
       std::make_unique<LogoutConfirmationController>();
 
@@ -1686,11 +1704,6 @@ void Shell::Init(
   system_notification_controller_ =
       std::make_unique<SystemNotificationController>();
 
-  if (features::IsFocusModeEnabled()) {
-    focus_mode_controller_ = std::make_unique<FocusModeController>(
-        shell_delegate_->CreateFocusModeDelegate());
-  }
-
   // WmModeController should be created before initializing the window tree
   // hosts, since the latter will initialize the shelf on each display, which
   // hosts the WM mode tray button.
@@ -1698,20 +1711,19 @@ void Shell::Init(
     wm_mode_controller_ = std::make_unique<WmModeController>();
   }
 
-  if (features::IsHotspotEnabled()) {
-    hotspot_icon_animation_ = std::make_unique<HotspotIconAnimation>();
-    hotspot_info_cache_ = std::make_unique<HotspotInfoCache>();
-  }
+  hotspot_icon_animation_ = std::make_unique<HotspotIconAnimation>();
+  hotspot_info_cache_ = std::make_unique<HotspotInfoCache>();
 
   window_tree_host_manager_->InitHosts();
+  display_manager_->NotifyDisplaysInitialized();
 
   if (ash::features::IsBootAnimationEnabled()) {
     booting_animation_controller_ =
         std::make_unique<BootingAnimationController>();
   }
 
-  // Create virtual keyboard after WindowTreeHostManager::InitHosts() since
-  // it may enable the virtual keyboard immediately, which requires a
+  // Create virtual keyboard after WindowTreeHostManager::InitHosts() since it
+  // may enable the virtual keyboard immediately, which requires a
   // WindowTreeHostManager to host the keyboard window.
   keyboard_controller_->CreateVirtualKeyboard(std::move(keyboard_ui_factory));
 
@@ -1731,7 +1743,7 @@ void Shell::Init(
       std::make_unique<VideoActivityNotifier>(video_detector_.get());
   bluetooth_state_cache_ = std::make_unique<BluetoothStateCache>();
   bluetooth_device_status_ui_handler_ =
-      std::make_unique<BluetoothDeviceStatusUiHandler>();
+      std::make_unique<BluetoothDeviceStatusUiHandler>(local_state_);
   bluetooth_notification_controller_ =
       std::make_unique<BluetoothNotificationController>(
           message_center::MessageCenter::Get());
@@ -1760,23 +1772,19 @@ void Shell::Init(
         std::make_unique<DisplayAlignmentController>();
   }
 
-  if (features::AreGlanceablesV2Enabled() ||
-      features::AreAnyGlanceablesTimeManagementViewsEnabled()) {
+  if (features::AreAnyGlanceablesTimeManagementViewsEnabled()) {
     glanceables_controller_ = std::make_unique<GlanceablesController>();
   }
   post_login_glanceables_metrics_reporter_ =
       std::make_unique<PostLoginGlanceablesMetricsRecorder>();
 
-  if (features::IsFocusModeEnabled()) {
-    tasks_controller_ = std::make_unique<api::TasksController>(
-        shell_delegate_->CreateTasksDelegate());
-  }
-
   projector_controller_ = std::make_unique<ProjectorControllerImpl>();
+  annotator_controller_ = std::make_unique<AnnotatorController>();
 
   float_controller_ = std::make_unique<FloatController>();
-  if (IsForestFeatureFlagEnabled()) {
-    pine_controller_ = std::make_unique<PineController>();
+  if (features::IsForestFeatureEnabled()) {
+    informed_restore_controller_ =
+        std::make_unique<InformedRestoreController>();
   }
   pip_controller_ = std::make_unique<PipController>();
 
@@ -1801,6 +1809,10 @@ void Shell::Init(
   if (features::IsPickerUpdateEnabled() &&
       PickerController::IsFeatureKeyMatched()) {
     picker_controller_ = std::make_unique<PickerController>();
+  }
+
+  if (features::IsLobsterEnabled() && LobsterController::IsEnabled()) {
+    lobster_controller_ = std::make_unique<LobsterController>();
   }
 
   if (features::IsTilingWindowResizeEnabled()) {
@@ -1866,13 +1878,8 @@ void Shell::InitializeDisplayManager() {
   display_configuration_observer_ =
       std::make_unique<DisplayConfigurationObserver>();
 
-  // `window_bounds_tracker_` will be used to remap or restore windows on
-  // display removal, reconnection and rotation if the corresponding flag is
-  // enabled.
-  if (!features::IsWindowBoundsTrackerEnabled()) {
-    persistent_window_controller_ =
-        std::make_unique<PersistentWindowController>();
-  }
+  persistent_window_controller_ =
+      std::make_unique<PersistentWindowController>();
 
   projecting_observer_ =
       std::make_unique<ProjectingObserver>(display_manager_->configurator());
@@ -1978,7 +1985,7 @@ std::unique_ptr<ui::EventTargetIterator> Shell::GetChildIterator() const {
 }
 
 ui::EventTargeter* Shell::GetEventTargeter() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 }
 

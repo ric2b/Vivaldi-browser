@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -19,6 +20,7 @@
 #include "components/viz/common/quads/aggregated_render_pass.h"
 #include "components/viz/service/display/skia_output_surface.h"
 #include "components/viz/test/test_context_provider.h"
+#include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "media/gpu/buildflags.h"
 
@@ -112,8 +114,8 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
                                  const gfx::Size& size,
                                  const gfx::ColorSpace& color_space,
                                  RenderPassAlphaType alpha_type,
-                                 uint32_t usage,
-                                 base::StringPiece debug_label,
+                                 gpu::SharedImageUsageSet usage,
+                                 std::string_view debug_label,
                                  gpu::SurfaceHandle surface_handle) override;
   gpu::Mailbox CreateSolidColorSharedImage(
       const SkColor4f& color,
@@ -174,7 +176,8 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
                      gpu::Mailbox output,
                      const gfx::RectF& display_rect,
                      const gfx::RectF& crop_rect,
-                     gfx::OverlayTransform transform) override {}
+                     gfx::OverlayTransform transform,
+                     bool is_10bit) override {}
 
   void CleanupImageProcessor() override {}
 #endif

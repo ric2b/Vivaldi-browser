@@ -96,7 +96,7 @@ std::vector<int> GetDesiredPixelSizes(
     case FaviconDriverObserver::TOUCH_LARGEST:
       return std::vector<int>(1U, kLargestIconSize);
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::vector<int>();
 }
 

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chromeos/ash/components/osauth/impl/engines/cryptohome_based_engine.h"
+
 #include <utility>
 
 #include "base/check.h"
@@ -62,6 +63,14 @@ void CryptohomeBasedEngine::OnAuthSessionStartFailure() {
 
 void CryptohomeBasedEngine::UpdateObserver(FactorEngineObserver* observer) {
   observer_ = observer;
+}
+
+void CryptohomeBasedEngine::CleanUp(CleanupCallback callback) {
+  // By default, the cleanup phase is no-op because the majority
+  // of the auth factors do not need to do anything for cleaning up.
+  // Simply run the callback with the factor type to indicate
+  // the end of clean-up.
+  std::move(callback).Run(GetFactor());
 }
 
 void CryptohomeBasedEngine::StopAuthFlow(ShutdownCallback callback) {

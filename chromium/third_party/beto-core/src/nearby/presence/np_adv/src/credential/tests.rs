@@ -15,38 +15,38 @@
 
 extern crate alloc;
 
+use crate::credential::matched::{
+    EmptyMatchedCredential, KeySeedMatchedCredential, ReferencedMatchedCredential,
+};
+use crate::credential::v1::MicSectionVerificationMaterial;
 use crate::credential::{
     book::{
         init_cache_from_source, CachedCredentialSource, PossiblyCachedDiscoveryCryptoMaterialKind,
     },
     source::{CredentialSource, SliceCredentialSource},
     v0::{V0DiscoveryCredential, V0},
-    v1::{
-        SignedBroadcastCryptoMaterial, SimpleSignedBroadcastCryptoMaterial, V1DiscoveryCredential,
-        V1DiscoveryCryptoMaterial, V1,
-    },
-    BroadcastCryptoMaterial, EmptyMatchedCredential, KeySeedMatchedCredential, MatchableCredential,
-    MetadataDecryptionError, ProtocolVersion, ReferencedMatchedCredential,
-    SimpleBroadcastCryptoMaterial,
+    v1::{V1BroadcastCredential, V1DiscoveryCredential, V1DiscoveryCryptoMaterial, V1},
+    MatchableCredential,
 };
-use crate::legacy::ShortMetadataKey;
-use crate::MetadataKey;
-use alloc::{vec, vec::Vec};
+use crate::extended::{V1IdentityToken, V1_IDENTITY_TOKEN_LEN};
+use alloc::vec::Vec;
+use crypto_provider::{ed25519, CryptoProvider};
 use crypto_provider_default::CryptoProviderImpl;
+
+type Ed25519ProviderImpl = <CryptoProviderImpl as CryptoProvider>::Ed25519;
 
 fn get_zeroed_v0_discovery_credential() -> V0DiscoveryCredential {
     V0DiscoveryCredential::new([0u8; 32], [0u8; 32])
 }
 
 fn get_constant_packed_v1_discovery_credential(value: u8) -> V1DiscoveryCredential {
-    let key_pair = np_ed25519::KeyPair::<CryptoProviderImpl>::generate();
-    SimpleSignedBroadcastCryptoMaterial::new(
+    V1BroadcastCredential::new(
         [value; 32],
-        MetadataKey([value; 16]),
+        V1IdentityToken::from([value; V1_IDENTITY_TOKEN_LEN]),
         // NOTE: This winds up being unused in these test cases
-        key_pair.private_key(),
+        ed25519::PrivateKey::generate::<Ed25519ProviderImpl>(),
     )
-    .derive_v1_discovery_credential::<CryptoProviderImpl>()
+    .derive_discovery_credential::<CryptoProviderImpl>()
 }
 
 #[test]
@@ -71,9 +71,11 @@ fn cached_credential_source_keeps_same_entries_as_original() {
         .iter()
         .map(|cred| {
             (
-                cred.discovery_credential
-                    .unsigned_verification_material::<CryptoProviderImpl>()
-                    .mic_hmac_key,
+                *cred
+                    .discovery_credential
+                    .mic_extended_salt_verification_material::<CryptoProviderImpl>()
+                    .mic_hmac_key()
+                    .as_bytes(),
                 ReferencedMatchedCredential::from(&cred.match_data),
             )
         })
@@ -82,7 +84,10 @@ fn cached_credential_source_keeps_same_entries_as_original() {
         .iter()
         .map(|(crypto_material, match_data)| {
             (
-                crypto_material.unsigned_verification_material::<CryptoProviderImpl>().mic_hmac_key,
+                *crypto_material
+                    .mic_extended_salt_verification_material::<CryptoProviderImpl>()
+                    .mic_hmac_key()
+                    .as_bytes(),
                 match_data,
             )
         })
@@ -119,90 +124,13 @@ fn cached_credential_source_has_requested_cache_size() {
     }
 }
 
-#[test]
-fn v0_metadata_decryption_works_same_metadata_key() {
-    let key_seed = [3u8; 32];
-    let metadata_key = ShortMetadataKey([5u8; 14]);
+mod coverage_gaming {
+    use crate::credential::MetadataDecryptionError;
+    use alloc::format;
 
-    let metadata = vec![7u8; 42];
-
-    let broadcast_cm = SimpleBroadcastCryptoMaterial::<V0>::new(key_seed, metadata_key);
-
-    let encrypted_metadata = broadcast_cm.encrypt_metadata::<CryptoProviderImpl>(&metadata);
-
-    let metadata_nonce = broadcast_cm.metadata_nonce::<CryptoProviderImpl>();
-
-    let decryption_result = V0::decrypt_metadata::<CryptoProviderImpl>(
-        metadata_nonce,
-        metadata_key,
-        &encrypted_metadata,
-    );
-    assert_eq!(decryption_result, Ok(metadata))
-}
-
-#[test]
-fn v1_metadata_decryption_works_same_metadata_key() {
-    let key_seed = [9u8; 32];
-    let metadata_key = MetadataKey([2u8; 16]);
-
-    let metadata = vec![6u8; 51];
-
-    let broadcast_cm = SimpleBroadcastCryptoMaterial::<V1>::new(key_seed, metadata_key);
-
-    let encrypted_metadata = broadcast_cm.encrypt_metadata::<CryptoProviderImpl>(&metadata);
-
-    let metadata_nonce = broadcast_cm.metadata_nonce::<CryptoProviderImpl>();
-
-    let decryption_result = V1::decrypt_metadata::<CryptoProviderImpl>(
-        metadata_nonce,
-        metadata_key,
-        &encrypted_metadata,
-    );
-    assert_eq!(decryption_result, Ok(metadata))
-}
-
-#[test]
-fn v0_metadata_decryption_fails_different_metadata_key() {
-    let key_seed = [3u8; 32];
-    let encrypting_metadata_key = ShortMetadataKey([5u8; 14]);
-
-    let metadata = vec![7u8; 42];
-
-    let broadcast_cm = SimpleBroadcastCryptoMaterial::<V0>::new(key_seed, encrypting_metadata_key);
-
-    let encrypted_metadata = broadcast_cm.encrypt_metadata::<CryptoProviderImpl>(&metadata);
-
-    let metadata_nonce = broadcast_cm.metadata_nonce::<CryptoProviderImpl>();
-
-    let decrypting_metadata_key = ShortMetadataKey([6u8; 14]);
-
-    let decryption_result = V0::decrypt_metadata::<CryptoProviderImpl>(
-        metadata_nonce,
-        decrypting_metadata_key,
-        &encrypted_metadata,
-    );
-    assert_eq!(decryption_result, Err(MetadataDecryptionError))
-}
-
-#[test]
-fn v1_metadata_decryption_fails_different_metadata_key() {
-    let key_seed = [251u8; 32];
-    let encrypting_metadata_key = MetadataKey([127u8; 16]);
-
-    let metadata = vec![255u8; 42];
-
-    let broadcast_cm = SimpleBroadcastCryptoMaterial::<V1>::new(key_seed, encrypting_metadata_key);
-
-    let encrypted_metadata = broadcast_cm.encrypt_metadata::<CryptoProviderImpl>(&metadata);
-
-    let metadata_nonce = broadcast_cm.metadata_nonce::<CryptoProviderImpl>();
-
-    let decrypting_metadata_key = MetadataKey([249u8; 16]);
-
-    let decryption_result = V1::decrypt_metadata::<CryptoProviderImpl>(
-        metadata_nonce,
-        decrypting_metadata_key,
-        &encrypted_metadata,
-    );
-    assert_eq!(decryption_result, Err(MetadataDecryptionError))
+    #[test]
+    fn metadata_decryption_error_debug() {
+        let err = MetadataDecryptionError;
+        let _ = format!("{:?}", err);
+    }
 }

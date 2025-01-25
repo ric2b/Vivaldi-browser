@@ -67,7 +67,7 @@ size_t GetRandomSeed(size_t seed) {
          std::hash<std::thread::id>{}(std::this_thread::get_id());
 }
 
-std::string AsString(const ByteArray &data, size_t max_len) {
+std::string AsPrintableString(const ByteArray &data, size_t max_len) {
   std::ostringstream out;
   size_t len = std::min(max_len, data.size());
   for (size_t i = 0; i < len; ++i) {
@@ -110,8 +110,13 @@ void ReadFromLocalFile(std::string_view file_path,
   return ReadFromLocalFile<std::vector<uint32_t> &>(file_path, data);
 }
 
+void ClearLocalFileContents(std::string_view file_path) {
+  std::ofstream f(std::string{file_path}, std::ios::out | std::ios::trunc);
+  CHECK(f) << "Failed to clear the file: " << file_path;
+}
+
 void WriteToLocalFile(std::string_view file_path, ByteSpan data) {
-  std::ofstream f(std::string{file_path.data()});
+  std::ofstream f(std::string{file_path});
   CHECK(f) << "Failed to open local file: " << file_path;
   f.write(reinterpret_cast<const char *>(data.data()),
           static_cast<int64_t>(data.size()));

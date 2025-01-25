@@ -30,6 +30,7 @@ namespace {
 std::vector<std::string> GetInputs(
     absl::string_view corpus_path_for_test_binary, absl::string_view test_name,
     absl::string_view subdir) {
+  if (corpus_path_for_test_binary.empty()) return {};
   return ListDirectory(
       absl::StrCat(corpus_path_for_test_binary, "/", test_name, "/", subdir));
 }
@@ -40,7 +41,8 @@ CorpusDatabase::CorpusDatabase(absl::string_view database_path,
                                absl::string_view binary_identifier,
                                bool use_coverage_inputs,
                                bool use_crashing_inputs)
-    : corpus_path_for_test_binary_([=] {
+    : corpus_path_for_test_binary_([=] () -> std::string {
+        if (database_path.empty()) return "";
         std::string corpus_path_for_test_binary =
             absl::StrCat(database_path, "/", binary_identifier);
         if (!absl::StartsWith(corpus_path_for_test_binary, "/") &&

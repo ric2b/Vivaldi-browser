@@ -18,6 +18,7 @@
 #include "components/autofill/core/browser/heuristic_source.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
+#include "components/autofill/core/common/form_data_test_api.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -86,10 +87,10 @@ FieldTemplate SetRolePresentation(FieldTemplate field_template) {
 std::pair<FormData, std::string> CreateFormAndServerClassification(
     std::vector<FieldTemplate> fields) {
   FormData form;
-  form.url = GURL("http://foo.com");
-  form.main_frame_origin = url::Origin::Create(form.url);
-  form.host_frame = test::MakeLocalFrameToken();
-  form.renderer_id = test::MakeFormRendererId();
+  form.set_url(GURL("http://foo.com"));
+  form.set_main_frame_origin(url::Origin::Create(form.url()));
+  form.set_host_frame(test::MakeLocalFrameToken());
+  form.set_renderer_id(test::MakeFormRendererId());
 
   // Build the fields for the form.
   for (const auto& field_template : fields) {
@@ -106,13 +107,13 @@ std::pair<FormData, std::string> CreateFormAndServerClassification(
     field.set_parsed_autocomplete(field_template.parsed_autocomplete);
     field.set_role(field_template.role);
     field.set_origin(
-        field_template.subframe_origin.value_or(form.main_frame_origin));
+        field_template.subframe_origin.value_or(form.main_frame_origin()));
     field.set_host_frame(
         field_template.host_form.value_or(form.global_id()).frame_token);
     field.set_host_form_id(
         field_template.host_form.value_or(form.global_id()).renderer_id);
     field.set_renderer_id(test::MakeFieldRendererId());
-    form.fields.push_back(std::move(field));
+    test_api(form).Append(std::move(field));
   }
 
   // Build the response of the Autofill Server with field classifications.
@@ -121,7 +122,7 @@ std::pair<FormData, std::string> CreateFormAndServerClassification(
   for (size_t i = 0; i < fields.size(); ++i) {
     auto* field_suggestion = form_suggestion->add_field_suggestions();
     field_suggestion->set_field_signature(
-        CalculateFieldSignatureForField(form.fields[i]).value());
+        CalculateFieldSignatureForField(form.fields()[i]).value());
     *field_suggestion->add_predictions() =
         ::autofill::test::CreateFieldPrediction(
             fields[i].field_type, fields[i].field_type_is_override);

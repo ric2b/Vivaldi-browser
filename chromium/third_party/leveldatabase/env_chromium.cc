@@ -420,9 +420,9 @@ std::string GetDumpNameForCache(DBTracker::SharedReadCacheUse cache) {
     case DBTracker::SharedReadCacheUse_InMemory:
       return "leveldatabase/block_cache/in_memory";
     case DBTracker::SharedReadCacheUse_NumCacheUses:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return "";
 }
 
@@ -458,7 +458,7 @@ void RecordCacheUsageInTracing(ProcessMemoryDump* pmd,
       cache_ptr = leveldb_chrome::GetSharedInMemoryBlockCache();
       break;
     case DBTracker::SharedReadCacheUse_NumCacheUses:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   if (!cache_ptr)
     return;
@@ -543,10 +543,10 @@ const char* MethodIDToString(MethodID method) {
     case kObsoleteDeleteFile:
     case kObsoleteDeleteDir:
     case kNumEntries:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "Unknown";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return "Unknown";
 }
 
@@ -710,6 +710,10 @@ ChromiumEnv::ChromiumEnv()
           storage::FilesystemProxy::UNRESTRICTED,
           base::FilePath())) {}
 
+ChromiumEnv::ChromiumEnv(bool log_lock_errors) : ChromiumEnv() {
+  log_lock_errors_ = log_lock_errors;
+}
+
 ChromiumEnv::ChromiumEnv(std::unique_ptr<storage::FilesystemProxy> filesystem)
     : filesystem_(std::move(filesystem)) {
   DCHECK(filesystem_);
@@ -768,7 +772,7 @@ const char* ChromiumEnv::FileErrorString(base::File::Error error) {
     case base::File::FILE_OK:
       return "OK.";
     case base::File::FILE_ERROR_MAX:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   NOTIMPLEMENTED();
   return "Unknown error.";
@@ -851,7 +855,7 @@ Status ChromiumEnv::RemoveDir(const std::string& name) {
 
 Status ChromiumEnv::GetFileSize(const std::string& fname, uint64_t* size) {
   Status s;
-  absl::optional<base::File::Info> info =
+  std::optional<base::File::Info> info =
       filesystem_->GetFileInfo(base::FilePath::FromUTF8Unsafe(fname));
   if (!info) {
     *size = 0;
@@ -892,12 +896,28 @@ Status ChromiumEnv::LockFile(const std::string& fname, FileLock** lock) {
   const base::FilePath path = base::FilePath::FromUTF8Unsafe(fname);
   Retrier retrier;
   FileErrorOr<std::unique_ptr<storage::FilesystemProxy::FileLock>> lock_result;
+  bool same_process_held_lock = false;
+  size_t tries = 0;
   do {
-    lock_result = filesystem_->LockFile(path);
+    tries++;
+    same_process_held_lock = false;
+    lock_result = filesystem_->LockFile(path, &same_process_held_lock);
   } while (!lock_result.has_value() && retrier.ShouldKeepTrying());
+
   if (!lock_result.has_value()) {
+    if (log_lock_errors_ &&
+        lock_result.error() == base::File::FILE_ERROR_IN_USE) {
+      base::UmaHistogramBoolean("LevelDBEnv.LockFileInUseByThisProcess",
+                                same_process_held_lock);
+    }
+
     return MakeIOError(fname, FileErrorString(lock_result.error()), kLockFile,
                        lock_result.error());
+  }
+
+  if (log_lock_errors_) {
+    // 100 because the retrier tries every ~10ms for ~1000ms.
+    base::UmaHistogramCounts100("LevelDBEnv.LockFileSuccessAttempts", tries);
   }
 
   *lock = new ChromiumFileLock(std::move(lock_result.value()), fname);
@@ -1096,7 +1116,7 @@ class DBTracker::TrackedDBImpl : public base::LinkNode<TrackedDBImpl>,
     } else if (block_cache == leveldb_chrome::GetSharedInMemoryBlockCache()) {
       shared_read_cache_use_ = SharedReadCacheUse_InMemory;
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
     tracker_->DatabaseOpened(this);
   }
@@ -1295,7 +1315,7 @@ DBTracker::DBTracker() : mdp_(new MemoryDumpProvider()) {
 }
 
 DBTracker::~DBTracker() {
-  NOTREACHED();  // DBTracker is a singleton
+  NOTREACHED_IN_MIGRATION();  // DBTracker is a singleton
 }
 
 // static
@@ -1482,7 +1502,7 @@ leveldb::Slice MakeSlice(std::string_view s) {
 
 leveldb::Slice MakeSlice(base::span<const uint8_t> s) {
   return MakeSlice(
-      base::StringPiece(reinterpret_cast<const char*>(s.data()), s.size()));
+      std::string_view(reinterpret_cast<const char*>(s.data()), s.size()));
 }
 
 }  // namespace leveldb_env

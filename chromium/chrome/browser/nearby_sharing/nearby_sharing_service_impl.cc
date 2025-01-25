@@ -57,6 +57,7 @@
 #include "chromeos/ash/services/nearby/public/mojom/nearby_share_target_types.mojom.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/cross_device/logging/logging.h"
+#include "components/cross_device/nearby/nearby_features.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/storage_partition.h"
@@ -112,11 +113,6 @@ constexpr base::TimeDelta kClearNearbyProcessUnexpectedShutdownCountDelay =
 // by (180 - kNearbySharingVisibilityReminderLastShownTimePrefName set in
 // nearby_share_prefs).
 constexpr base::TimeDelta kNearbyVisibilityReminderTimerDelay = base::Days(180);
-
-// Whether or not WifiLan is supported for advertising or discovery. Support as
-// a bandwidth upgrade medium is behind a feature flag.
-constexpr bool kIsWifiLanAdvertisingSupported = false;
-constexpr bool kIsWifiLanDiscoverySupported = false;
 
 std::string ReceiveSurfaceStateToString(
     NearbySharingService::ReceiveSurfaceState state) {
@@ -290,12 +286,9 @@ class TransferUpdateDecorator : public TransferUpdateCallback {
 };
 
 bool isVisibleForAdvertising(nearby_share::mojom::Visibility visibility) {
-  if (visibility == nearby_share::mojom::Visibility::kYourDevices &&
-      features::IsSelfShareEnabled()) {
-    return true;
-  }
   return visibility == nearby_share::mojom::Visibility::kAllContacts ||
-         visibility == nearby_share::mojom::Visibility::kSelectedContacts;
+         visibility == nearby_share::mojom::Visibility::kSelectedContacts ||
+         visibility == nearby_share::mojom::Visibility::kYourDevices;
 }
 
 }  // namespace
@@ -1453,6 +1446,25 @@ void NearbySharingServiceImpl::OnEndpointLost(const std::string& endpoint_id) {
                      base::Unretained(this), endpoint_id));
 }
 
+void NearbySharingServiceImpl::OnInitialMedium(const std::string& endpoint_id,
+                                               const Medium medium) {
+  // Our |share_target_map_| is populated in CreateShareTarget. This
+  // is deterministically called *before* this method when sending,
+  // and *after* this method when receiving. In other words, we can
+  // expect to *not* record the initial medium when receiving.
+  // We determined this acceptable as the initial medium when receiving
+  // will always be Bluetooth, until other mediums are supported (Wifi LAN
+  // can be an initial medium when sending due to mDNS discovery.)
+  if (!share_target_map_.contains(endpoint_id)) {
+    return;
+  }
+  RecordNearbyShareInitialConnectionMedium(medium);
+  auto share_target = share_target_map_[endpoint_id];
+  for (auto& observer : observers_) {
+    observer.OnInitialMedium(share_target, medium);
+  }
+}
+
 void NearbySharingServiceImpl::OnBandwidthUpgrade(
     const std::string& endpoint_id,
     const Medium medium) {
@@ -1484,8 +1496,7 @@ void NearbySharingServiceImpl::OnLockStateChanged(bool locked) {
   // not Hidden.
   nearby_share::mojom::Visibility current_visibility =
       settings_.GetVisibility();
-  if (features::IsSelfShareEnabled() &&
-      current_visibility != nearby_share::mojom::Visibility::kNoOne) {
+  if (current_visibility != nearby_share::mojom::Visibility::kNoOne) {
     if (locked) {
       // Store old visibility setting.
       user_visibility_ = current_visibility;
@@ -1552,7 +1563,7 @@ NearbySharingServiceImpl::GetReceiveCallbacksFromState(
     case ReceiveSurfaceState::kBackground:
       return background_receive_callbacks_;
     case ReceiveSurfaceState::kUnknown:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return foreground_receive_callbacks_;
   }
 }
@@ -1918,8 +1929,7 @@ bool NearbySharingServiceImpl::HasAvailableConnectionMediums() {
       connection_type ==
           net::NetworkChangeNotifier::ConnectionType::CONNECTION_ETHERNET;
   return IsBluetoothPowered() ||
-         (kIsWifiLanAdvertisingSupported && kIsWifiLanDiscoverySupported &&
-          hasNetworkConnection);
+         (hasNetworkConnection && ::features::IsNearbyMdnsEnabled());
 }
 
 void NearbySharingServiceImpl::InvalidateSurfaceState() {
@@ -2141,16 +2151,6 @@ void NearbySharingServiceImpl::InvalidateAdvertisingState() {
         << __func__
         << ": Stopping advertising because the system is suspended.";
     return;
-  }
-
-  // Do not advertise on lock screen unless Self Share is enabled.
-  if (!base::FeatureList::IsEnabled(features::kNearbySharingSelfShare)) {
-    if (is_screen_locked_) {
-      StopAdvertising();
-      CD_LOG(VERBOSE, Feature::NS)
-          << __func__ << ": Stopping advertising because the screen is locked.";
-      return;
-    }
   }
 
   if (!HasAvailableConnectionMediums()) {
@@ -4129,15 +4129,13 @@ void NearbySharingServiceImpl::OnStorageCheckCompleted(
     return;
   }
 
-  if (base::FeatureList::IsEnabled(features::kNearbySharingSelfShare)) {
-    // Auto-accept self shares when not in high-visibility mode, unless the
-    // filetype includes WiFi credentials.
-    if (share_target.CanAutoAccept() && !IsInHighVisibility()) {
-      CD_LOG(INFO, Feature::NS) << __func__ << ": Auto-accepting self share.";
-      Accept(share_target, base::DoNothing());
-    } else {
-      CD_LOG(INFO, Feature::NS) << __func__ << ": Can't auto-accept transfer.";
-    }
+  // Auto-accept self shares when not in high-visibility mode, unless the
+  // filetype includes WiFi credentials.
+  if (share_target.CanAutoAccept() && !IsInHighVisibility()) {
+    CD_LOG(INFO, Feature::NS) << __func__ << ": Auto-accepting self share.";
+    Accept(share_target, base::DoNothing());
+  } else {
+    CD_LOG(INFO, Feature::NS) << __func__ << ": Can't auto-accept transfer.";
   }
 
   frames_reader->ReadFrame(
@@ -4280,9 +4278,7 @@ std::optional<ShareTarget> NearbySharingServiceImpl::CreateShareTarget(
   target.device_name = std::move(*device_name);
   target.is_incoming = is_incoming;
   target.device_id = GetDeviceId(endpoint_id, certificate);
-  if (base::FeatureList::IsEnabled(features::kNearbySharingSelfShare)) {
-    target.for_self_share = certificate && certificate->for_self_share();
-  }
+  target.for_self_share = certificate && certificate->for_self_share();
 
   ShareTargetInfo& info = GetOrCreateShareTargetInfo(target, endpoint_id);
 

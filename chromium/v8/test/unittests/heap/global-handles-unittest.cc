@@ -50,6 +50,11 @@ struct TracedReferenceWrapper {
 
 class NonRootingEmbedderRootsHandler final : public v8::EmbedderRootsHandler {
  public:
+  START_ALLOW_USE_DEPRECATED()
+  NonRootingEmbedderRootsHandler()
+      : v8::EmbedderRootsHandler(v8::EmbedderRootsHandler::RootHandling::
+                                     kQueryEmbedderForNonDroppableReferences) {}
+  END_ALLOW_USE_DEPRECATED()
   bool IsRoot(const v8::TracedReference<v8::Value>& handle) final {
     return false;
   }
@@ -381,7 +386,7 @@ TEST_F(GlobalHandlesTest,
         v8::HandleScope scope(v8_isolate());
         Handle<JSReceiver> key =
             Utils::OpenHandle(*fp->handle.Get(v8_isolate()));
-        Handle<Smi> smi(Smi::FromInt(23), isolate);
+        DirectHandle<Smi> smi(Smi::FromInt(23), isolate);
         int32_t hash = Object::GetOrCreateHash(*key, isolate).value();
         JSWeakCollection::Set(weakmap, key, smi, hash);
       },

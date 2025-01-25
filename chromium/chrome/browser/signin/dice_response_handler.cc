@@ -23,10 +23,8 @@
 #include "chrome/browser/signin/account_reconcilor_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/signin/signin_metrics_service_factory.h"
 #include "components/signin/core/browser/about_signin_internals.h"
 #include "components/signin/core/browser/signin_header_helper.h"
-#include "components/signin/core/browser/signin_metrics_service.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/base/signin_client.h"
@@ -42,12 +40,15 @@
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
 #include <optional>
 
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/signin/bound_session_credentials/registration_token_helper.h"  // nogncheck
 #include "chrome/browser/signin/bound_session_credentials/unexportable_key_service_factory.h"  // nogncheck
+#include "components/embedder_support/user_agent_utils.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/unexportable_keys/unexportable_key_id.h"       // nogncheck
 #include "components/unexportable_keys/unexportable_key_service.h"  // nogncheck
 #include "google_apis/gaia/gaia_urls.h"
+#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
 
 const int kDiceTokenFetchTimeoutSeconds = 10;
@@ -145,7 +146,6 @@ class DiceResponseHandlerFactory : public ProfileKeyedServiceFactory {
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
     DependsOn(UnexportableKeyServiceFactory::GetInstance());
 #endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
-    DependsOn(SigninMetricsServiceFactory::GetInstance());
   }
 
   ~DiceResponseHandlerFactory() override {}
@@ -166,7 +166,6 @@ class DiceResponseHandlerFactory : public ProfileKeyedServiceFactory {
         IdentityManagerFactory::GetForProfile(profile),
         AccountReconcilorFactory::GetForProfile(profile),
         AboutSigninInternalsFactory::GetForProfile(profile),
-        SigninMetricsServiceFactory::GetForProfile(profile),
         std::move(registration_token_helper_factory));
   }
 };
@@ -276,7 +275,10 @@ void DiceResponseHandler::DiceTokenFetcher::StartTokenFetch() {
   // `binding_registration_token_` is empty if the binding key was not
   // generated.
   gaia_auth_fetcher_->StartAuthCodeForOAuth2TokenExchange(
-      authorization_code_, binding_registration_token_);
+      authorization_code_,
+      embedder_support::GetUserAgentMetadata(g_browser_process->local_state())
+          .SerializeBrandFullVersionList(),
+      binding_registration_token_);
 #else
   gaia_auth_fetcher_->StartAuthCodeForOAuth2TokenExchange(authorization_code_);
 #endif
@@ -294,7 +296,7 @@ void DiceResponseHandler::DiceTokenFetcher::StartBindingKeyGeneration(
   // `registration_token_helper_`.
   registration_token_helper_ = registration_token_helper_factory.Run(
       GaiaUrls::GetInstance()->oauth2_chrome_client_id(), authorization_code_,
-      GaiaUrls::GetInstance()->oauth2_token_url(),
+      GURL("https://accounts.google.com/accountmanager"),
       base::BindOnce(&DiceTokenFetcher::OnRegistrationTokenGenerated,
                      base::Unretained(this)));
   registration_token_helper_->Start();
@@ -327,13 +329,11 @@ DiceResponseHandler::DiceResponseHandler(
     signin::IdentityManager* identity_manager,
     AccountReconcilor* account_reconcilor,
     AboutSigninInternals* about_signin_internals,
-    SigninMetricsService* signin_metrics_service,
     RegistrationTokenHelperFactory registration_token_helper_factory)
     : signin_client_(signin_client),
       identity_manager_(identity_manager),
       account_reconcilor_(account_reconcilor),
       about_signin_internals_(about_signin_internals),
-      signin_metrics_service_(signin_metrics_service),
       registration_token_helper_factory_(
           std::move(registration_token_helper_factory)) {
   DCHECK(signin_client_);
@@ -368,10 +368,10 @@ void DiceResponseHandler::ProcessDiceHeader(
       ProcessDiceSignoutHeader(dice_params.signout_info->account_infos);
       return;
     case signin::DiceAction::NONE:
-      NOTREACHED() << "Invalid Dice response parameters.";
+      NOTREACHED_IN_MIGRATION() << "Invalid Dice response parameters.";
       return;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 size_t DiceResponseHandler::GetPendingDiceTokenFetchersCountForTesting() const {
@@ -537,7 +537,7 @@ void DiceResponseHandler::DeleteTokenFetcher(DiceTokenFetcher* token_fetcher) {
       return;
     }
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void DiceResponseHandler::OnTokenExchangeSuccess(
@@ -558,32 +558,11 @@ void DiceResponseHandler::OnTokenExchangeSuccess(
   bool is_new_account =
       !identity_manager_->HasAccountWithRefreshToken(account_id);
 
-  if (!is_new_account) {
-    signin_metrics_service_->SetReauthAccessPointIfInSigninPending(
-        account_id, token_fetcher->delegate()->GetAccessPoint());
-  }
-
-  // If this is a reauth, do not update the access point.
-  signin_metrics::AccessPoint access_point =
-      is_new_account ? token_fetcher->delegate()->GetAccessPoint()
-                     : signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN;
-  // Specifically set the token operation source in case the error was updated
-  // through a sign in from a password sign in promo, as this will indicate
-  // whether to move the password to account storage or not.
-  // TODO(crbug.com/339157240): Change the way this is implemented to not use
-  // SourceForRefreshTokenOperation as an indicator of the reauthentication
-  // source.
-  signin_metrics::SourceForRefreshTokenOperation token_operation_source =
-      token_fetcher->delegate()->GetAccessPoint() ==
-              signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE
-          ? signin_metrics::SourceForRefreshTokenOperation::
-                kDiceResponseHandler_PasswordPromoSignin
-          : signin_metrics::SourceForRefreshTokenOperation::
-                kDiceResponseHandler_Signin;
-
   identity_manager_->GetAccountsMutator()->AddOrUpdateAccount(
-      gaia_id, email, refresh_token, is_under_advanced_protection, access_point,
-      token_operation_source
+      gaia_id, email, refresh_token, is_under_advanced_protection,
+      token_fetcher->delegate()->GetAccessPoint(),
+      signin_metrics::SourceForRefreshTokenOperation::
+          kDiceResponseHandler_Signin
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
       ,
       wrapped_binding_key

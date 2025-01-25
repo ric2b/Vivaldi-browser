@@ -132,6 +132,27 @@ targets.mixin(
 )
 
 targets.mixin(
+    name = "12l-landscape-x64-emulator",
+    args = [
+        "--avd-config=../../tools/android/avd/proto/android_32_google_apis_x64_foldable_landscape.textpb",
+    ],
+    swarming = targets.swarming(
+        # soft affinity so that bots with caches will be picked first
+        optional_dimensions = {
+            60: {
+                "caches": "android_32_google_apis_x64_foldable_landscape",
+            },
+        },
+        named_caches = [
+            swarming.cache(
+                name = "android_32_google_apis_x64_foldable_landscape",
+                path = ".android_emulator/android_32_google_apis_x64_foldable_landscape",
+            ),
+        ],
+    ),
+)
+
+targets.mixin(
     name = "13-google-atd-x64-emulator",
     args = [
         "--avd-config=../../tools/android/avd/proto/android_33_google_atd_x64.textpb",
@@ -198,21 +219,21 @@ targets.mixin(
 
 targets.mixin(
     name = "15-x64-emulator",
-    description = "Run with android_v_google_apis_x64",
+    description = "Run with android_35_google_apis_x64",
     args = [
-        "--avd-config=../../tools/android/avd/proto/android_v_google_apis_x64.textpb",
+        "--avd-config=../../tools/android/avd/proto/android_35_google_apis_x64.textpb",
     ],
     swarming = targets.swarming(
         # soft affinity so that bots with caches will be picked first
         optional_dimensions = {
             60: {
-                "caches": "android_v_google_apis_x64",
+                "caches": "android_35_google_apis_x64",
             },
         },
         named_caches = [
             swarming.cache(
-                name = "android_v_google_apis_x64",
-                path = ".android_emulator/android_v_google_apis_x64",
+                name = "android_35_google_apis_x64",
+                path = ".android_emulator/android_35_google_apis_x64",
             ),
         ],
     ),
@@ -298,6 +319,16 @@ targets.mixin(
 )
 
 targets.mixin(
+    name = "crosier-no-arc",
+    args = [
+        # All is_chrome_branded Chrome has components/arc, but reven board
+        # don't have ChromeOS daemons and resources necessary for ARC.
+        # Disable ARC crosier tests on reven.
+        "--test-launcher-filter-file=../../testing/buildbot/filters/chromeos.reven.chromeos_integration_tests.filter",
+    ],
+)
+
+targets.mixin(
     name = "shards-10",
     shards = 10,
 )
@@ -375,7 +406,7 @@ targets.mixin(
 targets.mixin(
     name = "chromeos-betty-finch",
     args = [
-        "--board=betty-pi-arc",
+        "--board=betty",
         "--magic-vm-cache=magic_cros_vm_cache",
     ],
     swarming = targets.swarming(
@@ -442,35 +473,6 @@ targets.mixin(
 )
 
 targets.mixin(
-    name = "chromeos-reven",
-    args = [
-        "--magic-vm-cache=magic_cros_reven_vm_cache",
-    ],
-    swarming = targets.swarming(
-        dimensions = {
-            "cpu": "x86-64",
-            "kvm": "1",
-            "gce": "1",
-            "os": "Ubuntu-22.04",
-            "pool": "chrome.tests",
-        },
-        optional_dimensions = {
-            60: {
-                "caches": "cros_reven_vm",
-            },
-        },
-        # See the 'chromeos-amd64-generic' mixin above for the purpose of this
-        # cache.
-        named_caches = [
-            swarming.cache(
-                name = "cros_reven_vm",
-                path = "magic_cros_reven_vm_cache",
-            ),
-        ],
-    ),
-)
-
-targets.mixin(
     name = "chromium-tester-dev-service-account",
     swarming = targets.swarming(
         service_account = "chromium-tester-dev@chops-service-accounts.iam.gserviceaccount.com",
@@ -489,6 +491,11 @@ targets.mixin(
 targets.mixin(
     name = "ci_only",
     ci_only = True,
+)
+
+targets.mixin(
+    name = "experiments",
+    experiment_percentage = 100,
 )
 
 targets.mixin(
@@ -606,10 +613,11 @@ targets.mixin(
 )
 
 targets.mixin(
-    name = "fuchsia_logs",
-    args = [
-        "--logs-dir=${ISOLATED_OUTDIR}/logs",
-    ],
+    name = "upload_inv_extended_properties",
+    resultdb = targets.resultdb(
+        enable = True,
+        inv_extended_properties_dir = "${ISOLATED_OUTDIR}/invocations",
+    ),
 )
 
 targets.mixin(
@@ -836,24 +844,24 @@ targets.mixin(
 )
 
 targets.mixin(
-    name = "ios_runtime_cache_17_4",
-    swarming = targets.swarming(
-        named_caches = [
-            swarming.cache(
-                name = "runtime_ios_17_4",
-                path = "Runtime-ios-17.4",
-            ),
-        ],
-    ),
-)
-
-targets.mixin(
     name = "ios_runtime_cache_17_5",
     swarming = targets.swarming(
         named_caches = [
             swarming.cache(
                 name = "runtime_ios_17_5",
                 path = "Runtime-ios-17.5",
+            ),
+        ],
+    ),
+)
+
+targets.mixin(
+    name = "ios_runtime_cache_18_0",
+    swarming = targets.swarming(
+        named_caches = [
+            swarming.cache(
+                name = "runtime_ios_18_0",
+                path = "Runtime-ios-18.0",
             ),
         ],
     ),
@@ -927,6 +935,15 @@ targets.mixin(
     swarming = targets.swarming(
         dimensions = {
             "os": "Ubuntu-16.04",
+        },
+    ),
+)
+
+targets.mixin(
+    name = "linux-noble",
+    swarming = targets.swarming(
+        dimensions = {
+            "os": "Ubuntu-24.04",
         },
     ),
 )
@@ -1107,28 +1124,6 @@ targets.mixin(
     ),
 )
 
-# TODO(b/331775322) Remove when mac migration is done.
-targets.mixin(
-    name = "mac_13_or_14_arm64",
-    swarming = targets.swarming(
-        dimensions = {
-            "cpu": "arm64",
-            "os": "Mac-13|Mac-14",
-        },
-    ),
-)
-
-# TODO(b/331775322) Remove when mac migration is done.
-targets.mixin(
-    name = "mac_13_or_14_x64",
-    swarming = targets.swarming(
-        dimensions = {
-            "cpu": "x86-64",
-            "os": "Mac-13|Mac-14",
-        },
-    ),
-)
-
 targets.mixin(
     name = "mac_14_arm64",
     swarming = targets.swarming(
@@ -1150,13 +1145,23 @@ targets.mixin(
 )
 
 targets.mixin(
+    name = "mac_14_beta_arm64",
+    swarming = targets.swarming(
+        dimensions = {
+            "cpu": "arm64",
+            "os": "Mac-14.5",
+        },
+    ),
+)
+
+targets.mixin(
     name = "mac_arm64_apple_m1_gpu_experimental",
     swarming = targets.swarming(
         dimensions = {
             "cpu": "arm64",
             "gpu": "apple:m1",
             "mac_model": "Macmini9,1",
-            "os": "Mac-14.4.1",
+            "os": "Mac-14.5",
             "pool": "chromium.tests",
             "display_attached": "1",
         },
@@ -1170,7 +1175,7 @@ targets.mixin(
             "cpu": "arm64",
             "gpu": "apple:m1",
             "mac_model": "Macmini9,1",
-            "os": "Mac-14.4.1",
+            "os": "Mac-14.5",
             "pool": "chromium.tests",
             "display_attached": "1",
         },
@@ -1184,7 +1189,7 @@ targets.mixin(
             "cpu": "arm64",
             "gpu": "apple:m2",
             "mac_model": "Mac14,7",
-            "os": "Mac-14.3.1|Mac-14.4.1",
+            "os": "Mac-14.4.1",
             "pool": "chromium.tests.gpu",
             "display_attached": "1",
             "hidpi": "1",
@@ -1199,7 +1204,7 @@ targets.mixin(
             "cpu": "arm64",
             "gpu": "apple:m2",
             "mac_model": "Mac14,7",
-            "os": "Mac-13.3.1|Mac-14.3.1",
+            "os": "Mac-14.4.1",
             "pool": "chromium.tests.gpu",
             "display_attached": "1",
             "hidpi": "1",
@@ -1212,7 +1217,7 @@ targets.mixin(
     swarming = targets.swarming(
         dimensions = {
             "cpu": "arm64",
-            "os": "Mac-14",
+            "os": "Mac-15",
         },
     ),
 )
@@ -1222,7 +1227,7 @@ targets.mixin(
     swarming = targets.swarming(
         dimensions = {
             "cpu": "x86-64",
-            "os": "Mac-14",
+            "os": "Mac-15",
         },
     ),
 )
@@ -1232,7 +1237,7 @@ targets.mixin(
     swarming = targets.swarming(
         dimensions = {
             "cpu": "arm64",
-            "os": "Mac-13|Mac-14",
+            "os": "Mac-14",
         },
     ),
 )
@@ -1245,7 +1250,7 @@ targets.mixin(
     swarming = targets.swarming(
         dimensions = {
             "cpu": "x86-64",
-            "os": "Mac-13|Mac-14",
+            "os": "Mac-14",
         },
     ),
 )
@@ -1256,7 +1261,7 @@ targets.mixin(
         dimensions = {
             "cpu": "x86-64",
             "gpu": "8086:3e9b",
-            "os": "Mac-14.4.1",
+            "os": "Mac-14.5",
             "display_attached": "1",
         },
     ),
@@ -1272,7 +1277,7 @@ targets.mixin(
         dimensions = {
             "cpu": "x86-64",
             "gpu": "8086:3e9b",
-            "os": "Mac-14.4.1",
+            "os": "Mac-14.5",
             "display_attached": "1",
         },
     ),
@@ -1298,7 +1303,7 @@ targets.mixin(
             "cpu": "x86-64",
             "gpu": "1002:67ef",
             "hidpi": "1",
-            "os": "Mac-14.3.1|Mac-14.4.1",
+            "os": "Mac-14.4.1",
             "pool": "chromium.tests.gpu",
             "display_attached": "1",
         },
@@ -1312,7 +1317,7 @@ targets.mixin(
             "cpu": "x86-64",
             "gpu": "1002:67ef",
             "hidpi": "1",
-            "os": "Mac-13.5",
+            "os": "Mac-14.4.1",
             "pool": "chromium.tests.gpu",
             "display_attached": "1",
         },
@@ -1513,6 +1518,17 @@ targets.mixin(
     ],
 )
 
+# Pixel 7 on Android 14
+targets.mixin(
+    name = "panther_on_14",
+    swarming = targets.swarming(
+        dimensions = {
+            "device_type": "panther",
+            "device_os": "AP2A.240705.004",  # Android 14
+            "os": "Android",
+        },
+    ),
+)
 targets.mixin(
     name = "pie-x86-emulator",
     args = [
@@ -1582,6 +1598,25 @@ targets.mixin(
     name = "swarming_containment_auto",
     swarming = targets.swarming(
         containment_type = "AUTO",
+    ),
+)
+
+targets.mixin(
+    name = "skylab-cft",
+    skylab = targets.skylab(
+        run_cft = True,
+    ),
+)
+
+# Pixel Tablet
+targets.mixin(
+    name = "tangorpro",
+    swarming = targets.swarming(
+        dimensions = {
+            "device_type": "tangorpro",
+            "device_os": "AP1A.240505.005",  # Android 14
+            "os": "Android",
+        },
     ),
 )
 
@@ -1703,7 +1738,7 @@ targets.mixin(
         cipd_packages = [
             targets.cipd_package(
                 package = "chromium/android_webview/tools/cts_archive",
-                location = "android_webview/tools/cts_archive",
+                location = "android_webview/tools/cts_archive/cipd",
                 revision = "UYQZhJpB3MWpJIAcesI-M1bqRoTghiKCYr_SD9tPDewC",
             ),
         ],
@@ -1842,6 +1877,15 @@ targets.mixin(
 )
 
 targets.mixin(
+    name = "win11-any",
+    swarming = targets.swarming(
+        dimensions = {
+            "os": "Windows-11",
+        },
+    ),
+)
+
+targets.mixin(
     name = "win-arm64",
     swarming = targets.swarming(
         dimensions = {
@@ -1867,12 +1911,12 @@ targets.mixin(
     name = "xcode_15_beta",
     args = [
         "--xcode-build-version",
-        "15f31c",
+        "15f31d",
     ],
     swarming = targets.swarming(
         named_caches = [
             swarming.cache(
-                name = "xcode_ios_15f31c",
+                name = "xcode_ios_15f31d",
                 path = "Xcode.app",
             ),
         ],
@@ -1883,12 +1927,28 @@ targets.mixin(
     name = "xcode_15_main",
     args = [
         "--xcode-build-version",
-        "15c500b",
+        "15f31d",
     ],
     swarming = targets.swarming(
         named_caches = [
             swarming.cache(
-                name = "xcode_ios_15c500b",
+                name = "xcode_ios_15f31d",
+                path = "Xcode.app",
+            ),
+        ],
+    ),
+)
+
+targets.mixin(
+    name = "xcode_16_beta",
+    args = [
+        "--xcode-build-version",
+        "16a5202i",
+    ],
+    swarming = targets.swarming(
+        named_caches = [
+            swarming.cache(
+                name = "xcode_ios_16a5202i",
                 path = "Xcode.app",
             ),
         ],

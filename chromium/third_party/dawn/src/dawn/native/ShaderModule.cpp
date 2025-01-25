@@ -90,6 +90,8 @@ BindingInfoType TintResourceTypeToBindingInfoType(
             return BindingInfoType::StorageTexture;
         case tint::inspector::ResourceBinding::ResourceType::kExternalTexture:
             return BindingInfoType::ExternalTexture;
+        case tint::inspector::ResourceBinding::ResourceType::kInputAttachment:
+            return BindingInfoType::InputAttachment;
 
         default:
             DAWN_UNREACHABLE();
@@ -305,6 +307,10 @@ ResultOrError<InterpolationSampling> TintInterpolationSamplingToInterpolationSam
             return InterpolationSampling::Centroid;
         case tint::inspector::InterpolationSampling::kSample:
             return InterpolationSampling::Sample;
+        case tint::inspector::InterpolationSampling::kFirst:
+            return InterpolationSampling::First;
+        case tint::inspector::InterpolationSampling::kEither:
+            return InterpolationSampling::Either;
         case tint::inspector::InterpolationSampling::kUnknown:
             return DAWN_VALIDATION_ERROR(
                 "Attempted to convert 'Unknown' interpolation sampling type from Tint");
@@ -346,9 +352,14 @@ ResultOrError<PixelLocalMemberType> FromTintPixelLocalMemberType(
 
 ResultOrError<tint::Program> ParseWGSL(const tint::Source::File* file,
                                        const tint::wgsl::AllowedFeatures& allowedFeatures,
+                                       const tint::wgsl::ValidationMode mode,
+                                       const std::vector<tint::wgsl::Extension>& internalExtensions,
                                        OwnedCompilationMessages* outMessages) {
     tint::wgsl::reader::Options options;
+    options.mode = mode;
     options.allowed_features = allowedFeatures;
+    options.allowed_features.extensions.insert(internalExtensions.begin(),
+                                               internalExtensions.end());
     tint::Program program = tint::wgsl::reader::Parse(file, options);
     if (outMessages != nullptr) {
         DAWN_TRY(outMessages->AddMessages(program.Diagnostics()));
@@ -433,7 +444,8 @@ BindingInfoType GetShaderBindingType(const ShaderBindingInfo& shaderInfo) {
         [](const SamplerBindingInfo&) { return BindingInfoType::Sampler; },
         [](const TextureBindingInfo&) { return BindingInfoType::Texture; },
         [](const StorageTextureBindingInfo&) { return BindingInfoType::StorageTexture; },
-        [](const ExternalTextureBindingInfo&) { return BindingInfoType::ExternalTexture; });
+        [](const ExternalTextureBindingInfo&) { return BindingInfoType::ExternalTexture; },
+        [](const InputAttachmentBindingInfo&) { return BindingInfoType::InputAttachment; });
 }
 
 MaybeError ValidateCompatibilityOfSingleBindingWithLayout(const DeviceBase* device,
@@ -451,12 +463,8 @@ MaybeError ValidateCompatibilityOfSingleBindingWithLayout(const DeviceBase* devi
     if (std::holds_alternative<ExternalTextureBindingInfo>(shaderInfo.bindingInfo)) {
         // If an external texture binding used to exist in the bgl, it will be found as a
         // key in the ExternalTextureBindingExpansions map.
-        ExternalTextureBindingExpansionMap expansions =
-            layout->GetExternalTextureBindingExpansionMap();
-        std::map<BindingNumber, dawn::native::ExternalTextureBindingExpansion>::iterator it =
-            expansions.find(bindingNumber);
         // TODO(dawn:563): Provide info about the binding types.
-        DAWN_INVALID_IF(it == expansions.end(),
+        DAWN_INVALID_IF(!layout->GetExternalTextureBindingExpansionMap().contains(bindingNumber),
                         "Binding type in the shader (texture_external) doesn't match the "
                         "type in the layout.");
 
@@ -585,6 +593,15 @@ MaybeError ValidateCompatibilityOfSingleBindingWithLayout(const DeviceBase* devi
         },
         [](const ExternalTextureBindingInfo&) -> MaybeError {
             DAWN_UNREACHABLE();
+            return {};
+        },
+        [&](const InputAttachmentBindingInfo& bindingInfo) -> MaybeError {
+            // Internal use only, no validation, only assertions.
+            const InputAttachmentBindingInfo& bindingLayout =
+                std::get<InputAttachmentBindingInfo>(layoutInfo.bindingLayout);
+
+            DAWN_ASSERT(bindingLayout.sampleType == bindingInfo.sampleType);
+
             return {};
         });
 }
@@ -759,7 +776,6 @@ ResultOrError<std::unique_ptr<EntryPointMetadata>> ReflectEntryPointUsingTint(
             totalInterStageShaderComponents += 1;
         }
         metadata->usesSampleMaskOutput = entryPoint.output_sample_mask_used;
-        metadata->usesSampleIndex = entryPoint.sample_index_used;
         if (entryPoint.sample_index_used) {
             totalInterStageShaderComponents += 1;
         }
@@ -788,9 +804,23 @@ ResultOrError<std::unique_ptr<EntryPointMetadata>> ReflectEntryPointUsingTint(
                 continue;
             }
 
-            ColorAttachmentIndex attachment(static_cast<uint8_t>(unsanitizedAttachment));
-            metadata->fragmentOutputVariables[attachment] = variable;
-            metadata->fragmentOutputMask.set(attachment);
+            // Both `@blend_src(0)` and `@blend_src(1)` are related to color attachment 0 and must
+            // have the same type, so we just need to save the type information of `@blend_src(1)`
+            // in `metadata->fragmentOutputVariables[0]` so that when dual source blending is used
+            // `metadata->fragmentOutputVariables[0].blendSrc` is always 1.
+            bool isBlendSrc0 = false;
+            if (outputVar.attributes.blend_src.has_value()) {
+                variable.blendSrc = *outputVar.attributes.blend_src;
+                isBlendSrc0 = variable.blendSrc == 0;
+            } else {
+                variable.blendSrc = 0;
+            }
+
+            if (!isBlendSrc0) {
+                ColorAttachmentIndex attachment(static_cast<uint8_t>(unsanitizedAttachment));
+                metadata->fragmentOutputVariables[attachment] = variable;
+                metadata->fragmentOutputMask.set(attachment);
+            }
         }
 
         // Fragment input reflection.
@@ -910,6 +940,12 @@ ResultOrError<std::unique_ptr<EntryPointMetadata>> ReflectEntryPointUsingTint(
             }
             case BindingInfoType::StaticSampler: {
                 return DAWN_VALIDATION_ERROR("Static samplers not supported in WGSL");
+            }
+            case BindingInfoType::InputAttachment: {
+                InputAttachmentBindingInfo bindingInfo = {};
+                bindingInfo.sampleType = TintSampledKindToSampleType(resource.sampled_kind);
+                info.bindingInfo = bindingInfo;
+                break;
             }
             default:
                 return DAWN_VALIDATION_ERROR("Unknown binding type in Shader");
@@ -1039,10 +1075,12 @@ bool ShaderModuleParseResult::HasParsedShader() const {
     return tintProgram != nullptr;
 }
 
-MaybeError ValidateAndParseShaderModule(DeviceBase* device,
-                                        const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
-                                        ShaderModuleParseResult* parseResult,
-                                        OwnedCompilationMessages* outMessages) {
+MaybeError ValidateAndParseShaderModule(
+    DeviceBase* device,
+    const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
+    const std::vector<tint::wgsl::Extension>& internalExtensions,
+    ShaderModuleParseResult* parseResult,
+    OwnedCompilationMessages* outMessages) {
     DAWN_ASSERT(parseResult != nullptr);
 
     wgpu::SType moduleType;
@@ -1059,7 +1097,7 @@ MaybeError ValidateAndParseShaderModule(DeviceBase* device,
                     (descriptor.ValidateBranches<
                         Branch<ShaderModuleWGSLDescriptor, ShaderModuleCompilationOptions>>()));
 #endif
-    DAWN_ASSERT(moduleType != wgpu::SType::Invalid);
+    DAWN_ASSERT(moduleType != wgpu::SType(0u));
 
     ScopedTintICEHandler scopedICEHandler(device);
 
@@ -1111,13 +1149,15 @@ MaybeError ValidateAndParseShaderModule(DeviceBase* device,
 
     if (device->IsToggleEnabled(Toggle::DumpShaders)) {
         std::ostringstream dumpedMsg;
-        dumpedMsg << "// Dumped WGSL:" << std::endl << wgslDesc->code << std::endl;
+        dumpedMsg << "// Dumped WGSL:\n" << wgslDesc->code << "\n";
         device->EmitLog(WGPULoggingType_Info, dumpedMsg.str().c_str());
     }
 
     tint::Program program;
-    DAWN_TRY_ASSIGN(program,
-                    ParseWGSL(tintFile.get(), device->GetWGSLAllowedFeatures(), outMessages));
+    auto validationMode = device->IsCompatibilityMode() ? tint::wgsl::ValidationMode::kCompat
+                                                        : tint::wgsl::ValidationMode::kFull;
+    DAWN_TRY_ASSIGN(program, ParseWGSL(tintFile.get(), device->GetWGSLAllowedFeatures(),
+                                       validationMode, internalExtensions, outMessages));
 
     parseResult->tintProgram = AcquireRef(new TintProgram(std::move(program), std::move(tintFile)));
 
@@ -1273,8 +1313,11 @@ MaybeError ValidateCompatibilityWithPipelineLayout(DeviceBase* device,
 
 ShaderModuleBase::ShaderModuleBase(DeviceBase* device,
                                    const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
+                                   std::vector<tint::wgsl::Extension> internalExtensions,
                                    ApiObjectBase::UntrackedByDeviceTag tag)
-    : Base(device, descriptor->label), mType(Type::Undefined) {
+    : Base(device, descriptor->label),
+      mType(Type::Undefined),
+      mInternalExtensions(std::move(internalExtensions)) {
     if (auto* spirvDesc = descriptor.Get<ShaderModuleSPIRVDescriptor>()) {
         mType = Type::Spirv;
         mOriginalSpirv.assign(spirvDesc->code, spirvDesc->code + spirvDesc->codeSize);
@@ -1291,8 +1334,9 @@ ShaderModuleBase::ShaderModuleBase(DeviceBase* device,
 }
 
 ShaderModuleBase::ShaderModuleBase(DeviceBase* device,
-                                   const UnpackedPtr<ShaderModuleDescriptor>& descriptor)
-    : ShaderModuleBase(device, descriptor, kUntrackedByDevice) {
+                                   const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
+                                   std::vector<tint::wgsl::Extension> internalExtensions)
+    : ShaderModuleBase(device, descriptor, std::move(internalExtensions), kUntrackedByDevice) {
     GetObjectTrackingList()->Track(this);
 }
 
@@ -1387,7 +1431,8 @@ ShaderModuleBase::ScopedUseTintProgram ShaderModuleBase::UseTintProgram() {
         }
 
         ShaderModuleParseResult parseResult;
-        ValidateAndParseShaderModule(GetDevice(), Unpack(&descriptor), &parseResult,
+        ValidateAndParseShaderModule(GetDevice(), Unpack(&descriptor), mInternalExtensions,
+                                     &parseResult,
                                      /*compilationMessages=*/nullptr)
             .AcquireSuccess();
         DAWN_ASSERT(parseResult.tintProgram != nullptr);
@@ -1414,29 +1459,64 @@ int ShaderModuleBase::GetTintProgramRecreateCountForTesting() const {
     return mTintData.Use([&](auto tintData) { return tintData->tintProgramRecreateCount; });
 }
 
+namespace {
+
+void DefaultGetCompilationInfoCallback(WGPUCompilationInfoRequestStatus status,
+                                       const WGPUCompilationInfo* compilationInfo,
+                                       void* callback,
+                                       void* userdata) {
+    if (callback == nullptr) {
+        DAWN_ASSERT(userdata == nullptr);
+        return;
+    }
+    auto cb = reinterpret_cast<WGPUCompilationInfoCallback>(callback);
+    cb(status, compilationInfo, userdata);
+}
+
+}  // anonymous namespace
+
 void ShaderModuleBase::APIGetCompilationInfo(wgpu::CompilationInfoCallback callback,
                                              void* userdata) {
+    GetInstance()->EmitDeprecationWarning(
+        "Old GetCompilationInfo APIs are deprecated. If using C please pass a CallbackInfo struct "
+        "that has two userdatas. Otherwise, if using C++, please use templated helpers.");
+
     if (callback == nullptr) {
         return;
     }
-    CompilationInfoCallbackInfo callbackInfo = {nullptr, wgpu::CallbackMode::AllowSpontaneous,
-                                                callback, userdata};
-    APIGetCompilationInfoF(callbackInfo);
+    APIGetCompilationInfo2({nullptr, WGPUCallbackMode_AllowSpontaneous,
+                            &DefaultGetCompilationInfoCallback, reinterpret_cast<void*>(callback),
+                            userdata});
 }
 
 Future ShaderModuleBase::APIGetCompilationInfoF(const CompilationInfoCallbackInfo& callbackInfo) {
+    GetInstance()->EmitDeprecationWarning(
+        "Old GetCompilationInfo APIs are deprecated. If using C please pass a CallbackInfo struct "
+        "that has two userdatas. Otherwise, if using C++, please use templated helpers.");
+
+    return APIGetCompilationInfo2({ToAPI(callbackInfo.nextInChain), ToAPI(callbackInfo.mode),
+                                   &DefaultGetCompilationInfoCallback,
+                                   reinterpret_cast<void*>(callbackInfo.callback),
+                                   callbackInfo.userdata});
+}
+
+Future ShaderModuleBase::APIGetCompilationInfo2(
+    const WGPUCompilationInfoCallbackInfo2& callbackInfo) {
     struct CompilationInfoEvent final : public EventManager::TrackedEvent {
-        WGPUCompilationInfoCallback mCallback;
-        raw_ptr<void> mUserdata;
+        WGPUCompilationInfoCallback2 mCallback;
+        raw_ptr<void> mUserdata1;
+        raw_ptr<void> mUserdata2;
         // Need to keep a Ref of the compilation messages in case the ShaderModule goes away before
         // the callback happens.
         Ref<ShaderModuleBase> mShaderModule;
 
-        CompilationInfoEvent(const CompilationInfoCallbackInfo& callbackInfo,
+        CompilationInfoEvent(const WGPUCompilationInfoCallbackInfo2& callbackInfo,
                              Ref<ShaderModuleBase> shaderModule)
-            : TrackedEvent(callbackInfo.mode, TrackedEvent::Completed{}),
+            : TrackedEvent(static_cast<wgpu::CallbackMode>(callbackInfo.mode),
+                           TrackedEvent::Completed{}),
               mCallback(callbackInfo.callback),
-              mUserdata(callbackInfo.userdata),
+              mUserdata1(callbackInfo.userdata1),
+              mUserdata2(callbackInfo.userdata2),
               mShaderModule(std::move(shaderModule)) {}
 
         ~CompilationInfoEvent() override { EnsureComplete(EventCompletionType::Shutdown); }
@@ -1449,11 +1529,9 @@ Future ShaderModuleBase::APIGetCompilationInfoF(const CompilationInfoCallbackInf
                 status = WGPUCompilationInfoRequestStatus_Success;
                 compilationInfo = mShaderModule->mCompilationMessages->GetCompilationInfo();
             }
-            if (mCallback) {
-                mCallback(status, compilationInfo, mUserdata.ExtractAsDangling());
-            } else {
-                DAWN_ASSERT(mUserdata == nullptr);
-            }
+
+            mCallback(status, compilationInfo, mUserdata1.ExtractAsDangling(),
+                      mUserdata2.ExtractAsDangling());
         }
     };
     FutureID futureID = GetDevice()->GetInstance()->GetEventManager()->TrackEvent(

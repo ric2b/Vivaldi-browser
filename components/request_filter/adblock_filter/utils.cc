@@ -17,17 +17,18 @@
 namespace {
 // Increment this whenever an incompatible change is made to
 // adblock_rules_list.fbs or to the parser
-constexpr int kRulesListFormatVersion = 6;
+constexpr int kRulesListFormatVersion = 7;
 
 // Increment this whenever an incompatible change is made to
 // adblock_rules_index.fbs
-constexpr int kIndexFormatVersion = 4;
+constexpr int kIndexFormatVersion = 5;
 
 enum RulePriorities {
-  kBlockPriority = 0,
-  kRedirectPriority,
-  kAllowPriority,
-  kMaxPriority = kAllowPriority
+  kModifyPriority = 0,
+  kPassPriority,
+  kPassAllPriority,
+  kModifyImportantPriority,
+  kMaxPriority = kModifyImportantPriority
 };
 }  // namespace
 
@@ -45,15 +46,15 @@ std::string CalculateBufferChecksum(base::span<const uint8_t> data) {
   return base::NumberToString(base::PersistentHash(data));
 }
 
-int CompareDomains(base::StringPiece lhs_domain, base::StringPiece rhs_domain) {
+int CompareDomains(std::string_view lhs_domain, std::string_view rhs_domain) {
   if (lhs_domain.size() != rhs_domain.size())
     return lhs_domain.size() > rhs_domain.size() ? -1 : 1;
   return lhs_domain.compare(rhs_domain);
 }
 
-base::StringPiece ToStringPiece(const flatbuffers::String* string) {
+std::string_view ToStringPiece(const flatbuffers::String* string) {
   DCHECK(string);
-  return base::StringPiece(string->c_str(), string->size());
+  return std::string_view(string->c_str(), string->size());
 }
 
 int GetMaxRulePriority() {
@@ -61,18 +62,23 @@ int GetMaxRulePriority() {
 }
 
 int GetRulePriority(const flat::RequestFilterRule& rule) {
-  if (rule.options() & flat::OptionFlag_IS_ALLOW_RULE)
-    return kAllowPriority;
-
-  if (rule.redirect() && rule.redirect()->size())
-    return kRedirectPriority;
-
-  return kBlockPriority;
+  switch (rule.decision()) {
+    case flat::Decision_MODIFY:
+      return kModifyPriority;
+    case flat::Decision_PASS:
+      if (IsFullModifierPassRule(rule)) {
+        return kPassAllPriority;
+      }
+      return kMaxPriority;
+    case flat::Decision_MODIFY_IMPORTANT:
+      return kModifyImportantPriority;
+  }
 }
 
-bool IsFullCSPAllowRule(const flat::RequestFilterRule& rule) {
-  return (rule.options() & flat::OptionFlag_IS_ALLOW_RULE) != 0 &&
-         (rule.options() & flat::OptionFlag_IS_CSP_RULE) != 0 && !rule.csp();
+bool IsFullModifierPassRule(const flat::RequestFilterRule& rule) {
+  return rule.decision() == flat::Decision_PASS &&
+         rule.modifier() != flat::Modifier_NO_MODIFIER &&
+         !rule.modifier_value();
 }
 
 bool IsThirdParty(const GURL& url, const url::Origin& origin) {

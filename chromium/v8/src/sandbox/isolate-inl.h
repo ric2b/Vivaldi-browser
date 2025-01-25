@@ -61,6 +61,11 @@ CodePointerTable::Space* IsolateForSandbox::GetCodePointerTableSpaceFor(
              : isolate_->heap()->code_pointer_space();
 }
 
+JSDispatchTable::Space* IsolateForSandbox::GetJSDispatchTableSpaceFor(
+    Address owning_slot) {
+  return isolate_->heap()->js_dispatch_table_space();
+}
+
 TrustedPointerTable& IsolateForSandbox::GetTrustedPointerTable() {
   return isolate_->trusted_pointer_table();
 }
@@ -114,11 +119,11 @@ IsolateForPointerCompression::GetExternalPointerTableSpaceFor(
   return isolate_->heap()->old_external_pointer_space();
 }
 
-ExternalPointerTable& IsolateForPointerCompression::GetCppHeapPointerTable() {
+CppHeapPointerTable& IsolateForPointerCompression::GetCppHeapPointerTable() {
   return isolate_->cpp_heap_pointer_table();
 }
 
-ExternalPointerTable::Space*
+CppHeapPointerTable::Space*
 IsolateForPointerCompression::GetCppHeapPointerTableSpace() {
   return isolate_->heap()->cpp_heap_pointer_space();
 }

@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fxge/cfx_font.h"
 
 #include <stdint.h>
@@ -20,7 +15,6 @@
 
 #include "build/build_config.h"
 #include "core/fxcrt/check.h"
-#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_codepage.h"
 #include "core/fxcrt/fx_stream.h"
@@ -38,6 +32,23 @@
 #include "core/fxge/scoped_font_transform.h"
 
 namespace {
+
+const CFX_Font::CharsetFontMap kDefaultTTFMap[] = {
+    {static_cast<int>(FX_Charset::kANSI), CFX_Font::kDefaultAnsiFontName},
+    {static_cast<int>(FX_Charset::kChineseSimplified), "SimSun"},
+    {static_cast<int>(FX_Charset::kChineseTraditional), "MingLiU"},
+    {static_cast<int>(FX_Charset::kShiftJIS), "MS Gothic"},
+    {static_cast<int>(FX_Charset::kHangul), "Batang"},
+    {static_cast<int>(FX_Charset::kMSWin_Cyrillic), "Arial"},
+#if BUILDFLAG(IS_WIN)
+    {static_cast<int>(FX_Charset::kMSWin_EasternEuropean), "Tahoma"},
+#else
+    {static_cast<int>(FX_Charset::kMSWin_EasternEuropean), "Arial"},
+#endif
+    {static_cast<int>(FX_Charset::kMSWin_Arabic), "Arial"},
+    // TODO(crbug.com/348468114): Remove sentinel value when
+    // FPDF_GetDefaultTTFMap() gets removed.
+    {-1, nullptr}};
 
 FX_RECT FXRectFromFTPos(FT_Pos left, FT_Pos top, FT_Pos right, FT_Pos bottom) {
   return FX_RECT(pdfium::checked_cast<int32_t>(left),
@@ -86,21 +97,6 @@ bool ShouldAppendStyle(const ByteString& style) {
 
 }  // namespace
 
-const CFX_Font::CharsetFontMap CFX_Font::kDefaultTTFMap[] = {
-    {static_cast<int>(FX_Charset::kANSI), kDefaultAnsiFontName},
-    {static_cast<int>(FX_Charset::kChineseSimplified), "SimSun"},
-    {static_cast<int>(FX_Charset::kChineseTraditional), "MingLiU"},
-    {static_cast<int>(FX_Charset::kShiftJIS), "MS Gothic"},
-    {static_cast<int>(FX_Charset::kHangul), "Batang"},
-    {static_cast<int>(FX_Charset::kMSWin_Cyrillic), "Arial"},
-#if BUILDFLAG(IS_WIN)
-    {static_cast<int>(FX_Charset::kMSWin_EasternEuropean), "Tahoma"},
-#else
-    {static_cast<int>(FX_Charset::kMSWin_EasternEuropean), "Arial"},
-#endif
-    {static_cast<int>(FX_Charset::kMSWin_Arabic), "Arial"},
-    {-1, nullptr}};
-
 // static
 const char CFX_Font::kUntitledFontName[] = "Untitled";
 
@@ -111,10 +107,17 @@ const char CFX_Font::kDefaultAnsiFontName[] = "Helvetica";
 const char CFX_Font::kUniversalDefaultFontName[] = "Arial Unicode MS";
 
 // static
+pdfium::span<const CFX_Font::CharsetFontMap> CFX_Font::GetDefaultTTFMapSpan() {
+  auto map_with_sentinel_value = pdfium::make_span(kDefaultTTFMap);
+  return map_with_sentinel_value.first(map_with_sentinel_value.size() - 1);
+}
+
+// static
 ByteString CFX_Font::GetDefaultFontNameByCharset(FX_Charset nCharset) {
-  for (size_t i = 0; i < std::size(kDefaultTTFMap) - 1; ++i) {
-    if (static_cast<int>(nCharset) == kDefaultTTFMap[i].charset)
-      return kDefaultTTFMap[i].fontname;
+  for (const auto& entry : GetDefaultTTFMapSpan()) {
+    if (static_cast<int>(nCharset) == entry.charset) {
+      return entry.fontname;
+    }
   }
   return kUniversalDefaultFontName;
 }
@@ -393,19 +396,6 @@ ByteString CFX_Font::GetFamilyNameOrUntitled() const {
   return facename.IsEmpty() ? kUntitledFontName : facename;
 }
 
-ByteString CFX_Font::GetFaceName() const {
-  if (!m_Face && !m_pSubstFont)
-    return ByteString();
-  if (m_Face) {
-    ByteString style = m_Face->GetStyleName();
-    ByteString facename = GetFamilyNameOrUntitled();
-    if (ShouldAppendStyle(style))
-      facename += " " + style;
-    return facename;
-  }
-  return m_pSubstFont->m_Family;
-}
-
 ByteString CFX_Font::GetBaseFontName() const {
   ByteString psname = GetPsName();
   if (!psname.IsEmpty() && psname != kUntitledFontName)
@@ -438,10 +428,10 @@ std::optional<FX_RECT> CFX_Font::GetBBox() const {
   int em = m_Face->GetUnitsPerEm();
   if (em != 0) {
     FX_RECT& bbox = result.value();
-    bbox.left = (bbox.left * 1000) / em;
-    bbox.top = (bbox.top * 1000) / em;
-    bbox.right = (bbox.right * 1000) / em;
-    bbox.bottom = (bbox.bottom * 1000) / em;
+    bbox.left = pdfium::saturated_cast<int32_t>((bbox.left * 1000.0f) / em);
+    bbox.top = pdfium::saturated_cast<int32_t>((bbox.top * 1000.0f) / em);
+    bbox.right = pdfium::saturated_cast<int32_t>((bbox.right * 1000.0f) / em);
+    bbox.bottom = pdfium::saturated_cast<int32_t>((bbox.bottom * 1000.0f) / em);
   }
   return result;
 }

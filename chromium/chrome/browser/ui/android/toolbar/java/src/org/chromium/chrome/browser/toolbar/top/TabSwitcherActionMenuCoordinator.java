@@ -19,6 +19,7 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.toolbar.MenuBuilderHelper;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils;
@@ -43,8 +44,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
  * (popup window) in general and building a list of menu items.
  */
 public class TabSwitcherActionMenuCoordinator {
-    // For test.
-    private View mContentView;
 
     private static TabModelSelector mTabModelSelector; // Vivaldi
 
@@ -59,18 +58,22 @@ public class TabSwitcherActionMenuCoordinator {
     public @interface MenuItemType {
         int DIVIDER = 0;
         int CLOSE_TAB = 1;
-        int VIVALDI_CLOSE_OTHER_TABS = 2; // Vivaldi
-        int NEW_TAB = 3;
-        int NEW_INCOGNITO_TAB = 4;
-        int VIVALDI_CREATE_TAB_STACK = 5; // Vivaldi
+        int NEW_TAB = 2;
+        int NEW_INCOGNITO_TAB = 3;
+
+        int VIVALDI_CLOSE_OTHER_TABS = 301; // Vivaldi
+        int VIVALDI_CREATE_TAB_STACK = 302; // Vivaldi
     }
 
     /**
-     * @param onItemClicked  The clicked listener handling clicks on TabSwitcherActionMenu.
+     * @param onItemClicked The clicked listener handling clicks on TabSwitcherActionMenu.
+     * @param profile The {@link Profile} associated with the tabs.
      * @return a long click listener of the long press action of tab switcher button.
      */
-    public static OnLongClickListener createOnLongClickListener(Callback<Integer> onItemClicked) {
-        return createOnLongClickListener(new TabSwitcherActionMenuCoordinator(), onItemClicked);
+    public static OnLongClickListener createOnLongClickListener(
+            Callback<Integer> onItemClicked, Profile profile) {
+        return createOnLongClickListener(
+                new TabSwitcherActionMenuCoordinator(profile), onItemClicked);
     }
 
     // internal helper function to create a long click listener.
@@ -83,9 +86,6 @@ public class TabSwitcherActionMenuCoordinator {
                     (ListMenuButton) view,
                     menu.buildMenuItems(),
                     (id) -> {
-                        // TODO(crbug.com/40834987): Refactor to allow subclasses to record
-                        // different
-                        // user actions and update StartSurfaceTabSwitcherActionMenuCoordinator.
                         recordUserActions(id);
                         onItemClicked.onResult(id);
                     });
@@ -103,13 +103,23 @@ public class TabSwitcherActionMenuCoordinator {
         }
     }
 
+    private final Profile mProfile;
+
+    // For test.
+    private View mContentView;
+
+    /** Construct a coordinator for the given {@link Profile}. */
+    public TabSwitcherActionMenuCoordinator(Profile profile) {
+        mProfile = profile;
+    }
+
     /**
      * Created and display the tab switcher action menu anchored to the specified view.
      *
-     * @param context        The context of the TabSwitcherActionMenu.
-     * @param anchorView     The anchor {@link View} of the {@link PopupWindow}.
-     * @param listItems      The menu item models.
-     * @param onItemClicked  The clicked listener handling clicks on TabSwitcherActionMenu.
+     * @param context The context of the TabSwitcherActionMenu.
+     * @param anchorView The anchor {@link View} of the {@link PopupWindow}.
+     * @param listItems The menu item models.
+     * @param onItemClicked The clicked listener handling clicks on TabSwitcherActionMenu.
      */
     @VisibleForTesting
     public void displayMenu(
@@ -188,10 +198,12 @@ public class TabSwitcherActionMenuCoordinator {
                         R.string.menu_new_incognito_tab,
                         R.id.new_incognito_tab_menu_id,
                         R.drawable.incognito_simple,
-                        IncognitoUtils.isIncognitoModeEnabled());
+                        IncognitoUtils.isIncognitoModeEnabled(mProfile));
+
             case MenuItemType.VIVALDI_CREATE_TAB_STACK:
                 return buildMenuListItem(R.string.tabs_menu_create_new_tab_stack,
                         R.id.vivaldi_create_new_tab_stack, R.drawable.new_tab_stack_icon);
+
             case MenuItemType.DIVIDER:
             default:
                 return buildMenuDivider();

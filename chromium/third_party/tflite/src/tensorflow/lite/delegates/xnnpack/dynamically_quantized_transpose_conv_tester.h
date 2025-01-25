@@ -22,6 +22,7 @@ limitations under the License.
 #include <vector>
 
 #include <gtest/gtest.h>
+#include "tensorflow/lite/c/c_api_types.h"
 #include "tensorflow/lite/core/c/builtin_op_data.h"
 #include "tensorflow/lite/delegates/xnnpack/xnnpack_delegate.h"
 #include "tensorflow/lite/schema/schema_generated.h"
@@ -183,11 +184,7 @@ class DynamicallyQuantizedTransposeConvTester {
   std::vector<int8_t> GenerateKernelData() const;
   std::vector<float> GenerateBiasData() const;
   std::vector<float> GenerateKernelScaleData() const;
-  std::vector<char> CreateDRQTfLiteModel(
-      const std::vector<int8_t>& filter_data,
-      const std::vector<float>& bias_data,
-      const std::vector<float>& kernel_scale) const;
-  std::vector<char> CreateDequantizeTfLiteModel(
+  std::vector<char> CreateTfLiteModel(
       const std::vector<int8_t>& filter_data,
       const std::vector<float>& bias_data,
       const std::vector<float>& kernel_scale) const;

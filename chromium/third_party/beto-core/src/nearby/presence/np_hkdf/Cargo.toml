@@ -17,9 +17,10 @@ ldt.workspace = true
 xts_aes.workspace = true
 
 [dev-dependencies]
-crypto_provider_default.workspace = true
+crypto_provider_default = { workspace = true, features = ["rustcrypto"] }
 rand_ext.workspace = true
 test_helper.workspace = true
+test_vector_hkdf.workspace = true
 
 anyhow.workspace = true
 criterion.workspace = true

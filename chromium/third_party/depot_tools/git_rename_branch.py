@@ -12,8 +12,14 @@ import subprocess2
 from git_common import current_branch, run, set_branch_config, branch_config
 from git_common import branch_config_map
 
+import gclient_utils
+
 
 def main(args):
+    if gclient_utils.IsEnvCog():
+        print('rename-branch command is not supported in non-git environment.',
+              file=sys.stderr)
+        return 1
     current = current_branch()
     if current == 'HEAD':
         current = None

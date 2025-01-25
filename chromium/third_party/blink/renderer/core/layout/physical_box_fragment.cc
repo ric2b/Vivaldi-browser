@@ -102,14 +102,11 @@ const PhysicalBoxFragment* PhysicalBoxFragment::Create(
     WritingMode block_or_line_writing_mode) {
   const auto writing_direction = builder->GetWritingDirection();
   const PhysicalBoxStrut borders =
-      builder->initial_fragment_geometry_->border.ConvertToPhysical(
-          writing_direction);
+      builder->ApplicableBorders().ConvertToPhysical(writing_direction);
   const PhysicalBoxStrut scrollbar =
-      builder->initial_fragment_geometry_->scrollbar.ConvertToPhysical(
-          writing_direction);
+      builder->ApplicableScrollbar().ConvertToPhysical(writing_direction);
   const PhysicalBoxStrut padding =
-      builder->initial_fragment_geometry_->padding.ConvertToPhysical(
-          writing_direction);
+      builder->ApplicablePadding().ConvertToPhysical(writing_direction);
 
   const PhysicalSize physical_size =
       ToPhysicalSize(builder->Size(), builder->GetWritingMode());
@@ -289,7 +286,9 @@ PhysicalBoxFragment::PhysicalBoxFragment(
                  IsMonolithicFlag::encode(builder->is_monolithic_) |
                  IsMonolithicOverflowPropagationDisabledFlag::encode(
                      builder->GetConstraintSpace()
-                         .IsMonolithicOverflowPropagationDisabled())) {
+                         .IsMonolithicOverflowPropagationDisabled()) |
+                 HasMovedChildrenInBlockDirectionFlag::encode(
+                     builder->has_moved_children_in_block_direction_)) {
   DCHECK(layout_object_);
   DCHECK(layout_object_->IsBoxModelObject());
   DCHECK(!builder->break_token_ || builder->break_token_->IsBlockType());
@@ -330,7 +329,8 @@ PhysicalBoxFragment::PhysicalBoxFragment(
       !!builder->page_name_ + !!borders + !!scrollbar + !!padding +
       inflow_bounds.has_value() + !!builder->Style().MayHaveMargin();
 
-  if (rare_fields_size > 0 || !builder->table_column_geometries_.empty()) {
+  if (rare_fields_size > 0 || !builder->table_column_geometries_.empty() ||
+      !builder->reading_flow_elements_.empty()) {
     rare_data_ = MakeGarbageCollected<PhysicalFragmentRareData>(
         has_scrollable_overflow ? &scrollable_overflow : nullptr, borders,
         scrollbar, padding, inflow_bounds, *builder, rare_fields_size);
@@ -401,12 +401,6 @@ PhysicalBoxFragment::PhysicalBoxFragment(
 }
 
 PhysicalBoxFragment::~PhysicalBoxFragment() {
-  // Note: This function may not always be called because the dtor of
-  // PhysicalFragment is made non-virtual for memory efficiency.
-  SetInkOverflowType(ink_overflow_.Reset(InkOverflowType()));
-}
-
-void PhysicalBoxFragment::Dispose() {
   if (HasInkOverflow())
     SetInkOverflowType(ink_overflow_.Reset(InkOverflowType()));
   if (HasItems())
@@ -433,7 +427,7 @@ const LayoutBox* PhysicalBoxFragment::OwnerLayoutBox() const {
   if (UNLIKELY(IsFragmentainerBox())) {
     if (owner_box->IsLayoutView()) {
       DCHECK_EQ(GetBoxType(), kPageArea);
-      DCHECK(To<LayoutView>(owner_box)->ShouldUsePrintingLayout());
+      DCHECK(To<LayoutView>(owner_box)->ShouldUsePaginatedLayout());
     } else {
       DCHECK(IsColumnBox());
     }
@@ -1069,7 +1063,7 @@ void PhysicalBoxFragment::AddOutlineRects(
   DCHECK(IsOutlineOwner());
 
   // For anonymous blocks, the children add outline rects.
-  if (!IsAnonymousBlock()) {
+  if (!IsAnonymousBlock() || GetBoxType() == kPageBorderBox) {
     if (IsSvgText()) {
       if (Items()) {
         collector.AddRect(PhysicalRect::EnclosingRect(

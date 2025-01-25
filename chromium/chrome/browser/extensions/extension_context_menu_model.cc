@@ -26,15 +26,16 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/extensions/extension_side_panel_utils.h"
 #include "chrome/browser/ui/extensions/extensions_container.h"
-#include "chrome/browser/ui/side_panel/side_panel_entry_id.h"
-#include "chrome/browser/ui/side_panel/side_panel_entry_key.h"
-#include "chrome/browser/ui/side_panel/side_panel_ui.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_entry_id.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_entry_key.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
 #include "chrome/common/extensions/api/side_panel.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/branded_strings.h"
@@ -155,7 +156,7 @@ ExtensionContextMenuModel::ContextMenuAction CommandIdToContextMenuAction(
     case ExtensionContextMenuModel::PAGE_ACCESS_SUBMENU:
     case ExtensionContextMenuModel::PAGE_ACCESS_ALL_EXTENSIONS_GRANTED:
     case ExtensionContextMenuModel::PAGE_ACCESS_ALL_EXTENSIONS_BLOCKED:
-      DUMP_WILL_BE_NOTREACHED_NORETURN();
+      DUMP_WILL_BE_NOTREACHED();
       break;
     case ExtensionContextMenuModel::VIEW_WEB_PERMISSIONS:
       return ContextMenuAction::kViewWebPermissions;
@@ -164,7 +165,7 @@ ExtensionContextMenuModel::ContextMenuAction CommandIdToContextMenuAction(
     default:
       break;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return ContextMenuAction::kNoAction;
 }
 
@@ -177,7 +178,7 @@ PermissionsManager::UserSiteAccess CommandIdToSiteAccess(int command_id) {
     case ExtensionContextMenuModel::PAGE_ACCESS_RUN_ON_ALL_SITES:
       return PermissionsManager::UserSiteAccess::kOnAllSites;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return PermissionsManager::UserSiteAccess::kOnClick;
 }
 
@@ -206,7 +207,7 @@ void LogPageAccessAction(int command_id) {
           "Extensions.ContextMenu.Hosts.LearnMoreClicked"));
       break;
     default:
-      NOTREACHED() << "Unknown option: " << command_id;
+      NOTREACHED_IN_MIGRATION() << "Unknown option: " << command_id;
       break;
   }
 }
@@ -392,7 +393,7 @@ bool ExtensionContextMenuModel::IsCommandIdEnabled(int command_id) const {
     case VIEW_WEB_PERMISSIONS:
       return true;
     default:
-      NOTREACHED() << "Unknown command" << command_id;
+      NOTREACHED_IN_MIGRATION() << "Unknown command" << command_id;
   }
   return true;
 }
@@ -506,7 +507,7 @@ void ExtensionContextMenuModel::ExecuteCommand(int command_id,
 
       break;
     default:
-      NOTREACHED() << "Unknown option";
+      NOTREACHED_IN_MIGRATION() << "Unknown option";
       break;
   }
 }
@@ -788,8 +789,7 @@ void ExtensionContextMenuModel::InitMenu(const Extension* extension,
 
 void ExtensionContextMenuModel::AddSidePanelEntryIfPresent(
     const Extension& extension) {
-  if (!features::IsSidePanelPinningEnabled() ||
-      !extension.permissions_data()->HasAPIPermission(
+  if (!extension.permissions_data()->HasAPIPermission(
           mojom::APIPermissionID::kSidePanel)) {
     return;
   }
@@ -804,8 +804,7 @@ void ExtensionContextMenuModel::AddSidePanelEntryIfPresent(
   }
 
   AddSeparator(ui::NORMAL_SEPARATOR);
-  SidePanelUI* const side_panel_ui =
-      SidePanelUI::GetSidePanelUIForBrowser(browser_);
+  SidePanelUI* const side_panel_ui = browser_->GetFeatures().side_panel_ui();
   CHECK(side_panel_ui);
   bool is_side_panel_open = side_panel_ui->IsSidePanelEntryShowing(
       SidePanelEntryKey(SidePanelEntryId::kExtension, extension.id()));

@@ -15,7 +15,7 @@
 import m from 'mithril';
 
 import {duration, TimeSpan} from '../../base/time';
-import {EngineProxy} from '../../public';
+import {Engine} from '../../public';
 import {
   LONG,
   NUM_NULL,
@@ -67,7 +67,7 @@ export interface BreakdownByThreadState {
 // Compute a breakdown of thread states for a given thread for a given time
 // interval.
 export async function breakDownIntervalByThreadState(
-  engine: EngineProxy,
+  engine: Engine,
   range: TimeSpan,
   utid: Utid,
 ): Promise<BreakdownByThreadState> {
@@ -76,12 +76,12 @@ export async function breakDownIntervalByThreadState(
   const query = await engine.query(`
     INCLUDE PERFETTO MODULE sched.time_in_state;
     INCLUDE PERFETTO MODULE sched.states;
-    INCLUDE PERFETTO MODULE cpu.size;
+    INCLUDE PERFETTO MODULE viz.core_type;
 
     SELECT
       sched_state_io_to_human_readable_string(state, io_wait) as state,
       state AS rawState,
-      cpu_guess_core_type(cpu) AS cpuType,
+      _guess_core_type(cpu) AS cpuType,
       cpu,
       blocked_function AS blockedFunction,
       dur

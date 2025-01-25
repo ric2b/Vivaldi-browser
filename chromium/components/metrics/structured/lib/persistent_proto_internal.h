@@ -73,6 +73,8 @@ class PersistentProtoInternal
 
   constexpr explicit operator bool() const { return has_value(); }
 
+  const base::FilePath& path() { return proto_file_->path(); }
+
   // base::ImportantFileWriter::DataSerializer:
   std::optional<std::string> SerializeData() override;
 
@@ -93,6 +95,9 @@ class PersistentProtoInternal
   void DeallocProto();
 
  private:
+  // Queues a task to delete the backing file.
+  void QueueFileDelete();
+
   // Completes a write if there is a queued one.
   //
   // This is needed because it needs to be called by the class that owns the
@@ -101,7 +106,8 @@ class PersistentProtoInternal
   void FlushQueuedWrites();
 
   // Callback when the file has been loaded into a file.
-  void OnReadComplete(base::expected<std::string, ReadStatus> read_status);
+  void OnReadComplete(ReadCallback callback,
+                      base::expected<std::string, ReadStatus> read_status);
 
   // Called after |proto_file_| has attempted to write with the write status
   // captured in |write_successful|.
@@ -112,9 +118,6 @@ class PersistentProtoInternal
 
   // Whether we should immediately clear the proto after reading it.
   bool purge_after_reading_ = false;
-
-  // Run when the cache finishes reading from disk, if provided.
-  ReadCallback on_read_;
 
   // Run when the cache finishes writing to disk, if provided.
   WriteCallback on_write_;

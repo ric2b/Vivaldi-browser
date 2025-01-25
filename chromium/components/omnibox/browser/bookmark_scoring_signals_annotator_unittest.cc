@@ -22,6 +22,7 @@
 #include "components/omnibox/browser/autocomplete_result.h"
 #include "components/omnibox/browser/fake_autocomplete_provider_client.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
+#include "components/search_engines/search_engines_test_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
@@ -36,9 +37,9 @@ struct BookmarksTestInfo {
 };
 
 std::vector<BookmarksTestInfo> bookmark_test_data = {
-    {"abc", "http://testa.com"},
+    {"defgh abc", "http://testa.com"},
     {"abc defgh", "http://testa.com"},
-    {"abc edef", "http://testb.com"},
+    {"edef abc", "http://testb.com"},
     {"aaa", "http://testa.com/a"},
 };
 
@@ -65,6 +66,7 @@ class BookmarkScoringSignalsAnnotatorTest : public testing::Test {
 
   base::ScopedTempDir history_dir_;
   base::test::TaskEnvironment task_environment_;
+  search_engines::SearchEnginesTestEnvironment search_engines_test_environment_;
   std::unique_ptr<FakeAutocompleteProviderClient> client_;
   std::unique_ptr<BookmarkScoringSignalsAnnotator> annotator_;
   std::unique_ptr<AutocompleteResult> result_;
@@ -77,7 +79,7 @@ void BookmarkScoringSignalsAnnotatorTest::SetUp() {
       history_dir_.GetPath(), /*create_db=*/true));
   client_->set_bookmark_model(bookmarks::TestBookmarkClient::CreateModel());
   client_->set_template_url_service(
-      std::make_unique<TemplateURLService>(nullptr, 0));
+      search_engines_test_environment_.ReleaseTemplateURLService());
   annotator_ = std::make_unique<BookmarkScoringSignalsAnnotator>(client_.get());
   FillBookmarkModelData();
   CreateAutocompleteResult();
@@ -99,28 +101,60 @@ void BookmarkScoringSignalsAnnotatorTest::FillBookmarkModelData() {
 }
 
 void BookmarkScoringSignalsAnnotatorTest::CreateAutocompleteResult() {
-  AutocompleteMatch url_match;
-  url_match.destination_url = GURL("http://testa.com/");
-  url_match.type = AutocompleteMatchType::HISTORY_URL;
+  AutocompleteMatch url_match_c;
+  url_match_c.destination_url = GURL("http://testc.com/");
+  url_match_c.type = AutocompleteMatchType::HISTORY_URL;
 
-  std::vector<AutocompleteMatch> matches{url_match};
+  AutocompleteMatch url_match_b;
+  url_match_b.destination_url = GURL("http://testb.com/");
+  url_match_b.type = AutocompleteMatchType::HISTORY_URL;
+
+  AutocompleteMatch url_match_a;
+  url_match_a.destination_url = GURL("http://testa.com/");
+  url_match_a.type = AutocompleteMatchType::HISTORY_URL;
+
+  std::vector<AutocompleteMatch> matches{url_match_c, url_match_b, url_match_a};
   result_ = std::make_unique<AutocompleteResult>();
   result_->AppendMatches(matches);
 }
 
 TEST_F(BookmarkScoringSignalsAnnotatorTest, AnnotateResult) {
-  AutocompleteInput input(u"abc defg", std::u16string::npos,
+  AutocompleteInput input(u"abc", std::u16string::npos,
                           metrics::OmniboxEventProto::OTHER,
                           TestSchemeClassifier());
-
+  // url_match_c
   annotator()->AnnotateResult(input, result());
-  EXPECT_EQ(result()->match_at(0)->scoring_signals->num_bookmarks_of_url(), 2);
+  EXPECT_EQ(result()->match_at(0)->scoring_signals->num_bookmarks_of_url(), 0);
   EXPECT_EQ(result()
                 ->match_at(0)
                 ->scoring_signals->total_bookmark_title_match_length(),
-            7);
+            0);
   EXPECT_EQ(result()
                 ->match_at(0)
+                ->scoring_signals->first_bookmark_title_match_position(),
+            0);
+
+  // url_match_b
+  annotator()->AnnotateResult(input, result());
+  EXPECT_EQ(result()->match_at(1)->scoring_signals->num_bookmarks_of_url(), 1);
+  EXPECT_EQ(result()
+                ->match_at(1)
+                ->scoring_signals->total_bookmark_title_match_length(),
+            3);
+  EXPECT_EQ(result()
+                ->match_at(1)
+                ->scoring_signals->first_bookmark_title_match_position(),
+            5);
+
+  // url_match_a
+  annotator()->AnnotateResult(input, result());
+  EXPECT_EQ(result()->match_at(2)->scoring_signals->num_bookmarks_of_url(), 2);
+  EXPECT_EQ(result()
+                ->match_at(2)
+                ->scoring_signals->total_bookmark_title_match_length(),
+            3);
+  EXPECT_EQ(result()
+                ->match_at(2)
                 ->scoring_signals->first_bookmark_title_match_position(),
             0);
 }

@@ -13,22 +13,17 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
 #include "chrome/browser/apps/app_service/app_install/app_install.pb.h"
+#include "chrome/browser/apps/app_service/app_install/app_install_discovery_metrics.h"
 #include "chrome/browser/apps/app_service/app_install/app_install_types.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/ash/borealis/borealis_game_install_flow.h"
-#include "chrome/browser/ash/crosapi/crosapi_ash.h"
-#include "chrome/browser/ash/crosapi/crosapi_manager.h"
-#include "chrome/browser/ash/crosapi/web_app_service_ash.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/ash/app_install/app_install.mojom.h"
 // TODO(crbug.com/40283709): Remove circular dependency.
 #include "chrome/browser/ui/webui/ash/app_install/app_install_dialog.h"  // nogncheck
 #include "chrome/browser/ui/webui/ash/app_install/app_install_page_handler.h"  // nogncheck
-#include "chrome/browser/web_applications/web_app_command_scheduler.h"
-#include "chrome/browser/web_applications/web_app_provider.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_types.h"
 #include "chromeos/constants/chromeos_features.h"
-#include "chromeos/crosapi/mojom/web_app_service.mojom.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/package_id.h"
 #include "components/services/app_service/public/cpp/types_util.h"
@@ -68,35 +63,6 @@ AppInstallResult AppInstallResultFromQueryError(
     case QueryError::kBadResponse:
       return AppInstallResult::kAppDataCorrupted;
   }
-}
-
-AppInstallResult InstallWebAppWithBrowserInstallDialog(
-    Profile& profile,
-    const GURL& install_url) {
-  const GURL& origin_url = install_url;
-  constexpr bool is_renderer_initiated = false;
-
-  web_app::WebAppProvider* provider =
-      web_app::WebAppProvider::GetForWebApps(&profile);
-  if (provider) {
-    provider->scheduler().ScheduleNavigateAndTriggerInstallDialog(
-        install_url, origin_url, is_renderer_initiated, base::DoNothing());
-    return AppInstallResult::kUnknown;
-  }
-
-  // No WebAppProvider means web apps are hosted in Lacros (because this code
-  // runs in Ash).
-  crosapi::mojom::WebAppProviderBridge* web_app_provider_bridge =
-      crosapi::CrosapiManager::Get()
-          ->crosapi_ash()
-          ->web_app_service_ash()
-          ->GetWebAppProviderBridge();
-  if (!web_app_provider_bridge) {
-    return AppInstallResult::kAppProviderNotAvailable;
-  }
-  web_app_provider_bridge->ScheduleNavigateAndTriggerInstallDialog(
-      install_url, origin_url, is_renderer_initiated);
-  return AppInstallResult::kUnknown;
 }
 
 void RecordInstallResult(base::OnceClosure callback,
@@ -158,6 +124,9 @@ void AppInstallServiceAsh::InstallApp(
     std::move(InstallAppCallbackForTesting()).Run(package_id);
   }
 
+  RecordAppDiscoveryMetricForInstallRequest(&profile_.get(), surface,
+                                            package_id);
+
   base::OnceCallback<void(AppInstallResult)> result_callback =
       base::BindOnce(&RecordInstallResult, std::move(callback), surface);
 
@@ -173,8 +142,8 @@ void AppInstallServiceAsh::InstallApp(
           "https://play.google.com/store/apps/details";
       GURL url = net::AppendOrReplaceQueryParameter(
           GURL(kPlayStoreAppDetailsPage), "id", package_id.identifier());
-      MaybeLaunchPreferredAppForUrl(&*profile_, url,
-                                    LaunchSource::kFromInstaller);
+      LaunchUrlInInstalledAppOrBrowser(&*profile_, url,
+                                       LaunchSource::kFromInstaller);
       std::move(result_callback).Run(AppInstallResult::kUnknown);
       return;
     }
@@ -207,8 +176,8 @@ void AppInstallServiceAsh::InstallApp(
           "https://play.geforcenow.com/games";
       GURL url = net::AppendOrReplaceQueryParameter(
           GURL(kGeForceNowAppDetailsPage), "game-id", package_id.identifier());
-      MaybeLaunchPreferredAppForUrl(&*profile_, url,
-                                    LaunchSource::kFromInstaller);
+      LaunchUrlInInstalledAppOrBrowser(&*profile_, url,
+                                       LaunchSource::kFromInstaller);
       std::move(result_callback).Run(AppInstallResult::kUnknown);
       return;
     }
@@ -229,6 +198,7 @@ void AppInstallServiceAsh::InstallApp(
       return;
     }
     case PackageType::kChromeApp:
+    case PackageType::kSystem:
     case PackageType::kUnknown:
       // TODO(b/303350800): Generalize to work with all app types.
       std::move(result_callback).Run(AppInstallResult::kAppTypeNotSupported);
@@ -305,6 +275,9 @@ void AppInstallServiceAsh::PerformInstallHeadless(
     return;
   }
 
+  RecordAppDiscoveryMetricForInstallRequest(&profile_.get(), surface,
+                                            expected_package_id);
+
   PerformInstall(surface, *data, std::move(callback));
 }
 
@@ -323,22 +296,20 @@ void AppInstallServiceAsh::ShowDialogAndInstall(
 
   if (std::optional<QueryError::Type> query_error =
           VerifyAppInstallData(data, expected_package_id)) {
-    if (ash::app_install::AppInstallDialog::IsEnabled()) {
-      base::WeakPtr<ash::app_install::AppInstallDialog> dialog =
-          ash::app_install::AppInstallDialog::CreateDialog();
-      switch (query_error.value()) {
-        case QueryError::kConnectionError:
-          dialog->ShowConnectionError(
-              parent, base::BindOnce(&AppInstallServiceAsh::InstallApp,
-                                     weak_ptr_factory_.GetWeakPtr(), surface,
-                                     expected_package_id, anchor_window,
-                                     base::DoNothing()));
-          break;
-        case QueryError::kBadRequest:
-        case QueryError::kBadResponse:
-          dialog->ShowNoAppError(parent);
-          break;
-      }
+    base::WeakPtr<ash::app_install::AppInstallDialog> dialog =
+        ash::app_install::AppInstallDialog::CreateDialog();
+    switch (query_error.value()) {
+      case QueryError::kConnectionError:
+        dialog->ShowConnectionError(
+            parent, base::BindOnce(&AppInstallServiceAsh::InstallApp,
+                                   weak_ptr_factory_.GetWeakPtr(), surface,
+                                   expected_package_id, anchor_window,
+                                   base::DoNothing()));
+        break;
+      case QueryError::kBadRequest:
+      case QueryError::kBadResponse:
+        dialog->ShowNoAppError(parent);
+        break;
     }
 
     std::move(callback).Run(
@@ -350,16 +321,6 @@ void AppInstallServiceAsh::ShowDialogAndInstall(
   CHECK_EQ(expected_package_id.package_type(), PackageType::kWeb);
   const WebAppInstallData& web_app_data =
       absl::get<WebAppInstallData>(data->app_type_data);
-
-  if (!base::FeatureList::IsEnabled(
-          chromeos::features::kCrosWebAppInstallDialog) &&
-      !ash::app_install::AppInstallPageHandler::GetAutoAcceptForTesting()) {
-    // TODO(b/303350800): Delegate to a generic AppPublisher method
-    // instead of harboring app type specific logic here.
-    std::move(callback).Run(InstallWebAppWithBrowserInstallDialog(
-        *profile_, web_app_data.document_url));
-    return;
-  }
 
   std::vector<ash::app_install::mojom::ScreenshotPtr> screenshots;
   for (auto& screenshot : data->screenshots) {
@@ -373,15 +334,12 @@ void AppInstallServiceAsh::ShowDialogAndInstall(
   base::WeakPtr<ash::app_install::AppInstallDialog> dialog =
       ash::app_install::AppInstallDialog::CreateDialog();
   dialog->ShowApp(&*profile_, parent, expected_package_id, data->name,
-                  web_app_data.document_url, data->description,
-                  data->icon ? data->icon->url : GURL::EmptyGURL(),
-                  data->icon ? data->icon->width_in_pixels : 0,
-                  data->icon ? data->icon->is_masking_allowed : false,
+                  web_app_data.document_url, data->description, data->icon,
                   std::move(screenshots),
                   base::BindOnce(&AppInstallServiceAsh::InstallIfDialogAccepted,
                                  weak_ptr_factory_.GetWeakPtr(), surface,
-                                 expected_package_id, std::move(data).value(),
-                                 dialog, std::move(callback)));
+                                 expected_package_id, data.value(), dialog,
+                                 std::move(callback)));
 }
 
 void AppInstallServiceAsh::InstallIfDialogAccepted(
@@ -466,30 +424,28 @@ void AppInstallServiceAsh::FetchAppInstallUrlWithDeviceInfo(
 void AppInstallServiceAsh::MaybeLaunchAppInstallUrl(
     base::OnceCallback<void(AppInstallResult)> callback,
     base::expected<GURL, QueryError> install_url) {
-  if (!install_url.has_value()) {
-    if (ash::app_install::AppInstallDialog::IsEnabled()) {
-      base::WeakPtr<ash::app_install::AppInstallDialog> dialog =
-          ash::app_install::AppInstallDialog::CreateDialog();
-      switch (install_url.error().type) {
-        case QueryError::kConnectionError:
-          // TODO(b/339548810): Show connection error dialog instead, this needs
-          // the parameters necessary for a retry_callback to be plumbed through
-          // to here.
-        case QueryError::kBadRequest:
-        case QueryError::kBadResponse:
-          // TODO(b/339548810): Plumb the parent window through to here.
-          dialog->ShowNoAppError(/*parent=*/nullptr);
-          break;
-      }
-    }
-    std::move(callback).Run(
-        AppInstallResultFromQueryError(install_url.error().type));
+  if (install_url.has_value()) {
+    LaunchUrlInInstalledAppOrBrowser(&*profile_, install_url.value(),
+                                     LaunchSource::kFromInstaller);
+    std::move(callback).Run(AppInstallResult::kInstallUrlFallback);
     return;
   }
 
-  MaybeLaunchPreferredAppForUrl(&*profile_, install_url.value(),
-                                LaunchSource::kFromInstaller);
-  std::move(callback).Run(AppInstallResult::kInstallUrlFallback);
+  base::WeakPtr<ash::app_install::AppInstallDialog> dialog =
+      ash::app_install::AppInstallDialog::CreateDialog();
+  switch (install_url.error().type) {
+    case QueryError::kConnectionError:
+      // TODO(b/339548810): Show connection error dialog instead, this needs
+      // the parameters necessary for a retry_callback to be plumbed through
+      // to here.
+    case QueryError::kBadRequest:
+    case QueryError::kBadResponse:
+      // TODO(b/339548810): Plumb the parent window through to here.
+      dialog->ShowNoAppError(/*parent=*/nullptr);
+      break;
+  }
+  std::move(callback).Run(
+      AppInstallResultFromQueryError(install_url.error().type));
 }
 
 }  // namespace apps

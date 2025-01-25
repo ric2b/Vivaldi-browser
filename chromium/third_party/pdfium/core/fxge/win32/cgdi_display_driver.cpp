@@ -12,6 +12,7 @@
 #include "core/fxcrt/check_op.h"
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/fx_system.h"
+#include "core/fxge/agg/cfx_agg_imagerenderer.h"
 #include "core/fxge/dib/cfx_dibbase.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 #include "core/fxge/render_defines.h"
@@ -36,7 +37,7 @@ int CGdiDisplayDriver::GetDeviceCaps(int caps_id) const {
 
 bool CGdiDisplayDriver::GetDIBits(RetainPtr<CFX_DIBitmap> bitmap,
                                   int left,
-                                  int top) {
+                                  int top) const {
   bool ret = false;
   int width = bitmap->GetWidth();
   int height = bitmap->GetHeight();
@@ -55,6 +56,9 @@ bool CGdiDisplayDriver::GetDIBits(RetainPtr<CFX_DIBitmap> bitmap,
     ret = ::GetDIBits(hDCMemory, hbmp, 0, height,
                       bitmap->GetWritableBuffer().data(), &bmi,
                       DIB_RGB_COLORS) == height;
+    if (ret && bitmap->IsAlphaFormat()) {
+      bitmap->SetUniformOpaqueAlpha();
+    }
   } else {
     auto rgb_bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
     if (rgb_bitmap->Create(width, height, FXDIB_Format::kRgb)) {
@@ -66,9 +70,6 @@ bool CGdiDisplayDriver::GetDIBits(RetainPtr<CFX_DIBitmap> bitmap,
     } else {
       ret = false;
     }
-  }
-  if (ret && bitmap->IsAlphaFormat()) {
-    bitmap->SetUniformOpaqueAlpha();
   }
 
   DeleteObject(hbmp);
@@ -214,12 +215,12 @@ bool CGdiDisplayDriver::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                            dest_height, FXDIB_ResampleOptions());
 }
 
-bool CGdiDisplayDriver::StartDIBits(RetainPtr<const CFX_DIBBase> bitmap,
-                                    float alpha,
-                                    uint32_t color,
-                                    const CFX_Matrix& matrix,
-                                    const FXDIB_ResampleOptions& options,
-                                    std::unique_ptr<CFX_ImageRenderer>* handle,
-                                    BlendMode blend_type) {
-  return false;
+RenderDeviceDriverIface::StartResult CGdiDisplayDriver::StartDIBits(
+    RetainPtr<const CFX_DIBBase> bitmap,
+    float alpha,
+    uint32_t color,
+    const CFX_Matrix& matrix,
+    const FXDIB_ResampleOptions& options,
+    BlendMode blend_type) {
+  return {false, nullptr};
 }

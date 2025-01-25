@@ -167,10 +167,6 @@ build_recipe(
 )
 
 build_recipe(
-    name = "recipe:chromium/rr_test_launcher",
-)
-
-build_recipe(
     name = "recipe:chromium/compilator",
     bootstrappable = True,
 )
@@ -194,6 +190,15 @@ build_recipe(
 
 build_recipe(
     name = "recipe:chromium_polymorphic/launcher",
+)
+
+build_recipe(
+    name = "recipe:chromium_rr/orchestrator",
+)
+
+build_recipe(
+    name = "recipe:chromium_rr/test_launcher",
+    bootstrappable = POLYMORPHIC,
 )
 
 build_recipe(

@@ -16,7 +16,9 @@ static jlong JNI_SyncedFileStore_Init(
   return reinterpret_cast<intptr_t>(synced_file_store);
 }
 
-SyncedFileStoreAndroid::SyncedFileStoreAndroid(JNIEnv* env, jobject obj)
+SyncedFileStoreAndroid::SyncedFileStoreAndroid(
+    JNIEnv* env,
+    const base::android::JavaRef<jobject>& obj)
     : weak_java_ref_(env, obj) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   DCHECK(profile);

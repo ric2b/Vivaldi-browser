@@ -14,11 +14,11 @@ float16_t tint_workgroupUniformLoad_arg_0() {
   return result;
 }
 
-RWByteAddressBuffer prevent_dce : register(u0, space2);
+RWByteAddressBuffer prevent_dce : register(u0);
 
-void workgroupUniformLoad_e07d08() {
+float16_t workgroupUniformLoad_e07d08() {
   float16_t res = tint_workgroupUniformLoad_arg_0();
-  prevent_dce.Store<float16_t>(0u, res);
+  return res;
 }
 
 struct tint_symbol_1 {
@@ -27,7 +27,7 @@ struct tint_symbol_1 {
 
 void compute_main_inner(uint local_invocation_index) {
   tint_zero_workgroup_memory(local_invocation_index);
-  workgroupUniformLoad_e07d08();
+  prevent_dce.Store<float16_t>(0u, workgroupUniformLoad_e07d08());
 }
 
 [numthreads(1, 1, 1)]

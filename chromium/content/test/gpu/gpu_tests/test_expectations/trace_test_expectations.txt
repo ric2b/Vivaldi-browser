@@ -37,7 +37,7 @@
 #         intel intel-gen-9 intel-gen-12 intel-0xa2e intel-0xd26 intel-0xa011
 #             intel-0x3e92 intel-0x3e9b intel-0x4680 intel-0x5912 intel-0x9bc5
 #         nvidia nvidia-0xfe9 nvidia-0x1cb3 nvidia-0x2184
-#         qualcomm qualcomm-0x41333430 ]
+#         qualcomm qualcomm-0x41333430 qualcomm-0x36333630 qualcomm-0x36334330 ]
 # Architecture
 # tags: [ mac-arm64 mac-x86_64 ]
 # Decoder
@@ -70,8 +70,6 @@
 # tags: [ dawn-backend-validation dawn-no-backend-validation ]
 # WebGPU Adapter
 # tags: [ webgpu-adapter-default webgpu-adapter-swiftshader ]
-# WebGPU Compat Mode
-# tags: [ webgpu-compat webgpu-not-compat ]
 # WebGPU DXC
 # tags: [ webgpu-dxc-enabled webgpu-dxc-disabled ]
 # WebGPU worker usage
@@ -93,14 +91,6 @@
 # This is for things like tests that will never be supported on a particular
 # platform/configuration.
 
-# Trace tests don't support OS-specific tests, so windows-only test is skipped.
-crbug.com/337737554 [ mac ] TraceTest_MediaFoundationD3D11VideoCapture [ Skip ]
-crbug.com/337737554 [ linux ] TraceTest_MediaFoundationD3D11VideoCapture [ Skip ]
-crbug.com/337737554 [ android ] TraceTest_MediaFoundationD3D11VideoCapture [ Skip ]
-crbug.com/337737554 [ fuchsia ] TraceTest_MediaFoundationD3D11VideoCapture [ Skip ]
-crbug.com/337737554 [ chromeos ] TraceTest_MediaFoundationD3D11VideoCapture [ Skip ]
-
-
 # Require page actions - which are only supported in pixel tests.
 crbug.com/1048892 TraceTest_OffscreenCanvasIBRCWebGLMain [ Skip ]
 crbug.com/1048892 TraceTest_OffscreenCanvasIBRCWebGLWorker [ Skip ]
@@ -110,23 +100,6 @@ crbug.com/1048892 TraceTest_OffscreenCanvasIBRCWebGLWorker [ Skip ]
 # pixel tests so they're being skipped in this test suite.
 crbug.com/974077 TraceTest_Video_Context_Loss_MP4 [ Skip ]
 crbug.com/974077 TraceTest_Video_Context_Loss_VP9 [ Skip ]
-
-# Skip on platforms where DirectComposition isn't supported
-crbug.com/867136 [ mac ] VideoPathTraceTest_* [ Skip ]
-crbug.com/867136 [ linux ] VideoPathTraceTest_* [ Skip ]
-crbug.com/867136 [ android ] VideoPathTraceTest_* [ Skip ]
-crbug.com/867136 [ chromeos ] VideoPathTraceTest_* [ Skip ]
-crbug.com/867136 [ fuchsia ] VideoPathTraceTest_* [ Skip ]
-crbug.com/867136 [ mac ] OverlayModeTraceTest_* [ Skip ]
-crbug.com/867136 [ linux ] OverlayModeTraceTest_* [ Skip ]
-crbug.com/867136 [ android ] OverlayModeTraceTest_* [ Skip ]
-crbug.com/867136 [ chromeos ] OverlayModeTraceTest_* [ Skip ]
-crbug.com/867136 [ fuchsia ] OverlayModeTraceTest_* [ Skip ]
-crbug.com/1009860 [ mac ] SwapChainTraceTest_* [ Skip ]
-crbug.com/1009860 [ linux ] SwapChainTraceTest_* [ Skip ]
-crbug.com/1009860 [ android ] SwapChainTraceTest_* [ Skip ]
-crbug.com/1009860 [ chromeos ] SwapChainTraceTest_* [ Skip ]
-crbug.com/1009860 [ fuchsia ] SwapChainTraceTest_* [ Skip ]
 
 # Playing videos not supported in Fuchsia emulators.
 crbug.com/1096431 [ fuchsia fuchsia-board-qemu-x64 ] TraceTest_Video* [ Skip ]
@@ -201,7 +174,6 @@ crbug.com/dawn/549 [ mac ] WebGPUCachingTraceTest_* [ Skip ]
 
 # TODO(crbug.com/40145992): Remove these as the necessary driver is available on
 # more hardware configs.
-crbug.com/40145992 [ win amd ] TraceTest_MediaFoundationD3D11VideoCapture [ Skip ]
 crbug.com/40145992 [ win intel-0x4680 ] TraceTest_MediaFoundationD3D11VideoCapture [ Skip ]
 crbug.com/40145992 [ win nvidia ] TraceTest_MediaFoundationD3D11VideoCapture [ Skip ]
 crbug.com/40145992 [ win qualcomm ] TraceTest_MediaFoundationD3D11VideoCapture [ Skip ]
@@ -211,19 +183,11 @@ crbug.com/40145992 [ win qualcomm ] TraceTest_MediaFoundationD3D11VideoCapture [
 ###################
 # Non-"Skip" expectations go here to suppress regular flakes/failures.
 
-
 # WebGL's accelerated canvas capture is currently only supported on Win, Mac, ChromeOS.
 crbug.com/1201009 [ linux ] WebGLCanvasCaptureTraceTest_VideoStreamFromWebGLCanvas_OneCopy [ Failure ]
-crbug.com/1201009 [ fuchsia ] WebGLCanvasCaptureTraceTest_VideoStreamFromWebGLCanvas_OneCopy [ Failure ]
 crbug.com/1201009 [ linux ] WebGLCanvasCaptureTraceTest_VideoStreamFromWebGLCanvas_TwoCopy_Accelerated [ Failure ]
+crbug.com/1201009 [ fuchsia ] WebGLCanvasCaptureTraceTest_VideoStreamFromWebGLCanvas_OneCopy [ Failure ]
 crbug.com/1201009 [ fuchsia ] WebGLCanvasCaptureTraceTest_VideoStreamFromWebGLCanvas_TwoCopy_Accelerated [ Failure ]
-
-
-crbug.com/1402261 [ graphite-disabled intel-0x9bc5 win ] OverlayModeTraceTest_DirectComposition_Video_* [ RetryOnFailure ]
-
-
-# Broadly flaky unsymbolized crashes on Jacuzzi
-crbug.com/1518007 [ chromeos cros-chrome chromeos-board-jacuzzi ] WebGLCanvasCaptureTraceTest_VideoStream* [ RetryOnFailure ]
 
 # VP9 zero copy appears to be broken on newer driver versions.
 crbug.com/329691945 [ win amd-0x7340 ] VideoPathTraceTest_DirectComposition_Video_VP9 [ Failure ]
@@ -238,13 +202,12 @@ crbug.com/329138770 [ win graphite-enabled ] SwapChainTraceTest_CanvasLowLatency
 crbug.com/329138770 [ win graphite-enabled ] SwapChainTraceTest_CanvasLowLatencyWebGLAlphaFalse [ Failure ]
 crbug.com/329138770 [ win graphite-enabled ] SwapChainTraceTest_CanvasLowLatencyWebGLDrawImage [ Failure ]
 crbug.com/329138770 [ win graphite-enabled ] SwapChainTraceTest_CanvasLowLatencyWebGLRoundedCorners [ Failure ]
-crbug.com/329138770 [ win graphite-enabled ] WebGPUCachingTraceTest_ComputePipelineCrossOriginsCacheMisses [ Failure ]
+crbug.com/329138770 [ graphite-enabled release-x64 win10 ] WebGPUCachingTraceTest_ComputePipelineCrossOriginsCacheMisses [ Failure ]
 crbug.com/329138770 [ win graphite-enabled ] WebGPUCachingTraceTest_ComputePipelineDifferentOrigins [ Failure ]
-crbug.com/329138770 [ win graphite-enabled ] WebGPUCachingTraceTest_ComputePipelineIncognito [ Failure ]
+crbug.com/329138770 [ graphite-enabled release-x64 win10 ] WebGPUCachingTraceTest_ComputePipelineIncognito [ Failure ]
 crbug.com/329138770 [ win graphite-enabled ] WebGPUCachingTraceTest_RenderPipelineCrossOriginsCacheMisses [ Failure ]
-crbug.com/329138770 [ win graphite-enabled ] WebGPUCachingTraceTest_RenderPipelineDifferentOrigins [ Failure ]
-crbug.com/329138770 [ win graphite-enabled ] WebGPUCachingTraceTest_RenderPipelineIncognito [ Failure ]
-crbug.com/335564847 [ win graphite-enabled ] VideoPathTraceTest_DirectComposition_* [ Failure ]
+crbug.com/329138770 [ graphite-enabled release-x64 win10 ] WebGPUCachingTraceTest_RenderPipelineDifferentOrigins [ Failure ]
+crbug.com/329138770 [ graphite-enabled release-x64 win10 ] WebGPUCachingTraceTest_RenderPipelineIncognito [ Failure ]
 
 
 #######################################################################

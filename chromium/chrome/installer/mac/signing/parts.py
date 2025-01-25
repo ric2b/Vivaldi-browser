@@ -130,12 +130,6 @@ def get_parts(config):
                 'app_mode_loader',
                 options=full_hardened_runtime_options,
                 verify_options=verify_options),
-        #'vivaldi-relayproxy':
-        #    CodeSignedProduct(
-        #        '{.framework_dir}/Helpers/relayproxy-darwin'.format(config),
-        #        'relayproxy-darwin',
-        #        options=full_hardened_runtime_options,
-        #        verify_options=verify_options),
         'mac-sparkle-autoupdate':
             CodeSignedProduct(
                 "{.app_dir}/Contents/Frameworks/Sparkle.framework/Autoupdate".format(config),

@@ -10,6 +10,7 @@
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
 #include "base/types/strong_alias.h"
+#include "components/autofill/content/renderer/timing.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/unique_ids.h"
@@ -52,6 +53,8 @@ class FieldRef {
   explicit FieldRef(blink::WebFormControlElement form_control);
   explicit FieldRef(blink::WebElement content_editable);
 
+  friend bool operator<(const FieldRef& lhs, const FieldRef& rhs);
+
   blink::WebFormControlElement GetField() const;
   blink::WebElement GetContentEditable() const;
   FieldRendererId GetId() const;
@@ -73,7 +76,7 @@ class FormTracker : public content::RenderFrameObserver,
    public:
     enum class SaveFormReason {
       kTextFieldChanged,
-      // TODO(b/40281981): Remove after launching the feature
+      // TODO(crbug.com/40281981): Remove after launching the feature
       // kAutofillUnifyAndFixFormTracking.
       kWillSendSubmitEvent,
       kSelectChanged,
@@ -140,7 +143,7 @@ class FormTracker : public content::RenderFrameObserver,
 
   FormRef last_interacted_form() const { return last_interacted_.form; }
 
-  // TODO(b/40281981): Remove.
+  // TODO(crbug.com/40281981): Remove.
   std::optional<FormData>& provisionally_saved_form() {
     return last_interacted_.saved_state;
   }

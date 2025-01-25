@@ -1,4 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
+<translation id="1411542563378906926">Vivaldi Technologies AS.</translation>
+<translation id="1786453623676543866">Rozpocznij wyszukiwanie w nowej karcie Vivaldi.</translation>
+<translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Wszelkie prawa zastrzeżone.</translation>
+<translation id="261127087791356050">Otwórz w Vivaldi</translation>
+<translation id="2899836479226240291">Ustaw Vivaldi jako przeglądarkę domyślną, aby linki otwierały się w niej automatycznie.</translation>
+<translation id="3171582312249481866">Otwórz ustawienia Vivaldi</translation>
+<translation id="3372807273343182542">Otwórz adresy URL w Vivaldi w trybie prywatnym</translation>
+<translation id="3379322781901918214">1. Otwórz ustawienia Vivaldi</translation>
+<translation id="5444185556951208294">Pozwalaj przeglądarce Vivaldi blokować dostęp do Twoich prywatnych kart.</translation>
+<translation id="7064418729866177180">Blokuj prywatne karty po zamknięciu Vivaldi</translation>
+<translation id="7175743738896712454">Otwiera wprowadzone adresy URL w Vivaldi w trybie prywatnym.</translation>
+<translation id="8763006697839582351">Otwórz w trybie prywatnym Vivaldi</translation>
+<translation id="9060728682512999830">Szukaj w Vivaldi</translation>
 </translationbundle>

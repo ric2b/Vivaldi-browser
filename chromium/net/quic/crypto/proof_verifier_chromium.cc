@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/quic/crypto/proof_verifier_chromium.h"
 
 #include <string_view>
@@ -130,6 +135,11 @@ class ProofVerifierChromium::Job {
 
   int CheckCTRequirements();
 
+  // Must be before `cert_verifier_request_`, to avoid dangling pointer
+  // warnings, as the Request may be storing a raw pointer to which may have a
+  // raw_ptr to its `cert_verify_result`.
+  std::unique_ptr<ProofVerifyDetailsChromium> verify_details_;
+
   // Proof verifier to notify when this jobs completes.
   raw_ptr<ProofVerifierChromium> proof_verifier_;
 
@@ -151,7 +161,6 @@ class ProofVerifierChromium::Job {
   std::string cert_sct_;
 
   std::unique_ptr<quic::ProofVerifierCallback> callback_;
-  std::unique_ptr<ProofVerifyDetailsChromium> verify_details_;
   std::string error_details_;
 
   // X509Certificate from a chain of DER encoded certificates.

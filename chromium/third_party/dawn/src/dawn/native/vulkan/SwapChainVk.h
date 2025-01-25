@@ -48,9 +48,6 @@ class SwapChain : public SwapChainBase {
                                                 SwapChainBase* previousSwapChain,
                                                 const SurfaceConfiguration* config);
 
-    static ResultOrError<wgpu::TextureUsage> GetSupportedSurfaceUsage(const Device* device,
-                                                                      const Surface* surface);
-
     ~SwapChain() override;
 
   private:
@@ -97,7 +94,8 @@ class SwapChain : public SwapChainBase {
     Ref<Texture> mTexture;
 };
 
-ResultOrError<VkSurfaceKHR> CreateVulkanSurface(const PhysicalDevice* physicalDevice,
+ResultOrError<VkSurfaceKHR> CreateVulkanSurface(InstanceBase* instance,
+                                                const PhysicalDevice* physicalDevice,
                                                 const Surface* surface);
 
 }  // namespace dawn::native::vulkan

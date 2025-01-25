@@ -262,7 +262,7 @@ fn main(@builtin(local_invocation_index) invocation_id : u32) {
       toArray(inputIndices),
       GPUBufferUsage.STORAGE
     );
-    const outputBuffer = t.device.createBuffer({
+    const outputBuffer = t.createBufferTracked({
       size: bufferSize(expected),
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
     });

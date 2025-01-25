@@ -7,7 +7,7 @@ package org.chromium.chrome.test.transit;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
-import static org.chromium.base.test.transit.ViewElement.sharedViewElement;
+import static org.chromium.base.test.transit.ViewElement.scopedViewElement;
 import static org.chromium.base.test.transit.ViewElement.unscopedViewElement;
 
 import android.os.Build;
@@ -29,6 +29,7 @@ import org.chromium.base.test.transit.Facility;
 import org.chromium.base.test.transit.Transition.Trigger;
 import org.chromium.base.test.transit.ViewElement;
 import org.chromium.chrome.test.R;
+import org.chromium.chrome.test.transit.page.PageStation;
 import org.chromium.components.messages.DismissReason;
 import org.chromium.components.messages.MessageDispatcher;
 import org.chromium.components.messages.MessageDispatcherProvider;
@@ -44,7 +45,7 @@ import java.util.List;
  *
  * <p>Subclass for specific messages types to specify expected title, button text and behavior.
  */
-public class MessageFacility extends Facility<PageStation> {
+public class MessageFacility<HostStationT extends PageStation> extends Facility<HostStationT> {
     public static final Matcher<View> MESSAGE_TITLE_MATCHER = withId(R.id.message_title);
     public static final Matcher<View> MESSAGE_PRIMARY_BUTTON_MATCHER =
             withId(R.id.message_primary_button);
@@ -53,10 +54,6 @@ public class MessageFacility extends Facility<PageStation> {
     public static final ViewElement MESSAGE_BANNER =
             unscopedViewElement(withId(R.id.message_banner));
     public static final ViewElement MESSAGE_ICON = unscopedViewElement(withId(R.id.message_icon));
-
-    public MessageFacility(PageStation station) {
-        super(station);
-    }
 
     @CallSuper
     @Override
@@ -79,7 +76,6 @@ public class MessageFacility extends Facility<PageStation> {
                                         MessageDispatcher messageDispatcher =
                                                 MessageDispatcherProvider.from(
                                                         mHostStation
-                                                                .mChromeTabbedActivityTestRule
                                                                 .getActivity()
                                                                 .getWindowAndroid());
                                         assert messageDispatcher != null;
@@ -104,17 +100,17 @@ public class MessageFacility extends Facility<PageStation> {
                                                     GeneralLocation.TOP_CENTER,
                                                     Press.FINGER)));
         }
-        exitSync(this, dismissTrigger);
+        mHostStation.exitFacilitySync(this, dismissTrigger);
     }
 
     /** Create a ViewElement expecting the message's |title|. */
     protected static ViewElement titleViewElement(String title) {
-        return sharedViewElement(CoreMatchers.allOf(MESSAGE_TITLE_MATCHER, withText(title)));
+        return scopedViewElement(CoreMatchers.allOf(MESSAGE_TITLE_MATCHER, withText(title)));
     }
 
     /** Create a ViewElement expecting the message's primary button with |text|. */
     protected static ViewElement primaryButtonViewElement(String text) {
-        return sharedViewElement(
+        return scopedViewElement(
                 CoreMatchers.allOf(MESSAGE_PRIMARY_BUTTON_MATCHER, withText(text)));
     }
 }

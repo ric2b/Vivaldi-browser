@@ -46,7 +46,7 @@ bool TextureFormatSupportsStorageTexture(wgpu::TextureFormat format,
         case wgpu::TextureFormat::RGBA32Sint:
         case wgpu::TextureFormat::RGBA32Float:
             return true;
-            // TODO(crbug.com/dawn/595): 32-bit RG* formats are unsupported on OpenGL ES.
+            // 32-bit RG* formats are unsupported in Compatibility mode.
         case wgpu::TextureFormat::RG32Uint:
         case wgpu::TextureFormat::RG32Sint:
         case wgpu::TextureFormat::RG32Float:
@@ -527,6 +527,7 @@ uint32_t GetTexelBlockSizeInBytes(wgpu::TextureFormat textureFormat) {
         case wgpu::TextureFormat::R10X6BG10X6Biplanar422Unorm:
         case wgpu::TextureFormat::R10X6BG10X6Biplanar444Unorm:
         case wgpu::TextureFormat::R8BG8A8Triplanar420Unorm:
+        case wgpu::TextureFormat::External:
 
         case wgpu::TextureFormat::Undefined:
             break;
@@ -656,6 +657,7 @@ uint32_t GetTextureFormatBlockWidth(wgpu::TextureFormat textureFormat) {
         case wgpu::TextureFormat::R10X6BG10X6Biplanar422Unorm:
         case wgpu::TextureFormat::R10X6BG10X6Biplanar444Unorm:
         case wgpu::TextureFormat::R8BG8A8Triplanar420Unorm:
+        case wgpu::TextureFormat::External:
 
         case wgpu::TextureFormat::Undefined:
             break;
@@ -785,6 +787,7 @@ uint32_t GetTextureFormatBlockHeight(wgpu::TextureFormat textureFormat) {
         case wgpu::TextureFormat::R10X6BG10X6Biplanar422Unorm:
         case wgpu::TextureFormat::R10X6BG10X6Biplanar444Unorm:
         case wgpu::TextureFormat::R8BG8A8Triplanar420Unorm:
+        case wgpu::TextureFormat::External:
 
         case wgpu::TextureFormat::Undefined:
             break;

@@ -48,6 +48,7 @@ import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 import * as MobileThrottling from '../mobile_throttling/mobile_throttling.js';
 import * as Search from '../search/search.js';
+import * as TimelineUtils from '../timeline/utils/utils.js';
 
 import {Events, type RequestActivatedEvent} from './NetworkDataGridNode.js';
 import {NetworkItemView} from './NetworkItemView.js';
@@ -714,7 +715,8 @@ export class NetworkPanel extends UI.Panel.Panel implements
 
   appendApplicableItems(
       this: NetworkPanel, event: Event, contextMenu: UI.ContextMenu.ContextMenu,
-      target: SDK.NetworkRequest.NetworkRequest|SDK.Resource.Resource|Workspace.UISourceCode.UISourceCode): void {
+      target: SDK.NetworkRequest.NetworkRequest|SDK.Resource.Resource|Workspace.UISourceCode.UISourceCode|
+      TimelineUtils.NetworkRequest.TimelineNetworkRequest): void {
     const appendRevealItem = (request: SDK.NetworkRequest.NetworkRequest): void => {
       contextMenu.revealSection().appendItem(
           i18nString(UIStrings.revealInNetworkPanel),
@@ -739,6 +741,12 @@ export class NetworkPanel extends UI.Panel.Panel implements
       const resource = Bindings.ResourceUtils.resourceForURL(target.url());
       if (resource && resource.request) {
         appendRevealItem(resource.request);
+      }
+      return;
+    }
+    if (target instanceof TimelineUtils.NetworkRequest.TimelineNetworkRequest) {
+      if (target.request) {
+        appendRevealItem(target.request);
       }
       return;
     }
@@ -820,11 +828,11 @@ export class FilmStripRecorder implements TraceEngine.TracingManager.TracingMana
   private readonly filmStripView: PerfUI.FilmStripView.FilmStripView;
   private callback: ((filmStrip: TraceEngine.Extras.FilmStrip.Data) => void)|null;
   // Used to fetch screenshots of the page load and show them in the panel.
-  #traceEngine: TraceEngine.TraceModel.Model<TraceEngine.Extras.FilmStrip.HandlersWithFilmStrip>;
+  #traceEngine: TraceEngine.TraceModel.Model;
   #collectedTraceEvents: TraceEngine.Types.TraceEvents.TraceEventData[] = [];
 
   constructor(timeCalculator: NetworkTimeCalculator, filmStripView: PerfUI.FilmStripView.FilmStripView) {
-    this.#traceEngine = new TraceEngine.TraceModel.Model({
+    this.#traceEngine = TraceEngine.TraceModel.Model.createWithSubsetOfHandlers({
       Screenshots: TraceEngine.Handlers.ModelHandlers.Screenshots,
     });
 
@@ -835,10 +843,8 @@ export class FilmStripRecorder implements TraceEngine.TracingManager.TracingMana
     this.callback = null;
   }
 
-  traceEventsCollected(events: TraceEngine.TracingManager.EventPayload[]): void {
-    // TODO(crbug.com/339804979): once the old trace engine is removed, update
-    // the TS types here to avoid this typecast.
-    this.#collectedTraceEvents.push(...events as unknown as TraceEngine.Types.TraceEvents.TraceEventData[]);
+  traceEventsCollected(events: TraceEngine.Types.TraceEvents.TraceEventData[]): void {
+    this.#collectedTraceEvents.push(...events);
   }
 
   async tracingComplete(): Promise<void> {
@@ -848,7 +854,8 @@ export class FilmStripRecorder implements TraceEngine.TracingManager.TracingMana
     this.tracingManager = null;
     await this.#traceEngine.parse(this.#collectedTraceEvents);
 
-    const data = this.#traceEngine.traceParsedData(this.#traceEngine.size() - 1);
+    const data = this.#traceEngine.traceParsedData(this.#traceEngine.size() - 1) as
+        TraceEngine.Extras.FilmStrip.HandlerDataWithScreenshots;
     if (!data) {
       return;
     }

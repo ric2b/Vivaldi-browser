@@ -170,8 +170,8 @@ fairly complex example that will show all the possibilities of a DEPS file.
 
 ## Sending patches
 
-[Contributing code](/developers/contributing-code) is done the same way as in
-other Chromium repositories.
+[Contributing code](https://chromium.googlesource.com/chromium/src/+/main/docs/contributing.md)
+is done the same way as in other Chromium repositories.
 
 ## Disabling auto update
 

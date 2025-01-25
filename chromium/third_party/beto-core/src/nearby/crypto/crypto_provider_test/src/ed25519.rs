@@ -15,11 +15,8 @@
 extern crate alloc;
 extern crate std;
 
-use alloc::borrow::ToOwned;
-use alloc::string::String;
-use alloc::vec::Vec;
 use crypto_provider::ed25519::{
-    Ed25519Provider, KeyPair, PublicKey, RawPrivateKeyPermit, RawSignature, Signature,
+    Ed25519Provider, KeyPairImpl, PublicKeyImpl, RawPrivateKeyPermit, RawSignature, SignatureImpl,
 };
 use wycheproof::TestResult;
 
@@ -149,7 +146,7 @@ where
         sig.as_slice().try_into().expect("Test signature should be the correct length"),
     );
 
-    let pub_key = kp.public();
+    let pub_key = kp.public_key();
     assert_eq!(pub_key.to_bytes().as_slice(), expected_pub_key.as_slice());
     pub_key.verify_strict(msg.as_slice(), &signature).map_err(|_| "verify failed")?;
 

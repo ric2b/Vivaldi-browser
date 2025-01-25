@@ -106,28 +106,6 @@ inline bool try_spanmove(pdfium::span<T1, N1, P1> dst,
   return true;
 }
 
-// Bounds-checked sets into spans.
-template <typename T,
-          size_t N,
-          typename P,
-          typename = std::enable_if_t<std::is_trivially_constructible_v<T> &&
-                                      std::is_trivially_destructible_v<T>>>
-void spanset(pdfium::span<T, N, P> dst, uint8_t val) {
-  // SAFETY: `dst.size_bytes()` accurately describes `dst.data()`.
-  UNSAFE_BUFFERS(FXSYS_memset(dst.data(), val, dst.size_bytes()));
-}
-
-// Bounds-checked zeroing of spans.
-template <typename T,
-          size_t N,
-          typename P,
-          typename = std::enable_if_t<std::is_trivially_constructible_v<T> &&
-                                      std::is_trivially_destructible_v<T>>>
-void spanclr(pdfium::span<T, N, P> dst) {
-  // SAFETY: `dst.size_bytes()` accurately describes `dst.data()`.
-  UNSAFE_BUFFERS(FXSYS_memset(dst.data(), 0, dst.size_bytes()));
-}
-
 // Bounds-checked byte-for-byte equality of same-sized spans. This is
 // helpful because span does not (yet) have an operator==().
 template <typename T1,
@@ -175,8 +153,8 @@ template <typename T,
           typename = typename std::enable_if_t<std::is_const_v<T> ||
                                                !std::is_const_v<U>>>
 inline pdfium::span<T> reinterpret_span(pdfium::span<U> s) noexcept {
-  CHECK_EQ(s.size_bytes() % sizeof(T), 0u);
-  CHECK_EQ(reinterpret_cast<uintptr_t>(s.data()) % alignof(T), 0u);
+  CHECK(alignof(T) == alignof(U) ||
+        reinterpret_cast<uintptr_t>(s.data()) % alignof(T) == 0u);
   // SAFETY: relies on correct conversion of size_bytes() result.
   return UNSAFE_BUFFERS(pdfium::make_span(reinterpret_cast<T*>(s.data()),
                                           s.size_bytes() / sizeof(T)));

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "content/web_test/renderer/test_plugin.h"
 
 #include <stddef.h>
@@ -80,13 +85,12 @@ const char* PointState(blink::WebTouchPoint::State state) {
 
 void PrintTouchList(TestRunner* test_runner,
                     WebFrameTestProxy& frame_proxy,
-                    const blink::WebTouchPoint* points,
-                    int length) {
-  for (int i = 0; i < length; ++i) {
+                    base::span<const blink::WebTouchPoint> points) {
+  for (const blink::WebTouchPoint& point : points) {
     test_runner->PrintMessage(
-        base::StringPrintf(
-            "* %.2f, %.2f: %s\n", points[i].PositionInWidget().x(),
-            points[i].PositionInWidget().y(), PointState(points[i].state)),
+        base::StringPrintf("* %.2f, %.2f: %s\n", point.PositionInWidget().x(),
+                           point.PositionInWidget().y(),
+                           PointState(point.state)),
         frame_proxy);
   }
 }
@@ -97,8 +101,8 @@ void PrintEventDetails(TestRunner* test_runner,
   if (blink::WebInputEvent::IsTouchEventType(event.GetType())) {
     const blink::WebTouchEvent& touch =
         static_cast<const blink::WebTouchEvent&>(event);
-    PrintTouchList(test_runner, frame_proxy, touch.touches,
-                   touch.touches_length);
+    PrintTouchList(test_runner, frame_proxy,
+                   base::span(touch.touches).first(touch.touches_length));
   } else if (blink::WebInputEvent::IsMouseEventType(event.GetType()) ||
              event.GetType() == blink::WebInputEvent::Type::kMouseWheel) {
     const blink::WebMouseEvent& mouse =
@@ -411,7 +415,7 @@ TestPlugin::Primitive TestPlugin::ParsePrimitive(
   else if (string == *kPrimitiveTriangle)
     primitive = PrimitiveTriangle;
   else
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   return primitive;
 }
 
@@ -429,7 +433,7 @@ void TestPlugin::ParseColor(const blink::WebString& string, uint8_t color[3]) {
   else if (string == "blue")
     color[2] = 255;
   else
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
 }
 
 float TestPlugin::ParseOpacity(const blink::WebString& string) {
@@ -679,7 +683,7 @@ bool TestPlugin::HandleDragStatusUpdate(blink::WebDragStatus drag_status,
       drag_status_name = "DragDrop";
       break;
     case blink::kWebDragStatusUnknown:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   test_runner_->PrintMessage(
       std::string("Plugin received event: ") + drag_status_name + "\n",

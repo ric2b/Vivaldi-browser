@@ -17,6 +17,12 @@
                                 NO);
   registry->RegisterBooleanPref(
       vivaldiprefs::kVivaldiReverseSearchResultsEnabled, NO);
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kVivaldiShowXButtonBackgroundTabsEnabled, NO);
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kVivaldiOpenNTPOnClosingLastTabEnabled, YES);
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kVivaldiFocusOmniboxOnNTPEnabled, YES);
 }
 
 /// Returns the desktop style tab status

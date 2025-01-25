@@ -10,7 +10,8 @@ if (!is_win) {
   openscreen_source_set("public") {
     visibility += [ "*" ]
     public = [
-      "endpoint_config.h",
+      "agent_certificate.h",
+      "instance_request_ids.h",
       "message_demuxer.h",
       "network_metrics.h",
       "network_service_manager.h",
@@ -20,9 +21,12 @@ if (!is_win) {
       "protocol_connection.h",
       "protocol_connection_client.h",
       "protocol_connection_client_factory.h",
+      "protocol_connection_endpoint.h",
       "protocol_connection_server.h",
       "protocol_connection_server_factory.h",
+      "protocol_connection_service_observer.h",
       "request_response_handler.h",
+      "service_config.h",
       "service_info.h",
       "service_listener.h",
       "service_listener_factory.h",
@@ -30,10 +34,11 @@ if (!is_win) {
       "service_publisher_factory.h",
     ]
     sources = [
-      "endpoint_request_ids.cc",
-      "endpoint_request_ids.h",
+      "agent_certificate.cc",
+      "instance_request_ids.cc",
       "protocol_connection.cc",
       "protocol_connection_client.cc",
+      "protocol_connection_endpoint.cc",
       "protocol_connection_server.cc",
       "service_info.cc",
       "service_listener.cc",

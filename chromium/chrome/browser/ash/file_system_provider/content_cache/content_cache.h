@@ -7,6 +7,7 @@
 
 #include "base/files/file_error_or.h"
 #include "base/files/file_path.h"
+#include "base/observer_list_types.h"
 #include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/ash/file_system_provider/content_cache/content_lru_cache.h"
@@ -16,25 +17,25 @@
 namespace ash::file_system_provider {
 
 using FileErrorCallback = base::OnceCallback<void(base::File::Error)>;
-using OnItemEvictedCallback =
-    base::RepeatingCallback<void(const base::FilePath&)>;
 
 // Alias to explain the inner int indicates `bytes_read`.
 using FileErrorOrBytesRead = base::FileErrorOr<int>;
-
-// When the removal process finishes, this defines the total number of items
-// removed along with the total bytes removed.
-struct RemovedItemStats {
-  int64_t num_items = 0;
-  int64_t bytes_removed = 0;
-};
-
-using RemovedItemStatsCallback = base::OnceCallback<void(RemovedItemStats)>;
 
 // The content cache for every mounted FSP. This will serve as the single point
 // of orchestration between the LRU cache and the disk persistence layer.
 class ContentCache {
  public:
+  // Observer class to be notified about changes happening in the ContentCache.
+  class Observer : public base::CheckedObserver {
+   public:
+    // Called when the cached item with `fsp_path` is evicted.
+    virtual void OnItemEvicted(const base::FilePath& fsp_path) = 0;
+
+    // Called when the item on hard disk caching the contents of `fsp_path` is
+    // removed.
+    virtual void OnItemRemovedFromDisk(const base::FilePath& fsp_path,
+                                       int64_t bytes_removed) {}
+  };
   virtual ~ContentCache() = default;
 
   // Sets the maximum size of the cache. If the current number of items exceeds
@@ -68,7 +69,7 @@ class ContentCache {
 
   // Reads and writes are performed in "chunks". An attempt is made to re-use
   // open file descriptors to avoid opening/closing them on every chunk request.
-  // This requires any N requests of `StartReadBytes` or `StartWriteBytes` to be
+  // This requires any N requests of `ReadBytes` or `WriteBytes` to be
   // followed by a `CloseFile` to ensure any open file descriptors are properly
   // cleaned up.
   virtual void CloseFile(const OpenedCloudFile& file) = 0;
@@ -82,33 +83,25 @@ class ContentCache {
   // used order.
   virtual std::vector<base::FilePath> GetCachedFilePaths() = 0;
 
+  // Called with the changes in the file system. This potentially indicates
+  // cached files are deleted or changes.
+  virtual void Notify(ProvidedFileSystemObserver::Changes& changes) = 0;
+
+  // Called with the most recently seen `version_tag` for the file with
+  // `entry_path` on the FSP. If the `version_tag` does not match the one stored
+  // for the copy in the cache, Evict() the out of date copy.
+  virtual void ObservedVersionTag(const base::FilePath& entry_path,
+                                  const std::string& version_tag) = 0;
+
   // Evict the item with path `file_path` from the cache, if it exists. The item
-  // is inaccessible from this point onwards despite it remaining on disk and
-  // the database. It will be removed when `RemoveItems()` is called.
+  // is still accessible to current FSP requests but inaccessible to new FSP
+  // requests. It will be removed from the disk and the database if there are no
+  // current FSP requests. Otherwise it be be removed once the last FSP request
+  // completes with `CloseFile()`.
   virtual void Evict(const base::FilePath& file_path) = 0;
 
-  // Call this on_item_evicted_callback with the item's FSP path when it is
-  // evicted.
-  virtual void SetOnItemEvictedCallback(
-      OnItemEvictedCallback on_item_evicted_callback) = 0;
-
-  // Remove items which have their `evicted` bool set to true. If an
-  // removal is already in progress, the callback will be queued to be called
-  // with the current stats of the in progress removal.
-  virtual void RemoveItems(RemovedItemStatsCallback callback) = 0;
-
-  // A struct of size information pertaining to this cache instance.
-  struct SizeInfo {
-    int64_t max_bytes_on_disk = 0;
-    int64_t total_bytes_on_disk = 0;
-  };
-
-  // Helper methods to get and set size information.
-  virtual const SizeInfo GetSize() const = 0;
-  virtual void SetMaxBytesOnDisk(int64_t max_bytes_on_disk) = 0;
-
-  // Returns a `base::WeakPtr`.
-  virtual base::WeakPtr<ContentCache> GetWeakPtr() = 0;
+  virtual void AddObserver(Observer* observer) = 0;
+  virtual void RemoveObserver(Observer* observer) = 0;
 };
 
 }  // namespace ash::file_system_provider

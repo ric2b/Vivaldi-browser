@@ -51,8 +51,6 @@ class Isolate;
 class Object;
 template <class F1, class F2, class F3>
 class PersistentValueMapBase;
-template <class F1, class F2>
-class PersistentValueVector;
 class Primitive;
 class Private;
 template <class F>
@@ -382,8 +380,6 @@ class V8_TRIVIAL_ABI Local : public LocalBase<T>,
   friend class InternalEscapableScope;
   template <class F1, class F2, class F3>
   friend class PersistentValueMapBase;
-  template <class F1, class F2>
-  friend class PersistentValueVector;
   template <class F>
   friend class ReturnValue;
   template <class F>
@@ -398,8 +394,7 @@ class V8_TRIVIAL_ABI Local : public LocalBase<T>,
   explicit Local(const Local<T>& other, no_checking_tag do_not_check)
       : LocalBase<T>(other), StackAllocated(do_not_check) {}
 
-  V8_INLINE explicit Local<T>(const LocalBase<T>& other)
-      : LocalBase<T>(other) {}
+  V8_INLINE explicit Local(const LocalBase<T>& other) : LocalBase<T>(other) {}
 
   V8_INLINE static Local<T> FromSlot(internal::Address* slot) {
     return Local<T>(LocalBase<T>::FromSlot(slot));

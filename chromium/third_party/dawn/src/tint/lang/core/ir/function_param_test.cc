@@ -35,18 +35,9 @@ namespace {
 
 using namespace tint::core::number_suffixes;  // NOLINT
 using IR_FunctionParamTest = IRTestHelper;
+using IR_FunctionParamDeathTest = IR_FunctionParamTest;
 
-TEST_F(IR_FunctionParamTest, Fail_NullType) {
-    EXPECT_DEATH_IF_SUPPORTED(
-        {
-            Module mod;
-            Builder b{mod};
-            b.FunctionParam(nullptr);
-        },
-        "");
-}
-
-TEST_F(IR_FunctionParamTest, Fail_SetDuplicateBuiltin) {
+TEST_F(IR_FunctionParamDeathTest, Fail_SetDuplicateBuiltin) {
     EXPECT_DEATH_IF_SUPPORTED(
         {
             Module mod;
@@ -55,7 +46,7 @@ TEST_F(IR_FunctionParamTest, Fail_SetDuplicateBuiltin) {
             fp->SetBuiltin(BuiltinValue::kVertexIndex);
             fp->SetBuiltin(BuiltinValue::kSampleMask);
         },
-        "");
+        "internal compiler error");
 }
 
 TEST_F(IR_FunctionParamTest, CloneEmpty) {
@@ -72,8 +63,10 @@ TEST_F(IR_FunctionParamTest, CloneEmpty) {
 TEST_F(IR_FunctionParamTest, Clone) {
     auto* fp = b.FunctionParam(mod.Types().f32());
     fp->SetBuiltin(BuiltinValue::kVertexIndex);
-    fp->SetLocation(
-        1, Interpolation{core::InterpolationType::kFlat, core::InterpolationSampling::kCentroid});
+    fp->SetLocation(1);
+    fp->SetColor(2);
+    fp->SetInterpolation(
+        Interpolation{core::InterpolationType::kFlat, core::InterpolationSampling::kCentroid});
     fp->SetInvariant(true);
     fp->SetBindingPoint(1, 2);
 
@@ -85,11 +78,13 @@ TEST_F(IR_FunctionParamTest, Clone) {
     EXPECT_TRUE(new_fp->Builtin().has_value());
     EXPECT_EQ(BuiltinValue::kVertexIndex, new_fp->Builtin().value());
 
-    EXPECT_TRUE(new_fp->Location().has_value());
-    auto loc = new_fp->Location();
-    EXPECT_EQ(1u, loc->value);
-    EXPECT_EQ(core::InterpolationType::kFlat, loc->interpolation->type);
-    EXPECT_EQ(core::InterpolationSampling::kCentroid, loc->interpolation->sampling);
+    EXPECT_EQ(new_fp->Location(), 1u);
+    EXPECT_EQ(new_fp->Color(), 2u);
+
+    auto interp = new_fp->Interpolation();
+    EXPECT_TRUE(interp.has_value());
+    EXPECT_EQ(interp->type, core::InterpolationType::kFlat);
+    EXPECT_EQ(interp->sampling, core::InterpolationSampling::kCentroid);
 
     EXPECT_TRUE(new_fp->BindingPoint().has_value());
     auto bp = new_fp->BindingPoint();

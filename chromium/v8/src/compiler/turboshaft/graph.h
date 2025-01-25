@@ -361,6 +361,8 @@ class Block : public RandomAccessStackDominatorNode<Block> {
   }
 #endif
 
+  static constexpr int kInvalidPredecessorIndex = -1;
+
   // Returns the index of {target} in the predecessors of the current Block.
   // If {target} is not a direct predecessor, returns -1.
   int GetPredecessorIndex(const Block* target) const {
@@ -375,7 +377,7 @@ class Block : public RandomAccessStackDominatorNode<Block> {
       pred_count++;
     }
     if (pred_reverse_index == -1) {
-      return -1;
+      return kInvalidPredecessorIndex;
     }
     return pred_count - pred_reverse_index - 1;
   }
@@ -388,6 +390,16 @@ class Block : public RandomAccessStackDominatorNode<Block> {
   }
   void ResetLastPredecessor() {
     last_predecessor_ = nullptr;
+    predecessor_count_ = 0;
+  }
+  void ResetAllPredecessors() {
+    Block* pred = last_predecessor_;
+    last_predecessor_ = nullptr;
+    while (pred->neighboring_predecessor_) {
+      Block* tmp = pred->neighboring_predecessor_;
+      pred->neighboring_predecessor_ = nullptr;
+      pred = tmp;
+    }
     predecessor_count_ = 0;
   }
 
@@ -814,7 +826,7 @@ class Graph {
   uint32_t op_id_count() const {
     return (operations_.size() + (kSlotsPerId - 1)) / kSlotsPerId;
   }
-  uint32_t number_of_operations() const {
+  uint32_t NumberOfOperationsForDebugging() const {
     uint32_t number_of_operations = 0;
     for ([[maybe_unused]] auto& op : AllOperations()) {
       ++number_of_operations;

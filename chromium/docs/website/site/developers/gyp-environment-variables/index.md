@@ -146,11 +146,6 @@ directory, you may add the following flags:
 </tr>
 </table>
 
-### Use goma distributed build (Googlers only)
-
-See [go/ma](https://sites.google.com/a/google.com/goma/) for more information on
-how to set up goma.
-
 ### Use the icecc linker (Linux only)
 
 [Icecc](https://github.com/icecc/icecream) is the distributed compiler with a

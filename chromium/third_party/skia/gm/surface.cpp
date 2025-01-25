@@ -30,6 +30,9 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#if defined(SK_GRAPHITE)
+#include "include/gpu/graphite/Surface.h"
+#endif
 #include "include/utils/SkTextUtils.h"
 #include "tools/ToolUtils.h"
 #include "tools/fonts/FontToolUtils.h"
@@ -47,11 +50,18 @@ static sk_sp<SkShader> make_shader() {
 }
 
 static sk_sp<SkSurface> make_surface(GrRecordingContext* ctx,
+                                     skgpu::graphite::Recorder* recorder,
                                      const SkImageInfo& info,
+                                     uint32_t flags,
                                      SkPixelGeometry geo,
                                      SkScalar contrast,
                                      SkScalar gamma) {
-    SkSurfaceProps props(0, geo, contrast, gamma);
+    SkSurfaceProps props(flags, geo, contrast, gamma);
+#if defined(SK_GRAPHITE)
+    if (recorder) {
+            return SkSurfaces::RenderTarget(recorder, info, skgpu::Mipmapped::kNo, &props);
+    } else
+#endif
     if (ctx) {
         return SkSurfaces::RenderTarget(ctx, skgpu::Budgeted::kNo, info, 0, &props);
     } else {
@@ -78,7 +88,7 @@ static void test_draw(SkCanvas* canvas, const char label[]) {
 
 class SurfacePropsGM : public skiagm::GM {
 public:
-    SurfacePropsGM() {
+    SurfacePropsGM(uint32_t flags) : fFlags(flags) {
         recs = {
                 {kUnknown_SkPixelGeometry,
                  "Unknown geometry, default contrast/gamma",
@@ -108,12 +118,16 @@ public:
     }
 
 protected:
-    SkString getName() const override { return SkString("surfaceprops"); }
+    SkString getName() const override {
+        return SkStringPrintf("surfaceprops%s",
+                              fFlags != 0 ? "_df" : "");
+    }
 
     SkISize getISize() override { return SkISize::Make(W, H * recs.size()); }
 
     void onDraw(SkCanvas* canvas) override {
         auto ctx = canvas->recordingContext();
+        auto recorder = canvas->recorder();
 
         // must be opaque to have a hope of testing LCD text
         const SkImageInfo info = SkImageInfo::MakeN32(W, H, kOpaque_SkAlphaType);
@@ -121,7 +135,8 @@ protected:
         SkScalar x = 0;
         SkScalar y = 0;
         for (const auto& rec : recs) {
-            auto surface(make_surface(ctx, info, rec.fGeo, rec.fContrast, rec.fGamma));
+            auto surface(make_surface(ctx, recorder, info, fFlags, rec.fGeo, rec.fContrast,
+                                      rec.fGamma));
             if (!surface) {
                 SkDebugf("failed to create surface! label: %s", rec.fLabel);
                 continue;
@@ -141,9 +156,12 @@ private:
     };
     std::vector<SurfacePropsInput> recs;
 
+    uint32_t fFlags;
+
     using INHERITED = GM;
 };
-DEF_GM( return new SurfacePropsGM )
+DEF_GM( return new SurfacePropsGM(0); )
+DEF_GM( return new SurfacePropsGM(SkSurfaceProps::kUseDeviceIndependentFonts_Flag); )
 
 #ifdef SK_DEBUG
 static bool equal(const SkSurfaceProps& a, const SkSurfaceProps& b) {

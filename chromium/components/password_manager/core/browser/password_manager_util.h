@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
@@ -90,18 +91,17 @@ std::string_view GetSignonRealmWithProtocolExcluded(
 // the match for the requested page.
 GetLoginMatchType GetMatchType(const password_manager::PasswordForm& form);
 
-// Given all non-blocklisted |non_federated_matches|, finds and populates
-// |non_federated_same_scheme| and returns |best_matches| as the result of the
-// function. For comparing credentials the following rule is used: non-psl match
-// is better than psl match, most recently used match is better than other
-// matches. In case of tie, an arbitrary credential from the tied ones is chosen
-// for |best_matches|.
+// Given all non-blocklisted |matches| returns best matches as the result of the
+// function. For comparing credentials the following rule is used:
+//   - non-psl match is better than psl match,
+//   - most recently used match is better than other matches.
+//   - In case of tie, an arbitrary credential from the tied ones is chosen for
+//     best matches.
+// TODO(crbug.com/343879843) FindBestMatches should be part of FormFetcherImpl
+// implementation detail as it has a strong coupling to form fetcher's internal
+// state.
 std::vector<password_manager::PasswordForm> FindBestMatches(
-    const std::vector<raw_ptr<const password_manager::PasswordForm,
-                              VectorExperimental>>& non_federated_matches,
-    password_manager::PasswordForm::Scheme scheme,
-    std::vector<raw_ptr<const password_manager::PasswordForm,
-                        VectorExperimental>>* non_federated_same_scheme);
+    base::span<password_manager::PasswordForm> matches);
 
 // Returns a form with the given |username_value| from |forms|, or nullptr if
 // none exists. If multiple matches exist, returns the first one.
@@ -167,7 +167,8 @@ void SetCredentialProviderEnabledOnStartup(PrefService* prefs, bool enabled);
 #endif
 
 // Contains all special symbols considered for password-generation.
-inline constexpr char kSpecialSymbols[] = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
+inline constexpr std::u16string_view kSpecialSymbols =
+    u"!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 
 // Helper functions for character type classification. The built-in functions
 // depend on locale, platform and other stuff. To make the output more

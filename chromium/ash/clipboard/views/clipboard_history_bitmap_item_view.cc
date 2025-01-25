@@ -24,6 +24,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
@@ -95,7 +96,7 @@ class FadeImageView : public views::ImageView,
   void OnImplicitAnimationsCompleted() override {
     switch (animation_state_) {
       case FadeAnimationState::kNoFadeAnimation:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return;
       case FadeAnimationState::kFadeOut:
         CHECK_EQ(layer()->opacity(), 0.0f);
@@ -299,7 +300,7 @@ class ClipboardHistoryBitmapItemView::BitmapContentsView
         break;
       }
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
 
@@ -329,15 +330,15 @@ ClipboardHistoryBitmapItemView::ClipboardHistoryBitmapItemView(
   SetID(clipboard_history_util::kBitmapItemView);
   switch (data_format_) {
     case ui::ClipboardInternalFormat::kHtml:
-      SetAccessibleName(
+      GetViewAccessibility().SetName(
           l10n_util::GetStringUTF16(IDS_CLIPBOARD_HISTORY_MENU_HTML_IMAGE));
       break;
     case ui::ClipboardInternalFormat::kPng:
-      SetAccessibleName(
+      GetViewAccessibility().SetName(
           l10n_util::GetStringUTF16(IDS_CLIPBOARD_HISTORY_MENU_PNG_IMAGE));
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 

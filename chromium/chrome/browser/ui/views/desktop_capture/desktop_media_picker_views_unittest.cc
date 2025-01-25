@@ -43,6 +43,10 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_delegate.h"
 
+#if BUILDFLAG(IS_MAC)
+#include "base/mac/mac_util.h"
+#endif
+
 using content::DesktopMediaID;
 
 namespace views {
@@ -55,7 +59,9 @@ class TestDialogObserver : public DesktopMediaPickerManager::DialogObserver {
   }
 
  private:
-  void OnDialogOpened() override { opened_ = true; }
+  void OnDialogOpened(const DesktopMediaPicker::Params&) override {
+    opened_ = true;
+  }
   void OnDialogClosed() override { closed_ = true; }
 
   bool opened_ = false;
@@ -216,7 +222,7 @@ class DesktopMediaPickerViewsTestBase : public testing::Test {
     picker_views_->Show(
         picker_params, std::move(source_lists),
         base::BindOnce(&DesktopMediaPickerViewsTestBase::OnPickerDone,
-                       base::Unretained(this)));
+                       weak_factory_.GetWeakPtr()));
     widget_destroyed_waiter_ =
         std::make_unique<views::test::WidgetDestroyedWaiter>(
             waiter.WaitIfNeededAndGet());
@@ -258,6 +264,8 @@ class DesktopMediaPickerViewsTestBase : public testing::Test {
   base::RunLoop run_loop_;
   std::optional<content::DesktopMediaID> picked_id_;
   std::unique_ptr<views::test::WidgetDestroyedWaiter> widget_destroyed_waiter_;
+
+  base::WeakPtrFactory<DesktopMediaPickerViewsTestBase> weak_factory_{this};
 };
 
 class DesktopMediaPickerViewsTest
@@ -467,6 +475,50 @@ TEST_P(DesktopMediaPickerViewsTest, OkButtonEnabledDuringAcceptSpecific) {
   GetPickerDialogView()->AcceptSpecificSource(fake_id);
   EXPECT_EQ(fake_id, WaitForPickerDone());
 }
+
+#if BUILDFLAG(IS_MAC)
+TEST_P(DesktopMediaPickerViewsTest, OnPermissionUpdateWithPermissions) {
+  if (base::mac::MacOSMajorVersion() < 13) {
+    GTEST_SKIP()
+        << "ScreenCapturePermissionChecker only created for MacOS 13 and later";
+  }
+
+  test_api_.OnPermissionUpdate(true);
+
+  test_api_.SelectTabForSourceType(DesktopMediaList::Type::kScreen);
+  EXPECT_TRUE(test_api_.GetActivePane()->IsContentPaneVisible());
+  EXPECT_FALSE(test_api_.GetActivePane()->IsPermissionPaneVisible());
+
+  test_api_.SelectTabForSourceType(DesktopMediaList::Type::kWindow);
+  EXPECT_TRUE(test_api_.GetActivePane()->IsContentPaneVisible());
+  EXPECT_FALSE(test_api_.GetActivePane()->IsPermissionPaneVisible());
+
+  test_api_.SelectTabForSourceType(DesktopMediaList::Type::kWebContents);
+  EXPECT_TRUE(test_api_.GetActivePane()->IsContentPaneVisible());
+  EXPECT_FALSE(test_api_.GetActivePane()->IsPermissionPaneVisible());
+}
+
+TEST_P(DesktopMediaPickerViewsTest, OnPermissionUpdateWithoutPermissions) {
+  if (base::mac::MacOSMajorVersion() < 13) {
+    GTEST_SKIP()
+        << "ScreenCapturePermissionChecker only created for MacOS 13 and later";
+  }
+
+  test_api_.OnPermissionUpdate(false);
+
+  test_api_.SelectTabForSourceType(DesktopMediaList::Type::kScreen);
+  EXPECT_FALSE(test_api_.GetActivePane()->IsContentPaneVisible());
+  EXPECT_TRUE(test_api_.GetActivePane()->IsPermissionPaneVisible());
+
+  test_api_.SelectTabForSourceType(DesktopMediaList::Type::kWindow);
+  EXPECT_FALSE(test_api_.GetActivePane()->IsContentPaneVisible());
+  EXPECT_TRUE(test_api_.GetActivePane()->IsPermissionPaneVisible());
+
+  test_api_.SelectTabForSourceType(DesktopMediaList::Type::kWebContents);
+  EXPECT_TRUE(test_api_.GetActivePane()->IsContentPaneVisible());
+  EXPECT_FALSE(test_api_.GetActivePane()->IsPermissionPaneVisible());
+}
+#endif
 
 class DesktopMediaPickerViewsPerTypeTest
     : public DesktopMediaPickerViewsTestBase,
@@ -745,7 +797,7 @@ TEST_F(DesktopMediaPickerViewsSingleTabPaneTest,
   // with no selected source. If the fix to https://crbug.com/1042976 regresses,
   // this test will crash here.
   test_api_.PressKeyOnSourceAtIndex(
-      0, ui::KeyEvent(ui::ET_KEY_PRESSED, ui::VKEY_RETURN, 0));
+      0, ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_RETURN, 0));
 }
 
 class DesktopMediaPickerPreferredDisplaySurfaceTest
@@ -1055,8 +1107,8 @@ TEST_F(DelegatedSourceListTest, ReselectButtonEnabledState) {
 
   // Verify that clicking the button causes the button to become disabled.
   test_api_.SelectTabForSourceType(DesktopMediaList::Type::kScreen);
-  const ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                             ui::EventTimeForNow(), 0, 0);
+  const ui::MouseEvent event(ui::EventType::kMousePressed, gfx::Point(),
+                             gfx::Point(), ui::EventTimeForNow(), 0, 0);
   views::test::ButtonTestApi(test_api_.GetReselectButton()).NotifyClick(event);
   EXPECT_FALSE(test_api_.GetReselectButton()->GetEnabled());
 
@@ -1090,8 +1142,8 @@ TEST_F(DelegatedSourceListTest, ReselectTriggersShowDelegatedSourceList) {
 
   // Verify that clicking the button causes the selection to be cleared on the
   // current source list.
-  const ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                             ui::EventTimeForNow(), 0, 0);
+  const ui::MouseEvent event(ui::EventType::kMousePressed, gfx::Point(),
+                             gfx::Point(), ui::EventTimeForNow(), 0, 0);
   views::test::ButtonTestApi(test_api_.GetReselectButton()).NotifyClick(event);
   EXPECT_EQ(1, media_lists_[DesktopMediaList::Type::kScreen]
                    ->clear_delegated_source_list_selection_count());

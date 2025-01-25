@@ -1,5 +1,10 @@
 import("//vivaldi/gn/config/product.gni")
 
+if (is_ios) {
+  import("//build/config/ios/config.gni")
+  import("//vivaldi/gn/command_action.gni")
+}
+
 if (is_mac) {
 
   action("build_sparkle") {
@@ -74,4 +79,64 @@ if (is_mac) {
     ]
   }
 
+}
+
+if (is_ios) {
+  platform = "ios-arm64"
+  if (target_environment == "simulator") {
+    platform = "ios-arm64_x86_64-simulator"
+  }
+
+  system_command("unzip_lottie_framework") {
+    # For further information see:
+    # //vivaldi/ios/chrome/browser/providers/lottie/README
+    command = "ditto"
+    output_path = "$root_out_dir/lottie_lib"
+    zip_path = "//vivaldi/thirdparty/lottie-ios/Lottie-Xcode-15.2.xcframework.zip"
+    inputs = [ zip_path ]
+
+    framework_path = "$output_path/Lottie.xcframework/$platform/Lottie.framework"
+    outputs = [
+      "$framework_path/Headers/Lottie-Swift.h",
+      "$framework_path/Headers",
+      "$framework_path/Lottie",
+      "$framework_path/Modules",
+      "$framework_path/Info.plist",
+    ]
+
+    args = [
+      "-xk",
+      rebase_path(zip_path,root_build_dir),
+      rebase_path(output_path,root_build_dir),
+    ]
+  }
+
+  copy("copy_lottie_framework") {
+    framework_path = "$root_out_dir/lottie_lib/Lottie.xcframework/$platform/Lottie.framework"
+
+    sources = [
+      "$framework_path/Headers",
+      "$framework_path/Lottie",
+      "$framework_path/Modules",
+      "$framework_path/Info.plist",
+    ]
+
+    outputs = [
+      "$root_out_dir/Vivaldi.app/Frameworks/Lottie.framework/{{source_file_part}}",
+    ]
+
+    deps = [ ":unzip_lottie_framework" ]
+  }
+
+  copy("copy_lottie_headers") {
+    sources = [
+      "$root_out_dir/lottie_lib/Lottie.xcframework/$platform/Lottie.framework/Headers/Lottie-Swift.h"
+    ]
+
+    outputs = [
+      "$root_gen_dir/vivaldi/Lottie/{{source_file_part}}"
+    ]
+
+    deps = [ ":unzip_lottie_framework" ]
+  }
 }

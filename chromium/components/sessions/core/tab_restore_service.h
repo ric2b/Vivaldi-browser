@@ -135,6 +135,8 @@ class SESSIONS_EXPORT TabRestoreService : public KeyedService {
 
   // Added by Vivaldi to allow access to saving modified entry list.
   virtual void VivaldiRequestSave(int num_removed) {}
+  // Added by Vivaldi to allow removing tabs inside windows.
+  virtual int VivaldiRemoveEntryById(SessionID id) { return 0; }
 };
 
 }  // namespace sessions

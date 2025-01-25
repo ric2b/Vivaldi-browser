@@ -8,10 +8,10 @@ page_name: direct-commit
 title: Directly committing code
 ---
 
-[TOC]
-
-When [contributing code](/developers/contributing-code) to Chromium, the last
-step in the life of a change list is committing it, after which it's closed.
+When
+[contributing code](https://chromium.googlesource.com/chromium/src/+/main/docs/contributing.md)
+to Chromium, the last step in the life of a change list is committing it, after
+which it's closed.
 
 The preferred way of committing changes is via the [commit
 queue](/developers/testing/commit-queue).

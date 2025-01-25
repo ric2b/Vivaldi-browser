@@ -39,12 +39,16 @@ var __esDecorate = (this && this.__esDecorate) || function (ctor, descriptorIn, 
 };
 import { Frame, FrameEvent, throwIfDetached } from '../api/Frame.js';
 import { UnsupportedOperation } from '../common/Errors.js';
+import { debugError } from '../common/util.js';
 import { Deferred } from '../util/Deferred.js';
 import { disposeSymbol } from '../util/disposable.js';
 import { isErrorLike } from '../util/ErrorLike.js';
+import { Accessibility } from './Accessibility.js';
+import { FrameManagerEvent } from './FrameManagerEvents.js';
 import { IsolatedWorld } from './IsolatedWorld.js';
 import { MAIN_WORLD, PUPPETEER_WORLD } from './IsolatedWorlds.js';
 import { LifecycleWatcher, } from './LifecycleWatcher.js';
+import { CDP_BINDING_PREFIX } from './utils.js';
 /**
  * @internal
  */
@@ -54,6 +58,9 @@ let CdpFrame = (() => {
     let _goto_decorators;
     let _waitForNavigation_decorators;
     let _setContent_decorators;
+    let _addPreloadScript_decorators;
+    let _addExposedFunctionBinding_decorators;
+    let _removeExposedFunctionBinding_decorators;
     let _waitForDevicePrompt_decorators;
     return class CdpFrame extends _classSuper {
         static {
@@ -61,18 +68,22 @@ let CdpFrame = (() => {
             __esDecorate(this, null, _goto_decorators, { kind: "method", name: "goto", static: false, private: false, access: { has: obj => "goto" in obj, get: obj => obj.goto }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _waitForNavigation_decorators, { kind: "method", name: "waitForNavigation", static: false, private: false, access: { has: obj => "waitForNavigation" in obj, get: obj => obj.waitForNavigation }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _setContent_decorators, { kind: "method", name: "setContent", static: false, private: false, access: { has: obj => "setContent" in obj, get: obj => obj.setContent }, metadata: _metadata }, null, _instanceExtraInitializers);
+            __esDecorate(this, null, _addPreloadScript_decorators, { kind: "method", name: "addPreloadScript", static: false, private: false, access: { has: obj => "addPreloadScript" in obj, get: obj => obj.addPreloadScript }, metadata: _metadata }, null, _instanceExtraInitializers);
+            __esDecorate(this, null, _addExposedFunctionBinding_decorators, { kind: "method", name: "addExposedFunctionBinding", static: false, private: false, access: { has: obj => "addExposedFunctionBinding" in obj, get: obj => obj.addExposedFunctionBinding }, metadata: _metadata }, null, _instanceExtraInitializers);
+            __esDecorate(this, null, _removeExposedFunctionBinding_decorators, { kind: "method", name: "removeExposedFunctionBinding", static: false, private: false, access: { has: obj => "removeExposedFunctionBinding" in obj, get: obj => obj.removeExposedFunctionBinding }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _waitForDevicePrompt_decorators, { kind: "method", name: "waitForDevicePrompt", static: false, private: false, access: { has: obj => "waitForDevicePrompt" in obj, get: obj => obj.waitForDevicePrompt }, metadata: _metadata }, null, _instanceExtraInitializers);
             if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
         }
         #url = (__runInitializers(this, _instanceExtraInitializers), '');
         #detached = false;
         #client;
-        worlds;
         _frameManager;
-        _id;
         _loaderId = '';
         _lifecycleEvents = new Set();
+        _id;
         _parentId;
+        accessibility;
+        worlds;
         constructor(frameManager, frameId, parentFrameId, client) {
             super();
             this._frameManager = frameManager;
@@ -80,13 +91,32 @@ let CdpFrame = (() => {
             this._id = frameId;
             this._parentId = parentFrameId;
             this.#detached = false;
+            this.#client = client;
             this._loaderId = '';
-            this.updateClient(client);
+            this.worlds = {
+                [MAIN_WORLD]: new IsolatedWorld(this, this._frameManager.timeoutSettings),
+                [PUPPETEER_WORLD]: new IsolatedWorld(this, this._frameManager.timeoutSettings),
+            };
+            this.accessibility = new Accessibility(this.worlds[MAIN_WORLD]);
             this.on(FrameEvent.FrameSwappedByActivation, () => {
                 // Emulate loading process for swapped frames.
                 this._onLoadingStarted();
                 this._onLoadingStopped();
             });
+            this.worlds[MAIN_WORLD].emitter.on('consoleapicalled', this.#onMainWorldConsoleApiCalled.bind(this));
+            this.worlds[MAIN_WORLD].emitter.on('bindingcalled', this.#onMainWorldBindingCalled.bind(this));
+        }
+        #onMainWorldConsoleApiCalled(event) {
+            this._frameManager.emit(FrameManagerEvent.ConsoleApiCalled, [
+                this.worlds[MAIN_WORLD],
+                event,
+            ]);
+        }
+        #onMainWorldBindingCalled(event) {
+            this._frameManager.emit(FrameManagerEvent.BindingCalled, [
+                this.worlds[MAIN_WORLD],
+                event,
+            ]);
         }
         /**
          * This is used internally in DevTools.
@@ -103,23 +133,8 @@ let CdpFrame = (() => {
         updateId(id) {
             this._id = id;
         }
-        updateClient(client, keepWorlds = false) {
+        updateClient(client) {
             this.#client = client;
-            if (!keepWorlds) {
-                // Clear the current contexts on previous world instances.
-                if (this.worlds) {
-                    this.worlds[MAIN_WORLD].clearContext();
-                    this.worlds[PUPPETEER_WORLD].clearContext();
-                }
-                this.worlds = {
-                    [MAIN_WORLD]: new IsolatedWorld(this, this._frameManager.timeoutSettings),
-                    [PUPPETEER_WORLD]: new IsolatedWorld(this, this._frameManager.timeoutSettings),
-                };
-            }
-            else {
-                this.worlds[MAIN_WORLD].frameUpdated();
-                this.worlds[PUPPETEER_WORLD].frameUpdated();
-            }
         }
         page() {
             return this._frameManager.page();
@@ -242,6 +257,48 @@ let CdpFrame = (() => {
                 return rootFrame._frameManager._deviceRequestPromptManager(this.#client);
             }
         }
+        async addPreloadScript(preloadScript) {
+            if (!this.isOOPFrame() && this !== this._frameManager.mainFrame()) {
+                return;
+            }
+            if (preloadScript.getIdForFrame(this)) {
+                return;
+            }
+            const { identifier } = await this.#client.send('Page.addScriptToEvaluateOnNewDocument', {
+                source: preloadScript.source,
+            });
+            preloadScript.setIdForFrame(this, identifier);
+        }
+        async addExposedFunctionBinding(binding) {
+            // If a frame has not started loading, it might never start. Rely on
+            // addScriptToEvaluateOnNewDocument in that case.
+            if (this !== this._frameManager.mainFrame() && !this._hasStartedLoading) {
+                return;
+            }
+            await Promise.all([
+                this.#client.send('Runtime.addBinding', {
+                    name: CDP_BINDING_PREFIX + binding.name,
+                }),
+                this.evaluate(binding.initSource).catch(debugError),
+            ]);
+        }
+        async removeExposedFunctionBinding(binding) {
+            // If a frame has not started loading, it might never start. Rely on
+            // addScriptToEvaluateOnNewDocument in that case.
+            if (this !== this._frameManager.mainFrame() && !this._hasStartedLoading) {
+                return;
+            }
+            await Promise.all([
+                this.#client.send('Runtime.removeBinding', {
+                    name: CDP_BINDING_PREFIX + binding.name,
+                }),
+                this.evaluate(name => {
+                    // Removes the dangling Puppeteer binding wrapper.
+                    // @ts-expect-error: In a different context.
+                    globalThis[name] = undefined;
+                }, binding.name).catch(debugError),
+            ]);
+        }
         async waitForDevicePrompt(options = {}) {
             return await this.#deviceRequestPromptManager().waitForDevicePrompt(options);
         }
@@ -269,7 +326,7 @@ let CdpFrame = (() => {
         get detached() {
             return this.#detached;
         }
-        [(_goto_decorators = [throwIfDetached], _waitForNavigation_decorators = [throwIfDetached], _setContent_decorators = [throwIfDetached], _waitForDevicePrompt_decorators = [throwIfDetached], disposeSymbol)]() {
+        [(_goto_decorators = [throwIfDetached], _waitForNavigation_decorators = [throwIfDetached], _setContent_decorators = [throwIfDetached], _addPreloadScript_decorators = [throwIfDetached], _addExposedFunctionBinding_decorators = [throwIfDetached], _removeExposedFunctionBinding_decorators = [throwIfDetached], _waitForDevicePrompt_decorators = [throwIfDetached], disposeSymbol)]() {
             if (this.#detached) {
                 return;
             }

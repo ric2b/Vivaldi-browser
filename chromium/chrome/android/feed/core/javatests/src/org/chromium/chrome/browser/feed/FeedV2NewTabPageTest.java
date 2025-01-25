@@ -45,7 +45,6 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -55,8 +54,8 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-import org.chromium.base.FeatureList;
 import org.chromium.base.Promise;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterProvider;
 import org.chromium.base.test.params.ParameterSet;
@@ -67,8 +66,8 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.DisableFeatures;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.feed.sections.SectionHeaderListProperties;
@@ -84,28 +83,27 @@ import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.suggestions.SiteSuggestion;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.top.ToolbarPhone;
-import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
+import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
 import org.chromium.chrome.test.util.browser.suggestions.mostvisited.FakeMostVisitedSites;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.externalauth.ExternalAuthUtils;
+import org.chromium.components.signin.SigninFeatures;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.test.util.AccountCapabilitiesBuilder;
 import org.chromium.components.signin.test.util.FakeAccountManagerFacade;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -121,13 +119,8 @@ import java.util.concurrent.Callable;
     ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
     "disable-features=IPH_FeedHeaderMenu"
 })
+@Features.EnableFeatures({ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS})
 public class FeedV2NewTabPageTest {
-    @ParameterAnnotations.ClassParameter
-    private static List<ParameterSet> sClassParams =
-            Arrays.asList(
-                    new ParameterSet().value(true).name("EnableScrollableMVTOnNTP"),
-                    new ParameterSet().value(false).name("DisableScrollableMVTOnNTP"));
-
     private static final int ARTICLE_SECTION_HEADER_POSITION = 1;
     private static final int SIGNIN_PROMO_POSITION = 2;
     private static final int MIN_ITEMS_AFTER_LOAD = 10;
@@ -194,12 +187,7 @@ public class FeedV2NewTabPageTest {
     private EmbeddedTestServer mTestServer;
     private List<SiteSuggestion> mSiteSuggestions;
     private boolean mDisableSigninPromoCard;
-    private boolean mEnableScrollableMVT;
     private TestFeedServer mFeedServer;
-
-    public FeedV2NewTabPageTest(boolean enableScrollableMVT) {
-        mEnableScrollableMVT = enableScrollableMVT;
-    }
 
     @ParameterAnnotations.UseMethodParameterBefore(SigninPromoParams.class)
     public void disableSigninPromoCard(boolean disableSigninPromoCard) {
@@ -214,26 +202,12 @@ public class FeedV2NewTabPageTest {
         when(mExternalAuthUtils.canUseGooglePlayServices()).thenReturn(true);
 
         SignInPromo.setDisablePromoForTesting(mDisableSigninPromoCard);
-        FeatureList.TestValues testValuesOverride = new FeatureList.TestValues();
-        testValuesOverride.addFeatureFlagOverride(
-                ChromeFeatureList.SHOW_SCROLLABLE_MVT_ON_NTP_ANDROID, mEnableScrollableMVT);
-        if (!ChromeFeatureList.sSurfacePolish.isEnabled()) {
-            testValuesOverride.addFeatureFlagOverride(
-                    ChromeFeatureList.SHOW_SCROLLABLE_MVT_ON_NTP_PHONE_ANDROID,
-                    mEnableScrollableMVT);
-        } else {
-            StartSurfaceConfiguration.SURFACE_POLISH_SCROLLABLE_MVT.setForTesting(
-                    mEnableScrollableMVT);
-        }
-        FeatureList.setTestValues(testValuesOverride);
 
         mActivityTestRule.startMainActivityWithURL("about:blank");
 
-        Assume.assumeFalse(mActivityTestRule.getActivity().isTablet() && mEnableScrollableMVT);
-
         // EULA must be accepted, and internet connectivity is required, or the Feed will not
         // attempt to load.
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     NetworkChangeNotifier.forceConnectivityState(true);
                     FirstRunUtils.setEulaAccepted();
@@ -353,7 +327,28 @@ public class FeedV2NewTabPageTest {
     @Test
     @MediumTest
     @Feature({"FeedNewTabPage"})
-    public void testSignInPromoWhenDefaultAccountCanNotOfferExtendedSyncPromos() {
+    @Features.EnableFeatures({SigninFeatures.SEED_ACCOUNTS_REVAMP})
+    public void testSignInPromo_NotShownAfterSignIn() {
+        mIsCachePopulatedInAccountManagerFacade = true;
+        openNewTabPage();
+        // Check that the sign-in promo is displayed.
+        onView(withId(R.id.feed_stream_recycler_view))
+                .perform(RecyclerViewActions.scrollToPosition(SIGNIN_PROMO_POSITION));
+        onView(withId(R.id.signin_promo_view_container)).check(matches(isDisplayed()));
+
+        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_1);
+        // TODO(crbug.com/344816076): Use SigninTestRule in this suite instead.
+        SigninTestUtil.signin(AccountManagerTestRule.TEST_ACCOUNT_1);
+
+        onView(withId(R.id.feed_stream_recycler_view))
+                .perform(RecyclerViewActions.scrollToPosition(SIGNIN_PROMO_POSITION));
+        onView(withId(R.id.signin_promo_view_container)).check(doesNotExist());
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"FeedNewTabPage"})
+    public void testSignInPromoWhenDefaultAccountCannotShowHistorySyncWithoutMinorRestrictions() {
         final AccountCapabilitiesBuilder capabilitiesBuilder = new AccountCapabilitiesBuilder();
         mAccountManagerTestRule.addAccount(
                 "test@gmail.com",
@@ -366,8 +361,8 @@ public class FeedV2NewTabPageTest {
         onView(withId(R.id.feed_stream_recycler_view))
                 .perform(RecyclerViewActions.scrollToPosition(SIGNIN_PROMO_POSITION));
 
-        // Check that the sign-in promo is not displayed.
-        onView(withId(R.id.signin_promo_view_container)).check(doesNotExist());
+        // Check that the sign-in promo is displayed.
+        onView(withId(R.id.signin_promo_view_container)).check(matches(isDisplayed()));
     }
 
     @Test
@@ -436,28 +431,21 @@ public class FeedV2NewTabPageTest {
         RecyclerView recyclerView = getRecyclerView();
         FeedV2TestHelper.waitForRecyclerItems(MIN_ITEMS_AFTER_LOAD, recyclerView);
 
-        mRenderTestRule.render(
-                recyclerView,
-                "feedContent_landscape"
-                        + (mEnableScrollableMVT
-                                ? "_with_scrollable_mvt_v2"
-                                : "_with_non_scrollable_mvt_v2"));
+        mRenderTestRule.render(recyclerView, "feedContent_landscape_with_scrollable_mvt_v2");
     }
 
     @Test
     @MediumTest
     @Feature({"NewTabPage"})
-    @EnableFeatures(ChromeFeatureList.SURFACE_POLISH)
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
     @DisabledTest(message = "crbug.com/1467377")
-    public void testFakeOmniboxPolishOnNtp() throws IOException {
+    public void testFakeOmniboxOnNtp() throws IOException {
         openNewTabPage();
 
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         assertEquals(
                 cta.getResources()
-                        .getDimensionPixelSize(
-                                org.chromium.chrome.R.dimen.ntp_search_box_height_polish),
+                        .getDimensionPixelSize(org.chromium.chrome.R.dimen.ntp_search_box_height),
                 cta.findViewById(org.chromium.chrome.R.id.search_box).getLayoutParams().height);
 
         // Drag the Feed header title to scroll the toolbar to the top.
@@ -481,7 +469,7 @@ public class FeedV2NewTabPageTest {
             assertEquals(
                     toolbar.getLocationBarBackgroundHeightForTesting(),
                     cta.getResources()
-                            .getDimension(org.chromium.chrome.R.dimen.ntp_search_box_height_polish),
+                            .getDimension(org.chromium.chrome.R.dimen.ntp_search_box_height),
                     0.5);
         }
     }
@@ -490,7 +478,7 @@ public class FeedV2NewTabPageTest {
      * @return The position of the top of the fakebox relative to the window.
      */
     private int getFakeboxTop(final NewTabPage ntp) {
-        return TestThreadUtils.runOnUiThreadBlockingNoException(
+        return ThreadUtils.runOnUiThreadBlocking(
                 new Callable<Integer>() {
                     @Override
                     public Integer call() {

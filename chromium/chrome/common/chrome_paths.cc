@@ -50,6 +50,12 @@
 #include "chromeos/startup/startup.h"  // nogncheck
 #endif
 
+
+// Vivaldi: Flatpak support.
+#if BUILDFLAG(IS_LINUX)
+#include "sandbox/linux/services/flatpak_sandbox.h"
+#endif
+
 namespace {
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -543,6 +549,14 @@ bool PathProvider(int key, base::FilePath* result) {
       break;
 #if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_OPENBSD)
     case chrome::DIR_POLICY_FILES: {
+#if defined(OS_LINUX)
+      if (vivaldi::sandbox::FlatpakSandbox::GetInstance()->GetSandboxLevel() >
+          vivaldi::sandbox::FlatpakSandbox::SandboxLevel::kNone) {
+        cur = base::FilePath(
+            FILE_PATH_LITERAL("/app/chromium/extensions/policies"));
+        break;
+      }
+#endif
       cur = base::FilePath(policy::kPolicyPath);
       break;
     }
@@ -563,7 +577,13 @@ bool PathProvider(int key, base::FilePath* result) {
 #endif
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
     case chrome::DIR_STANDALONE_EXTERNAL_EXTENSIONS: {
+      if (vivaldi::sandbox::FlatpakSandbox::GetInstance()->GetSandboxLevel() >
+          vivaldi::sandbox::FlatpakSandbox::SandboxLevel::kNone) {
+        cur = base::FilePath(
+            FILE_PATH_LITERAL("/app/chromium/extensions/extensions"));
+      } else {
       cur = base::FilePath(kFilepathSinglePrefExtensions);
+      }
       break;
     }
 #endif
@@ -610,6 +630,12 @@ bool PathProvider(int key, base::FilePath* result) {
           "/Library/Application Support/Chromium/NativeMessagingHosts"));
 #endif
 #else  // BUILDFLAG(IS_MAC)
+      if (vivaldi::sandbox::FlatpakSandbox::GetInstance()->GetSandboxLevel() >
+          vivaldi::sandbox::FlatpakSandbox::SandboxLevel::kNone) {
+        cur = base::FilePath(FILE_PATH_LITERAL(
+            "/app/chromium/extensions/native-messaging-hosts"));
+        break;
+      }
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
       cur = base::FilePath(
           FILE_PATH_LITERAL("/etc/opt/chrome/native-messaging-hosts"));

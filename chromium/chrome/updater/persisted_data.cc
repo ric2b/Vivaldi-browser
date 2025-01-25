@@ -14,7 +14,6 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/sequence_checker.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -557,6 +556,11 @@ void PersistedData::SetEulaRequired(bool eula_required) {
   if (pref_service_) {
     pref_service_->SetBoolean(kEulaRequired, eula_required);
   }
+#if BUILDFLAG(IS_WIN)
+  // For backwards compatibility, `eulaaccepted` is recorded in the registry,
+  // since some applications read it from there.
+  SetEulaAccepted(scope_, !eula_required);
+#endif
 }
 
 base::Time PersistedData::GetLastChecked() const {

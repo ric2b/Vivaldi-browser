@@ -21,10 +21,15 @@ class InkBrush {
       float size,
       float epsilon);
 
-  ~InkBrush();
+  virtual ~InkBrush() = default;
 
- protected:
-  InkBrush();
+  virtual SkColor GetColor() const = 0;
+
+  virtual float GetSize() const = 0;
+
+  // Note that this method does not necessarily correspond 1:1 to the method in
+  // the Ink library. It is provided for convenience when testing.
+  virtual float GetOpacityForTesting() const = 0;
 };
 
 }  // namespace chrome_pdf

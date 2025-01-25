@@ -29,6 +29,7 @@
 #include "ash/public/cpp/capture_mode/capture_mode_test_api.h"
 #include "ash/public/cpp/style/dark_light_mode_controller.h"
 #include "ash/public/cpp/tablet_mode.h"
+#include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -41,6 +42,7 @@
 #include "ash/system/unified/feature_tile.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_observer.h"
+#include "ash/wm/snap_group/snap_group_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_state_util.h"
@@ -58,6 +60,7 @@
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/views/animation/ink_drop.h"
@@ -72,6 +75,10 @@ namespace {
 // Sub-label strings.
 const std::u16string& hidden_label = u"Hidden";
 const std::u16string& visible_label = u"Visible";
+
+// Touch drag constants.
+constexpr base::TimeDelta kTouchDragDuration = base::Milliseconds(200);
+const int kTouchDragSteps = 5;
 
 enum class Movement { kTouch, kMouse };
 
@@ -733,6 +740,26 @@ class GameDashboardContextTest : public GameDashboardTestBase {
     EXPECT_EQ(test_api_->GetToolbarSnapLocation(), desired_location);
   }
 
+  void CreateAnArcAppInFullscreen() {
+    // Create an ARC game window.
+    SetAppBounds(gfx::Rect(50, 50, 800, 700));
+    CreateGameWindow(/*is_arc_window=*/true,
+                     /*set_arc_game_controls_flags_prop=*/true);
+
+    auto* window_state = WindowState::Get(game_window_.get());
+    ASSERT_TRUE(window_state->IsNormalStateType());
+    views::Widget* button_widget = test_api_->GetGameDashboardButtonWidget();
+    CHECK(button_widget);
+
+    // Set initial state to fullscreen and verify Game Dashboard button widget
+    // is not visible.
+    ASSERT_FALSE(test_api_->GetGameDashboardButtonRevealController());
+    ToggleFullScreen(window_state, /*delegate=*/nullptr);
+    ASSERT_TRUE(window_state->IsFullscreen());
+    ASSERT_FALSE(button_widget->IsVisible());
+    ASSERT_TRUE(test_api_->GetGameDashboardButtonRevealController());
+  }
+
  protected:
   void DragToolbarToPoint(Movement move_type,
                           const gfx::Point& new_location,
@@ -1215,6 +1242,21 @@ TEST_F(GameDashboardContextTest, CompatModeArcGame) {
   EXPECT_TRUE(screen_size_button->GetEnabled());
 }
 
+// Verifies the screen size row isn't shown on O4C ARC game windows.
+TEST_F(GameDashboardContextTest, ScreenSizeRowAvailability) {
+  // Create an ARC game window that is O4C.
+  CreateGameWindow(/*is_arc_window=*/true);
+  game_window_->SetProperty(kArcResizeLockTypeKey, ArcResizeLockType::NONE);
+  game_window_->SetProperty(
+      kArcGameControlsFlagsKey,
+      static_cast<ArcGameControlsFlag>(ArcGameControlsFlag::kKnown |
+                                       ArcGameControlsFlag::kO4C));
+
+  test_api_->OpenTheMainMenu();
+
+  EXPECT_FALSE(test_api_->GetMainMenuScreenSizeSettingsButton());
+}
+
 TEST_F(GameDashboardContextTest, NonCompatModeArcGame) {
   // Create an ARC game window that doesn't support Compat Mode.
   CreateGameWindow(/*is_arc_window=*/true);
@@ -1485,7 +1527,8 @@ TEST_F(GameDashboardContextTest, GameDashboardButtonFullscreen) {
   ASSERT_FALSE(window_state->IsFullscreen());
   ASSERT_TRUE(button_widget->IsVisible());
 
-  // Switch to fullscreen and verify Game Dashboard button widget is visible.
+  // Switch to fullscreen and verify Game Dashboard button widget is not
+  // visible.
   ToggleFullScreen(window_state, /*delegate=*/nullptr);
   ASSERT_TRUE(window_state->IsFullscreen());
   ASSERT_FALSE(button_widget->IsVisible());
@@ -1550,43 +1593,175 @@ TEST_F(GameDashboardContextTest, GameDashboardButtonFullscreenWithMainMenu) {
   ASSERT_FALSE(button_widget->IsVisible());
 }
 
-TEST_F(GameDashboardContextTest, GameDashboardButtonFullscreen_MouseOver) {
-  // Create an ARC game window.
-  SetAppBounds(gfx::Rect(50, 50, 800, 700));
-  CreateGameWindow(/*is_arc_window=*/true,
-                   /*set_arc_game_controls_flags_prop=*/true);
-
-  auto* event_generator = GetEventGenerator();
-  auto app_bounds = game_window_->GetBoundsInScreen();
-  auto* window_state = WindowState::Get(game_window_.get());
-  ASSERT_TRUE(window_state->IsNormalStateType());
+TEST_F(GameDashboardContextTest,
+       GameDashboardButtonFullscreen_MouseOverAndTouchGesture) {
+  CreateAnArcAppInFullscreen();
   views::Widget* button_widget = test_api_->GetGameDashboardButtonWidget();
   CHECK(button_widget);
 
-  // Set initial state to fullscreen and verify Game Dashboard button widget is
-  // not visible.
-  ASSERT_FALSE(test_api_->GetGameDashboardButtonRevealController());
-  ToggleFullScreen(window_state, /*delegate=*/nullptr);
-  ASSERT_TRUE(window_state->IsFullscreen());
-  ASSERT_FALSE(button_widget->IsVisible());
-  ASSERT_TRUE(test_api_->GetGameDashboardButtonRevealController());
-  ASSERT_FALSE(test_api_->GetGameDashboardButtonWidget()->IsVisible());
-
   // Move mouse to top edge of window.
-  app_bounds = game_window_->GetBoundsInScreen();
+  const auto app_bounds = game_window_->GetBoundsInScreen();
+  auto* event_generator = GetEventGenerator();
   event_generator->MoveMouseTo(app_bounds.top_center());
   base::OneShotTimer& top_edge_hover_timer =
       test_api_->GetRevealControllerTopEdgeHoverTimer();
   ASSERT_TRUE(top_edge_hover_timer.IsRunning());
   top_edge_hover_timer.FireNow();
   ASSERT_TRUE(button_widget->IsVisible());
-  ASSERT_TRUE(test_api_->GetGameDashboardButtonWidget()->IsVisible());
 
   // Move mouse to the center of the app, and verify Game Dashboard button
   // widget is not visible.
   event_generator->MoveMouseTo(app_bounds.CenterPoint());
-  ASSERT_FALSE(test_api_->GetGameDashboardButtonWidget()->IsVisible());
   ASSERT_FALSE(button_widget->IsVisible());
+
+  // Touch drag from top edge of window.
+  event_generator->GestureScrollSequence(app_bounds.top_center(),
+                                         app_bounds.CenterPoint(),
+                                         kTouchDragDuration, kTouchDragSteps);
+  ASSERT_TRUE(button_widget->IsVisible());
+
+  // Touch drag to top edge of window.
+  event_generator->GestureScrollSequence(app_bounds.CenterPoint(),
+                                         app_bounds.top_center(),
+                                         kTouchDragDuration, kTouchDragSteps);
+  ASSERT_FALSE(button_widget->IsVisible());
+
+  // Re-open the game dashboard button and touch drag to bottom edge of window.
+  event_generator->GestureScrollSequence(app_bounds.top_center(),
+                                         app_bounds.CenterPoint(),
+                                         kTouchDragDuration, kTouchDragSteps);
+  ASSERT_TRUE(button_widget->IsVisible());
+
+  event_generator->GestureScrollSequence(app_bounds.CenterPoint(),
+                                         app_bounds.bottom_center(),
+                                         kTouchDragDuration, kTouchDragSteps);
+  ASSERT_FALSE(button_widget->IsVisible());
+
+  // Touch drag to bottom edge of window while the game dashboard button is
+  // hidden.
+  event_generator->GestureScrollSequence(app_bounds.CenterPoint(),
+                                         app_bounds.bottom_center(),
+                                         kTouchDragDuration, kTouchDragSteps);
+  ASSERT_FALSE(button_widget->IsVisible());
+}
+
+TEST_F(GameDashboardContextTest, GameDashboardButtonFullscreen_TouchEvent) {
+  CreateAnArcAppInFullscreen();
+  views::Widget* button_widget = test_api_->GetGameDashboardButtonWidget();
+  CHECK(button_widget);
+
+  // Move mouse to top edge of window, and verify Game Dashboard button
+  // widget is visible.
+  const auto app_bounds = game_window_->GetBoundsInScreen();
+  auto* event_generator = GetEventGenerator();
+  event_generator->MoveMouseTo(app_bounds.top_center());
+  base::OneShotTimer& top_edge_hover_timer =
+      test_api_->GetRevealControllerTopEdgeHoverTimer();
+  ASSERT_TRUE(top_edge_hover_timer.IsRunning());
+  top_edge_hover_timer.FireNow();
+  ASSERT_TRUE(button_widget->IsVisible());
+
+  // Touch outside the Game Dashboard button widget's bounds and verify the
+  // widget is hidden.
+  event_generator->PressTouch(app_bounds.right_center());
+  event_generator->ReleaseTouch();
+  ASSERT_FALSE(button_widget->IsVisible());
+}
+
+// Verifies that during a snap animation, the Game Dashboard and toolbar widgets
+// are not visible.
+TEST_F(GameDashboardContextTest, UIVisibilityWithWindowSnapAnimation) {
+  // Prevent short-circuit animations in this test.
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
+
+  // Create an ARC game window.
+  CreateGameWindow(/*is_arc_window=*/true);
+
+  // Extract animation layer.
+  ui::LayerAnimator* animator = game_window_->layer()->GetAnimator();
+  // Prevent animation from automatically running.
+  animator->set_disable_timer_for_test(true);
+
+  // Ensure that widgets exist and are visible before animation occurs.
+  const auto* game_dashboard_button_widget =
+      test_api_->GetGameDashboardButtonWidget();
+  ASSERT_TRUE(game_dashboard_button_widget);
+  ASSERT_TRUE(game_dashboard_button_widget->IsVisible());
+  test_api_->OpenTheMainMenu();
+  test_api_->OpenTheToolbar();
+
+  // Snap Left.
+  Shell::Get()->accelerator_controller()->PerformActionIfEnabled(
+      AcceleratorAction::kWindowCycleSnapLeft, {});
+  // Ensure that the animation is occurring.
+  ASSERT_TRUE(animator->is_animating());
+  // Manually take a step through the animation while it is running. The
+  // animation is still incomplete 10 milliseconds in.
+  animator->Step(animator->last_step_time() + base::Milliseconds(10));
+
+  // Verify that the widgets are not visible during the animation.
+  ASSERT_FALSE(game_dashboard_button_widget->IsVisible());
+  const auto* toolbar_widget = test_api_->GetToolbarWidget();
+  ASSERT_FALSE(toolbar_widget->IsVisible());
+
+  // Run the animation to completion.
+  animator->StopAnimating();
+
+  // Verify that the animation is complete.
+  ASSERT_FALSE(animator->is_animating());
+  // Ensure that the widgets are visible at the conclusion of the animation.
+  ASSERT_TRUE(game_dashboard_button_widget->IsVisible());
+  ASSERT_TRUE(toolbar_widget->IsVisible());
+  // Ensure that the window is snapped.
+  ASSERT_TRUE(WindowState::Get(game_window_.get())->IsSnapped());
+}
+
+// Verifies that during a float animation, the Game Dashboard and toolbar
+// widgets are not visible.
+TEST_F(GameDashboardContextTest, UIVisibilityWithWindowFloatAnimation) {
+  // Do not short-circuit animations in this test.
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
+
+  // Create an ARC game window.
+  CreateGameWindow(/*is_arc_window=*/true);
+
+  // Extract animation layer.
+  ui::LayerAnimator* animator = game_window_->layer()->GetAnimator();
+
+  // Prevent animation from automatically running.
+  animator->set_disable_timer_for_test(true);
+
+  const auto* game_dashboard_button_widget =
+      test_api_->GetGameDashboardButtonWidget();
+  ASSERT_TRUE(game_dashboard_button_widget);
+  ASSERT_TRUE(game_dashboard_button_widget->IsVisible());
+
+  test_api_->OpenTheMainMenu();
+  test_api_->OpenTheToolbar();
+
+  // Trigger the float animation.
+  PressAndReleaseKey(ui::VKEY_F, ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN);
+
+  // Ensure that the animation is occurring.
+  ASSERT_TRUE(animator->is_animating());
+
+  // Manually take a step through the animation.
+  animator->Step(animator->last_step_time() + base::Milliseconds(10));
+
+  // Verify that the widgets are not visible.
+  ASSERT_FALSE(game_dashboard_button_widget->IsVisible());
+  ASSERT_FALSE(test_api_->GetToolbarWidget()->IsVisible());
+
+  // Run the animation to completion.
+  ShellTestApi().WaitForWindowFinishAnimating(game_window_.get());
+
+  // Ensure that the widgets are visible at the conclusion of the animation.
+  EXPECT_TRUE(game_dashboard_button_widget->IsVisible());
+  ASSERT_TRUE(test_api_->GetToolbarWidget()->IsVisible());
+
+  ASSERT_TRUE(WindowState::Get(game_window_.get())->IsFloated());
 }
 
 // Verifies that at startup and with the welcome dialog is visible, opening
@@ -1791,6 +1966,51 @@ TEST_F(GameDashboardContextTest, TabNavigationToolbar) {
   // in the toolbar.
   TabNavigateBackward();
   EXPECT_TRUE(test_api_->GetToolbarScreenshotButton()->HasFocus());
+}
+
+class SnapGroupGameDashboardContextTest : public GameDashboardContextTest {
+ public:
+  SnapGroupGameDashboardContextTest()
+      : scoped_feature_list_(features::kSnapGroup) {}
+
+  SnapGroupGameDashboardContextTest(const SnapGroupGameDashboardContextTest&) =
+      delete;
+  SnapGroupGameDashboardContextTest& operator=(
+      const SnapGroupGameDashboardContextTest&) = delete;
+  ~SnapGroupGameDashboardContextTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Tests no crash when the game window in a snap group is fullscreen'ed then
+// forces a work area change. Regression test for http://b/348668590.
+TEST_F(SnapGroupGameDashboardContextTest, NoCrashOnSnapGroupWorkAreaChange) {
+  // Create a snap group with the game window.
+  CreateGameWindow(/*is_arc_window=*/false);
+  std::unique_ptr<aura::Window> w2(AshTestBase::CreateAppWindow());
+
+  WindowState* window_state2 = WindowState::Get(w2.get());
+  const WindowSnapWMEvent secondary_snap_event(
+      WM_EVENT_SNAP_SECONDARY, chromeos::kDefaultSnapRatio,
+      WindowSnapActionSource::kSnapByWindowLayoutMenu);
+  window_state2->OnWMEvent(&secondary_snap_event);
+  EXPECT_TRUE(window_state2->IsSnapped());
+
+  WindowState* window_state1 = WindowState::Get(game_window_.get());
+  const WindowSnapWMEvent primary_snap_event(
+      WM_EVENT_SNAP_PRIMARY, chromeos::kDefaultSnapRatio,
+      WindowSnapActionSource::kSnapByWindowLayoutMenu);
+  window_state1->OnWMEvent(&primary_snap_event);
+  EXPECT_TRUE(window_state1->IsSnapped());
+
+  ASSERT_TRUE(SnapGroupController::Get()->AreWindowsInSnapGroup(
+      game_window_.get(), w2.get()));
+  ASSERT_TRUE(test_api_->GetGameDashboardButtonWidget()->IsVisible());
+
+  // Fullscreen the game window. Test no crash.
+  wm::ActivateWindow(game_window_.get());
+  ToggleFullScreen(window_state1, /*delegate=*/nullptr);
 }
 
 // -----------------------------------------------------------------------------
@@ -2617,7 +2837,7 @@ TEST_P(GameTypeGameDashboardContextTest, OverviewModeWithTabletMode) {
   test_api_->OpenTheToolbar();
   const auto* overview_controller = OverviewController::Get();
 
-  // 1. Clamshell -> overrview -> tablet-> exit overview.
+  // 1. Clamshell -> overview -> tablet-> exit overview.
   ASSERT_FALSE(display::Screen::GetScreen()->InTabletMode());
   EnterOverview();
   ASSERT_TRUE(overview_controller->InOverviewSession());

@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+
 #include <string>
 
 #include "base/command_line.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
@@ -13,7 +14,6 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/safe_browsing/core/common/features.h"
-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -195,9 +195,11 @@ TEST_F(SafeBrowsingPrefsTest, IsExtendedReportingPolicyManaged) {
   // to the results of IsExtendedReportingPolicyManaged and
   // IsExtendedReportingOptInAllowed.
 
-  // Confirm default state, SBER should be disabled, OptInAllowed should
-  // be enabled, and SBER is not managed.
+  // Confirm default state, SBER should be disabled, SBER with deprecation flag
+  // bypassed should be disabled, OptInAllowed should be enabled, and SBER is
+  // not managed.
   EXPECT_FALSE(IsExtendedReportingEnabled(prefs_));
+  EXPECT_FALSE(IsExtendedReportingEnabledBypassDeprecationFlag(prefs_));
   EXPECT_TRUE(IsExtendedReportingOptInAllowed(prefs_));
   EXPECT_FALSE(IsExtendedReportingPolicyManaged(prefs_));
 
@@ -220,6 +222,8 @@ TEST_F(SafeBrowsingPrefsTest, IsExtendedReportingPolicyManaged) {
       prefs_.IsManagedPreference(prefs::kSafeBrowsingScoutReportingEnabled));
   // The value of the pref comes from the policy.
   EXPECT_TRUE(IsExtendedReportingEnabled(prefs_));
+  // The value of the pref comes from the policy and should be enabled.
+  EXPECT_TRUE(IsExtendedReportingEnabledBypassDeprecationFlag(prefs_));
   // SBER being managed doesn't change the SBEROptInAllowed pref.
   EXPECT_TRUE(IsExtendedReportingOptInAllowed(prefs_));
 }

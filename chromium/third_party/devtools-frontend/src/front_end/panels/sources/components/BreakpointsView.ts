@@ -507,7 +507,7 @@ export class BreakpointsSidebarController implements UI.ContextFlavorListener.Co
   }
 
   #getContent(locations: Breakpoints.BreakpointManager.BreakpointLocation[][]):
-      Promise<Array<TextUtils.Text.Text|Common.WasmDisassembly.WasmDisassembly>> {
+      Promise<Array<TextUtils.Text.Text|TextUtils.WasmDisassembly.WasmDisassembly>> {
     // Use a cache to share the Text objects between all breakpoints. This way
     // we share the cached line ending information that Text calculates. This
     // was very slow to calculate with a lot of breakpoints in the same very
@@ -601,7 +601,7 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
             aria-checked=${this.#pauseOnUncaughtExceptions}
             data-first-pause>
           <label class='checkbox-label'>
-            <input type='checkbox' tabindex=-1 ?checked=${this.#pauseOnUncaughtExceptions} @change=${this.#onPauseOnUncaughtExceptionsStateChanged.bind(this)} jslog=${VisualLogging.toggle('pause-uncaught').track({ change: true })}>
+            <input type='checkbox' tabindex=-1 class="small" ?checked=${this.#pauseOnUncaughtExceptions} @change=${this.#onPauseOnUncaughtExceptionsStateChanged.bind(this)} jslog=${VisualLogging.toggle('pause-uncaught').track({ change: true })}>
             <span>${i18nString(UIStrings.pauseOnUncaughtExceptions)}</span>
           </label>
         </div>
@@ -613,7 +613,7 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
               aria-checked=${pauseOnCaughtIsChecked}
               data-last-pause>
             <label class='checkbox-label'>
-              <input data-pause-on-caught-checkbox type='checkbox' tabindex=-1 ?checked=${pauseOnCaughtIsChecked} ?disabled=${pauseOnCaughtExceptionIsDisabled} @change=${this.#onPauseOnCaughtExceptionsStateChanged.bind(this)} jslog=${VisualLogging.toggle('pause-on-caught-exception').track({ change: true })}>
+              <input data-pause-on-caught-checkbox type='checkbox' class="small" tabindex=-1 ?checked=${pauseOnCaughtIsChecked} ?disabled=${pauseOnCaughtExceptionIsDisabled} @change=${this.#onPauseOnCaughtExceptionsStateChanged.bind(this)} jslog=${VisualLogging.toggle('pause-on-caught-exception').track({ change: true })}>
               <span>${i18nString(UIStrings.pauseOnCaughtExceptions)}</span>
             </label>
         </div>
@@ -716,8 +716,6 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
 
   #renderEditBreakpointButton(breakpointItem: BreakpointItem): LitHtml.TemplateResult {
     const clickHandler = (event: Event): void => {
-      Host.userMetrics.breakpointEditDialogRevealedFrom(
-          Host.UserMetrics.BreakpointEditDialogRevealedFrom.BreakpointSidebarEditButton);
       void this.#controller.breakpointEdited(breakpointItem, true /* editButtonClicked */);
       event.consume();
     };
@@ -851,7 +849,7 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
 
     const checked = group.breakpointItems.some(item => item.status === BreakpointStatus.ENABLED);
     return LitHtml.html`
-      <input class='group-checkbox' type='checkbox'
+      <input class='group-checkbox small' type='checkbox'
             aria-label=''
             .checked=${checked}
             @change=${groupCheckboxToggled}
@@ -879,8 +877,6 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
     }, {jslogContext: 'jump-to-breakpoint'});
 
     menu.editSection().appendItem(editBreakpointText, () => {
-      Host.userMetrics.breakpointEditDialogRevealedFrom(
-          Host.UserMetrics.BreakpointEditDialogRevealedFrom.BreakpointSidebarContextMenu);
       void this.#controller.breakpointEdited(breakpointItem, false /* editButtonClicked */);
     }, {disabled: !editable, jslogContext: 'edit-breakpoint'});
 
@@ -954,6 +950,7 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
         <span class='type-indicator'></span>
         <input type='checkbox'
               aria-label=${breakpointItem.location}
+              class='small'
               ?indeterminate=${breakpointItem.status === BreakpointStatus.INDETERMINATE}
               .checked=${breakpointItem.status === BreakpointStatus.ENABLED}
               @change=${(e: Event) => this.#onCheckboxToggled(e, breakpointItem)}

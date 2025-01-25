@@ -367,7 +367,8 @@ struct TensorPrinter<Tensor, rank, TensorIOFormatLegacy, std::enable_if_t<rank !
     const IndexType total_size = internal::array_prod(tensor.dimensions());
     if (total_size > 0) {
       const IndexType first_dim = Eigen::internal::array_get<0>(tensor.dimensions());
-      Map<const Array<Scalar, Dynamic, Dynamic, Tensor::Layout>> matrix(tensor.data(), first_dim, total_size / first_dim);
+      Map<const Array<Scalar, Dynamic, Dynamic, Tensor::Layout>> matrix(tensor.data(), first_dim,
+                                                                        total_size / first_dim);
       s << matrix;
       return;
     }

@@ -24,6 +24,7 @@ limitations under the License.
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -36,6 +37,7 @@ limitations under the License.
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
+#include "xla/autotuning.pb.h"
 #include "xla/debug_options_flags.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_instruction.h"
@@ -288,16 +290,12 @@ std::string NumBytesToString(int64_t bytes) {
 }
 
 CudnnVersion GetCudnnVersion(se::StreamExecutor* stream_executor) {
+  se::dnn::VersionInfo version = GetDnnVersionInfoOrDefault(stream_executor);
   CudnnVersion cudnn_version;
-  if (auto* dnn = stream_executor->AsDnn()) {
-    absl::StatusOr<se::dnn::VersionInfo> version_or = dnn->GetVersion();
-    if (version_or.ok()) {
-      const auto& version = version_or.value();
-      cudnn_version.set_major(version.major_version());
-      cudnn_version.set_minor(version.minor_version());
-      cudnn_version.set_patch(version.patch());
-    }
-  }
+  cudnn_version.set_major(version.major_version());
+  cudnn_version.set_minor(version.minor_version());
+  cudnn_version.set_patch(version.patch());
+
   return cudnn_version;
 }
 
@@ -318,14 +316,11 @@ void PrintPlatformInfo(const se::Stream* stream) {
   LOG(ERROR) << "Driver: " << desc.driver_version();
   LOG(ERROR) << "Runtime: " << desc.runtime_version();
 
-  auto* dnn = se->AsDnn();
-  if (dnn) {
-    auto dnn_version = dnn->GetVersion();
-    if (dnn_version.ok()) {
-      auto v = dnn_version.value();
-      LOG(ERROR) << "cudnn version: " << v.major_version() << "."
-                 << v.minor_version() << "." << v.patch();
-    }
+  auto dnn_version = GetDnnVersionInfo(se);
+  if (dnn_version.ok()) {
+    auto v = dnn_version.value();
+    LOG(ERROR) << "cudnn version: " << v.major_version() << "."
+               << v.minor_version() << "." << v.patch();
   }
 }
 
@@ -466,11 +461,54 @@ GpuConvAlgorithmPicker::AutotuneRuntimeArguments::FromInstruction(
   return runtime_arguments;
 }
 
-// There are three tiers of errors possible here: returning a failed StatusOr
-// means autotuning fails immediately; returning an AutotuneResult with a
-// failure code other than DISQUALIFIED means autotuning fails if
-// crash_on_checking_failure is set; and returning a DISQUALIFIED AutotuneResult
-// simply skips the engine/algorithm while recording a reason for skipping it.
+struct CudnnVersionRange {
+  using TupleVersion = std::tuple<int, int, int>;
+  TupleVersion begin;
+  TupleVersion end;
+
+  bool IsInRange(const CudnnVersion& other) const {
+    TupleVersion other_version{other.major(), other.minor(), other.patch()};
+    return begin <= other_version && other_version < end;
+  }
+
+  CudnnVersionRange(const CudnnVersion& begin, const CudnnVersion& end)
+      : begin(begin.major(), begin.minor(), begin.patch()),
+        end(end.major(), end.minor(), end.patch()) {}
+
+  CudnnVersionRange(const TupleVersion& begin, const TupleVersion& end)
+      : begin(begin), end(end) {}
+};
+
+struct ComputeCapabilityRange {
+  using TupleComputeCapability = std::tuple<int, int>;
+  TupleComputeCapability begin;
+  TupleComputeCapability end;
+
+  bool IsInRange(const ComputeCapability& other) const {
+    TupleComputeCapability other_cc{other.major(), other.minor()};
+    return begin <= other_cc && other_cc < end;
+  }
+};
+
+struct DisabledAlgorithm {
+  CudnnVersionRange cudnn_version_range;
+  ComputeCapabilityRange compute_capability_range;
+  int algo_id;
+};
+
+// TODO(b/343101418): Remove this once the bug is fixed in upstream cudnn and
+// once we updated to that cudnn version.
+static const DisabledAlgorithm kDisabledAlgorithms[] = {
+    {/*.cudnn_version_range=*/{/*.begin=*/{9, 0, 0}, /*.end=*/{10, 0, 0}},
+     /*.compute_capability_range=*/{/*.begin=*/{6, 0}, /*.end=*/{8, 0}},
+     /*.algo_id=*/14}};
+
+// There are three tiers of errors possible here: returning a failed
+// absl::StatusOr means autotuning fails immediately; returning an
+// AutotuneResult with a failure code other than DISQUALIFIED means autotuning
+// fails if crash_on_checking_failure is set; and returning a DISQUALIFIED
+// AutotuneResult simply skips the engine/algorithm while recording a reason for
+// skipping it.
 absl::StatusOr<AutotuneResult> GpuConvAlgorithmPicker::AutotuneOneConvRunner(
     GenericConvRunner* const runner,
     std::optional<ReferenceResult>* reference_result,
@@ -499,6 +537,19 @@ absl::StatusOr<AutotuneResult> GpuConvAlgorithmPicker::AutotuneOneConvRunner(
   std::string instr_str = instruction_info.has_value()
                               ? std::string(instruction_info->GetHlo())
                               : "<unknown>";
+
+  for (const auto& disabled_algo : kDisabledAlgorithms) {
+    if (disabled_algo.cudnn_version_range.IsInRange(
+            GetCudnnVersion(stream_exec)) &&
+        disabled_algo.compute_capability_range.IsInRange(
+            GetComputeCapability(stream_exec)) &&
+        disabled_algo.algo_id == alg.algo_id()) {
+      LOG(INFO) << "Omitted potentially buggy algorithm " << alg.ToString()
+                << " for conv " << instr_str;
+      return make_failure(AutotuneResult::DISQUALIFIED,
+                          "Disqualified for being known-buggy.");
+    }
+  }
 
   if (absl::c_linear_search(disabled_algos, alg_key)) {
     LOG(INFO) << "Omitted potentially buggy algorithm " << alg.ToString()
@@ -768,7 +819,9 @@ GpuConvAlgorithmPicker::PickBestAlgorithmNoCacheCuda(
 
   const bool cudnn_frontend_enabled =
       debug_options.xla_gpu_enable_cudnn_frontend();
-  const bool deterministic_ops = debug_options.xla_gpu_deterministic_ops();
+  const bool deterministic_ops =
+      debug_options.xla_gpu_deterministic_ops() ||
+      debug_options.xla_gpu_exclude_nondeterministic_ops();
   bool allow_tf32 = true;
   // TODO(b/284371623): Properly set allow_tf32 even if instr==nullptr, which is
   // the case when running an AOT compiled executable with runtime autotuning.
@@ -878,7 +931,9 @@ GpuConvAlgorithmPicker::PickBestAlgorithmNoCacheRocm(
 
   const DebugOptions& debug_options =
       instr->GetModule()->config().debug_options();
-  const bool deterministic_ops = debug_options.xla_gpu_deterministic_ops();
+  const bool deterministic_ops =
+      debug_options.xla_gpu_deterministic_ops() ||
+      debug_options.xla_gpu_exclude_nondeterministic_ops();
   const bool allow_tf32 = absl::c_all_of(
       instr->precision_config().operand_precision(),
       [](int precision) { return precision <= PrecisionConfig::HIGH; });

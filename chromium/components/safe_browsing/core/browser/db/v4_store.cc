@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/base64.h"
-#include "base/debug/crash_logging.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
@@ -339,21 +338,6 @@ class BaseFileInputStream : public google::protobuf::io::ZeroCopyInputStream {
   google::protobuf::io::CopyingInputStreamAdaptor impl_;
 };
 
-size_t GetIterationCount(const HashPrefixMap& hash_prefix_map,
-                         const IteratorMap& iterator_map) {
-  size_t max_iterations = 0;
-  for (const auto& iterator_pair : iterator_map) {
-    PrefixSize prefix_size = iterator_pair.first;
-    HashPrefixesView::const_iterator start = iterator_pair.second;
-
-    size_t distance =
-        std::distance(start, hash_prefix_map.at(prefix_size).end());
-    max_iterations += distance / prefix_size;
-  }
-
-  return max_iterations;
-}
-
 }  // namespace
 
 using ::google::protobuf::int32;
@@ -495,7 +479,8 @@ ApplyUpdateResult V4Store::ProcessUpdate(
       }
       raw_removals = &rice_removals;
     } else {
-      NOTREACHED() << "Unexpected compression_type type: " << compression_type;
+      NOTREACHED_IN_MIGRATION()
+          << "Unexpected compression_type type: " << compression_type;
       return UNEXPECTED_COMPRESSION_TYPE_REMOVALS_FAILURE;
     }
   }
@@ -560,8 +545,8 @@ void V4Store::ApplyUpdate(
         new_store->ProcessFullUpdateAndWriteToDisk(metric, std::move(response));
   } else {
     apply_update_result = UNEXPECTED_RESPONSE_TYPE_FAILURE;
-    NOTREACHED() << "Failure: Unexpected response type: "
-                 << response->response_type();
+    NOTREACHED_IN_MIGRATION()
+        << "Failure: Unexpected response type: " << response->response_type();
   }
 
   if (apply_update_result == APPLY_UPDATE_SUCCESS) {
@@ -628,7 +613,8 @@ ApplyUpdateResult V4Store::UpdateHashPrefixMapFromAdditions(
                                                 raw_hashes_size, additions_map);
       }
     } else {
-      NOTREACHED() << "Unexpected compression_type type: " << compression_type;
+      NOTREACHED_IN_MIGRATION()
+          << "Unexpected compression_type type: " << compression_type;
       return UNEXPECTED_COMPRESSION_TYPE_ADDITIONS_FAILURE;
     }
 
@@ -655,11 +641,11 @@ ApplyUpdateResult V4Store::AddUnlumpedHashes(PrefixSize prefix_size,
                                              const size_t raw_hashes_length,
                                              HashPrefixMap* additions_map) {
   if (prefix_size < kMinHashPrefixLength) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return PREFIX_SIZE_TOO_SMALL_FAILURE;
   }
   if (prefix_size > kMaxHashPrefixLength) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return PREFIX_SIZE_TOO_LARGE_FAILURE;
   }
   if (raw_hashes_length % prefix_size != 0) {
@@ -1026,13 +1012,6 @@ bool V4Store::VerifyChecksum() {
   HashPrefixStr next_smallest_prefix;
   InitializeIteratorMap(*hash_prefix_map_, &iterator_map);
   CHECK_EQ(hash_prefix_map_->view().size(), iterator_map.size());
-
-  // Crash keys added to investigate http://crbug.com/331054795
-  SCOPED_CRASH_KEY_NUMBER("SafeBrowsing", "VerifyChecksumSizeCount",
-                          iterator_map.size());
-  SCOPED_CRASH_KEY_NUMBER("SafeBrowsing", "VerifyChecksumIterations",
-                          GetIterationCount(*hash_prefix_map_, iterator_map));
-
   bool has_unmerged = GetNextSmallestUnmergedPrefix(
       *hash_prefix_map_, iterator_map, &next_smallest_prefix);
 

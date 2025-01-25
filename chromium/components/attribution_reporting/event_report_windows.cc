@@ -167,6 +167,19 @@ base::Time EventReportWindows::ReportTimeAtWindow(base::Time source_time,
                                 *std::next(end_times_.begin(), window_index));
 }
 
+base::Time EventReportWindows::StartTimeAtWindow(base::Time source_time,
+                                                 int window_index) const {
+  CHECK_GE(window_index, 0, base::NotFatalUntil::M128);
+  CHECK_LT(static_cast<size_t>(window_index), end_times_.size(),
+           base::NotFatalUntil::M128);
+
+  if (window_index == 0) {
+    return source_time + start_time_;
+  }
+
+  return source_time + *std::next(end_times_.begin(), window_index - 1);
+}
+
 EventReportWindows::WindowResult EventReportWindows::FallsWithin(
     base::TimeDelta trigger_moment) const {
   // It is possible for a source to have an assigned time of T and a trigger
@@ -198,10 +211,10 @@ EventReportWindows::FromJSON(const base::Value::Dict& registration,
         SourceRegistrationError::kBothEventReportWindowFieldsFound);
   } else if (singular_window) {
     ASSIGN_OR_RETURN(
-        base::TimeDelta report_window,
-        ParseLegacyDuration(
-            *singular_window,
-            SourceRegistrationError::kEventReportWindowValueInvalid));
+        base::TimeDelta report_window, ParseLegacyDuration(*singular_window),
+        [](ParseError) {
+          return SourceRegistrationError::kEventReportWindowValueInvalid;
+        });
 
     report_window = std::clamp(report_window, kMinReportWindow, expiry);
 
@@ -297,7 +310,7 @@ void EventReportWindows::Serialize(base::Value::Dict& dict) const {
 
   windows_dict.Set(kStartTime, static_cast<int>(start_time_.InSeconds()));
 
-  base::Value::List list;
+  auto list = base::Value::List::with_capacity(end_times_.size());
   for (const auto& end_time : end_times_) {
     list.Append(static_cast<int>(end_time.InSeconds()));
   }
@@ -308,16 +321,6 @@ void EventReportWindows::Serialize(base::Value::Dict& dict) const {
 
 bool EventReportWindows::IsValidForExpiry(base::TimeDelta expiry) const {
   return start_time_ <= expiry && *end_times_.rbegin() <= expiry;
-}
-
-base::Time LastTriggerTimeForReportTime(base::Time report_time) {
-  // TODO(apaseltiner): `base::Time` has microsecond resolution, so we should
-  // probably use `base::Microseconds(1)` instead.
-  constexpr base::TimeDelta kWindowTinyOffset = base::Milliseconds(1);
-
-  // `kWindowTinyOffset` is needed as the window is not selected right at
-  // `report_time`.
-  return report_time - kWindowTinyOffset;
 }
 
 }  // namespace attribution_reporting

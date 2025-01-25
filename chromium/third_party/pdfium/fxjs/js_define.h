@@ -46,7 +46,7 @@ template <class T>
 static void JSConstructor(CFXJS_Engine* pEngine,
                           v8::Local<v8::Object> obj,
                           v8::Local<v8::Object> proxy) {
-  pEngine->SetObjectPrivate(
+  pEngine->SetBinding(
       obj, std::make_unique<T>(proxy, static_cast<CJS_Runtime*>(pEngine)));
 }
 
@@ -55,14 +55,18 @@ void JSDestructor(v8::Local<v8::Object> obj);
 
 template <class C>
 UnownedPtr<C> JSGetObject(v8::Isolate* isolate, v8::Local<v8::Object> obj) {
-  if (CFXJS_Engine::GetObjDefnID(obj) != C::GetObjDefnID())
+  CFXJS_PerObjectData* pData = CFXJS_PerObjectData::GetFromObject(obj);
+  if (!pData) {
     return nullptr;
-
-  CJS_Object* pJSObj = CFXJS_Engine::GetObjectPrivate(isolate, obj);
-  if (!pJSObj)
+  }
+  if (pData->GetObjDefnID() != C::GetObjDefnID()) {
     return nullptr;
-
-  return UnownedPtr<C>(static_cast<C*>(pJSObj));
+  }
+  CFXJS_PerObjectData::Binding* pBinding = pData->GetBinding();
+  if (!pBinding) {
+    return nullptr;
+  }
+  return UnownedPtr<C>(static_cast<C*>(pBinding));
 }
 
 template <class C, CJS_Result (C::*M)(CJS_Runtime*)>
@@ -115,7 +119,7 @@ template <class C,
 void JSMethod(const char* method_name_string,
               const char* class_name_string,
               const v8::FunctionCallbackInfo<v8::Value>& info) {
-  auto pObj = JSGetObject<C>(info.GetIsolate(), info.Holder());
+  auto pObj = JSGetObject<C>(info.GetIsolate(), info.This());
   if (!pObj)
     return;
 

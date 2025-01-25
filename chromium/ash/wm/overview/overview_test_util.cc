@@ -4,16 +4,18 @@
 
 #include "ash/wm/overview/overview_test_util.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/overview_test_api.h"
-#include "ash/public/cpp/shelf_config.h"
 #include "ash/shell.h"
-#include "ash/utility/forest_util.h"
+#include "ash/test/ash_test_util.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_focus_cycler_old.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_item.h"
 #include "ash/wm/overview/overview_item_base.h"
+#include "ash/wm/overview/overview_item_view.h"
 #include "ash/wm/overview/overview_utils.h"
+#include "ash/wm/window_util.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -38,29 +40,24 @@ void WaitForOverviewAnimationState(OverviewAnimationState state) {
 
 }  // namespace
 
-void SendKey(ui::KeyboardCode key, int flags) {
-  ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow());
-  generator.PressKey(key, flags);
-  generator.ReleaseKey(key, flags);
-}
-
-bool FocusOverviewWindow(const aura::Window* window) {
+bool FocusOverviewWindow(const aura::Window* window,
+                         ui::test::EventGenerator* event_generator) {
   if (GetOverviewFocusedWindow() == nullptr) {
-    SendKey(ui::VKEY_TAB);
-    SendKey(ui::VKEY_TAB);
+    SendKey(ui::VKEY_TAB, event_generator, /*flags=*/0, /*count=*/2);
   }
   const aura::Window* start_window = GetOverviewFocusedWindow();
   if (start_window == window)
     return true;
   aura::Window* window_it = nullptr;
   do {
-    SendKey(ui::VKEY_TAB);
+    SendKey(ui::VKEY_TAB, event_generator);
     window_it = const_cast<aura::Window*>(GetOverviewFocusedWindow());
   } while (window_it != window && window_it != start_window);
   return window_it == window;
 }
 
 const aura::Window* GetOverviewFocusedWindow() {
+  CHECK(!features::IsOverviewNewFocusEnabled());
   OverviewItemBase* item =
       GetOverviewSession()->focus_cycler_old()->GetFocusedItem();
   return item ? item->GetWindow() : nullptr;
@@ -101,7 +98,7 @@ OverviewGrid* GetOverviewGridForRoot(aura::Window* root) {
 
 const std::vector<std::unique_ptr<OverviewItemBase>>& GetOverviewItemsForRoot(
     int index) {
-  return GetOverviewSession()->grid_list()[index]->window_list();
+  return GetOverviewSession()->grid_list()[index]->item_list();
 }
 
 std::vector<aura::Window*> GetWindowsListInOverviewGrids() {
@@ -111,7 +108,7 @@ std::vector<aura::Window*> GetWindowsListInOverviewGrids() {
   std::vector<aura::Window*> windows;
   for (const std::unique_ptr<OverviewGrid>& grid :
        overview_controller->overview_session()->grid_list()) {
-    for (const std::unique_ptr<OverviewItemBase>& item : grid->window_list()) {
+    for (const std::unique_ptr<OverviewItemBase>& item : grid->item_list()) {
       for (aura::Window* window : item->GetWindows()) {
         CHECK(window);
         windows.push_back(window);
@@ -123,21 +120,6 @@ std::vector<aura::Window*> GetWindowsListInOverviewGrids() {
 
 OverviewItemBase* GetOverviewItemForWindow(aura::Window* window) {
   return GetOverviewSession()->GetOverviewItemForWindow(window);
-}
-
-gfx::Rect ShrinkBoundsByHotseatInset(const gfx::Rect& rect) {
-  // TODO(sammiequon): Forest feature shrinks if the home launcher is visible,
-  // and no-ops otherwise. Determine if we need the home launcher logic here.
-  if (IsForestFeatureEnabled()) {
-    return rect;
-  }
-
-  gfx::Rect new_rect = rect;
-  const int hotseat_bottom_inset = ShelfConfig::Get()->GetHotseatSize(
-                                       /*density=*/HotseatDensity::kNormal) +
-                                   ShelfConfig::Get()->hotseat_bottom_padding();
-  new_rect.Inset(gfx::Insets::TLBR(0, 0, hotseat_bottom_inset, 0));
-  return new_rect;
 }
 
 void DragItemToPoint(OverviewItemBase* item,
@@ -168,9 +150,18 @@ void DragItemToPoint(OverviewItemBase* item,
   }
 }
 
-void SendKeyUntilOverviewItemIsFocused(ui::KeyboardCode key) {
+void SendKeyUntilOverviewItemIsFocused(
+    ui::KeyboardCode key,
+    ui::test::EventGenerator* event_generator) {
+  if (features::IsOverviewNewFocusEnabled()) {
+    do {
+      SendKey(key, event_generator);
+    } while (!views::IsViewClass<OverviewItemView>(GetFocusedView()));
+    return;
+  }
+
   do {
-    SendKey(key);
+    SendKey(key, event_generator);
   } while (!GetOverviewFocusedWindow());
 }
 
@@ -183,7 +174,7 @@ void WaitForOcclusionStateChange(aura::Window* window,
 
 bool IsWindowInItsCorrespondingOverviewGrid(aura::Window* window) {
   const auto& overview_items =
-      GetOverviewGridForRoot(window->GetRootWindow())->window_list();
+      GetOverviewGridForRoot(window->GetRootWindow())->item_list();
   for (auto& overview_item : overview_items) {
     if (overview_item->Contains(window)) {
       return true;
@@ -191,6 +182,23 @@ bool IsWindowInItsCorrespondingOverviewGrid(aura::Window* window) {
   }
 
   return false;
+}
+
+views::View* GetFocusedView() {
+  if (!features::IsOverviewNewFocusEnabled()) {
+    auto* focused_view =
+        GetOverviewSession()->focus_cycler_old()->focused_view();
+    return focused_view ? focused_view->GetView() : nullptr;
+  }
+
+  aura::Window* active_window = window_util::GetActiveWindow();
+  if (!active_window) {
+    return nullptr;
+  }
+
+  views::Widget* widget =
+      views::Widget::GetWidgetForNativeWindow(active_window);
+  return widget ? widget->GetFocusManager()->GetFocusedView() : nullptr;
 }
 
 }  // namespace ash

@@ -36,6 +36,9 @@ AboutThisSiteServiceFactory::AboutThisSiteServiceFactory()
               // TODO(crbug.com/40257657): Check if this service is needed in
               // Guest mode.
               .WithGuest(ProfileSelection::kOriginalOnly)
+              // TODO(crbug.com/41488885): Check if this service is needed for
+              // Ash Internals.
+              .WithAshInternals(ProfileSelection::kOriginalOnly)
               .Build()) {
   DependsOn(OptimizationGuideKeyedServiceFactory::GetInstance());
   DependsOn(TemplateURLServiceFactory::GetInstance());
@@ -53,9 +56,14 @@ AboutThisSiteServiceFactory::BuildServiceInstanceForBrowserContext(
 
   Profile* profile = Profile::FromBrowserContext(browser_context);
 
+  auto* optimization_guide =
+      OptimizationGuideKeyedServiceFactory::GetForProfile(profile);
+  if (!optimization_guide) {
+    return nullptr;
+  }
+
   return std::make_unique<page_info::AboutThisSiteService>(
-      OptimizationGuideKeyedServiceFactory::GetForProfile(profile),
-      profile->IsOffTheRecord(), profile->GetPrefs(),
+      optimization_guide, profile->IsOffTheRecord(), profile->GetPrefs(),
       TemplateURLServiceFactory::GetForProfile(profile));
 }
 

@@ -17,8 +17,11 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_registry_simple.h"
+#include "ui/base/accelerators/accelerator.h"
 #import "ui/base/accelerators/platform_accelerator_cocoa.h"
 #include "ui/base/l10n/l10n_util_mac.h"
+#include "ui/events/cocoa/cocoa_event_utils.h"
+#include "ui/events/keycodes/keyboard_code_conversion_mac.h"
 
 #include "app/vivaldi_commands.h"
 
@@ -137,13 +140,14 @@ const NSTimeInterval kTimeDeltaFuzzFactor = 1.0;
 // Private Interface ///////////////////////////////////////////////////////////
 
 @interface ConfirmQuitPanelController (Private) <CAAnimationDelegate>
+// The menu item for the Quit menu item, or a thrown-together default one if no
+// Quit menu item exists.
+@property(class, readonly) NSMenuItem* quitMenuItem;
+
 - (void)animateFadeOut;
 - (NSEvent*)pumpEventQueueForKeyUp:(NSApplication*)app untilDate:(NSDate*)date;
 - (void)hideAllWindowsForApplication:(NSApplication*)app
                         withDuration:(NSTimeInterval)duration;
-// Returns the menu item for the Quit menu item, or a thrown-together default
-// one if no Quit menu item exists.
-+ (NSMenuItem*)quitMenuItem;
 - (void)sendAccessibilityAnnouncement;
 @end
 
@@ -188,8 +192,7 @@ ConfirmQuitPanelController* __strong g_confirmQuitPanelController = nil;
     // Set the proper string.
     NSString* message = l10n_util::GetNSStringF(
         IDS_CONFIRM_TO_QUIT_DESCRIPTION,
-        base::SysNSStringToUTF16(
-            [ConfirmQuitPanelController keyCommandString]));
+        base::SysNSStringToUTF16(ConfirmQuitPanelController.keyCommandString));
     frameView.messageText = message;
   }
   return self;
@@ -334,12 +337,12 @@ ConfirmQuitPanelController* __strong g_confirmQuitPanelController = nil;
   [self close];
 }
 
-// This looks at the Main Menu and determines what the user has set as the
-// key combination for quit. It then gets the modifiers and builds a string
-// to display them.
 + (NSString*)keyCommandString {
-  return [ConfirmQuitPanelController
-      keyCombinationForMenuItem:[ConfirmQuitPanelController quitMenuItem]];
+  NSMenuItem* quitItem = self.quitMenuItem;
+  ui::Accelerator accelerator(
+      ui::KeyboardCodeFromCharCode([quitItem.keyEquivalent characterAtIndex:0]),
+      ui::EventFlagsFromModifiers(quitItem.keyEquivalentModifierMask));
+  return base::SysUTF16ToNSString(accelerator.GetShortcutText());
 }
 
 // Runs a nested loop that pumps the event queue until the next KeyUp event.
@@ -384,27 +387,10 @@ ConfirmQuitPanelController* __strong g_confirmQuitPanelController = nil;
   return item;
 }
 
-+ (NSString*)keyCombinationForMenuItem:(NSMenuItem*)item {
-  NSMutableString* string = [NSMutableString string];
-  NSUInteger modifiers = item.keyEquivalentModifierMask;
-
-  if (modifiers & NSEventModifierFlagCommand)
-    [string appendString:@"\u2318"];
-  if (modifiers & NSEventModifierFlagControl)
-    [string appendString:@"\u2303"];
-  if (modifiers & NSEventModifierFlagOption)
-    [string appendString:@"\u2325"];
-  if (modifiers & NSEventModifierFlagShift)
-    [string appendString:@"\u21E7"];
-
-  [string appendString:[item.keyEquivalent uppercaseString]];
-  return string;
-}
-
 - (void)sendAccessibilityAnnouncement {
   NSString* message = l10n_util::GetNSStringF(
       IDS_CONFIRM_TO_QUIT_DESCRIPTION,
-      base::SysNSStringToUTF16([ConfirmQuitPanelController keyCommandString]));
+      base::SysNSStringToUTF16(ConfirmQuitPanelController.keyCommandString));
 
   NSAccessibilityPostNotificationWithUserInfo(
       NSApp.mainWindow, NSAccessibilityAnnouncementRequestedNotification, @{

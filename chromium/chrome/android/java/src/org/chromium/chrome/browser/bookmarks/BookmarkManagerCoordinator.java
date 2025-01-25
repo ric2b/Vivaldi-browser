@@ -30,6 +30,7 @@ import org.chromium.chrome.browser.bookmarks.BookmarkListEntry.ViewType;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
 import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
+import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
@@ -55,8 +56,6 @@ import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import java.util.function.Consumer;
 
 // Vivaldi
-import org.chromium.chrome.browser.ChromeApplicationImpl;
-
 import org.vivaldi.browser.bookmarks.VivaldiBookmarkPanelDelegate;
 import org.vivaldi.browser.bookmarks.VivaldiBookmarksPageObserver;
 
@@ -164,16 +163,6 @@ public class BookmarkManagerCoordinator
         SelectableListLayout<BookmarkId> selectableList =
                 mMainView.findViewById(R.id.selectable_list);
         mSelectableListLayout = selectableList;
-        if (!ChromeApplicationImpl.isVivaldi()) {
-        mSelectableListLayout.initializeEmptyStateView(
-                R.drawable.bookmark_empty_state_illustration,
-                R.string.bookmark_manager_empty_state,
-                R.string.bookmark_manager_back_to_page_by_adding_bookmark);
-        } else { // Vivaldi
-            mSelectableListLayout.initializeEmptyView(R.string.bookmark_folders);
-        } // End Vivaldi
-
-        mSelectableListLayout.ignoreItemTypeForEmptyState(ViewType.SEARCH_BOX);
 
         mModelList = new ModelList();
         DragReorderableRecyclerViewAdapter dragReorderableRecyclerViewAdapter =
@@ -215,7 +204,8 @@ public class BookmarkManagerCoordinator
                         mBookmarkUiPrefs,
                         mModalDialogManager,
                         this::onEndSearch,
-                        moveSnackbarManager);
+                        moveSnackbarManager,
+                        () -> IncognitoUtils.isIncognitoModeEnabled(profile));
         mSelectableListLayout.configureWideDisplayStyle();
 
         LargeIconBridge largeIconBridge = new LargeIconBridge(mProfile);
@@ -226,6 +216,7 @@ public class BookmarkManagerCoordinator
                 mBookmarkUiPrefs.getBookmarkRowDisplayPref();
         BookmarkImageFetcher bookmarkImageFetcher =
                 new BookmarkImageFetcher(
+                        profile,
                         context,
                         mBookmarkModel,
                         mImageFetcher,
@@ -302,6 +293,10 @@ public class BookmarkManagerCoordinator
                 ViewType.SEARCH_BOX,
                 this::buildSearchBoxRow,
                 BookmarkSearchBoxRowViewBinder.createViewBinder());
+        dragReorderableRecyclerViewAdapter.registerType(
+                ViewType.EMPTY_STATE,
+                this::buildEmptyStateView,
+                BookmarkManagerEmptyStateViewBinder::bindEmptyStateView);
 
         RecordUserAction.record("MobileBookmarkManagerOpen");
         if (!isDialogUi) {
@@ -449,6 +444,10 @@ public class BookmarkManagerCoordinator
 
     View buildSearchBoxRow(ViewGroup parent) {
         return inflate(parent, R.layout.bookmark_search_box_row);
+    }
+
+    View buildEmptyStateView(ViewGroup parent) {
+        return inflate(parent, R.layout.empty_state_view);
     }
 
     private static View inflate(ViewGroup parent, @LayoutRes int layoutId) {

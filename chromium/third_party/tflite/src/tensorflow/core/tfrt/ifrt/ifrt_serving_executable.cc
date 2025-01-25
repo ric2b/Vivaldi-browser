@@ -51,6 +51,7 @@ limitations under the License.
 #include "xla/python/ifrt/device.h"
 #include "xla/python/ifrt/executable.h"
 #include "xla/python/ifrt/future.h"
+#include "xla/python/ifrt/hlo/hlo_program.h"
 #include "xla/python/ifrt/host_callback.h"
 #include "xla/python/ifrt/shape.h"
 #include "xla/python/ifrt/sharding.h"
@@ -59,6 +60,7 @@ limitations under the License.
 #include "xla/service/computation_placer.h"
 #include "xla/shape.h"
 #include "xla/tsl/concurrency/ref_count.h"
+#include "xla/tsl/framework/serving_device_selector.h"
 #include "xla/xla_data.pb.h"
 #include "tensorflow/core/common_runtime/device_mgr.h"
 #include "tensorflow/core/framework/function.pb.h"
@@ -75,7 +77,6 @@ limitations under the License.
 #include "tensorflow/core/tfrt/ifrt/ifrt_tensor_utils.h"
 #include "tensorflow/core/tfrt/ifrt/sharding_utils.h"
 #include "tensorflow/core/tfrt/ifrt/tf_host_callback.h"
-#include "tsl/framework/serving_device_selector.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/statusor.h"
 #include "tsl/platform/threadpool.h"
@@ -164,19 +165,22 @@ IfrtServingExecutable::Create(
     IfrtLoadedVariableRegistry* ifrt_loaded_variable_registry,
     const IfrtRestoreTensorRegistry* ifrt_restore,
     tfrt::ConcurrentWorkQueue* checkpoint_loader_queue,
-    tensorflow::StaticDeviceMgr* device_mgr,
+    tensorflow::DeviceMgr* device_mgr,
     tensorflow::XlaHelpers::ShapeRepresentationFn shape_representation_fn,
-    IfrtServingCoreSelector* ifrt_serving_core_selector) {
+    IfrtServingCoreSelector* ifrt_serving_core_selector,
+    tsl::protobuf::Message* compilation_environement_proto) {
   TF_ASSIGN_OR_RETURN(
       tensorflow::tpu::TPUCompileMetadataProto original_compile_metadata,
       GetCompileMetadata(*module, *client));
 
-  return absl::WrapUnique(new IfrtServingExecutable(
+  auto executable = absl::WrapUnique(new IfrtServingExecutable(
       program_id, model_name, signature_name, std::move(module),
       std::move(client), thread_pool, ifrt_loaded_variable_registry,
       ifrt_restore, checkpoint_loader_queue, device_mgr,
       std::move(shape_representation_fn), ifrt_serving_core_selector,
-      std::move(original_compile_metadata)));
+      std::move(original_compile_metadata), compilation_environement_proto));
+
+  return executable;
 }
 
 absl::StatusOr<tsl::RCReference<xla::ifrt::Array>>
@@ -236,7 +240,7 @@ GroupHostCallbackByKey(const Tf2HloResult& tf2hlo_result) {
 // TODO: shape propagation in module
 absl::StatusOr<xla::HostCallback> BuildHostCallback(
     absl::string_view key, const HostCallbackBuilderInfo& builder_info,
-    mlir::ModuleOp module, tensorflow::StaticDeviceMgr* device_mgr,
+    mlir::ModuleOp module, tensorflow::DeviceMgr* device_mgr,
     std::vector<std::unique_ptr<TfHostCallback>>& tf_host_callbacks) {
   VLOG(2) << "BuildHostCallback for key: " << key;
 
@@ -309,7 +313,7 @@ absl::StatusOr<xla::HostCallback> BuildHostCallback(
 
 absl::StatusOr<std::vector<xla::HostCallback>> BuildHostCallbacks(
     const Tf2HloResult& tf2hlo_result, mlir::ModuleOp module,
-    tensorflow::StaticDeviceMgr* device_mgr,
+    tensorflow::DeviceMgr* device_mgr,
     std::vector<std::unique_ptr<TfHostCallback>>& tf_host_callbacks) {
   TF_ASSIGN_OR_RETURN(auto host_callback_maps,
                       GroupHostCallbackByKey(tf2hlo_result));
@@ -350,8 +354,15 @@ IfrtServingExecutable::CreateExecutableSynchronously(
   }
 
   xla::CompileOptions xla_compile_options;
-  // TODO(b/304839793): populate xla_compile_options.argument_layouts.
-  // TODO(b/316071625): per model config in TFRT + IFRT.
+  if (compilation_environment_proto_) {
+    tsl::protobuf::Message* comp_env_copy =
+        compilation_environment_proto_->New();
+    comp_env_copy->CopyFrom(*compilation_environment_proto_);
+    TF_RETURN_IF_ERROR(
+        xla_compile_options.executable_build_options.mutable_comp_envs()
+            ->AddEnv(absl::WrapUnique<tsl::protobuf::Message>(comp_env_copy)));
+  }
+
   xla_compile_options.executable_build_options.set_num_replicas(num_replicas);
   xla_compile_options.executable_build_options.set_num_partitions(
       num_partitions);
@@ -386,7 +397,7 @@ IfrtServingExecutable::CreateExecutableSynchronously(
   TF_ASSIGN_OR_RETURN(
       std::unique_ptr<xla::ifrt::LoadedExecutable> ifrt_executable,
       ifrt_client_->GetDefaultCompiler()->Compile(
-          std::make_unique<xla::ifrt::XlaProgram>(
+          std::make_unique<xla::ifrt::HloProgram>(
               tf2hlo_result.mlir_hlo_module.get()),
           std::make_unique<xla::ifrt::XlaCompileOptions>(
               xla_compile_options, loaded_host_callbacks)));
@@ -635,7 +646,7 @@ absl::Status IfrtServingExecutable::AsyncLoadIfrtArray(
                        inputs[i].shape().DebugString(), " at index ", i));
     }
     std::string runtime_name = inputs[i].scalar<tsl::tstring>()();
-    // TODO(b/330360798): Add test cases for OpSharding on variables.
+    // TODO(b/339521818): Add test cases for OpSharding on variables.
     VariableDeviceShardingConfigProto sharding_config;
     *sharding_config.mutable_sharding() =
         executable_bundle.compile_metadata.args()[i].sharding();

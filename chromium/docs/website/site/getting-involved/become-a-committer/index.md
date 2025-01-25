@@ -54,8 +54,8 @@ you). Then ask someone to nominate you. You're basically demonstrating your
 *   ability to write good code (last but certainly not least)
 
 A current committer nominates you by sending email to committers@chromium.org
-containing the following information. Please do not CC the nominee on the
-nomination email.
+containing the following information.
+**Please do not CC the nominee on the nomination email.**
 
 *   your first and last name
 *   your email address. You can also ask to get an @chromium.org email

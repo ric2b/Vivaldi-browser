@@ -81,9 +81,20 @@ XLA_FFI_DEFINE_STRUCT_TRAITS(XLA_FFI_Api_Version, minor_version);
 // Error codes
 //===----------------------------------------------------------------------===//
 
-// XLA FFI handler must return an XLA_FFI_Error*, which is NULL if there is no
-// error and set if there is. Caller allocates any returned XLA_FFI_Errors, and
-// the XLA FFI is responsible for freeing them.
+// XLA FFI error is a mechanism to communicate errors between XLA and XLA FFI
+// via a set of C APIs. This is somewhat similar to type-erased version of
+// absl::Status exposed via API with opaque pointers.
+//
+// Returning NULL error is equivalent to returning absl::OkStatus().
+//
+// Ownership of an XLA_FFI_Error is always transferred to the caller, and the
+// caller is responsible for destroying it:
+//
+// (1) If the error is returned from an XLA FFI handler, the XLA runtime will
+//     destroy it (XLA is the caller who calls into the handler implementation).
+//
+// (2) If the error is returned from an XLA FFI API call, the caller is
+//     responsible for destroying it.
 typedef struct XLA_FFI_Error XLA_FFI_Error;
 
 // Codes are based on https://abseil.io/docs/cpp/guides/status-codes
@@ -167,6 +178,11 @@ typedef enum {
   XLA_FFI_DataType_C64 = 15,
   XLA_FFI_DataType_C128 = 18,
   XLA_FFI_DataType_TOKEN = 17,
+  XLA_FFI_DataType_F8E5M2 = 19,
+  XLA_FFI_DataType_F8E4M3FN = 20,
+  XLA_FFI_DataType_F8E4M3B11FNUZ = 23,
+  XLA_FFI_DataType_F8E5M2FNUZ = 24,
+  XLA_FFI_DataType_F8E4M3FNUZ = 25,
 } XLA_FFI_DataType;
 // LINT.ThenChange(ffi_test.cc)
 
@@ -217,44 +233,77 @@ typedef enum {
 typedef struct XLA_FFI_ExecutionContext XLA_FFI_ExecutionContext;
 
 //===----------------------------------------------------------------------===//
-// Call frame
+// Primitives.
 //===----------------------------------------------------------------------===//
+
+// TypeId uniquely identifies a user-defined type in a given XLA FFI instance.
+struct XLA_FFI_TypeId {
+  int64_t type_id;
+};
 
 // We use byte spans to pass strings to handlers because strings might not be
 // null terminated, and even if they are, looking for a null terminator can
 // become very expensive in tight loops.
 struct XLA_FFI_ByteSpan {
-  size_t struct_size;
-  void* priv;
-
   const char* ptr;
   size_t len;
 };
 
-XLA_FFI_DEFINE_STRUCT_TRAITS(XLA_FFI_ByteSpan, len);
-
 // A struct to pass a scalar value to FFI handler.
 struct XLA_FFI_Scalar {
-  size_t struct_size;
-  void* priv;
-
   XLA_FFI_DataType dtype;
   void* value;
 };
 
-XLA_FFI_DEFINE_STRUCT_TRAITS(XLA_FFI_Scalar, value);
-
 // A struct to pass a dense array to FFI handler.
 struct XLA_FFI_Array {
-  size_t struct_size;
-  void* priv;
-
   XLA_FFI_DataType dtype;
   size_t size;
   void* data;
 };
 
-XLA_FFI_DEFINE_STRUCT_TRAITS(XLA_FFI_Array, data);
+//===----------------------------------------------------------------------===//
+// Call frame
+//===----------------------------------------------------------------------===//
+
+// XLA runtime has multiple execution stages and it is possible to run
+// different handlers for each stage:
+//
+// (1) Instantiate - called when FFI handler is instantiated as a part of XLA
+//     executable instantiation. Every call site will have its own "instance" of
+//     the FFI handler, and it is possible to attach an arbitrary user-defined
+//     state to the FFI handler instance, and get it back in other execution
+//     stages. Constructed state owned by the XLA runtime and destructed
+//     together with a parent executable.
+//
+// (2) Prepare - called before the execution to let FFI handlers to prepare
+//     for the execution and request resources from runtime, i.e. in XLA:GPU
+//     we use prepare stage to request collective cliques.
+//
+// (3) Initialize - called before the execution after acquiring all the
+//     resources requested in the prepare stage.
+//
+// (4) Execute - called when FFI handler is executed. Note that FFI handler
+//     can be called as a part of command buffer capture (CUDA graph capture
+//     on GPU backend) and argument buffers might contain uninitialized
+//     values in this case.
+//
+// XLA program (HLO module) compiled to an XLA executable that can be executed
+// on any device accessible to the process, and by extension FFI handlers are
+// not instantiated for any particular device, but for a process. FFI handlers
+// running at instantiation stage do not have access to the underlying device
+// (memory allocation, stream, etc.) and arguments, however they can access
+// execution context and attributes.
+//
+// It is undefined behavior to access argument buffers in prepare and initialize
+// stages as they might not be initialized yet. However it is safe to use memory
+// address as it is assigned ahead of time by buffer assignment.
+typedef enum {
+  XLA_FFI_ExecutionStage_INSTANTIATE = 0,
+  XLA_FFI_ExecutionStage_PREPARE = 1,
+  XLA_FFI_ExecutionStage_INITIALIZE = 2,
+  XLA_FFI_ExecutionStage_EXECUTE = 3,
+} XLA_FFI_ExecutionStage;
 
 struct XLA_FFI_Args {
   size_t struct_size;
@@ -298,6 +347,7 @@ struct XLA_FFI_CallFrame {
 
   const XLA_FFI_Api* api;
   XLA_FFI_ExecutionContext* ctx;
+  XLA_FFI_ExecutionStage stage;
   XLA_FFI_Args args;
   XLA_FFI_Rets rets;
   XLA_FFI_Attrs attrs;
@@ -311,6 +361,14 @@ XLA_FFI_DEFINE_STRUCT_TRAITS(XLA_FFI_CallFrame, attrs);
 
 // External functions registered with XLA as FFI handlers.
 typedef XLA_FFI_Error* XLA_FFI_Handler(XLA_FFI_CallFrame* call_frame);
+
+// XLA FFI handlers for execution stages (see XLA_FFI_ExecutionStage).
+struct XLA_FFI_Handler_Bundle {
+  XLA_FFI_Handler* instantiate;  // optional
+  XLA_FFI_Handler* prepare;      // optional
+  XLA_FFI_Handler* initialize;   // optional
+  XLA_FFI_Handler* execute;      // required
+};
 
 enum XLA_FFI_Handler_TraitsBits {
   // Calls to FFI handler are safe to trace into the command buffer. It means
@@ -327,7 +385,7 @@ struct XLA_FFI_Handler_Register_Args {
 
   XLA_FFI_ByteSpan name;
   XLA_FFI_ByteSpan platform;
-  XLA_FFI_Handler* handler;
+  XLA_FFI_Handler_Bundle bundle;
   XLA_FFI_Handler_Traits traits;
 };
 
@@ -335,6 +393,24 @@ XLA_FFI_DEFINE_STRUCT_TRAITS(XLA_FFI_Handler_Register_Args, traits);
 
 typedef XLA_FFI_Error* XLA_FFI_Handler_Register(
     XLA_FFI_Handler_Register_Args* args);
+
+//===----------------------------------------------------------------------===//
+// TypeId
+//===----------------------------------------------------------------------===//
+
+struct XLA_FFI_TypeId_Register_Args {
+  size_t struct_size;
+  void* priv;
+
+  XLA_FFI_ByteSpan name;
+  XLA_FFI_TypeId* type_id;  // out
+};
+
+XLA_FFI_DEFINE_STRUCT_TRAITS(XLA_FFI_TypeId_Register_Args, type_id);
+
+// Registers user type `name` and returns a unique `type_id`.
+typedef XLA_FFI_Error* XLA_FFI_TypeId_Register(
+    XLA_FFI_TypeId_Register_Args* args);
 
 //===----------------------------------------------------------------------===//
 // ExecutionContext
@@ -345,15 +421,50 @@ struct XLA_FFI_ExecutionContext_Get_Args {
   void* priv;
 
   XLA_FFI_ExecutionContext* ctx;
-  XLA_FFI_ByteSpan id;
+  XLA_FFI_TypeId* type_id;
   void* data;  // out
 };
 
 XLA_FFI_DEFINE_STRUCT_TRAITS(XLA_FFI_ExecutionContext_Get_Args, data);
 
-// Returns an opaque data from the execution context for a given name.
+// Returns an opaque data from the execution context for a given type id.
 typedef XLA_FFI_Error* XLA_FFI_ExecutionContext_Get(
     XLA_FFI_ExecutionContext_Get_Args* args);
+
+//===----------------------------------------------------------------------===//
+// State
+//===----------------------------------------------------------------------===//
+
+struct XLA_FFI_State_Set_Args {
+  size_t struct_size;
+  void* priv;
+
+  XLA_FFI_ExecutionContext* ctx;
+  XLA_FFI_TypeId* type_id;
+  void* state;
+  void (*deleter)(void* state);
+};
+
+XLA_FFI_DEFINE_STRUCT_TRAITS(XLA_FFI_State_Set_Args, deleter);
+
+// Sets execution state to the `state` of type `type_id`. Returns an error if
+// state already set.
+typedef XLA_FFI_Error* XLA_FFI_State_Set(XLA_FFI_State_Set_Args* args);
+
+struct XLA_FFI_State_Get_Args {
+  size_t struct_size;
+  void* priv;
+
+  XLA_FFI_ExecutionContext* ctx;
+  XLA_FFI_TypeId* type_id;
+  void* state;  // out
+};
+
+XLA_FFI_DEFINE_STRUCT_TRAITS(XLA_FFI_State_Get_Args, state);
+
+// Gets execution state of type `type_id`. Returns an error if state is not set,
+// or set with a state of a different type.
+typedef XLA_FFI_Error* XLA_FFI_State_Get(XLA_FFI_State_Get_Args* args);
 
 //===----------------------------------------------------------------------===//
 // Stream
@@ -374,6 +485,41 @@ XLA_FFI_DEFINE_STRUCT_TRAITS(XLA_FFI_Stream_Get_Args, stream);
 typedef XLA_FFI_Error* XLA_FFI_Stream_Get(XLA_FFI_Stream_Get_Args* args);
 
 //===----------------------------------------------------------------------===//
+// Device memory allocation
+//===----------------------------------------------------------------------===//
+
+struct XLA_FFI_DeviceMemory_Allocate_Args {
+  size_t struct_size;
+  void* priv;
+
+  XLA_FFI_ExecutionContext* ctx;
+  size_t size;
+  size_t alignment;
+  void* data;  // out
+};
+
+XLA_FFI_DEFINE_STRUCT_TRAITS(XLA_FFI_DeviceMemory_Allocate_Args, data);
+
+// Allocates a block of memory on the device bound to the execution context.
+typedef XLA_FFI_Error* XLA_FFI_DeviceMemory_Allocate(
+    XLA_FFI_DeviceMemory_Allocate_Args* args);
+
+struct XLA_FFI_DeviceMemory_Free_Args {
+  size_t struct_size;
+  void* priv;
+
+  XLA_FFI_ExecutionContext* ctx;
+  size_t size;
+  void* data;
+};
+
+XLA_FFI_DEFINE_STRUCT_TRAITS(XLA_FFI_DeviceMemory_Free_Args, data);
+
+// Frees previously allocated device memory.
+typedef XLA_FFI_Error* XLA_FFI_DeviceMemory_Free(
+    XLA_FFI_DeviceMemory_Free_Args* args);
+
+//===----------------------------------------------------------------------===//
 // API access
 //===----------------------------------------------------------------------===//
 
@@ -390,7 +536,12 @@ struct XLA_FFI_Api {
   _XLA_FFI_API_STRUCT_FIELD(XLA_FFI_Error_Destroy);
   _XLA_FFI_API_STRUCT_FIELD(XLA_FFI_Handler_Register);
   _XLA_FFI_API_STRUCT_FIELD(XLA_FFI_Stream_Get);
+  _XLA_FFI_API_STRUCT_FIELD(XLA_FFI_TypeId_Register);
   _XLA_FFI_API_STRUCT_FIELD(XLA_FFI_ExecutionContext_Get);
+  _XLA_FFI_API_STRUCT_FIELD(XLA_FFI_State_Set);
+  _XLA_FFI_API_STRUCT_FIELD(XLA_FFI_State_Get);
+  _XLA_FFI_API_STRUCT_FIELD(XLA_FFI_DeviceMemory_Allocate);
+  _XLA_FFI_API_STRUCT_FIELD(XLA_FFI_DeviceMemory_Free);
 };
 
 #undef _XLA_FFI_API_STRUCT_FIELD

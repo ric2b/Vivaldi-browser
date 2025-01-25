@@ -18,7 +18,9 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/process/process_handle.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/to_string.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -252,13 +254,10 @@ void GotManifest(protocol::Maybe<std::string> manifest_id,
   auto convert_icon = [](const blink::Manifest::ImageResource& input_icon)
       -> std::unique_ptr<Page::ImageResource> {
     auto icon = Page::ImageResource::Create();
-    std::string sizes;
-    for (const auto& size : input_icon.sizes) {
-      sizes += gfx::Size(size.width(), size.height()).ToString();
-      sizes += ' ';
-    }
-    sizes.pop_back();
-    icon.SetSizes(sizes);
+    std::vector<std::string> size_strings;
+    base::ranges::transform(input_icon.sizes, std::back_inserter(size_strings),
+                            &gfx::Size::ToString);
+    icon.SetSizes(base::JoinString(size_strings, " "));
     icon.SetType(base::UTF16ToUTF8(input_icon.type));
     return icon.SetUrl(input_icon.src.possibly_invalid_spec()).Build();
   };
@@ -941,7 +940,7 @@ void PageHandler::OnDownloadUpdated(download::DownloadItem* item) {
       state = Page::DownloadProgress::StateEnum::Canceled;
       break;
     case download::DownloadItem::MAX_DOWNLOAD_STATE:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   frontend_->DownloadProgress(item->GetGuid(), item->GetTotalBytes(),
                               item->GetReceivedBytes(), state);
@@ -1616,8 +1615,6 @@ Page::BackForwardCacheNotRestoredReason NotRestoredReasonToProtocol(
       return Page::BackForwardCacheNotRestoredReasonEnum::SchemeNotHTTPOrHTTPS;
     case Reason::kLoading:
       return Page::BackForwardCacheNotRestoredReasonEnum::Loading;
-    case Reason::kWasGrantedMediaAccess:
-      return Page::BackForwardCacheNotRestoredReasonEnum::WasGrantedMediaAccess;
     case Reason::kDisableForRenderFrameHostCalled:
       return Page::BackForwardCacheNotRestoredReasonEnum::
           DisableForRenderFrameHostCalled;
@@ -1721,10 +1718,25 @@ Page::BackForwardCacheNotRestoredReason NotRestoredReasonToProtocol(
     case Reason::kBroadcastChannelOnMessage:
       return Page::BackForwardCacheNotRestoredReasonEnum::
           BroadcastChannelOnMessage;
+    case Reason::kWebViewSettingsChanged:
+      return Page::BackForwardCacheNotRestoredReasonEnum::
+          WebViewSettingsChanged;
+    case Reason::kWebViewJavaScriptObjectChanged:
+      return Page::BackForwardCacheNotRestoredReasonEnum::
+          WebViewJavaScriptObjectChanged;
+    case Reason::kWebViewMessageListenerInjected:
+      return Page::BackForwardCacheNotRestoredReasonEnum::
+          WebViewMessageListenerInjected;
+    case Reason::kWebViewSafeBrowsingAllowlistChanged:
+      return Page::BackForwardCacheNotRestoredReasonEnum::
+          WebViewSafeBrowsingAllowlistChanged;
+    case Reason::kWebViewDocumentStartJavascriptChanged:
+      return Page::BackForwardCacheNotRestoredReasonEnum::
+          WebViewDocumentStartJavascriptChanged;
     case Reason::kBlocklistedFeatures:
       // Blocklisted features should be handled separately and be broken down
       // into sub reasons.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return Page::BackForwardCacheNotRestoredReasonEnum::Unknown;
     case Reason::kUnknown:
       return Page::BackForwardCacheNotRestoredReasonEnum::Unknown;
@@ -1833,7 +1845,7 @@ Page::BackForwardCacheNotRestoredReason BlocklistedFeatureToProtocol(
       return Page::BackForwardCacheNotRestoredReasonEnum::IndexedDBEvent;
     case WebSchedulerTrackedFeature::kDummy:
       // This is a test only reason and should never be called.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return Page::BackForwardCacheNotRestoredReasonEnum::Dummy;
     case WebSchedulerTrackedFeature::
         kJsNetworkRequestReceivedCacheControlNoStoreResource:
@@ -1875,10 +1887,10 @@ DisableForRenderFrameHostReasonToProtocol(
     BackForwardCache::DisabledReason reason) {
   switch (reason.source) {
     case BackForwardCache::DisabledSource::kLegacy:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return Page::BackForwardCacheNotRestoredReasonEnum::Unknown;
     case BackForwardCache::DisabledSource::kTesting:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return Page::BackForwardCacheNotRestoredReasonEnum::Unknown;
     case BackForwardCache::DisabledSource::kContent:
       switch (
@@ -1973,7 +1985,6 @@ Page::BackForwardCacheNotRestoredReasonType MapNotRestoredReasonToType(
     case Reason::kHTTPStatusNotOK:
     case Reason::kSchemeNotHTTPOrHTTPS:
     case Reason::kLoading:
-    case Reason::kWasGrantedMediaAccess:
     case Reason::kDisableForRenderFrameHostCalled:
     case Reason::kDomainNotAllowed:
     case Reason::kHTTPMethodNotGET:
@@ -2009,6 +2020,11 @@ Page::BackForwardCacheNotRestoredReasonType MapNotRestoredReasonToType(
     case Reason::kHTTPAuthRequired:
     case Reason::kCookieFlushed:
     case Reason::kBroadcastChannelOnMessage:
+    case Reason::kWebViewSettingsChanged:
+    case Reason::kWebViewJavaScriptObjectChanged:
+    case Reason::kWebViewMessageListenerInjected:
+    case Reason::kWebViewSafeBrowsingAllowlistChanged:
+    case Reason::kWebViewDocumentStartJavascriptChanged:
       return Page::BackForwardCacheNotRestoredReasonTypeEnum::Circumstantial;
     case Reason::kCacheControlNoStore:
     case Reason::kCacheControlNoStoreCookieModified:
@@ -2020,7 +2036,7 @@ Page::BackForwardCacheNotRestoredReasonType MapNotRestoredReasonToType(
     case Reason::kUnknown:
       return Page::BackForwardCacheNotRestoredReasonTypeEnum::SupportPending;
     case Reason::kBlocklistedFeatures:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return Page::BackForwardCacheNotRestoredReasonTypeEnum::PageSupportNeeded;
   }
 }

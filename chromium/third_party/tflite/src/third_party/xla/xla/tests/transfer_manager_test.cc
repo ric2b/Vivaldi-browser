@@ -17,6 +17,7 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "absl/status/statusor.h"
 #include "xla/layout_util.h"
 #include "xla/literal.h"
 #include "xla/service/generic_transfer_manager.h"
@@ -24,7 +25,6 @@ limitations under the License.
 #include "xla/service/shaped_buffer.h"
 #include "xla/service/stream_pool.h"
 #include "xla/shape_util.h"
-#include "xla/statusor.h"
 #include "xla/stream_executor/device_memory_allocator.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "xla/tests/literal_test_util.h"
@@ -309,7 +309,7 @@ XLA_TEST_F(TransferManagerTest, TransferTokenFromDevice) {
   EXPECT_TRUE(LiteralTestUtil::Equal(LiteralUtil::CreateToken(), result));
 }
 
-XLA_TEST_F(TransferManagerTest, MultiStreamRoundTripSoak) {
+XLA_TEST_F(TransferManagerTest, OVERSIZE_ON_GRM(MultiStreamRoundTripSoak)) {
   const int64_t kIterationCount = 5000;
   Literal literal1 = LiteralUtil::MakeTupleFromSlices(
       {LiteralUtil::CreateR0<float>(123.0f),

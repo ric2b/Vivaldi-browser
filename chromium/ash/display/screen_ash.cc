@@ -83,7 +83,7 @@ class ScreenForShutdown : public display::Screen {
     return primary_display_;
   }
   void AddObserver(display::DisplayObserver* observer) override {
-    NOTREACHED() << "Observer should not be added during shutdown";
+    NOTREACHED_IN_MIGRATION() << "Observer should not be added during shutdown";
   }
   void RemoveObserver(display::DisplayObserver* observer) override {}
 
@@ -155,6 +155,8 @@ display::Display ScreenAsh::GetDisplayNearestWindow(
   if (!root_window)
     return GetPrimaryDisplay();
   const RootWindowSettings* rws = GetRootWindowSettings(root_window);
+  CHECK(rws) << "Missing RootWindowSettings : window=" << window->GetName()
+             << ", root=" << root_window->GetName();
   int64_t id = rws->display_id;
   // if id is |kInvaildDisplayID|, it's being deleted.
   if (id == display::kInvalidDisplayId)
@@ -218,11 +220,11 @@ display::Display ScreenAsh::GetPrimaryDisplay() const {
 }
 
 void ScreenAsh::AddObserver(display::DisplayObserver* observer) {
-  GetDisplayManager()->AddObserver(observer);
+  GetDisplayManager()->AddDisplayObserver(observer);
 }
 
 void ScreenAsh::RemoveObserver(display::DisplayObserver* observer) {
-  GetDisplayManager()->RemoveObserver(observer);
+  GetDisplayManager()->RemoveDisplayObserver(observer);
 }
 
 display::TabletState ScreenAsh::GetTabletState() const {

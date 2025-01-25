@@ -20,7 +20,7 @@ constexpr int kDefaultMaxBacklogSize = 64;
 // Call Select with no timeout, so that it doesn't block. Then use the result
 // to determine if any connection is pending.
 bool IsConnectionPending(int fd) {
-  fd_set handle_set;
+  fd_set handle_set{};
   FD_ZERO(&handle_set);
   FD_SET(fd, &handle_set);
   struct timeval tv {
@@ -153,7 +153,7 @@ Error StreamSocketPosix::Connect(const IPEndpoint& remote_endpoint) {
       return CloseOnError(Error::Code::kSocketInvalidState);
     }
 
-    struct sockaddr_in6 address_in6;
+    struct sockaddr_in6 address_in6 {};
     socklen_t size = sizeof(address_in6);
     if (getsockname(handle_.fd,
                     reinterpret_cast<struct sockaddr*>(&address_in6),

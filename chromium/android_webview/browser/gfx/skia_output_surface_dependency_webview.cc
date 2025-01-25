@@ -92,7 +92,7 @@ void SkiaOutputSurfaceDependencyWebView::ScheduleGrContextCleanup() {
   shared_context_state_->ScheduleSkiaCleanup();
 }
 
-scoped_refptr<base::TaskRunner>
+scoped_refptr<base::SingleThreadTaskRunner>
 SkiaOutputSurfaceDependencyWebView::GetClientTaskRunner() {
   return task_queue_->GetClientTaskRunner();
 }
@@ -117,13 +117,13 @@ SkiaOutputSurfaceDependencyWebView::CreateGLSurface(
 
 base::ScopedClosureRunner SkiaOutputSurfaceDependencyWebView::CachePresenter(
     gl::Presenter* presenter) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return base::ScopedClosureRunner();
 }
 
 base::ScopedClosureRunner SkiaOutputSurfaceDependencyWebView::CacheGLSurface(
     gl::GLSurface* surface) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return base::ScopedClosureRunner();
 }
 

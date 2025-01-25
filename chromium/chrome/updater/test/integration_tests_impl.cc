@@ -48,10 +48,10 @@
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/enterprise_companion/device_management_storage/dm_storage.h"
 #include "chrome/updater/activity.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/device_management/dm_policy_builder_for_testing.h"
-#include "chrome/updater/device_management/dm_storage.h"
 #include "chrome/updater/external_constants_builder.h"
 #include "chrome/updater/external_constants_override.h"
 #include "chrome/updater/persisted_data.h"
@@ -323,7 +323,9 @@ void ExpectDeviceManagementRequest(ScopedServer* test_server,
           R"(agent=%s\+%s&platform=.*&deviceid=%s)",
           test_server->device_management_path().c_str(), request_type.c_str(),
           PRODUCT_FULLNAME_STRING, kUpdaterVersion,
-          GetDefaultDMStorage()->GetDeviceID().c_str())),
+          device_management_storage::GetDefaultDMStorage()
+              ->GetDeviceID()
+              .c_str())),
       request::GetUpdaterUserAgentMatcher(),
       request::GetHeaderMatcher(
           {{"Authorization",
@@ -386,13 +388,8 @@ int CountDirectoryFiles(const base::FilePath& dir) {
   return res;
 }
 
-void RegisterApp(UpdaterScope scope,
-                 const std::string& app_id,
-                 const base::Version& version) {
+void RegisterApp(UpdaterScope scope, const RegistrationRequest& registration) {
   scoped_refptr<UpdateService> update_service = CreateUpdateServiceProxy(scope);
-  RegistrationRequest registration;
-  registration.app_id = app_id;
-  registration.version = version;
   base::RunLoop loop;
   update_service->RegisterApp(registration,
                               base::BindLambdaForTesting([&loop](int result) {
@@ -400,6 +397,28 @@ void RegisterApp(UpdaterScope scope,
                                 loop.Quit();
                               }));
   loop.Run();
+}
+
+void RegisterAppByValue(UpdaterScope scope, const base::Value::Dict& value) {
+  RegistrationRequest registration;
+  registration.app_id = *value.FindString("app_id");
+  registration.brand_code = *value.FindString("brand_code");
+  registration.brand_path =
+      base::FilePath::FromASCII(*value.FindString("brand_path"));
+  registration.ap = *value.FindString("ap");
+  registration.ap_path =
+      base::FilePath::FromASCII(*value.FindString("ap_path"));
+  registration.ap_key = *value.FindString("ap_key");
+  registration.version = base::Version(*value.FindString("version"));
+  registration.version_path =
+      base::FilePath::FromASCII(*value.FindString("version_path"));
+  registration.version_key = *value.FindString("version_key");
+  registration.existence_checker_path =
+      base::FilePath::FromASCII(*value.FindString("existence_checker_path"));
+  registration.cohort = *value.FindString("cohort");
+  registration.cohort_name = *value.FindString("cohort_name");
+  registration.cohort_hint = *value.FindString("cohort_hint");
+  return RegisterApp(scope, registration);
 }
 
 void SetGroupPolicies(const base::Value::Dict& values) {
@@ -478,45 +497,92 @@ void InstallUpdaterAndApp(UpdaterScope scope,
     CloseInstallCompleteDialog(base::ASCIIToWide(child_window_text_to_find),
                                verify_app_logo_loaded);
 #else
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
 #endif
   }
 }
 
-void PrintLog(UpdaterScope scope) {
+void PrintFile(const base::FilePath& file) {
   std::string contents;
-  std::optional<base::FilePath> path = GetInstallDirectory(scope);
-  EXPECT_TRUE(path);
-  if (path &&
-      base::ReadFileToString(path->AppendASCII("updater.log"), &contents)) {
-    VLOG(0) << "Contents of updater.log for " << GetTestName() << " in "
-            << path.value() << ":";
-    const std::string demarcation(72, '=');
-    VLOG(0) << demarcation;
-    VLOG(0) << contents;
-    VLOG(0) << "End contents of updater.log for " << GetTestName() << ".";
-    VLOG(0) << demarcation;
-  } else {
-    VLOG(0) << "No updater.log at " << path.value() << " for " << GetTestName();
+  if (!base::ReadFileToString(file, &contents)) {
+    return;
   }
+  VLOG(0) << "Contents of " << file << " for " << GetTestName();
+  const std::string demarcation(72, '=');
+  VLOG(0) << demarcation;
+  VLOG(0) << contents;
+  VLOG(0) << "End contents of " << file << " for " << GetTestName() << ".";
+  VLOG(0) << demarcation;
 }
 
-// Copies the updater log file present in `src_dir` to a test-specific directory
-// name in Swarming/Isolate. Avoids overwriting the destination log file if
-// other instances of it exist in the destination directory. Swarming retries
-// each failed test. It is useful to capture a few logs from previous failures
-// instead of the log of the last run only.
-void CopyLog(const base::FilePath& src_dir) {
+std::vector<base::FilePath> GetUpdaterLogFilesInTmp() {
+  base::FilePath temp_dir;
+
+#if BUILDFLAG(IS_WIN)
+  if (IsSystemInstall(GetUpdaterScopeForTesting())) {
+    base::FilePath windows_dir;
+    EXPECT_TRUE(base::PathService::Get(base::DIR_WINDOWS, &windows_dir));
+    temp_dir = windows_dir.Append(FILE_PATH_LITERAL("Temp"));
+  }
+#endif
+  if (temp_dir.empty() && !base::GetTempDir(&temp_dir)) {
+    return {};
+  }
+
+  std::vector<base::FilePath> files;
+  base::FileEnumerator(temp_dir, false, base::FileEnumerator::FILES,
+                       FILE_PATH_LITERAL("updater*.log"))
+      .ForEach([&](const base::FilePath& item) { files.push_back(item); });
+  return files;
+}
+
+void PrintLog(UpdaterScope scope) {
+  PrintFile([&] {
+    std::optional<base::FilePath> path = GetInstallDirectory(scope);
+    if (path && base::PathExists(path->AppendASCII("updater.log"))) {
+      return path->AppendASCII("updater.log");
+    } else if (const std::vector<base::FilePath> files =
+                   GetUpdaterLogFilesInTmp();
+               !files.empty()) {
+      return files[0];
+    } else {
+      VLOG(0) << "updater.log file not found for " << GetTestName();
+      return base::FilePath();
+    }
+  }());
+}
+
+// Copies the updater log file present in `src_dir` or `%TMP%` to a
+// test-specific directory name in Swarming/Isolate. Avoids overwriting the
+// destination log file if other instances of it exist in the destination
+// directory. Swarming retries each failed test. It is useful to capture a few
+// logs from previous failures instead of the log of the last run only. Logs
+// labeled with different (optional) infixes are numbered independently. The
+// infix is applied only to the output log file name; the retrieved log is
+// always `updater.log`.
+void CopyLog(const base::FilePath& src_dir, const std::string& infix) {
+  base::FilePath log_path = src_dir.AppendASCII("updater.log");
+  if (!base::PathExists(log_path)) {
+    if (const std::vector<base::FilePath> files = GetUpdaterLogFilesInTmp();
+        !files.empty()) {
+      log_path = files[0];
+    }
+  }
+
+  const std::string real_infix =
+      infix.empty() ? "" : base::StrCat({".", infix});
+
   base::FilePath dest_dir = GetLogDestinationDir();
-  const base::FilePath log_path = src_dir.AppendASCII("updater.log");
   if (!dest_dir.empty() && base::PathExists(dest_dir) &&
       base::PathExists(log_path)) {
     dest_dir = dest_dir.AppendASCII(GetTestName());
     EXPECT_TRUE(base::CreateDirectory(dest_dir));
-    const base::FilePath dest_file_path = [dest_dir] {
-      base::FilePath path = dest_dir.AppendASCII("updater.log");
+    const base::FilePath dest_file_path = [dest_dir, real_infix] {
+      base::FilePath path =
+          dest_dir.AppendASCII(base::StrCat({"updater", real_infix, ".log"}));
       for (int i = 1; i < 10 && base::PathExists(path); ++i) {
-        path = dest_dir.AppendASCII(base::StringPrintf("updater.%d.log", i));
+        path = dest_dir.AppendASCII(
+            base::StringPrintf("updater%s.%d.log", real_infix.c_str(), i));
       }
       return path;
     }();
@@ -527,6 +593,9 @@ void CopyLog(const base::FilePath& src_dir) {
 }
 
 void ExpectNoCrashes(UpdaterScope scope) {
+  if (scope == UpdaterScope::kSystem) {
+    ExpectNoCrashes(UpdaterScope::kUser);
+  }
   std::optional<base::FilePath> database_path(GetCrashDatabasePath(scope));
   if (!database_path || !base::PathExists(*database_path)) {
     return;
@@ -537,7 +606,9 @@ void ExpectNoCrashes(UpdaterScope scope) {
     VLOG(2) << "No log destination folder, skip copying possible crash dumps.";
     return;
   }
-  dest_dir = dest_dir.AppendASCII(GetTestName());
+  dest_dir =
+      dest_dir.AppendASCII(GetTestName())
+          .AppendASCII(scope == UpdaterScope::kSystem ? "system" : "user");
   EXPECT_TRUE(base::CreateDirectory(dest_dir));
 
   int count = 0;
@@ -958,6 +1029,16 @@ void ExpectAppTag(UpdaterScope scope,
                      ->GetAP(app_id));
 }
 
+void SetAppTag(UpdaterScope scope,
+               const std::string& app_id,
+               const std::string& tag) {
+  scoped_refptr<GlobalPrefs> global_prefs = CreateGlobalPrefs(scope);
+  base::MakeRefCounted<PersistedData>(scope, global_prefs->GetPrefService(),
+                                      nullptr)
+      ->SetAP(app_id, tag);
+  PrefsCommitPendingWrites(global_prefs->GetPrefService());
+}
+
 void Run(UpdaterScope scope, base::CommandLine command_line, int* exit_code) {
   base::ScopedAllowBaseSyncPrimitivesForTesting allow_wait_process;
   if (IsSystemInstall(scope)) {
@@ -1321,18 +1402,19 @@ void ExpectCleanProcesses() {
 void RunOfflineInstall(UpdaterScope scope,
                        bool is_legacy_install,
                        bool is_silent_install) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void RunOfflineInstallOsNotSupported(UpdaterScope scope,
                                      bool is_legacy_install,
                                      bool is_silent_install) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 #endif  // !BUILDFLAG(IS_WIN)
 
 void DMPushEnrollmentToken(const std::string& enrollment_token) {
-  scoped_refptr<DMStorage> storage = GetDefaultDMStorage();
+  scoped_refptr<device_management_storage::DMStorage> storage =
+      device_management_storage::GetDefaultDMStorage();
   ASSERT_NE(storage, nullptr);
   EXPECT_TRUE(storage->StoreEnrollmentToken(enrollment_token));
   EXPECT_TRUE(storage->DeleteDMToken());
@@ -1342,14 +1424,16 @@ void DMDeregisterDevice(UpdaterScope scope) {
   if (!IsSystemInstall(GetUpdaterScopeForTesting())) {
     return;
   }
-  EXPECT_TRUE(GetDefaultDMStorage()->InvalidateDMToken());
+  EXPECT_TRUE(
+      device_management_storage::GetDefaultDMStorage()->InvalidateDMToken());
 }
 
 void DMCleanup(UpdaterScope scope) {
   if (!IsSystemInstall(GetUpdaterScopeForTesting())) {
     return;
   }
-  scoped_refptr<DMStorage> storage = GetDefaultDMStorage();
+  scoped_refptr<device_management_storage::DMStorage> storage =
+      device_management_storage::GetDefaultDMStorage();
   EXPECT_TRUE(storage->DeleteEnrollmentToken());
   EXPECT_TRUE(storage->DeleteDMToken());
   EXPECT_TRUE(base::DeletePathRecursively(storage->policy_cache_folder()));
@@ -1391,7 +1475,9 @@ void ExpectDeviceManagementPolicyFetchRequest(
             dm_response = GetDMResponseForOmahaPolicy(
                 first_request, rotate_public_key,
                 DMPolicyBuilderForTesting::SigningOption::kSignNormally,
-                dm_token, GetDefaultDMStorage()->GetDeviceID(), omaha_settings);
+                dm_token,
+                device_management_storage::GetDefaultDMStorage()->GetDeviceID(),
+                omaha_settings);
         return dm_response->SerializeAsString();
       }(),
       target_url);
@@ -1410,7 +1496,9 @@ void ExpectDeviceManagementPolicyFetchWithNewPublicKeyRequest(
                 DMPolicyBuilderForTesting::CreateInstanceWithOptions(
                     /*first_request=*/false, /*rotate_to_new_key=*/true,
                     DMPolicyBuilderForTesting::SigningOption::kSignNormally,
-                    dm_token, GetDefaultDMStorage()->GetDeviceID())
+                    dm_token,
+                    device_management_storage::GetDefaultDMStorage()
+                        ->GetDeviceID())
                     ->BuildDMResponseForPolicies(
                         {{"a-mock-policy-type-without-new-public-key",
                           omaha_settings.SerializeAsString()},
@@ -1438,7 +1526,9 @@ void ExpectDeviceManagementTokenDeletionRequest(ScopedServer* test_server,
                 DMPolicyBuilderForTesting::CreateInstanceWithOptions(
                     /*first_request=*/false, /*rotate_to_new_key=*/false,
                     DMPolicyBuilderForTesting::SigningOption::kSignNormally,
-                    dm_token, GetDefaultDMStorage()->GetDeviceID())
+                    dm_token,
+                    device_management_storage::GetDefaultDMStorage()
+                        ->GetDeviceID())
                     ->BuildDMResponseWithError(error_detail);
         return dm_response->SerializeAsString();
       }());

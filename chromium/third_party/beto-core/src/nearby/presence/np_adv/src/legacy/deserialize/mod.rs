@@ -16,323 +16,147 @@
 //!
 //! This module only deals with the _contents_ of an advertisement, not the advertisement header.
 
+use core::fmt;
 use core::marker::PhantomData;
 
+use crate::legacy::data_elements::tx_power::TxPowerDataElement;
 use crate::{
     credential::v0::V0,
-    de_type::EncryptedIdentityDataElementType,
     legacy::{
-        actions,
-        data_elements::{DataElement, *},
-        de_type::{DataElementType, DeEncodedLength, DeTypeCode, PlainDataElementType},
-        Ciphertext, PacketFlavor, Plaintext, ShortMetadataKey, NP_MAX_DE_CONTENT_LEN,
+        data_elements::{
+            actions,
+            de_type::{DeEncodedLength, DeTypeCode},
+            DataElementDeserializeError, DeserializeDataElement, LengthMapper,
+        },
+        Ciphertext, PacketFlavor,
     },
-    HasIdentityMatch, PlaintextIdentityMode,
+    DeLengthOutOfRange,
 };
 use array_view::ArrayView;
-use crypto_provider::CryptoProvider;
-use ldt_np_adv::{LegacySalt, NP_LEGACY_METADATA_KEY_LEN};
-use nom::{bytes, combinator, number, sequence};
-
-use super::BLE_ADV_SVC_CONTENT_LEN;
+use ldt_np_adv::{V0IdentityToken, V0Salt, NP_LDT_MAX_EFFECTIVE_PAYLOAD_LEN};
+use nom::{bytes, combinator, number, Finish};
 
 #[cfg(test)]
 mod tests;
 
-/// Deserialize an advertisement into data elements (if plaintext) or an identity type and
-/// ciphertext.
-pub(crate) fn deserialize_adv_contents<C: CryptoProvider>(
-    input: &[u8],
-) -> Result<IntermediateAdvContents<'_>, AdvDeserializeError> {
-    parse_raw_adv_contents::<C>(input).and_then(|raw_adv| match raw_adv {
-        RawAdvertisement::Plaintext(adv_contents) => {
-            if adv_contents.data_elements().next().is_none() {
-                return Err(AdvDeserializeError::NoPublicDataElements);
-            }
+pub(crate) mod intermediate;
 
-            Ok(IntermediateAdvContents::Plaintext(adv_contents))
-        }
-        RawAdvertisement::Ciphertext(eac) => Ok(IntermediateAdvContents::Ciphertext(eac)),
-    })
-}
-
-/// Parse an advertisement's contents to the level of raw data elements (i.e no decryption,
-/// no per-type deserialization, etc).
-///
-/// Consumes the entire input.
-fn parse_raw_adv_contents<C: CryptoProvider>(
-    input: &[u8],
-) -> Result<RawAdvertisement, AdvDeserializeError> {
-    if input.is_empty() {
-        return Err(AdvDeserializeError::MissingIdentity);
-    }
-    match parse_de(input) {
-        Ok((rem, identity_de)) => {
-            if let Some(identity_de_type) = identity_de.de_type.try_as_identity_de_type() {
-                match identity_de_type.as_encrypted_identity_de_type() {
-                    Some(encrypted_de_type) => {
-                        if matches!(parse_de(rem), Err(nom::Err::Error(..))) {
-                            match encrypted_de_type {
-                                // TODO handle length=0 provisioned identity DEs
-                                EncryptedIdentityDataElementType::Private
-                                | EncryptedIdentityDataElementType::Trusted
-                                | EncryptedIdentityDataElementType::Provisioned => combinator::map(
-                                    parse_encrypted_identity_de_contents,
-                                    |(salt, payload)| {
-                                        RawAdvertisement::Ciphertext(EncryptedAdvContents {
-                                            identity_type: encrypted_de_type,
-                                            salt_padder: ldt_np_adv::salt_padder::<16, C>(salt),
-                                            salt,
-                                            ciphertext: payload,
-                                        })
-                                    },
-                                )(
-                                    identity_de.contents,
-                                )
-                                .map(|(_rem, contents)| contents)
-                                .map_err(|_e| AdvDeserializeError::AdvertisementDeserializeError),
-                            }
-                        } else {
-                            Err(AdvDeserializeError::TooManyTopLevelDataElements)
-                        }
-                    }
-                    // It's an identity de, but not encrypted, so it must be public, and the rest
-                    // must be plain
-                    None => Ok(RawAdvertisement::Plaintext(PlaintextAdvContents {
-                        identity_type: PlaintextIdentityMode::Public,
-                        data: rem,
-                    })),
-                }
-            } else {
-                Err(AdvDeserializeError::MissingIdentity)
-            }
-        }
-        Err(nom::Err::Error(_)) | Err(nom::Err::Failure(_)) => {
-            Err(AdvDeserializeError::AdvertisementDeserializeError)
-        }
-        Err(nom::Err::Incomplete(_)) => {
-            panic!("Should not hit Incomplete when using nom::complete parsers")
-        }
-    }
-}
+use crate::credential::matched::HasIdentityMatch;
+use crate::legacy::data_elements::actions::ActionsDataElement;
+use crate::legacy::data_elements::de_type::{DataElementType, DeActualLength};
+use crate::legacy::Plaintext;
+/// exposed because the unencrypted case isn't just for intermediate: no further processing is needed
+pub use intermediate::UnencryptedAdvContents;
 
 /// Legacy advertisement parsing errors
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AdvDeserializeError {
-    /// Parsing the overall advertisement or DE structure failed
-    AdvertisementDeserializeError,
-    /// Must not have any other top level data elements if there is an encrypted identity DE
-    TooManyTopLevelDataElements,
-    /// Missing identity DE
-    MissingIdentity,
-    /// Non-identity DE contents must not be empty
-    NoPublicDataElements,
-}
-
-/// Parse an individual DE into its header and contents.
-fn parse_de(input: &[u8]) -> nom::IResult<&[u8], RawDataElement, DataElementDeserializeError> {
-    let (remaining, (de_type, actual_len)) =
-        combinator::map_opt(number::complete::u8, |de_header| {
-            // header: LLLLTTTT
-            let len = de_header >> 4;
-            let de_type = de_header & 0x0F;
-            DeTypeCode::try_from(de_type).ok().and_then(DataElementType::from_type_code).and_then(
-                |de_type| {
-                    len.try_into()
-                        .ok()
-                        .and_then(|len: DeEncodedLength| {
-                            de_type.actual_len_for_encoded_len(len).ok()
-                        })
-                        .map(|len| (de_type, len))
-                },
-            )
-        })(input)?;
-
-    combinator::map(bytes::complete::take(actual_len.as_usize()), move |contents| RawDataElement {
-        de_type,
-        contents,
-    })(remaining)
-}
-
-/// Parse legacy encrypted identity DEs (private, trusted, provisioned) into salt and ciphertext
-/// (encrypted metadata key and at least 2 bytes of DEs).
-///
-/// Consumes the entire input.
-fn parse_encrypted_identity_de_contents(
-    de_contents: &[u8],
-) -> nom::IResult<&[u8], (ldt_np_adv::LegacySalt, &[u8])> {
-    combinator::all_consuming(sequence::tuple((
-        // 2-byte salt
-        combinator::map(
-            combinator::map_res(bytes::complete::take(2_usize), |slice: &[u8]| slice.try_into()),
-            |arr: [u8; 2]| arr.into(),
-        ),
-        // 14-byte encrypted metadata key plus encrypted DEs, which must together be at least 16
-        // bytes (AES block size), and at most a full DE minus the size of the salt.
-        bytes::complete::take_while_m_n(16_usize, NP_MAX_DE_CONTENT_LEN - 2, |_| true),
-    )))(de_contents)
+    /// Header or other structure was invalid
+    InvalidStructure,
+    /// DE contents must not be empty
+    NoDataElements,
 }
 
 /// A data element with content length determined and validated per its type's length rules, but
 /// no further decoding performed.
 #[derive(Debug, PartialEq, Eq)]
-struct RawDataElement<'d> {
-    de_type: DataElementType,
+pub(in crate::legacy) struct RawDataElement<'d, D: DataElementDeserializer> {
+    pub(in crate::legacy) de_type: D::DeTypeDisambiguator,
     /// Byte array payload of the data element, without the DE header.
-    contents: &'d [u8],
+    pub(in crate::legacy) contents: &'d [u8],
 }
 
-/// An advertisement broken down into data elements, but before decryption or mapping to higher
-/// level DE representations.
-#[derive(Debug, PartialEq, Eq)]
-enum RawAdvertisement<'d> {
-    Plaintext(PlaintextAdvContents<'d>),
-    Ciphertext(EncryptedAdvContents<'d>),
+impl<'d, D: DataElementDeserializer> RawDataElement<'d, D> {
+    /// Parse an individual DE into its header and contents.
+    fn parse(input: &'d [u8]) -> nom::IResult<&[u8], Self, DataElementDeserializeError> {
+        let (input, (de_type, actual_len)) = combinator::map_res(
+            combinator::map_opt(number::complete::u8, |de_header| {
+                // header: LLLLTTTT
+                let len = de_header >> 4;
+                let de_type_num = de_header & 0x0F;
+
+                // these can't fail since both inputs are 4 bits and will fit
+                DeTypeCode::try_from(de_type_num).ok().and_then(|de_type| {
+                    DeEncodedLength::try_from(len).ok().map(|encoded_len| (de_type, encoded_len))
+                })
+            }),
+            |(de_type, encoded_len)| {
+                D::map_encoded_len_to_actual_len(de_type, encoded_len).map_err(|e| match e {
+                    LengthError::InvalidLength => {
+                        DataElementDeserializeError::InvalidDeLength { de_type, len: encoded_len }
+                    }
+                    LengthError::InvalidType => {
+                        DataElementDeserializeError::InvalidDeType { de_type }
+                    }
+                })
+            },
+        )(input)?;
+
+        combinator::map(bytes::complete::take(actual_len.as_usize()), move |contents| {
+            RawDataElement { de_type, contents }
+        })(input)
+    }
 }
 
 /// An iterator that parses the given data elements iteratively. In environments
 /// where memory is not severely constrained, it is usually safer to collect
-/// this into `Result<Vec<PlainDataElement>>` so the validity of the whole
+/// this into `Result<Vec<DeserializedDataElement>>` so the validity of the whole
 /// advertisement can be checked before proceeding with further processing.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PlainDeIterator<'d, F>
-where
-    F: PacketFlavor,
-    actions::ActionsDataElement<F>: DataElement,
-{
-    /// Data to be parsed, containing a sequence of data elements in serialized
-    /// form. This should not contain the identity data elements.
-    data: &'d [u8],
-    _marker: PhantomData<F>,
+pub struct DeIterator<'d, F> {
+    delegate: GenericDeIterator<'d, F, StandardDeserializer>,
 }
 
-impl<'d, F> PlainDeIterator<'d, F>
-where
-    F: PacketFlavor,
-    actions::ActionsDataElement<F>: DataElement,
-{
-    fn raw_de_to_plain_de(
-        raw_de: RawDataElement<'d>,
-    ) -> Result<PlainDataElement<F>, DataElementDeserializeError> {
-        let de_type = raw_de
-            .de_type
-            .try_as_plain_de_type()
-            .ok_or(DataElementDeserializeError::DuplicateIdentityDataElement)?;
-        (RawPlainDataElement { de_type, contents: raw_de.contents }).try_deserialize()
+impl<'d, F> DeIterator<'d, F> {
+    pub(in crate::legacy) fn new(data: &'d [u8]) -> Self {
+        Self { delegate: GenericDeIterator::new(data) }
     }
 }
 
-impl<'d, F> Iterator for PlainDeIterator<'d, F>
-where
-    F: PacketFlavor,
-    actions::ActionsDataElement<F>: DataElement,
-{
-    type Item = Result<PlainDataElement<F>, DataElementDeserializeError>;
+impl<'d, F: PacketFlavor> Iterator for DeIterator<'d, F> {
+    type Item = Result<DeserializedDataElement<F>, DataElementDeserializeError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let parse_result = nom::combinator::cut(nom::combinator::map_res(
-            parse_de,
-            Self::raw_de_to_plain_de,
+        self.delegate.next()
+    }
+}
+
+/// The generified innards of [DeIterator] so that it's possible to also use test-only
+/// deserializers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(in crate::legacy) struct GenericDeIterator<'d, F, D> {
+    /// Data to be parsed, containing a sequence of data elements in serialized
+    /// form.
+    data: &'d [u8],
+    _flavor_marker: PhantomData<F>,
+    _deser_marker: PhantomData<D>,
+}
+
+impl<'d, F, D> GenericDeIterator<'d, F, D> {
+    fn new(data: &'d [u8]) -> Self {
+        Self { data, _flavor_marker: Default::default(), _deser_marker: Default::default() }
+    }
+}
+
+impl<'d, F: PacketFlavor, D: DataElementDeserializer> Iterator for GenericDeIterator<'d, F, D> {
+    type Item = Result<D::Deserialized<F>, DataElementDeserializeError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.data.is_empty() {
+            return None;
+        }
+        let parse_result = combinator::cut(combinator::map_res(
+            RawDataElement::parse,
+            D::deserialize_de,
         ))(self.data);
-        match parse_result {
+
+        match parse_result.finish() {
             Ok((rem, de)) => {
                 self.data = rem;
                 Some(Ok(de))
             }
-            Err(nom::Err::Error(_)) => {
-                panic!("All Errors are turned into Failures with `cut` above");
-            }
-            Err(nom::Err::Failure(DataElementDeserializeError::NomError(
-                nom::error::ErrorKind::Eof,
-            ))) => {
-                if self.data.is_empty() {
-                    None
-                } else {
-                    Some(Err(DataElementDeserializeError::UnexpectedDataRemaining))
-                }
-            }
-            Err(nom::Err::Failure(e)) => Some(Err(e)),
-            Err(nom::Err::Incomplete(_)) => {
-                panic!("Incomplete unexpected when using nom::complete APIs")
-            }
+            Err(e) => Some(Err(e)),
         }
-    }
-}
-
-/// A "plain" data element (not a container) without parsing the content.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct RawPlainDataElement<'d> {
-    de_type: PlainDataElementType,
-    /// Byte array payload of the data element, without the DE header.
-    contents: &'d [u8],
-}
-
-impl<'d> RawPlainDataElement<'d> {
-    /// Deserialize into a [PlainDataElement] to expose DE-type-specific data representations.
-    ///
-    /// Returns `None` if the contents of the raw DE can't be deserialized into the corresponding
-    /// DE's representation.
-    fn try_deserialize<F>(&self) -> Result<PlainDataElement<F>, DataElementDeserializeError>
-    where
-        F: PacketFlavor,
-        actions::ActionsDataElement<F>: DataElement,
-    {
-        match self.de_type {
-            PlainDataElementType::Actions => {
-                actions::ActionsDataElement::deserialize::<F>(self.contents)
-                    .map(PlainDataElement::Actions)
-            }
-            PlainDataElementType::TxPower => {
-                TxPowerDataElement::deserialize::<F>(self.contents).map(PlainDataElement::TxPower)
-            }
-        }
-    }
-}
-
-/// Contents of an encrypted advertisement before decryption.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct EncryptedAdvContents<'d> {
-    identity_type: EncryptedIdentityDataElementType,
-    /// Salt from the advertisement, converted into a padder.
-    /// Pre-calculated so it's only derived once across multiple decrypt attempts.
-    salt_padder: ldt::XorPadder<{ crypto_provider::aes::BLOCK_SIZE }>,
-    /// The salt instance used for encryption of this advertisement.
-    salt: LegacySalt,
-    /// Ciphertext containing the metadata key and any data elements
-    ciphertext: &'d [u8],
-}
-
-impl<'d> EncryptedAdvContents<'d> {
-    /// Try decrypting with an identity's LDT cipher and deserializing the resulting data elements.
-    ///
-    /// Returns the decrypted data if decryption and verification succeeded and the resulting DEs could be parsed
-    /// successfully, otherwise `Err`.
-    pub(crate) fn try_decrypt<C: CryptoProvider>(
-        &self,
-        cipher: &ldt_np_adv::LdtNpAdvDecrypterXtsAes128<C>,
-    ) -> Result<DecryptedAdvContents, DecryptError> {
-        let plaintext = cipher
-            .decrypt_and_verify(self.ciphertext, &self.salt_padder)
-            .map_err(|_e| DecryptError::DecryptOrVerifyError)?;
-
-        // plaintext starts with 14 bytes of metadata key, then DEs.
-        let (remaining, metadata_key) = combinator::map_res(
-            bytes::complete::take(NP_LEGACY_METADATA_KEY_LEN),
-            |slice: &[u8]| slice.try_into(),
-        )(plaintext.as_slice())
-        .map_err(|_e: nom::Err<nom::error::Error<&[u8]>>| {
-            DecryptError::DeserializeError(AdvDeserializeError::AdvertisementDeserializeError)
-        })?;
-
-        let remaining_arr = ArrayView::try_from_slice(remaining)
-            .expect("Max remaining = 31 - 14 = 17 bytes < BLE_ADV_SVC_CONTENT_LEN");
-
-        Ok(DecryptedAdvContents::new(
-            self.identity_type,
-            ShortMetadataKey(metadata_key),
-            self.salt,
-            remaining_arr,
-        ))
     }
 }
 
@@ -341,124 +165,171 @@ impl<'d> EncryptedAdvContents<'d> {
 pub(crate) enum DecryptError {
     /// Decrypting or verifying the advertisement ciphertext failed
     DecryptOrVerifyError,
-    /// Decrypting succeeded, but deserializing from the plaintext failed
-    DeserializeError(AdvDeserializeError),
 }
 
-impl From<AdvDeserializeError> for DecryptError {
-    fn from(e: AdvDeserializeError) -> Self {
-        DecryptError::DeserializeError(e)
-    }
-}
-
-/// All v0 normal DE types with deserialized contents.
-#[derive(Debug, PartialEq, Eq)]
+/// All v0 DE types with deserialized contents.
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[allow(missing_docs)]
-pub enum PlainDataElement<F: PacketFlavor> {
+pub enum DeserializedDataElement<F: PacketFlavor> {
     Actions(actions::ActionsDataElement<F>),
     TxPower(TxPowerDataElement),
 }
 
-impl<F: PacketFlavor> PlainDataElement<F> {
+impl<F: PacketFlavor> DeserializedDataElement<F> {
     /// Returns the DE type as a u8
     #[cfg(feature = "devtools")]
     pub fn de_type_code(&self) -> u8 {
         match self {
-            PlainDataElement::Actions(_) => DataElementType::Actions.type_code().as_u8(),
-            PlainDataElement::TxPower(_) => DataElementType::TxPower.type_code().as_u8(),
+            DeserializedDataElement::Actions(_) => ActionsDataElement::<F>::DE_TYPE_CODE.as_u8(),
+            DeserializedDataElement::TxPower(_) => TxPowerDataElement::DE_TYPE_CODE.as_u8(),
         }
     }
 
     /// Returns the serialized contents of the DE
     #[cfg(feature = "devtools")]
-    pub fn de_contents(&self) -> alloc::vec::Vec<u8> {
-        use crate::legacy::serialize::{DataElementBundle, ToDataElementBundle};
+    #[allow(clippy::unwrap_used)]
+    pub fn de_contents(&self) -> alloc::vec::Vec<u8>
+    where
+        actions::ActionsDataElement<F>: crate::legacy::data_elements::SerializeDataElement<F>,
+    {
+        use crate::legacy::data_elements::{DataElementSerializationBuffer, SerializeDataElement};
+
+        let mut sink = DataElementSerializationBuffer::new(super::NP_MAX_ADV_CONTENT_LEN).unwrap();
         match self {
-            PlainDataElement::Actions(a) => {
-                let bundle: DataElementBundle<F> = a.to_de_bundle();
-                bundle.contents_as_slice().to_vec()
-            }
-            PlainDataElement::TxPower(t) => {
-                let bundle: DataElementBundle<F> = t.to_de_bundle();
-                bundle.contents_as_slice().to_vec()
+            DeserializedDataElement::Actions(a) => a.serialize_contents(&mut sink),
+            DeserializedDataElement::TxPower(t) => {
+                SerializeDataElement::<F>::serialize_contents(t, &mut sink)
             }
         }
+        .unwrap();
+        sink.into_inner().into_inner().as_slice().to_vec()
     }
 }
 
-/// The contents of a plaintext advertisement after deserializing DE contents
-#[derive(Debug, PartialEq, Eq)]
-pub struct PlaintextAdvContents<'d> {
-    identity_type: PlaintextIdentityMode,
-    /// Contents of the advertisement excluding the identity DE
-    data: &'d [u8],
-}
-
-impl<'d> PlaintextAdvContents<'d> {
-    /// Returns the identity type used for the advertisement
-    pub fn identity(&self) -> PlaintextIdentityMode {
-        self.identity_type
-    }
-
-    /// Returns an iterator over the v0 data elements
-    pub fn data_elements(&self) -> PlainDeIterator<'d, Plaintext> {
-        PlainDeIterator { data: self.data, _marker: PhantomData }
-    }
-}
-
-/// Contents of an encrypted advertisement after decryption and deserializing DEs.
+/// Contents of an LDT advertisement after decryption.
 #[derive(Debug, PartialEq, Eq)]
 pub struct DecryptedAdvContents {
-    identity_type: EncryptedIdentityDataElementType,
-    metadata_key: ShortMetadataKey,
-    salt: LegacySalt,
-    /// The decrypted data in this advertisement. This should be a sequence of
-    /// serialized data elements, excluding the identity DE.
-    data: ArrayView<u8, { BLE_ADV_SVC_CONTENT_LEN }>,
+    identity_token: V0IdentityToken,
+    salt: V0Salt,
+    /// The decrypted data in this advertisement after the identity token.
+    /// This is hopefully a sequence of serialized data elements, but that hasn't been validated
+    /// yet at construction time.
+    data: ArrayView<u8, { NP_LDT_MAX_EFFECTIVE_PAYLOAD_LEN }>,
 }
 
 impl DecryptedAdvContents {
     /// Returns a new DecryptedAdvContents with the provided contents.
     fn new(
-        identity_type: EncryptedIdentityDataElementType,
-        metadata_key: ShortMetadataKey,
-        salt: LegacySalt,
-        data: ArrayView<u8, { BLE_ADV_SVC_CONTENT_LEN }>,
+        metadata_key: V0IdentityToken,
+        salt: V0Salt,
+        data: ArrayView<u8, { NP_LDT_MAX_EFFECTIVE_PAYLOAD_LEN }>,
     ) -> Self {
-        Self { identity_type, metadata_key, salt, data }
-    }
-
-    /// The type of identity DE used in the advertisement.
-    pub fn identity_type(&self) -> EncryptedIdentityDataElementType {
-        self.identity_type
+        Self { identity_token: metadata_key, salt, data }
     }
 
     /// Iterator over the data elements in an advertisement, except for any DEs related to resolving
     /// the identity or otherwise validating the payload (e.g. any identity DEs like Private
     /// Identity).
-    pub fn data_elements(&self) -> PlainDeIterator<Ciphertext> {
-        PlainDeIterator { data: self.data.as_slice(), _marker: PhantomData }
+    pub fn data_elements(&self) -> DeIterator<Ciphertext> {
+        DeIterator::new(self.data.as_slice())
     }
 
     /// The salt used for decryption of this advertisement.
-    pub fn salt(&self) -> LegacySalt {
+    pub fn salt(&self) -> V0Salt {
         self.salt
+    }
+
+    #[cfg(test)]
+    pub(in crate::legacy) fn generic_data_elements<D: DataElementDeserializer>(
+        &self,
+    ) -> GenericDeIterator<Ciphertext, D> {
+        GenericDeIterator::new(self.data.as_slice())
     }
 }
 
 impl HasIdentityMatch for DecryptedAdvContents {
     type Version = V0;
-    fn metadata_key(&self) -> ShortMetadataKey {
-        self.metadata_key
+    fn identity_token(&self) -> V0IdentityToken {
+        self.identity_token
     }
 }
 
-/// The contents of an advertisement after plaintext DEs, if any, have been deserialized, but
-/// before any decryption is done.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum IntermediateAdvContents<'d> {
-    /// Plaintext advertisements
-    Plaintext(PlaintextAdvContents<'d>),
-    /// Ciphertext advertisements
-    Ciphertext(EncryptedAdvContents<'d>),
+/// Overall strategy for deserializing adv contents (once decrypted, if applicable) into data
+/// elements
+pub(in crate::legacy) trait DataElementDeserializer: Sized {
+    /// Disambiguates the intermediate form of a DE
+    type DeTypeDisambiguator: Copy;
+    /// The fully deserialized form of a DE
+    type Deserialized<F: PacketFlavor>: fmt::Debug + PartialEq + Eq + Clone;
+
+    /// Map the encoded len found in a DE header to the actual len that should be consumed from the
+    /// advertisement payload
+    fn map_encoded_len_to_actual_len(
+        de_type: DeTypeCode,
+        encoded_len: DeEncodedLength,
+    ) -> Result<(Self::DeTypeDisambiguator, DeActualLength), LengthError>;
+
+    /// Deserialize into a [Self::Deserialized] to expose DE-type-specific data representations.
+    ///
+    /// Returns `Err` if the contents of the raw DE can't be deserialized into the corresponding
+    /// DE's representation.
+    fn deserialize_de<F: PacketFlavor>(
+        raw_de: RawDataElement<Self>,
+    ) -> Result<Self::Deserialized<F>, DataElementDeserializeError>;
+}
+
+/// Possible errors when mapping DE encoded lengths to actual lengths
+pub(in crate::legacy) enum LengthError {
+    /// The DE type was known, but the encoded length was invalid
+    InvalidLength,
+    /// The DE type was not unrecognized
+    InvalidType,
+}
+
+impl From<DeLengthOutOfRange> for LengthError {
+    fn from(_value: DeLengthOutOfRange) -> Self {
+        Self::InvalidLength
+    }
+}
+
+/// The default deserialization strategy that maps type codes to [DataElementType], and deserializes
+/// to [DeserializedDataElement].
+#[derive(Debug, PartialEq, Eq, Clone)]
+struct StandardDeserializer;
+
+impl DataElementDeserializer for StandardDeserializer {
+    type DeTypeDisambiguator = DataElementType;
+    type Deserialized<F: PacketFlavor> = DeserializedDataElement<F>;
+
+    fn map_encoded_len_to_actual_len(
+        de_type: DeTypeCode,
+        encoded_len: DeEncodedLength,
+    ) -> Result<(Self::DeTypeDisambiguator, DeActualLength), LengthError> {
+        match de_type {
+            TxPowerDataElement::DE_TYPE_CODE => {
+                <TxPowerDataElement as DeserializeDataElement>::LengthMapper::map_encoded_len_to_actual_len(encoded_len)
+                    .map_err(|e| e.into())
+                    .map(|l| (DataElementType::TxPower, l))
+            }
+            ActionsDataElement::<Plaintext>::DE_TYPE_CODE => {
+                <ActionsDataElement<Plaintext> as DeserializeDataElement>::LengthMapper::map_encoded_len_to_actual_len(encoded_len)
+                    .map_err(|e| e.into())
+                    .map(|l| (DataElementType::Actions, l))
+            }
+            _ => Err(LengthError::InvalidType),
+        }
+    }
+
+    fn deserialize_de<F: PacketFlavor>(
+        raw_de: RawDataElement<Self>,
+    ) -> Result<Self::Deserialized<F>, DataElementDeserializeError> {
+        match raw_de.de_type {
+            DataElementType::Actions => {
+                actions::ActionsDataElement::deserialize::<F>(raw_de.contents)
+                    .map(DeserializedDataElement::Actions)
+            }
+            DataElementType::TxPower => TxPowerDataElement::deserialize::<F>(raw_de.contents)
+                .map(DeserializedDataElement::TxPower),
+        }
+    }
 }

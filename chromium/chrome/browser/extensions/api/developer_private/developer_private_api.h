@@ -51,11 +51,9 @@ class EventRouter;
 class ExtensionError;
 class ExtensionInfoGenerator;
 
-// Keys that indicate whether the safety check warning for this
+// Key that indicates whether the safety check warning for this
 // extension has been acknowledged because the user has chosen to keep
 // it in a past review.
-inline constexpr PrefMap kPrefAcknowledgeSafetyCheckWarning = {
-    "ack_safety_check_warning", PrefType::kBool, PrefScope::kExtensionSpecific};
 inline constexpr PrefMap kPrefAcknowledgeSafetyCheckWarningReason = {
     "ack_safety_check_warning_reason", PrefType::kInteger,
     PrefScope::kExtensionSpecific};
@@ -1018,6 +1016,46 @@ class DeveloperPrivateDismissSafetyHubExtensionsMenuNotificationFunction
  private:
   ~DeveloperPrivateDismissSafetyHubExtensionsMenuNotificationFunction()
       override;
+};
+
+class DeveloperPrivateDismissMv2DeprecationNoticeForExtensionFunction
+    : public DeveloperPrivateAPIFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION(
+      "developerPrivate.dismissMv2DeprecationNoticeForExtension",
+      DEVELOPERPRIVATE_DISMISSMV2DEPRECATIONNOTICEFOREXTENSION)
+  DeveloperPrivateDismissMv2DeprecationNoticeForExtensionFunction();
+
+  DeveloperPrivateDismissMv2DeprecationNoticeForExtensionFunction(
+      const DeveloperPrivateDismissMv2DeprecationNoticeForExtensionFunction&) =
+      delete;
+  DeveloperPrivateDismissMv2DeprecationNoticeForExtensionFunction& operator=(
+      const DeveloperPrivateDismissMv2DeprecationNoticeForExtensionFunction&) =
+      delete;
+
+  void accept_bubble_for_testing(bool accept_bubble) {
+    accept_bubble_for_testing_ = accept_bubble;
+  }
+
+ private:
+  ~DeveloperPrivateDismissMv2DeprecationNoticeForExtensionFunction() override;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void DismissExtensionNotice();
+
+  // Callback to run when the user accepts the keep dialog.
+  void OnDialogAccepted();
+
+  // Callback to run when the user cancels the keep dialog.
+  void OnDialogCancelled();
+
+  // The ID of the extension to be dismissed.
+  ExtensionId extension_id_;
+
+  // If true, immediately accepts the keep dialog by running the callback.
+  std::optional<bool> accept_bubble_for_testing_;
 };
 
 }  // namespace api

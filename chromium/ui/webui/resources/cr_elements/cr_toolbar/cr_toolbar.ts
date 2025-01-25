@@ -89,22 +89,24 @@ export class CrToolbarElement extends CrLitElement {
       },
 
       searchIconOverride: {type: String},
+      searchInputAriaDescription: {type: String},
     };
   }
 
-  pageName: string;
-  searchPrompt: string;
-  clearLabel: string;
-  menuLabel: string;
-  spinnerActive: boolean;
+  pageName: string = '';
+  searchPrompt: string = '';
+  clearLabel: string = '';
+  menuLabel?: string;
+  spinnerActive: boolean = false;
   showMenu: boolean = false;
   showSearch: boolean = true;
   override autofocus: boolean = false;
-  narrow: boolean;
+  narrow: boolean = false;
   narrowThreshold: number = 900;
   alwaysShowLogo: boolean = false;
-  protected showingSearch_: boolean;
+  protected showingSearch_: boolean = false;
   searchIconOverride?: string;
+  searchInputAriaDescription: string = '';
   private narrowQuery_: MediaQueryList|null = null;
 
   override willUpdate(changedProperties: PropertyValues<this>) {

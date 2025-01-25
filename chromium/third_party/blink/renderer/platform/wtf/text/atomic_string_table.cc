@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string_table.h"
 
 #include "base/notreached.h"
@@ -146,10 +151,11 @@ struct HashAndUTF8CharactersTranslator {
           StringImpl::CreateUninitialized(buffer.utf16_length(), target);
 
       const char* source = buffer.characters();
-      if (unicode::ConvertUTF8ToUTF16(&source, source + buffer.length(),
-                                      &target, target + buffer.utf16_length(),
-                                      &is_all_ascii) != unicode::kConversionOK)
-        NOTREACHED();
+      if (unicode::ConvertUTF8ToUTF16(
+              &source, source + buffer.length(), &target,
+              target + buffer.utf16_length()) != unicode::kConversionOK) {
+        NOTREACHED_IN_MIGRATION();
+      }
     } else {
       new_string = StringImpl::Create(buffer.characters(), buffer.length());
     }

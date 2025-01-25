@@ -5,12 +5,13 @@
 #include "third_party/blink/renderer/modules/serial/serial.h"
 
 #include <inttypes.h>
+
 #include <utility>
 
 #include "base/unguessable_token.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/mojom/serial/serial.mojom-blink.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_serial_port_filter.h"
@@ -210,13 +211,13 @@ ScriptPromise<SerialPort> Serial::requestPort(
     ExceptionState& exception_state) {
   if (ShouldBlockSerialServiceCall(GetSupplementable()->DomWindow(),
                                    GetExecutionContext(), &exception_state)) {
-    return ScriptPromise<SerialPort>();
+    return EmptyPromise();
   }
 
   if (!LocalFrame::HasTransientUserActivation(DomWindow()->GetFrame())) {
     exception_state.ThrowSecurityError(
         "Must be handling a user gesture to show a permission request.");
-    return ScriptPromise<SerialPort>();
+    return EmptyPromise();
   }
 
   Vector<mojom::blink::SerialPortFilterPtr> filters;
@@ -225,7 +226,7 @@ ScriptPromise<SerialPort> Serial::requestPort(
       auto mojo_filter = CreateMojoFilter(filter, exception_state);
       if (!mojo_filter) {
         CHECK(exception_state.HadException());
-        return ScriptPromise<SerialPort>();
+        return EmptyPromise();
       }
 
       CHECK(!exception_state.HadException());

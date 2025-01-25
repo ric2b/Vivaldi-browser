@@ -179,7 +179,7 @@
 # If we annotated all Parcelables that get put into Bundles other than
 # for saveInstanceState (e.g. PendingIntents), then we could actually keep the
 # names of just those ones. For now, we'll just keep them all.
--keepnames class !cr_allowunused,** implements android.os.Parcelable {}
+-keepnames,allowaccessmodification class !cr_allowunused,** implements android.os.Parcelable {}
 
 # Keep all default constructors for used Fragments. Required since they are
 # called reflectively when fragments are reinflated after the app is killed.
@@ -222,7 +222,7 @@
 # Keep the names of exception types, to make it easier to understand stack
 # traces in contexts where it's not trivial to deobfuscate them - for example
 # when reported to app developers who are using WebView.
--keepnames class ** extends java.lang.Throwable {}
+-keepnames,allowaccessmodification class ** extends java.lang.Throwable {}
 
 # Should be removed once we use Android V SDK. b/336753747
 -keep class !cr_allowunused,androidx.privacysandbox.ads.adservices.internal.ContinuationOutcomeReceiver {
@@ -299,6 +299,18 @@
 # reflection.
 -keep,allowobfuscation public class ** extends org.chromium.chrome.browser.base.SplitCompat*$Impl {
   public <init>();
+}
+
+# To fix crbug/1017396. This is because AppBarLayout$ScrollingViewBehavior
+# is instantiated via java.lang.reflect.Constructor in CoordinatorLayout.java.
+# Note that AppBarLayout$Behavior is needed to keep the scrolling behavior.
+-keep class com.google.android.material.appbar.AppBarLayout$Behavior {
+    public <init>(android.content.Context, android.util.AttributeSet);
+    public <init>();
+}
+-keep class com.google.android.material.appbar.AppBarLayout$ScrollingViewBehavior {
+    public <init>(android.content.Context, android.util.AttributeSet);
+    public <init>();
 }
 
 # File: ../../third_party/android_deps/material_design.flags
@@ -449,24 +461,6 @@
   native <methods>;
 }
 
-# File: ../../chrome/android/features/start_surface/proguard.flags
-# Copyright 2019 The Chromium Authors
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
-
-
-# To fix crbug/1017396. This is because AppBarLayout$ScrollingViewBehavior
-# is instantiated via java.lang.reflect.Constructor in CoordinatorLayout.java.
-# Note that AppBarLayout$Behavior is needed to keep the scrolling behavior.
--keep class com.google.android.material.appbar.AppBarLayout$Behavior {
-    public <init>(android.content.Context, android.util.AttributeSet);
-    public <init>();
-}
--keep class com.google.android.material.appbar.AppBarLayout$ScrollingViewBehavior {
-    public <init>(android.content.Context, android.util.AttributeSet);
-    public <init>();
-}
-
 # File: obj/third_party/androidx/androidx_appcompat_appcompat_java/proguard.txt
 # Copyright (C) 2018 The Android Open Source Project
 #
@@ -485,6 +479,55 @@
 # Never inline methods, but allow shrinking and obfuscation.
 -keepclassmembernames,allowobfuscation,allowshrinking class androidx.appcompat.widget.AppCompatTextViewAutoSizeHelper$Impl* {
   <methods>;
+}
+
+# File: obj/third_party/androidx/androidx_biometric_biometric_java/proguard.txt
+# Copyright (C) 2020 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Never inline methods, but allow shrinking and obfuscation.
+-keepclassmembernames,allowobfuscation,allowshrinking
+        class androidx.biometric.AuthenticationCallbackProvider$Api* {
+    <methods>;
+}
+-keepclassmembernames,allowobfuscation,allowshrinking
+        class androidx.biometric.BiometricFragment$Api* {
+    <methods>;
+}
+-keepclassmembernames,allowobfuscation,allowshrinking
+        class androidx.biometric.BiometricManager$Api* {
+    <methods>;
+}
+-keepclassmembernames,allowobfuscation,allowshrinking
+        class androidx.biometric.CancellationSignalProvider$Api* {
+    <methods>;
+}
+-keepclassmembernames,allowobfuscation,allowshrinking
+        class androidx.biometric.CryptoObjectUtils$Api* {
+    <methods>;
+}
+-keepclassmembernames,allowobfuscation,allowshrinking
+        class androidx.biometric.FingerprintDialogFragment$Api* {
+    <methods>;
+}
+-keepclassmembernames,allowobfuscation,allowshrinking
+        class androidx.biometric.KeyguardUtils$Api* {
+    <methods>;
+}
+-keepclassmembernames,allowobfuscation,allowshrinking
+        class androidx.biometric.PackageUtils$Api* {
+    <methods>;
 }
 
 # File: obj/third_party/androidx/androidx_fragment_fragment_java/proguard.txt
@@ -939,14 +982,6 @@
 # Chromium code. They MUST be scoped appropriately to avoid side effects on app
 # code that we do not own.
 
-# Use assumevalues block instead of assumenosideeffects block because Google3
-# proguard cannot parse assumenosideeffects blocks which overwrite return
-# value. Keep this in shared_with_cronet.flags rather than remove_logging.flags
-# so that it's included in cronet.
--assumevalues class org.chromium.base.Log {
-  static boolean isDebug() return false;
-}
-
 # Keep all CREATOR fields within Parcelable that are kept.
 -keepclassmembers class !cr_allowunused,org.chromium.** implements android.os.Parcelable {
   public static *** CREATOR;
@@ -970,7 +1005,7 @@
   final org.chromium.base.ThreadUtils$ThreadChecker * return _NONNULL_;
 }
 
-# File: ../../third_party/android_deps/libs/org_jetbrains_kotlinx_kotlinx_coroutines_android/kotlinx-coroutines-android-1.6.4.jar:META-INF/com.android.tools/r8-from-1.6.0/coroutines.pro
+# File: ../../third_party/android_deps/cipd/libs/org_jetbrains_kotlinx_kotlinx_coroutines_android/kotlinx-coroutines-android-1.6.4.jar:META-INF/com.android.tools/r8-from-1.6.0/coroutines.pro
 # Allow R8 to optimize away the FastServiceLoader.
 # Together with ServiceLoader optimization in R8
 # this results in direct instantiation when loading Dispatchers.Main
@@ -994,7 +1029,7 @@
     boolean getRECOVER_STACK_TRACES() return false;
 }
 
-# File: ../../third_party/android_deps/libs/org_jetbrains_kotlinx_kotlinx_coroutines_core_jvm/kotlinx-coroutines-core-jvm-1.6.4.jar:META-INF/com.android.tools/r8/coroutines.pro
+# File: ../../third_party/android_deps/cipd/libs/org_jetbrains_kotlinx_kotlinx_coroutines_core_jvm/kotlinx-coroutines-core-jvm-1.6.4.jar:META-INF/com.android.tools/r8/coroutines.pro
 # When editing this file, update the following files as well:
 # - META-INF/proguard/coroutines.pro
 # - META-INF/com.android.tools/proguard/coroutines.pro

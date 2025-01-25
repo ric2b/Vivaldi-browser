@@ -28,6 +28,7 @@
 #include "components/autofill/core/browser/data_model/iban.h"
 #include "components/autofill/core/browser/payments/constants.h"
 #include "components/autofill/core/browser/payments/iban_access_manager.h"
+#include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/payments_data_manager.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
@@ -268,15 +269,15 @@ void PaymentMethodAccessoryControllerImpl::OnOptionSelected(
     ShowAutofillCreditCardSettings(&GetWebContents());
     return;
   }
-  NOTREACHED() << "Unhandled selected action: "
-               << static_cast<int>(selected_action);
+  NOTREACHED_IN_MIGRATION()
+      << "Unhandled selected action: " << static_cast<int>(selected_action);
 }
 
 void PaymentMethodAccessoryControllerImpl::OnToggleChanged(
     AccessoryAction toggled_action,
     bool enabled) {
-  NOTREACHED() << "Unhandled toggled action: "
-               << static_cast<int>(toggled_action);
+  NOTREACHED_IN_MIGRATION()
+      << "Unhandled toggled action: " << static_cast<int>(toggled_action);
 }
 
 // static
@@ -295,18 +296,11 @@ PaymentMethodAccessoryController* PaymentMethodAccessoryController::GetIfExistin
 void PaymentMethodAccessoryControllerImpl::RefreshSuggestions() {
   TRACE_EVENT0("passwords",
                "PaymentMethodAccessoryControllerImpl::RefreshSuggestions");
-  if (source_observer_) {
-    source_observer_.Run(
-        this, IsFillingSourceAvailable(!GetAllCreditCards().empty() ||
-                                       !GetPromoCodeOffers().empty() ||
-                                       !GetIbans().empty()));
-  } else {
-    // TODO(crbug.com/40165275): Remove once filling controller pulls this
-    // information instead of waiting to get it pushed.
-    std::optional<AccessorySheetData> data = GetSheetData();
-    DCHECK(data.has_value());
-    GetManualFillingController()->RefreshSuggestions(std::move(data.value()));
-  }
+  CHECK(source_observer_);
+  source_observer_.Run(this,
+                       IsFillingSourceAvailable(!GetAllCreditCards().empty() ||
+                                                !GetPromoCodeOffers().empty() ||
+                                                !GetIbans().empty()));
 }
 
 base::WeakPtr<PaymentMethodAccessoryController>
@@ -367,8 +361,8 @@ PaymentMethodAccessoryControllerImpl::PaymentMethodAccessoryControllerImpl(
     content::WebContents* web_contents)
     : content::WebContentsUserData<PaymentMethodAccessoryControllerImpl>(
           *web_contents),
-      personal_data_manager_(PersonalDataManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(web_contents->GetBrowserContext()))) {
+      personal_data_manager_(PersonalDataManagerFactory::GetForBrowserContext(
+          web_contents->GetBrowserContext())) {
   if (personal_data_manager_)
     personal_data_manager_->AddObserver(this);
 }
@@ -533,10 +527,14 @@ bool PaymentMethodAccessoryControllerImpl::FetchIfIban(
 
   Suggestion::BackendId backend_id = Suggestion::BackendId(
       Suggestion::InstrumentId((*iban_iter).instrument_id()));
-  GetAutofillManager()->client().GetIbanAccessManager()->FetchValue(
-      backend_id,
-      base::BindOnce(&PaymentMethodAccessoryControllerImpl::ApplyToField,
-                     weak_ptr_factory_.GetWeakPtr()));
+  GetAutofillManager()
+      ->client()
+      .GetPaymentsAutofillClient()
+      ->GetIbanAccessManager()
+      ->FetchValue(
+          backend_id,
+          base::BindOnce(&PaymentMethodAccessoryControllerImpl::ApplyToField,
+                         weak_ptr_factory_.GetWeakPtr()));
   return true;
 }
 

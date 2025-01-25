@@ -15,21 +15,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <xnnpack.h>
-#include <xnnpack/allocation-type.h>
-#include <xnnpack/allocator.h>
-#include <xnnpack/cache.h>
-#include <xnnpack/common.h>
-#include <xnnpack/log.h>
-#include <xnnpack/memory-planner.h>
-#include <xnnpack/memory.h>
-#include <xnnpack/microkernel-type.h>
-#include <xnnpack/node-type.h>
-#include <xnnpack/operator-type.h>
-#include <xnnpack/operator.h>
-#include <xnnpack/params.h>
-#include <xnnpack/subgraph.h>
-
+#include "xnnpack.h"
+#include "xnnpack/allocation-type.h"
+#include "xnnpack/allocator.h"
+#include "xnnpack/cache.h"
+#include "xnnpack/common.h"
+#include "xnnpack/log.h"
+#include "xnnpack/memory-planner.h"
+#include "xnnpack/memory.h"
+#include "xnnpack/microkernel-type.h"
+#include "xnnpack/node-type.h"
+#include "xnnpack/operator-type.h"
+#include "xnnpack/operator.h"
+#include "xnnpack/params.h"
+#include "xnnpack/subgraph.h"
 #include "pthreadpool.h"
 
 #if defined(__EMSCRIPTEN__)
@@ -162,7 +161,9 @@ enum xnn_status xnn_create_weights_cache_with_size(size_t size, xnn_weights_cach
   return xnn_status_success;
 
 error:
-  xnn_internal_release_weights_cache(cache_provider->context);
+  if (cache_provider != NULL) {
+    xnn_internal_release_weights_cache(cache_provider->context);
+  }
   return status;
 }
 
@@ -534,6 +535,7 @@ enum xnn_status xnn_create_runtime_v4(
         code_cache = &runtime->code_cache;
         status = xnn_init_code_cache(code_cache);
         if (status != xnn_status_success) {
+          xnn_log_error("failed to initialize code cache");
           goto error;
         }
       #endif
@@ -581,6 +583,7 @@ enum xnn_status xnn_create_runtime_v4(
       assert(node->create != NULL);
       status = node->create(node, runtime->values, runtime->num_values, runtime->opdata + i, code_cache, weights_cache);
       if (status != xnn_status_success) {
+        xnn_log_error("failed to create node %zu", i);
         goto error;
       }
       runtime->opdata[i].setup = node->setup;

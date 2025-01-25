@@ -90,7 +90,7 @@ enum class CardUploadEnabled {
   kUsingExplicitSyncPassphrase = 5,
   kLocalSyncEnabled = 6,
   // Deprecated: kPaymentsIntegrationDisabled = 7,
-  kEmailEmpty = 8,
+  // Deprecated: kEmailEmpty = 8,
   // Deprecated: kEmailDomainNotSupported = 9,
   // Deprecated: kAutofillUpstreamDisabled = 10,
   // Deprecated: kCardUploadEnabled = 11,
@@ -208,12 +208,15 @@ void LogSaveCardPromptOfferMetric(
     AutofillClient::SaveCreditCardOptions options,
     AutofillMetrics::PaymentsSigninState sync_state);
 
+// `has_saved_cards` indicates that local or server cards existed before the
+// save prompt was accepted/denied.
 void LogSaveCardPromptResultMetric(
     SaveCardPromptResult metric,
     bool is_uploading,
     bool is_reshow,
     AutofillClient::SaveCreditCardOptions options,
-    AutofillMetrics::PaymentsSigninState sync_state);
+    AutofillMetrics::PaymentsSigninState sync_state,
+    bool has_saved_cards);
 
 void LogSaveCvcPromptOfferMetric(SaveCardPromptOffer metric,
                                  bool is_uploading,

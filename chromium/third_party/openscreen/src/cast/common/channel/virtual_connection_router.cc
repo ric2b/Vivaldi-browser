@@ -14,7 +14,7 @@
 
 namespace openscreen::cast {
 
-using ::cast::channel::CastMessage;
+using proto::CastMessage;
 
 VirtualConnectionRouter::SocketErrorHandler::~SocketErrorHandler() = default;
 
@@ -160,7 +160,7 @@ Error VirtualConnectionRouter::Send(VirtualConnection virtual_conn,
 
 Error VirtualConnectionRouter::BroadcastFromLocalPeer(
     std::string local_id,
-    ::cast::channel::CastMessage message) {
+    proto::CastMessage message) {
   message.set_source_id(std::move(local_id));
   message.set_destination_id(kBroadcastId);
 

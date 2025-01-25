@@ -31,6 +31,22 @@ bool ContextMenuPostitionDelegate::CanSetPosition() const {
   return false;
 }
 
+std::unique_ptr<ContextMenuController> ContextMenuController::active_controller_;
+
+// Creates a new instance. Previous instance is kept in memory until new is
+// created as releasing too early can lead to crashes. This kind of memory
+// "leak" is a pattern chrome uses with the RenderViewContextMenu class for the
+// same reasons.
+// static
+ContextMenuController* ContextMenuController::Create(
+    content::WebContents* window_web_contents,
+    VivaldiRenderViewContextMenu* rv_context_menu,
+    std::optional<Params> params) {
+  active_controller_.reset(new ContextMenuController(
+      window_web_contents, rv_context_menu, std::move(params)));
+  return active_controller_.get();
+}
+
 ContextMenuController::ContextMenuController(
     content::WebContents* window_web_contents,
     VivaldiRenderViewContextMenu* rv_context_menu,
@@ -87,10 +103,6 @@ bool ContextMenuController::Show() {
                                        params_->properties.force_views,
                                        rv_context_menu_));
 
-  if (rv_context_menu_) {
-    menu_->SetParentView(rv_context_menu_->parent_view());
-  }
-
   extensions::MenubarMenuAPI::SendOpen(GetProfile(), 0);
 
   // Populate model.
@@ -99,7 +111,6 @@ bool ContextMenuController::Show() {
   // We do not know if count is 0 until after InitModel().
   if (root_menu_model_->GetItemCount() == 0) {
     MenuClosed(root_menu_model_);
-    // We have done a delete this
     return false;
   }
 
@@ -108,7 +119,6 @@ bool ContextMenuController::Show() {
   has_shown_ = menu_->Show();
   if (!has_shown_) {
     MenuClosed(root_menu_model_);
-    // We have done a delete this
     return false;
   }
 
@@ -404,6 +414,9 @@ void ContextMenuController::LoadFavicon(int command_id,
 void ContextMenuController::OnFaviconDataAvailable(
     int command_id,
     const favicon_base::FaviconImageResult& image_result) {
+  if (has_closed_) {
+    return;
+  }
   if (!image_result.image.IsEmpty()) {
     // Update the menu directly so that a visible menu will be updated, The
     // MenuItemView class we use to paint the menu does not support dynamic
@@ -517,7 +530,8 @@ bool ContextMenuController::GetShowShortcuts() {
 void ContextMenuController::OnDestroyed(VivaldiRenderViewContextMenu* menu) {
   rv_context_menu_->SetModelDelegate(nullptr);
   rv_context_menu_->SetMenuDelegate(nullptr);
-  Delete();
+  rv_context_menu_ = nullptr;
+  CleanupAndNotifyClose();
 }
 
 void ContextMenuController::MenuClosed(ui::SimpleMenuModel* source) {
@@ -534,25 +548,21 @@ void ContextMenuController::MenuClosed(ui::SimpleMenuModel* source) {
       source->SetMenuModelDelegate(nullptr);
     }
 
-    if (has_shown_) {
-      // TODO(espen): Closing by clicking outside the menu triggers a crash on
-      // Mac. It seems to be access to data after a "delete this" which the
-      // OnClosed call to the delegate starts, but the crash log is hard to make
-      // sense of.
-      timer_.reset(new base::OneShotTimer());
-      timer_->Start(FROM_HERE, base::Milliseconds(1),
-                    base::BindOnce(&ContextMenuController::Delete,
-                                   base::Unretained(this)));
-    } else {
-      Delete();
+    CleanupAndNotifyClose();
+
+    // Allow views based menus to terminate immediately. Otherwise the
+    // controller may be terminated on exit and views based manus can happen to
+    // access objects that are no longer valid. VB-108963
+    if (!has_shown_ || menu_->IsViews()) {
+      active_controller_.reset(nullptr);
     }
   }
 }
 
-void ContextMenuController::Delete() {
+void ContextMenuController::CleanupAndNotifyClose() {
+  has_closed_ = true;
   root_menu_model_ = nullptr;
   extensions::MenubarMenuAPI::SendClose(GetProfile());
-  delete this;
 }
 
 }  // namespace vivaldi

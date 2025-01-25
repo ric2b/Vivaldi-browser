@@ -10,9 +10,11 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/device_api/device_attribute_api.h"
+#include "chrome/browser/policy/policy_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_constants.h"
 #include "chrome/common/pref_names.h"
+#include "components/permissions/features.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
@@ -37,18 +39,6 @@
 #endif
 
 namespace {
-
-// Check whether the target origin is allowed to access to the device
-// attributes.
-bool CanAccessDeviceAttributes(const PrefService* prefs,
-                               const url::Origin& origin) {
-  const base::Value::List& prefs_list =
-      prefs->GetList(prefs::kDeviceAttributesAllowedForOrigins);
-
-  return base::Contains(prefs_list, origin, [](const auto& entry) {
-    return url::Origin::Create(GURL(entry.GetString()));
-  });
-}
 
 // Check whether the target origin is the same as the main application running
 // in the Kiosk session.
@@ -141,6 +131,13 @@ bool IsTrustedContext(content::RenderFrameHost& host,
   }
 
   if (chrome::IsRunningInAppMode()) {
+    if (base::FeatureList::IsEnabled(
+            permissions::features::
+                kAllowMultipleOriginsForWebKioskPermissions)) {
+      return IsEqualToKioskOrigin(origin) ||
+             chrome::IsWebKioskOriginAllowed(GetPrefs(host), origin.GetURL());
+    }
+
     return IsEqualToKioskOrigin(origin);
   }
 
@@ -168,6 +165,10 @@ DeviceServiceImpl::DeviceServiceImpl(
 #if BUILDFLAG(IS_CHROMEOS)
   pref_change_registrar_.Add(
       prefs::kIsolatedWebAppInstallForceList,
+      base::BindRepeating(&DeviceServiceImpl::OnDisposingIfNeeded,
+                          base::Unretained(this)));
+  pref_change_registrar_.Add(
+      prefs::kKioskBrowserPermissionsAllowedForOrigins,
       base::BindRepeating(&DeviceServiceImpl::OnDisposingIfNeeded,
                           base::Unretained(this)));
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -256,7 +257,9 @@ void DeviceServiceImpl::GetDeviceAttribute(
     return;
   }
 
-  if (!CanAccessDeviceAttributes(GetPrefs(render_frame_host()), origin())) {
+  if (!policy::IsOriginInAllowlist(origin().GetURL(),
+                                   GetPrefs(render_frame_host()),
+                                   prefs::kDeviceAttributesAllowedForOrigins)) {
     device_attribute_api_->ReportNotAllowedError(std::move(callback));
     return;
   }

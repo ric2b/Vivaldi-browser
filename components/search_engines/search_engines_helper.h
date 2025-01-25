@@ -24,10 +24,12 @@ struct EngineAndTier {
 
 const std::vector<EngineAndTier> GetPrepopulationSetFromCountryID(
     int country_id,
-    std::string application_locale = "",
-    size_t* default_search_provider_index = nullptr,
-    SearchType search_type = SearchType::kMain);
+    std::string application_locale = "");
 
+const PrepopulatedEngine* GetFallbackEngine(
+    int country_id,
+    std::string application_locale = "",
+    SearchType search_type = SearchType::kMain);
 }  // namespace TemplateURLPrepopulateData
 
 #endif  // COMPONENTS_SEARCH_ENGINES_SEARCH_ENGINES_HELPER_H_

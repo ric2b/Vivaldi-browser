@@ -20,7 +20,7 @@
 #include "src/maglev/maglev-graph-labeller.h"
 #include "src/maglev/maglev-graph-processor.h"
 #include "src/maglev/maglev-graph.h"
-#include "src/maglev/maglev-ir.h"
+#include "src/maglev/maglev-ir-inl.h"
 #include "src/objects/script-inl.h"
 #include "src/objects/shared-function-info-inl.h"
 #include "src/utils/utils.h"
@@ -490,6 +490,20 @@ void PrintSingleDeoptFrame(
   }
 }
 
+void PrintVirtualObjects(std::ostream& os, std::vector<BasicBlock*> targets,
+                         const DeoptFrame& frame,
+                         MaglevGraphLabeller* graph_labeller, int max_node_id) {
+  if (!v8_flags.trace_deopt_verbose) return;
+  PrintVerticalArrows(os, targets);
+  PrintPadding(os, graph_labeller, max_node_id, 0);
+  os << "  │       VOs : { ";
+  const VirtualObject::List& virtual_objects = GetVirtualObjects(frame);
+  for (auto vo : virtual_objects) {
+    os << PrintNodeLabel(graph_labeller, vo) << "; ";
+  }
+  os << "}\n";
+}
+
 void RecursivePrintEagerDeopt(std::ostream& os,
                               std::vector<BasicBlock*> targets,
                               const DeoptFrame& frame,
@@ -510,6 +524,7 @@ void RecursivePrintEagerDeopt(std::ostream& os,
   }
   PrintSingleDeoptFrame(os, graph_labeller, frame, current_input_location);
   os << "\n";
+  PrintVirtualObjects(os, targets, frame, graph_labeller, max_node_id);
 }
 
 void PrintEagerDeopt(std::ostream& os, std::vector<BasicBlock*> targets,
@@ -544,6 +559,7 @@ void RecursivePrintLazyDeopt(std::ostream& os, std::vector<BasicBlock*> targets,
   os << "  │      ";
   PrintSingleDeoptFrame(os, graph_labeller, frame, current_input_location);
   os << "\n";
+  PrintVirtualObjects(os, targets, frame, graph_labeller, max_node_id);
 }
 
 template <typename NodeT>
@@ -565,6 +581,7 @@ void PrintLazyDeopt(std::ostream& os, std::vector<BasicBlock*> targets,
   PrintSingleDeoptFrame(os, graph_labeller, top_frame, current_input_location,
                         deopt_info);
   os << "\n";
+  PrintVirtualObjects(os, targets, top_frame, graph_labeller, max_node_id);
 }
 
 template <typename NodeT>
@@ -663,7 +680,7 @@ void MaybePrintProvenance(std::ostream& os, std::vector<BasicBlock*> targets,
   if (provenance.position.IsKnown() &&
       (provenance.position != existing_provenance.position ||
        provenance.unit != existing_provenance.unit)) {
-    script = Script::cast(
+    script = Cast<Script>(
         provenance.unit->shared_function_info().object()->script());
     has_position_info = script->GetPositionInfo(
         provenance.position.ScriptOffset(), &position_info,
@@ -674,7 +691,7 @@ void MaybePrintProvenance(std::ostream& os, std::vector<BasicBlock*> targets,
   // Do the actual function + position print.
   if (needs_function_print) {
     if (script.is_null()) {
-      script = Script::cast(
+      script = Cast<Script>(
           provenance.unit->shared_function_info().object()->script());
     }
     PrintVerticalArrows(os, targets);
@@ -743,9 +760,10 @@ ProcessResult MaglevPrintingVisitor::Process(Phi* phi,
       UNREACHABLE();
   }
   if (phi->input_count() == 0) {
-    os_ << "ₑ " << phi->owner().ToString();
+    os_ << "ₑ " << (phi->owner().is_valid() ? phi->owner().ToString() : "VO");
   } else {
-    os_ << " " << phi->owner().ToString() << " (";
+    os_ << " " << (phi->owner().is_valid() ? phi->owner().ToString() : "VO")
+        << " (";
     // Manually walk Phi inputs to print just the node labels, without
     // input locations (which are shown in the predecessor block's gap
     // moves).
@@ -763,6 +781,10 @@ ProcessResult MaglevPrintingVisitor::Process(Phi* phi,
     }
   }
   os_ << " → " << phi->result().operand();
+  if (phi->result().operand().IsAllocated() && phi->is_spilled() &&
+      phi->spill_slot() != phi->result().operand()) {
+    os_ << " (spilled: " << phi->spill_slot() << ")";
+  }
   if (phi->has_valid_live_range()) {
     os_ << ", live range: [" << phi->live_range().start << "-"
         << phi->live_range().end << "]";
@@ -914,8 +936,8 @@ ProcessResult MaglevPrintingVisitor::Process(ControlNode* control_node,
           case ValueRepresentation::kIntPtr:
             UNREACHABLE();
         }
-        os_ << " " << phi->owner().ToString() << " " << phi->result().operand()
-            << "\n";
+        os_ << " " << (phi->owner().is_valid() ? phi->owner().ToString() : "VO")
+            << " " << phi->result().operand() << "\n";
       }
 #ifdef V8_ENABLE_MAGLEV
       if (target->state()->register_state().is_initialized()) {

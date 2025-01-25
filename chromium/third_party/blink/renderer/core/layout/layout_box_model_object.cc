@@ -44,6 +44,7 @@
 #include "third_party/blink/renderer/core/layout/layout_result.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/legacy_layout_tree_walking.h"
+#include "third_party/blink/renderer/core/layout/svg/svg_resources.h"
 #include "third_party/blink/renderer/core/layout/table/layout_table_section.h"
 #include "third_party/blink/renderer/core/page/scrolling/sticky_position_scrolling_constraints.h"
 #include "third_party/blink/renderer/core/paint/inline_paint_context.h"
@@ -83,7 +84,7 @@ bool NeedsAnchorPositionScrollData(Element& element,
   if (style.PositionAnchor()) {
     return true;
   }
-  // Now we have `position-anchor: implicit`. We need `AnchorPositionScrollData`
+  // Now we have `position-anchor: auto`. We need `AnchorPositionScrollData`
   // only if there's an implicit anchor element to track.
   return element.ImplicitAnchorElement();
 }
@@ -196,7 +197,7 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
       CreateLayerAfterStyleChange();
     }
   } else if (Layer() && Layer()->Parent()) {
-    Layer()->UpdateFilters(old_style, StyleRef());
+    Layer()->UpdateFilters(diff, old_style, StyleRef());
     Layer()->UpdateBackdropFilters(old_style, StyleRef());
     Layer()->UpdateClipPath(old_style, StyleRef());
     Layer()->UpdateOffsetPath(old_style, StyleRef());
@@ -484,15 +485,25 @@ PhysicalRect LayoutBoxModelObject::VisualOverflowRectIncludingFilters() const {
 PhysicalRect LayoutBoxModelObject::ApplyFiltersToRect(
     const PhysicalRect& rect) const {
   NOT_DESTROYED();
-  if (!StyleRef().HasFilter()) {
+  if (!HasReflection() && !StyleRef().HasFilter()) {
     return rect;
   }
   gfx::RectF float_rect(rect);
-  gfx::RectF filter_reference_box = Layer()->FilterReferenceBox();
-  if (!filter_reference_box.size().IsZero()) {
-    float_rect.UnionEvenIfEmpty(filter_reference_box);
+  if (auto* layer = Layer()) {
+    const gfx::RectF filter_reference_box = layer->FilterReferenceBox();
+    if (!filter_reference_box.size().IsZero()) {
+      float_rect.UnionEvenIfEmpty(filter_reference_box);
+    }
+    float_rect = layer->MapRectForFilter(float_rect);
+  } else {
+    CHECK(IsSVGChild());
+    const gfx::RectF filter_reference_box =
+        SVGResources::ReferenceBoxForEffects(*this);
+    if (!filter_reference_box.size().IsZero()) {
+      float_rect.UnionEvenIfEmpty(filter_reference_box);
+    }
+    float_rect = StyleRef().Filter().MapRect(float_rect);
   }
-  float_rect = Layer()->MapRectForFilter(float_rect);
   return PhysicalRect::EnclosingRect(float_rect);
 }
 

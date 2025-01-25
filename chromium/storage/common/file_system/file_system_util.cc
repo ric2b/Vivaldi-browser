@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "storage/common/file_system/file_system_util.h"
 
 #include <stddef.h>
@@ -221,9 +226,9 @@ GURL GetFileSystemRootURI(const GURL& origin_url, FileSystemType type) {
       return GURL(url + "/");
       // Internal types are always pointed via isolated or external URLs.
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return GURL();
 }
 
@@ -277,12 +282,12 @@ std::string GetFileSystemTypeString(FileSystemType type) {
       return "FuseBox";
     case kFileSystemInternalTypeEnumStart:
     case kFileSystemInternalTypeEnumEnd:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       [[fallthrough]];
     case kFileSystemTypeUnknown:
       return "Unknown";
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -323,7 +328,7 @@ bool GetFileSystemPublicType(const std::string type_string,
     *type = blink::kWebFileSystemTypeExternal;
     return true;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 

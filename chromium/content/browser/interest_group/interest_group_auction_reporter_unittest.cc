@@ -27,6 +27,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "content/browser/fenced_frame/fenced_frame_reporter.h"
+#include "content/browser/interest_group/ad_auction_page_data.h"
 #include "content/browser/interest_group/auction_worklet_manager.h"
 #include "content/browser/interest_group/header_direct_from_seller_signals.h"
 #include "content/browser/interest_group/interest_group_k_anonymity_manager.h"
@@ -36,6 +37,8 @@
 #include "content/browser/interest_group/test_interest_group_manager_impl.h"
 #include "content/browser/interest_group/test_interest_group_private_aggregation_manager.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
+#include "content/public/browser/page_user_data.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
 #include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom.h"
@@ -81,6 +84,7 @@ InterestGroupAuctionReporter::SellerWinningBidInfo CreateSellerWinningBidInfo(
   // they don't have default initializers, so have to set them to placate memory
   // tools.
   out.bid = 1;
+  out.rounded_bid = 1;
   out.bid_in_seller_currency = 10;
   out.score = 1;
   out.highest_scoring_other_bid = 0;
@@ -268,6 +272,9 @@ class InterestGroupAuctionReporterTest
             &private_aggregation_manager_,
             private_aggregation_manager_
                 .GetLogPrivateAggregationRequestsCallback(),
+            base::BindRepeating(
+                &InterestGroupAuctionReporterTest::GetAdAuctionPageDataCallback,
+                base::Unretained(this)),
             std::move(auction_config_), kDevtoolsAuctionId, kTopFrameOrigin,
             kFrameOrigin, frame_client_security_state_.Clone(),
             dummy_report_shared_url_loader_factory_,
@@ -410,17 +417,17 @@ class InterestGroupAuctionReporterTest
   // classes don't make network requests, but a real AuctionWorkletManager is
   // used, which expects most of these methods to return non-null objects.
   network::mojom::URLLoaderFactory* GetFrameURLLoaderFactory() override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
   network::mojom::URLLoaderFactory* GetTrustedURLLoaderFactory() override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
   void PreconnectSocket(
       const GURL& url,
       const net::NetworkAnonymizationKey& network_anonymization_key) override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
   RenderFrameHostImpl* GetFrame() override {
     return static_cast<RenderFrameHostImpl*>(main_rfh());
@@ -481,6 +488,11 @@ class InterestGroupAuctionReporterTest
   void OnCompleteCallback() {
     reporter_run_loop_.Quit();
     errors_ = interest_group_auction_reporter_->errors();
+  }
+
+  AdAuctionPageData* GetAdAuctionPageDataCallback() {
+    return PageUserData<AdAuctionPageData>::GetOrCreateForPage(
+        web_contents()->GetPrimaryPage());
   }
 
   base::test::ScopedFeatureList feature_list_;
@@ -599,7 +611,8 @@ class InterestGroupAuctionReporterTest
                               auction_worklet::mojom::ForEventSignalValue::
                                   NewIntValue(2),
                               /*filtering_id=*/std::nullopt,
-                              "event_type")),
+                              auction_worklet::mojom::EventType::NewNonReserved(
+                                  "event_type"))),
               blink::mojom::AggregationServiceMode::kDefault,
               blink::mojom::DebugModeDetails::New());
   const auction_worklet::mojom::PrivateAggregationRequestPtr
@@ -614,7 +627,8 @@ class InterestGroupAuctionReporterTest
                               auction_worklet::mojom::ForEventSignalValue::
                                   NewIntValue(24),
                               /*filtering_id=*/std::nullopt,
-                              "event_type2")),
+                              auction_worklet::mojom::EventType::NewNonReserved(
+                                  "event_type2"))),
               blink::mojom::AggregationServiceMode::kDefault,
               blink::mojom::DebugModeDetails::New());
   const auction_worklet::mojom::PrivateAggregationRequestPtr
@@ -629,7 +643,8 @@ class InterestGroupAuctionReporterTest
                               auction_worklet::mojom::ForEventSignalValue::
                                   NewIntValue(4),
                               /*filtering_id=*/0,
-                              "event_type")),
+                              auction_worklet::mojom::EventType::NewNonReserved(
+                                  "event_type"))),
               blink::mojom::AggregationServiceMode::kDefault,
               blink::mojom::DebugModeDetails::New());
 
@@ -659,7 +674,8 @@ class InterestGroupAuctionReporterTest
           /*is_web_secure_context=*/true,
           /*ip_address_space=*/network::mojom::IPAddressSpace::kPublic,
           /*is_web_secure_context=*/
-          network::mojom::PrivateNetworkRequestPolicy::kBlock)};
+          network::mojom::PrivateNetworkRequestPolicy::kBlock,
+          network::DocumentIsolationPolicy())};
 
   const GURL kSellerReportUrl =
       GURL("https://seller.report.test/seller-report");

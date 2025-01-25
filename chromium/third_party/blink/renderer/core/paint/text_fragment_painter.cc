@@ -140,31 +140,13 @@ bool ShouldPaintEmphasisMark(const ComputedStyle& style,
   return ruby_logical_side != style.GetTextEmphasisLineLogicalSide();
 }
 
-enum class DisclosureOrientation { kLeft, kRight, kUp, kDown };
-
-DisclosureOrientation GetDisclosureOrientation(const ComputedStyle& style,
-                                               bool is_open) {
-  // TODO(layout-dev): Sideways-lr and sideways-rl are not yet supported.
-  const auto mode = style.GetWritingMode();
-  DCHECK_NE(mode, WritingMode::kSidewaysRl);
-  DCHECK_NE(mode, WritingMode::kSidewaysLr);
-
-  if (is_open) {
-    if (blink::IsHorizontalWritingMode(mode)) {
-      return DisclosureOrientation::kDown;
-    }
-    return IsFlippedBlocksWritingMode(mode) ? DisclosureOrientation::kLeft
-                                            : DisclosureOrientation::kRight;
-  }
-  if (blink::IsHorizontalWritingMode(mode)) {
-    return style.IsLeftToRightDirection() ? DisclosureOrientation::kRight
-                                          : DisclosureOrientation::kLeft;
-  }
-  return style.IsLeftToRightDirection() ? DisclosureOrientation::kDown
-                                        : DisclosureOrientation::kUp;
+PhysicalDirection GetDisclosureOrientation(const ComputedStyle& style,
+                                           bool is_open) {
+  const auto direction_mode = style.GetWritingDirection();
+  return is_open ? direction_mode.BlockEnd() : direction_mode.InlineEnd();
 }
 
-Path CreatePath(const gfx::PointF* path) {
+Path CreatePath(base::span<const gfx::PointF, 4> path) {
   Path result;
   result.MoveTo(gfx::PointF(path[0].x(), path[0].y()));
   for (int i = 1; i < 4; ++i) {
@@ -184,13 +166,13 @@ Path GetCanonicalDisclosurePath(const ComputedStyle& style, bool is_open) {
       {0.0f, 0.07f}, {0.5f, 0.93f}, {1.0f, 0.07f}, {0.0f, 0.07f}};
 
   switch (GetDisclosureOrientation(style, is_open)) {
-    case DisclosureOrientation::kLeft:
+    case PhysicalDirection::kLeft:
       return CreatePath(kLeftPoints);
-    case DisclosureOrientation::kRight:
+    case PhysicalDirection::kRight:
       return CreatePath(kRightPoints);
-    case DisclosureOrientation::kUp:
+    case PhysicalDirection::kUp:
       return CreatePath(kUpPoints);
-    case DisclosureOrientation::kDown:
+    case PhysicalDirection::kDown:
       return CreatePath(kDownPoints);
   }
 
@@ -246,7 +228,7 @@ void TextFragmentPainter::PaintSymbol(const LayoutObject* layout_object,
     path.Translate(gfx::Vector2dF(marker_rect.X(), marker_rect.Y()));
     context.FillPath(path, auto_dark_mode);
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -468,7 +450,7 @@ void TextFragmentPainter::Paint(const PaintInfo& paint_info,
   // highlight overlay system, such as composition highlights. They use physical
   // coordinates, so are painted before GraphicsContext rotation.
   if (paint_marker_backgrounds) {
-    highlight_painter.Paint(HighlightPainter::kBackground);
+    highlight_painter.PaintNonCssMarkers(HighlightPainter::kBackground);
   }
 
   if (rotation) {
@@ -559,7 +541,7 @@ void TextFragmentPainter::Paint(const PaintInfo& paint_info,
   // Paint foregrounds for document markers that don’t participate in the CSS
   // highlight overlay system, such as composition highlights.
   if (paint_info.phase == PaintPhase::kForeground) {
-    highlight_painter.Paint(HighlightPainter::kForeground);
+    highlight_painter.PaintNonCssMarkers(HighlightPainter::kForeground);
   }
 
   // Paint ::selection foreground only.
@@ -583,7 +565,7 @@ void TextFragmentPainter::Paint(const PaintInfo& paint_info,
         break;
       case HighlightPainter::kFastSpellingGrammar:
       case HighlightPainter::kNoHighlights:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 }

@@ -6,22 +6,6 @@
 
 namespace openscreen::cast {
 
-const EnumNameTable<StatisticsEventType,
-                    static_cast<size_t>(StatisticsEventType::kNumOfEvents)>
-    kStatisticEventTypeNames = {
-        {{"Unknown", StatisticsEventType::kUnknown},
-         {"FrameCaptureBegin", StatisticsEventType::kFrameCaptureBegin},
-         {"FrameCaptureEnd", StatisticsEventType::kFrameCaptureEnd},
-         {"FrameEncoded", StatisticsEventType::kFrameEncoded},
-         {"FrameAckReceived", StatisticsEventType::kFrameAckReceived},
-         {"FrameAckSent", StatisticsEventType::kFrameAckSent},
-         {"FrameDecoded", StatisticsEventType::kFrameDecoded},
-         {"FramePlayedOut", StatisticsEventType::kFramePlayedOut},
-         {"PacketSentToNetwork", StatisticsEventType::kPacketSentToNetwork},
-         {"PacketRetransmitted", StatisticsEventType::kPacketRetransmitted},
-         {"PacketRtxRejected", StatisticsEventType::kPacketRtxRejected},
-         {"PacketReceived", StatisticsEventType::kPacketReceived}}};
-
 StatisticsEventMediaType ToMediaType(StreamType type) {
   switch (type) {
     case StreamType::kUnknown:

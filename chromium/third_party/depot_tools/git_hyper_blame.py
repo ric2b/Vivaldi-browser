@@ -12,6 +12,7 @@ import os
 import subprocess2
 import sys
 
+import gclient_utils
 import git_common
 import git_dates
 import setup_color
@@ -335,6 +336,10 @@ def parse_ignore_file(ignore_file):
 
 
 def main(args, outbuf):
+    if gclient_utils.IsEnvCog():
+        print('hyper-blame command is not supported in non-git environment.',
+              file=sys.stderr)
+        return 1
     parser = argparse.ArgumentParser(
         prog='git hyper-blame',
         description='git blame with support for ignoring certain commits.')

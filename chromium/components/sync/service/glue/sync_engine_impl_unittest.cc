@@ -14,7 +14,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
@@ -87,8 +86,8 @@ class MockSyncEngineHost : public SyncEngineHost {
 
 class FakeSyncManagerFactory : public SyncManagerFactory {
  public:
-  explicit FakeSyncManagerFactory(
-      FakeSyncManager** fake_manager,
+  FakeSyncManagerFactory(
+      raw_ptr<FakeSyncManager>* fake_manager,
       network::NetworkConnectionTracker* network_connection_tracker)
       : SyncManagerFactory(network_connection_tracker),
         fake_manager_(fake_manager) {
@@ -121,7 +120,7 @@ class FakeSyncManagerFactory : public SyncManagerFactory {
   ModelTypeSet initial_sync_ended_types_;
   ModelTypeSet progress_marker_types_;
   ModelTypeSet configure_fail_types_;
-  const raw_ptr<FakeSyncManager*> fake_manager_;
+  const raw_ptr<raw_ptr<FakeSyncManager>> fake_manager_;
 };
 
 class MockActiveDevicesProvider : public ActiveDevicesProvider {
@@ -165,11 +164,12 @@ class SyncEngineImplTest : public testing::Test {
         .WillByDefault(Return(
             ByMove(ActiveDevicesInvalidationInfo::CreateUninitialized())));
     backend_ = std::make_unique<SyncEngineImpl>(
-        "dummyDebugName", &mock_sync_invalidations_service_,
+        "fakeDebugName", &mock_sync_invalidations_service_,
         std::move(mock_active_devices_provider),
-        std::make_unique<SyncTransportDataPrefs>(&pref_service_),
+        std::make_unique<SyncTransportDataPrefs>(
+            &pref_service_, signin::GaiaIdHash::FromGaiaId(kTestGaiaId)),
         temp_dir_.GetPath().Append(base::FilePath(kTestSyncDir)),
-        std::move(sync_task_runner), sync_transport_data_cleared_cb_.Get());
+        std::move(sync_task_runner));
 
     fake_manager_factory_ = std::make_unique<FakeSyncManagerFactory>(
         &fake_manager_, network::TestNetworkConnectionTracker::GetInstance());
@@ -202,7 +202,7 @@ class SyncEngineImplTest : public testing::Test {
     params.http_factory_getter = base::BindOnce(&CreateHttpBridgeFactory);
     params.authenticated_account_info.gaia = gaia_id;
     params.authenticated_account_info.account_id =
-        CoreAccountId::FromGaiaId("gaia_id");
+        CoreAccountId::FromGaiaId(gaia_id);
     params.sync_manager_factory = std::move(fake_manager_factory_);
 
     EXPECT_CALL(mock_host_, OnEngineInitialized(expect_success, _))
@@ -225,6 +225,8 @@ class SyncEngineImplTest : public testing::Test {
   void ShutdownBackend(ShutdownReason reason) {
     DCHECK(backend_);
     backend_->StopSyncingForShutdown();
+    // Reset `fake_manager_` to avoid dangling pointer.
+    fake_manager_ = nullptr;
     backend_->Shutdown(reason);
     backend_.reset();
   }
@@ -278,13 +280,9 @@ class SyncEngineImplTest : public testing::Test {
   base::ScopedTempDir temp_dir_;
   TestingPrefServiceSimple pref_service_;
   NiceMock<MockSyncEngineHost> mock_host_;
-  NiceMock<base::MockCallback<base::RepeatingClosure>>
-      sync_transport_data_cleared_cb_;
   std::unique_ptr<SyncEngineImpl> backend_;
   std::unique_ptr<FakeSyncManagerFactory> fake_manager_factory_;
-  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
-  // #addr-of
-  RAW_PTR_EXCLUSION FakeSyncManager* fake_manager_ = nullptr;
+  raw_ptr<FakeSyncManager> fake_manager_ = nullptr;
   ModelTypeSet engine_types_;
   ModelTypeSet enabled_types_;
   base::OnceClosure quit_loop_;
@@ -300,7 +298,6 @@ TEST_F(SyncEngineImplTest, InitShutdownWithStopSync) {
   EXPECT_EQ(ControlTypes(), fake_manager_->GetAndResetDownloadedTypes());
   EXPECT_EQ(ControlTypes(), fake_manager_->InitialSyncEndedTypes());
 
-  EXPECT_CALL(sync_transport_data_cleared_cb_, Run()).Times(0);
   ShutdownBackend(ShutdownReason::STOP_SYNC_AND_KEEP_DATA);
 }
 
@@ -309,7 +306,6 @@ TEST_F(SyncEngineImplTest, InitShutdownWithDisableSync) {
   EXPECT_EQ(ControlTypes(), fake_manager_->GetAndResetDownloadedTypes());
   EXPECT_EQ(ControlTypes(), fake_manager_->InitialSyncEndedTypes());
 
-  EXPECT_CALL(sync_transport_data_cleared_cb_, Run());
   ShutdownBackend(ShutdownReason::DISABLE_SYNC_AND_CLEAR_DATA);
 }
 
@@ -528,6 +524,8 @@ TEST_F(SyncEngineImplTest, ModelTypeConnectorValidDuringShutdown) {
   backend_->StopSyncingForShutdown();
   // Verify that call to DisconnectDataType doesn't assert.
   backend_->DisconnectDataType(AUTOFILL);
+  // Reset `fake_manager_` to avoid dangling pointer.
+  fake_manager_ = nullptr;
   backend_->Shutdown(ShutdownReason::STOP_SYNC_AND_KEEP_DATA);
   backend_.reset();
 }
@@ -639,15 +637,15 @@ TEST_F(SyncEngineImplTest, GenerateCacheGUID) {
 }
 
 TEST_F(SyncEngineImplTest, ShouldLoadSyncDataUponInitialization) {
-  SyncTransportDataPrefs transport_data_prefs(&pref_service_);
+  SyncTransportDataPrefs transport_data_prefs(
+      &pref_service_, signin::GaiaIdHash::FromGaiaId(kTestGaiaId));
   transport_data_prefs.SetCacheGuid(kTestCacheGuid);
   transport_data_prefs.SetBirthday(kTestBirthday);
-  transport_data_prefs.SetGaiaId(kTestGaiaId);
+  transport_data_prefs.SetCurrentSyncingGaiaId(kTestGaiaId);
 
-  EXPECT_CALL(sync_transport_data_cleared_cb_, Run()).Times(0);
   InitializeBackend();
 
-  EXPECT_EQ(kTestGaiaId, transport_data_prefs.GetGaiaId());
+  EXPECT_EQ(kTestGaiaId, transport_data_prefs.GetCurrentSyncingGaiaId());
   EXPECT_EQ(kTestCacheGuid, transport_data_prefs.GetCacheGuid());
   EXPECT_EQ(kTestBirthday, transport_data_prefs.GetBirthday());
 }
@@ -656,15 +654,20 @@ TEST_F(SyncEngineImplTest, ShouldLoadSyncDataUponInitialization) {
 // between the account ID cached in SyncPrefs and the actual one.
 TEST_F(SyncEngineImplTest,
        ShouldClearLocalSyncTransportDataDueToAccountIdMismatch) {
-  SyncTransportDataPrefs transport_data_prefs(&pref_service_);
+  // If the account-scoped transport prefs are enabled, the concept of account
+  // ID mismatch doesn't exist anymore.
+  base::test::ScopedFeatureList disable_account_scoped;
+  disable_account_scoped.InitAndDisableFeature(kSyncAccountKeyedTransportPrefs);
+
+  SyncTransportDataPrefs transport_data_prefs(
+      &pref_service_, signin::GaiaIdHash::FromGaiaId(kTestGaiaId));
   transport_data_prefs.SetCacheGuid(kTestCacheGuid);
   transport_data_prefs.SetBirthday(kTestBirthday);
-  transport_data_prefs.SetGaiaId("corrupt_gaia_id");
+  transport_data_prefs.SetCurrentSyncingGaiaId("corrupt_gaia_id");
 
-  EXPECT_CALL(sync_transport_data_cleared_cb_, Run());
   InitializeBackend();
 
-  EXPECT_EQ(kTestGaiaId, transport_data_prefs.GetGaiaId());
+  EXPECT_EQ(kTestGaiaId, transport_data_prefs.GetCurrentSyncingGaiaId());
   EXPECT_NE(kTestCacheGuid, transport_data_prefs.GetCacheGuid());
   EXPECT_NE(kTestBirthday, transport_data_prefs.GetBirthday());
 }
@@ -698,10 +701,11 @@ TEST_F(SyncEngineImplTest, ShouldNotifyOnNewInvalidatedDataTypes) {
 }
 
 TEST_F(SyncEngineImplTest, ShouldReturnWhetherNextPollTimePassed) {
-  SyncTransportDataPrefs transport_data_prefs(&pref_service_);
+  SyncTransportDataPrefs transport_data_prefs(
+      &pref_service_, signin::GaiaIdHash::FromGaiaId(kTestGaiaId));
   transport_data_prefs.SetCacheGuid(kTestCacheGuid);
   transport_data_prefs.SetBirthday(kTestBirthday);
-  transport_data_prefs.SetGaiaId(kTestGaiaId);
+  transport_data_prefs.SetCurrentSyncingGaiaId(kTestGaiaId);
 
   transport_data_prefs.SetLastPollTime(base::Time::Now() - base::Hours(5));
   transport_data_prefs.SetPollInterval(base::Hours(4));

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/layout/inline/inline_node.h"
 
 #include <memory>
@@ -9,6 +14,8 @@
 
 #include "base/containers/adapters.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/not_fatal_until.h"
 #include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/blink/renderer/core/dom/text_diff_range.h"
@@ -373,7 +380,7 @@ void CollectInlinesInternal(ItemsBuilder* builder,
 
       builder->ClearInlineFragment(node);
     } else if (node->IsAtomicInlineLevel()) {
-      if (node->IsBoxListMarkerIncludingNG()) {
+      if (node->IsLayoutOutsideListMarker()) {
         // LayoutListItem produces the 'outside' list marker as an inline
         // block. This is an out-of-flow item whose position is computed
         // automatically.
@@ -701,7 +708,7 @@ class InlineNodeDataEditor final {
     auto const* end = data_->items.end();
     auto* it = data_->items.begin();
     for (; it != end && it->end_offset_ < start_offset; ++it) {
-      DCHECK(it != data_->items.end());
+      CHECK(it != data_->items.end(), base::NotFatalUntil::M130);
       items.push_back(*it);
     }
 
@@ -941,7 +948,9 @@ bool InlineNode::SetTextWithOffset(LayoutText* layout_text,
   InlineNode node(editor.GetLayoutBlockFlow());
   InlineNodeData* data = node.MutableData();
   data->items.reserve(previous_data->items.size());
-  InlineItemsBuilder builder(editor.GetLayoutBlockFlow(), &data->items);
+  InlineItemsBuilder builder(
+      editor.GetLayoutBlockFlow(), &data->items,
+      previous_data ? previous_data->text_content : String());
   // TODO(yosin): We should reuse before/after |layout_text| during collecting
   // inline items.
   layout_text->ClearInlineItems();
@@ -964,7 +973,7 @@ const InlineNodeData& InlineNode::EnsureData() const {
 const OffsetMapping* InlineNode::ComputeOffsetMappingIfNeeded() const {
 #if DCHECK_IS_ON()
   DCHECK(!GetLayoutBlockFlow()->GetDocument().NeedsLayoutTreeUpdate() ||
-         GetLayoutBlockFlow()->IsDetachedNonDomRoot());
+         GetLayoutBlockFlow()->IsInDetachedNonDomTree());
 #endif
 
   InlineNodeData* data = MutableData();
@@ -981,7 +990,7 @@ void InlineNode::ComputeOffsetMapping(LayoutBlockFlow* layout_block_flow,
 #if DCHECK_IS_ON()
   DCHECK(!data->offset_mapping);
   DCHECK(!layout_block_flow->GetDocument().NeedsLayoutTreeUpdate() ||
-         layout_block_flow->IsDetachedNonDomRoot());
+         layout_block_flow->IsInDetachedNonDomTree());
 #endif
 
   const SvgTextChunkOffsets* chunk_offsets = nullptr;
@@ -996,7 +1005,7 @@ void InlineNode::ComputeOffsetMapping(LayoutBlockFlow* layout_block_flow,
   ClearCollectionScope<HeapVector<InlineItem>> clear_scope(&items);
   items.reserve(EstimateInlineItemsCount(*layout_block_flow));
   InlineItemsBuilderForOffsetMapping builder(layout_block_flow, &items,
-                                             chunk_offsets);
+                                             data->text_content, chunk_offsets);
   builder.GetOffsetMappingBuilder().ReserveCapacity(
       EstimateOffsetMappingItemsCount(*layout_block_flow));
   CollectInlinesInternal(&builder, nullptr);
@@ -1065,7 +1074,9 @@ void InlineNode::CollectInlines(InlineNodeData* data,
   }
 
   data->items.reserve(EstimateInlineItemsCount(*block));
-  InlineItemsBuilder builder(block, &data->items, chunk_offsets);
+  InlineItemsBuilder builder(
+      block, &data->items,
+      previous_data ? previous_data->text_content : String(), chunk_offsets);
   CollectInlinesInternal(&builder, previous_data);
   if (block->IsSVGText() && !data->svg_node_data_) {
     SvgTextLayoutAttributesBuilder svg_attr_builder(*this);
@@ -1143,8 +1154,7 @@ void InlineNode::SegmentScriptRuns(InlineNodeData* data,
     return;
   }
 
-  if (RuntimeEnabledFeatures::LayoutSegmentationCacheEnabled() &&
-      previous_data && text_content == previous_data->text_content) {
+  if (previous_data && text_content == previous_data->text_content) {
     if (!previous_data->segments) {
       const auto it = base::ranges::find_if(
           previous_data->items,
@@ -1168,7 +1178,8 @@ void InlineNode::SegmentScriptRuns(InlineNodeData* data,
     }
   }
 
-  if (text_content.Is8Bit() && !data->is_bidi_enabled_) {
+  if ((text_content.Is8Bit() || !data->HasNonOrc16BitCharacters()) &&
+      !data->is_bidi_enabled_) {
     if (data->items.size()) {
       RunSegmenter::RunSegmenterRange range = {
           0u, data->text_content.length(), USCRIPT_LATIN,
@@ -1325,6 +1336,16 @@ void InlineNode::ShapeText(InlineItemsData* data,
                            const HeapVector<InlineItem>* previous_items,
                            const Font* override_font) const {
   TRACE_EVENT0("fonts", "InlineNode::ShapeText");
+  base::ScopedClosureRunner scoped_closure_runner(WTF::BindOnce(
+      [](base::ElapsedTimer timer, Document* document) {
+        if (document) {
+          document->MaybeRecordShapeTextElapsedTime(timer.Elapsed());
+        }
+      },
+      base::ElapsedTimer(),
+      WrapWeakPersistent(GetLayoutBox() ? &GetLayoutBox()->GetDocument()
+                                        : nullptr)));
+
   const String& text_content = data->text_content;
   HeapVector<InlineItem>* items = &data->items;
 

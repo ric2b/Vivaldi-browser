@@ -36,12 +36,15 @@ limitations under the License.
 #include "tensorflow/compiler/tf2xla/xla_compiler.h"
 #include "xla/client/local_client.h"
 #include "xla/pjrt/pjrt_client.h"
+#include "xla/pjrt/pjrt_common.h"
 #include "xla/pjrt/pjrt_future.h"
 #include "xla/pjrt/pjrt_stream_executor_client.h"
 #include "xla/pjrt/tracked_device_buffer.h"
 #include "xla/shape_util.h"
 #include "xla/status_macros.h"
 #include "xla/stream_executor/platform_manager.h"
+#include "xla/tsl/framework/device_id_utils.h"
+#include "xla/tsl/framework/serving_device_selector_policies.h"
 #include "tensorflow/core/common_runtime/dma_helper.h"
 #include "tensorflow/core/common_runtime/gpu/gpu_serving_device_selector.h"
 #include "tensorflow/core/common_runtime/gpu_device_context.h"
@@ -58,8 +61,6 @@ limitations under the License.
 #include "tensorflow/core/platform/statusor.h"
 #include "tensorflow/core/tfrt/common/async_value_tensor.h"
 #include "tensorflow/core/util/stream_executor_util.h"
-#include "tsl/framework/device_id_utils.h"
-#include "tsl/framework/serving_device_selector_policies.h"
 #include "tsl/platform/status.h"
 #include "tsl/platform/statusor.h"
 
@@ -390,10 +391,7 @@ Status XlaComputationLaunchContext::PopulateOutputs(
 
   std::shared_ptr<se::Event> definition_event;
   if (use_multiple_streams_ && stream) {
-    definition_event = std::make_shared<se::Event>(stream->parent());
-    if (!definition_event->Init()) {
-      return errors::Internal("Failed to initialize tensor definition event.");
-    }
+    TF_ASSIGN_OR_RETURN(definition_event, stream->parent()->CreateEvent());
     TF_RETURN_IF_ERROR(stream->RecordEvent(definition_event.get()));
   }
 
@@ -670,7 +668,8 @@ Status PreparePjRtExecutableArguments(
         std::unique_ptr<xla::PjRtBuffer> pjrt_buffer =
             std::make_unique<xla::PjRtStreamExecutorBuffer>(
                 device_shape, std::move(device_buffer), pjrt_client,
-                pjrt_device);
+                pjrt_device,
+                pjrt_device->default_memory_space().value_or(nullptr));
         owned_args->push_back(std::move(pjrt_buffer));
         args->push_back(owned_args->back().get());
       }
@@ -863,10 +862,11 @@ Status RunPjRtExecutable(
                       tsl::GetDeviceIdFromDeviceParsedName(
                           ctx->device()->parsed_name(), device_type));
   TF_ASSIGN_OR_RETURN(xla::PjRtDevice * device,
-                      pjrt_client->LookupAddressableDevice(pjrt_device_id));
+                      pjrt_client->LookupAddressableDevice(
+                          xla::PjRtLocalDeviceId(pjrt_device_id)));
 
   gpu::GpuServingDeviceSelectorResource* device_selector_resource = nullptr;
-  if (device_type == DEVICE_GPU && gpu::kUseGpuServingDeviceSelector) {
+  if (device_type == DEVICE_GPU) {
     auto rm = ctx->resource_manager();
     TF_RETURN_IF_ERROR(rm->LookupOrCreate<
                        gpu::GpuServingDeviceSelectorResource>(

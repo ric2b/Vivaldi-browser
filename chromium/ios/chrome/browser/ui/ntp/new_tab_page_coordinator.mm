@@ -6,6 +6,7 @@
 
 #import <MaterialComponents/MaterialSnackbar.h>
 
+#import "base/feature_list.h"
 #import "base/metrics/field_trial_params.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
@@ -21,8 +22,11 @@
 #import "components/search/search.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
+#import "components/signin/public/identity_manager/tribool.h"
+#import "components/supervised_user/core/common/features.h"
 #import "components/sync/service/sync_service.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
+#import "ios/chrome/browser/context_menu/ui_bundled/link_preview/link_preview_coordinator.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_observer_bridge.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service_factory.h"
@@ -31,6 +35,9 @@
 #import "ios/chrome/browser/follow/model/follow_browser_agent.h"
 #import "ios/chrome/browser/follow/model/followed_web_site.h"
 #import "ios/chrome/browser/follow/model/followed_web_site_state.h"
+#import "ios/chrome/browser/home_customization/coordinator/home_customization_coordinator.h"
+#import "ios/chrome/browser/home_customization/coordinator/home_customization_delegate.h"
+#import "ios/chrome/browser/home_customization/utils/home_customization_constants.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_state.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
@@ -52,6 +59,7 @@
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
+#import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -61,13 +69,15 @@
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/signin/model/system_identity_manager.h"
+#import "ios/chrome/browser/supervised_user/model/supervised_user_capabilities_observer_bridge.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
+#import "ios/chrome/browser/ui/authentication/account_menu/account_menu_coordinator.h"
+#import "ios/chrome/browser/ui/authentication/account_menu/account_menu_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/authentication/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_coordinator.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_mediator.h"
-#import "ios/chrome/browser/ui/context_menu/link_preview/link_preview_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/discover_feed_constants.h"
 #import "ios/chrome/browser/ui/ntp/discover_feed_manage_delegate.h"
 #import "ios/chrome/browser/ui/ntp/discover_feed_preview_delegate.h"
@@ -119,7 +129,8 @@
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
-@interface NewTabPageCoordinator () <AppStateObserver,
+@interface NewTabPageCoordinator () <AccountMenuCoordinatorDelegate,
+                                     AppStateObserver,
                                      AuthenticationServiceObserving,
                                      BooleanObserver,
                                      ContentSuggestionsDelegate,
@@ -130,6 +141,7 @@ using vivaldi::IsVivaldiRunning;
                                      FeedMenuCoordinatorDelegate,
                                      FeedSignInPromoDelegate,
                                      FeedWrapperViewControllerDelegate,
+                                     HomeCustomizationDelegate,
                                      HomeStartDataSource,
                                      IdentityManagerObserverBridgeDelegate,
                                      NewTabPageContentDelegate,
@@ -138,7 +150,8 @@ using vivaldi::IsVivaldiRunning;
                                      NewTabPageHeaderCommands,
                                      NewTabPageMetricsDelegate,
                                      OverscrollActionsControllerDelegate,
-                                     SceneStateObserver> {
+                                     SceneStateObserver,
+                                     SupervisedUserCapabilitiesObserving> {
   // Observes changes in the IdentityManager.
   std::unique_ptr<signin::IdentityManagerObserverBridge>
       _identityObserverBridge;
@@ -149,6 +162,10 @@ using vivaldi::IsVivaldiRunning;
   // Observer for auth service status changes.
   std::unique_ptr<AuthenticationServiceObserverBridge>
       _authServiceObserverBridge;
+
+  // Observer to track changes to supervision-related capabilities.
+  std::unique_ptr<supervised_user::SupervisedUserCapabilitiesObserverBridge>
+      _supervisedUserCapabilitiesObserverBridge;
 }
 
 // Coordinator for the ContentSuggestions.
@@ -254,6 +271,10 @@ using vivaldi::IsVivaldiRunning;
 @implementation NewTabPageCoordinator {
   // Coordinator in charge of handling sharing use cases.
   SharingCoordinator* _sharingCoordinator;
+  // Coordinator in charge of fast account menu.
+  AccountMenuCoordinator* _accountMenuCoordinator;
+  // Coordinator for presenting the Home customization menu.
+  HomeCustomizationCoordinator* _customizationCoordinator;
 
   // Vivaldi
   VivaldiSpeedDialHomeCoordinator* _speedDialHomeCoordinator;
@@ -335,8 +356,22 @@ using vivaldi::IsVivaldiRunning;
     self.NTPViewController.focusAccessibilityOmniboxWhenViewAppears = NO;
   }
 
-  // Updates feed asynchronously if the account is subject to parental controls.
-  [self updateFeedVisibilityForSupervision];
+  // Update the feed if the account is subject to parental controls.
+  if (base::FeatureList::IsEnabled(
+          supervised_user::
+              kReplaceSupervisionSystemCapabilitiesWithAccountCapabilitiesOnIOS)) {
+    signin::IdentityManager* identityManager =
+        IdentityManagerFactory::GetForBrowserState(
+            self.browser->GetBrowserState());
+    signin::Tribool capability =
+        supervised_user::IsPrimaryAccountSubjectToParentalControls(
+            identityManager);
+    [self
+        updateFeedWithIsSupervisedUser:(capability == signin::Tribool::kTrue)];
+  } else {
+    // Update asynchronously using system capabilities.
+    [self updateFeedVisibilityForSupervision];
+  }
 
   [self configureNTPMediator];
   if (self.NTPMediator.feedHeaderVisible) {
@@ -417,12 +452,18 @@ using vivaldi::IsVivaldiRunning;
   [self.feedMenuCoordinator stop];
   self.feedMenuCoordinator = nil;
 
+  _supervisedUserCapabilitiesObserverBridge.reset();
   _discoverFeedObserverBridge.reset();
   _identityObserverBridge.reset();
   _authServiceObserverBridge.reset();
 
   [_sharingCoordinator stop];
   _sharingCoordinator = nil;
+
+  [_customizationCoordinator stop];
+  _customizationCoordinator = nil;
+
+  [self stopAccountMenuCoordinator];
 
   // Vivaldi
   [_speedDialHomeCoordinator stop];
@@ -474,6 +515,7 @@ using vivaldi::IsVivaldiRunning;
   if (self.browser->GetBrowserState()->IsOffTheRecord()) {
     return;
   }
+  [self.contentSuggestionsCoordinator refresh];
   // Call this before RefreshFeed() to ensure some NTP state configs are reset
   // before callbacks in repsonse to a feed refresh are called, ensuring the NTP
   // returns to a state at the top of the surface upon refresh.
@@ -514,14 +556,15 @@ using vivaldi::IsVivaldiRunning;
   }
 }
 
-- (void)handleFeedModelDidEndUpdates:(FeedType)feedType {
+- (void)handleFeedModelOfType:(FeedType)feedType
+                didEndUpdates:(FeedLayoutUpdateType)updateType {
   DCHECK(self.NTPViewController);
   if (!self.feedViewController) {
     return;
   }
   // When the visible feed has been updated, recalculate the minimum NTP height.
   if (feedType == self.selectedFeed) {
-    [self.NTPViewController feedLayoutDidEndUpdates];
+    [self.NTPViewController feedLayoutDidEndUpdatesWithType:updateType];
   }
 }
 
@@ -596,6 +639,11 @@ using vivaldi::IsVivaldiRunning;
   _identityObserverBridge =
       std::make_unique<signin::IdentityManagerObserverBridge>(identityManager,
                                                               self);
+
+  // Start observing supervised user capabilities.
+  _supervisedUserCapabilitiesObserverBridge = std::make_unique<
+      supervised_user::SupervisedUserCapabilitiesObserverBridge>(
+      identityManager, self);
 
   // Start observing DiscoverFeedService.
   _discoverFeedObserverBridge = std::make_unique<DiscoverFeedObserverBridge>(
@@ -744,10 +792,8 @@ using vivaldi::IsVivaldiRunning;
 - (void)configureNTPViewController {
   DCHECK(self.NTPViewController);
 
-  if (IsIOSMagicStackCollectionViewEnabled()) {
-    self.NTPViewController.magicStackCollectionView =
-        self.contentSuggestionsCoordinator.magicStackCollectionView;
-  }
+  self.NTPViewController.magicStackCollectionView =
+      self.contentSuggestionsCoordinator.magicStackCollectionView;
   self.NTPViewController.contentSuggestionsViewController =
       self.contentSuggestionsCoordinator.viewController;
 
@@ -824,7 +870,7 @@ using vivaldi::IsVivaldiRunning;
   [self focusFakebox];
 }
 
-- (void)identityDiscWasTapped {
+- (void)identityDiscWasTapped:(UIView*)identityDisc {
   [self.NTPMetricsRecorder recordIdentityDiscTapped];
   id<ApplicationCommands> handler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), ApplicationCommands);
@@ -834,14 +880,15 @@ using vivaldi::IsVivaldiRunning;
   if (![self isSignInAllowed]) {
     [handler showSettingsFromViewController:self.baseViewController];
   } else if (isSignedIn) {
-    if (base::FeatureList::IsEnabled(kIdentityDiscAccountSwitch)) {
-      // "Instant signin" works as a quick account-switching UI.
-      ShowSigninCommand* const switchAccountCommand = [[ShowSigninCommand alloc]
-          initWithOperation:AuthenticationOperation::kInstantSignin
-                accessPoint:signin_metrics::AccessPoint::
-                                ACCESS_POINT_NTP_IDENTITY_DISC];
-      [handler showSignin:switchAccountCommand
-          baseViewController:self.baseViewController];
+    if (base::FeatureList::IsEnabled(kIdentityDiscAccountMenu)) {
+      _accountMenuCoordinator = [[AccountMenuCoordinator alloc]
+          initWithBaseViewController:self.baseViewController
+                             browser:self.browser];
+      _accountMenuCoordinator.delegate = self;
+      _accountMenuCoordinator.anchorView = identityDisc;
+      // TODO(crbug.com/336719423): Record signin metrics based on the selected
+      // action from the account switcher.
+      [_accountMenuCoordinator start];
     } else {
       [handler showSettingsFromViewController:self.baseViewController];
     }
@@ -853,6 +900,18 @@ using vivaldi::IsVivaldiRunning;
     [handler showSignin:showSigninCommand
         baseViewController:self.baseViewController];
   }
+}
+
+- (void)customizationMenuWasTapped:(UIView*)customizationMenu {
+  if (!_customizationCoordinator) {
+    _customizationCoordinator = [[HomeCustomizationCoordinator alloc]
+        initWithBaseViewController:self.NTPViewController
+                           browser:self.browser];
+    _customizationCoordinator.delegate = self;
+    [_customizationCoordinator start];
+  }
+  [_customizationCoordinator
+      presentCustomizationMenuAtPage:CustomizationMenuPage::kMain];
 }
 
 #pragma mark - FeedMenuCoordinatorDelegate
@@ -871,8 +930,8 @@ using vivaldi::IsVivaldiRunning;
     case FeedMenuItemType::kManageActivity:
       [self.NTPMediator handleNavigateToActivity];
       break;
-    case FeedMenuItemType::kManageInterests:
-      [self.NTPMediator handleNavigateToInterests];
+    case FeedMenuItemType::kManageFollowing:
+      [self.NTPMediator handleNavigateToFollowing];
       break;
     case FeedMenuItemType::kLearnMore:
       [self.NTPMediator handleFeedLearnMoreTapped];
@@ -938,7 +997,7 @@ using vivaldi::IsVivaldiRunning;
     self.discoverFeedService->SetFollowingFeedContentSeen();
   }
 
-  [self updateNTPForFeed];
+  [self handleChangeInModules];
 
   // Scroll position resets when changing the feed, so we set it back to what it
   // was.
@@ -962,7 +1021,7 @@ using vivaldi::IsVivaldiRunning;
   self.discoverFeedService->SetFollowingFeedSortType(sortType);
   self.feedHeaderViewController.followingFeedSortType = sortType;
 
-  [self updateNTPForFeed];
+  [self handleChangeInModules];
 
   // Scroll position resets when changing the feed, so we set it back to what it
   // was.
@@ -989,7 +1048,7 @@ using vivaldi::IsVivaldiRunning;
   if (!self.NTPViewController.viewLoaded) {
     return;
   }
-  [self updateNTPForFeed];
+  [self handleChangeInModules];
   [self.NTPViewController setContentOffsetToTop];
 }
 
@@ -1124,7 +1183,6 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)refreshNTPContent {
-  [self.contentSuggestionsCoordinator refresh];
   self.discoverFeedService->RefreshFeed(
       FeedRefreshTrigger::kForegroundFeedVisibleOther);
 }
@@ -1141,6 +1199,13 @@ using vivaldi::IsVivaldiRunning;
   // inserted.
   [self.feedHeaderViewController updateForSelectedFeed];
   self.feedMetricsRecorder.followDelegate = self;
+}
+
+- (void)updateModuleVisibility {
+  [self handleChangeInModules];
+  [self cancelOmniboxEdit];
+  [self setContentOffsetToTop];
+  [self.feedHeaderViewController updateForFeedVisibilityChanged];
 }
 
 #pragma mark - NewTabPageDelegate
@@ -1361,14 +1426,15 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark - BooleanObserver
 
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
-  [self handleFeedVisibilityDidChange];
+  // Observes changes in feed visibility pref.
+  [self updateModuleVisibility];
 }
 
 #pragma mark - DiscoverFeedObserverBridge
 
 - (void)discoverFeedModelWasCreated {
   if (self.NTPViewController.viewDidAppear) {
-    [self updateNTPForFeed];
+    [self handleChangeInModules];
 
     if (IsWebChannelsEnabled()) {
       [self.feedHeaderViewController updateForFollowingFeedVisibilityChanged];
@@ -1380,6 +1446,8 @@ using vivaldi::IsVivaldiRunning;
 
 #pragma mark - IdentityManagerObserverBridgeDelegate
 
+// TODO(crbug.com/346756363): Remove this method as it is replaced with
+// `onIsSubjectToParentalControlsCapabilityChanged`.
 - (void)onPrimaryAccountChanged:
     (const signin::PrimaryAccountChangeEvent&)event {
   // An account change may trigger after the coordinator has been stopped.
@@ -1390,6 +1458,7 @@ using vivaldi::IsVivaldiRunning;
   switch (event.GetEventTypeFor(signin::ConsentLevel::kSignin)) {
     case signin::PrimaryAccountChangeEvent::Type::kSet:
     case signin::PrimaryAccountChangeEvent::Type::kCleared: {
+      [self.contentSuggestionsCoordinator refresh];
       [self updateFeedVisibilityForSupervision];
       break;
     }
@@ -1411,8 +1480,22 @@ using vivaldi::IsVivaldiRunning;
       // If sign-in becomes disabled, the sign-in promo must be disabled too.
       // TODO(crbug.com/40280872): The sign-in promo should just be hidden
       // instead of resetting the hierarchy.
-      [self updateNTPForFeed];
+      [self handleChangeInModules];
       [self setContentOffsetToTop];
+  }
+}
+
+#pragma mark - SupervisedUserCapabilitiesObserving
+
+- (void)onIsSubjectToParentalControlsCapabilityChanged:
+    (supervised_user::CapabilityUpdateState)capabilityUpdateState {
+  if (base::FeatureList::IsEnabled(
+          supervised_user::
+              kReplaceSupervisionSystemCapabilitiesWithAccountCapabilitiesOnIOS)) {
+    BOOL isSubjectToParentalControl =
+        (capabilityUpdateState ==
+         supervised_user::CapabilityUpdateState::kSetToTrue);
+    [self updateFeedWithIsSupervisedUser:isSubjectToParentalControl];
   }
 }
 
@@ -1432,6 +1515,13 @@ using vivaldi::IsVivaldiRunning;
 }
 
 #pragma mark - Private
+
+// Stops the account switcher.
+- (void)stopAccountMenuCoordinator {
+  [_accountMenuCoordinator stop];
+  _accountMenuCoordinator.delegate = nil;
+  _accountMenuCoordinator = nil;
+}
 
 // Updates the feed visibility or content based on the supervision state
 // of the account defined in `value`.
@@ -1464,9 +1554,8 @@ using vivaldi::IsVivaldiRunning;
   }
 }
 
-// Updates the NTP to take into account a new feed, or a change in feed
-// visibility.
-- (void)updateNTPForFeed {
+// Updates the NTP to take into account a change in module visibility
+- (void)handleChangeInModules {
   DCHECK(self.NTPViewController);
 
   [self.NTPViewController resetViewHierarchy];
@@ -1531,27 +1620,33 @@ using vivaldi::IsVivaldiRunning;
 
 // Updates the visibility of the content suggestions on the NTP if the account
 // is subject to parental controls.
+// TODO(crbug.com/346756363): Remove this method as we deprecate getting
+// supervision status from SystemIdentityManager.
 - (void)updateFeedVisibilityForSupervision {
-  DCHECK(self.prefService);
-  DCHECK(self.authService);
+  if (!base::FeatureList::IsEnabled(
+          supervised_user::
+              kReplaceSupervisionSystemCapabilitiesWithAccountCapabilitiesOnIOS)) {
+    DCHECK(self.prefService);
+    DCHECK(self.authService);
 
-  id<SystemIdentity> identity =
-      self.authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
-  if (!identity) {
-    [self updateFeedWithIsSupervisedUser:NO];
-    return;
+    id<SystemIdentity> identity =
+        self.authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
+    if (!identity) {
+      [self updateFeedWithIsSupervisedUser:NO];
+      return;
+    }
+
+    using CapabilityResult = SystemIdentityCapabilityResult;
+
+    __weak NewTabPageCoordinator* weakSelf = self;
+    GetApplicationContext()
+        ->GetSystemIdentityManager()
+        ->IsSubjectToParentalControls(
+            identity, base::BindOnce(^(CapabilityResult result) {
+              const bool isSupervisedUser = result == CapabilityResult::kTrue;
+              [weakSelf updateFeedWithIsSupervisedUser:isSupervisedUser];
+            }));
   }
-
-  using CapabilityResult = SystemIdentityCapabilityResult;
-
-  __weak NewTabPageCoordinator* weakSelf = self;
-  GetApplicationContext()
-      ->GetSystemIdentityManager()
-      ->IsSubjectToParentalControls(
-          identity, base::BindOnce(^(CapabilityResult result) {
-            const bool isSupervisedUser = result == CapabilityResult::kTrue;
-            [weakSelf updateFeedWithIsSupervisedUser:isSupervisedUser];
-          }));
 }
 
 // Toggles feed visibility between hidden or expanded using the feed header
@@ -1560,7 +1655,7 @@ using vivaldi::IsVivaldiRunning;
 - (void)setFeedVisibleFromHeader:(BOOL)visible {
   [self.feedExpandedPref setValue:visible];
   [self.feedMetricsRecorder recordDiscoverFeedVisibilityChanged:visible];
-  [self handleFeedVisibilityDidChange];
+  [self updateModuleVisibility];
 }
 
 // Configures and returns the feed top section coordinator.
@@ -1587,15 +1682,6 @@ using vivaldi::IsVivaldiRunning;
   self.feedManagementCoordinator.navigationDelegate = self.NTPMediator;
   self.feedManagementCoordinator.feedMetricsRecorder = self.feedMetricsRecorder;
   [self.feedManagementCoordinator start];
-}
-
-// Handles how the NTP should react when the feed visbility preference is
-// changed.
-- (void)handleFeedVisibilityDidChange {
-  [self updateNTPForFeed];
-  [self cancelOmniboxEdit];
-  [self setContentOffsetToTop];
-  [self.feedHeaderViewController updateForFeedVisibilityChanged];
 }
 
 // Private setter for the `webState` property.
@@ -1668,10 +1754,8 @@ using vivaldi::IsVivaldiRunning;
 - (void)showSignInDisableMessage {
   id<SnackbarCommands> handler =
       static_cast<id<SnackbarCommands>>(self.browser->GetCommandDispatcher());
-  MDCSnackbarMessage* message = [MDCSnackbarMessage
-      messageWithText:
-          l10n_util::GetNSString(
-              IDS_IOS_NTP_FEED_SIGNIN_PROMO_DISABLE_SNACKBAR_MESSAGE)];
+  MDCSnackbarMessage* message = CreateSnackbarMessage(l10n_util::GetNSString(
+      IDS_IOS_NTP_FEED_SIGNIN_PROMO_DISABLE_SNACKBAR_MESSAGE));
 
   [handler showSnackbarMessage:message];
 }
@@ -1687,6 +1771,21 @@ using vivaldi::IsVivaldiRunning;
   [self.NTPMediator restoreNTPStateForWebState:self.webState];
 }
 
+#pragma mark - AccountMenuCoordinatorDelegate
+
+- (void)acountMenuCoordinatorShouldStop:(AccountMenuCoordinator*)coordinator {
+  CHECK_EQ(coordinator, _accountMenuCoordinator);
+  [self stopAccountMenuCoordinator];
+}
+
+#pragma mark - HomeCustomizationDelegate
+
+- (void)handleCustomizationMenuDismissed:
+    (HomeCustomizationCoordinator*)coordinator {
+  [_customizationCoordinator stop];
+  _customizationCoordinator = nil;
+}
+
 #pragma mark - VIVALDI
 - (void)configureVivaldiNTPViewController {
   UINavigationController *speedDialHomeController =
@@ -1700,5 +1799,6 @@ using vivaldi::IsVivaldiRunning;
   [speedDialHomeController.view fillSuperview];
   self.containedViewController = speedDialHomeController;
 }
+// End Vivaldi
 
 @end

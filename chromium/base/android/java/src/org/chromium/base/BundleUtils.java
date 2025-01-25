@@ -8,6 +8,7 @@ import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -202,7 +203,7 @@ public class BundleUtils {
                     shouldReplaceClassLoader);
             return context;
         } catch (PackageManager.NameNotFoundException e) {
-            throw new RuntimeException(e);
+            throw JavaUtils.throwUnchecked(e);
         }
     }
 
@@ -218,7 +219,7 @@ public class BundleUtils {
             classLoaderField.setAccessible(true);
             classLoaderField.set(baseContext, classLoader);
         } catch (ReflectiveOperationException e) {
-            throw new RuntimeException("Error setting ClassLoader.", e);
+            throw JavaUtils.throwUnchecked(e);
         }
     }
 
@@ -263,6 +264,15 @@ public class BundleUtils {
                     "Mismatched ClassLoaders between Activity and context (fixing): %s",
                     activity.getClass());
             replaceClassLoader(baseContext, activityClassLoader);
+            // Also fix up the Intent's bundle extras in case of Parcelables.
+            // https://crbug.com/346709145
+            Intent intent = activity.getIntent();
+            if (intent != null) {
+                Bundle bundle = intent.getExtras();
+                if (bundle != null) {
+                    bundle.setClassLoader(activityClassLoader);
+                }
+            }
         }
     }
 
@@ -279,7 +289,7 @@ public class BundleUtils {
         try {
             return context.getClassLoader().loadClass(className).newInstance();
         } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
+            throw JavaUtils.throwUnchecked(e);
         }
     }
 
@@ -448,7 +458,7 @@ public class BundleUtils {
             // This matches the logic LoadedApk.java uses to construct library paths.
             return apkPath + "!/lib/" + primaryCpuAbi + "/" + System.mapLibraryName(libraryName);
         } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
+            throw JavaUtils.throwUnchecked(e);
         }
     }
 

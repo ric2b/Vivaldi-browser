@@ -68,7 +68,7 @@ class Receiver final : public MessageDemuxer::MessageCallback,
   void Deinit();
 
   // Sets the object to call when a new receiver connection is available.
-  // |delegate| must either outlive PresentationReceiver or live until a new
+  // `delegate` must either outlive PresentationReceiver or live until a new
   // delegate (possibly nullptr) is set.  Setting the delegate to nullptr will
   // automatically ignore all future receiver requests.
   void SetReceiverDelegate(ReceiverDelegate* delegate);
@@ -93,7 +93,7 @@ class Receiver final : public MessageDemuxer::MessageCallback,
   void OnConnectionDestroyed(Connection* connection) override;
 
   // MessageDemuxer::MessageCallback overrides.
-  ErrorOr<size_t> OnStreamMessage(uint64_t endpoint_id,
+  ErrorOr<size_t> OnStreamMessage(uint64_t instance_id,
                                   uint64_t connection_id,
                                   msgs::Type message_type,
                                   const uint8_t* buffer,
@@ -105,15 +105,15 @@ class Receiver final : public MessageDemuxer::MessageCallback,
     enum class Type { kInitiation, kConnection };
 
     Type type;
-    uint64_t request_id;
-    uint64_t connection_id;
-    uint64_t endpoint_id;
+    uint64_t request_id = 0u;
+    uint64_t connection_id = 0u;
+    uint64_t instance_id = 0u;
   };
 
   struct Presentation {
-    uint64_t endpoint_id;
+    uint64_t instance_id = 0u;
     MessageDemuxer::MessageWatch terminate_watch;
-    uint64_t terminate_request_id;
+    uint64_t terminate_request_id = 0u;
     std::vector<Connection*> connections;
   };
 
@@ -125,24 +125,24 @@ class Receiver final : public MessageDemuxer::MessageCallback,
       const std::string& presentation_id,
       uint64_t request_id) const;
 
+  uint64_t GetNextConnectionId();
+
   ReceiverDelegate* delegate_ = nullptr;
 
   // TODO(jophba): scope requests by endpoint, not presentation. This doesn't
   // work properly for multiple controllers.
-  std::map<std::string, std::vector<QueuedResponse>> queued_responses_;
+  std::map<std::string, std::vector<QueuedResponse>> queued_responses_by_id_;
 
   // Presentations are added when the embedder starts the presentation,
   // and ended when a new receiver delegate is set or when
   // a presentation is called to be terminated (OnPresentationTerminated).
-  std::map<std::string, Presentation> started_presentations_;
+  std::map<std::string, Presentation> started_presentations_by_id_;
 
   std::unique_ptr<ConnectionManager> connection_manager_;
 
   MessageDemuxer::MessageWatch availability_watch_;
   MessageDemuxer::MessageWatch initiation_watch_;
   MessageDemuxer::MessageWatch connection_watch_;
-
-  uint64_t GetNextConnectionId();
 };
 
 }  // namespace openscreen::osp

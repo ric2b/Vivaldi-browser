@@ -57,6 +57,7 @@
 #include "third_party/blink/public/mojom/frame/frame_replication_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/draggable_region.mojom-blink.h"
+#include "third_party/blink/public/mojom/page/prerender_page_param.mojom.h"
 #include "third_party/blink/public/mojom/window_features/window_features.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -402,12 +403,12 @@ ui::mojom::blink::WindowOpenDisposition NavigationPolicyToDisposition(
     case kNavigationPolicyLinkPreview:
       NOTREACHED_NORETURN();
   }
-  NOTREACHED() << "Unexpected NavigationPolicy";
+  NOTREACHED_IN_MIGRATION() << "Unexpected NavigationPolicy";
   return ui::mojom::blink::WindowOpenDisposition::IGNORE_ACTION;
 }
 
 // Records the queuing duration for activation IPC.
-void RecordPrerenderActivationSignalDelay() {
+void RecordPrerenderActivationSignalDelay(const String& metric_suffix) {
   auto* task = base::TaskAnnotator::CurrentTaskForThread();
 
   // It should be a Mojo call, so `RunTask` executes it as a non-delayed task.
@@ -416,8 +417,9 @@ void RecordPrerenderActivationSignalDelay() {
   base::TimeDelta queueing_time =
       !task->queue_time.is_null() ? base::TimeTicks::Now() - task->queue_time
                                   : base::TimeDelta();
-  base::UmaHistogramTimes("Prerender.Experimental.ActivationIPCDelay",
-                          queueing_time);
+  base::UmaHistogramTimes(
+      "Prerender.Experimental.ActivationIPCDelay" + metric_suffix.Ascii(),
+      queueing_time);
 }
 
 #if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_WIN)
@@ -438,7 +440,7 @@ SkFontHinting RendererPreferencesToSkiaHinting(
       case gfx::FontRenderParams::HINTING_FULL:
         return SkFontHinting::kNormal;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return SkFontHinting::kNormal;
     }
   }
@@ -454,11 +456,26 @@ SkFontHinting RendererPreferencesToSkiaHinting(
     case gfx::FontRenderParams::HINTING_FULL:
       return SkFontHinting::kFull;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return SkFontHinting::kNormal;
   }
 }
 #endif  // !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_WIN)
+
+void ForEachFrameWidgetControlledByView(
+    WebViewImpl& web_view,
+    base::FunctionRef<void(WebFrameWidgetImpl*)> callback) {
+  for (WebFrame* frame = web_view.MainFrame(); frame;
+       frame = frame->TraverseNext()) {
+    if (auto* frame_impl = DynamicTo<WebLocalFrameImpl>(frame)) {
+      if (frame_impl->GetFrame()->IsLocalRoot()) {
+        if (auto* widget = frame_impl->FrameWidgetImpl()) {
+          callback(widget);
+        }
+      }
+    }
+  }
+}
 
 }  // namespace
 
@@ -467,8 +484,7 @@ SkFontHinting RendererPreferencesToSkiaHinting(
 WebView* WebView::Create(
     WebViewClient* client,
     bool is_hidden,
-    bool is_prerendering,
-    bool is_inside_portal,
+    blink::mojom::PrerenderParamPtr prerender_param,
     std::optional<blink::FencedFrame::DeprecatedFencedFrameMode>
         fenced_frame_mode,
     bool compositing_enabled,
@@ -485,7 +501,7 @@ WebView* WebView::Create(
       client,
       is_hidden ? mojom::blink::PageVisibilityState::kHidden
                 : mojom::blink::PageVisibilityState::kVisible,
-      is_prerendering, is_inside_portal, fenced_frame_mode, compositing_enabled,
+      std::move(prerender_param), fenced_frame_mode, compositing_enabled,
       widgets_never_composited, To<WebViewImpl>(opener), std::move(page_handle),
       agent_group_scheduler, session_storage_namespace_id,
       std::move(page_base_background_color), browsing_context_group_info,
@@ -495,8 +511,7 @@ WebView* WebView::Create(
 WebViewImpl* WebViewImpl::Create(
     WebViewClient* client,
     mojom::blink::PageVisibilityState visibility,
-    bool is_prerendering,
-    bool is_inside_portal,
+    blink::mojom::PrerenderParamPtr prerender_param,
     std::optional<blink::FencedFrame::DeprecatedFencedFrameMode>
         fenced_frame_mode,
     bool compositing_enabled,
@@ -509,7 +524,7 @@ WebViewImpl* WebViewImpl::Create(
     const BrowsingContextGroupInfo& browsing_context_group_info,
     const ColorProviderColorMaps* color_provider_colors) {
   return new WebViewImpl(
-      client, visibility, is_prerendering, is_inside_portal, fenced_frame_mode,
+      client, visibility, std::move(prerender_param), fenced_frame_mode,
       compositing_enabled, widgets_never_composited, opener,
       std::move(page_handle), agent_group_scheduler,
       session_storage_namespace_id, std::move(page_base_background_color),
@@ -566,8 +581,7 @@ void WebViewImpl::CloseWindow() {
 WebViewImpl::WebViewImpl(
     WebViewClient* client,
     mojom::blink::PageVisibilityState visibility,
-    bool is_prerendering,
-    bool is_inside_portal,
+    blink::mojom::PrerenderParamPtr prerender_param,
     std::optional<blink::FencedFrame::DeprecatedFencedFrameMode>
         fenced_frame_mode,
     bool does_composite,
@@ -582,8 +596,10 @@ WebViewImpl::WebViewImpl(
     : widgets_never_composited_(widgets_never_composited),
       web_view_client_(client),
       chrome_client_(MakeGarbageCollected<ChromeClientImpl>(this)),
-      minimum_zoom_level_(PageZoomFactorToZoomLevel(kMinimumPageZoomFactor)),
-      maximum_zoom_level_(PageZoomFactorToZoomLevel(kMaximumPageZoomFactor)),
+      minimum_zoom_level_(
+          blink::ZoomFactorToZoomLevel(kMinimumBrowserZoomFactor)),
+      maximum_zoom_level_(
+          blink::ZoomFactorToZoomLevel(kMaximumBrowserZoomFactor)),
       does_composite_(does_composite),
       fullscreen_controller_(std::make_unique<FullscreenController>(this)),
       page_base_background_color_(
@@ -612,9 +628,13 @@ WebViewImpl::WebViewImpl(
       *page_, session_storage_namespace_id_);
 
   SetVisibilityState(visibility, /*is_initial_state=*/true);
-  page_->SetIsPrerendering(is_prerendering);
-
-  // TODO(crbug.com/40287334): Remove the is_inside_portal parameter.
+  if (prerender_param) {
+    page_->SetIsPrerendering(true);
+    page_->SetPrerenderMetricSuffix(
+        String(prerender_param->page_metric_suffix));
+    page_->SetShouldWarmUpCompositorOnPrerender(
+        prerender_param->should_warm_up_compositor);
+  }
 
   if (fenced_frame_mode && features::IsFencedFramesEnabled()) {
     page_->SetIsMainFrameFencedFrameRoot();
@@ -1275,6 +1295,11 @@ void WebViewImpl::DidUpdateBrowserControls() {
     visual_viewport.SetBrowserControlsAdjustment(
         GetBrowserControls().UnreportedSizeAdjustment());
   }
+
+  if (RuntimeEnabledFeatures::DynamicSafeAreaInsetsEnabled() &&
+      RuntimeEnabledFeatures::DynamicSafeAreaInsetsOnScrollEnabled()) {
+    GetPage()->UpdateSafeAreaInsetWithBrowserControls(GetBrowserControls());
+  }
 }
 
 BrowserControls& WebViewImpl::GetBrowserControls() {
@@ -1292,6 +1317,11 @@ void WebViewImpl::ResizeViewWhileAnchored(
 
   if (old_viewport_shrink != GetBrowserControls().ShrinkViewport())
     MainFrameImpl()->GetFrameView()->DynamicViewportUnitsChanged();
+
+  if (RuntimeEnabledFeatures::DynamicSafeAreaInsetsEnabled()) {
+    GetPage()->UpdateSafeAreaInsetWithBrowserControls(GetBrowserControls(),
+                                                      /* force_update= */ true);
+  }
 
   {
     // Avoids unnecessary invalidations while various bits of state in
@@ -1743,6 +1773,8 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
       prefs.scroll_top_left_interop_enabled);
   RuntimeEnabledFeatures::SetAcceleratedSmallCanvasesEnabled(
       !prefs.disable_accelerated_small_canvases);
+  RuntimeEnabledFeatures::SetLongPressLinkSelectTextEnabled(
+      prefs.long_press_link_select_text);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
@@ -1789,6 +1821,7 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
 
   settings->SetLazyLoadEnabled(prefs.lazy_load_enabled);
   settings->SetInForcedColors(prefs.in_forced_colors);
+  settings->SetIsForcedColorsDisabled(prefs.is_forced_colors_disabled);
   settings->SetPreferredRootScrollbarColorScheme(
       prefs.preferred_root_scrollbar_color_scheme);
   settings->SetPreferredColorScheme(prefs.preferred_color_scheme);
@@ -1883,14 +1916,17 @@ void WebViewImpl::SetPageFocus(bool enable) {
   if (enable) {
     LocalFrame* focused_frame = page_->GetFocusController().FocusedFrame();
     if (focused_frame) {
+      // TODO(editing-dev): The use of UpdateStyleAndLayout needs to be audited.
+      // See http://crbug.com/590369 for more details.
+      focused_frame->GetDocument()->UpdateStyleAndLayout(
+          DocumentUpdateReason::kFocus);
       Element* element = focused_frame->GetDocument()->FocusedElement();
       if (element && focused_frame->Selection()
-                         .ComputeVisibleSelectionInDOMTreeDeprecated()
+                         .ComputeVisibleSelectionInDOMTree()
                          .IsNone()) {
         // If the selection was cleared while the WebView was not
         // focused, then the focus element shows with a focus ring but
         // no caret and does respond to keyboard inputs.
-        focused_frame->GetDocument()->UpdateStyleAndLayoutTree();
         if (element->IsTextControl()) {
           element->UpdateSelectionOnFocus(SelectionBehaviorOnFocus::kRestore);
         } else if (IsEditable(*element)) {
@@ -2181,7 +2217,7 @@ void WebViewImpl::ComputeScaleAndScrollForEditableElementRects(
                  2 * caret_bounds_in_content.height()
              ? minReadableCaretHeightForTextArea
              : minReadableCaretHeight) *
-        MainFrameImpl()->GetFrame()->PageZoomFactor();
+        MainFrameImpl()->GetFrame()->LayoutZoomFactor();
     new_scale = ClampPageScaleFactorToLimits(
         MaximumLegiblePageScale() * min_readable_caret_height_for_node /
         caret_bounds_in_content.height());
@@ -2268,61 +2304,54 @@ void WebViewImpl::AdvanceFocus(bool reverse) {
               : mojom::blink::FocusType::kForward);
 }
 
-double WebViewImpl::ZoomLevel() {
-  return zoom_level_;
+double WebViewImpl::ClampZoomLevel(double zoom_level) const {
+  return std::max(minimum_zoom_level_,
+                  std::min(maximum_zoom_level_, zoom_level));
 }
 
-void WebViewImpl::PropagateZoomFactorToLocalFrameRoots(Frame* frame,
-                                                       float zoom_factor) {
-  auto* local_frame = DynamicTo<LocalFrame>(frame);
-  if (local_frame && local_frame->IsLocalRoot()) {
-    if (Document* document = local_frame->GetDocument()) {
-      auto* plugin_document = DynamicTo<PluginDocument>(document);
-      if (!plugin_document || !plugin_document->GetPluginView()) {
-        local_frame->SetPageZoomFactor(zoom_factor);
-      }
+double WebViewImpl::ZoomLevelToZoomFactor(double zoom_level,
+                                          bool for_main_frame) const {
+  double zoom_factor = blink::ZoomLevelToZoomFactor(zoom_level);
+  if (for_main_frame && zoom_factor_override_) {
+    zoom_factor = zoom_factor_override_;
+  }
+  if (zoom_factor_for_device_scale_factor_) {
+    if (compositor_device_scale_factor_override_) {
+      zoom_factor *= compositor_device_scale_factor_override_;
+    } else {
+      zoom_factor *= zoom_factor_for_device_scale_factor_;
     }
   }
-
-  for (Frame* child = frame->Tree().FirstChild(); child;
-       child = child->Tree().NextSibling())
-    PropagateZoomFactorToLocalFrameRoots(child, zoom_factor);
+  return zoom_factor;
 }
 
-double WebViewImpl::SetZoomLevel(double zoom_level) {
-  double old_zoom_level = zoom_level_;
-  if (zoom_level < minimum_zoom_level_)
-    zoom_level_ = minimum_zoom_level_;
-  else if (zoom_level > maximum_zoom_level_)
-    zoom_level_ = maximum_zoom_level_;
-  else
-    zoom_level_ = zoom_level;
+double WebViewImpl::ZoomFactorToZoomLevel(double zoom_factor) const {
+  if (zoom_factor_for_device_scale_factor_) {
+    if (compositor_device_scale_factor_override_) {
+      zoom_factor /= compositor_device_scale_factor_override_;
+    } else {
+      zoom_factor /= zoom_factor_for_device_scale_factor_;
+    }
+  }
+  return blink::ZoomFactorToZoomLevel(zoom_factor);
+}
 
-  float zoom_factor =
-      zoom_factor_override_
-          ? zoom_factor_override_
-          : static_cast<float>(PageZoomLevelToZoomFactor(zoom_level_));
+void WebViewImpl::UpdateWidgetZoomFactors() {
+  ForEachFrameWidgetControlledByView(*this, [](WebFrameWidgetImpl* widget) {
+    widget->SetZoomLevel(widget->GetZoomLevel());
+  });
+}
+
+void WebViewImpl::UpdateInspectorDeviceScaleFactorOverride() {
   if (zoom_factor_for_device_scale_factor_) {
     if (compositor_device_scale_factor_override_) {
       page_->SetInspectorDeviceScaleFactorOverride(
           zoom_factor_for_device_scale_factor_ /
           compositor_device_scale_factor_override_);
-
-      zoom_factor *= compositor_device_scale_factor_override_;
     } else {
       page_->SetInspectorDeviceScaleFactorOverride(1.0f);
-      zoom_factor *= zoom_factor_for_device_scale_factor_;
     }
   }
-  PropagateZoomFactorToLocalFrameRoots(page_->MainFrame(), zoom_factor);
-
-  if (old_zoom_level != zoom_level_) {
-    for (auto& observer : observers_)
-      observer.OnZoomLevelChanged();
-    CancelPagePopup();
-  }
-
-  return zoom_level_;
 }
 
 float WebViewImpl::PageScaleFactor() const {
@@ -2374,10 +2403,12 @@ void WebViewImpl::SetPageScaleFactor(float scale_factor) {
 void WebViewImpl::SetZoomFactorForDeviceScaleFactor(
     float zoom_factor_for_device_scale_factor) {
   DCHECK(does_composite_);
-  // We can't early-return here if these are already equal, because we may
-  // need to propagate the correct zoom factor to newly navigated frames.
-  zoom_factor_for_device_scale_factor_ = zoom_factor_for_device_scale_factor;
-  SetZoomLevel(zoom_level_);
+  if (zoom_factor_for_device_scale_factor_ !=
+      zoom_factor_for_device_scale_factor) {
+    zoom_factor_for_device_scale_factor_ = zoom_factor_for_device_scale_factor;
+    UpdateWidgetZoomFactors();
+    UpdateInspectorDeviceScaleFactorOverride();
+  }
 }
 
 void WebViewImpl::SetPageLifecycleStateFromNewPageCommit(
@@ -3221,12 +3252,12 @@ void WebViewImpl::ConfigureAutoResizeMode() {
 
 void WebViewImpl::SetCompositorDeviceScaleFactorOverride(
     float device_scale_factor) {
-  if (compositor_device_scale_factor_override_ == device_scale_factor)
-    return;
-  compositor_device_scale_factor_override_ = device_scale_factor;
-  if (zoom_factor_for_device_scale_factor_) {
-    SetZoomLevel(ZoomLevel());
-    return;
+  if (compositor_device_scale_factor_override_ != device_scale_factor) {
+    compositor_device_scale_factor_override_ = device_scale_factor;
+    if (zoom_factor_for_device_scale_factor_) {
+      UpdateWidgetZoomFactors();
+      UpdateInspectorDeviceScaleFactorOverride();
+    }
   }
 }
 
@@ -3315,8 +3346,7 @@ void WebViewImpl::UpdateColorProviders(
   bool color_providers_did_change =
       page_->UpdateColorProviders(color_provider_colors);
   if (color_providers_did_change) {
-    Page::PlatformColorsChanged();
-    Page::ColorSchemeChanged();
+    Page::ForcedColorsChanged();
   }
 }
 
@@ -3419,7 +3449,7 @@ void WebViewImpl::ActivatePrerenderedPage(
     main_frame_document = local_frame->GetDocument();
   }
   if (main_frame_document) {
-    RecordPrerenderActivationSignalDelay();
+    RecordPrerenderActivationSignalDelay(GetPage()->PrerenderMetricSuffix());
   }
 
   for (Frame* frame = GetPage()->MainFrame(); frame;
@@ -3774,7 +3804,11 @@ void WebViewImpl::SetBackgroundColorOverrideForFullscreenController(
 
 void WebViewImpl::SetZoomFactorOverride(float zoom_factor) {
   zoom_factor_override_ = zoom_factor;
-  SetZoomLevel(ZoomLevel());
+  // This only affects the local main frame, so no need to propagate to all
+  // frame widgets.
+  if (web_widget_) {
+    web_widget_->SetZoomLevel(web_widget_->GetZoomLevel());
+  }
 }
 
 Element* WebViewImpl::FocusedElement() const {
@@ -4132,5 +4166,4 @@ void WebViewImpl::SetPageAttributionSupport(
 
   page->SetAttributionSupport(support);
 }
-
 }  // namespace blink

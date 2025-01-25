@@ -11,6 +11,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/label_button.h"
@@ -116,11 +117,21 @@ DialogExample::DialogExample()
       }) {}
 
 DialogExample::~DialogExample() {
-  title_->set_controller(nullptr);
-  body_->set_controller(nullptr);
-  ok_button_label_->set_controller(nullptr);
-  cancel_button_label_->set_controller(nullptr);
-  extra_button_label_->set_controller(nullptr);
+  if (title_) {
+    title_->set_controller(nullptr);
+  }
+  if (body_) {
+    body_->set_controller(nullptr);
+  }
+  if (ok_button_label_) {
+    ok_button_label_->set_controller(nullptr);
+  }
+  if (cancel_button_label_) {
+    cancel_button_label_->set_controller(nullptr);
+  }
+  if (extra_button_label_) {
+    extra_button_label_->set_controller(nullptr);
+  }
 }
 
 void DialogExample::CreateExampleView(View* container) {
@@ -184,7 +195,7 @@ void DialogExample::CreateExampleView(View* container) {
   mode_->SetCallback(base::BindRepeating(&DialogExample::OnPerformAction,
                                          base::Unretained(this)));
   mode_->SetSelectedIndex(ui::MODAL_TYPE_CHILD);
-  mode_->SetAccessibleName(modal_label);
+  mode_->GetViewAccessibility().SetName(modal_label);
   table->AddChildView(std::make_unique<View>());
 
   Label* bubble_label = table->AddChildView(std::make_unique<Label>(
@@ -207,7 +218,7 @@ void DialogExample::CreateExampleView(View* container) {
 }
 
 void DialogExample::StartTextfieldRow(View* parent,
-                                      Textfield** member,
+                                      raw_ptr<Textfield>* member,
                                       std::u16string label,
                                       std::u16string value,
                                       Label** created_label,
@@ -218,20 +229,22 @@ void DialogExample::StartTextfieldRow(View* parent,
   auto textfield = std::make_unique<Textfield>();
   textfield->set_controller(this);
   textfield->SetText(value);
-  textfield->SetAccessibleName(row_label);
+  textfield->GetViewAccessibility().SetName(*row_label);
   *member = parent->AddChildView(std::move(textfield));
   if (pad_last_col)
     parent->AddChildView(std::make_unique<View>());
 }
 
-void DialogExample::AddCheckbox(View* parent, Checkbox** member, Label* label) {
+void DialogExample::AddCheckbox(View* parent,
+                                raw_ptr<Checkbox>* member,
+                                Label* label) {
   auto callback = member == &bubble_ ? &DialogExample::BubbleCheckboxPressed
                                      : &DialogExample::OtherCheckboxPressed;
   auto checkbox = std::make_unique<Checkbox>(
       std::u16string(), base::BindRepeating(callback, base::Unretained(this)));
   checkbox->SetChecked(true);
   if (label)
-    checkbox->SetAccessibleName(label);
+    checkbox->GetViewAccessibility().SetName(*label);
   *member = parent->AddChildView(std::move(checkbox));
 }
 

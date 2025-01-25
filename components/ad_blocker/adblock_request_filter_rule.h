@@ -4,6 +4,7 @@
 #define COMPONENTS_AD_BLOCKER_ADBLOCK_REQUEST_FILTER_RULE_H_
 
 #include <bitset>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -25,6 +26,7 @@ struct RequestFilterRule {
     kWebRTC,
     kPing,
     kWebTransport,
+    kWebBundle,
     kOther,
     kTypeCount
   };
@@ -53,37 +55,42 @@ struct RequestFilterRule {
     kRegex,
   };
 
+  enum Decision { kModify, kPass, kModifyImportant };
+
+  enum ModifierType { kNoModifier = -1, kRedirect, kCsp };
+
   RequestFilterRule();
   ~RequestFilterRule();
   RequestFilterRule(RequestFilterRule&& request_filter_rule);
   RequestFilterRule& operator=(RequestFilterRule&& request_filter_rule);
   bool operator==(const RequestFilterRule& other) const;
 
-  bool is_allow_rule = false;
+  // Whether a match causes the request to be modified or passed as-is.
+  Decision decision = kModify;
+  // Whether the rule modifies the blocked state of the request.
+  bool modify_block = true;
+  // Other modification (redirect, CSP rules).
+  ModifierType modifier = kNoModifier;
+  std::optional<std::string> modifier_value;
+  // Affect whether some part of the filter run for given documents.
+  std::bitset<kActivationCount> activation_types;
+
   bool is_case_sensitive = false;
 
-  // Tells us whether this rule is supposed to modify the CSP
-  // Needed because allow CSP rules can use an empty CSP.
-  bool is_csp_rule = false;
-
   std::bitset<kTypeCount> resource_types;
-  std::bitset<kActivationCount> activation_types;
   std::bitset<kPartyCount> party;
   std::bitset<kAnchorTypeCount> anchor_type;
   PatternType pattern_type = kPlain;
 
   // Limit the rule to a specific host.
-  std::string host;
+  std::optional<std::string> host;
   std::vector<std::string> included_domains;
   std::vector<std::string> excluded_domains;
-
-  std::string redirect;
-  std::string csp;
 
   std::string pattern;
   // For regex patterns, this provides a string from which ngrams can be safely
   // extracted for indexing.
-  std::string ngram_search_string;
+  std::optional<std::string> ngram_search_string;
 };
 
 using RequestFilterRules = std::vector<RequestFilterRule>;

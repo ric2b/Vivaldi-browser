@@ -153,7 +153,6 @@ class CORE_EXPORT Frame : public GarbageCollected<Frame> {
   // the root Document in a WebContents). See content::Page for detailed
   // documentation.
   // This is false for main frames created for fenced-frames.
-  // TODO(khushalsagar) : Should also be the case for portals.
   bool IsOutermostMainFrame() const;
 
   // Returns true if and only if:
@@ -526,6 +525,14 @@ class CORE_EXPORT Frame : public GarbageCollected<Frame> {
                     remote_frame_host,
                 mojo::PendingAssociatedReceiver<mojom::blink::RemoteFrame>
                     remote_frame_receiver);
+
+  // Notifies a specific frame that it now has user activation. Used to prevent
+  // duplicated logic in `NotifyUserActivationInFrameTree()`, which notifies
+  // various sets of Frames that they're now activated.
+  static void NotifyUserActivationInFrame(
+      Frame* node,
+      mojom::blink::UserActivationNotificationType notification_type,
+      bool sticky_only);
 
   Member<FrameClient> client_;
   const Member<WindowProxyManager> window_proxy_manager_;

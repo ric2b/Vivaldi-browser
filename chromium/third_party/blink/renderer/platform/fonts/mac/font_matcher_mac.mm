@@ -27,6 +27,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #import "third_party/blink/renderer/platform/fonts/mac/font_matcher_mac.h"
 
 #import <AppKit/AppKit.h>
@@ -52,6 +57,15 @@ using base::apple::NSToCFOwnershipCast;
 using base::apple::NSToCFPtrCast;
 using base::apple::ObjCCast;
 using base::apple::ScopedCFTypeRef;
+
+// Forward declare Mac SPIs. `CTFontCopyVariationAxesInternal()` is working
+// faster than a public `CTFontCopyVariationAxes()` because it does not
+// localize variation axis name string, see
+// https://github.com/WebKit/WebKit/commit/1842365d413ed87868e7d33d4fad1691fa3a8129.
+// We don't need localized variation axis name, so we can use
+// `CTFontCopyVariationAxesInternal()` instead.
+// Request for public API: FB13788219.
+extern "C" CFArrayRef CTFontCopyVariationAxesInternal(CTFontRef);
 
 namespace blink {
 
@@ -389,8 +403,16 @@ void ClampVariationValuesToFontAcceptableRange(
     ScopedCFTypeRef<CTFontRef> ct_font,
     FontSelectionValue& weight,
     FontSelectionValue& width) {
-  NSArray* all_axes =
-      CFToNSOwnershipCast(CTFontCopyVariationAxes(ct_font.get()));
+  // `CTFontCopyVariationAxesInternal()` is only supported on MacOS 12+, so
+  // we are enabling it only on MacOS 13+ because these are our benchmarking
+  // platforms.
+  NSArray* all_axes;
+  if (@available(macOS 13.0, *)) {
+    all_axes =
+        CFToNSOwnershipCast(CTFontCopyVariationAxesInternal(ct_font.get()));
+  } else {
+    all_axes = CFToNSOwnershipCast(CTFontCopyVariationAxes(ct_font.get()));
+  }
   if (!all_axes) {
     return;
   }

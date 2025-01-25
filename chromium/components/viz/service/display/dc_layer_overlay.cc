@@ -24,6 +24,8 @@
 #include "gpu/config/gpu_finch_features.h"
 #include "media/base/media_switches.h"
 #include "media/base/win/mf_feature_checks.h"
+#include "ui/gfx/color_space.h"
+#include "ui/gfx/color_space_win.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -58,13 +60,14 @@ enum DCLayerResult {
   DC_LAYER_FAILED_OUTPUT_HDR = 14,
   DC_LAYER_FAILED_NOT_DAMAGED = 15,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_MOVED = 16,
-  DC_LAYER_FAILED_HDR_TONE_MAPPING = 17,
+  DC_LAYER_FAILED_YUV_VIDEO_QUAD_HDR_TONE_MAPPING = 17,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_NO_HDR_METADATA = 18,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_HLG = 19,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_NO_P010_VIDEO_PROCESSOR_SUPPORT = 20,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_HDR_NON_FULLSCREEN [[deprecated]] = 21,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_HDR_NON_P010 = 22,
-  kMaxValue = DC_LAYER_FAILED_YUV_VIDEO_QUAD_HDR_NON_P010,
+  DC_LAYER_FAILED_YUV_VIDEO_QUAD_UNSUPPORTED_COLORSPACE = 23,
+  kMaxValue = DC_LAYER_FAILED_YUV_VIDEO_QUAD_UNSUPPORTED_COLORSPACE,
 };
 
 bool IsCompatibleHDRMetadata(
@@ -78,7 +81,7 @@ bool IsCompatibleHDRMetadata(
 DCLayerResult ValidateYUVOverlay(
     const gfx::ProtectedVideoType& protected_video_type,
     const gfx::ColorSpace& video_color_space,
-    const gfx::BufferFormat& buffer_format,
+    const SharedImageFormat si_format,
     const std::optional<gfx::HDRMetadata>& hdr_metadata,
     bool has_overlay_support,
     bool has_p010_video_processor_support,
@@ -97,6 +100,12 @@ DCLayerResult ValidateYUVOverlay(
 
   if (processed_yuv_overlay_count >= allowed_yuv_overlay_count) {
     return DC_LAYER_FAILED_TOO_MANY_OVERLAYS;
+  }
+
+  // For YUV color spaces that VP couldn't handle, stop promote overlay.
+  if ((video_color_space.GetMatrixID() != gfx::ColorSpace::MatrixID::RGB) &&
+      !gfx::ColorSpaceWin::CanConvertToDXGIColorSpace(video_color_space)) {
+    return DC_LAYER_FAILED_YUV_VIDEO_QUAD_UNSUPPORTED_COLORSPACE;
   }
 
   // HLG shouldn't have the hdr metadata, but we don't want to promote it to
@@ -119,14 +128,14 @@ DCLayerResult ValidateYUVOverlay(
 
     // Do not promote hdr overlay if buffer is not in 10bit P010 format. as this
     // may cause blue output result if content is NV12 8bit HDR10.
-    if (buffer_format != gfx::BufferFormat::P010) {
+    if (si_format != MultiPlaneFormat::kP010) {
       return DC_LAYER_FAILED_YUV_VIDEO_QUAD_HDR_NON_P010;
     }
   }
 
   // Only promote overlay for 10bit+ contents when video processor can
   // handle P010 contents, otherwise disable overlay.
-  if (buffer_format == gfx::BufferFormat::P010 &&
+  if (si_format == MultiPlaneFormat::kP010 &&
       !has_p010_video_processor_support) {
     return DC_LAYER_FAILED_YUV_VIDEO_QUAD_NO_P010_VIDEO_PROCESSOR_SUPPORT;
   }
@@ -173,6 +182,14 @@ DCLayerResult ValidateYUVQuad(
   for (const auto& filter_target_rect : backdrop_filter_rects) {
     if (filter_target_rect.Intersects(quad_target_rect))
       return DC_LAYER_FAILED_BACKDROP_FILTERS;
+  }
+
+  // For YUV color spaces that VP couldn't handle, stop promote overlay.
+  if ((quad->video_color_space.GetMatrixID() !=
+       gfx::ColorSpace::MatrixID::RGB) &&
+      !gfx::ColorSpaceWin::CanConvertToDXGIColorSpace(
+          quad->video_color_space)) {
+    return DC_LAYER_FAILED_YUV_VIDEO_QUAD_UNSUPPORTED_COLORSPACE;
   }
 
   // HLG shouldn't have the hdr metadata, but we don't want to promote it to
@@ -281,10 +298,10 @@ DCLayerResult ValidateTextureQuad(
         resource_provider->GetColorSpace(quad->resource_id());
     const auto& hdr_metadata =
         resource_provider->GetHDRMetadata(quad->resource_id());
-    auto buffer_format =
-        resource_provider->GetBufferFormat(quad->resource_id());
+    auto si_format =
+        resource_provider->GetSharedImageFormat(quad->resource_id());
     auto result = ValidateYUVOverlay(
-        quad->protected_video_type, color_space, buffer_format, hdr_metadata,
+        quad->protected_video_type, color_space, si_format, hdr_metadata,
         has_overlay_support, has_p010_video_processor_support,
         allowed_yuv_overlay_count, processed_yuv_overlay_count);
     return result;
@@ -733,7 +750,7 @@ void FromDrawQuad(const DisplayResourceProvider* resource_provider,
       }
     } break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -1211,6 +1228,7 @@ void DCLayerOverlayProcessor::Process(
         surface_damage_rect_list_in_root_space;
     for (auto& rect : current_frame_state.surface_damage_rect_list) {
       rect = render_pass->transform_to_root_target.InverseMapRect(rect).value();
+      rect.Intersect(render_pass->output_rect);
     }
 
     CollectCandidates(resource_provider, render_pass,
@@ -1337,7 +1355,8 @@ bool DCLayerOverlayProcessor::ShouldSkipOverlay(
       // tone mapping to avoid a visual difference between Viz and video
       // processor.
       if (system_hdr_disabled_on_any_display_) {
-        RecordDCLayerResult(DC_LAYER_FAILED_HDR_TONE_MAPPING, it);
+        RecordDCLayerResult(DC_LAYER_FAILED_YUV_VIDEO_QUAD_HDR_TONE_MAPPING,
+                            it);
         return true;
       }
     }

@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/layout/box_fragment_builder.h"
 #include "third_party/blink/renderer/core/layout/constraint_space_builder.h"
 #include "third_party/blink/renderer/core/layout/inline/inline_node.h"
+#include "third_party/blink/renderer/core/layout/inline/line_box_fragment_builder.h"
 #include "third_party/blink/renderer/core/layout/inline/logical_line_item.h"
 #include "third_party/blink/renderer/core/layout/layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/unpositioned_float.h"
@@ -57,7 +58,7 @@ class CORE_EXPORT InlineLayoutAlgorithm final
   const LayoutResult* Layout();
 
   MinMaxSizesResult ComputeMinMaxSizes(const MinMaxSizesFloatInput&) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return MinMaxSizesResult();
   }
 
@@ -89,7 +90,7 @@ class CORE_EXPORT InlineLayoutAlgorithm final
 
   LayoutUnit ApplyTextAlign(LineInfo*);
 
-  void ApplyTextBoxTrim(const LineInfo&);
+  void ApplyTextBoxTrim(LineInfo&, bool is_truncated);
 
   // Add any trailing clearance requested by a BR 'clear' attribute on the line.
   // Return true if this was successful (this also includes cases where there is
@@ -103,7 +104,8 @@ class CORE_EXPORT InlineLayoutAlgorithm final
       const FontHeight& line_box_metrics,
       std::optional<FontHeight> annotation_font_height);
 
-  bool ShouldLineClamp(const LineInfo*) const;
+  bool ShouldLineClamp(const LineInfo*, LayoutUnit line_height) const;
+  bool ShouldHideLine(LayoutUnit line_height) const;
 
   InlineLayoutStateStack* box_states_;
   InlineChildLayoutContext* context_;

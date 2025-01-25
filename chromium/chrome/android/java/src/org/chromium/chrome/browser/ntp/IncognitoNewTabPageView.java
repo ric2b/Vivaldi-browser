@@ -67,11 +67,11 @@ public class IncognitoNewTabPageView extends FrameLayout {
     protected void onFinishInflate() {
         super.onFinishInflate();
 
-        mScrollView = (NewTabPageScrollView) findViewById(R.id.ntp_scrollview);
+        mScrollView = findViewById(R.id.ntp_scrollview);
+
         if (ChromeApplicationImpl.isVivaldi()) {
             mScrollView.setBackground(null);
-        }
-        else
+        } else
         mScrollView.setBackgroundColor(getContext().getColor(R.color.ntp_bg_incognito));
         setContentDescription(
                 getResources().getText(R.string.accessibility_new_incognito_tab_page));

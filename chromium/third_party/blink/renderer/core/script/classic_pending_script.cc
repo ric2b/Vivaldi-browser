@@ -36,7 +36,6 @@
 #include "third_party/blink/renderer/platform/loader/fetch/raw_resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_client.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
@@ -599,7 +598,7 @@ void ClassicPendingScript::AdvanceReadyState(ReadyState new_ready_state) {
       break;
     case kReady:
     case kErrorOccurred:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 

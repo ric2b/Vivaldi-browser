@@ -73,11 +73,12 @@ class VivaldiToolbarButtonProvider : public ToolbarButtonProvider {
       std::optional<PageActionIconType> type) override;  // the one
   void ZoomChangedForActiveTab(bool can_show_bubble) override;
   AvatarToolbarButton* GetAvatarToolbarButton() override;
+  ManagementToolbarButton* GetManagementToolbarButton() override;
   ToolbarButton* GetBackButton() override;
   ReloadButton* GetReloadButton() override;
   IntentChipButton* GetIntentChipButton() override;
   DownloadToolbarButtonView* GetDownloadButton() override;
-  SidePanelToolbarButton* GetSidePanelButton() override;
+  //SidePanelToolbarButton* GetSidePanelButton() override;
 
   raw_ptr<VivaldiBrowserWindow> window_ = nullptr;
 };
@@ -348,9 +349,8 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void FocusWebContentsPane() override {}
   void ShowAppMenu() override {}
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
-      const content::NativeWebKeyboardEvent& event) override;
-  bool HandleKeyboardEvent(
-      const content::NativeWebKeyboardEvent& event) override;
+      const input::NativeWebKeyboardEvent& event) override;
+  bool HandleKeyboardEvent(const input::NativeWebKeyboardEvent& event) override;
   gfx::Size GetContentsSize() const override;
   void SetContentsSize(const gfx::Size& size) override {}
   void UpdatePageActionIcon(PageActionIconType type) override;
@@ -386,8 +386,10 @@ class VivaldiBrowserWindow final : public BrowserWindow {
                              const std::string& target_language,
                              const std::u16string& text_selection) override {}
   void ShowAvatarBubbleFromAvatarButton(bool is_source_accelerator) override {}
+  void ShowBubbleFromManagementToolbarButton() override {}
   bool IsDownloadShelfVisible() const override;
   DownloadShelf* GetDownloadShelf() override;
+  views::View* GetTopContainer() override;
   DownloadBubbleUIController* GetDownloadBubbleUIController() override;
   void ConfirmBrowserCloseWithPendingDownloads(
       int download_count,
@@ -465,7 +467,8 @@ class VivaldiBrowserWindow final : public BrowserWindow {
       const base::Feature& iph_feature) override;
   void NotifyFeatureEngagementEvent(const char* event_name) override {}
   void NotifyPromoFeatureUsed(const base::Feature& iph_feature) override {}
-  bool MaybeShowNewBadgeFor(const base::Feature& feature) override;
+  user_education::DisplayNewBadge MaybeShowNewBadgeFor(
+      const base::Feature& feature) override;
   void ShowIncognitoClearBrowsingDataDialog() override {}
   void ShowIncognitoHistoryDisclaimerDialog() override {}
   std::string GetWorkspace() const override;

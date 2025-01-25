@@ -270,7 +270,7 @@ void InvalidationServiceStompWebsocket::ProcessOutgoing() {
                               remaining_outgoing_size_);
     }
 
-    base::StringPiece outgoing(outgoing_messages_.front());
+    std::string_view outgoing(outgoing_messages_.front());
     DCHECK_LE(remaining_outgoing_size_, outgoing.size());
 
     uint32_t num_bytes = static_cast<uint32_t>(remaining_outgoing_size_);
@@ -342,23 +342,23 @@ bool InvalidationServiceStompWebsocket::HandleFrame() {
     heart_beats_in_timer_.Reset();
   if (incoming_message_ == kLf || incoming_message_ == kCrLf)
     return true;
-  base::StringPiece incoming_message(incoming_message_);
+  std::string_view incoming_message(incoming_message_);
 
   const char* line_ending = kLf;
   int line_ending_length = 1;
   size_t header_end = incoming_message.find("\n\n");
-  if (header_end == base::StringPiece::npos) {
+  if (header_end == std::string_view::npos) {
     line_ending = kCrLf;
     line_ending_length = 2;
     header_end = incoming_message.find("\r\n\r\n");
-    if (header_end == base::StringPiece::npos)
+    if (header_end == std::string_view::npos)
       return false;
   }
 
-  base::StringPiece command;
-  std::map<base::StringPiece, base::StringPiece> headers;
+  std::string_view command;
+  std::map<std::string_view, std::string_view> headers;
 
-  std::vector<base::StringPiece> header_lines = SplitStringPieceUsingSubstr(
+  std::vector<std::string_view> header_lines = SplitStringPieceUsingSubstr(
       incoming_message.substr(0, header_end), line_ending,
       base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 
@@ -368,9 +368,9 @@ bool InvalidationServiceStompWebsocket::HandleFrame() {
   command = header_lines[0];
   header_lines.erase(header_lines.begin());
 
-  for (base::StringPiece header_line : header_lines) {
+  for (std::string_view header_line : header_lines) {
     size_t separator = header_line.find(':');
-    if (separator == base::StringPiece::npos)
+    if (separator == std::string_view::npos)
       return false;
     headers[header_line.substr(0, separator)] =
         header_line.substr(separator + 1);
@@ -387,7 +387,7 @@ bool InvalidationServiceStompWebsocket::HandleFrame() {
 
     const auto& heart_beat_header = headers.find(kHeartBeatHeader);
     if (heart_beat_header != headers.end()) {
-      std::vector<base::StringPiece> heart_beat_delays = base::SplitStringPiece(
+      std::vector<std::string_view> heart_beat_delays = base::SplitStringPiece(
           heart_beat_header->second, ",", base::TRIM_WHITESPACE,
           base::SPLIT_WANT_NONEMPTY);
       if (heart_beat_delays.size() != 2)
@@ -441,13 +441,13 @@ bool InvalidationServiceStompWebsocket::HandleFrame() {
     // strictly an error if we do.
   } else if (command == kMessageCommand) {
     const auto& content_length_header = headers.find(kContentLengthHeader);
-    base::StringPiece body =
+    std::string_view body =
         incoming_message.substr(header_end + 2 * line_ending_length);
     size_t body_end;
     if (content_length_header == headers.end()) {
       body_end = body.find('\0');
       // Frames are supposed to always end with a NUL-byte
-      if (body_end == base::StringPiece::npos)
+      if (body_end == std::string_view::npos)
         return false;
     } else {
       if (!base::StringToSizeT(content_length_header->second, &body_end))

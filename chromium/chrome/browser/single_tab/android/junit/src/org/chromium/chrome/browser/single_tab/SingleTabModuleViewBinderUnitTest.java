@@ -11,13 +11,13 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 
 import static org.chromium.chrome.browser.single_tab.SingleTabViewProperties.CLICK_LISTENER;
 import static org.chromium.chrome.browser.single_tab.SingleTabViewProperties.FAVICON;
 import static org.chromium.chrome.browser.single_tab.SingleTabViewProperties.IS_VISIBLE;
 import static org.chromium.chrome.browser.single_tab.SingleTabViewProperties.LATERAL_MARGIN;
+import static org.chromium.chrome.browser.single_tab.SingleTabViewProperties.SEE_MORE_LINK_CLICK_LISTENER;
 import static org.chromium.chrome.browser.single_tab.SingleTabViewProperties.TAB_THUMBNAIL;
 import static org.chromium.chrome.browser.single_tab.SingleTabViewProperties.TITLE;
 import static org.chromium.chrome.browser.single_tab.SingleTabViewProperties.URL;
@@ -42,14 +42,10 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
 
-import org.chromium.base.ContextUtils;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.tab_ui.TabListFaviconProvider;
-import org.chromium.chrome.browser.tab_ui.TabSwitcher;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.util.BrowserUiUtils.ModuleTypeOnStartAndNtp;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
@@ -70,8 +66,8 @@ public class SingleTabModuleViewBinderUnitTest {
     private PropertyModel mPropertyModel;
 
     @Mock private View.OnClickListener mClickListener;
+    @Mock private Runnable mSeeMoreLinkClickListener;
     @Mock private TabModelSelector mTabModelSelector;
-    @Mock private TabSwitcher.OnTabSelectingListener mOnTabSelectingListener;
     @Mock private TabListFaviconProvider mTabListFaviconProvider;
 
     @Before
@@ -187,32 +183,13 @@ public class SingleTabModuleViewBinderUnitTest {
         mPropertyModel.set(CLICK_LISTENER, mClickListener);
         mSingleTabModuleView.performClick();
         verify(mClickListener).onClick(any());
-    }
 
-    @Test
-    @SmallTest
-    public void testRecordHistogramSingleTabCardClick_StartSurface() {
-        doReturn(mTabId).when(mTabModelSelector).getCurrentTabId();
-        doReturn(false).when(mTabModelSelector).isIncognitoSelected();
-        SingleTabSwitcherMediator mediator =
-                new SingleTabSwitcherMediator(
-                        ContextUtils.getApplicationContext(),
-                        mPropertyModel,
-                        mTabModelSelector,
-                        mTabListFaviconProvider,
-                        /* TabContentManager= */ null,
-                        /* singleTabCardClickedCallback= */ null,
-                        /* isSurfacePolishEnabled= */ false,
-                        /* moduleDelegate= */ null);
-        mediator.setOnTabSelectingListener(mOnTabSelectingListener);
-        mSingleTabModuleView.performClick();
-        assertEquals(
-                HISTOGRAM_START_SURFACE_MODULE_CLICK
-                        + " is not recorded correctly when clicking on the single tab card.",
-                1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        HISTOGRAM_START_SURFACE_MODULE_CLICK,
-                        ModuleTypeOnStartAndNtp.SINGLE_TAB_CARD));
+        mPropertyModel.set(SEE_MORE_LINK_CLICK_LISTENER, mSeeMoreLinkClickListener);
+        TextView seeMoreLinkView =
+                mSingleTabModuleView.findViewById(R.id.tab_switcher_see_more_link);
+        assertNotNull(seeMoreLinkView);
+        seeMoreLinkView.performClick();
+        verify(mSeeMoreLinkClickListener).run();
     }
 
     @Test

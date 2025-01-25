@@ -4,16 +4,13 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "xfa/fxfa/formcalc/cxfa_fmlexer.h"
 
 #include <algorithm>
 
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_extension.h"
+#include "core/fxcrt/stl_util.h"
 
 namespace {
 
@@ -45,7 +42,7 @@ struct XFA_FMKeyword {
   const char* m_keyword;  // Raw, POD struct.
 };
 
-const XFA_FMKeyword keyWords[] = {
+const XFA_FMKeyword kKeyWords[] = {
     {TOKdo, "do"},
     {TOKkseq, "eq"},
     {TOKksge, "ge"},
@@ -86,7 +83,7 @@ const XFA_FMKeyword keyWords[] = {
 };
 
 #ifndef NDEBUG
-const char* const tokenStrings[] = {
+constexpr auto kTokenStrings = fxcrt::ToArray<const char*>({
     "TOKand",        "TOKlparen",     "TOKrparen",   "TOKmul",
     "TOKplus",       "TOKcomma",      "TOKminus",    "TOKdot",
     "TOKdiv",        "TOKlt",         "TOKassign",   "TOKgt",
@@ -104,17 +101,18 @@ const char* const tokenStrings[] = {
     "TOKcontinue",   "TOKfunc",       "TOKendif",    "TOKstar",
     "TOKidentifier", "TOKunderscore", "TOKdollar",   "TOKexclamation",
     "TOKcall",       "TOKstring",     "TOKnumber",   "TOKreserver",
-};
+});
 #endif  // NDEBUG
 
 XFA_FM_TOKEN TokenizeIdentifier(WideStringView str) {
   const XFA_FMKeyword* result =
-      std::find_if(std::begin(keyWords), std::end(keyWords),
+      std::find_if(std::begin(kKeyWords), std::end(kKeyWords),
                    [str](const XFA_FMKeyword& iter) {
                      return str.EqualsASCII(iter.m_keyword);
                    });
-  if (result != std::end(keyWords) && str.EqualsASCII(result->m_keyword))
+  if (result != std::end(kKeyWords) && str.EqualsASCII(result->m_keyword)) {
     return result->m_type;
+  }
   return TOKidentifier;
 }
 
@@ -134,7 +132,7 @@ CXFA_FMLexer::Token::~Token() = default;
 #ifndef NDEBUG
 WideString CXFA_FMLexer::Token::ToDebugString() const {
   WideString str = WideString::FromASCII("type = ");
-  str += WideString::FromASCII(tokenStrings[m_type]);
+  str += WideString::FromASCII(kTokenStrings[m_type]);
   str += WideString::FromASCII(", string = ");
   str += m_string;
   return str;
@@ -316,8 +314,7 @@ CXFA_FMLexer::Token CXFA_FMLexer::AdvanceForNumber() {
   // This will set end to the character after the end of the number.
   size_t used_length = 0;
   if (m_nCursor < m_spInput.size()) {
-    FXSYS_wcstof(&m_spInput[m_nCursor], m_spInput.size() - m_nCursor,
-                 &used_length);
+    FXSYS_wcstof(WideStringView(m_spInput.subspan(m_nCursor)), &used_length);
   }
   size_t end = m_nCursor + used_length;
   if (used_length == 0 ||

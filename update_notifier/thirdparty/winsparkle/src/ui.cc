@@ -673,7 +673,7 @@ void UpdateDialog::StateUpdateError(Error error) {
   switch (error.kind()) {
     case Error::kNone:
       NOTREACHED();
-      break;
+      //break;
     case Error::kCancelled:
       message_id = IDS_UPDATE_NOTIFICATION_ERROR_CANCEL_BASE;
       break;

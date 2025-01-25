@@ -497,22 +497,35 @@ export class RealboxElement extends RealboxElementBase {
       return;
     }
 
-    // Query for zero-prefix matches if user is tabbing into an empty input and
-    // matches are not visible.
-    if (!this.$.input.value && !this.dropdownIsVisible) {
-      this.queryAutocomplete_('');
+    if (!this.dropdownIsVisible) {
+      // Query for zero-prefix matches if user is tabbing into an empty input
+      // and matches are not visible.
+      if (!this.$.input.value) {
+        this.queryAutocomplete_('');
+      } else if (this.showThumbnail) {
+        // Query current input if tabbing into input while thumbnail is showing
+        // and matches are not visible.
+        this.queryAutocomplete_(this.$.input.value);
+      }
     }
   }
 
   private onInputMouseDown_(e: MouseEvent) {
+    // Non-main (generally left) mouse clicks are ignored.
     if (e.button !== 0) {
       return;
     }
 
-    // Query for zero-prefix matches when the main (generally left) mouse button
-    // is pressed on an empty input and matches are not visible.
-    if (!this.$.input.value && !this.dropdownIsVisible) {
-      this.queryAutocomplete_('');
+    if (!this.dropdownIsVisible) {
+      // Query for zero-prefix matches if user is clicking into an empty input
+      // and matches are not visible.
+      if (!this.$.input.value) {
+        this.queryAutocomplete_('');
+      } else if (this.showThumbnail) {
+        // Query current input if clicking into input while thumbnail is
+        // showing and matches are not visible.
+        this.queryAutocomplete_(this.$.input.value);
+      }
     }
   }
 
@@ -581,7 +594,7 @@ export class RealboxElement extends RealboxElementBase {
           // thumbnail isn't part of the text input.
           this.queryAutocomplete_(inputValue);
           e.preventDefault();
-        } else if (e.key === 'Tab') {
+        } else if (e.key === 'Tab' && !e.shiftKey) {
           this.$.input.focus();
           e.preventDefault();
         } else if (
@@ -594,9 +607,11 @@ export class RealboxElement extends RealboxElementBase {
         }
       } else if (
           this.$.input.selectionStart === 0 &&
-          this.$.input.selectionEnd === 0 && e.key === 'Backspace' &&
-          this.$.input === this.shadowRoot!.activeElement) {
-        // Backspacing the thumbnail results in the thumbnail being focused.
+          this.$.input.selectionEnd === 0 &&
+          this.$.input === this.shadowRoot!.activeElement &&
+          (e.key === 'Backspace' || (e.key === 'Tab' && e.shiftKey))) {
+        // Backspacing or shift-tabbing the thumbnail results in the thumbnail
+        // being focused.
         thumbnail?.focus();
         e.preventDefault();
       }
@@ -769,7 +784,8 @@ export class RealboxElement extends RealboxElementBase {
   }
 
   private computePlaceholderText_(): string {
-    return this.showThumbnail ? '' : this.i18n('searchBoxHint');
+    return this.showThumbnail ? this.i18n('searchBoxHintMultimodal') :
+                                this.i18n('searchBoxHint');
   }
 
   /**

@@ -19,8 +19,10 @@
 #include "ui/base/resource/data_pack.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/resource/resource_scale_factor.h"
-#include "ui/base/ui_base_jni_headers/ResourceBundle_jni.h"
 #include "ui/base/ui_base_paths.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "ui/base/ui_base_jni_headers/ResourceBundle_jni.h"
 
 namespace ui {
 
@@ -80,7 +82,7 @@ std::unique_ptr<DataPack> LoadDataPackFromLocalePak(
   auto data_pack = std::make_unique<DataPack>(k100Percent);
   if (!data_pack->LoadFromFileRegion(base::File(locale_pack_fd), region)) {
     LOG(WARNING) << "failed to load locale.pak";
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
   return data_pack;

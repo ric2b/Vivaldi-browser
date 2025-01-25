@@ -26,7 +26,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -43,7 +42,6 @@ import org.robolectric.shadows.ShadowLooper;
 import org.chromium.base.Callback;
 import org.chromium.base.Promise;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.JniMocker;
@@ -108,8 +106,6 @@ public class SigninManagerImplTest {
                     .fullName("full name")
                     .givenName("given name")
                     .build();
-
-    @Rule public final TestRule mFeaturesProcessorRule = new Features.JUnitProcessor();
 
     @Rule public final JniMocker mocker = new JniMocker();
 
@@ -501,7 +497,10 @@ public class SigninManagerImplTest {
     }
 
     @Test
-    @DisableFeatures(SigninFeatures.SEED_ACCOUNTS_REVAMP)
+    @DisableFeatures({
+        SigninFeatures.SEED_ACCOUNTS_REVAMP,
+        ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS
+    })
     public void signOutNonSyncingAccountFromJavaWithManagedDomain() {
         createSigninManager();
         when(mNativeMock.getManagementDomain(NATIVE_SIGNIN_MANAGER)).thenReturn("TestDomain");
@@ -521,6 +520,7 @@ public class SigninManagerImplTest {
 
     @Test
     @EnableFeatures(SigninFeatures.SEED_ACCOUNTS_REVAMP)
+    @DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     public void signOutNonSyncingAccountFromJavaWithManagedDomain_seedAccountsRevampEnabled() {
         createSigninManager();
         when(mNativeMock.getManagementDomain(NATIVE_SIGNIN_MANAGER)).thenReturn("TestDomain");
@@ -541,7 +541,10 @@ public class SigninManagerImplTest {
     }
 
     @Test
-    @DisableFeatures(SigninFeatures.SEED_ACCOUNTS_REVAMP)
+    @DisableFeatures({
+        SigninFeatures.SEED_ACCOUNTS_REVAMP,
+        ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS
+    })
     public void signOutSyncingAccountFromJavaWithManagedDomain() {
         createSigninManager();
         when(mNativeMock.getManagementDomain(NATIVE_SIGNIN_MANAGER)).thenReturn("TestDomain");
@@ -561,6 +564,7 @@ public class SigninManagerImplTest {
 
     @Test
     @EnableFeatures(SigninFeatures.SEED_ACCOUNTS_REVAMP)
+    @DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     public void signOutSyncingAccountFromJavaWithManagedDomain_seedAccountsRevampEnabled() {
         createSigninManager();
         when(mNativeMock.getManagementDomain(NATIVE_SIGNIN_MANAGER)).thenReturn("TestDomain");
@@ -581,7 +585,34 @@ public class SigninManagerImplTest {
     }
 
     @Test
-    @DisableFeatures(SigninFeatures.SEED_ACCOUNTS_REVAMP)
+    @EnableFeatures({
+        SigninFeatures.SEED_ACCOUNTS_REVAMP,
+        ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS
+    })
+    public void signOutSignedInAccountFromJavaWithManagedDomain() {
+        createSigninManager();
+        when(mNativeMock.getManagementDomain(NATIVE_SIGNIN_MANAGER)).thenReturn("TestDomain");
+
+        // Trigger the sign out flow!
+        mSigninManager.signOut(SignoutReason.TEST);
+
+        // The primary account should be cleared *before* clearing any account data.
+        // For more information see crbug.com/589028.
+        InOrder inOrder = inOrder(mNativeMock, mIdentityMutator);
+        inOrder.verify(mIdentityMutator).clearPrimaryAccount(eq(SignoutReason.TEST));
+        verify(mIdentityMutator)
+                .seedAccountsThenReloadAllAccountsWithPrimaryAccount(List.of(), null);
+
+        // Sign-out should only clear the profile when the user is managed.
+        verify(mNativeMock, never()).wipeProfileData(anyLong(), any());
+        inOrder.verify(mNativeMock).wipeGoogleServiceWorkerCaches(eq(NATIVE_SIGNIN_MANAGER), any());
+    }
+
+    @Test
+    @DisableFeatures({
+        SigninFeatures.SEED_ACCOUNTS_REVAMP,
+        ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS
+    })
     public void signOutNonSyncingAccountFromJavaWithNullDomain() {
         createSigninManager();
         mSigninManager.signOut(SignoutReason.TEST);
@@ -729,7 +760,10 @@ public class SigninManagerImplTest {
     }
 
     @Test
-    @DisableFeatures(SigninFeatures.SEED_ACCOUNTS_REVAMP)
+    @DisableFeatures({
+        SigninFeatures.SEED_ACCOUNTS_REVAMP,
+        ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS
+    })
     public void signOutSyncingAccountFromJavaWithNullDomainAndForceWipe() {
         createSigninManager();
         when(mIdentityManagerNativeMock.getPrimaryAccountInfo(

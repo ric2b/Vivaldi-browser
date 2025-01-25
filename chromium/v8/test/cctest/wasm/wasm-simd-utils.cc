@@ -18,6 +18,7 @@
 #include "test/common/c-signature.h"
 #include "test/common/value-helper.h"
 #include "test/common/wasm/wasm-macro-gen.h"
+#include "third_party/fp16/src/include/fp16.h"
 
 namespace v8 {
 namespace internal {
@@ -395,6 +396,56 @@ void RunI64x2ShiftOpTest(TestExecutionTier execution_tier, WasmOpcode opcode,
   }
 }
 
+bool IsCanonical(uint16_t actual) {
+  // Canonical NaN has quiet bit and no payload.
+  return isnan(actual) && (actual & 0xFE00) == actual;
+}
+
+bool isnan(uint16_t f) { return (f & 0x7C00) == 0x7C00 && (f & 0x03FF); }
+
+void CheckFloat16LaneResult(float x, float y, uint16_t expected,
+                            uint16_t actual, bool exact) {
+  CheckFloat16LaneResult(x, y, y, expected, actual, exact);
+}
+
+void CheckFloat16LaneResult(float x, float y, float z, uint16_t expected,
+                            uint16_t actual, bool exact) {
+  if (isnan(expected)) {
+    CHECK(isnan(actual));
+    if (std::isnan(x) && IsSameNan(fp16_ieee_from_fp32_value(x), actual)) {
+      return;
+    }
+    if (std::isnan(y) && IsSameNan(fp16_ieee_from_fp32_value(y), actual)) {
+      return;
+    }
+    if (std::isnan(z) && IsSameNan(fp16_ieee_from_fp32_value(z), actual)) {
+      return;
+    }
+    if (IsSameNan(expected, actual)) return;
+    if (IsCanonical(actual)) return;
+    // This is expected to assert; it's useful for debugging.
+    CHECK_EQ(expected, actual);
+  } else {
+    if (exact) {
+      CHECK_EQ(expected, actual);
+      return;
+    }
+    // Otherwise, perform an approximate equality test. First check for
+    // equality to handle +/-Infinity where approximate equality doesn't work.
+    if (expected == actual) return;
+
+    // 1% error allows all platforms to pass easily.
+    constexpr float kApproximationError = 0.01f;
+    float f32_expected = fp16_ieee_to_fp32_value(expected);
+    float f32_actual = fp16_ieee_to_fp32_value(actual);
+    float abs_error = std::abs(f32_expected) * kApproximationError;
+    float min = f32_expected - abs_error;
+    float max = f32_expected + abs_error;
+    CHECK_LE(min, f32_actual);
+    CHECK_GE(max, f32_actual);
+  }
+}
+
 bool IsExtreme(float x) {
   float abs_x = std::fabs(x);
   const float kSmallFloatThreshold = 1.0e-32f;
@@ -433,8 +484,9 @@ void CheckFloatResult(float x, float y, float expected, float actual,
 
     // 1% error allows all platforms to pass easily.
     constexpr float kApproximationError = 0.01f;
-    float abs_error = std::abs(expected) * kApproximationError,
-          min = expected - abs_error, max = expected + abs_error;
+    float abs_error = std::abs(expected) * kApproximationError;
+    float min = expected - abs_error;
+    float max = expected + abs_error;
     CHECK_LE(min, actual);
     CHECK_GE(max, actual);
   }
@@ -768,23 +820,27 @@ void RunI8x32BinOpRevecTest(WasmOpcode opcode, OpType expected_op,
   uint8_t temp1 = r.AllocateLocal(kWasmS128);
   uint8_t temp2 = r.AllocateLocal(kWasmS128);
   constexpr uint8_t offset = 16;
-
-  BUILD_AND_CHECK_REVEC_NODE(
-      r, revec_opcode,
-      WASM_LOCAL_SET(
-          temp1,
-          WASM_SIMD_BINOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
-                          WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param2)))),
-      WASM_LOCAL_SET(
-          temp2,
-          WASM_SIMD_BINOP(
-              opcode, WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param1)),
-              WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param2)))),
-      WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param3), WASM_LOCAL_GET(temp1)),
-      WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param3),
-                                 WASM_LOCAL_GET(temp2)),
-      WASM_ONE);
-
+  {
+    TSSimd256VerifyScope ts_scope(
+        r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                      compiler::turboshaft::Opcode::kSimd256Binop>);
+    BUILD_AND_CHECK_REVEC_NODE(
+        r, revec_opcode,
+        WASM_LOCAL_SET(
+            temp1,
+            WASM_SIMD_BINOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
+                            WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param2)))),
+        WASM_LOCAL_SET(
+            temp2,
+            WASM_SIMD_BINOP(
+                opcode,
+                WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param1)),
+                WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param2)))),
+        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param3), WASM_LOCAL_GET(temp1)),
+        WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param3),
+                                   WASM_LOCAL_GET(temp2)),
+        WASM_ONE);
+  }
   for (T x : compiler::ValueHelper::GetVector<T>()) {
     for (T y : compiler::ValueHelper::GetVector<T>()) {
       for (int i = 0; i < 16; i++) {
@@ -824,19 +880,23 @@ void RunI16x16UnOpRevecTest(WasmOpcode opcode, Int16UnOp expected_op,
   uint8_t temp2 = r.AllocateLocal(kWasmS128);
   constexpr uint8_t offset = 16;
 
-  BUILD_AND_CHECK_REVEC_NODE(
-      r, revec_opcode,
-      WASM_LOCAL_SET(
-          temp1,
-          WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)))),
-      WASM_LOCAL_SET(
-          temp2, WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM_OFFSET(
-                                            offset, WASM_LOCAL_GET(param1)))),
-      WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2), WASM_LOCAL_GET(temp1)),
-      WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param2),
-                                 WASM_LOCAL_GET(temp2)),
-      WASM_ONE);
-
+  {
+    TSSimd256VerifyScope ts_scope(
+        r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                      compiler::turboshaft::Opcode::kSimd256Unary>);
+    BUILD_AND_CHECK_REVEC_NODE(
+        r, revec_opcode,
+        WASM_LOCAL_SET(
+            temp1,
+            WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)))),
+        WASM_LOCAL_SET(
+            temp2, WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM_OFFSET(
+                                              offset, WASM_LOCAL_GET(param1)))),
+        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2), WASM_LOCAL_GET(temp1)),
+        WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param2),
+                                   WASM_LOCAL_GET(temp2)),
+        WASM_ONE);
+  }
   FOR_INT16_INPUTS(x) {
     r.builder().WriteMemory(&memory[1], x);
     r.builder().WriteMemory(&memory[10], x);
@@ -867,22 +927,27 @@ void RunI16x16BinOpRevecTest(WasmOpcode opcode, OpType expected_op,
   uint8_t temp2 = r.AllocateLocal(kWasmS128);
   constexpr uint8_t offset = 16;
 
-  BUILD_AND_CHECK_REVEC_NODE(
-      r, revec_opcode,
-      WASM_LOCAL_SET(
-          temp1,
-          WASM_SIMD_BINOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
-                          WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param2)))),
-      WASM_LOCAL_SET(
-          temp2,
-          WASM_SIMD_BINOP(
-              opcode, WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param1)),
-              WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param2)))),
-      WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param3), WASM_LOCAL_GET(temp1)),
-      WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param3),
-                                 WASM_LOCAL_GET(temp2)),
-      WASM_ONE);
-
+  {
+    TSSimd256VerifyScope ts_scope(
+        r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                      compiler::turboshaft::Opcode::kSimd256Binop>);
+    BUILD_AND_CHECK_REVEC_NODE(
+        r, revec_opcode,
+        WASM_LOCAL_SET(
+            temp1,
+            WASM_SIMD_BINOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
+                            WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param2)))),
+        WASM_LOCAL_SET(
+            temp2,
+            WASM_SIMD_BINOP(
+                opcode,
+                WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param1)),
+                WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param2)))),
+        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param3), WASM_LOCAL_GET(temp1)),
+        WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param3),
+                                   WASM_LOCAL_GET(temp2)),
+        WASM_ONE);
+  }
   for (T x : compiler::ValueHelper::GetVector<T>()) {
     for (T y : compiler::ValueHelper::GetVector<T>()) {
       for (int i = 0; i < 8; i++) {
@@ -925,28 +990,32 @@ void RunI16x16ShiftOpRevecTest(WasmOpcode opcode, Int16ShiftOp expected_op,
     uint8_t temp3 = r.AllocateLocal(kWasmS128);
     constexpr uint8_t offset = 16;
 
-    BUILD_AND_CHECK_REVEC_NODE(
-        r, revec_opcode,
-        WASM_LOCAL_SET(temp2,
-                       WASM_SIMD_SHIFT_OP(
-                           opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
-                           WASM_I32V(shift))),
-        WASM_LOCAL_SET(temp3,
-                       WASM_SIMD_SHIFT_OP(opcode,
-                                          WASM_SIMD_LOAD_MEM_OFFSET(
-                                              offset, WASM_LOCAL_GET(param1)),
-                                          WASM_I32V(shift))),
-        WASM_LOCAL_SET(temp1,
-                       WASM_LOAD_MEM(MachineType::Int32(), WASM_I32V(64))),
-        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2),
-                            WASM_SIMD_SHIFT_OP(opcode, WASM_LOCAL_GET(temp2),
-                                               WASM_LOCAL_GET(temp1))),
-        WASM_SIMD_STORE_MEM_OFFSET(
-            offset, WASM_LOCAL_GET(param2),
-            WASM_SIMD_SHIFT_OP(opcode, WASM_LOCAL_GET(temp3),
-                               WASM_LOCAL_GET(temp1))),
-        WASM_ONE);
-
+    {
+      TSSimd256VerifyScope ts_scope(
+          r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                        compiler::turboshaft::Opcode::kSimd256Shift>);
+      BUILD_AND_CHECK_REVEC_NODE(
+          r, revec_opcode,
+          WASM_LOCAL_SET(temp2,
+                         WASM_SIMD_SHIFT_OP(
+                             opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
+                             WASM_I32V(shift))),
+          WASM_LOCAL_SET(temp3,
+                         WASM_SIMD_SHIFT_OP(opcode,
+                                            WASM_SIMD_LOAD_MEM_OFFSET(
+                                                offset, WASM_LOCAL_GET(param1)),
+                                            WASM_I32V(shift))),
+          WASM_LOCAL_SET(temp1,
+                         WASM_LOAD_MEM(MachineType::Int32(), WASM_I32V(64))),
+          WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2),
+                              WASM_SIMD_SHIFT_OP(opcode, WASM_LOCAL_GET(temp2),
+                                                 WASM_LOCAL_GET(temp1))),
+          WASM_SIMD_STORE_MEM_OFFSET(
+              offset, WASM_LOCAL_GET(param2),
+              WASM_SIMD_SHIFT_OP(opcode, WASM_LOCAL_GET(temp3),
+                                 WASM_LOCAL_GET(temp1))),
+          WASM_ONE);
+    }
     r.builder().WriteMemory(reinterpret_cast<int32_t*>(&memory[32]), shift);
     FOR_INT16_INPUTS(x) {
       r.builder().WriteMemory(&memory[1], x);
@@ -973,20 +1042,23 @@ void RunI32x8UnOpRevecTest(WasmOpcode opcode, Int32UnOp expected_op,
   uint8_t temp1 = r.AllocateLocal(kWasmS128);
   uint8_t temp2 = r.AllocateLocal(kWasmS128);
   constexpr uint8_t offset = 16;
-
-  BUILD_AND_CHECK_REVEC_NODE(
-      r, revec_opcode,
-      WASM_LOCAL_SET(
-          temp1,
-          WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)))),
-      WASM_LOCAL_SET(
-          temp2, WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM_OFFSET(
-                                            offset, WASM_LOCAL_GET(param1)))),
-      WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2), WASM_LOCAL_GET(temp1)),
-      WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param2),
-                                 WASM_LOCAL_GET(temp2)),
-      WASM_ONE);
-
+  {
+    TSSimd256VerifyScope ts_scope(
+        r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                      compiler::turboshaft::Opcode::kSimd256Unary>);
+    BUILD_AND_CHECK_REVEC_NODE(
+        r, revec_opcode,
+        WASM_LOCAL_SET(
+            temp1,
+            WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)))),
+        WASM_LOCAL_SET(
+            temp2, WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM_OFFSET(
+                                              offset, WASM_LOCAL_GET(param1)))),
+        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2), WASM_LOCAL_GET(temp1)),
+        WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param2),
+                                   WASM_LOCAL_GET(temp2)),
+        WASM_ONE);
+  }
   FOR_INT32_INPUTS(x) {
     r.builder().WriteMemory(&memory[1], x);
     r.builder().WriteMemory(&memory[6], x);
@@ -1016,23 +1088,27 @@ void RunI32x8BinOpRevecTest(WasmOpcode opcode, OpType expected_op,
   uint8_t temp1 = r.AllocateLocal(kWasmS128);
   uint8_t temp2 = r.AllocateLocal(kWasmS128);
   constexpr uint8_t offset = 16;
-
-  BUILD_AND_CHECK_REVEC_NODE(
-      r, revec_opcode,
-      WASM_LOCAL_SET(
-          temp1,
-          WASM_SIMD_BINOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
-                          WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param2)))),
-      WASM_LOCAL_SET(
-          temp2,
-          WASM_SIMD_BINOP(
-              opcode, WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param1)),
-              WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param2)))),
-      WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param3), WASM_LOCAL_GET(temp1)),
-      WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param3),
-                                 WASM_LOCAL_GET(temp2)),
-      WASM_ONE);
-
+  {
+    TSSimd256VerifyScope ts_scope(
+        r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                      compiler::turboshaft::Opcode::kSimd256Binop>);
+    BUILD_AND_CHECK_REVEC_NODE(
+        r, revec_opcode,
+        WASM_LOCAL_SET(
+            temp1,
+            WASM_SIMD_BINOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
+                            WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param2)))),
+        WASM_LOCAL_SET(
+            temp2,
+            WASM_SIMD_BINOP(
+                opcode,
+                WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param1)),
+                WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param2)))),
+        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param3), WASM_LOCAL_GET(temp1)),
+        WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param3),
+                                   WASM_LOCAL_GET(temp2)),
+        WASM_ONE);
+  }
   for (T x : compiler::ValueHelper::GetVector<T>()) {
     for (T y : compiler::ValueHelper::GetVector<T>()) {
       for (int i = 0; i < 4; i++) {
@@ -1075,28 +1151,32 @@ void RunI32x8ShiftOpRevecTest(WasmOpcode opcode, Int32ShiftOp expected_op,
     uint8_t temp3 = r.AllocateLocal(kWasmS128);
     constexpr uint8_t offset = 16;
 
-    BUILD_AND_CHECK_REVEC_NODE(
-        r, revec_opcode,
-        WASM_LOCAL_SET(temp2,
-                       WASM_SIMD_SHIFT_OP(
-                           opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
-                           WASM_I32V(shift))),
-        WASM_LOCAL_SET(temp3,
-                       WASM_SIMD_SHIFT_OP(opcode,
-                                          WASM_SIMD_LOAD_MEM_OFFSET(
-                                              offset, WASM_LOCAL_GET(param1)),
-                                          WASM_I32V(shift))),
-        WASM_LOCAL_SET(temp1,
-                       WASM_LOAD_MEM(MachineType::Int32(), WASM_I32V(64))),
-        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2),
-                            WASM_SIMD_SHIFT_OP(opcode, WASM_LOCAL_GET(temp2),
-                                               WASM_LOCAL_GET(temp1))),
-        WASM_SIMD_STORE_MEM_OFFSET(
-            offset, WASM_LOCAL_GET(param2),
-            WASM_SIMD_SHIFT_OP(opcode, WASM_LOCAL_GET(temp3),
-                               WASM_LOCAL_GET(temp1))),
-        WASM_ONE);
-
+    {
+      TSSimd256VerifyScope ts_scope(
+          r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                        compiler::turboshaft::Opcode::kSimd256Shift>);
+      BUILD_AND_CHECK_REVEC_NODE(
+          r, revec_opcode,
+          WASM_LOCAL_SET(temp2,
+                         WASM_SIMD_SHIFT_OP(
+                             opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
+                             WASM_I32V(shift))),
+          WASM_LOCAL_SET(temp3,
+                         WASM_SIMD_SHIFT_OP(opcode,
+                                            WASM_SIMD_LOAD_MEM_OFFSET(
+                                                offset, WASM_LOCAL_GET(param1)),
+                                            WASM_I32V(shift))),
+          WASM_LOCAL_SET(temp1,
+                         WASM_LOAD_MEM(MachineType::Int32(), WASM_I32V(64))),
+          WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2),
+                              WASM_SIMD_SHIFT_OP(opcode, WASM_LOCAL_GET(temp2),
+                                                 WASM_LOCAL_GET(temp1))),
+          WASM_SIMD_STORE_MEM_OFFSET(
+              offset, WASM_LOCAL_GET(param2),
+              WASM_SIMD_SHIFT_OP(opcode, WASM_LOCAL_GET(temp3),
+                                 WASM_LOCAL_GET(temp1))),
+          WASM_ONE);
+    }
     r.builder().WriteMemory(&memory[16], shift);
     FOR_INT32_INPUTS(x) {
       r.builder().WriteMemory(&memory[1], x);
@@ -1129,22 +1209,27 @@ void RunI64x4BinOpRevecTest(WasmOpcode opcode, Int64BinOp expected_op,
   uint8_t temp2 = r.AllocateLocal(kWasmS128);
   constexpr uint8_t offset = 16;
 
-  BUILD_AND_CHECK_REVEC_NODE(
-      r, revec_opcode,
-      WASM_LOCAL_SET(
-          temp1,
-          WASM_SIMD_BINOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
-                          WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param2)))),
-      WASM_LOCAL_SET(
-          temp2,
-          WASM_SIMD_BINOP(
-              opcode, WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param1)),
-              WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param2)))),
-      WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param3), WASM_LOCAL_GET(temp1)),
-      WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param3),
-                                 WASM_LOCAL_GET(temp2)),
-      WASM_ONE);
-
+  {
+    TSSimd256VerifyScope ts_scope(
+        r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                      compiler::turboshaft::Opcode::kSimd256Binop>);
+    BUILD_AND_CHECK_REVEC_NODE(
+        r, revec_opcode,
+        WASM_LOCAL_SET(
+            temp1,
+            WASM_SIMD_BINOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
+                            WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param2)))),
+        WASM_LOCAL_SET(
+            temp2,
+            WASM_SIMD_BINOP(
+                opcode,
+                WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param1)),
+                WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param2)))),
+        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param3), WASM_LOCAL_GET(temp1)),
+        WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param3),
+                                   WASM_LOCAL_GET(temp2)),
+        WASM_ONE);
+  }
   FOR_INT64_INPUTS(x) {
     FOR_INT64_INPUTS(y) {
       for (int i = 0; i < 2; i++) {
@@ -1180,28 +1265,32 @@ void RunI64x4ShiftOpRevecTest(WasmOpcode opcode, Int64ShiftOp expected_op,
     uint8_t temp3 = r.AllocateLocal(kWasmS128);
     constexpr uint8_t offset = 16;
 
-    BUILD_AND_CHECK_REVEC_NODE(
-        r, revec_opcode,
-        WASM_LOCAL_SET(temp2,
-                       WASM_SIMD_SHIFT_OP(
-                           opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
-                           WASM_I32V(shift))),
-        WASM_LOCAL_SET(temp3,
-                       WASM_SIMD_SHIFT_OP(opcode,
-                                          WASM_SIMD_LOAD_MEM_OFFSET(
-                                              offset, WASM_LOCAL_GET(param1)),
-                                          WASM_I32V(shift))),
-        WASM_LOCAL_SET(temp1,
-                       WASM_LOAD_MEM(MachineType::Int32(), WASM_I32V(64))),
-        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2),
-                            WASM_SIMD_SHIFT_OP(opcode, WASM_LOCAL_GET(temp2),
-                                               WASM_LOCAL_GET(temp1))),
-        WASM_SIMD_STORE_MEM_OFFSET(
-            offset, WASM_LOCAL_GET(param2),
-            WASM_SIMD_SHIFT_OP(opcode, WASM_LOCAL_GET(temp3),
-                               WASM_LOCAL_GET(temp1))),
-        WASM_ONE);
-
+    {
+      TSSimd256VerifyScope ts_scope(
+          r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                        compiler::turboshaft::Opcode::kSimd256Shift>);
+      BUILD_AND_CHECK_REVEC_NODE(
+          r, revec_opcode,
+          WASM_LOCAL_SET(temp2,
+                         WASM_SIMD_SHIFT_OP(
+                             opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
+                             WASM_I32V(shift))),
+          WASM_LOCAL_SET(temp3,
+                         WASM_SIMD_SHIFT_OP(opcode,
+                                            WASM_SIMD_LOAD_MEM_OFFSET(
+                                                offset, WASM_LOCAL_GET(param1)),
+                                            WASM_I32V(shift))),
+          WASM_LOCAL_SET(temp1,
+                         WASM_LOAD_MEM(MachineType::Int32(), WASM_I32V(64))),
+          WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2),
+                              WASM_SIMD_SHIFT_OP(opcode, WASM_LOCAL_GET(temp2),
+                                                 WASM_LOCAL_GET(temp1))),
+          WASM_SIMD_STORE_MEM_OFFSET(
+              offset, WASM_LOCAL_GET(param2),
+              WASM_SIMD_SHIFT_OP(opcode, WASM_LOCAL_GET(temp3),
+                                 WASM_LOCAL_GET(temp1))),
+          WASM_ONE);
+    }
     r.builder().WriteMemory(reinterpret_cast<int32_t*>(&memory[8]), shift);
     FOR_INT64_INPUTS(x) {
       r.builder().WriteMemory(&memory[0], x);
@@ -1229,19 +1318,23 @@ void RunF32x8UnOpRevecTest(WasmOpcode opcode, FloatUnOp expected_op,
   uint8_t temp2 = r.AllocateLocal(kWasmS128);
   constexpr uint8_t offset = 16;
 
-  BUILD_AND_CHECK_REVEC_NODE(
-      r, revec_opcode,
-      WASM_LOCAL_SET(
-          temp1,
-          WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)))),
-      WASM_LOCAL_SET(
-          temp2, WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM_OFFSET(
-                                            offset, WASM_LOCAL_GET(param1)))),
-      WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2), WASM_LOCAL_GET(temp1)),
-      WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param2),
-                                 WASM_LOCAL_GET(temp2)),
-      WASM_ONE);
-
+  {
+    TSSimd256VerifyScope ts_scope(
+        r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                      compiler::turboshaft::Opcode::kSimd256Unary>);
+    BUILD_AND_CHECK_REVEC_NODE(
+        r, revec_opcode,
+        WASM_LOCAL_SET(
+            temp1,
+            WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)))),
+        WASM_LOCAL_SET(
+            temp2, WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM_OFFSET(
+                                              offset, WASM_LOCAL_GET(param1)))),
+        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2), WASM_LOCAL_GET(temp1)),
+        WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param2),
+                                   WASM_LOCAL_GET(temp2)),
+        WASM_ONE);
+  }
   FOR_FLOAT32_INPUTS(x) {
     if (!PlatformCanRepresent(x)) continue;
     float expected = expected_op(x);
@@ -1289,22 +1382,27 @@ void RunF32x8BinOpRevecTest(WasmOpcode opcode, FloatBinOp expected_op,
   uint8_t temp2 = r.AllocateLocal(kWasmS128);
   constexpr uint8_t offset = 16;
 
-  BUILD_AND_CHECK_REVEC_NODE(
-      r, revec_opcode,
-      WASM_LOCAL_SET(
-          temp1,
-          WASM_SIMD_BINOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
-                          WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param2)))),
-      WASM_LOCAL_SET(
-          temp2,
-          WASM_SIMD_BINOP(
-              opcode, WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param1)),
-              WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param2)))),
-      WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param3), WASM_LOCAL_GET(temp1)),
-      WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param3),
-                                 WASM_LOCAL_GET(temp2)),
-      WASM_ONE);
-
+  {
+    TSSimd256VerifyScope ts_scope(
+        r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                      compiler::turboshaft::Opcode::kSimd256Binop>);
+    BUILD_AND_CHECK_REVEC_NODE(
+        r, revec_opcode,
+        WASM_LOCAL_SET(
+            temp1,
+            WASM_SIMD_BINOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
+                            WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param2)))),
+        WASM_LOCAL_SET(
+            temp2,
+            WASM_SIMD_BINOP(
+                opcode,
+                WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param1)),
+                WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param2)))),
+        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param3), WASM_LOCAL_GET(temp1)),
+        WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param3),
+                                   WASM_LOCAL_GET(temp2)),
+        WASM_ONE);
+  }
   FOR_FLOAT32_INPUTS(x) {
     if (!PlatformCanRepresent(x)) continue;
     FOR_FLOAT32_INPUTS(y) {
@@ -1332,6 +1430,7 @@ void RunF32x8BinOpRevecTest(WasmOpcode opcode, FloatBinOp expected_op,
     FOR_FLOAT32_NAN_INPUTS(j) {
       float y = base::bit_cast<float>(nan_test_array[j]);
       if (!PlatformCanRepresent(y)) continue;
+      if (ShouldSkipTestingConstants(opcode, x, y)) continue;
       float expected = expected_op(x, y);
       if (!PlatformCanRepresent(expected)) continue;
       for (int i = 0; i < 4; i++) {
@@ -1363,19 +1462,23 @@ void RunF64x4UnOpRevecTest(WasmOpcode opcode, DoubleUnOp expected_op,
   uint8_t temp2 = r.AllocateLocal(kWasmS128);
   constexpr uint8_t offset = 16;
 
-  BUILD_AND_CHECK_REVEC_NODE(
-      r, revec_opcode,
-      WASM_LOCAL_SET(
-          temp1,
-          WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)))),
-      WASM_LOCAL_SET(
-          temp2, WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM_OFFSET(
-                                            offset, WASM_LOCAL_GET(param1)))),
-      WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2), WASM_LOCAL_GET(temp1)),
-      WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param2),
-                                 WASM_LOCAL_GET(temp2)),
-      WASM_ONE);
-
+  {
+    TSSimd256VerifyScope ts_scope(
+        r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                      compiler::turboshaft::Opcode::kSimd256Unary>);
+    BUILD_AND_CHECK_REVEC_NODE(
+        r, revec_opcode,
+        WASM_LOCAL_SET(
+            temp1,
+            WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)))),
+        WASM_LOCAL_SET(
+            temp2, WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM_OFFSET(
+                                              offset, WASM_LOCAL_GET(param1)))),
+        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2), WASM_LOCAL_GET(temp1)),
+        WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param2),
+                                   WASM_LOCAL_GET(temp2)),
+        WASM_ONE);
+  }
   FOR_FLOAT64_INPUTS(x) {
     if (!PlatformCanRepresent(x)) continue;
     double expected = expected_op(x);
@@ -1423,22 +1526,27 @@ void RunF64x4BinOpRevecTest(WasmOpcode opcode, DoubleBinOp expected_op,
   uint8_t temp2 = r.AllocateLocal(kWasmS128);
   constexpr uint8_t offset = 16;
 
-  BUILD_AND_CHECK_REVEC_NODE(
-      r, revec_opcode,
-      WASM_LOCAL_SET(
-          temp1,
-          WASM_SIMD_BINOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
-                          WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param2)))),
-      WASM_LOCAL_SET(
-          temp2,
-          WASM_SIMD_BINOP(
-              opcode, WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param1)),
-              WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param2)))),
-      WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param3), WASM_LOCAL_GET(temp1)),
-      WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param3),
-                                 WASM_LOCAL_GET(temp2)),
-      WASM_ONE);
-
+  {
+    TSSimd256VerifyScope ts_scope(
+        r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                      compiler::turboshaft::Opcode::kSimd256Binop>);
+    BUILD_AND_CHECK_REVEC_NODE(
+        r, revec_opcode,
+        WASM_LOCAL_SET(
+            temp1,
+            WASM_SIMD_BINOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)),
+                            WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param2)))),
+        WASM_LOCAL_SET(
+            temp2,
+            WASM_SIMD_BINOP(
+                opcode,
+                WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param1)),
+                WASM_SIMD_LOAD_MEM_OFFSET(offset, WASM_LOCAL_GET(param2)))),
+        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param3), WASM_LOCAL_GET(temp1)),
+        WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param3),
+                                   WASM_LOCAL_GET(temp2)),
+        WASM_ONE);
+  }
   FOR_FLOAT64_INPUTS(x) {
     if (!PlatformCanRepresent(x)) continue;
     FOR_FLOAT64_INPUTS(y) {
@@ -1466,6 +1574,7 @@ void RunF64x4BinOpRevecTest(WasmOpcode opcode, DoubleBinOp expected_op,
     FOR_FLOAT64_NAN_INPUTS(j) {
       double y = base::bit_cast<double>(double_nan_test_array[j]);
       if (!PlatformCanRepresent(y)) continue;
+      if (ShouldSkipTestingConstants(opcode, x, y)) continue;
       double expected = expected_op(x, y);
       if (!PlatformCanRepresent(expected)) continue;
       for (int i = 0; i < 2; i++) {
@@ -1496,20 +1605,24 @@ void RunI8x32UnOpRevecTest(WasmOpcode opcode, Int8UnOp expected_op,
   uint8_t temp1 = r.AllocateLocal(kWasmS128);
   uint8_t temp2 = r.AllocateLocal(kWasmS128);
   constexpr uint8_t offset = 16;
+  {
+    TSSimd256VerifyScope ts_scope(
+        r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                      compiler::turboshaft::Opcode::kSimd256Unary>);
 
-  BUILD_AND_CHECK_REVEC_NODE(
-      r, revec_opcode,
-      WASM_LOCAL_SET(
-          temp1,
-          WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)))),
-      WASM_LOCAL_SET(
-          temp2, WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM_OFFSET(
-                                            offset, WASM_LOCAL_GET(param1)))),
-      WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2), WASM_LOCAL_GET(temp1)),
-      WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param2),
-                                 WASM_LOCAL_GET(temp2)),
-      WASM_ONE);
-
+    BUILD_AND_CHECK_REVEC_NODE(
+        r, revec_opcode,
+        WASM_LOCAL_SET(
+            temp1,
+            WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)))),
+        WASM_LOCAL_SET(
+            temp2, WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM_OFFSET(
+                                              offset, WASM_LOCAL_GET(param1)))),
+        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2), WASM_LOCAL_GET(temp1)),
+        WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param2),
+                                   WASM_LOCAL_GET(temp2)),
+        WASM_ONE);
+  }
   FOR_INT8_INPUTS(x) {
     r.builder().WriteMemory(&memory[1], x);
     r.builder().WriteMemory(&memory[18], x);
@@ -1533,20 +1646,23 @@ void RunI32x8ConvertF32x8RevecTest(WasmOpcode opcode,
   uint8_t temp1 = r.AllocateLocal(kWasmS128);
   uint8_t temp2 = r.AllocateLocal(kWasmS128);
   constexpr uint8_t offset = 16;
-
-  BUILD_AND_CHECK_REVEC_NODE(
-      r, revec_opcode,
-      WASM_LOCAL_SET(
-          temp1,
-          WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)))),
-      WASM_LOCAL_SET(
-          temp2, WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM_OFFSET(
-                                            offset, WASM_LOCAL_GET(param1)))),
-      WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2), WASM_LOCAL_GET(temp1)),
-      WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param2),
-                                 WASM_LOCAL_GET(temp2)),
-      WASM_ONE);
-
+  {
+    TSSimd256VerifyScope ts_scope(
+        r.zone(), TSSimd256VerifyScope::VerifyHaveOpcode<
+                      compiler::turboshaft::Opcode::kSimd256Unary>);
+    BUILD_AND_CHECK_REVEC_NODE(
+        r, revec_opcode,
+        WASM_LOCAL_SET(
+            temp1,
+            WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM(WASM_LOCAL_GET(param1)))),
+        WASM_LOCAL_SET(
+            temp2, WASM_SIMD_UNOP(opcode, WASM_SIMD_LOAD_MEM_OFFSET(
+                                              offset, WASM_LOCAL_GET(param1)))),
+        WASM_SIMD_STORE_MEM(WASM_LOCAL_GET(param2), WASM_LOCAL_GET(temp1)),
+        WASM_SIMD_STORE_MEM_OFFSET(offset, WASM_LOCAL_GET(param2),
+                                   WASM_LOCAL_GET(temp2)),
+        WASM_ONE);
+  }
   bool is_unsigned = std::is_same_v<T, uint32_t>;
   FOR_FLOAT32_INPUTS(x) {
     if (!PlatformCanRepresent(x)) continue;

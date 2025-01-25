@@ -7,6 +7,7 @@
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -20,9 +21,9 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/input/native_web_keyboard_event.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -94,30 +95,29 @@ IN_PROC_BROWSER_TEST_F(PointerLockControllerTest,
 IN_PROC_BROWSER_TEST_F(PointerLockControllerTest,
                        PointerLockBubbleHideCallbackTimeout) {
   SetWebContentsGrantedSilentPointerLockPermission();
-  // TODO(crbug.com/40514143): Replace with TaskEnvironment using MOCK_TIME.
-  auto task_runner = base::MakeRefCounted<base::TestMockTimeTaskRunner>();
-  base::TestMockTimeTaskRunner::ScopedContext scoped_context(task_runner.get());
 
   pointer_lock_bubble_hide_reason_recorder_.clear();
   RequestToLockPointer(true, false);
   EXPECT_EQ(0ul, pointer_lock_bubble_hide_reason_recorder_.size());
 
-  EXPECT_TRUE(task_runner->HasPendingTask());
   // Must fast forward at least `ExclusiveAccessBubble::kShowTime`.
-  task_runner->FastForwardBy(ExclusiveAccessBubble::kShowTime * 2);
+  Wait(ExclusiveAccessBubble::kShowTime * 2);
   EXPECT_EQ(1ul, pointer_lock_bubble_hide_reason_recorder_.size());
   EXPECT_EQ(ExclusiveAccessBubbleHideReason::kTimeout,
             pointer_lock_bubble_hide_reason_recorder_[0]);
 }
 
-IN_PROC_BROWSER_TEST_F(PointerLockControllerTest, FastPointerLockUnlockRelock) {
-  // TODO(crbug.com/40514143): Replace with TaskEnvironment using MOCK_TIME.
-  auto task_runner = base::MakeRefCounted<base::TestMockTimeTaskRunner>();
-  base::TestMockTimeTaskRunner::ScopedContext scoped_context(task_runner.get());
-
+// TODO(crbug.com/348396470): Re-enable this test
+#if BUILDFLAG(IS_CHROMEOS_LACROS) && defined(ADDRESS_SANITIZER)
+#define MAYBE_FastPointerLockUnlockRelock DISABLED_FastPointerLockUnlockRelock
+#else
+#define MAYBE_FastPointerLockUnlockRelock FastPointerLockUnlockRelock
+#endif
+IN_PROC_BROWSER_TEST_F(PointerLockControllerTest,
+                       MAYBE_FastPointerLockUnlockRelock) {
   RequestToLockPointer(true, false);
   // Shorter than `ExclusiveAccessBubble::kShowTime`.
-  task_runner->FastForwardBy(ExclusiveAccessBubble::kShowTime / 2);
+  Wait(ExclusiveAccessBubble::kShowTime / 2);
   LostPointerLock();
   RequestToLockPointer(true, true);
 
@@ -130,13 +130,9 @@ IN_PROC_BROWSER_TEST_F(PointerLockControllerTest, FastPointerLockUnlockRelock) {
 }
 
 IN_PROC_BROWSER_TEST_F(PointerLockControllerTest, SlowPointerLockUnlockRelock) {
-  // TODO(crbug.com/40514143): Replace with TaskEnvironment using MOCK_TIME.
-  auto task_runner = base::MakeRefCounted<base::TestMockTimeTaskRunner>();
-  base::TestMockTimeTaskRunner::ScopedContext scoped_context(task_runner.get());
-
   RequestToLockPointer(true, false);
   // Longer than `ExclusiveAccessBubble::kShowTime`.
-  task_runner->FastForwardBy(ExclusiveAccessBubble::kShowTime * 2);
+  Wait(ExclusiveAccessBubble::kShowTime * 2);
   LostPointerLock();
   RequestToLockPointer(true, true);
 

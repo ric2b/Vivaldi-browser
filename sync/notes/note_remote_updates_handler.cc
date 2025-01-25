@@ -624,7 +624,6 @@ const SyncedNoteTrackerEntity* NoteRemoteUpdatesHandler::ProcessConflict(
   if (tracked_entity->metadata().is_deleted() && update_entity.is_deleted()) {
     // Both have been deleted, delete the corresponding entity from the tracker.
     note_tracker_->Remove(tracked_entity);
-    DLOG(WARNING) << "Conflict: CHANGES_MATCH";
     return nullptr;
   }
 
@@ -632,7 +631,6 @@ const SyncedNoteTrackerEntity* NoteRemoteUpdatesHandler::ProcessConflict(
     // Only remote has been deleted. Local wins. Record that we received the
     // update from the server but leave the pending commit intact.
     note_tracker_->UpdateServerVersion(tracked_entity, update.response_version);
-    DLOG(WARNING) << "Conflict: USE_LOCAL";
     return tracked_entity;
   }
 
@@ -642,7 +640,6 @@ const SyncedNoteTrackerEntity* NoteRemoteUpdatesHandler::ProcessConflict(
     // Only local node has been deleted. It should be restored from the server
     // data as a remote creation.
     note_tracker_->Remove(tracked_entity);
-    DLOG(WARNING) << "Conflict: USE_REMOTE";
     return ProcessCreate(update);
   }
 
@@ -685,11 +682,9 @@ const SyncedNoteTrackerEntity* NoteRemoteUpdatesHandler::ProcessConflict(
                           update_entity.specifics);
 
     // The changes are identical so there isn't a real conflict.
-    DLOG(WARNING) << "Conflict: CHANGES_MATCH";
   } else {
     // Conflict where data don't match and no remote deletion, and hence server
     // wins. Update the model from server data.
-    DLOG(WARNING) << "Conflict: USE_REMOTE";
     ApplyRemoteUpdate(update, tracked_entity, new_parent_entity, notes_model_,
                       note_tracker_);
   }

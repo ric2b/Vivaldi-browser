@@ -261,8 +261,8 @@ bool HoldingSpaceItemView::OnKeyPressed(const ui::KeyEvent& event) {
 
 void HoldingSpaceItemView::OnMouseEvent(ui::MouseEvent* event) {
   switch (event->type()) {
-    case ui::ET_MOUSE_ENTERED:
-    case ui::ET_MOUSE_EXITED:
+    case ui::EventType::kMouseEntered:
+    case ui::EventType::kMouseExited:
       UpdatePrimaryAction();
       break;
     default:
@@ -481,7 +481,7 @@ void HoldingSpaceItemView::OnPrimaryActionPressed() {
     if (!holding_space_util::ExecuteInProgressCommand(
             item(), HoldingSpaceCommandId::kCancelItem,
             holding_space_metrics::EventSource::kHoldingSpaceItem)) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
     return;
   }

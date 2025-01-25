@@ -16,7 +16,6 @@
 <translation id="1728677426644403582">Você está vendo o código-fonte de uma página da Web</translation>
 <translation id="1734878702283171397">Tente entrar em contato com o administrador do sistema.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Tente Executar o Diagnóstico de Rede do Windows<ph name="END_LINK" />.</translation>
-<translation id="1834321415901700177">Este site contém programas perigosos</translation>
 <translation id="1974060860693918893">Avançado</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Verificar o proxy e o firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emitido para: <ph name="ORGANIZATION" /> (<ph name="JURISDICTION" />)</translation>
@@ -42,7 +41,6 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Executar o Diagnóstico de Conectividade<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">A conexão foi redefinida.</translation>
 <translation id="2826760142808435982">A conexão foi criptografada e autenticada utilizando <ph name="CIPHER" /> e usa <ph name="KX" /> como o mecanismo de troca de chave.</translation>
-<translation id="2856444702002559011">Invasores podem estar tentando roubar suas informações do site <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (por exemplo, senhas, mensagens ou cartões de crédito). <ph name="BEGIN_LEARN_MORE_LINK" />Saiba mais<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Foi detectada uma alteração na rede.</translation>
 <translation id="2948083400971632585">Você pode desabilitar qualquer proxy configurado pela categoria "Rede" nas configurações do Vivaldi.</translation>
 <translation id="2991571918955627853">Você não pode visitar <ph name="SITE" /> agora, porque o site usa HSTS. Erros de rede e ataques são geralmente temporários. Esta página provavelmente funcionará mais tarde.</translation>
@@ -92,7 +90,6 @@
 <translation id="4265872034478892965">Permitido pelo administrador</translation>
 <translation id="4305666528087210886">Não foi possível acessar seu arquivo</translation>
 <translation id="4312866146174492540">Bloquear (padrão)</translation>
-<translation id="4356973930735388585">Este site foi denunciado por tentar instalar programas perigosos no seu computador para roubar ou excluir informações (como fotos, senhas, mensagens e números de cartão de crédito).</translation>
 <translation id="4408413947728134509">Cookies: <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544">O certificado de login não foi aceito por <ph name="HOST_NAME" /> ou não foi fornecido.</translation>
 <translation id="4506599922270137252">Entrar em contato com o administrador do sistema</translation>
@@ -144,7 +141,6 @@
 <translation id="6305205051461490394">Não é possível acessar <ph name="URL" />.</translation>
 <translation id="6321917430147971392">Verifique suas configurações de DNS</translation>
 <translation id="6328639280570009161">Tente desativar a previsão de página</translation>
-<translation id="6328786501058569169">Este site é enganoso</translation>
 <translation id="6348220984832452017">Variações ativas</translation>
 <translation id="6358450015545214790">O que são essas informações?</translation>
 <translation id="6433595998831338502">A conexão com <ph name="HOST_NAME" /> foi recusada.</translation>
@@ -158,7 +154,6 @@
 <translation id="6897140037006041989">User-Agent</translation>
 <translation id="6957624206566198865">Abra a página em uma nova aba privada</translation>
 <translation id="7053983685419859001">Bloquear</translation>
-<translation id="7079718277001814089">Este site contém malware</translation>
 <translation id="7096937462164235847">A identidade deste site não foi verificada.</translation>
 <translation id="7108819624672055576">Permitida por uma extensão</translation>
 <translation id="7111012039238467737">(Válido)</translation>
@@ -175,7 +170,6 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> não consegue atender a esta solicitação no momento.</translation>
 <translation id="7662298039739062396">Configuração controlada por uma extensão</translation>
 <translation id="7663736086183791259">Certificado <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Invasores nesse site podem tentar enganar você para que instale programas que prejudicam sua experiência de navegação (por exemplo, alterando sua página inicial ou mostrando mais anúncios nos sites que você visita).</translation>
 <translation id="7714464543167945231">Certificado</translation>
 <translation id="7716147886133743102">Bloqueada pelo administrador</translation>
 <translation id="7716424297397655342">Não é possível carregar este site do cache</translation>
@@ -185,7 +179,6 @@
 <translation id="7878562273885520351">Sua senha pode estar comprometida</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
 <translation id="7953236668995583915">Recarregue a página para aplicar as configurações atualizadas ao site</translation>
-<translation id="8025119109950072390">Este site foi denunciado por tentar induzir os usuários a fazer algo perigoso, como instalar um software ou revelar suas informações pessoais (como senhas e números de telefone ou cartão de crédito).</translation>
 <translation id="8037357227543935929">Perguntar (padrão)</translation>
 <translation id="8041940743680923270">Usar padrão global (Perguntar)</translation>
 <translation id="808894953321890993">Alterar Senha</translation>

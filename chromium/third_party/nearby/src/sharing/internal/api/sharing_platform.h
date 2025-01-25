@@ -20,10 +20,10 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
-#include "internal/analytics/event_logger.h"
 #include "internal/platform/device_info.h"
 #include "internal/platform/implementation/account_manager.h"
 #include "internal/platform/task_runner.h"
+#include "sharing/analytics/analytics_recorder.h"
 #include "sharing/internal/api/app_info.h"
 #include "sharing/internal/api/bluetooth_adapter.h"
 #include "sharing/internal/api/fast_init_ble_beacon.h"
@@ -46,7 +46,7 @@ class SharingPlatform {
   virtual ~SharingPlatform() = default;
 
   // This function should only be called once.
-  virtual void InitLogging() = 0;
+  virtual void InitLogging(absl::string_view log_file_base_name) = 0;
 
   // Platform specific implementation to set default logging levels.
   virtual void UpdateLoggingLevel() = 0;
@@ -95,7 +95,7 @@ class SharingPlatform {
 
   virtual std::unique_ptr<SharingRpcClientFactory>
   CreateSharingRpcClientFactory(
-      nearby::analytics::EventLogger* event_logger) = 0;
+      nearby::sharing::analytics::AnalyticsRecorder* analytics_recorder) = 0;
 };
 }  // namespace nearby::sharing::api
 

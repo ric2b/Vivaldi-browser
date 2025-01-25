@@ -49,9 +49,9 @@
 #include "hwconfig.h"
 #include "internal.h"
 #include "profiles.h"
+#include "progressframe.h"
 #include "refstruct.h"
 #include "thread.h"
-#include "threadframe.h"
 
 static const uint8_t hevc_pel_weight[65] = { [2] = 0, [4] = 1, [6] = 2, [8] = 3, [12] = 4, [16] = 5, [24] = 6, [32] = 7, [48] = 8, [64] = 9 };
 
@@ -1867,7 +1867,7 @@ static void hevc_await_progress(const HEVCContext *s, const HEVCFrame *ref,
     if (s->threads_type == FF_THREAD_FRAME ) {
         int y = FFMAX(0, (mv->y >> 2) + y0 + height + 9);
 
-        ff_thread_await_progress(&ref->tf, y, 0);
+        ff_progress_frame_await(&ref->tf, y);
     }
 }
 
@@ -1969,13 +1969,13 @@ static void hls_prediction_unit(HEVCLocalContext *lc, int x0, int y0,
 
     if (current_mv.pred_flag & PF_L0) {
         ref0 = refPicList[0].ref[current_mv.ref_idx[0]];
-        if (!ref0 || !ref0->frame->data[0])
+        if (!ref0 || !ref0->frame)
             return;
         hevc_await_progress(s, ref0, &current_mv.mv[0], y0, nPbH);
     }
     if (current_mv.pred_flag & PF_L1) {
         ref1 = refPicList[1].ref[current_mv.ref_idx[1]];
-        if (!ref1 || !ref1->frame->data[0])
+        if (!ref1 || !ref1->frame)
             return;
         hevc_await_progress(s, ref1, &current_mv.mv[1], y0, nPbH);
     }
@@ -2898,10 +2898,10 @@ static int hevc_frame_start(HEVCContext *s)
         goto fail;
 
     if (s->ref->needs_fg &&
-        ( s->sei.common.film_grain_characteristics.present &&
-          !ff_h274_film_grain_params_supported(s->sei.common.film_grain_characteristics.model_id,
-                                             s->ref->frame->format))
-          || !av_film_grain_params_select(s->ref->frame)) {
+        (s->sei.common.film_grain_characteristics.present &&
+         !ff_h274_film_grain_params_supported(s->sei.common.film_grain_characteristics.model_id,
+                                              s->ref->frame->format)
+         || !av_film_grain_params_select(s->ref->frame))) {
         av_log_once(s->avctx, AV_LOG_WARNING, AV_LOG_DEBUG, &s->film_grain_warning_shown,
                     "Unsupported film grain parameters. Ignoring film grain.\n");
         s->ref->needs_fg = 0;
@@ -3239,7 +3239,7 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
 
 fail:
     if (s->ref && s->threads_type == FF_THREAD_FRAME)
-        ff_thread_report_progress(&s->ref->tf, INT_MAX, 0);
+        ff_progress_frame_report(&s->ref->tf, INT_MAX);
 
     return ret;
 }
@@ -3365,14 +3365,13 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
     }
 
     sd = av_packet_get_side_data(avpkt, AV_PKT_DATA_DOVI_CONF, &sd_size);
-    if (sd && sd_size > 0) {
-        int old = s->dovi_ctx.dv_profile;
-
-        ff_dovi_update_cfg(&s->dovi_ctx, (AVDOVIDecoderConfigurationRecord *) sd);
+    if (sd && sd_size >= sizeof(s->dovi_ctx.cfg)) {
+        int old = s->dovi_ctx.cfg.dv_profile;
+        s->dovi_ctx.cfg = *(AVDOVIDecoderConfigurationRecord *) sd;
         if (old)
             av_log(avctx, AV_LOG_DEBUG,
                    "New DOVI configuration record from input packet (profile %d -> %u).\n",
-                   old, s->dovi_ctx.dv_profile);
+                   old, s->dovi_ctx.cfg.dv_profile);
     }
 
     s->ref = s->collocated_ref = NULL;
@@ -3417,14 +3416,14 @@ static int hevc_ref_frame(HEVCFrame *dst, HEVCFrame *src)
 {
     int ret;
 
-    ret = ff_thread_ref_frame(&dst->tf, &src->tf);
-    if (ret < 0)
-        return ret;
+    ff_progress_frame_ref(&dst->tf, &src->tf);
 
     if (src->needs_fg) {
         ret = av_frame_ref(dst->frame_grain, src->frame_grain);
-        if (ret < 0)
+        if (ret < 0) {
+            ff_hevc_unref_frame(dst, ~0);
             return ret;
+        }
         dst->needs_fg = 1;
     }
 
@@ -3464,7 +3463,6 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
 
     for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
         ff_hevc_unref_frame(&s->DPB[i], ~0);
-        av_frame_free(&s->DPB[i].frame);
         av_frame_free(&s->DPB[i].frame_grain);
     }
 
@@ -3510,11 +3508,6 @@ static av_cold int hevc_init_context(AVCodecContext *avctx)
         return AVERROR(ENOMEM);
 
     for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
-        s->DPB[i].frame = av_frame_alloc();
-        if (!s->DPB[i].frame)
-            return AVERROR(ENOMEM);
-        s->DPB[i].tf.f = s->DPB[i].frame;
-
         s->DPB[i].frame_grain = av_frame_alloc();
         if (!s->DPB[i].frame_grain)
             return AVERROR(ENOMEM);
@@ -3546,7 +3539,7 @@ static int hevc_update_thread_context(AVCodecContext *dst,
 
     for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
         ff_hevc_unref_frame(&s->DPB[i], ~0);
-        if (s0->DPB[i].frame->buf[0]) {
+        if (s0->DPB[i].frame) {
             ret = hevc_ref_frame(&s->DPB[i], &s0->DPB[i]);
             if (ret < 0)
                 return ret;
@@ -3666,8 +3659,8 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
         }
 
         sd = ff_get_coded_side_data(avctx, AV_PKT_DATA_DOVI_CONF);
-        if (sd && sd->size > 0)
-            ff_dovi_update_cfg(&s->dovi_ctx, (AVDOVIDecoderConfigurationRecord *) sd->data);
+        if (sd && sd->size >= sizeof(s->dovi_ctx.cfg))
+            s->dovi_ctx.cfg = *(AVDOVIDecoderConfigurationRecord *) sd->data;
     }
 
     return 0;
@@ -3720,7 +3713,8 @@ const FFCodec ff_hevc_decoder = {
     .p.capabilities        = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
                              AV_CODEC_CAP_SLICE_THREADS | AV_CODEC_CAP_FRAME_THREADS,
     .caps_internal         = FF_CODEC_CAP_EXPORTS_CROPPING |
-                             FF_CODEC_CAP_ALLOCATE_PROGRESS | FF_CODEC_CAP_INIT_CLEANUP,
+                             FF_CODEC_CAP_USES_PROGRESSFRAMES |
+                             FF_CODEC_CAP_INIT_CLEANUP,
     .p.profiles            = NULL_IF_CONFIG_SMALL(ff_hevc_profiles),
     .hw_configs            = (const AVCodecHWConfigInternal *const []) {
 #if CONFIG_HEVC_DXVA2_HWACCEL

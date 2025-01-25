@@ -38,15 +38,13 @@ class FakeMahiWebContentsManager : public MahiWebContentsManager {
     focused_web_content_state_.is_distillable.emplace(value);
   }
 
-  WebContentState requested_web_content_state() {
-    return requested_web_content_state_;
-  }
-
   void RequestContentFromPage(const base::UnguessableToken& page_id,
                               GetContentCallback callback);
 
   bool GetPrefValue() const override;
   void SetPrefForTesting(bool pref_state) { pref_state_ = pref_state; }
+
+  bool is_pdf_focused_web_contents() { return is_pdf_focused_web_contents_; }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   void SetMahiBrowserDelegateForTesting(

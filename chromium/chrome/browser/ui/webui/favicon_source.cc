@@ -79,7 +79,7 @@ std::string FaviconSource::GetSource() {
     case chrome::FaviconUrlFormat::kFavicon2:
       return chrome::kChromeUIFavicon2Host;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return "";
 }
 
@@ -156,12 +156,9 @@ void FaviconSource::StartDataRequest(
         !ParseHistoryUiOrigin(GetUnsafeRequestOrigin(wc_getter),
                               &parsed_history_ui_origin)) {
       // Request from local storage only.
-      // TODO(victorvianna): Expose fallback_to_host in FaviconRequestHandler
-      // API and move the explanatory comment for |fallback_to_host| here.
-      //const bool fallback_to_host = true;
-      // NOTE(espen@vivaldi.com): Original chromium code above. We need to make
-      // an exception for at least preloaded bookmark urls. Otherwise they will
-      // all be shown with the same icon.
+      // NOTE(espen@vivaldi.com): We need to make an exception for at least
+      // preloaded bookmark urls. Otherwise they will all be shown with the
+      // same icon.
       const bool fallback_to_host =
           page_url.spec().find("https://vivaldi.com/bk/") != 0;
       favicon_service->GetRawFaviconForPageURL(

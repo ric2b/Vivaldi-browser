@@ -21,7 +21,9 @@ cc_library(
     visibility = [
         "//connections:__subpackages__",
         "//googlemac/iPhone/Shared/Identity/SmartSetup:__subpackages__",
+        "//internal/platform/implementation:__subpackages__",
         "//location/nearby/cpp:__subpackages__",
+        "//sharing:__subpackages__",
     ],
     deps = [
         "//internal/flags:flag_reader",

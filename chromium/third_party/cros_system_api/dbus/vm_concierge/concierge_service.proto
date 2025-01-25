@@ -143,6 +143,7 @@ message VmInfo {
     PLUGIN_VM = 3;
     BOREALIS = 4;
     BRUSCHETTA = 5;
+    BAGUETTE = 6;
   };
 
   // What type of VM this is.
@@ -159,6 +160,14 @@ message VmInfo {
 message NetworkOptions {
   // Toggles the IFF_VNET_HDR option for the TAP device.
   bool enable_vnet_hdr = 1;
+}
+
+message VirtualSwapConfig {
+  // Size of the virtual swap device in MiB.
+  uint32 size_mib = 1;
+  // The interval between swapping out virtual swap area to the host in
+  // milliseconds.
+  uint32 swap_interval_ms = 2;
 }
 
 // Information that must be included with every StartVm dbus message.
@@ -446,6 +455,12 @@ message StartArcVmRequest {
 
   // Enable IO scheduler for the /data block device (/dev/block/vde).
   bool enable_data_block_io_scheduler = 49;
+
+  // Configuration of the virtual swap device to be set up by crosvm.
+  VirtualSwapConfig virtual_swap_config = 50;
+
+  // Whether to enable virtio-pvclock in the guest.
+  bool enable_pvclock = 51;
 }
 
 enum VmStatus {

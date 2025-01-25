@@ -17,7 +17,8 @@ FakeOpticalCharacterRecognizer::Create(bool return_empty) {
 
 FakeOpticalCharacterRecognizer::FakeOpticalCharacterRecognizer(
     bool return_empty)
-    : OpticalCharacterRecognizer(/*profile=*/nullptr),
+    : OpticalCharacterRecognizer(/*profile=*/nullptr,
+                                 mojom::OcrClientType::kTest),
       return_empty_(return_empty) {
   ready_ = true;
 }
@@ -47,6 +48,7 @@ void FakeOpticalCharacterRecognizer::PerformOCR(
     node.role = ax::mojom::Role::kStaticText;
     node.SetNameChecked("Testing");
     node.relative_bounds.bounds = gfx::RectF(1.0f, 2.0f, 1.0f, 2.0f);
+    node.AddStringAttribute(ax::mojom::StringAttribute::kLanguage, "en-US");
     update.nodes = {node};
     --next_node_id_;
   }

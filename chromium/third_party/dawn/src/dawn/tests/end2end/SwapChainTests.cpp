@@ -264,7 +264,9 @@ TEST_P(SwapChainTests, SwitchingDevice) {
             deviceToUse = device2;
         }
 
-        wgpu::SwapChain swapchain = deviceToUse.CreateSwapChain(surface, &baseDescriptor);
+        wgpu::SwapChain swapchain;
+        EXPECT_DEPRECATION_WARNING(swapchain =
+                                       deviceToUse.CreateSwapChain(surface, &baseDescriptor));
         swapchain.GetCurrentTexture();
         swapchain.Present();
     }
@@ -278,7 +280,8 @@ TEST_P(SwapChainTests, ErrorGetSurfaceSupportedUsage) {
 
     ASSERT_DEVICE_ERROR_MSG(
         {
-            auto usageFlags = device.GetSupportedSurfaceUsage(surface);
+            wgpu::TextureUsage usageFlags;
+            EXPECT_DEPRECATION_WARNING(usageFlags = device.GetSupportedSurfaceUsage(surface));
             EXPECT_EQ(usageFlags, wgpu::TextureUsage::None);
         },
         testing::HasSubstr("FeatureName::SurfaceCapabilities is not enabled"));
@@ -391,15 +394,18 @@ class SwapChainWithAdditionalUsageTests : public SwapChainTests {
 };
 
 TEST_P(SwapChainWithAdditionalUsageTests, GetSurfaceSupportedUsage) {
-    auto usageFlags = device.GetSupportedSurfaceUsage(surface);
+    wgpu::TextureUsage usageFlags;
+    EXPECT_DEPRECATION_WARNING(usageFlags = device.GetSupportedSurfaceUsage(surface));
     EXPECT_NE(usageFlags, wgpu::TextureUsage::None);
 }
 
 // Test that sampling from swapchain is supported.
 TEST_P(SwapChainWithAdditionalUsageTests, SamplingFromSwapChain) {
+    wgpu::TextureUsage supportedUsages;
+    EXPECT_DEPRECATION_WARNING(supportedUsages = device.GetSupportedSurfaceUsage(surface));
+
     // Skip all tests if readable surface doesn't support texture binding
-    DAWN_TEST_UNSUPPORTED_IF(
-        !(device.GetSupportedSurfaceUsage(surface) & wgpu::TextureUsage::TextureBinding));
+    DAWN_TEST_UNSUPPORTED_IF(!(supportedUsages & wgpu::TextureUsage::TextureBinding));
 
     auto desc = baseDescriptor;
     desc.usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment;
@@ -416,28 +422,33 @@ TEST_P(SwapChainWithAdditionalUsageTests, SamplingFromSwapChain) {
 TEST_P(SwapChainWithAdditionalUsageTests, ErrorIncludeUnsupportedUsage) {
     DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("skip_validation"));
 
-    auto supportedUsage = device.GetSupportedSurfaceUsage(surface);
+    wgpu::TextureUsage supportedUsages;
+    EXPECT_DEPRECATION_WARNING(supportedUsages = device.GetSupportedSurfaceUsage(surface));
 
     // Assuming StorageBinding is not supported.
-    DAWN_TEST_UNSUPPORTED_IF(supportedUsage & wgpu::TextureUsage::StorageBinding);
+    DAWN_TEST_UNSUPPORTED_IF(supportedUsages & wgpu::TextureUsage::StorageBinding);
 
     auto desc = baseDescriptor;
-    desc.usage = supportedUsage | wgpu::TextureUsage::StorageBinding;
+    desc.usage = supportedUsages | wgpu::TextureUsage::StorageBinding;
 
-    ASSERT_DEVICE_ERROR_MSG({ auto swapchain = CreateSwapChain(surface, &desc); },
-                            testing::HasSubstr("is not supported"));
+    ASSERT_DEVICE_ERROR_MSG(
+        { auto swapchain = CreateSwapChain(surface, &desc); },
+        testing::HasSubstr("is not supported"));
 }
 
 // Test copying to a swapchain texture when it is supported.
 TEST_P(SwapChainWithAdditionalUsageTests, CopyingToSwapChain) {
-    wgpu::TextureUsage supportedUsages = device.GetSupportedSurfaceUsage(surface);
+    wgpu::TextureUsage supportedUsages;
+    EXPECT_DEPRECATION_WARNING(supportedUsages = device.GetSupportedSurfaceUsage(surface));
+
     // We need the swapchain to support copying to the texture and at least one readback method.
     DAWN_TEST_UNSUPPORTED_IF(!(supportedUsages & wgpu::TextureUsage::CopyDst));
     DAWN_TEST_UNSUPPORTED_IF(
         !(supportedUsages & (wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::TextureBinding)));
 
     wgpu::SwapChainDescriptor desc = baseDescriptor;
-    desc.usage |= supportedUsages;
+    desc.usage = supportedUsages & (wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst |
+                                    wgpu::TextureUsage::TextureBinding);
     desc.width = 1;
     desc.height = 1;
 
@@ -455,9 +466,11 @@ TEST_P(SwapChainWithAdditionalUsageTests, CopyingToSwapChain) {
 
 // Test copying from a swapchain texture when it is supported.
 TEST_P(SwapChainWithAdditionalUsageTests, CopyingFromSwapChain) {
+    wgpu::TextureUsage supportedUsages;
+    EXPECT_DEPRECATION_WARNING(supportedUsages = device.GetSupportedSurfaceUsage(surface));
+
     // We need the swapchain to support copying from the texture
-    DAWN_TEST_UNSUPPORTED_IF(
-        !(device.GetSupportedSurfaceUsage(surface) & wgpu::TextureUsage::CopySrc));
+    DAWN_TEST_UNSUPPORTED_IF(!(supportedUsages & wgpu::TextureUsage::CopySrc));
 
     wgpu::SwapChainDescriptor desc = baseDescriptor;
     desc.usage |= wgpu::TextureUsage::CopySrc;

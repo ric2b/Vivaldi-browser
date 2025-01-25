@@ -13,10 +13,11 @@ let $mem0 = builder.addMemory(1, 1);
 let $box = builder.addStruct([makeField(kWasmFuncRef, true)]);
 
 let $sig_i_l = builder.addType(kSig_i_l);
-builder.addFunction("func0", kSig_v_i).exportFunc().addBody([
+builder.addFunction("func0", kSig_i_i).exportFunc().addBody([
   kExprLocalGet, 0,
   ...wasmI32Const(0x41414141),
   kExprI32StoreMem, 0, 0,
+  kExprI32Const, 0,
 ]);
 builder.addFunction("func1", $sig_i_l).exportFunc().addBody([
   kExprLocalGet, 0,

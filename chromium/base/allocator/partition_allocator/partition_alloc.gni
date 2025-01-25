@@ -2,8 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/cronet/config.gni")
-import("//build/config/sanitizers/sanitizers.gni")
 import("//build_overrides/partition_alloc.gni")
 
 # PartitionAlloc have limited support for MSVC's cl.exe compiler. It can only
@@ -73,16 +71,6 @@ if (is_nacl) {
 }
 
 declare_args() {
-  # Turns on compiler optimizations in PartitionAlloc in Debug build.
-  # If enabling PartitionAlloc-Everywhere in Debug build for tests in Debug
-  # build, since all memory allocations and deallocations are executed by
-  # non-optimized PartitionAlloc, chrome (including tests) will be much
-  # slower. This will cause debug trybots' timeouts. If we want to debug
-  # PartitionAlloc itself, use partition_alloc_optimized_debug=false.
-  # Otherwise, use partition_alloc_optimized_debug=true to enable optimized
-  # PartitionAlloc.
-  partition_alloc_optimized_debug = true
-
   # PartitionAlloc-Everywhere (PA-E). Causes allocator_shim.cc to route
   # calls to PartitionAlloc, rather than some other platform allocator.
   use_partition_alloc_as_malloc = use_partition_alloc && use_allocator_shim &&
@@ -107,7 +95,8 @@ declare_args() {
 
   # Puts the regular and BRP pools right next to each other, so that we can
   # check "belongs to one of the two pools" with a single bitmask operation.
-  glue_core_pools = false
+  # TODO(crbug.com/350104111): Fix ios-simulator failures to remove `!is_ios`.
+  glue_core_pools = use_partition_alloc_as_malloc && !is_ios
 
   # Introduces pointer compression support in PA. These are 4-byte
   # pointers that can point within the core pools (regular and BRP).
@@ -215,7 +204,7 @@ declare_args() {
   enable_backup_ref_ptr_instance_tracer = false
 
   backup_ref_ptr_extra_oob_checks =
-      false && enable_backup_ref_ptr_support && use_raw_ptr_backup_ref_impl
+      enable_backup_ref_ptr_support && use_raw_ptr_backup_ref_impl
 }
 
 declare_args() {
@@ -251,9 +240,6 @@ declare_args() {
   use_full_mte = false
 }
 
-# *Scan is currently only used by Chromium, and supports only 64-bit.
-use_starscan = build_with_chromium && has_64_bit_pointers
-
 stack_scan_supported =
     current_cpu == "x64" || current_cpu == "x86" || current_cpu == "arm" ||
     current_cpu == "arm64" || current_cpu == "riscv64"
@@ -266,8 +252,11 @@ stack_scan_supported =
 # Do not clear the following, as they can function outside of PartitionAlloc
 # - has_64_bit_pointers
 # - has_memory_tagging
-if (!use_partition_alloc) {
+if (!use_partition_alloc ||
+    (defined(toolchain_allows_use_partition_alloc_as_malloc) &&
+     !toolchain_allows_use_partition_alloc_as_malloc)) {
   use_partition_alloc_as_malloc = false
+  glue_core_pools = false
   enable_backup_ref_ptr_support = false
   use_raw_ptr_backup_ref_impl = false
   use_asan_backup_ref_ptr = false
@@ -278,8 +267,8 @@ if (!use_partition_alloc) {
   enable_dangling_raw_ptr_feature_flag = false
   enable_pointer_subtraction_check = false
   backup_ref_ptr_poison_oob_ptr = false
+  backup_ref_ptr_extra_oob_checks = false
   enable_backup_ref_ptr_instance_tracer = false
-  use_starscan = false
   use_full_mte = false
 }
 
@@ -368,14 +357,15 @@ assert(build_with_chromium || !use_asan_backup_ref_ptr,
 assert(!use_asan_backup_ref_ptr || use_raw_ptr_hookable_impl,
        "AsanBackupRefPtr requires RawPtrHookableImpl")
 
+# pkeys support is explicitly disabled in all Cronet builds, as some test
+# dependencies that use partition_allocator are compiled in AOSP against a
+# version of glibc that does not include pkeys syscall numbers.
+is_pkeys_available =
+    (is_linux || is_chromeos) && current_cpu == "x64" && !is_cronet_build
 declare_args() {
-  # pkeys support is explicitly disabled in all Cronet builds, as some test
-  # dependencies that use partition_allocator are compiled in AOSP against a
-  # version of glibc that does not include pkeys syscall numbers.
-  enable_pkeys =
-      (is_linux || is_chromeos) && target_cpu == "x64" && !is_cronet_build
+  enable_pkeys = is_pkeys_available
 }
-assert(!enable_pkeys || ((is_linux || is_chromeos) && target_cpu == "x64"),
+assert(!enable_pkeys || is_pkeys_available,
        "Pkeys are only supported on x64 linux and ChromeOS")
 
 # Some implementations of raw_ptr<>, like BackupRefPtr, require zeroing when

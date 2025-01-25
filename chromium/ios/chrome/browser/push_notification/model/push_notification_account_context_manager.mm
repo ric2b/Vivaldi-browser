@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/push_notification/model/push_notification_account_context_manager.h"
 
 #import "base/memory/raw_ptr.h"
+#import "base/metrics/histogram_functions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/values.h"
 #import "components/prefs/pref_service.h"
@@ -68,6 +69,11 @@ struct PermissionsPref {
 - (BOOL)removeAccount:(const std::string&)gaiaID {
   auto iterator = _contextMap.find(gaiaID);
   DCHECK(iterator != _contextMap.end());
+  if (iterator == _contextMap.end()) {
+    // The account was unexpectedly not found, so return NO to indicate that
+    // it was not removed.
+    return NO;
+  }
   size_t& occurrencesAcrossBrowserStates = iterator->second;
 
   occurrencesAcrossBrowserStates--;
@@ -89,6 +95,8 @@ struct PermissionsPref {
   }
   ScopedDictPrefUpdate update(pref.service, pref.key);
   update->Set(pref.client_key, true);
+  base::UmaHistogramEnumeration("IOS.PushNotification.Client.Enabled",
+                                clientID);
 }
 
 - (void)disablePushNotification:(PushNotificationClientId)clientID
@@ -101,6 +109,8 @@ struct PermissionsPref {
   }
   ScopedDictPrefUpdate update(pref.service, pref.key);
   update->Set(pref.client_key, false);
+  base::UmaHistogramEnumeration("IOS.PushNotification.Client.Disabled",
+                                clientID);
 }
 
 - (BOOL)isPushNotificationEnabledForClient:(PushNotificationClientId)clientID
@@ -166,7 +176,7 @@ struct PermissionsPref {
         infoCache->GetGAIAIdOfBrowserStateAtIndex(i);
     if (gaiaID == browserStateGaiaID) {
       base::FilePath path = infoCache->GetPathOfBrowserStateAtIndex(i);
-      return _chromeBrowserStateManager->GetBrowserState(path);
+      return _chromeBrowserStateManager->GetBrowserStateByPath(path);
     }
   }
 

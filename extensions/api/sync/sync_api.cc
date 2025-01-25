@@ -18,6 +18,8 @@
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sync/sessions/sync_sessions_web_contents_router.h"
+#include "chrome/browser/sync/sessions/sync_sessions_web_contents_router_factory.h"
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/sync/base/command_line_switches.h"
 #include "components/sync/base/model_type.h"
@@ -160,7 +162,6 @@ vivaldi::sync::DataType ToVivaldiSyncDataType(
       return vivaldi::sync::DataType::kNotes;
     default:
       NOTREACHED();
-      return vivaldi::sync::DataType::kNone;
   }
 }
 
@@ -189,7 +190,6 @@ std::optional<syncer::UserSelectableType> FromVivaldiSyncDataType(
       return syncer::UserSelectableType::kNotes;
     default:
       NOTREACHED();
-      return std::nullopt;
   }
 }
 
@@ -316,7 +316,7 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
         data_type == syncer::UserSelectableType::kSavedTabGroups ||
         data_type == syncer::UserSelectableType::kSharedTabGroupData ||
         data_type == syncer::UserSelectableType::kPayments ||
-        data_type == syncer::UserSelectableType::kCompare ||
+        data_type == syncer::UserSelectableType::kProductComparison ||
         data_type == syncer::UserSelectableType::kCookies) {
       continue;
     }
@@ -618,4 +618,21 @@ ExtensionFunction::ResponseAction SyncSetupCompleteFunction::Run() {
   return RespondNow(NoArguments());
 }
 
+ExtensionFunction::ResponseAction SyncSetTabsExtDataFunction::Run() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  DCHECK(profile);
+
+  auto params = vivaldi::sync::SetTabsExtData::Params::Create(args());
+
+  sync_sessions::SyncSessionsWebContentsRouter* router =
+      sync_sessions::SyncSessionsWebContentsRouterFactory::GetForProfile(
+          profile);
+
+  if (!router) {
+    return RespondNow(NoArguments());
+  }
+
+  router->UpdateVivExtData(params->data);
+  return RespondNow(NoArguments());
+}
 }  // namespace extensions

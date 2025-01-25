@@ -107,7 +107,6 @@ constexpr const char* GetCanonicalExtension(
   }
 
   NOTREACHED();
-  return "";
 }
 
 const char kDatasourceFilemappingFilename[] = "file_mapping.json";
@@ -267,7 +266,7 @@ VivaldiImageStore::GetAllowedImageExtensions() {
 
 /* static */
 std::optional<VivaldiImageStore::ImageFormat>
-VivaldiImageStore::FindFormatForMimeType(base::StringPiece mime_type) {
+VivaldiImageStore::FindFormatForMimeType(std::string_view mime_type) {
   for (int i = 0; kMimeTypePairs[i].first; ++i) {
     if (mime_type == kMimeTypePairs[i].first) {
       return kMimeTypePairs[i].second;
@@ -278,7 +277,7 @@ VivaldiImageStore::FindFormatForMimeType(base::StringPiece mime_type) {
 
 /* static */
 std::optional<VivaldiImageStore::ImageFormat>
-VivaldiImageStore::FindFormatForExtension(base::StringPiece file_extension) {
+VivaldiImageStore::FindFormatForExtension(std::string_view file_extension) {
   if (file_extension.empty())
     return std::nullopt;
   if (file_extension[0] == '.') {
@@ -306,7 +305,7 @@ VivaldiImageStore::FindFormatForPath(const base::FilePath& path) {
 }
 
 /* static */
-bool VivaldiImageStore::ParseDataUrl(base::StringPiece url,
+bool VivaldiImageStore::ParseDataUrl(std::string_view url,
                                      VivaldiImageStore::UrlKind& url_kind,
                                      std::string& id) {
   using PathType = vivaldi_data_url_utils::PathType;
@@ -485,7 +484,7 @@ base::FilePath VivaldiImageStore::GetFileMappingFilePath() {
   return user_data_dir_.AppendASCII(kDatasourceFilemappingFilename);
 }
 
-base::FilePath VivaldiImageStore::GetImagePath(base::StringPiece image_id) {
+base::FilePath VivaldiImageStore::GetImagePath(std::string_view image_id) {
   base::FilePath path = user_data_dir_.Append(kImageDirectory);
 #if BUILDFLAG(IS_POSIX)
   path = path.Append(image_id);
@@ -496,7 +495,7 @@ base::FilePath VivaldiImageStore::GetImagePath(base::StringPiece image_id) {
 }
 
 base::FilePath VivaldiImageStore::GetDirectMatchImagePath(
-    base::StringPiece image_id) {
+    std::string_view image_id) {
   base::FilePath path = user_data_dir_.Append(kDirectMatchImageDirectory);
 #if BUILDFLAG(IS_POSIX)
   path = path.Append(image_id);
@@ -703,7 +702,7 @@ void VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmarks(
   }
 #endif
 
-  auto check_url = [](UsedIds* used_ids, base::StringPiece url) {
+  auto check_url = [](UsedIds* used_ids, std::string_view url) {
     UrlKind url_kind;
     std::string id;
     if (ParseDataUrl(url, url_kind, id)) {
@@ -827,7 +826,7 @@ void VivaldiImageStore::FinishCustomBookmarkThumbnailMigrationOnUIThread(
           vivaldi_data_url_utils::PathType::kSyncedStore, checksum));
 }
 
-void VivaldiImageStore::AddNewbornUrlOnFileThread(base::StringPiece data_url) {
+void VivaldiImageStore::AddNewbornUrlOnFileThread(std::string_view data_url) {
   DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
   file_thread_newborn_urls_.push_back(
       std::string(data_url.data(), data_url.size()));

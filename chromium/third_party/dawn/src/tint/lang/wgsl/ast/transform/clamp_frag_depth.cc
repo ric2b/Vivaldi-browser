@@ -180,8 +180,7 @@ struct ClampFragDepth::State {
     bool ContainsFragDepth(VectorRef<const ast::Attribute*> attrs) {
         for (auto* attribute : attrs) {
             if (auto* builtin_attr = attribute->As<ast::BuiltinAttribute>()) {
-                auto builtin = sem.Get(builtin_attr)->Value();
-                if (builtin == core::BuiltinValue::kFragDepth) {
+                if (builtin_attr->builtin == core::BuiltinValue::kFragDepth) {
                     return true;
                 }
             }
@@ -222,7 +221,7 @@ ast::transform::Transform::ApplyResult ClampFragDepth::Apply(const Program& src,
 }
 
 ClampFragDepth::Config::Config() = default;
-ClampFragDepth::Config::Config(std::optional<tint::DepthRangeOffsets> off) : offsets(off) {}
+ClampFragDepth::Config::Config(std::optional<RangeOffsets> off) : offsets(off) {}
 
 ClampFragDepth::Config::~Config() = default;
 

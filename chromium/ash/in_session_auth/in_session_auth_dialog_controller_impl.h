@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 
+#include "ash/in_session_auth/in_session_auth_dialog_contents_view.h"
 #include "ash/public/cpp/in_session_auth_dialog_controller.h"
 #include "ash/public/cpp/in_session_auth_token_provider.h"
 #include "base/memory/raw_ptr.h"
@@ -48,6 +49,11 @@ class InSessionAuthDialogControllerImpl : public InSessionAuthDialogController,
   void SetTokenProvider(
       InSessionAuthTokenProvider* auth_token_provider) override;
 
+  void ShowLegacyWebAuthnDialog(
+      const std::string& rp_id,
+      const std::string& window_id,
+      WebAuthNDialogController::FinishCallback on_auth_complete) override;
+
   // AuthAttemptConsumer:
   void OnUserAuthAttemptRejected() override;
   void OnUserAuthAttemptConfirmed(
@@ -71,6 +77,9 @@ class InSessionAuthDialogControllerImpl : public InSessionAuthDialogController,
   // Destroys the authentication dialog.
   void OnEndAuthentication();
 
+  void NotifySuccess(const AuthProofToken& token);
+  void NotifyFailure();
+
   // Non owning pointer, initialized and owned by
   // `ChromeBrowserMainExtraPartsAsh`.
   // `auth_token_provider_` will outlive this controller since the controller
@@ -85,6 +94,8 @@ class InSessionAuthDialogControllerImpl : public InSessionAuthDialogController,
   std::unique_ptr<views::Widget> dialog_;
 
   std::optional<std::string> prompt_;
+
+  raw_ptr<InSessionAuthDialogContentsView> contents_view_ = nullptr;
 
   base::WeakPtrFactory<InSessionAuthDialogControllerImpl> weak_factory_{this};
 };

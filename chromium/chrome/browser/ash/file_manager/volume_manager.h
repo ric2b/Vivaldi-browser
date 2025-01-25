@@ -26,7 +26,8 @@
 #include "chrome/browser/ash/file_system_provider/observer.h"
 #include "chrome/browser/ash/file_system_provider/service.h"
 #include "chrome/browser/ash/guest_os/public/types.h"
-#include "chrome/browser/ash/policy/local_user_files/observer.h"
+#include "chrome/browser/ash/policy/skyvault/local_files_migration_manager.h"
+#include "chrome/browser/ash/policy/skyvault/local_user_files_policy_observer.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/storage_monitor/removable_storage_observer.h"
 #include "services/device/public/mojom/mtp_manager.mojom.h"
@@ -57,15 +58,17 @@ class VolumeManagerObserver;
 // - Linux/Crostini file system.
 // - Android/Arc++ file system.
 // - File System Providers.
-class VolumeManager : public KeyedService,
-                      arc::ArcSessionManagerObserver,
-                      drive::DriveIntegrationService::Observer,
-                      ash::disks::DiskMountManager::Observer,
-                      ash::file_system_provider::Observer,
-                      storage_monitor::RemovableStorageObserver,
-                      ui::ClipboardObserver,
-                      DocumentsProviderRootManager::Observer,
-                      policy::local_user_files::Observer {
+class VolumeManager
+    : public KeyedService,
+      arc::ArcSessionManagerObserver,
+      drive::DriveIntegrationService::Observer,
+      ash::disks::DiskMountManager::Observer,
+      ash::file_system_provider::Observer,
+      storage_monitor::RemovableStorageObserver,
+      ui::ClipboardObserver,
+      DocumentsProviderRootManager::Observer,
+      policy::local_user_files::LocalUserFilesPolicyObserver,
+      policy::local_user_files::LocalFilesMigrationManager::Observer {
  public:
   // An alternate to device::mojom::MtpManager::GetStorageInfo.
   // Used for injecting fake MTP manager for testing in VolumeManagerTest.
@@ -279,6 +282,9 @@ class VolumeManager : public KeyedService,
     return out << "VolumeManager[" << vm.id_ << "]";
   }
 
+  // Skips the migration and immediately unmounts My Files.
+  void OnMigrationSucceededForTesting();
+
  private:
   // Comparator sorting Volume objects by volume ID .
   struct SortByVolumeId {
@@ -344,7 +350,7 @@ class VolumeManager : public KeyedService,
                                     ash::MountError error);
 
   // Registers and mounts the downloads volume.
-  void MountDownloadsVolume();
+  void MountDownloadsVolume(bool read_only = false);
 
   // Unmounts and revokes the downloads volume.
   void UnmountDownloadsVolume();
@@ -365,10 +371,13 @@ class VolumeManager : public KeyedService,
   // revokes the arc volumes.
   void UnsubscribeAndUnmountArc();
 
-  // Mounts local folders (My Files, Play and Linux files).
+  // Mounts local folders (MyFiles, Play and Linux files).
   void OnLocalUserFilesEnabled();
-  // Unmounts local folders (My Files, Play and Linux files).
+  // Unmounts local folders (MyFiles, Play and Linux files).
   void OnLocalUserFilesDisabled();
+
+  // Removes My Files after SkyVault migration completes successufully.
+  void OnMigrationSucceeded() override;
 
   static int counter_;
   const int id_ = ++counter_;  // Only used in log traces
@@ -393,6 +402,8 @@ class VolumeManager : public KeyedService,
   bool ignore_clipboard_changed_ = false;
   // TODO(b/328006921): Replace with a check if the volumes are mounted.
   bool local_user_files_allowed_ = true;
+  // Whether a read only version of local folders (My Files) is needed.
+  bool read_only_local_folders_ = true;
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

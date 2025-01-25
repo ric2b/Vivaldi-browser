@@ -264,7 +264,6 @@
 <translation id="2783001728278437613">{COUNT,plural, =1{+#}other{+#}}</translation>
 <translation id="2792200646155001340">Tamén podes pasar un dedo da dereita á esquerda para volver ao elemento anterior. Próbao agora.</translation>
 <translation id="280499067616661124">Busca de ChromeVox na páxina</translation>
-<translation id="2811019999044652585">Para saltar a outras partes da pantalla como as barras de ferramentas ou a bandexa do sistema, preme Control + tecla de avance. Nos Chromebooks, a tecla de avance está xusto enriba do número 2.</translation>
 <translation id="2811204574343810641">Fila</translation>
 <translation id="2816868829355607410">Zona de práctica: comandos de desprazamento</translation>
 <translation id="2841013758207633010">Hora</translation>
@@ -520,6 +519,7 @@
 <translation id="4432457053224379116">Vermello indio</translation>
 <translation id="4432896207833262240">Contido marcado</translation>
 <translation id="4437615272777527928">Escribir consulta para buscar nos menús. Usar frechas arriba e abaixo para desprazarse polos resultados. Usar frechas dereita e esquerda para axustar o cursor de texto e moverse entre os menús.</translation>
+<translation id="4453530046591759283">Para ir a outras partes da pantalla, como ás barras de ferramentas ou á bandexa do sistema, preme Control + F1. F1 é a primeira tecla á dereita da tecla Escape.</translation>
 <translation id="4457472090507035117">Selecciona a voz actual:</translation>
 <translation id="4476183483923481720">liña nova</translation>
 <translation id="4479068155583208887">Ladrillo</translation>
@@ -880,6 +880,7 @@
 <translation id="7091296112653361280">Branco navajo</translation>
 <translation id="7095834689119144465">Editar só elemento numérico de texto</translation>
 <translation id="7096001299300236431">Ficheiro multimedia anterior</translation>
+<translation id="7096668131290451939">Preme Escape de novo para saír do modo de aprendizaxe</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">dicir palabras</translation>
 <translation id="7137397390322864165">Salmón</translation>

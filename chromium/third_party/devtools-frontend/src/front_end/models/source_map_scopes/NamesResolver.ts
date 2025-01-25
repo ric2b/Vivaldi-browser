@@ -20,20 +20,23 @@ interface CachedScopeMap {
 
 const scopeToCachedIdentifiersMap = new WeakMap<Formatter.FormatterWorkerPool.ScopeTreeNode, CachedScopeMap>();
 const cachedMapByCallFrame = new WeakMap<SDK.DebuggerModel.CallFrame, Map<string, string|null>>();
-const cachedTextByDeferredContent = new WeakMap<TextUtils.ContentProvider.DeferredContent, TextUtils.Text.Text|null>();
+const cachedTextByContentData = new WeakMap<TextUtils.ContentData.ContentData, TextUtils.Text.Text>();
 
-async function getTextFor(contentProvider: TextUtils.ContentProvider.ContentProvider):
+export async function getTextFor(contentProvider: TextUtils.ContentProvider.ContentProvider):
     Promise<TextUtils.Text.Text|null> {
-  // We intentionally cache based on the DeferredContent object rather
+  // We intentionally cache based on the ContentData object rather
   // than the ContentProvider object, which may appear as a more sensible
   // choice, since the content of both Script and UISourceCode objects
   // can change over time.
-  const deferredContent = await contentProvider.requestContent();
-  let text = cachedTextByDeferredContent.get(deferredContent);
+  const contentData = await contentProvider.requestContentData();
+  if (TextUtils.ContentData.ContentData.isError(contentData) || !contentData.isTextContent) {
+    return null;
+  }
+
+  let text = cachedTextByContentData.get(contentData);
   if (text === undefined) {
-    const {content} = deferredContent;
-    text = content ? new TextUtils.Text.Text(content) : null;
-    cachedTextByDeferredContent.set(deferredContent, text);
+    text = new TextUtils.Text.Text(contentData.text);
+    cachedTextByContentData.set(contentData, text);
   }
   return text;
 }
@@ -226,7 +229,7 @@ const resolveScope = async(script: SDK.Script.Script, scopeChain: Formatter.Form
         return {variableMapping: new Map<string, string>(), thisMapping: null};
       }
       let cachedScopeMap = scopeToCachedIdentifiersMap.get(parsedScope);
-      const sourceMap = script.debuggerModel.sourceMapManager().sourceMapForClient(script);
+      const sourceMap = script.sourceMap();
 
       if (!cachedScopeMap || cachedScopeMap.sourceMap !== sourceMap) {
         const identifiersPromise =
@@ -384,16 +387,18 @@ const resolveScope = async(script: SDK.Script.Script, scopeChain: Formatter.Form
     };
 
 export const resolveScopeChain =
-    async function(callFrame: SDK.DebuggerModel.CallFrame|null): Promise<SDK.DebuggerModel.ScopeChainEntry[]|null> {
-  if (!callFrame) {
-    return null;
-  }
+    async function(callFrame: SDK.DebuggerModel.CallFrame): Promise<SDK.DebuggerModel.ScopeChainEntry[]> {
   const {pluginManager} = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance();
   const scopeChain = await pluginManager.resolveScopeChain(callFrame);
   if (scopeChain) {
     return scopeChain;
   }
-  return callFrame.scopeChain();
+
+  if (callFrame.script.isWasm()) {
+    return callFrame.scopeChain();
+  }
+  const thisObject = await resolveThisObject(callFrame);
+  return callFrame.scopeChain().map(scope => new ScopeWithSourceMappedVariables(scope, thisObject));
 };
 
 /**
@@ -500,7 +505,7 @@ export const resolveExpression = async(
   if (!script) {
     return '';
   }
-  const sourceMap = script.debuggerModel.sourceMapManager().sourceMapForClient(script);
+  const sourceMap = script.sourceMap();
   if (!sourceMap) {
     return '';
   }
@@ -551,10 +556,7 @@ export const resolveExpression = async(
 };
 
 export const resolveThisObject =
-    async(callFrame: SDK.DebuggerModel.CallFrame|null): Promise<SDK.RemoteObject.RemoteObject|null> => {
-  if (!callFrame) {
-    return null;
-  }
+    async(callFrame: SDK.DebuggerModel.CallFrame): Promise<SDK.RemoteObject.RemoteObject|null> => {
   const scopeChain = callFrame.scopeChain();
   if (scopeChain.length === 0) {
     return callFrame.thisObject();
@@ -572,7 +574,7 @@ export const resolveThisObject =
     silent: true,
     returnByValue: false,
     generatePreview: true,
-  } as SDK.RuntimeModel.EvaluationOptions));
+  }));
   if ('exceptionDetails' in result) {
     return !result.exceptionDetails && result.object ? result.object : callFrame.thisObject();
   }
@@ -590,6 +592,65 @@ export const resolveScopeInObject = function(scope: SDK.DebuggerModel.ScopeChain
 
   return new RemoteObject(scope);
 };
+
+/**
+ * Wraps a debugger `Scope` but returns a scope object where variable names are
+ * mapped to their authored name.
+ *
+ * This implementation does not utilize source map "Scopes" information but obtains
+ * original variable names via parsing + mappings + names.
+ */
+class ScopeWithSourceMappedVariables implements SDK.DebuggerModel.ScopeChainEntry {
+  readonly #debuggerScope: SDK.DebuggerModel.ScopeChainEntry;
+  /** The resolved `this` of the current call frame */
+  readonly #thisObject: SDK.RemoteObject.RemoteObject|null;
+
+  constructor(scope: SDK.DebuggerModel.ScopeChainEntry, thisObject: SDK.RemoteObject.RemoteObject|null) {
+    this.#debuggerScope = scope;
+    this.#thisObject = thisObject;
+  }
+
+  callFrame(): SDK.DebuggerModel.CallFrame {
+    return this.#debuggerScope.callFrame();
+  }
+
+  type(): string {
+    return this.#debuggerScope.type();
+  }
+
+  typeName(): string {
+    return this.#debuggerScope.typeName();
+  }
+
+  name(): string|undefined {
+    return this.#debuggerScope.name();
+  }
+
+  range(): SDK.DebuggerModel.LocationRange|null {
+    return this.#debuggerScope.range();
+  }
+
+  object(): SDK.RemoteObject.RemoteObject {
+    return resolveScopeInObject(this.#debuggerScope);
+  }
+
+  description(): string {
+    return this.#debuggerScope.description();
+  }
+
+  icon(): string|undefined {
+    return this.#debuggerScope.icon();
+  }
+
+  extraProperties(): SDK.RemoteObject.RemoteObjectProperty[] {
+    const extraProperties = this.#debuggerScope.extraProperties();
+    if (this.#thisObject && this.type() === Protocol.Debugger.ScopeType.Local) {
+      extraProperties.unshift(new SDK.RemoteObject.RemoteObjectProperty(
+          'this', this.#thisObject, undefined, undefined, undefined, undefined, undefined, /* synthetic */ true));
+    }
+    return extraProperties;
+  }
+}
 
 export class RemoteObject extends SDK.RemoteObject.RemoteObject {
   private readonly scope: SDK.DebuggerModel.ScopeChainEntry;
@@ -716,7 +777,7 @@ async function getFunctionNameFromScopeStart(
   // To reduce the overhead of resolving function names,
   // we check for source maps first and immediately leave
   // this function if the script doesn't have a sourcemap.
-  const sourceMap = script.debuggerModel.sourceMapManager().sourceMapForClient(script);
+  const sourceMap = script.sourceMap();
   if (!sourceMap) {
     return null;
   }

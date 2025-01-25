@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Aplicar</translation>
 <translation id="1603914832182249871">(Incógnito)</translation>
 <translation id="1627276047960621195">Descriptores de archivo</translation>
+<translation id="1654713139320245449">No se han encontrado destinos de emisión. ¿Necesitas ayuda?</translation>
 <translation id="166278006618318542">Algoritmo de la clave pública del sujeto</translation>
 <translation id="1682548588986054654">Nueva ventana de incógnito</translation>
 <translation id="1708338024780164500">(Inactivo)</translation>
@@ -79,14 +80,13 @@
 <translation id="2326931316514688470">&amp;Recargar aplicación</translation>
 <translation id="2327492829706409234">Activar aplicación</translation>
 <translation id="2348176352564285430">Aplicación: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="2378982052244864789">Selecciona el directorio de la extensión</translation>
+<translation id="2378982052244864789">Selecciona el directorio de la extensión.</translation>
 <translation id="2379281330731083556">Imprimir usando el cuadro de diálogo del sistema... <ph name="SHORTCUT_KEY" /></translation>
 <translation id="241082044617551207">Complemento desconocido</translation>
 <translation id="2423578206845792524">Guar&amp;dar imagen como...</translation>
 <translation id="2439110203301358333">Otro programa de tu ordenador ha añadido una extensión que puede cambiar el funcionamiento de Vivaldi.</translation>
 <translation id="2443487764245141020">Es posible que los sitios también necesiten reconocer tu dispositivo mediante un identificador</translation>
 <translation id="2445081178310039857">Se requiere el directorio raíz de la extensión.</translation>
-<translation id="2470702053775288986">Extensiones no admitidas desactivadas</translation>
 <translation id="2485422356828889247">Desinstalar</translation>
 <translation id="2498539833203011245">Minimizar</translation>
 <translation id="2509495747794740764">El valor de la escala debe ser un número entre 10 y 200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Detalles</translation>
 <translation id="4345587454538109430">Configurar...</translation>
 <translation id="4348766275249686434">Recopilar errores</translation>
-<translation id="4363771538994847871">No se han encontrado destinos a los que transmitir. ¿Necesitas ayuda?</translation>
 <translation id="4384652540891215547">Activar la extensión</translation>
 <translation id="4394049700291259645">Desactivar</translation>
 <translation id="4409697491990005945">Márgenes</translation>
@@ -390,7 +389,6 @@ Exponente público (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bits):
 <translation id="7771452384635174008">Diseño</translation>
 <translation id="7782102568078991263">No hay más sugerencias de Google</translation>
 <translation id="7786889348652477777">&amp;Recargar aplicación</translation>
-<translation id="7791543448312431591">Añadir</translation>
 <translation id="7800518121066352902">Girar a la &amp;izquierda</translation>
 <translation id="7814458197256864873">&amp;Copiar</translation>
 <translation id="7818135753970109980">Tema nuevo añadido (<ph name="EXTENSION_NAME" />)</translation>

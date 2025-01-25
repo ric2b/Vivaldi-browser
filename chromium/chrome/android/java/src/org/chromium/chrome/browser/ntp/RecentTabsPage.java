@@ -19,7 +19,6 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.tab_ui.InvalidationAwareThumbnailProvider;
-import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.ui.native_page.NativePageHost;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
@@ -102,7 +101,7 @@ public class RecentTabsPage
         mRecentTabsManager.setUpdatedCallback(this);
         LayoutInflater inflater = LayoutInflater.from(activity);
         mView = (ViewGroup) inflater.inflate(R.layout.recent_tabs_page, null);
-        mListView = (ExpandableListView) mView.findViewById(R.id.odp_listview);
+        mListView = mView.findViewById(R.id.odp_listview);
         mAdapter = new RecentTabsRowAdapter(activity, recentTabsManager);
         mListView.setAdapter(mAdapter);
         mListView.setOnChildClickListener(this);
@@ -126,16 +125,14 @@ public class RecentTabsPage
 
         mTabStripHeightSupplier = tabStripHeightSupplier;
         mView.setPadding(0, mTabStripHeightSupplier.get(), 0, 0);
-        if (ToolbarFeatures.isDynamicTopChromeEnabled()) {
-            mTabStripHeightChangeCallback =
-                    newHeight ->
-                            mView.setPadding(
-                                    mView.getPaddingLeft(),
-                                    newHeight,
-                                    mView.getPaddingRight(),
-                                    mView.getPaddingBottom());
-            mTabStripHeightSupplier.addObserver(mTabStripHeightChangeCallback);
-        }
+        mTabStripHeightChangeCallback =
+                newHeight ->
+                        mView.setPadding(
+                                mView.getPaddingLeft(),
+                                newHeight,
+                                mView.getPaddingRight(),
+                                mView.getPaddingBottom());
+        mTabStripHeightSupplier.addObserver(mTabStripHeightChangeCallback);
 
         onUpdated();
 
@@ -348,7 +345,8 @@ public class RecentTabsPage
             int topControlsMinHeightOffset,
             int bottomOffset,
             int bottomControlsMinHeightOffset,
-            boolean needsAnimate) {
+            boolean needsAnimate,
+            boolean isVisibilityForced) {
         updateMargins();
     }
 
@@ -382,8 +380,7 @@ public class RecentTabsPage
         // Note(david@vivaldi.com): We reset the margin when in tab switcher mode.
         if (mRecentTabsManager.getVivaldiRecentTabsManager() != null)
             VivaldiUtils.updateViewsTopMargin(recentTabsRoot,
-                    mActivity.getResources().getDimensionPixelOffset(
-                            R.dimen.control_container_height));
+                    0);
     }
 
     Callback<Integer> getTabStripHeightChangeCallbackForTesting() {

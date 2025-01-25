@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/json/json_parser.h"
 
 #include "base/memory/raw_ptr.h"
@@ -23,7 +28,7 @@ String FormatErrorMessage(Error error, int line, int column) {
   String text;
   switch (error) {
     case Error::kNoError:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
     case Error::kUnexpectedToken:
       text = "Unexpected token.";
@@ -371,7 +376,7 @@ inline int HexToInt(CharType c) {
     return c - 'A' + 10;
   if ('a' <= c && c <= 'f')
     return c - 'a' + 10;
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0;
 }
 

@@ -2,16 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fxcodec/flate/flatemodule.h"
 
+#include "core/fxcodec/data_and_bytes_consumed.h"
 #include "core/fxcrt/compiler_specific.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/test_support.h"
+
+using testing::ElementsAreArray;
 
 // NOTE: python's zlib.compress() and zlib.decompress() may be useful for
 // external validation of the FlateDncode/FlateEecode test cases.
@@ -36,25 +35,15 @@ TEST(FlateModule, Decode) {
           "0 0 693 917 re\nf\nQ\nQ\n",
           96),
   };
-
-  for (size_t i = 0; i < std::size(flate_decode_cases); ++i) {
-    const pdfium::DecodeTestData& data = flate_decode_cases[i];
-    std::unique_ptr<uint8_t, FxFreeDeleter> buf;
-    uint32_t buf_size;
-    EXPECT_EQ(
-        data.processed_size,
-        FlateModule::FlateOrLZWDecode(
-            false,
-            UNSAFE_BUFFERS(pdfium::make_span(data.input, data.input_size)),
-            false, 0, 0, 0, 0, 0, &buf, &buf_size))
+  size_t i = 0;
+  for (const pdfium::DecodeTestData& data : flate_decode_cases) {
+    DataAndBytesConsumed result = FlateModule::FlateOrLZWDecode(
+        false, UNSAFE_TODO(pdfium::make_span(data.input, data.input_size)),
+        false, 0, 0, 0, 0, 0);
+    EXPECT_EQ(data.processed_size, result.bytes_consumed) << " for case " << i;
+    EXPECT_THAT(result.data, ElementsAreArray(data.expected_span()))
         << " for case " << i;
-    ASSERT_TRUE(buf);
-    EXPECT_EQ(data.expected_size, buf_size) << " for case " << i;
-    if (data.expected_size != buf_size) {
-      continue;
-    }
-    EXPECT_EQ(0, memcmp(data.expected, buf.get(), data.expected_size))
-        << " for case " << i;
+    ++i;
   }
 }
 
@@ -77,15 +66,11 @@ TEST(FlateModule, Encode) {
           "\x1b\x42"),
   };
 
-  for (size_t i = 0; i < std::size(flate_encode_cases); ++i) {
-    const pdfium::StrFuncTestData& data = flate_encode_cases[i];
-    DataVector<uint8_t> result = FlateModule::Encode(
-        UNSAFE_BUFFERS(pdfium::make_span(data.input, data.input_size)));
-    EXPECT_EQ(data.expected_size, result.size()) << " for case " << i;
-    if (data.expected_size != result.size()) {
-      continue;
-    }
-    EXPECT_EQ(0, memcmp(data.expected, result.data(), data.expected_size))
+  size_t i = 0;
+  for (const pdfium::StrFuncTestData& data : flate_encode_cases) {
+    DataVector<uint8_t> result = FlateModule::Encode(data.input_span());
+    EXPECT_THAT(result, ElementsAreArray(data.expected_span()))
         << " for case " << i;
+    ++i;
   }
 }

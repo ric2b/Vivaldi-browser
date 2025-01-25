@@ -106,9 +106,9 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
   //
   // Data is cached and will be reused by ReportWin().
   BidderWorklet(
-      scoped_refptr<AuctionV8Helper> v8_helper,
-      mojo::PendingRemote<mojom::AuctionSharedStorageHost>
-          shared_storage_host_remote,
+      std::vector<scoped_refptr<AuctionV8Helper>> v8_helpers,
+      std::vector<mojo::PendingRemote<mojom::AuctionSharedStorageHost>>
+          shared_storage_hosts,
       bool pause_for_debugger_on_start,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           pending_url_loader_factory,
@@ -134,7 +134,9 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
     close_pipe_callback_ = std::move(close_pipe_callback);
   }
 
-  int context_group_id_for_testing() const;
+  std::vector<int> context_group_ids_for_testing() const;
+
+  size_t GetNextThreadIndex();
 
   static bool IsKAnon(const mojom::BidderWorkletNonSharedParams*
                           bidder_worklet_non_shared_params,
@@ -206,8 +208,8 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
       uint64_t trace_id,
       ReportWinCallback report_win_callback) override;
   void ConnectDevToolsAgent(
-      mojo::PendingAssociatedReceiver<blink::mojom::DevToolsAgent> agent)
-      override;
+      mojo::PendingAssociatedReceiver<blink::mojom::DevToolsAgent> agent,
+      uint32_t thread_index) override;
 
   // mojom::GenerateBidFinalizer implementation.
   void FinishGenerateBid(
@@ -259,6 +261,8 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
         trusted_bidding_signals_request;
     // Results of loading trusted bidding signals.
     scoped_refptr<TrustedSignals::Result> trusted_bidding_signals_result;
+    // True if failed loading valid trusted bidding signals.
+    bool trusted_bidding_signals_fetch_failed = false;
     // Error message returned by attempt to load
     // `trusted_bidding_signals_result`. Errors loading it are not fatal, so
     // such errors are cached here and only reported on bid completion.
@@ -508,6 +512,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
         const std::optional<blink::AdSize>& requested_ad_size,
         uint16_t multi_bid_limit,
         scoped_refptr<TrustedSignals::Result> trusted_bidding_signals_result,
+        bool trusted_bidding_signals_fetch_failed,
         uint64_t trace_id,
         base::ScopedClosureRunner cleanup_generate_bid_task,
         GenerateBidCallbackInternal callback);
@@ -721,13 +726,17 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
   // loaded.
   bool IsCodeReady() const;
 
-  scoped_refptr<base::SequencedTaskRunner> v8_runner_;
+  std::vector<scoped_refptr<base::SequencedTaskRunner>> v8_runners_;
+  std::vector<scoped_refptr<AuctionV8Helper>> v8_helpers_;
+  std::vector<scoped_refptr<AuctionV8Helper::DebugId>> debug_ids_;
 
-  const scoped_refptr<AuctionV8Helper> v8_helper_;
-  const scoped_refptr<AuctionV8Helper::DebugId> debug_id_;
+  size_t next_thread_index_ = 0;
+
   mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory_;
 
   bool paused_;
+
+  size_t resumed_count_ = 0;
 
   // Values shared by all interest groups that the BidderWorklet can be used
   // for.
@@ -753,9 +762,9 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
   std::unique_ptr<WorkletLoader> worklet_loader_;
   std::unique_ptr<WorkletWasmLoader> wasm_loader_;
 
-  // Lives on `v8_runner_`. Since it's deleted there via DeleteSoon, tasks can
+  // Lives on `v8_runners_`. Since it's deleted there via DeleteSoon, tasks can
   // be safely posted from main thread to it with an Unretained pointer.
-  std::unique_ptr<V8State, base::OnTaskRunnerDeleter> v8_state_;
+  std::vector<std::unique_ptr<V8State, base::OnTaskRunnerDeleter>> v8_state_;
 
   // Pending calls to the corresponding Javascript methods. Only accessed on
   // main thread, but iterators to their elements are bound to callbacks passed

@@ -24,13 +24,13 @@
 #include "ui/events/event.h"
 #include "ui/events/ozone/events_ozone.h"
 #include "ui/gfx/range/range.h"
+#include "ui/ozone/platform/wayland/host/wayland_connection_test_api.h"
 #include "ui/ozone/platform/wayland/host/wayland_event_source.h"
 #include "ui/ozone/platform/wayland/host/wayland_seat.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 #include "ui/ozone/platform/wayland/test/mock_surface.h"
 #include "ui/ozone/platform/wayland/test/mock_zcr_extended_text_input.h"
 #include "ui/ozone/platform/wayland/test/mock_zwp_text_input.h"
-#include "ui/ozone/platform/wayland/test/test_util.h"
 #include "ui/ozone/platform/wayland/test/test_wayland_server_thread.h"
 #include "ui/ozone/platform/wayland/test/test_zcr_text_input_extension.h"
 #include "ui/ozone/platform/wayland/test/wayland_test.h"
@@ -144,6 +144,53 @@ class MockTextInputClient : public TextInputClient {
 
  private:
   TextInputType text_input_type_;
+};
+
+class MockZWPTextInputWrapper : public ZWPTextInputWrapper {
+ public:
+  ~MockZWPTextInputWrapper() override = default;
+
+  MOCK_METHOD(void, Reset, (), (override));
+
+  MOCK_METHOD(void,
+              Activate,
+              (WaylandWindow * window, ui::TextInputClient::FocusReason reason),
+              (override));
+  MOCK_METHOD(void, Deactivate, (), (override));
+
+  MOCK_METHOD(void, ShowInputPanel, (), (override));
+  MOCK_METHOD(void, HideInputPanel, (), (override));
+
+  MOCK_METHOD(void, SetCursorRect, (const gfx::Rect& rect), (override));
+  MOCK_METHOD(void,
+              SetSurroundingText,
+              (const std::string& text,
+               const gfx::Range& preedit_range,
+               const gfx::Range& selection_range),
+              (override));
+  MOCK_METHOD(bool, HasAdvancedSurroundingTextSupport, (), (const override));
+  MOCK_METHOD(void,
+              SetSurroundingTextOffsetUtf16,
+              (uint32_t offset_utf16),
+              (override));
+  MOCK_METHOD(void,
+              SetContentType,
+              (ui::TextInputType type,
+               ui::TextInputMode mode,
+               uint32_t flags,
+               bool should_do_learning,
+               bool can_compose_inline),
+              (override));
+
+  MOCK_METHOD(void,
+              SetGrammarFragmentAtCursor,
+              (const ui::GrammarFragment& fragment),
+              (override));
+  MOCK_METHOD(void,
+              SetAutocorrectInfo,
+              (const gfx::Range& autocorrect_range,
+               const gfx::Rect& autocorrect_bounds),
+              (override));
 };
 
 class TestInputMethodContextDelegate : public LinuxInputMethodContextDelegate {
@@ -312,7 +359,7 @@ class WaylandInputMethodContextTestBase : public WaylandTest {
     input_method_context_->Init(true);
     connection_->Flush();
 
-    wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+    WaylandConnectionTestApi(connection_.get()).SyncDisplay();
 
     // Unset Keyboard focus.
     connection_->window_manager()->SetKeyboardFocusedWindow(nullptr);
@@ -330,8 +377,6 @@ class WaylandInputMethodContextTestBase : public WaylandTest {
       input_method_context_delegate_;
   std::unique_ptr<TestKeyboardDelegate> keyboard_delegate_;
   std::unique_ptr<WaylandInputMethodContext> input_method_context_;
-  raw_ptr<wl::MockZwpTextInput> zwp_text_input_ = nullptr;
-  raw_ptr<wl::MockZcrExtendedTextInput> zcr_extended_text_input_ = nullptr;
 
   uint32_t surface_id_ = 0u;
 };
@@ -548,7 +593,8 @@ TEST_P(WaylandInputMethodContextTest, SetSurroundingTextForShortText) {
         .Times(1);
   });
 
-  input_method_context_->SetSurroundingText(text, gfx::Range(0, 50), range,
+  input_method_context_->SetSurroundingText(text, gfx::Range(0, 50),
+                                            gfx::Range::InvalidRange(), range,
                                             std::nullopt, std::nullopt);
   EXPECT_EQ(
       input_method_context_->predicted_state_for_testing().surrounding_text,
@@ -604,7 +650,8 @@ TEST_P(WaylandInputMethodContextTest, SetSurroundingTextForLongText) {
         .Times(1);
   });
 
-  input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000), range,
+  input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000),
+                                            gfx::Range::InvalidRange(), range,
                                             std::nullopt, std::nullopt);
   EXPECT_EQ(
       input_method_context_->predicted_state_for_testing().surrounding_text,
@@ -660,7 +707,8 @@ TEST_P(WaylandInputMethodContextTest, SetSurroundingTextForLongTextInLeftEdge) {
         .Times(1);
   });
 
-  input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000), range,
+  input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000),
+                                            gfx::Range::InvalidRange(), range,
                                             std::nullopt, std::nullopt);
   EXPECT_EQ(
       input_method_context_->predicted_state_for_testing().surrounding_text,
@@ -717,7 +765,8 @@ TEST_P(WaylandInputMethodContextTest,
         .Times(1);
   });
 
-  input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000), range,
+  input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000),
+                                            gfx::Range::InvalidRange(), range,
                                             std::nullopt, std::nullopt);
   EXPECT_EQ(
       input_method_context_->predicted_state_for_testing().surrounding_text,
@@ -760,7 +809,8 @@ TEST_P(WaylandInputMethodContextTest, SetSurroundingTextForLongRange) {
           .Times(0);
     });
 
-    input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000), range,
+    input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000),
+                                              gfx::Range::InvalidRange(), range,
                                               std::nullopt, std::nullopt);
     // Predicted state in SurroundingTextTracker is reset when the range is
     // longer than wayland message size maximum.
@@ -788,7 +838,8 @@ TEST_P(WaylandInputMethodContextTest, SetSurroundingTextForLongRange) {
           .Times(1);
     });
 
-    input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000), range,
+    input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000),
+                                              gfx::Range::InvalidRange(), range,
                                               std::nullopt, std::nullopt);
     EXPECT_EQ(
         input_method_context_->predicted_state_for_testing().surrounding_text,
@@ -825,8 +876,8 @@ TEST_P(WaylandInputMethodContextTest,
   });
 
   input_method_context_->SetSurroundingText(
-      text, gfx::Range(0, 50), range, GrammarFragment(gfx::Range(0, 10), "abc"),
-      std::nullopt);
+      text, gfx::Range(0, 50), gfx::Range::InvalidRange(), range,
+      GrammarFragment(gfx::Range(0, 10), "abc"), std::nullopt);
   EXPECT_EQ(
       input_method_context_->predicted_state_for_testing().surrounding_text,
       text);
@@ -870,7 +921,7 @@ TEST_P(WaylandInputMethodContextTest,
       });
 
   input_method_context_->SetSurroundingText(
-      text, gfx::Range(0, 5000), range,
+      text, gfx::Range(0, 5000), gfx::Range::InvalidRange(), range,
       GrammarFragment(gfx::Range(2700, 2710), "abc"), std::nullopt);
   EXPECT_EQ(
       input_method_context_->predicted_state_for_testing().surrounding_text,
@@ -909,7 +960,7 @@ TEST_P(WaylandInputMethodContextTest,
   });
 
   input_method_context_->SetSurroundingText(
-      text, gfx::Range(0, 50), range, std::nullopt,
+      text, gfx::Range(0, 50), gfx::Range::InvalidRange(), range, std::nullopt,
       AutocorrectInfo{gfx::Range(15, 18), gfx::Rect(10, 20)});
   EXPECT_EQ(
       input_method_context_->predicted_state_for_testing().surrounding_text,
@@ -936,7 +987,8 @@ TEST_P(WaylandInputMethodContextTest, DeleteSurroundingTextWithExtendedRange) {
         .Times(1);
   });
 
-  input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000), range,
+  input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000),
+                                            gfx::Range::InvalidRange(), range,
                                             std::nullopt, std::nullopt);
   EXPECT_EQ(
       input_method_context_->predicted_state_for_testing().surrounding_text,
@@ -972,7 +1024,8 @@ TEST_P(WaylandInputMethodContextTest, DeleteSurroundingTextInIncorrectOrder) {
   constexpr char16_t text[] = u"aあb";
   const gfx::Range range(3);
 
-  input_method_context_->SetSurroundingText(text, gfx::Range(0, 3), range,
+  input_method_context_->SetSurroundingText(text, gfx::Range(0, 3),
+                                            gfx::Range::InvalidRange(), range,
                                             std::nullopt, std::nullopt);
   connection_->Flush();
 
@@ -1008,7 +1061,8 @@ TEST_P(WaylandInputMethodContextTest, DeleteSurroundingTextInIncorrectOrder) {
   // 3. Set surrounding text for step 1. Ideally this thould be called before
   // step 2, but the order could be different due to the timing issue.
   input_method_context_->SetSurroundingText(
-      u"aあ", gfx::Range(0, 2), gfx::Range(2), std::nullopt, std::nullopt);
+      u"aあ", gfx::Range(0, 2), gfx::Range::InvalidRange(), gfx::Range(2),
+      std::nullopt, std::nullopt);
   connection_->Flush();
 
   // Surrounding text tracker should predict "a" instead of "aあ" here as that
@@ -1023,7 +1077,8 @@ TEST_P(WaylandInputMethodContextTest, DeleteSurroundingTextInIncorrectOrder) {
 
   // 4. Set surrounding text for step 2.
   input_method_context_->SetSurroundingText(
-      u"a", gfx::Range(0, 1), gfx::Range(1), std::nullopt, std::nullopt);
+      u"a", gfx::Range(0, 1), gfx::Range::InvalidRange(), gfx::Range(1),
+      std::nullopt, std::nullopt);
   connection_->Flush();
 
   EXPECT_EQ(
@@ -1041,9 +1096,9 @@ TEST_P(WaylandInputMethodContextTest,
 
   // 1. Set CommitString as a initial state. Cursor is between "Commit" and
   // "String".
-  input_method_context_->SetSurroundingText(u"CommitString", gfx::Range(0, 12),
-                                            gfx::Range(6), std::nullopt,
-                                            std::nullopt);
+  input_method_context_->SetSurroundingText(
+      u"CommitString", gfx::Range(0, 12), gfx::Range::InvalidRange(),
+      gfx::Range(6), std::nullopt, std::nullopt);
   connection_->Flush();
 
   EXPECT_EQ(
@@ -1086,7 +1141,8 @@ TEST_P(WaylandInputMethodContextTest,
   // 4. Set surrounding text for step 2. Ideally this should be sent before step
   // 3.
   input_method_context_->SetSurroundingText(
-      u"String", gfx::Range(0, 6), gfx::Range(0), std::nullopt, std::nullopt);
+      u"String", gfx::Range(0, 6), gfx::Range::InvalidRange(), gfx::Range(0),
+      std::nullopt, std::nullopt);
   connection_->Flush();
 
   EXPECT_EQ(
@@ -1096,9 +1152,9 @@ TEST_P(WaylandInputMethodContextTest,
             gfx::Range(7));
 
   // 5. Set surrounding text for step 3.
-  input_method_context_->SetSurroundingText(u"UpdatedString", gfx::Range(0, 13),
-                                            gfx::Range(7), std::nullopt,
-                                            std::nullopt);
+  input_method_context_->SetSurroundingText(
+      u"UpdatedString", gfx::Range(0, 13), gfx::Range::InvalidRange(),
+      gfx::Range(7), std::nullopt, std::nullopt);
   connection_->Flush();
 
   EXPECT_EQ(
@@ -1279,6 +1335,72 @@ TEST_P(WaylandInputMethodContextTest, OnCommit) {
             gfx::Range(0));
 }
 
+// Regression test for crbug.com/40263583
+TEST_P(WaylandInputMethodContextTest,
+       OnCommitAfterEmptyPreeditStringWithoutCursor) {
+  PostToServerAndWait([](wl::TestWaylandServerThread* server) {
+    zwp_text_input_v1_send_preedit_string(
+        server->text_input_manager_v1()->text_input()->resource(),
+        server->GetNextSerial(), "", "");
+  });
+  EXPECT_TRUE(input_method_context_delegate_->was_on_preedit_changed_called());
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().composition,
+            gfx::Range(0, 0));
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(0));
+  PostToServerAndWait([](wl::TestWaylandServerThread* server) {
+    zwp_text_input_v1_send_commit_string(
+        server->text_input_manager_v1()->text_input()->resource(),
+        server->GetNextSerial(), "CommitString");
+  });
+  EXPECT_TRUE(input_method_context_delegate_->was_on_commit_called());
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"CommitString");
+  // On commit string, selection is placed next to the last character unless the
+  // cursor position is specified by OnCursorPosition.
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(12));
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().composition,
+            gfx::Range(0));
+}
+
+TEST_P(WaylandInputMethodContextTest, OnCommitAfterPreeditStringWithoutCursor) {
+  PostToServerAndWait([](wl::TestWaylandServerThread* server) {
+    zwp_text_input_v1_send_preedit_string(
+        server->text_input_manager_v1()->text_input()->resource(),
+        server->GetNextSerial(), "PreeditString", "");
+  });
+  EXPECT_TRUE(input_method_context_delegate_->was_on_preedit_changed_called());
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"PreeditString");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().composition,
+            gfx::Range(0, 13));
+  // Cursor should be at the end of preedit when cursor position is not
+  // specified.
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(13));
+  PostToServerAndWait([](wl::TestWaylandServerThread* server) {
+    zwp_text_input_v1_send_commit_string(
+        server->text_input_manager_v1()->text_input()->resource(),
+        server->GetNextSerial(), "CommitString");
+  });
+  EXPECT_TRUE(input_method_context_delegate_->was_on_commit_called());
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"CommitString");
+  // On commit string, selection is placed next to the last character unless the
+  // cursor position is specified by OnCursorPosition.
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(12));
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().composition,
+            gfx::Range(0));
+}
+
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 TEST_P(WaylandInputMethodContextTest, OnConfirmCompositionText) {
   constexpr char16_t text[] = u"ab😀cあdef";
@@ -1289,7 +1411,8 @@ TEST_P(WaylandInputMethodContextTest, OnConfirmCompositionText) {
     EXPECT_CALL(*server->text_input_manager_v1()->text_input(),
                 SetSurroundingText("ab😀cあdef", gfx::Range(7, 10)));
   });
-  input_method_context_->SetSurroundingText(text, gfx::Range(0, 9), range,
+  input_method_context_->SetSurroundingText(text, gfx::Range(0, 9),
+                                            gfx::Range::InvalidRange(), range,
                                             std::nullopt, std::nullopt);
   EXPECT_EQ(
       input_method_context_->predicted_state_for_testing().surrounding_text,
@@ -1324,7 +1447,8 @@ TEST_P(WaylandInputMethodContextTest, OnConfirmCompositionText) {
 TEST_P(WaylandInputMethodContextTest,
        OnConfirmCompositionTextExtendedKeepSelectionNoComposition) {
   input_method_context_->SetSurroundingText(
-      u"abcd", gfx::Range(0, 4), gfx::Range(0, 4), std::nullopt, std::nullopt);
+      u"abcd", gfx::Range(0, 4), gfx::Range::InvalidRange(), gfx::Range(0, 4),
+      std::nullopt, std::nullopt);
   connection_->Flush();
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
@@ -1344,8 +1468,9 @@ TEST_P(WaylandInputMethodContextTest,
 TEST_P(WaylandInputMethodContextTest,
        OnConfirmCompositionTextExtendedKeepSelectionComposition) {
   input_method_context_->SetSurroundingText(
-      u"abcd", gfx::Range(0, 4), gfx::Range(2), std::nullopt, std::nullopt);
-  input_method_context_->OnPreeditString("xyz", {}, 1);
+      u"abcd", gfx::Range(0, 4), gfx::Range::InvalidRange(), gfx::Range(2),
+      std::nullopt, std::nullopt);
+  input_method_context_->OnPreeditString("xyz", {}, gfx::Range(1));
   connection_->Flush();
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
@@ -1365,7 +1490,8 @@ TEST_P(WaylandInputMethodContextTest,
 TEST_P(WaylandInputMethodContextTest,
        OnConfirmCompositionTextExtendedDontKeepSelectionNoComposition) {
   input_method_context_->SetSurroundingText(
-      u"abcd", gfx::Range(0, 4), gfx::Range(0, 4), std::nullopt, std::nullopt);
+      u"abcd", gfx::Range(0, 4), gfx::Range::InvalidRange(), gfx::Range(0, 4),
+      std::nullopt, std::nullopt);
   connection_->Flush();
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
@@ -1387,8 +1513,9 @@ TEST_P(WaylandInputMethodContextTest,
 TEST_P(WaylandInputMethodContextTest,
        OnConfirmCompositionTextExtendedDontKeepSelectionComposition) {
   input_method_context_->SetSurroundingText(
-      u"abcd", gfx::Range(0, 4), gfx::Range(2), std::nullopt, std::nullopt);
-  input_method_context_->OnPreeditString("xyz", {}, 1);
+      u"abcd", gfx::Range(0, 4), gfx::Range::InvalidRange(), gfx::Range(2),
+      std::nullopt, std::nullopt);
+  input_method_context_->OnPreeditString("xyz", {}, gfx::Range(1));
   connection_->Flush();
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
@@ -1433,7 +1560,8 @@ TEST_P(WaylandInputMethodContextTest, OnConfirmCompositionTextForLongRange) {
     EXPECT_CALL(*server->text_input_manager_v1()->text_input(),
                 SetSurroundingText(expected_sent_text, expected_sent_range));
   });
-  input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000), range,
+  input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000),
+                                            gfx::Range::InvalidRange(), range,
                                             std::nullopt, std::nullopt);
   EXPECT_EQ(
       input_method_context_->predicted_state_for_testing().surrounding_text,
@@ -1479,7 +1607,8 @@ TEST_P(WaylandInputMethodContextTest, OnSetPreeditRegion_Success) {
                 SetSurroundingText("abcあdef", gfx::Range(3, 6)));
   });
 
-  input_method_context_->SetSurroundingText(text, gfx::Range(0, 7), range,
+  input_method_context_->SetSurroundingText(text, gfx::Range(0, 7),
+                                            gfx::Range::InvalidRange(), range,
                                             std::nullopt, std::nullopt);
   EXPECT_EQ(
       input_method_context_->predicted_state_for_testing().surrounding_text,
@@ -1536,7 +1665,8 @@ TEST_P(WaylandInputMethodContextTest,
   });
 
   input_method_context_->SetSurroundingText(
-      u16_text, gfx::Range(0, 1), u16_range, std::nullopt, std::nullopt);
+      u16_text, gfx::Range(0, 1), gfx::Range::InvalidRange(), u16_range,
+      std::nullopt, std::nullopt);
   EXPECT_EQ(
       input_method_context_->predicted_state_for_testing().surrounding_text,
       u16_text);
@@ -1579,7 +1709,8 @@ TEST_P(WaylandInputMethodContextTest,
   });
 
   input_method_context_->SetSurroundingText(
-      u16_text, gfx::Range(0, 2), u16_range, std::nullopt, std::nullopt);
+      u16_text, gfx::Range(0, 2), gfx::Range::InvalidRange(), u16_range,
+      std::nullopt, std::nullopt);
   EXPECT_EQ(
       input_method_context_->predicted_state_for_testing().surrounding_text,
       u16_text);
@@ -1605,7 +1736,7 @@ TEST_P(WaylandInputMethodContextTest,
 
 TEST_P(WaylandInputMethodContextTest, OnClearGrammarFragments) {
   input_method_context_->OnClearGrammarFragments(gfx::Range(1, 5));
-  wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+  WaylandConnectionTestApi(connection_.get()).SyncDisplay();
   EXPECT_TRUE(
       input_method_context_delegate_->was_on_clear_grammar_fragments_called());
 }
@@ -1613,7 +1744,7 @@ TEST_P(WaylandInputMethodContextTest, OnClearGrammarFragments) {
 TEST_P(WaylandInputMethodContextTest, OnAddGrammarFragments) {
   input_method_context_->OnAddGrammarFragment(
       ui::GrammarFragment(gfx::Range(1, 5), "test"));
-  wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+  WaylandConnectionTestApi(connection_.get()).SyncDisplay();
   EXPECT_TRUE(
       input_method_context_delegate_->was_on_add_grammar_fragment_called());
 }
@@ -1621,13 +1752,13 @@ TEST_P(WaylandInputMethodContextTest, OnAddGrammarFragments) {
 TEST_P(WaylandInputMethodContextTest, OnInsertImage) {
   const GURL some_image_url = GURL("");
   input_method_context_->OnInsertImage(some_image_url);
-  wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+  WaylandConnectionTestApi(connection_.get()).SyncDisplay();
   EXPECT_TRUE(input_method_context_delegate_->was_on_insert_image_called());
 }
 
 TEST_P(WaylandInputMethodContextTest, OnSetAutocorrectRange) {
   input_method_context_->OnSetAutocorrectRange(gfx::Range(1, 5));
-  wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+  WaylandConnectionTestApi(connection_.get()).SyncDisplay();
   EXPECT_TRUE(
       input_method_context_delegate_->was_on_set_autocorrect_range_called());
 }
@@ -1635,7 +1766,7 @@ TEST_P(WaylandInputMethodContextTest, OnSetAutocorrectRange) {
 TEST_P(WaylandInputMethodContextTest, OnSetVirtualKeyboardOccludedBounds) {
   constexpr gfx::Rect kBounds(10, 20, 300, 400);
   input_method_context_->OnSetVirtualKeyboardOccludedBounds(kBounds);
-  wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+  WaylandConnectionTestApi(connection_.get()).SyncDisplay();
   EXPECT_EQ(input_method_context_delegate_->virtual_keyboard_bounds(), kBounds);
 }
 
@@ -1661,7 +1792,8 @@ TEST_P(WaylandInputMethodContextTest,
   EXPECT_CALL(*client1, EnsureCaretNotInRect(kBounds));
   EXPECT_CALL(*client2, EnsureCaretNotInRect(kBounds));
   input_method_context_->OnSetVirtualKeyboardOccludedBounds(kBounds);
-  wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+  WaylandConnectionTestApi test_api(connection_.get());
+  test_api.SyncDisplay();
   Mock::VerifyAndClearExpectations(client1.get());
   Mock::VerifyAndClearExpectations(client2.get());
 
@@ -1670,7 +1802,7 @@ TEST_P(WaylandInputMethodContextTest,
   EXPECT_CALL(*client1, EnsureCaretNotInRect(kBoundsEmpty));
   EXPECT_CALL(*client2, EnsureCaretNotInRect(kBoundsEmpty));
   input_method_context_->OnSetVirtualKeyboardOccludedBounds(kBoundsEmpty);
-  wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+  test_api.SyncDisplay();
   Mock::VerifyAndClearExpectations(client1.get());
   Mock::VerifyAndClearExpectations(client2.get());
 
@@ -1679,7 +1811,7 @@ TEST_P(WaylandInputMethodContextTest,
   EXPECT_CALL(*client1, EnsureCaretNotInRect).Times(0);
   EXPECT_CALL(*client2, EnsureCaretNotInRect).Times(0);
   input_method_context_->OnSetVirtualKeyboardOccludedBounds(kBounds2);
-  wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+  test_api.SyncDisplay();
   Mock::VerifyAndClearExpectations(client1.get());
   Mock::VerifyAndClearExpectations(client2.get());
 }
@@ -1698,12 +1830,13 @@ TEST_P(WaylandInputMethodContextTest,
   const gfx::Rect kBounds(10, 20, 300, 400);
   EXPECT_CALL(*client, EnsureCaretNotInRect(kBounds));
   input_method_context_->OnSetVirtualKeyboardOccludedBounds(kBounds);
-  wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+  WaylandConnectionTestApi test_api(connection_.get());
+  test_api.SyncDisplay();
   Mock::VerifyAndClearExpectations(client.get());
 
   client.reset();
   input_method_context_->OnSetVirtualKeyboardOccludedBounds(kBounds);
-  wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+  test_api.SyncDisplay();
 }
 
 TEST_P(WaylandInputMethodContextTest, DisplayVirtualKeyboard) {
@@ -1714,7 +1847,7 @@ TEST_P(WaylandInputMethodContextTest, DisplayVirtualKeyboard) {
   });
   EXPECT_TRUE(input_method_context_->DisplayVirtualKeyboard());
   connection_->Flush();
-  wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+  WaylandConnectionTestApi(connection_.get()).SyncDisplay();
 }
 
 TEST_P(WaylandInputMethodContextTest, DismissVirtualKeyboard) {
@@ -1724,7 +1857,7 @@ TEST_P(WaylandInputMethodContextTest, DismissVirtualKeyboard) {
   });
   input_method_context_->DismissVirtualKeyboard();
   connection_->Flush();
-  wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+  WaylandConnectionTestApi(connection_.get()).SyncDisplay();
 }
 
 TEST_P(WaylandInputMethodContextTest, UpdateVirtualKeyboardState) {
@@ -1765,8 +1898,8 @@ std::unique_ptr<KeyEvent> CreateKeyEventForCharacterComposer(
     DomCode dom_code,
     DomKey dom_key) {
   auto event =
-      std::make_unique<KeyEvent>(ET_KEY_PRESSED, keyboard_code, dom_code,
-                                 EF_NONE, dom_key, EventTimeForNow());
+      std::make_unique<KeyEvent>(EventType::kKeyPressed, keyboard_code,
+                                 dom_code, EF_NONE, dom_key, EventTimeForNow());
   // We need to set this flag to make sure the event is sent to
   // CharacterComposer.
   ui::SetKeyboardImeFlags(event.get(), ui::kPropertyKeyboardImeIgnoredFlag);
@@ -1943,6 +2076,195 @@ TEST_P(WaylandInputMethodContextNoKeyboardTest, UpdateFocusBetweenTextFields) {
     Mock::VerifyAndClearExpectations(
         server->text_input_manager_v1()->text_input());
   });
+}
+
+// For use in tests that simply test the WaylandInputMethodContext in isolation
+// without using a real v1/v3 wrapper.
+class WaylandInputMethodContextWithMockWrapperTest : public WaylandTestSimple {
+ public:
+  void SetUp() override {
+    WaylandTestSimple::SetUp();
+    input_method_context_delegate_ =
+        std::make_unique<TestInputMethodContextDelegate>();
+    keyboard_delegate_ = std::make_unique<TestKeyboardDelegate>();
+    input_method_context_ = std::make_unique<WaylandInputMethodContext>(
+        connection_.get(), keyboard_delegate_.get(),
+        input_method_context_delegate_.get());
+    auto mock_wrapper = std::make_unique<MockZWPTextInputWrapper>();
+    mock_wrapper_ = mock_wrapper.get();
+    input_method_context_->Init(true, std::move(mock_wrapper));
+  }
+
+ protected:
+  std::unique_ptr<TestInputMethodContextDelegate>
+      input_method_context_delegate_;
+  std::unique_ptr<TestKeyboardDelegate> keyboard_delegate_;
+  std::unique_ptr<WaylandInputMethodContext> input_method_context_;
+  raw_ptr<MockZWPTextInputWrapper> mock_wrapper_;
+};
+
+TEST_F(WaylandInputMethodContextWithMockWrapperTest,
+       SetSurroundingShortTextWithCompositionRange) {
+  const std::u16string text(50, u'あ');
+  constexpr gfx::Range range(20, 30);
+
+  const std::string kExpectedSentText(base::UTF16ToUTF8(text));
+  constexpr gfx::Range kExpectedSentRange(60, 90);
+
+  EXPECT_CALL(*mock_wrapper_,
+              SetSurroundingText(kExpectedSentText, kExpectedSentRange,
+                                 kExpectedSentRange));
+  input_method_context_->SetSurroundingText(text, gfx::Range(0, 50), range,
+                                            range, std::nullopt, std::nullopt);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            range);
+  connection_->Flush();
+}
+
+TEST_F(WaylandInputMethodContextWithMockWrapperTest,
+       SetSurroundingLongTextWithCompositionRange) {
+  const std::u16string text(5000, u'あ');
+  constexpr gfx::Range kRange(2800, 3200);
+
+  const std::string kExpectedSentText(
+      base::UTF16ToUTF8(std::u16string(1332, u'あ')));
+  constexpr gfx::Range kExpectedSentRange(1398, 2598);
+
+  EXPECT_CALL(*mock_wrapper_,
+              SetSurroundingText(kExpectedSentText, kExpectedSentRange,
+                                 kExpectedSentRange));
+  input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000), kRange,
+                                            kRange, std::nullopt, std::nullopt);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            kRange);
+}
+
+TEST_F(WaylandInputMethodContextWithMockWrapperTest,
+       SetSurroundingLongTextWithCompositionRangeOutsideSurroundingTextRange) {
+  const std::u16string text(5000, u'あ');
+  constexpr gfx::Range kSelectionRange(2800, 3200);
+  // composition range before surrounding text range.
+  constexpr gfx::Range kCompositionRange(10, 20);
+
+  const std::string kExpectedSentText(
+      base::UTF16ToUTF8(std::u16string(1332, u'あ')));
+  constexpr gfx::Range kExpectedSentSelectionRange(1398, 2598);
+
+  EXPECT_CALL(*mock_wrapper_,
+              SetSurroundingText(kExpectedSentText, gfx::Range::InvalidRange(),
+                                 kExpectedSentSelectionRange));
+  input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000),
+                                            kCompositionRange, kSelectionRange,
+                                            std::nullopt, std::nullopt);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            kSelectionRange);
+
+  // composition range after surrounding text range.
+  constexpr gfx::Range kCompositionRange2(4500, 4600);
+
+  EXPECT_CALL(*mock_wrapper_,
+              SetSurroundingText(kExpectedSentText, gfx::Range::InvalidRange(),
+                                 kExpectedSentSelectionRange));
+  input_method_context_->SetSurroundingText(text, gfx::Range(0, 5000),
+                                            kCompositionRange2, kSelectionRange,
+                                            std::nullopt, std::nullopt);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            kSelectionRange);
+}
+
+TEST_F(WaylandInputMethodContextWithMockWrapperTest,
+       SetSurroundingWithCompositionRangeOutideText) {
+  const std::u16string text(5000, u'あ');
+  constexpr gfx::Range kSelectionRange(2800, 3200);
+
+  EXPECT_CALL(*mock_wrapper_, SetSurroundingText(_, _, _)).Times(0);
+  input_method_context_->SetSurroundingText(
+      text, gfx::Range(0, 5000), gfx::Range(6000, 7000), kSelectionRange,
+      std::nullopt, std::nullopt);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            kSelectionRange);
+}
+
+TEST_F(WaylandInputMethodContextWithMockWrapperTest,
+       SetSurroundingWithCompositionRangeInvalid) {
+  const std::u16string text(5000, u'あ');
+  constexpr gfx::Range kSelectionRange(2800, 3200);
+
+  const std::string kExpectedSentText(
+      base::UTF16ToUTF8(std::u16string(1332, u'あ')));
+  constexpr gfx::Range kExpectedSentSelectionRange(1398, 2598);
+
+  EXPECT_CALL(*mock_wrapper_,
+              SetSurroundingText(kExpectedSentText, gfx::Range::InvalidRange(),
+                                 kExpectedSentSelectionRange));
+  // invalid composition range
+  input_method_context_->SetSurroundingText(
+      text, gfx::Range(0, 5000), gfx::Range::InvalidRange(), kSelectionRange,
+      std::nullopt, std::nullopt);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            kSelectionRange);
+}
+
+TEST_F(WaylandInputMethodContextWithMockWrapperTest, OnPreeditChanged) {
+  const std::u16string text(50, u'あ');
+  const std::string text_utf8 = base::UTF16ToUTF8(text);
+
+  input_method_context_->OnPreeditString(text_utf8, {}, {30, 60});
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(10, 20));
+
+  // cursor end before begin
+  input_method_context_->OnPreeditString(text_utf8, {}, {60, 30});
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(20, 10));
+}
+
+TEST_F(WaylandInputMethodContextWithMockWrapperTest,
+       OnPreeditChangedInvalidCursorEnd) {
+  const std::u16string text(50, u'あ');
+  const std::string text_utf8 = base::UTF16ToUTF8(text);
+
+  // Cursor end is outside of preedit text. So neither surrounding text nor
+  // selection should be updated.
+  input_method_context_->OnPreeditString(text_utf8, {}, {30, 999999});
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(0, 0));
+
+  // Cursor end is in the middle of a character. So neither surrounding text nor
+  // selection should be updated.
+  input_method_context_->OnPreeditString(text_utf8, {}, {30, 32});
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(0, 0));
 }
 
 }  // namespace ui

@@ -5,58 +5,120 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_CANVAS_CANVAS2D_BASE_RENDERING_CONTEXT_2D_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_CANVAS_CANVAS2D_BASE_RENDERING_CONTEXT_2D_H_
 
-#include <memory>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <utility>
 
-#include "base/containers/lru_cache.h"
-#include "base/functional/bind.h"
+#include "base/check.h"
+#include "base/compiler_specific.h"
+#include "base/dcheck_is_on.h"
+#include "base/feature_list.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
-#include "base/task/single_thread_task_runner.h"
+#include "cc/paint/paint_canvas.h"
+#include "cc/paint/paint_flags.h"
+#include "cc/paint/paint_record.h"
 #include "cc/paint/record_paint_canvas.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_texture_format.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_typedefs.h"
-#include "third_party/blink/renderer/core/geometry/dom_matrix.h"
+#include "third_party/blink/renderer/core/html/canvas/canvas_performance_monitor.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
-#include "third_party/blink/renderer/core/html/canvas/image_data.h"
-#include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_gradient.h"
-#include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_image_source_util.h"
+#include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
+#include "third_party/blink/renderer/modules/canvas/canvas2d/cached_color.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_path.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d_state.h"
-#include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_style.h"
-#include "third_party/blink/renderer/modules/canvas/canvas2d/identifiability_study_helper.h"
-#include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
-#include "third_party/blink/renderer/platform/graphics/image_orientation.h"
-#include "third_party/blink/renderer/platform/graphics/memory_managed_paint_recorder.h"
+#include "third_party/blink/renderer/platform/graphics/graphics_types.h"
+#include "third_party/blink/renderer/platform/graphics/paint/paint_filter.h"
+#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_linked_hash_set.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
+#include "third_party/blink/renderer/platform/heap/forward.h"  // IWYU pragma: keep (blink::Visitor)
+#include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/timer.h"
+#include "third_party/blink/renderer/platform/transforms/affine_transform.h"
+#include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
-#include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
+#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "third_party/blink/renderer/platform/wtf/vector.h"
+#include "third_party/skia/include/core/SkBlendMode.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
+#include "third_party/skia/include/core/SkM44.h"
+#include "third_party/skia/include/core/SkRect.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+
+// IWYU pragma: no_include "third_party/blink/renderer/platform/heap/visitor.h"
+
+enum class SkPathFillType;
+class SkPixmap;
+struct SkSamplingOptions;
+
+namespace base {
+class SingleThreadTaskRunner;
+}  // namespace base
+
+namespace gfx {
+class Rect;
+class Vector2d;
+}  // namespace gfx
 
 namespace ui {
 class ColorProvider;
 }  // namespace ui
+
+namespace v8 {
+class Isolate;
+class Value;
+template <class T>
+class Local;
+}  // namespace v8
 
 namespace blink {
 
 MODULES_EXPORT BASE_DECLARE_FEATURE(kDisableCanvasOverdrawOptimization);
 
 class BeginLayerOptions;
+class CanvasGradient;
 class CanvasImageSource;
-class CanvasWebGPUAccessOption;
-class Color;
+class Canvas2dGPUTransferOption;
+class CanvasPattern;
+class CanvasRenderingContextHost;
+class CanvasResourceProvider;
+class DOMMatrix;
+class DOMMatrixInit;
+class ExceptionState;
+class ExecutionContext;
+class Font;
+class FontSelector;
+class GPUTexture;
+class HTMLCanvasElement;
 class Image;
+class ImageData;
+class ImageDataSettings;
+class MemoryManagedPaintRecorder;
 class Mesh2DVertexBuffer;
 class Mesh2DUVBuffer;
 class Mesh2DIndexBuffer;
 class OffscreenCanvas;
+class Path;
 class Path2D;
+class ScriptState;
+class SimpleFontData;
 class TextMetrics;
-struct V8CanvasStyle;
-enum class V8CanvasStyleType;
-class GPUTexture;
+class V8GPUTextureFormat;
 class V8UnionCanvasFilterOrString;
-using cc::UsePaintCache;
+struct V8CanvasStyle;
+enum class CanvasOps;
+enum class ColorParseResult;
+enum RespectImageOrientationEnum : uint8_t;
+template <typename T>
+class NotShared;
 
 class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
  public:
@@ -280,26 +342,21 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
 
   // Transfers a canvas' existing back-buffer to a GPUTexture for use in a
   // WebGPU pipeline. The canvas' image can be used as a texture, or the texture
-  // can be bound as a color attachment and modified. After beginWebGPUAccess is
-  // called, the Canvas2D context will become unavailable until endWebGPUAccess
-  // is called. All other method calls to the context (including additional
-  // calls to beginWebGPUAccess) will throw InvalidStateError.
-  GPUTexture* beginWebGPUAccess(const CanvasWebGPUAccessOption*,
-                                ExceptionState& exception_state);
+  // can be bound as a color attachment and modified. After its texture is
+  // transferred, the canvas will be reset into an empty, freshly-initialized
+  // state.
+  GPUTexture* transferToGPUTexture(const Canvas2dGPUTransferOption*,
+                                   ExceptionState& exception_state);
 
-  // Returns the canvas' back-buffer texture to Canvas2D after a prior call
-  // to beginWebGPUAccess. The GPUTexture becomes inaccessible to WebGPU; any
-  // modifications made to the texture will be preserved. The Canvas2D context
-  // is restored, and Canvas2D method calls will function normally once more.
-  // Throws InvalidStateError if a matching call to beginWebGPUAccess was not
-  // performed.
-  // Generates a GPUValidationError if the GPUTexture is used after
-  // endWebGPUAccess is called.
-  void endWebGPUAccess(ExceptionState& exception_state);
+  // Replaces the canvas' back-buffer texture with the passed-in GPUTexture.
+  // The GPUTexture immediately becomes inaccessible to WebGPU.
+  // A GPUValidationError will occur if the GPUTexture is used after
+  // `transferBackFromGPUTexture` is called.
+  void transferBackFromGPUTexture(ExceptionState& exception_state);
 
-  // Returns the format of the GPUTexture that beginWebGPUAccess will return.
-  // This is useful if you need to create the WebGPU render pipeline before
-  // beginWebGPUAccess is first called.
+  // Returns the format of the GPUTexture that `transferToGPUTexture` will
+  // return. This is useful if you need to create the WebGPU render pipeline
+  // before `transferToGPUTexture` is first called.
   V8GPUTextureFormat getTextureFormat() const;
 
   virtual bool OriginClean() const = 0;
@@ -355,7 +412,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   virtual bool HasAlpha() const = 0;
 
   virtual bool IsDesynchronized() const {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return false;
   }
 
@@ -496,6 +553,9 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   unsigned try_restore_context_attempt_count_ = 0;
 
  protected:
+  explicit BaseRenderingContext2D(
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+
   virtual HTMLCanvasElement* HostAsHTMLCanvasElement() const;
   virtual OffscreenCanvas* HostAsOffscreenCanvas() const;
   virtual FontSelector* GetFontSelector() const;
@@ -505,9 +565,6 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   virtual bool WillSetFont() const;
   virtual bool ResolveFont(const String& new_font) = 0;
   virtual bool CurrentFontResolvedAndUpToDate() const;
-
-  explicit BaseRenderingContext2D(
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   ALWAYS_INLINE CanvasRenderingContext2DState& GetState() const {
     return *state_stack_.back();
@@ -541,11 +598,11 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
                            size_t row_bytes,
                            int x,
                            int y) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return false;
   }
   virtual scoped_refptr<StaticBitmapImage> GetImage(FlushReason) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
 
@@ -611,7 +668,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
       return;
     }
 
-    color_cache_.Clear();
+    color_cache_.clear();
     color_scheme_ = color_scheme;
   }
 
@@ -623,14 +680,6 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
       CanvasRenderingContext::kNotLostContext};
 
  private:
-  struct CachedColor {
-    CachedColor(const Color& color, ColorParseResult parse_result)
-        : color(color), parse_result(parse_result) {}
-
-    Color color;
-    ColorParseResult parse_result;
-  };
-
   void DrawTextInternal(const String& text,
                         double x,
                         double y,
@@ -639,8 +688,10 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
 
   // Returns the color from a string. This may return a cached value as well
   // as updating the cache (if possible).
-  bool ExtractColorFromStringAndUpdateCache(const AtomicString& string,
-                                            Color& color);
+  bool ExtractColorFromV8StringAndUpdateCache(v8::Isolate* isolate,
+                                              v8::Local<v8::String> v8_string,
+                                              ExceptionState& exception_state,
+                                              Color& color);
 
   CanvasRenderingContext2DState::SaveType SaveLayerForState(
       const CanvasRenderingContext2DState& state,
@@ -715,7 +766,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   void DrawPathInternal(const CanvasPath&,
                         CanvasRenderingContext2DState::PaintType,
                         SkPathFillType,
-                        UsePaintCache);
+                        cc::UsePaintCache);
   void DrawImageInternal(cc::PaintCanvas*,
                          CanvasImageSource*,
                          Image*,
@@ -725,7 +776,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
                          const cc::PaintFlags*);
   void ClipInternal(const Path&,
                     const String& winding_rule_string,
-                    UsePaintCache);
+                    cc::UsePaintCache);
 
   bool IsPointInPathInternal(const Path&,
                              const double x,
@@ -757,7 +808,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
                     const gfx::Rect& source_rect,
                     const gfx::Vector2d& dest_offset);
   virtual bool IsCanvas2DBufferValid() const {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return false;
   }
 
@@ -774,6 +825,9 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   void UpdateIdentifiabilityStudyBeforeSettingStrokeOrFill(
       const V8CanvasStyle& v8_style,
       CanvasOps op);
+  void UpdateIdentifiabilityStudyBeforeSettingStrokeOrFill(
+      v8::Local<v8::String> v8_string,
+      CanvasOps op);
 
   // Parses the string as a color and returns the result of parsing.
   ColorParseResult ParseColorOrCurrentColor(const String& color_string,
@@ -786,12 +840,14 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
       CanvasResourceProvider& resource_provider);
 
   bool origin_tainted_by_content_ = false;
-  UsePaintCache path2d_use_paint_cache_;
+  cc::UsePaintCache path2d_use_paint_cache_;
   int num_readbacks_performed_ = 0;
   unsigned read_count_ = 0;
-  base::HashingLRUCache<String, CachedColor> color_cache_{8};
   mojom::blink::ColorScheme color_scheme_ = mojom::blink::ColorScheme::kLight;
+  // Cache of recently used colors. Maintains LRU semantics.
+  HeapLinkedHashSet<Member<CachedColor>, CachedColorTraits> color_cache_;
   Member<GPUTexture> webgpu_access_texture_ = nullptr;
+  std::unique_ptr<CanvasResourceProvider> resource_provider_from_webgpu_access_;
 };
 
 namespace {
@@ -1039,8 +1095,6 @@ void BaseRenderingContext2D::CompositedDraw(
     // unroll into two independently composited passes if drawing shadows
     cc::PaintFlags shadow_flags =
         *state.GetFlags(paint_type, kDrawShadowOnly, image_type);
-    int save_count = c->getSaveCount();
-    c->save();
     if (canvas_filter ||
         ShouldUseDropShadowPaintFilter(paint_type, image_type)) {
       cc::PaintFlags foreground_flags =
@@ -1067,7 +1121,7 @@ void BaseRenderingContext2D::CompositedDraw(
       c->setMatrix(ctm);
       draw_func(c, &shadow_flags);
     }
-    c->restoreToCount(save_count);
+    c->restore();
   }
 
   composite_flags.setImageFilter(std::move(canvas_filter));

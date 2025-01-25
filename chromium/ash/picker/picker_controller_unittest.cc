@@ -10,19 +10,27 @@
 #include "ash/clipboard/clipboard_history_item.h"
 #include "ash/clipboard/test_support/mock_clipboard_history_controller.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
+#include "ash/picker/model/picker_action_type.h"
 #include "ash/picker/model/picker_model.h"
 #include "ash/picker/model/picker_search_results_section.h"
 #include "ash/picker/picker_test_util.h"
+#include "ash/public/cpp/ash_prefs.h"
 #include "ash/public/cpp/clipboard_history_controller.h"
 #include "ash/public/cpp/picker/mock_picker_client.h"
 #include "ash/public/cpp/system/toast_manager.h"
 #include "ash/public/cpp/test/test_new_window_delegate.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/view_drawn_waiter.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/scoped_user_pref_update.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "services/network/test/test_shared_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -36,17 +44,26 @@
 #include "ui/base/ime/input_method.h"
 #include "ui/base/models/image_model.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/test/widget_test.h"
 
 namespace ash {
 namespace {
 
 using ::testing::_;
+using ::testing::AllOf;
+using ::testing::AnyNumber;
 using ::testing::Contains;
+using ::testing::Each;
+using ::testing::ElementsAre;
+using ::testing::Field;
 using ::testing::FieldsAre;
+using ::testing::IsEmpty;
 using ::testing::NiceMock;
 using ::testing::Not;
+using ::testing::Property;
 using ::testing::Return;
+using ::testing::VariantWith;
 
 bool CopyTextToClipboard() {
   base::test::TestFuture<bool> copy_confirmed_future;
@@ -139,17 +156,19 @@ class TestPickerClient : public MockPickerClient {
   explicit TestPickerClient(PickerController* controller)
       : controller_(controller) {
     controller_->SetClient(this);
+    prefs_.registry()->RegisterDictionaryPref(prefs::kEmojiPickerHistory);
     // Set default behaviours. These can be overridden with `WillOnce` and
     // `WillRepeatedly`.
-    ON_CALL(*this, GetSharedURLLoaderFactory)
-        .WillByDefault(
-            base::MakeRefCounted<network::TestSharedURLLoaderFactory>);
     ON_CALL(*this, IsFeatureAllowedForDogfood).WillByDefault(Return(true));
+    ON_CALL(*this, GetPrefs).WillByDefault(Return(&prefs_));
   }
   ~TestPickerClient() override { controller_->SetClient(nullptr); }
 
+  PrefRegistrySimple* registry() { return prefs_.registry(); }
+
  private:
   raw_ptr<PickerController> controller_ = nullptr;
+  sync_preferences::TestingPrefServiceSyncable prefs_;
 };
 
 TEST_F(PickerControllerTest, ToggleWidgetShowsWidgetIfClosed) {
@@ -159,6 +178,61 @@ TEST_F(PickerControllerTest, ToggleWidgetShowsWidgetIfClosed) {
   controller.ToggleWidget();
 
   EXPECT_TRUE(controller.widget_for_testing());
+}
+
+TEST_F(PickerControllerTest,
+       ToggleWidgetInPasswordFieldTogglesCapslockAndShowsBubbleForAShortTime) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+  auto* input_method =
+      Shell::GetPrimaryRootWindow()->GetHost()->GetInputMethod();
+
+  ui::FakeTextInputClient input_field(input_method,
+                                      {.type = ui::TEXT_INPUT_TYPE_PASSWORD});
+  input_method->SetFocusedTextInputClient(&input_field);
+
+  controller.ToggleWidget();
+  input_method::ImeKeyboard* ime_keyboard = GetImeKeyboard();
+  ASSERT_TRUE(ime_keyboard);
+
+  EXPECT_FALSE(controller.widget_for_testing());
+  EXPECT_TRUE(controller.caps_lock_state_view_for_testing());
+  EXPECT_TRUE(ime_keyboard->IsCapsLockEnabled());
+
+  task_environment()->FastForwardBy(base::Seconds(4));
+  EXPECT_FALSE(controller.caps_lock_state_view_for_testing());
+}
+
+TEST_F(PickerControllerTest,
+       ToggleWidgetTwiceQuicklyInPasswordFieldExtendsBubbleShowTime) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+  auto* input_method =
+      Shell::GetPrimaryRootWindow()->GetHost()->GetInputMethod();
+
+  ui::FakeTextInputClient input_field(input_method,
+                                      {.type = ui::TEXT_INPUT_TYPE_PASSWORD});
+  input_method->SetFocusedTextInputClient(&input_field);
+
+  controller.ToggleWidget();
+  input_method::ImeKeyboard* ime_keyboard = GetImeKeyboard();
+  ASSERT_TRUE(ime_keyboard);
+
+  EXPECT_FALSE(controller.widget_for_testing());
+  EXPECT_TRUE(controller.caps_lock_state_view_for_testing());
+  EXPECT_TRUE(ime_keyboard->IsCapsLockEnabled());
+
+  task_environment()->FastForwardBy(base::Seconds(2));
+  EXPECT_TRUE(controller.caps_lock_state_view_for_testing());
+
+  controller.ToggleWidget();
+
+  EXPECT_FALSE(controller.widget_for_testing());
+  EXPECT_TRUE(controller.caps_lock_state_view_for_testing());
+  EXPECT_FALSE(ime_keyboard->IsCapsLockEnabled());
+
+  task_environment()->FastForwardBy(base::Seconds(2));
+  EXPECT_TRUE(controller.caps_lock_state_view_for_testing());
 }
 
 TEST_F(PickerControllerTest, ToggleWidgetClosesWidgetIfOpen) {
@@ -186,6 +260,35 @@ TEST_F(PickerControllerTest, ToggleWidgetShowsWidgetIfOpenedThenClosed) {
   controller.ToggleWidget();
 
   EXPECT_TRUE(controller.widget_for_testing());
+}
+
+TEST_F(PickerControllerTest, ToggleWidgetShowsFeatureTourForFirstTime) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+  RegisterUserProfilePrefs(client.registry(), /*country=*/"",
+                           /*for_test=*/true);
+  controller.ToggleWidget();
+
+  EXPECT_TRUE(controller.feature_tour_for_testing().widget_for_testing());
+  EXPECT_FALSE(controller.widget_for_testing());
+}
+
+TEST_F(PickerControllerTest,
+       ToggleWidgetShowsWidgetAfterCompletingFeatureTour) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+  RegisterUserProfilePrefs(client.registry(), /*country=*/"",
+                           /*for_test=*/true);
+  controller.ToggleWidget();
+  auto& feature_tour = controller.feature_tour_for_testing();
+  views::test::WidgetVisibleWaiter(feature_tour.widget_for_testing()).Wait();
+  views::Button* button = feature_tour.complete_button_for_testing();
+  ASSERT_NE(button, nullptr);
+  ViewDrawnWaiter().Wait(button);
+  LeftClickOn(button);
+  views::test::WidgetDestroyedWaiter(feature_tour.widget_for_testing()).Wait();
+
+  views::test::WidgetVisibleWaiter(controller.widget_for_testing()).Wait();
 }
 
 TEST_F(PickerControllerTest,
@@ -286,62 +389,13 @@ TEST_F(PickerControllerTest,
   controller.InsertResultOnNextFocus(PickerSearchResult::Clipboard(
       *clipboard_item_id,
       PickerSearchResult::ClipboardData::DisplayFormat::kText,
-      /*display_text=*/u"", /*display_image=*/{}));
+      /*display_text=*/u"", /*display_image=*/{}, /*is_recent=*/false));
   controller.widget_for_testing()->CloseNow();
   ClipboardPasteWaiter waiter;
   // Create a new to focus on.
   auto new_widget = CreateFramelessTestWidget();
 
   waiter.Wait();
-}
-
-TEST_F(PickerControllerTest, InsertGifResultInsertsIntoInputFieldAfterFocus) {
-  PickerController controller;
-  NiceMock<TestPickerClient> client(&controller);
-  controller.ToggleWidget();
-  auto* input_method =
-      Shell::GetPrimaryRootWindow()->GetHost()->GetInputMethod();
-
-  controller.InsertResultOnNextFocus(PickerSearchResult::Gif(
-      GURL("http://foo.com/fake_preview.gif"),
-      GURL("http://foo.com/fake_preview_image.png"), gfx::Size(),
-      GURL("http://foo.com/fake.gif"), gfx::Size(),
-      /*content_description=*/u""));
-  controller.widget_for_testing()->CloseNow();
-  ui::FakeTextInputClient input_field(
-      input_method,
-      {.type = ui::TEXT_INPUT_TYPE_TEXT, .can_insert_image = true});
-  input_method->SetFocusedTextInputClient(&input_field);
-
-  EXPECT_EQ(input_field.last_inserted_image_url(),
-            GURL("http://foo.com/fake.gif"));
-}
-
-TEST_F(PickerControllerTest,
-       InsertUnsupportedImageResultTimeoutCopiesToClipboard) {
-  PickerController controller;
-  NiceMock<TestPickerClient> client(&controller);
-  controller.ToggleWidget();
-  auto* input_method =
-      Shell::GetPrimaryRootWindow()->GetHost()->GetInputMethod();
-
-  controller.InsertResultOnNextFocus(PickerSearchResult::Gif(
-      /*preview_url=*/GURL("http://foo.com/preview"),
-      /*preview_image_url=*/GURL(), gfx::Size(30, 20),
-      /*full_url=*/GURL("http://foo.com"), gfx::Size(60, 40),
-      /*content_description=*/u"a gif"));
-  controller.widget_for_testing()->CloseNow();
-  ui::FakeTextInputClient input_field(
-      input_method,
-      {.type = ui::TEXT_INPUT_TYPE_TEXT, .can_insert_image = false});
-  input_method->SetFocusedTextInputClient(&input_field);
-  task_environment()->FastForwardBy(PickerController::kInsertMediaTimeout);
-
-  EXPECT_EQ(
-      ReadHtmlFromClipboard(ui::Clipboard::GetForCurrentThread()),
-      uR"html(<img src="http://foo.com/" referrerpolicy="no-referrer" alt="a gif" width="60" height="40"/>)html");
-  EXPECT_TRUE(
-      ash::ToastManager::Get()->IsToastShown("picker_copy_to_clipboard"));
 }
 
 TEST_F(PickerControllerTest,
@@ -381,7 +435,7 @@ TEST_F(PickerControllerTest, OpenDriveFileResult) {
       .Times(1);
 
   controller.OpenResult(PickerSearchResult::DriveFile(
-      u"title", GURL("http://foo.com"), ui::ImageModel{}));
+      u"title", GURL("http://foo.com"), base::FilePath()));
 }
 
 TEST_F(PickerControllerTest, OpenLocalFileResult) {
@@ -395,6 +449,114 @@ TEST_F(PickerControllerTest, OpenLocalFileResult) {
       PickerSearchResult::LocalFile(u"title", base::FilePath("abc.png")));
 }
 
+TEST_F(PickerControllerTest, OpenNewGoogleDocOpensGoogleDocs) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+
+  EXPECT_CALL(mock_new_window_delegate(),
+              OpenUrl(GURL("https://docs.new"), _, _))
+      .Times(1);
+
+  controller.OpenResult(PickerSearchResult::NewWindow(
+      PickerSearchResult::NewWindowData::Type::kDoc));
+}
+
+TEST_F(PickerControllerTest, OpenCapsLockResultTurnsOnCapsLock) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+  controller.ToggleWidget();
+
+  controller.OpenResult(PickerSearchResult::CapsLock(true));
+
+  input_method::ImeKeyboard* ime_keyboard = GetImeKeyboard();
+  ASSERT_TRUE(ime_keyboard);
+  EXPECT_TRUE(ime_keyboard->IsCapsLockEnabled());
+}
+
+TEST_F(PickerControllerTest, OpenCapsLockResultTurnsOffCapsLock) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+  controller.ToggleWidget();
+
+  controller.OpenResult(PickerSearchResult::CapsLock(false));
+
+  input_method::ImeKeyboard* ime_keyboard = GetImeKeyboard();
+  ASSERT_TRUE(ime_keyboard);
+  EXPECT_FALSE(ime_keyboard->IsCapsLockEnabled());
+}
+
+TEST_F(PickerControllerTest, OpenUpperCaseResultCommitsUpperCase) {
+  auto* input_method =
+      Shell::GetPrimaryRootWindow()->GetHost()->GetInputMethod();
+  ui::FakeTextInputClient input_field(input_method,
+                                      {.type = ui::TEXT_INPUT_TYPE_TEXT});
+  input_method->SetFocusedTextInputClient(&input_field);
+  input_field.SetTextAndSelection(u"abc", gfx::Range(0, 3));
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+
+  controller.ToggleWidget();
+  controller.OpenResult(PickerSearchResult::CaseTransform(
+      PickerSearchResult::CaseTransformData::Type::kUpperCase));
+  input_method->SetFocusedTextInputClient(&input_field);
+
+  EXPECT_EQ(input_field.text(), u"ABC");
+}
+
+TEST_F(PickerControllerTest, OpenLowerCaseResultCommitsLowerCase) {
+  auto* input_method =
+      Shell::GetPrimaryRootWindow()->GetHost()->GetInputMethod();
+  ui::FakeTextInputClient input_field(input_method,
+                                      {.type = ui::TEXT_INPUT_TYPE_TEXT});
+  input_method->SetFocusedTextInputClient(&input_field);
+  input_field.SetTextAndSelection(u"XYZ", gfx::Range(0, 3));
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+
+  controller.ToggleWidget();
+  controller.OpenResult(PickerSearchResult::CaseTransform(
+      PickerSearchResult::CaseTransformData::Type::kLowerCase));
+  input_method->SetFocusedTextInputClient(&input_field);
+
+  EXPECT_EQ(input_field.text(), u"xyz");
+}
+
+TEST_F(PickerControllerTest, OpenTitleCaseResultCommitsTitleCase) {
+  auto* input_method =
+      Shell::GetPrimaryRootWindow()->GetHost()->GetInputMethod();
+  ui::FakeTextInputClient input_field(input_method,
+                                      {.type = ui::TEXT_INPUT_TYPE_TEXT});
+  input_method->SetFocusedTextInputClient(&input_field);
+  input_field.SetTextAndSelection(u"how are you", gfx::Range(0, 11));
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+
+  controller.ToggleWidget();
+  controller.OpenResult(PickerSearchResult::CaseTransform(
+      PickerSearchResult::CaseTransformData::Type::kTitleCase));
+  input_method->SetFocusedTextInputClient(&input_field);
+
+  EXPECT_EQ(input_field.text(), u"How Are You");
+}
+
+TEST_F(PickerControllerTest, OpenSentenceCaseResultCommitsSentenceCase) {
+  auto* input_method =
+      Shell::GetPrimaryRootWindow()->GetHost()->GetInputMethod();
+  ui::FakeTextInputClient input_field(input_method,
+                                      {.type = ui::TEXT_INPUT_TYPE_TEXT});
+  input_method->SetFocusedTextInputClient(&input_field);
+  input_field.SetTextAndSelection(u"how are you? fine. thanks!  ok",
+                                  gfx::Range(0, 30));
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+
+  controller.ToggleWidget();
+  controller.OpenResult(PickerSearchResult::CaseTransform(
+      PickerSearchResult::CaseTransformData::Type::kSentenceCase));
+  input_method->SetFocusedTextInputClient(&input_field);
+
+  EXPECT_EQ(input_field.text(), u"How are you? Fine. Thanks!  Ok");
+}
 TEST_F(PickerControllerTest, ShowEmojiPickerCallsEmojiPanelCallback) {
   PickerController controller;
   NiceMock<TestPickerClient> client(&controller);
@@ -410,28 +572,6 @@ TEST_F(PickerControllerTest, ShowEmojiPickerCallsEmojiPanelCallback) {
   EXPECT_EQ(category, ui::EmojiPickerCategory::kSymbols);
   EXPECT_EQ(focus_behavior, ui::EmojiPickerFocusBehavior::kAlwaysShow);
   EXPECT_EQ(initial_query, "abc");
-}
-
-TEST_F(PickerControllerTest, SetCapsLockEnabledToTrueTurnsOnCapsLock) {
-  PickerController controller;
-  NiceMock<TestPickerClient> client(&controller);
-
-  controller.SetCapsLockEnabled(true);
-
-  input_method::ImeKeyboard* ime_keyboard = GetImeKeyboard();
-  ASSERT_TRUE(ime_keyboard);
-  EXPECT_TRUE(ime_keyboard->IsCapsLockEnabled());
-}
-
-TEST_F(PickerControllerTest, SetCapsLockEnabledToFalseTurnsOffCapsLock) {
-  PickerController controller;
-  NiceMock<TestPickerClient> client(&controller);
-
-  controller.SetCapsLockEnabled(false);
-
-  input_method::ImeKeyboard* ime_keyboard = GetImeKeyboard();
-  ASSERT_TRUE(ime_keyboard);
-  EXPECT_FALSE(ime_keyboard->IsCapsLockEnabled());
 }
 
 TEST_F(PickerControllerTest, ShowingAndClosingWidgetRecordsUsageMetrics) {
@@ -480,7 +620,28 @@ TEST_F(PickerControllerTest, ShowEditorCallsCallbackFromClient) {
   EXPECT_THAT(show_editor_future.Get(), FieldsAre("preset", "freeform"));
 }
 
+TEST_F(PickerControllerTest, GetResultsForCategoryReturnsEmptyForEmptyResults) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+  base::test::TestFuture<std::vector<PickerSearchResultsSection>> future;
+  EXPECT_CALL(client, GetSuggestedLinkResults)
+      .WillRepeatedly([](TestPickerClient::SuggestedLinksCallback callback) {
+        std::move(callback).Run({});
+      });
+
+  controller.ToggleWidget();
+  controller.GetResultsForCategory(PickerCategory::kLinks,
+                                   future.GetRepeatingCallback());
+
+  EXPECT_THAT(future.Take(), IsEmpty());
+}
+
 TEST_F(PickerControllerTest, AvailableCategoriesContainsEditorWhenEnabled) {
+  auto* input_method =
+      Shell::GetPrimaryRootWindow()->GetHost()->GetInputMethod();
+  ui::FakeTextInputClient input_field(input_method,
+                                      {.type = ui::TEXT_INPUT_TYPE_TEXT});
+  input_field.Focus();
   PickerController controller;
   NiceMock<TestPickerClient> client(&controller);
   EXPECT_CALL(client, CacheEditorContext).WillOnce(Return(base::DoNothing()));
@@ -504,73 +665,347 @@ TEST_F(PickerControllerTest,
               Not(Contains(PickerCategory::kEditorWrite)));
 }
 
-TEST_F(PickerControllerTest, GetUpperCaseSelectedText) {
+TEST_F(PickerControllerTest, SuggestedEmojiReturnsDefaultEmojisWhenEmpty) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+
+  controller.ToggleWidget();
+
+  EXPECT_THAT(
+      controller.GetSuggestedEmoji(),
+      ElementsAre(
+          PickerSearchResult::Emoji(u"🙂"), PickerSearchResult::Emoji(u"😂"),
+          PickerSearchResult::Emoji(u"🤔"), PickerSearchResult::Emoji(u"😢"),
+          PickerSearchResult::Emoji(u"👏"), PickerSearchResult::Emoji(u"👍")));
+}
+
+TEST_F(PickerControllerTest,
+       SuggestedEmojiReturnsRecentEmojiFollowedByDefaultEmojis) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+  base::Value::List history_value;
+  history_value.Append(base::Value::Dict().Set("text", "abc"));
+  history_value.Append(base::Value::Dict().Set("text", "xyz"));
+  ScopedDictPrefUpdate update(client.GetPrefs(), prefs::kEmojiPickerHistory);
+  update->Set("emoji", std::move(history_value));
+
+  controller.ToggleWidget();
+
+  EXPECT_THAT(
+      controller.GetSuggestedEmoji(),
+      ElementsAre(
+          PickerSearchResult::Emoji(u"abc"), PickerSearchResult::Emoji(u"xyz"),
+          PickerSearchResult::Emoji(u"🙂"), PickerSearchResult::Emoji(u"😂"),
+          PickerSearchResult::Emoji(u"🤔"), PickerSearchResult::Emoji(u"😢")));
+}
+
+TEST_F(PickerControllerTest, AddsNewRecentEmoji) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+  base::Value::List history_value;
+  history_value.Append(base::Value::Dict().Set("text", "abc"));
+  history_value.Append(base::Value::Dict().Set("text", "xyz"));
+  ScopedDictPrefUpdate update(client.GetPrefs(), prefs::kEmojiPickerHistory);
+  update->Set("emoji", std::move(history_value));
+
+  controller.ToggleWidget();
+  controller.InsertResultOnNextFocus(PickerSearchResult::Emoji(u"def"));
+
+  EXPECT_THAT(
+      controller.GetSuggestedEmoji(),
+      ElementsAre(
+          PickerSearchResult::Emoji(u"def"), PickerSearchResult::Emoji(u"abc"),
+          PickerSearchResult::Emoji(u"xyz"), PickerSearchResult::Emoji(u"🙂"),
+          PickerSearchResult::Emoji(u"😂"), PickerSearchResult::Emoji(u"🤔")));
+}
+
+TEST_F(PickerControllerTest, AddsExistingRecentEmoji) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+  base::Value::List history_value;
+  history_value.Append(base::Value::Dict().Set("text", "abc"));
+  history_value.Append(base::Value::Dict().Set("text", "xyz"));
+  ScopedDictPrefUpdate update(client.GetPrefs(), prefs::kEmojiPickerHistory);
+  update->Set("emoji", std::move(history_value));
+
+  controller.ToggleWidget();
+  controller.InsertResultOnNextFocus(PickerSearchResult::Emoji(u"xyz"));
+
+  EXPECT_THAT(
+      controller.GetSuggestedEmoji(),
+      ElementsAre(
+          PickerSearchResult::Emoji(u"xyz"), PickerSearchResult::Emoji(u"abc"),
+          PickerSearchResult::Emoji(u"🙂"), PickerSearchResult::Emoji(u"😂"),
+          PickerSearchResult::Emoji(u"🤔"), PickerSearchResult::Emoji(u"😢")));
+}
+
+TEST_F(PickerControllerTest, AddsRecentEmojiEmptyHistory) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+
+  controller.ToggleWidget();
+  controller.InsertResultOnNextFocus(PickerSearchResult::Emoji(u"abc"));
+
+  EXPECT_THAT(
+      controller.GetSuggestedEmoji(),
+      ElementsAre(
+          PickerSearchResult::Emoji(u"abc"), PickerSearchResult::Emoji(u"🙂"),
+          PickerSearchResult::Emoji(u"😂"), PickerSearchResult::Emoji(u"🤔"),
+          PickerSearchResult::Emoji(u"😢"), PickerSearchResult::Emoji(u"👏")));
+}
+
+TEST_F(PickerControllerTest,
+       SuggestedEmojiReturnsRecentEmojiEmoticonAndSymbol) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+  base::Value::List emoji_history_value;
+  emoji_history_value.Append(
+      base::Value::Dict().Set("text", "emoji1").Set("timestamp", "10"));
+  emoji_history_value.Append(
+      base::Value::Dict().Set("text", "emoji2").Set("timestamp", "5"));
+  base::Value::List emoticon_history_value;
+  emoticon_history_value.Append(
+      base::Value::Dict().Set("text", "emoticon1").Set("timestamp", "12"));
+  emoticon_history_value.Append(
+      base::Value::Dict().Set("text", "emoticon2").Set("timestamp", "2"));
+  base::Value::List symbol_history_value;
+  symbol_history_value.Append(
+      base::Value::Dict().Set("text", "symbol1").Set("timestamp", "15"));
+  symbol_history_value.Append(
+      base::Value::Dict().Set("text", "symbol2").Set("timestamp", "8"));
+  ScopedDictPrefUpdate update(client.GetPrefs(), prefs::kEmojiPickerHistory);
+  update->Set("emoji", std::move(emoji_history_value));
+  update->Set("emoticon", std::move(emoticon_history_value));
+  update->Set("symbol", std::move(symbol_history_value));
+
+  controller.ToggleWidget();
+
+  EXPECT_THAT(controller.GetSuggestedEmoji(),
+              ElementsAre(PickerSearchResult::Symbol(u"symbol1"),
+                          PickerSearchResult::Emoticon(u"emoticon1"),
+                          PickerSearchResult::Emoji(u"emoji1"),
+                          PickerSearchResult::Symbol(u"symbol2"),
+                          PickerSearchResult::Emoji(u"emoji2"),
+                          PickerSearchResult::Emoticon(u"emoticon2")));
+}
+
+TEST_F(PickerControllerTest, SearchesCapsLockOnWhenCapsLockIsOff) {
+  base::test::TestFuture<std::vector<PickerSearchResultsSection>> search_future;
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+
+  controller.ToggleWidget();
+  controller.StartSearch(u"caps", /*category=*/{},
+                         search_future.GetRepeatingCallback());
+
+  EXPECT_THAT(search_future.Take(),
+              Contains(Property(&PickerSearchResultsSection::results,
+                                Contains(PickerSearchResult::CapsLock(true)))));
+}
+
+TEST_F(PickerControllerTest, SearchesCapsLockOffWhenCapsLockIsOn) {
+  base::test::TestFuture<std::vector<PickerSearchResultsSection>> search_future;
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+  GetImeKeyboard()->SetCapsLockEnabled(true);
+
+  controller.ToggleWidget();
+  controller.StartSearch(u"caps", /*category=*/{},
+                         search_future.GetRepeatingCallback());
+
+  EXPECT_THAT(
+      search_future.Take(),
+      Contains(Property(&PickerSearchResultsSection::results,
+                        Contains(PickerSearchResult::CapsLock(false)))));
+}
+
+TEST_F(PickerControllerTest, DoesNotSearchCaseTransformWhenNoSelectedText) {
   auto* input_method =
       Shell::GetPrimaryRootWindow()->GetHost()->GetInputMethod();
   ui::FakeTextInputClient input_field(input_method,
                                       {.type = ui::TEXT_INPUT_TYPE_TEXT});
   input_method->SetFocusedTextInputClient(&input_field);
-  input_field.SetTextAndSelection(u"abc", gfx::Range(0, 3));
   PickerController controller;
   NiceMock<TestPickerClient> client(&controller);
+  base::MockCallback<PickerController::SearchResultsCallback> callback;
+
+  EXPECT_CALL(callback, Run(_)).Times(AnyNumber());
+  EXPECT_CALL(
+      callback,
+      Run(Contains(Property(
+          &PickerSearchResultsSection::results,
+          Contains(Property(
+              &PickerSearchResult::data,
+              VariantWith<PickerSearchResult::CaseTransformData>(_)))))))
+      .Times(0);
 
   controller.ToggleWidget();
-  controller.TransformSelectedText(PickerCategory::kUpperCase);
-  input_method->SetFocusedTextInputClient(&input_field);
-
-  EXPECT_EQ(input_field.text(), u"ABC");
+  controller.StartSearch(u"uppercase", /*category=*/{}, callback.Get());
 }
 
-TEST_F(PickerControllerTest, GetLowerCaseSelectedText) {
+TEST_F(PickerControllerTest, SearchesCaseTransformWhenSelectedText) {
+  auto* input_method =
+      Shell::GetPrimaryRootWindow()->GetHost()->GetInputMethod();
+  ui::FakeTextInputClient input_field(input_method,
+                                      {.type = ui::TEXT_INPUT_TYPE_TEXT});
+  input_field.SetTextAndSelection(u"a", gfx::Range(0, 1));
+  input_method->SetFocusedTextInputClient(&input_field);
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+  base::MockCallback<PickerController::SearchResultsCallback> callback;
+
+  EXPECT_CALL(callback, Run(_)).Times(AnyNumber());
+  EXPECT_CALL(
+      callback,
+      Run(Contains(Property(
+          &PickerSearchResultsSection::results,
+          Contains(Property(
+              &PickerSearchResult::data,
+              VariantWith<PickerSearchResult::CaseTransformData>(Field(
+                  &PickerSearchResult::CaseTransformData::type,
+                  PickerSearchResult::CaseTransformData::kUpperCase))))))))
+      .Times(1);
+
+  controller.ToggleWidget();
+  controller.StartSearch(u"uppercase", /*category=*/{}, callback.Get());
+}
+
+struct ActionTestCase {
+  PickerSearchResult result;
+  std::optional<PickerActionType> unfocused_action;
+  std::optional<PickerActionType> no_selection_action;
+  std::optional<PickerActionType> has_selection_action;
+};
+
+class PickerControllerActionTest
+    : public PickerControllerTest,
+      public testing::WithParamInterface<ActionTestCase> {};
+
+TEST_P(PickerControllerActionTest, GetActionForResultUnfocused) {
+  PickerController controller;
+  NiceMock<TestPickerClient> client(&controller);
+  controller.ToggleWidget();
+
+  if (GetParam().unfocused_action.has_value()) {
+    EXPECT_EQ(controller.GetActionForResult(GetParam().result),
+              GetParam().unfocused_action);
+  }
+}
+
+TEST_P(PickerControllerActionTest, GetActionForResultNoSelection) {
   auto* input_method =
       Shell::GetPrimaryRootWindow()->GetHost()->GetInputMethod();
   ui::FakeTextInputClient input_field(input_method,
                                       {.type = ui::TEXT_INPUT_TYPE_TEXT});
   input_method->SetFocusedTextInputClient(&input_field);
-  input_field.SetTextAndSelection(u"XYZ", gfx::Range(0, 3));
   PickerController controller;
   NiceMock<TestPickerClient> client(&controller);
-
   controller.ToggleWidget();
-  controller.TransformSelectedText(PickerCategory::kLowerCase);
-  input_method->SetFocusedTextInputClient(&input_field);
 
-  EXPECT_EQ(input_field.text(), u"xyz");
+  if (GetParam().no_selection_action.has_value()) {
+    EXPECT_EQ(controller.GetActionForResult(GetParam().result),
+              GetParam().no_selection_action);
+  }
 }
 
-TEST_F(PickerControllerTest, GetTitleCaseSelectedText) {
+TEST_P(PickerControllerActionTest, GetActionForResultHasSelection) {
   auto* input_method =
       Shell::GetPrimaryRootWindow()->GetHost()->GetInputMethod();
   ui::FakeTextInputClient input_field(input_method,
                                       {.type = ui::TEXT_INPUT_TYPE_TEXT});
   input_method->SetFocusedTextInputClient(&input_field);
-  input_field.SetTextAndSelection(u"how are you", gfx::Range(0, 11));
+  input_field.SetTextAndSelection(u"a", gfx::Range(0, 1));
   PickerController controller;
   NiceMock<TestPickerClient> client(&controller);
-
   controller.ToggleWidget();
-  controller.TransformSelectedText(PickerCategory::kTitleCase);
-  input_method->SetFocusedTextInputClient(&input_field);
 
-  EXPECT_EQ(input_field.text(), u"How Are You");
+  if (GetParam().has_selection_action.has_value()) {
+    EXPECT_EQ(controller.GetActionForResult(GetParam().result),
+              GetParam().has_selection_action);
+  }
 }
 
-TEST_F(PickerControllerTest, GetSentenceCaseSelectedText) {
-  auto* input_method =
-      Shell::GetPrimaryRootWindow()->GetHost()->GetInputMethod();
-  ui::FakeTextInputClient input_field(input_method,
-                                      {.type = ui::TEXT_INPUT_TYPE_TEXT});
-  input_method->SetFocusedTextInputClient(&input_field);
-  input_field.SetTextAndSelection(u"how are you? fine. thanks!  ok",
-                                  gfx::Range(0, 30));
-  PickerController controller;
-  NiceMock<TestPickerClient> client(&controller);
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    PickerControllerActionTest,
+    testing::ValuesIn<ActionTestCase>({
+        {
+            .result = PickerSearchResult::Text(u""),
+            .no_selection_action = PickerActionType::kInsert,
+            .has_selection_action = PickerActionType::kInsert,
+        },
+        {
+            .result = PickerSearchResult::Emoji(u""),
+            .no_selection_action = PickerActionType::kInsert,
+            .has_selection_action = PickerActionType::kInsert,
+        },
+        {
+            .result = PickerSearchResult::Symbol(u""),
+            .no_selection_action = PickerActionType::kInsert,
+            .has_selection_action = PickerActionType::kInsert,
+        },
+        {
+            .result = PickerSearchResult::Emoticon(u""),
+            .no_selection_action = PickerActionType::kInsert,
+            .has_selection_action = PickerActionType::kInsert,
+        },
+        {
+            .result = PickerSearchResult::Clipboard(
+                base::UnguessableToken::Create(),
+                PickerSearchResult::ClipboardData::DisplayFormat::kFile,
+                u"",
+                {},
+                false),
+            .no_selection_action = PickerActionType::kInsert,
+            .has_selection_action = PickerActionType::kInsert,
+        },
+        {
+            .result = PickerSearchResult::BrowsingHistory({}, u"", {}),
+            .unfocused_action = PickerActionType::kOpen,
+            .no_selection_action = PickerActionType::kInsert,
+            .has_selection_action = PickerActionType::kInsert,
+        },
+        {
+            .result = PickerSearchResult::LocalFile(u"", {}),
+            .unfocused_action = PickerActionType::kOpen,
+            .no_selection_action = PickerActionType::kInsert,
+            .has_selection_action = PickerActionType::kInsert,
+        },
+        {
+            .result = PickerSearchResult::DriveFile(u"", {}, {}),
+            .unfocused_action = PickerActionType::kOpen,
+            .no_selection_action = PickerActionType::kInsert,
+            .has_selection_action = PickerActionType::kInsert,
+        },
+        {
+            .result =
+                PickerSearchResult::Category(PickerCategory::kExpressions),
+            .unfocused_action = PickerActionType::kDo,
+            .no_selection_action = PickerActionType::kDo,
+            .has_selection_action = PickerActionType::kDo,
+        },
+        {
+            .result = PickerSearchResult::SearchRequest(u"", {}),
+            .unfocused_action = PickerActionType::kDo,
+            .no_selection_action = PickerActionType::kDo,
+            .has_selection_action = PickerActionType::kDo,
+        },
+        {
+            .result = PickerSearchResult::Editor(
+                PickerSearchResult::EditorData::Mode::kWrite,
+                u"",
+                {},
+                {}),
+            .unfocused_action = PickerActionType::kCreate,
+            .no_selection_action = PickerActionType::kCreate,
+            .has_selection_action = PickerActionType::kCreate,
+        },
+        {
+            .result = PickerSearchResult::NewWindow(
+                PickerSearchResult::NewWindowData::Type::kDoc),
+            .unfocused_action = PickerActionType::kDo,
+        },
+    }));
 
-  controller.ToggleWidget();
-  controller.TransformSelectedText(PickerCategory::kSentenceCase);
-  input_method->SetFocusedTextInputClient(&input_field);
-
-  EXPECT_EQ(input_field.text(), u"How are you? Fine. Thanks!  Ok");
-}
 }  // namespace
 }  // namespace ash

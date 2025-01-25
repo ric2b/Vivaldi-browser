@@ -114,13 +114,11 @@ void QuickStartScreen::OnUiUpdateRequested(
     return;
   }
 
-  // Update discoverable name
-  view_->SetDiscoverableName(controller_->GetDiscoverableName());
-
   switch (state) {
     case ash::quick_start::QuickStartController::UiState::SHOWING_QR:
       view_->SetWillRequestWiFi(controller_->WillRequestWiFi());
-      view_->SetQRCode(ConvertQrCode(controller_->GetQrCode()));
+      view_->SetQRCode(ConvertQrCode(controller_->GetQrCode().GetPixelData()),
+                       controller_->GetQrCode().GetQRCodeURLString());
       break;
     case quick_start::QuickStartController::UiState::SHOWING_PIN:
       view_->SetWillRequestWiFi(controller_->WillRequestWiFi());

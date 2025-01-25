@@ -8,12 +8,11 @@
 #include <string>
 
 #include "base/containers/flat_set.h"
-#include "base/functional/callback_forward.h"
-#include "base/functional/function_ref.h"
 #include "base/observer_list_types.h"
 #include "base/types/token_type.h"
 #include "components/performance_manager/public/execution_context_priority/execution_context_priority.h"
 #include "components/performance_manager/public/graph/node.h"
+#include "components/performance_manager/public/graph/node_set_view.h"
 #include "components/performance_manager/public/resource_attribution/worker_context.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 
@@ -53,10 +52,11 @@ using execution_context_priority::PriorityAndReason;
 // A client, from the point of view of the worker, is the frame or worker that
 // caused the worker to start running, either because it explicitly created it,
 // or a service worker is registered to handle their network requests.
-class WorkerNode : public Node {
+class WorkerNode : public TypedNode<WorkerNode> {
  public:
-  using FrameNodeVisitor = base::FunctionRef<bool(const FrameNode*)>;
-  using WorkerNodeVisitor = base::FunctionRef<bool(const WorkerNode*)>;
+  using NodeSet = base::flat_set<const Node*>;
+  template <class ReturnType>
+  using NodeSetView = NodeSetView<NodeSet, ReturnType>;
 
   // The different possible worker types.
   enum class WorkerType {
@@ -67,6 +67,8 @@ class WorkerNode : public Node {
 
   using Observer = WorkerNodeObserver;
   class ObserverDefaultImpl;
+
+  static constexpr NodeTypeEnum Type() { return NodeTypeEnum::kWorker; }
 
   WorkerNode();
 
@@ -107,12 +109,7 @@ class WorkerNode : public Node {
   virtual const PriorityAndReason& GetPriorityAndReason() const = 0;
 
   // Returns the frames that are clients of this worker.
-  virtual const base::flat_set<const FrameNode*> GetClientFrames() const = 0;
-
-  // Visits the frames that are clients of this worker. The iteration is halted
-  // if the visitor returns false. Returns true if every call to the visitor
-  // returned true, false otherwise.
-  virtual bool VisitClientFrames(const FrameNodeVisitor& visitor) const = 0;
+  virtual NodeSetView<const FrameNode*> GetClientFrames() const = 0;
 
   // Returns the workers that are clients of this worker.
   // There are 2 cases where this is possible:
@@ -120,12 +117,7 @@ class WorkerNode : public Node {
   //   one of its client worker.
   // - A dedicated worker or a shared worker will become a client of the service
   //   worker that handles their network requests.
-  virtual const base::flat_set<const WorkerNode*> GetClientWorkers() const = 0;
-
-  // Visits the workers that are clients of this worker. (See GetClientWorkers()
-  // for details.) The iteration is halted if the visitor returns false. Returns
-  // true if every call to the visitor returned true, false otherwise.
-  virtual bool VisitClientWorkers(const WorkerNodeVisitor& visitor) const = 0;
+  virtual NodeSetView<const WorkerNode*> GetClientWorkers() const = 0;
 
   // Returns the child workers of this worker.
   // There are 2 cases where a worker can be the child of another worker:
@@ -133,17 +125,7 @@ class WorkerNode : public Node {
   //   a child worker of the parent.
   // - A service worker will become a child worker of every worker for which
   //   it handles network requests.
-  virtual const base::flat_set<const WorkerNode*> GetChildWorkers() const = 0;
-
-  // Visits the child dedicated workers of this frame. The iteration is halted
-  // if the visitor returns false. Returns true if every call to the visitor
-  // returned true, false otherwise.
-  //
-  // The reason why we don't have a generic VisitChildWorkers method is that
-  // a service/shared worker may appear as a child of multiple other nodes
-  // and thus may be visited multiple times.
-  virtual bool VisitChildDedicatedWorkers(
-      const WorkerNodeVisitor& visitor) const = 0;
+  virtual NodeSetView<const WorkerNode*> GetChildWorkers() const = 0;
 
   // TODO(joenotcharles): Move the resource usage estimates to a separate
   // class.

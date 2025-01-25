@@ -226,8 +226,9 @@ class ASH_EXPORT OverviewItemBase : public EventHandlerDelegate {
   // Ensures that a possibly minimized window becomes visible after restore.
   virtual void EnsureVisible() = 0;
 
-  // Returns the focusable views contained in `this`.
+  // Returns the focusable views/widgets contained in `this`.
   virtual std::vector<OverviewFocusableView*> GetFocusableViews() const = 0;
+  virtual std::vector<views::Widget*> GetFocusableWidgets() = 0;
 
   // Returns the backdrop view of `this`.
   virtual views::View* GetBackDropView() const = 0;
@@ -248,9 +249,6 @@ class ASH_EXPORT OverviewItemBase : public EventHandlerDelegate {
   // Called when the starting animation is completed, or called immediately
   // if there was no starting animation to do any necessary visual changes.
   virtual void OnStartingAnimationComplete() = 0;
-
-  // Closes window(s) hosted by `this`.
-  virtual void CloseWindows() = 0;
 
   // Inserts the item back to its original stacking order so that the order of
   // overview items is the same as when entering overview.
@@ -294,11 +292,10 @@ class ASH_EXPORT OverviewItemBase : public EventHandlerDelegate {
   // Stops the current animation of `item_widget_`.
   virtual void StopWidgetAnimation() = 0;
 
-  virtual OverviewGridWindowFillMode GetWindowDimensionsType() const = 0;
+  virtual OverviewItemFillMode GetOverviewItemFillMode() const = 0;
 
-  // Recalculates the window dimensions type of the transform window. Called on
-  // window bounds change.
-  virtual void UpdateWindowDimensionsType() = 0;
+  // Updates the `OverviewItemFillMode` for this item.
+  virtual void UpdateOverviewItemFillMode() = 0;
 
   // Returns the point the accessibility magnifiers should focus on when `this`
   // is focused.

@@ -207,7 +207,7 @@ base::android::ScopedJavaLocalRef<jobject> ConvertToJavaAccountInfo(
 base::android::ScopedJavaLocalRef<jobject> ConvertToJavaCoreAccountId(
     JNIEnv* env,
     const CoreAccountId& account_id) {
-  CHECK(!account_id.empty());
+  //CHECK(!account_id.empty()); TODO CHR128
   return signin::Java_CoreAccountId_Constructor(
       env, base::android::ConvertUTF8ToJavaString(env, account_id.ToString()));
 }

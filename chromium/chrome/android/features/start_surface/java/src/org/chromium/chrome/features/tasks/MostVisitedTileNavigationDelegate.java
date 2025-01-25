@@ -11,7 +11,6 @@ import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.offlinepages.RequestCoordinatorBridge;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.suggestions.SuggestionsNavigationDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.document.ChromeAsyncTabLauncher;
@@ -27,16 +26,25 @@ import org.chromium.ui.mojom.WindowOpenDisposition;
 public class MostVisitedTileNavigationDelegate extends SuggestionsNavigationDelegate {
     private final Supplier<Tab> mParentTabSupplier;
     private final ChromeAsyncTabLauncher mChromeAsyncTabLauncher;
+    private final Profile mProfile;
 
     /**
      * Creates a new {@link MostVisitedTileNavigationDelegate}.
+     *
      * @param activity The Android activity.
      * @param profile The currently applicable profile.
      * @param parentTabSupplier Supplies the StartSurface's parent tab.
      */
     public MostVisitedTileNavigationDelegate(
             Activity activity, Profile profile, Supplier<Tab> parentTabSupplier) {
-        super(activity, profile, /* host= */ null, /* tabModelSelector= */ null, /* tab= */ null);
+        super(
+                activity,
+                profile,
+                /* host= */ null,
+                /* tabModelSelector= */ null,
+                /* tabGroupCreationDialogManager= */ null,
+                /* tab= */ null);
+        mProfile = profile;
         mParentTabSupplier = parentTabSupplier;
         mChromeAsyncTabLauncher = new ChromeAsyncTabLauncher(false);
     }
@@ -87,7 +95,7 @@ public class MostVisitedTileNavigationDelegate extends SuggestionsNavigationDele
     private void saveUrlForOffline(String url) {
         // TODO(crbug.com/40175383): Namespace shouldn't be NTP_SUGGESTIONS_NAMESPACE since it's
         // not on NTP.
-        RequestCoordinatorBridge.getForProfile(ProfileManager.getLastUsedRegularProfile())
+        RequestCoordinatorBridge.getForProfile(mProfile)
                 .savePageLater(
                         url,
                         OfflinePageBridge.NTP_SUGGESTIONS_NAMESPACE,

@@ -14,6 +14,14 @@ if(POLICY CMP0135)
     cmake_policy(SET CMP0135 NEW) # valid for DOWNLOAD_EXTRACT_TIMESTAMP option in CMake 3.24 and later
 endif()
 
+# New in CMake version 3.30. FetchContent_Populate(<name>) is deprecated, call
+# FetchContent_MakeAvailable(<name>) instead.
+if(POLICY CMP0169)
+    cmake_policy(SET CMP0169 OLD)
+endif()
+
+project(libavif LANGUAGES C VERSION 1.1.0)
+
 # The root directory of the avif source
 set(AVIF_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -24,8 +32,6 @@ include(ExternalProject)
 include(FetchContent)
 include(FindPkgConfig)
 include(AvifExternalProjectUtils)
-
-project(libavif LANGUAGES C VERSION 1.0.4)
 
 # Set C99 as the default
 set(CMAKE_C_STANDARD 99)
@@ -38,21 +44,21 @@ set(CMAKE_C_STANDARD 99)
 #   If the source code was changed, but there were no interface changes:
 #     Increment PATCH.
 set(LIBRARY_VERSION_MAJOR 16)
-set(LIBRARY_VERSION_MINOR 0)
-set(LIBRARY_VERSION_PATCH 4)
+set(LIBRARY_VERSION_MINOR 1)
+set(LIBRARY_VERSION_PATCH 0)
 set(LIBRARY_VERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}.${LIBRARY_VERSION_PATCH}")
 set(LIBRARY_SOVERSION ${LIBRARY_VERSION_MAJOR})
 
 option(BUILD_SHARED_LIBS "Build shared avif library" ON)
 
 option(AVIF_ENABLE_WERROR "Treat all compiler warnings as errors" OFF)
-option(AVIF_ENABLE_WUNUSED_RESULT "Add [[nodiscard]] to some functions. CMake must be at least 3.21 to force C23" OFF)
+option(AVIF_ENABLE_NODISCARD "Add [[nodiscard]] to some functions. CMake must be at least 3.21 to force C23" OFF)
 
 option(AVIF_ENABLE_EXPERIMENTAL_YCGCO_R "Enable experimental YCgCo-R matrix code" OFF)
 option(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP
        "Enable experimental gain map code (for HDR images that look good both on HDR and SDR displays)" OFF
 )
-option(AVIF_ENABLE_EXPERIMENTAL_MINI "Enable experimental reduced header" OFF)
+option(AVIF_ENABLE_EXPERIMENTAL_METAV1 "Enable experimental reduced header" OFF)
 option(AVIF_ENABLE_EXPERIMENTAL_SAMPLE_TRANSFORM "Enable experimental sample transform code" OFF)
 
 set(AVIF_PKG_CONFIG_EXTRA_LIBS_PRIVATE "")
@@ -156,8 +162,8 @@ add_library(avif_obj OBJECT)
 add_library(avif)
 
 # Adds <target> to avif_obj's public link libraries for build, and adds
-# the <target> library as an install link library for export if a consumer
-# would need to include that library alongside libavif when linking.
+# the <target> library as an install link library for export in case a consumer
+# needs to include that library alongside libavif when statically linking.
 function(avif_target_link_library target)
     target_link_libraries(avif_obj PUBLIC $<BUILD_INTERFACE:${target}>)
     get_target_property(target_is_local ${target} AVIF_LOCAL)
@@ -168,10 +174,8 @@ function(avif_target_link_library target)
     if(NOT install_target)
         set(install_target ${target})
     endif()
-    # The transitive dependency is an export link library if it is a shared
-    # library, or if it is a static library in a static build
-    get_target_property(target_type ${target} TYPE)
-    if(target_type STREQUAL "SHARED_LIBRARY" OR NOT BUILD_SHARED_LIBS)
+    # The transitive dependency needs to be an export link library in a static build.
+    if(NOT BUILD_SHARED_LIBS)
         target_link_libraries(avif PUBLIC $<INSTALL_INTERFACE:${install_target}>)
     endif()
 endfunction()
@@ -263,55 +267,69 @@ endif()
 
 # Enable all warnings
 include(CheckCCompilerFlag)
-if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+if(MSVC)
+    message(STATUS "libavif: Enabling warnings for MSVC")
+    target_compile_options(
+        avif_obj
+        PUBLIC $<BUILD_INTERFACE: /W4 # For clang-cl, /W4 enables -Wall and -Wextra
+               /wd4324 # Disable: structure was padded due to alignment specifier
+               >
+    )
+    # clang-cl documentation says:
+    #   /execution-charset:<value>
+    #                           Runtime encoding, supports only UTF-8
+    #   ...
+    #   /source-charset:<value> Source encoding, supports only UTF-8
+    # So we don't need to pass /source-charset:utf-8 to clang-cl, and we cannot pass /execution-charset:us-ascii to clang-cl.
+    if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
+        target_compile_options(
+            avif_obj
+            PUBLIC $<BUILD_INTERFACE:
+                   # This tells MSVC to read source code as UTF-8 and assume console can only use ASCII (minimal safe).
+                   # libavif uses ANSI API to print to console, which is not portable between systems using different
+                   # languages and results in mojibake unless we only use codes shared by every code page: ASCII.
+                   # A C4556 warning will be generated on violation.
+                   # Commonly used /utf-8 flag assumes UTF-8 for both source and console, which is usually not the case.
+                   # Warnings can be suppressed but there will still be random characters printed to the console.
+                   /source-charset:utf-8
+                   /execution-charset:us-ascii
+                   >
+        )
+    endif()
+elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
     message(STATUS "libavif: Enabling warnings for Clang")
     target_compile_options(avif_obj PUBLIC $<BUILD_INTERFACE:-Wall -Wextra -Wshorten-64-to-32>)
 elseif(CMAKE_C_COMPILER_ID MATCHES "GNU")
     message(STATUS "libavif: Enabling warnings for GCC")
     target_compile_options(avif_obj PUBLIC $<BUILD_INTERFACE:-Wall -Wextra>)
-elseif(CMAKE_C_COMPILER_ID MATCHES "MSVC")
-    message(STATUS "libavif: Enabling warnings for MSVC")
-    target_compile_options(
-        avif_obj
-        PUBLIC $<BUILD_INTERFACE:
-               /W4
-               /wd4324 # Disable: structure was padded due to alignment specifier
-               /wd4996 # Disable: potentially unsafe stdlib methods
-               # This tells MSVC to read source code as UTF-8 and assume console can only use ASCII (minimal safe).
-               # libavif uses ANSI API to print to console, which is not portable between systems using different
-               # languages and results in mojibake unless we only use codes shared by every code page: ASCII.
-               # A C4556 warning will be generated on violation.
-               # Commonly used /utf-8 flag assumes UTF-8 for both source and console, which is usually not the case.
-               # Warnings can be suppressed but there will still be random characters printed to the console.
-               /source-charset:utf-8
-               /execution-charset:us-ascii
-               >
-    )
 else()
     message(FATAL_ERROR "libavif: Unknown compiler, bailing out")
 endif()
 
 if(AVIF_ENABLE_WERROR)
     # Warnings as errors
-    if(CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU")
-        target_compile_options(avif_obj PUBLIC $<BUILD_INTERFACE:-Werror>)
-    elseif(CMAKE_C_COMPILER_ID MATCHES "MSVC")
+    if(MSVC)
         target_compile_options(avif_obj PUBLIC $<BUILD_INTERFACE:/WX>)
+    elseif(CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU")
+        target_compile_options(avif_obj PUBLIC $<BUILD_INTERFACE:-Werror>)
     else()
         message(FATAL_ERROR "libavif: Unknown compiler, bailing out")
     endif()
 endif()
 
-if(AVIF_ENABLE_WUNUSED_RESULT)
+if(AVIF_ENABLE_NODISCARD)
     if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.21.0)
         set(CMAKE_C_STANDARD 23)
         set_property(TARGET avif_obj PROPERTY C_STANDARD 23)
     else()
         unset(CMAKE_C_STANDARD)
         set_property(TARGET avif_obj PROPERTY C_STANDARD)
-        target_compile_options(avif_obj PUBLIC $<BUILD_INTERFACE:$<$<COMPILE_LANGUAGE:C>:-std=gnu2x>>)
+        if(CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU")
+            target_compile_options(avif_obj PUBLIC $<BUILD_INTERFACE:$<$<COMPILE_LANGUAGE:C>:-std=gnu2x>>)
+        elseif(CMAKE_C_COMPILER_ID MATCHES "MSVC")
+            target_compile_options(avif_obj PUBLIC $<BUILD_INTERFACE:$<$<COMPILE_LANGUAGE:C>:/std:clatest>>)
+        endif()
     endif()
-    target_compile_options(avif_obj PUBLIC $<BUILD_INTERFACE:-Wunused-result>)
     target_compile_definitions(avif_obj PUBLIC $<BUILD_INTERFACE:AVIF_ENABLE_NODISCARD=1>)
 endif()
 
@@ -328,6 +346,13 @@ if(AVIF_ENABLE_COVERAGE)
     endif()
 endif()
 
+if(MSVC)
+    # Disable deprecation warnings about POSIX function names such as setmode (replaced by the ISO C and C++ conformant name _setmode).
+    add_compile_definitions(_CRT_NONSTDC_NO_WARNINGS)
+    # Disable deprecation warnings about unsafe CRT library functions such as fopen (replaced by fopen_s).
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+endif()
+
 if(AVIF_ENABLE_EXPERIMENTAL_YCGCO_R)
     add_compile_definitions(AVIF_ENABLE_EXPERIMENTAL_YCGCO_R)
 endif()
@@ -336,8 +361,8 @@ if(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
     add_compile_definitions(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
 endif()
 
-if(AVIF_ENABLE_EXPERIMENTAL_MINI)
-    add_compile_definitions(AVIF_ENABLE_EXPERIMENTAL_MINI)
+if(AVIF_ENABLE_EXPERIMENTAL_METAV1)
+    add_compile_definitions(AVIF_ENABLE_EXPERIMENTAL_METAV1)
 endif()
 
 if(AVIF_ENABLE_EXPERIMENTAL_SAMPLE_TRANSFORM)
@@ -622,7 +647,11 @@ endif()
 
 if(AVIF_USE_CXX)
     enable_language(CXX)
-    set(CMAKE_CXX_STANDARD 14)
+    if(AVIF_ENABLE_NODISCARD)
+        set(CMAKE_CXX_STANDARD 17)
+    else()
+        set(CMAKE_CXX_STANDARD 14)
+    endif()
 endif()
 
 option(AVIF_BUILD_APPS "Build avif apps." OFF)

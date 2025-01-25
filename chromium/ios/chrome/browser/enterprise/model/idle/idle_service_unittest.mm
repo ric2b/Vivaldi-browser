@@ -7,9 +7,7 @@
 #import "base/memory/raw_ptr.h"
 #import "base/test/gmock_callback_support.h"
 #import "base/test/metrics/histogram_tester.h"
-#import "base/test/scoped_feature_list.h"
 #import "base/time/time.h"
-#import "components/enterprise/idle/idle_features.h"
 #import "components/enterprise/idle/idle_pref_names.h"
 #import "components/enterprise/idle/metrics.h"
 #import "ios/chrome/browser/enterprise/model/idle/action_runner.h"
@@ -61,6 +59,12 @@ class IdleTimeoutServiceTest : public PlatformTest {
   IdleTimeoutServiceTest() = default;
 
   void SetIdleTimeoutPolicy(base::TimeDelta timeout) {
+    base::Value::List actions;
+    actions.Append(
+        static_cast<int>(enterprise_idle::ActionType::kClearBrowsingHistory));
+    browser_state_->GetPrefs()->SetList(
+        enterprise_idle::prefs::kIdleTimeoutActions, std::move(actions));
+
     browser_state_.get()->GetPrefs()->SetTimeDelta(prefs::kIdleTimeout,
                                                    timeout);
   }
@@ -95,8 +99,6 @@ class IdleTimeoutServiceTest : public PlatformTest {
   }
 
   void SetUp() override {
-    scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
-    scoped_feature_list_->InitWithFeatures({enterprise_idle::kIdleTimeout}, {});
     TestChromeBrowserState::Builder test_cbs_builder;
     test_cbs_builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
@@ -123,7 +125,6 @@ class IdleTimeoutServiceTest : public PlatformTest {
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   MockObserver mock_observer_;
   raw_ptr<MockActionRunner> action_runner_;
-  std::unique_ptr<base::test::ScopedFeatureList> scoped_feature_list_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   std::unique_ptr<IdleService> idle_service_;
   IOSChromeScopedTestingLocalState local_state_;
@@ -372,12 +373,28 @@ TEST_F(IdleTimeoutServiceTest,
 
 // If the only action set is signout, and the user is not signed in when timeout
 // is detected, the actions should not run.
-TEST_F(IdleTimeoutServiceTest, NoActionsRunWhenNotNeeded) {
+TEST_F(IdleTimeoutServiceTest, NoActionsRunWhenNotNeeded_SignoutCase) {
   SetLastActiveTime(base::Time::Now() - base::Seconds(90));
   SetIdleTimeoutPolicy(base::Minutes(1));
   InitIdleService();
   base::Value::List actions;
   actions.Append(static_cast<int>(enterprise_idle::ActionType::kSignOut));
+  browser_state_->GetPrefs()->SetList(
+      enterprise_idle::prefs::kIdleTimeoutActions, std::move(actions));
+
+  EXPECT_CALL(mock_observer_, OnIdleTimeoutOnStartup()).Times(0);
+  EXPECT_CALL(*action_runner_, Run(_)).Times(0);
+  idle_service_->OnApplicationWillEnterForeground();
+}
+
+// When policy timeout is set, but no action runs.
+TEST_F(IdleTimeoutServiceTest, NoActionsRunWhenNotNeeded_UnknownActionsCase) {
+  SetLastActiveTime(base::Time::Now() - base::Seconds(90));
+  SetIdleTimeoutPolicy(base::Minutes(1));
+  InitIdleService();
+  base::Value::List actions;
+  // This can be the case if a string value supported on desktop is the only
+  // action that was set for the policy.
   browser_state_->GetPrefs()->SetList(
       enterprise_idle::prefs::kIdleTimeoutActions, std::move(actions));
 

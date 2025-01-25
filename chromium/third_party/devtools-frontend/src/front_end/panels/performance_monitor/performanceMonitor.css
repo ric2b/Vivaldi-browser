@@ -23,7 +23,7 @@
   --override-color-perf-monitor-recalc-style-count: var(--sys-color-pink);
 }
 
-:host-context(.-theme-with-dark-background) .perfmon-pane {
+:host-context(.theme-with-dark-background) .perfmon-pane {
   --override-color-perf-monitor-jsheap-total-size: var(--ref-palette-purple50);
   --override-color-perf-monitor-js-event-listeners: var(--ref-palette-green50);
 }
@@ -64,16 +64,11 @@
 }
 
 .perfmon-indicator {
-  padding: 6px 12px;
+  padding: 3px 9px;
   margin: -1px 0;
   display: flex;
   flex-shrink: 0;
   width: 210px;
-}
-
-.perfmon-indicator:hover,
-.perfmon-indicator:focus-visible {
-  background-color: var(--sys-color-state-hover-on-subtle);
 }
 
 .perfmon-indicator span {

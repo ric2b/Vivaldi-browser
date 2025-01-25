@@ -19,7 +19,6 @@
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "cc/trees/paint_holding_reason.h"
-#include "cc/trees/ukm_manager.h"
 #include "components/viz/common/features.h"
 #include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "gpu/command_buffer/common/context_creation_attribs.h"
@@ -1009,6 +1008,13 @@ void WidgetBase::SetCompositorVisible(bool visible) {
   layer_tree_view_->SetVisible(visible);
 }
 
+void WidgetBase::WarmUpCompositor() {
+  if (never_composited_) {
+    return;
+  }
+  layer_tree_view_->SetShouldWarmUp();
+}
+
 void WidgetBase::UpdateVisualState() {
   // When recording main frame metrics set the lifecycle reason to
   // kBeginMainFrame, because this is the calller of UpdateLifecycle
@@ -1316,7 +1322,7 @@ void WidgetBase::BindWidgetCompositor(
   if (widget_compositor_)
     widget_compositor_->Shutdown();
 
-  widget_compositor_ = base::MakeRefCounted<WidgetCompositor>(
+  widget_compositor_ = WidgetCompositor::Create(
       weak_ptr_factory_.GetWeakPtr(),
       LayerTreeHost()->GetTaskRunnerProvider()->MainThreadTaskRunner(),
       LayerTreeHost()->GetTaskRunnerProvider()->ImplThreadTaskRunner(),

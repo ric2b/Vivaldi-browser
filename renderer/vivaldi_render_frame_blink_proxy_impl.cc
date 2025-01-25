@@ -4,7 +4,7 @@
 
 #include "base/no_destructor.h"
 #include "content/public/renderer/render_frame.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 
 #include "components/content_injection/renderer/content_injection_manager.h"
 #include "components/request_filter/adblock_filter/mojom/adblock_cosmetic_filter.mojom-blink.h"
@@ -60,7 +60,7 @@ VivaldiRenderFrameBlinkProxyImpl::GetFrameHostService(
   if (!data)
     return nullptr;
   if (!data->frame_host_service) {
-    render_frame->GetBrowserInterfaceBroker()->GetInterface(
+    render_frame->GetBrowserInterfaceBroker().GetInterface(
         data->frame_host_service.BindNewPipeAndPassReceiver());
   }
   return data->frame_host_service.get();
@@ -74,7 +74,7 @@ VivaldiRenderFrameBlinkProxyImpl::GetCosmeticFilter(
   if (!data)
     return nullptr;
   if (!data->cosmetic_filter) {
-    render_frame->GetBrowserInterfaceBroker()->GetInterface(
+    render_frame->GetBrowserInterfaceBroker().GetInterface(
         data->cosmetic_filter.BindNewPipeAndPassReceiver());
   }
   return data->cosmetic_filter.get();

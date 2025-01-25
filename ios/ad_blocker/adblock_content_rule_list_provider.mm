@@ -26,7 +26,7 @@ namespace {
 constexpr char kListNamePrefix[] = "Vivaldi_";
 constexpr char kTrackerListNamePrefix[] = "Trackers_";
 constexpr char kAdsListNamePrefix[] = "Ads_";
-constexpr base::StringPiece kListNameGroupPrefix[2] = {kTrackerListNamePrefix,
+constexpr std::string_view kListNameGroupPrefix[2] = {kTrackerListNamePrefix,
                                                        kAdsListNamePrefix};
 
 class AdBlockerContentRuleListProviderImpl

@@ -17,6 +17,10 @@ use handle_map::HandleLike;
 
 /// Type-level predicate for handle types which uniformly hold a lock
 /// for longer than some other handle type in API calls.
+///
+/// Largely an informative marker trait used to indicate the
+/// lock ordering on types.
+#[allow(dead_code)]
 pub(crate) trait LocksLongerThan<H: HandleLike>: HandleLike {}
 
 /// Trait which canonicalizes the relationship between FFI

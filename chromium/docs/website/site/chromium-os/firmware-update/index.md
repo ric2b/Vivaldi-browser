@@ -271,7 +271,6 @@ build the Link firmware from source:
 
 <pre><code>
 repo init -u <i>&lt;internal-manifest-url&gt;</i> \
-    --repo-url='https://chromium.googlesource.com/external/repo.git'
     -b firmware-link-2695.B 
 repo sync
 cros_workon-link start chromeos-base/chromeos-ec \

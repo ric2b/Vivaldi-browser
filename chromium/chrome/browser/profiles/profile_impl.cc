@@ -100,6 +100,7 @@
 #include "chrome/browser/ssl/stateful_ssl_host_state_delegate_factory.h"
 #include "chrome/browser/startup_data.h"
 #include "chrome/browser/storage/storage_notification_service_factory.h"
+#include "chrome/browser/tpcd/support/origin_trial_service_factory.h"
 #include "chrome/browser/tpcd/support/top_level_trial_service_factory.h"
 #include "chrome/browser/tpcd/support/tpcd_support_service_factory.h"
 #include "chrome/browser/transition_manager/full_browser_transition_manager.h"
@@ -138,6 +139,7 @@
 #include "components/language/core/common/locale_util.h"
 #include "components/metrics/metrics_service.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
+#include "components/payments/core/payment_request_metrics.h"
 #include "components/permissions/permission_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_manager.h"
 #include "components/policy/core/common/cloud/profile_cloud_policy_manager.h"
@@ -155,6 +157,7 @@
 #include "components/spellcheck/spellcheck_buildflags.h"
 #include "components/supervised_user/core/common/pref_names.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
+#include "components/sync/base/features.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/user_prefs/user_prefs.h"
@@ -240,6 +243,7 @@
 #endif
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+#include "chrome/browser/accessibility/ax_main_node_annotator_controller_factory.h"
 #include "chrome/browser/accessibility/pdf_ocr_controller_factory.h"
 #include "ui/accessibility/accessibility_features.h"
 #endif
@@ -363,7 +367,7 @@ std::unique_ptr<Profile> Profile::CreateProfile(const base::FilePath& path,
       CreateProfileReadme(path);
     }
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   bool validated = true;
@@ -437,7 +441,6 @@ void ProfileImpl::RegisterProfilePrefs(
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   registry->RegisterBooleanPref(prefs::kPdfAnnotationsEnabled, true);
 #endif
-  registry->RegisterStringPref(prefs::kCustomProfileLabel, std::string());
   registry->RegisterIntegerPref(prefs::kProfileLabelPreset, 0);
   registry->RegisterIntegerPref(prefs::kEnterpriseBadgingTemporarySetting, 0);
 }
@@ -449,7 +452,8 @@ ProfileImpl::ProfileImpl(
     base::Time path_creation_time,
     scoped_refptr<base::SequencedTaskRunner> io_task_runner,
     bool* valid)
-    : path_(path),
+    : Profile(nullptr),
+      path_(path),
       path_creation_time_(path_creation_time),
       io_task_runner_(std::move(io_task_runner)),
       start_time_(base::Time::Now()),
@@ -858,6 +862,8 @@ void ProfileImpl::DoFinalInit(CreateMode create_mode) {
 
   NotifyProfileInitializationComplete();
 
+  RecordPrefValuesAfterProfileInitialization();
+
   SharingServiceFactory::GetForBrowserContext(this);
 
   HttpsFirstModeServiceFactory::GetForProfile(this);
@@ -880,6 +886,9 @@ void ProfileImpl::DoFinalInit(CreateMode create_mode) {
     // Create the PDF OCR controller so that it can self-activate as needed.
     screen_ai::PdfOcrControllerFactory::GetForProfile(this);
   }
+  if (features::IsMainNodeAnnotationsEnabled()) {
+    screen_ai::AXMainNodeAnnotatorControllerFactory::GetForProfile(this);
+  }
 #endif
 
   // The announcement notification  service might not be available for some
@@ -896,11 +905,13 @@ void ProfileImpl::DoFinalInit(CreateMode create_mode) {
   // as it depends on the default StoragePartition being initialized.
   GetOriginTrialsControllerDelegate();
 
-  // The TpcdTrialService and TopLevelTrialService must be created with the
-  // profile, but after the initialization of the
-  // OriginTrialsControllerDelegate, as it depends on it.
+  // The TpcdTrialService, TopLevelTrialService, and OriginTrialService for
+  // third-party cookie deprecation must be created with the profile, but after
+  // the initialization of the OriginTrialsControllerDelegate, as it depends on
+  // it.
   tpcd::trial::TpcdTrialServiceFactory::GetForProfile(this);
   tpcd::trial::TopLevelTrialServiceFactory::GetForProfile(this);
+  tpcd::trial::OriginTrialServiceFactory::GetForProfile(this);
 }
 
 base::FilePath ProfileImpl::last_selected_directory() {
@@ -1015,14 +1026,6 @@ scoped_refptr<base::SequencedTaskRunner> ProfileImpl::GetIOTaskRunner() {
   return io_task_runner_;
 }
 
-bool ProfileImpl::IsOffTheRecord() {
-  return false;
-}
-
-bool ProfileImpl::IsOffTheRecord() const {
-  return false;
-}
-
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 bool ProfileImpl::IsMainProfile() const {
   // Profile must be at "Default" path.
@@ -1031,13 +1034,6 @@ bool ProfileImpl::IsMainProfile() const {
   return Profile::IsMainProfilePath(GetPath());
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-
-const Profile::OTRProfileID& ProfileImpl::GetOTRProfileID() const {
-  NOTREACHED();
-  static base::NoDestructor<OTRProfileID> otr_profile_id(
-      OTRProfileID::CreateUnique("ProfileImp::NoOTRProfileID"));
-  return *otr_profile_id;
-}
 
 Profile* ProfileImpl::GetOffTheRecordProfile(const OTRProfileID& otr_profile_id,
                                              bool create_if_needed) {
@@ -1163,6 +1159,7 @@ void ProfileImpl::OnLocaleReady(CreateMode create_mode) {
 
   FullBrowserTransitionManager::Get()->OnProfileCreated(this);
 
+  SimpleDependencyManager::GetInstance()->CreateServices(GetProfileKey());
   BrowserContextDependencyManager::GetInstance()->CreateBrowserContextServices(
       this);
 
@@ -1493,7 +1490,7 @@ void ProfileImpl::EnsureSessionServiceCreated() {
 void ProfileImpl::ChangeAppLocale(const std::string& new_locale,
                                   AppLocaleChangedVia via) {
   if (new_locale.empty()) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
   PrefService* local_state = g_browser_process->local_state();
@@ -1573,7 +1570,7 @@ void ProfileImpl::ChangeAppLocale(const std::string& new_locale,
       break;
     }
     case APP_LOCALE_CHANGED_VIA_UNKNOWN: {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     }
   }
@@ -1621,8 +1618,12 @@ void ProfileImpl::SetCreationTimeForTesting(base::Time creation_time) {
 bool ProfileImpl::IsSignedIn() {
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(this);
-  return identity_manager &&
-         identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync);
+  // TODO(crbug.com/348368545): Switch to ConsentLevel::kSignin on ChromeOS.
+  signin::ConsentLevel consent_level =
+      base::FeatureList::IsEnabled(syncer::kReplaceSyncPromosWithSignInPromos)
+          ? signin::ConsentLevel::kSignin
+          : signin::ConsentLevel::kSync;
+  return identity_manager && identity_manager->HasPrimaryAccount(consent_level);
 }
 
 GURL ProfileImpl::GetHomePage() {
@@ -1696,5 +1697,17 @@ void ProfileImpl::UpdateIsEphemeralInStorage() {
   if (entry && !entry->IsOmitted()) {
     entry->SetIsEphemeral(
         GetPrefs()->GetBoolean(prefs::kForceEphemeralProfiles));
+  }
+}
+
+void ProfileImpl::RecordPrefValuesAfterProfileInitialization() {
+  // Measure whether users have the "Allow sites to check if you have payment
+  // methods saved" toggle enabled or disabled in chrome://settings/payments
+  //
+  // This is only relevant for regular profiles, as guest and incognito profiles
+  // do not have access to this settings page nor will any changes to the pref
+  // in those profiles affect future browsing sessions.
+  if (IsRegularProfile()) {
+    payments::RecordCanMakePaymentPrefMetrics(*GetPrefs(), "Startup");
   }
 }

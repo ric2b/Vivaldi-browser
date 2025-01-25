@@ -5,7 +5,10 @@
 #ifndef COMPONENTS_OPTIMIZATION_GUIDE_CORE_MODEL_QUALITY_MODEL_QUALITY_LOG_ENTRY_H_
 #define COMPONENTS_OPTIMIZATION_GUIDE_CORE_MODEL_QUALITY_MODEL_QUALITY_LOG_ENTRY_H_
 
+#include <cstdint>
+
 #include "base/memory/weak_ptr.h"
+#include "components/optimization_guide/core/model_execution/optimization_guide_model_execution_error.h"
 #include "components/optimization_guide/core/model_quality/model_quality_logs_uploader_service.h"
 #include "components/optimization_guide/proto/model_quality_service.pb.h"
 
@@ -19,23 +22,23 @@ class ModelQualityLogEntry {
  public:
   explicit ModelQualityLogEntry(
       std::unique_ptr<proto::LogAiDataRequest> log_ai_data_request,
-      base::WeakPtr<ModelQualityLogsUploaderService>
-          model_quality_uploader_service);
+      base::WeakPtr<ModelQualityLogsUploaderService> uploader);
 
   virtual ~ModelQualityLogEntry();
 
-  proto::LoggingMetadata* logging_metadata() {
-    return log_ai_data_request_->mutable_logging_metadata();
-  }
+  // Uploads the log entry if uploading is allowed; otherwise drops the entry.
+  // Note that the ModelQualityLogsEntry class will upload logs upon
+  // destruction, so most clients can skip calling this method.
+  static void Upload(std::unique_ptr<ModelQualityLogEntry> entry);
 
-  int64_t client_id() const {
-    return log_ai_data_request_->mutable_logging_metadata()->client_id();
-  }
+  // Drops the passed log entry, to ensure that it is never uploaded.
+  // Useful, for example, if the content of the log entry is stale.
+  static void Drop(std::unique_ptr<ModelQualityLogEntry> entry);
 
   template <typename FeatureType>
   FeatureType::Quality* quality_data() {
     return FeatureType::GetLoggingData(*log_ai_data_request_)
-        ->mutable_quality_data();
+        ->mutable_quality();
   }
 
   void set_model_execution_id(const std::string& execution_id) {
@@ -51,20 +54,25 @@ class ModelQualityLogEntry {
           ->mutable_error_response()) = error_response;
   }
 
+  void set_model_execution_error(
+      const OptimizationGuideModelExecutionError& model_execution_error) {
+    log_ai_data_request_->mutable_model_execution_info()
+        ->set_model_execution_error_enum(
+            static_cast<uint32_t>(model_execution_error.error()));
+  }
+
   proto::LogAiDataRequest* log_ai_data_request() {
     return log_ai_data_request_.get();
   }
 
  private:
-  friend class ModelQualityLogsUploaderService;
+  friend class ModelQualityLogsUploaderServiceTest;
 
   // Holds feature's model execution and quality data.
   std::unique_ptr<proto::LogAiDataRequest> log_ai_data_request_;
 
-  // Reference to ModelQualityLogsUploaderService to upload logs during
-  // destruction if not uploaded.
-  base::WeakPtr<ModelQualityLogsUploaderService>
-      model_quality_uploader_service_;
+  // The ModelQualityLogsUploaderService used to upload logs.
+  base::WeakPtr<ModelQualityLogsUploaderService> uploader_;
 };
 
 }  // namespace optimization_guide

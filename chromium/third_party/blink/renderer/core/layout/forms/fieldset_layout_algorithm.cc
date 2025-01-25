@@ -13,7 +13,6 @@
 #include "third_party/blink/renderer/core/layout/layout_result.h"
 #include "third_party/blink/renderer/core/layout/length_utils.h"
 #include "third_party/blink/renderer/core/layout/logical_fragment.h"
-#include "third_party/blink/renderer/core/layout/out_of_flow_layout_part.h"
 #include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/space_utils.h"
 
@@ -125,9 +124,8 @@ const LayoutResult* FieldsetLayoutAlgorithm::Layout() {
   container_builder_.SetIsFieldsetContainer();
 
   if (UNLIKELY(InvolvedInBlockFragmentation(container_builder_))) {
-    BreakStatus status = FinishFragmentation(
-        Node(), GetConstraintSpace(), Borders().block_end,
-        FragmentainerSpaceLeft(GetConstraintSpace()), &container_builder_);
+    BreakStatus status =
+        FinishFragmentation(Borders().block_end, &container_builder_);
     if (status == BreakStatus::kNeedsEarlierBreak) {
       // If we found a good break somewhere inside this block, re-layout and
       // break at that location.
@@ -145,7 +143,7 @@ const LayoutResult* FieldsetLayoutAlgorithm::Layout() {
 #endif
   }
 
-  OutOfFlowLayoutPart(Node(), GetConstraintSpace(), &container_builder_).Run();
+  container_builder_.HandleOofsAndSpecialDescendants();
 
   const auto& style = Style();
   if (style.LogicalHeight().MayHavePercentDependence() ||
@@ -403,9 +401,9 @@ BreakStatus FieldsetLayoutAlgorithm::LayoutFieldsetContent(
   BreakStatus break_status = BreakStatus::kContinue;
   if (GetConstraintSpace().HasBlockFragmentation() && !early_break_) {
     break_status = BreakBeforeChildIfNeeded(
-        GetConstraintSpace(), fieldset_content, *result,
-        GetConstraintSpace().FragmentainerOffset() + intrinsic_block_size_,
-        /* has_container_separation */ false, &container_builder_);
+        fieldset_content, *result,
+        FragmentainerOffsetForChildren() + intrinsic_block_size_,
+        /*has_container_separation=*/false);
   }
 
   if (break_status == BreakStatus::kContinue) {
@@ -437,8 +435,8 @@ BreakStatus FieldsetLayoutAlgorithm::LayoutFieldsetContent(
 LayoutUnit FieldsetLayoutAlgorithm::FragmentainerSpaceAvailable() const {
   // The legend may have extended past the end of the fragmentainer. Clamp to
   // zero if this is the case.
-  return std::max(LayoutUnit(), FragmentainerSpaceLeft(GetConstraintSpace()) -
-                                    intrinsic_block_size_);
+  return std::max(LayoutUnit(),
+                  FragmentainerSpaceLeftForChildren() - intrinsic_block_size_);
 }
 
 void FieldsetLayoutAlgorithm::ConsumeRemainingFragmentainerSpace() {
@@ -542,10 +540,8 @@ FieldsetLayoutAlgorithm::CreateConstraintSpaceForFieldsetContent(
       GetConstraintSpace().GetBaselineAlgorithmType());
 
   if (GetConstraintSpace().HasBlockFragmentation()) {
-    SetupSpaceBuilderForFragmentation(
-        GetConstraintSpace(), fieldset_content, block_offset, &builder,
-        /* is_new_fc */ true,
-        container_builder_.RequiresContentBeforeBreaking());
+    SetupSpaceBuilderForFragmentation(container_builder_, fieldset_content,
+                                      block_offset, &builder);
   }
   return builder.ToConstraintSpace();
 }

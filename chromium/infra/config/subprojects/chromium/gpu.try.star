@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-load("//lib/builders.star", "cpu", "os", "reclient")
+load("//lib/builders.star", "cpu", "os", "siso")
 load("//lib/try.star", "try_")
 load("//lib/gn_args.star", "gn_args")
 
@@ -20,9 +20,9 @@ try_.defaults.set(
     # Max. pending time for builds. CQ considers builds pending >2h as timed
     # out: http://shortn/_8PaHsdYmlq. Keep this in sync.
     expiration_timeout = 2 * time.hour,
-    reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
     service_account = "chromium-try-gpu-builder@chops-service-accounts.iam.gserviceaccount.com",
     siso_enabled = True,
+    siso_project = siso.project.DEFAULT_UNTRUSTED,
     subproject_list_view = "luci.chromium.try",
     task_template_canary_percentage = 5,
 )
@@ -44,7 +44,7 @@ def gpu_android_builder(*, name, **kwargs):
         name = name,
         builder_group = "tryserver.chromium.android",
         builderless = True,
-        reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
+        siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
         ssd = None,
         **kwargs
     )
@@ -143,7 +143,7 @@ gpu_android_builder(
             "android_builder",
             "release_builder",
             "try_builder",
-            "reclient",
+            "remoteexec",
             "arm64",
             "static_angle",
         ],
@@ -156,7 +156,7 @@ def gpu_chromeos_builder(*, name, **kwargs):
         name = name,
         builder_group = "tryserver.chromium.chromiumos",
         builderless = True,
-        reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
+        siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
         ssd = None,
         **kwargs
     )
@@ -185,28 +185,30 @@ def gpu_linux_builder(*, name, **kwargs):
         name = name,
         builder_group = "tryserver.chromium.linux",
         builderless = True,
-        reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
+        siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
         ssd = None,
         **kwargs
     )
 
 gpu_linux_builder(
-    name = "gpu-fyi-try-lacros-amd-rel",
+    name = "gpu-fyi-try-linux-wayland-amd-rel",
+    description_html = "Runs GPU tests on weston with AMD RX 5500 XT",
     mirrors = [
-        "ci/GPU FYI Lacros x64 Builder",
-        "ci/Lacros FYI x64 Release (AMD)",
+        "ci/GPU FYI Linux Wayland Builder",
+        "ci/Linux Wayland FYI Release (AMD)",
     ],
-    gn_args = "ci/GPU FYI Lacros x64 Builder",
+    gn_args = "ci/GPU FYI Linux Wayland Builder",
     pool = "luci.chromium.gpu.linux.amd.try",
 )
 
 gpu_linux_builder(
-    name = "gpu-fyi-try-lacros-intel-rel",
+    name = "gpu-fyi-try-linux-wayland-intel-rel",
+    description_html = "Runs GPU tests on weston with Intel UHD 630",
     mirrors = [
-        "ci/GPU FYI Lacros x64 Builder",
-        "ci/Lacros FYI x64 Release (Intel)",
+        "ci/GPU FYI Linux Wayland Builder",
+        "ci/Linux Wayland FYI Release (Intel)",
     ],
-    gn_args = "ci/GPU FYI Lacros x64 Builder",
+    gn_args = "ci/GPU FYI Linux Wayland Builder",
     pool = "luci.chromium.gpu.linux.intel.try",
 )
 
@@ -316,13 +318,12 @@ gpu_linux_builder(
 )
 
 def gpu_mac_builder(*, name, **kwargs):
+    kwargs.setdefault("cpu", None)
     return try_.builder(
         name = name,
         builder_group = "tryserver.chromium.mac",
         builderless = True,
         cores = None,
-        # Builders can run on either Intel or Apple Silicon hadware.
-        cpu = None,
         os = os.MAC_ANY,
         ssd = None,
         **kwargs
@@ -386,7 +387,8 @@ gpu_mac_builder(
     ],
     gn_args = "ci/GPU FYI Mac arm64 Builder",
     pool = "luci.chromium.gpu.mac.arm64.apple.m1.try",
-    reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
+    cpu = cpu.ARM64,
+    siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
 )
 
 gpu_mac_builder(
@@ -397,6 +399,7 @@ gpu_mac_builder(
     ],
     gn_args = "ci/GPU FYI Mac arm64 Builder",
     pool = "luci.chromium.gpu.mac.arm64.apple.m1.try",
+    cpu = cpu.ARM64,
 )
 
 gpu_mac_builder(
@@ -501,7 +504,7 @@ gpu_mac_builder(
     ],
     gn_args = "ci/GPU Mac Builder (dbg)",
     pool = "luci.chromium.gpu.mac.mini.intel.try",
-    reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
+    siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
 )
 
 def gpu_win_builder(*, name, **kwargs):
@@ -510,7 +513,7 @@ def gpu_win_builder(*, name, **kwargs):
         builder_group = "tryserver.chromium.win",
         builderless = True,
         os = os.WINDOWS_ANY,
-        reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
+        siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
         ssd = None,
         **kwargs
     )

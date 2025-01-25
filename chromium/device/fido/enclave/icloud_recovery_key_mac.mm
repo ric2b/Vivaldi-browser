@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "device/fido/enclave/icloud_recovery_key_mac.h"
 
 #import <CoreFoundation/CoreFoundation.h>
@@ -32,7 +37,11 @@ using base::apple::NSToCFPtrCast;
 
 // The kSecAttrServiceValue must match the value used in IdentityKit so that
 // these keys can be used as a recovery factor for folsom as well.
+#if defined(VIVALDI_BUILD)
+constexpr char kAttrService[] = "com.vivaldi.common.cloud.private";
+#else
 constexpr char kAttrService[] = "com.google.common.folsom.cloud.private";
+#endif  // defined(VIVALDI_BUILD)
 
 // The value for kSecAttrType for all folsom data on the keychain. This is to
 // ensure only Folsom data is returned from keychain queries, even when the

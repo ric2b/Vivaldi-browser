@@ -16,6 +16,7 @@
 #include "chrome/browser/web_applications/web_app_audio_focus_id_map.h"
 #include "chrome/browser/web_applications/web_app_launch_queue.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/browser/media_session.h"
@@ -57,7 +58,8 @@ WebAppTabHelper::GetAppIdForNotificationAttribution(
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   WebAppProvider* web_app_provider = WebAppProvider::GetForWebApps(profile);
   if (!web_app_provider ||
-      !web_app_provider->registrar_unsafe().IsLocallyInstalled(*app_id)) {
+      !web_app_provider->registrar_unsafe().IsInstallState(
+          *app_id, {proto::INSTALLED_WITH_OS_INTEGRATION})) {
     return std::nullopt;
   }
   // Default apps are locally installed but unless an app shim has been created

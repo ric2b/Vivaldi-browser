@@ -26,11 +26,6 @@ class NpCppTest : public testing::Test {
       ASSERT_TRUE(
           nearby_protocol::GlobalConfig::SetPanicHandler(test_panic_handler));
       panic_handler_set = true;
-      nearby_protocol::GlobalConfig::SetMaxNumDeserializedV0Advertisements(2);
-      nearby_protocol::GlobalConfig::SetMaxNumDeserializedV1Advertisements(2);
-      nearby_protocol::GlobalConfig::SetMaxNumCredentialSlabs(3);
-      nearby_protocol::GlobalConfig::SetMaxNumCredentialBooks(2);
-      nearby_protocol::GlobalConfig::SetMaxNumV0AdvertisementBuilders(2);
     } else {
       ASSERT_FALSE(
           nearby_protocol::GlobalConfig::SetPanicHandler(test_panic_handler));

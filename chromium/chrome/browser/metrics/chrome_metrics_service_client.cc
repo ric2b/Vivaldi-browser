@@ -21,6 +21,7 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/persistent_histogram_allocator.h"
@@ -199,7 +200,7 @@
 #include "components/metrics/motherboard_metrics_provider.h"
 #endif
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
 #include "chrome/browser/metrics/chrome_metrics_service_crash_reporter.h"
 #endif
 
@@ -231,10 +232,10 @@ const int kMaxHistogramGatheringWaitDuration = 60000;  // 60 seconds.
 // Needs to be kept in sync with the writer in
 // third_party/crashpad/crashpad/handler/handler_main.cc.
 const char kCrashpadHistogramAllocatorName[] = "CrashpadMetrics";
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
 base::LazyInstance<ChromeMetricsServiceCrashReporter>::Leaky g_crash_reporter =
     LAZY_INSTANCE_INITIALIZER;
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
 
 #if BUILDFLAG(IS_WIN)
 // Needs to be kept in sync with the writer in PlatformExperienceHelper.
@@ -612,12 +613,12 @@ std::string ChromeMetricsServiceClient::GetVersionString() {
 void ChromeMetricsServiceClient::OnEnvironmentUpdate(std::string* environment) {
   // TODO(https://bugs.chromium.org/p/crashpad/issues/detail?id=135): call this
   // on Mac when the Crashpad API supports it.
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
   // Register the environment with the crash reporter. Note that there is a
   // window from startup to this point during which crash reports will not have
   // an environment set.
   g_crash_reporter.Get().OnEnvironmentUpdate(*environment);
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
 }
 
 void ChromeMetricsServiceClient::MergeSubprocessHistograms() {
@@ -934,6 +935,11 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
 
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<syncer::PassphraseTypeMetricsProvider>(
+          /*use_cached_passphrase_type=*/false,
+          base::BindRepeating(&SyncServiceFactory::GetAllSyncServices)));
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<syncer::PassphraseTypeMetricsProvider>(
+          /*use_cached_passphrase_type=*/true,
           base::BindRepeating(&SyncServiceFactory::GetAllSyncServices)));
 
   metrics_service_->RegisterMetricsProvider(
@@ -1457,13 +1463,13 @@ void ChromeMetricsServiceClient::ResetClientStateWhenMsbbOrAppConsentIsRevoked(
 
 void ChromeMetricsServiceClient::CreateStructuredMetricsService() {
   PrefService* local_state = g_browser_process->local_state();
-  std::unique_ptr<metrics::structured::StructuredMetricsRecorder> recorder;
+  scoped_refptr<metrics::structured::StructuredMetricsRecorder> recorder;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   cros_system_profile_provider_ =
       std::make_unique<ChromeOSSystemProfileProvider>();
 
   recorder =
-      std::make_unique<metrics::structured::AshStructuredMetricsRecorder>(
+      base::MakeRefCounted<metrics::structured::AshStructuredMetricsRecorder>(
           cros_system_profile_provider_.get());
 #elif BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
 
@@ -1472,9 +1478,8 @@ void ChromeMetricsServiceClient::CreateStructuredMetricsService() {
   // and Lacros but isn't needed for the other platforms. So here is fine.
   metrics::structured::ChromeStructuredMetricsDelegate::Get()->Initialize();
   if (base::FeatureList::IsEnabled(::features::kChromeStructuredMetrics)) {
-    recorder =
-        std::make_unique<metrics::structured::ChromeStructuredMetricsRecorder>(
-            local_state);
+    recorder = base::MakeRefCounted<
+        metrics::structured::ChromeStructuredMetricsRecorder>(local_state);
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 

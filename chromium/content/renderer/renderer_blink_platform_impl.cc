@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "content/renderer/renderer_blink_platform_impl.h"
 
 #include <algorithm>
@@ -78,6 +83,7 @@
 #include "media/webrtc/webrtc_features.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "mojo/public/cpp/system/platform_handle.h"
+#include "net/base/schemeful_site.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -112,6 +118,12 @@
 #include "ui/gl/buildflags.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "content/renderer/font_data/font_data_manager.h"
+#include "skia/ext/font_utils.h"
+#include "third_party/blink/public/web/win/web_font_rendering.h"
+#endif
 
 #if BUILDFLAG(IS_MAC)
 #include "content/child/child_process_sandbox_support_impl_mac.h"
@@ -168,7 +180,7 @@ gpu::ContextType ToGpuContextType(blink::Platform::ContextType type) {
     case blink::Platform::kWebGPUContextType:
       return gpu::CONTEXT_TYPE_WEBGPU;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return gpu::CONTEXT_TYPE_OPENGLES2;
 }
 
@@ -197,6 +209,17 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
         font_service.InitWithNewPipeAndPassReceiver());
     font_loader = sk_make_sp<font_service::FontLoader>(std::move(font_service));
     SkFontConfigInterface::SetGlobal(font_loader);
+#endif
+
+#if BUILDFLAG(IS_WIN)
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kUseSkiaFontManager)) {
+      sk_sp<font_data_service::FontDataManager> font_data_manager =
+          sk_make_sp<font_data_service::FontDataManager>();
+
+      blink::WebFontRendering::SetSkiaFontManager(font_data_manager);
+      skia::OverrideDefaultSkFontMgr(font_data_manager);
+    }
 #endif
   }
 
@@ -286,8 +309,22 @@ uint64_t RendererBlinkPlatformImpl::VisitedLinkHash(
   return GetContentClient()->renderer()->VisitedLinkHash(canonical_url);
 }
 
+uint64_t RendererBlinkPlatformImpl::PartitionedVisitedLinkFingerprint(
+    std::string_view canonical_link_url,
+    const net::SchemefulSite& top_level_site,
+    const blink::WebSecurityOrigin& frame_origin) {
+  return GetContentClient()->renderer()->PartitionedVisitedLinkFingerprint(
+      canonical_link_url, top_level_site, frame_origin);
+}
+
 bool RendererBlinkPlatformImpl::IsLinkVisited(uint64_t link_hash) {
   return GetContentClient()->renderer()->IsLinkVisited(link_hash);
+}
+
+void RendererBlinkPlatformImpl::AddOrUpdateVisitedLinkSalt(
+    const url::Origin& origin,
+    uint64_t salt) {
+  GetContentClient()->renderer()->AddOrUpdateVisitedLinkSalt(origin, salt);
 }
 
 blink::WebString RendererBlinkPlatformImpl::UserAgent() {
@@ -490,6 +527,10 @@ RendererBlinkPlatformImpl::SharedCompositorWorkerContextProvider(
     cc::RasterDarkModeFilter* dark_mode_filter) {
   return RenderThreadImpl::current()->SharedCompositorWorkerContextProvider(
       dark_mode_filter);
+}
+
+bool RendererBlinkPlatformImpl::IsGpuRemoteDisconnected() {
+  return RenderThreadImpl::current()->IsGpuRemoteDisconnected();
 }
 
 scoped_refptr<gpu::GpuChannelHost>

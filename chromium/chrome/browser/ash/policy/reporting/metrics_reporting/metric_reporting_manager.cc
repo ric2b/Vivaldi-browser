@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/policy/reporting/metrics_reporting/metric_reporting_manager.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -39,6 +40,7 @@
 #include "chrome/browser/ash/policy/reporting/metrics_reporting/fatal_crash/chrome_fatal_crash_events_observer.h"
 #include "chrome/browser/ash/policy/reporting/metrics_reporting/fatal_crash/fatal_crash_events_observer.h"
 #include "chrome/browser/ash/policy/reporting/metrics_reporting/kiosk_heartbeat/kiosk_heartbeat_telemetry_sampler.h"
+#include "chrome/browser/ash/policy/reporting/metrics_reporting/kiosk_vision/kiosk_vision_telemetry_sampler.h"
 #include "chrome/browser/ash/policy/reporting/metrics_reporting/metric_reporting_prefs.h"
 #include "chrome/browser/ash/policy/reporting/metrics_reporting/network/https_latency_event_detector.h"
 #include "chrome/browser/ash/policy/reporting/metrics_reporting/network/https_latency_sampler.h"
@@ -58,6 +60,8 @@
 #include "chrome/browser/chromeos/reporting/websites/website_usage_telemetry_periodic_collector_ash.h"
 #include "chrome/browser/chromeos/reporting/websites/website_usage_telemetry_sampler.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chromeos/ash/components/kiosk/vision/pref_names.h"
+#include "chromeos/ash/components/settings/cros_settings.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/reporting/client/report_queue_configuration.h"
@@ -89,6 +93,7 @@ constexpr char kDelayedPeripheralTelemetry[] = "delayed_peripheral_telemetry";
 constexpr char kDisplaysTelemetry[] = "displays_telemetry";
 constexpr char kDeviceActivityTelemetry[] = "device_activity_telemetry";
 constexpr char kKioskHeartbeatTelemetry[] = "kiosk_heartbeat_telemetry";
+constexpr char kKioskVisionTelemetry[] = "kiosk_vision_telemetry";
 constexpr char kWebsiteTelemetry[] = "website_telemetry";
 
 }  // namespace
@@ -106,6 +111,9 @@ BASE_FEATURE(kEnableChromeFatalCrashEventsObserver,
 BASE_FEATURE(kEnableRuntimeCountersTelemetry,
              "EnableRuntimeCountersTelemetry",
              base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kEnableKioskVisionTelemetry,
+             "EnableKioskVisionTelemetry",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool MetricReportingManager::Delegate::IsUserAffiliated(
     Profile& profile) const {
@@ -284,6 +292,9 @@ void MetricReportingManager::Shutdown() {
   website_usage_observer_.reset();
   app_usage_observer_.reset();
   delegate_.reset();
+  // Reset the raw pointer `fatal_crash_events_observer_` before the actual
+  // class is destructed by `event_observer_managers_`.
+  fatal_crash_events_observer_ = nullptr;
   event_observer_managers_.clear();
   info_collectors_.clear();
   telemetry_collectors_.clear();
@@ -390,6 +401,7 @@ void MetricReportingManager::DelayedInitOnAffiliatedLogin(Profile* profile) {
   InitDisplayCollectors();
   InitDeviceActivityCollector();
   InitKioskHeartbeatTelemetryCollector();
+  InitKioskVisionTelemetryCollector();
 
   initial_upload_timer_.Start(FROM_HERE, GetUploadDelay(), this,
                               &MetricReportingManager::UploadTelemetry);
@@ -706,8 +718,11 @@ void MetricReportingManager::InitFatalCrashCollectors() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (base::FeatureList::IsEnabled(kEnableFatalCrashEventsObserver)) {
+    std::unique_ptr<FatalCrashEventsObserver> fatal_crash_observer =
+        FatalCrashEventsObserver::Create();
+    fatal_crash_events_observer_ = fatal_crash_observer.get();
     event_observer_managers_.emplace_back(delegate_->CreateEventObserverManager(
-        FatalCrashEventsObserver::Create(), crash_event_report_queue_.get(),
+        std::move(fatal_crash_observer), crash_event_report_queue_.get(),
         &reporting_settings_, ash::kReportDeviceCrashReportInfo,
         metrics::kReportDeviceCrashReportInfoDefaultValue,
         /*collector_pool=*/this));
@@ -828,6 +843,37 @@ void MetricReportingManager::InitKioskHeartbeatTelemetryCollector() {
   samplers_.push_back(std::move(heartbeat_sampler));
 }
 
+void MetricReportingManager::InitKioskVisionTelemetryCollector() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(user_reporting_settings_);
+
+  if (!base::FeatureList::IsEnabled(kEnableKioskVisionTelemetry)) {
+    return;
+  }
+  if (!user_telemetry_report_queue_) {
+    LOG(WARNING) << "No report queue created for KioskVisionTelemetry. "
+                    "No TelemetryCollector created.";
+    return;
+  }
+
+  auto kiosk_vision_sampler = std::make_unique<KioskVisionTelemetrySampler>();
+  auto collector = delegate_->CreatePeriodicCollector(
+      /*sampler=*/kiosk_vision_sampler.get(),
+      /*metric_report_queue=*/user_telemetry_report_queue_.get(),
+      /*reporting_settings=*/&local_state_reporting_settings_,
+      /*enable_setting_path=*/::ash::prefs::kKioskVisionTelemetryEnabled,
+      /*setting_enabled_default_value=*/
+      metrics::kKioskVisionTelemetryDefaultValue,
+      /*rate_setting_path=*/::ash::prefs::kKioskVisionTelemetryFrequency,
+      /*default_rate=*/
+      metrics::GetDefaultCollectionRate(
+          metrics::kDefaultKioskVisionTelemetryCollectionRate),
+      /*rate_unit_to_ms=*/1,
+      /*init_delay=*/delegate_->GetInitDelay());
+  telemetry_collectors_.insert({kKioskVisionTelemetry, std::move(collector)});
+  samplers_.push_back(std::move(kiosk_vision_sampler));
+}
+
 std::vector<raw_ptr<CollectorBase, VectorExperimental>>
 MetricReportingManager::GetTelemetryCollectorsFromSetting(
     std::string_view setting_name) {
@@ -862,6 +908,12 @@ MetricReportingManager::GetTelemetryCollectorsFromSetting(
 base::TimeDelta MetricReportingManager::GetUploadDelay() const {
   // Upload delay time starts after init delay.
   return delegate_->GetInitDelay() + delegate_->GetInitialUploadDelay();
+}
+
+FatalCrashEventsObserver*
+MetricReportingManager::fatal_crash_events_observer() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return fatal_crash_events_observer_;
 }
 
 }  // namespace reporting

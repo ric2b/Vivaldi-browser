@@ -37,11 +37,11 @@ constexpr char kTabsTypeName[] = "tabs";
 constexpr char kSavedTabGroupsTypeName[] = "savedTabGroups";
 constexpr char kSharedTabGroupDataTypeName[] = "sharedTabGroupData";
 constexpr char kPaymentsTypeName[] = "payments";
-constexpr char kCompareTypeName[] = "compare";
+constexpr char kProductComparisonTypeName[] = "productComparison";
 constexpr char kCookiesTypeName[] = "cookies";
 
 UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
-  static_assert(52 + 1 /* notes */ == syncer::GetNumModelTypes(),
+  static_assert(53 + 1 /* notes */ == syncer::GetNumModelTypes(),
                 "Almost always when adding a new ModelType, you must tie it to "
                 "a UserSelectableType below (new or existing) so the user can "
                 "disable syncing of that data. Today you must also update the "
@@ -85,7 +85,7 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
     case UserSelectableType::kReadingList:
       return {kReadingListTypeName, READING_LIST, {READING_LIST}};
     case UserSelectableType::kTabs:
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
       return {kTabsTypeName, SESSIONS, {SESSIONS, SAVED_TAB_GROUP}};
 #else
       return {kTabsTypeName, SESSIONS, {SESSIONS}};
@@ -106,8 +106,9 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
               {AUTOFILL_WALLET_CREDENTIAL, AUTOFILL_WALLET_DATA,
                AUTOFILL_WALLET_METADATA, AUTOFILL_WALLET_OFFER,
                AUTOFILL_WALLET_USAGE}};
-    case UserSelectableType::kCompare:
-      return {kCompareTypeName, COMPARE, {COMPARE}};
+    case UserSelectableType::kProductComparison:
+      return {
+          kProductComparisonTypeName, PRODUCT_COMPARISON, {PRODUCT_COMPARISON}};
     case UserSelectableType::kCookies:
       return {kCookiesTypeName, COOKIES, {COOKIES}};
 
@@ -115,7 +116,7 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
     case UserSelectableType::kNotes:
       return {"notes", NOTES, {NOTES}};
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return {nullptr, UNSPECIFIED, {}};
 }
 
@@ -190,8 +191,11 @@ std::optional<UserSelectableType> GetUserSelectableTypeFromString(
   if (type == kSharedTabGroupDataTypeName) {
     return UserSelectableType::kSharedTabGroupData;
   }
-  if (type == kCompareTypeName) {
-    return UserSelectableType::kCompare;
+  if (type == kProductComparisonTypeName) {
+    return UserSelectableType::kProductComparison;
+  }
+  if (type == kCookiesTypeName) {
+    return UserSelectableType::kCookies;
   }
   return std::nullopt;
 }

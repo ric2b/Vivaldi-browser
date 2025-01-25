@@ -12,6 +12,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/not_fatal_until.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/predictors/predictors_features.h"
 #include "chrome/browser/predictors/predictors_switches.h"
@@ -215,7 +216,7 @@ blink::mojom::ResourceType GetResourceType(
     case network::mojom::RequestDestination::kFont:
       return blink::mojom::ResourceType::kFontResource;
     default:
-      NOTREACHED() << destination;
+      NOTREACHED_IN_MIGRATION() << destination;
   }
   return blink::mojom::ResourceType::kSubResource;
 }
@@ -410,7 +411,7 @@ void PrefetchManager::TryToLaunchPrefetchJobs() {
 void PrefetchManager::AllPrefetchJobsForUrlFinished(PrefetchInfo& info) {
   DCHECK(info.is_done());
   auto it = prefetch_info_.find(info.url);
-  DCHECK(it != prefetch_info_.end());
+  CHECK(it != prefetch_info_.end(), base::NotFatalUntil::M130);
   DCHECK(&info == it->second.get());
 
   if (delegate_)

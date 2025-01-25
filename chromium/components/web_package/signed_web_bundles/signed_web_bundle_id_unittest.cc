@@ -6,12 +6,12 @@
 
 #include <array>
 #include <optional>
+#include <string_view>
 #include <tuple>
 #include <utility>
 
 #include "base/containers/span.h"
 #include "base/ranges/algorithm.h"
-#include "base/strings/string_piece.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_expected_support.h"
 #include "components/web_package/signed_web_bundles/ecdsa_p256_public_key.h"
@@ -139,7 +139,7 @@ TEST(SignedWebBundleIdTest, CreateForEd25519PublicKey) {
   auto public_key =
       Ed25519PublicKey::Create(base::span(kEd25519PublicKeyBytes));
 
-  auto id = SignedWebBundleId::CreateForEd25519PublicKey(public_key);
+  auto id = SignedWebBundleId::CreateForPublicKey(public_key);
   EXPECT_EQ(id.type(), SignedWebBundleId::Type::kEd25519PublicKey);
   EXPECT_EQ(id.id(), kEd25519SignedWebBundleId);
 }
@@ -148,7 +148,7 @@ TEST(SignedWebBundleIdTest, CreateForEcdsaP256PublicKey) {
   ASSERT_OK_AND_ASSIGN(auto public_key,
                        EcdsaP256PublicKey::Create(kEcdsaP256PublicKeyBytes));
 
-  auto id = SignedWebBundleId::CreateForEcdsaP256PublicKey(public_key);
+  auto id = SignedWebBundleId::CreateForPublicKey(public_key);
   EXPECT_EQ(id.type(), SignedWebBundleId::Type::kEcdsaP256PublicKey);
   EXPECT_EQ(id.id(), kEcdsaP256SignedWebBundleId);
 }

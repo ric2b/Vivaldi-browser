@@ -205,8 +205,9 @@ class ArcTermsOfServiceDefaultNegotiatorTest
 
   // BrowserWithTestWindowTest:
   TestingProfile::TestingFactories GetTestingFactories() override {
-    return {{ConsentAuditorFactory::GetInstance(),
-             base::BindRepeating(&BuildFakeConsentAuditor)}};
+    return {TestingProfile::TestingFactory{
+        ConsentAuditorFactory::GetInstance(),
+        base::BindRepeating(&BuildFakeConsentAuditor)}};
   }
 
  protected:
@@ -296,7 +297,7 @@ std::ostream& operator<<(std::ostream& os, Status status) {
       return os << "CANCELLED";
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return os;
 }
 

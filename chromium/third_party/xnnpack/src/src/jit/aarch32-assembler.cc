@@ -3,13 +3,15 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
+#include "xnnpack/aarch32-assembler.h"
+
+#include <cassert>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 
-#include <xnnpack/aarch32-assembler.h>
-#include <xnnpack/assembler.h>
-#include <xnnpack/common.h>
-#include <xnnpack/math.h>
+#include "xnnpack/assembler.h"
+#include "xnnpack/math.h"
 
 namespace xnnpack {
 namespace aarch32 {

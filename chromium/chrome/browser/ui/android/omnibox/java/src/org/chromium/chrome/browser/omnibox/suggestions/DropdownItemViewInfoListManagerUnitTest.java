@@ -16,7 +16,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -26,9 +25,7 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.Features;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
-import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.components.omnibox.suggestions.OmniboxSuggestionUiType;
 import org.chromium.ui.modelutil.ListObservable.ListObserver;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
@@ -43,7 +40,6 @@ import java.util.List;
 @Config(manifest = Config.NONE)
 public class DropdownItemViewInfoListManagerUnitTest {
     public @Rule MockitoRule mockitoRule = MockitoJUnit.rule();
-    public @Rule TestRule mProcessor = new Features.JUnitProcessor();
 
     private @Spy SuggestionProcessor mBasicSuggestionProcessor;
     private @Spy SuggestionProcessor mEditUrlSuggestionProcessor;
@@ -61,7 +57,6 @@ public class DropdownItemViewInfoListManagerUnitTest {
         when(mEditUrlSuggestionProcessor.getViewTypeId())
                 .thenReturn(OmniboxSuggestionUiType.EDIT_URL_SUGGESTION);
         when(mHeaderProcessor.getViewTypeId()).thenReturn(OmniboxSuggestionUiType.HEADER);
-        OmniboxFeatures.sOmniboxModernizeVisualUpdate.setForTesting(true);
 
         mSuggestionModels = new ModelList();
         mSuggestionModels.addObserver(mListObserver);

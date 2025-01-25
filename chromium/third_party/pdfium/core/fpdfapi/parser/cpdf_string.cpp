@@ -17,18 +17,25 @@
 
 CPDF_String::CPDF_String() = default;
 
-CPDF_String::CPDF_String(WeakPtr<ByteStringPool> pPool,
-                         const ByteString& str,
-                         bool bHex)
-    : m_String(str), m_bHex(bHex) {
-  if (pPool)
-    m_String = pPool->Intern(m_String);
+CPDF_String::CPDF_String(WeakPtr<ByteStringPool> pool,
+                         pdfium::span<const uint8_t> data,
+                         DataType is_hex)
+    : data_(ByteStringView(data)), output_is_hex_(true) {
+  if (pool) {
+    data_ = pool->Intern(data_);
+  }
 }
 
-CPDF_String::CPDF_String(WeakPtr<ByteStringPool> pPool, WideStringView str)
-    : m_String(PDF_EncodeText(str)) {
-  if (pPool)
-    m_String = pPool->Intern(m_String);
+CPDF_String::CPDF_String(WeakPtr<ByteStringPool> pool, const ByteString& str)
+    : data_(str) {
+  if (pool) {
+    data_ = pool->Intern(data_);
+  }
+}
+
+CPDF_String::CPDF_String(WeakPtr<ByteStringPool> pool, WideStringView str)
+    : CPDF_String(pool, PDF_EncodeText(str)) {
+  // Delegates to ctor above.
 }
 
 CPDF_String::~CPDF_String() = default;
@@ -38,18 +45,18 @@ CPDF_Object::Type CPDF_String::GetType() const {
 }
 
 RetainPtr<CPDF_Object> CPDF_String::Clone() const {
-  auto pRet = pdfium::MakeRetain<CPDF_String>();
-  pRet->m_String = m_String;
-  pRet->m_bHex = m_bHex;
-  return pRet;
+  auto clone = pdfium::MakeRetain<CPDF_String>();
+  clone->data_ = data_;
+  clone->output_is_hex_ = output_is_hex_;
+  return clone;
 }
 
 ByteString CPDF_String::GetString() const {
-  return m_String;
+  return data_;
 }
 
 void CPDF_String::SetString(const ByteString& str) {
-  m_String = str;
+  data_ = str;
 }
 
 CPDF_String* CPDF_String::AsMutableString() {
@@ -57,24 +64,24 @@ CPDF_String* CPDF_String::AsMutableString() {
 }
 
 WideString CPDF_String::GetUnicodeText() const {
-  return PDF_DecodeText(m_String.unsigned_span());
+  return PDF_DecodeText(data_.unsigned_span());
 }
 
 bool CPDF_String::WriteTo(IFX_ArchiveStream* archive,
                           const CPDF_Encryptor* encryptor) const {
   DataVector<uint8_t> encrypted_data;
-  pdfium::span<const uint8_t> data = m_String.unsigned_span();
+  pdfium::span<const uint8_t> data = data_.unsigned_span();
   if (encryptor) {
     encrypted_data = encryptor->Encrypt(data);
     data = encrypted_data;
   }
   ByteStringView raw(data);
   ByteString content =
-      m_bHex ? PDF_HexEncodeString(raw) : PDF_EncodeString(raw);
+      output_is_hex_ ? PDF_HexEncodeString(raw) : PDF_EncodeString(raw);
   return archive->WriteString(content.AsStringView());
 }
 
 ByteString CPDF_String::EncodeString() const {
-  return m_bHex ? PDF_HexEncodeString(m_String.AsStringView())
-                : PDF_EncodeString(m_String.AsStringView());
+  return output_is_hex_ ? PDF_HexEncodeString(data_.AsStringView())
+                        : PDF_EncodeString(data_.AsStringView());
 }

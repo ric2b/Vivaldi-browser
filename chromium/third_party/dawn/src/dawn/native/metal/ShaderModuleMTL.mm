@@ -63,6 +63,7 @@ using OptionalVertexPullingTransformConfig =
     X(std::string, entryPointName)                                                               \
     X(bool, disableSymbolRenaming)                                                               \
     X(tint::msl::writer::Options, tintOptions)                                                   \
+    X(bool, use_tint_ir)                                                                         \
     X(CacheKey::UnsafeUnkeyedValue<dawn::platform::Platform*>, platform)                         \
     X(std::optional<uint32_t>, maxSubgroupSizeForFullSubgroups)
 
@@ -91,15 +92,18 @@ namespace dawn::native::metal {
 ResultOrError<Ref<ShaderModule>> ShaderModule::Create(
     Device* device,
     const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
+    const std::vector<tint::wgsl::Extension>& internalExtensions,
     ShaderModuleParseResult* parseResult,
     OwnedCompilationMessages* compilationMessages) {
-    Ref<ShaderModule> module = AcquireRef(new ShaderModule(device, descriptor));
+    Ref<ShaderModule> module = AcquireRef(new ShaderModule(device, descriptor, internalExtensions));
     DAWN_TRY(module->Initialize(parseResult, compilationMessages));
     return module;
 }
 
-ShaderModule::ShaderModule(Device* device, const UnpackedPtr<ShaderModuleDescriptor>& descriptor)
-    : ShaderModuleBase(device, descriptor) {}
+ShaderModule::ShaderModule(Device* device,
+                           const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
+                           std::vector<tint::wgsl::Extension> internalExtensions)
+    : ShaderModuleBase(device, descriptor, std::move(internalExtensions)) {}
 
 ShaderModule::~ShaderModule() = default;
 
@@ -111,24 +115,11 @@ MaybeError ShaderModule::Initialize(ShaderModuleParseResult* parseResult,
 
 namespace {
 
-ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
-    DeviceBase* device,
-    const ProgrammableStage& programmableStage,
+tint::msl::writer::Bindings generateBindingInfo(
     SingleShaderStage stage,
     const PipelineLayout* layout,
-    ShaderModule::MetalFunctionData* out,
-    uint32_t sampleMask,
-    const RenderPipeline* renderPipeline,
     const BindingInfoArray& moduleBindingInfo,
-    std::optional<uint32_t> maxSubgroupSizeForFullSubgroups) {
-    ScopedTintICEHandler scopedICEHandler(device);
-
-    std::ostringstream errorStream;
-    errorStream << "Tint MSL failure:" << std::endl;
-
-    tint::msl::writer::ArrayLengthFromUniformOptions arrayLengthFromUniform;
-    arrayLengthFromUniform.ubo_binding = kBufferLengthBufferSlot;
-
+    tint::msl::writer::ArrayLengthFromUniformOptions& arrayLengthFromUniform) {
     tint::msl::writer::Bindings bindings;
 
     for (BindGroupIndex group : IterateBitSet(layout->GetBindGroupLayoutsMask())) {
@@ -195,7 +186,7 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
 
                     const auto& bindingExpansion = expansion->second;
                     tint::msl::writer::binding::BindingInfo plane0{
-                        static_cast<uint32_t>(shaderIndex)};
+                        bindingIndexInfo[bgl->GetBindingIndex(bindingExpansion.plane0)]};
                     tint::msl::writer::binding::BindingInfo plane1{
                         bindingIndexInfo[bgl->GetBindingIndex(bindingExpansion.plane1)]};
                     tint::msl::writer::binding::BindingInfo metadata{
@@ -204,9 +195,33 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
                     bindings.external_texture.emplace(
                         srcBindingPoint,
                         tint::msl::writer::binding::ExternalTexture{metadata, plane0, plane1});
-                });
+                },
+                [](const InputAttachmentBindingInfo&) { DAWN_UNREACHABLE(); });
         }
     }
+    return bindings;
+}
+
+ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
+    DeviceBase* device,
+    const ProgrammableStage& programmableStage,
+    SingleShaderStage stage,
+    const PipelineLayout* layout,
+    ShaderModule::MetalFunctionData* out,
+    uint32_t sampleMask,
+    const RenderPipeline* renderPipeline,
+    const BindingInfoArray& moduleBindingInfo,
+    std::optional<uint32_t> maxSubgroupSizeForFullSubgroups) {
+    ScopedTintICEHandler scopedICEHandler(device);
+
+    std::ostringstream errorStream;
+    errorStream << "Tint MSL failure:\n";
+
+    tint::msl::writer::ArrayLengthFromUniformOptions arrayLengthFromUniform;
+    arrayLengthFromUniform.ubo_binding = kBufferLengthBufferSlot;
+
+    tint::msl::writer::Bindings bindings =
+        generateBindingInfo(stage, layout, moduleBindingInfo, arrayLengthFromUniform);
 
     std::optional<tint::ast::transform::VertexPulling::Config> vertexPullingTransformConfig;
     if (stage == SingleShaderStage::Vertex &&
@@ -238,7 +253,7 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
         substituteOverrideConfig = BuildSubstituteOverridesTransformConfig(programmableStage);
     }
 
-    tint::PixelLocalOptions pixelLocal;
+    std::unordered_map<uint32_t, uint32_t> pixelLocalAttachments;
     if (stage == SingleShaderStage::Fragment && layout->HasPixelLocalStorage()) {
         const AttachmentState* attachmentState = renderPipeline->GetAttachmentState();
         const std::vector<wgpu::TextureFormat>& storageAttachmentSlots =
@@ -247,7 +262,7 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
             attachmentState->ComputeStorageAttachmentPackingInColorAttachments();
 
         for (size_t i = 0; i < storageAttachmentSlots.size(); i++) {
-            pixelLocal.attachments[i] = uint8_t(storageAttachmentPacking[i]);
+            pixelLocalAttachments[i] = uint8_t(storageAttachmentPacking[i]);
         }
     }
 
@@ -270,8 +285,9 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
         stage == SingleShaderStage::Vertex &&
         renderPipeline->GetPrimitiveTopology() == wgpu::PrimitiveTopology::PointList;
     req.tintOptions.array_length_from_uniform = std::move(arrayLengthFromUniform);
-    req.tintOptions.pixel_local_options = std::move(pixelLocal);
+    req.tintOptions.pixel_local_attachments = std::move(pixelLocalAttachments);
     req.tintOptions.bindings = std::move(bindings);
+    req.use_tint_ir = device->IsToggleEnabled(Toggle::UseTintIR);
     req.tintOptions.disable_polyfill_integer_div_mod =
         device->IsToggleEnabled(Toggle::DisablePolyfillsOnIntegerDivisonAndModulo);
 
@@ -347,7 +363,19 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
             }
 
             TRACE_EVENT0(r.platform.UnsafeGetValue(), General, "tint::msl::writer::Generate");
-            auto result = tint::msl::writer::Generate(program, r.tintOptions);
+            tint::Result<tint::msl::writer::Output> result;
+            if (r.use_tint_ir) {
+                // Convert the AST program to an IR module.
+                auto ir = tint::wgsl::reader::ProgramToLoweredIR(program);
+                DAWN_INVALID_IF(ir != tint::Success,
+                                "An error occurred while generating Tint IR\n%s",
+                                ir.Failure().reason.Str());
+
+                result = tint::msl::writer::Generate(ir.Get(), r.tintOptions);
+            } else {
+                result = tint::msl::writer::Generate(program, r.tintOptions);
+            }
+
             DAWN_INVALID_IF(result != tint::Success, "An error occurred while generating MSL:\n%s",
                             result.Failure().reason.Str());
 
@@ -377,7 +405,7 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
 
     if (device->IsToggleEnabled(Toggle::DumpShaders)) {
         std::ostringstream dumpedMsg;
-        dumpedMsg << "/* Dumped generated MSL */" << std::endl << mslCompilation->msl;
+        dumpedMsg << "/* Dumped generated MSL */\n" << mslCompilation->msl;
         device->EmitLog(WGPULoggingType_Info, dumpedMsg.str().c_str());
     }
 

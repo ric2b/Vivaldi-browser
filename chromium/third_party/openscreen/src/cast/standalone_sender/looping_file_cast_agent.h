@@ -106,7 +106,7 @@ class LoopingFileCastAgent final
   // CastMessageHandler overrides.
   void OnMessage(VirtualConnectionRouter* router,
                  CastSocket* socket,
-                 ::cast::channel::CastMessage message) override;
+                 proto::CastMessage message) override;
 
   // RemotingSender::Client overrides.
   void OnReady() override;

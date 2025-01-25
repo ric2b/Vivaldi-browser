@@ -68,7 +68,7 @@ void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
           input, client_->GetTemplateURLService());
 
   const query_parser::MatchingAlgorithm matching_algorithm =
-#if defined(VIVALDI_BUILD)
+#if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
       query_parser::MatchingAlgorithm::ALWAYS_PREFIX_SEARCH;
 #else
       GetMatchingAlgorithm(adjusted_input);
@@ -115,9 +115,6 @@ void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
         match.keyword = starter_pack_engine->keyword();
         match.transition = ui::PAGE_TRANSITION_KEYWORD;
       }
-
-      // Vivaldi
-      match.allowed_to_be_default_match = true;
 
       matches_.push_back(match);
     }
@@ -247,7 +244,7 @@ std::pair<int, int> BookmarkProvider::CalculateBookmarkMatchRelevance(
   // Boost the score if the bookmark's URL is referenced by other bookmarks.
   const int kURLCountBoost[4] = {0, 75, 125, 150};
 
-  const size_t url_node_count = bookmark_model_->GetNodeCountByURL(url);
+  const size_t url_node_count = bookmark_model_->GetNodesByURL(url).size();
   DCHECK_GE(std::min(std::size(kURLCountBoost), url_node_count), 1U);
   relevance +=
       kURLCountBoost[std::min(std::size(kURLCountBoost), url_node_count) - 1];

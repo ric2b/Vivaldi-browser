@@ -18,20 +18,19 @@
 #include "base/memory/raw_ptr.h"
 #include "base/trace_event/trace_event.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/omnibox/bookmark_nickname_match_utils.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 #include "components/omnibox/browser/keyword_provider.h"
-#include "components/omnibox/browser/omnibox_field_trial.h"
-#include "components/omnibox/browser/omnibox_triggered_feature_service.h"
 #include "components/omnibox/browser/scoring_functor.h"
 #include "components/omnibox/browser/titled_url_match_utils.h"
 #include "components/prefs/pref_service.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
-#include "ui/base/page_transition_types.h"
 #include "url/url_constants.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using bookmarks::BookmarkNode;
 using bookmarks::TitledUrlMatch;
@@ -45,7 +44,13 @@ BookmarkNicknameProvider::BookmarkNicknameProvider(
 void BookmarkNicknameProvider::Start(const AutocompleteInput& input,
                                      bool minimal_changes) {
   TRACE_EVENT0("omnibox", "BookmarkNicknameProvider::Start");
+
   matches_.clear();
+
+  PrefService* prefs = client_->GetPrefs();
+  if (!prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowNicknames)) {
+    return;
+  }
 
   if (input.IsZeroSuggest() || input.text().empty()) {
     return;
@@ -65,12 +70,6 @@ void BookmarkNicknameProvider::DoAutocomplete(const AutocompleteInput& input) {
   // suggesting the one that the user desires.
   const size_t kMaxBookmarkMatches = 50;
 
-  // Remove the keyword from input if we're in keyword mode for a starter pack
-  // engine.
-  const auto [adjusted_input, starter_pack_engine] =
-      KeywordProvider::AdjustInputForStarterPackEngines(
-          input, client_->GetTemplateURLService());
-
   // GetNicknameMatching returns bookmarks matching the user's
   // search terms using the following rules:
   //  - The search text is broken up into search terms. Each term is searched
@@ -85,105 +84,68 @@ void BookmarkNicknameProvider::DoAutocomplete(const AutocompleteInput& input) {
   //  - Multiple terms enclosed in quotes will require those exact words in that
   //    exact order to match.
   //
-  std::vector<TitledUrlMatch> matches = bookmark_model_->GetNicknameMatching(
-      adjusted_input.text(), kMaxBookmarkMatches);
+  std::vector<TitledUrlMatch> matches =
+      bookmark_model_->GetNicknameMatching(input.text(), kMaxBookmarkMatches);
 
   if (matches.empty())
     return;  // There were no matches.
 
-  const std::u16string fixed_up_input(FixupUserInput(adjusted_input).second);
+  std::u16string input_text(input.text());
+
   for (auto& bookmark_match : matches) {
     // Score the TitledUrlMatch. If its score is greater than 0 then the
     // AutocompleteMatch is created and added to matches_.
     auto [relevance, bookmark_count] =
         CalculateBookmarkMatchRelevance(bookmark_match);
 
-    relevance = relevance * 10;
     if (relevance > 0) {
-      AutocompleteMatch match = TitledUrlMatchToAutocompleteMatch(
-          bookmark_match, AutocompleteMatchType::BOOKMARK_NICKNAME,
-          relevance, bookmark_count, this, client_->GetSchemeClassifier(),
-          adjusted_input, fixed_up_input);
-      // If the input was in a starter pack keyword scope, set the `keyword` and
-      // `transition` appropriately to avoid popping the user out of keyword
-      // mode.
-      if (starter_pack_engine) {
-        match.keyword = starter_pack_engine->keyword();
-        match.transition = ui::PAGE_TRANSITION_KEYWORD;
+      AutocompleteMatch match = NicknameMatchToAutocompleteMatch(
+          bookmark_match, AutocompleteMatchType::BOOKMARK_NICKNAME, relevance,
+          bookmark_count, this, client_->GetSchemeClassifier(), input,
+          input_text);
+
+      if (match.inline_autocompletion.empty() &&
+          input_text.length() !=
+              bookmark_match.node->GetTitledUrlNodeNickName().length()) {
+        match.relevance = 0;
       }
 
-      match.allowed_to_be_default_match = true;
+      match.allowed_to_be_default_match =
+          !input.prevent_inline_autocomplete() ||
+          match.inline_autocompletion.empty();
 
-      matches_.push_back(match);
+      match.nickname = bookmark_match.node->GetTitledUrlNodeNickName();
+
+      if (!input.prevent_inline_autocomplete() && match.relevance > 0) {
+        matches_.push_back(match);
+      }
     }
   }
-
-  // In keyword mode, it's possible we only provide results from one or two
-  // autocomplete provider(s), so it's sometimes necessary to show more results
-  // than provider_max_matches_.
-  size_t max_matches = adjusted_input.InKeywordMode()
-                           ? provider_max_matches_in_keyword_mode_
-                           : provider_max_matches_;
-
-  // Sort and clip the resulting matches.
-  size_t num_matches = std::min(matches_.size(), max_matches);
-  std::partial_sort(matches_.begin(), matches_.begin() + num_matches,
-                    matches_.end(), AutocompleteMatch::MoreRelevant);
-  ResizeMatches(
-      num_matches,
-      OmniboxFieldTrial::IsMlUrlScoringUnlimitedNumCandidatesEnabled());
 }
 
 std::pair<int, int> BookmarkNicknameProvider::CalculateBookmarkMatchRelevance(
     const TitledUrlMatch& bookmark_match) const {
+  size_t nickname_length =
+      bookmark_match.node->GetTitledUrlNodeNickName().length();
 
+  ScoringFunctor nickname_position_functor =
+      for_each(bookmark_match.nickname_match_positions.begin(),
+               bookmark_match.nickname_match_positions.end(),
+               ScoringFunctor(nickname_length));
+  const double normalized_sum = std::min(
+      nickname_position_functor.ScoringFactor() / (nickname_length + 10), 1.0);
 
-  size_t title_length = bookmark_match.node->GetTitledUrlNodeTitle().length();
-  size_t url_length =
-      bookmark_match.node->GetTitledUrlNodeUrl().spec().length();
-  size_t length = title_length > 0 ? title_length : url_length;
-
-  ScoringFunctor title_position_functor = for_each(
-      bookmark_match.title_match_positions.begin(),
-      bookmark_match.title_match_positions.end(), ScoringFunctor(title_length));
-  ScoringFunctor url_position_functor = for_each(
-      bookmark_match.url_match_positions.begin(),
-      bookmark_match.url_match_positions.end(), ScoringFunctor(url_length));
-  const double title_match_strength = title_position_functor.ScoringFactor();
-  const double summed_factors =
-      title_match_strength + url_position_functor.ScoringFactor();
-  const double normalized_sum = std::min(summed_factors / (length + 10), 1.0);
-
-  // Bookmarks with javascript scheme ("bookmarklets") that do not have title
-  // matches get a lower base and lower maximum score because returning them
-  // for matches in their (often very long) URL looks stupid and is often not
-  // intended by the user.
   const GURL& url(bookmark_match.node->GetTitledUrlNodeUrl());
-  const bool bookmarklet_without_title_match =
-      url.SchemeIs(url::kJavaScriptScheme) && title_match_strength == 0.0;
-  const int kBaseBookmarkScore = bookmarklet_without_title_match ? 400 : 900;
-  const int kMaxBookmarkScore = bookmarklet_without_title_match ? 799 : 1199;
+
+  const int kBaseBookmarkNicknameScore = 1450;
+  const int kMaxBookmarkScore = 1599;
   const double kBookmarkScoreRange =
-      static_cast<double>(kMaxBookmarkScore - kBaseBookmarkScore);
+      static_cast<double>(kMaxBookmarkScore - kBaseBookmarkNicknameScore);
   int relevance = static_cast<int>(normalized_sum * kBookmarkScoreRange) +
-                  kBaseBookmarkScore;
+                  kBaseBookmarkNicknameScore;
 
-  // If scoring signal logging and ML scoring is disabled, skip counting
-  // bookmarks if relevance is above max score. Don't waste any time searching
-  // for additional referenced URLs if we already have a perfect title match.
-  // Returns a pair of the relevance score and -1 as a dummy bookmark count.
-  if (!OmniboxFieldTrial::IsPopulatingUrlScoringSignalsEnabled() &&
-      relevance >= kMaxBookmarkScore) {
-    return {relevance, /*bookmark_count=*/-1};
-  }
+  const size_t url_node_count = bookmark_model_->GetNodesByURL(url).size();
 
-  // Boost the score if the bookmark's URL is referenced by other bookmarks.
-  const int kURLCountBoost[4] = {0, 75, 125, 150};
-
-  const size_t url_node_count = bookmark_model_->GetNodeCountByURL(url);
-  DCHECK_GE(std::min(std::size(kURLCountBoost), url_node_count), 1U);
-  relevance +=
-      kURLCountBoost[std::min(std::size(kURLCountBoost), url_node_count) - 1];
   relevance = std::min(kMaxBookmarkScore, relevance);
   return {relevance, url_node_count};
 }

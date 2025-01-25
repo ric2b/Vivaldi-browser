@@ -107,6 +107,9 @@ void CrasAudioHandler::AudioObserver::OnInputMuteChanged(
 void CrasAudioHandler::AudioObserver::OnInputMutedByMicrophoneMuteSwitchChanged(
     bool /* muted */) {}
 
+void CrasAudioHandler::AudioObserver::OnInputMutedBySecurityCurtainChanged(
+    bool /* muted */) {}
+
 void CrasAudioHandler::AudioObserver::OnAudioNodesChanged() {}
 
 void CrasAudioHandler::AudioObserver::OnActiveOutputNodeChanged() {}
@@ -117,6 +120,8 @@ void CrasAudioHandler::AudioObserver::OnOutputChannelRemixingChanged(
     bool /* mono_on */) {}
 
 void CrasAudioHandler::AudioObserver::OnNoiseCancellationStateChanged() {}
+
+void CrasAudioHandler::AudioObserver::OnStyleTransferStateChanged() {}
 
 void CrasAudioHandler::AudioObserver::OnForceRespectUiGainsStateChanged() {}
 
@@ -167,6 +172,17 @@ void CrasAudioHandler::Initialize(
     scoped_refptr<AudioDevicesPrefHandler> audio_pref_handler) {
   g_cras_audio_handler = new CrasAudioHandler(
       std::move(media_controller_manager), audio_pref_handler);
+}
+
+// static
+void CrasAudioHandler::InitializeDelegate(
+    mojo::PendingRemote<media_session::mojom::MediaControllerManager>
+        media_controller_manager,
+    scoped_refptr<AudioDevicesPrefHandler> audio_pref_handler,
+    std::unique_ptr<Delegate> delegate) {
+  g_cras_audio_handler =
+      new CrasAudioHandler(std::move(media_controller_manager),
+                           audio_pref_handler, std::move(delegate));
 }
 
 // static
@@ -662,6 +678,75 @@ void CrasAudioHandler::SetNoiseCancellationSupportedForTesting(bool supported) {
   noise_cancellation_supported_ = supported;
 }
 
+bool CrasAudioHandler::IsStyleTransferSupportedForDevice(uint64_t device_id) {
+  if (!style_transfer_supported()) {
+    return false;
+  }
+
+  const AudioDevice* device = GetDeviceFromId(device_id);
+  if (!device) {
+    return false;
+  }
+
+  return device->audio_effect & cras::EFFECT_TYPE_STYLE_TRANSFER;
+}
+
+bool CrasAudioHandler::GetStyleTransferState() const {
+  return audio_pref_handler_->GetStyleTransferState();
+}
+
+void CrasAudioHandler::RefreshStyleTransferState() {
+  if (!style_transfer_supported()) {
+    return;
+  }
+
+  const AudioDevice* internal_mic =
+      GetDeviceByType(AudioDeviceType::kInternalMic);
+
+  if (!internal_mic) {
+    return;
+  }
+
+  // Refresh should only update the state in CRAS and leave the preference
+  // as-is.
+  CrasAudioClient::Get()->SetStyleTransferEnabled(
+      GetStyleTransferState() &&
+      (internal_mic->audio_effect & cras::EFFECT_TYPE_STYLE_TRANSFER));
+}
+
+void CrasAudioHandler::SetStyleTransferState(bool style_transfer_on) {
+  CrasAudioClient::Get()->SetStyleTransferEnabled(style_transfer_on);
+  audio_pref_handler_->SetStyleTransferState(style_transfer_on);
+
+  for (auto& observer : observers_) {
+    observer.OnStyleTransferStateChanged();
+  }
+}
+
+void CrasAudioHandler::RequestStyleTransferSupported(
+    OnStyleTransferSupportedCallback callback) {
+  CrasAudioClient::Get()->GetStyleTransferSupported(
+      base::BindOnce(&CrasAudioHandler::HandleGetStyleTransferSupported,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void CrasAudioHandler::HandleGetStyleTransferSupported(
+    OnStyleTransferSupportedCallback callback,
+    std::optional<bool> system_style_transfer_supported) {
+  if (!system_style_transfer_supported.has_value()) {
+    LOG(ERROR)
+        << "cras_audio_handler: Failed to retrieve style transfer support";
+  } else {
+    style_transfer_supported_ = system_style_transfer_supported.value();
+  }
+
+  std::move(callback).Run();
+}
+
+void CrasAudioHandler::SetStyleTransferSupportedForTesting(bool supported) {
+  style_transfer_supported_ = supported;
+}
+
 bool CrasAudioHandler::GetForceRespectUiGainsState() const {
   return audio_pref_handler_->GetForceRespectUiGainsState();
 }
@@ -768,6 +853,44 @@ void CrasAudioHandler::SetKeyboardMicActive(bool active) {
 void CrasAudioHandler::SetSpeakOnMuteDetection(bool som_on) {
   CrasAudioClient::Get()->SetSpeakOnMuteDetection(som_on);
   speak_on_mute_detection_on_ = som_on;
+}
+
+void CrasAudioHandler::SetEwmaPowerReportEnabled(bool enabled) {
+  CrasAudioClient::Get()->SetEwmaPowerReportEnabled(enabled);
+  ewma_power_report_enabled_ = enabled;
+}
+
+double CrasAudioHandler::GetEwmaPower() {
+  return ewma_power_;
+}
+
+void CrasAudioHandler::SetSidetoneEnabled(bool enabled) {
+  CrasAudioClient::Get()->SetSidetoneEnabled(enabled);
+  sidetone_enabled_ = enabled;
+}
+
+bool CrasAudioHandler::GetSidetoneEnabled() const {
+  return sidetone_enabled_;
+}
+
+bool CrasAudioHandler::IsSidetoneSupported() const {
+  return sidetone_supported_;
+}
+
+void CrasAudioHandler::UpdateSidetoneSupportedState() {
+  CrasAudioClient::Get()->GetSidetoneSupported(
+      base::BindOnce(&CrasAudioHandler::HandleGetSidetoneSupported,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void CrasAudioHandler::HandleGetSidetoneSupported(
+    std::optional<bool> supported) {
+  if (!supported.has_value()) {
+    LOG(ERROR) << "Failed to check whether sidetone is supported.";
+    return;
+  }
+
+  sidetone_supported_ = *supported;
 }
 
 void CrasAudioHandler::AddActiveNode(uint64_t node_id, bool notify) {
@@ -1104,6 +1227,10 @@ void CrasAudioHandler::SetInputMuteLockedBySecurityCurtain(bool mute_on) {
 
   input_mute_forced_by_security_curtain_ = mute_on;
   SetInputMute(mute_on, InputMuteChangeMethod::kOther);
+
+  for (auto& observer : observers_) {
+    observer.OnInputMutedBySecurityCurtainChanged(mute_on);
+  }
 }
 
 void CrasAudioHandler::SetActiveDevice(const AudioDevice& active_device,
@@ -1144,7 +1271,15 @@ void CrasAudioHandler::SetActiveDevice(const AudioDevice& active_device,
   // most recently activated device list.
   if (features::IsAudioSelectionImprovementEnabled()) {
     SyncDevicePrefSetMap(active_device.is_input);
-    AddDeviceToMostRecentActivatedList(active_device);
+    audio_pref_handler_->UpdateMostRecentActivatedDeviceIdList(active_device);
+
+    if (activate_by == DeviceActivateType::kActivateByUser) {
+      // Remove notification if the hotplugged device that triggered the
+      // notification has already been activated by user via settings or quick
+      // settings.
+      audio_selection_notification_handler_
+          .RemoveNotificationIfHotpluggedDeviceActivated({active_device});
+    }
   }
 
   // Save active state for the nodes.
@@ -1255,9 +1390,25 @@ void CrasAudioHandler::SetActiveHDMIOutoutRediscoveringIfNecessary(
 CrasAudioHandler::CrasAudioHandler(
     mojo::PendingRemote<media_session::mojom::MediaControllerManager>
         media_controller_manager,
+    scoped_refptr<AudioDevicesPrefHandler> audio_pref_handler,
+    std::unique_ptr<Delegate> delegate)
+    : media_controller_manager_(std::move(media_controller_manager)),
+      audio_pref_handler_(audio_pref_handler),
+      delegate_(std::move(delegate)) {
+  SetupCrasAudioHandler(audio_pref_handler);
+}
+
+CrasAudioHandler::CrasAudioHandler(
+    mojo::PendingRemote<media_session::mojom::MediaControllerManager>
+        media_controller_manager,
     scoped_refptr<AudioDevicesPrefHandler> audio_pref_handler)
     : media_controller_manager_(std::move(media_controller_manager)),
       audio_pref_handler_(audio_pref_handler) {
+  SetupCrasAudioHandler(audio_pref_handler);
+}
+
+void CrasAudioHandler::SetupCrasAudioHandler(
+    scoped_refptr<AudioDevicesPrefHandler> audio_pref_handler) {
   DCHECK(audio_pref_handler);
   DCHECK(CrasAudioClient::Get());
   CrasAudioClient::Get()->AddObserver(this);
@@ -1463,11 +1614,19 @@ void CrasAudioHandler::SpeakOnMuteDetected() {
   }
 }
 
+void CrasAudioHandler::EwmaPowerReported(double power) {
+  ewma_power_ = power;
+}
+
 void CrasAudioHandler::NumStreamIgnoreUiGains(int32_t num) {
   num_stream_ignore_ui_gains_ = num;
   for (auto& observer : observers_) {
     observer.OnNumStreamIgnoreUiGainsChanged(num);
   }
+}
+
+void CrasAudioHandler::SidetoneSupportedChanged(bool supported) {
+  sidetone_supported_ = supported;
 }
 
 void CrasAudioHandler::ResendBluetoothBattery() {
@@ -1501,10 +1660,12 @@ AudioDevice CrasAudioHandler::ConvertAudioNodeWithModifiedPriority(
 }
 
 const AudioDevice* CrasAudioHandler::GetDeviceFromStableDeviceId(
+    bool is_input,
     uint64_t stable_device_id) const {
   for (const auto& item : audio_devices_) {
     const AudioDevice& device = item.second;
-    if (device.stable_device_id == stable_device_id) {
+    if (device.is_input == is_input &&
+        device.stable_device_id == stable_device_id) {
       return &device;
     }
   }
@@ -1626,6 +1787,8 @@ void CrasAudioHandler::InitializeAudioAfterCrasServiceAvailable(
   GetSystemAgcSupported();
   RequestNoiseCancellationSupported(base::BindOnce(
       &CrasAudioHandler::GetNodes, weak_ptr_factory_.GetWeakPtr()));
+  RequestStyleTransferSupported(base::BindOnce(&CrasAudioHandler::GetNodes,
+                                               weak_ptr_factory_.GetWeakPtr()));
   RequestHfpMicSrSupported(base::BindOnce(&CrasAudioHandler::GetNodes,
                                           weak_ptr_factory_.GetWeakPtr()));
   GetNumberOfOutputStreams();
@@ -1651,6 +1814,10 @@ void CrasAudioHandler::InitializeAudioAfterCrasServiceAvailable(
   // Sets force respect ui gains enabled based on audio pref, it re-applies the
   // previous state if CRAS restarts.
   CrasAudioClient::Get()->SetForceRespectUiGains(GetForceRespectUiGainsState());
+
+  UpdateSidetoneSupportedState();
+  CrasAudioClient::Get()->SetSidetoneEnabled(sidetone_enabled_);
+  CrasAudioClient::Get()->SetEwmaPowerReportEnabled(ewma_power_report_enabled_);
 }
 
 void CrasAudioHandler::ApplyAudioPolicy() {
@@ -1855,16 +2022,16 @@ void CrasAudioHandler::SwitchToDevice(const AudioDevice& device,
 bool CrasAudioHandler::HasDeviceChange(const AudioNodeList& new_nodes,
                                        bool is_input,
                                        AudioDeviceList* new_discovered,
-                                       bool* device_removed,
+                                       AudioDeviceList* removed_devices,
                                        bool* active_device_removed) {
-  *device_removed = false;
+  removed_devices->clear();
   for (const auto& item : audio_devices_) {
     const AudioDevice& device = item.second;
     if (is_input != device.is_input) {
       continue;
     }
     if (!IsDeviceInList(device, new_nodes)) {
-      *device_removed = true;
+      removed_devices->push_back(device);
       if ((is_input && device.id == active_input_node_id_) ||
           (!is_input && device.id == active_output_node_id_)) {
         *active_device_removed = true;
@@ -1896,13 +2063,13 @@ bool CrasAudioHandler::HasDeviceChange(const AudioNodeList& new_nodes,
       new_or_changed_device = true;
     }
   }
-  return new_or_changed_device || *device_removed;
+  return new_or_changed_device || !removed_devices->empty();
 }
 
 CrasAudioHandler::DeviceStatus CrasAudioHandler::CheckDeviceStatus(
     const AudioDevice& device) {
   const AudioDevice* device_found =
-      GetDeviceFromStableDeviceId(device.stable_device_id);
+      GetDeviceFromStableDeviceId(device.is_input, device.stable_device_id);
   if (!device_found) {
     return NEW_DEVICE;
   }
@@ -2181,34 +2348,17 @@ void CrasAudioHandler::HandleSystemBoots(bool is_input,
   should_show_notification_ = true;
 }
 
-void CrasAudioHandler::AddDeviceToMostRecentActivatedList(
-    const AudioDevice& device) {
-  std::vector<std::string>& ids =
-      device.is_input ? most_recent_activated_input_device_ids_
-                      : most_recent_activated_output_device_ids_;
-  std::string target_device_id = GetDeviceIdString(device);
-  // Find if this device is already in the list, remove it if so.
-  for (auto it = ids.begin(); it != ids.end(); it++) {
-    if (target_device_id == *it) {
-      ids.erase(it);
-      break;
-    }
-  }
-
-  // Add this device to the end of the list.
-  ids.push_back(target_device_id);
-}
-
 bool CrasAudioHandler::ActivateMostRecentActiveDevice(bool is_input) {
-  const std::vector<std::string>& ids =
-      is_input ? most_recent_activated_input_device_ids_
-               : most_recent_activated_output_device_ids_;
+  const base::Value::List& ids =
+      audio_pref_handler_->GetMostRecentActivatedDeviceIdList(is_input);
   for (int i = ids.size() - 1; i >= 0; i--) {
-    std::optional<uint64_t> device_stable_id = ParseDeviceId(ids[i]);
+    std::optional<uint64_t> device_stable_id =
+        ParseDeviceId(ids[i].GetString());
     if (!device_stable_id.has_value()) {
       continue;
     }
-    const AudioDevice* device = GetDeviceFromStableDeviceId(*device_stable_id);
+    const AudioDevice* device =
+        GetDeviceFromStableDeviceId(is_input, *device_stable_id);
     if (!device) {
       continue;
     }
@@ -2311,6 +2461,13 @@ void CrasAudioHandler::SwitchToTopPriorityDevice(
 void CrasAudioHandler::SwitchToPreviousActiveDeviceIfAvailable(
     bool is_input,
     const AudioDeviceList& devices) {
+  // With new audio selection mechanism, activate the most recently active
+  // device first.
+  if (features::IsAudioSelectionImprovementEnabled() &&
+      ActivateMostRecentActiveDevice(is_input)) {
+    return;
+  }
+
   AudioDevice previous_active_device;
   if (GetActiveDeviceFromUserPref(is_input, &previous_active_device)) {
     DCHECK(previous_active_device.is_for_simple_usage());
@@ -2323,22 +2480,45 @@ void CrasAudioHandler::SwitchToPreviousActiveDeviceIfAvailable(
   }
 }
 
+void CrasAudioHandler::HandleRemoveNotification(bool is_input) {
+  audio_selection_notification_handler_
+      .RemoveNotificationIfHotpluggedDeviceDisconnected(
+          is_input, GetSimpleUsageAudioDevices(audio_devices_, is_input));
+}
+
 void CrasAudioHandler::UpdateDevicesAndSwitchActive(
     const AudioNodeList& nodes) {
   AudioDeviceList output_devices;
   AudioDeviceList input_devices;
   AudioDeviceList hotplug_output_devices;
   AudioDeviceList hotplug_input_devices;
-  bool has_output_removed = false;
-  bool has_input_removed = false;
+  AudioDeviceList removed_output_devices;
+  AudioDeviceList removed_input_devices;
   bool active_output_removed = false;
   bool active_input_removed = false;
   bool output_devices_changed =
       HasDeviceChange(nodes, false, &hotplug_output_devices,
-                      &has_output_removed, &active_output_removed);
+                      &removed_output_devices, &active_output_removed);
   bool input_devices_changed =
-      HasDeviceChange(nodes, true, &hotplug_input_devices, &has_input_removed,
-                      &active_input_removed);
+      HasDeviceChange(nodes, true, &hotplug_input_devices,
+                      &removed_input_devices, &active_input_removed);
+
+  if (!removed_input_devices.empty()) {
+    // Add grace period in case the USB device is not firmly plugged, making
+    // it disconnected and reconnected in a short period of time. In this case,
+    // the notification should not be removed.
+    remove_notification_timer_for_input_.Start(
+        FROM_HERE, kRemoveNotificationDelay,
+        base::BindOnce(&CrasAudioHandler::HandleRemoveNotification,
+                       weak_ptr_factory_.GetWeakPtr(), /*is_input=*/true));
+  }
+
+  if (!removed_output_devices.empty()) {
+    remove_notification_timer_for_output_.Start(
+        FROM_HERE, kRemoveNotificationDelay,
+        base::BindOnce(&CrasAudioHandler::HandleRemoveNotification,
+                       weak_ptr_factory_.GetWeakPtr(), /*is_input=*/false));
+  }
 
   // Record consecutive devices change metrics.
   if (input_devices_changed) {
@@ -2454,13 +2634,13 @@ void CrasAudioHandler::UpdateDevicesAndSwitchActive(
   }
 
   // Handle output device changes.
-  HandleAudioDeviceChange(false, output_devices, hotplug_output_devices,
-                          output_devices_changed, has_output_removed,
-                          active_output_removed);
+  HandleAudioDeviceChange(
+      false, output_devices, hotplug_output_devices, output_devices_changed,
+      !removed_output_devices.empty(), active_output_removed);
 
   // Handle input device changes.
   HandleAudioDeviceChange(true, input_devices, hotplug_input_devices,
-                          input_devices_changed, has_input_removed,
+                          input_devices_changed, !removed_input_devices.empty(),
                           active_input_removed);
 
   // At this moment, system has already made the switching or not switching
@@ -2482,6 +2662,8 @@ void CrasAudioHandler::UpdateDevicesAndSwitchActive(
             ? std::make_optional(active_output_device->display_name)
             : std::nullopt,
         base::BindRepeating(&CrasAudioHandler::SwitchToDevice,
+                            weak_ptr_factory_.GetWeakPtr()),
+        base::BindRepeating(&CrasAudioHandler::OpenSettingsAudioPage,
                             weak_ptr_factory_.GetWeakPtr()));
 
     // Reset show notification flag.
@@ -2565,6 +2747,9 @@ void CrasAudioHandler::HandleGetNodes(std::optional<AudioNodeList> node_list) {
 
   // Always set the input noise cancellation state on NodesChange event.
   RefreshNoiseCancellationState();
+
+  // Always set the input style transfer state on NodesChange event.
+  RefreshStyleTransferState();
 
   // Always set the hfp_mic_sr state on NodesChange event.
   RefreshHfpMicSrState();
@@ -2744,7 +2929,7 @@ const AudioDevice* CrasAudioHandler::GetMicForCamera(
     case media::MEDIA_VIDEO_FACING_ENVIRONMENT:
       return GetDeviceByType(AudioDeviceType::kRearMic);
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return nullptr;
 }
@@ -2854,6 +3039,10 @@ void CrasAudioHandler::HandleGetDefaultOutputBufferSize(
 
 bool CrasAudioHandler::noise_cancellation_supported() const {
   return noise_cancellation_supported_;
+}
+
+bool CrasAudioHandler::style_transfer_supported() const {
+  return style_transfer_supported_;
 }
 
 bool CrasAudioHandler::hfp_mic_sr_supported() const {
@@ -3012,20 +3201,15 @@ const std::optional<AudioDevice>
 CrasAudioHandler::GetPreferredDeviceIfDeviceSetSeenBefore(
     bool is_input,
     const AudioDeviceList& devices) const {
-  const std::map<std::string, std::string>& device_pref_set_map =
-      is_input ? input_device_pref_set_map_ : output_device_pref_set_map_;
-  const std::string ids = GetDeviceSetIdString(devices);
-  const auto iter = device_pref_set_map.find(ids);
-  if (iter == device_pref_set_map.end()) {
-    return std::nullopt;
-  }
+  std::optional<uint64_t> id =
+      audio_pref_handler_->GetPreferredDeviceFromPreferenceSet(is_input,
+                                                               devices);
 
-  std::optional<uint64_t> id = ParseDeviceId(iter->second);
   if (!id.has_value()) {
     return std::nullopt;
   }
 
-  const AudioDevice* device = GetDeviceFromStableDeviceId(id.value());
+  const AudioDevice* device = GetDeviceFromStableDeviceId(is_input, id.value());
   if (!device) {
     return std::nullopt;
   }
@@ -3043,11 +3227,8 @@ void CrasAudioHandler::SyncDevicePrefSetMap(bool is_input) {
     return;
   }
 
-  std::map<std::string, std::string>& device_pref_set_map =
-      is_input ? input_device_pref_set_map_ : output_device_pref_set_map_;
-  const std::string ids = GetDeviceSetIdString(
-      GetSimpleUsageAudioDevices(audio_devices_, is_input));
-  device_pref_set_map[ids] = GetDeviceIdString(*active_device);
+  audio_pref_handler_->UpdateDevicePreferenceSet(
+      GetSimpleUsageAudioDevices(audio_devices_, is_input), *active_device);
 }
 
 void CrasAudioHandler::HandleHotPlugDeviceWithNotification(
@@ -3121,6 +3302,12 @@ void CrasAudioHandler::HandleHotPlugDeviceWithNotification(
                   kInputRule3HotPlugUnpreferredDevice
             : AudioDeviceMetricsHandler::AudioSelectionExceptionRules::
                   kOutputRule3HotPlugUnpreferredDevice);
+  }
+}
+
+void CrasAudioHandler::OpenSettingsAudioPage() {
+  if (delegate_) {
+    delegate_->OpenSettingsAudioPage();
   }
 }
 

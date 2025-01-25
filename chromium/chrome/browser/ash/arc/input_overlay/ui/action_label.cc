@@ -26,6 +26,7 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/view_utils.h"
@@ -136,7 +137,7 @@ class ActionLabelTap : public ActionLabel {
                                                touch_point_size_.height() / 2));
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -269,7 +270,7 @@ std::vector<raw_ptr<ActionLabel, VectorExperimental>> ActionLabel::Show(
       break;
 
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 
@@ -285,8 +286,8 @@ void ActionLabel::Init() {
   SetRequestFocusOnPress(true);
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
   SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, kSideInset)));
-  SetAccessibilityProperties(ax::mojom::Role::kLabelText,
-                             CalculateAccessibleName());
+  GetViewAccessibility().SetProperties(ax::mojom::Role::kLabelText,
+                                       CalculateAccessibleName());
 }
 
 ActionLabel::ActionLabel(MouseAction mouse_action)
@@ -306,7 +307,7 @@ ActionLabel::~ActionLabel() = default;
 
 void ActionLabel::SetTextActionLabel(const std::u16string& text) {
   label()->SetText(text);
-  SetAccessibleName(CalculateAccessibleName());
+  GetViewAccessibility().SetName(CalculateAccessibleName());
 
   if (!IsBeta()) {
     return;
@@ -321,7 +322,7 @@ void ActionLabel::SetTextActionLabel(const std::u16string& text) {
 
 void ActionLabel::SetImageActionLabel(MouseAction mouse_action) {
   set_mouse_action(mouse_action);
-  SetAccessibleName(CalculateAccessibleName());
+  GetViewAccessibility().SetName(CalculateAccessibleName());
 }
 
 void ActionLabel::SetDisplayMode(DisplayMode mode) {
@@ -360,7 +361,7 @@ void ActionLabel::SetDisplayMode(DisplayMode mode) {
       SetToEditDefault();
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }

@@ -139,8 +139,8 @@ AppsCollectionsDismissDialog::AppsCollectionsDismissDialog(
           IDS_ASH_LAUNCHER_APPS_COLLECTIONS_DISMISS_DIALOG_EXIT),
       PillButton::Type::kPrimaryWithoutIcon, nullptr));
 
-  SetAccessibleRole(ax::mojom::Role::kAlertDialog);
-  SetAccessibleName(base::JoinString(
+  GetViewAccessibility().SetRole(ax::mojom::Role::kAlertDialog);
+  GetViewAccessibility().SetName(base::JoinString(
       {l10n_util::GetStringUTF16(
            IDS_ASH_LAUNCHER_APPS_COLLECTIONS_DISMISS_DIALOG_TITLE),
        l10n_util::GetStringUTF16(

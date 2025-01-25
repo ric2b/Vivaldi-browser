@@ -16,7 +16,6 @@
 #include "third_party/blink/renderer/core/css/media_query_evaluator.h"
 #include "third_party/blink/renderer/core/css/parser/sizes_attribute_parser.h"
 #include "third_party/blink/renderer/core/dom/document.h"
-#include "third_party/blink/renderer/core/dom/scripted_idle_task_controller.h"
 #include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/frame/frame_console.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -46,6 +45,7 @@
 #include "third_party/blink/renderer/core/loader/subresource_integrity_helper.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/viewport_description.h"
+#include "third_party/blink/renderer/core/scheduler/scripted_idle_task_controller.h"
 #include "third_party/blink/renderer/core/script/modulator.h"
 #include "third_party/blink/renderer/core/script/script_loader.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -57,7 +57,6 @@
 #include "third_party/blink/renderer/platform/loader/link_header.h"
 #include "third_party/blink/renderer/platform/loader/subresource_integrity.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -128,7 +127,7 @@ bool IsSupportedType(ResourceType resource_type, const String& mime_type) {
     case ResourceType::kRaw:
       return true;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   return false;
 }
@@ -223,7 +222,8 @@ bool IsResourceLoadAllowed(PreloadHelper::LoadLinksFromHeaderMode mode,
   }
 }
 
-bool IsDictionaryLoadAllowed(PreloadHelper::LoadLinksFromHeaderMode mode) {
+bool IsCompressionDictionaryLoadAllowed(
+    PreloadHelper::LoadLinksFromHeaderMode mode) {
   // Document header can trigger dictionary load after the page load completes.
   // Subresources header can trigger dictionary load if it is not from the
   // memory cache.
@@ -509,7 +509,7 @@ void PreloadHelper::PreloadIfNeeded(
           fetch_priority_message = " with fetchpriority hint 'auto'";
           break;
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
       }
     }
     document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
@@ -771,9 +771,10 @@ void PreloadHelper::LoadLinksFromHeader(
     bool is_network_hint_allowed = IsNetworkHintAllowed(mode);
     bool is_resource_load_allowed =
         IsResourceLoadAllowed(mode, header.IsViewportDependent());
-    bool is_dictionary_load_allowed = IsDictionaryLoadAllowed(mode);
+    bool is_compression_dictionary_load_allowed =
+        IsCompressionDictionaryLoadAllowed(mode);
     if (!is_network_hint_allowed && !is_resource_load_allowed &&
-        !is_dictionary_load_allowed) {
+        !is_compression_dictionary_load_allowed) {
       continue;
     }
 
@@ -849,7 +850,7 @@ void PreloadHelper::LoadLinksFromHeader(
 
       PreconnectIfNeeded(params, document, &frame, kLinkCalledFromHeader);
     }
-    if (is_resource_load_allowed || is_dictionary_load_allowed) {
+    if (is_resource_load_allowed || is_compression_dictionary_load_allowed) {
       DCHECK(document);
       PendingLinkPreload* pending_preload =
           MakeGarbageCollected<PendingLinkPreload>(*document,
@@ -863,8 +864,8 @@ void PreloadHelper::LoadLinksFromHeader(
         ModulePreloadIfNeeded(params, *document, viewport_description,
                               pending_preload);
       }
-      if (is_dictionary_load_allowed) {
-        FetchDictionaryIfNeeded(params, *document, pending_preload);
+      if (is_compression_dictionary_load_allowed) {
+        FetchCompressionDictionaryIfNeeded(params, *document, pending_preload);
       }
     }
     if (params.rel.IsServiceWorker()) {
@@ -876,7 +877,7 @@ void PreloadHelper::LoadLinksFromHeader(
 
 // TODO(crbug.com/1413922):
 // Always load the resource after the full document load completes
-void PreloadHelper::FetchDictionaryIfNeeded(
+void PreloadHelper::FetchCompressionDictionaryIfNeeded(
     const LinkLoadParameters& params,
     Document& document,
     PendingLinkPreload* pending_preload) {
@@ -889,12 +890,12 @@ void PreloadHelper::FetchDictionaryIfNeeded(
     return;
   }
 
-  if (!params.rel.IsDictionary() || !params.href.IsValid() ||
+  if (!params.rel.IsCompressionDictionary() || !params.href.IsValid() ||
       !document.GetFrame()) {
     return;
   }
 
-  DVLOG(1) << "PreloadHelper::FetchDictionaryIfNeeded "
+  DVLOG(1) << "PreloadHelper::FetchCompressionDictionaryIfNeeded "
            << params.href.GetString().Utf8();
   ResourceRequest resource_request(params.href);
 
@@ -978,7 +979,7 @@ Resource* PreloadHelper::StartPreload(ResourceType type,
       resource = RawResource::Fetch(params, resource_fetcher, nullptr);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   base::UmaHistogramMicrosecondsTimes("Blink.PreloadRequestStartDuration",

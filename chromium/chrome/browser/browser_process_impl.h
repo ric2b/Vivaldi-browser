@@ -51,10 +51,9 @@
 class BatteryMetrics;
 class ChromeMetricsServicesManagerClient;
 class DevToolsAutoOpener;
-class GlobalFeatures;
+class GlobalDesktopFeatures;
 class RemoteDebuggingServer;
 class PrefRegistrySimple;
-class SearchEngineChoiceProfileTagger;
 class SecureOriginPrefsObserver;
 class SiteIsolationPrefsObserver;
 class SystemNotificationHelper;
@@ -229,6 +228,7 @@ class BrowserProcessImpl : public BrowserProcess,
   SerialPolicyAllowedPorts* serial_policy_allowed_ports() override;
   HidSystemTrayIcon* hid_system_tray_icon() override;
   UsbSystemTrayIcon* usb_system_tray_icon() override;
+  GlobalDesktopFeatures* GetDesktopFeatures() override;
 #endif
 
   os_crypt_async::OSCryptAsync* os_crypt_async() override;
@@ -466,15 +466,12 @@ class BrowserProcessImpl : public BrowserProcess,
 
   BuildState build_state_;
 
-  std::unique_ptr<SearchEngineChoiceProfileTagger>
-      search_engine_choice_profile_tagger_;
+  std::unique_ptr<GlobalDesktopFeatures> desktop_features_;
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
   std::unique_ptr<base::android::ApplicationStatusListener> app_state_listener_;
 #endif
-
-  std::unique_ptr<GlobalFeatures> features_;
 
   // Observes application-wide events and logs them to breadcrumbs. Null if
   // breadcrumbs logging is disabled.

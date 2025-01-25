@@ -216,6 +216,54 @@ TEST_P(QueueWriteBufferTests, UnalignedDynamicUploader) {
     EXPECT_BUFFER_U32_EQ(value, buffer, 0);
 }
 
+// Test using various offset and size alignments to write a uniform buffer.
+TEST_P(QueueWriteBufferTests, WriteUniformBufferWithVariousOffsetAndSizeAlignments) {
+    wgpu::BufferDescriptor descriptor;
+    descriptor.size = 128;
+    descriptor.usage =
+        wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
+    wgpu::Buffer buffer = device.CreateBuffer(&descriptor);
+
+    constexpr size_t kElementCount = 16;
+    uint32_t data[kElementCount] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    constexpr size_t kElementBytes = sizeof(data[0]);
+    queue.WriteBuffer(buffer, 0, data, sizeof(data));
+    EXPECT_BUFFER_U32_RANGE_EQ(data, buffer, 0, kElementCount);
+
+    // Alignments: offset -- 4, size -- 4
+    size_t offset = 1;
+    data[offset] = 100;
+    size_t size = kElementBytes;
+    queue.WriteBuffer(buffer, offset * kElementBytes, &data[offset], size);
+    EXPECT_BUFFER_U32_RANGE_EQ(data, buffer, 0, kElementCount);
+
+    // Alignments: offset -- 16, size -- 16
+    offset = 4;
+    data[offset] = 101;
+    data[offset + 1] = 102;
+    data[offset + 2] = 103;
+    data[offset + 3] = 104;
+    size = 4 * kElementBytes;
+    queue.WriteBuffer(buffer, offset * kElementBytes, &data[offset], size);
+    EXPECT_BUFFER_U32_RANGE_EQ(data, buffer, 0, kElementCount);
+
+    // Alignments: offset -- 4, size -- 16
+    offset = 10;
+    data[offset] = 105;
+    data[offset + 1] = 106;
+    data[offset + 2] = 107;
+    data[offset + 3] = 108;
+    queue.WriteBuffer(buffer, offset * kElementBytes, &data[offset], size);
+    EXPECT_BUFFER_U32_RANGE_EQ(data, buffer, 0, kElementCount);
+
+    // Alignments: offset -- 16, size -- 4
+    offset = 12;
+    data[offset] = 109;
+    size = kElementBytes;
+    queue.WriteBuffer(buffer, offset * kElementBytes, &data[offset], size);
+    EXPECT_BUFFER_U32_RANGE_EQ(data, buffer, 0, kElementCount);
+}
+
 DAWN_INSTANTIATE_TEST(QueueWriteBufferTests,
                       D3D11Backend(),
                       D3D12Backend(),
@@ -272,14 +320,6 @@ void FillData(uint8_t* data, size_t count) {
 
 class QueueWriteTextureTests : public DawnTestWithParams<WriteTextureFormatParams> {
   protected:
-    void SetUp() override {
-        DawnTestWithParams::SetUp();
-        // TODO(crbug.com/dawn/2391): Stencil format is failing on ANGLE + SwiftShader, needs
-        // investigation.
-        DAWN_SUPPRESS_TEST_IF(IsANGLESwiftShader() &&
-                              utils::IsDepthOrStencilFormat(GetParam().mTextureFormat));
-    }
-
     static DataSpec MinimumDataSpec(wgpu::Extent3D writeSize,
                                     uint32_t overrideBytesPerRow = kStrideComputeDefault,
                                     uint32_t overrideRowsPerImage = kStrideComputeDefault) {
@@ -368,7 +408,7 @@ class QueueWriteTextureTests : public DawnTestWithParams<WriteTextureFormatParam
                 << textureSpec.copyOrigin.x + copySize.width << ", "
                 << textureSpec.copyOrigin.y + copySize.height << ")) region of "
                 << textureSpec.textureSize.width << " x " << textureSpec.textureSize.height
-                << " texture at mip level " << textureSpec.level << " layer " << slice << std::endl;
+                << " texture at mip level " << textureSpec.level << " layer " << slice << "\n";
 
             dataOffset += bytesPerImage;
         }
@@ -377,11 +417,6 @@ class QueueWriteTextureTests : public DawnTestWithParams<WriteTextureFormatParam
 
 // Test writing the whole texture for varying texture sizes.
 TEST_P(QueueWriteTextureTests, VaryingTextureSize) {
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
-
     for (unsigned int w : {127, 128}) {
         for (unsigned int h : {63, 64}) {
             for (unsigned int d : {1, 3, 4}) {
@@ -398,11 +433,6 @@ TEST_P(QueueWriteTextureTests, VaryingTextureSize) {
 
 // Test uploading a large amount of data with writeTexture.
 TEST_P(QueueWriteTextureTests, LargeWriteTexture) {
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
-
     TextureSpec textureSpec;
     textureSpec.textureSize = {2048, 2048, 2};
     textureSpec.copyOrigin = {0, 0, 0};
@@ -503,11 +533,6 @@ TEST_P(QueueWriteTextureTests, VaryingArrayWriteSize) {
 
 // Test writing to varying mips
 TEST_P(QueueWriteTextureTests, TextureWriteToMip) {
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
-
     constexpr uint32_t kWidth = 259;
     constexpr uint32_t kHeight = 127;
 
@@ -525,11 +550,6 @@ TEST_P(QueueWriteTextureTests, TextureWriteToMip) {
 
 // Test writing with different multiples of texel block size as data offset
 TEST_P(QueueWriteTextureTests, VaryingDataOffset) {
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
-
     constexpr uint32_t kWidth = 259;
     constexpr uint32_t kHeight = 127;
 
@@ -548,11 +568,6 @@ TEST_P(QueueWriteTextureTests, VaryingDataOffset) {
 
 // Test writing with rowsPerImage greater than needed.
 TEST_P(QueueWriteTextureTests, VaryingRowsPerImage) {
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
-
     constexpr uint32_t kWidth = 65;
     constexpr uint32_t kHeight = 31;
     constexpr uint32_t kDepth = 17;
@@ -582,11 +597,6 @@ TEST_P(QueueWriteTextureTests, VaryingRowsPerImage) {
 
 // Test with bytesPerRow greater than needed
 TEST_P(QueueWriteTextureTests, VaryingBytesPerRow) {
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
-
     constexpr uint32_t kWidth = 257;
     constexpr uint32_t kHeight = 129;
 
@@ -616,12 +626,15 @@ TEST_P(QueueWriteTextureTests, VaryingBytesPerRow) {
 // Test with bytesPerRow greater than needed for cube textures.
 // Made for testing compat behavior.
 TEST_P(QueueWriteTextureTests, VaryingBytesPerRowCube) {
+    auto format = GetParam().mTextureFormat;
     // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
     DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
     // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
     DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
     // TODO(crbug.com/dawn/2131): diagnose this failure on Win Angle D3D11
     DAWN_SUPPRESS_TEST_IF(IsANGLED3D11());
+    // TODO(crbug.com/dawn/42241333): diagnose stencil8 failure on Angle Swiftshader
+    DAWN_SUPPRESS_TEST_IF(format == wgpu::TextureFormat::Stencil8 && IsANGLESwiftShader());
 
     constexpr uint32_t kWidth = 257;
     constexpr uint32_t kHeight = 257;
@@ -633,8 +646,7 @@ TEST_P(QueueWriteTextureTests, VaryingBytesPerRowCube) {
     auto TestBody = [&](wgpu::Origin3D copyOrigin, wgpu::Extent3D copyExtent) {
         textureSpec.copyOrigin = copyOrigin;
         for (unsigned int b : {1, 2, 3, 4}) {
-            uint32_t bytesPerRow =
-                copyExtent.width * utils::GetTexelBlockSizeInBytes(GetParam().mTextureFormat) + b;
+            uint32_t bytesPerRow = copyExtent.width * utils::GetTexelBlockSizeInBytes(format) + b;
             DoTest(textureSpec, MinimumDataSpec(copyExtent, bytesPerRow), copyExtent,
                    wgpu::TextureViewDimension::Cube);
         }
@@ -642,7 +654,7 @@ TEST_P(QueueWriteTextureTests, VaryingBytesPerRowCube) {
 
     TestBody({0, 0, 0}, textureSpec.textureSize);
 
-    if (utils::IsDepthOrStencilFormat(GetParam().mTextureFormat)) {
+    if (utils::IsDepthOrStencilFormat(format)) {
         // The entire subresource must be copied when the format is a depth/stencil format.
         return;
     }
@@ -678,10 +690,6 @@ TEST_P(QueueWriteTextureTests, BytesPerRowWithOneRowCopy) {
 TEST_P(QueueWriteTextureTests, VaryingArrayBytesPerRow) {
     // TODO(crbug.com/dawn/2095): Failing on ANGLE + SwiftShader, needs investigation.
     DAWN_SUPPRESS_TEST_IF(IsANGLESwiftShader());
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
 
     constexpr uint32_t kWidth = 257;
     constexpr uint32_t kHeight = 129;
@@ -758,11 +766,6 @@ TEST_P(QueueWriteTextureTests, StrideSpecialCases) {
 // Testing a special code path: writing when dynamic uploader already contatins some unaligned
 // data, it might be necessary to use a ring buffer with properly aligned offset.
 TEST_P(QueueWriteTextureTests, UnalignedDynamicUploader) {
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
-
     utils::UnalignDynamicUploader(device);
 
     constexpr wgpu::Extent3D size = {10, 10, 1};
@@ -838,10 +841,6 @@ TEST_P(QueueWriteTextureSimpleTests, WriteTo64x1TextureFromUnalignedDynamicUploa
 TEST_P(QueueWriteTextureSimpleTests, WriteStencilAspectWithSourceOffsetUnalignedTo4) {
     // TODO(crbug.com/dawn/2095): Failing on ANGLE + SwiftShader, needs investigation.
     DAWN_SUPPRESS_TEST_IF(IsANGLESwiftShader());
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
 
     wgpu::TextureDescriptor textureDescriptor;
     textureDescriptor.format = wgpu::TextureFormat::Depth24PlusStencil8;
@@ -945,10 +944,6 @@ TEST_P(QueueWriteTextureSimpleTests, WriteDepthAspectAfterOtherQueueWriteTexture
 TEST_P(QueueWriteTextureSimpleTests, WriteStencilAspectAfterOtherQueueWriteTextureCalls) {
     // TODO(crbug.com/dawn/2095): Failing on ANGLE + SwiftShader, needs investigation.
     DAWN_SUPPRESS_TEST_IF(IsANGLESwiftShader());
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
 
     wgpu::TextureDescriptor textureDescriptor;
     textureDescriptor.format = wgpu::TextureFormat::Depth24PlusStencil8;

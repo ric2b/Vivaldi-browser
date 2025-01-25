@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <string>
 #include <vector>
 
@@ -752,11 +757,7 @@ class SignedExchangeSubresourcePrefetchBrowserTest
     enable_features.push_back(features::kSignedHTTPExchange);
     // Needed for reporting test. Doesn't significantly impact other tests.
     enable_features.push_back(
-        net::features::kPartitionNelAndReportingByNetworkIsolationKey);
-    enable_features.push_back(
         net::features::kPartitionConnectionsByNetworkIsolationKey);
-    enable_features.push_back(
-        net::features::kPartitionSSLSessionsByNetworkIsolationKey);
 
     feature_list_.InitWithFeatures(enable_features, disabled_features);
 

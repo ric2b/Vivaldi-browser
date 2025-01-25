@@ -380,31 +380,30 @@ bool InstallFromDiskImage(base::mac::ScopedAuthorizationRef authorization,
   return true;
 }
 
-// Launches the application at installed_path. The helper application
-// contained within install_path will be used for the relauncher process. This
-// keeps Launch Services from ever having to see or think about the helper
-// application on the disk image. The relauncher process will be asked to
-// call EjectAndTrashDiskImage on dmg_bsd_device_name.
+// Launches the application at `installed_path`. The helper application
+// contained within `installed_path` will be used for the relauncher process.
+// This keeps Launch Services from ever having to see or think about the helper
+// application on the disk image. The relauncher process will be asked to call
+// EjectAndTrashDiskImage on `dmg_bsd_device_name`.
 bool LaunchInstalledApp(NSString* installed_path,
                         const std::string& dmg_bsd_device_name) {
-  base::FilePath browser_path = base::apple::NSStringToFilePath(installed_path);
+  base::FilePath browser = base::apple::NSStringToFilePath(installed_path);
 
-  base::FilePath helper_path = browser_path.Append("Contents/Frameworks");
-  helper_path = helper_path.Append(chrome::kFrameworkName);
-  helper_path = helper_path.Append("Versions");
-  helper_path = helper_path.Append(
+  base::FilePath helper = browser.Append("Contents/Frameworks");
+  helper = helper.Append(chrome::kFrameworkName);
+  helper = helper.Append("Versions");
+  helper = helper.Append(
 #if defined(VIVALDI_BUILD)
       vivaldi::kVivaldiVersion
 #else
       chrome::kChromeVersion
 #endif
-      );
-  helper_path = helper_path.Append("Helpers");
-  helper_path = helper_path.Append(chrome::kHelperProcessExecutablePath);
+     );
+  helper = helper.Append("Helpers");
+  helper = helper.Append(chrome::kHelperProcessExecutablePath);
 
   std::vector<std::string> args =
       base::CommandLine::ForCurrentProcess()->argv();
-  args[0] = browser_path.value();
 
   std::vector<std::string> relauncher_args;
   if (!dmg_bsd_device_name.empty()) {
@@ -415,9 +414,8 @@ bool LaunchInstalledApp(NSString* installed_path,
     relauncher_args.push_back(dmg_arg);
   }
 
-  return mac_relauncher::RelaunchAppWithHelper(helper_path.value(),
-                                               relauncher_args,
-                                               args);
+  return mac_relauncher::RelaunchAppAtPathWithHelper(helper, browser,
+                                                     relauncher_args, args);
 }
 
 void ShowErrorDialog() {
@@ -457,7 +455,7 @@ bool MaybeInstallFromDiskImage() {
 
     NSArray* application_directories = NSSearchPathForDirectoriesInDomains(
         NSApplicationDirectory, NSLocalDomainMask, YES);
-    if (application_directories.count) {
+    if (!application_directories.count) {
       LOG(ERROR) << "NSSearchPathForDirectoriesInDomains: "
                  << "no local application directories";
       return false;

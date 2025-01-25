@@ -169,9 +169,15 @@ absl::StatusOr<DevicePutResultFn> HandleNumpyScalar(
   std::variant<T, SquashedT, void*> data;
   PrimitiveType type;
   // For extension types, ScalarAsCtype returns a pointer to the data.
-  if (std::is_same<T, xla::s4>()) {
+  if (std::is_same<T, xla::s2>()) {
+    PyArray_ScalarAsCtype(h.ptr(), &data.template emplace<2>());
+    type = S2;
+  } else if (std::is_same<T, xla::s4>()) {
     PyArray_ScalarAsCtype(h.ptr(), &data.template emplace<2>());
     type = S4;
+  } else if (std::is_same<T, xla::u2>()) {
+    PyArray_ScalarAsCtype(h.ptr(), &data.template emplace<2>());
+    type = U2;
   } else if (std::is_same<T, xla::u4>()) {
     PyArray_ScalarAsCtype(h.ptr(), &data.template emplace<2>());
     type = U4;
@@ -329,12 +335,14 @@ absl::StatusOr<DevicePutResultFn> HandlePyArray(
     return [ifrt_array = tsl::FormRef(ifrt_array), to_device, to_memory_kind,
             owning_pybuffer = py_array.weak_type()]() mutable
            -> absl::StatusOr<DevicePutResult> {
+      auto* ifrt_client = ifrt_array->client();
       TF_ASSIGN_OR_RETURN(
-          tsl::RCReference<ifrt::Array> copied_ifrt_array,
-          ifrt_array->Reshard(
-              ifrt::SingleDeviceSharding::Create(to_device, to_memory_kind),
-              ifrt::ArrayCopySemantics::kReuseInput));
-      return DevicePutResult(std::move(copied_ifrt_array),
+          auto copied_ifrt_arrays,
+          ifrt_client->CopyArrays(
+              absl::MakeSpan(&ifrt_array, 1),
+              ifrt::DeviceList(ifrt::DeviceList::Devices({to_device})),
+              to_memory_kind, ifrt::ArrayCopySemantics::kReuseInput));
+      return DevicePutResult(std::move(copied_ifrt_arrays[0]),
                              std::move(owning_pybuffer));
     };
   }
@@ -370,10 +378,16 @@ absl::StatusOr<DevicePutResultFn> DevicePut(nb::handle arg,
         // Python types (np_int64, np_float64, np_complex128).
         (*p)[dtypes.np_bool.ptr()] = HandleNumpyScalar<bool>;
         (*p)[dtypes.np_int4.ptr()] = HandleNumpyScalar<xla::s4>;
+        if (dtypes.np_int2.has_value()) {
+          (*p)[dtypes.np_int2->ptr()] = HandleNumpyScalar<xla::s2>;
+        }
         (*p)[dtypes.np_int8.ptr()] = HandleNumpyScalar<int8_t>;
         (*p)[dtypes.np_int16.ptr()] = HandleNumpyScalar<int16_t>;
         (*p)[dtypes.np_int32.ptr()] = HandleNumpyScalar<int32_t>;
         (*p)[dtypes.np_int64.ptr()] = HandleNumpyScalar<int64_t, int32_t>;
+        if (dtypes.np_uint2.has_value()) {
+          (*p)[dtypes.np_uint2->ptr()] = HandleNumpyScalar<xla::u2>;
+        }
         (*p)[dtypes.np_uint4.ptr()] = HandleNumpyScalar<xla::u4>;
         (*p)[dtypes.np_uint8.ptr()] = HandleNumpyScalar<uint8_t>;
         (*p)[dtypes.np_uint16.ptr()] = HandleNumpyScalar<uint16_t>;

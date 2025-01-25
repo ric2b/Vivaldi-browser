@@ -79,18 +79,13 @@ void CosmeticFilter::ShouldAllowWebRTC(const ::GURL& document_url,
 
     bool is_third_party = IsThirdParty(document_url, document_origin);
 
-    RulesIndex::ActivationsFound activations =
-        rules_index_manager_->rules_index()->FindMatchingActivationsRules(
-            document_url, document_origin, is_third_party, frame);
+    RulesIndex::ActivationResults activations =
+        rules_index_manager_->rules_index()->GetActivationsForFrame(
+            base::BindRepeating(&IsOriginWanted, service, group), frame,
+            document_url);
 
-    activations.in_allow_rules |=
-        rules_index_manager_->rules_index()
-            ->GetActivationsForFrame(
-                base::BindRepeating(&IsOriginWanted, service, group),
-                frame->GetParent())
-            .in_allow_rules;
-
-    if ((activations.in_allow_rules & flat::ActivationType_DOCUMENT) != 0) {
+    if (activations[flat::ActivationType_DOCUMENT].GetDecision().value_or(
+            flat::Decision_MODIFY) == flat::Decision_PASS) {
       continue;
     }
 
@@ -100,14 +95,15 @@ void CosmeticFilter::ShouldAllowWebRTC(const ::GURL& document_url,
           rules_index_manager_->rules_index()->FindMatchingBeforeRequestRule(
               ice_server, document_origin, flat::ResourceType_WEBRTC,
               is_third_party,
-              (activations.in_allow_rules &
-               flat::ActivationType_GENERIC_BLOCK));
+              (activations[flat::ActivationType_GENERIC_BLOCK]
+                   .GetDecision()
+                   .value_or(flat::Decision_MODIFY) == flat::Decision_PASS));
       if (request_filter_rule)
         break;
     }
 
     if (!request_filter_rule ||
-        request_filter_rule->options() & flat::OptionFlag_IS_ALLOW_RULE) {
+        request_filter_rule->decision() == flat::Decision_PASS) {
       continue;
     }
 

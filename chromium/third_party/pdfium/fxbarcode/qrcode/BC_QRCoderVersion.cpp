@@ -20,11 +20,6 @@
  * limitations under the License.
  */
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "fxbarcode/qrcode/BC_QRCoderVersion.h"
 
 #include <memory>
@@ -32,7 +27,7 @@
 
 #include "fxbarcode/common/BC_CommonBitMatrix.h"
 #include "fxbarcode/qrcode/BC_QRCoderBitVector.h"
-#include "fxbarcode/qrcode/BC_QRCoderECBlocksData.h"
+#include "fxbarcode/qrcode/BC_QRCoderECBlockData.h"
 #include "fxbarcode/qrcode/BC_QRCoderErrorCorrectionLevel.h"
 
 namespace {
@@ -42,12 +37,12 @@ std::vector<std::unique_ptr<CBC_QRCoderVersion>>* g_VERSION = nullptr;
 }  // namespace
 
 CBC_QRCoderVersion::CBC_QRCoderVersion(int32_t versionNumber,
-                                       const CBC_QRCoderECBlockData data[4])
+                                       const ECBlockDataRow& row)
     : m_versionNumber(versionNumber) {
-  m_ecBlocksArray[0] = std::make_unique<CBC_QRCoderECBlocks>(data[0]);
-  m_ecBlocksArray[1] = std::make_unique<CBC_QRCoderECBlocks>(data[1]);
-  m_ecBlocksArray[2] = std::make_unique<CBC_QRCoderECBlocks>(data[2]);
-  m_ecBlocksArray[3] = std::make_unique<CBC_QRCoderECBlocks>(data[3]);
+  m_ecBlocksArray[0] = std::make_unique<CBC_QRCoderECBlockData>(row[0]);
+  m_ecBlocksArray[1] = std::make_unique<CBC_QRCoderECBlockData>(row[1]);
+  m_ecBlocksArray[2] = std::make_unique<CBC_QRCoderECBlockData>(row[2]);
+  m_ecBlocksArray[3] = std::make_unique<CBC_QRCoderECBlockData>(row[3]);
   m_totalCodeWords = m_ecBlocksArray[0]->GetTotalDataCodeWords();
 }
 
@@ -70,7 +65,7 @@ const CBC_QRCoderVersion* CBC_QRCoderVersion::GetVersionForNumber(
   if (g_VERSION->empty()) {
     for (int i = 0; i < kMaxVersion; ++i) {
       g_VERSION->push_back(
-          std::make_unique<CBC_QRCoderVersion>(i + 1, fxbarcode::kECBData[i]));
+          std::make_unique<CBC_QRCoderVersion>(i + 1, kQRCoderECBDataTable[i]));
     }
   }
   if (versionNumber < 1 || versionNumber > kMaxVersion)
@@ -90,7 +85,7 @@ int32_t CBC_QRCoderVersion::GetDimensionForVersion() const {
   return 17 + 4 * m_versionNumber;
 }
 
-const CBC_QRCoderECBlocks* CBC_QRCoderVersion::GetECBlocksForLevel(
+const CBC_QRCoderECBlockData* CBC_QRCoderVersion::GetECBlocksForLevel(
     const CBC_QRCoderErrorCorrectionLevel& ecLevel) const {
   return m_ecBlocksArray[ecLevel.Ordinal()].get();
 }

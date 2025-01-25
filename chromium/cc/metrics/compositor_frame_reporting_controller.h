@@ -19,6 +19,11 @@
 #include "cc/metrics/frame_sequence_metrics.h"
 #include "cc/metrics/predictor_jank_tracker.h"
 #include "cc/metrics/scroll_jank_dropped_frame_tracker.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
+
+namespace ukm {
+class UkmRecorder;
+}
 
 namespace viz {
 struct FrameTimingDetails;
@@ -27,7 +32,6 @@ struct FrameTimingDetails;
 namespace cc {
 class DroppedFrameCounter;
 class EventLatencyTracker;
-class UkmManager;
 struct BeginMainFrameMetrics;
 struct FrameInfo;
 
@@ -70,12 +74,9 @@ class CC_EXPORT CompositorFrameReportingController {
   virtual void WillActivate();
   virtual void DidActivate();
   virtual void DidSubmitCompositorFrame(
-      uint32_t frame_token,
-      base::TimeTicks submit_time,
+      SubmitInfo& submit_info,
       const viz::BeginFrameId& current_frame_id,
-      const viz::BeginFrameId& last_activated_frame_id,
-      EventMetricsSet events_metrics,
-      bool has_missing_content);
+      const viz::BeginFrameId& last_activated_frame_id);
   virtual void DidNotProduceFrame(const viz::BeginFrameId& id,
                                   FrameSkippedReason skip_reason);
   virtual void OnFinishImplFrame(const viz::BeginFrameId& id);
@@ -86,7 +87,8 @@ class CC_EXPORT CompositorFrameReportingController {
 
   void NotifyReadyToCommit(std::unique_ptr<BeginMainFrameMetrics> details);
 
-  void SetUkmManager(UkmManager* manager);
+  void InitializeUkmManager(std::unique_ptr<ukm::UkmRecorder> recorder);
+  void SetSourceId(ukm::SourceId source_id);
 
   void AddActiveTracker(FrameSequenceTrackerType type);
   void RemoveActiveTracker(FrameSequenceTrackerType type);
@@ -198,6 +200,11 @@ class CC_EXPORT CompositorFrameReportingController {
   std::map<base::TimeTicks, CompositorFrameReporter::SmoothThread>
       smooth_thread_history_;
 
+  // Must outlive `reporters_` and `submitted_compositor_frames_` (which also
+  // have reporters), since destroying the reporters can flush frames to
+  // `global_trackers_`.
+  GlobalMetricsTrackers global_trackers_;
+
   // The latency reporter passed to each CompositorFrameReporter. Owned here
   // because it must be common among all reporters.
   // DO NOT reorder this line and the ones below. The latency_ukm_reporter_
@@ -234,8 +241,6 @@ class CC_EXPORT CompositorFrameReportingController {
 
   raw_ptr<const base::TickClock> tick_clock_ =
       base::DefaultTickClock::GetInstance();
-
-  GlobalMetricsTrackers global_trackers_;
 
   // When a frame with events metrics fails to be presented, its events metrics
   // will be added to this map. The first following presented frame will get

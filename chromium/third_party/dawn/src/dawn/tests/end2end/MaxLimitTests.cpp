@@ -220,14 +220,14 @@ TEST_P(MaxLimitTests, MaxBufferBindingSize) {
         bufDesc.usage = usage | wgpu::BufferUsage::CopyDst;
         wgpu::Buffer buffer = device.CreateBuffer(&bufDesc);
 
-        WGPUErrorType oomResult;
-        device.PopErrorScope([](WGPUErrorType type, const char*,
-                                void* userdata) { *static_cast<WGPUErrorType*>(userdata) = type; },
-                             &oomResult);
-        instance.ProcessEvents();
+        wgpu::ErrorType oomResult;
+        device.PopErrorScope(wgpu::CallbackMode::AllowProcessEvents,
+                             [&oomResult](wgpu::PopErrorScopeStatus, wgpu::ErrorType type,
+                                          const char*) { oomResult = type; });
         FlushWire();
+        instance.ProcessEvents();
         // Max buffer size is smaller than the max buffer binding size.
-        DAWN_TEST_UNSUPPORTED_IF(oomResult == WGPUErrorType_OutOfMemory);
+        DAWN_TEST_UNSUPPORTED_IF(oomResult == wgpu::ErrorType::OutOfMemory);
 
         wgpu::BufferDescriptor resultBufDesc;
         resultBufDesc.size = 8;
@@ -549,7 +549,16 @@ TEST_P(MaxLimitTests, MaxStorageBuffersPerShaderStage) {
 // used correctly. The test loads a different value from each binding, and writes 1 to a storage
 // buffer if all values are correct.
 TEST_P(MaxLimitTests, ReallyLargeBindGroup) {
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES());
+    // TODO(crbug.com/345758016): VVL produces a false-positive WAR hazard for this test.
+    // Remove this suppression once the issue is fixed.
+    DAWN_SUPPRESS_TEST_IF(IsVulkan() && IsBackendValidationEnabled());
+
+    // TODO(crbug.com/dawn/590): Crashing on ANGLE/D3D11.
+    DAWN_SUPPRESS_TEST_IF(IsANGLED3D11());
+
+    // TODO(crbug.com/dawn/590): Failing on Pixel4
+    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
+
     wgpu::Limits limits = GetSupportedLimits().limits;
 
     std::ostringstream interface;
@@ -594,13 +603,13 @@ TEST_P(MaxLimitTests, ReallyLargeBindGroup) {
             wgpu::TextureFormat::R8Unorm, expectedValue, wgpu::TextureUsage::TextureBinding);
         bgEntries.push_back({nullptr, binding, nullptr, 0, 0, nullptr, texture.CreateView()});
 
-        interface << "@group(0) @binding(" << binding++ << ") "
-                  << "var tex" << i << " : texture_2d<f32>;\n";
+        interface << "@group(0) @binding(" << binding++ << ") " << "var tex" << i
+                  << " : texture_2d<f32>;\n";
 
         bgEntries.push_back({nullptr, binding, nullptr, 0, 0, device.CreateSampler(), nullptr});
 
-        interface << "@group(0) @binding(" << binding++ << ")"
-                  << "var samp" << i << " : sampler;\n";
+        interface << "@group(0) @binding(" << binding++ << ")" << "var samp" << i
+                  << " : sampler;\n";
 
         body << "if (abs(textureSampleLevel(tex" << i << ", samp" << i
              << ", vec2f(0.5, 0.5), 0.0).r - " << expectedValue++ << ".0 / 255.0) > 0.0001) {\n";
@@ -612,8 +621,8 @@ TEST_P(MaxLimitTests, ReallyLargeBindGroup) {
             wgpu::TextureFormat::R32Uint, expectedValue, wgpu::TextureUsage::StorageBinding);
         bgEntries.push_back({nullptr, binding, nullptr, 0, 0, nullptr, texture.CreateView()});
 
-        interface << "@group(0) @binding(" << binding++ << ") "
-                  << "var image" << i << " : texture_storage_2d<r32uint, write>;\n";
+        interface << "@group(0) @binding(" << binding++ << ") " << "var image" << i
+                  << " : texture_storage_2d<r32uint, write>;\n";
 
         body << "_ = image" << i << ";";
     }
@@ -627,8 +636,8 @@ TEST_P(MaxLimitTests, ReallyLargeBindGroup) {
                 value : u32
             }
         )";
-        interface << "@group(0) @binding(" << binding++ << ") "
-                  << "var<uniform> ubuf" << i << " : UniformBuffer" << i << ";\n";
+        interface << "@group(0) @binding(" << binding++ << ") " << "var<uniform> ubuf" << i
+                  << " : UniformBuffer" << i << ";\n";
 
         body << "if (ubuf" << i << ".value != " << expectedValue++ << "u) {\n";
         body << "    return;\n";
@@ -644,8 +653,8 @@ TEST_P(MaxLimitTests, ReallyLargeBindGroup) {
                 value : u32
             }
         )";
-        interface << "@group(0) @binding(" << binding++ << ") "
-                  << "var<storage, read> sbuf" << i << " : ReadOnlyStorageBuffer" << i << ";\n";
+        interface << "@group(0) @binding(" << binding++ << ") " << "var<storage, read> sbuf" << i
+                  << " : ReadOnlyStorageBuffer" << i << ";\n";
 
         body << "if (sbuf" << i << ".value != " << expectedValue++ << "u) {\n";
         body << "    return;\n";
@@ -694,8 +703,13 @@ TEST_P(MaxLimitTests, ReallyLargeBindGroup) {
 // exercises an internal Vulkan maxFragmentCombinedOutputResources limit and makes sure that the
 // sub parts of the limit work as intended.
 TEST_P(MaxLimitTests, WriteToMaxFragmentCombinedOutputResources) {
-    // TODO(dawn:1692) Currently does not work on GL and GLES.
-    DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
+    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
+    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
+    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
+    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
+
+    // TODO(http://crbug.com/348199037): VUID-RuntimeSpirv-Location-06428
+    DAWN_SUPPRESS_TEST_IF(IsLinux() && IsVulkan() && IsNvidia());
 
     // Compute the number of each resource type (storage buffers and storage textures) such that
     // there is at least one color attachment, and as many of the buffer/textures as possible,
@@ -867,8 +881,9 @@ class MaxInterStageLimitTests : public MaxLimitTests {
     };
 
     void DoTest(const MaxInterStageLimitTestsSpec& spec) {
-        // Compat mode does not support sample index.
-        DAWN_TEST_UNSUPPORTED_IF(IsCompatibilityMode() && spec.hasSampleIndex);
+        // Compat mode does not support sample index or sample mask.
+        DAWN_TEST_UNSUPPORTED_IF(IsCompatibilityMode() &&
+                                 (spec.hasSampleIndex || spec.hasSampleMask));
 
         wgpu::RenderPipeline pipeline = CreateRenderPipeline(spec);
         EXPECT_NE(nullptr, pipeline.Get());
@@ -895,14 +910,13 @@ class MaxInterStageLimitTests : public MaxLimitTests {
     std::string GetInterStageVariableDeclarations(uint32_t interStageVariableCount) {
         std::stringstream stream;
 
-        stream << "struct VertexOut {" << std::endl;
+        stream << "struct VertexOut {\n";
 
         for (uint32_t location = 0; location < interStageVariableCount; ++location) {
-            stream << "@location(" << location << ") color" << location << " : vec4f, "
-                   << std::endl;
+            stream << "@location(" << location << ") color" << location << " : vec4f, \n";
         }
 
-        stream << "@builtin(position) pos : vec4f" << std::endl << "}" << std::endl;
+        stream << "@builtin(position) pos : vec4f\n}\n";
 
         return stream.str();
     }
@@ -911,9 +925,9 @@ class MaxInterStageLimitTests : public MaxLimitTests {
         std::stringstream stream;
 
         uint32_t interStageVariableCount = GetInterStageVariableCount(spec);
-        stream << GetInterStageVariableDeclarations(interStageVariableCount) << std::endl
-               << GetVertexShaderForTest(interStageVariableCount) << std::endl
-               << GetFragmentShaderForTest(interStageVariableCount, spec) << std::endl;
+        stream << GetInterStageVariableDeclarations(interStageVariableCount) << "\n"
+               << GetVertexShaderForTest(interStageVariableCount) << "\n"
+               << GetFragmentShaderForTest(interStageVariableCount, spec) << "\n";
         return utils::CreateShaderModule(device, stream.str().c_str());
     }
 
@@ -939,9 +953,9 @@ class MaxInterStageLimitTests : public MaxLimitTests {
                     stream << ", ";
                 }
             }
-            stream << ");" << std::endl;
+            stream << ");\n";
         }
-        stream << "return output;" << std::endl << "}" << std::endl;
+        stream << "return output;\n}\n";
         return stream.str();
     }
 
@@ -961,7 +975,7 @@ class MaxInterStageLimitTests : public MaxLimitTests {
         }
         // Ensure every inter-stage shader variable and built-in variable is used instead of being
         // optimized out.
-        stream << ") -> @location(0) vec4f {" << std::endl << "return input.pos";
+        stream << ") -> @location(0) vec4f {\nreturn input.pos";
         if (spec.hasFrontFacing) {
             stream << " + vec4f(f32(isFront), 0, 0, 1)";
         }
@@ -1142,15 +1156,15 @@ class MaxVertexAttributesPipelineCreationTests : public MaxLimitTests {
 
     wgpu::ShaderModule GetShaderModuleForTest(uint32_t maxVertexAttributes, const TestSpec& spec) {
         std::ostringstream sstream;
-        sstream << "struct VertexIn {" << std::endl;
+        sstream << "struct VertexIn {\n";
         for (uint32_t i = 0; i < maxVertexAttributes; ++i) {
-            sstream << "    @location(" << i << ") input" << i << " : vec4f," << std::endl;
+            sstream << "    @location(" << i << ") input" << i << " : vec4f,\n";
         }
         if (spec.hasVertexIndex) {
-            sstream << "    @builtin(vertex_index) VertexIndex : u32," << std::endl;
+            sstream << "    @builtin(vertex_index) VertexIndex : u32,\n";
         }
         if (spec.hasInstanceIndex) {
-            sstream << "    @builtin(instance_index) InstanceIndex : u32," << std::endl;
+            sstream << "    @builtin(instance_index) InstanceIndex : u32,\n";
         }
         sstream << R"(
             }
@@ -1168,7 +1182,7 @@ class MaxVertexAttributesPipelineCreationTests : public MaxLimitTests {
         if (spec.hasInstanceIndex) {
             sstream << " + vec4f(f32(input.InstanceIndex))";
         }
-        sstream << ";}" << std::endl;
+        sstream << ";}\n";
 
         sstream << R"(
             @fragment

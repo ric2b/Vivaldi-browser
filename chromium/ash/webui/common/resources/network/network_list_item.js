@@ -19,11 +19,12 @@ import './network_icon.js';
 import {assert} from '//resources/ash/common/assert.js';
 import {CellularSetupPageName} from '//resources/ash/common/cellular_setup/cellular_types.js';
 import {getESimProfileProperties} from '//resources/ash/common/cellular_setup/esim_manager_utils.js';
+import {CrPolicyIndicatorType} from '//resources/ash/common/cr_policy_indicator_behavior.js';
 import {FocusRowBehavior} from '//resources/ash/common/focus_row_behavior.js';
 import {I18nBehavior} from '//resources/ash/common/i18n_behavior.js';
 import {loadTimeData} from '//resources/ash/common/load_time_data.m.js';
 import {mojoString16ToString} from '//resources/js/mojo_type_util.js';
-import {ActivationStateType, CrosNetworkConfigInterface, GlobalPolicy, SecurityType} from '//resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
+import {ActivationStateType, CrosNetworkConfigInterface, GlobalPolicy, SecurityType, VpnType} from '//resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {ConnectionStateType, NetworkType, OncSource, PortalState} from '//resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {Polymer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -53,7 +54,9 @@ Polymer({
       reflectToAttribute: true,
       observer: 'disabledChanged_',
       computed: 'computeDisabled_(deviceState, deviceState.inhibitReason,' +
-          'disableItem, isUserLoggedIn_, isPSimPendingActivationNetwork_)',
+          'disableItem, isUserLoggedIn_, isPSimPendingActivationNetwork_,' +
+          'isBuiltInVpnManagementBlocked, networkState,' +
+          'networkState.typeState.vpn, networkState.typeState.vpn.type)',
     },
 
     /**
@@ -61,6 +64,11 @@ Polymer({
      * @type {boolean}
      */
     disableItem: Boolean,
+
+    isBuiltInVpnManagementBlocked: {
+      type: Boolean,
+      value: false,
+    },
 
     /** @type {!NetworkList.NetworkListItemType|undefined} */
     item: {
@@ -251,14 +259,6 @@ Polymer({
             loadTimeData.getBoolean('isUserLoggedIn');
       },
     },
-
-    isCellularCarrierLockEnabled_: {
-      type: Boolean,
-      value() {
-        return loadTimeData.valueExists('isCellularCarrierLockEnabled') &&
-            loadTimeData.getBoolean('isCellularCarrierLockEnabled');
-      },
-    },
   },
 
   /** @private {?CrosNetworkConfigInterface} */
@@ -302,6 +302,19 @@ Polymer({
         !!this.networkState.typeState.cellular &&
         !this.networkState.typeState.cellular.eid &&
         !!this.networkState.typeState.cellular.iccid;
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  isBuiltInVpn_() {
+    if (!this.networkState || this.networkState.type !== NetworkType.kVPN) {
+      return false;
+    }
+
+    const vpnType = this.networkState.typeState.vpn.type;
+    return vpnType === VpnType.kL2TPIPsec || vpnType === VpnType.kOpenVPN;
   },
 
   /** @private */
@@ -420,6 +433,9 @@ Polymer({
    */
   computeDisabled_() {
     if (this.disableItem) {
+      return true;
+    }
+    if (this.isBuiltInVpn_() && this.isBuiltInVpnManagementBlocked) {
       return true;
     }
     if (!this.deviceState) {
@@ -685,9 +701,8 @@ Polymer({
       // For carrier lock, display string is different from regular
       // pin lock
       if (this.networkState.typeState.cellular.simLocked) {
-        if (this.isCellularCarrierLockEnabled_ &&
-            this.networkState.typeState.cellular.simLockType ===
-                'network-pin') {
+        if (this.networkState.typeState.cellular.simLockType ===
+            'network-pin') {
           return this.i18n(
               'networkListItemUpdatedCellularSimCardCarrierLocked');
         }
@@ -704,6 +719,9 @@ Polymer({
     const connectionState = this.networkState.connectionState;
     if (OncMojo.connectionStateIsConnected(connectionState)) {
       if (this.isPortalState_(this.networkState.portalState)) {
+        if (this.networkState.type === NetworkType.kCellular) {
+          return this.i18n('networkListItemCellularSignIn');
+        }
         return this.i18n('networkListItemSignIn');
       }
       if (this.networkState.portalState === PortalState.kNoInternet) {
@@ -779,6 +797,9 @@ Polymer({
       return false;
     }
     if (this.isPSimPendingActivationNetwork_ || this.isPSimActivatingNetwork_) {
+      return true;
+    }
+    if (this.isBuiltInVpn_() && this.isBuiltInVpnManagementBlocked) {
       return true;
     }
     return !!networkState && !disabled_ && !this.shouldShowUnlockButton_();
@@ -1100,6 +1121,29 @@ Polymer({
    * @return {boolean}
    * @private
    */
+  shouldShowPolicyIcon_() {
+    if (this.isBuiltInVpn_() && this.isBuiltInVpnManagementBlocked) {
+      return true;
+    }
+
+    return !!this.networkState && this.isPolicySource(this.networkState.source);
+  },
+
+  /**
+   * @return {!CrPolicyIndicatorType}
+   */
+  getPolicyIcon_() {
+    if (this.isBuiltInVpn_() && this.isBuiltInVpnManagementBlocked) {
+      return CrPolicyIndicatorType.USER_POLICY;
+    }
+
+    return this.getIndicatorTypeForSource(this.networkState.source);
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
   isCellularNetworkScanning_() {
     if (!this.deviceState || !this.deviceState.scanning) {
       return false;
@@ -1133,8 +1177,7 @@ Polymer({
     if (!this.networkState || !this.networkState.typeState.cellular) {
       return false;
     }
-    if (this.isCellularCarrierLockEnabled_ &&
-        this.networkState.typeState.cellular.simLocked &&
+    if (this.networkState.typeState.cellular.simLocked &&
         this.networkState.typeState.cellular.simLockType === 'network-pin') {
       return false;
     }

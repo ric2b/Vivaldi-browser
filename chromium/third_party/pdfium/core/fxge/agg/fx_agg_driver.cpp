@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fxge/agg/fx_agg_driver.h"
 
 #include <math.h>
@@ -20,18 +15,21 @@
 #include "build/build_config.h"
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/check_op.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_2d_size.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/notreached.h"
 #include "core/fxcrt/span.h"
+#include "core/fxcrt/stl_util.h"
 #include "core/fxcrt/unowned_ptr_exclusion.h"
+#include "core/fxge/agg/cfx_agg_imagerenderer.h"
 #include "core/fxge/cfx_cliprgn.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
 #include "core/fxge/cfx_graphstatedata.h"
 #include "core/fxge/cfx_path.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
-#include "core/fxge/dib/cfx_imagerenderer.h"
 #include "core/fxge/dib/cfx_imagestretcher.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 
 // Ignore fallthrough warnings in agg23 headers.
 #if defined(__clang__)
@@ -61,75 +59,91 @@ CFX_PointF HardClip(const CFX_PointF& pos) {
                     std::clamp(pos.y, -kMaxPos, kMaxPos));
 }
 
-void RgbByteOrderCompositeRect(const RetainPtr<CFX_DIBitmap>& pBitmap,
+template <typename T>
+void DoAlphaMerge(T& pixel, int src_r, int src_g, int src_b, int src_alpha) {
+  pixel.red = FXDIB_ALPHA_MERGE(pixel.red, src_r, src_alpha);
+  pixel.green = FXDIB_ALPHA_MERGE(pixel.green, src_g, src_alpha);
+  pixel.blue = FXDIB_ALPHA_MERGE(pixel.blue, src_b, src_alpha);
+}
+
+void RgbByteOrderCompositeRect(const RetainPtr<CFX_DIBitmap>& bitmap,
                                int left,
                                int top,
                                int width,
                                int height,
-                               FX_ARGB argb) {
-  int src_alpha = FXARGB_A(argb);
-  if (src_alpha == 0)
+                               FX_ARGB src_argb) {
+  int src_alpha = FXARGB_A(src_argb);
+  if (src_alpha == 0) {
     return;
+  }
 
   FX_RECT rect(left, top, left + width, top + height);
-  rect.Intersect(0, 0, pBitmap->GetWidth(), pBitmap->GetHeight());
+  rect.Intersect(0, 0, bitmap->GetWidth(), bitmap->GetHeight());
   width = rect.Width();
-  int src_r = FXARGB_R(argb);
-  int src_g = FXARGB_G(argb);
-  int src_b = FXARGB_B(argb);
-  int Bpp = pBitmap->GetBPP() / 8;
-  int dib_argb = FXARGB_TOBGRORDERDIB(argb);
-  pdfium::span<uint8_t> pBuffer = pBitmap->GetWritableBuffer();
+  const int src_r = FXARGB_R(src_argb);
+  const int src_g = FXARGB_G(src_argb);
+  const int src_b = FXARGB_B(src_argb);
+  const int Bpp = bitmap->GetBPP() / 8;
   if (src_alpha == 255) {
+    if (Bpp == 4) {
+      const int src_abgr = FXARGB_TOBGRORDERDIB(src_argb);
+      for (int row = rect.top; row < rect.bottom; row++) {
+        auto dest_row_span = bitmap->GetWritableScanlineAs<uint32_t>(row);
+        fxcrt::Fill(dest_row_span.subspan(rect.left, width), src_abgr);
+      }
+      return;
+    }
+
     for (int row = rect.top; row < rect.bottom; row++) {
-      uint8_t* dest_scan =
-          pBuffer.subspan(row * pBitmap->GetPitch() + rect.left * Bpp).data();
-      if (Bpp == 4) {
-        std::fill_n(reinterpret_cast<uint32_t*>(dest_scan), width, dib_argb);
-      } else {
-        for (int col = 0; col < width; col++) {
-          *dest_scan++ = src_r;
-          *dest_scan++ = src_g;
-          *dest_scan++ = src_b;
-        }
+      auto dest_row_span =
+          bitmap->GetWritableScanlineAs<FX_RGB_STRUCT<uint8_t>>(row);
+      for (auto& rgb : dest_row_span.subspan(rect.left, width)) {
+        rgb.red = src_r;
+        rgb.green = src_g;
+        rgb.blue = src_b;
       }
     }
     return;
   }
-  bool bAlpha = pBitmap->IsAlphaFormat();
-  for (int row = rect.top; row < rect.bottom; row++) {
-    uint8_t* dest_scan =
-        pBuffer.subspan(row * pBitmap->GetPitch() + rect.left * Bpp).data();
-    if (bAlpha) {
-      for (int col = 0; col < width; col++) {
-        uint8_t back_alpha = dest_scan[3];
-        if (back_alpha == 0) {
-          FXARGB_SetRGBOrderDIB(dest_scan, argb);
-          dest_scan += 4;
+
+  if (bitmap->IsAlphaFormat()) {
+    for (int row = rect.top; row < rect.bottom; row++) {
+      auto dest_row_span =
+          bitmap->GetWritableScanlineAs<FX_RGBA_STRUCT<uint8_t>>(row);
+      for (auto& rgba : dest_row_span.subspan(rect.left, width)) {
+        if (rgba.alpha == 0) {
+          rgba.red = src_r;
+          rgba.green = src_g;
+          rgba.blue = src_b;
+          rgba.alpha = src_alpha;
           continue;
         }
-        uint8_t dest_alpha =
-            back_alpha + src_alpha - back_alpha * src_alpha / 255;
-        dest_scan[3] = dest_alpha;
-        int alpha_ratio = src_alpha * 255 / dest_alpha;
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, src_r, alpha_ratio);
-        dest_scan++;
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, src_g, alpha_ratio);
-        dest_scan++;
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, src_b, alpha_ratio);
-        dest_scan += 2;
+
+        const uint8_t dest_alpha =
+            rgba.alpha + src_alpha - rgba.alpha * src_alpha / 255;
+        const int alpha_ratio = src_alpha * 255 / dest_alpha;
+        DoAlphaMerge(rgba, src_r, src_g, src_b, alpha_ratio);
       }
-      continue;
     }
-    for (int col = 0; col < width; col++) {
-      *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, src_r, src_alpha);
-      dest_scan++;
-      *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, src_g, src_alpha);
-      dest_scan++;
-      *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, src_b, src_alpha);
-      dest_scan++;
-      if (Bpp == 4)
-        dest_scan++;
+    return;
+  }
+
+  if (Bpp == 4) {
+    for (int row = rect.top; row < rect.bottom; row++) {
+      auto dest_row_span =
+          bitmap->GetWritableScanlineAs<FX_RGBA_STRUCT<uint8_t>>(row);
+      for (auto& rgba : dest_row_span.subspan(rect.left, width)) {
+        DoAlphaMerge(rgba, src_r, src_g, src_b, src_alpha);
+      }
+    }
+    return;
+  }
+
+  for (int row = rect.top; row < rect.bottom; row++) {
+    auto dest_row_span =
+        bitmap->GetWritableScanlineAs<FX_RGB_STRUCT<uint8_t>>(row);
+    for (auto& rgb : dest_row_span.subspan(rect.left, width)) {
+      DoAlphaMerge(rgb, src_r, src_g, src_b, src_alpha);
     }
   }
 }
@@ -161,25 +175,37 @@ void RgbByteOrderTransferBitmap(RetainPtr<CFX_DIBitmap> pBitmap,
                                         .subspan(dest_x_offset);
   if (dest_format == src_format) {
     const size_t src_x_offset = Fx2DSizeOrDie(src_left, Bpp);
+    if (Bpp == 4) {
+      for (int row = 0; row < height; row++) {
+        UNSAFE_TODO({
+          uint8_t* dest_scan = dest_span.data();
+          const uint8_t* src_scan = pSrcBitmap->GetScanline(src_top + row)
+                                        .subspan(src_x_offset)
+                                        .data();
+          for (int col = 0; col < width; col++) {
+            FXARGB_SetRGBOrderDIB(dest_scan,
+                                  *reinterpret_cast<const uint32_t*>(src_scan));
+            dest_scan += 4;
+            src_scan += 4;
+          }
+        });
+        dest_span = dest_span.subspan(dest_pitch);
+      }
+      return;
+    }
+
     for (int row = 0; row < height; row++) {
-      uint8_t* dest_scan = dest_span.data();
-      const uint8_t* src_scan =
-          pSrcBitmap->GetScanline(src_top + row).subspan(src_x_offset).data();
-      if (Bpp == 4) {
-        for (int col = 0; col < width; col++) {
-          FXARGB_SetRGBOrderDIB(dest_scan,
-                                *reinterpret_cast<const uint32_t*>(src_scan));
-          dest_scan += 4;
-          src_scan += 4;
-        }
-      } else {
+      UNSAFE_TODO({
+        uint8_t* dest_scan = dest_span.data();
+        const uint8_t* src_scan =
+            pSrcBitmap->GetScanline(src_top + row).subspan(src_x_offset).data();
         for (int col = 0; col < width; col++) {
           *dest_scan++ = src_scan[2];
           *dest_scan++ = src_scan[1];
           *dest_scan++ = src_scan[0];
           src_scan += 3;
         }
-      }
+      });
       dest_span = dest_span.subspan(dest_pitch);
     }
     return;
@@ -189,19 +215,21 @@ void RgbByteOrderTransferBitmap(RetainPtr<CFX_DIBitmap> pBitmap,
     DCHECK_EQ(src_format, FXDIB_Format::kRgb32);
     const size_t src_x_offset = Fx2DSizeOrDie(src_left, 4);
     for (int row = 0; row < height; row++) {
-      uint8_t* dest_scan = dest_span.data();
-      const uint8_t* src_scan =
-          pSrcBitmap->GetScanline(src_top + row).subspan(src_x_offset).data();
-      for (int col = 0; col < width; col++) {
-        *dest_scan++ = src_scan[2];
-        *dest_scan++ = src_scan[1];
-        *dest_scan++ = src_scan[0];
-        src_scan += 4;
-      }
+      UNSAFE_TODO({
+        uint8_t* dest_scan = dest_span.data();
+        const uint8_t* src_scan =
+            pSrcBitmap->GetScanline(src_top + row).subspan(src_x_offset).data();
+        for (int col = 0; col < width; col++) {
+          *dest_scan++ = src_scan[2];
+          *dest_scan++ = src_scan[1];
+          *dest_scan++ = src_scan[0];
+          src_scan += 4;
+        }
+      });
       if (row < height - 1) {
-        // Since `dest_scan` was initialized in a way that takes `dest_x_offset`
-        // and `dest_y_offset` into account, it may go past the end of the span
-        // after processing the last row.
+        // Since `dest_scan` was initialized in a way that takes
+        // `dest_x_offset` and `dest_y_offset` into account, it may go past
+        // the end of the span after processing the last row.
         dest_span = dest_span.subspan(dest_pitch);
       }
     }
@@ -213,33 +241,38 @@ void RgbByteOrderTransferBitmap(RetainPtr<CFX_DIBitmap> pBitmap,
   if (src_format == FXDIB_Format::kRgb) {
     const size_t src_x_offset = Fx2DSizeOrDie(src_left, 3);
     for (int row = 0; row < height; row++) {
+      UNSAFE_TODO({
+        uint8_t* dest_scan = dest_span.data();
+        const uint8_t* src_scan =
+            pSrcBitmap->GetScanline(src_top + row).subspan(src_x_offset).data();
+        for (int col = 0; col < width; col++) {
+          FXARGB_SetDIB(dest_scan, ArgbEncode(0xff, src_scan[0], src_scan[1],
+                                              src_scan[2]));
+          dest_scan += 4;
+          src_scan += 3;
+        }
+      });
+      dest_span = dest_span.subspan(dest_pitch);
+    }
+    return;
+  }
+  if (src_format != FXDIB_Format::kRgb32) {
+    return;
+  }
+  DCHECK_EQ(dest_format, FXDIB_Format::kArgb);
+  const size_t src_x_offset = Fx2DSizeOrDie(src_left, 4);
+  for (int row = 0; row < height; row++) {
+    UNSAFE_TODO({
       uint8_t* dest_scan = dest_span.data();
       const uint8_t* src_scan =
           pSrcBitmap->GetScanline(src_top + row).subspan(src_x_offset).data();
       for (int col = 0; col < width; col++) {
         FXARGB_SetDIB(dest_scan,
                       ArgbEncode(0xff, src_scan[0], src_scan[1], src_scan[2]));
+        src_scan += 4;
         dest_scan += 4;
-        src_scan += 3;
       }
-      dest_span = dest_span.subspan(dest_pitch);
-    }
-    return;
-  }
-  if (src_format != FXDIB_Format::kRgb32)
-    return;
-  DCHECK_EQ(dest_format, FXDIB_Format::kArgb);
-  const size_t src_x_offset = Fx2DSizeOrDie(src_left, 4);
-  for (int row = 0; row < height; row++) {
-    uint8_t* dest_scan = dest_span.data();
-    const uint8_t* src_scan =
-        pSrcBitmap->GetScanline(src_top + row).subspan(src_x_offset).data();
-    for (int col = 0; col < width; col++) {
-      FXARGB_SetDIB(dest_scan,
-                    ArgbEncode(0xff, src_scan[0], src_scan[1], src_scan[2]));
-      src_scan += 4;
-      dest_scan += 4;
-    }
+    });
     dest_span = dest_span.subspan(dest_pitch);
   }
 }
@@ -421,14 +454,15 @@ class CFX_Renderer {
   }
 
   inline int GetSrcAlpha(const uint8_t* clip_scan, int col) const {
-    return clip_scan ? m_Alpha * clip_scan[col] / 255 : m_Alpha;
+    return clip_scan ? m_Alpha * UNSAFE_TODO(clip_scan[col]) / 255 : m_Alpha;
   }
 
   inline int GetSourceAlpha(const uint8_t* cover_scan,
                             const uint8_t* clip_scan,
                             int col) const {
-    return clip_scan ? m_Alpha * cover_scan[col] * clip_scan[col] / 255 / 255
-                     : m_Alpha * cover_scan[col] / 255;
+    return UNSAFE_TODO(clip_scan ? m_Alpha * cover_scan[col] * clip_scan[col] /
+                                       255 / 255
+                                 : m_Alpha * cover_scan[col] / 255);
   }
 
   inline int GetColStart(int span_left, int clip_left) const {
@@ -440,11 +474,13 @@ class CFX_Renderer {
                                              : clip_right - span_left;
   }
 
-  int m_Alpha;
-  int m_Red;
-  int m_Green;
-  int m_Blue;
-  int m_Gray;
+  const FX_BGR_STRUCT<uint8_t>& GetBGR() const {
+    return absl::get<FX_BGR_STRUCT<uint8_t>>(m_ColorData);
+  }
+  int GetGray() const { return absl::get<int>(m_ColorData); }
+
+  const int m_Alpha;
+  absl::variant<FX_BGR_STRUCT<uint8_t>, int> m_ColorData;
   const uint32_t m_Color;
   const bool m_bFullCover;
   const bool m_bRgbByteOrder;
@@ -468,136 +504,143 @@ void CFX_Renderer::CompositeSpan(uint8_t* dest_scan,
                                  const uint8_t* clip_scan) {
   int col_start = GetColStart(span_left, clip_left);
   int col_end = GetColEnd(span_left, span_len, clip_right);
-  if (Bpp) {
-    dest_scan += col_start * Bpp;
-    backdrop_scan += col_start * Bpp;
-  } else {
-    dest_scan += col_start / 8;
-    backdrop_scan += col_start / 8;
-  }
-  if (m_bRgbByteOrder) {
-    if (Bpp == 4 && bDestAlpha) {
-      for (int col = col_start; col < col_end; col++) {
-        int src_alpha = GetSrcAlpha(clip_scan, col);
-        uint8_t dest_alpha =
-            backdrop_scan[3] + src_alpha - backdrop_scan[3] * src_alpha / 255;
-        dest_scan[3] = dest_alpha;
-        int alpha_ratio = src_alpha * 255 / dest_alpha;
-        if (m_bFullCover) {
-          *dest_scan++ =
-              FXDIB_ALPHA_MERGE(*backdrop_scan++, m_Red, alpha_ratio);
-          *dest_scan++ =
-              FXDIB_ALPHA_MERGE(*backdrop_scan++, m_Green, alpha_ratio);
-          *dest_scan++ =
-              FXDIB_ALPHA_MERGE(*backdrop_scan++, m_Blue, alpha_ratio);
-          dest_scan++;
-          backdrop_scan++;
-        } else {
-          int r = FXDIB_ALPHA_MERGE(*backdrop_scan++, m_Red, alpha_ratio);
-          int g = FXDIB_ALPHA_MERGE(*backdrop_scan++, m_Green, alpha_ratio);
-          int b = FXDIB_ALPHA_MERGE(*backdrop_scan++, m_Blue, alpha_ratio);
-          backdrop_scan++;
+  const auto& bgr = GetBGR();
+  UNSAFE_TODO({
+    if (Bpp) {
+      dest_scan += col_start * Bpp;
+      backdrop_scan += col_start * Bpp;
+    } else {
+      dest_scan += col_start / 8;
+      backdrop_scan += col_start / 8;
+    }
+    if (m_bRgbByteOrder) {
+      if (Bpp == 4 && bDestAlpha) {
+        for (int col = col_start; col < col_end; col++) {
+          int src_alpha = GetSrcAlpha(clip_scan, col);
+          uint8_t dest_alpha =
+              backdrop_scan[3] + src_alpha - backdrop_scan[3] * src_alpha / 255;
+          dest_scan[3] = dest_alpha;
+          int alpha_ratio = src_alpha * 255 / dest_alpha;
+          if (m_bFullCover) {
+            *dest_scan++ =
+                FXDIB_ALPHA_MERGE(*backdrop_scan++, bgr.red, alpha_ratio);
+            *dest_scan++ =
+                FXDIB_ALPHA_MERGE(*backdrop_scan++, bgr.green, alpha_ratio);
+            *dest_scan++ =
+                FXDIB_ALPHA_MERGE(*backdrop_scan++, bgr.blue, alpha_ratio);
+            dest_scan++;
+            backdrop_scan++;
+          } else {
+            int r = FXDIB_ALPHA_MERGE(*backdrop_scan++, bgr.red, alpha_ratio);
+            int g = FXDIB_ALPHA_MERGE(*backdrop_scan++, bgr.green, alpha_ratio);
+            int b = FXDIB_ALPHA_MERGE(*backdrop_scan++, bgr.blue, alpha_ratio);
+            backdrop_scan++;
+            *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, r, cover_scan[col]);
+            dest_scan++;
+            *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, g, cover_scan[col]);
+            dest_scan++;
+            *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, b, cover_scan[col]);
+            dest_scan += 2;
+          }
+        }
+        return;
+      }
+      if (Bpp == 3 || Bpp == 4) {
+        for (int col = col_start; col < col_end; col++) {
+          int src_alpha = GetSrcAlpha(clip_scan, col);
+          int r = FXDIB_ALPHA_MERGE(*backdrop_scan++, bgr.red, src_alpha);
+          int g = FXDIB_ALPHA_MERGE(*backdrop_scan++, bgr.green, src_alpha);
+          int b = FXDIB_ALPHA_MERGE(*backdrop_scan, bgr.blue, src_alpha);
+          backdrop_scan += Bpp - 2;
           *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, r, cover_scan[col]);
           dest_scan++;
           *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, g, cover_scan[col]);
           dest_scan++;
           *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, b, cover_scan[col]);
-          dest_scan += 2;
+          dest_scan += Bpp - 2;
         }
+      }
+      return;
+    }
+    if (Bpp == 4 && bDestAlpha) {
+      for (int col = col_start; col < col_end; col++) {
+        int src_alpha = GetSrcAlpha(clip_scan, col);
+        int src_alpha_covered = src_alpha * cover_scan[col] / 255;
+        if (src_alpha_covered == 0) {
+          dest_scan += 4;
+          continue;
+        }
+        if (cover_scan[col] == 255) {
+          dest_scan[3] = src_alpha_covered;
+          *dest_scan++ = bgr.blue;
+          *dest_scan++ = bgr.green;
+          *dest_scan = bgr.red;
+          dest_scan += 2;
+          continue;
+        }
+        if (dest_scan[3] == 0) {
+          dest_scan[3] = src_alpha_covered;
+          *dest_scan++ = bgr.blue;
+          *dest_scan++ = bgr.green;
+          *dest_scan = bgr.red;
+          dest_scan += 2;
+          continue;
+        }
+        uint8_t cover = cover_scan[col];
+        dest_scan[3] = FXDIB_ALPHA_MERGE(dest_scan[3], src_alpha, cover);
+        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.blue, cover);
+        dest_scan++;
+        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.green, cover);
+        dest_scan++;
+        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.red, cover);
+        dest_scan += 2;
       }
       return;
     }
     if (Bpp == 3 || Bpp == 4) {
       for (int col = col_start; col < col_end; col++) {
         int src_alpha = GetSrcAlpha(clip_scan, col);
-        int r = FXDIB_ALPHA_MERGE(*backdrop_scan++, m_Red, src_alpha);
-        int g = FXDIB_ALPHA_MERGE(*backdrop_scan++, m_Green, src_alpha);
-        int b = FXDIB_ALPHA_MERGE(*backdrop_scan, m_Blue, src_alpha);
+        if (m_bFullCover) {
+          *dest_scan++ =
+              FXDIB_ALPHA_MERGE(*backdrop_scan++, bgr.blue, src_alpha);
+          *dest_scan++ =
+              FXDIB_ALPHA_MERGE(*backdrop_scan++, bgr.green, src_alpha);
+          *dest_scan = FXDIB_ALPHA_MERGE(*backdrop_scan, bgr.red, src_alpha);
+          dest_scan += Bpp - 2;
+          backdrop_scan += Bpp - 2;
+          continue;
+        }
+        int b = FXDIB_ALPHA_MERGE(*backdrop_scan++, bgr.blue, src_alpha);
+        int g = FXDIB_ALPHA_MERGE(*backdrop_scan++, bgr.green, src_alpha);
+        int r = FXDIB_ALPHA_MERGE(*backdrop_scan, bgr.red, src_alpha);
         backdrop_scan += Bpp - 2;
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, r, cover_scan[col]);
+        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, b, cover_scan[col]);
         dest_scan++;
         *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, g, cover_scan[col]);
         dest_scan++;
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, b, cover_scan[col]);
+        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, r, cover_scan[col]);
         dest_scan += Bpp - 2;
       }
+      return;
     }
-    return;
-  }
-  if (Bpp == 4 && bDestAlpha) {
-    for (int col = col_start; col < col_end; col++) {
-      int src_alpha = GetSrcAlpha(clip_scan, col);
-      int src_alpha_covered = src_alpha * cover_scan[col] / 255;
-      if (src_alpha_covered == 0) {
-        dest_scan += 4;
-        continue;
+    if (Bpp == 1) {
+      const int gray = GetGray();
+      for (int col = col_start; col < col_end; col++) {
+        int src_alpha = GetSrcAlpha(clip_scan, col);
+        if (m_bFullCover) {
+          *dest_scan = FXDIB_ALPHA_MERGE(*backdrop_scan++, gray, src_alpha);
+          continue;
+        }
+        int gray_merged = FXDIB_ALPHA_MERGE(*backdrop_scan++, gray, src_alpha);
+        *dest_scan =
+            FXDIB_ALPHA_MERGE(*dest_scan, gray_merged, cover_scan[col]);
+        dest_scan++;
       }
-      if (cover_scan[col] == 255) {
-        dest_scan[3] = src_alpha_covered;
-        *dest_scan++ = m_Blue;
-        *dest_scan++ = m_Green;
-        *dest_scan = m_Red;
-        dest_scan += 2;
-        continue;
-      }
-      if (dest_scan[3] == 0) {
-        dest_scan[3] = src_alpha_covered;
-        *dest_scan++ = m_Blue;
-        *dest_scan++ = m_Green;
-        *dest_scan = m_Red;
-        dest_scan += 2;
-        continue;
-      }
-      uint8_t cover = cover_scan[col];
-      dest_scan[3] = FXDIB_ALPHA_MERGE(dest_scan[3], src_alpha, cover);
-      *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Blue, cover);
-      dest_scan++;
-      *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Green, cover);
-      dest_scan++;
-      *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Red, cover);
-      dest_scan += 2;
+      return;
     }
-    return;
-  }
-  if (Bpp == 3 || Bpp == 4) {
-    for (int col = col_start; col < col_end; col++) {
-      int src_alpha = GetSrcAlpha(clip_scan, col);
-      if (m_bFullCover) {
-        *dest_scan++ = FXDIB_ALPHA_MERGE(*backdrop_scan++, m_Blue, src_alpha);
-        *dest_scan++ = FXDIB_ALPHA_MERGE(*backdrop_scan++, m_Green, src_alpha);
-        *dest_scan = FXDIB_ALPHA_MERGE(*backdrop_scan, m_Red, src_alpha);
-        dest_scan += Bpp - 2;
-        backdrop_scan += Bpp - 2;
-        continue;
-      }
-      int b = FXDIB_ALPHA_MERGE(*backdrop_scan++, m_Blue, src_alpha);
-      int g = FXDIB_ALPHA_MERGE(*backdrop_scan++, m_Green, src_alpha);
-      int r = FXDIB_ALPHA_MERGE(*backdrop_scan, m_Red, src_alpha);
-      backdrop_scan += Bpp - 2;
-      *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, b, cover_scan[col]);
-      dest_scan++;
-      *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, g, cover_scan[col]);
-      dest_scan++;
-      *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, r, cover_scan[col]);
-      dest_scan += Bpp - 2;
-    }
-    return;
-  }
-  if (Bpp == 1) {
-    for (int col = col_start; col < col_end; col++) {
-      int src_alpha = GetSrcAlpha(clip_scan, col);
-      if (m_bFullCover) {
-        *dest_scan = FXDIB_ALPHA_MERGE(*backdrop_scan++, m_Gray, src_alpha);
-        continue;
-      }
-      int gray = FXDIB_ALPHA_MERGE(*backdrop_scan++, m_Gray, src_alpha);
-      *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, gray, cover_scan[col]);
-      dest_scan++;
-    }
-    return;
-  }
-  CompositeSpan1bppHelper(dest_scan, col_start, col_end, cover_scan, clip_scan,
-                          span_left);
+    CompositeSpan1bppHelper(dest_scan, col_start, col_end, cover_scan,
+                            clip_scan, span_left);
+  });
 }
 
 void CFX_Renderer::CompositeSpan1bpp(uint8_t* dest_scan,
@@ -611,7 +654,7 @@ void CFX_Renderer::CompositeSpan1bpp(uint8_t* dest_scan,
   DCHECK(!m_bRgbByteOrder);
   int col_start = GetColStart(span_left, clip_left);
   int col_end = GetColEnd(span_left, span_len, clip_right);
-  dest_scan += col_start / 8;
+  UNSAFE_TODO(dest_scan += col_start / 8);
   CompositeSpan1bppHelper(dest_scan, col_start, col_end, cover_scan, clip_scan,
                           span_left);
 }
@@ -627,17 +670,21 @@ void CFX_Renderer::CompositeSpanGray(uint8_t* dest_scan,
   DCHECK(!m_bRgbByteOrder);
   int col_start = GetColStart(span_left, clip_left);
   int col_end = GetColEnd(span_left, span_len, clip_right);
-  dest_scan += col_start;
-  for (int col = col_start; col < col_end; col++) {
-    int src_alpha = GetSourceAlpha(cover_scan, clip_scan, col);
-    if (src_alpha) {
-      if (src_alpha == 255)
-        *dest_scan = m_Gray;
-      else
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Gray, src_alpha);
+  const int gray = GetGray();
+  UNSAFE_TODO({
+    dest_scan += col_start;
+    for (int col = col_start; col < col_end; col++) {
+      int src_alpha = GetSourceAlpha(cover_scan, clip_scan, col);
+      if (src_alpha) {
+        if (src_alpha == 255) {
+          *dest_scan = gray;
+        } else {
+          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, gray, src_alpha);
+        }
+      }
+      dest_scan++;
     }
-    dest_scan++;
-  }
+  });
 }
 
 void CFX_Renderer::CompositeSpanARGB(uint8_t* dest_scan,
@@ -650,8 +697,35 @@ void CFX_Renderer::CompositeSpanARGB(uint8_t* dest_scan,
                                      const uint8_t* clip_scan) {
   int col_start = GetColStart(span_left, clip_left);
   int col_end = GetColEnd(span_left, span_len, clip_right);
-  dest_scan += col_start * Bpp;
-  if (m_bRgbByteOrder) {
+  const auto& bgr = GetBGR();
+  UNSAFE_TODO({
+    dest_scan += col_start * Bpp;
+    if (m_bRgbByteOrder) {
+      for (int col = col_start; col < col_end; col++) {
+        int src_alpha = m_bFullCover
+                            ? GetSrcAlpha(clip_scan, col)
+                            : GetSourceAlpha(cover_scan, clip_scan, col);
+        if (src_alpha) {
+          if (src_alpha == 255) {
+            *(reinterpret_cast<uint32_t*>(dest_scan)) = m_Color;
+          } else {
+            uint8_t dest_alpha =
+                dest_scan[3] + src_alpha - dest_scan[3] * src_alpha / 255;
+            dest_scan[3] = dest_alpha;
+            int alpha_ratio = src_alpha * 255 / dest_alpha;
+            *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.red, alpha_ratio);
+            dest_scan++;
+            *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.green, alpha_ratio);
+            dest_scan++;
+            *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.blue, alpha_ratio);
+            dest_scan += 2;
+            continue;
+          }
+        }
+        dest_scan += 4;
+      }
+      return;
+    }
     for (int col = col_start; col < col_end; col++) {
       int src_alpha = m_bFullCover ? GetSrcAlpha(clip_scan, col)
                                    : GetSourceAlpha(cover_scan, clip_scan, col);
@@ -659,53 +733,30 @@ void CFX_Renderer::CompositeSpanARGB(uint8_t* dest_scan,
         if (src_alpha == 255) {
           *(reinterpret_cast<uint32_t*>(dest_scan)) = m_Color;
         } else {
+          if (dest_scan[3] == 0) {
+            dest_scan[3] = src_alpha;
+            *dest_scan++ = bgr.blue;
+            *dest_scan++ = bgr.green;
+            *dest_scan = bgr.red;
+            dest_scan += 2;
+            continue;
+          }
           uint8_t dest_alpha =
               dest_scan[3] + src_alpha - dest_scan[3] * src_alpha / 255;
           dest_scan[3] = dest_alpha;
           int alpha_ratio = src_alpha * 255 / dest_alpha;
-          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Red, alpha_ratio);
+          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.blue, alpha_ratio);
           dest_scan++;
-          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Green, alpha_ratio);
+          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.green, alpha_ratio);
           dest_scan++;
-          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Blue, alpha_ratio);
+          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.red, alpha_ratio);
           dest_scan += 2;
           continue;
         }
       }
-      dest_scan += 4;
+      dest_scan += Bpp;
     }
-    return;
-  }
-  for (int col = col_start; col < col_end; col++) {
-    int src_alpha = m_bFullCover ? GetSrcAlpha(clip_scan, col)
-                                 : GetSourceAlpha(cover_scan, clip_scan, col);
-    if (src_alpha) {
-      if (src_alpha == 255) {
-        *(reinterpret_cast<uint32_t*>(dest_scan)) = m_Color;
-      } else {
-        if (dest_scan[3] == 0) {
-          dest_scan[3] = src_alpha;
-          *dest_scan++ = m_Blue;
-          *dest_scan++ = m_Green;
-          *dest_scan = m_Red;
-          dest_scan += 2;
-          continue;
-        }
-        uint8_t dest_alpha =
-            dest_scan[3] + src_alpha - dest_scan[3] * src_alpha / 255;
-        dest_scan[3] = dest_alpha;
-        int alpha_ratio = src_alpha * 255 / dest_alpha;
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Blue, alpha_ratio);
-        dest_scan++;
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Green, alpha_ratio);
-        dest_scan++;
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Red, alpha_ratio);
-        dest_scan += 2;
-        continue;
-      }
-    }
-    dest_scan += Bpp;
-  }
+  });
 }
 
 void CFX_Renderer::CompositeSpanRGB(uint8_t* dest_scan,
@@ -718,59 +769,62 @@ void CFX_Renderer::CompositeSpanRGB(uint8_t* dest_scan,
                                     const uint8_t* clip_scan) {
   int col_start = GetColStart(span_left, clip_left);
   int col_end = GetColEnd(span_left, span_len, clip_right);
-  dest_scan += col_start * Bpp;
-  if (m_bRgbByteOrder) {
+  const auto& bgr = GetBGR();
+  UNSAFE_TODO({
+    dest_scan += col_start * Bpp;
+    if (m_bRgbByteOrder) {
+      for (int col = col_start; col < col_end; col++) {
+        int src_alpha = GetSourceAlpha(cover_scan, clip_scan, col);
+        if (src_alpha) {
+          if (src_alpha == 255) {
+            if (Bpp == 4) {
+              *(uint32_t*)dest_scan = m_Color;
+            } else if (Bpp == 3) {
+              *dest_scan++ = bgr.red;
+              *dest_scan++ = bgr.green;
+              *dest_scan++ = bgr.blue;
+              continue;
+            }
+          } else {
+            *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.red, src_alpha);
+            dest_scan++;
+            *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.green, src_alpha);
+            dest_scan++;
+            *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.blue, src_alpha);
+            dest_scan += Bpp - 2;
+            continue;
+          }
+        }
+        dest_scan += Bpp;
+      }
+      return;
+    }
     for (int col = col_start; col < col_end; col++) {
-      int src_alpha = GetSourceAlpha(cover_scan, clip_scan, col);
+      int src_alpha = m_bFullCover ? GetSrcAlpha(clip_scan, col)
+                                   : GetSourceAlpha(cover_scan, clip_scan, col);
       if (src_alpha) {
         if (src_alpha == 255) {
           if (Bpp == 4) {
             *(uint32_t*)dest_scan = m_Color;
           } else if (Bpp == 3) {
-            *dest_scan++ = m_Red;
-            *dest_scan++ = m_Green;
-            *dest_scan++ = m_Blue;
+            *dest_scan++ = bgr.blue;
+            *dest_scan++ = bgr.green;
+            *dest_scan++ = bgr.red;
             continue;
           }
         } else {
-          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Red, src_alpha);
+          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.blue, src_alpha);
           dest_scan++;
-          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Green, src_alpha);
+          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.green, src_alpha);
           dest_scan++;
-          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Blue, src_alpha);
+          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, bgr.red, src_alpha);
           dest_scan += Bpp - 2;
           continue;
         }
       }
       dest_scan += Bpp;
     }
-    return;
-  }
-  for (int col = col_start; col < col_end; col++) {
-    int src_alpha = m_bFullCover ? GetSrcAlpha(clip_scan, col)
-                                 : GetSourceAlpha(cover_scan, clip_scan, col);
-    if (src_alpha) {
-      if (src_alpha == 255) {
-        if (Bpp == 4) {
-          *(uint32_t*)dest_scan = m_Color;
-        } else if (Bpp == 3) {
-          *dest_scan++ = m_Blue;
-          *dest_scan++ = m_Green;
-          *dest_scan++ = m_Red;
-          continue;
-        }
-      } else {
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Blue, src_alpha);
-        dest_scan++;
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Green, src_alpha);
-        dest_scan++;
-        *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, m_Red, src_alpha);
-        dest_scan += Bpp - 2;
-        continue;
-      }
-    }
-    dest_scan += Bpp;
-  }
+  });
 }
 
 CFX_Renderer::CFX_Renderer(const RetainPtr<CFX_DIBitmap>& pDevice,
@@ -791,14 +845,16 @@ CFX_Renderer::CFX_Renderer(const RetainPtr<CFX_DIBitmap>& pDevice,
       m_CompositeSpanFunc(GetCompositeSpanFunc(m_pDevice)) {
   if (m_pDevice->GetBPP() == 8) {
     DCHECK(!m_bRgbByteOrder);
-    if (m_pDevice->IsMaskFormat())
-      m_Gray = 255;
-    else
-      m_Gray = FXRGB2GRAY(FXARGB_R(color), FXARGB_G(color), FXARGB_B(color));
+    if (m_pDevice->IsMaskFormat()) {
+      m_ColorData = 255;
+    } else {
+      m_ColorData =
+          FXRGB2GRAY(FXARGB_R(color), FXARGB_G(color), FXARGB_B(color));
+    }
     return;
   }
 
-  std::tie(m_Alpha, m_Red, m_Green, m_Blue) = ArgbDecode(color);
+  m_ColorData = ArgbToBGRStruct(color);
 }
 
 template <class Scanline>
@@ -819,39 +875,43 @@ void CFX_Renderer::render(const Scanline& sl) {
   bool bDestAlpha = m_pDevice->IsAlphaFormat() || m_pDevice->IsMaskFormat();
   unsigned num_spans = sl.num_spans();
   typename Scanline::const_iterator span = sl.begin();
-  while (true) {
-    if (span->len <= 0)
-      break;
+  UNSAFE_TODO({
+    while (true) {
+      if (span->len <= 0) {
+        break;
+      }
 
-    int x = span->x;
-    uint8_t* dest_pos = nullptr;
-    const uint8_t* backdrop_pos = nullptr;
-    if (Bpp) {
-      backdrop_pos = backdrop_scan ? backdrop_scan + x * Bpp : nullptr;
-      dest_pos = dest_scan + x * Bpp;
-    } else {
-      dest_pos = dest_scan + x / 8;
-      backdrop_pos = backdrop_scan ? backdrop_scan + x / 8 : nullptr;
-    }
-    const uint8_t* clip_pos = nullptr;
-    if (m_pClipMask) {
-      // TODO(crbug.com/1382604): use subspan arithmetic.
-      clip_pos = m_pClipMask->GetBuffer().data() +
-                 (y - m_ClipBox.top) * m_pClipMask->GetPitch() + x -
-                 m_ClipBox.left;
-    }
-    if (backdrop_pos) {
-      CompositeSpan(dest_pos, backdrop_pos, Bpp, bDestAlpha, x, span->len,
-                    span->covers, m_ClipBox.left, m_ClipBox.right, clip_pos);
-    } else {
-      (this->*m_CompositeSpanFunc)(dest_pos, Bpp, x, span->len, span->covers,
-                                   m_ClipBox.left, m_ClipBox.right, clip_pos);
-    }
-    if (--num_spans == 0)
-      break;
+      int x = span->x;
+      uint8_t* dest_pos = nullptr;
+      const uint8_t* backdrop_pos = nullptr;
+      if (Bpp) {
+        backdrop_pos = backdrop_scan ? backdrop_scan + x * Bpp : nullptr;
+        dest_pos = dest_scan + x * Bpp;
+      } else {
+        dest_pos = dest_scan + x / 8;
+        backdrop_pos = backdrop_scan ? backdrop_scan + x / 8 : nullptr;
+      }
+      const uint8_t* clip_pos = nullptr;
+      if (m_pClipMask) {
+        // TODO(crbug.com/1382604): use subspan arithmetic.
+        clip_pos = m_pClipMask->GetBuffer().data() +
+                   (y - m_ClipBox.top) * m_pClipMask->GetPitch() + x -
+                   m_ClipBox.left;
+      }
+      if (backdrop_pos) {
+        CompositeSpan(dest_pos, backdrop_pos, Bpp, bDestAlpha, x, span->len,
+                      span->covers, m_ClipBox.left, m_ClipBox.right, clip_pos);
+      } else {
+        (this->*m_CompositeSpanFunc)(dest_pos, Bpp, x, span->len, span->covers,
+                                     m_ClipBox.left, m_ClipBox.right, clip_pos);
+      }
+      if (--num_spans == 0) {
+        break;
+      }
 
-    ++span;
-  }
+      ++span;
+    }
+  });
 }
 
 void CFX_Renderer::CompositeSpan1bppHelper(uint8_t* dest_scan,
@@ -870,16 +930,19 @@ void CFX_Renderer::CompositeSpan1bppHelper(uint8_t* dest_scan,
     index = (static_cast<uint8_t>(m_Color) == 0xff) ? 1 : 0;
   }
   uint8_t* dest_scan1 = dest_scan;
-  for (int col = col_start; col < col_end; col++) {
-    int src_alpha = GetSourceAlpha(cover_scan, clip_scan, col);
-    if (src_alpha) {
-      if (!index)
-        *dest_scan1 &= ~(1 << (7 - (col + span_left) % 8));
-      else
-        *dest_scan1 |= 1 << (7 - (col + span_left) % 8);
+  UNSAFE_TODO({
+    for (int col = col_start; col < col_end; col++) {
+      int src_alpha = GetSourceAlpha(cover_scan, clip_scan, col);
+      if (src_alpha) {
+        if (!index) {
+          *dest_scan1 &= ~(1 << (7 - (col + span_left) % 8));
+        } else {
+          *dest_scan1 |= 1 << (7 - (col + span_left) % 8);
+        }
+      }
+      dest_scan1 = dest_scan + (span_left % 8 + col - col_start + 1) / 8;
     }
-    dest_scan1 = dest_scan + (span_left % 8 + col - col_start + 1) / 8;
-  }
+  });
 }
 
 template <class BaseRenderer>
@@ -909,7 +972,7 @@ class RendererScanLineAaOffset {
       if (--num_spans == 0)
         break;
 
-      ++span;
+      UNSAFE_TODO(++span);
     }
   }
 
@@ -1060,23 +1123,22 @@ void CFX_AggDeviceDriver::SetClipMask(agg::rasterizer_scanline_aa& rasterizer) {
   FX_RECT path_rect(rasterizer.min_x(), rasterizer.min_y(),
                     rasterizer.max_x() + 1, rasterizer.max_y() + 1);
   path_rect.Intersect(m_pClipRgn->GetBox());
-  if (path_rect.IsEmpty()) {
-    return;
-  }
   auto pThisLayer = pdfium::MakeRetain<CFX_DIBitmap>();
-  CHECK(pThisLayer->Create(path_rect.Width(), path_rect.Height(),
-                           FXDIB_Format::k8bppMask));
-  agg::rendering_buffer raw_buf(pThisLayer->GetWritableBuffer().data(),
-                                pThisLayer->GetWidth(), pThisLayer->GetHeight(),
-                                pThisLayer->GetPitch());
-  agg::pixfmt_gray8 pixel_buf(raw_buf);
-  agg::renderer_base<agg::pixfmt_gray8> base_buf(pixel_buf);
-  RendererScanLineAaOffset<agg::renderer_base<agg::pixfmt_gray8>> final_render(
-      base_buf, path_rect.left, path_rect.top);
-  final_render.color(agg::gray8(255));
-  agg::scanline_u8 scanline;
-  agg::render_scanlines(rasterizer, scanline, final_render,
-                        m_FillOptions.aliased_path);
+  if (!path_rect.IsEmpty()) {
+    CHECK(pThisLayer->Create(path_rect.Width(), path_rect.Height(),
+                             FXDIB_Format::k8bppMask));
+    agg::rendering_buffer raw_buf(
+        pThisLayer->GetWritableBuffer().data(), pThisLayer->GetWidth(),
+        pThisLayer->GetHeight(), pThisLayer->GetPitch());
+    agg::pixfmt_gray8 pixel_buf(raw_buf);
+    agg::renderer_base<agg::pixfmt_gray8> base_buf(pixel_buf);
+    RendererScanLineAaOffset<agg::renderer_base<agg::pixfmt_gray8>>
+        final_render(base_buf, path_rect.left, path_rect.top);
+    final_render.color(agg::gray8(255));
+    agg::scanline_u8 scanline;
+    agg::render_scanlines(rasterizer, scanline, final_render,
+                          m_FillOptions.aliased_path);
+  }
   m_pClipRgn->IntersectMaskF(path_rect.left, path_rect.top,
                              std::move(pThisLayer));
 }
@@ -1239,8 +1301,7 @@ bool CFX_AggDeviceDriver::FillRectWithBlend(const FX_RECT& rect,
   if (m_pBitmap->GetBuffer().empty())
     return true;
 
-  FX_RECT clip_rect;
-  GetClipBox(&clip_rect);
+  FX_RECT clip_rect = GetClipBox();
   FX_RECT draw_rect = clip_rect;
   draw_rect.Intersect(rect);
   if (draw_rect.IsEmpty())
@@ -1265,20 +1326,17 @@ bool CFX_AggDeviceDriver::FillRectWithBlend(const FX_RECT& rect,
   return true;
 }
 
-bool CFX_AggDeviceDriver::GetClipBox(FX_RECT* pRect) {
-  if (!m_pClipRgn) {
-    pRect->left = pRect->top = 0;
-    pRect->right = GetDeviceCaps(FXDC_PIXEL_WIDTH);
-    pRect->bottom = GetDeviceCaps(FXDC_PIXEL_HEIGHT);
-    return true;
+FX_RECT CFX_AggDeviceDriver::GetClipBox() const {
+  if (m_pClipRgn) {
+    return m_pClipRgn->GetBox();
   }
-  *pRect = m_pClipRgn->GetBox();
-  return true;
+  return FX_RECT(0, 0, GetDeviceCaps(FXDC_PIXEL_WIDTH),
+                 GetDeviceCaps(FXDC_PIXEL_HEIGHT));
 }
 
 bool CFX_AggDeviceDriver::GetDIBits(RetainPtr<CFX_DIBitmap> bitmap,
                                     int left,
-                                    int top) {
+                                    int top) const {
   if (m_pBitmap->GetBuffer().empty())
     return true;
 
@@ -1308,7 +1366,7 @@ bool CFX_AggDeviceDriver::GetDIBits(RetainPtr<CFX_DIBitmap> bitmap,
                                 std::move(pBack), left, top);
 }
 
-RetainPtr<CFX_DIBitmap> CFX_AggDeviceDriver::GetBackDrop() {
+RetainPtr<const CFX_DIBitmap> CFX_AggDeviceDriver::GetBackDrop() const {
   return m_pBackdropBitmap;
 }
 
@@ -1355,7 +1413,7 @@ bool CFX_AggDeviceDriver::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
   dest_rect.Normalize();
   FX_RECT dest_clip = dest_rect;
   dest_clip.Intersect(*pClipRect);
-  CFX_BitmapComposer composer;
+  CFX_AggBitmapComposer composer;
   composer.Compose(m_pBitmap, m_pClipRgn.get(), /*alpha=*/1.0f, argb, dest_clip,
                    /*bVertical=*/false, /*bFlipX=*/false, /*bFlipY=*/false,
                    m_bRgbByteOrder, blend_type);
@@ -1367,24 +1425,23 @@ bool CFX_AggDeviceDriver::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
   return true;
 }
 
-bool CFX_AggDeviceDriver::StartDIBits(
+RenderDeviceDriverIface::StartResult CFX_AggDeviceDriver::StartDIBits(
     RetainPtr<const CFX_DIBBase> bitmap,
     float alpha,
     uint32_t argb,
     const CFX_Matrix& matrix,
     const FXDIB_ResampleOptions& options,
-    std::unique_ptr<CFX_ImageRenderer>* handle,
     BlendMode blend_type) {
-  if (m_pBitmap->GetBuffer().empty())
-    return true;
+  if (m_pBitmap->GetBuffer().empty()) {
+    return {true, nullptr};
+  }
 
-  *handle = std::make_unique<CFX_ImageRenderer>(
-      m_pBitmap, m_pClipRgn.get(), std::move(bitmap), alpha, argb, matrix,
-      options, m_bRgbByteOrder);
-  return true;
+  return {true, std::make_unique<CFX_AggImageRenderer>(
+                    m_pBitmap, m_pClipRgn.get(), std::move(bitmap), alpha, argb,
+                    matrix, options, m_bRgbByteOrder)};
 }
 
-bool CFX_AggDeviceDriver::ContinueDIBits(CFX_ImageRenderer* pHandle,
+bool CFX_AggDeviceDriver::ContinueDIBits(CFX_AggImageRenderer* pHandle,
                                          PauseIndicatorIface* pPause) {
   return m_pBitmap->GetBuffer().empty() || pHandle->Continue(pPause);
 }

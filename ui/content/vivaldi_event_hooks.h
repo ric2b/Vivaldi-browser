@@ -4,7 +4,7 @@
 #define UI_CONTENT_VIVALDI_EVENT_HOOKS_H_
 
 #include "base/supports_user_data.h"
-#include "chromium/content/common/content_export.h"  // nogncheck
+#include "base/component_export.h"  // nogncheck
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 
 namespace blink {
@@ -12,10 +12,13 @@ class WebMouseEvent;
 class WebMouseWheelEvent;
 }  // namespace blink
 
-namespace content {
+namespace input {
 struct NativeWebKeyboardEvent;
-class RenderWidgetHostImpl;
 class RenderWidgetHostViewInput;
+}  // namespace input
+
+namespace content {
+class RenderWidgetHostImpl;
 class WebContents;
 }  // namespace content
 
@@ -26,18 +29,19 @@ class LatencyInfo;
 // Hooks into Chromium event processing. The implementation is provided in
 // vivaldi_ui_events.cc and stored in WebContents associated with the Vivaldi
 // window using SupportsUserData API.
-class CONTENT_EXPORT VivaldiEventHooks : public base::SupportsUserData::Data {
+class COMPONENT_EXPORT(INPUT) VivaldiEventHooks
+    : public base::SupportsUserData::Data {
  public:
   // Check for a mouse gesture event before it is dispatched to the web page
   // or default chromium handlers. Return true to stop further event
   // propagation or false to allow normal event flow.
-  static bool HandleMouseEvent(content::RenderWidgetHostViewInput* root_view,
+  static bool HandleMouseEvent(input::RenderWidgetHostViewInput* root_view,
                                const blink::WebMouseEvent& event);
 
   // Check for a wheel gesture event before it is dispatched to the web page
   // or default chromium handlers. Return true to stop further event
   // propagation or false to allow normal event flow.
-  static bool HandleWheelEvent(content::RenderWidgetHostViewInput* root_view,
+  static bool HandleWheelEvent(input::RenderWidgetHostViewInput* root_view,
                                const blink::WebMouseWheelEvent& event,
                                const ui::LatencyInfo& latency);
 
@@ -45,13 +49,13 @@ class CONTENT_EXPORT VivaldiEventHooks : public base::SupportsUserData::Data {
   // view. Return true to stop further event propagation or false to allow
   // normal event flow.
   static bool HandleWheelEventAfterChild(
-      content::RenderWidgetHostViewInput* root_view,
+      input::RenderWidgetHostViewInput* root_view,
       const blink::WebMouseWheelEvent& event);
 
   // Handle a keyboard event before it is send to the renderer process. Return
   // true to stop further event propagation or false to allow normal event flow.
   static bool HandleKeyboardEvent(content::RenderWidgetHostImpl* widget_host,
-                                  const content::NativeWebKeyboardEvent& event);
+                                  const input::NativeWebKeyboardEvent& event);
 
   // Hook to notify UI about the end of the drag operation and pointer position
   // when the user released the pointer. Return true to prevent any default
@@ -67,20 +71,20 @@ class CONTENT_EXPORT VivaldiEventHooks : public base::SupportsUserData::Data {
 
   static void InitInstance(VivaldiEventHooks& instance);
 
-  virtual bool DoHandleMouseEvent(content::RenderWidgetHostViewInput* root_view,
+  virtual bool DoHandleMouseEvent(input::RenderWidgetHostViewInput* root_view,
                                   const blink::WebMouseEvent& event) = 0;
 
-  virtual bool DoHandleWheelEvent(content::RenderWidgetHostViewInput* root_view,
+  virtual bool DoHandleWheelEvent(input::RenderWidgetHostViewInput* root_view,
                                   const blink::WebMouseWheelEvent& event,
                                   const ui::LatencyInfo& latency) = 0;
 
   virtual bool DoHandleWheelEventAfterChild(
-      content::RenderWidgetHostViewInput* root_view,
+      input::RenderWidgetHostViewInput* root_view,
       const blink::WebMouseWheelEvent& event) = 0;
 
   virtual bool DoHandleKeyboardEvent(
       content::RenderWidgetHostImpl* widget_host,
-      const content::NativeWebKeyboardEvent& event) = 0;
+      const input::NativeWebKeyboardEvent& event) = 0;
 
   virtual bool DoHandleDragEnd(content::WebContents* web_contents,
                                ui::mojom::DragOperation operation,

@@ -46,8 +46,8 @@ limitations under the License.
 #include "stablehlo/dialect/Base.h"  // from @stablehlo
 #include "stablehlo/dialect/ChloOps.h"  // from @stablehlo
 #include "stablehlo/dialect/StablehloOps.h"  // from @stablehlo
-#include "stablehlo/experimental/transforms/Passes.h"  // from @stablehlo
 #include "xla/mlir/utils/error_util.h"
+#include "xla/mlir_hlo/stablehlo_ext/transforms/passes.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/logging.h"
 
@@ -90,7 +90,7 @@ struct CheckShapeAssertionsPass
   void runOnOperation() final {
     mlir::func::FuncOp func_op = getOperation();
     func_op.walk([this](mlir::stablehlo::CustomCallOp op) {
-      if (!op.getCallTargetName().equals(shapeAssertionName)) return;
+      if (op.getCallTargetName() != shapeAssertionName) return;
       if (!enable_shape_assertions) {
         op.erase();
         return;
@@ -145,9 +145,9 @@ struct CheckShapeAssertionsPass
         return op.emitError()
                << attr.getName() << " is not a supported attribute";
     }
-    if (!op.getBackendConfig().empty())
+    if (!op.hasEmptyBackendConfig())
       return op.emitError() << "expects an empty backend_config";
-    if (!op.getCallTargetName().equals(shapeAssertionName))
+    if (op.getCallTargetName() != shapeAssertionName)
       return op.emitError() << "expects @shape_assertion";
     if (!op.getHasSideEffect())
       return op.emitError() << "expects has_side_effect=true";
@@ -268,10 +268,10 @@ absl::Status RefinePolymorphicShapes(mlir::ModuleOp module,
   // TODO(necula): we should not need the inliner.
   pm.addPass(mlir::createInlinerPass());
   pm.addPass(mlir::createCSEPass());
-  pm.addPass(mlir::stablehlo::experimental::createChloRecomposeOpsPass());
-  pm.addPass(mlir::stablehlo::experimental::createStablehloRefineShapesPass());
+  pm.addPass(mlir::stablehlo_ext::createChloRecomposeOpsPass());
+  pm.addPass(mlir::stablehlo_ext::createStablehloRefineShapesPass());
   pm.addNestedPass<mlir::func::FuncOp>(
-      mlir::stablehlo::experimental::createStablehloCanonicalizeDynamismPass());
+      mlir::stablehlo_ext::createStablehloCanonicalizeDynamismPass());
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<CheckShapeAssertionsPass>(enable_shape_assertions));
   if (!mlir::succeeded(pm.run(module))) {
@@ -334,8 +334,7 @@ absl::Status ValidateStaticShapes(mlir::ModuleOp module) {
     }
 
     auto customCall = mlir::dyn_cast<mlir::stablehlo::CustomCallOp>(op);
-    if (customCall &&
-        customCall.getCallTargetName().equals(shapeAssertionName)) {
+    if (customCall && customCall.getCallTargetName() == shapeAssertionName) {
       moduleHasShapeAssertions = true;
       op->emitOpError() << "has residual shape assertions";
     }

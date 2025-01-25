@@ -72,18 +72,6 @@ message HeaderAndBody {
   required bytes body = 2;
 }
 
-// Must be kept wire-format compatible with HeaderAndBody. Provides the
-// SecureMessage code with a consistent wire-format representation that
-// remains stable irrespective of protobuf implementation choices. This
-// low-level representation of a HeaderAndBody should not be used by
-// any code outside of the SecureMessage library implementation/tests.
-message HeaderAndBodyInternal {
-  // A raw (wire-format) byte encoding of a Header, suitable for hashing
-  required bytes header = 1;
-  // Payload data
-  required bytes body = 2;
-}
-
 // -------
 // The remainder of the messages defined here are provided only for
 // convenience. They are not needed for SecureMessage proper, but are

@@ -40,17 +40,17 @@ test_item_variations ()
   axis_idx_tag_map.set (1, axis_tag);
 
   OT::item_variations_t item_vars;
-  const OT::VariationStore& src_var_store = hvar_table+(hvar_table->varStore);
+  const OT::ItemVariationStore& src_var_store = hvar_table+(hvar_table->varStore);
   bool result = item_vars.create_from_item_varstore (src_var_store, axis_idx_tag_map);
       
   assert (result);
 
   /* partial instancing wght=300:800 */
   hb_hashmap_t<hb_tag_t, Triple> normalized_axes_location;
-  normalized_axes_location.set (axis_tag, Triple (-0.512817f, 0.f, 0.700012f));
+  normalized_axes_location.set (axis_tag, Triple (-0.512817, 0.0, 0.7000120));
 
   hb_hashmap_t<hb_tag_t, TripleDistances> axes_triple_distances;
-  axes_triple_distances.set (axis_tag, TripleDistances (200.f, 500.f));
+  axes_triple_distances.set (axis_tag, TripleDistances (200.0, 500.0));
 
   result = item_vars.instantiate_tuple_vars (normalized_axes_location, axes_triple_distances);
   assert (result);

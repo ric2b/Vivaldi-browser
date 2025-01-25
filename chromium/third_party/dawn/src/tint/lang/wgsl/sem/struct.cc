@@ -53,7 +53,7 @@ StructMember::StructMember(const ast::StructMember* declaration,
                            uint32_t offset,
                            uint32_t align,
                            uint32_t size,
-                           const core::type::StructMemberAttributes& attributes)
+                           const core::IOAttributes& attributes)
     : Base(name, type, index, offset, align, size, attributes), declaration_(declaration) {
     TINT_ASSERT(declaration != nullptr);
 }

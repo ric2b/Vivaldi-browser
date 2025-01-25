@@ -140,7 +140,7 @@ void OptimizingCompileDispatcher::FlushInputQueue() {
 void OptimizingCompileDispatcher::AwaitCompileTasks() {
   {
     AllowGarbageCollection allow_before_parking;
-    isolate_->main_thread_local_isolate()->BlockMainThreadWhileParked(
+    isolate_->main_thread_local_isolate()->ExecuteMainThreadWhileParked(
         [this]() { job_handle_->Join(); });
   }
   // Join kills the job handle, so drop it and post a new one.
@@ -189,7 +189,7 @@ void OptimizingCompileDispatcher::InstallOptimizedFunctions() {
       output_queue_.pop();
     }
     OptimizedCompilationInfo* info = job->compilation_info();
-    Handle<JSFunction> function(*info->closure(), isolate_);
+    DirectHandle<JSFunction> function(*info->closure(), isolate_);
 
     // If another racing task has already finished compiling and installing the
     // requested code kind on the function, throw out the current job.

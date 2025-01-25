@@ -8,10 +8,12 @@
 ////////////////////////////////////////////////////////////////////////////////
 // NOTE: This file should only contain constants that are reasonably globally
 // used (i.e., by many modules, and in all or nearly all subdirs).  Do NOT add
-// non-POD constants, functions, interfaces, or any logic to this module.
+// non-POD constants, functions, interfaces, or any logic to this module,
+// except for std::ostream operators on an as-needed basis.
 ////////////////////////////////////////////////////////////////////////////////
 
 #include <chrono>
+#include <ostream>
 #include <ratio>
 
 namespace openscreen::cast {
@@ -102,12 +104,15 @@ constexpr int kSupportedRemotingVersion = 2;
 // remoted and is not specified as part of the OFFER message (indicated as
 // "REMOTE_AUDIO" or "REMOTE_VIDEO").
 enum class AudioCodec { kAac, kOpus, kNotSpecified };
+
 enum class VideoCodec { kH264, kVp8, kHevc, kNotSpecified, kVp9, kAv1 };
+std::ostream& operator<<(std::ostream& os, VideoCodec codec);
 
 // The type (audio, video, or unknown) of the stream.
 enum class StreamType { kUnknown, kAudio, kVideo };
 
 enum class CastMode : uint8_t { kMirroring, kRemoting };
+std::ostream& operator<<(std::ostream& os, CastMode mode);
 
 }  // namespace openscreen::cast
 

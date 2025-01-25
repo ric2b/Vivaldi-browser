@@ -21,34 +21,34 @@
     clippy::panic
 )]
 
-use core::marker::PhantomData;
 use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
-use crypto_provider::{CryptoProvider, CryptoRng};
+use crypto_provider::{ed25519, CryptoProvider, CryptoRng};
 use crypto_provider_default::CryptoProviderImpl;
-use ldt_np_adv::LegacySalt;
+use ldt_np_adv::{V0IdentityToken, V0Salt, V0_IDENTITY_TOKEN_LEN};
 
+use np_adv::credential::matched::EmptyMatchedCredential;
 use np_adv::deserialization_arena;
 use np_adv::extended::serialize::AdvertisementType;
+use np_adv::extended::V1IdentityToken;
+use np_adv::legacy::serialize::UnencryptedEncoder;
 use np_adv::{
     credential::{book::*, v0::*, v1::*, *},
-    de_type::EncryptedIdentityDataElementType,
     deserialize_advertisement,
     extended::{
         data_elements::{GenericDataElement, TxPowerDataElement},
         deserialize::VerificationMode,
         serialize::{
-            AdvBuilder as ExtendedAdvBuilder, MicEncryptedSectionEncoder, PublicSectionEncoder,
-            SectionBuilder, SectionEncoder, SignedEncryptedSectionEncoder,
+            AdvBuilder as ExtendedAdvBuilder, MicEncryptedSectionEncoder, SectionBuilder,
+            SectionEncoder, SignedEncryptedSectionEncoder, UnencryptedSectionEncoder,
         },
     },
     legacy::{
-        actions::{ActionBits, ActionsDataElement},
-        serialize::{AdvBuilder as LegacyAdvBuilder, LdtIdentity},
-        ShortMetadataKey,
+        data_elements::actions::{ActionBits, ActionsDataElement},
+        serialize::{AdvBuilder as LegacyAdvBuilder, LdtEncoder},
     },
-    shared_data::{ContextSyncSeqNum, TxPower},
-    MetadataKey, PublicIdentity,
+    shared_data::TxPower,
 };
+use np_hkdf::{DerivedSectionKeys, NpKeySeedHkdf};
 use rand::{Rng as _, SeedableRng as _};
 use strum::IntoEnumIterator;
 
@@ -67,42 +67,40 @@ pub fn deser_adv_v1_encrypted(c: &mut Criterion) {
                         ),
                         |b| {
                             let identities = (0..num_identities)
-                                .map(|_| V1Identity::random(&mut crypto_rng))
+                                .map(|_| V1Identity::random::<CryptoProviderImpl>(&mut crypto_rng))
                                 .collect::<Vec<_>>();
 
                             let mut adv_builder = ExtendedAdvBuilder::new(AdvertisementType::Encrypted);
 
                             // take the first n identities, one section per identity
                             for identity in identities.iter().take(num_sections) {
-                                let broadcast_cm = SimpleSignedBroadcastCryptoMaterial::new(
+                                let broadcast_cm = V1BroadcastCredential::new(
                                     identity.key_seed,
-                                    identity.extended_metadata_key,
-                                    identity.key_pair.private_key(),
+                                    identity.identity_token,
+                                    identity.private_key.clone(),
                                 );
                                 match identity_type {
                                     VerificationMode::Mic => {
                                         let mut sb = adv_builder
-                                            .section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new_random_salt(
+                                            .section_builder(MicEncryptedSectionEncoder::<_>::new_random_salt::<CryptoProviderImpl>(
                                                 &mut crypto_rng,
-                                                EncryptedIdentityDataElementType::Private,
                                                 &broadcast_cm,
                                             ))
                                             .unwrap();
 
                                         add_des(&mut sb);
-                                        sb.add_to_advertisement();
+                                        sb.add_to_advertisement::<CryptoProviderImpl>();
                                     }
                                     VerificationMode::Signature => {
                                         let mut sb = adv_builder
-                                            .section_builder(SignedEncryptedSectionEncoder::<CryptoProviderImpl>::new_random_salt(
+                                            .section_builder(SignedEncryptedSectionEncoder::new_random_salt::<CryptoProviderImpl>(
                                                 &mut crypto_rng,
-                                                EncryptedIdentityDataElementType::Private,
                                                 &broadcast_cm,
                                             ))
                                             .unwrap();
 
                                         add_des(&mut sb);
-                                        sb.add_to_advertisement();
+                                        sb.add_to_advertisement::<CryptoProviderImpl>();
                                     }
                                 }
                             }
@@ -112,7 +110,7 @@ pub fn deser_adv_v1_encrypted(c: &mut Criterion) {
                             run_with_v1_creds::<
                                 CryptoProviderImpl
                             >(
-                                b, crypto_type, identities, adv.as_slice()
+                                b, crypto_type, identities, adv.as_slice(),
                             )
                         },
                     );
@@ -126,10 +124,10 @@ pub fn deser_adv_v1_plaintext(c: &mut Criterion) {
     c.bench_function("Deser V1 plaintext: sections=1", |b| {
         let mut adv_builder = ExtendedAdvBuilder::new(AdvertisementType::Plaintext);
 
-        let mut sb = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
+        let mut sb = adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
 
         add_des(&mut sb);
-        sb.add_to_advertisement();
+        sb.add_to_advertisement::<CryptoProviderImpl>();
 
         let adv = adv_builder.into_advertisement();
 
@@ -157,20 +155,16 @@ pub fn deser_adv_v0_encrypted(c: &mut Criterion) {
 
                     let identity = &identities[0];
 
-                    let broadcast_cm = SimpleBroadcastCryptoMaterial::<V0>::new(
-                        identity.key_seed,
-                        identity.legacy_metadata_key,
-                    );
+                    let broadcast_cm =
+                        V0BroadcastCredential::new(identity.key_seed, identity.identity_token);
 
                     let mut adv_builder =
-                        LegacyAdvBuilder::new(LdtIdentity::<CryptoProviderImpl>::new(
-                            EncryptedIdentityDataElementType::Private,
-                            LegacySalt::from(rng.gen::<[u8; 2]>()),
+                        LegacyAdvBuilder::new(LdtEncoder::<CryptoProviderImpl>::new(
+                            V0Salt::from(rng.gen::<[u8; 2]>()),
                             &broadcast_cm,
                         ));
 
-                    let mut action_bits = ActionBits::default();
-                    action_bits.set_action(ContextSyncSeqNum::try_from(3).unwrap());
+                    let action_bits = ActionBits::default();
                     adv_builder.add_data_element(ActionsDataElement::from(action_bits)).unwrap();
 
                     let adv = adv_builder.into_advertisement().unwrap();
@@ -188,10 +182,9 @@ pub fn deser_adv_v0_encrypted(c: &mut Criterion) {
 }
 
 pub fn deser_adv_v0_plaintext(c: &mut Criterion) {
-    let mut adv_builder = LegacyAdvBuilder::new(PublicIdentity);
+    let mut adv_builder = LegacyAdvBuilder::new(UnencryptedEncoder);
 
-    let mut action_bits = ActionBits::default();
-    action_bits.set_action(ContextSyncSeqNum::try_from(3).unwrap());
+    let action_bits = ActionBits::default();
     adv_builder.add_data_element(ActionsDataElement::from(action_bits)).unwrap();
     let adv = adv_builder.into_advertisement().unwrap();
 
@@ -227,16 +220,16 @@ pub fn deser_adv_v0_plaintext(c: &mut Criterion) {
 fn run_with_v0_creds<C>(
     b: &mut Bencher,
     crypto_material_type: CryptoMaterialType,
-    identities: Vec<V0Identity<C>>,
+    identities: Vec<V0Identity>,
     adv: &[u8],
 ) where
     C: CryptoProvider,
 {
     let mut creds = identities
         .into_iter()
-        .map(|identity| identity.into_discovery_credential())
-        .map(|discovery_credential| MatchableCredential {
-            discovery_credential,
+        .map(|identity| identity.into_discovery_credential::<C>())
+        .map(|crypto_material| MatchableCredential {
+            discovery_credential: crypto_material,
             match_data: EmptyMatchedCredential,
         })
         .collect::<Vec<_>>();
@@ -283,16 +276,16 @@ fn run_with_v0_creds<C>(
 fn run_with_v1_creds<C>(
     b: &mut Bencher,
     crypto_material_type: CryptoMaterialType,
-    identities: Vec<V1Identity<C>>,
+    identities: Vec<V1Identity>,
     adv: &[u8],
 ) where
     C: CryptoProvider,
 {
     let mut creds = identities
         .into_iter()
-        .map(|identity| identity.into_discovery_credential())
-        .map(|discovery_credential| MatchableCredential {
-            discovery_credential,
+        .map(|identity| identity.into_discovery_credential::<C>())
+        .map(|crypto_material| MatchableCredential {
+            discovery_credential: crypto_material,
             match_data: EmptyMatchedCredential,
         })
         .collect::<Vec<_>>();
@@ -333,6 +326,7 @@ fn run_with_v1_creds<C>(
         }
     }
 }
+
 fn add_des<I: SectionEncoder>(
     sb: &mut SectionBuilder<&mut np_adv::extended::serialize::AdvBuilder, I>,
 ) {
@@ -348,51 +342,61 @@ criterion_group!(
 );
 criterion_main!(benches);
 
-struct V0Identity<C: CryptoProvider> {
+struct V0Identity {
     key_seed: [u8; 32],
-    legacy_metadata_key: ShortMetadataKey,
-    _marker: PhantomData<C>,
+    identity_token: V0IdentityToken,
 }
 
-impl<C: CryptoProvider> V0Identity<C> {
+impl V0Identity {
     /// Generate a new identity with random crypto material
     fn random<R: rand::Rng + rand::CryptoRng>(rng: &mut R) -> Self {
         Self {
             key_seed: rng.gen(),
-            legacy_metadata_key: ShortMetadataKey(rng.gen()),
-            _marker: PhantomData,
+            identity_token: V0IdentityToken::from(rng.gen::<[u8; V0_IDENTITY_TOKEN_LEN]>()),
         }
     }
     /// Convert this `V0Identity` into a V0 discovery credential.
-    fn into_discovery_credential(self) -> V0DiscoveryCredential {
-        SimpleBroadcastCryptoMaterial::<V0>::new(self.key_seed, self.legacy_metadata_key)
-            .derive_v0_discovery_credential::<C>()
+    fn into_discovery_credential<C: CryptoProvider>(self) -> V0DiscoveryCredential {
+        let hkdf = NpKeySeedHkdf::<C>::new(&self.key_seed);
+        V0DiscoveryCredential::new(
+            self.key_seed,
+            hkdf.v0_identity_token_hmac_key().calculate_hmac::<C>(self.identity_token.as_slice()),
+        )
     }
 }
 
-struct V1Identity<C: CryptoProvider> {
+struct V1Identity {
     key_seed: [u8; 32],
-    extended_metadata_key: MetadataKey,
-    key_pair: np_ed25519::KeyPair<C>,
+    identity_token: V1IdentityToken,
+    private_key: ed25519::PrivateKey,
 }
 
-impl<C: CryptoProvider> V1Identity<C> {
+impl V1Identity {
     /// Generate a new identity with random crypto material
-    fn random(rng: &mut C::CryptoRng) -> Self {
+    fn random<C: CryptoProvider>(rng: &mut C::CryptoRng) -> Self {
         Self {
             key_seed: rng.gen(),
-            extended_metadata_key: MetadataKey(rng.gen()),
-            key_pair: np_ed25519::KeyPair::<C>::generate(),
+            identity_token: rng.gen(),
+            private_key: ed25519::PrivateKey::generate::<C::Ed25519>(),
         }
     }
     /// Convert this `V1Identity` into a `V1DiscoveryCredential`.
-    fn into_discovery_credential(self) -> V1DiscoveryCredential {
-        SimpleSignedBroadcastCryptoMaterial::new(
+    fn into_discovery_credential<C: CryptoProvider>(self) -> V1DiscoveryCredential {
+        let hkdf = NpKeySeedHkdf::<C>::new(&self.key_seed);
+
+        V1DiscoveryCredential::new(
             self.key_seed,
-            self.extended_metadata_key,
-            self.key_pair.private_key(),
+            hkdf.v1_mic_short_salt_keys()
+                .identity_token_hmac_key()
+                .calculate_hmac::<C>(self.identity_token.as_slice()),
+            hkdf.v1_mic_extended_salt_keys()
+                .identity_token_hmac_key()
+                .calculate_hmac::<C>(self.identity_token.as_slice()),
+            hkdf.v1_signature_keys()
+                .identity_token_hmac_key()
+                .calculate_hmac::<C>(self.identity_token.as_slice()),
+            self.private_key.derive_public_key::<C::Ed25519>(),
         )
-        .derive_v1_discovery_credential::<C>()
     }
 }
 

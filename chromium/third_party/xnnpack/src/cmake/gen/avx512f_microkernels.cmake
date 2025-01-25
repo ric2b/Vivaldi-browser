@@ -153,6 +153,9 @@ SET(ALL_AVX512F_MICROKERNEL_SRCS
   src/f32-vbinary/gen/f32-vsubc-minmax-avx512f-u32.c
   src/f32-vclamp/gen/f32-vclamp-avx512f-u16.c
   src/f32-vclamp/gen/f32-vclamp-avx512f-u32.c
+  src/f32-vcopysign/gen/f32-vcopysign-avx512f.c
+  src/f32-vcopysign/gen/f32-vcopysignc-avx512f.c
+  src/f32-vcopysign/gen/f32-vrcopysignc-avx512f.c
   src/f32-velu/gen/f32-velu-avx512f-rr1-lut16-p3-perm-u16.c
   src/f32-velu/gen/f32-velu-avx512f-rr1-lut16-p3-perm-u32.c
   src/f32-velu/gen/f32-velu-avx512f-rr1-lut16-p3-perm-u48.c
@@ -169,8 +172,12 @@ SET(ALL_AVX512F_MICROKERNEL_SRCS
   src/f32-velu/gen/f32-velu-avx512f-rr1-p6-u96.c
   src/f32-velu/gen/f32-velu-avx512f-rr1-p6-u112.c
   src/f32-velu/gen/f32-velu-avx512f-rr1-p6-u128.c
+  src/f32-vgelu/gen/f32-vgelu-avx512f-rational-12-10-div.c
+  src/f32-vgelu/gen/f32-vgelu-avx512f-rational-12-10-nr.c
   src/f32-vhswish/gen/f32-vhswish-avx512f-u16.c
   src/f32-vhswish/gen/f32-vhswish-avx512f-u32.c
+  src/f32-vlog/gen/f32-vlog-avx512f-rational-3-3-div.c
+  src/f32-vlog/gen/f32-vlog-avx512f-rational-3-3-nr.c
   src/f32-vlrelu/gen/f32-vlrelu-avx512f-u16.c
   src/f32-vlrelu/gen/f32-vlrelu-avx512f-u32.c
   src/f32-vrelu/gen/f32-vrelu-avx512f-u16.c
@@ -261,24 +268,11 @@ SET(ALL_AVX512F_MICROKERNEL_SRCS
   src/f32-vsqrt/gen/f32-vsqrt-avx512f-rsqrt-u16.c
   src/f32-vsqrt/gen/f32-vsqrt-avx512f-rsqrt-u32.c
   src/f32-vsqrt/gen/f32-vsqrt-avx512f-rsqrt-u48.c
-  src/f32-vtanh/gen/f32-vtanh-avx512f-rational-9-6-div-u8.c
-  src/f32-vtanh/gen/f32-vtanh-avx512f-rational-9-6-div-u16.c
-  src/f32-vtanh/gen/f32-vtanh-avx512f-rational-9-6-div-u24.c
-  src/f32-vtanh/gen/f32-vtanh-avx512f-rational-9-6-div-u32.c
-  src/f32-vtanh/gen/f32-vtanh-avx512f-rational-9-6-nr-u8.c
-  src/f32-vtanh/gen/f32-vtanh-avx512f-rational-9-6-nr-u16.c
-  src/f32-vtanh/gen/f32-vtanh-avx512f-rational-9-6-nr-u24.c
-  src/f32-vtanh/gen/f32-vtanh-avx512f-rational-9-6-nr-u32.c
-  src/f32-vtanh/gen/f32-vtanh-avx512f-rational-9-6-u8.c
-  src/f32-vtanh/gen/f32-vtanh-avx512f-rational-9-6-u16.c
-  src/f32-vtanh/gen/f32-vtanh-avx512f-rational-9-6-u24.c
-  src/f32-vtanh/gen/f32-vtanh-avx512f-rational-9-6-u32.c
-  src/f32-vunary/gen/f32-vabs-avx512f-u16.c
-  src/f32-vunary/gen/f32-vabs-avx512f-u32.c
-  src/f32-vunary/gen/f32-vneg-avx512f-u16.c
-  src/f32-vunary/gen/f32-vneg-avx512f-u32.c
-  src/f32-vunary/gen/f32-vsqr-avx512f-u16.c
-  src/f32-vunary/gen/f32-vsqr-avx512f-u32.c
+  src/f32-vtanh/gen/f32-vtanh-avx512f-rational-9-6-div.c
+  src/f32-vtanh/gen/f32-vtanh-avx512f-rational-9-6-nr.c
+  src/f32-vunary/gen/f32-vabs-avx512f.c
+  src/f32-vunary/gen/f32-vneg-avx512f.c
+  src/f32-vunary/gen/f32-vsqr-avx512f.c
   src/math/f32-exp-avx512f-rr2-lut16-p3-perm-scalef.c
   src/math/f32-exp-avx512f-rr2-lut16-p3-perm.c
   src/math/f32-exp-avx512f-rr2-lut32-p2-perm2-scalef.c
@@ -289,31 +283,31 @@ SET(ALL_AVX512F_MICROKERNEL_SRCS
   src/math/f32-expm1minus-avx512f-rr1-p6.c
   src/math/f32-extexp-avx512f-p5.c
   src/math/f32-sigmoid-avx512f-rr1-lut16-p3-perm-scalef-div.c
-  src/math/f32-sigmoid-avx512f-rr1-lut16-p3-perm-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr1-lut16-p3-perm-scalef-nr1fma.c
+  src/math/f32-sigmoid-avx512f-rr1-lut16-p3-perm-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr1-lut32-p2-perm2-scalef-div.c
-  src/math/f32-sigmoid-avx512f-rr1-lut32-p2-perm2-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr1-lut32-p2-perm2-scalef-nr1fma.c
+  src/math/f32-sigmoid-avx512f-rr1-lut32-p2-perm2-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr1-lut64-p2-gather-scalef-div.c
-  src/math/f32-sigmoid-avx512f-rr1-lut64-p2-gather-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr1-lut64-p2-gather-scalef-nr1fma.c
+  src/math/f32-sigmoid-avx512f-rr1-lut64-p2-gather-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr1-p5-scalef-div.c
-  src/math/f32-sigmoid-avx512f-rr1-p5-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr1-p5-scalef-nr1fma.c
+  src/math/f32-sigmoid-avx512f-rr1-p5-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr2-lut16-p3-perm-scalef-div.c
-  src/math/f32-sigmoid-avx512f-rr2-lut16-p3-perm-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr2-lut16-p3-perm-scalef-nr1fma.c
+  src/math/f32-sigmoid-avx512f-rr2-lut16-p3-perm-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr2-lut32-p2-perm2-scalef-div.c
-  src/math/f32-sigmoid-avx512f-rr2-lut32-p2-perm2-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr2-lut32-p2-perm2-scalef-nr1fma.c
+  src/math/f32-sigmoid-avx512f-rr2-lut32-p2-perm2-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr2-lut64-p2-gather-scalef-div.c
-  src/math/f32-sigmoid-avx512f-rr2-lut64-p2-gather-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr2-lut64-p2-gather-scalef-nr1fma.c
+  src/math/f32-sigmoid-avx512f-rr2-lut64-p2-gather-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr2-p5-scalef-div.c
-  src/math/f32-sigmoid-avx512f-rr2-p5-scalef-nr1fma1adj.c
   src/math/f32-sigmoid-avx512f-rr2-p5-scalef-nr1fma.c
-  src/math/f32-sqrt-avx512f-nr1fma1adj.c
+  src/math/f32-sigmoid-avx512f-rr2-p5-scalef-nr1fma1adj.c
   src/math/f32-sqrt-avx512f-nr1fma.c
+  src/math/f32-sqrt-avx512f-nr1fma1adj.c
   src/math/f32-sqrt-avx512f-nr2fma.c
   src/x32-packw/gen/x32-packw-x16-gemm-goi-avx512f-u4-prfm.c
   src/x32-packw/gen/x32-packw-x16-gemm-goi-avx512f-u4.c)

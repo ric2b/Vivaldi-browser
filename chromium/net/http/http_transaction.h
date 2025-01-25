@@ -145,6 +145,9 @@ class NET_EXPORT_PRIVATE HttpTransaction {
   // Get the number of bytes sent over the network.
   virtual int64_t GetTotalSentBytes() const = 0;
 
+  // Get the number of bytes of the body received from network.
+  virtual int64_t GetReceivedBodyBytes() const = 0;
+
   // Called to tell the transaction that we have successfully reached the end
   // of the stream. This is equivalent to performing an extra Read() at the end
   // that should return 0 bytes. This method should not be called if the
@@ -205,7 +208,7 @@ class NET_EXPORT_PRIVATE HttpTransaction {
   // Sets the callback to modify the request header. The callback will be called
   // just before sending the request to the network.
   virtual void SetModifyRequestHeadersCallback(
-      base::RepeatingCallback<void(net::HttpRequestHeaders*)> callback) = 0;
+      base::RepeatingCallback<void(HttpRequestHeaders*)> callback) = 0;
 
   virtual void SetIsSharedDictionaryReadAllowedCallback(
       base::RepeatingCallback<bool()> callback) = 0;

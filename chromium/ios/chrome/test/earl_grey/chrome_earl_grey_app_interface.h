@@ -15,7 +15,6 @@
 #import "third_party/metrics_proto/user_demographics.pb.h"
 
 @class ElementSelector;
-@class FakeSystemIdentity;
 
 @interface JavaScriptExecutionResult : NSObject
 @property(readonly, nonatomic) BOOL success;
@@ -350,9 +349,6 @@
 
 #pragma mark - Sync Utilities (EG2)
 
-// Signs in with `identity` without sync consent.
-+ (void)signInWithoutSyncWithIdentity:(FakeSystemIdentity*)identity;
-
 // Waits for sync engine to be initialized or not. It doesn't necessarily mean
 // that data types are configured and ready to use. See
 // SyncService::IsEngineInitialized() for details. If not succeeded a GREYAssert
@@ -553,6 +549,12 @@
 // Returns whether Tab Group Sync is enabled.
 + (BOOL)isTabGroupSyncEnabled;
 
+// Returns whether the current layout is showing the bottom omnibox.
++ (BOOL)isCurrentLayoutBottomOmnibox;
+
+// Returns whether the Enhanced Safe Browsing Infobar Promo feature is enabled.
++ (BOOL)isEnhancedSafeBrowsingInfobarEnabled;
+
 #pragma mark - ContentSettings
 
 // Gets the current value of the popup content setting preference for the
@@ -598,6 +600,10 @@
 // contains the preferences that are shared between all browser states.
 + (void)setTimeValue:(base::Time)value forLocalStatePref:(NSString*)prefName;
 
+// Sets the time value for the user pref with `prefName` in the original
+// browser state.
++ (void)setTimeValue:(base::Time)value forUserPref:(NSString*)prefName;
+
 // Sets the string value for the local state pref with `prefName`. Local State
 // contains the preferences that are shared between all browser states.
 + (void)setStringValue:(NSString*)value forLocalStatePref:(NSString*)prefName;
@@ -620,8 +626,8 @@
 // Sets the value of a integer user pref in the original browser state.
 + (void)setIntegerValue:(int)value forUserPref:(NSString*)prefName;
 
-// Returns true if the Preference is currently using its default value,
-// and has not been set by any higher-priority source (even with the same
+// Returns true if the LocalState Preference is currently using its default
+// value, and has not been set by any higher-priority source (even with the same
 // value).
 + (BOOL)prefWithNameIsDefaultValue:(NSString*)prefName;
 

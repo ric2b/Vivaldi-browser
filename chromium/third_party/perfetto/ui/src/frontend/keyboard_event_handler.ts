@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import {exists} from '../base/utils';
 import {Actions} from '../common/actions';
-import {Area, getLegacySelection} from '../common/state';
+import {getLegacySelection} from '../common/state';
 
 import {Flow, globals} from './globals';
 import {focusHorizontalRange, verticalScrollToTrack} from './scroll_helper';
@@ -45,7 +46,7 @@ function findAnotherFlowExcept(boundFlows: Flow[], flowId: number): number {
 // Change focus to the next flow event (matching the direction)
 export function focusOtherFlow(direction: Direction) {
   const currentSelection = getLegacySelection(globals.state);
-  if (!currentSelection || currentSelection.kind !== 'CHROME_SLICE') {
+  if (!currentSelection || currentSelection.kind !== 'SLICE') {
     return;
   }
   const sliceId = currentSelection.id;
@@ -77,7 +78,7 @@ export function focusOtherFlow(direction: Direction) {
 // Select the slice connected to the flow in focus
 export function moveByFocusedFlow(direction: Direction): void {
   const currentSelection = getLegacySelection(globals.state);
-  if (!currentSelection || currentSelection.kind !== 'CHROME_SLICE') {
+  if (!currentSelection || currentSelection.kind !== 'SLICE') {
     return;
   }
 
@@ -100,7 +101,7 @@ export function moveByFocusedFlow(direction: Direction): void {
       if (trackKey) {
         globals.setLegacySelection(
           {
-            kind: 'CHROME_SLICE',
+            kind: 'SLICE',
             id: flowPoint.sliceId,
             trackKey,
             table: 'slice',
@@ -116,22 +117,12 @@ export function moveByFocusedFlow(direction: Direction): void {
   }
 }
 
-export function lockSliceSpan(persistent = false) {
-  const range = globals.findTimeRangeOfSelection();
-  const currentSelection = getLegacySelection(globals.state);
-  if (range.start !== -1n && range.end !== -1n && currentSelection !== null) {
-    const tracks = currentSelection.trackKey ? [currentSelection.trackKey] : [];
-    const area: Area = {start: range.start, end: range.end, tracks};
-    globals.dispatch(Actions.markArea({area, persistent}));
-  }
-}
-
-export function findCurrentSelection() {
+export async function findCurrentSelection() {
   const selection = getLegacySelection(globals.state);
   if (selection === null) return;
 
-  const range = globals.findTimeRangeOfSelection();
-  if (range.start !== -1n && range.end !== -1n) {
+  const range = await globals.findTimeRangeOfSelection();
+  if (exists(range)) {
     focusHorizontalRange(range.start, range.end);
   }
 

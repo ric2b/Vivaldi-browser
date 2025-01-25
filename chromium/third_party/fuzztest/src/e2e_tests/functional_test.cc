@@ -17,7 +17,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
+#include <filesystem>  // NOLINT
 #include <optional>
 #include <string>
 #include <tuple>
@@ -431,6 +431,13 @@ TEST_F(UnitTestModeTest, FlatMapCorrectlyPrintsValues) {
   EXPECT_THAT(std_err, HasSubstr("argument 0: {\"AAA\", \"BBB\"}"));
   // This is the argument to the input domain.
   EXPECT_THAT(std_err, Not(HasSubstr("argument 0: 3")));
+}
+
+TEST_F(UnitTestModeTest, PrintsVeryLongInputsTrimmed) {
+  auto [status, std_out, std_err] = Run("MySuite.LongInput");
+  EXPECT_THAT(status, Eq(Signal(SIGABRT)));
+  EXPECT_THAT(std_err, HasSubstr("65 ...<value too long>"));
+  EXPECT_THAT(std_err, HasSubstr("A ...<value too long>"));
 }
 
 TEST_F(UnitTestModeTest, PropertyFunctionAcceptsTupleOfItsSingleParameter) {
@@ -1126,6 +1133,37 @@ TEST_F(FuzzingModeCommandLineInterfaceTest, TimeLimitFlagWorks) {
   EXPECT_THAT(std_err, HasSubstr("argument 0: "));
   EXPECT_THAT(std_err, ContainsRegex("Per-input timeout exceeded"));
   EXPECT_THAT(status, Eq(Signal(SIGABRT)));
+}
+
+// TODO: b/340232436 - Once fixed, remove this test since we will no longer need
+// to restrict the filter to only fuzz tests.
+TEST_F(FuzzingModeCommandLineInterfaceTest,
+       RunsOnlyFuzzTestsWhenNoFilterIsSpecified) {
+  auto [status, std_out, std_err] =
+      RunWith({{"fuzz_for", "1ns"}}, /*env=*/{}, /*timeout=*/absl::Seconds(10),
+              "testdata/unit_test_and_fuzz_tests");
+
+  EXPECT_THAT(std_out, Not(HasSubstr("[ RUN      ] UnitTest.AlwaysPasses")));
+  EXPECT_THAT(std_out, HasSubstr("[ RUN      ] FuzzTest.AlwaysPasses"));
+  EXPECT_THAT(std_out, HasSubstr("[ RUN      ] FuzzTest.AlsoAlwaysPasses"));
+  EXPECT_THAT(std_out, HasSubstr("2 tests from 1 test suite ran."));
+  EXPECT_THAT(status, Eq(ExitCode(0)));
+}
+
+TEST_F(FuzzingModeCommandLineInterfaceTest,
+       AllowsSpecifyingFilterWithFuzzForDuration) {
+  auto [status, std_out, std_err] =
+      RunWith({{"fuzz_for", "1ns"}}, /*env=*/{}, /*timeout=*/absl::Seconds(10),
+              "testdata/unit_test_and_fuzz_tests",
+              {{GTEST_FLAG_PREFIX_ "filter",
+                "UnitTest.AlwaysPasses:FuzzTest.AlwaysPasses"}});
+
+  EXPECT_THAT(std_out, HasSubstr("[ RUN      ] UnitTest.AlwaysPasses"));
+  EXPECT_THAT(std_out, HasSubstr("[ RUN      ] FuzzTest.AlwaysPasses"));
+  EXPECT_THAT(std_out,
+              Not(HasSubstr("[ RUN      ] FuzzTest.AlsoAlwaysPasses")));
+  EXPECT_THAT(std_out, HasSubstr("2 tests from 2 test suites ran."));
+  EXPECT_THAT(status, Eq(ExitCode(0)));
 }
 
 std::string CentipedePath() {

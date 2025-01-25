@@ -5,6 +5,7 @@
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
@@ -57,8 +58,9 @@
     [_dynamicAccentColorEnabled setObserver:self];
 
     _bottomOmniboxEnabled =
-        [[PrefBackedBoolean alloc] initWithPrefService:originalPrefService
-                                              prefName:prefs::kBottomOmnibox];
+        [[PrefBackedBoolean alloc]
+            initWithPrefService:GetApplicationContext()->GetLocalState()
+                prefName:prefs::kBottomOmnibox];
     [_bottomOmniboxEnabled setObserver:self];
 
     _tabBarEnabled =

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "extensions/browser/extension_protocols.h"
 
 #include <stddef.h>
@@ -93,6 +98,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
 #include "net/http/http_status_code.h"
+#include "pdf/buildflags.h"
 #include "services/network/public/cpp/record_ontransfersizeupdate_utils.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/self_deleting_url_loader_factory.h"
@@ -104,6 +110,10 @@
 #include "third_party/blink/public/common/loader/resource_type_util.h"
 #include "url/origin.h"
 #include "url/url_util.h"
+
+#if BUILDFLAG(ENABLE_PDF)
+#include "pdf/pdf_features.h"
+#endif  // BUILDFLAG(ENABLE_PDF)
 
 
 #include "app/vivaldi_apptools.h"
@@ -178,7 +188,8 @@ bool AllowExtensionResourceLoad(const network::ResourceRequest& request,
                                 const Extension* extension,
                                 bool extension_enabled_in_incognito,
                                 const ExtensionSet& extensions,
-                                const ProcessMap& process_map) {
+                                const ProcessMap& process_map,
+                                const GURL& upstream_url) {
   const bool is_main_frame =
       destination == network::mojom::RequestDestination::kDocument;
   if (extension && !vivaldi::IsVivaldiApp(extension->id()) &&
@@ -223,7 +234,7 @@ bool AllowExtensionResourceLoad(const network::ResourceRequest& request,
   // Allow the extension module embedder to grant permission for loads.
   if (ExtensionsBrowserClient::Get()->AllowCrossRendererResourceLoad(
           request, destination, page_transition, child_id, is_incognito,
-          extension, extensions, process_map)) {
+          extension, extensions, process_map, upstream_url)) {
     return true;
   }
 
@@ -295,7 +306,20 @@ void GetSecurityPolicyForURL(const network::ResourceRequest& request,
   *cross_origin_opener_policy =
       CrossOriginIsolationHeader::GetCrossOriginOpenerPolicy(extension);
 
-  if (WebAccessibleResourcesInfo::IsResourceWebAccessible(
+  bool should_pdf_resource_send_cors_header = false;
+#if BUILDFLAG(ENABLE_PDF)
+  // The CORS headers are needed in the OOPIF PDF extension's index.html if the
+  // original PDF has a COEP: require-corp header.
+  const auto origin = extension.origin();
+  should_pdf_resource_send_cors_header =
+      chrome_pdf::features::IsOopifPdfEnabled() &&
+      origin.scheme() == extensions::kExtensionScheme &&
+      origin.host() == extension_misc::kPdfExtensionId &&
+      resource_path == "/index.html";
+#endif  // BUILDFLAG(ENABLE_PDF)
+
+  if (should_pdf_resource_send_cors_header ||
+      WebAccessibleResourcesInfo::IsResourceWebAccessible(
           &extension, resource_path,
           base::OptionalToPtr(request.request_initiator))) {
     *send_cors_header = true;
@@ -452,8 +476,8 @@ class FileLoaderObserver : public content::FileURLLoaderObserver {
         // Note: We still pass the data to |verify_job_|, even if there was a
         // read error, because some errors are ignorable. See
         // ContentVerifyJob::BytesRead() for more details.
-        verify_job_->Read(static_cast<const char*>(buffer.data()),
-                          result->bytes_read, result->result);
+        verify_job_->BytesRead(static_cast<const char*>(buffer.data()),
+                               result->bytes_read, result->result);
       }
     }
   }
@@ -461,7 +485,7 @@ class FileLoaderObserver : public content::FileURLLoaderObserver {
   void OnDone() override {
     base::AutoLock auto_lock(lock_);
     if (verify_job_.get())
-      verify_job_->Done();
+      verify_job_->DoneReading();
   }
 
  private:
@@ -503,8 +527,9 @@ class ExtensionURLLoader : public network::mojom::URLLoader {
       const net::HttpRequestHeaders& modified_cors_exempt_headers,
       const std::optional<GURL>& new_url) override {
     // new_url isn't expected to have a value, but prefer it if it's populated.
-    if (new_url.has_value())
+    if (new_url.has_value()) {
       request_.url = new_url.value();
+    }
 
     Start();
   }
@@ -572,6 +597,7 @@ class ExtensionURLLoader : public network::mojom::URLLoader {
         extension && request_.url.host() == extension->guid()) {
       GURL::Replacements replace_host;
       replace_host.SetHostStr(extension->id());
+      upstream_url_ = request_.url;
       GURL new_url = request_.url.ReplaceComponents(replace_host);
       request_.url = new_url;
       net::RedirectInfo redirect_info;
@@ -589,7 +615,7 @@ class ExtensionURLLoader : public network::mojom::URLLoader {
             static_cast<ui::PageTransition>(request_.transition_type),
             render_process_id_, browser_context_->IsOffTheRecord(),
             extension.get(), incognito_enabled, enabled_extensions,
-            *process_map)) {
+            *process_map, upstream_url_)) {
       CompleteRequestAndDeleteThis(net::ERR_BLOCKED_BY_CLIENT);
       return;
     }
@@ -659,17 +685,18 @@ class ExtensionURLLoader : public network::mojom::URLLoader {
   void WriteData(mojo::StructPtr<network::mojom::URLResponseHead> head,
                  base::span<const uint8_t> contents) {
     DCHECK(contents.data());
-    size_t size = contents.size();
     mojo::ScopedDataPipeProducerHandle producer_handle;
     mojo::ScopedDataPipeConsumerHandle consumer_handle;
-    if (mojo::CreateDataPipe(size, producer_handle, consumer_handle) !=
-        MOJO_RESULT_OK) {
+    if (mojo::CreateDataPipe(contents.size(), producer_handle,
+                             consumer_handle) != MOJO_RESULT_OK) {
       CompleteRequestAndDeleteThis(net::ERR_FAILED);
       return;
     }
-    MojoResult result = producer_handle->WriteData(contents.data(), &size,
-                                                   MOJO_WRITE_DATA_FLAG_NONE);
-    if (result != MOJO_RESULT_OK || size < contents.size()) {
+
+    size_t actually_written_bytes = 0;
+    MojoResult result = producer_handle->WriteData(
+        contents, MOJO_WRITE_DATA_FLAG_NONE, actually_written_bytes);
+    if (result != MOJO_RESULT_OK || actually_written_bytes < contents.size()) {
       CompleteRequestAndDeleteThis(net::ERR_FAILED);
       return;
     }
@@ -691,25 +718,25 @@ class ExtensionURLLoader : public network::mojom::URLLoader {
     bool follow_symlinks_anywhere = false;
     bool include_allow_service_worker_header = false;
 
-    // Log if loading an extension resource not listed as a web accessible
-    // resource from a sandboxed page.
-    if (request_.request_initiator.has_value() &&
-        request_.request_initiator->opaque() &&
-        request_.request_initiator->GetTupleOrPrecursorTupleIfOpaque()
-                .scheme() == kExtensionScheme) {
-      // Surface opaque origin for web accessible resource verification.
-      const auto origin = url::Origin::Create(
-          request_.request_initiator->GetTupleOrPrecursorTupleIfOpaque()
-              .GetURL());
-      bool is_web_accessible_resource =
-          WebAccessibleResourcesInfo::IsResourceWebAccessible(
-              extension.get(), request_.url.path(), &origin);
-      base::UmaHistogramBoolean(
-          "Extensions.SandboxedPageLoad.IsWebAccessibleResource",
-          is_web_accessible_resource);
-    }
-
     if (extension) {
+      // Log if loading an extension resource not listed as a web accessible
+      // resource from a sandboxed page.
+      if (request_.request_initiator.has_value() &&
+          request_.request_initiator->opaque() &&
+          request_.request_initiator->GetTupleOrPrecursorTupleIfOpaque()
+                  .scheme() == kExtensionScheme) {
+        // Surface opaque origin for web accessible resource verification.
+        const auto origin = url::Origin::Create(
+            request_.request_initiator->GetTupleOrPrecursorTupleIfOpaque()
+                .GetURL());
+        bool is_web_accessible_resource =
+            WebAccessibleResourcesInfo::IsResourceWebAccessibleRedirect(
+                extension.get(), request_.url, origin, upstream_url_);
+        base::UmaHistogramBoolean(
+            "Extensions.SandboxedPageLoad.IsWebAccessibleResource",
+            is_web_accessible_resource);
+      }
+
       GetSecurityPolicyForURL(
           request_, *extension, is_web_view_request_, &content_security_policy,
           &cross_origin_embedder_policy, &cross_origin_opener_policy,
@@ -841,6 +868,9 @@ class ExtensionURLLoader : public network::mojom::URLLoader {
 
   // Tracker for favicon callback.
   std::unique_ptr<base::CancelableTaskTracker> tracker_;
+
+  // Used for determining if `target_url` is allowed to be requested.
+  GURL upstream_url_;
 
   base::WeakPtrFactory<ExtensionURLLoader> weak_ptr_factory_{this};
 };

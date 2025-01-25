@@ -48,6 +48,16 @@ declare_args() {
   is_debug = !is_official_build
 }
 
+declare_args() {
+  # Component build. Setting to true compiles targets declared as "components"
+  # as shared libraries loaded dynamically. This speeds up development time.
+  # When false, components will be linked statically.
+  #
+  # For more information see
+  # https://chromium.googlesource.com/chromium/src/+/main/docs/component_build.md
+  is_component_build = is_debug && current_os != "ios"
+}
+
 # ==============================================================================
 # TOOLCHAIN SETUP
 # ==============================================================================
@@ -84,3 +94,15 @@ is_win = current_os == "win" || current_os == "winuwp"
 
 is_apple = is_ios || is_mac
 is_posix = !is_win && !is_fuchsia
+
+# =============================================================================
+# Variables
+# =============================================================================
+#
+# These variables are used by other files in the //build directory and come from
+# the //build/config/BUILDCONFIG.gn
+
+TESTONLY_AND_VISIBILITY = [
+  "testonly",
+  "visibility",
+]

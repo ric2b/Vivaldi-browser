@@ -215,6 +215,10 @@ void MockRenderProcessHost::OnForegroundServiceWorkerRemoved() {
   foreground_service_worker_count_ -= 1;
 }
 
+void MockRenderProcessHost::OnBoostForLoadingAdded() {}
+
+void MockRenderProcessHost::OnBoostForLoadingRemoved() {}
+
 StoragePartition* MockRenderProcessHost::GetStoragePartition() {
   return browser_context_->GetStoragePartition(storage_partition_config_);
 }
@@ -334,6 +338,7 @@ void MockRenderProcessHost::RemovePriorityClient(
   priority_clients_.erase(priority_client);
 }
 
+#if !BUILDFLAG(IS_ANDROID)
 void MockRenderProcessHost::SetPriorityOverride(bool foreground) {}
 
 bool MockRenderProcessHost::HasPriorityOverride() {
@@ -341,6 +346,7 @@ bool MockRenderProcessHost::HasPriorityOverride() {
 }
 
 void MockRenderProcessHost::ClearPriorityOverride() {}
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_ANDROID)
 ChildProcessImportance MockRenderProcessHost::GetEffectiveImportance() {
@@ -541,6 +547,7 @@ bool MockRenderProcessHost::IsProcessLockedToSiteForTesting() {
 void MockRenderProcessHost::BindCacheStorage(
     const network::CrossOriginEmbedderPolicy&,
     mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>,
+    const network::DocumentIsolationPolicy&,
     const storage::BucketLocator& bucket_locator,
     mojo::PendingReceiver<blink::mojom::CacheStorage> receiver) {
   cache_storage_receiver_ = std::move(receiver);
@@ -548,13 +555,14 @@ void MockRenderProcessHost::BindCacheStorage(
 
 void MockRenderProcessHost::BindIndexedDB(
     const blink::StorageKey& storage_key,
-    const GlobalRenderFrameHostId& rfh_id,
+    BucketContext& bucket_context,
     mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) {
   idb_factory_receiver_ = std::move(receiver);
 }
 
 void MockRenderProcessHost::GetSandboxedFileSystemForBucket(
     const storage::BucketLocator& bucket,
+    const std::vector<std::string>& directory_path_components,
     blink::mojom::FileSystemAccessManager::GetSandboxedFileSystemCallback
         callback) {
   std::move(callback).Run(file_system_access_error::Ok(), {});

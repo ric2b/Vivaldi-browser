@@ -52,6 +52,7 @@
 #include "src/tint/lang/wgsl/ast/identifier.h"
 #include "src/tint/lang/wgsl/ast/if_statement.h"
 #include "src/tint/lang/wgsl/ast/increment_decrement_statement.h"
+#include "src/tint/lang/wgsl/ast/input_attachment_index_attribute.h"
 #include "src/tint/lang/wgsl/ast/internal_attribute.h"
 #include "src/tint/lang/wgsl/ast/interpolate_attribute.h"
 #include "src/tint/lang/wgsl/ast/invariant_attribute.h"
@@ -375,15 +376,11 @@ class DependencyScanner {
         Switch(
             attr,  //
             [&](const ast::BindingAttribute* binding) { TraverseExpression(binding->expr); },
-            [&](const ast::BuiltinAttribute* builtin) { TraverseExpression(builtin->builtin); },
             [&](const ast::ColorAttribute* color) { TraverseExpression(color->expr); },
             [&](const ast::GroupAttribute* group) { TraverseExpression(group->expr); },
             [&](const ast::IdAttribute* id) { TraverseExpression(id->expr); },
+            [&](const ast::InputAttachmentIndexAttribute* idx) { TraverseExpression(idx->expr); },
             [&](const ast::BlendSrcAttribute* index) { TraverseExpression(index->expr); },
-            [&](const ast::InterpolateAttribute* interpolate) {
-                TraverseExpression(interpolate->type);
-                TraverseExpression(interpolate->sampling);
-            },
             [&](const ast::LocationAttribute* loc) { TraverseExpression(loc->expr); },
             [&](const ast::StructMemberAlignAttribute* align) { TraverseExpression(align->expr); },
             [&](const ast::StructMemberSizeAttribute* size) { TraverseExpression(size->expr); },
@@ -415,18 +412,12 @@ class DependencyScanner {
         kFunction,
         /// Builtin
         kBuiltin,
-        /// Builtin value
-        kBuiltinValue,
         /// Address space
         kAddressSpace,
         /// Texel format
         kTexelFormat,
         /// Access
         kAccess,
-        /// Interpolation Type
-        kInterpolationType,
-        /// Interpolation Sampling
-        kInterpolationSampling,
     };
 
     /// BuiltinInfo stores information about the builtin that a symbol represents.
@@ -441,12 +432,9 @@ class DependencyScanner {
         std::variant<std::monostate,
                      wgsl::BuiltinFn,
                      core::BuiltinType,
-                     core::BuiltinValue,
                      core::AddressSpace,
                      core::TexelFormat,
-                     core::Access,
-                     core::InterpolationType,
-                     core::InterpolationSampling>
+                     core::Access>
             value = {};
     };
 
@@ -463,10 +451,6 @@ class DependencyScanner {
                 builtin_ty != core::BuiltinType::kUndefined) {
                 return BuiltinInfo{BuiltinType::kBuiltin, builtin_ty};
             }
-            if (auto builtin_val = core::ParseBuiltinValue(symbol.NameView());
-                builtin_val != core::BuiltinValue::kUndefined) {
-                return BuiltinInfo{BuiltinType::kBuiltinValue, builtin_val};
-            }
             if (auto addr = core::ParseAddressSpace(symbol.NameView());
                 addr != core::AddressSpace::kUndefined) {
                 return BuiltinInfo{BuiltinType::kAddressSpace, addr};
@@ -478,14 +462,6 @@ class DependencyScanner {
             if (auto access = core::ParseAccess(symbol.NameView());
                 access != core::Access::kUndefined) {
                 return BuiltinInfo{BuiltinType::kAccess, access};
-            }
-            if (auto i_type = core::ParseInterpolationType(symbol.NameView());
-                i_type != core::InterpolationType::kUndefined) {
-                return BuiltinInfo{BuiltinType::kInterpolationType, i_type};
-            }
-            if (auto i_smpl = core::ParseInterpolationSampling(symbol.NameView());
-                i_smpl != core::InterpolationSampling::kUndefined) {
-                return BuiltinInfo{BuiltinType::kInterpolationSampling, i_smpl};
             }
             return BuiltinInfo{};
         });
@@ -509,10 +485,6 @@ class DependencyScanner {
                     graph_.resolved_identifiers.Add(
                         from, ResolvedIdentifier(builtin_info.Value<core::BuiltinType>()));
                     break;
-                case BuiltinType::kBuiltinValue:
-                    graph_.resolved_identifiers.Add(
-                        from, ResolvedIdentifier(builtin_info.Value<core::BuiltinValue>()));
-                    break;
                 case BuiltinType::kAddressSpace:
                     graph_.resolved_identifiers.Add(
                         from, ResolvedIdentifier(builtin_info.Value<core::AddressSpace>()));
@@ -524,15 +496,6 @@ class DependencyScanner {
                 case BuiltinType::kAccess:
                     graph_.resolved_identifiers.Add(
                         from, ResolvedIdentifier(builtin_info.Value<core::Access>()));
-                    break;
-                case BuiltinType::kInterpolationType:
-                    graph_.resolved_identifiers.Add(
-                        from, ResolvedIdentifier(builtin_info.Value<core::InterpolationType>()));
-                    break;
-                case BuiltinType::kInterpolationSampling:
-                    graph_.resolved_identifiers.Add(
-                        from,
-                        ResolvedIdentifier(builtin_info.Value<core::InterpolationSampling>()));
                     break;
             }
             return;
@@ -883,20 +846,11 @@ std::string ResolvedIdentifier::String() const {
     if (auto builtin_ty = BuiltinType(); builtin_ty != core::BuiltinType::kUndefined) {
         return "builtin type '" + tint::ToString(builtin_ty) + "'";
     }
-    if (auto builtin_val = BuiltinValue(); builtin_val != core::BuiltinValue::kUndefined) {
-        return "builtin value '" + tint::ToString(builtin_val) + "'";
-    }
     if (auto access = Access(); access != core::Access::kUndefined) {
         return "access '" + tint::ToString(access) + "'";
     }
     if (auto addr = AddressSpace(); addr != core::AddressSpace::kUndefined) {
         return "address space '" + tint::ToString(addr) + "'";
-    }
-    if (auto type = InterpolationType(); type != core::InterpolationType::kUndefined) {
-        return "interpolation type '" + tint::ToString(type) + "'";
-    }
-    if (auto smpl = InterpolationSampling(); smpl != core::InterpolationSampling::kUndefined) {
-        return "interpolation sampling '" + tint::ToString(smpl) + "'";
     }
     if (auto fmt = TexelFormat(); fmt != core::TexelFormat::kUndefined) {
         return "texel format '" + tint::ToString(fmt) + "'";

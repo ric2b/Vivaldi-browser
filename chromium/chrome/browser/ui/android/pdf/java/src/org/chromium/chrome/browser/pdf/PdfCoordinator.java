@@ -20,6 +20,7 @@ import org.chromium.chrome.browser.fakepdf.PdfViewerFragment;
 import org.chromium.chrome.browser.fakepdf.PdfViewerFragment.PdfEventsListener;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.native_page.NativePageHost;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.content_public.browser.LoadUrlParams;
 
 import java.net.URL;
@@ -55,6 +56,9 @@ public class PdfCoordinator {
         mHost = host;
         mIsPdfLoaded = false;
         mView = LayoutInflater.from(host.getContext()).inflate(R.layout.pdf_page, null);
+        mView.setBackgroundColor(
+                ChromeColors.getPrimaryBackgroundColor(
+                        host.getContext(), profile.isOffTheRecord()));
         mTextView = mView.findViewById(R.id.fake_pdf_text);
         mTextView.setText(PDF_LOADING);
         mView.addOnAttachStateChangeListener(

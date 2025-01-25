@@ -4,8 +4,10 @@
 
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
-#include "chrome/browser/ui/side_panel/side_panel_entry_id.h"
-#include "chrome/browser/ui/side_panel/side_panel_ui.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_entry_id.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/web_ui_mocha_browser_test.h"
 #include "content/public/common/url_constants.h"
@@ -21,7 +23,7 @@ class ReadAnythingMochaBrowserTest : public WebUIMochaBrowserTest {
   }
 
   void RunSidePanelTest(const std::string& file, const std::string& trigger) {
-    auto* side_panel_ui = SidePanelUI::GetSidePanelUIForBrowser(browser());
+    auto* side_panel_ui = browser()->GetFeatures().side_panel_ui();
     side_panel_ui->Show(SidePanelEntryId::kReadAnything);
     auto* web_contents =
         side_panel_ui->GetWebContentsForTest(SidePanelEntryId::kReadAnything);
@@ -32,14 +34,27 @@ class ReadAnythingMochaBrowserTest : public WebUIMochaBrowserTest {
     ASSERT_TRUE(RunTestOnWebContents(web_contents, file, trigger, true));
     side_panel_ui->Close();
   }
-
-  base::test::ScopedFeatureList scoped_feature_list_{features::kReadAnything};
 };
 
 using ReadAnythingMochaTest = ReadAnythingMochaBrowserTest;
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, CheckmarkVisibleOnSelected) {
-  RunSidePanelTest("side_panel/read_anything/checkmark_visible_on_selected.js",
+  RunSidePanelTest(
+      "side_panel/read_anything/checkmark_visible_on_selected_test.js",
+      "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, Common) {
+  RunSidePanelTest("side_panel/read_anything/common_test.js", "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, Logger) {
+  RunSidePanelTest("side_panel/read_anything/read_anything_logger_test.js",
+                   "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, LoadingScreen) {
+  RunSidePanelTest("side_panel/read_anything/loading_screen_test.js",
                    "mocha.run()");
 }
 
@@ -55,11 +70,6 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, VoiceLanguageUtil) {
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, ReadAloudFlag) {
   RunSidePanelTest("side_panel/read_anything/read_aloud_flag_test.js",
-                   "mocha.run()");
-}
-
-IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, WebUiToolbarFlag) {
-  RunSidePanelTest("side_panel/read_anything/toolbar_flag_test.js",
                    "mocha.run()");
 }
 
@@ -127,11 +137,6 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, RateSelection) {
                    "mocha.run()");
 }
 
-IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, UpdateContentSelection) {
-  RunSidePanelTest("side_panel/read_anything/update_content_selection.js",
-                   "mocha.run()");
-}
-
 IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, FakeTreeBuilderTest) {
   RunSidePanelTest("side_panel/read_anything/fake_tree_builder_test.js",
                    "mocha.run()");
@@ -140,7 +145,8 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, FakeTreeBuilderTest) {
 IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest,
                        UpdateContentSelectionWithHighlights) {
   RunSidePanelTest(
-      "side_panel/read_anything/update_content_selection_with_highlights.js",
+      "side_panel/read_anything/"
+      "update_content_selection_with_highlights_test.js",
       "mocha.run()");
 }
 
@@ -149,15 +155,21 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, LanguageChanged) {
                    "mocha.run()");
 }
 
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, VoiceSelection) {
+  RunSidePanelTest("side_panel/read_anything/voice_selection_test.js",
+                   "mocha.run()");
+}
+
 IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, Prefs) {
   RunSidePanelTest("side_panel/read_anything/prefs_test.js", "mocha.run()");
 }
 
-IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, Speech) {
-  RunSidePanelTest("side_panel/read_anything/speech_test.js", "mocha.run()");
-}
-
-IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, UpdateVoicePack) {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_UpdateVoicePack DISABLED_UpdateVoicePack
+#else
+#define MAYBE_UpdateVoicePack UpdateVoicePack
+#endif
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, MAYBE_UpdateVoicePack) {
   RunSidePanelTest("side_panel/read_anything/update_voice_pack_test.js",
                    "mocha.run()");
 }
@@ -181,27 +193,29 @@ class ReadAnythingReadAloudMochaTest : public ReadAnythingMochaBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudMochaTest,
                        LinksToggledIntegration) {
-  RunSidePanelTest("side_panel/read_anything/links_toggled_integration.js",
+  RunSidePanelTest("side_panel/read_anything/links_toggled_integration_test.js",
                    "mocha.run()");
 }
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudMochaTest,
                        SpeechUsesMaxTextLength) {
-  RunSidePanelTest("side_panel/read_anything/speech_uses_max_text_length.js",
-                   "mocha.run()");
+  RunSidePanelTest(
+      "side_panel/read_anything/speech_uses_max_text_length_test.js",
+      "mocha.run()");
 }
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudMochaTest,
                        ReadAloud_UpdateContentSelection) {
   RunSidePanelTest(
-      "side_panel/read_anything/read_aloud_update_content_selection.js",
+      "side_panel/read_anything/read_aloud_update_content_selection_test.js",
       "mocha.run()");
 }
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudMochaTest,
                        ReadAloud_UpdateContentSelectionPDF) {
   RunSidePanelTest(
-      "side_panel/read_anything/read_aloud_update_content_selection_pdf.js",
+      "side_panel/read_anything/"
+      "read_aloud_update_content_selection_pdf_test.js",
       "mocha.run()");
 }
 
@@ -212,8 +226,23 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudMochaTest, ReadAloudHighlight) {
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudMochaTest,
                        WordBoundariesUsedForSpeech) {
+  RunSidePanelTest("side_panel/read_anything/word_boundaries_test.js",
+                   "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudMochaTest, Speech) {
+  RunSidePanelTest("side_panel/read_anything/speech_test.js", "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudMochaTest, UpdateContentSelection) {
+  RunSidePanelTest("side_panel/read_anything/update_content_selection_test.js",
+                   "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudMochaTest,
+                       UpdateContentIntegration) {
   RunSidePanelTest(
-      "side_panel/read_anything/word_boundaries_used_for_speech.js",
+      "side_panel/read_anything/update_content_integration_test.js",
       "mocha.run()");
 }
 
@@ -235,6 +264,30 @@ class ReadAnythingReadAloudWordHighlightingMochaTest
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudWordHighlightingMochaTest,
                        WordHighlighting) {
-  RunSidePanelTest("side_panel/read_anything/word_highlighting.js",
+  RunSidePanelTest("side_panel/read_anything/word_highlighting_test.js",
                    "mocha.run()");
+}
+
+// TODO(b/301131238): Remove this test once the word highlighting flag is
+// removed.
+// Integration tests that need the actual Read Aloud flag enabled and the word
+// highlighting flag because they use the full C++ pipeline
+class ReadAnythingReadAloudWordHighlightingDisabledMochaTest
+    : public ReadAnythingMochaBrowserTest {
+ protected:
+  ReadAnythingReadAloudWordHighlightingDisabledMochaTest() {
+    scoped_feature_list_.InitWithFeatures(
+        {features::kReadAnythingReadAloud},
+        {features::kReadAnythingReadAloudAutomaticWordHighlighting});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudWordHighlightingDisabledMochaTest,
+                       WordHighlighting) {
+  RunSidePanelTest(
+      "side_panel/read_anything/word_highlighting_disabled_test.js",
+      "mocha.run()");
 }

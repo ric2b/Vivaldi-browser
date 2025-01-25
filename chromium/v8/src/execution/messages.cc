@@ -13,6 +13,8 @@
 #include "src/execution/frames-inl.h"
 #include "src/execution/frames.h"
 #include "src/execution/isolate-inl.h"
+#include "src/execution/isolate.h"
+#include "src/handles/maybe-handles.h"
 #include "src/logging/runtime-call-stats-scope.h"
 #include "src/objects/call-site-info-inl.h"
 #include "src/objects/foreign-inl.h"
@@ -67,7 +69,7 @@ void MessageHandler::DefaultMessageReport(Isolate* isolate,
     DirectHandle<Object> data(loc->script()->name(), isolate);
     std::unique_ptr<char[]> data_str;
     if (IsString(*data))
-      data_str = DirectHandle<String>::cast(data)->ToCString(DISALLOW_NULLS);
+      data_str = Cast<String>(data)->ToCString(DISALLOW_NULLS);
     PrintF("%s:%i: %s\n", data_str ? data_str.get() : "<unknown>",
            loc->start_pos(), str.get());
   }
@@ -92,9 +94,8 @@ Handle<JSMessageObject> MessageHandler::MakeMessageObject(
   }
 
   DirectHandle<Object> stack_frames_handle =
-      stack_frames.is_null()
-          ? DirectHandle<Object>::cast(factory->undefined_value())
-          : DirectHandle<Object>::cast(stack_frames);
+      stack_frames.is_null() ? Cast<Object>(factory->undefined_value())
+                             : Cast<Object>(stack_frames);
 
   Handle<JSMessageObject> message_obj = factory->NewJSMessageObject(
       message, argument, start, end, shared_info, bytecode_offset,
@@ -171,15 +172,15 @@ void MessageHandler::ReportMessageNoExceptions(
     for (int i = 0; i < global_length; i++) {
       HandleScope scope(isolate);
       if (IsUndefined(global_listeners->get(i), isolate)) continue;
-      Tagged<FixedArray> listener = FixedArray::cast(global_listeners->get(i));
-      Tagged<Foreign> callback_obj = Foreign::cast(listener->get(0));
+      Tagged<FixedArray> listener = Cast<FixedArray>(global_listeners->get(i));
+      Tagged<Foreign> callback_obj = Cast<Foreign>(listener->get(0));
       int32_t message_levels =
           static_cast<int32_t>(Smi::ToInt(listener->get(2)));
       if (!(message_levels & error_level)) {
         continue;
       }
       v8::MessageCallback callback = FUNCTION_CAST<v8::MessageCallback>(
-          callback_obj->foreign_address<kGenericForeignTag>());
+          callback_obj->foreign_address<kMessageListenerTag>());
       DirectHandle<Object> callback_data(listener->get(1), isolate);
       {
         RCS_SCOPE(isolate, RuntimeCallCounterId::kMessageListenerCallback);
@@ -196,8 +197,7 @@ void MessageHandler::ReportMessageNoExceptions(
 
 Handle<String> MessageHandler::GetMessage(Isolate* isolate,
                                           DirectHandle<Object> data) {
-  DirectHandle<JSMessageObject> message =
-      DirectHandle<JSMessageObject>::cast(data);
+  DirectHandle<JSMessageObject> message = Cast<JSMessageObject>(data);
   DirectHandle<Object> arg{message->argument(), isolate};
   return MessageFormatter::Format(isolate, message->type(),
                                   base::VectorOf({arg}));
@@ -214,22 +214,21 @@ namespace {
 // Convert the raw frames as written by Isolate::CaptureSimpleStackTrace into
 // a JSArray of JSCallSite objects.
 MaybeHandle<JSArray> GetStackFrames(Isolate* isolate,
-                                    Handle<FixedArray> frames) {
+                                    DirectHandle<FixedArray> frames) {
   int frame_count = frames->length();
   Handle<JSFunction> constructor = isolate->callsite_function();
-  Handle<FixedArray> sites = isolate->factory()->NewFixedArray(frame_count);
+  DirectHandle<FixedArray> sites =
+      isolate->factory()->NewFixedArray(frame_count);
   for (int i = 0; i < frame_count; ++i) {
-    Handle<CallSiteInfo> frame(CallSiteInfo::cast(frames->get(i)), isolate);
+    Handle<CallSiteInfo> frame(Cast<CallSiteInfo>(frames->get(i)), isolate);
     Handle<JSObject> site;
-    ASSIGN_RETURN_ON_EXCEPTION(
-        isolate, site,
-        JSObject::New(constructor, constructor, Handle<AllocationSite>::null()),
-        JSArray);
-    RETURN_ON_EXCEPTION(isolate,
-                        JSObject::SetOwnPropertyIgnoreAttributes(
-                            site, isolate->factory()->call_site_info_symbol(),
-                            frame, DONT_ENUM),
-                        JSArray);
+    ASSIGN_RETURN_ON_EXCEPTION(isolate, site,
+                               JSObject::New(constructor, constructor,
+                                             Handle<AllocationSite>::null()));
+    RETURN_ON_EXCEPTION(
+        isolate, JSObject::SetOwnPropertyIgnoreAttributes(
+                     site, isolate->factory()->call_site_info_symbol(), frame,
+                     DONT_ENUM));
     sites->set(i, *site);
   }
 
@@ -242,7 +241,7 @@ MaybeHandle<Object> AppendErrorString(Isolate* isolate, Handle<Object> error,
   try_catch.SetVerbose(false);
   try_catch.SetCaptureMessage(false);
   MaybeHandle<String> err_str = ErrorUtils::ToString(
-      isolate, Handle<Object>::cast(error),
+      isolate, Cast<Object>(error),
       ErrorUtils::ToStringMessageSource::kPreferOriginalMessage);
   if (err_str.is_null()) {
     // Error.toString threw. Try to return a string representation of the thrown
@@ -295,14 +294,13 @@ class V8_NODISCARD PrepareStackTraceScope {
 }  // namespace
 
 // static
-MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
-                                                 Handle<JSObject> error,
-                                                 Handle<Object> raw_stack) {
+MaybeHandle<Object> ErrorUtils::FormatStackTrace(
+    Isolate* isolate, Handle<JSObject> error, DirectHandle<Object> raw_stack) {
   if (v8_flags.correctness_fuzzer_suppressions) {
     return isolate->factory()->empty_string();
   }
   DCHECK(IsFixedArray(*raw_stack));
-  Handle<FixedArray> elems = Handle<FixedArray>::cast(raw_stack);
+  auto elems = Cast<FixedArray>(raw_stack);
 
   const bool in_recursion = isolate->formatting_stack_trace();
   const bool has_overflowed = i::StackLimitCheck{isolate}.HasOverflowed();
@@ -313,14 +311,13 @@ MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
       PrepareStackTraceScope scope(isolate);
 
       Handle<JSArray> sites;
-      ASSIGN_RETURN_ON_EXCEPTION(isolate, sites, GetStackFrames(isolate, elems),
-                                 Object);
+      ASSIGN_RETURN_ON_EXCEPTION(isolate, sites,
+                                 GetStackFrames(isolate, elems));
 
       Handle<Object> result;
       ASSIGN_RETURN_ON_EXCEPTION(
           isolate, result,
-          isolate->RunPrepareStackTraceCallback(error_context, error, sites),
-          Object);
+          isolate->RunPrepareStackTraceCallback(error_context, error, sites));
       return result;
     } else {
       Handle<JSFunction> global_error =
@@ -332,8 +329,7 @@ MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
       Handle<Object> prepare_stack_trace;
       ASSIGN_RETURN_ON_EXCEPTION(
           isolate, prepare_stack_trace,
-          JSFunction::GetProperty(isolate, global_error, "prepareStackTrace"),
-          Object);
+          JSFunction::GetProperty(isolate, global_error, "prepareStackTrace"));
 
       if (IsJSFunction(*prepare_stack_trace)) {
         PrepareStackTraceScope scope(isolate);
@@ -342,14 +338,14 @@ MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
 
         Handle<JSArray> sites;
         ASSIGN_RETURN_ON_EXCEPTION(isolate, sites,
-                                   GetStackFrames(isolate, elems), Object);
+                                   GetStackFrames(isolate, elems));
 
         const int argc = 2;
         base::ScopedVector<Handle<Object>> argv(argc);
         if (V8_UNLIKELY(IsJSGlobalObject(*error))) {
           // Pass global proxy instead of global object.
           argv[0] =
-              handle(JSGlobalObject::cast(*error)->global_proxy(), isolate);
+              handle(Cast<JSGlobalObject>(*error)->global_proxy(), isolate);
         } else {
           argv[0] = error;
         }
@@ -360,8 +356,7 @@ MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
         ASSIGN_RETURN_ON_EXCEPTION(
             isolate, result,
             Execution::Call(isolate, prepare_stack_trace, global_error, argc,
-                            argv.begin()),
-            Object);
+                            argv.begin()));
 
         return result;
       }
@@ -371,13 +366,12 @@ MaybeHandle<Object> ErrorUtils::FormatStackTrace(Isolate* isolate,
   // Otherwise, run our internal formatting logic.
   IncrementalStringBuilder builder(isolate);
 
-  RETURN_ON_EXCEPTION(isolate, AppendErrorString(isolate, error, &builder),
-                      Object);
+  RETURN_ON_EXCEPTION(isolate, AppendErrorString(isolate, error, &builder));
 
   for (int i = 0; i < elems->length(); ++i) {
     builder.AppendCStringLiteral("\n    at ");
 
-    Handle<CallSiteInfo> frame(CallSiteInfo::cast(elems->get(i)), isolate);
+    Handle<CallSiteInfo> frame(Cast<CallSiteInfo>(elems->get(i)), isolate);
 
     v8::TryCatch try_catch(reinterpret_cast<v8::Isolate*>(isolate));
     SerializeCallSiteInfo(isolate, frame, &builder);
@@ -578,17 +572,16 @@ MaybeHandle<JSObject> ErrorUtils::Construct(
 
   // 1. If NewTarget is undefined, let newTarget be the active function object,
   // else let newTarget be NewTarget.
-  Handle<JSReceiver> new_target_recv =
-      IsJSReceiver(*new_target) ? Handle<JSReceiver>::cast(new_target)
-                                : Handle<JSReceiver>::cast(target);
+  Handle<JSReceiver> new_target_recv = IsJSReceiver(*new_target)
+                                           ? Cast<JSReceiver>(new_target)
+                                           : Cast<JSReceiver>(target);
 
   // 2. Let O be ? OrdinaryCreateFromConstructor(newTarget, "%ErrorPrototype%",
   //    « [[ErrorData]] »).
   Handle<JSObject> err;
   ASSIGN_RETURN_ON_EXCEPTION(
       isolate, err,
-      JSObject::New(target, new_target_recv, Handle<AllocationSite>::null()),
-      JSObject);
+      JSObject::New(target, new_target_recv, Handle<AllocationSite>::null()));
 
   // 3. If message is not undefined, then
   //  a. Let msg be ? ToString(message).
@@ -600,19 +593,16 @@ MaybeHandle<JSObject> ErrorUtils::Construct(
     Handle<String> msg_string;
     ASSIGN_RETURN_ON_EXCEPTION(
         isolate, msg_string,
-        indirect_handle(Object::ToString(isolate, message), isolate), JSObject);
-    RETURN_ON_EXCEPTION(
-        isolate,
-        JSObject::SetOwnPropertyIgnoreAttributes(
-            err, isolate->factory()->message_string(), msg_string, DONT_ENUM),
-        JSObject);
+        indirect_handle(Object::ToString(isolate, message), isolate));
+    RETURN_ON_EXCEPTION(isolate, JSObject::SetOwnPropertyIgnoreAttributes(
+                                     err, isolate->factory()->message_string(),
+                                     msg_string, DONT_ENUM));
 
     if (v8_flags.use_original_message_for_stack_trace) {
       RETURN_ON_EXCEPTION(isolate,
                           JSObject::SetOwnPropertyIgnoreAttributes(
                               err, isolate->factory()->error_message_symbol(),
-                              msg_string, DONT_ENUM),
-                          JSObject);
+                              msg_string, DONT_ENUM));
     }
   }
 
@@ -622,7 +612,7 @@ MaybeHandle<JSObject> ErrorUtils::Construct(
     //   b. Perform ! CreateNonEnumerableDataPropertyOrThrow(O, "cause", cause).
     Handle<Name> cause_string = isolate->factory()->cause_string();
     if (IsJSReceiver(*options)) {
-      Handle<JSReceiver> js_options = Handle<JSReceiver>::cast(options);
+      Handle<JSReceiver> js_options = Cast<JSReceiver>(options);
       Maybe<bool> has_cause =
           JSObject::HasProperty(isolate, js_options, cause_string);
       if (has_cause.IsNothing()) {
@@ -633,11 +623,9 @@ MaybeHandle<JSObject> ErrorUtils::Construct(
         Handle<Object> cause;
         ASSIGN_RETURN_ON_EXCEPTION(
             isolate, cause,
-            JSObject::GetProperty(isolate, js_options, cause_string), JSObject);
-        RETURN_ON_EXCEPTION(isolate,
-                            JSObject::SetOwnPropertyIgnoreAttributes(
-                                err, cause_string, cause, DONT_ENUM),
-                            JSObject);
+            JSObject::GetProperty(isolate, js_options, cause_string));
+        RETURN_ON_EXCEPTION(isolate, JSObject::SetOwnPropertyIgnoreAttributes(
+                                         err, cause_string, cause, DONT_ENUM));
       }
     }
   }
@@ -645,8 +633,7 @@ MaybeHandle<JSObject> ErrorUtils::Construct(
   switch (stack_trace_collection) {
     case StackTraceCollection::kEnabled:
       RETURN_ON_EXCEPTION(isolate,
-                          isolate->CaptureAndSetErrorStack(err, mode, caller),
-                          JSObject);
+                          isolate->CaptureAndSetErrorStack(err, mode, caller));
       break;
     case StackTraceCollection::kDisabled:
       break;
@@ -662,14 +649,13 @@ MaybeHandle<String> GetStringPropertyOrDefault(Isolate* isolate,
                                                Handle<String> default_str) {
   Handle<Object> obj;
   ASSIGN_RETURN_ON_EXCEPTION(isolate, obj,
-                             JSObject::GetProperty(isolate, recv, key), String);
+                             JSObject::GetProperty(isolate, recv, key));
 
   Handle<String> str;
   if (IsUndefined(*obj, isolate)) {
     str = default_str;
   } else {
-    ASSIGN_RETURN_ON_EXCEPTION(isolate, str, Object::ToString(isolate, obj),
-                               String);
+    ASSIGN_RETURN_ON_EXCEPTION(isolate, str, Object::ToString(isolate, obj));
   }
 
   return str;
@@ -684,13 +670,13 @@ MaybeHandle<String> ErrorUtils::ToString(Isolate* isolate,
   // 1. Let O be the this value.
   // 2. If Type(O) is not Object, throw a TypeError exception.
   if (!IsJSReceiver(*receiver)) {
-    return isolate->Throw<String>(isolate->factory()->NewTypeError(
-        MessageTemplate::kIncompatibleMethodReceiver,
-        isolate->factory()->NewStringFromAsciiChecked(
-            "Error.prototype.toString"),
-        receiver));
+    THROW_NEW_ERROR(isolate,
+                    NewTypeError(MessageTemplate::kIncompatibleMethodReceiver,
+                                 isolate->factory()->NewStringFromAsciiChecked(
+                                     "Error.prototype.toString"),
+                                 receiver));
   }
-  Handle<JSReceiver> recv = Handle<JSReceiver>::cast(receiver);
+  Handle<JSReceiver> recv = Cast<JSReceiver>(receiver);
 
   // 3. Let name be ? Get(O, "name").
   // 4. If name is undefined, let name be "Error"; otherwise let name be
@@ -700,8 +686,7 @@ MaybeHandle<String> ErrorUtils::ToString(Isolate* isolate,
   Handle<String> name;
   ASSIGN_RETURN_ON_EXCEPTION(
       isolate, name,
-      GetStringPropertyOrDefault(isolate, recv, name_key, name_default),
-      String);
+      GetStringPropertyOrDefault(isolate, recv, name_key, name_default));
 
   // 5. Let msg be ? Get(O, "message").
   // 6. If msg is undefined, let msg be the empty String; otherwise let msg be
@@ -722,7 +707,7 @@ MaybeHandle<String> ErrorUtils::ToString(Isolate* isolate,
       msg = msg_default;
     } else if (it.IsFound()) {
       ASSIGN_RETURN_ON_EXCEPTION(isolate, msg,
-                                 Object::ToString(isolate, result), String);
+                                 Object::ToString(isolate, result));
     }
   }
 
@@ -730,8 +715,7 @@ MaybeHandle<String> ErrorUtils::ToString(Isolate* isolate,
     Handle<String> msg_key = isolate->factory()->message_string();
     ASSIGN_RETURN_ON_EXCEPTION(
         isolate, msg,
-        GetStringPropertyOrDefault(isolate, recv, msg_key, msg_default),
-        String);
+        GetStringPropertyOrDefault(isolate, recv, msg_key, msg_default));
   }
 
   // 7. If name is the empty String, return msg.
@@ -747,8 +731,8 @@ MaybeHandle<String> ErrorUtils::ToString(Isolate* isolate,
   builder.AppendString(msg);
 
   Handle<String> result;
-  ASSIGN_RETURN_ON_EXCEPTION(
-      isolate, result, indirect_handle(builder.Finish(), isolate), String);
+  ASSIGN_RETURN_ON_EXCEPTION(isolate, result,
+                             indirect_handle(builder.Finish(), isolate));
   return result;
 }
 
@@ -793,8 +777,8 @@ bool ComputeLocation(Isolate* isolate, MessageLocation* target) {
     int pos =
         summary.abstract_code()->SourcePosition(isolate, summary.code_offset());
     if (IsScript(*script) &&
-        !(IsUndefined(Handle<Script>::cast(script)->source(), isolate))) {
-      Handle<Script> casted_script = Handle<Script>::cast(script);
+        !(IsUndefined(Cast<Script>(script)->source(), isolate))) {
+      Handle<Script> casted_script = Cast<Script>(script);
       *target = MessageLocation(casted_script, pos, pos + 1, shared);
       return true;
     }
@@ -808,7 +792,7 @@ Handle<String> BuildDefaultCallSite(Isolate* isolate, Handle<Object> object) {
   builder.AppendString(Object::TypeOf(isolate, object));
   if (IsString(*object)) {
     builder.AppendCStringLiteral(" \"");
-    Handle<String> string = Handle<String>::cast(object);
+    Handle<String> string = Cast<String>(object);
     // This threshold must be sufficiently far below String::kMaxLength that
     // the {builder}'s result can never exceed that limit.
     constexpr int kMaxPrintedStringLength = 100;
@@ -961,7 +945,7 @@ Tagged<Object> ErrorUtils::ThrowLoadFromNullOrUndefined(
   DirectHandle<Object> key_handle;
   if (key.ToHandle(&key_handle)) {
     if (IsString(*key_handle)) {
-      maybe_property_name = DirectHandle<String>::cast(key_handle);
+      maybe_property_name = Cast<String>(key_handle);
     } else {
       maybe_property_name =
           Object::NoSideEffectsToMaybeString(isolate, key_handle);
@@ -1097,8 +1081,7 @@ MaybeHandle<Object> ErrorUtils::GetFormattedStack(
       ErrorUtils::GetErrorStackProperty(isolate, maybe_error_object);
 
   if (IsErrorStackData(*lookup.error_stack)) {
-    Handle<ErrorStackData> error_stack_data =
-        Handle<ErrorStackData>::cast(lookup.error_stack);
+    auto error_stack_data = Cast<ErrorStackData>(lookup.error_stack);
     if (error_stack_data->HasFormattedStack()) {
       return handle(error_stack_data->formatted_stack(), isolate);
     }
@@ -1110,8 +1093,7 @@ MaybeHandle<Object> ErrorUtils::GetFormattedStack(
     ASSIGN_RETURN_ON_EXCEPTION(
         isolate, formatted_stack,
         FormatStackTrace(isolate, error_object,
-                         handle(error_stack_data->call_site_infos(), isolate)),
-        Object);
+                         handle(error_stack_data->call_site_infos(), isolate)));
     error_stack_data->set_formatted_stack(*formatted_stack);
     return formatted_stack;
   }
@@ -1123,15 +1105,12 @@ MaybeHandle<Object> ErrorUtils::GetFormattedStack(
     ASSIGN_RETURN_ON_EXCEPTION(
         isolate, formatted_stack,
         FormatStackTrace(isolate, error_object,
-                         Handle<FixedArray>::cast(lookup.error_stack)),
-        Object);
+                         Cast<FixedArray>(lookup.error_stack)));
     RETURN_ON_EXCEPTION(
-        isolate,
-        Object::SetProperty(isolate, error_object,
-                            isolate->factory()->error_stack_symbol(),
-                            formatted_stack, StoreOrigin::kMaybeKeyed,
-                            Just(ShouldThrow::kThrowOnError)),
-        Object);
+        isolate, Object::SetProperty(isolate, error_object,
+                                     isolate->factory()->error_stack_symbol(),
+                                     formatted_stack, StoreOrigin::kMaybeKeyed,
+                                     Just(ShouldThrow::kThrowOnError)));
     return formatted_stack;
   }
 
@@ -1151,8 +1130,7 @@ void ErrorUtils::SetFormattedStack(Isolate* isolate,
   if (!lookup.error_stack_symbol_holder.ToHandle(&error_object)) return;
 
   if (IsErrorStackData(*lookup.error_stack)) {
-    Handle<ErrorStackData> error_stack_data =
-        Handle<ErrorStackData>::cast(lookup.error_stack);
+    auto error_stack_data = Cast<ErrorStackData>(lookup.error_stack);
     ErrorStackData::EnsureStackFrameInfos(isolate, error_stack_data);
     error_stack_data->set_formatted_stack(*formatted_stack);
   } else {
@@ -1175,8 +1153,8 @@ MaybeHandle<Object> ErrorUtils::CaptureStackTrace(Isolate* isolate,
   // Explicitly check for frozen objects to simplify things since we need to
   // add both "stack" and "error_stack_symbol" properties in one go.
   if (!JSObject::IsExtensible(isolate, object)) {
-    return isolate->Throw<Object>(
-        factory->NewTypeError(MessageTemplate::kDefineDisallowed, name));
+    THROW_NEW_ERROR(isolate,
+                    NewTypeError(MessageTemplate::kDefineDisallowed, name));
   }
 
   // Add the stack accessors.
@@ -1192,8 +1170,8 @@ MaybeHandle<Object> ErrorUtils::CaptureStackTrace(Isolate* isolate,
 
   // Collect the stack trace and store it in |object|'s private
   // "error_stack_symbol" property.
-  RETURN_ON_EXCEPTION(
-      isolate, isolate->CaptureAndSetErrorStack(object, mode, caller), Object);
+  RETURN_ON_EXCEPTION(isolate,
+                      isolate->CaptureAndSetErrorStack(object, mode, caller));
 
   return isolate->factory()->undefined_value();
 }

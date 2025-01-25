@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "services/network/p2p/socket_test_utils.h"
 
 #include <stddef.h>
@@ -163,7 +168,7 @@ int FakeSocket::Connect(net::CompletionOnceCallback callback) {
 }
 
 void FakeSocket::Disconnect() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 bool FakeSocket::IsConnected() const {
@@ -185,7 +190,7 @@ int FakeSocket::GetLocalAddress(net::IPEndPoint* address) const {
 }
 
 const net::NetLogWithSource& FakeSocket::NetLog() const {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return net_log_;
 }
 
@@ -247,11 +252,10 @@ void CreateRandomPacket(std::vector<uint8_t>* packet) {
 static void CreateStunPacket(std::vector<uint8_t>* packet, uint16_t type) {
   CreateRandomPacket(packet);
   auto header = base::span(*packet).first<8u>();
-  header.subspan<0u, 2u>().copy_from(base::numerics::U16ToBigEndian(type));
-  header.subspan<2u, 2u>().copy_from(base::numerics::U16ToBigEndian(
+  header.subspan<0u, 2u>().copy_from(base::U16ToBigEndian(type));
+  header.subspan<2u, 2u>().copy_from(base::U16ToBigEndian(
       base::checked_cast<uint16_t>(packet->size() - kStunHeaderSize)));
-  header.subspan<4u, 4u>().copy_from(
-      base::numerics::U32ToBigEndian(kStunMagicCookie));
+  header.subspan<4u, 4u>().copy_from(base::U32ToBigEndian(kStunMagicCookie));
 }
 
 void CreateStunRequest(std::vector<uint8_t>* packet) {

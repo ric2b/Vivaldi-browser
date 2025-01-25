@@ -35,7 +35,7 @@ bool RecurrrenceExceptionTable ::CreateRecurringExceptionTable() {
       "last_modified INTEGER"
       ")");
 
-  return GetDB().Execute(sql.c_str());
+  return GetDB().Execute(sql);
 }
 
 RecurrenceExceptionID RecurrrenceExceptionTable ::CreateRecurrenceException(

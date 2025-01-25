@@ -3,14 +3,13 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <arm_neon.h>
 #include <assert.h>
 #include <math.h>
 #include <stddef.h>
 
-#include <arm_neon.h>
-
-#include <xnnpack/common.h>
-#include <xnnpack/math-stubs.h>
+#include "xnnpack/common.h"
+#include "xnnpack/math-stubs.h"
 
 
 // Table of exp2(k / 64) values, k = 0..63

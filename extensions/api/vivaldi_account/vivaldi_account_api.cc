@@ -55,6 +55,7 @@ vivaldi::vivaldi_account::State GetState(Profile* profile) {
   state.account_info.username = account_info.username;
   state.account_info.account_id = account_info.account_id;
   state.account_info.picture_url = account_info.picture_url;
+  state.account_info.donation_tier = account_info.donation_tier;
   state.has_saved_password =
       !account_manager->password_handler()->password().empty();
 
@@ -101,14 +102,6 @@ void VivaldiAccountEventRouter::OnTokenFetchSucceeded() {
 }
 
 void VivaldiAccountEventRouter::OnTokenFetchFailed() {
-  ::vivaldi::BroadcastEvent(
-      vivaldi::vivaldi_account::OnAccountStateChanged::kEventName,
-      vivaldi::vivaldi_account::OnAccountStateChanged::Create(
-          GetState(profile_)),
-      profile_);
-}
-
-void VivaldiAccountEventRouter::OnAccountInfoFetchFailed() {
   ::vivaldi::BroadcastEvent(
       vivaldi::vivaldi_account::OnAccountStateChanged::kEventName,
       vivaldi::vivaldi_account::OnAccountStateChanged::Create(

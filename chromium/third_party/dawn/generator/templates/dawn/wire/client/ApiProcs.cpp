@@ -30,6 +30,7 @@
 #include <string>
 #include <type_traits>
 #include <vector>
+#include <utility>
 
 #include "dawn/wire/client/Client.h"
 #include "dawn/wire/client/webgpu.h"
@@ -40,14 +41,14 @@ namespace dawn::wire::client {
     template <typename Parent, typename Child, typename... Args>
     Child* Create(Parent p, Args... args) {
         if constexpr (std::is_constructible_v<Child, const ObjectBaseParams&, decltype(args)...>) {
-            return p->GetClient()->template Make<Child>(args...);
+            return p->GetClient()->template Make<Child>(args...).Detach();
         } else if constexpr (std::is_constructible_v<Child, const ObjectBaseParams&, const ObjectHandle&, decltype(args)...>) {
-            return p->GetClient()->template Make<Child>(p->GetEventManagerHandle(), args...);
+            return p->GetClient()->template Make<Child>(p->GetEventManagerHandle(), args...).Detach();
         } else {
             if constexpr (std::is_base_of_v<ObjectWithEventsBase, Child>) {
-                return p->GetClient()->template Make<Child>(p->GetEventManagerHandle());
+                return p->GetClient()->template Make<Child>(p->GetEventManagerHandle()).Detach();
             } else {
-                return p->GetClient()->template Make<Child>();
+                return p->GetClient()->template Make<Child>().Detach();
             }
         }
     }
@@ -62,7 +63,7 @@ namespace dawn::wire::client {
     {% for method in type.methods %}
         {% set Suffix = as_MethodSuffix(type.name, method.name) %}
 
-        DAWN_WIRE_EXPORT {{as_cReturnType(method.return_type)}} {{as_cMethodNamespaced(type.name, method.name, Name('dawn wire client'))}}(
+        DAWN_WIRE_EXPORT {{as_cType(method.return_type.name)}} {{as_cMethodNamespaced(type.name, method.name, Name('dawn wire client'))}}(
             {{-cType}} cSelf
             {%- for arg in method.arguments -%}
                 , {{as_annotated_cType(arg)}}
@@ -111,16 +112,11 @@ namespace dawn::wire::client {
     //* When an object's refcount reaches 0, notify the server side of it and delete it.
     DAWN_WIRE_EXPORT void {{as_cMethodNamespaced(type.name, Name("release"), Name('dawn wire client'))}}({{cType}} cObj) {
         {{Type}}* obj = reinterpret_cast<{{Type}}*>(cObj);
-        obj->Release();
+        obj->APIRelease();
     }
 
     DAWN_WIRE_EXPORT void {{as_cMethodNamespaced(type.name, Name("add ref"), Name('dawn wire client'))}}({{cType}} cObj) {
-        reinterpret_cast<{{Type}}*>(cObj)->AddRef();
-    }
-
-    //* TODO(dawn:2234): Deprecated. Remove once no longer user.
-    DAWN_WIRE_EXPORT void {{as_cMethodNamespaced(type.name, Name("reference"), Name('dawn wire client'))}}({{cType}} cObj) {
-        {{as_cMethodNamespaced(type.name, Name("add ref"), Name('dawn wire client'))}}(cObj);
+        reinterpret_cast<{{Type}}*>(cObj)->APIAddRef();
     }
 
 {% endfor %}

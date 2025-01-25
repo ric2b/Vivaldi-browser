@@ -10,6 +10,8 @@
 #include "discovery/mdns/public/mdns_records.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "platform/base/span.h"
+#include "platform/test/byte_view_test_util.h"
 #include "platform/test/fake_udp_socket.h"
 #include "platform/test/mock_udp_socket.h"
 
@@ -21,16 +23,10 @@ using testing::Return;
 using testing::StrictMock;
 using testing::WithArgs;
 
-namespace {
-
-ACTION_P(VoidPointerMatchesBytes, expected_data) {
-  const uint8_t* actual_data = static_cast<const uint8_t*>(arg0);
-  for (size_t i = 0; i < expected_data.size(); ++i) {
-    EXPECT_EQ(actual_data[i], expected_data[i]);
-  }
+ACTION_P(MatchesBytes, expected_data) {
+  const ByteView& actual_data = arg0;
+  ExpectByteViewsHaveSameBytes(actual_data, expected_data);
 }
-
-}  // namespace
 
 class MdnsSenderTest : public testing::Test {
  public:
@@ -106,8 +102,8 @@ TEST_F(MdnsSenderTest, SendMulticast) {
   EXPECT_CALL(socket, IsIPv4()).WillRepeatedly(Return(true));
   EXPECT_CALL(socket, IsIPv6()).WillRepeatedly(Return(true));
   MdnsSender sender(socket);
-  EXPECT_CALL(socket, SendMessage(_, kQueryBytes.size(), _))
-      .WillOnce(WithArgs<0>(VoidPointerMatchesBytes(kQueryBytes)));
+  EXPECT_CALL(socket, SendMessage(_, _))
+      .WillOnce(WithArgs<0>(MatchesBytes(kQueryBytes)));
   EXPECT_EQ(sender.SendMulticast(query_message_), Error::Code::kNone);
 }
 
@@ -116,8 +112,8 @@ TEST_F(MdnsSenderTest, SendUnicastIPv4) {
 
   StrictMock<MockUdpSocket> socket;
   MdnsSender sender(socket);
-  EXPECT_CALL(socket, SendMessage(_, kResponseBytes.size(), _))
-      .WillOnce(WithArgs<0>(VoidPointerMatchesBytes(kResponseBytes)));
+  EXPECT_CALL(socket, SendMessage(_, _))
+      .WillOnce(WithArgs<0>(MatchesBytes(kResponseBytes)));
   EXPECT_EQ(sender.SendMessage(response_message_, endpoint),
             Error::Code::kNone);
 }
@@ -130,8 +126,8 @@ TEST_F(MdnsSenderTest, SendUnicastIPv6) {
 
   StrictMock<MockUdpSocket> socket;
   MdnsSender sender(socket);
-  EXPECT_CALL(socket, SendMessage(_, kResponseBytes.size(), _))
-      .WillOnce(WithArgs<0>(VoidPointerMatchesBytes(kResponseBytes)));
+  EXPECT_CALL(socket, SendMessage(_, _))
+      .WillOnce(WithArgs<0>(MatchesBytes(kResponseBytes)));
   EXPECT_EQ(sender.SendMessage(response_message_, endpoint),
             Error::Code::kNone);
 }

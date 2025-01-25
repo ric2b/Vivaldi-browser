@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/platform/widget/compositing/layer_tree_view.h"
 
 #include <stddef.h>
+
 #include <string>
 #include <utility>
 
@@ -28,6 +29,7 @@
 #include "cc/debug/layer_tree_debug_state.h"
 #include "cc/input/layer_selection_bound.h"
 #include "cc/layers/layer.h"
+#include "cc/metrics/ukm_manager.h"
 #include "cc/metrics/web_vital_metrics.h"
 #include "cc/tiles/raster_dark_mode_filter.h"
 #include "cc/trees/layer_tree_host.h"
@@ -36,7 +38,6 @@
 #include "cc/trees/presentation_time_callback_buffer.h"
 #include "cc/trees/render_frame_metadata_observer.h"
 #include "cc/trees/swap_promise.h"
-#include "cc/trees/ukm_manager.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/quads/compositor_frame_metadata.h"
@@ -200,6 +201,11 @@ void LayerTreeView::SetVisible(bool visible) {
   }
 }
 
+void LayerTreeView::SetShouldWarmUp() {
+  DCHECK(delegate_);
+  layer_tree_host_->SetShouldWarmUp();
+}
+
 void LayerTreeView::SetLayerTreeFrameSink(
     std::unique_ptr<cc::LayerTreeFrameSink> layer_tree_frame_sink,
     std::unique_ptr<cc::RenderFrameMetadataObserver>
@@ -321,8 +327,11 @@ void LayerTreeView::RequestNewLayerTreeFrameSink() {
   // When the compositor is not visible it would not request a
   // LayerTreeFrameSink so this is a race where it requested one on the
   // compositor thread while becoming non-visible on the main thread. In that
-  // case, we can wait for it to become visible again before replying.
-  if (!layer_tree_host_->IsVisible()) {
+  // case, we can wait for it to become visible again before replying. If
+  // `kWarmUpCompositor` is enabled and warm-up is triggered, a
+  // LayerTreeFrameSink is requested even if non-visible state. We can ignore
+  // this branch in that case. If not enabled, `ShouldWarmUp()` is always false.
+  if (!layer_tree_host_->ShouldWarmUp() && !layer_tree_host_->IsVisible()) {
     frame_sink_state_ = FrameSinkState::kRequestBufferedInvisible;
     return;
   }
@@ -350,15 +359,26 @@ void LayerTreeView::DidFailToInitializeLayerTreeFrameSink() {
   // LayerTreeFrameSink is being processed, then if it fails we would arrive
   // here. Since the compositor does not request a LayerTreeFrameSink while not
   // visible, we can delay trying again until becoming visible again.
-  if (!layer_tree_host_->IsVisible()) {
+  // If `kWarmUpCompositor` is enabled and warm-up is
+  // triggered, a LayerTreeFrameSink is requested even if non-visible state. We
+  // can ignore this branch in that case. If not enabled, `ShouldWarmUp()` is
+  // always false.
+  if (!layer_tree_host_->ShouldWarmUp() && !layer_tree_host_->IsVisible()) {
     frame_sink_state_ = FrameSinkState::kRequestBufferedInvisible;
     return;
   }
 
   frame_sink_state_ = FrameSinkState::kNoFrameSink;
-  layer_tree_host_->GetTaskRunnerProvider()->MainThreadTaskRunner()->PostTask(
-      FROM_HERE, base::BindOnce(&LayerTreeView::RequestNewLayerTreeFrameSink,
-                                weak_factory_.GetWeakPtr()));
+  // The GPU channel cannot be established when gpu_remote is disconnected. Stop
+  // calling RequestNewLayerTreeFrameSink because it's going to fail again and
+  // it will be stuck in a forever loop of retries. This makes the processes
+  // unable to be killed after Chrome is closed.
+  // https://issues.chromium.org/336164423
+  if (!Platform::Current()->IsGpuRemoteDisconnected()) {
+    layer_tree_host_->GetTaskRunnerProvider()->MainThreadTaskRunner()->PostTask(
+        FROM_HERE, base::BindOnce(&LayerTreeView::RequestNewLayerTreeFrameSink,
+                                  weak_factory_.GetWeakPtr()));
+  }
 }
 
 void LayerTreeView::WillCommit(const cc::CommitState&) {
@@ -463,7 +483,7 @@ std::unique_ptr<cc::WebVitalMetrics> LayerTreeView::GetWebVitalMetrics() {
 
 void LayerTreeView::NotifyThroughputTrackerResults(
     cc::CustomTrackerResults results) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void LayerTreeView::DidObserveFirstScrollDelay(

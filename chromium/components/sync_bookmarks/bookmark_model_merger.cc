@@ -20,6 +20,7 @@
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/browser/bookmark_uuids.h"
 #include "components/sync/base/hash_util.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
@@ -181,8 +182,7 @@ base::Uuid GetPermanentFolderUuidForServerDefinedUniqueTag(
     return base::Uuid::ParseLowercase(bookmarks::kMobileBookmarksNodeUuid);
   }
   if (server_defined_unique_tag == kTrashBookmarksTag) {
-    return base::Uuid::ParseLowercase(
-        bookmarks::kVivaldiTrashNodeUuid);
+    return base::Uuid::ParseLowercase(bookmarks::kVivaldiTrashNodeUuid);
   }
 
   return base::Uuid();
@@ -238,7 +238,7 @@ BookmarksUuidDuplicates MatchBookmarksUuidDuplicates(
 
   switch (update.entity.specifics.bookmark().type()) {
     case sync_pb::BookmarkSpecifics::UNSPECIFIED:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     case sync_pb::BookmarkSpecifics::URL: {
       const bool matching_urls =
@@ -259,7 +259,7 @@ BookmarksUuidDuplicates MatchBookmarksUuidDuplicates(
     }
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return BookmarksUuidDuplicates();
 }
 
@@ -559,7 +559,7 @@ BookmarkModelMerger::BookmarkModelMerger(
   CHECK(bookmark_model->bookmark_bar_node());
   CHECK(bookmark_model->mobile_node());
   CHECK(bookmark_model->other_node());
-  CHECK(!vivaldi::IsVivaldiRunning() ||bookmark_model->trash_node());
+  CHECK(!vivaldi::IsVivaldiRunning() || bookmark_model->trash_node());
 
   int num_updates_in_forest = 0;
   for (const auto& [server_defined_unique_tag, root] : remote_forest_) {
@@ -753,7 +753,7 @@ BookmarkModelMerger::FindGuidMatchesOrReassignLocal(
       // with --disable-vivaldi and even when the remote is no longer a partner
       // as we want to propagate loss of partner status locally.
       if (GetProtoTypeFromBookmarkNode(node) ==
-            remote_entity.specifics.bookmark().type()) {
+          remote_entity.specifics.bookmark().type()) {
         base::Uuid vivaldi_partner = vivaldi_bookmark_kit::GetPartner(node);
         if (vivaldi_partner.is_valid())
           goto vivaldi_force_merge;
@@ -998,19 +998,19 @@ void BookmarkModelMerger::ProcessLocalCreation(
   // FindGuidMatchesOrReassignLocal() takes care of reassigning local UUIDs if
   // they won't actually be merged with the remote bookmark with the same UUID
   // (e.g. incompatible types).
-  const std::string sync_id = node->uuid().AsLowercaseString();
   const int64_t server_version = syncer::kUncommittedVersion;
   const base::Time creation_time = base::Time::Now();
-  const std::string& suffix = syncer::GenerateSyncableBookmarkHash(
-      bookmark_tracker_->model_type_state().cache_guid(), sync_id);
+  const std::string suffix = syncer::GenerateUniquePositionSuffix(
+      SyncedBookmarkTracker::GetClientTagHashFromUuid(node->uuid()));
   // Locally created nodes aren't tracked and hence don't have a unique position
   // yet so we need to produce new ones.
   const syncer::UniquePosition pos =
       GenerateUniquePositionForLocalCreation(parent, index, suffix);
   const sync_pb::EntitySpecifics specifics = CreateSpecificsFromBookmarkNode(
       node, bookmark_model_, pos.ToProto(), /*force_favicon_load=*/true);
-  const SyncedBookmarkTrackerEntity* entity = bookmark_tracker_->Add(
-      node, sync_id, server_version, creation_time, specifics);
+  const SyncedBookmarkTrackerEntity* entity =
+      bookmark_tracker_->Add(node, /*sync_id=*/node->uuid().AsLowercaseString(),
+                             server_version, creation_time, specifics);
   // Mark the entity that it needs to be committed.
   bookmark_tracker_->IncrementSequenceNumber(entity);
   for (size_t i = 0; i < node->children().size(); ++i) {

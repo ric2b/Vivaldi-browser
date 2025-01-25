@@ -192,7 +192,7 @@ TEST(DuckDuckGoRulesParserTest, SimpleRuleAllow) {
   expected_rules.back().excluded_domains.push_back("mostly_bad.com");
 
   expected_rules.emplace_back();
-  expected_rules.back().is_allow_rule = true;
+  expected_rules.back().decision = RequestFilterRule::kPass;
   expected_rules.back().pattern = "mostly_bad.com/except/for/this";
   expected_rules.back().host = "mostly_bad.com";
   expected_rules.back().resource_types.set();
@@ -304,7 +304,7 @@ TEST(DuckDuckGoRulesParserTest, RuleAllowWithOptions) {
   expected_rules.back().excluded_domains.push_back("bad_site.com");
 
   expected_rules.emplace_back();
-  expected_rules.back().is_allow_rule = true;
+  expected_rules.back().decision = RequestFilterRule::kPass;
   expected_rules.back().pattern = "bad_site.com/required/on/first/party/";
   expected_rules.back().host = "bad_site.com";
   expected_rules.back().resource_types.set(RequestFilterRule::kObject);
@@ -419,7 +419,7 @@ TEST(DuckDuckGoRulesParserTest, RuleAllowWithExceptions) {
   expected_rules.back().excluded_domains.push_back("bad_site.com");
 
   expected_rules.emplace_back();
-  expected_rules.back().is_allow_rule = true;
+  expected_rules.back().decision = RequestFilterRule::kPass;
   expected_rules.back().pattern = "bad_site.com/with/this/mostly/good/resource";
   expected_rules.back().host = "bad_site.com";
   expected_rules.back().resource_types.set();
@@ -537,7 +537,7 @@ TEST(DuckDuckGoRulesParserTest, RuleAllowWithOptionsAndExceptions) {
   expected_rules.back().excluded_domains.push_back("example.com");
 
   expected_rules.emplace_back();
-  expected_rules.back().is_allow_rule = true;
+  expected_rules.back().decision = RequestFilterRule::kPass;
   expected_rules.back().pattern = "example.com/except/this";
   expected_rules.back().host = "example.com";
   expected_rules.back().resource_types.set(RequestFilterRule::kMedia);
@@ -680,7 +680,7 @@ TEST(DuckDuckGoRulesParserTest, RuleAllowFromExceptions) {
   expected_rules.back().excluded_domains.push_back("bad_site.com");
 
   expected_rules.emplace_back();
-  expected_rules.back().is_allow_rule = true;
+  expected_rules.back().decision = RequestFilterRule::kPass;
   expected_rules.back().pattern = "bad_site.com/but/these/images/";
   expected_rules.back().host = "bad_site.com";
   expected_rules.back().resource_types.set(RequestFilterRule::kImage);
@@ -755,7 +755,7 @@ TEST(DuckDuckGoRulesParserTest, RuleAllowFromOptionsAndExceptions) {
   expected_rules.back().excluded_domains.push_back("bad_site.com");
 
   expected_rules.emplace_back();
-  expected_rules.back().is_allow_rule = true;
+  expected_rules.back().decision = RequestFilterRule::kPass;
   expected_rules.back().pattern = "bad_site.com/special/";
   expected_rules.back().host = "bad_site.com";
   expected_rules.back().resource_types.set(RequestFilterRule::kStylesheet);
@@ -868,7 +868,8 @@ TEST(DuckDuckGoRulesParserTest, SimpleSurrogate) {
   expected_rules.back().resource_types.set();
   expected_rules.back().party.set();
   expected_rules.back().pattern_type = RequestFilterRule::kPlain;
-  expected_rules.back().redirect = "bad_script.js";
+  expected_rules.back().modifier = RequestFilterRule::kRedirect;
+  expected_rules.back().modifier_value = "bad_script.js";
   expected_rules.back().excluded_domains.push_back("bad_site.com");
 
   ASSERT_EQ(expected_rules.size(), parse_result.request_filter_rules.size());
@@ -930,7 +931,8 @@ TEST(DuckDuckGoRulesParserTest, SurrogateWithOptions) {
   expected_rules.back().resource_types.set();
   expected_rules.back().party.set();
   expected_rules.back().pattern_type = RequestFilterRule::kPlain;
-  expected_rules.back().redirect = "bad_script.js";
+  expected_rules.back().modifier = RequestFilterRule::kRedirect;
+  expected_rules.back().modifier_value = "bad_script.js";
   expected_rules.back().included_domains.push_back("use_bad_script.com");
   expected_rules.back().excluded_domains.push_back("bad_site.com");
 
@@ -988,7 +990,7 @@ TEST(DuckDuckGoRulesParserTest, SurrogateWithExceptions) {
   expected_rules.back().excluded_domains.push_back("bad_site.com");
 
   expected_rules.emplace_back();
-  expected_rules.back().is_allow_rule = true;
+  expected_rules.back().decision = RequestFilterRule::kPass;
   expected_rules.back().pattern = "bad_site.com/bad_script.js";
   expected_rules.back().host = "bad_site.com";
   expected_rules.back().resource_types.set();
@@ -1003,7 +1005,8 @@ TEST(DuckDuckGoRulesParserTest, SurrogateWithExceptions) {
   expected_rules.back().resource_types.set();
   expected_rules.back().party.set();
   expected_rules.back().pattern_type = RequestFilterRule::kPlain;
-  expected_rules.back().redirect = "bad_script.js";
+  expected_rules.back().modifier = RequestFilterRule::kRedirect;
+  expected_rules.back().modifier_value = "bad_script.js";
   expected_rules.back().excluded_domains.push_back("bad_site.com");
 
   ASSERT_EQ(expected_rules.size(), parse_result.request_filter_rules.size());
@@ -1051,7 +1054,8 @@ TEST(DuckDuckGoRulesParserTest, SimpleBlockWithSurrogate) {
   expected_rules.back().resource_types.set();
   expected_rules.back().party.set();
   expected_rules.back().pattern_type = RequestFilterRule::kPlain;
-  expected_rules.back().redirect = "tracking.js";
+  expected_rules.back().modifier = RequestFilterRule::kRedirect;
+  expected_rules.back().modifier_value = "tracking.js";
   expected_rules.back().excluded_domains.push_back("mostly_good.com");
 
   ASSERT_EQ(expected_rules.size(), parse_result.request_filter_rules.size());
@@ -1104,7 +1108,7 @@ TEST(DuckDuckGoRulesParserTest, NoSurrogateWhenIgnore) {
   expected_rules.back().excluded_domains.push_back("mostly_bad.com");
 
   expected_rules.emplace_back();
-  expected_rules.back().is_allow_rule = true;
+  expected_rules.back().decision = RequestFilterRule::kPass;
   expected_rules.back().pattern = "mostly_bad.com/except/for/this";
   expected_rules.back().host = "mostly_bad.com";
   expected_rules.back().resource_types.set();

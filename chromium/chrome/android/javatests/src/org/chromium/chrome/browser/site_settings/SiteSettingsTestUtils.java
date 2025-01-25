@@ -11,6 +11,7 @@ import android.os.Bundle;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.platform.app.InstrumentationRegistry;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataBridge;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataType;
@@ -33,7 +34,6 @@ import org.chromium.components.browser_ui.site_settings.WebsiteGroup;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescriptionAndAuxButton;
 import org.chromium.components.content_settings.CookieControlsMode;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.concurrent.TimeoutException;
 
@@ -46,7 +46,7 @@ public class SiteSettingsTestUtils {
         Intent intent =
                 settingsLauncher.createSettingsActivityIntent(
                         ApplicationProvider.getApplicationContext(),
-                        SiteSettings.class.getName(),
+                        SiteSettings.class,
                         fragmentArgs);
         return (SettingsActivity)
                 InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
@@ -57,7 +57,7 @@ public class SiteSettingsTestUtils {
         fragmentArgs.putString(
                 SingleCategorySettings.EXTRA_CATEGORY, SiteSettingsCategory.preferenceKey(type));
         String title =
-                TestThreadUtils.runOnUiThreadBlockingNoException(
+                ThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             Context context =
                                     InstrumentationRegistry.getInstrumentation().getContext();
@@ -69,7 +69,7 @@ public class SiteSettingsTestUtils {
         Intent intent =
                 settingsLauncher.createSettingsActivityIntent(
                         ApplicationProvider.getApplicationContext(),
-                        SingleCategorySettings.class.getName(),
+                        SingleCategorySettings.class,
                         fragmentArgs);
         return (SettingsActivity)
                 InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
@@ -84,7 +84,7 @@ public class SiteSettingsTestUtils {
         Context context = ApplicationProvider.getApplicationContext();
         Intent intent =
                 settingsLauncher.createSettingsActivityIntent(
-                        context, StorageAccessSubpageSettings.class.getName(), fragmentArgs);
+                        context, StorageAccessSubpageSettings.class, fragmentArgs);
         return (SettingsActivity)
                 InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
     }
@@ -96,7 +96,7 @@ public class SiteSettingsTestUtils {
         Intent intent =
                 settingsLauncher.createSettingsActivityIntent(
                         ApplicationProvider.getApplicationContext(),
-                        SingleWebsiteSettings.class.getName(),
+                        SingleWebsiteSettings.class,
                         fragmentArgs);
         return (SettingsActivity)
                 InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
@@ -109,7 +109,7 @@ public class SiteSettingsTestUtils {
         Intent intent =
                 settingsLauncher.createSettingsActivityIntent(
                         ApplicationProvider.getApplicationContext(),
-                        GroupedWebsitesSettings.class.getName(),
+                        GroupedWebsitesSettings.class,
                         fragmentArgs);
         return (SettingsActivity)
                 InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
@@ -123,7 +123,7 @@ public class SiteSettingsTestUtils {
         Intent intent =
                 settingsLauncher.createSettingsActivityIntent(
                         ApplicationProvider.getApplicationContext(),
-                        AllSiteSettings.class.getName(),
+                        AllSiteSettings.class,
                         fragmentArgs);
         return (SettingsActivity)
                 InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
@@ -139,7 +139,7 @@ public class SiteSettingsTestUtils {
         Intent intent =
                 settingsLauncher.createSettingsActivityIntent(
                         ApplicationProvider.getApplicationContext(),
-                        AllSiteSettings.class.getName(),
+                        AllSiteSettings.class,
                         fragmentArgs);
         return (SettingsActivity)
                 InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
@@ -155,7 +155,7 @@ public class SiteSettingsTestUtils {
 
     public static void cleanUpCookiesAndPermissions() throws TimeoutException {
         CallbackHelper helper = new CallbackHelper();
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     BrowsingDataBridge.getForProfile(ProfileManager.getLastUsedRegularProfile())
                             .clearBrowsingData(

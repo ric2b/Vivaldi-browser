@@ -24,7 +24,6 @@
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/profiles/avatar_toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/overflow_button.h"
-#include "chrome/browser/ui/views/toolbar/side_panel_toolbar_button.h"
 #include "components/prefs/pref_member.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -52,13 +51,14 @@ class ChromeLabsButton;
 class HomeButton;
 class IntentChipButton;
 class ExtensionsToolbarCoordinator;
+class ManagementToolbarButton;
 class MediaToolbarButtonView;
 class ReloadButton;
-class SidePanelToolbarContainer;
 class PinnedToolbarActionsContainer;
 class ToolbarButton;
 class AvatarToolbarButtonBrowserTest;
 class ToolbarController;
+class OverflowButton;
 class PerformanceInterventionButton;
 
 namespace media_router {
@@ -158,14 +158,13 @@ class ToolbarView : public views::AccessiblePaneView,
   BatterySaverButton* battery_saver_button() const {
     return battery_saver_button_;
   }
-  media_router::CastToolbarButton* cast_button() const { return cast_; }
-  SidePanelToolbarContainer* side_panel_container() const {
-    return side_panel_container_;
+  PerformanceInterventionButton* performance_intervention_button() const {
+    return performance_intervention_button_;
   }
+  media_router::CastToolbarButton* cast_button() const { return cast_; }
   PinnedToolbarActionsContainer* pinned_toolbar_actions_container() const {
     return pinned_toolbar_actions_container_;
   }
-  SidePanelToolbarButton* GetSidePanelButton() override;
   MediaToolbarButtonView* media_button() const { return media_button_; }
   send_tab_to_self::SendTabToSelfToolbarIconView* send_tab_to_self_button()
       const {
@@ -181,6 +180,10 @@ class ToolbarView : public views::AccessiblePaneView,
   }
 
   views::View* new_tab_button_for_testing() { return new_tab_button_; }
+
+  ManagementToolbarButton* management_toolbar_button() const {
+    return management_toolbar_button_;
+  }
 
   // LocationBarView::Delegate:
   content::WebContents* GetWebContents() override;
@@ -234,8 +237,6 @@ class ToolbarView : public views::AccessiblePaneView,
   // AppMenuIconController::Delegate:
   void UpdateTypeAndSeverity(
       AppMenuIconController::TypeAndSeverity type_and_severity) override;
-  SkColor GetDefaultColorForSeverity(
-      AppMenuIconController::Severity severity) const override;
 
   // ToolbarButtonProvider:
   ExtensionsToolbarContainer* GetExtensionsToolbarContainer() override;
@@ -249,6 +250,7 @@ class ToolbarView : public views::AccessiblePaneView,
   views::View* GetAnchorView(std::optional<PageActionIconType> type) override;
   void ZoomChangedForActiveTab(bool can_show_bubble) override;
   AvatarToolbarButton* GetAvatarToolbarButton() override;
+  ManagementToolbarButton* GetManagementToolbarButton() override;
   ToolbarButton* GetBackButton() override;
   ReloadButton* GetReloadButton() override;
   IntentChipButton* GetIntentChipButton() override;
@@ -299,11 +301,10 @@ class ToolbarView : public views::AccessiblePaneView,
   raw_ptr<PerformanceInterventionButton> performance_intervention_button_ =
       nullptr;
   raw_ptr<media_router::CastToolbarButton> cast_ = nullptr;
-  raw_ptr<SidePanelToolbarContainer> side_panel_container_ = nullptr;
   raw_ptr<PinnedToolbarActionsContainer> pinned_toolbar_actions_container_ =
       nullptr;
-  raw_ptr<SidePanelToolbarButton> side_panel_button_ = nullptr;
   raw_ptr<AvatarToolbarButton> avatar_ = nullptr;
+  raw_ptr<ManagementToolbarButton> management_toolbar_button_ = nullptr;
   raw_ptr<MediaToolbarButtonView> media_button_ = nullptr;
   raw_ptr<send_tab_to_self::SendTabToSelfToolbarIconView>
       send_tab_to_self_button_ = nullptr;
@@ -366,5 +367,7 @@ class ToolbarView : public views::AccessiblePaneView,
   // background_view_left_, as their background depends on active state.
   base::CallbackListSubscription active_state_subscription_;
 };
+
+extern const ui::ClassProperty<bool>* const kActionItemUnderlineIndicatorKey;
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_VIEW_H_

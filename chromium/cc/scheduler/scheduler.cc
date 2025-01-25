@@ -111,6 +111,12 @@ void Scheduler::SetVisible(bool visible) {
   ProcessScheduledActions();
 }
 
+void Scheduler::SetShouldWarmUp() {
+  CHECK(base::FeatureList::IsEnabled(features::kWarmUpCompositor));
+  state_machine_.SetShouldWarmUp();
+  ProcessScheduledActions();
+}
+
 void Scheduler::SetCanDraw(bool can_draw) {
   state_machine_.SetCanDraw(can_draw);
   ProcessScheduledActions();
@@ -171,25 +177,26 @@ void Scheduler::SetNeedsRedraw() {
   ProcessScheduledActions();
 }
 
+void Scheduler::SetNeedsUpdateDisplayTree() {
+  state_machine_.SetNeedsUpdateDisplayTree();
+  ProcessScheduledActions();
+}
+
 void Scheduler::SetNeedsPrepareTiles() {
   DCHECK(!IsInsideAction(SchedulerStateMachine::Action::PREPARE_TILES));
   state_machine_.SetNeedsPrepareTiles();
   ProcessScheduledActions();
 }
 
-void Scheduler::DidSubmitCompositorFrame(uint32_t frame_token,
-                                         base::TimeTicks submit_time,
-                                         EventMetricsSet events_metrics,
-                                         bool has_missing_content) {
+void Scheduler::DidSubmitCompositorFrame(SubmitInfo& submit_info) {
   // Hardware and software draw may occur at the same frame simultaneously for
   // Android WebView. There is no need to call DidSubmitCompositorFrame here for
   // software draw.
   if (!settings_.using_synchronous_renderer_compositor ||
       !state_machine_.resourceless_draw()) {
     compositor_frame_reporting_controller_->DidSubmitCompositorFrame(
-        frame_token, submit_time, begin_main_frame_args_.frame_id,
-        last_activate_origin_frame_args_.frame_id, std::move(events_metrics),
-        has_missing_content);
+        submit_info, begin_main_frame_args_.frame_id,
+        last_activate_origin_frame_args_.frame_id);
   }
   state_machine_.DidSubmitCompositorFrame();
 
@@ -241,12 +248,7 @@ void Scheduler::BeginMainFrameAborted(CommitEarlyOutReason reason) {
   ProcessScheduledActions();
 }
 
-void Scheduler::WillPrepareTiles() {
-  compositor_timing_history_->WillPrepareTiles();
-}
-
 void Scheduler::DidPrepareTiles() {
-  compositor_timing_history_->DidPrepareTiles();
   state_machine_.DidPrepareTiles();
 }
 
@@ -313,8 +315,9 @@ void Scheduler::StartOrStopBeginFrames() {
   }
 
   bool needs_begin_frames = state_machine_.ShouldSubscribeToBeginFrames();
-  if (needs_begin_frames == observing_begin_frame_source_)
+  if (needs_begin_frames == observing_begin_frame_source_) {
     return;
+  }
 
   if (needs_begin_frames) {
     observing_begin_frame_source_ = true;
@@ -574,19 +577,23 @@ void Scheduler::BeginImplFrameWithDeadline(const viz::BeginFrameArgs& args) {
             ->BeginMainFrameStartToReadyToCommitNotCriticalEstimate();
   }
 
-  bool main_thread_response_expected_before_deadline;
+  bool main_thread_response_expected_soon;
+  // Allow the main thread to delay N impl frame before we decide to give up
+  // and create a pending tree instead.
+  time_since_main_frame_sent -=
+      args.interval * settings_.delay_impl_invalidation_frames;
   if (time_since_main_frame_sent > bmf_to_activate_threshold) {
     // If the response to a main frame is pending past the desired duration
     // then proactively assume that the main thread is slow instead of late
     // correction through the frame history.
-    main_thread_response_expected_before_deadline = false;
+    main_thread_response_expected_soon = false;
   } else {
-    main_thread_response_expected_before_deadline =
+    main_thread_response_expected_soon =
         bmf_sent_to_ready_to_commit_estimate - time_since_main_frame_sent <
         bmf_to_activate_threshold;
   }
   state_machine_.set_should_defer_invalidation_for_fast_main_frame(
-      main_thread_response_expected_before_deadline);
+      main_thread_response_expected_soon);
 
   BeginImplFrame(adjusted_args, now);
 }
@@ -695,7 +702,6 @@ void Scheduler::BeginImplFrame(const viz::BeginFrameArgs& args,
 
     begin_impl_frame_tracker_.Start(args);
     state_machine_.OnBeginImplFrame(args.frame_id, args.animate_only);
-    compositor_timing_history_->WillBeginImplFrame(args, now);
     compositor_frame_reporting_controller_->WillBeginImplFrame(args);
     bool has_damage =
         client_->WillBeginImplFrame(begin_impl_frame_tracker_.Current());
@@ -810,6 +816,7 @@ void Scheduler::OnBeginImplFrameDeadline() {
     }
 
     state_machine_.OnBeginImplFrameDeadline();
+    client_->OnBeginImplFrameDeadline();
   }
   ProcessScheduledActions();
 
@@ -855,6 +862,15 @@ void Scheduler::DrawForced() {
   DrawResult result = client_->ScheduledActionDrawForced();
   state_machine_.DidDraw(result);
   compositor_timing_history_->DidDraw();
+}
+
+void Scheduler::UpdateDisplayTree() {
+  DCHECK(!inside_scheduled_action_);
+  base::AutoReset<bool> mark_inside(&inside_scheduled_action_, true);
+
+  // TODO(rockot): Update CompositorTimingHistory.
+  state_machine_.WillUpdateDisplayTree();
+  client_->ScheduledActionUpdateDisplayTree();
 }
 
 void Scheduler::SetDeferBeginMainFrame(bool defer_begin_main_frame) {
@@ -965,6 +981,9 @@ void Scheduler::ProcessScheduledActions() {
         // No action is actually performed, but this allows the state machine to
         // drain the pipeline without actually drawing.
         state_machine_.AbortDraw();
+        break;
+      case SchedulerStateMachine::Action::UPDATE_DISPLAY_TREE:
+        UpdateDisplayTree();
         break;
       case SchedulerStateMachine::Action::BEGIN_LAYER_TREE_FRAME_SINK_CREATION:
         state_machine_.WillBeginLayerTreeFrameSinkCreation();

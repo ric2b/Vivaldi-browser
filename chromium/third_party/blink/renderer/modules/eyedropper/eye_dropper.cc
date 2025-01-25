@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/modules/eyedropper/eye_dropper.h"
 
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
@@ -61,7 +61,7 @@ ScriptPromise<ColorSelectionResult> EyeDropper::open(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "The object is no longer associated with a window.");
-    return ScriptPromise<ColorSelectionResult>();
+    return EmptyPromise();
   }
 
   LocalDOMWindow* window = LocalDOMWindow::From(script_state);
@@ -69,19 +69,19 @@ ScriptPromise<ColorSelectionResult> EyeDropper::open(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotAllowedError,
         "EyeDropper::open() requires user gesture.");
-    return ScriptPromise<ColorSelectionResult>();
+    return EmptyPromise();
   }
 
   if (!::features::IsEyeDropperEnabled()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kOperationError,
                                       kNotAvailableMessage);
-    return ScriptPromise<ColorSelectionResult>();
+    return EmptyPromise();
   }
 
   if (eye_dropper_chooser_.is_bound()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "EyeDropper is already open.");
-    return ScriptPromise<ColorSelectionResult>();
+    return EmptyPromise();
   }
 
   std::unique_ptr<ScopedAbortState> end_chooser_abort_state = nullptr;

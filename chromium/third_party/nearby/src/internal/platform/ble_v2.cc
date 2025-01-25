@@ -131,6 +131,7 @@ BleV2Medium::StartScanning(const Uuid& service_uuid,
                 start_scanning_result(status);
               },
           .advertisement_found_cb = std::move(callback.advertisement_found_cb),
+          .advertisement_lost_cb = std::move(callback.advertisement_lost_cb),
       });
 }
 
@@ -224,7 +225,7 @@ BleV2Socket BleV2Medium::Connect(const std::string& service_id,
 }
 
 bool BleV2Medium::IsExtendedAdvertisementsAvailable() {
-  return impl_->IsExtendedAdvertisementsAvailable();
+  return IsValid() && impl_->IsExtendedAdvertisementsAvailable();
 }
 
 BleV2Peripheral BleV2Medium::GetRemotePeripheral(

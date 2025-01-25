@@ -238,7 +238,7 @@ class IndexedDBConnectionCoordinator::OpenRequest
       pending_->factory_client->OnOpenSuccess(
           db_->CreateConnection(std::move(pending_->database_callbacks),
                                 std::move(pending_->client_state_checker),
-                                pending_->client_id),
+                                pending_->client_token),
           db_->metadata_);
       bucket_context_handle_.Release();
       state_ = RequestState::kDone;
@@ -251,7 +251,7 @@ class IndexedDBConnectionCoordinator::OpenRequest
       pending_->factory_client->OnOpenSuccess(
           db_->CreateConnection(std::move(pending_->database_callbacks),
                                 std::move(pending_->client_state_checker),
-                                pending_->client_id),
+                                pending_->client_token),
           db_->metadata_);
       state_ = RequestState::kDone;
       bucket_context_handle_.Release();
@@ -331,7 +331,7 @@ class IndexedDBConnectionCoordinator::OpenRequest
     DCHECK(!lock_receiver_.locks.empty());
     connection_ = db_->CreateConnection(
         std::move(pending_->database_callbacks),
-        std::move(pending_->client_state_checker), pending_->client_id);
+        std::move(pending_->client_state_checker), pending_->client_token);
     bucket_context_handle_.Release();
     DCHECK(!connection_ptr_for_close_comparision_);
     connection_ptr_for_close_comparision_ = connection_.get();
@@ -561,11 +561,15 @@ class IndexedDBConnectionCoordinator::DeleteRequest
     state_ = RequestState::kDone;
   }
 
-  void BindTransactionReceiver() override { NOTREACHED(); }
+  void BindTransactionReceiver() override { NOTREACHED_IN_MIGRATION(); }
 
-  void UpgradeTransactionStarted(int64_t old_version) override { NOTREACHED(); }
+  void UpgradeTransactionStarted(int64_t old_version) override {
+    NOTREACHED_IN_MIGRATION();
+  }
 
-  void UpgradeTransactionFinished(bool committed) override { NOTREACHED(); }
+  void UpgradeTransactionFinished(bool committed) override {
+    NOTREACHED_IN_MIGRATION();
+  }
 
   // The delete requests should always be run during force close.
   bool ShouldPruneForForceClose() override { return false; }
@@ -688,7 +692,7 @@ IndexedDBConnectionCoordinator::ExecuteTask(bool has_connections) {
 
   switch (request->state()) {
     case RequestState::kNotStarted:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return {ExecuteTaskResult::kError, leveldb::Status::OK()};
     case RequestState::kPendingNoConnections:
     case RequestState::kPendingLocks:
@@ -720,7 +724,7 @@ IndexedDBConnectionCoordinator::ExecuteTask(bool has_connections) {
       return {ExecuteTaskResult::kError, status};
     }
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 size_t IndexedDBConnectionCoordinator::ActiveOpenDeleteCount() const {

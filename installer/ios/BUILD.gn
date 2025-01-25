@@ -1,5 +1,7 @@
 # Sign the Vialdi IOS App
 
+import("//vivaldi/gn/config/signer_features.gni")
+
 vivaldi_app = "$root_out_dir/Vivaldi.app"
 vivaldi_profiles = "${vivaldi_app}/PlugIns"
 
@@ -153,12 +155,26 @@ sign_bundle("sign_MaterialComponents") {
   app = "${vivaldi_app}/Frameworks/MaterialComponents.framework"
 }
 
-sign_bundle("sign_Lottie") {
-  bindir = "$root_out_dir/obj/ios/third_party/lottie"
+action("sign_Lottie") {
+  script = "//build/config/ios/codesign.py"
 
+  bindir = "$root_out_dir/Vivaldi.app/Frameworks/Lottie.framework"
   binary = "$bindir/Lottie"
-  extra_args = ["--disable-embedded-mobileprovision"]
-  app = "${vivaldi_app}/Frameworks/Lottie.framework"
+
+  args = [
+    "code-sign-file",
+    rebase_path(binary),
+    "--identity", vivaldi_signing_id,
+  ]
+
+  outputs = [
+    "$target_gen_dir/$target_name.signed.stamp"
+  ]
+  if (!is_full_signer) {
+    deps = [
+      "//vivaldi/thirdparty:copy_lottie_framework",
+    ]
+  }
 }
 
 sign_bundle("sign_ios") {

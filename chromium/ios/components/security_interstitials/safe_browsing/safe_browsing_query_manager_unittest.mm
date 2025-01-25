@@ -36,6 +36,13 @@ class MockQueryManagerObserver : public SafeBrowsingQueryManager::Observer {
                     safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck
                         performed_check));
 
+  MOCK_METHOD4(SafeBrowsingSyncQueryFinished,
+               void(SafeBrowsingQueryManager*,
+                    const SafeBrowsingQueryManager::Query&,
+                    const SafeBrowsingQueryManager::Result&,
+                    safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck
+                        performed_check));
+
   // Override rather than mocking so that the observer can remove itself.
   void SafeBrowsingQueryManagerDestroyed(
       SafeBrowsingQueryManager* manager) override {
@@ -116,7 +123,7 @@ TEST_F(SafeBrowsingQueryManagerTest, SafeURLQueryWithAsyncRealTimeCheck) {
   scoped_feature_list_.InitAndEnableFeature(
       safe_browsing::kSafeBrowsingAsyncRealTimeCheck);
   GURL url("http://chromium.test");
-  EXPECT_CALL(observer_, SafeBrowsingQueryFinished(manager(), _, _, _))
+  EXPECT_CALL(observer_, SafeBrowsingSyncQueryFinished(manager(), _, _, _))
       .WillOnce(VerifyQueryFinished(url, http_method_,
                                     /*is_url_safe=*/true));
 
@@ -142,7 +149,6 @@ TEST_F(SafeBrowsingQueryManagerTest, UnsafeURLQuery) {
   resource.url = url;
   resource.threat_type =
       safe_browsing::SBThreatType::SB_THREAT_TYPE_URL_PHISHING;
-  resource.request_destination = network::mojom::RequestDestination::kDocument;
   manager()->StoreUnsafeResource(resource);
   base::RunLoop().RunUntilIdle();
 }
@@ -166,7 +172,6 @@ TEST_F(SafeBrowsingQueryManagerTest, MultipleUnsafeURLQueries) {
   resource.url = url;
   resource.threat_type =
       safe_browsing::SBThreatType::SB_THREAT_TYPE_URL_PHISHING;
-  resource.request_destination = network::mojom::RequestDestination::kDocument;
   manager()->StoreUnsafeResource(resource);
   manager()->StoreUnsafeResource(resource);
   base::RunLoop().RunUntilIdle();
@@ -190,7 +195,6 @@ TEST_F(SafeBrowsingQueryManagerTest, StoreUnsafeResourceMultipleQueries) {
   resource.url = url;
   resource.threat_type =
       safe_browsing::SBThreatType::SB_THREAT_TYPE_URL_PHISHING;
-  resource.request_destination = network::mojom::RequestDestination::kDocument;
   manager()->StoreUnsafeResource(resource);
   base::RunLoop().RunUntilIdle();
 }
@@ -279,7 +283,6 @@ TEST_F(SafeBrowsingQueryManagerWebStateDestructionTest, UnsafeURLQuery) {
   resource.url = url;
   resource.threat_type =
       safe_browsing::SBThreatType::SB_THREAT_TYPE_URL_PHISHING;
-  resource.request_destination = network::mojom::RequestDestination::kDocument;
   manager()->StoreUnsafeResource(resource);
   base::RunLoop().RunUntilIdle();
 }

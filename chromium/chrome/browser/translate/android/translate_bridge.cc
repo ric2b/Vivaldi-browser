@@ -10,11 +10,8 @@
 #include "base/containers/adapters.h"
 #include "base/strings/string_split.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/language/android/jni_headers/TranslateBridge_jni.h"
-#include "chrome/browser/language/android/jni_headers/TranslationObserver_jni.h"
 #include "chrome/browser/language/language_model_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "components/language/core/browser/language_model.h"
@@ -32,6 +29,10 @@
 #include "third_party/icu/source/common/unicode/uloc.h"
 #include "ui/base/l10n/l10n_util.h"
 
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "chrome/browser/language/android/jni_headers/TranslateBridge_jni.h"
+#include "chrome/browser/language/android/jni_headers/TranslationObserver_jni.h"
+
 #include "browser/translate/vivaldi_translate_client.h"
 
 using base::android::ConvertJavaStringToUTF8;
@@ -44,7 +45,7 @@ using base::android::ToJavaArrayOfStrings;
 namespace {
 
 PrefService* GetPrefService(const base::android::JavaRef<jobject>& j_profile) {
-  return ProfileAndroid::FromProfileAndroid(j_profile)->GetPrefs();
+  return Profile::FromJavaObject(j_profile)->GetPrefs();
 }
 
 class TranslationObserver
@@ -178,7 +179,7 @@ static void JNI_TranslateBridge_SetPredefinedTargetLanguage(
 static base::android::ScopedJavaLocalRef<jstring>
 JNI_TranslateBridge_GetTargetLanguage(JNIEnv* env,
                                       const JavaParamRef<jobject>& j_profile) {
-  Profile* profile = ProfileAndroid::FromProfileAndroid(j_profile);
+  Profile* profile = Profile::FromJavaObject(j_profile);
   language::LanguageModel* language_model =
       LanguageModelManagerFactory::GetForBrowserContext(profile)
           ->GetPrimaryModel();

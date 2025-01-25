@@ -188,7 +188,7 @@ public abstract class TabModelSelectorBase
     public TabModel getModelForTabId(int id) {
         for (int i = 0; i < mTabModels.size(); i++) {
             TabModel model = mTabModels.get(i);
-            if (TabModelUtils.getTabById(model, id) != null || model.isClosurePending(id)) {
+            if (model.getTabById(id) != null || model.isClosurePending(id)) {
                 return model;
             }
         }
@@ -239,6 +239,18 @@ public abstract class TabModelSelectorBase
     public boolean isIncognitoSelected() {
         if (mTabModels.size() == 0) return mStartIncognito;
         return getCurrentModel().isIncognito();
+    }
+
+    @Override
+    public boolean isIncognitoBrandedModelSelected() {
+        if (mTabModels.size() == 0) return mStartIncognito;
+        return getCurrentModel().isIncognitoBranded();
+    }
+
+    @Override
+    public boolean isOffTheRecordModelSelected() {
+        if (mTabModels.size() == 0) return mStartIncognito;
+        return getCurrentModel().isOffTheRecord();
     }
 
     @Override
@@ -299,7 +311,7 @@ public abstract class TabModelSelectorBase
     @Override
     public Tab getTabById(int id) {
         for (int i = 0; i < getModels().size(); i++) {
-            Tab tab = TabModelUtils.getTabById(mTabModels.get(i), id);
+            Tab tab = mTabModels.get(i).getTabById(id);
             if (tab != null) return tab;
         }
         return null;

@@ -127,7 +127,7 @@
                 class="settings-columned-section">
               <div class="column">
                 <h3 class="description-header">
-                  $i18n{safeBrowsingEnhancedWhenOnLabel}
+                  $i18n{columnHeadingWhenOn}
                 </h3>
                 <ul class="icon-bulleted-list">
                   <li>
@@ -169,7 +169,7 @@
               </div>
               <div class="column">
                 <h3 class="description-header">
-                  $i18n{safeBrowsingEnhancedThingsToConsiderLabel}
+                  $i18n{columnHeadingConsider}
                 </h3>
                 <ul class="icon-bulleted-list">
                   <li>
@@ -229,14 +229,16 @@
             </div>
           </template>
           <div slot="noSelectionCollapse" style="display:none">
-            <settings-toggle-button id="safeBrowsingReportingToggle"
+            <template is="dom-if" if="[[!hideExtendedReportingRadioButton_]]">
+              <settings-toggle-button id="safeBrowsingReportingToggle"
                 pref="{{prefs.safebrowsing.scout_reporting_enabled}}"
                 label="$i18n{safeBrowsingStandardReportingLabel}"
                 sub-label="$i18n{safeBrowsingEnableExtendedReportingDesc}"
                 on-change="onSafeBrowsingExtendedReportingChange_"
                 disabled="[[getDisabledExtendedSafeBrowsing_(
                               prefs.generated.safe_browsing.*)]]">
-            </settings-toggle-button>
+              </settings-toggle-button>
+            </template>
             <settings-toggle-button id="passwordsLeakToggle"
                 label="[[getPasswordsLeakToggleLabel_(
                         enableFriendlierSafeBrowsingSettings_)]]"
@@ -345,12 +347,11 @@
 
 <if expr="chrome_root_store_cert_management_ui">
     <template is="dom-if" if="[[enableCertManagementUIV2_]]">
-      <cr-link-row id="manageCertificatesLinkRow"
-          class="hr"
+      <cr-link-row id="manageCertificatesLinkRow" class="hr"
           role-description="$i18n{subpageArrowRoleDescription}"
           label="$i18n{manageCertificates}"
           sub-label="$i18n{manageCertificatesDescription}"
-          on-click="onNewManageCertificatesClick_">
+          on-click="onNewManageCertificatesClick_" external>
       </cr-link-row>
     </template>
 

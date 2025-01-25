@@ -106,9 +106,9 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   // parent will recompute its children and be reserialized.
   virtual void Remove(AccessibleNode*) = 0;
   virtual void Remove(Node*) = 0;
-  virtual void RemoveSubtreeWhenSafe(Node*, bool remove_root = true) = 0;
+  virtual void RemoveSubtree(const Node*) = 0;
+  virtual void RemoveSubtree(const Node*, bool remove_root) = 0;
   virtual void RemoveAXObjectsInLayoutSubtree(LayoutObject*) = 0;
-  virtual void RemoveAXObjectsInLayoutSubtree(Node*) = 0;
   virtual void RemovePopup(Document*) = 0;
   virtual void Remove(AbstractInlineTextBox*) = 0;
 
@@ -131,7 +131,6 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   virtual void SubtreeIsAttached(Node*) = 0;
 
   // Called to process queued subtree removals when flat tree traversal is safe.
-  virtual void ProcessSubtreeRemovals() = 0;
   virtual void HandleAttributeChanged(const QualifiedName& attr_name,
                                       Element*) = 0;
   virtual void HandleFocusedUIElementChanged(Element* old_focused_node,
@@ -158,8 +157,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
 
   // Handle any notifications which arrived while layout was dirty.
   // If |force|, then process regardless of any active batching or pauses.
-  virtual void ProcessDeferredAccessibilityEvents(Document&,
-                                                  bool force = false) = 0;
+  virtual void CommitAXUpdates(Document&, bool force) = 0;
 
   // Changes to virtual Accessibility Object Model nodes.
   virtual void HandleAttributeChanged(const QualifiedName& attr_name,
@@ -247,7 +245,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
 
   // Note that any pending event also causes its corresponding object to
   // become dirty.
-  virtual bool HasDirtyObjects() const = 0;
+  virtual bool HasObjectsPendingSerialization() const = 0;
 
   // Ensure that a call to ProcessDeferredAccessibilityEvents() will occur soon.
   virtual void ScheduleAXUpdate() const = 0;

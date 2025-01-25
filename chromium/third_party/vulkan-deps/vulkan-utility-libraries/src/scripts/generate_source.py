@@ -44,53 +44,53 @@ def RunGenerators(api: str, registry: str, targetFilter: str) -> None:
         'vk_dispatch_table.h' : {
            'generator' : DispatchTableOutputGenerator,
            'genCombined': True,
-           'directory' : f'include/{api}/utility',
+           'directory' : f'include/vulkan/utility',
         },
         'vk_enum_string_helper.h' : {
             'generator' : EnumStringHelperOutputGenerator,
             'genCombined': True,
-            'directory' : f'include/{api}',
+            'directory' : f'include/vulkan',
         },
         'vk_format_utils.h' : {
             'generator' : FormatUtilsOutputGenerator,
             'genCombined': True,
-            'directory' : f'include/{api}/utility',
+            'directory' : f'include/vulkan/utility',
         },
         'vk_struct_helper.hpp' : {
             'generator' : StructHelperOutputGenerator,
             'genCombined': True,
-            'directory' : f'include/{api}/utility',
+            'directory' : f'include/vulkan/utility',
         },
         'vk_safe_struct.hpp' : {
             'generator' : SafeStructOutputGenerator,
             'genCombined': True,
-            'directory' : f'include/{api}/utility',
+            'directory' : f'include/vulkan/utility',
         },
         'vk_safe_struct_utils.cpp' : {
             'generator' : SafeStructOutputGenerator,
             'genCombined': True,
-            'directory' : f'src/{api}',
+            'directory' : f'src/vulkan',
         },
         'vk_safe_struct_core.cpp' : {
             'generator' : SafeStructOutputGenerator,
             'genCombined': True,
             'regenerate' : True,
-            'directory' : f'src/{api}',
+            'directory' : f'src/vulkan',
         },
         'vk_safe_struct_khr.cpp' : {
             'generator' : SafeStructOutputGenerator,
             'genCombined': True,
-            'directory' : f'src/{api}',
+            'directory' : f'src/vulkan',
         },
         'vk_safe_struct_ext.cpp' : {
             'generator' : SafeStructOutputGenerator,
             'genCombined': True,
-            'directory' : f'src/{api}',
+            'directory' : f'src/vulkan',
         },
         'vk_safe_struct_vendor.cpp' : {
             'generator' : SafeStructOutputGenerator,
             'genCombined': True,
-            'directory' : f'src/{api}',
+            'directory' : f'src/vulkan',
         },
     }
 

@@ -82,11 +82,11 @@ void LdtDecryptCorrectMac(std::array<uint8_t, 32> key_seed_bytes,
   // https://commondatastorage.googleapis.com/chromium-boringssl-docs/hkdf.h.html
   // 32 byte HMAC-SHA256 key
   uint8_t metadata_key_hmac_key[32] = {0};
-  auto result = HKDF(
-      metadata_key_hmac_key, sizeof(metadata_key_hmac_key), EVP_sha256(),
-      (const uint8_t *)&key_seed.bytes, (size_t)32,
-      (const uint8_t *)"Google Nearby", (size_t)13,
-      (const uint8_t *)"Legacy metadata key verification HMAC key", (size_t)41);
+  auto result = HKDF(metadata_key_hmac_key, sizeof(metadata_key_hmac_key),
+                     EVP_sha256(), (const uint8_t *)&key_seed.bytes, (size_t)32,
+                     (const uint8_t *)"Google Nearby", (size_t)13,
+                     (const uint8_t *)"V0 Identity token verification HMAC key",
+                     (size_t)39);
   EXPECT_EQ(1, result);
   // calculate metadata key hmac using hkdf'd hmac key
   NpMetadataKeyHmac metadata_key_hmac = {.bytes = {0}};

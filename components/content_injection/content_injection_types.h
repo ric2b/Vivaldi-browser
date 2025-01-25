@@ -19,7 +19,7 @@ struct StaticInjectionItem {
   StaticInjectionItem(const StaticInjectionItem& other);
   StaticInjectionItem& operator=(const StaticInjectionItem& other);
 
-  base::StringPiece content;
+  std::string_view content;
 };
 }  // namespace content_injection
 

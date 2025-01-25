@@ -256,8 +256,8 @@ gfx::BufferFormat SinglePlaneSharedImageFormatToBufferFormat(
   }
 }
 
-SharedImageFormat GetSinglePlaneSharedImageFormat(gfx::BufferFormat format) {
-  switch (format) {
+SharedImageFormat GetSharedImageFormat(gfx::BufferFormat buffer_format) {
+  switch (buffer_format) {
     case gfx::BufferFormat::BGRA_8888:
       return SinglePlaneFormat::kBGRA_8888;
     case gfx::BufferFormat::R_8:
@@ -285,13 +285,13 @@ SharedImageFormat GetSinglePlaneSharedImageFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::BGRA_1010102:
       return SinglePlaneFormat::kBGRA_1010102;
     case gfx::BufferFormat::YVU_420:
-      return LegacyMultiPlaneFormat::kYV12;
+      return MultiPlaneFormat::kYV12;
     case gfx::BufferFormat::YUV_420_BIPLANAR:
-      return LegacyMultiPlaneFormat::kNV12;
+      return MultiPlaneFormat::kNV12;
     case gfx::BufferFormat::YUVA_420_TRIPLANAR:
-      return LegacyMultiPlaneFormat::kNV12A;
+      return MultiPlaneFormat::kNV12A;
     case gfx::BufferFormat::P010:
-      return LegacyMultiPlaneFormat::kP010;
+      return MultiPlaneFormat::kP010;
   }
   NOTREACHED_NORETURN();
 }
@@ -423,7 +423,7 @@ SharedImageFormatRestrictedSinglePlaneUtils::ToGLTextureStorageFormat(
 #endif
     return GL_RGBA8_OES;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return GL_RGBA8_OES;
 }
 
@@ -444,7 +444,7 @@ SharedImageFormatToBufferFormatRestrictedUtils::ToBufferFormat(
   } else if (format == MultiPlaneFormat::kP010) {
     return gfx::BufferFormat::P010;
   }
-  NOTREACHED() << "format=" << format.ToString();
+  NOTREACHED_IN_MIGRATION() << "format=" << format.ToString();
   return gfx::BufferFormat::RGBA_8888;
 }
 

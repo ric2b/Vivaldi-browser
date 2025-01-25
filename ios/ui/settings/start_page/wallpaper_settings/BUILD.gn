@@ -37,7 +37,8 @@ swift_source_set("wallpaper_settings_swift") {
     "//base",
     "//ui/base",
     "//url",
-    "//ios/chrome/app/strings"
+    "//ios/chrome/app/strings",
+    "//vivaldi/ios/ui/helpers:helpers_swift",
   ]
 
   frameworks = [

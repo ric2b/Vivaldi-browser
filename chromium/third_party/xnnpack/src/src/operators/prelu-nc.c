@@ -8,20 +8,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <xnnpack.h>
-#include <xnnpack/allocator.h>
-#include <xnnpack/cache.h>
-#include <xnnpack/common.h>
-#include <xnnpack/compute.h>
-#include <xnnpack/config.h>
-#include <xnnpack/log.h>
-#include <xnnpack/math.h>
-#include <xnnpack/operator-type.h>
-#include <xnnpack/operator-utils.h>
-#include <xnnpack/operator.h>
-#include <xnnpack/pack.h>
-#include <xnnpack/params.h>
-
+#include "xnnpack.h"
+#include "xnnpack/allocator.h"
+#include "xnnpack/cache.h"
+#include "xnnpack/common.h"
+#include "xnnpack/compute.h"
+#include "xnnpack/config-types.h"
+#include "xnnpack/config.h"
+#include "xnnpack/log.h"
+#include "xnnpack/math.h"
+#include "xnnpack/operator-type.h"
+#include "xnnpack/operator-utils.h"
+#include "xnnpack/operator.h"
+#include "xnnpack/pack.h"
+#include "xnnpack/params.h"
 #include "pthreadpool.h"
 
 static enum xnn_status create_prelu_nc(
@@ -232,20 +232,17 @@ static enum xnn_status reshape_prelu_nc(
     .ukernel = prelu->ukernel,
   };
 
-  #if XNN_TEST_MODE
-    const size_t batch_tile = prelu->row_tile;
-  #else
-    size_t batch_tile = batch_size;
-    const size_t num_threads = pthreadpool_get_threads_count(threadpool);
-    if (num_threads > 1) {
-      const size_t target_tiles_per_thread = 5;
-      const size_t max_batch_tile = divide_round_up(batch_size, num_threads * target_tiles_per_thread);
-      if (max_batch_tile < batch_tile) {
-        const uint32_t row_tile = prelu->row_tile;
-        batch_tile = min(batch_tile, divide_round_up(batch_tile, max_batch_tile * row_tile) * row_tile);
-      }
+  size_t batch_tile = batch_size;
+  const size_t num_threads = pthreadpool_get_threads_count(threadpool);
+  if (num_threads > 1) {
+    const size_t target_tiles_per_thread = 5;
+    const size_t max_batch_tile = divide_round_up(batch_size, num_threads * target_tiles_per_thread);
+    if (max_batch_tile < batch_tile) {
+      const uint32_t row_tile = prelu->row_tile;
+      batch_tile = min(batch_tile, divide_round_up(batch_tile, max_batch_tile * row_tile) * row_tile);
     }
-  #endif
+  }
+
   prelu_op->compute[0].type = xnn_parallelization_type_1d_tile_1d;
   prelu_op->compute[0].task_1d_tile_1d = (pthreadpool_task_1d_tile_1d_t) xnn_compute_prelu;
   prelu_op->compute[0].range[0] = batch_size;

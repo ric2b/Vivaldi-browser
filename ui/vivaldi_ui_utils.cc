@@ -26,6 +26,10 @@
 #include "ui/views/widget/widget.h"
 #include "ui/vivaldi_browser_window.h"
 
+#include "base/task/current_thread.h"
+#include "base/run_loop.h"
+#include "ui/base/resource/resource_bundle.h"
+
 namespace vivaldi {
 namespace ui_tools {
 
@@ -193,6 +197,12 @@ bool GetTabById(int tab_id, content::WebContents** contents, int* index) {
     }
   }
   return false;
+}
+
+bool IsUIAvailable() {
+  return base::CurrentUIThread::IsSet() &&
+         base::RunLoop::IsRunningOnCurrentThread() &&
+         ui::ResourceBundle::HasSharedInstance();
 }
 
 }  // namespace ui_tools

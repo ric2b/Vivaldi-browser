@@ -66,10 +66,12 @@ class TestFrameSinkManagerImpl : public mojom::FrameSinkManager {
   void RequestCopyOfOutput(const SurfaceId& surface_id,
                            std::unique_ptr<CopyOutputRequest> request,
                            bool capture_exact_surface_id) override {}
+#if BUILDFLAG(IS_ANDROID)
   void CacheBackBuffer(uint32_t cache_id,
                        const FrameSinkId& root_frame_sink_id) override {}
   void EvictBackBuffer(uint32_t cache_id,
                        EvictBackBufferCallback callback) override {}
+#endif
   void UpdateDebugRendererSettings(
       const DebugRendererSettings& debug_settings) override {}
   void Throttle(const std::vector<FrameSinkId>& ids,
@@ -84,6 +86,9 @@ class TestFrameSinkManagerImpl : public mojom::FrameSinkManager {
       const blink::ViewTransitionToken& transition_token) override {}
   void HasUnclaimedViewTransitionResourcesForTest(
       HasUnclaimedViewTransitionResourcesForTestCallback callback) override {}
+  void SetSameDocNavigationScreenshotSizeForTesting(
+      const gfx::Size& result_size,
+      SetSameDocNavigationScreenshotSizeForTestingCallback callback) override {}
 
   mojo::Receiver<mojom::FrameSinkManager> receiver_{this};
   mojo::Remote<mojom::FrameSinkManagerClient> client_;

@@ -17,10 +17,14 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout_view.h"
 
-constexpr float kOverlayViewOpacity = 0.7f;
+namespace {
+
+constexpr float kOverlayViewOpacity = 0.60f;
 
 // The time duration for |background_| to fade in.
 constexpr int kFadeInDurationMs = 500;
+
+}  // namespace
 
 AutoPipSettingOverlayView::AutoPipSettingOverlayView(
     ResultCb result_cb,
@@ -80,7 +84,9 @@ void AutoPipSettingOverlayView::OnHideView() {
   // No longer block input events, if we were doing that.
   scoped_ignore_input_events_.reset();
 
-  NotifyAutoPipSettingOverlayViewHidden();
+  if (delegate_) {
+    delegate_->OnAutoPipSettingOverlayViewHidden();
+  }
 }
 
 gfx::Size AutoPipSettingOverlayView::GetBubbleSize() const {
@@ -137,12 +143,6 @@ void AutoPipSettingOverlayView::OnWidgetDestroying(views::Widget*) {
   auto_pip_setting_view_ = nullptr;
   widget_->RemoveObserver(this);
   widget_ = nullptr;
-}
-
-void AutoPipSettingOverlayView::NotifyAutoPipSettingOverlayViewHidden() {
-  for (AutoPipSettingOverlayViewObserver& obs : observers_) {
-    obs.OnAutoPipSettingOverlayViewHidden();
-  }
 }
 
 void AutoPipSettingOverlayView::IgnoreInputEvents(

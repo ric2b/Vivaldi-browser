@@ -122,40 +122,40 @@ TEST_F(AutofillXHRSubmissionDetectionTest,
        SubmissionDetectedAfterLastInteractedFormRemoved) {
   // Create two dummy FormData to simulate interaction and removal.
   FormData form_data1;
-  form_data1.renderer_id = FormRendererId(1);
+  form_data1.set_renderer_id(FormRendererId(1));
   FormFieldData form_field_data1;
   form_field_data1.set_renderer_id(FieldRendererId(2));
-  form_field_data1.set_host_form_id(form_data1.renderer_id);
-  form_data1.fields = {form_field_data1};
+  form_field_data1.set_host_form_id(form_data1.renderer_id());
+  form_data1.set_fields({form_field_data1});
 
   FormData form_data2;
-  form_data2.renderer_id = FormRendererId(3);
+  form_data2.set_renderer_id(FormRendererId(3));
   FormFieldData form_field_data2;
   form_field_data2.set_renderer_id(FieldRendererId(4));
-  form_field_data2.set_host_form_id(form_data2.renderer_id);
+  form_field_data2.set_host_form_id(form_data2.renderer_id());
   FormFieldData form_field_data3;
   form_field_data3.set_renderer_id(FieldRendererId(5));
-  form_field_data3.set_host_form_id(form_data2.renderer_id);
+  form_field_data3.set_host_form_id(form_data2.renderer_id());
 
   // Simulate typing in the first form.
   auto* autofill_driver = main_frame_driver();
   ASSERT_TRUE(autofill_driver);
-  autofill_driver->TextFieldDidChange(form_data1, form_field_data1,
+  autofill_driver->TextFieldDidChange(form_data1, form_field_data1.global_id(),
                                       base::TimeTicks::Now());
   // Simulate typing in the first field of the second form.
   form_field_data2.set_value(u"value2");
-  form_data2.fields = {form_field_data2, form_field_data3};
-  autofill_driver->TextFieldDidChange(form_data2, form_field_data2,
+  form_data2.set_fields({form_field_data2, form_field_data3});
+  autofill_driver->TextFieldDidChange(form_data2, form_field_data2.global_id(),
                                       base::TimeTicks::Now());
 
   // Simulate typing on the other field of the second form.
   form_field_data3.set_value(u"value3");
-  form_data2.fields = {form_field_data2, form_field_data3};
-  autofill_driver->TextFieldDidChange(form_data2, form_field_data3,
+  form_data2.set_fields({form_field_data2, form_field_data3});
+  autofill_driver->TextFieldDidChange(form_data2, form_field_data3.global_id(),
                                       base::TimeTicks::Now());
   // Simulate forms removal.
   autofill_driver->FormsRemoved(
-      /*removed_forms=*/{form_data1.renderer_id, form_data2.renderer_id},
+      /*removed_forms=*/{form_data1.renderer_id(), form_data2.renderer_id()},
       /*removed_unowned_fields=*/{});
 
   // Validate that last interacted form was detected as submitted and sent to
@@ -165,7 +165,7 @@ TEST_F(AutofillXHRSubmissionDetectionTest,
   // Check that the submitted form has the values "typed" in each field.
   EXPECT_TRUE(
       FormData::DeepEqual(*autofill_manager.submitted_form(), form_data2));
-  EXPECT_THAT(autofill_manager.submitted_form()->fields,
+  EXPECT_THAT(autofill_manager.submitted_form()->fields(),
               ElementsAre(Property(&FormFieldData::value, u"value2"),
                           Property(&FormFieldData::value, u"value3")));
 
@@ -193,12 +193,12 @@ TEST_F(AutofillXHRSubmissionDetectionTest,
        SubmissionDetectedAfterLastAutofilledFormRemoved) {
   // Create a dummy FormData to simulate interaction and removal.
   FormData form_data;
-  form_data.renderer_id = FormRendererId(1);
+  form_data.set_renderer_id(FormRendererId(1));
   FormFieldData form_field_data;
   form_field_data.set_renderer_id(FieldRendererId(2));
-  form_field_data.set_host_form_id(form_data.renderer_id);
+  form_field_data.set_host_form_id(form_data.renderer_id());
   form_field_data.set_value(u"value");
-  form_data.fields = {form_field_data};
+  form_data.set_fields({form_field_data});
 
   // Simulate autofilling the form.
   auto* autofill_driver = main_frame_driver();
@@ -206,7 +206,7 @@ TEST_F(AutofillXHRSubmissionDetectionTest,
   autofill_driver->DidFillAutofillFormData(form_data, base::TimeTicks::Now());
 
   // Simulate form removal.
-  autofill_driver->FormsRemoved(/*removed_forms=*/{form_data.renderer_id},
+  autofill_driver->FormsRemoved(/*removed_forms=*/{form_data.renderer_id()},
                                 /*removed_unowned_fields=*/{});
 
   // Validate that the form was detected as submitted and sent to
@@ -215,7 +215,7 @@ TEST_F(AutofillXHRSubmissionDetectionTest,
   ASSERT_TRUE(autofill_manager.submitted_form());
   EXPECT_TRUE(
       FormData::DeepEqual(*autofill_manager.submitted_form(), form_data));
-  EXPECT_THAT(autofill_manager.submitted_form()->fields,
+  EXPECT_THAT(autofill_manager.submitted_form()->fields(),
               ElementsAre(Property(&FormFieldData::value, u"value")));
 
   histogram_tester_->ExpectUniqueSample(
@@ -243,28 +243,28 @@ TEST_F(AutofillXHRSubmissionDetectionTest,
   // Create a dummy formless FormData to simulate interaction and removal.
   FormData form_data;
   // Explicitly setting "formless form" renderer id for clarity.
-  form_data.renderer_id = FormRendererId(0);
+  form_data.set_renderer_id(FormRendererId(0));
   // Create two fields.
   FormFieldData form_field_data1;
   form_field_data1.set_renderer_id(FieldRendererId(1));
-  form_field_data1.set_host_form_id(form_data.renderer_id);
+  form_field_data1.set_host_form_id(form_data.renderer_id());
   FormFieldData form_field_data2;
   form_field_data2.set_renderer_id(FieldRendererId(2));
-  form_field_data2.set_host_form_id(form_data.renderer_id);
-  form_data.fields = {form_field_data1, form_field_data2};
+  form_field_data2.set_host_form_id(form_data.renderer_id());
+  form_data.set_fields({form_field_data1, form_field_data2});
 
   // Simulate the user updating the first field.
   auto* autofill_driver = main_frame_driver();
   ASSERT_TRUE(autofill_driver);
   form_field_data1.set_value(u"value1");
-  form_data.fields = {form_field_data1, form_field_data2};
-  autofill_driver->TextFieldDidChange(form_data, form_field_data1,
+  form_data.set_fields({form_field_data1, form_field_data2});
+  autofill_driver->TextFieldDidChange(form_data, form_field_data1.global_id(),
                                       base::TimeTicks::Now());
 
   // Simulate the user updating the second field.
   form_field_data2.set_value(u"value2");
-  form_data.fields = {form_field_data1, form_field_data2};
-  autofill_driver->TextFieldDidChange(form_data, form_field_data2,
+  form_data.set_fields({form_field_data1, form_field_data2});
+  autofill_driver->TextFieldDidChange(form_data, form_field_data2.global_id(),
                                       base::TimeTicks::Now());
 
   // Simulate the removal of the first formless field.
@@ -306,7 +306,7 @@ TEST_F(AutofillXHRSubmissionDetectionTest,
   ASSERT_TRUE(autofill_manager.submitted_form());
   EXPECT_TRUE(
       FormData::DeepEqual(*autofill_manager.submitted_form(), form_data));
-  EXPECT_THAT(autofill_manager.submitted_form()->fields,
+  EXPECT_THAT(autofill_manager.submitted_form()->fields(),
               ElementsAre(Property(&FormFieldData::value, u"value1"),
                           Property(&FormFieldData::value, u"value2")));
 
@@ -334,16 +334,16 @@ TEST_F(AutofillXHRSubmissionDetectionTest,
        NoSubmissionDetectedAfterFormRemovedWithoutInteractions) {
   // Create a dummy FormData to simulate removal.
   FormData form_data;
-  form_data.renderer_id = FormRendererId(1);
+  form_data.set_renderer_id(FormRendererId(1));
   FormFieldData form_field_data;
   form_field_data.set_renderer_id(FieldRendererId(2));
-  form_field_data.set_host_form_id(form_data.renderer_id);
-  form_data.fields = {form_field_data};
+  form_field_data.set_host_form_id(form_data.renderer_id());
+  form_data.set_fields({form_field_data});
 
   auto* autofill_driver = main_frame_driver();
   ASSERT_TRUE(autofill_driver);
   // Simulate form removal without interactions.
-  autofill_driver->FormsRemoved(/*removed_forms=*/{form_data.renderer_id},
+  autofill_driver->FormsRemoved(/*removed_forms=*/{form_data.renderer_id()},
                                 /*removed_unowned_fields=*/{});
 
   // Validate that no form was sent to AutfillManager as submitted.
@@ -373,17 +373,17 @@ TEST_F(AutofillXHRSubmissionDetectionTest,
        SubmittedFormUpdatedFromFieldDataManager) {
   // Create a dummy FormData to simulate interaction and removal.
   FormData form_data;
-  form_data.renderer_id = FormRendererId(1);
+  form_data.set_renderer_id(FormRendererId(1));
   FormFieldData form_field_data;
   form_field_data.set_renderer_id(FieldRendererId(2));
-  form_field_data.set_host_form_id(form_data.renderer_id);
+  form_field_data.set_host_form_id(form_data.renderer_id());
   form_field_data.set_value(u"value1");
-  form_data.fields = {form_field_data};
+  form_data.set_fields({form_field_data});
 
   // Simulate the user updating the form field.
   auto* autofill_driver = main_frame_driver();
   ASSERT_TRUE(autofill_driver);
-  autofill_driver->TextFieldDidChange(form_data, form_field_data,
+  autofill_driver->TextFieldDidChange(form_data, form_field_data.global_id(),
                                       base::TimeTicks::Now());
 
   // Update the form field in FieldDataManager.
@@ -395,7 +395,7 @@ TEST_F(AutofillXHRSubmissionDetectionTest,
                                        data_manager_value, data_manager_mask);
 
   // Simulate form removal.
-  autofill_driver->FormsRemoved(/*removed_forms=*/{form_data.renderer_id},
+  autofill_driver->FormsRemoved(/*removed_forms=*/{form_data.renderer_id()},
                                 /*removed_unowned_fields=*/{});
 
   // Validate that form was detected as submitted and sent to
@@ -405,7 +405,7 @@ TEST_F(AutofillXHRSubmissionDetectionTest,
   ASSERT_TRUE(autofill_manager.submitted_form());
   EXPECT_TRUE(
       FormData::DeepEqual(form_data, *autofill_manager.submitted_form()));
-  EXPECT_THAT(autofill_manager.submitted_form()->fields,
+  EXPECT_THAT(autofill_manager.submitted_form()->fields(),
               ElementsAre(Property(&FormFieldData::value, u"value2")));
 }
 

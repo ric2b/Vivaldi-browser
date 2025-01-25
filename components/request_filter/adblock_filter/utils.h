@@ -31,11 +31,11 @@ std::string GetRulesListVersionHeader();
 
 std::string CalculateBufferChecksum(base::span<const uint8_t> data);
 
-int CompareDomains(base::StringPiece lhs_domain, base::StringPiece rhs_domain);
-base::StringPiece ToStringPiece(const flatbuffers::String* string);
+int CompareDomains(std::string_view lhs_domain, std::string_view rhs_domain);
+std::string_view ToStringPiece(const flatbuffers::String* string);
 int GetRulePriority(const flat::RequestFilterRule& rule);
 int GetMaxRulePriority();
-bool IsFullCSPAllowRule(const flat::RequestFilterRule& rule);
+bool IsFullModifierPassRule(const flat::RequestFilterRule& rule);
 bool IsThirdParty(const GURL& url, const url::Origin& origin);
 
 // These comparators only look at the rules body. This allows to avoid a string

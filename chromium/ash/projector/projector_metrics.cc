@@ -16,9 +16,6 @@ namespace {
 
 constexpr char kProjectorToolbarHistogramName[] = "Ash.Projector.Toolbar";
 
-constexpr char kProjectorMarkerColorHistogramName[] =
-    "Ash.Projector.MarkerColor";
-
 constexpr char kProjectorCreationFlowHistogramName[] =
     "Ash.Projector.CreationFlow";
 
@@ -64,11 +61,6 @@ void RecordToolbarMetrics(ProjectorToolbar button) {
       GetHistogramName(kProjectorToolbarHistogramName), button);
 }
 
-void RecordMarkerColorMetrics(ProjectorMarkerColor color) {
-  base::UmaHistogramEnumeration(
-      GetHistogramName(kProjectorMarkerColorHistogramName), color);
-}
-
 void RecordCreationFlowMetrics(ProjectorCreationFlow step) {
   base::UmaHistogramEnumeration(
       GetHistogramName(kProjectorCreationFlowHistogramName), step);
@@ -94,7 +86,7 @@ void RecordCreationFlowError(int message_id) {
       error = ProjectorCreationFlowError::kSessionAbortedByAudioPolicyDisabled;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   base::UmaHistogramEnumeration(

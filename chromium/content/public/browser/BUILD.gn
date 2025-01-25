@@ -151,6 +151,7 @@ source_set("browser_sources") {
     "devtools_manager_delegate.h",
     "devtools_network_transaction_factory.h",
     "devtools_socket_factory.h",
+    "digital_identity_interstitial_type.h",
     "digital_identity_provider.cc",
     "digital_identity_provider.h",
     "dips_delegate.cc",
@@ -265,6 +266,7 @@ source_set("browser_sources") {
     "navigation_controller.h",
     "navigation_details.cc",
     "navigation_details.h",
+    "navigation_discard_reason.h",
     "navigation_entry.h",
     "navigation_entry_restore_context.h",
     "navigation_handle.cc",
@@ -291,6 +293,8 @@ source_set("browser_sources") {
     "notification_service.h",
     "notification_source.h",
     "notification_types.h",
+    "origin_trial_status_change_details.cc",
+    "origin_trial_status_change_details.h",
     "origin_trials_controller_delegate.h",
     "overlay_window.h",
     "overscroll_configuration.h",
@@ -300,7 +304,7 @@ source_set("browser_sources") {
     "page_user_data.h",
     "payment_app_provider.h",
     "payment_app_provider_util.h",
-    "peak_gpu_memory_tracker.h",
+    "peak_gpu_memory_tracker_factory.h",
     "peer_connection_tracker_host_observer.cc",
     "peer_connection_tracker_host_observer.h",
     "per_web_ui_browser_interface_broker.h",
@@ -564,6 +568,7 @@ source_set("browser_sources") {
   deps = [
     "//build:chromeos_buildflags",
     "//cc",
+    "//components/input",
     "//components/services/storage/public/cpp",
     "//components/variations:variations",
     "//components/viz/host",
@@ -573,6 +578,7 @@ source_set("browser_sources") {
     "//gpu/command_buffer/service:gles2",
     "//media",
     "//media/capture",
+    "//media/mojo/mojom:web_speech_recognition",
     "//net",
     "//services/device/public/cpp/geolocation",
     "//services/metrics/public/cpp:metrics_cpp",
@@ -704,8 +710,6 @@ source_set("browser_sources") {
   if (is_chromeos_ash) {
     sources += [
       "chromeos/delegate_to_browser_gpu_service_accelerator_factory.h",
-      "on_device_model_service_instance.cc",
-      "on_device_model_service_instance.h",
       "tts_controller_delegate.cc",
       "tts_controller_delegate.h",
     ]
@@ -743,7 +747,10 @@ if (is_android) {
     sources = [ "bluetooth_chooser.h" ]
   }
   java_cpp_enum("digital_identity_enum") {
-    sources = [ "digital_identity_provider.h" ]
+    sources = [
+      "digital_identity_interstitial_type.h",
+      "digital_identity_provider.h",
+    ]
   }
 }
 

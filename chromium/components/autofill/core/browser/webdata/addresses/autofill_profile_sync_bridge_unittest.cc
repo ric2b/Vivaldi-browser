@@ -326,14 +326,8 @@ class AutofillProfileSyncBridgeTest : public testing::Test {
 
   std::vector<AutofillProfile> GetAllLocalData() {
     std::vector<AutofillProfile> data;
-    // Perform an async call synchronously for testing.
-    base::RunLoop loop;
-    bridge()->GetAllDataForDebugging(base::BindLambdaForTesting(
-        [&loop, &data](std::unique_ptr<DataBatch> batch) {
-          ExtractAutofillProfilesFromDataBatch(std::move(batch), &data);
-          loop.Quit();
-        }));
-    loop.Run();
+    ExtractAutofillProfilesFromDataBatch(bridge()->GetAllDataForDebugging(),
+                                         &data);
     return data;
   }
 
@@ -514,7 +508,7 @@ TEST_F(AutofillProfileSyncBridgeTest, GetAllDataForDebugging) {
   EXPECT_THAT(GetAllLocalData(), UnorderedElementsAre(local1, local2));
 }
 
-TEST_F(AutofillProfileSyncBridgeTest, GetData) {
+TEST_F(AutofillProfileSyncBridgeTest, GetDataForCommit) {
   AutofillProfile local1(kGuidA, AutofillProfile::Source::kLocalOrSyncable,
                          i18n_model_definition::kLegacyHierarchyCountryCode);
   local1.SetRawInfo(NAME_FIRST, u"John");
@@ -528,15 +522,8 @@ TEST_F(AutofillProfileSyncBridgeTest, GetData) {
   AddAutofillProfilesToTable({local1, local2});
 
   std::vector<AutofillProfile> data;
-  base::RunLoop loop;
-  bridge()->GetData({kGuidA},
-                    base::BindLambdaForTesting(
-                        [&loop, &data](std::unique_ptr<DataBatch> batch) {
-                          ExtractAutofillProfilesFromDataBatch(std::move(batch),
-                                                               &data);
-                          loop.Quit();
-                        }));
-  loop.Run();
+  ExtractAutofillProfilesFromDataBatch(bridge()->GetDataForCommit({kGuidA}),
+                                       &data);
 
   EXPECT_THAT(data, ElementsAre(local1));
 }

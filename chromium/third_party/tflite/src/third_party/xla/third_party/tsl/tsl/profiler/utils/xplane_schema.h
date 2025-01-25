@@ -72,6 +72,7 @@ TF_CONST_INIT extern const absl::string_view kXlaAsyncOpLineName;
 TF_CONST_INIT extern const absl::string_view kKernelLaunchLineName;
 TF_CONST_INIT extern const absl::string_view kSourceLineName;
 TF_CONST_INIT extern const absl::string_view kCounterEventsLineName;
+TF_CONST_INIT extern const absl::string_view kHostOffloadOpLineName;
 
 // GPU device vendors.
 TF_CONST_INIT extern const absl::string_view kDeviceVendorNvidia;
@@ -319,7 +320,9 @@ enum StatType {
   kEdgeTpuModelProfileInfo,
   kEdgeTpuMlir,
   kDroppedTraces,
-  kLastStatType = kDroppedTraces,
+  kCudaGraphId,
+  kCudaGraphDetails,
+  kLastStatType = kCudaGraphDetails,
 };
 
 enum MegaScaleStatType : uint8_t {
@@ -343,7 +346,8 @@ enum MegaScaleStatType : uint8_t {
   kMegaScaleLaunchId,
   kMegaScaleLoopIteration,
   kMegaScaleGraphProtos,
-  kLastMegaScaleStatType = kMegaScaleGraphProtos,
+  kMegaScaleNetworkTransportLatency,
+  kLastMegaScaleStatType = kMegaScaleNetworkTransportLatency,
 };
 
 enum TaskEnvStatType {

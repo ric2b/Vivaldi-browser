@@ -2,12 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/fetch/fetch_data_loader.h"
 
 #include <memory>
 #include <optional>
 #include <utility>
 
+#include "base/compiler_specific.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
@@ -175,7 +181,7 @@ class FetchDataLoaderAsArrayBuffer final : public FetchDataLoader,
         case BytesConsumer::Result::kOk:
           break;
         case BytesConsumer::Result::kShouldWait:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           return;
         case BytesConsumer::Result::kDone: {
           DOMArrayBuffer* array_buffer = BuildArrayBuffer();
@@ -263,7 +269,7 @@ class FetchDataLoaderAsFailure final : public FetchDataLoader,
         case BytesConsumer::Result::kOk:
           break;
         case BytesConsumer::Result::kShouldWait:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           return;
         case BytesConsumer::Result::kDone:
         case BytesConsumer::Result::kError:
@@ -341,7 +347,7 @@ class FetchDataLoaderAsFormData final : public FetchDataLoader,
         case BytesConsumer::Result::kOk:
           break;
         case BytesConsumer::Result::kShouldWait:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           return;
         case BytesConsumer::Result::kDone:
           if (multipart_parser_->Finish()) {
@@ -501,7 +507,7 @@ class FetchDataLoaderAsString final : public FetchDataLoader,
         case BytesConsumer::Result::kOk:
           break;
         case BytesConsumer::Result::kShouldWait:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           return;
         case BytesConsumer::Result::kDone:
           builder_.Append(decoder_->Flush());
@@ -626,14 +632,19 @@ class FetchDataLoaderAsDataPipe final : public FetchDataLoader,
       if (result == BytesConsumer::Result::kShouldWait)
         return;
       if (result == BytesConsumer::Result::kOk) {
-        if (available == 0) {
+        // SAFETY: `BeginRead` promises to return a valid pointer and size in
+        // the `kOk` case.
+        base::span<const char> span =
+            UNSAFE_BUFFERS(base::span(buffer, available));
+        if (span.empty()) {
           result = consumer_->EndRead(0);
         } else {
-          size_t num_bytes = available;
+          size_t actually_written_bytes = 0;
           MojoResult mojo_result = out_data_pipe_->WriteData(
-              buffer, &num_bytes, MOJO_WRITE_DATA_FLAG_NONE);
+              base::as_bytes(span), MOJO_WRITE_DATA_FLAG_NONE,
+              actually_written_bytes);
           if (mojo_result == MOJO_RESULT_OK) {
-            result = consumer_->EndRead(num_bytes);
+            result = consumer_->EndRead(actually_written_bytes);
           } else if (mojo_result == MOJO_RESULT_SHOULD_WAIT) {
             result = consumer_->EndRead(0);
             should_wait = true;
@@ -650,7 +661,7 @@ class FetchDataLoaderAsDataPipe final : public FetchDataLoader,
         case BytesConsumer::Result::kOk:
           break;
         case BytesConsumer::Result::kShouldWait:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           return;
         case BytesConsumer::Result::kDone:
           StopInternal();

@@ -18,6 +18,7 @@
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_parsing_utils.h"
 #include "device/fido/network_context_factory.h"
+#include "net/storage_access_api/status.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "third_party/boringssl/src/include/openssl/aes.h"
 #include "third_party/boringssl/src/include/openssl/digest.h"
@@ -133,7 +134,7 @@ FidoTunnelDevice::FidoTunnelDevice(
                           base::Unretained(this)));
   network_context_factory.Run()->CreateWebSocket(
       url, {kCableWebSocketProtocol}, net::SiteForCookies(),
-      /*has_storage_access=*/false, net::IsolationInfo(),
+      net::StorageAccessApiStatus::kNone, net::IsolationInfo(),
       /*additional_headers=*/{}, network::mojom::kBrowserProcessId,
       url::Origin::Create(url), network::mojom::kWebSocketOptionBlockAllCookies,
       net::MutableNetworkTrafficAnnotationTag(kTrafficAnnotation),
@@ -188,9 +189,9 @@ FidoTunnelDevice::FidoTunnelDevice(
       network::mojom::HttpHeader::New(kCableSignalConnectionHeader, "true"));
   network_context_factory.Run()->CreateWebSocket(
       url, {kCableWebSocketProtocol}, net::SiteForCookies(),
-      /*has_storage_access=*/false, net::IsolationInfo(), std::move(headers),
-      network::mojom::kBrowserProcessId, url::Origin::Create(url),
-      network::mojom::kWebSocketOptionBlockAllCookies,
+      net::StorageAccessApiStatus::kNone, net::IsolationInfo(),
+      std::move(headers), network::mojom::kBrowserProcessId,
+      url::Origin::Create(url), network::mojom::kWebSocketOptionBlockAllCookies,
       net::MutableNetworkTrafficAnnotationTag(kTrafficAnnotation),
       websocket_client_->BindNewHandshakeClientPipe(),
       /*url_loader_network_observer=*/mojo::NullRemote(),
@@ -484,7 +485,7 @@ void FidoTunnelDevice::OnTunnelData(
     case State::kReady: {
       // In |kReady| the connection is handled by |established_connection_| and
       // so this should never happen.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
     }
   }
@@ -627,7 +628,7 @@ void FidoTunnelDevice::EstablishedConnection::Close() {
 
     case State::kLocallyShutdown:
     case State::kClosed:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -765,7 +766,7 @@ void FidoTunnelDevice::EstablishedConnection::OnRemoteClose() {
 
     case State::kRemoteShutdown:
     case State::kClosed:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 }

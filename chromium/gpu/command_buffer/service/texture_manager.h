@@ -331,8 +331,6 @@ class GPU_GLES2_EXPORT Texture final : public TextureBase {
   // Marks a particular level as cleared or uncleared.
   void SetLevelCleared(GLenum target, GLint level, bool cleared);
 
-  void ApplyClampedBaseLevelAndMaxLevelToDriver();
-
   MemoryTypeTracker* GetMemTracker();
 
   // Returns GL_NONE on error.
@@ -940,7 +938,7 @@ class GPU_GLES2_EXPORT TextureManager
       case GL_TEXTURE_RECTANGLE_ARB:
         return default_textures_[kRectangleARB].get();
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         return nullptr;
     }
   }
@@ -1001,7 +999,7 @@ class GPU_GLES2_EXPORT TextureManager
         return;
       }
     }
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   struct DoTexImageArguments {

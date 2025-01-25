@@ -4,13 +4,13 @@
 
 #include "quiche/quic/moqt/moqt_subscribe_windows.h"
 
+#include <cstdint>
 #include <optional>
 
 #include "quiche/quic/moqt/moqt_messages.h"
 #include "quiche/quic/platform/api/quic_expect_bug.h"
 #include "quiche/quic/platform/api/quic_test.h"
 #include "quiche/common/platform/api/quiche_export.h"
-#include "quiche/web_transport/web_transport.h"
 
 namespace moqt {
 
@@ -21,16 +21,12 @@ class QUICHE_EXPORT SubscribeWindowTest : public quic::test::QuicTest {
   SubscribeWindowTest() {}
 
   const uint64_t subscribe_id_ = 2;
-  const uint64_t start_group_ = 4;
-  const uint64_t start_object_ = 0;
-  const uint64_t end_group_ = 5;
-  const uint64_t end_object_ = 5;
+  const FullSequence start_{4, 0};
+  const FullSequence end_{5, 5};
 };
 
 TEST_F(SubscribeWindowTest, Queries) {
-  SubscribeWindow window(subscribe_id_, MoqtForwardingPreference::kObject,
-                         start_group_, start_object_, end_group_, end_object_);
-  EXPECT_EQ(window.subscribe_id(), 2);
+  SubscribeWindow window(start_, end_);
   EXPECT_TRUE(window.InWindow(FullSequence(4, 0)));
   EXPECT_TRUE(window.InWindow(FullSequence(5, 5)));
   EXPECT_FALSE(window.InWindow(FullSequence(5, 6)));
@@ -39,89 +35,65 @@ TEST_F(SubscribeWindowTest, Queries) {
 }
 
 TEST_F(SubscribeWindowTest, AddQueryRemoveStreamIdTrack) {
-  SubscribeWindow window(subscribe_id_, MoqtForwardingPreference::kTrack,
-                         start_group_, start_object_, end_group_, end_object_);
-  window.AddStream(4, 0, 2);
-  EXPECT_QUIC_BUG(window.AddStream(5, 2, 6), "Stream already added");
-  EXPECT_EQ(*window.GetStreamForSequence(FullSequence(5, 2)), 2);
-  window.RemoveStream(7, 2);
-  EXPECT_FALSE(window.GetStreamForSequence(FullSequence(4, 0)).has_value());
+  SendStreamMap stream_map(MoqtForwardingPreference::kTrack);
+  stream_map.AddStream(FullSequence{4, 0}, 2);
+  EXPECT_QUIC_BUG(stream_map.AddStream(FullSequence{5, 2}, 6),
+                  "Stream already added");
+  EXPECT_EQ(stream_map.GetStreamForSequence(FullSequence(5, 2)), 2);
+  stream_map.RemoveStream(FullSequence{7, 2}, 2);
+  EXPECT_EQ(stream_map.GetStreamForSequence(FullSequence(4, 0)), std::nullopt);
 }
 
 TEST_F(SubscribeWindowTest, AddQueryRemoveStreamIdGroup) {
-  SubscribeWindow window(subscribe_id_, MoqtForwardingPreference::kGroup,
-                         start_group_, start_object_, end_group_, end_object_);
-  window.AddStream(4, 0, 2);
-  EXPECT_FALSE(window.GetStreamForSequence(FullSequence(5, 0)).has_value());
-  window.AddStream(5, 2, 6);
-  EXPECT_QUIC_BUG(window.AddStream(5, 3, 6), "Stream already added");
-  EXPECT_EQ(*window.GetStreamForSequence(FullSequence(4, 1)), 2);
-  EXPECT_EQ(*window.GetStreamForSequence(FullSequence(5, 0)), 6);
-  window.RemoveStream(5, 1);
-  EXPECT_FALSE(window.GetStreamForSequence(FullSequence(5, 2)).has_value());
+  SendStreamMap stream_map(MoqtForwardingPreference::kGroup);
+  stream_map.AddStream(FullSequence{4, 0}, 2);
+  EXPECT_EQ(stream_map.GetStreamForSequence(FullSequence(5, 0)), std::nullopt);
+  stream_map.AddStream(FullSequence{5, 2}, 6);
+  EXPECT_QUIC_BUG(stream_map.AddStream(FullSequence{5, 3}, 6),
+                  "Stream already added");
+  EXPECT_EQ(stream_map.GetStreamForSequence(FullSequence(4, 1)), 2);
+  EXPECT_EQ(stream_map.GetStreamForSequence(FullSequence(5, 0)), 6);
+  stream_map.RemoveStream(FullSequence{5, 1}, 6);
+  EXPECT_EQ(stream_map.GetStreamForSequence(FullSequence(5, 2)), std::nullopt);
 }
 
 TEST_F(SubscribeWindowTest, AddQueryRemoveStreamIdObject) {
-  SubscribeWindow window(subscribe_id_, MoqtForwardingPreference::kObject,
-                         start_group_, start_object_, end_group_, end_object_);
-  window.AddStream(4, 0, 2);
-  window.AddStream(4, 1, 6);
-  window.AddStream(4, 2, 10);
-  EXPECT_QUIC_BUG(window.AddStream(4, 2, 14), "Stream already added");
-  EXPECT_EQ(*window.GetStreamForSequence(FullSequence(4, 0)), 2);
-  EXPECT_EQ(*window.GetStreamForSequence(FullSequence(4, 2)), 10);
-  EXPECT_FALSE(window.GetStreamForSequence(FullSequence(4, 4)).has_value());
-  EXPECT_FALSE(window.GetStreamForSequence(FullSequence(5, 0)).has_value());
-  window.RemoveStream(4, 2);
-  EXPECT_FALSE(window.GetStreamForSequence(FullSequence(4, 2)).has_value());
+  SendStreamMap stream_map(MoqtForwardingPreference::kObject);
+  stream_map.AddStream(FullSequence{4, 0}, 2);
+  stream_map.AddStream(FullSequence{4, 1}, 6);
+  stream_map.AddStream(FullSequence{4, 2}, 10);
+  EXPECT_QUIC_BUG(stream_map.AddStream(FullSequence{4, 2}, 14),
+                  "Stream already added");
+  EXPECT_EQ(stream_map.GetStreamForSequence(FullSequence(4, 0)), 2);
+  EXPECT_EQ(stream_map.GetStreamForSequence(FullSequence(4, 2)), 10);
+  EXPECT_EQ(stream_map.GetStreamForSequence(FullSequence(4, 4)), std::nullopt);
+  EXPECT_EQ(stream_map.GetStreamForSequence(FullSequence(5, 0)), std::nullopt);
+  stream_map.RemoveStream(FullSequence(4, 2), 10);
+  EXPECT_EQ(stream_map.GetStreamForSequence(FullSequence(4, 2)), std::nullopt);
 }
 
 TEST_F(SubscribeWindowTest, AddQueryRemoveStreamIdDatagram) {
-  SubscribeWindow window(subscribe_id_, MoqtForwardingPreference::kDatagram,
-                         start_group_, start_object_, end_group_, end_object_);
-  EXPECT_QUIC_BUG(window.AddStream(4, 0, 2), "Adding a stream for datagram");
+  SendStreamMap stream_map(MoqtForwardingPreference::kDatagram);
+  EXPECT_QUIC_BUG(stream_map.AddStream(FullSequence{4, 0}, 2),
+                  "Adding a stream for datagram");
 }
 
-class QUICHE_EXPORT MoqtSubscribeWindowsTest : public quic::test::QuicTest {
- public:
-  MoqtSubscribeWindowsTest() : windows_(MoqtForwardingPreference::kObject) {}
-  MoqtSubscribeWindows windows_;
-};
-
-TEST_F(MoqtSubscribeWindowsTest, IsEmpty) {
-  EXPECT_TRUE(windows_.IsEmpty());
-  windows_.AddWindow(0, 1, 3);
-  EXPECT_FALSE(windows_.IsEmpty());
+TEST_F(SubscribeWindowTest, UpdateStartEnd) {
+  SubscribeWindow window(start_, end_);
+  EXPECT_TRUE(window.UpdateStartEnd(start_.next(),
+                                    FullSequence(end_.group, end_.object - 1)));
+  EXPECT_FALSE(window.InWindow(FullSequence(start_.group, start_.object)));
+  EXPECT_FALSE(window.InWindow(FullSequence(end_.group, end_.object)));
+  EXPECT_FALSE(
+      window.UpdateStartEnd(start_, FullSequence(end_.group, end_.object - 1)));
+  EXPECT_FALSE(window.UpdateStartEnd(start_.next(), end_));
 }
 
-TEST_F(MoqtSubscribeWindowsTest, IsSubscribed) {
-  EXPECT_TRUE(windows_.IsEmpty());
-  // The first two windows overlap; the third is open-ended.
-  windows_.AddWindow(0, 1, 0, 3, 9);
-  windows_.AddWindow(1, 2, 4, 4, 3);
-  windows_.AddWindow(2, 10, 0);
-  EXPECT_FALSE(windows_.IsEmpty());
-  EXPECT_TRUE(windows_.SequenceIsSubscribed(FullSequence(0, 8)).empty());
-  auto hits = windows_.SequenceIsSubscribed(FullSequence(1, 0));
-  EXPECT_EQ(hits.size(), 1);
-  EXPECT_EQ(hits[0]->subscribe_id(), 0);
-  EXPECT_TRUE(windows_.SequenceIsSubscribed(FullSequence(4, 4)).empty());
-  EXPECT_TRUE(windows_.SequenceIsSubscribed(FullSequence(8, 3)).empty());
-  hits = windows_.SequenceIsSubscribed(FullSequence(100, 7));
-  EXPECT_EQ(hits.size(), 1);
-  EXPECT_EQ(hits[0]->subscribe_id(), 2);
-  hits = windows_.SequenceIsSubscribed(FullSequence(3, 0));
-  EXPECT_EQ(hits.size(), 2);
-  EXPECT_EQ(hits[0]->subscribe_id() + hits[1]->subscribe_id(), 1);
-}
-
-TEST_F(MoqtSubscribeWindowsTest, AddGetRemoveWindow) {
-  windows_.AddWindow(0, 1, 0, 3, 9);
-  SubscribeWindow* window = windows_.GetWindow(0);
-  EXPECT_EQ(window->subscribe_id(), 0);
-  EXPECT_EQ(windows_.GetWindow(1), nullptr);
-  windows_.RemoveWindow(0);
-  EXPECT_EQ(windows_.GetWindow(0), nullptr);
+TEST_F(SubscribeWindowTest, UpdateStartEndOpenEnded) {
+  SubscribeWindow window(start_, std::nullopt);
+  EXPECT_TRUE(window.UpdateStartEnd(start_, end_));
+  EXPECT_FALSE(window.InWindow(end_.next()));
+  EXPECT_FALSE(window.UpdateStartEnd(start_, std::nullopt));
 }
 
 }  // namespace test

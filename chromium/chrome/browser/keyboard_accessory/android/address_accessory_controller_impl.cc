@@ -15,11 +15,14 @@
 #include "chrome/browser/keyboard_accessory/android/manual_filling_controller.h"
 #include "chrome/browser/keyboard_accessory/android/manual_filling_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/android/plus_addresses/all_plus_addresses_bottom_sheet_controller.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/core/browser/address_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/unique_ids.h"
+#include "components/plus_addresses/features.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -64,16 +67,28 @@ UserInfo TranslateProfile(const AutofillProfile* profile) {
 }
 
 std::vector<UserInfo> UserInfosForProfiles(
-    const std::vector<AutofillProfile*>& profiles) {
+    const std::vector<const AutofillProfile*>& profiles) {
   std::vector<UserInfo> infos(profiles.size());
   base::ranges::transform(profiles, infos.begin(), TranslateProfile);
   return infos;
 }
 
 std::vector<FooterCommand> CreateManageAddressesFooter() {
-  return {FooterCommand(
+  std::vector<FooterCommand> commands = {FooterCommand(
       l10n_util::GetStringUTF16(IDS_AUTOFILL_ADDRESS_SHEET_ALL_ADDRESSES_LINK),
       AccessoryAction::MANAGE_ADDRESSES)};
+  if (base::FeatureList::IsEnabled(
+          plus_addresses::features::kPlusAddressAndroidManualFallbackEnabled)) {
+    commands.emplace_back(FooterCommand(
+        l10n_util::GetStringUTF16(
+            IDS_PLUS_ADDRESS_CREATE_NEW_PLUS_ADDRESSES_LINK_ANDROID),
+        AccessoryAction::CREATE_PLUS_ADDRESS));
+    commands.emplace_back(
+        FooterCommand(l10n_util::GetStringUTF16(
+                          IDS_PLUS_ADDRESS_SELECT_PLUS_ADDRESS_LINK_ANDROID),
+                      AccessoryAction::SELECT_PLUS_ADDRESS));
+  }
+  return commands;
 }
 
 }  // namespace
@@ -100,13 +115,14 @@ AddressAccessoryControllerImpl::GetSheetData() const {
   if (!personal_data_manager_) {
     return std::nullopt;
   }
-  std::vector<AutofillProfile*> profiles =
+  std::vector<const AutofillProfile*> profiles =
       personal_data_manager_->address_data_manager().GetProfilesToSuggest();
   std::u16string title_or_empty_message;
   if (profiles.empty()) {
     title_or_empty_message =
         l10n_util::GetStringUTF16(IDS_AUTOFILL_ADDRESS_SHEET_EMPTY_MESSAGE);
   }
+  // TODO: crbug.com/327838324 - Populate the plus address section.
   return autofill::CreateAccessorySheetData(
       autofill::AccessoryTabType::ADDRESSES, title_or_empty_message,
       UserInfosForProfiles(profiles), CreateManageAddressesFooter());
@@ -115,18 +131,7 @@ AddressAccessoryControllerImpl::GetSheetData() const {
 void AddressAccessoryControllerImpl::OnFillingTriggered(
     FieldGlobalId focused_field_id,
     const AccessorySheetField& selection) {
-  // Since the data we fill is scoped to the profile and not to a frame, we can
-  // fill the focused frame - we basically behave like a keyboard here.
-  content::RenderFrameHost* rfh = GetWebContents().GetFocusedFrame();
-  if (!rfh)
-    return;
-  autofill::ContentAutofillDriver* driver =
-      autofill::ContentAutofillDriver::GetForRenderFrameHost(rfh);
-  if (!driver)
-    return;
-  driver->browser_events().ApplyFieldAction(
-      mojom::FieldActionType::kReplaceAll, mojom::ActionPersistence::kFill,
-      focused_field_id, selection.display_text());
+  FillValueIntoField(focused_field_id, selection.display_text());
 }
 
 void AddressAccessoryControllerImpl::OnPasskeySelected(
@@ -136,19 +141,46 @@ void AddressAccessoryControllerImpl::OnPasskeySelected(
 
 void AddressAccessoryControllerImpl::OnOptionSelected(
     AccessoryAction selected_action) {
-  if (selected_action == AccessoryAction::MANAGE_ADDRESSES) {
-    autofill::ShowAutofillProfileSettings(&GetWebContents());
-    return;
+  switch (selected_action) {
+    case AccessoryAction::MANAGE_ADDRESSES:
+      autofill::ShowAutofillProfileSettings(&GetWebContents());
+      return;
+    case AccessoryAction::CREATE_PLUS_ADDRESS: {
+      auto* client = ContentAutofillClient::FromWebContents(&GetWebContents());
+      client->OfferPlusAddressCreation(
+          client->GetLastCommittedPrimaryMainFrameOrigin(),
+          base::BindOnce(
+              &AddressAccessoryControllerImpl::OnPlusAddressCreated,
+              weak_ptr_factory_.GetWeakPtr(),
+              GetManualFillingController()->GetLastFocusedFieldId()));
+      // TODO: crbug.com/327838324 - Confirm with the UX that the manual filling
+      // sheet should be closed after the bottom sheet is closed.
+      GetManualFillingController()->Hide();
+      return;
+    }
+    case AccessoryAction::SELECT_PLUS_ADDRESS: {
+      if (!all_plus_addresses_bottom_sheet_controller_) {
+        all_plus_addresses_bottom_sheet_controller_ = std::make_unique<
+            plus_addresses::AllPlusAddressesBottomSheetController>(
+            &GetWebContents());
+        all_plus_addresses_bottom_sheet_controller_->Show(base::BindOnce(
+            &AddressAccessoryControllerImpl::OnPlusAddressSelected,
+            weak_ptr_factory_.GetWeakPtr(),
+            GetManualFillingController()->GetLastFocusedFieldId()));
+      }
+      return;
+    }
+    default:
+      NOTREACHED_NORETURN()
+          << "Unhandled selected action: " << static_cast<int>(selected_action);
   }
-  NOTREACHED() << "Unhandled selected action: "
-               << static_cast<int>(selected_action);
 }
 
 void AddressAccessoryControllerImpl::OnToggleChanged(
     AccessoryAction toggled_action,
     bool enabled) {
-  NOTREACHED() << "Unhandled toggled action: "
-               << static_cast<int>(toggled_action);
+  NOTREACHED_NORETURN() << "Unhandled toggled action: "
+                        << static_cast<int>(toggled_action);
 }
 
 void AddressAccessoryControllerImpl::RefreshSuggestions() {
@@ -156,24 +188,16 @@ void AddressAccessoryControllerImpl::RefreshSuggestions() {
                "AddressAccessoryControllerImpl::RefreshSuggestions");
   if (!personal_data_manager_) {
     personal_data_manager_ =
-        autofill::PersonalDataManagerFactory::GetForProfile(
-            Profile::FromBrowserContext(GetWebContents().GetBrowserContext()));
+        autofill::PersonalDataManagerFactory::GetForBrowserContext(
+            GetWebContents().GetBrowserContext());
     personal_data_manager_->AddObserver(this);
   }
-  if (source_observer_) {
-    source_observer_.Run(
-        this,
-        IsFillingSourceAvailable(personal_data_manager_ &&
+  CHECK(source_observer_);
+  source_observer_.Run(this, IsFillingSourceAvailable(
+                                 personal_data_manager_ &&
                                  !personal_data_manager_->address_data_manager()
                                       .GetProfilesToSuggest()
                                       .empty()));
-  } else {
-    // TODO(crbug.com/40165275): Remove once filling controller pulls this
-    // information instead of waiting to get it pushed.
-    std::optional<AccessorySheetData> data = GetSheetData();
-    DCHECK(data.has_value());
-    GetManualFillingController()->RefreshSuggestions(std::move(data).value());
-  }
 }
 
 base::WeakPtr<AddressAccessoryController>
@@ -210,6 +234,41 @@ AddressAccessoryControllerImpl::AddressAccessoryControllerImpl(
           *web_contents),
       mf_controller_(std::move(mf_controller)),
       personal_data_manager_(nullptr) {}
+
+void AddressAccessoryControllerImpl::OnPlusAddressCreated(
+    FieldGlobalId focused_field_id,
+    const std::string& plus_address) {
+  FillValueIntoField(focused_field_id, base::UTF8ToUTF16(plus_address));
+}
+
+void AddressAccessoryControllerImpl::OnPlusAddressSelected(
+    FieldGlobalId focused_field_id,
+    base::optional_ref<const std::string> plus_address) {
+  if (plus_address) {
+    FillValueIntoField(focused_field_id,
+                       base::UTF8ToUTF16(plus_address.value()));
+  }
+  all_plus_addresses_bottom_sheet_controller_.reset();
+}
+
+void AddressAccessoryControllerImpl::FillValueIntoField(
+    FieldGlobalId focused_field_id,
+    const std::u16string& value) {
+  // Since the data we fill is scoped to the profile and not to a frame, we can
+  // fill the focused frame - we basically behave like a keyboard here.
+  content::RenderFrameHost* rfh = GetWebContents().GetFocusedFrame();
+  if (!rfh) {
+    return;
+  }
+  autofill::ContentAutofillDriver* driver =
+      autofill::ContentAutofillDriver::GetForRenderFrameHost(rfh);
+  if (!driver) {
+    return;
+  }
+  driver->browser_events().ApplyFieldAction(mojom::FieldActionType::kReplaceAll,
+                                            mojom::ActionPersistence::kFill,
+                                            focused_field_id, value);
+}
 
 base::WeakPtr<ManualFillingController>
 AddressAccessoryControllerImpl::GetManualFillingController() {

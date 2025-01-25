@@ -50,6 +50,10 @@ following changes which are not merged to upstream:
   lld) arising from attempts to reference the table from assembler on
   32-bit x86. This only affects shared libraries, but that's important
   for downstream Android builds.
+* Merged upstream patch https://github.com/libjpeg-turbo/libjpeg-turbo/commit/0fc7313e545a3ff499c19ee6591bb87f0ad8b2a4
+  This patch resolves an O(n^2) slowdown issue when JPEG files contain an
+  enormous number of markers; this would only occur in a maliciouly-crafted
+  image, or through fuzzing.
 * Patches to enable running the upstream unit tests through GTest.
   The upstream unit tests are defined here under the section 'TESTS':
   https://github.com/libjpeg-turbo/libjpeg-turbo/blob/master/CMakeLists.txt

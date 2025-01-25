@@ -16,6 +16,7 @@
 #include "core/fdrm/fx_crypt.h"
 #include "core/fxcrt/binary_buffer.h"
 #include "core/fxcrt/bytestring.h"
+#include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/retain_ptr.h"
 #include "core/fxcrt/span.h"
@@ -34,16 +35,14 @@ class CPDF_CryptoHandler {
 
   static bool IsSignatureDictionary(const CPDF_Dictionary* dictionary);
 
-  CPDF_CryptoHandler(Cipher cipher, const uint8_t* key, size_t keylen);
+  CPDF_CryptoHandler(Cipher cipher, pdfium::span<const uint8_t> key);
   ~CPDF_CryptoHandler();
 
   bool DecryptObjectTree(RetainPtr<CPDF_Object> object);
-  size_t EncryptGetSize(pdfium::span<const uint8_t> source) const;
-  void EncryptContent(uint32_t objnum,
-                      uint32_t gennum,
-                      pdfium::span<const uint8_t> source,
-                      uint8_t* dest_buf,
-                      size_t& dest_size) const;
+
+  DataVector<uint8_t> EncryptContent(uint32_t objnum,
+                                     uint32_t gennum,
+                                     pdfium::span<const uint8_t> source) const;
 
   bool IsCipherAES() const;
 

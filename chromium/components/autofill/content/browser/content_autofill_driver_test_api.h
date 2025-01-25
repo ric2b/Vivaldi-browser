@@ -21,13 +21,7 @@ class ContentAutofillDriverTestApi {
     driver_->autofill_manager_ = std::move(autofill_manager);
   }
 
-  void SetFrameAndFormMetaData(FormData& form, FormFieldData* field) const {
-    driver_->SetFrameAndFormMetaData(form, field);
-  }
-
-  FormData GetFormWithFrameAndFormMetaData(const FormData& form) const {
-    return driver_->GetFormWithFrameAndFormMetaData(form);
-  }
+  void LiftForTest(FormData& form) const { driver_->LiftForTest(form); }
 
  private:
   const raw_ref<ContentAutofillDriver> driver_;

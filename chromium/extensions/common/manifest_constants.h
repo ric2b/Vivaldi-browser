@@ -66,6 +66,7 @@ inline constexpr char kHideBookmarkButton[] = "hide_bookmark_button";
 inline constexpr char kHomepageURL[] = "homepage_url";
 inline constexpr char kHostPermissions[] = "host_permissions";
 inline constexpr char kIcons[] = "icons";
+inline constexpr char kIconVariants[] = "icon_variants";
 inline constexpr char kId[] = "id";
 inline constexpr char kImeOptionsPage[] = "options_page";
 inline constexpr char kIndicator[] = "indicator";

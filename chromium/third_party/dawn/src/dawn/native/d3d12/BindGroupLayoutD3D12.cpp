@@ -32,8 +32,10 @@
 #include "dawn/common/BitSetIterator.h"
 #include "dawn/common/MatchVariant.h"
 #include "dawn/native/d3d12/DeviceD3D12.h"
+#include "dawn/native/d3d12/SamplerD3D12.h"
 #include "dawn/native/d3d12/SamplerHeapCacheD3D12.h"
 #include "dawn/native/d3d12/StagingDescriptorAllocatorD3D12.h"
+#include "dawn/native/d3d12/UtilsD3D12.h"
 
 namespace dawn::native::d3d12 {
 namespace {
@@ -54,10 +56,6 @@ D3D12_DESCRIPTOR_RANGE_TYPE WGPUBindingInfoToDescriptorRangeType(const BindingIn
             }
         },
         [](const StaticSamplerBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_TYPE {
-            // Static samplers are handled in the frontend.
-            // TODO(crbug.com/dawn/2483): Implement static samplers in the
-            // D3D12 backend.
-            DAWN_UNREACHABLE();
             return D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
         },
         [](const SamplerBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_TYPE {
@@ -76,6 +74,10 @@ D3D12_DESCRIPTOR_RANGE_TYPE WGPUBindingInfoToDescriptorRangeType(const BindingIn
                 case wgpu::StorageTextureAccess::Undefined:
                     DAWN_UNREACHABLE();
             }
+        },
+        [](const InputAttachmentBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_TYPE {
+            DAWN_UNREACHABLE();
+            return D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
         });
 }
 }  // anonymous namespace
@@ -99,6 +101,33 @@ BindGroupLayout::BindGroupLayout(Device* device, const BindGroupLayoutDescriptor
         D3D12_DESCRIPTOR_RANGE_TYPE descriptorRangeType =
             WGPUBindingInfoToDescriptorRangeType(bindingInfo);
         mShaderRegisters[bindingIndex] = uint32_t(bindingInfo.binding);
+
+        // Static samplers aren't stored in the descriptor heap. Handle them separately.
+        if (std::holds_alternative<StaticSamplerBindingInfo>(bindingInfo.bindingLayout)) {
+            const StaticSamplerBindingInfo& staticSamplerBindingInfo =
+                std::get<StaticSamplerBindingInfo>(bindingInfo.bindingLayout);
+
+            Sampler* sampler = ToBackend(staticSamplerBindingInfo.sampler.Get());
+
+            const D3D12_SAMPLER_DESC desc = sampler->GetSamplerDescriptor();
+            D3D12_STATIC_SAMPLER_DESC staticSamplerDesc = {};
+            staticSamplerDesc.ShaderRegister = GetShaderRegister(bindingIndex);
+            staticSamplerDesc.RegisterSpace = kRegisterSpacePlaceholder;
+            staticSamplerDesc.ShaderVisibility = ShaderVisibilityType(bindingInfo.visibility);
+            staticSamplerDesc.AddressU = desc.AddressU;
+            staticSamplerDesc.AddressV = desc.AddressV;
+            staticSamplerDesc.AddressW = desc.AddressW;
+            staticSamplerDesc.Filter = desc.Filter;
+            staticSamplerDesc.MinLOD = desc.MinLOD;
+            staticSamplerDesc.MaxLOD = desc.MaxLOD;
+            staticSamplerDesc.MipLODBias = desc.MipLODBias;
+            staticSamplerDesc.MaxAnisotropy = desc.MaxAnisotropy;
+            staticSamplerDesc.ComparisonFunc = desc.ComparisonFunc;
+
+            mStaticSamplers.push_back(staticSamplerDesc);
+
+            continue;
+        }
 
         // For dynamic resources, Dawn uses root descriptor in D3D12 backend. So there is no
         // need to allocate the descriptor from descriptor heap or create descriptor ranges.
@@ -128,9 +157,7 @@ BindGroupLayout::BindGroupLayout(Device* device, const BindGroupLayoutDescriptor
         range.Flags = MatchVariant(
             bindingInfo.bindingLayout,
             [](const StaticSamplerBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
-                // Static samplers are handled in the frontend.
-                // TODO(crbug.com/dawn/2483): Implement static samplers in the
-                // D3D12 backend.
+                // Static samplers should already be handled. This should never be reached.
                 DAWN_UNREACHABLE();
                 return D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
             },
@@ -139,22 +166,28 @@ BindGroupLayout::BindGroupLayout(Device* device, const BindGroupLayoutDescriptor
                 // point to data.
                 return D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
             },
-            [](const BufferBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
+            [&](const BufferBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
                 // In Dawn it's allowed to do state transitions on the buffers or textures after
-                // binding
-                // them on the current command list, which indicates a change to its data (or
-                // possibly resource metadata), so we cannot bind them as DATA_STATIC. We cannot
+                // binding them on the current command list, which indicates a change to its data
+                // (or possibly resource metadata), so we cannot bind them as DATA_STATIC. We cannot
                 // bind them as DATA_STATIC_WHILE_SET_AT_EXECUTE either because it is required to be
                 // rebound to the command list before the next (this) Draw/Dispatch call, while
                 // currently we may not rebind these resources if the current bind group is not
                 // changed.
-                return D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_STATIC_KEEPING_BUFFER_BOUNDS_CHECKS |
-                       D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
+                if (GetDevice()->IsRobustnessEnabled()) {
+                    return D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_STATIC_KEEPING_BUFFER_BOUNDS_CHECKS |
+                           D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
+                }
+                return D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
             },
             [](const TextureBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
                 return D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
             },
             [](const StorageTextureBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
+                return D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
+            },
+            [](const InputAttachmentBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
+                DAWN_UNREACHABLE();
                 return D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
             });
 
@@ -240,6 +273,10 @@ const std::vector<D3D12_DESCRIPTOR_RANGE1>& BindGroupLayout::GetCbvUavSrvDescrip
 
 const std::vector<D3D12_DESCRIPTOR_RANGE1>& BindGroupLayout::GetSamplerDescriptorRanges() const {
     return mSamplerDescriptorRanges;
+}
+
+const std::vector<D3D12_STATIC_SAMPLER_DESC>& BindGroupLayout::GetStaticSamplers() const {
+    return mStaticSamplers;
 }
 
 }  // namespace dawn::native::d3d12

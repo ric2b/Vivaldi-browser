@@ -4,16 +4,12 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fpdfapi/page/cpdf_image.h"
 
 #include <stdint.h>
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <utility>
 
@@ -32,12 +28,13 @@
 #include "core/fpdfapi/parser/cpdf_string.h"
 #include "core/fxcodec/jpeg/jpegmodule.h"
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_2d_size.h"
-#include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/fx_stream.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/span_util.h"
+#include "core/fxcrt/stl_util.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 #include "core/fxge/dib/fx_dib.h"
 
@@ -199,23 +196,15 @@ void CPDF_Image::SetImage(const RetainPtr<CFX_DIBitmap>& pBitmap) {
   size_t dest_pitch = 0;
   bool bCopyWithoutAlpha = true;
   if (bpp == 1) {
-    int32_t reset_a = 0;
-    int32_t reset_r = 0;
-    int32_t reset_g = 0;
-    int32_t reset_b = 0;
-    int32_t set_a = 0;
-    int32_t set_r = 0;
-    int32_t set_g = 0;
-    int32_t set_b = 0;
+    FX_BGRA_STRUCT<uint8_t> reset_bgra;
+    FX_BGRA_STRUCT<uint8_t> set_bgra;
     if (!pBitmap->IsMaskFormat()) {
-      std::tie(reset_a, reset_r, reset_g, reset_b) =
-          ArgbDecode(pBitmap->GetPaletteArgb(0));
-      std::tie(set_a, set_r, set_g, set_b) =
-          ArgbDecode(pBitmap->GetPaletteArgb(1));
+      reset_bgra = ArgbToBGRAStruct(pBitmap->GetPaletteArgb(0));
+      set_bgra = ArgbToBGRAStruct(pBitmap->GetPaletteArgb(1));
     }
-    if (set_a == 0 || reset_a == 0) {
+    if (set_bgra.alpha == 0 || reset_bgra.alpha == 0) {
       pDict->SetNewFor<CPDF_Boolean>("ImageMask", true);
-      if (reset_a == 0) {
+      if (reset_bgra.alpha == 0) {
         auto pArray = pDict->SetNewFor<CPDF_Array>("Decode");
         pArray->AppendNew<CPDF_Number>(1);
         pArray->AppendNew<CPDF_Number>(0);
@@ -225,19 +214,9 @@ void CPDF_Image::SetImage(const RetainPtr<CFX_DIBitmap>& pBitmap) {
       pCS->AppendNew<CPDF_Name>("Indexed");
       pCS->AppendNew<CPDF_Name>("DeviceRGB");
       pCS->AppendNew<CPDF_Number>(1);
-      ByteString ct;
-      {
-        // Span's lifetime must end before ReleaseBuffer() below.
-        pdfium::span<char> pBuf = ct.GetBuffer(6);
-        pBuf[0] = static_cast<char>(reset_r);
-        pBuf[1] = static_cast<char>(reset_g);
-        pBuf[2] = static_cast<char>(reset_b);
-        pBuf[3] = static_cast<char>(set_r);
-        pBuf[4] = static_cast<char>(set_g);
-        pBuf[5] = static_cast<char>(set_b);
-      }
-      ct.ReleaseBuffer(6);
-      pCS->AppendNew<CPDF_String>(ct, true);
+      const uint8_t ct[6] = {reset_bgra.red, reset_bgra.green, reset_bgra.blue,
+                             set_bgra.red,   set_bgra.green,   set_bgra.blue};
+      pCS->AppendNew<CPDF_String>(ct, CPDF_String::DataType::kIsHex);
     }
     pDict->SetNewFor<CPDF_Number>("BitsPerComponent", 1);
     dest_pitch = (BitmapWidth + 7) / 8;
@@ -291,8 +270,8 @@ void CPDF_Image::SetImage(const RetainPtr<CFX_DIBitmap>& pBitmap) {
     if (pMaskBitmap->GetFormat() != FXDIB_Format::k1bppMask) {
       mask_buf.resize(Fx2DSizeOrDie(mask_width, mask_height));
       for (int32_t a = 0; a < mask_height; a++) {
-        fxcrt::spancpy(pdfium::make_span(mask_buf).subspan(a * mask_width),
-                       pMaskBitmap->GetScanline(a).first(mask_width));
+        fxcrt::Copy(pMaskBitmap->GetScanline(a).first(mask_width),
+                    pdfium::make_span(mask_buf).subspan(a * mask_width));
       }
     }
     pMaskDict->SetNewFor<CPDF_Number>(
@@ -318,11 +297,13 @@ void CPDF_Image::SetImage(const RetainPtr<CFX_DIBitmap>& pBitmap) {
       uint8_t* dest_ptr = dest_span.data();
       const uint8_t* src_ptr = src_span.data();
       for (int32_t column = 0; column < BitmapWidth; column++) {
-        dest_ptr[0] = src_ptr[2];
-        dest_ptr[1] = src_ptr[1];
-        dest_ptr[2] = src_ptr[0];
-        dest_ptr += 3;
-        src_ptr += src_step;
+        UNSAFE_TODO({
+          dest_ptr[0] = src_ptr[2];
+          dest_ptr[1] = src_ptr[1];
+          dest_ptr[2] = src_ptr[0];
+          dest_ptr += 3;
+          src_ptr += src_step;
+        });
       }
       dest_span = dest_span.subspan(dest_pitch);
       src_span = src_span.subspan(src_pitch);
@@ -339,6 +320,10 @@ void CPDF_Image::SetImage(const RetainPtr<CFX_DIBitmap>& pBitmap) {
 void CPDF_Image::ResetCache(CPDF_Page* pPage) {
   RetainPtr<CPDF_Image> pHolder(this);
   pPage->GetPageImageCache()->ResetBitmapForImage(std::move(pHolder));
+}
+
+void CPDF_Image::WillBeDestroyed() {
+  m_bWillBeDestroyed = true;
 }
 
 RetainPtr<CPDF_DIB> CPDF_Image::CreateNewDIB() const {

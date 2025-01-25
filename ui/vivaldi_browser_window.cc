@@ -100,7 +100,6 @@
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/native_widget.h"
 #include "ui/views/widget/widget_observer.h"
-#include "ui/vivaldi_side_panel_coordinator.h"
 
 #include "app/vivaldi_constants.h"
 #include "browser/menus/vivaldi_menus.h"
@@ -179,7 +178,7 @@ WindowState ConvertToJSWindowState(ui::WindowShowState state) {
       return WindowState::kNormal;
   }
   NOTREACHED();
-  return WindowState::kNormal;
+  //return WindowState::kNormal;
 }
 
 class VivaldiBrowserWindow::InterfaceHelper final
@@ -228,7 +227,7 @@ class VivaldiBrowserWindow::InterfaceHelper final
 
   void OnExclusiveAccessUserInput() override {}
 
-  content::WebContents* GetActiveWebContents() override {
+  content::WebContents* GetWebContentsForExclusiveAccess() override {
     return window_->GetActiveWebContents();
   }
 
@@ -356,7 +355,7 @@ class VivaldiBrowserWindow::InterfaceHelper final
   // ExtensionKeybindingRegistry::Delegate overrides
 
   content::WebContents* GetWebContentsForExtension() override {
-    return GetActiveWebContents();
+    return GetWebContentsForExclusiveAccess();
   }
 
   // ExtensionRegistryObserver overrides
@@ -673,10 +672,6 @@ VivaldiBrowserWindow::~VivaldiBrowserWindow() {
 #endif
 #endif
 
-  if (browser()) {
-    SidePanelUI::RemoveSidePanelUIForBrowser(browser());
-  }
-
   // The WindowRegistryService can return null.
   if (vivaldi::WindowRegistryService::Get(GetProfile())) {
     vivaldi::WindowRegistryService::Get(GetProfile())
@@ -855,9 +850,6 @@ void VivaldiBrowserWindow::CreateWebContents(
   autofill_bubble_handler_ =
       std::make_unique<autofill::AutofillBubbleHandlerImpl>(
           browser_.get(), toolbar_button_provider_.get());
-
-  SidePanelUI::SetSidePanelUIForBrowser(
-      browser_.get(), std::make_unique<vivaldi::SidePanelCoordinator>(this));
 }
 
 void VivaldiBrowserWindow::InitWidget(
@@ -978,7 +970,7 @@ void VivaldiBrowserWindow::ContentsLoadCompletedInMainFrame() {
   std::u16string script;
   if (!base::UTF8ToUTF16(js.c_str(), js.length(), &script)) {
     NOTREACHED();
-    return;
+    //return;
   }
 
   // Unretained is safe here because VivaldiBrowserWindow owns everything.
@@ -1198,7 +1190,7 @@ void VivaldiBrowserWindow::MovePersistentTabsToOtherWindowIfNeeded() {
                                                 index, &new_index, 0,
                                                 AddTabTypes::ADD_PINNED)) {
         NOTREACHED();
-        break;
+        //break;
       }
       new_index += 1;
     }
@@ -1211,7 +1203,7 @@ void VivaldiBrowserWindow::MovePersistentTabsToOtherWindowIfNeeded() {
                                                 index, &new_index, 0,
                                                 AddTabTypes::ADD_NONE)) {
         NOTREACHED();
-        break;
+        //break;
       }
       new_index += 1;
     }
@@ -1646,12 +1638,12 @@ void VivaldiBrowserWindow::HandleMouseChange(bool motion) {
 
 content::KeyboardEventProcessingResult
 VivaldiBrowserWindow::PreHandleKeyboardEvent(
-    const content::NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
 bool VivaldiBrowserWindow::HandleKeyboardEvent(
-    const content::NativeWebKeyboardEvent& event) {
+    const input::NativeWebKeyboardEvent& event) {
   bool is_auto_repeat;
 #if BUILDFLAG(IS_MAC)
   is_auto_repeat = event.GetModifiers() & blink::WebInputEvent::kIsAutoRepeat;
@@ -1707,6 +1699,10 @@ DownloadShelf* VivaldiBrowserWindow::GetDownloadShelf() {
   return NULL;
 }
 
+views::View* VivaldiBrowserWindow::GetTopContainer() {
+  return nullptr;
+}
+
 // See comments on: BrowserWindow.VivaldiShowWebSiteSettingsAt.
 void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(
     Profile* profile,
@@ -1756,7 +1752,6 @@ void VivaldiBrowserWindow::DestroyBrowser() {
   //  extensions::ExtensionRegistry::Get(browser_->profile())->RemoveObserver(this);
   if (!browser_)
     return;
-  SidePanelUI::RemoveSidePanelUIForBrowser(browser());
   browser_.reset();
 }
 
@@ -2277,8 +2272,9 @@ VivaldiBrowserWindow::CloseFeaturePromoAndContinue(
   return {};
 }
 
-bool VivaldiBrowserWindow::MaybeShowNewBadgeFor(const base::Feature& feature) {
-  return false;
+user_education::DisplayNewBadge VivaldiBrowserWindow::MaybeShowNewBadgeFor(
+    const base::Feature& feature) {
+  return user_education::DisplayNewBadge();
 }
 
 void VivaldiBrowserWindow::DraggableRegionsChanged(
@@ -2450,6 +2446,11 @@ AvatarToolbarButton* VivaldiToolbarButtonProvider::GetAvatarToolbarButton() {
   return nullptr;
 }
 
+ManagementToolbarButton*
+VivaldiToolbarButtonProvider::GetManagementToolbarButton() {
+  return nullptr;
+}
+
 ToolbarButton* VivaldiToolbarButtonProvider::GetBackButton() {
   return nullptr;
 }
@@ -2466,6 +2467,6 @@ DownloadToolbarButtonView* VivaldiToolbarButtonProvider::GetDownloadButton() {
   return nullptr;
 }
 
-SidePanelToolbarButton* VivaldiToolbarButtonProvider::GetSidePanelButton() {
-  return nullptr;
-}
+//SidePanelToolbarButton* VivaldiToolbarButtonProvider::GetSidePanelButton() {
+//  return nullptr;
+//}

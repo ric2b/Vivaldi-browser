@@ -27,6 +27,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/html/track/vtt/vtt_cue.h"
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_autokeyword_double.h"
@@ -176,7 +181,7 @@ const String& VTTCue::vertical() const {
     case WritingDirection::kVerticalGrowingRight:
       return VerticalGrowingRightKeyword();
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return g_empty_string;
   }
 }
@@ -190,7 +195,7 @@ void VTTCue::setVertical(const String& value) {
   else if (value == VerticalGrowingRightKeyword())
     direction = WritingDirection::kVerticalGrowingRight;
   else
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
 
   if (direction == writing_direction_)
     return;
@@ -466,7 +471,7 @@ double VTTCue::CalculateComputedTextPosition() const {
     case AlignSetting::kCenter:
       return 50;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return 0;
   }
 }
@@ -529,7 +534,7 @@ VTTDisplayParameters VTTCue::CalculateDisplayParameters() const {
                        : (100 - computed_text_position);
     maximum_size = maximum_size * 2;
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
   // 5. If the cue size is less than maximum size, then let size
@@ -558,7 +563,7 @@ VTTDisplayParameters VTTCue::CalculateDisplayParameters() const {
                                           display_parameters.size / 2);
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   } else {
     // Cases for writing_direction_ being kVerticalGrowing{Left|Right}
@@ -575,7 +580,7 @@ VTTDisplayParameters VTTCue::CalculateDisplayParameters() const {
                                           display_parameters.size / 2);
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
 

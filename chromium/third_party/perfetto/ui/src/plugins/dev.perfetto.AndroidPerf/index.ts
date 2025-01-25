@@ -18,11 +18,10 @@ import {
   PluginContextTrace,
   PluginDescriptor,
 } from '../../public';
-import {EngineProxy} from '../../trace_processor/engine';
 
 class AndroidPerf implements Plugin {
   async addAppProcessStartsDebugTrack(
-    engine: EngineProxy,
+    ctx: PluginContextTrace,
     reason: string,
     sliceName: string,
   ): Promise<void> {
@@ -36,7 +35,7 @@ class AndroidPerf implements Plugin {
       'table_name',
     ];
     await addDebugSliceTrack(
-      engine,
+      ctx,
       {
         sqlSource: `
                     SELECT
@@ -113,7 +112,7 @@ class AndroidPerf implements Plugin {
         }
         ctx.tabs.openQuery(
           `
-          INCLUDE PERFETTO MODULE cpu.cpus;
+          INCLUDE PERFETTO MODULE viz.core_types;
           WITH
             total_runtime AS (
               SELECT sum(dur) AS total_runtime
@@ -129,7 +128,7 @@ class AndroidPerf implements Plugin {
             FROM sched s
             LEFT JOIN thread t
               USING (utid)
-            LEFT JOIN cpu_core_types c
+            LEFT JOIN _guessed_core_types c
               ON s.cpu = c.cpu_index
             WHERE t.tid = ${tid}
             GROUP BY 1`,
@@ -172,11 +171,7 @@ class AndroidPerf implements Plugin {
 
         const startReason = ['activity', 'service', 'broadcast', 'provider'];
         for (const reason of startReason) {
-          await this.addAppProcessStartsDebugTrack(
-            ctx.engine,
-            reason,
-            'process_name',
-          );
+          await this.addAppProcessStartsDebugTrack(ctx, reason, 'process_name');
         }
       },
     });
@@ -191,11 +186,7 @@ class AndroidPerf implements Plugin {
 
         const startReason = ['activity', 'service', 'broadcast'];
         for (const reason of startReason) {
-          await this.addAppProcessStartsDebugTrack(
-            ctx.engine,
-            reason,
-            'intent',
-          );
+          await this.addAppProcessStartsDebugTrack(ctx, reason, 'intent');
         }
       },
     });

@@ -22,9 +22,8 @@ class FileSelectionRunner : private ui::SelectFileDialog::Listener {
 
   // ui::SelectFileDialog::Listener:
   void FileSelected(const ui::SelectedFileInfo& path,
-                    int index,
-                    void* params) override;
-  void FileSelectionCanceled(void* params) override;
+                    int index) override;
+  void FileSelectionCanceled() override;
 
   FileSelectionOptions::RunDialogResult callback_;
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
@@ -40,17 +39,14 @@ FileSelectionRunner::~FileSelectionRunner() {
 }
 
 void FileSelectionRunner::FileSelected(const ui::SelectedFileInfo& path,
-                                       int index,
-                                       void* params) {
-  DCHECK(!params);
+                                       int index) {
   FileSelectionOptions::RunDialogResult callback = std::move(callback_);
   base::FilePath path_copy = path.file_path;
   delete this;
   std::move(callback).Run(std::move(path_copy), /*cancelled=*/false);
 }
 
-void FileSelectionRunner::FileSelectionCanceled(void* params) {
-  DCHECK(!params);
+void FileSelectionRunner::FileSelectionCanceled() {
   FileSelectionOptions::RunDialogResult callback = std::move(callback_);
   delete this;
   std::move(callback).Run(base::FilePath(), /*cancelled=*/true);
@@ -91,7 +87,7 @@ void FileSelectionOptions::RunDialog(RunDialogResult callback) && {
       base::FilePath::StringType(), window, nullptr);
 }
 
-void FileSelectionOptions::SetTitle(base::StringPiece str) {
+void FileSelectionOptions::SetTitle(std::string_view str) {
   title_ = base::UTF8ToUTF16(str);
 }
 
@@ -99,11 +95,11 @@ void FileSelectionOptions::SetType(ui::SelectFileDialog::Type type) {
   type_ = type;
 }
 
-void FileSelectionOptions::SetDefaultPath(base::StringPiece str) {
+void FileSelectionOptions::SetDefaultPath(std::string_view str) {
   default_path_ = base::FilePath::FromUTF8Unsafe(str);
 }
 
-void FileSelectionOptions::AddExtension(base::StringPiece extension) {
+void FileSelectionOptions::AddExtension(std::string_view extension) {
   DCHECK(!extension.empty() && extension[0] != '.');
 
   // FileTypeInfo takes a nested vector like [["htm", "html"], ["txt"]] to

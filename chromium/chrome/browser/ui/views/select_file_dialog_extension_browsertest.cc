@@ -87,8 +87,7 @@ class KeyboardVisibleWaiter : public ChromeKeyboardControllerClient::Observer {
 
 class MockSelectFileDialogListener : public ui::SelectFileDialog::Listener {
  public:
-  MockSelectFileDialogListener()
-      : file_selected_(false), canceled_(false), params_(nullptr) {}
+  MockSelectFileDialogListener() = default;
 
   MockSelectFileDialogListener(const MockSelectFileDialogListener&) = delete;
   MockSelectFileDialogListener& operator=(const MockSelectFileDialogListener&) =
@@ -97,24 +96,19 @@ class MockSelectFileDialogListener : public ui::SelectFileDialog::Listener {
   bool file_selected() const { return file_selected_; }
   bool canceled() const { return canceled_; }
   base::FilePath path() const { return path_; }
-  void* params() const { return params_; }
 
   // ui::SelectFileDialog::Listener:
-  void FileSelected(const ui::SelectedFileInfo& file,
-                    int index,
-                    void* params) override {
+  void FileSelected(const ui::SelectedFileInfo& file, int index) override {
     file_selected_ = true;
     path_ = file.path();
-    params_ = params;
     QuitMessageLoop();
   }
-  void MultiFilesSelected(const std::vector<ui::SelectedFileInfo>& files,
-                          void* params) override {
+  void MultiFilesSelected(
+      const std::vector<ui::SelectedFileInfo>& files) override {
     QuitMessageLoop();
   }
-  void FileSelectionCanceled(void* params) override {
+  void FileSelectionCanceled() override {
     canceled_ = true;
-    params_ = params;
     QuitMessageLoop();
   }
 
@@ -129,10 +123,9 @@ class MockSelectFileDialogListener : public ui::SelectFileDialog::Listener {
       message_loop_runner_->Quit();
   }
 
-  bool file_selected_;
-  bool canceled_;
+  bool file_selected_ = false;
+  bool canceled_ = false;
   base::FilePath path_;
-  raw_ptr<void> params_;
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
 };
 
@@ -258,14 +251,12 @@ class BaseSelectFileDialogExtensionBrowserTest
     std::u16string title;
     // Include a file type filter. This triggers additional functionality within
     // the Files app.
-    ui::SelectFileDialog::FileTypeInfo file_types;
-    file_types.extensions = {{"html"}};
+    ui::SelectFileDialog::FileTypeInfo file_types{{FILE_PATH_LITERAL("html")}};
     const ui::SelectFileDialog::FileTypeInfo* file_types_ptr =
         UseFileTypeFilter() ? &file_types : nullptr;
 
     dialog_->SelectFile(dialog_type, title, file_path, file_types_ptr, 0,
-                        FILE_PATH_LITERAL(""), owning_window, /*params=*/this,
-                        caller);
+                        FILE_PATH_LITERAL(""), owning_window, caller);
     LOG(INFO) << "Waiting for JavaScript ready message.";
     ASSERT_TRUE(init_listener.WaitUntilSatisfied());
 
@@ -296,7 +287,7 @@ class BaseSelectFileDialogExtensionBrowserTest
         ui::SelectFileDialog::SELECT_OPEN_FILE, std::u16string() /* title */,
         base::FilePath() /* default_path */, nullptr /* file_types */,
         0 /* file_type_index */, FILE_PATH_LITERAL("") /* default_extension */,
-        owning_window, this /* params */);
+        owning_window);
   }
 
   void ClickJsButton(content::RenderFrameHost* frame_host,
@@ -422,7 +413,6 @@ IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionBrowserTest,
   // Listener should have been informed of the cancellation.
   ASSERT_FALSE(listener_->file_selected());
   ASSERT_TRUE(listener_->canceled());
-  ASSERT_EQ(this, listener_->params());
 }
 
 IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionBrowserTest,
@@ -452,7 +442,6 @@ IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionBrowserTest,
   ASSERT_TRUE(listener_->file_selected());
   ASSERT_FALSE(listener_->canceled());
   ASSERT_EQ(test_file, listener_->path());
-  ASSERT_EQ(this, listener_->params());
 }
 
 // TODO(crbug.com/40249076): Re-enable this test
@@ -475,7 +464,6 @@ IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionBrowserTest,
   ASSERT_TRUE(listener_->file_selected());
   ASSERT_FALSE(listener_->canceled());
   ASSERT_EQ(test_file, listener_->path());
-  ASSERT_EQ(this, listener_->params());
 }
 
 // TODO(crbug.com/40249076): Re-enable this test
@@ -528,7 +516,6 @@ IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionBrowserTest,
   // Listener should have been informed of the cancellation.
   ASSERT_FALSE(listener_->file_selected());
   ASSERT_TRUE(listener_->canceled());
-  ASSERT_EQ(this, listener_->params());
 }
 
 IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionBrowserTest, OpenTwoDialogs) {
@@ -549,7 +536,6 @@ IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionBrowserTest, OpenTwoDialogs) {
   // Listener should have been informed of the cancellation.
   ASSERT_FALSE(listener_->file_selected());
   ASSERT_TRUE(listener_->canceled());
-  ASSERT_EQ(this, listener_->params());
 }
 
 IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionBrowserTest, FileInputElement) {
@@ -599,7 +585,6 @@ IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionBrowserTest,
 
   // Listener should have been informed of the cancellation.
   ASSERT_TRUE(listener_->canceled());
-  ASSERT_EQ(this, listener_->params());
 }
 
 IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionBrowserTest, MultipleOpenFile) {
@@ -631,7 +616,6 @@ IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionBrowserTest,
   // Listener should have been informed of the cancellation.
   ASSERT_FALSE(listener_->file_selected());
   ASSERT_TRUE(listener_->canceled());
-  ASSERT_EQ(this, listener_->params());
 }
 
 INSTANTIATE_TEST_SUITE_P(SystemWebApp,
@@ -836,7 +820,6 @@ IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionPolicyTest, DlpDownloadAllow) {
   // Listener should have been informed of the selection.
   ASSERT_TRUE(listener_->file_selected());
   ASSERT_FALSE(listener_->canceled());
-  ASSERT_EQ(this, listener_->params());
 }
 
 IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionPolicyTest, DlpDownloadBlock) {
@@ -869,7 +852,6 @@ IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionPolicyTest, DlpDownloadBlock) {
   // Listener should have been informed of the cancellation.
   ASSERT_FALSE(listener_->file_selected());
   ASSERT_TRUE(listener_->canceled());
-  ASSERT_EQ(this, listener_->params());
 }
 
 IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionPolicyTest, DlpUploadAllow) {
@@ -917,7 +899,6 @@ IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionPolicyTest, DlpUploadAllow) {
   // Listener should have been informed of the selection.
   ASSERT_TRUE(listener_->file_selected());
   ASSERT_FALSE(listener_->canceled());
-  ASSERT_EQ(this, listener_->params());
 }
 
 IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionPolicyTest, DlpUploadBlock) {
@@ -966,7 +947,6 @@ IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionPolicyTest, DlpUploadBlock) {
   // Listener should have been informed of the cancellation.
   ASSERT_FALSE(listener_->file_selected());
   ASSERT_TRUE(listener_->canceled());
-  ASSERT_EQ(this, listener_->params());
 }
 
 INSTANTIATE_TEST_SUITE_P(SystemWebApp,

@@ -5,19 +5,19 @@
 #ifndef CHROMEOS_ASH_COMPONENTS_DBUS_RESOURCED_RESOURCED_CLIENT_H_
 #define CHROMEOS_ASH_COMPONENTS_DBUS_RESOURCED_RESOURCED_CLIENT_H_
 
+#include <cstdint>
+#include <vector>
+
 #include "base/component_export.h"
 #include "base/observer_list_types.h"
 #include "base/process/process_handle.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
-#include "chromeos/dbus/common/dbus_method_call_status.h"
+#include "chromeos/dbus/common/dbus_callback.h"
 #include "components/memory_pressure/reclaim_target.h"
 #include "dbus/dbus_result.h"
 #include "dbus/object_proxy.h"
 #include "third_party/cros_system_api/dbus/resource_manager/dbus-constants.h"
-
-#include <cstdint>
-#include <vector>
 
 namespace dbus {
 class Bus;
@@ -51,17 +51,6 @@ class COMPONENT_EXPORT(RESOURCED) ResourcedClient {
                                   memory_pressure::ReclaimTarget target) = 0;
   };
 
-  enum class PressureLevelArcVm {
-    // There is enough memory to use.
-    NONE = 0,
-    // ARCVM is advised to kill cached apps to free memory.
-    CACHED = 1,
-    // ARCVM is advised to kill perceptible apps to free memory.
-    PERCEPTIBLE = 2,
-    // ARCVM is advised to kill foreground apps to free memory.
-    FOREGROUND = 3,
-  };
-
   // Indicates whether game mode is on, and which kind of game mode if it is on.
   // Borealis game mode will put more memory pressure on ARCVM processes than
   // will ARC game mode.
@@ -70,15 +59,6 @@ class COMPONENT_EXPORT(RESOURCED) ResourcedClient {
     OFF = 0,
     BOREALIS = 1,
     ARC = 2,
-  };
-
-  // Observer class for ARCVM memory pressure signal.
-  class ArcVmObserver : public base::CheckedObserver {
-   public:
-    ~ArcVmObserver() override = default;
-
-    virtual void OnMemoryPressure(PressureLevelArcVm level,
-                                  uint64_t reclaim_target_kb) = 0;
   };
 
   enum class PressureLevelArcContainer {
@@ -181,14 +161,6 @@ class COMPONENT_EXPORT(RESOURCED) ResourcedClient {
 
   // Removes an observer from observer list.
   virtual void RemoveObserver(Observer* observer) = 0;
-
-  // Adds an observer to be called when there is an ARCVM memory pressure
-  // signal.
-  virtual void AddArcVmObserver(ArcVmObserver* observer) = 0;
-
-  // Stops a previously added observer from being called on ARCVM memory
-  // pressure signals.
-  virtual void RemoveArcVmObserver(ArcVmObserver* observer) = 0;
 
   virtual void AddArcContainerObserver(ArcContainerObserver* observer) = 0;
 

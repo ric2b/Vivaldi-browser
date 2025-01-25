@@ -10,6 +10,7 @@ import static org.mockito.Mockito.doAnswer;
 
 import static org.chromium.chrome.browser.desktop_windowing.AppHeaderCoordinator.INSTANCE_STATE_KEY_IS_APP_IN_UNFOCUSED_DW;
 
+import android.content.ComponentCallbacks;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Rect;
@@ -24,6 +25,7 @@ import androidx.test.filters.MediumTest;
 import androidx.test.runner.lifecycle.Stage;
 
 import org.hamcrest.Matchers;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -33,35 +35,36 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerChromeTablet;
+import org.chromium.chrome.browser.compositor.layouts.eventfilter.AreaMotionEventFilter;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.hub.HubLayout;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
-import org.chromium.chrome.browser.tasks.tab_management.TabSwitcherLayout;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.chrome.browser.toolbar.top.ToolbarTablet;
+import org.chromium.chrome.browser.toolbar.top.tab_strip.TabStripTransitionCoordinator;
 import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderState;
 import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderUtils;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
-import org.chromium.components.browser_ui.widget.InsetObserver;
-import org.chromium.components.browser_ui.widget.InsetsRectProvider;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.ui.InsetObserver;
+import org.chromium.ui.InsetsRectProvider;
 import org.chromium.ui.test.util.UiRestriction;
 
 /** Browser test for {@link AppHeaderCoordinator} */
@@ -139,6 +142,62 @@ public class AppHeaderCoordinatorBrowserTest {
 
     @Test
     @MediumTest
+    @EnableFeatures(ChromeFeatureList.TAB_STRIP_TRANSITION_IN_DESKTOP_WINDOW)
+    public void testToggleTabStripVisibilityInDesktopWindow() {
+        ChromeTabbedActivity activity = mActivityTestRule.getActivity();
+        triggerDesktopWindowingModeChange(activity, true);
+
+        ComponentCallbacks tabStripCallback =
+                activity.getToolbarManager().getTabStripTransitionCoordinator();
+        Assert.assertNotNull("Tab strip transition callback is null.", tabStripCallback);
+
+        // Set the strip width threshold and trigger a configuration change to force tab strip
+        // visibility. This is a test only strategy, as we don't want to actually change the
+        // configuration which might result in an activity restart.
+
+        // A very large strip width threshold should hide the strip by adding the scrim.
+        TabStripTransitionCoordinator.setFadeTransitionThresholdForTesting(10000);
+        ThreadUtils.runOnUiThreadBlocking(
+                () ->
+                        tabStripCallback.onConfigurationChanged(
+                                activity.getResources().getConfiguration()));
+
+        var stripLayoutHelperManager = activity.getLayoutManager().getStripLayoutHelperManager();
+        var stripAreaMotionEventFilter =
+                (AreaMotionEventFilter) stripLayoutHelperManager.getEventFilter();
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    Criteria.checkThat(
+                            "Tab strip scrim should be visible.",
+                            stripLayoutHelperManager.isStripScrimVisibleForTesting(),
+                            Matchers.equalTo(true));
+                    Criteria.checkThat(
+                            "Motion event filter area should be empty on an invisible strip.",
+                            stripAreaMotionEventFilter.getEventAreaForTesting().isEmpty(),
+                            Matchers.equalTo(true));
+                });
+
+        // A very small strip width threshold value should show the strip by removing the scrim.
+        TabStripTransitionCoordinator.setFadeTransitionThresholdForTesting(1);
+        ThreadUtils.runOnUiThreadBlocking(
+                () ->
+                        tabStripCallback.onConfigurationChanged(
+                                activity.getResources().getConfiguration()));
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    Criteria.checkThat(
+                            "Tab strip scrim should not be visible.",
+                            stripLayoutHelperManager.isStripScrimVisibleForTesting(),
+                            Matchers.equalTo(false));
+                    Criteria.checkThat(
+                            "Motion event filter area should be non-empty on a visible strip.",
+                            stripAreaMotionEventFilter.getEventAreaForTesting().isEmpty(),
+                            Matchers.equalTo(false));
+                });
+    }
+
+    @Test
+    @MediumTest
     public void testOnTopResumedActivityChanged_UnfocusedInDesktopWindow() {
         // TODO (crbug/330213938): Also test other scenarios for different values of desktop
         // windowing mode / activity focus states; tests for other input combinations are currently
@@ -149,93 +208,7 @@ public class AppHeaderCoordinatorBrowserTest {
 
     @Test
     @MediumTest
-    @DisableFeatures(ChromeFeatureList.ANDROID_HUB)
-    public void testEnterTabSwitcherInDesktopWindow() {
-        ChromeTabbedActivity activity = mActivityTestRule.getActivity();
-
-        // Enter desktop windowing mode.
-        triggerDesktopWindowingModeChange(activity, true);
-        // Enter the tab switcher.
-        TabUiTestHelper.enterTabSwitcher(activity);
-
-        var layoutManager = (LayoutManagerChromeTablet) activity.getLayoutManager();
-        var tabSwitcherLayout =
-                ((TabSwitcherLayout) layoutManager.getTabSwitcherLayoutForTesting());
-        var tabSwitcherContainerView =
-                tabSwitcherLayout
-                        .getTabSwitcherForTesting()
-                        .getController()
-                        .getTabSwitcherContainer();
-
-        assertTrue(
-                "Tab switcher container view y-offset should be non-zero.",
-                tabSwitcherContainerView.getY() != 0);
-        assertEquals(
-                "Tab switcher container view y-offset should match the app header height.",
-                mTestAppHeaderHeight,
-                tabSwitcherContainerView.getY(),
-                0f);
-
-        // Exit desktop windowing mode.
-        triggerDesktopWindowingModeChange(activity, false);
-        assertEquals(
-                "Tab switcher container view y-offset should be zero.",
-                0,
-                tabSwitcherContainerView.getY(),
-                0f);
-        // Exit tab switcher.
-        TabUiTestHelper.clickFirstCardFromTabSwitcher(activity);
-    }
-
-    @Test
-    @MediumTest
-    @DisableFeatures(ChromeFeatureList.ANDROID_HUB)
-    public void testEnterDesktopWindowWithTabSwitcherActive() {
-        ChromeTabbedActivity activity = mActivityTestRule.getActivity();
-
-        // Enter the tab switcher. Desktop windowing mode is not active initially.
-        TabUiTestHelper.enterTabSwitcher(activity);
-
-        var layoutManager = (LayoutManagerChromeTablet) activity.getLayoutManager();
-        var tabSwitcherLayout =
-                ((TabSwitcherLayout) layoutManager.getTabSwitcherLayoutForTesting());
-        var tabSwitcherContainerView =
-                tabSwitcherLayout
-                        .getTabSwitcherForTesting()
-                        .getController()
-                        .getTabSwitcherContainer();
-        assertEquals(
-                "Tab switcher container view y-offset should be zero.",
-                0,
-                tabSwitcherContainerView.getY(),
-                0.0);
-
-        // Enter desktop windowing mode while the tab switcher is visible.
-        triggerDesktopWindowingModeChange(activity, true);
-
-        assertTrue(
-                "Tab switcher container view y-offset should be non-zero.",
-                tabSwitcherContainerView.getY() != 0);
-        assertEquals(
-                "Tab switcher container view y-offset should match the app header height.",
-                mTestAppHeaderHeight,
-                tabSwitcherContainerView.getY(),
-                0f);
-
-        // Exit desktop windowing mode.
-        triggerDesktopWindowingModeChange(activity, false);
-        assertEquals(
-                "Tab switcher container view y-offset should be zero.",
-                0,
-                tabSwitcherContainerView.getY(),
-                0f);
-        // Exit tab switcher.
-        TabUiTestHelper.clickFirstCardFromTabSwitcher(activity);
-    }
-
-    @Test
-    @MediumTest
-    @EnableFeatures(ChromeFeatureList.ANDROID_HUB)
+    @DisabledTest(message = "Flaky, crbug.com/339854841")
     public void testEnterTabSwitcherInDesktopWindow_HubLayout() {
         ChromeTabbedActivity activity = mActivityTestRule.getActivity();
 
@@ -245,7 +218,7 @@ public class AppHeaderCoordinatorBrowserTest {
         TabUiTestHelper.enterTabSwitcher(activity);
 
         var layoutManager = (LayoutManagerChromeTablet) activity.getLayoutManager();
-        var hubLayout = ((HubLayout) layoutManager.getTabSwitcherLayoutForTesting());
+        var hubLayout = ((HubLayout) layoutManager.getHubLayoutForTesting());
         var hubContainerView = hubLayout.getHubControllerForTesting().getContainerView();
         var params = (LayoutParams) hubContainerView.getLayoutParams();
 
@@ -277,7 +250,7 @@ public class AppHeaderCoordinatorBrowserTest {
 
     @Test
     @MediumTest
-    @EnableFeatures(ChromeFeatureList.ANDROID_HUB)
+    @DisabledTest(message = "Flaky, crbug.com/339854841")
     public void testEnterDesktopWindowWithTabSwitcherActive_HubLayout() {
         ChromeTabbedActivity activity = mActivityTestRule.getActivity();
 
@@ -285,7 +258,7 @@ public class AppHeaderCoordinatorBrowserTest {
         TabUiTestHelper.enterTabSwitcher(activity);
 
         var layoutManager = (LayoutManagerChromeTablet) activity.getLayoutManager();
-        var hubLayout = ((HubLayout) layoutManager.getTabSwitcherLayoutForTesting());
+        var hubLayout = ((HubLayout) layoutManager.getHubLayoutForTesting());
         var hubContainerView = hubLayout.getHubControllerForTesting().getContainerView();
         var params = (LayoutParams) hubContainerView.getLayoutParams();
 
@@ -327,11 +300,10 @@ public class AppHeaderCoordinatorBrowserTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "Flaky, crbug.com/340589545")
     public void testRecreateActivitiesInDesktopWindow() {
         // Assume that the current activity enters desktop windowing mode.
         ChromeTabbedActivity firstActivity = mActivityTestRule.getActivity();
-        AppHeaderUtils.setAppInDesktopWindowForTesting(true);
-        firstActivity = ApplicationTestUtils.recreateActivity(firstActivity);
         triggerDesktopWindowingModeChange(firstActivity, true);
 
         // Create a new (desktop) window, that should gain focus and cause the first activity to
@@ -352,7 +324,8 @@ public class AppHeaderCoordinatorBrowserTest {
 
         // Trigger activity recreation in desktop windowing mode (an app theme change for eg. would
         // trigger this).
-        firstActivity = ApplicationTestUtils.recreateActivity(firstActivity);
+        mActivityTestRule.recreateActivity();
+        firstActivity = mActivityTestRule.getActivity();
         secondActivity = ApplicationTestUtils.recreateActivity(secondActivity);
 
         // Activity recreation will send an #onTopResumedActivityChanged(false) signal as the
@@ -400,7 +373,7 @@ public class AppHeaderCoordinatorBrowserTest {
 
         // Assume that the current activity lost focus in desktop windowing mode.
         triggerDesktopWindowingModeChange(activity, true);
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> activity.onTopResumedActivityChanged(isActivityFocused));
 
         // Verify the toolbar icon tints.
@@ -453,7 +426,7 @@ public class AppHeaderCoordinatorBrowserTest {
 
     private void triggerDesktopWindowingModeChange(
             ChromeTabbedActivity activity, boolean isInDesktopWindow) {
-        TestThreadUtils.runOnUiThreadBlocking(
+        ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     var appHeaderStateProvider =
                             activity.getRootUiCoordinatorForTesting()

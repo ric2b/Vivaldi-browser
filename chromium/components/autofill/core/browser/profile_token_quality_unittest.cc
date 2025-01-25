@@ -27,6 +27,7 @@
 #include "components/autofill/core/browser/test_browser_autofill_manager.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
 #include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/form_data_test_api.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -41,11 +42,7 @@ class ProfileTokenQualityTest : public testing::Test {
   // Creates a form and registers it with the `bam_` as-if it had the given
   // `types` as predictions.
   FormData GetFormWithTypes(const std::vector<FieldType>& types) {
-    test::FormDescription form_description;
-    for (FieldType type : types) {
-      form_description.fields.emplace_back(type);
-    }
-    FormData form_data = test::GetFormData(form_description);
+    FormData form_data = test::GetFormData(types);
     bam_.AddSeenForm(form_data, types);
     return form_data;
   }
@@ -55,9 +52,9 @@ class ProfileTokenQualityTest : public testing::Test {
   void EditFieldValue(FormData& form,
                       size_t field_index,
                       std::u16string new_value) {
-    FormFieldData& field = form.fields[field_index];
+    FormFieldData& field = test_api(form).field(field_index);
     field.set_value(std::move(new_value));
-    bam_.OnTextFieldDidChange(form, field, base::TimeTicks::Now());
+    bam_.OnTextFieldDidChange(form, field.global_id(), base::TimeTicks::Now());
   }
 
   // Fills the `form` with the `profile`, as-if autofilling was triggered from
@@ -67,13 +64,11 @@ class ProfileTokenQualityTest : public testing::Test {
                 size_t triggering_field_index = 0) {
     bam_.FillOrPreviewProfileForm(
         mojom::ActionPersistence::kFill, form,
-        form.fields[triggering_field_index], profile,
+        form.fields()[triggering_field_index], profile,
         {.trigger_source = AutofillTriggerSource::kPopup});
   }
 
  protected:
-  base::test::ScopedFeatureList feature_{
-      features::kAutofillTrackProfileTokenQuality};
   base::test::TaskEnvironment task_environment_;
   test::AutofillUnitTestEnvironment autofill_test_environment_;
   TestAutofillClient client_;

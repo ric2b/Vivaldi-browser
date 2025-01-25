@@ -116,7 +116,11 @@ public class TabbedModeTabModelOrchestrator extends TabModelOrchestrator {
                 new TabbedModeTabPersistencePolicy(
                         assignedIndex, mergeTabsOnStartup, mTabMergingEnabled);
         mTabPersistentStore =
-                new TabPersistentStore(mTabPersistencePolicy, mTabModelSelector, tabCreatorManager);
+                new TabPersistentStore(
+                        mTabPersistencePolicy,
+                        mTabModelSelector,
+                        tabCreatorManager,
+                        TabWindowManagerSingleton.getInstance());
 
         wireSelectorAndStore();
         markTabModelsInitialized();
@@ -194,7 +198,7 @@ public class TabbedModeTabModelOrchestrator extends TabModelOrchestrator {
         assert profile != null;
 
         mArchivedTabModelOrchestrator = ArchivedTabModelOrchestrator.getForProfile(profile);
-        mArchivedTabModelOrchestrator.maybCreateAndInitTabModels(tabContentManager);
+        mArchivedTabModelOrchestrator.maybeCreateAndInitTabModels(tabContentManager);
 
         // If the feature flag is enabled, then start the declutter process. Otherwise, rescue
         // tabs that may have been archived previously.

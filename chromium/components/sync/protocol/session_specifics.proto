@@ -42,6 +42,9 @@ message SessionHeader {
   // Mandatory until M115. Replaced by device_form_factor afterwards, but still
   // populated for backward compatibility.
   optional SyncEnums.DeviceType device_type = 4 [deprecated = true];
+
+  // Vivaldi ext data
+  optional string vivaldi_specific = 50;
 }
 
 message SessionWindow {

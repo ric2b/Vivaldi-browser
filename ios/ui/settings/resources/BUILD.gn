@@ -7,6 +7,7 @@ group("main_settings") {
     ":vivaldi_setting_sync",
     ":vivaldi_setting_default_browser",
     ":vivaldi_setting_search_engine",
+    ":vivaldi_setting_addressbar",
     ":vivaldi_setting_passwords",
     ":vivaldi_setting_payment_methods",
     ":vivaldi_setting_addresses",
@@ -125,6 +126,13 @@ imageset("vivaldi_setting_passwords") {
   sources = [
     "vivaldi_setting_passwords.imageset/Contents.json",
     "vivaldi_setting_passwords.imageset/vivaldi_setting_passwords.pdf",
+  ]
+}
+
+imageset("vivaldi_setting_addressbar") {
+  sources = [
+    "vivaldi_setting_addressbar.imageset/Contents.json",
+    "vivaldi_setting_addressbar.imageset/vivaldi_setting_addressbar.pdf",
   ]
 }
 

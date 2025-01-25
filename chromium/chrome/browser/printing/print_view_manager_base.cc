@@ -126,6 +126,10 @@ void OnDidScriptedPrint(
 
   if (printer_query->last_status() != mojom::ResultCode::kSuccess ||
       !printer_query->settings().dpi()) {
+    // Notify user of the error, unless it was explicitly canceled.
+    if (printer_query->last_status() != mojom::ResultCode::kCanceled) {
+      ShowPrintErrorDialogForGenericError();
+    }
     std::move(callback).Run(nullptr);
     return;
   }
@@ -408,6 +412,7 @@ void PrintViewManagerBase::OnPrintSettingsDone(
       UnregisterSystemPrintClient();
     }
 #endif
+    ShowPrintErrorDialogForGenericError();
     std::move(callback).Run(base::Value("Update settings failed"));
     return;
   }
@@ -619,7 +624,7 @@ void PrintViewManagerBase::DidPrintDocument(
 
   const mojom::DidPrintContentParams& content = *params->content;
   if (!content.metafile_data_region.IsValid()) {
-    NOTREACHED() << "invalid memory handle";
+    NOTREACHED_IN_MIGRATION() << "invalid memory handle";
     web_contents()->Stop();
     OnDidPrintDocument(std::move(callback), /*succeeded=*/false);
     return;
@@ -640,7 +645,7 @@ void PrintViewManagerBase::DidPrintDocument(
   auto data = base::RefCountedSharedMemoryMapping::CreateFromWholeRegion(
       content.metafile_data_region);
   if (!data) {
-    NOTREACHED() << "couldn't map";
+    NOTREACHED_IN_MIGRATION() << "couldn't map";
     web_contents()->Stop();
     OnDidPrintDocument(std::move(callback), /*succeeded=*/false);
     return;

@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Apply</translation>
 <translation id="1603914832182249871">(Incognito)</translation>
 <translation id="1627276047960621195">File Descriptors</translation>
+<translation id="1654713139320245449">No cast destinations found. Need any help?</translation>
 <translation id="166278006618318542">Subject Public Key Algorithm</translation>
 <translation id="1682548588986054654">New Incognito Window</translation>
 <translation id="1708338024780164500">(Inactive)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Another programme on your computer added an extension that may change the way Vivaldi works.</translation>
 <translation id="2443487764245141020">Sites may also need to recognize your device using an identifier</translation>
 <translation id="2445081178310039857">Extension root directory is required.</translation>
-<translation id="2470702053775288986">Unsupported extensions disabled</translation>
 <translation id="2485422356828889247">Uninstall</translation>
 <translation id="2498539833203011245">Minimise</translation>
 <translation id="2509495747794740764">Scale amount must be a number between 10 and 200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Details</translation>
 <translation id="4345587454538109430">Configure...</translation>
 <translation id="4348766275249686434">Collect errors</translation>
-<translation id="4363771538994847871">No Cast destinations found. Need help?</translation>
 <translation id="4384652540891215547">Activate the extension</translation>
 <translation id="4394049700291259645">Disable</translation>
 <translation id="4409697491990005945">Margins</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">Layout</translation>
 <translation id="7782102568078991263">No more suggestions from Google</translation>
 <translation id="7786889348652477777">&amp;Reload App</translation>
-<translation id="7791543448312431591">Add</translation>
 <translation id="7800518121066352902">Rotate C&amp;ounterclockwise</translation>
 <translation id="7814458197256864873">&amp;Copy</translation>
 <translation id="7818135753970109980">New theme added (<ph name="EXTENSION_NAME" />)</translation>

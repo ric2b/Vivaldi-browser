@@ -15,11 +15,11 @@
 
 use crate::d2d_connection_context_v1::D2DConnectionContextV1;
 use crypto_provider::CryptoProvider;
-use rand::{rngs::StdRng, SeedableRng as _};
+use rand::SeedableRng as _;
 use std::{collections::HashSet, mem};
 use ukey2_rs::{
-    CompletedHandshake, HandshakeImplementation, StateMachine, Ukey2Client, Ukey2ClientStage1,
-    Ukey2Server, Ukey2ServerStage1, Ukey2ServerStage2,
+    CompletedHandshake, HandshakeImplementation, NextProtocol, StateMachine, Ukey2Client,
+    Ukey2ClientStage1, Ukey2Server, Ukey2ServerStage1, Ukey2ServerStage2,
 };
 
 #[derive(Debug)]
@@ -99,8 +99,8 @@ where
 }
 
 impl<C: CryptoProvider> InitiatorD2DHandshakeContext<C, rand::rngs::StdRng> {
-    pub fn new(handshake_impl: HandshakeImplementation) -> Self {
-        Self::new_impl(handshake_impl, rand::rngs::StdRng::from_entropy())
+    pub fn new(handshake_impl: HandshakeImplementation, next_protocols: Vec<NextProtocol>) -> Self {
+        Self::new_impl(handshake_impl, rand::rngs::StdRng::from_entropy(), next_protocols)
     }
 }
 
@@ -110,12 +110,12 @@ where
 {
     // Used for testing / fuzzing only.
     #[doc(hidden)]
-    pub fn new_impl(handshake_impl: HandshakeImplementation, mut rng: R) -> Self {
-        let client = Ukey2ClientStage1::from(
-            &mut rng,
-            D2DConnectionContextV1::<StdRng>::NEXT_PROTOCOL_IDENTIFIER.to_owned(),
-            handshake_impl,
-        );
+    pub fn new_impl(
+        handshake_impl: HandshakeImplementation,
+        mut rng: R,
+        next_protocols: Vec<NextProtocol>,
+    ) -> Self {
+        let client = Ukey2ClientStage1::from(&mut rng, next_protocols, handshake_impl);
         Self { state: InitiatorState::Stage1(client), rng }
     }
 }
@@ -157,6 +157,14 @@ where
         }
     }
 
+    fn to_connection_context(&mut self) -> Result<D2DConnectionContextV1<R>, HandshakeError> {
+        // Since self.rng is expected to be a seeded PRNG, not an OsRng directly, from_rng
+        // should never fail. https://rust-random.github.io/book/guide-err.html
+        let rng = R::from_rng(&mut self.rng).unwrap();
+        self.to_completed_handshake()
+            .map(|h| D2DConnectionContextV1::from_initiator_handshake::<C>(h, rng))
+    }
+
     fn to_completed_handshake(&self) -> Result<&CompletedHandshake, HandshakeError> {
         match &self.state {
             InitiatorState::Stage1(_) | InitiatorState::Invalid => {
@@ -164,18 +172,6 @@ where
             }
             InitiatorState::Complete(c) => Ok(c.completed_handshake()),
         }
-    }
-
-    fn to_connection_context(&mut self) -> Result<D2DConnectionContextV1<R>, HandshakeError> {
-        // Since self.rng is expected to be a seeded PRNG, not an OsRng directly, from_rng
-        // should never fail. https://rust-random.github.io/book/guide-err.html
-        let rng = R::from_rng(&mut self.rng).unwrap();
-        self.to_completed_handshake().and_then(|h| match h.next_protocol.as_ref() {
-            D2DConnectionContextV1::<R>::NEXT_PROTOCOL_IDENTIFIER => {
-                Ok(D2DConnectionContextV1::from_initiator_handshake::<C>(h, rng))
-            }
-            _ => Err(HandshakeError::HandshakeNotComplete),
-        })
     }
 }
 
@@ -198,8 +194,8 @@ where
 }
 
 impl<C: CryptoProvider> ServerD2DHandshakeContext<C, rand::rngs::StdRng> {
-    pub fn new(handshake_impl: HandshakeImplementation) -> Self {
-        Self::new_impl(handshake_impl, rand::rngs::StdRng::from_entropy())
+    pub fn new(handshake_impl: HandshakeImplementation, next_protocols: &[NextProtocol]) -> Self {
+        Self::new_impl(handshake_impl, rand::rngs::StdRng::from_entropy(), next_protocols)
     }
 }
 
@@ -209,13 +205,14 @@ where
 {
     // Used for testing / fuzzing only.
     #[doc(hidden)]
-    pub fn new_impl(handshake_impl: HandshakeImplementation, rng: R) -> Self {
+    pub fn new_impl(
+        handshake_impl: HandshakeImplementation,
+        rng: R,
+        next_protocols: &[NextProtocol],
+    ) -> Self {
         Self {
             state: ServerState::Stage1(Ukey2ServerStage1::from(
-                HashSet::from([
-                    D2DConnectionContextV1::<rand::rngs::StdRng>::NEXT_PROTOCOL_IDENTIFIER
-                        .to_owned(),
-                ]),
+                HashSet::from_iter(next_protocols.iter().map(|np| np.to_string())),
                 handshake_impl,
             )),
             rng,
@@ -280,16 +277,7 @@ where
         // Since self.rng is expected to be a seeded PRNG, not an OsRng directly, from_rng
         // should never fail. https://rust-random.github.io/book/guide-err.html
         let rng = R::from_rng(&mut self.rng).unwrap();
-        self.to_completed_handshake().map(|h| match h.next_protocol.as_ref() {
-            D2DConnectionContextV1::<R>::NEXT_PROTOCOL_IDENTIFIER => {
-                D2DConnectionContextV1::from_responder_handshake::<C>(h, rng)
-            }
-            _ => {
-                // This should never happen because ukey2_handshake should set next_protocol to
-                // one of the values we passed in Ukey2ServerStage1::from, which doesn't contain
-                // any other value.
-                panic!("Unknown next protocol: {}", h.next_protocol);
-            }
-        })
+        self.to_completed_handshake()
+            .map(|h| D2DConnectionContextV1::from_responder_handshake::<C>(h, rng))
     }
 }

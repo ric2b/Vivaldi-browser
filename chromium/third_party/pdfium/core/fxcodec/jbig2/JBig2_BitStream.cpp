@@ -8,6 +8,7 @@
 
 #include <algorithm>
 
+#include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
 
 namespace {
@@ -118,7 +119,7 @@ int32_t CJBig2_BitStream::readShortInteger(uint16_t* dwResult) {
 
 void CJBig2_BitStream::alignByte() {
   if (m_dwBitIdx != 0) {
-    ++m_dwByteIdx;
+    addOffset(1);
     m_dwBitIdx = 0;
   }
 }
@@ -128,8 +129,7 @@ uint8_t CJBig2_BitStream::getCurByte() const {
 }
 
 void CJBig2_BitStream::incByteIdx() {
-  if (IsInBounds())
-    ++m_dwByteIdx;
+  addOffset(1);
 }
 
 uint8_t CJBig2_BitStream::getCurByte_arith() const {
@@ -145,7 +145,16 @@ uint32_t CJBig2_BitStream::getOffset() const {
 }
 
 void CJBig2_BitStream::setOffset(uint32_t dwOffset) {
-  m_dwByteIdx = std::min(dwOffset, getLength());
+  m_dwByteIdx =
+      std::min(dwOffset, pdfium::checked_cast<uint32_t>(getBufSpan().size()));
+}
+
+void CJBig2_BitStream::addOffset(uint32_t dwDelta) {
+  FX_SAFE_UINT32 new_offset = m_dwByteIdx;
+  new_offset += dwDelta;
+  if (new_offset.IsValid()) {
+    setOffset(new_offset.ValueOrDie());
+  }
 }
 
 uint32_t CJBig2_BitStream::getBitPos() const {
@@ -157,24 +166,14 @@ void CJBig2_BitStream::setBitPos(uint32_t dwBitPos) {
   m_dwBitIdx = dwBitPos & 7;
 }
 
-const uint8_t* CJBig2_BitStream::getBuf() const {
-  return m_Span.data();
-}
-
-uint32_t CJBig2_BitStream::getLength() const {
-  return pdfium::checked_cast<uint32_t>(m_Span.size());
-}
-
 const uint8_t* CJBig2_BitStream::getPointer() const {
   return m_Span.subspan(m_dwByteIdx).data();
 }
 
-void CJBig2_BitStream::offset(uint32_t dwOffset) {
-  m_dwByteIdx += dwOffset;
-}
-
 uint32_t CJBig2_BitStream::getByteLeft() const {
-  return getLength() - m_dwByteIdx;
+  FX_SAFE_UINT32 result = getBufSpan().size();
+  result -= m_dwByteIdx;
+  return result.ValueOrDie();
 }
 
 void CJBig2_BitStream::AdvanceBit() {
@@ -187,9 +186,11 @@ void CJBig2_BitStream::AdvanceBit() {
 }
 
 bool CJBig2_BitStream::IsInBounds() const {
-  return m_dwByteIdx < getLength();
+  return m_dwByteIdx < getBufSpan().size();
 }
 
 uint32_t CJBig2_BitStream::LengthInBits() const {
-  return getLength() << 3;
+  FX_SAFE_UINT32 result = getBufSpan().size();
+  result *= 8;
+  return result.ValueOrDie();
 }

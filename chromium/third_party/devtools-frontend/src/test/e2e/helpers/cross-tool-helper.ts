@@ -2,7 +2,25 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {click, waitFor} from '../../shared/helper.js';
+import {type DevToolsFrontendReloadOptions} from '../../conductor/frontend_tab.js';
+import {getBrowserAndPages} from '../../conductor/puppeteer-state.js';
+import {click, reloadDevTools as baseReloadDevTools, waitFor} from '../../shared/helper.js';
+
+import {veImpressionForAnimationsPanel} from './animations-helpers.js';
+import {veImpressionForApplicationPanel} from './application-helpers.js';
+import {veImpressionForChangesPanel} from './changes-helpers.js';
+import {veImpressionForConsolePanel} from './console-helpers.js';
+import {veImpressionForLayersPanel} from './layers-helpers.js';
+import {veImpressionForNetworkPanel} from './network-helpers.js';
+import {veImpressionForPerformancePanel} from './performance-helpers.js';
+import {veImpressionForSecurityPanel} from './security-helpers.js';
+import {veImpressionForSourcesPanel} from './sources-helpers.js';
+import {
+  expectVeEvents,
+  veImpression,
+  veImpressionForElementsPanel,
+  veImpressionForMainToolbar,
+} from './visual-logging-helpers.js';
 
 export async function clickOnContextMenuItemFromTab(tabId: string, menuItemSelector: string) {
   // Find the selected node, right click.
@@ -34,3 +52,54 @@ export const checkIfTabExistsInDrawer = async (tabId: string) => {
   const tab = await waitFor(tabId, header);
   return Boolean(tab);
 };
+
+export async function reloadDevTools(
+    options?: DevToolsFrontendReloadOptions&
+    {expectClosedPanels?: string[], enableExperiments?: string[], disableExperiments?: string[]}) {
+  const {frontend} = getBrowserAndPages();
+  const enableExperiments = options?.enableExperiments || [];
+  const disableExperiments = options?.disableExperiments || [];
+  if (enableExperiments.length || disableExperiments.length) {
+    await frontend.evaluate(`(async () => {
+      const Root = await import('./core/root/root.js');
+      for (const experiment of ${JSON.stringify(enableExperiments)}) {
+        Root.Runtime.experiments.setEnabled(experiment, true);
+      }
+      for (const experiment of ${JSON.stringify(disableExperiments)}) {
+        Root.Runtime.experiments.setEnabled(experiment, false);
+      }
+    })()`);
+  }
+  await baseReloadDevTools(options);
+  const selectedPanel = options?.selectedPanel?.name || options?.queryParams?.panel || 'elements';
+  await waitFor(`.panel.${selectedPanel}`);
+  const expectClosedPanels = options?.expectClosedPanels;
+  const newFilterBar = enableExperiments.includes('network-panel-filter-bar-redesign');
+  const dockable = options?.canDock;
+  const panelImpression = selectedPanel === 'elements' ? veImpressionForElementsPanel({dockable}) :
+      selectedPanel === 'animations'                   ? veImpressionForAnimationsPanel() :
+      selectedPanel === 'security'                     ? veImpressionForSecurityPanel() :
+      selectedPanel === 'layers'                       ? veImpressionForLayersPanel() :
+      selectedPanel === 'network'                      ? veImpressionForNetworkPanel({newFilterBar}) :
+      selectedPanel === 'console'                      ? veImpressionForConsolePanel() :
+      selectedPanel === 'timeline'                     ? veImpressionForPerformancePanel() :
+      selectedPanel === 'sources'                      ? veImpressionForSourcesPanel() :
+      selectedPanel === 'animations'                   ? veImpressionForSourcesPanel() :
+      selectedPanel === 'changes'                      ? veImpressionForChangesPanel() :
+      selectedPanel === 'resources'                    ? veImpressionForApplicationPanel() :
+                                                         veImpression('Panel', selectedPanel);
+  const expectedVeEvents = [veImpressionForMainToolbar({selectedPanel, expectClosedPanels, dockable}), panelImpression];
+  if (options?.drawerShown) {
+    expectedVeEvents.push(veImpression('Drawer', undefined, [
+      veImpression(
+          'Toolbar', 'drawer',
+          [
+            veImpression('DropDown', 'more-tabs'),
+            veImpression('PanelTabHeader', 'console'),
+            veImpression('Close'),
+          ]),
+      veImpressionForConsolePanel(),
+    ]));
+  }
+  await expectVeEvents(expectedVeEvents);
+}

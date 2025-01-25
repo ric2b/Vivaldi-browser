@@ -6,6 +6,7 @@ export namespace Chrome {
   export namespace DevTools {
     export interface EventSink<ListenerT extends(...args: any) => void> {
       addListener(listener: ListenerT): void;
+      removeListener(listener: ListenerT): void;
     }
 
     export interface Resource {
@@ -177,9 +178,21 @@ export namespace Chrome {
       hasChildren: boolean;
     }
 
+    /**
+     * This refers to a Javascript or a Wasm value of reference type
+     * in the V8 engine. We call it foreign object here to emphasize
+     * the difference with the remote objects managed by a language
+     * extension plugin.
+     */
+    export interface ForeignObject {
+      type: 'reftype';
+      valueClass: 'local'|'global'|'operand';
+      index: number;
+    }
+
     export interface PropertyDescriptor {
       name: string;
-      value: RemoteObject;
+      value: RemoteObject|ForeignObject;
     }
 
     export interface LanguageExtensionPlugin {
@@ -246,7 +259,7 @@ export namespace Chrome {
        * opaque key that should be passed to the APIs accessing wasm state, e.g., getWasmLinearMemory. A stopId is
        * invalidated once the debugger resumes.
        */
-      evaluate(expression: string, context: RawLocation, stopId: unknown): Promise<RemoteObject|null>;
+      evaluate(expression: string, context: RawLocation, stopId: unknown): Promise<RemoteObject|ForeignObject|null>;
 
       /**
        * Retrieve properties of the remote object identified by the object id.
@@ -266,7 +279,7 @@ export namespace Chrome {
     }
 
     export type WasmValue = {type: 'i32'|'f32'|'f64', value: number}|{type: 'i64', value: bigint}|
-        {type: 'v128', value: string};
+        {type: 'v128', value: string}|ForeignObject;
 
     export interface LanguageExtensions {
       registerLanguageExtensionPlugin(

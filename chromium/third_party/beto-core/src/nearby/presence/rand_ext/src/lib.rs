@@ -20,8 +20,8 @@ extern crate alloc;
 use alloc::vec::Vec;
 use crypto_provider::{CryptoProvider, CryptoRng};
 use log::info;
-pub use rand;
 use rand::{Rng as _, SeedableRng};
+pub use {rand, rand_pcg};
 
 /// Returns a random Vec with the provided length.
 pub fn random_vec<C: CryptoProvider>(rng: &mut C::CryptoRng, len: usize) -> Vec<u8> {
@@ -52,7 +52,7 @@ pub fn random_bytes_rc<const B: usize, R: rand::Rng>(rng: &mut R) -> [u8; B] {
 }
 
 /// Returns a fast rng seeded with the thread rng (which is itself seeded from the OS).
-pub fn seeded_rng() -> impl rand::Rng {
+pub fn seeded_rng() -> rand_pcg::Pcg64 {
     let mut seed: <rand_pcg::Pcg64 as rand::SeedableRng>::Seed = Default::default();
     rand::thread_rng().fill(&mut seed);
     // print it out so if a test fails, the seed will be visible for further investigation

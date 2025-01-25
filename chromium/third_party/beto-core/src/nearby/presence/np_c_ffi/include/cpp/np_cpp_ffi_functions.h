@@ -61,6 +61,10 @@ extern "C" {
 /// but a bare `loop { }` when this crate is compiled without.
 bool np_ffi_global_config_panic_handler(void (*handler)(PanicReason));
 
+/// Checks the current count of all outstanding handle allocations, useful for debugging,
+/// logging, and testing
+CurrentHandleAllocations np_ffi_global_config_get_current_allocation_count();
+
 /// Sets an override to the number of shards to employ in the NP FFI's
 /// internal handle-maps, which places an upper bound on the number
 /// of writing threads which may make progress at any one time
@@ -76,94 +80,6 @@ bool np_ffi_global_config_panic_handler(void (*handler)(PanicReason));
 /// values set will take effect upon the first usage of _any_ non-`np_ffi_global_config_set`
 /// API call.
 void np_ffi_global_config_set_num_shards(uint8_t num_shards);
-
-/// Sets the maximum number of active handles to credential slabs
-/// which may be active at any one time.
-/// Default value: Max value.
-/// Max value: `u32::MAX - 1`.
-///
-/// Useful for bounding the maximum memory used by the client application
-/// on credential slabs in constrained-memory environments.
-///
-/// Setting this value will have no effect if the handle-maps for the
-/// API have already begun being used by the client code, and any
-/// values set will take effect upon the first usage of any API
-/// call utilizing credential slabs.
-void np_ffi_global_config_set_max_num_credential_slabs(uint32_t max_num_credential_slabs);
-
-/// Sets the maximum number of active handles to credential books
-/// which may be active at any one time.
-/// Default value: Max value.
-/// Max value: `u32::MAX - 1`.
-///
-/// Useful for bounding the maximum memory used by the client application
-/// on credential books in constrained-memory environments.
-///
-/// Setting this value will have no effect if the handle-maps for the
-/// API have already begun being used by the client code, and any
-/// values set will take effect upon the first usage of any API
-/// call utilizing credential books.
-void np_ffi_global_config_set_max_num_credential_books(uint32_t max_num_credential_books);
-
-/// Sets the maximum number of active handles to deserialized v0
-/// advertisements which may be active at any one time.
-///
-/// Useful for bounding the maximum memory used by the client application
-/// on v0 advertisements in constrained-memory environments.
-///
-/// Default value: Max value.
-/// Max value: `u32::MAX - 1`.
-///
-/// Setting this value will have no effect if the handle-maps for the
-/// API have already begun being used by the client code, and any
-/// values set will take effect upon the first usage of any API
-/// call which references or returns a deserialized V0 advertisement.
-void np_ffi_global_config_set_max_num_deserialized_v0_advertisements(uint32_t max_num_deserialized_v0_advertisements);
-
-/// Sets the maximum number of active handles to deserialized v1
-/// advertisements which may be active at any one time.
-///
-/// Useful for bounding the maximum memory used by the client application
-/// on v1 advertisements in constrained-memory environments.
-///
-/// Default value: Max value.
-/// Max value: `u32::MAX - 1`.
-///
-/// Setting this value will have no effect if the handle-maps for the
-/// API have already begun being used by the client code, and any
-/// values set will take effect upon the first usage of any API
-/// call which references or returns a deserialized V1 advertisement.
-void np_ffi_global_config_set_max_num_deserialized_v1_advertisements(uint32_t max_num_deserialized_v1_advertisements);
-
-/// Sets the maximum number of active handles to v0 advertisement
-/// builders which may be active at any one time.
-///
-/// Useful for bounding the maximum memory used by the client application
-/// on v0 advertisements in constrained-memory environments.
-///
-/// Default value: Max value.
-/// Max value: `u32::MAX - 1`.
-///
-/// Setting this value will have no effect if the handle-maps for the
-/// API have already begun being used by the client code, and any
-/// values set will take effect upon the first usage of any API
-/// call which references or returns a V0 advertisement builder.
-void np_ffi_global_config_set_max_num_v0_advertisement_builders(uint32_t max_num_v0_advertisement_builders);
-
-/// Sets the maximum number of active handles to v1 advertisement
-/// builders which may be active at any one time.
-///
-/// Useful for bounding the maximum memory used by the client application
-/// on v1 advertisements in constrained-memory environments.
-///
-/// Default value: Max value.
-/// Max value: `u32::MAX - 1`.
-///
-/// Setting this value will have no effect if the handle-maps for the
-/// API have already begun being used by the client code, and any
-/// values set will take effect upon the first usage of any API
-/// call which references or returns a V1 advertisement builder.
-void np_ffi_global_config_set_max_num_v1_advertisement_builders(uint32_t max_num_v1_advertisement_builders);
 
 /// Allocates a new credential-book from the given slab, returning a handle
 /// to the created object. The slab will be deallocated by this call.
@@ -183,14 +99,7 @@ DeallocateResult np_ffi_deallocate_credential_slab(CredentialSlab credential_sla
 DeallocateResult np_ffi_deallocate_credential_book(CredentialBook credential_book);
 
 /// Allocates a new credential-slab, returning a handle to the created object
-CreateCredentialSlabResult np_ffi_create_credential_slab();
-
-/// Gets the tag of a `CreateCredentialSlabResult` tagged enum.
-CreateCredentialSlabResultKind np_ffi_CreateCredentialSlabResult_kind(CreateCredentialSlabResult result);
-
-/// Casts a `CreateCredentialSlabResult` to the `SUCCESS` variant, panicking in the
-/// case where the passed value is of a different enum variant.
-CredentialSlab np_ffi_CreateCredentialSlabResult_into_SUCCESS(CreateCredentialSlabResult result);
+CredentialSlab np_ffi_create_credential_slab();
 
 /// Adds the given V0 discovery credential with some associated
 /// match-data to this credential slab.
@@ -396,20 +305,12 @@ SerializeV0AdvertisementResult np_ffi_V0AdvertisementBuilder_into_advertisement(
 /// the given handle.
 DeallocateResult np_ffi_deallocate_v0_advertisement_builder(V0AdvertisementBuilder adv_builder);
 
-/// Gets the tag of a `CreateV0AdvertisementBuilderResult` tagged-union.
-CreateV0AdvertisementBuilderResultKind np_ffi_CreateV0AdvertisementBuilderResult_kind(CreateV0AdvertisementBuilderResult result);
-
-/// Casts a `CreateV0AdvertisementBuilderResult` to the `Success` variant,
-/// panicking in the case where the passed value is of a different enum variant.
-V0AdvertisementBuilder np_ffi_CreateV0AdvertisementBuilderResult_into_SUCCESS(CreateV0AdvertisementBuilderResult result);
-
 /// Creates a new V0 advertisement builder for a public advertisement.
-CreateV0AdvertisementBuilderResult np_ffi_create_v0_public_advertisement_builder();
+V0AdvertisementBuilder np_ffi_create_v0_public_advertisement_builder();
 
 /// Creates a new V0 advertisement builder for an encrypted advertisement.
-CreateV0AdvertisementBuilderResult np_ffi_create_v0_encrypted_advertisement_builder(V0BroadcastCredential broadcast_cred,
-                                                                                    EncryptedIdentityType identity_type,
-                                                                                    FixedSizeArray<2> salt);
+V0AdvertisementBuilder np_ffi_create_v0_encrypted_advertisement_builder(V0BroadcastCredential broadcast_cred,
+                                                                        FixedSizeArray<2> salt);
 
 /// Gets the tag of a `SerializeV0AdvertisementResult` tagged-union.
 SerializeV0AdvertisementResultKind np_ffi_SerializeV0AdvertisementResult_kind(SerializeV0AdvertisementResult result);
@@ -445,7 +346,6 @@ CreateV1SectionBuilderResult np_ffi_V1AdvertisementBuilder_public_section_builde
 /// to fit within the enclosing advertisement.
 CreateV1SectionBuilderResult np_ffi_V1AdvertisementBuilder_encrypted_section_builder(V1AdvertisementBuilder adv_builder,
                                                                                      V1BroadcastCredential broadcast_cred,
-                                                                                     EncryptedIdentityType identity_type,
                                                                                      V1VerificationMode verification_mode);
 
 /// Attempts to serialize the contents of the advertisement builder
@@ -454,16 +354,9 @@ CreateV1SectionBuilderResult np_ffi_V1AdvertisementBuilder_encrypted_section_bui
 /// advertisement builder handle being deallocated.
 SerializeV1AdvertisementResult np_ffi_V1AdvertisementBuilder_into_advertisement(V1AdvertisementBuilder adv_builder);
 
-/// Gets the tag of a `CreateV1AdvertisementBuilderResult` tagged-union.
-CreateV1AdvertisementBuilderResultKind np_ffi_CreateV1AdvertisementBuilderResult_kind(CreateV1AdvertisementBuilderResult result);
-
-/// Casts a `CreateV1AdvertisementBuilderResult` to the `Success` variant,
-/// panicking in the case where the passed value is of a different enum variant.
-V1AdvertisementBuilder np_ffi_CreateV1AdvertisementBuilderResult_into_SUCCESS(CreateV1AdvertisementBuilderResult result);
-
 /// Creates a new V1 advertisement builder for the given advertisement
 /// kind (public/encrypted).
-CreateV1AdvertisementBuilderResult np_ffi_create_v1_advertisement_builder(AdvertisementBuilderKind kind);
+V1AdvertisementBuilder np_ffi_create_v1_advertisement_builder(AdvertisementBuilderKind kind);
 
 /// Gets the tag of a `SerializeV1AdvertisementResult` tagged-union.
 SerializeV1AdvertisementResultKind np_ffi_SerializeV1AdvertisementResult_kind(SerializeV1AdvertisementResult result);
@@ -550,10 +443,7 @@ V0Actions np_ffi_SetV0ActionResult_into_ERROR(SetV0ActionResult result);
 V0Actions np_ffi_build_new_zeroed_V0Actions(AdvertisementBuilderKind kind);
 
 /// Return whether a boolean action type is set in this data element
-bool np_ffi_V0Actions_has_action(V0Actions actions, BooleanActionType action_type);
-
-/// Gets the 4 bit context sync sequence number as a u8 from this data element
-ContextSyncSeqNum np_ffi_V0Actions_get_context_sync_sequence_number(V0Actions actions);
+bool np_ffi_V0Actions_has_action(V0Actions actions, ActionType action_type);
 
 /// Attempts to set the given action bit to the given boolean value.
 /// This operation may fail if the requested action bit may not be
@@ -562,30 +452,12 @@ ContextSyncSeqNum np_ffi_V0Actions_get_context_sync_sequence_number(V0Actions ac
 /// the original action bits will be yielded back to the caller,
 /// unaltered.
 SetV0ActionResult np_ffi_V0Actions_set_action(V0Actions actions,
-                                              BooleanActionType action_type,
+                                              ActionType action_type,
                                               bool value);
-
-/// Sets the context sequence number for the given Actions DE.
-V0Actions np_ffi_V0Actions_set_context_sync_sequence_number(V0Actions actions,
-                                                            ContextSyncSeqNum value);
 
 /// Returns the representation of the passed `V0Actions` as an unsigned
 /// integer, where the bit-positions correspond to individual actions.
 uint32_t np_ffi_V0Actions_as_u32(V0Actions actions);
-
-/// Gets the tag of a `BuildContextSyncSeqNumResult` tagged-union.
-BuildContextSyncSeqNumResultKind np_ffi_BuildContextSyncSeqNumResult_kind(BuildContextSyncSeqNumResult result);
-
-/// Casts a `BuildContextSyncSeqNumResult` to the `Success` variant, panicking in the
-/// case where the passed value is of a different enum variant.
-ContextSyncSeqNum np_ffi_BuildContextSyncSeqNumResult_into_SUCCESS(BuildContextSyncSeqNumResult result);
-
-/// Attempts to build a new context sync sequence number
-/// from the given unsigned byte.
-BuildContextSyncSeqNumResult np_ffi_ContextSyncSeqNum_build_from_unsigned_byte(uint8_t value);
-
-/// Gets the value of the given context-sync sequence number as an unsigned byte.
-uint8_t np_ffi_ContextSyncSeqNum_as_unsigned_byte(ContextSyncSeqNum seq_num);
 
 /// Converts a `V1DataElement` to a `GenericV1DataElement` which
 /// only maintains information about the DE's type-code and payload.

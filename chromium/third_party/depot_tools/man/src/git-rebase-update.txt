@@ -85,6 +85,10 @@ OPTIONS
 --current::
   Only rebase the current branch.
 
+--tree::
+  Also rebase any branches downstream from the selected branches. Use with
+  named branches or `--current` to selectively rebase a branch tree.
+
 
 CONFIGURATION VARIABLES
 -----------------------

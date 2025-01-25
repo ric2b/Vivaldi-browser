@@ -86,7 +86,6 @@
 <translation id="2439110203301358333">Jiný program ve vašem počítači nainstaloval rozšíření, které může měnit funkce prohlížeče Vivaldi.</translation>
 <translation id="2443487764245141020">Weby také mohou potřebovat rozpoznávat vaše zařízení pomocí identifikátoru</translation>
 <translation id="2445081178310039857">Je vyžadován kořenový adresář rozšíření.</translation>
-<translation id="2470702053775288986">Nepodporovaná rozšíření byla zakázána</translation>
 <translation id="2485422356828889247">Odinstalovat</translation>
 <translation id="2498539833203011245">Minimalizovat</translation>
 <translation id="2509495747794740764">Hodnota měřítka musí být v intervalu 10 až 200.</translation>
@@ -206,7 +205,6 @@
 <translation id="431076611119798497">&amp;Podrobnosti</translation>
 <translation id="4345587454538109430">Nastavit…</translation>
 <translation id="4348766275249686434">Zaznamenávat chyby</translation>
-<translation id="4363771538994847871">Nebyly nalezeny žádné cíle odesílání. Potřebujete pomoci?</translation>
 <translation id="4384652540891215547">Aktivovat rozšíření</translation>
 <translation id="4394049700291259645">Deaktivovat</translation>
 <translation id="4409697491990005945">Okraje</translation>
@@ -390,7 +388,6 @@
 <translation id="7771452384635174008">Rozložení</translation>
 <translation id="7782102568078991263">Žádné další návrhy z Googlu</translation>
 <translation id="7786889348652477777">Znovu načíst &amp;aplikaci</translation>
-<translation id="7791543448312431591">Přidat</translation>
 <translation id="7800518121066352902">Otočit &amp;proti směru hodinových ručiček</translation>
 <translation id="7814458197256864873">&amp;Kopírovat</translation>
 <translation id="7818135753970109980">Byl přidán nový motiv (<ph name="EXTENSION_NAME" />)</translation>

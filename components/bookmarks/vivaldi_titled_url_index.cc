@@ -52,12 +52,7 @@ std::vector<TitledUrlMatch> TitledUrlIndex::GetResultsNicknameMatching(
   // below will filter out nodes that neither match nor ancestor-match every
   // query term.
 
-  const query_parser::MatchingAlgorithm matching_algorithm =
-      query_parser::MatchingAlgorithm::ALWAYS_PREFIX_SEARCH;
-
-  static const size_t kMaxNodes = 1000;
-  TitledUrlNodeSet matches =
-      RetrieveNodesMatchingAnyTerms(terms, matching_algorithm, kMaxNodes);
+  TitledUrlNodeSet matches = RetrieveNicknameNodesMatchingAnyTerms(terms);
 
   if (matches.empty())
     return {};
@@ -69,8 +64,10 @@ std::vector<TitledUrlMatch> TitledUrlIndex::GetResultsNicknameMatching(
   // efficient way to go about this, but by the time we get here we know what
   // matches and so this shouldn't be performance critical.
   query_parser::QueryNodeVector query_nodes;
-  query_parser::QueryParser::ParseQueryNodes(query, matching_algorithm,
-                                             &query_nodes);
+
+  query_parser::QueryParser::ParseQueryNodes(
+      query, query_parser::MatchingAlgorithm::ALWAYS_PREFIX_SEARCH,
+      &query_nodes);
 
   std::vector<TitledUrlMatch> ret =
       MatchNicknameNodesWithQuery(sorted_nodes, query_nodes, terms, max_count);
@@ -93,8 +90,6 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchNicknameNodeWithQuery(
 
   // Clean up the title, URL, and ancestor titles in preparation for string
   // comparisons.
-  const std::u16string lower_title =
-      base::i18n::ToLower(Normalize(node->GetTitledUrlNodeTitle()));
   base::OffsetAdjuster::Adjustments adjustments;
   const std::u16string clean_url =
       CleanUpUrlForMatching(node->GetTitledUrlNodeUrl(), &adjustments);
@@ -127,7 +122,6 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchNicknameNodeWithQuery(
   // If `node` passed the approximate check above, to the more accurate check.
   query_parser::QueryWordVector title_words, url_words, ancestor_words;
   query_parser::QueryParser::ExtractQueryWords(clean_url, &url_words);
-  query_parser::QueryParser::ExtractQueryWords(lower_title, &title_words);
   for (const auto& ancestor_title : lower_ancestor_titles) {
     query_parser::QueryParser::ExtractQueryWords(ancestor_title,
                                                  &ancestor_words);
@@ -155,21 +149,12 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchNicknameNodeWithQuery(
   }
 
   TitledUrlMatch match;
-  if (lower_title.length() == node->GetTitledUrlNodeTitle().length()) {
-    // Only use title matches if the lowercase string is the same length
-    // as the original string, otherwise the matches are meaningless.
-    // TODO(mpearson): revise match positions appropriately.
-    // match.title_match_positions.swap(title_matches);
-  }
-  // Now that we're done processing this entry, correct the offsets of the
-  // matches in |url_matches| so they point to offsets in the original URL
-  // spec, not the cleaned-up URL string that we used for matching.
   std::vector<size_t> offsets =
       TitledUrlMatch::OffsetsFromMatchPositions(nickname_matches);
   base::OffsetAdjuster::UnadjustOffsets(adjustments, &offsets);
   nickname_matches =
       TitledUrlMatch::ReplaceOffsetsInMatchPositions(nickname_matches, offsets);
-  match.url_match_positions.swap(nickname_matches);
+  match.nickname_match_positions.swap(nickname_matches);
   match.has_ancestor_match = query_has_ancestor_matches;
   match.node = node;
   return match;

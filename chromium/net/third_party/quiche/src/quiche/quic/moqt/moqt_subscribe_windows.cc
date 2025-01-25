@@ -4,12 +4,12 @@
 
 #include "quiche/quic/moqt/moqt_subscribe_windows.h"
 
-#include <cstdint>
 #include <optional>
 #include <vector>
 
 #include "quiche/quic/moqt/moqt_messages.h"
 #include "quiche/quic/platform/api/quic_bug_tracker.h"
+#include "quiche/common/platform/api/quiche_logging.h"
 #include "quiche/web_transport/web_transport.h"
 
 namespace moqt {
@@ -21,9 +21,9 @@ bool SubscribeWindow::InWindow(const FullSequence& seq) const {
   return (!end_.has_value() || seq <= *end_);
 }
 
-std::optional<webtransport::StreamId> SubscribeWindow::GetStreamForSequence(
+std::optional<webtransport::StreamId> SendStreamMap::GetStreamForSequence(
     FullSequence sequence) const {
-  FullSequence index = SequenceToIndex(sequence);
+  ReducedSequenceIndex index(sequence, forwarding_preference_);
   auto stream_it = send_streams_.find(index);
   if (stream_it == send_streams_.end()) {
     return std::nullopt;
@@ -31,52 +31,72 @@ std::optional<webtransport::StreamId> SubscribeWindow::GetStreamForSequence(
   return stream_it->second;
 }
 
-void SubscribeWindow::AddStream(uint64_t group_id, uint64_t object_id,
-                                webtransport::StreamId stream_id) {
-  if (!InWindow(FullSequence(group_id, object_id))) {
-    return;
-  }
-  FullSequence index = SequenceToIndex(FullSequence(group_id, object_id));
+void SendStreamMap::AddStream(FullSequence sequence,
+                              webtransport::StreamId stream_id) {
+  ReducedSequenceIndex index(sequence, forwarding_preference_);
   if (forwarding_preference_ == MoqtForwardingPreference::kDatagram) {
     QUIC_BUG(quic_bug_moqt_draft_03_01) << "Adding a stream for datagram";
     return;
   }
-  auto stream_it = send_streams_.find(index);
-  if (stream_it != send_streams_.end()) {
-    QUIC_BUG(quic_bug_moqt_draft_03_02) << "Stream already added";
-    return;
-  }
-  send_streams_[index] = stream_id;
+  auto [stream_it, success] = send_streams_.emplace(index, stream_id);
+  QUIC_BUG_IF(quic_bug_moqt_draft_03_02, !success) << "Stream already added";
 }
 
-void SubscribeWindow::RemoveStream(uint64_t group_id, uint64_t object_id) {
-  FullSequence index = SequenceToIndex(FullSequence(group_id, object_id));
+void SendStreamMap::RemoveStream(FullSequence sequence,
+                                 webtransport::StreamId stream_id) {
+  ReducedSequenceIndex index(sequence, forwarding_preference_);
+  QUICHE_DCHECK(send_streams_.contains(index) &&
+                send_streams_.find(index)->second == stream_id)
+      << "Requested to remove a stream ID that does not match the one in the "
+         "map";
   send_streams_.erase(index);
 }
 
-FullSequence SubscribeWindow::SequenceToIndex(FullSequence sequence) const {
-  switch (forwarding_preference_) {
+bool SubscribeWindow::UpdateStartEnd(FullSequence start,
+                                     std::optional<FullSequence> end) {
+  // Can't make the subscription window bigger.
+  if (!InWindow(start)) {
+    return false;
+  }
+  if (end_.has_value() && (!end.has_value() || *end_ < *end)) {
+    return false;
+  }
+  start_ = start;
+  end_ = end;
+  return true;
+}
+
+bool SubscribeWindow::IsStreamProvokingObject(
+    FullSequence sequence, MoqtForwardingPreference preference) const {
+  if (preference == MoqtForwardingPreference::kGroup) {
+    return sequence.object == 0 || sequence == start_;
+  }
+  QUICHE_DCHECK(preference != MoqtForwardingPreference::kDatagram);
+  return true;
+}
+
+ReducedSequenceIndex::ReducedSequenceIndex(
+    FullSequence sequence, MoqtForwardingPreference preference) {
+  switch (preference) {
     case MoqtForwardingPreference::kTrack:
-      return FullSequence(0, 0);
+      sequence_ = FullSequence(0, 0);
+      break;
     case MoqtForwardingPreference::kGroup:
-      return FullSequence(sequence.group, 0);
+      sequence_ = FullSequence(sequence.group, 0);
+      break;
     case MoqtForwardingPreference::kObject:
-      return sequence;
     case MoqtForwardingPreference::kDatagram:
-      QUIC_BUG(quic_bug_moqt_draft_03_01) << "No stream for datagram";
-      return FullSequence(0, 0);
+      sequence_ = sequence;
+      break;
   }
 }
 
-std::vector<SubscribeWindow*> MoqtSubscribeWindows::SequenceIsSubscribed(
-    FullSequence sequence) {
-  std::vector<SubscribeWindow*> retval;
-  for (auto& [subscribe_id, window] : windows_) {
-    if (window.InWindow(sequence)) {
-      retval.push_back(&(window));
-    }
+std::vector<webtransport::StreamId> SendStreamMap::GetAllStreams() const {
+  std::vector<webtransport::StreamId> ids;
+  for (const auto& [index, id] : send_streams_) {
+    ids.push_back(id);
   }
-  return retval;
+  return ids;
 }
 
 }  // namespace moqt

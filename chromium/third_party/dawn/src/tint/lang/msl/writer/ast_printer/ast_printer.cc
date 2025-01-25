@@ -168,6 +168,23 @@ SanitizedResult Sanitize(const Program& in, const Options& options) {
         manager.Add<ast::transform::Robustness>();
     }
 
+    tint::transform::multiplanar::BindingsMap multiplanar_map{};
+    RemapperData remapper_data{};
+    ArrayLengthFromUniformOptions array_length_from_uniform_options{};
+    PopulateBindingRelatedOptions(options, remapper_data, multiplanar_map,
+                                  array_length_from_uniform_options);
+
+    manager.Add<ast::transform::BindingRemapper>();
+    data.Add<ast::transform::BindingRemapper::Remappings>(
+        remapper_data, std::unordered_map<BindingPoint, core::Access>{},
+        /* allow_collisions */ true);
+
+    // Note: it is more efficient for MultiplanarExternalTexture to come after Robustness
+    // MultiplanarExternalTexture must come after BindingRemapper
+    data.Add<ast::transform::MultiplanarExternalTexture::NewBindingPoints>(
+        multiplanar_map, /* allow_collisions */ true);
+    manager.Add<ast::transform::MultiplanarExternalTexture>();
+
     {  // Builtin polyfills
         ast::transform::BuiltinPolyfill::Builtins polyfills;
         polyfills.acosh = ast::transform::BuiltinPolyfill::Level::kRangeCheck;
@@ -190,23 +207,6 @@ SanitizedResult Sanitize(const Program& in, const Options& options) {
         manager.Add<ast::transform::BuiltinPolyfill>();
     }
 
-    ExternalTextureOptions external_texture_options{};
-    RemapperData remapper_data{};
-    ArrayLengthFromUniformOptions array_length_from_uniform_options{};
-    PopulateBindingRelatedOptions(options, remapper_data, external_texture_options,
-                                  array_length_from_uniform_options);
-
-    manager.Add<ast::transform::BindingRemapper>();
-    data.Add<ast::transform::BindingRemapper::Remappings>(
-        remapper_data, std::unordered_map<BindingPoint, core::Access>{},
-        /* allow_collisions */ true);
-
-    // Note: it is more efficient for MultiplanarExternalTexture to come after Robustness
-    // MultiplanarExternalTexture must come after BindingRemapper
-    data.Add<ast::transform::MultiplanarExternalTexture::NewBindingPoints>(
-        external_texture_options.bindings_map, /* allow_collisions */ true);
-    manager.Add<ast::transform::MultiplanarExternalTexture>();
-
     if (!options.disable_workgroup_init) {
         // ZeroInitWorkgroupMemory must come before CanonicalizeEntryPointIO as
         // ZeroInitWorkgroupMemory may inject new builtin parameters.
@@ -215,7 +215,7 @@ SanitizedResult Sanitize(const Program& in, const Options& options) {
 
     {
         PixelLocal::Config cfg;
-        for (auto it : options.pixel_local_options.attachments) {
+        for (auto it : options.pixel_local_attachments) {
             cfg.attachments.Add(it.first, it.second);
         }
         data.Add<PixelLocal::Config>(cfg);
@@ -284,10 +284,12 @@ bool ASTPrinter::Generate() {
                 wgsl::Extension::kChromiumExperimentalFramebufferFetch,
                 wgsl::Extension::kChromiumExperimentalPixelLocal,
                 wgsl::Extension::kChromiumExperimentalSubgroups,
-                wgsl::Extension::kChromiumInternalDualSourceBlending,
                 wgsl::Extension::kChromiumInternalGraphite,
                 wgsl::Extension::kChromiumInternalRelaxedUniformLayout,
                 wgsl::Extension::kF16,
+                wgsl::Extension::kDualSourceBlending,
+                wgsl::Extension::kSubgroups,
+                wgsl::Extension::kSubgroupsF16,
             })) {
         return false;
     }
@@ -664,9 +666,12 @@ bool ASTPrinter::EmitCall(StringStream& out, const ast::CallExpression* expr) {
 bool ASTPrinter::EmitFunctionCall(StringStream& out,
                                   const sem::Call* call,
                                   const sem::Function* fn) {
-    if (ast::GetAttribute<SubgroupBallot::SimdActiveThreadsMask>(fn->Declaration()->attributes) !=
-        nullptr) {
-        out << "as_type<uint2>((ulong)simd_active_threads_mask())";
+    if (ast::GetAttribute<SubgroupBallot::SimdBallot>(fn->Declaration()->attributes) != nullptr) {
+        out << "as_type<uint2>((ulong)simd_ballot(";
+        if (!EmitExpression(out, call->Arguments()[0]->Declaration())) {
+            return false;
+        }
+        out << "))";
         return true;
     }
 
@@ -1515,7 +1520,6 @@ std::string ASTPrinter::generate_builtin_name(const sem::BuiltinFn* builtin) {
         case wgsl::BuiltinFn::kMix:
         case wgsl::BuiltinFn::kModf:
         case wgsl::BuiltinFn::kNormalize:
-        case wgsl::BuiltinFn::kPow:
         case wgsl::BuiltinFn::kReflect:
         case wgsl::BuiltinFn::kRefract:
         case wgsl::BuiltinFn::kSaturate:
@@ -1531,6 +1535,9 @@ std::string ASTPrinter::generate_builtin_name(const sem::BuiltinFn* builtin) {
         case wgsl::BuiltinFn::kSign:
         case wgsl::BuiltinFn::kClamp:
             out += builtin->str();
+            break;
+        case wgsl::BuiltinFn::kPow:
+            out += "powr";
             break;
         case wgsl::BuiltinFn::kAbs:
             if (builtin->ReturnType()->is_float_scalar_or_vector()) {
@@ -2059,11 +2066,10 @@ bool ASTPrinter::EmitEntryPointFunction(const ast::Function* func) {
                         if (!builtin_attr) {
                             continue;
                         }
-                        auto builtin = builder_.Sem().Get(builtin_attr)->Value();
 
                         builtin_found = true;
 
-                        auto name = BuiltinToAttribute(builtin);
+                        auto name = BuiltinToAttribute(builtin_attr->builtin);
                         if (name.empty()) {
                             diagnostics_.AddError(Source{}) << "unknown builtin";
                             return false;

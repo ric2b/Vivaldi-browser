@@ -68,7 +68,7 @@ class ServicePublisher {
     // within the openscreen service type.
     // TODO(btolsch): This could be derived from |friendly_name| but we will
     // leave it as an arbitrary name until the spec is finalized.
-    std::string service_instance_name;
+    std::string instance_name;
 
     // The fingerprint of the server's certificate and it is included in DNS TXT
     // records.

@@ -7,7 +7,7 @@
 #include <string>
 
 #include "base/values.h"
-#include "content/public/common/input/native_web_keyboard_event.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/gfx/geometry/rect_f.h"
 
@@ -58,7 +58,7 @@ gfx::PointF ToUICoordinates(content::WebContents* web_contents,
 
 std::u16string KeyCodeToName(ui::KeyboardCode key_code);
 
-std::string ShortcutTextFromEvent(const content::NativeWebKeyboardEvent& event);
+std::string ShortcutTextFromEvent(const input::NativeWebKeyboardEvent& event);
 
 std::string ShortcutText(int windows_key_code, int modifiers, int dom_code);
 

@@ -11,20 +11,28 @@
 #include "ash/picker/picker_test_util.h"
 #include "ash/picker/views/picker_item_view.h"
 #include "ash/picker/views/picker_list_item_view.h"
+#include "ash/picker/views/picker_pseudo_focus.h"
 #include "ash/picker/views/picker_search_results_view_delegate.h"
 #include "ash/picker/views/picker_section_list_view.h"
 #include "ash/picker/views/picker_section_view.h"
+#include "ash/picker/views/picker_skeleton_loader_view.h"
 #include "ash/picker/views/picker_strings.h"
+#include "ash/picker/views/picker_submenu_controller.h"
+#include "ash/picker/views/picker_traversable_item_container.h"
 #include "ash/public/cpp/picker/picker_search_result.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/test/view_drawn_waiter.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback_helpers.h"
+#include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/gfx/geometry/size.h"
+#include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animator.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
+#include "ui/gfx/image/image_unittest_util.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/view_utils.h"
@@ -48,7 +56,12 @@ using ::testing::SizeIs;
 
 constexpr int kPickerWidth = 320;
 
-using PickerSearchResultsViewTest = views::ViewsTestBase;
+class PickerSearchResultsViewTest : public views::ViewsTestBase {
+ public:
+  PickerSearchResultsViewTest()
+      : views::ViewsTestBase(
+            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+};
 
 template <class V, class Matcher>
 auto AsView(Matcher matcher) {
@@ -56,6 +69,12 @@ auto AsView(Matcher matcher) {
       "AsViewClass",
       [](views::View* view) { return views::AsViewClass<V>(view); },
       Pointee(matcher));
+}
+
+auto MatchesTitlelessSection(int num_items) {
+  return AllOf(
+      Property(&PickerSectionView::title_label_for_testing, nullptr),
+      Property(&PickerSectionView::item_views_for_testing, SizeIs(num_items)));
 }
 
 auto MatchesResultSection(PickerSectionType section_type, int num_items) {
@@ -84,37 +103,45 @@ class MockSearchResultsViewDelegate : public PickerSearchResultsViewDelegate {
               SelectSearchResult,
               (const PickerSearchResult&),
               (override));
-  MOCK_METHOD(void, NotifyPseudoFocusChanged, (views::View*), (override));
+  MOCK_METHOD(void, RequestPseudoFocus, (views::View*), (override));
+  MOCK_METHOD(PickerActionType,
+              GetActionForResult,
+              (const PickerSearchResult& result),
+              (override));
 };
 
 TEST_F(PickerSearchResultsViewTest, CreatesResultsSections) {
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
-  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher);
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
 
-  view.AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kExpressions,
-      {{PickerSearchResult::Text(u"Result A")}}, /*has_more_results=*/false));
   view.AppendSearchResults(
-      PickerSearchResultsSection(PickerSectionType::kLinks,
-                                 {{PickerSearchResult::Text(u"Result B"),
-                                   PickerSearchResult::Text(u"Result C")}},
+      PickerSearchResultsSection(PickerSectionType::kNone,
+                                 {{PickerSearchResult::Text(u"Result A"),
+                                   PickerSearchResult::Text(u"Result B")}},
                                  /*has_more_results=*/false));
+  view.AppendSearchResults(PickerSearchResultsSection(
+      PickerSectionType::kLocalFiles,
+      {{PickerSearchResult::LocalFile(u"Result C", base::FilePath())}},
+      /*has_more_results=*/false));
 
   EXPECT_THAT(view.section_list_view_for_testing()->children(), SizeIs(2));
-  EXPECT_THAT(
-      view.section_views_for_testing(),
-      ElementsAre(
-          Pointee(MatchesResultSection(PickerSectionType::kExpressions, 1)),
-          Pointee(MatchesResultSection(PickerSectionType::kLinks, 2))));
+  EXPECT_THAT(view.section_views_for_testing(),
+              ElementsAre(Pointee(MatchesTitlelessSection(2)),
+                          Pointee(MatchesResultSection(
+                              PickerSectionType::kLocalFiles, 1))));
 }
 
 TEST_F(PickerSearchResultsViewTest, ClearSearchResultsClearsView) {
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
-  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher);
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
   view.AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kExpressions, {{PickerSearchResult::Text(u"Result")}},
+      PickerSectionType::kClipboard, {{PickerSearchResult::Text(u"Result")}},
       /*has_more_results=*/false));
 
   view.ClearSearchResults();
@@ -122,61 +149,32 @@ TEST_F(PickerSearchResultsViewTest, ClearSearchResultsClearsView) {
   EXPECT_THAT(view.section_list_view_for_testing()->children(), IsEmpty());
 }
 
-TEST_F(PickerSearchResultsViewTest, ClearSearchResultsClearsPseudoFocus) {
-  MockSearchResultsViewDelegate mock_delegate;
-  MockPickerAssetFetcher asset_fetcher;
-  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher);
-  view.AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kExpressions, {{PickerSearchResult::Text(u"Result")}},
-      /*has_more_results=*/false));
-
-  EXPECT_CALL(mock_delegate, NotifyPseudoFocusChanged(nullptr));
-
-  view.ClearSearchResults();
-}
-
-TEST_F(PickerSearchResultsViewTest, CreatesResultsSectionWithGif) {
-  MockSearchResultsViewDelegate mock_delegate;
-  MockPickerAssetFetcher asset_fetcher;
-  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher);
-
-  view.AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kGifs,
-      {{PickerSearchResult::Gif(
-          /*preview_url=*/GURL(), /*preview_image_url=*/GURL(), gfx::Size(),
-          /*full_url=*/GURL(), gfx::Size(),
-          /*content_description=*/u"")}},
-      /*has_more_results=*/false));
-
-  EXPECT_THAT(view.section_list_view_for_testing()->children(), SizeIs(1));
-  EXPECT_THAT(
-      view.section_views_for_testing(),
-      ElementsAre(Pointee(MatchesResultSection(PickerSectionType::kGifs, 1))));
-}
-
 TEST_F(PickerSearchResultsViewTest, CreatesResultsSectionWithCategories) {
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
-  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher);
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
 
   view.AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kCategories,
+      PickerSectionType::kNone,
       {{PickerSearchResult::Category(PickerCategory::kExpressions)}},
       /*has_more_results=*/false));
 
   EXPECT_THAT(view.section_list_view_for_testing()->children(), SizeIs(1));
   EXPECT_THAT(view.section_views_for_testing(),
-              ElementsAre(Pointee(
-                  MatchesResultSection(PickerSectionType::kCategories, 1))));
+              ElementsAre(Pointee(MatchesTitlelessSection(1))));
 }
 
 TEST_F(PickerSearchResultsViewTest, CreatesResultsSectionWithLocalFiles) {
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
-  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher);
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
 
   view.AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kFiles,
+      PickerSectionType::kLocalFiles,
       {{PickerSearchResult::LocalFile(u"local", base::FilePath())}},
       /*has_more_results=*/false));
 
@@ -184,7 +182,7 @@ TEST_F(PickerSearchResultsViewTest, CreatesResultsSectionWithLocalFiles) {
   EXPECT_THAT(
       view.section_views_for_testing(),
       ElementsAre(Pointee(MatchesResultSectionWithOneItem(
-          PickerSectionType::kFiles,
+          PickerSectionType::kLocalFiles,
           AsView<PickerListItemView>(Property(
               &PickerListItemView::GetPrimaryTextForTesting, u"local"))))));
 }
@@ -192,18 +190,20 @@ TEST_F(PickerSearchResultsViewTest, CreatesResultsSectionWithLocalFiles) {
 TEST_F(PickerSearchResultsViewTest, CreatesResultsSectionWithDriveFiles) {
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
-  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher);
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
 
   view.AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kFiles,
-      {{PickerSearchResult::DriveFile(u"drive", GURL(), /*icon=*/{})}},
+      PickerSectionType::kLocalFiles,
+      {{PickerSearchResult::DriveFile(u"drive", GURL(), base::FilePath())}},
       /*has_more_results=*/false));
 
   EXPECT_THAT(view.section_list_view_for_testing()->children(), SizeIs(1));
   EXPECT_THAT(
       view.section_views_for_testing(),
       ElementsAre(Pointee(MatchesResultSectionWithOneItem(
-          PickerSectionType::kFiles,
+          PickerSectionType::kLocalFiles,
           AsView<PickerListItemView>(Property(
               &PickerListItemView::GetPrimaryTextForTesting, u"drive"))))));
 }
@@ -211,166 +211,136 @@ TEST_F(PickerSearchResultsViewTest, CreatesResultsSectionWithDriveFiles) {
 TEST_F(PickerSearchResultsViewTest, UpdatesResultsSections) {
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
-  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher);
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
 
   view.AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kExpressions, {{PickerSearchResult::Text(u"Result")}},
+      PickerSectionType::kLocalFiles,
+      {{PickerSearchResult::LocalFile(u"Result", base::FilePath())}},
       /*has_more_results=*/false));
   view.AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kLinks,
-      {{PickerSearchResult::Text(u"Updated Result")}},
+      PickerSectionType::kNone, {{PickerSearchResult::Text(u"New Result")}},
       /*has_more_results=*/false));
 
   EXPECT_THAT(view.section_list_view_for_testing()->children(), SizeIs(2));
-  EXPECT_THAT(
-      view.section_views_for_testing(),
-      ElementsAre(
-          Pointee(MatchesResultSection(PickerSectionType::kExpressions, 1)),
-          Pointee(MatchesResultSection(PickerSectionType::kLinks, 1))));
+  EXPECT_THAT(view.section_views_for_testing(),
+              ElementsAre(Pointee(MatchesResultSection(
+                              PickerSectionType::kLocalFiles, 1)),
+                          Pointee(MatchesTitlelessSection(1))));
 }
 
-TEST_F(PickerSearchResultsViewTest,
-       NoPseudoFocusedActionForEmptySearchResults) {
+TEST_F(PickerSearchResultsViewTest, GetsTopItem) {
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
-  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher);
-
-  EXPECT_FALSE(view.DoPseudoFocusedAction());
-}
-
-TEST_F(PickerSearchResultsViewTest, PseudoFocusedActionDefaultsToFirstResult) {
-  MockSearchResultsViewDelegate mock_delegate;
-  MockPickerAssetFetcher asset_fetcher;
-  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher);
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
 
   EXPECT_CALL(mock_delegate,
-              SelectSearchResult(PickerSearchResult::Emoji(u"😊")));
-  EXPECT_CALL(mock_delegate, NotifyPseudoFocusChanged(_));
+              SelectSearchResult(PickerSearchResult::Text(u"Result A")));
 
-  view.AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kExpressions,
-      {{PickerSearchResult::Emoji(u"😊"), PickerSearchResult::Symbol(u"♬")}},
-      /*has_more_results=*/false));
+  view.AppendSearchResults(
+      PickerSearchResultsSection(PickerSectionType::kClipboard,
+                                 {{PickerSearchResult::Text(u"Result A"),
+                                   PickerSearchResult::Text(u"Result B")}},
+                                 /*has_more_results=*/false));
 
-  EXPECT_TRUE(view.DoPseudoFocusedAction());
+  EXPECT_TRUE(DoPickerPseudoFocusedActionOnView(view.GetTopItem()));
 }
 
-TEST_F(PickerSearchResultsViewTest, MovesPseudoFocusRight) {
+TEST_F(PickerSearchResultsViewTest, GetsBottomItem) {
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
-  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher);
-  view.AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kExpressions,
-      {{PickerSearchResult::Emoji(u"😊"), PickerSearchResult::Symbol(u"♬")}},
-      /*has_more_results=*/false));
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
 
   EXPECT_CALL(mock_delegate,
-              SelectSearchResult(PickerSearchResult::Symbol(u"♬")));
-  EXPECT_CALL(mock_delegate, NotifyPseudoFocusChanged(_));
+              SelectSearchResult(PickerSearchResult::Text(u"Result B")));
 
-  EXPECT_TRUE(view.MovePseudoFocusRight());
-  EXPECT_TRUE(view.DoPseudoFocusedAction());
+  view.AppendSearchResults(
+      PickerSearchResultsSection(PickerSectionType::kClipboard,
+                                 {{PickerSearchResult::Text(u"Result A"),
+                                   PickerSearchResult::Text(u"Result B")}},
+                                 /*has_more_results=*/false));
+
+  EXPECT_TRUE(DoPickerPseudoFocusedActionOnView(view.GetBottomItem()));
 }
 
-TEST_F(PickerSearchResultsViewTest, MovesPseudoFocusDown) {
+TEST_F(PickerSearchResultsViewTest, GetsItemAbove) {
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
-  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher);
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
   view.AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kCategories,
-      {{PickerSearchResult::Category(PickerCategory::kExpressions),
+      PickerSectionType::kNone,
+      {{PickerSearchResult::Category(PickerCategory::kLinks),
+        PickerSearchResult::Category(PickerCategory::kClipboard)}},
+      /*has_more_results=*/false));
+
+  EXPECT_CALL(
+      mock_delegate,
+      SelectSearchResult(PickerSearchResult::Category(PickerCategory::kLinks)));
+
+  EXPECT_TRUE(DoPickerPseudoFocusedActionOnView(
+      view.GetItemAbove(view.GetBottomItem())));
+}
+
+TEST_F(PickerSearchResultsViewTest, GetsItemBelow) {
+  MockSearchResultsViewDelegate mock_delegate;
+  MockPickerAssetFetcher asset_fetcher;
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
+  view.AppendSearchResults(PickerSearchResultsSection(
+      PickerSectionType::kNone,
+      {{PickerSearchResult::Category(PickerCategory::kLinks),
         PickerSearchResult::Category(PickerCategory::kClipboard)}},
       /*has_more_results=*/false));
 
   EXPECT_CALL(mock_delegate, SelectSearchResult(PickerSearchResult::Category(
                                  PickerCategory::kClipboard)));
-  EXPECT_CALL(mock_delegate, NotifyPseudoFocusChanged(_));
 
-  EXPECT_TRUE(view.MovePseudoFocusDown());
-  EXPECT_TRUE(view.DoPseudoFocusedAction());
-}
-
-TEST_F(PickerSearchResultsViewTest, AdvancesPseudoFocusForward) {
-  std::unique_ptr<views::Widget> widget = CreateTestWidget();
-  widget->SetFullscreen(true);
-  MockSearchResultsViewDelegate mock_delegate;
-  MockPickerAssetFetcher asset_fetcher;
-  auto* view =
-      widget->SetContentsView(std::make_unique<PickerSearchResultsView>(
-          &mock_delegate, kPickerWidth, &asset_fetcher));
-  view->AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kCategories,
-      {{PickerSearchResult::Category(PickerCategory::kExpressions),
-        PickerSearchResult::Category(PickerCategory::kClipboard),
-        PickerSearchResult::Category(PickerCategory::kDriveFiles)}},
-      /*has_more_results=*/false));
-  ViewDrawnWaiter().Wait(view->section_list_view_for_testing()->GetTopItem());
-
-  EXPECT_CALL(mock_delegate, SelectSearchResult(PickerSearchResult::Category(
-                                 PickerCategory::kClipboard)));
-  EXPECT_CALL(mock_delegate, NotifyPseudoFocusChanged(_));
-
-  view->AdvancePseudoFocus(
-      PickerPseudoFocusHandler::PseudoFocusDirection::kForward);
-  ASSERT_TRUE(view->DoPseudoFocusedAction());
-}
-
-TEST_F(PickerSearchResultsViewTest, AdvancesPseudoFocusBackward) {
-  std::unique_ptr<views::Widget> widget = CreateTestWidget();
-  widget->SetFullscreen(true);
-  MockSearchResultsViewDelegate mock_delegate;
-  MockPickerAssetFetcher asset_fetcher;
-  auto* view =
-      widget->SetContentsView(std::make_unique<PickerSearchResultsView>(
-          &mock_delegate, kPickerWidth, &asset_fetcher));
-  view->AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kCategories,
-      {{PickerSearchResult::Category(PickerCategory::kExpressions),
-        PickerSearchResult::Category(PickerCategory::kClipboard),
-        PickerSearchResult::Category(PickerCategory::kDriveFiles)}},
-      /*has_more_results=*/false));
-  ViewDrawnWaiter().Wait(view->section_list_view_for_testing()->GetTopItem());
-
-  EXPECT_CALL(mock_delegate, SelectSearchResult(PickerSearchResult::Category(
-                                 PickerCategory::kExpressions)));
-  EXPECT_CALL(mock_delegate, NotifyPseudoFocusChanged(_)).Times(2);
-
-  view->AdvancePseudoFocus(
-      PickerPseudoFocusHandler::PseudoFocusDirection::kForward);
-  view->AdvancePseudoFocus(
-      PickerPseudoFocusHandler::PseudoFocusDirection::kBackward);
-  ASSERT_TRUE(view->DoPseudoFocusedAction());
+  EXPECT_TRUE(
+      DoPickerPseudoFocusedActionOnView(view.GetItemBelow(view.GetTopItem())));
 }
 
 TEST_F(PickerSearchResultsViewTest, ShowsSeeMoreLinkWhenThereAreMoreResults) {
-  std::unique_ptr<views::Widget> widget = CreateTestWidget();
+  std::unique_ptr<views::Widget> widget =
+      CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
+  PickerSubmenuController submenu_controller;
   auto* view =
       widget->SetContentsView(std::make_unique<PickerSearchResultsView>(
-          &mock_delegate, kPickerWidth, &asset_fetcher));
+          &mock_delegate, kPickerWidth, &asset_fetcher, &submenu_controller));
 
   view->AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kGifs, {}, /*has_more_results=*/true));
+      PickerSectionType::kLocalFiles, {}, /*has_more_results=*/true));
 
   ASSERT_THAT(
       view->section_views_for_testing(),
       ElementsAre(Pointee(Property(
           "title_trailing_link_for_testing",
-          &PickerSectionView::title_trailing_link_for_testing, NotNull()))));
+          &PickerSectionView::title_trailing_link_for_testing,
+          Property(&views::View::GetAccessibleName, u"Show all Files")))));
 }
 
 TEST_F(PickerSearchResultsViewTest,
        DoesNotShowSeeMoreLinkWhenThereAreNoMoreResults) {
-  std::unique_ptr<views::Widget> widget = CreateTestWidget();
+  std::unique_ptr<views::Widget> widget =
+      CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
+  PickerSubmenuController submenu_controller;
   auto* view =
       widget->SetContentsView(std::make_unique<PickerSearchResultsView>(
-          &mock_delegate, kPickerWidth, &asset_fetcher));
+          &mock_delegate, kPickerWidth, &asset_fetcher, &submenu_controller));
 
   view->AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kGifs, {}, /*has_more_results=*/false));
+      PickerSectionType::kLocalFiles, {}, /*has_more_results=*/false));
 
   ASSERT_THAT(
       view->section_views_for_testing(),
@@ -380,18 +350,20 @@ TEST_F(PickerSearchResultsViewTest,
 }
 
 TEST_F(PickerSearchResultsViewTest, ClickingSeeMoreLinkCallsCallback) {
-  std::unique_ptr<views::Widget> widget = CreateTestWidget();
+  std::unique_ptr<views::Widget> widget =
+      CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
   widget->SetFullscreen(true);
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
+  PickerSubmenuController submenu_controller;
   auto* view =
       widget->SetContentsView(std::make_unique<PickerSearchResultsView>(
-          &mock_delegate, kPickerWidth, &asset_fetcher));
+          &mock_delegate, kPickerWidth, &asset_fetcher, &submenu_controller));
   widget->Show();
   view->AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kGifs, {}, /*has_more_results=*/true));
+      PickerSectionType::kLocalFiles, {}, /*has_more_results=*/true));
 
-  EXPECT_CALL(mock_delegate, SelectMoreResults(PickerSectionType::kGifs));
+  EXPECT_CALL(mock_delegate, SelectMoreResults(PickerSectionType::kLocalFiles));
 
   views::View* trailing_link =
       view->section_views_for_testing()[0]->title_trailing_link_for_testing();
@@ -399,27 +371,156 @@ TEST_F(PickerSearchResultsViewTest, ClickingSeeMoreLinkCallsCallback) {
   LeftClickOn(*trailing_link);
 }
 
-TEST_F(PickerSearchResultsViewTest, ShowNoResultsFoundShowsView) {
+TEST_F(PickerSearchResultsViewTest,
+       SearchStoppedShowsNoResultsViewWithNoIllustration) {
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
-  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher);
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
 
-  view.ShowNoResultsFound();
+  EXPECT_TRUE(view.SearchStopped(/*illustration=*/{}, u"no results"));
 
   EXPECT_FALSE(view.section_list_view_for_testing()->GetVisible());
   EXPECT_TRUE(view.no_results_view_for_testing()->GetVisible());
+  EXPECT_FALSE(view.no_results_illustration_for_testing().GetVisible());
+  EXPECT_TRUE(view.no_results_label_for_testing().GetVisible());
+  EXPECT_EQ(view.no_results_label_for_testing().GetText(), u"no results");
+}
+
+TEST_F(PickerSearchResultsViewTest,
+       SearchStoppedShowsNoResultsViewWithIllustration) {
+  MockSearchResultsViewDelegate mock_delegate;
+  MockPickerAssetFetcher asset_fetcher;
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
+
+  EXPECT_TRUE(view.SearchStopped(
+      ui::ImageModel::FromImageSkia(gfx::test::CreateImageSkia(1)),
+      u"no results"));
+
+  EXPECT_FALSE(view.section_list_view_for_testing()->GetVisible());
+  EXPECT_TRUE(view.no_results_view_for_testing()->GetVisible());
+  EXPECT_TRUE(view.no_results_illustration_for_testing().GetVisible());
+  EXPECT_TRUE(view.no_results_label_for_testing().GetVisible());
+  EXPECT_EQ(view.no_results_label_for_testing().GetText(), u"no results");
+}
+
+TEST_F(PickerSearchResultsViewTest,
+       SearchStoppedShowsSectionListIfThereAreResults) {
+  MockSearchResultsViewDelegate mock_delegate;
+  MockPickerAssetFetcher asset_fetcher;
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
+
+  view.AppendSearchResults(PickerSearchResultsSection(
+      PickerSectionType::kLocalFiles, {}, /*has_more_results=*/true));
+  EXPECT_FALSE(view.SearchStopped({}, u""));
+
+  EXPECT_TRUE(view.section_list_view_for_testing()->GetVisible());
+  EXPECT_FALSE(view.no_results_view_for_testing()->GetVisible());
+}
+
+TEST_F(PickerSearchResultsViewTest, SearchStoppedHidesLoaderView) {
+  MockSearchResultsViewDelegate mock_delegate;
+  MockPickerAssetFetcher asset_fetcher;
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
+
+  view.ShowLoadingAnimation();
+  ASSERT_TRUE(view.SearchStopped({}, u""));
+
+  EXPECT_FALSE(view.skeleton_loader_view_for_testing().GetVisible());
 }
 
 TEST_F(PickerSearchResultsViewTest, ClearSearchResultsShowsSearchResults) {
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
-  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher);
-  view.ShowNoResultsFound();
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
+  ASSERT_TRUE(view.SearchStopped({}, u""));
 
   view.ClearSearchResults();
 
   EXPECT_TRUE(view.section_list_view_for_testing()->GetVisible());
   EXPECT_FALSE(view.no_results_view_for_testing()->GetVisible());
+}
+
+TEST_F(PickerSearchResultsViewTest, ShowLoadingShowsLoaderView) {
+  MockSearchResultsViewDelegate mock_delegate;
+  MockPickerAssetFetcher asset_fetcher;
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
+
+  view.ShowLoadingAnimation();
+
+  EXPECT_TRUE(view.skeleton_loader_view_for_testing().GetVisible());
+  EXPECT_FALSE(view.skeleton_loader_view_for_testing()
+                   .layer()
+                   ->GetAnimator()
+                   ->is_animating());
+}
+
+TEST_F(PickerSearchResultsViewTest, ShowLoadingAnimatesAfterDelay) {
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  MockSearchResultsViewDelegate mock_delegate;
+  MockPickerAssetFetcher asset_fetcher;
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
+
+  view.ShowLoadingAnimation();
+  task_environment()->FastForwardBy(
+      PickerSearchResultsView::kLoadingAnimationDelay);
+
+  EXPECT_TRUE(view.skeleton_loader_view_for_testing()
+                  .layer()
+                  ->GetAnimator()
+                  ->is_animating());
+}
+
+TEST_F(PickerSearchResultsViewTest, AppendResultsDuringLoadingStopsAnimation) {
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  MockSearchResultsViewDelegate mock_delegate;
+  MockPickerAssetFetcher asset_fetcher;
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
+  task_environment()->FastForwardBy(
+      PickerSearchResultsView::kLoadingAnimationDelay);
+
+  view.AppendSearchResults({PickerSearchResultsSection(
+      PickerSectionType::kLinks, {PickerSearchResult::Text(u"1")},
+      /*has_more_results=*/false)});
+
+  EXPECT_FALSE(view.skeleton_loader_view_for_testing().GetVisible());
+  EXPECT_FALSE(view.skeleton_loader_view_for_testing()
+                   .layer()
+                   ->GetAnimator()
+                   ->is_animating());
+}
+
+TEST_F(PickerSearchResultsViewTest, AppendResultsDuringLoadingAppendsResults) {
+  MockSearchResultsViewDelegate mock_delegate;
+  MockPickerAssetFetcher asset_fetcher;
+  PickerSubmenuController submenu_controller;
+  PickerSearchResultsView view(&mock_delegate, kPickerWidth, &asset_fetcher,
+                               &submenu_controller);
+  view.ShowLoadingAnimation();
+
+  view.AppendSearchResults({PickerSearchResultsSection(
+      PickerSectionType::kLinks, {PickerSearchResult::Text(u"1")},
+      /*has_more_results=*/false)});
+
+  EXPECT_FALSE(view.skeleton_loader_view_for_testing().GetVisible());
+  EXPECT_THAT(view.section_views_for_testing(), SizeIs(1));
 }
 
 struct PickerSearchResultTestCase {
@@ -436,16 +537,18 @@ class PickerSearchResultsViewResultSelectionTest
 
 TEST_P(PickerSearchResultsViewResultSelectionTest, LeftClickSelectsResult) {
   const PickerSearchResultTestCase& test_case = GetParam();
-  std::unique_ptr<views::Widget> widget = CreateTestWidget();
+  std::unique_ptr<views::Widget> widget =
+      CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
   widget->SetFullscreen(true);
   MockSearchResultsViewDelegate mock_delegate;
   MockPickerAssetFetcher asset_fetcher;
+  PickerSubmenuController submenu_controller;
   auto* view =
       widget->SetContentsView(std::make_unique<PickerSearchResultsView>(
-          &mock_delegate, kPickerWidth, &asset_fetcher));
+          &mock_delegate, kPickerWidth, &asset_fetcher, &submenu_controller));
   widget->Show();
   view->AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kExpressions, {{test_case.result}},
+      PickerSectionType::kClipboard, {{test_case.result}},
       /*has_more_results=*/false));
   ASSERT_THAT(view->section_views_for_testing(), Not(IsEmpty()));
   ASSERT_THAT(view->section_views_for_testing()[0]->item_views_for_testing(),
@@ -459,45 +562,17 @@ TEST_P(PickerSearchResultsViewResultSelectionTest, LeftClickSelectsResult) {
   LeftClickOn(*result_view);
 }
 
-TEST_P(PickerSearchResultsViewResultSelectionTest,
-       PseudoFocusedActionSelectsResult) {
-  const PickerSearchResultTestCase& test_case = GetParam();
-  std::unique_ptr<views::Widget> widget = CreateTestWidget();
-  widget->SetFullscreen(true);
-  MockSearchResultsViewDelegate mock_delegate;
-  MockPickerAssetFetcher asset_fetcher;
-  auto* view =
-      widget->SetContentsView(std::make_unique<PickerSearchResultsView>(
-          &mock_delegate, kPickerWidth, &asset_fetcher));
-  view->AppendSearchResults(PickerSearchResultsSection(
-      PickerSectionType::kExpressions, {{test_case.result}},
-      /*has_more_results=*/false));
-
-  EXPECT_CALL(mock_delegate, SelectSearchResult(test_case.result));
-
-  EXPECT_TRUE(view->DoPseudoFocusedAction());
-}
-
 INSTANTIATE_TEST_SUITE_P(
     All,
     PickerSearchResultsViewResultSelectionTest,
     testing::ValuesIn<PickerSearchResultTestCase>({
         {"Text", PickerSearchResult::Text(u"result")},
-        {"Emoji", PickerSearchResult::Emoji(u"😊")},
-        {"Symbol", PickerSearchResult::Symbol(u"♬")},
-        {"Emoticon", PickerSearchResult::Emoticon(u"¯\\_(ツ)_/¯")},
-        {"Gif", PickerSearchResult::Gif(/*preview_url=*/GURL(),
-                                        /*preview_image_url=*/GURL(),
-                                        gfx::Size(10, 10),
-                                        /*full_url=*/GURL(),
-                                        gfx::Size(20, 20),
-                                        u"cat gif")},
         {"Category",
          PickerSearchResult::Category(PickerCategory::kExpressions)},
         {"LocalFile",
          PickerSearchResult::LocalFile(u"local", base::FilePath())},
         {"DriveFile",
-         PickerSearchResult::DriveFile(u"drive", GURL(), /*icon=*/{})},
+         PickerSearchResult::DriveFile(u"drive", GURL(), base::FilePath())},
     }),
     [](const testing::TestParamInfo<
         PickerSearchResultsViewResultSelectionTest::ParamType>& info) {

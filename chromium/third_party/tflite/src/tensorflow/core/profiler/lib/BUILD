@@ -61,10 +61,7 @@ alias(
 cc_library(
     name = "profiler_factory",
     hdrs = ["profiler_factory.h"],
-    visibility = [
-        "//perftools/accelerators/xprof/xprofilez/tpu:__pkg__",
-        "//tensorflow/c/experimental/pluggable_profiler:__pkg__",
-    ],
+    visibility = ["//tensorflow/c/experimental/pluggable_profiler:__pkg__"],
     deps = [
         ":profiler_interface",
         "@com_google_absl//absl/base:core_headers",
@@ -252,10 +249,11 @@ tf_cc_test(
     name = "profiler_disabled_test",
     srcs = ["profiler_disabled_test.cc"],
     deps = [
-        ":profiler_lock",
         "//tensorflow/core:lib",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
+        "@com_google_absl//absl/status:statusor",
+        "@local_tsl//tsl/profiler/lib:profiler_lock",
     ],
 )
 

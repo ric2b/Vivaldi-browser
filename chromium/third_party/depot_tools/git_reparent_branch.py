@@ -13,12 +13,18 @@ from git_common import upstream, current_branch, run, tags, set_branch_config
 from git_common import get_or_create_merge_base, root, manual_merge_base
 from git_common import get_branch_tree, topo_iter
 
+import gclient_utils
 import git_rebase_update
 import metrics
 
 
 @metrics.collector.collect_metrics('git reparent-branch')
 def main(args):
+    if gclient_utils.IsEnvCog():
+        print(
+            'reparent-branch command is not supported in non-git environment.',
+            file=sys.stderr)
+        return 1
     root_ref = root()
 
     parser = argparse.ArgumentParser()

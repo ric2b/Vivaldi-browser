@@ -27,16 +27,18 @@ parser.set_defaults(defines=list())
 
 
 def split_ukernel_name(name):
-  match = re.match(r"xnn_(qs8|f16_f32acc|f32)_rdsum?(_(fp32|rndnu))?_ukernel_((\d+)p)?(\d+)x__(.+)_c(\d+)(_acc(\d+))?", name)
+  match = re.match(r"xnn_(qs8|f16_f32acc|f32)_rdsum?(_minmax)?(_(fp32|rndnu))?_ukernel_((\d+)p)?(\d+)x__(.+)_c(\d+)(_acc(\d+))?", name)
+
   if match is None:
-    raise ValueError("Unexpected microkernel name2: " + name)
+    raise ValueError("Unexpected microkernel name: " + name)
 
-  requantization_type = match.group(2)
-  primary_tile = int(match.group(5))
-  incremental_tile = int(match.group(6))
-  channel_tile = int(match.group(8))
+  requantization_type = match.group(4)
+  primary_tile = int(match.group(6))
+  incremental_tile = int(match.group(7))
+  channel_tile = int(match.group(9))
+  target_name = match.group(8)
 
-  arch, isa, assembly = xnncommon.parse_target_name(target_name=match.group(7))
+  arch, isa, assembly = xnncommon.parse_target_name(target_name=match.group(8))
   return requantization_type, primary_tile, incremental_tile, channel_tile, arch, isa
 
 
@@ -259,6 +261,17 @@ TEST(${TEST_NAME}, channels_gt_${CHANNEL_TILE}_multipass_fulltile_with_input_str
     }
   }
 }
+
+TEST(${TEST_NAME}, overflow_accumulator) {
+  $if ISA_CHECK:
+    ${ISA_CHECK};
+  for (size_t channels = 1; channels < ${CHANNEL_TILE * 2}; ++channels) {
+     RDSumMicrokernelTester()
+       .rows(${257 + INCREMENTAL_TILE})
+       .channels(channels)
+       .Test(${", ".join(TEST_ARGS)});
+  }
+}
 """
 
 
@@ -319,13 +332,12 @@ def main(args):
 //   Generator: {generator}
 
 
-#include <xnnpack/common.h>
-#include <xnnpack/reduce.h>
-#include <xnnpack/isa-checks.h>
-#include <xnnpack/microparams-init.h>
-
-#include "rdsum-microkernel-tester.h"
 #include <gtest/gtest.h>
+#include "xnnpack/common.h"
+#include "xnnpack/isa-checks.h"
+#include "xnnpack/microparams-init.h"
+#include "xnnpack/reduce.h"
+#include "rdsum-microkernel-tester.h"
 """.format(specification=options.spec, generator=sys.argv[0])
 
     for ukernel_spec in spec_yaml:

@@ -37,7 +37,6 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/printer.h"
-#include "xla/status.h"
 #include "tsl/platform/errors.h"
 #include "tsl/profiler/lib/nvtx_utils.h"
 #include "tsl/profiler/lib/scoped_annotation.h"
@@ -154,7 +153,7 @@ class SourceLocationVisitor : public ConstDfsHloVisitorWithDefault {
     return std::move(oss).str();
   }
 
-  Status DefaultAction(HloInstruction const* inst) final {
+  absl::Status DefaultAction(HloInstruction const* inst) final {
     OpMetadata const& meta = inst->metadata();
     // The full op_name is split across three places: the module-level
     // annotation shows the prefix that is common to the whole module, the
@@ -192,7 +191,7 @@ class SourceLocationVisitor : public ConstDfsHloVisitorWithDefault {
                                           op_name,
                                           meta.source_line()});
     }
-    return OkStatus();
+    return absl::OkStatus();
   }
 
   std::pair<StringHandle, int32_t> LongestSourceLocationPrefix() const {
@@ -528,7 +527,7 @@ ModuleAnnotations::ModuleAnnotations(const HloModule& mod) : top_level{mod} {
       // range based on the content of `inst`, including `called` etc.
       // FIXME: using try_emplace here was sensitive to
       // https://github.com/abseil/abseil-cpp/issues/388.
-      kernels.insert({inst->name(), {top_level, *inst}});
+      kernels.insert({inst->name(), KernelAnnotation{top_level, *inst}});
     }
   }
 }
@@ -549,19 +548,15 @@ ScopedModuleAnnotations::~ScopedModuleAnnotations() {
   std::exchange(current_annotations, restore_);
 }
 
-const ModuleAnnotations* GetCurrentModuleAnnotations() {
-  return current_annotations;
-}
-
 std::optional<ScopedAnnotation> GetKernelAnnotation(
-    const ModuleAnnotations* annotations, std::string_view profile_annotation) {
+    std::string_view profile_annotation) {
   if (profile_annotation.empty()) {
     return {};
   }
-  if (annotations) {
+  if (current_annotations) {
     // Have a set of pre-prepared thunk/kernel annotations to use
-    const auto iter = annotations->kernels.find(profile_annotation);
-    if (iter != annotations->kernels.end()) {
+    const auto iter = current_annotations->kernels.find(profile_annotation);
+    if (iter != current_annotations->kernels.end()) {
       // Have a pre-prepared annotation, use it
       return std::optional<ScopedAnnotation>{[&] { return iter->second; }};
     }

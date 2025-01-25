@@ -398,19 +398,16 @@ using vivaldi::kVivaldiUIScheme;
 
 + (NSString* _Nonnull)formattedURLStringForChromeScheme:
   (NSString* _Nonnull)urlText {
+  NSURLComponents* locationUrlComponents =
+      [NSURLComponents componentsWithString:urlText];
   NSString* chromeSchemeString =
       [NSString stringWithUTF8String:kChromeUIScheme];
   NSString* vivaldiSchemeString =
       [NSString stringWithUTF8String:kVivaldiUIScheme];
-  if ([urlText hasPrefix:chromeSchemeString]) {
-    NSRange range = NSMakeRange(0, chromeSchemeString.length);
-    return
-        [urlText stringByReplacingOccurrencesOfString:chromeSchemeString
-                                           withString:vivaldiSchemeString
-                                              options:0
-                                                range:range];
+  if ([[locationUrlComponents scheme] isEqualToString:chromeSchemeString]) {
+    [locationUrlComponents setScheme:vivaldiSchemeString];
+    return [[locationUrlComponents URL] absoluteString];
   }
-
   return urlText;
 }
 
@@ -431,4 +428,27 @@ using vivaldi::kVivaldiUIScheme;
 
   return isInternal;
 }
+
++ (NSAttributedString*)attributedStringWithText:(NSString*)text
+                                      highlight:(NSString*)highlight
+                                      textColor:(UIColor*)textColor
+                                 highlightColor:(UIColor*)highlightColor {
+  NSMutableAttributedString *attributedString =
+      [[NSMutableAttributedString alloc] initWithString:text];
+
+  // Apply the text color to the entire text
+  [attributedString addAttribute:NSForegroundColorAttributeName
+                           value:textColor
+                           range:NSMakeRange(0, text.length)];
+
+  // Apply the highlight color to the highlight part
+  NSRange highlightRange = [text rangeOfString:highlight];
+  if (highlightRange.location != NSNotFound) {
+    [attributedString addAttribute:NSForegroundColorAttributeName
+                             value:highlightColor
+                             range:highlightRange];
+  }
+  return attributedString;
+}
+
 @end

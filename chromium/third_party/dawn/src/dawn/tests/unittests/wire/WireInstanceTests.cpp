@@ -76,10 +76,10 @@ class WireInstanceTests : public WireInstanceTestBase {
   protected:
     // Overriden version of wgpuInstanceRequestAdapter that defers to the API call based on the
     // test callback mode.
-    void InstanceRequestAdapter(WGPUInstance i,
-                                WGPURequestAdapterOptions const* options,
+    void InstanceRequestAdapter(const wgpu::Instance& i,
+                                wgpu::RequestAdapterOptions const* options,
                                 void* userdata = nullptr) {
-        CallImpl(userdata, i, options);
+        CallImpl(userdata, i.Get(), reinterpret_cast<const WGPURequestAdapterOptions*>(options));
     }
 };
 
@@ -87,9 +87,9 @@ DAWN_INSTANTIATE_WIRE_FUTURE_TEST_P(WireInstanceTests);
 
 // Test that RequestAdapterOptions are passed from the client to the server.
 TEST_P(WireInstanceTests, RequestAdapterPassesOptions) {
-    for (WGPUPowerPreference powerPreference :
-         {WGPUPowerPreference_LowPower, WGPUPowerPreference_HighPerformance}) {
-        WGPURequestAdapterOptions options = {};
+    for (auto powerPreference :
+         {wgpu::PowerPreference::LowPower, wgpu::PowerPreference::HighPerformance}) {
+        wgpu::RequestAdapterOptions options = {};
         options.powerPreference = powerPreference;
 
         InstanceRequestAdapter(instance, &options, nullptr);
@@ -115,18 +115,18 @@ TEST_P(WireInstanceTests, RequestAdapterPassesOptions) {
 
 // Test that RequestAdapter forwards the adapter information to the client.
 TEST_P(WireInstanceTests, RequestAdapterSuccess) {
-    WGPURequestAdapterOptions options = {};
+    wgpu::RequestAdapterOptions options = {};
     InstanceRequestAdapter(instance, &options, nullptr);
 
-    WGPUAdapterProperties fakeProperties = {};
-    fakeProperties.vendorID = 0x134;
-    fakeProperties.vendorName = "fake-vendor";
-    fakeProperties.architecture = "fake-architecture";
-    fakeProperties.deviceID = 0x918;
-    fakeProperties.name = "fake adapter";
-    fakeProperties.driverDescription = "hello world";
-    fakeProperties.backendType = WGPUBackendType_D3D12;
-    fakeProperties.adapterType = WGPUAdapterType_IntegratedGPU;
+    WGPUAdapterInfo fakeInfo = {};
+    fakeInfo.vendor = "fake-vendor";
+    fakeInfo.architecture = "fake-architecture";
+    fakeInfo.device = "fake adapter";
+    fakeInfo.description = "hello world";
+    fakeInfo.backendType = WGPUBackendType_D3D12;
+    fakeInfo.adapterType = WGPUAdapterType_IntegratedGPU;
+    fakeInfo.vendorID = 0x134;
+    fakeInfo.deviceID = 0x918;
 
     WGPUSupportedLimits fakeLimits = {};
     fakeLimits.nextInChain = nullptr;
@@ -144,13 +144,16 @@ TEST_P(WireInstanceTests, RequestAdapterSuccess) {
         .WillOnce(InvokeWithoutArgs([&] {
             EXPECT_CALL(api, AdapterHasFeature(apiAdapter, _)).WillRepeatedly(Return(false));
 
-            EXPECT_CALL(api, AdapterGetProperties(apiAdapter, NotNull()))
-                .WillOnce(SetArgPointee<1>(fakeProperties));
+            EXPECT_CALL(api, AdapterGetInfo(apiAdapter, NotNull()))
+                .WillOnce(WithArg<1>(Invoke([&](WGPUAdapterInfo* info) {
+                    *info = fakeInfo;
+                    return WGPUStatus_Success;
+                })));
 
             EXPECT_CALL(api, AdapterGetLimits(apiAdapter, NotNull()))
                 .WillOnce(WithArg<1>(Invoke([&](WGPUSupportedLimits* limits) {
                     *limits = fakeLimits;
-                    return true;
+                    return WGPUStatus_Success;
                 })));
 
             EXPECT_CALL(api, AdapterEnumerateFeatures(apiAdapter, nullptr))
@@ -174,19 +177,30 @@ TEST_P(WireInstanceTests, RequestAdapterSuccess) {
     ExpectWireCallbacksWhen([&](auto& mockCb) {
         EXPECT_CALL(mockCb, Call(WGPURequestAdapterStatus_Success, NotNull(), nullptr, nullptr))
             .WillOnce(WithArg<1>(Invoke([&](WGPUAdapter adapter) {
+                WGPUAdapterInfo info = {};
+                wgpuAdapterGetInfo(adapter, &info);
+                EXPECT_STREQ(info.vendor, fakeInfo.vendor);
+                EXPECT_STREQ(info.architecture, fakeInfo.architecture);
+                EXPECT_STREQ(info.device, fakeInfo.device);
+                EXPECT_STREQ(info.description, fakeInfo.description);
+                EXPECT_EQ(info.backendType, fakeInfo.backendType);
+                EXPECT_EQ(info.adapterType, fakeInfo.adapterType);
+                EXPECT_EQ(info.vendorID, fakeInfo.vendorID);
+                EXPECT_EQ(info.deviceID, fakeInfo.deviceID);
+
                 WGPUAdapterProperties properties = {};
                 wgpuAdapterGetProperties(adapter, &properties);
-                EXPECT_EQ(properties.vendorID, fakeProperties.vendorID);
-                EXPECT_STREQ(properties.vendorName, fakeProperties.vendorName);
-                EXPECT_STREQ(properties.architecture, fakeProperties.architecture);
-                EXPECT_EQ(properties.deviceID, fakeProperties.deviceID);
-                EXPECT_STREQ(properties.name, fakeProperties.name);
-                EXPECT_STREQ(properties.driverDescription, fakeProperties.driverDescription);
-                EXPECT_EQ(properties.backendType, fakeProperties.backendType);
-                EXPECT_EQ(properties.adapterType, fakeProperties.adapterType);
+                EXPECT_EQ(properties.vendorID, fakeInfo.vendorID);
+                EXPECT_STREQ(properties.vendorName, fakeInfo.vendor);
+                EXPECT_STREQ(properties.architecture, fakeInfo.architecture);
+                EXPECT_EQ(properties.deviceID, fakeInfo.deviceID);
+                EXPECT_STREQ(properties.name, fakeInfo.device);
+                EXPECT_STREQ(properties.driverDescription, fakeInfo.description);
+                EXPECT_EQ(properties.backendType, fakeInfo.backendType);
+                EXPECT_EQ(properties.adapterType, fakeInfo.adapterType);
 
                 WGPUSupportedLimits limits = {};
-                EXPECT_TRUE(wgpuAdapterGetLimits(adapter, &limits));
+                EXPECT_EQ(wgpuAdapterGetLimits(adapter, &limits), WGPUStatus_Success);
                 EXPECT_EQ(limits.limits.maxTextureDimension1D,
                           fakeLimits.limits.maxTextureDimension1D);
                 EXPECT_EQ(limits.limits.maxVertexAttributes, fakeLimits.limits.maxVertexAttributes);
@@ -208,7 +222,7 @@ TEST_P(WireInstanceTests, RequestAdapterSuccess) {
 
 // Test that RequestAdapter forwards all chained properties to the client.
 TEST_P(WireInstanceTests, RequestAdapterPassesChainedProperties) {
-    WGPURequestAdapterOptions options = {};
+    wgpu::RequestAdapterOptions options = {};
     InstanceRequestAdapter(instance, &options, nullptr);
 
     WGPUMemoryHeapInfo fakeHeapInfo[3] = {
@@ -244,14 +258,14 @@ TEST_P(WireInstanceTests, RequestAdapterPassesChainedProperties) {
                 EXPECT_CALL(api, AdapterHasFeature(apiAdapter, feature)).WillOnce(Return(true));
             }
 
-            EXPECT_CALL(api, AdapterGetProperties(apiAdapter, NotNull()))
-                .WillOnce(WithArg<1>(Invoke([&](WGPUAdapterProperties* properties) {
-                    properties->vendorName = "fake-vendor";
-                    properties->architecture = "fake-architecture";
-                    properties->name = "fake adapter";
-                    properties->driverDescription = "hello world";
+            EXPECT_CALL(api, AdapterGetInfo(apiAdapter, NotNull()))
+                .WillOnce(WithArg<1>(Invoke([&](WGPUAdapterInfo* info) {
+                    info->vendor = "fake-vendor";
+                    info->architecture = "fake-architecture";
+                    info->device = "fake adapter";
+                    info->description = "hello world";
 
-                    WGPUChainedStructOut* chain = properties->nextInChain;
+                    WGPUChainedStructOut* chain = info->nextInChain;
                     while (chain != nullptr) {
                         auto* next = chain->next;
                         switch (chain->sType) {
@@ -268,7 +282,8 @@ TEST_P(WireInstanceTests, RequestAdapterPassesChainedProperties) {
                                     fakeVkProperties;
                                 break;
                             default:
-                                FAIL() << "Unexpected chain";
+                                ADD_FAILURE() << "Unexpected chain";
+                                return WGPUStatus_Error;
                         }
                         // update next pointer back to the original since it would be overwritten
                         // in the switch statement
@@ -276,12 +291,13 @@ TEST_P(WireInstanceTests, RequestAdapterPassesChainedProperties) {
 
                         chain = next;
                     }
+                    return WGPUStatus_Success;
                 })));
 
             EXPECT_CALL(api, AdapterGetLimits(apiAdapter, NotNull()))
                 .WillOnce(WithArg<1>(Invoke([&](WGPUSupportedLimits* limits) {
                     *limits = {};
-                    return true;
+                    return WGPUStatus_Success;
                 })));
 
             EXPECT_CALL(api, AdapterEnumerateFeatures(apiAdapter, nullptr))
@@ -350,7 +366,7 @@ TEST_P(WireInstanceTests, RequestAdapterPassesChainedProperties) {
 // Test that features returned by the implementation that aren't supported in the wire are not
 // exposed.
 TEST_P(WireInstanceTests, RequestAdapterWireLacksFeatureSupport) {
-    WGPURequestAdapterOptions options = {};
+    wgpu::RequestAdapterOptions options = {};
     InstanceRequestAdapter(instance, &options, nullptr);
 
     std::initializer_list<WGPUFeatureName> fakeFeatures = {
@@ -365,19 +381,19 @@ TEST_P(WireInstanceTests, RequestAdapterWireLacksFeatureSupport) {
         .WillOnce(InvokeWithoutArgs([&] {
             EXPECT_CALL(api, AdapterHasFeature(apiAdapter, _)).WillRepeatedly(Return(false));
 
-            EXPECT_CALL(api, AdapterGetProperties(apiAdapter, NotNull()))
-                .WillOnce(WithArg<1>(Invoke([&](WGPUAdapterProperties* properties) {
-                    *properties = {};
-                    properties->vendorName = "";
-                    properties->architecture = "";
-                    properties->name = "";
-                    properties->driverDescription = "";
+            EXPECT_CALL(api, AdapterGetInfo(apiAdapter, NotNull()))
+                .WillOnce(WithArg<1>(Invoke([&](WGPUAdapterInfo* info) {
+                    info->vendor = "fake-vendor";
+                    info->architecture = "fake-architecture";
+                    info->device = "fake adapter";
+                    info->description = "hello world";
+                    return WGPUStatus_Success;
                 })));
 
             EXPECT_CALL(api, AdapterGetLimits(apiAdapter, NotNull()))
                 .WillOnce(WithArg<1>(Invoke([&](WGPUSupportedLimits* limits) {
                     *limits = {};
-                    return true;
+                    return WGPUStatus_Success;
                 })));
 
             EXPECT_CALL(api, AdapterEnumerateFeatures(apiAdapter, nullptr))
@@ -413,7 +429,7 @@ TEST_P(WireInstanceTests, RequestAdapterWireLacksFeatureSupport) {
 
 // Test that RequestAdapter errors forward to the client.
 TEST_P(WireInstanceTests, RequestAdapterError) {
-    WGPURequestAdapterOptions options = {};
+    wgpu::RequestAdapterOptions options = {};
     InstanceRequestAdapter(instance, &options, nullptr);
 
     // Expect the server to receive the message. Then, mock an error.
@@ -442,21 +458,21 @@ TEST_P(WireInstanceTests, DISABLED_RequestAdapterInstanceDestroyedBeforeCallback
     // TODO(crbug.com/dawn/2061) This test does not currently pass because the callbacks aren't
     // actually triggered by the destruction of the instance at the moment. Once we move the
     // EventManager to be per-Instance, this test should pass.
-    WGPURequestAdapterOptions options = {};
+    wgpu::RequestAdapterOptions options = {};
     InstanceRequestAdapter(instance, &options, nullptr);
 
     ExpectWireCallbacksWhen([&](auto& mockCb) {
         EXPECT_CALL(mockCb, Call(WGPURequestAdapterStatus_Unknown, nullptr, NotNull(), nullptr))
             .Times(1);
 
-        wgpuInstanceRelease(instance);
+        instance = nullptr;
     });
 }
 
 // Test that RequestAdapter receives unknown status if the wire is disconnected
 // before the callback happens.
 TEST_P(WireInstanceTests, RequestAdapterWireDisconnectBeforeCallback) {
-    WGPURequestAdapterOptions options = {};
+    wgpu::RequestAdapterOptions options = {};
     InstanceRequestAdapter(instance, &options, nullptr);
 
     ExpectWireCallbacksWhen([&](auto& mockCb) {

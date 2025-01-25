@@ -5,9 +5,6 @@ update_template_instance("//base:base") {
   }
   sources += [
     "//vivaldi/base/vivaldi_running.cpp",
-    "//vivaldi/base/vivaldi_user_agent.cc",
-    "//vivaldi/base/vivaldi_user_agent.h",
-    "//vivaldi/base/vivaldi_user_agent_white_list.inc",
   ]
 }
 

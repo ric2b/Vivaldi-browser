@@ -10,17 +10,18 @@
 #include <assert.h>
 #include <stdint.h>
 
-#include <xnnpack/operator-type.h>
+#include "xnnpack/operator-type.h"
 
-static const uint16_t offset[159] = {
+static const uint16_t offset[166] = {
   0, 8, 22, 36, 50, 64, 78, 92, 119, 147, 175, 203, 230, 257, 289, 321, 364, 382, 400, 425, 451, 467, 483, 498, 513,
-  535, 558, 581, 604, 627, 650, 673, 696, 719, 737, 760, 783, 807, 825, 848, 872, 896, 920, 944, 979, 1014, 1038, 1062,
-  1086, 1100, 1115, 1130, 1156, 1182, 1219, 1245, 1271, 1303, 1335, 1361, 1388, 1415, 1432, 1449, 1483, 1517, 1531,
-  1545, 1559, 1575, 1591, 1617, 1643, 1675, 1707, 1744, 1781, 1818, 1855, 1881, 1913, 1939, 1973, 2007, 2041, 2075,
-  2109, 2143, 2173, 2203, 2223, 2243, 2264, 2285, 2306, 2327, 2351, 2375, 2398, 2421, 2439, 2457, 2472, 2487, 2505,
-  2523, 2542, 2561, 2580, 2599, 2616, 2633, 2649, 2665, 2698, 2731, 2759, 2787, 2815, 2843, 2870, 2897, 2914, 2931,
-  2972, 3013, 3031, 3049, 3067, 3085, 3100, 3116, 3132, 3150, 3168, 3186, 3212, 3239, 3266, 3283, 3300, 3322, 3344,
-  3373, 3402, 3421, 3440, 3459, 3478, 3493, 3508, 3523, 3538, 3557, 3577, 3597, 3617, 3638, 3659
+  535, 558, 581, 604, 627, 650, 673, 696, 719, 742, 760, 783, 806, 830, 848, 871, 895, 919, 943, 967, 1002, 1037, 1061,
+  1085, 1109, 1123, 1138, 1153, 1173, 1199, 1225, 1262, 1288, 1318, 1344, 1376, 1408, 1434, 1461, 1488, 1505, 1522,
+  1556, 1590, 1604, 1618, 1632, 1646, 1662, 1678, 1704, 1730, 1762, 1794, 1831, 1868, 1905, 1942, 1979, 2005, 2037,
+  2063, 2078, 2112, 2146, 2180, 2214, 2248, 2282, 2312, 2342, 2362, 2382, 2403, 2424, 2445, 2466, 2480, 2504, 2528,
+  2551, 2574, 2592, 2610, 2625, 2640, 2658, 2676, 2695, 2714, 2733, 2752, 2769, 2786, 2802, 2818, 2851, 2884, 2912,
+  2940, 2968, 2996, 3023, 3050, 3067, 3084, 3125, 3166, 3184, 3202, 3220, 3238, 3253, 3269, 3285, 3303, 3321, 3339,
+  3365, 3392, 3419, 3436, 3453, 3475, 3497, 3526, 3555, 3574, 3593, 3612, 3631, 3646, 3661, 3676, 3691, 3710, 3730,
+  3750, 3770, 3791, 3812
 };
 
 static const char data[] =
@@ -55,6 +56,7 @@ static const char data[] =
   "Convert (NC, F16, QD8)\0"
   "Convert (NC, F32, F16)\0"
   "Convert (NC, F32, QD8)\0"
+  "Convert (NC, F32, QP8)\0"
   "Convert (NC, F32, QS8)\0"
   "Convert (NC, F32, QU8)\0"
   "Convert (NC, QS8)\0"
@@ -75,10 +77,12 @@ static const char data[] =
   "Copy (NC, X8)\0"
   "Copy (NC, X16)\0"
   "Copy (NC, X32)\0"
+  "Copy Sign (NC, F32)\0"
   "Deconvolution (NHWC, F16)\0"
   "Deconvolution (NHWC, F32)\0"
   "Deconvolution (NHWC, QD8, F32, QC8W)\0"
   "Deconvolution (NHWC, QS8)\0"
+  "Deconvolution (NC, QS8, QC8W)\0"
   "Deconvolution (NHWC, QU8)\0"
   "Depth To Space (NCHW2NHWC, X16)\0"
   "Depth To Space (NCHW2NHWC, X32)\0"
@@ -92,6 +96,7 @@ static const char data[] =
   "ELU (NC, F16)\0"
   "ELU (NC, F32)\0"
   "ELU (NC, QS8)\0"
+  "Exp (NC, F32)\0"
   "Floor (NC, F16)\0"
   "Floor (NC, F32)\0"
   "Fully Connected (NC, F16)\0"
@@ -102,9 +107,11 @@ static const char data[] =
   "Fully Connected (NC, QD8, F16, QC4W)\0"
   "Fully Connected (NC, QD8, F32, QC4W)\0"
   "Fully Connected (NC, QD8, F32, QC8W)\0"
+  "Fully Connected (NC, QP8, F32, QC4W)\0"
   "Fully Connected (NC, QS8)\0"
   "Fully Connected (NC, QS8, QC8W)\0"
   "Fully Connected (NC, QU8)\0"
+  "GELU (NC, F32)\0"
   "Global Average Pooling (NCW, F16)\0"
   "Global Average Pooling (NCW, F32)\0"
   "Global Average Pooling (NWC, F16)\0"
@@ -119,6 +126,7 @@ static const char data[] =
   "Leaky ReLU (NC, F32)\0"
   "Leaky ReLU (NC, QS8)\0"
   "Leaky ReLU (NC, QU8)\0"
+  "Log (NC, F32)\0"
   "Max Pooling (NHWC, F16)\0"
   "Max Pooling (NHWC, F32)\0"
   "Max Pooling (NHWC, S8)\0"

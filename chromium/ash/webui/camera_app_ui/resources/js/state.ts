@@ -20,6 +20,7 @@ export enum State {
       'disable-video-resolution-filter-for-testing',
   DOC_MODE_REVIEWING = 'doc-mode-reviewing',
   ENABLE_GIF_RECORDING = 'enable-gif-recording',
+  ENABLE_PREVIEW_OCR = 'enable-preview-ocr',
   ENABLE_PTZ = 'enable-ptz',
   ENABLE_SCAN_BARCODE = 'enable-scan-barcode',
   ENABLE_SCAN_DOCUMENT = 'enable-scan-document',
@@ -65,6 +66,7 @@ export enum State {
   TIMER = 'timer',
   TIMER_10SEC = 'timer-10s',
   TIMER_3SEC = 'timer-3s',
+  TIMER_TICK = 'timer-tick',
   USE_FAKE_CAMERA = 'use-fake-camera',
 }
 

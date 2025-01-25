@@ -10,51 +10,18 @@
 
 #include "osp/impl/quic/open_screen_server_session.h"
 #include "osp/impl/quic/quic_alarm_factory_impl.h"
+#include "osp/impl/quic/quic_constants.h"
 #include "osp/impl/quic/quic_dispatcher_impl.h"
 #include "osp/impl/quic/quic_packet_writer_impl.h"
+#include "osp/impl/quic/quic_server.h"
 #include "osp/impl/quic/quic_utils.h"
 #include "osp/impl/quic/quic_version_manager.h"
-#include "quiche/quic/core/crypto/proof_source_x509.h"
 #include "quiche/quic/core/quic_default_connection_helper.h"
-#include "util/crypto/pem_helpers.h"
 #include "util/osp_logging.h"
-#include "util/read_file.h"
 #include "util/std_util.h"
 #include "util/trace_logging.h"
 
 namespace openscreen::osp {
-
-namespace {
-
-constexpr char kSourceAddressTokenSecret[] = "secret";
-constexpr size_t kMaxConnectionsToCreate = 256;
-constexpr char kCertificatesPath[] =
-    "osp/impl/quic/certificates/openscreen.pem";
-constexpr char kPrivateKeyPath[] = "osp/impl/quic/certificates/openscreen.key";
-constexpr char kFingerPrint[] =
-    "50:87:8D:CA:1B:9B:67:76:CB:87:88:1C:43:20:82:7A:91:F5:9B:74:4D:85:95:D0:"
-    "76:E6:0B:50:7F:D3:29:D9";
-
-// TODO(issuetracker.google.com/300236996): Replace with OSP certificate
-// generation.
-std::unique_ptr<quic::ProofSource> CreateProofSource() {
-  std::vector<std::string> certificates =
-      ReadCertificatesFromPemFile(kCertificatesPath);
-  OSP_CHECK_EQ(certificates.size(), 1u)
-      << "Failed to parse the certificates file.";
-  auto chain = quiche::QuicheReferenceCountedPointer<quic::ProofSource::Chain>(
-      new quic::ProofSource::Chain(std::move(certificates)));
-  OSP_CHECK(chain) << "Failed to create the quic::ProofSource::Chain.";
-
-  const std::string key_raw = ReadEntireFileToString(kPrivateKeyPath);
-  std::unique_ptr<quic::CertificatePrivateKey> key =
-      quic::CertificatePrivateKey::LoadFromDer(key_raw);
-  OSP_CHECK(key) << "Failed to parse the key file.";
-
-  return quic::ProofSourceX509::Create(std::move(chain), std::move(*key));
-}
-
-}  // namespace
 
 QuicConnectionFactoryServer::QuicConnectionFactoryServer(
     TaskRunner& task_runner)
@@ -72,7 +39,8 @@ void QuicConnectionFactoryServer::SetServerDelegate(
 
   crypto_server_config_ = std::make_unique<quic::QuicCryptoServerConfig>(
       kSourceAddressTokenSecret, quic::QuicRandom::GetInstance(),
-      CreateProofSource(), quic::KeyExchangeSource::Default());
+      QuicServer::GetAgentCertificate().CreateProofSource(),
+      quic::KeyExchangeSource::Default());
 
   for (const auto& endpoint : endpoints) {
     // TODO(mfoltz): Need to notify the caller and/or ServerDelegate if socket
@@ -152,7 +120,11 @@ void QuicConnectionFactoryServer::OnConnectionClosed(
       [connection](const decltype(connections_)::value_type& entry) {
         return entry.second.connection == connection;
       });
-  OSP_CHECK(entry != connections_.end());
+
+  if (entry == connections_.end()) {
+    return;
+  }
+
   UdpSocket* const socket = entry->second.socket;
   connections_.erase(entry);
 
@@ -171,12 +143,6 @@ void QuicConnectionFactoryServer::OnConnectionClosed(
     OSP_CHECK(socket_it != dispatchers_.end());
     dispatchers_.erase(socket_it);
   }
-}
-
-// TODO(issuetracker.google.com/300236996): Replace with OSP certificate
-// generation.
-std::string QuicConnectionFactoryServer::GetFingerprint() {
-  return kFingerPrint;
 }
 
 }  // namespace openscreen::osp

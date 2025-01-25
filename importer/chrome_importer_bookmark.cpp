@@ -73,7 +73,7 @@ void ChromeBookmarkReader::LoadFile(const base::FilePath& file) {
     return;
 
   auto decode_named_folder = [&](const base::Value::Dict& parent,
-                                 base::StringPiece folder_name) -> void {
+                                 std::string_view folder_name) -> void {
     if (const base::Value::Dict* dict = parent.FindDict(folder_name)) {
       DecodeNode(*dict);
     }

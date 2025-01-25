@@ -4,14 +4,10 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fpdfapi/font/cpdf_type1font.h"
 
 #include <algorithm>
+#include <array>
 #include <iterator>
 #include <utility>
 
@@ -154,7 +150,7 @@ void CPDF_Type1Font::LoadGlyphMap() {
     if (UseTTCharmapMSSymbol(face)) {
       bool bGotOne = false;
       for (uint32_t charcode = 0; charcode < kInternalTableSize; charcode++) {
-        const uint8_t prefix[4] = {0x00, 0xf0, 0xf1, 0xf2};
+        constexpr std::array<uint8_t, 4> prefix = {{0x00, 0xf0, 0xf1, 0xf2}};
         for (int j = 0; j < 4; j++) {
           uint16_t unicode = prefix[j] * 256 + charcode;
           m_GlyphIndex[charcode] = face->GetCharIndex(unicode);

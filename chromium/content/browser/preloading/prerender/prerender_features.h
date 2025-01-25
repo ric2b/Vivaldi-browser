@@ -19,7 +19,19 @@ CONTENT_EXPORT BASE_DECLARE_FEATURE(kPrerender2EmbedderBlockedHosts);
 CONTENT_EXPORT extern const base::FeatureParam<std::string>
     kPrerender2EmbedderBlockedHostsParam;
 
-CONTENT_EXPORT BASE_DECLARE_FEATURE(kPrerender2NoVarySearch);
+CONTENT_EXPORT BASE_DECLARE_FEATURE(kPrerender2FallbackPrefetchSpecRules);
+
+// A field trial param that controls the timeout for waiting on headers
+// during navigation for the prerender URL matched by No-Vary-Search hint before
+// falling back to the default navigation path.
+CONTENT_EXPORT extern const base::FeatureParam<int>
+    kPrerender2NoVarySearchWaitForHeadersTimeoutEagerPrerender;
+CONTENT_EXPORT extern const base::FeatureParam<int>
+    kPrerender2NoVarySearchWaitForHeadersTimeoutModeratePrerender;
+CONTENT_EXPORT extern const base::FeatureParam<int>
+    kPrerender2NoVarySearchWaitForHeadersTimeoutConservativePrerender;
+CONTENT_EXPORT extern const base::FeatureParam<int>
+    kPrerender2NoVarySearchWaitForHeadersTimeoutForEmbedders;
 
 }  // namespace features
 

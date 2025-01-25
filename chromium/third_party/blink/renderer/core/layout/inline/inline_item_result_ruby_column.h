@@ -15,6 +15,8 @@ struct InlineItemResultRubyColumn
   void Trace(Visitor* visitor) const {
     visitor->Trace(base_line);
     visitor->Trace(annotation_line_list);
+    visitor->Trace(start_ruby_break_token);
+    visitor->Trace(end_ruby_break_token);
   }
 
   // A LineInfo for the base level.
@@ -31,6 +33,15 @@ struct InlineItemResultRubyColumn
   // breaking, and this InlineItemResult represents the second or later
   // segment.
   bool is_continuation = false;
+
+  // Break tokens at the start and the end of this ruby column.
+  // They are used only in LineBreaker to help rewinding.
+  Member<const RubyBreakTokenData> start_ruby_break_token;
+  Member<RubyBreakTokenData> end_ruby_break_token;
+
+  // Spacing amount on the right of the last glyph. This is set on justify
+  // a line, and consumed on applying ruby-align to an annotation.
+  LayoutUnit last_base_glyph_spacing;
 };
 
 }  // namespace blink

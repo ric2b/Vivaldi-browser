@@ -21,7 +21,6 @@
 using drmModeModeInfo = struct _drmModeModeInfo;
 
 namespace display {
-class GammaCurve;
 struct ColorCalibration;
 struct ColorTemperatureAdjustment;
 struct GammaAdjustment;
@@ -77,12 +76,7 @@ class DrmGpuDisplayManager {
                            const display::ColorCalibration& calibration);
   void SetGammaAdjustment(int64_t display_id,
                           const display::GammaAdjustment& adjustment);
-  void SetColorMatrix(int64_t display_id,
-                      const std::vector<float>& color_matrix);
   void SetBackgroundColor(int64_t display_id, const uint64_t background_color);
-  void SetGammaCorrection(int64_t display_id,
-                          const display::GammaCurve& degamma,
-                          const display::GammaCurve& gamma);
   bool SetPrivacyScreen(int64_t display_id, bool enabled);
   std::optional<std::vector<float>> GetSeamlessRefreshRates(
       int64_t display_id) const;
@@ -115,6 +109,17 @@ class DrmGpuDisplayManager {
   // successful test configuration before the commit modeset call.
   std::vector<ControllerConfigParams> GetLatestModesetTestConfig(
       const std::vector<display::DisplayConfigurationParams>& config_requests);
+
+  // Finds a mode that matches the size and timing specified by |request_mode|
+  // and returns an owned copy. Prioritizes choosing modes natively belonging to
+  // |display|, and attempts panel-fitting from |all_displays| if needed. If
+  // |is_seamless| is true, performs additional verification that the returned
+  // mode can be configured seamlessly. Returns nullptr if no matching mode was
+  // found.
+  std::unique_ptr<drmModeModeInfo> FindModeForDisplay(
+      const display::DisplayMode& request_mode,
+      const DrmDisplay& display,
+      bool is_seamless);
 
   const raw_ptr<ScreenManager> screen_manager_;         // Not owned.
   const raw_ptr<DrmDeviceManager> drm_device_manager_;  // Not owned.

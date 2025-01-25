@@ -7,8 +7,11 @@
 #include <algorithm>
 
 #include "ash/birch/birch_item.h"
+#include "ash/constants/ash_switches.h"
 #include "base/check.h"
+#include "base/command_line.h"
 #include "base/time/time.h"
+#include "base/types/cxx23_to_underlying.h"
 
 namespace {
 // How long release notes remain top ranked.
@@ -25,9 +28,15 @@ BirchRanker::~BirchRanker() = default;
 void BirchRanker::RankCalendarItems(std::vector<BirchCalendarItem>* items) {
   CHECK(items);
   // Sort the events by start time so that we can search forward in the vector
-  // to find upcoming events.
+  // to find upcoming events. Events with the same start time will be ranked
+  // according so the response status, with the `kAccepted` response being the
+  // highest priority.
   std::sort(items->begin(), items->end(),
             [](const BirchCalendarItem& a, const BirchCalendarItem& b) {
+              if (a.start_time() == b.start_time()) {
+                return base::to_underlying(a.response_status()) <
+                       base::to_underlying(b.response_status());
+              }
               return a.start_time() < b.start_time();
             });
 
@@ -37,7 +46,20 @@ void BirchRanker::RankCalendarItems(std::vector<BirchCalendarItem>* items) {
   bool found_tomorrow_event = false;
 
   for (BirchCalendarItem& item : *items) {
-    // Ongoing events have priority in the morning.
+    // Declined events should not be ranked.
+    if (item.response_status() ==
+        BirchCalendarItem::ResponseStatus::kDeclined) {
+      continue;
+    }
+
+    // All-day events have low priority. We only show all-day events from today
+    // (e.g. ongoing all-day events).
+    if (item.all_day_event() && IsOngoingEvent(item)) {
+      item.set_ranking(39.f);
+      continue;
+    }
+
+    // Non-all-day ongoing events have priority in the morning.
     if (is_morning && IsOngoingEvent(item)) {
       item.set_ranking(6.f);
       continue;
@@ -50,23 +72,23 @@ void BirchRanker::RankCalendarItems(std::vector<BirchCalendarItem>* items) {
       continue;
     }
 
-    // Ongoing events have medium priority all day.
+    // Non-all-day ongoing events have medium priority all day.
     if (IsOngoingEvent(item)) {
-      item.set_ranking(9.f);
+      item.set_ranking(12.f);
       continue;
     }
 
     // Events starting in the next 30 minutes has medium priority all day.
     if (now_ <= item.start_time() &&
         item.start_time() < now_ + base::Minutes(30)) {
-      item.set_ranking(12.f);
+      item.set_ranking(15.f);
       continue;
     }
 
     // In the evening, the first event from tomorrow has low priority.
     if (is_evening && IsTomorrowEvent(item) && !found_tomorrow_event) {
       found_tomorrow_event = true;
-      item.set_ranking(25.f);
+      item.set_ranking(28.f);
       continue;
     }
   }
@@ -88,7 +110,7 @@ void BirchRanker::RankAttachmentItems(std::vector<BirchAttachmentItem>* items) {
     // medium priority the rest of the day.
     const bool is_ongoing = item.start_time() <= now_ && now_ < item.end_time();
     if (is_ongoing) {
-      item.set_ranking(is_morning ? 7.f : 10.f);
+      item.set_ranking(is_morning ? 7.f : 13.f);
       continue;
     }
 
@@ -96,7 +118,7 @@ void BirchRanker::RankAttachmentItems(std::vector<BirchAttachmentItem>* items) {
     // priority.
     if (now_ <= item.start_time() &&
         item.start_time() < now_ + base::Minutes(30)) {
-      item.set_ranking(13.f);
+      item.set_ranking(16.f);
       continue;
     }
   }
@@ -116,17 +138,17 @@ void BirchRanker::RankFileSuggestItems(std::vector<BirchFileItem>* items) {
   for (BirchFileItem& item : *items) {
     // Items modified/shared recently have high priority.
     if (now_ - base::Hours(1) < item.timestamp()) {
-      item.set_ranking(19.f);
+      item.set_ranking(22.f);
       continue;
     }
     // Items modified/shared today have medium priority.
     if (now_ - base::Days(1) < item.timestamp()) {
-      item.set_ranking(32.f);
+      item.set_ranking(35.f);
       continue;
     }
     // Items modified/shared this week have low priority.
     if (now_ - base::Days(7) < item.timestamp()) {
-      item.set_ranking(40.f);
+      item.set_ranking(43.f);
       continue;
     }
   }
@@ -147,30 +169,81 @@ void BirchRanker::RankRecentTabItems(std::vector<BirchTabItem>* items) {
         item.form_factor() == BirchTabItem::DeviceFormFactor::kTablet;
     // Very recent mobile items have high priority.
     if (is_mobile && now_ - base::Minutes(5) < item.timestamp()) {
-      item.set_ranking(14.f);
+      item.set_ranking(17.f);
       continue;
     }
     const bool is_desktop =
         item.form_factor() == BirchTabItem::DeviceFormFactor::kDesktop;
     // Desktop items from the last hour have medium priority.
     if (is_desktop && now_ - base::Hours(1) < item.timestamp()) {
-      item.set_ranking(17.f);
+      item.set_ranking(20.f);
       continue;
     }
     // Desktop items from the last day have low priority.
     if (is_desktop && now_ - base::Days(1) < item.timestamp()) {
-      item.set_ranking(30.f);
+      item.set_ranking(33.f);
       continue;
     }
   }
 }
 
+void BirchRanker::RankLastActiveItems(std::vector<BirchLastActiveItem>* items) {
+  CHECK(items);
+
+  for (BirchLastActiveItem& item : *items) {
+    if (IsMorning()) {
+      item.set_ranking(8.f);
+    }
+  }
+}
+
+void BirchRanker::RankMostVisitedItems(
+    std::vector<BirchMostVisitedItem>* items) {
+  CHECK(items);
+
+  for (BirchMostVisitedItem& item : *items) {
+    if (IsMorning()) {
+      item.set_ranking(9.f);
+      continue;
+    }
+  }
+}
+
+void BirchRanker::RankSelfShareItems(std::vector<BirchSelfShareItem>* items) {
+  CHECK(items);
+
+  // Sort the self share items by their shared time, descending.
+  std::sort(items->begin(), items->end(),
+            [](const BirchSelfShareItem& a, const BirchSelfShareItem& b) {
+              return b.shared_time() < a.shared_time();
+            });
+
+  for (BirchSelfShareItem& item : *items) {
+    if (now_ - base::Hours(1) < item.shared_time()) {
+      item.set_ranking(14.f);
+      continue;
+    }
+    if (now_ - base::Days(1) < item.shared_time()) {
+      item.set_ranking(30.f);
+      continue;
+    }
+    if (now_ - base::Days(2) < item.shared_time()) {
+      item.set_ranking(40.f);
+      continue;
+    }
+  }
+}
+
+void BirchRanker::RankLostMediaItems(std::vector<BirchLostMediaItem>* items) {
+  CHECK(items);
+  for (BirchLostMediaItem& item : *items) {
+    item.set_ranking(11.0f);
+  }
+}
+
 void BirchRanker::RankWeatherItems(std::vector<BirchWeatherItem>* items) {
-  // TODO(jamescook): Limit weather to `IsMorning()`. For now show it at a much
-  // lower priority during non-morning hours as this helps with debugging and
-  // dogfooding.
-  if (!items->empty()) {
-    (*items)[0].set_ranking(IsMorning() ? 5.f : 36.f);
+  if (!items->empty() && IsMorning()) {
+    (*items)[0].set_ranking(5.f);
   }
 
   // TODO(b/305094126): Figure out how to query the next day's weather and show
@@ -191,15 +264,22 @@ float BirchRanker::GetReleaseNotesItemRanking(
     return 3.0f;
   }
   if (elapsed_time <= base::Hours(1)) {
-    return 13.0f;
+    return 18.0f;
   }
   if (elapsed_time <= base::Hours(24)) {
-    return 26.0f;
+    return 31.0f;
   }
-  return 42.0f;
+  return 47.0f;
 }
 
 bool BirchRanker::IsMorning() const {
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kBirchIsMorning)) {
+    return true;
+  }
+  if (command_line->HasSwitch(switches::kBirchIsEvening)) {
+    return false;
+  }
   base::Time last_midnight = now_.LocalMidnight();
   base::Time five_am_today = last_midnight + base::Hours(5);
   base::Time noon_today = last_midnight + base::Hours(12);
@@ -207,6 +287,13 @@ bool BirchRanker::IsMorning() const {
 }
 
 bool BirchRanker::IsEvening() const {
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kBirchIsEvening)) {
+    return true;
+  }
+  if (command_line->HasSwitch(switches::kBirchIsMorning)) {
+    return false;
+  }
   base::Time last_midnight = now_.LocalMidnight();
   base::Time five_pm_today = last_midnight + base::Hours(17);
   return five_pm_today <= now_;

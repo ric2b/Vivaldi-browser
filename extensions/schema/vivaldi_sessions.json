@@ -91,6 +91,10 @@
             "type": "string",
             "description": "Active page title. Can be empty."
           },
+          "fixedName": {
+            "type": "string",
+            "description": "Name provided by user. Overrides 'name'. Has not been set if string is empty."
+          },
           "url": {
             "type": "string",
             "description": "Url of active entry in navigation list."
@@ -107,9 +111,9 @@
             "type": "string",
             "description": "The group (stack) the tab belongs to. Can be empty which means no group."
           },
-          "groupName": {
+          "fixedGroupName": {
             "type": "string",
-            "description": "Name shown in UI. Only set for tabs in a stack. Can be empty even then."
+            "description": "Name provided by user. Has not been set if string is empty."
           }
         }
       },

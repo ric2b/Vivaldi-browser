@@ -25,6 +25,7 @@
 #include "device/fido/enclave/enclave_protocol_utils.h"
 #include "device/fido/enclave/enclave_websocket_client.h"
 #include "device/fido/fido_authenticator.h"
+#include "device/fido/fido_constants.h"
 #include "device/fido/fido_types.h"
 #include "device/fido/network_context_factory.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -97,12 +98,13 @@ class COMPONENT_EXPORT(DEVICE_FIDO) EnclaveAuthenticator
       base::span<const uint8_t> uv_public_key);
   void ProcessMakeCredentialResponse(std::optional<cbor::Value> response);
   void ProcessGetAssertionResponse(std::optional<cbor::Value> response);
-  void CompleteRequestWithError(CtapDeviceResponseCode error);
+  void CompleteRequestWithError(
+      absl::variant<GetAssertionStatus, MakeCredentialStatus> error);
   void CompleteMakeCredentialRequest(
-      CtapDeviceResponseCode status,
+      MakeCredentialStatus status,
       std::optional<AuthenticatorMakeCredentialResponse> response);
   void CompleteGetAssertionRequest(
-      CtapDeviceResponseCode status,
+      GetAssertionStatus status,
       std::vector<AuthenticatorGetAssertionResponse> responses);
   void ProcessErrorResponse(const ErrorResponse& error);
 

@@ -16,92 +16,107 @@
 
 extern crate std;
 use super::*;
+use crate::extended::serialize::section::header::SectionHeader;
 use crate::extended::serialize::section_tests::{fill_section_builder, DummyDataElement};
-use np_hkdf::v1_salt::DataElementOffset;
+use crate::extended::V1_ENCODING_UNENCRYPTED;
+use crypto_provider_default::CryptoProviderImpl;
 use std::{prelude::rust_2021::*, vec};
 
 #[test]
-fn adv_encode_no_salt() {
+fn adv_encode_unencrypted() {
     let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
 
     let mut public_identity_section_builder =
-        adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
+        adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
     public_identity_section_builder
         .add_de(|_| DummyDataElement { de_type: 30_u32.into(), data: vec![] })
         .unwrap();
 
-    public_identity_section_builder.add_to_advertisement();
+    public_identity_section_builder.add_to_advertisement::<CryptoProviderImpl>();
 
     assert_eq!(
         &[
-            0x20, // adv header
-            0x3,  // section header
-            0x3,  // public identity
-            0x80, 30, // de header
+            0x20, // NP version header
+            V1_ENCODING_UNENCRYPTED,
+            0x02, // section len
+            0x80, // de header, 0 length
+            30,
         ],
         adv_builder.into_advertisement().as_slice()
     )
 }
 
 #[test]
-fn adding_any_allowed_section_length_always_works_for_single_section() {
-    // up to section len - 1 to leave room for section header
-    for section_contents_len in 0..NP_ADV_MAX_SECTION_LEN - 1 {
+fn adding_any_ble5_allowed_section_length_always_works_for_single_section() {
+    // up to section len - 2 to leave room for NP version header, section length,
+    // and header
+    for section_contents_len in 0..=BLE_5_ADV_SVC_MAX_CONTENT_LEN - 3 {
         let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
-        let mut section_builder =
-            adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
-        fill_section_builder(section_contents_len, &mut section_builder);
+        let mut section_builder = adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
+        fill_section_builder(section_contents_len, &mut section_builder).unwrap();
 
-        section_builder.add_to_advertisement();
+        section_builder.add_to_advertisement::<CryptoProviderImpl>();
 
         let adv = adv_builder.into_advertisement();
         assert_eq!(
-            section_contents_len + 1 + 1 + 1, // adv and section headers and identity
+            section_contents_len + 1 + 1 + 1, // NP version header, section length, section header
             adv.as_slice().len(),
             "adv: {:?}\nsection contents len: {}",
             adv.as_slice(),
             section_contents_len
         );
     }
+
+    // one longer won't fit, though
+    let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
+    let mut section_builder = adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
+    assert_eq!(
+        AddDataElementError::InsufficientSectionSpace,
+        fill_section_builder(BLE_5_ADV_SVC_MAX_CONTENT_LEN - 2, &mut section_builder).unwrap_err()
+    );
 }
 
 #[test]
-fn building_capacity_0_section_works() {
+fn building_capacity_0_ble5_section_works() {
     let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
 
-    let mut section_builder = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
+    let mut section_builder = adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
 
-    // leave room for section header and the public identity
-    fill_section_builder(NP_ADV_MAX_SECTION_LEN - 2, &mut section_builder);
+    // leave room for NP version header, section length and header
+    fill_section_builder(BLE_5_ADV_SVC_MAX_CONTENT_LEN - 3, &mut section_builder).unwrap();
 
-    assert_eq!(NP_ADV_MAX_SECTION_LEN, section_builder.section.capacity);
-    assert_eq!(NP_ADV_MAX_SECTION_LEN, section_builder.section.len());
+    // this section can fill everything except the NP version header
+    assert_eq!(BLE_5_ADV_SVC_MAX_CONTENT_LEN - 1, section_builder.section.capacity);
+    assert_eq!(BLE_5_ADV_SVC_MAX_CONTENT_LEN - 1, section_builder.section.len());
 
-    section_builder.add_to_advertisement();
+    section_builder.add_to_advertisement::<CryptoProviderImpl>();
 
-    assert_eq!(BLE_ADV_SVC_CONTENT_LEN, adv_builder.into_advertisement().as_slice().len());
+    assert_eq!(BLE_5_ADV_SVC_MAX_CONTENT_LEN, adv_builder.into_advertisement().as_slice().len());
 }
+
+// TODO tests for other encoding types interacting with maximum possible section len
 
 /// A placeholder identity with a huge prefix
 #[derive(Default, PartialEq, Eq, Debug)]
 struct EnormousIdentity {}
 
 impl SectionEncoder for EnormousIdentity {
-    const PREFIX_LEN: usize = 200;
     const SUFFIX_LEN: usize = 0;
-    const INITIAL_DE_OFFSET: DataElementOffset = DataElementOffset::ZERO;
     const ADVERTISEMENT_TYPE: AdvertisementType = AdvertisementType::Plaintext;
+    type DerivedSalt = ();
 
-    fn postprocess(
+    fn header(&self) -> SectionHeader {
+        unimplemented!("Should never be hit")
+    }
+    fn postprocess<C: CryptoProvider>(
         &mut self,
-        _adv_header_byte: u8,
-        _section_header: u8,
-        _section_contents: &mut [u8],
+        _section_header_without_length: &mut [u8],
+        _section_len: u8,
+        _remaining_content_bytes: &mut [u8],
     ) {
         panic!("should never be called, just used for its huge prefix")
     }
 
-    type DerivedSalt = ();
     fn de_salt(&self, _de_offset: DataElementOffset) -> Self::DerivedSalt {
         panic!("should never be called, just used for its huge prefix")
     }

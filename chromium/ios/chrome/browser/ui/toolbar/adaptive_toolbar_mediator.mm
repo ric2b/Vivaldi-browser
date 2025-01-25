@@ -17,6 +17,7 @@
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/search_engines/model/search_engines_util.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
+#import "ios/chrome/browser/shared/model/url/url_util.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -49,6 +50,7 @@
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
@@ -446,8 +448,16 @@ using vivaldi::IsVivaldiRunning;
     return;
   }
   const GURL& URL = webState->GetLastCommittedURL();
+
+  // Enable sharing when the current page url is valid and the url is not app
+  // specific (the url's scheme is `chrome`) except when:
+  // 1. The page url represents a chrome's download path `chrome://downloads`.
+  // 2. The page url is a reference to an external file
+  //    `chrome://external-file`.
   BOOL shareMenuEnabled =
-      URL.is_valid() && !web::GetWebClient()->IsAppSpecificURL(URL);
+      URL.is_valid() &&
+      (UrlIsDownloadedFile(URL) || UrlIsExternalFileReference(URL) ||
+       !web::GetWebClient()->IsAppSpecificURL(URL));
   // Page sharing requires JavaScript execution, which is paused while overlays
   // are displayed over the web content area.
   [self.consumer setShareMenuEnabled:shareMenuEnabled &&
@@ -638,9 +648,10 @@ using vivaldi::IsVivaldiRunning;
 - (void)setUpVivaldiObservers {
   ChromeBrowserState* browserState =
       ChromeBrowserState::FromBrowserState(self.webState->GetBrowserState());
+  [self startObservingBottomOmniboxStateChange:
+      GetApplicationContext()->GetLocalState()];
   PrefService* prefService = browserState->GetPrefs();
   if (prefService) {
-    [self startObservingBottomOmniboxStateChange:prefService];
     [self startObservingTabBarStyleChange:prefService];
     [self startObservingAccentColorChange:prefService];
     [self startObservingWebsiteAppearanceChange:prefService];

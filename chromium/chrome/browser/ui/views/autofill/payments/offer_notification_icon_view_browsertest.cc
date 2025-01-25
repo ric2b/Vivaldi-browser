@@ -17,6 +17,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/payments/offer_notification_options.h"
+#include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/commerce/core/test_utils.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/test/browser_test.h"
@@ -74,11 +75,12 @@ class OfferNotificationIconViewBrowserTest
         ChromeAutofillClient::FromWebContentsForTesting(GetWebContents());
 
     if (name.find("show_offer_notification_icon_only") != std::string::npos) {
-      autofill_client->UpdateOfferNotification(&offer, {});
+      autofill_client->GetPaymentsAutofillClient()->UpdateOfferNotification(
+          offer, {});
     } else if (name.find("show_offer_notification_icon_expanded") !=
                std::string::npos) {
-      autofill_client->UpdateOfferNotification(
-          &offer, {.expand_notification_icon = true});
+      autofill_client->GetPaymentsAutofillClient()->UpdateOfferNotification(
+          offer, {.expand_notification_icon = true});
     }
   }
 
@@ -88,9 +90,10 @@ class OfferNotificationIconViewBrowserTest
       return false;
     }
 
-    EXPECT_EQ(offer_notification_icon_view->GetAccessibleName(),
-              l10n_util::GetStringUTF16(
-                  IDS_AUTOFILL_OFFERS_REMINDER_ICON_TOOLTIP_TEXT));
+    EXPECT_EQ(
+        offer_notification_icon_view->GetViewAccessibility().GetCachedName(),
+        l10n_util::GetStringUTF16(
+            IDS_AUTOFILL_OFFERS_REMINDER_ICON_TOOLTIP_TEXT));
 
     std::string test_name =
         testing::UnitTest::GetInstance()->current_test_info()->name();
@@ -151,16 +154,10 @@ class OfferNotificationIconViewBrowserTest
   base::test::ScopedFeatureList feature_list_;
 };
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    OfferNotificationIconViewBrowserTest,
-    testing::Values(
-        UiTestData{"Default"},
-        UiTestData{
-            "Chrome_refresh_style",
-            std::make_optional<std::vector<base::test::FeatureRefAndParams>>(
-                {{::features::kChromeRefresh2023, {}}})}),
-    GetTestName);
+INSTANTIATE_TEST_SUITE_P(All,
+                         OfferNotificationIconViewBrowserTest,
+                         testing::Values(UiTestData{"Default"}),
+                         GetTestName);
 
 IN_PROC_BROWSER_TEST_P(OfferNotificationIconViewBrowserTest,
                        InvokeUi_show_offer_notification_icon_only) {

@@ -28,15 +28,14 @@ bool ParseAnswer(const std::string& answer_json, SuggestionAnswer* answer) {
 }
 
 bool ParseJsonToAnswerData(const std::string& answer_json,
-                           omnibox::RichAnswerTemplate* answer_template,
-                           std::u16string answer_type = u"8") {
+                           omnibox::RichAnswerTemplate* answer_template) {
   std::optional<base::Value> value = base::JSONReader::Read(answer_json);
   if (!value || !value->is_dict()) {
     return false;
   }
 
-  return omnibox::answer_data_parser::ParseJsonToAnswerData(
-      value->GetDict(), answer_type, answer_template);
+  return omnibox::answer_data_parser::ParseJsonToAnswerData(value->GetDict(),
+                                                            answer_template);
 }
 
 }  // namespace
@@ -268,74 +267,6 @@ TEST(SuggestionAnswerTest, ValidPropertyValues) {
   EXPECT_FALSE(second_line.image_url().is_valid());
 }
 
-TEST(SuggestionAnswerTest, AddImageURLsTo) {
-  SuggestionAnswer::URLs urls;
-  SuggestionAnswer answer;
-  std::string json =
-      "{ \"l\": ["
-      "  { \"il\": { \"t\": [{ \"t\": \"text\", \"tt\": 8 }] } }, "
-      "  { \"il\": { \"t\": [{ \"t\": \"other text\", \"tt\": 5 }] } }] }";
-  ASSERT_TRUE(ParseAnswer(json, &answer));
-  answer.AddImageURLsTo(&urls);
-  ASSERT_EQ(0U, urls.size());
-
-  {
-    // Test with the image URL supplied by the "i" (image) param.
-    json =
-        "{ \"i\": { \"d\": \"https://gstatic.com/foo.png\", \"t\": 3 },"
-        "  \"l\" : ["
-        "    { \"il\": { \"t\": [{ \"t\": \"some text\", \"tt\": 5 }] } },"
-        "    { \"il\": { \"t\": [{ \"t\": \"other text\", \"tt\": 8 }] } }"
-        "  ]}";
-    ASSERT_TRUE(ParseAnswer(json, &answer));
-    answer.AddImageURLsTo(&urls);
-    ASSERT_EQ(1U, urls.size());
-    EXPECT_EQ(GURL("https://gstatic.com/foo.png"), urls[0]);
-    urls.clear();
-  }
-
-  // Test with the image URL supplied by the "il" (image line) param.
-  json =
-      "{ \"l\" : ["
-      "  { \"il\": { \"t\": [{ \"t\": \"some text\", \"tt\": 5 }] } },"
-      "  { \"il\": { \"t\": [{ \"t\": \"other text\", \"tt\": 8 }],"
-      "              \"i\": { \"d\": \"//gstatic.com/foo.png\", \"t\": 3 }}}]}";
-  ASSERT_TRUE(ParseAnswer(json, &answer));
-  answer.AddImageURLsTo(&urls);
-  ASSERT_EQ(1U, urls.size());
-  EXPECT_EQ(GURL("https://gstatic.com/foo.png"), urls[0]);
-  urls.clear();
-
-  // Test with image URLs supplied by both the "i" and "il" params. In this
-  // case, prefer the URL provided by the "i" param because the new answer code
-  // uses this.
-  json =
-      "{ \"i\": { \"d\": \"https://gstatic.com/foo.png\", \"t\": 3 },"
-      "  \"l\" : ["
-      "    { \"il\": { \"t\": [{ \"t\": \"some text\", \"tt\": 5 }] } },"
-      "    { \"il\": { \"t\": [{ \"t\": \"other text\", \"tt\": 8 }],"
-      "              \"i\": { \"d\": \"//gstatic.com/bar.png\", \"t\": 3 }}}"
-      "  ]}";
-  ASSERT_TRUE(ParseAnswer(json, &answer));
-  answer.AddImageURLsTo(&urls);
-  ASSERT_EQ(1U, urls.size());
-  EXPECT_EQ(GURL("https://gstatic.com/foo.png"), urls[0]);
-  urls.clear();
-
-  // Test with the image URL supplied by both "il" params. In this case, prefer
-  // the URL in the second line as the first is currently not used.
-  json =
-      "{ \"l\" : ["
-      "  { \"il\": { \"t\": [{ \"t\": \"some text\", \"tt\": 5 }],"
-      "              \"i\": { \"d\": \"//gstatic.com/foo.png\" } } }, "
-      "  { \"il\": { \"t\": [{ \"t\": \"other text\", \"tt\": 8 }],"
-      "              \"i\": { \"d\": \"//gstatic.com/bar.jpg\", \"t\": 3 }}}]}";
-  ASSERT_TRUE(ParseAnswer(json, &answer));
-  answer.AddImageURLsTo(&urls);
-  ASSERT_EQ(1U, urls.size());
-  EXPECT_EQ(GURL("https://gstatic.com/bar.jpg"), urls[0]);
-}
-
 TEST(SuggestionAnswerTest, ParseAccessibilityLabel) {
   SuggestionAnswer answer;
   std::string json =
@@ -517,14 +448,8 @@ TEST(SuggestionAnswerTest, AnswerData_ValidPropertyValues) {
       "              \"at\": { \"t\": \"slatfatf\", \"tt\": 6 }, "
       "              \"st\": { \"t\": \"oh hi, Mark\", \"tt\": 729347 } } } "
       "] }";
-  ASSERT_TRUE(ParseJsonToAnswerData(json, &answer_template, u"1"));
+  ASSERT_TRUE(ParseJsonToAnswerData(json, &answer_template));
   ASSERT_TRUE(ParseAnswer(json, &answer));
-
-  // SuggestionAnswer and RichAnswerTemplate answer types should be equal.
-  answer.set_type(1);
-  EXPECT_EQ(omnibox::RichAnswerTemplate::DICTIONARY,
-            answer_template.answer_type());
-  EXPECT_EQ(answer.type(), answer_template.answer_type());
 
   const omnibox::AnswerData& answer_data = answer_template.answers(0);
   const omnibox::FormattedString& headline = answer_data.headline();

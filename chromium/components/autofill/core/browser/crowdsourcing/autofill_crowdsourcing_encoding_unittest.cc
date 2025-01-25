@@ -27,6 +27,7 @@
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_test_utils.h"
 #include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/form_data_test_api.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/html_field_types.h"
 #include "components/autofill/core/common/signatures.h"
@@ -282,7 +283,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeUploadRequest) {
 
   // Add 2 address fields - this should be still a valid form.
   for (size_t i = 0; i < 2; ++i) {
-    form.fields.push_back(
+    test_api(form).Append(
         test::GetFormFieldData({.label = u"Address", .name = u"address"}));
     test::InitializePossibleTypes(possible_field_types,
                                   {ADDRESS_HOME_LINE1, ADDRESS_HOME_LINE2});
@@ -320,7 +321,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeUploadRequest) {
   // Add 300 address fields - now the form is invalid, as it has too many
   // fields.
   for (size_t i = 0; i < 300; ++i) {
-    form.fields.push_back(
+    test_api(form).Append(
         test::GetFormFieldData({.label = u"Address", .name = u"address"}));
     test::InitializePossibleTypes(possible_field_types,
                                   {ADDRESS_HOME_LINE1, ADDRESS_HOME_LINE2});
@@ -342,19 +343,19 @@ TEST_F(AutofillCrowdsourcingEncoding,
   std::unique_ptr<FormStructure> form_structure;
   std::vector<FieldTypeSet> possible_field_types;
   FormData form;
-  form.url = GURL("http://www.foo.com/");
-  form.renderer_id = test::MakeFormRendererId();
-  form.fields = {
-      CreateTestFormField("First Name", "firstname", "",
-                          FormControlType::kInputText, "given-name"),
-      CreateTestFormField("Last Name", "lastname", "",
-                          FormControlType::kInputText, "family-name"),
-      CreateTestFormField("Email", "email", "", FormControlType::kInputEmail,
-                          "email"),
-      CreateTestFormField("username", "username", "",
-                          FormControlType::kInputText, "email"),
-      CreateTestFormField("password", "password", "",
-                          FormControlType::kInputPassword, "email")};
+  form.set_url(GURL("http://www.foo.com/"));
+  form.set_renderer_id(test::MakeFormRendererId());
+  form.set_fields(
+      {CreateTestFormField("First Name", "firstname", "",
+                           FormControlType::kInputText, "given-name"),
+       CreateTestFormField("Last Name", "lastname", "",
+                           FormControlType::kInputText, "family-name"),
+       CreateTestFormField("Email", "email", "", FormControlType::kInputEmail,
+                           "email"),
+       CreateTestFormField("username", "username", "",
+                           FormControlType::kInputText, "email"),
+       CreateTestFormField("password", "password", "",
+                           FormControlType::kInputPassword, "email")});
   test::InitializePossibleTypes(possible_field_types, {NAME_FIRST});
   test::InitializePossibleTypes(possible_field_types, {NAME_LAST});
   test::InitializePossibleTypes(possible_field_types, {EMAIL_ADDRESS});
@@ -440,34 +441,43 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeUploadRequestWithPropertiesMask) {
   std::unique_ptr<FormStructure> form_structure;
   std::vector<FieldTypeSet> possible_field_types;
   FormData form;
-  form.url = GURL("http://www.foo.com/");
-  form.renderer_id = test::MakeFormRendererId();
-
-  form.fields.push_back(CreateTestFormField("First Name", "firstname", "",
-                                            FormControlType::kInputText,
-                                            "given-name"));
-  form.fields.back().set_name_attribute(form.fields.back().name());
-  form.fields.back().set_id_attribute(u"first_name");
-  form.fields.back().set_css_classes(u"class1 class2");
-  form.fields.back().set_properties_mask(FieldPropertiesFlags::kHadFocus);
+  form.set_url(GURL("http://www.foo.com/"));
+  form.set_renderer_id(test::MakeFormRendererId());
+  form.set_fields({
+      [] {
+        FormFieldData f =
+            CreateTestFormField("First Name", "firstname", "",
+                                FormControlType::kInputText, "given-name");
+        f.set_name_attribute(f.name());
+        f.set_id_attribute(u"first_name");
+        f.set_css_classes(u"class1 class2");
+        f.set_properties_mask(FieldPropertiesFlags::kHadFocus);
+        return f;
+      }(),
+      [] {
+        FormFieldData f =
+            CreateTestFormField("Last Name", "lastname", "",
+                                FormControlType::kInputText, "family-name");
+        f.set_name_attribute(f.name());
+        f.set_id_attribute(u"last_name");
+        f.set_css_classes(u"class1 class2");
+        f.set_properties_mask(FieldPropertiesFlags::kHadFocus |
+                              FieldPropertiesFlags::kUserTyped);
+        return f;
+      }(),
+      [] {
+        FormFieldData f = CreateTestFormField(
+            "Email", "email", "", FormControlType::kInputEmail, "email");
+        f.set_name_attribute(f.name());
+        f.set_id_attribute(u"e-mail");
+        f.set_css_classes(u"class1 class2");
+        f.set_properties_mask(FieldPropertiesFlags::kHadFocus |
+                              FieldPropertiesFlags::kUserTyped);
+        return f;
+      }(),
+  });
   test::InitializePossibleTypes(possible_field_types, {NAME_FIRST});
-
-  form.fields.push_back(CreateTestFormField(
-      "Last Name", "lastname", "", FormControlType::kInputText, "family-name"));
-  form.fields.back().set_name_attribute(form.fields.back().name());
-  form.fields.back().set_id_attribute(u"last_name");
-  form.fields.back().set_css_classes(u"class1 class2");
-  form.fields.back().set_properties_mask(FieldPropertiesFlags::kHadFocus |
-                                         FieldPropertiesFlags::kUserTyped);
   test::InitializePossibleTypes(possible_field_types, {NAME_LAST});
-
-  form.fields.push_back(CreateTestFormField(
-      "Email", "email", "", FormControlType::kInputEmail, "email"));
-  form.fields.back().set_name_attribute(form.fields.back().name());
-  form.fields.back().set_id_attribute(u"e-mail");
-  form.fields.back().set_css_classes(u"class1 class2");
-  form.fields.back().set_properties_mask(FieldPropertiesFlags::kHadFocus |
-                                         FieldPropertiesFlags::kUserTyped);
   test::InitializePossibleTypes(possible_field_types, {EMAIL_ADDRESS});
 
   form_structure = std::make_unique<FormStructure>(form);
@@ -717,10 +727,10 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeUploadRequest_WithSubForms) {
 
                                 {CREDIT_CARD_VERIFICATION_CODE});
 
-  ASSERT_EQ(form.global_id(), form.fields[0].renderer_form_id());
-  ASSERT_NE(form.global_id(), form.fields[1].renderer_form_id());
-  ASSERT_EQ(form.global_id(), form.fields[2].renderer_form_id());
-  ASSERT_NE(form.global_id(), form.fields[3].renderer_form_id());
+  ASSERT_EQ(form.global_id(), form.fields()[0].renderer_form_id());
+  ASSERT_NE(form.global_id(), form.fields()[1].renderer_form_id());
+  ASSERT_EQ(form.global_id(), form.fields()[2].renderer_form_id());
+  ASSERT_NE(form.global_id(), form.fields()[3].renderer_form_id());
 
   std::unique_ptr<FormStructure> form_structure =
       std::make_unique<FormStructure>(form);
@@ -759,7 +769,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeUploadRequest_WithSubForms) {
     AutofillUploadContents upload;
     upload.set_client_version(
         std::string(GetProductNameAndVersionForUserAgent()));
-    upload.set_form_signature(form.fields[0].host_form_signature().value());
+    upload.set_form_signature(form.fields()[0].host_form_signature().value());
     upload.set_autofill_used(false);
     upload.set_data_present("0000000000001850");
     test::FillUploadField(upload.add_field(), 3340391946, 51);
@@ -771,7 +781,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeUploadRequest_WithSubForms) {
     AutofillUploadContents upload;
     upload.set_client_version(
         std::string(GetProductNameAndVersionForUserAgent()));
-    upload.set_form_signature(form.fields[1].host_form_signature().value());
+    upload.set_form_signature(form.fields()[1].host_form_signature().value());
     upload.set_autofill_used(false);
     upload.set_data_present("0000000000001850");
     test::FillUploadField(upload.add_field(), 1415886167, 52);
@@ -782,7 +792,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeUploadRequest_WithSubForms) {
     AutofillUploadContents upload;
     upload.set_client_version(
         std::string(GetProductNameAndVersionForUserAgent()));
-    upload.set_form_signature(form.fields[3].host_form_signature().value());
+    upload.set_form_signature(form.fields()[3].host_form_signature().value());
     upload.set_autofill_used(false);
     upload.set_data_present("0000000000001850");
     test::FillUploadField(upload.add_field(), 917221285, 59);
@@ -1174,11 +1184,11 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeUploadRequest_RichMetadata) {
   };
 
   FormData form;
-  form.id_attribute = u"form-id";
-  form.url = GURL("http://www.foo.com/");
-  form.button_titles = {std::make_pair(
-      u"Submit", mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
-  form.full_url = GURL("http://www.foo.com/?foo=bar");
+  form.set_id_attribute(u"form-id");
+  form.set_url(GURL("http://www.foo.com/"));
+  form.set_button_titles({std::make_pair(
+      u"Submit", mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)});
+  form.set_full_url(GURL("http://www.foo.com/?foo=bar"));
   for (const auto& f : kFieldMetadata) {
     FormFieldData field;
     field.set_id_attribute(ASCIIToUTF16(f.id));
@@ -1192,7 +1202,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeUploadRequest_RichMetadata) {
     field.set_autocomplete_attribute(f.autocomplete);
     field.set_parsed_autocomplete(ParseAutocompleteAttribute(f.autocomplete));
     field.set_renderer_id(test::MakeFieldRendererId());
-    form.fields.push_back(field);
+    test_api(form).Append(field);
   }
   RandomizedEncoder encoder("seed for testing",
                             AutofillRandomizedValue_EncodingType_ALL_BITS,
@@ -1213,7 +1223,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeUploadRequest_RichMetadata) {
 
   const auto form_signature = form_structure.form_signature();
 
-  if (form.id_attribute.empty()) {
+  if (form.id_attribute().empty()) {
     EXPECT_FALSE(upload.randomized_form_metadata().has_id());
   } else {
     EXPECT_EQ(upload.randomized_form_metadata().id().encoded_bits(),
@@ -1222,7 +1232,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeUploadRequest_RichMetadata) {
                                        form_structure.id_attribute()));
   }
 
-  if (form.name_attribute.empty()) {
+  if (form.name_attribute().empty()) {
     EXPECT_FALSE(upload.randomized_form_metadata().has_name());
   } else {
     EXPECT_EQ(upload.randomized_form_metadata().name().encoded_bits(),
@@ -1245,7 +1255,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeUploadRequest_RichMetadata) {
                 .encoded_bits(),
             encoder.EncodeForTesting(form_signature, FieldSignature(),
                                      RandomizedEncoder::FORM_BUTTON_TITLES,
-                                     form.button_titles[0].first));
+                                     form.button_titles()[0].first));
   EXPECT_EQ(ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE,
             upload.randomized_form_metadata().button_title()[0].type());
 
@@ -1331,9 +1341,9 @@ TEST_F(AutofillCrowdsourcingEncoding, Metadata_OnlySendFullUrlWithUserConsent) {
   for (bool has_consent : {true, false}) {
     SCOPED_TRACE(testing::Message() << " has_consent=" << has_consent);
     FormData form;
-    form.id_attribute = u"form-id";
-    form.url = GURL("http://www.foo.com/");
-    form.full_url = GURL("http://www.foo.com/?foo=bar");
+    form.set_id_attribute(u"form-id");
+    form.set_url(GURL("http://www.foo.com/"));
+    form.set_full_url(GURL("http://www.foo.com/?foo=bar"));
 
     // One form field needed to be valid form.
     FormFieldData field;
@@ -1341,7 +1351,7 @@ TEST_F(AutofillCrowdsourcingEncoding, Metadata_OnlySendFullUrlWithUserConsent) {
     field.set_label(u"email");
     field.set_name(u"email");
     field.set_renderer_id(test::MakeFieldRendererId());
-    form.fields.push_back(field);
+    form.set_fields({field});
 
     TestingPrefServiceSimple prefs;
     prefs.registry()->RegisterBooleanPref(
@@ -1366,11 +1376,11 @@ TEST_F(AutofillCrowdsourcingEncoding, Metadata_OnlySendFullUrlWithUserConsent) {
 TEST_F(AutofillCrowdsourcingEncoding,
        EncodeUploadRequest_WithSingleUsernameVoteType) {
   FormData form;
-  form.url = GURL("http://www.foo.com/");
+  form.set_url(GURL("http://www.foo.com/"));
   FormFieldData field;
   field.set_name(u"text field");
   field.set_renderer_id(test::MakeFieldRendererId());
-  form.fields.push_back(field);
+  form.set_fields({field});
 
   FormStructure form_structure(form);
   form_structure.field(0)->set_single_username_vote_type(
@@ -1394,11 +1404,11 @@ TEST_F(AutofillCrowdsourcingEncoding,
 TEST_F(AutofillCrowdsourcingEncoding,
        EncodeUploadRequest_WithSingleUsernameData) {
   FormData form;
-  form.url = GURL("http://www.foo.com/");
+  form.set_url(GURL("http://www.foo.com/"));
   FormFieldData field_data;
   field_data.set_name(u"text field");
   field_data.set_renderer_id(test::MakeFieldRendererId());
-  form.fields.push_back(field_data);
+  form.set_fields({field_data});
 
   FormStructure form_structure(form);
   for (auto& field : form_structure) {
@@ -1558,7 +1568,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeAutofillPageQueryRequest) {
   FormSignature form_signature(16692857476255362434UL);
 
   FormData form;
-  form.url = GURL("http://www.foo.com/");
+  form.set_url(GURL("http://www.foo.com/"));
 
   FormFieldData field;
   field.set_form_control_type(FormControlType::kInputText);
@@ -1567,31 +1577,31 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeAutofillPageQueryRequest) {
   field.set_name(u"name_on_card");
   field.set_renderer_id(test::MakeFieldRendererId());
   field.set_host_form_signature(form_signature);
-  form.fields.push_back(field);
+  test_api(form).Append(field);
 
   field.set_label(u"Address");
   field.set_name(u"billing_address");
   field.set_renderer_id(test::MakeFieldRendererId());
   field.set_host_form_signature(FormSignature(12345UL));
-  form.fields.push_back(field);
+  test_api(form).Append(field);
 
   field.set_label(u"Card Number");
   field.set_name(u"card_number");
   field.set_renderer_id(test::MakeFieldRendererId());
   field.set_host_form_signature(FormSignature(67890UL));
-  form.fields.push_back(field);
+  test_api(form).Append(field);
 
   field.set_label(u"Expiration Date");
   field.set_name(u"expiration_month");
   field.set_renderer_id(test::MakeFieldRendererId());
   field.set_host_form_signature(FormSignature(12345UL));
-  form.fields.push_back(field);
+  test_api(form).Append(field);
 
   field.set_label(u"Expiration Year");
   field.set_name(u"expiration_year");
   field.set_renderer_id(test::MakeFieldRendererId());
   field.set_host_form_signature(FormSignature(12345UL));
-  form.fields.push_back(field);
+  test_api(form).Append(field);
 
   // Add checkable field.
   FormFieldData checkable_field;
@@ -1601,7 +1611,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeAutofillPageQueryRequest) {
   checkable_field.set_name(u"Checkable1");
   checkable_field.set_renderer_id(test::MakeFieldRendererId());
   checkable_field.set_host_form_signature(form_signature);
-  form.fields.push_back(checkable_field);
+  test_api(form).Append(checkable_field);
 
   FormStructure form_structure(form);
 
@@ -1660,7 +1670,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeAutofillPageQueryRequest) {
 
   // Add 5 address fields - this should be still a valid form.
   FormSignature form_signature3(2608858059775241169UL);
-  for (auto& f : form.fields) {
+  for (auto& f : test_api(form).fields()) {
     if (f.host_form_signature() == form_signature) {
       f.set_host_form_signature(form_signature3);
     }
@@ -1670,7 +1680,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeAutofillPageQueryRequest) {
     field.set_name(u"address");
     field.set_renderer_id(test::MakeFieldRendererId());
     field.set_host_form_signature(form_signature3);
-    form.fields.push_back(field);
+    test_api(form).Append(field);
   }
 
   FormStructure form_structure3(form);
@@ -1701,7 +1711,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeAutofillPageQueryRequest) {
   EXPECT_THAT(encoded_query3, SerializesSameAs(query));
 
   // |form_structures4| will have the same signature as |form_structure3|.
-  form.fields.back().set_name(u"address123456789");
+  test_api(form).field(-1).set_name(u"address123456789");
 
   FormStructure form_structure4(form);
   forms.push_back(&form_structure4);
@@ -1720,7 +1730,7 @@ TEST_F(AutofillCrowdsourcingEncoding, EncodeAutofillPageQueryRequest) {
     field.set_label(u"Address");
     field.set_name(u"address");
     field.set_renderer_id(test::MakeFieldRendererId());
-    malformed_form.fields.push_back(field);
+    test_api(malformed_form).Append(field);
   }
 
   FormStructure malformed_form_structure(malformed_form);
@@ -1906,10 +1916,10 @@ TEST_F(AutofillCrowdsourcingEncoding,
 
 TEST_F(AutofillCrowdsourcingEncoding, AllowBigForms) {
   FormData form;
-  form.url = GURL("http://foo.com");
+  form.set_url(GURL("http://foo.com"));
   // Check that the form with 250 fields are processed correctly.
   for (size_t i = 0; i < 250; ++i) {
-    form.fields.push_back(test::GetFormFieldData({
+    test_api(form).Append(test::GetFormFieldData({
         .name = u"text" + base::NumberToString16(i),
     }));
   }
@@ -1940,8 +1950,8 @@ TEST_F(AutofillCrowdsourcingEncoding,
   // name.
   AutofillQueryResponse response;
   auto* form_suggestion = response.add_form_suggestions();
-  AddFieldOverrideToForm(form_data.fields[0], NAME_FIRST, form_suggestion);
-  AddFieldPredictionToForm(form_data.fields[1], NAME_LAST, form_suggestion);
+  AddFieldOverrideToForm(form_data.fields()[0], NAME_FIRST, form_suggestion);
+  AddFieldPredictionToForm(form_data.fields()[1], NAME_LAST, form_suggestion);
 
   std::string response_string = SerializeAndEncode(response);
 
@@ -2001,10 +2011,10 @@ TEST_F(AutofillCrowdsourcingEncoding,
   // Setup the query response.
   AutofillQueryResponse response;
   auto* form_suggestion = response.add_form_suggestions();
-  AddFieldPredictionToForm(form_data.fields[0], NAME_FIRST, form_suggestion);
+  AddFieldPredictionToForm(form_data.fields()[0], NAME_FIRST, form_suggestion);
   // Simulate a NAME_LAST classification for the two last name fields.
-  AddFieldPredictionToForm(form_data.fields[1], NAME_LAST, form_suggestion);
-  AddFieldPredictionToForm(form_data.fields[2], NAME_LAST, form_suggestion);
+  AddFieldPredictionToForm(form_data.fields()[1], NAME_LAST, form_suggestion);
+  AddFieldPredictionToForm(form_data.fields()[2], NAME_LAST, form_suggestion);
 
   std::string response_string = SerializeAndEncode(response);
 
@@ -2049,11 +2059,11 @@ TEST_F(AutofillCrowdsourcingEncoding,
   // Setup the query response.
   AutofillQueryResponse response;
   auto* form_suggestion = response.add_form_suggestions();
-  AddFieldPredictionToForm(form_data.fields[0], NAME_FULL, form_suggestion);
+  AddFieldPredictionToForm(form_data.fields()[0], NAME_FULL, form_suggestion);
   // Simulate ADDRESS_LINE classifications for the two last name fields.
-  AddFieldPredictionToForm(form_data.fields[1], ADDRESS_HOME_LINE1,
+  AddFieldPredictionToForm(form_data.fields()[1], ADDRESS_HOME_LINE1,
                            form_suggestion);
-  AddFieldPredictionToForm(form_data.fields[2], ADDRESS_HOME_LINE2,
+  AddFieldPredictionToForm(form_data.fields()[2], ADDRESS_HOME_LINE2,
                            form_suggestion);
 
   std::string response_string = SerializeAndEncode(response);
@@ -2081,23 +2091,23 @@ TEST_F(AutofillCrowdsourcingEncoding,
 // server returns NO_SERVER_DATA, UNKNOWN_TYPE, and a valid type.
 TEST_F(AutofillCrowdsourcingEncoding, ParseQueryResponse_TooManyTypes) {
   FormData form_data;
-  form_data.url = GURL("http://foo.com");
-  form_data.fields = {
-      CreateTestFormField("First Name", "fname", "",
-                          FormControlType::kInputText),
-      CreateTestFormField("Last Name", "lname", "",
-                          FormControlType::kInputText),
-      CreateTestFormField("email", "email", "", FormControlType::kInputText,
-                          "address-level2")};
+  form_data.set_url(GURL("http://foo.com"));
+  form_data.set_fields(
+      {CreateTestFormField("First Name", "fname", "",
+                           FormControlType::kInputText),
+       CreateTestFormField("Last Name", "lname", "",
+                           FormControlType::kInputText),
+       CreateTestFormField("email", "email", "", FormControlType::kInputText,
+                           "address-level2")});
   FormStructure form(form_data);
   form.DetermineHeuristicTypes(GeoIpCountryCode(""), nullptr, nullptr);
 
   // Setup the query response.
   AutofillQueryResponse response;
   auto* form_suggestion = response.add_form_suggestions();
-  AddFieldPredictionToForm(form_data.fields[0], NAME_FIRST, form_suggestion);
-  AddFieldPredictionToForm(form_data.fields[1], NAME_LAST, form_suggestion);
-  AddFieldPredictionToForm(form_data.fields[2], ADDRESS_HOME_LINE1,
+  AddFieldPredictionToForm(form_data.fields()[0], NAME_FIRST, form_suggestion);
+  AddFieldPredictionToForm(form_data.fields()[1], NAME_LAST, form_suggestion);
+  AddFieldPredictionToForm(form_data.fields()[2], ADDRESS_HOME_LINE1,
                            form_suggestion);
   form_suggestion->add_field_suggestions()->add_predictions()->set_type(
       EMAIL_ADDRESS);
@@ -2145,24 +2155,25 @@ TEST_F(AutofillCrowdsourcingEncoding, ParseQueryResponse_TooManyTypes) {
 // server returns NO_SERVER_DATA, UNKNOWN_TYPE, and a valid type.
 TEST_F(AutofillCrowdsourcingEncoding, ParseQueryResponse_UnknownType) {
   FormData form_data;
-  form_data.url = GURL("http://foo.com");
-  form_data.fields = {
-      CreateTestFormField("First Name", "fname", "",
-                          FormControlType::kInputText),
-      CreateTestFormField("Last Name", "lname", "",
-                          FormControlType::kInputText),
-      CreateTestFormField("email", "email", "", FormControlType::kInputText,
-                          "address-level2")};
+  form_data.set_url(GURL("http://foo.com"));
+  form_data.set_fields(
+      {CreateTestFormField("First Name", "fname", "",
+                           FormControlType::kInputText),
+       CreateTestFormField("Last Name", "lname", "",
+                           FormControlType::kInputText),
+       CreateTestFormField("email", "email", "", FormControlType::kInputText,
+                           "address-level2")});
   FormStructure form(form_data);
   form.DetermineHeuristicTypes(GeoIpCountryCode(""), nullptr, nullptr);
 
   // Setup the query response.
   AutofillQueryResponse response;
   auto* form_suggestion = response.add_form_suggestions();
-  AddFieldPredictionToForm(form_data.fields[0], UNKNOWN_TYPE, form_suggestion);
-  AddFieldPredictionToForm(form_data.fields[1], NO_SERVER_DATA,
+  AddFieldPredictionToForm(form_data.fields()[0], UNKNOWN_TYPE,
                            form_suggestion);
-  AddFieldPredictionToForm(form_data.fields[2], ADDRESS_HOME_LINE1,
+  AddFieldPredictionToForm(form_data.fields()[1], NO_SERVER_DATA,
+                           form_suggestion);
+  AddFieldPredictionToForm(form_data.fields()[2], ADDRESS_HOME_LINE1,
                            form_suggestion);
 
   std::string response_string = SerializeAndEncode(response);
@@ -2241,8 +2252,8 @@ TEST_F(
 
     // Creating the main frame form.
     FormData form;
-    form.fields = fields;
-    form.url = GURL("http://foo.com");
+    form.set_fields(fields);
+    form.set_url(GURL("http://foo.com"));
     FormStructure form_structure(form);
     std::vector<raw_ptr<FormStructure, VectorExperimental>> forms;
     forms.push_back(&form_structure);
@@ -2292,12 +2303,12 @@ TEST_F(AutofillCrowdsourcingEncoding,
       test::GetEncodedSignatures(forms);
   // Main frame response.
   auto* main_frame_form_suggestion = response.add_form_suggestions();
-  AddFieldPredictionToForm(form_data.fields[0], EMAIL_ADDRESS,
+  AddFieldPredictionToForm(form_data.fields()[0], EMAIL_ADDRESS,
                            main_frame_form_suggestion);
   // Iframe response.
   encoded_signatures.emplace_back(12345);
   auto* iframe_form_suggestion = response.add_form_suggestions();
-  AddFieldPredictionToForm(form_data.fields[0], SINGLE_USERNAME,
+  AddFieldPredictionToForm(form_data.fields()[0], SINGLE_USERNAME,
                            iframe_form_suggestion);
 
   std::string response_string = SerializeAndEncode(response);
@@ -2343,7 +2354,7 @@ TEST_F(AutofillCrowdsourcingEncoding,
   std::vector<raw_ptr<FormStructure, VectorExperimental>> forms;
   forms.push_back(&form_structure);
 
-  ASSERT_GE(form.fields.size(), 6u);
+  ASSERT_GE(form.fields().size(), 6u);
 
   // Make serialized API response.
   AutofillQueryResponse api_response;
@@ -2358,32 +2369,32 @@ TEST_F(AutofillCrowdsourcingEncoding,
       test::GetEncodedSignatures(forms);
   {
     auto* form_suggestion = api_response.add_form_suggestions();
-    AddFieldPredictionToForm(form.fields[0], expected_types[0],
+    AddFieldPredictionToForm(form.fields()[0], expected_types[0],
                              form_suggestion);
-    AddFieldPredictionToForm(form.fields[1], NO_SERVER_DATA, form_suggestion);
-    AddFieldPredictionToForm(form.fields[2], NO_SERVER_DATA, form_suggestion);
-    AddFieldPredictionToForm(form.fields[3], expected_types[3],
+    AddFieldPredictionToForm(form.fields()[1], NO_SERVER_DATA, form_suggestion);
+    AddFieldPredictionToForm(form.fields()[2], NO_SERVER_DATA, form_suggestion);
+    AddFieldPredictionToForm(form.fields()[3], expected_types[3],
                              form_suggestion);
-    AddFieldPredictionToForm(form.fields[4], expected_types[4],
+    AddFieldPredictionToForm(form.fields()[4], expected_types[4],
                              form_suggestion);
   }
   // Response for the FormFieldData::host_form_signature 12345.
   encoded_signatures.push_back(FormSignature(12345));
   {
     auto* form_suggestion = api_response.add_form_suggestions();
-    AddFieldPredictionToForm(form.fields[0], NO_SERVER_DATA, form_suggestion);
-    AddFieldPredictionToForm(form.fields[1], expected_types[1],
+    AddFieldPredictionToForm(form.fields()[0], NO_SERVER_DATA, form_suggestion);
+    AddFieldPredictionToForm(form.fields()[1], expected_types[1],
                              form_suggestion);
-    AddFieldPredictionToForm(form.fields[2], expected_types[2],
+    AddFieldPredictionToForm(form.fields()[2], expected_types[2],
                              form_suggestion);
   }
   // Response for the FormFieldData::host_form_signature 67890.
   encoded_signatures.push_back(FormSignature(67890));
   {
     auto* form_suggestion = api_response.add_form_suggestions();
-    AddFieldPredictionToForm(form.fields[4], ADDRESS_HOME_CITY,
+    AddFieldPredictionToForm(form.fields()[4], ADDRESS_HOME_CITY,
                              form_suggestion);
-    AddFieldPredictionToForm(form.fields[5], expected_types[5],
+    AddFieldPredictionToForm(form.fields()[5], expected_types[5],
                              form_suggestion);
   }
 
@@ -2439,15 +2450,16 @@ TEST_F(AutofillCrowdsourcingEncoding, ParseServerPredictionsQueryResponse) {
   AutofillQueryResponse api_response;
   // Make form 1 suggestions.
   auto* form_suggestion = api_response.add_form_suggestions();
-  AddFieldPredictionsToForm(form.fields[0],
+  AddFieldPredictionsToForm(form.fields()[0],
                             {CreateFieldPrediction(NAME_FULL),
                              CreateFieldPrediction(PHONE_HOME_COUNTRY_CODE)},
                             form_suggestion);
-  AddFieldPredictionToForm(form.fields[1], ADDRESS_HOME_LINE1, form_suggestion);
+  AddFieldPredictionToForm(form.fields()[1], ADDRESS_HOME_LINE1,
+                           form_suggestion);
   // Make form 2 suggestions.
   form_suggestion = api_response.add_form_suggestions();
-  AddFieldPredictionToForm(form2.fields[0], EMAIL_ADDRESS, form_suggestion);
-  AddFieldPredictionToForm(form2.fields[1], NO_SERVER_DATA, form_suggestion);
+  AddFieldPredictionToForm(form2.fields()[0], EMAIL_ADDRESS, form_suggestion);
+  AddFieldPredictionToForm(form2.fields()[1], NO_SERVER_DATA, form_suggestion);
   // Serialize API response.
   std::string response_string;
   ASSERT_TRUE(api_response.SerializeToString(&response_string));
@@ -2490,8 +2502,8 @@ TEST_F(AutofillCrowdsourcingEncoding,
   FormFieldData field2 = CreateTestFormField("password", "password", "",
                                              FormControlType::kInputText);
   FormData form;
-  form.fields = {field1, field2};
-  form.url = GURL("http://foo.com");
+  form.set_fields({field1, field2});
+  form.set_url(GURL("http://foo.com"));
   FormStructure form_structure(form);
   std::vector<raw_ptr<FormStructure, VectorExperimental>> forms{
       &form_structure};
@@ -2512,11 +2524,11 @@ TEST_F(AutofillCrowdsourcingEncoding,
   AutofillQueryResponse api_response;
   auto* form_suggestion = api_response.add_form_suggestions();
   AddFieldPredictionsToForm(
-      form.fields[0],
+      form.fields()[0],
       {CreateFieldPrediction(EMAIL_ADDRESS, FieldPrediction::SOURCE_OVERRIDE)},
       form_suggestion);
   AddFieldPredictionsToForm(
-      form.fields[1],
+      form.fields()[1],
       {CreateFieldPrediction(PASSWORD, FieldPrediction::SOURCE_OVERRIDE)},
       form_suggestion);
 
@@ -2553,8 +2565,8 @@ TEST_F(
   EXPECT_EQ(kFieldSignature, CalculateFieldSignatureForField(field2));
 
   FormData form;
-  form.fields = {field1, field2};
-  form.url = GURL("http://foo.com");
+  form.set_fields({field1, field2});
+  form.set_url(GURL("http://foo.com"));
   FormStructure form_structure(form);
   std::vector<raw_ptr<FormStructure, VectorExperimental>> forms{
       &form_structure};
@@ -2616,8 +2628,8 @@ TEST_F(
   EXPECT_EQ(kFieldSignature, CalculateFieldSignatureForField(field3));
 
   FormData form;
-  form.fields = {field1, field2, field3};
-  form.url = GURL("http://foo.com");
+  form.set_fields({field1, field2, field3});
+  form.set_url(GURL("http://foo.com"));
   FormStructure form_structure(form);
   std::vector<raw_ptr<FormStructure, VectorExperimental>> forms{
       &form_structure};
@@ -2642,15 +2654,15 @@ TEST_F(
   AutofillQueryResponse api_response;
   auto* form_suggestion = api_response.add_form_suggestions();
   AddFieldPredictionsToForm(
-      form.fields[0],
+      form.fields()[0],
       {CreateFieldPrediction(NAME_FULL, FieldPrediction::SOURCE_OVERRIDE)},
       form_suggestion);
   AddFieldPredictionsToForm(
-      form.fields[1],
+      form.fields()[1],
       {CreateFieldPrediction(NAME_LAST, FieldPrediction::SOURCE_OVERRIDE)},
       form_suggestion);
   AddFieldPredictionsToForm(
-      form.fields[2],
+      form.fields()[2],
       {CreateFieldPrediction(COMPANY_NAME, FieldPrediction::SOURCE_OVERRIDE)},
       form_suggestion);
 
@@ -2697,8 +2709,8 @@ TEST_F(
   EXPECT_EQ(kFieldSignature, CalculateFieldSignatureForField(field4));
 
   FormData form;
-  form.fields = {field1, field2, field3, field4};
-  form.url = GURL("http://foo.com");
+  form.set_fields({field1, field2, field3, field4});
+  form.set_url(GURL("http://foo.com"));
   FormStructure form_structure(form);
   std::vector<raw_ptr<FormStructure, VectorExperimental>> forms{
       &form_structure};
@@ -2724,7 +2736,7 @@ TEST_F(
   AutofillQueryResponse api_response;
   auto* form_suggestion = api_response.add_form_suggestions();
   AddFieldPredictionsToForm(
-      form.fields[0],
+      form.fields()[0],
       {CreateFieldPrediction(NAME_LAST, FieldPrediction::SOURCE_OVERRIDE)},
       form_suggestion);
 
@@ -2767,8 +2779,8 @@ TEST_F(AutofillCrowdsourcingEncoding,
   FormFieldData field2 = CreateTestFormField("password", "password", "",
                                              FormControlType::kInputText);
   FormData form;
-  form.fields = {field1, field2};
-  form.url = GURL("http://foo.com");
+  form.set_fields({field1, field2});
+  form.set_url(GURL("http://foo.com"));
   FormStructure form_structure(form);
   std::vector<raw_ptr<FormStructure, VectorExperimental>> forms{
       &form_structure};
@@ -2791,11 +2803,11 @@ TEST_F(AutofillCrowdsourcingEncoding,
   AutofillQueryResponse api_response;
   auto* form_suggestion = api_response.add_form_suggestions();
   AddFieldPredictionsToForm(
-      form.fields[0],
+      form.fields()[0],
       {CreateFieldPrediction(EMAIL_ADDRESS, FieldPrediction::SOURCE_OVERRIDE)},
       form_suggestion);
   AddFieldPredictionsToForm(
-      form.fields[1],
+      form.fields()[1],
       {CreateFieldPrediction(PASSWORD, FieldPrediction::SOURCE_OVERRIDE)},
       form_suggestion);
 
@@ -2828,8 +2840,8 @@ TEST_F(
   FormFieldData field2 = CreateTestFormField("password", "password", "",
                                              FormControlType::kInputText);
   FormData form;
-  form.fields = {field1, field2};
-  form.url = GURL("http://foo.com");
+  form.set_fields({field1, field2});
+  form.set_url(GURL("http://foo.com"));
   FormStructure form_structure(form);
   std::vector<raw_ptr<FormStructure, VectorExperimental>> forms{
       &form_structure};
@@ -2852,12 +2864,12 @@ TEST_F(
   AutofillQueryResponse api_response;
   auto* form_suggestion = api_response.add_form_suggestions();
   AddFieldPredictionsToForm(
-      form.fields[0],
+      form.fields()[0],
       {CreateFieldPrediction(EMAIL_ADDRESS,
                              FieldPrediction::SOURCE_PASSWORDS_DEFAULT)},
       form_suggestion);
   AddFieldPredictionsToForm(
-      form.fields[1],
+      form.fields()[1],
       {CreateFieldPrediction(PASSWORD,
                              FieldPrediction::SOURCE_PASSWORDS_DEFAULT)},
       form_suggestion);
@@ -2886,8 +2898,8 @@ TEST_F(
   FormFieldData password_field = CreateTestFormField(
       "password", "password", "", FormControlType::kInputText);
   FormData form;
-  form.fields = {name_field, password_field};
-  form.url = GURL("http://foo.com");
+  form.set_fields({name_field, password_field});
+  form.set_url(GURL("http://foo.com"));
   FormStructure form_structure(form);
   std::vector<raw_ptr<FormStructure, VectorExperimental>> forms{
       &form_structure};
@@ -2911,11 +2923,11 @@ TEST_F(
   AutofillQueryResponse api_response;
   auto* form_suggestion = api_response.add_form_suggestions();
   AddFieldPredictionsToForm(
-      form.fields[0],
+      form.fields()[0],
       {CreateFieldPrediction(EMAIL_ADDRESS, FieldPrediction::SOURCE_OVERRIDE)},
       form_suggestion);
   AddFieldPredictionsToForm(
-      form.fields[1],
+      form.fields()[1],
       {CreateFieldPrediction(PASSWORD, FieldPrediction::SOURCE_OVERRIDE)},
       form_suggestion);
 
@@ -2940,9 +2952,9 @@ TEST_F(
 TEST_F(AutofillCrowdsourcingEncoding,
        ParseServerPredictionsQueryResponseWhenCannotParseProtoFromString) {
   FormData form;
-  form.url = GURL("http://foo.com");
-  form.fields = {CreateTestFormField("emailaddress", "emailaddress", "",
-                                     FormControlType::kInputEmail)};
+  form.set_url(GURL("http://foo.com"));
+  form.set_fields({CreateTestFormField("emailaddress", "emailaddress", "",
+                                       FormControlType::kInputEmail)});
 
   // Add form to the vector needed by the response parsing function.
   FormStructure form_structure(form);
@@ -2968,9 +2980,9 @@ TEST_F(AutofillCrowdsourcingEncoding,
 TEST_F(AutofillCrowdsourcingEncoding,
        ParseServerPredictionsQueryResponseWhenPayloadNotBase64) {
   FormData form;
-  form.url = GURL("http://foo.com");
-  form.fields = {CreateTestFormField("emailaddress", "emailaddress", "",
-                                     FormControlType::kInputEmail)};
+  form.set_url(GURL("http://foo.com"));
+  form.set_fields({CreateTestFormField("emailaddress", "emailaddress", "",
+                                       FormControlType::kInputEmail)});
 
   // Add form to the vector needed by the response parsing function.
   FormStructure form_structure(form);
@@ -2987,7 +2999,7 @@ TEST_F(AutofillCrowdsourcingEncoding,
   // is no issue when parsing the query response. In this test case there is an
   // issue with the encoding of the data, hence EMAIL_ADDRESS should not be
   // applied because of early exit of the parsing function.
-  AddFieldPredictionToForm(form.fields[0], EMAIL_ADDRESS, form_suggestion);
+  AddFieldPredictionToForm(form.fields()[0], EMAIL_ADDRESS, form_suggestion);
 
   // Serialize API response.
   std::string response_string;
@@ -3006,12 +3018,12 @@ TEST_F(AutofillCrowdsourcingEncoding,
 
 TEST_F(AutofillCrowdsourcingEncoding, ParseQueryResponse_AuthorDefinedTypes) {
   FormData form;
-  form.url = GURL("http://foo.com");
-  form.fields = {
-      CreateTestFormField("email", "email", "", FormControlType::kInputText,
-                          "email"),
-      CreateTestFormField("password", "password", "",
-                          FormControlType::kInputPassword, "new-password")};
+  form.set_url(GURL("http://foo.com"));
+  form.set_fields(
+      {CreateTestFormField("email", "email", "", FormControlType::kInputText,
+                           "email"),
+       CreateTestFormField("password", "password", "",
+                           FormControlType::kInputPassword, "new-password")});
   FormStructure form_structure(form);
   std::vector<raw_ptr<FormStructure, VectorExperimental>> forms;
   forms.push_back(&form_structure);
@@ -3020,8 +3032,8 @@ TEST_F(AutofillCrowdsourcingEncoding, ParseQueryResponse_AuthorDefinedTypes) {
 
   AutofillQueryResponse response;
   auto* form_suggestion = response.add_form_suggestions();
-  AddFieldPredictionToForm(form.fields[0], EMAIL_ADDRESS, form_suggestion);
-  AddFieldPredictionToForm(form.fields[1], ACCOUNT_CREATION_PASSWORD,
+  AddFieldPredictionToForm(form.fields()[0], EMAIL_ADDRESS, form_suggestion);
+  AddFieldPredictionToForm(form.fields()[1], ACCOUNT_CREATION_PASSWORD,
                            form_suggestion);
 
   std::string response_string = SerializeAndEncode(response);
@@ -3059,10 +3071,10 @@ TEST_F(AutofillCrowdsourcingEncoding,
 
   AutofillQueryResponse response;
   auto* form_suggestion = response.add_form_suggestions();
-  AddFieldPredictionToForm(form.fields[0], NAME_FIRST, form_suggestion);
-  AddFieldPredictionToForm(form.fields[1], NO_SERVER_DATA, form_suggestion);
-  AddFieldPredictionToForm(form.fields[2], NO_SERVER_DATA, form_suggestion);
-  AddFieldPredictionToForm(form.fields[3], NO_SERVER_DATA, form_suggestion);
+  AddFieldPredictionToForm(form.fields()[0], NAME_FIRST, form_suggestion);
+  AddFieldPredictionToForm(form.fields()[1], NO_SERVER_DATA, form_suggestion);
+  AddFieldPredictionToForm(form.fields()[2], NO_SERVER_DATA, form_suggestion);
+  AddFieldPredictionToForm(form.fields()[3], NO_SERVER_DATA, form_suggestion);
 
   std::string response_string = SerializeAndEncode(response);
 
@@ -3109,10 +3121,10 @@ TEST_F(AutofillCrowdsourcingEncoding, NoServerDataCCFields_CVC_NoOverwrite) {
 
   AutofillQueryResponse response;
   auto* form_suggestion = response.add_form_suggestions();
-  AddFieldPredictionToForm(form.fields[0], NO_SERVER_DATA, form_suggestion);
-  AddFieldPredictionToForm(form.fields[1], NO_SERVER_DATA, form_suggestion);
-  AddFieldPredictionToForm(form.fields[2], NO_SERVER_DATA, form_suggestion);
-  AddFieldPredictionToForm(form.fields[3], NO_SERVER_DATA, form_suggestion);
+  AddFieldPredictionToForm(form.fields()[0], NO_SERVER_DATA, form_suggestion);
+  AddFieldPredictionToForm(form.fields()[1], NO_SERVER_DATA, form_suggestion);
+  AddFieldPredictionToForm(form.fields()[2], NO_SERVER_DATA, form_suggestion);
+  AddFieldPredictionToForm(form.fields()[3], NO_SERVER_DATA, form_suggestion);
 
   std::string response_string = SerializeAndEncode(response);
 
@@ -3163,12 +3175,13 @@ TEST_F(AutofillCrowdsourcingEncoding, WithServerDataCCFields_CVC_NoOverwrite) {
 
   AutofillQueryResponse response;
   auto* form_suggestion = response.add_form_suggestions();
-  AddFieldPredictionToForm(form.fields[0], CREDIT_CARD_NAME_FULL,
+  AddFieldPredictionToForm(form.fields()[0], CREDIT_CARD_NAME_FULL,
                            form_suggestion);
-  AddFieldPredictionToForm(form.fields[1], CREDIT_CARD_NUMBER, form_suggestion);
-  AddFieldPredictionToForm(form.fields[2], CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR,
+  AddFieldPredictionToForm(form.fields()[1], CREDIT_CARD_NUMBER,
                            form_suggestion);
-  AddFieldPredictionToForm(form.fields[3], NO_SERVER_DATA, form_suggestion);
+  AddFieldPredictionToForm(form.fields()[2], CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR,
+                           form_suggestion);
+  AddFieldPredictionToForm(form.fields()[3], NO_SERVER_DATA, form_suggestion);
 
   std::string response_string = SerializeAndEncode(response);
 
@@ -3206,16 +3219,17 @@ TEST_F(AutofillCrowdsourcingEncoding, WithServerDataCCFields_CVC_NoOverwrite) {
 TEST_F(AutofillCrowdsourcingEncoding, ParseQueryResponse_RankEqualSignatures) {
   FormData form_data;
   FormFieldData field;
-  form_data.url = GURL("http://foo.com");
-  form_data.fields = {
-      CreateTestFormField("First Name", "name", "",
-                          FormControlType::kInputText),
-      CreateTestFormField("Last Name", "name", "", FormControlType::kInputText),
-      CreateTestFormField("email", "email", "", FormControlType::kInputText,
-                          "address-level2")};
+  form_data.set_url(GURL("http://foo.com"));
+  form_data.set_fields(
+      {CreateTestFormField("First Name", "name", "",
+                           FormControlType::kInputText),
+       CreateTestFormField("Last Name", "name", "",
+                           FormControlType::kInputText),
+       CreateTestFormField("email", "email", "", FormControlType::kInputText,
+                           "address-level2")});
 
-  ASSERT_EQ(CalculateFieldSignatureForField(form_data.fields[0]),
-            CalculateFieldSignatureForField(form_data.fields[1]));
+  ASSERT_EQ(CalculateFieldSignatureForField(form_data.fields()[0]),
+            CalculateFieldSignatureForField(form_data.fields()[1]));
 
   FormStructure form(form_data);
   form.DetermineHeuristicTypes(GeoIpCountryCode(""), nullptr, nullptr);
@@ -3223,9 +3237,10 @@ TEST_F(AutofillCrowdsourcingEncoding, ParseQueryResponse_RankEqualSignatures) {
   // Setup the query response.
   AutofillQueryResponse response;
   auto* form_suggestion = response.add_form_suggestions();
-  AddFieldPredictionToForm(form_data.fields[0], NAME_FIRST, form_suggestion);
-  AddFieldPredictionToForm(form_data.fields[1], NAME_LAST, form_suggestion);
-  AddFieldPredictionToForm(form_data.fields[2], EMAIL_ADDRESS, form_suggestion);
+  AddFieldPredictionToForm(form_data.fields()[0], NAME_FIRST, form_suggestion);
+  AddFieldPredictionToForm(form_data.fields()[1], NAME_LAST, form_suggestion);
+  AddFieldPredictionToForm(form_data.fields()[2], EMAIL_ADDRESS,
+                           form_suggestion);
 
   std::string response_string = SerializeAndEncode(response);
 
@@ -3246,16 +3261,17 @@ TEST_F(AutofillCrowdsourcingEncoding, ParseQueryResponse_RankEqualSignatures) {
 TEST_F(AutofillCrowdsourcingEncoding,
        ParseQueryResponse_EqualSignaturesFewerPredictions) {
   FormData form_data;
-  form_data.url = GURL("http://foo.com");
-  form_data.fields = {
-      CreateTestFormField("First Name", "name", "",
-                          FormControlType::kInputText),
-      CreateTestFormField("Last Name", "name", "", FormControlType::kInputText),
-      CreateTestFormField("email", "email", "", FormControlType::kInputText,
-                          "address-level2")};
+  form_data.set_url(GURL("http://foo.com"));
+  form_data.set_fields(
+      {CreateTestFormField("First Name", "name", "",
+                           FormControlType::kInputText),
+       CreateTestFormField("Last Name", "name", "",
+                           FormControlType::kInputText),
+       CreateTestFormField("email", "email", "", FormControlType::kInputText,
+                           "address-level2")});
 
-  ASSERT_EQ(CalculateFieldSignatureForField(form_data.fields[0]),
-            CalculateFieldSignatureForField(form_data.fields[1]));
+  ASSERT_EQ(CalculateFieldSignatureForField(form_data.fields()[0]),
+            CalculateFieldSignatureForField(form_data.fields()[1]));
 
   FormStructure form(form_data);
   form.DetermineHeuristicTypes(GeoIpCountryCode(""), nullptr, nullptr);
@@ -3263,8 +3279,9 @@ TEST_F(AutofillCrowdsourcingEncoding,
   // Setup the query response.
   AutofillQueryResponse response;
   auto* form_suggestion = response.add_form_suggestions();
-  AddFieldPredictionToForm(form_data.fields[0], NAME_FIRST, form_suggestion);
-  AddFieldPredictionToForm(form_data.fields[2], EMAIL_ADDRESS, form_suggestion);
+  AddFieldPredictionToForm(form_data.fields()[0], NAME_FIRST, form_suggestion);
+  AddFieldPredictionToForm(form_data.fields()[2], EMAIL_ADDRESS,
+                           form_suggestion);
 
   std::string response_string = SerializeAndEncode(response);
 
@@ -3286,7 +3303,7 @@ TEST_F(AutofillCrowdsourcingEncoding,
 TEST_F(AutofillCrowdsourcingEncoding,
        ExperimentalServerPredictionsAreSeparate) {
   FormData form_data;
-  form_data.url = GURL("http://foo.com");
+  form_data.set_url(GURL("http://foo.com"));
 
   // Add 6 fields.
   for (int i = 0; i < 6; i++) {
@@ -3295,7 +3312,7 @@ TEST_F(AutofillCrowdsourcingEncoding,
     field.set_name(base::NumberToString16(i));
     field.set_label((base::NumberToString16(i)));
     field.set_renderer_id(test::MakeFieldRendererId());
-    form_data.fields.push_back(field);
+    test_api(form_data).Append(field);
   }
 
   FormStructure form(form_data);
@@ -3318,30 +3335,30 @@ TEST_F(AutofillCrowdsourcingEncoding,
   auto* form_suggestion = response.add_form_suggestions();
   // 2 default + 1 experimental predictions.
   AddFieldPredictionsToForm(
-      form_data.fields[0],
+      form_data.fields()[0],
       {default_autofill_prediction, default_password_prediction,
        experimental_prediction},
       form_suggestion);
   // 1 default + 1 experimental predictions.
   AddFieldPredictionsToForm(
-      form_data.fields[1],
+      form_data.fields()[1],
       {default_autofill_prediction, experimental_prediction}, form_suggestion);
   // 2 default predictions.
   AddFieldPredictionsToForm(
-      form_data.fields[2],
+      form_data.fields()[2],
       {default_autofill_prediction, default_password_prediction},
       form_suggestion);
   // 1 null + 1 experimental predictions.
-  AddFieldPredictionsToForm(form_data.fields[3],
+  AddFieldPredictionsToForm(form_data.fields()[3],
                             {null_prediction, experimental_prediction},
                             form_suggestion);
   // 1 experimental prediction. The server doesn't do that, but we can defend
   // against it anyway. The default prediction should be effectively
   // `NO_SERVER_DATA`.
-  AddFieldPredictionsToForm(form_data.fields[4], {experimental_prediction},
+  AddFieldPredictionsToForm(form_data.fields()[4], {experimental_prediction},
                             form_suggestion);
   // A prediction without the source specified.
-  AddFieldPredictionsToForm(form_data.fields[5], {unknown_prediction_source},
+  AddFieldPredictionsToForm(form_data.fields()[5], {unknown_prediction_source},
                             form_suggestion);
 
   // Parse the response and update the field type predictions.
@@ -3351,10 +3368,8 @@ TEST_F(AutofillCrowdsourcingEncoding,
                                       nullptr, nullptr);
 
   ASSERT_EQ(form.field_count(), 6U);
-
-  auto form_as_span = base::make_span(form.begin(), form.end());
   EXPECT_THAT(
-      form_as_span,
+      form.fields(),
       Each(Pointee(Property(&AutofillField::server_type,
                             Not(AnyOf(experimental_prediction.type(),
                                       unknown_prediction_source.type()))))))

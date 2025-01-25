@@ -4,12 +4,10 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <immintrin.h>
 #include <stddef.h>
 
-#include <immintrin.h>
-
-#include <xnnpack/math.h>
-#include <xnnpack/math-stubs.h>
+#include "xnnpack/math-stubs.h"
 
 
 void xnn_math_f32_sqrt__fma3_nr1fma1adj(

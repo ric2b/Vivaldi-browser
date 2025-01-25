@@ -8,17 +8,17 @@
 
 #pragma once
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <assert.h>
 
 #ifdef _MSC_VER
   #include <intrin.h>
   #include <stdlib.h> // For _rotl.
 #endif
 
-#include <xnnpack/common.h>
+#include "xnnpack/common.h"
 
 
 // stdlib.h from Windows 10 SDK defines min & max macros.

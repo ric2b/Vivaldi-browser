@@ -11,11 +11,9 @@
 #include <limits>
 
 #include <gtest/gtest.h>
-
-#include <xnnpack/common.h>
-#include <xnnpack/isa-checks.h>
-
-#include <xnnpack/vcvt.h>
+#include "xnnpack/common.h"
+#include "xnnpack/isa-checks.h"
+#include "xnnpack/vcvt.h"
 #include "vcvt-microkernel-tester.h"
 
 

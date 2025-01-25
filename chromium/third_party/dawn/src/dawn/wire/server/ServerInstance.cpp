@@ -98,9 +98,9 @@ void Server::OnRequestAdapterCallback(RequestAdapterUserdata* data,
     cmd.featuresCount = std::distance(features.begin(), it);
     cmd.features = features.data();
 
-    // Query and report the adapter properties.
-    WGPUAdapterProperties properties = {};
-    WGPUChainedStructOut** propertiesChain = &properties.nextInChain;
+    // Query and report the adapter info.
+    WGPUAdapterInfo info = {};
+    WGPUChainedStructOut** propertiesChain = &info.nextInChain;
 
     // Query AdapterPropertiesMemoryHeaps if the feature is supported.
     WGPUAdapterPropertiesMemoryHeaps memoryHeapProperties = {};
@@ -126,8 +126,8 @@ void Server::OnRequestAdapterCallback(RequestAdapterUserdata* data,
         propertiesChain = &(*propertiesChain)->next;
     }
 
-    mProcs.adapterGetProperties(adapter, &properties);
-    cmd.properties = &properties;
+    mProcs.adapterGetInfo(adapter, &info);
+    cmd.info = &info;
 
     // Query and report the adapter limits, including DawnExperimentalSubgroupLimits.
     WGPUSupportedLimits limits = {};
@@ -140,7 +140,7 @@ void Server::OnRequestAdapterCallback(RequestAdapterUserdata* data,
     cmd.limits = &limits;
 
     SerializeCommand(cmd);
-    mProcs.adapterPropertiesFreeMembers(properties);
+    mProcs.adapterInfoFreeMembers(info);
     mProcs.adapterPropertiesMemoryHeapsFreeMembers(memoryHeapProperties);
 }
 

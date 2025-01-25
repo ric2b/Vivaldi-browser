@@ -6,11 +6,9 @@
 
 #import "base/strings/sys_string_conversions.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
-#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_item.h"
 
 using vivaldi_bookmark_kit::SetNodeThumbnail;
-using bookmarks::BookmarkModel;
 
 // Namespace
 namespace {
@@ -29,7 +27,7 @@ NSString* thumbnailDirectory = @"Vivaldi/sd-thumbnails";
                        snapshot:(UIImage*)snapshot
                         replace:(BOOL)replace
                     isMigrating:(BOOL)isMigrating
-                      bookmarks:(LegacyBookmarkModel*)bookmarks {
+                      bookmarks:(BookmarkModel*)bookmarks {
   NSString* snapshotPath = [self storeThumbnailFromSnapshot:snapshot
                                                      SDItem:sdItem
                                                     replace:replace];
@@ -41,7 +39,7 @@ NSString* thumbnailDirectory = @"Vivaldi/sd-thumbnails";
     const std::string imagePathU16 =
         base::SysNSStringToUTF8(snapshotPath);
     [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-      SetNodeThumbnail(bookmarks->getUnderlyingModel(),
+      SetNodeThumbnail(bookmarks,
                        sdItem.bookmarkNode, imagePathU16);
     }];
   }

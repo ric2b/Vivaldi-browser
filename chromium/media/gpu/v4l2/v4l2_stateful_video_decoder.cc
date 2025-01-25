@@ -13,7 +13,6 @@
 #include "base/containers/contains.h"
 #include "base/containers/heap_array.h"
 #include "base/files/file_util.h"
-#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -29,7 +28,8 @@
 #include "media/gpu/v4l2/v4l2_framerate_control.h"
 #include "media/gpu/v4l2/v4l2_queue.h"
 #include "media/gpu/v4l2/v4l2_utils.h"
-#include "media/video/h264_parser.h"
+#include "media/parsers/h264_parser.h"
+#include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace {
@@ -173,7 +173,7 @@ scoped_refptr<media::DecoderBuffer> ReassembleFragments(
   }
 
   auto reassembled_frame =
-      media::DecoderBuffer::FromArray(std::move(temp_buffer), frame_size);
+      media::DecoderBuffer::FromArray(std::move(temp_buffer));
   // Use the last fragment's timestamp as the |reassembled_frame|'s' timestamp.
   reassembled_frame->set_timestamp(fragments.back()->timestamp());
 
@@ -383,14 +383,14 @@ void V4L2StatefulVideoDecoder::Initialize(const VideoDecoderConfig& config,
   const auto profile_as_v4l2_fourcc =
       VideoCodecProfileToV4L2PixFmt(config.profile(), /*slice_based=*/false);
 
-  // In legacy code this was good for up to 1080p.
-  // TODO(mcasas): Increase this by 4x to support 4K decoding, if needed.
-  // Input buffer size is increased from 1024 * 1024 to accommodate bistreams
-  // with big data size (CAPCM1_Sand_E.h264, CAPCMNL1_Sand_E.h264).
+  // Allocate larger |OUTPUT_queue_| buffers for resolutions above 1080p.
   // TODO(hnt): Investigate ways to reduce this size.
-  constexpr size_t kInputBufferMaxSize = 1024 * 1024 * 2;
+  constexpr size_t kMiB = 1024 * 1024;
+  constexpr int kFullHDNumPixels = 1920 * 1080;
+  const size_t kInputBufferInMBs =
+      (config.coded_size().GetArea() <= kFullHDNumPixels) ? 2 : 4;
   const auto v4l2_format = OUTPUT_queue_->SetFormat(
-      profile_as_v4l2_fourcc, gfx::Size(), kInputBufferMaxSize);
+      profile_as_v4l2_fourcc, gfx::Size(), kInputBufferInMBs * kMiB);
   if (!v4l2_format) {
     std::move(init_cb).Run(DecoderStatus::Codes::kFailedToCreateDecoder);
     return;
@@ -532,10 +532,11 @@ void V4L2StatefulVideoDecoder::Reset(base::OnceClosure closure) {
 
   // In order to preserve the order of the callbacks between Decode() and
   // Reset(), we also trampoline |closure|.
-  base::ScopedClosureRunner scoped_trampoline_reset_cb(
-      base::BindOnce(base::IgnoreResult(&base::SequencedTaskRunner::PostTask),
-                     base::SequencedTaskRunner::GetCurrentDefault(), FROM_HERE,
-                     std::move(closure)));
+  absl::Cleanup scoped_trampoline_reset = [closure =
+                                               std::move(closure)]() mutable {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(closure));
+  };
 
   // Invalidate pointers from and cancel all hypothetical in-flight requests
   // to the WaitOnceForEvents() routine.
@@ -570,31 +571,36 @@ void V4L2StatefulVideoDecoder::Reset(base::OnceClosure closure) {
 
 bool V4L2StatefulVideoDecoder::NeedsBitstreamConversion() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  NOTREACHED() << "Our only owner VideoDecoderPipeline never calls here";
+  NOTREACHED_IN_MIGRATION()
+      << "Our only owner VideoDecoderPipeline never calls here";
   return false;
 }
 
 bool V4L2StatefulVideoDecoder::CanReadWithoutStalling() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  NOTREACHED() << "Our only owner VideoDecoderPipeline never calls here";
+  NOTREACHED_IN_MIGRATION()
+      << "Our only owner VideoDecoderPipeline never calls here";
   return true;
 }
 
 int V4L2StatefulVideoDecoder::GetMaxDecodeRequests() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  NOTREACHED() << "Our only owner VideoDecoderPipeline never calls here";
+  NOTREACHED_IN_MIGRATION()
+      << "Our only owner VideoDecoderPipeline never calls here";
   return 4;
 }
 
 VideoDecoderType V4L2StatefulVideoDecoder::GetDecoderType() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  NOTREACHED() << "Our only owner VideoDecoderPipeline never calls here";
+  NOTREACHED_IN_MIGRATION()
+      << "Our only owner VideoDecoderPipeline never calls here";
   return VideoDecoderType::kV4L2;
 }
 
 bool V4L2StatefulVideoDecoder::IsPlatformDecoder() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  NOTREACHED() << "Our only owner VideoDecoderPipeline never calls here";
+  NOTREACHED_IN_MIGRATION()
+      << "Our only owner VideoDecoderPipeline never calls here";
   return true;
 }
 
@@ -761,7 +767,11 @@ bool V4L2StatefulVideoDecoder::InitializeCAPTUREQueue() {
 
   const auto allocated_buffers = CAPTURE_queue_->AllocateBuffers(
       v4l2_num_buffers, buffer_type, /*incoherent=*/false);
-  CHECK_GE(allocated_buffers, v4l2_num_buffers);
+  if (allocated_buffers < v4l2_num_buffers) {
+    LOGF(ERROR) << "Failed to allocate enough CAPTURE buffers, requested= "
+                << v4l2_num_buffers << " actual= " << allocated_buffers;
+    return false;
+  }
   if (!CAPTURE_queue_->Streamon()) {
     return false;
   }

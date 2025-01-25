@@ -66,7 +66,6 @@ class ObservableProvider;
 class ProviderInterface;
 class PrefProvider;
 class TestUtils;
-class RuleIterator;
 class WebsiteSettingsInfo;
 }  // namespace content_settings
 
@@ -367,6 +366,9 @@ class HostContentSettingsMap : public content_settings::Observer,
     allow_invalid_secondary_pattern_for_testing_ = allow;
   }
 
+  // Returns the current time of the `clock_`.
+  base::Time Now() const { return clock_->Now(); }
+
  private:
   friend class base::RefCountedThreadSafe<HostContentSettingsMap>;
   friend class content_settings::TestUtils;
@@ -440,17 +442,7 @@ class HostContentSettingsMap : public content_settings::Observer,
       bool include_incognito,
       ContentSettingsPattern* primary_pattern,
       ContentSettingsPattern* secondary_pattern,
-      content_settings::RuleMetaData* metadata,
-      base::Clock* clock);
-
-  static base::Value GetContentSettingValueAndPatterns(
-      content_settings::RuleIterator* rule_iterator,
-      const GURL& primary_url,
-      const GURL& secondary_url,
-      ContentSettingsPattern* primary_pattern,
-      ContentSettingsPattern* secondary_pattern,
-      content_settings::RuleMetaData* metadata,
-      base::Clock* clock);
+      content_settings::RuleMetaData* metadata);
 
   static base::Value GetContentSettingValueAndPatterns(
       content_settings::Rule* rule,

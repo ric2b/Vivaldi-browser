@@ -11,7 +11,6 @@
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
-#import "ios/chrome/browser/crash_report/model/crash_keys_helper.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/url/url_util.h"
@@ -76,7 +75,6 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
                            WebStateList* web_state_list) {
   [consumer populateItems:CreateItemsOrderedByRecency(web_state_list)
       selectedItemIdentifier:nil];
-  crash_keys::SetInactiveTabCount(web_state_list->count());
 }
 
 }  // namespace
@@ -423,11 +421,15 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
   NOTREACHED_NORETURN();
 }
 
+- (void)deleteTabGroup:(const TabGroup*)group sourceView:(UIView*)sourceView {
+  NOTREACHED_NORETURN();
+}
+
 - (void)closeTabGroup:(const TabGroup*)group {
   NOTREACHED_NORETURN();
 }
 
-- (void)ungroupTabGroup:(const TabGroup*)group {
+- (void)ungroupTabGroup:(const TabGroup*)group sourceView:(UIView*)sourceView {
   NOTREACHED_NORETURN();
 }
 
@@ -473,7 +475,7 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
 }
 
 - (void)closeItemWithIdentifier:(GridItemIdentifier*)identifier {
-  CHECK(identifier.type == GridItemType::Tab);
+  CHECK(identifier.type == GridItemType::kTab);
   [self closeItemWithID:identifier.tabSwitcherItem.identifier];
 }
 

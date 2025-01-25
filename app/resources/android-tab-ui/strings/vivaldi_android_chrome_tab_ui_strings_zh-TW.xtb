@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
-<translation id="2947471979790858922">您在這些無痕式分頁中的活動將會從此裝置上移除</translation>
+<translation id="2947471979790858922">您在這些無痕分頁中的活動將會從此裝置上移除</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
-        =1 {您可以在 Vivaldi 主選單的最近分頁中找到您關閉的分頁。您的無痕式分頁將不會在此列表中出現。}
-        other {您可以在 Vivaldi 主選單的最近分頁中找到您關閉的分頁。您的 # 個無痕式分頁將不會在此列表中出現。}}</translation>
-<translation id="4871187110787939393">要關閉全部的無痕式分頁嗎？</translation>
+        =1 {您可以在 Vivaldi 主選單的最近分頁中找到您關閉的分頁。您的無痕分頁將不會在此清單中出現。}
+        other {您可以在 Vivaldi 主選單的最近分頁中找到您關閉的分頁。您的 # 個無痕分頁將不會在此清單中出現。}}</translation>
+<translation id="4871187110787939393">要關閉全部的無痕分頁嗎？</translation>
 </translationbundle>

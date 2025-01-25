@@ -41,17 +41,23 @@ class MakoRewriteView : public WebUIBubbleDialogView,
   const std::optional<SkRegion> GetDraggableRegion() override;
   const gfx::Rect GetWidgetBoundsInScreen() override;
   void SetWidgetBoundsConstrained(const gfx::Rect bounds) override;
+  void SetCursor(const ui::Cursor& cursor) override;
+  bool IsDraggingEnabled() override;
+  bool IsResizingEnabled() override;
 
-  bool HandleKeyboardEvent(
-      content::WebContents* source,
-      const content::NativeWebKeyboardEvent& event) override;
+  bool HandleKeyboardEvent(content::WebContents* source,
+                           const input::NativeWebKeyboardEvent& event) override;
 
  private:
   gfx::Rect caret_bounds_;
   std::optional<SkRegion> draggable_region_ = std::nullopt;
   std::unique_ptr<MakoBubbleEventHandler> event_handler_;
+  bool dragging_initialized_;
+  bool resizing_initialized_;
+  bool content_bounds_updated_by_webui_;
 
   void SetupDraggingSupport();
+  void SetupResizingSupport();
 };
 
 }  // namespace ash

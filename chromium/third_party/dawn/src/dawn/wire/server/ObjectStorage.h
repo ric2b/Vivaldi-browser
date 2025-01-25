@@ -70,7 +70,7 @@ struct ObjectData<WGPUBuffer> : public ObjectDataBase<WGPUBuffer> {
     std::unique_ptr<MemoryTransferService::ReadHandle> readHandle;
     std::unique_ptr<MemoryTransferService::WriteHandle> writeHandle;
     BufferMapWriteState mapWriteState = BufferMapWriteState::Unmapped;
-    WGPUBufferUsageFlags usage = WGPUBufferUsage_None;
+    WGPUBufferUsage usage = WGPUBufferUsage_None;
     // Indicate if writeHandle needs to be destroyed on unmap
     bool mappedAtCreation = false;
 };
@@ -250,7 +250,10 @@ class KnownObjectsBase {
     // Marks an ID as deallocated
     void Free(ObjectId id) {
         DAWN_ASSERT(id < mKnown.size());
-        mKnown[id].state = AllocationState::Free;
+        Data data;
+        data.generation = mKnown[id].generation;
+        data.state = AllocationState::Free;
+        mKnown[id] = std::move(data);
     }
 
     std::vector<T> AcquireAllHandles() {

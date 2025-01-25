@@ -31,6 +31,8 @@ class LocalSessionEventHandler {
   // for this instance of Chrome.
   virtual void OnLocalTabModified(SyncedTabDelegate* modified_tab) = 0;
 
+  virtual void OnVivDataModified(const std::string &) {}
+
  protected:
   LocalSessionEventHandler() {}
 };

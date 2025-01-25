@@ -22,7 +22,6 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/budget_pool.h"
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/cpu_time_budget_pool.h"
@@ -247,8 +246,10 @@ void PageSchedulerImpl::SetPageFrozen(bool frozen) {
   SetPageFrozenImpl(frozen, policy_updater);
 }
 
-void PageSchedulerImpl::SetPageFrozenImpl(bool frozen,
-                                          PolicyUpdater& policy_updater) {
+void PageSchedulerImpl::SetPageFrozenImpl(
+    bool frozen,
+    PolicyUpdater& policy_updater,
+    base::MemoryReductionTaskContext called_from) {
   // Only pages owned by web views can be frozen.
   DCHECK(!frozen || IsOrdinary());
 
@@ -262,7 +263,7 @@ void PageSchedulerImpl::SetPageFrozenImpl(bool frozen,
   }
   policy_updater.UpdatePagePolicy(this);
   if (frozen) {
-    main_thread_scheduler_->OnPageFrozen();
+    main_thread_scheduler_->OnPageFrozen(called_from);
     if (audio_state_ == AudioState::kRecentlyAudible) {
       // A recently audible page is being frozen before the audio silent timer
       // fired, which can happen if freezing from outside the scheduler (e.g.
@@ -367,10 +368,6 @@ std::unique_ptr<blink::FrameScheduler> PageSchedulerImpl::CreateFrameScheduler(
 void PageSchedulerImpl::Unregister(FrameSchedulerImpl* frame_scheduler) {
   DCHECK(base::Contains(frame_schedulers_, frame_scheduler));
   frame_schedulers_.erase(frame_scheduler);
-}
-
-void PageSchedulerImpl::ReportIntervention(const String& message) {
-  delegate_->ReportIntervention(message);
 }
 
 void PageSchedulerImpl::AudioStateChanged(bool is_audio_playing) {
@@ -863,7 +860,7 @@ void PageSchedulerImpl::UpdateFrozenState(
   }
 
   if (freeze_time > now) {
-    SetPageFrozenImpl(/* frozen=*/false, policy_updater);
+    SetPageFrozenImpl(/* frozen=*/false, policy_updater, called_from);
     if (!freeze_time.is_max()) {
       update_frozen_state_timer_.SetTaskRunner(
           main_thread_scheduler_->ControlTaskRunner());
@@ -878,7 +875,7 @@ void PageSchedulerImpl::UpdateFrozenState(
               base::Unretained(this)));
     }
   } else {
-    SetPageFrozenImpl(/* frozen=*/true, policy_updater);
+    SetPageFrozenImpl(/* frozen=*/true, policy_updater, called_from);
   }
 }
 

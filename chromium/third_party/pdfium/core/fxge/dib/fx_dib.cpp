@@ -7,6 +7,7 @@
 #include "core/fxge/dib/fx_dib.h"
 
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 #include "build/build_config.h"
@@ -20,20 +21,23 @@ static_assert(sizeof(FX_COLORREF) == sizeof(COLORREF),
               "FX_COLORREF vs. COLORREF mismatch");
 #endif
 
-FXDIB_Format MakeRGBFormat(int bpp) {
-  switch (bpp) {
-    case 1:
-      return FXDIB_Format::k1bppRgb;
-    case 8:
-      return FXDIB_Format::k8bppRgb;
-    case 24:
-      return FXDIB_Format::kRgb;
-    case 32:
-      return FXDIB_Format::kRgb32;
-    default:
-      return FXDIB_Format::kInvalid;
-  }
-}
+// Assert that FX_*_STRUCTS are packed.
+static_assert(sizeof(FX_RGB_STRUCT<uint8_t>) == 3u);
+static_assert(sizeof(FX_BGR_STRUCT<uint8_t>) == 3u);
+static_assert(sizeof(FX_ARGB_STRUCT<uint8_t>) == 4u);
+static_assert(sizeof(FX_ABGR_STRUCT<uint8_t>) == 4u);
+static_assert(sizeof(FX_RGBA_STRUCT<uint8_t>) == 4u);
+static_assert(sizeof(FX_BGRA_STRUCT<uint8_t>) == 4u);
+static_assert(sizeof(FX_CMYK_STRUCT<uint8_t>) == 4u);
+
+// Assert that FX_*_STRUCTS remain aggregates.
+static_assert(std::is_aggregate_v<FX_RGB_STRUCT<float>>);
+static_assert(std::is_aggregate_v<FX_BGR_STRUCT<float>>);
+static_assert(std::is_aggregate_v<FX_ARGB_STRUCT<float>>);
+static_assert(std::is_aggregate_v<FX_ABGR_STRUCT<float>>);
+static_assert(std::is_aggregate_v<FX_RGBA_STRUCT<float>>);
+static_assert(std::is_aggregate_v<FX_BGRA_STRUCT<float>>);
+static_assert(std::is_aggregate_v<FX_CMYK_STRUCT<float>>);
 
 FXDIB_ResampleOptions::FXDIB_ResampleOptions() = default;
 
@@ -41,9 +45,12 @@ bool FXDIB_ResampleOptions::HasAnyOptions() const {
   return bInterpolateBilinear || bHalftone || bNoSmoothing || bLossy;
 }
 
-std::tuple<int, int, int, int> ArgbDecode(FX_ARGB argb) {
-  return std::make_tuple(FXARGB_A(argb), FXARGB_R(argb), FXARGB_G(argb),
-                         FXARGB_B(argb));
+FX_BGRA_STRUCT<uint8_t> ArgbToBGRAStruct(FX_ARGB argb) {
+  return {FXARGB_B(argb), FXARGB_G(argb), FXARGB_R(argb), FXARGB_A(argb)};
+}
+
+FX_BGR_STRUCT<uint8_t> ArgbToBGRStruct(FX_ARGB argb) {
+  return {FXARGB_B(argb), FXARGB_G(argb), FXARGB_R(argb)};
 }
 
 std::pair<int, FX_COLORREF> ArgbToAlphaAndColorRef(FX_ARGB argb) {

@@ -60,6 +60,8 @@ class Shape {
 
   // Returns a ShapeProto representation of the Shape.
   ShapeProto ToProto() const;
+  // Sets a ShapeProto to the representation of the Shape.
+  void SetProto(ShapeProto& proto) const;
 
   // Prints a human-readable string that represents the given shape, with or
   // without layout. e.g. "F32[42,12] {0, 1}" or "F32[64]".
@@ -287,6 +289,7 @@ class Shape {
       ignore_element_size_in_layout_ = true;
       ignore_memory_space_in_layout_ = true;
       ignore_tail_padding_alignment_in_elements_in_layout_ = true;
+      ignore_split_config_in_layout_ = true;
       return *this;
     }
     Equal& IgnoreElementType() {
@@ -309,6 +312,10 @@ class Shape {
       ignore_tail_padding_alignment_in_elements_in_layout_ = true;
       return *this;
     }
+    Equal& IgnoreSplitConfigInLayout() {
+      ignore_split_config_in_layout_ = true;
+      return *this;
+    }
 
    private:
     bool ignore_layout_ = false;
@@ -320,6 +327,7 @@ class Shape {
     bool ignore_dynamic_dimension_ = false;
     bool ignore_dimensions_ = false;
     bool ignore_tail_padding_alignment_in_elements_in_layout_ = false;
+    bool ignore_split_config_in_layout_ = false;
   };
 
   // Test that all fields of the shape are the same, equivalent to Equal().

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/http/http_stream_parser.h"
 
 #include <stdint.h>
@@ -13,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -60,7 +66,7 @@ std::unique_ptr<StreamSocket> CreateConnectedSocket(SequencedSocketData* data) {
   data->set_connect_data(MockConnect(SYNCHRONOUS, OK));
 
   auto socket =
-      std::make_unique<MockTCPClientSocket>(net::AddressList(), nullptr, data);
+      std::make_unique<MockTCPClientSocket>(AddressList(), nullptr, data);
 
   TestCompletionCallback callback;
   EXPECT_THAT(socket->Connect(callback.callback()), IsOk());
@@ -1170,9 +1176,8 @@ TEST(HttpStreamParser, WebSocket101Response) {
   EXPECT_TRUE(response_info.headers->HasHeaderValue("Connection", "Upgrade"));
   EXPECT_TRUE(response_info.headers->HasHeaderValue("Upgrade", "websocket"));
   EXPECT_EQ(read_buffer->capacity(), read_buffer->offset());
-  EXPECT_EQ(
-      "a fake websocket frame",
-      std::string_view(read_buffer->StartOfBuffer(), read_buffer->capacity()));
+  EXPECT_EQ("a fake websocket frame",
+            base::as_string_view(read_buffer->everything()));
 
   EXPECT_EQ(CountWriteBytes(writes), parser.sent_bytes());
   EXPECT_EQ(CountReadBytes(reads) -
@@ -1198,10 +1203,10 @@ class SimpleGetRunner {
 
   void AddInitialData(const std::string& data) {
     int offset = read_buffer_->offset();
-    int size = data.size();
-    read_buffer_->SetCapacity(offset + size);
-    memcpy(read_buffer_->StartOfBuffer() + offset, data.data(), size);
-    read_buffer_->set_offset(offset + size);
+    read_buffer_->SetCapacity(offset + data.size());
+    auto span = base::as_byte_span(data);
+    read_buffer_->everything().subspan(offset, span.size()).copy_from(span);
+    read_buffer_->set_offset(offset + span.size());
   }
 
   // The data used to back |string_piece| must stay alive until all mock data
@@ -1411,7 +1416,7 @@ TEST(HttpStreamParser, ShoutcastSingleByteReads) {
   get_runner.AddRead("c");
   get_runner.AddRead("Y");
   // Needed because HttpStreamParser::Read returns ERR_CONNECTION_CLOSED on
-  // small response headers, which HttpNetworkTransaction replaces with net::OK.
+  // small response headers, which HttpNetworkTransaction replaces with OK.
   // TODO(mmenke): Can we just change that behavior?
   get_runner.AddRead(" Extra stuff");
   get_runner.SetupParserAndSendRequest();

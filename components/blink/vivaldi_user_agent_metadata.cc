@@ -23,8 +23,8 @@ std::optional<UserAgentMetadata> UserAgentOverride::GetUaMetaDataOverride(
     const std::string& hostname,
     bool return_main_metadata) const {
   if (!hostname.empty() && domain_ua_metadata_override.size()) {
-    base::StringPiece name(hostname);
-    while (name.find('.') != base::StringPiece::npos) {
+    std::string_view name(hostname);
+    while (name.find('.') != std::string_view::npos) {
       auto it = domain_ua_metadata_override.find(name);
       if (it != domain_ua_metadata_override.end()) {
         return it->second;

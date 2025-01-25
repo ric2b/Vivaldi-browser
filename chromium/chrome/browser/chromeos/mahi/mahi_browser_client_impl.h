@@ -12,6 +12,7 @@
 #include "base/unguessable_token.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/chromeos/mahi/mahi_browser_util.h"
+#include "chromeos/components/mahi/public/cpp/mahi_util.h"
 #include "chromeos/crosapi/mojom/mahi.mojom.h"
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -41,8 +42,9 @@ class MahiBrowserClientImpl : public crosapi::mojom::MahiBrowserClient {
   // Notifies `MahiBrowserDelegate` of context menu click action in the
   // browser.
   void OnContextMenuClicked(int64_t display_id,
-                            ButtonType button_type,
-                            const std::u16string& question);
+                            chromeos::mahi::ButtonType button_type,
+                            const std::u16string& question,
+                            const gfx::Rect& mahi_menu_bounds);
 
   // `crosapi::mojom::MahiBrowserClient` overrides:
   void GetContent(const base::UnguessableToken& page_id,

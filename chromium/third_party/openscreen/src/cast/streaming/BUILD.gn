@@ -19,6 +19,11 @@ fuzzable_proto_library("remoting_proto") {
   sources = [ "remoting.proto" ]
 }
 
+fuzzable_proto_library("sender_stats_proto") {
+  visibility += [ "*" ]  # Used by Android.
+  sources = [ "sender_stats.proto" ]
+}
+
 openscreen_source_set("streaming_configs") {
   # Used in //components/cast_streaming in Chromium.
   visibility += [ "*" ]
@@ -29,6 +34,7 @@ openscreen_source_set("streaming_configs") {
     "resolution.h",
   ]
   sources = [
+    "constants.cc",
     "message_fields.cc",
     "resolution.cc",
   ]

@@ -40,7 +40,7 @@ inline constexpr size_t kHashLen = 40;
 // being remote. Returns an empty string if the `file_path` is empty.
 std::string HashOfFileContents(std::string_view file_path);
 // Returns a printable string representing at most `max_len` bytes of `data`.
-std::string AsString(const ByteArray &data, size_t max_len = 16);
+std::string AsPrintableString(const ByteArray &data, size_t max_len);
 // Reads from a local file `file_path` into `data`.
 // Crashes on any error.
 void ReadFromLocalFile(std::string_view file_path, ByteArray &data);
@@ -51,6 +51,8 @@ void ReadFromLocalFile(std::string_view file_path, std::string &data);
 void ReadFromLocalFile(std::string_view file_path, FeatureVec &data);
 // Same as above but for vector<uint32_t>.
 void ReadFromLocalFile(std::string_view file_path, std::vector<uint32_t> &data);
+// Clears the content of the file `file_path`. Crashes on any error.
+void ClearLocalFileContents(std::string_view file_path);
 // Writes the contents of `data` to a local file `file_path`.
 // Crashes on any error.
 void WriteToLocalFile(std::string_view file_path, ByteSpan data);

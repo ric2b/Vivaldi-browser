@@ -33,7 +33,7 @@ class TlsConnectionPosix : public TlsConnection {
 
   // TlsConnection overrides.
   void SetClient(Client* client) override;
-  bool Send(const void* data, size_t len) override;
+  bool Send(ByteView data) override;
   IPEndpoint GetRemoteEndpoint() const override;
 
   // Registers |this| with the platform TlsDataRouterPosix.  This is called

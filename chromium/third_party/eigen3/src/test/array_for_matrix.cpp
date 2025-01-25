@@ -26,7 +26,7 @@ void array_for_matrix(const MatrixType& m) {
 
   // Prevent overflows for integer types.
   if (Eigen::NumTraits<Scalar>::IsInteger) {
-    Scalar kMaxVal = Scalar(10000);
+    Scalar kMaxVal = Scalar(1000);
     m1.array() = m1.array() - kMaxVal * (m1.array() / kMaxVal);
     m2.array() = m2.array() - kMaxVal * (m2.array() / kMaxVal);
   }
@@ -123,7 +123,7 @@ void comparisons(const MatrixType& m) {
   // test Select
   VERIFY_IS_APPROX((m1.array() < m2.array()).select(m1, m2), m1.cwiseMin(m2));
   VERIFY_IS_APPROX((m1.array() > m2.array()).select(m1, m2), m1.cwiseMax(m2));
-  Scalar mid = (m1.cwiseAbs().minCoeff() + m1.cwiseAbs().maxCoeff()) / Scalar(2);
+  Scalar mid = m1.cwiseAbs().minCoeff() / Scalar(2) + m1.cwiseAbs().maxCoeff() / Scalar(2);
   for (int j = 0; j < cols; ++j)
     for (int i = 0; i < rows; ++i) m3(i, j) = abs(m1(i, j)) < mid ? 0 : m1(i, j);
   VERIFY_IS_APPROX(
@@ -140,8 +140,8 @@ void comparisons(const MatrixType& m) {
   // and/or
   VERIFY(((m1.array() < RealScalar(0)).matrix() && (m1.array() > RealScalar(0)).matrix()).count() == 0);
   VERIFY(((m1.array() < RealScalar(0)).matrix() || (m1.array() >= RealScalar(0)).matrix()).count() == rows * cols);
-  RealScalar a = m1.cwiseAbs().mean();
-  VERIFY(((m1.array() < -a).matrix() || (m1.array() > a).matrix()).count() == (m1.cwiseAbs().array() > a).count());
+  VERIFY(((m1.array() < -mid).matrix() || (m1.array() > mid).matrix()).count() ==
+         (m1.cwiseAbs().array() > mid).count());
 
   typedef Matrix<Index, Dynamic, 1> VectorOfIndices;
 

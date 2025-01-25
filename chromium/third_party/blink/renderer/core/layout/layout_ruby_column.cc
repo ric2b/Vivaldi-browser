@@ -23,7 +23,7 @@ void UpdateRubyBaseStyle(const LayoutObject* child,
 
 }  // namespace
 
-LayoutRubyColumn::LayoutRubyColumn() : LayoutNGBlockFlow(nullptr) {
+LayoutRubyColumn::LayoutRubyColumn() : LayoutBlockFlow(nullptr) {
   DCHECK(!RuntimeEnabledFeatures::RubyLineBreakableEnabled());
   SetInline(true);
   SetIsAtomicInlineLevel(true);
@@ -94,14 +94,14 @@ void LayoutRubyColumn::AddChild(LayoutObject* child,
       // prepend ruby texts as first child
       LayoutBlockFlow::AddChild(child, FirstChild());
     } else {
-      NOTREACHED() << before_child;
+      NOTREACHED_IN_MIGRATION() << before_child;
     }
   } else if (child->IsRubyBase()) {
     DCHECK(!before_child);
     DCHECK(!RubyBase());
     LayoutBlockFlow::AddChild(child);
   } else {
-    NOTREACHED() << child;
+    NOTREACHED_IN_MIGRATION() << child;
   }
 }
 

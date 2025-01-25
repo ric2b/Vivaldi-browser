@@ -28,7 +28,6 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/aggregation_service/aggregation_coordinator_utils.h"
-#include "components/aggregation_service/features.h"
 #include "content/browser/interest_group/interest_group_features.h"
 #include "content/browser/interest_group/interest_group_manager_impl.h"
 #include "content/browser/interest_group/interest_group_storage.h"
@@ -271,9 +270,7 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     base::UmaHistogramBoolean(
         "Ads.InterestGroup.EnumNaming.Update.WorkletExecutionMode",
         *maybe_execution_mode == "groupByOrigin");
-  } else if (base::FeatureList::IsEnabled(
-                 features::kEnableUpdatingExecutionModeToFrozenContext) &&
-             *maybe_execution_mode == "frozen-context") {
+  } else if (*maybe_execution_mode == "frozen-context") {
     interest_group_update.execution_mode =
         blink::InterestGroup::ExecutionMode::kFrozenContext;
   } else {
@@ -577,15 +574,6 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
 [[nodiscard]] bool TryToCopyPrivateAggregationConfig(
     const base::Value::Dict& dict,
     InterestGroupUpdate& interest_group_update) {
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kPrivateAggregationApiMultipleCloudProviders) ||
-      !base::FeatureList::IsEnabled(
-          aggregation_service::kAggregationServiceMultipleCloudProviders)) {
-    // Ignore the specified aggregation coordinator unless the feature is
-    // enabled.
-    return true;
-  }
-
   const base::Value::Dict* maybe_config =
       dict.FindDict("privateAggregationConfig");
   if (!maybe_config) {
@@ -720,11 +708,8 @@ std::optional<InterestGroupUpdate> ParseUpdateJson(
   if (!TryToCopyTrustedBiddingSignalsKeys(*dict, interest_group_update)) {
     return std::nullopt;
   }
-  if (base::FeatureList::IsEnabled(
-          features::kEnableUpdatingUserBiddingSignals)) {
-    if (!TryToCopyUserBiddingSignals(*dict, interest_group_update)) {
-      return std::nullopt;
-    }
+  if (!TryToCopyUserBiddingSignals(*dict, interest_group_update)) {
+    return std::nullopt;
   }
   if (!TryToCopyAds(*dict, interest_group_update)) {
     return std::nullopt;
@@ -933,7 +918,6 @@ void InterestGroupUpdateManager::UpdateInterestGroupByBatch(
 
   for (auto& [interest_group_key, update_url, joining_origin] :
        update_parameters) {
-    manager_->QueueKAnonymityUpdateForInterestGroup(interest_group_key);
     ++num_in_flight_updates_;
     base::UmaHistogramCounts100000(
         "Ads.InterestGroup.Net.RequestUrlSizeBytes.Update",

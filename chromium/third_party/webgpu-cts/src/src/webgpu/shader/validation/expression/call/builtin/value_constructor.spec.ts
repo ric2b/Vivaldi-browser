@@ -662,3 +662,140 @@ g.test('struct_value')
     const x : ${testcase.name} = ${testcase.name}(${testcase.values});`;
     t.expectCompileResult(testcase.valid, code);
   });
+
+const kConstructors = {
+  u32_0: 'u32()',
+  i32_0: 'i32()',
+  bool_0: 'bool()',
+  f32_0: 'f32()',
+  f16_0: 'f16()',
+  vec2_0: 'vec2()',
+  vec3_0: 'vec3()',
+  vec4_0: 'vec4()',
+  mat2x2_0: 'mat2x2f()',
+  mat2x3_0: 'mat2x3f()',
+  mat2x4_0: 'mat2x4f()',
+  mat3x2_0: 'mat3x2f()',
+  mat3x3_0: 'mat3x3f()',
+  mat3x4_0: 'mat3x4f()',
+  mat4x2_0_f16: 'mat4x2h()',
+  mat4x3_0_f16: 'mat4x3h()',
+  mat4x4_0_f16: 'mat4x4h()',
+  S_0: 'S()',
+  array_0: 'array<u32, 4>()',
+  u32: 'u32(1)',
+  i32: 'i32(1)',
+  bool: 'bool(true)',
+  f32: 'f32(1)',
+  f16: 'f16(1)',
+  vec2f: 'vec2<f32>(1)',
+  vec3_f16: 'vec3<f16>(1)',
+  vec4: 'vec4(1)',
+  mat2x2: 'mat2x2f(1,1,1,1)',
+  mat2x3: 'mat2x3f(1,1,1,1,1,1)',
+  mat2x4: 'mat2x4f(1,1,1,1,1,1,1,1)',
+  mat3x2_f16: 'mat3x2<f16>(vec2h(),vec2h(),vec2h())',
+  mat3x3_f16: 'mat3x3<f16>(vec3h(),vec3h(),vec3h())',
+  mat3x4_f16: 'mat3x4<f16>(vec4h(),vec4h(),vec4h())',
+  mat4x2: 'mat4x2(vec2(),vec2(),vec2(),vec2())',
+  mat4x3: 'mat4x3(vec3(),vec3(),vec3(),vec3())',
+  mat4x4: 'mat4x4(vec4(),vec4(),vec4(),vec4())',
+  S: 'S(1,1)',
+  array_abs: 'array(1,2,3)',
+  array: 'array<u32, 4>(1,2,3,4)',
+};
+
+g.test('must_use')
+  .desc('Tests that value constructors must be used')
+  .params(u => u.combine('ctor', keysOf(kConstructors)).combine('use', [true, false] as const))
+  .beforeAllSubcases(t => {
+    if (t.params.ctor.includes('f16')) {
+      t.selectDeviceOrSkipTestCase('shader-f16');
+    }
+  })
+  .fn(t => {
+    const code = `
+    ${t.params.ctor.includes('f16') ? 'enable f16;' : ''}
+    struct S {
+      x : u32,
+      y : f32,
+    }
+    fn foo() {
+      ${t.params.use ? '_ =' : ''} ${kConstructors[t.params.ctor]};
+    }`;
+    t.expectCompileResult(t.params.use, code);
+  });
+
+g.test('partial_eval')
+  .desc('Tests that mixed runtime and early eval expressions catch errors')
+  .params(u =>
+    u
+      .combine('eleTy', ['i32', 'u32'] as const)
+      .combine('compTy', ['array', 'vec2', 'vec3', 'vec4', 'S'] as const)
+      .combine('stage', ['constant', 'runtime'] as const)
+      .beginSubcases()
+      .expandWithParams(t => {
+        const cases = [];
+        switch (t.compTy) {
+          case 'array':
+            cases.push({ numEles: 2, index: 0 });
+            cases.push({ numEles: 2, index: 1 });
+            cases.push({ numEles: 3, index: 0 });
+            cases.push({ numEles: 3, index: 1 });
+            cases.push({ numEles: 3, index: 2 });
+            break;
+          case 'vec2':
+            cases.push({ numEles: 2, index: 0 });
+            cases.push({ numEles: 2, index: 1 });
+            break;
+          case 'vec3':
+            cases.push({ numEles: 3, index: 0 });
+            cases.push({ numEles: 3, index: 1 });
+            cases.push({ numEles: 3, index: 2 });
+            break;
+          case 'vec4':
+            cases.push({ numEles: 4, index: 0 });
+            cases.push({ numEles: 4, index: 1 });
+            cases.push({ numEles: 4, index: 2 });
+            cases.push({ numEles: 4, index: 3 });
+            break;
+          case 'S':
+            cases.push({ numEles: 2, index: 0 });
+            cases.push({ numEles: 2, index: 1 });
+            break;
+        }
+        return cases;
+      })
+  )
+  .fn(t => {
+    const eleTy = Type['abstract-int'];
+    const value = t.params.eleTy === 'i32' ? 0xfffffffff : -1;
+    let compParams = '';
+    for (let i = 0; i < t.params.numEles; i++) {
+      if (t.params.index === i) {
+        switch (t.params.stage) {
+          case 'constant':
+            compParams += `${eleTy.create(value).wgsl()}, `;
+            break;
+          case 'runtime':
+            compParams += `v, `;
+            break;
+        }
+      } else {
+        compParams += `v, `;
+      }
+    }
+    const wgsl = `
+struct S {
+  x : ${t.params.eleTy},
+  y : ${t.params.eleTy},
+}
+
+fn foo() {
+  var v : ${t.params.eleTy};
+  let tmp = ${t.params.compTy}(${compParams});
+}`;
+
+    const shader_error = t.params.stage === 'constant';
+    t.expectCompileResult(!shader_error, wgsl);
+  });

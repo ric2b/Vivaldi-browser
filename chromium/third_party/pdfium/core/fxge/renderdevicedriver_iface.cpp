@@ -6,7 +6,10 @@
 
 #include "core/fxge/renderdevicedriver_iface.h"
 
+#include <utility>
+
 #include "core/fxcrt/fx_coordinates.h"
+#include "core/fxge/agg/cfx_agg_imagerenderer.h"
 #include "core/fxge/cfx_path.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 
@@ -36,15 +39,15 @@ bool RenderDeviceDriverIface::DrawCosmeticLine(const CFX_PointF& ptMoveTo,
 
 bool RenderDeviceDriverIface::GetDIBits(RetainPtr<CFX_DIBitmap> bitmap,
                                         int left,
-                                        int top) {
+                                        int top) const {
   return false;
 }
 
-RetainPtr<CFX_DIBitmap> RenderDeviceDriverIface::GetBackDrop() {
-  return RetainPtr<CFX_DIBitmap>();
+RetainPtr<const CFX_DIBitmap> RenderDeviceDriverIface::GetBackDrop() const {
+  return RetainPtr<const CFX_DIBitmap>();
 }
 
-bool RenderDeviceDriverIface::ContinueDIBits(CFX_ImageRenderer* handle,
+bool RenderDeviceDriverIface::ContinueDIBits(CFX_AggImageRenderer* handle,
                                              PauseIndicatorIface* pPause) {
   return false;
 }
@@ -88,3 +91,10 @@ bool RenderDeviceDriverIface::SyncInternalBitmaps() {
   return true;
 }
 #endif
+
+RenderDeviceDriverIface::StartResult::StartResult(
+    bool success,
+    std::unique_ptr<CFX_AggImageRenderer> agg_image_renderer)
+    : success(success), agg_image_renderer(std::move(agg_image_renderer)) {}
+
+RenderDeviceDriverIface::StartResult::~StartResult() = default;

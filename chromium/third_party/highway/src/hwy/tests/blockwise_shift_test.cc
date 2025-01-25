@@ -15,9 +15,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>  // memcpy
-
-#include <algorithm>  // std::fill
 
 #undef HWY_TARGET_INCLUDE
 #define HWY_TARGET_INCLUDE "tests/blockwise_shift_test.cc"
@@ -36,6 +33,7 @@ struct TestShiftBytes {
 #if HWY_TARGET != HWY_SCALAR || HWY_IDE
     const Repartition<uint8_t, D> du8;
     const size_t N8 = Lanes(du8);
+    const size_t N = Lanes(d);
 
     // Zero remains zero
     const auto v0 = Zero(d);
@@ -43,9 +41,13 @@ struct TestShiftBytes {
     HWY_ASSERT_VEC_EQ(d, v0, ShiftLeftBytes<1>(d, v0));
     HWY_ASSERT_VEC_EQ(d, v0, ShiftRightBytes<1>(d, v0));
 
-    // Zero after shifting out the high/low byte
     auto bytes = AllocateAligned<uint8_t>(N8);
-    std::fill(bytes.get(), bytes.get() + N8, 0);
+    auto in = AllocateAligned<T>(N);
+    auto expected = AllocateAligned<T>(N);
+    HWY_ASSERT(bytes && in && expected);
+
+    // Zero after shifting out the high/low byte
+    ZeroBytes(bytes.get(), N8);
     bytes[N8 - 1] = 0x7F;
     const auto vhi = BitCast(d, Load(du8, bytes.get()));
     bytes[N8 - 1] = 0;
@@ -56,25 +58,22 @@ struct TestShiftBytes {
     HWY_ASSERT_VEC_EQ(d, v0, ShiftRightBytes<1>(d, vlo));
 
     // Check expected result with Iota
-    const size_t N = Lanes(d);
-    auto in = AllocateAligned<T>(N);
     const uint8_t* in_bytes = reinterpret_cast<const uint8_t*>(in.get());
     const auto v = BitCast(d, Iota(du8, 1));
     Store(v, d, in.get());
 
-    auto expected = AllocateAligned<T>(N);
     uint8_t* expected_bytes = reinterpret_cast<uint8_t*>(expected.get());
 
     const size_t block_size = HWY_MIN(N8, 16);
     for (size_t block = 0; block < N8; block += block_size) {
       expected_bytes[block] = 0;
-      memcpy(expected_bytes + block + 1, in_bytes + block, block_size - 1);
+      CopyBytes(in_bytes + block, expected_bytes + block + 1, block_size - 1);
     }
     HWY_ASSERT_VEC_EQ(d, expected.get(), ShiftLeftBytes<1>(v));
     HWY_ASSERT_VEC_EQ(d, expected.get(), ShiftLeftBytes<1>(d, v));
 
     for (size_t block = 0; block < N8; block += block_size) {
-      memcpy(expected_bytes + block, in_bytes + block + 1, block_size - 1);
+      CopyBytes(in_bytes + block + 1, expected_bytes + block, block_size - 1);
       expected_bytes[block + block_size - 1] = 0;
     }
     HWY_ASSERT_VEC_EQ(d, expected.get(), ShiftRightBytes<1>(d, v));
@@ -93,10 +92,11 @@ struct TestShiftLeftLanes {
   HWY_NOINLINE void operator()(T /*unused*/, D d) {
     // Scalar does not define Shift*Lanes.
 #if HWY_TARGET != HWY_SCALAR || HWY_IDE
-    const auto v = Iota(d, T(1));
+    const auto v = Iota(d, 1);
     const size_t N = Lanes(d);
     if (N == 1) return;
     auto expected = AllocateAligned<T>(N);
+    HWY_ASSERT(expected);
 
     HWY_ASSERT_VEC_EQ(d, v, ShiftLeftLanes<0>(v));
     HWY_ASSERT_VEC_EQ(d, v, ShiftLeftLanes<0>(d, v));
@@ -104,7 +104,7 @@ struct TestShiftLeftLanes {
     constexpr size_t kLanesPerBlock = 16 / sizeof(T);
 
     for (size_t i = 0; i < N; ++i) {
-      expected[i] = (i % kLanesPerBlock) == 0 ? T(0) : T(i);
+      expected[i] = ConvertScalarTo<T>((i % kLanesPerBlock) == 0 ? 0 : i);
     }
     HWY_ASSERT_VEC_EQ(d, expected.get(), ShiftLeftLanes<1>(v));
     HWY_ASSERT_VEC_EQ(d, expected.get(), ShiftLeftLanes<1>(d, v));
@@ -119,10 +119,11 @@ struct TestShiftRightLanes {
   HWY_NOINLINE void operator()(T /*unused*/, D d) {
     // Scalar does not define Shift*Lanes.
 #if HWY_TARGET != HWY_SCALAR || HWY_IDE
-    const auto v = Iota(d, T(1));
+    const auto v = Iota(d, 1);
     const size_t N = Lanes(d);
     if (N == 1) return;
     auto expected = AllocateAligned<T>(N);
+    HWY_ASSERT(expected);
 
     HWY_ASSERT_VEC_EQ(d, v, ShiftRightLanes<0>(d, v));
 
@@ -130,7 +131,8 @@ struct TestShiftRightLanes {
 
     for (size_t i = 0; i < N; ++i) {
       const size_t mod = i % kLanesPerBlock;
-      expected[i] = mod == (kLanesPerBlock - 1) || i >= N - 1 ? T(0) : T(2 + i);
+      expected[i] = ConvertScalarTo<T>(
+          ((mod == kLanesPerBlock - 1) || (i >= N - 1)) ? 0 : (2 + i));
     }
     HWY_ASSERT_VEC_EQ(d, expected.get(), ShiftRightLanes<1>(d, v));
 #else
@@ -162,6 +164,7 @@ struct TestCombineShiftRightBytes {
     auto hi_bytes = AllocateAligned<uint8_t>(N8);
     auto lo_bytes = AllocateAligned<uint8_t>(N8);
     auto expected_bytes = AllocateAligned<uint8_t>(N8);
+    HWY_ASSERT(hi_bytes && lo_bytes && expected_bytes);
     uint8_t combined[2 * kBlockSize];
 
     // Random inputs in each lane
@@ -197,6 +200,7 @@ struct TestCombineShiftRightLanes {
     auto hi_bytes = AllocateAligned<uint8_t>(N8);
     auto lo_bytes = AllocateAligned<uint8_t>(N8);
     auto expected_bytes = AllocateAligned<uint8_t>(N8);
+    HWY_ASSERT(hi_bytes && lo_bytes && expected_bytes);
     constexpr size_t kBlockSize = 16;
     uint8_t combined[2 * kBlockSize];
 
@@ -265,6 +269,7 @@ HWY_EXPORT_AND_TEST_P(HwyBlockwiseShiftTest, TestAllShiftBytes);
 HWY_EXPORT_AND_TEST_P(HwyBlockwiseShiftTest, TestAllShiftLeftLanes);
 HWY_EXPORT_AND_TEST_P(HwyBlockwiseShiftTest, TestAllShiftRightLanes);
 HWY_EXPORT_AND_TEST_P(HwyBlockwiseShiftTest, TestAllCombineShiftRight);
+HWY_AFTER_TEST();
 }  // namespace hwy
 
 #endif

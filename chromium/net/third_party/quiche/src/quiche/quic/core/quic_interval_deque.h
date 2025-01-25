@@ -158,12 +158,13 @@ class QUICHE_NO_EXPORT QuicIntervalDeque {
     Iterator(std::size_t index, QuicIntervalDeque* deque)
         : index_(index), deque_(deque) {}
     // Only the ++ operator attempts to update the cached index. Other operators
-    // are used by |lower_bound| to binary search and are thus private.
+    // are used by |lower_bound| to binary search.
     Iterator& operator++() {
       // Don't increment when we are at the end.
       const std::size_t container_size = deque_->container_.size();
       if (index_ >= container_size) {
-        QUIC_BUG(quic_bug_10862_1) << "Iterator out of bounds.";
+        QUIC_BUG(QuicIntervalDeque_operator_plus_plus_iterator_out_of_bounds)
+            << "Iterator out of bounds.";
         return *this;
       }
       index_++;
@@ -186,6 +187,20 @@ class QUICHE_NO_EXPORT QuicIntervalDeque {
       ++(*this);
       return copy;
     }
+    Iterator& operator--() {
+      if (index_ == 0) {
+        QUIC_BUG(QuicIntervalDeque_operator_minus_minus_iterator_out_of_bounds)
+            << "Iterator out of bounds.";
+        return *this;
+      }
+      index_--;
+      return *this;
+    }
+    Iterator operator--(int) {
+      Iterator copy = *this;
+      --(*this);
+      return copy;
+    }
     reference operator*() { return deque_->container_[index_]; }
     reference operator*() const { return deque_->container_[index_]; }
     pointer operator->() { return &deque_->container_[index_]; }
@@ -194,11 +209,13 @@ class QUICHE_NO_EXPORT QuicIntervalDeque {
     }
     bool operator!=(const Iterator& rhs) const { return !(*this == rhs); }
     Iterator& operator+=(difference_type amount) {
+      // `amount` might be negative, check for underflow.
+      QUICHE_DCHECK_GE(static_cast<difference_type>(index_), -amount);
       index_ += amount;
-      QUICHE_DCHECK_LE(0u, index_);
       QUICHE_DCHECK_LT(index_, deque_->Size());
       return *this;
     }
+    Iterator& operator-=(difference_type amount) { return operator+=(-amount); }
     difference_type operator-(const Iterator& rhs) const {
       return static_cast<difference_type>(index_) -
              static_cast<difference_type>(rhs.index_);
@@ -272,7 +289,8 @@ void QuicIntervalDeque<T, C>::PushBack(const T& item) {
 template <class T, class C>
 void QuicIntervalDeque<T, C>::PopFront() {
   if (container_.size() == 0) {
-    QUIC_BUG(quic_bug_10862_2) << "Trying to pop from an empty container.";
+    QUIC_BUG(QuicIntervalDeque_PopFront_empty)
+        << "Trying to pop from an empty container.";
     return;
   }
   container_.pop_front();
@@ -355,7 +373,7 @@ void QuicIntervalDeque<T, C>::PushBackUniversal(U&& item) {
   QuicInterval<std::size_t> interval = item.interval();
   // Adding an empty interval is a bug.
   if (interval.Empty()) {
-    QUIC_BUG(quic_bug_10862_3)
+    QUIC_BUG(QuicIntervalDeque_PushBackUniversal_empty)
         << "Trying to save empty interval to quiche::QuicheCircularDeque.";
     return;
   }

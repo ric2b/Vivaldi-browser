@@ -37,29 +37,29 @@ constexpr char kResourceUrlPrefix[] = "/resources/";
 
 // Parse the path component of chrome://vivaldi-data/ URLs. Typically it is
 // /type/data, but there are few older formats that deviates from it.
-std::optional<PathType> ParsePath(base::StringPiece path,
+std::optional<PathType> ParsePath(std::string_view path,
                                    std::string* data = nullptr);
 
 // Parse the full url.
-std::optional<PathType> ParseUrl(base::StringPiece url,
+std::optional<PathType> ParseUrl(std::string_view url,
                                   std::string* data = nullptr);
 
 // Check if the url points to internal Vivaldi resources. If |subpath| is not
 // null on return |*subpath| holds the resource path.
-bool IsResourceURL(base::StringPiece url, std::string* subpath = nullptr);
+bool IsResourceURL(std::string_view url, std::string* subpath = nullptr);
 
 // Check if path mapping id is really old-format thumbnail, not a path
 // mapping.
-bool isOldFormatThumbnailId(base::StringPiece id);
+bool isOldFormatThumbnailId(std::string_view id);
 
-bool IsBookmarkCaptureUrl(base::StringPiece id);
+bool IsBookmarkCaptureUrl(std::string_view id);
 
-bool IsLocalPathUrl(base::StringPiece id);
+bool IsLocalPathUrl(std::string_view id);
 
-std::optional<std::string> GetSyncedStoreChecksumForUrl(base::StringPiece url);
+std::optional<std::string> GetSyncedStoreChecksumForUrl(std::string_view url);
 
 // Construct full vivaldi-data URL from the type and data.
-std::string MakeUrl(PathType type, base::StringPiece data);
+std::string MakeUrl(PathType type, std::string_view data);
 
 extern const char* const kTypeNames[PathTypeCount];
 

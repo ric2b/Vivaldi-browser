@@ -2,93 +2,74 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as Root from '../root/root.js';
+import {describeWithEnvironment, getGetHostConfigStub} from '../../testing/EnvironmentHelpers.js';
 
 import * as Host from './host.js';
 
 const TEST_MODEL_ID = 'testModelId';
 
-describe('AidaClient', () => {
-  it('adds no model temperature if there is no aidaTemperature query param', () => {
-    const stub = sinon.stub(Root.Runtime.Runtime, 'queryParam');
-    stub.withArgs('aidaTemperature').returns(null);
-    const request = Host.AidaClient.AidaClient.buildApiRequest('foo');
+describeWithEnvironment('AidaClient', () => {
+  it('adds no model temperature if console insights is not enabled', () => {
+    const stub = getGetHostConfigStub({});
+    const request = Host.AidaClient.AidaClient.buildConsoleInsightsRequest('foo');
     assert.deepStrictEqual(request, {
       input: 'foo',
       client: 'CHROME_DEVTOOLS',
+      client_feature: 1,
+      functionality_type: 2,
     });
     stub.restore();
   });
 
   it('adds a model temperature', () => {
-    const stub = sinon.stub(Root.Runtime.Runtime, 'queryParam');
-    stub.withArgs('aidaTemperature').returns('0.5');
-    const request = Host.AidaClient.AidaClient.buildApiRequest('foo');
+    const stub = getGetHostConfigStub({
+      devToolsConsoleInsights: {
+        enabled: true,
+        aidaTemperature: 0.5,
+      },
+    });
+    const request = Host.AidaClient.AidaClient.buildConsoleInsightsRequest('foo');
     assert.deepStrictEqual(request, {
       input: 'foo',
       client: 'CHROME_DEVTOOLS',
       options: {
         temperature: 0.5,
       },
+      client_feature: 1,
+      functionality_type: 2,
     });
     stub.restore();
   });
 
   it('adds a model temperature of 0', () => {
-    const stub = sinon.stub(Root.Runtime.Runtime, 'queryParam');
-    stub.withArgs('aidaTemperature').returns('0');
-    const request = Host.AidaClient.AidaClient.buildApiRequest('foo');
+    const stub = getGetHostConfigStub({
+      devToolsConsoleInsights: {
+        enabled: true,
+        aidaTemperature: 0,
+      },
+    });
+    const request = Host.AidaClient.AidaClient.buildConsoleInsightsRequest('foo');
     assert.deepStrictEqual(request, {
       input: 'foo',
       client: 'CHROME_DEVTOOLS',
       options: {
         temperature: 0,
       },
-    });
-    stub.restore();
-  });
-
-  it('adds no model temperature if the aidaTemperature query param cannot be parsed into a float', () => {
-    const stub = sinon.stub(Root.Runtime.Runtime, 'queryParam');
-    stub.withArgs('aidaTemperature').returns('not a number');
-    const request = Host.AidaClient.AidaClient.buildApiRequest('foo');
-    assert.deepStrictEqual(request, {
-      input: 'foo',
-      client: 'CHROME_DEVTOOLS',
-    });
-    stub.restore();
-  });
-
-  it('adds no model id if there is no aidaModelId query param', () => {
-    const stub = sinon.stub(Root.Runtime.Runtime, 'queryParam');
-    stub.withArgs('aidaModelId').returns(null);
-    const request = Host.AidaClient.AidaClient.buildApiRequest('foo');
-    assert.deepStrictEqual(request, {
-      input: 'foo',
-      client: 'CHROME_DEVTOOLS',
-    });
-    stub.restore();
-  });
-
-  it('adds a model id', () => {
-    const stub = sinon.stub(Root.Runtime.Runtime, 'queryParam');
-    stub.withArgs('aidaModelId').returns(TEST_MODEL_ID);
-    const request = Host.AidaClient.AidaClient.buildApiRequest('foo');
-    assert.deepStrictEqual(request, {
-      input: 'foo',
-      client: 'CHROME_DEVTOOLS',
-      options: {
-        model_id: TEST_MODEL_ID,
-      },
+      client_feature: 1,
+      functionality_type: 2,
     });
     stub.restore();
   });
 
   it('adds a model id and temperature', () => {
-    const stub = sinon.stub(Root.Runtime.Runtime, 'queryParam');
-    stub.withArgs('aidaModelId').returns(TEST_MODEL_ID);
-    stub.withArgs('aidaTemperature').returns('0.5');
-    const request = Host.AidaClient.AidaClient.buildApiRequest('foo');
+    const stub = getGetHostConfigStub({
+      devToolsConsoleInsights: {
+        enabled: true,
+        aidaModelId: TEST_MODEL_ID,
+        aidaTemperature: 0.5,
+      },
+    });
+    const request = Host.AidaClient.AidaClient.buildConsoleInsightsRequest('foo');
     assert.deepStrictEqual(request, {
       input: 'foo',
       client: 'CHROME_DEVTOOLS',
@@ -96,27 +77,39 @@ describe('AidaClient', () => {
         model_id: TEST_MODEL_ID,
         temperature: 0.5,
       },
+      client_feature: 1,
+      functionality_type: 2,
     });
     stub.restore();
   });
 
   it('adds metadata to disallow logging', () => {
-    const stub = sinon.stub(Root.Runtime.Runtime, 'queryParam');
-    stub.withArgs('ci_disallowLogging').returns('true');
-    const request = Host.AidaClient.AidaClient.buildApiRequest('foo');
+    const stub = getGetHostConfigStub({
+      devToolsConsoleInsights: {
+        enabled: true,
+        aidaTemperature: 0.5,
+        disallowLogging: true,
+      },
+    });
+    const request = Host.AidaClient.AidaClient.buildConsoleInsightsRequest('foo');
     assert.deepStrictEqual(request, {
       input: 'foo',
       client: 'CHROME_DEVTOOLS',
       metadata: {
         disable_user_content_logging: true,
       },
+      options: {
+        temperature: 0.5,
+      },
+      client_feature: 1,
+      functionality_type: 2,
     });
     stub.restore();
   });
 
   async function getAllResults(provider: Host.AidaClient.AidaClient): Promise<Host.AidaClient.AidaResponse[]> {
     const results = [];
-    for await (const result of provider.fetch('foo')) {
+    for await (const result of provider.fetch(Host.AidaClient.AidaClient.buildConsoleInsightsRequest('foo'))) {
       results.push(result);
     }
     return results;
@@ -230,6 +223,50 @@ describe('AidaClient', () => {
     ]);
   });
 
+  it('handles attributionMetadata', async () => {
+    sinon.stub(Host.InspectorFrontendHost.InspectorFrontendHostInstance, 'doAidaConversation')
+        .callsFake(async (_, streamId, callback) => {
+          const response = JSON.stringify([
+            {
+              textChunk: {text: 'Chunk1\n'},
+              metadata: {rpcGlobalId: 123, attributionMetadata: {attributionAction: 'BLOCK', citations: []}},
+            },
+            {
+              textChunk: {text: 'Chunk2\n'},
+              metadata: {
+                rpcGlobalId: 123,
+                attributionMetadata:
+                    {attributionAction: 'CITE', citations: [{startIndex: 0, endIndex: 1, url: 'https://example.com'}]},
+              },
+            },
+          ]);
+          const chunks = response.split(',{');
+          await new Promise(resolve => setTimeout(resolve, 0));
+          Host.ResourceLoader.streamWrite(streamId, chunks[0] + ',{' + chunks[1]);
+          await new Promise(resolve => setTimeout(resolve, 0));
+          callback({statusCode: 200});
+        });
+
+    const provider = new Host.AidaClient.AidaClient();
+    const results = await getAllResults(provider);
+    assert.deepStrictEqual(results, [
+      {
+        explanation: 'Chunk1\n' +
+            'Chunk2\n',
+        metadata: {
+          rpcGlobalId: 123,
+          attributionMetadata: [
+            {attributionAction: Host.AidaClient.RecitationAction.BLOCK, citations: []},
+            {
+              attributionAction: Host.AidaClient.RecitationAction.CITE,
+              citations: [{startIndex: 0, endIndex: 1, url: 'https://example.com'}],
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
   it('handles subsequent code chunks', async () => {
     sinon.stub(Host.InspectorFrontendHost.InspectorFrontendHostInstance, 'doAidaConversation')
         .callsFake(async (_, streamId, callback) => {
@@ -291,5 +328,82 @@ describe('AidaClient', () => {
           .equals(
               'Cannot send request: Cannot get OAuth credentials {\'@type\': \'type.googleapis.com/google.rpc.DebugInfo\', \'detail\': \'DETAILS\'}');
     }
+  });
+
+  describe('getAidaClientAvailability', () => {
+    function mockGetSyncInformation(information: Host.InspectorFrontendHostAPI.SyncInformation): void {
+      sinon.stub(Host.InspectorFrontendHost.InspectorFrontendHostInstance, 'getSyncInformation').callsFake(cb => {
+        cb(information);
+      });
+    }
+
+    beforeEach(() => {
+      sinon.restore();
+    });
+
+    it('should return NO_INTERNET when navigator is not online', async () => {
+      const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')!;
+      Object.defineProperty(globalThis, 'navigator', {
+        get() {
+          return {onLine: false};
+        },
+      });
+
+      try {
+        const result = await Host.AidaClient.AidaClient.getAidaClientAvailability();
+        assert.strictEqual(result, Host.AidaClient.AidaAvailability.NO_INTERNET);
+      } finally {
+        Object.defineProperty(globalThis, 'navigator', navigatorDescriptor);
+      }
+    });
+
+    it('should return NO_ACCOUNT_EMAIL when the syncInfo doesn\'t contain accountEmail', async () => {
+      mockGetSyncInformation({accountEmail: undefined, isSyncActive: true});
+
+      const result = await Host.AidaClient.AidaClient.getAidaClientAvailability();
+
+      assert.strictEqual(result, Host.AidaClient.AidaAvailability.NO_ACCOUNT_EMAIL);
+    });
+
+    it('should return NO_ACTIVE_SYNC when the syncInfo.isSyncActive is not true', async () => {
+      mockGetSyncInformation({accountEmail: 'some-email', isSyncActive: false});
+
+      const result = await Host.AidaClient.AidaClient.getAidaClientAvailability();
+
+      assert.strictEqual(result, Host.AidaClient.AidaAvailability.NO_ACTIVE_SYNC);
+    });
+
+    it('should return AVAILABLE when navigator is online, accountEmail exists and isSyncActive is true', async () => {
+      mockGetSyncInformation({accountEmail: 'some-email', isSyncActive: true});
+
+      const result = await Host.AidaClient.AidaClient.getAidaClientAvailability();
+
+      assert.strictEqual(result, Host.AidaClient.AidaAvailability.AVAILABLE);
+    });
+  });
+
+  describe('registerClientEvent', () => {
+    it('should populate the default value for Aida Client event', async () => {
+      const stub = sinon.stub(Host.InspectorFrontendHost.InspectorFrontendHostInstance, 'registerAidaClientEvent');
+      const RPC_ID = 0;
+
+      const provider = new Host.AidaClient.AidaClient();
+      void provider.registerClientEvent({
+        corresponding_aida_rpc_global_id: RPC_ID,
+        do_conversation_client_event: {user_feedback: {sentiment: Host.AidaClient.Rating.POSITIVE}},
+      });
+      const arg = JSON.parse(stub.getCalls()[0].args[0]);
+
+      sinon.assert.match(arg, sinon.match({
+        client: Host.AidaClient.CLIENT_NAME,
+        event_time: sinon.match.string,
+        corresponding_aida_rpc_global_id: RPC_ID,
+        do_conversation_client_event: {
+          user_feedback: {
+            sentiment: 'POSITIVE',
+          },
+        },
+      }));
+    });
   });
 });

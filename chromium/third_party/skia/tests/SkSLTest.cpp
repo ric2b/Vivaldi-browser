@@ -26,6 +26,7 @@
 #include "include/sksl/SkSLVersion.h"
 #include "src/base/SkArenaAlloc.h"
 #include "src/base/SkEnumBitMask.h"
+#include "src/base/SkNoDestructor.h"
 #include "src/base/SkStringView.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkRasterPipelineOpContexts.h"
@@ -302,7 +303,10 @@ static bool failure_is_expected(std::string_view deviceName,    // "Geforce RTX4
         }
 
         // Switch fallthrough has some issues on iOS.
-        disables["SwitchWithFallthrough"].push_back({_, "OpenGL", GPU, kiOS});
+        for (const char* test : {"SwitchWithFallthrough",
+                                 "SwitchWithFallthroughGroups"}) {
+            disables[test].push_back({_, "OpenGL", GPU, kiOS});
+        }
 
         // - ARM ----------------------------------------------------------------------------------
         // Mali 400 is a very old driver its share of quirks, particularly in relation to matrices.
@@ -322,6 +326,7 @@ static bool failure_is_expected(std::string_view deviceName,    // "Geforce RTX4
                                  "SwitchDefaultOnly",                 //  "      "
                                  "SwitchWithFallthrough",             //  "      "
                                  "SwitchWithFallthroughAndVarDecls",  //  "      "
+                                 "SwitchWithFallthroughGroups",       //  "      "
                                  "SwitchWithLoops",                   //  "      "
                                  "SwitchCaseFolding",                 //  "      "
                                  "LoopFloat",                         //  "      "
@@ -394,9 +399,15 @@ static bool failure_is_expected(std::string_view deviceName,    // "Geforce RTX4
                                  "IntrinsicMixFloatES2",
                                  "IntrinsicClampFloat",
                                  "SwitchWithFallthrough",
+                                 "SwitchWithFallthroughGroups",
                                  "SwizzleIndexLookup",
                                  "SwizzleIndexStore"}) {
             disables[test].push_back({regex(ADRENO "[3456]"), _, _, kAndroid});
+        }
+        for (const char* test : {"SwitchWithFallthroughGroups",
+                                 "SwizzleIndexLookup",
+                                 "SwizzleIndexStore"}) {
+            disables[test].push_back({regex(ADRENO "[7]"), _, _, kAndroid});
         }
 
         // Older Adreno 5/6xx drivers report a pipeline error or silently fail when handling inouts.
@@ -1075,6 +1086,7 @@ SKSL_TEST(ES3 | GPU_ES3, kNever,      Commutative,                     "runtime/
 SKSL_TEST(CPU,           kNever,      DivideByZero,                    "runtime/DivideByZero.rts")
 SKSL_TEST(CPU | GPU,     kNextRelease,FunctionParameterAliasingFirst,  "runtime/FunctionParameterAliasingFirst.rts")
 SKSL_TEST(CPU | GPU,     kNextRelease,FunctionParameterAliasingSecond, "runtime/FunctionParameterAliasingSecond.rts")
+SKSL_TEST(CPU | GPU,     kNextRelease,IfElseBinding,                   "runtime/IfElseBinding.rts")
 SKSL_TEST(CPU | GPU,     kNextRelease,IncrementDisambiguation,         "runtime/IncrementDisambiguation.rts")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, LoopFloat,                       "runtime/LoopFloat.rts")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, LoopInt,                         "runtime/LoopInt.rts")
@@ -1157,6 +1169,7 @@ SKSL_TEST(CPU | GPU,     kApiLevel_T, OutParamsDoubleSwizzle,          "shared/O
 SKSL_TEST(CPU | GPU,     kNextRelease,PostfixExpressions,              "shared/PostfixExpressions.sksl")
 SKSL_TEST(CPU | GPU,     kNextRelease,PrefixExpressionsES2,            "shared/PrefixExpressionsES2.sksl")
 SKSL_TEST(ES3 | GPU_ES3, kNever,      PrefixExpressionsES3,            "shared/PrefixExpressionsES3.sksl")
+SKSL_TEST(CPU | GPU,     kNextRelease,ReservedInGLSLButAllowedInSkSL,  "shared/ReservedInGLSLButAllowedInSkSL.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, ResizeMatrix,                    "shared/ResizeMatrix.sksl")
 SKSL_TEST(ES3 | GPU_ES3, kNever,      ResizeMatrixNonsquare,           "shared/ResizeMatrixNonsquare.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, ReturnsValueOnEveryPathES2,      "shared/ReturnsValueOnEveryPathES2.sksl")
@@ -1176,6 +1189,7 @@ SKSL_TEST(CPU | GPU,     kApiLevel_T, Switch,                          "shared/S
 SKSL_TEST(CPU | GPU,     kApiLevel_T, SwitchDefaultOnly,               "shared/SwitchDefaultOnly.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, SwitchWithFallthrough,           "shared/SwitchWithFallthrough.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, SwitchWithFallthroughAndVarDecls,"shared/SwitchWithFallthroughAndVarDecls.sksl")
+SKSL_TEST(CPU | GPU,     kApiLevel_V, SwitchWithFallthroughGroups,     "shared/SwitchWithFallthroughGroups.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, SwitchWithLoops,                 "shared/SwitchWithLoops.sksl")
 SKSL_TEST(ES3 | GPU_ES3, kNever,      SwitchWithLoopsES3,              "shared/SwitchWithLoopsES3.sksl")
 SKSL_TEST(CPU | GPU,     kNever,      SwizzleAsLValue,                 "shared/SwizzleAsLValue.sksl")

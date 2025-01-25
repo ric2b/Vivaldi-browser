@@ -17,6 +17,11 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/svg/svg_path_string_builder.h"
 
 #include "base/notreached.h"
@@ -125,7 +130,7 @@ void SVGPathStringBuilder::EmitSegment(const PathSegmentData& segment) {
       AppendPoint(string_builder_, segment.target_point);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
   string_builder_.Append(' ');
 }

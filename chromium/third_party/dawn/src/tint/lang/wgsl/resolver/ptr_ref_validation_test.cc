@@ -182,32 +182,13 @@ TEST_F(ResolverPtrRefValidationTest, AddressOfAddressSpace) {
     EXPECT_EQ(r()->error(), R"(12:34 error: cannot use address space 'uniform' as value)");
 }
 
-TEST_F(ResolverPtrRefValidationTest, AddressOfBuiltinValue) {
+TEST_F(ResolverPtrRefValidationTest, AddressOfUnresolvedValue) {
     // &position
     auto* expr = AddressOf(Expr(Source{{12, 34}}, "position"));
     WrapInFunction(expr);
 
     EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), R"(12:34 error: cannot use builtin value 'position' as value)");
-}
-
-TEST_F(ResolverPtrRefValidationTest, AddressOfInterpolationSampling) {
-    // &centroid
-    auto* expr = AddressOf(Expr(Source{{12, 34}}, "centroid"));
-    WrapInFunction(expr);
-
-    EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(),
-              R"(12:34 error: cannot use interpolation sampling 'centroid' as value)");
-}
-
-TEST_F(ResolverPtrRefValidationTest, AddressOfInterpolationType) {
-    // &perspective
-    auto* expr = AddressOf(Expr(Source{{12, 34}}, "perspective"));
-    WrapInFunction(expr);
-
-    EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), R"(12:34 error: cannot use interpolation type 'perspective' as value)");
+    EXPECT_EQ(r()->error(), R"(12:34 error: unresolved value 'position')");
 }
 
 TEST_F(ResolverPtrRefValidationTest, AddressOfTexelFormat) {

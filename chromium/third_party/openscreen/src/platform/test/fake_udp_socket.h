@@ -40,9 +40,7 @@ class FakeUdpSocket : public UdpSocket {
 
   // UdpSocket overrides
   void Bind() override;
-  void SendMessage(const void* data,
-                   size_t length,
-                   const IPEndpoint& dest) override;
+  void SendMessage(ByteView data, const IPEndpoint& dest) override;
   void SetMulticastOutboundInterface(NetworkInterfaceIndex interface) override;
   void JoinMulticastGroup(const IPAddress& address,
                           NetworkInterfaceIndex interface) override;

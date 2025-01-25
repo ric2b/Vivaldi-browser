@@ -55,8 +55,7 @@ bool User::TypeHasGaiaAccount(UserType user_type) {
 
 // static
 bool User::TypeIsKiosk(UserType type) {
-  return type == UserType::kKioskApp || type == UserType::kArcKioskApp ||
-         type == UserType::kWebKioskApp;
+  return type == UserType::kKioskApp || type == UserType::kWebKioskApp;
 }
 
 User::User(const AccountId& account_id, UserType type)
@@ -65,7 +64,6 @@ User::User(const AccountId& account_id, UserType type)
     case user_manager::UserType::kRegular:
     case user_manager::UserType::kChild:
     case user_manager::UserType::kKioskApp:
-    case user_manager::UserType::kArcKioskApp:
     case user_manager::UserType::kWebKioskApp:
       set_display_email(account_id.GetUserEmail());
       break;
@@ -150,7 +148,6 @@ bool User::CanLock() const {
       }
       break;
     case user_manager::UserType::kKioskApp:
-    case user_manager::UserType::kArcKioskApp:
     case user_manager::UserType::kWebKioskApp:
     case user_manager::UserType::kGuest:
       return false;
@@ -164,10 +161,6 @@ bool User::CanLock() const {
   }
 
   return profile_prefs_->GetBoolean(ash::prefs::kAllowScreenLock);
-}
-
-bool User::HasDefaultImage() const {
-  return UserManager::Get()->IsValidDefaultUserImageId(image_index_);
 }
 
 std::string User::display_email() const {
@@ -196,7 +189,6 @@ bool User::has_gaia_account() const {
     case user_manager::UserType::kGuest:
     case user_manager::UserType::kPublicAccount:
     case user_manager::UserType::kKioskApp:
-    case user_manager::UserType::kArcKioskApp:
     case user_manager::UserType::kWebKioskApp:
       return false;
   }
@@ -260,7 +252,6 @@ bool User::IsDeviceLocalAccount() const {
       return false;
     case user_manager::UserType::kPublicAccount:
     case user_manager::UserType::kKioskApp:
-    case user_manager::UserType::kArcKioskApp:
     case user_manager::UserType::kWebKioskApp:
       return true;
   }
@@ -287,10 +278,6 @@ User* User::CreateKioskAppUser(const AccountId& kiosk_app_account_id) {
   return new User(kiosk_app_account_id, UserType::kKioskApp);
 }
 
-User* User::CreateArcKioskAppUser(const AccountId& arc_kiosk_account_id) {
-  return new User(arc_kiosk_account_id, UserType::kArcKioskApp);
-}
-
 User* User::CreateWebKioskAppUser(const AccountId& web_kiosk_account_id) {
   return new User(web_kiosk_account_id, UserType::kWebKioskApp);
 }
@@ -311,7 +298,6 @@ void User::SetImage(std::unique_ptr<UserImage> user_image, int image_index) {
   image_index_ = image_index;
   image_is_stub_ = false;
   image_is_loading_ = false;
-  DCHECK(HasDefaultImage() || user_image_->has_image_bytes());
 }
 
 void User::SetImageURL(const GURL& image_url) {

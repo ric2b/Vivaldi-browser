@@ -37,6 +37,7 @@
 include(lang/glsl/writer/ast_printer/BUILD.cmake)
 include(lang/glsl/writer/ast_raise/BUILD.cmake)
 include(lang/glsl/writer/common/BUILD.cmake)
+include(lang/glsl/writer/helpers/BUILD.cmake)
 include(lang/glsl/writer/printer/BUILD.cmake)
 include(lang/glsl/writer/raise/BUILD.cmake)
 
@@ -55,13 +56,13 @@ tint_add_target(tint_lang_glsl_writer lib
 
 tint_target_add_dependencies(tint_lang_glsl_writer lib
   tint_api_common
-  tint_api_options
   tint_lang_core
   tint_lang_core_constant
   tint_lang_core_type
   tint_lang_glsl_writer_raise
   tint_lang_wgsl
   tint_lang_wgsl_ast
+  tint_lang_wgsl_ast_transform
   tint_lang_wgsl_features
   tint_lang_wgsl_program
   tint_lang_wgsl_sem
@@ -102,13 +103,13 @@ tint_add_target(tint_lang_glsl_writer_bench bench
 
 tint_target_add_dependencies(tint_lang_glsl_writer_bench bench
   tint_api_common
-  tint_api_options
   tint_cmd_bench_bench
   tint_lang_core
   tint_lang_core_constant
   tint_lang_core_type
   tint_lang_wgsl
   tint_lang_wgsl_ast
+  tint_lang_wgsl_ast_transform
   tint_lang_wgsl_features
   tint_lang_wgsl_program
   tint_lang_wgsl_sem
@@ -150,12 +151,12 @@ tint_add_target(tint_lang_glsl_writer_fuzz fuzz
 
 tint_target_add_dependencies(tint_lang_glsl_writer_fuzz fuzz
   tint_api_common
-  tint_api_options
   tint_lang_core
   tint_lang_core_constant
   tint_lang_core_type
   tint_lang_wgsl
   tint_lang_wgsl_ast
+  tint_lang_wgsl_ast_transform
   tint_lang_wgsl_features
   tint_lang_wgsl_inspector
   tint_lang_wgsl_program

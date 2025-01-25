@@ -13,6 +13,7 @@ namespace {
 
 using ::testing::ElementsAre;
 using ::testing::Return;
+using ::testing::UnorderedElementsAre;
 
 struct FakeResource {
   int resource;
@@ -30,7 +31,7 @@ class ScopedFakeResourceBundleDelegate {
 
     for (const auto& [resource, data] : resources) {
       EXPECT_CALL(delegate_, LoadDataResourceString(resource))
-          .WillOnce(Return(data));
+          .WillRepeatedly(Return(data));
     }
   }
 
@@ -45,6 +46,76 @@ class ScopedFakeResourceBundleDelegate {
 };
 
 using EmojiSearchTest = testing::Test;
+
+TEST_F(EmojiSearchTest, FindsSmilingEmojiInJapaneseLocale) {
+  // Requires English strings since they are loaded first on startup.
+  ScopedFakeResourceBundleDelegate mock_resource_delegate(
+      {{FakeResource{
+            IDR_EMOJI_PICKER_EMOJI_15_0_ORDERING_JSON_START,
+            R"([{"emoji":[{"base":{"string":"😀","name":"grinning face",
+            "keywords":["face","grin","grinning face",":D",":smile:"]}}]}])"},
+        FakeResource{
+            IDR_EMOJI_PICKER_EMOJI_15_0_ORDERING_JSON_REMAINING,
+            R"([{"emoji":[{"base":{"string":"😀","name":"grinning face",
+            "keywords":["face","grin","grinning face",":D",":smile:"]}}]}])"},
+        FakeResource{IDR_EMOJI_PICKER_SYMBOL_ORDERING_JSON,
+                     R"([{"group":"Arrows","emoji":[{"base":
+            {"string":"←","name":"leftwards arrow"}}]}])"},
+        FakeResource{IDR_EMOJI_PICKER_SYMBOL_JA,
+                     R"([{"group":"Arrows","emoji":[{"base":
+            {"string":"←","name":"leftwards arrow","keywords":["矢印"]}}]}])"},
+        FakeResource{IDR_EMOJI_PICKER_EMOTICON_ORDERING_JSON,
+                     R"-([{"group":"Classic","emoji":[
+              {"base":{"string":":-)","name":"smiley face "}}]}])-"},
+        FakeResource{
+            IDR_EMOJI_PICKER_JA_START,
+            R"([{"emoji":[{"base":{"string":"😀","name":"grinning face",
+            "keywords":["笑顔",":smile:"]}}]}])"},
+        FakeResource{IDR_EMOJI_PICKER_JA_REMAINING,
+                     R"([{"emoji":[{"base":{"string":"😺","name":"grinning cat",
+            "keywords":["笑顔",":smile:"]}}]}])"}}});
+
+  EmojiSearch search;
+
+  ASSERT_TRUE(search.SetEmojiLanguage("ja"));
+  std::vector<std::string> results = search.AllResultsForTesting("笑顔");
+  EXPECT_THAT(results, UnorderedElementsAre("😀", "😺"));
+}
+
+TEST_F(EmojiSearchTest, FindsSymbolInJapaneseLocale) {
+  // Requires English strings since they are loaded first on startup.
+  ScopedFakeResourceBundleDelegate mock_resource_delegate(
+      {{FakeResource{
+            IDR_EMOJI_PICKER_EMOJI_15_0_ORDERING_JSON_START,
+            R"([{"emoji":[{"base":{"string":"😀","name":"grinning face",
+            "keywords":["face","grin","grinning face",":D",":smile:"]}}]}])"},
+        FakeResource{
+            IDR_EMOJI_PICKER_EMOJI_15_0_ORDERING_JSON_REMAINING,
+            R"([{"emoji":[{"base":{"string":"😀","name":"grinning face",
+            "keywords":["face","grin","grinning face",":D",":smile:"]}}]}])"},
+        FakeResource{IDR_EMOJI_PICKER_SYMBOL_ORDERING_JSON,
+                     R"([{"group":"Arrows","emoji":[{"base":
+            {"string":"←","name":"leftwards arrow"}}]}])"},
+        FakeResource{IDR_EMOJI_PICKER_EMOTICON_ORDERING_JSON,
+                     R"-([{"group":"Classic","emoji":[
+              {"base":{"string":":-)","name":"smiley face "}}]}])-"},
+        FakeResource{IDR_EMOJI_PICKER_SYMBOL_JA,
+                     R"([{"group":"Arrows","emoji":[{"base":
+            {"string":"←","name":"leftwards arrow","keywords":["矢印"]}}]}])"},
+        FakeResource{
+            IDR_EMOJI_PICKER_JA_START,
+            R"([{"emoji":[{"base":{"string":"😀","name":"grinning face",
+            "keywords":["笑顔",":smile:"]}}]}])"},
+        FakeResource{IDR_EMOJI_PICKER_JA_REMAINING,
+                     R"([{"emoji":[{"base":{"string":"😺","name":"grinning cat",
+            "keywords":["笑顔",":smile:"]}}]}])"}}});
+
+  EmojiSearch search;
+
+  ASSERT_TRUE(search.SetEmojiLanguage("ja"));
+  std::vector<std::string> results = search.AllResultsForTesting("矢印");
+  EXPECT_THAT(results, UnorderedElementsAre("←"));
+}
 
 TEST_F(EmojiSearchTest, FindsSmilingEmoji) {
   ScopedFakeResourceBundleDelegate mock_resource_delegate(

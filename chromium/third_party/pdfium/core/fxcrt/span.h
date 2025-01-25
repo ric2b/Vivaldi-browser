@@ -8,11 +8,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <algorithm>
 #include <array>
 #include <iterator>
 #include <type_traits>
-#include <utility>
 
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/compiler_specific.h"
@@ -171,9 +169,6 @@ using EnableIfConstSpanCompatibleContainer =
 // - no constructor from a pointer range
 //
 // Differences from [span.sub]:
-// - no templated first()
-// - no templated last()
-// - no templated subspan()
 // - using size_t instead of ptrdiff_t for indexing
 //
 // Differences from [span.obs]:
@@ -206,16 +201,27 @@ class TRIVIAL_ABI GSL_POINTER span {
   // [span.cons], span constructors, copy, assignment, and destructor
   constexpr span() noexcept = default;
 
+  UNSAFE_BUFFER_USAGE constexpr span(T* data, size_t size) noexcept
+      : data_(data), size_(size) {
+    DCHECK(data_ || size_ == 0);
+  }
+
   // TODO(dcheng): Implement construction from a |begin| and |end| pointer.
   template <size_t N>
-  constexpr span(T (&array)[N]) noexcept : span(array, N) {}
+  constexpr span(T (&array)[N]) noexcept : span(array, N) {
+    static_assert(Extent == dynamic_extent || Extent == N);
+  }
 
   template <size_t N>
-  constexpr span(std::array<T, N>& array) noexcept : span(array.data(), N) {}
+  constexpr span(std::array<T, N>& array) noexcept : span(array.data(), N) {
+    static_assert(Extent == dynamic_extent || Extent == N);
+  }
 
   template <size_t N>
   constexpr span(const std::array<std::remove_cv_t<T>, N>& array) noexcept
-      : span(array.data(), N) {}
+      : span(array.data(), N) {
+    static_assert(Extent == dynamic_extent || Extent == N);
+  }
 
   // Conversion from a container that provides |T* data()| and |integral_type
   // size()|. Note that |data()| may not return nullptr for some empty
@@ -259,22 +265,49 @@ class TRIVIAL_ABI GSL_POINTER span {
   ~span() noexcept = default;
 
   // [span.sub], span subviews
+  template <size_t Count>
+  span first() const {
+    // TODO(tsepez): The following check isn't yet good enough to replace
+    // the runtime check since we are still allowing unchecked conversions
+    // to arbitrary non-dynamic_extent spans.
+    static_assert(Extent == dynamic_extent || Count <= Extent);
+    return first(Count);
+  }
   const span first(size_t count) const {
     CHECK(count <= size_);
-    return span(static_cast<T*>(data_), count);
+    // SAFETY: CHECK() on line above.
+    return UNSAFE_BUFFERS(span(static_cast<T*>(data_), count));
   }
 
+  template <size_t Count>
+  span last() const {
+    // TODO(tsepez): The following check isn't yet good enough to replace
+    // the runtime check since we are still allowing unchecked conversions
+    // to arbitrary non-dynamic_extent spans.
+    static_assert(Extent == dynamic_extent || Count <= Extent);
+    return last(Count);
+  }
   const span last(size_t count) const {
     CHECK(count <= size_);
     return UNSAFE_BUFFERS(
         span(static_cast<T*>(data_) + (size_ - count), count));
   }
 
+  template <size_t Offset, size_t Count = dynamic_extent>
+  span subspan() const {
+    // TODO(tsepez): The following check isn't yet good enough to replace
+    // the runtime check since we are still allowing unchecked conversions
+    // to arbitrary non-dynamic_extent spans.
+    static_assert(Extent == dynamic_extent || Count == dynamic_extent ||
+                  Offset + Count <= Extent);
+    return subspan(Offset, Count);
+  }
   const span subspan(size_t pos, size_t count = dynamic_extent) const {
     CHECK(pos <= size_);
     CHECK(count == dynamic_extent || count <= size_ - pos);
-    return span(UNSAFE_BUFFERS(static_cast<T*>(data_) + pos),
-                count == dynamic_extent ? size_ - pos : count);
+    // SAFETY: CHECK()s on lines above.
+    return UNSAFE_BUFFERS(span(static_cast<T*>(data_) + pos,
+                               count == dynamic_extent ? size_ - pos : count));
   }
 
   // [span.obs], span observers
@@ -324,14 +357,6 @@ class TRIVIAL_ABI GSL_POINTER span {
   }
 
  private:
-  // Move to public section once clang starts enforcing UNSAFE_BUFFERS on
-  // constructors (https://github.com/llvm/llvm-project/issues/80482). Until
-  // then, force calls into two-arg make_span() which enforces the unsafe
-  // buffer usage checks.
-  UNSAFE_BUFFER_USAGE constexpr span(T* data, size_t size) noexcept
-      : data_(data), size_(size) {
-    DCHECK(data_ || size_ == 0);
-  }
   template <typename U>
   friend constexpr span<U> make_span(U* data, size_t size) noexcept;
 
@@ -400,7 +425,9 @@ template <typename T,
           typename P,
           typename U = typename std::enable_if<!std::is_const<T>::value>::type>
 span<char> as_writable_chars(span<T, N, P> s) noexcept {
-  return {reinterpret_cast<char*>(s.data()), s.size_bytes()};
+  // SAFETY: from size_bytes() method.
+  return UNSAFE_BUFFERS(
+      make_span(reinterpret_cast<char*>(s.data()), s.size_bytes()));
 }
 
 // `span_from_ref` converts a reference to T into a span of length 1.  This is a
@@ -434,6 +461,10 @@ template <typename T>
 span<const uint8_t> as_byte_span(const T& arg) {
   return as_bytes(make_span(arg));
 }
+template <typename T>
+span<const uint8_t> as_byte_span(T&& arg) {
+  return as_bytes(make_span(arg));
+}
 
 // Convenience function for converting an object which is itself convertible
 // to span into a span of mutable bytes (i.e. span of uint8_t). Typically used
@@ -441,7 +472,7 @@ span<const uint8_t> as_byte_span(const T& arg) {
 // or vector-like objects holding other scalar types, prior to passing them
 // into an API that requires mutable byte spans.
 template <typename T>
-constexpr span<uint8_t> as_writable_byte_span(T& arg) {
+constexpr span<uint8_t> as_writable_byte_span(T&& arg) {
   return as_writable_bytes(make_span(arg));
 }
 

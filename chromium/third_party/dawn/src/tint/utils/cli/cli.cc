@@ -40,7 +40,7 @@ namespace tint::cli {
 Option::Option() = default;
 Option::~Option() = default;
 
-void OptionSet::ShowHelp(std::ostream& s_out) {
+void OptionSet::ShowHelp(std::ostream& s_out, bool show_equal_form) {
     Vector<const Option*, 32> sorted_options;
     for (auto* opt : options.Objects()) {
         sorted_options.Push(opt);
@@ -58,7 +58,7 @@ void OptionSet::ShowHelp(std::ostream& s_out) {
             std::stringstream left, right;
             left << "--" << opt->Name();
             if (auto param = opt->Parameter(); !param.empty()) {
-                left << " <" << param << ">";
+                left << (show_equal_form ? '=' : ' ') << "<" << param << ">";
             }
             right << opt->Description();
             if (auto def = opt->DefaultValue(); !def.empty()) {
@@ -115,7 +115,7 @@ void OptionSet::ShowHelp(std::ostream& s_out) {
                     if (left_lines[i].length() > left_width) {
                         // Left exceeds column width.
                         // Insert a new line and indent to the right
-                        s_out << std::endl;
+                        s_out << "\n";
                         pad(left_width);
                     } else {
                         pad(left_width - left_lines[i].length());
@@ -127,7 +127,7 @@ void OptionSet::ShowHelp(std::ostream& s_out) {
             if (has_right) {
                 s_out << "  " << right_lines[i];
             }
-            s_out << std::endl;
+            s_out << "\n";
         }
     }
 }

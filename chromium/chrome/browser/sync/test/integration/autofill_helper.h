@@ -18,7 +18,6 @@
 namespace autofill {
 class AutocompleteKey;
 class AutofillProfile;
-class AutofillType;
 class CreditCard;
 class PersonalDataManager;
 
@@ -70,15 +69,15 @@ void RemoveProfile(int profile, const std::string& guid);
 // to |type| and |value| with the verification status |status|.
 void UpdateProfile(int profile,
                    const std::string& guid,
-                   const autofill::AutofillType& type,
+                   autofill::FieldType type,
                    const std::u16string& value,
                    autofill::VerificationStatus status =
                        autofill::VerificationStatus::kObserved);
 
 // Gets all the Autofill profiles in the PersonalDataManager of sync profile
 // |profile|.
-[[nodiscard]] std::vector<autofill::AutofillProfile*> GetAllAutoFillProfiles(
-    int profile);
+[[nodiscard]] std::vector<const autofill::AutofillProfile*>
+GetAllAutoFillProfiles(int profile);
 
 // Returns the number of autofill profiles contained by sync profile
 // |profile|.

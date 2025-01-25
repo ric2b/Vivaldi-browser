@@ -64,7 +64,7 @@ class ManageSyncSettingsMediatorTest : public PlatformTest {
     FakeSystemIdentityManager* system_identity_manager =
         FakeSystemIdentityManager::FromSystemIdentityManager(
             GetApplicationContext()->GetSystemIdentityManager());
-    system_identity_manager->AddIdentity(fakeSystemIdentity_);
+    system_identity_manager->AddIdentity(fake_system_identity_);
 
     TestChromeBrowserState::Builder builder;
     builder.AddTestingFactory(SyncServiceFactory::GetInstance(),
@@ -83,7 +83,8 @@ class ManageSyncSettingsMediatorTest : public PlatformTest {
     AuthenticationService* authentication_service =
         AuthenticationServiceFactory::GetForBrowserState(browser_state_.get());
     authentication_service->SignIn(
-        fakeSystemIdentity_, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+        fake_system_identity_,
+        signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
   }
 
   // Creates the mediator for a given sync state.
@@ -125,7 +126,8 @@ class ManageSyncSettingsMediatorTest : public PlatformTest {
     ON_CALL(*sync_service_mock_, GetTransportState())
         .WillByDefault(Return(syncer::SyncService::TransportState::ACTIVE));
     CoreAccountInfo account_info;
-    account_info.email = base::SysNSStringToUTF8(fakeSystemIdentity_.userEmail);
+    account_info.email =
+        base::SysNSStringToUTF8(fake_system_identity_.userEmail);
     ON_CALL(*sync_service_mock_, GetAccountInfo())
         .WillByDefault(Return(account_info));
     ON_CALL(*sync_service_mock_->GetMockUserSettings(),
@@ -141,7 +143,8 @@ class ManageSyncSettingsMediatorTest : public PlatformTest {
     ON_CALL(*sync_service_mock_, GetTransportState())
         .WillByDefault(Return(syncer::SyncService::TransportState::DISABLED));
     CoreAccountInfo account_info;
-    account_info.email = base::SysNSStringToUTF8(fakeSystemIdentity_.userEmail);
+    account_info.email =
+        base::SysNSStringToUTF8(fake_system_identity_.userEmail);
     ON_CALL(*sync_service_mock_, GetAccountInfo())
         .WillByDefault(Return(account_info));
     ON_CALL(*sync_service_mock_->GetMockUserSettings(),
@@ -154,7 +157,8 @@ class ManageSyncSettingsMediatorTest : public PlatformTest {
     ON_CALL(*sync_service_mock_, GetTransportState())
         .WillByDefault(Return(syncer::SyncService::TransportState::ACTIVE));
     CoreAccountInfo account_info;
-    account_info.email = base::SysNSStringToUTF8(fakeSystemIdentity_.userEmail);
+    account_info.email =
+        base::SysNSStringToUTF8(fake_system_identity_.userEmail);
     ON_CALL(*sync_service_mock_, GetAccountInfo())
         .WillByDefault(Return(account_info));
   }
@@ -174,10 +178,8 @@ class ManageSyncSettingsMediatorTest : public PlatformTest {
   ManageSyncSettingsMediator* mediator_ = nullptr;
   ManageSyncSettingsTableViewController* consumer_ = nullptr;
 
-  FakeSystemIdentity* fakeSystemIdentity_ =
-      [FakeSystemIdentity identityWithEmail:@"foo1@gmail.com"
-                                     gaiaID:@"foo1ID"
-                                       name:@"Fake Foo 1"];
+  FakeSystemIdentity* fake_system_identity_ =
+      [FakeSystemIdentity fakeIdentity1];
 };
 
 // Tests for Advanced Settings items.
@@ -255,7 +257,7 @@ TEST_F(ManageSyncSettingsMediatorTest, SyncServiceEnabledWithTurnOffSync) {
   // "Turn off Sync" item is shown.
   NSArray* sign_out_items = [mediator_.consumer.tableViewModel
       itemsInSectionWithIdentifier:SyncSettingsSectionIdentifier::
-                                       SignOutSectionIdentifier];
+                                       ManageAndSignOutSectionIdentifier];
   EXPECT_EQ(1UL, sign_out_items.count);
 }
 
@@ -273,13 +275,13 @@ TEST_F(ManageSyncSettingsMediatorTest,
   // "Turn off Sync" item is shown.
   NSArray* sign_out_items = [mediator_.consumer.tableViewModel
       itemsInSectionWithIdentifier:SyncSettingsSectionIdentifier::
-                                       SignOutSectionIdentifier];
+                                       ManageAndSignOutSectionIdentifier];
   EXPECT_EQ(1UL, sign_out_items.count);
 
   // The footer below "Turn off Sync" is shown.
   ListItem* footer = [mediator_.consumer.tableViewModel
       footerForSectionWithIdentifier:SyncSettingsSectionIdentifier::
-                                         SignOutSectionIdentifier];
+                                         ManageAndSignOutSectionIdentifier];
   TableViewLinkHeaderFooterItem* footerTextItem =
       base::apple::ObjCCastStrict<TableViewLinkHeaderFooterItem>(footer);
   EXPECT_GT([footerTextItem.text length], 0UL);
@@ -322,7 +324,8 @@ TEST_F(ManageSyncSettingsMediatorTest, SyncServiceMultipleErrors) {
   EXPECT_CALL(*sync_service_mock_, GetDisableReasons())
       .WillOnce(Return(syncer::SyncService::DisableReasonSet()))
       .WillOnce(Return(syncer::SyncService::DisableReasonSet(
-          {syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY})));
+          {syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY})))
+      .WillRepeatedly(Return(syncer::SyncService::DisableReasonSet()));
 
   // Loads the Sync page once in the disabled by enterprise policy error state.
   [mediator_ manageSyncSettingsTableViewControllerLoadModel:mediator_.consumer];
@@ -403,8 +406,8 @@ TEST_F(ManageSyncSettingsMediatorTest,
   }
 }
 
-// Tests that the sign out item exists in the SignOutSectionIdentifier for a
-// signed in not syncing account along with manage accounts items.
+// Tests that the sign out item exists in the ManageAndSignOutSectionIdentifier
+// for a signed in not syncing account along with manage accounts items.
 TEST_F(ManageSyncSettingsMediatorTest,
        CheckSignOutSectionItemsForSignedInNotSyncingAccount) {
   CreateManageSyncSettingsMediator(SyncSettingsAccountState::kSignedIn);
@@ -415,7 +418,7 @@ TEST_F(ManageSyncSettingsMediatorTest,
 
   // Get section items.
   NSArray* items = [mediator_.consumer.tableViewModel
-      itemsInSectionWithIdentifier:SignOutSectionIdentifier];
+      itemsInSectionWithIdentifier:ManageAndSignOutSectionIdentifier];
 
   EXPECT_EQ(ManageGoogleAccountItemType,
             base::apple::ObjCCastStrict<TableViewItem>(items[0]).type);
@@ -480,7 +483,7 @@ TEST_F(ManageSyncSettingsMediatorTest, TestAccountStateTransitionOnSignOut) {
   // Verify the sign out section exists.
   ASSERT_TRUE([mediator_.consumer.tableViewModel
       hasSectionForSectionIdentifier:SyncSettingsSectionIdentifier::
-                                         SignOutSectionIdentifier]);
+                                         ManageAndSignOutSectionIdentifier]);
   // Verify the number of section shown in the kSignedIn state.
   ASSERT_EQ(3, [mediator_.consumer.tableViewModel numberOfSections]);
 

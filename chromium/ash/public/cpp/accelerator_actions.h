@@ -142,7 +142,7 @@ namespace ash {
   ACCELERATOR_ACTION_ENTRY(ToggleOverview)                             \
   ACCELERATOR_ACTION_ENTRY(ToggleProjectorMarker)                      \
   ACCELERATOR_ACTION_ENTRY(ToggleResizeLockMenu)                       \
-  ACCELERATOR_ACTION_ENTRY(ToggleSnapGroupWindowsGroupAndUngroup)      \
+  ACCELERATOR_ACTION_ENTRY(CreateSnapGroup)                            \
   ACCELERATOR_ACTION_ENTRY(ToggleSnapGroupWindowsMinimizeAndRestore)   \
   ACCELERATOR_ACTION_ENTRY(ToggleSpokenFeedback)                       \
   ACCELERATOR_ACTION_ENTRY(ToggleStylusTools)                          \
@@ -164,6 +164,12 @@ namespace ash {
   ACCELERATOR_ACTION_ENTRY(VolumeMuteToggle)                           \
   ACCELERATOR_ACTION_ENTRY(TogglePicker)                               \
   ACCELERATOR_ACTION_ENTRY(AccessibilityAction)                        \
+  ACCELERATOR_ACTION_ENTRY(EnableSelectToSpeak)                        \
+  ACCELERATOR_ACTION_ENTRY(TilingWindowResizeLeft)                     \
+  ACCELERATOR_ACTION_ENTRY(TilingWindowResizeRight)                    \
+  ACCELERATOR_ACTION_ENTRY(TilingWindowResizeUp)                       \
+  ACCELERATOR_ACTION_ENTRY(TilingWindowResizeDown)                     \
+  ACCELERATOR_ACTION_ENTRY(ToggleMouseKeys)                            \
   /* Debug actions are kept at an offset.*/                            \
   /* This offset should be kept consistent with the enum*/             \
   /* `AcceleratorAction` in*/                                          \

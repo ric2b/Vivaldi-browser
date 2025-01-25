@@ -52,6 +52,7 @@ class Font;
 class FontDescription;
 class Interpolation;
 class MatchResult;
+class PageMarginsStyle;
 class PropertyHandle;
 class StyleCascade;
 class StyleRecalcContext;
@@ -112,6 +113,19 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
                                     const AtomicString& page_name,
                                     float page_fitting_scale = 1.0,
                                     bool ignore_author_style = false);
+
+  // Calculate computed style for all 16 @page margin boxes for a given page
+  // index and name.
+  //
+  // Page margin contexts inherit from the page context (page_style).
+  void StyleForPageMargins(const ComputedStyle& page_style,
+                           uint32_t page_index,
+                           const AtomicString& page_name,
+                           PageMarginsStyle*);
+
+  // Trigger loading of resources only needed by printing (such as @page
+  // backgrounds, for instance).
+  void LoadPaginationResources();
 
   const ComputedStyle* StyleForText(Text*);
   const ComputedStyle* StyleForViewport();
@@ -302,8 +316,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
                             bool for_shadow_pseudo = false);
   void MatchPseudoPartRulesForUAHost(const Element&, ElementRuleCollector&);
   void MatchPositionTryRules(ElementRuleCollector&);
-  void MatchAuthorRules(const Element&,
-                        ElementRuleCollector&);
+  void MatchAuthorRules(const Element&, ElementRuleCollector&);
   void MatchAllRules(StyleResolverState&,
                      ElementRuleCollector&,
                      bool include_smil_properties);
@@ -396,8 +409,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
   bool was_viewport_resized_ = false;
 
   friend class StyleResolverTest;
-  FRIEND_TEST_ALL_PREFIXES(ParameterizedStyleResolverTest,
-                           TreeScopedReferences);
+  FRIEND_TEST_ALL_PREFIXES(StyleResolverTest, TreeScopedReferences);
 
   Element& EnsureElementForFormattedText();
   const ComputedStyle* StyleForFormattedText(

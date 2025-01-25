@@ -3,13 +3,6 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <xnnpack.h>
-#include <xnnpack/aligned-allocator.h>
-#include <xnnpack/common.h>
-#include <xnnpack/node-type.h>
-#include <xnnpack/operator.h>
-#include <xnnpack/subgraph.h>
-
 #include <algorithm>  // For std::generate.
 #include <array>      // For std::array.
 #include <cassert>
@@ -26,9 +19,15 @@
 #include <string>
 #include <vector>  // For std::vector.
 
-#include "replicable_random_device.h"
 #include <gtest/gtest.h>
 #include <fp16/fp16.h>
+#include "xnnpack.h"
+#include "xnnpack/aligned-allocator.h"
+#include "xnnpack/common.h"
+#include "xnnpack/node-type.h"
+#include "xnnpack/operator.h"
+#include "xnnpack/subgraph.h"
+#include "replicable_random_device.h"
 
 template <class InputType, class OutputType>
 class BatchMatrixMultiplyTestBase : public ::testing::Test {
@@ -60,10 +59,6 @@ class BatchMatrixMultiplyTestBase : public ::testing::Test {
     input2_dims[num_input_dims - 1] = n;
     input2_t_dims = input1_dims;
     input2_t_dims[num_input_dims - 2] = n;
-
-    // Allow G to be multiple of H (broadcasting), even if H != 1.
-    auto multiply_dist = std::uniform_int_distribution<size_t>(1, 8);
-    input1_dims[num_input_dims - 3] *= multiply_dist(rng);
 
     output_dims = input1_dims;
     output_dims[num_input_dims - 2] = m;
@@ -972,7 +967,9 @@ INSTANTIATE_TEST_SUITE_P(
         {/*.name = */"input_a_batch_dim_bcast_mult",
          /*.input_a_dims = */{2, 3, 5},
          /*.input_b_dims = */{6, 5, 7},
-         /*.expected_output_dims = */{6, 3, 7}},
+         /*.expected_output_dims = */{6, 3, 7},
+         /*.flags = */0,
+         /*.expected_status = */xnn_status_invalid_parameter},
 
         {/*.name = */"input_b_batch_dim_bcast_one",
          /*.input_a_dims = */{2, 3, 5},
@@ -982,12 +979,16 @@ INSTANTIATE_TEST_SUITE_P(
         {/*.name = */"input_b_batch_dim_bcast_mult",
          /*.input_a_dims = */{6, 3, 5},
          /*.input_b_dims = */{2, 5, 7},
-         /*.expected_output_dims = */{6, 3, 7}},
+         /*.expected_output_dims = */{6, 3, 7},
+         /*.flags = */0,
+         /*.expected_status = */xnn_status_invalid_parameter},
 
         {/*.name = */"both_inputs_batch_dim_bcast_mult",
          /*.input_a_dims = */{2, 6, 3, 5},
          /*.input_b_dims = */{4, 2, 5, 7},
-         /*.expected_output_dims = */{4, 6, 3, 7}},
+         /*.expected_output_dims = */{4, 6, 3, 7},
+         /*.flags = */0,
+         /*.expected_status = */xnn_status_invalid_parameter},
 
         {/*.name = */"both_inputs_batch_dim_bcast_one",
          /*.input_a_dims = */{1, 6, 3, 5},

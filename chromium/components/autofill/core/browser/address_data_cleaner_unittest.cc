@@ -20,6 +20,7 @@
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/test/test_sync_service.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace autofill {
@@ -46,10 +47,11 @@ class AddressDataCleanerTest : public testing::Test {
   AddressDataCleaner data_cleaner_;
 };
 
-// Tests that for non-syncing users `MaybeCleanupAddressData()` immediately
-// performs clean-ups.
-TEST_F(AddressDataCleanerTest, MaybeCleanupAddressData_NotSyncing) {
-  sync_service_.SetHasSyncConsent(false);
+// Tests that for users not syncing addresses, `MaybeCleanupAddressData()`
+// immediately performs clean-ups.
+TEST_F(AddressDataCleanerTest, MaybeCleanupAddressData_NotSyncingAddresses) {
+  // Disable UserSelectableType::kAutofill.
+  sync_service_.GetUserSettings()->SetSelectedTypes(false, {});
   ASSERT_TRUE(test_api(data_cleaner_).AreCleanupsPending());
   data_cleaner_.MaybeCleanupAddressData();
   EXPECT_FALSE(test_api(data_cleaner_).AreCleanupsPending());
@@ -57,7 +59,7 @@ TEST_F(AddressDataCleanerTest, MaybeCleanupAddressData_NotSyncing) {
 
 // Tests that for syncing users `MaybeCleanupAddressData()` doesn't perform
 // clean-ups, since it's expecting another call once sync is ready.
-TEST_F(AddressDataCleanerTest, MaybeCleanupAddressData_Syncing) {
+TEST_F(AddressDataCleanerTest, MaybeCleanupAddressData_SyncingAddresses) {
   sync_service_.SetDownloadStatusFor(
       {syncer::ModelType::AUTOFILL_PROFILE, syncer::ModelType::CONTACT_INFO},
       syncer::SyncService::ModelTypeDownloadStatus::kWaitingForUpdates);
@@ -211,7 +213,8 @@ TEST_F(AddressDataCleanerTest, Deduplicate_kAccountSuperset) {
   // Expect that only the account profile remains and that it became a Chrome-
   // originating profile.
   test_api(data_cleaner_).ApplyDeduplicationRoutine();
-  std::vector<AutofillProfile*> deduped_profiles = test_adm_.GetProfiles();
+  std::vector<const AutofillProfile*> deduped_profiles =
+      test_adm_.GetProfiles();
   ASSERT_THAT(deduped_profiles, UnorderedElementsAre(Pointee(account_profile)));
   EXPECT_EQ(deduped_profiles[0]->initial_creator_id(),
             AutofillProfile::kInitialCreatorOrModifierChrome);
@@ -237,11 +240,8 @@ TEST_F(AddressDataCleanerTest, Deduplicate_kAccountSubset) {
 // Tests that quasi duplicates are not silently removed, if the corresponding
 // token doesn't have low quality.
 TEST_F(AddressDataCleanerTest, Deduplicate_QuasiDuplicate_NoQuality) {
-  base::test::ScopedFeatureList features;
-  features.InitWithFeatures(
-      /*enabled_features=*/{features::kAutofillTrackProfileTokenQuality,
-                            features::kAutofillSilentlyRemoveQuasiDuplicates},
-      /*disabled_features=*/{});
+  base::test::ScopedFeatureList features(
+      features::kAutofillSilentlyRemoveQuasiDuplicates);
   const AutofillProfile profile = test::GetFullProfile();
   test_adm_.AddProfile(profile);
   AutofillProfile quasi_duplicate = test::GetFullProfile();
@@ -256,11 +256,8 @@ TEST_F(AddressDataCleanerTest, Deduplicate_QuasiDuplicate_NoQuality) {
 // Tests that quasi duplicates are silently removed, if the corresponding
 // token has low quality.
 TEST_F(AddressDataCleanerTest, Deduplicate_QuasiDuplicate_LowQuality) {
-  base::test::ScopedFeatureList features;
-  features.InitWithFeatures(
-      /*enabled_features=*/{features::kAutofillTrackProfileTokenQuality,
-                            features::kAutofillSilentlyRemoveQuasiDuplicates},
-      /*disabled_features=*/{});
+  base::test::ScopedFeatureList features(
+      features::kAutofillSilentlyRemoveQuasiDuplicates);
   const AutofillProfile profile = test::GetFullProfile();
   test_adm_.AddProfile(profile);
   AutofillProfile quasi_duplicate = test::GetFullProfile();
@@ -272,8 +269,54 @@ TEST_F(AddressDataCleanerTest, Deduplicate_QuasiDuplicate_LowQuality) {
   }
   test_adm_.AddProfile(quasi_duplicate);
 
+  base::HistogramTester histogram_tester;
   test_api(data_cleaner_).ApplyDeduplicationRoutine();
   EXPECT_THAT(test_adm_.GetProfiles(), UnorderedElementsAre(Pointee(profile)));
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.Deduplication.ExistingProfiles."
+      "LowQualityQuasiDuplicatesRemoved",
+      1, 1);
+}
+
+// Tests that when AutofillSilentlyRemoveQuasiDuplicates is enabled, the
+// deduplication routine is run a second time per milestone for enrolled users.
+TEST_F(AddressDataCleanerTest, Deduplicate_SecondTime) {
+  class MockAddressDataCleaner : public AddressDataCleaner {
+   public:
+    using AddressDataCleaner::AddressDataCleaner;
+    MOCK_METHOD(void, ApplyDeduplicationRoutine, (), (override));
+  };
+  MockAddressDataCleaner data_cleaner(
+      test_adm_, /*sync_service=*/nullptr, *prefs_,
+      /*alternative_state_name_map_updater=*/nullptr);
+  testing::MockFunction<void()> check;
+  {
+    testing::InSequence s;
+    EXPECT_CALL(data_cleaner, ApplyDeduplicationRoutine);
+    EXPECT_CALL(check, Call);
+    EXPECT_CALL(data_cleaner, ApplyDeduplicationRoutine);
+    EXPECT_CALL(check, Call);
+  }
+
+  // Duplication should run once per milestone by default without the feature.
+  {
+    data_cleaner.MaybeCleanupAddressData();
+    check.Call();
+    // Simulate a browser restart. Deduplication is not called again.
+    test_api(data_cleaner).ResetAreCleanupsPending();
+    data_cleaner.MaybeCleanupAddressData();
+  }
+  // Enroll the user in the feature. This enables a second deduplication run,
+  // but not a third one.
+  {
+    base::test::ScopedFeatureList feature(
+        features::kAutofillSilentlyRemoveQuasiDuplicates);
+    test_api(data_cleaner).ResetAreCleanupsPending();
+    data_cleaner.MaybeCleanupAddressData();
+    check.Call();
+    test_api(data_cleaner).ResetAreCleanupsPending();
+    data_cleaner.MaybeCleanupAddressData();
+  }
 }
 
 TEST_F(AddressDataCleanerTest, DeleteDisusedAddresses) {
@@ -316,8 +359,6 @@ TEST_F(AddressDataCleanerTest, CalculateMinimalIncompatibleTypeSets) {
 }
 
 TEST_F(AddressDataCleanerTest, IsTokenLowQualityForDeduplicationPurposes) {
-  base::test::ScopedFeatureList feature{
-      features::kAutofillTrackProfileTokenQuality};
   using ObservationType = ProfileTokenQuality::ObservationType;
 
   AutofillProfile profile = test::GetFullProfile();

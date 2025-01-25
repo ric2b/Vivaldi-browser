@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 
+#include "ash/ash_export.h"
 #include "ash/public/cpp/picker/picker_category.h"
 #include "ash/public/cpp/picker/picker_search_result.h"
 
@@ -18,7 +19,7 @@ class TextInputClient;
 namespace ash {
 
 // Records metrics for a session of using Picker.
-class PickerSessionMetrics {
+class ASH_EXPORT PickerSessionMetrics {
  public:
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
@@ -43,15 +44,13 @@ class PickerSessionMetrics {
   // a session.
   void SetOutcome(SessionOutcome outcome);
 
-  // Sets user action. This is expected to be called at most once during a
-  // session.
-  // TODO(b/336402739): replace the argument type with some action enum after
-  // refactor.
-  void SetAction(PickerCategory action);
+  // Sets the last category selected by the user during the session.
+  // This can be multiple times per session. Only the last category is recorded.
+  void SetSelectedCategory(PickerCategory category);
 
-  // Sets the search result which user inserts. This is expected to be called at
-  // most once during a session.
-  void SetInsertedResult(PickerSearchResult inserted_result, int index);
+  // Sets the search result which user selects to finish the session.
+  // This is expected to be called at most once during a session.
+  void SetSelectedResult(PickerSearchResult selected_result, int index);
 
   // Updates the search query to latest and accumulates total edits.
   void UpdateSearchQuery(std::u16string_view search_query);
@@ -65,10 +64,9 @@ class PickerSessionMetrics {
 
   SessionOutcome outcome_ = SessionOutcome::kUnknown;
 
-  // TODO(b/336402739): replace the type with some action enum after refactor.
-  std::optional<PickerCategory> action_;
+  std::optional<PickerCategory> last_category_;
 
-  std::optional<PickerSearchResult> inserted_result_;
+  std::optional<PickerSearchResult> selected_result_;
   int result_index_ = -1;
 
   int search_query_total_edits_ = 0;

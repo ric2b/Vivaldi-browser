@@ -13,6 +13,8 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 
+namespace ip_protection {
+
 namespace {
 constexpr std::string_view kGoogApiKeyHeader = "X-Goog-Api-Key";
 constexpr net::NetworkTrafficAnnotationTag kGetProxyConfigTrafficAnnotation =
@@ -108,6 +110,11 @@ void IpProtectionProxyConfigRetriever::GetProxyConfig(
   } else {
     resource_request->headers.SetHeader(kGoogApiKeyHeader, api_key_);
   }
+  int experiment_arm = net::features::kIpPrivacyDebugExperimentArm.Get();
+  if (experiment_arm != 0) {
+    resource_request->headers.SetHeader("Ip-Protection-Debug-Experiment-Arm",
+                                        base::NumberToString(experiment_arm));
+  }
 
   std::unique_ptr<network::SimpleURLLoader> url_loader =
       network::SimpleURLLoader::Create(std::move(resource_request),
@@ -147,3 +154,5 @@ void IpProtectionProxyConfigRetriever::OnGetProxyConfigCompleted(
 
   std::move(callback).Run(std::move(response_proto));
 }
+
+}  // namespace ip_protection

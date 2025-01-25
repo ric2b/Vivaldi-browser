@@ -37,8 +37,6 @@ import org.chromium.components.browser_ui.widget.highlight.PulseDrawable;
 import org.chromium.ui.interpolators.Interpolators;
 
 // Vivaldi
-import android.app.Activity;
-import org.vivaldi.browser.common.VivaldiDefaultBrowserUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /** The overflow menu button. */
@@ -449,10 +447,6 @@ public class MenuButton extends FrameLayout implements TintObserver {
 
     // Vivaldi
     public static boolean shouldShowAttentionBadge(Context context) {
-        // Check if any menu needs to be highlighted
-        if (context instanceof Activity
-                && VivaldiDefaultBrowserUtils.checkIfVivaldiDefaultBrowser((Activity) context))
-            return false;
         return VivaldiPreferences.getSharedPreferencesManager().readBoolean(
                 VivaldiPreferences.SET_AS_DEFAULT_MENU_HIGHLIGHT, true);
     }

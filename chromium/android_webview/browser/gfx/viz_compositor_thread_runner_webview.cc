@@ -9,13 +9,16 @@
 #include "android_webview/browser/gfx/task_queue_webview.h"
 #include "base/check_op.h"
 #include "base/location.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "components/viz/common/features.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/service/frame_sinks/shared_image_interface_provider.h"
 #include "components/viz/service/gl/gpu_service_impl.h"
 
 namespace android_webview {
@@ -34,6 +37,10 @@ void RunAndSignal(base::OnceClosure viz_task, base::WaitableEvent* done) {
   done->Signal();
 }
 
+BASE_FEATURE(kWebViewVizUseThreadPool,
+             "WebViewVizUseThreadPool",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 }  // namespace
 
 // static
@@ -45,9 +52,16 @@ VizCompositorThreadRunnerWebView::GetInstance() {
 
 VizCompositorThreadRunnerWebView::VizCompositorThreadRunnerWebView()
     : viz_thread_("VizWebView") {
-  base::Thread::Options options(base::ThreadType::kCompositing);
-  CHECK(viz_thread_.StartWithOptions(std::move(options)));
-  viz_task_runner_ = viz_thread_.task_runner();
+  if (base::FeatureList::IsEnabled(kWebViewVizUseThreadPool)) {
+    // TODO(crbug.com/341151462): See if this task runner can use the
+    // kCompositing thread type.
+    viz_task_runner_ =
+        base::ThreadPool::CreateSingleThreadTaskRunner({base::MayBlock()});
+  } else {
+    base::Thread::Options options(base::ThreadType::kCompositing);
+    CHECK(viz_thread_.StartWithOptions(std::move(options)));
+    viz_task_runner_ = viz_thread_.task_runner();
+  }
   TaskQueueWebView::GetInstance()->InitializeVizThread(viz_task_runner_);
 
   DETACH_FROM_THREAD(viz_thread_checker_);
@@ -101,6 +115,8 @@ void VizCompositorThreadRunnerWebView::ScheduleOnVizAndBlock(
 void VizCompositorThreadRunnerWebView::PostTaskAndBlock(
     const base::Location& from_here,
     base::OnceClosure task) {
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
+      "Android.WebView.VizCompositorRunnerPostTaskBlockTime");
   base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope allow_wait;
   base::WaitableEvent e;
   task_runner()->PostTask(from_here,
@@ -138,6 +154,9 @@ void VizCompositorThreadRunnerWebView::CreateFrameSinkManager(
   // Does not support software compositing.
   DCHECK(gpu_service);
 
+  shared_image_interface_provider_ =
+      std::make_unique<viz::SharedImageInterfaceProvider>(gpu_service);
+
   viz_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(
@@ -156,7 +175,8 @@ void VizCompositorThreadRunnerWebView::BindFrameSinkManagerOnViz(
 
   frame_sink_manager_->BindAndSetClient(
       std::move(params->frame_sink_manager), viz_task_runner_,
-      std::move(params->frame_sink_manager_client));
+      std::move(params->frame_sink_manager_client),
+      shared_image_interface_provider_.get());
 }
 
 viz::GpuServiceImpl* VizCompositorThreadRunnerWebView::GetGpuService() {

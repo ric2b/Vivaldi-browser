@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/functional/callback.h"
 #include "components/plus_addresses/mock_plus_address_http_client.h"
 #include "components/plus_addresses/plus_address_types.h"
@@ -15,12 +16,17 @@
 
 namespace plus_addresses {
 
-FakePlusAddressService::FakePlusAddressService()
+FakePlusAddressService::FakePlusAddressService(
+    signin::IdentityManager* identity_manager,
+    PlusAddressSettingService* setting_service)
     : PlusAddressService(
-          /*identity_manager=*/nullptr,
-          /*pref_service=*/nullptr,
+          identity_manager,
+          setting_service,
           std::make_unique<testing::NiceMock<MockPlusAddressHttpClient>>(),
-          /*webdata_service=*/nullptr) {}
+          /*webdata_service=*/nullptr,
+          /*affiliation_service=*/&mock_affiliation_service_,
+          /*feature_enabled_for_profile_check=*/
+          base::BindRepeating(&base::FeatureList::IsEnabled)) {}
 
 FakePlusAddressService::~FakePlusAddressService() = default;
 
@@ -55,6 +61,20 @@ void FakePlusAddressService::ConfirmPlusAddress(
     on_confirmed_.Reset();
   }
   std::move(on_completed).Run(profile);
+}
+
+void FakePlusAddressService::RefreshPlusAddress(
+    const url::Origin& origin,
+    PlusAddressRequestCallback on_completed) {
+  if (should_fail_to_refresh_) {
+    std::move(on_completed)
+        .Run(base::unexpected(PlusAddressRequestError(
+            PlusAddressRequestErrorType::kNetworkError)));
+    return;
+  }
+  std::move(on_completed)
+      .Run(
+          PlusProfile(kFakeProfileId, kFacet, kFakePlusAddress, is_confirmed_));
 }
 
 std::optional<std::string> FakePlusAddressService::GetPrimaryEmail() {

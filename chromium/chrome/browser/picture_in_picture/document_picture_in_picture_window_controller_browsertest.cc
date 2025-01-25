@@ -88,6 +88,62 @@ namespace {
 const base::FilePath::CharType kPictureInPictureDocumentPipPage[] =
     FILE_PATH_LITERAL("media/picture-in-picture/document-pip.html");
 
+// Observes a views::Widget and waits for it to be active or inactive.
+class WidgetActivationWaiter : public views::WidgetObserver {
+ public:
+  explicit WidgetActivationWaiter(views::Widget* widget) : widget_(widget) {
+    CHECK(widget_);
+    widget_->AddObserver(this);
+  }
+  WidgetActivationWaiter(const WidgetActivationWaiter&) = delete;
+  WidgetActivationWaiter& operator=(const WidgetActivationWaiter&) = delete;
+  ~WidgetActivationWaiter() override {
+    if (widget_) {
+      widget_->RemoveObserver(this);
+      widget_ = nullptr;
+    }
+  }
+
+  // Eventually returns true if the actual activation state matches `activated`.
+  // Returns false if the Widget is destroyed before that activation state ever
+  // matches `activated`.
+  bool WaitForActivationState(bool activated) {
+    if (!widget_) {
+      return false;
+    }
+
+    if (widget_->IsActive() == activated) {
+      return true;
+    }
+
+    run_loop_ = std::make_unique<base::RunLoop>();
+    run_loop_->Run();
+
+    if (!widget_) {
+      return false;
+    }
+    return widget_->IsActive() == activated;
+  }
+
+  // views::WidgetObserver:
+
+  void OnWidgetDestroying(views::Widget*) override {
+    widget_->RemoveObserver(this);
+    widget_ = nullptr;
+    run_loop_->Quit();
+  }
+
+  void OnWidgetActivationChanged(views::Widget*, bool active) override {
+    if (run_loop_) {
+      run_loop_->Quit();
+    }
+  }
+
+ private:
+  raw_ptr<views::Widget> widget_;
+  std::unique_ptr<base::RunLoop> run_loop_;
+};
+
 class DocumentPictureInPictureWindowControllerBrowserTest
     : public InProcessBrowserTest,
       public testing::WithParamInterface<gfx::Size> {
@@ -114,7 +170,8 @@ class DocumentPictureInPictureWindowControllerBrowserTest
   void SetUp() override {
     scoped_feature_list_.InitWithFeatures(
         {blink::features::kDocumentPictureInPictureAPI,
-         blink::features::kCSSDisplayModePictureInPicture},
+         blink::features::kCSSDisplayModePictureInPicture,
+         blink::features::kDocumentPictureInPicturePreferInitialPlacement},
         /*disabled_features=*/{});
     InProcessBrowserTest::SetUp();
   }
@@ -140,7 +197,8 @@ class DocumentPictureInPictureWindowControllerBrowserTest
 
   void LoadTabAndEnterPictureInPicture(
       Browser* browser,
-      const gfx::Size& window_size = gfx::Size(500, 500)) {
+      const gfx::Size& window_size = gfx::Size(500, 500),
+      bool prefer_initial_window_placement = false) {
     GURL test_page_url = ui_test_utils::GetTestUrl(
         base::FilePath(base::FilePath::kCurrentDirectory),
         base::FilePath(kPictureInPictureDocumentPipPage));
@@ -152,10 +210,13 @@ class DocumentPictureInPictureWindowControllerBrowserTest
 
     SetUpWindowController(active_web_contents);
 
-    const std::string script = base::StrCat(
-        {"createDocumentPipWindow({width:",
-         base::NumberToString(window_size.width()),
-         ",height:", base::NumberToString(window_size.height()), "})"});
+    std::string script =
+        base::StrCat({"createDocumentPipWindow({width:",
+                      base::NumberToString(window_size.width()),
+                      ",height:", base::NumberToString(window_size.height()),
+                      ",preferInitialWindowPlacement:",
+                      prefer_initial_window_placement ? "true" : "false"});
+    script = base::StrCat({script, "})"});
     ASSERT_EQ(true, EvalJs(active_web_contents, script));
     ASSERT_TRUE(window_controller() != nullptr);
     // Especially on Linux, this isn't synchronous.
@@ -168,8 +229,8 @@ class DocumentPictureInPictureWindowControllerBrowserTest
   }
 
   void ClickButton(views::Button* button) {
-    const ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                               ui::EventTimeForNow(), 0, 0);
+    const ui::MouseEvent event(ui::EventType::kMousePressed, gfx::Point(),
+                               gfx::Point(), ui::EventTimeForNow(), 0, 0);
     views::test::ButtonTestApi(button).NotifyClick(event);
   }
 
@@ -642,7 +703,8 @@ IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
   CheckOriginSet(browser_view);
 
   // Get the bounds, which might not be the same size we asked for.
-  gfx::Rect window_bounds = browser_view->GetBounds();
+  const gfx::Rect original_window_bounds = browser_view->GetBounds();
+  gfx::Rect window_bounds = original_window_bounds;
 
   // Move the window and change the size.  Make sure that it stays on-screen.
   // Also make sure it gets smaller, in case one of the bounds was clipped to
@@ -706,6 +768,17 @@ IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
   // The new window should match the bounds we set for the old one, which differ
   // from the default.
   EXPECT_EQ(browser_view_2->GetBounds(), window_bounds);
+
+  // Close the window and re-open it, but request no cache this time.  This
+  // should revert it to its original bounds.
+  LoadTabAndEnterPictureInPicture(browser(), size,
+                                  /*prefer_initial_window_placement=*/true);
+  auto* pip_web_contents_3 = window_controller()->GetChildWebContents();
+  ASSERT_NE(nullptr, pip_web_contents_3);
+  WaitForPageLoad(pip_web_contents_3);
+  auto* browser_view_3 = BrowserView::GetBrowserViewForNativeWindow(
+      pip_web_contents_3->GetTopLevelNativeWindow());
+  EXPECT_EQ(browser_view_3->GetBounds(), original_window_bounds);
 }
 
 INSTANTIATE_TEST_SUITE_P(WindowSizes,
@@ -808,4 +881,30 @@ IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
   auto* pip_browser = chrome::FindBrowserWithTab(pip_web_contents);
   auto* browser_view = BrowserView::GetBrowserViewForBrowser(pip_browser);
   EXPECT_EQ(size, browser_view->GetContentsSize());
+}
+
+// When `window.open()` is called from a picture-in-picture window, it must lose
+// focus to the newly opened window to prevent multiple popunders from opening
+// when a user types multiple keys in a picture-in-picture window.
+IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
+                       WindowOpenLosesFocus) {
+  LoadTabAndEnterPictureInPicture(browser());
+  auto* web_contents = window_controller()->GetChildWebContents();
+  ASSERT_TRUE(web_contents);
+  views::Widget* pip_widget = views::Widget::GetWidgetForNativeWindow(
+      web_contents->GetTopLevelNativeWindow());
+  ASSERT_TRUE(pip_widget);
+  WidgetActivationWaiter widget_activation_waiter(pip_widget);
+
+  // Ensure that the picture-in-picture window has system focus.
+  pip_widget->Activate();
+  ASSERT_TRUE(widget_activation_waiter.WaitForActivationState(true));
+
+  // Call `window.open()` to open a popup window.
+  EXPECT_TRUE(
+      ExecJs(web_contents,
+             "window.open('about:blank', '_blank', 'width=300,height=300');"));
+
+  // The picture-in-picture window should no longer have system focus.
+  EXPECT_TRUE(widget_activation_waiter.WaitForActivationState(false));
 }

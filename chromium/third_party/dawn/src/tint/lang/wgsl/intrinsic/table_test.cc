@@ -547,7 +547,7 @@ TEST_F(WgslIntrinsicTableTest, OverloadOrderByNumberOfParameters) {
     ASSERT_EQ(result.Failure().Plain(),
               R"(no matching call to 'textureDimensions(bool, bool)'
 
-27 candidate functions:
+31 candidate functions:
  • 'textureDimensions(texture: texture_depth_2d  ✗ , level: L  ✗ ) -> vec2<u32>' where:
       ✗  'L' is 'i32' or 'u32'
  • 'textureDimensions(texture: texture_depth_2d_array  ✗ , level: L  ✗ ) -> vec2<u32>' where:
@@ -579,10 +579,6 @@ TEST_F(WgslIntrinsicTableTest, OverloadOrderByNumberOfParameters) {
  • 'textureDimensions(texture: texture_depth_cube  ✗ ) -> vec2<u32>'
  • 'textureDimensions(texture: texture_depth_cube_array  ✗ ) -> vec2<u32>'
  • 'textureDimensions(texture: texture_depth_multisampled_2d  ✗ ) -> vec2<u32>'
- • 'textureDimensions(texture: texture_storage_1d<F, A>  ✗ ) -> u32'
- • 'textureDimensions(texture: texture_storage_2d<F, A>  ✗ ) -> vec2<u32>'
- • 'textureDimensions(texture: texture_storage_2d_array<F, A>  ✗ ) -> vec2<u32>'
- • 'textureDimensions(texture: texture_storage_3d<F, A>  ✗ ) -> vec3<u32>'
  • 'textureDimensions(texture: texture_external  ✗ ) -> vec2<u32>'
  • 'textureDimensions(texture: texture_1d<T>  ✗ ) -> u32' where:
       ✗  'T' is 'f32', 'i32' or 'u32'
@@ -598,6 +594,22 @@ TEST_F(WgslIntrinsicTableTest, OverloadOrderByNumberOfParameters) {
       ✗  'T' is 'f32', 'i32' or 'u32'
  • 'textureDimensions(texture: texture_multisampled_2d<T>  ✗ ) -> vec2<u32>' where:
       ✗  'T' is 'f32', 'i32' or 'u32'
+ • 'textureDimensions(texture: texture_storage_1d<F, R>  ✗ ) -> u32' where:
+      ✗  'R' is 'read'
+ • 'textureDimensions(texture: texture_storage_2d<F, R>  ✗ ) -> vec2<u32>' where:
+      ✗  'R' is 'read'
+ • 'textureDimensions(texture: texture_storage_2d_array<F, R>  ✗ ) -> vec2<u32>' where:
+      ✗  'R' is 'read'
+ • 'textureDimensions(texture: texture_storage_3d<F, R>  ✗ ) -> vec3<u32>' where:
+      ✗  'R' is 'read'
+ • 'textureDimensions(texture: texture_storage_1d<F, W>  ✗ ) -> u32' where:
+      ✗  'W' is 'write' or 'read_write'
+ • 'textureDimensions(texture: texture_storage_2d<F, W>  ✗ ) -> vec2<u32>' where:
+      ✗  'W' is 'write' or 'read_write'
+ • 'textureDimensions(texture: texture_storage_2d_array<F, W>  ✗ ) -> vec2<u32>' where:
+      ✗  'W' is 'write' or 'read_write'
+ • 'textureDimensions(texture: texture_storage_3d<F, W>  ✗ ) -> vec3<u32>' where:
+      ✗  'W' is 'write' or 'read_write'
 )");
 }
 
@@ -610,7 +622,7 @@ TEST_F(WgslIntrinsicTableTest, OverloadOrderByMatchingParameter) {
     ASSERT_EQ(result.Failure().Plain(),
               R"(no matching call to 'textureDimensions(texture_depth_2d, bool)'
 
-27 candidate functions:
+31 candidate functions:
  • 'textureDimensions(texture: texture_depth_2d  ✓ , level: L  ✗ ) -> vec2<u32>' where:
       ✗  'L' is 'i32' or 'u32'
  • 'textureDimensions(texture: texture_depth_2d  ✓ ) -> vec2<u32>' where:
@@ -643,10 +655,6 @@ TEST_F(WgslIntrinsicTableTest, OverloadOrderByMatchingParameter) {
  • 'textureDimensions(texture: texture_depth_cube  ✗ ) -> vec2<u32>'
  • 'textureDimensions(texture: texture_depth_cube_array  ✗ ) -> vec2<u32>'
  • 'textureDimensions(texture: texture_depth_multisampled_2d  ✗ ) -> vec2<u32>'
- • 'textureDimensions(texture: texture_storage_1d<F, A>  ✗ ) -> u32'
- • 'textureDimensions(texture: texture_storage_2d<F, A>  ✗ ) -> vec2<u32>'
- • 'textureDimensions(texture: texture_storage_2d_array<F, A>  ✗ ) -> vec2<u32>'
- • 'textureDimensions(texture: texture_storage_3d<F, A>  ✗ ) -> vec3<u32>'
  • 'textureDimensions(texture: texture_external  ✗ ) -> vec2<u32>'
  • 'textureDimensions(texture: texture_1d<T>  ✗ ) -> u32' where:
       ✗  'T' is 'f32', 'i32' or 'u32'
@@ -662,6 +670,22 @@ TEST_F(WgslIntrinsicTableTest, OverloadOrderByMatchingParameter) {
       ✗  'T' is 'f32', 'i32' or 'u32'
  • 'textureDimensions(texture: texture_multisampled_2d<T>  ✗ ) -> vec2<u32>' where:
       ✗  'T' is 'f32', 'i32' or 'u32'
+ • 'textureDimensions(texture: texture_storage_1d<F, R>  ✗ ) -> u32' where:
+      ✗  'R' is 'read'
+ • 'textureDimensions(texture: texture_storage_2d<F, R>  ✗ ) -> vec2<u32>' where:
+      ✗  'R' is 'read'
+ • 'textureDimensions(texture: texture_storage_2d_array<F, R>  ✗ ) -> vec2<u32>' where:
+      ✗  'R' is 'read'
+ • 'textureDimensions(texture: texture_storage_3d<F, R>  ✗ ) -> vec3<u32>' where:
+      ✗  'R' is 'read'
+ • 'textureDimensions(texture: texture_storage_1d<F, W>  ✗ ) -> u32' where:
+      ✗  'W' is 'write' or 'read_write'
+ • 'textureDimensions(texture: texture_storage_2d<F, W>  ✗ ) -> vec2<u32>' where:
+      ✗  'W' is 'write' or 'read_write'
+ • 'textureDimensions(texture: texture_storage_2d_array<F, W>  ✗ ) -> vec2<u32>' where:
+      ✗  'W' is 'write' or 'read_write'
+ • 'textureDimensions(texture: texture_storage_3d<F, W>  ✗ ) -> vec3<u32>' where:
+      ✗  'W' is 'write' or 'read_write'
 )");
 }
 
@@ -1189,10 +1213,9 @@ Case::Create<AFloat,     AFloat,     AFloat,     AInt,       AFloat>(),
 Case::Create<AInt,       AInt,       AInt,       AInt,       AInt>()
                              ));  // clang-format on
 
-INSTANTIATE_TEST_SUITE_P(
-    VecAFloat_VecAInt,
-    IntrinsicTableAbstractBinaryTest,
-    testing::Values(  // clang-format off
+INSTANTIATE_TEST_SUITE_P(VecAFloat_VecAInt,
+                         IntrinsicTableAbstractBinaryTest,
+                         testing::Values(  // clang-format off
 //            result   | param lhs | param rhs |  arg lhs  |  arg rhs
 Case::Create<AFloatV,    AFloatV,    AFloatV,    AFloatV,    AFloatV>(),
 Case::Create<AFloatV,    AFloatV,    AFloatV,    AFloatV,    AIntV>(),
@@ -1216,37 +1239,33 @@ Case::Create<f32V,       f32V,       f32V,       AFloatV,    f32V>(),
 Case::Create<f32V,       f32V,       f32V,       f32V,       AFloatV>()
                              ));  // clang-format on
 
-INSTANTIATE_TEST_SUITE_P(
-    AFloat_i32,
-    IntrinsicTableAbstractBinaryTest,
-    testing::Values(  // clang-format off
+INSTANTIATE_TEST_SUITE_P(AFloat_i32,
+                         IntrinsicTableAbstractBinaryTest,
+                         testing::Values(  // clang-format off
 //            result   | param lhs | param rhs |  arg lhs  |  arg rhs
 Case::Create<void,        void,        void,        AFloat,     i32>(false),
 Case::Create<void,        void,        void,        i32,        AFloat>(false)
                              ));  // clang-format on
 
-INSTANTIATE_TEST_SUITE_P(
-    VecAFloat_Veci32,
-    IntrinsicTableAbstractBinaryTest,
-    testing::Values(  // clang-format off
+INSTANTIATE_TEST_SUITE_P(VecAFloat_Veci32,
+                         IntrinsicTableAbstractBinaryTest,
+                         testing::Values(  // clang-format off
 //            result   | param lhs | param rhs |  arg lhs  |  arg rhs
 Case::Create<void,        void,        void,        AFloatV,    i32V>(false),
 Case::Create<void,        void,        void,        i32V,       AFloatV>(false)
                              ));  // clang-format on
 
-INSTANTIATE_TEST_SUITE_P(
-    AFloat_u32,
-    IntrinsicTableAbstractBinaryTest,
-    testing::Values(  // clang-format off
+INSTANTIATE_TEST_SUITE_P(AFloat_u32,
+                         IntrinsicTableAbstractBinaryTest,
+                         testing::Values(  // clang-format off
 //            result   | param lhs | param rhs |  arg lhs  |  arg rhs
 Case::Create<void,        void,        void,        AFloat,     u32>(false),
 Case::Create<void,        void,        void,        u32,        AFloat>(false)
                              ));  // clang-format on
 
-INSTANTIATE_TEST_SUITE_P(
-    VecAFloat_Vecu32,
-    IntrinsicTableAbstractBinaryTest,
-    testing::Values(  // clang-format off
+INSTANTIATE_TEST_SUITE_P(VecAFloat_Vecu32,
+                         IntrinsicTableAbstractBinaryTest,
+                         testing::Values(  // clang-format off
 //            result   | param lhs | param rhs |  arg lhs  |  arg rhs
 Case::Create<void,        void,        void,        AFloatV,    u32V>(false),
 Case::Create<void,        void,        void,        u32V,       AFloatV>(false)

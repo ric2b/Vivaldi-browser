@@ -88,6 +88,7 @@ def RunSteps(api):
   api.gerrit.set_change_label(host, 123, 'commit-queue', 1)
 
   api.gerrit.abandon_change(host, 123, 'bad roll')
+  api.gerrit.restore_change(host, 123, 'nevermind')
 
   api.gerrit.get_change_description(
       host,

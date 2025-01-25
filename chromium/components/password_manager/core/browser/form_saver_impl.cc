@@ -27,8 +27,9 @@ namespace {
 // Remove all information from |form| that is not required for signature
 // calculation.
 void SanitizeFormData(FormData* form) {
-  form->main_frame_origin = url::Origin();
-  for (FormFieldData& field : form->fields) {
+  form->set_main_frame_origin(url::Origin());
+  std::vector<FormFieldData> fields = form->ExtractFields();
+  for (FormFieldData& field : fields) {
     field.set_label({});
     field.set_value({});
     field.set_autocomplete_attribute({});
@@ -38,6 +39,7 @@ void SanitizeFormData(FormData* form) {
     field.set_id_attribute({});
     field.set_name_attribute({});
   }
+  form->set_fields(std::move(fields));
 }
 
 // Do the clean up of |matches| after |pending| was just pushed to the store.
@@ -51,8 +53,9 @@ void PostProcessMatches(
   // Update existing matches in the password store.
   for (const password_manager::PasswordForm* match : matches) {
     if (match->IsFederatedCredential() ||
-        ArePasswordFormUniqueKeysEqual(pending, *match))
+        ArePasswordFormUniqueKeysEqual(pending, *match)) {
       continue;
+    }
     // Delete obsolete empty username credentials.
     const bool same_password = match->password_value == pending.password_value;
     const bool username_was_added =
@@ -87,8 +90,7 @@ void PostProcessMatches(
 
 }  // namespace
 
-FormSaverImpl::FormSaverImpl(PasswordStoreInterface* store) : store_(store) {
-}
+FormSaverImpl::FormSaverImpl(PasswordStoreInterface* store) : store_(store) {}
 
 FormSaverImpl::~FormSaverImpl() = default;
 
@@ -120,8 +122,9 @@ void FormSaverImpl::Update(
     const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>& matches,
     const std::u16string& old_password) {
   SanitizeFormData(&pending.form_data);
-  if (old_password != pending.password_value)
+  if (old_password != pending.password_value) {
     pending.date_password_modified = base::Time::Now();
+  }
   store_->UpdateLogin(pending);
   // Update existing matches in the password store.
   PostProcessMatches(pending, matches, old_password, store_);

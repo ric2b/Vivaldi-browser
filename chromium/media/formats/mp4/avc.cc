@@ -12,7 +12,7 @@
 #include "media/base/decrypt_config.h"
 #include "media/formats/mp4/box_definitions.h"
 #include "media/formats/mp4/box_reader.h"
-#include "media/video/h264_parser.h"
+#include "media/parsers/h264_parser.h"
 
 namespace media {
 namespace mp4 {
@@ -118,7 +118,8 @@ bool AVC::InsertParamSetsAnnexB(const AVCDecoderConfigurationRecord& avc_config,
 
   if (nalu.nal_unit_type == H264NALU::kAUD) {
     // Move insert point to just after the AUD.
-    config_insert_point += (nalu.data + nalu.size) - start;
+    config_insert_point +=
+        (nalu.data + base::checked_cast<size_t>(nalu.size)) - start;
   }
 
   // Clear |parser| and |start| since they aren't needed anymore and
@@ -313,7 +314,8 @@ BitstreamConverter::AnalysisResult AVC::AnalyzeAnnexB(
         return result;
 
       case H264Parser::kUnsupportedStream:
-        NOTREACHED() << "AdvanceToNextNALU() returned kUnsupportedStream!";
+        NOTREACHED_IN_MIGRATION()
+            << "AdvanceToNextNALU() returned kUnsupportedStream!";
         return result;
 
       case H264Parser::kEOStream:

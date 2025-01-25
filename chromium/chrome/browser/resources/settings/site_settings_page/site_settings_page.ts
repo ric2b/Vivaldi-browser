@@ -9,10 +9,10 @@
  */
 
 import 'chrome://resources/cr_elements/icons.html.js';
+import 'chrome://resources/cr_elements/cr_collapse/cr_collapse.js';
 import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
-import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import '../controls/settings_toggle_button.js';
 import '../settings_shared.css.js';
 import './recent_site_permissions.js';
@@ -575,6 +575,12 @@ export class SettingsSiteSettingsPageElement extends
         },
       },
 
+      safetyHubAbusiveNotificationRevocationEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean(
+            'safetyHubAbusiveNotificationRevocationEnabled'),
+      },
+
       enableSafetyHub_: {
         type: Boolean,
         value() {
@@ -607,6 +613,7 @@ export class SettingsSiteSettingsPageElement extends
   private noRecentSitePermissions_: boolean;
   private showUnusedSitePermissions_: boolean;
   private unusedSitePermissionsEnabled_: boolean;
+  private safetyHubAbusiveNotificationRevocationEnabled_: boolean;
   private unusedSitePermissionsHeader_: string;
   private unusedSitePermissionsSubheader_: string;
   private safetyHubBrowserProxy_: SafetyHubBrowserProxy =
@@ -658,14 +665,19 @@ export class SettingsSiteSettingsPageElement extends
       return;
     }
 
-    this.showUnusedSitePermissions_ = this.unusedSitePermissionsEnabled_ &&
+    this.showUnusedSitePermissions_ =
+        (this.unusedSitePermissionsEnabled_ ||
+         this.safetyHubAbusiveNotificationRevocationEnabled_) &&
         permissions.length > 0 && !loadTimeData.getBoolean('isGuest');
     this.unusedSitePermissionsHeader_ =
         await PluralStringProxyImpl.getInstance().getPluralString(
             'safetyCheckUnusedSitePermissionsPrimaryLabel', permissions.length);
+    // TODO(crbug/342210522): Add test for this.
     this.unusedSitePermissionsSubheader_ =
         await PluralStringProxyImpl.getInstance().getPluralString(
-            'safetyCheckUnusedSitePermissionsSecondaryLabel',
+            this.safetyHubAbusiveNotificationRevocationEnabled_ ?
+                'safetyHubRevokedPermissionsSecondaryLabel' :
+                'safetyCheckUnusedSitePermissionsSecondaryLabel',
             permissions.length);
   }
 

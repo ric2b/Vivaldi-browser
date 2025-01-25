@@ -187,7 +187,7 @@ class FakeWebBluetoothCharacteristicClient : WebBluetoothCharacteristicClient {
   // WebBluetoothCharacteristicClient implementation:
   void RemoteCharacteristicValueChanged(
       const std::vector<uint8_t>& value) override {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 
  private:
@@ -551,8 +551,7 @@ class WebBluetoothServiceImplTest : public RenderViewHostImplTestHarness,
     // Set up an adapter.
     adapter_ = new FakeBluetoothAdapter();
     EXPECT_CALL(*adapter_, IsPresent()).WillRepeatedly(Return(true));
-    BluetoothAdapterFactoryWrapper::Get().SetBluetoothAdapterForTesting(
-        adapter_);
+    BluetoothAdapterFactoryWrapper::Get().SetBluetoothAdapterOverride(adapter_);
     battery_device_bundle_ = std::make_unique<FakeBluetoothDeviceBundle>(
         adapter_, battery_device_bundle_data);
 

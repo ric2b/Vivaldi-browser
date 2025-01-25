@@ -21,7 +21,7 @@ class VivaldiMainDelegate
  public:
   VivaldiMainDelegate();
 #if !BUILDFLAG(IS_ANDROID)
-  explicit VivaldiMainDelegate(base::TimeTicks exe_entry_point_ticks);
+  explicit VivaldiMainDelegate(const StartupTimestamps& timestamps);
 #endif
   ~VivaldiMainDelegate() override;
   content::ContentBrowserClient* CreateContentBrowserClient() override;
@@ -33,8 +33,8 @@ class VivaldiMainDelegate
 class VivaldiTestMainDelegate : public VivaldiMainDelegate {
  public:
   VivaldiTestMainDelegate() : VivaldiMainDelegate() {}
-  explicit VivaldiTestMainDelegate(base::TimeTicks exe_entry_point_ticks)
-      : VivaldiMainDelegate(exe_entry_point_ticks) {}
+  explicit VivaldiTestMainDelegate(const StartupTimestamps& timestamps)
+      : VivaldiMainDelegate(timestamps) {}
 #if BUILDFLAG(IS_WIN)
   bool ShouldHandleConsoleControlEvents() override;
 #endif

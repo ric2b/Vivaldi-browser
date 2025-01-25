@@ -25,10 +25,9 @@ use clap::Parser;
 
 use crypto_provider_rustcrypto::RustCrypto;
 use ukey2_connections::{
-    D2DConnectionContextV1, D2DHandshakeContext, InitiatorD2DHandshakeContext,
-    ServerD2DHandshakeContext,
+    D2DConnectionContextV1, D2DHandshakeContext, HandshakeImplementation,
+    InitiatorD2DHandshakeContext, NextProtocol, ServerD2DHandshakeContext,
 };
-use ukey2_rs::HandshakeImplementation;
 
 const MODE_INITIATOR: &str = "initiator";
 const MODE_RESPONDER: &str = "responder";
@@ -139,6 +138,7 @@ impl Ukey2Shell {
     fn run_as_initiator(&self) -> bool {
         let mut initiator_ctx = InitiatorD2DHandshakeContext::<RustCrypto, _>::new(
             HandshakeImplementation::PublicKeyInProtobuf,
+            vec![NextProtocol::Aes256CbcHmacSha256, NextProtocol::Aes256GcmSiv],
         );
         write_frame(initiator_ctx.get_next_handshake_message().unwrap());
         let server_init_msg = read_frame();
@@ -166,6 +166,7 @@ impl Ukey2Shell {
     fn run_as_responder(&self) -> bool {
         let mut server_ctx = ServerD2DHandshakeContext::<RustCrypto, _>::new(
             HandshakeImplementation::PublicKeyInProtobuf,
+            &[NextProtocol::Aes256GcmSiv, NextProtocol::Aes256CbcHmacSha256],
         );
         let initiator_init_msg = read_frame();
         server_ctx.handle_handshake_message(initiator_init_msg.as_slice()).unwrap();

@@ -46,7 +46,8 @@ AVCodecID CdmAudioCodecToCodecID(cdm::AudioCodec audio_codec) {
       return AV_CODEC_ID_AAC;
     case cdm::kUnknownAudioCodec:
     default:
-      NOTREACHED() << "Unsupported cdm::AudioCodec: " << audio_codec;
+      NOTREACHED_IN_MIGRATION()
+          << "Unsupported cdm::AudioCodec: " << audio_codec;
       return AV_CODEC_ID_NONE;
   }
 }
@@ -133,7 +134,7 @@ void CopySamples(cdm::AudioFormat cdm_format,
       break;
     }
     default:
-      NOTREACHED() << "Unsupported CDM Audio Format!";
+      NOTREACHED_IN_MIGRATION() << "Unsupported CDM Audio Format!";
       memset(output_buffer, 0, decoded_audio_size);
   }
 }
@@ -248,7 +249,7 @@ cdm::Status FFmpegCdmAudioDecoder::DecodeBuffer(
     case FFmpegDecodingLoop::DecodeStatus::kSendPacketFailed:
       return cdm::kDecodeError;
     case FFmpegDecodingLoop::DecodeStatus::kFrameProcessingFailed:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       [[fallthrough]];
     case FFmpegDecodingLoop::DecodeStatus::kDecodeFrameFailed:
       DLOG(WARNING) << " failed to decode an audio buffer: "
@@ -258,8 +259,7 @@ cdm::Status FFmpegCdmAudioDecoder::DecodeBuffer(
       break;
   }
 
-  if (output_timestamp_helper_->base_timestamp() == kNoTimestamp &&
-      !is_end_of_stream) {
+  if (!output_timestamp_helper_->base_timestamp() && !is_end_of_stream) {
     DCHECK(timestamp != kNoTimestamp);
     output_timestamp_helper_->SetBaseTimestamp(timestamp);
   }
@@ -331,7 +331,7 @@ bool FFmpegCdmAudioDecoder::OnNewFrame(
 }
 
 void FFmpegCdmAudioDecoder::ResetTimestampState() {
-  output_timestamp_helper_->SetBaseTimestamp(kNoTimestamp);
+  output_timestamp_helper_->Reset();
   last_input_timestamp_ = kNoTimestamp;
 }
 

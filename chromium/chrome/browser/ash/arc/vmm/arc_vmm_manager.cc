@@ -134,7 +134,7 @@ void ArcVmmManager::SetSwapState(SwapState state) {
     // The disable request will be sent immediately so the verify is
     // unnecessarily.
     SendSwapRequest(op, base::DoNothing());
-    enabled_state_heartbeat_timer_.Reset();
+    enabled_state_heartbeat_timer_.Stop();
     return;
   }
 
@@ -392,7 +392,7 @@ class ArcVmmManager::AcceleratorTarget : public ui::AcceleratorTarget {
       DVLOG(1) << "Set diable vmm swap state by keyboard shortcut.";
       manager_->SetSwapState(SwapState::DISABLE);
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
     }
     return true;

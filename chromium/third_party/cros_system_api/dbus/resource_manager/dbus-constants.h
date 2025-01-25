@@ -29,17 +29,6 @@ enum PressureLevelChrome {
   CRITICAL = 2,
 };
 
-enum class PressureLevelArcvm {
-  // There is enough memory to use.
-  NONE = 0,
-  // ARCVM is advised to kill cached processes to free memory.
-  CACHED = 1,
-  // ARCVM is advised to kill perceptible processes to free memory.
-  PERCEPTIBLE = 2,
-  // ARCVM is advised to kill foreground processes to free memory.
-  FOREGROUND = 3,
-};
-
 enum class PressureLevelArcContainer {
   // There is enough memory to use.
   NONE = 0,
@@ -65,6 +54,8 @@ enum class ThreadState {
   kEco = 3,
   kUtility = 4,
   kBackground = 5,
+  kUrgentBurstyServer = 6,
+  kUrgentBurstyClient = 7,
 };
 
 // Methods.
@@ -93,15 +84,6 @@ const char kSetThreadStateMethod[] = "SetThreadState";
 //   10000 KB to leave the critical memory pressure level (to moderate pressure
 //   level).
 const char kMemoryPressureChrome[] = "MemoryPressureChrome";
-
-// MemoryPressureArcvm signal contains 2 arguments:
-//   1. pressure_level, BYTE, see also enum PressureLevelArcvm.
-//   2. delta, UINT64, memory amount to free in KB to leave the current
-//   pressure level.
-//   E.g. argument (PressureLevelArcvm::FOREGROUND, 10000): ARCVM should free
-//   10000 KB to leave the foreground memory pressure level (to perceptible
-//   pressure level).
-const char kMemoryPressureArcvm[] = "MemoryPressureArcvm";
 
 // MemoryPressureArcContainer signal contains 2 arguments:
 //   1. pressure_level, BYTE, see also enum PressureLevelArcContainer.

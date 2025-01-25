@@ -15,6 +15,7 @@
 @class FeedHeaderViewController;
 @class FeedMetricsRecorder;
 @class FeedWrapperViewController;
+typedef NS_ENUM(NSInteger, FeedLayoutUpdateType);
 @class MagicStackCollectionViewController;
 @protocol NewTabPageContentDelegate;
 @class NewTabPageHeaderViewController;
@@ -53,7 +54,7 @@
 @property(nonatomic, weak) FeedMetricsRecorder* feedMetricsRecorder;
 
 // Whether or not the feed is visible.
-@property(nonatomic, assign, getter=isFeedVisible) BOOL feedVisible;
+@property(nonatomic, assign) BOOL feedVisible;
 
 // The view controller representing the NTP feed header.
 @property(nonatomic, weak) FeedHeaderViewController* feedHeaderViewController;
@@ -140,7 +141,7 @@
 - (void)updateScrollPositionForFeedTopSectionClosed;
 
 // Signals that the feed has completed its updates (i.e. loading cards).
-- (void)feedLayoutDidEndUpdates;
+- (void)feedLayoutDidEndUpdatesWithType:(FeedLayoutUpdateType)type;
 
 // Clears state and delegates.
 - (void)invalidate;

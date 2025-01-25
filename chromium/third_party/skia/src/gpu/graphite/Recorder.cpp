@@ -94,7 +94,9 @@ static uint32_t next_id() {
     return id;
 }
 
-Recorder::Recorder(sk_sp<SharedContext> sharedContext, const RecorderOptions& options)
+Recorder::Recorder(sk_sp<SharedContext> sharedContext,
+                   const RecorderOptions& options,
+                   const Context* context)
         : fSharedContext(std::move(sharedContext))
         , fRuntimeEffectDict(std::make_unique<RuntimeEffectDictionary>())
         , fRootTaskList(new TaskList)
@@ -111,12 +113,18 @@ Recorder::Recorder(sk_sp<SharedContext> sharedContext, const RecorderOptions& op
         fClientImageProvider = DefaultImageProvider::Make();
     }
 
-    fResourceProvider = fSharedContext->makeResourceProvider(this->singleOwner(),
-                                                             fUniqueID,
-                                                             options.fGpuBudgetInBytes);
-    fUploadBufferManager = std::make_unique<UploadBufferManager>(fResourceProvider.get(),
+    if (context) {
+        fOwnedResourceProvider = nullptr;
+        fResourceProvider = context->priv().resourceProvider();
+    } else {
+        fOwnedResourceProvider = fSharedContext->makeResourceProvider(this->singleOwner(),
+                                                                    fUniqueID,
+                                                                    options.fGpuBudgetInBytes);
+        fResourceProvider = fOwnedResourceProvider.get();
+    }
+    fUploadBufferManager = std::make_unique<UploadBufferManager>(fResourceProvider,
                                                                  fSharedContext->caps());
-    fDrawBufferManager = std::make_unique<DrawBufferManager>(fResourceProvider.get(),
+    fDrawBufferManager = std::make_unique<DrawBufferManager>(fResourceProvider,
                                                              fSharedContext->caps(),
                                                              fUploadBufferManager.get());
 
@@ -141,9 +149,6 @@ Recorder::~Recorder() {
         fContext->priv().deregisterRecorder(this);
     }
 #endif
-
-    // TODO: needed?
-    fStrikeCache->freeAll();
 }
 
 BackendApi Recorder::backend() const { return fSharedContext->backend(); }
@@ -178,19 +183,19 @@ std::unique_ptr<Recording> Recorder::snap() {
 
     // The scratch resources only need to be tracked until prepareResources() is finished, so
     // Recorder doesn't hold a persistent manager and it can be deleted when snap() returns.
-    ScratchResourceManager scratchManager{fResourceProvider.get(), std::move(fProxyReadCounts)};
+    ScratchResourceManager scratchManager{fResourceProvider, std::move(fProxyReadCounts)};
     fProxyReadCounts = std::make_unique<ProxyReadCountMap>();
 
     // In both the "task failed" case and the "everything is discarded" case, there's no work that
     // needs to be done in insertRecording(). However, we use nullptr as a failure signal, so
     // kDiscard will return a non-null Recording that has no tasks in it.
     if (fDrawBufferManager->hasMappingFailed() ||
-        fRootTaskList->prepareResources(fResourceProvider.get(),
+        fRootTaskList->prepareResources(fResourceProvider,
                                         &scratchManager,
                                         fRuntimeEffectDict.get()) == Task::Status::kFail) {
         // Leaving 'fTrackedDevices' alone since they were flushed earlier and could still be
         // attached to extant SkSurfaces.
-        fDrawBufferManager = std::make_unique<DrawBufferManager>(fResourceProvider.get(),
+        fDrawBufferManager = std::make_unique<DrawBufferManager>(fResourceProvider,
                                                                  fSharedContext->caps(),
                                                                  fUploadBufferManager.get());
         fTextureDataCache = std::make_unique<TextureDataCache>();
@@ -273,6 +278,10 @@ void Recorder::deregisterDevice(const Device* device) {
     }
 }
 
+int Recorder::maxTextureSize() const {
+    return this->priv().caps()->maxTextureSize();
+}
+
 BackendTexture Recorder::createBackendTexture(SkISize dimensions, const TextureInfo& info) {
     ASSERT_SINGLE_OWNER
 
@@ -332,7 +341,7 @@ bool Recorder::updateBackendTexture(const BackendTexture& backendTex,
         return false;
     }
 
-    sk_sp<Texture> texture = this->priv().resourceProvider()->createWrappedTexture(backendTex);
+    sk_sp<Texture> texture = this->priv().resourceProvider()->createWrappedTexture(backendTex, "");
     if (!texture) {
         return false;
     }
@@ -386,7 +395,7 @@ bool Recorder::updateCompressedBackendTexture(const BackendTexture& backendTex,
         return false;
     }
 
-    sk_sp<Texture> texture = this->priv().resourceProvider()->createWrappedTexture(backendTex);
+    sk_sp<Texture> texture = this->priv().resourceProvider()->createWrappedTexture(backendTex, "");
     if (!texture) {
         return false;
     }
@@ -443,6 +452,10 @@ void Recorder::freeGpuResources() {
     fAtlasProvider->clearTexturePool();
 
     fResourceProvider->freeGpuResources();
+
+    // This is technically not GPU memory, but there's no other place for the client to tell us to
+    // clean this up, and without any cleanup it can grow unbounded.
+    fStrikeCache->freeAll();
 }
 
 void Recorder::performDeferredCleanup(std::chrono::milliseconds msNotUsed) {
@@ -535,14 +548,14 @@ void RecorderPriv::flushTrackedDevices() {
 
 sk_sp<TextureProxy> RecorderPriv::CreateCachedProxy(Recorder* recorder,
                                                     const SkBitmap& bitmap,
-                                                    std::string_view label,
-                                                    Mipmapped mipmapped) {
+                                                    std::string_view label) {
     SkASSERT(!bitmap.isNull());
 
     if (!recorder) {
         return nullptr;
     }
-    return recorder->priv().proxyCache()->findOrCreateCachedProxy(recorder, bitmap, mipmapped,
+    return recorder->priv().proxyCache()->findOrCreateCachedProxy(recorder,
+                                                                  bitmap,
                                                                   std::move(label));
 }
 

@@ -8,27 +8,16 @@ source_set("field_trial") {
     "ios_first_run_field_trials.h",
   ]
   deps = [
-    ":field_trial_ids",
     "//base",
     "//components/prefs",
     "//components/signin/ios/browser:features",
+    "//components/variations",
     "//components/version_info",
     "//ios/chrome/app:tests_hook",
     "//ios/chrome/browser/first_run/model",
     "//ios/chrome/browser/shared/public/features",
-    "//ios/chrome/browser/ui/start_surface:feature_flags",
+    "//ios/chrome/browser/start_surface/ui_bundled:feature_flags",
     "//ios/chrome/common",
-  ]
-}
-
-source_set("field_trial_ids") {
-  sources = [
-    "field_trial_ids.cc",
-    "field_trial_ids.h",
-  ]
-  public_deps = [
-    "//base",
-    "//components/variations",
   ]
 }
 
@@ -36,8 +25,6 @@ source_set("first_run") {
   sources = [
     "first_run_coordinator.h",
     "first_run_coordinator.mm",
-    "orientation_limiting_navigation_controller.h",
-    "orientation_limiting_navigation_controller.mm",
   ]
   deps = [
     ":constants",
@@ -47,20 +34,16 @@ source_set("first_run") {
     ":utils",
     "//base",
     "//base:i18n",
-    "//components/metrics",
-    "//components/policy/core/common:common_constants",
-    "//components/prefs",
     "//components/signin/public/identity_manager",
-    "//components/web_resource",
     "//ios/chrome/app:tests_hook",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser/crash_report/model",
     "//ios/chrome/browser/docking_promo/coordinator",
     "//ios/chrome/browser/first_run/model",
-    "//ios/chrome/browser/geolocation/model",
     "//ios/chrome/browser/main/model",
     "//ios/chrome/browser/policy/model:policy_util",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
     "//ios/chrome/browser/shared/model/application_context",
+    "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/model/url:constants",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/public/commands",
@@ -69,15 +52,7 @@ source_set("first_run") {
     "//ios/chrome/browser/shared/ui/elements:elements_internal",
     "//ios/chrome/browser/shared/ui/util",
     "//ios/chrome/browser/shared/ui/util:terms_util",
-    "//ios/chrome/browser/signin/model",
-    "//ios/chrome/browser/sync/model",
-    "//ios/chrome/browser/ui/authentication",
     "//ios/chrome/browser/ui/authentication/history_sync",
-    "//ios/chrome/browser/ui/authentication/identity_chooser",
-    "//ios/chrome/browser/ui/authentication/signin",
-    "//ios/chrome/browser/ui/authentication/signin/add_account_signin",
-    "//ios/chrome/browser/ui/authentication/signin/logging",
-    "//ios/chrome/browser/ui/authentication/views",
     "//ios/chrome/browser/ui/first_run/default_browser",
     "//ios/chrome/browser/ui/first_run/omnibox_position",
     "//ios/chrome/browser/ui/first_run/resources",
@@ -88,11 +63,6 @@ source_set("first_run") {
     "//ios/chrome/browser/ui/search_engine_choice",
     "//ios/chrome/browser/ui/settings/resources",
     "//ios/chrome/browser/ui/settings/utils",
-    "//ios/chrome/common:string_util",
-    "//ios/chrome/common/ui/colors",
-    "//ios/chrome/common/ui/confirmation_alert",
-    "//ios/chrome/common/ui/promo_style",
-    "//ios/chrome/common/ui/util",
     "//ios/public/provider/chrome/browser/signin:choice_api",
     "//ui/base",
     "//ui/gfx",
@@ -180,7 +150,10 @@ source_set("eg2_tests") {
   testonly = true
   sources = [
     "enterprise_loading_screen_egtest.mm",
-    "first_run_egtest.mm",
+    "first_run_search_engine_choice_egtest.mm",
+    "first_run_test_case_base.h",
+    "first_run_test_case_base.mm",
+    "first_run_without_search_engine_choice_egtest.mm",
   ]
   deps = [
     ":constants",
@@ -202,6 +175,7 @@ source_set("eg2_tests") {
     "//components/sync/service",
     "//components/unified_consent",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/bookmarks/ui_bundled:eg_test_support+eg2",
     "//ios/chrome/browser/metrics/model:eg_test_support+eg2",
     "//ios/chrome/browser/policy/model:eg_test_support+eg2",
     "//ios/chrome/browser/policy/model:policy_util",
@@ -214,9 +188,9 @@ source_set("eg2_tests") {
     "//ios/chrome/browser/ui/authentication:eg_test_support+eg2",
     "//ios/chrome/browser/ui/authentication/signin:constants",
     "//ios/chrome/browser/ui/authentication/views:views_constants",
-    "//ios/chrome/browser/ui/bookmarks:eg_test_support+eg2",
     "//ios/chrome/browser/ui/search_engine_choice:constants",
     "//ios/chrome/browser/ui/search_engine_choice:earl_grey_ui_test_util",
+    "//ios/chrome/browser/ui/settings:constants",
     "//ios/chrome/browser/ui/settings:eg_test_support+eg2",
     "//ios/chrome/browser/ui/settings/google_services:constants",
     "//ios/chrome/common:string_util",
@@ -244,14 +218,8 @@ source_set("eg_app_support+eg2") {
     ":first_run",
     "//components/metrics",
     "//components/prefs",
-    "//components/signin/public/base",
-    "//ios/chrome/app:app_internal",
-    "//ios/chrome/app:first_run_app_state_agent",
-    "//ios/chrome/browser/shared/coordinator/scene:scene_state_header",
-    "//ios/chrome/browser/shared/coordinator/scene:scene_testing",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/public/features",
-    "//ios/chrome/browser/sync/model",
     "//ios/chrome/browser/ui/first_run/omnibox_position:omnibox_position_ui",
     "//ios/chrome/test/app:test_support",
     "//ios/third_party/earl_grey2:app_framework+link",

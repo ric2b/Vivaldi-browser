@@ -45,10 +45,10 @@ CONTENT_EXPORT const EnabledSet* GetEnabled(
 
 // Call to check if a named feature is enabled.
 CONTENT_EXPORT bool IsEnabled(content::BrowserContext* browser_context,
-                              base::StringPiece feature_name);
+                              std::string_view feature_name);
 
 CONTENT_EXPORT bool Enable(content::BrowserContext* browser_context,
-                           base::StringPiece feature_name,
+                           std::string_view feature_name,
                            bool enabled);
 
 }  // namespace vivaldi_runtime_feature

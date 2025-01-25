@@ -48,16 +48,7 @@ class CommandBufferHelperImpl
 
     stub_->AddDestructionObserver(this);
     wait_sequence_id_ = stub_->channel()->scheduler()->CreateSequence(
-#if BUILDFLAG(IS_MAC)
-        // Workaround for crbug.com/1035750.
-        // TODO(sandersd): Investigate whether there is a deeper scheduling
-        // problem that can be resolved.
-        gpu::SchedulingPriority::kHigh
-#else
-        gpu::SchedulingPriority::kNormal
-#endif  // BUILDFLAG(IS_MAC)
-        ,
-        stub_->channel()->task_runner());
+        gpu::SchedulingPriority::kNormal, stub_->channel()->task_runner());
 #if !BUILDFLAG(IS_ANDROID)
     decoder_helper_ = GLES2DecoderHelper::Create(stub_->decoder_context());
 #endif
@@ -92,16 +83,6 @@ class CommandBufferHelperImpl
   }
 
 #if !BUILDFLAG(IS_ANDROID)
-  gl::GLContext* GetGLContext() override {
-    DVLOG(2) << __func__;
-    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-
-    if (!decoder_helper_)
-      return nullptr;
-
-    return decoder_helper_->GetGLContext();
-  }
-
   gpu::SharedImageStub* GetSharedImageStub() override {
     return shared_image_stub();
   }
@@ -157,15 +138,6 @@ class CommandBufferHelperImpl
   void AddWillDestroyStubCB(WillDestroyStubCB callback) override {
     DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
     will_destroy_stub_callbacks_.push_back(std::move(callback));
-  }
-
-  bool SupportsTextureRectangle() const override {
-    if (!stub_)
-      return false;
-    return stub_->decoder_context()
-        ->GetFeatureInfo()
-        ->feature_flags()
-        .arb_texture_rectangle;
   }
 #endif
 

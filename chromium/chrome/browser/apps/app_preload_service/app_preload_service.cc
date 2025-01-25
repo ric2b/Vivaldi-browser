@@ -82,6 +82,18 @@ BASE_FEATURE(kAppPreloadServiceEnableArcApps,
              "AppPreloadServiceEnableArcApps",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kAppPreloadServiceEnableShelfPin,
+             "AppPreloadServiceEnableShelfPin",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kAppPreloadServiceEnableLauncherOrder,
+             "AppPreloadServiceEnableLauncherOrder",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kAppPreloadServiceAllUserTypes,
+             "AppPreloadServiceAllUserTypes",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 AppPreloadService::AppPreloadService(Profile* profile)
     : profile_(profile),
       device_info_manager_(std::make_unique<DeviceInfoManager>(profile)) {
@@ -117,6 +129,23 @@ base::AutoReset<bool> AppPreloadService::DisablePreloadsOnStartupForTesting() {
                                true);
 }
 
+void AppPreloadService::GetPinApps(GetPinAppsCallback callback) {
+  if (data_ready_) {
+    std::move(callback).Run(pin_apps_, pin_order_);
+  } else {
+    get_pin_apps_callbacks_.push_back(std::move(callback));
+  }
+}
+
+void AppPreloadService::GetLauncherOrdering(
+    base::OnceCallback<void(const LauncherOrdering&)> callback) {
+  if (data_ready_) {
+    std::move(callback).Run(launcher_ordering_);
+  } else {
+    get_launcher_ordering_callbacks_.push_back(std::move(callback));
+  }
+}
+
 void AppPreloadService::StartFirstLoginFlow() {
   auto start_time = base::TimeTicks::Now();
 
@@ -138,6 +167,8 @@ void AppPreloadService::StartFirstLoginFlow() {
     device_info_manager_->GetDeviceInfo(
         base::BindOnce(&AppPreloadService::StartAppInstallationForFirstLogin,
                        weak_ptr_factory_.GetWeakPtr(), start_time));
+  } else {
+    data_ready_ = true;
   }
 }
 
@@ -165,18 +196,50 @@ void AppPreloadService::OnGetAppsForFirstLoginCompleted(
     std::optional<std::vector<PreloadAppDefinition>> apps,
     LauncherOrdering launcher_ordering,
     ShelfPinOrdering shelf_pin_ordering) {
+  data_ready_ = true;
   if (!apps.has_value()) {
     OnFirstLoginFlowComplete(start_time, /*success=*/false);
     return;
   }
 
-  // TODO(crbug.com/327058999): Implement launcher ordering and shelf pinning.
+  // TODO(crbug.com/327058999): Implement launcher ordering.
   std::vector<const PreloadAppDefinition*> apps_to_install;
   for (const PreloadAppDefinition& app : apps.value()) {
     if (ShouldInstallApp(app)) {
       apps_to_install.push_back(&app);
     }
   }
+
+  if (base::FeatureList::IsEnabled(apps::kAppPreloadServiceEnableShelfPin)) {
+    pin_apps_.clear();
+    pin_order_.clear();
+    // Collect the apps that will be pinned after install.
+    for (auto* const app : apps_to_install) {
+      if (shelf_pin_ordering.contains(*app->GetPackageId())) {
+        pin_apps_.push_back(*app->GetPackageId());
+      }
+    }
+    // Sort shelf pin ordering.
+    std::vector<std::pair<apps::PackageId, uint32_t>> pins(
+        shelf_pin_ordering.begin(), shelf_pin_ordering.end());
+    base::ranges::sort(pins, {}, &std::pair<apps::PackageId, uint32_t>::second);
+    base::ranges::transform(pins, std::back_inserter(pin_order_),
+                            &std::pair<apps::PackageId, uint32_t>::first);
+  }
+  for (auto& callback : get_pin_apps_callbacks_) {
+    std::move(callback).Run(pin_apps_, pin_order_);
+  }
+  get_pin_apps_callbacks_.clear();
+
+  if (base::FeatureList::IsEnabled(
+          apps::kAppPreloadServiceEnableLauncherOrder)) {
+    launcher_ordering_ = launcher_ordering;
+  }
+  for (auto& callback : get_launcher_ordering_callbacks_) {
+    std::move(callback).Run(launcher_ordering_);
+  }
+  get_launcher_ordering_callbacks_.clear();
+
   const auto install_barrier_callback = base::BarrierCallback<bool>(
       apps_to_install.size(),
       base::BindOnce(&AppPreloadService::OnAppInstallationsCompleted,
@@ -185,8 +248,8 @@ void AppPreloadService::OnGetAppsForFirstLoginCompleted(
       AppServiceProxyFactory::GetForProfile(profile_)->AppInstallService();
   for (const PreloadAppDefinition* app : apps_to_install) {
     install_service.InstallAppHeadless(
-        app->IsDefaultApp() ? AppInstallSurface::kAppPreloadServiceDefault
-                            : AppInstallSurface::kAppPreloadServiceOem,
+        app->IsOemApp() ? AppInstallSurface::kAppPreloadServiceOem
+                        : AppInstallSurface::kAppPreloadServiceDefault,
         app->ToAppInstallData(), install_barrier_callback);
   }
 }
@@ -237,7 +300,7 @@ bool AppPreloadService::ShouldInstallApp(const PreloadAppDefinition& app) {
   // need to reinstall it. This avoids extra work in the case where we are
   // retrying the flow after an install error for a different app.
   InstallReason expected_reason =
-      app.IsDefaultApp() ? InstallReason::kDefault : InstallReason::kOem;
+      app.IsOemApp() ? InstallReason::kOem : InstallReason::kDefault;
   AppServiceProxy* proxy = AppServiceProxyFactory::GetForProfile(profile_);
   bool installed = false;
 

@@ -47,7 +47,7 @@ That means we expect everyone to try align (and even do better!) than what we
 outline here, not try and find loopholes that haven't been explicitly banned.
 
 *   Every change should have a reason, which is appropriately documented.
-    ([Write good commit messages](#Commit-messages)!)
+    ([Write good commit messages](#commit-messages)!)
 *   All changes should be agreed upon by two trusted persons (i.e. Googlers).
     *   Authors, if they are trusted, count as one.
     *   Upstream developers, even if you personally know them, do not count.
@@ -955,7 +955,7 @@ no way of enforcing those builds are never used or leaked externally, and this
 wouldn't protect from [insider threats].
 
 
-[Adding Reviewers]: #reviewers
+[Adding Reviewers]: #add-reviewers
 [archive mirrors]: /chromium-os/developer-library/reference/third-party/archive-mirrors/
 [Breakage and Flake Policy]: /chromium-os/developer-library/guides/testing/breakages-and-flakes/
 [Change-Id]: https://gerrit-review.googlesource.com/Documentation/user-changeid.html
@@ -976,7 +976,7 @@ wouldn't protect from [insider threats].
 [issuetracker.google.com]: https://issuetracker.google.com/
 [partner issue tracker]: https://partnerissuetracker.corp.google.com
 [Life of a Patch]: https://source.android.com/setup/contribute/life-of-a-patch
-[merge CL]: #How-do-I-upload-a-merge-CL-for-review
+[merge CL]: #how-do-i-upload-a-merge-cl-for-review
 [Policies]: #policies
 [unittests]: /chromium-os/developer-library/guides/testing/unit-tests/
 [Uploading Changes]: https://gerrit-review.googlesource.com/Documentation/user-upload.html

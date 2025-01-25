@@ -231,6 +231,23 @@ Address ExternalCodeCompressionScheme::DecompressTagged(
   return result;
 }
 
+// static
+template <typename ProcessPointerCallback>
+void ExternalCodeCompressionScheme::ProcessIntermediatePointers(
+    PtrComprCageBase cage_base, Address raw_value,
+    ProcessPointerCallback callback) {
+  // If pointer compression is enabled, we may have random compressed pointers
+  // on the stack that may be used for subsequent operations.
+  // Extract, decompress and trace both halfwords.
+  Address decompressed_low = ExternalCodeCompressionScheme::DecompressTagged(
+      cage_base, static_cast<Tagged_t>(raw_value));
+  callback(decompressed_low);
+  Address decompressed_high = ExternalCodeCompressionScheme::DecompressTagged(
+      cage_base,
+      static_cast<Tagged_t>(raw_value >> (sizeof(Tagged_t) * CHAR_BIT)));
+  callback(decompressed_high);
+}
+
 #endif  // V8_EXTERNAL_CODE_SPACE
 
 //
@@ -317,12 +334,24 @@ V8_INLINE PtrComprCageBase GetPtrComprCageBase(Tagged<HeapObject> object) {
 #ifdef V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES
 
 PtrComprCageAccessScope::PtrComprCageAccessScope(Isolate* isolate)
-    : cage_base_(V8HeapCompressionScheme::base()) {
+    : cage_base_(V8HeapCompressionScheme::base()),
+#ifdef V8_EXTERNAL_CODE_SPACE
+      code_cage_base_(ExternalCodeCompressionScheme::base()),
+#endif  // V8_EXTERNAL_CODE_SPACE
+      saved_current_isolate_group_(IsolateGroup::current()) {
   V8HeapCompressionScheme::InitBase(isolate->cage_base());
+#ifdef V8_EXTERNAL_CODE_SPACE
+  ExternalCodeCompressionScheme::InitBase(isolate->code_cage_base());
+#endif  // V8_EXTERNAL_CODE_SPACE
+  IsolateGroup::set_current(isolate->isolate_group());
 }
 
 PtrComprCageAccessScope::~PtrComprCageAccessScope() {
   V8HeapCompressionScheme::InitBase(cage_base_);
+#ifdef V8_EXTERNAL_CODE_SPACE
+  ExternalCodeCompressionScheme::InitBase(code_cage_base_);
+#endif  // V8_EXTERNAL_CODE_SPACE
+  IsolateGroup::set_current(saved_current_isolate_group_);
 }
 
 #endif  // V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES

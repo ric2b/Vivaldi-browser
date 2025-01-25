@@ -19,8 +19,8 @@ import time
 import uuid
 
 import gclient_paths
-import reclient_metrics
-
+import ninja
+import siso
 
 THIS_DIR = os.path.dirname(__file__)
 RECLIENT_LOG_CLEANUP = os.path.join(THIS_DIR, 'reclient_log_cleanup.py')
@@ -259,8 +259,13 @@ def set_reproxy_path_flags(out_dir, make_dirs=True):
 
 
 def set_racing_defaults():
-    os.environ.setdefault("RBE_local_resource_fraction", "0.2")
-    os.environ.setdefault("RBE_racing_bias", "0.95")
+    if sys.platform == 'linux':
+        os.environ.setdefault("RBE_local_resource_fraction", "0.4")
+        os.environ.setdefault("RBE_racing_bias", "0.7")
+    else:
+        # TODO(b/352463976): tune this on non-Linux platform too.
+        os.environ.setdefault("RBE_local_resource_fraction", "0.2")
+        os.environ.setdefault("RBE_racing_bias", "0.95")
 
 
 def set_mac_defaults():
@@ -307,7 +312,7 @@ def reclient_setup_docs_url():
 
 
 @contextlib.contextmanager
-def build_context(argv, tool):
+def build_context(argv, tool, should_collect_logs):
     # If use_remoteexec is set, but the reclient binaries or configs don't
     # exist, display an error message and stop.  Otherwise, the build will
     # attempt to run with rewrapper wrapping actions, but will fail with
@@ -333,7 +338,7 @@ def build_context(argv, tool):
         yield 1
         return
 
-    if reclient_metrics.check_status(ninja_out):
+    if should_collect_logs:
         set_reproxy_metrics_flags(tool)
 
     if os.environ.get('RBE_instance', None):
@@ -376,3 +381,30 @@ Ensure you have completed the reproxy setup instructions:
         if os.environ.get('NINJA_SUMMARIZE_BUILD') == '1':
             elapsed = time.time() - start
             print('%1.3fs to stop reproxy' % elapsed)
+
+
+def run_ninja(ninja_cmd, should_collect_logs=False):
+    """Runs Ninja in build_context()."""
+    # TODO: crbug.com/345113094 - rename the `tool` label to `ninja`.
+    with build_context(ninja_cmd, "ninja_reclient",
+                       should_collect_logs) as ret_code:
+        if ret_code:
+            return ret_code
+        try:
+            return ninja.main(ninja_cmd)
+        except KeyboardInterrupt:
+            print("Shutting down reproxy...", file=sys.stderr)
+            return 1
+
+
+def run_siso(siso_cmd, should_collect_logs=False):
+    """Runs Siso in build_context()."""
+    # TODO: crbug.com/345113094 - rename the `autosiso` label to `siso`.
+    with build_context(siso_cmd, "autosiso", should_collect_logs) as ret_code:
+        if ret_code:
+            return ret_code
+        try:
+            return siso.main(siso_cmd)
+        except KeyboardInterrupt:
+            print("Shutting down reproxy...", file=sys.stderr)
+            return 1

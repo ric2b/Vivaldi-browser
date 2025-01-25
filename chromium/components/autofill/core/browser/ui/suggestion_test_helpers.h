@@ -22,6 +22,12 @@ namespace autofill {
                                                 Suggestion::Icon icon);
 
 ::testing::Matcher<Suggestion> EqualsSuggestion(
+    SuggestionType type,
+    const std::u16string& main_text,
+    Suggestion::Icon icon,
+    const std::vector<std::vector<Suggestion::Text>>& labels);
+
+::testing::Matcher<Suggestion> EqualsSuggestion(
     SuggestionType id,
     const std::u16string& main_text,
     Suggestion::Icon icon,
@@ -40,9 +46,9 @@ inline auto SuggestionVectorMainTextsAre(const Matchers&... matchers) {
 }
 
 template <class... Matchers>
-inline auto SuggestionVectorLabelsContains(const Matchers&... matchers) {
-  return ::testing::Contains(
-      ::testing::Field("labels", &Suggestion::labels, matchers)...);
+inline auto SuggestionAdditionalLabelsContains(const Matchers&... matchers) {
+  return ::testing::Contains(::testing::Field(
+      "additional_label", &Suggestion::additional_label, matchers)...);
 }
 
 template <class... Matchers>

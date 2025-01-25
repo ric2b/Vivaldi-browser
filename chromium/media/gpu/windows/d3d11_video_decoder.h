@@ -5,7 +5,6 @@
 #ifndef MEDIA_GPU_WINDOWS_D3D11_VIDEO_DECODER_H_
 #define MEDIA_GPU_WINDOWS_D3D11_VIDEO_DECODER_H_
 
-#include <d3d11.h>
 #include <list>
 #include <vector>
 
@@ -27,7 +26,6 @@
 #include "media/base/video_types.h"
 #include "media/gpu/command_buffer_helper.h"
 #include "media/gpu/media_gpu_export.h"
-#include "media/gpu/windows/d3d11_com_defs.h"
 #include "media/gpu/windows/d3d11_decoder_configurator.h"
 #include "media/gpu/windows/d3d11_h264_accelerator.h"
 #include "media/gpu/windows/d3d11_status.h"
@@ -36,6 +34,7 @@
 #include "media/gpu/windows/d3d11_video_decoder_wrapper.h"
 #include "media/gpu/windows/d3d11_video_frame_mailbox_release_helper.h"
 #include "media/gpu/windows/d3d11_vp9_accelerator.h"
+#include "media/gpu/windows/d3d_com_defs.h"
 
 namespace gpu {
 class CommandBufferStub;
@@ -56,8 +55,7 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoder : public VideoDecoder,
   enum class D3DVersion { kD3D11, kD3D12 };
 
   // Callback to get a D3D11/12 device.
-  using GetD3DDeviceCB =
-      base::RepeatingCallback<Microsoft::WRL::ComPtr<IUnknown>(D3DVersion)>;
+  using GetD3DDeviceCB = base::RepeatingCallback<ComUnknown(D3DVersion)>;
 
   // List of configs that we'll check against when initializing.  This is only
   // needed since GpuMojoMediaClient merges our supported configs with the VDA

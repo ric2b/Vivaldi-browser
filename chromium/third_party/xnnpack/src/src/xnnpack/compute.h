@@ -5,15 +5,16 @@
 
 #pragma once
 
-
 #include <stddef.h>
 #include <stdint.h>
 
-#include <xnnpack.h>
-#include <xnnpack/common.h>
-#include <xnnpack/config.h>
-#include <xnnpack/math.h>
+#include "xnnpack.h"
+#include "xnnpack/common.h"
+#include "xnnpack/math.h"
+#include "xnnpack/microfnptr.h"
+#include "xnnpack/microparams.h"
 
+#include "pthreadpool.h"
 
 enum xnn_parallelization_type {
   xnn_parallelization_type_invalid = 0,
@@ -321,10 +322,15 @@ struct gemm_context {
   size_t batch_strides_c[XNN_MAX_TENSOR_DIMS];
   // The `mr` size of the current GEMM microkernel.
   size_t mr;
+  // The `kr` size of the current GEMM microkernel.
+  size_t kr;
+  // The `sr` size of the current GEMM microkernel.
+  size_t sr;
   // GEMM microkernels.
   union {
     struct xnn_hmp_gemm_ukernel ukernel;
     struct xnn_hmp_dqgemm_ukernel dq_ukernel;
+    struct xnn_hmp_qp8gemm_ukernel qp8_ukernel;
   };
   // Parameters for dynamically quantized inputs.
   const struct xnn_qd8_quantization_params* quantization_params;
@@ -364,7 +370,12 @@ struct gemm_context {
       size_t mr_block_size,
       size_t nr_block_size);
 
-  #if XNN_MAX_UARCH_TYPES > 1
+  XNN_PRIVATE void xnn_compute_qp8gemm(
+      const struct gemm_context context[restrict XNN_MIN_ELEMENTS(1)],
+      size_t mr_block_start, size_t nr_block_start, size_t mr_block_size,
+      size_t nr_block_size);
+
+#if XNN_MAX_UARCH_TYPES > 1
     XNN_PRIVATE void xnn_compute_hmp_grouped_gemm(
         const struct gemm_context context[restrict XNN_MIN_ELEMENTS(1)],
         uint32_t uarch_index,
@@ -389,39 +400,49 @@ struct gemm_context {
         size_t nr_block_start,
         size_t mr_block_size,
         size_t nr_block_size);
-  #endif  // XNN_MAX_UARCH_TYPES > 1
+
+    XNN_PRIVATE void xnn_compute_hmp_qp8gemm(
+        const struct gemm_context context[restrict XNN_MIN_ELEMENTS(1)],
+        uint32_t uarch_index, size_t mr_block_start, size_t nr_block_start,
+        size_t mr_block_size, size_t nr_block_size);
+#endif  // XNN_MAX_UARCH_TYPES > 1
 #endif
 
-// Context for Sparse Matrix-Dense Matrix Multiplication.
-// C [MxN] := A [MxK] * B [KxN] + bias [N]
-// A and C are dense matrices with row-major storage, B is a sparse matrix.
-struct spmm_context {
-  // N dimension of the B and C matrices.
-  // Corresponds to number of output channels in 1x1 convolution.
-  size_t n;
-  // M dimension of the A and C matrices, pre-scaled by sizeof(element size).
-  // Corresponds to the stride, in bytes, between adjacent rows of C matrix.
-  size_t scaled_m;
-  // Input matrix A.
-  const void* input;
-  // Packed bias elements and non-zero filter elements.
-  const void* nonzero_weights;
-  // Input pointer increments, in bytes, after each processed non-zero weight.
-  const int32_t* input_increments;
-  // Number of non-zero filter elements per each N (output channel) dimension.
-  const uint32_t* output_channel_nonzeros;
-  // Output matrix C.
-  void* output;
-  // Stride, in bytes, between matrices A corresponding to different images in batched 1x1 Convolution
-  size_t batched_input_stride;
-  // Stride, in bytes, between matrices C corresponding to different images in batched 1x1 Convolution
-  size_t batched_output_stride;
-  // Micro-kernel function pointer.
-  xnn_spmm_ukernel_fn ukernel;
-  // Output activation parameters.
-  union {
-    union xnn_f32_minmax_params f32;
-  } params;
+    // Context for Sparse Matrix-Dense Matrix Multiplication.
+    // C [MxN] := A [MxK] * B [KxN] + bias [N]
+    // A and C are dense matrices with row-major storage, B is a sparse matrix.
+    struct spmm_context {
+      // N dimension of the B and C matrices.
+      // Corresponds to number of output channels in 1x1 convolution.
+      size_t n;
+      // M dimension of the A and C matrices, pre-scaled by sizeof(element
+      // size). Corresponds to the stride, in bytes, between adjacent rows of C
+      // matrix.
+      size_t scaled_m;
+      // Input matrix A.
+      const void* input;
+      // Packed bias elements and non-zero filter elements.
+      const void* nonzero_weights;
+      // Input pointer increments, in bytes, after each processed non-zero
+      // weight.
+      const int32_t* input_increments;
+      // Number of non-zero filter elements per each N (output channel)
+      // dimension.
+      const uint32_t* output_channel_nonzeros;
+      // Output matrix C.
+      void* output;
+      // Stride, in bytes, between matrices A corresponding to different images
+      // in batched 1x1 Convolution
+      size_t batched_input_stride;
+      // Stride, in bytes, between matrices C corresponding to different images
+      // in batched 1x1 Convolution
+      size_t batched_output_stride;
+      // Micro-kernel function pointer.
+      xnn_spmm_ukernel_fn ukernel;
+      // Output activation parameters.
+      union {
+        union xnn_f32_minmax_params f32;
+      } params;
 };
 
 #ifndef __cplusplus
@@ -1322,14 +1343,12 @@ struct univector_strided_context {
     union xnn_f16_neg_params f16_neg;
     union xnn_f16_sigmoid_params f16_sigmoid;
     union xnn_f16_tanh_params f16_tanh;
-    union xnn_f32_abs_params f32_abs;
     union xnn_f32_default_params f32_default;
     union xnn_f32_elu_params f32_elu;
     union xnn_f32_f16_cvt_params f32_f16_cvt;
     union xnn_f32_hswish_params f32_hswish;
     union xnn_f32_lrelu_params f32_lrelu;
     union xnn_f32_minmax_params f32_minmax;
-    union xnn_f32_neg_params f32_neg;
     union xnn_f32_qs8_cvt_params f32_qs8_cvt;
     union xnn_f32_qu8_cvt_params f32_qu8_cvt;
     union xnn_f32_rnd_params f32_rnd;
@@ -1372,14 +1391,12 @@ struct univector_contiguous_context {
     union xnn_f16_minmax_params f16_minmax;
     union xnn_f16_neg_params f16_neg;
     union xnn_f16_sigmoid_params f16_sigmoid;
-    union xnn_f32_abs_params f32_abs;
     union xnn_f32_default_params f32_default;
     union xnn_f32_elu_params f32_elu;
     union xnn_f32_f16_cvt_params f32_f16_cvt;
     union xnn_f32_hswish_params f32_hswish;
     union xnn_f32_lrelu_params f32_lrelu;
     union xnn_f32_minmax_params f32_minmax;
-    union xnn_f32_neg_params f32_neg;
     union xnn_f32_qs8_cvt_params f32_qs8_cvt;
     union xnn_f32_qu8_cvt_params f32_qu8_cvt;
     union xnn_f32_rnd_params f32_rnd;
@@ -1409,22 +1426,43 @@ struct univector_contiguous_context {
 struct reduce_context {
   const void* input;
   void* output;
+  void* workspace;
+  const void* zero;
   size_t input_shape[XNN_MAX_TENSOR_DIMS];
   size_t input_stride[XNN_MAX_TENSOR_DIMS];
   size_t output_stride[XNN_MAX_TENSOR_DIMS];
-  size_t scaled_elements;
-  size_t element_size;
-  xnn_reduce_ukernel_fn ukernel;
+  size_t channels;
+  size_t accumulation_element_size;
+  size_t output_element_size;
+  union {
+    xnn_reduce_ukernel_fn rsum;
+    xnn_rdsum_ukernel_fn rdsum;
+  } ukernel;
+  xnn_vunary_ukernel_fn cvt_ukernel;
   union {
     union xnn_f32_default_params f32_default;
+    union xnn_f16_f32acc_scale_params scale_params;
     union xnn_f32_scale_params f32_scale;
   } params;
+  union xnn_f32_f16_cvt_params cvt_params;
 };
 
 #ifndef __cplusplus
-// Compute contigous reduction over the 1st, 3rd and 5th dimensions of the input
+// Compute contiguous reduction over the 1st, 3rd and 5th dimensions of the input
 // tensor.
   XNN_PRIVATE void xnn_compute_contiguous_reduce(
+      const struct reduce_context context[restrict XNN_MIN_ELEMENTS(1)],
+      size_t output_idx0,
+      size_t output_idx1,
+      size_t output_idx2,
+      size_t output1_block_size,
+      size_t output2_block_size);
+#endif
+
+#ifndef __cplusplus
+// Compute discontiguous reduction over the 0st, 2rd and 4th dimensions of the input
+// tensor.
+  XNN_PRIVATE void xnn_compute_discontiguous_reduce(
       const struct reduce_context context[restrict XNN_MIN_ELEMENTS(1)],
       size_t output_idx0,
       size_t output_idx1,
@@ -1566,16 +1604,35 @@ struct f32_qd8_convert_context {
       size_t batch_index);
 #endif
 
-struct u8_softmax_context {
-  size_t n;
-  const uint8_t* x;
-  size_t x_stride;
-  const uint32_t* t;
-  uint8_t* y;
-  size_t y_stride;
-  xnn_u8_rmax_ukernel_fn rmax_ukernel;
-  xnn_u8_lut32norm_ukernel_fn lut_norm_ukernel;
+struct f32_qp8_convert_context {
+  size_t m;
+  size_t k;
+  size_t mr;
+  size_t kr;
+  size_t sr;
+  const float* XNN_RESTRICT lhs;
+  size_t lhs_stride;
+  int8_t* XNN_RESTRICT lhs_packed;
+  xnn_x8_packq_f32qp8_ukernel_fn packq_ukernel;
 };
+
+#ifndef __cplusplus
+  XNN_PRIVATE void xnn_compute_f32_qp8_convert(
+      const struct f32_qp8_convert_context
+          context[restrict XNN_MIN_ELEMENTS(1)],
+      size_t m_idx_start);
+#endif
+
+  struct u8_softmax_context {
+    size_t n;
+    const uint8_t* x;
+    size_t x_stride;
+    const uint32_t* t;
+    uint8_t* y;
+    size_t y_stride;
+    xnn_u8_rmax_ukernel_fn rmax_ukernel;
+    xnn_u8_lut32norm_ukernel_fn lut_norm_ukernel;
+  };
 
 #ifndef __cplusplus
   XNN_PRIVATE void xnn_compute_u8_softmax(
@@ -1723,15 +1780,19 @@ struct scaled_dot_product_attention_context {
   xnn_vunary_ukernel_fn vtanh_ukernel;
 
   union {
+    union xnn_f16_expminus_params f16;
     union xnn_f32_expminus_params f32;
   } expminus_params;
   union {
+    union xnn_f16_minmax_params f16;
     union xnn_f32_minmax_params f32;
   } minmax_params;
   union {
     union xnn_f16_default_params f16;
+    union xnn_f32_default_params f32;
   } rmax_params;
   union {
+    union xnn_f16_tanh_params f16;
     union xnn_f32_tanh_params f32;
   } tanh_params;
 

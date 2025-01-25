@@ -7,6 +7,8 @@
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "components/content_settings/browser/ui/cookie_controls_util.h"
+#include "components/content_settings/core/common/cookie_controls_enforcement.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/views/controls/image_view.h"
@@ -17,6 +19,9 @@
 #include "ui/views/widget/widget.h"
 
 namespace {
+
+using Util = ::content_settings::CookieControlsUtil;
+
 // TODO(crbug.com/40064612): Consider moving this method to a Factory class
 // and refactor PageInfoViewFactory::CreateLabelWrapper.
 std::unique_ptr<views::View> CreateLabelWrapper() {
@@ -37,6 +42,7 @@ std::unique_ptr<views::View> CreateLabelWrapper() {
 }  // namespace
 
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(RichControlsContainerView, kIcon);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(RichControlsContainerView, kEnforcedIcon);
 
 RichControlsContainerView::RichControlsContainerView() {
   auto button_insets = ChromeLayoutProvider::Get()->GetInsetsMetric(
@@ -52,9 +58,7 @@ RichControlsContainerView::RichControlsContainerView() {
   labels_wrapper_ = AddChildView(CreateLabelWrapper());
   title_ = labels_wrapper_->AddChildView(std::make_unique<views::Label>(
       std::u16string(), views::style::CONTEXT_DIALOG_BODY_TEXT));
-  if (features::IsChromeRefresh2023()) {
-    title_->SetTextStyle(views::style::STYLE_BODY_3_MEDIUM);
-  }
+  title_->SetTextStyle(views::style::STYLE_BODY_3_MEDIUM);
   title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
   // Calculate difference between label height and icon size to align icons
@@ -68,6 +72,18 @@ RichControlsContainerView::RichControlsContainerView() {
 
 void RichControlsContainerView::SetIcon(const ui::ImageModel image) {
   icon_->SetImage(image);
+}
+
+void RichControlsContainerView::SetEnforcedIcon(
+    CookieControlsEnforcement enforcement) {
+  if (enforced_icon_ == nullptr) {
+    enforced_icon_ = AddChildView(std::make_unique<views::ImageView>());
+  }
+  enforced_icon_->SetProperty(views::kElementIdentifierKey, kEnforcedIcon);
+  enforced_icon_->SetImage(ui::ImageModel::FromVectorIcon(
+      Util::GetEnforcedIcon(enforcement), ui::kColorIcon,
+      GetLayoutConstant(PAGE_INFO_ICON_SIZE)));
+  enforced_icon_->SetTooltipText(Util::GetEnforcedTooltip(enforcement));
 }
 
 void RichControlsContainerView::SetTitle(std::u16string title) {
@@ -106,11 +122,8 @@ views::StyledLabel* RichControlsContainerView::AddSecondaryStyledLabel(
       views::kBoxLayoutFlexKey,
       views::BoxLayoutFlexSpecification().WithWeight(1));
 
-  if (features::IsChromeRefresh2023()) {
-    secondary_label->SetDefaultTextStyle(views::style::STYLE_BODY_5);
-    secondary_label->SetDefaultEnabledColorId(
-        ui::kColorLabelForegroundSecondary);
-  }
+  secondary_label->SetDefaultTextStyle(views::style::STYLE_BODY_5);
+  secondary_label->SetDefaultEnabledColorId(ui::kColorLabelForegroundSecondary);
   return labels_wrapper_->AddChildView(std::move(secondary_label));
 }
 
@@ -137,15 +150,20 @@ gfx::Size RichControlsContainerView::CalculatePreferredSize(
   width += controls_width_;
 
   width = std::max(width, GetMinBubbleWidth());
-  return gfx::Size(width, views::View::GetHeightForWidth(width));
+  return gfx::Size(width,
+                   GetLayoutManager()->GetPreferredHeightForWidth(this, width));
 }
 
 const std::u16string& RichControlsContainerView::GetTitleForTesting() {
   return title_->GetText();
 }
 
-const ui::ImageModel RichControlsContainerView::GetIconImageModelForTesting() {
+const ui::ImageModel RichControlsContainerView::GetIconForTesting() {
   return icon_->GetImageModel();
+}
+
+const ui::ImageModel RichControlsContainerView::GetEnforcedIconForTesting() {
+  return enforced_icon_->GetImageModel();
 }
 
 int RichControlsContainerView::GetMinBubbleWidth() const {

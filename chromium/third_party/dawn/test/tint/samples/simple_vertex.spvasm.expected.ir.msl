@@ -1,20 +1,29 @@
-SKIP: FAILED
-
 #include <metal_stdlib>
 using namespace metal;
-struct main_out {
-  float4 gl_Position [[position]];
+
+struct tint_module_vars_struct {
+  thread float4* gl_Position;
 };
 
-thread float4 gl_Position = 0.0f;
-void main_1() {
-  gl_Position = float4(0.0f);
-}
-vertex main_out tint_symbol() {
-  main_1();
-  return {.gl_Position=gl_Position};
-}
-program_source:7:15: error: program scope variable must reside in constant address space
-thread float4 gl_Position = 0.0f;
-              ^
+struct main_out {
+  float4 gl_Position;
+};
 
+struct tint_symbol_outputs {
+  float4 main_out_gl_Position [[position]];
+};
+
+void main_1(tint_module_vars_struct tint_module_vars) {
+  (*tint_module_vars.gl_Position) = float4(0.0f);
+}
+
+main_out tint_symbol_inner(tint_module_vars_struct tint_module_vars) {
+  main_1(tint_module_vars);
+  return main_out{.gl_Position=(*tint_module_vars.gl_Position)};
+}
+
+vertex tint_symbol_outputs tint_symbol() {
+  thread float4 gl_Position = 0.0f;
+  tint_module_vars_struct const tint_module_vars = tint_module_vars_struct{.gl_Position=(&gl_Position)};
+  return tint_symbol_outputs{.main_out_gl_Position=tint_symbol_inner(tint_module_vars).gl_Position};
+}

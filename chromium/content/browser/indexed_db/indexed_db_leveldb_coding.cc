@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "content/browser/indexed_db/indexed_db_leveldb_coding.h"
 
 #include <array>
@@ -202,7 +207,7 @@ void EncodeSortableDouble(double value, std::string* into) {
   }
 
   std::array<uint8_t, 8u> chars;
-  base::span(chars).copy_from(base::numerics::U64ToBigEndian(modified_bits));
+  base::span(chars).copy_from(base::U64ToBigEndian(modified_bits));
   into->insert(into->end(), chars.begin(), chars.end());
 }
 
@@ -214,7 +219,7 @@ bool DecodeSortableDouble(std::string_view& data, double* output) {
     return false;
   }
 
-  uint64_t host_bits = base::numerics::U64FromBigEndian(base::as_bytes(
+  uint64_t host_bits = base::U64FromBigEndian(base::as_bytes(
       base::span<const char, kLengthInBytes>{data.data(), kLengthInBytes}));
   data = data.substr(kLengthInBytes);
 
@@ -791,7 +796,7 @@ bool DecodeIDBKeyPath(std::string_view* slice, IndexedDBKeyPath* value) {
       return true;
     }
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -859,7 +864,7 @@ bool ConsumeEncodedIDBKey(std::string_view* slice) {
       slice->remove_prefix(sizeof(double));
       return true;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 
@@ -891,7 +896,7 @@ static blink::mojom::IDBKeyType KeyTypeByteToKeyType(unsigned char type) {
       return blink::mojom::IDBKeyType::Min;
   }
 
-  NOTREACHED() << "Got invalid type " << type;
+  NOTREACHED_IN_MIGRATION() << "Got invalid type " << type;
   return blink::mojom::IDBKeyType::Invalid;
 }
 
@@ -1035,7 +1040,7 @@ int CompareEncodedIDBKeys(std::string_view* slice_a,
     }
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0;
 }
 
@@ -1069,7 +1074,7 @@ int CompareSuffix(std::string_view* a,
                   std::string_view* b,
                   bool only_compare_index_keys,
                   bool* ok) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0;
 }
 
@@ -1282,7 +1287,7 @@ int Compare(std::string_view a,
       break;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   *ok = false;
   return 0;
 }
@@ -1525,10 +1530,8 @@ PartitionedLockId GetObjectStoreLockId(int64_t database_id,
   // existing leveldb key scheme used by IndexedDB. This is no longer a goal.
   std::array<uint8_t, 16u> chars;
   auto [db, obj] = base::span(chars).split_at<8u>();
-  db.copy_from(
-      base::numerics::U64ToBigEndian(static_cast<uint64_t>(database_id)));
-  obj.copy_from(
-      base::numerics::U64ToBigEndian(static_cast<uint64_t>(object_store_id)));
+  db.copy_from(base::U64ToBigEndian(static_cast<uint64_t>(database_id)));
+  obj.copy_from(base::U64ToBigEndian(static_cast<uint64_t>(object_store_id)));
   return {kObjectStoreLockPartition, std::string(chars.begin(), chars.end())};
 }
 
@@ -1742,7 +1745,7 @@ KeyPrefix::Type KeyPrefix::type() const {
   if (index_id_ >= kMinimumIndexId)
     return INDEX_DATA;
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return INVALID_TYPE;
 }
 

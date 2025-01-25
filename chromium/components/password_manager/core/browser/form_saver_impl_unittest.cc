@@ -111,8 +111,9 @@ void FormSaverImplSaveTest::SaveCredential(
       EXPECT_CALL(*mock_store_, AddLogin(expected, _));
       return form_saver_.Save(std::move(pending), matches, old_password);
     case SaveOperation::kUpdate:
-      if (old_password != pending.password_value)
+      if (old_password != pending.password_value) {
         expected.date_password_modified = base::Time::Now();
+      }
       EXPECT_CALL(*mock_store_, UpdateLogin(expected, _));
       return form_saver_.Update(std::move(pending), matches, old_password);
     case SaveOperation::kReplaceUpdate: {
@@ -295,7 +296,7 @@ TEST_P(FormSaverImplSaveTest, FormDataSanitized) {
   field.set_id_attribute(u"id");
   field.set_name_attribute(field.name());
   field.set_css_classes(u"css_classes");
-  pending.form_data.fields.push_back(field);
+  pending.form_data.set_fields({field});
 
   PasswordForm saved;
   switch (GetParam()) {
@@ -313,8 +314,8 @@ TEST_P(FormSaverImplSaveTest, FormDataSanitized) {
     }
   }
 
-  ASSERT_EQ(1u, saved.form_data.fields.size());
-  const FormFieldData& saved_field = saved.form_data.fields[0];
+  ASSERT_EQ(1u, saved.form_data.fields().size());
+  const FormFieldData& saved_field = saved.form_data.fields()[0];
   EXPECT_EQ(u"name", saved_field.name());
   EXPECT_EQ(autofill::FormControlType::kInputPassword,
             saved_field.form_control_type());

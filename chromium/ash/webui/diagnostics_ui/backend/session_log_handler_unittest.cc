@@ -72,20 +72,6 @@ std::vector<std::string> GetCombinedLogContents(
   return GetLogLines(contents);
 }
 
-class TestSelectFilePolicy : public ui::SelectFilePolicy {
- public:
-  TestSelectFilePolicy& operator=(const TestSelectFilePolicy&) = delete;
-
-  bool CanOpenSelectFileDialog() override { return true; }
-  void SelectFileDenied() override {}
-};
-
-// A fake SelectFilePolicyCreator.
-std::unique_ptr<ui::SelectFilePolicy> CreateTestSelectFilePolicy(
-    content::WebContents* web_contents) {
-  return std::make_unique<TestSelectFilePolicy>();
-}
-
 // A fake DiagnosticsBrowserDelegate.
 class FakeDiagnosticsBrowserDelegate : public DiagnosticsBrowserDelegate {
  public:
@@ -119,15 +105,13 @@ class TestSelectFileDialog : public ui::SelectFileDialog {
                       int file_type_index,
                       const base::FilePath::StringType& default_extension,
                       gfx::NativeWindow owning_window,
-                      void* params,
                       const GURL* caller) override {
     if (selected_path_.empty()) {
-      listener_->FileSelectionCanceled(params);
+      listener_->FileSelectionCanceled();
       return;
     }
 
-    listener_->FileSelected(ui::SelectedFileInfo(selected_path_), /*index=*/0,
-                            /*params=*/nullptr);
+    listener_->FileSelected(ui::SelectedFileInfo(selected_path_), /*index=*/0);
   }
 
   bool IsRunning(gfx::NativeWindow owning_window) const override {
@@ -184,7 +168,10 @@ class SessionLogHandlerTest : public NoSessionAshTestBase {
     DiagnosticsLogController::Initialize(
         std::make_unique<FakeDiagnosticsBrowserDelegate>());
     session_log_handler_ = std::make_unique<diagnostics::SessionLogHandler>(
-        base::BindRepeating(&CreateTestSelectFilePolicy),
+        base::BindRepeating(
+            [](content::WebContents*) -> std::unique_ptr<ui::SelectFilePolicy> {
+              return nullptr;
+            }),
         /*telemetry_log*/ nullptr, /*routine_log*/ nullptr,
         /*networking_log*/ nullptr, &holding_space_client_);
     session_log_handler_->SetWebUIForTest(&web_ui_);
@@ -441,7 +428,7 @@ TEST_F(SessionLogHandlerTest, NoUseAfterFree) {
   base::RunLoop run_loop;
 
   session_log_handler_->SetLogCreatedClosureForTest(
-      base::BindLambdaForTesting([]() { NOTREACHED(); }));
+      base::BindLambdaForTesting([]() { NOTREACHED_IN_MIGRATION(); }));
   EXPECT_EQ(0u, task_runner_->NumPendingTasks());
   web_ui_.HandleReceivedMessage("saveSessionLog", args);
   EXPECT_EQ(1u, task_runner_->NumPendingTasks());

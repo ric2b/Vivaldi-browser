@@ -1,5 +1,9 @@
 import("//vivaldi/gn/config/features.gni")
 
+import("//chromium/build/config/features.gni")
+
+import("//build/config/ui.gni")
+
 config("delay_load_mf") {
   ldflags = [
     "/DELAYLOAD:mfplat.dll",
@@ -237,6 +241,7 @@ static_library("apis") {
     "translate_history/translate_history_api.h",
     "vivaldi_account/vivaldi_account_api.cc",
     "vivaldi_account/vivaldi_account_api.h",
+    "vivaldi_utilities/drag_download_items.h",
     "vivaldi_utilities/vivaldi_utilities_api.cc",
     "vivaldi_utilities/vivaldi_utilities_api.h",
     "window/window_private_api.cc",
@@ -250,11 +255,18 @@ static_library("apis") {
       "auto_update/auto_update_api_linux.cc",
       "vivaldi_utilities/vivaldi_utilities_api_linux.cc",
       "window/window_private_api_linux.cc",
+      "vivaldi_utilities/launch_bar_gnome_support.cc",
+      "vivaldi_utilities/launch_bar_gnome_support.h",
     ]
+
+    if (use_gio) {
+      configs += [ "//build/linux:gio_config" ]
+    }
   }
   if (is_mac) {
     sources += [
       "auto_update/auto_update_api_mac.mm",
+      "vivaldi_utilities/drag_download_items_mac.mm",
       "vivaldi_utilities/vivaldi_utilities_api_mac.mm",
       "window/window_private_api_mac.mm",
     ]
@@ -266,8 +278,12 @@ static_library("apis") {
       "window/window_private_api_win.cc",
     ]
   }
-
+  if (use_aura) {
+    sources += [
+      "vivaldi_utilities/drag_download_items_aura.cc",
+    ]
+  }
   configs += [
     ":api_keys",
-    "//vivaldi/proxy:relayproxy_config" ]
+  ]
 }

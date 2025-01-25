@@ -15,6 +15,12 @@
 - (void)setPreferenceForReverseSearchResultOrder:(BOOL)reverseOrder;
 // Updates the state with the tab bar preference value.
 - (void)setPreferenceForShowTabBar:(BOOL)showTabBar;
+// Updates the state with open NTP on closing last tab preference value.
+- (void)setPreferenceOpenNTPOnClosingLastTab:(BOOL)openNTP;
+// Updates the state with focusing omnibox on NTP preference value.
+- (void)setPreferenceFocusOmniboxOnNTP:(BOOL)focusOmnibox;
+// Updates the state with the show X button for background tabs.
+- (void)setPreferenceShowXButtonInBackgroundTab:(BOOL)showXButton;
 // Updates the state with the inactive tabs threshold preference value.
 - (void)setPreferenceForInactiveTabsTimeThreshold:(int)threshold;
 // Updates the state with the show inactive tabs preference value.

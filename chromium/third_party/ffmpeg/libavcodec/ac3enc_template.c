@@ -31,36 +31,53 @@
 #include <stdint.h>
 
 #include "libavutil/attributes.h"
+#include "libavutil/avassert.h"
 #include "libavutil/mem_internal.h"
 
 #include "audiodsp.h"
 #include "ac3enc.h"
 #include "eac3enc.h"
 
+#if AC3ENC_FLOAT
+#define RENAME(element) element ## _float
+#else
+#define RENAME(element) element ## _fixed
+#endif
 
 /*
  * Apply the MDCT to input samples to generate frequency coefficients.
  * This applies the KBD window and normalizes the input to reduce precision
  * loss due to fixed-point calculations.
  */
-static void apply_mdct(AC3EncodeContext *s)
+static void apply_mdct(AC3EncodeContext *s, uint8_t * const *samples)
 {
-    int blk, ch;
+    av_assert1(s->num_blocks > 0);
 
-    for (ch = 0; ch < s->channels; ch++) {
-        for (blk = 0; blk < s->num_blocks; blk++) {
+    for (int ch = 0; ch < s->channels; ch++) {
+        const SampleType *input_samples0 = (const SampleType*)s->planar_samples[ch];
+        /* Reorder channels from native order to AC-3 order. */
+        const SampleType *input_samples1 = (const SampleType*)samples[s->channel_map[ch]];
+        int blk = 0;
+
+        do {
             AC3Block *block = &s->blocks[blk];
-            const SampleType *input_samples = (SampleType*)s->planar_samples[ch] + blk * AC3_BLOCK_SIZE;
+            SampleType *windowed_samples = s->RENAME(windowed_samples);
 
-            s->fdsp->vector_fmul(s->windowed_samples, input_samples,
-                                 s->mdct_window, AC3_BLOCK_SIZE);
-            s->fdsp->vector_fmul_reverse((SampleType*)s->windowed_samples + AC3_BLOCK_SIZE,
-                                         &input_samples[AC3_BLOCK_SIZE],
-                                         s->mdct_window, AC3_BLOCK_SIZE);
+            s->fdsp->vector_fmul(windowed_samples, input_samples0,
+                                 s->RENAME(mdct_window), AC3_BLOCK_SIZE);
+            s->fdsp->vector_fmul_reverse(windowed_samples + AC3_BLOCK_SIZE,
+                                         input_samples1,
+                                         s->RENAME(mdct_window), AC3_BLOCK_SIZE);
 
             s->tx_fn(s->tx, block->mdct_coef[ch+1],
-                     s->windowed_samples, sizeof(float));
-        }
+                     windowed_samples, sizeof(*windowed_samples));
+            input_samples0  = input_samples1;
+            input_samples1 += AC3_BLOCK_SIZE;
+        } while (++blk < s->num_blocks);
+
+        /* Store last 256 samples of current frame */
+        memcpy(s->planar_samples[ch], input_samples0,
+               AC3_BLOCK_SIZE * sizeof(*input_samples0));
     }
 }
 
@@ -330,9 +347,9 @@ static void compute_rematrixing_strategy(AC3EncodeContext *s)
 }
 
 
-static void encode_frame(AC3EncodeContext *s)
+static void encode_frame(AC3EncodeContext *s, uint8_t * const *samples)
 {
-    apply_mdct(s);
+    apply_mdct(s, samples);
 
     s->cpl_on = s->cpl_enabled;
     ff_ac3_compute_coupling_strategy(s);

@@ -18,8 +18,7 @@ import org.chromium.ui.modelutil.PropertyModel;
 public class ImprovedBookmarkRowViewBinder {
     public static void bind(PropertyModel model, View view, PropertyKey key) {
         ImprovedBookmarkRow row = (ImprovedBookmarkRow) view;
-        ImprovedBookmarkFolderView folderView =
-                (ImprovedBookmarkFolderView) view.findViewById(R.id.folder_view);
+        ImprovedBookmarkFolderView folderView = view.findViewById(R.id.folder_view);
         if (key == ImprovedBookmarkRowProperties.ENABLED) {
             row.setRowEnabled(model.get(ImprovedBookmarkRowProperties.ENABLED));
         } else if (key == ImprovedBookmarkRowProperties.TITLE) {
@@ -95,6 +94,9 @@ public class ImprovedBookmarkRowViewBinder {
             model.get(ImprovedBookmarkRowProperties.FOLDER_START_IMAGE_FOLDER_DRAWABLES).get();
         } else if (key == ImprovedBookmarkRowProperties.FOLDER_CHILD_COUNT) {
             folderView.setChildCount(model.get(ImprovedBookmarkRowProperties.FOLDER_CHILD_COUNT));
+        } else if (key == ImprovedBookmarkRowProperties.FOLDER_CHILD_COUNT_TEXT_STYLE) {
+            folderView.setChildCountStyle(
+                    model.get(ImprovedBookmarkRowProperties.FOLDER_CHILD_COUNT_TEXT_STYLE));
         } else if (key == BookmarkManagerProperties.IS_HIGHLIGHTED) {
             View highlightedView = view.findViewById(R.id.container);
             if (model.get(BookmarkManagerProperties.IS_HIGHLIGHTED)) {

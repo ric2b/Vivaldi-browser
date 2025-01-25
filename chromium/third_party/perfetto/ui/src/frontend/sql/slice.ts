@@ -18,7 +18,7 @@ import {BigintMath} from '../../base/bigint_math';
 import {Icons} from '../../base/semantic_icons';
 import {duration, Time, time} from '../../base/time';
 import {exists} from '../../base/utils';
-import {EngineProxy} from '../../trace_processor/engine';
+import {Engine} from '../../trace_processor/engine';
 import {
   LONG,
   LONG_NULL,
@@ -27,6 +27,10 @@ import {
   STR,
   STR_NULL,
 } from '../../trace_processor/query_result';
+import {
+  constraintsToQuerySuffix,
+  SQLConstraints,
+} from '../../trace_processor/sql_utils';
 import {Anchor} from '../../widgets/anchor';
 import {globals} from '../globals';
 import {focusHorizontalRange, verticalScrollToTrack} from '../scroll_helper';
@@ -39,7 +43,6 @@ import {
   Upid,
   Utid,
 } from '../sql_types';
-import {constraintsToQuerySuffix, SQLConstraints} from '../sql_utils';
 import {
   getProcessInfo,
   getThreadInfo,
@@ -68,7 +71,7 @@ export interface SliceDetails {
 }
 
 async function getUtidAndUpid(
-  engine: EngineProxy,
+  engine: Engine,
   sqlTrackId: number,
 ): Promise<{utid?: Utid; upid?: Upid}> {
   const columnInfo = (
@@ -118,7 +121,7 @@ async function getUtidAndUpid(
 }
 
 export async function getSliceFromConstraints(
-  engine: EngineProxy,
+  engine: Engine,
   constraints: SQLConstraints,
 ): Promise<SliceDetails[]> {
   const query = await engine.query(`
@@ -162,8 +165,8 @@ export async function getSliceFromConstraints(
       thread !== undefined
         ? thread.process
         : upid === undefined
-        ? undefined
-        : await getProcessInfo(engine, upid);
+          ? undefined
+          : await getProcessInfo(engine, upid);
 
     result.push({
       id: asSliceSqlId(it.id),
@@ -186,7 +189,7 @@ export async function getSliceFromConstraints(
 }
 
 export async function getSlice(
-  engine: EngineProxy,
+  engine: Engine,
   id: SliceSqlId,
 ): Promise<SliceDetails | undefined> {
   const result = await getSliceFromConstraints(engine, {
@@ -235,7 +238,7 @@ export class SliceRef implements m.ClassComponent<SliceRefAttrs> {
 
           globals.setLegacySelection(
             {
-              kind: 'CHROME_SLICE',
+              kind: 'SLICE',
               id: vnode.attrs.id,
               trackKey,
               table: 'slice',
@@ -272,7 +275,7 @@ export interface SliceTreeNode extends SliceDetails {
 
 // Get all descendants for a given slice in a tree form.
 export async function getDescendantSliceTree(
-  engine: EngineProxy,
+  engine: Engine,
   id: SliceSqlId,
 ): Promise<SliceTreeNode | undefined> {
   const slice = await getSlice(engine, id);

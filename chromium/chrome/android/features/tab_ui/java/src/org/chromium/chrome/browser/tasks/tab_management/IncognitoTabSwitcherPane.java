@@ -32,6 +32,9 @@ import org.chromium.chrome.tab_ui.R;
 
 import java.util.function.DoubleConsumer;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /** A {@link Pane} representing the incognito tab switcher. */
 public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
     private final IncognitoTabModelObserver mIncognitoTabModelObserver =
@@ -43,6 +46,7 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
 
                 @Override
                 public void didBecomeEmpty() {
+                    if (BuildConfig.IS_VIVALDI) return;
                     mReferenceButtonDataSupplier.set(null);
                     if (isFocused()) {
                         @Nullable PaneHubController controller = getPaneHubController();
@@ -50,7 +54,7 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
                                 : "isFocused requires a non-null PaneHubController.";
                         controller.focusPane(PaneId.TAB_SWITCHER);
                     }
-                    resetWithTabList(null, false);
+                    destroyTabSwitcherPaneCoordinator();
                 }
             };
 
@@ -118,7 +122,7 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
                 new ResourceButtonData(
                         R.string.accessibility_tab_switcher_incognito_stack,
                         R.string.accessibility_tab_switcher_incognito_stack,
-                        R.drawable.incognito_small);
+                        R.drawable.tab_switcher_new_privatetab_24dp); // Vivaldi
 
         ResourceButtonData newTabButtonData =
                 new ResourceButtonData(
@@ -143,6 +147,9 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
         } else {
             setNewTabButtonEnabledState(/* enabled= */ true);
         }
+        // Note(david@vivaldi.com): We setup the supplier directly. This will make sure the private
+        // tab pane is always shown even with empty tab model.
+        mReferenceButtonDataSupplier.set(mReferenceButtonData);
     }
 
     @Override
@@ -192,6 +199,12 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
     }
 
     @Override
+    public boolean shouldEagerlyCreateCoordinator() {
+        if (BuildConfig.IS_VIVALDI) return true;
+        return mReferenceButtonDataSupplier.get() != null;
+    }
+
+    @Override
     public boolean resetWithTabList(@Nullable TabList tabList, boolean quickMode) {
         @Nullable TabSwitcherPaneCoordinator coordinator = getTabSwitcherPaneCoordinator();
         if (coordinator == null) return false;
@@ -216,6 +229,9 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
                 mIncognitoReauthController != null
                         && mIncognitoReauthController.isIncognitoReauthPending();
 
+        // Note(david@vivaldi.com): We need to reset the tab list in any case.
+        if (BuildConfig.IS_VIVALDI) isNotVisibleOrSelected = false;
+
         if (isNotVisibleOrSelected || incognitoReauthShowing) {
             coordinator.resetWithTabList(null);
             cancelWaitForTabStateInitializedTimer();
@@ -236,6 +252,11 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
         }
 
         super.requestAccessibilityFocusOnCurrentTab();
+    }
+
+    @Override
+    protected Runnable getOnTabGroupCreationRunnable() {
+        return null;
     }
 
     private IncognitoTabModel getIncognitoTabModel() {

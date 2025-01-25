@@ -26,6 +26,7 @@
 #include "components/signin/public/base/signin_client.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/base/signin_pref_names.h"
+#include "components/signin/public/base/signin_prefs.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "google_apis/gaia/core_account_id.h"
@@ -148,12 +149,12 @@ class PrimaryAccountManager::ScopedPrefCommit {
       : pref_service_(pref_service),
         commit_on_destroy_(commit_on_destroy),
         commit_done_callback_(std::move(commit_done_callback)) {
-    if (commit_done_callback) {
+    if (commit_done_callback_) {
       // If `commit_on_destroy` is false, no commit will be done by
       // `ScopedPrefCommit` so the commit-related callback will not be called.
       // This CHECK ensures that the callback is not used (and expected to run)
       // in this case.
-      CHECK(commit_on_destroy);
+      CHECK(commit_on_destroy_);
     }
   }
 
@@ -222,12 +223,15 @@ PrimaryAccountManager::PrimaryAccountManager(
     scoped_pref_commit.ClearPref(prefs::kExplicitBrowserSignin);
     scoped_pref_commit.ClearPref(
         prefs::kCookieClearOnExitMigrationNoticeComplete);
+  } else {
+    signin_allowed_.Init(
+        prefs::kSigninAllowed, client_->GetPrefs(),
+        base::BindRepeating(&PrimaryAccountManager::OnSigninAllowedPrefChanged,
+                            base::Unretained(this)));
   }
 }
 
-PrimaryAccountManager::~PrimaryAccountManager() {
-  token_service_->RemoveObserver(this);
-}
+PrimaryAccountManager::~PrimaryAccountManager() = default;
 
 // static
 void PrimaryAccountManager::RegisterProfilePrefs(PrefRegistrySimple* registry) {
@@ -245,8 +249,6 @@ void PrimaryAccountManager::RegisterProfilePrefs(PrefRegistrySimple* registry) {
       prefs::kGoogleServicesSyncingGaiaIdMigratedToSignedIn, std::string());
   registry->RegisterStringPref(
       prefs::kGoogleServicesSyncingUsernameMigratedToSignedIn, std::string());
-  registry->RegisterBooleanPref(prefs::kAutologinEnabled, true);
-  registry->RegisterListPref(prefs::kReverseAutologinRejectedEmailList);
   registry->RegisterBooleanPref(prefs::kSigninAllowed, true);
   registry->RegisterBooleanPref(prefs::kSignedInWithCredentialProvider, false);
   registry->RegisterBooleanPref(kExplicitBrowserSigninWithoutFeatureEnabled,
@@ -413,6 +415,10 @@ void PrimaryAccountManager::Initialize() {
                                    account_info.gaia);
       scoped_pref_commit.SetString(prefs::kGoogleServicesLastSyncingUsername,
                                    account_info.email);
+    } else if (ShouldSigninAllowedPrefAffectPrimaryAccount(
+                   pref_consented_to_sync)) {
+      SetPrimaryAccountInternal(CoreAccountInfo(), /*consented_to_sync=*/false,
+                                scoped_pref_commit);
     } else {
       SetPrimaryAccountInternal(account_info, /*consented_to_sync=*/false,
                                 scoped_pref_commit);
@@ -429,7 +435,7 @@ void PrimaryAccountManager::Initialize() {
 
   // It is important to only load credentials after starting to observe the
   // token service.
-  token_service_->AddObserver(this);
+  token_service_observation_.Observe(token_service_);
   token_service_->LoadCredentials(
       GetPrimaryAccountId(signin::ConsentLevel::kSignin),
       HasPrimaryAccount(signin::ConsentLevel::kSync));
@@ -782,6 +788,13 @@ void PrimaryAccountManager::FirePrimaryAccountChanged(
 
   ComputeExplicitBrowserSignin(event_details, scoped_pref_commit);
 
+  if (event_details.GetEventTypeFor(signin::ConsentLevel::kSignin) ==
+      PrimaryAccountChangeEvent::Type::kCleared) {
+    SigninPrefs(*client_->GetPrefs())
+        .SetChromeLastSignoutTime(previous_state.primary_account.gaia,
+                                  base::Time::Now());
+  }
+
   client_->OnPrimaryAccountChanged(event_details);
 
   for (Observer& observer : observers_) {
@@ -790,7 +803,7 @@ void PrimaryAccountManager::FirePrimaryAccountChanged(
 }
 
 void PrimaryAccountManager::OnRefreshTokensLoaded() {
-  token_service_->RemoveObserver(this);
+  token_service_observation_.Reset();
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (account_tracker_service_->GetMigrationState() ==
@@ -822,4 +835,26 @@ void PrimaryAccountManager::OnRefreshTokensLoaded() {
       }
     }
   }
+}
+
+void PrimaryAccountManager::OnSigninAllowedPrefChanged() {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  if (ShouldSigninAllowedPrefAffectPrimaryAccount(
+          /*is_sync_consent=*/GetPrimaryAccountState().consent_level ==
+          signin::ConsentLevel::kSync)) {
+    ClearPrimaryAccount(signin_metrics::ProfileSignout::kPrefChanged);
+  }
+#endif
+}
+
+bool PrimaryAccountManager::ShouldSigninAllowedPrefAffectPrimaryAccount(
+    bool is_sync_consent) {
+  return switches::IsExplicitBrowserSigninUIOnDesktopEnabled() &&
+         !signin_allowed_.GetValue() &&
+         // If sync is enabled, we do not directly clear the primary account.
+         // This is handled by `PrimaryAccountPolicyManager`. That flow is
+         // extremely hard to follow especially for the case when the user is
+         // syncing with a managed account as in that case the whole profile
+         // needs to be deleted.
+         !is_sync_consent;
 }

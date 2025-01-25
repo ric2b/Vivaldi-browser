@@ -10,6 +10,7 @@
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
+#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/common/bookmark_pref_names.h"
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/feature_constants.h"
@@ -23,14 +24,12 @@
 #import "components/profile_metrics/browser_profile_type.h"
 #import "components/reading_list/core/reading_list_model.h"
 #import "components/reading_list/ios/reading_list_model_bridge_observer.h"
-#import "components/supervised_user/core/browser/supervised_user_preferences.h"
 #import "components/supervised_user/core/common/features.h"
 #import "components/supervised_user/core/common/supervised_user_constants.h"
 #import "components/sync/service/sync_service.h"
 #import "components/translate/core/browser/translate_manager.h"
 #import "components/translate/core/browser/translate_prefs.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_bridge_observer.h"
-#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
 #import "ios/chrome/browser/commerce/model/push_notification/push_notification_feature.h"
 #import "ios/chrome/browser/default_browser/model/default_browser_interest_signals.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
@@ -62,6 +61,7 @@
 #import "ios/chrome/browser/shared/public/commands/page_info_commands.h"
 #import "ios/chrome/browser/shared/public/commands/popup_menu_commands.h"
 #import "ios/chrome/browser/shared/public/commands/price_notifications_commands.h"
+#import "ios/chrome/browser/shared/public/commands/quick_delete_commands.h"
 #import "ios/chrome/browser/shared/public/commands/reading_list_add_command.h"
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/text_zoom_commands.h"
@@ -69,6 +69,7 @@
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/supervised_user/model/supervised_user_capabilities.h"
 #import "ios/chrome/browser/translate/model/chrome_ios_translate_client.h"
 #import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
 #import "ios/chrome/browser/ui/policy/user_policy_util.h"
@@ -81,6 +82,7 @@
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/overflow_menu_swift.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_utils.h"
+#import "ios/chrome/browser/ui/settings/clear_browsing_data/features.h"
 #import "ios/chrome/browser/ui/sharing/sharing_params.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_utils.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
@@ -117,11 +119,6 @@ using experimental_flags::IsSpotlightDebuggingEnabled;
 
 namespace {
 
-// Key used for storing NSUserDefault entry to keep track of the last timestamp
-// we've shown the default browser blue dot promo.
-NSString* const kMostRecentTimestampBlueDotPromoShownInOverflowMenu =
-    @"MostRecentTimestampBlueDotPromoShownInOverflowMenu";
-
 // Approximate number of visible page actions by default.
 const unsigned int kDefaultVisiblePageActionCount = 3u;
 
@@ -153,18 +150,6 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
                                           handler:handler];
 }
 
-// Uses `IsBookmarked` to check whether `url` is bookmarked in any of the
-// provided bookmark models. `account_model` can be null.
-bool IsBookmarked(const GURL& url,
-                  LegacyBookmarkModel* local_model,
-                  LegacyBookmarkModel* account_model) {
-  CHECK(local_model);
-  if (local_model->IsBookmarked(url)) {
-    return true;
-  }
-  return account_model && account_model->IsBookmarked(url);
-}
-
 }  // namespace
 
 @interface OverflowMenuMediator () <BookmarkModelBridgeObserver,
@@ -183,8 +168,7 @@ bool IsBookmarked(const GURL& url,
   std::unique_ptr<OverlayPresenterObserver> _overlayPresenterObserver;
 
   // Bridge to register for bookmark changes.
-  std::unique_ptr<BookmarkModelBridge> _localOrSyncableBookmarkModelBridge;
-  std::unique_ptr<BookmarkModelBridge> _accountBookmarkModelBridge;
+  std::unique_ptr<BookmarkModelBridge> _bookmarkModelBridge;
 
   // Bridge to register for reading list model changes.
   std::unique_ptr<ReadingListModelBridge> _readingListModelBridge;
@@ -323,8 +307,7 @@ bool IsBookmarked(const GURL& url,
   self.webState = nullptr;
   self.webStateList = nullptr;
 
-  self.localOrSyncableBookmarkModel = nullptr;
-  self.accountBookmarkModel = nullptr;
+  self.bookmarkModel = nullptr;
   self.readingListModel = nullptr;
   self.browserStatePrefs = nullptr;
   self.localStatePrefs = nullptr;
@@ -420,28 +403,14 @@ bool IsBookmarked(const GURL& url,
   }
 }
 
-- (void)setLocalOrSyncableBookmarkModel:
-    (LegacyBookmarkModel*)localOrSyncableBookmarkModel {
-  _localOrSyncableBookmarkModelBridge.reset();
+- (void)setBookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel {
+  _bookmarkModelBridge.reset();
 
-  _localOrSyncableBookmarkModel = localOrSyncableBookmarkModel;
+  _bookmarkModel = bookmarkModel;
 
-  if (localOrSyncableBookmarkModel) {
-    _localOrSyncableBookmarkModelBridge = std::make_unique<BookmarkModelBridge>(
-        self, localOrSyncableBookmarkModel);
-  }
-
-  [self updateModel];
-}
-
-- (void)setAccountBookmarkModel:(LegacyBookmarkModel*)accountBookmarkModel {
-  _accountBookmarkModelBridge.reset();
-
-  _accountBookmarkModel = accountBookmarkModel;
-
-  if (accountBookmarkModel) {
-    _accountBookmarkModelBridge =
-        std::make_unique<BookmarkModelBridge>(self, accountBookmarkModel);
+  if (bookmarkModel) {
+    _bookmarkModelBridge =
+        std::make_unique<BookmarkModelBridge>(self, bookmarkModel);
   }
 
   [self updateModel];
@@ -1272,21 +1241,15 @@ bool IsBookmarked(const GURL& url,
 
 // Highlight the Settings destination with a promo badge if needed.
 - (void)maybeHighlightSettingsWithPromoBadge {
+  if (self.syncService &&
+      ShouldIndicateIdentityErrorInOverflowMenu(self.syncService)) {
+    return;
+  }
+
   if (self.engagementTracker &&
-      ShouldTriggerDefaultBrowserHighlightFeature(
-          feature_engagement::kIPHiOSDefaultBrowserOverflowMenuBadgeFeature,
-          self.engagementTracker, self.syncService)) {
+      ShouldTriggerDefaultBrowserHighlightFeature(self.engagementTracker)) {
     self.settingsDestination.badge = BadgeTypePromo;
-    // If we've only started showing the blue dot recently (<6 hours), don't
-    // notify the FET again that the promo is being shown, since we're not in a
-    // new user session. We record the badge being shown per user session,
-    // instead of per time it is shown since the badge needs to be shown accross
-    // 3 user sessions.
-    if (!HasRecentTimestampForKey(
-            kMostRecentTimestampBlueDotPromoShownInOverflowMenu)) {
-      self.engagementTracker->NotifyEvent(
-          feature_engagement::events::kBlueDotPromoOverflowMenuShownNewSession);
-    }
+    RecordDefaultBrowserBlueDotFirstDisplay();
   }
 }
 
@@ -1357,7 +1320,7 @@ bool IsBookmarked(const GURL& url,
         });
   } else if (chrome_browser_state &&
              supervised_user::IsSubjectToParentalControls(
-                 *chrome_browser_state->GetPrefs())) {
+                 chrome_browser_state)) {
     self.helpActionsGroup.footer = CreateOverflowMenuManagedFooter(
         IDS_IOS_TOOLS_MENU_PARENT_MANAGED, IDS_IOS_TOOLS_MENU_PARENT_LEARN_MORE,
         kTextMenuFamilyLinkInfo, @"overflow_menu_footer_family_link", ^{
@@ -1684,34 +1647,30 @@ bool IsBookmarked(const GURL& url,
 
 // If an added or removed bookmark is the same as the current url, update the
 // toolbar so the star highlight is kept in sync.
-- (void)bookmarkModel:(LegacyBookmarkModel*)model
-    didChangeChildrenForNode:(const bookmarks::BookmarkNode*)bookmarkNode {
+- (void)didChangeChildrenForNode:(const bookmarks::BookmarkNode*)bookmarkNode {
   [self updateModel];
 }
 
 // If all bookmarks are removed, update the toolbar so the star highlight is
 // kept in sync.
-- (void)bookmarkModelRemovedAllNodes:(LegacyBookmarkModel*)model {
+- (void)bookmarkModelRemovedAllNodes {
   [self updateModel];
 }
 
 // In case we are on a bookmarked page before the model is loaded.
-- (void)bookmarkModelLoaded:(LegacyBookmarkModel*)model {
+- (void)bookmarkModelLoaded {
   [self updateModel];
 }
 
-- (void)bookmarkModel:(LegacyBookmarkModel*)model
-        didChangeNode:(const bookmarks::BookmarkNode*)bookmarkNode {
+- (void)didChangeNode:(const bookmarks::BookmarkNode*)bookmarkNode {
   [self updateModel];
 }
-- (void)bookmarkModel:(LegacyBookmarkModel*)model
-          didMoveNode:(const bookmarks::BookmarkNode*)bookmarkNode
-           fromParent:(const bookmarks::BookmarkNode*)oldParent
-             toParent:(const bookmarks::BookmarkNode*)newParent {
+- (void)didMoveNode:(const bookmarks::BookmarkNode*)bookmarkNode
+         fromParent:(const bookmarks::BookmarkNode*)oldParent
+           toParent:(const bookmarks::BookmarkNode*)newParent {
   // No-op -- required by BookmarkModelBridgeObserver but not used.
 }
-- (void)bookmarkModel:(LegacyBookmarkModel*)model
-        didDeleteNode:(const bookmarks::BookmarkNode*)node
+- (void)didDeleteNode:(const bookmarks::BookmarkNode*)node
            fromFolder:(const bookmarks::BookmarkNode*)folder {
   [self updateModel];
 }
@@ -1934,9 +1893,10 @@ bool IsBookmarked(const GURL& url,
 }
 
 - (void)destinationCustomizationCompleted {
-  if (_engagementTracker) {
-    _engagementTracker->NotifyEvent(
-        feature_engagement::events::kBlueDotPromoOverflowMenuDismissed);
+  if (self.engagementTracker &&
+      self.settingsDestination.badge == BadgeTypePromo) {
+    self.engagementTracker->NotifyEvent(
+        feature_engagement::events::kBlueDotOverflowMenuCustomized);
   }
 }
 
@@ -1986,11 +1946,9 @@ bool IsBookmarked(const GURL& url,
       return self.followAction;
     }
     case overflow_menu::ActionType::Bookmark: {
-      BOOL pageIsBookmarked = self.webState &&
-                              self.localOrSyncableBookmarkModel &&
-                              IsBookmarked(self.webState->GetVisibleURL(),
-                                           self.localOrSyncableBookmarkModel,
-                                           self.accountBookmarkModel);
+      BOOL pageIsBookmarked =
+          self.webState && self.bookmarkModel &&
+          self.bookmarkModel->IsBookmarked(self.webState->GetVisibleURL());
       return (pageIsBookmarked) ? self.editBookmarkAction
                                 : self.addBookmarkAction;
     }
@@ -2062,7 +2020,7 @@ bool IsBookmarked(const GURL& url,
     case overflow_menu::ActionType::vDownloads:
     // End Vivaldi
 
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return nil;
     case overflow_menu::ActionType::Follow:
       return [self newFollowAction];
@@ -2131,7 +2089,11 @@ bool IsBookmarked(const GURL& url,
 - (void)openClearBrowsingData {
   RecordAction(UserMetricsAction("MobileMenuClearBrowsingData"));
   [self dismissMenu];
-  [self.settingsHandler showClearBrowsingDataSettings];
+  if (IsIosQuickDeleteEnabled()) {
+    [self.quickDeleteHandler showQuickDelete];
+  } else {
+    [self.settingsHandler showClearBrowsingDataSettings];
+  }
 }
 
 // Follows the website corresponding to `webPage` and dismisses the menu.
@@ -2370,7 +2332,9 @@ bool IsBookmarked(const GURL& url,
                        : profile_metrics::BrowserProfileType::kRegular;
   UmaHistogramEnumeration("Settings.OpenSettingsFromMenu.PerProfileType", type);
   [self.applicationHandler
-      showSettingsFromViewController:self.baseViewController];
+      showSettingsFromViewController:self.baseViewController
+            hasDefaultBrowserBlueDot:(self.settingsDestination.badge ==
+                                      BadgeTypePromo)];
 }
 
 - (void)enterpriseLearnMore {

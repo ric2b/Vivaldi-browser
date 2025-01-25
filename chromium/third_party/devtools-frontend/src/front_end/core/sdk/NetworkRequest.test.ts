@@ -87,12 +87,17 @@ describe('NetworkRequest', () => {
       responseHeaders:
           [{name: 'Set-Cookie', value: 'foo=bar'}, {name: 'Set-Cookie', value: 'baz=qux; Secure;Partitioned'}],
       resourceIPAddressSpace: 'Public' as Protocol.Network.IPAddressSpace,
-      cookiePartitionKey: 'partitionKey',
+      cookiePartitionKey: {topLevelSite: 'partitionKey', hasCrossSiteAncestor: false},
     } as unknown as SDK.NetworkRequest.ExtraResponseInfo);
     assert.strictEqual(request.responseCookies.length, 2);
     expectCookie(request.responseCookies[0], {name: 'foo', value: 'bar', size: 8});
-    expectCookie(
-        request.responseCookies[1], {name: 'baz', value: 'qux', secure: true, partitionKey: 'partitionKey', size: 27});
+    expectCookie(request.responseCookies[1], {
+      name: 'baz',
+      value: 'qux',
+      secure: true,
+      partitionKey: {topLevelSite: 'partitionKey', hasCrossSiteAncestor: false},
+      size: 27,
+    });
   });
 
   it('determines whether the response headers have been overridden', () => {
@@ -286,7 +291,7 @@ describeWithMockConnection('NetworkRequest', () => {
           attribute: null,
           uiString: 'Setting this cookie was blocked due to third-party cookie phaseout. Learn more in the Issues tab.',
         }]));
-    assert.deepStrictEqual(await cookieModel.getCookies([url]), [cookie]);
+    assert.deepStrictEqual(await cookieModel.getCookiesForDomain(''), [cookie]);
 
     request.addExtraResponseInfo({
       responseHeaders: [{name: 'Set-Cookie', value: 'name=value; Path=/'}],
@@ -302,7 +307,7 @@ describeWithMockConnection('NetworkRequest', () => {
       }],
     });
     assert.isTrue(removeBlockedCookieSpy.calledOnceWith(cookie));
-    assert.isEmpty(await cookieModel.getCookies([url]));
+    assert.isEmpty(await cookieModel.getCookiesForDomain(''));
   });
 });
 
@@ -509,5 +514,35 @@ describeWithMockConnection('requestStreamingContent', () => {
     const {chunk} = await eventPromise;
     assert.strictEqual(chunk, 'YmFy');
     assert.strictEqual(streamingContent.content().text, 'foobar');
+  });
+
+  it('waits for "responseReceived" event to construct the StreamingContentData', async () => {
+    networkManager.dispatcher.requestWillBeSent({
+      requestId: '1' as Protocol.Network.RequestId,
+      request: {
+        url: 'https://example.com/index.html',
+      },
+      type: 'Document',
+    } as Protocol.Network.RequestWillBeSentEvent);
+    sinon.stub(target.networkAgent(), 'invoke_streamResourceContent')
+        .returns(Promise.resolve({bufferedData: '', getError: () => undefined}));
+
+    const streamingContentDataPromise = networkManager.requestForId('1')!.requestStreamingContent();
+
+    // Trigger the "responseReceived" on the next event loop tick.
+    setTimeout(() => {
+      networkManager.dispatcher.responseReceived({
+        requestId: '1' as Protocol.Network.RequestId,
+        response: {
+          url: 'https://example.com/index.html',
+          mimeType: 'text/html',
+        } as Protocol.Network.Response,
+      } as Protocol.Network.ResponseReceivedEvent);
+    }, 0);
+
+    const maybeStreamingContent = await streamingContentDataPromise;
+    assert.isFalse(TextUtils.StreamingContentData.isError(maybeStreamingContent));
+    const streamingContent = maybeStreamingContent as TextUtils.StreamingContentData.StreamingContentData;
+    assert.strictEqual(streamingContent.mimeType, 'text/html');
   });
 });

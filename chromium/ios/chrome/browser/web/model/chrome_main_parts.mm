@@ -9,6 +9,7 @@
 #import "base/allocator/partition_alloc_support.h"
 #import "base/check_op.h"
 #import "base/feature_list.h"
+#import "base/features.h"
 #import "base/files/file_path.h"
 #import "base/ios/ios_util.h"
 #import "base/memory/ptr_util.h"
@@ -26,6 +27,7 @@
 #import "components/crash/core/common/crash_key.h"
 #import "components/crash/core/common/reporter_running_ios.h"
 #import "components/flags_ui/pref_service_flags_storage.h"
+#import "components/keyed_service/ios/browser_state_dependency_manager.h"
 #import "components/language/core/browser/language_usage_metrics.h"
 #import "components/language/core/browser/pref_names.h"
 #import "components/memory_system/initializer.h"
@@ -241,6 +243,11 @@ void IOSChromeMainParts::PreCreateThreads() {
   // initialization is handled in PreMainMessageLoopRun since it posts tasks.
   SetUpFieldTrials(command_line_variation_ids);
 
+  // Initialize //base features that depend on the `FeatureList`. Don't force
+  // emitting profiler metadata since the profiler doesn't run on iOS.
+  base::features::Init(
+      base::features::EmitThreadControllerProfilerMetadata::kFeatureDependent);
+
   // Set metrics upload for stack/heap profiles.
   IOSThreadProfiler::SetBrowserProcessReceiverCallback(base::BindRepeating(
       &metrics::CallStackProfileMetricsProvider::ReceiveProfile));
@@ -310,8 +317,13 @@ void IOSChromeMainParts::PreMainMessageLoopRun() {
       .PreProfileInit(
           /*in_memory_database=*/false);
 
-  // Ensure that the browser state is initialized.
+  // Ensure that the KeyedService factories are registered.
   EnsureBrowserStateKeyedServiceFactoriesBuilt();
+  BrowserStateDependencyManager::GetInstance()
+      ->DisallowKeyedServiceFactoryRegistration(
+          "EnsureBrowserStateKeyedServiceFactoriesBuilt()");
+
+  // Ensure the ChromeBrowserState is loaded and initialized.
   ios::ChromeBrowserStateManager* browser_state_manager =
       application_context_->GetChromeBrowserStateManager();
 

@@ -9,7 +9,9 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "chromeos/ui/base/chromeos_ui_constants.h"
 #include "chromeos/ui/base/window_properties.h"
+#include "chromeos/ui/base/window_state_type.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
@@ -57,6 +59,8 @@ chromeos::WindowStateType ToChromeosWindowStateType(
       return chromeos::WindowStateType::kSecondarySnapped;
     case ui::PlatformWindowState::kFloated:
       return chromeos::WindowStateType::kFloated;
+    case ui::PlatformWindowState::kPip:
+      return chromeos::WindowStateType::kPip;
     case ui::PlatformWindowState::kPinnedFullscreen:
       return chromeos::WindowStateType::kPinned;
     case ui::PlatformWindowState::kTrustedPinnedFullscreen:
@@ -89,6 +93,23 @@ bool IsImmersive(ui::PlatformFullscreenType type) {
   return type == ui::PlatformFullscreenType::kImmersive;
 }
 
+gfx::RoundedCornersF GetWindowCornerRadii(
+    aura::Window* window,
+    ui::WaylandToplevelExtension* wayland_extension) {
+  if (!wayland_extension) {
+    return gfx::RoundedCornersF();
+  }
+
+  // If window is a pip, ignore the window radii specified by the server. Window
+  // radii specified by the server is for a window in normal window state.
+  const auto window_state = window->GetProperty(chromeos::kWindowStateTypeKey);
+  if (window_state == chromeos::WindowStateType::kPip) {
+    return gfx::RoundedCornersF(chromeos::kPipRoundedCornerRadius);
+  }
+
+  return wayland_extension->GetWindowCornersRadii();
+}
+
 }  // namespace
 namespace views {
 
@@ -103,15 +124,18 @@ DesktopWindowTreeHostLacros::DesktopWindowTreeHostLacros(
 
 DesktopWindowTreeHostLacros::~DesktopWindowTreeHostLacros() = default;
 
-ui::WaylandExtension* DesktopWindowTreeHostLacros::GetWaylandExtension() {
-  return platform_window() ? ui::GetWaylandExtension(*(platform_window()))
-                           : nullptr;
+ui::WaylandToplevelExtension*
+DesktopWindowTreeHostLacros::GetWaylandToplevelExtension() {
+  return platform_window()
+             ? ui::GetWaylandToplevelExtension(*(platform_window()))
+             : nullptr;
 }
 
-const ui::WaylandExtension* DesktopWindowTreeHostLacros::GetWaylandExtension()
-    const {
-  return platform_window() ? ui::GetWaylandExtension(*(platform_window()))
-                           : nullptr;
+const ui::WaylandToplevelExtension*
+DesktopWindowTreeHostLacros::GetWaylandToplevelExtension() const {
+  return platform_window()
+             ? ui::GetWaylandToplevelExtension(*(platform_window()))
+             : nullptr;
 }
 
 void DesktopWindowTreeHostLacros::OnNativeWidgetCreated(
@@ -186,9 +210,15 @@ void DesktopWindowTreeHostLacros::OnTooltipHiddenOnServer() {
 }
 
 void DesktopWindowTreeHostLacros::OnBoundsChanged(const BoundsChange& change) {
+  // DesktopWindowTreeHostPlatform::OnBoundsChanged() may result in |this| being
+  // deleted. As an extra safety guard, keep track of `this` with a weak
+  // pointer, and only call UpdateWindowHints() if it still exists.
+  auto weak_this = weak_factory_.GetWeakPtr();
   DesktopWindowTreeHostPlatform::OnBoundsChanged(change);
 
-  UpdateWindowHints();
+  if (weak_this.get()) {
+    UpdateWindowHints();
+  }
 }
 
 void DesktopWindowTreeHostLacros::AddAdditionalInitProperties(
@@ -212,7 +242,7 @@ void DesktopWindowTreeHostLacros::OnWindowPropertyChanged(aura::Window* window,
                                                           intptr_t old) {
   CHECK_EQ(GetContentWindow(), window);
   if (key == aura::client::kTopViewInset) {
-    if (auto* wayland_extension = GetWaylandExtension()) {
+    if (auto* wayland_extension = GetWaylandToplevelExtension()) {
       wayland_extension->SetTopInset(
           GetContentWindow()->GetProperty(aura::client::kTopViewInset));
     }
@@ -258,17 +288,17 @@ void DesktopWindowTreeHostLacros::UpdateWindowHints() {
   const gfx::Rect hit_test_rect_px =
       ConvertRectToPixels(hit_test_rect_mouse_dp);
 
-  auto* wayland_extension = ui::GetWaylandExtension(*platform_window());
+  aura::Window* native_window = GetWidget()->GetNativeWindow();
 
+  auto* wayland_extension = ui::GetWaylandToplevelExtension(*platform_window());
   const gfx::RoundedCornersF window_radii =
-      wayland_extension ? wayland_extension->GetWindowCornersRadii()
-                        : gfx::RoundedCornersF();
-
-  std::vector<gfx::Rect> input_region;
+      GetWindowCornerRadii(native_window, wayland_extension);
 
   const bool should_have_rounded_window =
       views::ViewsDelegate::GetInstance()->ShouldWindowHaveRoundedCorners(
-          GetWidget()->GetNativeWindow());
+          native_window);
+
+  std::vector<gfx::Rect> input_region;
 
   if (should_have_rounded_window) {
     GetContentWindow()->layer()->SetRoundedCornerRadius(window_radii);

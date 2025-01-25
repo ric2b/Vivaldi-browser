@@ -3,11 +3,12 @@
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/platform/scheduler/public/dummy_schedulers.h"
+
 #include <memory>
 
 #include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/platform/scheduler/common/simple_main_thread_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/public/agent_group_scheduler.h"
@@ -295,11 +296,6 @@ class DummyWebMainThreadScheduler : public WebThreadScheduler,
     return base::SingleThreadTaskRunner::GetCurrentDefault();
   }
 
-  scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override {
-    DCHECK(WTF::IsMainThread());
-    return base::SingleThreadTaskRunner::GetCurrentDefault();
-  }
-
   scoped_refptr<base::SingleThreadTaskRunner> V8TaskRunner() override {
     DCHECK(WTF::IsMainThread());
     return base::SingleThreadTaskRunner::GetCurrentDefault();
@@ -336,6 +332,10 @@ class DummyWebMainThreadScheduler : public WebThreadScheduler,
   std::unique_ptr<RendererPauseHandle> PauseScheduler() override {
     return nullptr;
   }
+
+  void ExecuteAfterCurrentTaskForTesting(
+      base::OnceClosure on_completion_task,
+      ExecuteAfterCurrentTaskRestricted) override {}
 
   v8::Isolate* Isolate() override {
     return isolate_;
@@ -382,14 +382,10 @@ class DummyAgentGroupScheduler : public AgentGroupScheduler {
   WebThreadScheduler& GetMainThreadScheduler() override {
     return *main_thread_scheduler_;
   }
-  void BindInterfaceBroker(
-      mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker> remote_broker)
-      override {}
-  BrowserInterfaceBrokerProxy& GetBrowserInterfaceBroker() override {
-    return GetEmptyBrowserInterfaceBroker();
-  }
   v8::Isolate* Isolate() override { return main_thread_scheduler_->Isolate(); }
   void AddAgent(Agent* agent) override {}
+  void OnUrgentMessageReceived() override {}
+  void OnUrgentMessageProcessed() override {}
 
  private:
   std::unique_ptr<DummyWebMainThreadScheduler> main_thread_scheduler_;

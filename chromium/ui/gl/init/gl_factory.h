@@ -85,8 +85,8 @@ GL_INIT_EXPORT GLDisplay* GetOrInitializeGLOneOffPlatformImplementation(
 // Calling this function a second time on the same |display| is a no-op.
 GL_INIT_EXPORT void ShutdownGL(GLDisplay* display, bool due_to_fallback);
 
-// Return information about the GL window system binding implementation (e.g.,
-// EGL, GLX, WGL). Returns true if the information was retrieved successfully.
+// Return information about the GL window system binding implementation.
+// Returns true if the information was retrieved successfully.
 GL_INIT_EXPORT bool GetGLWindowSystemBindingInfo(
     const GLVersionInfo& gl_info,
     GLWindowSystemBindingInfo* info);
@@ -123,9 +123,6 @@ GL_INIT_EXPORT scoped_refptr<GLSurface> CreateOffscreenGLSurface(
 // bindings.
 GL_INIT_EXPORT void SetDisabledExtensionsPlatform(
     const std::string& disabled_extensions);
-
-// Disable ANGLE and force to use native or other GL implementation.
-GL_INIT_EXPORT void DisableANGLE();
 
 }  // namespace init
 }  // namespace gl

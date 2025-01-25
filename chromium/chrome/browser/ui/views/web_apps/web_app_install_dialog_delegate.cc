@@ -6,14 +6,16 @@
 
 #include <memory>
 
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/observer_list_internal.h"
+#include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
-#include "chrome/browser/ui/views/web_apps/web_app_install_dialog_coordinator.h"
 #include "chrome/browser/ui/web_applications/web_app_dialogs.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
@@ -27,6 +29,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/view_utils.h"
+#include "ui/views/widget/widget.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 // TODO(crbug.com/40147906): Enable gn check once it learns about conditional
@@ -82,7 +85,6 @@ WebAppInstallDialogDelegate::WebAppInstallDialogDelegate(
       tracker_(tracker),
       dialog_type_(dialog_type) {
   CHECK(install_info_);
-  CHECK(install_info_->manifest_id.is_valid());
   CHECK(install_tracker_);
   CHECK(prefs_);
 }
@@ -107,18 +109,23 @@ WebAppInstallDialogDelegate::~WebAppInstallDialogDelegate() {
   }
 }
 
+void WebAppInstallDialogDelegate::StartObservingForPictureInPictureOcclusion(
+    views::Widget* install_dialog_widget) {
+  occlusion_observation_.Observe(install_dialog_widget);
+}
+
 void WebAppInstallDialogDelegate::OnAccept() {
   MeasureAcceptUserActionsForInstallDialog();
   if (iph_state_ == PwaInProductHelpState::kShown) {
     webapps::AppId app_id =
-        GenerateAppIdFromManifestId(install_info_->manifest_id);
+        GenerateAppIdFromManifestId(install_info_->manifest_id());
     WebAppPrefGuardrails::GetForDesktopInstallIph(prefs_).RecordAccept(app_id);
     tracker_->NotifyEvent(feature_engagement::events::kDesktopPwaInstalled);
   }
 
 #if BUILDFLAG(IS_CHROMEOS)
   const webapps::AppId app_id =
-      web_app::GenerateAppIdFromManifestId(install_info_->manifest_id);
+      web_app::GenerateAppIdFromManifestId(install_info_->manifest_id());
   metrics::structured::StructuredMetricsClient::Record(
       cros_events::AppDiscovery_Browser_AppInstallDialogResult()
           .SetWebAppInstallStatus(
@@ -138,18 +145,48 @@ void WebAppInstallDialogDelegate::OnAccept() {
   CHECK(callback_);
   CHECK(install_tracker_);
   install_tracker_->ReportResult(webapps::MlInstallUserResponse::kAccepted);
+  received_user_response_ = true;
+  base::UmaHistogramEnumeration(
+      "WebApp.InstallConfirmation.CloseReason",
+      views::Widget::ClosedReason::kAcceptButtonClicked);
   std::move(callback_).Run(true, std::move(install_info_));
 }
 
 void WebAppInstallDialogDelegate::OnCancel() {
   CHECK(install_tracker_);
   install_tracker_->ReportResult(webapps::MlInstallUserResponse::kCancelled);
+  received_user_response_ = true;
+  base::UmaHistogramEnumeration(
+      "WebApp.InstallConfirmation.CloseReason",
+      views::Widget::ClosedReason::kCancelButtonClicked);
   MeasureIphOnDialogClose();
 }
 
 void WebAppInstallDialogDelegate::OnClose() {
   CHECK(install_tracker_);
   install_tracker_->ReportResult(webapps::MlInstallUserResponse::kIgnored);
+  received_user_response_ = true;
+
+  // This could be hit by triggering the Esc key as well, unfortunately there is
+  // no way to listen to that without observing the low level widget.
+  base::UmaHistogramEnumeration(
+      "WebApp.InstallConfirmation.CloseReason",
+      views::Widget::ClosedReason::kCloseButtonClicked);
+  MeasureIphOnDialogClose();
+}
+
+void WebAppInstallDialogDelegate::OnDestroyed() {
+  // Only performs histogram measurement and other actions if the dialog was
+  // destroyed without user action, like a change in visibility or navigation to
+  // a different tab or destruction of the native widget that contains the
+  // dialog this delegate is assigned to.
+  if (received_user_response_) {
+    return;
+  }
+
+  install_tracker_->ReportResult(webapps::MlInstallUserResponse::kIgnored);
+  base::UmaHistogramEnumeration("WebApp.InstallConfirmation.CloseReason",
+                                views::Widget::ClosedReason::kUnspecified);
   MeasureIphOnDialogClose();
 }
 
@@ -165,7 +202,7 @@ void WebAppInstallDialogDelegate::OnTextFieldChangedMaybeUpdateButton(
 
 void WebAppInstallDialogDelegate::OnVisibilityChanged(
     content::Visibility visibility) {
-  if (visibility == content::Visibility::HIDDEN) {
+  if (visibility != content::Visibility::VISIBLE) {
     CloseDialogAsIgnored();
   }
 }
@@ -178,12 +215,21 @@ void WebAppInstallDialogDelegate::PrimaryPageChanged(content::Page& page) {
   CloseDialogAsIgnored();
 }
 
+void WebAppInstallDialogDelegate::OnOcclusionStateChanged(bool occluded) {
+  // If a picture-in-picture window is occluding the dialog, froce it to close
+  // to prevent spoofing.
+  if (occluded) {
+    PictureInPictureWindowManager::GetInstance()->ExitPictureInPicture();
+  }
+}
+
 void WebAppInstallDialogDelegate::CloseDialogAsIgnored() {
+  if (!dialog_model() || !dialog_model()->host()) {
+    return;
+  }
   CHECK(install_tracker_);
   install_tracker_->ReportResult(webapps::MlInstallUserResponse::kIgnored);
-  if (dialog_model() && dialog_model()->host()) {
-    dialog_model()->host()->Close();
-  }
+  dialog_model()->host()->Close();
 }
 
 void WebAppInstallDialogDelegate::MeasureIphOnDialogClose() {
@@ -193,7 +239,7 @@ void WebAppInstallDialogDelegate::MeasureIphOnDialogClose() {
   MeasureCancelUserActionsForInstallDialog();
   if (iph_state_ == PwaInProductHelpState::kShown && install_info_) {
     webapps::AppId app_id =
-        GenerateAppIdFromManifestId(install_info_->manifest_id);
+        GenerateAppIdFromManifestId(install_info_->manifest_id());
     WebAppPrefGuardrails::GetForDesktopInstallIph(prefs_).RecordIgnore(
         app_id, base::Time::Now());
   }
@@ -202,7 +248,7 @@ void WebAppInstallDialogDelegate::MeasureIphOnDialogClose() {
   if (install_info_) {
 #if BUILDFLAG(IS_CHROMEOS)
     const webapps::AppId app_id =
-        web_app::GenerateAppIdFromManifestId(install_info_->manifest_id);
+        web_app::GenerateAppIdFromManifestId(install_info_->manifest_id());
     metrics::structured::StructuredMetricsClient::Record(
         cros_events::AppDiscovery_Browser_AppInstallDialogResult()
             .SetWebAppInstallStatus(

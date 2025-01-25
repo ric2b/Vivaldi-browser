@@ -87,6 +87,9 @@ OpenXrDevice::OpenXrDevice(
   if (device::features::IsOpenXrArEnabled()) {
     device_data.supported_features.emplace_back(
         mojom::XRSessionFeature::HIT_TEST);
+    device_data.supported_features.emplace_back(
+        mojom::XRSessionFeature::LIGHT_ESTIMATION);
+    device_data.supported_features.emplace_back(mojom::XRSessionFeature::DEPTH);
   }
 
   SetDeviceData(std::move(device_data));
@@ -146,6 +149,11 @@ void OpenXrDevice::OnCreateInstanceResult(
   extension_helper_ = std::make_unique<OpenXrExtensionHelper>(
       instance_, platform_helper_->GetExtensionEnumeration());
 
+  // Now that we have an instance, check if it's even theoretically possible
+  // to support all of our required features. While this check isn't final, as
+  // the OpenXrRenderLoop will make that ultimate determination, it can help
+  // us early-exit and avoid spinning it up if we know we don't even have the
+  // extensions necessary to support a required feature.
   if (!AreAllRequiredFeaturesSupported(
           options->mode, options->required_features, *extension_helper_)) {
     DVLOG(1) << __func__ << " Missing a required feature";
@@ -238,7 +246,7 @@ void OpenXrDevice::ShutdownSession(
 
 void OpenXrDevice::SetFrameDataRestricted(bool restricted) {
   // Presentation sessions can not currently be restricted.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 }  // namespace device

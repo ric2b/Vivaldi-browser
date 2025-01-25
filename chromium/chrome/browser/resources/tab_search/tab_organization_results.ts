@@ -3,26 +3,24 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_elements/cr_feedback_buttons/cr_feedback_buttons.js';
-import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
-import 'chrome://resources/cr_elements/mwb_shared_style.css.js';
 import './strings.m.js';
 import './tab_organization_group.js';
 import './tab_organization_results_actions.js';
-import './tab_organization_shared_style.css.js';
 
 import {CrFeedbackOption} from 'chrome://resources/cr_elements/cr_feedback_buttons/cr_feedback_buttons.js';
 import type {CrFeedbackButtonsElement} from 'chrome://resources/cr_elements/cr_feedback_buttons/cr_feedback_buttons.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {mojoString16ToString} from 'chrome://resources/js/mojo_type_util.js';
-import type {IronSelectorElement} from 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
-import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+import type {PropertyValues} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
 import type {TabOrganizationGroupElement} from './tab_organization_group.js';
-import {getTemplate} from './tab_organization_results.html.js';
+import {getCss} from './tab_organization_results.css.js';
+import {getHtml} from './tab_organization_results.html.js';
 import type {TabOrganization, TabOrganizationSession} from './tab_search.mojom-webui.js';
 
 const MINIMUM_SCROLLABLE_MAX_HEIGHT: number = 204;
-const NON_SCROLLABLE_VERTICAL_SPACING: number = 120;
+const NON_SCROLLABLE_VERTICAL_SPACING: number = 212;
 
 export interface TabOrganizationResultsElement {
   $: {
@@ -30,60 +28,77 @@ export interface TabOrganizationResultsElement {
     header: HTMLElement,
     learnMore: HTMLElement,
     scrollable: HTMLElement,
-    selector: IronSelectorElement,
   };
 }
 
-export class TabOrganizationResultsElement extends PolymerElement {
+export class TabOrganizationResultsElement extends CrLitElement {
   static get is() {
     return 'tab-organization-results';
   }
 
-  static get properties() {
+  static override get properties() {
     return {
-      session: {
-        type: Object,
-        observer: 'onSessionChange_',
-      },
-
-      availableHeight: {
-        type: Number,
-        observer: 'onAvailableHeightChange_',
-        value: 0,
-      },
+      session: {type: Object},
+      availableHeight: {type: Number},
 
       multiTabOrganization: {
         type: Boolean,
-        value: false,
-        reflectToAttribute: true,
+        reflect: true,
       },
 
-      feedbackSelectedOption_: {
-        type: String,
-        value: CrFeedbackOption.UNSPECIFIED,
-      },
+      feedbackSelectedOption_: {type: Number},
     };
   }
 
-  session: TabOrganizationSession;
-  availableHeight: number;
-  multiTabOrganization: boolean;
+  session?: TabOrganizationSession;
+  availableHeight: number = 0;
+  multiTabOrganization: boolean = false;
 
-  private feedbackSelectedOption_: CrFeedbackOption;
+  protected feedbackSelectedOption_: CrFeedbackOption =
+      CrFeedbackOption.UNSPECIFIED;
 
-  static get template() {
-    return getTemplate();
+  static override get styles() {
+    return getCss();
   }
 
-  focusInput() {
-    const group = this.shadowRoot!.querySelector('tab-organization-group');
-    if (!group) {
-      return;
+  override render() {
+    return getHtml.bind(this)();
+  }
+
+  override willUpdate(changedProperties: PropertyValues<this>) {
+    super.willUpdate(changedProperties);
+
+    if (changedProperties.has('session')) {
+      const changedSession = changedProperties.get('session');
+      if (changedSession &&
+          (!this.session ||
+           changedSession.sessionId !== this.session.sessionId)) {
+        this.feedbackSelectedOption_ = CrFeedbackOption.UNSPECIFIED;
+      }
     }
-    group.focusInput();
   }
 
-  private getTitle_(): string {
+  override updated(changedProperties: PropertyValues<this>) {
+    super.updated(changedProperties);
+
+    if (changedProperties.has('availableHeight')) {
+      this.onAvailableHeightChange_();
+    }
+
+    if (changedProperties.has('session') ||
+        changedProperties.has('multiTabOrganization')) {
+      this.updateScroll_();
+    }
+  }
+
+  override firstUpdated() {
+    this.$.scrollable.addEventListener('scroll', this.updateScroll_.bind(this));
+  }
+
+  getTitle(): string {
+    if (this.missingActiveTab_()) {
+      return loadTimeData.getString('successMissingActiveTabTitle');
+    }
     if (this.multiTabOrganization) {
       if (this.hasMultipleOrganizations_()) {
         return loadTimeData.getStringF(
@@ -94,7 +109,49 @@ export class TabOrganizationResultsElement extends PolymerElement {
     return loadTimeData.getString('successTitle');
   }
 
-  private getOrganizations_(): TabOrganization[] {
+  focusInput() {
+    const group = this.shadowRoot!.querySelector('tab-organization-group');
+    if (!group) {
+      return;
+    }
+    group.focusInput();
+  }
+
+  private updateScroll_() {
+    const scrollable = this.$.scrollable;
+    scrollable.classList.toggle(
+        'can-scroll', scrollable.clientHeight < scrollable.scrollHeight);
+    scrollable.classList.toggle('is-scrolled', scrollable.scrollTop > 0);
+    scrollable.classList.toggle(
+        'scrolled-to-bottom',
+        scrollable.scrollTop + this.getMaxScrollableHeight_() >=
+            scrollable.scrollHeight);
+  }
+
+  protected missingActiveTab_(): boolean {
+    if (!this.session) {
+      return false;
+    }
+
+    const id = this.session.activeTabId;
+    if (id === -1) {
+      return false;
+    }
+    let foundTab = false;
+    this.getOrganizations_().forEach(organization => {
+      organization.tabs.forEach((tab) => {
+        if (tab.tabId === id) {
+          foundTab = true;
+        }
+      });
+    });
+    if (foundTab) {
+      return false;
+    }
+    return true;
+  }
+
+  protected getOrganizations_(): TabOrganization[] {
     if (!this.session) {
       return [];
     }
@@ -105,26 +162,27 @@ export class TabOrganizationResultsElement extends PolymerElement {
     }
   }
 
-  private hasMultipleOrganizations_() {
+  protected hasMultipleOrganizations_(): boolean {
     return this.getOrganizations_().length > 1;
   }
 
-  private getName_(organization: TabOrganization) {
+  protected getName_(organization: TabOrganization): string {
     return mojoString16ToString(organization.name);
   }
 
-  private onAvailableHeightChange_() {
-    const maxHeight = Math.max(
+  private getMaxScrollableHeight_(): number {
+    return Math.max(
         MINIMUM_SCROLLABLE_MAX_HEIGHT,
         (this.availableHeight - NON_SCROLLABLE_VERTICAL_SPACING));
+  }
+
+  private onAvailableHeightChange_() {
+    const maxHeight = this.getMaxScrollableHeight_();
     this.$.scrollable.style.maxHeight = maxHeight + 'px';
+    this.updateScroll_();
   }
 
-  private onSessionChange_() {
-    this.feedbackSelectedOption_ = CrFeedbackOption.UNSPECIFIED;
-  }
-
-  private onCreateAllGroupsClick_(event: CustomEvent) {
+  protected onCreateAllGroupsClick_(event: CustomEvent) {
     event.stopPropagation();
     event.preventDefault();
 
@@ -138,27 +196,20 @@ export class TabOrganizationResultsElement extends PolymerElement {
       };
     });
 
-    this.dispatchEvent(new CustomEvent('create-all-groups-click', {
-      bubbles: true,
-      composed: true,
-      detail: {organizations},
-    }));
+    this.fire('create-all-groups-click', {organizations});
   }
 
-  private onLearnMoreClick_() {
-    this.dispatchEvent(new CustomEvent('learn-more-click', {
-      bubbles: true,
-      composed: true,
-    }));
+  protected onLearnMoreClick_() {
+    this.fire('learn-more-click');
   }
 
-  private onLearnMoreKeyDown_(event: KeyboardEvent) {
+  protected onLearnMoreKeyDown_(event: KeyboardEvent) {
     if (event.key === 'Enter') {
       this.onLearnMoreClick_();
     }
   }
 
-  private onFeedbackKeyDown_(event: KeyboardEvent) {
+  protected onFeedbackKeyDown_(event: KeyboardEvent) {
     if ((event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) {
       return;
     }
@@ -185,14 +236,10 @@ export class TabOrganizationResultsElement extends PolymerElement {
     focusableElements[nextFocusedIndex]!.focus();
   }
 
-  private onFeedbackSelectedOptionChanged_(
+  protected onFeedbackSelectedOptionChanged_(
       event: CustomEvent<{value: CrFeedbackOption}>) {
     this.feedbackSelectedOption_ = event.detail.value;
-    this.dispatchEvent(new CustomEvent('feedback', {
-      bubbles: true,
-      composed: true,
-      detail: {value: event.detail.value},
-    }));
+    this.fire('feedback', {value: this.feedbackSelectedOption_});
   }
 }
 

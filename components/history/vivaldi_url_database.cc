@@ -23,9 +23,7 @@ history::DetailedUrlResults URLDatabase::GetVivaldiDetailedHistory(
 
   results.clear();
 
-  std::string sql("SELECT u.id, u.url, u.title, u.typed_count, ");
-  sql.append("u.visit_count, u.last_visit_time, score ");
-  sql.append("FROM ( SELECT id, url, title, typed_count, ");
+  std::string sql("SELECT id, url, title, typed_count, ");
   sql.append("visit_count, last_visit_time, ");
   sql.append(scoring);
   sql.append("as score ");
@@ -43,18 +41,22 @@ history::DetailedUrlResults URLDatabase::GetVivaldiDetailedHistory(
              "OR  SUBSTR(urls.url,0,6) LIKE 'file:' "
              "OR  SUBSTR(urls.url,0,6) LIKE 'http:' "
              "OR  SUBSTR(urls.url,0,7) LIKE 'https:') ");
-  sql.append("ORDER BY ");
-  sql.append(scoring);
-  sql.append("DESC limit ?) u ");
-  sql.append("JOIN visits ");
-  sql.append("ON (visits.url = u.id) AND visits.visit_time = u.last_visit_time ");
+  sql.append(
+      "AND EXISTS ("
+      "SELECT * FROM visits "
+      "WHERE visits.url = urls.id "
+      "AND visits.visit_time = urls.last_visit_time ");
   // TRANSITION_IS_REDIRECT_MASK = 0xC00000000
   // PAGE_TRANSITION_CHAIN_START | PAGE_TRANSITON_PAGE_END = 0x30000000
   // The following line excludes the middle of a redirect chain.
-  sql.append("AND NOT ((visits.transition & 0xC0000000) "
-             "AND NOT (visits.transition & 0x30000000 ))");
+  sql.append(
+      "AND NOT ((visits.transition & 0xC0000000) "
+      "AND NOT (visits.transition & 0x30000000 )) )");
+  sql.append("ORDER BY ");
+  sql.append(scoring);
+  sql.append("DESC limit ?");
 
-  sql::Statement statement(GetDB().GetUniqueStatement(sql.c_str()));
+  sql::Statement statement(GetDB().GetUniqueStatement(sql));
 
   int var = 0;
 for(std::istringstream iterator(query);iterator;iterator>>word){
@@ -96,7 +98,7 @@ history::TypedUrlResults URLDatabase::GetVivaldiTypedHistory(
   sql.append("ORDER BY u.last_visit_time DESC LIMIT ?");
 
   std::u16string lower_query(base::i18n::ToLower(base::UTF8ToUTF16(query)));
-  sql::Statement statement(GetDB().GetUniqueStatement(sql.c_str()));
+  sql::Statement statement(GetDB().GetUniqueStatement(sql));
   const std::u16string wild(u"%");
   const std::string wild8("%");
   statement.BindString(0, wild8 + query + wild8);
@@ -131,12 +133,12 @@ bool URLDatabase::CreateVivaldiURLScoreIndex() {
   sql.append(scoring);
   sql.append(")");
   if(!statement.Step()){
-  return GetDB().Execute(sql.c_str());
+  return GetDB().Execute(sql);
   }
   if(sql.compare(statement.ColumnString(0))){
     statement.Step();//Need to step beyond the last result to unlock the DB
     std::ignore = GetDB().Execute("DROP INDEX IF EXISTS urls_score_index;");
-    return GetDB().Execute(sql.c_str());
+    return GetDB().Execute(sql);
   }
   return 0;
 

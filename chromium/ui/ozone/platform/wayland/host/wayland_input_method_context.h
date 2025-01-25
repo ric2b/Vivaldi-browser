@@ -25,7 +25,6 @@
 namespace ui {
 
 class WaylandConnection;
-class ZWPTextInputWrapper;
 
 class WaylandInputMethodContext : public LinuxInputMethodContext,
                                   public VirtualKeyboardController,
@@ -42,7 +41,8 @@ class WaylandInputMethodContext : public LinuxInputMethodContext,
       delete;
   ~WaylandInputMethodContext() override;
 
-  void Init(bool initialize_for_testing = false);
+  void Init(bool initialize_for_testing = false,
+            std::unique_ptr<ZWPTextInputWrapper> wrapper_for_testing = nullptr);
 
   // LinuxInputMethodContext overrides:
   bool DispatchKeyEvent(const KeyEvent& key_event) override;
@@ -53,6 +53,7 @@ class WaylandInputMethodContext : public LinuxInputMethodContext,
   void SetSurroundingText(
       const std::u16string& text,
       const gfx::Range& text_range,
+      const gfx::Range& composition_range,
       const gfx::Range& selection_range,
       const std::optional<GrammarFragment>& fragment,
       const std::optional<AutocorrectInfo>& autocorrect) override;
@@ -78,7 +79,7 @@ class WaylandInputMethodContext : public LinuxInputMethodContext,
   // ZWPTextInputWrapperClient overrides:
   void OnPreeditString(std::string_view text,
                        const std::vector<SpanStyle>& spans,
-                       int32_t preedit_cursor) override;
+                       const gfx::Range& preedit_cursor) override;
   void OnCommitString(std::string_view text) override;
   void OnCursorPosition(int32_t index, int32_t anchor) override;
   void OnDeleteSurroundingText(int32_t index, uint32_t length) override;

@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Uporabi</translation>
 <translation id="1603914832182249871">(Privatno)</translation>
 <translation id="1627276047960621195">Deskriptorji datotek</translation>
+<translation id="1654713139320245449">Najden ni bil noben cilj igralca. Potrebujete pomoč?</translation>
 <translation id="166278006618318542">Algoritem javnega ključa subjekta</translation>
 <translation id="1682548588986054654">Novo okno brez beleženja zgodovine</translation>
 <translation id="1708338024780164500">(Nеaktivno)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">Drug program v računalniku je dodal razširitev, ki lahko spremeni način delovanja Chroma.</translation>
 <translation id="2443487764245141020">Spletna mesta bodo morda morala prepoznati tudi vašo napravo z identifikatorjem</translation>
 <translation id="2445081178310039857">Potreben je korenski imenik razširitve.</translation>
-<translation id="2470702053775288986">Nepodprte razširitve onemogočene</translation>
 <translation id="2485422356828889247">Deinstaliraj</translation>
 <translation id="2498539833203011245">Minimiziraj</translation>
 <translation id="2509495747794740764">Vrednost za prilagajanje velikosti mora biti število med 10 in 200.</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp;Podrobnosti</translation>
 <translation id="4345587454538109430">Konfiguracija ...</translation>
 <translation id="4348766275249686434">Zberi napake</translation>
-<translation id="4363771538994847871">Ni ciljev za predvajanje. Potrebujete pomoč?</translation>
 <translation id="4384652540891215547">Aktivirajte razširitev</translation>
 <translation id="4394049700291259645">Onemogoči</translation>
 <translation id="4409697491990005945">Robovi</translation>
@@ -390,7 +389,6 @@ Javni eksponent (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bitov):
 <translation id="7771452384635174008">Postavitev</translation>
 <translation id="7782102568078991263">Ni več Googlovih predlogov</translation>
 <translation id="7786889348652477777">&amp;Znova naloži aplikacijo</translation>
-<translation id="7791543448312431591">Dodaj</translation>
 <translation id="7800518121066352902">Zasukaj v o&amp;bratni smeri urinega kazalca</translation>
 <translation id="7814458197256864873">&amp;Kopiraj</translation>
 <translation id="7818135753970109980">Nova tema je dodana (<ph name="EXTENSION_NAME" />)</translation>

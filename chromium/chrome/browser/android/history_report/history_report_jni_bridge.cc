@@ -15,7 +15,6 @@
 #include "base/android/jni_string.h"
 #include "base/functional/bind.h"
 #include "base/threading/thread_restrictions.h"
-#include "chrome/android/chrome_jni_headers/HistoryReportJniBridge_jni.h"
 #include "chrome/browser/android/history_report/data_observer.h"
 #include "chrome/browser/android/history_report/data_provider.h"
 #include "chrome/browser/android/history_report/delta_file_commons.h"
@@ -31,6 +30,9 @@
 #include "components/history/core/browser/history_service.h"
 #include "content/public/browser/browser_thread.h"
 
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "chrome/android/chrome_jni_headers/HistoryReportJniBridge_jni.h"
+
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
@@ -42,7 +44,9 @@ static jlong JNI_HistoryReportJniBridge_Init(JNIEnv* env,
   return reinterpret_cast<intptr_t>(bridge);
 }
 
-HistoryReportJniBridge::HistoryReportJniBridge(JNIEnv* env, jobject obj)
+HistoryReportJniBridge::HistoryReportJniBridge(
+    JNIEnv* env,
+    const jni_zero::JavaRef<jobject>& obj)
     : weak_java_provider_(env, obj) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   Profile* profile = g_browser_process->profile_manager()->

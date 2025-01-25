@@ -69,7 +69,6 @@ class FrameVisibilityVoterTest : public GraphTestHarness {
   FrameVisibilityVoterTest& operator=(const FrameVisibilityVoterTest&) = delete;
 
   void SetUp() override {
-    GetGraphFeatures().EnableExecutionContextRegistry();
     GetGraphFeatures().EnableFrameVisibilityDecorator();
     Super::SetUp();
     auto wrapper = std::make_unique<GraphOwnedWrapper>();
@@ -105,7 +104,7 @@ TEST_F(FrameVisibilityVoterTest, ChangeFrameVisibility) {
   EXPECT_EQ(observer().GetVoteCount(), 1u);
   EXPECT_TRUE(observer().HasVote(voter_id(),
                                  GetExecutionContext(frame_node.get()),
-                                 base::TaskPriority::USER_VISIBLE,
+                                 base::TaskPriority::USER_BLOCKING,
                                  FrameVisibilityVoter::kFrameVisibilityReason));
 
   // Deleting the frame should invalidate the vote.

@@ -1247,7 +1247,7 @@ void InspectorOverlayAgent::PaintOverlayPage() {
   // The emulation scale factor is backed in the overlay frame.
   gfx::Size viewport_size =
       gfx::ScaleToCeiledSize(visual_viewport.Size(), EmulationScaleFactor());
-  overlay_frame->SetPageZoomFactor(WindowToViewportScale());
+  overlay_frame->SetLayoutZoomFactor(WindowToViewportScale());
   overlay_frame->View()->Resize(viewport_size);
   OverlayMainFrame()->View()->UpdateAllLifecyclePhases(
       DocumentUpdateReason::kInspector);
@@ -1337,7 +1337,8 @@ void InspectorOverlayAgent::LoadOverlayPageResource() {
       GetFrame()->GetPage()->GetChromeClient(), *this);
   overlay_page_ = Page::CreateNonOrdinary(
       *overlay_chrome_client_,
-      *GetFrame()->GetFrameScheduler()->GetAgentGroupScheduler());
+      *GetFrame()->GetFrameScheduler()->GetAgentGroupScheduler(),
+      &GetFrame()->GetPage()->GetColorProviderColorMaps());
   overlay_host_ = MakeGarbageCollected<InspectorOverlayHost>(this);
 
   Settings& settings = GetFrame()->GetPage()->GetSettings();
@@ -1369,7 +1370,7 @@ void InspectorOverlayAgent::LoadOverlayPageResource() {
   auto* frame = MakeGarbageCollected<LocalFrame>(
       dummy_local_frame_client, *overlay_page_, nullptr, nullptr, nullptr,
       FrameInsertType::kInsertInConstructor, LocalFrameToken(), nullptr,
-      nullptr);
+      nullptr, mojo::NullRemote());
   frame->SetView(MakeGarbageCollected<LocalFrameView>(*frame));
   frame->Init(/*opener=*/nullptr, DocumentToken(), /*policy_container=*/nullptr,
               StorageKey(), /*document_ukm_source_id=*/ukm::kInvalidSourceId,
@@ -1377,13 +1378,14 @@ void InspectorOverlayAgent::LoadOverlayPageResource() {
   frame->View()->SetCanHaveScrollbars(false);
   frame->View()->SetBaseBackgroundColor(Color::kTransparent);
 
-  scoped_refptr<SharedBuffer> data = SharedBuffer::Create();
+  SegmentedBuffer data;
 
-  data->Append("<script>", static_cast<size_t>(8));
-  data->Append(UncompressResourceAsBinary(IDR_INSPECT_TOOL_MAIN_JS));
-  data->Append("</script>", static_cast<size_t>(9));
+  data.Append("<script>", static_cast<size_t>(8));
+  data.Append(UncompressResourceAsBinary(IDR_INSPECT_TOOL_MAIN_JS));
+  data.Append("</script>", static_cast<size_t>(9));
 
-  frame->ForceSynchronousDocumentInstall(AtomicString("text/html"), data);
+  frame->ForceSynchronousDocumentInstall(AtomicString("text/html"),
+                                         std::move(data));
 
   v8::Isolate* isolate = ToIsolate(frame);
   ScriptState* script_state = ToScriptStateForMainWorld(frame);
@@ -1440,8 +1442,8 @@ void InspectorOverlayAgent::Reset(
 
   // The zoom factor in the overlay frame already has been multiplied by the
   // window to viewport scale (aka device scale factor), so cancel it.
-  reset_data->setDouble("pageZoomFactor",
-                        GetFrame()->PageZoomFactor() / WindowToViewportScale());
+  reset_data->setDouble("pageZoomFactor", GetFrame()->LayoutZoomFactor() /
+                                              WindowToViewportScale());
 
   // TODO(szager): These values have been zero since root layer scrolling
   // landed. Probably they should be derived from

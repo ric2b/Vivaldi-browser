@@ -183,7 +183,7 @@ rtc::scoped_refptr<webrtc::VideoFrameBuffer> MakeFrameAdapter(
       return rtc::scoped_refptr<webrtc::VideoFrameBuffer>(
           new rtc::RefCountedObject<NV12FrameAdapter>(std::move(video_frame)));
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return nullptr;
   }
 }
@@ -445,7 +445,7 @@ scoped_refptr<media::VideoFrame> ConvertFromMappedWebRtcVideoFrameBuffer(
       break;
     }
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return nullptr;
   }
   if (!video_frame) {
@@ -454,7 +454,7 @@ scoped_refptr<media::VideoFrame> ConvertFromMappedWebRtcVideoFrameBuffer(
   // The bind ensures that we keep a reference to the underlying buffer.
   video_frame->AddDestructionObserver(
       ConvertToBaseOnceCallback(CrossThreadBindOnce(
-          [](const scoped_refptr<rtc::RefCountInterface>&) {},
+          [](const scoped_refptr<webrtc::RefCountInterface>&) {},
           scoped_refptr<webrtc::VideoFrameBuffer>(buffer.get()))));
   return video_frame;
 }

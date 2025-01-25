@@ -33,10 +33,9 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.hub.HubFieldTrial;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabWindowManager;
 import org.chromium.chrome.browser.ui.native_page.FrozenNativePage;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -48,9 +47,6 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
-
-// Vivaldi
-import org.chromium.build.BuildConfig;
 
 /**
  * The TabContentManager is responsible for serving tab contents to the UI components. Contents
@@ -104,6 +100,7 @@ public class TabContentManager {
     private final boolean mSnapshotsEnabled;
     private final TabFinder mTabFinder;
     private final Context mContext;
+    private final TabWindowManager mTabWindowManager;
 
     /** The Java interface for listening to thumbnail changes. */
     public interface ThumbnailChangeListener {
@@ -144,11 +141,13 @@ public class TabContentManager {
             Context context,
             BrowserControlsStateProvider browserControlsStateProvider,
             boolean snapshotsEnabled,
-            TabFinder tabFinder) {
+            TabFinder tabFinder,
+            TabWindowManager tabWindowManager) {
         mContext = context;
         mBrowserControlsStateProvider = browserControlsStateProvider;
         mTabFinder = tabFinder;
         mSnapshotsEnabled = snapshotsEnabled;
+        mTabWindowManager = tabWindowManager;
 
         // Override the cache size on the command line with --thumbnails=100
         int defaultCacheSize =
@@ -316,72 +315,21 @@ public class TabContentManager {
     }
 
     /**
-     * Call to get a thumbnail for a given tab through a {@link Callback}. If there is
-     * no up-to-date thumbnail on disk for the given tab, callback returns null.
+     * Call to get a thumbnail for a given tab through a {@link Callback}. If there is no up-to-date
+     * thumbnail on disk for the given tab, callback returns null.
+     *
      * @param tabId The ID of the tab to get the thumbnail for.
      * @param thumbnailSize Desired size of thumbnail received by callback.
-     * @param callback The callback to send the {@link Bitmap} with. Can be called up to twice when
-     *                 {@code forceUpdate}; otherwise always called exactly once.
-     * @param forceUpdate Whether to obtain the thumbnail from the live content.
-     * @param writeBack When {@code forceUpdate}, whether to write the thumbnail to cache.
+     * @param callback The callback to send the {@link Bitmap} with.
      */
     public void getTabThumbnailWithCallback(
-            @NonNull int tabId,
-            @NonNull Size thumbnailSize,
-            @NonNull Callback<Bitmap> callback,
-            boolean forceUpdate,
-            boolean writeBack) {
-        if (!mSnapshotsEnabled) return;
-
-        // TODO(crbug.com/40267864): Remove forceUpdate and writeBack params once the following
-        // features
-        // launch:
-        // * GridTabSwitcherAndroidAnimations
-        // OR
-        // * Hub
-        if (HubFieldTrial.isHubEnabled()
-                || ChromeFeatureList.sGridTabSwitcherAndroidAnimations.isEnabled()) {
-            getTabThumbnailFromDisk(tabId, thumbnailSize, callback);
+            @NonNull int tabId, @NonNull Size thumbnailSize, @NonNull Callback<Bitmap> callback) {
+        if (!mSnapshotsEnabled) {
+            callback.onResult(null);
             return;
         }
 
-        if (!forceUpdate) {
-            assert !writeBack : "writeBack is ignored if not forceUpdate";
-            getTabThumbnailFromDisk(tabId, thumbnailSize, callback);
-            return;
-        }
-
-        // Reading thumbnail from disk is faster than taking screenshot from live Tab, so fetch
-        // that first even if |forceUpdate|.
-        getTabThumbnailFromDisk(
-                tabId,
-                thumbnailSize,
-                (diskBitmap) -> {
-                    if (diskBitmap != null) {
-                        callback.onResult(diskBitmap);
-                    }
-
-                    Tab tab = getTabById(tabId);
-                    if (tab == null) return;
-
-                    captureThumbnail(
-                            tab,
-                            writeBack,
-                            /* returnBitmap= */ true,
-                            (bitmap) -> {
-                                // Null check to avoid having a Bitmap from
-                                // getTabThumbnailFromDisk() but cleared here.
-                                // If invalidation is not needed, readbackNativeBitmap() might not
-                                // do anything and send back null.
-                                // Note(david@vivaldi.com): We always return even when bitmap is
-                                // null. This will cause fetching a favicon instead. The bitmap is
-                                // mostly null when a page was not yet loaded completely. See ref.
-                                // VAB-9169.
-                                if (bitmap != null || BuildConfig.IS_VIVALDI) {
-                                    callback.onResult(bitmap);
-                                }
-                            });
-                });
+        getTabThumbnailFromDisk(tabId, thumbnailSize, callback);
     }
 
     /**
@@ -600,7 +548,7 @@ public class TabContentManager {
             @NonNull final Tab tab, boolean returnBitmap, Callback<Bitmap> callback) {
         if (mNativeTabContentManager == 0 || !mSnapshotsEnabled) return;
 
-        captureThumbnail(tab, true, returnBitmap, callback);
+        captureThumbnail(tab, returnBitmap, callback);
     }
 
     private Bitmap cacheNativeTabThumbnail(final Tab tab) {
@@ -615,17 +563,13 @@ public class TabContentManager {
 
     /**
      * Capture the content of a tab as a thumbnail.
+     *
      * @param tab The tab whose content we will capture.
-     * @param writeToCache Whether write the captured thumbnail to cache. If not, a downsampled
-     *                     thumbnail is captured instead.
      * @param returnBitmap Whether to return a bitmap to the callback.
      * @param callback The callback to send the {@link Bitmap} with.
      */
     private void captureThumbnail(
-            @NonNull final Tab tab,
-            boolean writeToCache,
-            boolean returnBitmap,
-            @Nullable Callback<Bitmap> callback) {
+            @NonNull final Tab tab, boolean returnBitmap, @Nullable Callback<Bitmap> callback) {
         assert mNativeTabContentManager != 0;
         assert mSnapshotsEnabled;
 
@@ -657,18 +601,9 @@ public class TabContentManager {
                 }
                 return;
             }
-            // If we don't have to write the thumbnail back to the cache, we can use the faster
-            // path of capturing a downsampled copy.
-            // This faster path is essential to Tab-to-Grid animation to be smooth.
-            final float downsamplingScale = writeToCache ? 1 : 0.5f;
             TabContentManagerJni.get()
                     .captureThumbnail(
-                            mNativeTabContentManager,
-                            tab,
-                            mThumbnailScale * downsamplingScale,
-                            writeToCache,
-                            returnBitmap,
-                            callback);
+                            mNativeTabContentManager, tab, mThumbnailScale, returnBitmap, callback);
         }
     }
 
@@ -708,9 +643,12 @@ public class TabContentManager {
 
     /**
      * Removes a thumbnail of the tab whose id is |tabId|.
+     *
      * @param tabId The Id of the tab whose thumbnail is being removed.
      */
     public void removeTabThumbnail(int tabId) {
+        if (!mTabWindowManager.canTabThumbnailBeDeleted(tabId)) return;
+
         if (mNativeTabContentManager != 0) {
             TabContentManagerJni.get().removeTabThumbnail(mNativeTabContentManager, tabId);
         }
@@ -750,7 +688,6 @@ public class TabContentManager {
                 long nativeTabContentManager,
                 Object tab,
                 float thumbnailScale,
-                boolean writeToCache,
                 boolean returnBitmap,
                 Callback<Bitmap> callback);
 

@@ -6,22 +6,11 @@
 
 module arc.mojom;
 
-// Represents total storage usage of Android applications.
-struct ApplicationsSize {
-    // Usage for APK and OBB.
-    uint64 total_code_bytes;
-    // Usage for data and media.
-    uint64 total_data_bytes;
-    // Usage for applications' cache.
-    uint64 total_cache_bytes;
-};
+import "ash/components/arc/mojom/disk_space.mojom";
 
 // Next method ID: 5
-// Deprecated method ID: 1
+// Deprecated method ID: 1, 2
 interface StorageManagerInstance {
-  // Opens private volume details settings.
-  OpenPrivateVolumeSettings@2();
-
   // Gets storage usage of all applications' code, data, and cache size.
   // So far an external storage of ARC is an emulated sdcard, this RPC returns
   // the sum of the internal storage and the external storage usages in order

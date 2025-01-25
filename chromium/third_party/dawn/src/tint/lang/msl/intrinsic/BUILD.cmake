@@ -41,6 +41,7 @@
 tint_add_target(tint_lang_msl_intrinsic lib
   lang/msl/intrinsic/data.cc
   lang/msl/intrinsic/dialect.h
+  lang/msl/intrinsic/type_matchers.h
 )
 
 tint_target_add_dependencies(tint_lang_msl_intrinsic lib
@@ -49,6 +50,7 @@ tint_target_add_dependencies(tint_lang_msl_intrinsic lib
   tint_lang_core_intrinsic
   tint_lang_core_type
   tint_lang_msl
+  tint_lang_msl_type
   tint_utils_containers
   tint_utils_diagnostic
   tint_utils_ice

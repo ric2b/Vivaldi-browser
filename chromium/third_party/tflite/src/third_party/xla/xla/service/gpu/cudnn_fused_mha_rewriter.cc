@@ -28,6 +28,8 @@ limitations under the License.
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
@@ -44,9 +46,7 @@ limitations under the License.
 #include "xla/service/pattern_matcher.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
-#include "xla/status.h"
 #include "xla/status_macros.h"
-#include "xla/statusor.h"
 #include "xla/stream_executor/device_description.h"
 #include "xla/stream_executor/dnn.h"
 #include "xla/types.h"
@@ -132,6 +132,7 @@ auto OptionalBroadcast(Pattern pattern) {
 
 bool IsBatchedMatmul(const HloInstruction* instr) {
   if (instr->opcode() != HloOpcode::kDot) return false;
+  if (Cast<HloDotInstruction>(instr)->sparse_operands()) return false;
   const DotDimensionNumbers& dot_dims = instr->dot_dimension_numbers();
   bool is_batch_dot = !dot_dims.lhs_batch_dimensions().empty() ||
                       !dot_dims.rhs_batch_dimensions().empty();
@@ -1344,7 +1345,7 @@ absl::StatusOr<HloInstruction*> FuseFwdMultiHeadedAttentionBlock(
         bcast_dimensions.push_back(dim - starting_index);
       }
 
-      Shape bcast_shape = bmm_1->shape();
+      const Shape& bcast_shape = bmm_1->shape();
       bias = comp->AddInstruction(HloInstruction::CreateBroadcast(
           bcast_shape, original_bias, bcast_dimensions));
     }
@@ -1402,7 +1403,8 @@ absl::StatusOr<bool> FuseBwdMultiHeadedAttentionBlock(
 
   TF_ASSIGN_OR_RETURN(GpuBackendConfig gpu_config,
                       fwd_fmha_call->backend_config<GpuBackendConfig>());
-  CudnnfMHABackendConfig fwd_config = gpu_config.cudnn_fmha_backend_config();
+  const CudnnfMHABackendConfig& fwd_config =
+      gpu_config.cudnn_fmha_backend_config();
   bool is_causal_mask =
       fwd_config.mask_type() == CudnnfMHABackendConfig::CAUSAL;
   CudnnfMHABackendConfig bwd_fmha_config;
@@ -1573,7 +1575,7 @@ absl::StatusOr<bool> FuseBwdMultiHeadedAttentionBlock(
   return true;
 }
 
-Status RestoreFwdGraph(
+absl::Status RestoreFwdGraph(
     HloComputation* comp, HloInstruction* fwd_fmha_call, HloInstruction* bmm2,
     HloInstruction* activation, HloInstruction* original_bmm2_producer0,
     HloInstruction* original_bmm2_producer1,
@@ -1609,7 +1611,7 @@ Status RestoreFwdGraph(
   }
   TF_RETURN_IF_ERROR(
       comp->ReplaceInstruction(activation_gte, cloned_activation));
-  return OkStatus();
+  return absl::OkStatus();
 }
 }  // namespace
 
@@ -1624,7 +1626,7 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
     const DebugOptions& debug_options =
         comp->parent()->config().debug_options();
     const se::dnn::VersionInfo cudnn_version =
-        GetDnnVersionInfo(stream_executor_, cudnn_version_);
+        GetDnnVersionInfoOrDefault(stream_executor_, cudnn_version_);
 #if !defined(GOOGLE_CUDA) || CUDA_VERSION < 12000
     // CUDA needs to be >= 12.0 for cuDNN to work with all supported hardware.
     // Some cuDNN versions work with CUDA 11, but it is impractical for us to

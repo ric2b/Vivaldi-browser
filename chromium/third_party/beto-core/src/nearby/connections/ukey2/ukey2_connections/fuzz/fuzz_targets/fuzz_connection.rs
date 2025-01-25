@@ -1,4 +1,4 @@
-#![no_main]
+#![cfg_attr(fuzzing, no_main)]
 // Copyright 2023 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +15,15 @@
 
 use arbitrary::Arbitrary;
 use crypto_provider_rustcrypto::RustCrypto;
-use libfuzzer_sys::fuzz_target;
+use derive_fuzztest::fuzztest;
 use rand_chacha::rand_core::SeedableRng;
 use ukey2_connections::HandshakeImplementation;
 use ukey2_connections::{
     D2DHandshakeContext, InitiatorD2DHandshakeContext, ServerD2DHandshakeContext,
 };
+use ukey2_rs::NextProtocol;
 
-#[derive(Debug, Arbitrary)]
+#[derive(Clone, Debug, Arbitrary)]
 enum Type {
     SentByInitiator,
     SentByServer,
@@ -30,28 +31,24 @@ enum Type {
     ReceivedByServer,
 }
 
-#[derive(Debug, Arbitrary)]
-struct Message<'a> {
+#[derive(Clone, Debug, Arbitrary)]
+struct Message {
     sender: Type,
-    payload: &'a [u8],
-    associated_data: Option<&'a [u8]>,
+    payload: Vec<u8>,
+    associated_data: Option<Vec<u8>>,
 }
 
-#[derive(Debug, Arbitrary)]
-struct FuzzInput<'a> {
-    client_rng_seed: [u8; 32],
-    server_rng_seed: [u8; 32],
-    messages: Vec<Message<'a>>,
-}
-
-fuzz_target!(|input: FuzzInput| {
+#[fuzztest]
+fn test(client_rng_seed: [u8; 32], server_rng_seed: [u8; 32], messages: Vec<Message>) {
     let mut initiator_ctx = InitiatorD2DHandshakeContext::<RustCrypto, _>::new_impl(
         HandshakeImplementation::Spec,
-        rand_chacha::ChaChaRng::from_seed(input.client_rng_seed),
+        rand_chacha::ChaChaRng::from_seed(client_rng_seed),
+        vec![NextProtocol::Aes256CbcHmacSha256],
     );
     let mut server_ctx = ServerD2DHandshakeContext::<RustCrypto, _>::new_impl(
         HandshakeImplementation::Spec,
-        rand_chacha::ChaChaRng::from_seed(input.server_rng_seed),
+        rand_chacha::ChaChaRng::from_seed(server_rng_seed),
+        &[NextProtocol::Aes256CbcHmacSha256],
     );
     let client_init = initiator_ctx
         .get_next_handshake_message()
@@ -81,39 +78,40 @@ fuzz_target!(|input: FuzzInput| {
         "Initator handshake context should be converted to connection context successfully",
     );
 
-    for Message {
-        sender,
-        payload,
-        associated_data,
-    } in input.messages
-    {
+    for Message { sender, payload, associated_data } in messages {
         match sender {
             Type::SentByInitiator => {
                 let ciphertext = initiator_connection
-                    .encode_message_to_peer::<RustCrypto, _>(payload, associated_data);
+                    .encode_message_to_peer::<RustCrypto, _>(&payload, associated_data.as_ref());
                 let decoded = server_connection
-                    .decode_message_from_peer::<RustCrypto, _>(&ciphertext, associated_data)
+                    .decode_message_from_peer::<RustCrypto, _>(
+                        &ciphertext,
+                        associated_data.as_ref(),
+                    )
                     .unwrap();
                 assert_eq!(decoded, payload);
             }
             Type::SentByServer => {
                 let ciphertext = server_connection
-                    .encode_message_to_peer::<RustCrypto, _>(payload, associated_data);
+                    .encode_message_to_peer::<RustCrypto, _>(&payload, associated_data.as_ref());
                 let decoded = initiator_connection
-                    .decode_message_from_peer::<RustCrypto, _>(&ciphertext, associated_data)
+                    .decode_message_from_peer::<RustCrypto, _>(
+                        &ciphertext,
+                        associated_data.as_ref(),
+                    )
                     .unwrap();
                 assert_eq!(decoded, payload);
             }
             Type::ReceivedByInitiator => {
                 // Both Ok and Err results are possible here since the input is Arbitrary payload
                 let _unused_result = initiator_connection
-                    .decode_message_from_peer::<RustCrypto, _>(&payload, associated_data);
+                    .decode_message_from_peer::<RustCrypto, _>(&payload, associated_data.as_ref());
             }
             Type::ReceivedByServer => {
                 // Both Ok and Err results are possible here since the input is Arbitrary payload
                 let _unused_result = server_connection
-                    .decode_message_from_peer::<RustCrypto, _>(&payload, associated_data);
+                    .decode_message_from_peer::<RustCrypto, _>(&payload, associated_data.as_ref());
             }
         }
     }
-});
+}

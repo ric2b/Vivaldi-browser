@@ -9,7 +9,9 @@
 #import "ios/ui/ntp/vivaldi_speed_dial_home_consumer.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_view_controller_delegate.h"
 
-class LegacyBookmarkModel;
+namespace bookmarks {
+  class BookmarkModel;
+}
 
 // The controller that contains the speed dial folder menu and the child pages.
 @interface VivaldiSpeedDialBaseController : UIViewController
@@ -20,7 +22,7 @@ class LegacyBookmarkModel;
 
 // INITIALIZER
 - (instancetype)initWithBrowser:(Browser*)browser
-                  bookmarkModel:(LegacyBookmarkModel*)bookmarkModel;
+                  bookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel;
 
 - (void)invalidate;
 

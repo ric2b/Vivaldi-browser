@@ -40,6 +40,7 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
+#include "base/uuid.h"
 #include "base/win/atl.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_com_initializer.h"
@@ -65,17 +66,6 @@ namespace {
 constexpr char kTestAppID[] = "{D07D2B56-F583-4631-9E8E-9942F63765BE}";
 
 }  // namespace
-
-TEST(WinUtil, GetDownloadProgress) {
-  EXPECT_EQ(GetDownloadProgress(0, 50), 0);
-  EXPECT_EQ(GetDownloadProgress(12, 50), 24);
-  EXPECT_EQ(GetDownloadProgress(25, 50), 50);
-  EXPECT_EQ(GetDownloadProgress(50, 50), 100);
-  EXPECT_EQ(GetDownloadProgress(50, 50), 100);
-  EXPECT_EQ(GetDownloadProgress(0, -1), -1);
-  EXPECT_EQ(GetDownloadProgress(-1, -1), -1);
-  EXPECT_EQ(GetDownloadProgress(50, 0), -1);
-}
 
 TEST(WinUtil, GetServiceDisplayName) {
   for (const bool is_internal_service : {true, false}) {
@@ -658,6 +648,38 @@ TEST(WinUtil, StringFromGuid) {
   GUID guid = {0};
   EXPECT_HRESULT_SUCCEEDED(::CoCreateGuid(&guid));
   EXPECT_EQ(base::win::WStringFromGUID(guid), StringFromGuid(guid));
+}
+
+TEST(WinUtil, GetUniqueTempFilePath) {
+  EXPECT_FALSE(GetUniqueTempFilePath({}));
+
+  std::optional<base::FilePath> p = GetUniqueTempFilePath(base::FilePath(
+      L"C:\\Program Files (x86)\\Google\\GoogleUpdater\\updater.log"));
+  ASSERT_TRUE(p);
+  std::wstring p_base = p->BaseName().value();
+  EXPECT_TRUE(base::StartsWith(p_base, L"updater"));
+  EXPECT_TRUE(base::EndsWith(p_base, L".log"));
+  base::ReplaceSubstringsAfterOffset(&p_base, 0, L"updater", {});
+  base::ReplaceSubstringsAfterOffset(&p_base, 0, L".log", {});
+  EXPECT_TRUE(base::Uuid::ParseLowercase(base::WideToUTF8(p_base)).is_valid());
+}
+
+TEST(WinUtil, SetEulaAccepted) {
+  // This will set `eulaaccepted=0` in the registry.
+  EXPECT_TRUE(
+      SetEulaAccepted(GetUpdaterScopeForTesting(), /*eula_accepted=*/false));
+  DWORD eula_accepted = 0;
+  const HKEY root = UpdaterScopeToHKeyRoot(GetUpdaterScopeForTesting());
+  EXPECT_EQ(base::win::RegKey(root, UPDATER_KEY, Wow6432(KEY_READ))
+                .ReadValueDW(L"eulaaccepted", &eula_accepted),
+            ERROR_SUCCESS);
+  EXPECT_EQ(eula_accepted, 0ul);
+
+  // This will delete the `eulaaccepted` value in the registry.
+  EXPECT_TRUE(
+      SetEulaAccepted(GetUpdaterScopeForTesting(), /*eula_accepted=*/true));
+  EXPECT_FALSE(base::win::RegKey(root, UPDATER_KEY, Wow6432(KEY_READ))
+                   .HasValue(L"eulaaccepted"));
 }
 
 }  // namespace updater::test

@@ -243,6 +243,12 @@ class PossibleDesktopBrowser(possible_browser.PossibleBrowser):
                          .GetChromeTraceConfigFile())
     if trace_config_file:
       startup_args.append('--trace-config-file=%s' % trace_config_file)
+    trace_config = (self._platform_backend.tracing_controller_backend.
+                    GetChromeTraceConfig())
+    if trace_config:
+      if (trace_config.chrome_trace_config.trace_format is None
+          or trace_config.chrome_trace_config.trace_format != 'proto'):
+        startup_args.append('--trace-startup-format=json')
 
     if sys.platform.startswith('linux'):
       # All linux tests should use the --password-store=basic
@@ -383,13 +389,19 @@ def FindAllAvailableBrowsers(finder_options, device):
     return False
 
   # Add local builds
-  for build_path in path_module.GetBuildDirectories(finder_options.chrome_root):
-    # TODO(agrieve): Extract browser_type from args.gn's is_debug.
-    browser_type = os.path.basename(build_path.rstrip(os.sep)).lower()
+  if finder_options.chromium_output_dir:
     for chromium_app_name in chromium_app_names:
-      AddIfFound(browser_type, build_path, chromium_app_name, False)
-    AddIfFound('content-shell-' + browser_type, build_path,
-               content_shell_app_name, True)
+      AddIfFound(finder_options.browser_type,
+                 finder_options.chromium_output_dir, chromium_app_name, False)
+  else:
+    for build_path in path_module.GetBuildDirectories(
+        finder_options.chrome_root):
+      # TODO(agrieve): Extract browser_type from args.gn's is_debug.
+      browser_type = os.path.basename(build_path.rstrip(os.sep)).lower()
+      for chromium_app_name in chromium_app_names:
+        AddIfFound(browser_type, build_path, chromium_app_name, False)
+      AddIfFound('content-shell-' + browser_type, build_path,
+                 content_shell_app_name, True)
 
   reference_build = None
   if finder_options.browser_type == 'reference':

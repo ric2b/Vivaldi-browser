@@ -14,13 +14,11 @@
 
 #include "sharing/file_attachment.h"
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <filesystem>  // NOLINT(build/c++17)
 #include <optional>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
@@ -29,7 +27,6 @@
 #include "sharing/common/nearby_share_enums.h"
 #include "sharing/internal/base/mime.h"
 #include "sharing/proto/wire_format.pb.h"
-#include "sharing/share_target.h"
 
 namespace nearby {
 namespace sharing {
@@ -79,10 +76,6 @@ FileAttachment::FileAttachment(int64_t id, int64_t size, std::string file_name,
       mime_type_(std::move(mime_type)),
       type_(type),
       parent_folder_(std::move(parent_folder)) {}
-
-void FileAttachment::MoveToShareTarget(ShareTarget& share_target) {
-  share_target.file_attachments.push_back(std::move(*this));
-}
 
 absl::string_view FileAttachment::GetDescription() const { return file_name_; }
 

@@ -41,7 +41,6 @@
 #include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/ptr_util.h"
 #include "core/fxcrt/span.h"
-#include "core/fxcrt/span_util.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxcrt/unowned_ptr.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
@@ -642,9 +641,9 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_RenderPage(HDC dc,
     if (win_dc.GetDeviceType() == DeviceType::kPrinter) {
       auto dest_bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
       if (dest_bitmap->Create(size_x, size_y, FXDIB_Format::kRgb32)) {
-        fxcrt::spanset(dest_bitmap->GetWritableBuffer().first(
-                           pBitmap->GetPitch() * size_y),
-                       -1);
+        fxcrt::Fill(dest_bitmap->GetWritableBuffer().first(pBitmap->GetPitch() *
+                                                           size_y),
+                    -1);
         dest_bitmap->CompositeBitmap(0, 0, size_x, size_y, pBitmap, 0, 0,
                                      BlendMode::kNormal, nullptr, false);
         win_dc.StretchDIBits(std::move(dest_bitmap), 0, 0, size_x, size_y);
@@ -1282,7 +1281,7 @@ FPDF_EXPORT FPDF_DEST FPDF_CALLCONV FPDF_GetNamedDest(FPDF_DOCUMENT document,
     // SAFETY: required from caller.
     auto buffer_span =
         UNSAFE_BUFFERS(pdfium::make_span(static_cast<char*>(buffer), *buflen));
-    fxcrt::spancpy(buffer_span, utf16Name.span());
+    fxcrt::Copy(utf16Name.span(), buffer_span);
     *buflen = len;
   } else {
     *buflen = -1;
@@ -1357,8 +1356,8 @@ FPDF_GetTrailerEnds(FPDF_DOCUMENT document,
       fxcrt::CollectionSize<unsigned long>(trailer_ends);
   if (buffer && length >= trailer_ends_len) {
     // SAFETY: required from caller.
-    fxcrt::spancpy(UNSAFE_BUFFERS(pdfium::make_span(buffer, length)),
-                   pdfium::make_span(trailer_ends));
+    fxcrt::Copy(trailer_ends,
+                UNSAFE_BUFFERS(pdfium::make_span(buffer, length)));
   }
 
   return trailer_ends_len;

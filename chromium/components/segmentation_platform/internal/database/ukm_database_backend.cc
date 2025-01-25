@@ -78,7 +78,7 @@ std::string BindValuesToStatement(
         statement.BindString(i, UkmUrlTable::GetDatabaseUrlString(*value.url));
         break;
       case processing::ProcessedValue::Type::UNKNOWN:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
   return debug_string.str();
@@ -89,7 +89,7 @@ float GetSingleFloatOutput(sql::Statement& statement) {
   switch (output_type) {
     case sql::ColumnType::kBlob:
     case sql::ColumnType::kText:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return 0;
     case sql::ColumnType::kFloat:
       return statement.ColumnDouble(0);
@@ -299,7 +299,7 @@ void UkmDatabaseBackend::RunReadOnlyQueries(QueryList&& queries,
     const UkmDatabase::CustomSqlQuery& query = index_and_query.second;
     std::string debug_query = query.query;
 
-    sql::Statement statement(db_.GetReadonlyStatement(query.query.c_str()));
+    sql::Statement statement(db_.GetReadonlyStatement(query.query));
     debug_query +=
         " Bind values: " + BindValuesToStatement(query.bind_values, statement);
 

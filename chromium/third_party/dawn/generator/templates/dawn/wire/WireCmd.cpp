@@ -59,8 +59,6 @@
         ObjectId
     {%- elif member.type.category == "structure" -%}
         {{as_cType(member.type.name)}}Transfer
-    {%- elif member.type.category == "bitmask" -%}
-        {{as_cType(member.type.name)}}Flags
     {%- elif as_cType(member.type.name) == "size_t" -%}
         {{as_cType(types["uint64_t"].name)}}
     {%- else -%}
@@ -107,6 +105,8 @@
                 {%- endif -%}
             ));
         {%- endif -%}
+    {%- elif member.type.category == 'callback info' %}
+        {{out}} = WGPU_{{member.type.name.SNAKE_CASE()}}_INIT;
     {%- elif not is_wire_serializable(member.type) %}
         {{out}} = nullptr;
     {%- elif member.type.name.get() == "size_t" -%}
@@ -138,7 +138,7 @@
             //* Start the transfer structure with the command ID, so that casting to WireCmd gives the ID.
             {{Return}}WireCmd commandId;
         {% elif record.extensible %}
-            bool hasNextInChain;
+            WGPUBool hasNextInChain;
         {% elif record.chained %}
             WGPUChainedStructTransfer chain;
         {% endif %}
@@ -158,7 +158,7 @@
             {% endif %}
             //* Optional members additionally come with a boolean to indicate whether they were set.
             {% if member.optional and member.type.category != "object" %}
-                bool has_{{as_varName(member.name)}};
+                WGPUBool has_{{as_varName(member.name)}};
             {% endif %}
         {% endfor %}
     };
@@ -267,8 +267,8 @@
         //* "length", but order is not always given.
         {% for member in members | sort(reverse=true, attribute="annotation") %}
             {% set memberName = as_varName(member.name) %}
-            //* Skip serialization for custom serialized members.
-            {% if member.skip_serialize %}
+            //* Skip serialization for custom serialized members and callback infos.
+            {% if member.skip_serialize or member.type.category == 'callback info' %}
                 {% continue %}
             {% endif %}
             //* Value types are directly in the transfer record, objects being replaced with their IDs.
@@ -308,9 +308,14 @@
                 WIRE_TRY(buffer->NextN(memberLength, &memberBuffer));
 
                 {% if member.type.is_wire_transparent %}
-                    memcpy(
-                        memberBuffer, record.{{memberName}},
-                        {{member_transfer_sizeof(member)}} * memberLength);
+                    //* memcpy is not defined for null pointers, even when the length is zero.
+                    //* conflicts with the common practice to use (nullptr, 0) to represent an
+                    //* span. Guard memcpy with a zero check to work around this language bug.
+                    if (memberLength != 0) {
+                        memcpy(
+                            memberBuffer, record.{{memberName}},
+                            {{member_transfer_sizeof(member)}} * memberLength);
+                    }
                 {% else %}
                     //* This loop cannot overflow because it iterates up to |memberLength|. Even if
                     //* memberLength were the maximum integer value, |i| would become equal to it
@@ -436,15 +441,20 @@
                     record->{{memberName}} = copiedMembers;
 
                     {% if member.type.is_wire_transparent %}
-                        //* memcpy is not allowed to copy from volatile objects. However, these
-                        //* arrays are just used as plain data, and don't impact control flow. So if
-                        //* the underlying data were changed while the copy was still executing, we
-                        //* would get different data - but it wouldn't cause unexpected downstream
-                        //* effects.
-                        memcpy(
-                            copiedMembers,
-                            const_cast<const {{member_transfer_type(member)}}*>(memberBuffer),
-                           {{member_transfer_sizeof(member)}} * memberLength);
+                        //* memcpy is not defined for null pointers, even when the length is zero.
+                        //* conflicts with the common practice to use (nullptr, 0) to represent an
+                        //* span. Guard memcpy with a zero check to work around this language bug.
+                        if (memberLength != 0) {
+                            //* memcpy is not allowed to copy from volatile objects. However, these
+                            //* arrays are just used as plain data, and don't impact control flow.
+                            //* So if the underlying data were changed while the copy was still
+                            //* executing, we would get different data - but it wouldn't cause
+                            //* unexpected downstream effects.
+                            memcpy(
+                                copiedMembers,
+                                const_cast<const {{member_transfer_type(member)}}*>(memberBuffer),
+                              {{member_transfer_sizeof(member)}} * memberLength);
+                        }
                     {% else %}
                         //* This loop cannot overflow because it iterates up to |memberLength|. Even
                         //* if memberLength were the maximum integer value, |i| would become equal
@@ -556,8 +566,6 @@
                         break;
                     }
                 {% endfor %}
-                // Explicitly list the Invalid enum. MSVC complains about no case labels.
-                case WGPUSType_Invalid:
                 default:
                     // Invalid enum. Reserve space just for the transfer header (sType and hasNext).
                     result += WireAlignSizeof<WGPUChainedStructTransfer>();
@@ -592,18 +600,16 @@
                         chainedStruct = chainedStruct->next;
                     } break;
                 {% endfor %}
-                // Explicitly list the Invalid enum. MSVC complains about no case labels.
-                case WGPUSType_Invalid:
                 default: {
                     // Invalid enum. Serialize just the transfer header with Invalid as the sType.
                     // TODO(crbug.com/dawn/369): Unknown sTypes are silently discarded.
-                    if (chainedStruct->sType != WGPUSType_Invalid) {
+                    if (chainedStruct->sType != WGPUSType(0)) {
                         dawn::WarningLog() << "Unknown sType " << chainedStruct->sType << " discarded.";
                     }
 
                     WGPUChainedStructTransfer* transfer;
                     WIRE_TRY(buffer->Next(&transfer));
-                    transfer->sType = WGPUSType_Invalid;
+                    transfer->sType = WGPUSType(0);
                     transfer->hasNext = chainedStruct->next != nullptr;
 
                     // Still move on in case there are valid structs after this.
@@ -648,12 +654,10 @@
                         hasNext = transfer->chain.hasNext;
                     } break;
                 {% endfor %}
-                // Explicitly list the Invalid enum. MSVC complains about no case labels.
-                case WGPUSType_Invalid:
                 default: {
                     // Invalid enum. Deserialize just the transfer header with Invalid as the sType.
                     // TODO(crbug.com/dawn/369): Unknown sTypes are silently discarded.
-                    if (sType != WGPUSType_Invalid) {
+                    if (sType != WGPUSType(0)) {
                         dawn::WarningLog() << "Unknown sType " << sType << " discarded.";
                     }
 
@@ -662,7 +666,7 @@
 
                     {{ChainedStruct}}* outStruct;
                     WIRE_TRY(GetSpace(allocator, 1u, &outStruct));
-                    outStruct->sType = WGPUSType_Invalid;
+                    outStruct->sType = WGPUSType(0);
                     outStruct->next = nullptr;
 
                     // Still move on in case there are valid structs after this.

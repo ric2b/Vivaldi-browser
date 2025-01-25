@@ -33,18 +33,42 @@
  * SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_path.h"
 
+#include <cmath>
+#include <ostream>  // IWYU pragma: keep (needed by String::Number(int), https://github.com/clangd/clangd/issues/2053)
+#include <utility>
+
+#include "base/check.h"
+#include "base/check_op.h"
+#include "base/compiler_specific.h"
 #include "base/numerics/safe_conversions.h"
-#include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_point_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_dompointinit_unrestricteddouble.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"  // IWYU pragma: keep (https://github.com/clangd/clangd/issues/2044)
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/identifiability_study_helper.h"
+#include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/geometry/float_rounded_rect.h"
+#include "third_party/blink/renderer/platform/graphics/path.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
+#include "third_party/blink/renderer/platform/heap/member.h"
+#include "third_party/blink/renderer/platform/heap/visitor.h"
+#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/transforms/affine_transform.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
+#include "third_party/blink/renderer/platform/wtf/text/string_operators.h"
+#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/geometry/size_f.h"
 
 namespace blink {
 
@@ -462,7 +486,10 @@ void CanvasPath::arc(double double_x,
   CanonicalizeAngle(&start_angle, &end_angle);
   end_angle = AdjustEndAngle(start_angle, end_angle, anticlockwise);
 
-  if (IsEmpty() && RuntimeEnabledFeatures::CanvasUsesArcPaintOpEnabled()) {
+  // TODO(348683485): small arcs don't render as well with ganesh. Use
+  // old code path in this case.
+  if (IsEmpty() && RuntimeEnabledFeatures::CanvasUsesArcPaintOpEnabled() &&
+      radius >= 1) {
     const float sweep_angle = end_angle - start_angle;
     arc_builder_.ArcTo(x, y, radius, start_angle, sweep_angle);
     DCHECK(IsArc());
@@ -572,8 +599,9 @@ void CanvasPath::roundRect(
     ExceptionState& exception_state) {
   UseCounter::Count(GetTopExecutionContext(),
                     WebFeature::kCanvasRenderingContext2DRoundRect);
+  constexpr int kMaxRadii = 4;
   const int num_radii = radii.size();
-  if (UNLIKELY(num_radii < 1 || num_radii > 4)) {
+  if (UNLIKELY(num_radii < 1 || num_radii > kMaxRadii)) {
     exception_state.ThrowRangeError(
         String::Number(num_radii) +
         " radii provided. Between one and four radii are necessary.");
@@ -594,7 +622,7 @@ void CanvasPath::roundRect(
   // TODO(crbug.com/1234113): Instrument new canvas APIs.
   identifiability_study_helper_.set_encountered_skipped_ops();
 
-  gfx::SizeF r[num_radii];
+  gfx::SizeF r[kMaxRadii];
   for (int i = 0; i < num_radii; ++i) {
     switch (radii[i]->GetContentType()) {
       case V8UnionDOMPointInitOrUnrestrictedDouble::ContentType::

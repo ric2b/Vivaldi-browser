@@ -62,10 +62,11 @@ ts_modules = [
   "dictation/parse/parse_strategy.ts",
   "dictation/parse/pumpkin/pumpkin_constants.ts",
   "dictation/parse/speech_parser.ts",
-  "facegaze/camera_stream.ts",
   "facegaze/facegaze.ts",
+  "facegaze/web_cam_face_landmarker.ts",
   "facegaze/gesture_detector.ts",
   "facegaze/gesture_handler.ts",
+  "facegaze/metrics_utils.ts",
   "facegaze/mouse_controller.ts",
   "facegaze/macros/reset_cursor_macro.ts",
   "magnifier/magnifier.ts",
@@ -224,6 +225,7 @@ js2gtest("accessibility_common_extjs_tests") {
     "facegaze/facegaze_mediapipe_test.js",
     "facegaze/facegaze_test.js",
     "facegaze/facegaze_test_base.js",
+    "facegaze/metrics_utils_test.js",
     "magnifier/magnifier_test.js",
   ]
 

@@ -1936,10 +1936,22 @@ if (!is_robolectric && enable_java_templates) {
             "_RESOURCES_VERSION_VARIABLE=${invoker.resources_version_variable}",
           ]
         }
+      } else if (is_cronet_build && !is_java_debug) {
+        # Cronet never uses use_final_fields=true, so make this a reasonable default.
+        defines += [ "_DISABLE_DEBUG_LOGS" ]
       }
 
-      if (defined(testonly) && testonly) {
+      _test_only = defined(testonly) && testonly
+      if (_test_only) {
         defines += [ "_IS_FOR_TEST" ]
+      }
+
+      if (!is_java_debug && !_test_only) {
+        defines += [ "_DISABLE_DEBUG_LOGS" ]
+      }
+
+      if (is_cronet_build) {
+        defines += [ "_IS_CRONET_BUILD" ]
       }
 
       if (defined(invoker.write_clang_profiling_data) &&
@@ -3262,7 +3274,6 @@ if (!is_robolectric && enable_java_templates) {
             "data_deps",
             "deps",
             "enable_lint",
-            "enable_jni_multiplexing",
             "enable_proguard_checks",
             "enforce_resource_overlays_in_tests",
             "expected_android_manifest",
@@ -3411,7 +3422,6 @@ if (!is_robolectric && enable_java_templates) {
             "data",
             "data_deps",
             "deps",
-            "enable_jni_multiplexing",
             "expected_android_manifest",
             "expected_android_manifest_base",
             "expected_android_manifest_library_version_offset",
@@ -3654,9 +3664,7 @@ if (!is_robolectric && enable_java_templates) {
         data += invoker.data
       }
 
-      deps = [
-        "//testing/android/instrumentation:instrumentation_test_runner_java",
-      ]
+      deps = [ "//testing/android/instrumentation:test_runner_java" ]
       if (defined(invoker.deps)) {
         deps += invoker.deps
       }
@@ -5089,6 +5097,9 @@ if (!is_robolectric && enable_java_templates) {
         # Required by logcat command.
         data_deps += [ "//build/android/stacktrace:java_deobfuscate" ]
         data += [ _proguard_mapping_path ]
+      }
+      if (is_official_build) {
+        args += [ "--is-official-build" ]
       }
     }
 

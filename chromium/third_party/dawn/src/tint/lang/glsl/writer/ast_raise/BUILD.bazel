@@ -76,7 +76,12 @@ cc_library(
     "//src/tint/utils/symbol",
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
-  ],
+  ] + select({
+    ":tint_build_glsl_writer": [
+      "//src/tint/lang/glsl/writer/common",
+    ],
+    "//conditions:default": [],
+  }),
   copts = COPTS,
   visibility = ["//visibility:public"],
 )
@@ -120,6 +125,7 @@ cc_library(
   ] + select({
     ":tint_build_glsl_writer": [
       "//src/tint/lang/glsl/writer/ast_raise",
+      "//src/tint/lang/glsl/writer/common",
     ],
     "//conditions:default": [],
   }) + select({

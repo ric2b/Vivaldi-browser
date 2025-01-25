@@ -1312,11 +1312,11 @@ base::CancelableTaskTracker::TaskId HistoryService::GetLastVisitToURL(
       std::move(callback));
 }
 
-base::CancelableTaskTracker::TaskId HistoryService::GetDailyVisitsToHost(
-    const GURL& host,
+base::CancelableTaskTracker::TaskId HistoryService::GetDailyVisitsToOrigin(
+    const url::Origin& origin,
     base::Time begin_time,
     base::Time end_time,
-    GetDailyVisitsToHostCallback callback,
+    GetDailyVisitsToOriginCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "History service being called after cleanup";
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1324,7 +1324,7 @@ base::CancelableTaskTracker::TaskId HistoryService::GetDailyVisitsToHost(
   return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&HistoryBackend::GetDailyVisitsToHost, history_backend_,
-                     host, begin_time, end_time),
+                     origin.GetURL(), begin_time, end_time),
       std::move(callback));
 }
 
@@ -1837,12 +1837,16 @@ void HistoryService::NotifyDeletions(const DeletionInfo& deletion_info) {
   if (visit_delegate_) {
     if (deletion_info.IsAllHistory()) {
       visit_delegate_->DeleteAllURLs();
+      visit_delegate_->DeleteAllVisitedLinks();
     } else {
       std::vector<GURL> urls;
       urls.reserve(deletion_info.deleted_rows().size());
       for (const auto& row : deletion_info.deleted_rows())
         urls.push_back(row.url());
       visit_delegate_->DeleteURLs(urls);
+      // The deletion of individual VisitedLinks is completed by the
+      // ExpireHistoryBackend class, so we don't need to duplicate that behavior
+      // here.
     }
   }
 

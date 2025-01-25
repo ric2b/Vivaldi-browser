@@ -87,8 +87,9 @@ class MenuRunnerTest : public ViewsTestBase {
 #endif
 
     menu_delegate_ = std::make_unique<TestMenuDelegate>();
-    Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-    params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+    Widget::InitParams params =
+        CreateParams(Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
+                     Widget::InitParams::TYPE_POPUP);
     owner_ = std::make_unique<Widget>();
     owner_->Init(std::move(params));
     owner_->Show();
@@ -362,7 +363,7 @@ class MenuLauncherEventHandler : public ui::EventHandler {
  private:
   // ui::EventHandler:
   void OnMouseEvent(ui::MouseEvent* event) override {
-    if (event->type() == ui::ET_MOUSE_PRESSED) {
+    if (event->type() == ui::EventType::kMousePressed) {
       runner_->RunMenuAt(owner_, nullptr, gfx::Rect(),
                          MenuAnchorPosition::kTopLeft, ui::MENU_SOURCE_NONE,
                          nullptr);
@@ -408,7 +409,9 @@ class MenuRunnerWidgetTest : public MenuRunnerTest {
   void SetUp() override {
     MenuRunnerTest::SetUp();
     widget_ = new Widget;
-    Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+    Widget::InitParams params =
+        CreateParams(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+                     Widget::InitParams::TYPE_WINDOW);
     widget_->Init(std::move(params));
     widget_->Show();
     widget_->SetSize(gfx::Size(300, 300));
@@ -443,7 +446,7 @@ TEST_F(MenuRunnerWidgetTest, WidgetDoesntTakeCapture) {
   generator->MoveMouseTo(widget()->GetClientAreaBoundsInScreen().CenterPoint());
   // Implicit capture should not be held by |widget|.
   generator->PressLeftButton();
-  EXPECT_EQ(1, event_count_view()->GetEventCount(ui::ET_MOUSE_PRESSED));
+  EXPECT_EQ(1, event_count_view()->GetEventCount(ui::EventType::kMousePressed));
   EXPECT_NE(widget()->GetNativeView(),
             internal::NativeWidgetPrivate::GetGlobalCapture(
                 widget()->GetNativeView()));
@@ -490,7 +493,8 @@ TEST_F(MenuRunnerWidgetTest, ClearsMouseHandlerOnRun) {
   generator->MoveMouseTo(
       second_event_count_view->GetBoundsInScreen().CenterPoint());
   generator->PressLeftButton();
-  EXPECT_EQ(1, second_event_count_view->GetEventCount(ui::ET_MOUSE_PRESSED));
+  EXPECT_EQ(
+      1, second_event_count_view->GetEventCount(ui::EventType::kMousePressed));
 }
 
 class MenuRunnerImplTest : public MenuRunnerTest {

@@ -20,21 +20,11 @@ import {
 } from './hooks.js';
 import {SOURCE_ROOT} from './paths.js';
 import {TestConfig} from './test_config.js';
-import {getTestRunnerConfigSetting} from './test_runner_config.js';
 import {startServer, stopServer} from './test_server.js';
 
 /* eslint-disable no-console */
 
 process.on('SIGINT', postFileTeardown);
-
-const TEST_SERVER_TYPE = getTestRunnerConfigSetting<string>('test-server-type', TestConfig.serverType);
-
-if (TEST_SERVER_TYPE !== 'hosted-mode' && TEST_SERVER_TYPE !== 'component-docs' && TEST_SERVER_TYPE !== 'none') {
-  throw new Error(`Invalid test server type: ${TEST_SERVER_TYPE}`);
-}
-
-// Required to reassign to allow for TypeScript to correctly deduce its type
-const DERIVED_SERVER_TYPE = TEST_SERVER_TYPE;
 
 // We can run Mocha in two modes: serial and parallel. In parallel mode, Mocha
 // starts multiple node processes which don't know about each other. It provides
@@ -50,14 +40,13 @@ const DERIVED_SERVER_TYPE = TEST_SERVER_TYPE;
 // https://mochajs.org/#global-setup-fixtures. These let us start one hosted
 // mode server and share it between all the parallel test runners.
 export async function mochaGlobalSetup(this: Mocha.Suite) {
-  // Start the test server in the 'main' process. In parallel mode, we
-  // share one server between all parallel runners. The parallel runners are all
-  // in different processes, so we pass the port number as an environment var.
-  if (DERIVED_SERVER_TYPE === 'none') {
-    return;
+  const commandLineArgs = [];
+  if (TestConfig.coverage) {
+    commandLineArgs.push('--coverage');
   }
-  process.env.testServerPort = String(await startServer(DERIVED_SERVER_TYPE));
-  console.log(`Started ${DERIVED_SERVER_TYPE} server on port ${process.env.testServerPort}`);
+  process.env.testServerPort = String(await startServer(TestConfig.serverType, commandLineArgs));
+
+  console.log(`Started ${TestConfig.serverType} server on port ${process.env.testServerPort}`);
 }
 
 export function mochaGlobalTeardown() {
@@ -67,9 +56,7 @@ export function mochaGlobalTeardown() {
 
 const testSuiteCoverageMap = createCoverageMap();
 
-const testsRunWithCoverageEnvSet = Boolean(process.env.COVERAGE || process.env.COVERAGE_FOLDERS || TestConfig.coverage);
-
-const SHOULD_GATHER_COVERAGE_INFORMATION = testsRunWithCoverageEnvSet && DERIVED_SERVER_TYPE === 'component-docs';
+const SHOULD_GATHER_COVERAGE_INFORMATION = TestConfig.coverage && TestConfig.serverType === 'component-docs';
 const INTERACTIONS_COVERAGE_LOCATION = path.join(TestConfig.artifactsDir, 'interactions-coverage/');
 
 let didPauseAtBeginning = false;
@@ -91,6 +78,7 @@ export const mochaHooks = {
   // In parallel mode, run after all tests end, for each file.
   afterAll: async function(this: Mocha.Suite) {
     await postFileTeardown();
+    copyGoldens();
 
     if (!SHOULD_GATHER_COVERAGE_INFORMATION) {
       return;
@@ -108,8 +96,6 @@ export const mochaHooks = {
     }
 
     await writeCoverageReports();
-    copyGoldens();
-
   },
   // In both modes, run before each test.
   beforeEach: async function(this: Mocha.Context) {
@@ -124,7 +110,7 @@ export const mochaHooks = {
     // We need to pause after `resetPagesBetweenTests`, otherwise the DevTools
     // and target tab are not available to us to set breakpoints in.
     // We still only want to pause once, so we remember that we did pause.
-    if ((process.env['DEBUG_TEST'] || TestConfig.debug) && !didPauseAtBeginning) {
+    if (TestConfig.debug && !didPauseAtBeginning) {
       this.timeout(0);
       didPauseAtBeginning = true;
 
@@ -178,7 +164,7 @@ function copyGoldens() {
     return;
   }
   fs.cpSync(
-      path.join('test', 'interactions', 'goldens'),
+      path.join(SOURCE_ROOT, 'test', 'interactions', 'goldens'),
       path.join(TestConfig.artifactsDir, 'goldens'),
       {recursive: true},
   );

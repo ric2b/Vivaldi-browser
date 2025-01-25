@@ -5,16 +5,15 @@
 
 #import <Foundation/Foundation.h>
 
+#import "components/bookmarks/browser/bookmark_model.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_consumer.h"
 
 @protocol VivaldiBookmarksEditorConsumer;
 class ChromeBrowserState;
 @protocol SnackbarCommands;
 
-class LegacyBookmarkModel;
-namespace bookmarks {
-class BookmarkNode;
-}  // namespace bookmarks
+using bookmarks::BookmarkModel;
+using bookmarks::BookmarkNode;
 
 // Mediator for the bookmark editor
 @interface VivaldiBookmarksEditorMediator :
@@ -29,7 +28,7 @@ class BookmarkNode;
 @property(nonatomic, assign) BOOL isEditing;
 
 - (instancetype)
-    initWithBookmarkModel:(LegacyBookmarkModel*)bookmarkModel
+    initWithBookmarkModel:(BookmarkModel*)bookmarkModel
              bookmarkNode:(const bookmarks::BookmarkNode*)bookmarkNode
              browserState:(ChromeBrowserState*)browserState
     NS_DESIGNATED_INITIALIZER;
@@ -53,6 +52,13 @@ class BookmarkNode;
 - (void)deleteBookmark;
 
 - (void)setPreferenceShowSpeedDials:(BOOL)showSpeedDials;
+
+// Changes `self.folder`, updates the UI accordingly.
+// The change is not committed until the user taps the Save button.
+// Save this folder as last used by user in preferences
+// kIosBookmarkLastUsedFolderReceivingBookmarks and
+// kIosBookmarkLastUsedStorageReceivingBookmarks on Save.
+- (void)manuallyChangeFolder:(const bookmarks::BookmarkNode*)folder;
 
 @end
 

@@ -67,7 +67,7 @@ class ExpectFloatWithTolerance : public detail::Expectation {
                 testing::AssertionResult result = testing::AssertionFailure()
                                                   << "Expected data[" << i << "] to be close to "
                                                   << expectedValue << ", actual " << actualValue
-                                                  << std::endl;
+                                                  << "\n";
                 return result;
             }
         }
@@ -114,7 +114,7 @@ class ExpectFloat16 : public detail::Expectation {
                 testing::AssertionResult result = testing::AssertionFailure()
                                                   << "Expected data[" << i << "] to be "
                                                   << expectedValue << ", actual " << actualValue
-                                                  << std::endl;
+                                                  << "\n";
                 return result;
             }
         }
@@ -151,7 +151,7 @@ class ExpectRG11B10Ufloat : public detail::Expectation {
                 testing::AssertionResult result = testing::AssertionFailure()
                                                   << "Expected data[" << i << "] to be "
                                                   << expectedValue << ", actual " << actualValue
-                                                  << std::endl;
+                                                  << "\n";
                 return result;
             }
         }
@@ -820,9 +820,8 @@ TEST_P(TextureFormatTest, RGBA8UnormSrgb) {
 
 // Test the BGRA8UnormSrgb format
 TEST_P(TextureFormatTest, BGRA8UnormSrgb) {
-    // TODO(cwallez@chromium.org): This format doesn't exist in OpenGL, emulate it using
-    // RGBA8UnormSrgb and swizzling / shader twiddling
-    DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
+    // BGRA8UnormSrgb is unsupported in Compatibility mode
+    DAWN_SUPPRESS_TEST_IF(IsCompatibilityMode());
 
     uint8_t maxValue = std::numeric_limits<uint8_t>::max();
     std::vector<uint8_t> textureData = {0, 1, maxValue, 64, 35, 68, 152, 168};

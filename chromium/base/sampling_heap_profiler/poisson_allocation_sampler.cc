@@ -13,7 +13,6 @@
 #include "base/allocator/dispatcher/tls.h"
 #include "base/check.h"
 #include "base/compiler_specific.h"
-#include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
 #include "base/rand_util.h"
 #include "base/ranges/algorithm.h"
@@ -172,6 +171,14 @@ PoissonAllocationSampler::ScopedMuteHookedSamplesForTesting::
   ResetProfilingStateFlag(ProfilingStateFlag::kHookedSamplesMutedForTesting);
 }
 
+PoissonAllocationSampler::ScopedMuteHookedSamplesForTesting::
+    ScopedMuteHookedSamplesForTesting(ScopedMuteHookedSamplesForTesting&&) =
+        default;
+
+PoissonAllocationSampler::ScopedMuteHookedSamplesForTesting&
+PoissonAllocationSampler::ScopedMuteHookedSamplesForTesting::operator=(
+    ScopedMuteHookedSamplesForTesting&&) = default;
+
 // static
 ABSL_CONST_INIT std::atomic<PoissonAllocationSampler::ProfilingStateFlagMask>
     PoissonAllocationSampler::profiling_state_{0};
@@ -297,7 +304,7 @@ void PoissonAllocationSampler::DoRecordAllocation(
   }
 
   ScopedMuteThreadSamples no_reentrancy_scope;
-  std::vector<raw_ptr<SamplesObserver, VectorExperimental>> observers_copy;
+  std::vector<SamplesObserver*> observers_copy;
   {
     AutoLock lock(mutex_);
 
@@ -324,7 +331,7 @@ void PoissonAllocationSampler::DoRecordFree(void* address) {
   // thus reenter DoRecordAlloc. However the call chain won't build up further
   // as RecordAlloc accesses are guarded with pthread TLS-based ReentryGuard.
   ScopedMuteThreadSamples no_reentrancy_scope;
-  std::vector<raw_ptr<SamplesObserver, VectorExperimental>> observers_copy;
+  std::vector<SamplesObserver*> observers_copy;
   {
     AutoLock lock(mutex_);
     observers_copy = observers_;

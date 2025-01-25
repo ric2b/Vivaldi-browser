@@ -5,7 +5,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/bookmarks/browser/bookmark_node.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
-#import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
+#import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_utils_ios.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 
 using vivaldi_bookmark_kit::GetNickname;

@@ -5,6 +5,7 @@
 import {assert} from 'chai';
 import type * as puppeteer from 'puppeteer-core';
 
+import type * as Root from '../../../front_end/core/root/root.js';
 import type * as Console from '../../../front_end/panels/console/console.js';
 import {click, getBrowserAndPages, hover, setDevToolsSettings, waitFor, waitForNone} from '../../shared/helper.js';
 import {describe, it} from '../../shared/mocha-extensions.js';
@@ -13,45 +14,39 @@ import {clickOnContextMenu, CONSOLE_TAB_SELECTOR} from '../helpers/console-helpe
 describe('ConsoleInsight', function() {
   const CLICK_TARGET_SELECTOR = '.console-message-text';
   const EXPLAIN_LABEL = 'Understand this error';
+  const EXPLAIN_ACTION_ID = 'explain.console-message.context.error';
 
-  async function setupMocks(aidaResponse: unknown, queryParams = '') {
+  async function setupMocks(devToolsConsoleInsights: Partial<Root.Runtime.HostConfigConsoleInsights>) {
     const {frontend} = getBrowserAndPages();
     await frontend.bringToFront();
-    await frontend.evaluateOnNewDocument(`
-      globalThis.doAidaConversationForTesting = (data, cb) => {
-        cb({"response": JSON.stringify(${JSON.stringify(aidaResponse)})});
-      }
-      globalThis.getSyncInformation = (cb) => {
-        cb({"isSyncActive": true, "accountEmail": "some-email"});
-      }
-    `);
-    await frontend.goto(frontend.url() + '&enableAida=true' + queryParams, {
+    await frontend.evaluateOnNewDocument(
+        `globalThis.hostConfigForTesting = {...globalThis.hostConfigForTesting, devToolsConsoleInsights: ${
+            JSON.stringify(devToolsConsoleInsights)}
+    };`);
+    await frontend.reload({
       waitUntil: 'networkidle0',
     });
   }
 
   it('shows an insight for a console message via the context menu', async () => {
     const {target} = getBrowserAndPages();
-    await setupMocks([
-      {'textChunk': {'text': 'test'}},
-    ]);
+    await setupMocks({blocked: false, blockedByFeatureFlag: false, enabled: true});
     await click(CONSOLE_TAB_SELECTOR);
     await target.evaluate(() => {
       console.error(new Error('Unexpected error'));
     });
-    await clickOnContextMenu(CLICK_TARGET_SELECTOR, EXPLAIN_LABEL);
+    await clickOnContextMenu(CLICK_TARGET_SELECTOR, EXPLAIN_ACTION_ID);
     await waitFor('devtools-console-insight', undefined, undefined, 'pierce');
   });
 
   it('shows an insight for a console message via the hover button', async () => {
     const {target} = getBrowserAndPages();
-    await setupMocks([
-      {'textChunk': {'text': 'test'}},
-    ]);
+    await setupMocks({blocked: false, blockedByFeatureFlag: false, enabled: true});
     await click(CONSOLE_TAB_SELECTOR);
     await target.evaluate(() => {
       console.error(new Error('Unexpected error'));
     });
+    await waitFor('.console-message', undefined, undefined, 'pierce');
     await waitFor('.hover-button', undefined, undefined, 'pierce');
     await hover('.console-message');
     await click('.hover-button');
@@ -60,6 +55,7 @@ describe('ConsoleInsight', function() {
 
   it('does not show context menu if AIDA is not available', async () => {
     const {target} = getBrowserAndPages();
+    await setupMocks({blocked: false, blockedByFeatureFlag: true, enabled: false});
     await click(CONSOLE_TAB_SELECTOR);
     await target.evaluate(() => {
       console.error(new Error('Unexpected error'));
@@ -71,89 +67,74 @@ describe('ConsoleInsight', function() {
     assert(
         !texts.some(item => item.toLowerCase().startsWith(EXPLAIN_LABEL.toLowerCase())),
         'Context menu shows the explain option');
+    await waitFor('.console-message', undefined, undefined, 'pierce');
     await waitForNone('.hover-button');
   });
 
   it('does not show the hover button if locale is not supported', async () => {
     const {target} = getBrowserAndPages();
     await setDevToolsSettings({language: 'zh'});
-    await setupMocks([
-      {'textChunk': {'text': 'test'}},
-    ]);
+    await setupMocks({blocked: false, blockedByFeatureFlag: false, enabled: true});
     await click(CONSOLE_TAB_SELECTOR);
     await target.evaluate(() => {
       console.error(new Error('Unexpected error'));
     });
+    await waitFor('.console-message', undefined, undefined, 'pierce');
     await waitForNone('.hover-button', undefined, undefined, 'pierce');
   });
 
   it('does not show the hover button if age check is not passing', async () => {
     const {target} = getBrowserAndPages();
-    await setupMocks(
-        [
-          {'textChunk': {'text': 'test'}},
-        ],
-        '?ci_blockedByAge=true');
+    await setupMocks({blocked: false, blockedByFeatureFlag: false, enabled: true, blockedByAge: true});
     await click(CONSOLE_TAB_SELECTOR);
     await target.evaluate(() => {
       console.error(new Error('Unexpected error'));
     });
+    await waitFor('.console-message', undefined, undefined, 'pierce');
     await waitForNone('.hover-button', undefined, undefined, 'pierce');
   });
 
   it('does not show the hover button if policy does not allow it', async () => {
     const {target} = getBrowserAndPages();
-    await setupMocks(
-        [
-          {'textChunk': {'text': 'test'}},
-        ],
-        '?ci_blockedByEnterprisePolicy=true');
+    await setupMocks({blocked: false, blockedByFeatureFlag: false, enabled: true, blockedByEnterprisePolicy: true});
     await click(CONSOLE_TAB_SELECTOR);
     await target.evaluate(() => {
       console.error(new Error('Unexpected error'));
     });
+    await waitFor('.console-message', undefined, undefined, 'pierce');
     await waitForNone('.hover-button', undefined, undefined, 'pierce');
   });
 
   it('does not show the hover button if the feature is not rolled out', async () => {
     const {target} = getBrowserAndPages();
-    await setupMocks(
-        [
-          {'textChunk': {'text': 'test'}},
-        ],
-        '?ci_blockedByRollout=true');
+    await setupMocks({blocked: false, blockedByFeatureFlag: false, enabled: true, blockedByRollout: true});
     await click(CONSOLE_TAB_SELECTOR);
     await target.evaluate(() => {
       console.error(new Error('Unexpected error'));
     });
+    await waitFor('.console-message', undefined, undefined, 'pierce');
     await waitForNone('.hover-button', undefined, undefined, 'pierce');
   });
 
   it('does not show the hover button if it is restriced by geography', async () => {
     const {target} = getBrowserAndPages();
-    await setupMocks(
-        [
-          {'textChunk': {'text': 'test'}},
-        ],
-        '?ci_blockedByGeo=true');
+    await setupMocks({blocked: false, blockedByFeatureFlag: false, enabled: true, blockedByGeo: true});
     await click(CONSOLE_TAB_SELECTOR);
     await target.evaluate(() => {
       console.error(new Error('Unexpected error'));
     });
+    await waitFor('.console-message', undefined, undefined, 'pierce');
     await waitForNone('.hover-button', undefined, undefined, 'pierce');
   });
 
   it('does not show the hover button if disabled by default', async () => {
     const {target} = getBrowserAndPages();
-    await setupMocks(
-        [
-          {'textChunk': {'text': 'test'}},
-        ],
-        '?ci_disabledByDefault=true');
+    await setupMocks({blocked: false, blockedByFeatureFlag: false, enabled: true, optIn: true});
     await click(CONSOLE_TAB_SELECTOR);
     await target.evaluate(() => {
       console.error(new Error('Unexpected error'));
     });
+    await waitFor('.console-message', undefined, undefined, 'pierce');
     await waitForNone('.hover-button', undefined, undefined, 'pierce');
   });
 

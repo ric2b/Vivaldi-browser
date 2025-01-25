@@ -42,13 +42,13 @@ class WatermarkBrowserTestBase : public UiBrowserTest {
   }
 
   void ShowUi(const std::string& name) override {
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(
+        browser(), embedded_test_server()->GetURL(
+                       "/enterprise/watermark/watermark_test_page.html")));
     if (auto* watermark_view = BrowserView::GetBrowserViewForBrowser(browser())
                                    ->get_watermark_view_for_testing()) {
       watermark_view->SetString(watermark_message_);
     }
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), embedded_test_server()->GetURL(
-                       "/enterprise/watermark/watermark_test_page.html")));
     base::RunLoop().RunUntilIdle();
   }
 

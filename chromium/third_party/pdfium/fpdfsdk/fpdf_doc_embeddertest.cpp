@@ -2,11 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
+#include <array>
 #include <set>
 #include <string>
 #include <vector>
@@ -213,7 +209,7 @@ TEST_F(FPDFDocEmbedderTest, DestGetLocationInPage) {
   EXPECT_EQ(1, zoom);
 }
 
-TEST_F(FPDFDocEmbedderTest, BUG_1506_1) {
+TEST_F(FPDFDocEmbedderTest, Bug1506First) {
   ASSERT_TRUE(OpenDocument("bug_1506.pdf"));
 
   FPDF_DEST dest = FPDF_GetNamedDestByName(document(), "First");
@@ -221,7 +217,7 @@ TEST_F(FPDFDocEmbedderTest, BUG_1506_1) {
   EXPECT_EQ(3, FPDFDest_GetDestPageIndex(document(), dest));
 }
 
-TEST_F(FPDFDocEmbedderTest, BUG_1506_2) {
+TEST_F(FPDFDocEmbedderTest, Bug1506Second) {
   ASSERT_TRUE(OpenDocument("bug_1506.pdf"));
 
   std::vector<FPDF_PAGE> pages;
@@ -236,7 +232,7 @@ TEST_F(FPDFDocEmbedderTest, BUG_1506_2) {
     UnloadPage(page);
 }
 
-TEST_F(FPDFDocEmbedderTest, BUG_1506_3) {
+TEST_F(FPDFDocEmbedderTest, Bug1506Third) {
   ASSERT_TRUE(OpenDocument("bug_1506.pdf"));
 
   std::vector<FPDF_PAGE> pages;
@@ -251,7 +247,7 @@ TEST_F(FPDFDocEmbedderTest, BUG_1506_3) {
     UnloadPage(page);
 }
 
-TEST_F(FPDFDocEmbedderTest, BUG_680376) {
+TEST_F(FPDFDocEmbedderTest, Bug680376) {
   ASSERT_TRUE(OpenDocument("bug_680376.pdf"));
 
   // Page number directly in item from Dests NameTree.
@@ -260,7 +256,7 @@ TEST_F(FPDFDocEmbedderTest, BUG_680376) {
   EXPECT_EQ(-1, FPDFDest_GetDestPageIndex(document(), dest));
 }
 
-TEST_F(FPDFDocEmbedderTest, BUG_821454) {
+TEST_F(FPDFDocEmbedderTest, Bug821454) {
   ASSERT_TRUE(OpenDocument("bug_821454.pdf"));
 
   FPDF_PAGE page = LoadPage(0);
@@ -658,7 +654,7 @@ TEST_F(FPDFDocEmbedderTest, DeletePageAndRender) {
     int height;
     const char* checksum;
   };
-  const PageData expected_page_data[5] = {
+  const std::array<const PageData, 5> expected_page_data = {{
       {200, 250,
        []() {
          return CFX_DefaultRenderDevice::UseSkiaRenderer()
@@ -683,11 +679,13 @@ TEST_F(FPDFDocEmbedderTest, DeletePageAndRender) {
                     ? "a8c5b3e626f665eddf593c6d4c32ae9e"
                     : "dcd768be15efb9c6e5093cf74508752c";
        }()},
-      {200, 250, []() {
+      {200, 250,
+       []() {
          return CFX_DefaultRenderDevice::UseSkiaRenderer()
                     ? "72eb157853ae2d19b70ea62e3f5ac202"
                     : "7a3f8f79ebcb350854c0d69607729ec5";
-       }()}};
+       }()},
+  }};
 
   // Render the original document. (page indices 0-4)
   ASSERT_TRUE(OpenDocument("rectangles_multi_pages.pdf"));
@@ -914,7 +912,7 @@ TEST_F(FPDFDocEmbedderTest, Utf8Metadata) {
   EXPECT_EQ(L"Titlè 1", GetPlatformWString(buf));
 }
 
-TEST_F(FPDFDocEmbedderTest, Bug_182) {
+TEST_F(FPDFDocEmbedderTest, Bug182) {
   ASSERT_TRUE(OpenDocument("bug_182.pdf"));
 
   unsigned short buf[128];

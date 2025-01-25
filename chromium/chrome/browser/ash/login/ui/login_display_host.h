@@ -173,7 +173,6 @@ class LoginDisplayHost {
   virtual void UpdateOobeDialogState(OobeDialogState state) = 0;
 
   // Confirms sign in by provided credentials in `user_context`.
-  // Used for new user login via GAIA extension.
   virtual void CompleteLogin(const UserContext& user_context) = 0;
 
   // Notify the backend controller when the GAIA UI is finished loading.
@@ -195,14 +194,6 @@ class LoginDisplayHost {
   // ----- Password change flow methods -----
   // Cancels current password changed flow.
   virtual void CancelPasswordChangedFlow() = 0;
-
-  // Decrypt cryptohome using user provided `old_password` and migrate to new
-  // password.
-  virtual void MigrateUserData(const std::string& old_password) = 0;
-
-  // Ignore password change, remove existing cryptohome and force full sync of
-  // user data.
-  virtual void ResyncUserData() = 0;
 
   // Handles an accelerator action.
   // Returns `true` if the accelerator was handled.

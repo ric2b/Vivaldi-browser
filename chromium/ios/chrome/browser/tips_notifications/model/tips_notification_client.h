@@ -12,8 +12,9 @@
 #import "components/prefs/pref_change_registrar.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_client.h"
 
-enum class TipsNotificationType;
+@class CommandDispatcher;
 class PrefRegistrySimple;
+enum class TipsNotificationType;
 
 // A notification client responsible for registering notification requests and
 // handling the receiving of user notifications that are user-ed "Tips".
@@ -78,13 +79,19 @@ class TipsNotificationClient : public PushNotificationClient {
   // Returns true if a WhatsNew notification should be sent.
   bool ShouldSendWhatsNew();
 
+  // returns true if a SetUpList continuation notification should be sent.
+  bool ShouldSendSetUpListContinuation();
+
   // Returns `true` if there is foreground active browser.
   bool IsSceneLevelForegroundActive();
 
   // Helpers to handle notification interactions.
+  CommandDispatcher* Dispatcher();
+  void ShowUIForNotificationType(TipsNotificationType type);
   void ShowDefaultBrowserPromo();
   void ShowWhatsNew();
   void ShowSignin();
+  void ShowSetUpListContinuation();
 
   // Helpers to store state in local state prefs.
   void MarkNotificationTypeSent(TipsNotificationType type);

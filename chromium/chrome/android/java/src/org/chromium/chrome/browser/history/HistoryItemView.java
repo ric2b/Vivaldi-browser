@@ -101,6 +101,8 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
 
         mTitleView.setText(item.getTitle());
         mDescriptionView.setText(item.getDomain());
+        // Try to make the TLD part of the URL string visible.
+        mDescriptionView.setEllipsize(TextUtils.TruncateAt.START);
         updateChipView(item);
         SelectableListUtils.setContentDescriptionContext(
                 getContext(),
@@ -184,8 +186,7 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
     public void setRemoveButtonVisiblity(int visibility) {
         mRemoveButton.setVisibility(visibility);
         int endPadding = visibility == View.GONE ? mEndPadding : 0;
-        ViewCompat.setPaddingRelative(
-                mContentView,
+        mContentView.setPaddingRelative(
                 ViewCompat.getPaddingStart(mContentView),
                 mContentView.getPaddingTop(),
                 endPadding,

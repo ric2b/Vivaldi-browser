@@ -41,7 +41,7 @@ struct PartnerDetails {
   bool speeddial = false;
 };
 
-const PartnerDetails* FindDetailsByName(base::StringPiece name);
+const PartnerDetails* FindDetailsByName(std::string_view name);
 
 // If id is an old locale-based partner id, change it to the coresponding
 // locale-independent UUID and return true. Otherwise return false and leave

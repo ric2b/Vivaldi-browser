@@ -678,8 +678,11 @@ class ContactInfoSyncUtilTest
         {features::kAutofillUseI18nAddressModel,
          features::kAutofillUseAUAddressModel,
          features::kAutofillUseBRAddressModel,
+         features::kAutofillUseCAAddressModel,
          features::kAutofillUseDEAddressModel,
+         features::kAutofillUseFRAddressModel,
          features::kAutofillUseINAddressModel,
+         features::kAutofillUseITAddressModel,
          features::kAutofillUseMXAddressModel,
          features::kAutofillEnableSupportForLandmark,
          features::kAutofillEnableSupportForBetweenStreets,
@@ -688,8 +691,7 @@ class ContactInfoSyncUtilTest
          features::kAutofillEnableSupportForAddressOverflowAndLandmark,
          features::kAutofillEnableSupportForAdminLevel2,
          features::kAutofillEnableSupportForApartmentNumbers,
-         features::kAutofillEnableDependentLocalityParsing,
-         features::kAutofillTrackProfileTokenQuality},
+         features::kAutofillEnableDependentLocalityParsing},
         {});
   }
 

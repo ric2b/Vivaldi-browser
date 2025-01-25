@@ -3,13 +3,17 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
+import * as i18n from '../../core/i18n/i18n.js';
+import * as Root from '../../core/root/root.js';
 import * as TraceEngine from '../../models/trace/trace.js';
-import * as AnnotationsManager from '../../services/annotations_manager/annotations_manager.js';
 import * as TraceBounds from '../../services/trace_bounds/trace_bounds.js';
+import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import * as TimelineComponents from './components/components.js';
+import {ModificationsManager} from './ModificationsManager.js';
 import {
   type TimelineEventOverview,
   TimelineEventOverviewCPUActivity,
@@ -30,6 +34,15 @@ export interface OverviewData {
   };
 }
 
+const UIStrings = {
+  /**
+   * @description label used to tell screenreaders about the floating button they can click to open the sidebar
+   */
+  openSidebarButton: 'Open the sidebar',
+};
+
+const str_ = i18n.i18n.registerUIStrings('panels/timeline/TimelineMiniMap.ts', UIStrings);
+const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 /**
  * This component wraps the generic PerfUI Overview component and configures it
  * specifically for the Performance Panel, including injecting the CSS we use
@@ -50,10 +63,27 @@ export class TimelineMiniMap extends
 
   #onTraceBoundsChangeBound = this.#onTraceBoundsChange.bind(this);
 
+  #sidebarFloatingIcon = document.createElement('button');
+
   constructor() {
     super();
     this.element.classList.add('timeline-minimap');
     this.#breadcrumbsUI = new TimelineComponents.BreadcrumbsUI.BreadcrumbsUI();
+
+    const icon = new IconButton.Icon.Icon();
+    icon.setAttribute('name', 'left-panel-open');
+    icon.setAttribute('jslog', `${VisualLogging.action('timeline.sidebar-open').track({click: true})}`);
+    icon.addEventListener('click', () => {
+      this.dispatchEventToListeners(PerfUI.TimelineOverviewPane.Events.OpenSidebarButtonClicked, {});
+    });
+    this.#sidebarFloatingIcon.setAttribute('aria-label', i18nString(UIStrings.openSidebarButton));
+    this.#sidebarFloatingIcon.appendChild(icon);
+    this.#sidebarFloatingIcon.classList.add('timeline-sidebar-floating-icon');
+    if (!Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_SIDEBAR)) {
+      this.hideSidebarFloatingIcon();
+    }
+
+    this.element.appendChild(this.#sidebarFloatingIcon);
 
     this.#overviewComponent.show(this.element);
 
@@ -63,6 +93,14 @@ export class TimelineMiniMap extends
     this.#activateBreadcrumbs();
 
     TraceBounds.TraceBounds.onChange(this.#onTraceBoundsChangeBound);
+  }
+
+  showSidebarFloatingIcon(): void {
+    this.#sidebarFloatingIcon.removeAttribute('hidden');
+  }
+
+  hideSidebarFloatingIcon(): void {
+    this.#sidebarFloatingIcon.setAttribute('hidden', 'hidden');
   }
 
   #onOverviewPanelWindowChanged(
@@ -136,14 +174,13 @@ export class TimelineMiniMap extends
         TraceEngine.Helpers.Timing.traceWindowFromMilliSeconds(breadcrumbTimes.startTime, breadcrumbTimes.endTime);
 
     if (this.breadcrumbs === null) {
-      this.breadcrumbs =
-          AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance()?.getTimelineBreadcrumbs() ?? null;
+      this.breadcrumbs = ModificationsManager.activeManager()?.getTimelineBreadcrumbs() ?? null;
     } else {
       this.breadcrumbs.add(newVisibleTraceWindow);
     }
 
     if (!this.breadcrumbs) {
-      console.warn('AnnotationsManager has not been created, therefore Breadcrumbs can not be added');
+      console.warn('ModificationsManager has not been created, therefore Breadcrumbs can not be added');
       return;
     }
 
@@ -185,13 +222,13 @@ export class TimelineMiniMap extends
     const minTimeInMilliseconds = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(Meta.traceBounds.min);
 
     for (const event of navStartEvents) {
-      const {startTime} = TraceEngine.Legacy.timesForEventInMilliseconds(event);
+      const {startTime} = TraceEngine.Helpers.Timing.eventTimingsMilliSeconds(event);
       markers.set(startTime, TimelineUIUtils.createEventDivider(event, minTimeInMilliseconds));
     }
 
     // Now add markers for the page load events
     for (const event of PageLoadMetrics.allMarkerEvents) {
-      const {startTime} = TraceEngine.Legacy.timesForEventInMilliseconds(event);
+      const {startTime} = TraceEngine.Helpers.Timing.eventTimingsMilliSeconds(event);
       markers.set(startTime, TimelineUIUtils.createEventDivider(event, minTimeInMilliseconds));
     }
 

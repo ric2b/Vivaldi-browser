@@ -149,8 +149,9 @@ page](https://github.com/google/googletest)
 
 ## Quick start to submit a patch
 
-See [contributing code](/developers/contributing-code) for a more in-depth
-guide.
+See
+[contributing code](https://chromium.googlesource.com/chromium/src/+/main/docs/contributing.md)
+for a more in-depth guide.
 
 <pre><code>git checkout -b my_patch
 <i>...write, compile, test...</i>

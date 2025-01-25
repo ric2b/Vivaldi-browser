@@ -132,11 +132,11 @@ int ContactDatabase::GetCurrentVersion() {
 }
 
 void ContactDatabase::BeginTransaction() {
-  db_.BeginTransaction();
+  db_.BeginTransactionDeprecated();
 }
 
 void ContactDatabase::CommitTransaction() {
-  db_.CommitTransaction();
+  db_.CommitTransactionDeprecated();
 }
 
 // Migration -------------------------------------------------------------------
@@ -203,7 +203,7 @@ void ContactDatabase::RollbackTransaction() {
   // transaction. This will crash on a DCHECK. So transaction_nesting() is
   // checked first.
   if (db_.transaction_nesting())
-    db_.RollbackTransaction();
+    db_.RollbackTransactionDeprecated();
 }
 
 void ContactDatabase::Vacuum() {

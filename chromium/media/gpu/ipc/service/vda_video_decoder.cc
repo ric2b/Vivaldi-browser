@@ -61,24 +61,11 @@ scoped_refptr<CommandBufferHelper> CreateCommandBufferHelper(
 std::unique_ptr<VideoDecodeAccelerator> CreateAndInitializeVda(
     const gpu::GpuPreferences& gpu_preferences,
     const gpu::GpuDriverBugWorkarounds& gpu_workarounds,
-    scoped_refptr<CommandBufferHelper> command_buffer_helper,
     VideoDecodeAccelerator::Client* client,
     MediaLog* media_log,
     const VideoDecodeAccelerator::Config& config) {
-  GpuVideoDecodeGLClient gl_client;
-  // |command_buffer_helper| is nullptr in IMPORT mode in which case, we
-  // shouldn't need to do any GL calls.
-  if (command_buffer_helper) {
-    gl_client.get_context = base::BindRepeating(
-        &CommandBufferHelper::GetGLContext, command_buffer_helper);
-    gl_client.make_context_current = base::BindRepeating(
-        &CommandBufferHelper::MakeContextCurrent, command_buffer_helper);
-    gl_client.supports_arb_texture_rectangle =
-        command_buffer_helper->SupportsTextureRectangle();
-  }
-
   std::unique_ptr<GpuVideoDecodeAcceleratorFactory> factory =
-      GpuVideoDecodeAcceleratorFactory::Create(gl_client);
+      GpuVideoDecodeAcceleratorFactory::Create();
   // Note: GpuVideoDecodeAcceleratorFactory may create and initialize more than
   // one VDA. It is therefore important that VDAs do not call client methods
   // from Initialize().
@@ -160,11 +147,7 @@ VdaVideoDecoder::VdaVideoDecoder(
   DCHECK_EQ(vda_capabilities_.flags, 0U);
   DCHECK(media_log_);
 
-#if BUILDFLAG(IS_CHROMEOS)
-  if (output_mode != VideoDecodeAccelerator::Config::OutputMode::kImport) {
-    CHECK_IS_TEST();
-  }
-#endif
+  CHECK_EQ(output_mode, VideoDecodeAccelerator::Config::OutputMode::kImport);
 
   gpu_weak_this_ = gpu_weak_this_factory_.GetWeakPtr();
   parent_weak_this_ = parent_weak_this_factory_.GetWeakPtr();
@@ -350,20 +333,8 @@ void VdaVideoDecoder::InitializeOnGpuThread() {
 
   // Set up |command_buffer_helper_|.
   if (!reinitializing_) {
-    if (output_mode_ == VideoDecodeAccelerator::Config::OutputMode::kAllocate) {
-      command_buffer_helper_ =
-          std::move(create_command_buffer_helper_cb_).Run();
-      if (!command_buffer_helper_) {
-        parent_task_runner_->PostTask(
-            FROM_HERE,
-            base::BindOnce(&VdaVideoDecoder::InitializeDone, parent_weak_this_,
-                           DecoderStatus::Codes::kFailed));
-        return;
-      }
-    }
-
-    picture_buffer_manager_->Initialize(gpu_task_runner_,
-                                        command_buffer_helper_);
+    CHECK_EQ(output_mode_, VideoDecodeAccelerator::Config::OutputMode::kImport);
+    picture_buffer_manager_->Initialize(gpu_task_runner_, nullptr);
   }
 
   // Convert the configuration.
@@ -383,8 +354,8 @@ void VdaVideoDecoder::InitializeOnGpuThread() {
   // vda_config.supported_output_formats = [Only used by PPAPI]
 
   // Create and initialize the VDA.
-  vda_ = create_and_initialize_vda_cb_.Run(command_buffer_helper_, this,
-                                           media_log_.get(), vda_config);
+  vda_ = create_and_initialize_vda_cb_.Run(this, media_log_.get(), vda_config);
+
   if (!vda_) {
     parent_task_runner_->PostTask(
         FROM_HERE,
@@ -806,16 +777,6 @@ void VdaVideoDecoder::NotifyError(VideoDecodeAccelerator::Error error) {
   parent_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&VdaVideoDecoder::NotifyErrorOnParentThread,
                                 parent_weak_this_, error));
-}
-
-gpu::SharedImageStub* VdaVideoDecoder::GetSharedImageStub() const {
-  DCHECK_EQ(output_mode_, VideoDecodeAccelerator::Config::OutputMode::kAllocate);
-  return command_buffer_helper_->GetSharedImageStub();
-}
-
-CommandBufferHelper* VdaVideoDecoder::GetCommandBufferHelper() const {
-  DCHECK_EQ(output_mode_, VideoDecodeAccelerator::Config::OutputMode::kAllocate);
-  return command_buffer_helper_.get();
 }
 
 void VdaVideoDecoder::NotifyErrorOnParentThread(

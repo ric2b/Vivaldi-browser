@@ -1,11 +1,13 @@
-SKIP: FAILED
-
 #include <metal_stdlib>
 using namespace metal;
 
-fragment void tint_symbol(float none) {
-}
-program_source:4:27: error: invalid type 'float' for input declaration in a fragment function
-fragment void tint_symbol(float none) {
-                          ^~~~~~~~~~
+struct tint_symbol_inputs {
+  float none [[user(locn2)]];
+};
 
+void tint_symbol_inner(float none) {
+}
+
+fragment void tint_symbol(tint_symbol_inputs inputs [[stage_in]]) {
+  tint_symbol_inner(inputs.none);
+}

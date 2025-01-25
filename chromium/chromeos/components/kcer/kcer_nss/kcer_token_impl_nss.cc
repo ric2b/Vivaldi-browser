@@ -81,9 +81,13 @@ void CleanUpAndDestroyKeys(crypto::ScopedSECKEYPublicKey public_key,
   // Clean up generated keys. PK11_DeleteTokenPrivateKey and
   // PK11_DeleteTokenPublicKey are documented to also destroy the passed
   // SECKEYPublicKey/SECKEYPrivateKey structures.
-  PK11_DeleteTokenPrivateKey(/*privKey=*/private_key.release(),
-                             /*force=*/false);
-  PK11_DeleteTokenPublicKey(/*pubKey=*/public_key.release());
+  if (private_key) {
+    PK11_DeleteTokenPrivateKey(/*privKey=*/private_key.release(),
+                               /*force=*/false);
+  }
+  if (public_key) {
+    PK11_DeleteTokenPublicKey(/*pubKey=*/public_key.release());
+  }
 }
 
 base::expected<crypto::ScopedSECKEYPrivateKey, Error>
@@ -368,6 +372,9 @@ void ListCertsOnWorkerThread(
   if (cert_list) {
     for (CERTCertListNode* node = CERT_LIST_HEAD(cert_list);
          !CERT_LIST_END(node, cert_list); node = CERT_LIST_NEXT(node)) {
+      if (!CERT_IsUserCert(node->cert)) {
+        continue;
+      }
       result.push_back(net::x509_util::DupCERTCertificate(node->cert));
     }
   }
@@ -927,8 +934,13 @@ scoped_refptr<const Cert> BuildKcerCert(
   Pkcs11Id id_bytes(SECItemToBytes(crypto::MakeNssIdFromSpki(base::make_span(
       nss_cert->derPublicKey.data, nss_cert->derPublicKey.len))));
 
+  std::string nickname;
+  if (nss_cert->nickname) {
+    nickname = nss_cert->nickname;
+  }
+
   return base::MakeRefCounted<Cert>(
-      token, std::move(id_bytes), nss_cert->nickname,
+      token, std::move(id_bytes), std::move(nickname),
       net::x509_util::CreateX509CertificateFromCERTCertificate(nss_cert.get()));
 }
 
@@ -1134,6 +1146,10 @@ void KcerTokenImplNss::ImportPkcs12Cert(Pkcs12Blob pkcs12_blob,
   std::vector<CertData> certs_data;
   Pkcs12ReaderStatusCode prepare_certs_status = ValidateAndPrepareCertData(
       cert_cache_, pkcs12_reader, std::move(certs), key_data, certs_data);
+  if (prepare_certs_status == Pkcs12ReaderStatusCode::kAlreadyExists) {
+    return std::move(wrapped_callback)
+        .Run(/*did_modify=*/false, base::unexpected(Error::kAlreadyExists));
+  }
   if ((prepare_certs_status != Pkcs12ReaderStatusCode::kSuccess) ||
       certs_data.empty()) {
     return std::move(wrapped_callback)

@@ -77,14 +77,24 @@ BASE_DECLARE_FEATURE(kForceSynthesizedRestoreSession);
 // Feature flag to remove the UnsafeRestore code path.
 BASE_DECLARE_FEATURE(kRemoveOldWebStateRestoration);
 
+// Feature flag to enable detecting destroyed NavigationContexts. This is
+// intended to be used as a kill switch.
+BASE_DECLARE_FEATURE(kDetectDestroyedNavigationContexts);
+
 // Feature flag to enable intent detection in viewport only.
 BASE_DECLARE_FEATURE(kEnableViewportIntents);
+
+// Feature flag to enable improve tracking number detection.
+BASE_DECLARE_FEATURE(kEnableNewParcelTrackingNumberDetection);
 
 // When true, an option to enable Web Inspector should be present in Settings.
 bool IsWebInspectorSupportEnabled();
 
 // Feature flag to disable the raccoon.
 BASE_DECLARE_FEATURE(kDisableRaccoon);
+
+// Feature flag adds bugfix numbers to the iOS User-Agent header for Chrome
+BASE_DECLARE_FEATURE(kUserAgentBugFixVersion);
 
 }  // namespace features
 }  // namespace web

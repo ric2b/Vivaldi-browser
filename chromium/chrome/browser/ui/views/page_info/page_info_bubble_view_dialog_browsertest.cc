@@ -61,7 +61,7 @@
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_MAC)
-#include "chrome/browser/web_applications/app_shim_registry_mac.h"
+#include "chrome/browser/web_applications/os_integration/mac/app_shim_registry.h"
 #endif
 
 namespace {
@@ -475,8 +475,8 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewDialogBrowserTest,
 // set. All permissions will show regardless of its factory default value.
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewDialogBrowserTest,
                        InvokeUi_AllowAllPermissions) {
-  // Last updated in crrev.com/c/5237718.
-  set_baseline("5237718");
+  // Last updated in crrev.com/c/5642254.
+  set_baseline("5642254");
   ShowAndVerifyUi();
 }
 
@@ -484,8 +484,8 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewDialogBrowserTest,
 // set. All permissions will show regardless of its factory default value.
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewDialogBrowserTest,
                        InvokeUi_BlockAllPermissions) {
-  // Last updated in crrev.com/c/5237718.
-  set_baseline("5237718");
+  // Last updated in crrev.com/c/5642254.
+  set_baseline("5642254");
   ShowAndVerifyUi();
 }
 
@@ -588,7 +588,7 @@ class PageInfoBubbleViewAboutThisSiteDialogBrowserTest
     if (name == "AboutThisSite") {
       // No further action needed, default case.
     } else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
 

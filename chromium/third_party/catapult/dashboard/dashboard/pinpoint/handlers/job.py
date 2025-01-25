@@ -87,6 +87,7 @@ def MarshalToAttempt(quests, change_data, legacy_attempt):
   def FindIsolateExecution(find_iso_exec):
     builder_details = find_iso_exec.get('details')[0]
     builder_name = builder_details.get('value')
+    # TODO(b/322203189): Include buildbucket build ID in build info.
     iso_exec = find_isolate._FindIsolateExecution(None, builder_name, None,
                                                   None, None, None, None, None,
                                                   None)
@@ -113,16 +114,20 @@ def MarshalToAttempt(quests, change_data, legacy_attempt):
 
     digest = isolate_details.get('value', '').split('/')
     digest_url = isolate_details.get('url', '')
-    test_exec._result_arguments = {
-        'cas_root_ref': {
-            'casInstance':
-                digest_url[len(CAS_URL):].split('blobs')[0].strip('/'),
-            'digest': {
-                'sizeBytes': digest[1],
-                'hash': digest[0]
-            }
-        }
-    }
+    # when the swarming task errors, no isolate is returned.
+    if len(digest) == 2:
+      test_exec._result_arguments = {
+          'cas_root_ref': {
+              'casInstance':
+                  digest_url[len(CAS_URL):].split('blobs')[0].strip('/'),
+              'digest': {
+                  'sizeBytes': digest[1],
+                  'hash': digest[0]
+              }
+          }
+      }
+    else:
+      logging.debug("swarming task does not have cas output or incorrect output: %s", digest)
     test_exec._completed = True
     return test_exec
 
@@ -224,6 +229,9 @@ def MarshalArguments(arguments):
 
 def MarshalToJob(args):
   job = job_module.Job()
+  skia_job_id = args.get('job_id', args.get('JobId'))
+  if skia_job_id:
+    job = job_module.Job(id=skia_job_id)
 
   created_arg = args.get('created')
   created_timestamp = Timestamp(
@@ -235,6 +243,8 @@ def MarshalToJob(args):
       nanos=updated_arg.get('nanos')).ToDatetime()
 
   arguments = MarshalArguments(args.get('arguments', {}))
+  if args.get('skia_workflow_url'):
+    arguments['skia_workflow_url'] = args.get('skia_workflow_url')
   job.arguments = arguments
   # rewrite into args so that job state and other sub marshal commands use the
   # same arg set.

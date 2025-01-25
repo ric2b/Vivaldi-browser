@@ -72,6 +72,10 @@ OpResolver::OpResolver(const mojom::CreateContextOptions& options) {
              /* max_version = */ 3);
   AddBuiltin(::tflite::BuiltinOperator_EXP,
              ::tflite::ops::builtin::Register_EXP());
+  AddBuiltin(::tflite::BuiltinOperator_BROADCAST_TO,
+             ::tflite::ops::builtin::Register_BROADCAST_TO(),
+             /* min_version = */ 2,
+             /* max_version = */ 3);
   AddBuiltin(::tflite::BuiltinOperator_FLOOR,
              ::tflite::ops::builtin::Register_FLOOR());
   AddBuiltin(::tflite::BuiltinOperator_FULLY_CONNECTED,
@@ -82,6 +86,10 @@ OpResolver::OpResolver(const mojom::CreateContextOptions& options) {
              ::tflite::ops::builtin::Register_GATHER(),
              /* min_version = */ 1,
              /* max_version = */ 3);
+  AddBuiltin(::tflite::BuiltinOperator_GELU,
+             ::tflite::ops::builtin::Register_GELU(),
+             /* min_version = */ 1,
+             /* max_version = */ 2);
   AddBuiltin(::tflite::BuiltinOperator_GREATER,
              ::tflite::ops::builtin::Register_GREATER(),
              /* min_version = */ 1,
@@ -212,6 +220,10 @@ OpResolver::OpResolver(const mojom::CreateContextOptions& options) {
              ::tflite::ops::builtin::Register_TRANSPOSE(),
              /* min_version = */ 1,
              /* max_version = */ 4);
+  AddBuiltin(::tflite::BuiltinOperator_TRANSPOSE_CONV,
+             ::tflite::ops::builtin::Register_TRANSPOSE_CONV(),
+             /* min_version = */ 1,
+             /* max_version = */ 3);
 
 #if BUILDFLAG(BUILD_TFLITE_WITH_NNAPI)
   if (options.device == mojom::CreateContextOptions::Device::kNpu) {

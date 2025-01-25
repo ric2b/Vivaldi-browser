@@ -428,6 +428,13 @@ class OmniboxEditModel {
       bool include_positional_info,
       int* label_prefix_length = nullptr);
 
+  // The IPH message that sometimes appears at the bottom of the Omnibox is
+  // informational only and cannot be selected/focused. Its a11y label therefore
+  // has to be read at the end of the last suggestion.  Returns the label for
+  // the IPH row if the current selection is the one right before the IPH row.
+  // Otherwise, returns an empty string.
+  std::u16string MaybeGetPopupAccessibilityLabelForIPHSuggestion();
+
   // Invoked any time the result set of the controller changes.
   // TODO(orinj): This method seems like a good candidate for removal; it is
   // preserved here only to prevent possible behavior change while refactoring.
@@ -535,6 +542,11 @@ class OmniboxEditModel {
                  const GURL& alternate_nav_url,
                  const std::u16string& pasted_text,
                  base::TimeTicks match_selection_timestamp = base::TimeTicks());
+
+  // Updates the feedback type on the match at the given index and schedules a
+  // repaint to update the suggestion view. On negative feedback, also shows the
+  // feedback form.
+  void UpdateFeedbackOnMatch(size_t match_index, FeedbackType feedback_type);
 
   // An internal method to set the user text. Notably, this differs from
   // SetUserText because it does not change the user-input-in-progress state.

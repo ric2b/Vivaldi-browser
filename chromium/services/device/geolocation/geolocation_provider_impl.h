@@ -50,7 +50,7 @@ using CustomLocationProviderCallback =
 //
 // It also implements GeolocationSystemPermissionManager::PermissionObserver on
 // supported platforms. Monitors system permission changes to manage the
-// LocationArbitrator and report permission errors to clients.
+// LocationProviderManager and report permission errors to clients.
 //
 // THREADING
 //
@@ -70,7 +70,7 @@ class GeolocationProviderImpl
       public mojom::GeolocationControl,
       public mojom::GeolocationInternals,
       public base::Thread
-#if BUILDFLAG(IS_APPLE) || BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
+#if BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
     ,
       public GeolocationSystemPermissionManager::PermissionObserver
 #endif
@@ -83,7 +83,7 @@ class GeolocationProviderImpl
   bool HighAccuracyLocationInUse() override;
   void OverrideLocationForTesting(mojom::GeopositionResultPtr result) override;
 
-  // Callback from the LocationArbitrator. Public for testing.
+  // Callback from the LocationProviderManager. Public for testing.
   void OnLocationUpdate(const LocationProvider* provider,
                         mojom::GeopositionResultPtr result);
 
@@ -136,7 +136,8 @@ class GeolocationProviderImpl
 
   // Safe to call while there are no GeolocationProviderImpl clients
   // registered.
-  void SetArbitratorForTesting(std::unique_ptr<LocationProvider> arbitrator);
+  void SetLocationProviderManagerForTesting(
+      std::unique_ptr<LocationProvider> location_provider_manager);
 
   // mojom::GeolocationInternals implementation:
   void AddInternalsObserver(
@@ -147,7 +148,7 @@ class GeolocationProviderImpl
   // diagnostics in tests.
   void SimulateInternalsUpdatedForTesting();
 
-#if BUILDFLAG(IS_APPLE) || BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
+#if BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
   // GeolocationSystemPermissionManager::PermissionObserver implementation.
   void OnSystemPermissionUpdated(
       LocationSystemPermissionStatus new_status) override;
@@ -172,8 +173,8 @@ class GeolocationProviderImpl
   void StopProviders();
 
   // Starts the geolocation providers or updates their options (delegates to
-  // arbitrator). If `enable_diagnostics` is true, also enables geolocation
-  // diagnostics.
+  // location_provider_manager). If `enable_diagnostics` is true, also enables
+  // geolocation diagnostics.
   void StartProviders(bool enable_high_accuracy, bool enable_diagnostics);
 
   // Updates the providers on the geolocation thread, which must be running.
@@ -228,7 +229,7 @@ class GeolocationProviderImpl
   // thread.
   void DoStartProvidersOnGeolocationThread();
 
-#if BUILDFLAG(IS_APPLE) || BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
+#if BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
   // Called on main thread to notify clients when system permission is denied.
   void NotifyClientsSystemPermissionDenied();
 #endif
@@ -248,7 +249,7 @@ class GeolocationProviderImpl
   const scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
 
   // Only to be used on the geolocation thread.
-  std::unique_ptr<LocationProvider> arbitrator_;
+  std::unique_ptr<LocationProvider> location_provider_manager_;
 
   mojo::Receiver<mojom::GeolocationControl> control_receiver_{this};
 
@@ -259,7 +260,7 @@ class GeolocationProviderImpl
   // sends it to `internals_observers_`.
   bool diagnostics_enabled_ = false;
 
-#if BUILDFLAG(IS_APPLE) || BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
+#if BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
   LocationSystemPermissionStatus system_permission_status_ =
       LocationSystemPermissionStatus::kNotDetermined;
 

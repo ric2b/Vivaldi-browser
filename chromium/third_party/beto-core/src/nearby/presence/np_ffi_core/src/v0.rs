@@ -18,8 +18,11 @@
 use crate::common::InvalidStackDataStructure;
 use crate::serialize::AdvertisementBuilderKind;
 use crate::utils::FfiEnum;
-use np_adv::legacy::actions::ActionsDataElement;
-use np_adv::legacy::{data_elements as np_adv_de, Ciphertext, PacketFlavorEnum, Plaintext};
+use np_adv::{
+    legacy::data_elements::actions::ActionsDataElement,
+    legacy::{data_elements as np_adv_de, Ciphertext, PacketFlavorEnum, Plaintext},
+};
+use strum::IntoEnumIterator;
 
 /// Discriminant for `V0DataElement`.
 #[repr(u8)]
@@ -27,11 +30,11 @@ pub enum V0DataElementKind {
     /// A transmission Power (Tx Power) data-element.
     /// The associated payload may be obtained via
     /// `V0DataElement#into_tx_power`.
-    TxPower = 0,
+    TxPower = 1,
     /// The Actions data-element.
     /// The associated payload may be obtained via
     /// `V0DataElement#into_actions`.
-    Actions = 1,
+    Actions = 2,
 }
 
 /// Representation of a V0 data element.
@@ -43,7 +46,7 @@ pub enum V0DataElement {
     Actions(V0Actions),
 }
 
-impl TryFrom<V0DataElement> for np_adv_dynamic::legacy::ToBoxedDataElementBundle {
+impl TryFrom<V0DataElement> for np_adv_dynamic::legacy::ToBoxedSerializeDataElement {
     type Error = InvalidStackDataStructure;
     fn try_from(de: V0DataElement) -> Result<Self, InvalidStackDataStructure> {
         match de {
@@ -53,14 +56,14 @@ impl TryFrom<V0DataElement> for np_adv_dynamic::legacy::ToBoxedDataElementBundle
     }
 }
 
-impl<F: np_adv::legacy::PacketFlavor> From<np_adv::legacy::deserialize::PlainDataElement<F>>
+impl<F: np_adv::legacy::PacketFlavor> From<np_adv::legacy::deserialize::DeserializedDataElement<F>>
     for V0DataElement
 {
-    fn from(de: np_adv::legacy::deserialize::PlainDataElement<F>) -> Self {
-        use np_adv::legacy::deserialize::PlainDataElement;
+    fn from(de: np_adv::legacy::deserialize::DeserializedDataElement<F>) -> Self {
+        use np_adv::legacy::deserialize::DeserializedDataElement;
         match de {
-            PlainDataElement::Actions(x) => V0DataElement::Actions(x.into()),
-            PlainDataElement::TxPower(x) => V0DataElement::TxPower(x.into()),
+            DeserializedDataElement::Actions(x) => V0DataElement::Actions(x.into()),
+            DeserializedDataElement::TxPower(x) => V0DataElement::TxPower(x.into()),
         }
     }
 }
@@ -124,8 +127,7 @@ pub struct TxPower {
 }
 
 impl TxPower {
-    /// Attempts to construct a new TxPower from
-    /// the given signed-byte value.
+    /// Attempts to construct a new TxPower from the given signed-byte value.
     pub fn build_from_signed_byte(tx_power: i8) -> BuildTxPowerResult {
         match np_adv::shared_data::TxPower::try_from(tx_power) {
             Ok(_) => BuildTxPowerResult::Success(Self { tx_power }),
@@ -138,92 +140,18 @@ impl TxPower {
     }
 }
 
-impl From<np_adv_de::TxPowerDataElement> for TxPower {
-    fn from(de: np_adv_de::TxPowerDataElement) -> Self {
+impl From<np_adv_de::tx_power::TxPowerDataElement> for TxPower {
+    fn from(de: np_adv_de::tx_power::TxPowerDataElement) -> Self {
         Self { tx_power: de.tx_power_value() }
     }
 }
 
-impl TryFrom<TxPower> for np_adv_dynamic::legacy::ToBoxedDataElementBundle {
+impl TryFrom<TxPower> for np_adv_dynamic::legacy::ToBoxedSerializeDataElement {
     type Error = InvalidStackDataStructure;
     fn try_from(value: TxPower) -> Result<Self, InvalidStackDataStructure> {
         np_adv::shared_data::TxPower::try_from(value.as_i8())
             .map_err(|_| InvalidStackDataStructure)
             .map(|x| x.into())
-    }
-}
-
-/// Discriminant for `BuildContextSyncSeqNumResult`.
-#[repr(u8)]
-#[derive(Clone, Copy)]
-pub enum BuildContextSyncSeqNumResultKind {
-    /// The sequence number was outside the allowed
-    /// 0-15 single-nibble range.
-    OutOfRange = 0,
-    /// The sequence number was in range,
-    /// and so a `ContextSyncSeqNum` was constructed.
-    Success = 1,
-}
-
-/// Result type for attempting to construct a
-/// ContextSyncSeqNum from an unsigned byte.
-#[repr(C)]
-#[allow(missing_docs)]
-pub enum BuildContextSyncSeqNumResult {
-    OutOfRange,
-    Success(ContextSyncSeqNum),
-}
-
-impl FfiEnum for BuildContextSyncSeqNumResult {
-    type Kind = BuildContextSyncSeqNumResultKind;
-    fn kind(&self) -> Self::Kind {
-        match self {
-            Self::OutOfRange => BuildContextSyncSeqNumResultKind::OutOfRange,
-            Self::Success(_) => BuildContextSyncSeqNumResultKind::Success,
-        }
-    }
-}
-
-impl BuildContextSyncSeqNumResult {
-    declare_enum_cast! {into_success, Success, ContextSyncSeqNum}
-}
-/// Representation of a context-sync sequence number.
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub struct ContextSyncSeqNum {
-    value: u8,
-}
-
-impl ContextSyncSeqNum {
-    /// Attempts to build a new context sync sequence number
-    /// from the given unsigned byte.
-    pub fn build_from_unsigned_byte(value: u8) -> BuildContextSyncSeqNumResult {
-        match np_adv::shared_data::ContextSyncSeqNum::try_from(value) {
-            Ok(_) => BuildContextSyncSeqNumResult::Success(Self { value }),
-            Err(_) => BuildContextSyncSeqNumResult::OutOfRange,
-        }
-    }
-    /// Yields this context sync sequence number
-    /// as a u8.
-    pub fn as_u8(&self) -> u8 {
-        self.value
-    }
-}
-
-impl From<np_adv::shared_data::ContextSyncSeqNum> for ContextSyncSeqNum {
-    fn from(value: np_adv::shared_data::ContextSyncSeqNum) -> Self {
-        let value = value.as_u8();
-        Self { value }
-    }
-}
-
-impl TryFrom<ContextSyncSeqNum> for np_adv_dynamic::legacy::ToBoxedActionElement {
-    type Error = InvalidStackDataStructure;
-    fn try_from(value: ContextSyncSeqNum) -> Result<Self, Self::Error> {
-        let value = value.as_u8();
-        np_adv::shared_data::ContextSyncSeqNum::try_from(value)
-            .map(np_adv_dynamic::legacy::ToBoxedActionElement::ContextSyncSeqNum)
-            .map_err(|_| InvalidStackDataStructure)
     }
 }
 
@@ -237,7 +165,7 @@ pub enum V0Actions {
     Encrypted(V0ActionBits),
 }
 
-impl TryFrom<V0Actions> for np_adv_dynamic::legacy::ToBoxedDataElementBundle {
+impl TryFrom<V0Actions> for np_adv_dynamic::legacy::ToBoxedSerializeDataElement {
     type Error = InvalidStackDataStructure;
     fn try_from(value: V0Actions) -> Result<Self, InvalidStackDataStructure> {
         let boxed_action_bits = np_adv_dynamic::legacy::BoxedActionBits::try_from(value)?;
@@ -245,9 +173,7 @@ impl TryFrom<V0Actions> for np_adv_dynamic::legacy::ToBoxedDataElementBundle {
     }
 }
 
-impl<F: np_adv::legacy::PacketFlavor> From<np_adv::legacy::actions::ActionsDataElement<F>>
-    for V0Actions
-{
+impl<F: np_adv::legacy::PacketFlavor> From<ActionsDataElement<F>> for V0Actions {
     fn from(value: ActionsDataElement<F>) -> Self {
         match F::ENUM_VARIANT {
             PacketFlavorEnum::Plaintext => {
@@ -262,57 +188,102 @@ impl<F: np_adv::legacy::PacketFlavor> From<np_adv::legacy::actions::ActionsDataE
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-/// The bitfield data of a VOActions data element
+/// The bitfield data of a V0Actions data element
 pub struct V0ActionBits {
     bitfield: u32,
 }
 
-#[derive(Clone, Copy)]
+impl From<u32> for V0ActionBits {
+    fn from(bitfield: u32) -> Self {
+        // No need to validate here. Validation of this struct is done at all places where it is
+        // taken as a parameter. See [`InvalidStackDataStructure`]. Since this struct is
+        // `#[repr(C)]` if rules were enforced here, they could be broken by a foreign language
+        // user.
+        Self { bitfield }
+    }
+}
+
+#[derive(Clone, Copy, strum_macros::EnumIter)]
 #[allow(missing_docs)]
 #[repr(u8)]
 /// The possible boolean action types which can be present in an Actions data element
-pub enum BooleanActionType {
+pub enum ActionType {
+    CrossDevSdk = 1,
+    CallTransfer = 4,
     ActiveUnlock = 8,
     NearbyShare = 9,
     InstantTethering = 10,
     PhoneHub = 11,
-    PresenceManager = 12,
-    Finder = 13,
-    FastPairSass = 14,
 }
 
-impl BooleanActionType {
+#[derive(Clone, Copy, Debug)]
+/// The given int is out of range for conversion.
+pub struct TryFromIntError;
+
+impl From<core::num::TryFromIntError> for TryFromIntError {
+    fn from(_: core::num::TryFromIntError) -> Self {
+        Self
+    }
+}
+
+impl TryFrom<u8> for ActionType {
+    type Error = TryFromIntError;
+    fn try_from(n: u8) -> Result<Self, Self::Error> {
+        // cast is safe since it's a repr(u8) unit enum
+        Self::iter().find(|t| *t as u8 == n).ok_or(TryFromIntError)
+    }
+}
+
+impl ActionType {
     pub(crate) fn as_boxed_action_element(
         &self,
         value: bool,
     ) -> np_adv_dynamic::legacy::ToBoxedActionElement {
         use np_adv_dynamic::legacy::ToBoxedActionElement;
         match self {
+            Self::CrossDevSdk => ToBoxedActionElement::CrossDevSdk(value),
+            Self::CallTransfer => ToBoxedActionElement::CallTransfer(value),
             Self::ActiveUnlock => ToBoxedActionElement::ActiveUnlock(value),
             Self::NearbyShare => ToBoxedActionElement::NearbyShare(value),
             Self::InstantTethering => ToBoxedActionElement::InstantTethering(value),
             Self::PhoneHub => ToBoxedActionElement::PhoneHub(value),
-            Self::PresenceManager => ToBoxedActionElement::PresenceManager(value),
-            Self::Finder => ToBoxedActionElement::Finder(value),
-            Self::FastPairSass => ToBoxedActionElement::FastPairSass(value),
         }
     }
 }
 
-impl From<BooleanActionType> for np_adv::legacy::actions::ActionType {
-    fn from(value: BooleanActionType) -> Self {
+impl From<ActionType> for np_adv::legacy::data_elements::actions::ActionType {
+    fn from(value: ActionType) -> Self {
         match value {
-            BooleanActionType::ActiveUnlock => np_adv::legacy::actions::ActionType::ActiveUnlock,
-            BooleanActionType::NearbyShare => np_adv::legacy::actions::ActionType::NearbyShare,
-            BooleanActionType::InstantTethering => {
-                np_adv::legacy::actions::ActionType::InstantTethering
+            ActionType::CrossDevSdk => {
+                np_adv::legacy::data_elements::actions::ActionType::CrossDevSdk
             }
-            BooleanActionType::PhoneHub => np_adv::legacy::actions::ActionType::PhoneHub,
-            BooleanActionType::Finder => np_adv::legacy::actions::ActionType::Finder,
-            BooleanActionType::FastPairSass => np_adv::legacy::actions::ActionType::FastPairSass,
-            BooleanActionType::PresenceManager => {
-                np_adv::legacy::actions::ActionType::PresenceManager
+            ActionType::CallTransfer => {
+                np_adv::legacy::data_elements::actions::ActionType::CallTransfer
             }
+            ActionType::ActiveUnlock => {
+                np_adv::legacy::data_elements::actions::ActionType::ActiveUnlock
+            }
+            ActionType::NearbyShare => {
+                np_adv::legacy::data_elements::actions::ActionType::NearbyShare
+            }
+            ActionType::InstantTethering => {
+                np_adv::legacy::data_elements::actions::ActionType::InstantTethering
+            }
+            ActionType::PhoneHub => np_adv::legacy::data_elements::actions::ActionType::PhoneHub,
+        }
+    }
+}
+
+// ensure bidirectional mapping
+impl From<np_adv::legacy::data_elements::actions::ActionType> for ActionType {
+    fn from(value: np_adv_de::actions::ActionType) -> Self {
+        match value {
+            np_adv_de::actions::ActionType::CrossDevSdk => ActionType::CrossDevSdk,
+            np_adv_de::actions::ActionType::CallTransfer => ActionType::CallTransfer,
+            np_adv_de::actions::ActionType::ActiveUnlock => ActionType::ActiveUnlock,
+            np_adv_de::actions::ActionType::NearbyShare => ActionType::NearbyShare,
+            np_adv_de::actions::ActionType::InstantTethering => ActionType::InstantTethering,
+            np_adv_de::actions::ActionType::PhoneHub => ActionType::PhoneHub,
         }
     }
 }
@@ -334,17 +305,19 @@ impl TryFrom<V0Actions> for np_adv_dynamic::legacy::BoxedActionBits {
     fn try_from(actions: V0Actions) -> Result<Self, InvalidStackDataStructure> {
         match actions {
             V0Actions::Plaintext(action_bits) => {
-                let bits = np_adv::legacy::actions::ActionBits::<Plaintext>::try_from(
-                    action_bits.bitfield,
-                )
-                .map_err(|_| InvalidStackDataStructure)?;
+                let bits =
+                    np_adv::legacy::data_elements::actions::ActionBits::<Plaintext>::try_from(
+                        action_bits.bitfield,
+                    )
+                    .map_err(|_| InvalidStackDataStructure)?;
                 Ok(bits.into())
             }
             V0Actions::Encrypted(action_bits) => {
-                let bits = np_adv::legacy::actions::ActionBits::<Ciphertext>::try_from(
-                    action_bits.bitfield,
-                )
-                .map_err(|_| InvalidStackDataStructure)?;
+                let bits =
+                    np_adv::legacy::data_elements::actions::ActionBits::<Ciphertext>::try_from(
+                        action_bits.bitfield,
+                    )
+                    .map_err(|_| InvalidStackDataStructure)?;
                 Ok(bits.into())
             }
         }
@@ -410,13 +383,10 @@ impl V0Actions {
 
     /// Return whether a boolean action type is set in this data element
     #[allow(clippy::expect_used)]
-    pub fn has_action(
-        &self,
-        action_type: BooleanActionType,
-    ) -> Result<bool, InvalidStackDataStructure> {
+    pub fn has_action(&self, action_type: ActionType) -> Result<bool, InvalidStackDataStructure> {
         let boxed_action_bits = np_adv_dynamic::legacy::BoxedActionBits::try_from(*self)?;
         let action_type = action_type.into();
-        Ok(boxed_action_bits.has_action(&action_type).expect("BooleanActionType only has one bit"))
+        Ok(boxed_action_bits.has_action(action_type))
     }
 
     /// Attempts to set the given action bit to the given boolean value.
@@ -427,7 +397,7 @@ impl V0Actions {
     /// unaltered.
     pub fn set_action(
         self,
-        action_type: BooleanActionType,
+        action_type: ActionType,
         value: bool,
     ) -> Result<SetV0ActionResult, InvalidStackDataStructure> {
         let mut boxed_action_bits = np_adv_dynamic::legacy::BoxedActionBits::try_from(self)?;
@@ -436,26 +406,5 @@ impl V0Actions {
             Ok(()) => Ok(SetV0ActionResult::Success(boxed_action_bits.into())),
             Err(_) => Ok(SetV0ActionResult::Error(self)),
         }
-    }
-
-    /// Sets the context sequence number for this data element.
-    #[allow(clippy::expect_used)]
-    pub fn set_context_sync_seq_num(
-        self,
-        value: ContextSyncSeqNum,
-    ) -> Result<Self, InvalidStackDataStructure> {
-        let mut boxed_action_bits = np_adv_dynamic::legacy::BoxedActionBits::try_from(self)?;
-        let boxed_action_element = np_adv_dynamic::legacy::ToBoxedActionElement::try_from(value)?;
-        boxed_action_bits
-            .set_action(boxed_action_element)
-            .expect("Context sync sequence number always may be present");
-        Ok(boxed_action_bits.into())
-    }
-
-    /// Return the context sequence number from this data element
-    #[allow(clippy::expect_used)]
-    pub fn get_context_sync_seq_num(&self) -> Result<ContextSyncSeqNum, InvalidStackDataStructure> {
-        let boxed_action_bits = np_adv_dynamic::legacy::BoxedActionBits::try_from(*self)?;
-        Ok(boxed_action_bits.get_context_sync_seq_num().into())
     }
 }

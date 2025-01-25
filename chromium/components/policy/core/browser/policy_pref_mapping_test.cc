@@ -553,7 +553,7 @@ PolicySettings GetPolicySettings(const std::string& policy,
     else if (*source == "cloud_from_ash")
       settings.source = POLICY_SOURCE_CLOUD_FROM_ASH;
     else {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -723,7 +723,6 @@ void VerifyPolicyToPrefMappings(const base::FilePath& test_case_dir,
         // TODO(b/333460350) Remove logs here added temporarily for debugging.
         LOG(INFO) << policy_name << " # " << idx << " # " << i;
 #endif
-
         for (const auto& pref_case : pref_mapping->prefs()) {
           SCOPED_TRACE(::testing::Message() << "Pref: " << pref_case->pref());
           PrefService* prefs =

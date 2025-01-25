@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include <xnnpack/common.h>
-#include <xnnpack/unaligned.h>
+#include "xnnpack/common.h"
+#include "xnnpack/unaligned.h"
 
 
 #if defined(__SSE2__)
@@ -266,3 +266,107 @@ uint8x16x4_t vld1q_u8_x4(const uint8_t* address) {
 #endif  // AArch64 GCC pre-8, 8.1-8.4, 9.1-9.3
 
 #endif  // ARM64 NEON
+
+// Hexagon
+#if XNN_ARCH_HEXAGON
+#include <hexagon_types.h>
+#include <hvx_hexagon_protos.h>
+
+// Conditional Store:
+// - addr: destination
+// - n: number of elements * sizeof(datatype) where n <= 128
+// - vin: input
+static XNN_INTRINSIC
+void Q6_V_vstu_variable(void *addr, uint32_t n, HVX_Vector vin)
+{
+    // Rotate as needed.
+    vin = Q6_V_vlalign_VVR(vin, vin, (size_t) addr);
+
+    uint32_t left_off = (size_t) addr & 127;
+    uint32_t right_off = left_off + n;
+
+    HVX_VectorPred ql_not = Q6_Q_vsetq_R((size_t) addr);
+    HVX_VectorPred qr = Q6_Q_vsetq2_R(right_off);
+
+    if (right_off > 128)
+    {
+        Q6_vmem_QRIV(qr, (HVX_Vector*) addr + 1, vin);
+        // all 1's
+        qr = Q6_Q_vcmp_eq_VbVb(vin, vin);
+    }
+
+    ql_not = Q6_Q_or_QQn(ql_not, qr);
+    Q6_vmem_QnRIV(ql_not, (HVX_Vector*) addr, vin);
+}
+
+// 32x16 Integer Multiplication:
+// - multiplier: 32-bit integer
+// - vin: 16-bit signed integer
+// - Return 'HVX_VectorPair' keeping the same order as vin
+//   but with elements widened to 32-bit.
+static XNN_INTRINSIC
+HVX_VectorPair Q6_Vw_vmpyi_VwVh(HVX_Vector multiplier, HVX_Vector vin)
+{
+    vin = Q6_Vh_vshuffe_VhVh(vin, vin);
+    HVX_Vector mul_e = Q6_Vw_vmpyio_VwVh(multiplier, vin);
+    HVX_Vector mul_o = Q6_Vw_vmpyio_VwVh(multiplier, vin);
+    
+    return Q6_W_vshuff_VVR(mul_o, mul_e, -4);
+}
+
+// 32x16 Integer Multiplication of even elements in the 'vin':
+// multiplier_hi: upper part of 32-bit integer multiplier
+// multiplier_lo: lower part of 32-bit integer multiplier
+// vin: 16-bit signed integer
+// - Return 'vout' in the HVX_Vector format,
+//   containing only the multiplication results of the even elements from 'vin' and
+//   widened to 32-bit.
+static XNN_INTRINSIC
+HVX_Vector Q6_Vw_vmpyie_VwVh(HVX_Vector multiplier_lo, HVX_Vector multiplier_hi, HVX_Vector vin)
+{
+    multiplier_hi = Q6_Vh_vshuffe_VhVh(multiplier_hi, multiplier_hi);
+    HVX_Vector vout = Q6_Vw_vmpyieo_VhVh(vin, multiplier_hi);
+    vout = Q6_Vw_vmpyieacc_VwVwVh(vout, multiplier_lo, vin);
+
+    return vout;
+}
+
+// Horizontal vector sum by pairwise addition.
+// To calculate fewer elements than the full 128 bytes in 'vin', 
+// use the following code first before calling the intrinsic:
+//   vin = Q6_V_vand_QV(Q6_Q_vsetq_R(batch), vin);
+// where 'batch' is equal to 'elements * sizeof(float)'
+static XNN_INTRINSIC
+float Q6_f32_vrsum_Vsf(HVX_Vector vin){
+    HVX_VectorPair vsum_pair = Q6_W_vshuff_VVR(vin, vin, 64);
+    vin = Q6_Vsf_vadd_VsfVsf(Q6_V_lo_W(vsum_pair), Q6_V_hi_W(vsum_pair));
+
+    vsum_pair = Q6_W_vshuff_VVR(vin, vin, 32);
+    vin = Q6_Vsf_vadd_VsfVsf(Q6_V_lo_W(vsum_pair), Q6_V_hi_W(vsum_pair));
+
+    vsum_pair = Q6_W_vshuff_VVR(vin, vin, 16);
+    vin = Q6_Vsf_vadd_VsfVsf(Q6_V_lo_W(vsum_pair), Q6_V_hi_W(vsum_pair));
+
+    vsum_pair = Q6_W_vshuff_VVR(vin, vin, 8);
+    vin = Q6_Vsf_vadd_VsfVsf(Q6_V_lo_W(vsum_pair), Q6_V_hi_W(vsum_pair));
+
+    vsum_pair = Q6_W_vshuff_VVR(vin, vin, 4);
+    vin = Q6_Vsf_vadd_VsfVsf(Q6_V_lo_W(vsum_pair), Q6_V_hi_W(vsum_pair));
+
+    return *((float *) &vin);
+}
+
+// Temporary div implementation for HVX.
+// TODO: improve the implementation 
+//       e.g., use reprocical with newton-raphson approximation
+static XNN_INTRINSIC
+HVX_Vector Q6_Vsf_vdiv_VsfVsf(HVX_Vector vin1, HVX_Vector vin2){
+    float* svin1 = (float *) &vin1;
+    float* svin2 = (float *) &vin2;
+
+    for(int i = 0; i < 32; i++)
+      svin1[i] = svin1[i] / svin2[i];
+
+    return *((HVX_UVector *) svin1);
+}
+#endif  // XNN_ARCH_HEXAGON

@@ -12,7 +12,7 @@ load("./builder_url.star", "linkify_builder")
 load("./chrome_settings.star", "per_builder_outputs_config")
 load("./enums.star", "enums")
 load("./nodes.star", "nodes")
-load("./sheriff_rotations.star", "get_sheriff_rotations")
+load("./sheriff_rotations.star", "get_gardener_rotations")
 load("./structs.star", "structs")
 load("./targets.star", "get_targets_spec_generator", "register_targets")
 
@@ -441,7 +441,8 @@ def register_builder_config(
         settings,
         targets,
         targets_settings,
-        additional_exclusions):
+        additional_exclusions,
+        description_html):
     """Registers the builder config so the properties can be computed.
 
     At most one of builder_spec or mirrors can be set. If neither builder_spec
@@ -461,11 +462,9 @@ def register_builder_config(
         additional_exclusions: A list of paths that are excluded when analyzing
             the change to determine affected targets. The paths should be
             relative to the per-builder output root dir.
+        description_html: A string of html representing the description of the builder.
     """
     if not builder_spec and not mirrors:
-        if settings:
-            fail("settings specified without builder_spec or mirrors")
-
         # TODO(gbeaty) Eventually make this a failure for the chromium
         # family of recipes
         return
@@ -495,6 +494,7 @@ def register_builder_config(
         include_all_triggered_testers = include_all_triggered_testers,
         settings_fields = settings_fields,
         additional_exclusions = additional_exclusions,
+        description_html = description_html,
     ))
 
     if _is_copy_from(builder_spec):
@@ -640,6 +640,11 @@ def _get_builder_mirror_description(bucket_name, builder, bc_state):
         fail("A builder can't both mirror and be mirrored:", builder.name)
 
     description = builder.description_html
+    if not description and len(mirrored_builders) == 1:
+        m_id = _builder_id(mirrored_builders[0])
+        mirror_node = _BUILDER_CONFIG.get(m_id["bucket"], m_id["builder"])
+        if mirror_node.props.description_html:
+            description += "<br>%s<br/>" % mirror_node.props.description_html
     if description:
         description += "<br/>"
     if mirrored_builders:
@@ -805,7 +810,7 @@ def _set_builder_config_property(ctx):
             builder.description_html = _get_builder_mirror_description(bucket_name, builder, bc_state)
 
             # Enforce that most gardened CI bots have a matching trybot.
-            rotations = get_sheriff_rotations(bucket_name, builder.name)
+            rotations = get_gardener_rotations(bucket_name, builder.name)
             excluded_rotations = [
                 # Most/all the clang bots build using clang built from HEAD.
                 # Failures on them hopefully/rarely lead to reverts of random
@@ -823,7 +828,6 @@ def _set_builder_config_property(ctx):
                 # TODO(crbug.com/343505108): Remove the following libfuzzer
                 # builders as trybots are created for them.
                 "Centipede High End Upload Linux ASan",
-                "Libfuzzer Upload Chrome OS ASan",
                 "Libfuzzer Upload Linux ASan Debug",
                 "Libfuzzer Upload Linux MSan",
                 "Libfuzzer Upload Linux UBSan",
@@ -863,13 +867,14 @@ def _set_builder_config_property(ctx):
             allowed_trybot_recipes = [
                 "chromium_trybot",
                 "chromium_trybot_internal",
+                "chromium/fuzz",
                 "chromium/orchestrator",
             ]
             is_excluded = False
             all_mirror_rotations = []
             for m in mirrors:
                 mirror_id = _builder_id(m)
-                mirror_rotations = get_sheriff_rotations(mirror_id["bucket"], mirror_id["builder"])
+                mirror_rotations = get_gardener_rotations(mirror_id["bucket"], mirror_id["builder"])
                 all_mirror_rotations += mirror_rotations
                 if not mirror_rotations:
                     is_excluded = True

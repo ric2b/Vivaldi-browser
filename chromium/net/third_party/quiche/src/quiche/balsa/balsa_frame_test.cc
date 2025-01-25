@@ -52,9 +52,7 @@ DEFINE_QUICHE_COMMAND_LINE_FLAG(
     "This is the seed for Pseudo-random number"
     " generator used when generating random messages for unittests");
 
-namespace quiche {
-
-namespace test {
+namespace quiche::test {
 
 // This random engine from the standard library supports initialization with a
 // seed, which is helpful for reproducing any unit test failures that are due to
@@ -723,6 +721,72 @@ TEST(HTTPBalsaFrame, RequestFirstLineParsedCorrectly) {
   FirstLineParsedCorrectlyHelper(request_tokens, 0, true, "   \t \t  ");
 }
 
+TEST(HTTPBalsaFrame, RequestLineSanitizedProperly) {
+  SCOPED_TRACE("Testing that the request line is properly sanitized.");
+  using enum HttpValidationPolicy::FirstLineValidationOption;
+  using FirstLineValidationOption =
+      HttpValidationPolicy::FirstLineValidationOption;
+
+  struct TestCase {
+    const absl::string_view input;     // Input to the parser.
+    const absl::string_view parsed;    // Expected output.
+    FirstLineValidationOption option;  // Whether to sanitize/reject.
+    BalsaFrameEnums::ErrorCode expected_error;
+  };
+  const std::vector<TestCase> cases = {
+      // No invalid whitespace.
+      {"GET / HTTP/1.1\r\n", "GET / HTTP/1.1", NONE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"GET / HTTP/1.1\r\n", "GET / HTTP/1.1", SANITIZE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"GET / HTTP/1.1\r\n", "GET / HTTP/1.1", REJECT,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+
+      // Illegal CR in the request-line.
+      {"GET /\rHTTP/1.1\r\n", "GET /\rHTTP/1.1", NONE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"GET /\rHTTP/1.1\r\n", "GET / HTTP/1.1", SANITIZE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"GET /\rHTTP/1.1\r\n", "", REJECT,
+       BalsaFrameEnums::INVALID_WS_IN_REQUEST_LINE},
+
+      // Invalid tab in the request-line.
+      {"GET \t/ HTTP/1.1\r\n", "GET \t/ HTTP/1.1", NONE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"GET \t/ HTTP/1.1\r\n", "GET  / HTTP/1.1", SANITIZE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"GET \t/ HTTP/1.1\r\n", "", REJECT,
+       BalsaFrameEnums::INVALID_WS_IN_REQUEST_LINE},
+
+      // Both CR and tab in the request-line.
+      {"GET \t/\rHTTP/1.1 \r\n", "GET \t/\rHTTP/1.1", NONE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"GET \t/\rHTTP/1.1 \r\n", "GET  / HTTP/1.1", SANITIZE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"GET \t/\rHTTP/1.1 \r\n", "", REJECT,
+       BalsaFrameEnums::INVALID_WS_IN_REQUEST_LINE},
+  };
+  const absl::string_view kHeaderLineAndEnding = "Foo: bar\r\n\r\n";
+  for (auto& [firstline, parsed, ws_option, expected_error] : cases) {
+    SCOPED_TRACE(
+        absl::StrCat("Input: ", absl::CEscape(firstline),
+                     " Expected output: ", absl::CEscape(parsed),
+                     " whitespace option: ", static_cast<int>(ws_option)));
+    const std::string input = absl::StrCat(firstline, kHeaderLineAndEnding);
+
+    BalsaHeaders headers;
+    BalsaFrame framer;
+    HttpValidationPolicy policy;
+    policy.sanitize_cr_tab_in_first_line = ws_option;
+    framer.set_http_validation_policy(policy);
+    framer.set_is_request(true);
+    framer.set_balsa_headers(&headers);
+    framer.ProcessInput(input.data(), input.size());
+    EXPECT_EQ(headers.first_line(), parsed);
+    EXPECT_EQ(framer.ErrorCode(), expected_error);
+  }
+}
+
 TEST_F(HTTPBalsaFrameTest, NonnumericResponseCode) {
   balsa_frame_.set_is_request(false);
 
@@ -785,6 +849,73 @@ TEST(HTTPBalsaFrame, ResponseFirstLineParsedCorrectly) {
   FirstLineParsedCorrectlyHelper(response_tokens, 4242, false, "   \t \t  ");
 }
 
+TEST(HTTPBalsaFrame, StatusLineSanitizedProperly) {
+  SCOPED_TRACE("Testing that the status line is properly sanitized.");
+  using enum HttpValidationPolicy::FirstLineValidationOption;
+  using FirstLineValidationOption =
+      HttpValidationPolicy::FirstLineValidationOption;
+
+  struct TestCase {
+    const absl::string_view input;     // Input to the parser.
+    const absl::string_view parsed;    // Expected output.
+    FirstLineValidationOption option;  // Whether to sanitize/reject.
+    BalsaFrameEnums::ErrorCode expected_error;
+  };
+  const std::vector<TestCase> cases = {
+      // No invalid whitespace.
+      {"HTTP/1.1 200 OK\r\n", "HTTP/1.1 200 OK", NONE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"HTTP/1.1 200 OK\r\n", "HTTP/1.1 200 OK", SANITIZE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"HTTP/1.1 200 OK\r\n", "HTTP/1.1 200 OK", REJECT,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+
+      // Illegal CR in the status-line.
+      {"HTTP/1.1 200\rOK\r\n", "HTTP/1.1 200\rOK", NONE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"HTTP/1.1 200\rOK\r\n", "HTTP/1.1 200 OK", SANITIZE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"HTTP/1.1 200\rOK\r\n", "", REJECT,
+       BalsaFrameEnums::INVALID_WS_IN_STATUS_LINE},
+
+      // Invalid tab in the status-line.
+      {"HTTP/1.1 \t200 OK\r\n", "HTTP/1.1 \t200 OK", NONE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"HTTP/1.1 \t200 OK\r\n", "HTTP/1.1  200 OK", SANITIZE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"HTTP/1.1 \t200 OK\r\n", "", REJECT,
+       BalsaFrameEnums::INVALID_WS_IN_STATUS_LINE},
+
+      // Both CR and tab in the request-line.
+      {"HTTP/1.1 \t200\rOK \r\n", "HTTP/1.1 \t200\rOK", NONE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"HTTP/1.1 \t200\rOK \r\n", "HTTP/1.1  200 OK", SANITIZE,
+       BalsaFrameEnums::BALSA_NO_ERROR},
+      {"HTTP/1.1 \t200\rOK \r\n", "", REJECT,
+       BalsaFrameEnums::INVALID_WS_IN_STATUS_LINE},
+  };
+  const absl::string_view kHeaderLineAndEnding =
+      "Foo: bar\r\nContent-Length: 0\r\n\r\n";
+  for (auto& [firstline, parsed, ws_option, expected_error] : cases) {
+    SCOPED_TRACE(
+        absl::StrCat("Input: ", absl::CEscape(firstline),
+                     " Expected output: ", absl::CEscape(parsed),
+                     " whitespace option: ", static_cast<int>(ws_option)));
+    const std::string input = absl::StrCat(firstline, kHeaderLineAndEnding);
+
+    BalsaHeaders headers;
+    BalsaFrame framer;
+    HttpValidationPolicy policy;
+    policy.sanitize_cr_tab_in_first_line = ws_option;
+    framer.set_http_validation_policy(policy);
+    framer.set_is_request(false);
+    framer.set_balsa_headers(&headers);
+    framer.ProcessInput(input.data(), input.size());
+    EXPECT_EQ(headers.first_line(), parsed);
+    EXPECT_EQ(framer.ErrorCode(), expected_error);
+  }
+}
+
 void HeaderLineTestHelper(const char* firstline, bool is_request,
                           const std::pair<std::string, std::string>* headers,
                           size_t headers_len, const char* colon,
@@ -803,7 +934,7 @@ void HeaderLineTestHelper(const char* firstline, bool is_request,
 
 TEST(HTTPBalsaFrame, RequestLinesParsedProperly) {
   SCOPED_TRACE("Testing that lines are properly parsed.");
-  const char firstline[] = "GET / \rHTTP/1.1\r\n";
+  const char firstline[] = "GET / HTTP/1.1\r\n";
   const std::pair<std::string, std::string> headers[] = {
       std::pair<std::string, std::string>("foo", "bar"),
       std::pair<std::string, std::string>("duck", "water"),
@@ -856,8 +987,44 @@ TEST(HTTPBalsaFrame, CarriageReturnIllegalInHeaders) {
       CreateMessage("GET / \rHTTP/1.1\r\n", headers, 2, ":", "\r\n", "");
   framer.ProcessInput(message.data(), message.size());
   EXPECT_EQ(framer.ErrorCode(), BalsaFrameEnums::INVALID_HEADER_CHARACTER);
-  // One carriage return in firstline, 1 in header value.
-  EXPECT_EQ(framer.get_invalid_chars().at('\r'), 2);
+}
+
+// Test that lone '\r' detection works correctly in the firstline
+// even if it is the last character of fractional input.
+TEST(HTTPBalsaFrame, CarriageReturnIllegalInFirstLineOnInputBoundary) {
+  HttpValidationPolicy policy{.disallow_lone_cr_in_request_headers = true};
+  BalsaHeaders balsa_headers;
+  BalsaFrame framer;
+  framer.set_is_request(true);
+  framer.set_balsa_headers(&balsa_headers);
+  framer.set_http_validation_policy(policy);
+  framer.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kError);
+  constexpr absl::string_view message1("GET / \r");
+  constexpr absl::string_view message2("HTTP/1.1\r\n\r\n");
+  EXPECT_EQ(message1.size(),
+            framer.ProcessInput(message1.data(), message1.size()));
+  EXPECT_EQ(message2.size(),
+            framer.ProcessInput(message2.data(), message2.size()));
+  EXPECT_EQ(framer.ErrorCode(), BalsaFrameEnums::INVALID_HEADER_CHARACTER);
+}
+
+// Test that lone '\r' detection works correctly in header values
+// even if it is the last character of fractional input.
+TEST(HTTPBalsaFrame, CarriageReturnIllegalInHeaderValueOnInputBoundary) {
+  HttpValidationPolicy policy{.disallow_lone_cr_in_request_headers = true};
+  BalsaHeaders balsa_headers;
+  BalsaFrame framer;
+  framer.set_is_request(true);
+  framer.set_balsa_headers(&balsa_headers);
+  framer.set_http_validation_policy(policy);
+  framer.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kError);
+  constexpr absl::string_view message1("GET / HTTP/1.1\r\nfoo: b\r");
+  constexpr absl::string_view message2("ar\r\n\r\n");
+  EXPECT_EQ(message1.size(),
+            framer.ProcessInput(message1.data(), message1.size()));
+  EXPECT_EQ(message2.size(),
+            framer.ProcessInput(message2.data(), message2.size()));
+  EXPECT_EQ(framer.ErrorCode(), BalsaFrameEnums::INVALID_HEADER_CHARACTER);
 }
 
 TEST(HTTPBalsaFrame, CarriageReturnIllegalInHeaderKey) {
@@ -1690,6 +1857,61 @@ TEST_F(HTTPBalsaFrameTest, InvalidChunkExtensionWithCarriageReturn) {
                             message.size());
 }
 
+// Regression test for b/347710034: `disallow_lone_cr_in_chunk_extension` should
+// not trigger false positive when "\r\n" terminating chunk length is separated
+// into multiple calls to ProcessInput().
+TEST_F(HTTPBalsaFrameTest, ChunkExtensionCarriageReturnLineFeedAtBoundary) {
+  balsa_frame_.set_http_validation_policy(
+      HttpValidationPolicy{.disallow_lone_cr_in_chunk_extension = true});
+  EXPECT_CALL(visitor_mock_, ProcessHeaders(_));
+  EXPECT_CALL(visitor_mock_, HeaderDone());
+  constexpr absl::string_view headers(
+      "POST / HTTP/1.1\r\n"
+      "transfer-encoding: chunked\r\n\r\n");
+  ASSERT_EQ(headers.size(),
+            balsa_frame_.ProcessInput(headers.data(), headers.size()));
+
+  constexpr absl::string_view body1("3\r");
+  ASSERT_EQ(body1.size(),
+            balsa_frame_.ProcessInput(body1.data(), body1.size()));
+  ASSERT_EQ(BalsaFrameEnums::BALSA_NO_ERROR, balsa_frame_.ErrorCode());
+
+  constexpr absl::string_view body2(
+      "\nfoo\r\n"
+      "0\r\n\r\n");
+
+  EXPECT_CALL(visitor_mock_, OnBodyChunkInput("foo"));
+  EXPECT_CALL(visitor_mock_, MessageDone());
+  ASSERT_EQ(body2.size(),
+            balsa_frame_.ProcessInput(body2.data(), body2.size()));
+
+  EXPECT_EQ(BalsaFrameEnums::BALSA_NO_ERROR, balsa_frame_.ErrorCode());
+  EXPECT_TRUE(balsa_frame_.MessageFullyRead());
+}
+
+// A CR character followed by a non-LF character is detected even if separated
+// into multiple calls to ProcessInput().
+TEST_F(HTTPBalsaFrameTest, ChunkExtensionLoneCarriageReturnAtBoundary) {
+  balsa_frame_.set_http_validation_policy(
+      HttpValidationPolicy{.disallow_lone_cr_in_chunk_extension = true});
+  EXPECT_CALL(visitor_mock_, ProcessHeaders(_));
+  EXPECT_CALL(visitor_mock_, HeaderDone());
+  constexpr absl::string_view headers(
+      "POST / HTTP/1.1\r\n"
+      "transfer-encoding: chunked\r\n\r\n");
+  ASSERT_EQ(headers.size(),
+            balsa_frame_.ProcessInput(headers.data(), headers.size()));
+
+  constexpr absl::string_view body1("3\r");
+  ASSERT_EQ(body1.size(),
+            balsa_frame_.ProcessInput(body1.data(), body1.size()));
+  ASSERT_EQ(BalsaFrameEnums::BALSA_NO_ERROR, balsa_frame_.ErrorCode());
+
+  constexpr absl::string_view body2("a");
+  EXPECT_EQ(0, balsa_frame_.ProcessInput(body2.data(), body2.size()));
+  EXPECT_EQ(BalsaFrameEnums::INVALID_CHUNK_EXTENSION, balsa_frame_.ErrorCode());
+}
+
 TEST_F(HTTPBalsaFrameTest,
        VisitorInvokedProperlyForRequestWithTransferEncoding) {
   std::string message_headers =
@@ -1881,6 +2103,153 @@ TEST_F(HTTPBalsaFrameTest,
   EXPECT_FALSE(balsa_frame_.Error());
   EXPECT_EQ(BalsaFrameEnums::FAILED_TO_FIND_WS_AFTER_REQUEST_METHOD,
             balsa_frame_.ErrorCode());
+}
+
+TEST_F(HTTPBalsaFrameTest, AbsoluteFormTargetUri) {
+  std::string message =
+      "GET http://www.google.com/index.html HTTP/1.1\r\n"
+      "Host: example.com\r\n"
+      "\r\n";
+  balsa_frame_.set_is_request(true);
+
+  EXPECT_CALL(visitor_mock_, OnHeaderInput(message));
+
+  EXPECT_EQ(message.size(),
+            balsa_frame_.ProcessInput(message.data(), message.size()));
+  EXPECT_TRUE(balsa_frame_.MessageFullyRead());
+  EXPECT_FALSE(balsa_frame_.Error());
+  EXPECT_EQ(BalsaFrameEnums::BALSA_NO_ERROR, balsa_frame_.ErrorCode());
+  EXPECT_EQ("http://www.google.com/index.html",
+            balsa_frame_.headers()->request_uri());
+  EXPECT_EQ("example.com", balsa_frame_.headers()->GetHeader("host"));
+}
+
+TEST_F(HTTPBalsaFrameTest, InvalidAbsoluteFormTargetUri) {
+  std::string message =
+      "GET -pwn/index.html HTTP/1.1\r\n"
+      "Host: example.com\r\n"
+      "\r\n";
+  balsa_frame_.set_is_request(true);
+
+  EXPECT_CALL(visitor_mock_, OnHeaderInput(message));
+
+  EXPECT_EQ(message.size(),
+            balsa_frame_.ProcessInput(message.data(), message.size()));
+  EXPECT_TRUE(balsa_frame_.MessageFullyRead());
+  EXPECT_FALSE(balsa_frame_.is_valid_target_uri());
+  EXPECT_FALSE(balsa_frame_.Error());
+  EXPECT_EQ(BalsaFrameEnums::BALSA_NO_ERROR, balsa_frame_.ErrorCode());
+  EXPECT_EQ("-pwn/index.html", balsa_frame_.headers()->request_uri());
+  EXPECT_EQ("example.com", balsa_frame_.headers()->GetHeader("host"));
+}
+
+TEST_F(HTTPBalsaFrameTest, RejectInvalidAbsoluteFormTargetUri) {
+  HttpValidationPolicy http_validation_policy{.disallow_invalid_target_uris =
+                                                  true};
+  balsa_frame_.set_http_validation_policy(http_validation_policy);
+  std::string message =
+      "GET -pwn/index.html HTTP/1.1\r\n"
+      "Host: example.com\r\n"
+      "\r\n";
+  balsa_frame_.set_is_request(true);
+
+  const size_t end_of_first_line = message.find_first_of("\r\n") + 1;
+  EXPECT_EQ(end_of_first_line,
+            balsa_frame_.ProcessInput(message.data(), message.size()));
+  EXPECT_FALSE(balsa_frame_.MessageFullyRead());
+  EXPECT_TRUE(balsa_frame_.Error());
+  EXPECT_EQ(BalsaFrameEnums::INVALID_TARGET_URI, balsa_frame_.ErrorCode());
+}
+
+TEST_F(HTTPBalsaFrameTest, RejectStarForNonOptions) {
+  HttpValidationPolicy http_validation_policy{.disallow_invalid_target_uris =
+                                                  true};
+  balsa_frame_.set_http_validation_policy(http_validation_policy);
+  std::string message =
+      "GET * HTTP/1.1\r\n"
+      "Host: example.com\r\n"
+      "\r\n";
+  balsa_frame_.set_is_request(true);
+
+  const size_t end_of_first_line = message.find_first_of("\r\n") + 1;
+  EXPECT_EQ(end_of_first_line,
+            balsa_frame_.ProcessInput(message.data(), message.size()));
+
+  EXPECT_FALSE(balsa_frame_.MessageFullyRead());
+  EXPECT_TRUE(balsa_frame_.Error());
+  EXPECT_EQ(BalsaFrameEnums::INVALID_TARGET_URI, balsa_frame_.ErrorCode());
+}
+
+TEST_F(HTTPBalsaFrameTest, AllowStarForOptions) {
+  HttpValidationPolicy http_validation_policy{.disallow_invalid_target_uris =
+                                                  true};
+  balsa_frame_.set_http_validation_policy(http_validation_policy);
+  std::string message =
+      "OPTIONS * HTTP/1.1\r\n"
+      "Host: example.com\r\n"
+      "\r\n";
+  balsa_frame_.set_is_request(true);
+
+  EXPECT_CALL(visitor_mock_, OnHeaderInput(message));
+
+  EXPECT_EQ(message.size(),
+            balsa_frame_.ProcessInput(message.data(), message.size()));
+  EXPECT_TRUE(balsa_frame_.MessageFullyRead());
+  EXPECT_FALSE(balsa_frame_.Error());
+}
+
+TEST_F(HTTPBalsaFrameTest, RejectConnectWithNoPort) {
+  HttpValidationPolicy http_validation_policy{.disallow_invalid_target_uris =
+                                                  true};
+  balsa_frame_.set_http_validation_policy(http_validation_policy);
+  std::string message =
+      "CONNECT example.com HTTP/1.1\r\n"
+      "Host: example.com\r\n"
+      "\r\n";
+  balsa_frame_.set_is_request(true);
+
+  const size_t end_of_first_line = message.find_first_of("\r\n") + 1;
+  EXPECT_EQ(end_of_first_line,
+            balsa_frame_.ProcessInput(message.data(), message.size()));
+
+  EXPECT_FALSE(balsa_frame_.MessageFullyRead());
+  EXPECT_TRUE(balsa_frame_.Error());
+  EXPECT_EQ(BalsaFrameEnums::INVALID_TARGET_URI, balsa_frame_.ErrorCode());
+}
+
+TEST_F(HTTPBalsaFrameTest, RejectConnectWithInvalidPort) {
+  HttpValidationPolicy http_validation_policy{.disallow_invalid_target_uris =
+                                                  true};
+  balsa_frame_.set_http_validation_policy(http_validation_policy);
+  std::string message =
+      "CONNECT example.com:443z HTTP/1.1\r\n"
+      "Host: example.com\r\n"
+      "\r\n";
+  balsa_frame_.set_is_request(true);
+
+  const size_t end_of_first_line = message.find_first_of("\r\n") + 1;
+  EXPECT_EQ(end_of_first_line,
+            balsa_frame_.ProcessInput(message.data(), message.size()));
+
+  EXPECT_FALSE(balsa_frame_.MessageFullyRead());
+  EXPECT_TRUE(balsa_frame_.Error());
+  EXPECT_EQ(BalsaFrameEnums::INVALID_TARGET_URI, balsa_frame_.ErrorCode());
+}
+
+TEST_F(HTTPBalsaFrameTest, AllowConnectWithValidPort) {
+  HttpValidationPolicy http_validation_policy{.disallow_invalid_target_uris =
+                                                  true};
+  balsa_frame_.set_http_validation_policy(http_validation_policy);
+  std::string message =
+      "CONNECT example.com:443 HTTP/1.1\r\n"
+      "Host: example.com\r\n"
+      "\r\n";
+  balsa_frame_.set_is_request(true);
+
+  EXPECT_EQ(message.size(),
+            balsa_frame_.ProcessInput(message.data(), message.size()));
+  EXPECT_TRUE(balsa_frame_.MessageFullyRead());
+  EXPECT_FALSE(balsa_frame_.Error());
 }
 
 TEST_F(HTTPBalsaFrameTest,
@@ -3570,13 +3939,9 @@ TEST_F(HTTPBalsaFrameTest, FrameAndResetAndFrameAgain) {
   EXPECT_EQ(BalsaFrameEnums::BALSA_NO_ERROR, balsa_frame_.ErrorCode());
 }
 
-TEST_F(HTTPBalsaFrameTest, TrackInvalidChars) {
-  EXPECT_FALSE(balsa_frame_.track_invalid_chars());
-}
-
 // valid chars are 9 (tab), 10 (LF), 13(CR), and 32-255
-TEST_F(HTTPBalsaFrameTest, InvalidCharsInHeaderValueWarning) {
-  balsa_frame_.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kWarning);
+TEST_F(HTTPBalsaFrameTest, InvalidCharsInHeaderValueError) {
+  balsa_frame_.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kError);
   // nulls are double escaped since otherwise this initialized wrong
   const std::string kEscapedInvalid1 =
       "GET /foo HTTP/1.1\r\n"
@@ -3589,16 +3954,16 @@ TEST_F(HTTPBalsaFrameTest, InvalidCharsInHeaderValueWarning) {
   absl::CUnescape(kEscapedInvalid1, &message);
 
   EXPECT_CALL(visitor_mock_,
-              HandleWarning(BalsaFrameEnums::INVALID_HEADER_CHARACTER));
+              HandleError(BalsaFrameEnums::INVALID_HEADER_CHARACTER));
 
   balsa_frame_.ProcessInput(message.data(), message.size());
-  EXPECT_FALSE(balsa_frame_.Error());
-  EXPECT_TRUE(balsa_frame_.MessageFullyRead());
+  EXPECT_TRUE(balsa_frame_.Error());
+  EXPECT_FALSE(balsa_frame_.MessageFullyRead());
 }
 
-// Header names reject invalid chars even at the warning level.
-TEST_F(HTTPBalsaFrameTest, InvalidCharsInHeaderKeyError) {
-  balsa_frame_.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kWarning);
+// Header names reject invalid chars even when the InvalidCharsLevel is kOff.
+TEST_F(HTTPBalsaFrameTest, InvalidCharsInHeaderNameError) {
+  balsa_frame_.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kOff);
   // nulls are double escaped since otherwise this initialized wrong
   const std::string kEscapedInvalid1 =
       "GET /foo HTTP/1.1\r\n"
@@ -3675,8 +4040,8 @@ class HTTPBalsaFrameTestOneChar : public HTTPBalsaFrameTest,
   char GetCharUnderTest() { return GetParam(); }
 };
 
-TEST_P(HTTPBalsaFrameTestOneChar, InvalidCharsWarningSet) {
-  balsa_frame_.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kWarning);
+TEST_P(HTTPBalsaFrameTestOneChar, InvalidCharsErrorSet) {
+  balsa_frame_.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kError);
   const std::string kRequest =
       "GET /foo HTTP/1.1\r\n"
       "Bogus-Char-Goes-Here: ";
@@ -3688,27 +4053,26 @@ TEST_P(HTTPBalsaFrameTestOneChar, InvalidCharsWarningSet) {
   if (c == 9 || c == 10 || c == 13) {
     // valid char
     EXPECT_CALL(visitor_mock_,
-                HandleWarning(BalsaFrameEnums::INVALID_HEADER_CHARACTER))
+                HandleError(BalsaFrameEnums::INVALID_HEADER_CHARACTER))
         .Times(0);
     balsa_frame_.ProcessInput(message.data(), message.size());
-    EXPECT_THAT(balsa_frame_.get_invalid_chars(), IsEmpty());
+    EXPECT_FALSE(balsa_frame_.Error());
+    EXPECT_TRUE(balsa_frame_.MessageFullyRead());
   } else {
     // invalid char
-    absl::flat_hash_map<char, int> expected_count = {{c, 1}};
     EXPECT_CALL(visitor_mock_,
-                HandleWarning(BalsaFrameEnums::INVALID_HEADER_CHARACTER));
+                HandleError(BalsaFrameEnums::INVALID_HEADER_CHARACTER));
     balsa_frame_.ProcessInput(message.data(), message.size());
-    EXPECT_EQ(balsa_frame_.get_invalid_chars(), expected_count);
+    EXPECT_TRUE(balsa_frame_.Error());
+    EXPECT_FALSE(balsa_frame_.MessageFullyRead());
   }
-  EXPECT_FALSE(balsa_frame_.Error());
-  EXPECT_TRUE(balsa_frame_.MessageFullyRead());
 }
 
 INSTANTIATE_TEST_SUITE_P(TestInvalidCharSet, HTTPBalsaFrameTestOneChar,
                          Range<char>(0, 32));
 
 TEST_F(HTTPBalsaFrameTest, InvalidCharEndOfLine) {
-  balsa_frame_.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kWarning);
+  balsa_frame_.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kError);
   const std::string kInvalid1 =
       "GET /foo HTTP/1.1\r\n"
       "Header-Key: headervalue\\x00\r\n"
@@ -3717,14 +4081,14 @@ TEST_F(HTTPBalsaFrameTest, InvalidCharEndOfLine) {
   absl::CUnescape(kInvalid1, &message);
 
   EXPECT_CALL(visitor_mock_,
-              HandleWarning(BalsaFrameEnums::INVALID_HEADER_CHARACTER));
+              HandleError(BalsaFrameEnums::INVALID_HEADER_CHARACTER));
   balsa_frame_.ProcessInput(message.data(), message.size());
-  EXPECT_FALSE(balsa_frame_.Error());
-  EXPECT_TRUE(balsa_frame_.MessageFullyRead());
+  EXPECT_TRUE(balsa_frame_.Error());
+  EXPECT_FALSE(balsa_frame_.MessageFullyRead());
 }
 
 TEST_F(HTTPBalsaFrameTest, InvalidCharInFirstLine) {
-  balsa_frame_.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kWarning);
+  balsa_frame_.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kError);
   const std::string kInvalid1 =
       "GET /foo \\x00HTTP/1.1\r\n"
       "Legit-Header: legitvalue\r\n\r\n";
@@ -3732,31 +4096,10 @@ TEST_F(HTTPBalsaFrameTest, InvalidCharInFirstLine) {
   absl::CUnescape(kInvalid1, &message);
 
   EXPECT_CALL(visitor_mock_,
-              HandleWarning(BalsaFrameEnums::INVALID_HEADER_CHARACTER));
+              HandleError(BalsaFrameEnums::INVALID_HEADER_CHARACTER));
   balsa_frame_.ProcessInput(message.data(), message.size());
-  EXPECT_FALSE(balsa_frame_.Error());
-  EXPECT_TRUE(balsa_frame_.MessageFullyRead());
-}
-
-TEST_F(HTTPBalsaFrameTest, InvalidCharsAreCounted) {
-  balsa_frame_.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kWarning);
-  const std::string kInvalid1 =
-      "GET /foo \\x00\\x00\\x00HTTP/1.1\r\n"
-      "Bogus-Header: \\x00\\x04\\x04value\r\n\r\n";
-  std::string message;
-  absl::CUnescape(kInvalid1, &message);
-
-  EXPECT_CALL(visitor_mock_,
-              HandleWarning(BalsaFrameEnums::INVALID_HEADER_CHARACTER));
-  balsa_frame_.ProcessInput(message.data(), message.size());
-  absl::flat_hash_map<char, int> expected_count = {{'\0', 4}, {'\4', 2}};
-  EXPECT_FALSE(balsa_frame_.Error());
-  EXPECT_TRUE(balsa_frame_.MessageFullyRead());
-  EXPECT_EQ(balsa_frame_.get_invalid_chars(), expected_count);
-
-  absl::flat_hash_map<char, int> empty_count;
-  balsa_frame_.Reset();
-  EXPECT_EQ(balsa_frame_.get_invalid_chars(), empty_count);
+  EXPECT_TRUE(balsa_frame_.Error());
+  EXPECT_FALSE(balsa_frame_.MessageFullyRead());
 }
 
 // Test gibberish in headers and trailer. GFE does not crash but garbage in
@@ -4268,34 +4611,55 @@ TEST_F(HTTPBalsaFrameTest, ContinuationDisallowed) {
   EXPECT_EQ(BalsaFrameEnums::INVALID_HEADER_FORMAT, balsa_frame_.ErrorCode());
 }
 
-TEST_F(HTTPBalsaFrameTest, NullInValue) {
+TEST_F(HTTPBalsaFrameTest, NullAtBeginningOrEndOfValue) {
+  balsa_frame_.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kError);
+
   constexpr absl::string_view null_string("\0", 1);
   const std::string message =
       absl::StrCat("GET / HTTP/1.1\r\n",                                 //
                    "key1: ", null_string, "value starts with null\r\n",  //
-                   "key2: value ", null_string, "includes null\r\n",     //
-                   "key3: value ends in null", null_string, "\r\n",      //
+                   "key2: value ends in null", null_string, "\r\n",      //
                    "\r\n");
 
   // TODO(b/314138604): RFC9110 Section 5.5 requires received CR, LF and NUL
-  // characters to be replaced with SP, see
+  // characters to be replaced with SP if the message is not rejected, see
   // https://www.rfc-editor.org/rfc/rfc9110.html#name-field-values.
   // BalsaFrame currently strips (instead of replacing) NUL at the beginning or
-  // end of the header value, but keeps it if it occurs in the middle.
+  // end of the header value.
   FakeHeaders fake_headers;
   fake_headers.AddKeyValue("key1", "value starts with null");
-  fake_headers.AddKeyValue(
-      "key2", absl::StrCat("value ", null_string, "includes null"));
-  fake_headers.AddKeyValue("key3", "value ends in null");
-  EXPECT_CALL(visitor_mock_, ProcessHeaders(fake_headers));
+  fake_headers.AddKeyValue("key2", "value ends in null");
+  EXPECT_CALL(visitor_mock_,
+              HandleError(BalsaFrameEnums::INVALID_HEADER_CHARACTER));
 
   EXPECT_EQ(message.size(),
             balsa_frame_.ProcessInput(message.data(), message.size()));
-  EXPECT_FALSE(balsa_frame_.Error());
+  EXPECT_TRUE(balsa_frame_.Error());
+}
+
+TEST_F(HTTPBalsaFrameTest, NullInMiddleOfValue) {
+  balsa_frame_.set_invalid_chars_level(BalsaFrame::InvalidCharsLevel::kError);
+
+  constexpr absl::string_view null_string("\0", 1);
+  const std::string message =
+      absl::StrCat("GET / HTTP/1.1\r\n",                             //
+                   "key: value ", null_string, "includes null\r\n",  //
+                   "\r\n");
+
+  // TODO(b/314138604): RFC9110 Section 5.5 requires received CR, LF and NUL
+  // characters to be replaced with SP if the message is not rejected, see
+  // https://www.rfc-editor.org/rfc/rfc9110.html#name-field-values.
+  // BalsaFrame currently keeps the NUL character if it occurs in the middle.
+  FakeHeaders fake_headers;
+  fake_headers.AddKeyValue(
+      "key", absl::StrCat("value ", null_string, "includes null"));
+  EXPECT_CALL(visitor_mock_,
+              HandleError(BalsaFrameEnums::INVALID_HEADER_CHARACTER));
+
+  EXPECT_EQ(message.size(),
+            balsa_frame_.ProcessInput(message.data(), message.size()));
+  EXPECT_TRUE(balsa_frame_.Error());
 }
 
 }  // namespace
-
-}  // namespace test
-
-}  // namespace quiche
+}  // namespace quiche::test

@@ -8,7 +8,6 @@
 #include "third_party/blink/renderer/core/layout/length_utils.h"
 #include "third_party/blink/renderer/core/layout/logical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/mathml/math_layout_utils.h"
-#include "third_party/blink/renderer/core/layout/out_of_flow_layout_part.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/clear_collection_scope.h"
 
 namespace blink {
@@ -150,7 +149,7 @@ void MathScriptsLayoutAlgorithm::GatherChildren(
         // https://w3c.github.io/mathml-core/#prescripts-and-tensor-indices-mmultiscripts
         if (IsPrescriptDelimiter(block_child)) {
           if (!number_of_scripts_is_even || *prescripts) {
-            NOTREACHED();
+            NOTREACHED_IN_MIGRATION();
             return;
           }
           *first_prescript_index = sub_sup_pairs->size() - 1;
@@ -169,7 +168,7 @@ void MathScriptsLayoutAlgorithm::GatherChildren(
         continue;
       }
       default:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
     }
   }
   DCHECK(number_of_scripts_is_even);
@@ -410,7 +409,7 @@ const LayoutResult* MathScriptsLayoutAlgorithm::Layout() {
   container_builder_.SetIntrinsicBlockSize(intrinsic_block_size);
   container_builder_.SetFragmentsTotalBlockSize(block_size);
 
-  OutOfFlowLayoutPart(Node(), GetConstraintSpace(), &container_builder_).Run();
+  container_builder_.HandleOofsAndSpecialDescendants();
 
   return container_builder_.ToBoxFragment();
 }

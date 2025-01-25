@@ -963,6 +963,7 @@ message NetworkConfig {
 
   repeated IPAddrCIDR ipv6_addresses = 4;
   optional bytes ipv6_gateway = 5;
+  repeated IPAddrCIDR ipv6_delegated_prefixes = 15;
 
   bool ipv4_default_route = 6;
   bool ipv6_blackhole_route = 7;

@@ -79,8 +79,9 @@ password_manager::PasswordForm GenerateFormFromCredential(
   form.date_created = base::Time::Now();
   form.date_password_modified = form.date_created;
 
-  if (!credential.note.empty())
+  if (!credential.note.empty()) {
     form.SetNoteWithEmptyUniqueDisplayName(credential.note);
+  }
 
   DCHECK(!credential.stored_in.empty());
   form.in_store = *credential.stored_in.begin();
@@ -94,6 +95,10 @@ password_manager::PasswordStoreChangeList GetChangesForAddedForms(
     changes.emplace_back(password_manager::PasswordStoreChange::ADD, form);
   }
   return changes;
+}
+
+bool MergeDeleteAllResultsFromPasswordStores(std::vector<bool> results) {
+  return base::ranges::all_of(results, [](bool result) { return result; });
 }
 
 }  // namespace
@@ -115,7 +120,9 @@ SavedPasswordsPresenter::SavedPasswordsPresenter(
 
 SavedPasswordsPresenter::~SavedPasswordsPresenter() = default;
 
-void SavedPasswordsPresenter::Init() {
+void SavedPasswordsPresenter::Init(base::OnceClosure completion_callback) {
+  init_completion_callback_ = std::move(completion_callback);
+
   // Clear old cache.
   sort_key_to_password_forms_.clear();
   passwords_grouper_->ClearCache();
@@ -174,6 +181,28 @@ bool SavedPasswordsPresenter::RemoveCredential(
   return !forms_to_delete.empty();
 }
 
+void SavedPasswordsPresenter::DeleteAllData(
+    base::OnceCallback<void(bool)> success_callback) {
+  // Synchronosly remove all passkeys if they are available.
+  if (passkey_store_) {
+    passkey_store_->DeleteAllPasskeys();
+  }
+
+  const auto completion_barrier = base::BarrierCallback<bool>(
+      2 - !profile_store_ - !account_store_,
+      base::BindOnce(&MergeDeleteAllResultsFromPasswordStores)
+          .Then(std::move(success_callback)));
+
+  if (account_store_) {
+    account_store_->RemoveLoginsCreatedBetween(
+        FROM_HERE, base::Time(), base::Time::Max(), completion_barrier);
+  }
+  if (profile_store_) {
+    profile_store_->RemoveLoginsCreatedBetween(
+        FROM_HERE, base::Time(), base::Time::Max(), completion_barrier);
+  }
+}
+
 void SavedPasswordsPresenter::UndoLastRemoval() {
   undo_helper_->Undo();
 }
@@ -184,8 +213,9 @@ SavedPasswordsPresenter::GetExpectedAddResult(
   if (!IsValidPasswordURL(credential.GetURL())) {
     return AddResult::kInvalid;
   }
-  if (credential.password.empty())
+  if (credential.password.empty()) {
     return AddResult::kInvalid;
+  }
 
   auto have_equal_username_and_realm =
       [&credential](const PasswordForm& entry) {
@@ -212,8 +242,9 @@ SavedPasswordsPresenter::GetExpectedAddResult(
       base::ranges::any_of(sort_key_to_password_forms_,
                            have_equal_username_and_realm_in_account_store);
 
-  if (!existing_credential_profile && !existing_credential_account)
+  if (!existing_credential_profile && !existing_credential_account) {
     return AddResult::kSuccess;
+  }
 
   auto have_exact_match = [&credential, &have_equal_username_and_realm](
                               const DuplicatePasswordsMap::value_type& pair) {
@@ -221,13 +252,16 @@ SavedPasswordsPresenter::GetExpectedAddResult(
            credential.password == pair.second.password_value;
   };
 
-  if (base::ranges::any_of(sort_key_to_password_forms_, have_exact_match))
+  if (base::ranges::any_of(sort_key_to_password_forms_, have_exact_match)) {
     return AddResult::kExactMatch;
+  }
 
-  if (!existing_credential_profile)
+  if (!existing_credential_profile) {
     return AddResult::kConflictInAccountStore;
-  if (!existing_credential_account)
+  }
+  if (!existing_credential_account) {
     return AddResult::kConflictInProfileStore;
+  }
 
   return AddResult::kConflictInProfileAndAccountStore;
 }
@@ -235,8 +269,9 @@ SavedPasswordsPresenter::GetExpectedAddResult(
 bool SavedPasswordsPresenter::AddCredential(
     const CredentialUIEntry& credential,
     password_manager::PasswordForm::Type type) {
-  if (GetExpectedAddResult(credential) != AddResult::kSuccess)
+  if (GetExpectedAddResult(credential) != AddResult::kSuccess) {
     return false;
+  }
 
   UnblocklistBothStores(credential);
   PasswordForm form = GenerateFormFromCredential(credential, type);
@@ -253,8 +288,9 @@ void SavedPasswordsPresenter::UnblocklistBothStores(
       PasswordFormDigest(PasswordForm::Scheme::kHtml,
                          credential.GetFirstSignonRealm(), credential.GetURL());
   profile_store_->Unblocklist(form_digest);
-  if (account_store_)
+  if (account_store_) {
     account_store_->Unblocklist(form_digest);
+  }
 }
 
 void SavedPasswordsPresenter::AddCredentials(
@@ -373,7 +409,7 @@ std::vector<CredentialUIEntry> SavedPasswordsPresenter::GetSavedPasswords()
   auto credentials = GetSavedCredentials();
   std::erase_if(credentials, [](const auto& credential) {
     return !credential.passkey_credential_id.empty() ||
-           credential.blocked_by_user || !credential.federation_origin.opaque();
+           credential.blocked_by_user || credential.federation_origin.IsValid();
   });
   return credentials;
 }
@@ -407,8 +443,9 @@ void SavedPasswordsPresenter::RemoveObserver(Observer* observer) {
 
 void SavedPasswordsPresenter::NotifyEdited(
     const CredentialUIEntry& credential) {
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnEdited(credential);
+  }
 }
 
 void SavedPasswordsPresenter::NotifySavedPasswordsChanged(
@@ -417,8 +454,13 @@ void SavedPasswordsPresenter::NotifySavedPasswordsChanged(
   if (pending_store_updates_ > 0) {
     return;
   }
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnSavedPasswordsChanged(changes);
+  }
+
+  if (init_completion_callback_) {
+    std::move(init_completion_callback_).Run();
+  }
 }
 
 void SavedPasswordsPresenter::OnLoginsChanged(

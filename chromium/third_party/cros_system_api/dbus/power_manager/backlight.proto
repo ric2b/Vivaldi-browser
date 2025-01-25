@@ -42,10 +42,32 @@ message SetBacklightBrightnessRequest {
     MODEL = 1;
     // User request via the Settings app.
     USER_REQUEST_FROM_SETTINGS_APP = 2;
+    // Brightness was restored to the previous user preference (typically on the
+    // login screen).
+    RESTORED_FROM_USER_PREFERENCE = 3;
   }
   optional Cause cause = 3;
 
   // Next value to use: 4
+}
+
+// Request to change the ambient light sensor sent from Chrome to powerd in a
+// SetAmbientLightSensorEnabled D-Bus method call.
+message SetAmbientLightSensorEnabledRequest {
+  // Desired status of the ambient light sensor.
+  optional bool sensor_enabled = 1;
+
+  // The reason for sending the request.
+  enum Cause {
+    // User request via the Settings app.
+    USER_REQUEST_FROM_SETTINGS_APP = 0;
+    // Ambient light sensor was restored to the previous user
+    // preference (typically on the login screen).
+    RESTORED_FROM_USER_PREFERENCE = 1;
+  }
+  optional Cause cause = 2;
+
+  // Next value to use: 3
 }
 
 // Announcement of a backlight brightness change emitted by powerd via a
@@ -89,7 +111,10 @@ message BacklightBrightnessChange {
     BATTERY_SAVER_STATE_CHANGED = 13;
     // User request via the Settings app.
     USER_REQUEST_FROM_SETTINGS_APP = 14;
-    // Next value to use: 15
+    // Brightness was restored to the previous user preference (typically on the
+    // login screen).
+    RESTORED_FROM_USER_PREFERENCE = 15;
+    // Next value to use: 16
   }
   optional Cause cause = 2;
 
@@ -119,7 +144,10 @@ message AmbientLightSensorChange {
     // Ambient light sensor status was changed as a result of a brightness
     // change not triggered by the user.
     BRIGHTNESS_OTHER = 5;
-    // Next value to use: 6
+    // Ambient light sensor status was restored to the previous user preference
+    // (typically on the login screen).
+    RESTORED_FROM_USER_PREFERENCE = 6;
+    // Next value to use: 7
   }
   optional Cause cause = 2;
 }

@@ -6,8 +6,8 @@
 
 @implementation VivaldiBookmarksEditorFeatures
 
-+ (BOOL)shouldShowNewBookmarkEditor {
-  return IsNewStartPageIsEnabled();
++ (BOOL)shouldShowTopSites {
+  return IsTopSitesEnabled();
 }
 
 @end

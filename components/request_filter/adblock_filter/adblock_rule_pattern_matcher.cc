@@ -47,7 +47,7 @@ class IsWildcard {
 
 // Returns whether |position| within the |url| belongs to its |host| component
 // and corresponds to the beginning of a (sub-)domain.
-inline bool IsSubdomainAnchored(base::StringPiece url,
+inline bool IsSubdomainAnchored(std::string_view url,
                                 url::Component host,
                                 size_t position) {
   DCHECK_LE(position, url.size());
@@ -63,24 +63,24 @@ inline bool IsSubdomainAnchored(base::StringPiece url,
 // Returns the position of the leftmost occurrence of a |subpattern| in the
 // |text| starting no earlier than |from| the specified position. If the
 // |subpattern| has separator placeholders, searches for a fuzzy occurrence.
-size_t FindSubpattern(base::StringPiece text,
-                      base::StringPiece subpattern,
+size_t FindSubpattern(std::string_view text,
+                      std::string_view subpattern,
                       size_t from = 0) {
   const bool is_fuzzy =
       (subpattern.find(url_pattern_index::kSeparatorPlaceholder) !=
-       base::StringPiece::npos);
+       std::string_view::npos);
   return is_fuzzy ? url_pattern_index::FindFuzzy(text, subpattern, from)
                   : text.find(subpattern, from);
 }
 
 // Same as FindSubpattern(url, subpattern), but searches for an occurrence that
 // starts at the beginning of a (sub-)domain within the url's |host| component.
-size_t FindSubdomainAnchoredSubpattern(base::StringPiece url,
+size_t FindSubdomainAnchoredSubpattern(std::string_view url,
                                        url::Component host,
-                                       base::StringPiece subpattern) {
+                                       std::string_view subpattern) {
   const bool is_fuzzy =
       (subpattern.find(url_pattern_index::kSeparatorPlaceholder) !=
-       base::StringPiece::npos);
+       std::string_view::npos);
 
   // Any match found after the end of the host will be discarded, so just
   // avoid searching there for the subpattern to begin with.
@@ -89,10 +89,10 @@ size_t FindSubdomainAnchoredSubpattern(base::StringPiece url,
   size_t max_match_end = 0;
   if (!base::CheckAdd(host.end(), subpattern.length())
            .AssignIfValid(&max_match_end)) {
-    return base::StringPiece::npos;
+    return std::string_view::npos;
   }
-  const base::StringPiece url_match_candidate = url.substr(0, max_match_end);
-  const base::StringPiece url_host = url.substr(0, host.end());
+  const std::string_view url_match_candidate = url.substr(0, max_match_end);
+  const std::string_view url_host = url.substr(0, host.end());
 
   for (size_t position = static_cast<size_t>(host.begin);
        position <= static_cast<size_t>(host.end()); ++position) {
@@ -104,7 +104,7 @@ size_t FindSubdomainAnchoredSubpattern(base::StringPiece url,
     position = is_fuzzy ? url_pattern_index::FindFuzzy(url_match_candidate,
                                                        subpattern, position)
                         : url_match_candidate.find(subpattern, position);
-    if (position == base::StringPiece::npos ||
+    if (position == std::string_view::npos ||
         IsSubdomainAnchored(url, host, position)) {
       return position;
     }
@@ -113,21 +113,21 @@ size_t FindSubdomainAnchoredSubpattern(base::StringPiece url,
     // within the host, which the loop itself increments to the anchored
     // sub-domain.
     position = url_host.find('.', position);
-    if (position == base::StringPiece::npos)
+    if (position == std::string_view::npos)
       break;
   }
-  return base::StringPiece::npos;
+  return std::string_view::npos;
 }
 
 // Helper for DoesTextMatchLastSubpattern. Treats kSeparatorPlaceholder as not
 // matching the end of the text.
 bool DoesTextMatchLastSubpatternInternal(uint8_t anchor_type,
-                                         base::StringPiece text,
+                                         std::string_view text,
                                          url::Component url_host,
-                                         base::StringPiece subpattern) {
+                                         std::string_view subpattern) {
   // Enumerate all possible combinations of |anchor_left| and |anchor_right|.
   if (anchor_type == flat::AnchorType_NONE) {
-    return FindSubpattern(text, subpattern) != base::StringPiece::npos;
+    return FindSubpattern(text, subpattern) != std::string_view::npos;
   }
 
   if (anchor_type == flat::AnchorType_END) {
@@ -146,7 +146,7 @@ bool DoesTextMatchLastSubpatternInternal(uint8_t anchor_type,
   if (anchor_type == flat::AnchorType_HOST) {
     return url_host.is_nonempty() &&
            FindSubdomainAnchoredSubpattern(text, url_host, subpattern) !=
-               base::StringPiece::npos;
+               std::string_view::npos;
   }
 
   if (anchor_type == (flat::AnchorType_HOST | flat::AnchorType_END)) {
@@ -157,16 +157,15 @@ bool DoesTextMatchLastSubpatternInternal(uint8_t anchor_type,
   }
 
   NOTREACHED();
-  return false;
 }
 
 // Matches the last |subpattern| against |text|. Special treatment is required
 // for the last subpattern since |kSeparatorPlaceholder| can also match the end
 // of the text.
 bool DoesTextMatchLastSubpattern(uint8_t anchor_type,
-                                 base::StringPiece text,
+                                 std::string_view text,
                                  url::Component url_host,
-                                 base::StringPiece subpattern) {
+                                 std::string_view subpattern) {
   DCHECK(!subpattern.empty());
 
   if (DoesTextMatchLastSubpatternInternal(anchor_type, text, url_host,
@@ -187,9 +186,9 @@ bool DoesTextMatchLastSubpattern(uint8_t anchor_type,
 
 // Returns whether the given |url_pattern| matches the given |url_spec|.
 // Compares the pattern the the url in a case-sensitive manner.
-bool IsCaseSensitiveMatch(base::StringPiece url_pattern,
+bool IsCaseSensitiveMatch(std::string_view url_pattern,
                           uint8_t anchor_type,
-                          base::StringPiece url_spec,
+                          std::string_view url_spec,
                           url::Component url_host) {
   DCHECK(!url_spec.empty());
 
@@ -201,7 +200,7 @@ bool IsCaseSensitiveMatch(base::StringPiece url_pattern,
   // '*' were turned to empty at the parsing stage
   DCHECK(subpattern_it != subpattern_end);
 
-  base::StringPiece subpattern = *subpattern_it;
+  std::string_view subpattern = *subpattern_it;
   ++subpattern_it;
 
   // There is only one |subpattern|.
@@ -212,7 +211,7 @@ bool IsCaseSensitiveMatch(base::StringPiece url_pattern,
 
   // Otherwise, the first |subpattern| does not have to be a suffix. But it
   // still can have a left anchor. Check and handle that.
-  base::StringPiece text = url_spec;
+  std::string_view text = url_spec;
   if ((anchor_type & flat::AnchorType_START) != 0) {
     if (!url_pattern_index::StartsWithFuzzy(url_spec, subpattern))
       return false;
@@ -222,7 +221,7 @@ bool IsCaseSensitiveMatch(base::StringPiece url_pattern,
       return false;
     const size_t match_begin =
         FindSubdomainAnchoredSubpattern(url_spec, url_host, subpattern);
-    if (match_begin == base::StringPiece::npos)
+    if (match_begin == std::string_view::npos)
       return false;
     text.remove_prefix(match_begin + subpattern.size());
   } else {
@@ -239,7 +238,7 @@ bool IsCaseSensitiveMatch(base::StringPiece url_pattern,
     DCHECK(!subpattern.empty());
 
     const size_t match_position = FindSubpattern(text, subpattern);
-    if (match_position == base::StringPiece::npos)
+    if (match_position == std::string_view::npos)
       return false;
     text.remove_prefix(match_position + subpattern.size());
 

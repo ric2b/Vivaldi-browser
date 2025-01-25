@@ -2437,13 +2437,11 @@ EIGEN_STRONG_INLINE float predux<Packet4f>(const Packet4f& a) {
 
 template <>
 EIGEN_STRONG_INLINE int predux<Packet4i>(const Packet4i& a) {
-  Packet4i sum;
-  sum = vec_sums(a, p4i_ZERO);
-#ifdef _BIG_ENDIAN
-  sum = vec_sld(sum, p4i_ZERO, 12);
-#else
-  sum = vec_sld(p4i_ZERO, sum, 4);
-#endif
+  Packet4i b, sum;
+  b = vec_sld(a, a, 8);
+  sum = a + b;
+  b = vec_sld(sum, sum, 4);
+  sum += b;
   return pfirst(sum);
 }
 

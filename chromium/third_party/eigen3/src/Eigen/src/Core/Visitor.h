@@ -781,7 +781,7 @@ EIGEN_DEVICE_FUNC inline bool DenseBase<Derived>::hasNaN() const {
  */
 template <typename Derived>
 EIGEN_DEVICE_FUNC inline bool DenseBase<Derived>::allFinite() const {
-  return derived().array().isFinite().all();
+  return derived().array().isFiniteTyped().all();
 }
 
 }  // end namespace Eigen

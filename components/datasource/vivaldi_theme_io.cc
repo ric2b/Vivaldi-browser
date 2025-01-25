@@ -88,7 +88,7 @@ void RemoveTempDirLater(const scoped_refptr<base::SequencedTaskRunner>& runner,
 // Return the index of the theme with the given id in |value| or SIZE_MAX if
 // not found.
 size_t FindThemeIndex(const base::Value::List& list,
-                      base::StringPiece theme_id) {
+                      std::string_view theme_id) {
   // Be defensive and do not assume any structure of the value.
   for (size_t i = 0; i < list.size(); ++i) {
     const base::Value& elem = list[i];
@@ -106,7 +106,7 @@ size_t FindThemeIndex(const base::Value::List& list,
 // Find the theme object in the given preference list.
 const base::Value* FindThemeValue(const PrefService* prefs,
                                   const std::string& theme_list_pref_path,
-                                  base::StringPiece theme_id) {
+                                  std::string_view theme_id) {
   auto& themes = prefs->GetList(theme_list_pref_path);
   size_t index = FindThemeIndex(themes, theme_id);
   if (index == SIZE_MAX)
@@ -243,7 +243,7 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
 
   void WriteImage(base::Value& object,
                   std::string image_key,
-                  base::StringPiece name,
+                  std::string_view name,
                   std::string base_name,
                   const uint8_t* data,
                   size_t size) {
@@ -635,9 +635,9 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
     bool can_be_empty = false;
   };
   struct EnumInfo {
-    EnumInfo(std::vector<base::StringPiece> enum_cases)
+    EnumInfo(std::vector<std::string_view> enum_cases)
         : enum_cases(std::move(enum_cases)) {}
-    std::vector<base::StringPiece> enum_cases;
+    std::vector<std::string_view> enum_cases;
   };
 
   using InfoUnion = std::variant<BoolInfo, NumberInfo, StringInfo, EnumInfo>;
@@ -654,10 +654,10 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
     InfoUnion infoUnion;
   };
 
-  using InfoMap = base::flat_map<base::StringPiece, Info>;
+  using InfoMap = base::flat_map<std::string_view, Info>;
 
   auto build_map = []() -> InfoMap {
-    std::vector<std::pair<base::StringPiece, Info>> list;
+    std::vector<std::pair<std::string_view, Info>> list;
 
     auto add_bool = [&](const char* key) -> void {
       list.emplace_back(key, Info(kOptional, InfoUnion(BoolInfo())));
@@ -681,7 +681,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
       add_string(key, can_be_empty);
     };
     auto add_enum = [&](const char* key,
-                        std::vector<base::StringPiece> enum_cases) -> void {
+                        std::vector<std::string_view> enum_cases) -> void {
       DCHECK(!enum_cases.empty());
       list.emplace_back(
           key, Info(kOptional, InfoUnion(EnumInfo(std::move(enum_cases)))));
@@ -887,7 +887,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
     const raw_ref<base::Value> object_;
     const raw_ref<std::string> error_;
     const VerifyAndNormalizeFlags flags_;
-    base::StringPiece key_;
+    std::string_view key_;
     Presence presence_ = kOptional;
   };
 
@@ -916,7 +916,7 @@ void Import(base::WeakPtr<Profile> profile,
 
 void EnumerateUserThemeUrls(
     PrefService* prefs,
-    base::RepeatingCallback<void(base::StringPiece url)> callback) {
+    base::RepeatingCallback<void(std::string_view url)> callback) {
   auto enumerate_theme_list = [&](const std::string& theme_list_pref_path) {
     auto& themes = prefs->GetList(theme_list_pref_path);
     for (const base::Value& value : themes) {
@@ -959,7 +959,7 @@ void EnumerateUserThemeUrls(
 }
 
 bool StoreImageUrl(PrefService* prefs,
-                   base::StringPiece theme_id,
+                   std::string_view theme_id,
                    std::string url) {
   auto store_image = [&](const std::string& theme_list_pref_path) -> bool {
     size_t index =

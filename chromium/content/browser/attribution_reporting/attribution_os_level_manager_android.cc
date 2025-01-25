@@ -4,7 +4,6 @@
 
 #include "content/browser/attribution_reporting/attribution_os_level_manager_android.h"
 
-#include <jni.h>
 #include <stddef.h>
 
 #include <iterator>
@@ -13,8 +12,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/android/jni_array.h"
-#include "base/android/scoped_java_ref.h"
+#include "base/android/jni_string.h"
 #include "base/barrier_closure.h"
 #include "base/check.h"
 #include "base/check_op.h"
@@ -36,7 +34,6 @@
 #include "content/browser/attribution_reporting/attribution_reporting.mojom.h"
 #include "content/browser/attribution_reporting/os_registration.h"
 #include "content/browser/browser_thread_impl.h"
-#include "content/public/android/content_jni_headers/AttributionOsLevelManager_jni.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/content_browser_client.h"
@@ -44,6 +41,12 @@
 #include "url/android/gurl_android.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "content/public/android/content_jni_headers/AttributionOsLevelManager_jni.h"
+
+using jni_zero::AttachCurrentThread;
+using jni_zero::ScopedJavaLocalRef;
 
 namespace content {
 
@@ -98,8 +101,7 @@ ApiState ConvertToApiState(int value) {
 
 void GetMeasurementApiStatus() {
   base::ElapsedThreadTimer timer;
-  Java_AttributionOsLevelManager_getMeasurementApiStatus(
-      base::android::AttachCurrentThread());
+  Java_AttributionOsLevelManager_getMeasurementApiStatus(AttachCurrentThread());
   if (timer.is_supported()) {
     base::UmaHistogramTimes("Conversions.GetMeasurementStatusTime",
                             timer.Elapsed());
@@ -125,7 +127,7 @@ static void JNI_AttributionOsLevelManager_OnMeasurementStateReturned(
 
 AttributionOsLevelManagerAndroid::AttributionOsLevelManagerAndroid() {
   jobj_ = Java_AttributionOsLevelManager_Constructor(
-      base::android::AttachCurrentThread(), reinterpret_cast<intptr_t>(this));
+      AttachCurrentThread(), reinterpret_cast<intptr_t>(this));
 
   if (AttributionOsLevelManager::ShouldInitializeApiState()) {
     base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()})
@@ -135,8 +137,7 @@ AttributionOsLevelManagerAndroid::AttributionOsLevelManagerAndroid() {
 
 AttributionOsLevelManagerAndroid::~AttributionOsLevelManagerAndroid() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  Java_AttributionOsLevelManager_nativeDestroyed(
-      base::android::AttachCurrentThread(), jobj_);
+  Java_AttributionOsLevelManager_nativeDestroyed(AttachCurrentThread(), jobj_);
 }
 
 namespace {
@@ -175,11 +176,11 @@ void AttributionOsLevelManagerAndroid::Register(
   const size_t num_items = registration.registration_items.size();
   CHECK_EQ(num_items, is_debug_key_allowed.size());
 
-  JNIEnv* env = base::android::AttachCurrentThread();
+  JNIEnv* env = AttachCurrentThread();
 
   Registrar registrar = registration.registrar;
   attribution_reporting::mojom::RegistrationType type = registration.GetType();
-  std::vector<base::android::ScopedJavaLocalRef<jobject>> registration_urls;
+  std::vector<ScopedJavaLocalRef<jobject>> registration_urls;
   base::ranges::transform(
       registration.registration_items, std::back_inserter(registration_urls),
       [env](const attribution_reporting::OsRegistrationItem& item) {
@@ -277,9 +278,9 @@ void AttributionOsLevelManagerAndroid::ClearData(
     base::OnceClosure done) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  JNIEnv* env = base::android::AttachCurrentThread();
+  JNIEnv* env = AttachCurrentThread();
 
-  std::vector<base::android::ScopedJavaLocalRef<jobject>> j_origins;
+  std::vector<ScopedJavaLocalRef<jobject>> j_origins;
   base::ranges::transform(
       origins, std::back_inserter(j_origins), [env](const url::Origin& origin) {
         return url::GURLAndroid::FromNativeGURL(env, origin.GetURL());

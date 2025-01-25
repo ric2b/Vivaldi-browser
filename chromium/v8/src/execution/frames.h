@@ -136,6 +136,7 @@ class StackHandler {
   V(BUILTIN, BuiltinFrame)                                                \
   V(BUILTIN_EXIT, BuiltinExitFrame)                                       \
   V(API_CALLBACK_EXIT, ApiCallbackExitFrame)                              \
+  V(API_ACCESSOR_EXIT, ApiAccessorExitFrame)                              \
   V(NATIVE, NativeFrame)                                                  \
   V(IRREGEXP, IrregexpFrame)
 
@@ -267,6 +268,7 @@ class StackFrame {
   bool is_construct() const { return type() == CONSTRUCT; }
   bool is_fast_construct() const { return type() == FAST_CONSTRUCT; }
   bool is_builtin_exit() const { return type() == BUILTIN_EXIT; }
+  bool is_api_accessor_exit() const { return type() == API_ACCESSOR_EXIT; }
   bool is_api_callback_exit() const { return type() == API_CALLBACK_EXIT; }
   bool is_irregexp() const { return type() == IRREGEXP; }
 
@@ -279,7 +281,10 @@ class StackFrame {
   bool is_java_script() const { return IsJavaScript(type()); }
 
   // Accessors.
-  Address sp() const { return state_.sp; }
+  Address sp() const {
+    DCHECK(!InFastCCall());
+    return state_.sp;
+  }
   Address fp() const { return state_.fp; }
   Address callee_fp() const { return state_.callee_fp; }
   Address callee_pc() const { return state_.callee_pc; }
@@ -302,7 +307,7 @@ class StackFrame {
 
   // If the stack pointer is missing, this is a fast C call frame. For such
   // frames we cannot compute a stack pointer because of the missing ExitFrame.
-  bool InFastCCall() const { return sp() == kNullAddress; }
+  bool InFastCCall() const { return state_.sp == kNullAddress; }
 
   Address constant_pool() const { return *constant_pool_address(); }
   void set_constant_pool(Address constant_pool) {
@@ -450,7 +455,8 @@ class V8_EXPORT_PRIVATE FrameSummary {
 #if V8_ENABLE_WEBASSEMBLY
   class WasmFrameSummary : public FrameSummaryBase {
    public:
-    WasmFrameSummary(Isolate* isolate, Handle<WasmInstanceObject> instance,
+    WasmFrameSummary(Isolate* isolate,
+                     Handle<WasmTrustedInstanceData> instance_data,
                      wasm::WasmCode* code, int byte_offset, int function_index,
                      bool at_to_number_conversion);
 
@@ -464,14 +470,16 @@ class V8_EXPORT_PRIVATE FrameSummary {
     int SourcePosition() const;
     int SourceStatementPosition() const { return SourcePosition(); }
     Handle<Script> script() const;
-    Handle<WasmInstanceObject> wasm_instance() const { return wasm_instance_; }
-    Handle<WasmTrustedInstanceData> wasm_trusted_instance_data() const;
+    Handle<WasmInstanceObject> wasm_instance() const;
+    Handle<WasmTrustedInstanceData> wasm_trusted_instance_data() const {
+      return instance_data_;
+    }
     Handle<Context> native_context() const;
     bool at_to_number_conversion() const { return at_to_number_conversion_; }
     Handle<StackFrameInfo> CreateStackFrameInfo() const;
 
    private:
-    Handle<WasmInstanceObject> wasm_instance_;
+    Handle<WasmTrustedInstanceData> instance_data_;
     bool at_to_number_conversion_;
     wasm::WasmCode* code_;
     int byte_offset_;
@@ -483,11 +491,13 @@ class V8_EXPORT_PRIVATE FrameSummary {
   class WasmInlinedFrameSummary : public FrameSummaryBase {
    public:
     WasmInlinedFrameSummary(Isolate* isolate,
-                            Handle<WasmInstanceObject> instance,
+                            Handle<WasmTrustedInstanceData> instance_data,
                             int function_index, int op_wire_bytes_offset);
 
-    Handle<WasmInstanceObject> wasm_instance() const { return wasm_instance_; }
-    Handle<WasmTrustedInstanceData> wasm_trusted_instance_data() const;
+    Handle<WasmInstanceObject> wasm_instance() const;
+    Handle<WasmTrustedInstanceData> wasm_trusted_instance_data() const {
+      return instance_data_;
+    }
     Handle<Object> receiver() const;
     uint32_t function_index() const;
     int code_offset() const { return op_wire_bytes_offset_; }
@@ -500,7 +510,7 @@ class V8_EXPORT_PRIVATE FrameSummary {
     Handle<StackFrameInfo> CreateStackFrameInfo() const;
 
    private:
-    Handle<WasmInstanceObject> wasm_instance_;
+    Handle<WasmTrustedInstanceData> instance_data_;
     int function_index_;
     int op_wire_bytes_offset_;  // relative to function offset.
   };
@@ -637,7 +647,8 @@ class TypedFrame : public CommonFrame {
   Tagged<HeapObject> unchecked_code() const override { return {}; }
   void Iterate(RootVisitor* v) const override;
 
-  void IterateParamsOfWasmToJSWrapper(RootVisitor* v) const;
+  void IterateParamsOfGenericWasmToJSWrapper(RootVisitor* v) const;
+  void IterateParamsOfOptimizedWasmToJSWrapper(RootVisitor* v) const;
 
  protected:
   inline explicit TypedFrame(StackFrameIteratorBase* iterator);
@@ -887,27 +898,28 @@ class BuiltinExitFrame : public ExitFrame {
 
 // Api callback exit frames are a special case of exit frames, which are used
 // whenever an Api functions (such as v8::Function or v8::FunctionTemplate) are
-// called. Their main purpose is to allow these functions to appear in stack
-// traces.
+// called. Their main purpose is to support preprocessing of exceptions thrown
+// from Api functions and as a bonus it allows these functions to appear in
+// stack traces (see v8_flags.experimental_stack_trace_frames).
 class ApiCallbackExitFrame : public ExitFrame {
  public:
   Type type() const override { return API_CALLBACK_EXIT; }
-
-  // ApiCallbackExitFrame might contain either FunctionTemplateInfo or
-  // JSFunction in the function slot.
-  Tagged<HeapObject> target() const;
 
   // In case function slot contains FunctionTemplateInfo, instantiate the
   // function, stores it in the function slot and returns JSFunction handle.
   Handle<JSFunction> GetFunction() const;
 
-  Tagged<Object> receiver() const;
-  Tagged<Object> GetParameter(int i) const;
-  int ComputeParametersCount() const;
+  Handle<FunctionTemplateInfo> GetFunctionTemplateInfo() const;
+
+  inline Tagged<Object> receiver() const;
+  inline Tagged<Object> GetParameter(int i) const;
+  inline int ComputeParametersCount() const;
   Handle<FixedArray> GetParameters() const;
 
+  inline Tagged<Object> context() const override;
+
   // Check if this frame is a constructor frame invoked through 'new'.
-  bool IsConstructor() const;
+  inline bool IsConstructor() const;
 
   void Print(StringStream* accumulator, PrintMode mode,
              int index) const override;
@@ -924,13 +936,48 @@ class ApiCallbackExitFrame : public ExitFrame {
   inline explicit ApiCallbackExitFrame(StackFrameIteratorBase* iterator);
 
  private:
+  // ApiCallbackExitFrame might contain either FunctionTemplateInfo or
+  // JSFunction in the function slot.
+  inline Tagged<HeapObject> target() const;
+
   inline void set_target(Tagged<HeapObject> function) const;
 
-  inline FullObjectSlot receiver_slot() const;
-  inline FullObjectSlot argc_slot() const;
-  inline FullObjectSlot context_slot() const;
   inline FullObjectSlot target_slot() const;
-  inline FullObjectSlot new_target_slot() const;
+
+  friend class StackFrameIteratorBase;
+};
+
+// Api accessor exit frames are a special case of exit frames, which are used
+// whenever an Api property accessor callbacks (v8::AccessorGetterCallback or
+// v8::AccessorSetterCallback) are called. Their main purpose is to support
+// preprocessing of exceptions thrown from these callbacks.
+class ApiAccessorExitFrame : public ExitFrame {
+ public:
+  Type type() const override { return API_ACCESSOR_EXIT; }
+
+  inline Tagged<Name> property_name() const;
+
+  inline Tagged<Object> receiver() const;
+  inline Tagged<Object> holder() const;
+
+  void Print(StringStream* accumulator, PrintMode mode,
+             int index) const override;
+
+  // Summarize Frame
+  void Summarize(std::vector<FrameSummary>* frames) const override;
+
+  static ApiAccessorExitFrame* cast(StackFrame* frame) {
+    DCHECK(frame->is_api_accessor_exit());
+    return static_cast<ApiAccessorExitFrame*>(frame);
+  }
+
+ protected:
+  inline explicit ApiAccessorExitFrame(StackFrameIteratorBase* iterator);
+
+ private:
+  inline FullObjectSlot property_name_slot() const;
+  inline FullObjectSlot receiver_slot() const;
+  inline FullObjectSlot holder_slot() const;
 
   friend class StackFrameIteratorBase;
 };
@@ -964,7 +1011,8 @@ class OptimizedFrame : public JavaScriptFrame {
 
   void Summarize(std::vector<FrameSummary>* frames) const override;
 
-  Tagged<DeoptimizationData> GetDeoptimizationData(int* deopt_index) const;
+  Tagged<DeoptimizationData> GetDeoptimizationData(Tagged<Code> code,
+                                                   int* deopt_index) const;
 
   static int StackSlotOffsetRelativeToFp(int slot_index);
 
@@ -1341,6 +1389,8 @@ class ConstructFrame : public InternalFrame {
     return static_cast<ConstructFrame*>(frame);
   }
 
+  void Iterate(RootVisitor* v) const override;
+
  protected:
   inline explicit ConstructFrame(StackFrameIteratorBase* iterator);
 
@@ -1621,13 +1671,8 @@ class StackFrameIteratorForProfiler : public StackFrameIteratorBase {
 
   bool IsValidStackAddress(Address addr) const {
 #if V8_ENABLE_WEBASSEMBLY
-    wasm::StackMemory* head = wasm_stacks_;
-    if (head != nullptr) {
-      if (head->Contains(addr)) return true;
-      for (wasm::StackMemory* current = head->next(); current != head;
-           current = current->next()) {
-        if (current->Contains(addr)) return true;
-      }
+    for (const std::unique_ptr<wasm::StackMemory>& stack : wasm_stacks_) {
+      if (stack->Contains(addr)) return true;
     }
 #endif
     return low_bound_ <= addr && addr <= high_bound_;
@@ -1655,7 +1700,7 @@ class StackFrameIteratorForProfiler : public StackFrameIteratorBase {
   ExternalCallbackScope* external_callback_scope_;
   Address top_link_register_;
 #if V8_ENABLE_WEBASSEMBLY
-  wasm::StackMemory* wasm_stacks_ = nullptr;
+  std::vector<std::unique_ptr<wasm::StackMemory>>& wasm_stacks_;
 #endif
 };
 

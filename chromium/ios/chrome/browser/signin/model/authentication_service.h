@@ -105,6 +105,9 @@ class AuthenticationService : public KeyedService,
   virtual bool HasPrimaryIdentityManaged(
       signin::ConsentLevel consent_level) const;
 
+  // Returns true if data should be cleared on sign-out.
+  virtual bool ShouldClearDataOnSignOut() const;
+
   // Retrieves the identity of the currently authenticated user or `nil` if
   // either the user is not authenticated, or is authenticated through
   // ClientLogin.
@@ -218,6 +221,9 @@ class AuthenticationService : public KeyedService,
 
   // Clears the account settings prefs of all removed accounts from device.
   void ClearAccountSettingsPrefsOfRemovedAccounts();
+
+  // Returns the active identities for MDM.
+  NSArray<id<SystemIdentity>>* ActiveIdentities();
 
   // The delegate for this AuthenticationService. It is invalid to call any
   // method on this object except Initialize() or Shutdown() if this pointer

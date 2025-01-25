@@ -27,7 +27,6 @@
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state_manager.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
-#import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
@@ -44,7 +43,6 @@
 #import "ios/chrome/browser/sync/model/mock_sync_service_utils.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
-#import "ios/chrome/browser/tabs/model/tab_pickup/features.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_account_item.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
@@ -160,7 +158,9 @@ class SettingsTableViewControllerTest
                              forProtocol:@protocol(SnackbarCommands)];
 
     SettingsTableViewController* controller =
-        [[SettingsTableViewController alloc] initWithBrowser:browser_.get()];
+        [[SettingsTableViewController alloc]
+                     initWithBrowser:browser_.get()
+            hasDefaultBrowserBlueDot:has_default_browser_blue_dot_];
     controller.applicationHandler =
         HandlerForProtocol(dispatcher, ApplicationCommands);
     controller.settingsHandler =
@@ -194,6 +194,23 @@ class SettingsTableViewControllerTest
 
   PrefService* GetLocalState() { return scoped_testing_local_state_.Get(); }
 
+  void VerifyDefaultBrowwserBlueDot(bool has_default_browser_blue_dot) {
+    has_default_browser_blue_dot_ = has_default_browser_blue_dot;
+    CreateController();
+    CheckController();
+
+    NSArray<TableViewItem*>* default_section_items =
+        [controller().tableViewModel
+            itemsInSectionWithIdentifier:SettingsSectionIdentifier::
+                                             SettingsSectionIdentifierDefaults];
+
+    TableViewDetailIconItem* default_browser_item =
+        static_cast<TableViewDetailIconItem*>(default_section_items[0]);
+
+    EXPECT_EQ(has_default_browser_blue_dot,
+              BadgeType::kNotificationDot == default_browser_item.badgeType);
+  }
+
  protected:
   // Needed for test browser state created by TestChromeBrowserState().
   web::WebTaskEnvironment task_environment_;
@@ -211,6 +228,7 @@ class SettingsTableViewControllerTest
   std::unique_ptr<TestChromeBrowserState> browser_state_;
 
   SettingsTableViewController* controller_ = nullptr;
+  BOOL has_default_browser_blue_dot_ = false;
 };
 
 // Verifies that the Sync icon displays the on state when the user has turned
@@ -498,10 +516,9 @@ TEST_F(SettingsTableViewControllerTest, HasDownloadsMenuItem) {
   CheckController();
 
   // The section to check for depends on some other features.
-  SettingsSectionIdentifier section =
-      IsInactiveTabsAvailable() || IsTabPickupEnabled()
-          ? SettingsSectionIdentifierInfo
-          : SettingsSectionIdentifierAdvanced;
+  SettingsSectionIdentifier section = IsInactiveTabsAvailable()
+                                          ? SettingsSectionIdentifierInfo
+                                          : SettingsSectionIdentifierAdvanced;
 
   EXPECT_TRUE([controller().tableViewModel
       hasItemForItemType:SettingsItemTypeDownloadsSettings
@@ -524,4 +541,14 @@ TEST_F(SettingsTableViewControllerTest, NoPlusAddressesByDefault) {
   for (TableViewItem* advanced_item in advanced_items) {
     EXPECT_NE(advanced_item.accessibilityIdentifier, kSettingsPlusAddressesId);
   }
+}
+
+// Verifies that the default browser blue dot is displayed when indicated.
+TEST_F(SettingsTableViewControllerTest, TestHasDefaultBrowserBlueDot) {
+  VerifyDefaultBrowwserBlueDot(true);
+}
+
+// Verifies that the default browser blue dot is not displayed when indicated.
+TEST_F(SettingsTableViewControllerTest, TestHasNoDefaultBrowserBlueDot) {
+  VerifyDefaultBrowwserBlueDot(false);
 }

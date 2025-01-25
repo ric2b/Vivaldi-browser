@@ -31,6 +31,8 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_NODE_H_
 #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_NODE_H_
 
+#include <iosfwd>
+
 #include "base/functional/callback_helpers.h"
 #include "base/functional/function_ref.h"
 #include "cc/paint/element_id.h"
@@ -78,6 +80,7 @@ class BLINK_EXPORT WebNode {
   bool LessThan(const WebNode&) const;
 
   bool IsNull() const;
+  explicit operator bool() const { return !IsNull(); }
 
   bool IsConnected() const;
 
@@ -99,6 +102,10 @@ class BLINK_EXPORT WebNode {
   bool IsContentEditable() const;
   bool IsElementNode() const;
   void SimulateClick();
+
+  // Returns the top-most ancestor such this WebNode and that ancestor and all
+  // nodes in between are contenteditable.
+  WebElement RootEditableElement() const;
 
   // See cc/paint/element_id.h for the definition of these ids.
   cc::ElementId ScrollingElementIdForTesting() const;
@@ -146,6 +153,8 @@ class BLINK_EXPORT WebNode {
   // be performed.
   template <typename T>
   T DynamicTo() const;
+
+  BLINK_EXPORT friend std::ostream& operator<<(std::ostream&, const WebNode&);
 
 #if INSIDE_BLINK
   WebNode(Node*);

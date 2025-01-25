@@ -3,12 +3,6 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <xnnpack.h>
-#include <xnnpack/aligned-allocator.h>
-#include <xnnpack/common.h>
-#include <xnnpack/node-type.h>
-#include <xnnpack/subgraph.h>
-
 #include <algorithm>  // For std::generate.
 #include <array>      // For std::array.
 #include <cassert>
@@ -22,9 +16,14 @@
 #include <random>   // For std::uniform_real_distribution.
 #include <vector>   // For std::vector.
 
-#include "replicable_random_device.h"
 #include <gtest/gtest.h>
 #include <fp16/fp16.h>
+#include "xnnpack.h"
+#include "xnnpack/aligned-allocator.h"
+#include "xnnpack/common.h"
+#include "xnnpack/node-type.h"
+#include "xnnpack/subgraph.h"
+#include "replicable_random_device.h"
 
 template <class T>
 class ScaledDotProductAttentionTestBase : public ::testing::Test {
@@ -576,7 +575,10 @@ TEST_F(ScaledDotProductAttentionTestF32, matches_operator_api) {
 
   // Check outputs match.
   for (size_t i = 0; i < operator_output.size(); i++) {
-    EXPECT_EQ(subgraph_output[i], operator_output[i]) << i;
+    ASSERT_NEAR(subgraph_output[i], operator_output[i],
+                std::abs(operator_output[i]) * 5 *
+                    std::numeric_limits<float>::epsilon())
+        << "at offset " << i;
   }
 }
 
@@ -782,7 +784,10 @@ TEST_F(ScaledDotProductAttentionTestF32, matches_operator_api_dynamic_shape_no_r
 
   // Check outputs match.
   for (size_t i = 0; i < operator_output.size(); i++) {
-    EXPECT_EQ(subgraph_output[i], operator_output[i]) << i;
+    ASSERT_NEAR(subgraph_output[i], operator_output[i],
+                std::abs(operator_output[i]) * 5 *
+                    std::numeric_limits<float>::epsilon())
+        << "at offset " << i;
   }
 }
 
@@ -975,7 +980,10 @@ TEST_F(ScaledDotProductAttentionTestF32, matches_operator_api_dynamic_shape_requ
 
   // Check outputs match.
   for (size_t i = 0; i < operator_output.size(); i++) {
-    EXPECT_EQ(subgraph_output[i], operator_output[i]) << i;
+    ASSERT_NEAR(subgraph_output[i], operator_output[i],
+                std::abs(operator_output[i]) * 5 *
+                    std::numeric_limits<float>::epsilon())
+        << "at offset " << i;
   }
 }
 

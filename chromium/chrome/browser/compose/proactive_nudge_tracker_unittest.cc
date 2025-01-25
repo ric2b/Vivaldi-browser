@@ -11,6 +11,7 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "components/autofill/core/common/autofill_test_utils.h"
+#include "components/autofill/core/common/form_data_test_api.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/autofill/core/common/unique_ids.h"
@@ -59,13 +60,11 @@ autofill::FormFieldData CreateTestFormFieldData(
 
 autofill::FormData CreateFormData() {
   // Set up a form with two fields, the compose-eligible field is the first one.
-  autofill::FormData form_data;
-  form_data.fields.push_back(CreateTestFormFieldData());
-
   autofill::FormFieldData other_field;
   other_field.set_form_control_type(autofill::FormControlType::kInputMonth);
-  form_data.fields.push_back(std::move(other_field));
-  return form_data;
+  autofill::FormData form;
+  form.set_fields({CreateTestFormFieldData(), std::move(other_field)});
+  return form;
 }
 
 GURL TestURL() {
@@ -689,7 +688,7 @@ TEST_F(ProactiveNudgeTrackerDerivedEngagementTest, SuggestionGenerated) {
   TestFuture<segmentation_platform::TrainingLabels>& training_labels =
       TriggerNudgeForField(0, form_field_data);
   compose::ComposeSessionEvents events;
-  events.compose_count = 1;
+  events.compose_requests_count = 1;
   nudge_tracker().ComposeSessionCompleted(
       form_field_data.global_id(),
       ComposeSessionCloseReason::kCloseButtonPressed, events);
@@ -712,11 +711,11 @@ TEST_F(ProactiveNudgeTrackerDerivedEngagementTest, AcceptedSuggestion) {
   TestFuture<segmentation_platform::TrainingLabels>& training_labels =
       TriggerNudgeForField(0, form_field_data);
   compose::ComposeSessionEvents events;
-  events.compose_count = 1;
+  events.compose_requests_count = 1;
   events.inserted_results = true;
   nudge_tracker().ComposeSessionCompleted(
-      form_field_data.global_id(),
-      ComposeSessionCloseReason::kAcceptedSuggestion, events);
+      form_field_data.global_id(), ComposeSessionCloseReason::kInsertedResponse,
+      events);
 
   EXPECT_EQ(
       training_labels.Get().output_metric,
@@ -735,15 +734,15 @@ TEST_F(ProactiveNudgeTrackerDerivedEngagementTest,
       TriggerNudgeForField(0, form_field_data);
   compose::ComposeSessionEvents events;
   // This one is ignored because it has the wrong field id.
-  nudge_tracker().ComposeSessionCompleted(
-      form_field_data_2.global_id(),
-      ComposeSessionCloseReason::kEndedImplicitly, events);
+  nudge_tracker().ComposeSessionCompleted(form_field_data_2.global_id(),
+                                          ComposeSessionCloseReason::kAbandoned,
+                                          events);
 
-  events.compose_count = 1;
+  events.compose_requests_count = 1;
   events.inserted_results = true;
   nudge_tracker().ComposeSessionCompleted(
-      form_field_data.global_id(),
-      ComposeSessionCloseReason::kAcceptedSuggestion, events);
+      form_field_data.global_id(), ComposeSessionCloseReason::kInsertedResponse,
+      events);
 
   EXPECT_EQ(
       training_labels.Get().output_metric,
@@ -760,11 +759,11 @@ TEST_F(ProactiveNudgeTrackerDerivedEngagementTest, TwoSessions) {
   TestFuture<segmentation_platform::TrainingLabels>& training_labels2 =
       TriggerNudgeForField(1, CreateTestFormFieldData(kFieldRendererId2));
   compose::ComposeSessionEvents events;
-  events.compose_count = 1;
+  events.compose_requests_count = 1;
   events.inserted_results = true;
   nudge_tracker().ComposeSessionCompleted(
-      form_field_data.global_id(),
-      ComposeSessionCloseReason::kAcceptedSuggestion, events);
+      form_field_data.global_id(), ComposeSessionCloseReason::kInsertedResponse,
+      events);
   Reset();
 
   EXPECT_EQ(

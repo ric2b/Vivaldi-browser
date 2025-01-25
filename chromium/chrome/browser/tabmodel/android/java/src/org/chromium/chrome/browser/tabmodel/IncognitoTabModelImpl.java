@@ -130,6 +130,16 @@ class IncognitoTabModelImpl implements IncognitoTabModel {
     }
 
     @Override
+    public boolean isOffTheRecord() {
+        return mDelegateModel.isOffTheRecord();
+    }
+
+    @Override
+    public boolean isIncognitoBranded() {
+        return mDelegateModel.isIncognitoBranded();
+    }
+
+    @Override
     public boolean closeTab(Tab tab) {
         mCountOfAddingOrClosingTabs++;
         boolean retVal = mDelegateModel.closeTab(tab);
@@ -224,8 +234,8 @@ class IncognitoTabModelImpl implements IncognitoTabModel {
     }
 
     @Override
-    public void setIndex(int i, @TabSelectionType int type, boolean skipLoadingTab) {
-        mDelegateModel.setIndex(i, type, skipLoadingTab);
+    public void setIndex(int i, @TabSelectionType int type) {
+        mDelegateModel.setIndex(i, type);
     }
 
     @Override

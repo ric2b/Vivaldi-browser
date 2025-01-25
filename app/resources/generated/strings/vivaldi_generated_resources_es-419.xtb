@@ -78,7 +78,6 @@
 <translation id="2439110203301358333">Otro programa en tu computadora agregó una extensión que puede cambiar el funcionamiento de Vivaldi.</translation>
 <translation id="2443487764245141020">Es posible que los sitios también reconozcan tu dispositivo a través de un identificador</translation>
 <translation id="2445081178310039857">Se requiere un directorio de raíz de la extensión.</translation>
-<translation id="2470702053775288986">Extensiones no admitidas inhabilitadas</translation>
 <translation id="2485422356828889247">Desinstalación</translation>
 <translation id="2498539833203011245">Minimizar</translation>
 <translation id="2509495747794740764">El valor de la escala debe ser un número entre 10 y 200.</translation>
@@ -175,7 +174,6 @@
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K en vivo)</translation>
 <translation id="4345587454538109430">Configurar...</translation>
 <translation id="4348766275249686434">Recopilar errores</translation>
-<translation id="4363771538994847871">No se encontraron destinos de transmisión. ¿Necesita ayuda?</translation>
 <translation id="4384652540891215547">Activar la extensión</translation>
 <translation id="4409697491990005945">Márgenes</translation>
 <translation id="4423376891418188461">Restaurar configuración</translation>
@@ -327,7 +325,6 @@
 <translation id="7771452384635174008">Diseño</translation>
 <translation id="7782102568078991263">No hay más sugerencias de Google</translation>
 <translation id="7786889348652477777">&amp;Recargar la aplicación</translation>
-<translation id="7791543448312431591">Agregar</translation>
 <translation id="7800518121066352902">Girar a la &amp;izquierda</translation>
 <translation id="7818135753970109980">Nuevo tema añadido (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">C&amp;opiar dirección del vídeo</translation>

@@ -17,18 +17,6 @@ class ShoppingService;
 
 @protocol ParcelTrackingOptInCommands;
 
-// Enum for the different values of the parcel tracking opt-in status.
-enum class IOSParcelTrackingOptInStatus {
-  kNeverTrack = 0,
-  kAlwaysTrack = 1,
-  kAskToTrack = 2,
-};
-
-// Returns true if the parcel tracking feature is enabled. This returns true if
-// 1) the policy is not disabled for enterprise users and 2) the user's
-// permanent location is in the US.
-bool IsIOSParcelTrackingEnabled();
-
 // Returns true if the user is eligible for the parcel tracking opt-in prompt.
 // The user must have never before seen the prompt and must be signed in.
 bool IsUserEligibleParcelTrackingOptInPrompt(

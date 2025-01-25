@@ -28,6 +28,7 @@
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/chrome_features.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -40,10 +41,6 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/web_applications/web_app_system_web_app_delegate_map_utils.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS)
-#include "chromeos/constants/chromeos_features.h"
 #endif
 
 class Profile;
@@ -93,9 +90,7 @@ class ManifestUpdateManager::PreUpdateWebContentsObserver
 
  private:
   bool IsInvalidRenderFrameHost(content::RenderFrameHost* render_frame_host) {
-    return (!render_frame_host ||
-            render_frame_host->GetParentOrOuterDocument() ||
-            !render_frame_host->IsInPrimaryMainFrame());
+    return !render_frame_host || !render_frame_host->IsInPrimaryMainFrame();
   }
 
   // content::WebContentsObserver:
@@ -243,16 +238,6 @@ void ManifestUpdateManager::MaybeUpdate(
     return;
   }
 
-#if BUILDFLAG(IS_CHROMEOS)
-  if (provider_->registrar_unsafe().IsShortcutApp(*app_id) &&
-      chromeos::features::IsCrosShortstandEnabled()) {
-    // When create shortcut ignores manifest, we should not update manifest for
-    // shortcuts.
-    NotifyResult(url, *app_id, ManifestUpdateResult::kShortcutIgnoresManifest);
-    return;
-  }
-#endif
-
   if (base::Contains(update_stages_, *app_id)) {
     return;
   }
@@ -324,7 +309,7 @@ void ManifestUpdateManager::OnManifestCheckAwaitAppWindowClose(
     const GURL& url,
     const webapps::AppId& app_id,
     ManifestUpdateCheckResult check_result,
-    std::optional<WebAppInstallInfo> install_info) {
+    std::unique_ptr<WebAppInstallInfo> install_info) {
   auto update_stage_it = update_stages_.find(app_id);
   if (update_stage_it == update_stages_.end()) {
     // If the web_app already has already been uninstalled after the
@@ -356,7 +341,7 @@ void ManifestUpdateManager::OnManifestCheckAwaitAppWindowClose(
     return;
   }
 
-  CHECK(install_info.has_value());
+  CHECK(install_info);
 
   Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
   auto keep_alive = std::make_unique<ScopedKeepAlive>(
@@ -368,7 +353,7 @@ void ManifestUpdateManager::OnManifestCheckAwaitAppWindowClose(
   }
 
   provider_->scheduler().ScheduleManifestUpdateFinalize(
-      url, app_id, std::move(install_info.value()), std::move(keep_alive),
+      url, app_id, std::move(install_info), std::move(keep_alive),
       std::move(profile_keep_alive),
       base::BindOnce(&ManifestUpdateManager::OnUpdateStopped,
                      weak_factory_.GetWeakPtr()));

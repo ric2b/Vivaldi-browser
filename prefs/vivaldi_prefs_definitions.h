@@ -41,7 +41,7 @@ class VivaldiPrefsDefinitions : public sync_preferences::SyncablePrefsDatabase {
     EnumPrefValues(EnumPrefValues&&);
     EnumPrefValues& operator=(EnumPrefValues&&);
 
-    std::optional<int> FindValue(base::StringPiece name) const;
+    std::optional<int> FindValue(std::string_view name) const;
     const std::string* FindName(int value) const;
 
     std::vector<std::pair<std::string, int>> name_value_pairs;
@@ -94,8 +94,8 @@ class VivaldiPrefsDefinitions : public sync_preferences::SyncablePrefsDatabase {
   void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // Implementing sync_preferences::SyncablePrefsDatabase
-  std::optional<sync_preferences::SyncablePrefMetadata>
-  GetSyncablePrefMetadata(const std::string& pref_name) const override;
+  std::optional<sync_preferences::SyncablePrefMetadata> GetSyncablePrefMetadata(
+      const std::string_view pref_name) const override;
 
  private:
   friend class base::NoDestructor<VivaldiPrefsDefinitions>;
@@ -108,7 +108,7 @@ class VivaldiPrefsDefinitions : public sync_preferences::SyncablePrefsDatabase {
                                    std::string current_path);
 
   void AddChromiumProperties(base::Value::Dict& prefs,
-                             base::StringPiece current_path,
+                             std::string_view current_path,
                              bool local_pref);
 
   base::Value GetComputedDefault(const std::string& path);

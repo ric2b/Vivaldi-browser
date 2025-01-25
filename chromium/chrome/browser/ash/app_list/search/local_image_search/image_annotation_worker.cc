@@ -29,6 +29,7 @@
 #include "chrome/browser/ash/app_list/search/search_features.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/ash/components/string_matching/tokenized_string.h"
+#include "services/screen_ai/public/mojom/screen_ai_service.mojom.h"
 
 namespace app_list {
 namespace {
@@ -36,10 +37,10 @@ namespace {
 using TokenizedString = ::ash::string_matching::TokenizedString;
 using Mode = ::ash::string_matching::TokenizedString::Mode;
 
-constexpr int kMaxFileSizeBytes = 2e+7;    // ~ 20MiB
-constexpr int kConfidenceThreshold = 79;   // 30% of 255 (max of ICA)
+constexpr int kMaxFileSizeBytes = 2e+7;   // ~ 20MiB
+constexpr int kConfidenceThreshold = 79;  // 30% of 255 (max of ICA)
 constexpr int kOcrMinWordLength = 3;
-constexpr int kRetryDelay = 2;  // For exponential delays.
+constexpr int kRetryDelay = 2;              // For exponential delays.
 constexpr int kMaxNumRetries = 12;          // Over 2 hrs.
 constexpr int kDefaultIndexingLimit = 500;  // 500 images per user session.
 constexpr base::TimeDelta kInitialIndexingDelay = base::Seconds(1);
@@ -215,7 +216,8 @@ ImageAnnotationWorker::ImageAnnotationWorker(
     CHECK(profile);
     // `OpticalCharacterRecognizer` should be created on the UI thread.
     optical_character_recognizer_ =
-        screen_ai::OpticalCharacterRecognizer::Create(profile);
+        screen_ai::OpticalCharacterRecognizer::Create(
+            profile, screen_ai::mojom::OcrClientType::kLocalSearch);
   }
 }
 
@@ -337,8 +339,7 @@ void ImageAnnotationWorker::ProcessNextItem() {
       if (IsImage(path)) {
         return ProcessNextImage();
       } else {
-        files_to_process_.pop();
-        return ProcessNextItem();
+        return MaybeProcessNextItem(path);
       }
     }
   } else {
@@ -346,10 +347,24 @@ void ImageAnnotationWorker::ProcessNextItem() {
       return RemoveOldDirectory();
     } else {
       annotation_storage_->Remove(path);
-      files_to_process_.pop();
-      return ProcessNextItem();
+      return MaybeProcessNextItem(path);
     }
   }
+}
+
+void ImageAnnotationWorker::MaybeProcessNextItem(
+    const base::FilePath& file_path,
+    bool use_timer) {
+  // Early return if queue is empty already, or the processed file is
+  // out-of-date.
+  if (files_to_process_.empty() || files_to_process_.front() != file_path) {
+    return;
+  }
+  if (use_timer) {
+    timeout_timer_.Stop();
+  }
+  files_to_process_.pop();
+  return ProcessNextItem();
 }
 
 void ImageAnnotationWorker::ProcessNextDirectory() {
@@ -368,8 +383,7 @@ void ImageAnnotationWorker::ProcessNextDirectory() {
     DVLOG(1) << "Found file: " << file_path;
     OnFileChange(std::move(file_path), /*error=*/false);
   }
-  files_to_process_.pop();
-  return ProcessNextItem();
+  return MaybeProcessNextItem(directory_path);
 }
 
 void ImageAnnotationWorker::RemoveOldDirectory() {
@@ -382,8 +396,7 @@ void ImageAnnotationWorker::RemoveOldDirectory() {
     OnFileChange(file, /*error=*/false);
   }
 
-  files_to_process_.pop();
-  return ProcessNextItem();
+  return MaybeProcessNextItem(directory_path);
 }
 
 void ImageAnnotationWorker::ProcessNextImage() {
@@ -395,8 +408,7 @@ void ImageAnnotationWorker::ProcessNextImage() {
   if (!base::GetFileInfo(image_path, file_info.get()) || file_info->size == 0 ||
       file_info->size > kMaxFileSizeBytes || !IsSupportedImage(image_path)) {
     annotation_storage_->Remove(image_path);
-    files_to_process_.pop();
-    return ProcessNextItem();
+    return MaybeProcessNextItem(image_path);
   }
   DCHECK(file_info);
 
@@ -406,8 +418,7 @@ void ImageAnnotationWorker::ProcessNextImage() {
   // modified time. So skip inserting the image annotations if the file
   // has not changed since the last update.
   if (file_info->last_modified == last_modified_time) {
-    files_to_process_.pop();
-    return ProcessNextItem();
+    return MaybeProcessNextItem(image_path);
   }
 
   DVLOG(1) << "Processing new " << image_path << " "
@@ -420,8 +431,7 @@ void ImageAnnotationWorker::ProcessNextImage() {
     // Early return if reaches the indexing limit. Continue the process as we
     // still need to deal with deleted files.
     if (num_indexing_images_ >= indexing_limit_) {
-      files_to_process_.pop();
-      return ProcessNextItem();
+      return MaybeProcessNextItem(image_path);
     }
     num_indexing_images_ += 1;
   }
@@ -432,8 +442,15 @@ void ImageAnnotationWorker::ProcessNextImage() {
         base::BindOnce(&ImageAnnotationWorker::OnDecodeImageFile,
                        weak_ptr_factory_.GetWeakPtr(), image_info),
         image_info.path);
-  } else {
-    RunFakeImageAnnotator(std::move(image_info));
+    return;
+  }
+
+  // The fake logic should only work in tests.
+  if (image_processing_delay_for_test_.has_value()) {
+    // Call `OnDecodeImageFile` so that we can test the logic of timer.
+    ImageAnnotationWorker::OnDecodeImageFile(std::move(image_info),
+                                             gfx::ImageSkia());
+    return;
   }
 }
 
@@ -441,11 +458,12 @@ void ImageAnnotationWorker::OnDecodeImageFile(
     ImageInfo image_info,
     const gfx::ImageSkia& image_skia) {
   DVLOG(1) << "OnDecodeImageFile.";
-  if (image_skia.size().IsEmpty()) {
+  // `image_skia` can be empty in tests.
+  if (image_skia.size().IsEmpty() &&
+      !image_processing_delay_for_test_.has_value()) {
     LOG(ERROR) << "Failed to decode image.";
     LogStatusUma(Status::kFailedToDecodeImage);
-    files_to_process_.pop();
-    return ProcessNextItem();
+    return MaybeProcessNextItem(image_info.path);
   }
 
   timeout_timer_.Start(
@@ -486,7 +504,17 @@ void ImageAnnotationWorker::OnDecodeImageFile(
                        weak_ptr_factory_.GetWeakPtr(), std::move(image_info)));
     return;
   }
-  NOTREACHED();
+
+  // The fake logic should only work in tests.
+  if (image_processing_delay_for_test_.has_value()) {
+    // Post a delayed task to simulate the image processing delay.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&ImageAnnotationWorker::RunFakeImageAnnotator,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(image_info)),
+        image_processing_delay_for_test_.value());
+    return;
+  }
 }
 
 void ImageAnnotationWorker::OnPerformOcr(
@@ -512,9 +540,7 @@ void ImageAnnotationWorker::OnPerformOcr(
 
   // OCR is the first in the pipeline.
   if (!use_ica_) {
-    timeout_timer_.Stop();
-    files_to_process_.pop();
-    ProcessNextItem();
+    MaybeProcessNextItem(image_info.path, /*use_timer=*/true);
   }
 }
 
@@ -546,9 +572,7 @@ void ImageAnnotationWorker::OnPerformIca(
   annotation_storage_->Insert(image_info);
 
   // ICA is the last in the pipeline.
-  timeout_timer_.Stop();
-  files_to_process_.pop();
-  ProcessNextItem();
+  MaybeProcessNextItem(image_info.path, /*use_timer=*/true);
 }
 
 void ImageAnnotationWorker::FindAndRemoveDeletedFiles(
@@ -580,8 +604,7 @@ void ImageAnnotationWorker::FindAndRemoveDeletedFiles(
 void ImageAnnotationWorker::OnImageProcessTimeout() {
   LOG(ERROR) << "Annotators timed out.";
   LogStatusUma(Status::kImageProcessingTimeOut);
-  files_to_process_.pop();
-  ProcessNextItem();
+  MaybeProcessNextItem(base::FilePath());
 }
 
 void ImageAnnotationWorker::RunFakeImageAnnotator(ImageInfo image_info) {
@@ -591,8 +614,7 @@ void ImageAnnotationWorker::RunFakeImageAnnotator(ImageInfo image_info) {
       image_info.path.BaseName().RemoveFinalExtension().value();
   image_info.annotations.insert(std::move(annotation));
   annotation_storage_->Insert(std::move(image_info));
-  files_to_process_.pop();
-  ProcessNextItem();
+  MaybeProcessNextItem(image_info.path, /*use_timer=*/true);
 }
 
 void ImageAnnotationWorker::TriggerOnFileChangeForTests(

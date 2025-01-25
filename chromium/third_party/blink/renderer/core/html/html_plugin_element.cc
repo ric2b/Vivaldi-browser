@@ -294,16 +294,7 @@ bool HTMLPlugInElement::ShouldAccelerate() const {
 }
 
 ParsedPermissionsPolicy HTMLPlugInElement::ConstructContainerPolicy() const {
-  // Plugin elements (<object> and <embed>) are not allowed to enable the
-  // fullscreen feature. Add an empty allowlist for the fullscreen feature so
-  // that the nested browsing context is unable to use the API, regardless of
-  // origin.
-  // https://fullscreen.spec.whatwg.org/#model
-  ParsedPermissionsPolicy container_policy;
-  ParsedPermissionsPolicyDeclaration allowlist(
-      mojom::blink::PermissionsPolicyFeature::kFullscreen);
-  container_policy.push_back(allowlist);
-  return container_policy;
+  return GetLegacyFramePolicies();
 }
 
 void HTMLPlugInElement::DetachLayoutTree(bool performing_reattach) {
@@ -936,9 +927,11 @@ const ComputedStyle* HTMLPlugInElement::CustomStyleForLayoutObject(
       OriginalStyleForLayoutObject(style_recalc_context);
   if (IsImageType() && !GetLayoutObject() && style &&
       LayoutObjectIsNeeded(*style)) {
-    if (!image_loader_)
+    if (!image_loader_) {
       image_loader_ = MakeGarbageCollected<HTMLImageLoader>(this);
-    image_loader_->UpdateFromElement();
+    }
+    image_loader_->UpdateFromElement(ImageLoader::kUpdateNormal,
+                                     /* force_blocking */ true);
   }
   return style;
 }

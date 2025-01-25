@@ -174,7 +174,7 @@ FPDF_EXPORT FPDF_DOCUMENT FPDF_CALLCONV FPDF_CreateNewDocument() {
   RetainPtr<CPDF_Dictionary> pInfoDict = pDoc->GetInfo();
   if (pInfoDict) {
     if (IsPDFSandboxPolicyEnabled(FPDF_POLICY_MACHINETIME_ACCESS))
-      pInfoDict->SetNewFor<CPDF_String>("CreationDate", DateStr, false);
+      pInfoDict->SetNewFor<CPDF_String>("CreationDate", DateStr);
     pInfoDict->SetNewFor<CPDF_String>("Creator", L"PDFium");
   }
 
@@ -304,6 +304,16 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFPage_HasTransparency(FPDF_PAGE page) {
 FPDF_EXPORT void FPDF_CALLCONV
 FPDFPageObj_Destroy(FPDF_PAGEOBJECT page_object) {
   delete CPDFPageObjectFromFPDFPageObject(page_object);
+}
+
+FPDF_EXPORT int FPDF_CALLCONV
+FPDFPageObj_GetMarkedContentID(FPDF_PAGEOBJECT page_object) {
+  CPDF_PageObject* cpage_object = CPDFPageObjectFromFPDFPageObject(page_object);
+  if (!cpage_object) {
+    return -1;
+  }
+
+  return cpage_object->GetContentMarks()->GetMarkedContentID();
 }
 
 FPDF_EXPORT int FPDF_CALLCONV
@@ -559,7 +569,7 @@ FPDFPageObjMark_SetStringParam(FPDF_DOCUMENT document,
   if (!pParams)
     return false;
 
-  pParams->SetNewFor<CPDF_String>(key, value, false);
+  pParams->SetNewFor<CPDF_String>(key, value);
   pPageObj->SetDirty(true);
   return true;
 }
@@ -571,20 +581,27 @@ FPDFPageObjMark_SetBlobParam(FPDF_DOCUMENT document,
                              FPDF_BYTESTRING key,
                              void* value,
                              unsigned long value_len) {
-  CPDF_PageObject* pPageObj = CPDFPageObjectFromFPDFPageObject(page_object);
-  if (!pPageObj || !PageObjectContainsMark(pPageObj, mark))
+  if (!value && value_len > 0) {
     return false;
+  }
+
+  CPDF_PageObject* pPageObj = CPDFPageObjectFromFPDFPageObject(page_object);
+  if (!pPageObj || !PageObjectContainsMark(pPageObj, mark)) {
+    return false;
+  }
 
   RetainPtr<CPDF_Dictionary> pParams =
       GetOrCreateMarkParamsDict(document, mark);
-  if (!pParams)
+  if (!pParams) {
     return false;
+  }
 
-  if (!value && value_len > 0)
-    return false;
-
+  // SAFETY: required from caller.
   pParams->SetNewFor<CPDF_String>(
-      key, ByteString(static_cast<const char*>(value), value_len), true);
+      key,
+      UNSAFE_BUFFERS(
+          pdfium::make_span(static_cast<const uint8_t*>(value), value_len)),
+      CPDF_String::DataType::kIsHex);
   pPageObj->SetDirty(true);
   return true;
 }
@@ -633,12 +650,25 @@ FPDFPageObj_Transform(FPDF_PAGEOBJECT page_object,
                       double d,
                       double e,
                       double f) {
-  CPDF_PageObject* pPageObj = CPDFPageObjectFromFPDFPageObject(page_object);
-  if (!pPageObj)
-    return;
+  const FS_MATRIX matrix{static_cast<float>(a), static_cast<float>(b),
+                         static_cast<float>(c), static_cast<float>(d),
+                         static_cast<float>(e), static_cast<float>(f)};
+  FPDFPageObj_TransformF(page_object, &matrix);
+}
 
-  CFX_Matrix matrix((float)a, (float)b, (float)c, (float)d, (float)e, (float)f);
-  pPageObj->Transform(matrix);
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
+FPDFPageObj_TransformF(FPDF_PAGEOBJECT page_object, const FS_MATRIX* matrix) {
+  if (!matrix) {
+    return false;
+  }
+
+  CPDF_PageObject* cpage_object = CPDFPageObjectFromFPDFPageObject(page_object);
+  if (!cpage_object) {
+    return false;
+  }
+
+  cpage_object->Transform(CFXMatrixFromFSMatrix(*matrix));
+  return true;
 }
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
@@ -1013,8 +1043,7 @@ FPDFPageObj_SetDashArray(FPDF_PAGEOBJECT page_object,
   std::vector<float> dashes;
   if (dash_count > 0) {
     dashes.reserve(dash_count);
-    // TODO(crbug.com/pdfium/2155): resolve safety issues.
-    dashes.assign(dash_array, UNSAFE_BUFFERS(dash_array + dash_count));
+    dashes.assign(dash_array, UNSAFE_TODO(dash_array + dash_count));
   }
   pPageObj->mutable_graph_state().SetLineDash(dashes, phase, 1.0f);
   pPageObj->SetDirty(true);

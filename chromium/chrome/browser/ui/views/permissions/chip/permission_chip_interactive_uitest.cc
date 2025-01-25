@@ -18,8 +18,9 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_view_factory.h"
+#include "chrome/browser/ui/views/permissions/chip/chip_controller.h"
 #include "chrome/browser/ui/views/permissions/chip/permission_chip_theme.h"
-#include "chrome/browser/ui/views/permissions/chip_controller.h"
+#include "chrome/browser/ui/views/permissions/permission_prompt_chip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -45,7 +46,6 @@
 #include "content/public/test/permissions_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/dns/mock_host_resolver.h"
-#include "chrome/browser/ui/views/permissions/permission_prompt_chip.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/test/test_event.h"
@@ -173,10 +173,6 @@ class PermissionChipInteractiveUITest : public InProcessBrowserTest {
     return lbv->GetChipController();
   }
 
-  PermissionPromptChip* GetPermissionPromptChip() {
-    return static_cast<PermissionPromptChip*>(
-        test_api_->manager()->view_for_testing());
-  }
 
   void ClickOnChip(PermissionChipView* chip) {
     ASSERT_TRUE(chip != nullptr);
@@ -184,74 +180,17 @@ class PermissionChipInteractiveUITest : public InProcessBrowserTest {
     ASSERT_FALSE(GetChipController()->GetBubbleWidget());
 
     views::test::ButtonTestApi(chip).NotifyClick(
-        ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+        ui::MouseEvent(ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
                        ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
     base::RunLoop().RunUntilIdle();
   }
 
   void ClickOnLock() {
     views::test::ButtonTestApi(GetLocationBarView()->location_icon_view())
-        .NotifyClick(ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(),
+        .NotifyClick(ui::MouseEvent(ui::EventType::kMousePressed, gfx::Point(),
                                     gfx::Point(), ui::EventTimeForNow(),
                                     ui::EF_LEFT_MOUSE_BUTTON, 0));
     base::RunLoop().RunUntilIdle();
-  }
-
-  void ExpectQuietAbusiveChip() {
-    // PermissionChip lifetime is bound to a permission prompt view.
-    ASSERT_TRUE(test_api_->manager()->view_for_testing());
-
-    // The quiet chip will be shown even if the chip experiment is disabled.
-    PermissionChipView* chip_ = GetChip();
-    ASSERT_TRUE(chip_);
-
-    EXPECT_FALSE(GetPermissionPromptChip()
-                     ->get_chip_controller_for_testing()
-                     ->should_expand_for_testing());
-    EXPECT_FALSE(chip_->is_animating());
-    EXPECT_EQ(PermissionChipTheme::kLowVisibility,
-              chip_->get_theme_for_testing());
-  }
-
-  void ExpectQuietChip() {
-    // PermissionChip lifetime is bound to a permission prompt view.
-    ASSERT_TRUE(test_api_->manager()->view_for_testing());
-
-    // The quiet chip will be shown even if the chip experiment is disabled.
-    PermissionChipView* chip_ = GetChip();
-    ASSERT_TRUE(chip_);
-
-    EXPECT_TRUE(GetPermissionPromptChip()
-                    ->get_chip_controller_for_testing()
-                    ->should_expand_for_testing());
-    EXPECT_TRUE(chip_->is_animating());
-    EXPECT_EQ(PermissionChipTheme::kLowVisibility,
-              chip_->get_theme_for_testing());
-  }
-
-  void ExpectNormalChip() {
-    // PermissionChip lifetime is bound to a permission prompt view.
-    ASSERT_TRUE(test_api_->manager()->view_for_testing());
-    PermissionChipView* chip_ = GetChip();
-    ASSERT_TRUE(chip_);
-
-    EXPECT_TRUE(GetPermissionPromptChip()
-                    ->get_chip_controller_for_testing()
-                    ->should_expand_for_testing());
-    EXPECT_TRUE(chip_->is_animating());
-    // TODO(crbug.com/40780269): Verify that PermissionChipView::is_animating is
-    // true. Right now the value is flaky.
-    EXPECT_EQ(PermissionChipTheme::kNormalVisibility,
-              chip_->get_theme_for_testing());
-  }
-
-  ContentSettingImageView& GetContentSettingImageView(
-      ContentSettingImageModel::ImageType image_type) {
-    LocationBarView* location_bar_view =
-        BrowserView::GetBrowserViewForBrowser(browser())->GetLocationBarView();
-    return **base::ranges::find(
-        location_bar_view->GetContentSettingViewsForTest(), image_type,
-        &ContentSettingImageView::GetType);
   }
 
   // Create an <iframe> inside |parent_rfh|, and navigate it toward |url|.
@@ -614,7 +553,7 @@ class PageInfoChangedWithin1mUmaTest : public PermissionChipInteractiveUITest {
 
   void PerformMouseClickOnView(views::Button* button) {
     views::test::ButtonTestApi(button).NotifyClick(
-        ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+        ui::MouseEvent(ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
                        ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
   }
 

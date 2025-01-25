@@ -32,7 +32,7 @@ Compiler::Compiler(rx::GLImplFactory *implFactory, const State &state, egl::Disp
       mOutputType(mImplementation->getTranslatorOutputType()),
       mResources()
 {
-    // TODO(http://anglebug.com/3819): Update for GL version specific validation
+    // TODO(http://anglebug.com/42262462): Update for GL version specific validation
     ASSERT(state.getClientMajorVersion() == 1 || state.getClientMajorVersion() == 2 ||
            state.getClientMajorVersion() == 3 || state.getClientMajorVersion() == 4);
 
@@ -69,6 +69,7 @@ Compiler::Compiler(rx::GLImplFactory *implFactory, const State &state, egl::Disp
         extensions.shaderNoperspectiveInterpolationNV;
     mResources.ARB_texture_rectangle = extensions.textureRectangleANGLE;
     mResources.EXT_gpu_shader5       = extensions.gpuShader5EXT;
+    mResources.OES_gpu_shader5       = extensions.gpuShader5OES;
     mResources.OES_shader_io_blocks  = extensions.shaderIoBlocksOES;
     mResources.EXT_shader_io_blocks  = extensions.shaderIoBlocksEXT;
     mResources.OES_texture_storage_multisample_2d_array =
@@ -240,6 +241,7 @@ Compiler::Compiler(rx::GLImplFactory *implFactory, const State &state, egl::Disp
 
     // Tessellation Shader constants
     mResources.EXT_tessellation_shader        = extensions.tessellationShaderEXT;
+    mResources.OES_tessellation_shader        = extensions.tessellationShaderOES;
     mResources.MaxTessControlInputComponents  = caps.maxTessControlInputComponents;
     mResources.MaxTessControlOutputComponents = caps.maxTessControlOutputComponents;
     mResources.MaxTessControlTextureImageUnits =

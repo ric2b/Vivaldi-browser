@@ -175,7 +175,9 @@ struct ProgramOutput
         uint32_t isBuiltIn : 1;
         uint32_t isArray : 1;
         uint32_t hasImplicitLocation : 1;
-        uint32_t pad : 27;
+        uint32_t hasShaderAssignedLocation : 1;
+        uint32_t hasApiAssignedLocation : 1;
+        uint32_t pad : 25;
     } pod;
 };
 ANGLE_DISABLE_STRUCT_PADDING_WARNINGS
@@ -711,6 +713,13 @@ class ProgramExecutable final : public angle::Subject
         return mUniformBlockIndexToBufferBinding;
     }
 
+    const ShaderMap<SharedProgramExecutable> &getPPOProgramExecutables() const
+    {
+        return mPPOProgramExecutables;
+    }
+
+    bool IsPPO() const { return mIsPPO; }
+
     // Post-link task helpers
     const std::vector<std::shared_ptr<rx::LinkSubTask>> &getPostLinkSubTasks() const
     {
@@ -996,6 +1005,8 @@ class ProgramExecutable final : public angle::Subject
     // PPO only: installed executables from the programs.  Note that these may be different from the
     // programs' current executables, because they may have been unsuccessfully relinked.
     ShaderMap<SharedProgramExecutable> mPPOProgramExecutables;
+    // Flag for an easy check for PPO without inspecting mPPOProgramExecutables
+    bool mIsPPO;
 
     // Cache for sampler validation
     mutable Optional<bool> mCachedValidateSamplersResult;

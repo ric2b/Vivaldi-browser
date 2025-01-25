@@ -44,7 +44,6 @@ cc_binary(
   deps = [
     "//src/tint/api",
     "//src/tint/api/common",
-    "//src/tint/api/options",
     "//src/tint/cmd/common",
     "//src/tint/lang/core",
     "//src/tint/lang/core/constant",
@@ -54,6 +53,7 @@ cc_binary(
     "//src/tint/lang/hlsl/writer/helpers",
     "//src/tint/lang/wgsl",
     "//src/tint/lang/wgsl/ast",
+    "//src/tint/lang/wgsl/ast/transform",
     "//src/tint/lang/wgsl/common",
     "//src/tint/lang/wgsl/features",
     "//src/tint/lang/wgsl/helpers",
@@ -78,6 +78,7 @@ cc_binary(
     ":tint_build_glsl_writer": [
       "//src/tint/lang/glsl/writer",
       "//src/tint/lang/glsl/writer/common",
+      "//src/tint/lang/glsl/writer/helpers",
     ],
     "//conditions:default": [],
   }) + select({

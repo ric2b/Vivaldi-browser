@@ -5,12 +5,14 @@
 #include "components/sync/engine/get_updates_processor.h"
 
 #include <stddef.h>
+
 #include <map>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/logging.h"
+#include "base/not_fatal_until.h"
 #include "base/trace_event/trace_event.h"
 #include "components/sync/engine/cycle/status_controller.h"
 #include "components/sync/engine/cycle/sync_cycle.h"
@@ -87,7 +89,7 @@ void PartitionUpdatesByType(const sync_pb::GetUpdatesResponse& gu_response,
   for (const sync_pb::SyncEntity& update : gu_response.entries()) {
     ModelType type = GetModelTypeFromSpecifics(update.specifics());
     if (!IsRealDataType(type)) {
-      NOTREACHED() << "Received update with invalid type.";
+      NOTREACHED_IN_MIGRATION() << "Received update with invalid type.";
       continue;
     }
 
@@ -200,7 +202,7 @@ void GetUpdatesProcessor::PrepareGetUpdates(
 
   for (ModelType type : gu_types) {
     auto handler_it = update_handler_map_->find(type);
-    DCHECK(handler_it != update_handler_map_->end())
+    CHECK(handler_it != update_handler_map_->end(), base::NotFatalUntil::M130)
         << "Failed to look up handler for " << ModelTypeToDebugString(type);
     sync_pb::DataTypeProgressMarker* progress_marker =
         get_updates->add_from_progress_marker();
@@ -316,7 +318,8 @@ SyncerError GetUpdatesProcessor::ProcessResponse(
   PartitionProgressMarkersByType(gu_response, gu_types,
                                  &progress_index_by_type);
   if (gu_types.size() != progress_index_by_type.size()) {
-    NOTREACHED() << "Missing progress markers in GetUpdates response.";
+    NOTREACHED_IN_MIGRATION()
+        << "Missing progress markers in GetUpdates response.";
     return SyncerError::ProtocolViolationError();
   }
 

@@ -18,6 +18,7 @@
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/policy/policy_constants.h"
 #import "components/strings/grit/components_strings.h"
+#import "components/sync/base/features.h"
 #import "components/sync/base/user_selectable_type.h"
 #import "components/sync/service/sync_prefs.h"
 #import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
@@ -54,10 +55,9 @@
 #import "ios/testing/earl_grey/app_launch_manager.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ios/testing/earl_grey/matchers.h"
+#import "ios/third_party/earl_grey2/src/CommonLib/Matcher/GREYLayoutConstraint.h"  // nogncheck
 #import "ios/web/public/test/element_selector.h"
 #import "ui/base/l10n/l10n_util.h"
-
-#import "ios/third_party/earl_grey2/src/CommonLib/Matcher/GREYLayoutConstraint.h"  // nogncheck
 
 using chrome_test_util::ButtonWithAccessibilityLabel;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
@@ -66,7 +66,6 @@ using chrome_test_util::NavigationBarDoneButton;
 using chrome_test_util::PasswordsTableViewMatcher;
 using chrome_test_util::SettingsCollectionView;
 using chrome_test_util::SettingsDoneButton;
-using chrome_test_util::SettingsMenuBackButton;
 using chrome_test_util::SettingsNavigationBar;
 using chrome_test_util::TabGridEditButton;
 using chrome_test_util::TextFieldForCellWithLabelId;
@@ -79,6 +78,7 @@ using password_manager_test_utils::EditPasswordConfirmationButton;
 using password_manager_test_utils::GetInteractionForPasswordIssueEntry;
 using password_manager_test_utils::kDefaultPassword;
 using password_manager_test_utils::kDefaultSite;
+using password_manager_test_utils::kDefaultUserDisplayName;
 using password_manager_test_utils::kDefaultUsername;
 using password_manager_test_utils::kPasswordStoreErrorMessage;
 using password_manager_test_utils::kScrollAmount;
@@ -89,10 +89,12 @@ using password_manager_test_utils::PasswordDetailsTableViewMatcher;
 using password_manager_test_utils::PasswordSettingsTableView;
 using password_manager_test_utils::PasswordTextfieldForUsernameAndSites;
 using password_manager_test_utils::ReauthenticationController;
+using password_manager_test_utils::SaveExamplePasskeyToStore;
 using password_manager_test_utils::SavePasswordFormToProfileStore;
 using password_manager_test_utils::TapNavigationBarEditButton;
 using password_manager_test_utils::UsernameTextfieldForUsernameAndSites;
 using testing::ElementWithAccessibilityLabelSubstring;
+using testing::NavigationBarBackButton;
 
 namespace {
 
@@ -196,15 +198,24 @@ id<GREYMatcher> AddPasswordWebsite() {
 }
 
 // Matcher for the username in Password Details view.
-id<GREYMatcher> PasswordDetailUsername() {
+id<GREYMatcher> CredentialDetailUsername() {
   return TextFieldForCellWithLabelId(IDS_IOS_SHOW_PASSWORD_VIEW_USERNAME);
 }
 
-// Matcher for the note in Password Details view.
+id<GREYMatcher> PasskeyDetailUserDisplayName() {
+  return TextFieldForCellWithLabelId(IDS_IOS_SHOW_PASSKEY_DISPLAY_NAME);
+}
+
+// Matcher for the text view of the note in Password Details view.
 id<GREYMatcher> PasswordDetailNote() {
   return grey_allOf(
       grey_accessibilityID(GetTextFieldForID(IDS_IOS_SHOW_PASSWORD_VIEW_NOTE)),
       grey_kindOfClassName(@"UITextView"), nil);
+}
+
+// Returns matcher for the label of the note in Password Details view.
+id<GREYMatcher> PasswordDetailNoteLabel() {
+  return grey_allOf(grey_kindOfClass([UILabel class]), grey_text(@"Note"), nil);
 }
 
 // Matcher for the federation details in Password Details view.
@@ -253,6 +264,13 @@ id<GREYMatcher> DeleteButtonAtBottom() {
 id<GREYMatcher> DeleteBlockedSiteButton() {
   return grey_allOf(ButtonWithAccessibilityLabel(
                         l10n_util::GetNSString(IDS_IOS_DELETE_ACTION_TITLE)),
+                    grey_interactable(), nullptr);
+}
+
+// Matcher for the "Delete" associated with the blocked site.
+id<GREYMatcher> DeletePasskeyButton() {
+  return grey_allOf(ButtonWithAccessibilityLabel(l10n_util::GetNSString(
+                        IDS_IOS_CONFIRM_PASSKEY_DELETION)),
                     grey_interactable(), nullptr);
 }
 
@@ -718,11 +736,18 @@ void OpenPasswordManagerWidgetPromoInstructions() {
             (testPasswordManagerWidgetPromoInstructionsDeviceOrientation)] ||
       [self
           isRunningTest:@selector
-          (testOpeningPasswordManagerWidgetPromoInstructionsWithFailedAuth)]) {
+          (testOpeningPasswordManagerWidgetPromoInstructionsWithFailedAuth)] ||
+      [self isRunningTest:@selector(testDeletingLastAffiliatedGroup)]) {
     config.iph_feature_enabled = "IPH_iOSPromoPasswordManagerWidget";
     config.additional_args.push_back(base::StringPrintf(
         "--enable-features=%s",
         password_manager::features::kIOSPasswordAuthOnEntryV2.name));
+  }
+
+  if ([self isRunningTest:@selector(testEditPasskeyUsername)] ||
+      [self isRunningTest:@selector(testEditPasskeyUserDisplayName)] ||
+      [self isRunningTest:@selector(testDeletePasskey)]) {
+    config.features_enabled.push_back(syncer::kSyncWebauthnCredentials);
   }
 
   return config;
@@ -745,10 +770,9 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[self interactionForSinglePasswordEntryWithDomain:@"example.com"]
       performAction:grey_tap()];
   [ChromeEarlGrey verifyAccessibilityForCurrentScreen];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
-
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -772,9 +796,9 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(snackbarLabel)]
       performAction:grey_tap()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -797,9 +821,9 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [GetInteractionForPasswordDetailItem(grey_textFieldValue(kDefaultPassword))
       assertWithMatcher:grey_notNil()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -822,9 +846,9 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(snackbarLabel)]
       performAction:grey_tap()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -849,9 +873,9 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(snackbarLabel)]
       performAction:grey_tap()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -897,7 +921,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
       assertWithMatcher:grey_allOf(grey_enabled(), grey_sufficientlyVisible(),
                                    nil)];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -950,7 +974,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
       assertWithMatcher:grey_allOf(grey_enabled(), grey_sufficientlyVisible(),
                                    nil)];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -999,7 +1023,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [GetInteractionForPasswordEntry(@"exclude2.com")
       assertWithMatcher:grey_sufficientlyVisible()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1057,7 +1081,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
       assertWithMatcher:grey_allOf(grey_enabled(), grey_sufficientlyVisible(),
                                    nil)];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1108,7 +1132,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
       assertWithMatcher:grey_allOf(grey_enabled(), grey_sufficientlyVisible(),
                                    nil)];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1160,7 +1184,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[self interactionForSinglePasswordEntryWithDomain:@"example.com"]
       assertWithMatcher:grey_sufficientlyVisible()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1200,12 +1224,12 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   // list.
   [[EarlGrey selectElementWithMatcher:NavigationBarCancelButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[self interactionForSinglePasswordEntryWithDomain:@"example.com"]
       assertWithMatcher:grey_sufficientlyVisible()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1229,7 +1253,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:PasswordDetailPassword()]
       assertWithMatcher:grey_nil()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1263,9 +1287,9 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(snackbarLabel)]
       performAction:grey_tap()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1290,7 +1314,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:
                  [self matcherForPasswordDetailCellWithWebsites:kDefaultSite]]
       assertWithMatcher:grey_notNil()];
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       assertWithMatcher:grey_textFieldValue(@"federated username")];
   [[EarlGrey selectElementWithMatcher:PasswordDetailFederation()]
       assertWithMatcher:grey_textFieldValue(@"famous.provider.net")];
@@ -1309,9 +1333,9 @@ void OpenPasswordManagerWidgetPromoInstructions() {
 
   [[EarlGrey selectElementWithMatcher:NavigationBarCancelButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1330,7 +1354,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:
                  [self matcherForPasswordDetailCellWithWebsites:kDefaultSite]]
       assertWithMatcher:grey_notNil()];
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       assertWithMatcher:grey_textFieldValue(kDefaultUsername)];
   [[EarlGrey selectElementWithMatcher:PasswordDetailPassword()]
       assertWithMatcher:grey_textFieldValue(kMaskedPassword)];
@@ -1339,17 +1363,17 @@ void OpenPasswordManagerWidgetPromoInstructions() {
 
   [[EarlGrey selectElementWithMatcher:PasswordDetailFederation()]
       assertWithMatcher:grey_nil()];
-  [GetInteractionForPasswordDetailItem(PasswordDetailUsername())
+  [GetInteractionForPasswordDetailItem(CredentialDetailUsername())
       assertWithMatcher:
           grey_layout(
               @[ Below() ],
               [self matcherForPasswordDetailCellWithWebsites:kDefaultSite])];
   [GetInteractionForPasswordDetailItem(PasswordDetailPassword())
-      assertWithMatcher:grey_layout(@[ Below() ], PasswordDetailUsername())];
+      assertWithMatcher:grey_layout(@[ Below() ], CredentialDetailUsername())];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1418,16 +1442,16 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:
                  [self matcherForPasswordDetailCellWithWebsites:kDefaultSite]]
       assertWithMatcher:grey_notNil()];
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       assertWithMatcher:grey_nil()];
   [[EarlGrey selectElementWithMatcher:PasswordDetailPassword()]
       assertWithMatcher:grey_nil()];
   [[EarlGrey selectElementWithMatcher:PasswordDetailFederation()]
       assertWithMatcher:grey_nil()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1452,24 +1476,24 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:
                  [self matcherForPasswordDetailCellWithWebsites:kDefaultSite]]
       assertWithMatcher:grey_notNil()];
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       assertWithMatcher:grey_textFieldValue(@"federated username")];
   [[EarlGrey selectElementWithMatcher:PasswordDetailFederation()]
       assertWithMatcher:grey_textFieldValue(@"famous.provider.net")];
   [[EarlGrey selectElementWithMatcher:PasswordDetailPassword()]
       assertWithMatcher:grey_nil()];
 
-  [GetInteractionForPasswordDetailItem(PasswordDetailUsername())
+  [GetInteractionForPasswordDetailItem(CredentialDetailUsername())
       assertWithMatcher:
           grey_layout(
               @[ Below() ],
               [self matcherForPasswordDetailCellWithWebsites:kDefaultSite])];
   [[EarlGrey selectElementWithMatcher:PasswordDetailFederation()]
-      assertWithMatcher:grey_layout(@[ Below() ], PasswordDetailUsername())];
+      assertWithMatcher:grey_layout(@[ Below() ], CredentialDetailUsername())];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1518,7 +1542,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
         assertWithMatcher:grey_notNil()];
   }
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1570,7 +1594,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
                                           grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
   // "Back" to go to root settings menu.
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   // "Done" to close out.
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
@@ -1605,7 +1629,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [GetInteractionForPasswordEntry(@"example.com, concrete username")
       assertWithMatcher:grey_not(grey_sufficientlyVisible())];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1670,9 +1694,9 @@ void OpenPasswordManagerWidgetPromoInstructions() {
       onElementWithMatcher:PasswordDetailsTableViewMatcher()]
       assertWithMatcher:grey_notNil()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1704,7 +1728,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
       assertWithMatcher:grey_allOf(grey_enabled(), grey_sufficientlyVisible(),
                                    nil)];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1807,7 +1831,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey
       selectElementWithMatcher:ButtonWithAccessibilityLabelId(IDS_CANCEL)]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -1966,9 +1990,9 @@ void OpenPasswordManagerWidgetPromoInstructions() {
 
   [[EarlGrey selectElementWithMatcher:NavigationBarCancelButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -2012,9 +2036,9 @@ void OpenPasswordManagerWidgetPromoInstructions() {
 
   [[EarlGrey selectElementWithMatcher:NavigationBarCancelButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -2031,37 +2055,37 @@ void OpenPasswordManagerWidgetPromoInstructions() {
 
   TapNavigationBarEditButton();
 
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       assertWithMatcher:grey_textFieldValue(kDefaultUsername)];
 
   // Empty username should work as well.
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       performAction:grey_replaceText(@"")];
 
   [[EarlGrey selectElementWithMatcher:EditDoneButton()]
       performAction:grey_tap()];
 
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       assertWithMatcher:grey_textFieldValue(@"")];
 
   TapNavigationBarEditButton();
 
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       performAction:grey_replaceText(@"new username")];
 
   [[EarlGrey selectElementWithMatcher:EditDoneButton()]
       performAction:grey_tap()];
 
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       assertWithMatcher:grey_textFieldValue(@"new username")];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
 
   [[self interactionForSinglePasswordEntryWithDomain:@"example.com"]
       assertWithMatcher:grey_notNil()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -2103,13 +2127,134 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:NavigationBarCancelButton()]
       performAction:grey_tap()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
+}
+
+- (void)testEditPasskeyUsername {
+  SaveExamplePasskeyToStore();
+
+  OpenPasswordManager();
+
+  [[self interactionForSinglePasswordEntryWithDomain:@"example.com"]
+      performAction:grey_tap()];
+
+  TapNavigationBarEditButton();
+
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
+      assertWithMatcher:grey_textFieldValue(kDefaultUsername)];
+
+  // Empty username should work as well.
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
+      performAction:grey_replaceText(@"")];
+
+  [[EarlGrey selectElementWithMatcher:EditDoneButton()]
+      performAction:grey_tap()];
+
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
+      assertWithMatcher:grey_textFieldValue(@"")];
+
+  TapNavigationBarEditButton();
+
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
+      performAction:grey_replaceText(@"new username")];
+
+  [[EarlGrey selectElementWithMatcher:EditDoneButton()]
+      performAction:grey_tap()];
+
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
+      assertWithMatcher:grey_textFieldValue(@"new username")];
+
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
+      performAction:grey_tap()];
+
+  [[self interactionForSinglePasswordEntryWithDomain:@"example.com"]
+      assertWithMatcher:grey_notNil()];
+
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
+      performAction:grey_tap()];
+}
+
+- (void)testEditPasskeyUserDisplayName {
+  SaveExamplePasskeyToStore();
+
+  OpenPasswordManager();
+
+  [[self interactionForSinglePasswordEntryWithDomain:@"example.com"]
+      performAction:grey_tap()];
+
+  TapNavigationBarEditButton();
+
+  [[EarlGrey selectElementWithMatcher:PasskeyDetailUserDisplayName()]
+      assertWithMatcher:grey_textFieldValue(kDefaultUserDisplayName)];
+
+  // Empty username should work as well.
+  [[EarlGrey selectElementWithMatcher:PasskeyDetailUserDisplayName()]
+      performAction:grey_replaceText(@"")];
+
+  [[EarlGrey selectElementWithMatcher:EditDoneButton()]
+      performAction:grey_tap()];
+
+  [[EarlGrey selectElementWithMatcher:PasskeyDetailUserDisplayName()]
+      assertWithMatcher:grey_textFieldValue(@"")];
+
+  TapNavigationBarEditButton();
+
+  [[EarlGrey selectElementWithMatcher:PasskeyDetailUserDisplayName()]
+      performAction:grey_replaceText(@"new user display name")];
+
+  [[EarlGrey selectElementWithMatcher:EditDoneButton()]
+      performAction:grey_tap()];
+
+  [[EarlGrey selectElementWithMatcher:PasskeyDetailUserDisplayName()]
+      assertWithMatcher:grey_textFieldValue(@"new user display name")];
+
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
+      performAction:grey_tap()];
+
+  [[self interactionForSinglePasswordEntryWithDomain:@"example.com"]
+      assertWithMatcher:grey_notNil()];
+
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
+      performAction:grey_tap()];
+}
+
+- (void)testDeletePasskey {
+  SaveExamplePasskeyToStore();
+
+  OpenPasswordManager();
+
+  [[self interactionForSinglePasswordEntryWithDomain:@"example.com"]
+      performAction:grey_tap()];
+
+  TapNavigationBarEditButton();
+
+  id<GREYMatcher> userDisplayName = PasskeyDetailUserDisplayName();
+
+  // Verify that the passkey exists.
+  [[EarlGrey selectElementWithMatcher:userDisplayName]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Tap the delete button of the credential.
+  [[EarlGrey selectElementWithMatcher:DeletePasskeyButton()]
+      performAction:grey_tap()];
+
+  // Tap on the Delete confirmation button of the alert dialog.
+  [[EarlGrey selectElementWithMatcher:BatchDeleteConfirmationButton()]
+      performAction:grey_tap()];
+
+  // Verify that the passkey no longer exists.
+  [[EarlGrey selectElementWithMatcher:userDisplayName]
+      assertWithMatcher:grey_not(grey_sufficientlyVisible())];
 }
 
 // Checks that attempts to edit a username provide appropriate feedback.
@@ -2136,9 +2281,9 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:PasswordDetailPassword()]
       assertWithMatcher:grey_textFieldValue(kDefaultPassword)];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -2192,7 +2337,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
         assertWithMatcher:grey_allOf(grey_enabled(), grey_sufficientlyVisible(),
                                      nil)];
 
-    [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+    [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
         performAction:grey_tap()];
     [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
         performAction:grey_tap()];
@@ -2233,7 +2378,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:AddPasswordWebsite()]
       performAction:grey_replaceText(kDefaultSite)];
 
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       performAction:grey_replaceText(@"new username")];
 
   [[EarlGrey selectElementWithMatcher:PasswordDetailPassword()]
@@ -2309,7 +2454,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   // Fill form.
   [[EarlGrey selectElementWithMatcher:AddPasswordWebsite()]
       performAction:grey_replaceText(kDefaultSite)];
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       performAction:grey_replaceText(@"new username")];
   [[EarlGrey selectElementWithMatcher:PasswordDetailPassword()]
       performAction:grey_replaceText(@"new password")];
@@ -2374,7 +2519,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
       performAction:grey_replaceText([NSString
                         stringWithFormat:@"https://%@", kAddedDomain])];
 
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       performAction:grey_replaceText(@"zconcrete username")];
 
   [[EarlGrey selectElementWithMatcher:PasswordDetailPassword()]
@@ -2415,7 +2560,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:PasswordDetailPassword()]
       performAction:grey_replaceText(@"password")];
 
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       performAction:grey_replaceText(kDefaultUsername)];
 
   // Verify Save Button is not enabled.
@@ -2439,22 +2584,22 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:DuplicateCredentialViewPasswordButton()]
       performAction:grey_tap()];
 
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       performAction:grey_replaceText(@"new username")];
 
   [[EarlGrey selectElementWithMatcher:EditDoneButton()]
       performAction:grey_tap()];
 
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       assertWithMatcher:grey_textFieldValue(@"new username")];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
 
   [[self interactionForSinglePasswordEntryWithDomain:@"example.com"]
       assertWithMatcher:grey_notNil()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -2471,7 +2616,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   NSString* long_note = [@"" stringByPaddingToLength:1001
                                           withString:@"a"
                                      startingAtIndex:0];
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       performAction:grey_replaceText(@"username")];
 
   // Make sure that switching from invalid to valid note doesn't enable the save
@@ -2545,7 +2690,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:AddPasswordWebsite()]
       performAction:grey_replaceText(@"https://www.example.com")];
 
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       performAction:grey_replaceText(@"")];
 
   [[EarlGrey selectElementWithMatcher:PasswordDetailPassword()]
@@ -2565,7 +2710,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:DuplicateCredentialViewPasswordButton()]
       assertWithMatcher:grey_enabled()];
 
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       performAction:grey_replaceText(@"new username")];
 
   // Wait until duplicated message disappearing animation is done.
@@ -2613,7 +2758,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:PasswordDetailPassword()]
       performAction:grey_replaceText(@"password")];
 
-  [[EarlGrey selectElementWithMatcher:PasswordDetailUsername()]
+  [[EarlGrey selectElementWithMatcher:CredentialDetailUsername()]
       performAction:grey_replaceText(kDefaultUsername)];
 
   [[EarlGrey selectElementWithMatcher:
@@ -2642,7 +2787,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
       assertWithMatcher:grey_sufficientlyVisible()];
   [GetInteractionForPasswordDetailItem(HidePasswordButton())
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -2693,7 +2838,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   if (error) {
     GREYFail([error description]);
   }
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -2779,12 +2924,10 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   [[EarlGrey selectElementWithMatcher:offMatcher] assertWithMatcher:grey_nil()];
 
   [PasswordsInOtherAppsAppInterface startFakeManagerWithAutoFillStatus:NO];
-  [[EarlGrey selectElementWithMatcher:offMatcher]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:offMatcher];
 
   [PasswordsInOtherAppsAppInterface setAutoFillStatus:YES];
-  [[EarlGrey selectElementWithMatcher:onMatcher]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:onMatcher];
 }
 
 // Tests that the detail view is dismissed when the last password is deleted,
@@ -2849,7 +2992,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
                  base::test::ios::kWaitForUIElementTimeout, condition),
              @"Waiting for the view to load");
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -2890,7 +3033,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
                                           kMovePasswordToAccountButtonID)]
       assertWithMatcher:grey_notVisible()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
 
   [GetInteractionForListItem(localIconMatcher, kGREYDirectionDown)
@@ -2938,7 +3081,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
                                           kMovePasswordToAccountButtonID)]
       assertWithMatcher:grey_notVisible()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
 
   [GetInteractionForListItem(localIconMatcher, kGREYDirectionDown)
@@ -3481,7 +3624,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
 
   // Navigate back to the Password Manager. The search bar should not be
   // enabled.
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SearchTextField()]
       assertWithMatcher:grey_userInteractionEnabled()];
@@ -3707,6 +3850,109 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   // option anymore.
   [[EarlGrey selectElementWithMatcher:PasswordDetailsMoveToAccountButton()]
       assertWithMatcher:grey_notVisible()];
+}
+
+- (void)testAddPasswordTappingAnywhereInNoteFieldFocusesTextView {
+  SavePasswordFormToProfileStore();
+  OpenPasswordManager();
+
+  // Tap "Add Password"
+  [[EarlGrey selectElementWithMatcher:AddPasswordButton()]
+      performAction:grey_tap()];
+
+  // Tap the "Note" label of the note cell.
+  [[EarlGrey selectElementWithMatcher:PasswordDetailNoteLabel()]
+      performAction:grey_tap()];
+
+  // Check that the text view is the first responder.
+  [[EarlGrey selectElementWithMatcher:PasswordDetailNote()]
+      assertWithMatcher:grey_firstResponder()];
+}
+
+- (void)testEditPasswordTappingAnywhereInNoteFieldFocusesTextView {
+  SaveExamplePasswordFormToProfileStoreWithNote();
+  OpenPasswordManager();
+
+  // Open password details and tap "Edit".
+  [[self interactionForSinglePasswordEntryWithDomain:@"example.com"]
+      performAction:grey_tap()];
+  TapNavigationBarEditButton();
+
+  // Tap the "Note" label of the note cell.
+  [[EarlGrey selectElementWithMatcher:PasswordDetailNoteLabel()]
+      performAction:grey_tap()];
+
+  // Check that the text view is the first responder.
+  [[EarlGrey selectElementWithMatcher:PasswordDetailNote()]
+      assertWithMatcher:grey_firstResponder()];
+}
+
+// Tests that deleting the last affiliated group (composed of at least two
+// passwords) while the Password Manager view is scrolled down results in
+// showing the empty state view. See crbug.com/41492279.
+- (void)testDeletingLastAffiliatedGroup {
+  // Form an affiliated group with two passwords.
+  SavePasswordFormToProfileStore(/*password=*/@"password1",
+                                 /*username=*/@"user1",
+                                 /*origin=*/@"https://example11.com");
+  SavePasswordFormToProfileStore(/*password=*/@"password2",
+                                 /*username=*/@"user2",
+                                 /*origin=*/@"https://example11.com");
+
+  OpenPasswordManager();
+
+  // Scroll down to the bottom of the Password Manager table view.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(kPasswordsTableViewID)]
+      performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
+
+  // Delete the affiliated group with a left swipe.
+  [[EarlGrey selectElementWithMatcher:grey_text(@"example11.com")]
+      performAction:grey_swipeSlowInDirectionWithStartPoint(kGREYDirectionLeft,
+                                                            0.9, 0.5)];
+
+  [ChromeEarlGreyUI waitForAppToIdle];
+
+  // Verify that the empty view is now displayed.
+  [[EarlGrey selectElementWithMatcher:password_manager_test_utils::
+                                          PasswordManagerEmptyView()]
+      assertWithMatcher:grey_sufficientlyVisible()];
+}
+
+- (void)testSwipingAnotherAffiliatedGroupWhenAnotherIsInEditMode {
+  // Form an affiliated group with two passwords.
+  SavePasswordFormToProfileStore(/*password=*/@"password1",
+                                 /*username=*/@"user1",
+                                 /*origin=*/@"https://example.com");
+  SavePasswordFormToProfileStore(/*password=*/@"password2",
+                                 /*username=*/@"user2",
+                                 /*origin=*/@"https://example1.com");
+
+  OpenPasswordManager();
+
+  // Swipe the affiliated group until the "Delete" button is revealed.
+  [[EarlGrey selectElementWithMatcher:grey_text(@"example.com")]
+      performAction:chrome_test_util::SwipeToShowDeleteButton()];
+
+  [ChromeEarlGreyUI waitForAppToIdle];
+
+  // Assert that "Delete" button is displayed.
+  [[EarlGrey selectElementWithMatcher:grey_kindOfClassName(
+                                          @"UISwipeActionStandardButton")]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Swipe the next affiliated group until the "Delete" button is revealed.
+  [[EarlGrey selectElementWithMatcher:grey_text(@"example1.com")]
+      performAction:chrome_test_util::SwipeToShowDeleteButton()];
+
+  // Wait for the first affiliated group to reach its original state (i.e. no
+  // visible delete button).
+  [ChromeEarlGreyUI waitForAppToIdle];
+
+  // Assert that "Delete" button is displayed for the second affiliated group.
+  [[EarlGrey selectElementWithMatcher:grey_kindOfClassName(
+                                          @"UISwipeActionStandardButton")]
+      assertWithMatcher:grey_sufficientlyVisible()];
 }
 
 @end

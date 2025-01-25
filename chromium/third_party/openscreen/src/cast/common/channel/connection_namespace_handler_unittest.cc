@@ -29,8 +29,8 @@ using ::testing::_;
 using ::testing::Invoke;
 using ::testing::NiceMock;
 
-using ::cast::channel::CastMessage;
-using ::cast::channel::CastMessage_ProtocolVersion;
+using proto::CastMessage;
+using proto::CastMessage_ProtocolVersion;
 
 class MockVirtualConnectionPolicy
     : public ConnectionNamespaceHandler::VirtualConnectionPolicy {
@@ -73,8 +73,7 @@ void VerifyConnectionMessage(const CastMessage& message,
   EXPECT_EQ(message.source_id(), source_id);
   EXPECT_EQ(message.destination_id(), destination_id);
   EXPECT_EQ(message.namespace_(), kConnectionNamespace);
-  ASSERT_EQ(message.payload_type(),
-            ::cast::channel::CastMessage_PayloadType_STRING);
+  ASSERT_EQ(message.payload_type(), proto::CastMessage_PayloadType_STRING);
 }
 
 Json::Value ParseConnectionMessage(const CastMessage& message) {
@@ -173,29 +172,29 @@ TEST_F(ConnectionNamespaceHandlerTest, PolicyDeniesConnection) {
 }
 
 TEST_F(ConnectionNamespaceHandlerTest, ConnectWithVersion) {
-  ExpectConnectedMessage(
-      &fake_cast_socket_pair_.mock_peer_client, receiver_id_, sender_id_,
-      ::cast::channel::CastMessage_ProtocolVersion_CASTV2_1_2);
+  ExpectConnectedMessage(&fake_cast_socket_pair_.mock_peer_client, receiver_id_,
+                         sender_id_,
+                         proto::CastMessage_ProtocolVersion_CASTV2_1_2);
   connection_namespace_handler_.OnMessage(
       &router_, socket_,
-      MakeVersionedConnectMessage(
-          sender_id_, receiver_id_,
-          ::cast::channel::CastMessage_ProtocolVersion_CASTV2_1_2, {}));
+      MakeVersionedConnectMessage(sender_id_, receiver_id_,
+                                  proto::CastMessage_ProtocolVersion_CASTV2_1_2,
+                                  {}));
   EXPECT_TRUE(router_.GetConnectionData(
       VirtualConnection{receiver_id_, sender_id_, socket_->socket_id()}));
 }
 
 TEST_F(ConnectionNamespaceHandlerTest, ConnectWithVersionList) {
-  ExpectConnectedMessage(
-      &fake_cast_socket_pair_.mock_peer_client, receiver_id_, sender_id_,
-      ::cast::channel::CastMessage_ProtocolVersion_CASTV2_1_3);
+  ExpectConnectedMessage(&fake_cast_socket_pair_.mock_peer_client, receiver_id_,
+                         sender_id_,
+                         proto::CastMessage_ProtocolVersion_CASTV2_1_3);
   connection_namespace_handler_.OnMessage(
       &router_, socket_,
       MakeVersionedConnectMessage(
           sender_id_, receiver_id_,
-          ::cast::channel::CastMessage_ProtocolVersion_CASTV2_1_2,
-          {::cast::channel::CastMessage_ProtocolVersion_CASTV2_1_3,
-           ::cast::channel::CastMessage_ProtocolVersion_CASTV2_1_0}));
+          proto::CastMessage_ProtocolVersion_CASTV2_1_2,
+          {proto::CastMessage_ProtocolVersion_CASTV2_1_3,
+           proto::CastMessage_ProtocolVersion_CASTV2_1_0}));
   EXPECT_TRUE(router_.GetConnectionData(
       VirtualConnection{receiver_id_, sender_id_, socket_->socket_id()}));
 }

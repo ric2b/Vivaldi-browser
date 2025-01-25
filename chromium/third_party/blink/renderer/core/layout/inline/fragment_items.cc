@@ -10,7 +10,6 @@
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/clear_collection_scope.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -66,8 +65,8 @@ FragmentItems::FragmentItems(const FragmentItems& other)
 }
 
 bool FragmentItems::IsSubSpan(const Span& span) const {
-  return span.empty() ||
-         (span.data() >= ItemsData() && &span.back() < ItemsData() + Size());
+  return span.empty() || (span.data() >= ItemsData() && !items_.empty() &&
+                          &span.back() <= &items_.back());
 }
 
 void FragmentItems::FinalizeAfterLayout(

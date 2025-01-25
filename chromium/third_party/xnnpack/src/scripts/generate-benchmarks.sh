@@ -22,6 +22,7 @@ tools/generate-vunary-benchmark.py --spec test/f16-vtanh.yaml --output bench/f16
 tools/generate-vunary-benchmark.py --spec test/f32-vabs.yaml --output bench/f32-vabs.cc &
 tools/generate-vunary-benchmark.py --spec test/f32-vclamp.yaml --output bench/f32-vclamp.cc &
 tools/generate-vunary-benchmark.py --spec test/f32-velu.yaml --output bench/f32-velu.cc &
+tools/generate-vunary-benchmark.py --spec test/f32-vgelu.yaml --output bench/f32-vgelu.cc &
 tools/generate-vunary-benchmark.py --spec test/f32-vneg.yaml --output bench/f32-vneg.cc &
 tools/generate-vunary-benchmark.py --spec test/f32-vrelu.yaml --output bench/f32-vrelu.cc &
 tools/generate-vunary-benchmark.py --spec test/f32-vrndd.yaml  --output bench/f32-vrndd.cc &
@@ -33,6 +34,7 @@ tools/generate-vunary-benchmark.py --spec test/f32-vsigmoid.yaml --output bench/
 tools/generate-vunary-benchmark.py --spec test/f32-vsqr.yaml --output bench/f32-vsqr.cc &
 tools/generate-vunary-benchmark.py --spec test/f32-vsqrt.yaml --output bench/f32-vsqrt.cc &
 tools/generate-vunary-benchmark.py --spec test/f32-vtanh.yaml --output bench/f32-vtanh.cc &
+tools/generate-vunary-benchmark.py --spec test/f32-vlog.yaml --output bench/f32-vlog.cc &
 
 ### Tests for VLRelu micro-kernels
 tools/generate-vunary-benchmark.py --spec test/f16-vlrelu.yaml --output bench/f16-vlrelu.cc &
@@ -43,7 +45,12 @@ tools/generate-vunary-benchmark.py --spec test/f16-vhswish.yaml --output bench/f
 tools/generate-vunary-benchmark.py --spec test/f32-vhswish.yaml --output bench/f32-vhswish.cc &
 
 ### Tests for Rsum micro-kernels
-tools/generate-rdsum-benchmark.py  --spec test/f32-rdsum.yaml --output bench/f32-rdsum.cc
-tools/generate-rdsum-benchmark.py  --spec test/f16-f32acc-rdsum.yaml --output bench/f16-f32acc-rdsum.cc
+tools/generate-rdsum-benchmark.py  --spec test/f32-rdsum.yaml --output bench/f32-rdsum.cc &
+tools/generate-rdsum-benchmark.py  --spec test/f16-f32acc-rdsum.yaml --output bench/f16-f32acc-rdsum.cc &
+tools/generate-rdsum-benchmark.py  --spec test/qs8-rdsum-minmax-fp32.yaml --output bench/qs8-rdsum.cc &
 
+tools/generate-rdsum-benchmark.py  --spec test/f16-rsum.yaml --output bench/f16-rsum.cc &
+tools/generate-rdsum-benchmark.py  --spec test/f16-f32acc-rsum.yaml --output bench/f16-f32acc-rsum.cc &
+tools/generate-rdsum-benchmark.py  --spec test/f32-rsum.yaml --output bench/f32-rsum.cc &
+tools/generate-rdsum-benchmark.py  --spec test/qs8-rsum.yaml --output bench/qs8-rsum.cc &
 wait

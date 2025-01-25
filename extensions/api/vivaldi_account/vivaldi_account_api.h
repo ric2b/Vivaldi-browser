@@ -39,7 +39,6 @@ class VivaldiAccountEventRouter
   void OnVivaldiAccountUpdated() override;
   void OnTokenFetchSucceeded() override;
   void OnTokenFetchFailed() override;
-  void OnAccountInfoFetchFailed() override;
   void OnVivaldiAccountShutdown() override;
 
   // VivaldiAccountPasswordHandler::Observer implementation.

@@ -13,12 +13,17 @@ source_set("price_insights_ui") {
     "price_insights_item.h",
     "price_insights_item.mm",
     "price_insights_mutator.h",
+    "price_ranger_slider.h",
+    "price_ranger_slider.mm",
   ]
 
   deps = [
     ":price_history_swift",
     "//base",
+    "//components/commerce/core:commerce_constants",
+    "//components/payments/core",
     "//components/strings",
+    "//ios/chrome/browser/contextual_panel/ui:public",
     "//ios/chrome/browser/shared/ui/symbols",
     "//ios/chrome/browser/shared/ui/util",
     "//ios/chrome/browser/ui/price_notifications/cells",
@@ -51,7 +56,10 @@ swift_source_set("price_history_swift") {
     "price_history.swift",
     "price_history_provider.swift",
   ]
-  deps = [ "//ios/chrome/common/ui/colors" ]
+  deps = [
+    "//ios/chrome/browser/price_insights/ui/resources",
+    "//ios/chrome/common/ui/colors",
+  ]
   frameworks = [
     "Charts.framework",
     "Foundation.framework",

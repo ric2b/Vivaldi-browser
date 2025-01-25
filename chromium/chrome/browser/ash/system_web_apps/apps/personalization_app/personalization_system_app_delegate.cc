@@ -33,16 +33,16 @@ PersonalizationSystemAppDelegate::PersonalizationSystemAppDelegate(
 
 std::unique_ptr<web_app::WebAppInstallInfo>
 PersonalizationSystemAppDelegate::GetWebAppInfo() const {
-  std::unique_ptr<web_app::WebAppInstallInfo> info =
-      std::make_unique<web_app::WebAppInstallInfo>();
-  info->start_url =
+  GURL start_url =
       GURL(ash::personalization_app::kChromeUIPersonalizationAppURL);
+  auto info =
+      web_app::CreateSystemWebAppInstallInfoWithStartUrlAsIdentity(start_url);
   info->scope = GURL(ash::personalization_app::kChromeUIPersonalizationAppURL);
   info->title = l10n_util::GetStringUTF16(
       IDS_PERSONALIZATION_APP_PERSONALIZATION_HUB_TITLE);
 
   web_app::CreateIconInfoForSystemWebApp(
-      info->start_url,
+      info->start_url(),
       {
           {
               "app_hub_icon_64.png",
@@ -81,14 +81,10 @@ gfx::Rect PersonalizationSystemAppDelegate::GetDefaultBounds(
     Browser* browser) const {
   gfx::Rect bounds =
       display::Screen::GetScreen()->GetDisplayForNewWindows().work_area();
-  if (ash::features::IsPersonalizationJellyEnabled()) {
-    if (ash::Shell::Get()->rgb_keyboard_manager()->IsRgbKeyboardSupported()) {
-      bounds.ClampToCenteredSize({826, 881});
-    } else {
-      bounds.ClampToCenteredSize({826, 708});
-    }
+  if (ash::Shell::Get()->rgb_keyboard_manager()->IsRgbKeyboardSupported()) {
+    bounds.ClampToCenteredSize({826, 881});
   } else {
-    bounds.ClampToCenteredSize({826, 745});
+    bounds.ClampToCenteredSize({826, 708});
   }
   return bounds;
 }

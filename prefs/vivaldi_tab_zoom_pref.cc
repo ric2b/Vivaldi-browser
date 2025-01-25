@@ -16,8 +16,11 @@ bool IsTabZoomEnabled(content::WebContents* web_contents) {
   if (!::vivaldi::IsVivaldiRunning())
     return false;
 
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  content::BrowserContext* browser_context = web_contents->GetBrowserContext();
+  if (!browser_context)
+    return false;
+
+  Profile* profile = static_cast<Profile*>(browser_context);
 
   bool tabZoom =
       profile->GetPrefs()->GetBoolean(vivaldiprefs::kWebpagesTabZoomEnabled);

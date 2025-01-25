@@ -18,6 +18,16 @@
   padding: var(--sp-card-padding);
 }
 
+#showToggleContainer:hover {
+  background-color: var(--cr-hover-background-color);
+  cursor: pointer;
+}
+
+#showToggleContainer:focus {
+  background-color: var(--cr-menu-background-focus-color);
+  outline: none;
+}
+
 #showToggleTitle {
   flex-grow: 1;
 }
@@ -35,6 +45,16 @@
   padding-inline-start: 32px;
 }
 
+.card:hover {
+  background-color: var(--cr-hover-background-color);
+  cursor: pointer;
+}
+
+.card:focus {
+  background-color: var(--cr-menu-background-focus-color);
+  outline: none;
+}
+
 .card-name {
   font-size: inherit;
   line-height: inherit;
@@ -42,10 +62,6 @@
 
 .card-checkbox {
   width: 16px;
-}
-
-.card-option-name {
-  margin-inline-start: 40px;
 }
 
 cr-collapse {

@@ -578,7 +578,7 @@ char GetFirstDifferentChar(const std::string& str1, const std::string& str2) {
     i1++;
     i2++;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return 0;
 }
 
@@ -1374,12 +1374,9 @@ bool IsHeuristicEnabledForHostname(
   if (!config_proto) {
     return false;
   }
-  const unsigned char* bytes =
-      reinterpret_cast<const unsigned char*>(lookalike_etld_plus_one.c_str());
-  unsigned char data[base::kSHA1Length];
-  base::SHA1HashBytes(bytes, lookalike_etld_plus_one.length(), data);
-
-  float cohort = data[0] / 2.56;
+  base::SHA1Digest hash =
+      base::SHA1Hash(base::as_byte_span(lookalike_etld_plus_one));
+  float cohort = hash[0u] / 2.56;
   for (const reputation::HeuristicLaunchConfig& config :
        config_proto->launch_config()) {
     if (heuristic == config.heuristic()) {
@@ -1510,10 +1507,10 @@ LookalikeActionType GetActionForMatchType(
                  : LookalikeActionType::kRecordMetrics;
 
     case LookalikeUrlMatchType::kNone:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return LookalikeActionType::kNone;
 }
 

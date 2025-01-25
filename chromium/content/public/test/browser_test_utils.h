@@ -50,6 +50,7 @@
 #include "net/base/load_flags.h"
 #include "net/cookies/cookie_options.h"
 #include "net/cookies/cookie_partition_key_collection.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/cookie_manager.mojom-forward.h"
 #include "storage/common/file_system/file_system_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -303,6 +304,11 @@ void PrepContentsForBeforeUnloadTest(WebContents* web_contents,
 void WaitForResizeComplete(WebContents* web_contents);
 #endif  // defined(USE_AURA) || BUILDFLAG(IS_ANDROID)
 
+void NotifyCopyableViewInWebContents(WebContents* web_contents,
+                                     base::OnceClosure done_callback);
+void NotifyCopyableViewInFrame(RenderFrameHost* render_frame_host,
+                               base::OnceClosure done_callback);
+
 // Allows tests to set the last committed origin of |render_frame_host|, to
 // simulate a scenario that might happen with a compromised renderer or might
 // not otherwise be possible.
@@ -335,6 +341,9 @@ void SimulateUnresponsiveRenderer(WebContents* web_contents,
 // RenderWidgetHostInputEventRouter and thus can target OOPIFs. If an OOPIF is
 // the intended target, ensure that its hit test data is available for routing,
 // using `WaitForHitTestData`, first.
+// Note: For simulating clicks inside a fenced frame tree, this function does
+// not work. Use `SimulateClickInFencedFrameTree` in
+// `content/public/test/fenced_frame_test_util.cc`
 void SimulateMouseClick(WebContents* web_contents,
                         int modifiers,
                         blink::WebMouseEvent::Button button);
@@ -344,6 +353,9 @@ void SimulateMouseClick(WebContents* web_contents,
 // through RenderWidgetHostInputEventRouter and thus can target OOPIFs. If an
 // OOPIF is the intended target, ensure that its hit test data is available for
 // routing, using `WaitForHitTestData`, first.
+// Note: For simulating clicks inside a fenced frame tree, this function does
+// not work. Use `SimulateClickInFencedFrameTree` in
+// `content/public/test/fenced_frame_test_util.cc`
 void SimulateMouseClickAt(WebContents* web_contents,
                           int modifiers,
                           blink::WebMouseEvent::Button button,
@@ -1709,6 +1721,18 @@ class TestNavigationManager : public WebContentsObserver {
   // WillStartRequest. Returns false if the request was aborted before starting.
   [[nodiscard]] bool WaitForRequestStart();
 
+  // Waits for the URLLoader of the navigation has been started. Returns false
+  // if the navigation never started the URLLoader.
+  [[nodiscard]] bool WaitForLoaderStart();
+
+  // Waits until the navigation request has received a redirect response. This
+  // will wait until all NavigationThrottles have proceeded through
+  // WillRedirectRequest. Returns false if the request was aborted before
+  // getting redirected, or it never got redirected. Note that this will only
+  // wait for only one redirection, so if the navigation gets redirected
+  // multiple times, this needs to be called multiple times.
+  [[nodiscard]] bool WaitForRequestRedirected();
+
   // Waits until the navigation response's headers have been received. This
   // will wait until all NavigationThrottles have proceeded through
   // WillProcessResponse. Returns false if the request was aborted before
@@ -1720,8 +1744,16 @@ class TestNavigationManager : public WebContentsObserver {
   // terminated before reaching DidStartNavigation (e.g. timeout).
   [[nodiscard]] bool WaitForNavigationFinished();
 
+  // Waits until a speculative render frame host is created.
+  // Note that the network may or may not be accessed.
+  void WaitForSpeculativeRenderFrameHostCreation();
+
+  RenderFrameHost* GetCreatedSpeculativeRFH();
+
   // Resume the navigation.
   // * Called after |WaitForRequestStart|, it causes the request to be sent.
+  // * Called after |WaitForRequestRedirected|, it causes the redirect to
+  // proceed.
   // * Called after |WaitForResponse|, it causes the response to be committed.
   void ResumeNavigation();
 
@@ -1751,18 +1783,27 @@ class TestNavigationManager : public WebContentsObserver {
   enum class NavigationState {
     INITIAL = 0,
     WILL_START = 1,
-    STARTED = 2,
-    RESPONSE = 3,
-    FINISHED = 4,
+    REQUEST_STARTED = 2,
+    LOADER_STARTED = 3,
+    REDIRECTED = 4,
+    RESPONSE = 5,
+    FINISHED = 6,
   };
 
   // WebContentsObserver:
   void DidStartNavigation(NavigationHandle* handle) override;
+  void DidRedirectNavigation(NavigationHandle* handle) override;
   void DidFinishNavigation(NavigationHandle* handle) override;
+  void DidUpdateNavigationHandleTiming(NavigationHandle* handle) override;
+  void RenderFrameCreated(RenderFrameHost* render_frame_host) override;
 
   // Called when the NavigationThrottle pauses the navigation in
   // WillStartRequest.
   void OnWillStartRequest();
+
+  // Called when the NavigationThrottle pauses the navigation in
+  // WillRedirectRequest.
+  void OnWillRedirectRequest();
 
   // Called when the NavigationThrottle pauses the navigation in
   // WillProcessResponse.
@@ -1788,7 +1829,10 @@ class TestNavigationManager : public WebContentsObserver {
   NavigationState desired_state_ = NavigationState::WILL_START;
   bool was_committed_ = false;
   bool was_successful_ = false;
-  base::OnceClosure quit_closure_;
+  bool speculative_rfh_created_ = false;
+  std::unique_ptr<RenderFrameHostWrapper> created_speculative_rfh_;
+  base::OnceClosure state_quit_closure_;
+  base::OnceClosure wait_rfh_closure_;
   base::RunLoop::Type message_loop_type_ = base::RunLoop::Type::kDefault;
 
   base::WeakPtrFactory<TestNavigationManager> weak_factory_{this};
@@ -1847,6 +1891,10 @@ class TestActivationManager : public WebContentsObserver {
 
   // Returns true if the navigation is paused by the TestActivationManager.
   bool is_paused() const { return !resume_callback_.is_null(); }
+
+  // Returns ukm::SourceId for the navigated page. This must be called after the
+  // navigation finished.
+  ukm::SourceId next_page_ukm_source_id() const;
 
  private:
   enum class ActivationState {
@@ -1907,6 +1955,8 @@ class TestActivationManager : public WebContentsObserver {
   bool was_committed_ = false;
   bool was_successful_ = false;
   bool was_activated_ = false;
+
+  ukm::SourceId next_page_ukm_source_id_ = ukm::kInvalidSourceId;
 
   // Callback to be called in the last condition callback after all commit
   // deferring conditions run.
@@ -2330,6 +2380,31 @@ class CookieChangeObserver : public content::WebContentsObserver {
   int num_expected_calls_;
   int num_read_seen_ = 0;
   int num_write_seen_ = 0;
+};
+
+// Wait for the creation of Speculative RFH without throttling the navigation.
+// Since the TestNavigationManager will throttle the navigation, using with
+// class with TestNavigationManager is not recommended. Manually driving the
+// run loop will be required to receive the events in both objects. We recommend
+// to use TestNavigationManager for simply driving the navigation. However if it
+// is required to intercept the navigation with other observers such as
+// CommitPauser, it would be better to use SpeculativeRenderFrameHostObserver to
+// ensure the speculative RFH to avoid interference caused by the
+// TestNavigationManager.
+class SpeculativeRenderFrameHostObserver : public content::WebContentsObserver {
+ public:
+  explicit SpeculativeRenderFrameHostObserver(
+      content::WebContents* web_contents,
+      const GURL& url);
+  ~SpeculativeRenderFrameHostObserver() override;
+
+  void Wait();
+
+ private:
+  void RenderFrameCreated(RenderFrameHost* render_frame_host) override;
+
+  base::RunLoop run_loop_;
+  GURL url_;
 };
 
 [[nodiscard]] base::CallbackListSubscription

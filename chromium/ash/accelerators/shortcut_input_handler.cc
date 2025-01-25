@@ -23,7 +23,7 @@ namespace {
 
 constexpr int kKeyboardModifierFlags = ui::EF_CONTROL_DOWN |
                                        ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN |
-                                       ui::EF_ALT_DOWN;
+                                       ui::EF_ALT_DOWN | ui::EF_FUNCTION_DOWN;
 
 ui::KeyboardCode RetrieveKeyCode(const ui::KeyEvent& event) {
   // Remap positional keys in the current layout to the corresponding US layout
@@ -92,7 +92,7 @@ void ShortcutInputHandler::OnKeyEvent(ui::KeyEvent* event) {
                             static_cast<int>(event->GetDomKey()),
                             event->flags() & kKeyboardModifierFlags,
                             base::UTF16ToUTF8(GetKeyDisplay(key_code)));
-  if (event->type() == ui::ET_KEY_PRESSED) {
+  if (event->type() == ui::EventType::kKeyPressed) {
     for (auto& observer : observers_) {
       observer.OnShortcutInputEventPressed(key_event);
     }
@@ -118,7 +118,7 @@ void ShortcutInputHandler::OnPrerewriteKeyInputEvent(
                             static_cast<int>(event.GetDomKey()),
                             event.flags() & kKeyboardModifierFlags,
                             base::UTF16ToUTF8(GetKeyDisplay(key_code)));
-  if (event.type() == ui::ET_KEY_PRESSED) {
+  if (event.type() == ui::EventType::kKeyPressed) {
     for (auto& observer : observers_) {
       observer.OnPrerewrittenShortcutInputEventPressed(key_event);
     }

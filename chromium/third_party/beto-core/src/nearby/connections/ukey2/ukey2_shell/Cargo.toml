@@ -9,6 +9,5 @@ workspace = true
 
 [dependencies]
 crypto_provider_rustcrypto = { workspace = true, features = [ "alloc" ] }
-ukey2_rs = { version = "0.1.0", path = "../ukey2" }
 ukey2_connections = { version = "0.1.0", path = "../ukey2_connections" }
 clap = { workspace = true, features = ["std", "derive"] }

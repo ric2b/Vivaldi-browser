@@ -48,6 +48,9 @@ class WebContents;
 
 namespace printing {
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+class ExtensionPrinterHandlerAdapterAsh;
+#endif
 class PdfPrinterHandler;
 class PrinterHandler;
 class PrintPreviewUI;
@@ -107,9 +110,7 @@ class PrintPreviewHandler : public content::WebUIMessageHandler {
                             int preview_request_id);
 
   // Notifies PDF Printer Handler that |path| was selected. Used for tests.
-  void FileSelectedForTesting(const base::FilePath& path,
-                              int index,
-                              void* params);
+  void FileSelectedForTesting(const base::FilePath& path, int index);
 
   // Sets |pdf_file_saved_closure_| to |closure|.
   void SetPdfSavedClosureForTesting(base::OnceClosure closure);
@@ -323,6 +324,12 @@ class PrintPreviewHandler : public content::WebUIMessageHandler {
   // lacros will automatically be restarted.
   raw_ptr<crosapi::mojom::LocalPrinter, DanglingUntriaged> local_printer_ =
       nullptr;
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Used when Lacros is enabled.
+  std::unique_ptr<ExtensionPrinterHandlerAdapterAsh>
+      extension_printer_handler_adapter_;
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)

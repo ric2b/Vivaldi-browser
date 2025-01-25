@@ -15,8 +15,10 @@
 #![allow(clippy::unwrap_used)]
 
 use super::super::*;
-use crate::legacy::actions::{ActionBits, InstantTethering, NearbyShare};
+use crate::legacy::data_elements::actions::{ActionBits, InstantTethering, NearbyShare};
 use crate::legacy::{Ciphertext, Plaintext};
+use alloc::vec::Vec;
+use strum::IntoEnumIterator;
 
 #[test]
 fn new_v0_actions_invalid_length() {
@@ -28,7 +30,7 @@ fn new_v0_actions_invalid_length() {
 
 #[test]
 fn new_v0_actions() {
-    let actions = [actions::ActionType::ActiveUnlock; 7];
+    let actions = [actions::ActionType::ActiveUnlock; 5];
     let result = V0ActionsFilter::new_from_slice(&actions);
     assert!(result.is_ok());
 }
@@ -55,16 +57,8 @@ fn test_actions_filter_all_actions_not_present() {
     // default is all 0 bits
     let action_bits = ActionBits::<Plaintext>::default();
 
-    let filter = V0ActionsFilter::new_from_slice(&[
-        actions::ActionType::ActiveUnlock,
-        actions::ActionType::NearbyShare,
-        actions::ActionType::InstantTethering,
-        actions::ActionType::PhoneHub,
-        actions::ActionType::Finder,
-        actions::ActionType::FastPairSass,
-        actions::ActionType::PresenceManager,
-    ])
-    .expect("7 is a valid length");
+    let filter = V0ActionsFilter::new_from_slice(&actions::ActionType::iter().collect::<Vec<_>>())
+        .expect("5 is a valid length");
 
     assert_eq!(filter.match_v0_actions(&action_bits.into()), Err(NoMatch))
 }
@@ -75,16 +69,8 @@ fn test_actions_filter_single_action_present() {
     let mut action_bits = ActionBits::<Plaintext>::default();
     action_bits.set_action(NearbyShare::from(true));
 
-    let filter = V0ActionsFilter::new_from_slice(&[
-        actions::ActionType::ActiveUnlock,
-        actions::ActionType::NearbyShare,
-        actions::ActionType::InstantTethering,
-        actions::ActionType::PhoneHub,
-        actions::ActionType::Finder,
-        actions::ActionType::FastPairSass,
-        actions::ActionType::PresenceManager,
-    ])
-    .expect("7 is a valid length");
+    let filter = V0ActionsFilter::new_from_slice(&actions::ActionType::iter().collect::<Vec<_>>())
+        .expect("5 is a valid length");
 
     assert_eq!(filter.match_v0_actions(&action_bits.into()), Ok(()))
 }
@@ -96,14 +82,12 @@ fn test_actions_filter_desired_action_not_present() {
     action_bits.set_action(NearbyShare::from(true));
 
     let filter = V0ActionsFilter::new_from_slice(&[
+        actions::ActionType::CallTransfer,
         actions::ActionType::ActiveUnlock,
         actions::ActionType::InstantTethering,
         actions::ActionType::PhoneHub,
-        actions::ActionType::Finder,
-        actions::ActionType::FastPairSass,
-        actions::ActionType::PresenceManager,
     ])
-    .expect("6 is a valid length");
+    .expect("4 is a valid length");
 
     assert_eq!(filter.match_v0_actions(&action_bits.into()), Err(NoMatch))
 }
@@ -135,4 +119,9 @@ fn test_multiple_actions_set_both_present() {
     .expect("7 is a valid length");
 
     assert_eq!(filter.match_v0_actions(&action_bits.into()), Ok(()))
+}
+
+#[test]
+fn num_actions_is_correct() {
+    assert_eq!(actions::ActionType::iter().count(), NUM_ACTIONS);
 }

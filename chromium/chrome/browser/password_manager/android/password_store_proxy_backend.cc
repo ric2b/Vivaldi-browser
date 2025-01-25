@@ -36,8 +36,6 @@ namespace password_manager {
 
 namespace {
 
-using sync_util::IsSyncFeatureEnabledIncludingPasswords;
-
 bool ShouldErrorResultInFallback(PasswordStoreBackendError error) {
   switch (error.recovery_type) {
     case PasswordStoreBackendErrorRecoveryType::kUnrecoverable:
@@ -46,7 +44,6 @@ bool ShouldErrorResultInFallback(PasswordStoreBackendError error) {
       return false;
   }
 }
-
 
 using MethodName = base::StrongAlias<struct MethodNameTag, std::string>;
 
@@ -161,7 +158,7 @@ void PasswordStoreProxyBackend::GetAutofillableLoginsAsync(
 void PasswordStoreProxyBackend::GetAllLoginsForAccountAsync(
     std::string account,
     LoginsOrErrorReply callback) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void PasswordStoreProxyBackend::FillMatchingLoginsAsync(
@@ -326,7 +323,7 @@ void PasswordStoreProxyBackend::OnSyncServiceInitialized(
   android_backend_->OnSyncServiceInitialized(sync_service);
   MaybeClearBuiltInBackend();
 
-  if (!IsSyncFeatureEnabledIncludingPasswords(sync_service_)) {
+  if (!password_manager::sync_util::HasChosenToSyncPasswords(sync_service_)) {
     // Reset initial UPM migration if password sync is disabled.
     prefs_->SetInteger(prefs::kCurrentMigrationVersionToGoogleMobileServices,
                        0);
@@ -374,7 +371,7 @@ PasswordStoreBackend* PasswordStoreProxyBackend::shadow_backend() {
 }
 
 void PasswordStoreProxyBackend::OnStateChanged(syncer::SyncService* sync) {
-  if (!IsSyncFeatureEnabledIncludingPasswords(sync_service_)) {
+  if (!password_manager::sync_util::HasChosenToSyncPasswords(sync_service_)) {
     // Reset initial UPM migration if password sync is disabled.
     prefs_->SetInteger(prefs::kCurrentMigrationVersionToGoogleMobileServices,
                        0);
@@ -401,7 +398,7 @@ void PasswordStoreProxyBackend::OnRemoteFormChangesReceived(
 
 bool PasswordStoreProxyBackend::UsesAndroidBackendAsMainBackend() {
   CHECK(sync_service_);
-  if (!IsSyncFeatureEnabledIncludingPasswords(sync_service_)) {
+  if (!password_manager::sync_util::HasChosenToSyncPasswords(sync_service_)) {
     return false;
   }
 
@@ -445,7 +442,7 @@ void PasswordStoreProxyBackend::MaybeClearBuiltInBackend() {
   }
 
   // Don't do anything if password syncing is not enabled.
-  if (!IsSyncFeatureEnabledIncludingPasswords(sync_service_)) {
+  if (!password_manager::sync_util::HasChosenToSyncPasswords(sync_service_)) {
     return;
   }
 

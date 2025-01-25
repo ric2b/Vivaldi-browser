@@ -140,8 +140,9 @@ AutofillWalletUsageDataSyncBridge::ApplyIncrementalSyncChanges(
   return change_processor()->GetError();
 }
 
-void AutofillWalletUsageDataSyncBridge::GetData(StorageKeyList storage_keys,
-                                                DataCallback callback) {
+std::unique_ptr<syncer::DataBatch>
+AutofillWalletUsageDataSyncBridge::GetDataForCommit(
+    StorageKeyList storage_keys) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   base::ranges::sort(storage_keys);
   auto filter_by_keys = base::BindRepeating(
@@ -149,20 +150,14 @@ void AutofillWalletUsageDataSyncBridge::GetData(StorageKeyList storage_keys,
         return base::ranges::binary_search(storage_keys, usage_data_id);
       },
       storage_keys);
-  if (std::unique_ptr<syncer::MutableDataBatch> batch =
-          GetDataAndFilter(filter_by_keys)) {
-    std::move(callback).Run(std::move(batch));
-  }
+  return GetDataAndFilter(filter_by_keys);
 }
 
-void AutofillWalletUsageDataSyncBridge::GetAllDataForDebugging(
-    DataCallback callback) {
+std::unique_ptr<syncer::DataBatch>
+AutofillWalletUsageDataSyncBridge::GetAllDataForDebugging() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (std::unique_ptr<syncer::MutableDataBatch> batch =
-          GetDataAndFilter(base::BindRepeating(
-              [](const std::string& usage_data_id) { return true; }))) {
-    std::move(callback).Run(std::move(batch));
-  }
+  return GetDataAndFilter(base::BindRepeating(
+      [](const std::string& usage_data_id) { return true; }));
 }
 
 std::string AutofillWalletUsageDataSyncBridge::GetClientTag(

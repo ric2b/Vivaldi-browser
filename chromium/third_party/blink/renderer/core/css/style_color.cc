@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "third_party/blink/renderer/core/css/css_color.h"
+#include "third_party/blink/renderer/core/css/css_color_mix_value.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
@@ -44,20 +45,20 @@ Color ResolveColorOperand(const StyleColor::ColorOrUnresolvedColorMix& color,
 }  // namespace
 
 StyleColor::UnresolvedColorMix::UnresolvedColorMix(
-    const cssvalue::CSSColorMixValue* in,
+    Color::ColorSpace color_interpolation_space,
+    Color::HueInterpolationMethod hue_interpolation_method,
     const StyleColor& c1,
-    const StyleColor& c2)
-    : color_interpolation_space_(in->ColorInterpolationSpace()),
-      hue_interpolation_method_(in->HueInterpolationMethod()),
+    const StyleColor& c2,
+    double percentage,
+    double alpha_multiplier)
+    : color_interpolation_space_(color_interpolation_space),
+      hue_interpolation_method_(hue_interpolation_method),
       color1_(c1.color_or_unresolved_color_mix_),
       color2_(c2.color_or_unresolved_color_mix_),
+      percentage_(percentage),
+      alpha_multiplier_(alpha_multiplier),
       color1_type_(ResolveColorOperandType(c1)),
-      color2_type_(ResolveColorOperandType(c2)) {
-  // TODO(crbug.com/1333988): If both percentages are zero, the color should
-  // be rejected at parse time.
-  cssvalue::CSSColorMixValue::NormalizePercentages(
-      in->Percentage1(), in->Percentage2(), percentage_, alpha_multiplier_);
-}
+      color2_type_(ResolveColorOperandType(c2)) {}
 
 Color StyleColor::UnresolvedColorMix::Resolve(
     const Color& current_color) const {
@@ -183,8 +184,15 @@ bool StyleColor::IsColorKeyword(CSSValueID id) {
   //   '-internal-spelling-error-color'
   //   '-internal-grammar-error-color'
   //
+  // ::search-text
+  // <https://github.com/w3c/csswg-drafts/issues/10329>
+  //   ‘-internal-search-color’
+  //   ‘-internal-search-text-color’
+  //   ‘-internal-current-search-color’
+  //   ‘-internal-current-search-text-color’
+  //
   return (id >= CSSValueID::kAqua &&
-          id <= CSSValueID::kInternalGrammarErrorColor) ||
+          id <= CSSValueID::kInternalCurrentSearchTextColor) ||
          (id >= CSSValueID::kAliceblue && id <= CSSValueID::kYellowgreen) ||
          id == CSSValueID::kMenu;
 }
@@ -222,6 +230,10 @@ bool StyleColor::IsSystemColor(CSSValueID id) {
     case CSSValueID::kHighlighttext:
     case CSSValueID::kInternalGrammarErrorColor:
     case CSSValueID::kInternalSpellingErrorColor:
+    case CSSValueID::kInternalSearchColor:
+    case CSSValueID::kInternalSearchTextColor:
+    case CSSValueID::kInternalCurrentSearchColor:
+    case CSSValueID::kInternalCurrentSearchTextColor:
     case CSSValueID::kLinktext:
     case CSSValueID::kMark:
     case CSSValueID::kMarktext:

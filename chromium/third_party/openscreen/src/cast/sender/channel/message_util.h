@@ -15,11 +15,10 @@ namespace openscreen::cast {
 
 class AuthContext;
 
-::cast::channel::CastMessage CreateAuthChallengeMessage(
-    const AuthContext& auth_context);
+proto::CastMessage CreateAuthChallengeMessage(const AuthContext& auth_context);
 
 // |request_id| must be unique for |sender_id|.
-ErrorOr<::cast::channel::CastMessage> CreateAppAvailabilityRequest(
+ErrorOr<proto::CastMessage> CreateAppAvailabilityRequest(
     const std::string& sender_id,
     int request_id,
     const std::string& app_id);

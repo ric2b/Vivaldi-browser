@@ -55,7 +55,7 @@ void SetLogFifoOrDie(const char* filename) {
   }
 
   // Note: The use of OSP_CHECK/OSP_LOG_* here will log to stderr.
-  struct stat st = {};
+  struct stat st {};
   int open_result = -1;
   if (stat(filename, &st) == -1 && errno == ENOENT) {
     if (mkfifo(filename, 0644) == 0) {
@@ -85,7 +85,7 @@ LogLevel GetLogLevel() {
   return g_log_level;
 }
 
-bool IsLoggingOn(LogLevel level, const char* file) {
+bool IsLoggingOn(LogLevel level, const std::string_view file) {
   // Possible future enhancement: Use glob patterns passed on the command-line
   // to use a different logging level for certain files, like in Chromium.
   return level >= g_log_level;

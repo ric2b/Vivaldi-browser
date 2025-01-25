@@ -11,6 +11,8 @@
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/mojom/view_type.mojom.h"
 
+#include "chrome/browser/ui/autofill/autofill_client_provider.h"
+#include "chrome/browser/ui/autofill/autofill_client_provider_factory.h"
 #define VIVALDI_CORE_DOCUMENT "main.html"
 
 VivaldiDocumentLoader::VivaldiDocumentLoader(
@@ -35,6 +37,11 @@ VivaldiDocumentLoader::VivaldiDocumentLoader(
       vivaldi_web_contents_.get());
   // Need even if not used.
   zoom::ZoomController::CreateForWebContents(vivaldi_web_contents_.get());
+
+  // Needed for chrome.autofillPrivate API
+  autofill::AutofillClientProvider& autofill_client_provider =
+      autofill::AutofillClientProviderFactory::GetForProfile(profile);
+  autofill_client_provider.CreateClientForWebContents(vivaldi_web_contents_.get());
 
   content::WebContentsObserver::Observe(vivaldi_web_contents_.get());
 

@@ -7,8 +7,9 @@
 
 #include "base/time/default_clock.h"
 #include "chrome/browser/ui/plus_addresses/plus_address_creation_controller.h"
-#include "components/plus_addresses/plus_address_metrics.h"
+#include "components/plus_addresses/metrics/plus_address_metrics.h"
 #include "components/plus_addresses/plus_address_types.h"
+#include "components/plus_addresses/settings/plus_address_setting_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "url/origin.h"
@@ -18,6 +19,7 @@ namespace plus_addresses {
 class PlusAddressCreationDialogDelegate;
 class PlusAddressCreationView;
 class PlusAddressService;
+class PlusAddressSettingService;
 
 class PlusAddressCreationControllerDesktop
     : public PlusAddressCreationController,
@@ -38,8 +40,6 @@ class PlusAddressCreationControllerDesktop
   PlusAddressCreationView* get_view_for_testing();
   // A mechanism to avoid view entanglements, reducing the need for view
   // mocking, etc., while still allowing tests of specific business logic.
-  // TODO(crbug.com/40276862): Add more end-to-end coverage as the modal
-  // behavior comes fully online.
   void set_suppress_ui_for_testing(bool should_suppress);
   // Used to validate storage and clearing of `maybe_plus_profile_`.
   std::optional<PlusProfile> get_plus_profile_for_testing();
@@ -55,6 +55,12 @@ class PlusAddressCreationControllerDesktop
       PlusAddressCreationControllerDesktop>;
 
   PlusAddressService* GetPlusAddressService();
+  PlusAddressSettingService* GetPlusAddressSettingService();
+
+  // Returns whether we should show a notice. This is true iff the user has
+  // never created a plus address before (and the feature for showing the notice
+  // is enabled).
+  bool ShouldShowNotice() const;
 
   // Populates `plus_profile_` with `maybe_plus_profile` if it's not an error.
   void OnPlusAddressReserved(const PlusProfileOrError& maybe_plus_profile);
@@ -70,16 +76,19 @@ class PlusAddressCreationControllerDesktop
   // This is set by OnPlusAddressReserved and cleared when the dialog is closed.
   std::optional<PlusProfile> plus_profile_;
 
-  // Record the time between `modal_shown_time_` and now as modal shown duration
-  // and clear `modal_shown_time_`.
-  void RecordModalShownDuration(
-      const PlusAddressMetrics::PlusAddressModalCompletionStatus status);
+  // Records the time between `modal_shown_time_` and now as modal shown
+  // duration and the number of refresh attempts. Resets both
+  // `modal_shown_time_` and `reserve_response_count_`.
+  void RecordModalShownOutcome(
+      metrics::PlusAddressModalCompletionStatus status);
 
   raw_ptr<base::Clock> clock_ = base::DefaultClock::GetInstance();
   // This is set on `OfferCreation`.
   std::optional<base::Time> modal_shown_time_;
-  std::optional<PlusAddressMetrics::PlusAddressModalCompletionStatus>
-      modal_error_status_;
+  std::optional<metrics::PlusAddressModalCompletionStatus> modal_error_status_;
+  // The number of responses from calls to reserve a plus address that a user
+  // has made. This equals 1 + number of refreshes.
+  int reserve_response_count_ = 0;
 
   base::WeakPtrFactory<PlusAddressCreationControllerDesktop> weak_ptr_factory_{
       this};

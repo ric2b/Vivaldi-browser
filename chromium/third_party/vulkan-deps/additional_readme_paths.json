@@ -1,5 +1,6 @@
 [
     "glslang",
+    "lunarg-vulkantools",
     "spirv-cross",
     "spirv-headers",
     "spirv-tools",

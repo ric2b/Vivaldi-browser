@@ -6,10 +6,12 @@
 
 #include <optional>
 
+#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/supervised_user/core/browser/supervised_user_preferences.h"
 #include "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #include "components/supervised_user/core/common/features.h"
+#include "components/supervised_user/core/common/pref_names.h"
 #include "extensions/buildflags/buildflags.h"
 
 namespace supervised_user {
@@ -69,6 +71,41 @@ std::optional<WebFilterType> GetWebFilterType(
   return supervised_user_filter->GetWebFilterType();
 }
 
+std::optional<ToggleState> GetPermissionsToggleState(
+    const PrefService& pref_service,
+    const HostContentSettingsMap& content_settings_map) {
+#if BUILDFLAG(IS_IOS)
+  // The permissions toggle is not supported on iOS.
+  return std::nullopt;
+#else
+  if (!IsSubjectToParentalControls(pref_service)) {
+    return std::nullopt;
+  }
+
+  // The permissions toggle set multiple content settings. We pick one of them,
+  // geolocation, to inspect here to infer the value of the toggle.
+  content_settings::ProviderType provider;
+  auto content_setting = content_settings_map.GetDefaultContentSetting(
+      ContentSettingsType::GEOLOCATION, &provider);
+  // Note: Do not check that the ProviderType is `kSupervisedProvider`. This
+  // is true only when the parent has disabled the "Permissions" FL switch.
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  bool block_geolocation =
+      content_setting == ContentSetting::CONTENT_SETTING_BLOCK;
+  bool permissions_allowed_pref = pref_service.GetBoolean(
+      prefs::kSupervisedUserExtensionsMayRequestPermissions);
+  // Cross-check the content setting against the preference that was the former
+  // source of truth for a similar metric.
+  DCHECK(permissions_allowed_pref != block_geolocation);
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
+  return content_setting == ContentSetting::CONTENT_SETTING_BLOCK
+             ? ToggleState::kDisabled
+             : ToggleState::kEnabled;
+#endif  // BUILDFLAG(IS_IOS)
+}
+
 std::optional<ToggleState> GetExtensionToggleState(
     const PrefService& pref_service) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -90,21 +127,25 @@ std::optional<ToggleState> GetExtensionToggleState(
 FamilyLinkUserLogRecord FamilyLinkUserLogRecord::Create(
     signin::IdentityManager* identity_manager,
     const PrefService& pref_service,
+    const HostContentSettingsMap& content_settings_map,
     SupervisedUserURLFilter* supervised_user_filter) {
   std::optional<FamilyLinkUserLogRecord::Segment> supervision_status =
       GetSupervisionStatus(identity_manager);
   return FamilyLinkUserLogRecord(
       supervision_status,
       GetWebFilterType(supervision_status, supervised_user_filter),
+      GetPermissionsToggleState(pref_service, content_settings_map),
       GetExtensionToggleState(pref_service));
 }
 
 FamilyLinkUserLogRecord::FamilyLinkUserLogRecord(
     std::optional<FamilyLinkUserLogRecord::Segment> supervision_status,
     std::optional<WebFilterType> web_filter_type,
+    std::optional<ToggleState> permissions_toggle_state,
     std::optional<ToggleState> extensions_toggle_state)
     : supervision_status_(supervision_status),
       web_filter_type_(web_filter_type),
+      permissions_toggle_state_(permissions_toggle_state),
       extensions_toggle_state_(extensions_toggle_state) {}
 
 std::optional<FamilyLinkUserLogRecord::Segment>
@@ -115,6 +156,11 @@ FamilyLinkUserLogRecord::GetSupervisionStatusForPrimaryAccount() const {
 std::optional<WebFilterType>
 FamilyLinkUserLogRecord::GetWebFilterTypeForPrimaryAccount() const {
   return web_filter_type_;
+}
+
+std::optional<ToggleState>
+FamilyLinkUserLogRecord::GetPermissionsToggleStateForPrimaryAccount() const {
+  return permissions_toggle_state_;
 }
 
 std::optional<ToggleState>

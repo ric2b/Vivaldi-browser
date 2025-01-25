@@ -11,6 +11,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "components/autofill/core/browser/autofill_field.h"
+#include "components/autofill/core/browser/autofill_testing_pref_service.h"
 #include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/autofill_wallet_usage_data.h"
@@ -27,6 +28,7 @@
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/browser/ui/suggestion_type.h"
 #include "components/autofill/core/common/autofill_test_utils.h"
+#include "components/sync/protocol/autofill_specifics.pb.h"
 
 class PrefService;
 
@@ -39,7 +41,7 @@ namespace autofill {
 class AutofillExternalDelegate;
 class AutofillProfile;
 class BankAccount;
-struct FormData;
+class FormData;
 class FormFieldData;
 struct FormDataPredictions;
 struct FormFieldDataPredictions;
@@ -87,7 +89,7 @@ inline constexpr char kEmptyOrigin[] = "";
 // have to be constructed manually (e.g., in unit tests within Autofill core
 // code). The returned PrefService has had Autofill preferences registered on
 // its associated registry.
-std::unique_ptr<PrefService> PrefServiceForTesting();
+std::unique_ptr<AutofillTestingPrefService> PrefServiceForTesting();
 std::unique_ptr<PrefService> PrefServiceForTesting(
     user_prefs::PrefRegistrySyncable* registry);
 
@@ -389,6 +391,14 @@ Suggestion CreateAutofillSuggestion(
 
 // Returns a bank account enabled for Pix with fake data.
 BankAccount CreatePixBankAccount(int64_t instrument_id);
+
+// Returns a payment instrument with a bank account filled with fake data.
+sync_pb::PaymentInstrument CreatePaymentInstrumentWithBankAccount(
+    int64_t instrument_id);
+
+// Returns a payment instrument with an IBAN filled with fake data.
+sync_pb::PaymentInstrument CreatePaymentInstrumentWithIban(
+    int64_t instrument_id);
 
 }  // namespace test
 }  // namespace autofill

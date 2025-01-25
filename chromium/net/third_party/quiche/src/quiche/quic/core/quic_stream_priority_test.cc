@@ -4,6 +4,8 @@
 
 #include "quiche/quic/core/quic_stream_priority.h"
 
+#include <optional>
+
 #include "quiche/quic/core/quic_types.h"
 #include "quiche/common/platform/api/quiche_test.h"
 
@@ -34,36 +36,27 @@ TEST(HttpStreamPriority, Equals) {
 TEST(WebTransportStreamPriority, DefaultConstructed) {
   WebTransportStreamPriority priority;
 
-  EXPECT_EQ(priority.stream_type,
-            WebTransportStreamPriority::StreamType::kData);
+  EXPECT_EQ(priority.session_id, 0);
+  EXPECT_EQ(priority.send_group_number, 0);
   EXPECT_EQ(priority.send_order, 0);
 }
 
 TEST(WebTransportStreamPriority, Equals) {
   EXPECT_EQ(WebTransportStreamPriority(),
-            (WebTransportStreamPriority{
-                WebTransportStreamPriority::StreamType::kData, 0}));
+            (WebTransportStreamPriority{0, 0, 0}));
   EXPECT_NE(WebTransportStreamPriority(),
-            (WebTransportStreamPriority{
-                WebTransportStreamPriority::StreamType::kData, 1}));
+            (WebTransportStreamPriority{1, 2, 3}));
   EXPECT_NE(WebTransportStreamPriority(),
-            (WebTransportStreamPriority{
-                WebTransportStreamPriority::StreamType::kHttp, 0}));
+            (WebTransportStreamPriority{0, 0, 1}));
 }
 
 TEST(QuicStreamPriority, Default) {
-  EXPECT_EQ(QuicStreamPriority::Default(QuicPriorityType::kHttp).http(),
-            HttpStreamPriority());
-  EXPECT_EQ(QuicStreamPriority::Default(QuicPriorityType::kWebTransport)
-                .web_transport(),
-            WebTransportStreamPriority());
+  EXPECT_EQ(QuicStreamPriority().type(), QuicPriorityType::kHttp);
+  EXPECT_EQ(QuicStreamPriority().http(), HttpStreamPriority());
 }
 
 TEST(QuicStreamPriority, Equals) {
-  EXPECT_EQ(QuicStreamPriority::Default(QuicPriorityType::kHttp),
-            QuicStreamPriority(HttpStreamPriority()));
-  EXPECT_EQ(QuicStreamPriority::Default(QuicPriorityType::kWebTransport),
-            QuicStreamPriority(WebTransportStreamPriority()));
+  EXPECT_EQ(QuicStreamPriority(), QuicStreamPriority(HttpStreamPriority()));
 }
 
 TEST(QuicStreamPriority, Type) {

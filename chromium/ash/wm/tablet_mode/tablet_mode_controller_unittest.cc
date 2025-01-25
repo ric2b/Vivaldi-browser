@@ -114,7 +114,7 @@ class TabletModeControllerTest : public AshTestBase {
  public:
   TabletModeControllerTest() {
     scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kFasterSplitScreenSetup,
+        /*enabled_features=*/{features::kSnapGroup,
                               features::kOsSettingsRevampWayfinding},
         /*disabled_features=*/{});
   }

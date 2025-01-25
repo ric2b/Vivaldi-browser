@@ -16,59 +16,17 @@
 //! credentials for discovering advertisements/advertisement
 //! sections for a _particular_ protocol version.
 
-use crate::credential::{
-    DiscoveryCryptoMaterial, MatchableCredential, MatchedCredential, ProtocolVersion,
-    ReferencedMatchedCredential,
-};
-use core::borrow::Borrow;
-
-/// Specialized version of the [`CredentialSource`] trait for
-/// credential-sources which provide discovery credentials
-/// for a specific protocol version.
-///
-/// If you want ready-made structures which can provide
-/// credentials for both V0 and V1 protocol versions,
-/// see [`crate::credential::book::CredentialBook`]
-/// and [`crate::credential::book::CredentialBookBuilder`] instead.
-///
-/// It's preferred to use this kind of credential-source
-/// in client code, if possible, and then lift to a
-/// [`CredentialSource`] using [`AsCredentialSource`]
-/// instead of implementing [`CredentialSource`] directly,
-/// since it's better to trust this crate to handle
-/// the details of what's in [`DiscoveryCryptoMaterial`]s
-/// for specific protocol versions.
-pub trait DiscoveryCredentialSource<'a, V: ProtocolVersion>
-where
-    Self: 'a,
-{
-    /// The kind of data yielded to the caller upon a successful
-    /// identity-match.
-    type Matched: MatchedCredential;
-
-    /// The kind of crypto-material yielded from the wrapped
-    /// iterator, which allows borrowing a discovery credential.
-    type Crypto: DiscoveryCryptoMaterial<V> + Borrow<V::DiscoveryCredential>;
-
-    /// The iterator type produced which emits credentials.
-    /// This is a lending iterator which may borrow things from `self`.
-    type Iterator: Iterator<Item = (Self::Crypto, Self::Matched)>;
-
-    /// Iterate over the available credentials
-    fn iter(&'a self) -> Self::Iterator;
-}
+use crate::credential::matched::{MatchedCredential, ReferencedMatchedCredential};
+use crate::credential::{DiscoveryMetadataCryptoMaterial, MatchableCredential, ProtocolVersion};
 
 /// A source of credentials for a particular protocol version,
-/// utilizing any [`DiscoveryCryptoMaterial`] which is usable
+/// utilizing any [`DiscoveryMetadataCryptoMaterial`] which is usable
 /// for discovering advertisements in that protocol version.
 ///
 /// This trait is largely leveraged as a tool for building
 /// new kinds of [`crate::credential::book::CredentialBook`]s
 /// via the [`crate::credential::book::CredentialBookFromSources`]
-/// wrapper. It differs from the [`DiscoveryCredentialSource`]
-/// trait in that the crypto-materials do not have to be
-/// discovery credentials, and can instead be some pre-calculated
-/// crypto-materials.
+/// wrapper.
 ///
 /// See [`crate::credential::book::CachedCredentialSource`]
 /// for an example of this pattern.
@@ -82,7 +40,7 @@ where
 
     /// The kind of crypto-material yielded from the wrapped
     /// iterator.
-    type Crypto: DiscoveryCryptoMaterial<V>;
+    type Crypto: DiscoveryMetadataCryptoMaterial<V>;
 
     /// The iterator type produced which emits credentials.
     /// This is a lending iterator which may borrow things from `self`.
@@ -92,27 +50,7 @@ where
     fn iter(&'a self) -> Self::Iterator;
 }
 
-// Note: This is needed to get around coherence problems
-// with the [`CredentialSource`] trait's relationship
-// with [`DiscoveryCredentialSource`] if it were declared
-// as a sub-trait (i.e: conflicting impls)
-/// Wrapper which turns any [`DiscoveryCredentialSource`]
-/// into a [`CredentialSource`].
-pub struct AsCredentialSource<S>(pub S);
-
-impl<'a, V: ProtocolVersion, S: DiscoveryCredentialSource<'a, V>> CredentialSource<'a, V>
-    for AsCredentialSource<S>
-{
-    type Matched = <S as DiscoveryCredentialSource<'a, V>>::Matched;
-    type Crypto = <S as DiscoveryCredentialSource<'a, V>>::Crypto;
-    type Iterator = <S as DiscoveryCredentialSource<'a, V>>::Iterator;
-
-    fn iter(&'a self) -> Self::Iterator {
-        self.0.iter()
-    }
-}
-
-/// A simple [`DiscoveryCredentialSource`] which iterates over a provided slice of credentials
+/// A simple [`CredentialSource`] which iterates over a provided slice of credentials
 pub struct SliceCredentialSource<'c, V: ProtocolVersion, M: MatchedCredential> {
     credentials: &'c [MatchableCredential<V, M>],
 }
@@ -124,12 +62,12 @@ impl<'c, V: ProtocolVersion, M: MatchedCredential> SliceCredentialSource<'c, V, 
     }
 }
 
-impl<'a, 'b, V: ProtocolVersion, M: MatchedCredential> DiscoveryCredentialSource<'a, V>
+impl<'a, 'b, V: ProtocolVersion, M: MatchedCredential> CredentialSource<'a, V>
     for SliceCredentialSource<'b, V, M>
 where
     'b: 'a,
     Self: 'b,
-    &'a <V as ProtocolVersion>::DiscoveryCredential: DiscoveryCryptoMaterial<V>,
+    &'a <V as ProtocolVersion>::DiscoveryCredential: DiscoveryMetadataCryptoMaterial<V>,
 {
     type Matched = ReferencedMatchedCredential<'a, M>;
     type Crypto = &'a V::DiscoveryCredential;

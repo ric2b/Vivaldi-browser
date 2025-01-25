@@ -182,7 +182,7 @@ class BrowserActionInteractiveTest : public ExtensionApiTest {
   void EnsurePopupActive() {
     auto test_util = ExtensionActionTestHelper::Create(browser());
     EXPECT_TRUE(test_util->HasPopup());
-    EXPECT_TRUE(test_util->WaitForPopup());
+    ASSERT_NO_FATAL_FAILURE(test_util->WaitForPopup());
     EXPECT_TRUE(test_util->HasPopup());
   }
 
@@ -308,7 +308,14 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, MAYBE_TestOpenPopup) {
 }
 
 // Tests opening a popup in an incognito window.
-IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, TestOpenPopupIncognito) {
+// TODO(crbug.com/345091943): Extremely flaky on Mac release builds.
+#if BUILDFLAG(IS_MAC) && defined(NDEBUG)
+#define MAYBE_TestOpenPopupIncognito DISABLED_TestOpenPopupIncognito
+#else
+#define MAYBE_TestOpenPopupIncognito TestOpenPopupIncognito
+#endif
+IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest,
+                       MAYBE_TestOpenPopupIncognito) {
   // The creation of the incognito window is the first WebContents.
   content::CreateAndLoadWebContentsObserver frame_observer(
       /*num_expected_contents=*/2);
@@ -414,8 +421,10 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, FocusLossClosesPopup2) {
   ClosePopupViaFocusLoss();
 }
 
-// TODO(crbug.com/330684964): Test flaking frequently on Linux MSan builder.
-#if BUILDFLAG(IS_LINUX) && defined(MEMORY_SANITIZER)
+// TODO(crbug.com/330684964): Test flaking frequently on Linux MSan builder
+// and Mac release builders.
+#if (BUILDFLAG(IS_MAC) && defined(NDEBUG)) || \
+    (BUILDFLAG(IS_LINUX) && defined(MEMORY_SANITIZER))
 #define MAYBE_TabSwitchClosesPopup DISABLED_TabSwitchClosesPopup
 #else
 #define MAYBE_TabSwitchClosesPopup TabSwitchClosesPopup
@@ -499,13 +508,13 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, PopupZoomsIndependently) {
       content::HostZoomMap::GetForWebContents(popup_contents)
           ->GetDefaultZoomLevel();
   double popup_zoom_level = content::HostZoomMap::GetZoomLevel(popup_contents);
-  EXPECT_TRUE(blink::PageZoomValuesEqual(popup_zoom_level, default_zoom_level))
+  EXPECT_TRUE(blink::ZoomValuesEqual(popup_zoom_level, default_zoom_level))
       << popup_zoom_level << " vs " << default_zoom_level;
 
   // Preventing the use of the per-origin zoom level in the popup should not
   // affect the zoom of the tab.
-  EXPECT_TRUE(blink::PageZoomValuesEqual(zoom_controller->GetZoomLevel(),
-                                         tab_new_zoom_level))
+  EXPECT_TRUE(blink::ZoomValuesEqual(zoom_controller->GetZoomLevel(),
+                                     tab_new_zoom_level))
       << zoom_controller->GetZoomLevel() << " vs " << tab_new_zoom_level;
 
   // Subsequent zooming in the tab should also be done independently of the
@@ -521,7 +530,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, PopupZoomsIndependently) {
   zoom_change_watcher2.Wait();
 
   popup_zoom_level = content::HostZoomMap::GetZoomLevel(popup_contents);
-  EXPECT_TRUE(blink::PageZoomValuesEqual(popup_zoom_level, default_zoom_level))
+  EXPECT_TRUE(blink::ZoomValuesEqual(popup_zoom_level, default_zoom_level))
       << popup_zoom_level << " vs " << default_zoom_level;
 
   EXPECT_TRUE(ClosePopup());

@@ -228,6 +228,7 @@ declare namespace chrome {
       GRAPHICS_OBJECT = 'graphicsObject',
       GRAPHICS_SYMBOL = 'graphicsSymbol',
       GRID = 'grid',
+      GRID_CELL = 'gridCell',
       GROUP = 'group',
       HEADER = 'header',
       HEADER_AS_NON_LANDMARK = 'headerAsNonLandmark',
@@ -925,6 +926,8 @@ declare namespace chrome {
       createPosition:
           (type: PositionType, offset: number,
            isUpstream?: boolean) => AutomationPosition;
+
+      [key: string]: any;
     }
 
     export function getDesktop(callback: (rootNode: AutomationNode) => void):

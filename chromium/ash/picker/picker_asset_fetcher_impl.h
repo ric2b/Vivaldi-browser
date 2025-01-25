@@ -7,37 +7,27 @@
 
 #include "ash/ash_export.h"
 #include "ash/picker/picker_asset_fetcher.h"
-#include "base/functional/callback.h"
-#include "base/memory/scoped_refptr.h"
-
-namespace network {
-class SharedURLLoaderFactory;
-}  // namespace network
-
-class GURL;
+#include "base/memory/raw_ptr.h"
 
 namespace ash {
 
+class PickerAssetFetcherImplDelegate;
+
+// Implementation of PickerAssetFetcher using a delegate.
 class ASH_EXPORT PickerAssetFetcherImpl : public PickerAssetFetcher {
  public:
-  using SharedURLLoaderFactoryGetter =
-      base::RepeatingCallback<scoped_refptr<network::SharedURLLoaderFactory>()>;
-
-  explicit PickerAssetFetcherImpl(
-      SharedURLLoaderFactoryGetter shared_url_loader_factory_getter);
+  // `delegate` must remain valid while this class is alive.
+  explicit PickerAssetFetcherImpl(PickerAssetFetcherImplDelegate* delegate);
   PickerAssetFetcherImpl(const PickerAssetFetcherImpl&) = delete;
   PickerAssetFetcherImpl& operator=(const PickerAssetFetcherImpl&) = delete;
   ~PickerAssetFetcherImpl() override;
 
-  // PickerAssetFetcher:
-  void FetchGifFromUrl(const GURL& url,
-                       PickerGifFetchedCallback callback) override;
-  void FetchGifPreviewImageFromUrl(
-      const GURL& url,
-      PickerImageFetchedCallback callback) override;
+  void FetchFileThumbnail(const base::FilePath& path,
+                          const gfx::Size& size,
+                          FetchFileThumbnailCallback callback) override;
 
  private:
-  SharedURLLoaderFactoryGetter shared_url_loader_factory_getter_;
+  raw_ptr<PickerAssetFetcherImplDelegate> delegate_;
 };
 
 }  // namespace ash

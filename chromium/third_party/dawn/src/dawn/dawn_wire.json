@@ -37,7 +37,8 @@
             { "name": "future", "type": "future" },
             { "name": "mode", "type": "map mode" },
             { "name": "offset", "type": "uint64_t"},
-            { "name": "size", "type": "uint64_t"}
+            { "name": "size", "type": "uint64_t"},
+            { "name": "userdata count", "type": "uint8_t", "_comment": "TODO(crbug.com/dawn/2509): Remove this once Chromium overrides the correct functions in the proc table."}
         ],
         "buffer update mapped data": [
             { "name": "buffer id", "type": "ObjectId", "id_type": "buffer" },
@@ -74,14 +75,15 @@
             { "name": "event manager handle", "type": "ObjectHandle" },
             { "name": "future", "type": "future" }
         ],
-        "destroy object": [
+        "unregister object": [
             { "name": "object type", "type": "ObjectType" },
             { "name": "object id", "type": "ObjectId" }
         ],
         "queue on submitted work done": [
             { "name": "queue id", "type": "ObjectId", "id_type": "queue" },
             { "name": "event manager handle", "type": "ObjectHandle" },
-            { "name": "future", "type": "future" }
+            { "name": "future", "type": "future" },
+            { "name": "userdata count", "type": "uint8_t", "_comment": "TODO(crbug.com/dawn/2509): Remove this once Chromium overrides the correct functions in the proc table."}
         ],
         "queue write buffer": [
             {"name": "queue id", "type": "ObjectId", "id_type": "queue" },
@@ -103,6 +105,11 @@
             { "name": "event manager handle", "type": "ObjectHandle" },
             { "name": "future", "type": "future" }
         ],
+        "surface get current texture": [
+            { "name": "surface id", "type": "ObjectId", "id_type": "surface" },
+            { "name": "configured device id", "type": "ObjectId", "id_type": "device" },
+            { "name": "texture handle", "type": "ObjectHandle", "handle_type": "texture" }
+        ],
         "instance request adapter": [
             { "name": "instance id", "type": "ObjectId", "id_type": "instance" },
             { "name": "event manager handle", "type": "ObjectHandle" },
@@ -117,7 +124,8 @@
             { "name": "future", "type": "future" },
             { "name": "device object handle", "type": "ObjectHandle", "handle_type": "device"},
             { "name": "device lost future", "type": "future" },
-            { "name": "descriptor", "type": "device descriptor", "annotation": "const*" }
+            { "name": "descriptor", "type": "device descriptor", "annotation": "const*" },
+            { "name": "userdata count", "type": "uint8_t", "_comment": "TODO(crbug.com/dawn/2509): Remove this once Chromium overrides the correct functions in the proc table."}
         ]
     },
     "return commands": {
@@ -125,6 +133,9 @@
             { "name": "event manager", "type": "ObjectHandle" },
             { "name": "future", "type": "future" },
             { "name": "status", "type": "buffer map async status" },
+            { "name": "status2", "type": "map async status" },
+            { "name": "message", "type": "char", "annotation": "const*", "length": "strlen", "optional": true },
+            { "name": "userdata count", "type": "uint8_t", "_comment": "TODO(crbug.com/dawn/2509): Remove this once Chromium overrides the correct functions in the proc table."},
             { "name": "read data update info length", "type": "uint64_t" },
             { "name": "read data update info", "type": "uint8_t", "annotation": "const*", "length": "read data update info length", "skip_serialize": true }
         ],
@@ -178,7 +189,7 @@
             { "name": "future", "type": "future" },
             { "name": "status", "type": "request adapter status" },
             { "name": "message", "type": "char", "annotation": "const*", "length": "strlen", "optional": true },
-            { "name": "properties", "type": "adapter properties", "annotation": "const*", "optional": "true" },
+            { "name": "info", "type": "adapter info", "annotation": "const*", "optional": "true" },
             { "name": "limits", "type": "supported limits", "annotation": "const*", "optional": "true" },
             { "name": "features count", "type": "uint32_t"},
             { "name": "features", "type": "feature name", "annotation": "const*", "length": "features count"}
@@ -206,14 +217,17 @@
         "client_side_commands": [
             "AdapterCreateDevice",
             "AdapterGetFormatCapabilities",
+            "AdapterGetInfo",
             "AdapterGetProperties",
             "AdapterGetLimits",
             "AdapterHasFeature",
             "AdapterEnumerateFeatures",
             "AdapterRequestDevice",
             "AdapterRequestDeviceF",
+            "AdapterRequestDevice2",
             "BufferMapAsync",
             "BufferMapAsyncF",
+            "BufferMapAsync2",
             "BufferGetConstMappedRange",
             "BufferGetMappedRange",
             "BufferGetMapState",
@@ -222,30 +236,37 @@
             "DeviceCreateBuffer",
             "DeviceCreateComputePipelineAsync",
             "DeviceCreateComputePipelineAsyncF",
+            "DeviceCreateComputePipelineAsync2",
             "DeviceCreateRenderPipelineAsync",
             "DeviceCreateRenderPipelineAsyncF",
+            "DeviceCreateRenderPipelineAsync2",
             "DeviceGetLimits",
             "DeviceHasFeature",
             "DeviceEnumerateFeatures",
             "DevicePopErrorScope",
             "DevicePopErrorScopeF",
+            "DevicePopErrorScope2",
             "DeviceSetDeviceLostCallback",
             "DeviceSetUncapturedErrorCallback",
             "DeviceSetLoggingCallback",
             "InstanceEnumerateWGSLLanguageFeatures",
             "InstanceHasWGSLLanguageFeature",
+            "InstanceCreateSurface",
             "InstanceRequestAdapter",
             "InstanceRequestAdapterF",
             "InstanceRequestAdapter2",
             "ShaderModuleGetCompilationInfo",
             "ShaderModuleGetCompilationInfoF",
+            "ShaderModuleGetCompilationInfo2",
             "QuerySetGetType",
             "QuerySetGetCount",
             "QueueOnSubmittedWorkDone",
             "QueueOnSubmittedWorkDoneF",
+            "QueueOnSubmittedWorkDone2",
             "QueueWriteBuffer",
             "QueueWriteTexture",
             "SurfaceGetCapabilities",
+            "SurfaceGetCurrentTexture",
             "SurfaceGetPreferredFormat",
             "TextureGetWidth",
             "TextureGetHeight",
@@ -260,6 +281,8 @@
             "AdapterGetInstance",
             "BufferDestroy",
             "BufferUnmap",
+            "DeviceCreateErrorBuffer",
+            "DeviceDestroy",
             "DeviceGetAdapter",
             "DeviceGetQueue",
             "DeviceGetSupportedSurfaceUsage",
@@ -267,7 +290,7 @@
             "InstanceProcessEvents",
             "InstanceWaitAny",
             "SurfaceConfigure",
-            "SurfaceGetCurrentTexture",
+            "SurfaceUnconfigure",
             "SwapChainGetCurrentTexture"
         ],
         "client_special_objects": [

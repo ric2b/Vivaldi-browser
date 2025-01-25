@@ -264,7 +264,6 @@
 <translation id="2783001728278437613">{COUNT,plural, =1{+#}one{+#}other{+#}}</translation>
 <translation id="2792200646155001340">Puwede ka ring mag-swipe ng isang daliri pakaliwa para lumipat sa nakaraang item. Subukan ito ngayon.</translation>
 <translation id="280499067616661124">May nakitang ChromeVox sa page</translation>
-<translation id="2811019999044652585">Upang pumunta sa iba pang mga bahagi ng screen, tulad ng mga toolbar o system tray, pindutin ang Control+Forward. Sa isang Chromebook, ang Forward key ay nasa itaas lang ng number 2 na key.</translation>
 <translation id="2811204574343810641">Row</translation>
 <translation id="2816868829355607410">Lugar ng pagsasanay: Mga jump command</translation>
 <translation id="2841013758207633010">Oras</translation>
@@ -520,6 +519,7 @@
 <translation id="4432457053224379116">Indian Red</translation>
 <translation id="4432896207833262240">Minarkahang content</translation>
 <translation id="4437615272777527928">Mag-type para maghanap sa mga menu. Gamitin ang mga pataas at pababang arrow para makita ang mga resulta. Gamitin ang mga pakaliwa at pakanang arrow para maisaayos ang text caret, at para magpalipat-lipat sa mga menu.</translation>
+<translation id="4453530046591759283">Para pumunta sa iba pang bahagi ng screen, tulad ng mga toolbar o system tray, pindutin ang Control+F1. Ang F1 ay ang unang key sa kanan ng escape key.</translation>
 <translation id="4457472090507035117">Piliin ang kasalukuyang boses:</translation>
 <translation id="4476183483923481720">bagong linya</translation>
 <translation id="4479068155583208887">Fire Brick</translation>
@@ -880,6 +880,7 @@
 <translation id="7091296112653361280">Navajo White</translation>
 <translation id="7095834689119144465">I-edit lang ang text numeric</translation>
 <translation id="7096001299300236431">Nakaraang media</translation>
+<translation id="7096668131290451939">Pindutin ulit ang escape para umalis sa Learn Mode</translation>
 <translation id="7116595520562830928">multln</translation>
 <translation id="712735679809149106">echo ng salita</translation>
 <translation id="7137397390322864165">Salmon</translation>

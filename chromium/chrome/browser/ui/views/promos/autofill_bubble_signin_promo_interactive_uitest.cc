@@ -7,6 +7,7 @@
 #include "chrome/browser/signin/chrome_signin_client_test_util.h"
 #include "chrome/browser/signin/dice_tab_helper.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/autofill/autofill_signin_promo_tab_helper.h"
 #include "chrome/browser/ui/passwords/manage_passwords_test.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
@@ -125,11 +126,8 @@ bool AutofillBubbleSignInPromoInteractiveUITest::IsSignInURL() {
 }
 
 bool AutofillBubbleSignInPromoInteractiveUITest::IsSignedIn() {
-  return identity_manager()->HasPrimaryAccountWithRefreshToken(
-             signin::ConsentLevel::kSignin) &&
-         !identity_manager()->HasAccountWithRefreshTokenInPersistentErrorState(
-             identity_manager()->GetPrimaryAccountId(
-                 signin::ConsentLevel::kSignin));
+  return signin_util::GetSignedInState(identity_manager()) ==
+         signin_util::SignedInState::kSignedIn;
 }
 
 void AutofillBubbleSignInPromoInteractiveUITest::ExtendAccountInfo(
@@ -311,7 +309,7 @@ IN_PROC_BROWSER_TEST_F(AutofillBubbleSignInPromoInteractiveUITest,
       /*is_under_advanced_protection=*/false,
       signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE,
       signin_metrics::SourceForRefreshTokenOperation::
-          kDiceResponseHandler_PasswordPromoSignin);
+          kDiceResponseHandler_Signin);
   account_store_waiter.WaitOrReturn();
 
   // Check that the sign in was successful.

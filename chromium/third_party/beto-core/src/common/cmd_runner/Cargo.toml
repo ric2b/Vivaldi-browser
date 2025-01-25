@@ -1,0 +1,17 @@
+[package]
+name = "cmd_runner"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow = "1.0.64"
+shell-escape = "0.1.5"
+owo-colors = "3.5.0"
+xshell = "0.2.6"
+clap = { version = "4.5.4", features = ["derive"] }
+file-header = "0.1.2"
+chrono = "0.4.37"
+log = "0.4.21"
+globset = "0.4.14"
+

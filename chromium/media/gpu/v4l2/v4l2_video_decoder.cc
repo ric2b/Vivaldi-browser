@@ -29,9 +29,9 @@
 #include "media/gpu/chromeos/video_decoder_pipeline.h"
 #include "media/gpu/gpu_video_decode_accelerator_helpers.h"
 #include "media/gpu/macros.h"
+#include "media/gpu/v4l2/legacy/v4l2_video_decoder_backend_stateful.h"
 #include "media/gpu/v4l2/v4l2_status.h"
 #include "media/gpu/v4l2/v4l2_utils.h"
-#include "media/gpu/v4l2/v4l2_video_decoder_backend_stateful.h"
 #include "media/gpu/v4l2/v4l2_video_decoder_backend_stateless.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 
@@ -365,7 +365,7 @@ void V4L2VideoDecoder::Initialize(const VideoDecoderConfig& config,
 
 bool V4L2VideoDecoder::NeedsBitstreamConversion() const {
   DCHECK(output_cb_) << "V4L2VideoDecoder hasn't been initialized";
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return (profile_ >= H264PROFILE_MIN && profile_ <= H264PROFILE_MAX) ||
          (profile_ >= HEVCPROFILE_MIN && profile_ <= HEVCPROFILE_MAX);
 }
@@ -515,7 +515,7 @@ void V4L2VideoDecoder::AllocateSecureBuffer(uint32_t size,
                   weak_this_for_callbacks_.GetWeakPtr(), std::move(callback))),
               mojo::PlatformHandle()));
 #else
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
@@ -674,10 +674,7 @@ CroStatus V4L2VideoDecoder::SetupOutputFormat(const gfx::Size& size,
     // P010 and NV12, and then down sample to NV12 if it is selected. This is
     // not desired, so drop the candidates that don't match the bit depth of the
     // stream.
-    size_t candidate_bit_depth =
-        (candidate == Fourcc(Fourcc::MT2T))
-            ? 10u
-            : BitDepth(candidate->ToVideoPixelFormat());
+    size_t candidate_bit_depth = BitDepth(candidate->ToVideoPixelFormat());
     if (candidate_bit_depth != bit_depth) {
       DVLOGF(1) << "Enumerated format " << candidate->ToString()
                 << " with a bit depth of " << candidate_bit_depth

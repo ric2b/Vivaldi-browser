@@ -20,6 +20,7 @@
 /fetch                        recipes
 /gclient                      recipes
 /git*                         recipes
+/git-credential-luci          -recipes
 /gn                           recipes
 /ninja*                       recipes
 /pylint*                      recipes
@@ -32,10 +33,10 @@
 /cipd_manifest* recipes
 
 # Symlinks
-/cbuildbot      recipes
-/cros*          recipes
+/cbuildbot recipes
+/cros*     recipes
 
-/lib/* recipes
+/lib/*     recipes
 
 # Metadata validation package, without its tests.
 /metadata/**       recipes
@@ -43,9 +44,9 @@
 
 # TODO: There are some really junky dependencies in here that we should probably
 # move to vpython/cipd.
-/third_party/**                     recipes
+/third_party/**     recipes
 
-/win_toolchain/** recipes
+/win_toolchain/**   recipes
 
 /fetch_configs/*.py recipes
 

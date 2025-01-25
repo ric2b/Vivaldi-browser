@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 // The rules for parsing content-types were borrowed from Firefox:
 // http://lxr.mozilla.org/mozilla/source/netwerk/base/src/nsURLHelper.cpp#834
 
@@ -83,6 +88,16 @@ std::string GetBaseLanguageCode(const std::string& language_code) {
 }  // namespace
 
 // HttpUtil -------------------------------------------------------------------
+
+std::string HttpUtil::GenerateRequestLine(std::string_view method,
+                                          GURL url,
+                                          bool is_for_get_to_http_proxy) {
+  static constexpr char kSuffix[] = " HTTP/1.1\r\n";
+  const std::string path = is_for_get_to_http_proxy
+                               ? HttpUtil::SpecForRequest(url)
+                               : url.PathForRequest();
+  return base::StrCat({method, " ", path, kSuffix});
+}
 
 // static
 std::string HttpUtil::SpecForRequest(const GURL& url) {
@@ -270,8 +285,7 @@ bool HttpUtil::ParseRetryAfterHeader(const std::string& retry_after_string,
   base::Time time;
   base::TimeDelta interval;
 
-  if (net::ParseUint32(retry_after_string, ParseIntFormat::NON_NEGATIVE,
-                       &seconds)) {
+  if (ParseUint32(retry_after_string, ParseIntFormat::NON_NEGATIVE, &seconds)) {
     interval = base::Seconds(seconds);
   } else if (base::Time::FromUTCString(retry_after_string.c_str(), &time)) {
     interval = time - now;

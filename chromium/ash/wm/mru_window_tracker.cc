@@ -165,6 +165,7 @@ MruWindowTracker::WindowList BuildWindowListInternal(
         if (!can_include_window_predicate(window))
           continue;
 
+        DCHECK(!window->GetProperty(kExcludeInMruKey));
         windows.emplace_back(window);
       }
     }
@@ -228,6 +229,11 @@ bool CanIncludeWindowInMruList(aura::Window* window) {
          !window->GetProperty(kOverviewUiKey);
 }
 
+bool CanIncludeWindowInAppMruList(aura::Window* window) {
+  return window->GetProperty(chromeos::kAppTypeKey) !=
+         chromeos::AppType::NON_APP;
+}
+
 //////////////////////////////////////////////////////////////////////////////
 // MruWindowTracker, public:
 
@@ -244,11 +250,8 @@ MruWindowTracker::~MruWindowTracker() {
 
 WindowList MruWindowTracker::BuildAppWindowList(
     DesksMruType desks_mru_type) const {
-  return BuildWindowListInternal(
-      &mru_windows_, desks_mru_type, [](aura::Window* w) {
-        return w->GetProperty(chromeos::kAppTypeKey) !=
-               chromeos::AppType::NON_APP;
-      });
+  return BuildWindowListInternal(&mru_windows_, desks_mru_type,
+                                 CanIncludeWindowInAppMruList);
 }
 
 WindowList MruWindowTracker::BuildMruWindowList(

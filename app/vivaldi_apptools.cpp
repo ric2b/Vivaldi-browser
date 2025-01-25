@@ -40,11 +40,11 @@ const char *const vivaldi_extra_locales_array[] = {
 bool using_legacy_menu = false;
 }  // namespace
 
-bool IsVivaldiApp(base::StringPiece extension_id) {
+bool IsVivaldiApp(std::string_view extension_id) {
   return extension_id == kVivaldiAppIdHex || extension_id == kVivaldiAppId;
 }
 
-bool IsVivaldiExtraLocale(base::StringPiece locale) {
+bool IsVivaldiExtraLocale(std::string_view locale) {
   DCHECK([]() {
     // Verify vivaldi_extra_locales_array is sorted.
     static bool after_first = false;

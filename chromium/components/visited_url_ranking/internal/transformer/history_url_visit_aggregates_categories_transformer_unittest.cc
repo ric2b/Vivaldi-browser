@@ -16,8 +16,8 @@
 #include "base/strings/strcat.h"
 #include "base/test/mock_callback.h"
 #include "components/history/core/browser/history_types.h"
-#include "components/visited_url_ranking/internal/transformer/history_transformer_test_support.h"
 #include "components/visited_url_ranking/internal/transformer/transformer_test_support.h"
+#include "components/visited_url_ranking/public/test_support.h"
 #include "components/visited_url_ranking/public/url_visit.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -75,7 +75,7 @@ TEST_P(HistoryURLVisitAggregatesCategoriesTransformerTest, Transform) {
       1, u"sample_title", GURL(kSampleSearchUrl), true, "foreign_session_guid",
       1.0f, std::move(categories));
 
-  URLVisitAggregate visit_aggregate = {};
+  URLVisitAggregate visit_aggregate(kSampleSearchUrl);
   visit_aggregate.fetcher_data_map.emplace(
       Fetcher::kHistory,
       URLVisitAggregate::HistoryData(std::move(annotated_visit)));

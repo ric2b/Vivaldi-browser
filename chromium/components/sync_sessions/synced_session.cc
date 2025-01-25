@@ -258,6 +258,9 @@ sync_pb::SessionHeader SyncedSession::ToSessionHeaderProto() const {
   header.set_client_name(session_name_);
   header.set_device_type(device_type);
   header.set_device_form_factor(ToDeviceFormFactorProto(device_form_factor));
+  if (viv_ext_data) {
+    header.set_vivaldi_specific(*viv_ext_data);
+  }
   return header;
 }
 

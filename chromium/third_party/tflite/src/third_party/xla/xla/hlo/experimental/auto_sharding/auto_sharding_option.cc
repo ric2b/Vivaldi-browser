@@ -40,6 +40,7 @@ std::string AutoShardingOption::ToString() const {
         absl::StrCat("memory_budget_per_device: ",
                      memory_budget_per_device / (1024 * 1024 * 1024), " GB"));
   }
+  lines.push_back(absl::StrCat("memory_budget_ratio: ", memory_budget_ratio));
 
   lines.push_back(absl::StrCat("force_override_all_gather_cost: ",
                                force_override_all_gather_cost));
@@ -135,6 +136,13 @@ std::string AutoShardingOption::ToString() const {
 
   lines.push_back(absl::StrCat("model_resharding_memory_costs: ",
                                model_resharding_memory_costs));
+
+  lines.push_back(absl::StrCat("generate_windowed_einsum_strategies: ",
+                               generate_windowed_einsum_strategies));
+
+  lines.push_back(
+      absl::StrCat("allow_shardings_small_dims_across_many_devices: ",
+                   allow_shardings_small_dims_across_many_devices));
 
   return absl::StrJoin(lines, "\n");
 }

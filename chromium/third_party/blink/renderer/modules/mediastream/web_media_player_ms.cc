@@ -31,8 +31,8 @@
 #include "media/mojo/mojom/media_metrics_provider.mojom.h"
 #include "media/video/gpu_memory_buffer_video_frame_pool.h"
 #include "services/viz/public/cpp/gpu/context_provider_command_buffer.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-blink.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_audio_renderer.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_video_renderer.h"
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
@@ -1134,7 +1134,7 @@ bool WebMediaPlayerMS::HasReadableVideoFrame() const {
   return has_first_frame_;
 }
 
-void WebMediaPlayerMS::OnFrameHidden() {
+void WebMediaPlayerMS::OnPageHidden() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   bool in_picture_in_picture =
@@ -1189,7 +1189,7 @@ void WebMediaPlayerMS::SuspendForFrameClosed() {
   }
 }
 
-void WebMediaPlayerMS::OnFrameShown() {
+void WebMediaPlayerMS::OnPageShown() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   if (watch_time_reporter_)
@@ -1490,10 +1490,11 @@ void WebMediaPlayerMS::MaybeCreateWatchTimeReporter() {
 
   watch_time_reporter_->OnVolumeChange(volume_);
 
-  if (delegate_->IsFrameHidden())
+  if (delegate_->IsPageHidden()) {
     watch_time_reporter_->OnHidden();
-  else
+  } else {
     watch_time_reporter_->OnShown();
+  }
 
   if (client_) {
     if (client_->HasNativeControls())
@@ -1609,7 +1610,7 @@ WebMediaPlayerMS::GetMediaStreamType() {
     case mojom::blink::MediaStreamType::DISPLAY_VIDEO_CAPTURE_SET:
       return media::mojom::MediaStreamType::kLocalDisplayCapture;
     case mojom::blink::MediaStreamType::NUM_MEDIA_TYPES:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return std::nullopt;
   }
 

@@ -16,10 +16,10 @@ void ReceiverList::OnReceiverAdded(const ServiceInfo& info) {
 }
 
 Error ReceiverList::OnReceiverChanged(const ServiceInfo& info) {
-  auto existing_info = std::find_if(receivers_.begin(), receivers_.end(),
-                                    [&info](const ServiceInfo& x) {
-                                      return x.instance_id == info.instance_id;
-                                    });
+  auto existing_info = std::find_if(
+      receivers_.begin(), receivers_.end(), [&info](const ServiceInfo& x) {
+        return x.instance_name == info.instance_name;
+      });
   if (existing_info == receivers_.end())
     return Error::Code::kItemNotFound;
 

@@ -43,7 +43,7 @@ bool AccountTable::CreateAccountTable() {
       "last_modified INTEGER"
       ")");
 
-  bool res = GetDB().Execute(sql.c_str());
+  bool res = GetDB().Execute(sql);
 
   return res;
 }
@@ -176,7 +176,7 @@ bool AccountTable::DoesLocalAccountExist() {
 bool AccountTable::MigrateCalendarToVersion7() {
   if (!GetDB().DoesTableExist("accounts")) {
     NOTREACHED() << "accounts table should exist before migration";
-    return false;
+    //return false;
   }
 
   if (!GetDB().DoesColumnExist("accounts", "username")) {

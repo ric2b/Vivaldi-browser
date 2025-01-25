@@ -18,6 +18,7 @@ import org.chromium.ui.util.ColorUtils;
 import org.chromium.url.GURL;
 
 // Vivaldi
+import org.chromium.chrome.browser.night_mode.settings.ThemeSettingsFragment;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 /**
@@ -93,7 +94,7 @@ public class WebContentsDarkModeController {
         return WebsitePreferenceBridge.isContentSettingEnabled(
                 browserContextHandle, ContentSettingsType.AUTO_DARK_WEB_CONTENT)
                 && ChromeSharedPreferences.getInstance().readBoolean(
-                "dark_mode_for_webpages", false); // Vivaldi
+                ThemeSettingsFragment.KEY_DARK_MODE_FOR_WEBPAGES, false); // Vivaldi
     }
 
     /**

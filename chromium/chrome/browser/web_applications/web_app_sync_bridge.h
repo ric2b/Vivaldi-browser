@@ -11,17 +11,14 @@
 #include <vector>
 
 #include "base/containers/flat_set.h"
-#include "base/feature_list.h"
 #include "base/functional/callback.h"
-#include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/one_shot_event.h"
-#include "base/types/expected.h"
 #include "build/build_config.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
-#include "chrome/browser/web_applications/web_app_command_scheduler.h"
+#include "chrome/browser/web_applications/web_app_database.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "components/sync/model/entity_change.h"
 #include "components/sync/model/model_type_sync_bridge.h"
@@ -56,9 +53,9 @@ class AppLock;
 class ScopedRegistryUpdate;
 class WebApp;
 class WebAppCommandManager;
-class WebAppDatabase;
 class WebAppInstallManager;
 class WebAppRegistryUpdate;
+class WebAppCommandScheduler;
 enum class ApiApprovalState;
 struct RegistryUpdateData;
 
@@ -210,9 +207,9 @@ class WebAppSyncBridge : public syncer::ModelTypeSyncBridge {
   std::optional<syncer::ModelError> ApplyIncrementalSyncChanges(
       std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
       syncer::EntityChangeList entity_changes) override;
-  void GetDataForCommit(StorageKeyList storage_keys,
-                        DataCallback callback) override;
-  void GetAllDataForDebugging(DataCallback callback) override;
+  std::unique_ptr<syncer::DataBatch> GetDataForCommit(
+      StorageKeyList storage_keys) override;
+  std::unique_ptr<syncer::DataBatch> GetAllDataForDebugging() override;
   std::string GetClientTag(const syncer::EntityData& entity_data) override;
   std::string GetStorageKey(const syncer::EntityData& entity_data) override;
   bool IsEntityDataValid(const syncer::EntityData& entity_data) const override;
@@ -269,6 +266,7 @@ class WebAppSyncBridge : public syncer::ModelTypeSyncBridge {
                         std::unique_ptr<syncer::MetadataBatch> metadata_batch);
   // Update apps that don't have a UserDisplayMode set for the current platform.
   void EnsureAppsHaveUserDisplayModeForCurrentPlatform();
+  void EnsurePartiallyInstalledAppsHaveCorrectStatus();
   void OnDataWritten(CommitCallback callback, bool success);
   void OnWebAppUninstallComplete(const webapps::AppId& app,
                                  webapps::UninstallResultCode code);

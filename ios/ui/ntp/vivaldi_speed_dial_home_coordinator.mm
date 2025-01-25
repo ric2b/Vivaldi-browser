@@ -2,16 +2,18 @@
 
 #import "ios/ui/ntp/vivaldi_speed_dial_home_coordinator.h"
 
-#import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
-#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
+#import "components/bookmarks/browser/bookmark_model.h"
+#import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+
+using bookmarks::BookmarkModel;
 
 @interface VivaldiSpeedDialHomeCoordinator () {
   // The browser where the settings are being displayed.
   Browser* _browser;
   // Bookmark model in which meditor and speed dial home controller depends
-  LegacyBookmarkModel* _bookmarkModel;
+  BookmarkModel* _bookmarkModel;
   // Browser state in which meditor depends
   ChromeBrowserState* _browserState;
 }
@@ -39,8 +41,7 @@
     _browserState =
         _browser->GetBrowserState()->GetOriginalChromeBrowserState();
     _bookmarkModel =
-        ios::LocalOrSyncableBookmarkModelFactory::
-            GetForBrowserState(_browserState);
+        ios::BookmarkModelFactory::GetForBrowserState(_browserState);
   }
 
   return self;

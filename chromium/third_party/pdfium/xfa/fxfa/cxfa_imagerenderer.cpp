@@ -10,10 +10,10 @@
 
 #include <utility>
 
+#include "core/fxge/agg/cfx_agg_imagerenderer.h"
 #include "core/fxge/cfx_renderdevice.h"
 #include "core/fxge/dib/cfx_dibbase.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
-#include "core/fxge/dib/cfx_imagerenderer.h"
 #include "core/fxge/dib/cfx_imagetransformer.h"
 
 CXFA_ImageRenderer::CXFA_ImageRenderer(CFX_RenderDevice* pDevice,
@@ -26,8 +26,10 @@ CXFA_ImageRenderer::~CXFA_ImageRenderer() = default;
 bool CXFA_ImageRenderer::Start() {
   FXDIB_ResampleOptions options;
   options.bInterpolateBilinear = true;
-  if (m_pDevice->StartDIBits(m_pDIBBase, /*alpha=*/1.0f, /*argb=*/0,
-                             m_ImageMatrix, options, &m_DeviceHandle)) {
+  RenderDeviceDriverIface::StartResult result = m_pDevice->StartDIBits(
+      m_pDIBBase, /*alpha=*/1.0f, /*argb=*/0, m_ImageMatrix, options);
+  if (result.success) {
+    m_DeviceHandle = std::move(result.agg_image_renderer);
     if (m_DeviceHandle) {
       m_State = State::kStarted;
       return true;

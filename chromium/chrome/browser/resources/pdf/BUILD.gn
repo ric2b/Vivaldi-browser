@@ -96,11 +96,22 @@ build_webui("build") {
     ]
   }
 
+  if (enable_pdf_ink2) {
+    non_web_component_files += [
+      "elements/viewer-side-panel.html.ts",
+      "elements/viewer-side-panel.ts",
+    ]
+  }
+
   css_files = [
     "elements/pdf-shared.css",
     "elements/shared-vars.css",
     "pdf_viewer_shared_style.css",
   ]
+
+  if (enable_pdf_ink2) {
+    css_files += [ "elements/viewer-side-panel.css" ]
+  }
 
   icons_html_files = [ "elements/icons.html" ]
 
@@ -130,6 +141,10 @@ build_webui("build") {
     "//ui/webui/resources/cr_elements:build_ts",
     "//ui/webui/resources/js:build_ts",
   ]
+
+  if (enable_pdf_ink2) {
+    ts_deps += [ "//third_party/lit/v3_0:build_ts" ]
+  }
 
   # grd file generation parameters
   grd_prefix = "pdf"

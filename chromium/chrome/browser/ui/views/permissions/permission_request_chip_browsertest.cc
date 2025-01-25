@@ -15,7 +15,7 @@
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
-#include "chrome/browser/ui/views/permissions/chip_controller.h"
+#include "chrome/browser/ui/views/permissions/chip/chip_controller.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chrome/test/permissions/permission_request_manager_test_api.h"
@@ -370,14 +370,8 @@ class PermissionRequestChipBrowserUiTest : public UiBrowserTest {
           gfx::Animation::RichAnimationRenderMode::FORCE_DISABLED);
 };
 
-// TODO(crbug.com/340578724): Flaky on Windows.
-#if BUILDFLAG(IS_WIN)
-#define MAYBE_InvokeUi_geolocation DISABLED_InvokeUi_geolocation
-#else
-#define MAYBE_InvokeUi_geolocation InvokeUi_geolocation
-#endif
 IN_PROC_BROWSER_TEST_F(PermissionRequestChipBrowserUiTest,
-                       MAYBE_InvokeUi_geolocation) {
+                       InvokeUi_geolocation) {
   ShowAndVerifyUi();
 }
 

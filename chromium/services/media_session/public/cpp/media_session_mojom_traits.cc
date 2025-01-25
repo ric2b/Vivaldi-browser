@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "services/media_session/public/cpp/media_session_mojom_traits.h"
 
 #include "mojo/public/cpp/base/string16_mojom_traits.h"
@@ -69,7 +74,7 @@ StructTraits<media_session::mojom::MediaImageBitmapDataView,
     case (kBGRA_8888_SkColorType):
       return media_session::mojom::MediaImageBitmapColorType::kBGRA_8888;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return media_session::mojom::MediaImageBitmapColorType::kRGBA_8888;
   }
 }

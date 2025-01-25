@@ -11,6 +11,7 @@
 #include "ui/accessibility/platform/ax_platform.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/accessibility/platform/ax_platform_tree_manager.h"
+#include "ui/accessibility/platform/ax_unique_id.h"
 #include "ui/accessibility/platform/child_iterator.h"
 #include "ui/accessibility/platform/child_iterator_base.h"
 
@@ -138,7 +139,7 @@ AXNodePosition::AXPositionInstance AXPlatformNodeDelegate::CreateTextPositionAt(
 }
 
 gfx::NativeViewAccessible AXPlatformNodeDelegate::GetNSWindow() {
-  NOTREACHED() << "Only available on macOS.";
+  NOTREACHED_IN_MIGRATION() << "Only available on macOS.";
   return nullptr;
 }
 
@@ -148,7 +149,7 @@ gfx::NativeViewAccessible AXPlatformNodeDelegate::GetNativeViewAccessible() {
   // overridden this method. On all other platforms, this method should not be
   // called yet. In the future, when all subclasses have moved over to be
   // implemented by AXPlatformNode, we may make this method completely virtual.
-  NOTREACHED() << "https://crbug.com/703369";
+  NOTREACHED_IN_MIGRATION() << "https://crbug.com/703369";
   return nullptr;
 }
 
@@ -572,23 +573,23 @@ bool AXPlatformNodeDelegate::IsValidRelationTarget(
     // relations reported via platform APIs.
     return false;
   }
-  DCHECK_GT(GetUniqueId(), AXUniqueId::kInvalidId);
+  DCHECK_GT(GetUniqueId(), AXPlatformNodeId());
   DCHECK(target);
-  DCHECK_GT(target->GetUniqueId(), AXUniqueId::kInvalidId);
+  DCHECK_GT(target->GetUniqueId(), AXPlatformNodeId());
   // We should ignore reflexive relations.
   return GetUniqueId() != target->GetUniqueId();
 }
 
 std::u16string AXPlatformNodeDelegate::GetAuthorUniqueId() const {
   if (node_)
-    return node_->GetHtmlAttribute("id");
+    return node_->GetString16Attribute(ax::mojom::StringAttribute::kHtmlId);
   return std::u16string();
 }
 
-const AXUniqueId& AXPlatformNodeDelegate::GetUniqueId() const {
+AXPlatformNodeId AXPlatformNodeDelegate::GetUniqueId() const {
   static const base::NoDestructor<AXUniqueId> empty_unique_id(
       AXUniqueId::Create());
-  return *empty_unique_id;
+  return empty_unique_id->Get();
 }
 
 AXPlatformNodeDelegate* AXPlatformNodeDelegate::GetParentDelegate() const {

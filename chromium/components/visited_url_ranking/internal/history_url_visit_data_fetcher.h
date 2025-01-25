@@ -8,9 +8,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/memory/weak_ptr.h"
+#include "base/memory/raw_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "components/visited_url_ranking/public/fetch_result.h"
+#include "components/visited_url_ranking/public/fetcher_config.h"
 #include "components/visited_url_ranking/public/url_visit.h"
 #include "components/visited_url_ranking/public/url_visit_data_fetcher.h"
 
@@ -24,13 +25,13 @@ namespace visited_url_ranking {
 // Fetches URL visit data from the history service.
 class HistoryURLVisitDataFetcher : public URLVisitDataFetcher {
  public:
-  explicit HistoryURLVisitDataFetcher(
-      base::WeakPtr<history::HistoryService> history_service);
+  explicit HistoryURLVisitDataFetcher(history::HistoryService* history_service);
   HistoryURLVisitDataFetcher(const HistoryURLVisitDataFetcher&) = delete;
   ~HistoryURLVisitDataFetcher() override;
 
   // URLVisitDataFetcher::
   void FetchURLVisitData(const FetchOptions& options,
+                         const FetcherConfig& config,
                          FetchResultCallback callback) override;
 
  private:
@@ -38,9 +39,10 @@ class HistoryURLVisitDataFetcher : public URLVisitDataFetcher {
   void OnGotAnnotatedVisits(
       FetchResultCallback callback,
       FetchOptions::FetchSources requested_fetch_sources,
+      const FetcherConfig& config,
       std::vector<history::AnnotatedVisit> annotated_visits);
 
-  const base::WeakPtr<history::HistoryService> history_service_;
+  const raw_ptr<history::HistoryService> history_service_;
 
   // The task tracker for the HistoryService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -50,4 +52,4 @@ class HistoryURLVisitDataFetcher : public URLVisitDataFetcher {
 
 }  // namespace visited_url_ranking
 
-#endif  // COMPONENTS_URL_VISIT_HISTORY_URL_VISIT_DATA_FETCHER_H_
+#endif  // COMPONENTS_VISITED_URL_RANKING_INTERNAL_HISTORY_URL_VISIT_DATA_FETCHER_H_

@@ -481,7 +481,7 @@ error::Error GLES2DecoderPassthroughImpl::DoBindFramebuffer(
       break;
 
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
 
@@ -2428,7 +2428,7 @@ error::Error GLES2DecoderPassthroughImpl::DoMultiDrawEndCHROMIUM() {
           result.baseinstances.data(), result.drawcount);
       return error::kNoError;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return error::kLostContext;
   }
 }
@@ -4891,11 +4891,6 @@ error::Error GLES2DecoderPassthroughImpl::DoDrawBuffersEXT(
   return error::kNoError;
 }
 
-error::Error GLES2DecoderPassthroughImpl::DoDiscardBackbufferCHROMIUM() {
-  NOTIMPLEMENTED();
-  return error::kNoError;
-}
-
 error::Error GLES2DecoderPassthroughImpl::DoFlushDriverCachesCHROMIUM() {
   // On Adreno Android devices we need to use a workaround to force caches to
   // clear.
@@ -5219,7 +5214,7 @@ GLES2DecoderPassthroughImpl::DoConvertYUVAMailboxesToTextureINTERNAL(
   ui::ScopedMakeCurrent smc(lazy_context_->shared_context_state()->context(),
                             lazy_context_->shared_context_state()->surface());
 
-  if (GLenumToTextureTarget(target) == TextureTarget::kUnkown) {
+  if (target != GL_TEXTURE_2D && target != GL_TEXTURE_RECTANGLE) {
     InsertError(GL_INVALID_VALUE, "Invalid texture target");
     return error::kNoError;
   }
@@ -5291,7 +5286,7 @@ error::Error GLES2DecoderPassthroughImpl::DoCopySharedImageToTextureINTERNAL(
   ui::ScopedMakeCurrent smc(lazy_context_->shared_context_state()->context(),
                             lazy_context_->shared_context_state()->surface());
 
-  if (GLenumToTextureTarget(target) == TextureTarget::kUnkown) {
+  if (target != GL_TEXTURE_2D && target != GL_TEXTURE_RECTANGLE) {
     InsertError(GL_INVALID_VALUE, "Invalid texture target");
     return error::kNoError;
   }

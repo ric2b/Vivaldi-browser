@@ -12,14 +12,14 @@ layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
   int inner;
 } prevent_dce;
 
-void atomicAdd_794055() {
+int atomicAdd_794055() {
   int res = atomicAdd(arg_0, 1);
-  prevent_dce.inner = res;
+  return res;
 }
 
 void compute_main(uint local_invocation_index) {
   tint_zero_workgroup_memory(local_invocation_index);
-  atomicAdd_794055();
+  prevent_dce.inner = atomicAdd_794055();
 }
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;

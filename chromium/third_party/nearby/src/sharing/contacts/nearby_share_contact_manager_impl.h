@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "absl/functional/any_invocable.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "internal/platform/implementation/account_manager.h"
 #include "internal/platform/task_runner.h"
@@ -90,19 +91,14 @@ class NearbyShareContactManagerImpl : public NearbyShareContactManager {
    public:
     ContactDownloadContext(
         nearby::sharing::api::SharingRpcClient* nearby_share_client,
-        absl::AnyInvocable<void() &&> download_failure_callback,
-        absl::AnyInvocable<
-            void(
-                std::vector<nearby::sharing::proto::ContactRecord> contacts) &&>
-            download_success_callback)
+        ContactsCallback download_callback)
         : nearby_share_client_(nearby_share_client),
-          download_failure_callback_(std::move(download_failure_callback)),
-          download_success_callback_(std::move(download_success_callback)) {}
+          download_callback_(std::move(download_callback)) {}
 
     // Fetches the next page of contacts.
     // If |next_page_token_| is empty, it fetches the first page.
     // On successful download, if  page token in the response is empty, the
-    // |download_success_callback_| is invoked with all downloaded contacts.
+    // |download_callback_| is invoked with all downloaded contacts.
     void FetchNextPage();
 
    private:
@@ -110,10 +106,7 @@ class NearbyShareContactManagerImpl : public NearbyShareContactManager {
     std::optional<std::string> next_page_token_;
     int page_number_ = 1;
     std::vector<nearby::sharing::proto::ContactRecord> contacts_;
-    absl::AnyInvocable<void() &&> download_failure_callback_;
-    absl::AnyInvocable<void(
-        std::vector<nearby::sharing::proto::ContactRecord> contacts) &&>
-        download_success_callback_;
+    ContactsCallback download_callback_;
   };
 
   NearbyShareContactManagerImpl(
@@ -125,15 +118,14 @@ class NearbyShareContactManagerImpl : public NearbyShareContactManager {
 
   // NearbyShareContactsManager:
   void DownloadContacts() override;
-  void SetAllowedContacts(
-      const std::set<std::string>& allowed_contact_ids) override;
+  void GetContacts(ContactsCallback callback) override;
   void OnStart() override;
   void OnStop() override;
 
-  std::set<std::string> GetAllowedContacts() const;
-  bool SetAllowlist(const std::set<std::string>& new_allowlist);
   void OnContactsDownloadCompleted(
-      std::vector<nearby::sharing::proto::ContactRecord> contacts);
+      absl::StatusOr<std::vector<nearby::sharing::proto::ContactRecord>>
+          contacts,
+      uint32_t num_unreachable_contacts_filtered_out);
   void OnContactsDownloadSuccess(
       std::vector<::nearby::sharing::proto::ContactRecord> contacts,
       uint32_t num_unreachable_contacts_filtered_out);
@@ -145,7 +137,6 @@ class NearbyShareContactManagerImpl : public NearbyShareContactManager {
 
   // Notify the base-class and mojo observers that contacts were downloaded.
   void NotifyAllObserversContactsDownloaded(
-      const std::set<std::string>& allowed_contact_ids,
       const std::vector<nearby::sharing::proto::ContactRecord>& contacts,
       uint32_t num_unreachable_contacts_filtered_out);
 

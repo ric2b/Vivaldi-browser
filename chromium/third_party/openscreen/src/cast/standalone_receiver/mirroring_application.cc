@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "build/build_config.h"
 #include "cast/common/public/cast_streaming_app_ids.h"
 #include "cast/common/public/message_port.h"
 #include "cast/streaming/constants.h"
@@ -47,9 +48,9 @@ bool MirroringApplication::Launch(const std::string& app_id,
     return false;
   }
 
-#if defined(__APPLE__)
+#if BUILDFLAG(IS_APPLE)
   wake_lock_ = ScopedWakeLock::Create(task_runner_);
-#endif  // defined(__APPLE__)
+#endif  // BUILDFLAG(IS_APPLE)
   environment_ = std::make_unique<Environment>(
       &Clock::now, task_runner_,
       IPEndpoint{interface_address_, kDefaultCastStreamingPort});

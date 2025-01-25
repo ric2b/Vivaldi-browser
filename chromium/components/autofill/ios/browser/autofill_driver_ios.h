@@ -54,6 +54,7 @@ inline constexpr char kFormRemovalRemovedUnownedFieldsHistogram[] =
     "Autofill.iOS.FormRemoval.RemovedUnownedFields";
 
 class AutofillDriverIOSFactory;
+class AutofillDriverRouter;
 
 // AutofillDriverIOS drives the Autofill flow in the browser process based
 // on communication from JavaScript and from the external world.
@@ -88,26 +89,25 @@ class AutofillDriverIOS : public AutofillDriver,
   AutofillDriverIOS* GetParent() override;
   AutofillClient& GetAutofillClient() override;
   BrowserAutofillManager& GetAutofillManager() override;
-  bool IsInActiveFrame() const override;
+  bool IsActive() const override;
   bool IsInAnyMainFrame() const override;
-  bool IsPrerendering() const override;
   bool HasSharedAutofillPermission() const override;
   bool CanShowAutofillUi() const override;
   base::flat_set<FieldGlobalId> ApplyFormAction(
       mojom::FormActionType action_type,
       mojom::ActionPersistence action_persistence,
-      const FormData& data,
+      base::span<const FormFieldData> fields,
       const url::Origin& triggered_origin,
       const base::flat_map<FieldGlobalId, FieldType>& field_type_map) override;
   void ApplyFieldAction(mojom::FieldActionType action_type,
                         mojom::ActionPersistence action_persistence,
-                        const FieldGlobalId& field,
+                        const FieldGlobalId& field_id,
                         const std::u16string& value) override;
   void ExtractForm(
       FormGlobalId form,
       base::OnceCallback<void(AutofillDriver*, const std::optional<FormData>&)>
           response_callback) override;
-  void SendAutofillTypePredictionsToRenderer(
+  void SendTypePredictionsToRenderer(
       const std::vector<raw_ptr<FormStructure, VectorExperimental>>& forms)
       override;
   void RendererShouldClearPreviewedForm() override;
@@ -115,7 +115,7 @@ class AutofillDriverIOS : public AutofillDriver,
       const FieldGlobalId& field_id,
       AutofillSuggestionTriggerSource trigger_source) override;
   void RendererShouldAcceptDataListSuggestion(
-      const FieldGlobalId& field,
+      const FieldGlobalId& field_id,
       const std::u16string& value) override;
   void TriggerFormExtractionInDriverFrame() override;
   void TriggerFormExtractionInAllFrames(
@@ -132,9 +132,9 @@ class AutofillDriverIOS : public AutofillDriver,
   }
 
   void RendererShouldSetSuggestionAvailability(
-      const FieldGlobalId& field,
+      const FieldGlobalId& field_id,
       mojom::AutofillSuggestionAvailability suggestion_availability) override;
-  net::IsolationInfo IsolationInfo() override;
+  std::optional<net::IsolationInfo> GetIsolationInfo() override;
 
   bool is_processed() const { return processed_; }
   void set_processed(bool processed) { processed_ = processed; }
@@ -146,17 +146,18 @@ class AutofillDriverIOS : public AutofillDriver,
   // irrelevant args omitted). See
   // components/autofill/content/common/mojom/autofill_driver.mojom
   // for further documentation of each method.
-  void AskForValuesToFill(const FormData& form, const FormFieldData& field);
+  void AskForValuesToFill(const FormData& form, const FieldGlobalId& field_id);
   void DidFillAutofillFormData(const FormData& form, base::TimeTicks timestamp);
-  void FormsSeen(const std::vector<FormData>& updated_forms);
+  void FormsSeen(const std::vector<FormData>& updated_forms,
+                 const std::vector<FormGlobalId>& removed_forms);
   void FormSubmitted(const FormData& form,
                      bool known_success,
                      mojom::SubmissionSource submission_source);
   void CaretMovedInFormField(const FormData& form,
-                             const FormFieldData& field,
+                             const FieldGlobalId& field_id,
                              const gfx::Rect& caret_bounds);
   void TextFieldDidChange(const FormData& form,
-                          const FormFieldData& field,
+                          const FieldGlobalId& field_id,
                           base::TimeTicks timestamp);
 
   // AutofillDriverIOS:
@@ -177,19 +178,22 @@ class AutofillDriverIOS : public AutofillDriver,
 
     // Renderer id of the last interacted formless field or `FieldRendererId()`
     // if the last interaction was not with a single formless field.
+    // TODO: crbug.com/40266699 - Convert to FieldGlobalId.
     FieldRendererId formless_field;
   };
 
   AutofillDriverIOS(web::WebState* web_state,
                     web::WebFrame* web_frame,
                     AutofillClient* client,
+                    AutofillDriverRouter* router,
                     id<AutofillDriverIOSBridge> bridge,
                     const std::string& app_locale);
 
   void SetParent(base::WeakPtr<AutofillDriverIOS> parent);
 
-  // Sets `this` as the parent of the frame identified by `token`.
-  void SetSelfAsParent(LocalFrameToken token);
+  // Sets `this` as the parent of the frame identified by `token` and with
+  // `form` as parent.
+  void SetSelfAsParent(const autofill::FormData& form, LocalFrameToken token);
 
   // Updates the saved information about the last interacted form or formless
   // field.
@@ -266,6 +270,8 @@ class AutofillDriverIOS : public AutofillDriver,
 
   base::ScopedObservation<AutofillManager, AutofillManager::Observer>
       manager_observation_{this};
+
+  raw_ptr<AutofillDriverRouter> router_;
 
   base::WeakPtrFactory<AutofillDriverIOS> weak_ptr_factory_{this};
 };

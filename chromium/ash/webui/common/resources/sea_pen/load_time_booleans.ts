@@ -18,8 +18,8 @@ export function isSeaPenTextInputEnabled() {
   return loadTimeData.getBoolean('isSeaPenTextInputEnabled');
 }
 
-export function isSeaPenUINextEnabled() {
-  return loadTimeData.getBoolean('isSeaPenUINextEnabled');
+export function isSeaPenUseExptTemplateEnabled() {
+  return loadTimeData.getBoolean('isSeaPenUseExptTemplateEnabled');
 }
 
 export function isSeaPenEnterpriseEnabled() {
@@ -28,4 +28,8 @@ export function isSeaPenEnterpriseEnabled() {
 
 export function isLacrosEnabled() {
   return loadTimeData.getBoolean('isLacrosEnabled');
+}
+
+export function isVcResizeThumbnailEnabled() {
+  return loadTimeData.getBoolean('isVcResizeThumbnailEnabled');
 }

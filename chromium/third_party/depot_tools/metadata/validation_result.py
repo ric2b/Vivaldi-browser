@@ -4,7 +4,7 @@
 # found in the LICENSE file.
 
 import textwrap
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 _CHROMIUM_METADATA_PRESCRIPT = "Third party metadata issue:"
 _CHROMIUM_METADATA_POSTSCRIPT = ("Check //third_party/README.chromium.template "
@@ -26,42 +26,40 @@ class ValidationResult:
         """
         self._reason = reason
         self._fatal = fatal
-        self._message = " ".join([reason] + additional)
+        self._additional = additional
         self._tags = {}
 
     def __str__(self) -> str:
         prefix = self.get_severity_prefix()
-        return f"{prefix} - {self._message}"
+        additional_text = ' '.join(self._additional)
+        return f"{prefix} - {self._reason} {additional_text}"
 
     def __repr__(self) -> str:
         return str(self)
+
+    def _comparision_key(self) -> Tuple:
+        return (not self._fatal, self._reason, self._additional)
 
     # PEP 8 recommends implementing all 6 rich comparisons.
     # Here we make use of tuple comparison, and order based on the severity
     # (e.g. fatal comes before non-fatal), then the message.
     def __lt__(self, other) -> bool:
-        return (not self._fatal, self._message) < (not other._fatal,
-                                                   other._message)
+        return self._comparision_key() < other._comparision_key()
 
     def __le__(self, other) -> bool:
-        return (not self._fatal, self._message) <= (not other._fatal,
-                                                    other._message)
+        return self._comparision_key() <= other._comparision_key()
 
     def __gt__(self, other) -> bool:
-        return (not self._fatal, self._message) > (not other._fatal,
-                                                   other._message)
+        return self._comparision_key() > other._comparision_key()
 
     def __ge__(self, other) -> bool:
-        return (not self._fatal, self._message) >= (not other._fatal,
-                                                    other._message)
+        return self._comparision_key() >= other._comparision_key()
 
     def __eq__(self, other) -> bool:
-        return (not self._fatal, self._message) == (not other._fatal,
-                                                    other._message)
+        return self._comparision_key() == other._comparision_key()
 
     def __ne__(self, other) -> bool:
-        return (not self._fatal, self._message) != (not other._fatal,
-                                                    other._message)
+        return self._comparision_key() != other._comparision_key()
 
     def is_fatal(self) -> bool:
         return self._fatal
@@ -83,11 +81,15 @@ class ValidationResult:
     def get_all_tags(self) -> Dict[str, str]:
         return dict(self._tags)
 
+    def get_additional(self) -> List[str]:
+        return self._additional
+
     def get_message(self,
                     prescript: str = _CHROMIUM_METADATA_PRESCRIPT,
                     postscript: str = _CHROMIUM_METADATA_POSTSCRIPT,
                     width: int = 0) -> str:
-        components = [prescript, self._message, postscript]
+        additional_text = ' '.join(self._additional)
+        components = [prescript, self._reason, additional_text, postscript]
         message = " ".join(
             [component for component in components if len(component) > 0])
 

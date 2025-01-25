@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/memory/raw_ptr.h"
-#include "base/strings/string_piece.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager_base.h"
@@ -38,7 +37,6 @@ class USER_MANAGER_EXPORT FakeUserManager : public UserManagerBase {
   const User* AddChildUser(const AccountId& account_id);
   const User* AddGuestUser(const AccountId& account_id);
   const User* AddKioskAppUser(const AccountId& account_id);
-  const User* AddArcKioskAppUser(const AccountId& account_id);
 
   // The same as AddUser() but allows to specify user affiliation with the
   // domain, that owns the device.
@@ -103,7 +101,6 @@ class USER_MANAGER_EXPORT FakeUserManager : public UserManagerBase {
   bool IsLoggedInAsManagedGuestSession() const override;
   bool IsLoggedInAsGuest() const override;
   bool IsLoggedInAsKioskApp() const override;
-  bool IsLoggedInAsArcKioskApp() const override;
   bool IsLoggedInAsWebKioskApp() const override;
   bool IsLoggedInAsAnyKioskApp() const override;
   bool IsLoggedInAsStub() const override;
@@ -112,31 +109,24 @@ class USER_MANAGER_EXPORT FakeUserManager : public UserManagerBase {
   bool IsGuestSessionAllowed() const override;
   bool IsGaiaUserAllowed(const User& user) const override;
   bool IsUserAllowed(const User& user) const override;
-  void AsyncRemoveCryptohome(const AccountId& account_id) const override;
   bool IsDeprecatedSupervisedAccountId(
       const AccountId& account_id) const override;
-  bool IsValidDefaultUserImageId(int image_index) const override;
 
   // UserManagerBase overrides:
-  void SetEphemeralModeConfig(
-      EphemeralModeConfig ephemeral_mode_config) override;
-
-  void LoadDeviceLocalAccounts(
-      std::set<AccountId>* device_local_accounts_set) override {}
   bool IsDeviceLocalAccountMarkedForRemoval(
       const AccountId& account_id) const override;
   void SetUserAffiliated(const AccountId& account_id,
                          bool is_affiliated) override {}
+
   // Just make it public for tests.
   using UserManagerBase::ResetOwnerId;
+  using UserManagerBase::SetEphemeralModeConfig;
   using UserManagerBase::SetOwnerId;
 
  protected:
   // If set this is the active user. If empty, the first created user is the
   // active user.
   AccountId active_account_id_ = EmptyAccountId();
-
-  bool IsEphemeralAccountIdByPolicy(const AccountId& account_id) const override;
 
  private:
   // We use this internal function for const-correctness.

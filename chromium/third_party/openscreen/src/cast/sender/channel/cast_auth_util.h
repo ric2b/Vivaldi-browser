@@ -12,14 +12,11 @@
 #include "cast/common/certificate/cast_cert_validator.h"
 #include "platform/base/error.h"
 
-namespace cast {
-namespace channel {
+namespace openscreen::cast {
+namespace proto {
 class AuthResponse;
 class CastMessage;
-}  // namespace channel
-}  // namespace cast
-
-namespace openscreen::cast {
+}  // namespace proto
 
 enum class CRLPolicy;
 struct DateTime;
@@ -55,7 +52,7 @@ class AuthContext {
 // 1. Signature contained in the reply is valid.
 // 2. certificate used to sign is rooted to a trusted CA.
 ErrorOr<CastDeviceCertPolicy> AuthenticateChallengeReply(
-    const ::cast::channel::CastMessage& challenge_reply,
+    const proto::CastMessage& challenge_reply,
     const ParsedCertificate& peer_cert,
     const AuthContext& auth_context,
     TrustStore* cast_trust_store,
@@ -66,7 +63,7 @@ ErrorOr<CastDeviceCertPolicy> AuthenticateChallengeReply(
 // Overloaded version of AuthenticateChallengeReply that allows modifying the
 // crl policy and verification times.
 ErrorOr<CastDeviceCertPolicy> AuthenticateChallengeReplyForTest(
-    const ::cast::channel::CastMessage& challenge_reply,
+    const proto::CastMessage& challenge_reply,
     const ParsedCertificate& peer_cert,
     const AuthContext& auth_context,
     CRLPolicy crl_policy,
@@ -82,7 +79,7 @@ Error VerifyTLSCertificateValidity(const ParsedCertificate& peer_cert,
 // routines. Verifies that |response| contains a valid signature of
 // |signature_input|.
 ErrorOr<CastDeviceCertPolicy> VerifyCredentials(
-    const ::cast::channel::AuthResponse& response,
+    const proto::AuthResponse& response,
     const std::vector<uint8_t>& signature_input,
     TrustStore* cast_trust_store,
     TrustStore* crl_trust_store,
@@ -94,7 +91,7 @@ ErrorOr<CastDeviceCertPolicy> VerifyCredentials(
 // Overloaded version of VerifyCredentials that allows modifying the crl policy
 // and verification times.
 ErrorOr<CastDeviceCertPolicy> VerifyCredentialsForTest(
-    const ::cast::channel::AuthResponse& response,
+    const proto::AuthResponse& response,
     const std::vector<uint8_t>& signature_input,
     CRLPolicy crl_policy,
     TrustStore* cast_trust_store,

@@ -37,8 +37,8 @@ namespace screen_ai {
 class PreloadedModelData;
 
 // Uses a local machine intelligence library to augment the accessibility
-// tree. Functionalities include extracting layout and running OCR on passed
-// snapshots and extracting the main content of a page.
+// tree. Functionalities include running OCR on images and extracting the main
+// content of a page.
 // See more in: google3/chrome/chromeos/accessibility/machine_intelligence/
 // chrome_screen_ai/README.md
 class ScreenAIService : public mojom::ScreenAIServiceFactory,
@@ -68,9 +68,7 @@ class ScreenAIService : public mojom::ScreenAIServiceFactory,
   void LoadLibrary(const base::FilePath& library_path);
 
   // mojom::ScreenAIAnnotator:
-  void ExtractSemanticLayout(const SkBitmap& image,
-                             const ui::AXTreeID& parent_tree_id,
-                             ExtractSemanticLayoutCallback callback) override;
+  void SetClientType(mojom::OcrClientType client) override;
 
   // mojom::ScreenAIAnnotator:
   void PerformOcrAndReturnAXTreeUpdate(
@@ -108,10 +106,6 @@ class ScreenAIService : public mojom::ScreenAIServiceFactory,
   void BindAnnotator(
       mojo::PendingReceiver<mojom::ScreenAIAnnotator> annotator) override;
 
-  // mojom::OCRService:
-  void BindAnnotatorClient(mojo::PendingRemote<mojom::ScreenAIAnnotatorClient>
-                               annotator_client) override;
-
   // mojom::MainContentExtractionService:
   void BindMainContentExtractor(
       mojo::PendingReceiver<mojom::Screen2xMainContentExtractor>
@@ -142,16 +136,18 @@ class ScreenAIService : public mojom::ScreenAIServiceFactory,
       const SkBitmap& image,
       bool a11y_tree_request);
 
+  void ReceiverDisconnected();
+
   mojo::Receiver<mojom::ScreenAIServiceFactory> factory_receiver_;
   mojo::Receiver<mojom::OCRService> ocr_receiver_;
   mojo::Receiver<mojom::MainContentExtractionService>
       main_content_extraction_receiver_;
 
+  // Client type for each OCR receiver.
+  std::map<mojo::ReceiverId, mojom::OcrClientType> ocr_client_types_;
+
   // The set of receivers used to receive messages from annotators.
   mojo::ReceiverSet<mojom::ScreenAIAnnotator> screen_ai_annotators_;
-
-  // The client that can receive annotator update messages.
-  mojo::Remote<mojom::ScreenAIAnnotatorClient> screen_ai_annotator_client_;
 
   // The set of receivers used to receive messages from main content
   // extractors.

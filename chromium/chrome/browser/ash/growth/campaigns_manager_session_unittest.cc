@@ -106,10 +106,11 @@ class CampaignsManagerSessionTest : public testing::Test {
 
     TestingProfile* profile = profile_manager_->CreateTestingProfile(
         account_id.GetUserEmail(),
-        {{ash::OwnerSettingsServiceAshFactory::GetInstance(),
-          base::BindRepeating(
-              &CampaignsManagerSessionTest::CreateOwnerSettingsServiceAsh,
-              base::Unretained(this))}});
+        {TestingProfile::TestingFactory{
+            ash::OwnerSettingsServiceAshFactory::GetInstance(),
+            base::BindRepeating(
+                &CampaignsManagerSessionTest::CreateOwnerSettingsServiceAsh,
+                base::Unretained(this))}});
 
     owner_settings_service_ash_ =
         ash::OwnerSettingsServiceAshFactory::GetInstance()
@@ -163,6 +164,16 @@ TEST_F(CampaignsManagerSessionTest, LoadCampaignsComponentManagedDevice) {
   builder.OverridePolicyConnectorIsManagedForTesting(/*is_managed=*/true);
   auto profile = builder.Build();
   campaigns_manager_session.SetProfileForTesting(profile.get());
+  session_manager_->SetSessionState(session_manager::SessionState::ACTIVE);
+
+  EXPECT_FALSE(component_manager_ash_->HasPendingInstall(kCampaignsComponent));
+}
+
+TEST_F(CampaignsManagerSessionTest, LoadCampaignsComponentGuestMode) {
+  auto campaigns_manager_session = CampaignsManagerSession();
+  auto* profile = profile_manager_->CreateGuestProfile()->GetPrimaryOTRProfile(
+      /*create_if_needed=*/true);
+  campaigns_manager_session.SetProfileForTesting(profile);
   session_manager_->SetSessionState(session_manager::SessionState::ACTIVE);
 
   EXPECT_FALSE(component_manager_ash_->HasPendingInstall(kCampaignsComponent));

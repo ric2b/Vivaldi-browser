@@ -360,10 +360,29 @@ CORE_EXPORT LayoutUnit ResolveUsedColumnGap(LayoutUnit available_size,
 
 CORE_EXPORT LayoutUnit ColumnInlineProgression(LayoutUnit available_size,
                                                const ComputedStyle&);
+
 // Compute physical margins.
 CORE_EXPORT PhysicalBoxStrut
 ComputePhysicalMargins(const ComputedStyle&,
-                       LogicalSize percentage_resolution_size);
+                       PhysicalSize percentage_resolution_size);
+
+inline PhysicalBoxStrut ComputePhysicalMargins(
+    const ComputedStyle& style,
+    LogicalSize percentage_resolution_size) {
+  if (!style.MayHaveMargin()) {
+    return PhysicalBoxStrut();
+  }
+
+  // This function may be called for determining intrinsic margins, clamp
+  // indefinite %-sizes to zero. See:
+  // https://drafts.csswg.org/css-sizing-3/#min-percentage-contribution
+  percentage_resolution_size =
+      percentage_resolution_size.ClampIndefiniteToZero();
+
+  PhysicalSize physical_resolution_size =
+      ToPhysicalSize(percentage_resolution_size, style.GetWritingMode());
+  return ComputePhysicalMargins(style, physical_resolution_size);
+}
 
 inline PhysicalBoxStrut ComputePhysicalMargins(
     const ConstraintSpace& constraint_space,
@@ -488,6 +507,26 @@ CORE_EXPORT void ResolveInlineAutoMargins(
     LayoutUnit inline_size,
     BoxStrut* margins);
 
+// Resolve auto margins in one dimension. May result in negative margins, if
+// `additional_space` is negative.
+// `start_result` and `end_result` will be left unmodified for non-auto margins.
+void ResolveAutoMargins(Length start_length,
+                        Length end_length,
+                        LayoutUnit additional_space,
+                        LayoutUnit* start_result,
+                        LayoutUnit* end_result);
+
+// Resolve all auto margins. May result in negative margins, if
+// `additional_inline_space` or `additional_block_space` is negative. Non-auto
+// strut values will be left unmodified.
+void ResolveAutoMargins(Length inline_start_length,
+                        Length inline_end_length,
+                        Length block_start_length,
+                        Length block_end_length,
+                        LayoutUnit additional_inline_space,
+                        LayoutUnit additional_block_space,
+                        BoxStrut* margins);
+
 // Calculate the adjustment needed for the line's left position, based on
 // text-align, direction and amount of unused space.
 CORE_EXPORT LayoutUnit LineOffsetForTextAlign(ETextAlign,
@@ -571,10 +610,6 @@ MinMaxSizesResult ComputeMinAndMaxContentContributionInternal(
 // require a constraint space (percentage sizes as well as auto margins compute
 // to zero) and an auto inline-size resolves to the respective min/max content
 // size.
-//
-// Additionally, the min/max contribution includes the inline margins. Because
-// content contributions are commonly needed by a block's parent, we also take
-// a writing-mode here so we can compute this in the parent's coordinate system.
 //
 // Note that if the writing mode of the child is orthogonal to that of the
 // parent, we'll still return the inline min/max contribution in the writing

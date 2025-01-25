@@ -52,10 +52,10 @@ ContentSetting ConvertToContentSetting(
       return CONTENT_SETTING_DETECT_IMPORTANT_CONTENT;
     default: {
       NOTREACHED();
-      break;
+      //break;
     }
   }
-  return CONTENT_SETTING_DEFAULT;
+  //return CONTENT_SETTING_DEFAULT;
 }
 
 ContentSettingsType ConvertToContentSettingsType(
@@ -69,10 +69,10 @@ ContentSettingsType ConvertToContentSettingsType(
       return ContentSettingsType::NOTIFICATIONS;
     default: {
       NOTREACHED();
-      break;
+      //break;
     }
   }
-  return ContentSettingsType::DEFAULT;
+  //return ContentSettingsType::DEFAULT;
 }
 
 ExtensionFunction::ResponseAction SettingsSetContentSettingFunction::Run() {

@@ -8,15 +8,15 @@
 #include <optional>
 #include <vector>
 
-#include "components/autofill/core/browser/ml_model/autofill_model_vectorizer.h"
+#include "components/autofill/core/browser/ml_model/autofill_model_encoder.h"
 #include "components/optimization_guide/core/base_model_executor.h"
 
 namespace autofill {
 
 // Maximum number of form fields for which the model can predict types.
 // When calling the executor with a larger form, predictions are only returned
-// for the first `kMaxNumberOfFields` many fields.
-inline constexpr size_t kModelExecutorMaxNumberOfFields = 20;
+// for the first `kModelExecutorMaxNumberOfFields` many fields.
+inline constexpr size_t kModelExecutorMaxNumberOfFields = 30;
 
 // The executor maps its inputs into TFLite's tensor format and converts the
 // model output's tensor representation back. See `ModelInput` and `ModelOutput`
@@ -25,14 +25,16 @@ class AutofillModelExecutor
     : public optimization_guide::BaseModelExecutor<
           std::array<std::vector<float>, kModelExecutorMaxNumberOfFields>,
           const std::vector<
-              std::array<AutofillModelVectorizer::TokenId,
-                         AutofillModelVectorizer::kOutputSequenceLength>>&> {
+              std::array<AutofillModelEncoder::TokenId,
+                         AutofillModelEncoder::kOutputSequenceLength>>&> {
  public:
-  // A vectorized representation of the form's labels. Each element of the
-  // vector corresponds to a vectorized label. See `AutofillModelVectorizer`,
+  // TODO(crbug.com/40276177): Move `ModelInput` and `ModelOutput` to the
+  // autofill_model_encoder. An encoded representation of the form's labels.
+  // Each element of the vector corresponds to an encoded label. See
+  // `AutofillModelEncoder`,
   using ModelInput =
-      std::vector<std::array<AutofillModelVectorizer::TokenId,
-                             AutofillModelVectorizer::kOutputSequenceLength>>;
+      std::vector<std::array<AutofillModelEncoder::TokenId,
+                             AutofillModelEncoder::kOutputSequenceLength>>;
 
   // The model always returns predictions for `kModelExecutorMaxNumberOfFields`.
   // If the queried form was smaller, the last

@@ -77,6 +77,10 @@ void SyncSessionsWebContentsRouter::InjectStartSyncFlare(
 void SyncSessionsWebContentsRouter::StartRoutingTo(
     LocalSessionEventHandler* handler) {
   handler_ = handler;
+  if (future_viv_ext_data_) {
+    handler_->OnVivDataModified(*future_viv_ext_data_);
+    future_viv_ext_data_ = std::nullopt;
+  }
 }
 
 void SyncSessionsWebContentsRouter::Stop() {
@@ -89,4 +93,11 @@ void SyncSessionsWebContentsRouter::Shutdown() {
 #endif  // !BUILDFLAG(IS_ANDROID)
 }
 
+void SyncSessionsWebContentsRouter::UpdateVivExtData(const std::string &data) {
+  if (handler_) {
+    handler_->OnVivDataModified(data);
+  } else {
+    future_viv_ext_data_ = data;
+  }
+}
 }  // namespace sync_sessions

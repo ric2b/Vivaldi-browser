@@ -26,6 +26,7 @@
 #include "components/page_load_metrics/browser/page_load_metrics_util.h"
 #include "components/page_load_metrics/common/page_load_timing.h"
 #include "content/public/browser/navigation_details.h"
+#include "content/public/browser/navigation_discard_reason.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -147,7 +148,7 @@ PageEndReason EndReasonForPageTransition(ui::PageTransition transition) {
   if (ui::PageTransitionIsNewNavigation(transition)) {
     return END_NEW_NAVIGATION;
   }
-  NOTREACHED()
+  NOTREACHED_IN_MIGRATION()
       << "EndReasonForPageTransition received unexpected ui::PageTransition: "
       << transition;
   return END_OTHER;
@@ -562,7 +563,7 @@ void PageLoadTracker::Commit(content::NavigationHandle* navigation_handle) {
     // navigation.
     parent_tracker_->DidFinishSubFrameNavigation(navigation_handle);
   } else if (navigation_handle->IsPrerenderedPageActivation()) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     // We don't deliver OnCommit() for activation. Prerendered pages will see
     // DidActivatePrerenderedPage() instead.
     // Event records below are also not needed as we did them for the initial
@@ -737,9 +738,24 @@ void PageLoadTracker::FailedProvisionalLoad(
     // navigation.
     parent_tracker_->DidFinishSubFrameNavigation(navigation_handle);
   }
+  CHECK(navigation_handle->GetNavigationDiscardReason().has_value());
   failed_provisional_load_info_ = std::make_unique<FailedProvisionalLoadInfo>(
       failed_load_time - navigation_handle->NavigationStart(),
-      navigation_handle->GetNetErrorCode());
+      navigation_handle->GetNetErrorCode(),
+      navigation_handle->GetNavigationDiscardReason().value());
+}
+
+void PageLoadTracker::DidUpdateNavigationHandleTiming(
+    content::NavigationHandle* navigation_handle) {
+  InvokeAndPruneObservers(
+      "PageLoadMetricsObserver::OnNavigationHandleTimingUpdated",
+      base::BindRepeating(
+          [](content::NavigationHandle* navigation_handle,
+             PageLoadMetricsObserverInterface* observer) {
+            return observer->OnNavigationHandleTimingUpdated(navigation_handle);
+          },
+          navigation_handle),
+      /*permit_forwarding=*/false);
 }
 
 void PageLoadTracker::Redirect(content::NavigationHandle* navigation_handle) {
@@ -1533,6 +1549,13 @@ void PageLoadTracker::UpdateMetrics(
       std::move(features), resources, std::move(render_data),
       std::move(cpu_timing), std::move(input_timing_delta),
       subresource_load_metrics, std::move(soft_navigation_metrics), page_type_);
+}
+
+void PageLoadTracker::AddCustomUserTimings(
+    std::vector<mojom::CustomUserTimingMarkPtr> custom_timings) {
+  for (const auto& observer : observers_) {
+    observer->OnCustomUserTimingMarkObserved(custom_timings);
+  }
 }
 
 void PageLoadTracker::SetPageMainFrame(content::RenderFrameHost* rfh) {

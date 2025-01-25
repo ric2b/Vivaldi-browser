@@ -113,14 +113,6 @@ const UIStrings = {
    */
   backgroundColor: 'Background color',
   /**
-   *@description Text in App Manifest View of the Application panel
-   */
-  darkThemeColor: 'Dark theme color',
-  /**
-   *@description Text in App Manifest View of the Application panel
-   */
-  darkBackgroundColor: 'Dark background color',
-  /**
    *@description Text for the orientation of something
    */
   orientation: 'Orientation',
@@ -486,10 +478,6 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
   private readonly startURLField: HTMLElement;
   private readonly themeColorSwatch: InlineEditor.ColorSwatch.ColorSwatch;
   private readonly backgroundColorSwatch: InlineEditor.ColorSwatch.ColorSwatch;
-  private readonly darkThemeColorField: HTMLElement;
-  private readonly darkThemeColorSwatch: InlineEditor.ColorSwatch.ColorSwatch;
-  private readonly darkBackgroundColorField: HTMLElement;
-  private readonly darkBackgroundColorSwatch: InlineEditor.ColorSwatch.ColorSwatch;
   private orientationField: HTMLElement;
   private displayField: HTMLElement;
   private readonly newNoteUrlField: HTMLElement;
@@ -521,22 +509,20 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
     this.reportView.show(this.contentElement);
     this.reportView.hideWidget();
 
-    this.errorsSection = this.reportView.appendSection(i18nString(UIStrings.errorsAndWarnings));
-    this.errorsSection.element.setAttribute('jslog', `${VisualLogging.section('errors-and-warnings')}`);
-    this.installabilitySection = this.reportView.appendSection(i18nString(UIStrings.installability));
-    this.installabilitySection.element.setAttribute('jslog', `${VisualLogging.section('installability')}`);
-    this.identitySection = this.reportView.appendSection(i18nString(UIStrings.identity));
-    this.identitySection.element.setAttribute('jslog', `${VisualLogging.section('identity')}`);
-    this.presentationSection = this.reportView.appendSection(i18nString(UIStrings.presentation));
-    this.presentationSection.element.setAttribute('jslog', `${VisualLogging.section('presentation')}`);
-    this.protocolHandlersSection = this.reportView.appendSection(i18nString(UIStrings.protocolHandlers));
-    this.protocolHandlersSection.element.setAttribute('jslog', `${VisualLogging.section('protocol-handlers')}`);
+    this.errorsSection =
+        this.reportView.appendSection(i18nString(UIStrings.errorsAndWarnings), undefined, 'errors-and-warnings');
+    this.installabilitySection =
+        this.reportView.appendSection(i18nString(UIStrings.installability), undefined, 'installability');
+    this.identitySection = this.reportView.appendSection(i18nString(UIStrings.identity), 'undefined,identity');
+    this.presentationSection =
+        this.reportView.appendSection(i18nString(UIStrings.presentation), 'undefined,presentation');
+    this.protocolHandlersSection =
+        this.reportView.appendSection(i18nString(UIStrings.protocolHandlers), 'undefined,protocol-handlers');
     this.protocolHandlersView = new ApplicationComponents.ProtocolHandlersView.ProtocolHandlersView();
     this.protocolHandlersSection.appendFieldWithCustomView(this.protocolHandlersView);
-    this.iconsSection = this.reportView.appendSection(i18nString(UIStrings.icons), 'report-section-icons');
-    this.iconsSection.element.setAttribute('jslog', `${VisualLogging.section('icons')}`);
-    this.windowControlsSection = this.reportView.appendSection(UIStrings.windowControlsOverlay);
-    this.windowControlsSection.element.setAttribute('jslog', `${VisualLogging.section('window-controls-overlay')}`);
+    this.iconsSection = this.reportView.appendSection(i18nString(UIStrings.icons), 'report-section-icons', 'icons');
+    this.windowControlsSection =
+        this.reportView.appendSection(UIStrings.windowControlsOverlay, undefined, 'window-controls-overlay');
     this.shortcutSections = [];
     this.screenshotsSections = [];
 
@@ -554,14 +540,6 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
     const backgroundColorField = this.presentationSection.appendField(i18nString(UIStrings.backgroundColor));
     this.backgroundColorSwatch = new InlineEditor.ColorSwatch.ColorSwatch();
     backgroundColorField.appendChild(this.backgroundColorSwatch);
-
-    this.darkThemeColorField = this.presentationSection.appendField(i18nString(UIStrings.darkThemeColor));
-    this.darkThemeColorSwatch = new InlineEditor.ColorSwatch.ColorSwatch();
-    this.darkThemeColorField.appendChild(this.darkThemeColorSwatch);
-
-    this.darkBackgroundColorField = this.presentationSection.appendField(i18nString(UIStrings.darkBackgroundColor));
-    this.darkBackgroundColorSwatch = new InlineEditor.ColorSwatch.ColorSwatch();
-    this.darkBackgroundColorField.appendChild(this.darkBackgroundColorSwatch);
 
     this.orientationField = this.presentationSection.appendField(i18nString(UIStrings.orientation));
     this.displayField = this.presentationSection.appendField(i18nString(UIStrings.display));
@@ -639,7 +617,8 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
     ]);
 
     void this.throttler.schedule(
-        () => this.renderManifest(url, data, errors, installabilityErrors, appId), immediately);
+        () => this.renderManifest(url, data, errors, installabilityErrors, appId),
+        immediately ? Common.Throttler.Scheduling.AsSoonAsPossible : Common.Throttler.Scheduling.Default);
   }
 
   private async renderManifest(
@@ -756,35 +735,13 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
     this.themeColorSwatch.classList.toggle('hidden', !stringProperty('theme_color'));
     const themeColor = Common.Color.parse(stringProperty('theme_color') || 'white') || Common.Color.parse('white');
     if (themeColor) {
-      this.themeColorSwatch.renderColor(themeColor, true);
+      this.themeColorSwatch.renderColor(themeColor);
     }
     this.backgroundColorSwatch.classList.toggle('hidden', !stringProperty('background_color'));
     const backgroundColor =
         Common.Color.parse(stringProperty('background_color') || 'white') || Common.Color.parse('white');
     if (backgroundColor) {
-      this.backgroundColorSwatch.renderColor(backgroundColor, true);
-    }
-
-    const userPreferences = parsedManifest['user_preferences'] || {};
-    const colorScheme = userPreferences['color_scheme'] || {};
-    const colorSchemeDark = colorScheme['dark'] || {};
-    const darkThemeColorString = colorSchemeDark['theme_color'];
-    const hasDarkThemeColor = typeof darkThemeColorString === 'string';
-    this.darkThemeColorField.parentElement?.classList.toggle('hidden', !hasDarkThemeColor);
-    if (hasDarkThemeColor) {
-      const darkThemeColor = Common.Color.parse(darkThemeColorString);
-      if (darkThemeColor) {
-        this.darkThemeColorSwatch.renderColor(darkThemeColor, true);
-      }
-    }
-    const darkBackgroundColorString = colorSchemeDark['background_color'];
-    const hasDarkBackgroundColor = typeof darkBackgroundColorString === 'string';
-    this.darkBackgroundColorField.parentElement?.classList.toggle('hidden', !hasDarkBackgroundColor);
-    if (hasDarkBackgroundColor) {
-      const darkBackgroundColor = Common.Color.parse(darkBackgroundColorString);
-      if (darkBackgroundColor) {
-        this.darkBackgroundColorSwatch.renderColor(darkBackgroundColor, true);
-      }
+      this.backgroundColorSwatch.renderColor(backgroundColor);
     }
 
     this.orientationField.textContent = stringProperty('orientation');

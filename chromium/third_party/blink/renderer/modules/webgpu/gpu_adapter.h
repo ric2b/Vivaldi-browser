@@ -40,6 +40,7 @@ class GPUAdapter final : public ScriptWrappable, DawnObject<wgpu::Adapter> {
   GPU* gpu() const { return gpu_.Get(); }
   GPUSupportedFeatures* features() const;
   GPUSupportedLimits* limits() const { return limits_.Get(); }
+  GPUAdapterInfo* info() const;
   bool isFallbackAdapter() const;
   wgpu::BackendType backendType() const;
   bool SupportsMultiPlanarFormats() const;
@@ -61,8 +62,8 @@ class GPUAdapter final : public ScriptWrappable, DawnObject<wgpu::Adapter> {
   void OnRequestDeviceCallback(ScriptState* script_state,
                                const GPUDeviceDescriptor* descriptor,
                                ScriptPromiseResolver<GPUDevice>* resolver,
-                               WGPURequestDeviceStatus status,
-                               WGPUDevice dawn_device,
+                               wgpu::RequestDeviceStatus status,
+                               wgpu::Device dawn_device,
                                const char* error_message);
 
   void setLabelImpl(const String&) override {
@@ -77,6 +78,7 @@ class GPUAdapter final : public ScriptWrappable, DawnObject<wgpu::Adapter> {
   bool is_compatibility_mode_;
   Member<GPUSupportedLimits> limits_;
   Member<GPUSupportedFeatures> features_;
+  Member<GPUAdapterInfo> info_;
 
   String vendor_;
   String architecture_;

@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fpdfapi/render/cpdf_docrenderdata.h"
 
 #include <stdint.h>
@@ -25,6 +20,7 @@
 #include "core/fpdfapi/parser/cpdf_array.h"
 #include "core/fpdfapi/parser/cpdf_document.h"
 #include "core/fpdfapi/render/cpdf_type3cache.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fixed_size_data_vector.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -48,28 +44,28 @@ CPDF_DocRenderData::CPDF_DocRenderData() = default;
 CPDF_DocRenderData::~CPDF_DocRenderData() = default;
 
 RetainPtr<CPDF_Type3Cache> CPDF_DocRenderData::GetCachedType3(
-    CPDF_Type3Font* pFont) {
-  auto it = m_Type3FaceMap.find(pFont);
+    CPDF_Type3Font* font) {
+  CHECK(font);
+  auto it = m_Type3FaceMap.find(font);
   if (it != m_Type3FaceMap.end() && it->second)
     return pdfium::WrapRetain(it->second.Get());
 
-  auto pCache = pdfium::MakeRetain<CPDF_Type3Cache>(pFont);
-  m_Type3FaceMap[pFont].Reset(pCache.Get());
-  return pCache;
+  auto cache = pdfium::MakeRetain<CPDF_Type3Cache>(font);
+  m_Type3FaceMap[font].Reset(cache.Get());
+  return cache;
 }
 
 RetainPtr<CPDF_TransferFunc> CPDF_DocRenderData::GetTransferFunc(
-    RetainPtr<const CPDF_Object> pObj) {
-  if (!pObj)
-    return nullptr;
-
-  auto it = m_TransferFuncMap.find(pObj);
-  if (it != m_TransferFuncMap.end() && it->second)
+    RetainPtr<const CPDF_Object> obj) {
+  CHECK(obj);
+  auto it = m_TransferFuncMap.find(obj);
+  if (it != m_TransferFuncMap.end() && it->second) {
     return pdfium::WrapRetain(it->second.Get());
+  }
 
-  auto pFunc = CreateTransferFunc(pObj);
-  m_TransferFuncMap[pObj].Reset(pFunc.Get());
-  return pFunc;
+  auto func = CreateTransferFunc(obj);
+  m_TransferFuncMap[obj].Reset(func.Get());
+  return func;
 }
 
 #if BUILDFLAG(IS_WIN)
@@ -82,7 +78,7 @@ CFX_PSFontTracker* CPDF_DocRenderData::GetPSFontTracker() {
 
 RetainPtr<CPDF_TransferFunc> CPDF_DocRenderData::CreateTransferFunc(
     RetainPtr<const CPDF_Object> pObj) const {
-  std::unique_ptr<CPDF_Function> pFuncs[3];
+  std::array<std::unique_ptr<CPDF_Function>, 3> pFuncs;
   const CPDF_Array* pArray = pObj->AsArray();
   if (pArray) {
     if (pArray->size() < 3)
@@ -90,8 +86,9 @@ RetainPtr<CPDF_TransferFunc> CPDF_DocRenderData::CreateTransferFunc(
 
     for (uint32_t i = 0; i < 3; ++i) {
       pFuncs[2 - i] = CPDF_Function::Load(pArray->GetDirectObjectAt(i));
-      if (!pFuncs[2 - i])
+      if (!pFuncs[2 - i]) {
         return nullptr;
+      }
     }
   } else {
     pFuncs[0] = CPDF_Function::Load(pObj);

@@ -19,6 +19,7 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import type {UpdateSyncStateEvent} from '../../clear_browsing_data_dialog/clear_browsing_data_browser_proxy.js';
 import {ClearBrowsingDataBrowserProxyImpl} from '../../clear_browsing_data_dialog/clear_browsing_data_browser_proxy.js';
+import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../../hats_browser_proxy.js';
 import {loadTimeData} from '../../i18n_setup.js';
 import type {MetricsBrowserProxy} from '../../metrics_browser_proxy.js';
 import {MetricsBrowserProxyImpl, PrivacyGuideInteractions, PrivacyGuideStepsEligibleAndReached} from '../../metrics_browser_proxy.js';
@@ -74,6 +75,17 @@ export class PrivacyGuideCompletionFragmentElement extends
         type: Boolean,
         value: false,
       },
+
+      privacySandboxRowSubLabel_: {
+        type: String,
+        value: () => {
+          return loadTimeData.getString(
+              loadTimeData.getBoolean(
+                  'isPrivacySandboxPrivacyGuideAdTopicsEnabled') ?
+                  'privacyGuideCompletionCardPrivacySandboxSubLabelAdTopics' :
+                  'privacyGuideCompletionCardPrivacySandboxSubLabel');
+        },
+      },
     };
   }
 
@@ -82,6 +94,7 @@ export class PrivacyGuideCompletionFragmentElement extends
   private shouldShowWaa_: boolean;
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
+  private privacySandboxRowSubLabel_: string;
 
   override ready() {
     super.ready();
@@ -99,6 +112,8 @@ export class PrivacyGuideCompletionFragmentElement extends
   }
 
   private onViewEnterStart_() {
+    HatsBrowserProxyImpl.getInstance().trustSafetyInteractionOccurred(
+        TrustSafetyInteraction.COMPLETED_PRIVACY_GUIDE);
     this.metricsBrowserProxy_
         .recordPrivacyGuideStepsEligibleAndReachedHistogram(
             PrivacyGuideStepsEligibleAndReached.COMPLETION_REACHED);

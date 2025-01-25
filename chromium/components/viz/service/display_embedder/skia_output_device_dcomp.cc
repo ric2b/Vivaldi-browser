@@ -132,13 +132,8 @@ bool CopySharedImage(gpu::SharedContextState* context_state,
 
   CHECK(!src_read_access->HasBackendSurfaceEndState());
 
-  GrFlushInfo flush_info = {
-      .fNumSemaphores = end_semaphores.size(),
-      .fSignalSemaphores = end_semaphores.data(),
-  };
-  GrSemaphoresSubmitted flush_result = context_state->gr_context()->flush(
-      dst_write_access->surface(), flush_info);
-  CHECK_EQ(flush_result, GrSemaphoresSubmitted::kYes);
+  context_state->FlushWriteAccess(dst_write_access.get());
+  context_state->SubmitIfNecessary(std::move(end_semaphores));
 
   dst_write_access->ApplyBackendSurfaceEndState();
 
@@ -164,7 +159,7 @@ ScopedSharedImageMailbox CopyQuadResource(
   // conversion pass.
   CHECK(!src_representation->color_space().IsHDR());
 
-  const gpu::Mailbox overlay_dst = gpu::Mailbox::GenerateForSharedImage();
+  const gpu::Mailbox overlay_dst = gpu::Mailbox::Generate();
   const SharedImageFormat dst_format = SinglePlaneFormat::kBGRA_8888;
   const gfx::ColorSpace dst_color_space = gfx::ColorSpace::CreateSRGB();
   const bool success = shared_image_factory.CreateSharedImage(
@@ -299,24 +294,25 @@ SkiaOutputDeviceDComp::SkiaOutputDeviceDComp(
   DCHECK(presenter_);
 
   // SRGB
-  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::RGBA_8888)] =
+  capabilities_.sk_color_type_map[SinglePlaneFormat::kRGBA_8888] =
       kRGBA_8888_SkColorType;
-  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::RGBX_8888)] =
+  capabilities_.sk_color_type_map[SinglePlaneFormat::kRGBX_8888] =
       kRGBA_8888_SkColorType;
-  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::BGRA_8888)] =
+  capabilities_.sk_color_type_map[SinglePlaneFormat::kBGRA_8888] =
       kRGBA_8888_SkColorType;
-  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::BGRX_8888)] =
+  capabilities_.sk_color_type_map[SinglePlaneFormat::kBGRX_8888] =
       kRGBA_8888_SkColorType;
   // HDR10
-  capabilities_
-      .sk_color_types[static_cast<int>(gfx::BufferFormat::RGBA_1010102)] =
+  capabilities_.sk_color_type_map[SinglePlaneFormat::kRGBA_1010102] =
       kRGBA_1010102_SkColorType;
   // scRGB linear
-  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::RGBA_F16)] =
+  capabilities_.sk_color_type_map[SinglePlaneFormat::kRGBA_F16] =
       kRGBA_F16_SkColorType;
 }
 
-SkiaOutputDeviceDComp::~SkiaOutputDeviceDComp() = default;
+SkiaOutputDeviceDComp::~SkiaOutputDeviceDComp() {
+  DCHECK(presenter_->HasOneRef());
+}
 
 void SkiaOutputDeviceDComp::Present(const std::optional<gfx::Rect>& update_rect,
                                     BufferPresentedCallback feedback,
@@ -371,11 +367,11 @@ bool SkiaOutputDeviceDComp::EnsureDCompSurfaceCopiesForNonOverlayResources(
 
     // Lookup the mailbox's usage after checking for existing copies since the
     // mailbox lookup is protected by a lock.
-    const std::optional<uint32_t> candidate_image_usage =
+    const std::optional<gpu::SharedImageUsageSet> candidate_image_usage =
         shared_image_manager_->GetUsageForMailbox(overlay.mailbox);
     const bool needs_dcomp_copy =
         candidate_image_usage.has_value() &&
-        (candidate_image_usage.value() & gpu::SHARED_IMAGE_USAGE_SCANOUT) == 0;
+        !candidate_image_usage.value().Has(gpu::SHARED_IMAGE_USAGE_SCANOUT);
     if (needs_dcomp_copy) {
       ScopedSharedImageMailbox quad_resource_copy = CopyQuadResource(
           context_state_, gr_shader_cache_, shared_image_factory_.get(),
@@ -492,20 +488,16 @@ void SkiaOutputDeviceDComp::ForceFailureOnNextSwap() {
   force_failure_on_next_swap_ = true;
 }
 
-bool SkiaOutputDeviceDComp::Reshape(const SkImageInfo& image_info,
-                                    const gfx::ColorSpace& color_space,
-                                    int sample_count,
-                                    float device_scale_factor,
-                                    gfx::OverlayTransform transform) {
-  DCHECK_EQ(transform, gfx::OVERLAY_TRANSFORM_NONE);
+bool SkiaOutputDeviceDComp::Reshape(const ReshapeParams& params) {
+  DCHECK_EQ(params.transform, gfx::OVERLAY_TRANSFORM_NONE);
 
-  auto size = gfx::SkISizeToSize(image_info.dimensions());
+  auto size = params.GfxSize();
 
   // DCompPresenter calls SetWindowPos on resize, so we call it to reflect the
   // newly allocated root surface.
   // Note, we could inline SetWindowPos here, but we need access to the HWND.
-  if (!presenter_->Resize(size, device_scale_factor, color_space,
-                          /*has_alpha=*/!image_info.isOpaque())) {
+  if (!presenter_->Resize(size, params.device_scale_factor, params.color_space,
+                          /*has_alpha=*/!params.image_info.isOpaque())) {
     CheckForLoopFailures();
     // To prevent tail call, so we can see the stack.
     base::debug::Alias(nullptr);

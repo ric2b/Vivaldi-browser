@@ -28,6 +28,7 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/chrome_content_browser_client.h"
+#include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils_desktop.h"
@@ -53,6 +54,7 @@
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/constrained_window/constrained_window_views.h"
+#include "components/gcm_driver/fake_gcm_profile_service.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/page_navigator.h"
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
@@ -214,7 +216,7 @@ class TabKeyWaiter : public ui::EventHandler {
  private:
   // ui::EventHandler:
   void OnKeyEvent(ui::KeyEvent* event) override {
-    if (event->type() == ui::ET_KEY_RELEASED &&
+    if (event->type() == ui::EventType::kKeyReleased &&
         event->key_code() == ui::VKEY_TAB) {
       received_tab_ = true;
       if (!quit_closure_.is_null()) {
@@ -306,7 +308,9 @@ class TestingPageNavigator : public PageNavigator {
 // TearDown.
 class BookmarkBarViewEventTestBase : public ViewEventTestBase {
  public:
-  BookmarkBarViewEventTestBase() = default;
+  BookmarkBarViewEventTestBase()
+      : scoped_testing_factory_installer_(
+            base::BindRepeating(&gcm::FakeGCMProfileService::Build)) {}
   ~BookmarkBarViewEventTestBase() override = default;
 
   void SetUp() override {
@@ -464,6 +468,9 @@ class BookmarkBarViewEventTestBase : public ViewEventTestBase {
                                                base::Milliseconds(20));
                        })));
   }
+
+  gcm::GCMProfileServiceFactory::ScopedTestingFactoryInstaller
+      scoped_testing_factory_installer_;
 
   raw_ptr<BookmarkModel, AcrossTasksDanglingUntriaged> model_ = nullptr;
   raw_ptr<BookmarkBarView, AcrossTasksDanglingUntriaged> bb_view_ = nullptr;

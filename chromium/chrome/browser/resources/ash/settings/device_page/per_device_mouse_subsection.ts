@@ -10,6 +10,7 @@
 
 import '../icons.html.js';
 import '../settings_shared.css.js';
+import 'chrome://resources/ash/common/bluetooth/bluetooth_battery_icon_percentage.js';
 import 'chrome://resources/ash/common/cr_elements/localized_link/localized_link.js';
 import 'chrome://resources/ash/common/cr_elements/cr_radio_button/cr_radio_button.js';
 import 'chrome://resources/ash/common/cr_elements/cr_shared_vars.css.js';
@@ -17,10 +18,12 @@ import '../controls/settings_radio_group.js';
 import '../controls/settings_slider.js';
 import '../controls/settings_toggle_button.js';
 import './input_device_settings_shared.css.js';
+import './per_device_subsection_header.js';
 import 'chrome://resources/ash/common/cr_elements/cr_slider/cr_slider.js';
 
 import {CrLinkRowElement} from 'chrome://resources/ash/common/cr_elements/cr_link_row/cr_link_row.js';
 import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -32,7 +35,7 @@ import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 import {Route, Router, routes} from '../router.js';
 
 import {getInputDeviceSettingsProvider} from './input_device_mojo_interface_provider.js';
-import {CustomizationRestriction, InputDeviceSettingsProviderInterface, Mouse, MousePolicies, MouseSettings} from './input_device_settings_types.js';
+import {CompanionAppState, CustomizationRestriction, InputDeviceSettingsProviderInterface, Mouse, MousePolicies, MouseSettings} from './input_device_settings_types.js';
 import {getPrefPolicyFields, settingsAreEqual} from './input_device_settings_utils.js';
 import {getTemplate} from './per_device_mouse_subsection.html.js';
 
@@ -200,6 +203,27 @@ export class SettingsPerDeviceMouseSubsectionElement extends
       currentMouseChanged: {
         type: Boolean,
       },
+
+      isWelcomeExperienceEnabled: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('enableWelcomeExperience');
+        },
+        readOnly: true,
+      },
+
+      deviceImageDataUrl: {
+        type: String,
+      },
+
+      bluetoothDevice: {
+        type: Object,
+      },
+
+      openAppLabel: {
+        type: String,
+        computed: 'computeOpenAppLabel(mouse.*)',
+      },
     };
   }
 
@@ -216,7 +240,7 @@ export class SettingsPerDeviceMouseSubsectionElement extends
     ];
   }
 
-  override currentRouteChanged(route: Route): void {
+  override async currentRouteChanged(route: Route): Promise<void> {
     // Avoid override currentMouseChanged when on the customization subpage.
     if (route === routes.CUSTOMIZE_MOUSE_BUTTONS) {
       return;
@@ -246,6 +270,8 @@ export class SettingsPerDeviceMouseSubsectionElement extends
     this.currentMouseChanged = false;
   }
 
+  isWelcomeExperienceEnabled: boolean;
+  openAppLabel: string;
   private mouse: Mouse;
   protected mousePolicies: MousePolicies;
   private primaryRightPref: chrome.settingsPrivate.PrefObject;
@@ -274,6 +300,14 @@ export class SettingsPerDeviceMouseSubsectionElement extends
     return this.customizationRestriction ===
         CustomizationRestriction.kDisallowCustomizations &&
         this.isPeripheralCustomizationEnabled_;
+  }
+
+  private showInstallAppRow(): boolean {
+    return this.mouse.appInfo?.state === CompanionAppState.kAvailable;
+  }
+
+  private onInstallCompanionAppButtonClicked(): void {
+    window.open(this.mouse.appInfo?.actionLink);
   }
 
   private updateSettingsToCurrentPrefs(): void {
@@ -392,6 +426,30 @@ export class SettingsPerDeviceMouseSubsectionElement extends
       return this.i18n('mouseAccelerationDescription');
     }
     return '';
+  }
+
+  private isCompanionAppInstalled(): boolean {
+    return this.mouse.appInfo?.state === CompanionAppState.kInstalled;
+  }
+
+  private onCompanionAppRowClick(): void {
+    assert(this.mouse.appInfo);
+    this.inputDeviceSettingsProvider.launchCompanionApp(
+        this.mouse.appInfo.packageId || '');
+  }
+
+  private computeOpenAppLabel(): string {
+    if (!this.mouse?.appInfo) {
+      return '';
+    }
+    return this.i18n('openAppLabel', this.mouse.appInfo?.appName);
+  }
+
+  private computeInstallAppLabel(): string {
+    if (!this.mouse?.appInfo) {
+      return '';
+    }
+    return this.i18n('installAppLabel', this.mouse.appInfo?.appName);
   }
 }
 

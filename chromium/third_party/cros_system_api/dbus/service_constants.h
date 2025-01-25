@@ -22,7 +22,6 @@
 #include "cryptohome/dbus-constants.h"
 #include "dcad/dbus-constants.h"
 #include "debugd/dbus-constants.h"
-#include "discod/dbus-constants.h"
 #include "dlp/dbus-constants.h"
 #include "drivefs/dbus-constants.h"
 #include "faced/dbus-constants.h"

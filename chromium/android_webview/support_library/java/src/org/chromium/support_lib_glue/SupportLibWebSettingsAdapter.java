@@ -11,6 +11,7 @@ import android.webkit.WebSettings;
 import org.chromium.android_webview.AwDarkMode;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.common.MediaIntegrityApiStatus;
+import org.chromium.android_webview.settings.SpeculativeLoadingAllowedFlags;
 import org.chromium.base.Log;
 import org.chromium.base.TraceEvent;
 import org.chromium.components.webauthn.WebauthnMode;
@@ -432,5 +433,59 @@ class SupportLibWebSettingsAdapter implements WebSettingsBoundaryInterface {
         }
         // unreached
         throw new IllegalArgumentException("Invalid WebView Media Integrity API status: " + status);
+    }
+
+    @Override
+    public void setSpeculativeLoadingStatus(
+            @SpeculativeLoadingStatus int speculativeLoadingStatus) {
+        try (TraceEvent event =
+                TraceEvent.scoped("WebView.APICall.AndroidX.SET_SPECULATIVE_LOADING_ENABLED")) {
+            recordApiCall(ApiCall.SET_SPECULATIVE_LOADING_STATUS);
+            switch (speculativeLoadingStatus) {
+                case SpeculativeLoadingStatus.DISABLED:
+                    mAwSettings.setSpeculativeLoadingAllowed(
+                            SpeculativeLoadingAllowedFlags.SPECULATIVE_LOADING_DISABLED);
+                    break;
+                case SpeculativeLoadingStatus.PRERENDER_ENABLED:
+                    mAwSettings.setSpeculativeLoadingAllowed(
+                            SpeculativeLoadingAllowedFlags.PRERENDER_ENABLED);
+                    break;
+            }
+        }
+    }
+
+    @Override
+    public @SpeculativeLoadingStatus int getSpeculativeLoadingStatus() {
+        try (TraceEvent event =
+                TraceEvent.scoped("WebView.APICall.AndroidX.IS_SPECULATIVE_LOADING_ENABLED")) {
+            recordApiCall(ApiCall.GET_SPECULATIVE_LOADING_STATUS);
+
+            switch (mAwSettings.getSpeculativeLoadingAllowed()) {
+                case SpeculativeLoadingAllowedFlags.SPECULATIVE_LOADING_DISABLED:
+                    return SpeculativeLoadingStatus.DISABLED;
+                case SpeculativeLoadingAllowedFlags.PRERENDER_ENABLED:
+                    return SpeculativeLoadingStatus.PRERENDER_ENABLED;
+            }
+        }
+        // It has a default state so theoretically this case shouldn't happen.
+        throw new IllegalArgumentException("Couldn't retrieve a valid status.");
+    }
+
+    @Override
+    public void setBackForwardCacheEnabled(boolean backForwardCacheEnabled) {
+        try (TraceEvent ignored =
+                TraceEvent.scoped("WebView.APICall.AndroidX.SET_BACK_FORWARD_CACHE_ENABLED")) {
+            recordApiCall(ApiCall.SET_BACK_FORWARD_CACHE_ENABLED);
+            mAwSettings.setBackForwardCacheEnabled(backForwardCacheEnabled);
+        }
+    }
+
+    @Override
+    public boolean getBackForwardCacheEnabled() {
+        try (TraceEvent ignored =
+                TraceEvent.scoped("WebView.APICall.AndroidX.GET_BACK_FORWARD_CACHE_ENABLED")) {
+            recordApiCall(ApiCall.GET_BACK_FORWARD_CACHE_ENABLED);
+            return mAwSettings.getBackForwardCacheEnabled();
+        }
     }
 }

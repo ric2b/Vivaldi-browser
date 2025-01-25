@@ -18,7 +18,6 @@
 #include "ui/gl/gl_share_group.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_utils.h"
-#include "ui/gl/gl_version_info.h"
 #include "ui/gl/init/gl_initializer.h"
 
 #if BUILDFLAG(IS_OZONE)
@@ -30,8 +29,6 @@ namespace gl {
 namespace init {
 
 namespace {
-
-bool g_is_angle_enabled = true;
 
 bool ShouldFallbackToSoftwareGL() {
   const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
@@ -65,12 +62,8 @@ GLImplementationParts GetRequestedGLImplementation(
   std::vector<GLImplementationParts> allowed_impls =
       GetAllowedGLImplementations();
 
-  if (GetGlWorkarounds().disable_es3gl_context_for_testing) {
-    GLVersionInfo::DisableES3ForTesting();
-  }
-
   // If the passthrough command decoder is enabled, put ANGLE first if allowed
-  if (g_is_angle_enabled && UsePassthroughCommandDecoder(cmd)) {
+  if (UsePassthroughCommandDecoder(cmd)) {
     std::vector<GLImplementationParts> angle_impls = {};
     bool software_gl_allowed = false;
     auto iter = allowed_impls.begin();
@@ -265,11 +258,6 @@ void ShutdownGL(GLDisplay* display, bool due_to_fallback) {
 
   UnloadGLNativeLibraries(due_to_fallback);
   SetGLImplementation(kGLImplementationNone);
-}
-
-void DisableANGLE() {
-  DCHECK_NE(GetGLImplementation(), kGLImplementationEGLANGLE);
-  g_is_angle_enabled = false;
 }
 
 }  // namespace init

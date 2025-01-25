@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/core/fetch/fetch_manager.h"
 
 #include <stdint.h>
@@ -29,12 +34,12 @@
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
 #include "services/network/public/mojom/trust_tokens.mojom-blink.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-blink.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/scheme_registry.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/code_cache.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/fetch_later.mojom-blink.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/platform/web_url_request_util.h"
@@ -366,8 +371,7 @@ class FetchManager::Loader final
           loader_(loader),
           integrity_metadata_(integrity_metadata),
           url_(url),
-          response_type_(response_type),
-          finished_(false) {
+          response_type_(response_type) {
       body_->SetClient(this);
 
       OnStateChange();
@@ -387,7 +391,8 @@ class FetchManager::Loader final
         size_t available;
         result = body_->BeginRead(&buffer, &available);
         if (result == Result::kOk) {
-          buffer_.Append(buffer, base::checked_cast<wtf_size_t>(available));
+          buffer_.Append(base::make_span(
+              buffer, base::checked_cast<wtf_size_t>(available)));
           result = body_->EndRead(available);
         }
         if (result == Result::kShouldWait)
@@ -413,13 +418,13 @@ class FetchManager::Loader final
               integrity_metadata_,
               SubresourceIntegrityHelper::GetFeatures(
                   loader_->GetExecutionContext()),
-              buffer_.data(), buffer_.size(), url_, report_info);
+              &buffer_, url_, report_info);
         }
         SubresourceIntegrityHelper::DoReport(*loader_->GetExecutionContext(),
                                              report_info);
         if (check_result) {
-          updater_->Update(MakeGarbageCollected<FormDataBytesConsumer>(
-              buffer_.data(), buffer_.size()));
+          updater_->Update(
+              MakeGarbageCollected<FormDataBytesConsumer>(std::move(buffer_)));
           loader_->resolver_->Resolve(response_);
           loader_->resolver_.Clear();
           return;
@@ -455,8 +460,8 @@ class FetchManager::Loader final
     String integrity_metadata_;
     KURL url_;
     const FetchResponseType response_type_;
-    Vector<char> buffer_;
-    bool finished_;
+    SegmentedBuffer buffer_;
+    bool finished_ = false;
   };
 
  private:
@@ -650,7 +655,7 @@ void FetchManager::Loader::DidReceiveResponse(
       tainted_response = response_data->CreateOpaqueRedirectFilteredResponse();
       break;
     case FetchResponseType::kError:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       break;
   }
   // TODO(crbug.com/1288221): Remove this once the investigation is done.
@@ -1466,7 +1471,7 @@ ScriptPromise<Response> FetchManager::Fetch(ScriptState* script_state,
   DCHECK(signal);
   if (signal->aborted()) {
     exception_state.RethrowV8Exception(signal->reason(script_state).V8Value());
-    return ScriptPromise<Response>();
+    return EmptyPromise();
   }
 
   request->SetDestination(network::mojom::RequestDestination::kEmpty);
@@ -1489,10 +1494,10 @@ FetchLaterResult* FetchLaterManager::FetchLater(
     AbortSignal* signal,
     std::optional<DOMHighResTimeStamp> activate_after_ms,
     ExceptionState& exception_state) {
-  // https://whatpr.org/fetch/1647/9ca4bda...9994c1d.html#dom-global-fetch-later
+  // https://whatpr.org/fetch/1647.html#dom-global-fetch-later
   // Continuing the fetchLater(input, init) method steps:
   CHECK(signal);
-  // 3. If request’s signal is aborted, then throw signal’s abort reason.
+  // 2. If request’s signal is aborted, then throw signal’s abort reason.
   if (signal->aborted()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kAbortError,
                                       "The user aborted a fetchLater request.");
@@ -1502,7 +1507,7 @@ FetchLaterResult* FetchLaterManager::FetchLater(
   std::optional<base::TimeDelta> activate_after = std::nullopt;
   if (activate_after_ms.has_value()) {
     activate_after = base::Milliseconds(*activate_after_ms);
-    // 8. If `activate_after` is less than 0 then throw a RangeError.
+    // 7. If `activate_after` is less than 0 then throw a RangeError.
     if (activate_after->is_negative()) {
       exception_state.ThrowRangeError(
           "fetchLater's activateAfter cannot be negative.");
@@ -1510,11 +1515,20 @@ FetchLaterResult* FetchLaterManager::FetchLater(
     }
   }
 
-  // 12. Let deferredRecord be the result of calling request a deferred fetch
+  // 8. Let deferredRecord be the result of calling "request a deferred fetch"
   // given `request` and `activate_after`. This may throw an exception.
   //
-  // "request a deferred fetch"
-  // https://whatpr.org/fetch/1647/9ca4bda...9994c1d.html#request-a-deferred-fetch
+  // "request a deferred fetch":
+  // https://whatpr.org/fetch/1647.html#request-a-deferred-fetch
+
+  // 1. If request’s client is not a fully active Document, then throw an
+  // "InvalidStateError" DOMException.
+  if (!DomWindow() || GetExecutionContext()->is_in_back_forward_cache()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "fetchLater can only be called from a fully active Document.");
+    return nullptr;
+  }
 
   // 2. If request’s URL’s scheme is not an HTTPS scheme, then throw a
   // TypeError.
@@ -1529,6 +1543,24 @@ FetchLaterResult* FetchLaterManager::FetchLater(
         "fetchLater was passed an insecure URL.");
     return nullptr;
   }
+
+  // 4. If request’s client’s fetch group is eligible for deferred fetching is
+  // false, then throw a "NotAllowedError" DOMException.
+  // https://w3c.github.io/webappsec-permissions-policy/#algo-is-feature-enabled
+  // NOTE: The default value of True for report means that most permissions
+  // policy checks will generate a violation report if the feature is disabled.
+  if (!GetExecutionContext()->IsFeatureEnabled(
+          mojom::blink::PermissionsPolicyFeature::kDeferredFetch,
+          ReportOptions::kReportOnFailure)) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotAllowedError,
+        "Access to fetchLater requires the permissions policy "
+        "\"deferred-fetch\" be enabled for the origin of this document.");
+    return nullptr;
+  }
+
+  // TODO(crbug.com/40276121): Update the following steps to match latest PR.
+
   // 4. Set request’s service-workers mode to "none".
   // Done in `PerformHTTPFetch()`.
   // 5. If request’s body is not null and request’s body’s source is null, then

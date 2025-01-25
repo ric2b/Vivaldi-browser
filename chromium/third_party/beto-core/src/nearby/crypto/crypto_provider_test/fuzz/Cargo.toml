@@ -8,24 +8,18 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
-libfuzzer-sys = "0.4"
-crypto_provider = { path = "../../crypto_provider" }
-crypto_provider_default = { path = "../../crypto_provider_default", default-features = false }
-arbitrary = { version = "1.2.3", features = ["derive"] }
+crypto_provider.workspace = true
+crypto_provider_default = { workspace = true, default-features = false }
+derive_fuzztest.workspace = true
+
+[target.'cfg(fuzzing)'.dependencies]
+libfuzzer-sys.workspace = true
 
 [features]
 default = ["crypto_provider_default/default"]
 boringssl = ["crypto_provider_default/boringssl"]
 
-# Prevent this from interfering with workspaces
-[workspace]
-members = ["."]
-
-[profile.release]
-debug = 1
-
 [[bin]]
 name = "fuzz_p256"
-path = "fuzz_targets/fuzz_p256.rs"
-test = false
+path = "src/bin/fuzz_p256.rs"
 doc = false

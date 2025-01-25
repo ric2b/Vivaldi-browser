@@ -5,8 +5,10 @@
 #include "ash/picker/views/picker_widget.h"
 
 #include <memory>
+#include <string_view>
 
 #include "ash/picker/metrics/picker_session_metrics.h"
+#include "ash/picker/model/picker_action_type.h"
 #include "ash/picker/views/picker_preview_bubble.h"
 #include "ash/picker/views/picker_view.h"
 #include "ash/picker/views/picker_view_delegate.h"
@@ -32,26 +34,32 @@ class FakePickerViewDelegate : public PickerViewDelegate {
  public:
   // PickerViewDelegate:
   std::vector<PickerCategory> GetAvailableCategories() override { return {}; }
-  bool ShouldShowSuggestedResults() override { return false; }
+  void GetZeroStateSuggestedResults(
+      SuggestedResultsCallback callback) override {}
   void GetResultsForCategory(PickerCategory category,
                              SearchResultsCallback callback) override {}
-  void TransformSelectedText(PickerCategory category) override {}
-  void StartSearch(const std::u16string& query,
+  void StartSearch(std::u16string_view query,
                    std::optional<PickerCategory> category,
                    SearchResultsCallback callback) override {}
+  void StopSearch() override {}
+  void StartEmojiSearch(std::u16string_view query,
+                        EmojiSearchResultsCallback callback) override {}
   void InsertResultOnNextFocus(const PickerSearchResult& result) override {}
   void OpenResult(const PickerSearchResult& result) override {}
   void ShowEmojiPicker(ui::EmojiPickerCategory category,
                        std::u16string_view query) override {}
   void ShowEditor(std::optional<std::string> preset_query_id,
                   std::optional<std::string> freeform_text) override {}
-  void SetCapsLockEnabled(bool enabled) override {}
-  void GetSuggestedEditorResults(
-      SuggestedEditorResultsCallback callback) override {}
   PickerAssetFetcher* GetAssetFetcher() override { return nullptr; }
   PickerSessionMetrics& GetSessionMetrics() override {
     return session_metrics_;
   }
+  PickerActionType GetActionForResult(
+      const PickerSearchResult& result) override {
+    return PickerActionType::kInsert;
+  }
+  std::vector<PickerSearchResult> GetSuggestedEmoji() override { return {}; }
+  bool IsGifsEnabled() override { return true; }
 
  private:
   PickerSessionMetrics session_metrics_;

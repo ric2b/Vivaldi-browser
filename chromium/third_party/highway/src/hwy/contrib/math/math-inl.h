@@ -15,12 +15,15 @@
 
 // Include guard (still compiled once per target)
 #if defined(HIGHWAY_HWY_CONTRIB_MATH_MATH_INL_H_) == \
-    defined(HWY_TARGET_TOGGLE)
+    defined(HWY_TARGET_TOGGLE)  // NOLINT
 #ifdef HIGHWAY_HWY_CONTRIB_MATH_MATH_INL_H_
 #undef HIGHWAY_HWY_CONTRIB_MATH_MATH_INL_H_
 #else
 #define HIGHWAY_HWY_CONTRIB_MATH_MATH_INL_H_
 #endif
+
+#include <stddef.h>
+#include <stdint.h>
 
 #include "hwy/highway.h"
 
@@ -37,7 +40,7 @@ namespace HWY_NAMESPACE {
  * @return arc cosine of 'x'
  */
 template <class D, class V>
-HWY_INLINE V Acos(const D d, V x);
+HWY_INLINE V Acos(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallAcos(const D d, VecArg<V> x) {
   return Acos(d, x);
@@ -52,7 +55,7 @@ HWY_NOINLINE V CallAcos(const D d, VecArg<V> x) {
  * @return hyperbolic arc cosine of 'x'
  */
 template <class D, class V>
-HWY_INLINE V Acosh(const D d, V x);
+HWY_INLINE V Acosh(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallAcosh(const D d, VecArg<V> x) {
   return Acosh(d, x);
@@ -67,7 +70,7 @@ HWY_NOINLINE V CallAcosh(const D d, VecArg<V> x) {
  * @return arc sine of 'x'
  */
 template <class D, class V>
-HWY_INLINE V Asin(const D d, V x);
+HWY_INLINE V Asin(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallAsin(const D d, VecArg<V> x) {
   return Asin(d, x);
@@ -82,7 +85,7 @@ HWY_NOINLINE V CallAsin(const D d, VecArg<V> x) {
  * @return hyperbolic arc sine of 'x'
  */
 template <class D, class V>
-HWY_INLINE V Asinh(const D d, V x);
+HWY_INLINE V Asinh(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallAsinh(const D d, VecArg<V> x) {
   return Asinh(d, x);
@@ -97,7 +100,7 @@ HWY_NOINLINE V CallAsinh(const D d, VecArg<V> x) {
  * @return arc tangent of 'x'
  */
 template <class D, class V>
-HWY_INLINE V Atan(const D d, V x);
+HWY_INLINE V Atan(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallAtan(const D d, VecArg<V> x) {
   return Atan(d, x);
@@ -112,10 +115,58 @@ HWY_NOINLINE V CallAtan(const D d, VecArg<V> x) {
  * @return hyperbolic arc tangent of 'x'
  */
 template <class D, class V>
-HWY_INLINE V Atanh(const D d, V x);
+HWY_INLINE V Atanh(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallAtanh(const D d, VecArg<V> x) {
   return Atanh(d, x);
+}
+
+// Atan2 was added later and some users may be implementing it themselves, so
+// notify them that this version of Highway defines it already.
+#ifndef HWY_HAVE_ATAN2
+#define HWY_HAVE_ATAN2 1
+#endif
+
+/**
+ * Highway SIMD version of std::atan2(x).
+ *
+ * Valid Lane Types: float32, float64
+ * Correctly handles negative zero, infinities, and NaN.
+ * @return atan2 of 'y', 'x'
+ */
+template <class D, class V = VFromD<D>, class M = MFromD<D>,
+          typename T = TFromD<D>>
+HWY_INLINE V Atan2(const D d, V y, V x) {
+  const V kHalf = Set(d, static_cast<T>(+0.5));
+  const V kPi = Set(d, static_cast<T>(+3.14159265358979323846264));
+  const V kPi2 = Mul(kPi, kHalf);
+
+  const V k0 = Zero(d);
+  const M y_0 = Eq(y, k0);
+  const M x_0 = Eq(x, k0);
+  const M x_neg = Lt(x, k0);
+  const M y_inf = IsInf(y);
+  const M x_inf = IsInf(x);
+  const M nan = Or(IsNaN(y), IsNaN(x));
+
+  const V if_xneg_pi = IfThenElseZero(x_neg, kPi);
+  // x= +inf: pi/4; -inf: 3*pi/4; else: pi/2
+  const V if_yinf = Mul(kHalf, IfThenElse(x_inf, Add(kPi2, if_xneg_pi), kPi));
+
+  V t = Atan(d, Div(y, x));
+  // Disambiguate between quadrants 1/3 and 2/4 by adding (Q2: Pi; Q3: -Pi).
+  t = Add(t, CopySignToAbs(if_xneg_pi, y));
+  // Special cases for 0 and infinity:
+  t = IfThenElse(x_inf, if_xneg_pi, t);
+  t = IfThenElse(x_0, kPi2, t);
+  t = IfThenElse(y_inf, if_yinf, t);
+  t = IfThenElse(y_0, if_xneg_pi, t);
+  // Any input NaN => NaN, otherwise fix sign.
+  return IfThenElse(nan, NaN(d), CopySign(t, y));
+}
+template <class D, class V>
+HWY_NOINLINE V CallAtan2(const D d, VecArg<V> y, VecArg<V> x) {
+  return Atan2(d, y, x);
 }
 
 /**
@@ -127,7 +178,7 @@ HWY_NOINLINE V CallAtanh(const D d, VecArg<V> x) {
  * @return cosine of 'x'
  */
 template <class D, class V>
-HWY_INLINE V Cos(const D d, V x);
+HWY_INLINE V Cos(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallCos(const D d, VecArg<V> x) {
   return Cos(d, x);
@@ -142,10 +193,25 @@ HWY_NOINLINE V CallCos(const D d, VecArg<V> x) {
  * @return e^x
  */
 template <class D, class V>
-HWY_INLINE V Exp(const D d, V x);
+HWY_INLINE V Exp(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallExp(const D d, VecArg<V> x) {
   return Exp(d, x);
+}
+
+/**
+ * Highway SIMD version of std::exp2(x).
+ *
+ * Valid Lane Types: float32, float64
+ *        Max Error: ULP = 2
+ *      Valid Range: float32[-FLT_MAX, +128], float64[-DBL_MAX, +1024]
+ * @return e^x
+ */
+template <class D, class V>
+HWY_INLINE V Exp2(D d, V x);
+template <class D, class V>
+HWY_NOINLINE V CallExp2(const D d, VecArg<V> x) {
+  return Exp2(d, x);
 }
 
 /**
@@ -157,7 +223,7 @@ HWY_NOINLINE V CallExp(const D d, VecArg<V> x) {
  * @return e^x - 1
  */
 template <class D, class V>
-HWY_INLINE V Expm1(const D d, V x);
+HWY_INLINE V Expm1(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallExpm1(const D d, VecArg<V> x) {
   return Expm1(d, x);
@@ -172,7 +238,7 @@ HWY_NOINLINE V CallExpm1(const D d, VecArg<V> x) {
  * @return natural logarithm of 'x'
  */
 template <class D, class V>
-HWY_INLINE V Log(const D d, V x);
+HWY_INLINE V Log(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallLog(const D d, VecArg<V> x) {
   return Log(d, x);
@@ -187,7 +253,7 @@ HWY_NOINLINE V CallLog(const D d, VecArg<V> x) {
  * @return base 10 logarithm of 'x'
  */
 template <class D, class V>
-HWY_INLINE V Log10(const D d, V x);
+HWY_INLINE V Log10(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallLog10(const D d, VecArg<V> x) {
   return Log10(d, x);
@@ -202,7 +268,7 @@ HWY_NOINLINE V CallLog10(const D d, VecArg<V> x) {
  * @return log(1 + x)
  */
 template <class D, class V>
-HWY_INLINE V Log1p(const D d, V x);
+HWY_INLINE V Log1p(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallLog1p(const D d, VecArg<V> x) {
   return Log1p(d, x);
@@ -217,7 +283,7 @@ HWY_NOINLINE V CallLog1p(const D d, VecArg<V> x) {
  * @return base 2 logarithm of 'x'
  */
 template <class D, class V>
-HWY_INLINE V Log2(const D d, V x);
+HWY_INLINE V Log2(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallLog2(const D d, VecArg<V> x) {
   return Log2(d, x);
@@ -232,7 +298,7 @@ HWY_NOINLINE V CallLog2(const D d, VecArg<V> x) {
  * @return sine of 'x'
  */
 template <class D, class V>
-HWY_INLINE V Sin(const D d, V x);
+HWY_INLINE V Sin(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallSin(const D d, VecArg<V> x) {
   return Sin(d, x);
@@ -247,7 +313,7 @@ HWY_NOINLINE V CallSin(const D d, VecArg<V> x) {
  * @return hyperbolic sine of 'x'
  */
 template <class D, class V>
-HWY_INLINE V Sinh(const D d, V x);
+HWY_INLINE V Sinh(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallSinh(const D d, VecArg<V> x) {
   return Sinh(d, x);
@@ -262,10 +328,42 @@ HWY_NOINLINE V CallSinh(const D d, VecArg<V> x) {
  * @return hyperbolic tangent of 'x'
  */
 template <class D, class V>
-HWY_INLINE V Tanh(const D d, V x);
+HWY_INLINE V Tanh(D d, V x);
 template <class D, class V>
 HWY_NOINLINE V CallTanh(const D d, VecArg<V> x) {
   return Tanh(d, x);
+}
+
+/**
+ * Highway SIMD version of SinCos.
+ * Compute the sine and cosine at the same time
+ * The performance should be around the same as calling Sin.
+ *
+ * Valid Lane Types: float32, float64
+ *        Max Error: ULP = 1
+ *      Valid Range: [-39000, +39000]
+ * @return sine and cosine of 'x'
+ */
+template <class D, class V>
+HWY_INLINE void SinCos(D d, V x, V& s, V& c);
+template <class D, class V>
+HWY_NOINLINE void CallSinCos(const D d, VecArg<V> x, V& s, V& c) {
+  SinCos(d, x, s, c);
+}
+
+/**
+ * Highway SIMD version of Hypot
+ *
+ * Valid Lane Types: float32, float64
+ *        Max Error: ULP = 4
+ *      Valid Range: float32[-FLT_MAX, +FLT_MAX], float64[-DBL_MAX, +DBL_MAX]
+ * @return hypotenuse of a and b
+ */
+template <class D, class V>
+HWY_INLINE V Hypot(D d, V a, V b);
+template <class D, class V>
+HWY_NOINLINE V CallHypot(const D d, VecArg<V> a, VecArg<V> b) {
+  return Hypot(d, a, b);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -471,6 +569,8 @@ template <class FloatOrDouble>
 struct ExpImpl {};
 template <class FloatOrDouble>
 struct LogImpl {};
+template <class FloatOrDouble>
+struct SinCosImpl {};
 
 template <>
 struct AsinImpl<float> {
@@ -762,6 +862,13 @@ struct ExpImpl<float> {
     x = MulAdd(qf, kLn2Part1f, x);
     return x;
   }
+
+  template <class D, class V, class VI32>
+  HWY_INLINE V Exp2Reduce(D d, V x, VI32 q) {
+    const V x_frac = Sub(x, ConvertTo(d, q));
+    return MulAdd(x_frac, Set(d, 0.193147182464599609375f),
+                  Mul(x_frac, Set(d, 0.5f)));
+  }
 };
 
 template <>
@@ -842,6 +949,13 @@ struct ExpImpl<double> {
     x = MulAdd(qf, kLn2Part0d, x);
     x = MulAdd(qf, kLn2Part1d, x);
     return x;
+  }
+
+  template <class D, class V, class VI32>
+  HWY_INLINE V Exp2Reduce(D d, V x, VI32 q) {
+    const V x_frac = Sub(x, PromoteTo(d, q));
+    return MulAdd(x_frac, Set(d, 0.1931471805599453139823396),
+                  Mul(x_frac, Set(d, 0.5)));
   }
 };
 
@@ -940,6 +1054,240 @@ HWY_INLINE V Log(const D d, V x) {
       exp, kLn2Hi,
       Sub(MulSub(z, Sub(ym1, impl.LogPoly(d, z)), Mul(exp, kLn2Lo)), ym1));
 }
+
+// SinCos
+// Based on "sse_mathfun.h", by Julien Pommier
+// http://gruntthepeon.free.fr/ssemath/
+
+// Third degree poly
+template <class D, class V>
+HWY_INLINE void SinCos3(D d, TFromD<D> dp1, TFromD<D> dp2, TFromD<D> dp3, V x,
+                        V& s, V& c) {
+  using T = TFromD<D>;
+  using TI = MakeSigned<T>;
+  using DI = Rebind<TI, D>;
+  const DI di;
+  using VI = decltype(Zero(di));
+  using M = Mask<D>;
+
+  static constexpr size_t bits = sizeof(TI) * 8;
+  const VI sign_mask = SignBit(di);
+  const VI ci_0 = Zero(di);
+  const VI ci_1 = Set(di, 1);
+  const VI ci_2 = Set(di, 2);
+  const VI ci_4 = Set(di, 4);
+  const V cos_p0 = Set(d, ConvertScalarTo<T>(2.443315711809948E-005));
+  const V cos_p1 = Set(d, ConvertScalarTo<T>(-1.388731625493765E-003));
+  const V cos_p2 = Set(d, ConvertScalarTo<T>(4.166664568298827E-002));
+  const V sin_p0 = Set(d, ConvertScalarTo<T>(-1.9515295891E-4));
+  const V sin_p1 = Set(d, ConvertScalarTo<T>(8.3321608736E-3));
+  const V sin_p2 = Set(d, ConvertScalarTo<T>(-1.6666654611E-1));
+  const V FOPI = Set(d, ConvertScalarTo<T>(1.27323954473516));  // 4 / M_PI
+  const V DP1 = Set(d, dp1);
+  const V DP2 = Set(d, dp2);
+  const V DP3 = Set(d, dp3);
+
+  V xmm1, xmm2, sign_bit_sin, y;
+  VI imm0, imm2, imm4;
+
+  sign_bit_sin = x;
+  x = Abs(x);
+
+  /* extract the sign bit (upper one) */
+  sign_bit_sin = And(sign_bit_sin, BitCast(d, sign_mask));
+
+  /* scale by 4/Pi */
+  y = Mul(x, FOPI);
+
+  /* store the integer part of y in imm2 */
+  imm2 = ConvertTo(di, y);
+
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  imm2 = Add(imm2, ci_1);
+  imm2 = AndNot(ci_1, imm2);
+
+  y = ConvertTo(d, imm2);
+  imm4 = imm2;
+
+  /* get the swap sign flag for the sine */
+  imm0 = And(imm2, ci_4);
+  imm0 = ShiftLeft<bits - 3>(imm0);
+
+  V swap_sign_bit_sin = BitCast(d, imm0);
+
+  /* get the polynomial selection mask for the sine*/
+  imm2 = And(imm2, ci_2);
+  M poly_mask = RebindMask(d, Eq(imm2, ci_0));
+
+  /* The magic pass: "Extended precision modular arithmetic"
+  x = ((x - y * DP1) - y * DP2) - y * DP3; */
+  x = MulAdd(y, DP1, x);
+  x = MulAdd(y, DP2, x);
+  x = MulAdd(y, DP3, x);
+
+  imm4 = Sub(imm4, ci_2);
+  imm4 = AndNot(imm4, ci_4);
+  imm4 = ShiftLeft<bits - 3>(imm4);
+
+  V sign_bit_cos = BitCast(d, imm4);
+
+  sign_bit_sin = Xor(sign_bit_sin, swap_sign_bit_sin);
+
+  /* Evaluate the first polynomial  (0 <= x <= Pi/4) */
+  V z = Mul(x, x);
+
+  y = MulAdd(cos_p0, z, cos_p1);
+  y = MulAdd(y, z, cos_p2);
+  y = Mul(y, z);
+  y = Mul(y, z);
+  y = NegMulAdd(z, Set(d, 0.5f), y);
+  y = Add(y, Set(d, 1));
+
+  /* Evaluate the second polynomial  (Pi/4 <= x <= 0) */
+  V y2 = MulAdd(sin_p0, z, sin_p1);
+  y2 = MulAdd(y2, z, sin_p2);
+  y2 = Mul(y2, z);
+  y2 = MulAdd(y2, x, x);
+
+  /* select the correct result from the two polynomials */
+  xmm1 = IfThenElse(poly_mask, y2, y);
+  xmm2 = IfThenElse(poly_mask, y, y2);
+
+  /* update the sign */
+  s = Xor(xmm1, sign_bit_sin);
+  c = Xor(xmm2, sign_bit_cos);
+}
+
+// Sixth degree poly
+template <class D, class V>
+HWY_INLINE void SinCos6(D d, TFromD<D> dp1, TFromD<D> dp2, TFromD<D> dp3, V x,
+                        V& s, V& c) {
+  using T = TFromD<D>;
+  using TI = MakeSigned<T>;
+  using DI = Rebind<TI, D>;
+  const DI di;
+  using VI = decltype(Zero(di));
+  using M = Mask<D>;
+
+  static constexpr size_t bits = sizeof(TI) * 8;
+  const VI sign_mask = SignBit(di);
+  const VI ci_0 = Zero(di);
+  const VI ci_1 = Set(di, 1);
+  const VI ci_2 = Set(di, 2);
+  const VI ci_4 = Set(di, 4);
+  const V cos_p0 = Set(d, ConvertScalarTo<T>(-1.13585365213876817300E-11));
+  const V cos_p1 = Set(d, ConvertScalarTo<T>(2.08757008419747316778E-9));
+  const V cos_p2 = Set(d, ConvertScalarTo<T>(-2.75573141792967388112E-7));
+  const V cos_p3 = Set(d, ConvertScalarTo<T>(2.48015872888517045348E-5));
+  const V cos_p4 = Set(d, ConvertScalarTo<T>(-1.38888888888730564116E-3));
+  const V cos_p5 = Set(d, ConvertScalarTo<T>(4.16666666666665929218E-2));
+  const V sin_p0 = Set(d, ConvertScalarTo<T>(1.58962301576546568060E-10));
+  const V sin_p1 = Set(d, ConvertScalarTo<T>(-2.50507477628578072866E-8));
+  const V sin_p2 = Set(d, ConvertScalarTo<T>(2.75573136213857245213E-6));
+  const V sin_p3 = Set(d, ConvertScalarTo<T>(-1.98412698295895385996E-4));
+  const V sin_p4 = Set(d, ConvertScalarTo<T>(8.33333333332211858878E-3));
+  const V sin_p5 = Set(d, ConvertScalarTo<T>(-1.66666666666666307295E-1));
+  const V FOPI =  // 4 / M_PI
+      Set(d, ConvertScalarTo<T>(1.2732395447351626861510701069801148));
+  const V DP1 = Set(d, dp1);
+  const V DP2 = Set(d, dp2);
+  const V DP3 = Set(d, dp3);
+
+  V xmm1, xmm2, sign_bit_sin, y;
+  VI imm0, imm2, imm4;
+
+  sign_bit_sin = x;
+  x = Abs(x);
+
+  /* extract the sign bit (upper one) */
+  sign_bit_sin = And(sign_bit_sin, BitCast(d, sign_mask));
+
+  /* scale by 4/Pi */
+  y = Mul(x, FOPI);
+
+  /* store the integer part of y in imm2 */
+  imm2 = ConvertTo(di, y);
+
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  imm2 = Add(imm2, ci_1);
+  imm2 = AndNot(ci_1, imm2);
+
+  y = ConvertTo(d, imm2);
+  imm4 = imm2;
+
+  /* get the swap sign flag for the sine */
+  imm0 = And(imm2, ci_4);
+  imm0 = ShiftLeft<bits - 3>(imm0);
+
+  V swap_sign_bit_sin = BitCast(d, imm0);
+
+  /* get the polynomial selection mask for the sine*/
+  imm2 = And(imm2, ci_2);
+  M poly_mask = RebindMask(d, Eq(imm2, ci_0));
+
+  /* The magic pass: "Extended precision modular arithmetic"
+    x = ((x - y * DP1) - y * DP2) - y * DP3; */
+  x = MulAdd(y, DP1, x);
+  x = MulAdd(y, DP2, x);
+  x = MulAdd(y, DP3, x);
+
+  imm4 = Sub(imm4, ci_2);
+  imm4 = AndNot(imm4, ci_4);
+  imm4 = ShiftLeft<bits - 3>(imm4);
+
+  V sign_bit_cos = BitCast(d, imm4);
+  sign_bit_sin = Xor(sign_bit_sin, swap_sign_bit_sin);
+
+  /* Evaluate the first polynomial  (0 <= x <= Pi/4) */
+  V z = Mul(x, x);
+
+  y = MulAdd(cos_p0, z, cos_p1);
+  y = MulAdd(y, z, cos_p2);
+  y = MulAdd(y, z, cos_p3);
+  y = MulAdd(y, z, cos_p4);
+  y = MulAdd(y, z, cos_p5);
+  y = Mul(y, z);
+  y = Mul(y, z);
+  y = NegMulAdd(z, Set(d, 0.5f), y);
+  y = Add(y, Set(d, 1.0f));
+
+  /* Evaluate the second polynomial  (Pi/4 <= x <= 0) */
+  V y2 = MulAdd(sin_p0, z, sin_p1);
+  y2 = MulAdd(y2, z, sin_p2);
+  y2 = MulAdd(y2, z, sin_p3);
+  y2 = MulAdd(y2, z, sin_p4);
+  y2 = MulAdd(y2, z, sin_p5);
+  y2 = Mul(y2, z);
+  y2 = MulAdd(y2, x, x);
+
+  /* select the correct result from the two polynomials */
+  xmm1 = IfThenElse(poly_mask, y2, y);
+  xmm2 = IfThenElse(poly_mask, y, y2);
+
+  /* update the sign */
+  s = Xor(xmm1, sign_bit_sin);
+  c = Xor(xmm2, sign_bit_cos);
+}
+
+template <>
+struct SinCosImpl<float> {
+  template <class D, class V>
+  HWY_INLINE void SinCos(D d, V x, V& s, V& c) {
+    SinCos3(d, -0.78515625f, -2.4187564849853515625e-4f,
+            -3.77489497744594108e-8f, x, s, c);
+  }
+};
+
+#if HWY_HAVE_FLOAT64 && HWY_HAVE_INTEGER64
+template <>
+struct SinCosImpl<double> {
+  template <class D, class V>
+  HWY_INLINE void SinCos(D d, V x, V& s, V& c) {
+    SinCos6(d, -7.85398125648498535156E-1, -3.77489470793079817668E-8,
+            -2.69515142907905952645E-15, x, s, c);
+  }
+};
+#endif
 
 }  // namespace impl
 
@@ -1127,6 +1475,26 @@ HWY_INLINE V Exp(const D d, V x) {
 }
 
 template <class D, class V>
+HWY_INLINE V Exp2(const D d, V x) {
+  using T = TFromD<D>;
+
+  const V kHalf = Set(d, static_cast<T>(+0.5));
+  const V kLowerBound =
+      Set(d, static_cast<T>((sizeof(T) == 4 ? -150.0 : -1075.0)));
+  const V kOne = Set(d, static_cast<T>(+1.0));
+
+  impl::ExpImpl<T> impl;
+
+  // q = static_cast<int32>(x + ((x < 0) ? -0.5 : +0.5))
+  const auto q = impl.ToInt32(d, Add(x, CopySign(kHalf, x)));
+
+  // Reduce, approximate, and then reconstruct.
+  const V y = impl.LoadExpShortRange(
+      d, Add(impl.ExpPoly(d, impl.Exp2Reduce(d, x, q)), kOne), q);
+  return IfThenElseZero(Ge(x, kLowerBound), y);
+}
+
+template <class D, class V>
 HWY_INLINE V Expm1(const D d, V x) {
   using T = TFromD<D>;
 
@@ -1232,6 +1600,137 @@ HWY_INLINE V Tanh(const D d, V x) {
   const V y = Expm1(d, Mul(abs_x, kTwo));
   const V z = IfThenElse(Gt(abs_x, kLimit), kOne, Div(y, Add(y, kTwo)));
   return Xor(z, sign);  // Reapply the sign bit
+}
+
+template <class D, class V>
+HWY_INLINE void SinCos(const D d, V x, V& s, V& c) {
+  using T = TFromD<D>;
+  impl::SinCosImpl<T> impl;
+  impl.SinCos(d, x, s, c);
+}
+
+template <class D, class V>
+HWY_INLINE V Hypot(const D d, V a, V b) {
+  using T = TFromD<D>;
+  using TI = MakeSigned<T>;
+  const RebindToUnsigned<decltype(d)> du;
+  const RebindToSigned<decltype(d)> di;
+  using VI = VFromD<decltype(di)>;
+
+  constexpr int kMaxBiasedExp = static_cast<int>(MaxExponentField<T>());
+  static_assert(kMaxBiasedExp > 0, "kMaxBiasedExp > 0 must be true");
+
+  constexpr int kNumOfMantBits = MantissaBits<T>();
+  static_assert(kNumOfMantBits > 0, "kNumOfMantBits > 0 must be true");
+
+  constexpr int kExpBias = kMaxBiasedExp / 2;
+
+  static_assert(
+      static_cast<unsigned>(kExpBias) + static_cast<unsigned>(kNumOfMantBits) <
+          static_cast<unsigned>(kMaxBiasedExp),
+      "kExpBias + kNumOfMantBits < kMaxBiasedExp must be true");
+
+  // kMinValToSquareBiasedExp is the smallest biased exponent such that
+  // pow(pow(2, kMinValToSquareBiasedExp - kExpBias) * x, 2) is either a normal
+  // floating-point value or infinity if x is a non-zero, non-NaN value
+  constexpr int kMinValToSquareBiasedExp = (kExpBias / 2) + kNumOfMantBits;
+  static_assert(kMinValToSquareBiasedExp < kExpBias,
+                "kMinValToSquareBiasedExp < kExpBias must be true");
+
+  // kMaxValToSquareBiasedExp is the largest biased exponent such that
+  // pow(pow(2, kMaxValToSquareBiasedExp - kExpBias) * x, 2) * 2 is guaranteed
+  // to be a finite value if x is a finite value
+  constexpr int kMaxValToSquareBiasedExp = kExpBias + ((kExpBias / 2) - 1);
+  static_assert(kMaxValToSquareBiasedExp > kExpBias,
+                "kMaxValToSquareBiasedExp > kExpBias must be true");
+  static_assert(kMaxValToSquareBiasedExp < kMaxBiasedExp,
+                "kMaxValToSquareBiasedExp < kMaxBiasedExp must be true");
+
+#if HWY_TARGET == HWY_SCALAR || HWY_TARGET == HWY_EMU128 || \
+    HWY_TARGET == HWY_Z14 || HWY_TARGET == HWY_Z15
+  using TExpSatSub = MakeUnsigned<T>;
+  using TExpMinMax = TI;
+#else
+  using TExpSatSub = uint16_t;
+  using TExpMinMax = int16_t;
+#endif
+
+  const Repartition<TExpSatSub, decltype(d)> d_exp_sat_sub;
+  const Repartition<TExpMinMax, decltype(d)> d_exp_min_max;
+
+  const V abs_a = Abs(a);
+  const V abs_b = Abs(b);
+
+  const MFromD<D> either_inf = Or(IsInf(a), IsInf(b));
+
+  const VI zero = Zero(di);
+
+  // exp_a[i] is the biased exponent of abs_a[i]
+  const VI exp_a = BitCast(di, ShiftRight<kNumOfMantBits>(BitCast(du, abs_a)));
+
+  // exp_b[i] is the biased exponent of abs_b[i]
+  const VI exp_b = BitCast(di, ShiftRight<kNumOfMantBits>(BitCast(du, abs_b)));
+
+  // max_exp[i] is equal to HWY_MAX(exp_a[i], exp_b[i])
+
+  // If abs_a[i] and abs_b[i] are both NaN values, max_exp[i] will be equal to
+  // the biased exponent of the larger value. Otherwise, if either abs_a[i] or
+  // abs_b[i] is NaN, max_exp[i] will be equal to kMaxBiasedExp.
+  const VI max_exp = BitCast(
+      di, Max(BitCast(d_exp_min_max, exp_a), BitCast(d_exp_min_max, exp_b)));
+
+  // If either abs_a[i] or abs_b[i] is zero, min_exp[i] is equal to max_exp[i].
+  // Otherwise, if abs_a[i] and abs_b[i] are both nonzero, min_exp[i] is equal
+  // to HWY_MIN(exp_a[i], exp_b[i]).
+  const VI min_exp = IfThenElse(
+      Or(Eq(BitCast(di, abs_a), zero), Eq(BitCast(di, abs_b), zero)), max_exp,
+      BitCast(di, Min(BitCast(d_exp_min_max, exp_a),
+                      BitCast(d_exp_min_max, exp_b))));
+
+  // scl_pow2[i] is the power of 2 to scale abs_a[i] and abs_b[i] by
+
+  // abs_a[i] and abs_b[i] should be scaled by a factor that is greater than
+  // zero but less than or equal to
+  // pow(2, kMaxValToSquareBiasedExp - max_exp[i]) to ensure that that the
+  // multiplications or addition operations do not overflow if
+  // std::hypot(abs_a[i], abs_b[i]) is finite
+
+  // If either abs_a[i] or abs_b[i] is a a positive value that is less than
+  // pow(2, kMinValToSquareBiasedExp - kExpBias), then scaling up abs_a[i] and
+  // abs_b[i] by pow(2, kMinValToSquareBiasedExp - min_exp[i]) will ensure that
+  // the multiplications and additions result in normal floating point values,
+  // infinities, or NaNs.
+
+  // If HWY_MAX(kMinValToSquareBiasedExp - min_exp[i], 0) is greater than
+  // kMaxValToSquareBiasedExp - max_exp[i], scale abs_a[i] and abs_b[i] up by
+  // pow(2, kMaxValToSquareBiasedExp - max_exp[i]) to ensure that the
+  // multiplication and addition operations result in a finite result if
+  // std::hypot(abs_a[i], abs_b[i]) is finite.
+
+  const VI scl_pow2 = BitCast(
+      di,
+      Min(BitCast(d_exp_min_max,
+                  SaturatedSub(BitCast(d_exp_sat_sub,
+                                       Set(di, static_cast<TI>(
+                                                   kMinValToSquareBiasedExp))),
+                               BitCast(d_exp_sat_sub, min_exp))),
+          BitCast(d_exp_min_max,
+                  Sub(Set(di, static_cast<TI>(kMaxValToSquareBiasedExp)),
+                      max_exp))));
+
+  const VI exp_bias = Set(di, static_cast<TI>(kExpBias));
+
+  const V ab_scl_factor =
+      BitCast(d, ShiftLeft<kNumOfMantBits>(Add(exp_bias, scl_pow2)));
+  const V hypot_scl_factor =
+      BitCast(d, ShiftLeft<kNumOfMantBits>(Sub(exp_bias, scl_pow2)));
+
+  const V scl_a = Mul(abs_a, ab_scl_factor);
+  const V scl_b = Mul(abs_b, ab_scl_factor);
+
+  const V scl_hypot = Sqrt(MulAdd(scl_a, scl_a, Mul(scl_b, scl_b)));
+  // std::hypot returns inf if one input is +/- inf, even if the other is NaN.
+  return IfThenElse(either_inf, Inf(d), Mul(scl_hypot, hypot_scl_factor));
 }
 
 // NOLINTNEXTLINE(google-readability-namespace-comments)

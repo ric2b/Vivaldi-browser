@@ -31,7 +31,7 @@ set(BUILD_TESTING OFF)
 # fetch_dawn_dependencies.py is an alternative to using depot_tools
 # It is particularly interesting when building dawn as a subdirectory in
 # a parent project that does not want to use depot_tools.
-if (${DAWN_FETCH_DEPENDENCIES})
+if (DAWN_FETCH_DEPENDENCIES)
     set(EXTRA_FETCH_ARGS)
     if (NOT TARGET gmock AND ${TINT_BUILD_TESTS})
         list(APPEND EXTRA_FETCH_ARGS --use-test-deps)
@@ -55,27 +55,31 @@ if (NOT TARGET SPIRV-Headers)
     add_subdirectory(${DAWN_SPIRV_HEADERS_DIR} "${CMAKE_CURRENT_BINARY_DIR}/spirv-headers")
 endif()
 
-if (NOT TARGET SPIRV-Tools)
-    set(SPIRV_SKIP_TESTS ON CACHE BOOL "" FORCE)
+if (NOT TARGET SPIRV-Tools AND
+    (((DAWN_ENABLE_OPENGL OR DAWN_ENABLE_VULKAN)
+        AND DAWN_ENABLE_SPIRV_VALIDATION)
+        OR TINT_BUILD_SPV_READER
+        OR TINT_BUILD_SPV_WRITER
+        OR DAWN_USE_BUILT_DXC))
+    set(SPIRV_SKIP_TESTS ON CACHE BOOL "Controls whether SPIR-V tests are run" FORCE)
     set(SPIRV_SKIP_EXECUTABLES ON CACHE BOOL "" FORCE)
     set(SKIP_SPIRV_TOOLS_INSTALL ON CACHE BOOL "" FORCE)
-
-    if(${TINT_BUILD_SPV_READER} OR ${TINT_BUILD_SPV_WRITER})
-        set(SPIRV_SKIP_TESTS ON CACHE BOOL "Controls whether SPIR-V tests are run" FORCE)
-        set(SPIRV_WERROR OFF CACHE BOOL OFF FORCE)
-        if (${TINT_BUILD_SPIRV_TOOLS_FUZZER})
-            set(SPIRV_BUILD_FUZZER ON CACHE BOOL "Controls whether spirv-fuzz is built" FORCE)
-        endif()
-    endif()
+    set(SPIRV_WERROR OFF CACHE BOOL OFF FORCE)
 
     message(STATUS "Dawn: using SPIRV-Tools at ${DAWN_SPIRV_TOOLS_DIR}")
     add_subdirectory(${DAWN_SPIRV_TOOLS_DIR} "${CMAKE_CURRENT_BINARY_DIR}/spirv-tools" EXCLUDE_FROM_ALL)
 endif()
 
-if(NOT TARGET glslang AND (${TINT_BUILD_GLSL_WRITER} OR ${TINT_BUILD_GLSL_VALIDATOR}) AND ${TINT_BUILD_CMD_TOOLS})
+if(NOT TARGET glslang AND (TINT_BUILD_GLSL_WRITER OR TINT_BUILD_GLSL_VALIDATOR) AND TINT_BUILD_CMD_TOOLS)
     set(SKIP_GLSLANG_INSTALL ON CACHE BOOL "" FORCE)
     set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
-    add_subdirectory("${DAWN_THIRD_PARTY_DIR}/vulkan-deps/glslang/src" "${CMAKE_CURRENT_BINARY_DIR}/glslang" EXCLUDE_FROM_ALL)
+    message(STATUS "Dawn: using GLSLang at ${DAWN_GLSLANG_DIR}")
+    # https://github.com/KhronosGroup/glslang/issues/2283
+    # glslang does not export symbols properly when BUILD_SHARED_LIBS=1, so always build it as static for now.
+    set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
+    set(BUILD_SHARED_LIBS 0)
+    add_subdirectory("${DAWN_GLSLANG_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/glslang" EXCLUDE_FROM_ALL)
+    set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED})
 endif()
 
 if (NOT TARGET glfw AND DAWN_USE_GLFW)
@@ -84,12 +88,15 @@ if (NOT TARGET glfw AND DAWN_USE_GLFW)
     set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(GLFW_BUILD_X11 ${DAWN_USE_X11} CACHE BOOL "" FORCE)
     set(GLFW_BUILD_WAYLAND ${DAWN_USE_WAYLAND} CACHE BOOL "" FORCE)
+    set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 
     message(STATUS "Dawn: using GLFW at ${DAWN_GLFW_DIR}")
     add_subdirectory(${DAWN_GLFW_DIR} "${CMAKE_CURRENT_BINARY_DIR}/glfw")
 endif()
 
-if (NOT TARGET libabsl)
+if (NOT TARGET absl::strings)
+    # Recommended setting for compability with future abseil releases.
+    set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "" FORCE)
     message(STATUS "Dawn: using Abseil at ${DAWN_ABSEIL_DIR}")
     if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang") OR
         ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"))
@@ -103,29 +110,31 @@ if (NOT TARGET libabsl)
     add_subdirectory(${DAWN_ABSEIL_DIR} "${CMAKE_CURRENT_BINARY_DIR}/abseil")
 endif()
 
-if (NOT TARGET Vulkan-Headers)
+if (DAWN_BUILD_PROTOBUF AND NOT TARGET libprotobuf-mutator)
+    message(STATUS "Dawn: using LPM at ${DAWN_LPM_DIR}")
+    include("libprotobuf-mutator/BUILD.cmake")
+endif()
+
+if (DAWN_ENABLE_DESKTOP_GL OR DAWN_ENABLE_OPENGLES)
+    # Header-only library for khrplatform.h
+    add_library(dawn_khronos_platform INTERFACE)
+    target_sources(dawn_khronos_platform INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/khronos/EGL-Registry/api/KHR/khrplatform.h")
+    target_include_directories(dawn_khronos_platform INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/khronos/EGL-Registry/api")
+endif()
+
+if (NOT TARGET Vulkan-Headers AND DAWN_ENABLE_VULKAN)
     message(STATUS "Dawn: using Vulkan-Headers at ${DAWN_VULKAN_HEADERS_DIR}")
+
+    set(VULKAN_HEADERS_ENABLE_MODULE OFF)
     add_subdirectory(${DAWN_VULKAN_HEADERS_DIR} "${CMAKE_CURRENT_BINARY_DIR}/vulkan-headers")
 endif()
 
-# Header-only library for khrplatform.h
-add_library(dawn_khronos_platform INTERFACE)
-target_sources(dawn_khronos_platform INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/khronos/EGL-Registry/api/KHR/khrplatform.h")
-target_include_directories(dawn_khronos_platform INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/khronos/EGL-Registry/api")
+if (NOT TARGET VulkanUtilityHeaders AND DAWN_ENABLE_VULKAN)
+    message(STATUS "Dawn: using VulkanUtilityLibraries at ${DAWN_VULKAN_UTILITY_LIBRARIES_DIR}")
+    add_subdirectory(${DAWN_VULKAN_UTILITY_LIBRARIES_DIR} "${CMAKE_CURRENT_BINARY_DIR}/vulkan-utility-libraries")
+endif()
 
-# Header-only library for Vulkan headers
-add_library(dawn_vulkan_headers INTERFACE)
-target_sources(dawn_vulkan_headers INTERFACE
-    "${CMAKE_CURRENT_SOURCE_DIR}/khronos/vulkan/vk_icd.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/khronos/vulkan/vk_layer.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/khronos/vulkan/vk_platform.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/khronos/vulkan/vk_sdk_platform.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/khronos/vulkan/vulkan.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/khronos/vulkan/vulkan_core.h"
-)
-target_include_directories(dawn_vulkan_headers INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/khronos")
-
-if (NOT TARGET vk_swiftshader AND ${DAWN_ENABLE_SWIFTSHADER})
+if (DAWN_ENABLE_SWIFTSHADER AND NOT TARGET vk_swiftshader)
     set(SWIFTSHADER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(SWIFTSHADER_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
 
@@ -133,12 +142,12 @@ if (NOT TARGET vk_swiftshader AND ${DAWN_ENABLE_SWIFTSHADER})
     add_subdirectory(${DAWN_SWIFTSHADER_DIR} "${CMAKE_CURRENT_BINARY_DIR}/swiftshader")
 endif()
 
-if (${TINT_BUILD_BENCHMARKS} OR ${DAWN_BUILD_BENCHMARKS})
+if (TINT_BUILD_BENCHMARKS OR DAWN_BUILD_BENCHMARKS)
     set(BENCHMARK_ENABLE_TESTING FALSE CACHE BOOL FALSE FORCE)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/google_benchmark/src EXCLUDE_FROM_ALL)
 endif()
 
-if (NOT TARGET gmock AND ${TINT_BUILD_TESTS})
+if (TINT_BUILD_TESTS AND NOT TARGET gmock)
     set(gtest_force_shared_crt ON CACHE BOOL "Controls whether a shared run-time library should be used even when Google Test is built as static library" FORCE)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/googletest EXCLUDE_FROM_ALL)
 endif()
@@ -152,6 +161,11 @@ function(AddSubdirectoryDXC)
     set(HLSL_ENABLE_FIXED_VER OFF)
     set(HLSL_BUILD_DXILCONV OFF)
     set(HLSL_INCLUDE_TESTS OFF)
+    # When bundling up dawn, the object files of dxc must be binary compatible with rest of dawn.
+    # The default value of `OFF` adds a macro `_ITERATOR_DEBUG_LEVEL=0`.
+    # This is a problem in `Debug` builds of dawn because all of dawn's objects get compiled
+    # with `_ITERATOR_DEBUG_LEVEL=2`
+    set(HLSL_ENABLE_DEBUG_ITERATORS ON)
 
     set(ENABLE_SPIRV_CODEGEN OFF)
     set(SPIRV_BUILD_TESTS OFF)

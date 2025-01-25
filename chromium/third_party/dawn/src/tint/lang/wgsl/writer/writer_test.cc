@@ -32,13 +32,17 @@
 #include <string_view>
 
 #include "gtest/gtest.h"
-#include "src/tint/lang/core/ir/disassembly.h"
+#include "src/tint/lang/core/fluent_types.h"
+#include "src/tint/lang/core/ir/disassembler.h"
 #include "src/tint/lang/core/ir/ir_helper_test.h"
+#include "src/tint/lang/core/number.h"
 #include "src/tint/lang/wgsl/writer/ir_to_program/ir_to_program.h"
 #include "src/tint/lang/wgsl/writer/ir_to_program/program_options.h"
 #include "src/tint/lang/wgsl/writer/raise/raise.h"
 #include "src/tint/utils/result/result.h"
 #include "src/tint/utils/text/string.h"
+
+using namespace tint::core::fluent_types;  // NOLINT
 
 namespace tint::wgsl::writer {
 namespace {
@@ -65,14 +69,14 @@ class WgslIRWriterTest : public core::ir::IRTestHelper {
     Result Run(std::string_view expected_wgsl) {
         Result result;
 
-        result.ir_pre_raise = core::ir::Disassemble(mod).Plain();
+        result.ir_pre_raise = core::ir::Disassembler(mod).Plain();
 
         if (auto res = tint::wgsl::writer::Raise(mod); res != Success) {
             result.err = res.Failure().reason.Str();
             return result;
         }
 
-        result.ir_post_raise = core::ir::Disassemble(mod).Plain();
+        result.ir_post_raise = core::ir::Disassembler(mod).Plain();
 
         writer::ProgramOptions program_options;
         program_options.allowed_features = AllowedFeatures::Everything();
@@ -108,32 +112,28 @@ class WgslIRWriterTest : public core::ir::IRTestHelper {
 
 std::ostream& operator<<(std::ostream& o, const WgslIRWriterTest::Result& res) {
     if (!res.err.empty()) {
-        o << "============================" << std::endl
-          << "== Error                  ==" << std::endl
-          << "============================" << std::endl
-          << res.err << std::endl
-          << std::endl;
+        o << "============================\n"
+          << "== Error                  ==\n"
+          << "============================\n"
+          << res.err << "\n\n";
     }
     if (!res.ir_pre_raise.empty()) {
-        o << "============================" << std::endl
-          << "== IR (pre-raise)         ==" << std::endl
-          << "============================" << std::endl
-          << res.ir_pre_raise << std::endl
-          << std::endl;
+        o << "============================\n"
+          << "== IR (pre-raise)         ==\n"
+          << "============================\n"
+          << res.ir_pre_raise << "\n\n";
     }
     if (!res.ir_post_raise.empty()) {
-        o << "============================" << std::endl
-          << "== IR (post-raise)        ==" << std::endl
-          << "============================" << std::endl
-          << res.ir_post_raise << std::endl
-          << std::endl;
+        o << "============================\n"
+          << "== IR (post-raise)        ==\n"
+          << "============================\n"
+          << res.ir_post_raise << "\n\n";
     }
     if (!res.ast.empty()) {
-        o << "============================" << std::endl
-          << "== AST                    ==" << std::endl
-          << "============================" << std::endl
-          << res.ast << std::endl
-          << std::endl;
+        o << "============================\n"
+          << "== AST                    ==\n"
+          << "============================\n"
+          << res.ast << "\n\n";
     }
     return o;
 }
@@ -146,6 +146,64 @@ std::ostream& operator<<(std::ostream& o, const WgslIRWriterTest::Result& res) {
             FAIL() << res;                               \
         }                                                \
     } while (false)
+
+TEST_F(WgslIRWriterTest, NameConflict_NamedBeforeUnnamed_ModuleScope) {
+    b.Append(mod.root_block, [&] {
+        b.Var<private_, u32>("v");
+        b.Var<private_, u32>();
+    });
+
+    RUN_TEST(R"(
+var<private> v : u32;
+
+var<private> v_1 : u32;
+)");
+}
+
+TEST_F(WgslIRWriterTest, NameConflict_NamedBeforeUnnamed_FunctionScope) {
+    auto* fn = b.Function("f", ty.void_());
+    b.Append(fn->Block(), [&] {
+        b.Var<function, u32>("v");
+        b.Var<function, u32>();
+        b.Return(fn);
+    });
+
+    RUN_TEST(R"(
+fn f() {
+  var v : u32;
+  var v_1 : u32;
+}
+)");
+}
+
+TEST_F(WgslIRWriterTest, NameConflict_UnnamedBeforeNamed_ModuleScope) {
+    b.Append(mod.root_block, [&] {
+        b.Var<private_, u32>();
+        b.Var<private_, u32>("v");
+    });
+
+    RUN_TEST(R"(
+var<private> v_1 : u32;
+
+var<private> v : u32;
+)");
+}
+
+TEST_F(WgslIRWriterTest, NameConflict_UnnamedBeforeNamed_FunctionScope) {
+    auto* fn = b.Function("f", ty.void_());
+    b.Append(fn->Block(), [&] {
+        b.Var<function, u32>();
+        b.Var<function, u32>("v");
+        b.Return(fn);
+    });
+
+    RUN_TEST(R"(
+fn f() {
+  var v_1 : u32;
+  var v : u32;
+}
+)");
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Short-circuiting binary ops

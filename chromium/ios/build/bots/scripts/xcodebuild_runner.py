@@ -201,12 +201,20 @@ class LaunchCommand(object):
       outdir_attempt = os.path.join(self.out_dir, 'attempt_%d' % attempt)
       cmd_list = self.egtests_app.command(outdir_attempt, 'id=%s' % self.udid,
                                           clones)
+
+      # TODO(crbug.com/340857498): temporarily turning this off on all
+      # device testing due to Xcode hang on iOS17.4+. In the future
+      # we should have a testing config flag to toggle this on/off
+      if not iossim_util.is_device_with_udid_simulator(self.udid):
+        cmd_list.extend(['-collect-test-diagnostics', 'never'])
+
       # TODO(crbug.com/40606422): add heartbeat logging to xcodebuild_runner.
       LOGGER.info('Start test attempt #%d for command [%s]' %
                   (attempt, ' '.join(cmd_list)))
       output = self.launch_attempt(cmd_list)
 
-      result = XcodeLogParser.collect_test_results(outdir_attempt, output)
+      result = XcodeLogParser.collect_test_results(outdir_attempt, output,
+                                                   clones > 1)
 
       tests_selected_at_runtime = _tests_decided_at_runtime(
           self.egtests_app.test_app_path)
@@ -295,11 +303,6 @@ class SimulatorParallelTestRunner(test_runner.SimulatorTestRunner):
     self.release = kwargs.get('release') or False
     self.test_results['path_delimiter'] = '/'
 
-    # TODO(crbug.com/40933880): For simulators, the record_video_option
-    # is always None right now, because we are still using our own video
-    # plugin. Currently native Xcode15+ video recording is only supported
-    # on iOS17+, but we should aim to migrate to the native solution so
-    # that we don't need to maintain our own.
     self.record_video_option = kwargs.get('record_video_option')
 
     self.all_eg_test_names = []
@@ -307,6 +310,8 @@ class SimulatorParallelTestRunner(test_runner.SimulatorTestRunner):
     self.resolve_eg_test_cases()
 
     # initializing test plugin service
+    # TODO(crbug.com/40933880): remove the legacy code of video recording
+    # support as we have migrated to native xcode video recording.
     self.test_plugin_service = None
     enabled_plugins = init_plugins_from_args(
         os.path.join(self.out_dir, self.udid), **kwargs)

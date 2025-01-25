@@ -58,7 +58,8 @@ BookmarkLoadDetails::~BookmarkLoadDetails() = default;
 void BookmarkLoadDetails::AddAccountPermanentNodes(
     std::unique_ptr<BookmarkPermanentNode> account_bb_node,
     std::unique_ptr<BookmarkPermanentNode> account_other_folder_node,
-    std::unique_ptr<BookmarkPermanentNode> account_mobile_folder_node) {
+    std::unique_ptr<BookmarkPermanentNode> account_mobile_folder_node,
+    std::unique_ptr<BookmarkPermanentNode> account_trash_folder_node) {
   CHECK(account_bb_node);
   CHECK(account_other_folder_node);
   CHECK(account_mobile_folder_node);
@@ -74,6 +75,14 @@ void BookmarkLoadDetails::AddAccountPermanentNodes(
       root_node_->Add(std::move(account_other_folder_node)));
   account_mobile_folder_node_ = static_cast<BookmarkPermanentNode*>(
       root_node_->Add(std::move(account_mobile_folder_node)));
+
+  // Vivaldi
+  CHECK(account_trash_folder_node);
+  CHECK(!account_trash_folder_node_);
+  if (vivaldi::IsVivaldiRunning()) {
+    account_trash_folder_node_ = static_cast<BookmarkPermanentNode*>(
+        root_node_->Add(std::move(account_trash_folder_node)));
+  }
 }
 
 void BookmarkLoadDetails::PopulateNodeIdsForLocalOrSyncablePermanentNodes() {
@@ -133,7 +142,8 @@ void BookmarkLoadDetails::CreateIndices() {
   for (const auto& child : root_node_->children()) {
     if (child.get() == account_bb_node_ ||
         child.get() == account_other_folder_node_ ||
-        child.get() == account_mobile_folder_node_) {
+        child.get() == account_mobile_folder_node_ ||
+        child.get() == account_trash_folder_node_) {
       // Use a dedicated index for account folders and desdendants.
       AddNodeToIndexRecursive(child.get(), account_uuid_index_);
     } else {
@@ -148,10 +158,13 @@ void BookmarkLoadDetails::ResetPermanentNodePointers() {
   bb_node_ = nullptr;
   other_folder_node_ = nullptr;
   mobile_folder_node_ = nullptr;
-  trash_folder_node_ = nullptr;
   account_bb_node_ = nullptr;
   account_other_folder_node_ = nullptr;
   account_mobile_folder_node_ = nullptr;
+
+  // Vivaldi
+  trash_folder_node_ = nullptr;
+  account_trash_folder_node_ = nullptr;
 }
 
 const BookmarkNode* BookmarkLoadDetails::RootNodeForTest() const {

@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_strip/coordinator/tab_strip_mediator_utils.h"
 
 #import "base/check.h"
+#import "ios/chrome/browser/saved_tab_groups/model/ios_tab_group_sync_util.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/web_state_list/browser_util.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
@@ -50,6 +51,8 @@ void MoveGroupBeforeTabStripItem(const TabGroup* group,
         int web_state_index = GetWebStateIndex(
             web_state_list,
             WebStateSearchCriteria{.identifier = tab_switcher_item.identifier});
+        CHECK(web_state_list->ContainsIndex(web_state_index),
+              base::NotFatalUntil::M128);
         const TabGroup* group_of_web_state =
             web_state_list->GetGroupOfWebStateAt(web_state_index);
         // In case the WebState before which the group is being inserted is
@@ -77,7 +80,7 @@ void MoveGroupBeforeTabStripItem(const TabGroup* group,
   if (web_state_list->ContainsGroup(group)) {
     web_state_list->MoveGroup(group, web_state_list_index_after_update);
   } else {
-    MoveTabGroupToBrowser(group, destination_browser,
-                          web_state_list_index_after_update);
+    tab_groups::utils::MoveTabGroupToBrowser(group, destination_browser,
+                                             web_state_list_index_after_update);
   }
 }

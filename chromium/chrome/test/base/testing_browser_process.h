@@ -70,6 +70,10 @@ namespace resource_coordinator {
 class ResourceCoordinatorParts;
 }
 
+namespace variations {
+class VariationsService;
+}
+
 class TestingBrowserProcess : public BrowserProcess {
  public:
   // Initializes |g_browser_process| with a new TestingBrowserProcess.
@@ -162,6 +166,7 @@ class TestingBrowserProcess : public BrowserProcess {
   SerialPolicyAllowedPorts* serial_policy_allowed_ports() override;
   HidSystemTrayIcon* hid_system_tray_icon() override;
   UsbSystemTrayIcon* usb_system_tray_icon() override;
+  GlobalDesktopFeatures* GetDesktopFeatures() override;
 #endif
   os_crypt_async::OSCryptAsync* os_crypt_async() override;
   void set_additional_os_crypt_async_provider_for_test(
@@ -176,6 +181,7 @@ class TestingBrowserProcess : public BrowserProcess {
   void SetMetricsService(metrics::MetricsService* metrics_service);
   void SetProfileManager(std::unique_ptr<ProfileManager> profile_manager);
   void SetSafeBrowsingService(safe_browsing::SafeBrowsingService* sb_service);
+  void SetVariationsService(variations::VariationsService* variations_service);
   void SetWebRtcLogUploader(std::unique_ptr<WebRtcLogUploader> uploader);
   void SetRulesetService(
       std::unique_ptr<subresource_filter::RulesetService> ruleset_service);
@@ -220,6 +226,7 @@ class TestingBrowserProcess : public BrowserProcess {
   std::unique_ptr<network::TestNetworkQualityTracker>
       test_network_quality_tracker_;
   raw_ptr<metrics::MetricsService> metrics_service_ = nullptr;
+  raw_ptr<variations::VariationsService> variations_service_ = nullptr;
   std::unique_ptr<ProfileManager> profile_manager_;
 
 #if BUILDFLAG(ENABLE_CHROME_NOTIFICATIONS)
@@ -276,6 +283,7 @@ class TestingBrowserProcess : public BrowserProcess {
   std::unique_ptr<HidSystemTrayIcon> hid_system_tray_icon_;
   std::unique_ptr<UsbSystemTrayIcon> usb_system_tray_icon_;
   BuildState build_state_;
+  std::unique_ptr<GlobalDesktopFeatures> desktop_features_;
 #endif
 
   std::unique_ptr<StatusTray> status_tray_;

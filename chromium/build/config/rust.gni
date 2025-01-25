@@ -29,7 +29,7 @@ declare_args() {
   # The CXX tool is in //third_party/rust which is not shared with downstream
   # projects yet. So they need to copy the required dependencies and GN files
   # into their project to enable CXX there.
-  enable_cxx = build_with_chromium
+  enable_rust_cxx = build_with_chromium
 
   # The chromium prelude crate provides the `chromium::import!` macro which
   # is needed to depend on first-party rust libraries. Third-party libraries
@@ -55,6 +55,10 @@ declare_args() {
   # a Rust sysroot, which will have a 'bin' directory and others. Commonly
   # <home dir>/.rustup/toolchains/nightly-<something>-<something>
   rust_sysroot_absolute = ""
+
+  # Directory under which to find `bin/bindgen` (a `bin` directory containing
+  # the bindgen exectuable).
+  rust_bindgen_root = "//third_party/rust-toolchain"
 
   # If you're using a Rust toolchain as specified by rust_sysroot_absolute,
   # set this to the output of `rustc -V`. Changing this string will cause all
@@ -104,7 +108,7 @@ declare_args() {
   enable_rust_base_conversions = enable_rust
 
   # The base::JSONReader implementation. Requires base conversions.
-  enable_rust_json = enable_rust && enable_all_rust_features
+  enable_rust_json = enable_rust
 
   # Support for chrome://crash-rust to check crash dump collection works.
   enable_rust_crash = enable_rust
@@ -114,9 +118,6 @@ declare_args() {
 
   # Rust gtest interop.
   enable_rust_gtest_interop = enable_rust
-
-  # Enable experimental Fontations Rust font stack.
-  use_typeface_fontations = enable_rust
 }
 
 # Use the Rust toolchain built in-tree. When false, we use the prebuilt Rust
@@ -168,11 +169,6 @@ if (enable_rust) {
   } else {
     rust_sysroot = get_path_info(rust_sysroot_absolute, "abspath")
   }
-
-  # Prebuilt toolchains won't come with bindgen, so we unconditionally use the
-  # bindgen we ship with the Rust toolchain. This could be made configurable
-  # if folks want to supply a bindgen with their toolchain.
-  rust_bindgen_root = "//third_party/rust-toolchain"
 }
 
 # Figure out the Rust target triple (aka 'rust_abi_target')
@@ -206,6 +202,8 @@ if (is_linux || is_chromeos) {
     } else {
       rust_abi_target = "arm-unknown-linux-gnueabi" + float_suffix
     }
+  } else if (current_cpu == "riscv64") {
+    rust_abi_target = "riscv64gc-unknown-linux-gnu"
   } else {
     # Best guess for other future platforms.
     rust_abi_target = current_cpu + "-unknown-linux-gnu"

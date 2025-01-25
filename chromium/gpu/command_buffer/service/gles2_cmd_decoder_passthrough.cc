@@ -984,26 +984,14 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
       std::min(max_2d_texture_size, max_renderbuffer_size_);
 
   if (offscreen_) {
-#if BUILDFLAG(IS_ANDROID)
-    const bool alpha_channel_requested = attrib_helper.need_alpha;
-#else
-    const bool alpha_channel_requested = false;
-#endif
-    emulated_default_framebuffer_format_ =
-        alpha_channel_requested ? GL_RGBA : GL_RGB;
+    emulated_default_framebuffer_format_ = GL_RGB;
 
     CheckErrorCallbackState();
     emulated_back_buffer_ = std::make_unique<EmulatedDefaultFramebuffer>(this);
-    // If we're an offscreen surface with zero width and/or height, set to a
-    // non-zero size so that we have a complete framebuffer for operations like
-    // glClear. Furthermore, on some ChromeOS platforms (particularly MediaTek
-    // devices), there are driver limitations on the minimum size of a buffer.
-    // Thus, we set the initial size to 64x64 here instead of 1x1.
-    gfx::Size initial_size(
-        std::max(64,
-                 attrib_helper.offscreen_framebuffer_size_for_testing.width()),
-        std::max(
-            64, attrib_helper.offscreen_framebuffer_size_for_testing.height()));
+    // Some ChromeOS platforms (particularly MediaTek devices), there are driver
+    // limitations on the minimum size of a buffer. Thus, we set the initial
+    // size to 64x64 here instead of 1x1.
+    gfx::Size initial_size(64, 64);
     if (!emulated_back_buffer_->Initialize(initial_size)) {
       bool was_lost = CheckResetStatus();
       Destroy(true);
@@ -1358,7 +1346,6 @@ gpu::Capabilities GLES2DecoderPassthroughImpl::GetCapabilities() {
   caps.msaa_is_slow = MSAAIsSlow(feature_info_->workarounds());
   caps.avoid_stencil_buffers =
       feature_info_->workarounds().avoid_stencil_buffers;
-  caps.supports_yuv_to_rgb_conversion = true;
   caps.supports_rgb_to_yuv_conversion = true;
   // Technically, YUV readback is handled on the client side, but enable it here
   // so that clients can use this to detect support.
@@ -1369,9 +1356,6 @@ gpu::Capabilities GLES2DecoderPassthroughImpl::GetCapabilities() {
 
   caps.gpu_memory_buffer_formats =
       feature_info_->feature_flags().gpu_memory_buffer_formats;
-  caps.disable_legacy_mailbox =
-      group_->shared_image_manager() &&
-      group_->shared_image_manager()->display_context_on_another_thread();
   caps.angle_rgbx_internal_format =
       feature_info_->feature_flags().angle_rgbx_internal_format;
 
@@ -1915,7 +1899,7 @@ GLES2DecoderPassthroughImpl::PatchGetFramebufferAttachmentParameter(
           break;
 
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
           break;
       }
     } break;
@@ -2104,7 +2088,7 @@ bool GLES2DecoderPassthroughImpl::CheckResetStatus() {
       MarkContextLost(error::kUnknown);
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return false;
   }
   reset_by_robustness_extension_ = true;
@@ -2339,7 +2323,7 @@ void GLES2DecoderPassthroughImpl::ReadBackBuffersIntoShadowCopies(
     if (!resources_->buffer_id_map.GetServiceID(client_id, &service_id)) {
       // Buffer no longer exists, this shadow update should have been removed by
       // DoDeleteBuffers
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       continue;
     }
 

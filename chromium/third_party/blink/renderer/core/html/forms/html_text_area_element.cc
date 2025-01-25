@@ -385,11 +385,14 @@ void HTMLTextAreaElement::SubtreeHasChanged() {
   CalculateAndAdjustAutoDirectionality();
 
   DCHECK(GetDocument().IsActive());
+  if (InnerEditorValue().empty()) {
+    GetDocument().GetPage()->GetChromeClient().DidClearValueInTextField(*this);
+  }
   GetDocument().GetPage()->GetChromeClient().DidChangeValueInTextField(*this);
 }
 
 void HTMLTextAreaElement::HandleBeforeTextInsertedEvent(
-    BeforeTextInsertedEvent* event) const {
+    BeforeTextInsertedEvent* event) {
   DCHECK(event);
   DCHECK(GetLayoutObject());
   int signed_max_length = maxLength();
@@ -422,6 +425,11 @@ void HTMLTextAreaElement::HandleBeforeTextInsertedEvent(
   unsigned appendable_length =
       unsigned_max_length > base_length ? unsigned_max_length - base_length : 0;
   event->SetText(SanitizeUserInputValue(event->GetText(), appendable_length));
+
+  if (selection_length == current_length && selection_length != 0 &&
+      !event->GetText().empty()) {
+    GetDocument().GetPage()->GetChromeClient().DidClearValueInTextField(*this);
+  }
 }
 
 String HTMLTextAreaElement::SanitizeUserInputValue(const String& proposed_value,
@@ -557,16 +565,15 @@ void HTMLTextAreaElement::SetValueCommon(const String& new_value,
       break;
   }
 
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillDontSetAutofillStateAfterJavaScriptChanges)) {
+  if (!RuntimeEnabledFeatures::AllowJavaScriptToResetAutofillStateEnabled()) {
     // We set the Autofilled state again because setting the autofill value
     // triggers JavaScript events and the site may override the autofilled
     // value, which resets the autofill state. Even if the website modifies the
     // form control element's content during the autofill operation, we want the
     // state to show as autofilled.
-    // If kAutofillDontSetAutofillStateAfterJavaScriptChanges is enabled, the
-    // WebAutofillClient will monitor JavaScript induced changes and take care
-    // of resetting the autofill state when appropriate.
+    // If AllowJavaScriptToResetAutofillState is enabled, the WebAutofillClient
+    // will monitor JavaScript induced changes and take care of resetting the
+    // autofill state when appropriate.
     SetAutofillState(autofill_state);
   }
 }
@@ -706,7 +713,7 @@ void HTMLTextAreaElement::SetPlaceholderVisibility(bool visible) {
 void HTMLTextAreaElement::CreateInnerEditorElementIfNecessary() const {
   // HTMLTextArea immediately creates the inner-editor, so this function should
   // never be called.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 bool HTMLTextAreaElement::IsInnerEditorValueEmpty() const {

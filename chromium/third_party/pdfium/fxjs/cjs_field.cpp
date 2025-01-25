@@ -101,24 +101,25 @@ void UpdateFormControl(CPDFSDK_FormFillEnvironment* pFormFillEnv,
                        bool bResetAP) {
   DCHECK(pFormControl);
   CPDFSDK_InteractiveForm* pForm = pFormFillEnv->GetInteractiveForm();
-  CPDFSDK_Widget* pWidget = pForm->GetWidget(pFormControl);
-  if (pWidget) {
-    ObservedPtr<CPDFSDK_Widget> observed_widget(pWidget);
+  ObservedPtr<CPDFSDK_Widget> observed_widget(pForm->GetWidget(pFormControl));
+  if (observed_widget) {
     if (bResetAP) {
-      FormFieldType fieldType = pWidget->GetFieldType();
+      FormFieldType fieldType = observed_widget->GetFieldType();
       if (fieldType == FormFieldType::kComboBox ||
           fieldType == FormFieldType::kTextField) {
-        std::optional<WideString> sValue = pWidget->OnFormat();
+        std::optional<WideString> sValue = observed_widget->OnFormat();
         if (!observed_widget)
           return;
-        pWidget->ResetAppearance(sValue, CPDFSDK_Widget::kValueUnchanged);
+        observed_widget->ResetAppearance(sValue,
+                                         CPDFSDK_Widget::kValueUnchanged);
       } else {
-        pWidget->ResetAppearance(std::nullopt, CPDFSDK_Widget::kValueUnchanged);
+        observed_widget->ResetAppearance(std::nullopt,
+                                         CPDFSDK_Widget::kValueUnchanged);
       }
       if (!observed_widget)
         return;
     }
-    pFormFillEnv->UpdateAllViews(pWidget);
+    pFormFillEnv->UpdateAllViews(observed_widget.Get());
   }
   pFormFillEnv->SetChangeMark();
 }
@@ -1911,13 +1912,10 @@ CJS_Result CJS_Field::get_text_color(CJS_Runtime* pRuntime) {
   if (maybe_type_argb_pair.has_value() &&
       maybe_type_argb_pair.value().color_type !=
           CFX_Color::Type::kTransparent) {
-    int32_t a;
-    int32_t r;
-    int32_t g;
-    int32_t b;
-    std::tie(a, r, g, b) = ArgbDecode(maybe_type_argb_pair.value().argb);
-    crRet =
-        CFX_Color(CFX_Color::Type::kRGB, r / 255.0f, g / 255.0f, b / 255.0f);
+    FX_BGR_STRUCT<uint8_t> bgr =
+        ArgbToBGRStruct(maybe_type_argb_pair.value().argb);
+    crRet = CFX_Color(CFX_Color::Type::kRGB, bgr.red / 255.0f,
+                      bgr.green / 255.0f, bgr.blue / 255.0f);
   }
 
   v8::Local<v8::Value> array =
@@ -2251,7 +2249,7 @@ CJS_Result CJS_Field::buttonGetIcon(CJS_Runtime* pRuntime,
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
   auto* pJS_Icon = static_cast<CJS_Icon*>(
-      CFXJS_Engine::GetObjectPrivate(pRuntime->GetIsolate(), pObj));
+      CFXJS_Engine::GetBinding(pRuntime->GetIsolate(), pObj));
   return pJS_Icon ? CJS_Result::Success(pJS_Icon->ToV8Object())
                   : CJS_Result::Failure(JSMessage::kBadObjectError);
 }
@@ -2359,7 +2357,7 @@ CJS_Result CJS_Field::getArray(CJS_Runtime* pRuntime,
       return CJS_Result::Failure(JSMessage::kBadObjectError);
 
     auto* pJSField = static_cast<CJS_Field*>(
-        CFXJS_Engine::GetObjectPrivate(pRuntime->GetIsolate(), pObj));
+        CFXJS_Engine::GetBinding(pRuntime->GetIsolate(), pObj));
     pJSField->AttachField(m_pJSDoc.Get(), *pStr);
     pRuntime->PutArrayElement(FormFieldArray, j++,
                               pJSField

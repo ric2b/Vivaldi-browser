@@ -1,47 +1,47 @@
-SKIP: FAILED
+#include <metal_stdlib>
+using namespace metal;
 
-../../src/tint/lang/msl/writer/printer/printer.cc:500 internal compiler error: $B1: {  # root
-  %arg_0:ptr<handle, texture_depth_multisampled_2d, read> = var @binding_point(1, 0)
-  %prevent_dce:ptr<storage, f32, read_write> = var @binding_point(2, 0)
-}
+struct tint_module_vars_struct {
+  device float* prevent_dce;
+  depth2d_ms<float, access::read> arg_0;
+};
 
-%textureLoad_4db25c = func():void {
-  $B2: {
-    %arg_1:ptr<function, vec2<u32>, read_write> = var, vec2<u32>(1u)
-    %arg_2:ptr<function, u32, read_write> = var, 1u
-    %6:texture_depth_multisampled_2d = load %arg_0
-    %7:vec2<u32> = load %arg_1
-    %8:u32 = load %arg_2
-    %9:f32 = textureLoad %6, %7, %8
-    %res:ptr<function, f32, read_write> = var, %9
-    %11:f32 = load %res
-    store %prevent_dce, %11
-    ret
-  }
-}
-%vertex_main = @vertex func():vec4<f32> [@position] {
-  $B3: {
-    %13:void = call %textureLoad_4db25c
-    ret vec4<f32>(0.0f)
-  }
-}
-%fragment_main = @fragment func():void {
-  $B4: {
-    %15:void = call %textureLoad_4db25c
-    ret
-  }
-}
-%compute_main = @compute @workgroup_size(1, 1, 1) func():void {
-  $B5: {
-    %17:void = call %textureLoad_4db25c
-    ret
-  }
+struct VertexOutput {
+  float4 pos;
+  float prevent_dce;
+};
+
+struct vertex_main_outputs {
+  float4 VertexOutput_pos [[position]];
+  float VertexOutput_prevent_dce [[user(locn0)]] [[flat]];
+};
+
+float textureLoad_4db25c(tint_module_vars_struct tint_module_vars) {
+  uint2 arg_1 = uint2(1u);
+  uint arg_2 = 1u;
+  float res = tint_module_vars.arg_0.read(arg_1, arg_2);
+  return res;
 }
 
-unhandled variable address space
-********************************************************************
-*  The tint shader compiler has encountered an unexpected error.   *
-*                                                                  *
-*  Please help us fix this issue by submitting a bug report at     *
-*  crbug.com/tint with the source program that triggered the bug.  *
-********************************************************************
+fragment void fragment_main(device float* prevent_dce [[buffer(0)]], depth2d_ms<float, access::read> arg_0 [[texture(0)]]) {
+  tint_module_vars_struct const tint_module_vars = tint_module_vars_struct{.prevent_dce=prevent_dce, .arg_0=arg_0};
+  (*tint_module_vars.prevent_dce) = textureLoad_4db25c(tint_module_vars);
+}
+
+kernel void compute_main(device float* prevent_dce [[buffer(0)]], depth2d_ms<float, access::read> arg_0 [[texture(0)]]) {
+  tint_module_vars_struct const tint_module_vars = tint_module_vars_struct{.prevent_dce=prevent_dce, .arg_0=arg_0};
+  (*tint_module_vars.prevent_dce) = textureLoad_4db25c(tint_module_vars);
+}
+
+VertexOutput vertex_main_inner(tint_module_vars_struct tint_module_vars) {
+  VertexOutput out = {};
+  out.pos = float4(0.0f);
+  out.prevent_dce = textureLoad_4db25c(tint_module_vars);
+  return out;
+}
+
+vertex vertex_main_outputs vertex_main(depth2d_ms<float, access::read> arg_0 [[texture(0)]]) {
+  tint_module_vars_struct const tint_module_vars = tint_module_vars_struct{.arg_0=arg_0};
+  VertexOutput const v = vertex_main_inner(tint_module_vars);
+  return vertex_main_outputs{.VertexOutput_pos=v.pos, .VertexOutput_prevent_dce=v.prevent_dce};
+}

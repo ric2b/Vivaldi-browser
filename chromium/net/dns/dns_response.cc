@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "net/dns/dns_response.h"
 
 #include <algorithm>
@@ -119,6 +124,16 @@ size_t DnsResourceRecord::CalculateRecordSize() const {
 }
 
 DnsRecordParser::DnsRecordParser() = default;
+
+DnsRecordParser::~DnsRecordParser() = default;
+
+DnsRecordParser::DnsRecordParser(const DnsRecordParser&) = default;
+
+DnsRecordParser::DnsRecordParser(DnsRecordParser&&) = default;
+
+DnsRecordParser& DnsRecordParser::operator=(const DnsRecordParser&) = default;
+
+DnsRecordParser& DnsRecordParser::operator=(DnsRecordParser&&) = default;
 
 DnsRecordParser::DnsRecordParser(base::span<const uint8_t> packet,
                                  size_t offset,

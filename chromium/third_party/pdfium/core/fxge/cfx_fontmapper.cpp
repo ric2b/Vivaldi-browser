@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fxge/cfx_fontmapper.h"
 
 #include <stdint.h>
@@ -25,7 +20,6 @@
 #include "core/fxcrt/fx_codepage.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_memory.h"
-#include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/unowned_ptr_exclusion.h"
 #include "core/fxge/cfx_fontmgr.h"
 #include "core/fxge/cfx_substfont.h"
@@ -37,22 +31,23 @@ namespace {
 static_assert(CFX_FontMapper::kLast + 1 == CFX_FontMapper::kNumStandardFonts,
               "StandardFont enum count mismatch");
 
-const char* const kBase14FontNames[CFX_FontMapper::kNumStandardFonts] = {
-    "Courier",
-    "Courier-Bold",
-    "Courier-BoldOblique",
-    "Courier-Oblique",
-    "Helvetica",
-    "Helvetica-Bold",
-    "Helvetica-BoldOblique",
-    "Helvetica-Oblique",
-    "Times-Roman",
-    "Times-Bold",
-    "Times-BoldItalic",
-    "Times-Italic",
-    "Symbol",
-    "ZapfDingbats",
-};
+constexpr std::array<const char*, CFX_FontMapper::kNumStandardFonts>
+    kBase14FontNames = {{
+        "Courier",
+        "Courier-Bold",
+        "Courier-BoldOblique",
+        "Courier-Oblique",
+        "Helvetica",
+        "Helvetica-Bold",
+        "Helvetica-BoldOblique",
+        "Helvetica-Oblique",
+        "Times-Roman",
+        "Times-Bold",
+        "Times-BoldItalic",
+        "Times-Italic",
+        "Symbol",
+        "ZapfDingbats",
+    }};
 
 struct AltFontName {
   const char* m_pName;  // Raw, POD struct.
@@ -421,14 +416,13 @@ std::unique_ptr<SystemFontInfoIface> CFX_FontMapper::TakeSystemFontInfo() {
 
 uint32_t CFX_FontMapper::GetChecksumFromTT(void* font_handle) {
   uint32_t buffer[256];
-  m_pFontInfo->GetFontData(
-      font_handle, kTableTTCF,
-      pdfium::as_writable_bytes(pdfium::make_span(buffer)));
+  m_pFontInfo->GetFontData(font_handle, kTableTTCF,
+                           pdfium::as_writable_byte_span(buffer));
 
   uint32_t checksum = 0;
-  for (auto x : buffer)
+  for (auto x : buffer) {
     checksum += x;
-
+  }
   return checksum;
 }
 

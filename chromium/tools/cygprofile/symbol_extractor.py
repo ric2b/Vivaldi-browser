@@ -10,7 +10,6 @@ import logging
 import os
 import re
 import subprocess
-import sys
 
 import cygprofile_utils
 
@@ -25,6 +24,23 @@ _MAX_WARNINGS_TO_PRINT = 200
 
 SymbolInfo = collections.namedtuple('SymbolInfo', ('name', 'offset', 'size',
                                                    'section'))
+
+
+def _IsExpectedSectionForInstrumentedCode(section):
+  # Using __attribute__((section("any_name"))) one can put a function in a
+  # section "any_name". The LLD linker puts this section in the same executable
+  # segment as the section '.text'. The linker cannot reorder functions across
+  # sections, so these functions outside `.text` will produce warnings during
+  # orderfile verification. It is possible to exclude from the orderfile the
+  # symbols from non-.text sections, but it is not done yet (as of 2024-07).
+  #
+  # The instrumentation hook (in orderfile_instrumentation.cc) warns against
+  # offsets outside of the range between `linker_script_start_of_text` and
+  # `linker_script_end_of_text`.
+  #
+  # The sections in the list below should be in sync with the
+  # `anchor_functions.lds`.
+  return section in ['.text', 'malloc_hook']
 
 
 def _SymbolInfosFromStream(input_file):
@@ -69,10 +85,20 @@ def _SymbolInfosFromStream(input_file):
       # 'Builtins_.*') are indistinguishable from labels of size 0 other than
       # by name.
       continue
-    if section != '.text':
-      # Ignore anything that's outside the primary .text section
+    # Skip symbols defined in other native libraries assuming they are not
+    # instrumented.
+    if section == 'Undefined':
+      assert scope != 'Local', name
       continue
-    assert symbol_type in ['Object', 'Function', 'File', 'GNU_IFunc']
+    # Skip non-function symbols (global variables, file references).
+    if not symbol_type in ['Function', 'GNU_IFunc']:
+      continue
+    # Executable code can be in a section with any name, not only in '.text'.
+    # Unfortunately, code reordering needs adjustments for each custom section
+    # name. Break early on encountering symbols in unexpected sections to get
+    # notified about adjustments due.
+    assert _IsExpectedSectionForInstrumentedCode(section), (
+        f'Symbol {name} in unexpected section "{section}"')
     assert scope in ['Local', 'Global', 'Weak']
     # Forbid ARM mapping symbols and other unexpected symbol names, but allow $
     # characters in a non-initial position, which can appear as a component of a
@@ -188,8 +214,11 @@ def SymbolNamesFromLlvmBitcodeFile(filename):
     [str] A list of symbol names, can be empty.
   """
   command = (_NM_PATH, '--defined-only', filename)
-  p = subprocess.Popen(command, shell=False, stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE)
+  p = subprocess.Popen(command,
+                       shell=False,
+                       stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE,
+                       text=True)
   try:
     result = _SymbolInfosFromLlvmNm(p.stdout)
     if not result:
@@ -198,7 +227,8 @@ def SymbolNamesFromLlvmBitcodeFile(filename):
     return result
   finally:
     _, _ = p.communicate()
-    p.stdout.close()
+    if p.stdout:
+      p.stdout.close()
     assert p.wait() == 0
 
 

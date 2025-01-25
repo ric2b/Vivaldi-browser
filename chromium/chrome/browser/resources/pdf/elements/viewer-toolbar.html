@@ -184,16 +184,6 @@
     padding-inline-start: 12px;
   }
 
-  /* For more info, see https://webaim.org/techniques/css/invisiblecontent/ */
-  .only-visible-to-screen-reader {
-    height: 1px;
-    left: -10000px;
-    overflow: hidden;
-    position: absolute;
-    top: auto;
-    width: 1px;
-  }
-
   .check-container {
     margin-inline-end: 12px;
     width: 16px;
@@ -252,10 +242,29 @@
         aria-label="$i18n{tooltipRotateCCW}" title="$i18n{tooltipRotateCCW}"
         on-click="onRotateClick_">
     </cr-icon-button>
+<if expr="enable_pdf_ink2">
+    <template is="dom-if" if="[[showInk2Buttons_]]">
+      <span class="vertical-separator"></span>
+      <cr-icon-button id="annotate" iron-icon="cr:create"
+          on-click="onAnnotationClick_"
+          aria-label="$i18n{tooltipAnnotate}"
+          disabled="[[!annotationsAvailable]]"
+          title="$i18n{tooltipAnnotate}"></cr-icon-button>
+      <span class="vertical-separator"></span>
+      <cr-icon-button id="undo" disabled="[[!canUndoAnnotation_]]"
+          iron-icon="pdf:undo" on-click="onUndoClick_"
+          aria-label="$i18n{annotationUndo}"
+          title="$i18n{annotationUndo}"></cr-icon-button>
+      <cr-icon-button id="redo" disabled="[[!canRedoAnnotation_]]"
+          iron-icon="pdf:redo" on-click="onRedoClick_"
+          aria-label="$i18n{annotationRedo}"
+          title="$i18n{annotationRedo}"></cr-icon-button>
+    </template>
+</if>
   </div>
   <div id="end">
-  <if expr="enable_ink or enable_pdf_ink2">
-    <template is="dom-if" if="[[pdfAnnotationsEnabled]]">
+  <if expr="enable_ink">
+    <template is="dom-if" if="[[showInkAnnotationButton_]]">
       <cr-icon-button id="annotate" iron-icon="cr:create"
           on-click="onAnnotationClick_"
           aria-label="$i18n{tooltipAnnotate}"
@@ -266,6 +275,9 @@
     <viewer-download-controls id="downloads"
         has-edits="[[hasEdits]]"
         has-entered-annotation-mode="[[hasEnteredAnnotationMode]]"
+<if expr="enable_pdf_ink2">
+        has-ink2-edits="[[hasInk2Edits]]"
+</if>
         is-form-field-focused="[[isFormFieldFocused]]">
     </viewer-download-controls>
     <cr-icon-button id="print" iron-icon="cr:print"
@@ -303,21 +315,6 @@
     $i18n{annotationsShowToggle}
   </button>
 
-<if expr="enable_screen_ai_service">
-  <template is="dom-if" if="[[pdfOcrEnabled]]">
-    <button id="pdf-ocr-button"
-        class="dropdown-item only-visible-to-screen-reader"
-        on-click="onPdfOcrClick_" role="checkbox"
-        aria-checked="[[getAriaChecked_(pdfOcrAlwaysActive_)]]">
-      <span class="check-container">
-        <iron-icon icon="pdf:check" hidden="[[!pdfOcrAlwaysActive_]]">
-        </iron-icon>
-      </span>
-      $i18n{pdfOcrShowToggle}
-    </button>
-  </template>
-</if>
-
   <hr>
 
   <button id="present-button" class="dropdown-item" on-click="onPresentClick_"
@@ -342,7 +339,11 @@
 </if>
 <if expr="enable_ink or enable_pdf_ink2">
   <template is="dom-if" if="[[showAnnotationsBar_]]">
-    <viewer-annotations-bar annotation-mode="[[annotationMode]]">
+    <viewer-annotations-bar
+<if expr="enable_pdf_ink2">
+      pdf-ink2-enabled="[[pdfInk2Enabled]]"
+</if>
+      annotation-mode="[[annotationMode]]">
     </viewer-annotations-bar>
   </template>
 </if>

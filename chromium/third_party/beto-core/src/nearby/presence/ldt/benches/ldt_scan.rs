@@ -19,7 +19,8 @@ use crypto_provider::{CryptoProvider, CryptoRng};
 use crypto_provider_rustcrypto::RustCrypto;
 use ctr::cipher::{KeyIvInit as _, StreamCipher as _, StreamCipherSeek as _};
 use ldt::{
-    DefaultPadder, LdtDecryptCipher, LdtEncryptCipher, LdtKey, Mix, Padder, Swap, XorPadder,
+    DefaultPadder, LdtCipher, LdtDecryptCipher, LdtEncryptCipher, LdtKey, Mix, Padder, Swap,
+    XorPadder,
 };
 use ldt_tbc::TweakableBlockCipher;
 use sha2::Digest as _;
@@ -159,7 +160,9 @@ fn random_vec<C: CryptoProvider>(rng: &mut C::CryptoRng, len: usize) -> Vec<u8> 
 }
 
 trait ScanCipher {
+    #[allow(dead_code)]
     fn encrypt(&mut self, buf: &mut [u8]);
+
     fn decrypt(&mut self, buf: &mut [u8]);
 }
 

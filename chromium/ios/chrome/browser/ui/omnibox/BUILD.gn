@@ -97,12 +97,8 @@ source_set("omnibox_internal") {
     "omnibox_mediator.mm",
     "omnibox_return_key_forwarding_delegate.h",
     "omnibox_return_key_forwarding_delegate.mm",
-    "omnibox_text_field_experimental.h",
-    "omnibox_text_field_experimental.mm",
     "omnibox_text_field_ios.h",
     "omnibox_text_field_ios.mm",
-    "omnibox_text_field_legacy.h",
-    "omnibox_text_field_legacy.mm",
     "omnibox_text_field_paste_delegate.h",
     "omnibox_text_field_paste_delegate.mm",
     "omnibox_view_controller.h",
@@ -133,7 +129,9 @@ source_set("omnibox_internal") {
     "//ios/chrome/browser/autocomplete/model",
     "//ios/chrome/browser/bookmarks/model",
     "//ios/chrome/browser/bookmarks/model:model_utils",
+    "//ios/chrome/browser/bubble/ui_bundled",
     "//ios/chrome/browser/default_browser/model:default_browser_interest_signals",
+    "//ios/chrome/browser/default_promo/ui_bundled:coordinator",
     "//ios/chrome/browser/favicon/model",
     "//ios/chrome/browser/feature_engagement/model",
     "//ios/chrome/browser/https_upgrades/model",
@@ -143,7 +141,7 @@ source_set("omnibox_internal") {
     "//ios/chrome/browser/prerender/model",
     "//ios/chrome/browser/search_engines/model",
     "//ios/chrome/browser/search_engines/model:search_engines_util",
-    "//ios/chrome/browser/sessions",
+    "//ios/chrome/browser/sessions/model",
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
     "//ios/chrome/browser/shared/coordinator/layout_guide",
     "//ios/chrome/browser/shared/coordinator/scene:scene_state_header",
@@ -156,9 +154,8 @@ source_set("omnibox_internal") {
     "//ios/chrome/browser/shared/ui/elements",
     "//ios/chrome/browser/shared/ui/symbols",
     "//ios/chrome/browser/shared/ui/util",
+    "//ios/chrome/browser/shared/ui/util:omnibox_util",
     "//ios/chrome/browser/shared/ui/util:util_swift",
-    "//ios/chrome/browser/ui/bubble",
-    "//ios/chrome/browser/ui/default_promo",
     "//ios/chrome/browser/ui/fullscreen",
     "//ios/chrome/browser/ui/lens:lens_entrypoint",
     "//ios/chrome/browser/ui/location_bar:constants",
@@ -225,6 +222,7 @@ source_set("eg_app_support+eg2") {
     "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/ui/omnibox/popup:popup_ui",
     "//ios/chrome/test/app:test_support",
+    "//ios/testing:nserror_support",
     "//ios/testing/earl_grey:eg_app_support+eg2",
     "//ios/third_party/earl_grey2:app_framework+link",
     "//ios/web/public",
@@ -243,12 +241,15 @@ source_set("eg_test_support+eg2") {
     "omnibox_app_interface_stub.mm",
     "omnibox_earl_grey.h",
     "omnibox_earl_grey.mm",
+    "omnibox_matchers.h",
+    "omnibox_matchers.mm",
     "omnibox_test_util.h",
     "omnibox_test_util.mm",
   ]
   deps = [
     "//base/test:test_support",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/ui/omnibox/popup:popup_accessibility_identifier_constants",
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",
     "//ios/testing/earl_grey:eg_test_support+eg2",
     "//ios/testing/earl_grey:launch_configuration",
@@ -308,7 +309,6 @@ source_set("unit_tests") {
   sources = [
     "chrome_omnibox_client_ios_unittest.mm",
     "fake_suggestions_database_unittest.cc",
-    "omnibox_text_field_ios_experimental_unittest.mm",
     "omnibox_text_field_ios_unittest.mm",
     "zero_suggest_prefetch_helper_unittest.mm",
   ]
@@ -324,6 +324,7 @@ source_set("unit_tests") {
     "//components/feature_engagement/test:test_support",
     "//components/omnibox/browser:test_support",
     "//components/search_engines",
+    "//components/search_engines:test_support",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/autocomplete/model",
     "//ios/chrome/browser/main/model",
@@ -355,7 +356,11 @@ bundle_data("resources_unit_tests") {
 bundle_data("resources_fake_suggestions_tests") {
   visibility = [ ":eg_app_support+eg2" ]
   testonly = true
-  sources = [ "//ios/chrome/test/data/omnibox/fake_suggestions_pedal.json" ]
+  sources = [
+    "//ios/chrome/test/data/omnibox/fake_suggestion_actions.json",
+    "//ios/chrome/test/data/omnibox/fake_suggestions_pedal.json",
+    "//ios/chrome/test/data/omnibox/fake_suggestions_sample.json",
+  ]
   outputs = [ "{{bundle_resources_dir}}/" +
               "{{source_root_relative_dir}}/{{source_file_part}}" ]
 }

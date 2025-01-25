@@ -74,6 +74,12 @@ GLenum TargetForTextureViewDimension(wgpu::TextureViewDimension dimension, uint3
 bool RequiresCreatingNewTextureView(
     const TextureBase* texture,
     const UnpackedPtr<TextureViewDescriptor>& textureViewDescriptor) {
+    // Compatibility mode validation should prevent the need for creation of
+    // new texture views.
+    if (ToBackend(texture->GetDevice())->IsCompatibilityMode()) {
+        return false;
+    }
+
     constexpr wgpu::TextureUsage kShaderUsageNeedsView =
         wgpu::TextureUsage::StorageBinding | wgpu::TextureUsage::TextureBinding;
     constexpr wgpu::TextureUsage kUsageNeedsView =
@@ -146,6 +152,31 @@ void AllocateTexture(const OpenGLFunctions& gl,
     }
 }
 
+void FramebufferTextureHelper(const OpenGLFunctions& gl,
+                              GLenum textarget,
+                              GLenum target,
+                              GLenum attachment,
+                              GLuint textureHandle,
+                              GLuint mipLevel,
+                              GLuint arrayLayer) {
+    switch (textarget) {
+        case GL_TEXTURE_2D_ARRAY:
+        case GL_TEXTURE_CUBE_MAP_ARRAY:
+        case GL_TEXTURE_3D:
+            gl.FramebufferTextureLayer(target, attachment, textureHandle, mipLevel, arrayLayer);
+            break;
+        case GL_TEXTURE_CUBE_MAP: {
+            GLenum cubeTexTarget = GL_TEXTURE_CUBE_MAP_POSITIVE_X + arrayLayer;
+            gl.FramebufferTexture2D(target, attachment, cubeTexTarget, textureHandle, mipLevel);
+            break;
+        }
+        default:
+            DAWN_ASSERT(textarget == GL_TEXTURE_2D || textarget == GL_TEXTURE_2D_MULTISAMPLE);
+            gl.FramebufferTexture2D(target, attachment, textarget, textureHandle, mipLevel);
+            break;
+    }
+}
+
 }  // namespace
 
 // Texture
@@ -178,14 +209,6 @@ Texture::Texture(Device* device, const UnpackedPtr<TextureDescriptor>& descripto
     // The texture is not complete if it uses mipmapping and not all levels up to
     // MAX_LEVEL have been defined.
     gl.TexParameteri(mTarget, GL_TEXTURE_MAX_LEVEL, levels - 1);
-}
-
-void Texture::Touch() {
-    mGenID++;
-}
-
-uint32_t Texture::GetGenID() const {
-    return mGenID;
 }
 
 Texture::Texture(Device* device, const UnpackedPtr<TextureDescriptor>& descriptor, GLuint handle)
@@ -266,57 +289,25 @@ MaybeError Texture::ClearTexture(const SubresourceRange& range,
 
             for (uint32_t level = range.baseMipLevel; level < range.baseMipLevel + range.levelCount;
                  ++level) {
-                switch (GetDimension()) {
-                    case wgpu::TextureDimension::e1D:
-                    case wgpu::TextureDimension::e2D:
-                        if (GetArrayLayers() == 1) {
-                            Aspect aspectsToClear = Aspect::None;
-                            for (Aspect aspect : IterateEnumMask(range.aspects)) {
-                                if (clearValue == TextureBase::ClearValue::Zero &&
-                                    IsSubresourceContentInitialized(
-                                        SubresourceRange::SingleMipAndLayer(level, 0, aspect))) {
-                                    // Skip lazy clears if already initialized.
-                                    continue;
-                                }
-                                aspectsToClear |= aspect;
-                            }
-
-                            if (aspectsToClear == Aspect::None) {
-                                continue;
-                            }
-                            gl.FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, attachment, GetGLTarget(),
-                                                    GetHandle(), static_cast<GLint>(level));
-                            DoClear(aspectsToClear);
-                        } else {
-                            for (uint32_t layer = range.baseArrayLayer;
-                                 layer < range.baseArrayLayer + range.layerCount; ++layer) {
-                                Aspect aspectsToClear = Aspect::None;
-                                for (Aspect aspect : IterateEnumMask(range.aspects)) {
-                                    if (clearValue == TextureBase::ClearValue::Zero &&
-                                        IsSubresourceContentInitialized(
-                                            SubresourceRange::SingleMipAndLayer(level, layer,
-                                                                                aspect))) {
-                                        // Skip lazy clears if already initialized.
-                                        continue;
-                                    }
-                                    aspectsToClear |= aspect;
-                                }
-
-                                if (aspectsToClear == Aspect::None) {
-                                    continue;
-                                }
-
-                                gl.FramebufferTextureLayer(GL_DRAW_FRAMEBUFFER, attachment,
-                                                           GetHandle(), static_cast<GLint>(level),
-                                                           static_cast<GLint>(layer));
-                                DoClear(aspectsToClear);
-                            }
+                for (uint32_t layer = range.baseArrayLayer;
+                     layer < range.baseArrayLayer + range.layerCount; ++layer) {
+                    Aspect aspectsToClear = Aspect::None;
+                    for (Aspect aspect : IterateEnumMask(range.aspects)) {
+                        if (clearValue == TextureBase::ClearValue::Zero &&
+                            IsSubresourceContentInitialized(
+                                SubresourceRange::SingleMipAndLayer(level, layer, aspect))) {
+                            // Skip lazy clears if already initialized.
+                            continue;
                         }
-                        break;
+                        aspectsToClear |= aspect;
+                    }
 
-                    case wgpu::TextureDimension::e3D:
-                    case wgpu::TextureDimension::Undefined:
-                        DAWN_UNREACHABLE();
+                    if (aspectsToClear == Aspect::None) {
+                        continue;
+                    }
+                    FramebufferTextureHelper(gl, mTarget, GL_DRAW_FRAMEBUFFER, attachment,
+                                             GetHandle(), level, layer);
+                    DoClear(aspectsToClear);
                 }
             }
 
@@ -350,6 +341,7 @@ MaybeError Texture::ClearTexture(const SubresourceRange& range,
             TextureComponentType baseType = GetFormat().GetAspectInfo(Aspect::Color).baseType;
 
             const GLFormat& glFormat = GetGLFormat();
+            const auto dimension = GetDimension();
             for (uint32_t level = range.baseMipLevel; level < range.baseMipLevel + range.levelCount;
                  ++level) {
                 Extent3D mipSize = GetMipLevelSingleSubresourcePhysicalSize(level, Aspect::Color);
@@ -409,32 +401,18 @@ MaybeError Texture::ClearTexture(const SubresourceRange& range,
                         }
                     };
 
-                    if (GetArrayLayers() == 1) {
-                        switch (GetDimension()) {
-                            case wgpu::TextureDimension::Undefined:
-                                DAWN_UNREACHABLE();
-                            case wgpu::TextureDimension::e1D:
-                            case wgpu::TextureDimension::e2D:
-                                gl.FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, attachment,
-                                                        GetGLTarget(), GetHandle(), level);
-                                DoClear();
-                                break;
-                            case wgpu::TextureDimension::e3D:
-                                uint32_t depth =
-                                    GetMipLevelSingleSubresourceVirtualSize(level, Aspect::Color)
-                                        .depthOrArrayLayers;
-                                for (GLint z = 0; z < static_cast<GLint>(depth); ++z) {
-                                    gl.FramebufferTextureLayer(GL_DRAW_FRAMEBUFFER, attachment,
-                                                               GetHandle(), level, z);
-                                    DoClear();
-                                }
-                                break;
+                    if (dimension == wgpu::TextureDimension::e3D) {
+                        uint32_t depth =
+                            GetMipLevelSingleSubresourceVirtualSize(level, Aspect::Color)
+                                .depthOrArrayLayers;
+                        for (GLint z = 0; z < static_cast<GLint>(depth); ++z) {
+                            gl.FramebufferTextureLayer(GL_DRAW_FRAMEBUFFER, attachment, GetHandle(),
+                                                       level, z);
+                            DoClear();
                         }
-
                     } else {
-                        DAWN_ASSERT(GetDimension() == wgpu::TextureDimension::e2D);
-                        gl.FramebufferTextureLayer(GL_DRAW_FRAMEBUFFER, attachment, GetHandle(),
-                                                   level, layer);
+                        FramebufferTextureHelper(gl, mTarget, GL_DRAW_FRAMEBUFFER, attachment,
+                                                 GetHandle(), level, layer);
                         DoClear();
                     }
 
@@ -517,7 +495,6 @@ MaybeError Texture::ClearTexture(const SubresourceRange& range,
         SetIsSubresourceContentInitialized(true, range);
         device->IncrementLazyClearCountForTesting();
     }
-    Touch();
     return {};
 }
 
@@ -554,8 +531,6 @@ TextureView::TextureView(TextureBase* texture, const UnpackedPtr<TextureViewDesc
                            descriptor->baseArrayLayer, descriptor->arrayLayerCount);
             mOwnsHandle = true;
         } else {
-            // Simulate glTextureView() with texture-to-texture copies.
-            mUseCopy = true;
             mHandle = 0;
         }
     }
@@ -590,18 +565,19 @@ void TextureView::BindToFramebuffer(GLenum target, GLenum attachment, GLuint dep
     bool useOwnView = GetFormat().format != GetTexture()->GetFormat().format &&
                       !GetTexture()->GetFormat().HasDepthOrStencil();
 
-    GLuint handle, textarget, mipLevel, arrayLayer;
+    GLenum textarget;
+    GLuint textureHandle, mipLevel, arrayLayer;
     if (useOwnView) {
         // Use our own texture handle and target which points to a subset of the texture's
         // subresources.
-        handle = GetHandle();
+        textureHandle = GetHandle();
         textarget = GetGLTarget();
         mipLevel = 0;
         arrayLayer = 0;
     } else {
         // Use the texture's handle and target, with the view's base mip level and base array
 
-        handle = ToBackend(GetTexture())->GetHandle();
+        textureHandle = ToBackend(GetTexture())->GetHandle();
         textarget = ToBackend(GetTexture())->GetGLTarget();
         mipLevel = GetBaseMipLevel();
         // We have validated that the depthSlice in render pass's colorAttachments must be undefined
@@ -611,60 +587,10 @@ void TextureView::BindToFramebuffer(GLenum target, GLenum attachment, GLuint dep
         arrayLayer = GetBaseArrayLayer() + depthSlice;
     }
 
-    DAWN_ASSERT(handle != 0);
+    DAWN_ASSERT(textureHandle != 0);
 
-    switch (textarget) {
-        case GL_TEXTURE_2D_ARRAY:
-        case GL_TEXTURE_CUBE_MAP_ARRAY:
-        case GL_TEXTURE_3D:
-            gl.FramebufferTextureLayer(target, attachment, handle, mipLevel, arrayLayer);
-            break;
-        case GL_TEXTURE_CUBE_MAP: {
-            GLenum cubeTexTarget = GL_TEXTURE_CUBE_MAP_POSITIVE_X + arrayLayer;
-            gl.FramebufferTexture2D(target, attachment, cubeTexTarget, handle, mipLevel);
-            break;
-        }
-        default:
-            gl.FramebufferTexture2D(target, attachment, textarget, handle, mipLevel);
-            break;
-    }
-}
-
-void TextureView::CopyIfNeeded() {
-    if (!mUseCopy) {
-        return;
-    }
-
-    const Texture* texture = ToBackend(GetTexture());
-    if (mGenID == texture->GetGenID()) {
-        return;
-    }
-
-    Device* device = ToBackend(GetDevice());
-    const OpenGLFunctions& gl = device->GetGL();
-    uint32_t srcLevel = GetBaseMipLevel();
-    uint32_t numLevels = GetLevelCount();
-
-    uint32_t width = GetSingleSubresourceVirtualSize().width;
-    uint32_t height = GetSingleSubresourceVirtualSize().height;
-    Extent3D size{width, height, GetLayerCount()};
-
-    if (mHandle == 0) {
-        gl.GenTextures(1, &mHandle);
-        gl.BindTexture(mTarget, mHandle);
-        AllocateTexture(gl, mTarget, texture->GetSampleCount(), numLevels, GetInternalFormat(),
-                        size);
-        mOwnsHandle = true;
-    }
-
-    Origin3D src{0, 0, GetBaseArrayLayer()};
-    Origin3D dst{0, 0, 0};
-    for (GLuint level = 0; level < numLevels; ++level) {
-        CopyImageSubData(gl, GetAspects(), texture->GetHandle(), texture->GetGLTarget(),
-                         srcLevel + level, src, mHandle, mTarget, level, dst, size);
-    }
-
-    mGenID = texture->GetGenID();
+    FramebufferTextureHelper(gl, textarget, target, attachment, textureHandle, mipLevel,
+                             arrayLayer);
 }
 
 GLenum TextureView::GetInternalFormat() const {

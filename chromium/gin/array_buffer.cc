@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "gin/array_buffer.h"
 
 #include <stddef.h>
@@ -26,9 +31,6 @@
 #endif  // BUILDFLAG(IS_POSIX)
 
 namespace gin {
-
-static_assert(V8_ARRAY_BUFFER_INTERNAL_FIELD_COUNT == 2,
-              "array buffers must have two internal fields");
 
 // ArrayBufferAllocator -------------------------------------------------------
 partition_alloc::PartitionRoot* ArrayBufferAllocator::partition_ = nullptr;

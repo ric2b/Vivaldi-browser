@@ -79,7 +79,6 @@
 <translation id="2536780277491102902">예외</translation>
 <translation id="2558801801411970131">트래커 차단</translation>
 <translation id="2562040727226360285">방해되는 요소 제거, 사이트에 오류가 있을 수 있음 (<ph name="ORIGIN" />)</translation>
-<translation id="2563886993995570961">최대 열 개수</translation>
 <translation id="257674075312929031">그룹</translation>
 <translation id="2577446409661931381">새 메모</translation>
 <translation id="261264557609353020">시작 페이지</translation>
@@ -106,7 +105,6 @@
 <translation id="2961573414320947355">Vivaldi에서 모든 링크를 여시겠어요? 기본값으로 설정되어 있는지 확인해주세요.</translation>
 <translation id="3006429105107822794">이 비밀번호를 기억하지 않아도 됩니다. Vivaldi 비밀번호 관리자에 저장되었습니다.</translation>
 <translation id="3018244467214569202">그리스어 (<ph name="ORIGIN" />)</translation>
-<translation id="3029426144711327484">스피드 다이얼 표시</translation>
 <translation id="3039671569659952257">폴더 삭제</translation>
 <translation id="3073196329485613487">내 계정으로 로그인</translation>
 <translation id="307859903981308731">계속하면 Vivaldi의</translation>
@@ -115,7 +113,6 @@
 <translation id="3091563570137981919">추적기 및 광고 차단</translation>
 <translation id="3134385238404760368">최근 방문한 탭 없음</translation>
 <translation id="3157931365184549694">복구</translation>
-<translation id="3159285901314605198">배경 이미지</translation>
 <translation id="3177673846235066154">서버가 정보를 거절했습니다.</translation>
 <translation id="3229182533910980085">아래의 더하기 아이콘을 눌러서 첫번째 북마크를 추가해주세요</translation>
 <translation id="3236835587712044564">Vivaldi에 만족하시나요? 기본 브라우저로 설정해주세요.</translation>
@@ -248,12 +245,10 @@
 <translation id="5378841821586202982">휴지통 폴더</translation>
 <translation id="5398772614898833570">광고 차단됨</translation>
 <translation id="5421638721143596928">정보 복호화에 실패했습니다. 다시 로그인해주세요.</translation>
-<translation id="5422086212043657100">스피드 다이얼 폴더로 사용하기</translation>
 <translation id="5439835075346716808">이 IP를 통한 가입이 일시적으로 비활성화되었습니다. 나중에 다시 시도해주세요.</translation>
 <translation id="5486261815000869482">비밀번호 확인</translation>
 <translation id="5494016731375030300">최근에 닫은 탭</translation>
 <translation id="5564687523685713029">그룹만 표시</translation>
-<translation id="5600792731098584229">스피드 다이얼 크기</translation>
 <translation id="5639137028584114536">귀하의 조직에서 시크릿 브라우징을 요구합니다. 시크릿 모드에서는 탭이 저장되지 않습니다.
         <ph name="BEGIN_LINK" />자세히 알아보기<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">목록</translation>
@@ -272,7 +267,6 @@
 <translation id="6005497458542935062">폴더 밖으로 이동</translation>
 <translation id="6042308850641462728">더보기</translation>
 <translation id="6077943432358741146">스피드 다이얼</translation>
-<translation id="6079696972035130497">무제한</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> 항목 이동됨</translation>
 <translation id="6147094071357011481">최근에 닫을 탭을 사용할 수 없음</translation>
 <translation id="6193995664633100765">힌디어 (<ph name="ORIGIN" />)</translation>
@@ -303,7 +297,6 @@
 <translation id="681368974849482173">항목 생성됨</translation>
 <translation id="6830986331692390764">동기화 데이터를 지우는 중. 잠시만 기다려주세요.</translation>
 <translation id="6875510405870945573">원하는 차단 수준을 선택해주세요.</translation>
-<translation id="6885837502028760851">스피드 다이얼 폴더만 표시</translation>
 <translation id="6887143077297974801">동기화 시작에 실패했습니다.</translation>
 <translation id="691132463664340655">테마 탐색</translation>
 <translation id="6937750621455385628">Vivaldi 계정을 사용하려면 로그인해야 합니다.</translation>
@@ -379,7 +372,6 @@
 <translation id="8275038454117074363">불러오기</translation>
 <translation id="8284356787013856231">파일 열기 권한 거부됨</translation>
 <translation id="8289933454364510719">상단 또는 하단</translation>
-<translation id="8304044605002588416">시작 페이지 수정 버튼</translation>
 <translation id="8326104954595890674">새 시크릿 탭</translation>
 <translation id="8329813750766387010">업데이트됨: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">쿠키 팝업 제거 (<ph name="TYPE" />)</translation>

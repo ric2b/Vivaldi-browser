@@ -122,38 +122,3 @@ should still be able to get into its terminal. Try the following:
 4.  Reboot the Chromebook with `reboot`.
 
 5.  Attempt to deploy again.
-
-## Troubleshooting Goma
-
-### Builds are slow
-
-If your builds are running slower than usual, check http://localhost:8088 on the
-machine you're building on, e.g., corp workstation or cloudtop instance. For
-example, there might be a message saying you need to restart the compiler proxy.
-You can do this with
-
-```
-goma_ctl ensure_start
-```
-Just to be safe, I like to do this every time I rebase:
-
-```
-git rebase-update && gclient sync -D && goma_ctl ensure_start
-```
-
-### Goma path not found
-
-You may see issues with Goma not being found in the expected location, or an
-auth issue where you get a 401 when trying to enter the SDK shell. Goma has
-changed locations and is now included with `depot_tools` rather than being
-installed in `~/goma`. Run the following command to check your installation:
-
-```shell
-$ goma_ctl goma_dir 2>/dev/null
-```
-
-Make sure the output is not blank and that it's pointing to a location in the
-`depot_tools` directory. If this isn't the case, there may be an environment
-variable called `GOMA_DIR` pointing at the old location, causing a conflict.
-Clear it out (`export GOMA_DIR=""`) and see if that fixes your problem.
-[More info](https://g3doc.corp.google.com/devtools/goma/g3doc/how-to-use-goma/how-to-build-chrome-with-goma.md).

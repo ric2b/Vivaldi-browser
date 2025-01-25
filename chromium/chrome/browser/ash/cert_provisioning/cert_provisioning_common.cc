@@ -10,8 +10,10 @@
 #include "base/functional/callback_helpers.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
+#include "base/unguessable_token.h"
 #include "chrome/browser/ash/platform_keys/key_permissions/key_permissions_manager.h"
 #include "chrome/browser/ash/platform_keys/key_permissions/key_permissions_manager_impl.h"
 #include "chrome/browser/ash/platform_keys/platform_keys_service.h"
@@ -47,7 +49,7 @@ std::optional<AccountId> GetAccountId(CertScope scope, Profile* profile) {
     }
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 // This function implements `DeleteVaKey()` and `DeleteVaKeysByPrefix()`, both
@@ -160,6 +162,7 @@ std::optional<CertProfile> CertProfile::MakeFromValue(
   const std::string* name = value.FindString(kCertProfileNameKey);
   const std::string* policy_version =
       value.FindString(kCertProfilePolicyVersionKey);
+  const std::string* key_type = value.FindString(kCertProfileKeyType);
   std::optional<bool> is_va_enabled =
       value.FindBool(kCertProfileIsVaEnabledKey);
   std::optional<int> renewal_period_sec =
@@ -168,6 +171,11 @@ std::optional<CertProfile> CertProfile::MakeFromValue(
       value.FindInt(kCertProfileProtocolVersion);
 
   if (!id || !policy_version) {
+    return std::nullopt;
+  }
+
+  if (key_type && *key_type != "rsa") {
+    LOG(ERROR) << "Unsupported key type received: " << *key_type;
     return std::nullopt;
   }
 
@@ -339,6 +347,18 @@ platform_keys::KeyPermissionsManager* GetKeyPermissionsManager(
       return platform_keys::KeyPermissionsManagerImpl::
           GetSystemTokenKeyPermissionsManager();
   }
+}
+
+std::string GenerateCertProvisioningId() {
+  return base::UnguessableToken::Create().ToString();
+}
+
+std::string MakeInvalidationListenerType(const std::string& cert_prov_id) {
+  constexpr char kCertProvPrefix[] = "cert-";
+  std::string result = base::StrCat({kCertProvPrefix, cert_prov_id});
+  // Server-side stores the type and expects it to be <=128 characters long.
+  CHECK_LE(result.size(), 128u);
+  return result;
 }
 
 }  // namespace cert_provisioning

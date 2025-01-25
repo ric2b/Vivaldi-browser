@@ -68,8 +68,6 @@ NSString* const vNTPToolbarMoreDarkTintColor =
 #pragma mark - ICONS
 // Image names for the search icon.
 NSString* vNTPSearchIcon = @"vivaldi_ntp_search";
-// Image name for toolbar sort icon
-NSString* vNTPToolbarSortIcon = @"vivaldi_ntp_toolbar_sort";
 // Image name for toolbar more icon
 NSString* vNTPToolbarMoreIcon = @"vivaldi_ntp_toolbar_more";
 // Image name for private mode page background

@@ -21,7 +21,9 @@
 #include "components/password_manager/core/browser/password_store/split_stores_and_local_upm.h"
 #include "components/password_manager/core/browser/password_sync_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/signin/public/identity_manager/account_info.h"
 #include "components/sync/base/features.h"
+#include "components/sync/service/sync_service.h"
 
 namespace password_manager {
 
@@ -32,16 +34,13 @@ constexpr char kUPMActiveHistogram[] =
 
 std::string GetSyncingAccount(const syncer::SyncService* sync_service) {
   CHECK(sync_service);
-  // TODO(crbug.com/40067770): Migrate away from `ConsentLevel::kSync` on
-  // Android.
-  return sync_util::GetAccountEmailIfSyncFeatureEnabledIncludingPasswords(
-      sync_service);
+  return password_manager::sync_util::HasChosenToSyncPasswords(sync_service)
+             ? sync_service->GetAccountInfo().email
+             : std::string();
 }
 
 void LogUPMActiveStatus(syncer::SyncService* sync_service, PrefService* prefs) {
-  // TODO(crbug.com/40067770): Migrate away from `ConsentLevel::kSync` on
-  // Android.
-  if (!sync_util::IsSyncFeatureEnabledIncludingPasswords(sync_service)) {
+  if (!password_manager::sync_util::HasChosenToSyncPasswords(sync_service)) {
     base::UmaHistogramEnumeration(
         kUPMActiveHistogram,
         UnifiedPasswordManagerActiveStatus::kInactiveSyncOff);
@@ -215,7 +214,7 @@ bool PasswordStoreAndroidAccountBackend::IsAbleToSavePasswords() {
 
 void PasswordStoreAndroidAccountBackend::GetAllLoginsAsync(
     LoginsOrErrorReply callback) {
-  if (!sync_util::IsSyncFeatureEnabledIncludingPasswords(sync_service_)) {
+  if (!password_manager::sync_util::HasChosenToSyncPasswords(sync_service_)) {
     ReplyWithEmptyList<LoginsResult>(std::move(callback));
     return;
   }
@@ -224,7 +223,7 @@ void PasswordStoreAndroidAccountBackend::GetAllLoginsAsync(
 
 void PasswordStoreAndroidAccountBackend::
     GetAllLoginsWithAffiliationAndBrandingAsync(LoginsOrErrorReply callback) {
-  if (!sync_util::IsSyncFeatureEnabledIncludingPasswords(sync_service_)) {
+  if (!password_manager::sync_util::HasChosenToSyncPasswords(sync_service_)) {
     ReplyWithEmptyList<LoginsResult>(std::move(callback));
     return;
   }
@@ -243,7 +242,7 @@ void PasswordStoreAndroidAccountBackend::
 
 void PasswordStoreAndroidAccountBackend::GetAutofillableLoginsAsync(
     LoginsOrErrorReply callback) {
-  if (!sync_util::IsSyncFeatureEnabledIncludingPasswords(sync_service_)) {
+  if (!password_manager::sync_util::HasChosenToSyncPasswords(sync_service_)) {
     ReplyWithEmptyList<LoginsResult>(std::move(callback));
     return;
   }
@@ -265,7 +264,7 @@ void PasswordStoreAndroidAccountBackend::FillMatchingLoginsAsync(
     LoginsOrErrorReply callback,
     bool include_psl,
     const std::vector<PasswordFormDigest>& forms) {
-  if (!sync_util::IsSyncFeatureEnabledIncludingPasswords(sync_service_)) {
+  if (!password_manager::sync_util::HasChosenToSyncPasswords(sync_service_)) {
     ReplyWithEmptyList<LoginsResult>(std::move(callback));
     return;
   }
@@ -276,7 +275,7 @@ void PasswordStoreAndroidAccountBackend::FillMatchingLoginsAsync(
 void PasswordStoreAndroidAccountBackend::GetGroupedMatchingLoginsAsync(
     const PasswordFormDigest& form_digest,
     LoginsOrErrorReply callback) {
-  if (!sync_util::IsSyncFeatureEnabledIncludingPasswords(sync_service_)) {
+  if (!password_manager::sync_util::HasChosenToSyncPasswords(sync_service_)) {
     ReplyWithEmptyList<LoginsResult>(std::move(callback));
     return;
   }
@@ -293,14 +292,14 @@ void PasswordStoreAndroidAccountBackend::GetGroupedMatchingLoginsAsync(
 void PasswordStoreAndroidAccountBackend::AddLoginAsync(
     const PasswordForm& form,
     PasswordChangesOrErrorReply callback) {
-  CHECK(sync_util::IsSyncFeatureEnabledIncludingPasswords(sync_service_));
+  CHECK(password_manager::sync_util::HasChosenToSyncPasswords(sync_service_));
   AddLoginInternal(GetSyncingAccount(sync_service_), form, std::move(callback));
 }
 
 void PasswordStoreAndroidAccountBackend::UpdateLoginAsync(
     const PasswordForm& form,
     PasswordChangesOrErrorReply callback) {
-  CHECK(sync_util::IsSyncFeatureEnabledIncludingPasswords(sync_service_));
+  CHECK(password_manager::sync_util::HasChosenToSyncPasswords(sync_service_));
   UpdateLoginInternal(GetSyncingAccount(sync_service_), form,
                       std::move(callback));
 }
@@ -309,7 +308,7 @@ void PasswordStoreAndroidAccountBackend::RemoveLoginAsync(
     const base::Location& location,
     const PasswordForm& form,
     PasswordChangesOrErrorReply callback) {
-  if (!sync_util::IsSyncFeatureEnabledIncludingPasswords(sync_service_)) {
+  if (!password_manager::sync_util::HasChosenToSyncPasswords(sync_service_)) {
     ReplyWithEmptyList<PasswordStoreChangeList>(std::move(callback));
     return;
   }
@@ -324,7 +323,7 @@ void PasswordStoreAndroidAccountBackend::RemoveLoginsByURLAndTimeAsync(
     base::Time delete_end,
     base::OnceCallback<void(bool)> sync_completion,
     PasswordChangesOrErrorReply callback) {
-  if (!sync_util::IsSyncFeatureEnabledIncludingPasswords(sync_service_)) {
+  if (!password_manager::sync_util::HasChosenToSyncPasswords(sync_service_)) {
     ReplyWithEmptyList<PasswordStoreChangeList>(std::move(callback));
     return;
   }
@@ -338,7 +337,7 @@ void PasswordStoreAndroidAccountBackend::RemoveLoginsCreatedBetweenAsync(
     base::Time delete_begin,
     base::Time delete_end,
     PasswordChangesOrErrorReply callback) {
-  if (!sync_util::IsSyncFeatureEnabledIncludingPasswords(sync_service_)) {
+  if (!password_manager::sync_util::HasChosenToSyncPasswords(sync_service_)) {
     ReplyWithEmptyList<PasswordStoreChangeList>(std::move(callback));
     return;
   }
@@ -350,7 +349,7 @@ void PasswordStoreAndroidAccountBackend::RemoveLoginsCreatedBetweenAsync(
 void PasswordStoreAndroidAccountBackend::DisableAutoSignInForOriginsAsync(
     const base::RepeatingCallback<bool(const GURL&)>& origin_filter,
     base::OnceClosure completion) {
-  CHECK(sync_util::IsSyncFeatureEnabledIncludingPasswords(sync_service_));
+  CHECK(password_manager::sync_util::HasChosenToSyncPasswords(sync_service_));
   DisableAutoSignInForOriginsInternal(GetSyncingAccount(sync_service_),
                                       origin_filter, std::move(completion));
 }
@@ -431,7 +430,7 @@ void PasswordStoreAndroidAccountBackend::OnSyncServiceInitialized(
   // can be obtained directly from the GMS Core backend.
   if (!prefs()->GetBoolean(
           prefs::kUnenrolledFromGoogleMobileServicesDueToErrors) &&
-      sync_util::IsSyncFeatureEnabledIncludingPasswords(sync_service_) &&
+      password_manager::sync_util::HasChosenToSyncPasswords(sync_service_) &&
       bridge_helper()->CanUseGetAllLoginsWithBrandingInfoAPI() &&
       password_affiliation_adapter_) {
     password_affiliation_adapter_->DisableSource();

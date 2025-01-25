@@ -290,12 +290,12 @@ bool ValidateColorMaskForSharedExponentColorBuffer(const Context *context,
 }
 }  // anonymous namespace
 
-static bool ValidateTexImageFormatCombination(const Context *context,
-                                              angle::EntryPoint entryPoint,
-                                              TextureType target,
-                                              GLenum internalFormat,
-                                              GLenum format,
-                                              GLenum type)
+bool ValidateTexImageFormatCombination(const Context *context,
+                                       angle::EntryPoint entryPoint,
+                                       TextureType target,
+                                       GLenum internalFormat,
+                                       GLenum format,
+                                       GLenum type)
 {
     // Different validation if on desktop api
     if (context->getClientType() == EGL_OPENGL_API)
@@ -608,15 +608,15 @@ bool ValidateES3TexImageParametersBase(const Context *context,
                 return false;
             }
 
-            if (width > (caps.maxCubeMapTextureSize >> level))
+            if (width > (caps.maxCubeMapTextureSize >> level) ||
+                height > (caps.maxCubeMapTextureSize >> level))
             {
                 ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kResourceMaxTextureSize);
                 return false;
             }
 
             if (width > (caps.max3DTextureSize >> level) ||
-                height > (caps.max3DTextureSize >> level) ||
-                depth > (caps.max3DTextureSize >> level))
+                height > (caps.max3DTextureSize >> level) || depth > caps.max3DTextureSize)
             {
                 ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kResourceMaxTextureSize);
                 return false;

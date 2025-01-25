@@ -32,6 +32,8 @@ QualifiedName GetCorrespondingARIAAttribute(AOMStringProperty property) {
       return html_names::kAriaBrailleroledescriptionAttr;
     case AOMStringProperty::kChecked:
       return html_names::kAriaCheckedAttr;
+    case AOMStringProperty::kColIndexText:
+      return html_names::kAriaColindextextAttr;
     case AOMStringProperty::kCurrent:
       return html_names::kAriaCurrentAttr;
     case AOMStringProperty::kDescription:
@@ -58,6 +60,8 @@ QualifiedName GetCorrespondingARIAAttribute(AOMStringProperty property) {
       return html_names::kRoleAttr;
     case AOMStringProperty::kRoleDescription:
       return html_names::kAriaRoledescriptionAttr;
+    case AOMStringProperty::kRowIndexText:
+      return html_names::kAriaRowindextextAttr;
     case AOMStringProperty::kSort:
       return html_names::kAriaSortAttr;
     case AOMStringProperty::kValueText:
@@ -66,7 +70,7 @@ QualifiedName GetCorrespondingARIAAttribute(AOMStringProperty property) {
       return html_names::kAriaVirtualcontentAttr;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return g_null_name;
 }
 
@@ -76,7 +80,7 @@ QualifiedName GetCorrespondingARIAAttribute(AOMRelationProperty property) {
       return html_names::kAriaActivedescendantAttr;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return g_null_name;
 }
 
@@ -100,7 +104,7 @@ QualifiedName GetCorrespondingARIAAttribute(AOMRelationListProperty property) {
       return html_names::kAriaOwnsAttr;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return g_null_name;
 }
 
@@ -130,7 +134,7 @@ QualifiedName GetCorrespondingARIAAttribute(AOMBooleanProperty property) {
       return html_names::kAriaSelectedAttr;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return g_null_name;
 }
 
@@ -145,7 +149,7 @@ QualifiedName GetCorrespondingARIAAttribute(AOMFloatProperty property) {
       return html_names::kAriaValuenowAttr;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return g_null_name;
 }
 
@@ -165,7 +169,7 @@ QualifiedName GetCorrespondingARIAAttribute(AOMUIntProperty property) {
       return html_names::kAriaRowspanAttr;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return g_null_name;
 }
 
@@ -179,7 +183,7 @@ QualifiedName GetCorrespondingARIAAttribute(AOMIntProperty property) {
       return html_names::kAriaSetsizeAttr;
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return g_null_name;
 }
 
@@ -588,6 +592,15 @@ void AccessibleNode::setColIndex(std::optional<uint32_t> value) {
   NotifyAttributeChanged(html_names::kAriaColindexAttr);
 }
 
+AtomicString AccessibleNode::colIndexText() const {
+  return GetProperty(AOMStringProperty::kColIndexText);
+}
+
+void AccessibleNode::setColIndexText(const AtomicString& value) {
+  SetStringProperty(AOMStringProperty::kColIndexText, value);
+  NotifyAttributeChanged(html_names::kAriaColindextextAttr);
+}
+
 std::optional<uint32_t> AccessibleNode::colSpan() const {
   return GetProperty(element_, AOMUIntProperty::kColSpan);
 }
@@ -886,6 +899,15 @@ void AccessibleNode::setRowIndex(std::optional<uint32_t> value) {
   NotifyAttributeChanged(html_names::kAriaRowindexAttr);
 }
 
+AtomicString AccessibleNode::rowIndexText() const {
+  return GetProperty(AOMStringProperty::kRowIndexText);
+}
+
+void AccessibleNode::setRowIndexText(const AtomicString& value) {
+  SetStringProperty(AOMStringProperty::kRowIndexText, value);
+  NotifyAttributeChanged(html_names::kAriaRowindextextAttr);
+}
+
 std::optional<uint32_t> AccessibleNode::rowSpan() const {
   return GetProperty(element_, AOMUIntProperty::kRowSpan);
 }
@@ -1078,6 +1100,7 @@ bool AccessibleNode::IsStringTokenProperty(AOMStringProperty property) {
       return true;
     case AOMStringProperty::kAriaBrailleLabel:
     case AOMStringProperty::kAriaBrailleRoleDescription:
+    case AOMStringProperty::kColIndexText:
     case AOMStringProperty::kDescription:
     case AOMStringProperty::kKeyShortcuts:
     case AOMStringProperty::kLabel:
@@ -1085,6 +1108,7 @@ bool AccessibleNode::IsStringTokenProperty(AOMStringProperty property) {
     case AOMStringProperty::kRole:  // Is token, but ""/"undefined" not
                                     // supported.
     case AOMStringProperty::kRoleDescription:
+    case AOMStringProperty::kRowIndexText:
     case AOMStringProperty::kValueText:
     case AOMStringProperty::kVirtualContent:
       break;

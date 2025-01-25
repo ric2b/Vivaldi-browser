@@ -1598,7 +1598,7 @@
     FT_Vector*  points;
     FT_Vector*  point;
     FT_Vector*  limit;
-    char*       tags;
+    FT_Byte*    tags;
 
     UInt        tag;       /* current point's state           */
 
@@ -2683,7 +2683,7 @@
       return FT_THROW( Invalid_Outline );
 
     /* return immediately if the outline is empty */
-    if ( outline->n_points == 0 || outline->n_contours <= 0 )
+    if ( outline->n_points == 0 || outline->n_contours == 0 )
       return Raster_Err_Ok;
 
     if ( !outline->contours || !outline->points )

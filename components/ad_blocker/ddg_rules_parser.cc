@@ -114,7 +114,8 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
     }
 
     const base::Value::List* excluded_origins = nullptr;
-    const std::string* owner = item.second.GetDict().FindStringByDottedPath(kOwnerNamePath);
+    const std::string* owner =
+        item.second.GetDict().FindStringByDottedPath(kOwnerNamePath);
     if (owner) {
       const base::Value* entity = entities->GetDict().Find(*owner);
       if (entity)
@@ -178,10 +179,11 @@ void DuckDuckGoRulesParser::AddBlockingRuleForDomain(
   parse_result_->rules_info.valid_rules++;
 }
 
-void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
-                                      const std::string& domain,
-                                      bool default_ignore,
-                                      const base::Value::List* excluded_origins) {
+void DuckDuckGoRulesParser::ParseRule(
+    const base::Value& rule,
+    const std::string& domain,
+    bool default_ignore,
+    const base::Value::List* excluded_origins) {
   if (!rule.is_dict())
     return;
 
@@ -227,7 +229,7 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
   } else {  // surrogate && !ignore
     // All block rules with surrogates result in a redirect rule. In this case
     // the rule is not redundant if the tracker default is block. If the rule
-    // has exceptions, those result in a separate allow rule.
+    // has exceptions, those result in a separate pass rule.
     if (default_ignore == ignore && exceptions)
       make_request_filter_rule = true;
     make_redirect_rule = true;
@@ -279,14 +281,14 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
     RequestFilterRule filter_rule;
     filter_rule.party.set();
     if (!default_ignore)
-      filter_rule.is_allow_rule = true;
+      filter_rule.decision = RequestFilterRule::kPass;
     if (default_ignore == ignore) {
       DCHECK(ignore == false);
       DCHECK(exceptions);
       // Under the DDG implementation, if a block rule has options and
       // exceptions, the rule is matched if the options are matched and the
       // request is then ignored if the exceptions are matched in turn. So, to
-      // implement this, we need an allow rule that matches both the options and
+      // implement this, we need an pass rule that matches both the options and
       // exceptions in the original rule.
       if (option_domains && exception_domains) {
         // Domain must have a match in both lists to be included.
@@ -297,7 +299,7 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
         //    run on the UI thread and people aren't expected to load this list
         //    manually.
         for (const auto& option_domain : option_domains.value()) {
-          base::StringPiece potential_domain;
+          std::string_view potential_domain;
           for (const auto& exception_domain : exception_domains.value()) {
             if (potential_domain.empty()) {
               if (option_domain == exception_domain) {
@@ -341,7 +343,8 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
         filter_rule.included_domains.swap(option_domains.value());
       filter_rule.resource_types = option_types.value();
       if (!ignore) {
-        DCHECK(default_ignore && !filter_rule.is_allow_rule);
+        DCHECK(default_ignore &&
+               filter_rule.decision != RequestFilterRule::kPass);
         // Under the DDG implementation, exceptions always mean ignore, so
         // they're only meaningful for block rules
         if (exception_domains)
@@ -385,7 +388,7 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
     redirect_rule.resource_types = option_types.value();
     if (default_ignore) {
       // If we are blocking for the tracker, the exceptions are handled by
-      // an allow rule instead
+      // an pass rule instead
       if (exception_domains)
         redirect_rule.excluded_domains.swap(exception_domains.value());
       if (exception_types)
@@ -412,7 +415,8 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
       }
     }
 
-    redirect_rule.redirect = *surrogate;
+    redirect_rule.modifier = RequestFilterRule::kRedirect;
+    redirect_rule.modifier_value = *surrogate;
 
     parse_result_->request_filter_rules.push_back(std::move(redirect_rule));
     parse_result_->rules_info.valid_rules++;
@@ -422,7 +426,8 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
 std::optional<std::bitset<RequestFilterRule::kTypeCount>>
 DuckDuckGoRulesParser::GetTypes(const base::Value* rule_properties) {
   std::bitset<RequestFilterRule::kTypeCount> types;
-  const base::Value::List* types_value = rule_properties->GetDict().FindList(kTypesKey);
+  const base::Value::List* types_value =
+      rule_properties->GetDict().FindList(kTypesKey);
   if (!types_value)
     return std::nullopt;
 
@@ -443,7 +448,8 @@ DuckDuckGoRulesParser::GetTypes(const base::Value* rule_properties) {
 std::optional<std::vector<std::string>> DuckDuckGoRulesParser::GetDomains(
     const base::Value* rule_properties) {
   std::vector<std::string> domains;
-  const base::Value::List* domains_value = rule_properties->GetDict().FindList(kDomainsKey);
+  const base::Value::List* domains_value =
+      rule_properties->GetDict().FindList(kDomainsKey);
   if (!domains_value)
     return std::nullopt;
 

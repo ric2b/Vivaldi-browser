@@ -6,12 +6,15 @@
 
 #include "base/functional/bind.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
-#include "chrome/browser/ui/browser_window_features.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/frame/window_frame_util.h"
 #include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/ui/tabs/features.h"
+#include "chrome/browser/ui/tabs/tab_strip_prefs.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/commerce/product_specifications_button.h"
@@ -31,6 +34,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/vector_icons/vector_icons.h"
+#include "tab_strip_region_view.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -88,8 +92,12 @@ bool ShouldShowNewTabButton(const Browser* browser) {
 }  // namespace
 
 TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip)
-    : render_tab_search_before_tab_strip_(
-          TabSearchBubbleHost::ShouldTabSearchRenderBeforeTabStrip()) {
+    : profile_(tab_strip->GetBrowser() ? tab_strip->GetBrowser()->profile()
+                                       : nullptr),
+      render_tab_search_before_tab_strip_(
+          !tabs::GetTabSearchTrailingTabstrip(profile_)),
+      tab_search_position_metrics_logger_(
+          std::make_unique<TabSearchPositionMetricsLogger>(profile_)) {
   views::SetCascadingColorProviderColor(
       this, views::kCascadingBackgroundColor,
       kColorTabBackgroundInactiveFrameInactive);
@@ -97,7 +105,7 @@ TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip)
   SetLayoutManager(std::make_unique<views::FlexLayout>())
       ->SetOrientation(views::LayoutOrientation::kHorizontal);
 
-  SetAccessibleRole(ax::mojom::Role::kTabList);
+  GetViewAccessibility().SetRole(ax::mojom::Role::kTabList);
 
   tab_strip_ = tab_strip.get();
   const Browser* browser = tab_strip_->GetBrowser();
@@ -147,7 +155,7 @@ TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip)
     }
   }
 
-  if (base::FeatureList::IsEnabled(features::kScrollableTabStrip)) {
+  if (base::FeatureList::IsEnabled(tabs::kScrollableTabStrip)) {
     std::unique_ptr<TabStripScrollContainer> scroll_container =
         std::make_unique<TabStripScrollContainer>(std::move(tab_strip));
     tab_strip_scroll_container_ = scroll_container.get();
@@ -188,7 +196,7 @@ TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip)
 
     new_tab_button_->SetTooltipText(
         l10n_util::GetStringUTF16(IDS_TOOLTIP_NEW_TAB));
-    new_tab_button_->SetAccessibleName(
+    new_tab_button_->GetViewAccessibility().SetName(
         l10n_util::GetStringUTF16(IDS_ACCNAME_NEWTAB));
 
     // TODO(crbug.com/40118868): Revisit the macro expression once build flag
@@ -211,24 +219,15 @@ TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip)
 
   SetProperty(views::kElementIdentifierKey, kTabStripRegionElementId);
 
-  if (browser && tab_search_container &&
-      !WindowFrameUtil::IsWindowsTabSearchCaptionButtonEnabled(browser) &&
-      !render_tab_search_before_tab_strip_) {
+  if (browser && tab_search_container && !render_tab_search_before_tab_strip_) {
     if (product_specifications_button) {
       product_specifications_button_ =
           AddChildView(std::move(product_specifications_button));
     }
     tab_search_container_ = AddChildView(std::move(tab_search_container));
-    if (features::IsChromeRefresh2023()) {
-      tab_search_container_->SetProperty(
-          views::kMarginsKey,
-          gfx::Insets::TLBR(0, 0, 0, GetLayoutConstant(TAB_STRIP_PADDING)));
-    } else {
-      const gfx::Insets control_padding = gfx::Insets::TLBR(
-          0, 0, 0, GetLayoutConstant(TABSTRIP_REGION_VIEW_CONTROL_PADDING));
-
-      tab_search_container_->SetProperty(views::kMarginsKey, control_padding);
-    }
+    tab_search_container_->SetProperty(
+        views::kMarginsKey,
+        gfx::Insets::TLBR(0, 0, 0, GetLayoutConstant(TAB_STRIP_PADDING)));
   }
 
   UpdateTabStripMargin();
@@ -273,7 +272,7 @@ bool TabStripRegionView::IsRectInWindowCaption(const gfx::Rect& rect) {
   // true.
   if (tab_strip_container_->HitTestRect(
           get_target_rect(tab_strip_container_))) {
-    if (base::FeatureList::IsEnabled(features::kScrollableTabStrip)) {
+    if (base::FeatureList::IsEnabled(tabs::kScrollableTabStrip)) {
       TabStripScrollContainer* scroll_container =
           views::AsViewClass<TabStripScrollContainer>(tab_strip_container_);
 
@@ -399,19 +398,26 @@ bool TabStripRegionView::GetDropFormats(
 }
 
 void TabStripRegionView::OnDragEntered(const ui::DropTargetEvent& event) {
-  DCHECK(TabDragController::IsSystemDragAndDropSessionRunning());
+  CHECK(TabDragController::IsSystemDragAndDropSessionRunning());
   TabDragController::OnSystemDragAndDropUpdated(event);
 }
 
 int TabStripRegionView::OnDragUpdated(const ui::DropTargetEvent& event) {
-  DCHECK(TabDragController::IsSystemDragAndDropSessionRunning());
-  TabDragController::OnSystemDragAndDropUpdated(event);
-  return ui::DragDropTypes::DRAG_MOVE;
+  // This can be false because we can still receive drag events after
+  // TabDragController is destroyed due to the asynchronous nature of the
+  // platform DnD.
+  if (TabDragController::IsSystemDragAndDropSessionRunning()) {
+    TabDragController::OnSystemDragAndDropUpdated(event);
+    return ui::DragDropTypes::DRAG_MOVE;
+  }
+  return ui::DragDropTypes::DRAG_NONE;
 }
 
 void TabStripRegionView::OnDragExited() {
-  DCHECK(TabDragController::IsSystemDragAndDropSessionRunning());
-  TabDragController::OnSystemDragAndDropExited();
+  // See comment in OnDragUpdated().
+  if (TabDragController::IsSystemDragAndDropSessionRunning()) {
+    TabDragController::OnSystemDragAndDropExited();
+  }
 }
 
 void TabStripRegionView::ChildPreferredSizeChanged(views::View* child) {
@@ -450,10 +456,6 @@ void TabStripRegionView::ReportCaptionHitTestInReservedGrabHandleSpace(
   }
   button_down_previously = button_down_now;
 #endif
-}
-
-void TabStripRegionView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ax::mojom::Role::kTabList;
 }
 
 void TabStripRegionView::UpdateButtonBorders() {
@@ -510,7 +512,7 @@ void TabStripRegionView::UpdateTabStripMargin() {
   std::optional<int> tab_strip_left_margin;
   if (tab_search_container_ && render_tab_search_before_tab_strip_) {
     // The `tab_search_container_` is being laid out manually.
-    tab_search_container_->GetProperty(views::kViewIgnoredByLayoutKey);
+    CHECK(tab_search_container_->GetProperty(views::kViewIgnoredByLayoutKey));
 
     // When tab search container shows before tab strip, add a margin to the
     // tab_strip_container_ to leave the correct amount of space for UI
@@ -551,6 +553,56 @@ void TabStripRegionView::AdjustViewBoundsRect(View* view, int offset) {
   const gfx::Rect new_bounds = gfx::Rect(gfx::Point(x, 0), view_size);
   view->SetBoundsRect(new_bounds);
 }
+
+// Logger that periodically saves the tab search position. There should be 1
+// instance per tabstrip.
+class TabSearchPositionMetricsLogger {
+ public:
+  explicit TabSearchPositionMetricsLogger(
+      const Profile* profile,
+      base::TimeDelta logging_interval = base::Hours(1))
+      : profile_(profile),
+        logging_interval_(logging_interval),
+        weak_ptr_factory_(this) {
+    LogMetrics();
+    ScheduleNextLog();
+  }
+
+  ~TabSearchPositionMetricsLogger() = default;
+
+ private:
+  // Logs the UMA metric for the tab search position.
+  void LogMetrics() {
+    base::UmaHistogramEnumeration(
+        "Tabs.TabSearch.IsTrailingTabstrip",
+        tabs::GetTabSearchTrailingTabstrip(profile_)
+            ? TabStripRegionView::TabSearchPositionEnum::kTrailing
+            : TabStripRegionView::TabSearchPositionEnum::kLeading);
+  }
+
+  // Sets up a task runner that calls back into the logging data.
+  void ScheduleNextLog() {
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&TabSearchPositionMetricsLogger::LogMetricAndReschedule,
+                       weak_ptr_factory_.GetWeakPtr()),
+        logging_interval_);
+  }
+
+  // Helper method for posting the task which logs and schedules the next log.
+  void LogMetricAndReschedule() {
+    LogMetrics();
+    ScheduleNextLog();
+  }
+
+  // Profile for checking the pref value.
+  const raw_ptr<const Profile> profile_;
+
+  // Time in which this metric should be logged. Default is hourly.
+  const base::TimeDelta logging_interval_;
+
+  base::WeakPtrFactory<TabSearchPositionMetricsLogger> weak_ptr_factory_;
+};
 
 BEGIN_METADATA(TabStripRegionView)
 END_METADATA

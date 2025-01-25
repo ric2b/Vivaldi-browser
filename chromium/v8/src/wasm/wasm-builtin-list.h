@@ -93,7 +93,6 @@ namespace v8::internal::wasm {
   IF_TSAN(V, TSANRelaxedLoad64SaveFP)                                          \
   V(WasmAllocateArray_Uninitialized)                                           \
   V(WasmArrayCopy)                                                             \
-  V(WasmArrayCopyWithChecks)                                                   \
   V(WasmArrayNewSegment)                                                       \
   V(WasmArrayInitSegment)                                                      \
   V(WasmAllocateStructWithRtt)                                                 \
@@ -143,6 +142,7 @@ namespace v8::internal::wasm {
   V(WasmAllocateZeroedFixedArray)                                              \
   V(WasmFastApiCallTypeCheckAndUpdateIC)                                       \
   V(DeoptimizationEntry_Eager)                                                 \
+  V(WasmLiftoffDeoptFinish)                                                    \
   V(WasmPropagateException)
 
 namespace detail {

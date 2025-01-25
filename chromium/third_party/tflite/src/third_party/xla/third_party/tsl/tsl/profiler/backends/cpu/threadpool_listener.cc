@@ -26,6 +26,7 @@ limitations under the License.
 #include "tsl/profiler/backends/cpu/traceme_recorder.h"
 #include "tsl/profiler/lib/context_types.h"
 #include "tsl/profiler/lib/traceme_encode.h"
+#include "tsl/profiler/protobuf/xplane.pb.h"
 #include "tsl/profiler/utils/time_utils.h"
 #include "tsl/profiler/utils/xplane_schema.h"
 
@@ -33,7 +34,13 @@ namespace tsl {
 namespace profiler {
 namespace {
 
-void RegisterThreadpoolEventCollector(ThreadpoolEventCollector* collector) {
+ThreadpoolEventCollector* GetThreadpoolEventCollector() {
+  static auto event_collector = new ThreadpoolEventCollector();
+  return event_collector;
+}
+
+void RegisterThreadpoolEventCollector(
+    const ThreadpoolEventCollector* collector) {
   tracing::SetEventCollector(tracing::EventCategory::kScheduleClosure,
                              collector);
   tracing::SetEventCollector(tracing::EventCategory::kRunClosure, collector);
@@ -75,8 +82,7 @@ absl::Status ThreadpoolProfilerInterface::Start() {
         "ThreadPool.");
     return absl::OkStatus();
   }
-  event_collector_ = std::make_unique<ThreadpoolEventCollector>();
-  RegisterThreadpoolEventCollector(event_collector_.get());
+  RegisterThreadpoolEventCollector(GetThreadpoolEventCollector());
   threadpool_listener::Activate();
   return absl::OkStatus();
 }

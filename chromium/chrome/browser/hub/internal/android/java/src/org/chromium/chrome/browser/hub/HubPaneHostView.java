@@ -10,11 +10,13 @@ import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.content.res.Resources;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.Nullable;
@@ -25,13 +27,17 @@ import org.chromium.ui.widget.ButtonCompat;
 
 import java.util.Objects;
 
+// Vivaldi
+import androidx.recyclerview.widget.RecyclerView;
+
 /** Holds the current pane's {@link View}. */
 public class HubPaneHostView extends FrameLayout {
     // Chosen to exactly match the default add/remove animation duration of RecyclerView.
     private static final int FADE_ANIMATION_DURATION_MILLIS = 120;
 
-    private FrameLayout mPaneFrame;
+    protected RecyclerView mPaneFrame;
     private ButtonCompat mActionButton;
+    private ImageView mHairline;
     private @Nullable View mCurrentViewRoot;
     private @Nullable Animator mCurrentAnimator;
 
@@ -45,9 +51,16 @@ public class HubPaneHostView extends FrameLayout {
         super.onFinishInflate();
         mPaneFrame = findViewById(R.id.pane_frame);
         mActionButton = findViewById(R.id.host_action_button);
+        mHairline = findViewById(R.id.pane_top_hairline);
+
+        // ButtonCompat's style Flat removes elevation after calling super so it is overridden. Undo
+        // this.
+        Resources res = getContext().getResources();
+        mActionButton.setElevation(
+                res.getDimensionPixelSize(R.dimen.floating_action_button_elevation));
     }
 
-    void setRootView(@Nullable View newRootView) {
+    protected void setRootView(@Nullable View newRootView) { // Vivaldi
         final View oldRootView = mCurrentViewRoot;
         mCurrentViewRoot = newRootView;
         if (mCurrentAnimator != null) {
@@ -95,15 +108,32 @@ public class HubPaneHostView extends FrameLayout {
         @ColorInt int backgroundColor = HubColors.getBackgroundColor(context, colorScheme);
         mPaneFrame.setBackgroundColor(backgroundColor);
 
-        ColorStateList iconColor = HubColors.getIconColor(context, colorScheme);
+        ColorStateList iconColor;
+        ColorStateList buttonColor;
+        @StyleRes int textAppearance;
+        if (HubFieldTrial.useAlternativeFabColor()) {
+            iconColor =
+                    ColorStateList.valueOf(
+                            HubColors.getOnPrimaryContainerColor(context, colorScheme));
+            buttonColor = HubColors.getPrimaryContainerColorStateList(context, colorScheme);
+            textAppearance = HubColors.getTextAppearanceMediumOnPrimaryContainer(colorScheme);
+        } else {
+            iconColor =
+                    ColorStateList.valueOf(
+                            HubColors.getOnSecondaryContainerColor(context, colorScheme));
+            buttonColor = HubColors.getSecondaryContainerColorStateList(context, colorScheme);
+            textAppearance = HubColors.getTextAppearanceMedium(colorScheme);
+        }
         TextViewCompat.setCompoundDrawableTintList(mActionButton, iconColor);
-
-        ColorStateList buttonColor =
-                HubColors.getSecondaryContainerColorStateList(context, colorScheme);
         mActionButton.setButtonColor(buttonColor);
-
-        @StyleRes int textAppearance = HubColors.getTextAppearanceMedium(colorScheme);
         mActionButton.setTextAppearance(textAppearance);
+
+        @ColorInt int hairlineColor = HubColors.getHairlineColor(context, colorScheme);
+        mHairline.setImageTintList(ColorStateList.valueOf(hairlineColor));
+    }
+
+    void setHairlineVisibility(boolean visible) {
+        mHairline.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     private void tryAddViewToFrame(View rootView) {

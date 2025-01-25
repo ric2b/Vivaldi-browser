@@ -4,11 +4,6 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#if defined(UNSAFE_BUFFERS_BUILD)
-// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "core/fpdfapi/render/cpdf_renderstatus.h"
 
 #include <stdint.h>
@@ -58,6 +53,7 @@
 #include "core/fpdfapi/render/cpdf_type3cache.h"
 #include "core/fxcrt/autorestorer.h"
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_2d_size.h"
@@ -65,8 +61,9 @@
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/notreached.h"
 #include "core/fxcrt/span.h"
-#include "core/fxcrt/span_util.h"
+#include "core/fxcrt/stl_util.h"
 #include "core/fxcrt/unowned_ptr.h"
+#include "core/fxge/agg/cfx_agg_imagerenderer.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_glyphbitmap.h"
@@ -323,7 +320,8 @@ bool CPDF_RenderStatus::DrawObjWithBlend(CPDF_PageObject* pObj,
       return ProcessImage(pObj->AsImage(), mtObj2Device);
     case CPDF_PageObject::Type::kForm:
       return ProcessForm(pObj->AsForm(), mtObj2Device);
-    default:
+    case CPDF_PageObject::Type::kText:
+    case CPDF_PageObject::Type::kShading:
       return false;
   }
 }
@@ -350,6 +348,7 @@ void CPDF_RenderStatus::DrawObjWithBackground(CPDF_PageObject* pObj,
   status.SetTransparency(m_Transparency);
   status.SetDropObjects(m_bDropObjects);
   status.SetFormResource(std::move(pFormResource));
+  status.SetInGroup(m_bInGroup);
   status.Initialize(nullptr, nullptr);
   status.RenderSingleObject(pObj, matrix);
   buffer.OutputToDevice();
@@ -371,6 +370,7 @@ bool CPDF_RenderStatus::ProcessForm(const CPDF_FormObject* pFormObj,
   status.SetTransparency(m_Transparency);
   status.SetDropObjects(m_bDropObjects);
   status.SetFormResource(std::move(pResources));
+  status.SetInGroup(m_bInGroup);
   status.Initialize(this, &pFormObj->graphic_states());
   status.m_curBlend = m_curBlend;
   {
@@ -588,6 +588,7 @@ bool CPDF_RenderStatus::ProcessTransparency(CPDF_PageObject* pPageObj,
   }
   RetainPtr<const CPDF_Dictionary> pFormResource;
   float group_alpha = 1.0f;
+  float initial_alpha = 1.0f;
   CPDF_Transparency transparency = m_Transparency;
   bool bGroupTransparent = false;
   const CPDF_FormObject* pFormObj = pPageObj->AsForm();
@@ -596,13 +597,14 @@ bool CPDF_RenderStatus::ProcessTransparency(CPDF_PageObject* pPageObj,
     transparency = pFormObj->form()->GetTransparency();
     bGroupTransparent = transparency.IsIsolated();
     pFormResource = pFormObj->form()->GetDict()->GetDictFor("Resources");
+    initial_alpha = m_InitialStates.general_state().GetFillAlpha();
   }
   bool bTextClip =
       (pPageObj->clip_path().HasRef() &&
        pPageObj->clip_path().GetTextCount() > 0 && !m_bPrint &&
        !(m_pDevice->GetDeviceCaps(FXDC_RENDER_CAPS) & FXRC_SOFT_CLIP));
   if (!pSMaskDict && group_alpha == 1.0f && blend_type == BlendMode::kNormal &&
-      !bTextClip && !bGroupTransparent) {
+      !bTextClip && !bGroupTransparent && initial_alpha == 1.0f) {
     return false;
   }
   if (m_bPrint) {
@@ -636,8 +638,10 @@ bool CPDF_RenderStatus::ProcessTransparency(CPDF_PageObject* pPageObj,
       return true;
     m_pDevice->GetDIBits(backdrop, rect.left, rect.top);
   }
-  if (!bitmap_device.Create(width, height, FXDIB_Format::kArgb, backdrop))
+  if (!bitmap_device.CreateWithBackdrop(width, height, FXDIB_Format::kArgb,
+                                        backdrop)) {
     return true;
+  }
 
   CFX_Matrix new_matrix = mtObj2Device;
   new_matrix.Translate(-rect.left, -rect.top);
@@ -671,12 +675,13 @@ bool CPDF_RenderStatus::ProcessTransparency(CPDF_PageObject* pPageObj,
   bitmap_render.SetStdCS(true);
   bitmap_render.SetDropObjects(m_bDropObjects);
   bitmap_render.SetFormResource(std::move(pFormResource));
+  bitmap_render.SetInGroup(transparency.IsGroup());
   bitmap_render.Initialize(nullptr, nullptr);
   bitmap_render.ProcessObjectNoClip(pPageObj, new_matrix);
 #if defined(PDF_USE_SKIA)
   if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
     // Safe because `CFX_SkiaDeviceDriver` always uses pre-multiplied alpha.
-    // TODO(crbug.com/pdfium/2011): Remove the need for this.
+    // TODO(crbug.com/42271020): Remove the need for this.
     bitmap_device.GetBitmap()->ForcePreMultiply();
   }
 #endif
@@ -695,6 +700,9 @@ bool CPDF_RenderStatus::ProcessTransparency(CPDF_PageObject* pPageObj,
   }
   if (transparency.IsGroup()) {
     bitmap_device.MultiplyAlpha(group_alpha);
+  }
+  if (initial_alpha != 1.0f && !m_bInGroup) {
+    bitmap_device.MultiplyAlpha(initial_alpha);
   }
   transparency = m_Transparency;
   if (pPageObj->IsForm()) {
@@ -958,7 +966,7 @@ bool CPDF_RenderStatus::ProcessType3Text(CPDF_TextObject* textobj,
 
         CFX_DefaultRenderDevice bitmap_device;
         if (!bitmap_device.Create(rect.Width(), rect.Height(),
-                                  FXDIB_Format::kArgb, nullptr)) {
+                                  FXDIB_Format::kArgb)) {
           return true;
         }
         CPDF_RenderStatus status(m_pContext, &bitmap_device);
@@ -1220,11 +1228,10 @@ void CPDF_RenderStatus::CompositeDIBitmap(
     if (!bitmap->IsMaskFormat()) {
       if (alpha != 1.0f) {
         if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
-          std::unique_ptr<CFX_ImageRenderer> dummy;
           CFX_Matrix matrix = CFX_RenderDevice::GetFlipMatrix(
               bitmap->GetWidth(), bitmap->GetHeight(), left, top);
           m_pDevice->StartDIBits(std::move(bitmap), alpha, /*argb=*/0, matrix,
-                                 FXDIB_ResampleOptions(), &dummy);
+                                 FXDIB_ResampleOptions());
           return;
         }
         bitmap->MultiplyAlpha(alpha);
@@ -1236,7 +1243,7 @@ void CPDF_RenderStatus::CompositeDIBitmap(
       uint32_t fill_argb = m_Options.TranslateColor(mask_argb);
       if (alpha != 1.0f) {
         uint8_t* fill_argb8 = reinterpret_cast<uint8_t*>(&fill_argb);
-        fill_argb8[3] *= FXSYS_roundf(alpha * 255) / 255;
+        UNSAFE_TODO(fill_argb8[3]) *= FXSYS_roundf(alpha * 255) / 255;
       }
       if (m_pDevice->SetBitMask(bitmap, left, top, fill_argb)) {
         return;
@@ -1353,7 +1360,7 @@ RetainPtr<CFX_DIBitmap> CPDF_RenderStatus::LoadSMask(
   const int width = clip_rect.Width();
   const int height = clip_rect.Height();
   const FXDIB_Format format = GetFormatForLuminosity(bLuminosity);
-  if (!bitmap_device.Create(width, height, format, nullptr)) {
+  if (!bitmap_device.Create(width, height, format)) {
     return nullptr;
   }
 
@@ -1409,8 +1416,10 @@ RetainPtr<CFX_DIBitmap> CPDF_RenderStatus::LoadSMask(
       uint8_t* dest_pos = dest_buf.subspan(dest_offset).data();
       const uint8_t* src_pos = src_buf.subspan(src_offset).data();
       for (int col = 0; col < width; col++) {
-        *dest_pos++ = transfers[FXRGB2GRAY(src_pos[2], src_pos[1], *src_pos)];
-        src_pos += Bpp;
+        UNSAFE_TODO({
+          *dest_pos++ = transfers[FXRGB2GRAY(src_pos[2], src_pos[1], *src_pos)];
+          src_pos += Bpp;
+        });
       }
     }
   } else if (pFunc) {
@@ -1419,7 +1428,7 @@ RetainPtr<CFX_DIBitmap> CPDF_RenderStatus::LoadSMask(
       dest_buf[i] = transfers[src_buf[i]];
     }
   } else {
-    fxcrt::spancpy(dest_buf, src_buf.first(dest_pitch * height));
+    fxcrt::Copy(src_buf.first(dest_pitch * height), dest_buf);
   }
   return result_mask;
 }
@@ -1459,10 +1468,8 @@ FX_ARGB CPDF_RenderStatus::GetBackgroundColor(
   std::vector<float> floats = ReadArrayElementsToVector(pBC.Get(), count);
   floats.resize(comps);
 
-  float R;
-  float G;
-  float B;
-  pCS->GetRGB(floats, &R, &G, &B);
-  return ArgbEncode(255, static_cast<int>(R * 255), static_cast<int>(G * 255),
-                    static_cast<int>(B * 255));
+  auto rgb = pCS->GetRGBOrZerosOnError(floats);
+  return ArgbEncode(255, static_cast<int>(rgb.red * 255),
+                    static_cast<int>(rgb.green * 255),
+                    static_cast<int>(rgb.blue * 255));
 }

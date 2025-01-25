@@ -43,8 +43,6 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
       vivaldiprefs::kVivaldiTranslateLanguageListLastUpdate, base::Time());
   registry->RegisterStringPref(vivaldiprefs::kVivaldiAccountServerUrlIdentity,
                                "https://login.vivaldi.net/oauth2/token");
-  registry->RegisterStringPref(vivaldiprefs::kVivaldiAccountServerUrlOpenId,
-                               "https://login.vivaldi.net/oauth2/userinfo");
   if (version_info::IsOfficialBuild()) {
     registry->RegisterStringPref(vivaldiprefs::kVivaldiSyncServerUrl,
                                  "https://bifrost.vivaldi.com/vivid-sync");

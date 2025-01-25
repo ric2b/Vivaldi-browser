@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, Alliance for Open Media. All rights reserved
+ * Copyright (c) 2018, Alliance for Open Media. All rights reserved.
  *
  * This source code is subject to the terms of the BSD 2 Clause License and
  * the Alliance for Open Media Patent License 1.0. If the BSD 2 Clause License
@@ -158,11 +158,11 @@ static void compute_stats_win_opt_c(int wiener_win, const uint8_t *dgd,
   }
 }
 
-void compute_stats_opt_c(int wiener_win, const uint8_t *dgd, const uint8_t *src,
-                         int16_t *d, int16_t *s, int h_start, int h_end,
-                         int v_start, int v_end, int dgd_stride, int src_stride,
-                         int64_t *M, int64_t *H,
-                         int use_downsampled_wiener_stats) {
+static void compute_stats_opt_c(int wiener_win, const uint8_t *dgd,
+                                const uint8_t *src, int16_t *d, int16_t *s,
+                                int h_start, int h_end, int v_start, int v_end,
+                                int dgd_stride, int src_stride, int64_t *M,
+                                int64_t *H, int use_downsampled_wiener_stats) {
   if (wiener_win == WIENER_WIN || wiener_win == WIENER_WIN_CHROMA) {
     compute_stats_win_opt_c(wiener_win, dgd, src, d, s, h_start, h_end, v_start,
                             v_end, dgd_stride, src_stride, M, H,
@@ -519,11 +519,12 @@ static void compute_stats_highbd_win_opt_c(int wiener_win, const uint8_t *dgd8,
   }
 }
 
-void compute_stats_highbd_opt_c(int wiener_win, const uint8_t *dgd,
-                                const uint8_t *src, int16_t *d, int16_t *s,
-                                int h_start, int h_end, int v_start, int v_end,
-                                int dgd_stride, int src_stride, int64_t *M,
-                                int64_t *H, aom_bit_depth_t bit_depth) {
+static void compute_stats_highbd_opt_c(int wiener_win, const uint8_t *dgd,
+                                       const uint8_t *src, int16_t *d,
+                                       int16_t *s, int h_start, int h_end,
+                                       int v_start, int v_end, int dgd_stride,
+                                       int src_stride, int64_t *M, int64_t *H,
+                                       aom_bit_depth_t bit_depth) {
   if (wiener_win == WIENER_WIN || wiener_win == WIENER_WIN_CHROMA) {
     compute_stats_highbd_win_opt_c(wiener_win, dgd, src, h_start, h_end,
                                    v_start, v_end, dgd_stride, src_stride, M, H,
@@ -1721,7 +1722,7 @@ TEST(SearchWienerTest, 8bitSignedIntegerOverflowInUpdateBSepSym) {
 
 // A test that reproduces crbug.com/oss-fuzz/68195: signed integer overflow in
 // linsolve_wiener().
-TEST(SearchWienerTest, DISABLED_8bitSignedIntegerOverflowInLinsolveWiener) {
+TEST(SearchWienerTest, 8bitSignedIntegerOverflowInLinsolveWiener) {
   constexpr int kWidth = 4;
   constexpr int kHeight = 3;
   constexpr unsigned char kBuffer[kWidth * kHeight] = {
@@ -1889,7 +1890,7 @@ TEST(SearchWienerTest, 10bitSignedIntegerOverflowInLinsolveWiener) {
 
 // A test that reproduces b/330639949: signed integer overflow in
 // linsolve_wiener().
-TEST(SearchWienerTest, DISABLED_12bitSignedIntegerOverflowInLinsolveWiener) {
+TEST(SearchWienerTest, 12bitSignedIntegerOverflowInLinsolveWiener) {
   constexpr int kWidth = 173;
   constexpr int kHeight = 3;
   // Since the image format is YUV 4:2:0, aom_img_wrap() expects the buffer is

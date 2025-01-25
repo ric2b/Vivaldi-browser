@@ -228,7 +228,7 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
   [self updateAllButtonsVisibility];
   if (IsRegularXRegularSizeClass(self)) {
     [self.view.progressBar setHidden:YES animated:NO completion:nil];
-  } else if (self.loading) {
+  } else if (self.loading && self.hasOmnibox) {
 
     if (IsVivaldiRunning() && self.shouldShowProgressBar) {
     [self.view.progressBar setHidden:NO animated:NO completion:nil];
@@ -595,7 +595,7 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
     base::RecordAction(base::UserMetricsAction("MobileToolbarNewTabShortcut"));
     base::RecordAction(base::UserMetricsAction("MobileTabNewTab"));
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 

@@ -11,6 +11,7 @@
 #include "ash/accelerators/accelerator_notifications.h"
 #include "ash/accelerators/accelerator_table.h"
 #include "ash/accelerators/pre_target_accelerator_handler.h"
+#include "ash/accelerators/system_shortcut_behavior_policy.h"
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/magnifier/docked_magnifier_controller.h"
 #include "ash/accessibility/magnifier/fullscreen_magnifier_controller.h"
@@ -32,6 +33,7 @@
 #include "ash/media/media_controller_impl.h"
 #include "ash/public/cpp/accelerators.h"
 #include "ash/public/cpp/arc_game_controls_flag.h"
+#include "ash/public/cpp/ash_prefs.h"
 #include "ash/public/cpp/capture_mode/capture_mode_test_api.h"
 #include "ash/public/cpp/ime_info.h"
 #include "ash/public/cpp/test/shell_test_api.h"
@@ -78,6 +80,8 @@
 #include "chromeos/ui/frame/caption_buttons/frame_size_button.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
+#include "components/prefs/testing_pref_service.h"
+#include "components/user_manager/user_type.h"
 #include "media/base/media_switches.h"
 #include "services/media_session/public/cpp/test/test_media_controller.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
@@ -100,10 +104,13 @@
 #include "ui/events/devices/keyboard_device.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
+#include "ui/events/event_handler.h"
 #include "ui/events/event_sink.h"
+#include "ui/events/event_targeter.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/events/types/event_type.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/notification_types.h"
 #include "ui/views/widget/widget.h"
@@ -115,6 +122,8 @@ namespace {
 
 using ::chromeos::WindowStateType;
 using ::media_session::mojom::MediaSessionAction;
+
+constexpr char kUserEmail[] = "user@testemail.com";
 
 struct PrefToAcceleratorEntry {
   const char* pref_name;
@@ -256,7 +265,10 @@ class DummyKeyboardBrightnessControlDelegate
         ui::Accelerator(ui::VKEY_KBD_BACKLIGHT_TOGGLE, ui::EF_NONE);
   }
 
-  void HandleSetKeyboardBrightness(double percent, bool gradual) override {}
+  void HandleSetKeyboardBrightness(
+      double percent,
+      bool gradual,
+      KeyboardBrightnessChangeSource source) override {}
 
   void HandleGetKeyboardBrightness(
       base::OnceCallback<void(std::optional<double>)> callback) override {
@@ -308,6 +320,23 @@ class MockAcceleratorObserver
               OnAcceleratorControllerWillBeDestroyed,
               (AcceleratorController * controller),
               (override));
+};
+
+class VoidEventHandler : public ui::EventHandler {
+ public:
+  VoidEventHandler() = default;
+
+  void OnEvent(ui::Event* event) override {
+    num_events_received_++;
+    event->SetHandled();
+    event->StopPropagation();
+  }
+
+  void ResetEventCounter() { num_events_received_ = 0; }
+  int num_events_received() const { return num_events_received_; }
+
+ private:
+  int num_events_received_ = 0;
 };
 
 }  // namespace
@@ -1266,7 +1295,9 @@ TEST_F(AcceleratorControllerTest, DontRepeatToggleFullscreen) {
   };
   test_api_->RegisterAccelerators(accelerators);
 
-  views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
+  views::Widget::InitParams params(
+      views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+      views::Widget::InitParams::TYPE_WINDOW);
   params.bounds = gfx::Rect(5, 5, 20, 20);
   views::Widget* widget = new views::Widget;
   params.context = GetContext();
@@ -1296,7 +1327,8 @@ TEST_F(AcceleratorControllerTest, DontRepeatToggleFullscreen) {
 
 TEST_F(AcceleratorControllerTest, DontToggleFullscreenWhenOverviewStarts) {
   std::unique_ptr<views::Widget> widget(CreateTestWidget(
-      nullptr, desks_util::GetActiveDeskContainerId(), gfx::Rect(400, 400)));
+      views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET, nullptr,
+      desks_util::GetActiveDeskContainerId(), gfx::Rect(400, 400)));
 
   ui::test::EventGenerator* generator = GetEventGenerator();
 
@@ -1336,7 +1368,7 @@ TEST_F(AcceleratorControllerTest, ProcessOnce) {
   ui::EventSink* sink =
       Shell::GetPrimaryRootWindow()->GetHost()->GetEventSink();
 
-  ui::KeyEvent key_event1(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::EF_NONE);
+  ui::KeyEvent key_event1(ui::EventType::kKeyPressed, ui::VKEY_A, ui::EF_NONE);
   ui::EventDispatchDetails details = sink->OnEventFromSource(&key_event1);
   EXPECT_TRUE(key_event1.handled() || details.dispatcher_destroyed);
 
@@ -1345,7 +1377,7 @@ TEST_F(AcceleratorControllerTest, ProcessOnce) {
   details = sink->OnEventFromSource(&key_event2);
   EXPECT_FALSE(key_event2.handled() || details.dispatcher_destroyed);
 
-  ui::KeyEvent key_event3(ui::ET_KEY_RELEASED, ui::VKEY_A, ui::EF_NONE);
+  ui::KeyEvent key_event3(ui::EventType::kKeyReleased, ui::VKEY_A, ui::EF_NONE);
   details = sink->OnEventFromSource(&key_event3);
   EXPECT_FALSE(key_event3.handled() || details.dispatcher_destroyed);
   EXPECT_EQ(1, target.accelerator_count());
@@ -1680,7 +1712,8 @@ TEST_F(AcceleratorControllerTest, ImeGlobalAccelerators) {
 // TODO(nona|mazda): Remove this when crbug.com/139556 in a better way.
 TEST_F(AcceleratorControllerTest, ImeGlobalAcceleratorsWorkaround139556) {
   // The workaround for crbug.com/139556 depends on the fact that we don't
-  // use Shift+Alt+Enter/Space with ET_KEY_PRESSED as an accelerator. Test it.
+  // use Shift+Alt+Enter/Space with EventType::kKeyPressed as an accelerator.
+  // Test it.
   const ui::Accelerator shift_alt_return_press(
       ui::VKEY_RETURN, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
   EXPECT_FALSE(ProcessInController(shift_alt_return_press));
@@ -1842,7 +1875,7 @@ TEST_P(SideVolumeButtonAcceleratorTest, FlipSideVolumeButtonAction) {
   EXPECT_EQ(1, user_action_tester.GetActionCount("Accel_VolumeDown_F9"));
   user_action_tester.ResetCounts();
 
-  ui::KeyEvent event(ui::ET_KEY_PRESSED, ui::VKEY_VOLUME_DOWN,
+  ui::KeyEvent event(ui::EventType::kKeyPressed, ui::VKEY_VOLUME_DOWN,
                      ui::DomCode::VOLUME_DOWN, /*flags=*/0, /*dom_key=*/2099727,
                      base::TimeTicks::Now());
   event.set_source_device_id(kSideVolumeButtonId);
@@ -1904,20 +1937,93 @@ INSTANTIATE_TEST_SUITE_P(
     AshSideVolumeButton,
     SideVolumeButtonAcceleratorTest,
     testing::ValuesIn(
-        {std::make_pair<std::string, std::string>(kVolumeButtonRegionKeyboard,
-                                                  kVolumeButtonSideLeft),
-         std::make_pair<std::string, std::string>(kVolumeButtonRegionKeyboard,
-                                                  kVolumeButtonSideRight),
-         std::make_pair<std::string, std::string>(kVolumeButtonRegionKeyboard,
-                                                  kVolumeButtonSideBottom),
-         std::make_pair<std::string, std::string>(kVolumeButtonRegionScreen,
-                                                  kVolumeButtonSideLeft),
-         std::make_pair<std::string, std::string>(kVolumeButtonRegionScreen,
-                                                  kVolumeButtonSideRight),
-         std::make_pair<std::string, std::string>(kVolumeButtonRegionScreen,
-                                                  kVolumeButtonSideTop),
-         std::make_pair<std::string, std::string>(kVolumeButtonRegionScreen,
-                                                  kVolumeButtonSideBottom)}));
+        {std::pair<std::string, std::string>(kVolumeButtonRegionKeyboard,
+                                             kVolumeButtonSideLeft),
+         std::pair<std::string, std::string>(kVolumeButtonRegionKeyboard,
+                                             kVolumeButtonSideRight),
+         std::pair<std::string, std::string>(kVolumeButtonRegionKeyboard,
+                                             kVolumeButtonSideBottom),
+         std::pair<std::string, std::string>(kVolumeButtonRegionScreen,
+                                             kVolumeButtonSideLeft),
+         std::pair<std::string, std::string>(kVolumeButtonRegionScreen,
+                                             kVolumeButtonSideRight),
+         std::pair<std::string, std::string>(kVolumeButtonRegionScreen,
+                                             kVolumeButtonSideTop),
+         std::pair<std::string, std::string>(kVolumeButtonRegionScreen,
+                                             kVolumeButtonSideBottom)}));
+
+TEST_F(AcceleratorControllerTest, PressAndReleasePowerButtonWithFunctionKey) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {features::kModifierSplit, features::kPeripheralCustomization,
+       features::kInputDeviceSettingsSplit},
+      {});
+  auto reset = switches::SetIgnoreModifierSplitSecretKeyForTest();
+  Shell::Get()
+      ->keyboard_capability()
+      ->ResetModifierSplitDogfoodControllerForTesting();
+
+  const int kKeyboardDeviceIdWithFunction = 123;
+  const int kKeyboardDeviceId = 456;
+  const ui::KeyboardDevice keyboard_with_function(
+      kKeyboardDeviceIdWithFunction, ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+      /*name=*/"test keyboard with function key",
+      /*phys=*/"",
+      base::FilePath("/devices/platform/i8042/serio2/input/input1"),
+      /*vendor=*/-1,
+      /*product=*/-1, /*version=*/-1,
+      /*has_assistant_key=*/true,
+      /*has_function_key=*/true);
+  const ui::KeyboardDevice keyboard(
+      kKeyboardDeviceId, ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+      /*name=*/"test keyboard with function key",
+      /*phys=*/"",
+      base::FilePath("/devices/platform/i8042/serio2/input/input1"),
+      /*vendor=*/-1,
+      /*product=*/-1, /*version=*/-1,
+      /*has_assistant_key=*/true,
+      /*has_function_key=*/false);
+
+  // Reset the state of the device manager.
+  ui::DeviceDataManagerTestApi().SetKeyboardDevices({keyboard_with_function});
+
+  // Create an event with a keyboard that has function key. The controller
+  // should not process the lock key event.
+  ui::KeyEvent press_event_with_function(ui::EventType::kKeyPressed,
+                                         ui::VKEY_F13,
+                                         /*flags=*/ui::EF_NONE);
+  press_event_with_function.set_source_device_id(kKeyboardDeviceIdWithFunction);
+  const ui::Accelerator press_f13_with_function(press_event_with_function);
+  EXPECT_FALSE(ProcessInController(press_f13_with_function));
+
+  // Test releasing F13 with fn key.
+  ui::KeyEvent release_event_with_function(ui::EventType::kKeyReleased,
+                                           ui::VKEY_F13,
+                                           /*flags=*/ui::EF_NONE);
+  release_event_with_function.set_source_device_id(
+      kKeyboardDeviceIdWithFunction);
+  const ui::Accelerator release_f13_with_function(release_event_with_function);
+
+  EXPECT_FALSE(ProcessInController(release_f13_with_function));
+
+  // Reset the state of the device manager.
+  ui::DeviceDataManagerTestApi().SetKeyboardDevices(
+      {keyboard_with_function, keyboard});
+  // Create an event with a keyboard that does not have function key. The
+  // controller should process the lock key event.
+  ui::KeyEvent press_event(ui::EventType::kKeyPressed, ui::VKEY_F13,
+                           /*flags=*/ui::EF_NONE);
+  press_event.set_source_device_id(kKeyboardDeviceId);
+  const ui::Accelerator press_f13(press_event);
+  EXPECT_TRUE(ProcessInController(press_f13));
+
+  // Test releaseing F13 without fn key.
+  ui::KeyEvent release_event(ui::EventType::kKeyReleased, ui::VKEY_F13,
+                             /*flags=*/ui::EF_NONE);
+  release_event.set_source_device_id(kKeyboardDeviceId);
+  const ui::Accelerator release_f13(press_event);
+  EXPECT_TRUE(ProcessInController(release_f13));
+}
 
 TEST_F(AcceleratorControllerTest, ToggleCapsLockAcceleratorsWithFunctionKey) {
   base::test::ScopedFeatureList feature_list;
@@ -1956,13 +2062,13 @@ TEST_F(AcceleratorControllerTest, ToggleCapsLockAcceleratorsWithFunctionKey) {
 
   // Create an event with a keyboard that has function key. The controller
   // shouldn't process the capsLock key event.
-  ui::KeyEvent press_event(ui::ET_KEY_PRESSED, ui::VKEY_LWIN,
+  ui::KeyEvent press_event(ui::EventType::kKeyPressed, ui::VKEY_LWIN,
                            /*flags=*/ui::EF_ALT_DOWN);
   press_event.set_source_device_id(kKeyboardDeviceId);
   const ui::Accelerator press_search_after_alt(press_event);
   EXPECT_FALSE(ProcessInController(press_search_after_alt));
 
-  ui::KeyEvent release_event(ui::ET_KEY_RELEASED, ui::VKEY_LWIN,
+  ui::KeyEvent release_event(ui::EventType::kKeyReleased, ui::VKEY_LWIN,
                              /*flags=*/ui::EF_ALT_DOWN);
   release_event.set_source_device_id(kKeyboardDeviceId);
   const ui::Accelerator release_search_after_alt(release_event);
@@ -2509,6 +2615,203 @@ TEST_F(AcceleratorControllerTest, ChangeIMEMode_SwitchesInputMethod) {
   EXPECT_EQ(1, client.next_ime_count_);
 }
 
+class SystemShortcutBehaviorTest : public AcceleratorControllerTest {
+  void SetUp() override {
+    AcceleratorControllerTest::SetUp();
+
+    auto* session_controller = GetSessionControllerClient();
+
+    auto user_prefs = std::make_unique<TestingPrefServiceSimple>();
+    user_prefs_ = user_prefs.get();
+    RegisterUserProfilePrefs(user_prefs->registry(), /*country=*/"",
+                             /*for_test=*/true);
+    session_controller->AddUserSession(kUserEmail,
+                                       user_manager::UserType::kRegular,
+                                       /*provide_pref_service=*/false);
+    session_controller->SetUserPrefService(AccountId::FromUserEmail(kUserEmail),
+                                           std::move(user_prefs));
+    SimulateUserLogin(AccountId::FromUserEmail(kUserEmail));
+  }
+
+  void TearDown() override {
+    user_prefs_ = nullptr;
+    AcceleratorControllerTest::TearDown();
+  }
+
+ protected:
+  raw_ptr<TestingPrefServiceSimple> user_prefs_ = nullptr;
+};
+
+TEST_F(SystemShortcutBehaviorTest, StandardSearchBasedAcceleratorProcessing) {
+  VoidEventHandler event_handler;
+  aura::Window* w1 = CreateTestWindowInShellWithId(0);
+  w1->AddPostTargetHandler(&event_handler);
+  wm::ActivateWindow(w1);
+
+  ui::test::EventGenerator* generator = GetEventGenerator();
+
+  // Generates 4 events, but the Search + D event gets consumed since it is a
+  // valid keyboard shortcut.
+  generator->PressAndReleaseKeyAndModifierKeys(ui::VKEY_D, ui::EF_COMMAND_DOWN);
+
+  // Since we generate 4 events, but one gets eaten, we expect 3 at the end of
+  // this test.
+  EXPECT_EQ(3, event_handler.num_events_received());
+}
+
+TEST_F(SystemShortcutBehaviorTest, IgnoreCommonVdiShortcuts) {
+  user_prefs_->SetManagedPref(
+      ash::prefs::kSystemShortcutBehavior,
+      base::Value(static_cast<int>(
+          SystemShortcutBehaviorType::kIgnoreCommonVdiShortcuts)));
+  ui::Accelerator press_d_and_search(ui::VKEY_D, ui::EF_COMMAND_DOWN);
+  EXPECT_FALSE(ProcessInController(press_d_and_search));
+
+  user_prefs_->RemoveManagedPref(ash::prefs::kSystemShortcutBehavior);
+  EXPECT_TRUE(ProcessInController(press_d_and_search));
+}
+
+TEST_F(SystemShortcutBehaviorTest, IgnoreCommonVdiShortcutsFullscreenOnly) {
+  VoidEventHandler event_handler;
+  aura::Window* w1 = CreateTestWindowInShellWithId(0);
+  w1->AddPostTargetHandler(&event_handler);
+  wm::ActivateWindow(w1);
+
+  ui::test::EventGenerator* generator = GetEventGenerator();
+
+  user_prefs_->SetManagedPref(
+      ash::prefs::kSystemShortcutBehavior,
+      base::Value(
+          static_cast<int>(SystemShortcutBehaviorType::
+                               kIgnoreCommonVdiShortcutsFullscreenOnly)));
+  {
+    // Generates 4 events, Search + D event does get consumed because the target
+    // window is not fullscreen.
+    generator->PressAndReleaseKeyAndModifierKeys(ui::VKEY_D,
+                                                 ui::EF_COMMAND_DOWN);
+    // Since we generate 4 events, but one gets eaten, we expect 3 at the end of
+    // this test.
+    EXPECT_EQ(3, event_handler.num_events_received());
+    event_handler.ResetEventCounter();
+  }
+
+  // Make the window fullscreen.
+  WMEvent fullscreen(WM_EVENT_FULLSCREEN);
+  WindowState* w1_state = WindowState::Get(w1);
+  w1_state->OnWMEvent(&fullscreen);
+  ASSERT_TRUE(w1_state->IsFullscreen());
+
+  // Tests that while fullscreen all events flow through since Search + D is in
+  // the common VDI shortcut list.
+  {
+    generator->PressAndReleaseKeyAndModifierKeys(ui::VKEY_D,
+                                                 ui::EF_COMMAND_DOWN);
+    EXPECT_EQ(4, event_handler.num_events_received());
+    event_handler.ResetEventCounter();
+  }
+
+  // Take out of fullscreen to verify the shortcuts still work.
+  WMEvent normal(WM_EVENT_NORMAL);
+  w1_state->OnWMEvent(&normal);
+  ASSERT_FALSE(w1_state->IsFullscreen());
+
+  // Tests that once the window is not fullscreen again, the event gets
+  // consumed.
+  {
+    generator->PressAndReleaseKeyAndModifierKeys(ui::VKEY_D,
+                                                 ui::EF_COMMAND_DOWN);
+    EXPECT_EQ(3, event_handler.num_events_received());
+  }
+}
+
+TEST_F(SystemShortcutBehaviorTest, AllowSearchBasedPassthrough) {
+  VoidEventHandler event_handler;
+  aura::Window* w1 = CreateTestWindowInShellWithId(0);
+  w1->AddPostTargetHandler(&event_handler);
+  wm::ActivateWindow(w1);
+
+  ui::test::EventGenerator* generator = GetEventGenerator();
+
+  user_prefs_->SetManagedPref(
+      ash::prefs::kSystemShortcutBehavior,
+      base::Value(static_cast<int>(
+          SystemShortcutBehaviorType::kAllowSearchBasedPassthrough)));
+  {
+    // Generates 4 events, Search + D event does _not_ get consumed because we
+    // are allowing search based events to flow through.
+    generator->PressAndReleaseKeyAndModifierKeys(ui::VKEY_D,
+                                                 ui::EF_COMMAND_DOWN);
+    // Since we generate 4 events, but one gets eaten, we expect 3 at the end of
+    // this test.
+    EXPECT_EQ(4, event_handler.num_events_received());
+    event_handler.ResetEventCounter();
+  }
+
+  user_prefs_->RemoveManagedPref(ash::prefs::kSystemShortcutBehavior);
+  {
+    // Generates 4 events, but the Search + D event gets consumed since it is a
+    // valid keyboard shortcut.
+    generator->PressAndReleaseKeyAndModifierKeys(ui::VKEY_D,
+                                                 ui::EF_COMMAND_DOWN);
+
+    // Since we generate 4 events, but one gets eaten, we expect 3 at the end of
+    // this test.
+    EXPECT_EQ(3, event_handler.num_events_received());
+  }
+}
+
+TEST_F(SystemShortcutBehaviorTest, AllowSearchBasedPassthroughFullscreenOnly) {
+  VoidEventHandler event_handler;
+  aura::Window* w1 = CreateTestWindowInShellWithId(0);
+  w1->AddPostTargetHandler(&event_handler);
+  wm::ActivateWindow(w1);
+
+  ui::test::EventGenerator* generator = GetEventGenerator();
+
+  user_prefs_->SetManagedPref(
+      ash::prefs::kSystemShortcutBehavior,
+      base::Value(
+          static_cast<int>(SystemShortcutBehaviorType::
+                               kAllowSearchBasedPassthroughFullscreenOnly)));
+  {
+    // Generates 4 events, Search + D event does get consumed because the target
+    // window is not fullscreen.
+    generator->PressAndReleaseKeyAndModifierKeys(ui::VKEY_D,
+                                                 ui::EF_COMMAND_DOWN);
+    // Since we generate 4 events, but one gets eaten, we expect 3 at the end of
+    // this test.
+    EXPECT_EQ(3, event_handler.num_events_received());
+    event_handler.ResetEventCounter();
+  }
+
+  // Make the window fullscreen.
+  WMEvent fullscreen(WM_EVENT_FULLSCREEN);
+  WindowState* w1_state = WindowState::Get(w1);
+  w1_state->OnWMEvent(&fullscreen);
+  ASSERT_TRUE(w1_state->IsFullscreen());
+
+  // Tests that while fullscreen all events flow through.
+  {
+    generator->PressAndReleaseKeyAndModifierKeys(ui::VKEY_D,
+                                                 ui::EF_COMMAND_DOWN);
+    EXPECT_EQ(4, event_handler.num_events_received());
+    event_handler.ResetEventCounter();
+  }
+
+  // Take out of fullscreen to verify the shortcuts still work.
+  WMEvent normal(WM_EVENT_NORMAL);
+  w1_state->OnWMEvent(&normal);
+  ASSERT_FALSE(w1_state->IsFullscreen());
+
+  // Tests that once the window is not fullscreen again, the event gets
+  // consumed.
+  {
+    generator->PressAndReleaseKeyAndModifierKeys(ui::VKEY_D,
+                                                 ui::EF_COMMAND_DOWN);
+    EXPECT_EQ(3, event_handler.num_events_received());
+  }
+}
+
 class AcceleratorControllerImprovedKeyboardShortcutsTest
     : public AcceleratorControllerTest {
  public:
@@ -2830,8 +3133,6 @@ TEST_F(AcceleratorControllerGuestModeTest, IncognitoWindowDisabled) {
       AcceleratorAction::kNewIncognitoWindow, {}));
 }
 
-constexpr char kUserEmail[] = "user@magnifier";
-
 class MagnifiersAcceleratorsTester : public AcceleratorControllerTest {
  public:
   MagnifiersAcceleratorsTester() = default;
@@ -2857,10 +3158,15 @@ class MagnifiersAcceleratorsTester : public AcceleratorControllerTest {
 
   void SetUp() override {
     AcceleratorControllerTest::SetUp();
+    feature_list_.InitAndEnableFeature(
+        ::features::kAccessibilityMagnifyAcceleratorDialog);
 
     // Create user session and simulate its login.
     SimulateUserLogin(kUserEmail);
   }
+
+ protected:
+  base::test::ScopedFeatureList feature_list_;
 };
 
 // TODO (afakhry): Remove this class after refactoring MagnificationManager.
@@ -2909,6 +3215,22 @@ TEST_F(MagnifiersAcceleratorsTester, TestToggleFullscreenMagnifier) {
       accessibility_controller->fullscreen_magnifier().WasDialogAccepted());
   EXPECT_TRUE(ProcessInController(fullscreen_magnifier_accelerator));
   EXPECT_TRUE(IsConfirmationDialogOpen());
+  // Magnifier is enabled in order to let users better see the dialog.
+  EXPECT_TRUE(fullscreen_magnifier_controller()->IsEnabled());
+  EXPECT_FALSE(docked_magnifier_controller()->GetEnabled());
+
+  CancelConfirmationDialog();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(
+      accessibility_controller->fullscreen_magnifier().WasDialogAccepted());
+  // Magnifier is disabled when the dialog is cancelled.
+  EXPECT_FALSE(fullscreen_magnifier_controller()->IsEnabled());
+
+  // Open the dialog again.
+  EXPECT_TRUE(ProcessInController(fullscreen_magnifier_accelerator));
+  EXPECT_TRUE(IsConfirmationDialogOpen());
+  EXPECT_TRUE(fullscreen_magnifier_controller()->IsEnabled());
+
   AcceptConfirmationDialog();
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(IsConfirmationDialogOpen());
@@ -2972,6 +3294,91 @@ TEST_F(MagnifiersAcceleratorsTester, TestToggleDockedMagnifier) {
   EXPECT_TRUE(docked_magnifier_controller()->GetEnabled());
   EXPECT_FALSE(fullscreen_magnifier_controller()->IsEnabled());
   EXPECT_TRUE(ContainsDockedMagnifierNotification());
+
+  RemoveAllNotifications();
+}
+
+class MagnifiersAcceleratorsMagnifyAcceleratorDialogDisabledTest
+    : public MagnifiersAcceleratorsTester {
+ public:
+  MagnifiersAcceleratorsMagnifyAcceleratorDialogDisabledTest() = default;
+  MagnifiersAcceleratorsMagnifyAcceleratorDialogDisabledTest(
+      const MagnifiersAcceleratorsMagnifyAcceleratorDialogDisabledTest&) =
+      delete;
+  MagnifiersAcceleratorsMagnifyAcceleratorDialogDisabledTest& operator=(
+      const MagnifiersAcceleratorsMagnifyAcceleratorDialogDisabledTest&) =
+      delete;
+  ~MagnifiersAcceleratorsMagnifyAcceleratorDialogDisabledTest() override =
+      default;
+
+  void SetUp() override {
+    AcceleratorControllerTest::SetUp();
+    feature_list_.InitAndDisableFeature(
+        ::features::kAccessibilityMagnifyAcceleratorDialog);
+
+    // Create user session and simulate its login.
+    SimulateUserLogin(kUserEmail);
+  }
+};
+
+TEST_F(MagnifiersAcceleratorsMagnifyAcceleratorDialogDisabledTest,
+       TestToggleFullscreenMagnifier) {
+  FakeMagnificationManager manager;
+  manager.SetPrefs(user_pref_service());
+  EXPECT_FALSE(docked_magnifier_controller()->GetEnabled());
+  EXPECT_FALSE(fullscreen_magnifier_controller()->IsEnabled());
+  EXPECT_FALSE(IsConfirmationDialogOpen());
+
+  AccessibilityController* accessibility_controller =
+      Shell::Get()->accessibility_controller();
+  // Toggle the fullscreen magnifier on/off, dialog should be shown on first use
+  // of accelerator.
+  const ui::Accelerator fullscreen_magnifier_accelerator(
+      ui::VKEY_M, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN);
+  EXPECT_FALSE(
+      accessibility_controller->fullscreen_magnifier().WasDialogAccepted());
+  EXPECT_TRUE(ProcessInController(fullscreen_magnifier_accelerator));
+  EXPECT_TRUE(IsConfirmationDialogOpen());
+  // Magnifier is not enabled when feature is not on.
+  EXPECT_FALSE(fullscreen_magnifier_controller()->IsEnabled());
+  EXPECT_FALSE(docked_magnifier_controller()->GetEnabled());
+
+  CancelConfirmationDialog();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(
+      accessibility_controller->fullscreen_magnifier().WasDialogAccepted());
+  EXPECT_FALSE(fullscreen_magnifier_controller()->IsEnabled());
+
+  // Open the dialog again.
+  EXPECT_TRUE(ProcessInController(fullscreen_magnifier_accelerator));
+  EXPECT_TRUE(IsConfirmationDialogOpen());
+  EXPECT_FALSE(fullscreen_magnifier_controller()->IsEnabled());
+
+  AcceptConfirmationDialog();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(IsConfirmationDialogOpen());
+  EXPECT_FALSE(docked_magnifier_controller()->GetEnabled());
+  EXPECT_TRUE(fullscreen_magnifier_controller()->IsEnabled());
+  EXPECT_TRUE(ContainsFullscreenMagnifierNotification());
+  EXPECT_FALSE(
+      IsNotificationPinned(kFullscreenMagnifierToggleAccelNotificationId));
+
+  EXPECT_TRUE(ProcessInController(fullscreen_magnifier_accelerator));
+  EXPECT_FALSE(docked_magnifier_controller()->GetEnabled());
+  EXPECT_FALSE(fullscreen_magnifier_controller()->IsEnabled());
+  EXPECT_TRUE(
+      accessibility_controller->fullscreen_magnifier().WasDialogAccepted());
+  EXPECT_FALSE(IsConfirmationDialogOpen());
+  EXPECT_FALSE(ContainsFullscreenMagnifierNotification());
+
+  // Dialog will not be shown the second time the accelerator is used.
+  EXPECT_TRUE(ProcessInController(fullscreen_magnifier_accelerator));
+  EXPECT_FALSE(IsConfirmationDialogOpen());
+  EXPECT_TRUE(
+      accessibility_controller->fullscreen_magnifier().WasDialogAccepted());
+  EXPECT_FALSE(docked_magnifier_controller()->GetEnabled());
+  EXPECT_TRUE(fullscreen_magnifier_controller()->IsEnabled());
+  EXPECT_TRUE(ContainsFullscreenMagnifierNotification());
 
   RemoveAllNotifications();
 }
@@ -3263,7 +3670,7 @@ TEST_P(MediaSessionAcceleratorTest, MediaPlaybackAcceleratorsBehavior) {
     // be handled in ash.
     std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithId(1));
     {
-      ui::KeyEvent press_key(ui::ET_KEY_PRESSED, key, ui::EF_NONE);
+      ui::KeyEvent press_key(ui::EventType::kKeyPressed, key, ui::EF_NONE);
       ui::Event::DispatcherApi dispatch_helper(&press_key);
       dispatch_helper.set_target(window.get());
       filter.OnKeyEvent(&press_key);
@@ -3274,7 +3681,7 @@ TEST_P(MediaSessionAcceleratorTest, MediaPlaybackAcceleratorsBehavior) {
     // through.
     WindowState::Get(window.get())->SetCanConsumeSystemKeys(true);
     {
-      ui::KeyEvent press_key(ui::ET_KEY_PRESSED, key, ui::EF_NONE);
+      ui::KeyEvent press_key(ui::EventType::kKeyPressed, key, ui::EF_NONE);
       ui::Event::DispatcherApi dispatch_helper(&press_key);
       dispatch_helper.set_target(window.get());
       filter.OnKeyEvent(&press_key);

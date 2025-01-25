@@ -338,6 +338,22 @@
         "type": "function",
         "description": "Clear all the user's data on the server side and logs them out",
         "parameters": [ ]
+      },
+      {
+        "name": "setTabsExtData",
+        "type": "function",
+        "description": "Set ext-data to be synced together with tabs.",
+        "parameters": [
+            {
+              "name": "data",
+              "type": "string"
+            }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+          ]
+        }
       }
     ],
     "events": [

@@ -46,20 +46,13 @@ For example,
 python tools/bisect-builds.py -a mac -g 782793 -b 800218 --use-local-cache --verify-range -- --no-first-run --user-data-dir=/tmp http://example.com
 ```
 
-Alternately, if bisecting between stable releases you can specify either end of
-the bisect range using milestone numbers, like this:
-
-```none
-python tools/bisect-builds.py -a mac -g M85 -b M86 --use-local-cache --verify-range
-```
-
-Finally, you can specify either end of the bisect range using version numbers.
+Also, you can specify either end of the bisect range using version numbers.
 
 ```none
 python tools/bisect-builds.py -a mac -g 85.0.4183.121 -b 86.0.4240.193 --use-local-cache --verify-range
 ```
 
-The three range specifications above are equivalent. Note that in all cases the
+The two range specifications above are equivalent. Note that in all cases the
 bisect is being done from trunk builds so merges to a release branch will not be
 bisected.
 
@@ -88,10 +81,11 @@ and FAILURE_REV with the range start and end):
 
 <https://test-results.appspot.com/revision_range?start=SUCCESS_REV&end=FAILURE_REV>
 
-**Notes:** For internal usage, we also enable bisect builds by commits. Please
-refer to [internal
-doc](https://sites.google.com/a/google.com/chrome-te/home/tools/bisect_builds)
-for more information.
+**Notes:** The default option is snapshot(Chromium build). There are also
+release build(-r) and official build(-o) available for Googlers.
+Googlers should use official build(-o) whenever possible to bisect to a
+single commit. Please refer to
+[go/chrome-bisect](https://goto.google.com/chrome-bisect) for more information.
 
 **Getting an initial revision range**
 
@@ -126,24 +120,6 @@ you.
 To find out which variation causes a regression, you can use [bisect-variations.py](
 https://chromium.googlesource.com/chromium/src/+/refs/heads/main/tools/variations/bisect_variations.py)
 
-### If Pepper Flash is required to repro
-
-You will have to locate a Flash binary from an official build. If you suspect a
-Chromium change causing the regression and the Flash version doesn't matter
-locate any binary on your machine. For instance:
-
-```none
-./bisect-builds.py -f /opt/google/chrome/PepperFlash/libpepflashplayer.so -b 232915 -g 230425 -a linux64
-```
-
-```none
-python bisect-builds.py -f "C:\Program Files (x86)\Google\Chrome\Application\31.0.1650.39\PepperFlash\pepflashplayer.dll" -b 232915 -g 230425 -a win
-```
-
-```none
-./bisect-builds.py -f "/Applications/Google Chrome.app/Contents/Versions/33.0.1707.0/Google Chrome Framework.framework/Internet Plug-Ins/PepperFlash/PepperFlashPlayer.plugin" -b 232915 -g 230425 -a mac
-```
-
 **API Keys and Chrome OS builds**
 
 Without API keys, Chrome OS won't allow you to log in as a specific user. To run
@@ -159,9 +135,3 @@ GOOGLE_DEFAULT_CLIENT_SECRET=&lt;secret&gt;
 See <https://www.chromium.org/developers/how-tos/api-keys> for more info about
 API keys.
 
-**Bisecting Per-Revision Builds (Googlers Only)**
-
-The -o and -r options available in the internal version of the script allow
-tighter bisects. Google employees should visit
-[go/bisect-builds](https://goto.google.com/bisect-builds) for configuration
-instructions.

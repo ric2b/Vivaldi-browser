@@ -5,6 +5,9 @@
 #ifndef COMPONENTS_DATA_SHARING_PUBLIC_DATA_SHARING_SERVICE_H_
 #define COMPONENTS_DATA_SHARING_PUBLIC_DATA_SHARING_SERVICE_H_
 
+#include <set>
+#include <string>
+
 #include "base/functional/callback_forward.h"
 #include "base/observer_list_types.h"
 #include "base/supports_user_data.h"
@@ -35,15 +38,24 @@ class DataSharingService : public KeyedService, public base::SupportsUserData {
     // User either created a new group or has been invited to the existing one.
     virtual void OnGroupAdded(const GroupData& group_data) {}
     // Either group has been deleted or user has been removed from the group.
-    virtual void OnGroupRemoved(const std::string& group_id) {}
+    virtual void OnGroupRemoved(const GroupId& group_id) {}
   };
 
-  enum class PeopleGroupActionFailure { kTransientFailure, kPersistentFailure };
+  // GENERATED_JAVA_ENUM_PACKAGE: (
+  //   org.chromium.components.data_sharing)
+  enum class PeopleGroupActionFailure {
+    kUnknown = 0,
+    kTransientFailure = 1,
+    kPersistentFailure = 2
+  };
 
+  // GENERATED_JAVA_ENUM_PACKAGE: (
+  //   org.chromium.components.data_sharing)
   enum class PeopleGroupActionOutcome {
-    kSuccess,
-    kTransientFailure,
-    kPersistentFailure
+    kUnknown = 0,
+    kSuccess = 1,
+    kTransientFailure = 2,
+    kPersistentFailure = 3
   };
 
   using GroupDataOrFailureOutcome =
@@ -89,7 +101,7 @@ class DataSharingService : public KeyedService, public base::SupportsUserData {
 
   // Refreshes data if necessary and passes the GroupData to `callback`.
   virtual void ReadGroup(
-      const std::string& group_id,
+      const GroupId& group_id,
       base::OnceCallback<void(const GroupDataOrFailureOutcome&)> callback) = 0;
 
   // Attempts to create a new group. Returns a created group on success.
@@ -99,18 +111,18 @@ class DataSharingService : public KeyedService, public base::SupportsUserData {
 
   // Attempts to delete a group.
   virtual void DeleteGroup(
-      const std::string& group_id,
+      const GroupId& group_id,
       base::OnceCallback<void(PeopleGroupActionOutcome)> callback) = 0;
 
   // Attempts to invite a new user to the group.
   virtual void InviteMember(
-      const std::string& group_id,
+      const GroupId& group_id,
       const std::string& invitee_email,
       base::OnceCallback<void(PeopleGroupActionOutcome)> callback) = 0;
 
   // Attempts to remove a user from the group.
   virtual void RemoveMember(
-      const std::string& group_id,
+      const GroupId& group_id,
       const std::string& member_email,
       base::OnceCallback<void(PeopleGroupActionOutcome)> callback) = 0;
 

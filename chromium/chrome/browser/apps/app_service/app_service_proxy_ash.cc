@@ -12,7 +12,9 @@
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/not_fatal_until.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/task/task_traits.h"
 #include "chrome/browser/apps/app_service/app_icon/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/app_icon/app_icon_util.h"
 #include "chrome/browser/apps/app_service/app_install/app_install_service.h"
@@ -24,7 +26,6 @@
 #include "chrome/browser/apps/app_service/promise_apps/promise_app_registry_cache.h"
 #include "chrome/browser/apps/app_service/promise_apps/promise_app_service.h"
 #include "chrome/browser/apps/app_service/publishers/app_publisher.h"
-#include "chrome/browser/apps/app_service/publishers/browser_shortcuts_crosapi_publisher.h"
 #include "chrome/browser/apps/app_service/publishers/shortcut_publisher.h"
 #include "chrome/browser/apps/app_service/publishers/standalone_browser_apps.h"
 #include "chrome/browser/apps/app_service/shortcut_removal_dialog.h"
@@ -58,6 +59,7 @@
 #include "components/services/app_service/public/cpp/types_util.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "content/public/browser/browser_thread.h"
 #include "extensions/grit/extensions_browser_resources.h"
 
 namespace {
@@ -219,12 +221,6 @@ AppServiceProxyAsh::BrowserAppInstanceRegistry() {
   return browser_app_instance_registry_.get();
 }
 
-apps::BrowserShortcutsCrosapiPublisher*
-AppServiceProxyAsh::BrowserShortcutsCrosapiPublisher() {
-  return publisher_host_ ? publisher_host_->BrowserShortcutsCrosapiPublisher()
-                         : nullptr;
-}
-
 apps::StandaloneBrowserApps* AppServiceProxyAsh::StandaloneBrowserApps() {
   return publisher_host_ ? publisher_host_->StandaloneBrowserApps() : nullptr;
 }
@@ -378,7 +374,8 @@ void AppServiceProxyAsh::UnpauseApps(const std::set<std::string>& app_ids) {
   }
 }
 
-void AppServiceProxyAsh::BlockApps(const std::set<std::string>& app_ids) {
+void AppServiceProxyAsh::BlockApps(const std::set<std::string>& app_ids,
+                                   bool show_block_dialog) {
   for (auto& app_id : app_ids) {
     auto app_type = app_registry_cache_.GetAppType(app_id);
     if (app_type == AppType::kUnknown) {
@@ -388,6 +385,12 @@ void AppServiceProxyAsh::BlockApps(const std::set<std::string>& app_ids) {
     auto* publisher = GetPublisher(app_type);
     if (publisher) {
       publisher->BlockApp(app_id);
+    }
+
+    if (show_block_dialog) {
+      app_registry_cache_.ForOneApp(app_id, [](const apps::AppUpdate& update) {
+        AppServiceProxyAsh::CreateLocalBlockDialog(update.Name());
+      });
     }
   }
 }
@@ -828,7 +831,7 @@ void AppServiceProxyAsh::OnUninstallDialogClosed(
 
   DCHECK(uninstall_dialog);
   auto it = uninstall_dialogs_.find(app_id);
-  DCHECK(it != uninstall_dialogs_.end());
+  CHECK(it != uninstall_dialogs_.end(), base::NotFatalUntil::M130);
   uninstall_dialogs_.erase(it);
 }
 
@@ -892,12 +895,27 @@ bool AppServiceProxyAsh::MaybeShowLaunchPreventionDialog(
     return false;
   }
 
-  // Return true, and load the icon for the app block dialog when the app
-  // is blocked by policy, or by local settings.
-  if (apps_util::IsDisabled(update.Readiness())) {
+  // Return true and load the icon for the app block dialog when the app
+  // is blocked by policy.
+  if (update.Readiness() == apps::Readiness::kDisabledByPolicy) {
     LoadIconForDialog(
         update, base::BindOnce(&AppServiceProxyAsh::OnLoadIconForBlockDialog,
                                weak_ptr_factory_.GetWeakPtr(), update.Name()));
+    return true;
+  }
+
+  // Return true and load the icon for the app local block dialog when the app
+  // is blocked by local settings.
+  if (update.Readiness() == apps::Readiness::kDisabledByLocalSettings) {
+    AppServiceProxyAsh::CreateLocalBlockDialog(update.Name());
+
+    // For browser tests, call the dialog created callback to stop the run loop.
+    if (!dialog_created_callback_.is_null()) {
+      // Post task to the UI thread so local block dialog matches the
+      // asynchronicity of the other dialogs.
+      content::GetUIThreadTaskRunner({base::TaskPriority::BEST_EFFORT})
+          ->PostTask(FROM_HERE, std::move(dialog_created_callback_));
+    }
     return true;
   }
 
@@ -911,7 +929,7 @@ bool AppServiceProxyAsh::MaybeShowLaunchPreventionDialog(
     auto time_limit =
         app_limit->GetTimeLimitForApp(update.AppId(), update.AppType());
     if (!time_limit.has_value()) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return true;
     }
     PauseData pause_data;
@@ -1055,8 +1073,8 @@ void AppServiceProxyAsh::RecordAppPlatformMetrics(
 
 void AppServiceProxyAsh::InitAppPlatformMetrics() {
   if (app_platform_metrics_service_) {
-    app_platform_metrics_service_->Start(app_registry_cache_,
-                                         instance_registry_);
+    app_platform_metrics_service_->Start(
+        app_registry_cache_, instance_registry_, app_capability_access_cache_);
   }
 }
 

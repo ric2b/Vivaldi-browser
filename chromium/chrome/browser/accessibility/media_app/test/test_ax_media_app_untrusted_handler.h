@@ -35,6 +35,7 @@ class TestAXMediaAppUntrustedHandler : public AXMediaAppUntrustedHandler {
  public:
   TestAXMediaAppUntrustedHandler(
       content::BrowserContext& context,
+      gfx::NativeWindow native_window,
       mojo::PendingRemote<media_app_ui::mojom::OcrUntrustedPage> page);
   TestAXMediaAppUntrustedHandler(const TestAXMediaAppUntrustedHandler&) =
       delete;
@@ -64,8 +65,8 @@ class TestAXMediaAppUntrustedHandler : public AXMediaAppUntrustedHandler {
     return pages_;
   }
 
-  const std::vector<const ui::AXTreeUpdate>&
-  GetPendingSerializedUpdatesForTesting() const {
+  const std::vector<ui::AXTreeUpdate>& GetPendingSerializedUpdatesForTesting()
+      const {
     return *pending_serialized_updates_for_testing_;
   }
 
@@ -84,6 +85,8 @@ class TestAXMediaAppUntrustedHandler : public AXMediaAppUntrustedHandler {
   }
 
   void DisableStatusNodesForTesting() { has_landmark_node_ = false; }
+
+  void DisablePostamblePageForTesting() { has_postamble_page_ = false; }
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
   void CreateFakeOpticalCharacterRecognizerForTesting(bool return_empty);

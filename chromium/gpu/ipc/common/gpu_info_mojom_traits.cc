@@ -27,7 +27,6 @@ bool StructTraits<gpu::mojom::GpuDeviceDataView, gpu::GPUInfo::GPUDevice>::Read(
   out->sub_sys_id = data.sub_sys_id();
 #endif  // BUILDFLAG(IS_WIN)
   out->active = data.active();
-  out->cuda_compute_capability_major = data.cuda_compute_capability_major();
   return data.ReadVendorString(&out->vendor_string) &&
          data.ReadDeviceString(&out->device_string) &&
 #if BUILDFLAG(IS_WIN)
@@ -150,7 +149,8 @@ EnumTraits<gpu::mojom::VideoCodecProfile, gpu::VideoCodecProfile>::ToMojom(
     case gpu::VideoCodecProfile::VVCPROFILE_MAIN16_444_STILL_PICTURE:
       return gpu::mojom::VideoCodecProfile::VVCPROFILE_MAIN12_444_STILL_PICTURE;
   }
-  NOTREACHED() << "Invalid VideoCodecProfile:" << video_codec_profile;
+  NOTREACHED_IN_MIGRATION()
+      << "Invalid VideoCodecProfile:" << video_codec_profile;
   return gpu::mojom::VideoCodecProfile::VIDEO_CODEC_PROFILE_UNKNOWN;
 }
 
@@ -318,7 +318,7 @@ bool EnumTraits<gpu::mojom::VideoCodecProfile, gpu::VideoCodecProfile>::
       *out = gpu::VideoCodecProfile::VVCPROFILE_MAIN12_444_STILL_PICTURE;
       return true;
   }
-  NOTREACHED() << "Invalid VideoCodecProfile: " << input;
+  NOTREACHED_IN_MIGRATION() << "Invalid VideoCodecProfile: " << input;
   return false;
 }
 
@@ -387,7 +387,7 @@ bool EnumTraits<gpu::mojom::ImageDecodeAcceleratorType,
       *out = gpu::ImageDecodeAcceleratorType::kUnknown;
       return true;
   }
-  NOTREACHED() << "Invalid ImageDecodeAcceleratorType: " << input;
+  NOTREACHED_IN_MIGRATION() << "Invalid ImageDecodeAcceleratorType: " << input;
   return false;
 }
 
@@ -422,7 +422,8 @@ bool EnumTraits<gpu::mojom::ImageDecodeAcceleratorSubsampling,
       *out = gpu::ImageDecodeAcceleratorSubsampling::k444;
       return true;
   }
-  NOTREACHED() << "Invalid ImageDecodeAcceleratorSubsampling: " << input;
+  NOTREACHED_IN_MIGRATION()
+      << "Invalid ImageDecodeAcceleratorSubsampling: " << input;
   return false;
 }
 
@@ -482,7 +483,8 @@ bool StructTraits<gpu::mojom::OverlayInfoDataView, gpu::OverlayInfo>::Read(
   return data.ReadYuy2OverlaySupport(&out->yuy2_overlay_support) &&
          data.ReadNv12OverlaySupport(&out->nv12_overlay_support) &&
          data.ReadBgra8OverlaySupport(&out->bgra8_overlay_support) &&
-         data.ReadRgb10a2OverlaySupport(&out->rgb10a2_overlay_support);
+         data.ReadRgb10a2OverlaySupport(&out->rgb10a2_overlay_support) &&
+         data.ReadP010OverlaySupport(&out->p010_overlay_support);
 }
 #endif
 
@@ -497,13 +499,6 @@ bool StructTraits<gpu::mojom::GpuInfoDataView, gpu::GPUInfo>::Read(
   out->passthrough_cmd_decoder = data.passthrough_cmd_decoder();
   out->can_support_threaded_texture_mailbox =
       data.can_support_threaded_texture_mailbox();
-#if BUILDFLAG(IS_MAC)
-  if (!gpu::ValidateMacOSSpecificTextureTarget(
-          data.macos_specific_texture_target())) {
-    return false;
-  }
-  out->macos_specific_texture_target = data.macos_specific_texture_target();
-#endif  // BUILDFLAG(IS_MAC)
   out->jpeg_decode_accelerator_supported =
       data.jpeg_decode_accelerator_supported();
 
@@ -520,6 +515,7 @@ bool StructTraits<gpu::mojom::GpuInfoDataView, gpu::GPUInfo>::Read(
   return data.ReadInitializationTime(&out->initialization_time) &&
          data.ReadGpu(&out->gpu) &&
          data.ReadSecondaryGpus(&out->secondary_gpus) &&
+         data.ReadNpus(&out->npus) &&
          data.ReadPixelShaderVersion(&out->pixel_shader_version) &&
          data.ReadVertexShaderVersion(&out->vertex_shader_version) &&
          data.ReadMaxMsaaSamples(&out->max_msaa_samples) &&

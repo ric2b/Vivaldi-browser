@@ -193,7 +193,7 @@ bool IndexStorage::SaveNow() {
     // We should only get here if we have a valid model and it's finished
     // loading.
     NOTREACHED();
-    return false;
+    //return false;
   }
 
   std::optional<std::string> data = SerializeData();

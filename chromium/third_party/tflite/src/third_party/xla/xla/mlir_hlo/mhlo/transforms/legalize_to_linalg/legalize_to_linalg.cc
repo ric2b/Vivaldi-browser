@@ -24,6 +24,7 @@ limitations under the License.
 #include <utility>
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "mhlo/IR/hlo_ops.h"
 #include "mhlo/transforms/map_mhlo_to_scalar_op.h"
@@ -2029,7 +2030,7 @@ class MapOpToGenericConverter : public OpConversionPattern<mhlo::MapOp> {
     }
     signatureConverter.addInputs(resultType.getElementType());
 
-    rewriter.applySignatureConversion(&region, signatureConverter,
+    rewriter.applySignatureConversion(&region.front(), signatureConverter,
                                       getTypeConverter());
     rewriter.replaceOp(op, linalgOp.getResults());
     return success();
@@ -2078,7 +2079,7 @@ class MapOpToMapConverter : public OpConversionPattern<mhlo::MapOp> {
               mlir::cast<ShapedType>(it.value().getType()).getElementType()));
     }
 
-    rewriter.applySignatureConversion(&region, signatureConverter,
+    rewriter.applySignatureConversion(&region.front(), signatureConverter,
                                       getTypeConverter());
     auto result = rewriter.createOrFold<tensor::CastOp>(loc, resultType,
                                                         linalgOp.getResults());
@@ -2221,7 +2222,7 @@ class ReduceOpToGenericConverter : public OpConversionPattern<mhlo::ReduceOp> {
               mlir::cast<ShapedType>(val.getType()).getElementType()));
     }
 
-    rewriter.applySignatureConversion(&region, signatureConverter,
+    rewriter.applySignatureConversion(&region.front(), signatureConverter,
                                       getTypeConverter());
     rewriter.replaceOp(op, linalgOp.getResults());
     return success();
@@ -2316,7 +2317,7 @@ struct ReduceOpToReduceConverter : public OpConversionPattern<mhlo::ReduceOp> {
           // type for new operand number 'idx' + linalgOp.getNumInputs()
           typeConverter->convertType(val.getElementType()));
     }
-    rewriter.applySignatureConversion(&region, signatureConverter,
+    rewriter.applySignatureConversion(&region.front(), signatureConverter,
                                       getTypeConverter());
 
     // Cast the result to the correct type.
@@ -2519,8 +2520,8 @@ struct SelectAndScatterNoOverlapConverter
     reduceSignConverter.addInputs(srcETy);
     reduceSignConverter.addInputs(1, destETy);
     reduceSignConverter.addInputs(indexETy);
-    rewriter.applySignatureConversion(&reduceRegion, reduceSignConverter,
-                                      getTypeConverter());
+    rewriter.applySignatureConversion(&reduceRegion.front(),
+                                      reduceSignConverter, getTypeConverter());
 
     // Grab the terminator and use the turned value to now select the
     // correct index and value.
@@ -2627,8 +2628,8 @@ struct SelectAndScatterNoOverlapConverter
     scatterSignConverter.addInputs(indexETy);
     scatterSignConverter.addInputs(0, sourceTy.getElementType());
     scatterSignConverter.addInputs(1, sourceTy.getElementType());
-    rewriter.applySignatureConversion(&scatterRegion, scatterSignConverter,
-                                      getTypeConverter());
+    rewriter.applySignatureConversion(&scatterRegion.front(),
+                                      scatterSignConverter, getTypeConverter());
 
     auto& scatterBlock = scatterRegion.front();
     auto scatterTerminator = scatterBlock.getTerminator();
@@ -3677,7 +3678,7 @@ struct ReduceWindowOpOnTensorsGenericConversion
           i, mlir::cast<ShapedType>(input.getType()).getElementType());
     }
 
-    rewriter.applySignatureConversion(&region, signatureConverter,
+    rewriter.applySignatureConversion(&region.front(), signatureConverter,
                                       getTypeConverter());
     rewriter.replaceOp(op, linalgOp.getResults());
     return success();
@@ -4043,6 +4044,10 @@ struct GatherConversion : public OpConversionPattern<mhlo::GatherOp> {
         gatherOp.getDimensionNumbers().getOffsetDims();
     ArrayRef<int64_t> collapsedSliceDims =
         gatherOp.getDimensionNumbers().getCollapsedSliceDims();
+    ArrayRef<int64_t> operandBatchingDims =
+        gatherOp.getDimensionNumbers().getOperandBatchingDims();
+    ArrayRef<int64_t> startIndicesBatchingDims =
+        gatherOp.getDimensionNumbers().getStartIndicesBatchingDims();
     ArrayRef<int64_t> startIndexMap =
         gatherOp.getDimensionNumbers().getStartIndexMap();
 
@@ -4123,12 +4128,25 @@ struct GatherConversion : public OpConversionPattern<mhlo::GatherOp> {
     for (const auto& it : llvm::enumerate(startIndexMap))
       remappedIndexFromIndices[it.value()] = indexFromStartIndices[it.index()];
 
+    // Now we construct the index based on the operand/start_indices batching
+    // dimensions.
+    SmallVector<Value> indexFromBatching(operandRank, constants[0]);
+    for (auto [operandDim, indicesDim] :
+         llvm::zip_equal(operandBatchingDims, startIndicesBatchingDims)) {
+      indexFromBatching[operandDim] =
+          gatherIndex[indicesDim + (indicesDim < indexVectorDim ? 0 : 1)];
+    }
+
+    auto isCollapsedOrBatching = [&](int64_t dim) {
+      return llvm::is_contained(collapsedSliceDims, dim) ||
+             llvm::is_contained(operandBatchingDims, dim);
+    };
+
     // Now we construct the index based on the offset. First we need to remap
     // the offset dimensions by dropping the collapsed indices.
     SmallVector<unsigned> remappedOffsetDims;
     for (int i = 0; i < operandRank; ++i)
-      if (!llvm::is_contained(collapsedSliceDims, i))
-        remappedOffsetDims.push_back(i);
+      if (!isCollapsedOrBatching(i)) remappedOffsetDims.push_back(i);
 
     assert(remappedOffsetDims.size() == offsetDims.size());
 
@@ -4137,7 +4155,7 @@ struct GatherConversion : public OpConversionPattern<mhlo::GatherOp> {
       // Compute the size of the output shape dimension corresponding to this
       // index dimension. If it's collapsed set it to 1.
       Value outputDimSize = constants[1];
-      if (!llvm::is_contained(collapsedSliceDims, i)) {
+      if (!isCollapsedOrBatching(i)) {
         outputDimSize = rewriter.createOrFold<tensor::DimOp>(
             loc, emptyOp, offsetDims[operandIndexDim++]);
       }
@@ -4166,12 +4184,15 @@ struct GatherConversion : public OpConversionPattern<mhlo::GatherOp> {
     for (unsigned k = 0; k < offsetDims.size(); ++k)
       indexFromOffset[remappedOffsetDims[k]] = linalgIndices[offsetDims[k]];
 
-    // Now we add together our two indices to get the final index into the
+    // Now we add together our three indices to get the final index into the
     // operand.
     SmallVector<Value> combinedIndex;
     for (int i = 0; i < operandRank; ++i)
       combinedIndex.push_back(rewriter.createOrFold<arith::AddIOp>(
-          loc, rewriter.getIndexType(), remappedIndexFromIndices[i],
+          loc, rewriter.getIndexType(),
+          rewriter.createOrFold<arith::AddIOp>(loc, rewriter.getIndexType(),
+                                               remappedIndexFromIndices[i],
+                                               indexFromBatching[i]),
           indexFromOffset[i]));
 
     Value extractOperand;

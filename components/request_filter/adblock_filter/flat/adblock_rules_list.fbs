@@ -2,6 +2,18 @@
 
 namespace adblock_filter.flat;
 
+enum Decision : ubyte {
+  MODIFY,
+  PASS,
+  MODIFY_IMPORTANT,
+}
+
+enum Modifier : ubyte {
+  NO_MODIFIER,
+  REDIRECT,
+  CSP
+}
+
 enum PatternType : ubyte {
   PLAIN,
   WILDCARDED,
@@ -15,9 +27,8 @@ enum AnchorType : ubyte (bit_flags) {
 }
 
 enum OptionFlag : ubyte (bit_flags) {
-  IS_ALLOW_RULE,
+  MODIFY_BLOCK,
   IS_CASE_SENSITIVE,
-  IS_CSP_RULE,
   FIRST_PARTY,
   THIRD_PARTY,
 }
@@ -46,10 +57,14 @@ enum ResourceType : ushort (bit_flags) {
   WEBRTC,
   PING,
   WEBTRANSPORT,
+  WEBBUNDLE,
   OTHER,
 }
 
 table RequestFilterRule {
+  // The decision associated with the pattern.
+  decision : Decision = MODIFY;
+
   // Rule matching options, a bitmask consisting of OptionFlags.
   options : ubyte;
 
@@ -76,11 +91,9 @@ table RequestFilterRule {
   domains_included : [string];
   domains_excluded : [string];
 
-  // Set for redirect/rewrite rules
-  redirect: string;
-
-  // Set for CSP rules.
-  csp: string;
+  // Redirect or CSP rules
+  modifier : Modifier = NO_MODIFIER;
+  modifier_value : string;
 
   // A URL pattern in the format defined by |pattern_type|.  This should
   // only consist of ascii characters, since it's matched against a url where
@@ -92,7 +105,7 @@ table RequestFilterRule {
   // For regular expression pattern types, this sets a string that is safe to
   // use for ngram extraction. It contains only string pieces that a url must
   // match to match the full regex, separated by wildcards
-  ngram_search_string: string;
+  ngram_search_string : string;
 }
 
 table ContentInjectionRuleCore {

@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">適用</translation>
 <translation id="1603914832182249871">(プライベート)</translation>
 <translation id="1627276047960621195">ファイル記述子</translation>
+<translation id="1654713139320245449">キャスト先が見つからへんわ。ヘルプいる？</translation>
 <translation id="166278006618318542">サブジェクトの公開鍵アルゴリズム</translation>
 <translation id="1682548588986054654">さらのプライベートウィンドウ</translation>
 <translation id="1708338024780164500">(非アクティブ)</translation>
@@ -86,7 +87,6 @@
 <translation id="2439110203301358333">パソコンにある他所のプログラムが、Vivaldiの動きに影響するかもしれへん拡張機能追加したわ。</translation>
 <translation id="2443487764245141020">サイト側は識別子使うてデバイス認識せなあかん時もあるで</translation>
 <translation id="2445081178310039857">拡張機能のルートフォルダー教えてや。</translation>
-<translation id="2470702053775288986">サポートされてへん拡張機能が無効になったで</translation>
 <translation id="2485422356828889247">アンイストール</translation>
 <translation id="2498539833203011245">最小化</translation>
 <translation id="2509495747794740764">倍率は10から200までにしといて。</translation>
@@ -206,7 +206,6 @@
 <translation id="431076611119798497">&amp; 詳細</translation>
 <translation id="4345587454538109430">設定...</translation>
 <translation id="4348766275249686434">エラー収集</translation>
-<translation id="4363771538994847871">キャスト先が見つからへんわ。ヘルプ表示しよか？</translation>
 <translation id="4384652540891215547">拡張機能使えるようにする</translation>
 <translation id="4394049700291259645">無効にする</translation>
 <translation id="4409697491990005945">余白</translation>
@@ -390,7 +389,6 @@
 <translation id="7771452384635174008">レイアウト</translation>
 <translation id="7782102568078991263">もう候補ないわ</translation>
 <translation id="7786889348652477777">アプリもっかい読み込む (&amp;R)</translation>
-<translation id="7791543448312431591">追加</translation>
 <translation id="7800518121066352902">反時計回りに回転 (&amp;O)</translation>
 <translation id="7814458197256864873">コピー (&amp;C)</translation>
 <translation id="7818135753970109980">さらのテーマが追加されたで (<ph name="EXTENSION_NAME" />)</translation>

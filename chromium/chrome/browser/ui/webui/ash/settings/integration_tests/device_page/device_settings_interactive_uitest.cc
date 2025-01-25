@@ -3,19 +3,23 @@
 // found in the LICENSE file.
 
 #include <linux/input-event-codes.h>
+
 #include <memory>
 
 #include "ash/ash_element_identifiers.h"
 #include "ash/constants/ash_features.h"
 #include "ash/shell.h"
 #include "ash/webui/settings/public/constants/routes.mojom-forward.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chrome/test/base/chromeos/crosier/interactive_ash_test.h"
+#include "chrome/grit/generated_resources.h"
+#include "chrome/test/base/ash/interactive/interactive_ash_test.h"
 #include "device/udev_linux/fake_udev_loader.h"
 #include "ui/base/interaction/element_identifier.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/events/ash/keyboard_capability.h"
 #include "ui/events/devices/device_data_manager_test_api.h"
@@ -141,12 +145,22 @@ class DeviceSettingsInteractiveUiTest : public InteractiveAshTest {
       "settings-device-page",
       "settings-per-device-keyboard",
       "settings-per-device-keyboard-subsection",
-      "h2#keyboardName",
+      "per-device-subsection-header",
+      "h2#deviceName",
   };
 
   const DeepQuery kKeyboardRowQuery{
       "os-settings-ui",       "os-settings-main",      "main-page-container",
       "settings-device-page", "#perDeviceKeyboardRow",
+  };
+
+  const DeepQuery kPerDeviceKeyboardSubsectionQuery{
+      "os-settings-ui",
+      "os-settings-main",
+      "main-page-container",
+      "settings-device-page",
+      "settings-per-device-keyboard",
+      "settings-per-device-keyboard-subsection",
   };
 
   // Query to pierce through Shadow DOM to find the Settings search box.
@@ -186,13 +200,14 @@ class DeviceSettingsInteractiveUiTest : public InteractiveAshTest {
   auto LaunchSettingsApp(const ui::ElementIdentifier& element_id,
                          const std::string& subpage) {
     return Steps(
-        Log(std::format("Open OS Settings to {0}", subpage)),
+        Log(base::StringPrintf("Open OS Settings to %s", subpage.c_str())),
         InstrumentNextTab(element_id, AnyBrowser()), Do([&]() {
           chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
               GetActiveUserProfile(), subpage);
         }),
         WaitForShow(element_id),
-        Log(std::format("Waiting for OS Settings {0} page to load", subpage)),
+        Log(base::StringPrintf("Waiting for OS Settings %s page to load",
+                               subpage.c_str())),
 
         Log("Waiting for OS settings audio settings page to load"),
         WaitForWebContentsReady(element_id, chrome::GetOSSettingsUrl(subpage)));
@@ -290,7 +305,8 @@ IN_PROC_BROWSER_TEST_F(DeviceSettingsInteractiveUiTest, OpenTouchpadSubpage) {
       "settings-device-page",
       "settings-per-device-touchpad",
       "settings-per-device-touchpad-subsection",
-      "h2#touchpadName",
+      "per-device-subsection-header",
+      "h2#deviceName",
   };
 
   SetTouchpadDevices({kSampleTouchpadInternal});
@@ -329,7 +345,8 @@ IN_PROC_BROWSER_TEST_F(DeviceSettingsInteractiveUiTest, AddNewMouse) {
       "settings-device-page",
       "settings-per-device-mouse",
       "settings-per-device-mouse-subsection",
-      "h2#mouseName",
+      "per-device-subsection-header",
+      "h2#deviceName",
   };
 
   SetMouseDevices({ui::InputDevice(
@@ -471,7 +488,7 @@ class DeviceSettingsSwapPrimaryMouseButtonInteractiveUiTest
       "#dropdownMenu",
   };
 
-  const DeepQuery kCursorAcceleartorToggleQuery{
+  const DeepQuery kCursorAcceleratorToggleQuery{
       "os-settings-ui",
       "os-settings-main",
       "main-page-container",
@@ -492,7 +509,7 @@ IN_PROC_BROWSER_TEST_F(DeviceSettingsSwapPrimaryMouseButtonInteractiveUiTest,
       StateChange::Type::kExistsAndConditionTrue;
   cursor_acceleration_toggle_enabled.event =
       kCursorAccelerationToggleEnabledEvent;
-  cursor_acceleration_toggle_enabled.where = kCursorAcceleartorToggleQuery;
+  cursor_acceleration_toggle_enabled.where = kCursorAcceleratorToggleQuery;
   cursor_acceleration_toggle_enabled.test_function = "el => !el.disabled";
 
   RunTestSequence(
@@ -501,14 +518,13 @@ IN_PROC_BROWSER_TEST_F(DeviceSettingsSwapPrimaryMouseButtonInteractiveUiTest,
       Log("Waiting for per device mouse row to be visible"),
       WaitForElementExists(webcontents_id_, kMouseRowQuery),
       ClickElement(webcontents_id_, kMouseRowQuery),
-      Log("Waiting for swap primary mouse toggle to be visible"),
-      WaitForElementExists(webcontents_id_, kMouseSwapButtonDropdownQuery),
       Log("Selecting 'Right button' from the dropdown menu"),
-      ExecuteJsAt(webcontents_id_, kMouseSwapButtonDropdownQuery,
-                  "(el) => {el.selectedIndex = 1; el.dispatchEvent(new "
-                  "Event('change'));}"),
+      SelectDropdownElementOption(
+          webcontents_id_, kMouseSwapButtonDropdownQuery,
+          l10n_util::GetStringUTF8(
+              IDS_SETTINGS_PRIMARY_MOUSE_BUTTON_RIGHT_LABEL)),
       Log("Verifying that right clicking behavior has changed"),
-      MoveMouseTo(webcontents_id_, kCursorAcceleartorToggleQuery),
+      MoveMouseTo(webcontents_id_, kCursorAcceleratorToggleQuery),
       ClickMouse(ui_controls::RIGHT),
       WaitForStateChange(webcontents_id_, cursor_acceleration_toggle_enabled));
 }
@@ -528,7 +544,8 @@ IN_PROC_BROWSER_TEST_F(DeviceSettingsInteractiveUiTest, AddNewTouchpad) {
       "settings-device-page",
       "settings-per-device-touchpad",
       "settings-per-device-touchpad-subsection",
-      "h2#touchpadName",
+      "per-device-subsection-header",
+      "h2#deviceName",
   };
 
   SetTouchpadDevices({kSampleTouchpadInternal});
@@ -843,6 +860,54 @@ IN_PROC_BROWSER_TEST_F(DeviceSettingsInteractiveUiTest, KeyboardFkeys) {
   // Get settings browser and verify that the window is maximized.
   Browser* browser = BrowserList::GetInstance()->get(0);
   EXPECT_TRUE(browser->window()->IsFullscreen());
+}
+
+class DeviceSettingsBrightnessInteractiveUiTest
+    : public DeviceSettingsInteractiveUiTest {
+ public:
+  DeviceSettingsBrightnessInteractiveUiTest() {
+    feature_list_.Reset();
+    feature_list_.InitWithFeatures(
+        {features::kInputDeviceSettingsSplit,
+         features::kPeripheralCustomization,
+         features::kEnableKeyboardBacklightControlInSettings},
+        {});
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(DeviceSettingsBrightnessInteractiveUiTest,
+                       NavigateToRgbCustomization) {
+  DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kRgbKeyboardCustomizationSectionId);
+
+  const DeepQuery kKeyboardColorsQuery{
+      "os-settings-ui",
+      "os-settings-main",
+      "#mainPageContainer",
+      "settings-device-page",
+      "settings-per-device-keyboard",
+      "settings-per-device-keyboard-subsection",
+      "#rgbKeyboardControlLink",
+  };
+
+  RunTestSequence(
+      SetupInternalKeyboard(),
+      LaunchSettingsApp(
+          webcontents_id_,
+          chromeos::settings::mojom::kPerDeviceKeyboardSubpagePath),
+      Log("Manually enabling RGB keyboard support."),
+      WaitForElementExists(webcontents_id_, kPerDeviceKeyboardSubsectionQuery),
+      ExecuteJsAt(webcontents_id_, kPerDeviceKeyboardSubsectionQuery,
+                  "(subsection) => { if (subsection) { "
+                  "subsection.isRgbKeyboardSupported = true; "
+                  "subsection.notifyPath('isRgbKeyboardSupported', true); "
+                  "}}"),
+      Log("Waiting for keyboard colors section to exist"),
+      WaitForElementExists(webcontents_id_, kKeyboardColorsQuery),
+      Log("Clicking the keyboard colors section"),
+      ClickElement(webcontents_id_, kKeyboardColorsQuery),
+      Log("Verifying rgb customization page is open"),
+      InstrumentNextTab(kRgbKeyboardCustomizationSectionId, AnyBrowser()),
+      WaitForShow(kRgbKeyboardCustomizationSectionId));
 }
 
 }  // namespace

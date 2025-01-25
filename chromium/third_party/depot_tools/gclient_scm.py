@@ -22,6 +22,7 @@ import traceback
 import gclient_utils
 # import gerrit_util
 import git_cache
+import git_common
 import scm
 import subprocess2
 
@@ -834,16 +835,11 @@ class GitWrapper(SCMWrapper):
         return_early = False
         # TODO(maruel): Delete url != 'git://foo' since it's just to make the
         # unit test pass. (and update the comment above)
-        # Skip url auto-correction if remote.origin.gclient-auto-fix-url is set.
-        # This allows devs to use experimental repos which have a different url
-        # but whose branch(s) are the same as official repos.
         strp_url = url[:-4] if url.endswith('.git') else url
         strp_current_url = current_url[:-4] if current_url.endswith(
             '.git') else current_url
         if (strp_current_url.rstrip('/') != strp_url.rstrip('/')
-                and url != 'git://foo' and scm.GIT.GetConfigBool(
-                    self.checkout_path,
-                    f'remote.{self.remote}.gclient-auto-fix-url')):
+                and url != 'git://foo'):
             self.Print('_____ switching %s from %s to new upstream %s' %
                        (self.relpath, current_url, url))
             if not (options.force or options.reset):
@@ -1578,8 +1574,8 @@ class GitWrapper(SCMWrapper):
             env.setdefault(
                 'GIT_DIR',
                 os.path.abspath(os.path.join(self.checkout_path, '.git')))
-        ret = subprocess2.check_output(['git'] + args, env=env,
-                                       **kwargs).decode('utf-8')
+        kwargs.setdefault('env', env)
+        ret = git_common.run(*args, **kwargs)
         if strip:
             ret = ret.strip()
         self.Print('Finished running: %s %s' % ('git', ' '.join(args)))

@@ -55,10 +55,10 @@
 #include "extensions/browser/preload_check_group.h"
 #include "extensions/browser/requirements_checker.h"
 #include "extensions/common/extension_features.h"
-#include "extensions/common/extension_icon_set.h"
 #include "extensions/common/extension_id.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/file_util.h"
+#include "extensions/common/icons/extension_icon_set.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_handlers/kiosk_mode_info.h"
 #include "extensions/common/manifest_handlers/shared_module_info.h"
@@ -199,7 +199,7 @@ void CrxInstaller::InstallCrxFile(const CRXFileInfo& source_file) {
   if (!GetUnpackerTaskRunner()->PostTask(
           FROM_HERE, base::BindOnce(&SandboxedUnpacker::StartWithCrx, unpacker,
                                     source_file))) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -222,7 +222,7 @@ void CrxInstaller::InstallUnpackedCrx(const ExtensionId& extension_id,
           FROM_HERE,
           base::BindOnce(&SandboxedUnpacker::StartWithDirectory, unpacker,
                          extension_id, public_key, unpacked_dir))) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -239,7 +239,7 @@ void CrxInstaller::InstallUserScript(const base::FilePath& source_file,
           FROM_HERE,
           base::BindOnce(&CrxInstaller::ConvertUserScriptOnSharedFileThread,
                          this)))
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
 }
 
 void CrxInstaller::ConvertUserScriptOnSharedFileThread() {
@@ -255,7 +255,7 @@ void CrxInstaller::ConvertUserScriptOnSharedFileThread() {
 
   OnUnpackSuccessOnSharedFileThread(extension->path(), extension->path(),
                                     nullptr, extension, SkBitmap(),
-                                    {} /* ruleset_install_prefs */);
+                                    /*ruleset_install_prefs=*/{});
 }
 
 void CrxInstaller::UpdateExtensionFromUnpackedCrx(
@@ -497,7 +497,7 @@ void CrxInstaller::GetContentVerifierKey(
   if (!content::GetUIThreadTaskRunner({})->PostTask(
           FROM_HERE, base::BindOnce(&CrxInstaller::GetContentVerifierKeyOnUI,
                                     this, std::move(callback)))) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -509,7 +509,7 @@ void CrxInstaller::ShouldComputeHashesForOffWebstoreExtension(
           FROM_HERE,
           base::BindOnce(&CrxInstaller::ShouldComputeHashesOnUI, this,
                          std::move(extension), std::move(callback)))) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -518,7 +518,7 @@ void CrxInstaller::OnUnpackFailure(const CrxInstallError& error) {
   if (!content::GetUIThreadTaskRunner({})->PostTask(
           FROM_HERE, base::BindOnce(&CrxInstaller::ReportFailureFromUIThread,
                                     this, error))) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -528,7 +528,7 @@ void CrxInstaller::OnUnpackSuccess(
     std::unique_ptr<base::Value::Dict> original_manifest,
     const Extension* extension,
     const SkBitmap& install_icon,
-    declarative_net_request::RulesetInstallPrefs ruleset_install_prefs) {
+    base::Value::Dict ruleset_install_prefs) {
   DCHECK(GetUnpackerTaskRunner()->RunsTasksInCurrentSequence());
   shared_file_task_runner_->PostTask(
       FROM_HERE,
@@ -544,7 +544,7 @@ void CrxInstaller::OnUnpackSuccessOnSharedFileThread(
     std::unique_ptr<base::Value::Dict> original_manifest,
     scoped_refptr<const Extension> extension,
     SkBitmap install_icon,
-    declarative_net_request::RulesetInstallPrefs ruleset_install_prefs) {
+    base::Value::Dict ruleset_install_prefs) {
   DCHECK(shared_file_task_runner_->RunsTasksInCurrentSequence());
 
   extension_ = extension;
@@ -582,7 +582,7 @@ void CrxInstaller::OnUnpackSuccessOnSharedFileThread(
     delete_source_ = false;
     if (!content::GetUIThreadTaskRunner({})->PostTask(
             FROM_HERE, std::move(expectations_verified_callback_))) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
 
@@ -595,7 +595,7 @@ void CrxInstaller::OnUnpackSuccessOnSharedFileThread(
 
   if (!content::GetUIThreadTaskRunner({})->PostTask(
           FROM_HERE, base::BindOnce(&CrxInstaller::CheckInstall, this)))
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
 }
 
 void CrxInstaller::OnStageChanged(InstallationStage stage) {
@@ -897,7 +897,7 @@ void CrxInstaller::UpdateCreationFlagsAndCompleteInstall(
           FROM_HERE,
           base::BindOnce(&CrxInstaller::CompleteInstall, this,
                          updates_from_webstore_or_empty_update_url))) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -967,7 +967,7 @@ void CrxInstaller::ReportFailureFromSharedFileThread(
   if (!content::GetUIThreadTaskRunner({})->PostTask(
           FROM_HERE, base::BindOnce(&CrxInstaller::ReportFailureFromUIThread,
                                     this, error))) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -1005,7 +1005,7 @@ void CrxInstaller::ReportSuccessFromSharedFileThread() {
   if (!content::GetUIThreadTaskRunner({})->PostTask(
           FROM_HERE,
           base::BindOnce(&CrxInstaller::ReportSuccessFromUIThread, this)))
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
 
   // Delete temporary files.
   CleanupTempFiles();
@@ -1037,7 +1037,8 @@ void CrxInstaller::ReportSuccessFromUIThread() {
   }
 
   service_weak_->OnExtensionInstalled(extension(), page_ordinal_,
-                                      install_flags_, ruleset_install_prefs_);
+                                      install_flags_,
+                                      std::move(ruleset_install_prefs_));
   NotifyCrxInstallComplete(std::nullopt);
 }
 
@@ -1048,7 +1049,7 @@ void CrxInstaller::ReportInstallationStage(InstallationStage stage) {
     if (!content::GetUIThreadTaskRunner({})->PostTask(
             FROM_HERE, base::BindOnce(&CrxInstaller::ReportInstallationStage,
                                       this, stage))) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
     return;
   }
@@ -1107,7 +1108,7 @@ void CrxInstaller::NotifyCrxInstallComplete(
             error->detail());
         break;
       case CrxInstallErrorType::NONE:
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
         break;
     }
   }
@@ -1127,7 +1128,7 @@ void CrxInstaller::CleanupTempFiles() {
   if (!shared_file_task_runner_->RunsTasksInCurrentSequence()) {
     if (!shared_file_task_runner_->PostTask(
             FROM_HERE, base::BindOnce(&CrxInstaller::CleanupTempFiles, this))) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
     return;
   }
@@ -1219,7 +1220,7 @@ void CrxInstaller::RunInstallerCallbacks(
   for (InstallerResultCallback& callback : installer_callbacks_) {
     if (!content::GetUIThreadTaskRunner({})->PostTask(
             FROM_HERE, base::BindOnce(std::move(callback), error))) {
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
     }
   }
   installer_callbacks_.clear();

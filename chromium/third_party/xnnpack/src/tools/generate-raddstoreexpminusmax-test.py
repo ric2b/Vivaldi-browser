@@ -46,7 +46,7 @@ TEST(${TEST_NAME}, elements_eq_${ELEMENTS_TILE}${ELEMENTS_SUFFIX}) {
     .Test(${TEST_FUNCTION}, ${INIT_FUNCTION});
 }
 
-$if ELEMENTS_TILE > 1:
+$if ELEMENTS_TILE > 1 or ELEMENTS_SCALE != "":
   TEST(${TEST_NAME}, elements_div_${ELEMENTS_TILE}${ELEMENTS_SUFFIX}) {
     $if ISA_CHECK:
       ${ISA_CHECK};
@@ -164,12 +164,11 @@ def main(args):
 //   Generator: {generator}
 
 
-#include <xnnpack/common.h>
-#include <xnnpack/isa-checks.h>
-#include <xnnpack/microparams-init.h>
-#include <xnnpack/raddstoreexpminusmax.h>
-
 #include <gtest/gtest.h>
+#include "xnnpack/common.h"
+#include "xnnpack/isa-checks.h"
+#include "xnnpack/microparams-init.h"
+#include "xnnpack/raddstoreexpminusmax.h"
 #include "raddstoreexpminusmax-microkernel-tester.h"
 """.format(specification=options.spec, generator=sys.argv[0])
 

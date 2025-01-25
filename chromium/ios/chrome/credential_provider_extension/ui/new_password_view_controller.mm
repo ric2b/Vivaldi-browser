@@ -175,7 +175,7 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
       cell.accessibilityTraits |= UIAccessibilityTraitButton;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       cellType = NewPasswordTableCellTypeSuggestStrongPassword;
       break;
   }
@@ -502,7 +502,7 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 
 - (void)credentialSaved:(ArchivableCredential*)credential {
   CPENewCredentialUsername usernameType =
-      (credential.user.length)
+      (credential.username.length)
           ? CPENewCredentialUsername::kCredentialWithUsername
           : CPENewCredentialUsername::kCredentialWithoutUsername;
   UpdateHistogramCount(@"IOS.CredentialExtension.NewCredentialUsername",
@@ -557,7 +557,8 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 
 - (void)fromInputAccessoryViewDidTapOmniboxTypingShield:
     (FormInputAccessoryView*)sender {
-  NOTREACHED() << "The typing shield should only be present on web";
+  NOTREACHED_IN_MIGRATION()
+      << "The typing shield should only be present on web";
 }
 
 @end

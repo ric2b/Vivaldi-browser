@@ -15,7 +15,7 @@
 //! NP Rust C FFI functionality for V0 advertisement serialization.
 
 use crate::{panic_if_invalid, unwrap, PanicReason};
-use np_ffi_core::common::{ByteBuffer, DeallocateResult, EncryptedIdentityType, FixedSizeArray};
+use np_ffi_core::common::{ByteBuffer, DeallocateResult, FixedSizeArray};
 use np_ffi_core::credentials::V0BroadcastCredential;
 use np_ffi_core::serialize::v0::*;
 use np_ffi_core::utils::FfiEnum;
@@ -52,41 +52,28 @@ pub extern "C" fn np_ffi_V0AdvertisementBuilder_into_advertisement(
 pub extern "C" fn np_ffi_deallocate_v0_advertisement_builder(
     adv_builder: V0AdvertisementBuilder,
 ) -> DeallocateResult {
-    adv_builder.deallocate()
-}
-
-/// Gets the tag of a `CreateV0AdvertisementBuilderResult` tagged-union.
-#[no_mangle]
-pub extern "C" fn np_ffi_CreateV0AdvertisementBuilderResult_kind(
-    result: CreateV0AdvertisementBuilderResult,
-) -> CreateV0AdvertisementBuilderResultKind {
-    result.kind()
-}
-
-/// Casts a `CreateV0AdvertisementBuilderResult` to the `Success` variant,
-/// panicking in the case where the passed value is of a different enum variant.
-#[no_mangle]
-pub extern "C" fn np_ffi_CreateV0AdvertisementBuilderResult_into_SUCCESS(
-    result: CreateV0AdvertisementBuilderResult,
-) -> V0AdvertisementBuilder {
-    unwrap(result.into_success(), PanicReason::EnumCastFailed)
+    adv_builder.deallocate_handle()
 }
 
 /// Creates a new V0 advertisement builder for a public advertisement.
 #[no_mangle]
-pub extern "C" fn np_ffi_create_v0_public_advertisement_builder(
-) -> CreateV0AdvertisementBuilderResult {
-    create_v0_public_advertisement_builder()
+pub extern "C" fn np_ffi_create_v0_public_advertisement_builder() -> V0AdvertisementBuilder {
+    unwrap(
+        create_v0_public_advertisement_builder().into_success(),
+        PanicReason::ExceededMaxHandleAllocations,
+    )
 }
 
 /// Creates a new V0 advertisement builder for an encrypted advertisement.
 #[no_mangle]
 pub extern "C" fn np_ffi_create_v0_encrypted_advertisement_builder(
     broadcast_cred: V0BroadcastCredential,
-    identity_type: EncryptedIdentityType,
     salt: FixedSizeArray<2>,
-) -> CreateV0AdvertisementBuilderResult {
-    create_v0_encrypted_advertisement_builder(broadcast_cred, identity_type, salt)
+) -> V0AdvertisementBuilder {
+    unwrap(
+        create_v0_encrypted_advertisement_builder(broadcast_cred, salt).into_success(),
+        PanicReason::ExceededMaxHandleAllocations,
+    )
 }
 
 /// Gets the tag of a `SerializeV0AdvertisementResult` tagged-union.

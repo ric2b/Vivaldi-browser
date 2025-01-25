@@ -84,7 +84,7 @@ void CallPrinter::Print(const char* str) {
   builder_.AppendCString(str);
 }
 
-void CallPrinter::Print(Handle<String> str) {
+void CallPrinter::Print(DirectHandle<String> str) {
   if (!found_ || done_) return;
   num_prints_++;
   builder_.AppendString(str);
@@ -577,9 +577,14 @@ void CallPrinter::VisitTemplateLiteral(TemplateLiteral* node) {
 }
 
 void CallPrinter::VisitImportCallExpression(ImportCallExpression* node) {
-  Print("ImportCall(");
+  Print("import");
+  if (node->phase() == ModuleImportPhase::kSource) {
+    Print(".source");
+  }
+  Print("(");
   Find(node->specifier(), true);
   if (node->import_options()) {
+    Print(", ");
     Find(node->import_options(), true);
   }
   Print(")");
@@ -612,7 +617,7 @@ void CallPrinter::FindArguments(const ZonePtrList<Expression>* arguments) {
 void CallPrinter::PrintLiteral(Handle<Object> value, bool quote) {
   if (IsString(*value)) {
     if (quote) Print("\"");
-    Print(Handle<String>::cast(value));
+    Print(Cast<String>(value));
     if (quote) Print("\"");
   } else if (IsNull(*value, isolate_)) {
     Print("null");
@@ -626,8 +631,7 @@ void CallPrinter::PrintLiteral(Handle<Object> value, bool quote) {
     Print(isolate_->factory()->NumberToString(value));
   } else if (IsSymbol(*value)) {
     // Symbols can only occur as literals if they were inserted by the parser.
-    PrintLiteral(handle(Handle<Symbol>::cast(value)->description(), isolate_),
-                 false);
+    PrintLiteral(handle(Cast<Symbol>(value)->description(), isolate_), false);
   }
 }
 
@@ -1417,8 +1421,7 @@ void AstPrinter::VisitCallNew(CallNew* node) {
 
 void AstPrinter::VisitCallRuntime(CallRuntime* node) {
   base::EmbeddedVector<char, 128> buf;
-  SNPrintF(buf, "CALL RUNTIME %s%s", node->debug_name(),
-           node->is_jsruntime() ? " (JS function)" : "");
+  SNPrintF(buf, "CALL RUNTIME %s", node->function()->name);
   IndentedScope indent(this, buf.begin(), node->position());
   PrintArguments(node->arguments());
 }
@@ -1488,6 +1491,8 @@ void AstPrinter::VisitTemplateLiteral(TemplateLiteral* node) {
 
 void AstPrinter::VisitImportCallExpression(ImportCallExpression* node) {
   IndentedScope indent(this, "IMPORT-CALL", node->position());
+  PrintIndented("PHASE");
+  Print(" %d\n", static_cast<uint32_t>(node->phase()));
   Visit(node->specifier());
   if (node->import_options()) {
     Visit(node->import_options());

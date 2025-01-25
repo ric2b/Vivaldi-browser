@@ -82,7 +82,7 @@ const wchar_t kSetupExe[] = L"setup.exe";
 // a special location remapped from the original and which requires an extra
 // HTTP header instead of the password. Without the header HTTP reports a
 // not-found error.
-const std::pair<base::StringPiece, base::StringPiece> kSopranoDownloadRemap[] =
+const std::pair<std::string_view, std::string_view> kSopranoDownloadRemap[] =
     {
         {"https://vivaldi.com/sopranos/",
          "https://vivaldi.com/sopranos-update/"},

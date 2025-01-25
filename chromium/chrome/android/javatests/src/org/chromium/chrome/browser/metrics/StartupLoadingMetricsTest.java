@@ -21,6 +21,7 @@ import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
@@ -42,7 +43,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 /** Tests for startup timing histograms. */
 @RunWith(ChromeJUnit4ClassRunner.class)
@@ -69,8 +69,6 @@ public class StartupLoadingMetricsTest {
             "Startup.Android.Cold.FirstNavigationCommitOccurredPreForeground";
     private static final String FIRST_COMMIT_COLD_START_TRACKER_HISTOGRAM =
             "Startup.Android.Experimental.FirstNavigationCommit.Tabbed.ColdStartTracker";
-    private static final String FIRST_COMMIT_ACTIVITY_CREATED_WHILE_INIT_HISTOGRAM =
-            "Startup.Android.Experimental.FirstNavigationCommit.Tabbed.ActivityCreatedWhileInit";
 
     private CustomTabsConnection mConnectionToCleanup;
 
@@ -118,14 +116,12 @@ public class StartupLoadingMetricsTest {
     private void runAndWaitForPageLoadMetricsRecorded(Runnable runnable) throws Exception {
         PageLoadMetricsTest.PageLoadMetricsTestObserver testObserver =
                 new PageLoadMetricsTest.PageLoadMetricsTestObserver();
-        TestThreadUtils.runOnUiThreadBlockingNoException(
-                () -> PageLoadMetrics.addObserver(testObserver, false));
+        ThreadUtils.runOnUiThreadBlocking(() -> PageLoadMetrics.addObserver(testObserver, false));
         runnable.run();
         // First Contentful Paint may be recorded asynchronously after a page load is finished, we
         // have to wait the event to occur.
         testObserver.waitForFirstContentfulPaintEvent();
-        TestThreadUtils.runOnUiThreadBlockingNoException(
-                () -> PageLoadMetrics.removeObserver(testObserver));
+        ThreadUtils.runOnUiThreadBlocking(() -> PageLoadMetrics.removeObserver(testObserver));
     }
 
     private void loadUrlAndWaitForPageLoadMetricsRecorded(
@@ -164,10 +160,6 @@ public class StartupLoadingMetricsTest {
                 isTabbedSuffix ? expectedCount : 0,
                 RecordHistogram.getHistogramTotalCountForTesting(
                         FIRST_COMMIT_COLD_START_TRACKER_HISTOGRAM));
-        Assert.assertEquals(
-                isTabbedSuffix ? expectedCount : 0,
-                RecordHistogram.getHistogramTotalCountForTesting(
-                        FIRST_COMMIT_ACTIVITY_CREATED_WHILE_INIT_HISTOGRAM));
 
         int firstCommitSamples =
                 RecordHistogram.getHistogramTotalCountForTesting(
@@ -397,7 +389,7 @@ public class StartupLoadingMetricsTest {
                         FIRST_COMMIT_OCCURRED_PRE_FOREGROUND_HISTOGRAM, 1));
 
         // Trigger the come-to-foreground event. This time it should not be skipped.
-        TestThreadUtils.runOnUiThreadBlocking(UmaUtils::recordForegroundStartTimeWithNative);
+        ThreadUtils.runOnUiThreadBlocking(UmaUtils::recordForegroundStartTimeWithNative);
 
         // Startup metrics should still not have been recorded...
         Assert.assertEquals(

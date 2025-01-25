@@ -177,9 +177,10 @@ class ProfileOAuth2TokenServiceDelegate {
   void ExtractCredentials(ProfileOAuth2TokenService* to_service,
                           const CoreAccountId& account_id);
 
-  // Attempts to fix the error if possible.  Returns true if the error was fixed
-  // and false otherwise.
-  virtual bool FixRequestErrorIfPossible();
+  // Attempts to fix account error. This is only possible for some cases where
+  // signin happens with a credential provider. See
+  // `signin_util::SigninWithCredentialProviderIfPossible()`.
+  virtual bool FixAccountErrorIfPossible();
 
 #if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
   // Triggers platform specific implementation to reload accounts from system.
@@ -214,6 +215,11 @@ class ProfileOAuth2TokenServiceDelegate {
   // revocation operation.
   void SetRefreshTokenRevokedFromSourceCallback(
       RefreshTokenRevokedFromSourceCallback callback);
+
+  // This callback will be invoked when a refresh token is revoked and observers
+  // have been notified.
+  void SetOnRefreshTokenRevokedNotified(
+      base::RepeatingCallback<void(const CoreAccountId&)> callback);
 
   // -----------------------------------------------------------------------
   // End of methods that are only used by ProfileOAuth2TokenService
@@ -254,12 +260,14 @@ class ProfileOAuth2TokenServiceDelegate {
   };
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(ProfileOAuth2TokenServiceDelegateTest,
+                           FireRefreshTokenRevoked);
   FRIEND_TEST_ALL_PREFIXES(MutableProfileOAuth2TokenServiceDelegateTest,
                            RetryBackoff);
   FRIEND_TEST_ALL_PREFIXES(ProfileOAuth2TokenServiceDelegateChromeOSTest,
                            BackOffIsTriggerredForTransientErrors);
   FRIEND_TEST_ALL_PREFIXES(ProfileOAuth2TokenServiceDelegateTest,
-                           UpdateAuthError_TransientErrors);
+                           UpdateAuthErrorTransientErrors);
 
   // Internal implementations of the methods that can be overridden by
   // subclasses.
@@ -287,8 +295,7 @@ class ProfileOAuth2TokenServiceDelegate {
 
   // List of observers to notify when refresh token availability changes.
   // Makes sure list is empty on destruction.
-  base::ObserverList<ProfileOAuth2TokenServiceObserver, true>::Unchecked
-      observer_list_;
+  base::ObserverList<ProfileOAuth2TokenServiceObserver, true> observer_list_;
 
   // The state of the load credentials operation.
   signin::LoadCredentialsState load_credentials_state_ =
@@ -312,6 +319,8 @@ class ProfileOAuth2TokenServiceDelegate {
   // Callbacks to invoke, if set, for refresh token-related events.
   RefreshTokenAvailableFromSourceCallback on_refresh_token_available_callback_;
   RefreshTokenRevokedFromSourceCallback on_refresh_token_revoked_callback_;
+  base::RepeatingCallback<void(const CoreAccountId&)>
+      on_refresh_token_revoked_notified_callback_;
 
   signin_metrics::SourceForRefreshTokenOperation update_refresh_token_source_ =
       signin_metrics::SourceForRefreshTokenOperation::kUnknown;

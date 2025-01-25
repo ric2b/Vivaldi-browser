@@ -41,7 +41,7 @@
 #include "src/heap/large-spaces.h"
 #include "src/heap/main-allocator.h"
 #include "src/heap/memory-allocator.h"
-#include "src/heap/mutable-page.h"
+#include "src/heap/mutable-page-metadata.h"
 #include "src/heap/spaces-inl.h"
 #include "src/heap/spaces.h"
 #include "src/objects/free-space.h"
@@ -175,7 +175,7 @@ TEST(MutablePageMetadata) {
     // code range for easy metadata lookup, so use the process wide code range
     // in this case.
     CodeRange* code_range =
-        CodeRange::EnsureProcessWideCodeRange(page_allocator, code_range_size);
+        IsolateGroup::current()->EnsureCodeRange(code_range_size);
     base::BoundedPageAllocator* page_allocator = code_range->page_allocator();
 #else
     // With CodeRange.
@@ -320,7 +320,7 @@ TEST(SemiSpaceNewSpace) {
     if (allocation.IsFailure()) break;
     successful_allocations++;
     Tagged<Object> obj = allocation.ToObjectChecked();
-    Tagged<HeapObject> ho = HeapObject::cast(obj);
+    Tagged<HeapObject> ho = Cast<HeapObject>(obj);
     CHECK(new_space->Contains(ho));
   }
   CHECK_LT(0, successful_allocations);
@@ -354,7 +354,7 @@ TEST(PagedNewSpace) {
     if (allocation.IsFailure()) break;
     successful_allocations++;
     Tagged<Object> obj = allocation.ToObjectChecked();
-    Tagged<HeapObject> ho = HeapObject::cast(obj);
+    Tagged<HeapObject> ho = Cast<HeapObject>(obj);
     CHECK(new_space->Contains(ho));
   }
   CHECK_LT(0, successful_allocations);
@@ -390,7 +390,7 @@ TEST(OldSpace) {
     if (allocation.IsFailure()) break;
     successful_allocations++;
     Tagged<Object> obj = allocation.ToObjectChecked();
-    Tagged<HeapObject> ho = HeapObject::cast(obj);
+    Tagged<HeapObject> ho = Cast<HeapObject>(obj);
     CHECK(old_space->Contains(ho));
   }
   CHECK_LT(0, successful_allocations);
@@ -422,7 +422,7 @@ TEST(OldLargeObjectSpace) {
     successful_allocations++;
     Tagged<Object> obj = allocation.ToObjectChecked();
     CHECK(IsHeapObject(obj));
-    Tagged<HeapObject> ho = HeapObject::cast(obj);
+    Tagged<HeapObject> ho = Cast<HeapObject>(obj);
     CHECK(lo->Contains(ho));
     CHECK_EQ(0, Heap::GetFillToAlign(ho.address(), kTaggedAligned));
     // All large objects have the same alignment because they start at the
@@ -430,7 +430,7 @@ TEST(OldLargeObjectSpace) {
     // alignment requirements.
     CHECK_EQ(0, Heap::GetFillToAlign(ho.address(),
                                      HeapObject::RequiredAlignment(map)));
-    Handle<HeapObject> keep_alive(ho, isolate);
+    DirectHandle<HeapObject> keep_alive(ho, isolate);
   }
   CHECK_LT(0, successful_allocations);
 
@@ -609,7 +609,7 @@ TEST(ShrinkPageToHighWaterMarkFreeSpaceEnd) {
 
   // Prepare page that only contains a single object and a trailing FreeSpace
   // filler.
-  Handle<FixedArray> array =
+  DirectHandle<FixedArray> array =
       isolate->factory()->NewFixedArray(128, AllocationType::kOld);
   PageMetadata* page = PageMetadata::FromHeapObject(*array);
 
@@ -639,7 +639,7 @@ TEST(ShrinkPageToHighWaterMarkNoFiller) {
   const int kFillerSize = 0;
   std::vector<Handle<FixedArray>> arrays =
       heap::FillOldSpacePageWithFixedArrays(CcTest::heap(), kFillerSize);
-  Handle<FixedArray> array = arrays.back();
+  DirectHandle<FixedArray> array = arrays.back();
   PageMetadata* page = PageMetadata::FromHeapObject(*array);
   CHECK_EQ(page->area_end(), array->address() + array->Size() + kFillerSize);
 
@@ -663,7 +663,7 @@ TEST(ShrinkPageToHighWaterMarkOneWordFiller) {
   const int kFillerSize = kTaggedSize;
   std::vector<Handle<FixedArray>> arrays =
       heap::FillOldSpacePageWithFixedArrays(CcTest::heap(), kFillerSize);
-  Handle<FixedArray> array = arrays.back();
+  DirectHandle<FixedArray> array = arrays.back();
   PageMetadata* page = PageMetadata::FromHeapObject(*array);
   CHECK_EQ(page->area_end(), array->address() + array->Size() + kFillerSize);
 
@@ -692,7 +692,7 @@ TEST(ShrinkPageToHighWaterMarkTwoWordFiller) {
   const int kFillerSize = 2 * kTaggedSize;
   std::vector<Handle<FixedArray>> arrays =
       heap::FillOldSpacePageWithFixedArrays(CcTest::heap(), kFillerSize);
-  Handle<FixedArray> array = arrays.back();
+  DirectHandle<FixedArray> array = arrays.back();
   PageMetadata* page = PageMetadata::FromHeapObject(*array);
   CHECK_EQ(page->area_end(), array->address() + array->Size() + kFillerSize);
 

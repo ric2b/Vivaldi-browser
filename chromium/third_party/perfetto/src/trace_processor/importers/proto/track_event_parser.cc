@@ -26,14 +26,16 @@
 #include "perfetto/trace_processor/status.h"
 #include "src/trace_processor/importers/common/args_tracker.h"
 #include "src/trace_processor/importers/common/args_translation_table.h"
+#include "src/trace_processor/importers/common/cpu_tracker.h"
 #include "src/trace_processor/importers/common/event_tracker.h"
 #include "src/trace_processor/importers/common/flow_tracker.h"
-#include "src/trace_processor/importers/common/machine_tracker.h"
+#include "src/trace_processor/importers/common/process_track_translation_table.h"
 #include "src/trace_processor/importers/common/process_tracker.h"
 #include "src/trace_processor/importers/common/track_tracker.h"
+#include "src/trace_processor/importers/common/virtual_memory_mapping.h"
 #include "src/trace_processor/importers/json/json_utils.h"
+#include "src/trace_processor/importers/proto/args_parser.h"
 #include "src/trace_processor/importers/proto/packet_analyzer.h"
-#include "src/trace_processor/importers/proto/packet_sequence_state.h"
 #include "src/trace_processor/importers/proto/profile_packet_utils.h"
 #include "src/trace_processor/importers/proto/stack_profile_sequence_state.h"
 #include "src/trace_processor/importers/proto/track_event_tracker.h"
@@ -74,103 +76,6 @@ using protozero::ConstBytes;
 constexpr int64_t kPendingThreadDuration = -1;
 constexpr int64_t kPendingThreadInstructionDelta = -1;
 
-class TrackEventArgsParser : public util::ProtoToArgsParser::Delegate {
- public:
-  TrackEventArgsParser(int64_t packet_timestamp,
-                       BoundInserter& inserter,
-                       TraceStorage& storage,
-                       PacketSequenceStateGeneration& sequence_state)
-      : packet_timestamp_(packet_timestamp),
-        inserter_(inserter),
-        storage_(storage),
-        sequence_state_(sequence_state) {}
-
-  ~TrackEventArgsParser() override;
-
-  using Key = util::ProtoToArgsParser::Key;
-
-  void AddInteger(const Key& key, int64_t value) final {
-    inserter_.AddArg(storage_.InternString(base::StringView(key.flat_key)),
-                     storage_.InternString(base::StringView(key.key)),
-                     Variadic::Integer(value));
-  }
-  void AddUnsignedInteger(const Key& key, uint64_t value) final {
-    inserter_.AddArg(storage_.InternString(base::StringView(key.flat_key)),
-                     storage_.InternString(base::StringView(key.key)),
-                     Variadic::UnsignedInteger(value));
-  }
-  void AddString(const Key& key, const protozero::ConstChars& value) final {
-    inserter_.AddArg(storage_.InternString(base::StringView(key.flat_key)),
-                     storage_.InternString(base::StringView(key.key)),
-                     Variadic::String(storage_.InternString(value)));
-  }
-  void AddString(const Key& key, const std::string& value) final {
-    inserter_.AddArg(
-        storage_.InternString(base::StringView(key.flat_key)),
-        storage_.InternString(base::StringView(key.key)),
-        Variadic::String(storage_.InternString(base::StringView(value))));
-  }
-  void AddDouble(const Key& key, double value) final {
-    inserter_.AddArg(storage_.InternString(base::StringView(key.flat_key)),
-                     storage_.InternString(base::StringView(key.key)),
-                     Variadic::Real(value));
-  }
-  void AddPointer(const Key& key, const void* value) final {
-    inserter_.AddArg(storage_.InternString(base::StringView(key.flat_key)),
-                     storage_.InternString(base::StringView(key.key)),
-                     Variadic::Pointer(reinterpret_cast<uintptr_t>(value)));
-  }
-  void AddBoolean(const Key& key, bool value) final {
-    inserter_.AddArg(storage_.InternString(base::StringView(key.flat_key)),
-                     storage_.InternString(base::StringView(key.key)),
-                     Variadic::Boolean(value));
-  }
-  void AddBytes(const Key& key, const protozero::ConstBytes& value) final {
-    std::string b64_data = base::Base64Encode(value.data, value.size);
-    AddString(key, b64_data);
-  }
-  bool AddJson(const Key& key, const protozero::ConstChars& value) final {
-    auto json_value = json::ParseJsonString(value);
-    if (!json_value)
-      return false;
-    return json::AddJsonValueToArgs(*json_value, base::StringView(key.flat_key),
-                                    base::StringView(key.key), &storage_,
-                                    &inserter_);
-  }
-  void AddNull(const Key& key) final {
-    inserter_.AddArg(storage_.InternString(base::StringView(key.flat_key)),
-                     storage_.InternString(base::StringView(key.key)),
-                     Variadic::Null());
-  }
-
-  size_t GetArrayEntryIndex(const std::string& array_key) final {
-    return inserter_.GetNextArrayEntryIndex(
-        storage_.InternString(base::StringView(array_key)));
-  }
-
-  size_t IncrementArrayEntryIndex(const std::string& array_key) final {
-    return inserter_.IncrementArrayEntryIndex(
-        storage_.InternString(base::StringView(array_key)));
-  }
-
-  InternedMessageView* GetInternedMessageView(uint32_t field_id,
-                                              uint64_t iid) final {
-    return sequence_state_.GetInternedMessageView(field_id, iid);
-  }
-
-  int64_t packet_timestamp() final { return packet_timestamp_; }
-
-  PacketSequenceStateGeneration* seq_state() final { return &sequence_state_; }
-
- private:
-  int64_t packet_timestamp_;
-  BoundInserter& inserter_;
-  TraceStorage& storage_;
-  PacketSequenceStateGeneration& sequence_state_;
-};
-
-TrackEventArgsParser::~TrackEventArgsParser() = default;
-
 // Paths on Windows use backslash rather than slash as a separator.
 // Normalise the paths by replacing backslashes with slashes to make it
 // easier to write cross-platform scripts.
@@ -198,7 +103,7 @@ std::optional<base::Status> MaybeParseUnsymbolizedSourceLocation(
   // Interned mapping_id loses it's meaning when the sequence ends. So we need
   // to get an id from stack_profile_mapping table.
   auto mapping = delegate.seq_state()
-                     ->GetOrCreate<StackProfileSequenceState>()
+                     ->GetCustomState<StackProfileSequenceState>()
                      ->FindOrInsertMapping(decoder->mapping_id());
   if (!mapping) {
     return std::nullopt;
@@ -477,11 +382,9 @@ class TrackEventParser::EventImporter {
             storage_->process_track_table().id().IndexOf(track_id_);
         if (process_track_row) {
           upid_ = storage_->process_track_table().upid()[*process_track_row];
-          if (sequence_state_->state()->pid_and_tid_valid()) {
-            uint32_t pid =
-                static_cast<uint32_t>(sequence_state_->state()->pid());
-            uint32_t tid =
-                static_cast<uint32_t>(sequence_state_->state()->tid());
+          if (sequence_state_->pid_and_tid_valid()) {
+            uint32_t pid = static_cast<uint32_t>(sequence_state_->pid());
+            uint32_t tid = static_cast<uint32_t>(sequence_state_->tid());
             UniqueTid utid_candidate = procs->UpdateThread(tid, pid);
             if (storage_->thread_table().upid()[utid_candidate] == upid_)
               legacy_passthrough_utid_ = utid_candidate;
@@ -495,17 +398,15 @@ class TrackEventParser::EventImporter {
               tracks->mutable_name()->Set(*track_index, name_id_);
           }
 
-          if (sequence_state_->state()->pid_and_tid_valid()) {
-            uint32_t pid =
-                static_cast<uint32_t>(sequence_state_->state()->pid());
-            uint32_t tid =
-                static_cast<uint32_t>(sequence_state_->state()->tid());
+          if (sequence_state_->pid_and_tid_valid()) {
+            uint32_t pid = static_cast<uint32_t>(sequence_state_->pid());
+            uint32_t tid = static_cast<uint32_t>(sequence_state_->tid());
             legacy_passthrough_utid_ = procs->UpdateThread(tid, pid);
           }
         }
       }
     } else {
-      bool pid_tid_state_valid = sequence_state_->state()->pid_and_tid_valid();
+      bool pid_tid_state_valid = sequence_state_->pid_and_tid_valid();
 
       // We have a 0-value |track_uuid|. Nevertheless, we should only fall back
       // if we have either no |track_uuid| specified at all or |track_uuid| was
@@ -524,8 +425,8 @@ class TrackEventParser::EventImporter {
           legacy_event_.has_tid_override() && pid_tid_state_valid;
 
       if (fallback_to_legacy_pid_tid_tracks) {
-        uint32_t pid = static_cast<uint32_t>(sequence_state_->state()->pid());
-        uint32_t tid = static_cast<uint32_t>(sequence_state_->state()->tid());
+        uint32_t pid = static_cast<uint32_t>(sequence_state_->pid());
+        uint32_t tid = static_cast<uint32_t>(sequence_state_->tid());
         if (legacy_event_.has_pid_override()) {
           pid = static_cast<uint32_t>(legacy_event_.pid_override());
           tid = static_cast<uint32_t>(-1);
@@ -1122,10 +1023,11 @@ class TrackEventParser::EventImporter {
     if (!utid_)
       return util::ErrStatus("raw legacy event without thread association");
 
-    RawId id = storage_->mutable_raw_table()
-                   ->Insert({ts_, parser_->raw_legacy_event_id_, 0, *utid_, 0,
-                             0, context_->machine_id()})
-                   .id;
+    auto ucpu = context_->cpu_tracker->GetOrCreateCpu(0);
+    RawId id =
+        storage_->mutable_raw_table()
+            ->Insert({ts_, parser_->raw_legacy_event_id_, *utid_, 0, 0, ucpu})
+            .id;
 
     auto inserter = context_->args_tracker->AddArgsTo(id);
     inserter
@@ -1230,8 +1132,8 @@ class TrackEventParser::EventImporter {
       }
     }
 
-    TrackEventArgsParser args_writer(ts_, *inserter, *storage_,
-                                     *sequence_state_);
+    ArgsParser args_writer(ts_, *inserter, *storage_, sequence_state_,
+                           /*support_json=*/true);
     int unknown_extensions = 0;
     log_errors(parser_->args_parser_.ParseMessage(
         blob_, ".perfetto.protos.TrackEvent", &parser_->reflect_fields_,
@@ -1626,9 +1528,12 @@ void TrackEventParser::ParseTrackDescriptor(
   }
 
   // Override the name with the most recent name seen (after sorting by ts).
-  if (decoder.has_name()) {
+  if (decoder.has_name() || decoder.has_static_name()) {
     auto* tracks = context_->storage->mutable_track_table();
-    StringId name_id = context_->storage->InternString(decoder.name());
+    const StringId raw_name_id = context_->storage->InternString(
+        decoder.has_name() ? decoder.name() : decoder.static_name());
+    const StringId name_id =
+        context_->process_track_translation_table->TranslateName(raw_name_id);
     tracks->mutable_name()->Set(*tracks->id().IndexOf(track_id), name_id);
   }
 }

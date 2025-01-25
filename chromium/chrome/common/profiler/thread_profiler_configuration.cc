@@ -8,6 +8,7 @@
 #include "base/command_line.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
+#include "base/profiler/stack_sampler.h"
 #include "base/rand_util.h"
 #include "build/branding_buildflags.h"
 #include "chrome/common/channel_info.h"
@@ -112,11 +113,9 @@ bool ThreadProfilerConfiguration::GetSyntheticFieldTrial(
       *group_name = "Control";
       break;
 
-#if BUILDFLAG(IS_ANDROID)
-    case kProfileEnabledWithJavaNameHashing:
-      *group_name = "EnabledWithJavaNameHashing";
+    case kProfileEnabledWithThreadPool:
+      *group_name = "EnabledWithThreadPool";
       break;
-#endif  // BUILDFLAG(IS_ANDROID)
 
     case kProfileEnabled:
       *group_name = "Enabled";
@@ -155,12 +154,6 @@ void ThreadProfilerConfiguration::AppendCommandLineSwitchForChildProcess(
     child_process_command_line->AppendSwitchASCII(
         switches::kStartStackProfiler,
         switches::kStartStackProfilerBrowserTest);
-#if BUILDFLAG(IS_ANDROID)
-  } else if (IsJavaNameHashingEnabled()) {
-    child_process_command_line->AppendSwitchASCII(
-        switches::kStartStackProfiler,
-        switches::kStartStackProfilerWithJavaNameHashing);
-#endif  // BUILDFLAG(IS_ANDROID)
   } else {
     child_process_command_line->AppendSwitch(switches::kStartStackProfiler);
   }
@@ -168,23 +161,28 @@ void ThreadProfilerConfiguration::AppendCommandLineSwitchForChildProcess(
 
 #if BUILDFLAG(IS_ANDROID)
 bool ThreadProfilerConfiguration::IsJavaNameHashingEnabled() const {
-  if (const auto* config =
-          absl::get_if<BrowserProcessConfiguration>(&configuration_)) {
-    return config->variation_group == kProfileEnabledWithJavaNameHashing;
-  }
-
-  const auto* command_line = base::CommandLine::ForCurrentProcess();
-  return command_line->GetSwitchValueASCII(switches::kStartStackProfiler) ==
-         switches::kStartStackProfilerWithJavaNameHashing;
+  return false;
 }
 #endif  // BUILDFLAG(IS_ANDROID)
+
+bool ThreadProfilerConfiguration::IsThreadPoolEnabledForCurrentProcess() const {
+  if (absl::holds_alternative<ChildProcessConfiguration>(configuration_)) {
+    return base::CommandLine::ForCurrentProcess()->HasSwitch(
+        switches::kStackProfilerUseThreadPool);
+  }
+
+  const auto& config = absl::get<BrowserProcessConfiguration>(configuration_);
+  return config.variation_group == kProfileEnabledWithThreadPool;
+}
 
 ThreadProfilerConfiguration::ThreadProfilerConfiguration()
     : platform_configuration_(ThreadProfilerPlatformConfiguration::Create(
           IsBrowserTestModeEnabled())),
       configuration_(GenerateConfiguration(
           GetProfileParamsProcess(*base::CommandLine::ForCurrentProcess()),
-          *platform_configuration_)) {}
+          *platform_configuration_)) {
+  base::StackSampler::SetUseThreadPool(IsThreadPoolEnabledForCurrentProcess());
+}
 
 // static
 bool ThreadProfilerConfiguration::EnableForVariationGroup(
@@ -193,9 +191,7 @@ bool ThreadProfilerConfiguration::EnableForVariationGroup(
   // that are to be enabled.
   return variation_group.has_value() &&
          (*variation_group == kProfileEnabled ||
-#if BUILDFLAG(IS_ANDROID)
-          *variation_group == kProfileEnabledWithJavaNameHashing ||
-#endif  // BUILDFLAG(IS_ANDROID)
+          *variation_group == kProfileEnabledWithThreadPool ||
           *variation_group == kProfileControl);
 }
 
@@ -225,7 +221,7 @@ ThreadProfilerConfiguration::ChooseVariationGroup(
     }
     cumulative_weight += variation.weight;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return kProfileDisabled;
 }
 
@@ -259,29 +255,16 @@ ThreadProfilerConfiguration::GenerateBrowserProcessConfiguration(
   const std::optional<metrics::CallStackProfileParams::Process>
       process_type_to_sample = platform_configuration.ChooseEnabledProcess();
 
-#if BUILDFLAG(IS_ANDROID)
   CHECK_EQ(0, relative_populations.experiment % 3);
   return {
       ChooseVariationGroup({
           {kProfileDisabledOutsideOfExperiment, relative_populations.disabled},
           {kProfileEnabled, relative_populations.enabled},
+          {kProfileEnabledWithThreadPool, relative_populations.experiment / 3},
           {kProfileControl, relative_populations.experiment / 3},
-          {kProfileEnabledWithJavaNameHashing,
-           relative_populations.experiment / 3},
           {kProfileDisabled, relative_populations.experiment / 3},
       }),
       process_type_to_sample};
-#else
-  CHECK_EQ(0, relative_populations.experiment % 2);
-  return {
-      ChooseVariationGroup({
-          {kProfileDisabledOutsideOfExperiment, relative_populations.disabled},
-          {kProfileEnabled, relative_populations.enabled},
-          {kProfileControl, relative_populations.experiment / 2},
-          {kProfileDisabled, relative_populations.experiment / 2},
-      }),
-      process_type_to_sample};
-#endif
 }
 
 // static

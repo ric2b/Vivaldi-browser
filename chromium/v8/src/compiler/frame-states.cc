@@ -132,11 +132,11 @@ FrameState CreateBuiltinContinuationFrameStateCommon(
       signature ? common->CreateJSToWasmFrameStateFunctionInfo(
                       frame_type, parameter_count, 0, shared, signature)
                 : common->CreateFrameStateFunctionInfo(
-                      frame_type, parameter_count, 0, shared);
+                      frame_type, parameter_count, 0, 0, shared);
 #else
   DCHECK_NULL(signature);
   const FrameStateFunctionInfo* state_info =
-      common->CreateFrameStateFunctionInfo(frame_type, parameter_count, 0,
+      common->CreateFrameStateFunctionInfo(frame_type, parameter_count, 0, 0,
                                            shared);
 #endif  // V8_ENABLE_WEBASSEMBLY
 
@@ -264,9 +264,7 @@ Node* CreateInlinedApiFunctionFrameState(JSGraph* graph,
                                          Node* target, Node* context,
                                          Node* receiver,
                                          Node* outer_frame_state) {
-  if (!v8_flags.experimental_stack_trace_frames) return outer_frame_state;
-  return CreateGenericLazyDeoptContinuationFrameState(
-      graph, shared, target, context, receiver, outer_frame_state);
+  return outer_frame_state;
 }
 
 FrameState CloneFrameState(JSGraph* jsgraph, FrameState frame_state,

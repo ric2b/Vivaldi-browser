@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_bloberizer.h"
 
 #include <hb.h>
@@ -17,17 +22,6 @@
 #include "third_party/blink/renderer/platform/text/text_run.h"
 
 namespace blink {
-
-namespace {
-template <typename T, size_t E>
-std::ostream& operator<<(std::ostream& out, const base::span<T, E>& c) {
-#if DCHECK_IS_ON()
-  for (auto&& e : c)
-    out << e << " ";
-#endif
-  return out;
-}
-}  // namespace
 
 ShapeResultBloberizer::ShapeResultBloberizer(
     const FontDescription& font_description,
